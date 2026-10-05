@@ -526,7 +526,9 @@ export function createSimulation() {
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
-      if (stationName === 'Boiler' && !status) status = `Pressure ${Math.round(state.ship.press / 5) * 5}% - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
+      const feel = state.buoyancy > 0 ? 'FLOATY - vent!' : state.buoyancy < 0 ? 'SINKY - more coal!' : 'just right';
+      if (stationName === 'Boiler' && !status) status = `Pressure ${Math.round(state.ship.press / 5) * 5}% (${feel}) - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
+      if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Too much steam - she wants to rise!' : 'Low steam - she wants to sink!';
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - vent steam!';
       const ammoText = gun ? gun.ammo : null;
       const attackLabel = player.carry === 'sword' ? 'Swing' : 'Shove';
@@ -606,6 +608,20 @@ export function createSimulation() {
         state.ship.alt += Math.max(-step, Math.min(step, target - state.ship.alt));
       } else state.ship.alt *= 1 - dt * 0.4;
     }
+    // Buoyancy from steam pressure: sinky below the band, floaty above it.
+    const BU = config.BUOYANCY;
+    const press = state.ship.press;
+    state.buoyancy = press > BU.FLOATY_ABOVE ? press - BU.FLOATY_ABOVE : press < BU.SINKY_BELOW ? press - BU.SINKY_BELOW : 0;
+    if (state.buoyancy && !state.ship.down && state.phase === 'flying') {
+      const R = config.SHIP.ALT_RANGE;
+      state.ship.alt = clamp(state.ship.alt + state.buoyancy * BU.DRIFT * dt, -R, R);
+      const kind = state.buoyancy > 0 ? 'floaty' : 'sinky';
+      if (state.buoyWarned !== kind && Math.abs(state.buoyancy) > 4) {
+        state.buoyWarned = kind;
+        state.ev.warn = 2.5;
+        state.ev.warnText = kind === 'floaty' ? 'TOO FLOATY - VENT STEAM!' : 'TOO SINKY - MORE COAL!';
+      }
+    } else if (!state.buoyancy) state.buoyWarned = null;
     // Losing gas: the ship sinks, and scrapes along the bottom if it's very low.
     state.sinking = state.ship.gas < G.SINK_BELOW;
     if (state.sinking && !state.ship.down) {

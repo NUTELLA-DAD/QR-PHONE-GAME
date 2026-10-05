@@ -401,16 +401,33 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.textAlign = 'right';
     ctx.fillText('Raiders downed: ' + state.kills, 454, 50);
     // Steam pressure: red zone at the top means vent!
+    // Bands: sinky (blue), just right (green), floaty (yellow), danger (red).
     const warnAt = config.BOILER.WARN_AT / 100;
+    const BU = config.BUOYANCY;
     ctx.fillStyle = '#3b2a1d';
     ctx.fillRect(46, 104, 408, 14);
-    ctx.fillStyle = 'rgba(230,57,70,.45)';
-    ctx.fillRect(46 + 408 * warnAt, 104, 408 * (1 - warnAt), 14);
-    ctx.fillStyle = state.ship.press >= config.BOILER.WARN_AT ? '#e63946' : state.ship.press < 30 ? '#e8913a' : '#e8eef2';
-    ctx.fillRect(46, 104, 408 * state.ship.press / 100, 14);
+    [
+      [0, BU.SINKY_BELOW / 100, 'rgba(90,150,230,.5)'],
+      [BU.SINKY_BELOW / 100, BU.FLOATY_ABOVE / 100, 'rgba(120,200,110,.5)'],
+      [BU.FLOATY_ABOVE / 100, warnAt, 'rgba(240,200,60,.5)'],
+      [warnAt, 1, 'rgba(230,57,70,.55)'],
+    ].forEach(([a, b, c]) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(46 + 408 * a, 104, 408 * (b - a), 14);
+    });
+    const p = state.ship.press;
+    ctx.fillStyle = p >= config.BOILER.WARN_AT ? '#e63946' : p > BU.FLOATY_ABOVE ? '#f2c53d' : p < BU.SINKY_BELOW ? '#5a96e6' : '#e8eef2';
+    ctx.fillRect(46, 107, 408 * p / 100, 8);
     ink();
     ctx.lineWidth = 3;
     ctx.strokeRect(46, 104, 408, 14);
+    // Needle marking the current pressure.
+    ctx.fillStyle = config.INK;
+    ctx.beginPath();
+    ctx.moveTo(46 + 408 * p / 100, 120);
+    ctx.lineTo(40 + 408 * p / 100, 128);
+    ctx.lineTo(52 + 408 * p / 100, 128);
+    ctx.fill();
     // Gas in the envelope.
     ctx.fillStyle = '#3b2a1d';
     ctx.fillRect(46, 154, 408, 14);
@@ -420,7 +437,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillStyle = config.INK;
     ctx.font = '700 16px Georgia';
     ctx.textAlign = 'left';
-    ctx.fillText('Steam', 46, 100);
+    ctx.fillText('Steam' + (state.buoyancy > 0 ? ' - FLOATY' : state.buoyancy < 0 ? ' - SINKY' : ''), 46, 100);
     ctx.fillText(`Gas${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}${state.sinking ? ' - SINKING!' : ''}`, 46, 150);
     ctx.textAlign = 'right';
     ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);

@@ -190,6 +190,13 @@ export const config = {
     BLOWOUT_AT: 100, // boiler blows: damages itself and bursts a pipe
     VENT_RATE: 20, // pressure released per second while someone holds a vent
   },
+  // Steam pressure also sets how buoyant the ship is: too little and it sinks, too much and it
+  // floats up (and eventually the boiler blows). The stoker keeps it in the 'just right' band.
+  BUOYANCY: {
+    SINKY_BELOW: 35, // below this pressure the ship drifts down...
+    FLOATY_ABOVE: 72, // ...above this it drifts up (vent steam to settle it)
+    DRIFT: 2.2, // altitude drift per second for each point of pressure outside the band
+  },
   // Gasbag: shots punch holes that leak gas. Low gas = the ship sinks. Boiler pressure
   // pumps gas back in, so high pressure can keep a leaky ship afloat.
   GAS: {
