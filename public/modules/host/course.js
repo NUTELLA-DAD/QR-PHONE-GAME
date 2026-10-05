@@ -76,6 +76,31 @@ export function altWindow(state, ahead = 2) {
   return { min, max };
 }
 
+// Keep something flying at (x, y) out of the rock, `margin` away from it, looking a little to
+// either side (`reach`) so it rises before a slope. `ahead` = seconds into the future (for aiming).
+export function keepClear(state, x, y, margin, ahead = 0, reach = 160) {
+  const course = state.course;
+  if (!course || !K.ENABLED) return y;
+  const wx = x + scrollSpeed(state) * ahead;
+  let g = Infinity;
+  let c = -Infinity;
+  for (const dx of [-reach, -reach / 2, 0, reach / 2, reach]) {
+    g = Math.min(g, groundAt(course, wx + dx));
+    c = Math.max(c, ceilAt(course, wx + dx));
+  }
+  const lo = c + margin;
+  const hi = g - margin;
+  if (lo > hi) return (lo + hi) / 2; // squeezed: fly down the middle
+  return Math.max(lo, Math.min(hi, y));
+}
+
+// Is a point inside the rock?
+export function inRock(state, x, y) {
+  const course = state.course;
+  if (!course || !K.ENABLED) return false;
+  return y > groundAt(course, x) || y < ceilAt(course, x);
+}
+
 // How fast the scenery passes (same as the clouds and mines).
 export const scrollSpeed = (state) => 40 + state.ship.speed * 520;
 

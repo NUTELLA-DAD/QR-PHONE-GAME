@@ -3,6 +3,7 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { enemyPath } from './enemy.js';
+import { keepClear, inRock } from './course.js';
 
 const B = SHIP_LAYOUT.bounds;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -47,6 +48,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     e.cy += (-state.ship.alt - e.cy) * Math.min(1, dt * 0.8);
     const next = enemyPath(e.ang);
     next.y += e.cy;
+    next.y = keepClear(state, next.x, next.y, 70); // fly over mountains, under overhangs
     e.vx = next.x - e.x;
     e.vy = next.y - e.y;
     e.x = next.x;
@@ -82,6 +84,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
         state.cargo.push({
           x: fromLeft ? B.x0 - C.START_DISTANCE : B.x1 + C.START_DISTANCE,
           y: B.y0 - C.HEIGHT - state.ship.alt,
+          baseY: B.y0 - C.HEIGHT - state.ship.alt, // the height it wants to fly at
           vx: fromLeft ? C.SPEED : -C.SPEED,
           hp: C.HP + Math.floor(crew() / 4),
           dropX: entry.x,
@@ -94,6 +97,9 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     }
     for (const c of state.cargo) {
       c.x += c.vx * dt;
+      // Climb over / duck under terrain, smoothly.
+      c.y += (keepClear(state, c.x, c.baseY, 120, 0, 450) - c.y) * Math.min(1, dt * 3);
+      c.y = keepClear(state, c.x, c.y, 50, 0, 120); // and never inside rock
       c.hit = Math.max(0, c.hit - dt);
       if (!c.dropped && (c.vx > 0 ? c.x >= c.dropX : c.x <= c.dropX)) {
         c.dropped = true;
@@ -113,12 +119,15 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
         let shipY;
         if (Math.random() < M.EDGE_CHANCE) shipY = Math.random() < 0.5 ? rand(70, 150) : rand(800, 900);
         else shipY = rand(320, 680);
-        state.mines.push({ x: B.x1 + 1500, y: shipY - state.ship.alt, vx: 0, bob: Math.random() * 6 });
+        state.mines.push({ x: B.x1 + 1500, y: shipY - state.ship.alt, baseY: shipY - state.ship.alt, vx: 0, bob: Math.random() * 6 });
       }
     }
     for (const m of state.mines) {
       m.vx = -(40 + state.ship.speed * 520); // the ship flies into them
       m.x += m.vx * dt;
+      // Mines float in open air, never inside rock.
+      m.y += (keepClear(state, m.x, m.baseY, M.RADIUS + 40, 0, 250) - m.y) * Math.min(1, dt * 3);
+      m.y = keepClear(state, m.x, m.y, M.RADIUS + 5, 0, 60); // and never inside rock
       m.bob += dt;
       if (!m.dead && !state.ship.down && touches(m.x, m.y, M.RADIUS)) {
         m.dead = true;
@@ -135,6 +144,12 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       w.vy += 500 * dt;
       w.x += w.vx * dt;
       w.y += w.vy * dt;
+      if (!w.dead && inRock(state, w.x, w.y)) {
+        // Smashes into the ground (or a rock ceiling).
+        w.dead = true;
+        puff(w.x, w.y, '#8b6b4a', 16);
+        puff(w.x, w.y, '#ff5a1f', 10);
+      }
       w.spin += dt * 4;
       if (Math.random() < 0.6) puff(w.x, w.y, '#444', 1);
       if (!w.dead && !state.ship.down && touches(w.x, w.y, 30)) {
@@ -152,6 +167,11 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       shell.x += shell.vx * dt;
       shell.y += shell.vy * dt;
       shell.life -= dt;
+      if (inRock(state, shell.x, shell.y)) {
+        shell.life = 0; // hit the rock
+        puff(shell.x, shell.y, '#8b6b4a', 4);
+        continue;
+      }
       const e = state.enemy;
       if (e.dead <= 0 && Math.hypot(shell.x - e.x, shell.y - e.y) < 46) {
         shell.life = 0;

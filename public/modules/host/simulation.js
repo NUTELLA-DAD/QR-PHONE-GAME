@@ -5,7 +5,7 @@ import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
 import { createModules } from './modules.js';
 import { createThreats } from './threats.js';
 import { createRaiders } from './raiders.js';
-import { createCourse } from './course.js';
+import { createCourse, inRock } from './course.js';
 import { assistAim } from './aim.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
@@ -434,6 +434,11 @@ export function createSimulation() {
       bullet.x += bullet.vx * dt;
       bullet.y += bullet.vy * dt;
       bullet.life -= dt;
+      if (inRock(state, bullet.x, bullet.y) && bullet.life < 4.8) {
+        bullet.life = 0; // mountains give cover (flak gets a moment to leave its turret)
+        puff(bullet.x, bullet.y, '#8b6b4a', 4);
+        continue;
+      }
       const sy = bullet.y + state.ship.alt;
       if (!bullet.miss && hitsShip(bullet.x, sy)) {
         bullet.life = 0;
