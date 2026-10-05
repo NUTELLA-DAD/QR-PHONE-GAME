@@ -212,13 +212,14 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.restore();
   };
 
-  const drawEffects = (time) => {
+  const drawEffects = (time, view) => {
     threatArt.drawWrecks();
     threatArt.drawMines(time);
     threatArt.drawCargo(time);
     threatArt.drawBoss(time);
     threatArt.drawBombers(time);
     threatArt.drawBats(time);
+    drawPopups(view.zoom);
     drawEnemy(time);
     // Cartoon puffs: swell up, then shrink and fade, with an ink outline and a highlight.
     for (const puffItem of state.puffs) {
@@ -374,6 +375,30 @@ export function createRenderer({ ctx, state, canvas }) {
     drawBossBar();
     if (state.scorecard) drawScorecard();
     if (state.vote) drawVote();
+  };
+
+  // Comic-book words: pop in big, settle, then float up and fade.
+  const drawPopups = (zoom) => {
+    const screen = Math.max(1, 0.45 / zoom); // keep them readable when zoomed out
+    for (const p of state.popups || []) {
+      const grow = p.t < 0.12 ? 0.4 + (p.t / 0.12) * 0.8 : 1.2 - Math.min(0.2, (p.t - 0.12) * 0.6);
+      const alpha = p.t > 0.75 ? Math.max(0, 1 - (p.t - 0.75) / 0.35) : 1;
+      ctx.save();
+      ctx.translate(p.x, p.y - p.t * 40);
+      ctx.rotate(p.tilt);
+      ctx.scale(grow * p.size * screen, grow * p.size * screen);
+      ctx.globalAlpha = alpha;
+      ctx.font = '900 46px Georgia';
+      ctx.textAlign = 'center';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 12;
+      ctx.strokeStyle = config.INK;
+      ctx.strokeText(p.text, 0, 0);
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, 0, 0);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
   };
 
   // Lap scorecard: who did the most of each job.
@@ -898,7 +923,7 @@ export function createRenderer({ ctx, state, canvas }) {
     drawHighlights(time / 1000);
     [...Object.values(state.players), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => drawPlayer(player, time / 1000));
     ctx.restore();
-    drawEffects(time / 1000);
+    drawEffects(time / 1000, view);
 
     // Screen overlay on a fixed 1600x900 stage.
     const scale = Math.min(width / config.W, height / config.H);

@@ -7,6 +7,7 @@ import { createThreats } from './threats.js';
 import { createRaiders } from './raiders.js';
 import { createCourse, inRock } from './course.js';
 import { createSquadrons } from './squadrons.js';
+import { pop, updatePopups } from './popups.js';
 import { assistAim } from './aim.js';
 import { UPGRADES, pickOffer } from './upgrades.js';
 
@@ -142,8 +143,12 @@ export function createSimulation() {
     if (!target) return;
     player.face = target.x < player.x ? -1 : 1;
     puff(target.x, target.y - 40, '#fff', 6);
+    if (sword) pop(state, target.x, target.y - 110 - state.ship.alt, 'whack', '#ffffff', 0.8);
     raiders.onHit(target, sword, player.face * (sword ? T.SWORD_KNOCKBACK : T.SHOVE_KNOCKBACK));
-    if (!state.boarders.includes(target)) stat(player, 'raiders');
+    if (!state.boarders.includes(target)) {
+      stat(player, 'raiders');
+      pop(state, target.x, target.y - 130 - state.ship.alt, 'raider', '#ffd23f', 1);
+    }
   };
 
   // puff() at a point given in ship coordinates.
@@ -160,6 +165,7 @@ export function createSimulation() {
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
   const impact = (x, y, power) => {
     state.ship.shake = Math.min(1, 0.35 * power);
+    if (power >= 1.5) pop(state, x, y - 40 - state.ship.alt, 'bigHit', '#ff7b00', Math.min(1.6, 0.6 + power * 0.3));
     shipPuff(x, y, '#ff7b00', Math.round(8 * power));
     modules.hitAt(x, y, shipPuff, power);
     if (onGasbag(x, y)) {
@@ -397,6 +403,7 @@ export function createSimulation() {
             if (modules.repair(object, dt)) {
               puff(object.pos.x, object.pos.y - state.ship.alt, '#8fe388', 10);
               stat(player, 'repairs');
+              pop(state, object.pos.x, object.pos.y - 50 - state.ship.alt, 'repair', '#8fe388', 0.8);
             }
           } else if (act.type === 'vent') {
             state.ship.press = Math.max(0, state.ship.press - config.BOILER.VENT_RATE * dt);
@@ -408,6 +415,8 @@ export function createSimulation() {
             if (object.prog >= 1) {
               object.prog = 0;
               stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', defuse: 'defused', revive: 'revives' }[act.type]);
+              if (act.type === 'fire') pop(state, object.x, player.y - 120 - state.ship.alt, 'fireOut', '#9fd3e6', 0.8);
+              if (act.type === 'hole' || act.type === 'gas') pop(state, object.x, player.y - 120 - state.ship.alt, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
               else if (act.type === 'hole') {
                 state.breaches.splice(state.breaches.indexOf(object), 1);
@@ -485,6 +494,7 @@ export function createSimulation() {
     }
 
     state.lookout = state.periscope || Object.values(state.players).some((q) => q.lock === 'Lookout');
+    updatePopups(state, dt);
     modules.update(state, dt);
     const BO = config.BOILER;
     if (state.ship.fuel > 0 && !modules.byName.Boiler.broken) {
@@ -503,6 +513,7 @@ export function createSimulation() {
       state.ship.press = 75;
       const boiler = SHIP_LAYOUT.stations.find((s) => s.n === 'Boiler');
       puff(boiler.x, platformY(boiler.d) - 70 - state.ship.alt, '#fff', 20);
+      pop(state, boiler.x, platformY(boiler.d) - 160 - state.ship.alt, 'boiler', '#ff5a1f', 1.6);
       modules.damage(modules.byName.Boiler, config.MODULES.BOILER_BLOWOUT_DAMAGE, shipPuff);
       const pipes = modules.list.filter((m) => m.kind === 'pipe' && !m.broken);
       if (pipes.length) modules.damage(pipes[(Math.random() * pipes.length) | 0], 999, shipPuff);

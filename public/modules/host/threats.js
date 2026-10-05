@@ -4,6 +4,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { enemyPath } from './enemy.js';
 import { keepClear, inRock } from './course.js';
+import { pop } from './popups.js';
 
 const B = SHIP_LAYOUT.bounds;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -58,6 +59,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     if (!state.ship.down && touches(e.x, e.y, 30)) {
       impact(e.x, e.y + state.ship.alt, config.IMPACT.PLANE_CRASH);
       puff(e.x, e.y, '#ff5a1f', 24);
+      pop(state, e.x, e.y - 40, 'kill');
       e.dead = 5;
       warn('ENEMY PLANE CRASHED INTO US!');
       return;
@@ -184,6 +186,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
           state.kills += 1;
           credit?.(shell);
           puff(e.x, e.y, '#ff5a1f', 24);
+          pop(state, e.x, e.y - 40, 'kill');
           wreck(e.x, e.y, e.vx / Math.max(dt, 1e-3), 'fighter');
         }
         continue;
@@ -198,6 +201,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
             state.kills += 1;
             credit?.(shell);
             puff(c.x, c.y, '#ff5a1f', 30);
+            pop(state, c.x, c.y - 60, 'kill', '#ffd23f', 1.4);
             wreck(c.x, c.y, c.vx, 'cargo');
             warn(c.dropped ? 'CARGO PLANE DOWN!' : 'CARGO PLANE DOWN - NO RAIDERS THIS TIME!', 2.5);
           }

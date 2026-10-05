@@ -9,6 +9,7 @@
 // Course position cx maps to world x as  wx = cx - dist  (dist = how far the ship has flown).
 // World y grows downward; the ship is drawn shifted up by its altitude (alt).
 import { config } from '../../config.js';
+import { pop } from './popups.js';
 
 const K = config.COURSE;
 const TOP = -1400; // where ceilings start (far above the view)
@@ -286,6 +287,7 @@ export function createCourse({ state, impact, puff, onMarker, credit }) {
           state.kills += 1;
           credit?.(shell);
           puff(t.x, t.y, '#ff5a1f', 22);
+          pop(state, t.x, t.y - 60, 'kill');
         }
         break;
       }

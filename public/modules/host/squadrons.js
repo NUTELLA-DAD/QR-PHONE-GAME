@@ -7,6 +7,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock } from './course.js';
 import { SHIP_SAMPLES } from './course.js';
+import { pop } from './popups.js';
 
 const W = config.WAVES;
 const B = SHIP_LAYOUT.bounds;
@@ -207,6 +208,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
           state.kills += 1;
           credit(s, 'bat');
           puff(b.x, b.y, '#4a3b5c', 8);
+          pop(state, b.x, b.y - 20, 'bat', '#c9a0ff', 0.7);
           break;
         }
       }
@@ -230,6 +232,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
             state.kills += 1;
             credit(s, 'bomber');
             puff(p.x, p.y, '#ff5a1f', 30);
+            pop(state, p.x, p.y - 60, 'kill', '#ffd23f', 1.4);
             state.wrecks.push({ x: p.x, y: p.y, vx: p.vx, vy: -40, spin: 0, kind: 'cargo' });
             warn('BOMBER DOWN!', 2);
           }
@@ -246,6 +249,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
           state.kills += 5;
           credit(s, 'boss');
           for (let k = 0; k < 6; k++) puff(z.x + rand(-250, 250), z.y + rand(-120, 150), '#ff5a1f', 20);
+          pop(state, z.x, z.y - 160, 'boss', '#ff5a1f', 2.2);
           state.wrecks.push({ x: z.x, y: z.y, vx: -60, vy: -20, spin: 0, kind: 'cargo' });
           state.boss = null;
           // Spoils of war: patch the ship up.
