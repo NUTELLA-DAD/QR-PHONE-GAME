@@ -242,7 +242,7 @@ export function createSimulation() {
         player.actQ = false;
         player.act = null;
       } else {
-        moveWalker(player, player.jx || 0, player.jy || 0, dt, 230);
+        moveWalker(player, player.jx || 0, player.jy || 0, dt, config.MOVE.WALK_SPEED);
         player.moving = !player.climb && Math.abs(player.jx) > 0.15;
         const act = interaction(player, station);
         player.act = act;

@@ -304,6 +304,53 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.restore();
   };
 
+  // Where a player's Action would land (ship coordinates), for the highlight ring.
+  const actionSpot = (act) => {
+    const P = SHIP_LAYOUT.platforms;
+    const o = act.obj;
+    switch (act.type) {
+      case 'revive':
+        return { x: o.x, y: o.y - 30, r: 55 };
+      case 'defuse':
+        return { x: o.x, y: P[o.d].y - 22, r: 40 };
+      case 'fire':
+        return { x: o.x, y: P[o.d].y - 30, r: 50 };
+      case 'hole':
+        return { x: o.x, y: P[o.d].y - 58, r: 42 };
+      case 'repair':
+      case 'valve':
+        return { x: o.pos.x, y: o.pos.y, r: 40 };
+      case 'rack':
+        return { x: o.x, y: P[o.d].y - (o.kind === 'extinguisher' ? 58 : 80), r: 46 };
+      case 'load':
+      case 'ammo':
+      case 'station':
+        return { x: act.station.x, y: P[act.station.d].y - 60, r: 52 };
+      default:
+        return null;
+    }
+  };
+
+  // A pulsing ring in each (human) player's colour around what their Action button will use.
+  const drawHighlights = (time) => {
+    for (const p of Object.values(state.players)) {
+      if (p.bot || !p.act || p.ko > 0) continue;
+      const spot = actionSpot(p.act);
+      if (!spot) continue;
+      const pulse = 1 + Math.sin(time * 6) * 0.08;
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = config.INK;
+      ctx.beginPath();
+      ctx.arc(spot.x, spot.y, spot.r * pulse + 3, 0, 7);
+      ctx.stroke();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(spot.x, spot.y, spot.r * pulse, 0, 7);
+      ctx.stroke();
+    }
+  };
+
   const drawPlayer = (player, time) => {
     const species = config.SPECIES[player.species] || config.SPECIES.bulldog;
     const bob = player.moving ? Math.sin(time * 16) * 3 : player.climb ? Math.sin(time * 10) * 3 : 0;
@@ -551,6 +598,7 @@ export function createRenderer({ ctx, state, canvas }) {
     drawGuns();
     drawHazards(time / 1000);
     threatArt.drawBombs(time / 1000);
+    drawHighlights(time / 1000);
     [...Object.values(state.players), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => drawPlayer(player, time / 1000));
     ctx.restore();
     drawEffects(time / 1000);

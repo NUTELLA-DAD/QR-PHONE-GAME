@@ -67,7 +67,73 @@ export function createControllerInput({ network, ui }) {
     );
   };
 
-  const sendAction = () => network.sendInput({ jx, jy, act: 1 });
+  // Boiler shovel timing: a marker sweeps back and forth; tapping while it's in the green
+  // zone (middle 20%) is a "perfect" shovel. Judged here on the phone so lag doesn't matter.
+  const rhythm = document.getElementById('rhythm');
+  const mark = rhythm.querySelector('.mark');
+  const msg = rhythm.querySelector('.msg');
+  const PERIOD = 1300;
+  const markerPos = () => {
+    const t = (performance.now() % PERIOD) / PERIOD;
+    return t < 0.5 ? t * 2 : 2 - t * 2;
+  };
+  const animate = () => {
+    if (rhythm.style.display !== 'none') mark.style.left = markerPos() * 100 + '%';
+    requestAnimationFrame(animate);
+  };
+  requestAnimationFrame(animate);
+
+  // Helm throttle lever: drag up for full speed.
+  const lever = document.getElementById('lever');
+  const leverFill = lever.querySelector('.fill');
+  const leverHandle = lever.querySelector('.handle');
+  let throttle = 0.5;
+  let lastThrottleSend = 0;
+  const showLever = () => {
+    leverFill.style.height = throttle * 100 + '%';
+    leverHandle.style.top = (1 - throttle) * 100 + '%';
+  };
+  const dragLever = (event) => {
+    const rect = lever.getBoundingClientRect();
+    throttle = Math.max(0, Math.min(1, 1 - (event.clientY - rect.top) / rect.height));
+    showLever();
+    const now = performance.now();
+    if (now - lastThrottleSend > 80) {
+      lastThrottleSend = now;
+      network.sendInput({ jx, jy, thr: throttle });
+    }
+  };
+  let leverPointer = null;
+  lever.addEventListener('pointerdown', (event) => {
+    leverPointer = event.pointerId;
+    try {
+      lever.setPointerCapture(event.pointerId);
+    } catch {}
+    dragLever(event);
+  });
+  lever.addEventListener('pointermove', (event) => {
+    if (event.pointerId === leverPointer) dragLever(event);
+  });
+  const leverUp = (event) => {
+    if (event.pointerId !== leverPointer) return;
+    leverPointer = null;
+    network.sendInput({ jx, jy, thr: throttle }); // final position always arrives
+  };
+  lever.addEventListener('pointerup', leverUp);
+  lever.addEventListener('pointercancel', leverUp);
+  showLever();
+
+  const sendAction = () => {
+    const state = ui.getState ? ui.getState() : {};
+    if (state.locked && state.kind === 'boiler') {
+      const perfect = Math.abs(markerPos() - 0.5) < 0.1;
+      msg.textContent = perfect ? 'PERFECT!' : 'Shovel!';
+      if (perfect) navigator.vibrate?.([10, 30, 10]);
+      network.sendInput({ jx, jy, act: 1, perfect: perfect ? 1 : 0 });
+      return;
+    }
+    network.sendInput({ jx, jy, act: 1 });
+  };
 
   const cease = () => {
     if (firing) {

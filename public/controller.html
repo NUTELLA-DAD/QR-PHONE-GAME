@@ -45,6 +45,17 @@ body.lefty #controls{flex-direction:row-reverse}
 body.lefty #act{right:auto;left:0}
 body.lefty #atk{right:auto;left:min(42vh,180px)}
 #act.hold::after{content:'HOLD';font-size:11px;opacity:.85}
+/* Helm throttle lever (replaces Attack while steering). */
+#lever{position:absolute;right:min(42vh,180px);top:0;width:min(20vh,84px);height:100%;border:5px solid #1b1410;border-radius:18px;background:#3b2a1d;display:none;touch-action:none}
+body.lefty #lever{right:auto;left:min(42vh,180px)}
+#lever .fill{position:absolute;left:0;right:0;bottom:0;background:#4caf50;border-radius:0 0 12px 12px}
+#lever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f1e2b8;border:5px solid #1b1410;border-radius:10px}
+#lever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
+/* Boiler shovel timing bar. */
+#rhythm{height:30px;border:3px solid #1b1410;border-radius:10px;background:#3b2a1d;position:relative;overflow:hidden;display:none}
+#rhythm .zone{position:absolute;left:40%;width:20%;top:0;bottom:0;background:#4caf50}
+#rhythm .mark{position:absolute;top:0;bottom:0;width:8px;margin-left:-4px;background:#ffd23f;border-left:2px solid #1b1410;border-right:2px solid #1b1410}
+#rhythm .msg{position:absolute;inset:0;text-align:center;color:#fff;font-weight:900;font-size:15px;line-height:24px;text-shadow:0 1px 2px #000}
 #rotate{display:none;position:fixed;inset:0;background:#1b1410;color:#f1e2b8;font-size:24px;font-weight:900;text-align:center;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9}
 #rotate .ic{font-size:70px}
 @media (orientation:portrait){body.play #rotate{display:flex}}
@@ -67,9 +78,11 @@ body.lefty #atk{right:auto;left:min(42vh,180px)}
   </div>
   <div id="info"><b>Walking</b> - walk to a station, rack, fire or hole</div>
   <div id="gauge"><div id="gfill"></div><div id="gband"></div></div>
+  <div id="rhythm"><div class="zone"></div><div class="mark"></div><div class="msg">Tap SHOVEL! when the marker is in the green</div></div>
   <div id="controls">
     <div id="pad"><div id="knob"></div></div>
     <div id="buttons">
+      <div id="lever"><div class="fill"></div><div class="handle"></div><div class="tag">THROTTLE</div></div>
       <button class="btn" id="atk"><span class="ic">✋</span><span class="tx">Shove</span></button>
       <button class="btn" id="act"><span class="ic">👋</span><span class="tx">Hey!</span></button>
     </div>

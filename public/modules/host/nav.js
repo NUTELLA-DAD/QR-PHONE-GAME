@@ -4,10 +4,11 @@
 // A "walker" (player or raider) has: x, y, d (platform index it stands on), and while climbing
 // conn (connector index) and s (0 = top end, 1 = bottom end).
 import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { config } from '../../config.js';
 
 const P = SHIP_LAYOUT.platforms;
 const C = SHIP_LAYOUT.connectors;
-const GRAB = 30; // how close (px) to a connector end you must be to grab it
+const GRAB = 38; // how close (px) to a connector end you must be to grab it
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // Per-connector speed multiplier (e.g. the lift crawls without steam). Set by the game each frame.
@@ -105,11 +106,20 @@ export function moveWalker(w, jx, jy, dt, walkSpeed, climbScale = 1) {
       w.conn = i;
       w.s = up ? 1 : 0;
       w.climb = true;
+      w.vx = 0;
       return;
     }
   }
   w.climb = false;
-  w.x = clamp(w.x + jx * walkSpeed * dt, p.x0, p.x1);
+  // Momentum: speed up quickly, stop even quicker.
+  const want = jx * walkSpeed;
+  const v = w.vx || 0;
+  const speedingUp = Math.abs(want) > Math.abs(v) && Math.sign(want) === Math.sign(v || want);
+  const rate = (speedingUp ? config.MOVE.ACCEL : config.MOVE.BRAKE) * dt;
+  w.vx = v + clamp(want - v, -rate, rate);
+  const nx = clamp(w.x + w.vx * dt, p.x0, p.x1);
+  if (nx !== w.x + w.vx * dt) w.vx = 0; // bumped into the end of the deck
+  w.x = nx;
   w.y = p.y;
   if (Math.abs(jx) > 0.15) w.face = jx < 0 ? -1 : 1;
 }

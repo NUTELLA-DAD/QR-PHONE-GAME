@@ -8,7 +8,7 @@ export function createControllerUI({ network }) {
     ['Spray fire', '🧯'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['Close valve', '🚱'], ['Open valve', '🚰'], ['Load', '📦'], ['Grab ammo', '📦'],
     ['Take Helm', '☸️'], ['Take Boiler', '🔥'], ['Take', '🎯'],
-    ['FIRE', '💥'], ['STOKE', '🔥'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
+    ['FIRE', '💥'], ['SHOVEL', '🔥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
   ];
   const CARRY = { sword: '🗡️ Sword', hammer: '🔨 Hammer', extinguisher: '🧯 Extinguisher', ammo: '📦 Ammo' };
 
@@ -64,6 +64,9 @@ export function createControllerUI({ network }) {
       $('act').classList.remove('hold');
       $('leave').style.display = 'none';
       $('gauge').style.display = 'none';
+      $('rhythm').style.display = 'none';
+      $('lever').style.display = 'none';
+      $('atk').style.display = '';
       navigator.vibrate?.([80, 60, 80]);
       return;
     }
@@ -83,9 +86,10 @@ export function createControllerUI({ network }) {
     const ammo = next.ammo != null ? ` - ${next.ammo} shells` : '';
     const hint = next.locked
       ? {
-          helm: 'Left/right: throttle. Up/down: altitude. Weave to dodge shots!',
-          gun: 'Drag to aim (it only turns so far). Hold FIRE. Needs ammo from the hold!',
-          boiler: 'Hold STOKE to shovel coal. Keep the gauge in the green!',
+          helm: 'Stick up/down: climb and dive to dodge mines. Lever: throttle.',
+          gun: 'Drag to aim - it snaps onto nearby targets. Hold FIRE. Needs ammo!',
+          boiler: 'Tap SHOVEL! in the green for extra steam. Keep the gauge in the green!',
+          lookout: 'Keep watch! Arrows on the TV show what is coming from off screen.',
         }[next.kind]
       : next.taken
         ? 'Someone is already here'
@@ -98,6 +102,10 @@ export function createControllerUI({ network }) {
     $('info').innerHTML = `<b>${where}${ammo}</b> - ${hint}${warn}`;
     $('leave').style.display = next.locked ? 'block' : 'none';
     $('gauge').style.display = next.locked && next.kind === 'boiler' ? 'block' : 'none';
+    $('rhythm').style.display = next.locked && next.kind === 'boiler' ? 'block' : 'none';
+    const helm = next.locked && next.kind === 'helm';
+    $('lever').style.display = helm ? 'block' : 'none';
+    $('atk').style.display = helm ? 'none' : '';
     navigator.vibrate?.(20);
   };
 
