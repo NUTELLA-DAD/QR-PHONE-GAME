@@ -1,6 +1,7 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { createShipArt } from './shipArt.js';
+import { createThreatArt } from './threatArt.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   const ink = () => {
@@ -16,6 +17,7 @@ export function createRenderer({ ctx, state, canvas }) {
   };
 
   const drawShip = createShipArt({ ctx, state, ink, rrect });
+  const threatArt = createThreatArt({ ctx, state, ink });
 
   const drawGuns = () => {
     for (const [name, gun] of Object.entries(state.GUNS)) {
@@ -183,6 +185,9 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+    threatArt.drawWrecks();
+    threatArt.drawMines(time);
+    threatArt.drawCargo(time);
     drawEnemy(time);
     ink();
     for (const shell of state.shells) {
@@ -238,9 +243,10 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.textAlign = 'center';
       ctx.lineWidth = 8;
       ctx.strokeStyle = '#fff';
-      ctx.strokeText('BOARDERS ON THE CATWALK!', 800, 170);
+      const text = state.ev.warnText || 'BOARDERS ON THE CATWALK!';
+      ctx.strokeText(text, 800, 170);
       ctx.fillStyle = '#e63946';
-      ctx.fillText('BOARDERS ON THE CATWALK!', 800, 170);
+      ctx.fillText(text, 800, 170);
       ink();
     }
     if (state.ship.down > 0) {
@@ -306,6 +312,8 @@ export function createRenderer({ ctx, state, canvas }) {
     const hop = actionAge < 400 ? Math.sin(actionAge / 400 * Math.PI) * 40 : 0;
     ctx.save();
     ctx.translate(player.x, player.y - bob - hop);
+    const size = player.scale || 1;
+    if (size !== 1) ctx.scale(size, size);
     if (player.ko > 0) {
       ctx.rotate(-1.4 * face);
       ctx.translate(0, 10);
@@ -431,9 +439,20 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.textAlign = 'center';
     ctx.lineWidth = 5;
     ctx.strokeStyle = '#fff';
-    ctx.strokeText(player.name, player.x, player.y - 96);
+    const nameY = player.y - 96 * (player.scale || 1);
+    ctx.strokeText(player.name, player.x, nameY);
     ctx.fillStyle = player.connected === false ? '#888' : config.INK;
-    ctx.fillText(player.name, player.x, player.y - 96);
+    ctx.fillText(player.name, player.x, nameY);
+    if (player.windup > 0) {
+      // Raider winding up to strike: big pulsing "!".
+      const pulse = 1 + Math.sin(time * 30) * 0.15;
+      ctx.font = `900 ${Math.round(44 * pulse)}px Georgia`;
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = '#fff';
+      ctx.strokeText('!', player.x, nameY - 22);
+      ctx.fillStyle = '#e63946';
+      ctx.fillText('!', player.x, nameY - 22);
+    }
     if (actionAge < 900) {
       ctx.font = '900 26px Georgia';
       ctx.lineWidth = 6;
@@ -531,6 +550,7 @@ export function createRenderer({ ctx, state, canvas }) {
     drawShip(time / 1000);
     drawGuns();
     drawHazards(time / 1000);
+    threatArt.drawBombs(time / 1000);
     [...Object.values(state.players), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => drawPlayer(player, time / 1000));
     ctx.restore();
     drawEffects(time / 1000);
@@ -539,6 +559,8 @@ export function createRenderer({ ctx, state, canvas }) {
     const scale = Math.min(width / config.W, height / config.H);
     ctx.setTransform(scale, 0, 0, scale, (width - config.W * scale) / 2, (height - config.H * scale) / 2);
     drawHud();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    threatArt.drawLookoutArrows(width, height, view);
   };
 
   return { renderFrame, ink, drawBar };

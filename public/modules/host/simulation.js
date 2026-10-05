@@ -2,8 +2,10 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { updateBot } from './bots.js';
 import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
-import { enemyPath } from './enemy.js';
 import { createModules } from './modules.js';
+import { createThreats } from './threats.js';
+import { createRaiders } from './raiders.js';
+import { assistAim } from './aim.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
 const platformY = (d) => PLATFORMS[d].y;
@@ -60,7 +62,7 @@ export function createSimulation() {
   const modules = createModules();
   state.modules = modules.list;
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
-  const LOCKABLE = (name) => name === 'Helm' || name === 'Boiler' || !!state.GUNS[name];
+  const LOCKABLE = (name) => name === 'Helm' || name === 'Boiler' || name === 'Lookout' || !!state.GUNS[name];
 
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
@@ -70,6 +72,8 @@ export function createSimulation() {
     const tool = player.carry;
     const revive = Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && q.conn == null && here(q, 65));
     if (revive) return { type: 'revive', obj: revive, hold: true, time: T.REVIVE_TIME, label: `Revive ${revive.name}` };
+    const bomb = state.bombs.find((o) => here(o, 60));
+    if (bomb) return { type: 'defuse', obj: bomb, hold: true, time: config.RAIDERS.DEFUSE_TIME, label: 'Defuse bomb' };
     const fire = state.fires.find((o) => here(o, 70));
     if (fire && tool === 'extinguisher') return { type: 'fire', obj: fire, hold: true, time: T.EXTINGUISH_TIME, label: 'Spray fire' };
     const hole = state.breaches.find((o) => here(o, 70));
@@ -104,23 +108,37 @@ export function createSimulation() {
       .sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0];
     if (!target) return;
     player.face = target.x < player.x ? -1 : 1;
-    const p = PLATFORMS[target.d];
-    target.x = clamp(target.x + player.face * (sword ? T.SWORD_KNOCKBACK : T.SHOVE_KNOCKBACK), p.x0, p.x1);
-    target.hit = 0.25;
     puff(target.x, target.y - 40, '#fff', 6);
-    if (sword) {
-      target.hp -= 1;
-      if (target.hp <= 0) {
-        puff(target.x, target.y - 40, '#ffcf40', 14);
-        state.boarders.splice(state.boarders.indexOf(target), 1);
-      }
-    } else {
-      target.cd = Math.max(target.cd, 0.6); // staggered: can't strike for a moment
-    }
+    raiders.onHit(target, sword, player.face * (sword ? T.SWORD_KNOCKBACK : T.SHOVE_KNOCKBACK));
   };
 
   // puff() at a point given in ship coordinates.
   const shipPuff = (x, y, color, count) => puff(x, y - state.ship.alt, color, count);
+
+  const damageHull = (amount) => {
+    if (!state.ship.down && (state.ship.hull -= amount) <= 0) {
+      state.ship.hull = 0;
+      state.ship.down = 6;
+    }
+  };
+
+  // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
+  const impact = (x, y, power) => {
+    state.ship.shake = Math.min(1, 0.35 * power);
+    shipPuff(x, y, '#ff7b00', Math.round(8 * power));
+    modules.hitAt(x, y, shipPuff, power);
+    const d = roomPlatformAt(x, y);
+    if (d !== null) {
+      const p = PLATFORMS[d];
+      const holes = power >= 2 ? 2 : Math.random() < 0.8 ? 1 : 0;
+      for (let i = 0; i < holes && state.breaches.length < 10; i++) state.breaches.push({ x: clamp(x + (i - 0.5) * 70 * (holes - 1), p.x0 + 20, p.x1 - 20), d, prog: 0 });
+      if ((power >= 2 || Math.random() < 0.35) && state.fires.length < 8) state.fires.push({ x: clamp(x + (Math.random() - 0.5) * 80, p.x0 + 20, p.x1 - 20), d, t: 0, prog: 0 });
+    }
+    damageHull(5 * power);
+  };
+
+  const raiders = createRaiders({ state, modules, puff, impact });
+  const threats = createThreats({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, getHelm });
 
   const emitPlayerUi = (playerId, ui) => {
     if (socket && !state.players[playerId]?.bot) socket.emit('host:ui', { id: playerId, ui });
@@ -173,15 +191,33 @@ export function createSimulation() {
         const working = modules.works(state, player.lock);
         if (player.lock === 'Helm') {
           if (working) {
-            state.ship.speed = clamp(state.ship.speed + player.jx * dt * 0.6, 0, 1);
-            state.ship.alt = clamp(state.ship.alt - player.jy * 130 * (0.4 + 0.6 * Math.min(1, state.ship.press / 50)) * dt, -90, 90);
+            // Throttle: the phone's lever if used, otherwise the stick left/right.
+            if (player.thr != null) state.ship.speed += (clamp(player.thr, 0, 1) - state.ship.speed) * Math.min(1, dt * 1.5);
+            else state.ship.speed = clamp(state.ship.speed + player.jx * dt * 0.6, 0, 1);
+            const climb = config.SHIP.CLIMB_SPEED * (0.4 + 0.6 * Math.min(1, state.ship.press / 50));
+            state.ship.alt = clamp(state.ship.alt - player.jy * climb * dt, -config.SHIP.ALT_RANGE, config.SHIP.ALT_RANGE);
           }
         } else if (player.lock === 'Boiler') {
-          if (working) state.ship.press = clamp(state.ship.press + (player.fire ? 16 * dt : 0) + (player.actQ ? 5 : 0), 0, 100);
+          const BO = config.BOILER;
+          player.shovelCd = Math.max(0, (player.shovelCd || 0) - dt);
+          if (working) {
+            if (player.fire) state.ship.press += BO.HOLD_RATE * dt;
+            if (player.actQ && player.shovelCd <= 0) {
+              state.ship.press += player.perfect ? BO.PERFECT_SHOVEL : BO.SHOVEL;
+              player.shovelCd = BO.SHOVEL_COOLDOWN;
+              shipPuff(player.x - 40, PLATFORMS[player.d].y - 40, player.perfect ? '#ffd23f' : '#ff8c42', player.perfect ? 8 : 3);
+            }
+            state.ship.press = clamp(state.ship.press, 0, 100);
+          }
+          player.perfect = false;
         } else if (gun) {
           gun.cd = Math.max(0, gun.cd - dt);
           // Turn toward the stick, but only within this gun's firing arc (a broken gun is jammed).
-          if (working && Math.hypot(player.jx, player.jy) > 0.25) gun.aim = gun.home + clamp(angleDiff(Math.atan2(player.jy, player.jx), gun.home), -gun.arc, gun.arc);
+          if (working && Math.hypot(player.jx, player.jy) > 0.25) {
+            const A = config.AIM_ASSIST;
+            const wanted = assistAim(state, gun, Math.atan2(player.jy, player.jx), A.ANGLE, A.STRENGTH);
+            gun.aim = gun.home + clamp(angleDiff(wanted, gun.home), -gun.arc, gun.arc);
+          }
           if ((player.actQ || player.fire) && gun.cd <= 0 && !state.ship.down) {
             if (!working || gun.ammo <= 0) {
               gun.cd = 0.5;
@@ -225,7 +261,8 @@ export function createSimulation() {
               else if (act.type === 'hole') {
                 state.breaches.splice(state.breaches.indexOf(object), 1);
                 state.ship.hull = Math.min(100, state.ship.hull + 3);
-              } else object.ko = 0;
+              } else if (act.type === 'defuse') state.bombs.splice(state.bombs.indexOf(object), 1);
+              else object.ko = 0;
               puff(object.x, player.y - 50, '#8fe388', 10);
             }
           }
@@ -257,14 +294,14 @@ export function createSimulation() {
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
-      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : null;
+      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : null;
       const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && taken(stationName);
       let label = 'Hey!';
       let hold = false;
       if (player.lock) {
         const working = modules.works(state, player.lock);
-        label = !working && kind !== 'helm' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'boiler' ? 'STOKE!' : 'Honk!';
-        hold = kind === 'gun' || kind === 'boiler';
+        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
+        hold = kind === 'gun';
       } else if (player.act) {
         label = player.act.label;
         hold = !!player.act.hold;
@@ -289,6 +326,7 @@ export function createSimulation() {
       }
     }
 
+    state.lookout = Object.values(state.players).some((q) => q.lock === 'Lookout');
     modules.update(state, dt);
     state.ship.press = clamp(state.ship.press - modules.pressureDrain(state) * dt, 0, 100);
     if (state.ship.press >= 96) {
@@ -314,37 +352,14 @@ export function createSimulation() {
         state.ship.hull = 100;
         state.breaches.length = 0;
         state.fires.length = 0;
-        state.boarders.length = 0;
+        raiders.reset();
+        threats.reset();
         modules.reset();
         for (const player of Object.values(state.players)) player.ko = 0;
       }
     }
 
-    if (state.enemy.dead > 0) {
-      state.enemy.dead -= dt;
-      if (state.enemy.dead <= 0) {
-        state.enemy.hp = 5 + Math.floor(Object.keys(state.players).length / 4);
-        state.enemy.ang = Math.random() * 6.28;
-      }
-    } else {
-      state.enemy.ang += dt * config.ENEMY.TURN_SPEED;
-      const next = enemyPath(state.enemy.ang);
-      state.enemy.vx = next.x - state.enemy.x;
-      state.enemy.vy = next.y - state.enemy.y;
-      state.enemy.x = next.x;
-      state.enemy.y = next.y;
-      if (state.enemy.hp <= 2 && Math.random() < 0.5) puff(state.enemy.x, state.enemy.y, '#555', 1);
-      if ((state.enemy.fire -= dt) <= 0 && !state.ship.down) {
-        state.enemy.fire = (2 + Math.random() * 1.5) * (1.2 - Math.min(0.5, Object.keys(state.players).length * 0.04));
-        const helm = getHelm();
-        const evading = helm && (Math.abs(helm.jy) > 0.2 || state.ship.speed > 0.3);
-        const miss = evading && Math.random() < 0.5;
-        const tx = SHIP_LAYOUT.aimPoint.x + (Math.random() - 0.5) * 900;
-        const ty = SHIP_LAYOUT.aimPoint.y - state.ship.alt + (Math.random() - 0.5) * 200 + (miss ? (Math.random() < 0.5 ? -1 : 1) * 700 : 0);
-        const d = Math.hypot(tx - state.enemy.x, ty - state.enemy.y) || 1;
-        state.bullets.push({ x: state.enemy.x, y: state.enemy.y, vx: ((tx - state.enemy.x) / d) * 430, vy: ((ty - state.enemy.y) / d) * 430, miss, life: 4 });
-      }
-    }
+    threats.update(dt);
 
     for (const bullet of state.bullets) {
       bullet.x += bullet.vx * dt;
@@ -353,35 +368,8 @@ export function createSimulation() {
       const sy = bullet.y + state.ship.alt;
       if (!bullet.miss && hitsShip(bullet.x, sy)) {
         bullet.life = 0;
-        state.ship.shake = 0.35;
         puff(bullet.x, bullet.y, '#ff7b00', 8);
-        modules.hitAt(bullet.x, sy, shipPuff);
-        const d = roomPlatformAt(bullet.x, sy);
-        if (d !== null) {
-          const p = PLATFORMS[d];
-          if (Math.random() < 0.8 && state.breaches.length < 8) state.breaches.push({ x: clamp(bullet.x, p.x0 + 20, p.x1 - 20), d, prog: 0 });
-          if (Math.random() < 0.35 && state.fires.length < 6) state.fires.push({ x: clamp(bullet.x + (Math.random() - 0.5) * 80, p.x0 + 20, p.x1 - 20), d, t: 0, prog: 0 });
-        }
-        if (!state.ship.down && (state.ship.hull -= 5) <= 0) {
-          state.ship.hull = 0;
-          state.ship.down = 6;
-        }
-      }
-    }
-
-    for (const shell of state.shells) {
-      shell.x += shell.vx * dt;
-      shell.y += shell.vy * dt;
-      shell.life -= dt;
-      if (state.enemy.dead <= 0 && Math.hypot(shell.x - state.enemy.x, shell.y - state.enemy.y) < 46) {
-        shell.life = 0;
-        state.enemy.hp -= 1;
-        puff(state.enemy.x, state.enemy.y, '#ffcf40', 8);
-        if (state.enemy.hp <= 0) {
-          state.enemy.dead = 3;
-          state.kills += 1;
-          puff(state.enemy.x, state.enemy.y, '#ff5a1f', 24);
-        }
+        impact(bullet.x, sy, 1);
       }
     }
 
@@ -397,7 +385,7 @@ export function createSimulation() {
     }
 
     // Progress drains only while nobody is working on it.
-    for (const object of [...state.breaches, ...state.fires]) {
+    for (const object of [...state.breaches, ...state.fires, ...state.bombs]) {
       if (!object.worked) object.prog = Math.max(0, (object.prog || 0) - dt * 0.4);
       object.worked = false;
     }
@@ -418,51 +406,7 @@ export function createSimulation() {
       }
     }
 
-    state.ev.t -= dt;
-    state.ev.warn = Math.max(0, state.ev.warn - dt);
-    const playerCount = Object.keys(state.players).length;
-    if (state.ev.t <= 0 && playerCount && !state.ship.down && !state.boarders.length) {
-      const count = clamp(1 + Math.floor(playerCount / 4), 1, 5);
-      const entry = SHIP_LAYOUT.boarderEntryPoints[(Math.random() * SHIP_LAYOUT.boarderEntryPoints.length) | 0];
-      for (let i = 0; i < count; i++) {
-        state.boarders.push({ id: 'b' + i, name: 'Raider', species: 'fox', color: '#8c2f2f', x: entry.x + (i - count / 2) * 40, y: -60 - i * 70, fall: true, hp: 3, hit: 0, cd: 0, face: entry.x < 800 ? 1 : -1 });
-      }
-      state.ev.warn = 4;
-      state.ev.t = 40 + Math.random() * 20;
-    } else if (state.ev.t <= 0) {
-      state.ev.t = 5;
-    }
-
-    const livePlayers = Object.values(state.players).filter((q) => !q.fall && !(q.ko > 0) && q.d != null);
-    for (const boarder of state.boarders) {
-      if (boarder.fall) {
-        fall(boarder, dt, 300);
-        continue;
-      }
-      boarder.hit = Math.max(0, boarder.hit - dt);
-      boarder.cd = Math.max(0, boarder.cd - dt);
-      boarder.moving = false;
-      const targetPlayer = livePlayers.reduce((best, player) => !best || Math.abs(player.x - boarder.x) + Math.abs(player.y - boarder.y) * 2 < Math.abs(best.x - boarder.x) + Math.abs(best.y - boarder.y) * 2 ? player : best, null);
-      if (!targetPlayer) continue;
-      // Chase the target's platform (or where they are climbing from).
-      const goal = targetPlayer.conn == null ? targetPlayer.d : SHIP_LAYOUT.connectors[targetPlayer.conn][targetPlayer.s < 0.5 ? 'top' : 'bottom'];
-      const step = steerTo(boarder, goal, targetPlayer.x, 30);
-      moveWalker(boarder, step.jx, step.jy, dt, 85, 0.65);
-      boarder.moving = !boarder.climb && Math.abs(step.jx) > 0.15;
-      if (boarder.conn == null && boarder.d === targetPlayer.d && targetPlayer.conn == null) {
-        const dx = targetPlayer.x - boarder.x;
-        boarder.face = dx < 0 ? -1 : 1;
-        if (Math.abs(dx) < 36 && boarder.cd <= 0) {
-          boarder.cd = 1.5;
-          targetPlayer.ko = 12;
-          targetPlayer.prog = 0;
-          targetPlayer.lock = null;
-          targetPlayer.carry = null;
-          targetPlayer.fire = false;
-          puff(targetPlayer.x, targetPlayer.y - 40, '#fff', 10);
-        }
-      }
-    }
+    raiders.update(dt);
   };
 
   return {

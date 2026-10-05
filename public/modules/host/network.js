@@ -45,6 +45,8 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
       player.jy = data.jy || 0;
       if (data.act) player.actQ = true;
       if (data.atk) player.atkQ = true;
+      if ('thr' in data) player.thr = data.thr;
+      if (data.perfect) player.perfect = true;
       if (data.leave) player.leaveQ = true;
       if ('fire' in data) player.fire = !!data.fire;
     }

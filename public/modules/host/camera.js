@@ -20,8 +20,12 @@ export function createCamera() {
     let x1 = b.x1;
     let y0 = b.y0 - alt - PAD_Y;
     let y1 = b.y1 - alt + PAD_Y;
-    const e = state.enemy;
-    if (e.dead <= 0) {
+    // Frame the fighter, plus any cargo plane or mine that's getting close.
+    const shipX = (b.x0 + b.x1) / 2;
+    const things = [];
+    if (state.enemy.dead <= 0) things.push(state.enemy);
+    for (const t of [...(state.cargo || []), ...(state.mines || [])]) if (Math.abs(t.x - shipX) < 2400) things.push(t);
+    for (const e of things) {
       x0 = Math.min(x0, e.x - C.ENEMY_MARGIN);
       x1 = Math.max(x1, e.x + C.ENEMY_MARGIN);
       y0 = Math.min(y0, e.y - C.ENEMY_MARGIN);

@@ -20,6 +20,65 @@ export const config = {
     PATH_WOBBLE: 50, // small up-down weave
     TURN_SPEED: 0.38, // how fast it goes round (radians per second)
   },
+  // How far the helm can climb/dive (world pixels either way) and how fast.
+  SHIP: {
+    ALT_RANGE: 260,
+    CLIMB_SPEED: 170,
+  },
+  // Enemy cargo plane: flies in from far away and drops raiders on the catwalk.
+  CARGO: {
+    FIRST_AFTER: 25, // seconds before the first one
+    EVERY_MIN: 40, // seconds between cargo planes...
+    EVERY_MAX: 60,
+    START_DISTANCE: 2300, // how far from the ship it appears
+    SPEED: 140,
+    HEIGHT: 300, // how far above the ship's top it flies
+    HP: 8, // plus 1 per 4 crew
+  },
+  // Floating mines drifting toward the bow.
+  MINES: {
+    FIRST_AFTER: 30,
+    EVERY_MIN: 12,
+    EVERY_MAX: 20,
+    EDGE_CHANCE: 0.6, // chance a mine skims the top/bottom (dodge it); otherwise it's dead centre (shoot it)
+    RADIUS: 34,
+  },
+  // How hard different explosions hit the ship (1 = one enemy bullet).
+  IMPACT: {
+    MINE: 2.5,
+    PLANE_CRASH: 3,
+    BOMB: 2,
+  },
+  // Raider types. windup = seconds of warning ("!") before they strike.
+  RAIDERS: {
+    grunt: { name: 'Raider', hp: 3, speed: 85, windup: 0.6, reach: 40, species: 'fox', color: '#8c2f2f', scale: 1 },
+    brute: { name: 'Brute', hp: 7, speed: 55, windup: 1.0, reach: 52, species: 'bear', color: '#5c2a1a', scale: 1.35, knockback: 140, noShove: true },
+    sapper: { name: 'Sapper', hp: 2, speed: 100, windup: 0.6, reach: 40, species: 'fox', color: '#7a6420', scale: 0.95 },
+    cutter: { name: 'Cutter', hp: 3, speed: 105, windup: 0.6, reach: 40, species: 'wolf', color: '#2f4f8c', scale: 1 },
+    MIX: { grunt: 0.5, brute: 0.15, sapper: 0.2, cutter: 0.15 }, // chances when a cargo plane drops a squad
+    KO_TIME: 12,
+    BOMB_FUSE: 10, // seconds until a sapper's bomb goes off
+    DEFUSE_TIME: 1.6, // seconds of holding Action to defuse (no tool needed)
+    CUT_DAMAGE: 14, // per second a cutter does to the module it's hacking
+  },
+  // Gun aim assist: pulls your aim toward a target near where you point.
+  AIM_ASSIST: {
+    ANGLE: 0.28, // radians: how close your aim must be for assist to kick in
+    STRENGTH: 0.7, // 0 = off, 1 = snap fully onto the target
+  },
+  // Boiler shovel timing (phone shows a sweeping marker).
+  BOILER: {
+    SHOVEL: 4, // pressure per normal shovel
+    PERFECT_SHOVEL: 10, // pressure per well-timed shovel
+    SHOVEL_COOLDOWN: 0.35,
+    HOLD_RATE: 7, // pressure per second when just holding the button
+  },
+  // Walking feel.
+  MOVE: {
+    WALK_SPEED: 230,
+    ACCEL: 1600, // px/s² speeding up
+    BRAKE: 3200, // px/s² slowing down (snappy stops)
+  },
   // Tools and close combat.
   TOOLS: {
     REACH: 45, // how close you must stand to a rack, hook or valve

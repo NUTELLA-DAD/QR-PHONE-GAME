@@ -3,13 +3,12 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { steerTo } from './nav.js';
-import { enemyAt } from './enemy.js';
+import { bestTarget } from './aim.js';
 
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
-const SHELL_SPEED = 950;
 const GUN_STATIONS = Object.keys(L.gunMounts);
-const MANNED_STATIONS = ['Helm', 'Boiler', ...GUN_STATIONS];
+const MANNED_STATIONS = ['Helm', 'Boiler', ...GUN_STATIONS, 'Lookout'];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -25,14 +24,27 @@ function steer(p, d, x, near = 12) {
 
 const enemyActive = (state) => state.enemy.dead <= 0;
 
-// Where a gun must point to hit the enemy (leading the target). null if out of its arc.
+// Where a gun must point to hit something useful right now, or null.
 function firingSolution(state, gun) {
-  const gx = gun.bx;
-  const gy = gun.by - state.ship.alt;
-  let target = state.enemy;
-  for (let i = 0; i < 2; i++) target = enemyAt(state.enemy, Math.hypot(target.x - gx, target.y - gy) / SHELL_SPEED);
-  const angle = Math.atan2(target.y - gy, target.x - gx);
-  return Math.abs(angleDiff(angle, gun.home)) <= gun.arc ? angle : null;
+  const best = bestTarget(state, gun);
+  return best ? best.angle : null;
+}
+
+// Helm: altitude that dodges the next mine skimming the top or bottom of the ship (or null).
+function dodgeAltitude(state) {
+  const R = config.MINES.RADIUS;
+  let soonest = null;
+  for (const m of state.mines || []) {
+    if (m.x < L.bounds.x0 || m.vx >= 0) continue;
+    const t = (m.x - L.bounds.x1) / -m.vx;
+    if (t > 6) continue;
+    const rel = m.y + state.ship.alt;
+    let target = null;
+    if (rel > -10 - R && rel < 330) target = -10 - R - 30 - m.y; // dive under it
+    else if (rel > 700 && rel < L.bounds.y1 + R) target = L.bounds.y1 + R + 30 - m.y; // climb over it
+    if (target !== null && Math.abs(target) <= config.SHIP.ALT_RANGE && (!soonest || t < soonest.t)) soonest = { t, target };
+  }
+  return soonest && soonest.target;
 }
 
 // List every job on the ship, most urgent first.
@@ -42,6 +54,7 @@ function listJobs(state, bot) {
   const mods = state.modules || [];
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2 });
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
+  for (const bomb of state.bombs || []) jobs.push({ kind: 'defuse', obj: bomb, max: 1 });
   const fires = state.fires.map((f) => ({ kind: 'fire', obj: f, max: 1 }));
   const holes = state.breaches.map((h) => ({ kind: 'patch', obj: h, max: 1 }));
   // Burst pipes with their valve open leak steam: shut the valve, then fix what's broken.
@@ -57,7 +70,7 @@ function listJobs(state, bot) {
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   // Helm and boiler first, then guns that can reach the enemy right now. Skip broken ones.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
-  const reach = (n) => (!GUN_STATIONS.includes(n) ? 0 : enemyActive(state) && firingSolution(state, state.GUNS[n]) !== null ? 1 : 2);
+  const reach = (n) => (n === 'Lookout' ? 3 : !GUN_STATIONS.includes(n) ? 0 : firingSolution(state, state.GUNS[n]) !== null ? 1 : 2);
   const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   for (const n of open) jobs.push({ kind: 'station', obj: n, max: 1 });
   return jobs;
@@ -90,15 +103,19 @@ function operate(p, state, dt) {
   const ship = state.ship;
   if (p.lock === 'Helm') {
     p.jx = clamp((B.HELM_SPEED - ship.speed) * 4, -1, 1);
-    p.jy = enemyActive(state) ? Math.sin(performance.now() / 700 + p.phase) * 0.7 : clamp(ship.alt / 40, -1, 1);
+    const dodge = dodgeAltitude(state);
+    if (dodge !== null) p.jy = clamp((ship.alt - dodge) / 40, -1, 1);
+    else p.jy = enemyActive(state) ? Math.sin(performance.now() / 700 + p.phase) * 0.7 : clamp(ship.alt / 40, -1, 1);
   } else if (p.lock === 'Boiler') {
     if (ship.press < B.BOILER_LOW) p.stoking = true;
     if (ship.press > B.BOILER_HIGH) p.stoking = false;
-    p.fire = !!p.stoking;
+    // Shovel in rhythm; most shovels are well timed.
+    if (p.stoking && (p.pressCd || 0) <= 0) p.perfect = Math.random() < 0.6;
+    if (p.stoking) press(p);
   } else {
     const gun = state.GUNS[p.lock];
     if (!gun) return;
-    const angle = enemyActive(state) ? firingSolution(state, gun) : null;
+    const angle = firingSolution(state, gun);
     // Count how long the enemy has been out of this gun's reach.
     p.gunIdle = angle === null ? (p.gunIdle || 0) + dt : 0;
     if (angle === null) return;
@@ -141,7 +158,7 @@ function work(p, state) {
   if (!job) return wander(p);
   const o = job.obj;
   if (job.kind === 'fight') {
-    if (o.fall || !getTool(p, 'sword')) return;
+    if (o.fall || !state.boarders.includes(o) || !getTool(p, 'sword')) return;
     if (steer(p, goalOf(o), o.x, 45) || (Math.abs(o.y - p.y) < 20 && Math.abs(o.x - p.x) < 70)) {
       p.jx = 0;
       p.face = o.x < p.x ? -1 : 1;
@@ -150,6 +167,8 @@ function work(p, state) {
         p.whackCd = B.WHACK_EVERY;
       }
     }
+  } else if (job.kind === 'defuse') {
+    if (steer(p, o.d, o.x, 25)) p.fire = true;
   } else if (job.kind === 'revive') {
     if (steer(p, goalOf(o), o.x, 30)) p.fire = true;
   } else if (job.kind === 'fire') {
