@@ -377,11 +377,17 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.fill();
       ctx.stroke();
       for (const g of z.guns) {
-        ctx.fillStyle = '#c0392b';
+        // Live turrets are red with a barrel; shot-off ones are blackened stumps.
+        ctx.fillStyle = g.dead ? '#2a2a2a' : '#c0392b';
         ctx.beginPath();
-        ctx.arc(-g.dx, 168, 16, 0, 7);
+        ctx.arc(-g.dx, 168, g.dead ? 12 : 16, 0, 7);
         ctx.fill();
         ctx.stroke();
+        if (!g.dead) {
+          ctx.fillStyle = '#4a4a4a';
+          ctx.fillRect(-g.dx - 5, 172, 10, 34);
+          ctx.strokeRect(-g.dx - 5, 172, 10, 34);
+        }
       }
       ctx.fillStyle = '#ffd23f';
       for (let k = -2; k <= 2; k++) {

@@ -36,14 +36,15 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   };
 
   // ---- Spawning ----
-  const spawnBats = () => {
-    const n = Math.min(W.BATS_MAX, W.BATS_BASE + (lap() - 1) * W.BATS_PER_LAP + Math.floor(crew() / 4));
+  // from = { x, y } to launch from a point (the boss's hangar), and n to set the swarm size.
+  const spawnBats = (from = null, count = 0) => {
+    const n = count || Math.min(W.BATS_MAX, W.BATS_BASE + (lap() - 1) * W.BATS_PER_LAP + Math.floor(crew() / 4));
     const fromRight = Math.random() < 0.65;
     for (let i = 0; i < n; i++) {
       const [sx, sy] = SHIP_SAMPLES[(Math.random() * SHIP_SAMPLES.length) | 0];
       state.bats.push({
-        x: fromRight ? B.x1 + 1500 + i * 70 : B.x0 - 1500 - i * 70,
-        y: rand(-300, 1000) - state.ship.alt,
+        x: from ? from.x + rand(-40, 40) : fromRight ? B.x1 + 1500 + i * 70 : B.x0 - 1500 - i * 70,
+        y: from ? from.y + rand(-30, 30) : rand(-300, 1000) - state.ship.alt,
         vx: 0,
         vy: 0,
         tx: sx,
@@ -81,7 +82,8 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       maxHp: hp,
       hit: 0,
       bob: 0,
-      guns: [0, 1, 2].map((i) => ({ dx: -200 + i * 200, cd: 2 + i * 0.7 })),
+      guns: [0, 1, 2].map((i) => ({ dx: -200 + i * 200, cd: 2 + i * 0.7, hp: W.BOSS_GUN_HP, dead: false })),
+      batCd: W.BOSS_BATS_EVERY * 0.5,
       boardCd: W.BOSS_BOARD_EVERY * 0.6,
       leaving: false,
     };
@@ -216,7 +218,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     if (z.x > W.BOSS_STATION_X + 400 || state.ship.down) return; // not in range yet
     // Turrets.
     for (const g of z.guns) {
-      if ((g.cd -= dt) > 0) continue;
+      if (g.dead || (g.cd -= dt) > 0) continue;
       g.cd = W.BOSS_FIRE_EVERY * rand(0.8, 1.2);
       const gx = z.x + g.dx;
       const gy = z.y + 150;
@@ -227,6 +229,12 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       const miss = helm && Math.abs(helm.jy) > 0.3 && Math.random() < 0.35;
       state.bullets.push({ x: gx, y: gy, vx: ((tx - gx) / d) * 470, vy: ((ty - gy) / d) * 470 + (miss ? -200 : 0), miss, life: 4 });
       puff(gx, gy, '#555', 4);
+    }
+    // From lap 2: bat swarms from the hangar.
+    if (lap() > 1 && (z.batCd -= dt) <= 0) {
+      z.batCd = W.BOSS_BATS_EVERY;
+      spawnBats({ x: z.x, y: z.y + 120 }, 3 + lap());
+      warn('BATS FROM THE ZEPPELIN!');
     }
     // Boarding lines.
     if ((z.boardCd -= dt) <= 0 && !state.boarders.length) {
@@ -296,6 +304,20 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         }
       }
       const z = state.boss;
+      // Its turrets can be shot off one at a time.
+      const gun = z && s.life > 0 && z.guns.find((g) => !g.dead && Math.hypot(s.x - (z.x + g.dx), s.y - (z.y + 168)) < 36);
+      if (gun) {
+        s.life = 0;
+        gun.hp -= dmg;
+        puff(s.x, s.y, '#ffcf40', 8);
+        if (gun.hp <= 0) {
+          gun.dead = true;
+          z.hp -= W.BOSS_GUN_BONUS;
+          puff(z.x + gun.dx, z.y + 168, '#ff5a1f', 18);
+          pop(state, z.x + gun.dx, z.y + 120, 'kill', '#ffd23f', 1);
+          credit(s);
+        }
+      }
       if (s.life > 0 && z && Math.abs(s.x - z.x) < 330 && s.y > z.y - 150 && s.y < z.y + 190) {
         s.life = 0;
         z.hp -= dmg;

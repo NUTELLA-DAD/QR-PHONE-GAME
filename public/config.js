@@ -123,7 +123,10 @@ export const config = {
     BOSS_STATION_X: 2700, // where it parks, ahead of the ship
     BOSS_FIRE_EVERY: 2.6,
     BOSS_BOARD_EVERY: 30, // seconds between boarding parties
-    BOSS_REWARD_HULL: 35, // hull patched when you shoot it down
+    BOSS_REWARD_HULL: 35,
+    BOSS_GUN_HP: 4, // each turret can be shot off separately...
+    BOSS_GUN_BONUS: 6, // ...knocking this much off the boss
+    BOSS_BATS_EVERY: 20, // from lap 2 the boss launches small bat swarms this often (seconds) // hull patched when you shoot it down
   },
   // Storm fronts: where they are in each lap (progress 0-1) and from which lap they start.
   STORM: {
