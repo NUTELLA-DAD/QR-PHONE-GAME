@@ -1,4 +1,5 @@
-import { config, SHIP_LAYOUT } from '../../config.js';
+import { config } from '../../config.js';
+import { SHIP_LAYOUT } from '../../shipLayout.js';
 
 export function createSimulation() {
   let socket = null;
@@ -29,7 +30,7 @@ export function createSimulation() {
 
   const workTarget = (player) => {
     if (player.lock || player.climb || player.fall) return null;
-    const floorIndex = config.FLOORS.findIndex((f) => Math.abs(player.y - f) < 6);
+    const floorIndex = SHIP_LAYOUT.floors.findIndex((f) => Math.abs(player.y - f) < 6);
     if (floorIndex < 0) return null;
     const revived = Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && Math.abs(q.y - player.y) < 8 && Math.abs(q.x - player.x) < 65);
     if (revived) return { kind: 'revive', obj: revived };
@@ -64,8 +65,8 @@ export function createSimulation() {
       }
       if (player.fall) {
         player.y += 260 * dt;
-        if (player.y >= config.FLOORS[0]) {
-          player.y = config.FLOORS[0];
+        if (player.y >= SHIP_LAYOUT.floors[0]) {
+          player.y = SHIP_LAYOUT.floors[0];
           player.fall = false;
         }
         continue;
@@ -95,7 +96,7 @@ export function createSimulation() {
         player.lock = null;
         player.fire = false;
       }
-      const station = !player.lock ? config.STATIONS.find((s) => Math.abs(player.y - config.FLOORS[s.d]) < 6 && Math.abs(player.x - s.x) < 55) : null;
+      const station = !player.lock ? SHIP_LAYOUT.stations.find((s) => Math.abs(player.y - SHIP_LAYOUT.floors[s.d]) < 6 && Math.abs(player.x - s.x) < 55) : null;
       const target = player.lock ? null : workTarget(player);
       const boarder = player.lock ? null : state.boarders.find((b) => !b.fall && Math.abs(b.y - player.y) < 20 && Math.abs(b.x - player.x) < 80);
 
@@ -133,16 +134,16 @@ export function createSimulation() {
         player.face = player.lock === 'Port Cannon' ? -1 : 1;
         player.actQ = false;
       } else {
-        const ladder = config.LADDERS.find((l) => Math.abs(player.x - l) < 30);
+        const ladder = SHIP_LAYOUT.ladders.find((l) => Math.abs(player.x - l) < 30);
         if (ladder && Math.abs(player.jy) > 0.4) {
           player.climb = true;
           player.x += (ladder - player.x) * Math.min(1, dt * 10);
-          player.y = clamp(player.y + player.jy * 170 * dt, config.FLOORS[0], config.FLOORS[2]);
+          player.y = clamp(player.y + player.jy * 170 * dt, SHIP_LAYOUT.floors[0], SHIP_LAYOUT.floors[2]);
         } else {
           player.climb = false;
-          player.x = clamp(player.x + player.jx * 230 * dt, config.X0, config.X1);
+          player.x = clamp(player.x + player.jx * 230 * dt, SHIP_LAYOUT.hull.x0, SHIP_LAYOUT.hull.x1);
           if (Math.abs(player.jx) > 0.15) player.face = player.jx < 0 ? -1 : 1;
-          const floor = config.FLOORS.reduce((best, value) => Math.abs(value - player.y) < Math.abs(best - player.y) ? value : best);
+          const floor = SHIP_LAYOUT.floors.reduce((best, value) => Math.abs(value - player.y) < Math.abs(best - player.y) ? value : best);
           player.y += (floor - player.y) * Math.min(1, dt * 12);
         }
         player.moving = !player.climb && Math.abs(player.jx) > 0.15;
@@ -168,7 +169,7 @@ export function createSimulation() {
           if (boarder) {
             boarder.hp -= 1;
             boarder.hit = 0.25;
-            boarder.x = clamp(boarder.x + Math.sign(boarder.x - player.x || 1) * 45, config.X0, config.X1);
+            boarder.x = clamp(boarder.x + Math.sign(boarder.x - player.x || 1) * 45, SHIP_LAYOUT.hull.x0, SHIP_LAYOUT.hull.x1);
             puff(boarder.x, boarder.y - 40, '#fff', 6);
             if (boarder.hp <= 0) {
               puff(boarder.x, boarder.y - 40, '#ffcf40', 14);
@@ -235,7 +236,7 @@ export function createSimulation() {
     state.ship.press = clamp(state.ship.press - (2 + state.ship.speed * 6) * dt, 0, 100);
     if (state.ship.press >= 96) {
       state.ship.press = 72;
-      puff(425, config.FLOORS[2] - 70, '#fff', 14);
+      puff(425, SHIP_LAYOUT.floors[2] - 70, '#fff', 14);
     }
     const maxSpeed = clamp(state.ship.press / 50, 0.05, 1);
     if (state.ship.speed > maxSpeed) state.ship.speed += (maxSpeed - state.ship.speed) * Math.min(1, dt * 2);
@@ -295,9 +296,9 @@ export function createSimulation() {
         puff(bullet.x, bullet.y, '#ff7b00', 8);
         const sy = bullet.y + state.ship.alt;
         if (sy > 350) {
-          const floorIndex = [0, 1, 2].reduce((best, i) => Math.abs(config.FLOORS[i] - 60 - sy) < Math.abs(config.FLOORS[best] - 60 - sy) ? i : best, 0);
-          if (Math.random() < 0.8 && state.breaches.length < 8) state.breaches.push({ x: clamp(bullet.x, config.X0 + 20, config.X1 - 20), d: floorIndex, prog: 0 });
-          if (Math.random() < 0.35 && state.fires.length < 6) state.fires.push({ x: clamp(bullet.x + (Math.random() - 0.5) * 80, config.X0 + 20, config.X1 - 20), d: floorIndex, t: 0, prog: 0 });
+          const floorIndex = [0, 1, 2].reduce((best, i) => Math.abs(SHIP_LAYOUT.floors[i] - 60 - sy) < Math.abs(SHIP_LAYOUT.floors[best] - 60 - sy) ? i : best, 0);
+          if (Math.random() < 0.8 && state.breaches.length < 8) state.breaches.push({ x: clamp(bullet.x, SHIP_LAYOUT.hull.x0 + 20, SHIP_LAYOUT.hull.x1 - 20), d: floorIndex, prog: 0 });
+          if (Math.random() < 0.35 && state.fires.length < 6) state.fires.push({ x: clamp(bullet.x + (Math.random() - 0.5) * 80, SHIP_LAYOUT.hull.x0 + 20, SHIP_LAYOUT.hull.x1 - 20), d: floorIndex, t: 0, prog: 0 });
         }
         if (!state.ship.down && (state.ship.hull -= 5) <= 0) {
           state.ship.hull = 0;
@@ -337,7 +338,7 @@ export function createSimulation() {
     for (const fire of state.fires) {
       if ((fire.t += dt) > 7 && state.fires.length < 8) {
         fire.t = 0;
-        state.fires.push({ x: clamp(fire.x + (Math.random() < 0.5 ? -1 : 1) * (100 + Math.random() * 60), config.X0 + 20, config.X1 - 20), d: fire.d, t: 0, prog: 0 });
+        state.fires.push({ x: clamp(fire.x + (Math.random() < 0.5 ? -1 : 1) * (100 + Math.random() * 60), SHIP_LAYOUT.hull.x0 + 20, SHIP_LAYOUT.hull.x1 - 20), d: fire.d, t: 0, prog: 0 });
         break;
       }
     }
@@ -355,9 +356,9 @@ export function createSimulation() {
     const playerCount = Object.keys(state.players).length;
     if (state.ev.t <= 0 && playerCount && !state.ship.down && !state.boarders.length) {
       const count = clamp(1 + Math.floor(playerCount / 4), 1, 5);
-      const side = Math.random() < 0.5 ? config.X0 + 10 : config.X1 - 10;
+      const side = Math.random() < 0.5 ? SHIP_LAYOUT.hull.x0 + 10 : SHIP_LAYOUT.hull.x1 - 10;
       for (let i = 0; i < count; i++) {
-        state.boarders.push({ id: 'b' + i, name: 'Raider', species: 'fox', color: '#8c2f2f', x: clamp(side + (i - count / 2) * 50, config.X0, config.X1), y: -60 - i * 70, fall: true, hp: 3, hit: 0, cd: 0, face: side < 800 ? 1 : -1 });
+        state.boarders.push({ id: 'b' + i, name: 'Raider', species: 'fox', color: '#8c2f2f', x: clamp(side + (i - count / 2) * 50, SHIP_LAYOUT.hull.x0, SHIP_LAYOUT.hull.x1), y: -60 - i * 70, fall: true, hp: 3, hit: 0, cd: 0, face: side < 800 ? 1 : -1 });
       }
       state.ev.warn = 4;
       state.ev.t = 40 + Math.random() * 20;
@@ -365,12 +366,12 @@ export function createSimulation() {
       state.ev.t = 5;
     }
 
-    const livePlayers = Object.values(state.players).filter((q) => !q.fall && !(q.ko > 0) && config.FLOORS.some((floor) => Math.abs(q.y - floor) < 30));
+    const livePlayers = Object.values(state.players).filter((q) => !q.fall && !(q.ko > 0) && SHIP_LAYOUT.floors.some((floor) => Math.abs(q.y - floor) < 30));
     for (const boarder of state.boarders) {
       if (boarder.fall) {
         boarder.y += 300 * dt;
-        if (boarder.y >= config.FLOORS[0]) {
-          boarder.y = config.FLOORS[0];
+        if (boarder.y >= SHIP_LAYOUT.floors[0]) {
+          boarder.y = SHIP_LAYOUT.floors[0];
           boarder.fall = false;
         }
         continue;
@@ -381,7 +382,7 @@ export function createSimulation() {
       boarder.climb = false;
       const targetPlayer = livePlayers.reduce((best, player) => !best || Math.abs(player.x - boarder.x) + Math.abs(player.y - boarder.y) * 2 < Math.abs(best.x - boarder.x) + Math.abs(best.y - boarder.y) * 2 ? player : best, null);
       if (!targetPlayer) continue;
-      const targetFloor = config.FLOORS.reduce((best, floor) => Math.abs(floor - targetPlayer.y) < Math.abs(best - targetPlayer.y) ? floor : best);
+      const targetFloor = SHIP_LAYOUT.floors.reduce((best, floor) => Math.abs(floor - targetPlayer.y) < Math.abs(best - targetPlayer.y) ? floor : best);
       if (Math.abs(boarder.y - targetFloor) < 4) {
         boarder.y = targetFloor;
         const dx = targetPlayer.x - boarder.x;
@@ -398,7 +399,7 @@ export function createSimulation() {
           puff(targetPlayer.x, targetPlayer.y - 40, '#fff', 10);
         }
       } else {
-        const ladder = config.LADDERS.reduce((best, x) => Math.abs(x - boarder.x) < Math.abs(best - boarder.x) ? x : best, config.LADDERS[0]);
+        const ladder = SHIP_LAYOUT.ladders.reduce((best, x) => Math.abs(x - boarder.x) < Math.abs(best - boarder.x) ? x : best, SHIP_LAYOUT.ladders[0]);
         const dx = ladder - boarder.x;
         if (Math.abs(dx) > 4) {
           boarder.x += Math.sign(dx) * Math.min(85 * dt, Math.abs(dx));

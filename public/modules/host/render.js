@@ -1,4 +1,5 @@
-import { config, SHIP_LAYOUT } from '../../config.js';
+import { config } from '../../config.js';
+import { SHIP_LAYOUT } from '../../shipLayout.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   const ink = () => {
@@ -49,7 +50,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.stroke();
 
     const rooms = ['#c9a46a', '#bf9a5d', '#b08a50'];
-    config.FLOORS.forEach((floor, index) => {
+    SHIP_LAYOUT.floors.forEach((floor, index) => {
       ctx.fillStyle = rooms[index];
       rrect(262, floor - 135, 1076, 135, 10);
       ctx.fill();
@@ -59,15 +60,15 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fillRect(262, floor, 1076, 14);
     });
 
-    config.LADDERS.forEach((l) => {
+    SHIP_LAYOUT.ladders.forEach((l) => {
       ink();
       ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.moveTo(l - 14, config.FLOORS[0] - 120);
-      ctx.lineTo(l - 14, config.FLOORS[2]);
-      ctx.moveTo(l + 14, config.FLOORS[0] - 120);
-      ctx.lineTo(l + 14, config.FLOORS[2]);
-      for (let y = config.FLOORS[0] - 100; y < config.FLOORS[2]; y += 26) {
+      ctx.moveTo(l - 14, SHIP_LAYOUT.floors[0] - 120);
+      ctx.lineTo(l - 14, SHIP_LAYOUT.floors[2]);
+      ctx.moveTo(l + 14, SHIP_LAYOUT.floors[0] - 120);
+      ctx.lineTo(l + 14, SHIP_LAYOUT.floors[2]);
+      for (let y = SHIP_LAYOUT.floors[0] - 100; y < SHIP_LAYOUT.floors[2]; y += 26) {
         ctx.moveTo(l - 14, y);
         ctx.lineTo(l + 14, y);
       }
@@ -76,8 +77,8 @@ export function createRenderer({ ctx, state, canvas }) {
 
     ctx.font = '700 20px Georgia';
     ctx.textAlign = 'center';
-    config.STATIONS.forEach((station) => {
-      const y = config.FLOORS[station.d];
+    SHIP_LAYOUT.stations.forEach((station) => {
+      const y = SHIP_LAYOUT.floors[station.d];
       ctx.fillStyle = 'rgba(27,20,16,.18)';
       rrect(station.x - 55, y - 8, 110, 10, 5);
       ctx.fill();
@@ -95,11 +96,11 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fillStyle = '#b5833f';
       ink();
       ctx.lineWidth = 3;
-      ctx.fillRect(x, config.FLOORS[2] - 24 + y, 34, 24);
-      ctx.strokeRect(x, config.FLOORS[2] - 24 + y, 34, 24);
+      ctx.fillRect(x, SHIP_LAYOUT.floors[2] - 24 + y, 34, 24);
+      ctx.strokeRect(x, SHIP_LAYOUT.floors[2] - 24 + y, 34, 24);
     });
 
-    const gaugeY = config.FLOORS[2] - 60;
+    const gaugeY = SHIP_LAYOUT.floors[2] - 60;
     const gaugeAngle = -Math.PI * 1.15 + state.ship.press / 100 * Math.PI * 1.3;
     ctx.fillStyle = '#f1e2b8';
     ctx.beginPath();
@@ -154,7 +155,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawHazards = (time) => {
     ink();
     for (const breach of state.breaches) {
-      const y = config.FLOORS[breach.d] - 58;
+      const y = SHIP_LAYOUT.floors[breach.d] - 58;
       ctx.fillStyle = config.INK;
       ctx.beginPath();
       ctx.ellipse(breach.x, y, 24, 30, 0.2, 0, 7);
@@ -176,7 +177,7 @@ export function createRenderer({ ctx, state, canvas }) {
     }
     ink();
     for (const fire of state.fires) {
-      const y = config.FLOORS[fire.d];
+      const y = SHIP_LAYOUT.floors[fire.d];
       for (let i = -1; i <= 1; i++) {
         const height = 46 + Math.sin(time * 12 + i * 2) * 10 - (i ? 10 : 0);
         const x = fire.x + i * 18;
