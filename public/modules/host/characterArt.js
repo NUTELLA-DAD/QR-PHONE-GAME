@@ -6,8 +6,13 @@
 // Each can be overridden per character in art/sprites/rig.json, e.g.
 //   "crew/bulldog": { "scale": 0.5, "neck": { "x": 3, "y": -60 }, "armLength": 30 }
 
-// Where each raider type's art lives.
-export const ENEMY_FOLDERS = { grunt: 'enemies/skeleton', brute: 'enemies/devil', sapper: 'enemies/skeleton-bomber', cutter: 'enemies/bat' };
+// Where each raider type's art lives (first folder that has art wins).
+export const ENEMY_FOLDERS = {
+  grunt: ['enemies/skeleton'],
+  brute: ['enemies/devil'],
+  sapper: ['enemies/skeleton-bomber', 'enemies/skeleton'],
+  cutter: ['enemies/bat'],
+};
 
 const DEFAULT_RIG = {
   scale: 0.5, // world units per image pixel (art is 2x)
@@ -32,7 +37,10 @@ const merge = (base, over) => {
 
 // drawItem(item, x, y, swingAge): draws a placeholder held item when there's no item art.
 export function createCharacterArt({ ctx, sprites, drawItem }) {
-  const folderFor = (p) => (p.type ? ENEMY_FOLDERS[p.type] : 'crew/' + p.species);
+  const folderFor = (p) => {
+    if (!p.type) return 'crew/' + p.species;
+    return (ENEMY_FOLDERS[p.type] || []).find((f) => sprites.has(f + '/head')) || null;
+  };
 
   // Draws the character if its art exists. Returns { top } (y of the head top, relative to the
   // feet) or null so the caller can draw the placeholder instead.

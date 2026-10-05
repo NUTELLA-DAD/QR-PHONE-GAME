@@ -63,8 +63,10 @@ export function createFilmLook(ctx) {
   let flicker = 0;
   let scratch = null;
 
-  // Draw over the finished frame (screen space).
+  // Draw over the finished frame (screen space). Does nothing when every effect is off.
+  const anyOn = () => S.WARM_TINT > 0 || S.PAPER > 0 || S.GRAIN > 0 || S.VIGNETTE > 0 || S.FLICKER > 0 || S.SCRATCHES;
   return (timeMs, width, height) => {
+    if (!anyOn()) return;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     // New grain position, flicker and maybe a scratch ~12 times a second.
@@ -74,7 +76,7 @@ export function createFilmLook(ctx) {
       gx = Math.random() * 200;
       gy = Math.random() * 200;
       flicker = Math.random() * S.FLICKER;
-      scratch = Math.random() < 0.06 ? { x: Math.random() * width, w: 1 + Math.random() * 2 } : null;
+      scratch = S.SCRATCHES && Math.random() < 0.06 ? { x: Math.random() * width, w: 1 + Math.random() * 2 } : null;
     }
     // Warm sepia tint.
     ctx.globalCompositeOperation = 'multiply';

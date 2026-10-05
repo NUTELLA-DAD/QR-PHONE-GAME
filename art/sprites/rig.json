@@ -1,5 +1,8 @@
 {
   "crew/bulldog": {
     "headScale": 1.15
+  },
+  "enemies/skeleton": {
+    "headScale": 1.15
   }
 }
