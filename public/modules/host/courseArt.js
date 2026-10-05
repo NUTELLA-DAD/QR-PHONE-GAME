@@ -20,7 +20,8 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     return v - Math.floor(v);
   };
   const G = config.COURSE.GROUND;
-  const SNOW_LINE = G - 430; // peaks higher than this get snow
+  const SNOW_LINE = G - 640; // peaks higher than this get snow
+  const LIFT = G - 1350; // markers were sized for ground at 1350; keep their tops at the same height
 
   // Trace a line through samples, offset by dy(i) (i = sample index).
   const trace = (xs, ys, dy, from = 0, to = xs.length - 1, move = true) => {
@@ -93,7 +94,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       const x = i * STEP - dist;
       ids.push(i);
       xs.push(x);
-      gs.push(groundAt(course, x));
+      gs.push(groundAt(course, x, false)); // bare rock (buildings are drawn separately)
       cs.push(ceilAt(course, x));
     }
     const n = xs.length;
@@ -219,7 +220,9 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
 
     // Trees, bushes and boulders, kept clear of turrets and markers.
     const busy = (cx) =>
-      course.turrets.some((t) => Math.abs(t.cx - cx) < 140) || (course.markers || []).some((m) => Math.abs(m.cx - cx) < 220);
+      course.turrets.some((t) => Math.abs(t.cx - cx) < 140) ||
+      (course.markers || []).some((m) => Math.abs(m.cx - cx) < 220) ||
+      course.features.some((f) => f.blocks && f.blocks.some((b) => cx > b.x0 - 80 && cx < b.x1 + 80));
     ink();
     ctx.lineWidth = 4;
     for (let i = 1; i < last; i++) {
@@ -360,6 +363,186 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     }
   };
 
+  // ---------- Buildings: mountain fortresses and factories ----------
+  const stoneLines = (x0, y0, x1, y1, row, col) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, y0, x1 - x0, y1 - y0);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(40,30,25,.35)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let y = y0 + row, k = 0; y < y1; y += row, k++) {
+      ctx.moveTo(x0, y);
+      ctx.lineTo(x1, y);
+      for (let x = x0 + (k % 2 ? col / 2 : 0); x < x1; x += col) {
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y - row);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  // Battlements: a row of merlons along the top edge.
+  const merlons = (x0, x1, top, h, color) => {
+    const n = Math.max(2, Math.round((x1 - x0) / 44));
+    const w = (x1 - x0) / (n * 2 - 1);
+    ctx.fillStyle = color;
+    for (let i = 0; i < n; i++) {
+      ctx.fillRect(x0 + i * 2 * w, top, w, h + 2);
+      ctx.strokeRect(x0 + i * 2 * w, top, w, h + 2);
+    }
+  };
+
+  // The raiders' banner: dark red with a pair of black horns (fictional emblem).
+  const banner = (x, y, s) => {
+    ctx.fillStyle = '#8e1f1a';
+    ctx.beginPath();
+    ctx.moveTo(x - 20 * s, y);
+    ctx.lineTo(x + 20 * s, y);
+    ctx.lineTo(x + 20 * s, y + 60 * s);
+    ctx.lineTo(x, y + 48 * s);
+    ctx.lineTo(x - 20 * s, y + 60 * s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#1b1410';
+    ctx.beginPath();
+    ctx.moveTo(x - 10 * s, y + 34 * s);
+    ctx.quadraticCurveTo(x - 14 * s, y + 14 * s, x - 4 * s, y + 10 * s);
+    ctx.quadraticCurveTo(x - 6 * s, y + 22 * s, x - 2 * s, y + 32 * s);
+    ctx.moveTo(x + 10 * s, y + 34 * s);
+    ctx.quadraticCurveTo(x + 14 * s, y + 14 * s, x + 4 * s, y + 10 * s);
+    ctx.quadraticCurveTo(x + 6 * s, y + 22 * s, x + 2 * s, y + 32 * s);
+    ctx.fill();
+  };
+
+  const window2 = (x, y, w, h, lit) => {
+    ctx.fillStyle = lit ? '#ffd86b' : '#2b2420';
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y, w, h, [w / 2, w / 2, 2, 2]);
+    ctx.fill();
+    ctx.stroke();
+  };
+
+  const drawBuildings = (view, width, time) => {
+    const course = state.course;
+    if (!course) return;
+    const [wx0, wx1] = span(view, width);
+    const dist = course.dist;
+    // Draw tall things last so walls sit behind towers.
+    const order = { wall: 0, shed: 1, keep: 2, tower: 3, chimney: 4 };
+    const blocks = [];
+    for (const f of course.features) if (f.blocks) for (const b of f.blocks) if (b.x1 - dist > wx0 - 200 && b.x0 - dist < wx1 + 200) blocks.push(b);
+    blocks.sort((a, b) => order[a.kind] - order[b.kind]);
+    for (const b of blocks) {
+      const x0 = b.x0 - dist;
+      const x1 = b.x1 - dist;
+      const cx = (x0 + x1) / 2;
+      const top = b.top;
+      const bottom = Math.max(groundAt(course, x0, false), groundAt(course, x1, false), groundAt(course, cx, false)) + 40;
+      ink();
+      if (b.kind === 'wall') {
+        ctx.fillStyle = '#9a948c';
+        ctx.fillRect(x0, top + 22, x1 - x0, bottom - top - 22);
+        stoneLines(x0, top + 22, x1, bottom, 26, 52);
+        ctx.strokeRect(x0, top + 22, x1 - x0, bottom - top - 22);
+        merlons(x0, x1, top, 22, '#9a948c');
+        // Gatehouse arch.
+        ctx.fillStyle = '#2b2420';
+        ctx.beginPath();
+        ctx.moveTo(cx - 40, bottom - 40);
+        ctx.lineTo(cx - 40, bottom - 90);
+        ctx.arc(cx, bottom - 90, 40, Math.PI, 0);
+        ctx.lineTo(cx + 40, bottom - 40);
+        ctx.fill();
+        ctx.stroke();
+      } else if (b.kind === 'tower') {
+        ctx.fillStyle = '#8a847c';
+        ctx.fillRect(x0, top + 26, x1 - x0, bottom - top - 26);
+        stoneLines(x0, top + 26, x1, bottom, 26, 40);
+        ctx.strokeRect(x0, top + 26, x1 - x0, bottom - top - 26);
+        merlons(x0 - 6, x1 + 6, top, 26, '#8a847c');
+        for (let y = top + 70; y < bottom - 90; y += 90) window2(cx, y, 12, 34, false);
+        banner(cx, top + 34, 1);
+      } else if (b.kind === 'keep') {
+        const roofH = 80;
+        ctx.fillStyle = '#958f86';
+        ctx.fillRect(x0, top + roofH, x1 - x0, bottom - top - roofH);
+        stoneLines(x0, top + roofH, x1, bottom, 26, 52);
+        ctx.strokeRect(x0, top + roofH, x1 - x0, bottom - top - roofH);
+        ctx.fillStyle = '#4a4f63';
+        ctx.beginPath();
+        ctx.moveTo(x0 - 10, top + roofH);
+        ctx.lineTo(cx, top);
+        ctx.lineTo(x1 + 10, top + roofH);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        for (let y = top + roofH + 30; y < bottom - 80; y += 70) {
+          window2(cx - 60, y, 20, 36, (Math.floor(y) + b.x0) % 3 !== 0);
+          window2(cx + 60, y, 20, 36, (Math.floor(y) + b.x0) % 2 === 0);
+        }
+        banner(cx, top + roofH + 6, 1.3);
+      } else if (b.kind === 'shed') {
+        const roofH = 40;
+        ctx.fillStyle = '#9b4a3a';
+        ctx.fillRect(x0, top + roofH, x1 - x0, bottom - top - roofH);
+        stoneLines(x0, top + roofH, x1, bottom, 14, 30);
+        ctx.strokeRect(x0, top + roofH, x1 - x0, bottom - top - roofH);
+        // Saw-tooth roof with glazed faces.
+        const teeth = Math.max(2, Math.round((x1 - x0) / 80));
+        const tw = (x1 - x0) / teeth;
+        for (let i = 0; i < teeth; i++) {
+          const a = x0 + i * tw;
+          ctx.fillStyle = '#5b5550';
+          ctx.beginPath();
+          ctx.moveTo(a, top + roofH);
+          ctx.lineTo(a + tw, top);
+          ctx.lineTo(a + tw, top + roofH);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#9fd3e6';
+          ctx.fillRect(a + tw - 8, top + 8, 6, roofH - 10);
+        }
+        for (let x = x0 + 40; x < x1 - 30; x += 60) window2(x, top + roofH + 24, 26, 30, ((x - x0) / 60) % 2 < 1);
+        ctx.fillStyle = '#3b2a1d';
+        ctx.fillRect(cx - 24, bottom - 100, 48, 60);
+        ctx.strokeRect(cx - 24, bottom - 100, 48, 60);
+      } else if (b.kind === 'chimney') {
+        // Tapered brick smokestack with bands, puffing smoke.
+        ctx.fillStyle = '#8e3f30';
+        ctx.beginPath();
+        ctx.moveTo(x0, top + 14);
+        ctx.lineTo(x1, top + 14);
+        ctx.lineTo(x1 + 12, bottom);
+        ctx.lineTo(x0 - 12, bottom);
+        ctx.closePath();
+        ctx.fill();
+        ctx.save();
+        ctx.clip();
+        stoneLines(x0 - 12, top + 14, x1 + 12, bottom, 14, 24);
+        ctx.restore();
+        ctx.stroke();
+        ctx.fillStyle = '#3a3330';
+        ctx.fillRect(x0 - 6, top, x1 - x0 + 12, 18);
+        ctx.strokeRect(x0 - 6, top, x1 - x0 + 12, 18);
+        ctx.fillStyle = '#f3ead6';
+        for (const k of [0.12, 0.2]) ctx.fillRect(x0 + 2, top + (bottom - top) * k, x1 - x0 - 4, 10);
+        const seed = (b.x0 * 0.013) % 1;
+        for (let k = 0; k < 7; k++) {
+          const t = (time * 0.3 + k / 7 + seed) % 1;
+          ctx.fillStyle = `rgba(70,68,66,${0.75 * (1 - t)})`;
+          ctx.beginPath();
+          ctx.arc(cx + t * 160, top - 30 - t * 320, 26 + t * 70, 0, 7);
+          ctx.fill();
+        }
+      }
+    }
+  };
+
   const drawTurrets = (time) => {
     const course = state.course;
     if (!course) return;
@@ -445,7 +628,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       ink();
       if (m.kind === 'home') {
         // Lattice mooring mast with a platform near the top.
-        const top = g - 900;
+        const top = g - 900 - LIFT;
         ctx.fillStyle = '#7a5a3a';
         ctx.beginPath();
         ctx.moveTo(x - 70, g);
@@ -457,7 +640,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.stroke();
         ctx.lineWidth = 3;
         for (let y = g; y > top + 40; y -= 70) {
-          const k = (g - y) / 900;
+          const k = (g - y) / (900 + LIFT);
           const half = 70 - 48 * k;
           ctx.beginPath();
           ctx.moveTo(x - half, y);
@@ -483,7 +666,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.stroke();
       } else if (m.kind === 'checkpoint') {
         // Tall pole with a waving chequered flag.
-        const top = g - 640;
+        const top = g - 640 - LIFT;
         ctx.lineWidth = 8;
         ctx.beginPath();
         ctx.moveTo(x, g);
@@ -506,10 +689,10 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.strokeRect(x, top, 104, 72);
       } else if (m.kind === 'beacon') {
         // Striped lighthouse with a sweeping light.
-        const top = g - 820;
+        const top = g - 820 - LIFT;
         for (let i = 0; i < 6; i++) {
-          const y0 = g - (i * 820) / 6;
-          const y1 = g - ((i + 1) * 820) / 6;
+          const y0 = g - (i * (820 + LIFT)) / 6;
+          const y1 = g - ((i + 1) * (820 + LIFT)) / 6;
           const w0 = 80 - (i * 40) / 6;
           const w1 = 80 - ((i + 1) * 40) / 6;
           ctx.fillStyle = i % 2 ? '#ffffff' : '#c0392b';
@@ -545,5 +728,5 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     }
   };
 
-  return { drawTerrain, drawTurrets, drawMarkers };
+  return { drawTerrain, drawBuildings, drawTurrets, drawMarkers };
 }

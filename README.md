@@ -25,8 +25,9 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
 
 ## Jobs on board
 
-- **Helm** (bridge): steer up/down through mountains, under rock and through underpasses; the
-  lever is the throttle. Nobody at the helm? On Easy/Normal the autopilot steers gently.
+- **Helm** (bridge): steer up/down through mountains, under rock, through underpasses and
+  zig-zag runs (climb, dive, climb...), over mountain **fortresses** (gun towers on the walls) and
+  **factories** (tall smokestacks); the lever is the throttle. Nobody at the helm? On Easy/Normal the autopilot steers gently.
 - **Guns** (6 of them, each turns only so far): aim near a target and the aim snaps on. Guns need
   **ammo** carried from the Ammo Hold.
 - **Boiler**: carry **coal** from the Coal Bunker (lower deck). More coal = more steam pressure.

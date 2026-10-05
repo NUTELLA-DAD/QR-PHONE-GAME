@@ -45,8 +45,9 @@ const plateau = (t) => {
 };
 const jag = (x, seed) => (Math.sin(x * 0.013 + seed) + Math.sin(x * 0.031 + seed * 2.1) * 0.6) * 14;
 
-// Ground surface (world y) at world x.
-export function groundAt(course, wx) {
+// Ground surface (world y) at world x. Buildings (castle towers, smokestacks) count as solid
+// unless solid = false (the terrain art draws bare rock and then the buildings on top).
+export function groundAt(course, wx, solid = true) {
   let y = K.GROUND;
   const cx = wx + course.dist;
   for (const f of course.features) {
@@ -55,6 +56,7 @@ export function groundAt(course, wx) {
     const h = plateau(t);
     const gy = K.GROUND - (K.GROUND - f.ground) * h + (f.rough ? Math.abs(jag(cx, f.seed)) * h : 0);
     y = Math.min(y, gy);
+    if (solid && f.blocks) for (const b of f.blocks) if (cx >= b.x0 && cx <= b.x1) y = Math.min(y, b.top);
   }
   return y;
 }
@@ -183,6 +185,57 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     }
   };
 
+  // A turret standing on a building (so it fires from the battlements).
+  const turretOn = (b) => {
+    const rocket = course.rand() < K.ROCKET_SHARE * difficulty() + (course.lap > 1 ? 0.15 : 0);
+    course.turrets.push({ cx: (b.x0 + b.x1) / 2, hp: K.TURRET_HP, cd: r(1, K.TURRET_FIRE_MAX), aim: -Math.PI / 2, dead: false, rocket });
+  };
+
+  // A castle on a mountain top: curtain wall, a keep and towers with guns. Building heights are
+  // set from the altitude the ship needs to clear them (never more than A).
+  const makeFortress = (d) => {
+    const width = r(2700, 3200);
+    const baseNeed = r(-A * 0.75, -A * 0.1);
+    const f = { type: 'fortress', ground: groundFor(baseNeed), rough: true, width, blocks: [] };
+    const room = A - 20 - baseNeed; // most a building may rise above the mountain top
+    const c0 = width * 0.31;
+    const c1 = width * 0.69;
+    const block = (kind, a, b, h) => f.blocks.push({ kind, x0: a, x1: b, top: f.ground - Math.min(room, h), h: Math.min(room, h) });
+    block('wall', c0, c1, r(140, 170));
+    const towerH = () => r(270, 340 + 120 * d);
+    block('tower', c0 - 30, c0 + 140, towerH());
+    block('tower', c1 - 140, c1 + 30, towerH());
+    const mid = (c0 + c1) / 2;
+    block('keep', mid - 190, mid + 190, r(330, 420 + 120 * d));
+    return f;
+  };
+
+  // A factory valley: sheds with saw-tooth roofs and tall smokestacks to climb over.
+  const makeFactory = (d) => {
+    const width = r(2600, 3200);
+    const f = { type: 'factory', ground: K.GROUND - r(60, 140), rough: false, width, blocks: [] };
+    const baseNeed = BOTTOM_Y + MARGIN - f.ground;
+    let x = width * 0.28;
+    const end = width * 0.72;
+    let sheds = 1; // start with a stack
+    while (x < end) {
+      if (sheds < 2 && course.rand() < 0.5) {
+        const w = r(300, 460);
+        const h = r(140, 210);
+        f.blocks.push({ kind: 'shed', x0: x, x1: x + w, top: f.ground - h, h });
+        x += w + r(10, 40);
+        sheds += 1;
+      } else {
+        const need = Math.min(A - 20, r(A * 0.1, A * (0.55 + 0.4 * d)));
+        const h = Math.max(260, need - baseNeed);
+        f.blocks.push({ kind: 'chimney', x0: x, x1: x + 70, top: f.ground - h, h });
+        x += 70 + r(60, 140);
+        sheds = 0;
+      }
+    }
+    return f;
+  };
+
   const generate = () => {
     while (course.markers[course.markers.length - 1].cx < course.dist + 12000) addLapMarkers(course.markers[course.markers.length - 1].lap + 1);
     while (course.nextX < course.dist + 9000) {
@@ -192,31 +245,62 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
       const blocked = nearMarker(x0, x0 + widthGuess);
       if (blocked) {
         course.nextX = blocked.cx + K.MARKER_CLEAR;
+        course.zig = 0;
         continue;
       }
-      const roll = course.rand();
       let f;
-      if (roll < 0.3) {
-        // Mountain: climb over it.
-        f = { type: 'mountain', ground: groundFor(r(40, A * (0.55 + 0.45 * d))), rough: true, width: r(1600, 2600) };
-      } else if (roll < 0.5) {
-        // Rock overhang: dive under it.
-        f = { type: 'overhang', ceil: ceilFor(-r(30, A * (0.5 + 0.5 * d))), width: r(1400, 2200) };
-      } else if (roll < 0.78) {
-        // Underpass: a gap you have to hold the ship inside.
-        const room = K.UNDERPASS_GAP_START + (K.UNDERPASS_GAP_END - K.UNDERPASS_GAP_START) * d;
-        const mid = r(-A + room / 2, A - room / 2);
-        f = { type: 'underpass', ground: groundFor(mid - room / 2), ceil: ceilFor(mid + room / 2), rough: true, width: r(2000, 3200) };
+      if (course.zig > 0) {
+        // Zig-zag: alternating rock spires (climb!) and hanging rock (dive!).
+        course.zig -= 1;
+        course.zigUp = !course.zigUp;
+        const swing = course.zigSwing;
+        f = course.zigUp
+          ? { type: 'spire', ground: groundFor(swing), rough: true, width: r(800, 1100) }
+          : { type: 'stalactite', ceil: ceilFor(-swing), width: r(800, 1100) };
       } else {
-        // Rolling hills: no steering needed, but turrets love them.
-        f = { type: 'hills', ground: r(1060, 1180), rough: true, width: r(1400, 2400) };
+        const M = K.MIX;
+        let roll = course.rand();
+        const pick = (k) => (roll -= M[k]) < 0;
+        if (pick('mountain')) {
+          // Mountain: climb over it.
+          f = { type: 'mountain', ground: groundFor(r(40, A * (0.55 + 0.45 * d))), rough: true, width: r(1600, 2600) };
+        } else if (pick('overhang')) {
+          // Rock overhang: dive under it.
+          f = { type: 'overhang', ceil: ceilFor(-r(30, A * (0.5 + 0.5 * d))), width: r(1400, 2200) };
+        } else if (pick('underpass')) {
+          // Underpass: a gap you have to hold the ship inside.
+          const room = K.UNDERPASS_GAP_START + (K.UNDERPASS_GAP_END - K.UNDERPASS_GAP_START) * d;
+          const mid = r(-A + room / 2, A - room / 2);
+          f = { type: 'underpass', ground: groundFor(mid - room / 2), ceil: ceilFor(mid + room / 2), rough: true, width: r(2000, 3200) };
+        } else if (pick('zigzag')) {
+          // Start a zig-zag run; the gates follow one by one.
+          course.zig = Math.round(r(K.ZIGZAG_GATES[0], K.ZIGZAG_GATES[1] + 0.49)) - 1;
+          course.zigUp = course.rand() < 0.5;
+          const swing = (course.zigSwing = r(0.35, 0.5 + 0.3 * d) * A);
+          f = course.zigUp
+            ? { type: 'spire', ground: groundFor(swing), rough: true, width: r(800, 1100), first: true }
+            : { type: 'stalactite', ceil: ceilFor(-swing), width: r(800, 1100), first: true };
+        } else if (pick('fortress')) f = makeFortress(d);
+        else if (pick('factory')) f = makeFactory(d);
+        else {
+          // Rolling hills: no steering needed, but turrets love them.
+          f = { type: 'hills', ground: K.GROUND - r(170, 290), rough: true, width: r(1400, 2400) };
+        }
       }
       f.x0 = x0;
       f.x1 = x0 + Math.min(f.width, widthGuess);
       f.seed = course.rand() * 100;
+      // Buildings were laid out relative to the feature's start.
+      if (f.blocks) for (const b of f.blocks) (b.x0 += x0), (b.x1 += x0);
       course.features.push(f);
-      if (f.ground != null) addTurrets(f, course.rand() < 0.4 + 0.4 * d ? (course.rand() < d ? 2 : 1) : 0);
-      course.nextX = f.x1 + r(K.GAP_MIN, K.GAP_MAX) * (1 - 0.4 * d);
+      if (f.type === 'fortress') {
+        // Guns on both towers, and on the keep later on.
+        f.blocks.filter((b) => b.kind === 'tower' || (b.kind === 'keep' && course.rand() < d)).forEach(turretOn);
+      } else if (f.type === 'factory') {
+        const sheds = f.blocks.filter((b) => b.kind === 'shed');
+        sheds.slice(0, course.rand() < d ? 2 : 1).forEach(turretOn);
+      } else if (f.ground != null && f.type !== 'spire') addTurrets(f, course.rand() < 0.4 + 0.4 * d ? (course.rand() < d ? 2 : 1) : 0);
+      course.nextX = f.x1 + (course.zig > 0 ? K.ZIGZAG_GAP + course.zigSwing * K.ZIGZAG_GAP_PER_SWING : r(K.GAP_MIN, K.GAP_MAX) * (1 - 0.4 * d));
     }
     // Forget what's well behind the last marker (we may need to rewind to it).
     const keep = Math.min(course.dist, course.lastMarker.cx) - 4000;
@@ -234,7 +318,16 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     if (next && course.warned !== next) {
       course.warned = next;
       state.ev.warn = 3;
-      state.ev.warnText = next.type === 'mountain' ? 'MOUNTAIN AHEAD - CLIMB!' : next.type === 'overhang' ? 'LOW ROCK AHEAD - DIVE!' : 'UNDERPASS AHEAD - HOLD HER STEADY!';
+      const zig = next.first ? 'ZIG-ZAG AHEAD - ' : '';
+      state.ev.warnText = {
+        mountain: 'MOUNTAIN AHEAD - CLIMB!',
+        overhang: 'LOW ROCK AHEAD - DIVE!',
+        underpass: 'UNDERPASS AHEAD - HOLD HER STEADY!',
+        spire: zig + 'CLIMB!',
+        stalactite: zig + 'DIVE!',
+        fortress: 'FORTRESS AHEAD - CLIMB!',
+        factory: 'SMOKESTACKS AHEAD - CLIMB!',
+      }[next.type];
     }
   };
 
@@ -426,6 +519,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
       leg: 'out',
       lastMarker: { cx: 0, kind: 'home', lap: 1 },
       dusk: 0,
+      zig: 0,
     });
     addLapMarkers(1);
     course.markers[0].passed = true;

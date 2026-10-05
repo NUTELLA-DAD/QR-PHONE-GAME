@@ -1119,6 +1119,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.setTransform(view.zoom, 0, 0, view.zoom, width / 2 - view.cx * view.zoom, height / 2 - view.cy * view.zoom);
     drawNearClouds(width, height, view);
     courseArt.drawTerrain(view, width, height);
+    courseArt.drawBuildings(view, width, time / 1000);
     courseArt.drawMarkers(time / 1000);
     courseArt.drawTurrets(time / 1000);
 

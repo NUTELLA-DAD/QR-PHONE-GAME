@@ -22,8 +22,8 @@ export const config = {
   },
   // How far the helm can climb/dive (world pixels either way) and how fast.
   SHIP: {
-    ALT_RANGE: 260,
-    CLIMB_SPEED: 170,
+    ALT_RANGE: 420, // how far the ship can climb or dive from the middle
+    CLIMB_SPEED: 210,
     HULL_DAMAGE: 1, // multiplier on hull damage taken (armour upgrades lower it)
     HIT_DAMAGE: 3, // hull lost per enemy bullet hit (bigger blasts scale this up)
     HOLE_CHANCE: 0.6, // chance an enemy bullet hit punches a hole in the deck
@@ -78,7 +78,7 @@ export const config = {
   // ground turrets. Endless, getting harder with distance.
   COURSE: {
     ENABLED: true,
-    GROUND: 1350, // ground level far below the ship (world y)
+    GROUND: 1520, // ground level far below the ship (world y)
     FIRST_FEATURE: 4000, // distance before the first obstacle
     GAP_MIN: 700, // open sky between obstacles...
     GAP_MAX: 1600,
@@ -88,6 +88,11 @@ export const config = {
     LOOP_LENGTH: 110000, // one lap: out to the beacon and back home (~6 minutes at cruising speed)
     SECTIONS: 6, // markers per lap: home, checkpoints, beacon halfway
     CHECKPOINT_REPAIR: 15, // hull repaired by the supplies at each checkpoint flag
+    // Share of each kind of obstacle (the rest are rolling hills).
+    MIX: { mountain: 0.17, overhang: 0.12, underpass: 0.17, zigzag: 0.16, fortress: 0.13, factory: 0.13 },
+    ZIGZAG_GATES: [3, 6], // a zig-zag is this many spires/hanging rocks in a row, alternating
+    ZIGZAG_GAP: 2000, // distance between one gate's end and the next (the ship is ~1750 long)...
+    ZIGZAG_GAP_PER_SWING: 3.4, // ...plus this much per pixel of climb/dive each gate asks for
     MARKER_CLEAR: 1800, // open sky kept around every marker (safe restart spots)
     REWIND_BEFORE: 900, // after going down, restart this far before the last marker
     SCRAPE_COOLDOWN: 0.45, // seconds between scrape damage while touching rock
