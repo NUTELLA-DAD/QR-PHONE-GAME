@@ -482,12 +482,13 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
   const updateTurrets = (dt) => {
     const v = scrollSpeed(state);
     for (const t of course.turrets) {
-      if (t.dead) continue;
+      // Every turret (wrecked ones too) stays fixed to the ground as it scrolls past.
       const wx = t.cx - course.dist;
       const wy = groundAt(course, wx);
       t.x = wx;
       t.y = wy - 20;
       t.vx = -v;
+      if (t.dead) continue;
       // Aim at the middle of the ship.
       const ty = 640 - state.ship.alt;
       t.aim = Math.atan2(ty - t.y, 800 - wx);
