@@ -6,10 +6,19 @@ export const config = {
   PLAYER_COLORS: ['#e63946', '#f4a261', '#f1c40f', '#2a9d8f', '#3a86ff', '#8338ec', '#ff5da2', '#06d6a0', '#ff7b00', '#00b4d8', '#9ef01a', '#b5179e', '#ffffff', '#7f5539', '#4cc9f0', '#d00000'],
   // Camera framing.
   CAMERA: {
-    SHIP_SCREEN_FRACTION: 0.5, // the ship takes at most this much of the screen width
+    SHIP_SCREEN_FRACTION: 0.38, // the ship takes at most this much of the screen width
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
     SMOOTHING: 1.6, // how quickly the camera catches up (higher = snappier)
+  },
+  // Enemy plane: flies a loop around the ship.
+  ENEMY: {
+    PATH_CX: 800, // centre of the loop
+    PATH_CY: 470,
+    PATH_RX: 1300, // half-width of the loop
+    PATH_RY: 680, // half-height of the loop
+    PATH_WOBBLE: 50, // small up-down weave
+    TURN_SPEED: 0.38, // how fast it goes round (radians per second)
   },
   // Test bot behaviour (times in seconds).
   BOTS: {

@@ -47,6 +47,13 @@ Done when: the game plays exactly like v0.4, and the layout lives in a data file
 - Clear boarder entry points: deck hatches and grapple points on the outside walkways.
 - A navigation graph so boarders and bots can path anywhere on the ship.
 
+**Added by the user (Oct 2026)**
+- Zoom further out than the first camera pass: the ship around 35-40% of the screen width.
+- Guns turn only within a firing arc and can never shoot through their own ship.
+- Steam pipes run from the boiler to every part of the ship, with pressure valves along the way
+  (laid out as data here; the gameplay comes in Phase 2).
+- Tool racks (swords, hammers) and fire-extinguisher hooks placed around the ship.
+
 Done when: 16 avatars fit without crowding, any station is reachable in about 8 seconds, and every
 station is visually distinct at a glance from across the room.
 
@@ -71,15 +78,27 @@ station is visually distinct at a glance from across the room.
 - Acceleration and snappy stops, automatic ladder grab, drop down through hatches.
 - On the host screen, highlight what each player is about to interact with.
 
+**Tools and ship systems** (user idea)
+- Players pick up tools from racks and carry one at a time: a sword to fight raiders, a hammer to
+  fix holes and burst pipes (replaces the patch kit), and fire extinguishers from hooks around the
+  ship to put out fires.
+- Steam network: the boiler feeds pipes to each section (helm/engines, guns, lift). Pressure valves
+  let the crew route steam; pipes can be hit and burst, cutting power to that section until fixed.
+
 **Weapons and boarding combat**
-- Every crew member carries a melee weapon. Cutlass by default, with cosmetic variants per player
+- Melee weapons come from the tool racks (see above). Cosmetic variants per player later
   (wrench, frying pan, umbrella, cricket bat).
 - Attack button: a swing arc that hits raiders in front, a 3-hit combo, knockback, short cooldown.
 - Raiders telegraph their attacks with a wind-up flash so players can step back or interrupt.
 - Raider types: Grunt (basic), Brute (slow, tough, big knockback), Sapper (plants a bomb on the
   hull that blows a breach unless defused), Cutter (goes after gas lines and stations).
-- Boarders arrive on a visible boarding craft with grapple lines. Gunners can shoot the craft down
-  before it docks, which ties the gun crew to boarding defence.
+- Boarders arrive in an enemy cargo plane that approaches from far out and drops them on the ship.
+  Gunners can shoot it down before it arrives, which ties the gun crew to boarding defence.
+
+**Enemies and reasons to steer** (user idea)
+- Enemy planes never fly through the ship: their paths go around it, and a plane that does hit
+  the ship crashes into it (damage, fire, wreck).
+- Hazards to dodge with the helm: floating mines, flak bursts, later storms.
 - No friendly fire. Keep knockouts and revives, retuned for the new combat.
 
 Done when: a new player can pick up the phone and play without instructions, and fighting raiders

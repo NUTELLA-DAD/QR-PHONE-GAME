@@ -1,50 +1,113 @@
 // Ship layout as data. Change the ship here, not in the game code.
-// Coordinates are in world pixels (the world is config.W x config.H).
-// Floors are numbered 0 (top) to 2 (bottom); `d` on a station means which floor it is on.
+// Coordinates are world pixels; y grows downward. The ship flies to the RIGHT (bow on the right).
+//
+// Platforms are the walkable floors. Everything that sits on a floor says which one with `p`
+// (a platform id). At load time each of those also gets `d` = the platform's index, which is what
+// the game code uses.
 
-const floors = [500, 650, 800];
+const platforms = [
+  { id: 'nest', name: "Crow's Nest", y: 52, x0: 690, x1: 910, outside: true },
+  { id: 'catwalk', name: 'Top Catwalk', y: 470, x0: 240, x1: 1360, outside: true },
+  { id: 'main', name: 'Main Deck', y: 640, x0: 140, x1: 1470 },
+  { id: 'lower', name: 'Lower Deck', y: 790, x0: 20, x1: 1580 },
+  { id: 'pod', name: 'Ball Turret', y: 905, x0: 735, x1: 855 },
+];
+
+const index = (id) => platforms.findIndex((p) => p.id === id);
+const withD = (list) => list.map((o) => ({ ...o, d: index(o.p) }));
 
 export const SHIP_LAYOUT = {
-  // Y position of each walkable floor (top to bottom).
-  floors,
+  platforms,
 
-  // X position of each ladder. Ladders connect all floors.
-  ladders: [520, 1080],
+  // Ways between platforms. `top`/`bottom` are platform ids; xTop/xBottom where each end sits.
+  // speed = climbing speed in pixels per second (vertical).
+  connectors: [
+    { type: 'rope', top: 'nest', bottom: 'catwalk', xTop: 720, xBottom: 720, speed: 150 },
+    { type: 'ladder', top: 'catwalk', bottom: 'main', xTop: 300, xBottom: 300, speed: 170 },
+    { type: 'ladder', top: 'catwalk', bottom: 'main', xTop: 1050, xBottom: 1050, speed: 170 },
+    { type: 'ladder', top: 'main', bottom: 'lower', xTop: 255, xBottom: 255, speed: 170 },
+    { type: 'stairs', top: 'main', bottom: 'lower', xTop: 560, xBottom: 700, speed: 150 },
+    { type: 'lift', top: 'main', bottom: 'lower', xTop: 960, xBottom: 960, speed: 260 },
+    { type: 'ladder', top: 'main', bottom: 'lower', xTop: 1140, xBottom: 1140, speed: 170 },
+    { type: 'ladder', top: 'lower', bottom: 'pod', xTop: 760, xBottom: 760, speed: 170 },
+  ].map((c) => ({ ...c, top: index(c.top), bottom: index(c.bottom) })),
 
-  // Left and right inner walls of the hull.
-  hull: { x0: 290, x1: 1310 },
+  // Named areas, used for drawing and for telling players where things are.
+  rooms: withD([
+    { name: 'Tail Turret', p: 'main', x0: 140, x1: 240, color: '#b9925c' },
+    { name: 'Boiler Room', p: 'main', x0: 240, x1: 620, color: '#b08250' },
+    { name: 'Workshop', p: 'main', x0: 620, x1: 1100, color: '#c9a46a' },
+    { name: 'Bridge', p: 'main', x0: 1100, x1: 1470, color: '#d4b47c' },
+    { name: 'Aft Gun Deck', p: 'lower', x0: 250, x1: 650, color: '#a8814f' },
+    { name: 'Hold', p: 'lower', x0: 650, x1: 950, color: '#9c7646' },
+    { name: 'Fore Gun Deck', p: 'lower', x0: 950, x1: 1350, color: '#a8814f' },
+    { name: 'Aft Outrigger', p: 'lower', x0: 20, x1: 250, outside: true },
+    { name: 'Fore Outrigger', p: 'lower', x0: 1350, x1: 1580, outside: true },
+  ]),
 
-  // Outer edges of the whole ship drawing (gasbag, guns, tail). The camera keeps all of this in view.
-  bounds: { x0: 180, x1: 1560, y0: 40, y1: 830 },
+  // Stations players can use. n = name, p = platform, x = position.
+  stations: withD([
+    { n: 'Lookout', p: 'nest', x: 740 },
+    { n: 'Dorsal Gun', p: 'nest', x: 870 },
+    { n: 'Tail Gun', p: 'main', x: 180 },
+    { n: 'Boiler', p: 'main', x: 400 },
+    { n: 'Repairs', p: 'main', x: 760 },
+    { n: 'Navigator', p: 'main', x: 1215 },
+    { n: 'Helm', p: 'main', x: 1330 },
+    { n: 'Nose Gun', p: 'main', x: 1430 },
+    { n: 'Aft Sponson', p: 'lower', x: 420 },
+    { n: 'Ammo Hold', p: 'lower', x: 870 },
+    { n: 'Fore Sponson', p: 'lower', x: 1180 },
+    { n: 'Ventral Gun', p: 'pod', x: 820 },
+  ]),
 
-  // Rooms: a named area on one floor, from x0 to x1.
-  rooms: [
-    { name: 'Upper Deck', d: 0, x0: 290, x1: 1310 },
-    { name: 'Gun Deck', d: 1, x0: 290, x1: 1310 },
-    { name: 'Engine Deck', d: 2, x0: 290, x1: 1310 },
-  ],
-
-  // Stations players can use. n = name, d = floor, x = position.
-  stations: [
-    { n: 'Lookout', d: 0, x: 330 },
-    { n: 'Roof Gun', d: 0, x: 1270 },
-    { n: 'Port Cannon', d: 1, x: 330 },
-    { n: 'Navigator', d: 1, x: 800 },
-    { n: 'Helm', d: 1, x: 1270 },
-    { n: 'Boiler', d: 2, x: 330 },
-    { n: 'Repairs', d: 2, x: 800 },
-    { n: 'Ammo Hold', d: 2, x: 1270 },
-  ],
-
-  // Where each gun's barrel pivots (bx, by) and its resting aim angle.
+  // Guns: where the barrel pivots (bx, by), the middle of its firing arc (aim, radians;
+  // 0 = right, PI/2 = down) and how far it may turn either side of that (arc).
   gunMounts: {
-    'Port Cannon': { bx: 262, by: floors[1] - 62, aim: Math.PI },
-    'Roof Gun': { bx: 1270, by: floors[0] - 142, aim: -Math.PI / 2 },
+    'Dorsal Gun': { bx: 870, by: 18, aim: -Math.PI / 2, arc: 1.4 },
+    'Tail Gun': { bx: 112, by: 585, aim: Math.PI, arc: 1.0 },
+    'Nose Gun': { bx: 1498, by: 585, aim: 0, arc: 1.0 },
+    'Aft Sponson': { bx: 330, by: 812, aim: 2.15, arc: 0.7 },
+    'Fore Sponson': { bx: 1270, by: 812, aim: 1.0, arc: 0.7 },
+    'Ventral Gun': { bx: 805, by: 948, aim: Math.PI / 2, arc: 1.2 },
   },
 
-  // Where raiders can climb aboard.
-  boarderEntryPoints: [
-    { x: 300, side: 'left' },
-    { x: 1300, side: 'right' },
+  // Engines on the outriggers (become repairable/steam-powered in Phase 2).
+  engines: withD([
+    { name: 'Aft Engine', p: 'lower', x: 70 },
+    { name: 'Fore Engine', p: 'lower', x: 1530 },
+  ]),
+
+  // Steam pipes from the boiler, each with a valve (gameplay in Phase 2).
+  pipes: [
+    { to: 'Helm', points: [[430, 560], [430, 505], [1330, 505], [1330, 530]], valve: [760, 505] },
+    { to: 'Aft Engine', points: [[370, 610], [370, 680], [110, 680], [110, 765]], valve: [230, 680] },
+    { to: 'Fore Engine', points: [[440, 610], [440, 692], [1490, 692], [1490, 765]], valve: [1230, 692] },
   ],
+
+  // Tool racks and fire-extinguisher hooks (gameplay in Phase 2).
+  racks: withD([
+    { kind: 'sword', p: 'main', x: 660 },
+    { kind: 'hammer', p: 'main', x: 860 },
+    { kind: 'sword', p: 'lower', x: 1300 },
+  ]),
+  extinguishers: withD([
+    { p: 'main', x: 520 },
+    { p: 'main', x: 1185 },
+    { p: 'lower', x: 300 },
+    { p: 'lower', x: 1040 },
+    { p: 'catwalk', x: 820 },
+  ]),
+
+  // Where raiders land (grapple points on the catwalk).
+  boarderEntryPoints: [
+    { x: 290, p: 'catwalk' },
+    { x: 1310, p: 'catwalk' },
+  ],
+
+  // Outer edges of the whole ship drawing. The camera keeps all of this in view.
+  bounds: { x0: -100, x1: 1670, y0: -70, y1: 975 },
+
+  // Where enemy fire is aimed (centre of the gondola).
+  aimPoint: { x: 800, y: 640 },
 };

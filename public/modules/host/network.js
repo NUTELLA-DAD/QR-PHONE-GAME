@@ -23,7 +23,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
 
   socket.on('player:joined', (m) => {
     const player = simulation.state.players[m.id] || (simulation.state.players[m.id] = {
-      x: SHIP_LAYOUT.hull.x0 + Math.random() * (SHIP_LAYOUT.hull.x1 - SHIP_LAYOUT.hull.x0),
+      x: SHIP_LAYOUT.boarderEntryPoints[0].x + Math.random() * (SHIP_LAYOUT.boarderEntryPoints[1].x - SHIP_LAYOUT.boarderEntryPoints[0].x),
       y: -60,
       fall: true,
       jx: 0,
@@ -65,7 +65,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
         name: 'Bot' + (Object.keys(simulation.state.players).length + 1),
         species: speciesNames[Math.random() * speciesNames.length | 0],
         color: colors[Math.random() * colors.length | 0],
-        x: SHIP_LAYOUT.hull.x0 + Math.random() * (SHIP_LAYOUT.hull.x1 - SHIP_LAYOUT.hull.x0),
+        x: SHIP_LAYOUT.boarderEntryPoints[0].x + Math.random() * (SHIP_LAYOUT.boarderEntryPoints[1].x - SHIP_LAYOUT.boarderEntryPoints[0].x),
         y: -60,
         fall: true,
         jx: 0,

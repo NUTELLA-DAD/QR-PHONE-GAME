@@ -2,48 +2,37 @@
 // (jx/jy joystick, actQ = tap Action, fire = hold Action), so they test the real game rules.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { steerTo } from './nav.js';
+import { enemyAt } from './enemy.js';
 
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
 const SHELL_SPEED = 950;
-const GUN_STATIONS = ['Port Cannon', 'Roof Gun'];
+const GUN_STATIONS = Object.keys(L.gunMounts);
 const MANNED_STATIONS = ['Helm', 'Boiler', ...GUN_STATIONS];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 const stationNamed = (name) => L.stations.find((s) => s.n === name);
-const nearestFloor = (y) => L.floors.reduce((best, f, i) => (Math.abs(f - y) < Math.abs(L.floors[best] - y) ? i : best), 0);
-const floorOfY = (y) => nearestFloor(y);
 
-// Walk/climb toward floor d at position x. Returns true when there.
+// Walk/climb toward platform d at position x. Returns true when there.
 function steer(p, d, x, near = 12) {
-  const fy = L.floors[d];
-  p.jx = 0;
-  p.jy = 0;
-  if (p.climb) {
-    if (Math.abs(p.y - fy) > 3) p.jy = Math.sign(fy - p.y);
-    return false;
-  }
-  if (nearestFloor(p.y) === d) {
-    const dx = x - p.x;
-    if (Math.abs(dx) <= near) return true;
-    p.jx = Math.sign(dx) * clamp(Math.abs(dx) / 60, 0.3, 1);
-    return false;
-  }
-  const ladder = L.ladders.reduce((best, l) => (Math.abs(p.x - l) + Math.abs(x - l) < Math.abs(p.x - best) + Math.abs(x - best) ? l : best));
-  if (Math.abs(p.x - ladder) < 12) p.jy = Math.sign(fy - p.y);
-  else p.jx = Math.sign(ladder - p.x) * clamp(Math.abs(ladder - p.x) / 60, 0.3, 1);
-  return false;
+  const step = steerTo(p, d, x, near);
+  p.jx = step.jx;
+  p.jy = step.jy;
+  return step.arrived;
 }
 
-// Where the enemy plane will be in t seconds (it flies a fixed looping path).
-function enemyAt(enemy, t) {
-  const ang = enemy.ang + 0.55 * t;
-  return { x: 800 + Math.cos(ang) * 820, y: 380 + Math.sin(ang * 1.3) * 330 };
-}
+const enemyActive = (state) => state.enemy.dead <= 0;
 
-function enemyActive(state) {
-  const e = state.enemy;
-  return e.dead <= 0 && e.x > -40 && e.x < config.W + 40 && e.y > -40 && e.y < config.H;
+// Where a gun must point to hit the enemy (leading the target). null if out of its arc.
+function firingSolution(state, gun) {
+  const gx = gun.bx;
+  const gy = gun.by - state.ship.alt;
+  let target = state.enemy;
+  for (let i = 0; i < 2; i++) target = enemyAt(state.enemy, Math.hypot(target.x - gx, target.y - gy) / SHELL_SPEED);
+  const angle = Math.atan2(target.y - gy, target.x - gx);
+  return Math.abs(angleDiff(angle, gun.home)) <= gun.arc ? angle : null;
 }
 
 // List every job on the ship, most urgent first.
@@ -61,7 +50,10 @@ function listJobs(state, bot) {
     guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
     for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   }
-  for (const n of MANNED_STATIONS) if (!players.some((q) => q.lock === n)) jobs.push({ kind: 'station', obj: n, max: 1 });
+  // Helm and boiler first, then guns that can reach the enemy right now.
+  const reach = (n) => (!GUN_STATIONS.includes(n) ? 0 : enemyActive(state) && firingSolution(state, state.GUNS[n]) !== null ? 1 : 2);
+  const open = MANNED_STATIONS.filter((n) => !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
+  for (const n of open) jobs.push({ kind: 'station', obj: n, max: 1 });
   return jobs;
 }
 
@@ -78,7 +70,7 @@ function chooseJob(state, bot, bots) {
   const dist = (j) => {
     const o = j.obj;
     if (typeof o === 'string') return 0;
-    const y = o.d !== undefined ? L.floors[o.d] : o.y;
+    const y = o.d != null ? L.platforms[o.d].y : o.y;
     return Math.abs(o.x - bot.x) + Math.abs(y - bot.y) * 3;
   };
   return jobs.filter((j) => j.kind === kind).sort((a, b) => dist(a) - dist(b))[0];
@@ -99,18 +91,23 @@ function operate(p, state, dt) {
     p.fire = !!p.stoking;
   } else {
     const gun = state.GUNS[p.lock];
-    if (!gun || !enemyActive(state)) return;
-    const gx = gun.bx;
-    const gy = gun.by - ship.alt;
-    // Lead the target: guess flight time, predict, refine once.
-    let target = state.enemy;
-    for (let i = 0; i < 2; i++) target = enemyAt(state.enemy, Math.hypot(target.x - gx, target.y - gy) / SHELL_SPEED);
-    const angle = Math.atan2(target.y - gy, target.x - gx);
+    if (!gun) return;
+    const angle = enemyActive(state) ? firingSolution(state, gun) : null;
+    // Count how long the enemy has been out of this gun's reach.
+    p.gunIdle = angle === null ? (p.gunIdle || 0) + dt : 0;
+    if (angle === null) return;
     p.jx = Math.cos(angle);
     p.jy = Math.sin(angle);
     const off = Math.abs(Math.atan2(Math.sin(angle - gun.aim), Math.cos(angle - gun.aim)));
     p.fire = gun.ammo > 0 && off < B.AIM_TOLERANCE;
   }
+}
+
+// The platform someone is on (or the nearer end of what they're climbing).
+function goalOf(o) {
+  if (o.conn == null) return o.d;
+  const c = L.connectors[o.conn];
+  return o.s < 0.5 ? c.top : c.bottom;
 }
 
 function press(p) {
@@ -127,7 +124,8 @@ function work(p, state) {
   if (!job) return wander(p);
   const o = job.obj;
   if (job.kind === 'fight') {
-    if (steer(p, floorOfY(o.y), o.x, 45) || (Math.abs(o.y - p.y) < 20 && Math.abs(o.x - p.x) < 70)) {
+    if (o.fall) return;
+    if (steer(p, goalOf(o), o.x, 45) || (Math.abs(o.y - p.y) < 20 && Math.abs(o.x - p.x) < 70)) {
       p.jx = 0;
       p.face = o.x < p.x ? -1 : 1;
       if ((p.whackCd || 0) <= 0) {
@@ -136,7 +134,7 @@ function work(p, state) {
       }
     }
   } else if (job.kind === 'revive') {
-    if (steer(p, floorOfY(o.y), o.x, 30)) p.fire = true;
+    if (steer(p, goalOf(o), o.x, 30)) p.fire = true;
   } else if (job.kind === 'fire') {
     if (steer(p, o.d, o.x, 30)) p.fire = true;
   } else if (job.kind === 'patch') {
@@ -155,7 +153,9 @@ function work(p, state) {
 
 function wander(p) {
   if (!p.wanderTo || (p.wanderWait !== undefined && p.wanderWait <= 0)) {
-    p.wanderTo = { d: (Math.random() * L.floors.length) | 0, x: L.hull.x0 + 40 + Math.random() * (L.hull.x1 - L.hull.x0 - 80) };
+    const d = (Math.random() * L.platforms.length) | 0;
+    const plat = L.platforms[d];
+    p.wanderTo = { d, x: plat.x0 + 20 + Math.random() * (plat.x1 - plat.x0 - 40) };
     p.wanderWait = undefined;
   }
   if (steer(p, p.wanderTo.d, p.wanderTo.x) && p.wanderWait === undefined) p.wanderWait = 1 + Math.random() * 2;
@@ -182,7 +182,9 @@ export function updateBot(p, state, dt) {
       const free = bots.filter((q) => !q.lock && !(q.ko > 0)).length;
       const urgent = listJobs(state, p).filter(isEmergency).length;
       if (p.lockLeft === undefined) p.lockLeft = B.STATION_MIN + Math.random() * (B.STATION_MAX - B.STATION_MIN);
-      if (p.lockLeft <= 0 || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
+      const gunUseless = (p.gunIdle || 0) > 6;
+      if (gunUseless) p.gunIdle = 0;
+      if (p.lockLeft <= 0 || gunUseless || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;
         p.lockLeft = undefined;
         p.botJob = null;
