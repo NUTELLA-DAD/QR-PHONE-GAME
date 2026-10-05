@@ -110,7 +110,7 @@ export function createModules() {
       if (m.kind !== 'pipe' || !m.open) continue;
       if (m.broken) use += M.PIPE_LEAK;
       else if (!byName[m.to] || byName[m.to].broken) continue;
-      else use += byName[m.to].kind === 'engine' ? B.USE_ENGINE * state.ship.speed : B.USE_POWERED;
+      else use += byName[m.to].kind === 'engine' ? B.USE_ENGINE * Math.abs(state.ship.speed) : B.USE_POWERED;
     }
     return use;
   };

@@ -1,3 +1,4 @@
+import { config } from '../../config.js';
 export function createControllerInput({ network, ui }) {
   const pad = document.getElementById('pad');
   const knob = document.getElementById('knob');
@@ -67,19 +68,30 @@ export function createControllerInput({ network, ui }) {
     );
   };
 
-  // Helm throttle lever: drag up for full speed.
+  // Helm throttle lever: up = ahead (full speed at the top), the STOP line = hover, below it =
+  // reverse. throttle runs from -REVERSE to 1.
+  const REV = config.SHIP.REVERSE;
   const lever = document.getElementById('lever');
   const leverFill = lever.querySelector('.fill');
   const leverHandle = lever.querySelector('.handle');
+  const leverStop = lever.querySelector('.stop');
   let throttle = 0.5;
   let lastThrottleSend = 0;
+  const toPos = (thr) => (thr + REV) / (1 + REV); // 0 = bottom, 1 = top
   const showLever = () => {
-    leverFill.style.height = throttle * 100 + '%';
-    leverHandle.style.top = (1 - throttle) * 100 + '%';
+    const stop = toPos(0);
+    const pos = toPos(throttle);
+    leverStop.style.bottom = stop * 100 + '%';
+    leverFill.style.bottom = Math.min(stop, pos) * 100 + '%';
+    leverFill.style.height = Math.abs(pos - stop) * 100 + '%';
+    leverFill.style.background = throttle < 0 ? '#e63946' : '#4caf50';
+    leverHandle.style.top = (1 - pos) * 100 + '%';
   };
   const dragLever = (event) => {
     const rect = lever.getBoundingClientRect();
-    throttle = Math.max(0, Math.min(1, 1 - (event.clientY - rect.top) / rect.height));
+    const pos = Math.max(0, Math.min(1, 1 - (event.clientY - rect.top) / rect.height));
+    throttle = pos * (1 + REV) - REV;
+    if (Math.abs(throttle) < 0.06) throttle = 0; // easy to find the hover point
     showLever();
     const now = performance.now();
     if (now - lastThrottleSend > 80) {

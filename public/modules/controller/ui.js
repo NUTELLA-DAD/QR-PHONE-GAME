@@ -127,7 +127,7 @@ export function createControllerUI({ network }) {
     const ammo = next.ammo != null ? ` - ${next.ammo} shells` : '';
     const hint = next.locked
       ? {
-          helm: 'Stick up/down: climb and dive to dodge mines. Lever: throttle.',
+          helm: 'Stick up/down: climb and dive. Lever: ahead, STOP line = hover, below it = reverse.',
           gun: 'Drag to aim - it snaps onto nearby targets. Hold FIRE. Needs ammo!',
           lookout: 'Keep watch! Arrows on the TV show what is coming from off screen.',
         }[next.kind]

@@ -1,7 +1,7 @@
 // Draws the course: rocky ground and mountains below, rock overhangs above, and ground turrets.
 // Placeholder vector art (sprites: fx/turret, fx/turret-barrel if they exist).
 import { config } from '../../config.js';
-import { groundAt, ceilAt } from './course.js';
+import { groundAt, ceilAt, elevAt } from './course.js';
 
 const INK = config.INK;
 
@@ -90,11 +90,13 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     const xs = [];
     const gs = [];
     const cs = [];
+    const snow = []; // snow line at each sample
     for (let i = i0; i <= i1; i++) {
       const x = i * STEP - dist;
       ids.push(i);
       xs.push(x);
       gs.push(groundAt(course, x, false)); // bare rock (buildings are drawn separately)
+      snow.push(SNOW_LINE - elevAt(course, i * STEP) * 0.5); // higher land is snowier
       cs.push(ceilAt(course, x));
     }
     const n = xs.length;
@@ -149,10 +151,10 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     ink();
     ctx.lineWidth = 4;
     for (let i = 0; i < n; i++) {
-      if (gs[i] >= SNOW_LINE) continue;
+      if (gs[i] >= snow[i]) continue;
       let j = i;
-      while (j + 1 < n && gs[j + 1] < SNOW_LINE) j++;
-      const depth = (k) => Math.min(70, (SNOW_LINE - gs[k]) * 0.5) * (ids[k] % 3 === 0 ? 1.25 : 0.8);
+      while (j + 1 < n && gs[j + 1] < snow[j + 1]) j++;
+      const depth = (k) => Math.min(70, (snow[k] - gs[k]) * 0.5) * (ids[k] % 3 === 0 ? 1.25 : 0.8);
       ctx.beginPath();
       trace(xs, gs, () => -2, i, j);
       for (let k = j; k >= i; k--) ctx.lineTo(xs[k], gs[k] + depth(k));
@@ -163,7 +165,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     }
 
     // Grass along the surface (not on snow), with a lighter sunlit lip.
-    const grassy = (i) => gs[i] >= SNOW_LINE - 10;
+    const grassy = (i) => gs[i] >= snow[i] - 10;
     const runs = (fn) => {
       for (let i = 0; i < n; i++) {
         if (!grassy(i)) continue;
@@ -235,7 +237,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       const x = xs[i];
       const y = gs[i] + 6;
       const s = 0.8 + hash(ids[i], 9) * 0.7;
-      if (gs[i] < SNOW_LINE) {
+      if (gs[i] < snow[i]) {
         if (h < 0.12) boulder(x, y, s * 0.8);
       } else if (slope > 0.9) {
         if (h < 0.2) boulder(x, y, s);

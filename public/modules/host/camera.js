@@ -47,7 +47,8 @@ export function createCamera() {
 
   return {
     update(dt, state, width, height) {
-      scroll += (40 + state.ship.speed * 520) * dt;
+      // The scenery follows the ship's real position (it scrolls back when backing up).
+      scroll = state.course ? state.course.dist : scroll + 200 * dt;
       // A minimised or hidden window can report zero size; keep the last view until it's back.
       if (width < 10 || height < 10) return view ? { ...view, scroll } : { cx: 800, cy: 450, zoom: 0.3, scroll };
       const t = target(state, width, height);

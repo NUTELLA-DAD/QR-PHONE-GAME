@@ -5,7 +5,7 @@ import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
 import { createModules } from './modules.js';
 import { createThreats } from './threats.js';
 import { createRaiders } from './raiders.js';
-import { createCourse, inRock, altWindow, tilt } from './course.js';
+import { createCourse, inRock, tilt, altBounds, pilotPlan } from './course.js';
 import { createSquadrons } from './squadrons.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
@@ -459,10 +459,12 @@ export function createSimulation() {
         if (player.lock === 'Helm') {
           if (working) {
             // Throttle: the phone's lever if used, otherwise the stick left/right.
-            if (player.thr != null) state.ship.speed += (clamp(player.thr, 0, 1) - state.ship.speed) * Math.min(1, dt * 1.5);
-            else state.ship.speed = clamp(state.ship.speed + player.jx * dt * 0.6, 0, 1);
+            const REV = -config.SHIP.REVERSE;
+            if (player.thr != null) state.ship.speed += (clamp(player.thr, REV, 1) - state.ship.speed) * Math.min(1, dt * 1.5);
+            else state.ship.speed = clamp(state.ship.speed + player.jx * dt * 0.6, REV, 1);
             const climb = config.SHIP.CLIMB_SPEED * (0.4 + 0.6 * Math.min(1, state.ship.press / 50));
-            state.ship.alt = clamp(state.ship.alt - player.jy * climb * dt, -config.SHIP.ALT_RANGE, config.SHIP.ALT_RANGE);
+            const bounds = altBounds(state);
+            state.ship.alt = clamp(state.ship.alt - player.jy * climb * dt, bounds.lo, bounds.hi);
           }
         } else if (gun) {
           gun.cd = Math.max(0, gun.cd - dt);
@@ -645,6 +647,8 @@ export function createSimulation() {
     }
     const maxSpeed = clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state);
     if (state.ship.speed > maxSpeed) state.ship.speed += (maxSpeed - state.ship.speed) * Math.min(1, dt * 2);
+    const maxReverse = -maxSpeed * config.SHIP.REVERSE;
+    if (state.ship.speed < maxReverse) state.ship.speed += (maxReverse - state.ship.speed) * Math.min(1, dt * 2);
 
     for (const gun of Object.values(state.GUNS)) {
       gun.empty = Math.max(0, gun.empty - dt);
@@ -656,19 +660,20 @@ export function createSimulation() {
     }
     state.autopilot = false;
     if (!getHelm()) {
-      state.ship.speed += (0.3 - state.ship.speed) * dt * 0.5;
       const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
       if (diff.autopilot && state.phase === 'flying' && modules.works(state, 'Helm')) {
-        // Autopilot: ease into the safe gap ahead, slower than a real helmsman.
+        // Autopilot: ease into the safe gap ahead (stopping to climb cliffs), slower than a real
+        // helmsman.
         state.autopilot = true;
-        const w = altWindow(state, 5);
-        const R = config.SHIP.ALT_RANGE;
-        const lo = Math.max(w.min, -R);
-        const hi = Math.min(w.max, R);
-        const target = lo > hi ? (w.min + w.max) / 2 : Math.max(lo + 30, Math.min(hi - 30, 0));
+        const plan = pilotPlan(state, 4, 0.3);
+        state.ship.speed += (plan.speed - state.ship.speed) * Math.min(1, dt * 0.8);
         const step = config.SHIP.CLIMB_SPEED * config.AUTOPILOT_SPEED * dt;
-        state.ship.alt += Math.max(-step, Math.min(step, target - state.ship.alt));
-      } else state.ship.alt *= 1 - dt * 0.4;
+        state.ship.alt += Math.max(-step, Math.min(step, plan.target - state.ship.alt));
+      } else {
+        // Nobody steering: she drifts along slowly and holds her height.
+        state.ship.speed += ((state.phase === 'flying' ? 0.2 : 0.3) - state.ship.speed) * dt * 0.5;
+        if (state.phase !== 'flying') state.ship.alt *= 1 - dt * 0.4;
+      }
     }
     // Buoyancy from the gas: sinky below the band, floaty above it.
     const BU = config.BUOYANCY;
@@ -676,8 +681,8 @@ export function createSimulation() {
     state.buoyancy = gas > BU.FLOATY_ABOVE ? gas - BU.FLOATY_ABOVE : gas < BU.SINKY_BELOW ? gas - BU.SINKY_BELOW : 0;
     state.sinking = state.buoyancy < 0;
     if (state.buoyancy && !state.ship.down && state.phase === 'flying') {
-      const R = config.SHIP.ALT_RANGE;
-      state.ship.alt = clamp(state.ship.alt + state.buoyancy * BU.DRIFT * dt, -R, R);
+      const bounds = altBounds(state);
+      state.ship.alt = clamp(state.ship.alt + state.buoyancy * BU.DRIFT * dt, bounds.lo, bounds.hi);
       const kind = state.buoyancy > 0 ? 'floaty' : 'sinky';
       if (state.buoyWarned !== kind && Math.abs(state.buoyancy) > 4) {
         state.buoyWarned = kind;
@@ -685,7 +690,7 @@ export function createSimulation() {
         state.ev.warnText = kind === 'floaty' ? 'TOO FLOATY - OPEN A VENT!' : state.gasHoles.length ? 'SINKING - PATCH THE GASBAG!' : 'SINKING - MORE STEAM!';
       }
       // Very low on gas at the bottom: the hull scrapes.
-      if (state.ship.alt <= -R + 1 && gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
+      if (state.ship.alt <= bounds.lo + 1 && gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
     } else if (!state.buoyancy) state.buoyWarned = null;
     state.ship.shake = Math.max(0, state.ship.shake - dt);
     // Nose up while climbing, nose down while diving.

@@ -4,7 +4,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { steerTo } from './nav.js';
 import { bestTarget } from './aim.js';
-import { altWindow } from './course.js';
+import { altWindow, altBounds, pilotPlan } from './course.js';
 
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
@@ -43,7 +43,8 @@ function dodgeAltitude(state) {
     let target = null;
     if (rel > -10 - R && rel < 330) target = -10 - R - 30 - m.y; // dive under it
     else if (rel > 700 && rel < L.bounds.y1 + R) target = L.bounds.y1 + R + 30 - m.y; // climb over it
-    if (target !== null && Math.abs(target) <= config.SHIP.ALT_RANGE && (!soonest || t < soonest.t)) soonest = { t, target };
+    const bounds = altBounds(state);
+    if (target !== null && target >= bounds.lo && target <= bounds.hi && (!soonest || t < soonest.t)) soonest = { t, target };
   }
   return soonest && soonest.target;
 }
@@ -110,16 +111,18 @@ function operate(p, state, dt) {
   p.fire = false;
   const ship = state.ship;
   if (p.lock === 'Helm') {
-    p.jx = clamp((B.HELM_SPEED - ship.speed) * 4, -1, 1);
-    // Terrain first: keep inside the safe altitude window for the next couple of seconds.
-    const w = state.course ? altWindow(state, 2.5) : { min: -Infinity, max: Infinity };
-    const lo = Math.max(w.min, -config.SHIP.ALT_RANGE);
-    const hi = Math.min(w.max, config.SHIP.ALT_RANGE);
+    // Terrain first: keep inside the safe altitude window, stopping to climb cliffs.
+    const plan = pilotPlan(state, 2.5, B.HELM_SPEED);
+    p.jx = clamp((plan.speed - ship.speed) * 4, -1, 1);
+    const w = altWindow(state, 2.5);
+    const bounds = altBounds(state);
+    const lo = Math.max(w.min, bounds.lo);
+    const hi = Math.min(w.max, bounds.hi);
     let target = null;
     const dodge = dodgeAltitude(state);
-    if (lo > hi) target = (w.min + w.max) / 2; // squeeze: aim for the middle
+    if (lo > hi || Math.abs(plan.target - ship.alt) > 120) target = plan.target;
     else if (dodge !== null && dodge > lo && dodge < hi) target = dodge;
-    else if (ship.alt < lo + 15 || ship.alt > hi - 15) target = clamp((lo + hi) / 2, lo + 30, hi - 30);
+    else if (ship.alt < lo + 15 || ship.alt > hi - 15) target = plan.target;
     if (target !== null) p.jy = clamp((ship.alt - target) / 40, -1, 1);
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
     else p.jy = 0;

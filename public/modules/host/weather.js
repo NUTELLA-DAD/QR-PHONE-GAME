@@ -1,6 +1,7 @@
 // Storm fronts (from lap 2): dark sky and rain, wind gusts that shove the ship up or down (the helm
 // has to fight them), and lightning that sometimes strikes the ship.
 import { config } from '../../config.js';
+import { altBounds } from './course.js';
 
 const S = config.STORM;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -42,7 +43,8 @@ export function createWeather({ state, impact, puff }) {
     if (gustLeft > 0) {
       gustLeft -= dt;
       state.ship.alt += w.gust * w.storm * dt;
-      state.ship.alt = Math.max(-config.SHIP.ALT_RANGE - 60, Math.min(config.SHIP.ALT_RANGE + 60, state.ship.alt));
+      const bounds = altBounds(state);
+      state.ship.alt = Math.max(bounds.lo - 60, Math.min(bounds.hi + 60, state.ship.alt));
       if (gustLeft <= 0) w.gust = 0;
     } else if ((gustT -= dt) <= 0) {
       gustT = rand(S.GUST_EVERY_MIN, S.GUST_EVERY_MAX);

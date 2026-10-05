@@ -45,11 +45,31 @@ const plateau = (t) => {
 };
 const jag = (x, seed) => (Math.sin(x * 0.013 + seed) + Math.sin(x * 0.031 + seed * 2.1) * 0.6) * 14;
 
+// Height of the land at course position cx (cliffs raise it, drops lower it). Every feature,
+// building and ceiling rides on top of this.
+export function elevAt(course, cx) {
+  let e = course.elev0 || 0;
+  for (const s of course.elev || []) {
+    if (cx < s.x0) break;
+    if (cx >= s.x1) e = s.to;
+    else {
+      const t = (cx - s.x0) / (s.x1 - s.x0);
+      return s.from + (s.to - s.from) * t * t * (3 - 2 * t);
+    }
+  }
+  return e;
+}
+
 // Ground surface (world y) at world x. Buildings (castle towers, smokestacks) count as solid
 // unless solid = false (the terrain art draws bare rock and then the buildings on top).
 export function groundAt(course, wx, solid = true) {
-  let y = K.GROUND;
   const cx = wx + course.dist;
+  return groundFlat(course, cx, solid) - elevAt(course, cx);
+}
+
+// Ground before the land's elevation is added.
+function groundFlat(course, cx, solid) {
+  let y = K.GROUND;
   for (const f of course.features) {
     if (f.ground == null || cx < f.x0 || cx > f.x1) continue;
     const t = (cx - f.x0) / (f.x1 - f.x0);
@@ -63,8 +83,12 @@ export function groundAt(course, wx, solid = true) {
 
 // Underside of any rock above (world y) at world x, or -Infinity for open sky.
 export function ceilAt(course, wx) {
-  let y = -Infinity;
   const cx = wx + course.dist;
+  return ceilFlat(course, cx) - elevAt(course, cx);
+}
+
+function ceilFlat(course, cx) {
+  let y = -Infinity;
   for (const f of course.features) {
     if (f.ceil == null || cx < f.x0 || cx > f.x1) continue;
     const t = (cx - f.x0) / (f.x1 - f.x0);
@@ -80,7 +104,9 @@ export function ceilAt(course, wx) {
 // Returns { min, max } (min > max means there's no way through).
 export function altWindow(state, ahead = 2) {
   const course = state.course;
-  const v = scrollSpeed(state);
+  // Even when hovering, look a little way ahead in the direction we're facing.
+  const sp = scrollSpeed(state);
+  const v = sp >= 0 ? Math.max(sp, 180) : Math.min(sp, -120);
   let min = -Infinity;
   let max = Infinity;
   for (let t = 0; t <= ahead; t += 0.25) {
@@ -92,6 +118,24 @@ export function altWindow(state, ahead = 2) {
     }
   }
   return { min, max };
+}
+
+// What a sensible pilot would do now: the altitude to aim for and the throttle to use.
+// Slows to a crawl when a big climb or dive is needed (cliffs), and creeps forward when the way
+// ahead isn't open yet (e.g. the tail is still over a cliff edge).
+export function pilotPlan(state, ahead, cruise) {
+  const course = state.course;
+  const alt = state.ship.alt;
+  const B = altBounds(state);
+  const range = (w) => [Math.max(w.min, B.lo), Math.min(w.max, B.hi)];
+  const [lo, hi] = range(altWindow(state, ahead));
+  const fit = (a, b, want) => (a + 30 > b - 30 ? (a + b) / 2 : Math.max(a + 30, Math.min(b - 30, want)));
+  if (lo > hi) {
+    const [lo0, hi0] = range(altWindow(state, 0));
+    return { target: fit(lo0, hi0, alt), speed: 0.12 };
+  }
+  const target = fit(lo, hi, course ? elevAt(course, course.dist + 800) : 0);
+  return { target, speed: Math.abs(target - alt) > 120 ? 0.04 : cruise };
 }
 
 // Keep something flying at (x, y) out of the rock, `margin` away from it, looking a little to
@@ -119,8 +163,24 @@ export function inRock(state, x, y) {
   return y > groundAt(course, x) || y < ceilAt(course, x);
 }
 
-// How fast the scenery passes (same as the clouds and mines).
-export const scrollSpeed = (state) => 40 + state.ship.speed * 520;
+// How fast the ship moves along the course (negative = backing up; 0 = hovering).
+export const scrollSpeed = (state) => state.ship.speed * config.SHIP.TOP_SPEED;
+
+// How high and low the ship may fly here: up to ALT_RANGE above the highest land under and just
+// ahead of it, and ALT_RANGE below the lowest.
+export function altBounds(state) {
+  const course = state.course;
+  const R = config.SHIP.ALT_RANGE;
+  if (!course) return { lo: -R, hi: R };
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let dx = -200; dx <= 2600; dx += 200) {
+    const e = elevAt(course, course.dist + dx);
+    lo = Math.min(lo, e);
+    hi = Math.max(hi, e);
+  }
+  return { lo: lo - R, hi: hi + R };
+}
 
 // Small seeded random generator so a course is repeatable.
 function rng(seed) {
@@ -152,6 +212,9 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     leg: 'out', // 'out' or 'home'
     lastMarker: { cx: 0, kind: 'home', lap: 1 },
     dusk: 0, // 0 = day, 1 = sunset (return leg)
+    elev: [], // height steps of the land (cliffs and drops)
+    elev0: 0, // land height before the first remembered step
+    maxDist: 0, // furthest the ship has got (backing up is limited)
   };
   state.course = course;
 
@@ -236,6 +299,30 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     return f;
   };
 
+  // Climb pocket: a low tunnel opens into a pocket below a cliff wall. Stop, climb straight up,
+  // then carry on over the top. Returns where the next obstacle may start.
+  const addClimb = (x0, d) => {
+    const e = elevAt(course, x0);
+    const H = r(900, 1300 + 900 * d);
+    const tunnel = { type: 'tunnel', ceil: ceilFor(r(-120, 40)), x0, x1: x0 + 1800, seed: course.rand() * 100 };
+    const wallX = tunnel.x1 + 2600;
+    course.features.push(tunnel, { type: 'cliff', x0: wallX - 300, x1: wallX + 450 });
+    course.elev.push({ x0: wallX, x1: wallX + 450, from: e, to: e + H });
+    if (course.rand() < 0.3 + 0.6 * d) turretOn({ x0: wallX + 900, x1: wallX + 960 });
+    return wallX + 450 + r(K.GAP_MIN, K.GAP_MAX);
+  };
+
+  // Drop: the land falls away, then a low cave mouth. Clear the edge, descend, then go in.
+  const addDrop = (x0, d) => {
+    const e = elevAt(course, x0);
+    const H = r(900, 1300 + 900 * d);
+    course.features.push({ type: 'drop', x0: x0 - 300, x1: x0 + 450 });
+    course.elev.push({ x0, x1: x0 + 450, from: e, to: e - H });
+    const cave = { type: 'cave', ceil: ceilFor(r(-160, 30)), x0: x0 + 2800, x1: x0 + 2800 + r(2200, 2800), seed: course.rand() * 100 };
+    course.features.push(cave);
+    return cave.x1 + r(K.GAP_MIN, K.GAP_MAX);
+  };
+
   const generate = () => {
     while (course.markers[course.markers.length - 1].cx < course.dist + 12000) addLapMarkers(course.markers[course.markers.length - 1].lap + 1);
     while (course.nextX < course.dist + 9000) {
@@ -247,6 +334,15 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
         course.nextX = blocked.cx + K.MARKER_CLEAR;
         course.zig = 0;
         continue;
+      }
+      // Big height changes: climb a cliff or dive off one (keeping the land roughly in range).
+      if (!(course.zig > 0) && course.rand() < K.CLIFF_SHARE) {
+        const e = elevAt(course, x0);
+        const up = e < -K.ELEV_LIMIT * 0.3 ? true : e > K.ELEV_LIMIT ? false : course.rand() < 0.55;
+        if (!nearMarker(x0, x0 + 7800)) {
+          course.nextX = up ? addClimb(x0, d) : addDrop(x0, d);
+          continue;
+        }
       }
       let f;
       if (course.zig > 0) {
@@ -303,8 +399,9 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
       course.nextX = f.x1 + (course.zig > 0 ? K.ZIGZAG_GAP + course.zigSwing * K.ZIGZAG_GAP_PER_SWING : r(K.GAP_MIN, K.GAP_MAX) * (1 - 0.4 * d));
     }
     // Forget what's well behind the last marker (we may need to rewind to it).
-    const keep = Math.min(course.dist, course.lastMarker.cx) - 4000;
+    const keep = Math.min(course.maxDist, course.lastMarker.cx) - 4000;
     course.features = course.features.filter((f) => f.x1 > keep);
+    while (course.elev.length && course.elev[0].x1 < keep) course.elev0 = course.elev.shift().to;
     course.turrets = course.turrets.filter((t) => t.cx > keep);
     course.markers = course.markers.filter((m) => m.cx > keep - L);
   };
@@ -326,6 +423,10 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
         spire: zig + 'CLIMB!',
         stalactite: zig + 'DIVE!',
         fortress: 'FORTRESS AHEAD - CLIMB!',
+        tunnel: 'LOW TUNNEL - GET DOWN!',
+        cliff: 'CLIFF WALL - STOP AND CLIMB!',
+        drop: 'CLIFF EDGE - CLEAR IT, THEN DIVE!',
+        cave: 'CAVE MOUTH - GET LOW!',
         factory: 'SMOKESTACKS AHEAD - CLIMB!',
       }[next.type];
     }
@@ -335,13 +436,24 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
   const collide = (dt) => {
     let push = 0; // + = needs to go up
     let worst = null;
+    let wallAhead = false;
+    let wallBehind = false;
     for (const [sx0, sy0] of SHIP_SAMPLES) {
       const [sx, sy] = tilt(state, sx0, sy0);
       const wy = sy - state.ship.alt;
       const down = wy - groundAt(course, sx);
       const up = ceilAt(course, sx) - wy;
-      if (down > 0 && (!worst || down > worst.depth)) worst = { sx, sy, depth: down };
-      if (up > 0 && (!worst || up > worst.depth)) worst = { sx, sy, depth: up };
+      if (down <= 0 && up <= 0) continue;
+      if (!worst || Math.max(down, up) > worst.depth) worst = { sx, sy, depth: Math.max(down, up) };
+      // A wall face: a little way back toward the middle of the ship the rock isn't there, so
+      // we flew into it sideways. Walls stop the ship instead of lifting it.
+      const back = sx > 800 ? -60 : 60;
+      const wall = down > 0 ? wy < groundAt(course, sx + back) && down > 30 : wy > ceilAt(course, sx + back) && up > 30;
+      if (wall) {
+        if (sx > 800) wallAhead = true;
+        else wallBehind = true;
+        continue;
+      }
       if (down > 0) push = Math.max(push, down);
       if (up > 0) push = Math.min(push, -up);
     }
@@ -351,6 +463,14 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     // Shove the ship out of the rock (a hard bump), and slow it down.
     state.ship.alt += Math.sign(push) * Math.min(Math.abs(push), 600 * dt);
     state.ship.speed *= 1 - 0.8 * dt;
+    // Bounce back off a wall.
+    if (wallAhead && state.ship.speed >= -0.05) {
+      course.dist -= 260 * dt;
+      state.ship.speed = -0.12;
+    } else if (wallBehind && state.ship.speed <= 0.05) {
+      course.dist += 260 * dt;
+      state.ship.speed = 0.12;
+    }
     if (course.scrapeCd <= 0 && !state.ship.down) {
       course.scrapeCd = K.SCRAPE_COOLDOWN;
       impact(worst.sx, worst.sy, 1 + Math.min(2, worst.depth / 40));
@@ -474,6 +594,10 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
   const helmHint = () => {
     const w = altWindow(state, 2.5);
     const alt = state.ship.alt;
+    if (course.scraping && state.ship.speed < 0) return 'Backing off the wall - now climb or dive!';
+    const plan = pilotPlan(state, 2.5, 0.5);
+    if (plan.speed < 0.1 && plan.target - alt > 120) return 'STOP (lever to the line) and CLIMB!';
+    if (plan.speed < 0.1 && alt - plan.target > 120) return 'STOP (lever to the line) and DIVE!';
     if (w.min > w.max) return 'Squeeze through - hold the middle!';
     if (alt < w.min) return 'CLIMB! Push the stick up';
     if (alt > w.max) return 'DIVE! Pull the stick down';
@@ -484,6 +608,12 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     if (!K.ENABLED) return;
     if (state.ship.down > 0) return; // the world waits while the crew patches up
     course.dist += scrollSpeed(state) * dt;
+    // You can back up, but only so far (the land behind is forgotten).
+    course.maxDist = Math.max(course.maxDist, course.dist);
+    if (course.dist < course.maxDist - K.MAX_REVERSE) {
+      course.dist = course.maxDist - K.MAX_REVERSE;
+      state.ship.speed = Math.max(0, state.ship.speed);
+    }
     generate();
     passMarkers();
     warnAhead(dt);
@@ -520,6 +650,9 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
       lastMarker: { cx: 0, kind: 'home', lap: 1 },
       dusk: 0,
       zig: 0,
+      elev: [],
+      elev0: 0,
+      maxDist: 0,
     });
     addLapMarkers(1);
     course.markers[0].passed = true;

@@ -24,6 +24,8 @@ export const config = {
   SHIP: {
     ALT_RANGE: 420, // how far the ship can climb or dive from the middle
     CLIMB_SPEED: 210,
+    TOP_SPEED: 560, // forward speed at full throttle (reverse is up to 40% of this)
+    REVERSE: 0.4, // how much of the throttle is reverse
     HULL_DAMAGE: 1, // multiplier on hull damage taken (armour upgrades lower it)
     HIT_DAMAGE: 3, // hull lost per enemy bullet hit (bigger blasts scale this up)
     HOLE_CHANCE: 0.6, // chance an enemy bullet hit punches a hole in the deck
@@ -90,6 +92,9 @@ export const config = {
     CHECKPOINT_REPAIR: 15, // hull repaired by the supplies at each checkpoint flag
     // Share of each kind of obstacle (the rest are rolling hills).
     MIX: { mountain: 0.17, overhang: 0.12, underpass: 0.17, zigzag: 0.16, fortress: 0.13, factory: 0.13 },
+    CLIFF_SHARE: 0.25, // share of obstacles that are a cliff to climb or a drop to dive
+    ELEV_LIMIT: 2600, // the land wanders up and down but stays within about this height
+    MAX_REVERSE: 3000, // how far the ship may back up from the furthest point reached
     ZIGZAG_GATES: [3, 6], // a zig-zag is this many spires/hanging rocks in a row, alternating
     ZIGZAG_GAP: 2000, // distance between one gate's end and the next (the ship is ~1750 long)...
     ZIGZAG_GAP_PER_SWING: 3.4, // ...plus this much per pixel of climb/dive each gate asks for
