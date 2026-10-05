@@ -452,12 +452,14 @@ export function createRenderer({ ctx, state, canvas }) {
       'Practise with tools and stations while moored.',
       crew ? `${crew} aboard - press CAST OFF (or Space) when ready!` : 'Waiting for crew...',
     ];
+    const rec = state.record || { laps: 0 };
+    if (rec.laps > 0) lines.push(`Record on this TV: ${rec.laps} lap${rec.laps > 1 ? 's' : ''}, ${rec.kills} shot down`);
     ctx.font = '700 26px Georgia';
     lines.forEach((t, i) => {
       ctx.lineWidth = 7;
       ctx.strokeStyle = '#fff';
       ctx.strokeText(t, 720, 760 + i * 40);
-      ctx.fillStyle = i === 2 ? '#2e7d32' : config.INK;
+      ctx.fillStyle = i === 2 ? '#2e7d32' : i === 3 ? '#8c2f2f' : config.INK;
       ctx.fillText(t, 720, 760 + i * 40);
     });
   };
@@ -478,6 +480,12 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillText(`Lap ${sc.lap} complete!`, 800, 185);
     ctx.font = '700 26px Georgia';
     ctx.fillText(sc.rows.length ? 'Crew awards' : 'Nobody did much this lap... next time!', 800, 228);
+    if (state.newRecord) {
+      ctx.fillStyle = '#c0392b';
+      ctx.font = '900 30px Georgia';
+      ctx.fillText('NEW RECORD FOR THIS CREW!', 800, 775);
+      ctx.fillStyle = config.INK;
+    }
     sc.rows.forEach((r, i) => {
       const col = i % 2;
       const row = Math.floor(i / 2);

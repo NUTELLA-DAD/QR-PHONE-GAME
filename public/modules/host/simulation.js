@@ -48,6 +48,22 @@ function roomPlatformAt(x, y) {
   return d < 0 ? null : d;
 }
 
+// Best run, remembered by this browser (the TV). Never let storage problems break the game.
+function loadRecord() {
+  try {
+    return JSON.parse(localStorage.getItem('airshipRecord')) || { laps: 0, kills: 0 };
+  } catch {
+    return { laps: 0, kills: 0 };
+  }
+}
+function saveRecord(r) {
+  try {
+    localStorage.setItem('airshipRecord', JSON.stringify(r));
+  } catch {
+    // ignore
+  }
+}
+
 export function createSimulation() {
   let socket = null;
   const state = {
@@ -57,6 +73,7 @@ export function createSimulation() {
     upgrades: {}, // id -> times taken
     difficulty: config.START_DIFFICULTY,
     phase: 'lobby', // 'lobby' = moored at the mast while the crew joins; 'flying' after CAST OFF
+    record: loadRecord(), // best run on this TV: { laps, kills }
     vote: null, // an upgrade vote in progress
     enemy: { ang: 0, x: -200, y: 300, vx: 1, vy: 0, hp: 5, fire: 2.5, dead: 0 },
     shells: [],
@@ -290,6 +307,13 @@ export function createSimulation() {
   let pendingVote = null;
   const onMarker = (m) => {
     if (m.kind !== 'home') return startVote(m);
+    // A new record for this TV?
+    const laps = m.lap - 1;
+    if (laps > state.record.laps || (laps === state.record.laps && state.kills > state.record.kills)) {
+      state.record = { laps, kills: state.kills };
+      saveRecord(state.record);
+      state.newRecord = true;
+    }
     const players = Object.values(state.players);
     const rows = [];
     for (const a of AWARDS) {
@@ -323,6 +347,7 @@ export function createSimulation() {
     if (state.scorecard) {
       if ((state.scorecard.t -= dt) <= 0) {
         state.scorecard = null;
+        state.newRecord = false;
         if (pendingVote) startVote(pendingVote);
         pendingVote = null;
       }
