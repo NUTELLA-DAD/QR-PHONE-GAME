@@ -51,10 +51,10 @@ export const config = {
   },
   // Raider types. windup = seconds of warning ("!") before they strike.
   RAIDERS: {
-    grunt: { name: 'Raider', hp: 3, speed: 85, windup: 0.6, reach: 40, species: 'fox', color: '#8c2f2f', scale: 1 },
-    brute: { name: 'Brute', hp: 7, speed: 55, windup: 1.0, reach: 52, species: 'bear', color: '#5c2a1a', scale: 1.35, knockback: 140, noShove: true },
-    sapper: { name: 'Sapper', hp: 2, speed: 100, windup: 0.6, reach: 40, species: 'fox', color: '#7a6420', scale: 0.95 },
-    cutter: { name: 'Cutter', hp: 3, speed: 105, windup: 0.6, reach: 40, species: 'wolf', color: '#2f4f8c', scale: 1 },
+    grunt: { name: 'Raider', hp: 3, speed: 85, windup: 0.6, reach: 40, species: 'skeleton', color: '#8c2f2f', scale: 1 },
+    brute: { name: 'Brute', hp: 7, speed: 55, windup: 1.0, reach: 52, species: 'devil', color: '#5c2a1a', scale: 1.35, knockback: 140, noShove: true },
+    sapper: { name: 'Sapper', hp: 2, speed: 100, windup: 0.6, reach: 40, species: 'skeleton', color: '#7a6420', scale: 0.95 },
+    cutter: { name: 'Cutter', hp: 3, speed: 105, windup: 0.6, reach: 40, species: 'bat', color: '#2f4f8c', scale: 1 },
     MIX: { grunt: 0.5, brute: 0.15, sapper: 0.2, cutter: 0.15 }, // chances when a cargo plane drops a squad
     KO_TIME: 12,
     BOMB_FUSE: 10, // seconds until a sapper's bomb goes off
@@ -154,8 +154,14 @@ export const config = {
     fox: { fur: '#d9572b', ear: 'point' },
     bear: { fur: '#6b4a33', ear: 'round' },
     cat: { fur: '#9a9a9a', ear: 'point' },
-    devil: { fur: '#c8372d', ear: 'point', horns: 1 },
+    rabbit: { fur: '#e8e2d6', ear: 'long' },
+    // Monsters (raiders). Placeholder looks until their art arrives.
+    skeleton: { fur: '#efe9dc', ear: 'none', monster: 1 },
+    devil: { fur: '#c8372d', ear: 'point', horns: 1, monster: 1 },
+    bat: { fur: '#4a3b5c', ear: 'bat', monster: 1 },
   },
+  // Animals players (and test bots) can be.
+  CREW_SPECIES: ['bulldog', 'wolf', 'tiger', 'shiba', 'fox', 'bear', 'cat', 'rabbit'],
 };
 
 // The ship layout (floors, ladders, stations, rooms) lives in shipLayout.js.

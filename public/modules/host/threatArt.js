@@ -6,9 +6,10 @@ import { SHIP_LAYOUT } from '../../shipLayout.js';
 const INK = config.INK;
 const P = SHIP_LAYOUT.platforms;
 
-export function createThreatArt({ ctx, state, ink }) {
+export function createThreatArt({ ctx, state, ink, sprites }) {
   // Ember Pact insignia: a flame inside a triangle.
   const insignia = (x, y, s) => {
+    if (sprites.box(ctx, 'crests/monsters', x - 16 * s, y - 16 * s, 32 * s, 32 * s)) return;
     ctx.fillStyle = '#f4c430';
     ctx.beginPath();
     ctx.moveTo(x, y - 14 * s);
@@ -29,6 +30,17 @@ export function createThreatArt({ ctx, state, ink }) {
       ctx.save();
       ctx.translate(c.x, c.y);
       if (c.vx < 0) ctx.scale(-1, 1);
+      if (sprites.plane(ctx, 'cargo', time)) {
+        // Side door swings open as it nears the drop point.
+        const R = { door: { x: -60, y: 0 }, ...sprites.rigFor('planes/cargo') };
+        if (!c.dropped && Math.abs(c.x - c.dropX) < 700) sprites.pivot(ctx, 'planes/cargo/door_open', R.door.x, R.door.y, 0.5, 0.5);
+        ctx.restore();
+        for (let i = 0; i < c.hp; i++) {
+          ctx.fillStyle = '#e63946';
+          ctx.fillRect(c.x - c.hp * 6 + i * 12, c.y - 80, 9, 9);
+        }
+        continue;
+      }
       ink();
       ctx.lineWidth = 5;
       // Tail and fuselage.
@@ -84,6 +96,8 @@ export function createThreatArt({ ctx, state, ink }) {
     const r = config.MINES.RADIUS;
     for (const m of state.mines || []) {
       const y = m.y + Math.sin(m.bob * 2) * 6;
+      // Mine art includes its balloon: the mine ball sits in the lower part of the picture.
+      if (sprites.box(ctx, 'fx/mine', m.x - 50, y - 110, 100, 160)) continue;
       ink();
       ctx.lineWidth = 4;
       // Spikes.
@@ -125,6 +139,10 @@ export function createThreatArt({ ctx, state, ink }) {
       ctx.save();
       ctx.translate(w.x, w.y);
       ctx.rotate(w.spin);
+      if (sprites.plane(ctx, w.kind === 'cargo' ? 'cargo' : 'fighter', 0, 'wreck')) {
+        ctx.restore();
+        continue;
+      }
       ink();
       ctx.lineWidth = 4;
       ctx.fillStyle = '#3a2a22';
@@ -147,17 +165,19 @@ export function createThreatArt({ ctx, state, ink }) {
       const y = P[b.d].y - 22;
       ink();
       ctx.lineWidth = 4;
-      ctx.fillStyle = '#1b1410';
-      ctx.beginPath();
-      ctx.arc(b.x, y, 22, 0, 7);
-      ctx.fill();
-      ctx.stroke();
-      // Fizzing fuse.
-      ctx.strokeStyle = '#7a4a24';
-      ctx.beginPath();
-      ctx.moveTo(b.x + 10, y - 18);
-      ctx.quadraticCurveTo(b.x + 22, y - 36, b.x + 14, y - 44);
-      ctx.stroke();
+      if (!sprites.box(ctx, 'fx/bomb', b.x - 24, y - 38, 48, 60)) {
+        ctx.fillStyle = '#1b1410';
+        ctx.beginPath();
+        ctx.arc(b.x, y, 22, 0, 7);
+        ctx.fill();
+        ctx.stroke();
+        // Fuse.
+        ctx.strokeStyle = '#7a4a24';
+        ctx.beginPath();
+        ctx.moveTo(b.x + 10, y - 18);
+        ctx.quadraticCurveTo(b.x + 22, y - 36, b.x + 14, y - 44);
+        ctx.stroke();
+      }
       ctx.fillStyle = Math.sin(time * 20) > 0 ? '#ffd23f' : '#ff5a1f';
       ctx.beginPath();
       ctx.arc(b.x + 14, y - 46, 6, 0, 7);

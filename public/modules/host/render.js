@@ -3,8 +3,21 @@ import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { createShipArt } from './shipArt.js';
 import { createThreatArt } from './threatArt.js';
 import { installLineBoil, setBoilTime, createFilmLook } from './style.js';
+import { createSprites } from './sprites.js';
+import { createCharacterArt } from './characterArt.js';
 
 export function createRenderer({ ctx, state, canvas }) {
+  // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
+  const sprites = createSprites();
+  sprites.load();
+  // Placeholder tool in a sprite character's hand (drawCarry draws relative to the body).
+  const drawItemAt = (item, x, y, swingAge) => {
+    ctx.save();
+    ctx.translate(x - 16, y + 24);
+    drawCarry(item, 1, swingAge);
+    ctx.restore();
+  };
+  const characterArt = createCharacterArt({ ctx, sprites, drawItem: (...a) => drawItemAt(...a) });
   const ink = () => {
     ctx.strokeStyle = config.INK;
     ctx.lineWidth = 5;
@@ -17,8 +30,8 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.roundRect(x, y, w, h, r);
   };
 
-  const drawShip = createShipArt({ ctx, state, ink, rrect });
-  const threatArt = createThreatArt({ ctx, state, ink });
+  const drawShip = createShipArt({ ctx, state, ink, rrect, sprites });
+  const threatArt = createThreatArt({ ctx, state, ink, sprites });
   installLineBoil(ctx);
   const filmLook = createFilmLook(ctx);
 
@@ -33,22 +46,26 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.closePath();
         ctx.fill();
       }
-      ctx.save();
-      ctx.translate(gun.bx, gun.by);
-      ctx.rotate(gun.aim);
-      ink();
-      ctx.fillStyle = '#4a4a4a';
-      ctx.fillRect(0, -9, 62, 18);
-      ctx.strokeRect(0, -9, 62, 18);
-      ctx.fillStyle = '#2a2a2a';
-      ctx.fillRect(56, -12, 10, 24);
-      ctx.restore();
-      ctx.fillStyle = state.GUNS[name] ? '#e63946' : '#f1e2b8';
-      ctx.beginPath();
-      ctx.arc(gun.bx, gun.by, 16, 0, 7);
-      ctx.fill();
-      ink();
-      ctx.stroke();
+      if (!sprites.pivot(ctx, 'ship/gun-barrel', gun.bx, gun.by, 0.12, 0.5, gun.aim)) {
+        ctx.save();
+        ctx.translate(gun.bx, gun.by);
+        ctx.rotate(gun.aim);
+        ink();
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(0, -9, 62, 18);
+        ctx.strokeRect(0, -9, 62, 18);
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(56, -12, 10, 24);
+        ctx.restore();
+      }
+      if (!sprites.box(ctx, 'ship/gun-mount', gun.bx - 16, gun.by - 16, 32, 32)) {
+        ctx.fillStyle = '#e63946';
+        ctx.beginPath();
+        ctx.arc(gun.bx, gun.by, 16, 0, 7);
+        ctx.fill();
+        ink();
+        ctx.stroke();
+      }
       for (let i = 0; i < gun.max; i++) {
         ctx.fillStyle = i < gun.ammo ? '#ffd23f' : 'rgba(27,20,16,.3)';
         ctx.beginPath();
@@ -72,6 +89,10 @@ export function createRenderer({ ctx, state, canvas }) {
     ink();
     for (const breach of state.breaches) {
       const y = SHIP_LAYOUT.platforms[breach.d].y - 58;
+      if (sprites.box(ctx, 'fx/hole', breach.x - 25, y - 30, 50, 60)) {
+        drawBar(breach.x, y - 48, breach.prog);
+        continue;
+      }
       ctx.fillStyle = config.INK;
       ctx.beginPath();
       ctx.ellipse(breach.x, y, 24, 30, 0.2, 0, 7);
@@ -94,6 +115,11 @@ export function createRenderer({ ctx, state, canvas }) {
     ink();
     for (const fire of state.fires) {
       const y = SHIP_LAYOUT.platforms[fire.d].y;
+      const frame = 1 + (Math.floor(time * 8 + fire.x) % 4);
+      if (sprites.box(ctx, `fx/fire-${frame}`, fire.x - 30, y - 70, 60, 70) || sprites.box(ctx, 'fx/fire-1', fire.x - 30, y - 70, 60, 70)) {
+        drawBar(fire.x, y - 70, fire.prog);
+        continue;
+      }
       for (let i = -1; i <= 1; i++) {
         const height = 46 + Math.sin(time * 12 + i * 2) * 10 - (i ? 10 : 0);
         const x = fire.x + i * 18;
@@ -125,6 +151,10 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.translate(state.enemy.x, state.enemy.y);
     ctx.rotate(Math.atan2(state.enemy.vy, state.enemy.vx || 1));
     if (state.enemy.vx < 0) ctx.scale(1, -1);
+    if (sprites.plane(ctx, 'fighter', time)) {
+      ctx.restore();
+      return;
+    }
     ink();
     ctx.lineWidth = 4;
     ctx.fillStyle = '#8c2f2f';
@@ -300,6 +330,10 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.save();
     ctx.translate(face * 16, -24);
     ctx.scale(face, 1);
+    if (sprites.pivot(ctx, 'items/' + item, 0, 0, 0.5, item === 'coal' || item === 'ammo' ? 0.5 : 0.85, swingAge < 250 ? -0.9 + (swingAge / 250) * 1.6 : 0)) {
+      ctx.restore();
+      return;
+    }
     ink();
     ctx.lineWidth = 3;
     if (item === 'coal') {
@@ -411,136 +445,146 @@ export function createRenderer({ ctx, state, canvas }) {
     const face = player.face || 1;
     const actionAge = performance.now() - (player.actT || -1e9);
     const hop = actionAge < 400 ? Math.sin(actionAge / 400 * Math.PI) * 40 : 0;
-    ctx.save();
-    ctx.translate(player.x, player.y - bob - hop);
-    const size = player.scale || 1;
-    if (size !== 1) ctx.scale(size, size);
-    if (player.ko > 0) {
-      ctx.rotate(-1.4 * face);
-      ctx.translate(0, 10);
-    }
-    ink();
-    ctx.lineWidth = 4;
-    if (player.fall) {
-      ctx.fillStyle = player.color;
-      ctx.beginPath();
-      ctx.arc(0, -120, 50, Math.PI, 0);
-      ctx.fill();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(-50, -120);
-      ctx.lineTo(-12, -50);
-      ctx.moveTo(50, -120);
-      ctx.lineTo(12, -50);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#4f5d3a';
-    rrect(-15, -34, 30, 34, 10);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#2b1d14';
-    ctx.fillRect(-14, -6, 11, 8);
-    ctx.fillRect(3, -6, 11, 8);
-    if (player.carry) drawCarry(player.carry, face, performance.now() - (player.swingT || -1e9));
-    const swingAge = performance.now() - (player.swingT || -1e9);
-    if (swingAge < 200) {
-      // White swoosh in front of the attacker.
-      ctx.strokeStyle = 'rgba(255,255,255,.9)';
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      const mid = face > 0 ? 0 : Math.PI;
-      ctx.arc(face * 10, -40, player.carry === 'sword' ? 70 : 45, mid - 0.9, mid + 0.9);
-      ctx.stroke();
+    const art = characterArt.draw(player, time, bob + hop);
+    if (!art) {
+      ctx.save();
+      ctx.translate(player.x, player.y - bob - hop);
+      const size = player.scale || 1;
+      if (size !== 1) ctx.scale(size, size);
+      if (player.ko > 0) {
+        ctx.rotate(-1.4 * face);
+        ctx.translate(0, 10);
+      }
       ink();
       ctx.lineWidth = 4;
-    }
-    ctx.fillStyle = species.fur;
-    const ear = (side) => {
-      ctx.beginPath();
-      if (species.ear === 'point') {
-        ctx.moveTo(side * 6, -62);
-        ctx.lineTo(side * 18, -84);
-        ctx.lineTo(side * 20, -58);
-      } else if (species.ear === 'round') {
-        ctx.arc(side * 16, -66, 8, 0, 7);
-      } else {
-        ctx.ellipse(side * 20, -52, 7, 14, side * 0.3, 0, 7);
+      if (player.fall) {
+        ctx.fillStyle = player.color;
+        ctx.beginPath();
+        ctx.arc(0, -120, 50, Math.PI, 0);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-50, -120);
+        ctx.lineTo(-12, -50);
+        ctx.moveTo(50, -120);
+        ctx.lineTo(12, -50);
+        ctx.stroke();
       }
+      ctx.fillStyle = '#4f5d3a';
+      rrect(-15, -34, 30, 34, 10);
       ctx.fill();
       ctx.stroke();
-    };
-    ear(-1);
-    ear(1);
-    if (species.horns) {
-      ctx.fillStyle = '#f1e2b8';
-      [-1, 1].forEach((side) => {
+      ctx.fillStyle = '#2b1d14';
+      ctx.fillRect(-14, -6, 11, 8);
+      ctx.fillRect(3, -6, 11, 8);
+      if (player.carry) drawCarry(player.carry, face, performance.now() - (player.swingT || -1e9));
+      const swingAge = performance.now() - (player.swingT || -1e9);
+      if (swingAge < 200) {
+        // White swoosh in front of the attacker.
+        ctx.strokeStyle = 'rgba(255,255,255,.9)';
+        ctx.lineWidth = 6;
         ctx.beginPath();
-        ctx.moveTo(side * 8, -70);
-        ctx.lineTo(side * 12, -90);
-        ctx.lineTo(side * 16, -68);
+        const mid = face > 0 ? 0 : Math.PI;
+        ctx.arc(face * 10, -40, player.carry === 'sword' ? 70 : 45, mid - 0.9, mid + 0.9);
+        ctx.stroke();
+        ink();
+        ctx.lineWidth = 4;
+      }
+      ctx.fillStyle = species.fur;
+      const ear = (side) => {
+        ctx.beginPath();
+        if (species.ear === 'none') return;
+      if (species.ear === 'long') {
+        ctx.ellipse(side * 9, -84, 6, 20, side * 0.15, 0, 7);
+      } else if (species.ear === 'bat') {
+        ctx.moveTo(side * 6, -62);
+        ctx.lineTo(side * 26, -92);
+        ctx.lineTo(side * 22, -60);
+      } else if (species.ear === 'point') {
+          ctx.moveTo(side * 6, -62);
+          ctx.lineTo(side * 18, -84);
+          ctx.lineTo(side * 20, -58);
+        } else if (species.ear === 'round') {
+          ctx.arc(side * 16, -66, 8, 0, 7);
+        } else {
+          ctx.ellipse(side * 20, -52, 7, 14, side * 0.3, 0, 7);
+        }
+        ctx.fill();
+        ctx.stroke();
+      };
+      ear(-1);
+      ear(1);
+      if (species.horns) {
+        ctx.fillStyle = '#f1e2b8';
+        [-1, 1].forEach((side) => {
+          ctx.beginPath();
+          ctx.moveTo(side * 8, -70);
+          ctx.lineTo(side * 12, -90);
+          ctx.lineTo(side * 16, -68);
+          ctx.fill();
+          ctx.stroke();
+        });
+      }
+      ctx.fillStyle = species.fur;
+      ctx.beginPath();
+      ctx.arc(0, -50, 22, 0, 7);
+      ctx.fill();
+      ctx.stroke();
+      if (species.stripes) {
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-12, -68);
+        ctx.lineTo(-6, -62);
+        ctx.moveTo(12, -68);
+        ctx.lineTo(6, -62);
+        ctx.stroke();
+        ctx.lineWidth = 4;
+      }
+      ctx.fillStyle = '#f1e2b8';
+      ctx.beginPath();
+      ctx.ellipse(face * 10, -44, 11, 8, 0, 0, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = config.INK;
+      ctx.beginPath();
+      ctx.arc(face * 20, -46, 3.5, 0, 7);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      [-4, 10].forEach((x) => {
+        ctx.beginPath();
+        ctx.arc(x * face + face * 2, -56, 6, 0, 7);
         ctx.fill();
         ctx.stroke();
       });
-    }
-    ctx.fillStyle = species.fur;
-    ctx.beginPath();
-    ctx.arc(0, -50, 22, 0, 7);
-    ctx.fill();
-    ctx.stroke();
-    if (species.stripes) {
-      ctx.lineWidth = 3;
+      ctx.fillStyle = config.INK;
+      [-4, 10].forEach((x) => {
+        ctx.beginPath();
+        ctx.arc(x * face + face * 4, -56, 2.5, 0, 7);
+        ctx.fill();
+      });
+      ctx.fillStyle = '#6a4a2c';
       ctx.beginPath();
-      ctx.moveTo(-12, -68);
-      ctx.lineTo(-6, -62);
-      ctx.moveTo(12, -68);
-      ctx.lineTo(6, -62);
-      ctx.stroke();
-      ctx.lineWidth = 4;
-    }
-    ctx.fillStyle = '#f1e2b8';
-    ctx.beginPath();
-    ctx.ellipse(face * 10, -44, 11, 8, 0, 0, 7);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = config.INK;
-    ctx.beginPath();
-    ctx.arc(face * 20, -46, 3.5, 0, 7);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    [-4, 10].forEach((x) => {
-      ctx.beginPath();
-      ctx.arc(x * face + face * 2, -56, 6, 0, 7);
+      ctx.arc(0, -62, 20, Math.PI, 0);
       ctx.fill();
       ctx.stroke();
-    });
-    ctx.fillStyle = config.INK;
-    [-4, 10].forEach((x) => {
-      ctx.beginPath();
-      ctx.arc(x * face + face * 4, -56, 2.5, 0, 7);
+      ctx.fillStyle = player.color;
+      rrect(-17, -32, 34, 9, 4);
       ctx.fill();
-    });
-    ctx.fillStyle = '#6a4a2c';
-    ctx.beginPath();
-    ctx.arc(0, -62, 20, Math.PI, 0);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = player.color;
-    rrect(-17, -32, 34, 9, 4);
-    ctx.fill();
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-face * 14, -28);
-    ctx.lineTo(-face * (32 + (player.moving ? 8 : 0)), -20 + Math.sin(time * 9) * 4);
-    ctx.lineTo(-face * 14, -22);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-face * 14, -28);
+      ctx.lineTo(-face * (32 + (player.moving ? 8 : 0)), -20 + Math.sin(time * 9) * 4);
+      ctx.lineTo(-face * 14, -22);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
 
     ctx.font = '700 18px Georgia';
     ctx.textAlign = 'center';
     ctx.lineWidth = 5;
     ctx.strokeStyle = '#fff';
-    const nameY = player.y - 96 * (player.scale || 1);
+    const nameY = art ? player.y - bob - hop + art.top - 10 : player.y - 96 * (player.scale || 1);
     ctx.strokeText(player.name, player.x, nameY);
     ctx.fillStyle = player.connected === false ? '#888' : config.INK;
     ctx.fillText(player.name, player.x, nameY);

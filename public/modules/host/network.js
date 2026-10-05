@@ -58,7 +58,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   });
 
   document.getElementById('bots').onclick = () => {
-    const speciesNames = Object.keys(config.SPECIES);
+    const speciesNames = config.CREW_SPECIES;
     const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
     for (let i = 0; i < 4 && Object.keys(simulation.state.players).length < config.MAX_PLAYERS; i++) {
       const id = 'bot' + Math.random();

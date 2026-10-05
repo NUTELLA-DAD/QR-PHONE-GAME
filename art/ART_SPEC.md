@@ -45,7 +45,7 @@ everywhere else, so you can add art **one piece at a time** and see it in the ga
 | 5 | Fox | new – same style |
 | 6 | Bear | new – same style |
 | 7 | Cat | new – same style |
-| 8 | *Your pick* (e.g. rabbit or owl) | new – replaces the devil, who is now an enemy |
+| 8 | Rabbit | new – same style |
 
 **The enemy: monsters.**
 
@@ -68,8 +68,15 @@ In the game a character is about **100 units tall**, so the whole figure assembl
 **200 px tall at 2×**. Proportions like the sheets: **big head (about 40% of the height)**, short
 body, rubber-hose arms and legs.
 
-Folder: `art/sprites/crew/<animal>/` or `art/sprites/enemies/<creature>/`
-(e.g. `art/sprites/crew/bulldog/head.png`, `art/sprites/enemies/skeleton/head.png`)
+Folders (exact names):
+
+- Crew: `art/sprites/crew/<animal>/` with `<animal>` = `bulldog`, `wolf`, `shiba`, `tiger`, `fox`,
+  `bear`, `cat`, `rabbit` — e.g. `art/sprites/crew/bulldog/head.png`
+- Monsters: `art/sprites/enemies/skeleton/` (Raider), `enemies/devil/` (Brute),
+  `enemies/skeleton-bomber/` (Sapper), `enemies/bat/` (Cutter)
+
+A character switches to its art once it has at least `head.png` and `torso.png`; any other
+piece that's missing is simply left out (or uses the placeholder tool, for held items).
 
 | File | What | Size (2×) |
 |---|---|---|
@@ -102,7 +109,8 @@ the same `leg.png` for both legs.
 
 ## 4. Planes
 
-Folder: `art/sprites/planes/<name>/` — names: `fighter`, `cargo`, `skeleton-fighter`
+Folder: `art/sprites/planes/<name>/` — names: `fighter` (the devil's twin-boom), `cargo`,
+`skeleton-fighter` (not in the game yet)
 
 | File | What | Size (2×) |
 |---|---|---|
@@ -183,7 +191,7 @@ Folder: `art/sprites/items/` and `art/sprites/fx/`
 | `fx/gas-hole.png` | Rip in the gasbag fabric | 80 × 60 |
 | `fx/bomb.png` | Sapper's round bomb with fuse | 96 × 120 |
 | `fx/mine.png` | Floating spiked mine hanging from a little balloon (a skull face is welcome) | 200 × 320 |
-| `fx/explosion-1.png` … `-4.png` | *(optional)* puffy cartoon explosion frames | 200 × 200 each |
+| `fx/explosion-1.png` … `-4.png` | *(optional, not used yet)* puffy cartoon explosion frames | 200 × 200 each |
 
 ---
 
@@ -225,7 +233,13 @@ prompt; keep the outline thickness the same between pieces.
 5. **Cargo plane** and **mine**.
 6. The other animals, monsters, rooms and props in any order.
 
-## 10. How to hand it over
+## 10. Fine-tuning (my job)
+
+`art/sprites/rig.json` holds the joint points for each character and plane, e.g.
+`{ "crew/bulldog": { "neck": { "x": 3, "y": -60 }, "armLength": 30 } }`. I'll fill it in once
+real art arrives, so the pieces line up.
+
+## 11. How to hand it over
 
 Put the PNGs in the folders above (inside `art/sprites/`) and tell me. I'll check each piece,
 strip magenta backgrounds, set the joint points, and you'll see it in the game the next time

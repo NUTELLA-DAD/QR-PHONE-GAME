@@ -11,6 +11,23 @@ const COLORS = ['#e63946','#f4a261','#f1c40f','#2a9d8f','#3a86ff','#8338ec','#ff
                 '#ff7b00','#00b4d8','#9ef01a','#b5179e','#ffffff','#7f5539','#4cc9f0','#d00000'];
 
 app.use(express.static('public'));
+// Game art: files in art/sprites/ are served, and listed so the host only loads what exists.
+const path = require('path'), fs = require('fs');
+const SPRITES = path.join(__dirname, 'art', 'sprites');
+app.use('/art', express.static(path.join(__dirname, 'art')));
+app.get('/api/sprites', (q, r) => {
+  const found = [];
+  const walk = (dir, rel) => {
+    if (!fs.existsSync(dir)) return;
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(path.join(dir, e.name), rel + e.name + '/');
+      else if (/\.png$/i.test(e.name)) found.push(rel + e.name.replace(/\.png$/i, ''));
+      else if (e.name === 'rig.json') found.push(rel + 'rig.json');
+    }
+  };
+  walk(SPRITES, '');
+  r.json(found);
+});
 app.get('/api/info', (q, r) => r.json({ base: BASE }));
 app.get('/qr', async (q, r) => r.type('image/svg+xml').send(await QR.toString(String(q.query.t || '').slice(0, 200), { type: 'svg', margin: 1 })));
 app.get('/join/:code', (q, r) => r.redirect('/controller.html?code=' + encodeURIComponent(q.params.code)));

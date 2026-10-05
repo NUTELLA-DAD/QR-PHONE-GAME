@@ -1,6 +1,6 @@
 export function createControllerUI({ network }) {
   const $ = (id) => document.getElementById(id);
-  const speciesNames = [['bulldog', '🐶'], ['wolf', '🐺'], ['tiger', '🐯'], ['shiba', '🐕'], ['fox', '🦊'], ['bear', '🐻'], ['cat', '🐱'], ['devil', '😈']];
+  const speciesNames = [['bulldog', '🐶'], ['wolf', '🐺'], ['tiger', '🐯'], ['shiba', '🐕'], ['fox', '🦊'], ['bear', '🐻'], ['cat', '🐱'], ['rabbit', '🐰']];
 
   // Icon for the Action button, picked from the start of its label.
   const ACTION_ICONS = [
