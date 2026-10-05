@@ -440,27 +440,29 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
   };
 
-  // Steam vent stacks: they hiss when pressure is high.
+  // Steam vent stacks: open ones blow a big plume (handle turned); closed ones hiss a little
+  // when the pressure is high.
   const drawVents = (time) => {
     const high = state.ship.press >= config.BOILER.WARN_AT;
-    for (const v of L.vents) {
+    L.vents.forEach((v, i) => {
       const y = P[v.d].y;
+      const open = state.ventOpen && state.ventOpen[i];
       if (!sprites.box(ctx, 'ship/vent', v.x - 16, y - 150, 32, 110)) {
         filled('#9aa1a6', () => ctx.rect(v.x - 9, y - 140, 18, 100));
         filled('#6d7378', () => ctx.rect(v.x - 16, y - 150, 32, 14));
-        filled(high ? '#e63946' : '#c0392b', () => ctx.arc(v.x, y - 60, 13, 0, 7));
-        line([[v.x - 13, y - 60], [v.x + 13, y - 60]], 3);
+        filled(open ? '#4caf50' : high ? '#e63946' : '#c0392b', () => ctx.arc(v.x, y - 60, 13, 0, 7));
+        if (open) line([[v.x, y - 73], [v.x, y - 47]], 3);
+        else line([[v.x - 13, y - 60], [v.x + 13, y - 60]], 3);
       }
-      if (high) {
-        for (let k = 0; k < 2; k++) {
-          const t = (time * 1.5 + k / 2) % 1;
-          ctx.fillStyle = `rgba(255,255,255,${0.7 - t * 0.7})`;
-          ctx.beginPath();
-          ctx.arc(v.x, y - 160 - t * 40, 8 + t * 12, 0, 7);
-          ctx.fill();
-        }
+      const puffs = open ? 5 : high ? 2 : 0;
+      for (let k = 0; k < puffs; k++) {
+        const t = (time * (open ? 2.2 : 1.5) + k / puffs) % 1;
+        ctx.fillStyle = `rgba(255,255,255,${(open ? 0.85 : 0.7) - t * 0.7})`;
+        ctx.beginPath();
+        ctx.arc(v.x + (open ? Math.sin(k * 2.1) * t * 20 : 0), y - 160 - t * (open ? 110 : 40), (open ? 12 : 8) + t * (open ? 22 : 12), 0, 7);
+        ctx.fill();
       }
-    }
+    });
   };
 
   // Coal bunker: a bin with a coal heap.

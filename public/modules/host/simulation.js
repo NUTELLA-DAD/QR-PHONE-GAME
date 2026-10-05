@@ -68,8 +68,10 @@ export function createSimulation() {
   let socket = null;
   const state = {
     players: {},
-    ship: { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 70, fuel: config.BOILER.START_FUEL, gas: 100 },
+    ship: { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START },
     gasHoles: [],
+    ventOpen: SHIP_LAYOUT.vents.map(() => false), // which vent stacks are open
+    wreck: null, // { t } while the ship is breaking apart
     upgrades: {}, // id -> times taken
     difficulty: config.START_DIFFICULTY,
     phase: 'lobby', // 'lobby' = moored at the mast while the crew joins; 'flying' after CAST OFF
@@ -130,7 +132,7 @@ export function createSimulation() {
     const hurt = modules.list.find((m) => m.hp < m.max && here(m, T.REACH + 15));
     if (hurt && tool === 'hammer') return { type: 'repair', obj: hurt, hold: true, label: `Repair ${hurt.name}` };
     const vent = SHIP_LAYOUT.vents.find((v) => here(v, T.REACH));
-    if (vent) return { type: 'vent', obj: vent, hold: true, label: 'Vent steam' };
+    if (vent) return { type: 'vent', obj: vent, label: state.ventOpen[SHIP_LAYOUT.vents.indexOf(vent)] ? 'Close vent' : 'Open vent' };
     const valve = modules.list.find((m) => m.kind === 'pipe' && here(m, T.REACH));
     if (valve) return { type: 'valve', obj: valve, label: valve.open ? 'Close valve' : 'Open valve' };
     if (station) {
@@ -176,11 +178,67 @@ export function createSimulation() {
 
   const damageHull = (amount) => {
     const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
-    if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * diff.damage) <= 0) {
-      state.ship.hull = 0;
-      state.ship.down = 6;
+    if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * diff.damage) <= 0) wreck();
+  };
+
+  // The hull gave out: the ship breaks apart, then the whole game starts over.
+  function wreck(text = "SHE'S BREAKING UP!") {
+    if (state.ship.down) return;
+    state.ship.hull = 0;
+    state.ship.down = config.WRECK.TIME;
+    state.wreck = { t: 0, lap: state.course ? state.course.lap : 1, kills: state.kills };
+    state.ship.shake = 1.5;
+    state.ev.warn = config.WRECK.TIME;
+    state.ev.warnText = text;
+    // Laps fully flown still count toward this TV's record.
+    const laps = state.wreck.lap - 1;
+    if (laps > state.record.laps || (laps === state.record.laps && state.kills > state.record.kills)) {
+      state.record = { laps, kills: state.kills };
+      saveRecord(state.record);
+      state.newRecord = true;
+    }
+  }
+
+  // Settings as they were at the start (upgrades change them during a run).
+  const copyData = (v) => (Array.isArray(v) ? v.map(copyData) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, copyData(x)])) : v);
+  const pristine = copyData(config);
+  const restoreData = (target, from) => {
+    for (const [k, v] of Object.entries(from)) {
+      if (v && typeof v === 'object' && !Array.isArray(v) && target[k] && typeof target[k] === 'object') restoreData(target[k], v);
+      else target[k] = copyData(v);
     }
   };
+
+  // Start the whole game over, moored at the mast (players stay connected).
+  function restartGame() {
+    restoreData(config, pristine);
+    Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0 });
+    state.lastAlt = 0;
+    state.wreck = null;
+    state.phase = 'lobby';
+    state.upgrades = {};
+    state.periscope = false;
+    state.vote = null;
+    state.scorecard = null;
+    state.kills = 0;
+    state.ventOpen.fill(false);
+    for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
+    for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: 6, max: 8, empty: 0, auto: 0 });
+    raiders.reset();
+    threats.reset();
+    squadrons.restart();
+    course.restart();
+    modules.reset();
+    if (state.weather) Object.assign(state.weather, { storm: 0, gust: 0, flash: 0, bolt: null });
+    for (const player of Object.values(state.players)) {
+      // Drop everyone back aboard from above, as when joining.
+      const [e0, e1] = SHIP_LAYOUT.boarderEntryPoints;
+      Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x), stats: {} });
+      player.uk = null; // resend the phone's buttons
+    }
+    state.ev.warn = 5;
+    state.ev.warnText = 'A NEW SHIP IS READY!';
+  }
 
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
   const impact = (x, y, power) => {
@@ -302,7 +360,7 @@ export function createSimulation() {
     { key: 'coal', title: 'Stoker', icon: '⚫', unit: 'coal loads' },
     { key: 'revives', title: 'Medic', icon: '💫', unit: 'revives' },
     { key: 'defused', title: 'Bomb Squad', icon: '💣', unit: 'bombs defused' },
-    { key: 'vent', title: 'Steam Valve', icon: '💨', unit: 'seconds venting' },
+    { key: 'vent', title: 'Steam Valve', icon: '💨', unit: 'vents worked' },
   ];
   let pendingVote = null;
   const onMarker = (m) => {
@@ -454,10 +512,6 @@ export function createSimulation() {
               stat(player, 'repairs');
               pop(state, object.pos.x, object.pos.y - 50 - state.ship.alt, 'repair', '#8fe388', 0.8);
             }
-          } else if (act.type === 'vent') {
-            state.ship.press = Math.max(0, state.ship.press - config.BOILER.VENT_RATE * dt);
-            stat(player, 'vent', dt);
-            if (Math.random() < dt * 12) shipPuff(object.x + (Math.random() - 0.5) * 20, PLATFORMS[object.d].y - 150, '#ffffff', 2);
           } else {
             object.worked = true;
             object.prog = (object.prog || 0) + dt / act.time;
@@ -483,7 +537,12 @@ export function createSimulation() {
           player.actQ = false;
           const type = act ? act.type : null;
           if (type === 'rack') player.carry = player.carry === act.obj.kind ? null : act.obj.kind;
-          else if (type === 'valve') {
+          else if (type === 'vent') {
+            const i = SHIP_LAYOUT.vents.indexOf(act.obj);
+            state.ventOpen[i] = !state.ventOpen[i];
+            stat(player, 'vent');
+            shipPuff(act.obj.x, PLATFORMS[act.obj.d].y - 150, '#ffffff', 8);
+          } else if (type === 'valve') {
             act.obj.open = !act.obj.open;
             puff(act.obj.pos.x, act.obj.pos.y - state.ship.alt, '#ffffff', 6);
           } else if (type === 'load') {
@@ -527,10 +586,10 @@ export function createSimulation() {
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
-      const feel = state.buoyancy > 0 ? 'FLOATY - vent!' : state.buoyancy < 0 ? 'SINKY - more coal!' : 'just right';
-      if (stationName === 'Boiler' && !status) status = `Pressure ${Math.round(state.ship.press / 5) * 5}% (${feel}) - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
-      if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Too much steam - she wants to rise!' : 'Low steam - she wants to sink!';
-      if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - vent steam!';
+      const feel = state.buoyancy > 0 ? 'FLOATY - open a vent!' : state.buoyancy < 0 ? (state.gasHoles.length ? 'SINKY - patch the gasbag!' : 'SINKY - more coal!') : 'just right';
+      if (stationName === 'Boiler' && !status) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - gas ${Math.round(state.ship.gas / 5) * 5}% (${feel}) - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
+      if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag too full - she wants to rise!' : 'Gasbag low - she wants to sink!';
+      if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
       const ammoText = gun ? gun.ammo : null;
       const attackLabel = player.carry === 'sword' ? 'Swing' : 'Shove';
       const hull = Math.round(state.ship.hull / 5) * 5;
@@ -547,16 +606,21 @@ export function createSimulation() {
     state.lookout = state.periscope || Object.values(state.players).some((q) => q.lock === 'Lookout');
     updatePopups(state, dt);
     modules.update(state, dt);
+    // Steam pressure: heat from the coal in the firebox in, steam used by everything powered,
+    // open vents and burst pipes out (all using more at higher pressure).
     const BO = config.BOILER;
+    let heat = 0;
     if (state.ship.fuel > 0 && !modules.byName.Boiler.broken) {
       state.ship.fuel = Math.max(0, state.ship.fuel - BO.BURN_RATE * dt);
-      state.ship.press += BO.HEAT_RATE * dt;
+      heat = BO.HEAT_PER_COAL * state.ship.fuel;
     }
-    state.ship.press = clamp(state.ship.press - modules.pressureDrain(state) * dt, 0, 100);
+    const openVents = state.ventOpen.filter(Boolean).length;
+    state.steamUse = modules.pressureDrain(state) + openVents * BO.VENT_RATE;
+    state.ship.press = clamp(state.ship.press + (heat - (state.steamUse * state.ship.press) / BO.USE_REF) * dt, 0, 100);
     if (state.ship.press >= BO.WARN_AT && !state.pressureWarned && !state.ship.down) {
       state.pressureWarned = true;
       state.ev.warn = 3;
-      state.ev.warnText = 'PRESSURE HIGH - VENT STEAM!';
+      state.ev.warnText = 'PRESSURE HIGH - OPEN A VENT!';
     }
     if (state.ship.press < BO.WARN_AT - 10) state.pressureWarned = false;
     if (state.ship.press >= BO.BLOWOUT_AT) {
@@ -573,14 +637,11 @@ export function createSimulation() {
       state.ev.warnText = 'THE BOILER BLEW! A PIPE BURST!';
     }
 
+    // Gas: pumped in by boiler pressure, seeping out of the envelope, and leaking from holes.
     const G = config.GAS;
     if (!state.ship.down) {
-      state.ship.gas += (G.REFILL_RATE * (state.ship.press / 100) - G.LEAK_PER_HOLE * state.gasHoles.length) * dt;
+      state.ship.gas += ((G.REFILL_RATE * state.ship.press) / 100 - (G.SEEP * state.ship.gas) / 100 - G.LEAK_PER_HOLE * state.gasHoles.length) * dt;
       state.ship.gas = clamp(state.ship.gas, 0, 100);
-      if (state.ship.gas <= 0) {
-        state.ship.down = 6;
-        state.ship.hull = 0;
-      }
     }
     const maxSpeed = clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state);
     if (state.ship.speed > maxSpeed) state.ship.speed += (maxSpeed - state.ship.speed) * Math.min(1, dt * 2);
@@ -609,10 +670,11 @@ export function createSimulation() {
         state.ship.alt += Math.max(-step, Math.min(step, target - state.ship.alt));
       } else state.ship.alt *= 1 - dt * 0.4;
     }
-    // Buoyancy from steam pressure: sinky below the band, floaty above it.
+    // Buoyancy from the gas: sinky below the band, floaty above it.
     const BU = config.BUOYANCY;
-    const press = state.ship.press;
-    state.buoyancy = press > BU.FLOATY_ABOVE ? press - BU.FLOATY_ABOVE : press < BU.SINKY_BELOW ? press - BU.SINKY_BELOW : 0;
+    const gas = state.ship.gas;
+    state.buoyancy = gas > BU.FLOATY_ABOVE ? gas - BU.FLOATY_ABOVE : gas < BU.SINKY_BELOW ? gas - BU.SINKY_BELOW : 0;
+    state.sinking = state.buoyancy < 0;
     if (state.buoyancy && !state.ship.down && state.phase === 'flying') {
       const R = config.SHIP.ALT_RANGE;
       state.ship.alt = clamp(state.ship.alt + state.buoyancy * BU.DRIFT * dt, -R, R);
@@ -620,15 +682,11 @@ export function createSimulation() {
       if (state.buoyWarned !== kind && Math.abs(state.buoyancy) > 4) {
         state.buoyWarned = kind;
         state.ev.warn = 2.5;
-        state.ev.warnText = kind === 'floaty' ? 'TOO FLOATY - VENT STEAM!' : 'TOO SINKY - MORE COAL!';
+        state.ev.warnText = kind === 'floaty' ? 'TOO FLOATY - OPEN A VENT!' : state.gasHoles.length ? 'SINKING - PATCH THE GASBAG!' : 'SINKING - MORE STEAM!';
       }
+      // Very low on gas at the bottom: the hull scrapes.
+      if (state.ship.alt <= -R + 1 && gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
     } else if (!state.buoyancy) state.buoyWarned = null;
-    // Losing gas: the ship sinks, and scrapes along the bottom if it's very low.
-    state.sinking = state.ship.gas < G.SINK_BELOW;
-    if (state.sinking && !state.ship.down) {
-      state.ship.alt = Math.max(-config.SHIP.ALT_RANGE, state.ship.alt - (G.SINK_BELOW - state.ship.gas) * G.SINK_SPEED * dt);
-      if (state.ship.alt <= -config.SHIP.ALT_RANGE + 1 && state.ship.gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
-    }
     state.ship.shake = Math.max(0, state.ship.shake - dt);
     // Nose up while climbing, nose down while diving.
     const SH = config.SHIP;
@@ -637,32 +695,23 @@ export function createSimulation() {
     const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED, -SH.TILT_MAX, SH.TILT_MAX);
     state.ship.pitch = (state.ship.pitch || 0) + (wantPitch - (state.ship.pitch || 0)) * Math.min(1, dt * SH.TILT_SMOOTH);
 
+    // Breaking apart: pieces fall, explosions go off, then the whole game starts over.
     if (state.ship.down > 0) {
       state.ship.down -= dt;
-      if (state.ship.down <= 0) {
-        state.ship.down = 0; // exactly 0, or "!ship.down" checks think we're still crashed
-        state.ship.hull = 100;
-        state.breaches.length = 0;
-        state.fires.length = 0;
-        raiders.reset();
-        threats.reset();
-        squadrons.reset();
-        course.reset();
-        state.ship.alt = 0;
-        modules.reset();
-        state.gasHoles.length = 0;
-        state.ship.gas = 100;
-        state.ship.fuel = config.BOILER.START_FUEL;
-        state.ship.press = 70;
-        for (const player of Object.values(state.players)) player.ko = 0;
+      state.wreck.t += dt;
+      if (Math.random() < dt * 6) {
+        const x = 100 + Math.random() * 1400;
+        const y = 200 + Math.random() * 700;
+        shipPuff(x, y + state.wreck.t * state.wreck.t * 60, Math.random() < 0.5 ? '#ff8c42' : '#555', 12);
       }
+      if (state.ship.down <= 0) restartGame();
     }
 
     if (state.phase === 'lobby') {
       // Moored at the home mast: no enemies, the boiler and gasbag are kept topped up.
-      state.ship.press = 70;
+      state.ship.press = 65;
       state.ship.fuel = Math.max(state.ship.fuel, config.BOILER.START_FUEL);
-      state.ship.gas = 100;
+      state.ship.gas = config.GAS.START;
     } else {
       threats.update(dt);
       squadrons.update(dt);
@@ -713,11 +762,9 @@ export function createSimulation() {
     }
 
     if (!state.ship.down) {
-      state.ship.hull -= (state.breaches.length * 0.5 + state.fires.length * 0.35) * dt;
-      if (state.ship.hull <= 0) {
-        state.ship.hull = 0;
-        state.ship.down = 6;
-      }
+      const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
+      state.ship.hull -= (state.breaches.length * 0.5 + state.fires.length * 0.35) * diff.damage * 2 * dt;
+      if (state.ship.hull <= 0) wreck();
     }
 
     raiders.update(dt);

@@ -29,8 +29,12 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
   lever is the throttle. Nobody at the helm? On Easy/Normal the autopilot steers gently.
 - **Guns** (6 of them, each turns only so far): aim near a target and the aim snaps on. Guns need
   **ammo** carried from the Ammo Hold.
-- **Boiler**: carry **coal** from the Coal Bunker (lower deck). Too much pressure? Hold Action at
-  a **vent** stack, or the boiler blows.
+- **Boiler**: carry **coal** from the Coal Bunker (lower deck). More coal = more steam pressure.
+  Everything powered (engines, helm, lift) uses steam; tap Action at a **vent** stack to open or
+  close it. At 100% pressure the boiler blows.
+- **Gasbag**: steam pressure pumps gas into the bag; holes leak it out. The gas gauge shows
+  **sinky** (blue), **just right** (green) or **floaty** (yellow) - the ship drifts down or up and
+  the helm has to fight it. Patch holes and keep the pressure up to stay afloat.
 - **Tools** from the racks and hooks: **hammer** (patch holes, repair broken modules and gasbag
   tears), **extinguisher** (fires), **sword** (raiders). One thing at a time.
 - **Valves** on the steam pipes: close a burst pipe's valve to stop the leak.
@@ -40,7 +44,8 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
 
 Each lap flies out past checkpoint flags to a **turning beacon**, then home to the mooring mast.
 At the beacon and at home the crew **votes on an upgrade** on their phones. Arriving home shows
-the **lap scorecard** with crew awards. If the ship goes down, you restart at the last flag.
+the **lap scorecard** with crew awards. Each checkpoint flag brings supplies (+15 hull). If the
+hull breaks, the ship **breaks apart** and the game starts over at the mast (upgrades are lost).
 
 Enemies: fighters, raider cargo planes (shoot them before they drop raiders), mines, bat swarms,
 bombers, skeleton strafers, ground flak turrets and rocket batteries, the **Dread Zeppelin** boss

@@ -27,7 +27,7 @@ function distToPath(x, y, pts) {
 
 export function createModules() {
   const list = [];
-  const add = (m) => list.push({ hp: M.HP, max: M.HP, broken: false, ...m });
+  const add = (m) => list.push({ hp: M.HP, max: M.HP, baseMax: M.HP, broken: false, ...m });
 
   for (const [name, mount] of Object.entries(L.gunMounts)) {
     const s = station(name);
@@ -100,12 +100,19 @@ export function createModules() {
     connScale[LIFT] = works(state, 'Lift') ? 1 : M.UNPOWERED_LIFT;
   };
 
-  // How much steam pressure is lost this frame (engines use it; burst pipes leak it).
+  // Steam used per second (at the reference pressure): the boiler itself, every powered module
+  // (engines by how fast they run) and burst pipes with their valve open. Vents are added by the
+  // simulation.
   const pressureDrain = (state) => {
-    let drain = 2;
-    for (const e of L.engines) if (works(state, e.name)) drain += state.ship.speed * 3;
-    for (const m of list) if (m.kind === 'pipe' && m.broken && m.open) drain += M.PIPE_LEAK;
-    return drain;
+    const B = config.BOILER;
+    let use = B.USE_BASE;
+    for (const m of list) {
+      if (m.kind !== 'pipe' || !m.open) continue;
+      if (m.broken) use += M.PIPE_LEAK;
+      else if (!byName[m.to] || byName[m.to].broken) continue;
+      else use += byName[m.to].kind === 'engine' ? B.USE_ENGINE * state.ship.speed : B.USE_POWERED;
+    }
+    return use;
   };
 
   // Top speed allowed by the engines (1 = both working).
@@ -116,6 +123,7 @@ export function createModules() {
 
   const reset = () => {
     for (const m of list) {
+      m.max = m.baseMax;
       m.hp = m.max;
       m.broken = false;
       if (m.kind === 'pipe') m.open = true;

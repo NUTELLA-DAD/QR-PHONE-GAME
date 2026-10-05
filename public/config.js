@@ -87,6 +87,7 @@ export const config = {
     HARDEST_AT: 240000, // distance at which obstacles reach full difficulty (about lap 3)
     LOOP_LENGTH: 110000, // one lap: out to the beacon and back home (~6 minutes at cruising speed)
     SECTIONS: 6, // markers per lap: home, checkpoints, beacon halfway
+    CHECKPOINT_REPAIR: 15, // hull repaired by the supplies at each checkpoint flag
     MARKER_CLEAR: 1800, // open sky kept around every marker (safe restart spots)
     REWIND_BEFORE: 900, // after going down, restart this far before the last marker
     SCRAPE_COOLDOWN: 0.45, // seconds between scrape damage while touching rock
@@ -156,10 +157,11 @@ export const config = {
   },
   // Difficulty presets (button on the TV). damage = hull damage taken; pace = how often waves,
   // flak and enemy fire come (higher = busier).
+  // A wrecked ship ends the run, so damage is kept gentle (multiplier on all hull damage).
   DIFFICULTY: {
-    easy: { label: 'Easy', damage: 0.4, pace: 0.75, autopilot: true },
-    normal: { label: 'Normal', damage: 0.6, pace: 0.9, autopilot: true },
-    hard: { label: 'Hard', damage: 1.4, pace: 1.3, autopilot: false },
+    easy: { label: 'Easy', damage: 0.12, pace: 0.75, autopilot: true },
+    normal: { label: 'Normal', damage: 0.2, pace: 0.9, autopilot: true },
+    hard: { label: 'Hard', damage: 0.5, pace: 1.3, autopilot: false },
   },
   START_DIFFICULTY: 'normal',
   AUTOPILOT_SPEED: 0.65, // an unmanned helm steers itself at this share of the climb speed (Easy/Normal)
@@ -189,29 +191,42 @@ export const config = {
     COAL_FUEL: 25, // fuel added per load of coal
     FUEL_MAX: 100,
     BURN_RATE: 1.6, // fuel burned per second
-    HEAT_RATE: 7, // pressure gained per second while there's fuel
+    // Pressure in the line = heat in vs steam used. Heat comes from the coal in the firebox
+    // (more coal = hotter fire). Steam is used by everything powered (each open pipe valve),
+    // by open vents and by burst pipes, and all of them use more when the pressure is higher,
+    // so the pressure settles where heat and use balance.
+    HEAT_PER_COAL: 0.16, // pressure gained per second per unit of coal in the firebox
+    USE_REF: 60, // usage below is per second at this pressure (scales with pressure)
+    USE_BASE: 1, // the boiler itself
+    USE_ENGINE: 3, // each working engine, times the ship's speed
+    USE_POWERED: 1, // each other powered module (helm, lift) with its valve open
+    VENT_RATE: 10, // each open vent stack
     WARN_AT: 90, // "vent steam!" warning
     BLOWOUT_AT: 100, // boiler blows: damages itself and bursts a pipe
-    VENT_RATE: 20, // pressure released per second while someone holds a vent
   },
-  // Steam pressure also sets how buoyant the ship is: too little and it sinks, too much and it
-  // floats up (and eventually the boiler blows). The stoker keeps it in the 'just right' band.
+  // Lift comes from the GAS in the gasbag (not straight from the boiler): too little and the ship
+  // sinks, too much and it floats up. The helm has to fight the drift.
   BUOYANCY: {
-    SINKY_BELOW: 35, // below this pressure the ship drifts down...
-    FLOATY_ABOVE: 72, // ...above this it drifts up (vent steam to settle it)
-    DRIFT: 2.2, // altitude drift per second for each point of pressure outside the band
+    SINKY_BELOW: 40, // below this much gas the ship drifts down...
+    FLOATY_ABOVE: 75, // ...above this it drifts up (open a vent to settle it)
+    DRIFT: 2.2, // altitude drift per second for each point of gas outside the band
   },
-  // Gasbag: shots punch holes that leak gas. Low gas = the ship sinks. Boiler pressure
-  // pumps gas back in, so high pressure can keep a leaky ship afloat.
+  // Gasbag: boiler pressure pumps gas in, the envelope seeps a little out, and holes leak more.
+  // With no holes the gas settles near the pressure; each hole costs about 13 points, so a
+  // leaky ship needs more pressure to stay up.
   GAS: {
-    LEAK_PER_HOLE: 3, // gas lost per second per hole
-    REFILL_RATE: 3, // gas gained per second at 100% pressure
-    SINK_BELOW: 65, // below this much gas the ship starts sinking
-    SINK_SPEED: 4, // how fast it sinks per point of gas below that
+    START: 65,
+    REFILL_RATE: 9, // gas pumped in per second at 100% pressure
+    SEEP: 9, // gas seeping out per second when the bag is full (less when emptier)
+    LEAK_PER_HOLE: 1.2, // extra gas lost per second per hole
     SCRAPE_BELOW: 35, // at the lowest altitude with gas below this, the hull scrapes...
-    SCRAPE_DAMAGE: 2, // ...losing this much hull per second
+    SCRAPE_DAMAGE: 5, // ...losing this much hull per second (before the difficulty multiplier)
     MAX_HOLES: 8,
     HOLE_CHANCE: 1, // chance a hit on the gasbag punches a hole
+  },
+  // When the hull gives out the ship breaks apart and the whole game starts over at the mast.
+  WRECK: {
+    TIME: 8, // seconds of breaking apart before the restart
   },
   // Old-film effects. All OFF (the user found them unpleasant). Raise a number or set
   // LINE_BOIL to true to bring one back.

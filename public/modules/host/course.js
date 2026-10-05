@@ -363,7 +363,11 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
       } else if (m.kind === 'beacon') {
         state.ev.warnText = 'TURNING BEACON - HEADING HOME!';
         course.leg = 'home';
-      } else state.ev.warnText = 'CHECKPOINT!';
+      } else {
+        // Supplies at every flag patch the hull up a little.
+        state.ship.hull = Math.min(100, state.ship.hull + K.CHECKPOINT_REPAIR);
+        state.ev.warnText = 'CHECKPOINT! SUPPLIES ABOARD: +' + K.CHECKPOINT_REPAIR + ' HULL';
+      }
       if (m.kind !== 'checkpoint' && onMarker) onMarker(m);
     }
     // Sunset on the return leg (fades in after the beacon, out before home).
@@ -405,5 +409,27 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     state.ev.warnText = m.kind === 'home' ? 'BACK TO THE MOORING MAST - TRY AGAIN!' : 'BACK TO THE LAST ' + (m.kind === 'beacon' ? 'BEACON' : 'CHECKPOINT') + '!';
   };
 
-  return { update, reset, helmHint };
+  // A brand-new game: fresh terrain from the home mast, lap 1.
+  const restart = () => {
+    state.rockets.length = 0;
+    Object.assign(course, {
+      dist: 0,
+      features: [],
+      turrets: [],
+      markers: [],
+      nextX: K.FIRST_FEATURE,
+      rand: rng(Date.now()),
+      scrapeCd: 0,
+      scraping: false,
+      warned: null,
+      lap: 1,
+      leg: 'out',
+      lastMarker: { cx: 0, kind: 'home', lap: 1 },
+      dusk: 0,
+    });
+    addLapMarkers(1);
+    course.markers[0].passed = true;
+  };
+
+  return { update, reset, restart, helmHint };
 }

@@ -101,7 +101,7 @@ export const UPGRADES = [
     desc: 'Patch everything up right now: hull, gasbag and every module.',
     apply: ({ state, modules }) => {
       state.ship.hull = 100;
-      state.ship.gas = 100;
+      state.ship.gas = Math.max(state.ship.gas, config.GAS.START);
       state.breaches.length = 0;
       state.gasHoles.length = 0;
       state.fires.length = 0;

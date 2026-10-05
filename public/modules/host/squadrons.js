@@ -369,5 +369,14 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     waveT = Math.max(waveT, 12);
   };
 
-  return { update, reset, spawnBats, spawnBomber, spawnBoss, spawnStrafers };
+  // A brand-new game: no boss yet, first wave after the usual wait.
+  const restart = () => {
+    reset();
+    state.boss = null;
+    bossLap = 0;
+    waveT = W.FIRST_AFTER;
+    nextWave = 'bats';
+  };
+
+  return { update, reset, restart, spawnBats, spawnBomber, spawnBoss, spawnStrafers };
 }

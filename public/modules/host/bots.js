@@ -55,7 +55,12 @@ function listJobs(state, bot) {
   const mods = state.modules || [];
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2 });
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
-  if (state.ship.press >= config.BUOYANCY.FLOATY_ABOVE + 3) jobs.push({ kind: 'vent', obj: 'vent', max: 1 });
+  // Vents: open one when the gasbag is too full or pressure is near the top; close them when calm.
+  const BU = config.BUOYANCY;
+  const ventWanted = state.ship.gas > BU.FLOATY_ABOVE + 3 || state.ship.press > config.BOILER.WARN_AT - 5;
+  const ventCalm = state.ship.gas < BU.FLOATY_ABOVE - 12 && state.ship.press < config.BOILER.WARN_AT - 20;
+  const ventIdx = state.ventOpen.findIndex((open) => (ventWanted ? !open : ventCalm && open));
+  if ((ventWanted || ventCalm) && ventIdx >= 0) jobs.push({ kind: 'vent', obj: L.vents[ventIdx], max: 1 });
   for (const bomb of state.bombs || []) jobs.push({ kind: 'defuse', obj: bomb, max: 1 });
   const fires = state.fires.map((f) => ({ kind: 'fire', obj: f, max: 1 }));
   const holes = [...state.breaches, ...(state.gasHoles || [])].map((h) => ({ kind: 'patch', obj: h, max: 1 }));
@@ -67,7 +72,7 @@ function listJobs(state, bot) {
   else jobs.push(...fires, ...leaks, ...broken, ...holes);
   for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open) jobs.push({ kind: 'valve', obj: m, max: 1 });
   for (const m of mods) if (!m.broken && m.hp < 60) jobs.push({ kind: 'repair', obj: m, max: 1 });
-  if ((state.ship.fuel < 35 && state.ship.press < config.BUOYANCY.FLOATY_ABOVE - 5) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: 1 });
+  if ((state.ship.fuel < 60 && state.ship.gas < BU.FLOATY_ABOVE - 10 && state.ship.press < config.BOILER.WARN_AT - 25) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
   const guns = GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
@@ -174,10 +179,8 @@ function work(p, state) {
       }
     }
   } else if (job.kind === 'vent') {
-    // Hold the nearest vent until pressure is back down.
-    const cost = (v) => Math.abs(v.x - p.x) + Math.abs(L.platforms[v.d].y - p.y) * 3;
-    const v = [...L.vents].sort((a, b) => cost(a) - cost(b))[0];
-    if (steer(p, v.d, v.x, 10) && state.ship.press > config.BUOYANCY.FLOATY_ABOVE - 15) p.fire = true;
+    // Walk to the vent and flip it.
+    if (steer(p, o.d, o.x, 10)) press(p);
   } else if (job.kind === 'coal') {
     const s = p.carry === 'coal' ? stationNamed('Boiler') : stationNamed('Coal Bunker');
     if (steer(p, s.d, s.x)) press(p);

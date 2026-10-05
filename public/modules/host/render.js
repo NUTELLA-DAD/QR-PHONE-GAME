@@ -400,51 +400,55 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillText('Hull', 46, 50);
     ctx.textAlign = 'right';
     ctx.fillText('Raiders downed: ' + state.kills, 454, 50);
-    // Steam pressure: red zone at the top means vent!
-    // Bands: sinky (blue), just right (green), floaty (yellow), danger (red).
+    // A gauge with coloured bands and a needle under the current value.
+    const gauge = (y, value, bands, fill) => {
+      ctx.fillStyle = '#3b2a1d';
+      ctx.fillRect(46, y, 408, 14);
+      for (const [a, b, c] of bands) {
+        ctx.fillStyle = c;
+        ctx.fillRect(46 + 408 * a, y, 408 * (b - a), 14);
+      }
+      ctx.fillStyle = fill;
+      ctx.fillRect(46, y + 3, (408 * value) / 100, 8);
+      ink();
+      ctx.lineWidth = 3;
+      ctx.strokeRect(46, y, 408, 14);
+      ctx.fillStyle = config.INK;
+      ctx.beginPath();
+      ctx.moveTo(46 + (408 * value) / 100, y + 16);
+      ctx.lineTo(40 + (408 * value) / 100, y + 24);
+      ctx.lineTo(52 + (408 * value) / 100, y + 24);
+      ctx.fill();
+    };
+    // Steam pressure in the line: red zone at the top means open a vent!
     const warnAt = config.BOILER.WARN_AT / 100;
-    const BU = config.BUOYANCY;
-    ctx.fillStyle = '#3b2a1d';
-    ctx.fillRect(46, 104, 408, 14);
-    [
-      [0, BU.SINKY_BELOW / 100, 'rgba(90,150,230,.5)'],
-      [BU.SINKY_BELOW / 100, BU.FLOATY_ABOVE / 100, 'rgba(120,200,110,.5)'],
-      [BU.FLOATY_ABOVE / 100, warnAt, 'rgba(240,200,60,.5)'],
-      [warnAt, 1, 'rgba(230,57,70,.55)'],
-    ].forEach(([a, b, c]) => {
-      ctx.fillStyle = c;
-      ctx.fillRect(46 + 408 * a, 104, 408 * (b - a), 14);
-    });
     const p = state.ship.press;
-    ctx.fillStyle = p >= config.BOILER.WARN_AT ? '#e63946' : p > BU.FLOATY_ABOVE ? '#f2c53d' : p < BU.SINKY_BELOW ? '#5a96e6' : '#e8eef2';
-    ctx.fillRect(46, 107, 408 * p / 100, 8);
-    ink();
-    ctx.lineWidth = 3;
-    ctx.strokeRect(46, 104, 408, 14);
-    // Needle marking the current pressure.
-    ctx.fillStyle = config.INK;
-    ctx.beginPath();
-    ctx.moveTo(46 + 408 * p / 100, 120);
-    ctx.lineTo(40 + 408 * p / 100, 128);
-    ctx.lineTo(52 + 408 * p / 100, 128);
-    ctx.fill();
-    // Gas in the envelope.
-    ctx.fillStyle = '#3b2a1d';
-    ctx.fillRect(46, 154, 408, 14);
-    ctx.fillStyle = state.ship.gas < config.GAS.SINK_BELOW ? '#e63946' : '#a8d8a0';
-    ctx.fillRect(46, 154, 408 * state.ship.gas / 100, 14);
-    ctx.strokeRect(46, 154, 408, 14);
+    gauge(104, p, [[warnAt, 1, 'rgba(230,57,70,.55)']], p >= config.BOILER.WARN_AT ? '#e63946' : '#e8eef2');
+    // Gas in the envelope: sinky (blue), just right (green), floaty (yellow).
+    const BU = config.BUOYANCY;
+    const gas = state.ship.gas;
+    gauge(
+      154,
+      gas,
+      [
+        [0, BU.SINKY_BELOW / 100, 'rgba(90,150,230,.5)'],
+        [BU.SINKY_BELOW / 100, BU.FLOATY_ABOVE / 100, 'rgba(120,200,110,.5)'],
+        [BU.FLOATY_ABOVE / 100, 1, 'rgba(240,200,60,.5)'],
+      ],
+      gas > BU.FLOATY_ABOVE ? '#f2c53d' : gas < BU.SINKY_BELOW ? '#5a96e6' : '#a8d8a0',
+    );
     ctx.fillStyle = config.INK;
     ctx.font = '700 16px Georgia';
     ctx.textAlign = 'left';
-    ctx.fillText('Steam' + (state.buoyancy > 0 ? ' - FLOATY' : state.buoyancy < 0 ? ' - SINKY' : ''), 46, 100);
-    ctx.fillText(`Gas${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}${state.sinking ? ' - SINKING!' : ''}`, 46, 150);
+    const vents = (state.ventOpen || []).filter(Boolean).length;
+    ctx.fillText('Steam' + (vents ? ` - ${vents} vent${vents > 1 ? 's' : ''} open` : ''), 46, 100);
+    ctx.fillText(`Gas${state.buoyancy > 0 ? ' - FLOATY' : state.buoyancy < 0 ? ' - SINKY' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}`, 46, 150);
     ctx.textAlign = 'right';
     ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);
     if (state.autopilot) {
       ctx.fillStyle = '#3a5a8c';
       ctx.textAlign = 'center';
-      ctx.fillText('AUTOPILOT', 250, 100);
+      ctx.fillText('AUTOPILOT', 170, 50);
       ctx.fillStyle = config.INK;
     }
     if (state.course && config.COURSE.ENABLED) {
@@ -462,14 +466,6 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fillStyle = '#e63946';
       ctx.fillText(text, 800, 170);
       ink();
-    }
-    if (state.ship.down > 0) {
-      ctx.fillStyle = 'rgba(27,20,16,.55)';
-      ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3); // cover letterbox edges too
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center';
-      ctx.font = '900 64px Georgia';
-      ctx.fillText('Hull breached! Patching up...', 800, 450);
     }
     drawUpgradeIcons();
     if (state.phase === 'lobby') drawLobby();
@@ -1134,12 +1130,33 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.rotate(state.ship.pitch);
       ctx.translate(-px, -py);
     }
-    drawShip(time / 1000);
-    drawGuns();
-    drawHazards(time / 1000);
-    threatArt.drawBombs(time / 1000);
-    drawHighlights(time / 1000);
-    [...Object.values(state.players), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => drawPlayer(player, time / 1000));
+    const drawShipAndCrew = () => {
+      drawShip(time / 1000);
+      drawGuns();
+      drawHazards(time / 1000);
+      threatArt.drawBombs(time / 1000);
+      drawHighlights(time / 1000);
+      [...Object.values(state.players), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => drawPlayer(player, time / 1000));
+    };
+    if (state.wreck) {
+      // Breaking apart: the gasbag and the two halves of the gondola tumble away separately.
+      const t = state.wreck.t;
+      [
+        { clip: [-500, -300, 2600, 730], c: [800, 245], dx: -15 * t, dy: 40 * t * t, rot: -0.05 * t },
+        { clip: [-500, 430, 1300, 900], c: [450, 700], dx: -60 * t, dy: 120 * t * t, rot: -0.12 * t * t },
+        { clip: [800, 430, 1300, 900], c: [1150, 700], dx: 70 * t, dy: 140 * t * t, rot: 0.15 * t * t },
+      ].forEach((piece) => {
+        ctx.save();
+        ctx.translate(piece.c[0] + piece.dx, piece.c[1] + piece.dy);
+        ctx.rotate(piece.rot);
+        ctx.translate(-piece.c[0], -piece.c[1]);
+        ctx.beginPath();
+        ctx.rect(...piece.clip);
+        ctx.clip();
+        drawShipAndCrew();
+        ctx.restore();
+      });
+    } else drawShipAndCrew();
     ctx.restore();
     drawEffects(time / 1000, view);
     drawStorm(width, height, view, time / 1000);
@@ -1148,6 +1165,25 @@ export function createRenderer({ ctx, state, canvas }) {
     const scale = Math.min(width / config.W, height / config.H);
     ctx.setTransform(scale, 0, 0, scale, (width - config.W * scale) / 2, (height - config.H * scale) / 2);
     drawHud();
+    if (state.wreck && state.wreck.t > 1.2) {
+      // "Ship lost" card, then the restart.
+      const w = state.wreck;
+      ctx.globalAlpha = Math.min(1, (w.t - 1.2) * 2);
+      ctx.fillStyle = 'rgba(30,20,14,.82)';
+      ctx.fillRect(400, 300, 800, 260);
+      ink();
+      ctx.strokeRect(400, 300, 800, 260);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffd23f';
+      ctx.font = '700 64px Georgia';
+      ctx.fillText('SHIP LOST!', 800, 385);
+      ctx.fillStyle = '#f3ead6';
+      ctx.font = '700 28px Georgia';
+      ctx.fillText(`Laps flown: ${w.lap - 1}   -   Raiders downed: ${w.kills}`, 800, 440);
+      ctx.font = '700 22px Georgia';
+      ctx.fillText(`A new ship waits at the mast in ${Math.max(1, Math.ceil(state.ship.down))}...`, 800, 500);
+      ctx.globalAlpha = 1;
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     threatArt.drawLookoutArrows(width, height, view);
     filmLook(time, width, height);
