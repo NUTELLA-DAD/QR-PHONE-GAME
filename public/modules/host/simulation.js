@@ -283,7 +283,7 @@ export function createSimulation() {
     for (const p of players) p.stats = {};
   };
 
-  const course = createCourse({ state, impact, puff, onMarker, credit });
+  const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip });
 
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit });
 

@@ -94,8 +94,21 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.restore();
         continue;
       }
-      // Barrel, then the bunker over its base.
-      if (!sprites.pivot(ctx, 'fx/turret-barrel', 0, -26, 0.1, 0.5, t.aim)) {
+      if (t.rocket) {
+        // Rocket battery: a sloped launch rail with a rocket waiting on it.
+        ink();
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(-20, -10);
+        ctx.lineTo(10, -70);
+        ctx.stroke();
+        ctx.fillStyle = t.cd < 1 ? '#c0392b' : '#7a2a22';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(0, -48, 8, 18, 0.45, 0, 7);
+        ctx.fill();
+        ctx.stroke();
+      } else if (!sprites.pivot(ctx, 'fx/turret-barrel', 0, -26, 0.1, 0.5, t.aim)) {
         ctx.save();
         ctx.translate(0, -26);
         ctx.rotate(t.aim);

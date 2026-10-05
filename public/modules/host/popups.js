@@ -5,6 +5,7 @@ const pick = (list) => list[(Math.random() * list.length) | 0];
 export const WORDS = {
   kill: ['KA-BOOM!', 'BLAM!', 'KRAKOOM!'],
   bat: ['SPLAT!', 'SQUEAK!', 'POP!'],
+  rocket: ['POP!', 'PFFT!', 'FIZZLE!'],
   bigHit: ['CRUNCH!', 'KRUNK!', 'WHAM!'],
   whack: ['WHACK!', 'THWACK!', 'BIFF!'],
   raider: ['BONK!', 'KO!', 'ZONK!'],

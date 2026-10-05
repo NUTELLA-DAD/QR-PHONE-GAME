@@ -1,6 +1,7 @@
 // More enemy types, sent in waves that ramp up with each lap:
 //   Bat swarm   - small fast bats that dive at the ship and burst on contact.
 //   Bomber      - slow heavy plane crossing overhead, dropping bombs (shoot them down, or the bombs).
+//   Strafers    - pairs of fast skeleton fighters making straight passes above or below the ship.
 //   Dread Zeppelin - boss airship on the way home each lap: parks ahead, three turrets, and sends
 //                    boarders down grapple lines. Shooting it down patches your ship up.
 import { config } from '../../config.js';
@@ -17,6 +18,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   state.bats = [];
   state.bombers = [];
   state.enemyBombs = [];
+  state.strafers = [];
   state.boss = null;
   let waveT = W.FIRST_AFTER;
   let nextWave = 'bats';
@@ -87,6 +89,24 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     warn('THE DREAD ZEPPELIN APPROACHES!', 4);
   };
 
+  const spawnStrafers = () => {
+    const fromLeft = Math.random() < 0.5;
+    const above = Math.random() < 0.6;
+    const y = (above ? B.y0 - 220 : B.y1 + 200) - state.ship.alt;
+    for (let i = 0; i < 2; i++) {
+      state.strafers.push({
+        x: (fromLeft ? B.x0 - 2600 : B.x1 + 2600) - (fromLeft ? 1 : -1) * i * 320,
+        y: y + i * (above ? -70 : 70),
+        baseY: y + i * (above ? -70 : 70),
+        vx: (fromLeft ? 1 : -1) * W.STRAFER_SPEED,
+        hp: W.STRAFER_HP,
+        above,
+        gunCd: 0,
+      });
+    }
+    warn(above ? 'STRAFERS - HIGH! DORSAL GUN!' : 'STRAFERS - LOW! VENTRAL GUN!');
+  };
+
   const director = (dt) => {
     if (state.ship.down || !Object.keys(state.players).length) return;
     const c = state.course;
@@ -98,9 +118,11 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     waveT = rand(W.EVERY_MIN, W.EVERY_MAX) * pace;
     if (state.boss) return; // the boss fight is enough on its own
     const bomberOk = lap() > 1 || (c && c.progress > 0.25);
+    const strafersOk = lap() > 1 || (c && c.progress > 0.5);
     if (nextWave === 'bomber' && bomberOk && !state.bombers.length) spawnBomber();
+    else if (nextWave === 'strafers' && strafersOk && !state.strafers.length) spawnStrafers();
     else spawnBats();
-    nextWave = nextWave === 'bats' ? 'bomber' : 'bats';
+    nextWave = nextWave === 'bats' ? 'bomber' : nextWave === 'bomber' ? 'strafers' : 'bats';
   };
 
   // ---- Movement and attacks ----
@@ -155,6 +177,24 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       }
     }
     state.enemyBombs = state.enemyBombs.filter((b) => !b.dead && b.hp > 0 && b.y < 2500);
+  };
+
+  const updateStrafers = (dt) => {
+    for (const p of state.strafers) {
+      p.x += p.vx * dt;
+      p.y += (keepClear(state, p.x, p.baseY, 90, 0, 300) - p.y) * Math.min(1, dt * 3);
+      // Spray bullets at the ship while passing over/under it.
+      if (Math.abs(p.x - 800) < 1000 && !state.ship.down && (p.gunCd -= dt) <= 0) {
+        p.gunCd = W.STRAFER_FIRE_EVERY;
+        const tx = p.x + p.vx * 0.5;
+        const ty = (p.above ? 260 : 820) - state.ship.alt;
+        const d = Math.hypot(tx - p.x, ty - p.y) || 1;
+        const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
+        const miss = Math.random() < 0.35 || (helm && Math.abs(helm.jy) > 0.3 && Math.random() < 0.35);
+        state.bullets.push({ x: p.x, y: p.y, vx: ((tx - p.x) / d) * 520, vy: ((ty - p.y) / d) * 520 + (miss ? (p.above ? -260 : 260) : 0), miss, life: 3 });
+      }
+    }
+    state.strafers = state.strafers.filter((p) => p.hp > 0 && Math.abs(p.x - 800) < 3200);
   };
 
   const updateBoss = (dt) => {
@@ -222,6 +262,22 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         }
       }
       if (s.life <= 0) continue;
+      for (const p of state.strafers) {
+        if (p.hp > 0 && Math.abs(s.x - p.x) < 60 && Math.abs(s.y - p.y) < 28) {
+          s.life = 0;
+          p.hp -= dmg;
+          puff(s.x, s.y, '#ffcf40', 6);
+          if (p.hp <= 0) {
+            state.kills += 1;
+            credit(s);
+            puff(p.x, p.y, '#ff5a1f', 22);
+            pop(state, p.x, p.y - 40, 'kill');
+            state.wrecks.push({ x: p.x, y: p.y, vx: p.vx * 0.5, vy: -40, spin: 0, kind: 'fighter' });
+          }
+          break;
+        }
+      }
+      if (s.life <= 0) continue;
       for (const p of state.bombers) {
         if (p.hp > 0 && Math.abs(s.x - p.x) < 120 && Math.abs(s.y - p.y) < 40) {
           s.life = 0;
@@ -265,6 +321,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     director(dt);
     updateBats(dt);
     updateBombers(dt);
+    updateStrafers(dt);
     updateBoss(dt);
     shellHits();
   };
@@ -273,9 +330,10 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     state.bats.length = 0;
     state.bombers.length = 0;
     state.enemyBombs.length = 0;
+    state.strafers.length = 0;
     if (state.boss) state.boss.leaving = true;
     waveT = Math.max(waveT, 12);
   };
 
-  return { update, reset, spawnBats, spawnBomber, spawnBoss };
+  return { update, reset, spawnBats, spawnBomber, spawnBoss, spawnStrafers };
 }

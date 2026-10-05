@@ -208,6 +208,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     for (const m of state.mines || []) items.push({ x: m.x, y: m.y, icon: '✹', color: '#3d3d3d', label: 'MINE' });
     if (state.enemy.dead <= 0) items.push({ x: state.enemy.x, y: state.enemy.y, icon: '✈', color: '#8c2f2f', label: 'FIGHTER' });
     for (const p of state.bombers || []) items.push({ x: p.x, y: p.y, color: '#3d3a40', label: 'BOMBER' });
+    if ((state.strafers || []).length) items.push({ x: state.strafers[0].x, y: state.strafers[0].y, color: '#26221f', label: 'STRAFE' });
     if (state.boss) items.push({ x: state.boss.x, y: state.boss.y, color: '#5c1e1e', label: 'BOSS' });
     const bat = (state.bats || []).find((b) => b.delay <= 0);
     if (bat) items.push({ x: bat.x, y: bat.y, color: '#3b2c4c', label: 'BATS' });
@@ -396,6 +397,79 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     ctx.restore();
   };
 
+  // Skeleton strafers: lean black fighters with red stripes and a skull.
+  const drawStrafers = (time) => {
+    for (const p of state.strafers || []) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      if (p.vx < 0) ctx.scale(-1, 1);
+      if (!sprites.plane(ctx, 'skeleton-fighter', time)) {
+        ink();
+        ctx.lineWidth = 4;
+        ctx.fillStyle = '#26221f';
+        ctx.beginPath();
+        ctx.moveTo(-50, -4);
+        ctx.lineTo(-62, -26);
+        ctx.lineTo(-40, -6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 54, 14, 0, 0, 7);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#c0392b';
+        ctx.fillRect(-30, -12, 8, 24);
+        ctx.fillRect(34, -10, 8, 20);
+        ctx.fillStyle = '#1b1410';
+        ctx.beginPath();
+        ctx.ellipse(-4, 8, 34, 6, 0, 0, 7);
+        ctx.fill();
+        ctx.fillStyle = '#efe9dc';
+        ctx.beginPath();
+        ctx.arc(4, -2, 6, 0, 7);
+        ctx.fill();
+        const spin = Math.abs(Math.sin(time * 34)) * 22 + 3;
+        ctx.fillStyle = '#c0392b';
+        ctx.fillRect(56, -spin, 4, spin * 2);
+      }
+      ctx.restore();
+    }
+  };
+
+  // Homing rockets from the ground batteries.
+  const drawRockets = () => {
+    for (const k of state.rockets || []) {
+      ctx.save();
+      ctx.translate(k.x, k.y);
+      ctx.rotate(k.ang);
+      ink();
+      ctx.lineWidth = 3;
+      ctx.fillStyle = '#c0392b';
+      ctx.beginPath();
+      ctx.moveTo(22, 0);
+      ctx.lineTo(10, -7);
+      ctx.lineTo(-16, -7);
+      ctx.lineTo(-16, 7);
+      ctx.lineTo(10, 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#4a4a4a';
+      ctx.beginPath();
+      ctx.moveTo(-16, -7);
+      ctx.lineTo(-24, -14);
+      ctx.lineTo(-24, 14);
+      ctx.lineTo(-16, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#ffd23f';
+      ctx.beginPath();
+      ctx.arc(-28, 0, 6 + Math.random() * 3, 0, 7);
+      ctx.fill();
+      ctx.restore();
+    }
+  };
+
   // Small health bar.
   const drawHp = (x, y, hp, max, w) => {
     ctx.fillStyle = '#3b2a1d';
@@ -407,5 +481,5 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     ctx.strokeRect(x - w / 2, y, w, 8);
   };
 
-  return { drawCargo, drawMines, drawWrecks, drawBombs, drawLookoutArrows, drawBats, drawBombers, drawBoss };
+  return { drawCargo, drawMines, drawWrecks, drawBombs, drawLookoutArrows, drawBats, drawBombers, drawBoss, drawStrafers, drawRockets };
 }

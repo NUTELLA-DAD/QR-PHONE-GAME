@@ -219,6 +219,8 @@ export function createRenderer({ ctx, state, canvas }) {
     threatArt.drawBoss(time);
     threatArt.drawBombers(time);
     threatArt.drawBats(time);
+    threatArt.drawStrafers(time);
+    threatArt.drawRockets();
     drawPopups(view.zoom);
     drawEnemy(time);
     // Cartoon puffs: swell up, then shrink and fade, with an ink outline and a highlight.

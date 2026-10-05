@@ -93,6 +93,11 @@ export const config = {
     TURRET_RANGE: 2000,
     FLAK_MISS: 0.3, // share of flak that misses anyway (weaving at the helm adds more)
     FLAK_SPEED: 520,
+    ROCKET_SHARE: 0.45, // share of turrets that are rocket batteries at full difficulty
+    ROCKET_SPEED: 300,
+    ROCKET_TURN: 1.3, // how sharply rockets home in (radians per second)
+    ROCKET_LIFE: 7,
+    ROCKET_IMPACT: 1.3,
   },
   // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
   WAVES: {
@@ -108,6 +113,9 @@ export const config = {
     BOMBER_HP: 9,
     BOMB_EVERY: 1.8, // seconds between bombs while over the ship
     BOMB_IMPACT: 1.0,
+    STRAFER_SPEED: 620,
+    STRAFER_HP: 3,
+    STRAFER_FIRE_EVERY: 0.22,
     BOSS_AT: 0.66, // lap progress (0-1) when the Dread Zeppelin shows up, on the way home
     BOSS_HP: 45,
     BOSS_HP_PER_LAP: 20,

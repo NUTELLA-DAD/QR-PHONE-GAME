@@ -122,7 +122,9 @@ function rng(seed) {
 }
 
 // onMarker(marker) is called when the ship passes the beacon or arrives home.
-export function createCourse({ state, impact, puff, onMarker, credit }) {
+export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }) {
+  state.rockets = [];
+  const hitsShipNow = (x, y) => hitsShip && hitsShip(x, y + state.ship.alt);
   const A = config.SHIP.ALT_RANGE - 30; // the most altitude we'll ever ask the helm for
   const course = {
     dist: 0,
@@ -165,7 +167,8 @@ export function createCourse({ state, impact, puff, onMarker, credit }) {
   const addTurrets = (f, n) => {
     for (let i = 0; i < n; i++) {
       const cx = f.x0 + (f.x1 - f.x0) * r(0.35, 0.65) + (i - (n - 1) / 2) * 220;
-      course.turrets.push({ cx, hp: K.TURRET_HP, cd: r(1, K.TURRET_FIRE_MAX), aim: -Math.PI / 2, dead: false });
+      const rocket = course.rand() < K.ROCKET_SHARE * difficulty() + (course.lap > 1 ? 0.15 : 0);
+      course.turrets.push({ cx, hp: K.TURRET_HP, cd: r(1, K.TURRET_FIRE_MAX), aim: -Math.PI / 2, dead: false, rocket });
     }
   };
 
@@ -271,10 +274,49 @@ export function createCourse({ state, impact, puff, onMarker, credit }) {
         const tx = 300 + course.rand() * 1000;
         const aimY = 400 + course.rand() * 400 - state.ship.alt + (miss ? -900 : 0);
         const d = Math.hypot(tx - t.x, aimY - t.y) || 1;
-        state.bullets.push({ x: t.x, y: t.y, vx: ((tx - t.x) / d) * K.FLAK_SPEED, vy: ((aimY - t.y) / d) * K.FLAK_SPEED, miss, life: 5, flak: true });
+        if (t.rocket) {
+          // A slow homing rocket (gunners can shoot it down).
+          t.cd *= 1.6;
+          state.rockets.push({ x: t.x, y: t.y - 30, ang: -Math.PI / 2, life: K.ROCKET_LIFE, hp: 1 });
+        } else state.bullets.push({ x: t.x, y: t.y, vx: ((tx - t.x) / d) * K.FLAK_SPEED, vy: ((aimY - t.y) / d) * K.FLAK_SPEED, miss, life: 5, flak: true });
         puff(t.x + Math.cos(t.aim) * 40, t.y + Math.sin(t.aim) * 40, '#555', 4);
       }
     }
+    // Rockets turn toward the middle of the ship.
+    for (const k of state.rockets) {
+      const tx = 800;
+      const ty = 600 - state.ship.alt;
+      const want = Math.atan2(ty - k.y, tx - k.x);
+      const diff = Math.atan2(Math.sin(want - k.ang), Math.cos(want - k.ang));
+      k.ang += Math.max(-K.ROCKET_TURN * dt, Math.min(K.ROCKET_TURN * dt, diff));
+      k.vx = Math.cos(k.ang) * K.ROCKET_SPEED - v; // the scenery is moving too
+      k.vy = Math.sin(k.ang) * K.ROCKET_SPEED;
+      k.x += k.vx * dt;
+      k.y += k.vy * dt;
+      k.life -= dt;
+      if (course.rand() < 0.5) puff(k.x - Math.cos(k.ang) * 20, k.y - Math.sin(k.ang) * 20, '#bbb', 1);
+      if (inRock(state, k.x, k.y) && k.life < K.ROCKET_LIFE - 0.5) {
+        k.hp = 0;
+        puff(k.x, k.y, '#ff7b00', 10);
+      } else if (!state.ship.down && hitsShipNow(k.x, k.y)) {
+        k.hp = 0;
+        puff(k.x, k.y, '#ff5a1f', 16);
+        impact(k.x, k.y + state.ship.alt, K.ROCKET_IMPACT);
+      }
+    }
+    for (const shell of state.shells) {
+      for (const k of state.rockets) {
+        if (k.hp > 0 && Math.hypot(shell.x - k.x, shell.y - k.y) < 24) {
+          shell.life = 0;
+          k.hp = 0;
+          puff(k.x, k.y, '#ff7b00', 12);
+          pop(state, k.x, k.y - 30, 'rocket', '#ffd23f', 0.7);
+          break;
+        }
+      }
+    }
+    state.rockets = state.rockets.filter((k) => k.hp > 0 && k.life > 0);
+
     // Crew shells knock turrets out.
     for (const shell of state.shells) {
       for (const t of course.turrets) {
@@ -342,6 +384,7 @@ export function createCourse({ state, impact, puff, onMarker, credit }) {
 
   // After going down: rewind to just before the last marker passed (open sky, same terrain ahead).
   const reset = () => {
+    state.rockets.length = 0;
     const m = course.lastMarker;
     course.dist = m.cx - 800 - K.REWIND_BEFORE;
     course.warned = null;
