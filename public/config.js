@@ -125,6 +125,23 @@ export const config = {
     BOSS_BOARD_EVERY: 30, // seconds between boarding parties
     BOSS_REWARD_HULL: 35, // hull patched when you shoot it down
   },
+  // Storm fronts: where they are in each lap (progress 0-1) and from which lap they start.
+  STORM: {
+    ZONES: [
+      { fromLap: 2, from: 0.18, to: 0.32 },
+      { fromLap: 2, from: 0.7, to: 0.82 },
+      { fromLap: 3, from: 0.4, to: 0.48 },
+    ],
+    GUST_EVERY_MIN: 3, // seconds between wind gusts
+    GUST_EVERY_MAX: 6,
+    GUST_TIME: 1.6, // how long a gust pushes
+    GUST_MIN: 70, // how hard (altitude change per second)
+    GUST_MAX: 150,
+    BOLT_EVERY_MIN: 5, // seconds between lightning flashes
+    BOLT_EVERY_MAX: 9,
+    STRIKE_CHANCE: 0.4, // chance a flash actually strikes the ship
+    STRIKE_POWER: 1,
+  },
   // Sound effects (on the TV). Press M on the TV keyboard to mute.
   SOUND: {
     VOLUME: 0.5,

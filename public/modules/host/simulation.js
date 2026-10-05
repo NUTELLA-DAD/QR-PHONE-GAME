@@ -8,6 +8,7 @@ import { createRaiders } from './raiders.js';
 import { createCourse, inRock } from './course.js';
 import { createSquadrons } from './squadrons.js';
 import { pop, updatePopups } from './popups.js';
+import { createWeather } from './weather.js';
 import { assistAim } from './aim.js';
 import { UPGRADES, pickOffer } from './upgrades.js';
 
@@ -307,6 +308,7 @@ export function createSimulation() {
   const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip });
 
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit });
+  const weather = createWeather({ state, impact, puff });
 
   const emitPlayerUi = (playerId, ui) => {
     if (socket && !state.players[playerId]?.bot) socket.emit('host:ui', { id: playerId, ui });
@@ -605,6 +607,7 @@ export function createSimulation() {
       threats.update(dt);
       squadrons.update(dt);
       course.update(dt);
+      weather.update(dt);
     }
 
     for (const bullet of state.bullets) {

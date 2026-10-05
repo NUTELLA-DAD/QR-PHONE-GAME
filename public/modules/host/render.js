@@ -919,16 +919,19 @@ export function createRenderer({ ctx, state, canvas }) {
     const s = height / config.H;
     // Day sky, blending to sunset on the return leg of the course.
     const dusk = (state.course && state.course.dusk) || 0;
-    const mix = (a, b) => {
+    // ...and to dark grey in a storm.
+    const storm = (state.weather && state.weather.storm) || 0;
+    const mix = (a, b, c) => {
       const rgb = (hex) => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
       const pa = rgb(a);
       const pb = rgb(b);
-      return 'rgb(' + pa.map((v, i) => Math.round(v + (pb[i] - v) * dusk)).join(',') + ')';
+      const pc = rgb(c);
+      return 'rgb(' + pa.map((v, i) => Math.round((v + (pb[i] - v) * dusk) * (1 - storm * 0.8) + pc[i] * storm * 0.8)).join(',') + ')';
     };
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, mix('5aa6c8', '6a5a9c'));
-    gradient.addColorStop(0.75, mix('f2d9a0', 'f4a46a'));
-    gradient.addColorStop(1, mix('e8c48a', 'e8865a'));
+    gradient.addColorStop(0, mix('5aa6c8', '6a5a9c', '3a4048'));
+    gradient.addColorStop(0.75, mix('f2d9a0', 'f4a46a', '6a6e72'));
+    gradient.addColorStop(1, mix('e8c48a', 'e8865a', '585c60'));
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
@@ -955,6 +958,45 @@ export function createRenderer({ ctx, state, canvas }) {
     });
   };
 
+  // Storm: rain streaks, lightning bolts and the flash (drawn in world space, flash over everything).
+  const drawStorm = (width, height, view, time) => {
+    const w = state.weather;
+    if (!w || w.storm < 0.05) return;
+    const left = view.cx - width / 2 / view.zoom;
+    const top = view.cy - height / 2 / view.zoom;
+    const vw = width / view.zoom;
+    const vh = height / view.zoom;
+    ctx.strokeStyle = `rgba(200,215,230,${0.45 * w.storm})`;
+    ctx.lineWidth = 3 / view.zoom * 0.6;
+    ctx.beginPath();
+    const n = Math.round(160 * w.storm);
+    for (let i = 0; i < n; i++) {
+      const x = left + ((i * 937.13 + time * 900) % (vw + 400)) - 200;
+      const y = top + ((i * 613.7 + time * 2600 + i * 31) % (vh + 200)) - 100;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 30, y + 90);
+    }
+    ctx.stroke();
+    if (w.bolt) {
+      const bx = w.bolt.x;
+      const by = w.bolt.y ?? top + vh * 0.85;
+      ctx.strokeStyle = '#fff7a8';
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(bx + 120, top);
+      const steps = 7;
+      for (let k = 1; k <= steps; k++) ctx.lineTo(bx + 120 * (1 - k / steps) + (k % 2 ? 40 : -40), top + ((by - top) * k) / steps);
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
+    if (w.flash > 0) {
+      ctx.fillStyle = `rgba(255,255,240,${w.flash * 0.45})`;
+      ctx.fillRect(left - 100, top - 100, vw + 200, vh + 200);
+    }
+  };
+
   const renderFrame = (time, view) => {
     const width = canvas.width;
     const height = canvas.height;
@@ -979,6 +1021,7 @@ export function createRenderer({ ctx, state, canvas }) {
     [...Object.values(state.players), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => drawPlayer(player, time / 1000));
     ctx.restore();
     drawEffects(time / 1000, view);
+    drawStorm(width, height, view, time / 1000);
 
     // Screen overlay on a fixed 1600x900 stage.
     const scale = Math.min(width / config.W, height / config.H);
