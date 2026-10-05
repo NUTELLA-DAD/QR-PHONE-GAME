@@ -375,6 +375,12 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillText(`Gas${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}${state.sinking ? ' - SINKING!' : ''}`, 46, 150);
     ctx.textAlign = 'right';
     ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);
+    if (state.autopilot) {
+      ctx.fillStyle = '#3a5a8c';
+      ctx.textAlign = 'center';
+      ctx.fillText('AUTOPILOT', 250, 100);
+      ctx.fillStyle = config.INK;
+    }
     if (state.course && config.COURSE.ENABLED) {
       ctx.fillText('Lap ' + state.course.lap + (state.course.leg === 'home' ? ' - heading home' : ' - outbound'), 454, 150);
       drawRouteBar();

@@ -5,7 +5,7 @@ import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
 import { createModules } from './modules.js';
 import { createThreats } from './threats.js';
 import { createRaiders } from './raiders.js';
-import { createCourse, inRock } from './course.js';
+import { createCourse, inRock, altWindow } from './course.js';
 import { createSquadrons } from './squadrons.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
@@ -565,9 +565,21 @@ export function createSimulation() {
         gun.ammo += 1;
       }
     }
+    state.autopilot = false;
     if (!getHelm()) {
       state.ship.speed += (0.3 - state.ship.speed) * dt * 0.5;
-      state.ship.alt *= 1 - dt * 0.4;
+      const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
+      if (diff.autopilot && state.phase === 'flying' && modules.works(state, 'Helm')) {
+        // Autopilot: ease into the safe gap ahead, slower than a real helmsman.
+        state.autopilot = true;
+        const w = altWindow(state, 5);
+        const R = config.SHIP.ALT_RANGE;
+        const lo = Math.max(w.min, -R);
+        const hi = Math.min(w.max, R);
+        const target = lo > hi ? (w.min + w.max) / 2 : Math.max(lo + 30, Math.min(hi - 30, 0));
+        const step = config.SHIP.CLIMB_SPEED * config.AUTOPILOT_SPEED * dt;
+        state.ship.alt += Math.max(-step, Math.min(step, target - state.ship.alt));
+      } else state.ship.alt *= 1 - dt * 0.4;
     }
     // Losing gas: the ship sinks, and scrapes along the bottom if it's very low.
     state.sinking = state.ship.gas < G.SINK_BELOW;
