@@ -184,57 +184,106 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.restore();
       return;
     }
+    // Devil's twin-boom fighter (after the reference sheet): grey boom with a twin tail and a
+    // lightning bolt, engine with a red spinner, and a shark-mouthed pod with a devil in the cockpit.
     ink();
     ctx.lineWidth = 4;
-    ctx.fillStyle = '#8c2f2f';
+    const grey = '#6b6a5e';
+    // Tail fin with lightning bolt.
+    ctx.fillStyle = grey;
     ctx.beginPath();
-    ctx.moveTo(-40, 0);
-    ctx.lineTo(-56, -24);
-    ctx.lineTo(-30, -5);
+    ctx.moveTo(-70, 2);
+    ctx.quadraticCurveTo(-82, -30, -66, -34);
+    ctx.lineTo(-54, -4);
+    ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 46, 16, 0, 0, 7);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#6e2323';
-    ctx.beginPath();
-    ctx.ellipse(-4, 8, 30, 8, 0, 0, 7);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#f4c430';
-    ctx.beginPath();
-    ctx.moveTo(40, -13);
-    ctx.lineTo(60, 0);
-    ctx.lineTo(40, 13);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#fff';
-    for (let i = 0; i < 3; i++) {
-      ctx.beginPath();
-      ctx.moveTo(22 + i * 8, 6);
-      ctx.lineTo(26 + i * 8, 14);
-      ctx.lineTo(30 + i * 8, 6);
-      ctx.fill();
-    }
-    ctx.fillStyle = '#f4c430';
-    ctx.beginPath();
-    ctx.moveTo(-26, -3);
-    ctx.lineTo(-18, 6);
-    ctx.lineTo(-34, 6);
-    ctx.fill();
     ctx.fillStyle = '#d9572b';
     ctx.beginPath();
-    ctx.arc(4, -15, 11, 0, 7);
+    ctx.moveTo(-66, -26);
+    ctx.lineTo(-72, -14);
+    ctx.lineTo(-66, -15);
+    ctx.lineTo(-70, -4);
+    ctx.lineTo(-61, -18);
+    ctx.lineTo(-66, -17);
+    ctx.closePath();
     ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#7ad0e0';
+    // Boom and engine.
+    ctx.fillStyle = grey;
     ctx.beginPath();
-    ctx.arc(8, -16, 5, 0, 7);
+    ctx.ellipse(-8, 8, 64, 9, 0, 0, 7);
     ctx.fill();
     ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(40, 8, 20, 13, 0, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#c0392b';
+    ctx.beginPath();
+    ctx.moveTo(58, 0);
+    ctx.lineTo(74, 8);
+    ctx.lineTo(58, 16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Wing (seen edge-on).
+    ctx.fillStyle = '#56554b';
+    ctx.beginPath();
+    ctx.roundRect(-10, 2, 56, 8, 4);
+    ctx.fill();
+    ctx.stroke();
+    // Central pod with shark mouth and canopy.
+    ctx.fillStyle = grey;
+    ctx.beginPath();
+    ctx.ellipse(18, -12, 40, 14, 0, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#c0392b';
+    ctx.beginPath();
+    ctx.arc(56, -12, 7, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#7a1e1e';
+    ctx.beginPath();
+    ctx.moveTo(30, -8);
+    ctx.quadraticCurveTo(42, 0, 54, -8);
+    ctx.lineTo(30, -8);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(32 + i * 5.5, -8);
+      ctx.lineTo(34.5 + i * 5.5, -3);
+      ctx.lineTo(37 + i * 5.5, -8);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#1b1410';
+    ctx.beginPath();
+    ctx.arc(44, -17, 2.5, 0, 7);
+    ctx.fill();
+    // The devil pilot under a glass canopy.
+    ctx.fillStyle = '#c8372d';
+    ctx.beginPath();
+    ctx.arc(10, -26, 8, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#f1e2b8';
+    for (const hx of [5, 15]) {
+      ctx.beginPath();
+      ctx.moveTo(hx - 3, -32);
+      ctx.lineTo(hx, -42);
+      ctx.lineTo(hx + 3, -32);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(122,208,224,.55)';
+    ctx.beginPath();
+    ctx.ellipse(10, -24, 15, 11, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    // Spinning propeller in front of the spinner.
     ctx.fillStyle = '#2b1d14';
-    ctx.fillRect(62, -18 * Math.abs(Math.sin(time * 30)) - 4, 4, 36 * Math.abs(Math.sin(time * 30)) + 8);
+    ctx.fillRect(74, 8 - 18 * Math.abs(Math.sin(time * 30)) - 4, 4, 36 * Math.abs(Math.sin(time * 30)) + 8);
     ctx.restore();
   };
 
