@@ -264,9 +264,9 @@ export function createCourse({ state, impact, puff, onMarker }) {
       t.aim = Math.atan2(ty - t.y, 800 - wx);
       if (Math.hypot(800 - wx, ty - t.y) > K.TURRET_RANGE || state.ship.down) continue;
       if ((t.cd -= dt) <= 0) {
-        t.cd = r(K.TURRET_FIRE_MIN, K.TURRET_FIRE_MAX);
+        t.cd = r(K.TURRET_FIRE_MIN, K.TURRET_FIRE_MAX) / (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
         const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
-        const miss = helm && Math.abs(helm.jy) > 0.3 && course.rand() < 0.4;
+        const miss = course.rand() < K.FLAK_MISS || (helm && Math.abs(helm.jy) > 0.3 && course.rand() < 0.4);
         const tx = 300 + course.rand() * 1000;
         const aimY = 400 + course.rand() * 400 - state.ship.alt + (miss ? -900 : 0);
         const d = Math.hypot(tx - t.x, aimY - t.y) || 1;

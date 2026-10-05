@@ -63,7 +63,9 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       return;
     }
     if ((e.fire -= dt) <= 0 && !state.ship.down) {
-      e.fire = (2 + Math.random() * 1.5) * (1.2 - Math.min(0.5, crew() * 0.04));
+      const lapRate = config.LAP_FIRE_RATE[Math.min(config.LAP_FIRE_RATE.length - 1, ((state.course && state.course.lap) || 1) - 1)];
+      const pace = (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
+      e.fire = ((2 + Math.random() * 1.5) * (1.2 - Math.min(0.5, crew() * 0.04))) / lapRate / pace;
       const helm = getHelm();
       const evading = helm && (Math.abs(helm.jy) > 0.2 || state.ship.speed > 0.3);
       const miss = evading && Math.random() < 0.5;

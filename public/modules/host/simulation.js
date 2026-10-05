@@ -6,6 +6,7 @@ import { createModules } from './modules.js';
 import { createThreats } from './threats.js';
 import { createRaiders } from './raiders.js';
 import { createCourse, inRock } from './course.js';
+import { createSquadrons } from './squadrons.js';
 import { assistAim } from './aim.js';
 import { UPGRADES, pickOffer } from './upgrades.js';
 
@@ -52,6 +53,7 @@ export function createSimulation() {
     ship: { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 70, fuel: config.BOILER.START_FUEL, gas: 100 },
     gasHoles: [],
     upgrades: {}, // id -> times taken
+    difficulty: config.START_DIFFICULTY,
     vote: null, // an upgrade vote in progress
     enemy: { ang: 0, x: -200, y: 300, vx: 1, vy: 0, hp: 5, fire: 2.5, dead: 0 },
     shells: [],
@@ -147,7 +149,8 @@ export function createSimulation() {
   const shipPuff = (x, y, color, count) => puff(x, y - state.ship.alt, color, count);
 
   const damageHull = (amount) => {
-    if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE) <= 0) {
+    const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
+    if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * diff.damage) <= 0) {
       state.ship.hull = 0;
       state.ship.down = 6;
     }
@@ -166,11 +169,11 @@ export function createSimulation() {
     const d = roomPlatformAt(x, y);
     if (d !== null) {
       const p = PLATFORMS[d];
-      const holes = power >= 2 ? 2 : Math.random() < 0.8 ? 1 : 0;
+      const holes = power >= 2 ? 2 : Math.random() < config.SHIP.HOLE_CHANCE ? 1 : 0;
       for (let i = 0; i < holes && state.breaches.length < 10; i++) state.breaches.push({ x: clamp(x + (i - 0.5) * 70 * (holes - 1), p.x0 + 20, p.x1 - 20), d, prog: 0 });
       if ((power >= 2 || Math.random() < 0.35) && state.fires.length < 8) state.fires.push({ x: clamp(x + (Math.random() - 0.5) * 80, p.x0 + 20, p.x1 - 20), d, t: 0, prog: 0 });
     }
-    damageHull(5 * power);
+    damageHull(config.SHIP.HIT_DAMAGE * power);
   };
 
   const raiders = createRaiders({ state, modules, puff, impact });
@@ -237,6 +240,15 @@ export function createSimulation() {
   };
 
   const course = createCourse({ state, impact, puff, onMarker: startVote });
+
+  // Who gets the credit for a kill (shells remember who fired them). Shown on the lap scorecard.
+  const credit = (shell, what) => {
+    const p = shell && state.players[shell.owner];
+    if (!p) return;
+    p.stats = p.stats || {};
+    p.stats.kills = (p.stats.kills || 0) + 1;
+  };
+  const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit });
 
   const emitPlayerUi = (playerId, ui) => {
     if (socket && !state.players[playerId]?.bot) socket.emit('host:ui', { id: playerId, ui });
@@ -323,6 +335,7 @@ export function createSimulation() {
                 vx: Math.cos(angle) * 950,
                 vy: Math.sin(angle) * 950,
                 life: 1.6,
+                owner: player.id,
               });
               puff(gun.bx + Math.cos(angle) * 64, gun.by - state.ship.alt + Math.sin(angle) * 64, '#ffe9a8', 4);
             }
@@ -492,6 +505,7 @@ export function createSimulation() {
         state.fires.length = 0;
         raiders.reset();
         threats.reset();
+        squadrons.reset();
         course.reset();
         state.ship.alt = 0;
         modules.reset();
@@ -504,6 +518,7 @@ export function createSimulation() {
     }
 
     threats.update(dt);
+    squadrons.update(dt);
     course.update(dt);
 
     for (const bullet of state.bullets) {
@@ -568,6 +583,7 @@ export function createSimulation() {
     interaction,
     modules,
     startVote,
+    squadrons,
     puff,
     setSocket,
     countPlayers: () => Object.keys(state.players).length,

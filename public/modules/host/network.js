@@ -58,6 +58,16 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
     else location.reload();
   });
 
+  // Difficulty button cycles Easy -> Normal -> Hard.
+  const diffButton = document.getElementById('difficulty');
+  const showDifficulty = () => (diffButton.textContent = 'Difficulty: ' + config.DIFFICULTY[simulation.state.difficulty].label);
+  diffButton.onclick = () => {
+    const keys = Object.keys(config.DIFFICULTY);
+    simulation.state.difficulty = keys[(keys.indexOf(simulation.state.difficulty) + 1) % keys.length];
+    showDifficulty();
+  };
+  showDifficulty();
+
   document.getElementById('bots').onclick = () => {
     const speciesNames = config.CREW_SPECIES;
     const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];

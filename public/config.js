@@ -14,9 +14,9 @@ export const config = {
   // Enemy plane: flies a loop around the ship.
   ENEMY: {
     PATH_CX: 800, // centre of the loop
-    PATH_CY: 470,
-    PATH_RX: 1300, // half-width of the loop
-    PATH_RY: 680, // half-height of the loop
+    PATH_CY: 452,
+    PATH_RX: 1500, // half-width of the loop (big enough to go all the way round the ship)
+    PATH_RY: 900, // half-height of the loop
     PATH_WOBBLE: 50, // small up-down weave
     TURN_SPEED: 0.38, // how fast it goes round (radians per second)
   },
@@ -25,6 +25,8 @@ export const config = {
     ALT_RANGE: 260,
     CLIMB_SPEED: 170,
     HULL_DAMAGE: 1, // multiplier on hull damage taken (armour upgrades lower it)
+    HIT_DAMAGE: 3, // hull lost per enemy bullet hit (bigger blasts scale this up)
+    HOLE_CHANCE: 0.6, // chance an enemy bullet hit punches a hole in the deck
   },
   // Ship guns (upgrades change these).
   GUNS: {
@@ -62,7 +64,7 @@ export const config = {
   },
   // How hard different explosions hit the ship (1 = one enemy bullet).
   IMPACT: {
-    MINE: 2.5,
+    MINE: 2,
     PLANE_CRASH: 3,
     BOMB: 2,
   },
@@ -85,11 +87,44 @@ export const config = {
     WARN_SECONDS: 3, // warning before an obstacle...
     LOOKOUT_WARN_SECONDS: 5, // ...earlier with someone on Lookout
     TURRET_HP: 3,
-    TURRET_FIRE_MIN: 2.5, // seconds between flak shots
-    TURRET_FIRE_MAX: 4.5,
-    TURRET_RANGE: 2600,
+    TURRET_FIRE_MIN: 4, // seconds between flak shots
+    TURRET_FIRE_MAX: 6.5,
+    TURRET_RANGE: 2000,
+    FLAK_MISS: 0.3, // share of flak that misses anyway (weaving at the helm adds more)
     FLAK_SPEED: 520,
   },
+  // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
+  WAVES: {
+    FIRST_AFTER: 35, // seconds before the first wave
+    EVERY_MIN: 28, // seconds between waves (shorter on later laps)...
+    EVERY_MAX: 42,
+    BATS_BASE: 4, // bats in a swarm on lap 1...
+    BATS_PER_LAP: 2, // ...plus this many per extra lap
+    BATS_MAX: 14,
+    BAT_SPEED: 240,
+    BAT_IMPACT: 0.4, // how hard a bat bursting on the ship hits (1 = an enemy bullet)
+    BOMBER_SPEED: 120,
+    BOMBER_HP: 9,
+    BOMB_EVERY: 1.8, // seconds between bombs while over the ship
+    BOMB_IMPACT: 1.0,
+    BOSS_AT: 0.66, // lap progress (0-1) when the Dread Zeppelin shows up, on the way home
+    BOSS_HP: 45,
+    BOSS_HP_PER_LAP: 20,
+    BOSS_STATION_X: 2700, // where it parks, ahead of the ship
+    BOSS_FIRE_EVERY: 2.6,
+    BOSS_BOARD_EVERY: 30, // seconds between boarding parties
+    BOSS_REWARD_HULL: 35, // hull patched when you shoot it down
+  },
+  // Difficulty presets (button on the TV). damage = hull damage taken; pace = how often waves,
+  // flak and enemy fire come (higher = busier).
+  DIFFICULTY: {
+    easy: { label: 'Easy', damage: 0.4, pace: 0.75 },
+    normal: { label: 'Normal', damage: 0.6, pace: 0.9 },
+    hard: { label: 'Hard', damage: 1, pace: 1.1 },
+  },
+  START_DIFFICULTY: 'normal',
+  // Enemies get busier with each lap: their fire rate is multiplied by this (lap 1 first).
+  LAP_FIRE_RATE: [0.6, 0.8, 1.0, 1.15, 1.3],
   // Raider types. windup = seconds of warning ("!") before they strike.
   RAIDERS: {
     grunt: { name: 'Raider', hp: 3, speed: 85, windup: 0.6, reach: 40, species: 'skeleton', color: '#8c2f2f', scale: 1 },

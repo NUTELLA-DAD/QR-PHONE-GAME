@@ -20,6 +20,10 @@ export function targets(state) {
   }
   for (const c of state.cargo || []) list.push({ kind: 'cargo', obj: c, r: 75, at: (t) => ({ x: c.x + c.vx * t, y: c.y }) });
   for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + m.vx * t, y: m.y }) });
+  for (const b of state.bats || []) if (b.delay <= 0) list.push({ kind: 'bat', obj: b, r: 26, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t }) });
+  for (const p of state.bombers || []) list.push({ kind: 'bomber', obj: p, r: 80, at: (t) => ({ x: p.x + p.vx * t, y: p.y }) });
+  for (const b of state.enemyBombs || []) list.push({ kind: 'bomb', obj: b, r: 22, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t + 210 * t * t }) });
+  if (state.boss) list.push({ kind: 'boss', obj: state.boss, r: 200, at: () => ({ x: state.boss.x, y: state.boss.y + 20 }) });
   for (const g of (state.course && state.course.turrets) || []) {
     if (!g.dead && g.x != null) list.push({ kind: 'turret', obj: g, r: 40, at: (t) => ({ x: g.x + g.vx * t, y: g.y }) });
   }
@@ -39,7 +43,7 @@ export function solution(state, gun, target) {
 
 // The most useful target this gun can hit right now (mines, turrets, cargo, then fighter).
 export function bestTarget(state, gun) {
-  const order = { mine: 0, turret: 1, cargo: 2, fighter: 3 };
+  const order = { bomb: 0, mine: 1, bat: 2, turret: 3, bomber: 4, cargo: 5, boss: 6, fighter: 7 };
   let best = null;
   for (const t of targets(state)) {
     const angle = solution(state, gun, t);

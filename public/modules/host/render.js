@@ -216,6 +216,9 @@ export function createRenderer({ ctx, state, canvas }) {
     threatArt.drawWrecks();
     threatArt.drawMines(time);
     threatArt.drawCargo(time);
+    threatArt.drawBoss(time);
+    threatArt.drawBombers(time);
+    threatArt.drawBats(time);
     drawEnemy(time);
     // Cartoon puffs: swell up, then shrink and fade, with an ink outline and a highlight.
     for (const puffItem of state.puffs) {
@@ -368,7 +371,25 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fillText('Hull breached! Patching up...', 800, 450);
     }
     drawUpgradeIcons();
+    drawBossBar();
     if (state.vote) drawVote();
+  };
+
+  // Boss health bar across the top of the screen.
+  const drawBossBar = () => {
+    const z = state.boss;
+    if (!z) return;
+    ctx.fillStyle = 'rgba(27,20,16,.8)';
+    rrect(450, 830, 700, 46, 12);
+    ctx.fill();
+    ctx.fillStyle = '#3b2a1d';
+    ctx.fillRect(470, 852, 660, 14);
+    ctx.fillStyle = '#e63946';
+    ctx.fillRect(470, 852, (660 * Math.max(0, z.hp)) / z.maxHp, 14);
+    ctx.fillStyle = '#f1e2b8';
+    ctx.font = '900 18px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillText('THE DREAD ZEPPELIN', 800, 847);
   };
 
   // Upgrades the ship has, as a row of icons under the status panel.
