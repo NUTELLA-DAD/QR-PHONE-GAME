@@ -147,6 +147,17 @@ Done when: a screenshot reads as one consistent style, with no placeholder shape
 
 ---
 
+## Progress log
+- Phases 0-2: done (modules, new ship, camera, tools, module damage, steam, phone gamepad,
+  enemies, raider types, course with laps). Phase 3: film look tried and switched off at the
+  user's request; sprite loader + art spec done; bulldog and skeleton vector art done.
+- "Make it fun" pass (Oct 2026): upgrade votes at beacon/home (15 upgrades, shown on the ship),
+  bat swarms, bombers, skeleton strafers, rocket batteries, the Dread Zeppelin boss with
+  destroyable turrets, storms from lap 2, difficulty presets + autopilot, lap scorecard with
+  awards, comic pop-up words, synthesised sound effects, phone buzzes/toasts, moored start screen
+  with CAST OFF. Balance tuned with bot playtests (Normal, 8 bots: about 1 down per 5 minutes).
+- Next ideas: more boss types per lap, enemy art, playtest with real people and retune.
+
 ## Decisions to confirm with the user
 - Phone orientation: landscape gamepad layout (recommended) or portrait.
 - Name and crest of the player crew's faction.
