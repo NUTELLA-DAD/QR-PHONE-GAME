@@ -4,5 +4,11 @@
   },
   "enemies/skeleton": {
     "headScale": 1.15
+  },
+  "enemies/devil": {
+    "headScale": 1.15
+  },
+  "enemies/bat": {
+    "headScale": 1.1
   }
 }
