@@ -115,6 +115,11 @@ export const config = {
     BOSS_BOARD_EVERY: 30, // seconds between boarding parties
     BOSS_REWARD_HULL: 35, // hull patched when you shoot it down
   },
+  // Sound effects (on the TV). Press M on the TV keyboard to mute.
+  SOUND: {
+    VOLUME: 0.5,
+    START_MUTED: false,
+  },
   // Difficulty presets (button on the TV). damage = hull damage taken; pace = how often waves,
   // flak and enemy fire come (higher = busier).
   DIFFICULTY: {
