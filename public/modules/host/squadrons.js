@@ -6,7 +6,7 @@
 //                    boarders down grapple lines. Shooting it down patches your ship up.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
-import { keepClear, inRock } from './course.js';
+import { keepClear, inRock, scrollSpeed } from './course.js';
 import { SHIP_SAMPLES } from './course.js';
 import { pop } from './popups.js';
 
@@ -108,7 +108,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       state.strafers.push({
         x: (fromLeft ? B.x0 - 2600 : B.x1 + 2600) - (fromLeft ? 1 : -1) * i * 320,
         y: y + i * (above ? -70 : 70),
-        baseY: y + i * (above ? -70 : 70),
+        offY: (above ? B.y0 - 220 : B.y1 + 200) + i * (above ? -70 : 70), // height relative to the ship
         vx: (fromLeft ? 1 : -1) * W.STRAFER_SPEED,
         hp: W.STRAFER_HP,
         above,
@@ -192,8 +192,25 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
 
   const updateStrafers = (dt) => {
     for (const p of state.strafers) {
-      p.x += p.vx * dt;
-      p.y += (keepClear(state, p.x, p.baseY, 90, 0, 300) - p.y) * Math.min(1, dt * 3);
+      // They track the ship's height and swoop in toward it as they pass, but can only climb or
+      // dive so fast: if the ground rises too steeply they fly into it.
+      // (On screen the ship's own speed is subtracted, but they always cross at a decent clip.)
+      let rel = p.vx - scrollSpeed(state);
+      if (Math.sign(rel) !== Math.sign(p.vx) || Math.abs(rel) < 300) rel = Math.sign(p.vx) * 300;
+      p.x += rel * dt;
+      const swoop = (p.above ? 1 : -1) * 160 * Math.exp(-(((p.x - 800) / 900) ** 2));
+      const want = keepClear(state, p.x + Math.sign(p.vx) * 250, p.offY - state.ship.alt + swoop, 90, 0, 300);
+      const climb = W.STRAFER_CLIMB * dt;
+      p.y += Math.max(-climb, Math.min(climb, want - p.y));
+      p.vy = Math.max(-W.STRAFER_CLIMB, Math.min(W.STRAFER_CLIMB, (want - p.y) / Math.max(dt, 1e-3)));
+      if (inRock(state, p.x, p.y)) {
+        p.hp = 0;
+        state.kills += 1;
+        puff(p.x, p.y, '#ff5a1f', 22);
+        puff(p.x, p.y, '#555', 10);
+        pop(state, p.x, p.y - 50, 'kill');
+        continue;
+      }
       // Spray bullets at the ship while passing over/under it.
       if (Math.abs(p.x - 800) < 1000 && !state.ship.down && (p.gunCd -= dt) <= 0) {
         p.gunCd = W.STRAFER_FIRE_EVERY;

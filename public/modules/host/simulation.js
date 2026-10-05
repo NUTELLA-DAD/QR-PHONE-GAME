@@ -78,7 +78,7 @@ export function createSimulation() {
     phase: 'lobby', // 'lobby' = moored at the mast while the crew joins; 'flying' after CAST OFF
     record: loadRecord(), // best run on this TV: { laps, kills }
     vote: null, // an upgrade vote in progress
-    enemy: { ang: 0, x: -200, y: 300, vx: 1, vy: 0, hp: 5, fire: 2.5, dead: 0 },
+    enemy: { x: -2000, y: 300, vx: 0, vy: 0, hp: 5, fire: 0, dead: 3, heading: null },
     shells: [],
     bullets: [],
     puffs: [],

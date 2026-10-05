@@ -2,8 +2,7 @@
 // wrecks, plus the crew's shells hitting them. Anything that touches the ship crashes into it.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
-import { enemyPath } from './enemy.js';
-import { keepClear, inRock } from './course.js';
+import { keepClear, inRock, groundAt, ceilAt, scrollSpeed } from './course.js';
 import { pop } from './popups.js';
 
 const B = SHIP_LAYOUT.bounds;
@@ -29,58 +28,147 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
   // A falling wreck that can crash into the ship.
   const wreck = (x, y, vx, kind) => state.wrecks.push({ x, y, vx, vy: -60, spin: 0, kind });
 
+  // ---------- The fighter: a real plane with momentum ----------
+  // It flies at speed with a limited turn rate, so its turns are wide. It lines up far off to
+  // one side, makes a long strafing run at the ship firing along its nose, breaks away past it,
+  // extends out the other side and swings round for another pass. It tries to dodge rock it sees
+  // ahead, but it can't turn on a sixpence: misjudge a mountain and it crashes.
+  const F = config.ENEMY;
+  const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+  const shipMid = () => ({ x: SHIP_LAYOUT.aimPoint.x, y: SHIP_LAYOUT.aimPoint.y - state.ship.alt });
+  const nearShip = (x, y, pad) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - state.ship.alt - pad && y < B.y1 - state.ship.alt + pad;
+
+  const startRun = (e) => {
+    const mid = shipMid();
+    e.mode = 'run';
+    e.aim = { dx: rand(-500, 500), dy: rand(-120, 160) };
+    const lapRate = config.LAP_FIRE_RATE[Math.min(config.LAP_FIRE_RATE.length - 1, ((state.course && state.course.lap) || 1) - 1)];
+    const pace = (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
+    e.shots = Math.max(2, Math.min(6, Math.round(F.SHOTS * lapRate * pace * (0.8 + Math.min(0.5, crew() * 0.04)))));
+    e.side = Math.sign(e.x - mid.x) || 1;
+  };
+
+  const spawnFighter = (e) => {
+    const mid = shipMid();
+    const side = Math.random() < 0.5 ? -1 : 1;
+    e.hp = 5 + Math.floor(crew() / 4);
+    e.x = mid.x + side * F.RUN_FROM;
+    e.y = mid.y + rand(-700, 200);
+    e.heading = side > 0 ? Math.PI : 0;
+    e.fire = 0;
+    startRun(e);
+  };
+
+  // Break off past the ship: go over it (or under, if there's room) and extend to the far side.
+  const breakAway = (e) => {
+    const mid = shipMid();
+    const groundGap = groundAt(state.course, mid.x) - (B.y1 - state.ship.alt);
+    const over = e.y < mid.y || groundGap < 700 || Math.random() < 0.5;
+    e.mode = 'extend';
+    e.wp = { x: mid.x - e.side * F.RUN_FROM, y: over ? B.y0 - state.ship.alt - rand(500, 900) : B.y1 - state.ship.alt + rand(350, 550) };
+  };
+
+  const crashFighter = (e, text) => {
+    puff(e.x, e.y, '#ff5a1f', 26);
+    puff(e.x, e.y, '#555', 14);
+    pop(state, e.x, e.y - 50, 'kill', '#ffd23f', 1.2);
+    e.dead = F.RESPAWN;
+    warn(text, 2.5);
+  };
+
   const updateFighter = (dt) => {
     const e = state.enemy;
     if (e.dead > 0) {
       e.dead -= dt;
-      if (e.dead <= 0) {
-        e.hp = 5 + Math.floor(crew() / 4);
-        e.ang = Math.random() * 6.28;
-        e.cy = -state.ship.alt;
-        const p = enemyPath(e.ang);
-        e.x = p.x;
-        e.y = p.y + e.cy;
-      }
+      if (e.dead <= 0) spawnFighter(e);
       return;
     }
-    e.ang += dt * config.ENEMY.TURN_SPEED;
-    // The loop follows the ship's altitude, a little late: sharp climbs/dives can still meet it.
-    e.cy = e.cy ?? -state.ship.alt;
-    e.cy += (-state.ship.alt - e.cy) * Math.min(1, dt * 3);
-    const next = enemyPath(e.ang);
-    next.y += e.cy;
-    next.y = keepClear(state, next.x, next.y, 70); // fly over mountains, under overhangs
-    // If the terrain pushed it into the ship's space, it climbs over the ship instead.
-    const shipTop = B.y0 - state.ship.alt - 140;
-    if (next.x > B.x0 - 120 && next.x < B.x1 + 120 && next.y > shipTop && next.y < B.y1 - state.ship.alt + 120) {
-      next.y = shipTop; // hard pull-up over the ship
-      if (Math.random() < 0.3) puff(next.x - 30, next.y + 10, '#ffffff', 1);
+    if (e.heading == null) spawnFighter(e);
+    const mid = shipMid();
+    // Where it wants to go.
+    let tx;
+    let ty;
+    if (e.mode === 'run') {
+      tx = mid.x + e.aim.dx;
+      ty = mid.y + e.aim.dy;
+      const dist = Math.hypot(tx - e.x, ty - e.y);
+      const passed = Math.cos(e.heading) * (tx - e.x) + Math.sin(e.heading) * (ty - e.y) < 0;
+      // Break off before its path reaches the hull (it can't turn tighter than this).
+      const ahead = F.BREAK_LOOKAHEAD * F.SPEED;
+      const soon = nearShip(e.x + Math.cos(e.heading) * ahead, e.y + Math.sin(e.heading) * ahead, 230);
+      if (soon || dist < F.BREAK_AT || (passed && dist < 1400)) breakAway(e);
+    } else {
+      tx = e.wp.x;
+      ty = e.wp.y;
+      if (Math.hypot(tx - e.x, ty - e.y) < 350 || Math.abs(e.x - mid.x) > F.RUN_FROM + 400) startRun(e);
     }
-    e.vx = next.x - e.x;
-    e.vy = next.y - e.y;
-    e.x = next.x;
-    e.y = next.y;
+    let want = Math.atan2(ty - e.y, tx - e.x);
+    let turn = F.TURN;
+    // Look ahead along the nose: pull up from ground, dive away from rock above, swerve off the ship.
+    const course = state.course;
+    for (const t of [0.5, 1.0]) {
+      const px = e.x + Math.cos(e.heading) * F.SPEED * t;
+      const py = e.y + Math.sin(e.heading) * F.SPEED * t;
+      const g = course ? groundAt(course, px) : Infinity;
+      const c = course ? ceilAt(course, px) : -Infinity;
+      const fwd = Math.cos(e.heading) >= 0 ? 1 : -1;
+      if (py > g - 160) {
+        want = Math.atan2(-1.2, fwd * 0.6); // climb!
+        turn = F.TURN_AVOID;
+        break;
+      }
+      if (py < c + 160) {
+        want = Math.atan2(1.2, fwd * 0.6); // dive!
+        turn = F.TURN_AVOID;
+        break;
+      }
+      if (nearShip(px, py, 200)) {
+        want = Math.atan2(py < mid.y ? -1.2 : 1.2, fwd * 0.6);
+        turn = F.TURN_AVOID;
+        break;
+      }
+    }
+    const d = angDiff(want, e.heading);
+    e.heading += Math.max(-turn * dt, Math.min(turn * dt, d));
+    e.heading = Math.atan2(Math.sin(e.heading), Math.cos(e.heading));
+    // Faster in a dive, slower in a climb.
+    const speed = F.SPEED * (1 + 0.18 * Math.sin(e.heading));
+    // On screen the ship's own motion carries everything else backward.
+    e.vx = Math.cos(e.heading) * speed - scrollSpeed(state);
+    e.vy = Math.sin(e.heading) * speed;
+    e.x += e.vx * dt;
+    e.y += e.vy * dt;
     if (e.hp <= 2 && Math.random() < 0.5) puff(e.x, e.y, '#555', 1);
-    // Flew into the ship (e.g. the helm climbed into its path): it crashes.
+    // Flew into the rock: it crashes.
+    if (course && inRock(state, e.x, e.y)) {
+      state.kills += 1;
+      wreck(e.x, e.y - 20, e.vx * 0.3, 'fighter');
+      crashFighter(e, 'ENEMY FIGHTER FLEW INTO THE ROCKS!');
+      return;
+    }
+    // Flew into the ship: it crashes, and that hurts.
     if (!state.ship.down && touches(e.x, e.y, 30)) {
       impact(e.x, e.y + state.ship.alt, config.IMPACT.PLANE_CRASH);
-      puff(e.x, e.y, '#ff5a1f', 24);
-      pop(state, e.x, e.y - 40, 'kill');
-      e.dead = 5;
-      warn('ENEMY PLANE CRASHED INTO US!');
+      crashFighter(e, 'ENEMY PLANE CRASHED INTO US!');
       return;
     }
-    if ((e.fire -= dt) <= 0 && !state.ship.down) {
-      const lapRate = config.LAP_FIRE_RATE[Math.min(config.LAP_FIRE_RATE.length - 1, ((state.course && state.course.lap) || 1) - 1)];
-      const pace = (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
-      e.fire = ((2 + Math.random() * 1.5) * (1.2 - Math.min(0.5, crew() * 0.04))) / lapRate / pace;
-      const helm = getHelm();
-      const evading = helm && (Math.abs(helm.jy) > 0.2 || state.ship.speed > 0.3);
-      const miss = evading && Math.random() < 0.5;
-      const tx = SHIP_LAYOUT.aimPoint.x + (Math.random() - 0.5) * 900;
-      const ty = SHIP_LAYOUT.aimPoint.y - state.ship.alt + (Math.random() - 0.5) * 200 + (miss ? (Math.random() < 0.5 ? -1 : 1) * 700 : 0);
-      const d = Math.hypot(tx - e.x, ty - e.y) || 1;
-      state.bullets.push({ x: e.x, y: e.y, vx: ((tx - e.x) / d) * 430, vy: ((ty - e.y) / d) * 430, miss, life: 4 });
+    // Guns fire along the nose during a run, in short bursts.
+    e.fire = Math.max(0, (e.fire || 0) - dt);
+    if (e.mode === 'run' && e.shots > 0 && e.fire <= 0 && !state.ship.down) {
+      const aimAt = Math.atan2(ty - e.y, tx - e.x);
+      const off = angDiff(aimAt, e.heading);
+      if (Math.abs(off) < 0.5 && Math.hypot(tx - e.x, ty - e.y) < F.FIRE_RANGE) {
+        e.shots -= 1;
+        e.fire = F.SHOT_EVERY;
+        const helm = getHelm();
+        const evading = helm && (Math.abs(helm.jy) > 0.2 || Math.abs(state.ship.speed) > 0.3);
+        const miss = evading && Math.random() < 0.5;
+        const dir = e.heading + Math.max(-0.2, Math.min(0.2, off)) + (miss ? (Math.random() < 0.5 ? -1 : 1) * 0.3 : rand(-0.05, 0.05));
+        const nx = e.x + Math.cos(e.heading) * 40;
+        const ny = e.y + Math.sin(e.heading) * 40;
+        state.bullets.push({ x: nx, y: ny, vx: Math.cos(dir) * F.BULLET_SPEED, vy: Math.sin(dir) * F.BULLET_SPEED, miss, life: 3 });
+        puff(nx, ny, '#ffe9a8', 2);
+      }
     }
   };
 
@@ -193,7 +281,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
           credit?.(shell);
           puff(e.x, e.y, '#ff5a1f', 24);
           pop(state, e.x, e.y - 40, 'kill');
-          wreck(e.x, e.y, e.vx / Math.max(dt, 1e-3), 'fighter');
+          wreck(e.x, e.y, e.vx * 0.5, 'fighter');
         }
         continue;
       }

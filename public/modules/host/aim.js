@@ -1,7 +1,5 @@
 // What the guns can shoot at, and where to point to hit it (leading moving targets).
 // Shared by the game (aim assist) and the test bots.
-import { enemyAt } from './enemy.js';
-import { keepClear } from './course.js';
 
 export const SHELL_SPEED = 950;
 export const SHELL_LIFE = 1.6;
@@ -13,10 +11,7 @@ export function targets(state) {
   const list = [];
   const e = state.enemy;
   if (e.dead <= 0) {
-    list.push({ kind: 'fighter', obj: e, r: 46, at: (t) => {
-      const p = enemyAt(e, t);
-      return { x: p.x, y: keepClear(state, p.x, p.y + (e.cy || 0), 70, t) };
-    } });
+    list.push({ kind: 'fighter', obj: e, r: 46, at: (t) => ({ x: e.x + e.vx * t, y: e.y + e.vy * t }) });
   }
   for (const c of state.cargo || []) list.push({ kind: 'cargo', obj: c, r: 75, at: (t) => ({ x: c.x + c.vx * t, y: c.y }) });
   for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + m.vx * t, y: m.y }) });

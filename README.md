@@ -53,7 +53,8 @@ At the beacon and at home the crew **votes on an upgrade** on their phones. Arri
 the **lap scorecard** with crew awards. Each checkpoint flag brings supplies (+15 hull). If the
 hull breaks, the ship **breaks apart** and the game starts over at the mast (upgrades are lost).
 
-Enemies: fighters, raider cargo planes (shoot them before they drop raiders), mines, bat swarms,
+Enemies: fighters (they fly like real planes: long strafing runs from far out, wide turns,
+and they can crash into mountains), raider cargo planes (shoot them before they drop raiders), mines, bat swarms,
 bombers, skeleton strafers, ground flak turrets and rocket batteries, the **Dread Zeppelin** boss
 on the way home, and storms from lap 2.
 

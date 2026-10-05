@@ -178,8 +178,9 @@ export function createRenderer({ ctx, state, canvas }) {
     if (state.enemy.dead > 0 || state.phase === 'lobby') return;
     ctx.save();
     ctx.translate(state.enemy.x, state.enemy.y);
-    ctx.rotate(Math.atan2(state.enemy.vy, state.enemy.vx || 1));
-    if (state.enemy.vx < 0) ctx.scale(1, -1);
+    const heading = state.enemy.heading ?? Math.atan2(state.enemy.vy, state.enemy.vx || 1);
+    ctx.rotate(heading);
+    if (Math.cos(heading) < 0) ctx.scale(1, -1);
     if (sprites.plane(ctx, 'fighter', time)) {
       ctx.restore();
       return;

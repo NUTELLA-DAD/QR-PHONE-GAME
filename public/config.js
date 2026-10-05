@@ -12,13 +12,19 @@ export const config = {
     SMOOTHING: 1.6, // how quickly the camera catches up (higher = snappier)
   },
   // Enemy plane: flies a loop around the ship.
+  // Enemy fighter: flies like a plane (speed + limited turning), making long strafing runs.
   ENEMY: {
-    PATH_CX: 800, // centre of the loop
-    PATH_CY: 452,
-    PATH_RX: 1500, // half-width of the loop (big enough to go all the way round the ship)
-    PATH_RY: 900, // half-height of the loop
-    PATH_WOBBLE: 50, // small up-down weave
-    TURN_SPEED: 0.38, // how fast it goes round (radians per second)
+    SPEED: 560, // air speed (pixels per second)
+    TURN: 1.1, // normal turn rate (radians per second) - lower = wider turns
+    TURN_AVOID: 1.7, // hardest it can turn to dodge rock or the ship
+    RUN_FROM: 2300, // how far out it lines up before a run, and extends to after one
+    FIRE_RANGE: 1900, // opens fire inside this distance
+    BREAK_AT: 600, // breaks away this close to its aim point...
+    BREAK_LOOKAHEAD: 1.3, // ...or when it would reach the hull within this many seconds
+    SHOTS: 5, // bullets per run (more on later laps / harder settings)
+    SHOT_EVERY: 0.22,
+    BULLET_SPEED: 720,
+    RESPAWN: 5, // seconds until the next fighter after one goes down
   },
   // How far the helm can climb/dive (world pixels either way) and how fast.
   SHIP: {
@@ -142,6 +148,7 @@ export const config = {
     STRAFER_SPEED: 620,
     STRAFER_HP: 3,
     STRAFER_FIRE_EVERY: 0.22,
+    STRAFER_CLIMB: 380, // fastest a strafer can climb or dive (steeper ground = it crashes)
     BOSS_AT: 0.66, // lap progress (0-1) when the Dread Zeppelin shows up, on the way home
     BOSS_HP: 45,
     BOSS_HP_PER_LAP: 20,
