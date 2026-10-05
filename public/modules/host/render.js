@@ -960,21 +960,55 @@ export function createRenderer({ ctx, state, canvas }) {
   };
 
   // A far-away mountain range. f = how strongly it follows the camera (0 = fixed, 1 = moves with the ship).
-  const drawRidge = (width, height, view, f, baseY, amp, freq, color) => {
+  // Samples sit on a grid fixed to the landscape (not the screen) so the outline doesn't shimmer.
+  const drawRidge = (width, height, view, f, baseY, amp, freq, color, extra = {}) => {
     const s = height / config.H;
     const shift = (view.scroll + view.cx) * f;
     const y0 = height * baseY + (config.H / 2 - view.cy) * view.zoom * f * 0.6;
+    const du = 16;
+    const ridge = (u) => Math.sin(u * freq) * 0.45 + Math.sin(u * freq * 2.3 + 1) * 0.35 + Math.sin(u * freq * 5.7 + 2) * 0.2;
+    const pts = [];
+    for (let u = Math.floor(shift / du) * du; (u - shift) * s <= width + du * s; u += du) {
+      const h = ridge(u);
+      pts.push([(u - shift) * s, y0 - (h + 1) * amp * s, h, u]);
+    }
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.moveTo(0, height);
-    for (let sx = 0; sx <= width + 24; sx += 24) {
-      const u = sx / s + shift;
-      const h = Math.sin(u * freq) * 0.45 + Math.sin(u * freq * 2.3 + 1) * 0.35 + Math.sin(u * freq * 5.7 + 2) * 0.2;
-      ctx.lineTo(sx, y0 - (h + 1) * amp * s);
-    }
-    ctx.lineTo(width, height);
+    ctx.moveTo(pts[0][0], height);
+    pts.forEach(([x, y]) => ctx.lineTo(x, y));
+    ctx.lineTo(pts[pts.length - 1][0], height);
     ctx.closePath();
     ctx.fill();
+    if (extra.snow) {
+      // White caps on the tallest peaks.
+      ctx.fillStyle = extra.snow;
+      for (let i = 0; i < pts.length; i++) {
+        if (pts[i][2] < 0.55) continue;
+        let j = i;
+        while (j + 1 < pts.length && pts[j + 1][2] >= 0.55) j++;
+        ctx.beginPath();
+        for (let k = i; k <= j; k++) ctx.lineTo(pts[k][0], pts[k][1]);
+        for (let k = j; k >= i; k--) ctx.lineTo(pts[k][0], pts[k][1] + (pts[k][2] - 0.55) * amp * s * (k % 2 ? 0.9 : 0.5));
+        ctx.closePath();
+        ctx.fill();
+        i = j;
+      }
+    }
+    if (extra.trees) {
+      // A row of pine silhouettes along the ridge line.
+      ctx.fillStyle = extra.trees;
+      ctx.beginPath();
+      pts.forEach(([x, y, , u]) => {
+        const k = Math.round(u / du);
+        const r = Math.sin(k * 91.7) * 43758.5;
+        if (r - Math.floor(r) > 0.6) return;
+        const t = (14 + (r - Math.floor(r)) * 30) * s;
+        ctx.moveTo(x - t * 0.35, y + 4 * s);
+        ctx.lineTo(x, y - t);
+        ctx.lineTo(x + t * 0.35, y + 4 * s);
+      });
+      ctx.fill();
+    }
   };
 
   // Background drawn in screen space, back to front, each layer scrolling at its own speed.
@@ -998,6 +1032,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
+    drawRidge(width, height, view, 0.02, 0.86, 170, 0.003, '#b9c8d6', { snow: '#eef3f8' });
     drawRidge(width, height, view, 0.04, 0.9, 120, 0.004, '#a9bccb');
     // High thin clouds.
     ctx.fillStyle = 'rgba(255,255,255,.45)';
@@ -1006,7 +1041,7 @@ export function createRenderer({ ctx, state, canvas }) {
       const cx = wrap(x - (view.scroll + view.cx) * 0.15, span) - 250;
       cloud(cx * s, (y + (config.H / 2 - view.cy) * view.zoom * 0.1) * s, 0.55 * s);
     });
-    drawRidge(width, height, view, 0.1, 0.97, 90, 0.007, '#7f9a8c');
+    drawRidge(width, height, view, 0.1, 0.97, 90, 0.007, '#7f9a8c', { trees: '#6d8a7b' });
   };
 
   // Big clouds in the world, drifting past at full ship speed (behind the ship).

@@ -12,60 +12,352 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     return [view.cx - half - 60, view.cx + half + 60];
   };
 
+  // Everything below is placed on a grid fixed to the course (not to the screen), so the outline
+  // and the scenery stay put as the ground scrolls past instead of shimmering.
+  const STEP = 20;
+  const hash = (i, salt = 0) => {
+    const v = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  const G = config.COURSE.GROUND;
+  const SNOW_LINE = G - 430; // peaks higher than this get snow
+
+  // Trace a line through samples, offset by dy(i) (i = sample index).
+  const trace = (xs, ys, dy, from = 0, to = xs.length - 1, move = true) => {
+    for (let i = from; i <= to; i++) {
+      if (i === from && move) ctx.moveTo(xs[i], ys[i] + dy(i));
+      else ctx.lineTo(xs[i], ys[i] + dy(i));
+    }
+  };
+
+  const pine = (x, y, s, dark) => {
+    ctx.fillStyle = '#5a3b26';
+    ctx.fillRect(x - 4 * s, y - 14 * s, 8 * s, 16 * s);
+    ctx.strokeRect(x - 4 * s, y - 14 * s, 8 * s, 16 * s);
+    ctx.fillStyle = dark ? '#2f5e3a' : '#3d7a47';
+    for (let k = 0; k < 3; k++) {
+      const by = y - 12 * s - k * 22 * s;
+      const w = (30 - k * 7) * s;
+      ctx.beginPath();
+      ctx.moveTo(x - w, by);
+      ctx.lineTo(x, by - 36 * s);
+      ctx.lineTo(x + w, by);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  };
+
+  const bush = (x, y, s) => {
+    ctx.fillStyle = '#4f8a4a';
+    ctx.beginPath();
+    ctx.arc(x - 14 * s, y - 8 * s, 14 * s, Math.PI, 0);
+    ctx.arc(x, y - 16 * s, 17 * s, Math.PI, 0);
+    ctx.arc(x + 15 * s, y - 8 * s, 13 * s, Math.PI, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  };
+
+  const boulder = (x, y, s) => {
+    ctx.fillStyle = '#9a8a78';
+    ctx.beginPath();
+    ctx.moveTo(x - 30 * s, y + 4);
+    ctx.quadraticCurveTo(x - 30 * s, y - 30 * s, x - 4 * s, y - 32 * s);
+    ctx.quadraticCurveTo(x + 30 * s, y - 30 * s, x + 32 * s, y + 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    ctx.beginPath();
+    ctx.ellipse(x - 8 * s, y - 20 * s, 10 * s, 5 * s, -0.3, 0, 7);
+    ctx.fill();
+  };
+
   const drawTerrain = (view, width, height) => {
     const course = state.course;
     if (!course || !config.COURSE.ENABLED) return;
-    const [x0, x1] = span(view, width);
-    const step = Math.max(12, 18 / view.zoom);
+    const [wx0, wx1] = span(view, width);
+    const dist = course.dist;
     const bottom = view.cy + height / 2 / view.zoom + 200;
     const top = view.cy - height / 2 / view.zoom - 200;
 
-    // Ground: rock with a grassy top edge.
-    ctx.beginPath();
-    ctx.moveTo(x0, bottom);
-    for (let x = x0; x <= x1 + step; x += step) ctx.lineTo(x, groundAt(course, x));
-    ctx.lineTo(x1 + step, bottom);
-    ctx.closePath();
-    ctx.fillStyle = '#8b6b4a';
-    ctx.fill();
-    ink();
-    ctx.lineWidth = 6;
-    ctx.stroke();
-    ctx.strokeStyle = '#6f8f4e';
-    ctx.lineWidth = 10;
-    ctx.beginPath();
-    for (let x = x0; x <= x1 + step; x += step) {
-      const y = groundAt(course, x) + 6;
-      if (x === x0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    // Samples at fixed course positions.
+    const i0 = Math.floor((wx0 + dist) / STEP) - 1;
+    const i1 = Math.ceil((wx1 + dist) / STEP) + 1;
+    const ids = [];
+    const xs = [];
+    const gs = [];
+    const cs = [];
+    for (let i = i0; i <= i1; i++) {
+      const x = i * STEP - dist;
+      ids.push(i);
+      xs.push(x);
+      gs.push(groundAt(course, x));
+      cs.push(ceilAt(course, x));
     }
+    const n = xs.length;
+    const last = n - 1;
+    const minG = Math.min(...gs);
+
+    // ---------- Ground ----------
+    // Rock body, lighter near the surface.
+    const grad = ctx.createLinearGradient(0, minG, 0, minG + 900);
+    grad.addColorStop(0, '#b08a5c');
+    grad.addColorStop(0.35, '#8b6b4a');
+    grad.addColorStop(1, '#6a4c36');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(xs[0], bottom);
+    trace(xs, gs, () => 0, 0, last, false);
+    ctx.lineTo(xs[last], bottom);
+    ctx.closePath();
+    ctx.fill();
+
+    // Rock strata: wavy bands that follow the surface.
+    ctx.save();
+    ctx.clip();
+    ctx.lineJoin = 'round';
+    // (alternating light and dark layers all the way down)
+    for (let k = 0; k < 14; k++) {
+      const depth = 60 + k * 105;
+      ctx.strokeStyle = k % 2 ? `rgba(60,38,24,${0.3 + k * 0.012})` : `rgba(176,140,96,${Math.max(0.12, 0.45 - k * 0.025)})`;
+      ctx.lineWidth = 16 + k * 2;
+      ctx.beginPath();
+      trace(xs, gs, (i) => depth + Math.sin(ids[i] * 0.09 + k * 2) * 14 + Math.sin(ids[i] * 0.023 + k) * 26);
+      ctx.stroke();
+    }
+    // Embedded stones and cracks.
+    ink();
+    ctx.lineWidth = 3;
+    for (let i = 0; i < n; i++) {
+      if (ids[i] % 5 !== 0) continue;
+      const h = hash(ids[i], 1);
+      if (h > 0.6) continue;
+      const y = gs[i] + 60 + hash(ids[i], 2) * 1100;
+      ctx.fillStyle = h < 0.2 ? '#6b5440' : '#a08466';
+      ctx.beginPath();
+      ctx.ellipse(xs[i], y, 10 + hash(ids[i], 3) * 16, 7 + hash(ids[i], 4) * 8, hash(ids[i], 5), 0, 7);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Snow caps on the high peaks (the surface plus a jagged lower edge).
+    ctx.fillStyle = '#f4f7fb';
+    ink();
+    ctx.lineWidth = 4;
+    for (let i = 0; i < n; i++) {
+      if (gs[i] >= SNOW_LINE) continue;
+      let j = i;
+      while (j + 1 < n && gs[j + 1] < SNOW_LINE) j++;
+      const depth = (k) => Math.min(70, (SNOW_LINE - gs[k]) * 0.5) * (ids[k] % 3 === 0 ? 1.25 : 0.8);
+      ctx.beginPath();
+      trace(xs, gs, () => -2, i, j);
+      for (let k = j; k >= i; k--) ctx.lineTo(xs[k], gs[k] + depth(k));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      i = j;
+    }
+
+    // Grass along the surface (not on snow), with a lighter sunlit lip.
+    const grassy = (i) => gs[i] >= SNOW_LINE - 10;
+    const runs = (fn) => {
+      for (let i = 0; i < n; i++) {
+        if (!grassy(i)) continue;
+        let j = i;
+        while (j + 1 < n && grassy(j + 1)) j++;
+        fn(i, j);
+        i = j;
+      }
+    };
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#4f7f3c';
+    ctx.lineWidth = 22;
+    ctx.beginPath();
+    runs((i, j) => trace(xs, gs, () => 9, i, j));
+    ctx.stroke();
+    ctx.strokeStyle = '#7fb24f';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    runs((i, j) => trace(xs, gs, () => 3, i, j));
     ctx.stroke();
 
-    // Overhangs and tunnel roofs: dark rock hanging down, with stalactites.
-    let inRock = false;
-    ctx.fillStyle = '#5e4a3a';
+    // Ink outline of the whole surface.
     ink();
     ctx.lineWidth = 6;
     ctx.beginPath();
-    for (let x = x0; x <= x1 + step; x += step) {
-      const c = ceilAt(course, x);
-      const rock = c > top;
-      if (rock && !inRock) {
-        ctx.moveTo(x, top);
-        inRock = true;
-      }
-      if (rock) {
-        const drip = (Math.floor(x / 60) % 3 === 0 ? 22 : 0) * Math.min(1, (c - top) / 400);
-        ctx.lineTo(x, c + drip);
-      }
-      if (!rock && inRock) {
-        ctx.lineTo(x, top);
-        inRock = false;
+    trace(xs, gs, () => 0);
+    ctx.stroke();
+
+    // Grass tufts and flowers.
+    ctx.lineWidth = 3;
+    for (let i = 0; i < n; i++) {
+      if (!grassy(i) || ids[i] % 2) continue;
+      const h = hash(ids[i], 6);
+      if (h > 0.55) continue;
+      const x = xs[i] + hash(ids[i], 7) * 16;
+      const y = gs[i] + 2;
+      ctx.strokeStyle = '#3f6e30';
+      ctx.beginPath();
+      ctx.moveTo(x - 6, y);
+      ctx.lineTo(x - 9, y - 14);
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 1, y - 18);
+      ctx.moveTo(x + 6, y);
+      ctx.lineTo(x + 10, y - 13);
+      ctx.stroke();
+      if (h < 0.08) {
+        ctx.fillStyle = ['#ffd23f', '#ff8fa0', '#ffffff'][ids[i] % 3];
+        ctx.beginPath();
+        ctx.arc(x + 1, y - 20, 5, 0, 7);
+        ctx.fill();
       }
     }
-    if (inRock) ctx.lineTo(x1 + step, top);
-    ctx.fill();
-    ctx.stroke();
+
+    // Trees, bushes and boulders, kept clear of turrets and markers.
+    const busy = (cx) =>
+      course.turrets.some((t) => Math.abs(t.cx - cx) < 140) || (course.markers || []).some((m) => Math.abs(m.cx - cx) < 220);
+    ink();
+    ctx.lineWidth = 4;
+    for (let i = 1; i < last; i++) {
+      if (ids[i] % 4 !== 0) continue;
+      const h = hash(ids[i], 8);
+      if (h > 0.42) continue;
+      const slope = Math.abs(gs[i + 1] - gs[i - 1]) / (2 * STEP);
+      const cx = ids[i] * STEP;
+      if (busy(cx)) continue;
+      const x = xs[i];
+      const y = gs[i] + 6;
+      const s = 0.8 + hash(ids[i], 9) * 0.7;
+      if (gs[i] < SNOW_LINE) {
+        if (h < 0.12) boulder(x, y, s * 0.8);
+      } else if (slope > 0.9) {
+        if (h < 0.2) boulder(x, y, s);
+      } else if (h < 0.24) pine(x, y, s, h < 0.1);
+      else if (h < 0.34) bush(x, y, s);
+      else boulder(x, y, s * 0.7);
+    }
+
+    // ---------- Overhangs and tunnel roofs ----------
+    const rock = (i) => cs[i] > top;
+    const roofRuns = (fn) => {
+      for (let i = 0; i < n; i++) {
+        if (!rock(i)) continue;
+        let j = i;
+        while (j + 1 < n && rock(j + 1)) j++;
+        fn(Math.max(0, i - 1), Math.min(last, j + 1));
+        i = j;
+      }
+    };
+    const roofY = (i) => (rock(i) ? cs[i] : top);
+    const ceilYs = cs.map((c, i) => roofY(i));
+    let maxC = -Infinity;
+    for (let i = 0; i < n; i++) if (rock(i)) maxC = Math.max(maxC, cs[i]);
+    if (maxC > -Infinity) {
+      const rg = ctx.createLinearGradient(0, maxC - 700, 0, maxC);
+      rg.addColorStop(0, '#5a4638');
+      rg.addColorStop(1, '#7a6150');
+      roofRuns((i, j) => {
+        ctx.beginPath();
+        ctx.moveTo(xs[i], top);
+        trace(xs, ceilYs, () => 0, i, j, false);
+        ctx.lineTo(xs[j], top);
+        ctx.closePath();
+        ctx.fillStyle = rg;
+        ctx.fill();
+        // Bands inside the rock.
+        ctx.save();
+        ctx.clip();
+        for (let k = 0; k < 12; k++) {
+          ctx.strokeStyle = k % 2 ? 'rgba(50,36,28,.35)' : 'rgba(150,122,100,.35)';
+          ctx.lineWidth = 14 + k * 2;
+          ctx.beginPath();
+          trace(xs, ceilYs, (q) => -50 - k * 100 + Math.sin(ids[q] * 0.07 + k * 3) * 16 + Math.sin(ids[q] * 0.02 + k) * 24, i, j);
+          ctx.stroke();
+        }
+        // Embedded stones.
+        ink();
+        ctx.lineWidth = 3;
+        for (let q = i; q <= j; q++) {
+          if (!rock(q) || ids[q] % 4 || hash(ids[q], 16) > 0.5) continue;
+          ctx.fillStyle = hash(ids[q], 17) < 0.5 ? '#4a3a30' : '#8f7764';
+          ctx.beginPath();
+          ctx.ellipse(xs[q], cs[q] - 50 - hash(ids[q], 18) * 900, 10 + hash(ids[q], 19) * 14, 7 + hash(ids[q], 20) * 7, hash(ids[q], 21), 0, 7);
+          ctx.fill();
+          ctx.stroke();
+        }
+        // Glowing crystals here and there.
+        for (let q = i; q <= j; q++) {
+          if (!rock(q) || ids[q] % 6 || hash(ids[q], 10) > 0.3) continue;
+          const x = xs[q];
+          const y = cs[q] - 100 - hash(ids[q], 11) * 450;
+          ctx.fillStyle = 'rgba(120,230,255,.25)';
+          ctx.beginPath();
+          ctx.arc(x, y, 75, 0, 7);
+          ctx.fill();
+          ink();
+          ctx.lineWidth = 5;
+          ctx.fillStyle = '#7fe6ff';
+          [-30, 0, 28].forEach((dx, m) => {
+            const hgt = 40 + (m === 1 ? 30 : m * 8);
+            ctx.beginPath();
+            ctx.moveTo(x + dx - 14, y + 20);
+            ctx.lineTo(x + dx, y - hgt);
+            ctx.lineTo(x + dx + 14, y + 20);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          });
+        }
+        ctx.restore();
+        // Outline.
+        ink();
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        trace(xs, ceilYs, () => 0, i, j);
+        ctx.stroke();
+      });
+
+      // Stalactites and hanging vines (only where the rock is well down into view).
+      ink();
+      ctx.lineWidth = 4;
+      for (let i = 1; i < last; i++) {
+        if (!rock(i) || !rock(i - 1) || !rock(i + 1)) continue;
+        const h = hash(ids[i], 12);
+        if (ids[i] % 3 === 0 && h < 0.5) {
+          const len = 16 + hash(ids[i], 13) * 30;
+          const w = 10 + hash(ids[i], 14) * 10;
+          const c = cs[i] - 4;
+          ctx.fillStyle = '#6e5646';
+          ctx.beginPath();
+          ctx.moveTo(xs[i] - w, c);
+          ctx.lineTo(xs[i] + 2, c + len);
+          ctx.lineTo(xs[i] + w, c);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else if (ids[i] % 5 === 1 && h < 0.35) {
+          const len = 40 + hash(ids[i], 15) * 110;
+          ctx.strokeStyle = '#3f6e30';
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(xs[i], cs[i]);
+          ctx.quadraticCurveTo(xs[i] + 14, cs[i] + len * 0.5, xs[i] - 4, cs[i] + len);
+          ctx.stroke();
+          ctx.fillStyle = '#5f9a45';
+          for (let k = 1; k <= 3; k++) {
+            ctx.beginPath();
+            ctx.ellipse(xs[i] + 6 - k * 2, cs[i] + (len * k) / 3.4, 8, 4, 0.6, 0, 7);
+            ctx.fill();
+          }
+          ink();
+          ctx.lineWidth = 4;
+        }
+      }
+    }
   };
 
   const drawTurrets = (time) => {
