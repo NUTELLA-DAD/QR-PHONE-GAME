@@ -468,7 +468,8 @@ export function createSimulation() {
             else state.ship.speed = clamp(state.ship.speed + player.jx * dt * 0.6, REV, 1);
             const climb = config.SHIP.CLIMB_SPEED * (0.4 + 0.6 * Math.min(1, state.ship.press / 50));
             const bounds = altBounds(state);
-            state.ship.alt = clamp(state.ship.alt - player.jy * climb * dt, bounds.lo, bounds.hi);
+            // (A ship that sank below the usual floor isn't snapped back up; it has to climb out.)
+            state.ship.alt = clamp(state.ship.alt - player.jy * climb * dt, Math.min(bounds.lo, state.ship.alt), bounds.hi);
           }
         } else if (player.lock === 'Bomb Bay') {
           // Bombardier: FIRE drops a bomb through the belly doors.
@@ -716,7 +717,9 @@ export function createSimulation() {
     state.sinking = state.buoyancy < 0;
     if (state.buoyancy && !state.ship.down && state.phase === 'flying') {
       const bounds = altBounds(state);
-      state.ship.alt = clamp(state.ship.alt + state.buoyancy * BU.DRIFT * dt, bounds.lo, bounds.hi);
+      // Sinking has no floor but the ground itself: she settles onto the rock and grinds along it.
+      const floor = state.buoyancy < 0 ? -Infinity : Math.min(bounds.lo, state.ship.alt);
+      state.ship.alt = clamp(state.ship.alt + state.buoyancy * BU.DRIFT * dt, floor, Math.max(bounds.hi, state.ship.alt));
       const kind = state.buoyancy > 0 ? 'floaty' : 'sinky';
       if (state.buoyWarned !== kind && Math.abs(state.buoyancy) > 4) {
         state.buoyWarned = kind;
@@ -724,7 +727,7 @@ export function createSimulation() {
         state.ev.warnText = kind === 'floaty' ? 'TOO FLOATY - OPEN A VENT!' : state.gasHoles.length ? 'SINKING - PATCH THE GASBAG!' : 'SINKING - MORE STEAM!';
       }
       // Very low on gas at the bottom: the hull scrapes.
-      if (state.ship.alt <= bounds.lo + 1 && gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
+      if (state.course && state.course.scraping && gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
     } else if (!state.buoyancy) state.buoyWarned = null;
     state.ship.shake = Math.max(0, state.ship.shake - dt);
     // Nose up while climbing, nose down while diving.

@@ -44,7 +44,7 @@ export function createWeather({ state, impact, puff }) {
       gustLeft -= dt;
       state.ship.alt += w.gust * w.storm * dt;
       const bounds = altBounds(state);
-      state.ship.alt = Math.max(bounds.lo - 60, Math.min(bounds.hi + 60, state.ship.alt));
+      state.ship.alt = Math.max(Math.min(bounds.lo - 60, state.ship.alt), Math.min(bounds.hi + 60, state.ship.alt));
       if (gustLeft <= 0) w.gust = 0;
     } else if ((gustT -= dt) <= 0) {
       gustT = rand(S.GUST_EVERY_MIN, S.GUST_EVERY_MAX);
