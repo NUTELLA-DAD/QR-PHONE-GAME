@@ -60,12 +60,17 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
 
   // CAST OFF starts the flight (also Space / Enter on the TV keyboard).
   const castButton = document.getElementById('castoff');
+  const showCastButton = () => {
+    castButton.style.display = simulation.state.phase === 'lobby' ? '' : 'none';
+  };
   const castOff = () => {
     simulation.castOff();
-    castButton.style.display = 'none';
+    showCastButton();
   };
   castButton.onclick = castOff;
   addEventListener('keydown', (e) => (e.key === ' ' || e.key === 'Enter') && castOff());
+  // Back at the mast after the ship is lost: the button comes back.
+  setInterval(showCastButton, 250);
 
   // Difficulty button cycles Easy -> Normal -> Hard.
   const diffButton = document.getElementById('difficulty');
