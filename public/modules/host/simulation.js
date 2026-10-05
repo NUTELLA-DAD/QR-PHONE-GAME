@@ -55,6 +55,7 @@ export function createSimulation() {
     gasHoles: [],
     upgrades: {}, // id -> times taken
     difficulty: config.START_DIFFICULTY,
+    phase: 'lobby', // 'lobby' = moored at the mast while the crew joins; 'flying' after CAST OFF
     vote: null, // an upgrade vote in progress
     enemy: { ang: 0, x: -200, y: 300, vx: 1, vy: 0, hp: 5, fire: 2.5, dead: 0 },
     shells: [],
@@ -595,9 +596,16 @@ export function createSimulation() {
       }
     }
 
-    threats.update(dt);
-    squadrons.update(dt);
-    course.update(dt);
+    if (state.phase === 'lobby') {
+      // Moored at the home mast: no enemies, the boiler and gasbag are kept topped up.
+      state.ship.press = 70;
+      state.ship.fuel = Math.max(state.ship.fuel, config.BOILER.START_FUEL);
+      state.ship.gas = 100;
+    } else {
+      threats.update(dt);
+      squadrons.update(dt);
+      course.update(dt);
+    }
 
     for (const bullet of state.bullets) {
       bullet.x += bullet.vx * dt;
@@ -661,6 +669,12 @@ export function createSimulation() {
     interaction,
     modules,
     startVote,
+    castOff: () => {
+      if (state.phase !== 'lobby') return;
+      state.phase = 'flying';
+      state.ev.warn = 4;
+      state.ev.warnText = 'CAST OFF! NEXT STOP: THE TURNING BEACON';
+    },
     onMarker,
     squadrons,
     puff,

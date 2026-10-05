@@ -58,6 +58,15 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
     else location.reload();
   });
 
+  // CAST OFF starts the flight (also Space / Enter on the TV keyboard).
+  const castButton = document.getElementById('castoff');
+  const castOff = () => {
+    simulation.castOff();
+    castButton.style.display = 'none';
+  };
+  castButton.onclick = castOff;
+  addEventListener('keydown', (e) => (e.key === ' ' || e.key === 'Enter') && castOff());
+
   // Difficulty button cycles Easy -> Normal -> Hard.
   const diffButton = document.getElementById('difficulty');
   const showDifficulty = () => (diffButton.textContent = 'Difficulty: ' + config.DIFFICULTY[simulation.state.difficulty].label);

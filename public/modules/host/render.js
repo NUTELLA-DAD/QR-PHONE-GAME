@@ -175,7 +175,7 @@ export function createRenderer({ ctx, state, canvas }) {
   };
 
   const drawEnemy = (time) => {
-    if (state.enemy.dead > 0) return;
+    if (state.enemy.dead > 0 || state.phase === 'lobby') return;
     ctx.save();
     ctx.translate(state.enemy.x, state.enemy.y);
     ctx.rotate(Math.atan2(state.enemy.vy, state.enemy.vx || 1));
@@ -400,6 +400,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fillText('Hull breached! Patching up...', 800, 450);
     }
     drawUpgradeIcons();
+    if (state.phase === 'lobby') drawLobby();
     drawBossBar();
     if (state.scorecard) drawScorecard();
     if (state.vote) drawVote();
@@ -427,6 +428,32 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.restore();
     }
     ctx.globalAlpha = 1;
+  };
+
+  // Before the flight: title up top, how-to-start low over the ground (clear of the ship and QR panel).
+  const drawLobby = () => {
+    ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.font = '900 76px Georgia';
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = config.INK;
+    ctx.strokeText('AIRSHIP CREW', 790, 175);
+    ctx.fillStyle = '#ffd23f';
+    ctx.fillText('AIRSHIP CREW', 790, 175);
+    const crew = Object.keys(state.players).length;
+    const lines = [
+      'Scan the code with your phone to climb aboard (hold it sideways).',
+      'Practise with tools and stations while moored.',
+      crew ? `${crew} aboard - press CAST OFF (or Space) when ready!` : 'Waiting for crew...',
+    ];
+    ctx.font = '700 26px Georgia';
+    lines.forEach((t, i) => {
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = '#fff';
+      ctx.strokeText(t, 720, 760 + i * 40);
+      ctx.fillStyle = i === 2 ? '#2e7d32' : config.INK;
+      ctx.fillText(t, 720, 760 + i * 40);
+    });
   };
 
   // Lap scorecard: who did the most of each job.
