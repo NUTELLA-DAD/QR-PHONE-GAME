@@ -30,7 +30,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
       jy: 0,
       station: null,
     });
-    Object.assign(player, m, { connected: true });
+    Object.assign(player, m, { connected: true, uk: null }); // uk: null = resend button labels to the phone
     count();
   });
 

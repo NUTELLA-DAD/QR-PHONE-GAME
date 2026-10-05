@@ -42,7 +42,10 @@ io.on('connection', (s) => {
 
   s.on('player:input', (data) => {
     const { code, token } = s.data || {}; const room = rooms[code];
-    if (room && token) io.to(room.host).volatile.emit('player:input', { id: token, data });
+    if (!room || !token) return;
+    // Joystick-only updates may be dropped when busy (a newer one follows); button presses never are.
+    const onlyStick = Object.keys(data || {}).every((k) => k === 'jx' || k === 'jy');
+    (onlyStick ? io.to(room.host).volatile : io.to(room.host)).emit('player:input', { id: token, data });
   });
 
   s.on('host:ui', ({ id, ui }) => { // host -> one phone
