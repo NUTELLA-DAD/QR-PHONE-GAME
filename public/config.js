@@ -58,8 +58,8 @@ export const config = {
   // Floating mines drifting toward the bow.
   MINES: {
     FIRST_AFTER: 30,
-    EVERY_MIN: 12,
-    EVERY_MAX: 20,
+    EVERY_MIN: 18,
+    EVERY_MAX: 28,
     EDGE_CHANCE: 0.6, // chance a mine skims the top/bottom (dodge it); otherwise it's dead centre (shoot it)
     RADIUS: 34,
   },
@@ -67,6 +67,7 @@ export const config = {
   IMPACT: {
     MINE: 2,
     PLANE_CRASH: 3,
+    WRECK_SMALL: 1.2, // a small plane's falling wreck
     BOMB: 2,
   },
   // The course: terrain the ship flies through (mountains, overhangs, underpasses) with

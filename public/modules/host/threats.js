@@ -46,10 +46,16 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     e.ang += dt * config.ENEMY.TURN_SPEED;
     // The loop follows the ship's altitude, a little late: sharp climbs/dives can still meet it.
     e.cy = e.cy ?? -state.ship.alt;
-    e.cy += (-state.ship.alt - e.cy) * Math.min(1, dt * 0.8);
+    e.cy += (-state.ship.alt - e.cy) * Math.min(1, dt * 3);
     const next = enemyPath(e.ang);
     next.y += e.cy;
     next.y = keepClear(state, next.x, next.y, 70); // fly over mountains, under overhangs
+    // If the terrain pushed it into the ship's space, it climbs over the ship instead.
+    const shipTop = B.y0 - state.ship.alt - 140;
+    if (next.x > B.x0 - 120 && next.x < B.x1 + 120 && next.y > shipTop && next.y < B.y1 - state.ship.alt + 120) {
+      next.y = shipTop; // hard pull-up over the ship
+      if (Math.random() < 0.3) puff(next.x - 30, next.y + 10, '#ffffff', 1);
+    }
     e.vx = next.x - e.x;
     e.vy = next.y - e.y;
     e.x = next.x;
@@ -159,7 +165,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       if (!w.dead && !state.ship.down && touches(w.x, w.y, 30)) {
         w.dead = true;
         puff(w.x, w.y, '#ff5a1f', 24);
-        impact(w.x, w.y + state.ship.alt, config.IMPACT.PLANE_CRASH);
+        impact(w.x, w.y + state.ship.alt, w.kind === 'fighter' ? config.IMPACT.WRECK_SMALL : config.IMPACT.PLANE_CRASH);
         warn('WRECKAGE CRASHED ONTO US!');
       }
     }
