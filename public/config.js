@@ -89,6 +89,17 @@ export const config = {
     SCRAPE_DAMAGE: 2, // ...losing this much hull per second
     MAX_HOLES: 8,
   },
+  // Phase 3 cartoon film look (set an amount to 0, or LINE_BOIL to false, to turn it off).
+  STYLE: {
+    LINE_BOIL: true, // outlines wobble like hand-drawn animation
+    BOIL_FPS: 10, // how often the wobble changes
+    BOIL_AMOUNT: 2.2, // how far lines wobble
+    WARM_TINT: 0.14, // old-film sepia warmth
+    PAPER: 0.1, // paper texture strength
+    GRAIN: 0.07, // jumping film grain
+    VIGNETTE: 0.45, // darkened screen edges
+    FLICKER: 0.035, // projector flicker
+  },
   // Walking feel.
   MOVE: {
     WALK_SPEED: 230,

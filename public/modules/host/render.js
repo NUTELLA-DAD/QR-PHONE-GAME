@@ -2,6 +2,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { createShipArt } from './shipArt.js';
 import { createThreatArt } from './threatArt.js';
+import { installLineBoil, setBoilTime, createFilmLook } from './style.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   const ink = () => {
@@ -18,6 +19,8 @@ export function createRenderer({ ctx, state, canvas }) {
 
   const drawShip = createShipArt({ ctx, state, ink, rrect });
   const threatArt = createThreatArt({ ctx, state, ink });
+  installLineBoil(ctx);
+  const filmLook = createFilmLook(ctx);
 
   const drawGuns = () => {
     for (const [name, gun] of Object.entries(state.GUNS)) {
@@ -177,18 +180,40 @@ export function createRenderer({ ctx, state, canvas }) {
   };
 
   const drawEffects = (time) => {
-    for (const puffItem of state.puffs) {
-      ctx.globalAlpha = Math.max(0, puffItem.life / puffItem.max);
-      ctx.fillStyle = puffItem.c;
-      ctx.beginPath();
-      ctx.arc(puffItem.x, puffItem.y, 10 * puffItem.life / puffItem.max + 4, 0, 7);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
     threatArt.drawWrecks();
     threatArt.drawMines(time);
     threatArt.drawCargo(time);
     drawEnemy(time);
+    // Cartoon puffs: swell up, then shrink and fade, with an ink outline and a highlight.
+    for (const puffItem of state.puffs) {
+      const t = 1 - puffItem.life / puffItem.max;
+      const r = 5 + 13 * Math.sin(Math.min(1, t * 1.6) * Math.PI * 0.5 + 0.15) * (1 - t * 0.45);
+      ctx.globalAlpha = Math.max(0, 1 - t * t);
+      ctx.fillStyle = puffItem.c;
+      ctx.beginPath();
+      ctx.arc(puffItem.x, puffItem.y, r, 0, 7);
+      ctx.fill();
+      ctx.strokeStyle = config.INK;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.35)';
+      ctx.beginPath();
+      ctx.arc(puffItem.x - r * 0.3, puffItem.y - r * 0.3, r * 0.35, 0, 7);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // Speed streaks behind shells and bullets.
+    ctx.lineCap = 'round';
+    for (const [list, color] of [[state.shells, 'rgba(255,240,190,.7)'], [state.bullets, 'rgba(255,170,160,.6)']]) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 6;
+      for (const p of list) {
+        ctx.beginPath();
+        ctx.moveTo(p.x - p.vx * 0.07, p.y - p.vy * 0.07);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+    }
     ink();
     for (const shell of state.shells) {
       ctx.fillStyle = '#ffd23f';
@@ -614,6 +639,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const renderFrame = (time, view) => {
     const width = canvas.width;
     const height = canvas.height;
+    setBoilTime(time);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     drawBackground(width, height, view);
 
@@ -638,6 +664,7 @@ export function createRenderer({ ctx, state, canvas }) {
     drawHud();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     threatArt.drawLookoutArrows(width, height, view);
+    filmLook(time, width, height);
   };
 
   return { renderFrame, ink, drawBar };

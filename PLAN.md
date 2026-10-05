@@ -85,6 +85,10 @@ station is visually distinct at a glance from across the room.
 - Steam network: the boiler feeds pipes to each section (helm/engines, guns, lift). Pressure valves
   let the crew route steam; pipes can be hit and burst, cutting power to that section until fixed.
 
+- (Done) Boiler fed by carrying coal from the Coal Bunker; overpressure must be vented at vent
+  stacks or the boiler blows. Gasbag holes leak gas and sink the ship; boiler pressure pumps gas
+  back in.
+
 **Weapons and boarding combat**
 - Melee weapons come from the tool racks (see above). Cosmetic variants per player later
   (wrench, frying pan, umbrella, cricket bat).
