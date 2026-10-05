@@ -39,6 +39,7 @@ export const config = {
   VOTE: {
     TIME: 15, // seconds to vote
     ALL_VOTED_WAIT: 1.5, // once everyone has voted, wait this long
+    SCORECARD_TIME: 8, // seconds the lap scorecard shows before the vote
   },
   // Fires.
   FIRE: {

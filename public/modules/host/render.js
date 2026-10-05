@@ -372,7 +372,48 @@ export function createRenderer({ ctx, state, canvas }) {
     }
     drawUpgradeIcons();
     drawBossBar();
+    if (state.scorecard) drawScorecard();
     if (state.vote) drawVote();
+  };
+
+  // Lap scorecard: who did the most of each job.
+  const drawScorecard = () => {
+    const sc = state.scorecard;
+    ctx.fillStyle = 'rgba(27,20,16,.7)';
+    ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
+    ctx.fillStyle = '#f1e2b8';
+    ink();
+    rrect(200, 110, 1200, 700, 26);
+    ctx.fill();
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = config.INK;
+    ctx.font = '900 54px Georgia';
+    ctx.fillText(`Lap ${sc.lap} complete!`, 800, 185);
+    ctx.font = '700 26px Georgia';
+    ctx.fillText(sc.rows.length ? 'Crew awards' : 'Nobody did much this lap... next time!', 800, 228);
+    sc.rows.forEach((r, i) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x = 260 + col * 560;
+      const y = 300 + row * 92;
+      ctx.textAlign = 'left';
+      ctx.font = '44px "Segoe UI Emoji", sans-serif';
+      ctx.fillText(r.icon, x, y + 14);
+      ctx.font = '900 28px Georgia';
+      ctx.fillStyle = config.INK;
+      ctx.fillText(r.title, x + 70, y);
+      ctx.fillStyle = r.color;
+      ctx.strokeStyle = config.INK;
+      ctx.lineWidth = 4;
+      ctx.font = '900 26px Georgia';
+      ctx.strokeText(r.name, x + 70, y + 34);
+      ctx.fillText(r.name, x + 70, y + 34);
+      ctx.fillStyle = '#5a4a3a';
+      ctx.font = '400 22px Georgia';
+      ctx.fillText(`${r.value} ${r.unit}`, x + 80 + ctx.measureText(r.name).width + 40, y + 34);
+      ctx.fillStyle = config.INK;
+    });
   };
 
   // Boss health bar across the top of the screen.

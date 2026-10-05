@@ -8,7 +8,7 @@ import { keepClear, inRock } from './course.js';
 const B = SHIP_LAYOUT.bounds;
 const rand = (a, b) => a + Math.random() * (b - a);
 
-export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHelm }) {
+export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHelm, credit }) {
   state.cargo = [];
   state.mines = [];
   state.wrecks = [];
@@ -182,6 +182,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
         if (e.hp <= 0) {
           e.dead = 4;
           state.kills += 1;
+          credit?.(shell);
           puff(e.x, e.y, '#ff5a1f', 24);
           wreck(e.x, e.y, e.vx / Math.max(dt, 1e-3), 'fighter');
         }
@@ -195,6 +196,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
           puff(shell.x, shell.y, '#ffcf40', 8);
           if (c.hp <= 0) {
             state.kills += 1;
+            credit?.(shell);
             puff(c.x, c.y, '#ff5a1f', 30);
             wreck(c.x, c.y, c.vx, 'cargo');
             warn(c.dropped ? 'CARGO PLANE DOWN!' : 'CARGO PLANE DOWN - NO RAIDERS THIS TIME!', 2.5);

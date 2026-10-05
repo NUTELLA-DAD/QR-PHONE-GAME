@@ -121,7 +121,7 @@ function rng(seed) {
 }
 
 // onMarker(marker) is called when the ship passes the beacon or arrives home.
-export function createCourse({ state, impact, puff, onMarker }) {
+export function createCourse({ state, impact, puff, onMarker, credit }) {
   const A = config.SHIP.ALT_RANGE - 30; // the most altitude we'll ever ask the helm for
   const course = {
     dist: 0,
@@ -284,6 +284,7 @@ export function createCourse({ state, impact, puff, onMarker }) {
         if (t.hp <= 0) {
           t.dead = true;
           state.kills += 1;
+          credit?.(shell);
           puff(t.x, t.y, '#ff5a1f', 22);
         }
         break;

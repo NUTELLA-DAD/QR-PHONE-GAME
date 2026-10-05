@@ -143,6 +143,7 @@ export function createSimulation() {
     player.face = target.x < player.x ? -1 : 1;
     puff(target.x, target.y - 40, '#fff', 6);
     raiders.onHit(target, sword, player.face * (sword ? T.SWORD_KNOCKBACK : T.SHOVE_KNOCKBACK));
+    if (!state.boarders.includes(target)) stat(player, 'raiders');
   };
 
   // puff() at a point given in ship coordinates.
@@ -176,8 +177,17 @@ export function createSimulation() {
     damageHull(config.SHIP.HIT_DAMAGE * power);
   };
 
+  // Per-player stats for the lap scorecard.
+  const stat = (player, key, n = 1) => {
+    if (!player) return;
+    player.stats = player.stats || {};
+    player.stats[key] = (player.stats[key] || 0) + n;
+  };
+  // Kill credit goes to whoever fired the shell.
+  const credit = (shell) => stat(shell && state.players[shell.owner], 'kills');
+
   const raiders = createRaiders({ state, modules, puff, impact });
-  const threats = createThreats({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, getHelm });
+  const threats = createThreats({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, getHelm, credit });
   // ---- Upgrade votes (at the turning beacon and back home) ----
   const startVote = (marker) => {
     const offer = pickOffer(state.upgrades);
@@ -239,15 +249,36 @@ export function createSimulation() {
     }
   };
 
-  const course = createCourse({ state, impact, puff, onMarker: startVote });
-
-  // Who gets the credit for a kill (shells remember who fired them). Shown on the lap scorecard.
-  const credit = (shell, what) => {
-    const p = shell && state.players[shell.owner];
-    if (!p) return;
-    p.stats = p.stats || {};
-    p.stats.kills = (p.stats.kills || 0) + 1;
+  // Back home: show the lap scorecard for a few seconds, then vote on an upgrade.
+  const AWARDS = [
+    { key: 'kills', title: 'Ace Gunner', icon: '🎯', unit: 'shot down' },
+    { key: 'raiders', title: 'Swashbuckler', icon: '🗡️', unit: 'raiders beaten' },
+    { key: 'holes', title: 'Patch Master', icon: '🔨', unit: 'holes patched' },
+    { key: 'fires', title: 'Firefighter', icon: '🧯', unit: 'fires out' },
+    { key: 'repairs', title: 'Grease Monkey', icon: '🔧', unit: 'repairs' },
+    { key: 'ammo', title: 'Quartermaster', icon: '📦', unit: 'ammo runs' },
+    { key: 'coal', title: 'Stoker', icon: '⚫', unit: 'coal loads' },
+    { key: 'revives', title: 'Medic', icon: '💫', unit: 'revives' },
+    { key: 'defused', title: 'Bomb Squad', icon: '💣', unit: 'bombs defused' },
+    { key: 'vent', title: 'Steam Valve', icon: '💨', unit: 'seconds venting' },
+  ];
+  let pendingVote = null;
+  const onMarker = (m) => {
+    if (m.kind !== 'home') return startVote(m);
+    const players = Object.values(state.players);
+    const rows = [];
+    for (const a of AWARDS) {
+      const best = players.reduce((b, p) => ((p.stats?.[a.key] || 0) > (b?.stats?.[a.key] || 0) ? p : b), null);
+      const value = best?.stats?.[a.key] || 0;
+      if (value > 0) rows.push({ ...a, name: best.name, color: best.color, value: Math.round(value) });
+    }
+    state.scorecard = { lap: m.lap - 1, rows, t: config.VOTE.SCORECARD_TIME };
+    pendingVote = m;
+    for (const p of players) p.stats = {};
   };
+
+  const course = createCourse({ state, impact, puff, onMarker, credit });
+
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit });
 
   const emitPlayerUi = (playerId, ui) => {
@@ -259,6 +290,15 @@ export function createSimulation() {
   };
 
   const update = (dt) => {
+    // The lap scorecard pauses the action, then the upgrade vote starts.
+    if (state.scorecard) {
+      if ((state.scorecard.t -= dt) <= 0) {
+        state.scorecard = null;
+        if (pendingVote) startVote(pendingVote);
+        pendingVote = null;
+      }
+      return;
+    }
     // While the crew votes on an upgrade, the action is paused.
     if (state.vote) {
       updateVote(dt);
@@ -354,15 +394,20 @@ export function createSimulation() {
         if (act && act.hold && player.fire) {
           const object = act.obj;
           if (act.type === 'repair') {
-            if (modules.repair(object, dt)) puff(object.pos.x, object.pos.y - state.ship.alt, '#8fe388', 10);
+            if (modules.repair(object, dt)) {
+              puff(object.pos.x, object.pos.y - state.ship.alt, '#8fe388', 10);
+              stat(player, 'repairs');
+            }
           } else if (act.type === 'vent') {
             state.ship.press = Math.max(0, state.ship.press - config.BOILER.VENT_RATE * dt);
+            stat(player, 'vent', dt);
             if (Math.random() < dt * 12) shipPuff(object.x + (Math.random() - 0.5) * 20, PLATFORMS[object.d].y - 150, '#ffffff', 2);
           } else {
             object.worked = true;
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
+              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', defuse: 'defused', revive: 'revives' }[act.type]);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
               else if (act.type === 'hole') {
                 state.breaches.splice(state.breaches.indexOf(object), 1);
@@ -385,12 +430,14 @@ export function createSimulation() {
             puff(act.obj.pos.x, act.obj.pos.y - state.ship.alt, '#ffffff', 6);
           } else if (type === 'load') {
             act.obj.ammo = Math.min(act.obj.max, act.obj.ammo + config.GUNS.LOAD);
+            stat(player, 'ammo');
             player.carry = null;
             puff(act.station.x, player.y - 60, '#ffd23f', 8);
           } else if (type === 'ammo') player.carry = 'ammo';
           else if (type === 'coal') player.carry = 'coal';
           else if (type === 'stoke') {
             state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + config.BOILER.COAL_FUEL);
+            stat(player, 'coal');
             player.carry = null;
             shipPuff(act.station.x - 30, PLATFORMS[act.station.d].y - 50, '#ff8c42', 8);
           }
@@ -583,6 +630,7 @@ export function createSimulation() {
     interaction,
     modules,
     startVote,
+    onMarker,
     squadrons,
     puff,
     setSocket,
