@@ -263,7 +263,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.restore();
   };
 
-  const drawWorld = (time) => {
+  const drawEffects = (time) => {
     for (const puffItem of state.puffs) {
       ctx.globalAlpha = Math.max(0, puffItem.life / puffItem.max);
       ctx.fillStyle = puffItem.c;
@@ -288,7 +288,10 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fill();
       ctx.stroke();
     }
+  };
 
+  // Screen overlay (hull/steam panel, warnings). Drawn on a fixed 1600x900 stage, not zoomed by the camera.
+  const drawHud = () => {
     ctx.fillStyle = '#f1e2b8';
     ink();
     rrect(30, 28, 440, 100, 14);
@@ -331,7 +334,7 @@ export function createRenderer({ ctx, state, canvas }) {
     }
     if (state.ship.down > 0) {
       ctx.fillStyle = 'rgba(27,20,16,.55)';
-      ctx.fillRect(0, 0, config.W, config.H);
+      ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3); // cover letterbox edges too
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
       ctx.font = '900 64px Georgia';
@@ -488,27 +491,76 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.strokeRect(x - 24, y, 48, 8);
   };
 
-  const renderFrame = (time, cameraScroll) => {
-    const width = canvas.width;
-    const height = canvas.height;
-    const scale = Math.min(width / config.W, height / config.H);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const wrap = (v, span) => ((v % span) + span) % span;
+
+  const cloud = (x, y, size) => {
+    ctx.beginPath();
+    [[0, 0, 1], [0.9, -0.3, 1.15], [1.8, 0, 0.95], [0.9, 0.25, 1.1]].forEach(([dx, dy, r]) => {
+      ctx.ellipse(x + dx * 50 * size, y + dy * 50 * size, 50 * r * size, 32 * r * size, 0, 0, 7);
+    });
+    ctx.fill();
+  };
+
+  // A far-away mountain range. f = how strongly it follows the camera (0 = fixed, 1 = moves with the ship).
+  const drawRidge = (width, height, view, f, baseY, amp, freq, color) => {
+    const s = height / config.H;
+    const shift = (view.scroll + view.cx) * f;
+    const y0 = height * baseY + (config.H / 2 - view.cy) * view.zoom * f * 0.6;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, height);
+    for (let sx = 0; sx <= width + 24; sx += 24) {
+      const u = sx / s + shift;
+      const h = Math.sin(u * freq) * 0.45 + Math.sin(u * freq * 2.3 + 1) * 0.35 + Math.sin(u * freq * 5.7 + 2) * 0.2;
+      ctx.lineTo(sx, y0 - (h + 1) * amp * s);
+    }
+    ctx.lineTo(width, height);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  // Background drawn in screen space, back to front, each layer scrolling at its own speed.
+  const drawBackground = (width, height, view) => {
+    const s = height / config.H;
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
     gradient.addColorStop(0, '#5aa6c8');
-    gradient.addColorStop(1, '#f2d9a0');
+    gradient.addColorStop(0.75, '#f2d9a0');
+    gradient.addColorStop(1, '#e8c48a');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
-    ctx.setTransform(scale, 0, 0, scale, (width - config.W * scale) / 2, (height - config.H * scale) / 2);
 
-    ctx.fillStyle = 'rgba(255,255,255,.85)';
-    [[200, 120], [1250, 80], [700, 40], [1500, 300], [100, 760], [1000, 860]].forEach(([x, y], index) => {
-      const cloudX = ((x + index * 400 - cameraScroll) % 1900 + 1900) % 1900 - 150;
-      ctx.beginPath();
-      [0, 45, 90].forEach((offset, cloudIndex) => {
-        ctx.ellipse(cloudX + offset, y + (cloudIndex === 1 ? -15 : 0), 50, 32, 0, 0, 7);
-      });
-      ctx.fill();
+    drawRidge(width, height, view, 0.04, 0.9, 120, 0.004, '#a9bccb');
+    // High thin clouds.
+    ctx.fillStyle = 'rgba(255,255,255,.45)';
+    const span = width / s + 500;
+    [[100, 140], [600, 90], [1100, 200], [1500, 60], [1900, 160], [2400, 110]].forEach(([x, y]) => {
+      const cx = wrap(x - (view.scroll + view.cx) * 0.15, span) - 250;
+      cloud(cx * s, (y + (config.H / 2 - view.cy) * view.zoom * 0.1) * s, 0.55 * s);
     });
+    drawRidge(width, height, view, 0.1, 0.97, 90, 0.007, '#7f9a8c');
+  };
+
+  // Big clouds in the world, drifting past at full ship speed (behind the ship).
+  const drawNearClouds = (width, height, view) => {
+    const left = view.cx - width / 2 / view.zoom - 300;
+    const top = view.cy - height / 2 / view.zoom;
+    const viewW = width / view.zoom + 600;
+    const viewH = height / view.zoom;
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    [[0, 0.1], [700, 0.75], [1300, 0.3], [1900, 0.9], [2600, 0.55], [3200, 0.2], [3900, 0.8]].forEach(([x, y], i) => {
+      cloud(left + wrap(x - view.scroll, Math.max(viewW, 4200)), top + y * viewH, 1 + (i % 3) * 0.3);
+    });
+  };
+
+  const renderFrame = (time, view) => {
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    drawBackground(width, height, view);
+
+    // World layer, positioned by the camera.
+    ctx.setTransform(view.zoom, 0, 0, view.zoom, width / 2 - view.cx * view.zoom, height / 2 - view.cy * view.zoom);
+    drawNearClouds(width, height, view);
 
     ctx.save();
     ctx.translate(state.ship.shake > 0 ? (Math.random() - 0.5) * 16 : 0, -state.ship.alt + Math.sin(time / 1000) * 3);
@@ -517,7 +569,12 @@ export function createRenderer({ ctx, state, canvas }) {
     drawHazards(time / 1000);
     [...Object.values(state.players), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => drawPlayer(player, time / 1000));
     ctx.restore();
-    drawWorld(time / 1000);
+    drawEffects(time / 1000);
+
+    // Screen overlay on a fixed 1600x900 stage.
+    const scale = Math.min(width / config.W, height / config.H);
+    ctx.setTransform(scale, 0, 0, scale, (width - config.W * scale) / 2, (height - config.H * scale) / 2);
+    drawHud();
   };
 
   return { renderFrame, ink, drawBar };

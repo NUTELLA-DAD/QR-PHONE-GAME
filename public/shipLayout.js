@@ -14,6 +14,9 @@ export const SHIP_LAYOUT = {
   // Left and right inner walls of the hull.
   hull: { x0: 290, x1: 1310 },
 
+  // Outer edges of the whole ship drawing (gasbag, guns, tail). The camera keeps all of this in view.
+  bounds: { x0: 180, x1: 1560, y0: 40, y1: 830 },
+
   // Rooms: a named area on one floor, from x0 to x1.
   rooms: [
     { name: 'Upper Deck', d: 0, x0: 290, x1: 1310 },

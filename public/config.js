@@ -4,6 +4,13 @@ export const config = {
   INK: '#1b1410',
   MAX_PLAYERS: 16,
   PLAYER_COLORS: ['#e63946', '#f4a261', '#f1c40f', '#2a9d8f', '#3a86ff', '#8338ec', '#ff5da2', '#06d6a0', '#ff7b00', '#00b4d8', '#9ef01a', '#b5179e', '#ffffff', '#7f5539', '#4cc9f0', '#d00000'],
+  // Camera framing.
+  CAMERA: {
+    SHIP_SCREEN_FRACTION: 0.5, // the ship takes at most this much of the screen width
+    ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
+    MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
+    SMOOTHING: 1.6, // how quickly the camera catches up (higher = snappier)
+  },
   // Test bot behaviour (times in seconds).
   BOTS: {
     THINK_EVERY: 0.3, // how often a bot rethinks what to do

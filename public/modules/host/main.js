@@ -21,8 +21,8 @@ function frame(now) {
   const dt = Math.min(0.05, (now - lastTime) / 1000);
   lastTime = now;
   simulation.update(dt);
-  const scroll = camera.update(dt, simulation.state.ship);
-  renderer.renderFrame(now, scroll);
+  const view = camera.update(dt, simulation.state, canvas.width, canvas.height);
+  renderer.renderFrame(now, view);
   requestAnimationFrame(frame);
 }
 
