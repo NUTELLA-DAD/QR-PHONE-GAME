@@ -33,6 +33,8 @@ export function createModules() {
     const s = station(name);
     add({ name, kind: 'gun', d: s.d, x: s.x, pos: { x: mount.bx, y: mount.by } });
   }
+  const bay = station('Bomb Bay');
+  add({ name: 'Bomb Bay', kind: 'bombbay', d: bay.d, x: bay.x, pos: { x: L.bombBay.x, y: L.bombBay.y - 30 } });
   for (const name of ['Boiler', 'Helm']) {
     const s = station(name);
     add({ name, kind: name.toLowerCase(), d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });

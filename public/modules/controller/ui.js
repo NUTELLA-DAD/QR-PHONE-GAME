@@ -124,19 +124,20 @@ export function createControllerUI({ network }) {
     }
 
     const where = next.station || 'Walking';
-    const ammo = next.ammo != null ? ` - ${next.ammo} shells` : '';
+    const ammo = next.ammo != null ? ` - ${next.ammo} ${next.kind === 'bombbay' ? 'bombs' : 'shells'}` : '';
     const hint = next.locked
       ? {
           helm: 'Stick up/down: climb and dive. Lever: ahead, STOP line = hover, below it = reverse.',
           gun: 'Drag to aim - it snaps onto nearby targets. Hold FIRE. Needs ammo!',
           lookout: 'Keep watch! Arrows on the TV show what is coming from off screen.',
+          bombbay: 'Watch the red ring on the TV - press DROP when it is on a gun or building. Needs ammo crates!',
         }[next.kind]
       : next.taken
         ? 'Someone is already here'
         : next.label && next.label !== 'Hey!'
           ? next.hold ? 'Hold the Action button' : 'Tap the Action button'
           : next.carry === 'ammo'
-            ? 'Bring the ammo to a gun'
+            ? 'Bring the ammo to a gun or the Bomb Bay'
             : next.carry === 'coal'
               ? 'Bring the coal to the Boiler (main deck)'
             : 'Walk to a station, rack, fire or hole';

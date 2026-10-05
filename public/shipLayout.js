@@ -58,6 +58,7 @@ export const SHIP_LAYOUT = {
     { n: 'Aft Sponson', p: 'lower', x: 420 },
     { n: 'Coal Bunker', p: 'lower', x: 570 },
     { n: 'Ammo Hold', p: 'lower', x: 870 },
+    { n: 'Bomb Bay', p: 'lower', x: 495 },
     { n: 'Fore Sponson', p: 'lower', x: 1180 },
     { n: 'Ventral Gun', p: 'pod', x: 820 },
   ]),
@@ -73,6 +74,9 @@ export const SHIP_LAYOUT = {
     'Fore Sponson': { bx: 1270, by: 812, aim: 1.0, arc: 0.7 },
     'Ventral Gun': { bx: 805, by: 948, aim: Math.PI / 2, arc: 1.2 },
   },
+
+  // Bomb bay doors in the belly, under the Bomb Bay station: bombs drop from here.
+  bombBay: { x: 495, y: 815 },
 
   // Engines on the outriggers, driven by steam.
   engines: withD([

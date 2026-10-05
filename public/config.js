@@ -34,6 +34,16 @@ export const config = {
     TILT_SMOOTH: 3, // how quickly the tilt follows (higher = snappier)
     TILT_PIVOT: [800, 520], // the point the ship tips around (ship coordinates)
   },
+  // Bomb bay: drops bombs on turrets and buildings below.
+  BOMBS: {
+    START: 3, // bombs aboard at the start
+    MAX: 6,
+    LOAD: 2, // bombs added per ammo crate
+    COOLDOWN: 0.9, // seconds between drops
+    GRAVITY: 700,
+    DRAG: 0.35, // how quickly a falling bomb loses the ship's forward speed
+    RADIUS: 170, // blast radius
+  },
   // Ship guns (upgrades change these).
   GUNS: {
     COOLDOWN: 0.55, // seconds between shots

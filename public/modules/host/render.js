@@ -1024,6 +1024,55 @@ export function createRenderer({ ctx, state, canvas }) {
     }
   };
 
+  // Falling bombs and the bombardier's aiming ring on the ground.
+  const drawBombs = (time) => {
+    const bay = state.bombBay;
+    if (bay && bay.aim) {
+      const { x, y } = bay.aim;
+      const pulse = 1 + Math.sin(time * 8) * 0.08;
+      // Dotted drop line from the bay doors.
+      ctx.strokeStyle = 'rgba(230,57,70,.6)';
+      ctx.lineWidth = 6;
+      ctx.setLineDash([18, 22]);
+      ctx.beginPath();
+      ctx.moveTo(bay.from.x, bay.from.y);
+      ctx.quadraticCurveTo(bay.from.x, (bay.from.y + y) / 2, x, y - 40);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#e63946';
+      ctx.lineWidth = 14;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 170 * pulse, 55 * pulse, 0, 0, 7);
+      ctx.moveTo(x - 220, y);
+      ctx.lineTo(x + 220, y);
+      ctx.moveTo(x, y - 110);
+      ctx.lineTo(x, y + 70);
+      ctx.stroke();
+    }
+    for (const b of state.shipBombs || []) {
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(Math.atan2(b.vy, b.vx) - Math.PI / 2);
+      ink();
+      ctx.lineWidth = 4;
+      ctx.fillStyle = '#3a3a3a';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 14, 26, 0, 0, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#c0392b';
+      ctx.beginPath();
+      ctx.moveTo(-14, -20);
+      ctx.lineTo(14, -20);
+      ctx.lineTo(10, -40);
+      ctx.lineTo(-10, -40);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+
   // Background drawn in screen space, back to front, each layer scrolling at its own speed.
   const drawBackground = (width, height, view) => {
     const s = height / config.H;
@@ -1122,6 +1171,7 @@ export function createRenderer({ ctx, state, canvas }) {
     courseArt.drawBuildings(view, width, time / 1000);
     courseArt.drawMarkers(time / 1000);
     courseArt.drawTurrets(time / 1000);
+    drawBombs(time / 1000);
 
     ctx.save();
     ctx.translate(state.ship.shake > 0 ? (Math.random() - 0.5) * 16 : 0, -state.ship.alt + Math.sin(time / 1000) * 3);

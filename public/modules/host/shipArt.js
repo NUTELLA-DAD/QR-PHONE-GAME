@@ -538,6 +538,32 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
   };
 
+  // Bomb bay: a rack of bombs inside and two doors in the belly that swing open on a drop.
+  const drawBombBay = () => {
+    const B = L.bombBay;
+    const bay = state.bombBay || { bombs: 0 };
+    const deck = P.find((q) => q.id === 'lower').y;
+    // Bombs waiting in the rack.
+    for (let i = 0; i < bay.bombs; i++) {
+      const x = B.x - 50 + (i % 3) * 50;
+      const y = deck - 30 - Math.floor(i / 3) * 34;
+      filled('#3a3a3a', () => ctx.ellipse(x, y, 12, 17, 0, 0, 7));
+      filled('#c0392b', () => ctx.rect(x - 9, y - 22, 18, 6));
+    }
+    const open = Math.min(1, (bay.open || 0) * 3);
+    const a = open * 1.2;
+    ctx.save();
+    ctx.translate(B.x - 44, B.y);
+    ctx.rotate(a);
+    filled('#5a3b26', () => ctx.rect(0, -6, 44, 12));
+    ctx.restore();
+    ctx.save();
+    ctx.translate(B.x + 44, B.y);
+    ctx.rotate(-a);
+    filled('#5a3b26', () => ctx.rect(-44, -6, 44, 12));
+    ctx.restore();
+  };
+
   return (time) => {
     drawGasbag();
     drawNest();
@@ -550,6 +576,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     drawExtinguishers();
     drawProps(time);
     drawCoal();
+    drawBombBay();
     drawVents(time);
     drawConnectors();
     drawCatwalk();

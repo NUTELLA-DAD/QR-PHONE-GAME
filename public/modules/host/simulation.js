@@ -72,6 +72,7 @@ export function createSimulation() {
     gasHoles: [],
     ventOpen: SHIP_LAYOUT.vents.map(() => false), // which vent stacks are open
     wreck: null, // { t } while the ship is breaking apart
+    bombBay: { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null },
     upgrades: {}, // id -> times taken
     difficulty: config.START_DIFFICULTY,
     phase: 'lobby', // 'lobby' = moored at the mast while the crew joins; 'flying' after CAST OFF
@@ -108,7 +109,7 @@ export function createSimulation() {
   const modules = createModules();
   state.modules = modules.list;
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
-  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || !!state.GUNS[name];
+  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || !!state.GUNS[name];
 
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
@@ -138,6 +139,7 @@ export function createSimulation() {
     if (station) {
       const gun = state.GUNS[station.n];
       if (gun && tool === 'ammo' && gun.ammo < gun.max) return { type: 'load', obj: gun, station, label: 'Load ' + station.n };
+      if (station.n === 'Bomb Bay' && tool === 'ammo' && state.bombBay.bombs < config.BOMBS.MAX) return { type: 'loadBombs', station, label: 'Load bombs' };
       if (station.n === 'Ammo Hold' && tool !== 'ammo') return { type: 'ammo', station, label: 'Grab ammo' };
       if (station.n === 'Coal Bunker' && tool !== 'coal') return { type: 'coal', station, label: 'Grab coal' };
       if (station.n === 'Boiler' && tool === 'coal') {
@@ -222,6 +224,7 @@ export function createSimulation() {
     state.scorecard = null;
     state.kills = 0;
     state.ventOpen.fill(false);
+    Object.assign(state.bombBay, { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null });
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
     for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: 6, max: 8, empty: 0, auto: 0 });
     raiders.reset();
@@ -361,6 +364,7 @@ export function createSimulation() {
     { key: 'revives', title: 'Medic', icon: '💫', unit: 'revives' },
     { key: 'defused', title: 'Bomb Squad', icon: '💣', unit: 'bombs defused' },
     { key: 'vent', title: 'Steam Valve', icon: '💨', unit: 'vents worked' },
+    { key: 'demolished', title: 'Bombardier', icon: '🎯', unit: 'buildings flattened' },
   ];
   let pendingVote = null;
   const onMarker = (m) => {
@@ -466,6 +470,22 @@ export function createSimulation() {
             const bounds = altBounds(state);
             state.ship.alt = clamp(state.ship.alt - player.jy * climb * dt, bounds.lo, bounds.hi);
           }
+        } else if (player.lock === 'Bomb Bay') {
+          // Bombardier: FIRE drops a bomb through the belly doors.
+          const bay = state.bombBay;
+          if ((player.actQ || player.fire) && bay.cd <= 0 && !state.ship.down) {
+            if (!working || bay.bombs <= 0) {
+              bay.cd = 0.5;
+              bay.empty = 0.8;
+              bay.emptyText = working ? 'NO BOMBS!' : 'BROKEN!';
+            } else {
+              bay.bombs -= 1;
+              bay.cd = config.BOMBS.COOLDOWN;
+              bay.open = 0.6;
+              const [bx, by] = tilt(state, SHIP_LAYOUT.bombBay.x, SHIP_LAYOUT.bombBay.y);
+              course.dropBomb(bx, by - state.ship.alt + 20, player.id);
+            }
+          }
         } else if (gun) {
           gun.cd = Math.max(0, gun.cd - dt);
           // Turn toward the stick, but only within this gun's firing arc (a broken gun is jammed).
@@ -552,6 +572,11 @@ export function createSimulation() {
             stat(player, 'ammo');
             player.carry = null;
             puff(act.station.x, player.y - 60, '#ffd23f', 8);
+          } else if (type === 'loadBombs') {
+            state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + config.BOMBS.LOAD);
+            stat(player, 'ammo');
+            player.carry = null;
+            puff(act.station.x, player.y - 60, '#ffd23f', 8);
           } else if (type === 'ammo') player.carry = 'ammo';
           else if (type === 'coal') player.carry = 'coal';
           else if (type === 'stoke') {
@@ -573,14 +598,14 @@ export function createSimulation() {
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
-      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : null;
+      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : null;
       const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && taken(stationName);
       let label = 'Hey!';
       let hold = false;
       if (player.lock) {
         const working = modules.works(state, player.lock);
-        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
-        hold = kind === 'gun';
+        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
+        hold = kind === 'gun' || kind === 'bombbay';
       } else if (player.act) {
         label = player.act.label;
         hold = !!player.act.hold;
@@ -592,7 +617,7 @@ export function createSimulation() {
       if (stationName === 'Boiler' && !status) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - gas ${Math.round(state.ship.gas / 5) * 5}% (${feel}) - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
       if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag too full - she wants to rise!' : 'Gasbag low - she wants to sink!';
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
-      const ammoText = gun ? gun.ammo : null;
+      const ammoText = gun ? gun.ammo : stationName === 'Bomb Bay' ? state.bombBay.bombs : null;
       const attackLabel = player.carry === 'sword' ? 'Swing' : 'Shove';
       const hull = Math.round(state.ship.hull / 5) * 5;
       const key = [stationName, kind, !!player.lock, takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull].join('|');
@@ -650,6 +675,15 @@ export function createSimulation() {
     const maxReverse = -maxSpeed * config.SHIP.REVERSE;
     if (state.ship.speed < maxReverse) state.ship.speed += (maxReverse - state.ship.speed) * Math.min(1, dt * 2);
 
+    const bay = state.bombBay;
+    bay.cd = Math.max(0, bay.cd - dt);
+    bay.empty = Math.max(0, bay.empty - dt);
+    bay.open = Math.max(0, (bay.open || 0) - dt);
+    if (taken('Bomb Bay') && state.phase === 'flying') {
+      const [bx, by] = tilt(state, SHIP_LAYOUT.bombBay.x, SHIP_LAYOUT.bombBay.y);
+      bay.from = { x: bx, y: by - state.ship.alt + 20 };
+      bay.aim = course.predictBomb(bx, by - state.ship.alt + 20);
+    } else bay.aim = null;
     for (const gun of Object.values(state.GUNS)) {
       gun.empty = Math.max(0, gun.empty - dt);
       // Auto-Loader upgrade: a free shell every so often.

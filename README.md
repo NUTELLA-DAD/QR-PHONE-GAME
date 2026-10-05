@@ -32,6 +32,9 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
   throttle: up = ahead, the yellow STOP line = hover, below it = reverse. Nobody at the helm? On Easy/Normal the autopilot steers gently.
 - **Guns** (6 of them, each turns only so far): aim near a target and the aim snaps on. Guns need
   **ammo** carried from the Ammo Hold.
+- **Bomb Bay** (lower deck, Aft Gun Deck): press DROP to drop a bomb through the belly doors. A
+  red ring on the TV shows where it will land. Bombs knock out gun turrets and flatten castle
+  towers, walls and smokestacks (clearing your path). Reload with ammo crates (2 bombs each).
 - **Boiler**: carry **coal** from the Coal Bunker (lower deck). More coal = more steam pressure.
   Everything powered (engines, helm, lift) uses steam; tap Action at a **vent** stack to open or
   close it. At 100% pressure the boiler blows.

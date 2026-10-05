@@ -561,6 +561,72 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     }
   };
 
+  // ---------- Bombs from the bomb bay ----------
+  // A bomb keeps the ship's forward speed at first (so it falls straight down below the ship)
+  // and slowly loses it to drag, landing a little behind.
+  state.shipBombs = [];
+  const BOMB = config.BOMBS;
+  const stepBomb = (b, dt) => {
+    b.vx += (-scrollSpeed(state) - b.vx) * Math.min(1, dt * BOMB.DRAG);
+    b.vy += BOMB.GRAVITY * dt;
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+  };
+  const dropBomb = (x, y, owner) => state.shipBombs.push({ x, y, vx: 0, vy: 60, owner });
+  // Where a bomb dropped now would land (for the aiming ring).
+  const predictBomb = (x, y) => {
+    const b = { x, y, vx: 0, vy: 60 };
+    for (let i = 0; i < 300; i++) {
+      stepBomb(b, 1 / 30);
+      if (b.y >= groundAt(course, b.x)) return { x: b.x, y: groundAt(course, b.x) };
+    }
+    return null;
+  };
+  const blast = (b) => {
+    const R = BOMB.RADIUS;
+    puff(b.x, b.y, '#ff8c42', 26);
+    puff(b.x, b.y - 40, '#555', 14);
+    pop(state, b.x, b.y - 120, 'kill', '#ff5a1f', 1.3);
+    state.ship.shake = Math.max(state.ship.shake, 0.15);
+    const owner = state.players[b.owner];
+    for (const t of course.turrets) {
+      if (t.dead || t.x == null || Math.hypot(b.x - t.x, b.y - t.y) > R) continue;
+      t.dead = true;
+      state.kills += 1;
+      credit?.(b);
+      puff(t.x, t.y, '#ff5a1f', 22);
+    }
+    // Buildings: a hit knocks a chunk off; enough hits bring it down (and its gun with it).
+    for (const f of course.features) {
+      if (!f.blocks) continue;
+      for (const blk of [...f.blocks]) {
+        const x0 = blk.x0 - course.dist;
+        const x1 = blk.x1 - course.dist;
+        if (b.x < x0 - R * 0.6 || b.x > x1 + R * 0.6) continue;
+        blk.hp = (blk.hp ?? (blk.kind === 'chimney' || blk.kind === 'tower' ? 2 : 3)) - 1;
+        if (blk.hp > 0) continue;
+        f.blocks.splice(f.blocks.indexOf(blk), 1);
+        for (let k = 0; k < 6; k++) puff(x0 + ((x1 - x0) * k) / 5, groundAt(course, (x0 + x1) / 2) - k * 40, '#8a847c', 16);
+        pop(state, (x0 + x1) / 2, groundAt(course, (x0 + x1) / 2) - 160, 'bigHit', '#ffd23f', 1.4);
+        for (const t of course.turrets) if (!t.dead && t.cx >= blk.x0 - 20 && t.cx <= blk.x1 + 20) t.dead = true;
+        if (owner) {
+          owner.stats = owner.stats || {};
+          owner.stats.demolished = (owner.stats.demolished || 0) + 1;
+        }
+      }
+    }
+  };
+  const updateBombs = (dt) => {
+    for (const b of state.shipBombs) {
+      stepBomb(b, dt);
+      if (b.y >= groundAt(course, b.x)) {
+        b.done = true;
+        blast(b);
+      } else if (inRock(state, b.x, b.y)) b.done = true; // hit an overhang
+    }
+    state.shipBombs = state.shipBombs.filter((b) => !b.done && b.y < 8000);
+  };
+
   // Passing a marker: checkpoint, beacon (turn for home) or home (lap complete).
   const passMarkers = () => {
     const shipX = course.dist + 800;
@@ -618,6 +684,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     passMarkers();
     warnAhead(dt);
     collide(dt);
+    updateBombs(dt);
     updateTurrets(dt);
   };
 
@@ -635,6 +702,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
   // A brand-new game: fresh terrain from the home mast, lap 1.
   const restart = () => {
     state.rockets.length = 0;
+    state.shipBombs.length = 0;
     Object.assign(course, {
       dist: 0,
       features: [],
@@ -658,5 +726,5 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     course.markers[0].passed = true;
   };
 
-  return { update, reset, restart, helmHint };
+  return { update, reset, restart, helmHint, dropBomb, predictBomb };
 }
