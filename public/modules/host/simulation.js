@@ -147,6 +147,7 @@ export function createSimulation() {
     raiders.onHit(target, sword, player.face * (sword ? T.SWORD_KNOCKBACK : T.SHOVE_KNOCKBACK));
     if (!state.boarders.includes(target)) {
       stat(player, 'raiders');
+      phoneFx(player, '+1 Raider beaten!', [30, 40, 30]);
       pop(state, target.x, target.y - 130 - state.ship.alt, 'raider', '#ffd23f', 1);
     }
   };
@@ -165,7 +166,14 @@ export function createSimulation() {
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
   const impact = (x, y, power) => {
     state.ship.shake = Math.min(1, 0.35 * power);
-    if (power >= 1.5) pop(state, x, y - 40 - state.ship.alt, 'bigHit', '#ff7b00', Math.min(1.6, 0.6 + power * 0.3));
+    if (power >= 1.5) {
+      pop(state, x, y - 40 - state.ship.alt, 'bigHit', '#ff7b00', Math.min(1.6, 0.6 + power * 0.3));
+      // Every phone feels the big ones.
+      if (performance.now() - lastJolt > 1000) {
+        lastJolt = performance.now();
+        for (const p of Object.values(state.players)) phoneFx(p, null, [80]);
+      }
+    }
     shipPuff(x, y, '#ff7b00', Math.round(8 * power));
     modules.hitAt(x, y, shipPuff, power);
     if (onGasbag(x, y)) {
@@ -189,8 +197,17 @@ export function createSimulation() {
     player.stats = player.stats || {};
     player.stats[key] = (player.stats[key] || 0) + n;
   };
+  // A quick message and buzz on one player's phone (doesn't change their buttons).
+  const phoneFx = (player, toast, buzz) => {
+    if (player && !player.bot && socket) socket.emit('host:ui', { id: player.id, ui: { fx: { toast, buzz } } });
+  };
   // Kill credit goes to whoever fired the shell.
-  const credit = (shell) => stat(shell && state.players[shell.owner], 'kills');
+  const credit = (shell) => {
+    const p = shell && state.players[shell.owner];
+    stat(p, 'kills');
+    phoneFx(p, '+1 Shot down!', [30, 40, 30]);
+  };
+  let lastJolt = 0;
 
   const raiders = createRaiders({ state, modules, puff, impact });
   const threats = createThreats({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, getHelm, credit });
@@ -276,7 +293,10 @@ export function createSimulation() {
     for (const a of AWARDS) {
       const best = players.reduce((b, p) => ((p.stats?.[a.key] || 0) > (b?.stats?.[a.key] || 0) ? p : b), null);
       const value = best?.stats?.[a.key] || 0;
-      if (value > 0) rows.push({ ...a, name: best.name, color: best.color, value: Math.round(value) });
+      if (value > 0) {
+        rows.push({ ...a, name: best.name, color: best.color, value: Math.round(value) });
+        phoneFx(best, `🏆 You're the ${a.title}!`, [60, 60, 60, 60, 120]);
+      }
     }
     state.scorecard = { lap: m.lap - 1, rows, t: config.VOTE.SCORECARD_TIME };
     pendingVote = m;

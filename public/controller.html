@@ -57,6 +57,7 @@ body.lefty #lever{right:auto;left:min(42vh,180px)}
 #vote button b{font-size:19px}
 #vote button small{font-size:14px;line-height:1.2}
 #vote button.on{background:#ffd23f;transform:translateY(-3px);outline:5px solid #fff}
+#toast{display:none;position:fixed;left:50%;top:22%;transform:translateX(-50%);background:#ffd23f;color:#1b1410;border:5px solid #1b1410;border-radius:16px;padding:10px 18px;font-size:24px;font-weight:900;z-index:7;box-shadow:0 5px 0 #1b1410;pointer-events:none;white-space:nowrap}
 #rotate{display:none;position:fixed;inset:0;background:#1b1410;color:#f1e2b8;font-size:24px;font-weight:900;text-align:center;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9}
 #rotate .ic{font-size:70px}
 @media (orientation:portrait){body.play #rotate{display:flex}}
@@ -88,6 +89,7 @@ body.lefty #lever{right:auto;left:min(42vh,180px)}
   </div>
 </div>
 <div id="vote"><h2 id="vtitle">Pick an upgrade</h2><div class="cards" id="vcards"></div></div>
+<div id="toast"></div>
 <div id="rotate"><div class="ic">📱↻</div>Turn your phone sideways</div>
 <script src="/socket.io/socket.io.js"></script>
 <script type="module" src="/modules/controller/main.js"></script>

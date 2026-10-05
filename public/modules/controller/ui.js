@@ -84,7 +84,20 @@ export function createControllerUI({ network }) {
     [...cards.children].forEach((b, i) => b.classList.toggle('on', v.mine === i));
   };
 
+  // A short message that pops up over the controls, plus a buzz.
+  let toastTimer = null;
+  const showFx = (fx) => {
+    if (fx.buzz) navigator.vibrate?.(fx.buzz);
+    if (!fx.toast) return;
+    const t = $('toast');
+    t.textContent = fx.toast;
+    t.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (t.style.display = 'none'), 1800);
+  };
+
   const updateUI = (next) => {
+    if (next.fx) return showFx(next.fx);
     showVote(next.vote);
     if (next.vote) return;
     uiState = next;
