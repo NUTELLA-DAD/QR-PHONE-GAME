@@ -155,7 +155,7 @@ export const config = {
   DIFFICULTY: {
     easy: { label: 'Easy', damage: 0.4, pace: 0.75, autopilot: true },
     normal: { label: 'Normal', damage: 0.6, pace: 0.9, autopilot: true },
-    hard: { label: 'Hard', damage: 1, pace: 1.1, autopilot: false },
+    hard: { label: 'Hard', damage: 1.4, pace: 1.3, autopilot: false },
   },
   START_DIFFICULTY: 'normal',
   AUTOPILOT_SPEED: 0.65, // an unmanned helm steers itself at this share of the climb speed (Easy/Normal)
