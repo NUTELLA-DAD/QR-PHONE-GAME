@@ -50,8 +50,16 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     return true;
   };
 
+  const has = (id) => (state.upgrades || {})[id] || 0;
+
   const drawGasbag = () => {
     const G = L.gasbag;
+    // Better Rudders: bigger fins.
+    const fin = 1 + 0.25 * has('rudders');
+    ctx.save();
+    ctx.translate(40, 245);
+    ctx.scale(fin, fin);
+    ctx.translate(-40, -245);
     // Tail fins (behind the envelope, at the stern = left).
     if (!sprites.box(ctx, 'ship/fin-top', -95, 70, 135, 130)) {
       filled('#a0522d', () => {
@@ -69,8 +77,11 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
         ctx.closePath();
       });
     }
+    ctx.restore();
     if (!sprites.box(ctx, 'ship/gasbag', G.cx - G.rx, G.cy - G.ry, G.rx * 2, G.ry * 2)) {
-      filled('#d9c18f', () => ctx.ellipse(G.cx, G.cy, G.rx, G.ry, 0, 0, 7));
+      // Rubberised Gasbag: darker rubber with patches.
+      filled(has('rubber-gasbag') ? '#b8a77a' : '#d9c18f', () => ctx.ellipse(G.cx, G.cy, G.rx, G.ry, 0, 0, 7));
+      if (has('rubber-gasbag')) for (const [px, py] of [[300, 200], [620, 320], [1050, 170], [1350, 300]]) filled('#8f8159', () => ctx.roundRect(px, py, 60, 34, 8));
       ctx.lineWidth = 3;
       for (let i = -5; i <= 5; i++) {
         ctx.beginPath();
@@ -98,6 +109,11 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       ctx.lineTo(850, -48);
       ctx.lineTo(800, -36);
       ctx.fill();
+    }
+    if (has('periscope')) {
+      // Periscope sticking up from the crow's nest.
+      line([[720, 8], [720, -70], [748, -70]], 9, '#4a4a4a');
+      filled('#9fd3e6', () => ctx.arc(752, -70, 7, 0, 7));
     }
     if (sprites.box(ctx, 'ship/nest', 690, 6, 220, 80)) return;
     filled(WOOD, () => ctx.roundRect(690, 52, 220, 34, 8));
@@ -308,7 +324,9 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       ctx.fillRect(boiler.x - 50, by - 48, 50, 30);
       ctx.restore();
     } else {
-      filled('#3d3d3d', () => ctx.roundRect(boiler.x - 70, by - 112, 90, 112, 16));
+      // Big Firebox: a wider boiler.
+      const wide = 18 * has('firebox');
+      filled('#3d3d3d', () => ctx.roundRect(boiler.x - 70 - wide, by - 112, 90 + wide, 112, 16));
       ctx.fillStyle = fuel > 0 ? `rgba(255,${120 + glow * 80},40,${0.3 + 0.7 * fuel})` : '#2b2b2b';
       ctx.fillRect(boiler.x - 50, by - 48, 50, 30);
     }
@@ -485,10 +503,43 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
   };
 
+  // Upgrade fittings: armour plates, sprinklers, the safety-valve whistle.
+  const drawUpgradeFittings = () => {
+    const armour = has('armour');
+    for (let k = 0; k < armour; k++) {
+      // Riveted steel plates along the hull's lower edge.
+      for (let x = 270; x < 1330; x += 90) {
+        filled('#7d868c', () => ctx.rect(x, 770 - k * 22, 80, 20));
+        ctx.fillStyle = INK;
+        ctx.beginPath();
+        ctx.arc(x + 8, 780 - k * 22, 2.5, 0, 7);
+        ctx.arc(x + 72, 780 - k * 22, 2.5, 0, 7);
+        ctx.fill();
+      }
+    }
+    if (has('sprinklers')) {
+      for (const id of ['main', 'lower']) {
+        const p = P.find((q) => q.id === id);
+        const top = p.y - (id === 'lower' ? 138 : 146);
+        for (let x = p.x0 + 120; x < p.x1 - 60; x += 220) {
+          line([[x, top], [x, top + 12]], 4, '#9aa1a6');
+          filled('#c0392b', () => ctx.arc(x, top + 15, 5, 0, 7));
+        }
+      }
+    }
+    if (has('safety-valve')) {
+      const b = L.stations.find((s) => s.n === 'Boiler');
+      const y = P[b.d].y - 112;
+      line([[b.x - 30, y], [b.x - 30, y - 22]], 6, '#c9a54a');
+      filled('#c9a54a', () => ctx.roundRect(b.x - 38, y - 34, 16, 14, 4));
+    }
+  };
+
   return (time) => {
     drawGasbag();
     drawNest();
     drawGondola();
+    drawUpgradeFittings();
     drawOutriggers(time);
     drawPod();
     drawPipes();

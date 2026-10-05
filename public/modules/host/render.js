@@ -50,15 +50,22 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.fill();
       }
       if (!sprites.pivot(ctx, 'ship/gun-barrel', gun.bx, gun.by, 0.12, 0.5, gun.aim)) {
+        // Upgrades show: Twin Barrels adds barrels, Big Shells makes them fatter.
+        const up = state.upgrades || {};
+        const barrels = 1 + Math.min(2, up['twin-barrels'] || 0);
+        const fat = 9 + 3 * (up['big-shells'] || 0);
         ctx.save();
         ctx.translate(gun.bx, gun.by);
         ctx.rotate(gun.aim);
         ink();
-        ctx.fillStyle = '#4a4a4a';
-        ctx.fillRect(0, -9, 62, 18);
-        ctx.strokeRect(0, -9, 62, 18);
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(56, -12, 10, 24);
+        for (let b = 0; b < barrels; b++) {
+          const off = (b - (barrels - 1) / 2) * (fat * 1.7);
+          ctx.fillStyle = '#4a4a4a';
+          ctx.fillRect(0, off - fat, 62, fat * 2);
+          ctx.strokeRect(0, off - fat, 62, fat * 2);
+          ctx.fillStyle = '#2a2a2a';
+          ctx.fillRect(56, off - fat - 3, 10, fat * 2 + 6);
+        }
         ctx.restore();
       }
       if (!sprites.box(ctx, 'ship/gun-mount', gun.bx - 16, gun.by - 16, 32, 32)) {
@@ -68,6 +75,25 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.fill();
         ink();
         ctx.stroke();
+      }
+      if ((state.upgrades || {})['auto-loader']) {
+        // Auto-Loader: a little spinning gear on the mount.
+        ctx.save();
+        ctx.translate(gun.bx - 18, gun.by + 18);
+        ctx.rotate(performance.now() / 300);
+        ctx.fillStyle = '#c9a54a';
+        ink();
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let k = 0; k < 16; k++) {
+          const r = k % 2 ? 7 : 10;
+          const a = (k * Math.PI) / 8;
+          ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
       }
       for (let i = 0; i < gun.max; i++) {
         ctx.fillStyle = i < gun.ammo ? '#ffd23f' : 'rgba(27,20,16,.3)';
@@ -257,7 +283,7 @@ export function createRenderer({ ctx, state, canvas }) {
     for (const shell of state.shells) {
       ctx.fillStyle = '#ffd23f';
       ctx.beginPath();
-      ctx.arc(shell.x, shell.y, 7, 0, 7);
+      ctx.arc(shell.x, shell.y, 7 + 3 * ((state.upgrades || {})['big-shells'] || 0), 0, 7);
       ctx.fill();
       ctx.stroke();
     }
