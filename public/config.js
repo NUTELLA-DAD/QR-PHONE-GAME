@@ -27,6 +27,10 @@ export const config = {
     HULL_DAMAGE: 1, // multiplier on hull damage taken (armour upgrades lower it)
     HIT_DAMAGE: 3, // hull lost per enemy bullet hit (bigger blasts scale this up)
     HOLE_CHANCE: 0.6, // chance an enemy bullet hit punches a hole in the deck
+    TILT_MAX: 0.06, // most the nose tips up/down while climbing or diving (radians, about 3.5 degrees)
+    TILT_PER_SPEED: 0.0004, // tilt per pixel/second of climb
+    TILT_SMOOTH: 3, // how quickly the tilt follows (higher = snappier)
+    TILT_PIVOT: [800, 520], // the point the ship tips around (ship coordinates)
   },
   // Ship guns (upgrades change these).
   GUNS: {

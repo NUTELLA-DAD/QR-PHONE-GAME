@@ -5,7 +5,7 @@ import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
 import { createModules } from './modules.js';
 import { createThreats } from './threats.js';
 import { createRaiders } from './raiders.js';
-import { createCourse, inRock, altWindow } from './course.js';
+import { createCourse, inRock, altWindow, tilt } from './course.js';
 import { createSquadrons } from './squadrons.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
@@ -422,16 +422,17 @@ export function createSimulation() {
             } else {
               gun.ammo -= 1;
               gun.cd = config.GUNS.COOLDOWN;
-              const angle = gun.aim;
+              const angle = gun.aim + (state.ship.pitch || 0);
+              const [gx, gy] = tilt(state, gun.bx, gun.by);
               state.shells.push({
-                x: gun.bx + Math.cos(angle) * 60,
-                y: gun.by - state.ship.alt + Math.sin(angle) * 60,
+                x: gx + Math.cos(angle) * 60,
+                y: gy - state.ship.alt + Math.sin(angle) * 60,
                 vx: Math.cos(angle) * 950,
                 vy: Math.sin(angle) * 950,
                 life: 1.6,
                 owner: player.id,
               });
-              puff(gun.bx + Math.cos(angle) * 64, gun.by - state.ship.alt + Math.sin(angle) * 64, '#ffe9a8', 4);
+              puff(gx + Math.cos(angle) * 64, gy - state.ship.alt + Math.sin(angle) * 64, '#ffe9a8', 4);
             }
           }
         }
@@ -629,6 +630,12 @@ export function createSimulation() {
       if (state.ship.alt <= -config.SHIP.ALT_RANGE + 1 && state.ship.gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
     }
     state.ship.shake = Math.max(0, state.ship.shake - dt);
+    // Nose up while climbing, nose down while diving.
+    const SH = config.SHIP;
+    const climbRate = dt > 0 && state.lastAlt != null ? (state.ship.alt - state.lastAlt) / dt : 0;
+    state.lastAlt = state.ship.alt;
+    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED, -SH.TILT_MAX, SH.TILT_MAX);
+    state.ship.pitch = (state.ship.pitch || 0) + (wantPitch - (state.ship.pitch || 0)) * Math.min(1, dt * SH.TILT_SMOOTH);
 
     if (state.ship.down > 0) {
       state.ship.down -= dt;

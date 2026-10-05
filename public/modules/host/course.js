@@ -26,6 +26,16 @@ const BOTTOM_Y = 975; // lowest point of the ship (ventral gun)
 const TOP_Y = -60; // highest point (flag on the crow's nest)
 const MARGIN = 25;
 
+// A point on the ship (ship coordinates), tipped by the ship's current pitch.
+export function tilt(state, x, y) {
+  const a = state.ship.pitch || 0;
+  if (!a) return [x, y];
+  const [px, py] = config.SHIP.TILT_PIVOT;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return [px + (x - px) * c - (y - py) * s, py + (x - px) * s + (y - py) * c];
+}
+
 // Smooth plateau 0..1..0 across a feature (t = 0..1).
 const plateau = (t) => {
   if (t <= 0 || t >= 1) return 0;
@@ -72,7 +82,8 @@ export function altWindow(state, ahead = 2) {
   let min = -Infinity;
   let max = Infinity;
   for (let t = 0; t <= ahead; t += 0.25) {
-    for (const [sx, sy] of SHIP_SAMPLES) {
+    for (const [sx0, sy0] of SHIP_SAMPLES) {
+      const [sx, sy] = tilt(state, sx0, sy0);
       const x = sx + v * t;
       min = Math.max(min, sy - groundAt(course, x) + MARGIN);
       max = Math.min(max, sy - ceilAt(course, x) - MARGIN);
@@ -231,7 +242,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
   const collide = (dt) => {
     let push = 0; // + = needs to go up
     let worst = null;
-    for (const [sx, sy] of SHIP_SAMPLES) {
+    for (const [sx0, sy0] of SHIP_SAMPLES) {
+      const [sx, sy] = tilt(state, sx0, sy0);
       const wy = sy - state.ship.alt;
       const down = wy - groundAt(course, sx);
       const up = ceilAt(course, sx) - wy;

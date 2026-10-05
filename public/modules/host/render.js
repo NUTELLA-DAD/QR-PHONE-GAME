@@ -1128,6 +1128,12 @@ export function createRenderer({ ctx, state, canvas }) {
 
     ctx.save();
     ctx.translate(state.ship.shake > 0 ? (Math.random() - 0.5) * 16 : 0, -state.ship.alt + Math.sin(time / 1000) * 3);
+    if (state.ship.pitch) {
+      const [px, py] = config.SHIP.TILT_PIVOT;
+      ctx.translate(px, py);
+      ctx.rotate(state.ship.pitch);
+      ctx.translate(-px, -py);
+    }
     drawShip(time / 1000);
     drawGuns();
     drawHazards(time / 1000);
