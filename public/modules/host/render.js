@@ -524,7 +524,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillStyle = '#f1e2b8';
     ctx.font = '900 18px Georgia';
     ctx.textAlign = 'center';
-    ctx.fillText('THE DREAD ZEPPELIN', 800, 847);
+    ctx.fillText(z.name || 'THE DREAD ZEPPELIN', 800, 847);
   };
 
   // Upgrades the ship has, as a row of icons under the status panel.

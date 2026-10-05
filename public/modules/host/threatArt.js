@@ -348,7 +348,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ink();
       ctx.lineWidth = 6;
       // Fins, then a dark banded envelope.
-      ctx.fillStyle = '#5c1e1e';
+      ctx.fillStyle = z.fin || '#5c1e1e';
       for (const s of [-1, 1]) {
         ctx.beginPath();
         ctx.moveTo(-260, s * 40);
@@ -358,7 +358,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
         ctx.fill();
         ctx.stroke();
       }
-      ctx.fillStyle = z.hit > 0 ? '#ffffff' : '#3a3036';
+      ctx.fillStyle = z.hit > 0 ? '#ffffff' : z.body || '#3a3036';
       ctx.beginPath();
       ctx.ellipse(0, 0, 330, 115, 0, 0, 7);
       ctx.fill();

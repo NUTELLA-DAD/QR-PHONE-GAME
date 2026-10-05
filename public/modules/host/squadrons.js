@@ -73,9 +73,18 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     warn('BOMBER OVERHEAD SOON - DORSAL GUN!');
   };
 
+  // A different boss each lap: Dread Zeppelin, Bat Carrier, then the Iron Dreadnought.
+  const BOSSES = {
+    dread: { name: 'THE DREAD ZEPPELIN', body: '#3a3036', fin: '#5c1e1e' },
+    carrier: { name: 'THE BAT CARRIER', body: '#3b2c4c', fin: '#6a3a8c' },
+    iron: { name: 'THE IRON DREADNOUGHT', body: '#4a5056', fin: '#2a2e33' },
+  };
   const spawnBoss = () => {
+    const kind = lap() === 1 ? 'dread' : lap() === 2 ? 'carrier' : 'iron';
     const hp = W.BOSS_HP + (lap() - 1) * W.BOSS_HP_PER_LAP;
     state.boss = {
+      kind,
+      ...BOSSES[kind],
       x: B.x1 + 3000,
       y: 250 - state.ship.alt,
       hp,
@@ -88,7 +97,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       leaving: false,
     };
     bossLap = lap();
-    warn('THE DREAD ZEPPELIN APPROACHES!', 4);
+    warn(BOSSES[kind].name + ' APPROACHES!', 4);
   };
 
   const spawnStrafers = () => {
@@ -227,12 +236,15 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       const d = Math.hypot(tx - gx, ty - gy) || 1;
       const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
       const miss = helm && Math.abs(helm.jy) > 0.3 && Math.random() < 0.35;
-      state.bullets.push({ x: gx, y: gy, vx: ((tx - gx) / d) * 470, vy: ((ty - gy) / d) * 470 + (miss ? -200 : 0), miss, life: 4 });
+      if (z.kind === 'iron' && Math.random() < 0.5) {
+        // The Iron Dreadnought's turrets also fire homing rockets.
+        state.rockets.push({ x: gx, y: gy, ang: Math.atan2(ty - gy, tx - gx), life: config.COURSE.ROCKET_LIFE, hp: 1 });
+      } else state.bullets.push({ x: gx, y: gy, vx: ((tx - gx) / d) * 470, vy: ((ty - gy) / d) * 470 + (miss ? -200 : 0), miss, life: 4 });
       puff(gx, gy, '#555', 4);
     }
-    // From lap 2: bat swarms from the hangar.
-    if (lap() > 1 && (z.batCd -= dt) <= 0) {
-      z.batCd = W.BOSS_BATS_EVERY;
+    // The Bat Carrier (and the Dreadnought, less often) launch bat swarms from the hangar.
+    if (z.kind !== 'dread' && (z.batCd -= dt) <= 0) {
+      z.batCd = W.BOSS_BATS_EVERY * (z.kind === 'carrier' ? 0.6 : 1.4);
       spawnBats({ x: z.x, y: z.y + 120 }, 3 + lap());
       warn('BATS FROM THE ZEPPELIN!');
     }
@@ -333,7 +345,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
           // Spoils of war: patch the ship up.
           state.ship.hull = Math.min(100, state.ship.hull + W.BOSS_REWARD_HULL);
           state.ship.gas = Math.min(100, state.ship.gas + 30);
-          warn('DREAD ZEPPELIN DOWN! SALVAGE PATCHES THE HULL!', 4);
+          warn(z.name.replace('THE ', '') + ' DOWN! SALVAGE PATCHES THE HULL!', 4);
         }
       }
     }
