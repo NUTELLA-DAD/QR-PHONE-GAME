@@ -115,10 +115,11 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       line([[720, 8], [720, -70], [748, -70]], 9, '#4a4a4a');
       filled('#9fd3e6', () => ctx.arc(752, -70, 7, 0, 7));
     }
-    if (sprites.box(ctx, 'ship/nest', 690, 6, 220, 80)) return;
-    filled(WOOD, () => ctx.roundRect(690, 52, 220, 34, 8));
-    line([[690, 8], [910, 8]], 5);
-    for (let x = 700; x <= 900; x += 50) line([[x, 8], [x, 52]], 4);
+    const n = P.find((q) => q.id === 'nest');
+    if (sprites.box(ctx, 'ship/nest', n.x0, 6, n.x1 - n.x0, 80)) return;
+    filled(WOOD, () => ctx.roundRect(n.x0, 52, n.x1 - n.x0, 34, 8));
+    line([[n.x0, 8], [n.x1, 8]], 5);
+    for (let x = n.x0 + 10; x <= n.x1 - 9; x += (n.x1 - n.x0 - 20) / 7) line([[x, 8], [x, 52]], 4);
   };
 
   const drawCatwalk = () => {

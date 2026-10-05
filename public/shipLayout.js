@@ -6,7 +6,7 @@
 // the game code uses.
 
 const platforms = [
-  { id: 'nest', name: "Crow's Nest", y: 52, x0: 690, x1: 910, outside: true },
+  { id: 'nest', name: "Crow's Nest", y: 52, x0: 610, x1: 990, outside: true },
   { id: 'catwalk', name: 'Top Catwalk', y: 470, x0: 240, x1: 1360, outside: true },
   { id: 'main', name: 'Main Deck', y: 640, x0: 140, x1: 1470 },
   { id: 'lower', name: 'Lower Deck', y: 790, x0: 20, x1: 1580 },
@@ -47,8 +47,9 @@ export const SHIP_LAYOUT = {
 
   // Stations players can use. n = name, p = platform, x = position.
   stations: withD([
-    { n: 'Lookout', p: 'nest', x: 740 },
-    { n: 'Dorsal Gun', p: 'nest', x: 870 },
+    { n: 'Aft Dorsal Gun', p: 'nest', x: 660 },
+    { n: 'Lookout', p: 'nest', x: 770 },
+    { n: 'Dorsal Gun', p: 'nest', x: 940 },
     { n: 'Tail Gun', p: 'main', x: 180 },
     { n: 'Boiler', p: 'main', x: 400 },
     { n: 'Navigator', p: 'main', x: 1215 },
@@ -64,7 +65,8 @@ export const SHIP_LAYOUT = {
   // Guns: where the barrel pivots (bx, by), the middle of its firing arc (aim, radians;
   // 0 = right, PI/2 = down) and how far it may turn either side of that (arc).
   gunMounts: {
-    'Dorsal Gun': { bx: 870, by: 18, aim: -Math.PI / 2, arc: 1.4 },
+    'Dorsal Gun': { bx: 950, by: 18, aim: -1.2, arc: 1.2 },
+    'Aft Dorsal Gun': { bx: 650, by: 18, aim: -1.95, arc: 1.2 },
     'Tail Gun': { bx: 112, by: 585, aim: Math.PI, arc: 1.0 },
     'Nose Gun': { bx: 1498, by: 585, aim: 0, arc: 1.0 },
     'Aft Sponson': { bx: 330, by: 812, aim: 2.15, arc: 0.7 },
