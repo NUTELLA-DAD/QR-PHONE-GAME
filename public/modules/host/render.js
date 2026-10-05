@@ -263,6 +263,43 @@ export function createRenderer({ ctx, state, canvas }) {
     }
   };
 
+  // Lap progress: home mast, checkpoints, the beacon halfway, and the ship.
+  const drawRouteBar = () => {
+    const c = state.course;
+    const x0 = 560;
+    const w = 480;
+    const y = 52;
+    ctx.fillStyle = 'rgba(241,226,184,.92)';
+    ink();
+    ctx.lineWidth = 4;
+    rrect(x0 - 26, y - 22, w + 52, 44, 12);
+    ctx.fill();
+    ctx.stroke();
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x0 + w, y);
+    ctx.stroke();
+    const n = config.COURSE.SECTIONS;
+    for (let k = 0; k <= n; k++) {
+      const x = x0 + (w * k) / n;
+      const home = k === 0 || k === n;
+      const beacon = k === n / 2;
+      ctx.fillStyle = home ? '#3a86ff' : beacon ? '#ffd23f' : '#e63946';
+      ctx.beginPath();
+      ctx.arc(x, y, home || beacon ? 10 : 6, 0, 7);
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+    const px = x0 + w * (c.progress || 0);
+    ctx.fillStyle = '#d9c18f';
+    ctx.beginPath();
+    ctx.ellipse(px, y - 2, 16, 8, 0, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+  };
+
   // Screen overlay (hull/steam panel, warnings). Drawn on a fixed 1600x900 stage, not zoomed by the camera.
   const drawHud = () => {
     ctx.fillStyle = '#f1e2b8';
@@ -305,7 +342,10 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillText(`Gas${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}${state.sinking ? ' - SINKING!' : ''}`, 46, 150);
     ctx.textAlign = 'right';
     ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);
-    if (state.course && config.COURSE.ENABLED) ctx.fillText('Course ' + (state.course.dist / 1000).toFixed(1) + ' km', 454, 150);
+    if (state.course && config.COURSE.ENABLED) {
+      ctx.fillText('Lap ' + state.course.lap + (state.course.leg === 'home' ? ' - heading home' : ' - outbound'), 454, 150);
+      drawRouteBar();
+    }
 
     if (state.ev.warn > 0) {
       ctx.font = '900 44px Georgia';
@@ -653,10 +693,17 @@ export function createRenderer({ ctx, state, canvas }) {
   // Background drawn in screen space, back to front, each layer scrolling at its own speed.
   const drawBackground = (width, height, view) => {
     const s = height / config.H;
+    // Day sky, blending to sunset on the return leg of the course.
+    const dusk = (state.course && state.course.dusk) || 0;
+    const mix = (a, b) => {
+      const pa = a.match(/ww/g).map((h) => parseInt(h, 16));
+      const pb = b.match(/ww/g).map((h) => parseInt(h, 16));
+      return 'rgb(' + pa.map((v, i) => Math.round(v + (pb[i] - v) * dusk)).join(',') + ')';
+    };
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, '#5aa6c8');
-    gradient.addColorStop(0.75, '#f2d9a0');
-    gradient.addColorStop(1, '#e8c48a');
+    gradient.addColorStop(0, mix('5aa6c8', '6a5a9c'));
+    gradient.addColorStop(0.75, mix('f2d9a0', 'f4a46a'));
+    gradient.addColorStop(1, mix('e8c48a', 'e8865a'));
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
@@ -694,6 +741,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.setTransform(view.zoom, 0, 0, view.zoom, width / 2 - view.cx * view.zoom, height / 2 - view.cy * view.zoom);
     drawNearClouds(width, height, view);
     courseArt.drawTerrain(view, width, height);
+    courseArt.drawMarkers(time / 1000);
     courseArt.drawTurrets(time / 1000);
 
     ctx.save();

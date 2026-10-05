@@ -1,6 +1,10 @@
 // The course: terrain scrolling past the ship (mountains to climb over, rock overhangs to dive
-// under, underpasses to thread) plus ground turrets firing flak. Generated endlessly ahead of
-// the ship and harder the further you go.
+// under, underpasses to thread) plus ground turrets firing flak.
+//
+// It's a looping route. Each lap starts at the home mooring mast, passes checkpoint flags, turns at
+// a beacon halfway (the sky goes to sunset for the trip home) and ends back at the mast, then the
+// next, harder lap begins. If the ship goes down, the world pauses and the ship restarts just
+// before the last marker it passed, with the same terrain ahead.
 //
 // Course position cx maps to world x as  wx = cx - dist  (dist = how far the ship has flown).
 // World y grows downward; the ship is drawn shifted up by its altitude (alt).
@@ -118,11 +122,39 @@ function rng(seed) {
 
 export function createCourse({ state, impact, puff }) {
   const A = config.SHIP.ALT_RANGE - 30; // the most altitude we'll ever ask the helm for
-  const course = { dist: 0, features: [], turrets: [], nextX: K.FIRST_FEATURE, rand: rng(Date.now()), scrapeCd: 0, warned: null };
+  const course = {
+    dist: 0,
+    features: [],
+    turrets: [],
+    markers: [], // home / checkpoint / beacon positions along the route
+    nextX: K.FIRST_FEATURE,
+    rand: rng(Date.now()),
+    scrapeCd: 0,
+    warned: null,
+    lap: 1,
+    leg: 'out', // 'out' or 'home'
+    lastMarker: { cx: 0, kind: 'home', lap: 1 },
+    dusk: 0, // 0 = day, 1 = sunset (return leg)
+  };
   state.course = course;
 
   const r = (a, b) => a + course.rand() * (b - a);
+  // Harder along each lap and with every lap.
   const difficulty = () => Math.min(1, course.nextX / K.HARDEST_AT);
+
+  // Route markers for lap n (1-based): home at the start, checkpoints, the beacon halfway.
+  const L = K.LOOP_LENGTH;
+  const addLapMarkers = (n) => {
+    const start = (n - 1) * L;
+    for (let k = 0; k < K.SECTIONS; k++) {
+      const kind = k === 0 ? 'home' : k === K.SECTIONS / 2 ? 'beacon' : 'checkpoint';
+      course.markers.push({ cx: start + (k * L) / K.SECTIONS, kind, lap: n, passed: false });
+    }
+  };
+  addLapMarkers(1);
+  course.markers[0].passed = true;
+  // Keep terrain away from markers so each is a safe place to restart.
+  const nearMarker = (x0, x1) => course.markers.find((m) => x1 > m.cx - K.MARKER_CLEAR && x0 < m.cx + K.MARKER_CLEAR);
 
   // Altitude the ship must be above to clear ground g / below to clear ceiling c.
   const groundFor = (needAlt) => BOTTOM_Y + MARGIN - needAlt; // need alt > needAlt
@@ -136,9 +168,16 @@ export function createCourse({ state, impact, puff }) {
   };
 
   const generate = () => {
+    while (course.markers[course.markers.length - 1].cx < course.dist + 12000) addLapMarkers(course.markers[course.markers.length - 1].lap + 1);
     while (course.nextX < course.dist + 9000) {
       const d = difficulty();
       const x0 = course.nextX;
+      const widthGuess = 3200;
+      const blocked = nearMarker(x0, x0 + widthGuess);
+      if (blocked) {
+        course.nextX = blocked.cx + K.MARKER_CLEAR;
+        continue;
+      }
       const roll = course.rand();
       let f;
       if (roll < 0.3) {
@@ -157,14 +196,17 @@ export function createCourse({ state, impact, puff }) {
         f = { type: 'hills', ground: r(1060, 1180), rough: true, width: r(1400, 2400) };
       }
       f.x0 = x0;
-      f.x1 = x0 + f.width;
+      f.x1 = x0 + Math.min(f.width, widthGuess);
       f.seed = course.rand() * 100;
       course.features.push(f);
       if (f.ground != null) addTurrets(f, course.rand() < 0.4 + 0.4 * d ? (course.rand() < d ? 2 : 1) : 0);
       course.nextX = f.x1 + r(K.GAP_MIN, K.GAP_MAX) * (1 - 0.4 * d);
     }
-    course.features = course.features.filter((f) => f.x1 > course.dist - 4000);
-    course.turrets = course.turrets.filter((t) => t.cx > course.dist - 4000);
+    // Forget what's well behind the last marker (we may need to rewind to it).
+    const keep = Math.min(course.dist, course.lastMarker.cx) - 4000;
+    course.features = course.features.filter((f) => f.x1 > keep);
+    course.turrets = course.turrets.filter((t) => t.cx > keep);
+    course.markers = course.markers.filter((m) => m.cx > keep - L);
   };
 
   const warnAhead = (dt) => {
@@ -248,6 +290,30 @@ export function createCourse({ state, impact, puff }) {
     }
   };
 
+  // Passing a marker: checkpoint, beacon (turn for home) or home (lap complete).
+  const passMarkers = () => {
+    const shipX = course.dist + 800;
+    for (const m of course.markers) {
+      if (m.passed || m.cx > shipX) continue;
+      m.passed = true;
+      course.lastMarker = m;
+      state.ev.warn = 3.5;
+      if (m.kind === 'home') {
+        state.ev.warnText = `HOME! LAP ${m.lap - 1} COMPLETE - LAP ${m.lap} BEGINS`;
+        course.lap = m.lap;
+        course.leg = 'out';
+      } else if (m.kind === 'beacon') {
+        state.ev.warnText = 'TURNING BEACON - HEADING HOME!';
+        course.leg = 'home';
+      } else state.ev.warnText = 'CHECKPOINT!';
+    }
+    // Sunset on the return leg (fades in after the beacon, out before home).
+    const p = (shipX % L) / L;
+    course.progress = p;
+    const target = p > 0.5 && p < 0.97 ? Math.min(1, (p - 0.5) / 0.08) * Math.min(1, (0.97 - p) / 0.06) : 0;
+    course.dusk += (target - course.dusk) * 0.02;
+  };
+
   // Hint for the helmsman's phone.
   const helmHint = () => {
     const w = altWindow(state, 2.5);
@@ -260,18 +326,23 @@ export function createCourse({ state, impact, puff }) {
 
   const update = (dt) => {
     if (!K.ENABLED) return;
+    if (state.ship.down > 0) return; // the world waits while the crew patches up
     course.dist += scrollSpeed(state) * dt;
     generate();
+    passMarkers();
     warnAhead(dt);
     collide(dt);
     updateTurrets(dt);
   };
 
-  // After a crash: clear anything near the ship so the restart is safe.
+  // After going down: rewind to just before the last marker passed (open sky, same terrain ahead).
   const reset = () => {
-    course.features = course.features.filter((f) => f.x0 > course.dist + 3500);
-    course.turrets = course.turrets.filter((t) => t.cx > course.dist + 3500);
-    course.nextX = Math.max(course.nextX, course.dist + 3500);
+    const m = course.lastMarker;
+    course.dist = m.cx - 800 - K.REWIND_BEFORE;
+    course.warned = null;
+    for (const t of course.turrets) t.cd = Math.max(t.cd, 2);
+    state.ev.warn = 3;
+    state.ev.warnText = m.kind === 'home' ? 'BACK TO THE MOORING MAST - TRY AGAIN!' : 'BACK TO THE LAST ' + (m.kind === 'beacon' ? 'BEACON' : 'CHECKPOINT') + '!';
   };
 
   return { update, reset, helmHint };

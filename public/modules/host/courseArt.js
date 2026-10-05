@@ -129,5 +129,116 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     }
   };
 
-  return { drawTerrain, drawTurrets };
+  // Route markers: home mooring mast, checkpoint flags, and the turning beacon (a lighthouse).
+  const drawMarkers = (time) => {
+    const course = state.course;
+    if (!course || !course.markers) return;
+    for (const m of course.markers) {
+      const x = m.cx - course.dist;
+      if (x < -1500 || x > 4500) continue;
+      const g = groundAt(course, x);
+      ink();
+      if (m.kind === 'home') {
+        // Lattice mooring mast with a platform near the top.
+        const top = g - 900;
+        ctx.fillStyle = '#7a5a3a';
+        ctx.beginPath();
+        ctx.moveTo(x - 70, g);
+        ctx.lineTo(x - 22, top);
+        ctx.lineTo(x + 22, top);
+        ctx.lineTo(x + 70, g);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.lineWidth = 3;
+        for (let y = g; y > top + 40; y -= 70) {
+          const k = (g - y) / 900;
+          const half = 70 - 48 * k;
+          ctx.beginPath();
+          ctx.moveTo(x - half, y);
+          ctx.lineTo(x + half - 6, y - 70);
+          ctx.moveTo(x + half, y);
+          ctx.lineTo(x - half + 6, y - 70);
+          ctx.stroke();
+        }
+        ink();
+        ctx.fillStyle = '#5a3b26';
+        ctx.fillRect(x - 60, top - 12, 120, 24);
+        ctx.strokeRect(x - 60, top - 12, 120, 24);
+        ctx.beginPath();
+        ctx.moveTo(x, top - 12);
+        ctx.lineTo(x, top - 110);
+        ctx.stroke();
+        ctx.fillStyle = '#3a86ff';
+        ctx.beginPath();
+        ctx.moveTo(x, top - 110);
+        ctx.lineTo(x + 70 + Math.sin(time * 4) * 8, top - 92);
+        ctx.lineTo(x, top - 74);
+        ctx.fill();
+        ctx.stroke();
+      } else if (m.kind === 'checkpoint') {
+        // Tall pole with a waving chequered flag.
+        const top = g - 640;
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(x, g);
+        ctx.lineTo(x, top);
+        ctx.stroke();
+        const wave = (k) => Math.sin(time * 5 + k) * 8;
+        for (let i = 0; i < 4; i++) {
+          for (let j = 0; j < 3; j++) {
+            ctx.fillStyle = (i + j) % 2 ? '#ffffff' : '#e63946';
+            ctx.beginPath();
+            ctx.moveTo(x + i * 26, top + j * 24 + wave(i));
+            ctx.lineTo(x + (i + 1) * 26, top + j * 24 + wave(i + 1));
+            ctx.lineTo(x + (i + 1) * 26, top + (j + 1) * 24 + wave(i + 1));
+            ctx.lineTo(x + i * 26, top + (j + 1) * 24 + wave(i));
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x, top, 104, 72);
+      } else if (m.kind === 'beacon') {
+        // Striped lighthouse with a sweeping light.
+        const top = g - 820;
+        for (let i = 0; i < 6; i++) {
+          const y0 = g - (i * 820) / 6;
+          const y1 = g - ((i + 1) * 820) / 6;
+          const w0 = 80 - (i * 40) / 6;
+          const w1 = 80 - ((i + 1) * 40) / 6;
+          ctx.fillStyle = i % 2 ? '#ffffff' : '#c0392b';
+          ctx.beginPath();
+          ctx.moveTo(x - w0, y0);
+          ctx.lineTo(x - w1, y1);
+          ctx.lineTo(x + w1, y1);
+          ctx.lineTo(x + w0, y0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.fillStyle = '#ffd23f';
+        ctx.fillRect(x - 34, top - 60, 68, 60);
+        ctx.strokeRect(x - 34, top - 60, 68, 60);
+        ctx.fillStyle = '#3b2a1d';
+        ctx.beginPath();
+        ctx.moveTo(x - 44, top - 60);
+        ctx.lineTo(x, top - 110);
+        ctx.lineTo(x + 44, top - 60);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        const a = time * 1.5;
+        ctx.fillStyle = 'rgba(255,240,150,.35)';
+        ctx.beginPath();
+        ctx.moveTo(x, top - 30);
+        ctx.lineTo(x + Math.cos(a) * 900, top - 30 + Math.sin(a) * 160 - 80);
+        ctx.lineTo(x + Math.cos(a) * 900, top - 30 + Math.sin(a) * 160 + 80);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  };
+
+  return { drawTerrain, drawTurrets, drawMarkers };
 }

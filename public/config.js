@@ -59,7 +59,11 @@ export const config = {
     GAP_MAX: 1600,
     UNDERPASS_GAP_START: 280, // how much altitude room an underpass leaves at first...
     UNDERPASS_GAP_END: 150, // ...shrinking to this as you go further
-    HARDEST_AT: 60000, // distance at which obstacles reach full difficulty
+    HARDEST_AT: 240000, // distance at which obstacles reach full difficulty (about lap 3)
+    LOOP_LENGTH: 110000, // one lap: out to the beacon and back home (~6 minutes at cruising speed)
+    SECTIONS: 6, // markers per lap: home, checkpoints, beacon halfway
+    MARKER_CLEAR: 1800, // open sky kept around every marker (safe restart spots)
+    REWIND_BEFORE: 900, // after going down, restart this far before the last marker
     SCRAPE_COOLDOWN: 0.45, // seconds between scrape damage while touching rock
     WARN_SECONDS: 3, // warning before an obstacle...
     LOOKOUT_WARN_SECONDS: 5, // ...earlier with someone on Lookout
