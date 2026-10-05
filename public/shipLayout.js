@@ -51,7 +51,6 @@ export const SHIP_LAYOUT = {
     { n: 'Dorsal Gun', p: 'nest', x: 870 },
     { n: 'Tail Gun', p: 'main', x: 180 },
     { n: 'Boiler', p: 'main', x: 400 },
-    { n: 'Repairs', p: 'main', x: 760 },
     { n: 'Navigator', p: 'main', x: 1215 },
     { n: 'Helm', p: 'main', x: 1330 },
     { n: 'Nose Gun', p: 'main', x: 1430 },
@@ -72,24 +71,29 @@ export const SHIP_LAYOUT = {
     'Ventral Gun': { bx: 805, by: 948, aim: Math.PI / 2, arc: 1.2 },
   },
 
-  // Engines on the outriggers (become repairable/steam-powered in Phase 2).
+  // Engines on the outriggers, driven by steam.
   engines: withD([
     { name: 'Aft Engine', p: 'lower', x: 70 },
     { name: 'Fore Engine', p: 'lower', x: 1530 },
   ]),
 
-  // Steam pipes from the boiler, each with a valve (gameplay in Phase 2).
-  pipes: [
-    { to: 'Helm', points: [[430, 560], [430, 505], [1330, 505], [1330, 530]], valve: [760, 505] },
-    { to: 'Aft Engine', points: [[370, 610], [370, 680], [110, 680], [110, 765]], valve: [230, 680] },
-    { to: 'Fore Engine', points: [[440, 610], [440, 692], [1490, 692], [1490, 765]], valve: [1230, 692] },
-  ],
+  // Steam pipes from the boiler to each steam-driven module. Each has a valve the crew can
+  // open/close (tap Action while standing under it on platform p). Pipes can burst and leak.
+  pipes: withD([
+    { to: 'Helm', p: 'main', points: [[430, 560], [430, 505], [1330, 505], [1330, 530]], valve: [760, 505] },
+    { to: 'Lift', p: 'main', points: [[455, 560], [455, 535], [960, 535], [960, 490]], valve: [600, 535] },
+    { to: 'Aft Engine', p: 'lower', points: [[370, 610], [370, 680], [110, 680], [110, 765]], valve: [230, 680] },
+    { to: 'Fore Engine', p: 'lower', points: [[440, 610], [440, 692], [1490, 692], [1490, 765]], valve: [1260, 692] },
+  ]),
 
-  // Tool racks and fire-extinguisher hooks (gameplay in Phase 2).
+  // Where to stand to repair the lift.
+  liftRepair: { p: 'lower', x: 925 },
+
+  // Tool racks and fire-extinguisher hooks: tap Action to take (or put back) a tool.
   racks: withD([
     { kind: 'sword', p: 'main', x: 660 },
     { kind: 'hammer', p: 'main', x: 860 },
-    { kind: 'sword', p: 'lower', x: 1300 },
+    { kind: 'sword', p: 'lower', x: 1340 },
   ]),
   extinguishers: withD([
     { p: 'main', x: 520 },

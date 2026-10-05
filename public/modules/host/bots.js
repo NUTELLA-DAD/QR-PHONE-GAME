@@ -39,26 +39,32 @@ function firingSolution(state, gun) {
 function listJobs(state, bot) {
   const jobs = [];
   const players = Object.values(state.players);
+  const mods = state.modules || [];
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2 });
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
-  // A bot already holding a patch kit fixes holes before fires.
   const fires = state.fires.map((f) => ({ kind: 'fire', obj: f, max: 1 }));
-  const holes = bot.carry === 'ammo' ? [] : state.breaches.map((h) => ({ kind: 'patch', obj: h, max: 1 }));
-  jobs.push(...(bot.carry === 'patch' ? [...holes, ...fires] : [...fires, ...holes]));
-  if (bot.carry !== 'patch') {
-    const guns = GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
-    guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
-    for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
-  }
-  // Helm and boiler first, then guns that can reach the enemy right now.
+  const holes = state.breaches.map((h) => ({ kind: 'patch', obj: h, max: 1 }));
+  // Burst pipes with their valve open leak steam: shut the valve, then fix what's broken.
+  const leaks = mods.filter((m) => m.kind === 'pipe' && m.broken && m.open).map((m) => ({ kind: 'valve', obj: m, max: 1 }));
+  const broken = mods.filter((m) => m.broken).map((m) => ({ kind: 'repair', obj: m, max: 1 }));
+  // Use the tool already in hand first.
+  if (bot.carry === 'hammer') jobs.push(...leaks, ...broken, ...holes, ...fires);
+  else jobs.push(...fires, ...leaks, ...broken, ...holes);
+  for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open) jobs.push({ kind: 'valve', obj: m, max: 1 });
+  for (const m of mods) if (!m.broken && m.hp < 60) jobs.push({ kind: 'repair', obj: m, max: 1 });
+  const guns = GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
+  guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
+  for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
+  // Helm and boiler first, then guns that can reach the enemy right now. Skip broken ones.
+  const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
   const reach = (n) => (!GUN_STATIONS.includes(n) ? 0 : enemyActive(state) && firingSolution(state, state.GUNS[n]) !== null ? 1 : 2);
-  const open = MANNED_STATIONS.filter((n) => !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
+  const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   for (const n of open) jobs.push({ kind: 'station', obj: n, max: 1 });
   return jobs;
 }
 
 function isEmergency(job) {
-  return job.kind === 'fight' || job.kind === 'revive' || job.kind === 'fire' || job.kind === 'patch';
+  return job.kind !== 'ammo' && job.kind !== 'station' && !(job.kind === 'repair' && !job.obj.broken);
 }
 
 function chooseJob(state, bot, bots) {
@@ -117,6 +123,17 @@ function press(p) {
   }
 }
 
+const PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
+
+// Make sure the bot holds a tool; walks to the nearest rack/hook for it if not. True when held.
+function getTool(p, kind) {
+  if (p.carry === kind) return true;
+  const cost = (r) => Math.abs(r.x - p.x) + Math.abs(L.platforms[r.d].y - p.y) * 3;
+  const rack = PICKUPS.filter((r) => r.kind === kind).sort((a, b) => cost(a) - cost(b))[0];
+  if (steer(p, rack.d, rack.x)) press(p);
+  return false;
+}
+
 // Carry out the current job for one frame.
 function work(p, state) {
   const job = p.botJob;
@@ -124,30 +141,36 @@ function work(p, state) {
   if (!job) return wander(p);
   const o = job.obj;
   if (job.kind === 'fight') {
-    if (o.fall) return;
+    if (o.fall || !getTool(p, 'sword')) return;
     if (steer(p, goalOf(o), o.x, 45) || (Math.abs(o.y - p.y) < 20 && Math.abs(o.x - p.x) < 70)) {
       p.jx = 0;
       p.face = o.x < p.x ? -1 : 1;
       if ((p.whackCd || 0) <= 0) {
-        p.actQ = true;
+        p.atkQ = true;
         p.whackCd = B.WHACK_EVERY;
       }
     }
   } else if (job.kind === 'revive') {
     if (steer(p, goalOf(o), o.x, 30)) p.fire = true;
   } else if (job.kind === 'fire') {
-    if (steer(p, o.d, o.x, 30)) p.fire = true;
+    if (getTool(p, 'extinguisher') && steer(p, o.d, o.x, 30)) p.fire = true;
   } else if (job.kind === 'patch') {
-    if (p.carry !== 'patch') {
-      const s = stationNamed('Repairs');
-      if (steer(p, s.d, s.x)) press(p);
-    } else if (steer(p, o.d, o.x, 30)) p.fire = true;
+    if (getTool(p, 'hammer') && steer(p, o.d, o.x, 30)) p.fire = true;
+  } else if (job.kind === 'repair') {
+    if (getTool(p, 'hammer') && steer(p, o.d, o.x, 20)) p.fire = true;
+  } else if (job.kind === 'valve') {
+    if (steer(p, o.d, o.x, 10)) press(p);
   } else if (job.kind === 'ammo') {
     const s = p.carry === 'ammo' ? stationNamed(o) : stationNamed('Ammo Hold');
     if (steer(p, s.d, s.x)) press(p);
   } else if (job.kind === 'station') {
     const s = stationNamed(o);
-    if (steer(p, s.d, s.x)) press(p);
+    if (steer(p, s.d, s.x)) {
+      // Fix it up on the way in if we happen to have a hammer.
+      const m = (state.modules || []).find((q) => q.name === o);
+      if (p.carry === 'hammer' && m && m.hp < m.max) p.fire = true;
+      else press(p);
+    }
   }
 }
 
@@ -182,7 +205,8 @@ export function updateBot(p, state, dt) {
       const free = bots.filter((q) => !q.lock && !(q.ko > 0)).length;
       const urgent = listJobs(state, p).filter(isEmergency).length;
       if (p.lockLeft === undefined) p.lockLeft = B.STATION_MIN + Math.random() * (B.STATION_MAX - B.STATION_MIN);
-      const gunUseless = (p.gunIdle || 0) > 6;
+      const mod = (state.modules || []).find((m) => m.name === p.lock);
+      const gunUseless = (p.gunIdle || 0) > 6 || (mod && mod.broken);
       if (gunUseless) p.gunIdle = 0;
       if (p.lockLeft <= 0 || gunUseless || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;

@@ -56,8 +56,8 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.fillStyle = '#e63946';
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 5;
-        ctx.strokeText('EMPTY!', gun.bx, gun.by - 32);
-        ctx.fillText('EMPTY!', gun.bx, gun.by - 32);
+        ctx.strokeText(gun.emptyText || 'EMPTY!', gun.bx, gun.by - 32);
+        ctx.fillText(gun.emptyText || 'EMPTY!', gun.bx, gun.by - 32);
         ink();
       }
     }
@@ -253,6 +253,51 @@ export function createRenderer({ ctx, state, canvas }) {
     }
   };
 
+  // The item a player is holding. swingAge = ms since their last attack (for the swing pose).
+  const drawCarry = (item, face, swingAge) => {
+    ctx.save();
+    ctx.translate(face * 16, -24);
+    ctx.scale(face, 1);
+    ink();
+    ctx.lineWidth = 3;
+    if (item === 'ammo') {
+      ctx.fillStyle = '#b5833f';
+      ctx.fillRect(-8, -8, 22, 16);
+      ctx.strokeRect(-8, -8, 22, 16);
+    } else if (item === 'extinguisher') {
+      ctx.fillStyle = '#d62828';
+      rrect(-4, -16, 14, 30, 6);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(3, -16);
+      ctx.lineTo(14, -24);
+      ctx.stroke();
+    } else {
+      // Sword or hammer, raised and swung down when attacking.
+      const swing = swingAge < 250 ? Math.sin((swingAge / 250) * Math.PI) * 1.6 : 0;
+      ctx.rotate(-0.9 + swing);
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -44);
+      ctx.strokeStyle = item === 'sword' ? '#d8dde0' : '#7a4a24';
+      ctx.stroke();
+      ink();
+      if (item === 'sword') {
+        ctx.beginPath();
+        ctx.moveTo(-8, -8);
+        ctx.lineTo(8, -8);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(-11, -50, 22, 14);
+        ctx.strokeRect(-11, -50, 22, 14);
+      }
+    }
+    ctx.restore();
+  };
+
   const drawPlayer = (player, time) => {
     const species = config.SPECIES[player.species] || config.SPECIES.bulldog;
     const bob = player.moving ? Math.sin(time * 16) * 3 : player.climb ? Math.sin(time * 10) * 3 : 0;
@@ -287,10 +332,18 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillStyle = '#2b1d14';
     ctx.fillRect(-14, -6, 11, 8);
     ctx.fillRect(3, -6, 11, 8);
-    if (player.carry) {
-      ctx.fillStyle = player.carry === 'patch' ? '#6c8aa0' : '#b5833f';
-      ctx.fillRect(face * 14 - 10, -30, 20, 16);
-      ctx.strokeRect(face * 14 - 10, -30, 20, 16);
+    if (player.carry) drawCarry(player.carry, face, performance.now() - (player.swingT || -1e9));
+    const swingAge = performance.now() - (player.swingT || -1e9);
+    if (swingAge < 200) {
+      // White swoosh in front of the attacker.
+      ctx.strokeStyle = 'rgba(255,255,255,.9)';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      const mid = face > 0 ? 0 : Math.PI;
+      ctx.arc(face * 10, -40, player.carry === 'sword' ? 70 : 45, mid - 0.9, mid + 0.9);
+      ctx.stroke();
+      ink();
+      ctx.lineWidth = 4;
     }
     ctx.fillStyle = species.fur;
     const ear = (side) => {

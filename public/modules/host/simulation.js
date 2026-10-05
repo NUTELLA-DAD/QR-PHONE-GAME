@@ -3,6 +3,7 @@ import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { updateBot } from './bots.js';
 import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
 import { enemyPath } from './enemy.js';
+import { createModules } from './modules.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
 const platformY = (d) => PLATFORMS[d].y;
@@ -49,23 +50,77 @@ export function createSimulation() {
 
   const getHelm = () => Object.values(state.players).find((q) => q.lock === 'Helm');
 
-  const workTarget = (player) => {
-    if (player.lock || player.conn != null || player.fall) return null;
-    const floorIndex = player.d;
-    const revived = Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && q.conn == null && q.d === floorIndex && Math.abs(q.x - player.x) < 65);
-    if (revived) return { kind: 'revive', obj: revived };
-    const fire = state.fires.find((o) => o.d === floorIndex && Math.abs(o.x - player.x) < 70);
-    if (fire) return { kind: 'fire', obj: fire };
-    const breach = state.breaches.find((o) => o.d === floorIndex && Math.abs(o.x - player.x) < 70);
-    if (breach) return { kind: 'breach', obj: breach, need: player.carry !== 'patch' };
-    return null;
-  };
-
   const puff = (x, y, color, count = 6) => {
     for (let i = 0; i < count; i++) {
       state.puffs.push({ x, y, vx: (Math.random() - 0.5) * 160, vy: (Math.random() - 0.5) * 160, life: 0.5, max: 0.5, c: color });
     }
   };
+
+  const T = config.TOOLS;
+  const modules = createModules();
+  state.modules = modules.list;
+  const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
+  const LOCKABLE = (name) => name === 'Helm' || name === 'Boiler' || !!state.GUNS[name];
+
+  // What the Action button does for this player right now (or null).
+  // hold = keep the button held to make progress; otherwise a tap does it.
+  const interaction = (player, station) => {
+    if (player.lock || player.conn != null || player.fall) return null;
+    const here = (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r;
+    const tool = player.carry;
+    const revive = Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && q.conn == null && here(q, 65));
+    if (revive) return { type: 'revive', obj: revive, hold: true, time: T.REVIVE_TIME, label: `Revive ${revive.name}` };
+    const fire = state.fires.find((o) => here(o, 70));
+    if (fire && tool === 'extinguisher') return { type: 'fire', obj: fire, hold: true, time: T.EXTINGUISH_TIME, label: 'Spray fire' };
+    const hole = state.breaches.find((o) => here(o, 70));
+    if (hole && tool === 'hammer') return { type: 'hole', obj: hole, hold: true, time: T.PATCH_TIME, label: 'Patch hole' };
+    // Standing right at a rack or hook always means take / put back.
+    const pickup = PICKUPS.find((r) => here(r, T.REACH));
+    if (pickup) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : `Take ${pickup.kind}` };
+    const hurt = modules.list.find((m) => m.hp < m.max && here(m, T.REACH + 15));
+    if (hurt && tool === 'hammer') return { type: 'repair', obj: hurt, hold: true, label: `Repair ${hurt.name}` };
+    const valve = modules.list.find((m) => m.kind === 'pipe' && here(m, T.REACH));
+    if (valve) return { type: 'valve', obj: valve, label: valve.open ? 'Close valve' : 'Open valve' };
+    if (station) {
+      const gun = state.GUNS[station.n];
+      if (gun && tool === 'ammo' && gun.ammo < gun.max) return { type: 'load', obj: gun, station, label: 'Load ' + station.n };
+      if (station.n === 'Ammo Hold' && tool !== 'ammo') return { type: 'ammo', station, label: 'Grab ammo' };
+      if (LOCKABLE(station.n) && !taken(station.n)) return { type: 'station', station, label: 'Take ' + station.n };
+    }
+    if (fire) return { type: 'need', label: 'Need an extinguisher' };
+    if (hole || hurt) return { type: 'need', label: 'Need a hammer' };
+    return null;
+  };
+
+  // Attack button: a sword hurts raiders; bare hands only shove them back.
+  const attack = (player) => {
+    if ((player.atkCd || 0) > 0 || player.lock || player.conn != null) return;
+    const sword = player.carry === 'sword';
+    player.atkCd = sword ? T.SWORD_COOLDOWN : T.SHOVE_COOLDOWN;
+    player.swingT = performance.now();
+    const range = sword ? T.SWORD_RANGE : T.SHOVE_RANGE;
+    const target = state.boarders
+      .filter((b) => !b.fall && b.conn == null && b.d === player.d && Math.abs(b.x - player.x) < range)
+      .sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0];
+    if (!target) return;
+    player.face = target.x < player.x ? -1 : 1;
+    const p = PLATFORMS[target.d];
+    target.x = clamp(target.x + player.face * (sword ? T.SWORD_KNOCKBACK : T.SHOVE_KNOCKBACK), p.x0, p.x1);
+    target.hit = 0.25;
+    puff(target.x, target.y - 40, '#fff', 6);
+    if (sword) {
+      target.hp -= 1;
+      if (target.hp <= 0) {
+        puff(target.x, target.y - 40, '#ffcf40', 14);
+        state.boarders.splice(state.boarders.indexOf(target), 1);
+      }
+    } else {
+      target.cd = Math.max(target.cd, 0.6); // staggered: can't strike for a moment
+    }
+  };
+
+  // puff() at a point given in ship coordinates.
+  const shipPuff = (x, y, color, count) => puff(x, y - state.ship.alt, color, count);
 
   const emitPlayerUi = (playerId, ui) => {
     if (socket && !state.players[playerId]?.bot) socket.emit('host:ui', { id: playerId, ui });
@@ -110,26 +165,28 @@ export function createSimulation() {
         player.fire = false;
       }
       const station = !player.lock && player.conn == null ? SHIP_LAYOUT.stations.find((s) => s.d === player.d && Math.abs(player.x - s.x) < 55) : null;
-      const target = player.lock ? null : workTarget(player);
-      const boarder = player.lock ? null : state.boarders.find((b) => !b.fall && Math.abs(b.y - player.y) < 20 && Math.abs(b.x - player.x) < 80);
 
       if (player.lock) {
         player.moving = false;
         player.climb = false;
         const gun = state.GUNS[player.lock];
+        const working = modules.works(state, player.lock);
         if (player.lock === 'Helm') {
-          state.ship.speed = clamp(state.ship.speed + player.jx * dt * 0.6, 0, 1);
-          state.ship.alt = clamp(state.ship.alt - player.jy * 130 * (0.4 + 0.6 * Math.min(1, state.ship.press / 50)) * dt, -90, 90);
+          if (working) {
+            state.ship.speed = clamp(state.ship.speed + player.jx * dt * 0.6, 0, 1);
+            state.ship.alt = clamp(state.ship.alt - player.jy * 130 * (0.4 + 0.6 * Math.min(1, state.ship.press / 50)) * dt, -90, 90);
+          }
         } else if (player.lock === 'Boiler') {
-          state.ship.press = clamp(state.ship.press + (player.fire ? 16 * dt : 0) + (player.actQ ? 5 : 0), 0, 100);
+          if (working) state.ship.press = clamp(state.ship.press + (player.fire ? 16 * dt : 0) + (player.actQ ? 5 : 0), 0, 100);
         } else if (gun) {
           gun.cd = Math.max(0, gun.cd - dt);
-          // Turn toward the stick, but only within this gun's firing arc.
-          if (Math.hypot(player.jx, player.jy) > 0.25) gun.aim = gun.home + clamp(angleDiff(Math.atan2(player.jy, player.jx), gun.home), -gun.arc, gun.arc);
+          // Turn toward the stick, but only within this gun's firing arc (a broken gun is jammed).
+          if (working && Math.hypot(player.jx, player.jy) > 0.25) gun.aim = gun.home + clamp(angleDiff(Math.atan2(player.jy, player.jx), gun.home), -gun.arc, gun.arc);
           if ((player.actQ || player.fire) && gun.cd <= 0 && !state.ship.down) {
-            if (gun.ammo <= 0) {
+            if (!working || gun.ammo <= 0) {
               gun.cd = 0.5;
               gun.empty = 0.8;
+              gun.emptyText = working ? 'EMPTY!' : 'BROKEN!';
             } else {
               gun.ammo -= 1;
               gun.cd = 0.55;
@@ -147,86 +204,81 @@ export function createSimulation() {
         }
         if (gun) player.face = Math.cos(gun.aim) < 0 ? -1 : 1;
         player.actQ = false;
+        player.act = null;
       } else {
         moveWalker(player, player.jx || 0, player.jy || 0, dt, 230);
         player.moving = !player.climb && Math.abs(player.jx) > 0.15;
+        const act = interaction(player, station);
+        player.act = act;
 
-        if (target && !target.need && player.fire && !boarder) {
-          const object = target.obj;
-          object.worked = true;
-          object.prog = (object.prog || 0) + dt / (target.kind === 'fire' ? 2 : target.kind === 'breach' ? 1.5 : 1.2);
-          if (object.prog >= 1) {
-            object.prog = 0;
-            if (target.kind === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
-            else if (target.kind === 'breach') {
-              state.breaches.splice(state.breaches.indexOf(object), 1);
-              player.carry = null;
-              state.ship.hull = Math.min(100, state.ship.hull + 3);
-            } else object.ko = 0;
-            puff(object.x, player.y - 50, '#8fe388', 10);
+        // Holding the button: revive, spray, patch or repair.
+        if (act && act.hold && player.fire) {
+          const object = act.obj;
+          if (act.type === 'repair') {
+            if (modules.repair(object, dt)) puff(object.pos.x, object.pos.y - state.ship.alt, '#8fe388', 10);
+          } else {
+            object.worked = true;
+            object.prog = (object.prog || 0) + dt / act.time;
+            if (object.prog >= 1) {
+              object.prog = 0;
+              if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
+              else if (act.type === 'hole') {
+                state.breaches.splice(state.breaches.indexOf(object), 1);
+                state.ship.hull = Math.min(100, state.ship.hull + 3);
+              } else object.ko = 0;
+              puff(object.x, player.y - 50, '#8fe388', 10);
+            }
           }
         }
 
+        // Tapping the button.
         if (player.actQ) {
           player.actQ = false;
-          const gunAtStation = station && state.GUNS[station.n];
-          if (boarder) {
-            boarder.hp -= 1;
-            boarder.hit = 0.25;
-            if (boarder.conn == null) boarder.x = clamp(boarder.x + Math.sign(boarder.x - player.x || 1) * 45, PLATFORMS[boarder.d].x0, PLATFORMS[boarder.d].x1);
-            puff(boarder.x, boarder.y - 40, '#fff', 6);
-            if (boarder.hp <= 0) {
-              puff(boarder.x, boarder.y - 40, '#ffcf40', 14);
-              state.boarders.splice(state.boarders.indexOf(boarder), 1);
-            }
-          } else if (target && !target.need) {
-            // no-op, handled by fire interaction
-          } else if (gunAtStation && player.carry === 'ammo' && gunAtStation.ammo < gunAtStation.max) {
-            gunAtStation.ammo = Math.min(gunAtStation.max, gunAtStation.ammo + 4);
+          const type = act ? act.type : null;
+          if (type === 'rack') player.carry = player.carry === act.obj.kind ? null : act.obj.kind;
+          else if (type === 'valve') {
+            act.obj.open = !act.obj.open;
+            puff(act.obj.pos.x, act.obj.pos.y - state.ship.alt, '#ffffff', 6);
+          } else if (type === 'load') {
+            act.obj.ammo = Math.min(act.obj.max, act.obj.ammo + 4);
             player.carry = null;
-            puff(station.x, player.y - 60, '#ffd23f', 8);
-          } else if (station && station.n === 'Ammo Hold' && !player.carry) {
-            player.carry = 'ammo';
-          } else if (station && station.n === 'Repairs' && !player.carry) {
-            player.carry = 'patch';
-          } else if (station && !taken(station.n) && (station.n === 'Helm' || station.n === 'Boiler' || gunAtStation)) {
-            player.lock = station.n;
-            player.x = station.x;
-          } else {
-            player.actT = performance.now();
-          }
+            puff(act.station.x, player.y - 60, '#ffd23f', 8);
+          } else if (type === 'ammo') player.carry = 'ammo';
+          else if (type === 'station') {
+            player.lock = act.station.n;
+            player.x = act.station.x;
+          } else if (!act || !act.hold) player.actT = performance.now();
         }
+        if (player.atkQ) attack(player);
       }
+      player.atkQ = false;
+      player.atkCd = Math.max(0, (player.atkCd || 0) - dt);
 
-      const stationName = player.lock || (station && station.n);
+      // Tell the phone what its buttons do now.
+      const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
       const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : null;
-      const takenBySomeone = !player.lock && !!stationName && taken(stationName);
+      const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && taken(stationName);
       let label = 'Hey!';
       let hold = false;
       if (player.lock) {
-        label = kind === 'gun' ? 'FIRE!' : kind === 'boiler' ? 'STOKE!' : 'Honk!';
+        const working = modules.works(state, player.lock);
+        label = !working && kind !== 'helm' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'boiler' ? 'STOKE!' : 'Honk!';
         hold = kind === 'gun' || kind === 'boiler';
-      } else if (boarder) {
-        label = 'Whack!';
-      } else if (target) {
-        label = target.kind === 'revive' ? `Revive ${target.obj.name}` : target.kind === 'fire' ? 'Put out fire' : target.need ? 'Need a patch kit' : 'Patch hole';
-        hold = !target.need;
-      } else if (gun && player.carry === 'ammo' && gun.ammo < gun.max) {
-        label = 'Load ' + stationName;
-      } else if (stationName === 'Ammo Hold' && !player.carry) {
-        label = 'Grab ammo';
-      } else if (stationName === 'Repairs' && !player.carry) {
-        label = 'Grab patch kit';
-      } else if (kind && !takenBySomeone) {
-        label = 'Take ' + stationName;
+      } else if (player.act) {
+        label = player.act.label;
+        hold = !!player.act.hold;
       }
+      const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
+      const status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       const ammoText = gun ? gun.ammo : null;
-      const key = [stationName, kind, !!player.lock, takenBySomeone, label, ammoText, player.carry || '', hold].join('|');
+      const attackLabel = player.carry === 'sword' ? 'Swing' : 'Shove';
+      const hull = Math.round(state.ship.hull / 5) * 5;
+      const key = [stationName, kind, !!player.lock, takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: stationName || null, kind, locked: !!player.lock, taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold };
+          player.ui = { station: stationName, kind, locked: !!player.lock, taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull };
           emitPlayerUi(player.id, player.ui);
         }
       }
@@ -237,13 +289,15 @@ export function createSimulation() {
       }
     }
 
-    state.ship.press = clamp(state.ship.press - (2 + state.ship.speed * 6) * dt, 0, 100);
+    modules.update(state, dt);
+    state.ship.press = clamp(state.ship.press - modules.pressureDrain(state) * dt, 0, 100);
     if (state.ship.press >= 96) {
       state.ship.press = 72;
       const boiler = SHIP_LAYOUT.stations.find((s) => s.n === 'Boiler');
       puff(boiler.x, platformY(boiler.d) - 70 - state.ship.alt, '#fff', 14);
+      modules.damage(modules.byName.Boiler, config.MODULES.BOILER_BLOWOUT_DAMAGE, shipPuff);
     }
-    const maxSpeed = clamp(state.ship.press / 50, 0.05, 1);
+    const maxSpeed = clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state);
     if (state.ship.speed > maxSpeed) state.ship.speed += (maxSpeed - state.ship.speed) * Math.min(1, dt * 2);
 
     for (const gun of Object.values(state.GUNS)) gun.empty = Math.max(0, gun.empty - dt);
@@ -261,6 +315,7 @@ export function createSimulation() {
         state.breaches.length = 0;
         state.fires.length = 0;
         state.boarders.length = 0;
+        modules.reset();
         for (const player of Object.values(state.players)) player.ko = 0;
       }
     }
@@ -300,6 +355,7 @@ export function createSimulation() {
         bullet.life = 0;
         state.ship.shake = 0.35;
         puff(bullet.x, bullet.y, '#ff7b00', 8);
+        modules.hitAt(bullet.x, sy, shipPuff);
         const d = roomPlatformAt(bullet.x, sy);
         if (d !== null) {
           const p = PLATFORMS[d];
@@ -415,7 +471,8 @@ export function createSimulation() {
     clamp,
     taken,
     getHelm,
-    workTarget,
+    interaction,
+    modules,
     puff,
     setSocket,
     countPlayers: () => Object.keys(state.players).length,

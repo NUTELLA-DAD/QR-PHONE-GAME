@@ -10,6 +10,9 @@ const C = SHIP_LAYOUT.connectors;
 const GRAB = 30; // how close (px) to a connector end you must be to grab it
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+// Per-connector speed multiplier (e.g. the lift crawls without steam). Set by the game each frame.
+export const connScale = C.map(() => 1);
+
 // Number of connector hops between every pair of platforms.
 const hops = P.map((_, from) => {
   const dist = P.map(() => Infinity);
@@ -79,7 +82,7 @@ export function moveWalker(w, jx, jy, dt, walkSpeed, climbScale = 1) {
   if (w.conn != null) {
     const c = C[w.conn];
     const h = P[c.bottom].y - P[c.top].y;
-    if (Math.abs(jy) > 0.4) w.s = clamp(w.s + (jy * c.speed * climbScale * dt) / h, 0, 1);
+    if (Math.abs(jy) > 0.4) w.s = clamp(w.s + (jy * c.speed * connScale[w.conn] * climbScale * dt) / h, 0, 1);
     const pt = connPoint(c, w.s);
     w.x = pt.x;
     w.y = pt.y;

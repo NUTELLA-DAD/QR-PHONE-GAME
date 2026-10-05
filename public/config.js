@@ -20,6 +20,33 @@ export const config = {
     PATH_WOBBLE: 50, // small up-down weave
     TURN_SPEED: 0.38, // how fast it goes round (radians per second)
   },
+  // Tools and close combat.
+  TOOLS: {
+    REACH: 45, // how close you must stand to a rack, hook or valve
+    SWORD_RANGE: 95,
+    SWORD_COOLDOWN: 0.35,
+    SWORD_KNOCKBACK: 60,
+    SHOVE_RANGE: 65, // bare hands: pushes a raider back but does no damage
+    SHOVE_COOLDOWN: 0.6,
+    SHOVE_KNOCKBACK: 45,
+    EXTINGUISH_TIME: 1.0, // seconds of spraying per fire
+    PATCH_TIME: 1.5, // seconds of hammering per hole
+    REVIVE_TIME: 1.2,
+  },
+  // Ship modules (guns, boiler, helm, engines, lift, steam pipes).
+  MODULES: {
+    HP: 100,
+    HIT_DAMAGE: 55, // damage from an enemy hit right on top of a module...
+    HIT_RADIUS: 180, // ...fading to nothing at this distance
+    FIRE_DAMAGE: 6, // per second, per fire within FIRE_RADIUS on the same deck
+    FIRE_RADIUS: 120,
+    BOILER_BLOWOUT_DAMAGE: 35, // when pressure goes over the top
+    REPAIR_RATE: 40, // hp per second while hammering
+    STEAM_MIN: 10, // below this pressure nothing gets steam
+    PIPE_LEAK: 6, // pressure lost per second from each burst pipe with its valve open
+    UNPOWERED_LIFT: 0.25, // lift speed without steam (hand crank)
+    NO_ENGINE_SPEED: 0.1, // top speed with both engines out
+  },
   // Test bot behaviour (times in seconds).
   BOTS: {
     THINK_EVERY: 0.3, // how often a bot rethinks what to do

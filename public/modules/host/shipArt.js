@@ -161,9 +161,10 @@ export function createShipArt({ ctx, state, ink, rrect }) {
       line(pipe.points, 13, INK);
       line(pipe.points, 7, '#9aa1a6');
       const [vx, vy] = pipe.valve;
+      const m = moduleFor(pipe.to + ' Pipe');
       ink();
       ctx.lineWidth = 3;
-      ctx.fillStyle = '#c0392b';
+      ctx.fillStyle = !m || m.open ? '#2e9e4f' : '#c0392b'; // green = open, red = closed
       ctx.beginPath();
       ctx.arc(vx, vy, 14, 0, 7);
       ctx.fill();
@@ -275,6 +276,42 @@ export function createShipArt({ ctx, state, ink, rrect }) {
     [[30, 0], [64, 0], [47, -26]].forEach(([x, y]) => filled('#b5833f', () => ctx.rect(hold.x + x, hy2 - 24 + y, 34, 24)));
   };
 
+  const moduleFor = (name) => (state.modules || []).find((m) => m.name === name);
+
+  // Health bars on damaged modules, smoke on broken ones, steam jets from burst pipes.
+  const drawModuleStatus = (time) => {
+    for (const m of state.modules || []) {
+      const { x, y } = m.pos;
+      if (m.broken) {
+        const leaking = m.kind === 'pipe' && m.open;
+        for (let k = 0; k < 3; k++) {
+          const t = (time * 0.8 + k / 3) % 1;
+          ctx.fillStyle = leaking ? `rgba(255,255,255,${0.8 - t * 0.8})` : `rgba(60,60,60,${0.7 - t * 0.7})`;
+          ctx.beginPath();
+          ctx.arc(x + Math.sin(time * 3 + k) * 10 + (leaking ? t * 40 : 0), y - 20 - t * 70, 10 + t * 18, 0, 7);
+          ctx.fill();
+        }
+        ctx.font = '900 22px Georgia';
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#fff';
+        ctx.strokeText('BROKEN', x, y - 34);
+        ctx.fillStyle = '#c62828';
+        ctx.fillText('BROKEN', x, y - 34);
+      }
+      if (m.hp < m.max) {
+        const w = 60;
+        ctx.fillStyle = '#3b2a1d';
+        ctx.fillRect(x - w / 2, y - 26, w, 9);
+        ctx.fillStyle = m.hp > 50 ? '#8fe388' : m.hp > 0 ? '#f4a261' : '#c62828';
+        ctx.fillRect(x - w / 2, y - 26, (w * m.hp) / m.max, 9);
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - w / 2, y - 26, w, 9);
+      }
+    }
+  };
+
   const drawLabels = () => {
     ctx.font = '700 24px Georgia';
     ctx.textAlign = 'center';
@@ -315,5 +352,6 @@ export function createShipArt({ ctx, state, ink, rrect }) {
     drawConnectors();
     drawCatwalk();
     drawLabels();
+    drawModuleStatus(time);
   };
 }
