@@ -2,7 +2,8 @@
 // magenta (#FF00FF) backgrounds, and offers helpers that draw a sprite if it exists and report
 // false if not, so every caller can fall back to its placeholder drawing.
 //
-// Keys are paths without ".png", e.g. 'ship/gasbag', 'crew/bulldog/head'.
+// Keys are paths without the extension, e.g. 'ship/gasbag', 'crew/bulldog/head'. PNG and SVG
+// both work; if both exist, the PNG is used.
 // Art is made at 2x, so by default 1 image pixel = 0.5 world units.
 //
 // art/sprites/rig.json (optional) fine-tunes characters and planes, e.g.
@@ -56,24 +57,28 @@ export function createSprites() {
         console.warn('art/sprites/rig.json could not be read:', err);
       }
     }
+    // key -> file to load (a PNG wins over an SVG with the same name).
+    const files = {};
+    for (const file of list) {
+      const m = file.match(/^(.*)\.(png|svg)$/i);
+      if (m && (!files[m[1]] || /\.png$/i.test(file))) files[m[1]] = file;
+    }
     await Promise.all(
-      list
-        .filter((k) => k !== 'rig.json' && !k.endsWith('/rig.json'))
-        .map(
-          (key) =>
-            new Promise((resolve) => {
-              const img = new Image();
-              img.onload = () => {
-                images[key] = stripMagenta(img);
-                resolve();
-              };
-              img.onerror = () => {
-                console.warn('Could not load sprite', key);
-                resolve();
-              };
-              img.src = `/art/sprites/${key}.png`;
-            }),
-        ),
+      Object.entries(files).map(
+        ([key, file]) =>
+          new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              images[key] = stripMagenta(img);
+              resolve();
+            };
+            img.onerror = () => {
+              console.warn('Could not load sprite', file);
+              resolve();
+            };
+            img.src = `/art/sprites/${file}`;
+          }),
+      ),
     );
     console.log(`Loaded ${Object.keys(images).length} sprite(s)`);
   };

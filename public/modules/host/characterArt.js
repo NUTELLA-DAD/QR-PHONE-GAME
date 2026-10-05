@@ -18,8 +18,9 @@ const DEFAULT_RIG = {
   armSpread: 5,
   armLength: 32, // shoulder to hand, for placing held items
   neck: { x: 2, y: -58 }, // head sits on this (bottom-centre of the head image)
+  headScale: 1, // make the head bigger/smaller than drawn (rubber-hose = big heads)
   tail: { x: -16, y: -36, px: 0.95, py: 0.6 },
-  scarf: { x: -2, y: -58, px: 0.92, py: 0.3 },
+  scarf: { x: -2, y: -62, px: 0.92, py: 0.3 },
   item: { px: 0.5, py: 0.85 }, // held tools are gripped near their bottom
 };
 
@@ -45,7 +46,7 @@ export function createCharacterArt({ ctx, sprites, drawItem }) {
     const swingAge = now - (p.swingT || -1e9);
     const effort = (p.fire && p.act && p.act.hold) || swingAge < 300 || p.windup > 0;
     const head = sprites.get(f + '/head');
-    const headH = head.height * s;
+    const headH = head.height * s * R.headScale;
 
     ctx.save();
     ctx.translate(p.x, p.y - lift);
@@ -104,7 +105,7 @@ export function createCharacterArt({ ctx, sprites, drawItem }) {
     const scarf = p.color && !p.type ? sprites.tinted(f + '/scarf', p.color) : sprites.get(f + '/scarf');
     if (scarf) sprites.pivot(ctx, null, R.scarf.x, R.scarf.y - bob, R.scarf.px, R.scarf.py, Math.sin(time * 9) * 0.08, s, scarf);
     const headKey = p.ko > 0 && sprites.has(f + '/head_ko') ? '/head_ko' : effort && sprites.has(f + '/head_effort') ? '/head_effort' : '/head';
-    sprites.pivot(ctx, f + headKey, R.neck.x, R.neck.y - bob, 0.5, 0.92, 0, s);
+    sprites.pivot(ctx, f + headKey, R.neck.x, R.neck.y - bob, 0.5, 0.92, 0, s * R.headScale);
 
     // Front arm, with whatever is in hand.
     const hx = sh.x + R.armSpread - Math.sin(frontArm) * R.armLength;

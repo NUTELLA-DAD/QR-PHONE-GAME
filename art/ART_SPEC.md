@@ -22,6 +22,7 @@ everywhere else, so you can add art **one piece at a time** and see it in the ga
    no labels, no text, no other pieces.
 5. **Transparent background (PNG).** If your art tool can't make transparent backgrounds, use a
    **flat pure magenta background (#FF00FF)** and I'll strip it automatically.
+   SVG (vector) files work too; if a PNG and an SVG have the same name, the PNG is used.
 6. **Size = 2× the game size.** Every size below is in pixels at 2× and is a guide: a little
    bigger or smaller is fine as long as the **proportions** match. Leave about 10 px of empty
    space around each piece.
