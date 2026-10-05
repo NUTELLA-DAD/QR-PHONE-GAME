@@ -7,6 +7,7 @@ import { createThreats } from './threats.js';
 import { createRaiders } from './raiders.js';
 import { createCourse, inRock } from './course.js';
 import { assistAim } from './aim.js';
+import { UPGRADES, pickOffer } from './upgrades.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
 const platformY = (d) => PLATFORMS[d].y;
@@ -50,6 +51,8 @@ export function createSimulation() {
     players: {},
     ship: { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 70, fuel: config.BOILER.START_FUEL, gas: 100 },
     gasHoles: [],
+    upgrades: {}, // id -> times taken
+    vote: null, // an upgrade vote in progress
     enemy: { ang: 0, x: -200, y: 300, vx: 1, vy: 0, hp: 5, fire: 2.5, dead: 0 },
     shells: [],
     bullets: [],
@@ -144,7 +147,7 @@ export function createSimulation() {
   const shipPuff = (x, y, color, count) => puff(x, y - state.ship.alt, color, count);
 
   const damageHull = (amount) => {
-    if (!state.ship.down && (state.ship.hull -= amount) <= 0) {
+    if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE) <= 0) {
       state.ship.hull = 0;
       state.ship.down = 6;
     }
@@ -156,7 +159,7 @@ export function createSimulation() {
     shipPuff(x, y, '#ff7b00', Math.round(8 * power));
     modules.hitAt(x, y, shipPuff, power);
     if (onGasbag(x, y)) {
-      if (state.gasHoles.length < config.GAS.MAX_HOLES) state.gasHoles.push(gasHoleAt(x, y));
+      if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE) state.gasHoles.push(gasHoleAt(x, y));
       damageHull(2 * power);
       return;
     }
@@ -172,7 +175,68 @@ export function createSimulation() {
 
   const raiders = createRaiders({ state, modules, puff, impact });
   const threats = createThreats({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, getHelm });
-  const course = createCourse({ state, impact, puff });
+  // ---- Upgrade votes (at the turning beacon and back home) ----
+  const startVote = (marker) => {
+    const offer = pickOffer(state.upgrades);
+    if (!offer.length) return;
+    state.vote = {
+      options: offer.map((u) => u.id),
+      t: config.VOTE.TIME,
+      title: marker.kind === 'beacon' ? 'Turning beacon! Pick an upgrade' : `Lap ${marker.lap - 1} complete! Pick an upgrade`,
+    };
+    for (const p of Object.values(state.players)) {
+      p.vote = null;
+      p.voteAt = 1.5 + Math.random() * 4; // bots take a moment to "think"
+      p.fire = false;
+    }
+  };
+
+  const updateVote = (dt) => {
+    const v = state.vote;
+    v.t -= dt;
+    const voters = Object.values(state.players).filter((p) => p.connected !== false);
+    for (const p of voters) {
+      if (p.bot && p.vote == null && (p.voteAt -= dt) <= 0) p.vote = (Math.random() * v.options.length) | 0;
+      if (p.bot) continue;
+      // Tell each phone what's on offer and what it picked.
+      const ui = {
+        vote: {
+          title: v.title,
+          t: Math.max(0, Math.ceil(v.t)),
+          mine: p.vote ?? null,
+          options: v.options.map((id) => {
+            const u = UPGRADES.find((x) => x.id === id);
+            return { name: u.name, icon: u.icon, desc: u.desc };
+          }),
+        },
+      };
+      const key = 'vote|' + ui.vote.t + '|' + ui.vote.mine + '|' + v.options.join();
+      if (key !== p.uk) {
+        p.uk = key;
+        emitPlayerUi(p.id, ui);
+      }
+    }
+    if (voters.length && voters.every((p) => p.vote != null)) v.t = Math.min(v.t, config.VOTE.ALL_VOTED_WAIT);
+    if (v.t > 0) return;
+    // Count the votes; ties (or no votes at all) are settled at random.
+    const counts = v.options.map((_, i) => voters.filter((p) => p.vote === i).length);
+    const best = Math.max(...counts);
+    const tied = v.options.filter((_, i) => counts[i] === best);
+    const id = tied[(Math.random() * tied.length) | 0];
+    const up = UPGRADES.find((x) => x.id === id);
+    up.apply({ state, modules });
+    state.upgrades[id] = (state.upgrades[id] || 0) + 1;
+    state.vote = null;
+    state.ev.warn = 3.5;
+    state.ev.warnText = `UPGRADE: ${up.name.toUpperCase()}!`;
+    for (const p of Object.values(state.players)) {
+      p.vote = null;
+      p.uk = null; // resend normal button labels
+      if (!p.bot) emitPlayerUi(p.id, {}); // close the vote screen right away
+    }
+  };
+
+  const course = createCourse({ state, impact, puff, onMarker: startVote });
 
   const emitPlayerUi = (playerId, ui) => {
     if (socket && !state.players[playerId]?.bot) socket.emit('host:ui', { id: playerId, ui });
@@ -183,6 +247,11 @@ export function createSimulation() {
   };
 
   const update = (dt) => {
+    // While the crew votes on an upgrade, the action is paused.
+    if (state.vote) {
+      updateVote(dt);
+      return;
+    }
     for (const player of Object.values(state.players)) {
       if (player.bot) updateBot(player, state, dt);
       if (player.fall) {
@@ -246,7 +315,7 @@ export function createSimulation() {
               gun.emptyText = working ? 'EMPTY!' : 'BROKEN!';
             } else {
               gun.ammo -= 1;
-              gun.cd = 0.55;
+              gun.cd = config.GUNS.COOLDOWN;
               const angle = gun.aim;
               state.shells.push({
                 x: gun.bx + Math.cos(angle) * 60,
@@ -302,7 +371,7 @@ export function createSimulation() {
             act.obj.open = !act.obj.open;
             puff(act.obj.pos.x, act.obj.pos.y - state.ship.alt, '#ffffff', 6);
           } else if (type === 'load') {
-            act.obj.ammo = Math.min(act.obj.max, act.obj.ammo + 4);
+            act.obj.ammo = Math.min(act.obj.max, act.obj.ammo + config.GUNS.LOAD);
             player.carry = null;
             puff(act.station.x, player.y - 60, '#ffd23f', 8);
           } else if (type === 'ammo') player.carry = 'ammo';
@@ -355,7 +424,7 @@ export function createSimulation() {
       }
     }
 
-    state.lookout = Object.values(state.players).some((q) => q.lock === 'Lookout');
+    state.lookout = state.periscope || Object.values(state.players).some((q) => q.lock === 'Lookout');
     modules.update(state, dt);
     const BO = config.BOILER;
     if (state.ship.fuel > 0 && !modules.byName.Boiler.broken) {
@@ -394,7 +463,14 @@ export function createSimulation() {
     const maxSpeed = clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state);
     if (state.ship.speed > maxSpeed) state.ship.speed += (maxSpeed - state.ship.speed) * Math.min(1, dt * 2);
 
-    for (const gun of Object.values(state.GUNS)) gun.empty = Math.max(0, gun.empty - dt);
+    for (const gun of Object.values(state.GUNS)) {
+      gun.empty = Math.max(0, gun.empty - dt);
+      // Auto-Loader upgrade: a free shell every so often.
+      if (config.GUNS.AUTOLOAD_EVERY && gun.ammo < gun.max && (gun.auto = (gun.auto || 0) + dt) >= config.GUNS.AUTOLOAD_EVERY) {
+        gun.auto = 0;
+        gun.ammo += 1;
+      }
+    }
     if (!getHelm()) {
       state.ship.speed += (0.3 - state.ship.speed) * dt * 0.5;
       state.ship.alt *= 1 - dt * 0.4;
@@ -464,7 +540,7 @@ export function createSimulation() {
       object.worked = false;
     }
     for (const fire of state.fires) {
-      if ((fire.t += dt) > 7 && state.fires.length < 8) {
+      if ((fire.t += dt) > config.FIRE.SPREAD_EVERY && state.fires.length < 8) {
         fire.t = 0;
         const p = PLATFORMS[fire.d];
         state.fires.push({ x: clamp(fire.x + (Math.random() < 0.5 ? -1 : 1) * (100 + Math.random() * 60), p.x0 + 20, p.x1 - 20), d: fire.d, t: 0, prog: 0 });
@@ -491,6 +567,7 @@ export function createSimulation() {
     getHelm,
     interaction,
     modules,
+    startVote,
     puff,
     setSocket,
     countPlayers: () => Object.keys(state.players).length,

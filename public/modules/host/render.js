@@ -6,6 +6,7 @@ import { installLineBoil, setBoilTime, createFilmLook } from './style.js';
 import { createSprites } from './sprites.js';
 import { createCharacterArt } from './characterArt.js';
 import { createCourseArt } from './courseArt.js';
+import { UPGRADES } from './upgrades.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
@@ -366,6 +367,87 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.font = '900 64px Georgia';
       ctx.fillText('Hull breached! Patching up...', 800, 450);
     }
+    drawUpgradeIcons();
+    if (state.vote) drawVote();
+  };
+
+  // Upgrades the ship has, as a row of icons under the status panel.
+  const drawUpgradeIcons = () => {
+    const owned = Object.entries(state.upgrades || {});
+    if (!owned.length) return;
+    ctx.font = '26px "Segoe UI Emoji", sans-serif';
+    ctx.textAlign = 'left';
+    let x = 34;
+    for (const [id, n] of owned) {
+      const u = UPGRADES.find((q) => q.id === id);
+      if (!u) continue;
+      ctx.fillStyle = config.INK;
+      ctx.fillText(u.icon, x, 214);
+      if (n > 1) {
+        ctx.font = '700 15px Georgia';
+        ctx.fillText('x' + n, x + 30, 214);
+        ctx.font = '26px "Segoe UI Emoji", sans-serif';
+      }
+      x += n > 1 ? 58 : 38;
+    }
+  };
+
+  // Upgrade vote: three cards, each player's vote shown as a dot in their colour.
+  const drawVote = () => {
+    const v = state.vote;
+    ctx.fillStyle = 'rgba(27,20,16,.6)';
+    ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.font = '900 52px Georgia';
+    ctx.fillText(v.title, 800, 170);
+    ctx.font = '700 26px Georgia';
+    ctx.fillText(`Vote on your phone - ${Math.max(0, Math.ceil(v.t))}s`, 800, 215);
+    const voters = Object.values(state.players);
+    v.options.forEach((id, i) => {
+      const u = UPGRADES.find((q) => q.id === id);
+      const x = 160 + i * 440;
+      const y = 260;
+      ctx.fillStyle = '#f1e2b8';
+      ink();
+      rrect(x, y, 400, 420, 22);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = config.INK;
+      ctx.font = '90px "Segoe UI Emoji", sans-serif';
+      ctx.fillText(u.icon, x + 200, y + 130);
+      ctx.font = '900 36px Georgia';
+      ctx.fillText(u.name, x + 200, y + 200);
+      // Description, wrapped.
+      ctx.font = '400 24px Georgia';
+      const words = u.desc.split(' ');
+      let line = '';
+      let ly = y + 250;
+      for (const word of words) {
+        if (ctx.measureText(line + word).width > 340) {
+          ctx.fillText(line.trim(), x + 200, ly);
+          line = '';
+          ly += 32;
+        }
+        line += word + ' ';
+      }
+      ctx.fillText(line.trim(), x + 200, ly);
+      const level = (state.upgrades[id] || 0) + 1;
+      if (u.max > 1 && u.max < 99) {
+        ctx.font = '700 20px Georgia';
+        ctx.fillText(`Level ${level} of ${u.max}`, x + 200, y + 360);
+      }
+      // Vote dots.
+      const mine = voters.filter((p) => p.vote === i);
+      mine.forEach((p, k) => {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(x + 200 - (mine.length - 1) * 16 + k * 32, y + 395, 12, 0, 7);
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      });
+    });
   };
 
   // The item a player is holding. swingAge = ms since their last attack (for the swing pose).
@@ -696,8 +778,9 @@ export function createRenderer({ ctx, state, canvas }) {
     // Day sky, blending to sunset on the return leg of the course.
     const dusk = (state.course && state.course.dusk) || 0;
     const mix = (a, b) => {
-      const pa = a.match(/ww/g).map((h) => parseInt(h, 16));
-      const pb = b.match(/ww/g).map((h) => parseInt(h, 16));
+      const rgb = (hex) => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      const pa = rgb(a);
+      const pb = rgb(b);
       return 'rgb(' + pa.map((v, i) => Math.round(v + (pb[i] - v) * dusk)).join(',') + ')';
     };
     const gradient = ctx.createLinearGradient(0, 0, 0, height);

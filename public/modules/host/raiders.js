@@ -180,7 +180,7 @@ export function createRaiders({ state, modules, puff, impact }) {
     b.windup = 0; // interrupted!
     b.hit = 0.25;
     if (sword) {
-      b.hp -= 1;
+      b.hp -= config.TOOLS.SWORD_DAMAGE;
       b.cd = Math.max(b.cd, 0.5);
       if (b.conn == null) b.x = clampX(b, b.x + push);
     } else if (!t.noShove) {

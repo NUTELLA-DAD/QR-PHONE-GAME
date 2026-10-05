@@ -57,7 +57,36 @@ export function createControllerUI({ network }) {
     $(id).querySelector('.tx').textContent = text;
   };
 
+  // Upgrade vote: show three cards; tapping one sends the vote (you can change your mind).
+  const showVote = (v) => {
+    const box = $('vote');
+    if (!v) {
+      box.style.display = 'none';
+      return;
+    }
+    box.style.display = 'flex';
+    $('vtitle').textContent = `${v.title} - ${v.t}s`;
+    const cards = $('vcards');
+    const sig = v.options.map((o) => o.name).join('|');
+    if (cards.dataset.sig !== sig) {
+      cards.dataset.sig = sig;
+      cards.innerHTML = '';
+      v.options.forEach((o, i) => {
+        const b = document.createElement('button');
+        b.innerHTML = `<span class="ic">${o.icon}</span><b>${o.name}</b><small>${o.desc}</small>`;
+        b.addEventListener('pointerdown', () => {
+          navigator.vibrate?.(25);
+          network.sendInput({ jx: 0, jy: 0, vote: i });
+        });
+        cards.appendChild(b);
+      });
+    }
+    [...cards.children].forEach((b, i) => b.classList.toggle('on', v.mine === i));
+  };
+
   const updateUI = (next) => {
+    showVote(next.vote);
+    if (next.vote) return;
     uiState = next;
     if (next.ko) {
       $('info').innerHTML = '<b>Knocked out!</b> Hang tight - a crewmate can revive you';

@@ -175,7 +175,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       const e = state.enemy;
       if (e.dead <= 0 && Math.hypot(shell.x - e.x, shell.y - e.y) < 46) {
         shell.life = 0;
-        e.hp -= 1;
+        e.hp -= config.GUNS.DAMAGE;
         puff(e.x, e.y, '#ffcf40', 8);
         if (e.hp <= 0) {
           e.dead = 4;
@@ -188,7 +188,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       for (const c of state.cargo) {
         if (Math.abs(shell.x - c.x) < 90 && Math.abs(shell.y - c.y) < 40) {
           shell.life = 0;
-          c.hp -= 1;
+          c.hp -= config.GUNS.DAMAGE;
           c.hit = 0.15;
           puff(shell.x, shell.y, '#ffcf40', 8);
           if (c.hp <= 0) {

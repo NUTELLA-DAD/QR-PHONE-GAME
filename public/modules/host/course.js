@@ -120,7 +120,8 @@ function rng(seed) {
   };
 }
 
-export function createCourse({ state, impact, puff }) {
+// onMarker(marker) is called when the ship passes the beacon or arrives home.
+export function createCourse({ state, impact, puff, onMarker }) {
   const A = config.SHIP.ALT_RANGE - 30; // the most altitude we'll ever ask the helm for
   const course = {
     dist: 0,
@@ -210,7 +211,7 @@ export function createCourse({ state, impact, puff }) {
   };
 
   const warnAhead = (dt) => {
-    const lookout = Object.values(state.players).some((q) => q.lock === 'Lookout');
+    const lookout = state.lookout;
     const secs = lookout ? K.LOOKOUT_WARN_SECONDS : K.WARN_SECONDS;
     const v = scrollSpeed(state);
     const shipFront = 1670 + course.dist;
@@ -278,7 +279,7 @@ export function createCourse({ state, impact, puff }) {
       for (const t of course.turrets) {
         if (t.dead || t.x == null || Math.hypot(shell.x - t.x, shell.y - t.y) > 42) continue;
         shell.life = 0;
-        t.hp -= 1;
+        t.hp -= config.GUNS.DAMAGE;
         puff(shell.x, shell.y, '#ffcf40', 8);
         if (t.hp <= 0) {
           t.dead = true;
@@ -306,6 +307,7 @@ export function createCourse({ state, impact, puff }) {
         state.ev.warnText = 'TURNING BEACON - HEADING HOME!';
         course.leg = 'home';
       } else state.ev.warnText = 'CHECKPOINT!';
+      if (m.kind !== 'checkpoint' && onMarker) onMarker(m);
     }
     // Sunset on the return leg (fades in after the beacon, out before home).
     const p = (shipX % L) / L;

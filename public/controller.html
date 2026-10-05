@@ -48,6 +48,15 @@ body.lefty #lever{right:auto;left:min(42vh,180px)}
 #lever .fill{position:absolute;left:0;right:0;bottom:0;background:#4caf50;border-radius:0 0 12px 12px}
 #lever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f1e2b8;border:5px solid #1b1410;border-radius:10px}
 #lever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
+/* Upgrade vote: three big cards over everything. */
+#vote{display:none;position:fixed;inset:0;background:rgba(27,20,16,.92);z-index:8;flex-direction:column;padding:10px;gap:8px}
+#vote h2{margin:0;color:#f1e2b8;font-size:22px;text-align:center}
+#vote .cards{flex:1;display:flex;gap:10px;min-height:0}
+#vote button{flex:1;font:inherit;border:5px solid #1b1410;border-radius:16px;background:#f1e2b8;color:#1b1410;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px;box-shadow:0 5px 0 #000}
+#vote button .ic{font-size:44px}
+#vote button b{font-size:19px}
+#vote button small{font-size:14px;line-height:1.2}
+#vote button.on{background:#ffd23f;transform:translateY(-3px);outline:5px solid #fff}
 #rotate{display:none;position:fixed;inset:0;background:#1b1410;color:#f1e2b8;font-size:24px;font-weight:900;text-align:center;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9}
 #rotate .ic{font-size:70px}
 @media (orientation:portrait){body.play #rotate{display:flex}}
@@ -78,6 +87,7 @@ body.lefty #lever{right:auto;left:min(42vh,180px)}
     </div>
   </div>
 </div>
+<div id="vote"><h2 id="vtitle">Pick an upgrade</h2><div class="cards" id="vcards"></div></div>
 <div id="rotate"><div class="ic">📱↻</div>Turn your phone sideways</div>
 <script src="/socket.io/socket.io.js"></script>
 <script type="module" src="/modules/controller/main.js"></script>

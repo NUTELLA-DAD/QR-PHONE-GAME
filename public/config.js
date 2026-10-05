@@ -24,6 +24,23 @@ export const config = {
   SHIP: {
     ALT_RANGE: 260,
     CLIMB_SPEED: 170,
+    HULL_DAMAGE: 1, // multiplier on hull damage taken (armour upgrades lower it)
+  },
+  // Ship guns (upgrades change these).
+  GUNS: {
+    COOLDOWN: 0.55, // seconds between shots
+    DAMAGE: 1, // damage per shell hit
+    LOAD: 4, // shells added per ammo crate
+    AUTOLOAD_EVERY: 0, // seconds per free shell (0 = off; the Auto-Loader upgrade turns it on)
+  },
+  // Upgrade votes at the beacon and back home.
+  VOTE: {
+    TIME: 15, // seconds to vote
+    ALL_VOTED_WAIT: 1.5, // once everyone has voted, wait this long
+  },
+  // Fires.
+  FIRE: {
+    SPREAD_EVERY: 7, // seconds before a fire spreads
   },
   // Enemy cargo plane: flies in from far away and drops raiders on the catwalk.
   CARGO: {
@@ -112,6 +129,7 @@ export const config = {
     SCRAPE_BELOW: 35, // at the lowest altitude with gas below this, the hull scrapes...
     SCRAPE_DAMAGE: 2, // ...losing this much hull per second
     MAX_HOLES: 8,
+    HOLE_CHANCE: 1, // chance a hit on the gasbag punches a hole
   },
   // Old-film effects. All OFF (the user found them unpleasant). Raise a number or set
   // LINE_BOIL to true to bring one back.
@@ -137,6 +155,7 @@ export const config = {
   TOOLS: {
     REACH: 45, // how close you must stand to a rack, hook or valve
     SWORD_RANGE: 95,
+    SWORD_DAMAGE: 1,
     SWORD_COOLDOWN: 0.35,
     SWORD_KNOCKBACK: 60,
     SHOVE_RANGE: 65, // bare hands: pushes a raider back but does no damage
