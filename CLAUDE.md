@@ -26,5 +26,5 @@ and use their phone browser as the controller. The roadmap is in **PLAN.md**. Wo
 - For each task: say what you will change, make the change, run the server and check for errors,
   then summarise what changed and how the user can test it.
 - Commit to git after each working step with a clear message, so anything can be rolled back.
-- Use the test bots for solo testing; extend them when new systems need testing.
+- Use the bots for solo testing (button "Add 4 bot crew"); extend them when new systems need testing.
 - Keep tunable numbers (damage, speeds, timers) in one config file.

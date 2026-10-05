@@ -156,7 +156,11 @@ Done when: a screenshot reads as one consistent style, with no placeholder shape
   destroyable turrets, storms from lap 2, difficulty presets + autopilot, lap scorecard with
   awards, comic pop-up words, synthesised sound effects, phone buzzes/toasts, moored start screen
   with CAST OFF. Balance tuned with bot playtests (Normal, 8 bots: about 1 down per 5 minutes).
-- Next ideas: more boss types per lap, enemy art, playtest with real people and retune.
+- Also: a different boss each lap (Dread Zeppelin, Bat Carrier, Iron Dreadnought), the fighter
+  redrawn as the devil's twin-boom plane, vector art for the devil Brute and bat Cutter, a crew
+  record remembered on the TV, "Add 4 bot crew" for small groups.
+- Next ideas: playtest with real people and retune difficulty; painted sprite art; more
+  missions/routes (Phase 5).
 
 ## Decisions to confirm with the user
 - Phone orientation: landscape gamepad layout (recommended) or portrait.
