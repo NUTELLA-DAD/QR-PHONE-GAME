@@ -35,50 +35,5 @@ input{font:inherit;font-size:22px;padding:12px;border:4px solid #1b1410;border-r
   <button class="big" id="act">Hey!</button><button class="big" id="leave" style="display:none;background:#555;padding:12px">Leave station</button>
 </div>
 <script src="/socket.io/socket.io.js"></script>
-<script>if(typeof io==="undefined"){document.body.innerHTML='<div style="padding:30px;font:22px Georgia;color:#fff;background:#8b1a1a;height:100%">Cannot reach the game server.<br><br>Run <b>npm start</b> in the airship folder, then open <b>http://localhost:3000/host.html</b> (not the file directly).</div>';throw new Error("socket.io not loaded");}</script>
-<script>
-const $=id=>document.getElementById(id), sock=io({transports:['websocket']});
-const SP=[['bulldog','🐶'],['wolf','🐺'],['tiger','🐯'],['shiba','🐕'],['fox','🦊'],['bear','🐻'],['cat','🐱'],['devil','😈']];
-let species='bulldog', joined=null; // joined = {code,name,species}
-$('code').value=(new URLSearchParams(location.search).get('code')||'').toUpperCase();
-$('name').value=localStorage.name||'';
-SP.forEach(([k,e])=>{const b=document.createElement('button');b.textContent=e;b.onclick=()=>{species=k;[...$('species').children].forEach(c=>c.classList.remove('on'));b.classList.add('on');};
-  if(k===species)b.classList.add('on');$('species').appendChild(b);});
-function join(){const code=$('code').value.trim().toUpperCase(),name=$('name').value.trim()||'Crew';
-  localStorage.name=name;joined={code,name,species};
-  sock.emit('player:join',{...joined,token:localStorage['tok'+code]});}
-$('go').onclick=join;
-sock.on('connect',()=>{if(joined)join();});   // auto-rejoin after sleep/network drop
-sock.on('join:error',m=>{$('err').textContent=m;joined=null;});
-sock.on('join:ok',m=>{localStorage['tok'+m.code]=m.token;document.body.classList.add('play');document.body.style.setProperty('--c',m.color);
-  $('vjoin').classList.remove('show');$('vplay').classList.add('show');navigator.wakeLock?.request('screen').catch(()=>{});});
-sock.on('room:closed',()=>location.reload());
-let ui={};const HINT={helm:'Left/right: throttle. Up/down: altitude. Keep moving to dodge shots!',gun:'Drag to aim. Hold FIRE to shoot. Needs ammo from the hold!',boiler:'Hold STOKE to shovel coal. Keep the gauge in the green!'};
-sock.on('ui',u=>{
-  if(u.tick){const f=$('gfill');f.style.width=u.pressure+'%';f.style.background=(u.pressure>=40&&u.pressure<=80)?'#4caf50':'#e63946';return;}
-  ui=u;
-  if(u.ko){$('station').innerHTML='Knocked out!<small>Hang tight - a crewmate can revive you</small>';$('act').textContent='Zzz';$('leave').style.display='none';$('gauge').style.display='none';navigator.vibrate?.([80,60,80]);return;}
-  const s=u.station,am=u.ammo!=null?' - '+u.ammo+' shells':'';
-  const act=u.label&&u.label!=='Hey!'?u.label+(u.hold?' - hold the button':' - tap the button'):'';
-  const small=u.locked?HINT[u.kind]:act||(u.taken?'Someone is already here':u.carry==='ammo'?'Bring the ammo to a cannon':u.carry?'Find a hole to patch':s?'Nothing to do here yet':'Walk to a station, hole, or fire');
-  $('station').innerHTML=`${s||'Walking'}${am}${u.carry?' (carrying '+u.carry+')':''}<small>${small}</small>`;
-  $('act').textContent=u.label||'Hey!';$('leave').style.display=u.locked?'block':'none';
-  $('gauge').style.display=u.locked&&u.kind==='boiler'?'block':'none';navigator.vibrate?.(30);});
-
-// joystick: sends {jx,jy} (-1..1) at ~25Hz while it changes
-let jx=0,jy=0,dirty=false,id=null;const pad=$('pad'),knob=$('knob');
-function move(e){const r=pad.getBoundingClientRect(),R=r.width/2;let dx=e.clientX-(r.left+R),dy=e.clientY-(r.top+R);
-  const d=Math.hypot(dx,dy);if(d>R){dx*=R/d;dy*=R/d;}jx=dx/R;jy=dy/R;dirty=true;
-  knob.style.transform=`translate(${dx}px,${dy}px)`;}
-pad.addEventListener('pointerdown',e=>{id=e.pointerId;pad.setPointerCapture(id);move(e);});
-pad.addEventListener('pointermove',e=>{if(e.pointerId===id)move(e);});
-const end=e=>{if(e.pointerId===id){id=null;jx=jy=0;dirty=true;knob.style.transform='';}};
-pad.addEventListener('pointerup',end);pad.addEventListener('pointercancel',end);
-let firing=false;const sendAct=()=>{sock.emit('player:input',{jx,jy,act:1});navigator.vibrate?.(15);};
-const cease=()=>{if(firing){firing=false;sock.emit('player:input',{jx,jy,fire:0});}};
-$('act').addEventListener('pointerdown',()=>{sendAct();if(ui.hold){firing=true;sock.emit('player:input',{jx,jy,fire:1});}});
-['pointerup','pointercancel','pointerleave'].forEach(e=>$('act').addEventListener(e,cease));
-addEventListener('contextmenu',e=>e.preventDefault());
-$('leave').onclick=()=>sock.emit('player:input',{jx:0,jy:0,leave:1});
-setInterval(()=>{if(dirty&&joined){sock.volatile.emit('player:input',{jx,jy});dirty=false;}},40);
-</script></body></html>
+<script type="module" src="/modules/controller/main.js"></script>
+</body></html>
