@@ -8,7 +8,7 @@ import { bestTarget } from './aim.js';
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
 const GUN_STATIONS = Object.keys(L.gunMounts);
-const MANNED_STATIONS = ['Helm', 'Boiler', ...GUN_STATIONS, 'Lookout'];
+const MANNED_STATIONS = ['Helm', ...GUN_STATIONS, 'Lookout'];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -54,9 +54,10 @@ function listJobs(state, bot) {
   const mods = state.modules || [];
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2 });
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
+  if (state.ship.press >= config.BOILER.WARN_AT - 3) jobs.push({ kind: 'vent', obj: 'vent', max: 1 });
   for (const bomb of state.bombs || []) jobs.push({ kind: 'defuse', obj: bomb, max: 1 });
   const fires = state.fires.map((f) => ({ kind: 'fire', obj: f, max: 1 }));
-  const holes = state.breaches.map((h) => ({ kind: 'patch', obj: h, max: 1 }));
+  const holes = [...state.breaches, ...(state.gasHoles || [])].map((h) => ({ kind: 'patch', obj: h, max: 1 }));
   // Burst pipes with their valve open leak steam: shut the valve, then fix what's broken.
   const leaks = mods.filter((m) => m.kind === 'pipe' && m.broken && m.open).map((m) => ({ kind: 'valve', obj: m, max: 1 }));
   const broken = mods.filter((m) => m.broken).map((m) => ({ kind: 'repair', obj: m, max: 1 }));
@@ -65,6 +66,7 @@ function listJobs(state, bot) {
   else jobs.push(...fires, ...leaks, ...broken, ...holes);
   for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open) jobs.push({ kind: 'valve', obj: m, max: 1 });
   for (const m of mods) if (!m.broken && m.hp < 60) jobs.push({ kind: 'repair', obj: m, max: 1 });
+  if (state.ship.fuel < 35 || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: 1 });
   const guns = GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
@@ -77,7 +79,7 @@ function listJobs(state, bot) {
 }
 
 function isEmergency(job) {
-  return job.kind !== 'ammo' && job.kind !== 'station' && !(job.kind === 'repair' && !job.obj.broken);
+  return job.kind !== 'ammo' && job.kind !== 'station' && job.kind !== 'coal' && !(job.kind === 'repair' && !job.obj.broken);
 }
 
 function chooseJob(state, bot, bots) {
@@ -106,12 +108,6 @@ function operate(p, state, dt) {
     const dodge = dodgeAltitude(state);
     if (dodge !== null) p.jy = clamp((ship.alt - dodge) / 40, -1, 1);
     else p.jy = enemyActive(state) ? Math.sin(performance.now() / 700 + p.phase) * 0.7 : clamp(ship.alt / 40, -1, 1);
-  } else if (p.lock === 'Boiler') {
-    if (ship.press < B.BOILER_LOW) p.stoking = true;
-    if (ship.press > B.BOILER_HIGH) p.stoking = false;
-    // Shovel in rhythm; most shovels are well timed.
-    if (p.stoking && (p.pressCd || 0) <= 0) p.perfect = Math.random() < 0.6;
-    if (p.stoking) press(p);
   } else {
     const gun = state.GUNS[p.lock];
     if (!gun) return;
@@ -167,6 +163,14 @@ function work(p, state) {
         p.whackCd = B.WHACK_EVERY;
       }
     }
+  } else if (job.kind === 'vent') {
+    // Hold the nearest vent until pressure is back down.
+    const cost = (v) => Math.abs(v.x - p.x) + Math.abs(L.platforms[v.d].y - p.y) * 3;
+    const v = [...L.vents].sort((a, b) => cost(a) - cost(b))[0];
+    if (steer(p, v.d, v.x, 10) && state.ship.press > config.BOILER.WARN_AT - 20) p.fire = true;
+  } else if (job.kind === 'coal') {
+    const s = p.carry === 'coal' ? stationNamed('Boiler') : stationNamed('Coal Bunker');
+    if (steer(p, s.d, s.x)) press(p);
   } else if (job.kind === 'defuse') {
     if (steer(p, o.d, o.x, 25)) p.fire = true;
   } else if (job.kind === 'revive') {

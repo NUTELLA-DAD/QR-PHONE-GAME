@@ -240,13 +240,14 @@ export function createShipArt({ ctx, state, ink, rrect }) {
     const by = P[boiler.d].y;
     filled('#3d3d3d', () => ctx.roundRect(boiler.x - 70, by - 112, 90, 112, 16));
     const glow = 0.5 + 0.5 * Math.sin(time * 6);
-    ctx.fillStyle = `rgba(255,${120 + glow * 80},40,0.9)`;
+    const fuel = Math.min(1, (state.ship.fuel || 0) / 40);
+    ctx.fillStyle = fuel > 0 ? `rgba(255,${120 + glow * 80},40,${0.3 + 0.7 * fuel})` : '#2b2b2b';
     ctx.fillRect(boiler.x - 50, by - 48, 50, 30);
     const gx = boiler.x + 60;
     const gy = by - 90;
     const angle = -Math.PI * 1.15 + (state.ship.press / 100) * Math.PI * 1.3;
     filled('#f1e2b8', () => ctx.arc(gx, gy, 28, 0, 7));
-    line([[gx, gy], [gx + Math.cos(angle) * 22, gy + Math.sin(angle) * 22]], 5, state.ship.press >= 40 && state.ship.press <= 80 ? '#2e7d32' : '#c62828');
+    line([[gx, gy], [gx + Math.cos(angle) * 22, gy + Math.sin(angle) * 22]], 5, state.ship.press < config.BOILER.WARN_AT ? '#2e7d32' : '#c62828');
 
     // Ship's wheel at the helm, turning with speed.
     const helm = L.stations.find((s) => s.n === 'Helm');
@@ -312,6 +313,71 @@ export function createShipArt({ ctx, state, ink, rrect }) {
     }
   };
 
+  // Gasbag holes: torn patches with gas wisping out.
+  const drawGasHoles = (time) => {
+    for (const h of state.gasHoles || []) {
+      ink();
+      ctx.lineWidth = 3;
+      ctx.fillStyle = '#3b2a1d';
+      ctx.beginPath();
+      ctx.moveTo(h.x - 16, h.y - 8);
+      ctx.lineTo(h.x - 4, h.y - 14);
+      ctx.lineTo(h.x + 14, h.y - 6);
+      ctx.lineTo(h.x + 10, h.y + 10);
+      ctx.lineTo(h.x - 12, h.y + 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      for (let k = 0; k < 3; k++) {
+        const t = (time * 1.2 + k / 3) % 1;
+        ctx.fillStyle = `rgba(225,240,220,${0.8 - t * 0.8})`;
+        ctx.beginPath();
+        ctx.arc(h.x + Math.sin(time * 4 + k) * 8, h.y - 14 - t * 50, 7 + t * 14, 0, 7);
+        ctx.fill();
+      }
+      if (h.prog > 0) {
+        ctx.fillStyle = '#3b2a1d';
+        ctx.fillRect(h.x - 24, h.y + 16, 48, 8);
+        ctx.fillStyle = '#8fe388';
+        ctx.fillRect(h.x - 24, h.y + 16, 48 * Math.min(1, h.prog), 8);
+      }
+    }
+  };
+
+  // Steam vent stacks: they hiss when pressure is high.
+  const drawVents = (time) => {
+    const high = state.ship.press >= config.BOILER.WARN_AT;
+    for (const v of L.vents) {
+      const y = P[v.d].y;
+      filled('#9aa1a6', () => ctx.rect(v.x - 9, y - 140, 18, 100));
+      filled('#6d7378', () => ctx.rect(v.x - 16, y - 150, 32, 14));
+      filled(high ? '#e63946' : '#c0392b', () => ctx.arc(v.x, y - 60, 13, 0, 7));
+      line([[v.x - 13, y - 60], [v.x + 13, y - 60]], 3);
+      if (high) {
+        for (let k = 0; k < 2; k++) {
+          const t = (time * 1.5 + k / 2) % 1;
+          ctx.fillStyle = `rgba(255,255,255,${0.7 - t * 0.7})`;
+          ctx.beginPath();
+          ctx.arc(v.x, y - 160 - t * 40, 8 + t * 12, 0, 7);
+          ctx.fill();
+        }
+      }
+    }
+  };
+
+  // Coal bunker: a bin with a coal heap.
+  const drawCoal = () => {
+    const s = L.stations.find((q) => q.n === 'Coal Bunker');
+    if (!s) return;
+    const y = P[s.d].y;
+    filled(WOOD, () => ctx.rect(s.x - 50, y - 46, 100, 46));
+    filled('#2b2b2b', () => {
+      ctx.moveTo(s.x - 44, y - 44);
+      ctx.quadraticCurveTo(s.x - 10, y - 86, s.x + 44, y - 44);
+      ctx.closePath();
+    });
+  };
+
   const drawLabels = () => {
     ctx.font = '700 24px Georgia';
     ctx.textAlign = 'center';
@@ -349,9 +415,12 @@ export function createShipArt({ ctx, state, ink, rrect }) {
     drawRacks();
     drawExtinguishers();
     drawProps(time);
+    drawCoal();
+    drawVents(time);
     drawConnectors();
     drawCatwalk();
     drawLabels();
+    drawGasHoles(time);
     drawModuleStatus(time);
   };
 }

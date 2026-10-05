@@ -67,22 +67,6 @@ export function createControllerInput({ network, ui }) {
     );
   };
 
-  // Boiler shovel timing: a marker sweeps back and forth; tapping while it's in the green
-  // zone (middle 20%) is a "perfect" shovel. Judged here on the phone so lag doesn't matter.
-  const rhythm = document.getElementById('rhythm');
-  const mark = rhythm.querySelector('.mark');
-  const msg = rhythm.querySelector('.msg');
-  const PERIOD = 1300;
-  const markerPos = () => {
-    const t = (performance.now() % PERIOD) / PERIOD;
-    return t < 0.5 ? t * 2 : 2 - t * 2;
-  };
-  const animate = () => {
-    if (rhythm.style.display !== 'none') mark.style.left = markerPos() * 100 + '%';
-    requestAnimationFrame(animate);
-  };
-  requestAnimationFrame(animate);
-
   // Helm throttle lever: drag up for full speed.
   const lever = document.getElementById('lever');
   const leverFill = lever.querySelector('.fill');
@@ -123,17 +107,7 @@ export function createControllerInput({ network, ui }) {
   lever.addEventListener('pointercancel', leverUp);
   showLever();
 
-  const sendAction = () => {
-    const state = ui.getState ? ui.getState() : {};
-    if (state.locked && state.kind === 'boiler') {
-      const perfect = Math.abs(markerPos() - 0.5) < 0.1;
-      msg.textContent = perfect ? 'PERFECT!' : 'Shovel!';
-      if (perfect) navigator.vibrate?.([10, 30, 10]);
-      network.sendInput({ jx, jy, act: 1, perfect: perfect ? 1 : 0 });
-      return;
-    }
-    network.sendInput({ jx, jy, act: 1 });
-  };
+  const sendAction = () => network.sendInput({ jx, jy, act: 1 });
 
   const cease = () => {
     if (firing) {

@@ -28,9 +28,6 @@ label.opt input{width:28px;height:28px}
 #info{background:rgba(241,226,184,.9);border:3px solid #1b1410;border-radius:12px;padding:3px 10px;font-size:15px;line-height:1.25;min-height:26px}
 #info b{font-size:17px}
 #info .warn{color:#c62828;font-weight:900}
-#gauge{height:22px;border:3px solid #1b1410;border-radius:10px;background:#3b2a1d;position:relative;overflow:hidden;display:none}
-#gfill{position:absolute;left:0;top:0;bottom:0;width:0;background:#e63946}
-#gband{position:absolute;left:40%;width:40%;top:0;bottom:0;border:3px solid #4caf50}
 #controls{flex:1;display:flex;align-items:center;justify-content:space-between;min-height:0}
 body.lefty #controls{flex-direction:row-reverse}
 #pad{position:relative;border:5px solid #1b1410;border-radius:50%;background:rgba(255,255,255,.35);width:min(44vw,62vh);aspect-ratio:1}
@@ -51,11 +48,6 @@ body.lefty #lever{right:auto;left:min(42vh,180px)}
 #lever .fill{position:absolute;left:0;right:0;bottom:0;background:#4caf50;border-radius:0 0 12px 12px}
 #lever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f1e2b8;border:5px solid #1b1410;border-radius:10px}
 #lever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
-/* Boiler shovel timing bar. */
-#rhythm{height:30px;border:3px solid #1b1410;border-radius:10px;background:#3b2a1d;position:relative;overflow:hidden;display:none}
-#rhythm .zone{position:absolute;left:40%;width:20%;top:0;bottom:0;background:#4caf50}
-#rhythm .mark{position:absolute;top:0;bottom:0;width:8px;margin-left:-4px;background:#ffd23f;border-left:2px solid #1b1410;border-right:2px solid #1b1410}
-#rhythm .msg{position:absolute;inset:0;text-align:center;color:#fff;font-weight:900;font-size:15px;line-height:24px;text-shadow:0 1px 2px #000}
 #rotate{display:none;position:fixed;inset:0;background:#1b1410;color:#f1e2b8;font-size:24px;font-weight:900;text-align:center;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9}
 #rotate .ic{font-size:70px}
 @media (orientation:portrait){body.play #rotate{display:flex}}
@@ -77,8 +69,6 @@ body.lefty #lever{right:auto;left:min(42vh,180px)}
     <button id="leave">Leave</button>
   </div>
   <div id="info"><b>Walking</b> - walk to a station, rack, fire or hole</div>
-  <div id="gauge"><div id="gfill"></div><div id="gband"></div></div>
-  <div id="rhythm"><div class="zone"></div><div class="mark"></div><div class="msg">Tap SHOVEL! when the marker is in the green</div></div>
   <div id="controls">
     <div id="pad"><div id="knob"></div></div>
     <div id="buttons">

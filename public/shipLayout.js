@@ -55,6 +55,7 @@ export const SHIP_LAYOUT = {
     { n: 'Helm', p: 'main', x: 1330 },
     { n: 'Nose Gun', p: 'main', x: 1430 },
     { n: 'Aft Sponson', p: 'lower', x: 420 },
+    { n: 'Coal Bunker', p: 'lower', x: 570 },
     { n: 'Ammo Hold', p: 'lower', x: 870 },
     { n: 'Fore Sponson', p: 'lower', x: 1180 },
     { n: 'Ventral Gun', p: 'pod', x: 820 },
@@ -85,6 +86,17 @@ export const SHIP_LAYOUT = {
     { to: 'Aft Engine', p: 'lower', points: [[370, 610], [370, 680], [110, 680], [110, 765]], valve: [230, 680] },
     { to: 'Fore Engine', p: 'lower', points: [[440, 610], [440, 692], [1490, 692], [1490, 765]], valve: [1260, 692] },
   ]),
+
+  // Steam vents: hold Action here to release boiler pressure when it gets too high.
+  vents: withD([
+    { p: 'catwalk', x: 600 },
+    { p: 'main', x: 1000 },
+    { p: 'lower', x: 1100 },
+  ]),
+
+  // The gasbag envelope (an ellipse). Holes in it are patched from the catwalk below
+  // or the crow's nest on top.
+  gasbag: { cx: 800, cy: 245, rx: 860, ry: 185 },
 
   // Where to stand to repair the lift.
   liftRepair: { p: 'lower', x: 925 },

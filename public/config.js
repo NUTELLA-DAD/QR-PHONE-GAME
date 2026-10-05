@@ -66,12 +66,28 @@ export const config = {
     ANGLE: 0.28, // radians: how close your aim must be for assist to kick in
     STRENGTH: 0.7, // 0 = off, 1 = snap fully onto the target
   },
-  // Boiler shovel timing (phone shows a sweeping marker).
+  // Boiler: crew carry coal from the Coal Bunker. Burning coal builds pressure; too much
+  // pressure must be vented at the vent stacks or the boiler blows.
   BOILER: {
-    SHOVEL: 4, // pressure per normal shovel
-    PERFECT_SHOVEL: 10, // pressure per well-timed shovel
-    SHOVEL_COOLDOWN: 0.35,
-    HOLD_RATE: 7, // pressure per second when just holding the button
+    START_FUEL: 40,
+    COAL_FUEL: 25, // fuel added per load of coal
+    FUEL_MAX: 100,
+    BURN_RATE: 1.6, // fuel burned per second
+    HEAT_RATE: 7, // pressure gained per second while there's fuel
+    WARN_AT: 90, // "vent steam!" warning
+    BLOWOUT_AT: 100, // boiler blows: damages itself and bursts a pipe
+    VENT_RATE: 20, // pressure released per second while someone holds a vent
+  },
+  // Gasbag: shots punch holes that leak gas. Low gas = the ship sinks. Boiler pressure
+  // pumps gas back in, so high pressure can keep a leaky ship afloat.
+  GAS: {
+    LEAK_PER_HOLE: 3, // gas lost per second per hole
+    REFILL_RATE: 3, // gas gained per second at 100% pressure
+    SINK_BELOW: 65, // below this much gas the ship starts sinking
+    SINK_SPEED: 4, // how fast it sinks per point of gas below that
+    SCRAPE_BELOW: 35, // at the lowest altitude with gas below this, the hull scrapes...
+    SCRAPE_DAMAGE: 2, // ...losing this much hull per second
+    MAX_HOLES: 8,
   },
   // Walking feel.
   MOVE: {

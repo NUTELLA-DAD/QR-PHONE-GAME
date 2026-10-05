@@ -210,7 +210,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawHud = () => {
     ctx.fillStyle = '#f1e2b8';
     ink();
-    rrect(30, 28, 440, 100, 14);
+    rrect(30, 28, 440, 156, 14);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#3b2a1d';
@@ -224,19 +224,30 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillText('Hull', 46, 50);
     ctx.textAlign = 'right';
     ctx.fillText('Raiders downed: ' + state.kills, 454, 50);
+    // Steam pressure: red zone at the top means vent!
+    const warnAt = config.BOILER.WARN_AT / 100;
     ctx.fillStyle = '#3b2a1d';
     ctx.fillRect(46, 104, 408, 14);
-    ctx.fillStyle = state.ship.press >= 40 && state.ship.press <= 80 ? '#e8eef2' : '#e8913a';
+    ctx.fillStyle = 'rgba(230,57,70,.45)';
+    ctx.fillRect(46 + 408 * warnAt, 104, 408 * (1 - warnAt), 14);
+    ctx.fillStyle = state.ship.press >= config.BOILER.WARN_AT ? '#e63946' : state.ship.press < 30 ? '#e8913a' : '#e8eef2';
     ctx.fillRect(46, 104, 408 * state.ship.press / 100, 14);
-    ctx.strokeStyle = '#4caf50';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(46 + 408 * 0.4, 104, 408 * 0.4, 14);
     ink();
+    ctx.lineWidth = 3;
     ctx.strokeRect(46, 104, 408, 14);
+    // Gas in the envelope.
+    ctx.fillStyle = '#3b2a1d';
+    ctx.fillRect(46, 154, 408, 14);
+    ctx.fillStyle = state.ship.gas < config.GAS.SINK_BELOW ? '#e63946' : '#a8d8a0';
+    ctx.fillRect(46, 154, 408 * state.ship.gas / 100, 14);
+    ctx.strokeRect(46, 154, 408, 14);
     ctx.fillStyle = config.INK;
     ctx.font = '700 16px Georgia';
     ctx.textAlign = 'left';
     ctx.fillText('Steam', 46, 100);
+    ctx.fillText(`Gas${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}${state.sinking ? ' - SINKING!' : ''}`, 46, 150);
+    ctx.textAlign = 'right';
+    ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);
 
     if (state.ev.warn > 0) {
       ctx.font = '900 44px Georgia';
@@ -266,7 +277,18 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.scale(face, 1);
     ink();
     ctx.lineWidth = 3;
-    if (item === 'ammo') {
+    if (item === 'coal') {
+      ctx.fillStyle = '#2b2b2b';
+      ctx.beginPath();
+      ctx.moveTo(-8, 6);
+      ctx.lineTo(-4, -8);
+      ctx.lineTo(10, -10);
+      ctx.lineTo(16, 4);
+      ctx.lineTo(6, 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (item === 'ammo') {
       ctx.fillStyle = '#b5833f';
       ctx.fillRect(-8, -8, 22, 16);
       ctx.strokeRect(-8, -8, 22, 16);
@@ -317,6 +339,13 @@ export function createRenderer({ ctx, state, canvas }) {
         return { x: o.x, y: P[o.d].y - 30, r: 50 };
       case 'hole':
         return { x: o.x, y: P[o.d].y - 58, r: 42 };
+      case 'gas':
+        return { x: o.x, y: o.y, r: 40 };
+      case 'vent':
+        return { x: o.x, y: P[o.d].y - 100, r: 42 };
+      case 'coal':
+      case 'stoke':
+        return { x: act.station.x, y: P[act.station.d].y - 50, r: 52 };
       case 'repair':
       case 'valve':
         return { x: o.pos.x, y: o.pos.y, r: 40 };

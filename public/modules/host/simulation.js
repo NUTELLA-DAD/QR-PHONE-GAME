@@ -20,6 +20,23 @@ function hitsShip(x, y) {
   return gas || gondola || outriggers || pod;
 }
 
+const GB = SHIP_LAYOUT.gasbag;
+const onGasbag = (x, y) => ((x - GB.cx) / GB.rx) ** 2 + ((y - GB.cy) / GB.ry) ** 2 < 1 && y < 455;
+
+// A gasbag hole where the crew can reach it: on top near the crow's nest, or on the underside
+// above the catwalk. (x, y) is the hole's drawn position on the envelope.
+function gasHoleAt(x, y) {
+  const nest = PLATFORMS.findIndex((p) => p.id === 'nest');
+  const cat = PLATFORMS.findIndex((p) => p.id === 'catwalk');
+  const edge = (hx, top) => GB.cy + (top ? -1 : 1) * GB.ry * Math.sqrt(Math.max(0, 1 - ((hx - GB.cx) / GB.rx) ** 2));
+  if (y < GB.cy && x > PLATFORMS[nest].x0 - 60 && x < PLATFORMS[nest].x1 + 60) {
+    const hx = Math.max(PLATFORMS[nest].x0 + 15, Math.min(PLATFORMS[nest].x1 - 15, x));
+    return { x: hx, d: nest, y: edge(hx, true) + 34, prog: 0 };
+  }
+  const hx = Math.max(PLATFORMS[cat].x0 + 20, Math.min(PLATFORMS[cat].x1 - 20, x));
+  return { x: hx, d: cat, y: edge(hx, false) - 22, prog: 0 };
+}
+
 // Which indoor/outdoor floor a hit at (x, y) lands on (holes and fires go there), or null (e.g. gasbag).
 function roomPlatformAt(x, y) {
   const d = PLATFORMS.findIndex((p) => p.id !== 'nest' && x >= p.x0 && x <= p.x1 && y <= p.y + 15 && y >= p.y - 170);
@@ -30,7 +47,8 @@ export function createSimulation() {
   let socket = null;
   const state = {
     players: {},
-    ship: { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 70 },
+    ship: { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 70, fuel: config.BOILER.START_FUEL, gas: 100 },
+    gasHoles: [],
     enemy: { ang: 0, x: -200, y: 300, vx: 1, vy: 0, hp: 5, fire: 2.5, dead: 0 },
     shells: [],
     bullets: [],
@@ -62,7 +80,7 @@ export function createSimulation() {
   const modules = createModules();
   state.modules = modules.list;
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
-  const LOCKABLE = (name) => name === 'Helm' || name === 'Boiler' || name === 'Lookout' || !!state.GUNS[name];
+  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || !!state.GUNS[name];
 
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
@@ -81,18 +99,27 @@ export function createSimulation() {
     // Standing right at a rack or hook always means take / put back.
     const pickup = PICKUPS.find((r) => here(r, T.REACH));
     if (pickup) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : `Take ${pickup.kind}` };
+    const gasHole = state.gasHoles.find((o) => here(o, 60));
+    if (gasHole && tool === 'hammer') return { type: 'gas', obj: gasHole, hold: true, time: T.PATCH_TIME, label: 'Patch gasbag' };
     const hurt = modules.list.find((m) => m.hp < m.max && here(m, T.REACH + 15));
     if (hurt && tool === 'hammer') return { type: 'repair', obj: hurt, hold: true, label: `Repair ${hurt.name}` };
+    const vent = SHIP_LAYOUT.vents.find((v) => here(v, T.REACH));
+    if (vent) return { type: 'vent', obj: vent, hold: true, label: 'Vent steam' };
     const valve = modules.list.find((m) => m.kind === 'pipe' && here(m, T.REACH));
     if (valve) return { type: 'valve', obj: valve, label: valve.open ? 'Close valve' : 'Open valve' };
     if (station) {
       const gun = state.GUNS[station.n];
       if (gun && tool === 'ammo' && gun.ammo < gun.max) return { type: 'load', obj: gun, station, label: 'Load ' + station.n };
       if (station.n === 'Ammo Hold' && tool !== 'ammo') return { type: 'ammo', station, label: 'Grab ammo' };
+      if (station.n === 'Coal Bunker' && tool !== 'coal') return { type: 'coal', station, label: 'Grab coal' };
+      if (station.n === 'Boiler' && tool === 'coal') {
+        const full = state.ship.fuel > config.BOILER.FUEL_MAX - config.BOILER.COAL_FUEL;
+        return full ? { type: 'need', label: 'Firebox is full' } : { type: 'stoke', station, label: 'Load coal' };
+      }
       if (LOCKABLE(station.n) && !taken(station.n)) return { type: 'station', station, label: 'Take ' + station.n };
     }
     if (fire) return { type: 'need', label: 'Need an extinguisher' };
-    if (hole || hurt) return { type: 'need', label: 'Need a hammer' };
+    if (hole || hurt || gasHole) return { type: 'need', label: 'Need a hammer' };
     return null;
   };
 
@@ -127,6 +154,11 @@ export function createSimulation() {
     state.ship.shake = Math.min(1, 0.35 * power);
     shipPuff(x, y, '#ff7b00', Math.round(8 * power));
     modules.hitAt(x, y, shipPuff, power);
+    if (onGasbag(x, y)) {
+      if (state.gasHoles.length < config.GAS.MAX_HOLES) state.gasHoles.push(gasHoleAt(x, y));
+      damageHull(2 * power);
+      return;
+    }
     const d = roomPlatformAt(x, y);
     if (d !== null) {
       const p = PLATFORMS[d];
@@ -197,19 +229,6 @@ export function createSimulation() {
             const climb = config.SHIP.CLIMB_SPEED * (0.4 + 0.6 * Math.min(1, state.ship.press / 50));
             state.ship.alt = clamp(state.ship.alt - player.jy * climb * dt, -config.SHIP.ALT_RANGE, config.SHIP.ALT_RANGE);
           }
-        } else if (player.lock === 'Boiler') {
-          const BO = config.BOILER;
-          player.shovelCd = Math.max(0, (player.shovelCd || 0) - dt);
-          if (working) {
-            if (player.fire) state.ship.press += BO.HOLD_RATE * dt;
-            if (player.actQ && player.shovelCd <= 0) {
-              state.ship.press += player.perfect ? BO.PERFECT_SHOVEL : BO.SHOVEL;
-              player.shovelCd = BO.SHOVEL_COOLDOWN;
-              shipPuff(player.x - 40, PLATFORMS[player.d].y - 40, player.perfect ? '#ffd23f' : '#ff8c42', player.perfect ? 8 : 3);
-            }
-            state.ship.press = clamp(state.ship.press, 0, 100);
-          }
-          player.perfect = false;
         } else if (gun) {
           gun.cd = Math.max(0, gun.cd - dt);
           // Turn toward the stick, but only within this gun's firing arc (a broken gun is jammed).
@@ -252,6 +271,9 @@ export function createSimulation() {
           const object = act.obj;
           if (act.type === 'repair') {
             if (modules.repair(object, dt)) puff(object.pos.x, object.pos.y - state.ship.alt, '#8fe388', 10);
+          } else if (act.type === 'vent') {
+            state.ship.press = Math.max(0, state.ship.press - config.BOILER.VENT_RATE * dt);
+            if (Math.random() < dt * 12) shipPuff(object.x + (Math.random() - 0.5) * 20, PLATFORMS[object.d].y - 150, '#ffffff', 2);
           } else {
             object.worked = true;
             object.prog = (object.prog || 0) + dt / act.time;
@@ -262,6 +284,7 @@ export function createSimulation() {
                 state.breaches.splice(state.breaches.indexOf(object), 1);
                 state.ship.hull = Math.min(100, state.ship.hull + 3);
               } else if (act.type === 'defuse') state.bombs.splice(state.bombs.indexOf(object), 1);
+              else if (act.type === 'gas') state.gasHoles.splice(state.gasHoles.indexOf(object), 1);
               else object.ko = 0;
               puff(object.x, player.y - 50, '#8fe388', 10);
             }
@@ -281,6 +304,12 @@ export function createSimulation() {
             player.carry = null;
             puff(act.station.x, player.y - 60, '#ffd23f', 8);
           } else if (type === 'ammo') player.carry = 'ammo';
+          else if (type === 'coal') player.carry = 'coal';
+          else if (type === 'stoke') {
+            state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + config.BOILER.COAL_FUEL);
+            player.carry = null;
+            shipPuff(act.station.x - 30, PLATFORMS[act.station.d].y - 50, '#ff8c42', 8);
+          }
           else if (type === 'station') {
             player.lock = act.station.n;
             player.x = act.station.x;
@@ -307,7 +336,9 @@ export function createSimulation() {
         hold = !!player.act.hold;
       }
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
-      const status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
+      let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
+      if (stationName === 'Boiler' && !status) status = `Pressure ${Math.round(state.ship.press / 5) * 5}% - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
+      if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - vent steam!';
       const ammoText = gun ? gun.ammo : null;
       const attackLabel = player.carry === 'sword' ? 'Swing' : 'Shove';
       const hull = Math.round(state.ship.hull / 5) * 5;
@@ -319,21 +350,43 @@ export function createSimulation() {
           emitPlayerUi(player.id, player.ui);
         }
       }
-      if (player.lock === 'Boiler' && !player.bot && ((player.pt = (player.pt || 0) - dt) <= 0)) {
-        player.pt = 0.2;
-        player.ui = { ...(player.ui || {}), tick: 1, pressure: state.ship.press };
-        emitPlayerUi(player.id, player.ui);
-      }
     }
 
     state.lookout = Object.values(state.players).some((q) => q.lock === 'Lookout');
     modules.update(state, dt);
+    const BO = config.BOILER;
+    if (state.ship.fuel > 0 && !modules.byName.Boiler.broken) {
+      state.ship.fuel = Math.max(0, state.ship.fuel - BO.BURN_RATE * dt);
+      state.ship.press += BO.HEAT_RATE * dt;
+    }
     state.ship.press = clamp(state.ship.press - modules.pressureDrain(state) * dt, 0, 100);
-    if (state.ship.press >= 96) {
-      state.ship.press = 72;
+    if (state.ship.press >= BO.WARN_AT && !state.pressureWarned && !state.ship.down) {
+      state.pressureWarned = true;
+      state.ev.warn = 3;
+      state.ev.warnText = 'PRESSURE HIGH - VENT STEAM!';
+    }
+    if (state.ship.press < BO.WARN_AT - 10) state.pressureWarned = false;
+    if (state.ship.press >= BO.BLOWOUT_AT) {
+      // The boiler blows: damage it and burst a random steam pipe.
+      state.ship.press = 75;
       const boiler = SHIP_LAYOUT.stations.find((s) => s.n === 'Boiler');
-      puff(boiler.x, platformY(boiler.d) - 70 - state.ship.alt, '#fff', 14);
+      puff(boiler.x, platformY(boiler.d) - 70 - state.ship.alt, '#fff', 20);
       modules.damage(modules.byName.Boiler, config.MODULES.BOILER_BLOWOUT_DAMAGE, shipPuff);
+      const pipes = modules.list.filter((m) => m.kind === 'pipe' && !m.broken);
+      if (pipes.length) modules.damage(pipes[(Math.random() * pipes.length) | 0], 999, shipPuff);
+      state.ship.shake = 0.6;
+      state.ev.warn = 3;
+      state.ev.warnText = 'THE BOILER BLEW! A PIPE BURST!';
+    }
+
+    const G = config.GAS;
+    if (!state.ship.down) {
+      state.ship.gas += (G.REFILL_RATE * (state.ship.press / 100) - G.LEAK_PER_HOLE * state.gasHoles.length) * dt;
+      state.ship.gas = clamp(state.ship.gas, 0, 100);
+      if (state.ship.gas <= 0) {
+        state.ship.down = 6;
+        state.ship.hull = 0;
+      }
     }
     const maxSpeed = clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state);
     if (state.ship.speed > maxSpeed) state.ship.speed += (maxSpeed - state.ship.speed) * Math.min(1, dt * 2);
@@ -342,6 +395,12 @@ export function createSimulation() {
     if (!getHelm()) {
       state.ship.speed += (0.3 - state.ship.speed) * dt * 0.5;
       state.ship.alt *= 1 - dt * 0.4;
+    }
+    // Losing gas: the ship sinks, and scrapes along the bottom if it's very low.
+    state.sinking = state.ship.gas < G.SINK_BELOW;
+    if (state.sinking && !state.ship.down) {
+      state.ship.alt = Math.max(-config.SHIP.ALT_RANGE, state.ship.alt - (G.SINK_BELOW - state.ship.gas) * G.SINK_SPEED * dt);
+      if (state.ship.alt <= -config.SHIP.ALT_RANGE + 1 && state.ship.gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
     }
     state.ship.shake = Math.max(0, state.ship.shake - dt);
 
@@ -355,6 +414,10 @@ export function createSimulation() {
         raiders.reset();
         threats.reset();
         modules.reset();
+        state.gasHoles.length = 0;
+        state.ship.gas = 100;
+        state.ship.fuel = config.BOILER.START_FUEL;
+        state.ship.press = 70;
         for (const player of Object.values(state.players)) player.ko = 0;
       }
     }
@@ -385,7 +448,7 @@ export function createSimulation() {
     }
 
     // Progress drains only while nobody is working on it.
-    for (const object of [...state.breaches, ...state.fires, ...state.bombs]) {
+    for (const object of [...state.breaches, ...state.fires, ...state.bombs, ...state.gasHoles]) {
       if (!object.worked) object.prog = Math.max(0, (object.prog || 0) - dt * 0.4);
       object.worked = false;
     }
