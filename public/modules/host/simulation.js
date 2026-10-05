@@ -1,5 +1,6 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { updateBot } from './bots.js';
 
 export function createSimulation() {
   let socket = null;
@@ -57,12 +58,7 @@ export function createSimulation() {
 
   const update = (dt) => {
     for (const player of Object.values(state.players)) {
-      if (player.bot && (player.t -= dt) <= 0) {
-        player.t = 1 + Math.random() * 2;
-        player.jx = Math.random() < 0.3 ? 0 : Math.random() * 2 - 1;
-        player.jy = Math.random() < 0.35 ? (Math.random() < 0.5 ? -1 : 1) : 0;
-        if (Math.random() < 0.15) player.actT = performance.now();
-      }
+      if (player.bot) updateBot(player, state, dt);
       if (player.fall) {
         player.y += 260 * dt;
         if (player.y >= SHIP_LAYOUT.floors[0]) {
@@ -158,7 +154,7 @@ export function createSimulation() {
               state.breaches.splice(state.breaches.indexOf(object), 1);
               player.carry = null;
               state.ship.hull = Math.min(100, state.ship.hull + 3);
-            }
+            } else object.ko = 0;
             puff(object.x, player.y - 50, '#8fe388', 10);
           }
         }
@@ -251,6 +247,7 @@ export function createSimulation() {
     if (state.ship.down > 0) {
       state.ship.down -= dt;
       if (state.ship.down <= 0) {
+        state.ship.down = 0; // exactly 0, or "!ship.down" checks think we're still crashed
         state.ship.hull = 100;
         state.breaches.length = 0;
         state.fires.length = 0;

@@ -13,6 +13,7 @@ const simulation = createSimulation();
 const camera = createCamera();
 const renderer = createRenderer({ ctx, state: simulation.state, canvas });
 const network = initHostNetwork({ simulation });
+window.game = simulation; // handy for debugging in the browser console
 
 let lastTime = performance.now();
 
