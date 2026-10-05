@@ -49,6 +49,26 @@ export const config = {
     PLANE_CRASH: 3,
     BOMB: 2,
   },
+  // The course: terrain the ship flies through (mountains, overhangs, underpasses) with
+  // ground turrets. Endless, getting harder with distance.
+  COURSE: {
+    ENABLED: true,
+    GROUND: 1350, // ground level far below the ship (world y)
+    FIRST_FEATURE: 4000, // distance before the first obstacle
+    GAP_MIN: 700, // open sky between obstacles...
+    GAP_MAX: 1600,
+    UNDERPASS_GAP_START: 280, // how much altitude room an underpass leaves at first...
+    UNDERPASS_GAP_END: 150, // ...shrinking to this as you go further
+    HARDEST_AT: 60000, // distance at which obstacles reach full difficulty
+    SCRAPE_COOLDOWN: 0.45, // seconds between scrape damage while touching rock
+    WARN_SECONDS: 3, // warning before an obstacle...
+    LOOKOUT_WARN_SECONDS: 5, // ...earlier with someone on Lookout
+    TURRET_HP: 3,
+    TURRET_FIRE_MIN: 2.5, // seconds between flak shots
+    TURRET_FIRE_MAX: 4.5,
+    TURRET_RANGE: 2600,
+    FLAK_SPEED: 520,
+  },
   // Raider types. windup = seconds of warning ("!") before they strike.
   RAIDERS: {
     grunt: { name: 'Raider', hp: 3, speed: 85, windup: 0.6, reach: 40, species: 'skeleton', color: '#8c2f2f', scale: 1 },

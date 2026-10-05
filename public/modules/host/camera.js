@@ -47,8 +47,11 @@ export function createCamera() {
   return {
     update(dt, state, width, height) {
       scroll += (40 + state.ship.speed * 520) * dt;
+      // A minimised or hidden window can report zero size; keep the last view until it's back.
+      if (width < 10 || height < 10) return view ? { ...view, scroll } : { cx: 800, cy: 450, zoom: 0.3, scroll };
       const t = target(state, width, height);
-      if (!view) view = { ...t };
+      // Start fresh if there's no view yet or it ever went bad.
+      if (!view || !Number.isFinite(view.cx) || !Number.isFinite(view.cy) || !Number.isFinite(view.zoom) || view.zoom <= 0) view = { ...t };
       const k = 1 - Math.exp(-C.SMOOTHING * dt);
       view.cx += (t.cx - view.cx) * k;
       view.cy += (t.cy - view.cy) * k;

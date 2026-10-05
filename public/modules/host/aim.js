@@ -19,6 +19,9 @@ export function targets(state) {
   }
   for (const c of state.cargo || []) list.push({ kind: 'cargo', obj: c, r: 75, at: (t) => ({ x: c.x + c.vx * t, y: c.y }) });
   for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + m.vx * t, y: m.y }) });
+  for (const g of (state.course && state.course.turrets) || []) {
+    if (!g.dead && g.x != null) list.push({ kind: 'turret', obj: g, r: 40, at: (t) => ({ x: g.x + g.vx * t, y: g.y }) });
+  }
   return list;
 }
 
@@ -33,9 +36,9 @@ export function solution(state, gun, target) {
   return Math.abs(angleDiff(angle, gun.home)) <= gun.arc ? angle : null;
 }
 
-// The most useful target this gun can hit right now (mines first, then cargo, then fighter).
+// The most useful target this gun can hit right now (mines, turrets, cargo, then fighter).
 export function bestTarget(state, gun) {
-  const order = { mine: 0, cargo: 1, fighter: 2 };
+  const order = { mine: 0, turret: 1, cargo: 2, fighter: 3 };
   let best = null;
   for (const t of targets(state)) {
     const angle = solution(state, gun, t);

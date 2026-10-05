@@ -5,6 +5,7 @@ import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
 import { createModules } from './modules.js';
 import { createThreats } from './threats.js';
 import { createRaiders } from './raiders.js';
+import { createCourse } from './course.js';
 import { assistAim } from './aim.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
@@ -171,6 +172,7 @@ export function createSimulation() {
 
   const raiders = createRaiders({ state, modules, puff, impact });
   const threats = createThreats({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, getHelm });
+  const course = createCourse({ state, impact, puff });
 
   const emitPlayerUi = (playerId, ui) => {
     if (socket && !state.players[playerId]?.bot) socket.emit('host:ui', { id: playerId, ui });
@@ -337,6 +339,7 @@ export function createSimulation() {
       }
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
+      if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
       if (stationName === 'Boiler' && !status) status = `Pressure ${Math.round(state.ship.press / 5) * 5}% - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - vent steam!';
       const ammoText = gun ? gun.ammo : null;
@@ -413,6 +416,8 @@ export function createSimulation() {
         state.fires.length = 0;
         raiders.reset();
         threats.reset();
+        course.reset();
+        state.ship.alt = 0;
         modules.reset();
         state.gasHoles.length = 0;
         state.ship.gas = 100;
@@ -423,6 +428,7 @@ export function createSimulation() {
     }
 
     threats.update(dt);
+    course.update(dt);
 
     for (const bullet of state.bullets) {
       bullet.x += bullet.vx * dt;

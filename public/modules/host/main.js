@@ -14,6 +14,8 @@ const camera = createCamera();
 const renderer = createRenderer({ ctx, state: simulation.state, canvas });
 const network = initHostNetwork({ simulation });
 window.game = simulation; // handy for debugging in the browser console
+// Debugging: draw one frame now (useful when the page isn't animating, e.g. a hidden tab).
+window.renderNow = (dt = 0.016) => renderer.renderFrame(performance.now(), camera.update(dt, simulation.state, canvas.width, canvas.height));
 
 let lastTime = performance.now();
 

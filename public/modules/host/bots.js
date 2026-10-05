@@ -4,6 +4,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { steerTo } from './nav.js';
 import { bestTarget } from './aim.js';
+import { altWindow } from './course.js';
 
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
@@ -105,9 +106,18 @@ function operate(p, state, dt) {
   const ship = state.ship;
   if (p.lock === 'Helm') {
     p.jx = clamp((B.HELM_SPEED - ship.speed) * 4, -1, 1);
+    // Terrain first: keep inside the safe altitude window for the next couple of seconds.
+    const w = state.course ? altWindow(state, 2.5) : { min: -Infinity, max: Infinity };
+    const lo = Math.max(w.min, -config.SHIP.ALT_RANGE);
+    const hi = Math.min(w.max, config.SHIP.ALT_RANGE);
+    let target = null;
     const dodge = dodgeAltitude(state);
-    if (dodge !== null) p.jy = clamp((ship.alt - dodge) / 40, -1, 1);
-    else p.jy = enemyActive(state) ? Math.sin(performance.now() / 700 + p.phase) * 0.7 : clamp(ship.alt / 40, -1, 1);
+    if (lo > hi) target = (w.min + w.max) / 2; // squeeze: aim for the middle
+    else if (dodge !== null && dodge > lo && dodge < hi) target = dodge;
+    else if (ship.alt < lo + 15 || ship.alt > hi - 15) target = clamp((lo + hi) / 2, lo + 30, hi - 30);
+    if (target !== null) p.jy = clamp((ship.alt - target) / 40, -1, 1);
+    else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
+    else p.jy = 0;
   } else {
     const gun = state.GUNS[p.lock];
     if (!gun) return;
@@ -231,6 +241,8 @@ export function updateBot(p, state, dt) {
       const mod = (state.modules || []).find((m) => m.name === p.lock);
       const gunUseless = (p.gunIdle || 0) > 6 || (mod && mod.broken);
       if (gunUseless) p.gunIdle = 0;
+      // Never wander off the helm while there's terrain to steer through.
+      if (p.lock === 'Helm' && config.COURSE.ENABLED) p.lockLeft = Math.max(p.lockLeft, 1);
       if (p.lockLeft <= 0 || gunUseless || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;
         p.lockLeft = undefined;

@@ -5,6 +5,7 @@ import { createThreatArt } from './threatArt.js';
 import { installLineBoil, setBoilTime, createFilmLook } from './style.js';
 import { createSprites } from './sprites.js';
 import { createCharacterArt } from './characterArt.js';
+import { createCourseArt } from './courseArt.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
@@ -32,6 +33,7 @@ export function createRenderer({ ctx, state, canvas }) {
 
   const drawShip = createShipArt({ ctx, state, ink, rrect, sprites });
   const threatArt = createThreatArt({ ctx, state, ink, sprites });
+  const courseArt = createCourseArt({ ctx, state, ink, sprites });
   installLineBoil(ctx);
   const filmLook = createFilmLook(ctx);
 
@@ -253,9 +255,9 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.stroke();
     }
     for (const bullet of state.bullets) {
-      ctx.fillStyle = '#e63946';
+      ctx.fillStyle = bullet.flak ? '#3b3b3b' : '#e63946'; // flak from ground turrets is dark
       ctx.beginPath();
-      ctx.arc(bullet.x, bullet.y, 8, 0, 7);
+      ctx.arc(bullet.x, bullet.y, bullet.flak ? 10 : 8, 0, 7);
       ctx.fill();
       ctx.stroke();
     }
@@ -303,6 +305,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillText(`Gas${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}${state.sinking ? ' - SINKING!' : ''}`, 46, 150);
     ctx.textAlign = 'right';
     ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);
+    if (state.course && config.COURSE.ENABLED) ctx.fillText('Course ' + (state.course.dist / 1000).toFixed(1) + ' km', 454, 150);
 
     if (state.ev.warn > 0) {
       ctx.font = '900 44px Georgia';
@@ -690,6 +693,8 @@ export function createRenderer({ ctx, state, canvas }) {
     // World layer, positioned by the camera.
     ctx.setTransform(view.zoom, 0, 0, view.zoom, width / 2 - view.cx * view.zoom, height / 2 - view.cy * view.zoom);
     drawNearClouds(width, height, view);
+    courseArt.drawTerrain(view, width, height);
+    courseArt.drawTurrets(time / 1000);
 
     ctx.save();
     ctx.translate(state.ship.shake > 0 ? (Math.random() - 0.5) * 16 : 0, -state.ship.alt + Math.sin(time / 1000) * 3);
