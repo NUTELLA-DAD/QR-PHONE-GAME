@@ -103,6 +103,15 @@ export const config = {
     REWARD_HULL: 15,
     REWARD_COAL: 40,
   },
+  // Pacing: each fight builds up, peaks, then eases off for a breather with a supply balloon.
+  PACING: {
+    BUILD: 45, // seconds of normal pressure...
+    PEAK: 30, // ...then enemies come faster for this long...
+    CALM: 22, // ...then nothing new arrives for this long
+    SUPPLY_REACH: 750, // fly within this of the balloon to grab it
+    SUPPLY_HULL: 12,
+    SUPPLY_COAL: 25,
+  },
   // Deflector shield: a steam-powered arc the Deflector station swings around the ship. It
   // blocks enemy bullets, bats, rockets and bombs that hit it.
   SHIELD: {

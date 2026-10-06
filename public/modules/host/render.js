@@ -409,6 +409,47 @@ export function createRenderer({ ctx, state, canvas }) {
     }
   };
 
+  // The supply balloon (a striped balloon with a crate) during a calm.
+  const drawSupply = (time) => {
+    const sp = state.supply;
+    if (!sp || !state.course) return;
+    const x = sp.mx - state.course.dist;
+    const y = sp.my + Math.sin((sp.bob || 0) * 1.3) * 30;
+    const g = ctx.createRadialGradient(x, y, 40, x, y, 260);
+    g.addColorStop(0, 'rgba(255,220,90,.45)');
+    g.addColorStop(1, 'rgba(255,220,90,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, 260, 0, 7);
+    ctx.fill();
+    ink();
+    ctx.lineWidth = 5;
+    for (let k = 0; k < 6; k++) {
+      ctx.fillStyle = k % 2 ? '#ffffff' : '#e63946';
+      ctx.beginPath();
+      ctx.ellipse(x, y - 60, 90, 110, 0, -Math.PI / 2 + (k * Math.PI) / 3 - Math.PI / 2, -Math.PI / 2 + ((k + 1) * Math.PI) / 3 - Math.PI / 2);
+      ctx.lineTo(x, y - 60);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.ellipse(x, y - 60, 90, 110, 0, 0, 7);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - 50, y + 30);
+    ctx.lineTo(x - 30, y + 90);
+    ctx.moveTo(x + 50, y + 30);
+    ctx.lineTo(x + 30, y + 90);
+    ctx.stroke();
+    ctx.fillStyle = '#a0784a';
+    ctx.fillRect(x - 40, y + 90, 80, 60);
+    ctx.strokeRect(x - 40, y + 90, 80, 60);
+    ctx.fillStyle = '#ffd23f';
+    ctx.font = '900 30px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillText('+', x, y + 132);
+  };
+
   // Muzzle flashes (a bright star at the barrel) and impact rings (a quick expanding burst).
   const drawFlashesAndRings = () => {
     for (const f of state.flashes || []) {
@@ -464,6 +505,7 @@ export function createRenderer({ ctx, state, canvas }) {
     threatArt.drawRockets();
     drawSpecials(time);
     drawFlashesAndRings();
+    drawSupply(time);
     drawPopups(view.zoom);
     drawEnemy(time);
     // Cartoon puffs: swell up, then shrink and fade, with an ink outline and a highlight.

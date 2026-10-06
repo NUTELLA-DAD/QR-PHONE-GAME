@@ -79,6 +79,8 @@ export function createSimulation() {
     sfxQ: [], // sounds asked for by name: [name, arg]
     flashes: [], // muzzle flashes { x, y, ang, t, color }
     rings: [], // impact rings { x, y, t, max, color, size }
+    tempo: { phase: 'build', t: config.PACING.BUILD }, // build-up -> peak -> calm (breather)
+    supply: null, // a supply balloon to catch during a calm { mx, my, t }
     gasValve: { input: 0, auto: false }, // +1 = pumping hot steam into the gasbag, -1 = venting
     shield: { ang: -Math.PI / 2, on: false, flash: 0 }, // the Deflector's arc (angle around the ship)
     upgrades: {}, // id -> times taken
@@ -243,6 +245,8 @@ export function createSimulation() {
     state.ventOpen.fill(false);
     Object.assign(state.bombBay, { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null });
     Object.assign(state.shield, { ang: -Math.PI / 2, on: false, flash: 0 });
+    state.tempo = { phase: 'build', t: config.PACING.BUILD };
+    state.supply = null;
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
     for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: 6, max: 8, empty: 0, auto: 0 });
     raiders.reset();
@@ -276,6 +280,59 @@ export function createSimulation() {
     puff(x, y, '#9fe8ff', 6);
     S.flash = 1;
     return true;
+  };
+
+  // Pacing: a build-up, then a peak (they come thick and fast), then a calm to catch your breath -
+  // with a supply balloon drifting nearby to fly into.
+  const updateTempo = (dt) => {
+    const PC = config.PACING;
+    const tp = state.tempo;
+    if (state.ship.down || state.boss) return;
+    if ((tp.t -= dt) <= 0) {
+      tp.phase = tp.phase === 'build' ? 'peak' : tp.phase === 'peak' ? 'calm' : 'build';
+      tp.t = PC[tp.phase.toUpperCase()];
+      state.ev.warn = 3;
+      if (tp.phase === 'peak') state.ev.warnText = 'HERE THEY COME!';
+      if (tp.phase === 'calm') {
+        state.ev.warnText = 'ALL CLEAR - SUPPLY BALLOON SPOTTED! FLY INTO IT!';
+        spawnSupply();
+      }
+      if (tp.phase === 'build') state.ev.warn = 0;
+    }
+    const sp = state.supply;
+    if (sp) {
+      sp.t -= dt;
+      sp.bob = (sp.bob || 0) + dt;
+      const wx = sp.mx - state.course.dist;
+      const wy = sp.my + Math.sin(sp.bob * 1.3) * 30;
+      if (Math.hypot(wx - 800, wy - (470 - state.ship.alt)) < PC.SUPPLY_REACH) {
+        state.ship.hull = Math.min(100, state.ship.hull + PC.SUPPLY_HULL);
+        state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + PC.SUPPLY_COAL);
+        for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 3);
+        state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + 1);
+        puff(wx, wy, '#ffd23f', 20);
+        pop(state, wx, wy - 120, 'SUPPLIES!', '#ffd23f', 1.4);
+        state.ev.warn = 2.5;
+        state.ev.warnText = 'SUPPLIES ABOARD: HULL, COAL AND AMMO!';
+        state.sfxQ.push(['bell']);
+        state.supply = null;
+      } else if (sp.t <= 0) state.supply = null;
+    }
+  };
+  // A balloon in open air a little ahead of the ship (searching for a clear spot).
+  const spawnSupply = () => {
+    const c = state.course;
+    if (!c) return;
+    for (const [dx, dy] of [[1400, -500], [1800, 0], [1200, 400], [-600, -700], [2200, -300]]) {
+      const wx = 800 + dx;
+      const wy = 470 - state.ship.alt + dy;
+      let clear = true;
+      for (const [ox, oy] of [[0, 0], [150, 0], [-150, 0], [0, 150], [0, -150]]) if (inRock(state, wx + ox, wy + oy)) clear = false;
+      if (clear) {
+        state.supply = { mx: wx + c.dist, my: wy, t: config.PACING.CALM + 12 };
+        return;
+      }
+    }
   };
 
   // Speed changes with weight: she builds speed gradually and brakes harder than she accelerates,
@@ -872,6 +929,7 @@ export function createSimulation() {
         gunship.reset();
         state.enemy.dead = Math.max(state.enemy.dead, 6);
       }
+      updateTempo(dt);
       squadrons.update(dt);
       specials.update(dt);
       gunship.update(dt);

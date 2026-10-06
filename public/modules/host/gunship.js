@@ -110,7 +110,7 @@ export function createGunship({ state, puff, impact, credit }) {
     let g = state.gunship;
     if (!g) {
       if (state.phase !== 'flying' || state.ship.down || state.boss || !Object.keys(state.players).length) return;
-      if ((timer -= dt) > 0) return;
+      if ((timer -= dt * (state.tempo && state.tempo.phase === 'calm' ? 0 : state.tempo && state.tempo.phase === 'peak' ? 1.7 : 1)) > 0) return;
       if (!roomAlongside()) {
         timer = 6;
         return;

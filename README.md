@@ -69,6 +69,10 @@ the minimap - bomb them from above or shoot them), and get bigger each time. Rea
 scorecard with crew awards, and the crew **votes on an upgrade** on their phones. If the hull
 breaks, the ship **breaks apart** and the game starts over at mission 1.
 
+Fights come in waves: a build-up, then **HERE THEY COME!** (enemies arrive faster), then **ALL
+CLEAR** - a breather with no new enemies and a striped **supply balloon** nearby: fly the ship
+into it for hull, coal and ammo. A **Twin Gasbag** upgrade adds a second envelope for more lift.
+
 Enemies: fighters (they fly like real planes: long strafing runs from far out, wide turns,
 and they can crash into mountains), raider cargo planes (shoot them before they drop raiders), mines, bat swarms,
 bombers, skeleton strafers, **gyro-saws** (spinning blades that circle then dash in - shoot

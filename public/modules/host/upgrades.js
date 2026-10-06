@@ -55,6 +55,15 @@ export const UPGRADES = [
     apply: () => (config.BOILER.BLOWOUT_AT = Infinity),
   },
   {
+    id: 'twin-gasbag', name: 'Twin Gasbag', icon: '🎈', max: 1,
+    desc: 'A second gasbag: stronger lift, faster pumping, and holes leak less.',
+    apply: () => {
+      config.GAS.LIFT *= 1.3;
+      config.GAS.PUMP_RATE *= 1.4;
+      config.GAS.LEAK_PER_HOLE *= 0.8;
+    },
+  },
+  {
     id: 'rubber-gasbag', name: 'Rubberised Gasbag', icon: '🎈', max: 2,
     desc: 'Gasbag holes leak 40% slower and hits tear it less often.',
     apply: () => {

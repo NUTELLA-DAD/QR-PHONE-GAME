@@ -76,7 +76,7 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
   const director = (dt) => {
     if (state.ship.down || state.phase !== 'flying' || state.boss || !Object.keys(state.players).length) return;
     if (lap() === 1 && progress() < 0.1) return;
-    if ((timer -= dt) > 0) return;
+    if ((timer -= dt * (state.tempo && state.tempo.phase === 'calm' ? 0 : state.tempo && state.tempo.phase === 'peak' ? 1.7 : 1)) > 0) return;
     const pace = (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
     const open = state.course && state.course.map && state.course.map.open;
     timer = (rand(SP.EVERY_MIN, SP.EVERY_MAX) / pace / (1 + (lap() - 1) * 0.15)) * (open ? 2 : 1);

@@ -35,6 +35,7 @@ export function createCamera() {
     for (const t of [...(state.cargo || []), ...(state.mines || []), ...(state.bombers || [])]) if (near(t, C.FRAME_RANGE)) things.push(t);
     if (state.boss && near(state.boss, C.FRAME_RANGE + 600)) things.push(state.boss);
     for (const t of state.specials ? [...state.specials.snipers, ...state.specials.tugs] : []) if (near(t, C.FRAME_RANGE + 400)) things.push(t);
+    if (state.supply && state.course) things.push({ x: state.supply.mx - state.course.dist, y: state.supply.my });
     if (state.gunship) things.push({ x: 2600 + state.gunship.offset, y: 500 - alt }, { x: 3300 + state.gunship.offset, y: 300 - alt });
     for (const e of things) {
       x0 = Math.min(x0, e.x - C.ENEMY_MARGIN);
