@@ -656,6 +656,12 @@ export const config = {
     LADDER_JUMP_VX: 260, // px/s sideways launch when you press JUMP on a ladder (stick direction, or toward the middle of the ship)
     LADDER_JUMP_VY: 600, // px/s upward kick of that jump (about 95 px of rise: enough to get onto the deck above if you leave near the top)
     REGRAB_CD: 0.5, // seconds after jumping off a ladder before you can grab that same ladder again
+    CHUTE_DELAY: 0.5, // seconds of free fall after jumping from the bomb bay before the parachute opens
+    CHUTE_GRAVITY: 700, // px/s² under the open parachute (the fall is cushioned)
+    CHUTE_FALL: 150, // terminal falling speed under the parachute (px/s)
+    CHUTE_STEER: 1100, // px/s² of sideways push from the stick under the parachute
+    CHUTE_DRAG: 1.6, // sideways drag under the parachute (steer speed tops out near CHUTE_STEER / CHUTE_DRAG, about 690 px/s)
+    CHUTE_OVERBOARD_Y: 1900, // under a parachute you are only overboard below this (ship coordinates), so there is time to drift onto a gunship
     CLIMB_FAST: 1.35, // climbing speed multiplier with the stick pushed fully up/down (humans only)
   },
   // Tools and close combat.
@@ -688,6 +694,14 @@ export const config = {
     PIPE_LEAK: 6, // pressure lost per second from each burst pipe with its valve open
     UNPOWERED_LIFT: 0.25, // lift speed without steam (hand crank)
     NO_ENGINE_SPEED: 0.1, // top speed with both engines out
+  },
+  // The helm sits on an exposed mount on the top deck: enemy hits close to the helmsman knock them out.
+  HELM_EXPOSED: {
+    HIT_RADIUS: 40, // px: a hit this close (grows a little with hit power) to the helmsman can KO them
+    KO_CHANCE: 0.6, // chance that such a hit knocks them out
+    KO_TIME: 5, // seconds out cold (a crewmate can revive them sooner); they let go of the wheel
+    WARN_TIME: 1.6, // seconds the red flash and HELMSMAN HIT! stay on screen
+    HIT_CY: 55, // px above the helm floor where the helmsman is hit (body height)
   },
   // Test bot behaviour (times in seconds).
   BOTS: {

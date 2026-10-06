@@ -7,9 +7,14 @@
 
 const platforms = [
   { id: 'nest', name: "Crow's Nest", y: -42, x0: 610, x1: 990, outside: true },
-  { id: 'catwalk', name: 'Top Catwalk', y: 470, x0: 240, x1: 1360, outside: true },
+  // The open-air TOP DECK on the roof of the gondola, under the gasbag: deck guns at both ends,
+  // and the helm on its own raised mount (the helmsman is exposed up here).
+  { id: 'catwalk', name: 'Top Deck', y: 470, x0: 240, x1: 1360, outside: true },
+  { id: 'helm', name: 'Helm Mount', y: 420, x0: 1195, x1: 1315, outside: true },
   { id: 'main', name: 'Main Deck', y: 640, x0: 140, x1: 1470 },
   { id: 'lower', name: 'Lower Deck', y: 790, x0: 20, x1: 1580 },
+  // The bomb bay: its own compartment in the belly of the hull, reached by a hatch ladder from the lower deck.
+  { id: 'bay', name: 'Bomb Bay', y: 925, x0: 350, x1: 640 },
   { id: 'pod', name: 'Ball Turret', y: 905, x0: 735, x1: 855 },
   { id: 'hangar', name: 'Fighter Hatch', y: 905, x0: 1020, x1: 1110, outside: true },
 ];
@@ -24,12 +29,14 @@ export const SHIP_LAYOUT = {
   // speed = climbing speed in pixels per second (vertical).
   connectors: [
     { type: 'rope', top: 'nest', bottom: 'catwalk', xTop: 720, xBottom: 720, speed: 150 },
-    { type: 'ladder', top: 'catwalk', bottom: 'main', xTop: 300, xBottom: 300, speed: 170 },
+    { type: 'ladder', top: 'helm', bottom: 'catwalk', xTop: 1215, xBottom: 1215, speed: 170 },
+    { type: 'ladder', top: 'catwalk', bottom: 'main', xTop: 340, xBottom: 340, speed: 170 },
     { type: 'ladder', top: 'catwalk', bottom: 'main', xTop: 1050, xBottom: 1050, speed: 170 },
     { type: 'ladder', top: 'main', bottom: 'lower', xTop: 255, xBottom: 255, speed: 170 },
     { type: 'stairs', top: 'main', bottom: 'lower', xTop: 560, xBottom: 700, speed: 150 },
     { type: 'lift', top: 'main', bottom: 'lower', xTop: 960, xBottom: 960, speed: 260 },
     { type: 'ladder', top: 'main', bottom: 'lower', xTop: 1140, xBottom: 1140, speed: 170 },
+    { type: 'ladder', top: 'lower', bottom: 'bay', xTop: 372, xBottom: 372, speed: 170 },
     { type: 'ladder', top: 'lower', bottom: 'pod', xTop: 760, xBottom: 760, speed: 170 },
     { type: 'ladder', top: 'lower', bottom: 'hangar', xTop: 1040, xBottom: 1040, speed: 170 },
   ].map((c) => ({ ...c, top: index(c.top), bottom: index(c.bottom) })),
@@ -43,6 +50,7 @@ export const SHIP_LAYOUT = {
     { name: 'Aft Gun Deck', p: 'lower', x0: 250, x1: 650, color: '#a8814f' },
     { name: 'Hold', p: 'lower', x0: 650, x1: 950, color: '#9c7646' },
     { name: 'Fore Gun Deck', p: 'lower', x0: 950, x1: 1350, color: '#a8814f' },
+    { name: 'Bomb Bay', p: 'bay', x0: 350, x1: 640, color: '#4a4346' },
     { name: 'Aft Outrigger', p: 'lower', x0: 20, x1: 250, outside: true },
     { name: 'Fore Outrigger', p: 'lower', x0: 1350, x1: 1580, outside: true },
   ]),
@@ -53,16 +61,16 @@ export const SHIP_LAYOUT = {
     { n: 'Lookout', p: 'nest', x: 770 },
     { n: 'Deflector', p: 'catwalk', x: 940 },
     { n: 'Dorsal Gun', p: 'nest', x: 940 },
-    { n: 'Tail Gun', p: 'main', x: 180 },
+    { n: 'Tail Gun', p: 'catwalk', x: 275 },
     { n: 'Lightning Coil', p: 'main', x: 710 },
     { n: 'Boiler', p: 'main', x: 400 },
     { n: 'Navigator', p: 'main', x: 1215 },
-    { n: 'Helm', p: 'main', x: 1330 },
-    { n: 'Nose Gun', p: 'main', x: 1430 },
+    { n: 'Helm', p: 'helm', x: 1275 },
+    { n: 'Nose Gun', p: 'catwalk', x: 1340 },
     { n: 'Aft Sponson', p: 'lower', x: 420 },
     { n: 'Coal Bunker', p: 'lower', x: 570 },
     { n: 'Ammo Hold', p: 'lower', x: 870 },
-    { n: 'Bomb Bay', p: 'lower', x: 495 },
+    { n: 'Bomb Bay', p: 'bay', x: 520 },
     { n: 'Fore Sponson', p: 'lower', x: 1180 },
     { n: 'Ventral Gun', p: 'pod', x: 820 },
     { n: 'Escort Fighter', p: 'hangar', x: 1085 },
@@ -73,8 +81,8 @@ export const SHIP_LAYOUT = {
   gunMounts: {
     'Dorsal Gun': { bx: 950, by: -76, aim: -1.2, arc: 1.2 },
     'Aft Dorsal Gun': { bx: 650, by: -76, aim: -1.95, arc: 1.2 },
-    'Tail Gun': { bx: 112, by: 585, aim: Math.PI, arc: 1.0 },
-    'Nose Gun': { bx: 1498, by: 585, aim: 0, arc: 1.0 },
+    'Tail Gun': { bx: 248, by: 418, aim: Math.PI + 0.35, arc: 1.1 }, // top deck, aft: back and up
+    'Nose Gun': { bx: 1372, by: 418, aim: -0.35, arc: 1.1 }, // top deck, fore: forward and up
     'Aft Sponson': { bx: 330, by: 812, aim: 2.15, arc: 0.7 },
     'Fore Sponson': { bx: 1270, by: 812, aim: 1.0, arc: 0.7 },
     'Ventral Gun': { bx: 805, by: 948, aim: Math.PI / 2, arc: 1.2 },
@@ -91,8 +99,9 @@ export const SHIP_LAYOUT = {
   // Where the escort fighter hangs on its hook under the hull (below the Fighter Hatch).
   escortDock: { x: 1075, y: 965 },
 
-  // Bomb bay doors in the belly, under the Bomb Bay station: bombs drop from here.
-  bombBay: { x: 495, y: 815 },
+  // Bomb bay doors in the bay floor beside the bombardier: bombs drop from here, and jumpX is
+  // where you stand to jump out (parachute) - both are over the doors.
+  bombBay: { x: 550, y: 925, jumpX: 585, doorHalf: 48 },
 
   // Engines on the outriggers, driven by steam.
   engines: withD([
@@ -103,7 +112,7 @@ export const SHIP_LAYOUT = {
   // Steam pipes from the boiler to each steam-driven module. Each has a valve the crew can
   // open/close (tap Action while standing under it on platform p). Pipes can burst and leak.
   pipes: withD([
-    { to: 'Helm', p: 'main', points: [[430, 560], [430, 505], [1330, 505], [1330, 530]], valve: [760, 505] },
+    { to: 'Helm', p: 'main', points: [[430, 560], [430, 505], [1275, 505], [1275, 430]], valve: [760, 505] },
     { to: 'Lift', p: 'main', points: [[455, 560], [455, 535], [960, 535], [960, 490]], valve: [600, 535] },
     { to: 'Aft Engine', p: 'lower', points: [[370, 610], [370, 680], [110, 680], [110, 765]], valve: [230, 680] },
     { to: 'Fore Engine', p: 'lower', points: [[440, 610], [440, 692], [1490, 692], [1490, 765]], valve: [1260, 692] },
@@ -142,7 +151,7 @@ export const SHIP_LAYOUT = {
   // Where raiders land (grapple points on the catwalk).
   boarderEntryPoints: [
     { x: 290, p: 'catwalk' },
-    { x: 1310, p: 'catwalk' },
+    { x: 1335, p: 'catwalk' },
   ],
 
   // Outer edges of the whole ship drawing. The camera keeps all of this in view.

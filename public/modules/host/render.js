@@ -1121,6 +1121,42 @@ export function createRenderer({ ctx, state, canvas }) {
     const face = player.face || 1;
     const actionAge = performance.now() - (player.actT || -1e9);
     const hop = actionAge < 400 ? Math.sin(actionAge / 400 * Math.PI) * 40 + (player.jz || 0) : player.jz || 0;
+    // Parachute (bomb bay jump): the canopy opens above them (soft cream and sage, like the pilots'), cut away on landing.
+    if (player.chute > 0 && player.fly) {
+      const open = player.chuteOpen ? Math.min(1, (player.chute - config.AIR.CHUTE_DELAY) / 0.4 + 0.25) : 0.15;
+      ctx.save();
+      ctx.translate(player.x, player.y - 4);
+      ctx.rotate((player.rot || 0) * 0.6);
+      ink();
+      ctx.lineWidth = 2.6;
+      if (open > 0.3) {
+        const cw = 62 * open;
+        const ch = 44 * open;
+        ctx.fillStyle = '#eee6d2';
+        ctx.beginPath();
+        ctx.ellipse(0, -150, cw, ch, 0, Math.PI, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#8fb37a';
+        ctx.beginPath();
+        ctx.ellipse(0, -150, cw * 0.36, ch, 0, Math.PI, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        for (const k of [-1, -0.45, 0.45, 1]) {
+          ctx.moveTo(k * cw, -150);
+          ctx.lineTo(0, -88);
+        }
+        ctx.stroke();
+      } else {
+        // Still bundled: a little pack on their back.
+        ctx.fillStyle = '#eee6d2';
+        ctx.fillRect(-9 * (player.face || 1) - 7, -78, 14, 24);
+        ctx.strokeRect(-9 * (player.face || 1) - 7, -78, 14, 24);
+      }
+      ctx.restore();
+    }
     const art = characterArt.draw(player, time, bob + hop);
     if (!art) {
       ctx.save();

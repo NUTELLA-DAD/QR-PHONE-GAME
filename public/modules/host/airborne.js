@@ -68,6 +68,27 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     p.fvy = vy;
     p.apex = p.y;
     p.stag = 0;
+    p.chute = 0; // no parachute (set by jumpChute)
+  };
+
+  // JUMP out of the bomb bay doors: free fall, then a PARACHUTE opens after CHUTE_DELAY seconds. Under it
+  // the fall is slow and the stick steers hard, so you can drift onto a gunship (or our own deck) below.
+  // p.chute: 0 = none, otherwise the seconds since the jump; p.chuteOpen = canopy out.
+  const jumpChute = (p) => {
+    const bay = SHIP_LAYOUT.bombBay;
+    p.y = P[p.d].y + 3; // just below the bay floor so we do not land straight back on it
+    startFlight(p, 0, 60);
+    p.chute = 0.001;
+    p.chuteOpen = false;
+    p.carry = null;
+    puff(p.x, p.y, '#ffffff', 5);
+    return !!bay;
+  };
+
+  // Cut the parachute away (landing, or any other change of state).
+  const cutChute = (p) => {
+    p.chute = 0;
+    p.chuteOpen = false;
   };
 
   // GRAB A LADDER/ROPE mid-air (flying or mid-hop). Auto-grab when within reach sideways and between
@@ -88,6 +109,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       if (Math.abs(p.x - (c.xTop + (c.xBottom - c.xTop) * s)) > A.GRAB_REACH) continue;
       p.fly = false;
       p.air = false;
+      cutChute(p);
       p.jz = 0;
       p.vy = 0;
       p.vx = 0;
@@ -190,14 +212,25 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     if (p.regrabCd > 0) p.regrabCd -= dt;
     const ctrl = controlled && !p.bot ? clamp(p.jx || 0, -1, 1) : 0;
     const drift = -Math.max(0, state.ship.speed || 0) * A.SHIP_DRIFT;
-    p.fvx += ctrl * A.STEER_ACCEL * dt;
-    p.fvx -= (p.fvx - drift) * Math.min(1, A.DRAG * dt);
-    p.fvy = Math.min(A.MAX_FALL, p.fvy + A.GRAVITY * dt);
+    if (p.chute > 0) {
+      p.chute += dt;
+      if (!p.chuteOpen && p.chute >= A.CHUTE_DELAY && p.fvy >= 0) p.chuteOpen = true;
+    }
+    if (p.chuteOpen) {
+      // Under the canopy: slow fall, strong steering (humans steer with the stick; others just drift).
+      p.fvx += ctrl * A.CHUTE_STEER * dt;
+      p.fvx -= (p.fvx - drift) * Math.min(1, A.CHUTE_DRAG * dt);
+      p.fvy = p.fvy > A.CHUTE_FALL ? Math.max(A.CHUTE_FALL, p.fvy - 3000 * dt) : Math.min(A.CHUTE_FALL, p.fvy + A.CHUTE_GRAVITY * dt);
+    } else {
+      p.fvx += ctrl * A.STEER_ACCEL * dt;
+      p.fvx -= (p.fvx - drift) * Math.min(1, A.DRAG * dt);
+      p.fvy = Math.min(A.MAX_FALL, p.fvy + A.GRAVITY * dt);
+    }
     const py = p.y;
     p.x += p.fvx * dt;
     p.y += p.fvy * dt;
     p.apex = Math.min(p.apex, p.y);
-    p.rot = clamp(p.fvx * 0.0008, -0.3, 0.3);
+    p.rot = p.chuteOpen ? clamp(p.fvx * 0.0003, -0.2, 0.2) : clamp(p.fvx * 0.0008, -0.3, 0.3);
     if (Math.abs(ctrl) > 0.15) p.face = ctrl < 0 ? -1 : 1;
     p.moving = false;
 
@@ -219,9 +252,10 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     // Overboard: well below the ship or far past either end.
     // (Past the bow counts only beyond any other deck out there, e.g. a gunship alongside.)
     const farX = Math.max(1600, ...extra.map((s) => (val(s.y) == null ? 0 : val(s.x1)))) + A.OVERBOARD_X;
-    if (p.y > A.OVERBOARD_Y || p.x < -A.OVERBOARD_X || p.x > farX) {
+    if (p.y > (p.chute > 0 ? A.CHUTE_OVERBOARD_Y : A.OVERBOARD_Y) || p.x < -A.OVERBOARD_X || p.x > farX) {
       p.fly = false;
       p.air = false;
+      cutChute(p);
       p.fall = true; // the existing fall -> medical bay respawn takes it from here
       p.tumble = true;
       p.tvy = Math.max(p.fvy, 300);
@@ -236,7 +270,8 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
 
   const land = (p, s, y) => {
     const speed = p.fvy;
-    const height = y - p.apex;
+    const height = p.chuteOpen ? 0 : y - p.apex; // a parachute landing is a soft one
+    cutChute(p);
     p.fly = false;
     p.air = false;
     p.jz = 0;
@@ -269,11 +304,12 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
 
   const clear = (p) => {
     p.fly = false;
+    cutChute(p);
     p.tumble = false;
     p.rot = 0;
     p.squash = 0;
     p.stag = 0;
   };
 
-  return { addSurface, removeSurface, addProvider, surfaces, startFlight, grab, jumpOff, edgeCheck, vault, shove, standing, step, tumble, clear };
+  return { addSurface, removeSurface, addProvider, surfaces, startFlight, jumpChute, grab, jumpOff, edgeCheck, vault, shove, standing, step, tumble, clear };
 }
