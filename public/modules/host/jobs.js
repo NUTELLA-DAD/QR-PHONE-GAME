@@ -13,9 +13,9 @@ const J = config.JOBS;
 const GUN_NAMES = Object.keys(L.gunMounts);
 const PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
 const stationNamed = (n) => L.stations.find((s) => s.n === n);
-const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer' };
-export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0' };
-const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL' };
+const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer' };
+export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0' };
+const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL' };
 
 // Name of the room (or deck) at a spot, for the label.
 const roomName = (d, x) => {
@@ -40,6 +40,7 @@ export function createJobFinder(state) {
     for (const f of state.fires) add('fire', f, f.d, f.x);
     for (const h of state.breaches) add('hole', h, h.d, h.x);
     for (const h of state.gasHoles || []) add('gas', h, h.d, h.x);
+    for (const c of state.icing || []) if (c.lvl >= config.ENVIRONMENTS.frost.ICE.JOB_AT) add('ice', c, c.d, c.x, {}, c.gun ? `ICE on ${c.gun}` : c.area === 'gasbag' ? 'ICE on the gasbag' : 'ICE on the top deck');
     for (const b of state.bats || []) if (b.latched && b.landed && b.hp > 0) add('swat', b, b.d, b.lx);
     const mods = state.modules || [];
     for (const m of mods) {

@@ -434,8 +434,8 @@ export const config = {
     // Planned environments. Not-ready ones fly as Sky Isles for now but show their real name.
     ENVIRONMENTS: {
       skyisles: { name: 'Sky Isles', icon: '🏝️', color: '#7fb6d9', ready: true },
-      frost: { name: 'Frost Peaks', icon: '❄️', color: '#bfe3f0', ready: false },
-      ember: { name: 'Ember Forge', icon: '🌋', color: '#e0713a', ready: false },
+      frost: { name: 'Frost Peaks', icon: '❄️', color: '#bfe3f0', ready: true },
+      ember: { name: 'Ember Forge', icon: '🌋', color: '#e0713a', ready: true },
       storm: { name: 'Storm Front', icon: '⛈️', color: '#6a6f9a', ready: false },
       sea: { name: 'Sunken Sea', icon: '🌊', color: '#3f8fa6', ready: false },
       fungal: { name: 'Fungal Depths', icon: '🍄', color: '#8a6fb0', ready: false },
@@ -728,6 +728,75 @@ export const config = {
     SHAFTS: { SPACING: 9, CHANCE: 0.3, ALPHA: 0.085, LENGTH: 1500, WIDTH: 150, SPREAD: 320, PULSE: 0.3, COLOR: '236,242,248', DUSK_COLOR: '255,214,170' },
     DUST: { TILE: 1000, ALPHA: 0.35, SIZE: 3.2, SPEED: 6 },
   },
+  // Environments (modules/host/environments.js + envArt.js): each mission can happen in one. 'skyisles'
+  // is the original look and rules. FORCE = pin one id for testing (botsim --env). Each block holds the
+  // palette, background layers, weather, flying modifiers, hazards and enemy weights ("favour").
+  ENVIRONMENTS: {
+    DEFAULT: 'skyisles',
+    FORCE: null,
+    skyisles: { name: 'Sky Isles', favour: { swarm: 1, imps: 1, bombers: 1, strafers: 1, gunship: 1 } },
+    // FROST PEAKS: ice builds up on the gasbag, top deck and guns. Chip it off with the hammer.
+    frost: {
+      name: 'Frost Peaks',
+      favour: { swarm: 0.7, imps: 0.5, bombers: 1.6, strafers: 1, gunship: 1 }, // more bombers
+      sky: ['6f9cc4', 'bcd8ec', 'eef5fa'], sun: '255,255,255', ridgeHaze: '232,242,250',
+      rock: '#c6d7e6', rockStripes: ['rgba(60,90,130,.16)', 'rgba(255,255,255,.35)'], rockHaze: 'rgba(214,230,246,.2)',
+      rim: 'rgba(235,246,255,.75)', edgeDark: '#cfe2f1', edgeLight: '#ffffff', // snow lying on floors
+      cave: ['#4b6f96', '#7a9cbc'], pillar: '22,38,62', fog: '222,236,248', shaft: '214,236,255',
+      ridges: [
+        { f: 0.02, base: 0.86, amp: 190, freq: 0.003, color: '#b7cbe0', snow: '#ffffff' },
+        { f: 0.045, base: 0.91, amp: 130, freq: 0.004, color: '#a3bbd3', snow: '#f4f9ff' },
+        { f: 0.1, base: 0.98, amp: 100, freq: 0.007, color: '#8ca6c0', snow: '#eef6ff' },
+      ],
+      SNOW: { COUNT: 140, SPEED: 95, DRIFT: -30, SIZE: 3.4, TILE_W: 2600, TILE_H: 1500, ALPHA: 0.8 },
+      BLIZZARD: { FIRST: 40, EVERY_MIN: 55, EVERY_MAX: 90, TIME: 14, WIND: 50, HAZE: 0.32, SNOW_MUL: 3 }, // wind = px per second the gust shoves the ship along
+      ICE: {
+        SPAWN_EVERY: 11, // seconds between new crusts while flying (a blizzard doubles the rate)
+        MAX_CRUSTS: 8, // at most this many crusts on the ship at once
+        START: 0.25, GROW: 0.011, // a crust starts at this size (0-1) and grows this much per second
+        AREAS: { gasbag: 0.45, topdeck: 0.25, gun: 0.3 }, // chance a new crust lands on each area
+        GASBAG_CAP: 3, DECK_CAP: 3, // crusts of an area that count as "fully iced" for the weight
+        SINK: 8, // full ice on the gasbag raises the gas level she needs to hover by this many points (she sinks)
+        DECK_SINK: 3, // ...and a fully iced top deck by this many
+        GUN_SLOW: 1.6, // an iced gun's cooldown grows by this much times the ice (1 = double)
+        JAM_AT: 0.8, // ice this thick jams a gun completely ("ICED - chip it!")
+        CHIP_TIME: 2.2, // seconds of hammering to knock a crust off
+        JOB_AT: 0.35, // crusts thicker than this show up as a job on idle phones and for the bots
+      },
+    },
+    // EMBER FORGE: lava low in the map. Thermals over it lift the ship hard, getting too low sets the
+    // hull on fire and overheats the boiler. Smoke drifts across the screen (visual only).
+    ember: {
+      name: 'Ember Forge',
+      favour: { swarm: 2.2, imps: 1.4, bombers: 0.8, strafers: 0.8, gunship: 1 }, // magma bats
+      sky: ['2a1216', '7a2e22', 'd4692e'], sun: '255,150,70', ridgeHaze: '150,60,40',
+      rock: '#4c3a3e', rockStripes: ['rgba(10,4,6,.3)', 'rgba(255,110,50,.14)'], rockHaze: 'rgba(150,60,40,.2)',
+      rim: 'rgba(255,150,80,.55)', edgeDark: '#7a2a14', edgeLight: '#ff8a34', // a glowing crust on the floors
+      cave: ['#1c0d10', '#42191a'], pillar: '12,4,6', fog: '130,56,40', shaft: '255,150,80',
+      ridges: [
+        { f: 0.02, base: 0.86, amp: 180, freq: 0.003, color: '#6a2c26', snow: null },
+        { f: 0.045, base: 0.92, amp: 130, freq: 0.004, color: '#52211e', snow: null },
+        { f: 0.1, base: 0.98, amp: 100, freq: 0.007, color: '#3a1816', snow: null },
+      ],
+      EMBERS: { COUNT: 70, SPEED: 70, SIZE: 3.2, TILE_W: 2600, TILE_H: 1500 },
+      LAVA: {
+        OPEN_SHARE: 0.55, // the lava surface sits where this share of a map's columns have open sky below it...
+        ROWS_MIN: 8, ROWS_MAX: 24, // ...but is always between this many map rows deep and that many
+        COLOR: ['#ffcf4a', '#ff7a1c', '#c8320f'], GLOW: 700, // glow height above the surface (px)
+        KEEL: 380, // the ship's underside is this far below her reference point (px)
+        THERMAL_RANGE: 1100, // thermals reach this far above the lava (px)
+        THERMAL_LIFT: 150, // extra upward push at full heat (px per second squared; the gas valve is 8 per gas point)
+        BURN_MARGIN: 200, // keel this close to the lava (or lower) sets the hull on fire
+        FIRE_EVERY: 6, // seconds between new fires while scorched
+        MAX_FIRES: 4, // she won't start fires past this many
+        PRESS_RATE: 1.0, // boiler pressure gained per second at full heat (vent it!)
+        BURN_PRESS: 1.4, // ...and extra while scorched
+        PLUME_EVERY: 2300, // smoke plumes rise from the lava every this many px
+      },
+      SMOKE: { FIRST: 35, EVERY_MIN: 35, EVERY_MAX: 60, TIME: 11, ALPHA: 0.34 },
+      bat: { body: '#d2491f', wing: '#e8742a' }, // magma bats
+    },
+  },
   // Old-film effects. All OFF (the user found them unpleasant). Raise a number or set
   // LINE_BOIL to true to bring one back.
   STYLE: {
@@ -834,6 +903,7 @@ export const config = {
   BOTS: {
     THINK_EVERY: 0.3, // how often a bot rethinks what to do
     WHACK_EVERY: 0.35, // time between swings at a raider
+    ICE_AT: 0.5, // frost: bots chip an ice crust once it is this thick (0-1)
     ENGINEER_PRESS: 35, // steam this low: bots shut the valve of a leaking module (reopened after repair)
     OVERDRIVE_PUSH_EVERY: 45, // every third spell of this many seconds the bots stoke extra coal to reach overdrive
     BOILER_LOW: 55, // start stoking below this pressure
@@ -857,7 +927,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, repair: 1.1, ammo: 1, coal: 1 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, repair: 1.1, ammo: 1, coal: 1 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

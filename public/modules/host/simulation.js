@@ -15,6 +15,7 @@ import { createGunship, MAIN_X1, GS } from './gunship.js';
 import { createAirborne } from './airborne.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
+import { createEnvironment, favour } from './environments.js';
 import { assistAim } from './aim.js';
 import { UPGRADES } from './upgrades.js';
 import { generateVoyage, stopById, stopName, envInfo, loadVoyageSave, saveVoyageSave } from './voyage.js';
@@ -153,6 +154,8 @@ export function createSimulation() {
     // Holding the right tool for a job in reach: the job wins over a nearby rack.
     const gasHole = state.gasHoles.find((o) => here(o, 60));
     if (gasHole && tool === 'hammer') return { type: 'gas', obj: gasHole, hold: true, time: T.PATCH_TIME, label: 'Patch gasbag' };
+    const ice = state.icing.find((o) => here(o, 80));
+    if (ice && tool === 'hammer') return { type: 'ice', obj: ice, hold: true, time: config.ENVIRONMENTS.frost.ICE.CHIP_TIME, label: 'Chip ice' };
     const hurt = modules.list.find((m) => m.hp < m.max && here(m, T.REACH + 15));
     if (hurt && tool === 'hammer') return { type: 'repair', obj: hurt, hold: true, label: `Repair ${hurt.name}` };
     // Otherwise standing at a rack or hook means take / swap / put back.
@@ -346,7 +349,7 @@ export function createSimulation() {
   };
   const pickSetPiece = (tp) => {
     const pool = [];
-    const add = (k, w) => { if (k !== tp.last) for (let i = 0; i < w; i++) pool.push(k); };
+    const add = (k, w) => { if (k !== tp.last) for (let i = 0; i < Math.round(w * favour(state, k)); i++) pool.push(k); }; // (the environment's enemy flavour scales each weight)
     add('swarm', 2);
     add('imps', 1);
     if (tp.peaks >= 1 || lapNo() > 1) {
@@ -902,6 +905,7 @@ export function createSimulation() {
   const coil = createCoil({ state, puff, credit });
   const gunship = createGunship({ state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType });
   const weather = createWeather({ state, impact, puff });
+  const env = createEnvironment({ state, puff }); // ice, thermals, blizzards (rules in environments.js)
   const air = createAirborne({ state, puff, phoneFx });
   // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
   const onDeck = () => state.gunship && state.gunship.phase !== 'sinking' && state.gunship.phase !== 'leaving';
@@ -1066,13 +1070,13 @@ export function createSimulation() {
             gun.aim = gun.home + clamp(angleDiff(wanted, gun.home), -gun.arc, gun.arc);
           }
           if ((player.actQ || player.fire) && gun.cd <= 0 && !state.ship.down) {
-            if (!working || gun.ammo <= 0) {
+            if (!working || gun.ammo <= 0 || env.gunJammed(player.lock)) {
               gun.cd = 0.5;
               gun.empty = 0.8;
-              gun.emptyText = working ? 'EMPTY!' : 'BROKEN!';
+              gun.emptyText = !working ? 'BROKEN!' : gun.ammo <= 0 ? 'EMPTY!' : 'ICED - CHIP IT!';
             } else {
               gun.ammo -= 1;
-              gun.cd = config.GUNS.COOLDOWN;
+              gun.cd = config.GUNS.COOLDOWN * env.gunCooldownMul(player.lock);
               const angle = gun.aim + (state.ship.pitch || 0);
               const [gx, gy] = tilt(state, gun.bx, gun.by);
               state.shells.push({
@@ -1148,7 +1152,7 @@ export function createSimulation() {
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
-              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', defuse: 'defused', revive: 'revives', sabotage: 'sabotage', cutline: 'boarding' }[act.type]);
+              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', defuse: 'defused', revive: 'revives', sabotage: 'sabotage', cutline: 'boarding' }[act.type]);
               if (act.type === 'fire') pop(state, object.x, player.y - 120 - state.ship.alt, 'fireOut', '#9fd3e6', 0.8);
               if (act.type === 'hole' || act.type === 'gas') pop(state, object.x, player.y - 120 - state.ship.alt, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
@@ -1157,6 +1161,7 @@ export function createSimulation() {
                 state.ship.hull = Math.min(100, state.ship.hull + 3);
               } else if (act.type === 'defuse') state.bombs.splice(state.bombs.indexOf(object), 1);
               else if (act.type === 'gas') state.gasHoles.splice(state.gasHoles.indexOf(object), 1);
+              else if (act.type === 'ice') env.chip(object);
               else if (act.type === 'sabotage') gunship.plant(player);
               else if (act.type === 'cutline') gunship.cutLine(player);
               else object.ko = 0;
@@ -1256,6 +1261,7 @@ export function createSimulation() {
       if (stationName === 'Boiler' && !status) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
       if (stationName === 'Helm' && player.lock && !status && (state.ship.press < config.GAS.PUMP_MIN_PRESS || state.gasHoles.length)) status = `Gas ${Math.round(state.ship.gas)}% - ${feel}${state.ship.press < config.GAS.PUMP_MIN_PRESS ? ' - NO STEAM TO PUMP!' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' holes leaking' : ''}`;
       if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag full - she is rising' : 'Gasbag low - she is dropping';
+      if (gun && !status && env.gunIce(stationName) > 0.35) status = env.gunJammed(stationName) ? 'ICED - CHIP IT! (hammer)' : 'Gun is icing up - chip it (hammer)';
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
       const ammoText = gun ? gun.ammo : stationName === 'Bomb Bay' ? state.bombBay.bombs : null;
       const attackLabel = !player.lock && player.conn == null && batInReach(player, config.WAVES.BAT_NOTICE) ? 'Swat bat!' : player.carry === 'sword' ? 'Swing' : 'Shove';
@@ -1385,9 +1391,11 @@ export function createSimulation() {
     }
     // Lift: above the neutral fill she accelerates up, below it she drops (fast at the extremes).
     // The helm's little trim engine adds a nudge.
-    const lift = (state.ship.gas - G.NEUTRAL) * G.LIFT;
+    // (ice weight shifts the level she needs to hover; lava thermals push her up - state.env, environments.js)
+    const effGas = state.ship.gas - state.env.sink + state.env.lift / G.LIFT;
+    const lift = (effGas - G.NEUTRAL) * G.LIFT;
     const trim = state.ship.trim * SHM.TRIM_ACCEL * (modules.works(state, 'Helm') ? 1 : 0);
-    state.buoyancy = state.ship.gas > G.NEUTRAL + 5 ? 1 : state.ship.gas < G.NEUTRAL - 5 ? -1 : 0;
+    state.buoyancy = effGas > G.NEUTRAL + 5 ? 1 : effGas < G.NEUTRAL - 5 ? -1 : 0;
     state.sinking = state.buoyancy < 0;
     if (flying) {
       state.ship.vy = (state.ship.vy || 0) + (lift + trim - (state.ship.vy || 0) * G.DRAG) * dt;
@@ -1456,6 +1464,7 @@ export function createSimulation() {
       gunship.update(dt);
       course.update(dt);
       weather.update(dt);
+      env.update(dt);
       gunship.settle(dt);
       salvageWatch();
     }
@@ -1508,7 +1517,7 @@ export function createSimulation() {
     }
 
     // Progress drains only while nobody is working on it.
-    for (const object of [...state.breaches, ...state.fires, ...state.bombs, ...state.gasHoles]) {
+    for (const object of [...state.breaches, ...state.fires, ...state.bombs, ...state.gasHoles, ...state.icing]) {
       if (!object.worked) object.prog = Math.max(0, (object.prog || 0) - dt * 0.4);
       object.worked = false;
     }

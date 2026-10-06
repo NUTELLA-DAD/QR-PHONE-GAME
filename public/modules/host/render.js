@@ -7,6 +7,7 @@ import { createSprites } from './sprites.js';
 import { createCharacterArt } from './characterArt.js';
 import { createCourseArt } from './courseArt.js';
 import { createSkyArt } from './skyArt.js';
+import { createEnvArt } from './envArt.js';
 import { UPGRADES } from './upgrades.js';
 import { stopById } from './voyage.js';
 import { targets } from './aim.js';
@@ -41,7 +42,8 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawShip = createShipArt({ ctx, state, ink, rrect, sprites });
   const threatArt = createThreatArt({ ctx, state, ink, sprites });
   const skyArt = createSkyArt({ ctx, state });
-  const courseArt = createCourseArt({ ctx, state, ink, sprites, skyArt });
+  const envArt = createEnvArt({ ctx, state, ink }); // Frost Peaks / Ember Forge look (sky, weather, lava, ice)
+  const courseArt = createCourseArt({ ctx, state, ink, sprites, skyArt, envArt });
   const drawSpecials = createSpecialsArt({ ctx, state, ink });
   const drawGunship = createGunshipArt({ ctx, state, ink });
   installLineBoil(ctx);
@@ -1288,6 +1290,8 @@ export function createRenderer({ ctx, state, canvas }) {
         return { x: o.x, y: P[o.d].y - 30, r: 50 };
       case 'hole':
         return { x: o.x, y: P[o.d].y - 58, r: 42 };
+      case 'ice':
+        return o.area === 'gasbag' ? { x: o.x, y: 198 + 232 * Math.sqrt(Math.max(0, 1 - ((o.x - 800) / 1000) ** 2)) + 20, r: 60 } : o.gun ? { x: o.x, y: P[o.d].y - 50, r: 56 } : { x: o.x, y: P[o.d].y - 24, r: 52 };
       case 'gas':
         return { x: o.x, y: o.y, r: 40 };
       case 'vent':
@@ -1688,6 +1692,7 @@ export function createRenderer({ ctx, state, canvas }) {
 
   // Background drawn in screen space, back to front, each layer scrolling at its own speed.
   const drawBackground = (width, height, view) => {
+    if (envArt.background(width, height, view)) return; // Frost Peaks / Ember Forge draw their own sky
     const s = height / config.H;
     // Day sky, blending to sunset on the return leg of the course.
     const dusk = (state.course && state.course.dusk) || 0;
@@ -1789,6 +1794,7 @@ export function createRenderer({ ctx, state, canvas }) {
     const height = canvas.height;
     setBoilTime(time);
     skyArt.setTime(time / 1000);
+    envArt.setTime(time / 1000);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     drawBackground(width, height, view);
 
@@ -1836,6 +1842,7 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.restore();
       }
       drawGuns();
+      envArt.drawIce(); // frost: ice crusts on the gasbag, top deck and guns
       drawGunship(time / 1000);
       drawHazards(time / 1000);
       threatArt.drawBombs(time / 1000);
@@ -1914,6 +1921,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.restore();
     drawEffects(time / 1000, view);
     drawStorm(width, height, view, time / 1000);
+    envArt.worldFront(view, width, height, time / 1000); // snow, blizzard haze, embers, smoke
 
     // Screen overlay on a fixed 1600x900 stage.
     const scale = Math.min(width / config.W, height / config.H);

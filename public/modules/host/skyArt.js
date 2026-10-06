@@ -2,6 +2,7 @@
 // valley fog banks; the layered cave backdrop with light shafts and dust. Everything is placed on
 // grids fixed to the world, so shapes only slide past (never shimmer or reshape). Drawing never throws.
 import { config } from '../../config.js';
+import { envIdOf, envOf } from './environments.js';
 
 const hash = (i, salt = 0) => {
   const v = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
@@ -155,7 +156,8 @@ export function createSkyArt({ ctx, state }) {
 
   const fogRgb = () => {
     const { dusk, storm } = mood();
-    const warm = mixRgb(FOG.COLOR, FOG.DUSK_COLOR, dusk);
+    const look = state.course && envIdOf(state) !== config.ENVIRONMENTS.DEFAULT ? envOf(state) : null; // Frost Peaks / Ember Forge tint the fog
+    const warm = look ? look.fog : mixRgb(FOG.COLOR, FOG.DUSK_COLOR, dusk);
     return { rgb: mixRgb(warm, FOG.STORM_COLOR, storm), storm };
   };
 
@@ -283,8 +285,9 @@ export function createSkyArt({ ctx, state }) {
       const { dusk, storm } = mood();
       const mapH = map.H * C;
       const wall = ctx.createLinearGradient(0, 0, 0, mapH);
-      wall.addColorStop(0, CAVE.TOP);
-      wall.addColorStop(1, CAVE.BOTTOM);
+      const look = state.course && envIdOf(state) !== config.ENVIRONMENTS.DEFAULT ? envOf(state) : null;
+      wall.addColorStop(0, look ? look.cave[0] : CAVE.TOP);
+      wall.addColorStop(1, look ? look.cave[1] : CAVE.BOTTOM);
       ctx.save();
       ctx.beginPath();
       ctx.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
@@ -298,7 +301,7 @@ export function createSkyArt({ ctx, state }) {
         const shift = dd * P.parallax;
         const k0 = Math.floor((num(view.cx) - hw - 400 + shift) / sp) - 1;
         const k1 = Math.ceil((num(view.cx) + hw + 400 + shift) / sp) + 1;
-        ctx.fillStyle = `rgba(${P.color},${P.alpha})`;
+        ctx.fillStyle = `rgba(${look ? look.pillar : P.color},${P.alpha})`;
         ctx.beginPath();
         for (let k = k0; k <= k1; k++) {
           if (hash(k, 120 + layer) > P.chance) continue;
@@ -326,7 +329,7 @@ export function createSkyArt({ ctx, state }) {
       const S = CAVE.SHAFTS;
       const sa = S.ALPHA * (1 - storm * 0.85);
       if (sa > 0.003) {
-        const col = mixRgb(S.COLOR, S.DUSK_COLOR, dusk);
+        const col = look ? look.shaft : mixRgb(S.COLOR, S.DUSK_COLOR, dusk);
         const g0 = Math.floor((num(view.cx) - hw - S.LENGTH + dd) / (C * S.SPACING)) - 1;
         const g1 = Math.ceil((num(view.cx) + hw + S.LENGTH + dd) / (C * S.SPACING)) + 1;
         for (let g = g0; g <= g1; g++) {
