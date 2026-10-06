@@ -214,7 +214,7 @@ export function createSimulation() {
   // Start the whole game over, moored at the mast (players stay connected).
   function restartGame() {
     restoreData(config, pristine);
-    Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0 });
+    Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0 });
     state.lastAlt = 0;
     state.wreck = null;
     state.phase = 'lobby';
@@ -405,6 +405,7 @@ export function createSimulation() {
   };
 
   const update = (dt) => {
+    let helmFlown = false; // did someone steer this frame (momentum is then theirs)
     // The lap scorecard pauses the action, then the upgrade vote starts.
     if (state.scorecard) {
       if ((state.scorecard.t -= dt) <= 0) {
@@ -462,14 +463,18 @@ export function createSimulation() {
         const working = modules.works(state, player.lock);
         if (player.lock === 'Helm') {
           if (working) {
-            // Throttle: the phone's lever if used, otherwise the stick left/right.
-            const REV = -config.SHIP.REVERSE;
-            if (player.thr != null) state.ship.speed += (clamp(player.thr, REV, 1) - state.ship.speed) * Math.min(1, dt * 1.5);
-            else state.ship.speed = clamp(state.ship.speed + player.jx * dt * 0.6, REV, 1);
-            const climb = config.SHIP.CLIMB_SPEED * (0.4 + 0.6 * Math.min(1, state.ship.press / 50));
-            const bounds = altBounds(state);
-            // (A ship that sank below the usual floor isn't snapped back up; it has to climb out.)
-            state.ship.alt = clamp(state.ship.alt - player.jy * climb * dt, Math.min(bounds.lo, state.ship.alt), bounds.hi);
+            // She flies with momentum. The lever sets the cruise speed; pushing the stick left/right
+            // thrusts backward/forward over it, and up/down climbs and dives. Let go and she glides
+            // on, slowly settling.
+            const SH = config.SHIP;
+            const REV = -SH.REVERSE;
+            if (Math.abs(player.jx) > 0.25) state.ship.speed = clamp(state.ship.speed + player.jx * SH.THRUST * dt, REV, 1);
+            else if (player.thr != null) state.ship.speed += (clamp(player.thr, REV, 1) - state.ship.speed) * Math.min(1, dt * 0.9);
+            const climb = SH.CLIMB_SPEED * (0.4 + 0.6 * Math.min(1, state.ship.press / 50));
+            const wantVy = Math.abs(player.jy) > 0.15 ? -player.jy * climb : 0;
+            const rate = wantVy ? SH.CLIMB_ACCEL : SH.GLIDE_DRAG;
+            state.ship.vy = (state.ship.vy || 0) + clamp(wantVy - (state.ship.vy || 0), -rate * dt, rate * dt);
+            helmFlown = true;
           }
         } else if (player.lock === 'Bomb Bay') {
           // Bombardier: FIRE drops a bomb through the belly doors.
@@ -691,6 +696,20 @@ export function createSimulation() {
       if (config.GUNS.AUTOLOAD_EVERY && gun.ammo < gun.max && (gun.auto = (gun.auto || 0) + dt) >= config.GUNS.AUTOLOAD_EVERY) {
         gun.auto = 0;
         gun.ammo += 1;
+      }
+    }
+    // Vertical momentum: the ship glides on at its climb/dive speed, settling when nobody steers.
+    const SHM = config.SHIP;
+    if (!helmFlown) state.ship.vy = (state.ship.vy || 0) * Math.max(0, 1 - dt * 3);
+    if (state.ship.vy && !state.ship.down) {
+      const bounds = altBounds(state);
+      // (A ship that sank below the usual floor isn't snapped back up; it has to climb out.)
+      const lo = Math.min(bounds.lo, state.ship.alt);
+      const hi = Math.max(bounds.hi, state.ship.alt);
+      state.ship.alt += state.ship.vy * dt;
+      if (state.ship.alt <= lo || state.ship.alt >= hi) {
+        state.ship.alt = clamp(state.ship.alt, lo, hi);
+        state.ship.vy = 0;
       }
     }
     state.autopilot = false;

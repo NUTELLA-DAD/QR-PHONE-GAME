@@ -29,7 +29,9 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
   zig-zag runs (climb, dive, climb...), over mountain **fortresses** (gun towers on the walls) and
   **factories** (tall smokestacks). The land climbs and falls: at a **cliff wall**, stop and climb
   straight up; at a **cliff edge**, clear it, then dive down into the cave. The lever is the
-  throttle: up = ahead, the yellow STOP line = hover, below it = reverse. Nobody at the helm? On Easy/Normal the autopilot steers gently.
+  cruise speed: up = ahead, the yellow STOP line = hover, below it = reverse. The ship has
+  momentum: push the stick any way (left/right = thrust back/forward) and she glides on after you
+  let go. Nobody at the helm? On Easy/Normal the autopilot steers gently.
 - **Guns** (6 of them, each turns only so far): aim near a target and the aim snaps on. Guns need
   **ammo** carried from the Ammo Hold.
 - **Bomb Bay** (lower deck, Aft Gun Deck): press DROP to drop a bomb through the belly doors. A

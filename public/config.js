@@ -30,6 +30,9 @@ export const config = {
   SHIP: {
     ALT_RANGE: 420, // how far the ship can climb or dive from the middle
     CLIMB_SPEED: 210,
+    CLIMB_ACCEL: 480, // how quickly she picks up climb/dive speed from the stick (momentum)
+    GLIDE_DRAG: 230, // how quickly the climb/dive fades after letting go (lower = floatier glide)
+    THRUST: 0.9, // throttle change per second from pushing the stick left/right
     TOP_SPEED: 560, // forward speed at full throttle (reverse is up to 40% of this)
     REVERSE: 0.4, // how much of the throttle is reverse
     HULL_DAMAGE: 1, // multiplier on hull damage taken (armour upgrades lower it)

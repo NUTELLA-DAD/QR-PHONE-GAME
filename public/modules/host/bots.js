@@ -134,7 +134,8 @@ function operate(p, state, dt) {
     if (lo > hi || Math.abs(plan.target - ship.alt) > 120) target = plan.target;
     else if (dodge !== null && dodge > lo && dodge < hi) target = dodge;
     else if (ship.alt < lo + 15 || ship.alt > hi - 15) target = plan.target;
-    if (target !== null) p.jy = clamp((ship.alt - target) / 40, -1, 1);
+    // (Gentle enough not to overshoot now that she glides with momentum.)
+    if (target !== null) p.jy = clamp((ship.alt - target) / 90 + (ship.vy || 0) / 260, -1, 1);
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
     else p.jy = 0;
   } else if (p.lock === 'Bomb Bay') {

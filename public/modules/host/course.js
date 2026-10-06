@@ -462,6 +462,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     if (!worst) return;
     // Shove the ship out of the rock (a hard bump), and slow it down.
     state.ship.alt += Math.sign(push) * Math.min(Math.abs(push), 600 * dt);
+    if ((push > 0 && state.ship.vy < 0) || (push < 0 && state.ship.vy > 0)) state.ship.vy = 0; // momentum stops on the rock
     state.ship.speed *= 1 - 0.8 * dt;
     // Bounce back off a wall.
     if (wallAhead && state.ship.speed >= -0.05) {
