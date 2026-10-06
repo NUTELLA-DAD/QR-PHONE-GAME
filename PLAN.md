@@ -114,8 +114,20 @@ misses comes round in the medical bay as now (so daring is never a game-over).
   hookshot back to the ship or parachute down to the medical bay.
 - Order: H1 -> H2 -> H3 -> H5 -> H4. Each step tested with botsim and bots taught the new move.
 
+### S. Steam that makes you choose (user, 6 Oct 2026)
+Measured: on open/route maps steam never matters; on cave maps it is just short (low 35% of the
+time). Damaged modules cost no steam. Approved design:
+- S1. Damaged steam modules leak (more damage = more leak) -> less pressure -> weaker gas pump,
+  harder to lift. Close a module's pipe valve to stop the leak (and switch it off) or repair it.
+- S2. Overdrive: above ~70% pressure engines, pumping and the coil get stronger; above 90% the
+  boiler rattles and may blow - vent it. Push-your-luck, never a constant chore.
+- S3. A small steam gauge on the TV showing where steam goes (engines, pump, Deflector, coil,
+  leaks, vents) with the overdrive zone marked.
+- S4. Bots act as engineers (close leaking valves when short, vent when too high).
+- Targets: on cave maps steam short 10-20% of the time; overdrive reached sometimes everywhere.
+
 ### Order for the focus work
-A1 -> F1a -> F2a/F2b -> G1 -> G2 -> H1 -> H2 -> H3 -> H5 -> H4 -> G3 -> F5a/F5b -> F4 -> F1b/F1c -> then Phase B onward.
+A1 -> F1a -> F2a/F2b -> G1 -> (H1 + S + G2 in parallel) -> H2 -> H3 -> H5 -> H4 -> G3 -> F5a/F5b -> F4 -> F1b/F1c -> then Phase B onward.
 
 ## Phase A - Foundations that make everything else cheaper
 - A1. **Headless test runner** (`tools/botsim.mjs`): run the real simulation in Node with N bots
@@ -177,6 +189,7 @@ after each phase.
 - G1 done: guns hold 20, crates give 10, free trickle every 4 s, ~3.5 shots/s, faster shells,
   half damage per shell. Empty-gun time 32-69% -> 7-25% (botsim). Normal is a touch harder
   since the bigger gasbag (watch it).
+- Workers now run several at once, each in its own git worktree; the lead merges them one by one.
 - Note: the .claude/agents files load in a NEW session; until then the lead runs the same
   instructions through a general-purpose agent with model = sonnet.
 
