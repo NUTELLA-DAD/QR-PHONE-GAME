@@ -194,6 +194,10 @@ after each phase.
   are a touch harder with steam leaks (bots wreck ~0.7 per 5 min) - balance pass later.
 - User: the enemy gunship feels locked in place; it should be hooked by a hookshot and the two
   ships should have separate physics -> F5a/F5b now (with H2 in parallel).
+- Round 5 (running): gunship can't pass through rock; gunship AI hunts around us firing, and once
+  her guns are shot out she latches on with her own grapple and boards us; the cargo plane is
+  replaced by paratroopers jumping from the gunship. Fog + sky effects (art). Crew all use the
+  drawn character style (big bulldog sprite off).
 - Workers now run several at once, each in its own git worktree; the lead merges them one by one.
 - Note: the .claude/agents files load in a NEW session; until then the lead runs the same
   instructions through a general-purpose agent with model = sonnet.
