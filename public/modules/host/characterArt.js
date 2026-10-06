@@ -5,6 +5,7 @@
 // Joint positions are in world units relative to the character's feet (0, 0), facing right.
 // Each can be overridden per character in art/sprites/rig.json, e.g.
 //   "crew/bulldog": { "scale": 0.5, "neck": { "x": 3, "y": -60 }, "armLength": 30 }
+import { config } from '../../config.js';
 
 // Where each raider type's art lives (first folder that has art wins).
 export const ENEMY_FOLDERS = {
@@ -38,7 +39,7 @@ const merge = (base, over) => {
 // drawItem(item, x, y, swingAge): draws a placeholder held item when there's no item art.
 export function createCharacterArt({ ctx, sprites, drawItem }) {
   const folderFor = (p) => {
-    if (!p.type) return 'crew/' + p.species;
+    if (!p.type) return config.CREW_SPRITES ? 'crew/' + p.species : null; // crew use the drawn style
     return (ENEMY_FOLDERS[p.type] || []).find((f) => sprites.has(f + '/head')) || null;
   };
 

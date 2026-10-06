@@ -643,6 +643,7 @@ export const config = {
     bat: { fur: '#4a3b5c', ear: 'bat', monster: 1 },
   },
   // Animals players (and test bots) can be.
+  CREW_SPRITES: false, // true = use crew sprite art from art/sprites/crew (only the bulldog has any); false = the drawn style for everyone
   CREW_SPECIES: ['bulldog', 'wolf', 'tiger', 'shiba', 'fox', 'bear', 'cat', 'rabbit'],
 };
 
