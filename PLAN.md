@@ -88,8 +88,34 @@ and just chipped the hull. The user chose:
   flat shapes with one highlight, layered hazy backgrounds - applied to ship, crew, enemies and
   HUD (a written palette + rules in art/ART_SPEC.md first, then the art worker applies it).
 
+### H. Daring crew (user, 6 Oct 2026) - top priority after G1/G2
+"Player controls should be smooth and intuitive with big buttons. Grabbing items seems clunky.
+I want to jump over the side in epic moments, board an enemy, kick out the pilot of a small
+plane and take it for myself, hookshot myself and launch across the map."
+
+Core idea: the crew can leave the ship. A player can be **airborne** with real physics (velocity,
+gravity, air control), land on any deck - ours, a gunship's, a bomber's back - and anyone who
+misses comes round in the medical bay as now (so daring is never a game-over).
+
+- H1. **Controls and grabbing**: one big context button that does the obvious thing (walk over
+  a rack and tap = grab; tap again near a gun/boiler = load it; no separate put-back step);
+  auto-swap items; a big JUMP button; smoother walking (quick start, short skid - merges F3a);
+  bigger, clearer phone buttons with an icon for what will happen. [phone-builder + gameplay]
+- H2. **Jump and airborne physics**: jump with an arc; jump off the rail to drop to a lower deck
+  or overboard; airborne players drift with the wind and the ship's motion; landing squash; the
+  ship's pitch and big hits make standing crew stagger (merges F3b/F3c). [gameplay]
+- H3. **Personal hookshot** (a tool from the rack, or everyone carries one): aim with the stick,
+  fire - it catches the ship, rock, enemy decks or planes; hold to swing on the rope like a
+  pendulum, let go to launch across the sky; reel in to zip. [gameplay + art]
+- H4. **Leap aboard enemies**: from the rail (or by hookshot) land on a gunship, bomber or the
+  boss and fight / sabotage there (reuse the gunship crew-fight and plant-charge rules).
+- H5. **Hijack a small plane**: land on (or hook) a dogfighter, tap to kick the pilot out (he
+  parachutes), and fly it yourself like the escort fighter (auto guns); bail out with LEAVE -
+  hookshot back to the ship or parachute down to the medical bay.
+- Order: H1 -> H2 -> H3 -> H5 -> H4. Each step tested with botsim and bots taught the new move.
+
 ### Order for the focus work
-A1 -> F1a -> F2a/F2b -> G1 -> G2 -> G3 -> F3a/F3b -> F5a/F5b -> F4 -> F1b/F1c -> then Phase B onward.
+A1 -> F1a -> F2a/F2b -> G1 -> G2 -> H1 -> H2 -> H3 -> H5 -> H4 -> G3 -> F5a/F5b -> F4 -> F1b/F1c -> then Phase B onward.
 
 ## Phase A - Foundations that make everything else cheaper
 - A1. **Headless test runner** (`tools/botsim.mjs`): run the real simulation in Node with N bots
@@ -146,6 +172,8 @@ after each phase.
 - A1 done: `node tools/botsim.mjs --minutes 5 --difficulty hard --map open --seed 1` runs the
   real game with bots in about a second per simulated minute; the same seed replays exactly.
 - F1a done: fixed 60 Hz steps in main.js (config.LOOP).
+- F2 done: flight model (airspeed, stalls, bank, damage wobble, flocking bats); small planes crash
+  into the ship, big ones bump (config.BUMP). G4 done: bigger gasbag; camera +20%.
 - Note: the .claude/agents files load in a NEW session; until then the lead runs the same
   instructions through a general-purpose agent with model = sonnet.
 
