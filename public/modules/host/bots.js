@@ -2,7 +2,7 @@
 // (jx/jy joystick, actQ = tap Action, fire = hold Action), so they test the real game rules.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
-import { steerTo } from './nav.js';
+import { steerTo, travelTime } from './nav.js';
 import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
 import { GS, MAIN_X1, landX, boilerX } from './gunship.js';
@@ -175,7 +175,7 @@ function listJobs(state, bot) {
   const botPlanes = players.filter((q) => q.bot && isEscortStation(q.lock)).length; // the crew can only spare so many for the patrol planes
   const reach = (n) => (isEscortStation(n) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
-  for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1 });
+  for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
   const gs = state.gunship;
   if (gs && gs.charge && bot.onGunship) jobs.unshift({ kind: 'flee', obj: 'flee', max: 8 });
@@ -202,7 +202,7 @@ function listJobs(state, bot) {
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   if (state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 1 });
-  for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1 });
+  for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   return jobs;
 }
 
@@ -216,14 +216,18 @@ function chooseJob(state, bot, bots) {
   // Among the most urgent kind, prefer the closest.
   if (!jobs.length) return null;
   const kind = jobs[0].kind;
+  // Walking time (slide poles, ladders and stairs included) to the job, as pixels of walking.
   const dist = (j) => {
-    const o = j.obj;
-    if (typeof o === 'string') return 0;
-    const y = o.d != null ? L.platforms[o.d].y : o.y;
-    return Math.abs(o.x - bot.x) + Math.abs(y - bot.y) * 3;
+    let o = j.obj;
+    if (typeof o === 'string') o = j.kind === 'station' ? stationNamed(o) : null;
+    if (!o) return 0;
+    if (o.d == null) return Math.abs(o.x - bot.x) + Math.abs(o.y - bot.y) * 3;
+    if (bot.d == null) return 0;
+    return travelTime(bot, o.d, o.x) * config.MOVE.WALK_SPEED;
   };
   // (Stations come in order of usefulness: weigh that over walking distance.)
-  const rank = (j) => (kind === 'station' ? jobs.indexOf(j) * 900 : 0);
+  // (how useful it is counts for more than how far it is - but stations of EQUAL use go to whoever is nearest.)
+  const rank = (j) => (kind === 'station' ? (j.tier ?? 1) * B.STATION_TIER_PX : 0);
   return jobs.filter((j) => j.kind === kind).sort((a, b) => rank(a) + dist(a) - rank(b) - dist(b))[0];
 }
 
@@ -322,9 +326,10 @@ function press(p) {
 const PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
 
 // Make sure the bot holds a tool; walks to the nearest rack/hook for it if not. True when held.
-function getTool(p, kind) {
+function getTool(p, kind, to) {
   if (p.carry === kind) return true;
-  const cost = (r) => Math.abs(r.x - p.x) + Math.abs(L.platforms[r.d].y - p.y) * 3;
+  // (the rack that makes the whole trip - rack, then the job - shortest)
+  const cost = (r) => (p.d == null ? 0 : travelTime(p, r.d, r.x) + (to && to.d != null ? travelTime({ d: r.d, x: r.x, conn: null }, to.d, to.x) : 0));
   const rack = PICKUPS.filter((r) => r.kind === kind).sort((a, b) => cost(a) - cost(b))[0];
   if (steer(p, rack.d, rack.x)) press(p);
   return false;
@@ -385,11 +390,11 @@ function work(p, state) {
   } else if (job.kind === 'revive') {
     if (steer(p, goalOf(o), o.x, 30)) p.fire = true;
   } else if (job.kind === 'fire') {
-    if (getTool(p, 'extinguisher') && steer(p, o.d, o.x, 30)) p.fire = true;
+    if (getTool(p, 'extinguisher', o) && steer(p, o.d, o.x, 30)) p.fire = true;
   } else if (job.kind === 'patch') {
-    if (getTool(p, 'hammer') && steer(p, o.d, o.x, 30)) p.fire = true;
+    if (getTool(p, 'hammer', o) && steer(p, o.d, o.x, 30)) p.fire = true;
   } else if (job.kind === 'repair') {
-    if (getTool(p, 'hammer') && steer(p, o.d, o.x, 20)) p.fire = true;
+    if (getTool(p, 'hammer', o) && steer(p, o.d, o.x, 20)) p.fire = true;
   } else if (job.kind === 'valve') {
     if (steer(p, o.d, o.x, 10)) press(p);
   } else if (job.kind === 'ammo') {
@@ -408,7 +413,8 @@ function work(p, state) {
 
 function wander(p) {
   if (!p.wanderTo || (p.wanderWait !== undefined && p.wanderWait <= 0)) {
-    const d = (Math.random() * L.platforms.length) | 0;
+    // Mostly amble about the deck they are on (less pointless walking), now and then go somewhere else.
+    const d = p.d != null && Math.random() < 0.75 ? p.d : (Math.random() * L.platforms.length) | 0;
     const plat = L.platforms[d];
     p.wanderTo = { d, x: plat.x0 + 20 + Math.random() * ((plat.id === 'main' ? MAIN_X1 : plat.x1) - plat.x0 - 40) };
     p.wanderWait = undefined;

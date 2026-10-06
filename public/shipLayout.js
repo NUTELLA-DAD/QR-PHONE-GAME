@@ -37,6 +37,14 @@ export const SHIP_LAYOUT = {
     { type: 'stairs', top: 'main', bottom: 'lower', xTop: 560, xBottom: 700, speed: 150 },
     { type: 'lift', top: 'main', bottom: 'lower', xTop: 960, xBottom: 960, speed: 260 },
     { type: 'ladder', top: 'main', bottom: 'lower', xTop: 1140, xBottom: 1140, speed: 170 },
+    { type: 'ladder', top: 'catwalk', bottom: 'main', xTop: 640, xBottom: 640, speed: 170 }, // a third way down from the top deck, mid-ship
+    { type: 'rope', top: 'nest', bottom: 'catwalk', xTop: 640, xBottom: 640, speed: 150 }, // third rope, above the new mid-ship ladder (one climb from the main deck to the nest)
+    { type: 'rope', top: 'nest', bottom: 'catwalk', xTop: 905, xBottom: 905, speed: 150 }, // second rope, by the Dorsal Gun and Deflector
+    // SLIDE POLES: one-way and fast, top -> bottom only (a brass pole straight down through the decks).
+    { type: 'pole', top: 'catwalk', bottom: 'main', xTop: 860, xBottom: 860, speed: 520 },
+    { type: 'pole', top: 'main', bottom: 'lower', xTop: 860, xBottom: 860, speed: 520 },
+    { type: 'pole', top: 'catwalk', bottom: 'main', xTop: 1300, xBottom: 1300, speed: 520 },
+    { type: 'pole', top: 'main', bottom: 'lower', xTop: 1300, xBottom: 1300, speed: 520 },
     { type: 'ladder', top: 'lower', bottom: 'bay', xTop: 372, xBottom: 372, speed: 170 },
     { type: 'ladder', top: 'lower', bottom: 'pod', xTop: 760, xBottom: 760, speed: 170 },
     { type: 'ladder', top: 'lower', bottom: 'hangar', xTop: 1040, xBottom: 1040, speed: 170 },
@@ -147,8 +155,14 @@ export const SHIP_LAYOUT = {
     { kind: 'sword', p: 'main', x: 660 },
     { kind: 'hammer', p: 'main', x: 860 },
     { kind: 'sword', p: 'lower', x: 1340 },
+    // More hammers where the holes and repairs actually happen (the outriggers, the top deck).
+    { kind: 'hammer', p: 'lower', x: 1430 },
+    { kind: 'hammer', p: 'lower', x: 110 },
+    { kind: 'hammer', p: 'catwalk', x: 480 },
+    { kind: 'hammer', p: 'lower', x: 690 },
   ]),
   extinguishers: withD([
+    { p: 'lower', x: 1510 },
     { p: 'main', x: 520 },
     { p: 'main', x: 1185 },
     { p: 'lower', x: 300 },

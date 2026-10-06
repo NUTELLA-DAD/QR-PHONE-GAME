@@ -485,6 +485,13 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
         line([[c.xTop - 14, top], [c.xTop - 14, yBot]], 4, color);
         line([[c.xTop + 14, top], [c.xTop + 14, yBot]], 4, color);
         for (let y = top + 18; y < yBot; y += 26) line([[c.xTop - 14, y], [c.xTop + 14, y]], 4, color);
+      } else if (c.type === 'pole') {
+        // Slide pole: a brass pole with a handrail ring at the top (one-way, down only).
+        line([[c.xTop, yTop - 70], [c.xTop, yBot]], 9, INK);
+        line([[c.xTop, yTop - 70], [c.xTop, yBot]], 5, '#d9a93c');
+        line([[c.xTop - 1.5, yTop - 66], [c.xTop - 1.5, yBot]], 1.6, '#fff0b0');
+        line([[c.xTop - 16, yTop - 70], [c.xTop + 16, yTop - 70]], 5, INK);
+        line([[c.xTop - 15, yTop - 70], [c.xTop + 15, yTop - 70]], 2.5, '#d9a93c');
       } else if (c.type === 'stairs') {
         if (sprites.box(ctx, 'ship/stairs', c.xTop - 30, yTop - 50, c.xBottom - c.xTop + 60, yBot - yTop + 50)) return;
         line([[c.xTop - 10, yTop], [c.xBottom - 10, yBot]], 6);
