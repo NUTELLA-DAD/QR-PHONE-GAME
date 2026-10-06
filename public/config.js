@@ -85,6 +85,25 @@ export const config = {
     COOLDOWN: 4,
   },
   // Enemy gunships that come alongside to be boarded (see gunship.js).
+  // Dogfighters: a squadron of small biplanes that circle the ship and take turns diving at it.
+  DOGFIGHT: {
+    COUNT: 2, // planes in a squadron on the first mission...
+    PER_LAP: 1, // ...plus this many per later mission...
+    MAX: 4, // ...up to this many
+    HP: 3,
+    SPEED: 470, // air speed
+    TURN: 1.7, // turn rate (radians per second): tighter than the big fighter
+    TURN_AVOID: 2.4,
+    ORBIT: 1000, // how far out they circle the ship
+    ORBIT_SPEED: 0.35, // how fast the circle goes round
+    CIRCLE_MIN: 3, // seconds circling before peeling off to attack
+    CIRCLE_MAX: 6,
+    LOOP_CHANCE: 0.4, // chance of a loop-the-loop after a pass
+    FIRE_RANGE: 1300,
+    BURST: 4, // bullets per pass
+    SHOT_EVERY: 0.2,
+    BULLET_SPEED: 700,
+  },
   GUNSHIP: {
     FIRST_AFTER: 100, // seconds into a mission before the first
     EVERY_MIN: 80,
@@ -251,10 +270,6 @@ export const config = {
     BOMBER_HP: 9,
     BOMB_EVERY: 1.8, // seconds between bombs while over the ship
     BOMB_IMPACT: 1.0,
-    STRAFER_SPEED: 620,
-    STRAFER_HP: 3,
-    STRAFER_FIRE_EVERY: 0.22,
-    STRAFER_CLIMB: 380, // fastest a strafer can climb or dive (steeper ground = it crashes)
     BOSS_AT: 0.66, // lap progress (0-1) when the Dread Zeppelin shows up, on the way home
     BOSS_HP: 45,
     BOSS_HP_PER_LAP: 20,

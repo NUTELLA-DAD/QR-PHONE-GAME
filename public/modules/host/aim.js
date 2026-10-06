@@ -16,7 +16,7 @@ export function targets(state) {
   for (const c of state.cargo || []) list.push({ kind: 'cargo', obj: c, r: 75, at: (t) => ({ x: c.x + c.vx * t, y: c.y }) });
   for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + m.vx * t, y: m.y }) });
   for (const b of state.bats || []) if (b.delay <= 0) list.push({ kind: 'bat', obj: b, r: 26, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t }) });
-  for (const p of state.strafers || []) list.push({ kind: 'strafer', obj: p, r: 40, at: (t) => ({ x: p.x + p.vx * t, y: p.y }) });
+  for (const p of state.strafers || []) list.push({ kind: 'strafer', obj: p, r: 40, at: (t) => ({ x: p.x + p.vx * t, y: p.y + p.vy * t }) });
   const SP = state.specials;
   if (SP) {
     for (const s of SP.saws) list.push({ kind: 'saw', obj: s, r: 52, at: (t) => ({ x: s.x + s.vx * t, y: s.y + s.vy * t }) });

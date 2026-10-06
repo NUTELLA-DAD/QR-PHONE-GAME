@@ -4,6 +4,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, groundAt, ceilAt, scrollSpeed } from './course.js';
 import { pop } from './popups.js';
+import { flyPlane, smoke, shootDown, updateChutes } from './planes.js';
 
 const B = SHIP_LAYOUT.bounds;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -51,7 +52,8 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
   const spawnFighter = (e) => {
     const mid = shipMid();
     const side = Math.random() < 0.5 ? -1 : 1;
-    e.hp = 5 + Math.floor(crew() / 4);
+    e.hp = e.max = 5 + Math.floor(crew() / 4);
+    e.trail = [];
     e.x = mid.x + side * F.RUN_FROM;
     e.y = mid.y + rand(-700, 200);
     e.heading = side > 0 ? Math.PI : 0;
@@ -102,43 +104,9 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       ty = e.wp.y;
       if (Math.hypot(tx - e.x, ty - e.y) < 350 || Math.abs(e.x - mid.x) > F.RUN_FROM + 400) startRun(e);
     }
-    let want = Math.atan2(ty - e.y, tx - e.x);
-    let turn = F.TURN;
-    // Look ahead along the nose: pull up from ground, dive away from rock above, swerve off the ship.
+    flyPlane(state, e, tx, ty, dt, { speed: F.SPEED, turn: F.TURN, turnAvoid: F.TURN_AVOID, nearShip, midY: mid.y });
     const course = state.course;
-    for (const t of [0.5, 1.0]) {
-      const px = e.x + Math.cos(e.heading) * F.SPEED * t;
-      const py = e.y + Math.sin(e.heading) * F.SPEED * t;
-      const g = course ? groundAt(course, px, true, py) : Infinity;
-      const c = course ? ceilAt(course, px, py) : -Infinity;
-      const fwd = Math.cos(e.heading) >= 0 ? 1 : -1;
-      if (py > g - 160) {
-        want = Math.atan2(-1.2, fwd * 0.6); // climb!
-        turn = F.TURN_AVOID;
-        break;
-      }
-      if (py < c + 160) {
-        want = Math.atan2(1.2, fwd * 0.6); // dive!
-        turn = F.TURN_AVOID;
-        break;
-      }
-      if (nearShip(px, py, 200)) {
-        want = Math.atan2(py < mid.y ? -1.2 : 1.2, fwd * 0.6);
-        turn = F.TURN_AVOID;
-        break;
-      }
-    }
-    const d = angDiff(want, e.heading);
-    e.heading += Math.max(-turn * dt, Math.min(turn * dt, d));
-    e.heading = Math.atan2(Math.sin(e.heading), Math.cos(e.heading));
-    // Faster in a dive, slower in a climb.
-    const speed = F.SPEED * (1 + 0.18 * Math.sin(e.heading));
-    // On screen the ship's own motion carries everything else backward.
-    e.vx = Math.cos(e.heading) * speed - scrollSpeed(state);
-    e.vy = Math.sin(e.heading) * speed;
-    e.x += e.vx * dt;
-    e.y += e.vy * dt;
-    if (e.hp <= 2 && Math.random() < 0.5) puff(e.x, e.y, '#555', 1);
+    smoke(e, e.max || 5, puff);
     // Flew into the rock: it crashes.
     if (course && inRock(state, e.x, e.y)) {
       state.kills += 1;
@@ -240,21 +208,31 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
 
   const updateWrecks = (dt) => {
     for (const w of state.wrecks) {
-      w.vy += 500 * dt;
-      w.x += w.vx * dt;
-      w.y += w.vy * dt;
+      if (w.spiral) {
+        // A shot-down plane corkscrews away: still flying, nose spinning round, losing height.
+        w.spin += w.spiral * 3.2 * dt;
+        w.vx += (Math.cos(w.spin) * 260 - w.vx) * Math.min(1, dt * 2);
+        w.vy += (Math.sin(w.spin) * 200 + 260 - w.vy) * Math.min(1, dt * 2);
+        w.x += (w.vx - scrollSpeed(state)) * dt;
+        w.y += w.vy * dt;
+        if (Math.random() < 0.9) puff(w.x, w.y, '#333', 1);
+      } else {
+        w.vy += 500 * dt;
+        w.x += w.vx * dt;
+        w.y += w.vy * dt;
+        w.spin += dt * 4;
+      }
       if (!w.dead && inRock(state, w.x, w.y)) {
         // Smashes into the ground (or a rock ceiling).
         w.dead = true;
         puff(w.x, w.y, '#8b6b4a', 16);
         puff(w.x, w.y, '#ff5a1f', 10);
       }
-      w.spin += dt * 4;
       if (Math.random() < 0.6) puff(w.x, w.y, '#444', 1);
       if (!w.dead && !state.ship.down && touches(w.x, w.y, 30)) {
         w.dead = true;
         puff(w.x, w.y, '#ff5a1f', 24);
-        impact(w.x, w.y + state.ship.alt, w.kind === 'fighter' ? config.IMPACT.WRECK_SMALL : config.IMPACT.PLANE_CRASH);
+        impact(w.x, w.y + state.ship.alt, w.kind !== 'cargo' ? config.IMPACT.WRECK_SMALL : config.IMPACT.PLANE_CRASH);
         warn('WRECKAGE CRASHED ONTO US!');
       }
     }
@@ -282,7 +260,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
           credit?.(shell);
           puff(e.x, e.y, '#ff5a1f', 24);
           pop(state, e.x, e.y - 40, 'kill');
-          wreck(e.x, e.y, e.vx * 0.5, 'fighter');
+          shootDown(state, e);
         }
         continue;
       }
@@ -324,6 +302,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     updateCargo(dt);
     updateMines(dt);
     updateWrecks(dt);
+    updateChutes(state, dt);
     updateShells(dt);
     state.ev.warn = Math.max(0, state.ev.warn - dt);
   };

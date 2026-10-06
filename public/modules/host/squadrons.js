@@ -1,7 +1,9 @@
 // More enemy types, sent in waves that ramp up with each lap:
 //   Bat swarm   - small fast bats that dive at the ship and burst on contact.
 //   Bomber      - slow heavy plane crossing overhead, dropping bombs (shoot them down, or the bombs).
-//   Strafers    - pairs of fast skeleton fighters making straight passes above or below the ship.
+//   Dogfighters - a squadron of small skeleton biplanes (after Bomber XXL): they circle the ship in
+//                 wide arcs, peel off one at a time for a diving gun pass, loop away and come round
+//                 again. Shot down, they spiral into the ground and the pilot bails out.
 //   Dread Zeppelin - boss airship on the way home each lap: parks ahead, three turrets, and sends
 //                    boarders down grapple lines. Shooting it down patches your ship up.
 import { config } from '../../config.js';
@@ -9,6 +11,7 @@ import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, scrollSpeed } from './course.js';
 import { SHIP_SAMPLES } from './course.js';
 import { pop } from './popups.js';
+import { flyPlane, smoke, shootDown, angDiff } from './planes.js';
 
 const W = config.WAVES;
 const B = SHIP_LAYOUT.bounds;
@@ -100,22 +103,33 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     warn(BOSSES[kind].name + ' APPROACHES!', 4);
   };
 
+  const D = config.DOGFIGHT;
+  const shipMid = () => ({ x: SHIP_LAYOUT.aimPoint.x, y: SHIP_LAYOUT.aimPoint.y - state.ship.alt });
+  const nearShip = (x, y, pad) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - state.ship.alt - pad && y < B.y1 - state.ship.alt + pad;
   const spawnStrafers = () => {
-    const fromLeft = Math.random() < 0.5;
-    const above = Math.random() < 0.6;
-    const y = (above ? B.y0 - 220 : B.y1 + 200) - state.ship.alt;
-    for (let i = 0; i < 2; i++) {
+    const n = Math.min(D.MAX, D.COUNT + (lap() - 1) * D.PER_LAP);
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const mid = shipMid();
+    const dir = Math.random() < 0.5 ? -1 : 1; // which way round they circle
+    for (let i = 0; i < n; i++) {
       state.strafers.push({
-        x: (fromLeft ? B.x0 - 2600 : B.x1 + 2600) - (fromLeft ? 1 : -1) * i * 320,
-        y: y + i * (above ? -70 : 70),
-        offY: (above ? B.y0 - 220 : B.y1 + 200) + i * (above ? -70 : 70), // height relative to the ship
-        vx: (fromLeft ? 1 : -1) * W.STRAFER_SPEED,
-        hp: W.STRAFER_HP,
-        above,
+        x: mid.x + side * (D.ORBIT + 1400 + i * 260),
+        y: mid.y - 300 + i * 120 + rand(-80, 80),
+        heading: side > 0 ? Math.PI : 0,
+        vx: 0,
+        vy: 0,
+        hp: D.HP,
+        max: D.HP,
+        mode: 'circle',
+        modeT: rand(D.CIRCLE_MIN, D.CIRCLE_MAX) + i * 1.5, // they take turns to attack
+        orbit: Math.atan2(-1, side) + i * 0.6,
+        dir,
         gunCd: 0,
+        shots: 0,
+        trail: [],
       });
     }
-    warn(above ? 'STRAFERS - HIGH! DORSAL GUN!' : 'STRAFERS - LOW! VENTRAL GUN!');
+    warn('ENEMY SQUADRON - DOGFIGHTERS INCOMING!');
   };
 
   const director = (dt) => {
@@ -192,18 +206,67 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   };
 
   const updateStrafers = (dt) => {
+    const mid = shipMid();
     for (const p of state.strafers) {
-      // They track the ship's height and swoop in toward it as they pass, but can only climb or
-      // dive so fast: if the ground rises too steeply they fly into it.
-      // (On screen the ship's own speed is subtracted, but they always cross at a decent clip.)
-      let rel = p.vx - scrollSpeed(state);
-      if (Math.sign(rel) !== Math.sign(p.vx) || Math.abs(rel) < 300) rel = Math.sign(p.vx) * 300;
-      p.x += rel * dt;
-      const swoop = (p.above ? 1 : -1) * 160 * Math.exp(-(((p.x - 800) / 900) ** 2));
-      const want = keepClear(state, p.x + Math.sign(p.vx) * 250, p.offY - state.ship.alt + swoop, 90, 0, 300);
-      const climb = W.STRAFER_CLIMB * dt;
-      p.y += Math.max(-climb, Math.min(climb, want - p.y));
-      p.vy = Math.max(-W.STRAFER_CLIMB, Math.min(W.STRAFER_CLIMB, (want - p.y) / Math.max(dt, 1e-3)));
+      p.modeT -= dt;
+      let tx;
+      let ty;
+      let forceTurn = 0;
+      if (p.mode === 'circle') {
+        // Swing round the ship in a wide circle, chasing a point that runs ahead round it.
+        p.orbit += p.dir * D.ORBIT_SPEED * dt;
+        tx = mid.x + Math.cos(p.orbit) * D.ORBIT * 1.4;
+        ty = mid.y + Math.sin(p.orbit) * D.ORBIT * 0.75 - 150;
+        if (p.modeT <= 0) {
+          p.mode = 'attack';
+          p.shots = D.BURST;
+          p.aim = { dx: rand(-450, 450), dy: rand(-150, 150) };
+        }
+      } else if (p.mode === 'attack') {
+        // Dive at the ship, guns blazing, then break off before hitting it.
+        tx = mid.x + p.aim.dx;
+        ty = mid.y + p.aim.dy;
+        const dist = Math.hypot(tx - p.x, ty - p.y);
+        const ahead = 1.0 * D.SPEED;
+        const soon = nearShip(p.x + Math.cos(p.heading) * ahead, p.y + Math.sin(p.heading) * ahead, 200);
+        if (soon || dist < 420) {
+          p.mode = Math.random() < D.LOOP_CHANCE ? 'loop' : 'extend';
+          p.modeT = p.mode === 'loop' ? (Math.PI * 2) / D.TURN : 1.6;
+          p.loopDir = Math.cos(p.heading) >= 0 ? -1 : 1; // pull up and over
+        }
+        // Guns along the nose, in a short burst.
+        p.gunCd -= dt;
+        const off = angDiff(Math.atan2(ty - p.y, tx - p.x), p.heading);
+        if (p.shots > 0 && p.gunCd <= 0 && Math.abs(off) < 0.35 && dist < D.FIRE_RANGE && !state.ship.down) {
+          p.shots -= 1;
+          p.gunCd = D.SHOT_EVERY;
+          const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
+          const evading = helm && (Math.abs(helm.jy) > 0.2 || Math.abs(state.ship.speed) > 0.3);
+          const miss = Math.random() < 0.25 || (evading && Math.random() < 0.4);
+          const dir = p.heading + Math.max(-0.15, Math.min(0.15, off)) + (miss ? (Math.random() < 0.5 ? -1 : 1) * 0.3 : rand(-0.05, 0.05));
+          const nx = p.x + Math.cos(p.heading) * 30;
+          const ny = p.y + Math.sin(p.heading) * 30;
+          state.bullets.push({ x: nx, y: ny, vx: Math.cos(dir) * D.BULLET_SPEED, vy: Math.sin(dir) * D.BULLET_SPEED, miss, life: 3 });
+          if (state.flashes) state.flashes.push({ x: nx, y: ny, ang: dir, t: 0.06, color: '#ffb3b3', size: 0.6 });
+        }
+      } else if (p.mode === 'loop') {
+        // A loop-the-loop away from the ship.
+        forceTurn = p.loopDir * D.TURN;
+        tx = p.x + Math.cos(p.heading) * 500;
+        ty = p.y + Math.sin(p.heading) * 500;
+        if (p.modeT <= 0) p.mode = 'extend', (p.modeT = 1.2);
+      } else {
+        // Extend away past the ship, then rejoin the circle.
+        tx = p.x + Math.cos(p.heading) * 800;
+        ty = p.y + Math.sin(p.heading) * 800 - 200;
+        if (p.modeT <= 0) {
+          p.mode = 'circle';
+          p.modeT = rand(D.CIRCLE_MIN, D.CIRCLE_MAX) + (state.strafers.length - 1) * 1.2;
+          p.orbit = Math.atan2((p.y - mid.y) / 0.75, (p.x - mid.x) / 1.4);
+        }
+      }
+      flyPlane(state, p, tx, ty, dt, { speed: D.SPEED, turn: D.TURN, turnAvoid: D.TURN_AVOID, nearShip, midY: mid.y, forceTurn });
+      smoke(p, p.max, puff);
       if (inRock(state, p.x, p.y)) {
         p.hp = 0;
         state.kills += 1;
@@ -212,18 +275,15 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         pop(state, p.x, p.y - 50, 'kill');
         continue;
       }
-      // Spray bullets at the ship while passing over/under it.
-      if (Math.abs(p.x - 800) < 1000 && !state.ship.down && (p.gunCd -= dt) <= 0) {
-        p.gunCd = W.STRAFER_FIRE_EVERY;
-        const tx = p.x + p.vx * 0.5;
-        const ty = (p.above ? 260 : 820) - state.ship.alt;
-        const d = Math.hypot(tx - p.x, ty - p.y) || 1;
-        const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
-        const miss = Math.random() < 0.35 || (helm && Math.abs(helm.jy) > 0.3 && Math.random() < 0.35);
-        state.bullets.push({ x: p.x, y: p.y, vx: ((tx - p.x) / d) * 520, vy: ((ty - p.y) / d) * 520 + (miss ? (p.above ? -260 : 260) : 0), miss, life: 3 });
+      // Flew into the ship.
+      if (!state.ship.down && touches(p.x, p.y, 24)) {
+        p.hp = 0;
+        puff(p.x, p.y, '#ff5a1f', 22);
+        impact(p.x, p.y + state.ship.alt, config.IMPACT.WRECK_SMALL);
+        warn('A DOGFIGHTER RAMMED US!', 2);
       }
     }
-    state.strafers = state.strafers.filter((p) => p.hp > 0 && Math.abs(p.x - 800) < 3200);
+    state.strafers = state.strafers.filter((p) => p.hp > 0 && Math.abs(p.x - 800) < 7000);
   };
 
   const updateBoss = (dt) => {
@@ -301,7 +361,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       }
       if (s.life <= 0) continue;
       for (const p of state.strafers) {
-        if (p.hp > 0 && Math.abs(s.x - p.x) < 60 && Math.abs(s.y - p.y) < 28) {
+        if (p.hp > 0 && Math.hypot(s.x - p.x, s.y - p.y) < 44) {
           s.life = 0;
           p.hp -= dmg;
           puff(s.x, s.y, '#ffcf40', 6);
@@ -310,7 +370,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
             credit(s);
             puff(p.x, p.y, '#ff5a1f', 22);
             pop(state, p.x, p.y - 40, 'kill');
-            state.wrecks.push({ x: p.x, y: p.y, vx: p.vx * 0.5, vy: -40, spin: 0, kind: 'fighter' });
+            shootDown(state, p, 'biplane');
           }
           break;
         }

@@ -139,6 +139,13 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.save();
       ctx.translate(w.x, w.y);
       ctx.rotate(w.spin);
+      if (w.kind === 'biplane') {
+        if (Math.cos(w.spin) < 0) ctx.scale(1, -1);
+        ctx.scale(1.3, 1.3);
+        biplane(0, '#7d766a', '#7a3433', true);
+        ctx.restore();
+        continue;
+      }
       if (sprites.plane(ctx, w.kind === 'cargo' ? 'cargo' : 'fighter', 0, 'wreck')) {
         ctx.restore();
         continue;
@@ -209,7 +216,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     for (const m of state.mines || []) items.push({ x: m.x, y: m.y, icon: '✹', color: '#3d3d3d', label: 'MINE' });
     if (state.enemy.dead <= 0) items.push({ x: state.enemy.x, y: state.enemy.y, icon: '✈', color: '#8c2f2f', label: 'FIGHTER' });
     for (const p of state.bombers || []) items.push({ x: p.x, y: p.y, color: '#3d3a40', label: 'BOMBER' });
-    if ((state.strafers || []).length) items.push({ x: state.strafers[0].x, y: state.strafers[0].y, color: '#26221f', label: 'STRAFE' });
+    if ((state.strafers || []).length) items.push({ x: state.strafers[0].x, y: state.strafers[0].y, color: '#26221f', label: 'SQUADRON' });
     if (state.boss) items.push({ x: state.boss.x, y: state.boss.y, color: '#5c1e1e', label: 'BOSS' });
     const bat = (state.bats || []).find((b) => b.delay <= 0);
     if (bat) items.push({ x: bat.x, y: bat.y, color: '#3b2c4c', label: 'BATS' });
@@ -422,41 +429,141 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     ctx.restore();
   };
 
-  // Skeleton strafers: lean black fighters with red stripes and a skull.
+  // A small biplane (after Bomber XXL): soft flat colours, thin outlines, two stacked wings,
+  // a round cowling and a blurred propeller. Drawn nose-right at the origin.
+  const biplane = (time, body, trim, wreck) => {
+    ctx.strokeStyle = '#2b2622';
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    // Tail fin and tailplane.
+    ctx.fillStyle = trim;
+    ctx.beginPath();
+    ctx.moveTo(-40, -2);
+    ctx.lineTo(-50, -22);
+    ctx.lineTo(-38, -22);
+    ctx.lineTo(-28, -4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Lower wing.
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.roundRect(-10, 8, 34, 6, 3);
+    ctx.fill();
+    ctx.stroke();
+    // Fuselage.
+    ctx.beginPath();
+    ctx.moveTo(-46, -4);
+    ctx.quadraticCurveTo(-10, -12, 22, -10);
+    ctx.lineTo(24, 8);
+    ctx.quadraticCurveTo(-10, 8, -46, 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Stripe and cowling.
+    ctx.fillStyle = trim;
+    ctx.fillRect(-20, -9, 7, 15);
+    ctx.fillStyle = '#4a4440';
+    ctx.beginPath();
+    ctx.roundRect(20, -11, 10, 20, 4);
+    ctx.fill();
+    ctx.stroke();
+    // Struts and upper wing.
+    ctx.beginPath();
+    ctx.moveTo(-2, 8);
+    ctx.lineTo(0, -20);
+    ctx.moveTo(16, 8);
+    ctx.lineTo(18, -20);
+    ctx.stroke();
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.roundRect(-12, -26, 38, 7, 3);
+    ctx.fill();
+    ctx.stroke();
+    // Pilot: a skull in goggles.
+    ctx.fillStyle = '#efe9dc';
+    ctx.beginPath();
+    ctx.arc(-8, -14, 5.5, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+    // Propeller blur.
+    if (!wreck) {
+      ctx.fillStyle = 'rgba(60,50,45,.45)';
+      ctx.beginPath();
+      ctx.ellipse(33, -1, 3, 18 * (0.7 + 0.3 * Math.abs(Math.sin(time * 40))), 0, 0, 7);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#ff7b00';
+      ctx.beginPath();
+      ctx.arc(26, -2, 7 + Math.random() * 3, 0, 7);
+      ctx.fill();
+    }
+  };
+
+  // Contrails: thin white lines behind planes, brightest where they turned hard.
+  const drawTrail = (t) => {
+    if (!t || t.length < 2) return;
+    ctx.lineCap = 'round';
+    for (let i = 1; i < t.length; i++) {
+      const a = Math.max(0, t[i].a) * (i / t.length) * 0.7;
+      if (a < 0.03) continue;
+      ctx.strokeStyle = 'rgba(255,255,255,' + a.toFixed(3) + ')';
+      ctx.lineWidth = 3 + 3 * (i / t.length);
+      ctx.beginPath();
+      ctx.moveTo(t[i - 1].x, t[i - 1].y);
+      ctx.lineTo(t[i].x, t[i].y);
+      ctx.stroke();
+    }
+  };
+
+  // Pilots who bailed out, drifting down under parachutes.
+  const drawChutes = (time) => {
+    for (const c of state.chutes || []) {
+      const open = Math.min(1, c.t / 0.6);
+      const sway = Math.sin(time * 2 + c.x * 0.01) * 0.15 * open;
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(sway);
+      ctx.strokeStyle = '#2b2622';
+      ctx.lineWidth = 2;
+      if (open > 0.2) {
+        ctx.fillStyle = '#eee6d2';
+        ctx.beginPath();
+        ctx.ellipse(0, -70, 46 * open, 34 * open, 0, Math.PI, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        for (const k of [-1, -0.4, 0.4, 1]) {
+          ctx.moveTo(k * 44 * open, -70);
+          ctx.lineTo(0, -12);
+        }
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#efe9dc';
+      ctx.beginPath();
+      ctx.arc(0, -10, 6, 0, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#6b6a5e';
+      ctx.fillRect(-5, -4, 10, 16);
+      ctx.strokeRect(-5, -4, 10, 16);
+      ctx.restore();
+    }
+  };
+
+  // Dogfighters (skeleton biplanes), with every plane's contrail and the parachutes.
   const drawStrafers = (time) => {
+    if (state.enemy && !(state.enemy.dead > 0) && state.phase !== 'lobby') drawTrail(state.enemy.trail);
+    for (const p of state.strafers || []) drawTrail(p.trail);
+    drawChutes(time);
     for (const p of state.strafers || []) {
       ctx.save();
       ctx.translate(p.x, p.y);
-      if (p.vx < 0) ctx.scale(-1, 1);
-      if (!sprites.plane(ctx, 'skeleton-fighter', time)) {
-        ink();
-        ctx.lineWidth = 4;
-        ctx.fillStyle = '#26221f';
-        ctx.beginPath();
-        ctx.moveTo(-50, -4);
-        ctx.lineTo(-62, -26);
-        ctx.lineTo(-40, -6);
-        ctx.fill();
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 54, 14, 0, 0, 7);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = '#c0392b';
-        ctx.fillRect(-30, -12, 8, 24);
-        ctx.fillRect(34, -10, 8, 20);
-        ctx.fillStyle = '#1b1410';
-        ctx.beginPath();
-        ctx.ellipse(-4, 8, 34, 6, 0, 0, 7);
-        ctx.fill();
-        ctx.fillStyle = '#efe9dc';
-        ctx.beginPath();
-        ctx.arc(4, -2, 6, 0, 7);
-        ctx.fill();
-        const spin = Math.abs(Math.sin(time * 34)) * 22 + 3;
-        ctx.fillStyle = '#c0392b';
-        ctx.fillRect(56, -spin, 4, spin * 2);
-      }
+      ctx.rotate(p.heading || 0);
+      if (Math.cos(p.heading || 0) < 0) ctx.scale(1, -1); // keep the wheels down
+      ctx.scale(1.3, 1.3);
+      biplane(time, '#b9b1a0', '#b0413e');
       ctx.restore();
     }
   };
