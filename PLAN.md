@@ -26,6 +26,59 @@ on a TV at a party.
 - Usage: the lead asks the user before starting each batch of tasks. A task is roughly one
   worker run + one playtest + one review.
 
+## Current focus (from the user, 6 Oct 2026) - do these first, after A1
+The user's goals: better player physics, better enemy fighter and enemy physics, a stronger game
+loop, new airship mechanics, and richer ways for an enemy airship to interact with ours. Plus
+the lead's own additions (marked *).
+
+### F1. Game loop (the backbone)
+- F1a. *Fixed-timestep simulation*: the game steps at exactly 60 Hz whatever the TV's frame rate
+  (an accumulator in main.js), so physics feel the same on every laptop and bot runs repeat.
+- F1b. A clear loop for every mission: **briefing** (one line: goal + threat) -> **flight** with
+  rising encounters -> **objective moment** -> **escape / extraction** -> **debrief** (scorecard)
+  -> **shipyard** (spend salvage). Each step has its own short screen on the TV and phones.
+- F1c. *Director 2.0*: one "intensity" budget that spends on enemies, weather and ship faults so
+  pressure rises and falls smoothly; tuned with botsim numbers rather than guesswork.
+
+### F2. Enemy flight physics (fighters and everything that flies)
+- F2a. One shared flight model for all planes: thrust, drag, lift and gravity. Planes lose speed
+  climbing, gain it diving, **stall** if too slow (nose drops, then recover), bank into turns.
+- F2b. Different "weights": nimble dogfighters, heavy bombers with wide slow turns, the big
+  fighter with boom-and-zoom passes, bats as a flock (boids: stay together, avoid, swarm).
+- F2c. Damage changes handling: a hurt plane wobbles, pulls to one side, trails smoke, and may
+  try to ram. Rams shove our ship (real momentum) as well as damaging it.
+- F2d. Our escort fighter uses the same model, so it feels like the enemies.
+
+### F3. Player physics (the crew on deck)
+- F3a. Walking with a little momentum (quick start, short skid), a **jump** button with a real
+  arc, and ledge/ladder grabs.
+- F3b. The ship moves under them: hard pitch or a big hit makes crew stagger and slide, loose
+  crew on outside decks can be thrown off (and land in the medical bay as now).
+- F3c. Knockback that reads: hits push crew, explosions blow them over, landing has a squash.
+
+### F4. Airship mechanics (new ideas)
+- F4a. **Ballast**: drop sandbags for an emergency climb (then the ship is lighter until you
+  reload ballast at a station).
+- F4b. **Steam boost**: a short engine burst that costs boiler pressure (escape or ram).
+- F4c. **Wind and thermals**: updrafts, downdrafts and headwinds on some maps that the helm and
+  pressure lever must fight or ride.
+- F4d. **Ship damage zones**: losing a section (engine pod, gasbag cell) changes how she flies;
+  repairs bring it back.
+- F4e. *Anchor / grapple line*: hook onto rock or an enemy to hold position or pull close.
+
+### F5. Enemy airships vs our airship
+- F5a. Gunships fly with the same gas/engine physics as us instead of being locked alongside:
+  they manoeuvre for a broadside, and our helm can out-manoeuvre them (get above, behind).
+- F5b. **Ship-to-ship actions**: grapple hooks that pull the ships together, ramming with
+  real shoves, boarding parties coming to US by rope swing, cutting their gasbag so they sink.
+- F5c. Their visible crew aim their guns (you see the barrels track you), and the systems
+  status (GUNS/STEAM/HELM) changes how they fly and fight.
+- F5d. *Capture*: clear a gunship's crew and you can fire her guns at other enemies until she
+  drifts away.
+
+### Order for the focus work
+A1 -> F1a -> F2a/F2b -> F3a/F3b -> F5a/F5b -> F4 -> F1b/F1c -> then Phase B onward.
+
 ## Phase A - Foundations that make everything else cheaper
 - A1. **Headless test runner** (`tools/botsim.mjs`): run the real simulation in Node with N bots
   for M minutes on a chosen map type and difficulty; print missions done, wrecks, hull, kills
@@ -72,12 +125,14 @@ on a TV at a party.
 - E5. **TV readability check**: contrast and text size from across a room.
 
 ## Order
-A1 -> A2 -> A3 first (they make every later task safer and cheaper). Then B1-B4, then C1 and
+A1 first, then the Current focus list above (F1-F5), then A2 -> A3, then B1-B4, then C1 and
 E1 (lots of fun for little effort), then the rest. The lead re-checks the order with the user
 after each phase.
 
 ## Progress log (round 2)
-- Plan and agent team set up. No tasks started yet.
+- Plan and agent team set up. User goals added as Current focus (F1-F5).
+- Note: the .claude/agents files load in a NEW session; until then the lead runs the same
+  instructions through a general-purpose agent with model = sonnet.
 
 ---
 
