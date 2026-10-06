@@ -15,6 +15,7 @@ export const config = {
     LEAD_SMOOTHING: 1.2,
     SHAKE_SCALE: 14, // screen shake per unit of 'shake'...
     SHAKE_MAX: 9, // ...but never more than this many pixels
+    SHIP_KEEP_IN: 0.8, // the ship stays inside this share of the screen from the middle
     FRAME_RANGE: 1900, // threats closer than this are kept in view (farther ones get edge arrows)
   },
   // Enemy plane: flies a loop around the ship.
@@ -82,6 +83,25 @@ export const config = {
     TURN: 2.5, // aiming speed (radians per second)
     STEAM_USE: 9, // extra steam used while charging
     COOLDOWN: 4,
+  },
+  // Enemy gunships that come alongside to be boarded (see gunship.js).
+  GUNSHIP: {
+    FIRST_AFTER: 100, // seconds into a mission before the first
+    EVERY_MIN: 80,
+    EVERY_MAX: 120,
+    HP: 30, // shell hits to shoot one down (boarding is quicker)
+    CREW: 2, // crew aboard (more on later missions)
+    CREW_HP: 3, // sword hits count 2
+    CREW_SPEED: 160,
+    FIRE_EVERY: 7, // seconds between broadsides
+    SHOTS: 2, // cannonballs per broadside
+    STAY: 75, // seconds alongside before it pulls away
+    PLANT_TIME: 2.5, // holding Action at its boiler to set the charge
+    FUSE: 8, // seconds to get back before it blows
+    CUT_TIME: 7, // seconds its crew need to hack through the rope (they wait 3s first)
+    RESPAWN_TIME: 4, // seconds dazed in the medical bay after falling off
+    REWARD_HULL: 15,
+    REWARD_COAL: 40,
   },
   // Deflector shield: a steam-powered arc the Deflector station swings around the ship. It
   // blocks enemy bullets, bats, rockets and bombs that hit it.

@@ -9,6 +9,7 @@ import { createCourseArt } from './courseArt.js';
 import { UPGRADES } from './upgrades.js';
 import { targets } from './aim.js';
 import { createSpecialsArt } from './specialsArt.js';
+import { createGunshipArt } from './gunshipArt.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
@@ -38,6 +39,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const threatArt = createThreatArt({ ctx, state, ink, sprites });
   const courseArt = createCourseArt({ ctx, state, ink, sprites });
   const drawSpecials = createSpecialsArt({ ctx, state, ink });
+  const drawGunship = createGunshipArt({ ctx, state, ink });
   installLineBoil(ctx);
   const filmLook = createFilmLook(ctx);
 
@@ -1450,6 +1452,7 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.restore();
       }
       drawGuns();
+      drawGunship(time / 1000);
       drawHazards(time / 1000);
       threatArt.drawBombs(time / 1000);
       drawHighlights(time / 1000);

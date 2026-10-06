@@ -59,7 +59,7 @@ export function detach(w) {
 }
 
 // Drop from the sky until landing on a platform. Returns true while still falling.
-export function fall(w, dt, speed) {
+export function fall(w, dt, speed, onMiss) {
   const prevY = w.y;
   w.y += speed * dt;
   const d = platformBelow(w.x, prevY);
@@ -67,6 +67,10 @@ export function fall(w, dt, speed) {
     w.y = P[d].y;
     w.d = d;
     w.fall = false;
+    return false;
+  }
+  if (w.y > 1600 && onMiss) {
+    onMiss(w);
     return false;
   }
   if (w.y > 1600) {

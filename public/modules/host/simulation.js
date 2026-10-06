@@ -9,6 +9,7 @@ import { createCourse, inRock, tilt, altBounds, pilotPlan, gasFor } from './cour
 import { createSquadrons } from './squadrons.js';
 import { createSpecials } from './specials.js';
 import { createCoil } from './coil.js';
+import { createGunship } from './gunship.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
 import { assistAim } from './aim.js';
@@ -126,6 +127,8 @@ export function createSimulation() {
     const tool = player.carry;
     const revive = Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && q.conn == null && here(q, 65));
     if (revive) return { type: 'revive', obj: revive, hold: true, time: T.REVIVE_TIME, label: `Revive ${revive.name}` };
+    const boarding = gunship.interaction(player);
+    if (boarding) return boarding;
     const bomb = state.bombs.find((o) => here(o, 60));
     if (bomb) return { type: 'defuse', obj: bomb, hold: true, time: config.RAIDERS.DEFUSE_TIME, label: 'Defuse bomb' };
     const fire = state.fires.find((o) => here(o, 70));
@@ -170,7 +173,13 @@ export function createSimulation() {
     const target = state.boarders
       .filter((b) => !b.fall && b.conn == null && b.d === player.d && Math.abs(b.x - player.x) < range)
       .sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0];
-    if (!target) return;
+    if (!target) {
+      if (gunship.hitCrew(player, sword, range)) {
+        stat(player, 'raiders');
+        if (sword) pop(state, player.x + player.face * 60, player.y - 110 - state.ship.alt, 'whack', '#ffffff', 0.8);
+      }
+      return;
+    }
     player.face = target.x < player.x ? -1 : 1;
     puff(target.x, target.y - 40, '#fff', 6);
     if (sword) pop(state, target.x, target.y - 110 - state.ship.alt, 'whack', '#ffffff', 0.8);
@@ -241,6 +250,7 @@ export function createSimulation() {
     squadrons.restart();
     specials.reset();
     coil.reset();
+    gunship.reset();
     course.restart();
     modules.reset();
     if (state.weather) Object.assign(state.weather, { storm: 0, gust: 0, flash: 0, bolt: null });
@@ -401,6 +411,8 @@ export function createSimulation() {
     { key: 'defused', title: 'Bomb Squad', icon: '💣', unit: 'bombs defused' },
     { key: 'vent', title: 'Steam Valve', icon: '💨', unit: 'vents worked' },
     { key: 'demolished', title: 'Bombardier', icon: '🎯', unit: 'buildings flattened' },
+    { key: 'sabotage', title: 'Saboteur', icon: '🧨', unit: 'gunships blown up' },
+    { key: 'boarding', title: 'Boarding Party', icon: '🪝', unit: 'hookshots fired' },
   ];
   let pendingVote = null;
   const onMarker = (m) => {
@@ -432,6 +444,7 @@ export function createSimulation() {
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
   const coil = createCoil({ state, puff, credit });
+  const gunship = createGunship({ state, puff, impact, credit });
   const weather = createWeather({ state, impact, puff });
 
   const emitPlayerUi = (playerId, ui) => {
@@ -464,7 +477,17 @@ export function createSimulation() {
     for (const player of Object.values(state.players)) {
       if (player.bot) updateBot(player, state, dt);
       if (player.fall) {
-        fall(player, dt, 260);
+        fall(player, dt, 260, (w) => {
+          // Fell off the ship (or off a gunship): back aboard in the medical bay, dazed.
+          const mb = SHIP_LAYOUT.medbay;
+          w.d = PLATFORMS.findIndex((p) => p.id === mb.p);
+          w.x = mb.x + (Math.random() - 0.5) * 60;
+          w.y = PLATFORMS[w.d].y;
+          w.fall = false;
+          w.ko = config.GUNSHIP.RESPAWN_TIME;
+          w.carry = null;
+          phoneFx(w, 'You fell! Coming round in the medical bay...', [80, 40, 80]);
+        });
         continue;
       }
       if (player.d == null) player.d = platformBelow(player.x, player.y) ?? 1;
@@ -598,7 +621,7 @@ export function createSimulation() {
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
-              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', defuse: 'defused', revive: 'revives' }[act.type]);
+              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', defuse: 'defused', revive: 'revives', sabotage: 'sabotage' }[act.type]);
               if (act.type === 'fire') pop(state, object.x, player.y - 120 - state.ship.alt, 'fireOut', '#9fd3e6', 0.8);
               if (act.type === 'hole' || act.type === 'gas') pop(state, object.x, player.y - 120 - state.ship.alt, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
@@ -607,6 +630,7 @@ export function createSimulation() {
                 state.ship.hull = Math.min(100, state.ship.hull + 3);
               } else if (act.type === 'defuse') state.bombs.splice(state.bombs.indexOf(object), 1);
               else if (act.type === 'gas') state.gasHoles.splice(state.gasHoles.indexOf(object), 1);
+              else if (act.type === 'sabotage') gunship.plant(player);
               else object.ko = 0;
               puff(object.x, player.y - 50, '#8fe388', 10);
             }
@@ -617,7 +641,12 @@ export function createSimulation() {
         if (player.actQ) {
           player.actQ = false;
           const type = act ? act.type : null;
-          if (type === 'rack') player.carry = player.carry === act.obj.kind ? null : act.obj.kind;
+          if (type === 'hook') {
+            gunship.fireHook();
+            stat(player, 'boarding');
+            puff(player.x + 200, player.y - 60 - state.ship.alt, '#ffe9a8', 8);
+            phoneFx(player, 'Hook fast! Across the rope - plant a charge at their boiler!', [40, 30, 40]);
+          } else if (type === 'rack') player.carry = player.carry === act.obj.kind ? null : act.obj.kind;
           else if (type === 'vent') {
             const i = SHIP_LAYOUT.vents.indexOf(act.obj);
             state.ventOpen[i] = !state.ventOpen[i];
@@ -840,10 +869,12 @@ export function createSimulation() {
         threats.reset();
         squadrons.reset();
         specials.reset();
+        gunship.reset();
         state.enemy.dead = Math.max(state.enemy.dead, 6);
       }
       squadrons.update(dt);
       specials.update(dt);
+      gunship.update(dt);
       course.update(dt);
       weather.update(dt);
     }
@@ -937,6 +968,7 @@ export function createSimulation() {
     squadrons,
     specials,
     course,
+    gunship,
     puff,
     setSocket,
     countPlayers: () => Object.keys(state.players).length,

@@ -35,6 +35,7 @@ export function createCamera() {
     for (const t of [...(state.cargo || []), ...(state.mines || []), ...(state.bombers || [])]) if (near(t, C.FRAME_RANGE)) things.push(t);
     if (state.boss && near(state.boss, C.FRAME_RANGE + 600)) things.push(state.boss);
     for (const t of state.specials ? [...state.specials.snipers, ...state.specials.tugs] : []) if (near(t, C.FRAME_RANGE + 400)) things.push(t);
+    if (state.gunship) things.push({ x: 2600 + state.gunship.offset, y: 500 - alt }, { x: 3300 + state.gunship.offset, y: 300 - alt });
     for (const e of things) {
       x0 = Math.min(x0, e.x - C.ENEMY_MARGIN);
       x1 = Math.max(x1, e.x + C.ENEMY_MARGIN);
@@ -49,8 +50,10 @@ export function createCamera() {
     const halfW = width / 2 / zoom;
     const halfH = height / 2 / zoom;
     const clampTo = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v)));
-    const cx = clampTo((x0 + x1) / 2, b.x1 - halfW, b.x0 + halfW);
-    const cy = clampTo((y0 + y1) / 2, b.y1 - alt + PAD_Y - halfH, b.y0 - alt - PAD_Y + halfH);
+    // (The ship always stays well inside the frame - threats that don't fit get edge arrows.)
+    const keep = C.SHIP_KEEP_IN;
+    const cx = clampTo((x0 + x1) / 2, b.x1 - halfW * keep, b.x0 + halfW * keep);
+    const cy = clampTo((y0 + y1) / 2, b.y1 - alt + PAD_Y - halfH * keep, b.y0 - alt - PAD_Y + halfH * keep);
     return { cx, cy, zoom };
   };
 

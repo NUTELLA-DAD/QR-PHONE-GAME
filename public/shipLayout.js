@@ -84,6 +84,9 @@ export const SHIP_LAYOUT = {
   // Deflector shield: a band on an ellipse around the whole ship, swung round by the crew.
   shield: { cx: 800, cy: 470, rx: 1020, ry: 660 },
 
+  // Medical bay: where anyone who falls off the ship comes round.
+  medbay: { p: 'lower', x: 640 },
+
   // Bomb bay doors in the belly, under the Bomb Bay station: bombs drop from here.
   bombBay: { x: 495, y: 815 },
 

@@ -5,6 +5,9 @@ import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { steerTo } from './nav.js';
 import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
+import { GS, MAIN_X1 } from './gunship.js';
+
+const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
 
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
@@ -143,6 +146,16 @@ function listJobs(state, bot) {
   const reach = (n) => (n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1 });
+  // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
+  const gs = state.gunship;
+  if (gs && gs.charge && bot.d === MAIN && bot.x > MAIN_X1 - 20) jobs.unshift({ kind: 'flee', obj: 'flee', max: 8 });
+  if (gs && gs.phase === 'docked' && !gs.charge) {
+    if (!gs.rope) jobs.push({ kind: 'hook', obj: 'hook', max: 1 });
+    else {
+      for (const c of gs.crew) jobs.push({ kind: 'fight', obj: c, max: 1 });
+      jobs.push({ kind: 'raid', obj: 'raid', max: 2 });
+    }
+  }
   if ((state.ship.fuel < 25 && state.ship.press < config.BOILER.WARN_AT - 25) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
   for (const m of mods) if (!m.broken && m.hp < 60) jobs.push({ kind: 'repair', obj: m, max: 1 });
   const guns = GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
@@ -274,8 +287,21 @@ function work(p, state) {
   p.fire = false;
   if (!job) return wander(p);
   const o = job.obj;
+  if (job.kind === 'hook') {
+    if (steer(p, MAIN, MAIN_X1 - 15, 12)) press(p);
+    return;
+  }
+  if (job.kind === 'raid') {
+    if (steer(p, MAIN, GS.boilerX, 30)) p.fire = true;
+    return;
+  }
+  if (job.kind === 'flee') {
+    steer(p, MAIN, 1250, 30);
+    return;
+  }
   if (job.kind === 'fight') {
-    if (o.fall || !state.boarders.includes(o) || !getTool(p, 'sword')) return;
+    const crew = state.gunship && state.gunship.crew.includes(o);
+    if (o.fall || !(state.boarders.includes(o) || crew) || !getTool(p, 'sword')) return;
     if (steer(p, goalOf(o), o.x, 45) || (Math.abs(o.y - p.y) < 20 && Math.abs(o.x - p.x) < 70)) {
       p.jx = 0;
       p.face = o.x < p.x ? -1 : 1;

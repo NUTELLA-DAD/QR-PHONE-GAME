@@ -596,6 +596,15 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     drawProps(time);
     drawCoal();
     drawBombBay();
+    // Medical bay sign (where anyone who falls off comes round).
+    {
+      const mb = L.medbay;
+      const y = P.find((q) => q.id === mb.p).y - 120;
+      filled('#f3ead6', () => ctx.roundRect(mb.x - 28, y - 28, 56, 56, 8));
+      ctx.fillStyle = '#e63946';
+      ctx.fillRect(mb.x - 8, y - 20, 16, 40);
+      ctx.fillRect(mb.x - 20, y - 8, 40, 16);
+    }
     drawVents(time);
     drawConnectors();
     drawCatwalk();
