@@ -7,6 +7,7 @@ import { createSprites } from './sprites.js';
 import { createCharacterArt } from './characterArt.js';
 import { createCourseArt } from './courseArt.js';
 import { UPGRADES } from './upgrades.js';
+import { targets } from './aim.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
@@ -288,7 +289,42 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.restore();
   };
 
+  // Readability: a soft pulsing red glow behind everything dangerous / shootable, so threats pop
+  // out of the scenery at TV distance.
+  const drawThreatGlows = (time) => {
+    for (const t of targets(state)) {
+      const p = t.at(0);
+      if (!p || !Number.isFinite(p.x)) continue;
+      const r = t.r * (2.4 + 0.3 * Math.sin(time * 6 + p.x * 0.01));
+      const g = ctx.createRadialGradient(p.x, p.y, t.r * 0.3, p.x, p.y, r);
+      g.addColorStop(0, 'rgba(255,60,80,.5)');
+      g.addColorStop(1, 'rgba(255,60,80,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, 7);
+      ctx.fill();
+    }
+  };
+
+  // The fighter's line of fire while it's on a strafing run.
+  const drawFighterAim = (time) => {
+    const e = state.enemy;
+    if (e.dead > 0 || e.mode !== 'run' || !(e.shots > 0) || e.heading == null || state.phase === 'lobby') return;
+    const d = Math.hypot(e.x - SHIP_LAYOUT.aimPoint.x, e.y - (SHIP_LAYOUT.aimPoint.y - state.ship.alt));
+    if (d > config.ENEMY.FIRE_RANGE + 500) return;
+    ctx.strokeStyle = `rgba(255,50,70,${0.45 + 0.3 * Math.sin(time * 14)})`;
+    ctx.lineWidth = 7;
+    ctx.setLineDash([30, 24]);
+    ctx.beginPath();
+    ctx.moveTo(e.x + Math.cos(e.heading) * 60, e.y + Math.sin(e.heading) * 60);
+    ctx.lineTo(e.x + Math.cos(e.heading) * 900, e.y + Math.sin(e.heading) * 900);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+
   const drawEffects = (time, view) => {
+    drawThreatGlows(time);
+    drawFighterAim(time);
     threatArt.drawWrecks();
     threatArt.drawMines(time);
     threatArt.drawCargo(time);
@@ -317,33 +353,34 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
-    // Speed streaks behind shells and bullets.
-    ctx.lineCap = 'round';
-    for (const [list, color] of [[state.shells, 'rgba(255,240,190,.7)'], [state.bullets, 'rgba(255,170,160,.6)']]) {
+    // Shots: bright glowing orbs with trails. Crew shells glow in the shooter's own colour (so you
+    // can follow your fire); enemy bullets are hot red, flak orange.
+    const glowShot = (p, color, r, trail) => {
       ctx.strokeStyle = color;
-      ctx.lineWidth = 6;
-      for (const p of list) {
-        ctx.beginPath();
-        ctx.moveTo(p.x - p.vx * 0.07, p.y - p.vy * 0.07);
-        ctx.lineTo(p.x, p.y);
-        ctx.stroke();
-      }
-    }
-    ink();
-    for (const shell of state.shells) {
-      ctx.fillStyle = '#ffd23f';
+      ctx.globalAlpha = 0.45;
+      ctx.lineWidth = r * 1.6;
       ctx.beginPath();
-      ctx.arc(shell.x, shell.y, 7 + 3 * ((state.upgrades || {})['big-shells'] || 0), 0, 7);
-      ctx.fill();
+      ctx.moveTo(p.x - p.vx * trail, p.y - p.vy * trail);
+      ctx.lineTo(p.x, p.y);
       ctx.stroke();
-    }
-    for (const bullet of state.bullets) {
-      ctx.fillStyle = bullet.flak ? '#3b3b3b' : '#e63946'; // flak from ground turrets is dark
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(bullet.x, bullet.y, bullet.flak ? 10 : 8, 0, 7);
+      ctx.arc(p.x, p.y, r * 2.3, 0, 7);
       ctx.fill();
-      ctx.stroke();
-    }
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, 7);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r * 0.45, 0, 7);
+      ctx.fill();
+    };
+    ctx.lineCap = 'round';
+    const big = (state.upgrades || {})['big-shells'] || 0;
+    for (const shell of state.shells) glowShot(shell, (state.players[shell.owner] || {}).color || '#ffd23f', 9 + 3 * big, 0.06);
+    for (const bullet of state.bullets) glowShot(bullet, bullet.flak ? '#ff8c1a' : '#ff2e55', bullet.flak ? 13 : 12, 0.09);
   };
 
   // Lap progress: home mast, checkpoints, the beacon halfway, and the ship.
@@ -1189,6 +1226,21 @@ export function createRenderer({ ctx, state, canvas }) {
       threatArt.drawBombs(time / 1000);
       drawHighlights(time / 1000);
       [...Object.values(state.players), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => drawPlayer(player, time / 1000));
+      // Each crew member's colour marker above their head, easy to spot from the sofa.
+      for (const p of Object.values(state.players)) {
+        if (!p.color || p.connected === false) continue;
+        const y = p.y - (p.ko > 0 ? 90 : 165) + Math.sin(time / 300 + p.x) * 4;
+        ink();
+        ctx.lineWidth = 4;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.moveTo(p.x - 16, y - 20);
+        ctx.lineTo(p.x + 16, y - 20);
+        ctx.lineTo(p.x, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
     };
     if (state.wreck) {
       // Breaking apart: the gasbag and the two halves of the gondola tumble away separately.

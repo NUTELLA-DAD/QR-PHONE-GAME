@@ -15,6 +15,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
   // Everything below is placed on a grid fixed to the course (not to the screen), so the outline
   // and the scenery stay put as the ground scrolls past instead of shimmering.
   const STEP = 20;
+  const HAZE = 'rgba(200,214,228,.32)'; // aerial haze over the rock (higher = calmer background)
   const hash = (i, salt = 0) => {
     const v = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
     return v - Math.floor(v);
@@ -246,6 +247,15 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       else boulder(x, y, s * 0.7);
     }
 
+    // A light haze over the land pushes it back, so ships, enemies and shots read clearly.
+    ctx.fillStyle = HAZE;
+    ctx.beginPath();
+    ctx.moveTo(xs[0], bottom);
+    trace(xs, gs, () => 0, 0, last, false);
+    ctx.lineTo(xs[last], bottom);
+    ctx.closePath();
+    ctx.fill();
+
     // ---------- Overhangs and tunnel roofs ----------
     const rock = (i) => cs[i] > top;
     const roofRuns = (fn) => {
@@ -318,7 +328,14 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
           });
         }
         ctx.restore();
-        // Outline.
+        // Haze, then the outline.
+        ctx.fillStyle = HAZE;
+        ctx.beginPath();
+        ctx.moveTo(xs[i], top);
+        trace(xs, ceilYs, () => 0, i, j, false);
+        ctx.lineTo(xs[j], top);
+        ctx.closePath();
+        ctx.fill();
         ink();
         ctx.lineWidth = 6;
         ctx.beginPath();
