@@ -1651,6 +1651,31 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+        // Job finder: a small chevron above an idle player, pointing the way to the job it picked.
+        const jb = p.job;
+        if (jb && jb.dir && !p.bot && (p.freeT || 0) >= config.JOBS.IDLE_AFTER) {
+          const v = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[jb.dir];
+          const cy = y - 44 + Math.sin(time / 180) * 3;
+          const cx = px + v[0] * 4;
+          const ux = v[0];
+          const uy = v[1];
+          ctx.save();
+          ctx.translate(cx, cy);
+          ink();
+          ctx.lineWidth = 3.4;
+          ctx.lineJoin = 'round';
+          ctx.fillStyle = jb.color;
+          ctx.beginPath();
+          // an arrowhead: tip ahead, two wings behind
+          ctx.moveTo(ux * 16, uy * 16);
+          ctx.lineTo(-ux * 10 - uy * 14, -uy * 10 + ux * 14);
+          ctx.lineTo(-ux * 3, -uy * 3);
+          ctx.lineTo(-ux * 10 + uy * 14, -uy * 10 - ux * 14);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
       }
     };
     if (state.wreck) {

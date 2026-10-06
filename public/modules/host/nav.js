@@ -14,23 +14,58 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // Per-connector speed multiplier (e.g. the lift crawls without steam). Set by the game each frame.
 export const connScale = C.map(() => 1);
 
-// Number of connector hops between every pair of platforms.
-const hops = P.map((_, from) => {
-  const dist = P.map(() => Infinity);
-  dist[from] = 0;
-  const queue = [from];
-  while (queue.length) {
-    const d = queue.shift();
-    for (const c of C) {
-      const next = c.top === d ? c.bottom : c.bottom === d ? c.top : -1;
-      if (next >= 0 && dist[next] === Infinity) {
-        dist[next] = dist[d] + 1;
-        queue.push(next);
-      }
+// Route-finding by TIME (seconds). Every connector has two end nodes (2i = top end, 2i+1 = bottom
+// end). Walking between two nodes on the same platform costs distance / walk speed, climbing costs
+// height / climb speed (poles are one-way: top -> bottom only). Floyd-Warshall gives the quickest
+// time between every pair of nodes; plan() adds the walk at each end.
+const WALK = config.MOVE.WALK_SPEED;
+const GRAB_COST = 0.25; // seconds to get onto a ladder
+const isPole = (c) => c.type === 'pole';
+const nodeAt = (n) => ({ d: n % 2 ? C[n >> 1].bottom : C[n >> 1].top, x: n % 2 ? C[n >> 1].xBottom : C[n >> 1].xTop });
+const climbTime = (c) => (P[c.bottom].y - P[c.top].y) / c.speed + GRAB_COST;
+const NN = C.length * 2;
+const nodes = Array.from({ length: NN }, (_, n) => nodeAt(n));
+const nodesOn = P.map((_, d) => nodes.map((nd, n) => (nd.d === d ? n : -1)).filter((n) => n >= 0));
+const tt = Array.from({ length: NN }, () => Array(NN).fill(Infinity));
+for (let a = 0; a < NN; a++) {
+  tt[a][a] = 0;
+  for (const b of nodesOn[nodes[a].d]) tt[a][b] = Math.min(tt[a][b], Math.abs(nodes[a].x - nodes[b].x) / WALK);
+}
+C.forEach((c, i) => {
+  tt[2 * i][2 * i + 1] = Math.min(tt[2 * i][2 * i + 1], climbTime(c));
+  if (!isPole(c)) tt[2 * i + 1][2 * i] = Math.min(tt[2 * i + 1][2 * i], climbTime(c));
+});
+for (let k = 0; k < NN; k++) for (let a = 0; a < NN; a++) for (let b = 0; b < NN; b++) if (tt[a][k] + tt[k][b] < tt[a][b]) tt[a][b] = tt[a][k] + tt[k][b];
+
+// Quickest way from (d1, x1) to (d2, x2): { cost (seconds), node (the connector end to head for first) }.
+// node is -1 when already on the same platform (or there is no way).
+export function plan(d1, x1, d2, x2) {
+  if (d1 === d2) return { cost: Math.abs(x1 - x2) / WALK, node: -1 };
+  let best = { cost: Infinity, node: -1 };
+  for (const a of nodesOn[d1]) {
+    const c = C[a >> 1];
+    if (a % 2 && isPole(c)) continue; // cannot climb a pole
+    const there = a % 2 ? 2 * (a >> 1) : 2 * (a >> 1) + 1;
+    const first = Math.abs(x1 - nodes[a].x) / WALK + climbTime(c);
+    for (const b of nodesOn[d2]) {
+      const cost = first + tt[there][b] + Math.abs(nodes[b].x - x2) / WALK;
+      if (cost < best.cost) best = { cost, node: a };
     }
   }
-  return dist;
-});
+  return best;
+}
+
+// Seconds for a walker to reach platform d at x (Infinity if it cannot).
+export function travelTime(w, d, x) {
+  if (w.conn != null) {
+    const c = C[w.conn];
+    const h = P[c.bottom].y - P[c.top].y;
+    const viaBottom = ((1 - w.s) * h) / c.speed + plan(c.bottom, c.xBottom, d, x).cost;
+    if (isPole(c)) return viaBottom;
+    return Math.min(viaBottom, (w.s * h) / c.speed + plan(c.top, c.xTop, d, x).cost);
+  }
+  return plan(w.d, w.x, d, x).cost;
+}
 
 export const connPoint = (c, s) => ({
   x: c.xTop + (c.xBottom - c.xTop) * s,
@@ -87,6 +122,8 @@ export function moveWalker(w, jx, jy, dt, walkSpeed, climbScale = 1) {
   if (w.conn != null) {
     const c = C[w.conn];
     const h = P[c.bottom].y - P[c.top].y;
+    // A slide pole carries you down by itself (fast, no stopping, no climbing back up).
+    if (isPole(c)) jy = 1;
     if (Math.abs(jy) > 0.4) w.s = clamp(w.s + (jy * c.speed * connScale[w.conn] * climbScale * dt) / h, 0, 1);
     const pt = connPoint(c, w.s);
     w.x = pt.x;
@@ -105,7 +142,7 @@ export function moveWalker(w, jx, jy, dt, walkSpeed, climbScale = 1) {
   const p = P[w.d];
   if (Math.abs(jy) > 0.4) {
     const up = jy < 0;
-    const i = C.findIndex((c) => (up ? c.bottom === w.d && Math.abs(w.x - c.xBottom) < GRAB : c.top === w.d && Math.abs(w.x - c.xTop) < GRAB));
+    const i = C.findIndex((c) => (up ? c.bottom === w.d && !isPole(c) && Math.abs(w.x - c.xBottom) < GRAB : c.top === w.d && Math.abs(w.x - c.xTop) < GRAB));
     if (i >= 0) {
       w.conn = i;
       w.s = up ? 1 : 0;
@@ -128,33 +165,38 @@ export function moveWalker(w, jx, jy, dt, walkSpeed, climbScale = 1) {
   if (Math.abs(jx) > 0.15) w.face = jx < 0 ? -1 : 1;
 }
 
-// Joystick input that moves a walker toward platform d at x. Returns { jx, jy, arrived }.
-export function steerTo(w, d, x, near = 12) {
+// Which way a walker should push right now to get to platform d at x: { dir, arrived }.
+// dir is 'left' | 'right' | 'up' | 'down' (or null when there already / no way).
+export function direction(w, d, x, near = 12) {
   if (w.conn != null) {
     const c = C[w.conn];
-    const goUp = hops[c.top][d] < hops[c.bottom][d] || (hops[c.top][d] === hops[c.bottom][d] && w.s < 0.5);
-    return { jx: 0, jy: goUp ? -1 : 1, arrived: false };
+    if (isPole(c)) return { dir: 'down', arrived: false };
+    const h = P[c.bottom].y - P[c.top].y;
+    const viaBottom = ((1 - w.s) * h) / c.speed + plan(c.bottom, c.xBottom, d, x).cost;
+    const viaTop = (w.s * h) / c.speed + plan(c.top, c.xTop, d, x).cost;
+    return { dir: viaTop < viaBottom || (viaTop === viaBottom && w.s < 0.5) ? 'up' : 'down', arrived: false };
   }
   if (w.d === d) {
     const dx = x - w.x;
-    if (Math.abs(dx) <= near) return { jx: 0, jy: 0, arrived: true };
-    return { jx: Math.sign(dx) * clamp(Math.abs(dx) / 60, 0.3, 1), jy: 0, arrived: false };
+    if (Math.abs(dx) <= near) return { dir: null, arrived: true };
+    return { dir: dx < 0 ? 'left' : 'right', arrived: false };
   }
-  // Pick the connector from here that gets closest to the goal, preferring shorter walks.
-  let best = null;
-  for (const c of C) {
-    const down = c.top === w.d;
-    if (!down && c.bottom !== w.d) continue;
-    const other = down ? c.bottom : c.top;
-    const entry = down ? c.xTop : c.xBottom;
-    const exit = down ? c.xBottom : c.xTop;
-    const cost = hops[other][d] * 2000 + Math.abs(w.x - entry) + (other === d ? Math.abs(exit - x) : 0);
-    if (!best || cost < best.cost) best = { cost, entry, down };
-  }
-  if (!best) return { jx: 0, jy: 0, arrived: false };
-  const dx = best.entry - w.x;
-  if (Math.abs(dx) < 10) return { jx: 0, jy: best.down ? 1 : -1, arrived: false };
-  return { jx: Math.sign(dx) * clamp(Math.abs(dx) / 60, 0.3, 1), jy: 0, arrived: false };
+  const best = plan(w.d, w.x, d, x);
+  if (best.node < 0) return { dir: null, arrived: false };
+  const entry = nodes[best.node].x;
+  const dx = entry - w.x;
+  if (Math.abs(dx) < 10) return { dir: best.node % 2 ? 'up' : 'down', arrived: false };
+  return { dir: dx < 0 ? 'left' : 'right', arrived: false };
+}
+
+// Joystick input that moves a walker toward platform d at x. Returns { jx, jy, arrived }.
+export function steerTo(w, d, x, near = 12) {
+  const { dir, arrived } = direction(w, d, x, near);
+  if (dir === 'up' || dir === 'down') return { jx: 0, jy: dir === 'up' ? -1 : 1, arrived };
+  if (dir === null) return { jx: 0, jy: 0, arrived };
+  const dx = dir === 'left' ? -1 : 1;
+  const goalX = w.d === d ? x : nodes[plan(w.d, w.x, d, x).node].x;
+  return { jx: dx * clamp(Math.abs(goalX - w.x) / 60, 0.3, 1), jy: 0, arrived: false };
 }
 
 // Is a point within reach on the same platform?

@@ -94,11 +94,22 @@ export function createControllerUI({ network }) {
     toastTimer = setTimeout(() => (t.style.display = 'none'), 1800);
   };
 
+  // Idle: a big arrow to the most useful job (the host picks it).
+  const ARROWS = { left: '◀', right: '▶', up: '▲', down: '▼' };
+  const showJob = (job) => {
+    const on = !!(job && ARROWS[job.dir]);
+    $('job').classList.toggle('show', on);
+    if (!on) return;
+    $('jarrow').textContent = ARROWS[job.dir];
+    $('jtext').textContent = job.label;
+  };
+
   const updateUI = (next) => {
     if (next.fx) return showFx(next.fx);
     showVote(next.vote);
     if (next.vote) return;
     uiState = next;
+    showJob(next.ko || next.locked ? null : next.job);
     if (next.ko) {
       $('info').innerHTML = '<b>Knocked out!</b> Hang tight - a crewmate can revive you';
       setButton('act', '💤', 'Zzz');

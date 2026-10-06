@@ -765,7 +765,21 @@ export const config = {
     AIM_TOLERANCE: 0.12, // fire when aim is within this many radians
     STATION_MIN: 20, // stay at a station at least this long...
     STATION_MAX: 40, // ...and at most this long, then rotate
+    STATION_TIER_PX: 1800, // a station that is one 'usefulness point' better is worth walking this many extra px for
     LEAVE_FOR_EMERGENCY: 0.2, // chance per think to leave a station when help is short
+  },
+  // Job arrows on idle phones (the job finder, modules/host/jobs.js).
+  JOBS: {
+    EVERY: 0.3, // seconds between looks at the ship's job list
+    HOLD: 3, // a suggestion stays at least this long unless the job is gone or done
+    SWITCH_GAIN: 0.6, // ...and is only swapped for a new job that scores this fraction of the old one or better (lower = calmer)
+    ARRIVE: 70, // px: standing this close (same deck) means you have arrived - the arrow goes away
+    IDLE_AFTER: 0.8, // seconds free (no station, not working) before the first arrow shows
+    AMMO_LOW: 8, // a gun with this many shells or fewer is worth an ammo run
+    COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
+    CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
+    // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, repair: 1.1, ammo: 1, coal: 1 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

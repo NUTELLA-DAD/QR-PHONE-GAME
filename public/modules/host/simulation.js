@@ -1,3 +1,4 @@
+import { createJobFinder } from './jobs.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { updateBot } from './bots.js';
@@ -122,6 +123,7 @@ export function createSimulation() {
 
   const T = config.TOOLS;
   const modules = createModules();
+  const jobFinder = createJobFinder(state);
   state.modules = modules.list;
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
   const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || isEscortStation(name) || !!state.GUNS[name];
@@ -884,6 +886,10 @@ export function createSimulation() {
       player.atkQ = false;
       player.atkCd = Math.max(0, (player.atkCd || 0) - dt);
 
+      // Idle crew get an arrow to the most useful nearby job (phone + a chevron on the TV).
+      if (!player.bot) jobFinder.update(player, dt);
+      const jobUi = player.bot ? null : jobFinder.ui(player);
+
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
@@ -915,11 +921,11 @@ export function createSimulation() {
       const ammoText = gun ? gun.ammo : stationName === 'Bomb Bay' ? state.bombBay.bombs : null;
       const attackLabel = !player.lock && player.conn == null && batInReach(player, config.WAVES.BAT_NOTICE) ? 'Swat bat!' : player.carry === 'sword' ? 'Swing' : 'Shove';
       const hull = Math.round(state.ship.hull / 5) * 5;
-      const key = [stationName, kind, !!player.lock, takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull].join('|');
+      const key = [stationName, kind, !!player.lock, takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, jobUi ? jobUi.label + '|' + jobUi.dir : ''].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: stationName, kind, locked: !!player.lock, taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull };
+          player.ui = { station: stationName, kind, locked: !!player.lock, taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, job: jobUi };
           emitPlayerUi(player.id, player.ui);
         }
       }

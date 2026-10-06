@@ -38,6 +38,11 @@ body.lefty #controls{flex-direction:row-reverse}
 .btn .ic{font-size:2.3em;line-height:1}
 .btn .tx{max-width:92%;overflow-wrap:anywhere}
 .btn.down{transform:translateY(5px);box-shadow:0 1px 0 #1b1410;filter:brightness(.9)}
+/* Job arrow for idle crew: the nearest useful job and which way to go (between the stick and the buttons). */
+#job{display:none;flex:1;min-width:0;align-self:center;margin:0 8px;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 8px;background:#1b1410;color:#ffd23f;border:4px solid #f1e2b8;border-radius:16px;text-align:center;font-weight:900;pointer-events:none}
+#job.show{display:flex}
+#jarrow{font-size:min(24vh,104px);line-height:1}
+#jtext{font-size:clamp(14px,4.4vh,22px);line-height:1.1;overflow-wrap:anywhere}
 /* Action: biggest, lower right. JUMP: above it. Attack: to its left. */
 #act{width:var(--a);height:var(--a);right:0;bottom:0;background:#f1e2b8;color:#1b1410;font-size:clamp(14px,4vh,20px)}
 #atk{width:var(--k);height:var(--k);right:calc(var(--a) + 10px);bottom:0;background:#3a5a8c;font-size:clamp(13px,3.6vh,18px)}
@@ -94,6 +99,7 @@ body.lefty #plever{right:auto;left:calc(var(--a) + min(20vh,84px) + 20px)}
   <div id="info"><b>Walking</b> - walk to a station, rack, fire or hole</div>
   <div id="controls">
     <div id="pad"><div id="knob"></div></div>
+    <div id="job"><div id="jarrow"></div><div id="jtext"></div></div>
     <div id="buttons">
       <div id="plever"><div class="fill"></div><div class="mid"></div><div class="tag">PUMP ▲</div><div class="rev">VENT ▼</div><div class="handle"></div></div>
       <div id="lever"><div class="fill"></div><div class="stop"></div><div class="tag">AHEAD</div><div class="rev">REVERSE</div><div class="handle"></div></div>
