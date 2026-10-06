@@ -705,7 +705,32 @@ export function createRenderer({ ctx, state, canvas }) {
     // Steam pressure in the line: red zone at the top means open a vent!
     const warnAt = config.BOILER.WARN_AT / 100;
     const p = state.ship.press;
-    gauge(104, p, [[warnAt, 1, 'rgba(230,57,70,.55)']], p >= config.BOILER.WARN_AT ? '#e63946' : '#e8eef2');
+    const odAt = config.BOILER.OVERDRIVE_AT / 100;
+    gauge(104, p, [[odAt, warnAt, 'rgba(255,190,60,.55)'], [warnAt, 1, 'rgba(230,57,70,.55)']], p >= config.BOILER.WARN_AT ? '#e63946' : p >= config.BOILER.OVERDRIVE_AT ? '#ffd23f' : '#e8eef2');
+    // Overdrive zone label, and a thin stacked bar of where the steam goes.
+    ctx.fillStyle = 'rgba(60,40,10,.8)';
+    ctx.font = '700 10px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillText('OVERDRIVE', 46 + 408 * ((odAt + warnAt) / 2), 115);
+    const sp = state.steamParts;
+    if (sp) {
+      const segs = [['engines', '#5b8fd9', 'ENG'], ['pump', '#6cc070', 'PUMP'], ['shield', '#9b7be0', 'SHLD'], ['coil', '#7fd8ee', 'COIL'], ['leaks', '#e63946', 'LEAK'], ['vents', '#d6d6d6', 'VENT'], ['other', '#8a7560', '']];
+      let sx = 46;
+      ctx.fillStyle = '#3b2a1d';
+      ctx.fillRect(46, 130, 408, 8);
+      ctx.font = '700 8px Georgia';
+      for (const [k, col, name] of segs) {
+        const w = Math.min(408 - (sx - 46), (408 * (sp[k] || 0)) / config.BOILER.USE_GAUGE);
+        if (w < 1) continue;
+        ctx.fillStyle = col;
+        ctx.fillRect(sx, 130, w, 8);
+        if (name && w > 26) {
+          ctx.fillStyle = '#1b1410';
+          ctx.fillText(name, sx + w / 2, 137);
+        }
+        sx += w;
+      }
+    }
     // Gas in the envelope: below the neutral mark she drops (blue), above it she rises (yellow).
     const GS = config.GAS;
     const gas = state.ship.gas;
@@ -726,7 +751,15 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.font = '700 16px Georgia';
     ctx.textAlign = 'left';
     const vents = (state.ventOpen || []).filter(Boolean).length;
-    ctx.fillText('Steam' + (vents ? ` - ${vents} vent${vents > 1 ? 's' : ''} open` : ''), 46, 100);
+    const leaking = state.steamParts && state.steamParts.leaks > 0.2;
+    ctx.fillText('Steam' + (vents ? ` - ${vents} vent${vents > 1 ? 's' : ''} open` : '') + (p >= config.BOILER.OVERDRIVE_AT && p < config.BOILER.WARN_AT ? ' - OVERDRIVE!' : ''), 46, 100);
+    if (leaking) {
+      ctx.fillStyle = '#c62828';
+      ctx.textAlign = 'center';
+      ctx.fillText('LEAKING', 352, 100);
+      ctx.fillStyle = config.INK;
+      ctx.textAlign = 'left';
+    }
     const valve = state.gasValve || {};
     ctx.fillText(`Gas${valve.input > 0.1 ? ' - PUMPING' : valve.input < -0.1 ? ' - VENTING' : ''}${state.buoyancy > 0 ? ' - RISING' : state.buoyancy < 0 ? ' - FALLING' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}`, 46, 150);
     ctx.textAlign = 'right';

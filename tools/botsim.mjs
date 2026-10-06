@@ -78,6 +78,8 @@ const totalSteps = Math.round(args.minutes * 60 * 60);
 const errors = new Map(); let errorCount = 0;
 let wrecks = 0, killsTotal = 0, hullSum = 0, hullN = 0, missions = 0, maxLap = state.course.lap;
 let lastKills = 0, stuckVoteSteps = 0;
+// Steam stats while flying: pressure sum, steps under 35 / over 70 / over 90, blowouts, steps in overdrive.
+let pSum = 0, pN = 0, pLow = 0, pOver70 = 0, pOver90 = 0, blowouts = 0, leakSteps = 0, lastPress = state.ship.press;
 const t0 = realNow();
 
 for (let step = 1; step <= totalSteps; step++) {
@@ -101,6 +103,13 @@ for (let step = 1; step <= totalSteps; step++) {
   if (state.kills < lastKills) lastKills = 0;
   killsTotal += state.kills - lastKills; lastKills = state.kills;
   if (state.course.lap > maxLap) { missions += state.course.lap - maxLap; maxLap = state.course.lap; }
+  if (state.phase === 'flying') {
+    const pr = state.ship.press;
+    pSum += pr; pN++; if (pr < 35) pLow++; if (pr > 70) pOver70++; if (pr > 90) pOver90++;
+    if (state.steamParts && state.steamParts.leaks > 0.2) leakSteps++;
+    if (state.boilerBlew) { blowouts++; state.boilerBlew = false; }
+  }
+  lastPress = state.ship.press;
   if (state.phase === 'flying') { hullSum += state.ship.hull; hullN++; }
   // Wreck sequence ends in the lobby: count it and cast off again.
   if (state.phase === 'lobby') {
@@ -124,6 +133,8 @@ console.log(`average hull: ${hullN ? (hullSum / hullN).toFixed(1) : 'n/a'}`);
 console.log(`kills: ${killsTotal}`);
 const sum = (k) => tally[k] || 0;
 console.log(`hauled: ${sum('ammo')} ammo loads, ${sum('coal')} coal loads; fires out ${sum('fires')}, holes patched ${sum('holes')}`);
+const pc = (n) => (pN ? ((100 * n) / pN).toFixed(1) : 'n/a') + '%';
+console.log(`steam: mean ${pN ? (pSum / pN).toFixed(1) : 'n/a'}, <35 ${pc(pLow)}, >70 ${pc(pOver70)}, >90 ${pc(pOver90)}, blowouts ${blowouts}, leaking ${pc(leakSteps)}`);
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);

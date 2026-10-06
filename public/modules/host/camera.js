@@ -68,7 +68,7 @@ export function createCamera() {
       // A minimised or hidden window can report zero size; keep the last view until it's back.
       if (width < 10 || height < 10) return view ? { ...view, scroll } : { cx: 800, cy: 450, zoom: 0.3, scroll };
       // Smoothly lead toward where she's heading.
-      const vx = (state.ship.speed || 0) * config.SHIP.TOP_SPEED;
+      const vx = (state.ship.speed || 0) * config.SHIP.TOP_SPEED * (1 + config.BOILER.OD_ENGINE * (state.overdrive || 0));
       const vy = -(state.ship.vy || 0);
       const kl = 1 - Math.exp(-C.LEAD_SMOOTHING * dt);
       lead.x += (vx * C.LEAD_TIME - lead.x) * kl;
