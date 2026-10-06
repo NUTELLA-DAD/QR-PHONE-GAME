@@ -10,7 +10,7 @@
 // World y grows downward; the ship is drawn shifted up by its altitude (alt).
 import { config } from '../../config.js';
 import { pop } from './popups.js';
-import { makeMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell } from './maps.js';
+import { makeMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
 
 const K = config.COURSE;
 const TOP = -1400; // where ceilings start (far above the view)
@@ -152,8 +152,12 @@ function mapPlan(state, cruise) {
   const course = state.course;
   const sx = course.dist + 800;
   const sy = 500 - state.ship.alt;
-  const p = routeAhead(course.map, sx, sy, 7);
+  // Unsticking (the ship made no headway for a while): look further along the route, and for the
+  // first moments back away from whatever is holding it.
+  const un = course.unstick > 0;
+  const p = routeAhead(course.map, sx, sy, un ? 14 : 7);
   if (!p) return { target: state.ship.alt, speed: 0, dx: 0, dy: 0 };
+  if (un && course.unstick > config.MAPS.UNSTICK_TIME / 2) return { target: 500 - p.y, speed: -0.4, dx: -300, dy: p.y - sy };
   const dx = p.x - sx;
   const dy = p.y - sy;
   const target = 500 - p.y;
@@ -778,23 +782,46 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
 
   // Passing a marker: checkpoint, beacon (turn for home) or home (lap complete).
   // On a mission map: how far along the route we are, and whether we've reached the beacon.
-  const mapProgress = () => {
+  const mapProgress = (dt = 0) => {
     const map = course.map;
     const sx = course.dist + 800;
     const sy = 500 - state.ship.alt;
     course.dusk += (0 - course.dusk) * 0.02;
+    // Stuck check: no real headway toward the goal for a while (pinned on rock, wedged, drifting).
+    // Hovering right over the goal (bombing an outpost) doesn't count.
+    const dNow = distToGoal(map, sx, sy);
+    if (course.unstick > 0) course.unstick -= dt;
+    if (!Number.isFinite(dNow) || dNow <= 3 || !(dNow > (course.stuckBest ?? Infinity) - 2)) {
+      course.stuckBest = Number.isFinite(dNow) ? dNow : null;
+      course.stuckT = 0;
+    } else if ((course.stuckT += dt) > config.MAPS.STUCK_AFTER) {
+      course.stuckT = 0;
+      course.unstick = config.MAPS.UNSTICK_TIME;
+      course.unstuck = (course.unstuck || 0) + 1;
+    }
     if (map.open) {
       // Open sky: knock out every outpost (all its guns), nearest first.
       for (const o of map.outposts) if (!o.done && course.turrets.filter((t) => t.outpost === map.outposts.indexOf(o)).every((t) => t.dead)) {
         o.done = true;
         state.ev.warn = 3;
-        state.ev.warnText = 'OUTPOST DESTROYED!';
+        state.ev.warnText = 'OUTPOST DESTROYED!' + (config.MAPS.OUTPOST_REFILL ? ' BOMB BAY RESTOCKED' : '');
+        if (config.MAPS.OUTPOST_REFILL && state.bombBay) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX); // their stores are ours
       }
       const left = map.outposts.filter((o) => !o.done);
       course.progress = Math.min(0.99, 1 - left.length / map.outposts.length);
       if (left.length && (!course.target || course.target.done)) {
-        course.target = left.sort((a, b) => Math.hypot(a.x - sx, a.y - sy) - Math.hypot(b.x - sx, b.y - sy))[0];
+        // The one with the shortest flight (by the route, not as the crow flies).
+        course.target = left.map((o) => ({ o, d: stationDist(map, o, sx, sy) })).sort((a, b) => a.d - b.d)[0].o;
+        course.stationGun = null;
+        course.stuckBest = null;
         setGoal(map, stationCell(map, course.target));
+      }
+      // Hover right over the nearest gun still standing (the bomb bay can only hit what's under it).
+      if (course.target && !course.target.done && (!course.stationGun || course.stationGun.dead)) {
+        const live = course.turrets.filter((t) => t.outpost === map.outposts.indexOf(course.target) && !t.dead);
+        course.stationGun = live.sort((a, b) => Math.abs(a.mx - sx) - Math.abs(b.mx - sx))[0] || null;
+        if (course.stationGun) setGoal(map, stationCell(map, { x: course.stationGun.mx, y: course.stationGun.my - 20 }));
+        course.stuckBest = null;
       }
       if (!left.length && !course.done) {
         course.done = true;
@@ -818,8 +845,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     }
   };
 
-  const passMarkers = () => {
-    if (course.map) return mapProgress();
+  const passMarkers = (dt = 0) => {
+    if (course.map) return mapProgress(dt);
     const shipX = course.dist + 800;
     for (const m of course.markers) {
       if (m.passed || m.cx > shipX) continue;
@@ -874,7 +901,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     // Mission done and the vote's over: on to the next map.
     if (course.pendingNext && !state.scorecard && !state.vote) startMission(course.lap + 1);
     course.dist += scrollSpeed(state) * dt;
-    if (course.map) passMarkers();
+    if (course.map) passMarkers(dt);
     else {
       // You can back up, but only so far (the land behind is forgotten).
       course.maxDist = Math.max(course.maxDist, course.dist);
@@ -933,6 +960,10 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
         outpost: t.outpost,
       })),
       target: map.open ? map.outposts[0] : null,
+      stationGun: null,
+      stuckBest: null,
+      stuckT: 0,
+      unstick: 0,
       markers: [
         { kind: 'home', mx: map.start.x, my: floorBelow(map, map.start.x, map.start.y), top: map.start.y + 300, passed: true },
         map.open ? null : { kind: 'beacon', mx: map.goal.x, my: floorBelow(map, map.goal.x, map.goal.y), passed: false },
@@ -944,6 +975,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     state.ship.alt = course.homeAlt;
     state.ship.vy = 0;
     state.ship.speed = 0;
+    if (map.open && state.bombBay) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX); // a full bay for the raid
     state.rockets.length = 0;
     if (state.shipBombs) state.shipBombs.length = 0;
     state.ev.warn = 4;
