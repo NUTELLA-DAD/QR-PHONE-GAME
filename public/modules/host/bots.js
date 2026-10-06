@@ -5,7 +5,7 @@ import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { steerTo } from './nav.js';
 import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
-import { GS, MAIN_X1 } from './gunship.js';
+import { GS, MAIN_X1, landX, boilerX } from './gunship.js';
 
 const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
 
@@ -28,7 +28,7 @@ function steer(p, d, x, near = 12) {
     const mid = (MAIN_X1 + GS.x0) / 2; // targets past this are on her deck (her home frame)
     if (x > mid !== !!p.onGunship) {
       // Wrong side: walk to the swing spot, and swing only while the rope is hooked and in range.
-      const edge = p.onGunship ? GS.x0 + 40 : MAIN_X1 - 15;
+      const edge = p.onGunship ? landX(g) : MAIN_X1 - 15;
       const step = steerTo(p, MAIN, edge, 12);
       p.jx = step.jx;
       p.jy = step.jy;
@@ -343,7 +343,7 @@ function work(p, state) {
     return;
   }
   if (job.kind === 'raid') {
-    if (steer(p, MAIN, GS.boilerX, 30)) p.fire = true;
+    if (steer(p, MAIN, boilerX(state.gunship), 30)) p.fire = true;
     return;
   }
   if (job.kind === 'flee') {
