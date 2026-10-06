@@ -906,7 +906,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
   // Start mission n on a fresh map: the ship at the start, the beacon somewhere ahead.
   function startMission(n) {
     const MP = config.MAPS;
-    const kind = MP.KINDS[(n - 1) % MP.KINDS.length];
+    const kind = MP.FORCE_KIND || MP.KINDS[(n - 1) % MP.KINDS.length];
     const map = makeMap(kind, n, course.rand);
     const d = Math.min(1, (n - 1) / 4);
     Object.assign(course, {

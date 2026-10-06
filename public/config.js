@@ -255,6 +255,7 @@ export const config = {
   // mission is a fresh map; reach the beacon to finish it (scorecard, upgrade vote, next map).
   MAPS: {
     ENABLED: true,
+    FORCE_KIND: null, // set to 'network', 'route' or 'open' to use only that kind (used by tools/botsim.mjs)
     KINDS: ['network', 'route', 'open'], // mission types in turn: branching caves, one winding
     // passage, open sky with outposts to destroy
     CELL: 200, // size of one map square (pixels)

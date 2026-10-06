@@ -131,6 +131,8 @@ after each phase.
 
 ## Progress log (round 2)
 - Plan and agent team set up. User goals added as Current focus (F1-F5).
+- A1 done: `node tools/botsim.mjs --minutes 5 --difficulty hard --map open --seed 1` runs the
+  real game with bots in about a second per simulated minute; the same seed replays exactly.
 - Note: the .claude/agents files load in a NEW session; until then the lead runs the same
   instructions through a general-purpose agent with model = sonnet.
 
