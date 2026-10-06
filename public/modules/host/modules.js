@@ -33,8 +33,6 @@ export function createModules() {
     const s = station(name);
     add({ name, kind: 'gun', d: s.d, x: s.x, pos: { x: mount.bx, y: mount.by } });
   }
-  const gv = station('Gas Valve');
-  add({ name: 'Gas Valve', kind: 'gasvalve', d: gv.d, x: gv.x, pos: { x: gv.x, y: P[gv.d].y - 60 } });
   const coilSt = station('Lightning Coil');
   add({ name: 'Lightning Coil', kind: 'coil', d: coilSt.d, x: coilSt.x, pos: { x: coilSt.x, y: P[coilSt.d].y - 60 } });
   const defl = station('Deflector');

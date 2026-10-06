@@ -50,6 +50,13 @@ body.lefty #lever{right:auto;left:min(42vh,180px)}
 #lever .stop{position:absolute;left:-4px;right:-4px;height:4px;margin-bottom:-2px;background:#ffd23f}
 #lever .rev{position:absolute;left:0;right:0;bottom:4px;text-align:center;color:#ff8a8a;font-size:11px;font-weight:900}
 #lever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f1e2b8;border:5px solid #1b1410;border-radius:10px}
+#plever{position:absolute;right:calc(min(42vh,180px) + min(20vh,84px) + 16px);top:0;width:min(20vh,84px);height:100%;border:5px solid #1b1410;border-radius:18px;background:#3b2a1d;display:none;touch-action:none}
+body.lefty #plever{right:auto;left:calc(min(42vh,180px) + min(20vh,84px) + 16px)}
+#plever .fill{position:absolute;left:0;right:0;bottom:50%}
+#plever .mid{position:absolute;left:-4px;right:-4px;top:50%;height:4px;margin-top:-2px;background:#ffd23f}
+#plever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f1e2b8;border:5px solid #1b1410;border-radius:10px}
+#plever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
+#plever .rev{position:absolute;left:0;right:0;bottom:4px;text-align:center;color:#8ab8ff;font-size:11px;font-weight:900}
 #lever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
 /* Upgrade vote: three big cards over everything. */
 #vote{display:none;position:fixed;inset:0;background:rgba(27,20,16,.92);z-index:8;flex-direction:column;padding:10px;gap:8px}
@@ -85,6 +92,7 @@ body.lefty #lever{right:auto;left:min(42vh,180px)}
   <div id="controls">
     <div id="pad"><div id="knob"></div></div>
     <div id="buttons">
+      <div id="plever"><div class="fill"></div><div class="mid"></div><div class="tag">PUMP ▲</div><div class="rev">VENT ▼</div><div class="handle"></div></div>
       <div id="lever"><div class="fill"></div><div class="stop"></div><div class="tag">AHEAD</div><div class="rev">REVERSE</div><div class="handle"></div></div>
       <button class="btn" id="atk"><span class="ic">✋</span><span class="tx">Shove</span></button>
       <button class="btn" id="act"><span class="ic">👋</span><span class="tx">Hey!</span></button>

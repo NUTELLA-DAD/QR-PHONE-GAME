@@ -119,7 +119,7 @@ export function createSimulation() {
   const modules = createModules();
   state.modules = modules.list;
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
-  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || name === 'Gas Valve' || !!state.GUNS[name];
+  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || !!state.GUNS[name];
 
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
@@ -517,7 +517,7 @@ export function createSimulation() {
 
   const update = (dt) => {
     let helmFlown = false; // did someone steer this frame
-    let gasManned = false; // is someone on the Gas Valve
+    let gasManned = false; // is someone working the gas (the helm's PRESSURE lever)
     state.ship.trim = 0;
     // The lap scorecard pauses the action, then the upgrade vote starts.
     if (state.scorecard) {
@@ -593,7 +593,7 @@ export function createSimulation() {
           if (working) {
             // The helm works the front/back engines (stick left/right; the lever sets the cruise
             // speed) and the small up/down trim engine (stick up/down). Big climbs and drops come
-            // from the gasbag (the Gas Valve station).
+            // from the gasbag: the PRESSURE lever pumps hot steam in (up) or vents it (down).
             const SH = config.SHIP;
             const REV = -SH.REVERSE;
             // Stick left/right asks for full ahead / full reverse; let go and she goes back to the
@@ -601,12 +601,10 @@ export function createSimulation() {
             const want = player.jx > 0.25 ? player.jx : player.jx < -0.25 ? player.jx * SH.REVERSE : player.thr != null ? clamp(player.thr, REV, 1) : state.ship.speed;
             driveSpeed(want, dt);
             state.ship.trim = Math.abs(player.jy) > 0.15 ? -player.jy : 0;
+            state.gasValve.input = clamp(player.gas || 0, -1, 1);
+            gasManned = true;
             helmFlown = true;
           }
-        } else if (player.lock === 'Gas Valve') {
-          // Stick up pumps hot steam into the gasbag (she rises), down vents it (she drops).
-          state.gasValve.input = working && Math.abs(player.jy) > 0.15 ? -player.jy : 0;
-          gasManned = true;
         } else if (player.lock === 'Deflector') {
           // Swing the shield round toward where the stick points.
           if (working && Math.hypot(player.jx, player.jy) > 0.3) {
@@ -759,13 +757,13 @@ export function createSimulation() {
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
-      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : stationName === 'Gas Valve' ? 'gasvalve' : null;
+      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : null;
       const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && Object.values(state.players).some((q) => q.lock === stationName && (q.bot ? player.bot : true));
       let label = 'Hey!';
       let hold = false;
       if (player.lock) {
         const working = modules.works(state, player.lock);
-        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'gasvalve' ? 'Valve' : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
+        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
         hold = kind === 'gun' || kind === 'bombbay' || kind === 'coil';
       } else if (player.act) {
         label = player.act.label;
@@ -776,7 +774,7 @@ export function createSimulation() {
       if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
       const feel = state.buoyancy > 0 ? 'RISING' : state.buoyancy < 0 ? 'FALLING' : 'holding';
       if (stationName === 'Boiler' && !status) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
-      if (stationName === 'Gas Valve' && !status) status = `Gas ${Math.round(state.ship.gas)}% - ${feel}${state.ship.press < config.GAS.PUMP_MIN_PRESS ? ' - NO STEAM TO PUMP!' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' holes leaking' : ''}`;
+      if (stationName === 'Helm' && player.lock && !status && (state.ship.press < config.GAS.PUMP_MIN_PRESS || state.gasHoles.length)) status = `Gas ${Math.round(state.ship.gas)}% - ${feel}${state.ship.press < config.GAS.PUMP_MIN_PRESS ? ' - NO STEAM TO PUMP!' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' holes leaking' : ''}`;
       if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag full - she is rising' : 'Gasbag low - she is dropping';
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
       const ammoText = gun ? gun.ammo : stationName === 'Bomb Bay' ? state.bombBay.bombs : null;
@@ -859,7 +857,7 @@ export function createSimulation() {
     const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
     const flying = state.phase === 'flying' && !state.ship.down;
     state.autopilot = false;
-    // Easy/Normal: with nobody at the helm (or on the Gas Valve) the ship flies itself, gently.
+    // Easy/Normal: with nobody at the helm the ship flies itself, gently.
     const assist = diff.autopilot && flying;
     const plan = assist && (!getHelm() || !gasManned) ? pilotPlan(state, 4, 0.3) : null;
     if (!getHelm()) {

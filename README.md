@@ -33,9 +33,9 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
   up/down trim engine, the lever = cruise speed (yellow STOP line = hover, below it = reverse).
   Steer over mountains, under rock, through zig-zags, past fortresses and factories, and stop
   below cliff walls. Nobody at the helm? On Easy/Normal the autopilot steers gently.
-- **Gas Valve** (top catwalk): the big up/down control. Stick UP pumps hot steam into the gasbag
-  (she rises - fast when overfilled, and the envelope swells), DOWN vents it (she drops - fast
-  when empty, and it sags). The gas slowly cools and leaks from holes, so keep topping it up.
+- **PRESSURE lever** (the helm's second lever): the big up/down control. Push it UP to pump hot steam into the gasbag
+  (she rises - fast when overfilled, and the envelope swells), DOWN to vent it (she drops - fast
+  when empty, and it sags). Middle = hold. The gas slowly cools and leaks from holes, so keep topping it up.
   Pumping uses boiler steam.
 - **Guns** (6 of them, each turns only so far): aim near a target and the aim snaps on. Guns need
   **ammo** carried from the Ammo Hold.

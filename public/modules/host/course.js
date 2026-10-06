@@ -162,7 +162,7 @@ function mapPlan(state, cruise) {
   return { target, speed: Math.max(-config.SHIP.REVERSE, speed), dx, dy };
 }
 
-// The Gas Valve setting (-1 vent .. +1 pump) that brings the ship to altitude `target`.
+// The PRESSURE lever setting (-1 vent .. +1 pump) that brings the ship to altitude `target`.
 export function gasFor(state, target) {
   const G = config.GAS;
   const vy = state.ship.vy || 0;
@@ -859,8 +859,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     const alt = state.ship.alt;
     if (course.scraping && state.ship.speed < 0) return 'Backing off the wall - now climb or dive!';
     const plan = pilotPlan(state, 2.5, 0.5);
-    if (plan.speed < 0.1 && plan.target - alt > 120) return 'STOP (lever to the line) - Gas Valve: PUMP to climb!';
-    if (plan.speed < 0.1 && alt - plan.target > 120) return 'STOP (lever to the line) - Gas Valve: VENT to drop!';
+    if (plan.speed < 0.1 && plan.target - alt > 120) return 'STOP (lever to the line) - PRESSURE lever UP to climb!';
+    if (plan.speed < 0.1 && alt - plan.target > 120) return 'STOP (lever to the line) - PRESSURE lever DOWN to drop!';
     if (w.min > w.max) return 'Squeeze through - hold the middle!';
     if (alt < w.min) return 'CLIMB! (stick up - and pump the gas)';
     if (alt > w.max) return 'DIVE! (stick down - and vent the gas)';

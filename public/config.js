@@ -353,10 +353,10 @@ export const config = {
     WARN_AT: 90, // "vent steam!" warning
     BLOWOUT_AT: 100, // boiler blows: damages itself and bursts a pipe
   },
-  // The gasbag is the big up/down control. The Gas Valve station pumps hot steam in (she
+  // The gasbag is the big up/down control. The helm's PRESSURE lever pumps hot steam in (she
   // rises - fast when overfilled) or vents it (she drops - fast when deflated). At the neutral
-  // fill she hangs still. Hot gas cools and seeps out, and holes leak more, so the valve crew
-  // keep topping it up. The envelope visibly swells and shrinks with the gas.
+  // fill she hangs still. Hot gas cools and seeps out, and holes leak more, so the helmsman
+  // keeps topping it up. The envelope visibly swells and shrinks with the gas.
   GAS: {
     START: 50,
     NEUTRAL: 50, // gas level at which she neither rises nor falls

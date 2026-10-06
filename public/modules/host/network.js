@@ -46,6 +46,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
       if (data.act) player.actQ = true;
       if (data.atk) player.atkQ = true;
       if ('thr' in data) player.thr = data.thr;
+      if ('gas' in data) player.gas = data.gas;
       if (data.perfect) player.perfect = true;
       if ('vote' in data) player.vote = data.vote;
       if (data.leave) player.leaveQ = true;

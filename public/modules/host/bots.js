@@ -12,7 +12,7 @@ const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
 const GUN_STATIONS = Object.keys(L.gunMounts);
-const MANNED_STATIONS = ['Helm', 'Gas Valve', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
+const MANNED_STATIONS = ['Helm', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -230,12 +230,8 @@ function operate(p, state, dt) {
     if (target !== null) p.jy = clamp((ship.alt - target) / 90 + (ship.vy || 0) / 260, -1, 1);
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
     else p.jy = 0;
-  } else if (p.lock === 'Gas Valve') {
-    // Fly her up and down: pump or vent toward the altitude the pilot plan wants.
-    const plan = pilotPlan(state, 3, B.HELM_SPEED);
-    const dodge = beamDodge(state);
-    p.jy = -gasFor(state, dodge ?? plan.target);
-    p.jx = 0;
+    // The PRESSURE lever: pump or vent the gasbag toward the altitude the plan wants.
+    p.gas = gasFor(state, beamDodge(state) ?? plan.target);
   } else if (p.lock === 'Lightning Coil') {
     // Aim at the thickest bunch of enemies and charge while lined up.
     const shot = coilShot(state);
@@ -398,8 +394,8 @@ export function updateBot(p, state, dt) {
       const gunUseless = (p.gunIdle || 0) > 6 || (mod && mod.broken);
       if (gunUseless) p.gunIdle = 0;
       // Never wander off the helm while there's terrain to steer through.
-      if ((p.lock === 'Helm' || p.lock === 'Gas Valve') && config.COURSE.ENABLED) p.lockLeft = Math.max(p.lockLeft, 1);
-      if (p.lockLeft <= 0 || gunUseless || (urgent > free && p.lock !== 'Helm' && p.lock !== 'Gas Valve' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
+      if (p.lock === 'Helm' && config.COURSE.ENABLED) p.lockLeft = Math.max(p.lockLeft, 1);
+      if (p.lockLeft <= 0 || gunUseless || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;
         p.lockLeft = undefined;
         p.botJob = null;

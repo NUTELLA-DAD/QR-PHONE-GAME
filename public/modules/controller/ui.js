@@ -105,6 +105,7 @@ export function createControllerUI({ network }) {
       $('act').classList.remove('hold');
       $('leave').style.display = 'none';
       $('lever').style.display = 'none';
+      $('plever').style.display = 'none';
       $('atk').style.display = '';
       return;
     }
@@ -124,10 +125,9 @@ export function createControllerUI({ network }) {
     const ammo = next.ammo != null ? ` - ${next.ammo} ${next.kind === 'bombbay' ? 'bombs' : 'shells'}` : '';
     const hint = next.locked
       ? {
-          helm: 'Stick left/right: engines. Stick up/down: small trim engine. Lever: cruise speed (STOP line = hover, below = reverse). Big climbs/drops = the Gas Valve crew!',
+          helm: 'Stick: engines (left/right) and trim (up/down). AHEAD lever: cruise speed (STOP line = hover). PUMP/VENT lever: the gasbag - up = rise, middle = hold, down = drop.',
           gun: 'Drag to aim - it snaps onto nearby targets. Hold FIRE. Needs ammo!',
           lookout: 'Keep watch! Arrows on the TV show what is coming from off screen.',
-          gasvalve: 'You fly her up and down! Stick UP = pump hot steam into the gasbag (rise), DOWN = vent it (drop). Middle = hold.',
           coil: 'Aim with the stick, HOLD to charge the coil (uses lots of steam), let go to fire a giant bolt!',
           shield: 'Point the stick to swing the glowing shield round the ship - it blocks bullets, bats and rockets!',
           bombbay: 'Watch the red ring on the TV - press DROP when it is on a gun or building. Needs ammo crates!',
@@ -146,6 +146,7 @@ export function createControllerUI({ network }) {
     $('leave').style.display = next.locked ? 'block' : 'none';
     const helm = next.locked && next.kind === 'helm';
     $('lever').style.display = helm ? 'block' : 'none';
+    $('plever').style.display = helm ? 'block' : 'none';
     $('atk').style.display = helm ? 'none' : '';
   };
 

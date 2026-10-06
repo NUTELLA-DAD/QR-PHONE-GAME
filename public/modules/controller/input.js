@@ -118,6 +118,52 @@ export function createControllerInput({ network, ui }) {
   lever.addEventListener('pointercancel', leverUp);
   showLever();
 
+  // Helm PRESSURE lever (the gasbag): up = pump hot steam in (she rises), the middle line = hold,
+  // down = vent (she drops). Stays where you leave it. gas runs from -1 to 1.
+  const plever = document.getElementById('plever');
+  const pFill = plever.querySelector('.fill');
+  const pHandle = plever.querySelector('.handle');
+  let gas = 0;
+  let lastGasSend = 0;
+  const showPLever = () => {
+    const pos = (gas + 1) / 2;
+    pFill.style.bottom = Math.min(0.5, pos) * 100 + '%';
+    pFill.style.height = Math.abs(pos - 0.5) * 100 + '%';
+    pFill.style.background = gas < 0 ? '#3a86ff' : '#ff8c42';
+    pHandle.style.top = (1 - pos) * 100 + '%';
+  };
+  const dragPLever = (event) => {
+    const rect = plever.getBoundingClientRect();
+    const pos = Math.max(0, Math.min(1, 1 - (event.clientY - rect.top) / rect.height));
+    gas = pos * 2 - 1;
+    if (Math.abs(gas) < 0.12) gas = 0; // easy to find hold
+    showPLever();
+    const now = performance.now();
+    if (now - lastGasSend > 80) {
+      lastGasSend = now;
+      network.sendInput({ jx, jy, gas });
+    }
+  };
+  let pPointer = null;
+  plever.addEventListener('pointerdown', (event) => {
+    pPointer = event.pointerId;
+    try {
+      plever.setPointerCapture(event.pointerId);
+    } catch {}
+    dragPLever(event);
+  });
+  plever.addEventListener('pointermove', (event) => {
+    if (event.pointerId === pPointer) dragPLever(event);
+  });
+  const pUp = (event) => {
+    if (event.pointerId !== pPointer) return;
+    pPointer = null;
+    network.sendInput({ jx, jy, gas });
+  };
+  plever.addEventListener('pointerup', pUp);
+  plever.addEventListener('pointercancel', pUp);
+  showPLever();
+
   const sendAction = () => network.sendInput({ jx, jy, act: 1 });
 
   const cease = () => {
