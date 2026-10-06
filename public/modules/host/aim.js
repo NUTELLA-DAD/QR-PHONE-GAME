@@ -28,7 +28,7 @@ export function targets(state) {
     }
   }
   for (const k of state.rockets || []) list.push({ kind: 'rocket', obj: k, r: 24, at: (t) => ({ x: k.x + k.vx * t, y: k.y + k.vy * t }) });
-  for (const p of state.bombers || []) list.push({ kind: 'bomber', obj: p, r: 80, at: (t) => ({ x: p.x + p.vx * t, y: p.y }) });
+  for (const p of state.bombers || []) list.push({ kind: 'bomber', obj: p, r: 80, at: (t) => ({ x: p.x + p.vx * t, y: p.y + (p.vy || 0) * t }) });
   for (const b of state.enemyBombs || []) list.push({ kind: 'bomb', obj: b, r: 22, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t + 210 * t * t }) });
   if (state.boss) {
     const z = state.boss;

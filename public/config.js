@@ -12,7 +12,7 @@ export const config = {
   },
   // Camera framing.
   CAMERA: {
-    SHIP_SCREEN_FRACTION: 0.46, // the ship takes at most this much of the screen width (was 0.38; +20% so details read)
+    SHIP_SCREEN_FRACTION: 0.53, // the ship (incl. its long gasbag) takes at most this much of the screen width; the hull reads ~20% bigger than before
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
     SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
@@ -24,12 +24,35 @@ export const config = {
     SHIP_KEEP_IN: 0.5, // the ship's middle stays within this share of the screen from the centre
     FRAME_RANGE: 1900, // threats closer than this are kept in view (farther ones get edge arrows)
   },
+  // Flight model shared by every plane (see planes.js flyPlane). Per-type THRUST / DRAG / STALL_SPEED /
+  // MAX_SPEED / GRAVITY in ENEMY, DOGFIGHT, ESCORT and WAVES override these.
+  FLIGHT: {
+    GRAVITY: 420, // pull along the flight path (pixels per second squared): climbs lose speed, dives gain it
+    THRUST: 360, // engine push back up to cruise speed (less than GRAVITY: a long steep climb runs out of speed)
+    DRAG: 1.6, // how fast a plane sheds speed above cruise (per second)
+    STALL_SHARE: 0.55, // stall speed as a share of cruise (when a type has no STALL_SPEED)
+    MAX_SHARE: 1.4, // top speed as a share of cruise (when a type has no MAX_SPEED)
+    MIN_SHARE: 0.3, // she never drops below this share of cruise
+    STALL_PITCH: 1.3, // how fast the nose drops in a stall (radians per second)
+    STALL_ROOM: 450, // a stall only drops the nose if the ground is at least this far below
+    SLOW_TURN: 0.45, // turn rate share at (nearly) no airspeed; full at cruise, up to FAST_TURN when faster
+    FAST_TURN: 1.15,
+    WOBBLE: 0.9, // heading shake (radians per second) of a plane at death's door (below half hp)
+    PULL: 0.35, // steady drift to one side (radians per second) of a plane at death's door
+    RAM_KICK: 90, // shove a ramming plane gives the ship's up/down speed
+    RAM_CHANCE: 0.35, // chance a nearly dead dogfighter tries to ram the ship on its next pass
+  },
   // Enemy plane: flies a loop around the ship.
   // Enemy fighter: flies like a plane (speed + limited turning), making long strafing runs.
   ENEMY: {
     SPEED: 560, // air speed (pixels per second)
     TURN: 1.1, // normal turn rate (radians per second) - lower = wider turns
     TURN_AVOID: 1.7, // hardest it can turn to dodge rock or the ship
+    THRUST: 300, // heavy: slow to pick speed back up after a climb
+    DRAG: 1.4,
+    STALL_SPEED: 300,
+    MAX_SPEED: 780, // boom and zoom: a dive from height takes her well over cruise
+    ZOOM: 500, // extra height she climbs to after a pass before diving back in
     RUN_FROM: 2300, // how far out it lines up before a run, and extends to after one
     FIRE_RANGE: 1900, // opens fire inside this distance
     BREAK_AT: 600, // breaks away this close to its aim point...
@@ -100,6 +123,10 @@ export const config = {
     SPEED: 470, // air speed
     TURN: 1.7, // turn rate (radians per second): tighter than the big fighter
     TURN_AVOID: 2.4,
+    THRUST: 360, // nimble: a spry engine
+    DRAG: 1.6,
+    STALL_SPEED: 230,
+    MAX_SPEED: 650,
     ORBIT: 1000, // how far out they circle the ship
     ORBIT_SPEED: 0.35, // how fast the circle goes round
     CIRCLE_MIN: 3, // seconds circling before peeling off to attack
@@ -116,6 +143,10 @@ export const config = {
     SPEED: 560,
     TURN: 2.4, // turn rate (radians per second): nimble, but she still swoops
     TURN_AVOID: 3,
+    THRUST: 410, // generous: she recovers speed quickly and rarely stalls
+    DRAG: 1.6,
+    STALL_SPEED: 200,
+    MAX_SPEED: 780,
     ORBIT: 900, // hands off the stick, she circles the ship this far out
     ORBIT_SPEED: 0.45,
     FIRE_RANGE: 1000, // guns fire at anything this close...
@@ -287,8 +318,15 @@ export const config = {
     BATS_PER_LAP: 2, // ...plus this many per extra lap
     BATS_MAX: 14,
     BAT_SPEED: 240,
+    BAT_SEPARATE: 70, // bats this close push apart...
+    BAT_COHESION: 0.6, // ...pull toward the flock's middle (share of speed)...
+    BAT_ALIGN: 0.5, // ...and fly the way their neighbours fly
+    BAT_SEEK: 1.0, // (how strongly they head for the ship, against the flock urges)
+    BAT_FLOCK_RANGE: 400, // who counts as a neighbour
     BAT_IMPACT: 0.4, // how hard a bat bursting on the ship hits (1 = an enemy bullet)
     BOMBER_SPEED: 120,
+    BOMBER_TURN: 0.35, // very wide, slow turns (radians per second)
+    BOMBER_FM: { THRUST: 90, DRAG: 1, GRAVITY: 60, STALL_SPEED: 40, MAX_SPEED: 170 }, // flight model overrides
     BOMBER_HP: 9,
     BOMB_EVERY: 1.8, // seconds between bombs while over the ship
     BOMB_IMPACT: 1.0,

@@ -497,7 +497,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.translate(esc.x, esc.y);
       ctx.rotate(esc.heading);
       if (Math.cos(esc.heading) < 0) ctx.scale(1, -1);
-      ctx.scale(1.45, 1.45);
+      ctx.scale(1.45, 1.45 * (1 - 0.45 * Math.min(1, Math.abs(esc.bank) || 0))); // banking squashes her
       biplane(time, '#8fb37a', '#e8d8a8', false, '#c8372d');
       ctx.restore();
     }
@@ -507,7 +507,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.translate(p.x, p.y);
       ctx.rotate(p.heading || 0);
       if (Math.cos(p.heading || 0) < 0) ctx.scale(1, -1); // keep the wheels down
-      ctx.scale(1.3, 1.3);
+      ctx.scale(1.3, 1.3 * (1 - 0.45 * Math.min(1, Math.abs(p.bank) || 0))); // banking squashes her
       biplane(time, '#b9b1a0', '#b0413e');
       ctx.restore();
     }

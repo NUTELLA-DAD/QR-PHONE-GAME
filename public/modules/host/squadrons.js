@@ -11,7 +11,7 @@ import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, scrollSpeed } from './course.js';
 import { SHIP_SAMPLES } from './course.js';
 import { pop } from './popups.js';
-import { flyPlane, smoke, shootDown, angDiff } from './planes.js';
+import { flyPlane, smoke, shootDown, angDiff, shoveShip } from './planes.js';
 
 const W = config.WAVES;
 const B = SHIP_LAYOUT.bounds;
@@ -68,6 +68,8 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       y,
       baseY: y,
       vx: (fromLeft ? 1 : -1) * W.BOMBER_SPEED,
+      vy: 0,
+      heading: fromLeft ? 0 : Math.PI,
       hp: W.BOMBER_HP + (lap() - 1) * 3,
       maxHp: W.BOMBER_HP + (lap() - 1) * 3,
       dropCd: 0,
@@ -127,6 +129,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         gunCd: 0,
         shots: 0,
         trail: [],
+        bank: 0,
       });
     }
     warn('ENEMY SQUADRON - DOGFIGHTERS INCOMING!');
@@ -163,8 +166,42 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       const dy = ty - b.y;
       const d = Math.hypot(dx, dy) || 1;
       const speed = W.BAT_SPEED + (lap() - 1) * 25;
-      b.vx += ((dx / d) * speed - b.vx) * Math.min(1, dt * 2.5);
-      b.vy += ((dy / d) * speed - b.vy) * Math.min(1, dt * 2.5);
+      // Boids: bats nearby push apart (separation), drift to the flock's middle (cohesion) and match
+      // each other's heading (alignment) on top of heading for the ship.
+      let sx = 0;
+      let sy = 0;
+      let cx = 0;
+      let cy = 0;
+      let ax = 0;
+      let ay = 0;
+      let n = 0;
+      for (const o of state.bats) {
+        if (o === b || o.delay > 0) continue;
+        const ox = o.x - b.x;
+        const oy = o.y - b.y;
+        const od = Math.hypot(ox, oy);
+        if (od > W.BAT_FLOCK_RANGE) continue;
+        n++;
+        cx += ox;
+        cy += oy;
+        ax += o.vx;
+        ay += o.vy;
+        if (od < W.BAT_SEPARATE) {
+          sx -= (ox / (od || 1)) * (1 - od / W.BAT_SEPARATE);
+          sy -= (oy / (od || 1)) * (1 - od / W.BAT_SEPARATE);
+        }
+      }
+      let wx = (dx / d) * W.BAT_SEEK + sx * 1.4;
+      let wy = (dy / d) * W.BAT_SEEK + sy * 1.4;
+      if (n) {
+        const cd = Math.hypot(cx, cy) || 1;
+        const ad = Math.hypot(ax, ay) || 1;
+        wx += (cx / cd) * W.BAT_COHESION * 0.5 + (ax / ad) * W.BAT_ALIGN * 0.5;
+        wy += (cy / cd) * W.BAT_COHESION * 0.5 + (ay / ad) * W.BAT_ALIGN * 0.5;
+      }
+      const wd = Math.hypot(wx, wy) || 1;
+      b.vx += ((wx / wd) * speed - b.vx) * Math.min(1, dt * 2.5);
+      b.vy += ((wy / wd) * speed - b.vy) * Math.min(1, dt * 2.5);
       b.x += b.vx * dt;
       b.y += b.vy * dt + Math.sin(b.phase) * 40 * dt;
       b.y = keepClear(state, b.x, b.y, 30);
@@ -179,9 +216,11 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
 
   const updateBombers = (dt) => {
     for (const p of state.bombers) {
-      p.x += p.vx * dt;
       p.hit = Math.max(0, p.hit - dt);
-      p.y += (keepClear(state, p.x, p.baseY, 140, 0, 400) - p.y) * Math.min(1, dt * 2);
+      // A heavy plane: it holds its course with very wide, slow turns, climbing and dipping over the terrain.
+      const dir = Math.cos(p.heading) >= 0 ? 1 : -1;
+      const ax = p.x + dir * 700;
+      flyPlane(state, p, ax, keepClear(state, ax, p.baseY, 140, 0, 400), dt, { speed: W.BOMBER_SPEED, turn: W.BOMBER_TURN, turnAvoid: W.BOMBER_TURN * 1.5, fm: W.BOMBER_FM, noScroll: true });
       // Bombs away while over the ship.
       if (Math.abs(p.x - 800) < 950 && (p.dropCd -= dt) <= 0 && !state.ship.down) {
         p.dropCd = W.BOMB_EVERY;
@@ -220,7 +259,9 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         if (p.modeT <= 0) {
           p.mode = 'attack';
           p.shots = D.BURST;
-          p.aim = { dx: rand(-450, 450), dy: rand(-150, 150) };
+          // A nearly dead dogfighter sometimes gives up on the pass and rams.
+          p.ram = p.hp <= 1 && p.hp < p.max * 0.5 && Math.random() < config.FLIGHT.RAM_CHANCE;
+          p.aim = p.ram ? { dx: 0, dy: 0 } : { dx: rand(-450, 450), dy: rand(-150, 150) };
         }
       } else if (p.mode === 'attack') {
         // Dive at the ship, guns blazing, then break off before hitting it.
@@ -229,7 +270,9 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         const dist = Math.hypot(tx - p.x, ty - p.y);
         const ahead = 1.0 * D.SPEED;
         const soon = nearShip(p.x + Math.cos(p.heading) * ahead, p.y + Math.sin(p.heading) * ahead, 200);
-        if (soon || dist < 420) {
+        const passed = Math.cos(p.heading) * (tx - p.x) + Math.sin(p.heading) * (ty - p.y) < 0;
+        if (p.ram ? passed && dist > 500 : soon || dist < 420) {
+          p.ram = false;
           p.mode = Math.random() < D.LOOP_CHANCE ? 'loop' : 'extend';
           p.modeT = p.mode === 'loop' ? (Math.PI * 2) / D.TURN : 1.6;
           p.loopDir = Math.cos(p.heading) >= 0 ? -1 : 1; // pull up and over
@@ -265,7 +308,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
           p.orbit = Math.atan2((p.y - mid.y) / 0.75, (p.x - mid.x) / 1.4);
         }
       }
-      flyPlane(state, p, tx, ty, dt, { speed: D.SPEED, turn: D.TURN, turnAvoid: D.TURN_AVOID, nearShip, midY: mid.y, forceTurn });
+      flyPlane(state, p, tx, ty, dt, { speed: D.SPEED, turn: D.TURN, turnAvoid: D.TURN_AVOID, nearShip: p.ram ? null : nearShip, midY: mid.y, forceTurn, fm: D, max: p.max });
       smoke(p, p.max, puff);
       if (inRock(state, p.x, p.y)) {
         p.hp = 0;
@@ -280,6 +323,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         p.hp = 0;
         puff(p.x, p.y, '#ff5a1f', 22);
         impact(p.x, p.y + state.ship.alt, config.IMPACT.WRECK_SMALL);
+        shoveShip(state, p, p.ram ? 1.5 : 1);
         warn('A DOGFIGHTER RAMMED US!', 2);
       }
     }

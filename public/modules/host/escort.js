@@ -34,7 +34,7 @@ export function createEscort({ state, puff, phoneFx }) {
   const launch = () => {
     const s = state.escort;
     const d = dockPoint();
-    Object.assign(s, { docked: false, flying: true, returning: false, x: d.x, y: d.y + 20, heading: 0.5, trail: [], orbit: Math.PI / 2 });
+    Object.assign(s, { docked: false, flying: true, returning: false, x: d.x, y: d.y + 20, heading: 0.5, trail: [], orbit: Math.PI / 2, air: null, stalled: false, bank: 0 });
     puff(d.x, d.y, '#ffffff', 10);
   };
 
@@ -102,6 +102,8 @@ export function createEscort({ state, puff, phoneFx }) {
       turnAvoid: E.TURN_AVOID,
       nearShip: s.returning ? null : nearShip,
       midY: mid.y,
+      fm: E,
+      max: s.max,
     });
     smoke(s, s.max, puff);
 

@@ -186,6 +186,7 @@ export function createRenderer({ ctx, state, canvas }) {
     const heading = state.enemy.heading ?? Math.atan2(state.enemy.vy, state.enemy.vx || 1);
     ctx.rotate(heading);
     if (Math.cos(heading) < 0) ctx.scale(1, -1);
+    ctx.scale(1, 1 - 0.45 * Math.min(1, Math.abs(state.enemy.bank) || 0)); // banking squashes her
     if (sprites.plane(ctx, 'fighter', time)) {
       ctx.restore();
       return;

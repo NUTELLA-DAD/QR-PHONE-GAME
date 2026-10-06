@@ -4,7 +4,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, groundAt, ceilAt, scrollSpeed } from './course.js';
 import { pop } from './popups.js';
-import { flyPlane, smoke, shootDown, updateChutes } from './planes.js';
+import { flyPlane, smoke, shootDown, updateChutes, shoveShip } from './planes.js';
 
 const B = SHIP_LAYOUT.bounds;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -54,6 +54,8 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     const side = Math.random() < 0.5 ? -1 : 1;
     e.hp = e.max = 5 + Math.floor(crew() / 4);
     e.trail = [];
+    e.air = e.stalled = e.pullDir = null;
+    e.bank = 0;
     e.x = mid.x + side * F.RUN_FROM;
     e.y = mid.y + rand(-700, 200);
     e.heading = side > 0 ? Math.PI : 0;
@@ -67,7 +69,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     const groundGap = groundAt(state.course, mid.x) - (B.y1 - state.ship.alt);
     const over = e.y < mid.y || groundGap < 700 || Math.random() < 0.5;
     e.mode = 'extend';
-    e.wp = { x: mid.x - e.side * F.RUN_FROM, y: over ? B.y0 - state.ship.alt - rand(500, 900) : B.y1 - state.ship.alt + rand(350, 550) };
+    e.wp = { x: mid.x - e.side * F.RUN_FROM, y: over ? B.y0 - state.ship.alt - rand(500, 900) - F.ZOOM : B.y1 - state.ship.alt + rand(350, 550) };
   };
 
   const crashFighter = (e, text) => {
@@ -104,7 +106,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       ty = e.wp.y;
       if (Math.hypot(tx - e.x, ty - e.y) < 350 || Math.abs(e.x - mid.x) > F.RUN_FROM + 400) startRun(e);
     }
-    flyPlane(state, e, tx, ty, dt, { speed: F.SPEED, turn: F.TURN, turnAvoid: F.TURN_AVOID, nearShip, midY: mid.y });
+    flyPlane(state, e, tx, ty, dt, { speed: F.SPEED, turn: F.TURN, turnAvoid: F.TURN_AVOID, nearShip, midY: mid.y, fm: F, max: e.max });
     const course = state.course;
     smoke(e, e.max || 5, puff);
     // Flew into the rock: it crashes.
@@ -117,6 +119,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     // Flew into the ship: it crashes, and that hurts.
     if (!state.ship.down && touches(e.x, e.y, 30)) {
       impact(e.x, e.y + state.ship.alt, config.IMPACT.PLANE_CRASH);
+      shoveShip(state, e, 1.5);
       crashFighter(e, 'ENEMY PLANE CRASHED INTO US!');
       return;
     }
