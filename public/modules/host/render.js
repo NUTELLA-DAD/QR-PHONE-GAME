@@ -299,9 +299,9 @@ export function createRenderer({ ctx, state, canvas }) {
     for (const t of targets(state)) {
       const p = t.at(0);
       if (!p || !Number.isFinite(p.x)) continue;
-      const r = t.r * (2.4 + 0.3 * Math.sin(time * 6 + p.x * 0.01));
+      const r = t.r * (1.9 + 0.2 * Math.sin(time * 6 + p.x * 0.01));
       const g = ctx.createRadialGradient(p.x, p.y, t.r * 0.3, p.x, p.y, r);
-      g.addColorStop(0, 'rgba(255,60,80,.5)');
+      g.addColorStop(0, 'rgba(255,60,80,.3)');
       g.addColorStop(1, 'rgba(255,60,80,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -579,10 +579,11 @@ export function createRenderer({ ctx, state, canvas }) {
       }
       g.putImageData(img, 0, 0);
     }
-    const w = 420;
-    const h = Math.min(170, (w * map.H) / map.W);
-    const x0 = 800 - w / 2;
-    const y0 = 14;
+    // (Top-right corner, small: out of the way of the ship.)
+    const w = 300;
+    const h = Math.min(120, (w * map.H) / map.W);
+    const x0 = 1600 - w - 22;
+    const y0 = 16;
     ctx.fillStyle = 'rgba(241,226,184,.92)';
     ink();
     ctx.lineWidth = 4;
@@ -745,14 +746,21 @@ export function createRenderer({ ctx, state, canvas }) {
     }
 
     if (state.ev.warn > 0) {
-      ctx.font = '900 44px Georgia';
-      ctx.textAlign = 'center';
-      ctx.lineWidth = 8;
-      ctx.strokeStyle = '#fff';
+      // A compact message bar along the bottom (clear of the HUD and the ship), fading out.
       const text = state.ev.warnText || 'BOARDERS ON THE CATWALK!';
-      ctx.strokeText(text, 800, 170);
+      ctx.font = '800 24px Georgia';
+      const w = Math.min(1100, ctx.measureText(text).width + 60);
+      ctx.globalAlpha = Math.min(1, state.ev.warn * 2);
+      ctx.fillStyle = 'rgba(27,20,16,.82)';
+      rrect(800 - w / 2, 832, w, 44, 22);
+      ctx.fill();
       ctx.fillStyle = '#e63946';
-      ctx.fillText(text, 800, 170);
+      rrect(800 - w / 2, 832, 14, 44, 7);
+      ctx.fill();
+      ctx.fillStyle = '#f3ead6';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, 800 + 7, 862);
+      ctx.globalAlpha = 1;
       ink();
     }
     drawUpgradeIcons();
@@ -764,7 +772,7 @@ export function createRenderer({ ctx, state, canvas }) {
 
   // Comic-book words: pop in big, settle, then float up and fade.
   const drawPopups = (zoom) => {
-    const screen = Math.max(1, 0.45 / zoom); // keep them readable when zoomed out
+    const screen = Math.max(1, 0.3 / zoom); // keep them readable when zoomed out (but small)
     for (const p of state.popups || []) {
       const grow = p.t < 0.12 ? 0.4 + (p.t / 0.12) * 0.8 : 1.2 - Math.min(0.2, (p.t - 0.12) * 0.6);
       const alpha = p.t > 0.75 ? Math.max(0, 1 - (p.t - 0.75) / 0.35) : 1;
@@ -773,10 +781,10 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.rotate(p.tilt);
       ctx.scale(grow * p.size * screen, grow * p.size * screen);
       ctx.globalAlpha = alpha;
-      ctx.font = '900 46px Georgia';
+      ctx.font = '900 32px Georgia';
       ctx.textAlign = 'center';
       ctx.lineJoin = 'round';
-      ctx.lineWidth = 12;
+      ctx.lineWidth = 8;
       ctx.strokeStyle = config.INK;
       ctx.strokeText(p.text, 0, 0);
       ctx.fillStyle = p.color;

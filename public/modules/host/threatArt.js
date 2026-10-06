@@ -230,7 +230,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       const sy = height / 2 + (it.y - view.cy) * view.zoom;
       if (sx > 0 && sx < width && sy > 0 && sy < height) continue;
       const ax = Math.max(margin, Math.min(width - margin, sx));
-      const ay = Math.max(margin, Math.min(height - margin, sy));
+      const ay = Math.max(height * 0.2, Math.min(height - margin * 2, sy)); // (clear of the HUD at the top and the message bar)
       const ang = Math.atan2(sy - ay, sx - ax);
       ctx.save();
       ctx.translate(ax, ay);

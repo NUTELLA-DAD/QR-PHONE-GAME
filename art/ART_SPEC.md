@@ -245,3 +245,22 @@ real art arrives, so the pieces line up.
 Put the PNGs in the folders above (inside `art/sprites/`) and tell me. I'll check each piece,
 strip magenta backgrounds, set the joint points, and you'll see it in the game the next time
 you start it. Anything missing keeps its placeholder, so nothing ever breaks.
+
+## Style guide (the whole game)
+
+Simple and uncluttered. The colours live in `public/config.js` under `PALETTE`.
+
+- **Backgrounds stay calm:** sky, distant hills, rock and caves are flat, muted colours with only
+  soft bands - no speckles or busy detail. Caves are a plain dark backdrop.
+- **The action is bold:** the ship (warm wood and cream), the crew (their bright scarf colours
+  and a colour marker over each head) and enemies (red accents, with a soft red glow) are the
+  brightest, highest-contrast things on screen.
+- **Colour means something:** red = enemies and their attacks/warnings; gold = goals, pickups
+  and supplies; cyan = our shield and Lightning Coil; crew shots glow in the shooter's colour.
+- **Warnings come before attacks:** a glow or a line (turret glow and dotted aim line, sniper
+  line, gun-port glow, raider wind-up flash) - always in red.
+- **Screen layout:** HUD top-left, minimap top-right, messages in one small bar at the bottom,
+  join code bottom-right. Nothing sits over the middle of the screen, where the ship stays.
+- **Text on the playfield is small:** comic pop-up words are short and few; station names show
+  only on the start screen (in flight, each phone says where its player is).
+- One ink outline weight (about 4-6 px) for everything drawn.

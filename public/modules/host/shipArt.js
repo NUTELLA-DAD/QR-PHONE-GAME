@@ -621,7 +621,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     drawVents(time);
     drawConnectors();
     drawCatwalk();
-    drawLabels();
+    if (state.phase === 'lobby') drawLabels(); // (in flight each phone says where you are)
     drawGasHoles(time);
     drawModuleStatus(time);
   };

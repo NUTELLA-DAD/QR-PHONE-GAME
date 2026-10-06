@@ -52,9 +52,12 @@ export function createCamera() {
     const halfH = height / 2 / zoom;
     const clampTo = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v)));
     // (The ship always stays well inside the frame - threats that don't fit get edge arrows.)
+    // (The ship's middle always stays within the middle half of the screen.)
     const keep = C.SHIP_KEEP_IN;
-    const cx = clampTo((x0 + x1) / 2, b.x1 - halfW * keep, b.x0 + halfW * keep);
-    const cy = clampTo((y0 + y1) / 2, b.y1 - alt + PAD_Y - halfH * keep, b.y0 - alt - PAD_Y + halfH * keep);
+    const mx = (b.x0 + b.x1) / 2;
+    const my = (b.y0 + b.y1) / 2 - alt;
+    const cx = clampTo((x0 + x1) / 2, mx - halfW * keep, mx + halfW * keep);
+    const cy = clampTo((y0 + y1) / 2, my - halfH * keep, my + halfH * keep);
     return { cx, cy, zoom };
   };
 

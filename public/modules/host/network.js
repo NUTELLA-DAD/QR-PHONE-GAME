@@ -62,6 +62,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   const castButton = document.getElementById('castoff');
   const showCastButton = () => {
     castButton.style.display = simulation.state.phase === 'lobby' ? '' : 'none';
+    document.getElementById('join').classList.toggle('flying', simulation.state.phase !== 'lobby');
   };
   const castOff = () => {
     simulation.castOff();

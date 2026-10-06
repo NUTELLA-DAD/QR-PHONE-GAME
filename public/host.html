@@ -8,6 +8,11 @@ canvas{display:block;width:100vw;height:100vh}
 #code{font-size:46px;font-weight:900;letter-spacing:6px;line-height:1}
 #url{font-size:12px;max-width:190px;word-break:break-all;margin-top:4px}
 #count{font-weight:700;margin-top:6px}
+/* In flight the join panel shrinks to a small code badge in the corner. */
+#join.flying{top:auto;bottom:14px;padding:6px 12px;border-width:3px;box-shadow:3px 4px 0 #1b1410;opacity:.9}
+#join.flying img,#join.flying #url,#join.flying button{display:none}
+#join.flying #code{font-size:22px;letter-spacing:3px}
+#join.flying #count{font-size:12px;margin-top:2px}
 button{margin-top:8px;font:inherit;font-weight:700;border:3px solid #1b1410;background:#e63946;color:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
 </style></head><body>
 <canvas id="c"></canvas>

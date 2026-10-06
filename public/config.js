@@ -11,11 +11,11 @@ export const config = {
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
     SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
     ZOOM_SMOOTHING: 0.6, // how quickly it zooms (low = calm, no pumping)
-    LEAD_TIME: 0.9, // look this many seconds ahead of where she's heading
+    LEAD_TIME: 0.6, // look this many seconds ahead of where she's heading
     LEAD_SMOOTHING: 1.2,
     SHAKE_SCALE: 14, // screen shake per unit of 'shake'...
     SHAKE_MAX: 9, // ...but never more than this many pixels
-    SHIP_KEEP_IN: 0.8, // the ship stays inside this share of the screen from the middle
+    SHIP_KEEP_IN: 0.5, // the ship's middle stays within this share of the screen from the centre
     FRAME_RANGE: 1900, // threats closer than this are kept in view (farther ones get edge arrows)
   },
   // Enemy plane: flies a loop around the ship.
@@ -355,6 +355,17 @@ export const config = {
   // When the hull gives out the ship breaks apart and the whole game starts over at the mast.
   WRECK: {
     TIME: 8, // seconds of breaking apart before the restart
+  },
+  // The look of the whole game, in one place. Simple style: calm, muted backgrounds (sky, rock,
+  // caves); the ship in warm wood and cream; crew in their bright scarf colours; enemies and
+  // their attacks in red; friendly shots in the shooter's colour; pickups and goals in gold.
+  PALETTE: {
+    rock: '#8a7560',
+    cave: '#2f2b36',
+    enemy: '#e63946',
+    gold: '#ffd23f',
+    ink: '#1b1410',
+    panel: '#f3ead6',
   },
   // Old-film effects. All OFF (the user found them unpleasant). Raise a number or set
   // LINE_BOIL to true to bring one back.

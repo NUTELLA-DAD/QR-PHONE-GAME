@@ -16,6 +16,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
   // and the scenery stay put as the ground scrolls past instead of shimmering.
   const STEP = 20;
   const HAZE = 'rgba(200,214,228,.32)'; // aerial haze over the rock (higher = calmer background)
+  const PALETTE = config.PALETTE;
   const hash = (i, salt = 0) => {
     const v = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
     return v - Math.floor(v);
@@ -84,20 +85,20 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     const c = document.createElement('canvas');
     c.width = c.height = 400;
     const g = c.getContext('2d');
-    g.fillStyle = '#7d6148';
+    g.fillStyle = PALETTE.rock;
     g.fillRect(0, 0, 400, 400);
-    for (let k = 0; k < 8; k++) {
-      g.strokeStyle = k % 2 ? 'rgba(60,40,26,.35)' : 'rgba(176,140,96,.35)';
-      g.lineWidth = 18 + (k % 3) * 8;
+    for (let k = 0; k < 4; k++) {
+      g.strokeStyle = k % 2 ? 'rgba(40,30,25,.12)' : 'rgba(255,240,220,.08)';
+      g.lineWidth = 34;
       g.beginPath();
       for (let x = 0; x <= 400; x += 20) {
-        const y = k * 50 + 20 + Math.sin((x / 400) * Math.PI * 2 + k) * 10;
+        const y = k * 100 + 40 + Math.sin((x / 400) * Math.PI * 2 + k) * 12;
         if (x === 0) g.moveTo(x, y);
         else g.lineTo(x, y);
       }
       g.stroke();
     }
-    for (let k = 0; k < 26; k++) {
+    for (let k = 0; k < 0; k++) {
       const h = hash(k, 40);
       g.fillStyle = h < 0.5 ? 'rgba(60,45,35,.6)' : 'rgba(170,145,120,.6)';
       g.beginPath();
@@ -131,14 +132,14 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     const Y = (j) => j * C;
 
     // Cave backdrop: dark, so ships, enemies and shots stand out.
-    ctx.fillStyle = '#2b2733';
+    ctx.fillStyle = PALETTE.cave;
     const bx0 = Math.max(X(0), wx0 - C);
     const bx1 = Math.min(X(map.W), wx1 + C);
     const by0 = Math.max(0, top);
     const by1 = Math.min(map.H * C, bottom);
     if (!map.open && bx1 > bx0 && by1 > by0) ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
     ctx.fillStyle = 'rgba(70,60,80,.5)';
-    for (let i = i0; i <= i1 && !map.open; i += 3) {
+    for (let i = i0; i <= i1 && false; i += 3) {
       for (let j = j0; j <= j1; j += 3) {
         if (hash(i * 131 + j, 51) > 0.35) continue;
         ctx.beginPath();
@@ -217,28 +218,13 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       ctx.lineTo(bx2, by2);
     }
     ctx.stroke();
-    // Tufts on floors.
-    ctx.strokeStyle = '#3f6e30';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    for (const [[ax, ay], [bx2, by2], i, j] of floors) {
-      if (hash(i * 31 + j, 54) > 0.6) continue;
-      const x = (ax + bx2) / 2;
-      const y = (ay + by2) / 2;
-      ctx.moveTo(x - 8, y);
-      ctx.lineTo(x - 12, y - 18);
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + 2, y - 24);
-      ctx.moveTo(x + 8, y);
-      ctx.lineTo(x + 13, y - 16);
-    }
-    ctx.stroke();
+    // (Tufts on floors - off in the simple style.)
     // Open sky: pine trees on the hills.
     if (map.open) {
       ink();
       ctx.lineWidth = 4;
       for (const [[ax, ay], [bx2, by2], i, j] of floors) {
-        if (Math.abs(by2 - ay) > 60 || hash(i * 13 + j, 58) > 0.3) continue;
+        if (Math.abs(by2 - ay) > 60 || hash(i * 13 + j, 58) > 0.14) continue;
         pine((ax + bx2) / 2, (ay + by2) / 2 + 6, 1.2 + hash(i, 59), hash(j, 60) < 0.4);
       }
     }
@@ -247,7 +233,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       const h = hash(i * 17 + j, 55);
       const x = (ax + bx2) / 2;
       const y = (ay + by2) / 2;
-      if (h < 0.35) {
+      if (h < 0.18) {
         const len = 30 + hash(i, 56) * 50;
         ctx.fillStyle = '#6e5646';
         ink();
@@ -259,7 +245,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
-      } else if (h < 0.55) {
+      } else if (h < 0.28) {
         const len = 60 + hash(j, 57) * 140;
         ctx.strokeStyle = '#3f6e30';
         ctx.lineWidth = 6;
@@ -267,7 +253,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.moveTo(x, y);
         ctx.quadraticCurveTo(x + 16, y + len * 0.5, x - 6, y + len);
         ctx.stroke();
-      } else if (h < 0.62) {
+      } else if (false) {
         ctx.fillStyle = 'rgba(120,230,255,.25)';
         ctx.beginPath();
         ctx.arc(x, y + 20, 60, 0, 7);
