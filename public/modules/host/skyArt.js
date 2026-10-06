@@ -16,6 +16,8 @@ const mixRgb = (a, b, t) => {
   return pa.map((v, i) => Math.round(v + (pb[i] - v) * t)).join(',');
 };
 
+// Decorative effects never stop the game, but problems are still reported (pause menu shows the last one).
+const report = (e) => { const list = (globalThis.gameErrors = globalThis.gameErrors || []); if (list.length < 50) list.push('sky: ' + (e && e.message)); };
 export function createSkyArt({ ctx, state }) {
   let now = 0; // seconds, set by the renderer each frame
   const SKY = config.SKY;
@@ -77,6 +79,7 @@ export function createSkyArt({ ctx, state }) {
         ctx.globalAlpha = 1;
       }
     } catch (e) {
+      report(e);
       ctx.globalAlpha = 1;
     }
   };
@@ -107,7 +110,7 @@ export function createSkyArt({ ctx, state }) {
         ctx.lineTo(x - L * 0.36, y + L * 0.08);
         ctx.fill();
       }
-    } catch (e) { /* decorative only */ }
+    } catch (e) { report(e); }
   };
 
   // Small flocks of tiny gull 'v' shapes (static shapes, slowly sliding).
@@ -140,7 +143,7 @@ export function createSkyArt({ ctx, state }) {
         }
       }
       ctx.stroke();
-    } catch (e) { /* decorative only */ }
+    } catch (e) { report(e); }
   };
 
   // ---------- Fog (world space) ----------
@@ -201,7 +204,7 @@ export function createSkyArt({ ctx, state }) {
     if (!FOG.ENABLED || !state.course) return;
     try {
       for (const L of FOG.LAYERS) fogBand(view, width, height, L, 1);
-    } catch (e) { /* decorative only */ }
+    } catch (e) { report(e); }
   };
 
   // Thin fog in front of the rock but behind the ship, plus floating dust in caves.
@@ -211,7 +214,7 @@ export function createSkyArt({ ctx, state }) {
     try {
       if (FOG.ENABLED) fogBand(view, width, height, FOG.FRONT, course.map && !course.map.open ? FOG.FRONT.cave : 1);
       if (CAVE.ENABLED && course.map && !course.map.open) dust(view, width, height);
-    } catch (e) { /* decorative only */ }
+    } catch (e) { report(e); }
   };
 
   // A few slow dust motes on a tile grid fixed to the cave.
@@ -351,6 +354,7 @@ export function createSkyArt({ ctx, state }) {
       ctx.restore();
       return true;
     } catch (e) {
+      report(e);
       try { ctx.restore(); } catch (e2) { /* ignore */ }
       return false;
     }
