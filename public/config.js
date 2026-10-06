@@ -184,6 +184,50 @@ export const config = {
     PLANT_TIME: 2.5, // holding Action at its boiler to set the charge
     FUSE: 8, // seconds to get back before it blows
     CUT_TIME: 7, // seconds its crew need to hack through the rope (they wait 3s first)
+    // -- Her own flight (she has engines + gas lift of her own; positions are offsets from our ship) --
+    START_DX: 2600, // she appears this far ahead of our ship (pixels)...
+    START_DY: 120, // ...and up to this much above or below
+    HOLD_DX: 0, // the station her helmsman tries to hold, relative to our ship (0,0 = broadside off our bow, level)
+    HOLD_DY: 0,
+    DOCK_DX: 250, // "on station" once she is this close to it (sideways) and...
+    DOCK_DY: 150, // ...this close (up/down)
+    MAX_SPEED: 800, // her top forward speed through the world (our top is 560, a bit more in overdrive)
+    MAX_BACK: 250, // her top reverse speed
+    ACCEL_X: 260, // engine push (pixels/s per second): lower = she lags more when we speed up or brake
+    ENGINE_GAIN: 1.4, // how hard she throttles toward the speed she wants (higher = snappier, less overshoot)
+    KX: 0.9, // how strongly she closes a sideways gap (wanted closing speed = KX x gap)
+    MAX_CLOSE: 650, // fastest she will close on her station
+    DRAG_X: 0.15, // with nobody at the helm her engines idle and she coasts to a stop (per second)
+    MAX_VY: 220, // her fastest climb/dive
+    ACCEL_Y: 150, // gas-lift response (pixels/s per second): lower = slower to follow our dives and climbs
+    LIFT_GAIN: 1.5,
+    KY: 1.1, // how strongly she corrects being above/below her station
+    DRAG_Y: 0.8, // vertical drag with nobody at the helm
+    SAG: 25, // with nobody at the helm she slowly sags (pixels/s per second)
+    REACT: 0.8, // seconds her helmsman takes to notice what our ship is doing (bigger = more lag)
+    WOBBLE_X: 70, // she never sits perfectly still: slow sway around her station
+    WOBBLE_Y: 40,
+    ROCK_AVOID: 150, // she shifts this far up/down to keep rock off her hull and gasbag
+    GONE_DIST: 4200, // lost for good (removed) if she gets this far from us in any direction
+    // -- Her broadsides get less accurate the further she is from her station --
+    MISS_BASE: 0.15, // chance a cannonball misses even when perfectly placed
+    MISS_DY: 600, // each this-many pixels above/below the station adds +100% miss chance
+    MISS_FREE_DX: 300, // sideways slop that costs nothing...
+    MISS_DX: 1500, // ...then each this-many pixels adds +100%
+    MISS_MAX: 0.92,
+    // -- Hookshot rope --
+    HOOK_RANGE: 700, // the grapple only catches if the yardarm is this close to our bow
+    SWING_RANGE: 620, // you can only swing across while the rope is hooked and she is this close
+    BOARD_LEN: 470, // the winch reels the rope in to this length (pixels)
+    REEL_SPEED: 45, // reeling speed (pixels per second)
+    SNAP_LEN: 1000, // the rope snaps if the ships get this far apart
+    ROPE_K: 5, // taut rope pulls HER back (accel per pixel of stretch)...
+    ROPE_DAMP: 1.8, // ...and kills the speed she's pulling away at
+    ROPE_MAX_ACC: 700, // strongest rope pull on her
+    TUG_VY: 0.35, // gentle tug on OUR ship's climb speed per pixel of stretch
+    TUG_SPEED: 0.0005, // gentle tug on OUR ship's throttle (fraction of speed per second per pixel of stretch)
+    TUG_CAP: 300, // stretch beyond this adds no more tug on our ship
+    TILT_PER_SPEED: 0.0004, // drawing only: her tilt (radians) per pixel/second of climb (capped at 0.04)
     SWING_TIME: 0.9, // seconds to swing across on the line
     SWING_DIP: 150, // how far below the deck the swing dips
     STOMP_RANGE: 160, // landing on her deck knocks back crew this close

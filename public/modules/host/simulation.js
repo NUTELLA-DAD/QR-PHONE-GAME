@@ -10,7 +10,7 @@ import { createSquadrons } from './squadrons.js';
 import { createEscort } from './escort.js';
 import { createSpecials } from './specials.js';
 import { createCoil } from './coil.js';
-import { createGunship, MAIN_X1 } from './gunship.js';
+import { createGunship, MAIN_X1, GS } from './gunship.js';
 import { createAirborne } from './airborne.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
@@ -542,6 +542,15 @@ export function createSimulation() {
   const gunship = createGunship({ state, puff, impact, credit });
   const weather = createWeather({ state, impact, puff });
   const air = createAirborne({ state, puff, phoneFx });
+  // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
+  const onDeck = () => state.gunship && state.gunship.phase !== 'sinking' && state.gunship.phase !== 'leaving';
+  air.addSurface({
+    id: 'gunship',
+    y: () => (onDeck() ? GS.deckY + state.gunship.dy : null),
+    x0: () => (onDeck() ? GS.x0 - 20 + state.gunship.dx : 0),
+    x1: () => (onDeck() ? GS.x1 + 40 + state.gunship.dx : 0),
+    onLand: (p) => gunship.land(p),
+  });
 
   const emitPlayerUi = (playerId, ui) => {
     if (socket && !state.players[playerId]?.bot) socket.emit('host:ui', { id: playerId, ui });
@@ -723,17 +732,17 @@ export function createSimulation() {
           player.air = true;
           player.vy = M.JUMP_VY;
           player.jz = 0;
-          air.vault(player); // outside deck + stick held down: hop over the rail into free flight
+          if (!player.onGunship) air.vault(player); // outside deck + stick held down: hop over the rail into free flight
         }
         player.jumpQ = false;
         if (player.fly) {
           air.step(player, dt); // free flight (off a deck end, over the rail, or thrown)
         } else if (player.air) {
           // Steer (a bit less than on the ground), no ladders while airborne.
-          moveWalker(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED);
+          (player.onGunship ? gunship.walk : moveWalker)(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED);
           player.vy -= M.JUMP_GRAVITY * dt;
           player.jz += player.vy * dt;
-          if (!air.edgeCheck(player, dt, true)) {
+          if (player.onGunship || !air.edgeCheck(player, dt, true)) {
             if (player.jz <= 0) {
               player.jz = 0;
               player.vy = 0;
@@ -743,11 +752,13 @@ export function createSimulation() {
               puff(player.x, player.y - 4, '#d9cbb0', 3);
             }
           }
+        } else if (player.onGunship) {
+          gunship.walk(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED); // aboard a gunship she carries them
         } else {
           moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED);
           air.edgeCheck(player, dt, false); // walking off the end of an outside deck
         }
-        if (!player.fly) air.standing(player, dt);
+        if (!player.fly && !player.onGunship) air.standing(player, dt);
         player.moving = !player.climb && Math.abs(player.jx) > 0.15;
         const act = interaction(player, station);
         player.act = act;
@@ -787,10 +798,11 @@ export function createSimulation() {
           player.actQ = false;
           const type = act ? act.type : null;
           if (type === 'hook') {
-            gunship.fireHook();
-            stat(player, 'boarding');
-            puff(player.x + 200, player.y - 60 - state.ship.alt, '#ffe9a8', 8);
-            phoneFx(player, 'Hooked! Press Action at the bow to swing across!', [40, 30, 40]);
+            if (gunship.fireHook()) {
+              stat(player, 'boarding');
+              puff(player.x + 200, player.y - 60 - state.ship.alt, '#ffe9a8', 8);
+              phoneFx(player, 'Hooked! Press Action at the bow to swing across!', [40, 30, 40]);
+            } else phoneFx(player, 'Too far - the hook falls short! Get closer.', [40, 30, 40]);
           } else if (type === 'swing') gunship.swing(player);
           else if (type === 'rack') player.carry = player.carry === act.obj.kind ? null : act.obj.kind;
           else if (type === 'vent') {

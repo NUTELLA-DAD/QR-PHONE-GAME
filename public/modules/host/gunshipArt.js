@@ -1,21 +1,63 @@
-// Drawing for an enemy gunship alongside (ship coordinates - drawn inside the ship's transform),
-// its crew at their posts, the swing line from its yardarm, and the charge ticking on its boiler.
-import { GS, POSTS, ANCHOR, MAIN_X1 } from './gunship.js';
+// Drawing for an enemy gunship (ship coordinates - drawn inside the ship's transform). She is drawn
+// in her own home frame, shifted to wherever she is now (g.dx, g.dy) with a slight tilt from her
+// climb/dive. Also: her crew, the grapple rope to our bow (sagging when slack, straight when taut),
+// the swing line, and the charge ticking on her boiler.
+import { GS, POSTS, ANCHOR, BOW } from './gunship.js';
+import { config } from '../../config.js';
 
 export function createGunshipArt({ ctx, state, ink }) {
   return (time) => {
     const g = state.gunship;
     if (!g) return;
-    const o = g.offset + (g.phase === 'sinking' ? 0 : 0);
+    const o = 0; // (everything below is in her home frame; the translate puts her where she is)
+    const dx = g.dx || 0;
+    const dy = g.dy || 0;
     const sink = g.phase === 'sinking' ? g.sink * g.sink * 120 : 0;
     const x0 = GS.x0 + o;
     const x1 = GS.x1 + o;
     const y = GS.deckY + sink;
     const cx = (x0 + x1) / 2;
+    // The rope and swing line are drawn in ship coordinates, after her own transform is undone.
+    const drawRope = () => {
+      if (!g.rope) return;
+      const ax = ANCHOR.x + dx;
+      const ay = ANCHOR.y + dy + sink;
+      const swingers = Object.values(state.players).filter((p) => p.swing);
+      ctx.strokeStyle = '#d8c79a';
+      ctx.lineWidth = 2.8;
+      for (const p of swingers) {
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(p.x, p.y - 90);
+        ctx.stroke();
+      }
+      // The grapple rope itself: straight when taut, sagging when slack.
+      const len = Math.hypot(ax - BOW.x, ay - BOW.y);
+      const slack = Math.max(0, (g.ropeLen || len) - len);
+      const sag = Math.min(160, Math.sqrt(slack * 400)) * (1 - 0.9 * Math.min(1, g.tension || 0));
+      ctx.strokeStyle = g.tension > 0.6 && Math.sin(time * 40) > 0 ? '#ffffff' : '#d8c79a'; // about to snap: it flickers
+      ctx.lineWidth = g.tension > 0 ? 3.6 : 3;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.quadraticCurveTo((ax + BOW.x) / 2, (ay + BOW.y) / 2 + sag * 2, BOW.x, BOW.y);
+      ctx.stroke();
+      // The grapple head on her yardarm.
+      ctx.fillStyle = '#8a8a8a';
+      ctx.beginPath();
+      ctx.arc(ax, ay, 8, 0, 7);
+      ctx.fill();
+    };
+    // Tilt: a slight nose-up when she climbs, nose-down when she dives (her bow points at us, to the left).
+    const tilt = Math.max(-0.04, Math.min(0.04, (g.wvy || 0) * config.GUNSHIP.TILT_PER_SPEED));
     ctx.save();
+    ctx.translate(dx, dy);
     if (sink) {
       ctx.translate(cx, y);
       ctx.rotate(g.sink * 0.15);
+      ctx.translate(-cx, -y);
+    } else if (tilt) {
+      ctx.translate(cx, y);
+      ctx.rotate(tilt);
       ctx.translate(-cx, -y);
     }
     // Gasbag.
@@ -194,24 +236,6 @@ export function createGunshipArt({ ctx, state, ink }) {
         ctx.fillRect(px - 18 + k * 13, y - 140, 9, 9);
       }
     }
-    // The swing line: tied off at our bow, or carrying someone across.
-    if (g.rope) {
-      const swingers = Object.values(state.players).filter((p) => p.swing);
-      ctx.strokeStyle = '#d8c79a';
-      ctx.lineWidth = 2.8;
-      for (const p of swingers) {
-        ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(p.x, p.y - 90);
-        ctx.stroke();
-      }
-      if (!swingers.length) {
-        ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.quadraticCurveTo((ax + MAIN_X1) / 2, y - 60, MAIN_X1 - 10, y - 50);
-        ctx.stroke();
-      }
-    }
     // Health bar over the gasbag.
     if (g.phase !== 'sinking') {
       ctx.fillStyle = '#2b2622';
@@ -239,5 +263,6 @@ export function createGunshipArt({ ctx, state, ink }) {
       }
     }
     ctx.restore();
+    drawRope();
   };
 }

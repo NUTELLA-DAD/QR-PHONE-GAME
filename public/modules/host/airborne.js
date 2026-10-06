@@ -108,7 +108,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const shove = (power, hx) => {
     if (power < A.STAGGER_POWER) return;
     for (const p of Object.values(state.players)) {
-      if (p.bot || p.fly || p.air || p.fall || p.conn != null || p.lock || p.ko > 0 || p.swing || p.d == null) continue; // bots keep their footing (balance)
+      if (p.bot || p.fly || p.air || p.fall || p.conn != null || p.lock || p.ko > 0 || p.swing || p.onGunship || p.d == null) continue; // bots keep their footing (balance)
       const pl = P[p.d];
       if (!outsideAt(p.d, p.x)) continue;
       const dir = Math.abs(p.x - hx) < 8 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(p.x - hx);
@@ -157,6 +157,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       let best = null;
       for (const s of surfaces()) {
         const sy = val(s.y);
+        if (sy == null) continue; // (a surface that isn't there right now, e.g. no gunship)
         if (s.onLand === undefined && s.d === undefined) continue;
         if (p.x < val(s.x0) || p.x > val(s.x1)) continue;
         if (py < sy && p.y >= sy && (!best || sy < best.y)) best = { s, y: sy };
@@ -167,7 +168,9 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       }
     }
     // Overboard: well below the ship or far past either end.
-    if (p.y > A.OVERBOARD_Y || p.x < -A.OVERBOARD_X || p.x > 1600 + A.OVERBOARD_X) {
+    // (Past the bow counts only beyond any other deck out there, e.g. a gunship alongside.)
+    const farX = Math.max(1600, ...extra.map((s) => (val(s.y) == null ? 0 : val(s.x1)))) + A.OVERBOARD_X;
+    if (p.y > A.OVERBOARD_Y || p.x < -A.OVERBOARD_X || p.x > farX) {
       p.fly = false;
       p.air = false;
       p.fall = true; // the existing fall -> medical bay respawn takes it from here

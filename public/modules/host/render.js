@@ -174,8 +174,9 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.font = '900 22px Georgia';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#a8443f';
-        ctx.fillText('KO!', player.x, player.y - 80);
-        drawBar(player.x, player.y - 70, player.prog);
+        const gs = player.onGunship && state.gunship;
+        ctx.fillText('KO!', player.x + (gs ? gs.dx : 0), player.y + (gs ? gs.dy : 0) - 80);
+        drawBar(player.x + (gs ? gs.dx : 0), player.y + (gs ? gs.dy : 0) - 70, player.prog);
       }
     }
   };
@@ -1582,18 +1583,28 @@ export function createRenderer({ ctx, state, canvas }) {
       drawHazards(time / 1000);
       threatArt.drawBombs(time / 1000);
       drawHighlights(time / 1000);
-      [...Object.values(state.players).filter((p) => !(p.lock === 'Escort Fighter' && state.escort && state.escort.flying)), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => drawPlayer(player, time / 1000));
+      [...Object.values(state.players).filter((p) => !(p.lock === 'Escort Fighter' && state.escort && state.escort.flying)), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => {
+        // Crew aboard a gunship are stored in HER frame: draw them where she is.
+        if (player.onGunship && state.gunship) {
+          ctx.save();
+          ctx.translate(state.gunship.dx, state.gunship.dy);
+          drawPlayer(player, time / 1000);
+          ctx.restore();
+        } else drawPlayer(player, time / 1000);
+      });
       // Each crew member's colour marker above their head, easy to spot from the sofa.
       for (const p of Object.values(state.players)) {
         if (!p.color || p.connected === false) continue;
-        const y = p.y - (p.ko > 0 ? 90 : 165) + Math.sin(time / 300 + p.x) * 4;
+        const gs = p.onGunship && state.gunship;
+        const y = p.y + (gs ? gs.dy : 0) - (p.ko > 0 ? 90 : 165) + Math.sin(time / 300 + p.x) * 4;
         ink();
         ctx.lineWidth = 4;
         ctx.fillStyle = p.color;
         ctx.beginPath();
-        ctx.moveTo(p.x - 16, y - 20);
-        ctx.lineTo(p.x + 16, y - 20);
-        ctx.lineTo(p.x, y);
+        const px = p.x + (gs ? gs.dx : 0);
+        ctx.moveTo(px - 16, y - 20);
+        ctx.lineTo(px + 16, y - 20);
+        ctx.lineTo(px, y);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
