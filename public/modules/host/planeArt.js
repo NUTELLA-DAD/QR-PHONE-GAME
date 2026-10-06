@@ -70,3 +70,19 @@ export function drawBiplane(ctx, time, body, trim, wreck, pilot = '#efe9dc') {
     ctx.fill();
   }
 }
+
+// A small tail number on a friendly plane (drawn in the plane's own frame; `flip` = she is drawn
+// mirrored so the text must be mirrored back). Never throws.
+export function drawTailNumber(ctx, num, flip = false) {
+  try {
+    ctx.save();
+    ctx.translate(-33, -1);
+    if (flip) ctx.scale(1, -1);
+    ctx.fillStyle = '#2b2622';
+    ctx.font = '700 12px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(num), 0, 0);
+    ctx.restore();
+  } catch (e) { /* drawing must never throw */ }
+}

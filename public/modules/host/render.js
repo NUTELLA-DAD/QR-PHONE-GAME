@@ -1590,7 +1590,7 @@ export function createRenderer({ ctx, state, canvas }) {
       drawHazards(time / 1000);
       threatArt.drawBombs(time / 1000);
       drawHighlights(time / 1000);
-      [...Object.values(state.players).filter((p) => !(p.lock === 'Escort Fighter' && state.escort && state.escort.flying)), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => {
+      [...Object.values(state.players).filter((p) => !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying))), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => {
         // Crew aboard a gunship are stored in HER frame: draw them where she is.
         if (player.onGunship && state.gunship) {
           ctx.save();

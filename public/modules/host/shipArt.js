@@ -3,7 +3,7 @@
 // Everything is in ship coordinates; render.js has already shifted for altitude.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
-import { drawBiplane } from './planeArt.js';
+import { drawBiplane, drawTailNumber } from './planeArt.js';
 
 const L = SHIP_LAYOUT;
 const P = L.platforms;
@@ -265,19 +265,23 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
   // The fighter hatch under the hull, and the escort fighter hanging on its hook when she's home
   // (a ghostly outline while a new one is being built).
   const drawHangar = (time) => {
-    const hp = P.find((q) => q.id === 'hangar');
-    const dock = L.escortDock;
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(hp.x0, hp.y, hp.x1 - hp.x0, 8);
-    const esc = state.escort;
-    if (!esc || esc.flying) return;
-    line([[dock.x, hp.y + 8], [dock.x, dock.y - 32]], 5, INK);
-    ctx.save();
-    ctx.translate(dock.x, dock.y);
-    ctx.scale(1.45, 1.45);
-    if (esc.rebuild > 0) ctx.globalAlpha = 0.35;
-    drawBiplane(ctx, 0, '#8fb37a', '#e8d8a8', false, '#c8372d');
-    ctx.restore();
+    const docks = L.escortDocks || [{ p: 'hangar', num: 1, x: L.escortDock.x, y: L.escortDock.y }];
+    docks.forEach((dock, i) => {
+      const hp = P.find((q) => q.id === dock.p);
+      if (!hp) return;
+      ctx.fillStyle = WOOD_DARK;
+      ctx.fillRect(hp.x0, hp.y, hp.x1 - hp.x0, 8);
+      const esc = (state.escorts || [state.escort])[i];
+      if (!esc || esc.flying) return;
+      line([[dock.x, hp.y + 8], [dock.x, dock.y - 32]], 5, INK);
+      ctx.save();
+      ctx.translate(dock.x, dock.y);
+      ctx.scale(1.45, 1.45);
+      if (esc.rebuild > 0) ctx.globalAlpha = 0.35;
+      drawBiplane(ctx, 0, '#8fb37a', '#e8d8a8', false, '#c8372d');
+      drawTailNumber(ctx, dock.num || i + 1);
+      ctx.restore();
+    });
   };
 
   // ---- Fittings ----

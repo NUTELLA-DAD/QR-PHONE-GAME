@@ -168,6 +168,18 @@ export const config = {
     LEASH: 3200, // further than this from the ship and she flies home
     DOCK_RANGE: 90, // how close to the hook she latches on
     REBUILD: 30, // seconds to build a new one after she's shot down
+    // Two patrol planes hang under the hull. With nobody at the station she flies herself:
+    AUTO_PATROL: true, // false = she only flies when someone takes the station
+    PATROL_ENGAGE: 1500, // the auto pilot only goes after enemies this close to the ship
+    PATROL_IDLE: 10, // seconds with nothing to shoot before the auto pilot flies home
+    PATROL_FIRE_CONE: 0.14, // auto pilot aims worse than a human (radians, vs FIRE_CONE)
+    PATROL_SHOT_EVERY: 0.38, // ...and fires slower (vs SHOT_EVERY)
+    PATROL_MIN_HP: 0.75, // she won't launch on auto below this share of her hp
+    PATROL_RETURN_HP: 0.5, // below this share of hp the auto pilot flies home
+    REPAIR_RATE: 0.12, // hp repaired per second while docked
+    CRAMPED: 0.12, // share of the space round the ship that is rock before the auto pilot stays home
+    BOT_MAX: 1, // bot crew will fly at most this many of the planes at once
+    ORBIT_SPREAD: 0.4, // the second plane circles this much wider
   },
   GUNSHIP: {
     FIRST_AFTER: 100, // seconds into a mission before the first

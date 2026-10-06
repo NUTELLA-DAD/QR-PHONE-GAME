@@ -6,13 +6,14 @@ import { steerTo } from './nav.js';
 import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
 import { GS, MAIN_X1 } from './gunship.js';
+import { isEscortStation, escortFor } from './escort.js';
 
 const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
 
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
 const GUN_STATIONS = Object.keys(L.gunMounts);
-const MANNED_STATIONS = ['Helm', 'Escort Fighter', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
+const MANNED_STATIONS = ['Helm', 'Escort Fighter', 'Escort Fighter 2', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -171,7 +172,8 @@ function listJobs(state, bot) {
   // Stations, most useful first. The vital ones (helm, gas valve, a gun or weapon with a target
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
-  const reach = (n) => (n === 'Escort Fighter' ? (state.escort && state.escort.docked && state.escort.rebuild <= 0 && targets(state).length ? 0.6 : 4) : n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
+  const botPlanes = players.filter((q) => q.bot && isEscortStation(q.lock)).length; // the crew can only spare so many for the patrol planes
+  const reach = (n) => (isEscortStation(n) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1 });
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
@@ -231,9 +233,9 @@ function operate(p, state, dt) {
   p.jy = 0;
   p.fire = false;
   const ship = state.ship;
-  if (p.lock === 'Escort Fighter') {
+  if (isEscortStation(p.lock)) {
     // Fly the escort fighter at the nearest enemy (or let her circle the ship if there's none).
-    const esc = state.escort;
+    const esc = escortFor(state, p.lock);
     const list = esc && esc.flying ? targets(state).map((t) => ({ t, q: t.at(0.4) })).sort((a, b) => Math.hypot(a.q.x - esc.x, a.q.y - esc.y) - Math.hypot(b.q.x - esc.x, b.q.y - esc.y)) : [];
     if (list.length) {
       const q = list[0].q;
