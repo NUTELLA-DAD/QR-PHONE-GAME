@@ -581,6 +581,11 @@ export const config = {
     KNOCK_VY: 380, // upward launch speed when thrown (they land on the deck below, or go overboard)
     PITCH_STAGGER: 0.035, // ship pitch (radians; max is 0.06) beyond which outside-deck crew slide toward the low end
     PITCH_SLIDE: 260, // px/s slide at full pitch
+    GRAB_REACH: 30, // px: fly or hop this close (sideways) to a ladder/rope and you grab it automatically (hold the stick DOWN to fall past instead)
+    LADDER_JUMP_VX: 260, // px/s sideways launch when you press JUMP on a ladder (stick direction, or toward the middle of the ship)
+    LADDER_JUMP_VY: 600, // px/s upward kick of that jump (about 95 px of rise: enough to get onto the deck above if you leave near the top)
+    REGRAB_CD: 0.5, // seconds after jumping off a ladder before you can grab that same ladder again
+    CLIMB_FAST: 1.35, // climbing speed multiplier with the stick pushed fully up/down (humans only)
   },
   // Tools and close combat.
   TOOLS: {

@@ -70,6 +70,53 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     p.stag = 0;
   };
 
+  // GRAB A LADDER/ROPE mid-air (flying or mid-hop). Auto-grab when within reach sideways and between
+  // the connector's ends, unless the stick is held DOWN (that means "drop past it"). Humans only.
+  const grab = (p) => {
+    if (p.bot || p.conn != null || p.onGunship || p.lock || p.ko > 0) return false;
+    if (!(p.fly || p.air)) return false;
+    if ((p.jy || 0) > 0.6) return false;
+    const y = p.fly ? p.y : p.y - (p.jz || 0);
+    for (let i = 0; i < SHIP_LAYOUT.connectors.length; i++) {
+      const c = SHIP_LAYOUT.connectors[i];
+      if (c.type !== 'ladder' && c.type !== 'rope') continue;
+      if (p.regrabCd > 0 && p.regrabConn === i) continue;
+      const yt = P[c.top].y;
+      const yb = P[c.bottom].y;
+      if (y < yt + 6 || y > yb - 4) continue;
+      const s = (y - yt) / (yb - yt);
+      if (Math.abs(p.x - (c.xTop + (c.xBottom - c.xTop) * s)) > A.GRAB_REACH) continue;
+      p.fly = false;
+      p.air = false;
+      p.jz = 0;
+      p.vy = 0;
+      p.vx = 0;
+      p.fvx = 0;
+      p.fvy = 0;
+      p.rot = 0;
+      p.conn = i;
+      p.s = s;
+      p.climb = true;
+      puff(p.x, y, '#ffffff', 3);
+      return true;
+    }
+    return false;
+  };
+
+  // JUMP while climbing: leap off sideways with an upward kick into free flight.
+  const jumpOff = (p) => {
+    if (p.conn == null || p.bot) return false;
+    const stick = p.jx || 0;
+    const dir = Math.abs(stick) > 0.3 ? Math.sign(stick) : p.x < 800 ? 1 : -1; // neutral: toward the middle of the ship
+    const i = p.conn;
+    startFlight(p, dir * A.LADDER_JUMP_VX, -A.LADDER_JUMP_VY);
+    p.regrabConn = i;
+    p.regrabCd = A.REGRAB_CD;
+    p.face = dir;
+    puff(p.x, p.y, '#ffffff', 3);
+    return true;
+  };
+
   // Hop or walk reached a deck end: step/jump off it. Humans only (bots never go overboard by accident).
   // Called every frame while on a deck. hopping = mid-hop (jz is the height above the deck).
   const edgeCheck = (p, dt, hopping) => {
@@ -125,6 +172,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   // Per frame for a player standing on a deck (not flying): stagger timer, pitch slide, squash decay.
   const standing = (p, dt) => {
     p.squash = Math.max(0, (p.squash || 0) - dt / A.SQUASH_TIME);
+    if (p.regrabCd > 0) p.regrabCd -= dt;
     if (p.stag > 0) p.stag = Math.max(0, p.stag - dt);
     const pl = P[p.d];
     const pitch = state.ship.pitch || 0;
@@ -139,6 +187,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   // Free flight for one frame. Returns true while still flying.
   const step = (p, dt, controlled = true) => {
     if (!p.fly) return false;
+    if (p.regrabCd > 0) p.regrabCd -= dt;
     const ctrl = controlled && !p.bot ? clamp(p.jx || 0, -1, 1) : 0;
     const drift = -Math.max(0, state.ship.speed || 0) * A.SHIP_DRIFT;
     p.fvx += ctrl * A.STEER_ACCEL * dt;
@@ -226,5 +275,5 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     p.stag = 0;
   };
 
-  return { addSurface, removeSurface, addProvider, surfaces, startFlight, edgeCheck, vault, shove, standing, step, tumble, clear };
+  return { addSurface, removeSurface, addProvider, surfaces, startFlight, grab, jumpOff, edgeCheck, vault, shove, standing, step, tumble, clear };
 }

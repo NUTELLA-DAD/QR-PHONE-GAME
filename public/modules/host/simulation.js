@@ -728,6 +728,7 @@ export function createSimulation() {
         // or at a station. Kept simple so airborne play (jumping overboard) can extend it later.
         const M = config.MOVE;
         player.jumpCd = Math.max(0, (player.jumpCd || 0) - dt);
+        if (player.jumpQ && player.conn != null && !player.air) air.jumpOff(player); // leap off a ladder into free flight
         if (player.jumpQ && !player.air && player.conn == null && player.jumpCd <= 0) {
           player.air = true;
           player.vy = M.JUMP_VY;
@@ -736,7 +737,7 @@ export function createSimulation() {
         }
         player.jumpQ = false;
         if (player.fly) {
-          air.step(player, dt); // free flight (off a deck end, over the rail, or thrown)
+          if (air.step(player, dt)) air.grab(player); // free flight (off a deck end, over the rail, or thrown); may catch a ladder
         } else if (player.air) {
           // Steer (a bit less than on the ground), no ladders while airborne.
           (player.onGunship ? gunship.walk : moveWalker)(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED);
@@ -752,10 +753,11 @@ export function createSimulation() {
               puff(player.x, player.y - 4, '#d9cbb0', 3);
             }
           }
+          if (player.air && !player.onGunship) air.grab(player); // a hop can catch a ladder
         } else if (player.onGunship) {
           gunship.walk(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED); // aboard a gunship she carries them
         } else {
-          moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED);
+          moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED, player.conn != null && !player.bot && Math.abs(player.jy || 0) > 0.9 ? config.AIR.CLIMB_FAST : 1);
           air.edgeCheck(player, dt, false); // walking off the end of an outside deck
         }
         if (!player.fly && !player.onGunship) air.standing(player, dt);
