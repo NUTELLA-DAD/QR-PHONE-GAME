@@ -179,7 +179,7 @@ export function createGunship({ state, puff, impact, credit }) {
       // Spoils: patch the hull, fill the firebox, top up guns and bombs.
       state.ship.hull = Math.min(100, state.ship.hull + G.REWARD_HULL);
       state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + G.REWARD_COAL);
-      for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 3);
+      for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
       state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + 2);
       warn('GUNSHIP DESTROYED! SUPPLIES ABOARD: HULL, COAL AND AMMO', 4);
     } else warn('GUNSHIP SHOT DOWN!', 3);

@@ -4,7 +4,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, groundAt, ceilAt, scrollSpeed } from './course.js';
 import { pop } from './popups.js';
-import { flyPlane, smoke, shootDown, updateChutes, shoveShip } from './planes.js';
+import { flyPlane, smoke, shootDown, updateChutes, shoveShip, bumpShip, bounceStep } from './planes.js';
 
 const B = SHIP_LAYOUT.bounds;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -106,6 +106,8 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       ty = e.wp.y;
       if (Math.hypot(tx - e.x, ty - e.y) < 350 || Math.abs(e.x - mid.x) > F.RUN_FROM + 400) startRun(e);
     }
+    const px0 = e.x;
+    const py0 = e.y;
     flyPlane(state, e, tx, ty, dt, { speed: F.SPEED, turn: F.TURN, turnAvoid: F.TURN_AVOID, nearShip, midY: mid.y, fm: F, max: e.max });
     const course = state.course;
     smoke(e, e.max || 5, puff);
@@ -117,7 +119,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       return;
     }
     // Flew into the ship: it crashes, and that hurts.
-    if (!state.ship.down && touches(e.x, e.y, 30)) {
+    if (!state.ship.down && (touches(e.x, e.y, 30) || touches((e.x + px0) / 2, (e.y + py0) / 2, 30))) {
       impact(e.x, e.y + state.ship.alt, config.IMPACT.PLANE_CRASH);
       shoveShip(state, e, 1.5);
       crashFighter(e, 'ENEMY PLANE CRASHED INTO US!');
@@ -171,6 +173,8 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       c.y += (keepClear(state, c.x, c.baseY, 120, 0, 450) - c.y) * Math.min(1, dt * 3);
       c.y = keepClear(state, c.x, c.y, 50, 0, 120); // and never inside rock
       c.hit = Math.max(0, c.hit - dt);
+      bounceStep(c, dt);
+      bumpShip(state, c, { hitsShip, impact, puff, hw: 130, hh: 45, size: config.BUMP.CARGO_SIZE, hp: 'hp' });
       if (!c.dropped && (c.vx > 0 ? c.x >= c.dropX : c.x <= c.dropX)) {
         c.dropped = true;
         dropSquad(c.x, c.y + 40);
@@ -232,14 +236,15 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
         puff(w.x, w.y, '#ff5a1f', 10);
       }
       if (Math.random() < 0.6) puff(w.x, w.y, '#444', 1);
-      if (!w.dead && !state.ship.down && touches(w.x, w.y, 30)) {
+      if (w.grace > 0) w.grace -= dt;
+      else if (!w.dead && !state.ship.down && touches(w.x, w.y, 30)) {
         w.dead = true;
         puff(w.x, w.y, '#ff5a1f', 24);
         impact(w.x, w.y + state.ship.alt, w.kind !== 'cargo' ? config.IMPACT.WRECK_SMALL : config.IMPACT.PLANE_CRASH);
         warn('WRECKAGE CRASHED ONTO US!');
       }
     }
-    state.wrecks = state.wrecks.filter((w) => !w.dead && w.y < 2500);
+    state.wrecks = state.wrecks.filter((w) => !w.dead && w.y + state.ship.alt < 2500); // (measured from the ship: maps can be very deep)
   };
 
   const updateShells = (dt) => {

@@ -42,6 +42,20 @@ export const config = {
     RAM_KICK: 90, // shove a ramming plane gives the ship's up/down speed
     RAM_CHANCE: 0.35, // chance a nearly dead dogfighter tries to ram the ship on its next pass
   },
+  // Big enemies (bombers, cargo plane, boss) bump off the ship instead of crashing. Scaled by their size.
+  BUMP: {
+    DAMAGE: 0.8, // hit on our ship (1 = one enemy bullet) per bump, times size
+    SELF_DAMAGE: 1, // hp the enemy loses per bump (it never dies from bumping)
+    PUSH: 70, // pixels it is shoved clear at once, times size
+    BOUNCE: 260, // speed it bounces away at (pixels per second)...
+    DECAY: 3, // ...fading out at this rate per second
+    SHIP_KICK: 60, // shove our ship's up/down speed gets, times size
+    SHIP_SPEED: 0.05, // and her forward speed (share of full), times size
+    COOLDOWN: 1.2, // seconds before the same enemy can bump again
+    BOMBER_SIZE: 1,
+    CARGO_SIZE: 0.8,
+    BOSS_SIZE: 2.5,
+  },
   // Enemy plane: flies a loop around the ship.
   // Enemy fighter: flies like a plane (speed + limited turning), making long strafing runs.
   ENEMY: {
@@ -208,10 +222,14 @@ export const config = {
   },
   // Ship guns (upgrades change these).
   GUNS: {
-    COOLDOWN: 0.55, // seconds between shots
-    DAMAGE: 1, // damage per shell hit
-    LOAD: 4, // shells added per ammo crate
-    AUTOLOAD_EVERY: 0, // seconds per free shell (0 = off; the Auto-Loader upgrade turns it on)
+    COOLDOWN: 0.28, // seconds between shots (about 3.5 per second)
+    DAMAGE: 0.5, // damage per shell hit (enemy hp are whole numbers, so 2 shells = 1 old hit)
+    MAX_AMMO: 20, // shells a gun holds
+    START_AMMO: 16, // shells in each gun at the start of a game
+    LOAD: 10, // shells added per ammo crate
+    AUTOLOAD_EVERY: 4, // seconds per free shell (0 = off; the Auto-Loader upgrade makes it faster)
+    SHELL_SPEED: 1300, // shell speed, px/s
+    SHELL_LIFE: 1.17, // shell lifetime, seconds (speed x life = range, about 1520 px)
   },
   // Upgrade votes at the beacon and back home.
   VOTE: {
@@ -503,7 +521,7 @@ export const config = {
     BOILER_LOW: 55, // start stoking below this pressure
     BOILER_HIGH: 85, // stop stoking above this pressure
     HELM_SPEED: 0.55, // cruising speed the bot helmsman holds (0-1)
-    AMMO_LOW: 3, // fetch ammo when a gun has this many shells or fewer
+    AMMO_LOW: 10, // fetch ammo when a gun has this many shells or fewer
     AIM_TOLERANCE: 0.12, // fire when aim is within this many radians
     STATION_MIN: 20, // stay at a station at least this long...
     STATION_MAX: 40, // ...and at most this long, then rotate

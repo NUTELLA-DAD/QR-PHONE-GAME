@@ -174,6 +174,9 @@ after each phase.
 - F1a done: fixed 60 Hz steps in main.js (config.LOOP).
 - F2 done: flight model (airspeed, stalls, bank, damage wobble, flocking bats); small planes crash
   into the ship, big ones bump (config.BUMP). G4 done: bigger gasbag; camera +20%.
+- G1 done: guns hold 20, crates give 10, free trickle every 4 s, ~3.5 shots/s, faster shells,
+  half damage per shell. Empty-gun time 32-69% -> 7-25% (botsim). Normal is a touch harder
+  since the bigger gasbag (watch it).
 - Note: the .claude/agents files load in a NEW session; until then the lead runs the same
   instructions through a general-purpose agent with model = sonnet.
 

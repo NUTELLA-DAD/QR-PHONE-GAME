@@ -1,8 +1,10 @@
 // What the guns can shoot at, and where to point to hit it (leading moving targets).
 // Shared by the game (aim assist) and the test bots.
 
-export const SHELL_SPEED = 950;
-export const SHELL_LIFE = 1.6;
+import { config } from '../../config.js';
+
+export const SHELL_SPEED = config.GUNS.SHELL_SPEED;
+export const SHELL_LIFE = config.GUNS.SHELL_LIFE;
 const RANGE = SHELL_SPEED * SHELL_LIFE;
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 

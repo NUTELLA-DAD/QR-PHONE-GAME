@@ -98,6 +98,65 @@ export function shoveShip(state, e, scale = 1) {
   state.ship.vy = (state.ship.vy || 0) + dir * config.FLIGHT.RAM_KICK * scale;
 }
 
+// Big enemies (bombers, the cargo plane, the boss) don't crash into the ship, they bump off it.
+// Call bounceStep every frame (counts the cooldown down and carries the bounce), then bumpShip:
+// o = { hitsShip, impact, puff, hw, hh (half size), size (1 = bomber), hp: key of the hp field, dt }.
+export function bounceStep(e, dt) {
+  e.bumpCd = Math.max(0, (e.bumpCd || 0) - dt);
+  if (!e.kx && !e.ky) return;
+  e.x += (e.kx || 0) * dt;
+  e.y += (e.ky || 0) * dt;
+  const k = Math.max(0, 1 - config.BUMP.DECAY * dt);
+  e.kx *= k;
+  e.ky *= k;
+  if (Math.abs(e.kx) + Math.abs(e.ky) < 5) e.kx = e.ky = 0;
+}
+export function bumpShip(state, e, o) {
+  const B = config.BUMP;
+  if (state.ship.down || (e.bumpCd || 0) > 0) return false;
+  // Sample points across the body; any one inside the ship is a contact.
+  let n = 0;
+  let cx = 0;
+  let cy = 0;
+  for (const fx of [-1, -0.5, 0, 0.5, 1]) {
+    for (const fy of [-1, 0, 1]) {
+      const px = e.x + fx * o.hw;
+      const py = e.y + fy * o.hh;
+      if (o.hitsShip(px, py + state.ship.alt)) {
+        n++;
+        cx += px;
+        cy += py;
+      }
+    }
+  }
+  if (!n) return false;
+  cx /= n;
+  cy /= n;
+  let dx = e.x - cx;
+  let dy = e.y - cy;
+  const d = Math.hypot(dx, dy);
+  if (d < 1) {
+    dx = 0;
+    dy = -1;
+  } else {
+    dx /= d;
+    dy /= d;
+  }
+  e.bumpCd = B.COOLDOWN;
+  e.x += dx * B.PUSH * o.size;
+  e.y += dy * B.PUSH * o.size;
+  e.kx = dx * B.BOUNCE;
+  e.ky = dy * B.BOUNCE;
+  // Our ship is shoved the other way, jolted and hurt; the enemy takes a knock too (never a kill).
+  state.ship.vy = (state.ship.vy || 0) - dy * B.SHIP_KICK * o.size;
+  state.ship.speed = Math.max(-0.4, Math.min(1, state.ship.speed - dx * B.SHIP_SPEED * o.size));
+  o.impact(cx, cy + state.ship.alt, B.DAMAGE * o.size);
+  o.puff(cx, cy, '#ffe9a8', 8);
+  if (e[o.hp] != null) e[o.hp] = Math.max(1, e[o.hp] - B.SELF_DAMAGE);
+  if (state.sfxQ) state.sfxQ.push(['clang', true]);
+  return true;
+}
+
 // Contrail: a short line of points behind the plane, bright while it turns hard.
 export function trail(state, e, dt) {
   const t = (e.trail = e.trail || []);
@@ -117,7 +176,7 @@ export function smoke(e, max, puff) {
 
 // Shot down: the plane spirals away trailing smoke, and the pilot bails out.
 export function shootDown(state, e, kind = 'fighter') {
-  state.wrecks.push({ x: e.x, y: e.y, vx: e.vx * 0.6, vy: e.vy * 0.4 - 60, spin: e.heading || 0, kind, spiral: Math.random() < 0.5 ? -1 : 1 });
+  state.wrecks.push({ x: e.x, y: e.y, vx: e.vx * 0.6, vy: e.vy * 0.4 - 60, spin: e.heading || 0, kind, spiral: Math.random() < 0.5 ? -1 : 1, grace: 0.8 }); // grace: can't hit the ship straight away (a plane that rammed us already did)
   (state.chutes = state.chutes || []).push({ x: e.x, y: e.y - 20, vx: e.vx * 0.2, vy: -220, t: 0 });
 }
 

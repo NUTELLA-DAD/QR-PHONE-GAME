@@ -100,7 +100,7 @@ export function createSimulation() {
     kills: 0,
     scroll: 0,
     GUNS: Object.fromEntries(
-      Object.entries(SHIP_LAYOUT.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ammo: 6, max: 8, empty: 0 }]),
+      Object.entries(SHIP_LAYOUT.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0 }]),
     ),
   };
 
@@ -252,7 +252,7 @@ export function createSimulation() {
     state.tempo = { phase: 'build', t: config.PACING.BUILD };
     state.supply = null;
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
-    for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: 6, max: 8, empty: 0, auto: 0 });
+    for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, auto: 0 });
     raiders.reset();
     threats.reset();
     squadrons.restart();
@@ -313,7 +313,7 @@ export function createSimulation() {
       if (Math.hypot(wx - 800, wy - (470 - state.ship.alt)) < PC.SUPPLY_REACH) {
         state.ship.hull = Math.min(100, state.ship.hull + PC.SUPPLY_HULL);
         state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + PC.SUPPLY_COAL);
-        for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 3);
+        for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
         state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + 1);
         puff(wx, wy, '#ffd23f', 20);
         pop(state, wx, wy - 120, 'SUPPLIES!', '#ffd23f', 1.4);
@@ -654,9 +654,9 @@ export function createSimulation() {
               state.shells.push({
                 x: gx + Math.cos(angle) * 60,
                 y: gy - state.ship.alt + Math.sin(angle) * 60,
-                vx: Math.cos(angle) * 950,
-                vy: Math.sin(angle) * 950,
-                life: 1.6,
+                vx: Math.cos(angle) * config.GUNS.SHELL_SPEED,
+                vy: Math.sin(angle) * config.GUNS.SHELL_SPEED,
+                life: config.GUNS.SHELL_LIFE,
                 owner: player.id,
               });
               puff(gx + Math.cos(angle) * 64, gy - state.ship.alt + Math.sin(angle) * 64, '#ffe9a8', 4);

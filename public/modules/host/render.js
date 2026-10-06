@@ -100,10 +100,11 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.stroke();
         ctx.restore();
       }
+      const pip = Math.min(9, 72 / gun.max); // pip spacing: the row stays about 72 px wide however many shells a gun holds
       for (let i = 0; i < gun.max; i++) {
         ctx.fillStyle = i < gun.ammo ? '#ffd23f' : 'rgba(27,20,16,.3)';
         ctx.beginPath();
-        ctx.arc(gun.bx - 31 + i * 9, gun.by + 30, 3.6, 0, 7);
+        ctx.arc(gun.bx - 31 + i * pip, gun.by + 30, Math.min(3.6, pip * 0.42), 0, 7);
         ctx.fill();
       }
       if (gun.empty > 0) {

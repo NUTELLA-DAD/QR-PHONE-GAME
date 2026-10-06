@@ -10,21 +10,21 @@ export const UPGRADES = [
   },
   {
     id: 'big-shells', name: 'Big Shells', icon: '💣', max: 2,
-    desc: 'Every shell does +1 damage.',
-    apply: () => (config.GUNS.DAMAGE += 1),
+    desc: 'Shells hit harder (+1 old-style damage).',
+    apply: () => (config.GUNS.DAMAGE += 0.5),
   },
   {
     id: 'deep-magazines', name: 'Deep Magazines', icon: '📦', max: 2,
-    desc: 'Guns hold 4 more shells and each crate loads 2 more.',
+    desc: 'Guns hold 10 more shells and each crate loads 5 more.',
     apply: ({ state }) => {
-      config.GUNS.LOAD += 2;
-      for (const g of Object.values(state.GUNS)) g.max += 4;
+      config.GUNS.LOAD += 5;
+      for (const g of Object.values(state.GUNS)) g.max += 10;
     },
   },
   {
     id: 'auto-loader', name: 'Auto-Loader', icon: '⚙️', max: 2,
-    desc: 'Guns slowly reload themselves.',
-    apply: () => (config.GUNS.AUTOLOAD_EVERY = config.GUNS.AUTOLOAD_EVERY ? config.GUNS.AUTOLOAD_EVERY * 0.6 : 8),
+    desc: 'Guns reload themselves twice as fast.',
+    apply: () => (config.GUNS.AUTOLOAD_EVERY = config.GUNS.AUTOLOAD_EVERY ? config.GUNS.AUTOLOAD_EVERY * 0.5 : 4),
   },
   {
     id: 'armour', name: 'Armour Plating', icon: '🛡️', max: 3,

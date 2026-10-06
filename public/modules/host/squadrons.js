@@ -11,7 +11,7 @@ import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, scrollSpeed } from './course.js';
 import { SHIP_SAMPLES } from './course.js';
 import { pop } from './popups.js';
-import { flyPlane, smoke, shootDown, angDiff, shoveShip } from './planes.js';
+import { flyPlane, smoke, shootDown, angDiff, shoveShip, bumpShip, bounceStep } from './planes.js';
 
 const W = config.WAVES;
 const B = SHIP_LAYOUT.bounds;
@@ -221,6 +221,8 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       const dir = Math.cos(p.heading) >= 0 ? 1 : -1;
       const ax = p.x + dir * 700;
       flyPlane(state, p, ax, keepClear(state, ax, p.baseY, 140, 0, 400), dt, { speed: W.BOMBER_SPEED, turn: W.BOMBER_TURN, turnAvoid: W.BOMBER_TURN * 1.5, fm: W.BOMBER_FM, noScroll: true });
+      bounceStep(p, dt);
+      bumpShip(state, p, { hitsShip, impact, puff, hw: 150, hh: 25, size: config.BUMP.BOMBER_SIZE, hp: 'hp' });
       // Bombs away while over the ship.
       if (Math.abs(p.x - 800) < 950 && (p.dropCd -= dt) <= 0 && !state.ship.down) {
         p.dropCd = W.BOMB_EVERY;
@@ -241,7 +243,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         impact(b.x, b.y + state.ship.alt, W.BOMB_IMPACT);
       }
     }
-    state.enemyBombs = state.enemyBombs.filter((b) => !b.dead && b.hp > 0 && b.y < 2500);
+    state.enemyBombs = state.enemyBombs.filter((b) => !b.dead && b.hp > 0 && b.y + state.ship.alt < 2500); // (from the ship: maps can be deep)
   };
 
   const updateStrafers = (dt) => {
@@ -308,6 +310,8 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
           p.orbit = Math.atan2((p.y - mid.y) / 0.75, (p.x - mid.x) / 1.4);
         }
       }
+      const px0 = p.x;
+      const py0 = p.y;
       flyPlane(state, p, tx, ty, dt, { speed: D.SPEED, turn: D.TURN, turnAvoid: D.TURN_AVOID, nearShip: p.ram ? null : nearShip, midY: mid.y, forceTurn, fm: D, max: p.max });
       smoke(p, p.max, puff);
       if (inRock(state, p.x, p.y)) {
@@ -319,8 +323,9 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         continue;
       }
       // Flew into the ship.
-      if (!state.ship.down && touches(p.x, p.y, 24)) {
+      if (!state.ship.down && (touches(p.x, p.y, 24) || touches((p.x + px0) / 2, (p.y + py0) / 2, 24))) {
         p.hp = 0;
+        shootDown(state, p, 'biplane');
         puff(p.x, p.y, '#ff5a1f', 22);
         impact(p.x, p.y + state.ship.alt, config.IMPACT.WRECK_SMALL);
         shoveShip(state, p, p.ram ? 1.5 : 1);
@@ -342,6 +347,8 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     z.x += Math.sign(homeX - z.x) * Math.min(Math.abs(homeX - z.x), 220 * dt);
     const wantY = keepClear(state, z.x, 250 - state.ship.alt + Math.sin(z.bob * 0.6) * 60, 260, 0, 500);
     z.y += (wantY - z.y) * Math.min(1, dt * 1.2);
+    bounceStep(z, dt);
+    bumpShip(state, z, { hitsShip, impact, puff, hw: 330, hh: 150, size: config.BUMP.BOSS_SIZE, hp: 'hp' });
     if (z.leaving && z.x > B.x1 + 3800) {
       state.boss = null;
       return;
