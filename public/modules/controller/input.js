@@ -56,7 +56,6 @@ export function createControllerInput({ network, ui }) {
         button.setPointerCapture(event.pointerId);
       } catch {}
       button.classList.add('down');
-      navigator.vibrate?.(15);
       onDown();
     });
     ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((name) =>

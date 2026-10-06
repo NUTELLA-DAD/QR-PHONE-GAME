@@ -75,7 +75,6 @@ export function createControllerUI({ network }) {
         const b = document.createElement('button');
         b.innerHTML = `<span class="ic">${o.icon}</span><b>${o.name}</b><small>${o.desc}</small>`;
         b.addEventListener('pointerdown', () => {
-          navigator.vibrate?.(25);
           network.sendInput({ jx: 0, jy: 0, vote: i });
         });
         cards.appendChild(b);
@@ -87,7 +86,6 @@ export function createControllerUI({ network }) {
   // A short message that pops up over the controls, plus a buzz.
   let toastTimer = null;
   const showFx = (fx) => {
-    if (fx.buzz) navigator.vibrate?.(fx.buzz);
     if (!fx.toast) return;
     const t = $('toast');
     t.textContent = fx.toast;
@@ -108,7 +106,6 @@ export function createControllerUI({ network }) {
       $('leave').style.display = 'none';
       $('lever').style.display = 'none';
       $('atk').style.display = '';
-      navigator.vibrate?.([80, 60, 80]);
       return;
     }
     const label = next.label || 'Hey!';
@@ -150,7 +147,6 @@ export function createControllerUI({ network }) {
     const helm = next.locked && next.kind === 'helm';
     $('lever').style.display = helm ? 'block' : 'none';
     $('atk').style.display = helm ? 'none' : '';
-    navigator.vibrate?.(20);
   };
 
   const setup = () => {
