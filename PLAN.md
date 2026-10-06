@@ -79,6 +79,14 @@ flagged so players remember them ("The Iron Widow").
 7. **Music + juice** (E1/E2) - hits, explosions and a 1930s tune make everything feel better.
 8. **End-of-run story** - the summary screen and awards people screenshot.
 
+### Progress (Voyage)
+- V1 done: missions finish in ~3-3.5 min on all map types (fixed bomb runs, unreachable outposts,
+  detours, empty bomb bay; stuck recovery; goal readout under the minimap).
+- V2 done: rhythm director (build -> set piece -> 34 s calm with ALL CLEAR + supply balloon).
+- V3 done: slide poles, extra ladders/racks, job arrows on idle phones; walking 48% -> 38%.
+- Boss softened (HP 36, fires every 3.4 s, boarders every 40 s): 9 runs x 15 min went from
+  13 wrecks / 24 missions to 9 wrecks / 27 missions.
+
 ### Build order (proposal)
 V1 investigate/fix missions not finishing + mission length -> V2 rhythm director -> V3 less
 walking -> V4 sky-dock shop with salvage -> V5 sector map + run structure -> V6 first two new

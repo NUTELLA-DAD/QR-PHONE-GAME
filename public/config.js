@@ -513,11 +513,11 @@ export const config = {
     BOMB_EVERY: 1.8, // seconds between bombs while over the ship
     BOMB_IMPACT: 1.0,
     BOSS_AT: 0.66, // lap progress (0-1) when the Dread Zeppelin shows up, on the way home
-    BOSS_HP: 45,
+    BOSS_HP: 36,
     BOSS_HP_PER_LAP: 20,
     BOSS_STATION_X: 2700, // where it parks, ahead of the ship
-    BOSS_FIRE_EVERY: 2.6,
-    BOSS_BOARD_EVERY: 30, // seconds between boarding parties
+    BOSS_FIRE_EVERY: 3.4,
+    BOSS_BOARD_EVERY: 40, // seconds between boarding parties
     BOSS_REWARD_HULL: 35,
     BOSS_GUN_HP: 4, // each turret can be shot off separately...
     BOSS_GUN_BONUS: 6, // ...knocking this much off the boss
