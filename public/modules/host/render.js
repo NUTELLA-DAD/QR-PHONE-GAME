@@ -11,6 +11,7 @@ import { UPGRADES } from './upgrades.js';
 import { targets } from './aim.js';
 import { createSpecialsArt } from './specialsArt.js';
 import { createGunshipArt } from './gunshipArt.js';
+import { distToGoal } from './maps.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
@@ -628,6 +629,28 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.arc(px(c.dist + 800), py(500 - state.ship.alt), 6, 0, 7);
     ctx.fill();
     ctx.stroke();
+    // The goal, small and always there: how far to the beacon, or how many outposts are left.
+    const dCells = distToGoal(map, c.dist + 800, 500 - state.ship.alt);
+    const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
+    let goalText;
+    if (c.done) goalText = map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
+    else if (map.open) {
+      const total = map.outposts.length;
+      const left = map.outposts.filter((o) => !o.done).length;
+      goalText = 'OUTPOSTS ' + (total - left) + '/' + total + (km === null ? '' : km < 0.5 ? ' - BOMBS AWAY!' : ' - next ' + km.toFixed(1) + ' km');
+    } else goalText = 'BEACON ' + (km === null ? '?' : km.toFixed(1) + ' km');
+    const gy0 = y0 + h + 22;
+    ctx.fillStyle = 'rgba(241,226,184,.92)';
+    ink();
+    ctx.lineWidth = 2.8;
+    rrect(x0 - 8, gy0, w + 16, 34, 10);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = config.INK;
+    ctx.font = '800 20px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillText(goalText, x0 + w / 2, gy0 + 24);
+    ctx.textAlign = 'left';
   };
 
   const drawRouteBar = () => {

@@ -200,9 +200,16 @@ function listJobs(state, bot) {
   for (const m of mods) if (!m.broken && m.hp < (['engine', 'helm', 'lift', 'shield', 'coil'].includes(m.kind) ? m.max * config.MODULES.LEAK_BELOW - 1 : 60)) jobs.push({ kind: 'repair', obj: m, max: 1 });
   const guns = GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
+  // Bombing run coming up (an outpost to destroy is near): bombs are the weapon that matters,
+  // so loading the bay comes before topping up the guns.
+  const c = state.course;
+  const bombRun = !!(c && c.map && c.map.open && !c.done && c.target && Math.hypot(c.target.x - (c.dist + 800), c.target.y - (500 - state.ship.alt)) < config.MAPS.BOMB_RUN_RANGE);
+  if (bombRun && state.bombBay && state.bombBay.bombs < config.MAPS.BOMB_RUN_STOCK) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 1 });
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
-  if (state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 1 });
+  if (!bombRun && state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 1 });
   for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
+  // Hovering over an outpost with bombs aboard: one bot drops everything and mans the bomb bay.
+  if (bombRun && c.target && Math.hypot(c.target.x - (c.dist + 800), c.target.y - (500 - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken('Bomb Bay') && !players.some((q) => q.lock === 'Bomb Bay')) jobs.unshift({ kind: 'station', obj: 'Bomb Bay', max: 1 });
   return jobs;
 }
 

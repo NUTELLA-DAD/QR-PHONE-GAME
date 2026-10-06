@@ -78,6 +78,7 @@ const totalSteps = Math.round(args.minutes * 60 * 60);
 const errors = new Map(); let errorCount = 0;
 let wrecks = 0, killsTotal = 0, hullSum = 0, hullN = 0, missions = 0, maxLap = state.course.lap;
 let lastKills = 0, stuckVoteSteps = 0;
+const missionMins = []; let missionStartStep = 0;
 // Steam stats while flying: pressure sum, steps under 35 / over 70 / over 90, blowouts, steps in overdrive.
 let pSum = 0, pN = 0, pLow = 0, pOver70 = 0, pOver90 = 0, blowouts = 0, leakSteps = 0, lastPress = state.ship.press;
 const t0 = realNow();
@@ -102,7 +103,7 @@ for (let step = 1; step <= totalSteps; step++) {
   // Kills reset on a wreck, so accumulate the increases.
   if (state.kills < lastKills) lastKills = 0;
   killsTotal += state.kills - lastKills; lastKills = state.kills;
-  if (state.course.lap > maxLap) { missions += state.course.lap - maxLap; maxLap = state.course.lap; }
+  if (state.course.lap > maxLap) { missions += state.course.lap - maxLap; maxLap = state.course.lap; missionMins.push((step - missionStartStep) / 3600); missionStartStep = step; }
   if (state.phase === 'flying') {
     const pr = state.ship.press;
     pSum += pr; pN++; if (pr < 35) pLow++; if (pr > 70) pOver70++; if (pr > 90) pOver90++;
@@ -113,7 +114,7 @@ for (let step = 1; step <= totalSteps; step++) {
   if (state.phase === 'flying') { hullSum += state.ship.hull; hullN++; }
   // Wreck sequence ends in the lobby: count it and cast off again.
   if (state.phase === 'lobby') {
-    wrecks++;
+    wrecks++; missionStartStep = step;
     maxLap = state.course.lap; lastKills = 0;
     sim.castOff();
   }
@@ -127,7 +128,7 @@ for (let step = 1; step <= totalSteps; step++) {
 
 console.log('--- botsim summary ---');
 console.log(`bots ${args.bots}, ${args.minutes} min, ${args.difficulty}, map ${args.map || 'mixed'}, seed ${args.seed ?? 'random'}`);
-console.log(`missions completed: ${missions}`);
+console.log(`missions completed: ${missions}` + (missionMins.length ? `, minutes each: ${missionMins.map((m) => m.toFixed(1)).join(" ")}, average ${(missionMins.reduce((a, b) => a + b, 0) / missionMins.length).toFixed(1)}` : ""));
 console.log(`wrecks: ${wrecks}`);
 console.log(`average hull: ${hullN ? (hullSum / hullN).toFixed(1) : 'n/a'}`);
 console.log(`kills: ${killsTotal}`);

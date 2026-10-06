@@ -462,7 +462,7 @@ export const config = {
     CELL: 200, // size of one map square (pixels)
     WIDTH: 170, // map size in squares for mission 1...
     HEIGHT: 60,
-    WIDTH_PER_LEVEL: 25, // ...growing with each mission
+    WIDTH_PER_LEVEL: 10, // ...growing with each mission
     HEIGHT_PER_LEVEL: 6,
     ROOMS: 8, // caverns along the way (more on later missions)
     BRANCHES: 3, // side caves that dead-end (network maps)
@@ -472,6 +472,16 @@ export const config = {
     OPEN_WIDTH: 190, // open-sky map size (squares) for its first mission
     OPEN_HEIGHT: 50,
     OUTPOSTS: 3, // outposts to destroy on an open-sky map (more later)
+    STUCK_AFTER: 25, // seconds without real headway before the pilot plan tries to unstick the ship
+    UNSTICK_TIME: 8, // seconds the unstick manoeuvre lasts (back off, then take a longer look ahead)
+    KM: 4000, // map pixels shown as one "km" on the TV goal readout
+    LENGTH: { network: 1.2, route: 1.15, open: 1.2 }, // length knob per mission type: multiplies the map width (so the flying time)
+    BOMB_RUN_RANGE: 7000, // bots start loading the bomb bay when the next outpost is this close (px)
+    OUTPOST_REFILL: true, // knocking out an outpost restocks the bomb bay to full
+    BOMB_RUN_MAN: 2600, // within this distance of the outpost one bot drops everything to man the bomb bay (px)
+    BOMB_RUN_STOCK: 4, // ...and keep it stocked to at least this many bombs
+    DETOUR: 1.6, // an open map is rebuilt if the way from the start to an outpost (or between outposts) is more than this many times the straight trip (mountains in the way)
+    STATION_SLACK: 3, // an outpost's hover spot may be at most this many squares lower than planned (else the map is rebuilt)
   },
   // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
   WAVES: {

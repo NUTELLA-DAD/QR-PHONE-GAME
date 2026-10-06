@@ -15,7 +15,7 @@ export const SHIP_BOX = { left: -900, right: 870, up: -570, down: 485 };
 // Build a map, checking the ship really can get from the start to the beacon (try again if not).
 export function makeMap(kind, level, rand) {
   let map = null;
-  for (let tries = 0; tries < 12; tries++) {
+  for (let tries = 0; tries < 40; tries++) {
     map = kind === 'open' ? buildOpenMap(level, rand) : buildMap(kind, level, rand);
     if (map.startDist >= 1e9) continue;
     if (map.open) {
@@ -23,10 +23,32 @@ export function makeMap(kind, level, rand) {
       const C = map.CELL;
       const si = Math.floor(map.start.x / C);
       const sj = Math.floor(map.start.y / C);
-      const ok = map.outposts.every((o) => {
-        setGoal(map, stationCell(map, o));
-        return map.dist[sj * map.W + si] < 1e9;
-      });
+      // The ship must really be able to hover over every gun so the bomb bay can reach it: a spot
+      // it fits exactly at the station square (not in a pocket or valley it can never enter),
+      // not far below it, and a way there from the start.
+      const M = config.MAPS;
+      const stations = []; // the fit cell over the first gun of each outpost
+      let ok = map.outposts.every((o) => o.guns.every((g, gi) => {
+        const st = stationCell(map, { x: g.mx, y: g.my - 20 });
+        setGoal(map, st);
+        const dj = Math.floor(map.goal.y / C) - st.j;
+        const di = Math.abs(Math.floor(map.goal.x / C) - st.i);
+        if (gi === 0) stations.push({ i: Math.floor(map.goal.x / C), j: Math.floor(map.goal.y / C) });
+        // ...and nothing (a floating island, an overhang) between the bomb bay and the gun.
+        const gcol = Math.floor(g.mx / C);
+        let clear = true;
+        for (let j = Math.floor(map.goal.y / C) + 2; j < Math.floor(g.my / C) && clear; j++) if (map.solid[j * map.W + gcol] || (map.solid[j * map.W + gcol - 1] && map.solid[j * map.W + gcol + 1])) clear = false;
+        return clear && map.dist[sj * map.W + si] < 1e9 && dj <= M.STATION_SLACK && dj >= -12 && di === 0;
+      }));
+      // No huge detours over mountains: the way from the start to an outpost, and from one outpost
+      // to the next, stays close to the straight-line trip (this is what sets how long it takes).
+      const longWay = (from, to) => map.dist[from.j * map.W + from.i] > M.DETOUR * (Math.abs(from.i - to.i) + Math.abs(from.j - to.j)) + 12;
+      for (let k = 0; k < stations.length && ok; k++) {
+        const g0 = map.outposts[k].guns[0];
+        setGoal(map, stationCell(map, { x: g0.mx, y: g0.my - 20 }));
+        if (longWay({ i: si, j: sj }, stations[k])) ok = false;
+        for (let m = 0; m < stations.length && ok; m++) if (m !== k && longWay(stations[m], stations[k])) ok = false;
+      }
       setGoal(map, stationCell(map, map.outposts[0]));
       map.startDist = map.dist[sj * map.W + si];
       if (!ok) continue;
@@ -41,7 +63,7 @@ function buildMap(kind, level, rand) {
   const C = M.CELL;
   const r = (a, b) => a + rand() * (b - a);
   const ri = (a, b) => Math.floor(r(a, b + 1));
-  const W = Math.round(M.WIDTH + M.WIDTH_PER_LEVEL * (level - 1));
+  const W = Math.round((M.WIDTH + M.WIDTH_PER_LEVEL * (level - 1)) * M.LENGTH[kind]);
   const H = Math.round(M.HEIGHT + M.HEIGHT_PER_LEVEL * (level - 1));
   const solid = new Uint8Array(W * H).fill(1);
   const idx = (i, j) => j * W + i;
@@ -145,7 +167,7 @@ function buildOpenMap(level, rand) {
   const C = M.CELL;
   const r = (a, b) => a + rand() * (b - a);
   const ri = (a, b) => Math.floor(r(a, b + 1));
-  const W = Math.round(M.OPEN_WIDTH + M.WIDTH_PER_LEVEL * (level - 1));
+  const W = Math.round((M.OPEN_WIDTH + M.WIDTH_PER_LEVEL * (level - 1)) * M.LENGTH.open);
   const H = Math.round(M.OPEN_HEIGHT + M.HEIGHT_PER_LEVEL * (level - 1));
   const solid = new Uint8Array(W * H);
   const idx = (i, j) => j * W + i;
@@ -219,11 +241,17 @@ function buildOpenMap(level, rand) {
   return map;
 }
 
+// Path length (squares) from a point to an outpost's station (sets the route goal as a side effect).
+export function stationDist(map, o, mx, my) {
+  setGoal(map, stationCell(map, o));
+  return distToGoal(map, mx, my);
+}
+
 // Where the ship should hover to attack an outpost: high above it, in open air.
 export function stationCell(map, o) {
   const C = map.CELL;
   // (Shifted so the bomb bay, which is behind the ship's middle, sits right over the outpost.)
-  return { i: Math.floor((o.x + 300) / C), j: Math.max(4, Math.floor(o.y / C) - 7) };
+  return { i: Math.floor((o.x + 265) / C), j: Math.max(4, Math.floor(o.y / C) - 7) };
 }
 
 // Work out where the ship fits, then the route to the goal from everywhere.
