@@ -83,7 +83,7 @@ into it for hull, coal and ammo. A **Twin Gasbag** upgrade adds a second envelop
 
 Enemies: fighters (they fly like real planes: long strafing runs from far out, wide turns,
 and they can crash into mountains), raider cargo planes (shoot them before they drop raiders), mines, bat swarms,
-bombers, skeleton strafers, **gyro-saws** (spinning blades that circle then dash in - shoot
+bombers, squadrons of skeleton **dogfighter** biplanes (they circle, dive in for a gun pass and loop away; shot down, they spiral in and the pilot bails out), **gyro-saws** (spinning blades that circle then dash in - shoot
 them), **imp swarms**, the **sniper zeppelin** (a red line tracks you, then flashes: get out of
 the line or block it with the Deflector), the **harpoon tug** (hooks and drags the ship - shoot
 the cable or hack it with a sword at the hook), ground flak turrets and rocket batteries, the **Dread Zeppelin** boss
