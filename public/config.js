@@ -4,6 +4,12 @@ export const config = {
   INK: '#1b1410',
   MAX_PLAYERS: 16,
   PLAYER_COLORS: ['#e63946', '#f4a261', '#f1c40f', '#2a9d8f', '#3a86ff', '#8338ec', '#ff5da2', '#06d6a0', '#ff7b00', '#00b4d8', '#9ef01a', '#b5179e', '#ffffff', '#7f5539', '#4cc9f0', '#d00000'],
+  // Main loop: the simulation always advances in fixed steps so game speed is the same on any display.
+  LOOP: {
+    STEP: 1 / 60, // seconds of game time per simulation step
+    MAX_STEPS: 5, // most steps run in one drawn frame; leftover time is dropped (stops a slow-down spiral)
+    MAX_FRAME: 0.25, // longest real frame time counted (a tab coming back from hidden won't fast-forward)
+  },
   // Camera framing.
   CAMERA: {
     SHIP_SCREEN_FRACTION: 0.38, // the ship takes at most this much of the screen width

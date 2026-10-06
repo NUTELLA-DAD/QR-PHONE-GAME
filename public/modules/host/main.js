@@ -29,6 +29,8 @@ showSound();
 window.renderNow = (dt = 0.016) => renderer.renderFrame(performance.now(), camera.update(dt, simulation.state, canvas.width, canvas.height));
 
 let lastTime = performance.now();
+const STEP = config.LOOP.STEP;
+let acc = 0; // real time not yet simulated
 let paused = false;
 const menu = createMenu({ simulation, network, onPause: (on) => (paused = on) });
 
@@ -51,9 +53,20 @@ const guard = (what, fn) => {
 
 function frame(now) {
   requestAnimationFrame(frame); // schedule the next frame first, whatever happens below
-  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  const dt = Math.min(0.05, (now - lastTime) / 1000); // frame time for the camera
+  const real = Math.min(config.LOOP.MAX_FRAME, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
-  if (!paused) guard('update', () => simulation.update(dt));
+  if (!paused) {
+    // Fixed timestep: run the simulation in exact STEP slices, however fast or slow frames arrive.
+    acc += real;
+    let steps = 0;
+    while (acc >= STEP && steps < config.LOOP.MAX_STEPS) {
+      guard('update', () => simulation.update(STEP));
+      acc -= STEP;
+      steps++;
+    }
+    if (acc >= STEP) acc = 0; // hit the cap: drop the leftover rather than spiral
+  }
   guard('sound', () => sfx.update());
   const view = guard('camera', () => camera.update(paused ? 0 : dt, simulation.state, canvas.width, canvas.height));
   if (view) guard('draw', () => renderer.renderFrame(now, view));
