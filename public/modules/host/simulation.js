@@ -19,6 +19,7 @@ import { UPGRADES, pickOffer } from './upgrades.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
 const platformY = (d) => PLATFORMS[d].y;
+const BAY_D = PLATFORMS.findIndex((p) => p.id === 'bay');
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 // Does a point (in ship coordinates) touch the ship? Gasbag, gondola, outriggers or ball turret.
@@ -27,7 +28,9 @@ function hitsShip(x, y) {
   const gondola = x > 125 && x < 1500 && y > 475 && y < 815;
   const outriggers = x > 20 && x < 1580 && y > 745 && y < 800;
   const pod = x > 735 && x < 855 && y > 815 && y < 935;
-  return gas || gondola || outriggers || pod;
+  const bay = x > 350 && x < 640 && y > 815 && y < 945; // the bomb bay compartment under the hull
+  const deck = x > 240 && x < 1380 && y > 330 && y <= 475; // the open top deck, its guns and the helm mount
+  return gas || gondola || outriggers || pod || bay || deck;
 }
 
 const GB = SHIP_LAYOUT.gasbag;
@@ -133,6 +136,8 @@ export function createSimulation() {
     if (revive) return { type: 'revive', obj: revive, hold: true, time: T.REVIVE_TIME, label: `Revive ${revive.name}` };
     const boarding = gunship.interaction(player);
     if (boarding) return boarding;
+    // Standing over the open bomb bay doors: jump out (parachute). Not while carrying ammo - that loads the bombs.
+    if (!player.bot && player.d === BAY_D && tool !== 'ammo' && Math.abs(player.x - SHIP_LAYOUT.bombBay.jumpX) < 40) return { type: 'jump', label: 'Jump!' };
     const bomb = state.bombs.find((o) => here(o, 60));
     if (bomb) return { type: 'defuse', obj: bomb, hold: true, time: config.RAIDERS.DEFUSE_TIME, label: 'Defuse bomb' };
     const fire = state.fires.find((o) => here(o, 70));
@@ -268,7 +273,8 @@ export function createSimulation() {
     state.scorecard = null;
     state.kills = 0;
     state.ventOpen.fill(false);
-    Object.assign(state.bombBay, { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null });
+    Object.assign(state.bombBay, { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null, open: 0 });
+    state.helmHit = 0;
     Object.assign(state.shield, { ang: -Math.PI / 2, on: false, flash: 0 });
     state.tempo = { phase: 'build', t: config.PACING.BUILD };
     state.supply = null;
@@ -372,6 +378,27 @@ export function createSimulation() {
     state.ship.accelX = dt > 0 ? (state.ship.speed - sp) / dt : 0;
   };
 
+  // The helm is out in the open on the top deck: a hit right next to whoever is standing at it can
+  // knock them out for a few seconds (red flash + HELMSMAN HIT!).
+  const helmsmanHit = (x, y, power) => {
+    const H = config.HELM_EXPOSED;
+    const st = SHIP_LAYOUT.stations.find((s) => s.n === 'Helm');
+    if (!st) return;
+    const cy = PLATFORMS[st.d].y - H.HIT_CY;
+    if (Math.hypot(x - st.x, y - cy) > H.HIT_RADIUS * Math.min(2, Math.max(1, power))) return;
+    const victim = Object.values(state.players).find((q) => !q.fall && !q.fly && !(q.ko > 0) && q.conn == null && q.d === st.d && (q.lock === 'Helm' || Math.abs(q.x - st.x) < 45));
+    state.helmHit = H.WARN_TIME; // flash even if nobody is home
+    if (!victim || Math.random() >= H.KO_CHANCE) return;
+    victim.ko = H.KO_TIME;
+    victim.prog = 0;
+    victim.lock = null;
+    victim.fire = false;
+    stat(victim, 'ko');
+    phoneFx(victim, 'You were hit at the helm!', [120, 50, 120]);
+    pop(state, st.x, cy - 70 - state.ship.alt, 'bigHit', '#e63946', 1.1);
+    shipPuff(st.x, cy, '#e63946', 8);
+  };
+
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
   const impact = (x, y, power) => {
     state.ship.shake = Math.max(state.ship.shake, Math.min(0.6, 0.22 * power));
@@ -386,6 +413,7 @@ export function createSimulation() {
     }
     shipPuff(x, y, '#ff7b00', Math.round(8 * power));
     modules.hitAt(x, y, shipPuff, power);
+    helmsmanHit(x, y, power);
     if (onGasbag(x, y)) {
       if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE) state.gasHoles.push(gasHoleAt(x, y));
       damageHull(2 * power);
@@ -800,7 +828,12 @@ export function createSimulation() {
         if (player.actQ) {
           player.actQ = false;
           const type = act ? act.type : null;
-          if (type === 'hook') {
+          if (type === 'jump') {
+            state.bombBay.open = Math.max(state.bombBay.open || 0, 1.6); // the doors swing open under you
+            air.jumpChute(player);
+            stat(player, 'jumps');
+            phoneFx(player, 'Jumping! Steer with the stick - the chute opens in a moment', [60, 40, 60]);
+          } else if (type === 'hook') {
             if (gunship.fireHook()) {
               stat(player, 'boarding');
               puff(player.x + 200, player.y - 60 - state.ship.alt, '#ffe9a8', 8);
@@ -866,7 +899,7 @@ export function createSimulation() {
         label = player.act.label;
         hold = !!player.act.hold;
       }
-      if (player.fly) label = player.fvy > 0 ? 'Falling!' : 'Airborne';
+      if (player.fly) label = player.chuteOpen ? 'Steer!' : player.chute ? 'Chute...' : player.fvy > 0 ? 'Falling!' : 'Airborne';
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
@@ -962,6 +995,7 @@ export function createSimulation() {
     bay.cd = Math.max(0, bay.cd - dt);
     bay.empty = Math.max(0, bay.empty - dt);
     bay.open = Math.max(0, (bay.open || 0) - dt);
+    state.helmHit = Math.max(0, (state.helmHit || 0) - dt);
     if (taken('Bomb Bay') && state.phase === 'flying') {
       const [bx, by] = tilt(state, SHIP_LAYOUT.bombBay.x, SHIP_LAYOUT.bombBay.y);
       bay.from = { x: bx, y: by - state.ship.alt + 20 };

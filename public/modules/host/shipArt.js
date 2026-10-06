@@ -175,10 +175,139 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
 
   const drawCatwalk = () => {
     const p = P.find((q) => q.id === 'catwalk');
-    if (tileRow('ship/catwalk', p.x0, p.x1, p.y - 40, 140, 50)) return;
-    for (let x = p.x0; x <= p.x1; x += 70) line([[x, p.y], [x, p.y - 40]], 4);
-    line([[p.x0, p.y - 40], [p.x1, p.y - 40]], 4);
-    filled(WOOD, () => ctx.rect(p.x0, p.y, p.x1 - p.x0, 10));
+    const y = p.y;
+    const w = p.x1 - p.x0;
+    if (!tileRow('ship/catwalk', p.x0, p.x1, y - 40, 140, 50)) {
+      // Planked deck: boards with a pale highlight, and a dark toe beam along the edge.
+      filled(WOOD, () => ctx.rect(p.x0, y, w, 14));
+      ctx.fillStyle = 'rgba(255,246,214,.35)';
+      ctx.fillRect(p.x0 + 3, y + 3, w - 6, 3);
+      for (let x = p.x0 + 44; x < p.x1; x += 44) line([[x, y], [x, y + 14]], 2, WOOD_DARK);
+      filled(WOOD_DARK, () => ctx.rect(p.x0 - 6, y + 14, w + 12, 8));
+      // Railings (broken where a ladder or rope comes up through the deck): posts, a top rail and a rope.
+      const gaps = L.connectors.filter((c) => P[c.top].id === 'catwalk' || P[c.bottom].id === 'catwalk').map((c) => (P[c.top].id === 'catwalk' ? c.xTop : c.xBottom));
+      const open = (x) => gaps.some((g) => Math.abs(x - g) < 30);
+      const rail = (x0, x1) => {
+        line([[x0, y - 46], [x1, y - 46]], 5);
+        line([[x0, y - 22], [x1, y - 22]], 3, '#a87b4f');
+      };
+      let from = p.x0;
+      for (const g of [...gaps].sort((a, b) => a - b).concat([p.x1 + 40])) {
+        const to = Math.min(g - 28, p.x1);
+        if (to > from + 10) rail(from, to);
+        from = g + 28;
+      }
+      for (let x = p.x0 + 4; x <= p.x1; x += 70) {
+        if (open(x)) continue;
+        line([[x, y], [x, y - 46]], 5);
+        filled('#c9a85a', () => ctx.arc(x, y - 48, 4.5, 0, 7)); // brass cap
+      }
+    }
+    // Fittings along the deck: lanterns on the rail, a stack of crates, barrels, a rope coil, a sign.
+    for (const lx of [640, 1120]) {
+      line([[lx, y - 46], [lx, y - 74]], 4);
+      filled('#f2d36b', () => ctx.roundRect(lx - 7, y - 94, 14, 20, 4));
+    }
+    filled('#c9a05f', () => ctx.rect(450, y - 40, 44, 40));
+    line([[450, y - 40], [494, y]], 2.5, WOOD_DARK);
+    line([[494, y - 40], [450, y]], 2.5, WOOD_DARK);
+    filled('#b98a5a', () => ctx.rect(462, y - 78, 36, 38));
+    line([[462, y - 78], [498, y - 40]], 2.5, WOOD_DARK);
+    for (const bx of [1128, 1166]) {
+      filled('#8a6444', () => ctx.roundRect(bx - 16, y - 46, 32, 46, 8));
+      line([[bx - 16, y - 32], [bx + 16, y - 32]], 3);
+      line([[bx - 16, y - 14], [bx + 16, y - 14]], 3);
+    }
+    filled('#a87b4f', () => ctx.ellipse(400, y - 8, 22, 8, 0, 0, 7));
+    filled('#bf9567', () => ctx.ellipse(400, y - 17, 18, 7, 0, 0, 7));
+    line([[560, y - 48], [560, y - 70]], 3);
+    line([[650, y - 48], [650, y - 70]], 3);
+    filled('#f3ead6', () => ctx.roundRect(540, y - 100, 130, 30, 5));
+    ctx.font = '900 19px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = INK;
+    ctx.fillText('TOP DECK', 605, y - 79);
+    // Deck guns: a post from the deck up to the mount, a base plate and sandbags on the outer side.
+    for (const [name, m] of Object.entries(L.gunMounts)) {
+      const s = L.stations.find((q) => q.n === name);
+      if (!s || P[s.d].id !== 'catwalk') continue;
+      const out = Math.cos(m.aim) < 0 ? -1 : 1;
+      line([[m.bx, m.by + 14], [m.bx, y]], 11);
+      line([[m.bx, m.by + 14], [m.bx, y]], 6, IRON);
+      filled(IRON, () => ctx.roundRect(m.bx - 20, y - 8, 40, 8, 3));
+      for (const [dx, dy, r] of [[out * 34, -9, 17], [out * 56, -9, 15], [out * 44, -25, 15]]) {
+        filled('#cdbd92', () => ctx.ellipse(m.bx + dx, y + dy, r, r * 0.55, 0, 0, 7));
+      }
+    }
+  };
+
+  // The helm: a ship's wheel on a little raised mount on the top deck, in the open. Whoever steers
+  // is exposed to enemy fire (a hit close to them can knock them out).
+  const drawHelmMount = () => {
+    const hp = P.find((q) => q.id === 'helm');
+    const cat = P.find((q) => q.id === 'catwalk');
+    const st = L.stations.find((q) => q.n === 'Helm');
+    const w = hp.x1 - hp.x0;
+    // Trestle legs and cross brace down to the deck.
+    for (const x of [hp.x0 + 8, hp.x1 - 8]) filled(WOOD_DARK, () => ctx.rect(x - 4, hp.y, 8, cat.y - hp.y));
+    line([[hp.x0 + 8, hp.y + 8], [hp.x1 - 8, cat.y - 4]], 4, WOOD_DARK);
+    line([[hp.x1 - 8, hp.y + 8], [hp.x0 + 8, cat.y - 4]], 4, WOOD_DARK);
+    // Planked platform.
+    filled(WOOD, () => ctx.rect(hp.x0 - 6, hp.y, w + 12, 12));
+    ctx.fillStyle = 'rgba(255,246,214,.35)';
+    ctx.fillRect(hp.x0 - 2, hp.y + 3, w + 4, 3);
+    filled(WOOD_DARK, () => ctx.rect(hp.x0 - 6, hp.y + 12, w + 12, 6));
+    // Rail on the open side (the ladder comes up at the left), with a pennant.
+    line([[hp.x1, hp.y], [hp.x1, hp.y - 46]], 5);
+    line([[hp.x0 + 52, hp.y - 46], [hp.x1, hp.y - 46]], 5);
+    line([[hp.x0 + 52, hp.y], [hp.x0 + 52, hp.y - 46]], 5);
+    line([[hp.x0 + 52, hp.y - 22], [hp.x1, hp.y - 22]], 3, '#a87b4f');
+    line([[hp.x1, hp.y - 46], [hp.x1, hp.y - 130]], 4);
+    filled('#8fb37a', () => {
+      ctx.moveTo(hp.x1, hp.y - 130);
+      ctx.lineTo(hp.x1 - 44, hp.y - 118);
+      ctx.lineTo(hp.x1, hp.y - 104);
+      ctx.closePath();
+    });
+    // Compass binnacle.
+    filled(WOOD_DARK, () => ctx.rect(hp.x0 + 78, hp.y - 28, 16, 28));
+    filled('#c9a85a', () => ctx.arc(hp.x0 + 86, hp.y - 34, 12, Math.PI, 0));
+    // The wheel on its pedestal (turning with the ship's speed).
+    filled(WOOD_DARK, () => ctx.roundRect(st.x - 13, hp.y - 44, 26, 44, 4));
+    const wy = hp.y - 70;
+    if (!sprites.pivot(ctx, 'ship/wheel', st.x, wy, 0.5, 0.5, state.ship.speed * 6)) {
+      ctx.save();
+      ctx.translate(st.x, wy);
+      ctx.rotate(state.ship.speed * 6);
+      ink();
+      ctx.beginPath();
+      ctx.arc(0, 0, 28, 0, 7);
+      ctx.stroke();
+      for (let k = 0; k < 8; k++) {
+        const a = (k * Math.PI) / 4;
+        line([[0, 0], [Math.cos(a) * 38, Math.sin(a) * 38]], 4, WOOD);
+      }
+      ctx.restore();
+    }
+    // Hit warning: red flash over the helm and HELMSMAN HIT!
+    const H = config.HELM_EXPOSED;
+    if (state.helmHit > 0) {
+      const t = Math.min(1, state.helmHit / H.WARN_TIME);
+      ctx.fillStyle = `rgba(230,57,70,${0.4 * t})`;
+      ctx.beginPath();
+      ctx.arc(st.x, hp.y - 55, 70, 0, 7);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(230,57,70,${0.9 * t})`;
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      ctx.font = '900 26px Georgia';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#fff';
+      ctx.strokeText('HELMSMAN HIT!', st.x, hp.y - 150);
+      ctx.fillStyle = '#c0282f';
+      ctx.fillText('HELMSMAN HIT!', st.x, hp.y - 150);
+    }
   };
 
   // Room back walls: a picture per room if drawn, else flat colour.
@@ -192,7 +321,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     gondolaPath();
     ctx.clip();
     for (const r of L.rooms) {
-      if (r.outside) continue;
+      if (r.outside || r.p === 'bay') continue; // (the bomb bay compartment is drawn by drawBombBay)
       const y = P[r.d].y;
       const h = P[r.d].id === 'lower' ? 140 : 148;
       if (!sprites.box(ctx, 'ship/room-' + ROOM_ART[r.name], r.x0, y - h, r.x1 - r.x0, h)) {
@@ -406,23 +535,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     if (!sprites.box(ctx, 'ship/gauge', gx - 28, gy - 28, 56, 56)) filled('#f1e2b8', () => ctx.arc(gx, gy, 28, 0, 7));
     line([[gx, gy], [gx + Math.cos(angle) * 22, gy + Math.sin(angle) * 22]], 5, state.ship.press < config.BOILER.WARN_AT ? '#6fa07a' : '#a8443f');
 
-    // Ship's wheel at the helm, turning with speed.
-    const helm = L.stations.find((s) => s.n === 'Helm');
-    const hy = P[helm.d].y - 70;
-    if (!sprites.pivot(ctx, 'ship/wheel', helm.x + 30, hy, 0.5, 0.5, state.ship.speed * 6)) {
-      ctx.save();
-      ctx.translate(helm.x + 30, hy);
-      ctx.rotate(state.ship.speed * 6);
-      ink();
-      ctx.beginPath();
-      ctx.arc(0, 0, 28, 0, 7);
-      ctx.stroke();
-      for (let k = 0; k < 8; k++) {
-        const a = (k * Math.PI) / 4;
-        line([[0, 0], [Math.cos(a) * 38, Math.sin(a) * 38]], 4, WOOD);
-      }
-      ctx.restore();
-    }
+    // (The ship's wheel is drawn by drawHelmMount, out on the top deck.)
 
     // Chart table for the navigator.
     const nav = L.stations.find((s) => s.n === 'Navigator');
@@ -559,8 +672,8 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       ctx.fill();
       const w = ctx.measureText(s.n).width + 20;
       const id = P[s.d].id;
-      let ly = id === 'nest' ? y - 100 : id === 'pod' || id === 'hangar' ? y - 20 : y - 134;
-      const lx = id === 'pod' || id === 'hangar' ? s.x + 130 : s.x;
+      let ly = id === 'nest' ? y - 100 : id === 'pod' || id === 'hangar' || id === 'bay' ? y - 20 : y - 134;
+      const lx = id === 'pod' || id === 'hangar' ? s.x + 130 : id === 'bay' ? s.x - 25 : s.x;
       // Drop a label one row if it would overlap its neighbour.
       while (placed.some((o) => Math.abs(o.ly - ly) < 30 && Math.abs(o.lx - lx) < (o.w + w) / 2 + 6)) ly += 36;
       placed.push({ lx, ly, w });
@@ -608,29 +721,142 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
   };
 
   // Bomb bay: a rack of bombs inside and two doors in the belly that swing open on a drop.
+  // Hazard stripes (red and cream, slanted) in a box.
+  const hazard = (x0, y0, w, h) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, y0, w, h);
+    ctx.clip();
+    ctx.fillStyle = '#ebdfc0';
+    ctx.fillRect(x0, y0, w, h);
+    ctx.fillStyle = '#a8443f';
+    for (let x = x0 - h; x < x0 + w; x += 24) {
+      ctx.beginPath();
+      ctx.moveTo(x, y0 + h);
+      ctx.lineTo(x + 12, y0 + h);
+      ctx.lineTo(x + 12 + h, y0);
+      ctx.lineTo(x + h, y0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    ink();
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(x0, y0, w, h);
+  };
+
+  // One bomb lying on a shelf, nose to the right.
+  const drawBomb = (x, y) => {
+    filled('#4a4346', () => ctx.ellipse(x, y, 17, 9, 0, 0, 7));
+    filled('#a8443f', () => ctx.rect(x - 3, y - 9, 7, 18));
+    filled('#6a6568', () => {
+      ctx.moveTo(x - 14, y);
+      ctx.lineTo(x - 24, y - 9);
+      ctx.lineTo(x - 24, y + 9);
+      ctx.closePath();
+    });
+  };
+
+  // The bomb bay: its own dark compartment in the belly of the hull, reached by a hatch ladder from
+  // the lower deck. Racks of bombs (they empty as bombs are dropped), a bombsight, an ammo point
+  // where crates are brought to load bombs, and doors in the floor that swing open on a drop or a jump.
   const drawBombBay = () => {
     const B = L.bombBay;
     const bay = state.bombBay || { bombs: 0 };
-    const deck = P.find((q) => q.id === 'lower').y;
-    // Bombs waiting in the rack.
-    for (let i = 0; i < bay.bombs; i++) {
-      const x = B.x - 50 + (i % 3) * 50;
-      const y = deck - 30 - Math.floor(i / 3) * 34;
-      filled('#4a4346', () => ctx.ellipse(x, y, 12, 17, 0, 0, 7));
-      filled('#a8443f', () => ctx.rect(x - 9, y - 22, 18, 6));
-    }
+    const bp = P.find((q) => q.id === 'bay');
+    const fy = bp.y; // floor
+    const x0 = bp.x0;
+    const x1 = bp.x1;
+    const top = 812;
+    const half = B.doorHalf;
     const open = Math.min(1, (bay.open || 0) * 3);
+    const manned = Object.values(state.players).some((q) => q.lock === 'Bomb Bay');
+    // Hull blister: dark metal with chamfered bottom corners.
+    filled('#4a4346', () => {
+      ctx.moveTo(x0, top);
+      ctx.lineTo(x0, fy - 8);
+      ctx.lineTo(x0 + 22, fy + 18);
+      ctx.lineTo(x1 - 22, fy + 18);
+      ctx.lineTo(x1, fy - 8);
+      ctx.lineTo(x1, top);
+      ctx.closePath();
+    });
+    // Back wall, panelled, with rivets.
+    ctx.fillStyle = '#5f585d';
+    ctx.fillRect(x0 + 6, top + 12, x1 - x0 - 12, fy - top - 12);
+    ctx.fillStyle = 'rgba(255,255,255,.08)';
+    ctx.fillRect(x0 + 6, top + 12, x1 - x0 - 12, 10);
+    for (let x = x0 + 46; x < x1 - 20; x += 62) line([[x, top + 14], [x, fy]], 2, '#3d373b');
+    ctx.fillStyle = INK;
+    for (let x = x0 + 16; x < x1 - 10; x += 31) {
+      ctx.beginPath();
+      ctx.arc(x, top + 20, 2, 0, 7);
+      ctx.fill();
+    }
+    // Red warning stripes along the ceiling and the floor edge.
+    hazard(x0 + 6, top + 12, x1 - x0 - 12, 12);
+    hazard(x0 + 6, fy - 12, B.x - half - x0 - 6, 12);
+    hazard(B.x + half, fy - 12, x1 - B.x - half - 6, 12);
+    // Hatch up to the lower deck (the ladder is drawn with the other connectors).
+    filled('#3d373b', () => ctx.rect(372 - 24, top + 8, 48, 8));
+    // Stencilled name on the wall.
+    ctx.font = '900 22px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e8c9c4';
+    ctx.fillText('BOMB BAY', (x0 + x1) / 2 - 20, top + 52);
+    // Bomb rack: a shelving frame with two shelves of three bombs; it empties as bombs are used.
+    const rx0 = 400;
+    const rx1 = 508;
+    line([[rx0 - 4, top + 66], [rx0 - 4, fy]], 6, '#3d373b');
+    line([[rx1, top + 66], [rx1, fy]], 6, '#3d373b');
+    for (const sy of [fy - 30, fy - 68]) filled('#6b4a32', () => ctx.rect(rx0 - 8, sy, rx1 - rx0 + 14, 7));
+    const shown = Math.min(bay.bombs, 6);
+    for (let i = 0; i < shown; i++) drawBomb(rx0 + 28 + (i % 3) * 38, (i < 3 ? fy - 30 : fy - 68) - 10);
+    ctx.font = '900 18px Georgia';
+    ctx.fillStyle = bay.bombs > 0 ? '#f2d36b' : '#e8887f';
+    ctx.fillText(bay.bombs > 0 ? 'BOMBS x' + bay.bombs : 'EMPTY', (rx0 + rx1) / 2, fy - 86);
+    // Ammo point: crates stacked by the wall; bring an ammo crate to the bombardier to load bombs.
+    filled('#c9a05f', () => ctx.rect(x1 - 52, fy - 34, 36, 34));
+    line([[x1 - 52, fy - 34], [x1 - 16, fy]], 2.5, WOOD_DARK);
+    filled('#b98a5a', () => ctx.rect(x1 - 44, fy - 66, 30, 32));
+    ctx.font = '900 13px Georgia';
+    ctx.fillStyle = INK;
+    ctx.fillText('AMMO', x1 - 29, fy - 45);
+    // Bombsight on a stand beside the bombardier, looking down through the doors.
+    const sx = 536;
+    line([[sx, fy], [sx, fy - 54]], 6, IRON);
+    line([[sx, fy - 54], [sx + 22, fy - 28]], 11, INK);
+    line([[sx, fy - 54], [sx + 22, fy - 28]], 7, '#c9a85a');
+    filled(manned ? '#ff6a5c' : '#9a5a55', () => ctx.arc(sx + 24, fy - 26, 6, 0, 7));
+    filled('#c9a85a', () => ctx.roundRect(sx - 10, fy - 62, 20, 12, 3));
+    // Door slot in the floor: dark opening when the doors are open, leaves hinged at both sides.
+    if (open > 0.02) {
+      filled('#1d2630', () => ctx.rect(B.x - half, fy, half * 2, 17));
+    }
     const a = open * 1.2;
     ctx.save();
-    ctx.translate(B.x - 44, B.y);
+    ctx.translate(B.x - half, fy);
     ctx.rotate(a);
-    filled('#8a6444', () => ctx.rect(0, -6, 44, 12));
+    filled('#8a6444', () => ctx.rect(0, 0, half, 12));
+    hazard(2, 1, half - 4, 6);
     ctx.restore();
     ctx.save();
-    ctx.translate(B.x + 44, B.y);
+    ctx.translate(B.x + half, fy);
     ctx.rotate(-a);
-    filled('#8a6444', () => ctx.rect(-44, -6, 44, 12));
+    filled('#8a6444', () => ctx.rect(-half, 0, half, 12));
+    hazard(-half + 2, 1, half - 4, 6);
     ctx.restore();
+    // JUMP sign over the doors (parachute!).
+    ctx.font = '900 16px Georgia';
+    ctx.fillStyle = '#f2d36b';
+    ctx.fillText('JUMP', B.jumpX, fy - 74);
+    ctx.fillStyle = '#f2d36b';
+    ctx.beginPath();
+    ctx.moveTo(B.jumpX - 9, fy - 66);
+    ctx.lineTo(B.jumpX + 9, fy - 66);
+    ctx.lineTo(B.jumpX, fy - 52);
+    ctx.closePath();
+    ctx.fill();
   };
 
   return (time) => {
@@ -647,6 +873,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     drawProps(time);
     drawCoal();
     drawBombBay();
+    drawHelmMount();
     // Medical bay sign (where anyone who falls off comes round).
     {
       const mb = L.medbay;
