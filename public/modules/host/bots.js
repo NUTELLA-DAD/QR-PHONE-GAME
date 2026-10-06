@@ -12,7 +12,7 @@ const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
 const GUN_STATIONS = Object.keys(L.gunMounts);
-const MANNED_STATIONS = ['Helm', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
+const MANNED_STATIONS = ['Helm', 'Escort Fighter', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -158,7 +158,7 @@ function listJobs(state, bot) {
   // Stations, most useful first. The vital ones (helm, gas valve, a gun or weapon with a target
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
-  const reach = (n) => (n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
+  const reach = (n) => (n === 'Escort Fighter' ? (state.escort && state.escort.docked && state.escort.rebuild <= 0 && targets(state).length ? 0.6 : 4) : n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1 });
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
@@ -213,6 +213,19 @@ function operate(p, state, dt) {
   p.jy = 0;
   p.fire = false;
   const ship = state.ship;
+  if (p.lock === 'Escort Fighter') {
+    // Fly the escort fighter at the nearest enemy (or let her circle the ship if there's none).
+    const esc = state.escort;
+    const list = esc && esc.flying ? targets(state).map((t) => ({ t, q: t.at(0.4) })).sort((a, b) => Math.hypot(a.q.x - esc.x, a.q.y - esc.y) - Math.hypot(b.q.x - esc.x, b.q.y - esc.y)) : [];
+    if (list.length) {
+      const q = list[0].q;
+      const d = Math.hypot(q.x - esc.x, q.y - esc.y) || 1;
+      p.jx = (q.x - esc.x) / d;
+      p.jy = (q.y - esc.y) / d;
+    } else p.jx = p.jy = 0;
+    p.gunIdle = list.length ? 0 : (p.gunIdle || 0) + dt;
+    return;
+  }
   if (p.lock === 'Helm') {
     // Terrain first: keep inside the safe altitude window, stopping to climb cliffs.
     const plan = pilotPlan(state, 2.5, B.HELM_SPEED);

@@ -3,6 +3,7 @@
 // Everything is in ship coordinates; render.js has already shifted for altitude.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { drawBiplane } from './planeArt.js';
 
 const L = SHIP_LAYOUT;
 const P = L.platforms;
@@ -241,6 +242,24 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
     ctx.fillStyle = WOOD_DARK;
     ctx.fillRect(735, P.find((q) => q.id === 'pod').y, 120, 8);
+  };
+
+  // The fighter hatch under the hull, and the escort fighter hanging on its hook when she's home
+  // (a ghostly outline while a new one is being built).
+  const drawHangar = (time) => {
+    const hp = P.find((q) => q.id === 'hangar');
+    const dock = L.escortDock;
+    ctx.fillStyle = WOOD_DARK;
+    ctx.fillRect(hp.x0, hp.y, hp.x1 - hp.x0, 8);
+    const esc = state.escort;
+    if (!esc || esc.flying) return;
+    line([[dock.x, hp.y + 8], [dock.x, dock.y - 32]], 5, INK);
+    ctx.save();
+    ctx.translate(dock.x, dock.y);
+    ctx.scale(1.45, 1.45);
+    if (esc.rebuild > 0) ctx.globalAlpha = 0.35;
+    drawBiplane(ctx, 0, '#8fb37a', '#e8d8a8', false, '#c8372d');
+    ctx.restore();
   };
 
   // ---- Fittings ----
@@ -522,8 +541,8 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       ctx.fill();
       const w = ctx.measureText(s.n).width + 20;
       const id = P[s.d].id;
-      let ly = id === 'nest' ? y - 100 : id === 'pod' ? y - 20 : y - 134;
-      const lx = id === 'pod' ? s.x + 130 : s.x;
+      let ly = id === 'nest' ? y - 100 : id === 'pod' || id === 'hangar' ? y - 20 : y - 134;
+      const lx = id === 'pod' || id === 'hangar' ? s.x + 130 : s.x;
       // Drop a label one row if it would overlap its neighbour.
       while (placed.some((o) => Math.abs(o.ly - ly) < 30 && Math.abs(o.lx - lx) < (o.w + w) / 2 + 6)) ly += 36;
       placed.push({ lx, ly, w });
@@ -603,6 +622,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     drawUpgradeFittings();
     drawOutriggers(time);
     drawPod();
+    drawHangar(time);
     drawPipes();
     drawRacks();
     drawExtinguishers();

@@ -37,6 +37,11 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
   (she rises - fast when overfilled, and the envelope swells), DOWN to vent it (she drops - fast
   when empty, and it sags). Middle = hold. The gas slowly cools and leaks from holes, so keep topping it up.
   Pumping uses boiler steam.
+- **Escort Fighter** (climb the ladder down from the lower deck to the Fighter Hatch): our own
+  little biplane hangs under the hull. Take the station and she drops off the hook. Point the stick
+  where to fly (let go and she circles the ship); her guns fire by themselves at anything in front
+  of her. LEAVE flies her home. Shot down, the pilot bails out to the medical bay and a new one
+  takes 30 seconds to build. Watch the rock!
 - **Guns** (6 of them, each turns only so far): aim near a target and the aim snaps on. Guns need
   **ammo** carried from the Ammo Hold.
 - **Lightning Coil** (main deck, Workshop): aim with the stick, HOLD to charge (uses lots of

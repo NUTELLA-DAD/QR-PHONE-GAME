@@ -104,6 +104,21 @@ export const config = {
     SHOT_EVERY: 0.2,
     BULLET_SPEED: 700,
   },
+  // The ship's own escort fighter (hangs under the hull; the "Escort Fighter" station flies it).
+  ESCORT: {
+    HP: 6, // enemy bullets she can take
+    SPEED: 560,
+    TURN: 2.4, // turn rate (radians per second): nimble, but she still swoops
+    TURN_AVOID: 3,
+    ORBIT: 900, // hands off the stick, she circles the ship this far out
+    ORBIT_SPEED: 0.45,
+    FIRE_RANGE: 1000, // guns fire at anything this close...
+    FIRE_CONE: 0.3, // ...within this angle of her nose (radians)
+    SHOT_EVERY: 0.18,
+    LEASH: 3200, // further than this from the ship and she flies home
+    DOCK_RANGE: 90, // how close to the hook she latches on
+    REBUILD: 30, // seconds to build a new one after she's shot down
+  },
   GUNSHIP: {
     FIRST_AFTER: 100, // seconds into a mission before the first
     EVERY_MIN: 80,

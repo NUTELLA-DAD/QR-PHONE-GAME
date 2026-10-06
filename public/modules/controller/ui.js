@@ -128,6 +128,7 @@ export function createControllerUI({ network }) {
           helm: 'Stick: engines (left/right) and trim (up/down). AHEAD lever: cruise speed (STOP line = hover). PUMP/VENT lever: the gasbag - up = rise, middle = hold, down = drop.',
           gun: 'Drag to aim - it snaps onto nearby targets. Hold FIRE. Needs ammo!',
           lookout: 'Keep watch! Arrows on the TV show what is coming from off screen.',
+          escort: 'You are flying the escort fighter! Point the stick where to fly - let go and she circles the ship. Her guns fire by themselves at anything in front. LEAVE flies her home.',
           coil: 'Aim with the stick, HOLD to charge the coil (uses lots of steam), let go to fire a giant bolt!',
           shield: 'Point the stick to swing the glowing shield round the ship - it blocks bullets, bats and rockets!',
           bombbay: 'Watch the red ring on the TV - press DROP when it is on a gun or building. Needs ammo crates!',

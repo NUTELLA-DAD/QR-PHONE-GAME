@@ -7,6 +7,7 @@ import { createThreats } from './threats.js';
 import { createRaiders } from './raiders.js';
 import { createCourse, inRock, tilt, altBounds, pilotPlan, gasFor } from './course.js';
 import { createSquadrons } from './squadrons.js';
+import { createEscort } from './escort.js';
 import { createSpecials } from './specials.js';
 import { createCoil } from './coil.js';
 import { createGunship, MAIN_X1 } from './gunship.js';
@@ -119,7 +120,7 @@ export function createSimulation() {
   const modules = createModules();
   state.modules = modules.list;
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
-  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || !!state.GUNS[name];
+  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || name === 'Escort Fighter' || !!state.GUNS[name];
 
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
@@ -255,6 +256,7 @@ export function createSimulation() {
     raiders.reset();
     threats.reset();
     squadrons.restart();
+    escort.reset();
     specials.reset();
     coil.reset();
     gunship.reset();
@@ -396,6 +398,7 @@ export function createSimulation() {
   let lastJolt = 0;
 
   const raiders = createRaiders({ state, modules, puff, impact });
+  const escort = createEscort({ state, puff, phoneFx });
   const threats = createThreats({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, getHelm, credit });
   // ---- Upgrade votes (at the turning beacon and back home) ----
   const startVote = (marker) => {
@@ -757,13 +760,13 @@ export function createSimulation() {
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
-      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : null;
+      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : stationName === 'Escort Fighter' ? 'escort' : null;
       const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && Object.values(state.players).some((q) => q.lock === stationName && (q.bot ? player.bot : true));
       let label = 'Hey!';
       let hold = false;
       if (player.lock) {
         const working = modules.works(state, player.lock);
-        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
+        label = !working && kind !== 'helm' && kind !== 'lookout' && kind !== 'escort' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'escort' ? (state.escort.flying ? 'Auto guns' : 'Wait...') : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
         hold = kind === 'gun' || kind === 'bombbay' || kind === 'coil';
       } else if (player.act) {
         label = player.act.label;
@@ -772,6 +775,7 @@ export function createSimulation() {
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
+      if (stationName === 'Escort Fighter' && !status) status = escort.status();
       const feel = state.buoyancy > 0 ? 'RISING' : state.buoyancy < 0 ? 'FALLING' : 'holding';
       if (stationName === 'Boiler' && !status) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
       if (stationName === 'Helm' && player.lock && !status && (state.ship.press < config.GAS.PUMP_MIN_PRESS || state.gasHoles.length)) status = `Gas ${Math.round(state.ship.gas)}% - ${feel}${state.ship.press < config.GAS.PUMP_MIN_PRESS ? ' - NO STEAM TO PUMP!' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' holes leaking' : ''}`;
@@ -945,6 +949,7 @@ export function createSimulation() {
       }
       updateTempo(dt);
       squadrons.update(dt);
+      escort.update(dt);
       specials.update(dt);
       gunship.update(dt);
       course.update(dt);

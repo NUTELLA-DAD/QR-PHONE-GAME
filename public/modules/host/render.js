@@ -1541,7 +1541,7 @@ export function createRenderer({ ctx, state, canvas }) {
       drawHazards(time / 1000);
       threatArt.drawBombs(time / 1000);
       drawHighlights(time / 1000);
-      [...Object.values(state.players), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => drawPlayer(player, time / 1000));
+      [...Object.values(state.players).filter((p) => !(p.lock === 'Escort Fighter' && state.escort && state.escort.flying)), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => drawPlayer(player, time / 1000));
       // Each crew member's colour marker above their head, easy to spot from the sofa.
       for (const p of Object.values(state.players)) {
         if (!p.color || p.connected === false) continue;
