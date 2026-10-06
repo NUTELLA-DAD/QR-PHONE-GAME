@@ -65,6 +65,17 @@ export const config = {
     TUG_PULL: 70, // how hard a hooked tug drags the ship down (pixels per second)
     TUG_SLOW: 1.2, // and how quickly it drags her speed back
   },
+  // Lightning Coil super-weapon: hold to charge (uses lots of steam), let go to fire.
+  COIL: {
+    CHARGE_TIME: 3.5, // seconds to full charge at good pressure
+    MIN_CHARGE: 0.3, // letting go below this just fizzles
+    DAMAGE: 10, // damage at full charge (scales with charge)
+    WIDTH: 80, // half-width of the bolt
+    RANGE: 3200,
+    TURN: 2.5, // aiming speed (radians per second)
+    STEAM_USE: 9, // extra steam used while charging
+    COOLDOWN: 4,
+  },
   // Deflector shield: a steam-powered arc the Deflector station swings around the ship. It
   // blocks enemy bullets, bats, rockets and bombs that hit it.
   SHIELD: {

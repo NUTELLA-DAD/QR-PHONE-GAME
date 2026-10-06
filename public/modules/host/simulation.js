@@ -8,6 +8,7 @@ import { createRaiders } from './raiders.js';
 import { createCourse, inRock, tilt, altBounds, pilotPlan } from './course.js';
 import { createSquadrons } from './squadrons.js';
 import { createSpecials } from './specials.js';
+import { createCoil } from './coil.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
 import { assistAim } from './aim.js';
@@ -111,7 +112,7 @@ export function createSimulation() {
   const modules = createModules();
   state.modules = modules.list;
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
-  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || !!state.GUNS[name];
+  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || !!state.GUNS[name];
 
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
@@ -234,6 +235,7 @@ export function createSimulation() {
     threats.reset();
     squadrons.restart();
     specials.reset();
+    coil.reset();
     course.restart();
     modules.reset();
     if (state.weather) Object.assign(state.weather, { storm: 0, gust: 0, flash: 0, bolt: null });
@@ -413,6 +415,7 @@ export function createSimulation() {
 
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
+  const coil = createCoil({ state, puff, credit });
   const weather = createWeather({ state, impact, puff });
 
   const emitPlayerUi = (playerId, ui) => {
@@ -632,14 +635,14 @@ export function createSimulation() {
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
-      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : null;
+      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : null;
       const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && taken(stationName);
       let label = 'Hey!';
       let hold = false;
       if (player.lock) {
         const working = modules.works(state, player.lock);
-        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
-        hold = kind === 'gun' || kind === 'bombbay';
+        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
+        hold = kind === 'gun' || kind === 'bombbay' || kind === 'coil';
       } else if (player.act) {
         label = player.act.label;
         hold = !!player.act.hold;
@@ -677,7 +680,9 @@ export function createSimulation() {
     }
     const openVents = state.ventOpen.filter(Boolean).length;
     state.shield.on = taken('Deflector') && modules.works(state, 'Deflector') && state.phase === 'flying';
-    state.steamUse = modules.pressureDrain(state) + openVents * BO.VENT_RATE + (state.shield.on ? config.SHIELD.STEAM_USE : 0);
+    const coilOp = Object.values(state.players).find((q) => q.lock === 'Lightning Coil');
+    coil.update(dt, coilOp || null, modules.works(state, 'Lightning Coil'));
+    state.steamUse = modules.pressureDrain(state) + openVents * BO.VENT_RATE + (state.shield.on ? config.SHIELD.STEAM_USE : 0) + (state.coil.charging ? config.COIL.STEAM_USE : 0);
     state.ship.press = clamp(state.ship.press + (heat - (state.steamUse * state.ship.press) / BO.USE_REF) * dt, 0, 100);
     if (state.ship.press >= BO.WARN_AT && !state.pressureWarned && !state.ship.down) {
       state.pressureWarned = true;

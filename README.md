@@ -34,6 +34,9 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
   let go. Nobody at the helm? On Easy/Normal the autopilot steers gently.
 - **Guns** (6 of them, each turns only so far): aim near a target and the aim snaps on. Guns need
   **ammo** carried from the Ammo Hold.
+- **Lightning Coil** (main deck, Workshop): aim with the stick, HOLD to charge (uses lots of
+  steam), let go to fire a giant lightning bolt from the top of the crow's nest that hits
+  everything along it. The longer the charge, the harder it hits.
 - **Deflector** (top catwalk): point the stick to swing a glowing steam shield round the ship.
   It blocks enemy bullets, bats, rockets and bombs - but uses steam while it's up.
 - **Bomb Bay** (lower deck, Aft Gun Deck): press DROP to drop a bomb through the belly doors. A

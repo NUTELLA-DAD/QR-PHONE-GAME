@@ -3,13 +3,13 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { steerTo } from './nav.js';
-import { bestTarget } from './aim.js';
+import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan } from './course.js';
 
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
 const GUN_STATIONS = Object.keys(L.gunMounts);
-const MANNED_STATIONS = ['Helm', 'Deflector', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
+const MANNED_STATIONS = ['Helm', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -32,6 +32,26 @@ function firingSolution(state, gun) {
 }
 
 // Helm: altitude that dodges the next mine skimming the top or bottom of the ship (or null).
+// Best direction for the Lightning Coil: the angle (within its arc) that lines up the most targets.
+function coilShot(state) {
+  const M = L.coil;
+  const ex = M.x;
+  const ey = M.y - 60 - state.ship.alt;
+  const angles = [];
+  for (const t of targets(state)) {
+    const p = t.at(0);
+    if (Math.hypot(p.x - ex, p.y - ey) > config.COIL.RANGE) continue;
+    const a = Math.atan2(p.y - ey, p.x - ex);
+    if (Math.abs(Math.atan2(Math.sin(a - M.aim), Math.cos(a - M.aim))) <= M.arc) angles.push(a);
+  }
+  let best = { angle: M.aim, count: 0 };
+  for (const a of angles) {
+    const count = angles.filter((b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) < 0.09).length;
+    if (count > best.count) best = { angle: a, count };
+  }
+  return best;
+}
+
 // The nearest bullet, bat, rocket or bomb coming at the ship (for the Deflector), or null.
 function incoming(state) {
   const S = L.shield;
@@ -118,7 +138,7 @@ function listJobs(state, bot) {
   if (state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 1 });
   // Helm and boiler first, then guns that can reach the enemy right now. Skip broken ones.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
-  const reach = (n) => (n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : firingSolution(state, state.GUNS[n]) !== null ? 1 : 2);
+  const reach = (n) => (n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : firingSolution(state, state.GUNS[n]) !== null ? 1 : 2);
   const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   for (const n of open) jobs.push({ kind: 'station', obj: n, max: 1 });
   return jobs;
@@ -166,6 +186,16 @@ function operate(p, state, dt) {
     if (target !== null) p.jy = clamp((ship.alt - target) / 90 + (ship.vy || 0) / 260, -1, 1);
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
     else p.jy = 0;
+  } else if (p.lock === 'Lightning Coil') {
+    // Aim at the thickest bunch of enemies and charge while lined up.
+    const shot = coilShot(state);
+    p.gunIdle = shot.count >= 2 ? 0 : (p.gunIdle || 0) + dt;
+    if (shot.count) {
+      p.jx = Math.cos(shot.angle);
+      p.jy = Math.sin(shot.angle);
+      const off = Math.abs(Math.atan2(Math.sin(shot.angle - state.coil.aim), Math.cos(shot.angle - state.coil.aim)));
+      p.fire = off < 0.1 && state.coil.cd <= 0;
+    }
   } else if (p.lock === 'Deflector') {
     // Swing the shield toward the nearest thing heading for the ship.
     const t = incoming(state);

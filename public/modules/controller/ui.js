@@ -130,6 +130,7 @@ export function createControllerUI({ network }) {
           helm: 'Stick up/down: climb and dive. Lever: ahead, STOP line = hover, below it = reverse.',
           gun: 'Drag to aim - it snaps onto nearby targets. Hold FIRE. Needs ammo!',
           lookout: 'Keep watch! Arrows on the TV show what is coming from off screen.',
+          coil: 'Aim with the stick, HOLD to charge the coil (uses lots of steam), let go to fire a giant bolt!',
           shield: 'Point the stick to swing the glowing shield round the ship - it blocks bullets, bats and rockets!',
           bombbay: 'Watch the red ring on the TV - press DROP when it is on a gun or building. Needs ammo crates!',
         }[next.kind]

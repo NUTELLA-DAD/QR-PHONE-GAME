@@ -350,7 +350,65 @@ export function createRenderer({ ctx, state, canvas }) {
     }
   };
 
+  // Lightning Coil on top of the crow's nest: copper coil and a glowing ball that brightens as it
+  // charges, an aiming line while charging, and the bolt itself.
+  const drawCoil = (time) => {
+    const C = state.coil;
+    if (!C) return;
+    const M = SHIP_LAYOUT.coil;
+    const x = M.x;
+    const y = M.y - state.ship.alt;
+    ink();
+    ctx.lineWidth = 5;
+    ctx.fillStyle = '#5a3b26';
+    ctx.fillRect(x - 26, y + 20, 52, 26);
+    ctx.strokeRect(x - 26, y + 20, 52, 26);
+    ctx.strokeStyle = '#c87533';
+    ctx.lineWidth = 8;
+    for (let k = 0; k < 4; k++) {
+      ctx.beginPath();
+      ctx.ellipse(x, y + 12 - k * 16, 22 - k * 3, 7, 0, 0, 7);
+      ctx.stroke();
+    }
+    const c = C.charge;
+    const glow = 0.25 + c * 0.75;
+    ctx.fillStyle = `rgba(160,235,255,${0.25 * glow})`;
+    ctx.beginPath();
+    ctx.arc(x, y - 60, 30 + c * 50 + Math.sin(time * 30) * 4 * c, 0, 7);
+    ctx.fill();
+    ink();
+    ctx.lineWidth = 4;
+    ctx.fillStyle = `rgb(${Math.round(120 + 135 * c)},${Math.round(200 + 55 * c)},255)`;
+    ctx.beginPath();
+    ctx.arc(x, y - 60, 18, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+    if (C.charging) {
+      ctx.strokeStyle = `rgba(160,235,255,${0.3 + 0.5 * c})`;
+      ctx.lineWidth = 4 + 10 * c;
+      ctx.setLineDash([26, 20]);
+      ctx.beginPath();
+      ctx.moveTo(x, y - 60);
+      ctx.lineTo(x + Math.cos(C.aim) * 2400, y - 60 + Math.sin(C.aim) * 2400);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (C.bolt) {
+      const k = C.bolt.t / 0.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      for (const [w, col] of [[90 * C.bolt.power * k + 10, `rgba(120,220,255,${0.3 * k})`], [30 * k + 6, `rgba(190,240,255,${0.8 * k})`], [10, `rgba(255,255,255,${k})`]]) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        C.bolt.pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+        ctx.stroke();
+      }
+    }
+  };
+
   const drawEffects = (time, view) => {
+    drawCoil(time);
     drawShield(time);
     drawThreatGlows(time);
     drawFighterAim(time);

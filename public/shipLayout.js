@@ -52,6 +52,7 @@ export const SHIP_LAYOUT = {
     { n: 'Deflector', p: 'catwalk', x: 940 },
     { n: 'Dorsal Gun', p: 'nest', x: 940 },
     { n: 'Tail Gun', p: 'main', x: 180 },
+    { n: 'Lightning Coil', p: 'main', x: 710 },
     { n: 'Boiler', p: 'main', x: 400 },
     { n: 'Navigator', p: 'main', x: 1215 },
     { n: 'Helm', p: 'main', x: 1330 },
@@ -75,6 +76,9 @@ export const SHIP_LAYOUT = {
     'Fore Sponson': { bx: 1270, by: 812, aim: 1.0, arc: 0.7 },
     'Ventral Gun': { bx: 805, by: 948, aim: Math.PI / 2, arc: 1.2 },
   },
+
+  // Lightning Coil emitter (on top of the crow's nest): fires up and out to the sides.
+  coil: { x: 875, y: -20, aim: -Math.PI / 2, arc: 1.45 },
 
   // Deflector shield: a band on an ellipse around the whole ship, swung round by the crew.
   shield: { cx: 800, cy: 470, rx: 1020, ry: 660 },
