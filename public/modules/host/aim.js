@@ -17,6 +17,16 @@ export function targets(state) {
   for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + m.vx * t, y: m.y }) });
   for (const b of state.bats || []) if (b.delay <= 0) list.push({ kind: 'bat', obj: b, r: 26, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t }) });
   for (const p of state.strafers || []) list.push({ kind: 'strafer', obj: p, r: 40, at: (t) => ({ x: p.x + p.vx * t, y: p.y }) });
+  const SP = state.specials;
+  if (SP) {
+    for (const s of SP.saws) list.push({ kind: 'saw', obj: s, r: 52, at: (t) => ({ x: s.x + s.vx * t, y: s.y + s.vy * t }) });
+    for (const b of SP.imps) if (b.delay <= 0) list.push({ kind: 'imp', obj: b, r: 22, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t }) });
+    for (const z of SP.snipers) list.push({ kind: 'sniper', obj: z, r: 60, at: () => ({ x: z.x, y: z.y }) });
+    for (const g of SP.tugs) {
+      list.push({ kind: 'tug', obj: g, r: 50, at: () => ({ x: g.x, y: g.y }) });
+      if (g.mode === 'pull' && g.hook) list.push({ kind: 'cable', obj: g, r: 20, at: () => ({ x: (g.x + g.hook.x) / 2, y: (g.y + g.hook.y - state.ship.alt) / 2 }) });
+    }
+  }
   for (const k of state.rockets || []) list.push({ kind: 'rocket', obj: k, r: 24, at: (t) => ({ x: k.x + k.vx * t, y: k.y + k.vy * t }) });
   for (const p of state.bombers || []) list.push({ kind: 'bomber', obj: p, r: 80, at: (t) => ({ x: p.x + p.vx * t, y: p.y }) });
   for (const b of state.enemyBombs || []) list.push({ kind: 'bomb', obj: b, r: 22, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t + 210 * t * t }) });
@@ -44,7 +54,7 @@ export function solution(state, gun, target) {
 
 // The most useful target this gun can hit right now (mines, turrets, cargo, then fighter).
 export function bestTarget(state, gun) {
-  const order = { bomb: 0, rocket: 1, mine: 2, bat: 3, strafer: 4, turret: 5, bomber: 6, bossgun: 7, cargo: 8, boss: 9, fighter: 10 };
+  const order = { cable: -1, bomb: 0, rocket: 1, saw: 1.5, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, bomber: 6, sniper: 6.5, bossgun: 7, cargo: 8, boss: 9, fighter: 10 };
   let best = null;
   for (const t of targets(state)) {
     const angle = solution(state, gun, t);

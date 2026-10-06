@@ -43,6 +43,28 @@ export const config = {
     TILT_SMOOTH: 3, // how quickly the tilt follows (higher = snappier)
     TILT_PIVOT: [800, 520], // the point the ship tips around (ship coordinates)
   },
+  // Special enemies (see specials.js), one group every so often.
+  SPECIALS: {
+    FIRST_AFTER: 50, // seconds before the first
+    EVERY_MIN: 30,
+    EVERY_MAX: 45,
+    SAW_COUNT: 3,
+    SAW_HP: 2,
+    SAW_SPEED: 380,
+    SAW_IMPACT: 0.7, // hull cut per dash that connects
+    IMP_COUNT: 14, // imps per swarm (more on later laps)
+    IMP_SPEED: 330,
+    IMP_IMPACT: 0.35,
+    SNIPER_HP: 5,
+    SNIPER_SHOTS: 2, // beams before it leaves
+    SNIPER_CHARGE: 2.6, // seconds the red line tracks the ship...
+    SNIPER_LOCK: 0.7, // ...then it locks and flashes this long before firing
+    SNIPER_IMPACT: 2.2,
+    TUG_HP: 4,
+    CABLE_HP: 2, // shell hits to cut the harpoon cable
+    TUG_PULL: 70, // how hard a hooked tug drags the ship down (pixels per second)
+    TUG_SLOW: 1.2, // and how quickly it drags her speed back
+  },
   // Deflector shield: a steam-powered arc the Deflector station swings around the ship. It
   // blocks enemy bullets, bats, rockets and bombs that hit it.
   SHIELD: {
@@ -196,9 +218,9 @@ export const config = {
   // flak and enemy fire come (higher = busier).
   // A wrecked ship ends the run, so damage is kept gentle (multiplier on all hull damage).
   DIFFICULTY: {
-    easy: { label: 'Easy', damage: 0.12, pace: 0.75, autopilot: true },
-    normal: { label: 'Normal', damage: 0.2, pace: 0.9, autopilot: true },
-    hard: { label: 'Hard', damage: 0.5, pace: 1.3, autopilot: false },
+    easy: { label: 'Easy', damage: 0.1, pace: 0.75, autopilot: true },
+    normal: { label: 'Normal', damage: 0.17, pace: 0.9, autopilot: true },
+    hard: { label: 'Hard', damage: 0.45, pace: 1.3, autopilot: false },
   },
   START_DIFFICULTY: 'normal',
   AUTOPILOT_SPEED: 0.65, // an unmanned helm steers itself at this share of the climb speed (Easy/Normal)

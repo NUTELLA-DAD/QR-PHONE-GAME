@@ -7,6 +7,7 @@ import { createThreats } from './threats.js';
 import { createRaiders } from './raiders.js';
 import { createCourse, inRock, tilt, altBounds, pilotPlan } from './course.js';
 import { createSquadrons } from './squadrons.js';
+import { createSpecials } from './specials.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
 import { assistAim } from './aim.js';
@@ -232,6 +233,7 @@ export function createSimulation() {
     raiders.reset();
     threats.reset();
     squadrons.restart();
+    specials.reset();
     course.restart();
     modules.reset();
     if (state.weather) Object.assign(state.weather, { storm: 0, gust: 0, flash: 0, bolt: null });
@@ -410,6 +412,7 @@ export function createSimulation() {
   const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip });
 
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit });
+  const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
   const weather = createWeather({ state, impact, puff });
 
   const emitPlayerUi = (playerId, ui) => {
@@ -802,6 +805,7 @@ export function createSimulation() {
     } else {
       threats.update(dt);
       squadrons.update(dt);
+      specials.update(dt);
       course.update(dt);
       weather.update(dt);
     }
@@ -886,6 +890,7 @@ export function createSimulation() {
     },
     onMarker,
     squadrons,
+    specials,
     puff,
     setSocket,
     countPlayers: () => Object.keys(state.players).length,

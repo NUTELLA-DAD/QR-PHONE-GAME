@@ -59,7 +59,10 @@ hull breaks, the ship **breaks apart** and the game starts over at the mast (upg
 
 Enemies: fighters (they fly like real planes: long strafing runs from far out, wide turns,
 and they can crash into mountains), raider cargo planes (shoot them before they drop raiders), mines, bat swarms,
-bombers, skeleton strafers, ground flak turrets and rocket batteries, the **Dread Zeppelin** boss
+bombers, skeleton strafers, **gyro-saws** (spinning blades that circle then dash in - shoot
+them), **imp swarms**, the **sniper zeppelin** (a red line tracks you, then flashes: get out of
+the line or block it with the Deflector), the **harpoon tug** (hooks and drags the ship - shoot
+the cable or hack it with a sword at the hook), ground flak turrets and rocket batteries, the **Dread Zeppelin** boss
 on the way home, and storms from lap 2.
 
 ## For tinkering

@@ -58,6 +58,18 @@ function groundTargets(state) {
   return out;
 }
 
+// A sniper about to fire with its line across the ship: climb or dive out of it.
+function beamDodge(state) {
+  for (const z of (state.specials && state.specials.snipers) || []) {
+    if (!(z.mode === 'lock' || (z.mode === 'charge' && z.t < 1.2))) continue;
+    const cy = L.shield.cy - state.ship.alt;
+    const lineY = z.y + Math.tan(z.aim) * (L.shield.cx - z.x);
+    if (Math.abs(Math.cos(z.aim)) < 0.2 || Math.abs(lineY - cy) > 520) continue;
+    return state.ship.alt + (lineY > cy ? 380 : -380);
+  }
+  return null;
+}
+
 function dodgeAltitude(state) {
   const R = config.MINES.RADIUS;
   let soonest = null;
@@ -146,7 +158,7 @@ function operate(p, state, dt) {
     const lo = Math.max(w.min, bounds.lo);
     const hi = Math.min(w.max, bounds.hi);
     let target = null;
-    const dodge = dodgeAltitude(state);
+    const dodge = beamDodge(state) ?? dodgeAltitude(state);
     if (lo > hi || Math.abs(plan.target - ship.alt) > 120) target = plan.target;
     else if (dodge !== null && dodge > lo && dodge < hi) target = dodge;
     else if (ship.alt < lo + 15 || ship.alt > hi - 15) target = plan.target;

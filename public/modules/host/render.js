@@ -8,6 +8,7 @@ import { createCharacterArt } from './characterArt.js';
 import { createCourseArt } from './courseArt.js';
 import { UPGRADES } from './upgrades.js';
 import { targets } from './aim.js';
+import { createSpecialsArt } from './specialsArt.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
@@ -36,6 +37,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawShip = createShipArt({ ctx, state, ink, rrect, sprites });
   const threatArt = createThreatArt({ ctx, state, ink, sprites });
   const courseArt = createCourseArt({ ctx, state, ink, sprites });
+  const drawSpecials = createSpecialsArt({ ctx, state, ink });
   installLineBoil(ctx);
   const filmLook = createFilmLook(ctx);
 
@@ -360,6 +362,7 @@ export function createRenderer({ ctx, state, canvas }) {
     threatArt.drawBats(time);
     threatArt.drawStrafers(time);
     threatArt.drawRockets();
+    drawSpecials(time);
     drawPopups(view.zoom);
     drawEnemy(time);
     // Cartoon puffs: swell up, then shrink and fade, with an ink outline and a highlight.
