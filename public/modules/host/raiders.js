@@ -23,7 +23,15 @@ export function createRaiders({ state, modules, puff, impact }) {
     return 'grunt';
   };
 
-  // A cargo plane drops a squad at (x, y).
+  // One raider arrives at (x, y) and falls to the deck below (a gunship paratrooper landing, or one crossing her rope).
+  const dropOne = (x, y, type = pickType()) => {
+    const t = R[type];
+    const b = { id: 'r' + nextId++, type, name: t.name, species: t.species, color: t.color, scale: t.scale, x, y, fall: true, hp: t.hp, hit: 0, cd: 0, windup: 0, face: 1 };
+    state.boarders.push(b);
+    return b;
+  };
+
+  // A squad arrives at (x, y) (boarding lines from the boss).
   const dropSquad = (x, y) => {
     const crew = Object.keys(state.players).length;
     const count = Math.max(1, Math.min(5, 1 + Math.floor(crew / 4)));
@@ -199,5 +207,5 @@ export function createRaiders({ state, modules, puff, impact }) {
     state.bombs.length = 0;
   };
 
-  return { update, dropSquad, onHit, reset };
+  return { update, dropSquad, dropOne, pickType, onHit, reset };
 }

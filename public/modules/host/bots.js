@@ -91,7 +91,10 @@ function incoming(state) {
 // highest, then any gun with something in reach.
 function gunReach(state, n) {
   const best = bestTarget(state, state.GUNS[n]);
+  // Paratroopers are about to jump (or are in the air): get up to the dorsal gun, it covers their approach.
+  if (!best && n === 'Dorsal Gun' && state.gunship && (state.paras.length || state.gunship.paraDue)) return 0.7;
   if (!best) return 2;
+  if (best.target.kind === 'para' || best.target.kind === 'gport') return 0.6; // paratroopers and gunship gun ports are worth manning a gun for
   return best.target.kind === 'turret' ? 0.8 : 1;
 }
 
@@ -174,7 +177,10 @@ function listJobs(state, bot) {
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
   const gs = state.gunship;
   if (gs && gs.charge && bot.onGunship) jobs.unshift({ kind: 'flee', obj: 'flee', max: 8 });
-  if (gs && gs.phase === 'docked' && !gs.charge) {
+  const engaged = gs && (gs.phase === 'hunt' || gs.phase === 'latch');
+  // Her grapple is on our bow and raiders are piling over: someone hacks it through (the rest board her).
+  if (engaged && gs.phase === 'latch' && gs.rope && !bot.onGunship && state.boarders.length >= 2) jobs.unshift({ kind: 'cutline', obj: 'cutline', max: 1 });
+  if (engaged && !gs.charge && (gs.rope || bot.onGunship || (gs.gap || 9999) <= config.GUNSHIP.HOOK_RANGE)) {
     if (!gs.rope && !bot.onGunship) jobs.push({ kind: 'hook', obj: 'hook', max: 1 });
     else if (gs.rope || bot.onGunship) {
       for (const c of gs.crew) jobs.push({ kind: 'fight', obj: c, max: 1 });
@@ -330,6 +336,10 @@ function work(p, state) {
   const o = job.obj;
   if (job.kind === 'hook') {
     if (steer(p, MAIN, MAIN_X1 - 15, 12)) press(p);
+    return;
+  }
+  if (job.kind === 'cutline') {
+    if (steer(p, MAIN, MAIN_X1 - 110, 25)) p.fire = true; // hold Action at the bow to hack her line
     return;
   }
   if (job.kind === 'raid') {
