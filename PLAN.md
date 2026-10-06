@@ -11,6 +11,80 @@ That needs (1) a reason to keep going (a campaign), (2) every player feeling nee
 minute, (3) moments people talk about afterwards, and (4) polish so it reads and sounds great
 on a TV at a party.
 
+## The Voyage - game loop with environments (plan, 7 Oct 2026)
+
+### Fun check (botsim, 8 bots, 10 min per map type, after round 5)
+| | Caves | Route | Open sky |
+|---|---|---|---|
+| Crew time walking between jobs | 43% | 50% | 37% |
+| Crew time at stations | 35% | 26% | 46% |
+| Enemies on screen | 83% | 68% | 93% |
+| Missions finished in 10 min | 4 (~2 min each) | 0 | 0 |
+
+What that means:
+1. **Too much walking** - over a third of everyone's time is spent getting somewhere (the ship got
+   bigger and deeper). Fix: shortcuts (slide poles, rope swings between decks, the new ladder
+   jumps), job spots closer to where they're needed, and call-outs that send the nearest person.
+2. **No breathing room** - enemies are on screen almost all the time; the calm phase rarely
+   happens on route/open maps. Fun needs rhythm: tension -> big moment -> breather -> loot.
+3. **Missions don't end** on route/open maps (bots finished none in 10 minutes). A mission must
+   have a clear finish line and last 3-5 minutes. Investigate first (it may be a bot problem or
+   a real stall: unreachable beacon, outposts too tough, gunship pinning the ship).
+4. What's already fun and should be the heart of every mission: boarding and jumping, gunship
+   fights, steam push-your-luck, the helm/pressure double act.
+
+### The loop: a Voyage across the Broken Skies (one evening = one run, 45-60 min)
+1. **Sector map** (TV + phone vote): a branching route of 6-8 stops across environments, each
+   stop showing its environment, mission type, danger and reward. Pick a path.
+2. **Mission** (3-5 min): a short briefing line -> flight with rising pressure -> one big
+   objective moment (boss, raid, rescue, heist) -> escape -> landing at a sky-dock.
+3. **Sky-dock** (1 min): scorecard and awards, spend salvage on repairs and upgrades (the vote
+   becomes a shop), a breather and chat.
+4. Repeat until the **Flagship** (final boss) - win screen; or the ship is lost - the run ends
+   with a summary ("you reached the Ember Forge"). Unlocks carry over: new ship parts, crew hats,
+   new starting routes.
+
+### Environments (each changes how the ship flies AND adds one new crew job)
+| Environment | Look | Flying twist | New crew job / hazard | Signature enemy |
+|---|---|---|---|---|
+| Sky Isles (start) | floating islands, waterfalls | gentle updrafts | - (learn the ship) | dogfighters, gunships |
+| Frost Peaks (snow) | ice cliffs, blizzards | ICE builds on the gasbag and decks: heavier, sinks | chip ice with tools; frozen guns need thawing at the boiler | ice wyrms, sled-gunships |
+| Ember Forge (lava) | lava rivers, smoke stacks | hot thermals = huge lift; smoke hides enemies | fires everywhere; boiler overheats faster (vent!) | magma bats, furnace fortress |
+| Storm Front | dark clouds, lightning | wind gusts shove the ship | lightning rods to man; the coil can drink lightning | storm riders |
+| Sunken Sea | ocean, wrecks, waterspouts | low flight over waves | rescue crew from the water with the rope ladder | flak ships, sub-surface torpedo boats |
+| Fungal Depths (caves) | glowing mushrooms, spores | tight caves | spore clouds slow crew; clear vents | bat swarms, spore drones |
+| The Aether (space) | stars, the curve of the world | thin air: gas lift weak, engines strong, low gravity for jumping crew | oxygen tanks to refill; long jumps between ships | void corsairs, the Flagship |
+
+### Mission types (mix and match with environments)
+Escort the barge, Raid the factory (bomb bay), Heist (board a gunship and steal her cargo - bring
+it back by hookshot/swing), Rescue (pick up crew), Survive the storm, Chase the courier gunship,
+Boss fight.
+
+### Enemy gunship variety (user: "no one quite alike")
+Every gunship is generated from parts so no two are the same: hull length (short cutter / long
+frigate), 1-3 decks, single or twin gasbags, engine pods, where her guns are (broadside, top
+turret, mortar, flak), a special (bat hangar, boarding ramp, harpoon gun, armoured boiler), her
+crew size and her captain's personality (aggressive, cautious, cowardly, boarder). Named and
+flagged so players remember them ("The Iron Widow").
+
+### Making it more fun - ranked by fun per effort
+1. **Fix missions that don't end** + give every mission a clear goal and 3-5 min length.
+2. **Rhythm**: a director that guarantees calm moments and one big set piece per mission.
+3. **Less walking**: slide poles / rope swings / closer job spots; idle-player arrows to the
+   nearest job (C1).
+4. **Hero moments for everyone**: boarding by bomb-bay parachute, plane hijack (H5), personal
+   hookshot (H3), last-second saves; the TV calls them out ("BOB BLEW UP THE GUNSHIP!").
+5. **Sky-dock shop with salvage** (replaces random votes) - meaningful choices between missions.
+6. **Environments** (above) - each adds a new job so the crew's routine keeps changing.
+7. **Music + juice** (E1/E2) - hits, explosions and a 1930s tune make everything feel better.
+8. **End-of-run story** - the summary screen and awards people screenshot.
+
+### Build order (proposal)
+V1 investigate/fix missions not finishing + mission length -> V2 rhythm director -> V3 less
+walking -> V4 sky-dock shop with salvage -> V5 sector map + run structure -> V6 first two new
+environments (Frost Peaks, Ember Forge) -> V7 gunship variety -> V8 remaining environments ->
+V9 Flagship finale.
+
 ## How the work is done (the agent team)
 - **Lead (Claude Opus, the main chat)**: owns this plan, picks the next task, writes a clear
   brief, hands it to one worker, checks the result, tests it, commits, and reports to the user
