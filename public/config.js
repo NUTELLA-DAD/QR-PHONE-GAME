@@ -429,7 +429,16 @@ export const config = {
     USE_POWERED: 1, // each other powered module (helm, lift) with its valve open
     VENT_RATE: 10, // each open vent stack
     WARN_AT: 90, // "vent steam!" warning
-    BLOWOUT_AT: 100, // boiler blows: damages itself and bursts a pipe
+    BLOWOUT_AT: 100, // boiler surely blows here: damages itself and bursts a pipe
+    // Overdrive: the hotter the boiler runs above OVERDRIVE_AT the bigger the bonuses (full at
+    // 100) - but from WARN_AT it rattles and each second has a growing chance to blow.
+    OVERDRIVE_AT: 70, // bonuses start above this pressure
+    USE_GAUGE: 20, // steam use that fills the whole "where the steam goes" bar on the TV
+    OD_ENGINE: 0.2, // extra ship speed at full overdrive (0.2 = +20%)
+    OD_PUMP: 0.5, // extra gasbag pumping speed at full overdrive
+    OD_COIL: 0.6, // extra Lightning Coil charge speed at full overdrive
+    BLOWOUT_RATE: 0.12, // chance per second of a blowout at 100 pressure (scales up from 0 at WARN_AT)
+    WARN_SHAKE: 0.18, // screen rattle while over WARN_AT (more near the top)
   },
   // The gasbag is the big up/down control. The helm's PRESSURE lever pumps hot steam in (she
   // rises - fast when overfilled) or vents it (she drops - fast when deflated). At the neutral
@@ -510,6 +519,8 @@ export const config = {
     BOILER_BLOWOUT_DAMAGE: 35, // when pressure goes over the top
     REPAIR_RATE: 40, // hp per second while hammering
     STEAM_MIN: 10, // below this pressure nothing gets steam
+    LEAK_FULL: 5, // steam lost per second by a fully broken steam module (proportional to its damage)
+    LEAK_BELOW: 0.9, // a module only leaks once its health is below this share of full
     PIPE_LEAK: 6, // pressure lost per second from each burst pipe with its valve open
     UNPOWERED_LIFT: 0.25, // lift speed without steam (hand crank)
     NO_ENGINE_SPEED: 0.1, // top speed with both engines out
@@ -518,6 +529,8 @@ export const config = {
   BOTS: {
     THINK_EVERY: 0.3, // how often a bot rethinks what to do
     WHACK_EVERY: 0.35, // time between swings at a raider
+    ENGINEER_PRESS: 35, // steam this low: bots shut the valve of a leaking module (reopened after repair)
+    OVERDRIVE_PUSH_EVERY: 45, // every third spell of this many seconds the bots stoke extra coal to reach overdrive
     BOILER_LOW: 55, // start stoking below this pressure
     BOILER_HIGH: 85, // stop stoking above this pressure
     HELM_SPEED: 0.55, // cruising speed the bot helmsman holds (0-1)

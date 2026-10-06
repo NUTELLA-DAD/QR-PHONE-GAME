@@ -92,7 +92,7 @@ export function createCoil({ state, puff, credit }) {
     if (player.fire || player.actQ) {
       // Charging is slower on low steam.
       coil.charging = true;
-      coil.charge = Math.min(1, coil.charge + (dt / C.CHARGE_TIME) * Math.min(1, state.ship.press / 50));
+      coil.charge = Math.min(1, coil.charge + (dt / C.CHARGE_TIME) * Math.min(1, state.ship.press / 50) * (1 + config.BOILER.OD_COIL * (state.overdrive || 0)));
       if (Math.random() < dt * 20) puff(M.x + (Math.random() - 0.5) * 60, M.y - state.ship.alt - 40 - Math.random() * 40, '#9fe8ff', 2);
       if (coil.charge >= 1) fire(player.id);
     } else if (coil.charge >= C.MIN_CHARGE) fire(player.id);

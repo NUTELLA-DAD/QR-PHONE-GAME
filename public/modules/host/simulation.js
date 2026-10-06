@@ -777,6 +777,9 @@ export function createSimulation() {
       if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
       if (stationName === 'Escort Fighter' && !status) status = escort.status();
       const feel = state.buoyancy > 0 ? 'RISING' : state.buoyancy < 0 ? 'FALLING' : 'holding';
+      const leakNow = modules.leaks()[0];
+      const leakText = leakNow ? (leakNow.pipe && leakNow.pipe.open ? `${leakNow.m.name} pipe leaking - close the valve or repair` : `${leakNow.m.name} leaking steam - repair it`) : '';
+      if (stationName === 'Boiler' && !status && leakText) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - ${leakText}`;
       if (stationName === 'Boiler' && !status) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
       if (stationName === 'Helm' && player.lock && !status && (state.ship.press < config.GAS.PUMP_MIN_PRESS || state.gasHoles.length)) status = `Gas ${Math.round(state.ship.gas)}% - ${feel}${state.ship.press < config.GAS.PUMP_MIN_PRESS ? ' - NO STEAM TO PUMP!' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' holes leaking' : ''}`;
       if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag full - she is rising' : 'Gasbag low - she is dropping';
@@ -810,7 +813,17 @@ export function createSimulation() {
     state.shield.on = taken('Deflector') && modules.works(state, 'Deflector') && state.phase === 'flying';
     const coilOp = Object.values(state.players).find((q) => q.lock === 'Lightning Coil');
     coil.update(dt, coilOp || null, modules.works(state, 'Lightning Coil'));
-    state.steamUse = modules.pressureDrain(state) + openVents * BO.VENT_RATE + (state.shield.on ? config.SHIELD.STEAM_USE : 0) + (state.coil.charging ? config.COIL.STEAM_USE : 0);
+    const parts = modules.drainParts(state);
+    parts.vents = openVents * BO.VENT_RATE;
+    parts.shield = state.shield.on ? config.SHIELD.STEAM_USE : 0;
+    parts.coil = state.coil.charging ? config.COIL.STEAM_USE : 0;
+    parts.pump = state.steamParts ? state.steamParts.pump || 0 : 0; // (set below, while pumping)
+    state.steamParts = parts; // where the steam goes: read by the HUD gauge
+    state.steamUse = parts.other + parts.engines + parts.leaks + parts.vents + parts.shield + parts.coil;
+    // Leaking modules puff steam so the crew can see where it's going.
+    for (const l of modules.leaks()) {
+      if (Math.random() < dt * (2 + 10 * (l.rate / config.MODULES.LEAK_FULL))) shipPuff(l.m.pos.x + (Math.random() - 0.5) * 30, l.m.pos.y - 20, '#ffffff', 1);
+    }
     state.ship.press = clamp(state.ship.press + (heat - (state.steamUse * state.ship.press) / BO.USE_REF) * dt, 0, 100);
     if (state.ship.press >= BO.WARN_AT && !state.pressureWarned && !state.ship.down) {
       state.pressureWarned = true;
@@ -818,9 +831,22 @@ export function createSimulation() {
       state.ev.warnText = 'PRESSURE HIGH - OPEN A VENT!';
     }
     if (state.ship.press < BO.WARN_AT - 10) state.pressureWarned = false;
-    if (state.ship.press >= BO.BLOWOUT_AT) {
+    // Overdrive: 0 at OVERDRIVE_AT up to 1 at 100 pressure (engines, pump and coil get faster).
+    state.overdrive = clamp((state.ship.press - BO.OVERDRIVE_AT) / (100 - BO.OVERDRIVE_AT), 0, 1);
+    // Over WARN_AT the boiler rattles and each second there is a growing chance it blows.
+    const hot = clamp((state.ship.press - BO.WARN_AT) / (100 - BO.WARN_AT), 0, 1);
+    if (hot > 0 && !state.ship.down) {
+      state.ship.shake = Math.max(state.ship.shake, BO.WARN_SHAKE * (0.5 + hot));
+      state.warnBeep = (state.warnBeep || 0) - dt;
+      if (state.warnBeep <= 0) {
+        state.warnBeep = 2.5 - hot * 1.5;
+        state.sfxQ.push(['alarm']);
+      }
+    }
+    if (state.ship.press >= BO.BLOWOUT_AT || (hot > 0 && Math.random() < BO.BLOWOUT_RATE * hot * dt)) {
       // The boiler blows: damage it and burst a random steam pipe.
       state.ship.press = 75;
+      state.boilerBlew = true; // (read by tools/botsim.mjs)
       const boiler = SHIP_LAYOUT.stations.find((s) => s.n === 'Boiler');
       puff(boiler.x, platformY(boiler.d) - 70 - state.ship.alt, '#fff', 20);
       pop(state, boiler.x, platformY(boiler.d) - 160 - state.ship.alt, 'boiler', '#ff5a1f', 1.6);
@@ -878,7 +904,8 @@ export function createSimulation() {
     // cools and seeps out, and holes leak more.
     if (flying) {
       const pumping = Math.max(0, valve.input) * (state.ship.press > G.PUMP_MIN_PRESS && !modules.byName.Boiler.broken ? Math.min(1, state.ship.press / 60) : 0);
-      state.ship.gas += (pumping * G.PUMP_RATE + Math.min(0, valve.input) * G.VENT_RATE - G.SEEP - G.LEAK_PER_HOLE * state.gasHoles.length) * dt;
+      state.steamParts.pump = pumping * G.PUMP_STEAM;
+      state.ship.gas += (pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) + Math.min(0, valve.input) * G.VENT_RATE - G.SEEP - G.LEAK_PER_HOLE * state.gasHoles.length) * dt;
       state.ship.press = Math.max(0, state.ship.press - pumping * G.PUMP_STEAM * dt);
       state.ship.gas = clamp(state.ship.gas, 0, 100);
     }

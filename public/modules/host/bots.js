@@ -141,8 +141,8 @@ function listJobs(state, bot) {
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2 });
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
   // Vents: open one when the pressure is near the top; close them when it's calm again.
-  const ventWanted = state.ship.press > config.BOILER.WARN_AT - 5;
-  const ventCalm = state.ship.press < config.BOILER.WARN_AT - 20;
+  const ventWanted = state.ship.press > config.BOILER.WARN_AT - 3;
+  const ventCalm = state.ship.press < config.BOILER.WARN_AT - 14;
   const ventIdx = state.ventOpen.findIndex((open) => (ventWanted ? !open : ventCalm && open));
   if ((ventWanted || ventCalm) && ventIdx >= 0) jobs.push({ kind: 'vent', obj: L.vents[ventIdx], max: 1 });
   for (const bomb of state.bombs || []) jobs.push({ kind: 'defuse', obj: bomb, max: 1 });
@@ -150,11 +150,18 @@ function listJobs(state, bot) {
   const holes = [...state.breaches, ...(state.gasHoles || [])].map((h) => ({ kind: 'patch', obj: h, max: 1 }));
   // Burst pipes with their valve open leak steam: shut the valve, then fix what's broken.
   const leaks = mods.filter((m) => m.kind === 'pipe' && m.broken && m.open).map((m) => ({ kind: 'valve', obj: m, max: 1 }));
+  // Steam is short and a damaged module is leaking it? Shut that module's valve - unless it is
+  // vital while flying (helm, engines). It is reopened once the module is repaired.
+  const leaky = (m) => m.kind === 'pipe' && !m.broken && mods.some((t) => t.name === m.to && t.hp < t.max * config.MODULES.LEAK_BELOW);
+  const flying = state.phase === 'flying';
+  if (state.ship.press < B.ENGINEER_PRESS) {
+    for (const m of mods) if (m.open && leaky(m) && !(flying && (m.to === 'Helm' || /Engine/.test(m.to)))) leaks.push({ kind: 'valve', obj: m, max: 1 });
+  }
   const broken = mods.filter((m) => m.broken).map((m) => ({ kind: 'repair', obj: m, max: 1 }));
   // Use the tool already in hand first.
   if (bot.carry === 'hammer') jobs.push(...leaks, ...broken, ...holes, ...fires);
   else jobs.push(...fires, ...leaks, ...broken, ...holes);
-  for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open) jobs.push({ kind: 'valve', obj: m, max: 1 });
+  for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open && (!leaky(m) || state.ship.press >= B.ENGINEER_PRESS + 25)) jobs.push({ kind: 'valve', obj: m, max: 1 });
   // Stations, most useful first. The vital ones (helm, gas valve, a gun or weapon with a target
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
@@ -176,8 +183,10 @@ function listJobs(state, bot) {
       if (bot.carry === 'sword') for (const c of gs.crew) jobs.unshift({ kind: 'fight', obj: c, max: 2 });
     }
   }
-  if ((state.ship.fuel < 25 && state.ship.press < config.BOILER.WARN_AT - 25) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
-  for (const m of mods) if (!m.broken && m.hp < 60) jobs.push({ kind: 'repair', obj: m, max: 1 });
+  // Now and then the crew shovels extra coal to push into overdrive.
+  const pushing = Math.floor(performance.now() / 1000 / B.OVERDRIVE_PUSH_EVERY) % 3 === 0;
+  if ((state.ship.fuel < (pushing ? 60 : 25) && state.ship.press < config.BOILER.WARN_AT - (pushing ? 10 : 25)) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
+  for (const m of mods) if (!m.broken && m.hp < (['engine', 'helm', 'lift', 'shield', 'coil'].includes(m.kind) ? m.max * config.MODULES.LEAK_BELOW - 1 : 60)) jobs.push({ kind: 'repair', obj: m, max: 1 });
   const guns = GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });

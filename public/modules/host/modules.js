@@ -106,19 +106,38 @@ export function createModules() {
     connScale[LIFT] = works(state, 'Lift') ? 1 : M.UNPOWERED_LIFT;
   };
 
-  // Steam used per second (at the reference pressure): the boiler itself, every powered module
-  // (engines by how fast they run) and burst pipes with their valve open. Vents are added by the
-  // simulation.
-  const pressureDrain = (state) => {
+  // Damaged steam-powered modules leak steam in proportion to the damage (broken = full leak).
+  // Closing their pipe valve stops the leak (and switches the module off); a module with no
+  // pipe (Deflector, Coil) leaks until it is repaired.
+  const LEAKY = ['engine', 'helm', 'lift', 'shield', 'coil'];
+  const leakRate = (m) => {
+    if (!LEAKY.includes(m.kind) || m.hp >= m.max * M.LEAK_BELOW) return 0;
+    const pipe = pipeTo(m.name);
+    if (pipe && (!pipe.open || pipe.broken)) return 0; // valve shut (or the pipe already counts as burst)
+    return M.LEAK_FULL * (1 - m.hp / m.max);
+  };
+  // Every module leaking right now, worst first: [{ m, rate, pipe }].
+  const leaks = () => list.map((m) => ({ m, rate: leakRate(m), pipe: pipeTo(m.name) || null })).filter((l) => l.rate > 0).sort((a, b) => b.rate - a.rate);
+
+  // Steam used per second (at the reference pressure), split by where it goes: the boiler itself
+  // and helm/lift ('other'), engines (by how fast they run), burst pipes and damaged modules
+  // ('leaks'). Vents, shield, coil and the pump are added by the simulation.
+  const drainParts = (state) => {
     const B = config.BOILER;
-    let use = B.USE_BASE;
+    const parts = { other: B.USE_BASE, engines: 0, leaks: 0 };
     for (const m of list) {
       if (m.kind !== 'pipe' || !m.open) continue;
-      if (m.broken) use += M.PIPE_LEAK;
+      if (m.broken) parts.leaks += M.PIPE_LEAK;
       else if (!byName[m.to] || byName[m.to].broken) continue;
-      else use += byName[m.to].kind === 'engine' ? B.USE_ENGINE * Math.abs(state.ship.speed) : B.USE_POWERED;
+      else if (byName[m.to].kind === 'engine') parts.engines += B.USE_ENGINE * Math.abs(state.ship.speed);
+      else parts.other += B.USE_POWERED;
     }
-    return use;
+    for (const l of leaks()) parts.leaks += l.rate;
+    return parts;
+  };
+  const pressureDrain = (state) => {
+    const p = drainParts(state);
+    return p.other + p.engines + p.leaks;
   };
 
   // Top speed allowed by the engines (1 = both working).
@@ -140,11 +159,16 @@ export function createModules() {
   const status = (state, name) => {
     const m = byName[name];
     if (!m) return '';
-    if (m.broken) return `${name} is BROKEN - fix it with a hammer`;
+    if (m.kind === 'pipe' && !m.broken && m.open) {
+      const t = byName[m.to];
+      if (t && leakRate(t) > 0) return `${m.to} is leaking steam - close this valve (or repair it)`;
+    }
+    if (m.broken) return `${name} is BROKEN - fix it with a hammer${leakRate(m) > 0 ? ' (leaking steam)' : ''}`;
     if ((m.kind === 'helm' || m.kind === 'engine' || m.kind === 'lift' || m.kind === 'shield' || m.kind === 'coil') && !hasSteam(state, name)) return `${name} has no steam!`;
+    if (leakRate(m) > 0) return `${name} is leaking steam - repair it${pipeTo(name) ? ' or close its valve' : ''}`;
     if (m.hp < m.max * 0.5) return `${name} is damaged (${Math.round(m.hp)}%)`;
     return '';
   };
 
-  return { list, byName, hasSteam, works, damage, hitAt, repair, update, pressureDrain, engineFactor, reset, status };
+  return { list, byName, hasSteam, works, damage, hitAt, repair, update, pressureDrain, drainParts, leaks, leakRate, engineFactor, reset, status };
 }
