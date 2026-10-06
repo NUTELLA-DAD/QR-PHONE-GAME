@@ -72,6 +72,7 @@ for (let i = 0; i < args.bots; i++) {
 }
 sim.castOff();
 
+const tally = {}; // stat counts that survive the per-lap stat reset
 const dt = 1 / 60;
 const totalSteps = Math.round(args.minutes * 60 * 60);
 const errors = new Map(); let errorCount = 0;
@@ -83,6 +84,14 @@ for (let step = 1; step <= totalSteps; step++) {
   try {
     simClock += dt * 1000;
     sim.update(dt);
+    for (const q of Object.values(state.players)) {
+      const st = q.stats || {};
+      for (const k of ['ammo', 'coal', 'fires', 'holes']) {
+        const d = (st[k] || 0) - ((q.seen && q.seen[k]) || 0);
+        if (d > 0) tally[k] = (tally[k] || 0) + d;
+        (q.seen = q.seen || {})[k] = st[k] || 0;
+      }
+    }
   } catch (err) {
     errorCount++;
     const msg = String(err && err.message);
@@ -113,6 +122,8 @@ console.log(`missions completed: ${missions}`);
 console.log(`wrecks: ${wrecks}`);
 console.log(`average hull: ${hullN ? (hullSum / hullN).toFixed(1) : 'n/a'}`);
 console.log(`kills: ${killsTotal}`);
+const sum = (k) => tally[k] || 0;
+console.log(`hauled: ${sum('ammo')} ammo loads, ${sum('coal')} coal loads; fires out ${sum('fires')}, holes patched ${sum('holes')}`);
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);

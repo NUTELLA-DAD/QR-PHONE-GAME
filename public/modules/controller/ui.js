@@ -4,7 +4,7 @@ export function createControllerUI({ network }) {
 
   // Icon for the Action button, picked from the start of its label.
   const ACTION_ICONS = [
-    ['Take sword', '🗡️'], ['Take hammer', '🔨'], ['Take extinguisher', '🧯'], ['Put back', '↩️'],
+    ['Swap to sword', '🗡️'], ['Swap to hammer', '🔨'], ['Swap to extinguisher', '🧯'], ['Take sword', '🗡️'], ['Take hammer', '🔨'], ['Take extinguisher', '🧯'], ['Put back', '↩️'],
     ['Spray fire', '🧯'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['Close valve', '🚱'], ['Open valve', '🚰'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
     ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'],
@@ -107,6 +107,7 @@ export function createControllerUI({ network }) {
       $('lever').style.display = 'none';
       $('plever').style.display = 'none';
       $('atk').style.display = '';
+      $('jump').style.display = 'none';
       return;
     }
     const label = next.label || 'Hey!';
@@ -149,6 +150,7 @@ export function createControllerUI({ network }) {
     $('lever').style.display = helm ? 'block' : 'none';
     $('plever').style.display = helm ? 'block' : 'none';
     $('atk').style.display = helm ? 'none' : '';
+    $('jump').style.display = next.locked ? 'none' : ''; // no hopping while at a station
   };
 
   const setup = () => {

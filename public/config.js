@@ -483,12 +483,18 @@ export const config = {
   // Walking feel.
   MOVE: {
     WALK_SPEED: 230,
-    ACCEL: 1600, // px/s² speeding up
-    BRAKE: 3200, // px/s² slowing down (snappy stops)
+    ACCEL: 2300, // px/s² speeding up (about 0.1 s to full speed)
+    BRAKE: 2300, // px/s² slowing down (a short ~0.1 s skid)
+    JUMP_VY: 520, // px/s upward kick of a hop
+    JUMP_GRAVITY: 1900, // px/s² pulling a jumper back down (hop lasts ~0.55 s, ~70 px high)
+    JUMP_AIR_CONTROL: 0.8, // share of walking speed you can still steer in the air
+    JUMP_DODGE: 28, // height (px) above the deck at which a jumper dodges a raider's swing
+    JUMP_COOLDOWN: 0.15, // seconds after landing before the next hop
   },
   // Tools and close combat.
   TOOLS: {
-    REACH: 45, // how close you must stand to a rack, hook or valve
+    REACH: 65, // how close you must stand to a rack, hook or valve (generous: no pixel-perfect standing)
+    STATION_REACH: 85, // how close to a gun, boiler, bunker or bomb bay for Action to load/grab/take it
     SWORD_RANGE: 95,
     SWORD_DAMAGE: 1,
     SWORD_COOLDOWN: 0.35,
