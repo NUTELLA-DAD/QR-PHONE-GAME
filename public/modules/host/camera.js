@@ -10,6 +10,7 @@ const PAD_Y = 90; // sky kept above and below the ship (world pixels)
 export function createCamera() {
   let scroll = 0;
   let view = null;
+  let lead = { x: 0, y: 0 }; // look-ahead in the direction she's moving (smoothed)
 
   const target = (state, width, height) => {
     const b = SHIP_LAYOUT.bounds;
@@ -20,13 +21,20 @@ export function createCamera() {
     let x1 = b.x1;
     let y0 = b.y0 - alt - PAD_Y;
     let y1 = b.y1 - alt + PAD_Y;
-    // Frame the fighter, plus any cargo plane or mine that's getting close.
+    // Look ahead the way she's going (so you see what you're flying into).
+    x0 += Math.min(0, lead.x);
+    x1 += Math.max(0, lead.x);
+    y0 += Math.min(0, lead.y);
+    y1 += Math.max(0, lead.y);
+    // Frame threats that are actually close (farther ones get arrows at the screen edge instead).
     const shipX = (b.x0 + b.x1) / 2;
+    const shipY = (b.y0 + b.y1) / 2 - alt;
+    const near = (t, r) => Math.hypot((t.x - shipX) * 0.8, t.y - shipY) < r;
     const things = [];
-    if (state.enemy.dead <= 0 && Math.abs(state.enemy.x - (b.x0 + b.x1) / 2) < 2000) things.push(state.enemy);
-    for (const t of [...(state.cargo || []), ...(state.mines || []), ...(state.bombers || [])]) if (Math.abs(t.x - shipX) < 2400) things.push(t);
-    if (state.boss && Math.abs(state.boss.x - shipX) < 2600) things.push(state.boss);
-    for (const t of state.specials ? [...state.specials.snipers, ...state.specials.tugs] : []) if (Math.abs(t.x - shipX) < 2600) things.push(t);
+    if (state.enemy.dead <= 0 && near(state.enemy, C.FRAME_RANGE)) things.push(state.enemy);
+    for (const t of [...(state.cargo || []), ...(state.mines || []), ...(state.bombers || [])]) if (near(t, C.FRAME_RANGE)) things.push(t);
+    if (state.boss && near(state.boss, C.FRAME_RANGE + 600)) things.push(state.boss);
+    for (const t of state.specials ? [...state.specials.snipers, ...state.specials.tugs] : []) if (near(t, C.FRAME_RANGE + 400)) things.push(t);
     for (const e of things) {
       x0 = Math.min(x0, e.x - C.ENEMY_MARGIN);
       x1 = Math.max(x1, e.x + C.ENEMY_MARGIN);
@@ -52,13 +60,20 @@ export function createCamera() {
       scroll = state.course ? state.course.dist : scroll + 200 * dt;
       // A minimised or hidden window can report zero size; keep the last view until it's back.
       if (width < 10 || height < 10) return view ? { ...view, scroll } : { cx: 800, cy: 450, zoom: 0.3, scroll };
+      // Smoothly lead toward where she's heading.
+      const vx = (state.ship.speed || 0) * config.SHIP.TOP_SPEED;
+      const vy = -(state.ship.vy || 0);
+      const kl = 1 - Math.exp(-C.LEAD_SMOOTHING * dt);
+      lead.x += (vx * C.LEAD_TIME - lead.x) * kl;
+      lead.y += (vy * C.LEAD_TIME * 0.8 - lead.y) * kl;
       const t = target(state, width, height);
       // Start fresh if there's no view yet or it ever went bad.
       if (!view || !Number.isFinite(view.cx) || !Number.isFinite(view.cy) || !Number.isFinite(view.zoom) || view.zoom <= 0) view = { ...t };
       const k = 1 - Math.exp(-C.SMOOTHING * dt);
       view.cx += (t.cx - view.cx) * k;
       view.cy += (t.cy - view.cy) * k;
-      view.zoom += (t.zoom - view.zoom) * k;
+      // Zoom changes slowly (no pumping in and out), panning a little quicker.
+      view.zoom += (t.zoom - view.zoom) * (1 - Math.exp(-C.ZOOM_SMOOTHING * dt));
       return { ...view, scroll };
     },
     getScroll() {

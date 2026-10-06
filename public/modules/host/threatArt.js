@@ -201,8 +201,9 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
   };
 
   // Lookout on duty: arrows at the screen edge pointing at threats out of view.
+  // Arrows at the screen edge pointing at threats out of view. Everyone gets them for nearby
+  // threats; with someone on Lookout they reach much farther and carry labels.
   const drawLookoutArrows = (width, height, view) => {
-    if (!state.lookout) return;
     const items = [];
     for (const c of state.cargo || []) items.push({ x: c.x, y: c.y, icon: '✈', color: '#9c5a2b', label: 'CARGO' });
     for (const m of state.mines || []) items.push({ x: m.x, y: m.y, icon: '✹', color: '#3d3d3d', label: 'MINE' });
@@ -212,8 +213,19 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     if (state.boss) items.push({ x: state.boss.x, y: state.boss.y, color: '#5c1e1e', label: 'BOSS' });
     const bat = (state.bats || []).find((b) => b.delay <= 0);
     if (bat) items.push({ x: bat.x, y: bat.y, color: '#3b2c4c', label: 'BATS' });
+    const SP = state.specials;
+    if (SP) {
+      for (const z of SP.snipers) items.push({ x: z.x, y: z.y, color: '#c0392b', label: 'SNIPER' });
+      for (const g of SP.tugs) items.push({ x: g.x, y: g.y, color: '#7a4a2a', label: 'HARPOON' });
+      if (SP.saws.length) items.push({ x: SP.saws[0].x, y: SP.saws[0].y, color: '#4a4f63', label: 'SAWS' });
+      const imp = SP.imps.find((b) => b.delay <= 0);
+      if (imp) items.push({ x: imp.x, y: imp.y, color: '#e63946', label: 'IMPS' });
+    }
     const margin = 46;
+    const range = state.lookout ? 9000 : 3600;
+    const shipY = 470 - state.ship.alt;
     for (const it of items) {
+      if (Math.hypot(it.x - 800, it.y - shipY) > range) continue;
       const sx = width / 2 + (it.x - view.cx) * view.zoom;
       const sy = height / 2 + (it.y - view.cy) * view.zoom;
       if (sx > 0 && sx < width && sy > 0 && sy < height) continue;
@@ -237,10 +249,17 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.lineTo(28, 12);
       ctx.fill();
       ctx.restore();
-      ctx.font = '900 13px Georgia';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = it.color;
-      ctx.fillText(it.label, ax, ay + 5);
+      if (state.lookout) {
+        ctx.font = '900 13px Georgia';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = it.color;
+        ctx.fillText(it.label, ax, ay + 5);
+      } else {
+        ctx.fillStyle = it.color;
+        ctx.beginPath();
+        ctx.arc(ax, ay, 9, 0, 7);
+        ctx.fill();
+      }
     }
   };
 

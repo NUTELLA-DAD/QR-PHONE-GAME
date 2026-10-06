@@ -509,6 +509,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     }
     course.scrapeCd = Math.max(0, course.scrapeCd - dt);
     course.scraping = !!worst;
+    course.lastContact = worst;
     if (!worst) return;
     const step = 600 * dt;
     state.ship.alt += Math.min(pushUp, step) - Math.min(pushDown, step);
@@ -529,6 +530,35 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
       state.ev.warn = 1.5;
       state.ev.warnText = 'SCRAPING THE ROCKS!';
     }
+  };
+
+  // Close calls: which points of the hull have rock near them, and which way (so the TV can light
+  // up that edge before you hit). Also the first touch of rock: a clang, sparks and a small bounce.
+  const proximity = () => {
+    const near = [];
+    for (const [sx0, sy0] of SHIP_SAMPLES) {
+      const [sx, sy] = tilt(state, sx0, sy0);
+      const wy = sy - state.ship.alt;
+      if (inRock(state, sx, wy)) continue;
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+        for (let k = 1; k <= 4; k++) {
+          if (inRock(state, sx + dx * k * 55, wy + dy * k * 55)) {
+            near.push({ x: sx0, y: sy0, dx, dy, close: 1 - (k - 1) / 4 });
+            break;
+          }
+        }
+      }
+    }
+    course.near = near;
+    if (course.scraping && !course.wasScraping) {
+      const w = course.lastContact;
+      if (w) {
+        state.sfxQ.push(['clang', w.depth > 40]);
+        for (let k = 0; k < 3; k++) puff(w.sx, w.sy - state.ship.alt, k ? '#ffe9a8' : '#ffffff', 5);
+      }
+      state.ship.vy = -(state.ship.vy || 0) * 0.3; // a small bounce off the rock
+    }
+    course.wasScraping = course.scraping;
   };
 
   // Rock contact: push the ship clear and take scrape damage.
@@ -559,6 +589,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     }
     course.scrapeCd = Math.max(0, course.scrapeCd - dt);
     course.scraping = !!worst;
+    course.lastContact = worst;
     if (!worst) return;
     // Shove the ship out of the rock (a hard bump), and slow it down.
     state.ship.alt += Math.sign(push) * Math.min(Math.abs(push), 600 * dt);
@@ -840,6 +871,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
       warnAhead(dt);
     }
     collide(dt);
+    proximity();
     updateBombs(dt);
     updateTurrets(dt);
   };

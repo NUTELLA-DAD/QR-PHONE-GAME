@@ -75,6 +75,7 @@ export function createSimulation() {
     ventOpen: SHIP_LAYOUT.vents.map(() => false), // which vent stacks are open
     wreck: null, // { t } while the ship is breaking apart
     bombBay: { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null },
+    sfxQ: [], // sounds asked for by name: [name, arg]
     gasValve: { input: 0, auto: false }, // +1 = pumping hot steam into the gasbag, -1 = venting
     shield: { ang: -Math.PI / 2, on: false, flash: 0 }, // the Deflector's arc (angle around the ship)
     upgrades: {}, // id -> times taken
@@ -265,9 +266,20 @@ export function createSimulation() {
     return true;
   };
 
+  // Speed changes with weight: she builds speed gradually and brakes harder than she accelerates,
+  // easing in as she nears the speed asked for.
+  const driveSpeed = (want, dt) => {
+    const SH = config.SHIP;
+    const sp = state.ship.speed;
+    const braking = Math.abs(want) < Math.abs(sp) || (Math.sign(want) !== Math.sign(sp) && Math.abs(sp) > 0.02);
+    const rate = (braking ? SH.BRAKE : SH.ACCEL) * Math.min(1, Math.abs(want - sp) * 4 + 0.25);
+    state.ship.speed = sp + clamp(want - sp, -rate * dt, rate * dt);
+    state.ship.accelX = dt > 0 ? (state.ship.speed - sp) / dt : 0;
+  };
+
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
   const impact = (x, y, power) => {
-    state.ship.shake = Math.min(1, 0.35 * power);
+    state.ship.shake = Math.max(state.ship.shake, Math.min(0.6, 0.22 * power));
     if (power >= 1.5) {
       pop(state, x, y - 40 - state.ship.alt, 'bigHit', '#ff7b00', Math.min(1.6, 0.6 + power * 0.3));
       // Every phone feels the big ones.
@@ -494,8 +506,10 @@ export function createSimulation() {
             // from the gasbag (the Gas Valve station).
             const SH = config.SHIP;
             const REV = -SH.REVERSE;
-            if (Math.abs(player.jx) > 0.25) state.ship.speed = clamp(state.ship.speed + player.jx * SH.THRUST * dt, REV, 1);
-            else if (player.thr != null) state.ship.speed += (clamp(player.thr, REV, 1) - state.ship.speed) * Math.min(1, dt * 0.9);
+            // Stick left/right asks for full ahead / full reverse; let go and she goes back to the
+            // lever's cruise speed (or holds her speed if the lever isn't used).
+            const want = player.jx > 0.25 ? player.jx : player.jx < -0.25 ? player.jx * SH.REVERSE : player.thr != null ? clamp(player.thr, REV, 1) : state.ship.speed;
+            driveSpeed(want, dt);
             state.ship.trim = Math.abs(player.jy) > 0.15 ? -player.jy : 0;
             helmFlown = true;
           }
@@ -746,9 +760,9 @@ export function createSimulation() {
     if (!getHelm()) {
       if (plan && modules.works(state, 'Helm')) {
         state.autopilot = true;
-        state.ship.speed += (plan.speed - state.ship.speed) * Math.min(1, dt * 0.8);
+        driveSpeed(plan.speed, dt);
         state.ship.trim = clamp((plan.target - state.ship.alt) / 150, -1, 1) * 0.6;
-      } else state.ship.speed += ((flying ? 0.2 : 0.3) - state.ship.speed) * dt * 0.5;
+      } else driveSpeed(flying ? 0.2 : 0.3, dt);
     }
     if (!gasManned) valve.input = plan ? gasFor(state, plan.target) * 0.6 : 0;
     valve.auto = !gasManned && !!plan;
@@ -794,7 +808,8 @@ export function createSimulation() {
     const SH = config.SHIP;
     const climbRate = dt > 0 && state.lastAlt != null ? (state.ship.alt - state.lastAlt) / dt : 0;
     state.lastAlt = state.ship.alt;
-    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED, -SH.TILT_MAX, SH.TILT_MAX);
+    // (Speeding up lifts the nose a touch, braking dips it: she has weight.)
+    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED - (state.ship.accelX || 0) * SH.PITCH_PER_ACCEL, -SH.TILT_MAX, SH.TILT_MAX);
     state.ship.pitch = (state.ship.pitch || 0) + (wantPitch - (state.ship.pitch || 0)) * Math.min(1, dt * SH.TILT_SMOOTH);
 
     // Breaking apart: pieces fall, explosions go off, then the whole game starts over.

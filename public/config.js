@@ -9,7 +9,13 @@ export const config = {
     SHIP_SCREEN_FRACTION: 0.38, // the ship takes at most this much of the screen width
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
-    SMOOTHING: 1.6, // how quickly the camera catches up (higher = snappier)
+    SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
+    ZOOM_SMOOTHING: 0.6, // how quickly it zooms (low = calm, no pumping)
+    LEAD_TIME: 0.9, // look this many seconds ahead of where she's heading
+    LEAD_SMOOTHING: 1.2,
+    SHAKE_SCALE: 14, // screen shake per unit of 'shake'...
+    SHAKE_MAX: 9, // ...but never more than this many pixels
+    FRAME_RANGE: 1900, // threats closer than this are kept in view (farther ones get edge arrows)
   },
   // Enemy plane: flies a loop around the ship.
   // Enemy fighter: flies like a plane (speed + limited turning), making long strafing runs.
@@ -30,7 +36,10 @@ export const config = {
   SHIP: {
     ALT_RANGE: 420, // how far the ship can climb or dive from the middle
     TRIM_ACCEL: 150, // push from the helm's small up/down trim engine (pixels per second squared)
-    THRUST: 0.9, // throttle change per second from pushing the stick left/right
+    THRUST: 0.9, // (old) throttle change per second from the stick; see ACCEL/BRAKE
+    ACCEL: 0.45, // how fast she picks up speed (share of full speed per second) - she's heavy
+    BRAKE: 0.9, // how fast she sheds speed when braking or reversing
+    PITCH_PER_ACCEL: 0.03, // nose lift when speeding up / dip when braking
     TOP_SPEED: 560, // forward speed at full throttle (reverse is up to 40% of this)
     REVERSE: 0.4, // how much of the throttle is reverse
     HULL_DAMAGE: 1, // multiplier on hull damage taken (armour upgrades lower it)

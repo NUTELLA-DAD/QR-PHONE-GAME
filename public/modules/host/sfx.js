@@ -112,6 +112,11 @@ export function createSfx(state) {
       tone('sine', 1320, 1310, 0.7, 0.12);
     },
     fanfare: () => [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, f, 0.18, 0.25, i * 0.11)),
+    clang: (big) => {
+      tone('triangle', big ? 180 : 260, big ? 70 : 120, 0.4, big ? 0.4 : 0.25);
+      tone('square', 520, 300, 0.12, 0.08);
+      noise('bandpass', 900, 0.3, big ? 0.45 : 0.3, 0, 2);
+    },
     horn: () => {
       tone('sawtooth', 70, 65, 1.6, 0.35);
       tone('sawtooth', 104, 98, 1.6, 0.2);
@@ -128,6 +133,10 @@ export function createSfx(state) {
 
   // Called every frame: compare with last frame and play what's new.
   const update = () => {
+    // Sounds the game asked for by name this frame.
+    const q = state.sfxQ || [];
+    if (ac) for (const [name, arg] of q) if (S[name] && ready(name, 0.05)) play(name, arg);
+    q.length = 0;
     if (!ac) return;
     if (state.shells.length > last.shells && ready('cannon', 0.06)) play('cannon');
     if (state.bullets.length > last.bullets && ready('pew', 0.15)) play('pew');

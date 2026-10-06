@@ -1377,15 +1377,37 @@ export function createRenderer({ ctx, state, canvas }) {
     drawBombs(time / 1000);
 
     ctx.save();
-    ctx.translate(state.ship.shake > 0 ? (Math.random() - 0.5) * 16 : 0, -state.ship.alt + Math.sin(time / 1000) * 3);
-    if (state.ship.pitch) {
+    // A smooth, capped shake (no random jitter), a slow two-speed bob and a slight sway: she's a
+    // big thing hanging in the air. (Visual only - collisions use the steady ship.)
+    const ts = time / 1000;
+    const amp = Math.min(config.CAMERA.SHAKE_MAX, state.ship.shake * config.CAMERA.SHAKE_SCALE);
+    const bob = Math.sin(ts * 1.1) * 5 + Math.sin(ts * 0.37 + 1) * 3;
+    ctx.translate(amp ? Math.sin(ts * 61) * amp : 0, -state.ship.alt + bob + (amp ? Math.cos(ts * 47) * amp * 0.6 : 0));
+    {
+      const sway = Math.sin(ts * 0.8) * 0.005 + Math.sin(ts * 0.31) * 0.004;
       const [px, py] = config.SHIP.TILT_PIVOT;
       ctx.translate(px, py);
-      ctx.rotate(state.ship.pitch);
+      ctx.rotate((state.ship.pitch || 0) + sway);
       ctx.translate(-px, -py);
     }
     const drawShipAndCrew = () => {
       drawShip(time / 1000);
+      // Close-call warnings: red chevrons on the hull pointing at nearby rock.
+      for (const n of (state.course && state.course.near) || []) {
+        const a = n.close * (0.55 + 0.45 * Math.sin(time / 90));
+        ctx.save();
+        ctx.translate(n.x + n.dx * 24, n.y + n.dy * 24);
+        ctx.rotate(Math.atan2(n.dy, n.dx));
+        ctx.strokeStyle = `rgba(255,40,60,${a})`;
+        ctx.lineWidth = 10;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-14, -22);
+        ctx.lineTo(10, 0);
+        ctx.lineTo(-14, 22);
+        ctx.stroke();
+        ctx.restore();
+      }
       drawGuns();
       drawHazards(time / 1000);
       threatArt.drawBombs(time / 1000);
