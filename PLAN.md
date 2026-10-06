@@ -76,8 +76,20 @@ the lead's own additions (marked *).
 - F5d. *Capture*: clear a gunship's crew and you can fire her guns at other enemies until she
   drifts away.
 
+### G. Decided after the gun/bat assessment (6 Oct 2026)
+Measured with botsim: manned guns sat EMPTY 32% (caves) to 69% (open sky) of the time; a gun
+empties in ~4 s of firing and a crate refills only ~2 s; bats were almost never shot (3 of 60)
+and just chipped the hull. The user chose:
+- G1. **Guns**: 20 shells per gun, 10 per crate, a slow free trickle (about 1 shell / 4 s),
+  about 3-4 shots per second with faster shells (~1300) and slightly less damage per shell.
+- G2. **Bats latch on**: they land on the gasbag and decks and gnaw holes; deck crew swat them
+  (sword or shove); gunners can still shoot incoming ones. Bots must swat them too.
+- G3. **One art style - Bomber XXL soft flat**: faded pastel palette, thin consistent outlines,
+  flat shapes with one highlight, layered hazy backgrounds - applied to ship, crew, enemies and
+  HUD (a written palette + rules in art/ART_SPEC.md first, then the art worker applies it).
+
 ### Order for the focus work
-A1 -> F1a -> F2a/F2b -> F3a/F3b -> F5a/F5b -> F4 -> F1b/F1c -> then Phase B onward.
+A1 -> F1a -> F2a/F2b -> G1 -> G2 -> G3 -> F3a/F3b -> F5a/F5b -> F4 -> F1b/F1c -> then Phase B onward.
 
 ## Phase A - Foundations that make everything else cheaper
 - A1. **Headless test runner** (`tools/botsim.mjs`): run the real simulation in Node with N bots
@@ -133,6 +145,7 @@ after each phase.
 - Plan and agent team set up. User goals added as Current focus (F1-F5).
 - A1 done: `node tools/botsim.mjs --minutes 5 --difficulty hard --map open --seed 1` runs the
   real game with bots in about a second per simulated minute; the same seed replays exactly.
+- F1a done: fixed 60 Hz steps in main.js (config.LOOP).
 - Note: the .claude/agents files load in a NEW session; until then the lead runs the same
   instructions through a general-purpose agent with model = sonnet.
 
