@@ -109,8 +109,8 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     for (const t of [0.5, 1.0]) {
       const px = e.x + Math.cos(e.heading) * F.SPEED * t;
       const py = e.y + Math.sin(e.heading) * F.SPEED * t;
-      const g = course ? groundAt(course, px) : Infinity;
-      const c = course ? ceilAt(course, px) : -Infinity;
+      const g = course ? groundAt(course, px, true, py) : Infinity;
+      const c = course ? ceilAt(course, px, py) : -Infinity;
       const fwd = Math.cos(e.heading) >= 0 ? 1 : -1;
       if (py > g - 160) {
         want = Math.atan2(-1.2, fwd * 0.6); // climb!

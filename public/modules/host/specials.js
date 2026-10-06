@@ -224,7 +224,9 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
 
   const updateTugs = (dt) => {
     for (const g of S.tugs) {
+      if (g.hp <= 0) continue; // shot down (removed below)
       g.hit = Math.max(0, g.hit - dt);
+      if (g.mode === 'pull' && !g.hook) g.mode = 'flee'; // cable gone
       const m = mid();
       if (g.mode === 'approach') {
         // Close in below and to one side, then fire the harpoon.

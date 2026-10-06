@@ -172,6 +172,22 @@ export const config = {
     ROCKET_LIFE: 7,
     ROCKET_IMPACT: 1.3,
   },
+  // Mission maps (maps.js): caves, shafts and passages flown through in any direction. Each
+  // mission is a fresh map; reach the beacon to finish it (scorecard, upgrade vote, next map).
+  MAPS: {
+    ENABLED: true,
+    KINDS: ['network', 'route'], // mission types in turn: branching caves, one winding passage
+    CELL: 200, // size of one map square (pixels)
+    WIDTH: 170, // map size in squares for mission 1...
+    HEIGHT: 60,
+    WIDTH_PER_LEVEL: 25, // ...growing with each mission
+    HEIGHT_PER_LEVEL: 6,
+    ROOMS: 8, // caverns along the way (more on later missions)
+    BRANCHES: 3, // side caves that dead-end (network maps)
+    TUNNEL_CELLS: 8, // tunnel height (the ship needs 7)
+    SHAFT_CELLS: 12, // shaft width (the ship needs 11)
+    GOAL_RADIUS: 700, // how close to the beacon counts as reaching it
+  },
   // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
   WAVES: {
     FIRST_AFTER: 35, // seconds before the first wave

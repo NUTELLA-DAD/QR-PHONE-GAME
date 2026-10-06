@@ -54,10 +54,13 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
 
 ## The flight
 
-Each lap flies out past checkpoint flags to a **turning beacon**, then home to the mooring mast.
-At the beacon and at home the crew **votes on an upgrade** on their phones. Arriving home shows
-the **lap scorecard** with crew awards. Each checkpoint flag brings supplies (+15 hull). If the
-hull breaks, the ship **breaks apart** and the game starts over at the mast (upgrades are lost).
+Each **mission** is a new map of caves, shafts and passages to fly through in any direction -
+up shafts, back along tunnels, across caverns. Find your way to the **beacon** (the yellow star on
+the minimap at the top of the TV; the helm's phone says which way to go). Missions alternate
+between a **branching cave network** (with dead ends) and a **winding passage** that climbs, drops
+and doubles back, and get bigger each time. Reaching the beacon patches the hull, shows the
+scorecard with crew awards, and the crew **votes on an upgrade** on their phones. If the hull
+breaks, the ship **breaks apart** and the game starts over at mission 1.
 
 Enemies: fighters (they fly like real planes: long strafing runs from far out, wide turns,
 and they can crash into mountains), raider cargo planes (shoot them before they drop raiders), mines, bat swarms,

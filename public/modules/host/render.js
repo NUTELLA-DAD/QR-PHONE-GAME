@@ -472,6 +472,65 @@ export function createRenderer({ ctx, state, canvas }) {
   };
 
   // Lap progress: home mast, checkpoints, the beacon halfway, and the ship.
+  // Minimap of the mission map: caves, the ship (red) and the beacon (yellow star).
+  let miniFor = null;
+  let miniCanvas = null;
+  const drawMinimap = () => {
+    const c = state.course;
+    const map = c.map;
+    if (miniFor !== map) {
+      miniFor = map;
+      miniCanvas = document.createElement('canvas');
+      miniCanvas.width = map.W;
+      miniCanvas.height = map.H;
+      const g = miniCanvas.getContext('2d');
+      const img = g.createImageData(map.W, map.H);
+      for (let k = 0; k < map.W * map.H; k++) {
+        const rock = map.solid[k];
+        img.data[k * 4] = rock ? 70 : 214;
+        img.data[k * 4 + 1] = rock ? 54 : 200;
+        img.data[k * 4 + 2] = rock ? 44 : 170;
+        img.data[k * 4 + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+    }
+    const w = 420;
+    const h = Math.min(170, (w * map.H) / map.W);
+    const x0 = 800 - w / 2;
+    const y0 = 14;
+    ctx.fillStyle = 'rgba(241,226,184,.92)';
+    ink();
+    ctx.lineWidth = 4;
+    rrect(x0 - 8, y0 - 8, w + 16, h + 16, 10);
+    ctx.fill();
+    ctx.stroke();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(miniCanvas, x0, y0, w, h);
+    ctx.imageSmoothingEnabled = true;
+    const px = (mx) => x0 + (mx / (map.W * map.CELL)) * w;
+    const py = (my) => y0 + (my / (map.H * map.CELL)) * h;
+    // Beacon.
+    const gx = px(map.goal.x);
+    const gy = py(map.goal.y);
+    ctx.fillStyle = '#ffd23f';
+    ctx.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+      const r = k % 2 ? 4 : 10;
+      ctx.lineTo(gx + Math.cos(a) * r, gy + Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Ship.
+    ctx.fillStyle = '#e63946';
+    ctx.beginPath();
+    ctx.arc(px(c.dist + 800), py(500 - state.ship.alt), 6, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+  };
+
   const drawRouteBar = () => {
     const c = state.course;
     const x0 = 560;
@@ -582,8 +641,13 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fillStyle = config.INK;
     }
     if (state.course && config.COURSE.ENABLED) {
-      ctx.fillText('Lap ' + state.course.lap + (state.course.leg === 'home' ? ' - heading home' : ' - outbound'), 454, 150);
-      drawRouteBar();
+      if (state.course.map) {
+        ctx.fillText('Mission ' + state.course.lap, 454, 150);
+        drawMinimap();
+      } else {
+        ctx.fillText('Lap ' + state.course.lap + (state.course.leg === 'home' ? ' - heading home' : ' - outbound'), 454, 150);
+        drawRouteBar();
+      }
     }
 
     if (state.ev.warn > 0) {
@@ -645,7 +709,7 @@ export function createRenderer({ ctx, state, canvas }) {
       crew ? `${crew} aboard - press CAST OFF (or Space) when ready!` : 'Waiting for crew...',
     ];
     const rec = state.record || { laps: 0 };
-    if (rec.laps > 0) lines.push(`Record on this TV: ${rec.laps} lap${rec.laps > 1 ? 's' : ''}, ${rec.kills} shot down`);
+    if (rec.laps > 0) lines.push(`Record on this TV: ${rec.laps} mission${rec.laps > 1 ? 's' : ''}, ${rec.kills} shot down`);
     ctx.font = '700 26px Georgia';
     lines.forEach((t, i) => {
       ctx.lineWidth = 7;
@@ -1375,7 +1439,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fillText('SHIP LOST!', 800, 385);
       ctx.fillStyle = '#f3ead6';
       ctx.font = '700 28px Georgia';
-      ctx.fillText(`Laps flown: ${w.lap - 1}   -   Raiders downed: ${w.kills}`, 800, 440);
+      ctx.fillText(`Missions done: ${w.lap - 1}   -   Raiders downed: ${w.kills}`, 800, 440);
       ctx.font = '700 22px Georgia';
       ctx.fillText(`A new ship waits at the mast in ${Math.max(1, Math.ceil(state.ship.down))}...`, 800, 500);
       ctx.globalAlpha = 1;

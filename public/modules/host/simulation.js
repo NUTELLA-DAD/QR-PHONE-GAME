@@ -786,7 +786,8 @@ export function createSimulation() {
     } else if (state.phase !== 'flying') {
       // Moored at the mast.
       state.ship.vy = 0;
-      state.ship.alt *= 1 - dt * 0.4;
+      const home = (state.course && state.course.homeAlt) || 0;
+      state.ship.alt += (home - state.ship.alt) * Math.min(1, dt * 0.4);
     }
     state.ship.shake = Math.max(0, state.ship.shake - dt);
     // Nose up while climbing, nose down while diving.
@@ -815,6 +816,14 @@ export function createSimulation() {
       state.ship.gas = config.GAS.START;
     } else {
       threats.update(dt);
+      // A new mission map: clear away the last one's enemies.
+      if (state.course.justStarted) {
+        state.course.justStarted = false;
+        threats.reset();
+        squadrons.reset();
+        specials.reset();
+        state.enemy.dead = Math.max(state.enemy.dead, 6);
+      }
       squadrons.update(dt);
       specials.update(dt);
       course.update(dt);

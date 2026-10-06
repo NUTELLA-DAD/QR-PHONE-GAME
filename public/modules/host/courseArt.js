@@ -76,7 +76,211 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     ctx.fill();
   };
 
+  // ---------- Mission maps: caves drawn with smooth edges (marching squares) ----------
+  // A tiling rock texture (layers and stones), made once.
+  let rockPattern = null;
+  const getRockPattern = () => {
+    if (rockPattern) return rockPattern;
+    const c = document.createElement('canvas');
+    c.width = c.height = 400;
+    const g = c.getContext('2d');
+    g.fillStyle = '#7d6148';
+    g.fillRect(0, 0, 400, 400);
+    for (let k = 0; k < 8; k++) {
+      g.strokeStyle = k % 2 ? 'rgba(60,40,26,.35)' : 'rgba(176,140,96,.35)';
+      g.lineWidth = 18 + (k % 3) * 8;
+      g.beginPath();
+      for (let x = 0; x <= 400; x += 20) {
+        const y = k * 50 + 20 + Math.sin((x / 400) * Math.PI * 2 + k) * 10;
+        if (x === 0) g.moveTo(x, y);
+        else g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    for (let k = 0; k < 26; k++) {
+      const h = hash(k, 40);
+      g.fillStyle = h < 0.5 ? 'rgba(60,45,35,.6)' : 'rgba(170,145,120,.6)';
+      g.beginPath();
+      g.ellipse(hash(k, 41) * 400, hash(k, 42) * 400, 8 + hash(k, 43) * 14, 6 + hash(k, 44) * 8, hash(k, 45) * 3, 0, 7);
+      g.fill();
+    }
+    rockPattern = ctx.createPattern(c, 'repeat');
+    return rockPattern;
+  };
+
+  const drawMapTerrain = (view, width, height) => {
+    const course = state.course;
+    const map = course.map;
+    const C = map.CELL;
+    const dist = course.dist;
+    const [wx0, wx1] = span(view, width);
+    const top = view.cy - height / 2 / view.zoom - C;
+    const bottom = view.cy + height / 2 / view.zoom + C;
+    const i0 = Math.floor((wx0 + dist) / C) - 1;
+    const i1 = Math.ceil((wx1 + dist) / C) + 1;
+    const j0 = Math.floor(top / C) - 1;
+    const j1 = Math.ceil(bottom / C) + 1;
+    const S = (i, j) => (i < 0 || j < 0 || i >= map.W || j >= map.H ? 1 : map.solid[j * map.W + i]);
+    // Corner values: how much rock surrounds each grid corner, wobbled a little (fixed to the map)
+    // so the edges look like rock rather than blocks.
+    const corner = (i, j) => {
+      const v = (S(i - 1, j - 1) + S(i, j - 1) + S(i - 1, j) + S(i, j)) / 4;
+      return v === 0 || v === 1 ? v : v + (hash(i * 7919 + j, 50) - 0.5) * 0.3;
+    };
+    const X = (i) => i * C - dist;
+    const Y = (j) => j * C;
+
+    // Cave backdrop: dark, so ships, enemies and shots stand out.
+    ctx.fillStyle = '#2b2733';
+    const bx0 = Math.max(X(0), wx0 - C);
+    const bx1 = Math.min(X(map.W), wx1 + C);
+    const by0 = Math.max(0, top);
+    const by1 = Math.min(map.H * C, bottom);
+    if (bx1 > bx0 && by1 > by0) ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+    ctx.fillStyle = 'rgba(70,60,80,.5)';
+    for (let i = i0; i <= i1; i += 3) {
+      for (let j = j0; j <= j1; j += 3) {
+        if (hash(i * 131 + j, 51) > 0.35) continue;
+        ctx.beginPath();
+        ctx.ellipse(X(i) + C * 1.5, Y(j) + C * 1.5, C * (0.8 + hash(i + j, 52)), C * (0.5 + hash(i - j, 53)), 0, 0, 7);
+        ctx.fill();
+      }
+    }
+
+    // Marching squares: rock polygon pieces and edge segments.
+    const fill = new Path2D();
+    const segs = [];
+    for (let j = j0; j < j1; j++) {
+      for (let i = i0; i < i1; i++) {
+        const v = [corner(i, j), corner(i + 1, j), corner(i + 1, j + 1), corner(i, j + 1)];
+        const P = [[X(i), Y(j)], [X(i + 1), Y(j)], [X(i + 1), Y(j + 1)], [X(i), Y(j + 1)]];
+        const inside = v.map((q) => q >= 0.5);
+        if (inside.every((q) => q)) {
+          fill.rect(X(i), Y(j), C, C);
+          continue;
+        }
+        if (!inside.some((q) => q)) continue;
+        const poly = [];
+        const cross = [];
+        for (let k = 0; k < 4; k++) {
+          const a = k;
+          const b = (k + 1) % 4;
+          if (inside[a]) poly.push(P[a]);
+          if (inside[a] !== inside[b]) {
+            const t = (0.5 - v[a]) / (v[b] - v[a]);
+            const pt = [P[a][0] + (P[b][0] - P[a][0]) * t, P[a][1] + (P[b][1] - P[a][1]) * t];
+            poly.push(pt);
+            cross.push(pt);
+          }
+        }
+        fill.moveTo(poly[0][0], poly[0][1]);
+        for (const p of poly.slice(1)) fill.lineTo(p[0], p[1]);
+        fill.closePath();
+        for (let k = 0; k + 1 < cross.length; k += 2) segs.push([cross[k], cross[k + 1], i, j]);
+      }
+    }
+    const pat = getRockPattern();
+    if (pat.setTransform) pat.setTransform(new DOMMatrix([1, 0, 0, 1, -(dist % 400), 0]));
+    ctx.fillStyle = pat;
+    ctx.fill(fill);
+    ctx.fillStyle = HAZE;
+    ctx.fill(fill);
+
+    // Edges: ink outline, grass on floors, drips/vines/crystals under ceilings.
+    const rockAt = (x, y) => S(Math.floor((x + dist) / C), Math.floor(y / C)) === 1;
+    const floors = [];
+    const ceilings = [];
+    for (const sg of segs) {
+      const [[ax, ay], [bx2, by2], i, j] = sg;
+      const mx = (ax + bx2) / 2;
+      const my = (ay + by2) / 2;
+      if (!rockAt(mx, my - 40) && rockAt(mx, my + 40)) floors.push(sg);
+      else if (rockAt(mx, my - 40) && !rockAt(mx, my + 40)) ceilings.push(sg);
+    }
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#4f7f3c';
+    ctx.lineWidth = 20;
+    ctx.beginPath();
+    for (const [[ax, ay], [bx2, by2]] of floors) {
+      ctx.moveTo(ax, ay + 8);
+      ctx.lineTo(bx2, by2 + 8);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = '#7fb24f';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ink();
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    for (const [[ax, ay], [bx2, by2]] of segs) {
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx2, by2);
+    }
+    ctx.stroke();
+    // Tufts on floors.
+    ctx.strokeStyle = '#3f6e30';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    for (const [[ax, ay], [bx2, by2], i, j] of floors) {
+      if (hash(i * 31 + j, 54) > 0.6) continue;
+      const x = (ax + bx2) / 2;
+      const y = (ay + by2) / 2;
+      ctx.moveTo(x - 8, y);
+      ctx.lineTo(x - 12, y - 18);
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 2, y - 24);
+      ctx.moveTo(x + 8, y);
+      ctx.lineTo(x + 13, y - 16);
+    }
+    ctx.stroke();
+    // Under ceilings: stalactites, vines and the odd glowing crystal.
+    for (const [[ax, ay], [bx2, by2], i, j] of ceilings) {
+      const h = hash(i * 17 + j, 55);
+      const x = (ax + bx2) / 2;
+      const y = (ay + by2) / 2;
+      if (h < 0.35) {
+        const len = 30 + hash(i, 56) * 50;
+        ctx.fillStyle = '#6e5646';
+        ink();
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x - 16, y - 4);
+        ctx.lineTo(x, y + len);
+        ctx.lineTo(x + 16, y - 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (h < 0.55) {
+        const len = 60 + hash(j, 57) * 140;
+        ctx.strokeStyle = '#3f6e30';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.quadraticCurveTo(x + 16, y + len * 0.5, x - 6, y + len);
+        ctx.stroke();
+      } else if (h < 0.62) {
+        ctx.fillStyle = 'rgba(120,230,255,.25)';
+        ctx.beginPath();
+        ctx.arc(x, y + 20, 60, 0, 7);
+        ctx.fill();
+        ink();
+        ctx.lineWidth = 4;
+        ctx.fillStyle = '#7fe6ff';
+        for (const dx of [-18, 0, 18]) {
+          ctx.beginPath();
+          ctx.moveTo(x + dx - 10, y - 4);
+          ctx.lineTo(x + dx, y + 40 + (dx ? 0 : 20));
+          ctx.lineTo(x + dx + 10, y - 4);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+    }
+  };
+
   const drawTerrain = (view, width, height) => {
+    if (state.course && state.course.map) return drawMapTerrain(view, width, height);
     const course = state.course;
     if (!course || !config.COURSE.ENABLED) return;
     const [wx0, wx1] = span(view, width);
@@ -641,13 +845,15 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     const course = state.course;
     if (!course || !course.markers) return;
     for (const m of course.markers) {
-      const x = m.cx - course.dist;
+      // (On a mission map markers sit on a cave floor; the mast reaches up to the ship.)
+      const x = (m.mx ?? m.cx) - course.dist;
       if (x < -1500 || x > 4500) continue;
-      const g = groundAt(course, x);
+      const g = m.my ?? groundAt(course, x);
+      const mastH = m.top != null ? g - m.top : 900 + LIFT;
       ink();
       if (m.kind === 'home') {
         // Lattice mooring mast with a platform near the top.
-        const top = g - 900 - LIFT;
+        const top = g - mastH;
         ctx.fillStyle = '#7a5a3a';
         ctx.beginPath();
         ctx.moveTo(x - 70, g);
@@ -659,7 +865,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.stroke();
         ctx.lineWidth = 3;
         for (let y = g; y > top + 40; y -= 70) {
-          const k = (g - y) / (900 + LIFT);
+          const k = (g - y) / mastH;
           const half = 70 - 48 * k;
           ctx.beginPath();
           ctx.moveTo(x - half, y);

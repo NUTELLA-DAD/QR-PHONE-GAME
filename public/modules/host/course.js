@@ -10,6 +10,7 @@
 // World y grows downward; the ship is drawn shifted up by its altitude (alt).
 import { config } from '../../config.js';
 import { pop } from './popups.js';
+import { makeMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead } from './maps.js';
 
 const K = config.COURSE;
 const TOP = -1400; // where ceilings start (far above the view)
@@ -48,6 +49,7 @@ const jag = (x, seed) => (Math.sin(x * 0.013 + seed) + Math.sin(x * 0.031 + seed
 // Height of the land at course position cx (cliffs raise it, drops lower it). Every feature,
 // building and ceiling rides on top of this.
 export function elevAt(course, cx) {
+  if (course.map) return 0;
   let e = course.elev0 || 0;
   for (const s of course.elev || []) {
     if (cx < s.x0) break;
@@ -62,8 +64,10 @@ export function elevAt(course, cx) {
 
 // Ground surface (world y) at world x. Buildings (castle towers, smokestacks) count as solid
 // unless solid = false (the terrain art draws bare rock and then the buildings on top).
-export function groundAt(course, wx, solid = true) {
+// On a mission map, "ground" means the rock floor below height y (default: the ship's middle).
+export function groundAt(course, wx, solid = true, y) {
   const cx = wx + course.dist;
+  if (course.map) return floorBelow(course.map, cx, y ?? course.refY);
   return groundFlat(course, cx, solid) - elevAt(course, cx);
 }
 
@@ -82,8 +86,10 @@ function groundFlat(course, cx, solid) {
 }
 
 // Underside of any rock above (world y) at world x, or -Infinity for open sky.
-export function ceilAt(course, wx) {
+// On a mission map, the rock roof above height y (default: the ship's middle).
+export function ceilAt(course, wx, y) {
   const cx = wx + course.dist;
+  if (course.map) return roofAbove(course.map, cx, y ?? course.refY);
   return ceilFlat(course, cx) - elevAt(course, cx);
 }
 
@@ -113,8 +119,9 @@ export function altWindow(state, ahead = 2) {
     for (const [sx0, sy0] of SHIP_SAMPLES) {
       const [sx, sy] = tilt(state, sx0, sy0);
       const x = sx + v * t;
-      min = Math.max(min, sy - groundAt(course, x) + MARGIN);
-      max = Math.min(max, sy - ceilAt(course, x) - MARGIN);
+      const wy = sy - state.ship.alt;
+      min = Math.max(min, sy - groundAt(course, x, true, wy) + MARGIN);
+      max = Math.min(max, sy - ceilAt(course, x, wy) - MARGIN);
     }
   }
   return { min, max };
@@ -126,6 +133,7 @@ export function altWindow(state, ahead = 2) {
 export function pilotPlan(state, ahead, cruise) {
   const course = state.course;
   const alt = state.ship.alt;
+  if (course && course.map) return mapPlan(state, cruise);
   const B = altBounds(state);
   const range = (w) => [Math.max(w.min, B.lo), Math.min(w.max, B.hi)];
   const [lo, hi] = range(altWindow(state, ahead));
@@ -136,6 +144,22 @@ export function pilotPlan(state, ahead, cruise) {
   }
   const target = fit(lo, hi, course ? elevAt(course, course.dist + 800) : 0);
   return { target, speed: Math.abs(target - alt) > 120 ? 0.04 : cruise };
+}
+
+// On a mission map: follow the route to the goal. Aim for the height of a point a few steps along
+// it, and drive toward it (forward, backward, or hover when the way goes straight up/down).
+function mapPlan(state, cruise) {
+  const course = state.course;
+  const sx = course.dist + 800;
+  const sy = 500 - state.ship.alt;
+  const p = routeAhead(course.map, sx, sy, 7);
+  if (!p) return { target: state.ship.alt, speed: 0, dx: 0, dy: 0 };
+  const dx = p.x - sx;
+  const dy = p.y - sy;
+  const target = 500 - p.y;
+  // Mostly vertical: hover and let the gas do the work.
+  const speed = Math.abs(dx) < 120 ? 0 : Math.sign(dx) * (Math.abs(dy) > 350 ? 0.12 : cruise) * (dx < 0 ? 0.8 : 1);
+  return { target, speed: Math.max(-config.SHIP.REVERSE, speed), dx, dy };
 }
 
 // The Gas Valve setting (-1 vent .. +1 pump) that brings the ship to altitude `target`.
@@ -154,11 +178,20 @@ export function keepClear(state, x, y, margin, ahead = 0, reach = 160) {
   const course = state.course;
   if (!course || !K.ENABLED) return y;
   const wx = x + scrollSpeed(state) * ahead;
+  // On a map, something inside the rock moves to the nearest open air in its column.
+  if (course.map && solidAt(course.map, wx + course.dist, y)) {
+    const C = course.map.CELL;
+    for (let k = 1; k < 40; k++) {
+      if (!solidAt(course.map, wx + course.dist, y - k * C)) return y - k * C - margin * 0.5;
+      if (!solidAt(course.map, wx + course.dist, y + k * C)) return y + k * C + margin * 0.5;
+    }
+    return y;
+  }
   let g = Infinity;
   let c = -Infinity;
   for (const dx of [-reach, -reach / 2, 0, reach / 2, reach]) {
-    g = Math.min(g, groundAt(course, wx + dx));
-    c = Math.max(c, ceilAt(course, wx + dx));
+    g = Math.min(g, groundAt(course, wx + dx, true, y));
+    c = Math.max(c, ceilAt(course, wx + dx, y));
   }
   const lo = c + margin;
   const hi = g - margin;
@@ -170,6 +203,7 @@ export function keepClear(state, x, y, margin, ahead = 0, reach = 160) {
 export function inRock(state, x, y) {
   const course = state.course;
   if (!course || !K.ENABLED) return false;
+  if (course.map) return solidAt(course.map, x + course.dist, y);
   return y > groundAt(course, x) || y < ceilAt(course, x);
 }
 
@@ -182,6 +216,7 @@ export function altBounds(state) {
   const course = state.course;
   const R = config.SHIP.ALT_RANGE;
   if (!course) return { lo: -R, hi: R };
+  if (course.map) return { lo: -Infinity, hi: Infinity }; // the rock itself is the limit
   let lo = Infinity;
   let hi = -Infinity;
   for (let dx = -200; dx <= 2600; dx += 200) {
@@ -442,8 +477,63 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     }
   };
 
+  // Rock contact on a mission map: each point of the ship stuck in rock is pushed out the shortest
+  // way (up, down, back or forward), and scrapes.
+  const mapCollide = (dt) => {
+    const map = course.map;
+    let pushUp = 0;
+    let pushDown = 0;
+    let pushBack = 0;
+    let pushFwd = 0;
+    let worst = null;
+    for (const [sx0, sy0] of SHIP_SAMPLES) {
+      const [sx, sy] = tilt(state, sx0, sy0);
+      const mx = sx + course.dist;
+      const my = sy - state.ship.alt;
+      if (!solidAt(map, mx, my)) continue;
+      let best = null;
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+        for (let k = 1; k <= 8; k++) {
+          if (!solidAt(map, mx + dx * k * 30, my + dy * k * 30)) {
+            if (!best || k * 30 < best.d) best = { dx, dy, d: k * 30 };
+            break;
+          }
+        }
+      }
+      if (!best) continue;
+      if (!worst || best.d > worst.depth) worst = { sx, sy, depth: best.d };
+      if (best.dy < 0) pushUp = Math.max(pushUp, best.d);
+      else if (best.dy > 0) pushDown = Math.max(pushDown, best.d);
+      else if (best.dx < 0) pushBack = Math.max(pushBack, best.d);
+      else pushFwd = Math.max(pushFwd, best.d);
+    }
+    course.scrapeCd = Math.max(0, course.scrapeCd - dt);
+    course.scraping = !!worst;
+    if (!worst) return;
+    const step = 600 * dt;
+    state.ship.alt += Math.min(pushUp, step) - Math.min(pushDown, step);
+    if (pushUp && state.ship.vy < 0) state.ship.vy = 0;
+    if (pushDown && state.ship.vy > 0) state.ship.vy = 0;
+    if (pushBack) {
+      course.dist -= Math.min(pushBack, step);
+      if (state.ship.speed > -0.1) state.ship.speed = -0.1;
+    }
+    if (pushFwd) {
+      course.dist += Math.min(pushFwd, step);
+      if (state.ship.speed < 0.1) state.ship.speed = 0.1;
+    }
+    state.ship.speed *= 1 - 0.8 * dt;
+    if (course.scrapeCd <= 0 && !state.ship.down) {
+      course.scrapeCd = K.SCRAPE_COOLDOWN;
+      impact(worst.sx, worst.sy, 1 + Math.min(2, worst.depth / 40));
+      state.ev.warn = 1.5;
+      state.ev.warnText = 'SCRAPING THE ROCKS!';
+    }
+  };
+
   // Rock contact: push the ship clear and take scrape damage.
   const collide = (dt) => {
+    if (course.map) return mapCollide(dt);
     let push = 0; // + = needs to go up
     let worst = null;
     let wallAhead = false;
@@ -494,8 +584,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     const v = scrollSpeed(state);
     for (const t of course.turrets) {
       // Every turret (wrecked ones too) stays fixed to the ground as it scrolls past.
-      const wx = t.cx - course.dist;
-      const wy = groundAt(course, wx);
+      const wx = (t.mx ?? t.cx) - course.dist;
+      const wy = t.my ?? groundAt(course, wx);
       t.x = wx;
       t.y = wy - 20;
       t.vx = -v;
@@ -590,7 +680,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     const b = { x, y, vx: 0, vy: 60 };
     for (let i = 0; i < 300; i++) {
       stepBomb(b, 1 / 30);
-      if (b.y >= groundAt(course, b.x)) return { x: b.x, y: groundAt(course, b.x) };
+      if (course.map ? inRock(state, b.x, b.y) : b.y >= groundAt(course, b.x)) return { x: b.x, y: course.map ? b.y : groundAt(course, b.x) };
     }
     return null;
   };
@@ -631,7 +721,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
   const updateBombs = (dt) => {
     for (const b of state.shipBombs) {
       stepBomb(b, dt);
-      if (b.y >= groundAt(course, b.x)) {
+      if (course.map ? inRock(state, b.x, b.y) : b.y >= groundAt(course, b.x)) {
         b.done = true;
         blast(b);
       } else if (inRock(state, b.x, b.y)) b.done = true; // hit an overhang
@@ -640,7 +730,27 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
   };
 
   // Passing a marker: checkpoint, beacon (turn for home) or home (lap complete).
+  // On a mission map: how far along the route we are, and whether we've reached the beacon.
+  const mapProgress = () => {
+    const map = course.map;
+    const sx = course.dist + 800;
+    const sy = 500 - state.ship.alt;
+    const d = distToGoal(map, sx, sy);
+    if (Number.isFinite(d)) course.progress = Math.max(0, Math.min(0.99, 1 - d / Math.max(1, map.startDist)));
+    course.dusk += (0 - course.dusk) * 0.02;
+    if (!course.done && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS) {
+      course.done = true;
+      course.markers[1].passed = true;
+      state.ship.hull = Math.min(100, state.ship.hull + K.CHECKPOINT_REPAIR);
+      state.ev.warn = 4;
+      state.ev.warnText = 'BEACON REACHED! MISSION ' + course.lap + ' COMPLETE';
+      course.pendingNext = true;
+      if (onMarker) onMarker({ kind: 'home', lap: course.lap + 1 });
+    }
+  };
+
   const passMarkers = () => {
+    if (course.map) return mapProgress();
     const shipX = course.dist + 800;
     for (const m of course.markers) {
       if (m.passed || m.cx > shipX) continue;
@@ -670,6 +780,12 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
 
   // Hint for the helmsman's phone.
   const helmHint = () => {
+    if (course.map) {
+      const p = mapPlan(state, 0.5);
+      const h = p.dx > 300 ? 'AHEAD' : p.dx < -300 ? 'BACK' : '';
+      const v = p.dy < -250 ? 'UP (pump the gas!)' : p.dy > 250 ? 'DOWN (vent the gas!)' : '';
+      return h || v ? 'Way to the beacon: ' + [v, h].filter(Boolean).join(' and ') : '';
+    }
     const w = altWindow(state, 2.5);
     const alt = state.ship.alt;
     if (course.scraping && state.ship.speed < 0) return 'Backing off the wall - now climb or dive!';
@@ -684,17 +800,23 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
 
   const update = (dt) => {
     if (!K.ENABLED) return;
+    course.refY = 500 - state.ship.alt;
     if (state.ship.down > 0) return; // the world waits while the crew patches up
+    // Mission done and the vote's over: on to the next map.
+    if (course.pendingNext && !state.scorecard && !state.vote) startMission(course.lap + 1);
     course.dist += scrollSpeed(state) * dt;
-    // You can back up, but only so far (the land behind is forgotten).
-    course.maxDist = Math.max(course.maxDist, course.dist);
-    if (course.dist < course.maxDist - K.MAX_REVERSE) {
-      course.dist = course.maxDist - K.MAX_REVERSE;
-      state.ship.speed = Math.max(0, state.ship.speed);
+    if (course.map) passMarkers();
+    else {
+      // You can back up, but only so far (the land behind is forgotten).
+      course.maxDist = Math.max(course.maxDist, course.dist);
+      if (course.dist < course.maxDist - K.MAX_REVERSE) {
+        course.dist = course.maxDist - K.MAX_REVERSE;
+        state.ship.speed = Math.max(0, state.ship.speed);
+      }
+      generate();
+      passMarkers();
+      warnAhead(dt);
     }
-    generate();
-    passMarkers();
-    warnAhead(dt);
     collide(dt);
     updateBombs(dt);
     updateTurrets(dt);
@@ -710,6 +832,50 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     state.ev.warn = 3;
     state.ev.warnText = m.kind === 'home' ? 'BACK TO THE MOORING MAST - TRY AGAIN!' : 'BACK TO THE LAST ' + (m.kind === 'beacon' ? 'BEACON' : 'CHECKPOINT') + '!';
   };
+
+  // Start mission n on a fresh map: the ship at the start, the beacon somewhere ahead.
+  function startMission(n) {
+    const MP = config.MAPS;
+    const kind = MP.KINDS[(n - 1) % MP.KINDS.length];
+    const map = makeMap(kind, n, course.rand);
+    const d = Math.min(1, (n - 1) / 4);
+    Object.assign(course, {
+      map,
+      lap: n,
+      leg: 'out',
+      dist: map.start.x - 800,
+      features: [],
+      elev: [],
+      elev0: 0,
+      done: false,
+      pendingNext: false,
+      progress: 0,
+      justStarted: true,
+      turrets: map.turrets.map((t) => ({
+        cx: t.mx,
+        mx: t.mx,
+        my: t.my,
+        hp: K.TURRET_HP,
+        cd: r(2, K.TURRET_FIRE_MAX),
+        aim: -Math.PI / 2,
+        dead: false,
+        rocket: course.rand() < K.ROCKET_SHARE * d + 0.1,
+      })),
+      markers: [
+        { kind: 'home', mx: map.start.x, my: floorBelow(map, map.start.x, map.start.y), top: map.start.y + 300, passed: true },
+        { kind: 'beacon', mx: map.goal.x, my: floorBelow(map, map.goal.x, map.goal.y), passed: false },
+      ],
+    });
+    course.lastMarker = course.markers[0];
+    course.homeAlt = 500 - map.start.y;
+    state.ship.alt = course.homeAlt;
+    state.ship.vy = 0;
+    state.ship.speed = 0;
+    state.rockets.length = 0;
+    if (state.shipBombs) state.shipBombs.length = 0;
+    state.ev.warn = 4;
+    state.ev.warnText = 'MISSION ' + n + ': REACH THE BEACON!';
+  }
 
   // A brand-new game: fresh terrain from the home mast, lap 1.
   const restart = () => {
@@ -736,7 +902,10 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     });
     addLapMarkers(1);
     course.markers[0].passed = true;
+    if (config.MAPS.ENABLED) startMission(1);
   };
 
-  return { update, reset, restart, helmHint, dropBomb, predictBomb };
+  if (config.MAPS.ENABLED) startMission(1);
+
+  return { update, reset, restart, helmHint, dropBomb, predictBomb, startMission };
 }
