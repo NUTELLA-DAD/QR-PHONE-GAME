@@ -8,6 +8,7 @@ import { createCharacterArt } from './characterArt.js';
 import { createCourseArt } from './courseArt.js';
 import { createSkyArt } from './skyArt.js';
 import { UPGRADES } from './upgrades.js';
+import { stopById } from './voyage.js';
 import { targets } from './aim.js';
 import { createSpecialsArt } from './specialsArt.js';
 import { createGunshipArt } from './gunshipArt.js';
@@ -693,7 +694,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawHud = () => {
     ctx.fillStyle = '#f1e2b8';
     ink();
-    rrect(30, 28, 440, 156, 14);
+    rrect(30, 28, 440, 184, 14);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#3b2a1d';
@@ -797,7 +798,20 @@ export function createRenderer({ ctx, state, canvas }) {
     }
     if (state.course && config.COURSE.ENABLED) {
       if (state.course.map) {
-        ctx.fillText('Mission ' + state.course.lap, 454, 150);
+        const run = state.run;
+        const stop = run && stopById(run.voyage, run.stopId);
+        ctx.fillText(stop ? `Stop ${stop.col + 1}/${run.voyage.columns.length}` : 'Mission ' + state.course.lap, 454, 150);
+        if (run) {
+          ctx.font = '900 18px Georgia';
+          ctx.fillStyle = '#8a5a00';
+          ctx.fillText('Salvage ' + run.salvage, 454, 204);
+          ctx.textAlign = 'left';
+          ctx.fillStyle = state.salvagePop ? '#2e7d32' : '#5a4a3a';
+          ctx.fillText(state.salvagePop ? `+${state.salvagePop.n} ${state.salvagePop.label}` : state.course.stop ? state.course.stop.name : '', 46, 204);
+          ctx.textAlign = 'right';
+          ctx.fillStyle = config.INK;
+          ctx.font = '700 20px Georgia';
+        }
         drawMinimap();
       } else {
         ctx.fillText('Lap ' + state.course.lap + (state.course.leg === 'home' ? ' - heading home' : ' - outbound'), 454, 150);
@@ -895,9 +909,15 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.textAlign = 'center';
     ctx.fillStyle = config.INK;
     ctx.font = '900 54px Georgia';
-    ctx.fillText(`Lap ${sc.lap} complete!`, 800, 185);
+    ctx.fillText(sc.flagship ? 'THE FLAGSHIP IS DOWN!' : `${sc.stopName} cleared!`, 800, 185);
     ctx.font = '700 26px Georgia';
-    ctx.fillText(sc.rows.length ? 'Crew awards' : 'Nobody did much this lap... next time!', 800, 228);
+    ctx.fillText(sc.rows.length ? 'Crew awards' : 'Nobody did much this mission... next time!', 800, 228);
+    const G = sc.gain || {};
+    const names = { kills: 'enemies', outposts: 'outposts', gunships: 'gunships', boss: 'boss', mission: 'mission bonus' };
+    ctx.fillStyle = '#8a5a00';
+    ctx.font = '900 26px Georgia';
+    ctx.fillText(`Salvage +${sc.gained} (${Object.keys(G).map((k) => names[k] + ' ' + G[k]).join(', ')})   -   total ${sc.total}`, 800, 775 - (state.newRecord ? 45 : 0));
+    ctx.fillStyle = config.INK;
     if (state.newRecord) {
       ctx.fillStyle = '#c0392b';
       ctx.font = '900 30px Georgia';
@@ -956,72 +976,243 @@ export function createRenderer({ ctx, state, canvas }) {
       const u = UPGRADES.find((q) => q.id === id);
       if (!u) continue;
       ctx.fillStyle = config.INK;
-      ctx.fillText(u.icon, x, 214);
+      ctx.fillText(u.icon, x, 244);
       if (n > 1) {
         ctx.font = '700 15px Georgia';
-        ctx.fillText('x' + n, x + 30, 214);
+        ctx.fillText('x' + n, x + 30, 244);
         ctx.font = '26px "Segoe UI Emoji", sans-serif';
       }
       x += n > 1 ? 58 : 38;
     }
   };
 
-  // Upgrade vote: three cards, each player's vote shown as a dot in their colour.
+  // Wrap text into lines no wider than w (uses the current font).
+  const wrapLines = (text, w) => {
+    const lines = [];
+    let line = '';
+    for (const word of String(text).split(' ')) {
+      if (line && ctx.measureText(line + word).width > w) {
+        lines.push(line.trim());
+        line = '';
+      }
+      line += word + ' ';
+    }
+    lines.push(line.trim());
+    return lines;
+  };
+  const dots = (list, cx, y) => {
+    list.forEach((p, k) => {
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(cx - (list.length - 1) * 14 + k * 28, y, 11, 0, 7);
+      ctx.fill();
+      ink();
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    });
+  };
+  const skulls = (n) => '💀'.repeat(n);
+
+  // Votes: the sky-dock shop and the route map. Each player's vote is a dot in their colour.
   const drawVote = () => {
     const v = state.vote;
-    ctx.fillStyle = 'rgba(27,20,16,.6)';
+    ctx.fillStyle = 'rgba(27,20,16,.72)';
     ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
-    ctx.font = '900 52px Georgia';
-    ctx.fillText(v.title, 800, 170);
+    ctx.font = '900 50px Georgia';
+    ctx.fillText(v.kind === 'dock' ? 'SKY-DOCK' : 'ROUTE MAP - WHERE TO NEXT?', 800, 80);
     ctx.font = '700 26px Georgia';
-    ctx.fillText(`Vote on your phone - ${Math.max(0, Math.ceil(v.t))}s`, 800, 215);
+    const run = state.run;
+    ctx.fillStyle = '#ffd23f';
+    if (v.kind === 'dock') ctx.fillText(`Salvage: ${run.salvage}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`, 800, 125);
+    else ctx.fillText(`Vote on your phone - ${Math.max(0, Math.ceil(v.t))}s`, 800, 125);
     const voters = Object.values(state.players);
-    v.options.forEach((id, i) => {
-      const u = UPGRADES.find((q) => q.id === id);
-      const x = 160 + i * 440;
-      const y = 260;
-      ctx.fillStyle = '#f1e2b8';
+    if (v.kind === 'route') return drawRouteMap(v, voters);
+    // The shop: up to 4 cards a row.
+    const n = v.options.length;
+    const perRow = n > 6 ? 4 : 3;
+    const cw = perRow === 4 ? 360 : 470;
+    const gap = 20;
+    const ch = 330;
+    v.options.forEach((o, i) => {
+      const row = Math.floor(i / perRow);
+      const inRow = Math.min(perRow, n - row * perRow);
+      const col = i - row * perRow;
+      const x = 800 - (inRow * cw + (inRow - 1) * gap) / 2 + col * (cw + gap);
+      const y = 160 + row * (ch + 26);
+      const off = o.kind !== 'cast' && (o.sold || o.cost > run.salvage);
+      ctx.globalAlpha = off ? 0.5 : 1;
+      ctx.fillStyle = o.kind === 'cast' ? '#cfe3b8' : o.kind === 'repair' ? '#e8d8a8' : '#f1e2b8';
       ink();
-      rrect(x, y, 400, 420, 22);
+      rrect(x, y, cw, ch, 20);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = config.INK;
-      ctx.font = '90px "Segoe UI Emoji", sans-serif';
-      ctx.fillText(u.icon, x + 200, y + 130);
-      ctx.font = '900 36px Georgia';
-      ctx.fillText(u.name, x + 200, y + 200);
-      // Description, wrapped.
-      ctx.font = '400 24px Georgia';
-      const words = u.desc.split(' ');
-      let line = '';
-      let ly = y + 250;
-      for (const word of words) {
-        if (ctx.measureText(line + word).width > 340) {
-          ctx.fillText(line.trim(), x + 200, ly);
-          line = '';
-          ly += 32;
+      ctx.textAlign = 'center';
+      ctx.font = '64px "Segoe UI Emoji", sans-serif';
+      ctx.fillText(o.icon, x + cw / 2, y + 82);
+      ctx.font = '900 30px Georgia';
+      ctx.fillText(o.name, x + cw / 2, y + 128);
+      ctx.font = '400 20px Georgia';
+      wrapLines(o.desc, cw - 40).slice(0, 3).forEach((l, k) => ctx.fillText(l, x + cw / 2, y + 160 + k * 25));
+      if (o.kind !== 'cast') {
+        ctx.font = '900 28px Georgia';
+        ctx.fillStyle = off && !o.sold ? '#b3261e' : config.INK;
+        ctx.fillText(o.sold ? 'SOLD' : `Salvage ${o.cost}`, x + cw / 2, y + 282);
+        if (o.max > 1 && !o.sold) {
+          ctx.font = '700 16px Georgia';
+          ctx.fillStyle = config.INK;
+          ctx.fillText(`Level ${o.level} of ${o.max}`, x + cw / 2, y + 252);
         }
-        line += word + ' ';
       }
-      ctx.fillText(line.trim(), x + 200, ly);
-      const level = (state.upgrades[id] || 0) + 1;
-      if (u.max > 1 && u.max < 99) {
-        ctx.font = '700 20px Georgia';
-        ctx.fillText(`Level ${level} of ${u.max}`, x + 200, y + 360);
-      }
-      // Vote dots.
-      const mine = voters.filter((p) => p.vote === i);
-      mine.forEach((p, k) => {
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(x + 200 - (mine.length - 1) * 16 + k * 32, y + 395, 12, 0, 7);
-        ctx.fill();
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      });
+      ctx.globalAlpha = 1;
+      dots(voters.filter((p) => p.vote === i), x + cw / 2, y + ch - 14);
     });
+  };
+
+  // The route map: columns of stops joined by lines; the choices ahead are big, with their details.
+  const drawRouteMap = (v, voters) => {
+    const run = state.run;
+    const cols = run.voyage.columns;
+    const x0 = 150;
+    const x1 = 1450;
+    const px = (c) => x0 + ((x1 - x0) * c) / (cols.length - 1);
+    const py = (s) => 330 + (cols[s.col].length === 1 ? 0 : (s.row - (cols[s.col].length - 1) / 2) * 150);
+    const cur = stopById(run.voyage, run.stopId);
+    // Paths.
+    for (const col of cols) {
+      for (const s of col) {
+        for (const id of s.next) {
+          const t = stopById(run.voyage, id);
+          const walked = run.visited.includes(s.id) && run.visited.includes(id);
+          const ahead = s.id === cur.id;
+          ctx.strokeStyle = walked ? '#ffd23f' : ahead ? '#fff' : 'rgba(241,226,184,.35)';
+          ctx.lineWidth = walked || ahead ? 6 : 3;
+          ctx.setLineDash(walked ? [] : [10, 8]);
+          ctx.beginPath();
+          ctx.moveTo(px(s.col), py(s));
+          ctx.lineTo(px(t.col), py(t));
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.setLineDash([]);
+    // Stops.
+    for (const col of cols) {
+      for (const s of col) {
+        const idx = v.options.findIndex((o) => o.id === s.id);
+        const choice = idx >= 0;
+        const visited = run.visited.includes(s.id);
+        const r = choice ? 46 : 32;
+        const env = config.VOYAGE.ENVIRONMENTS[s.env] || config.VOYAGE.ENVIRONMENTS.skyisles;
+        ctx.globalAlpha = choice || visited ? 1 : 0.55;
+        ctx.fillStyle = visited && !choice ? '#8a7a55' : env.color;
+        ink();
+        ctx.lineWidth = choice ? 6 : 4;
+        ctx.beginPath();
+        ctx.arc(px(s.col), py(s), r, 0, 7);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = config.INK;
+        ctx.textAlign = 'center';
+        ctx.font = (choice ? 44 : 30) + 'px "Segoe UI Emoji", sans-serif';
+        ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
+        ctx.globalAlpha = 1;
+        if (s.id === cur.id) {
+          ctx.fillStyle = '#ffd23f';
+          ctx.font = '900 18px Georgia';
+          ctx.fillText('YOU ARE HERE', px(s.col), py(s) - r - 12);
+        }
+        if (!choice && !visited) {
+          ctx.fillStyle = 'rgba(241,226,184,.8)';
+          ctx.font = '700 16px Georgia';
+          ctx.fillText(skulls(s.danger), px(s.col), py(s) + r + 22);
+        }
+        if (choice) {
+          ctx.fillStyle = '#fff';
+          ctx.font = '900 22px Georgia';
+          ctx.fillText(s.flagship ? 'THE FLAGSHIP' : env.name, px(s.col), py(s) + r + 28);
+          dots(voters.filter((p) => p.vote === idx), px(s.col), py(s) - r - 24);
+        }
+      }
+    }
+    // Details of each choice, as a strip along the bottom.
+    const n = v.options.length;
+    const w = 440;
+    v.options.forEach((o, i) => {
+      const x = 800 - (n * w + (n - 1) * 20) / 2 + i * (w + 20);
+      const y = 640;
+      ctx.fillStyle = '#f1e2b8';
+      ink();
+      rrect(x, y, w, 190, 18);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = config.INK;
+      ctx.textAlign = 'center';
+      ctx.font = '900 30px Georgia';
+      ctx.fillText(`${i + 1}. ${o.name}`, x + w / 2, y + 44);
+      ctx.font = '700 22px Georgia';
+      ctx.fillText(o.kindName || '', x + w / 2, y + 82);
+      ctx.font = '28px "Segoe UI Emoji", sans-serif';
+      ctx.fillText(skulls(o.danger), x + w / 2, y + 122);
+      ctx.font = '700 22px Georgia';
+      ctx.fillText(`Reward: ${o.reward} salvage`, x + w / 2, y + 160);
+    });
+    ctx.fillStyle = '#f1e2b8';
+    ctx.font = '700 20px Georgia';
+    ctx.fillText(`Stop ${cur.col + 1} of ${cols.length} done - skulls = danger`, 800, 870);
+  };
+
+  // End of the run: victory, or the summary after the ship is lost.
+  const drawRunEnd = () => {
+    const e = state.runEnd;
+    ctx.fillStyle = 'rgba(27,20,16,.82)';
+    ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
+    ctx.fillStyle = '#f1e2b8';
+    ink();
+    rrect(250, 90, 1100, 720, 26);
+    ctx.fill();
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = e.victory ? '#2e7d32' : '#b3261e';
+    ctx.font = '900 70px Georgia';
+    ctx.fillText(e.victory ? 'VICTORY!' : 'SHIP LOST!', 800, 185);
+    ctx.fillStyle = config.INK;
+    ctx.font = '700 32px Georgia';
+    ctx.fillText(e.victory ? 'The Flagship is down - the Broken Skies are yours!' : `You reached Stop ${e.reached} - ${e.stopName}`, 800, 240);
+    ctx.font = '700 26px Georgia';
+    ctx.fillText(`Stops finished: ${e.done} of ${e.total}   -   Salvage earned: ${e.salvage}`, 800, 295);
+    ctx.fillText(`Enemies shot down: ${e.kills}   -   Gunships destroyed: ${e.gunships}`, 800, 335);
+    ctx.font = '900 28px Georgia';
+    ctx.fillText(e.rows.length ? 'Crew awards' : '', 800, 395);
+    e.rows.forEach((r, i) => {
+      const x = 330 + (i % 2) * 520;
+      const y = 450 + Math.floor(i / 2) * 85;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = config.INK;
+      ctx.font = '40px "Segoe UI Emoji", sans-serif';
+      ctx.fillText(r.icon, x, y + 12);
+      ctx.font = '900 24px Georgia';
+      ctx.fillText(r.title, x + 62, y - 4);
+      ctx.fillStyle = r.color;
+      ink();
+      ctx.lineWidth = 4;
+      ctx.font = '900 24px Georgia';
+      ctx.strokeText(r.name, x + 62, y + 28);
+      ctx.fillText(r.name, x + 62, y + 28);
+      ctx.fillStyle = '#5a4a3a';
+      ctx.font = '400 20px Georgia';
+      ctx.fillText(`${r.value} ${r.unit}`, x + 76 + ctx.measureText(r.name).width + 20, y + 28);
+    });
+    ctx.textAlign = 'center';
+    ctx.fillStyle = config.INK;
+    ctx.font = '700 22px Georgia';
+    const s = state.save;
+    if (s) ctx.fillText(`Best run: ${s.bestStops} stops   -   Runs flown: ${s.totalRuns}   -   Victories: ${s.victories}`, 800, 745);
+    ctx.font = '700 22px Georgia';
+    const left = e.victory ? e.t : state.ship.down;
+    ctx.fillText(`A new voyage starts at the mooring mast in ${Math.max(1, Math.ceil(left))}...`, 800, 785);
   };
 
   // The item a player is holding. swingAge = ms since their last attack (for the swing pose).
@@ -1728,23 +1919,9 @@ export function createRenderer({ ctx, state, canvas }) {
     const scale = Math.min(width / config.W, height / config.H);
     ctx.setTransform(scale, 0, 0, scale, (width - config.W * scale) / 2, (height - config.H * scale) / 2);
     drawHud();
-    if (state.wreck && state.wreck.t > 1.2) {
-      // "Ship lost" card, then the restart.
-      const w = state.wreck;
-      ctx.globalAlpha = Math.min(1, (w.t - 1.2) * 2);
-      ctx.fillStyle = 'rgba(30,20,14,.82)';
-      ctx.fillRect(400, 300, 800, 260);
-      ink();
-      ctx.strokeRect(400, 300, 800, 260);
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#ffd23f';
-      ctx.font = '700 64px Georgia';
-      ctx.fillText('SHIP LOST!', 800, 385);
-      ctx.fillStyle = '#f3ead6';
-      ctx.font = '700 28px Georgia';
-      ctx.fillText(`Missions done: ${w.lap - 1}   -   Raiders downed: ${w.kills}`, 800, 440);
-      ctx.font = '700 22px Georgia';
-      ctx.fillText(`A new ship waits at the mast in ${Math.max(1, Math.ceil(state.ship.down))}...`, 800, 500);
+    if (state.runEnd && (!state.wreck || state.wreck.t > 1.2)) {
+      ctx.globalAlpha = state.wreck ? Math.min(1, (state.wreck.t - 1.2) * 2) : 1;
+      drawRunEnd();
       ctx.globalAlpha = 1;
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);

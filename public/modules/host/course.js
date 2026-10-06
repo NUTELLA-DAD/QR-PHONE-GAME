@@ -244,7 +244,7 @@ function rng(seed) {
 }
 
 // onMarker(marker) is called when the ship passes the beacon or arrives home.
-export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }) {
+export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, firstMission }) {
   state.rockets = [];
   const hitsShipNow = (x, y) => hitsShip && hitsShip(x, y + state.ship.alt);
   const A = config.SHIP.ALT_RANGE - 30; // the most altitude we'll ever ask the helm for
@@ -898,8 +898,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     if (!K.ENABLED) return;
     course.refY = 500 - state.ship.alt;
     if (state.ship.down > 0) return; // the world waits while the crew patches up
-    // Mission done and the vote's over: on to the next map.
-    if (course.pendingNext && !state.scorecard && !state.vote) startMission(course.lap + 1);
+    // (After a mission, the sky-dock and route votes in simulation.js pick the next one and call startMission.)
     course.dist += scrollSpeed(state) * dt;
     if (course.map) passMarkers(dt);
     else {
@@ -931,14 +930,21 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
   };
 
   // Start mission n on a fresh map: the ship at the start, the beacon somewhere ahead.
-  function startMission(n) {
+  // opts (from the voyage): { environment, kind, danger, modifiers, stop, title }. environment is the id of
+  // the look/hazards to use ('skyisles' for now); the map is also tagged with it (map.environment).
+  function startMission(n, opts = {}) {
     const MP = config.MAPS;
-    const kind = MP.FORCE_KIND || MP.KINDS[(n - 1) % MP.KINDS.length];
+    const kind = MP.FORCE_KIND || opts.kind || MP.KINDS[(n - 1) % MP.KINDS.length];
     const map = makeMap(kind, n, course.rand);
+    map.environment = opts.environment || 'skyisles';
     const d = Math.min(1, (n - 1) / 4);
     Object.assign(course, {
       map,
       lap: n,
+      environment: map.environment,
+      danger: opts.danger || 2,
+      modifiers: opts.modifiers || [],
+      stop: opts.stop || null,
       leg: 'out',
       dist: map.start.x - 800,
       features: [],
@@ -979,7 +985,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     state.rockets.length = 0;
     if (state.shipBombs) state.shipBombs.length = 0;
     state.ev.warn = 4;
-    state.ev.warnText = map.open ? 'MISSION ' + n + ': DESTROY ' + map.outposts.length + ' OUTPOSTS!' : 'MISSION ' + n + ': REACH THE BEACON!';
+    state.ev.warnText = opts.title ? opts.title : map.open ? 'MISSION ' + n + ': DESTROY ' + map.outposts.length + ' OUTPOSTS!' : 'MISSION ' + n + ': REACH THE BEACON!';
   }
 
   // A brand-new game: fresh terrain from the home mast, lap 1.
@@ -1007,10 +1013,10 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     });
     addLapMarkers(1);
     course.markers[0].passed = true;
-    if (config.MAPS.ENABLED) startMission(1);
+    if (config.MAPS.ENABLED) startMission(1, firstMission && firstMission());
   };
 
-  if (config.MAPS.ENABLED) startMission(1);
+  if (config.MAPS.ENABLED) startMission(1, firstMission && firstMission());
 
   return { update, reset, restart, helmHint, dropBomb, predictBomb, startMission };
 }

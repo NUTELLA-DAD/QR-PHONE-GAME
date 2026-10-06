@@ -42,7 +42,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     const mid = shipMid();
     e.mode = 'run';
     e.aim = { dx: rand(-500, 500), dy: rand(-120, 160) };
-    const lapRate = config.LAP_FIRE_RATE[Math.min(config.LAP_FIRE_RATE.length - 1, ((state.course && state.course.lap) || 1) - 1)];
+    const lapRate = config.LAP_FIRE_RATE[Math.min(config.LAP_FIRE_RATE.length - 1, ((state.course && state.course.lap) || 1) - 1)] * (1 + (((state.course && state.course.danger) || 2) - 2) * config.VOYAGE.DANGER_FIRE);
     const pace = (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
     e.shots = Math.max(2, Math.min(6, Math.round(F.SHOTS * lapRate * pace * (0.8 + Math.min(0.5, crew() * 0.04)))));
     e.side = Math.sign(e.x - mid.x) || 1;

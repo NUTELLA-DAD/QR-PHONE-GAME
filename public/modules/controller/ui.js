@@ -67,14 +67,19 @@ export function createControllerUI({ network }) {
     box.style.display = 'flex';
     $('vtitle').textContent = `${v.title} - ${v.t}s`;
     const cards = $('vcards');
-    const sig = v.options.map((o) => o.name).join('|');
+    const sig = v.options.map((o) => o.name + '|' + o.off + '|' + o.sold).join('/');
     if (cards.dataset.sig !== sig) {
       cards.dataset.sig = sig;
       cards.innerHTML = '';
+      cards.classList.toggle('route', v.kind === 'route');
       v.options.forEach((o, i) => {
         const b = document.createElement('button');
-        b.innerHTML = `<span class="ic">${o.icon}</span><b>${o.name}</b><small>${o.desc}</small>`;
+        const price = o.sold ? 'SOLD' : o.cost != null ? 'Salvage ' + o.cost : '';
+        b.innerHTML = `<span class="ic">${o.icon}</span><b>${o.name}</b><small>${o.desc}</small>${price ? '<em>' + price + '</em>' : ''}`;
+        b.classList.toggle('off', !!o.off);
+        b.classList.toggle('cast', o.name === 'Cast off!');
         b.addEventListener('pointerdown', () => {
+          if (b.classList.contains('off')) return;
           network.sendInput({ jx: 0, jy: 0, vote: i });
         });
         cards.appendChild(b);

@@ -16,7 +16,8 @@ import { createAirborne } from './airborne.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
 import { assistAim } from './aim.js';
-import { UPGRADES, pickOffer } from './upgrades.js';
+import { UPGRADES } from './upgrades.js';
+import { generateVoyage, stopById, stopName, envInfo, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
 const platformY = (d) => PLATFORMS[d].y;
@@ -96,7 +97,7 @@ export function createSimulation() {
     difficulty: config.START_DIFFICULTY,
     phase: 'lobby', // 'lobby' = moored at the mast while the crew joins; 'flying' after CAST OFF
     record: loadRecord(), // best run on this TV: { laps, kills }
-    vote: null, // an upgrade vote in progress
+    vote: null, // a vote in progress: the sky-dock shop or the route map
     enemy: { x: -2000, y: 300, vx: 0, vy: 0, hp: 5, fire: 0, dead: 3, heading: null },
     shells: [],
     bullets: [],
@@ -233,14 +234,15 @@ export function createSimulation() {
 
   const damageHull = (amount) => {
     const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
-    if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * diff.damage) <= 0) wreck();
+    const danger = 1 + (((state.course && state.course.danger) || 2) - 2) * config.VOYAGE.DANGER_DAMAGE; // skulls on the stop
+    if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * diff.damage * danger) <= 0) wreck();
   };
 
   // The hull gave out: the ship breaks apart, then the whole game starts over.
   function wreck(text = "SHE'S BREAKING UP!") {
     if (state.ship.down) return;
     state.ship.hull = 0;
-    state.ship.down = config.WRECK.TIME;
+    state.ship.down = Math.max(config.WRECK.TIME, config.VOYAGE.WRECK_SUMMARY_TIME);
     state.wreck = { t: 0, lap: state.course ? state.course.lap : 1, kills: state.kills };
     state.ship.shake = 1.5;
     state.ev.warn = config.WRECK.TIME;
@@ -252,6 +254,7 @@ export function createSimulation() {
       saveRecord(state.record);
       state.newRecord = true;
     }
+    endRun(false);
   }
 
   // Settings as they were at the start (upgrades change them during a run).
@@ -276,7 +279,11 @@ export function createSimulation() {
     state.periscope = false;
     state.vote = null;
     state.scorecard = null;
+    pendingVote = null;
     state.kills = 0;
+    watch.kills = 0;
+    watch.boss = null;
+    newRun();
     state.ventOpen.fill(false);
     Object.assign(state.bombBay, { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null, open: 0 });
     state.helmHit = 0;
@@ -549,60 +556,145 @@ export function createSimulation() {
   const raiders = createRaiders({ state, modules, puff, impact });
   const escort = createEscort({ state, puff, phoneFx });
   const threats = createThreats({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, getHelm, credit });
-  // ---- Upgrade votes (at the turning beacon and back home) ----
-  const startVote = (marker) => {
-    const offer = pickOffer(state.upgrades);
-    if (!offer.length) return;
-    state.vote = {
-      options: offer.map((u) => u.id),
-      t: config.VOTE.TIME,
-      title: marker.kind === 'beacon' ? 'Turning beacon! Pick an upgrade' : `Lap ${marker.lap - 1} complete! Pick an upgrade`,
-    };
-    for (const p of Object.values(state.players)) {
-      p.vote = null;
-      p.voteAt = 1.5 + Math.random() * 4; // bots take a moment to "think"
-      p.fire = false;
+  // ---- The Voyage: salvage, the sky-dock shop, the route map, and how a run ends ----
+  const SV = config.SALVAGE;
+  const SH = config.SHOP;
+  const VY = config.VOYAGE;
+  state.save = loadVoyageSave(); // best run, total runs, unlocks (this TV)
+
+  // A fresh voyage: a new route map from a new seed, an empty purse.
+  const newRun = () => {
+    const voyage = generateVoyage((Math.random() * 2 ** 31) | 0);
+    const first = voyage.columns[0][0];
+    state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [] };
+    state.runEnd = null;
+    state.salvagePop = null;
+  };
+  const curStop = () => stopById(state.run.voyage, state.run.stopId);
+
+  // What a stop asks of the course (see startMission in course.js).
+  const missionOpts = (stop) => ({
+    environment: stop.play,
+    kind: stop.kind,
+    danger: stop.danger,
+    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship },
+    title: `STOP ${stop.col + 1}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
+  });
+  const firstMission = () => missionOpts(curStop());
+
+  // Salvage in: kind is for the scorecard breakdown ('kills', 'outposts', 'gunships', 'boss', 'mission').
+  const addSalvage = (n, kind, label) => {
+    const run = state.run;
+    n = Math.round(n);
+    if (!run || n <= 0) return;
+    run.salvage += n;
+    run.earned += n;
+    run.gain[kind] = (run.gain[kind] || 0) + n;
+    if (label) state.salvagePop = { n, label, t: 3 };
+  };
+
+  // Watch for things worth salvage (kills, outposts, gunships, the boss) without touching those modules.
+  const watch = { kills: 0, map: null, outposts: 0, boss: null };
+  const salvageWatch = () => {
+    if (state.kills < watch.kills) watch.kills = state.kills;
+    if (state.kills > watch.kills) {
+      const d = state.kills - watch.kills;
+      watch.kills = state.kills;
+      state.run.kills += d;
+      addSalvage(d * SV.PER_KILL, 'kills');
+    }
+    const map = state.course && state.course.map;
+    if (map !== watch.map) {
+      watch.map = map;
+      watch.outposts = map ? map.outposts.filter((o) => o.done).length : 0;
+    } else if (map) {
+      const done = map.outposts.filter((o) => o.done).length;
+      if (done > watch.outposts) addSalvage((done - watch.outposts) * SV.OUTPOST, 'outposts', 'Outpost destroyed');
+      watch.outposts = done;
+    }
+    const g = state.gunship;
+    if (g && g.phase === 'sinking' && !g.paid) {
+      g.paid = true;
+      state.run.gunships++;
+      if (g.charge) addSalvage(SV.GUNSHIP_BOARDED, 'gunships', 'Gunship blown up by boarders!');
+      else addSalvage(SV.GUNSHIP_SHOT, 'gunships', 'Gunship shot down');
+    }
+    if (state.boss) watch.boss = state.boss;
+    else if (watch.boss) {
+      if (watch.boss.hp <= 0) addSalvage(SV.BOSS, 'boss', 'Boss destroyed!');
+      watch.boss = null;
     }
   };
 
-  const updateVote = (dt) => {
-    const v = state.vote;
-    v.t -= dt;
-    const voters = Object.values(state.players).filter((p) => p.connected !== false);
-    for (const p of voters) {
-      if (p.bot && p.vote == null && (p.voteAt -= dt) <= 0) p.vote = (Math.random() * v.options.length) | 0;
-      if (p.bot) continue;
-      // Tell each phone what's on offer and what it picked.
-      const ui = {
-        vote: {
-          title: v.title,
-          t: Math.max(0, Math.ceil(v.t)),
-          mine: p.vote ?? null,
-          options: v.options.map((id) => {
-            const u = UPGRADES.find((x) => x.id === id);
-            return { name: u.name, icon: u.icon, desc: u.desc };
-          }),
-        },
-      };
-      const key = 'vote|' + ui.vote.t + '|' + ui.vote.mine + '|' + v.options.join();
-      if (key !== p.uk) {
-        p.uk = key;
-        emitPlayerUi(p.id, ui);
+  // Fold each player's per-mission stats into the run totals (for the end-of-run awards).
+  const bankStats = (reset) => {
+    for (const p of Object.values(state.players)) {
+      const c = (state.run.crew[p.id] = state.run.crew[p.id] || { name: p.name, color: p.color, stats: {} });
+      c.name = p.name;
+      c.color = p.color;
+      for (const [k, v] of Object.entries(p.stats || {})) c.stats[k] = (c.stats[k] || 0) + v;
+      if (reset) p.stats = {};
+    }
+  };
+  const awardRows = (list, wired) => {
+    const rows = [];
+    for (const a of AWARDS) {
+      const best = list.reduce((b, p) => ((p.stats?.[a.key] || 0) > (b?.stats?.[a.key] || 0) ? p : b), null);
+      const value = best?.stats?.[a.key] || 0;
+      if (value > 0) {
+        rows.push({ ...a, name: best.name, color: best.color, value: Math.round(value) });
+        if (wired) phoneFx(best, `🏆 You're the ${a.title}!`, [60, 60, 60, 60, 120]);
       }
     }
-    if (voters.length && voters.every((p) => p.vote != null)) v.t = Math.min(v.t, config.VOTE.ALL_VOTED_WAIT);
-    if (v.t > 0) return;
-    // Count the votes; ties (or no votes at all) are settled at random.
-    const counts = v.options.map((_, i) => voters.filter((p) => p.vote === i).length);
-    const best = Math.max(...counts);
-    const tied = v.options.filter((_, i) => counts[i] === best);
-    const id = tied[(Math.random() * tied.length) | 0];
-    const up = UPGRADES.find((x) => x.id === id);
-    up.apply({ state, modules });
-    state.upgrades[id] = (state.upgrades[id] || 0) + 1;
+    return rows;
+  };
+
+  // The run is over (ship lost, or the Flagship beaten): a summary for the TV, and the saved progress.
+  const endRun = (victory) => {
+    if (state.runEnd) return;
+    const run = state.run;
+    const stop = curStop();
+    bankStats(false);
+    const done = victory ? stop.col + 1 : stop.col; // stops finished
+    state.runEnd = {
+      victory,
+      reached: stop.col + 1,
+      total: run.voyage.columns.length,
+      stopName: stopName(stop),
+      done,
+      salvage: run.earned,
+      kills: run.kills,
+      gunships: run.gunships,
+      rows: awardRows(Object.values(run.crew), false).slice(0, 6),
+      t: VY.VICTORY_TIME,
+    };
+    const s = state.save;
+    s.totalRuns++;
+    s.bestStops = Math.max(s.bestStops, done);
+    s.bestSalvage = Math.max(s.bestSalvage, run.earned);
+    if (victory) {
+      s.victories++;
+      if (!s.unlocks.includes('flagship-medal')) s.unlocks.push('flagship-medal');
+    }
+    saveVoyageSave(s);
+    if (victory) {
+      state.ev.warn = 6;
+      state.ev.warnText = 'THE FLAGSHIP IS DOWN - VICTORY!';
+    }
+  };
+
+  // ---- Votes (the sky-dock shop and the route map share this) ----
+  const openVote = (v) => {
+    state.vote = { ...v, total: 0 };
+    for (const p of Object.values(state.players)) {
+      p.vote = null;
+      p.uk = null;
+      p.voteAt = 1.5 + Math.random() * 3.5; // bots take a moment to "think"
+      p.fire = false;
+    }
+  };
+  const closeVote = () => {
     state.vote = null;
-    state.ev.warn = 3.5;
-    state.ev.warnText = `UPGRADE: ${up.name.toUpperCase()}!`;
     for (const p of Object.values(state.players)) {
       p.vote = null;
       p.uk = null; // resend normal button labels
@@ -610,7 +702,144 @@ export function createSimulation() {
     }
   };
 
-  // Back home: show the lap scorecard for a few seconds, then vote on an upgrade.
+  // Sky-dock offers: repairs that are actually needed, then random upgrades, then 'Cast off!'.
+  const needsHull = () => state.ship.hull < 99 || state.breaches.length || state.fires.length || modules.list.some((m) => m.broken || m.hp < m.max - 0.5);
+  const needsGas = () => state.ship.gas < config.GAS.START * 0.95 || state.gasHoles.length;
+  const needsCoal = () => state.ship.fuel < config.BOILER.FUEL_MAX * 0.85 || Object.values(state.GUNS).some((g) => g.ammo < g.max * 0.7) || state.bombBay.bombs < config.BOMBS.MAX;
+  const upgradePrice = (u) => Math.round((SH.PRICES[u.id] || SH.PRICE_DEFAULT) * (1 + SH.REPEAT_PRICE * (state.upgrades[u.id] || 0)) / 5) * 5;
+  const buildOffers = () => {
+    const offers = [];
+    if (needsHull()) offers.push({ id: 'repair-hull', kind: 'repair', name: 'Full Repair', icon: '🔧', desc: 'Hull, holes, fires and every broken part, as good as new.', cost: SH.REPAIR_HULL });
+    if (needsGas()) offers.push({ id: 'repair-gas', kind: 'repair', name: 'New Gas', icon: '🎈', desc: 'Patch the gasbag and fill it up.', cost: SH.REPAIR_GAS });
+    if (needsCoal()) offers.push({ id: 'repair-coal', kind: 'repair', name: 'Coal and Shells', icon: '⛏️', desc: 'Stoke the boiler, fill every gun and the bomb bay.', cost: SH.REPAIR_COAL });
+    const open = UPGRADES.filter((u) => u.id !== 'spare-parts' && (state.upgrades[u.id] || 0) < u.max);
+    while (offers.length < SH.OFFERS && open.length) {
+      const u = open.splice((Math.random() * open.length) | 0, 1)[0];
+      offers.push({ id: u.id, kind: 'upgrade', name: u.name, icon: u.icon, desc: u.desc, cost: upgradePrice(u), level: (state.upgrades[u.id] || 0) + 1, max: u.max });
+    }
+    offers.push({ id: 'cast', kind: 'cast', name: 'Cast off!', icon: '🚀', desc: 'Leave the dock and choose the next stop.', cost: 0 });
+    return offers;
+  };
+  const applyOffer = (o) => {
+    if (o.kind === 'upgrade') {
+      UPGRADES.find((u) => u.id === o.id).apply({ state, modules });
+      state.upgrades[o.id] = (state.upgrades[o.id] || 0) + 1;
+    } else if (o.id === 'repair-hull') UPGRADES.find((u) => u.id === 'spare-parts').apply({ state, modules });
+    else if (o.id === 'repair-gas') {
+      state.ship.gas = Math.max(state.ship.gas, config.GAS.START);
+      state.gasHoles.length = 0;
+    } else if (o.id === 'repair-coal') {
+      state.ship.fuel = config.BOILER.FUEL_MAX;
+      for (const g of Object.values(state.GUNS)) g.ammo = g.max;
+      state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX);
+    }
+    state.run.bought.push(o.id);
+  };
+  // Is this card unavailable right now (bought already, or too dear)?
+  const cardOff = (o) => o.kind !== 'cast' && (o.sold || o.cost > state.run.salvage);
+
+  const startDock = () => {
+    const options = buildOffers();
+    if (options.every((o) => o.kind === 'cast' || cardOff(o))) return startRoute(); // nothing affordable: straight on
+    openVote({ kind: 'dock', title: 'SKY-DOCK', options, t: SH.TIME });
+  };
+
+  const startRoute = () => {
+    const stop = curStop();
+    const options = stop.next.map((id) => {
+      const s = stopById(state.run.voyage, id);
+      const env = envInfo(s.env);
+      return { id, kind: 'stop', name: stopName(s), icon: s.flagship ? '🚩' : env.icon, desc: `${VY.KIND_NAMES[s.kind] || s.kind} - ${'💀'.repeat(s.danger)} - reward ${s.reward}`, danger: s.danger, reward: s.reward, envName: env.name, color: env.color, kindName: VY.KIND_NAMES[s.kind] };
+    });
+    openVote({ kind: 'route', title: 'WHERE TO NEXT?', options, t: VY.ROUTE_TIME });
+  };
+
+  const goToStop = (id) => {
+    const run = state.run;
+    run.stopId = id;
+    run.visited.push(id);
+    course.startMission(curStop().col + 1, missionOpts(curStop()));
+  };
+
+  // Bots vote sensibly: the dock - repair what's broken, else something they can afford, sometimes cast off.
+  const botChoice = (v, p) => {
+    const ok = v.options.map((o, i) => i).filter((i) => !cardOff(v.options[i]) && v.options[i].kind !== 'cast');
+    const cast = v.options.findIndex((o) => o.kind === 'cast');
+    if (v.kind === 'route') return (Math.random() * v.options.length) | 0;
+    if (!ok.length || Math.random() < SH.BOT_CAST_CHANCE) return cast;
+    const rep = ok.filter((i) => v.options[i].kind === 'repair');
+    if (rep.length && Math.random() < 0.7) return rep[(Math.random() * rep.length) | 0];
+    return ok[(Math.random() * ok.length) | 0];
+  };
+
+  const updateVote = (dt) => {
+    const v = state.vote;
+    v.t -= dt;
+    v.total += dt;
+    const voters = Object.values(state.players).filter((p) => p.connected !== false);
+    const valid = (i) => Number.isInteger(i) && i >= 0 && i < v.options.length && !(v.kind === 'dock' && cardOff(v.options[i]));
+    for (const p of voters) {
+      if (p.bot && p.vote == null && (p.voteAt -= dt) <= 0) p.vote = botChoice(v, p);
+      if (p.bot) continue;
+      // Tell each phone what's on offer and what it picked.
+      const ui = {
+        vote: {
+          kind: v.kind,
+          title: v.kind === 'dock' ? `SKY-DOCK - ${state.run.salvage} salvage` : v.title,
+          t: Math.max(0, Math.ceil(v.t)),
+          mine: valid(p.vote) ? p.vote : null,
+          options: v.options.map((o) => ({ name: o.name, icon: o.icon, desc: o.desc, cost: o.kind === 'cast' || o.kind === 'stop' ? null : o.cost, off: v.kind === 'dock' && cardOff(o), sold: !!o.sold })),
+        },
+      };
+      const key = 'vote|' + ui.vote.title + '|' + ui.vote.t + '|' + ui.vote.mine + '|' + ui.vote.options.map((o) => o.name + o.off + o.sold).join();
+      if (key !== p.uk) {
+        p.uk = key;
+        emitPlayerUi(p.id, ui);
+      }
+    }
+    const wait = v.kind === 'dock' ? SH.ALL_VOTED_WAIT : VY.ROUTE_ALL_VOTED_WAIT;
+    if (voters.length && voters.every((p) => p.vote != null)) v.t = Math.min(v.t, wait);
+    if (v.kind === 'dock' && v.total > SH.MAX_TIME) v.t = Math.min(v.t, 0);
+    if (v.t > 0) return;
+    // Count the votes; ties are settled at random. Nobody voting: the dock closes, the route picks at random.
+    const counts = v.options.map((_, i) => voters.filter((p) => p.vote === i && valid(i)).length);
+    const best = Math.max(...counts);
+    const idx = v.options.map((_, i) => i);
+    let pick;
+    if (best === 0) pick = v.kind === 'dock' ? v.options.findIndex((o) => o.kind === 'cast') : (Math.random() * v.options.length) | 0;
+    else {
+      const tied = idx.filter((i) => counts[i] === best);
+      pick = tied[(Math.random() * tied.length) | 0];
+    }
+    if (v.total > SH.MAX_TIME && v.kind === 'dock') pick = v.options.findIndex((o) => o.kind === 'cast');
+    const o = v.options[pick];
+    if (v.kind === 'route') {
+      closeVote();
+      return goToStop(o.id);
+    }
+    if (o.kind === 'cast') {
+      closeVote();
+      return startRoute();
+    }
+    // Buy it, then keep shopping while there is anything left to afford.
+    state.run.salvage -= o.cost;
+    applyOffer(o);
+    o.sold = true;
+    state.ev.warn = 3;
+    state.ev.warnText = `BOUGHT: ${o.name.toUpperCase()}!`;
+    if (v.options.every((x) => x.kind === 'cast' || cardOff(x))) {
+      closeVote();
+      return startRoute();
+    }
+    v.t = SH.TIME;
+    for (const p of Object.values(state.players)) {
+      p.vote = null;
+      p.uk = null;
+      p.voteAt = 1 + Math.random() * 3;
+    }
+  };
+
+  // Back home: show the mission scorecard for a few seconds, then the sky-dock (or the victory screen).
   const AWARDS = [
     { key: 'kills', title: 'Ace Gunner', icon: '🎯', unit: 'shot down' },
     { key: 'raiders', title: 'Swashbuckler', icon: '🗡️', unit: 'raiders beaten' },
@@ -628,7 +857,7 @@ export function createSimulation() {
   ];
   let pendingVote = null;
   const onMarker = (m) => {
-    if (m.kind !== 'home') return startVote(m);
+    if (m.kind !== 'home') return;
     // A new record for this TV?
     const laps = m.lap - 1;
     if (laps > state.record.laps || (laps === state.record.laps && state.kills > state.record.kills)) {
@@ -636,22 +865,27 @@ export function createSimulation() {
       saveRecord(state.record);
       state.newRecord = true;
     }
-    const players = Object.values(state.players);
-    const rows = [];
-    for (const a of AWARDS) {
-      const best = players.reduce((b, p) => ((p.stats?.[a.key] || 0) > (b?.stats?.[a.key] || 0) ? p : b), null);
-      const value = best?.stats?.[a.key] || 0;
-      if (value > 0) {
-        rows.push({ ...a, name: best.name, color: best.color, value: Math.round(value) });
-        phoneFx(best, `🏆 You're the ${a.title}!`, [60, 60, 60, 60, 120]);
-      }
-    }
-    state.scorecard = { lap: m.lap - 1, rows, t: config.VOTE.SCORECARD_TIME };
-    pendingVote = m;
-    for (const p of players) p.stats = {};
+    const run = state.run;
+    const stop = curStop();
+    addSalvage(SV.MISSION + stop.reward, 'mission');
+    const rows = awardRows(Object.values(state.players), true);
+    bankStats(true);
+    state.scorecard = {
+      lap: m.lap - 1,
+      stopName: stopName(stop),
+      flagship: stop.flagship,
+      rows,
+      t: config.VOTE.SCORECARD_TIME,
+      gain: { ...run.gain },
+      gained: Object.values(run.gain).reduce((a, b) => a + b, 0),
+      total: run.salvage,
+    };
+    run.gain = {};
+    pendingVote = stop.flagship ? 'victory' : 'dock';
   };
 
-  const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip });
+  newRun();
+  const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip, firstMission });
 
   // A latched bat chews a hole: a gasbag leak, or a breach in the deck it sits on (ship coordinates).
   const gnaw = (kind, x, y, d) => {
@@ -696,11 +930,19 @@ export function createSimulation() {
       if ((state.scorecard.t -= dt) <= 0) {
         state.scorecard = null;
         state.newRecord = false;
-        if (pendingVote) startVote(pendingVote);
+        const next = pendingVote;
         pendingVote = null;
+        if (next === 'victory') endRun(true);
+        else if (next === 'dock') startDock();
       }
       return;
     }
+    // The victory screen holds the game, then a new voyage starts back at the mast.
+    if (state.runEnd && !state.wreck) {
+      if ((state.runEnd.t -= dt) <= 0) restartGame();
+      return;
+    }
+    if (state.salvagePop && (state.salvagePop.t -= dt) <= 0) state.salvagePop = null;
     // While the crew votes on an upgrade, the action is paused.
     if (state.vote) {
       updateVote(dt);
@@ -1215,6 +1457,7 @@ export function createSimulation() {
       course.update(dt);
       weather.update(dt);
       gunship.settle(dt);
+      salvageWatch();
     }
 
     for (const bullet of state.bullets) {
@@ -1295,7 +1538,8 @@ export function createSimulation() {
     getHelm,
     interaction,
     modules,
-    startVote,
+    startDock,
+    startRoute,
     castOff: () => {
       if (state.phase !== 'lobby') return;
       state.phase = 'flying';

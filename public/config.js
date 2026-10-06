@@ -391,7 +391,57 @@ export const config = {
   VOTE: {
     TIME: 15, // seconds to vote
     ALL_VOTED_WAIT: 1.5, // once everyone has voted, wait this long
-    SCORECARD_TIME: 8, // seconds the lap scorecard shows before the vote
+    SCORECARD_TIME: 8, // seconds the mission scorecard shows before the sky-dock
+  },
+  // SALVAGE: the currency of a voyage. Earned in missions, spent at the sky-dock.
+  SALVAGE: {
+    PER_KILL: 2, // each enemy shot down
+    OUTPOST: 15, // an outpost knocked out
+    GUNSHIP_BOARDED: 45, // a gunship blown up by a boarding party
+    GUNSHIP_SHOT: 15, // a gunship shot down
+    BOSS: 70,
+    MISSION: 30, // bonus for finishing a mission (plus the stop's own reward)
+  },
+  // The SKY-DOCK shop between missions.
+  SHOP: {
+    OFFERS: 6, // cards on offer (repairs and upgrades), plus the Cast off card
+    TIME: 20, // seconds to vote on each purchase
+    MAX_TIME: 55, // the whole shop closes after this long
+    ALL_VOTED_WAIT: 1.2,
+    REPEAT_PRICE: 0.5, // an upgrade costs this much more per time it has been bought already
+    PRICE_DEFAULT: 70,
+    PRICES: { 'twin-barrels': 90, 'big-shells': 90, 'deep-magazines': 70, 'auto-loader': 90, armour: 100, reinforced: 90, firebox: 70, 'safety-valve': 80, 'twin-gasbag': 110, 'rubber-gasbag': 70, rudders: 80, cutlasses: 60, sprinklers: 60, 'hammer-drills': 70, periscope: 50 },
+    REPAIR_HULL: 40, // full hull, every hole and every broken part
+    REPAIR_GAS: 25, // gasbag refilled and holes patched
+    REPAIR_COAL: 20, // boiler topped up with coal, guns with shells
+    BOT_CAST_CHANCE: 0.3, // bots: chance to cast off on each round
+  },
+  // THE VOYAGE: a branching route of stops across the Broken Skies; one run = one voyage.
+  VOYAGE: {
+    STOPS_MIN: 6, // columns on the map, first (launch) and last (the Flagship) included
+    STOPS_MAX: 8,
+    CHOICES_MIN: 2, // stops to choose between in each middle column
+    CHOICES_MAX: 3,
+    ROUTE_TIME: 20, // seconds to vote on the next stop
+    ROUTE_ALL_VOTED_WAIT: 1.2,
+    REWARD_BASE: 10, // a stop's salvage reward: base + per skull + random
+    REWARD_PER_DANGER: 15,
+    REWARD_RANDOM: 10,
+    DANGER_DAMAGE: 0.2, // hull damage is 1 + (skulls - 2) * this
+    DANGER_FIRE: 0.2, // enemy fire rate likewise
+    WRECK_SUMMARY_TIME: 10, // seconds the run summary shows after the ship is lost (before the lobby)
+    VICTORY_TIME: 25, // seconds the victory screen shows
+    // Planned environments. Not-ready ones fly as Sky Isles for now but show their real name.
+    ENVIRONMENTS: {
+      skyisles: { name: 'Sky Isles', icon: '🏝️', color: '#7fb6d9', ready: true },
+      frost: { name: 'Frost Peaks', icon: '❄️', color: '#bfe3f0', ready: false },
+      ember: { name: 'Ember Forge', icon: '🌋', color: '#e0713a', ready: false },
+      storm: { name: 'Storm Front', icon: '⛈️', color: '#6a6f9a', ready: false },
+      sea: { name: 'Sunken Sea', icon: '🌊', color: '#3f8fa6', ready: false },
+      fungal: { name: 'Fungal Depths', icon: '🍄', color: '#8a6fb0', ready: false },
+      aether: { name: 'The Aether', icon: '🌌', color: '#4b3f7a', ready: false },
+    },
+    KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid' },
   },
   // Fires.
   FIRE: {
