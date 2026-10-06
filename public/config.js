@@ -12,7 +12,7 @@ export const config = {
   },
   // Camera framing.
   CAMERA: {
-    SHIP_SCREEN_FRACTION: 0.38, // the ship takes at most this much of the screen width
+    SHIP_SCREEN_FRACTION: 0.46, // the ship takes at most this much of the screen width (was 0.38; +20% so details read)
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
     SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
