@@ -539,7 +539,7 @@ export function createSimulation() {
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
   const coil = createCoil({ state, puff, credit });
-  const gunship = createGunship({ state, puff, impact, credit });
+  const gunship = createGunship({ state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType });
   const weather = createWeather({ state, impact, puff });
   const air = createAirborne({ state, puff, phoneFx });
   // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
@@ -779,7 +779,7 @@ export function createSimulation() {
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
-              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', defuse: 'defused', revive: 'revives', sabotage: 'sabotage' }[act.type]);
+              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', defuse: 'defused', revive: 'revives', sabotage: 'sabotage', cutline: 'boarding' }[act.type]);
               if (act.type === 'fire') pop(state, object.x, player.y - 120 - state.ship.alt, 'fireOut', '#9fd3e6', 0.8);
               if (act.type === 'hole' || act.type === 'gas') pop(state, object.x, player.y - 120 - state.ship.alt, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
@@ -789,6 +789,7 @@ export function createSimulation() {
               } else if (act.type === 'defuse') state.bombs.splice(state.bombs.indexOf(object), 1);
               else if (act.type === 'gas') state.gasHoles.splice(state.gasHoles.indexOf(object), 1);
               else if (act.type === 'sabotage') gunship.plant(player);
+              else if (act.type === 'cutline') gunship.cutLine(player);
               else object.ko = 0;
               puff(object.x, player.y - 50, '#8fe388', 10);
             }
@@ -1075,6 +1076,7 @@ export function createSimulation() {
       gunship.update(dt);
       course.update(dt);
       weather.update(dt);
+      gunship.settle(dt);
     }
 
     for (const bullet of state.bullets) {

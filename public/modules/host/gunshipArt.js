@@ -6,7 +6,53 @@ import { GS, POSTS, ANCHOR, BOW } from './gunship.js';
 import { config } from '../../config.js';
 
 export function createGunshipArt({ ctx, state, ink }) {
+  // Her paratroopers: a raider under a dark red chute (same style as a bailed-out pilot's).
+  const drawParas = (time) => {
+    for (const p of state.paras || []) {
+      if (p.t < 0) continue;
+      const open = Math.max(0, Math.min(1, p.t / 0.5));
+      const sway = Math.sin(time * 2 + p.x * 0.01) * 0.15 * open;
+      const rd = config.RAIDERS[p.type] || config.RAIDERS.grunt;
+      const s = rd.scale || 1;
+      ctx.save();
+      ctx.translate(p.x, p.y + state.ship.alt); // (this layer is in ship coordinates; paratroopers live in world coordinates)
+      ctx.rotate(sway);
+      ink();
+      ctx.lineWidth = 2.4;
+      if (open > 0.2) {
+        ctx.fillStyle = '#8c2f2f';
+        ctx.beginPath();
+        ctx.ellipse(0, -72, 50 * open, 36 * open, 0, Math.PI, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#eee6d2';
+        ctx.beginPath();
+        ctx.ellipse(0, -72, 16 * open, 36 * open, 0, Math.PI, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        for (const k of [-1, -0.4, 0.4, 1]) {
+          ctx.moveTo(k * 48 * open, -72);
+          ctx.lineTo(0, -18);
+        }
+        ctx.stroke();
+      }
+      ctx.fillStyle = rd.color;
+      ctx.beginPath();
+      ctx.roundRect(-9 * s, -22 * s, 18 * s, 26 * s, 6);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#efe9dc';
+      ctx.beginPath();
+      ctx.arc(0, -30 * s, 9 * s, 0, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
   return (time) => {
+    drawParas(time);
     const g = state.gunship;
     if (!g) return;
     const o = 0; // (everything below is in her home frame; the translate puts her where she is)
@@ -126,18 +172,39 @@ export function createGunshipArt({ ctx, state, ink }) {
     ctx.fillStyle = '#2a1616';
     ctx.fillRect(x0 - 20, y - 6, x1 - x0 + 70, 16); // deck
     ctx.strokeRect(x0 - 20, y - 6, x1 - x0 + 70, 16);
-    // Gun ports facing us, glowing before a broadside.
+    // Gun ports on the end facing us (they swing to whichever end faces our hull), glowing before a
+    // broadside. A wrecked port is a smoking, blackened hole with a bent barrel.
+    const gside = g.side > 0 ? 1 : -1;
+    const px = gside < 0 ? x0 - 30 : x1 + 30;
     for (let k = 0; k < 3; k++) {
       const py = y - 80 + 40 + k * 70 - 0;
-      const glow = g.warnFire ? 0.5 + 0.5 * Math.sin(time * 30) : 0;
-      ctx.fillStyle = glow ? `rgba(255,${80 + 100 * (1 - glow)},60,1)` : '#2b2622';
+      const dead = g.ports && g.ports[k] && g.ports[k].dead;
+      const glow = g.warnFire && !dead ? 0.5 + 0.5 * Math.sin(time * 30) : 0;
+      ctx.fillStyle = dead ? '#120d0d' : glow ? `rgba(255,${80 + 100 * (1 - glow)},60,1)` : '#2b2622';
       ctx.beginPath();
-      ctx.arc(x0 - 30, py, 16, 0, 7);
+      ctx.arc(px, py, 16, 0, 7);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#4a4346';
-      ctx.fillRect(x0 - 90, py - 8, 60, 16);
-      ctx.strokeRect(x0 - 90, py - 8, 60, 16);
+      ctx.save();
+      ctx.translate(px, py);
+      // The barrel points along the aim, within a gentle arc about the end of the hull (bent down when wrecked).
+      const aim = typeof g.aim === 'number' ? g.aim : gside < 0 ? Math.PI : 0;
+      let ang = dead ? (gside < 0 ? 2.4 : 0.74) : aim;
+      if (!dead) {
+        const base = gside < 0 ? Math.PI : 0;
+        ang = base + Math.max(-1.1, Math.min(1.1, Math.atan2(Math.sin(aim - base), Math.cos(aim - base))));
+      }
+      ctx.rotate(ang);
+      ctx.fillStyle = dead ? '#2a2526' : '#4a4346';
+      ctx.fillRect(0, -8, dead ? 32 : 60, 16);
+      ctx.strokeRect(0, -8, dead ? 32 : 60, 16);
+      ctx.restore();
+      if (dead && Math.sin(time * 9 + k) > 0.2) {
+        ctx.fillStyle = 'rgba(70,70,70,.55)';
+        ctx.beginPath();
+        ctx.arc(px + gside * 10, py - 24 - ((time * 40 + k * 17) % 30), 9, 0, 7);
+        ctx.fill();
+      }
     }
     // Boiler (the target) with the charge.
     const bx = GS.boilerX + o;
@@ -244,7 +311,8 @@ export function createGunshipArt({ ctx, state, ink }) {
       ctx.fillRect(cx - 196, 194, 392 * Math.max(0, g.hp / g.max), 14);
       // Her systems: lit while crewed, dark and crossed out when you've knocked them out.
       if (g.posts) {
-        const items = [['GUNS', g.posts.guns > 0], ['STEAM', g.posts.steam], ['HELM', g.posts.helm]];
+        const portsUp = g.ports ? g.ports.filter((q) => !q.dead).length : 3;
+        const items = [['GUNS ' + portsUp + '/3', g.posts.guns > 0 && portsUp > 0], ['STEAM', g.posts.steam], ['HELM', g.posts.helm]];
         ctx.font = '900 24px Georgia';
         ctx.textAlign = 'center';
         items.forEach(([name, on], i) => {

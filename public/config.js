@@ -42,7 +42,7 @@ export const config = {
     RAM_KICK: 90, // shove a ramming plane gives the ship's up/down speed
     RAM_CHANCE: 0.35, // chance a nearly dead dogfighter tries to ram the ship on its next pass
   },
-  // Big enemies (bombers, cargo plane, boss) bump off the ship instead of crashing. Scaled by their size.
+  // Big enemies (bombers, boss) bump off the ship instead of crashing. Scaled by their size.
   BUMP: {
     DAMAGE: 0.8, // hit on our ship (1 = one enemy bullet) per bump, times size
     SELF_DAMAGE: 1, // hp the enemy loses per bump (it never dies from bumping)
@@ -53,7 +53,6 @@ export const config = {
     SHIP_SPEED: 0.05, // and her forward speed (share of full), times size
     COOLDOWN: 1.2, // seconds before the same enemy can bump again
     BOMBER_SIZE: 1,
-    CARGO_SIZE: 0.8,
     BOSS_SIZE: 2.5,
   },
   // Enemy plane: flies a loop around the ship.
@@ -180,7 +179,7 @@ export const config = {
     CREW_SPEED: 160,
     FIRE_EVERY: 7, // seconds between broadsides
     SHOTS: 3, // most cannonballs per broadside (1 gunner = 2 shots, 2 gunners = 3)
-    STAY: 75, // seconds alongside before it pulls away
+    STAY: 150, // seconds engaged (hunting or latched on) before it pulls away
     PLANT_TIME: 2.5, // holding Action at its boiler to set the charge
     FUSE: 8, // seconds to get back before it blows
     CUT_TIME: 7, // seconds its crew need to hack through the rope (they wait 3s first)
@@ -207,13 +206,60 @@ export const config = {
     REACT: 0.8, // seconds her helmsman takes to notice what our ship is doing (bigger = more lag)
     WOBBLE_X: 70, // she never sits perfectly still: slow sway around her station
     WOBBLE_Y: 40,
-    ROCK_AVOID: 150, // she shifts this far up/down to keep rock off her hull and gasbag
+    // -- Terrain: she is solid. Her outline (gasbag + hull) is tested against rock every step --
+    MAX_SPEED_ANY: 600, // her speed in any direction never exceeds this, even when the rope yanks her
+    ROCK_MARGIN: 70, // her helmsman wants this much clear space around her when choosing where to sit
+    PUSH_STEP: 30, // push-out search resolution (pixels)
+    ROCK_BOUNCE: 0.25, // share of her speed that bounces back off a wall
+    ROCK_DAMAGE: 0.8, // hull points lost per scrape (scaled by how fast she hit, 0.25x to 3x)
+    SCRAPE_CD: 0.5, // seconds between clang/damage events while she grinds along rock
+    SCRAPE_SHOVE: 160, // sideways stagger for crew standing on her deck when she hits
+    LOOKAHEAD: 1.3, // seconds ahead her helmsman looks along her own velocity for rock
+    PLAN_EVERY: 0.25, // seconds between her free-space checks (station spots)
+    ROCK_BREAKOFF: 8, // seconds of "no room to manoeuvre" before she breaks off
+    SHIP_RECT: { x0: 100, x1: 1520, y0: -120, y1: 960 }, // our ship's box: she is nudged away if she overlaps it
+    // -- Free manoeuvring: her captain flies a ring round our ship, stopping at firing spots (nodes) --
+    // dx/dy = her offset from our ship. fire = she shoots from here, drop = paratroopers jump from here
+    // (high up and ahead so they can drift down onto our catwalk), w = how often it is picked, links =
+    // nodes she can fly to directly (the ring keeps her clear of our ship). Nodes blocked by rock are not used.
+    NODES: {
+      bow: { dx: 0, dy: 0, fire: true, w: 3, links: ['high', 'c1', 'c2'] },
+      high: { dx: -300, dy: -800, fire: true, drop: true, w: 2, links: ['bow', 'c1'] },
+      c1: { dx: 0, dy: -1100, links: ['bow', 'high', 'A'] },
+      A: { dx: -1900, dy: -1100, fire: true, w: 1, links: ['c1', 'c3'] },
+      c3: { dx: -3700, dy: -1100, links: ['A', 'K'] },
+      K: { dx: -3700, dy: -100, fire: true, w: 1, links: ['c3', 'c4'] },
+      c4: { dx: -3700, dy: 1000, links: ['K', 'B'] },
+      B: { dx: -1900, dy: 1000, fire: true, w: 1, links: ['c4', 'c2'] },
+      c2: { dx: 0, dy: 1000, links: ['B', 'bow'] },
+    },
+    STAY_MIN: 7, // seconds she stays at a firing spot before her captain moves her...
+    STAY_MAX: 13,
+    NODE_ARRIVE: 120, // "there" (final spot)
+    NODE_PASS: 260, // ring corners count as passed within this distance
+    FIRE_RANGE: 2300, // her gunners only fire at our hull from this close (and with a clear line)
+    // -- Gun ports (destroyable: when all are down, or her gunners are, she latches on) --
+    PORT_HP: 2.5, // shell damage a gun port takes (0.5 per shell)
+    PORT_RADIUS: 55, // how close a shell must be to hit a port
+    // -- Latching on --
+    LATCH_RANGE: 760, // she fires her own grapple once her yardarm is this close to our bow
+    LATCH_RETRY: 6, // seconds before she re-fires after we cut her line
+    LATCH_SEND_EVERY: 6, // seconds between raiders crossing her rope to board us
+    LATCH_EXTRA: 4, // extra deckhands (beyond her guards) that can cross the rope
+    CUT_HOLD: 3, // seconds of holding Action at our bow to cut her grapple line
+    // -- Paratroopers: raiders jump from her deck and parachute onto our ship --
+    PARA_FIRST: 12, // seconds after she gets on station before the first drop
+    PARA_EVERY_MIN: 22, // seconds between drops
+    PARA_EVERY_MAX: 34,
+    PARA_FALL: 85, // descent speed under the chute (pixels/s)
+    PARA_STEER: 230, // sideways steering speed toward our deck
+    PARA_HP: 1, // shell damage to kill one (0.5 per shell = 2 shells)
+    PARA_MAX_AIR: 5, // no new drop while this many are still in the air
+    PARA_MAX_BOARDERS: 3, // ...or while this many raiders are already on our ship
     GONE_DIST: 4200, // lost for good (removed) if she gets this far from us in any direction
     // -- Her broadsides get less accurate the further she is from her station --
     MISS_BASE: 0.15, // chance a cannonball misses even when perfectly placed
-    MISS_DY: 600, // each this-many pixels above/below the station adds +100% miss chance
-    MISS_FREE_DX: 300, // sideways slop that costs nothing...
-    MISS_DX: 1500, // ...then each this-many pixels adds +100%
+    MISS_DX: 1500, // her guns are fully accurate within 1500px of our hull, then each this-many pixels further adds +100% miss chance
     MISS_MAX: 0.92,
     // -- Hookshot rope --
     HOOK_RANGE: 900, // the grapple only catches if the yardarm is this close to our bow
@@ -284,16 +330,6 @@ export const config = {
   // Fires.
   FIRE: {
     SPREAD_EVERY: 7, // seconds before a fire spreads
-  },
-  // Enemy cargo plane: flies in from far away and drops raiders on the catwalk.
-  CARGO: {
-    FIRST_AFTER: 25, // seconds before the first one
-    EVERY_MIN: 40, // seconds between cargo planes...
-    EVERY_MAX: 60,
-    START_DISTANCE: 2300, // how far from the ship it appears
-    SPEED: 140,
-    HEIGHT: 300, // how far above the ship's top it flies
-    HP: 8, // plus 1 per 4 crew
   },
   // Floating mines drifting toward the bow.
   MINES: {
@@ -451,7 +487,7 @@ export const config = {
     brute: { name: 'Brute', hp: 7, speed: 55, windup: 1.0, reach: 52, species: 'devil', color: '#5c2a1a', scale: 1.35, knockback: 140, noShove: true },
     sapper: { name: 'Sapper', hp: 2, speed: 100, windup: 0.6, reach: 40, species: 'skeleton', color: '#7a6420', scale: 0.95 },
     cutter: { name: 'Cutter', hp: 3, speed: 105, windup: 0.6, reach: 40, species: 'bat', color: '#2f4f8c', scale: 1 },
-    MIX: { grunt: 0.5, brute: 0.15, sapper: 0.2, cutter: 0.15 }, // chances when a cargo plane drops a squad
+    MIX: { grunt: 0.5, brute: 0.15, sapper: 0.2, cutter: 0.15 }, // chances for each raider that lands from a gunship or boarding line
     KO_TIME: 12,
     BOMB_FUSE: 10, // seconds until a sapper's bomb goes off
     DEFUSE_TIME: 1.6, // seconds of holding Action to defuse (no tool needed)

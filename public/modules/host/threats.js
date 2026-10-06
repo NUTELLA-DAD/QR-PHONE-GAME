@@ -1,4 +1,4 @@
-// Threats from outside the ship: the fighter, the raider cargo plane, floating mines, falling
+// Threats from outside the ship: the fighter, floating mines, falling
 // wrecks, plus the crew's shells hitting them. Anything that touches the ship crashes into it.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
@@ -10,10 +10,9 @@ const B = SHIP_LAYOUT.bounds;
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHelm, credit }) {
-  state.cargo = [];
   state.mines = [];
   state.wrecks = [];
-  state.ev = { t: config.CARGO.FIRST_AFTER, warn: 0, warnText: '' };
+  state.ev = { t: 0, warn: 0, warnText: '' };
   let mineT = config.MINES.FIRST_AFTER;
 
   const crew = () => Object.keys(state.players).length;
@@ -146,44 +145,6 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     }
   };
 
-  const updateCargo = (dt) => {
-    const C = config.CARGO;
-    state.ev.t -= dt;
-    if (state.ev.t <= 0) {
-      if (crew() && !state.ship.down && !state.cargo.length && !state.boarders.length) {
-        const fromLeft = Math.random() < 0.5;
-        const entry = SHIP_LAYOUT.boarderEntryPoints[fromLeft ? 0 : SHIP_LAYOUT.boarderEntryPoints.length - 1];
-        state.cargo.push({
-          x: fromLeft ? B.x0 - C.START_DISTANCE : B.x1 + C.START_DISTANCE,
-          y: B.y0 - C.HEIGHT - state.ship.alt,
-          baseY: B.y0 - C.HEIGHT - state.ship.alt, // the height it wants to fly at
-          vx: fromLeft ? C.SPEED : -C.SPEED,
-          hp: C.HP + Math.floor(crew() / 4),
-          dropX: entry.x,
-          dropped: false,
-          hit: 0,
-        });
-        warn('CARGO PLANE INCOMING - SHOOT IT DOWN!');
-        state.ev.t = rand(C.EVERY_MIN, C.EVERY_MAX);
-      } else state.ev.t = 5;
-    }
-    for (const c of state.cargo) {
-      c.x += c.vx * dt;
-      // Climb over / duck under terrain, smoothly.
-      c.y += (keepClear(state, c.x, c.baseY, 120, 0, 450) - c.y) * Math.min(1, dt * 3);
-      c.y = keepClear(state, c.x, c.y, 50, 0, 120); // and never inside rock
-      c.hit = Math.max(0, c.hit - dt);
-      bounceStep(c, dt);
-      bumpShip(state, c, { hitsShip, impact, puff, hw: 130, hh: 45, size: config.BUMP.CARGO_SIZE, hp: 'hp' });
-      if (!c.dropped && (c.vx > 0 ? c.x >= c.dropX : c.x <= c.dropX)) {
-        c.dropped = true;
-        dropSquad(c.x, c.y + 40);
-        warn('RAIDERS ON THE CATWALK!');
-      }
-    }
-    state.cargo = state.cargo.filter((c) => c.hp > 0 && c.x > B.x0 - C.START_DISTANCE - 200 && c.x < B.x1 + C.START_DISTANCE + 200);
-  };
-
   const updateMines = (dt) => {
     const M = config.MINES;
     if ((mineT -= dt) <= 0) {
@@ -272,23 +233,6 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
         }
         continue;
       }
-      for (const c of state.cargo) {
-        if (Math.abs(shell.x - c.x) < 90 && Math.abs(shell.y - c.y) < 40) {
-          shell.life = 0;
-          c.hp -= config.GUNS.DAMAGE;
-          c.hit = 0.15;
-          puff(shell.x, shell.y, '#ffcf40', 8);
-          if (c.hp <= 0) {
-            state.kills += 1;
-            credit?.(shell);
-            puff(c.x, c.y, '#ff5a1f', 30);
-            pop(state, c.x, c.y - 60, 'kill', '#ffd23f', 1.4);
-            wreck(c.x, c.y, c.vx, 'cargo');
-            warn(c.dropped ? 'CARGO PLANE DOWN!' : 'CARGO PLANE DOWN - NO RAIDERS THIS TIME!', 2.5);
-          }
-          break;
-        }
-      }
       for (const m of state.mines) {
         if (!m.dead && Math.hypot(shell.x - m.x, shell.y - m.y) < config.MINES.RADIUS + 8) {
           shell.life = 0;
@@ -300,14 +244,12 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
   };
 
   const reset = () => {
-    state.cargo.length = 0;
     state.mines.length = 0;
     state.wrecks.length = 0;
   };
 
   const update = (dt) => {
     updateFighter(dt);
-    updateCargo(dt);
     updateMines(dt);
     updateWrecks(dt);
     updateChutes(state, dt);

@@ -502,7 +502,6 @@ export function createRenderer({ ctx, state, canvas }) {
     drawFighterAim(time);
     threatArt.drawWrecks();
     threatArt.drawMines(time);
-    threatArt.drawCargo(time);
     threatArt.drawBoss(time);
     threatArt.drawBombers(time);
     threatArt.drawBats(time);

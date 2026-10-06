@@ -1,4 +1,4 @@
-// Drawing for outside threats (cargo plane, mines, wrecks), sapper bombs, and the lookout's
+// Drawing for outside threats (mines, wrecks), sapper bombs, and the lookout's
 // off-screen arrows. Placeholder vector art until Phase 3. Ember Pact = fictional enemy faction.
 import { config } from '../../config.js';
 import { drawBiplane } from './planeArt.js';
@@ -24,73 +24,6 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     ctx.quadraticCurveTo(x + 7 * s, y + 4 * s, x, y + 7 * s);
     ctx.quadraticCurveTo(x - 7 * s, y + 4 * s, x, y - 6 * s);
     ctx.fill();
-  };
-
-  const drawCargo = (time) => {
-    for (const c of state.cargo || []) {
-      ctx.save();
-      ctx.translate(c.x, c.y);
-      if (c.vx < 0) ctx.scale(-1, 1);
-      if (sprites.plane(ctx, 'cargo', time)) {
-        // Side door swings open as it nears the drop point.
-        const R = { door: { x: -60, y: 0 }, ...sprites.rigFor('planes/cargo') };
-        if (!c.dropped && Math.abs(c.x - c.dropX) < 700) sprites.pivot(ctx, 'planes/cargo/door_open', R.door.x, R.door.y, 0.5, 0.5);
-        ctx.restore();
-        for (let i = 0; i < c.hp; i++) {
-          ctx.fillStyle = '#a8443f';
-          ctx.fillRect(c.x - c.hp * 6 + i * 12, c.y - 80, 9, 9);
-        }
-        continue;
-      }
-      ink();
-      ctx.lineWidth = 3;
-      // Tail and fuselage.
-      ctx.fillStyle = c.hit > 0 ? '#ffffff' : '#9c5a2b';
-      ctx.beginPath();
-      ctx.moveTo(-120, -10);
-      ctx.lineTo(-150, -50);
-      ctx.lineTo(-118, -48);
-      ctx.lineTo(-95, -12);
-      ctx.fill();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.roundRect(-130, -26, 230, 54, 22);
-      ctx.fill();
-      ctx.stroke();
-      // Cockpit glass and wing.
-      ctx.fillStyle = '#7ad0e0';
-      ctx.beginPath();
-      ctx.roundRect(60, -20, 30, 18, 6);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = '#7a3f1d';
-      ctx.beginPath();
-      ctx.roundRect(-40, -6, 110, 16, 6);
-      ctx.fill();
-      ctx.stroke();
-      // Twin engines with spinning props.
-      for (const ex of [-10, 40]) {
-        ctx.fillStyle = '#555';
-        ctx.beginPath();
-        ctx.ellipse(ex, 16, 20, 11, 0, 0, 7);
-        ctx.fill();
-        ctx.stroke();
-        const spin = Math.abs(Math.sin(time * 30)) * 26 + 4;
-        ctx.fillStyle = '#2b1d14';
-        ctx.fillRect(ex + 20, 16 - spin, 4, spin * 2);
-      }
-      // Side door: open (raiders inside) until they've jumped.
-      ctx.fillStyle = c.dropped ? '#3b2a1d' : '#5c3418';
-      ctx.fillRect(-60, -14, 28, 34);
-      ctx.strokeRect(-60, -14, 28, 34);
-      insignia(-90, 2, 1);
-      ctx.restore();
-      // Health pips.
-      for (let i = 0; i < c.hp; i++) {
-        ctx.fillStyle = '#a8443f';
-        ctx.fillRect(c.x - c.hp * 6 + i * 12, c.y - 64, 9, 9);
-      }
-    }
   };
 
   const drawMines = (time) => {
@@ -214,7 +147,6 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
   // threats; with someone on Lookout they reach much farther and carry labels.
   const drawLookoutArrows = (width, height, view) => {
     const items = [];
-    for (const c of state.cargo || []) items.push({ x: c.x, y: c.y, icon: '✈', color: '#9c5a2b', label: 'CARGO' });
     for (const m of state.mines || []) items.push({ x: m.x, y: m.y, icon: '✹', color: '#4a4346', label: 'MINE' });
     if (state.enemy.dead <= 0) items.push({ x: state.enemy.x, y: state.enemy.y, icon: '✈', color: '#8c2f2f', label: 'FIGHTER' });
     for (const p of state.bombers || []) items.push({ x: p.x, y: p.y, color: '#3d3a40', label: 'BOMBER' });
@@ -625,5 +557,5 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     ctx.strokeRect(x - w / 2, y, w, 8);
   };
 
-  return { drawCargo, drawMines, drawWrecks, drawBombs, drawLookoutArrows, drawBats, drawBombers, drawBoss, drawStrafers, drawRockets };
+  return { drawMines, drawWrecks, drawBombs, drawLookoutArrows, drawBats, drawBombers, drawBoss, drawStrafers, drawRockets };
 }
