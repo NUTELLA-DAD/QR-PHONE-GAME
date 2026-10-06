@@ -382,7 +382,7 @@ export const config = {
   // their attacks in red; friendly shots in the shooter's colour; pickups and goals in gold.
   PALETTE: {
     rock: '#8a7560',
-    cave: '#2f2b36',
+    cave: '#465060', // muted slate blue (soft, faded look - after Bomber XXL)
     enemy: '#e63946',
     gold: '#ffd23f',
     ink: '#1b1410',

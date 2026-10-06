@@ -1268,6 +1268,30 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fill();
   };
 
+  // A long soft cloud band across the sky (after Bomber XXL): a wavy ribbon of white haze.
+  // Like the ridges, its shape is fixed to the landscape - it only slides past, never wobbles.
+  const drawCloudBand = (width, height, view, f, baseY, thick, color) => {
+    const s = height / config.H;
+    const shift = (view.scroll + view.cx) * f;
+    const y0 = height * baseY + (config.H / 2 - view.cy) * view.zoom * f * 0.6;
+    const du = 24;
+    const top = [];
+    const bot = [];
+    for (let u = Math.floor(shift / du) * du; (u - shift) * s <= width + du * s; u += du) {
+      const x = (u - shift) * s;
+      const w1 = Math.sin(u * 0.004) * 0.6 + Math.sin(u * 0.011 + 2) * 0.4;
+      const w2 = Math.sin(u * 0.005 + 1) * 0.6 + Math.sin(u * 0.013 + 4) * 0.4;
+      top.push([x, y0 - thick * s * (0.6 + 0.4 * w1)]);
+      bot.push([x, y0 + thick * s * (0.3 + 0.3 * w2)]);
+    }
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    top.forEach(([x, y]) => ctx.lineTo(x, y));
+    for (let i = bot.length - 1; i >= 0; i--) ctx.lineTo(bot[i][0], bot[i][1]);
+    ctx.closePath();
+    ctx.fill();
+  };
+
   // A far-away mountain range. f = how strongly it follows the camera (0 = fixed, 1 = moves with the ship).
   // Samples sit on a grid fixed to the landscape (not the screen) so the outline doesn't shimmer.
   const drawRidge = (width, height, view, f, baseY, amp, freq, color, extra = {}) => {
@@ -1384,14 +1408,25 @@ export function createRenderer({ ctx, state, canvas }) {
       return 'rgb(' + pa.map((v, i) => Math.round((v + (pb[i] - v) * dusk) * (1 - storm * 0.8) + pc[i] * storm * 0.8)).join(',') + ')';
     };
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, mix('5aa6c8', '6a5a9c', '3a4048'));
-    gradient.addColorStop(0.75, mix('f2d9a0', 'f4a46a', '6a6e72'));
-    gradient.addColorStop(1, mix('e8c48a', 'e8865a', '585c60'));
+    // Soft, faded colours (after Bomber XXL): dusty blue overhead, pale haze at the horizon.
+    gradient.addColorStop(0, mix('8fb3c9', '6a5a9c', '3a4048'));
+    gradient.addColorStop(0.7, mix('cfdde2', 'f4a46a', '6a6e72'));
+    gradient.addColorStop(1, mix('e3e6dc', 'e8865a', '585c60'));
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
-    drawRidge(width, height, view, 0.02, 0.86, 170, 0.003, '#b9c8d6', { snow: '#eef3f8' });
-    drawRidge(width, height, view, 0.04, 0.9, 120, 0.004, '#a9bccb');
+    // Cloud bands at different depths, the far ones fainter.
+    drawCloudBand(width, height, view, 0.01, 0.2, 40, 'rgba(255,255,255,.22)');
+    drawCloudBand(width, height, view, 0.03, 0.42, 60, 'rgba(255,255,255,.3)');
+    drawRidge(width, height, view, 0.02, 0.86, 170, 0.003, '#c2d0d8', { snow: '#eef3f8' });
+    drawRidge(width, height, view, 0.04, 0.9, 120, 0.004, '#b2c3cc');
+    // Haze: distant hills fade into the sky.
+    const haze = ctx.createLinearGradient(0, height * 0.6, 0, height);
+    haze.addColorStop(0, 'rgba(225,232,232,0)');
+    haze.addColorStop(1, 'rgba(225,232,232,.45)');
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, height * 0.6, width, height * 0.4);
+    drawCloudBand(width, height, view, 0.06, 0.66, 70, 'rgba(255,255,255,.35)');
     // High thin clouds.
     ctx.fillStyle = 'rgba(255,255,255,.45)';
     const span = width / s + 500;
@@ -1399,7 +1434,7 @@ export function createRenderer({ ctx, state, canvas }) {
       const cx = wrap(x - (view.scroll + view.cx) * 0.15, span) - 250;
       cloud(cx * s, (y + (config.H / 2 - view.cy) * view.zoom * 0.1) * s, 0.55 * s);
     });
-    drawRidge(width, height, view, 0.1, 0.97, 90, 0.007, '#7f9a8c', { trees: '#6d8a7b' });
+    drawRidge(width, height, view, 0.1, 0.97, 90, 0.007, '#9cb09c', { trees: '#8aa08b' });
   };
 
   // Big clouds in the world, drifting past at full ship speed (behind the ship).
