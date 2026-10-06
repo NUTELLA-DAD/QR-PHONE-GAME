@@ -19,12 +19,12 @@ const TOP = -1400; // where ceilings start (far above the view)
 export const SHIP_SAMPLES = [
   // underside
   [-80, 410], [126, 662], [248, 815], [500, 815], [740, 935], [805, 975], [855, 935], [1100, 815], [1352, 815], [1470, 662],
-  [20, 862], [140, 862], [1460, 862], [1580, 862], [1512, 620], [1660, 245],
+  [20, 862], [140, 862], [1460, 862], [1580, 862], [1512, 620], [1790, 198],
   // top
-  [-95, 70], [100, 160], [300, 95], [500, 70], [690, 8], [800, -60], [910, 8], [1100, 70], [1300, 110], [1500, 170],
+  [-235, 20], [-60, 90], [150, 5], [380, -50], [600, -100], [690, -86], [800, -154], [910, -86], [1000, -100], [1220, -50], [1450, 5], [1660, 90],
 ];
 const BOTTOM_Y = 975; // lowest point of the ship (ventral gun)
-const TOP_Y = -60; // highest point (flag on the crow's nest)
+const TOP_Y = -154; // highest point (flag on the crow's nest)
 const MARGIN = 25;
 
 // A point on the ship (ship coordinates), tipped by the ship's current pitch.

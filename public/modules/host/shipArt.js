@@ -58,13 +58,13 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     if (has('twin-gasbag')) {
       // The second envelope, riding higher behind the first, with its own rigging.
       const g2 = Math.max(0, Math.min(1, (state.ship.gas ?? 50) / 100));
-      line([[520, 160], [520, 60]], 4);
-      line([[1100, 150], [1100, 60]], 4);
-      filled('#cdb683', () => ctx.ellipse(780, 40, (G.rx * 0.7) * (0.8 + 0.4 * g2), G.ry * 0.62 * (0.9 + 0.2 * g2), 0, 0, 7));
+      line([[520, 0], [520, -60]], 4);
+      line([[1100, 0], [1100, -60]], 4);
+      filled('#cdb683', () => ctx.ellipse(780, -60, (G.rx * 0.7) * (0.8 + 0.4 * g2), G.ry * 0.62 * (0.9 + 0.2 * g2), 0, 0, 7));
       ctx.lineWidth = 3;
       for (let i = -3; i <= 3; i++) {
         ctx.beginPath();
-        ctx.ellipse(780, 40, (G.rx * 0.7 * Math.abs(i)) / 3.6 + 4, G.ry * 0.62, 0, i < 0 ? Math.PI - 1.57 : -1.57, i < 0 ? Math.PI + 1.57 : 1.57);
+        ctx.ellipse(780, -60, (G.rx * 0.7 * Math.abs(i)) / 3.6 + 4, G.ry * 0.62, 0, i < 0 ? Math.PI - 1.57 : -1.57, i < 0 ? Math.PI + 1.57 : 1.57);
         ctx.stroke();
       }
     }
@@ -77,7 +77,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     // Better Rudders: bigger fins.
     const fin = 1 + 0.25 * has('rudders');
     ctx.save();
-    ctx.translate(40, 245);
+    ctx.translate(-100, 198); // the stern of the bigger bag
     ctx.scale(fin, fin);
     ctx.translate(-40, -245);
     // Tail fins (behind the envelope, at the stern = left).
@@ -134,6 +134,13 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
   };
 
   const drawNest = () => {
+    ctx.save();
+    ctx.translate(0, -L.nestRise); // drawn at its old height, then lifted onto the bigger bag
+    drawNestParts();
+    ctx.restore();
+  };
+
+  const drawNestParts = () => {
     line([[800, 8], [800, -60]], 5); // flag pole
     if (!sprites.box(ctx, 'crests/crew', 802, -64, 34, 34)) {
       ctx.fillStyle = '#e63946';

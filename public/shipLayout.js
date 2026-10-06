@@ -6,7 +6,7 @@
 // the game code uses.
 
 const platforms = [
-  { id: 'nest', name: "Crow's Nest", y: 52, x0: 610, x1: 990, outside: true },
+  { id: 'nest', name: "Crow's Nest", y: -42, x0: 610, x1: 990, outside: true },
   { id: 'catwalk', name: 'Top Catwalk', y: 470, x0: 240, x1: 1360, outside: true },
   { id: 'main', name: 'Main Deck', y: 640, x0: 140, x1: 1470 },
   { id: 'lower', name: 'Lower Deck', y: 790, x0: 20, x1: 1580 },
@@ -71,8 +71,8 @@ export const SHIP_LAYOUT = {
   // Guns: where the barrel pivots (bx, by), the middle of its firing arc (aim, radians;
   // 0 = right, PI/2 = down) and how far it may turn either side of that (arc).
   gunMounts: {
-    'Dorsal Gun': { bx: 950, by: 18, aim: -1.2, arc: 1.2 },
-    'Aft Dorsal Gun': { bx: 650, by: 18, aim: -1.95, arc: 1.2 },
+    'Dorsal Gun': { bx: 950, by: -76, aim: -1.2, arc: 1.2 },
+    'Aft Dorsal Gun': { bx: 650, by: -76, aim: -1.95, arc: 1.2 },
     'Tail Gun': { bx: 112, by: 585, aim: Math.PI, arc: 1.0 },
     'Nose Gun': { bx: 1498, by: 585, aim: 0, arc: 1.0 },
     'Aft Sponson': { bx: 330, by: 812, aim: 2.15, arc: 0.7 },
@@ -81,7 +81,7 @@ export const SHIP_LAYOUT = {
   },
 
   // Lightning Coil emitter (on top of the crow's nest): fires up and out to the sides.
-  coil: { x: 875, y: -20, aim: -Math.PI / 2, arc: 1.45 },
+  coil: { x: 875, y: -114, aim: -Math.PI / 2, arc: 1.45 },
 
   // Deflector shield: a band on an ellipse around the whole ship, swung round by the crew.
   shield: { cx: 800, cy: 470, rx: 1020, ry: 660 },
@@ -118,7 +118,9 @@ export const SHIP_LAYOUT = {
 
   // The gasbag envelope (an ellipse). Holes in it are patched from the catwalk below
   // or the crow's nest on top.
-  gasbag: { cx: 800, cy: 245, rx: 860, ry: 185 },
+  gasbag: { cx: 800, cy: 198, rx: 1000, ry: 232 },
+  // How far the crow's nest (and flag, periscope) sits above where it was drawn when the bag was smaller.
+  nestRise: 94,
 
   // Where to stand to repair the lift.
   liftRepair: { p: 'lower', x: 925 },
@@ -144,7 +146,7 @@ export const SHIP_LAYOUT = {
   ],
 
   // Outer edges of the whole ship drawing. The camera keeps all of this in view.
-  bounds: { x0: -100, x1: 1670, y0: -70, y1: 975 },
+  bounds: { x0: -240, x1: 1810, y0: -165, y1: 975 },
 
   // Where enemy fire is aimed (centre of the gondola).
   aimPoint: { x: 800, y: 640 },

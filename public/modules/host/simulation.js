@@ -22,7 +22,7 @@ const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 // Does a point (in ship coordinates) touch the ship? Gasbag, gondola, outriggers or ball turret.
 function hitsShip(x, y) {
-  const gas = ((x - 800) / 860) ** 2 + ((y - 245) / 185) ** 2 < 1;
+  const gas = ((x - SHIP_LAYOUT.gasbag.cx) / SHIP_LAYOUT.gasbag.rx) ** 2 + ((y - SHIP_LAYOUT.gasbag.cy) / SHIP_LAYOUT.gasbag.ry) ** 2 < 1;
   const gondola = x > 125 && x < 1500 && y > 475 && y < 815;
   const outriggers = x > 20 && x < 1580 && y > 745 && y < 800;
   const pod = x > 735 && x < 855 && y > 815 && y < 935;
