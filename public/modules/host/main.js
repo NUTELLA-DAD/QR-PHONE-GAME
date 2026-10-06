@@ -4,6 +4,7 @@ import { createSimulation } from './simulation.js';
 import { createRenderer } from './render.js';
 import { createCamera } from './camera.js';
 import { createSfx } from './sfx.js';
+import { createMenu } from './menu.js';
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -28,15 +29,34 @@ showSound();
 window.renderNow = (dt = 0.016) => renderer.renderFrame(performance.now(), camera.update(dt, simulation.state, canvas.width, canvas.height));
 
 let lastTime = performance.now();
+let paused = false;
+const menu = createMenu({ simulation, network, onPause: (on) => (paused = on) });
+
+// If anything ever goes wrong in a frame, note it and keep going (the game must never just
+// freeze). The pause menu shows the last problem.
+window.gameErrors = [];
+const guard = (what, fn) => {
+  try {
+    return fn();
+  } catch (err) {
+    const msg = what + ': ' + (err && err.message ? err.message : err) + (err && err.stack ? ' @ ' + String(err.stack).split('\n')[1]?.trim() : '');
+    if (window.gameErrors[window.gameErrors.length - 1] !== msg) {
+      window.gameErrors.push(msg);
+      if (window.gameErrors.length > 10) window.gameErrors.shift();
+      console.error(err);
+    }
+    return undefined;
+  }
+};
 
 function frame(now) {
+  requestAnimationFrame(frame); // schedule the next frame first, whatever happens below
   const dt = Math.min(0.05, (now - lastTime) / 1000);
   lastTime = now;
-  simulation.update(dt);
-  sfx.update();
-  const view = camera.update(dt, simulation.state, canvas.width, canvas.height);
-  renderer.renderFrame(now, view);
-  requestAnimationFrame(frame);
+  if (!paused) guard('update', () => simulation.update(dt));
+  guard('sound', () => sfx.update());
+  const view = guard('camera', () => camera.update(paused ? 0 : dt, simulation.state, canvas.width, canvas.height));
+  if (view) guard('draw', () => renderer.renderFrame(now, view));
 }
 
 requestAnimationFrame(frame);

@@ -1027,6 +1027,7 @@ export function createSimulation() {
     specials,
     course,
     gunship,
+    restart: () => restartGame(),
     puff,
     setSocket,
     countPlayers: () => Object.keys(state.players).length,

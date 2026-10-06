@@ -789,7 +789,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       }
       if (t.charging) {
         // About to fire: a growing red glow and a dotted line where it's aiming.
-        const k = 1 - Math.max(0, t.cd) / config.COURSE.TURRET_WARN;
+        const k = Math.max(0, Math.min(1, 1 - Math.max(0, t.cd) / config.COURSE.TURRET_WARN));
         ctx.fillStyle = `rgba(255,40,60,${0.25 + 0.45 * k})`;
         ctx.beginPath();
         ctx.arc(0, -26, 30 + 40 * k, 0, 7);

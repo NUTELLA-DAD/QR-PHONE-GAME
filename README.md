@@ -12,6 +12,10 @@ ship; everyone plays with their phone as the controller.
 3. While moored at the mast, walk around and try things out. No enemies yet.
 4. Press **CAST OFF!** on the TV (or Space) to set off.
 
+**Pause menu**: press **Esc** (or P) on the TV, or click **Menu** on the small join badge in the
+corner. It pauses the game and has: Resume, Show join QR code (for late arrivals), Add 4 bot crew,
+Remove bots, Difficulty, Sound, Skip to next map, and Restart from mission 1.
+
 TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small groups),
 **Difficulty** (Easy / Normal / Hard) and **Sound** (or press M).
 
