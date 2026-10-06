@@ -24,7 +24,8 @@ label.opt input{width:28px;height:28px}
 #hull{flex:1;height:18px;border:3px solid #1b1410;border-radius:8px;background:#3b2a1d;position:relative;overflow:hidden;min-width:60px}
 #hfill{position:absolute;left:0;top:0;bottom:0;width:100%;background:#4caf50}
 #hull span{position:absolute;inset:0;text-align:center;color:#fff;font-size:12px;font-weight:700;line-height:12px}
-#leave{font:inherit;font-weight:900;font-size:15px;border:3px solid #1b1410;border-radius:10px;background:#555;color:#fff;padding:6px 10px;display:none}
+#leave{font:inherit;font-weight:900;font-size:24px;border:4px solid #1b1410;border-radius:14px;background:#c62828;color:#fff;padding:8px 30px;min-height:58px;min-width:150px;box-shadow:0 4px 0 #1b1410;display:none;touch-action:none}
+#leave:active{transform:translateY(3px);box-shadow:0 1px 0 #1b1410}
 #info{background:rgba(241,226,184,.9);border:3px solid #1b1410;border-radius:12px;padding:3px 10px;font-size:15px;line-height:1.25;min-height:26px}
 #info b{font-size:17px}
 #info .warn{color:#c62828;font-weight:900}
@@ -78,7 +79,7 @@ body.lefty #lever{right:auto;left:min(42vh,180px)}
     <div id="me"><div id="swatch"></div><span id="myname">Crew</span></div>
     <div id="carry">Hands empty</div>
     <div id="hull"><div id="hfill"></div><span>HULL</span></div>
-    <button id="leave">Leave</button>
+    <button id="leave">⬅ LEAVE</button>
   </div>
   <div id="info"><b>Walking</b> - walk to a station, rack, fire or hole</div>
   <div id="controls">

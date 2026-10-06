@@ -159,6 +159,9 @@ export function createSimulation() {
         return full ? { type: 'need', label: 'Firebox is full' } : { type: 'stoke', station, label: 'Load coal' };
       }
       if (LOCKABLE(station.n) && !taken(station.n)) return { type: 'station', station, label: 'Take ' + station.n };
+      // Players can always bump a bot off a station.
+      const botThere = !player.bot && Object.values(state.players).find((q) => q.bot && q.lock === station.n);
+      if (botThere) return { type: 'station', station, bump: botThere, label: 'Take ' + station.n };
     }
     if (fire) return { type: 'need', label: 'Need an extinguisher' };
     if (hole || hurt || gasHole) return { type: 'need', label: 'Need a hammer' };
@@ -731,6 +734,13 @@ export function createSimulation() {
             shipPuff(act.station.x - 30, PLATFORMS[act.station.d].y - 50, '#ff8c42', 8);
           }
           else if (type === 'station') {
+            if (act.bump) {
+              act.bump.lock = null;
+              act.bump.lockLeft = undefined;
+              act.bump.restCd = 4;
+              act.bump.fire = false;
+              act.bump.x = act.station.x + 50;
+            }
             player.lock = act.station.n;
             player.x = act.station.x;
           } else if (!act || !act.hold) player.actT = performance.now();
@@ -744,7 +754,7 @@ export function createSimulation() {
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
       const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : stationName === 'Gas Valve' ? 'gasvalve' : null;
-      const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && taken(stationName);
+      const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && Object.values(state.players).some((q) => q.lock === stationName && (q.bot ? player.bot : true));
       let label = 'Hey!';
       let hold = false;
       if (player.lock) {
