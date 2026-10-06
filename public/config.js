@@ -216,11 +216,11 @@ export const config = {
     MISS_DX: 1500, // ...then each this-many pixels adds +100%
     MISS_MAX: 0.92,
     // -- Hookshot rope --
-    HOOK_RANGE: 700, // the grapple only catches if the yardarm is this close to our bow
+    HOOK_RANGE: 900, // the grapple only catches if the yardarm is this close to our bow
     SWING_RANGE: 620, // you can only swing across while the rope is hooked and she is this close
     BOARD_LEN: 470, // the winch reels the rope in to this length (pixels)
     REEL_SPEED: 45, // reeling speed (pixels per second)
-    SNAP_LEN: 1000, // the rope snaps if the ships get this far apart
+    SNAP_LEN: 1250, // the rope snaps if the ships get this far apart
     ROPE_K: 5, // taut rope pulls HER back (accel per pixel of stretch)...
     ROPE_DAMP: 1.8, // ...and kills the speed she's pulling away at
     ROPE_MAX_ACC: 700, // strongest rope pull on her
