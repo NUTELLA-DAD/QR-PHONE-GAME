@@ -341,7 +341,15 @@ export const config = {
     BAT_ALIGN: 0.5, // ...and fly the way their neighbours fly
     BAT_SEEK: 1.0, // (how strongly they head for the ship, against the flock urges)
     BAT_FLOCK_RANGE: 400, // who counts as a neighbour
-    BAT_IMPACT: 0.4, // how hard a bat bursting on the ship hits (1 = an enemy bullet)
+    BAT_IMPACT: 0.4, // (now unused: bats latch on instead of bursting) how hard a bat bursting on the ship hits
+    BAT_LATCH_SPEED: 170, // how fast a bat that hit the ship crawls to its landing spot (px/s)
+    BAT_GAS_CHANCE: 0.45, // chance a bat that hits the gasbag settles on it (otherwise it drops to a deck)
+    BAT_GNAW_GAS: 5, // seconds a gasbag bat gnaws before it chews a gas hole
+    BAT_GNAW_DECK: 6, // seconds a deck bat gnaws between breaches...
+    BAT_DECK_DPS: 0.1, // ...and the hull points it chews per second meanwhile
+    BAT_LIFE: 16, // a bat left alone flies off after this many seconds on the ship
+    BAT_SWAT_REACH: 30, // extra reach (px) to swat a bat on the gasbag from the catwalk below it
+    BAT_NOTICE: 220, // a player within this distance of a latched bat gets a 'Swat bat!' button
     BOMBER_SPEED: 120,
     BOMBER_TURN: 0.35, // very wide, slow turns (radians per second)
     BOMBER_FM: { THRUST: 90, DRAG: 1, GRAVITY: 60, STALL_SPEED: 40, MAX_SPEED: 170 }, // flight model overrides

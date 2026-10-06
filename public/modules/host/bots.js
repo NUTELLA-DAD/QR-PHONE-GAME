@@ -80,7 +80,7 @@ function incoming(state) {
     if (d < bestD) (bestD = d), (best = { x, y });
   };
   for (const b of state.bullets) if (!b.miss) consider(b.x, b.y);
-  for (const b of state.bats || []) if (b.delay <= 0 && !b.dead) consider(b.x, b.y);
+  for (const b of state.bats || []) if (b.delay <= 0 && !b.dead && !b.latched) consider(b.x, b.y);
   for (const k of state.rockets || []) if (k.hp > 0) consider(k.x, k.y);
   for (const b of state.enemyBombs || []) if (!b.dead) consider(b.x, b.y);
   return best;
@@ -140,6 +140,8 @@ function listJobs(state, bot) {
   const mods = state.modules || [];
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2 });
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
+  // Bats latched on the ship: swat them before they chew holes (bare hands are enough).
+  for (const b of state.bats || []) if (b.latched && b.landed && b.hp > 0) jobs.push({ kind: 'swat', obj: b, max: 1 });
   // Vents: open one when the pressure is near the top; close them when it's calm again.
   const ventWanted = state.ship.press > config.BOILER.WARN_AT - 3;
   const ventCalm = state.ship.press < config.BOILER.WARN_AT - 14;
@@ -343,6 +345,17 @@ function work(p, state) {
     if (steer(p, goalOf(o), o.x, 45) || (Math.abs(o.y - p.y) < 20 && Math.abs(o.x - p.x) < 70)) {
       p.jx = 0;
       p.face = o.x < p.x ? -1 : 1;
+      if ((p.whackCd || 0) <= 0) {
+        p.atkQ = true;
+        p.whackCd = B.WHACK_EVERY;
+      }
+    }
+  } else if (job.kind === 'swat') {
+    // Walk under/up to the bat and hit the attack button.
+    if (o.hp <= 0 || !o.latched) return;
+    if (steer(p, o.d, o.lx, 40)) {
+      p.jx = 0;
+      p.face = o.lx < p.x ? -1 : 1;
       if ((p.whackCd || 0) <= 0) {
         p.atkQ = true;
         p.whackCd = B.WHACK_EVERY;
