@@ -509,10 +509,19 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.imageSmoothingEnabled = true;
     const px = (mx) => x0 + (mx / (map.W * map.CELL)) * w;
     const py = (my) => y0 + (my / (map.H * map.CELL)) * h;
-    // Beacon.
+    // Outposts (open sky): red while standing, grey once destroyed.
+    for (const o of map.outposts || []) {
+      ctx.fillStyle = o.done ? '#888' : '#e63946';
+      ctx.beginPath();
+      ctx.arc(px(o.x), py(o.y), o.done ? 5 : 8, 0, 7);
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    // Beacon (cave missions).
     const gx = px(map.goal.x);
     const gy = py(map.goal.y);
-    ctx.fillStyle = '#ffd23f';
+    ctx.fillStyle = map.open ? 'rgba(0,0,0,0)' : '#ffd23f';
     ctx.beginPath();
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2 - Math.PI / 2;

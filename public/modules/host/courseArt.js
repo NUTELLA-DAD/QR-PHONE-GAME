@@ -120,7 +120,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     const i1 = Math.ceil((wx1 + dist) / C) + 1;
     const j0 = Math.floor(top / C) - 1;
     const j1 = Math.ceil(bottom / C) + 1;
-    const S = (i, j) => (i < 0 || j < 0 || i >= map.W || j >= map.H ? 1 : map.solid[j * map.W + i]);
+    const S = (i, j) => (j < 0 && map.open && i >= 0 && i < map.W ? 0 : i < 0 || j < 0 || i >= map.W || j >= map.H ? 1 : map.solid[j * map.W + i]);
     // Corner values: how much rock surrounds each grid corner, wobbled a little (fixed to the map)
     // so the edges look like rock rather than blocks.
     const corner = (i, j) => {
@@ -136,9 +136,9 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     const bx1 = Math.min(X(map.W), wx1 + C);
     const by0 = Math.max(0, top);
     const by1 = Math.min(map.H * C, bottom);
-    if (bx1 > bx0 && by1 > by0) ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+    if (!map.open && bx1 > bx0 && by1 > by0) ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
     ctx.fillStyle = 'rgba(70,60,80,.5)';
-    for (let i = i0; i <= i1; i += 3) {
+    for (let i = i0; i <= i1 && !map.open; i += 3) {
       for (let j = j0; j <= j1; j += 3) {
         if (hash(i * 131 + j, 51) > 0.35) continue;
         ctx.beginPath();
@@ -233,6 +233,15 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       ctx.lineTo(x + 13, y - 16);
     }
     ctx.stroke();
+    // Open sky: pine trees on the hills.
+    if (map.open) {
+      ink();
+      ctx.lineWidth = 4;
+      for (const [[ax, ay], [bx2, by2], i, j] of floors) {
+        if (Math.abs(by2 - ay) > 60 || hash(i * 13 + j, 58) > 0.3) continue;
+        pine((ax + bx2) / 2, (ay + by2) / 2 + 6, 1.2 + hash(i, 59), hash(j, 60) < 0.4);
+      }
+    }
     // Under ceilings: stalactites, vines and the odd glowing crystal.
     for (const [[ax, ay], [bx2, by2], i, j] of ceilings) {
       const h = hash(i * 17 + j, 55);
@@ -889,6 +898,16 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.lineTo(x, top - 74);
         ctx.fill();
         ctx.stroke();
+      } else if (m.kind === 'outpost') {
+        // Enemy outpost: a tall pole with the raiders' banner (gone once it's destroyed).
+        const live = state.course.map && state.course.map.outposts.find((o) => o.x === m.mx && !o.done);
+        if (!live) continue;
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(x, g);
+        ctx.lineTo(x, g - 420);
+        ctx.stroke();
+        banner(x + 2, g - 420, 2.4);
       } else if (m.kind === 'checkpoint') {
         // Tall pole with a waving chequered flag.
         const top = g - 640 - LIFT;

@@ -126,7 +126,8 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     // Waves of bats and bombers, coming faster each lap.
     if ((waveT -= dt) > 0) return;
     const pace = Math.max(0.45, 1 - (lap() - 1) * 0.18) / (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
-    waveT = rand(W.EVERY_MIN, W.EVERY_MAX) * pace;
+    // (Open-sky missions already have the outposts shooting: waves come less often.)
+    waveT = rand(W.EVERY_MIN, W.EVERY_MAX) * pace * (c && c.map && c.map.open ? 2 : 1);
     if (state.boss) return; // the boss fight is enough on its own
     const bomberOk = lap() > 1 || (c && c.progress > 0.25);
     const strafersOk = lap() > 1 || (c && c.progress > 0.5);

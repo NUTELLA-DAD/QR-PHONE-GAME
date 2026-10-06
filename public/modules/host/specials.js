@@ -78,7 +78,8 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
     if (lap() === 1 && progress() < 0.1) return;
     if ((timer -= dt) > 0) return;
     const pace = (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
-    timer = rand(SP.EVERY_MIN, SP.EVERY_MAX) / pace / (1 + (lap() - 1) * 0.15);
+    const open = state.course && state.course.map && state.course.map.open;
+    timer = (rand(SP.EVERY_MIN, SP.EVERY_MAX) / pace / (1 + (lap() - 1) * 0.15)) * (open ? 2 : 1);
     const pool = [spawnSaws, spawnImps, spawnSniper];
     if (lap() > 1 || progress() > 0.3) pool.push(spawnTug, spawnTug);
     pool[(Math.random() * pool.length) | 0]();

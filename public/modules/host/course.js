@@ -10,7 +10,7 @@
 // World y grows downward; the ship is drawn shifted up by its altitude (alt).
 import { config } from '../../config.js';
 import { pop } from './popups.js';
-import { makeMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead } from './maps.js';
+import { makeMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell } from './maps.js';
 
 const K = config.COURSE;
 const TOP = -1400; // where ceilings start (far above the view)
@@ -595,7 +595,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
       t.aim = Math.atan2(ty - t.y, 800 - wx);
       if (Math.hypot(800 - wx, ty - t.y) > K.TURRET_RANGE || state.ship.down) continue;
       if ((t.cd -= dt) <= 0) {
-        t.cd = r(K.TURRET_FIRE_MIN, K.TURRET_FIRE_MAX) / (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
+        t.cd = (r(K.TURRET_FIRE_MIN, K.TURRET_FIRE_MAX) / (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace) * (course.map && course.map.open ? 1.3 : 1);
         const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
         const miss = course.rand() < K.FLAK_MISS || (helm && Math.abs(helm.jy) > 0.3 && course.rand() < 0.4);
         const tx = 300 + course.rand() * 1000;
@@ -735,12 +735,34 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     const map = course.map;
     const sx = course.dist + 800;
     const sy = 500 - state.ship.alt;
+    course.dusk += (0 - course.dusk) * 0.02;
+    if (map.open) {
+      // Open sky: knock out every outpost (all its guns), nearest first.
+      for (const o of map.outposts) if (!o.done && course.turrets.filter((t) => t.outpost === map.outposts.indexOf(o)).every((t) => t.dead)) {
+        o.done = true;
+        state.ev.warn = 3;
+        state.ev.warnText = 'OUTPOST DESTROYED!';
+      }
+      const left = map.outposts.filter((o) => !o.done);
+      course.progress = Math.min(0.99, 1 - left.length / map.outposts.length);
+      if (left.length && (!course.target || course.target.done)) {
+        course.target = left.sort((a, b) => Math.hypot(a.x - sx, a.y - sy) - Math.hypot(b.x - sx, b.y - sy))[0];
+        setGoal(map, stationCell(map, course.target));
+      }
+      if (!left.length && !course.done) {
+        course.done = true;
+        state.ship.hull = Math.min(100, state.ship.hull + K.CHECKPOINT_REPAIR);
+        state.ev.warn = 4;
+        state.ev.warnText = 'ALL OUTPOSTS DOWN! MISSION ' + course.lap + ' COMPLETE';
+        course.pendingNext = true;
+        if (onMarker) onMarker({ kind: 'home', lap: course.lap + 1 });
+      }
+      return;
+    }
     const d = distToGoal(map, sx, sy);
     if (Number.isFinite(d)) course.progress = Math.max(0, Math.min(0.99, 1 - d / Math.max(1, map.startDist)));
-    course.dusk += (0 - course.dusk) * 0.02;
     if (!course.done && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS) {
       course.done = true;
-      course.markers[1].passed = true;
       state.ship.hull = Math.min(100, state.ship.hull + K.CHECKPOINT_REPAIR);
       state.ev.warn = 4;
       state.ev.warnText = 'BEACON REACHED! MISSION ' + course.lap + ' COMPLETE';
@@ -784,7 +806,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
       const p = mapPlan(state, 0.5);
       const h = p.dx > 300 ? 'AHEAD' : p.dx < -300 ? 'BACK' : '';
       const v = p.dy < -250 ? 'UP (pump the gas!)' : p.dy > 250 ? 'DOWN (vent the gas!)' : '';
-      return h || v ? 'Way to the beacon: ' + [v, h].filter(Boolean).join(' and ') : '';
+      return h || v ? (course.map.open ? 'Next outpost: ' : 'Way to the beacon: ') + [v, h].filter(Boolean).join(' and ') : course.map.open ? 'Outpost below - guns and bombs!' : '';
     }
     const w = altWindow(state, 2.5);
     const alt = state.ship.alt;
@@ -855,16 +877,19 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
         cx: t.mx,
         mx: t.mx,
         my: t.my,
-        hp: K.TURRET_HP,
+        hp: map.open ? 2 : K.TURRET_HP,
         cd: r(2, K.TURRET_FIRE_MAX),
         aim: -Math.PI / 2,
         dead: false,
         rocket: course.rand() < K.ROCKET_SHARE * d + 0.1,
+        outpost: t.outpost,
       })),
+      target: map.open ? map.outposts[0] : null,
       markers: [
         { kind: 'home', mx: map.start.x, my: floorBelow(map, map.start.x, map.start.y), top: map.start.y + 300, passed: true },
-        { kind: 'beacon', mx: map.goal.x, my: floorBelow(map, map.goal.x, map.goal.y), passed: false },
-      ],
+        map.open ? null : { kind: 'beacon', mx: map.goal.x, my: floorBelow(map, map.goal.x, map.goal.y), passed: false },
+        ...map.outposts.map((o) => ({ kind: 'outpost', mx: o.x, my: o.y, passed: false })),
+      ].filter(Boolean),
     });
     course.lastMarker = course.markers[0];
     course.homeAlt = 500 - map.start.y;
@@ -874,7 +899,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     state.rockets.length = 0;
     if (state.shipBombs) state.shipBombs.length = 0;
     state.ev.warn = 4;
-    state.ev.warnText = 'MISSION ' + n + ': REACH THE BEACON!';
+    state.ev.warnText = map.open ? 'MISSION ' + n + ': DESTROY ' + map.outposts.length + ' OUTPOSTS!' : 'MISSION ' + n + ': REACH THE BEACON!';
   }
 
   // A brand-new game: fresh terrain from the home mast, lap 1.

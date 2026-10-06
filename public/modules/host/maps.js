@@ -16,8 +16,22 @@ export const SHIP_BOX = { left: -900, right: 870, up: -570, down: 485 };
 export function makeMap(kind, level, rand) {
   let map = null;
   for (let tries = 0; tries < 12; tries++) {
-    map = buildMap(kind, level, rand);
-    if (map.startDist < 1e9) return map;
+    map = kind === 'open' ? buildOpenMap(level, rand) : buildMap(kind, level, rand);
+    if (map.startDist >= 1e9) continue;
+    if (map.open) {
+      // Every outpost must be reachable too.
+      const C = map.CELL;
+      const si = Math.floor(map.start.x / C);
+      const sj = Math.floor(map.start.y / C);
+      const ok = map.outposts.every((o) => {
+        setGoal(map, stationCell(map, o));
+        return map.dist[sj * map.W + si] < 1e9;
+      });
+      setGoal(map, stationCell(map, map.outposts[0]));
+      map.startDist = map.dist[sj * map.W + si];
+      if (!ok) continue;
+    }
+    return map;
   }
   return map;
 }
@@ -106,52 +120,6 @@ function buildMap(kind, level, rand) {
     }
   }
 
-  // Where the ship's centre can be (its whole box clear of rock), and the distance from there to
-  // the goal along the way the ship fits (for the autopilot, bots, minimap and hints).
-  const pre = new Int32Array((W + 1) * (H + 1));
-  for (let jj = 0; jj < H; jj++) {
-    for (let ii = 0; ii < W; ii++) pre[(jj + 1) * (W + 1) + ii + 1] = solid[idx(ii, jj)] + pre[jj * (W + 1) + ii + 1] + pre[(jj + 1) * (W + 1) + ii] - pre[jj * (W + 1) + ii];
-  }
-  const rockIn = (i0, j0, i1, j1) => {
-    if (i0 < 0 || j0 < 0 || i1 >= W || j1 >= H) return 1;
-    return pre[(j1 + 1) * (W + 1) + i1 + 1] - pre[j0 * (W + 1) + i1 + 1] - pre[(j1 + 1) * (W + 1) + i0] + pre[j0 * (W + 1) + i0];
-  };
-  const bl = Math.ceil(-SHIP_BOX.left / C);
-  const br = Math.ceil(SHIP_BOX.right / C);
-  const bu = Math.ceil(-SHIP_BOX.up / C);
-  const bd = Math.ceil(SHIP_BOX.down / C);
-  const fit = new Uint8Array(W * H);
-  for (let jj = 0; jj < H; jj++) for (let ii = 0; ii < W; ii++) fit[idx(ii, jj)] = rockIn(ii - bl, jj - bu, ii + br, jj + bd) === 0 ? 1 : 0;
-
-  const start = rooms[0];
-  const goal = rooms[rooms.length - 1];
-  const nearestFit = (ci, cj) => {
-    let best = null;
-    for (let d = 0; d < 20 && !best; d++) {
-      for (let dj = -d; dj <= d && !best; dj++) for (let di = -d; di <= d; di++) if (fit[idx(Math.max(0, Math.min(W - 1, ci + di)), Math.max(0, Math.min(H - 1, cj + dj)))]) { best = { i: ci + di, j: cj + dj }; break; }
-    }
-    return best || { i: ci, j: cj };
-  };
-  const s = nearestFit(start.i, start.j);
-  const g = nearestFit(goal.i, goal.j);
-  const dist = new Int32Array(W * H).fill(1e9);
-  const queue = [idx(g.i, g.j)];
-  dist[queue[0]] = 0;
-  for (let q = 0; q < queue.length; q++) {
-    const c = queue[q];
-    const ci = c % W;
-    const cj = (c - ci) / W;
-    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const ni = ci + di;
-      const nj = cj + dj;
-      if (ni < 0 || nj < 0 || ni >= W || nj >= H) continue;
-      const nc = idx(ni, nj);
-      if (!fit[nc] || dist[nc] <= dist[c] + 1) continue;
-      dist[nc] = dist[c] + 1;
-      queue.push(nc);
-    }
-  }
-
   // Floor guns around the caverns (not in the start cavern).
   const turrets = [];
   for (const rm of rooms.slice(1)) {
@@ -165,28 +133,169 @@ function buildMap(kind, level, rand) {
       turrets.push({ mx: (ii + 0.5) * C, my: (jj + 1) * C });
     }
   }
+  const map = { kind, level, CELL: C, W, H, solid, turrets, outposts: [] };
+  finishMap(map, rooms[0], rooms[rooms.length - 1]);
+  return map;
+}
 
-  return {
-    kind,
-    level,
-    CELL: C,
-    W,
-    H,
-    solid,
-    fit,
-    dist,
-    start: { x: (s.i + 0.5) * C, y: (s.j + 0.5) * C },
-    goal: { x: (g.i + 0.5) * C, y: (g.j + 0.5) * C },
-    startDist: dist[idx(s.i, s.j)],
-    turrets,
-    rooms: rooms.map((q) => ({ x: q.i * C, y: q.j * C })),
+// Open sky: hills and mountains below, floating rock islands, and enemy outposts (gun nests and
+// rocket batteries) to destroy in any order.
+function buildOpenMap(level, rand) {
+  const M = config.MAPS;
+  const C = M.CELL;
+  const r = (a, b) => a + rand() * (b - a);
+  const ri = (a, b) => Math.floor(r(a, b + 1));
+  const W = Math.round(M.OPEN_WIDTH + M.WIDTH_PER_LEVEL * (level - 1));
+  const H = Math.round(M.OPEN_HEIGHT + M.HEIGHT_PER_LEVEL * (level - 1));
+  const solid = new Uint8Array(W * H);
+  const idx = (i, j) => j * W + i;
+  // Ground: rolling hills with a few tall mountains.
+  const s1 = r(0, 6);
+  const s2 = r(0, 6);
+  const peaks = Array.from({ length: 3 + level }, () => ({ i: ri(30, W - 20), h: r(10, H * 0.55), w: r(6, 14) }));
+  const groundTop = (i) => {
+    let h = 5 + 3 * Math.sin(i * 0.07 + s1) + 2 * Math.sin(i * 0.19 + s2);
+    for (const p of peaks) h = Math.max(h, p.h * Math.max(0, 1 - Math.abs(i - p.i) / p.w));
+    return Math.round(H - 3 - h);
   };
+  const tops = [];
+  for (let i = 0; i < W; i++) {
+    const t = i < 26 ? H - 6 : groundTop(i); // flat ground under the start
+    tops.push(t);
+    for (let j = t; j < H; j++) solid[idx(i, j)] = 1;
+  }
+  // Floating islands.
+  const islands = [];
+  for (let k = 0; k < 5 + level; k++) {
+    const ci = ri(34, W - 16);
+    const cj = ri(8, Math.max(9, tops[ci] - 18));
+    const rx = r(4, 9);
+    const ry = r(2.5, 4.5);
+    islands.push({ i: ci, j: cj, rx, ry });
+    for (let j = Math.floor(cj - ry); j <= Math.ceil(cj + ry * 1.8); j++) {
+      for (let i = Math.floor(ci - rx); i <= Math.ceil(ci + rx); i++) {
+        if (i < 0 || j < 2 || i >= W || j >= H) continue;
+        const u = (i - ci) / rx;
+        const v = j < cj ? (j - cj) / ry : (j - cj) / (ry * 1.8); // rounded top, pointy bottom
+        if (u * u + v * v <= 1) solid[idx(i, j)] = 1;
+      }
+    }
+  }
+  // Outposts: gun nests on the ground or on island tops, spread along the map.
+  const outposts = [];
+  const n = M.OUTPOSTS + Math.floor(level / 2);
+  for (let k = 0; k < n; k++) {
+    const want = Math.round(40 + ((W - 55) * (k + 0.5)) / n);
+    let ci = want;
+    let surface = tops[ci];
+    const isl = islands.find((q) => Math.abs(q.i - want) < 12 && rand() < 0.5);
+    if (isl) {
+      ci = isl.i;
+      surface = Math.floor(isl.j - isl.ry) + 1;
+      while (surface > 2 && solid[idx(ci, surface - 1)]) surface--;
+    }
+    const guns = [];
+    for (const di of (level >= 5 ? [-3, 0, 3] : [-2, 2])) {
+      const i = ci + di;
+      if (i < 0 || i >= W) continue;
+      let j = surface - 3;
+      while (j < H - 1 && !solid[idx(i, j + 1)]) j++;
+      if (j > surface + 1) continue; // (the ground drops away here: keep the guns together)
+      guns.push({ mx: (i + 0.5) * C, my: (j + 1) * C, outpost: k });
+    }
+    if (!guns.length) {
+      let j = surface - 3;
+      while (j < H - 1 && !solid[idx(ci, j + 1)]) j++;
+      guns.push({ mx: (ci + 0.5) * C, my: (j + 1) * C, outpost: k });
+    }
+    outposts.push({ x: (ci + 0.5) * C, y: surface * C, done: false });
+    for (const g of guns) g.outpost = outposts.length - 1;
+    outposts[outposts.length - 1].guns = guns;
+  }
+  const turrets = outposts.flatMap((o) => o.guns);
+  const map = { kind: 'open', level, CELL: C, W, H, solid, turrets, outposts, open: true };
+  // Aim first for the station above the first outpost.
+  finishMap(map, { i: 12, j: H - 14 }, stationCell(map, outposts[0]));
+  return map;
+}
+
+// Where the ship should hover to attack an outpost: high above it, in open air.
+export function stationCell(map, o) {
+  const C = map.CELL;
+  // (Shifted so the bomb bay, which is behind the ship's middle, sits right over the outpost.)
+  return { i: Math.floor((o.x + 300) / C), j: Math.max(4, Math.floor(o.y / C) - 7) };
+}
+
+// Work out where the ship fits, then the route to the goal from everywhere.
+function finishMap(map, startCell, goalCell) {
+  const { W, H, CELL: C, solid } = map;
+  const idx = (i, j) => j * W + i;
+  const pre = new Int32Array((W + 1) * (H + 1));
+  for (let jj = 0; jj < H; jj++) {
+    for (let ii = 0; ii < W; ii++) pre[(jj + 1) * (W + 1) + ii + 1] = solid[idx(ii, jj)] + pre[jj * (W + 1) + ii + 1] + pre[(jj + 1) * (W + 1) + ii] - pre[jj * (W + 1) + ii];
+  }
+  const rockIn = (i0, j0, i1, j1) => {
+    if (i0 < 0 || i1 >= W || j1 >= H) return 1;
+    if (j0 < 0) {
+      if (!map.open) return 1;
+      j0 = 0; // open sky above the map top
+    }
+    return pre[(j1 + 1) * (W + 1) + i1 + 1] - pre[j0 * (W + 1) + i1 + 1] - pre[(j1 + 1) * (W + 1) + i0] + pre[j0 * (W + 1) + i0];
+  };
+  const bl = Math.ceil(-SHIP_BOX.left / C);
+  const br = Math.ceil(SHIP_BOX.right / C);
+  const bu = Math.ceil(-SHIP_BOX.up / C);
+  const bd = Math.ceil(SHIP_BOX.down / C);
+  map.fit = new Uint8Array(W * H);
+  for (let jj = 0; jj < H; jj++) for (let ii = 0; ii < W; ii++) map.fit[idx(ii, jj)] = rockIn(ii - bl, jj - bu, ii + br, jj + bd) === 0 ? 1 : 0;
+  const s = nearestFit(map, startCell.i, startCell.j);
+  map.start = { x: (s.i + 0.5) * C, y: (s.j + 0.5) * C };
+  setGoal(map, goalCell);
+  map.startDist = map.dist[idx(s.i, s.j)];
+}
+
+function nearestFit(map, ci, cj) {
+  for (let d = 0; d < 30; d++) {
+    for (let dj = -d; dj <= d; dj++) {
+      for (let di = -d; di <= d; di++) {
+        const i = ci + di;
+        const j = cj + dj;
+        if (i >= 0 && j >= 0 && i < map.W && j < map.H && map.fit[j * map.W + i]) return { i, j };
+      }
+    }
+  }
+  return { i: ci, j: cj };
+}
+
+// Point the route at a new goal cell (distance field from there to everywhere the ship fits).
+export function setGoal(map, goalCell) {
+  const { W, H, CELL: C } = map;
+  const g = nearestFit(map, goalCell.i, goalCell.j);
+  map.goal = { x: (g.i + 0.5) * C, y: (g.j + 0.5) * C };
+  const dist = (map.dist = new Int32Array(W * H).fill(1e9));
+  const queue = [g.j * W + g.i];
+  dist[queue[0]] = 0;
+  for (let q = 0; q < queue.length; q++) {
+    const c = queue[q];
+    const ci = c % W;
+    const cj = (c - ci) / W;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = ci + di;
+      const nj = cj + dj;
+      if (ni < 0 || nj < 0 || ni >= W || nj >= H) continue;
+      const nc = nj * W + ni;
+      if (!map.fit[nc] || dist[nc] <= dist[c] + 1) continue;
+      dist[nc] = dist[c] + 1;
+      queue.push(nc);
+    }
+  }
 }
 
 // ---------- Queries (map coordinates) ----------
 export function solidAt(map, mx, my) {
   const i = Math.floor(mx / map.CELL);
   const j = Math.floor(my / map.CELL);
+  if (j < 0 && map.open && i >= 0 && i < map.W) return false; // open sky above
   if (i < 0 || j < 0 || i >= map.W || j >= map.H) return true;
   return map.solid[j * map.W + i] === 1;
 }

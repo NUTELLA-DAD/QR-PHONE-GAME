@@ -68,6 +68,14 @@ function incoming(state) {
   return best;
 }
 
+// How useful manning a gun is right now: one that can hit a ground target (outposts) ranks
+// highest, then any gun with something in reach.
+function gunReach(state, n) {
+  const best = bestTarget(state, state.GUNS[n]);
+  if (!best) return 2;
+  return best.target.kind === 'turret' ? 0.8 : 1;
+}
+
 // Things below and ahead worth bombing, as world x ranges: live turrets and buildings.
 function groundTargets(state) {
   const c = state.course;
@@ -129,17 +137,19 @@ function listJobs(state, bot) {
   if (bot.carry === 'hammer') jobs.push(...leaks, ...broken, ...holes, ...fires);
   else jobs.push(...fires, ...leaks, ...broken, ...holes);
   for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open) jobs.push({ kind: 'valve', obj: m, max: 1 });
-  for (const m of mods) if (!m.broken && m.hp < 60) jobs.push({ kind: 'repair', obj: m, max: 1 });
+  // Stations, most useful first. The vital ones (helm, gas valve, a gun or weapon with a target
+  // right now) come before chores like topping up coal or patching dents.
+  const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
+  const reach = (n) => (n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
+  const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
+  for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1 });
   if ((state.ship.fuel < 25 && state.ship.press < config.BOILER.WARN_AT - 25) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
+  for (const m of mods) if (!m.broken && m.hp < 60) jobs.push({ kind: 'repair', obj: m, max: 1 });
   const guns = GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   if (state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 1 });
-  // Helm and boiler first, then guns that can reach the enemy right now. Skip broken ones.
-  const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
-  const reach = (n) => (n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : firingSolution(state, state.GUNS[n]) !== null ? 1 : 2);
-  const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
-  for (const n of open) jobs.push({ kind: 'station', obj: n, max: 1 });
+  for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1 });
   return jobs;
 }
 
@@ -159,7 +169,9 @@ function chooseJob(state, bot, bots) {
     const y = o.d != null ? L.platforms[o.d].y : o.y;
     return Math.abs(o.x - bot.x) + Math.abs(y - bot.y) * 3;
   };
-  return jobs.filter((j) => j.kind === kind).sort((a, b) => dist(a) - dist(b))[0];
+  // (Stations come in order of usefulness: weigh that over walking distance.)
+  const rank = (j) => (kind === 'station' ? jobs.indexOf(j) * 900 : 0);
+  return jobs.filter((j) => j.kind === kind).sort((a, b) => rank(a) + dist(a) - rank(b) - dist(b))[0];
 }
 
 // Work a manned station (bot is locked in).

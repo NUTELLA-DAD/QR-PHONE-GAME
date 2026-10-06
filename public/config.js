@@ -176,7 +176,8 @@ export const config = {
   // mission is a fresh map; reach the beacon to finish it (scorecard, upgrade vote, next map).
   MAPS: {
     ENABLED: true,
-    KINDS: ['network', 'route'], // mission types in turn: branching caves, one winding passage
+    KINDS: ['network', 'route', 'open'], // mission types in turn: branching caves, one winding
+    // passage, open sky with outposts to destroy
     CELL: 200, // size of one map square (pixels)
     WIDTH: 170, // map size in squares for mission 1...
     HEIGHT: 60,
@@ -187,6 +188,9 @@ export const config = {
     TUNNEL_CELLS: 8, // tunnel height (the ship needs 7)
     SHAFT_CELLS: 12, // shaft width (the ship needs 11)
     GOAL_RADIUS: 700, // how close to the beacon counts as reaching it
+    OPEN_WIDTH: 190, // open-sky map size (squares) for its first mission
+    OPEN_HEIGHT: 50,
+    OUTPOSTS: 3, // outposts to destroy on an open-sky map (more later)
   },
   // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
   WAVES: {

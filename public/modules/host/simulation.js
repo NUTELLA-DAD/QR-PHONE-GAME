@@ -911,6 +911,7 @@ export function createSimulation() {
     onMarker,
     squadrons,
     specials,
+    course,
     puff,
     setSocket,
     countPlayers: () => Object.keys(state.players).length,
