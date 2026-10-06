@@ -220,7 +220,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     for (const p of state.bombers || []) items.push({ x: p.x, y: p.y, color: '#3d3a40', label: 'BOMBER' });
     if ((state.strafers || []).length) items.push({ x: state.strafers[0].x, y: state.strafers[0].y, color: '#26221f', label: 'SQUADRON' });
     if (state.boss) items.push({ x: state.boss.x, y: state.boss.y, color: '#5c1e1e', label: 'BOSS' });
-    const bat = (state.bats || []).find((b) => b.delay <= 0);
+    const bat = (state.bats || []).find((b) => b.delay <= 0 && !b.latched);
     if (bat) items.push({ x: bat.x, y: bat.y, color: '#3b2c4c', label: 'BATS' });
     const SP = state.specials;
     if (SP) {
@@ -273,9 +273,76 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
   };
 
   // ---- Wave enemies ----
+  // A bat stuck to the ship: wings folded round its body, head bobbing as it gnaws, with a pulsing
+  // ring and "!" so the crew notice it. Gasbag bats hang upside down under the envelope.
+  const drawLatchedBat = (b, time) => {
+    const hang = b.kind === 'gas';
+    const bob = Math.sin(b.phase * 0.9) * 2.5;
+    const pulse = 0.5 + 0.5 * Math.sin(time * 7);
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    // pulsing marker ring
+    ctx.strokeStyle = `rgba(255,59,48,${0.35 + pulse * 0.5})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, 34 + pulse * 8, 0, 7);
+    ctx.stroke();
+    ctx.scale(1.7, hang ? -1.7 : 1.7);
+    ink();
+    ctx.lineWidth = 3;
+    ctx.fillStyle = '#3b2c4c';
+    // folded wings (two pointed shapes hugging the body)
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * 3, -8);
+      ctx.lineTo(side * 15, 0);
+      ctx.lineTo(side * 11, 11);
+      ctx.lineTo(side * 2, 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.ellipse(0, 2, 8, 10, 0, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+    // head with ears, bobbing
+    ctx.beginPath();
+    ctx.moveTo(-6, -7 + bob);
+    ctx.lineTo(-5, -15 + bob);
+    ctx.lineTo(-1, -9 + bob);
+    ctx.lineTo(1, -9 + bob);
+    ctx.lineTo(5, -15 + bob);
+    ctx.lineTo(6, -7 + bob);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ff3b30';
+    ctx.beginPath();
+    ctx.arc(-2.5, -8 + bob, 1.6, 0, 7);
+    ctx.arc(2.5, -8 + bob, 1.6, 0, 7);
+    ctx.fill();
+    ctx.restore();
+    // "!" marker above (or below, for a hanging bat)
+    ctx.save();
+    ctx.translate(b.x, b.y + (hang ? 62 : -62));
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = `rgba(255,59,48,${0.6 + pulse * 0.4})`;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 4;
+    ctx.strokeText('!', 0, 0);
+    ctx.fillText('!', 0, 0);
+    ctx.restore();
+  };
+
   const drawBats = (time) => {
     for (const b of state.bats || []) {
       if (b.delay > 0) continue;
+      if (b.latched && b.landed) {
+        drawLatchedBat(b, time);
+        continue;
+      }
       const flap = Math.sin(b.phase * 1.4);
       ctx.save();
       ctx.translate(b.x, b.y);

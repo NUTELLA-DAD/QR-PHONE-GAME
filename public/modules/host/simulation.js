@@ -169,6 +169,12 @@ export function createSimulation() {
     return null;
   };
 
+  // The nearest latched bat this player can swat (same deck; gasbag bats are swatted from the catwalk), or null.
+  const batInReach = (player, range, extra = 0) =>
+    state.bats
+      .filter((b) => b.latched && b.landed && b.hp > 0 && b.d === player.d && Math.abs(b.lx - player.x) < range + extra + (b.kind === 'gas' ? config.WAVES.BAT_SWAT_REACH : 0))
+      .sort((a, b) => Math.abs(a.lx - player.x) - Math.abs(b.lx - player.x))[0] || null;
+
   // Attack button: a sword hurts raiders; bare hands only shove them back.
   const attack = (player) => {
     if ((player.atkCd || 0) > 0 || player.lock || player.conn != null) return;
@@ -180,6 +186,18 @@ export function createSimulation() {
       .filter((b) => !b.fall && b.conn == null && b.d === player.d && Math.abs(b.x - player.x) < range)
       .sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0];
     if (!target) {
+      // A bat latched on this deck (or hanging under the gasbag, above the catwalk): one hit is enough.
+      const bat = batInReach(player, range);
+      if (bat) {
+        bat.hp = 0;
+        state.kills += 1;
+        player.face = bat.x < player.x ? -1 : 1;
+        puff(bat.x, bat.y, '#4a3b5c', 10);
+        pop(state, bat.x, bat.y - 30, 'bat', '#c9a0ff', 0.9);
+        stat(player, 'bats');
+        phoneFx(player, '+1 Bat swatted!', [30, 40, 30]);
+        return;
+      }
       if (gunship.hitCrew(player, sword, range)) {
         stat(player, 'raiders');
         if (sword) pop(state, player.x + player.face * 60, player.y - 110 - state.ship.alt, 'whack', '#ffffff', 0.8);
@@ -504,7 +522,17 @@ export function createSimulation() {
 
   const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip });
 
-  const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit });
+  // A latched bat chews a hole: a gasbag leak, or a breach in the deck it sits on (ship coordinates).
+  const gnaw = (kind, x, y, d) => {
+    shipPuff(x, y, '#4a3b5c', 6);
+    if (kind === 'gas') {
+      if (state.gasHoles.length < config.GAS.MAX_HOLES) state.gasHoles.push(gasHoleAt(x, y));
+    } else if (state.breaches.length < 10) {
+      const p = PLATFORMS[d];
+      state.breaches.push({ x: clamp(x, p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d, prog: 0 });
+    }
+  };
+  const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
   const coil = createCoil({ state, puff, credit });
   const gunship = createGunship({ state, puff, impact, credit });
@@ -782,7 +810,7 @@ export function createSimulation() {
       if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag full - she is rising' : 'Gasbag low - she is dropping';
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
       const ammoText = gun ? gun.ammo : stationName === 'Bomb Bay' ? state.bombBay.bombs : null;
-      const attackLabel = player.carry === 'sword' ? 'Swing' : 'Shove';
+      const attackLabel = !player.lock && player.conn == null && batInReach(player, config.WAVES.BAT_NOTICE) ? 'Swat bat!' : player.carry === 'sword' ? 'Swing' : 'Shove';
       const hull = Math.round(state.ship.hull / 5) * 5;
       const key = [stationName, kind, !!player.lock, takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull].join('|');
       if (key !== player.uk) {
@@ -979,7 +1007,7 @@ export function createSimulation() {
 
     // The shield also swats bats, rockets and falling bombs.
     if (state.shield.on) {
-      for (const b of state.bats) if (b.delay <= 0 && !b.dead && shieldBlocks(b.x, b.y)) (b.dead = true), (state.kills += 1);
+      for (const b of state.bats) if (b.delay <= 0 && !b.dead && !b.latched && shieldBlocks(b.x, b.y)) (b.dead = true), (state.kills += 1);
       for (const k of state.rockets || []) if (k.hp > 0 && shieldBlocks(k.x, k.y)) k.hp = 0;
       for (const b of state.enemyBombs) if (!b.dead && shieldBlocks(b.x, b.y)) b.dead = true;
     }

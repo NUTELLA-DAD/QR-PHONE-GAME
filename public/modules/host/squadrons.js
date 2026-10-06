@@ -1,5 +1,6 @@
 // More enemy types, sent in waves that ramp up with each lap:
-//   Bat swarm   - small fast bats that dive at the ship and burst on contact.
+//   Bat swarm   - small fast bats that dive at the ship and LATCH ON (gasbag or a deck), gnawing
+//                 holes until the crew swat them (attack button) or they flap away.
 //   Bomber      - slow heavy plane crossing overhead, dropping bombs (shoot them down, or the bombs).
 //   Dogfighters - a squadron of small skeleton biplanes (after Bomber XXL): they circle the ship in
 //                 wide arcs, peel off one at a time for a diving gun pass, loop away and come round
@@ -17,7 +18,7 @@ const W = config.WAVES;
 const B = SHIP_LAYOUT.bounds;
 const rand = (a, b) => a + Math.random() * (b - a);
 
-export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, credit }) {
+export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, credit, gnaw, damageHull }) {
   state.bats = [];
   state.bombers = [];
   state.enemyBombs = [];
@@ -158,7 +159,17 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   const updateBats = (dt) => {
     for (const b of state.bats) {
       if ((b.delay -= dt) > 0) continue;
+      if (b.latched) {
+        updateLatched(b, dt);
+        continue;
+      }
       b.phase += dt * 14;
+      if (b.leaving) {
+        b.age += dt;
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        continue;
+      }
       // Steer toward their chosen spot on the ship, fluttering.
       const tx = b.tx;
       const ty = b.ty - state.ship.alt;
@@ -176,7 +187,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       let ay = 0;
       let n = 0;
       for (const o of state.bats) {
-        if (o === b || o.delay > 0) continue;
+        if (o === b || o.delay > 0 || o.latched || o.leaving) continue;
         const ox = o.x - b.x;
         const oy = o.y - b.y;
         const od = Math.hypot(ox, oy);
@@ -205,13 +216,83 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       b.x += b.vx * dt;
       b.y += b.vy * dt + Math.sin(b.phase) * 40 * dt;
       b.y = keepClear(state, b.x, b.y, 30);
-      if (!b.dead && !state.ship.down && touches(b.x, b.y, 14)) {
-        b.dead = true;
-        puff(b.x, b.y, '#4a3b5c', 10);
-        impact(b.x, b.y + state.ship.alt, W.BAT_IMPACT);
+      if (!b.dead && !state.ship.down && touches(b.x, b.y, 14)) latchOn(b);
+    }
+    state.bats = state.bats.filter((b) => !b.dead && b.hp > 0 && Math.abs(b.x - 800) < 6000 && !(b.leaving && b.age > W.BAT_LIFE + 4));
+  };
+
+  // A bat that reached the ship picks a landing spot (ship coordinates: lx, ls) and crawls to it:
+  // the gasbag's underside (above the catwalk) or the nearest deck floor.
+  const latchOn = (b) => {
+    const P = SHIP_LAYOUT.platforms;
+    const GB = SHIP_LAYOUT.gasbag;
+    const cat = P.findIndex((p) => p.id === 'catwalk');
+    const sx = b.x;
+    const sy = b.y + state.ship.alt;
+    // (a little generous: a bat grazing the envelope's skin counts as hitting the gasbag)
+    const hitGas = ((sx - GB.cx) / (GB.rx * 1.15)) ** 2 + ((sy - GB.cy) / (GB.ry * 1.2)) ** 2 < 1 && sy < 455;
+    b.latched = true;
+    b.age = 0;
+    b.gnawT = 0;
+    b.vx = 0;
+    b.vy = 0;
+    if (hitGas && Math.random() < W.BAT_GAS_CHANCE) {
+      b.kind = 'gas';
+      b.d = cat;
+      b.lx = Math.max(P[cat].x0 + 40, Math.min(P[cat].x1 - 40, sx));
+      b.ls = GB.cy + GB.ry * Math.sqrt(Math.max(0, 1 - ((b.lx - GB.cx) / GB.rx) ** 2)) - 18;
+    } else {
+      let best = -1;
+      P.forEach((p, i) => {
+        if (p.id === 'nest' || p.id === 'pod' || p.id === 'hangar') return;
+        if (best < 0 || Math.abs(p.y - sy) < Math.abs(P[best].y - sy)) best = i;
+      });
+      b.kind = 'deck';
+      b.d = best;
+      b.lx = Math.max(P[best].x0 + 40, Math.min(P[best].x1 - 40, sx));
+      b.ls = P[best].y - 16;
+    }
+  };
+
+  // Latched bats live in ship coordinates (lx, ls) and are mirrored into b.x / b.y each frame.
+  const updateLatched = (b, dt) => {
+    b.phase += dt * 14;
+    b.age += dt;
+    if (state.ship.down || b.age > W.BAT_LIFE) {
+      b.latched = false;
+      b.leaving = true;
+      b.vx = (Math.random() < 0.5 ? -1 : 1) * W.BAT_SPEED;
+      b.vy = -W.BAT_SPEED * 0.6;
+      b.age = W.BAT_LIFE;
+      return;
+    }
+    if (!b.landed) {
+      const dx = b.lx - b.x;
+      const dy = b.ls - (b.y + state.ship.alt);
+      const d = Math.hypot(dx, dy);
+      const step = Math.min(W.BAT_LATCH_SPEED * dt, d);
+      if (d > 4) {
+        b.x += (dx / d) * step;
+        b.y += (dy / d) * step;
+        return;
+      }
+      b.landed = true;
+    }
+    // Settled: stuck to the ship (follows its altitude) and gnawing.
+    b.x = b.lx;
+    b.y = b.ls - state.ship.alt;
+    b.gnawT += dt;
+    if (b.kind === 'gas' && b.gnawT >= W.BAT_GNAW_GAS) {
+      gnaw('gas', b.lx, b.ls, b.d);
+      b.age = Math.max(b.age, W.BAT_LIFE - 1.5); // job done: it flaps off soon
+      b.gnawT = -999;
+    } else if (b.kind === 'deck') {
+      damageHull(W.BAT_DECK_DPS * dt);
+      if (b.gnawT >= W.BAT_GNAW_DECK) {
+        b.gnawT = 0;
+        gnaw('deck', b.lx, b.ls, b.d);
       }
     }
-    state.bats = state.bats.filter((b) => !b.dead && b.hp > 0 && Math.abs(b.x - 800) < 6000);
   };
 
   const updateBombers = (dt) => {
@@ -391,7 +472,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     for (const s of state.shells) {
       if (s.life <= 0) continue;
       for (const b of state.bats) {
-        if (b.hp > 0 && Math.hypot(s.x - b.x, s.y - b.y) < 26) {
+        if (b.hp > 0 && !b.latched && Math.hypot(s.x - b.x, s.y - b.y) < 26) {
           s.life = 0;
           b.hp = 0;
           state.kills += 1;
