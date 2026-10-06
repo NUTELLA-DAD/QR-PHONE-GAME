@@ -1,4 +1,87 @@
-# Airship Crew - roadmap to the next level
+# Airship Crew - Next Level plan (round 2)
+
+Where we are (Oct 2026): a working co-op airship game for up to 16 phones. Gas-and-engines
+flight through cave, route and open-sky maps; many stations (helm with speed + pressure levers,
+guns, deflector, lightning coil, bomb bay, escort fighter); enemies (dogfighter squadrons,
+fighter, bombers, bats, gunships you can board, bosses, turrets, specials); upgrades between
+missions; bots for testing; pause menu.
+
+What "next level" means: a game a group wants to play for a whole evening and come back to.
+That needs (1) a reason to keep going (a campaign), (2) every player feeling needed every
+minute, (3) moments people talk about afterwards, and (4) polish so it reads and sounds great
+on a TV at a party.
+
+## How the work is done (the agent team)
+- **Lead (Claude Opus, the main chat)**: owns this plan, picks the next task, writes a clear
+  brief, hands it to one worker, checks the result, tests it, commits, and reports to the user
+  in plain language. Only the lead talks to the user and only the lead commits.
+- **Workers (Claude Sonnet - cheaper and faster)**, defined in `.claude/agents/`:
+  - `gameplay-builder` - game rules, enemies, missions, bots (host code).
+  - `art-builder` - drawing on the TV: ship, enemies, effects, HUD.
+  - `phone-builder` - the phone controller (buttons, levers, hints).
+  - `playtester` - runs headless bot games and reports balance and errors (changes nothing).
+  - `reviewer` - reads a finished change against CLAUDE.md and looks for bugs (changes nothing).
+- Rules for workers: one task at a time; read only the files needed; tunable numbers go in
+  `public/config.js`; no internet assets; never commit; finish by running the headless test.
+- Usage: the lead asks the user before starting each batch of tasks. A task is roughly one
+  worker run + one playtest + one review.
+
+## Phase A - Foundations that make everything else cheaper
+- A1. **Headless test runner** (`tools/botsim.mjs`): run the real simulation in Node with N bots
+  for M minutes on a chosen map type and difficulty; print missions done, wrecks, hull, kills
+  and any errors. Every later task is tested with it. [gameplay-builder]
+- A2. **Split the two giant files** (simulation.js about 1050 lines, render.js about 1600) into
+  smaller modules (players/stations, flight, combat; HUD, effects, background) with no change
+  in behaviour, checked with A1 before and after. [gameplay-builder, then art-builder]
+- A3. **Balance report**: the runner prints a short table per difficulty (time to wreck,
+  damage by enemy type) so tuning is based on numbers. [playtester + gameplay-builder]
+
+## Phase B - A campaign worth playing
+- B1. **Sector map between missions**: pick the next mission from 2-3 choices (risk vs reward),
+  shown on the TV, voted on phones (reusing the upgrade vote).
+- B2. **Mission types**: escort a slow supply barge, raid a factory (bomb bay), rescue downed
+  crew (rope-ladder pickup), survive the storm, chase down a gunship.
+- B3. **Salvage + shipyard**: earn salvage from kills, boarding and missions; spend it between
+  missions on upgrades and repairs.
+- B4. **Campaign save**: progress, ship and unlocks saved on the TV computer, with
+  "Continue campaign" on the start screen.
+- B5. **Final battle**: the enemy flagship after N sectors, with a proper ending screen.
+
+## Phase C - Every player needed, every minute
+- C1. **Call-outs**: the TV shows short orders ("GUNS LEFT!", "FIRE IN THE HOLD!") and an idle
+  player's phone shows a big arrow toward the nearest useful job.
+- C2. **Two-person stations**: a few jobs that need two people (heavy cannon loader + gunner,
+  hand-cranked searchlight in storms).
+- C3. **Roles at join**: optional role pick (pilot, gunner, engineer, medic) with a small perk.
+- C4. **Join and drop-out polish**: join mid-flight cleanly; bots fill and free seats
+  automatically so 2 players and 16 players both feel right.
+
+## Phase D - Moments people talk about
+- D1. **Set-piece events**: gasbag fire, engine stall, lightning strike, a ramming run, a
+  canyon chase.
+- D2. **Enemies board us by rope swing too**, and a deck-fight event.
+- D3. **Boss phases**: bosses change behaviour at half health and have weak points.
+- D4. **New biomes**: sea with flak ships, a city at night with searchlights, a mountain fortress.
+
+## Phase E - Polish for the party
+- E1. **Music**: a looping 1930s-style tune made in code (no internet files), calm and combat.
+- E2. **Juice**: hit-stop, squash and stretch, better explosions.
+- E3. **Phone polish**: clearer buttons per station, a short tutorial card per station,
+  colour-blind friendly colours.
+- E4. **First-time tutorial**: a short moored practice the first time a group plays.
+- E5. **TV readability check**: contrast and text size from across a room.
+
+## Order
+A1 -> A2 -> A3 first (they make every later task safer and cheaper). Then B1-B4, then C1 and
+E1 (lots of fun for little effort), then the rest. The lead re-checks the order with the user
+after each phase.
+
+## Progress log (round 2)
+- Plan and agent team set up. No tasks started yet.
+
+---
+
+## Archive - round 1 roadmap (done)
 
 Current state (v0.4): QR join, 16 players, walking and ladders, helm, two cannons, ammo hauling,
 boiler steam, breaches, fires, repairs, boarders, knockouts and revives. Everything is drawn with
@@ -16,7 +99,7 @@ rebuilt is wasted effort, and character animations depend on the final moves (wa
 
 ---
 
-## Phase 0 - Foundation (small, do first)
+### Phase 0 - Foundation (small, do first)
 Make the code easy to grow without breaking things.
 - Initialise git and commit the current v0.4 as the starting point.
 - Split `host.html` into modules: simulation (players, ship, enemies, hazards), rendering, camera,
@@ -30,7 +113,7 @@ Make the code easy to grow without breaking things.
 
 Done when: the game plays exactly like v0.4, and the layout lives in a data file.
 
-## Phase 1 - Camera and ship layout
+### Phase 1 - Camera and ship layout
 **Camera**
 - The ship should take up roughly half the screen width, leaving open sky where fights happen.
 - Smooth camera that frames the ship plus nearby enemies, zooming out when enemies are far.
@@ -57,7 +140,7 @@ Done when: the game plays exactly like v0.4, and the layout lives in a data file
 Done when: 16 avatars fit without crowding, any station is reachable in about 8 seconds, and every
 station is visually distinct at a glance from across the room.
 
-## Phase 2 - Controls and weapons
+### Phase 2 - Controls and weapons
 **Phone layout (landscape gamepad)**
 - Joystick bottom-left (keep the current feel).
 - Right-thumb cluster: a big context button (Action) and a separate Attack button, both at least
@@ -108,7 +191,7 @@ station is visually distinct at a glance from across the room.
 Done when: a new player can pick up the phone and play without instructions, and fighting raiders
 feels like its own fun job.
 
-## Phase 3 - Visual overhaul
+### Phase 3 - Visual overhaul
 **Style target**: 1930s rubber-hose cartoon combined with WW2 squadron-patch art.
 - Thick ink outlines with a gentle "line boil" wobble (redrawn at 8-12 fps).
 - Paper grain, film grain, vignette, and a slight flicker over the whole screen.
@@ -135,19 +218,19 @@ feels like its own fun job.
 
 Done when: a screenshot reads as one consistent style, with no placeholder shapes left in view.
 
-## Phase 4 - Feel, sound, and balance
+### Phase 4 - Feel, sound, and balance
 - Cartoon sound effects and a 1930s-style music loop on the host, with volume control.
 - Screen shake, hit-stop, and squash-and-stretch on impacts.
 - Difficulty presets and scaling by crew size, tuned in `config.js`.
 - An end-of-mission scorecard: raiders whacked, holes patched, shells hauled, revives.
 
-## Phase 5 - Game structure (later)
+### Phase 5 - Game structure (later)
 - Missions with goals (escort, raid, survive the storm) and a sector map between them.
 - Ship upgrades between missions, more enemy aircraft and airships, weather events, and ship classes.
 
 ---
 
-## Progress log
+### Progress log
 - Phases 0-2: done (modules, new ship, camera, tools, module damage, steam, phone gamepad,
   enemies, raider types, course with laps). Phase 3: film look tried and switched off at the
   user's request; sprite loader + art spec done; bulldog and skeleton vector art done.
@@ -162,7 +245,7 @@ Done when: a screenshot reads as one consistent style, with no placeholder shape
 - Next ideas: playtest with real people and retune difficulty; painted sprite art; more
   missions/routes (Phase 5).
 
-## Decisions to confirm with the user
+### Decisions to confirm with the user
 - Phone orientation: landscape gamepad layout (recommended) or portrait.
 - Name and crest of the player crew's faction.
 - Weapon variants: cosmetic only (recommended for now) or with different stats.
