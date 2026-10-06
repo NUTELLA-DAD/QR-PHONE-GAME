@@ -5,7 +5,7 @@ import { groundAt, ceilAt, elevAt } from './course.js';
 
 const INK = config.INK;
 
-export function createCourseArt({ ctx, state, ink, sprites }) {
+export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
   // Visible world x range for the current camera view.
   const span = (view, width) => {
     const half = width / 2 / view.zoom;
@@ -132,12 +132,19 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     const Y = (j) => j * C;
 
     // Cave backdrop: dark, so ships, enemies and shots stand out.
-    ctx.fillStyle = PALETTE.cave;
     const bx0 = Math.max(X(0), wx0 - C);
     const bx1 = Math.min(X(map.W), wx1 + C);
     const by0 = Math.max(0, top);
     const by1 = Math.min(map.H * C, bottom);
-    if (!map.open && bx1 > bx0 && by1 > by0) ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+    if (!map.open && bx1 > bx0 && by1 > by0) {
+      // Layered backdrop (far wall, pillars, light shafts) - or the flat colour if that is off.
+      const done = skyArt && skyArt.caveBackdrop(view, width, height, map, { x0: bx0, x1: bx1, y0: by0, y1: by1 });
+      if (!done) {
+        ctx.fillStyle = PALETTE.cave;
+        ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+      }
+    }
+    if (skyArt) skyArt.fogBack(view, width, height); // fog banks behind the rock
     ctx.fillStyle = 'rgba(70,60,80,.5)';
     for (let i = i0; i <= i1 && false; i += 3) {
       for (let j = j0; j <= j1; j += 3) {
