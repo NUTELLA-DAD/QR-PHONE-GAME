@@ -49,6 +49,7 @@ export const SHIP_LAYOUT = {
   stations: withD([
     { n: 'Aft Dorsal Gun', p: 'nest', x: 660 },
     { n: 'Lookout', p: 'nest', x: 770 },
+    { n: 'Deflector', p: 'catwalk', x: 940 },
     { n: 'Dorsal Gun', p: 'nest', x: 940 },
     { n: 'Tail Gun', p: 'main', x: 180 },
     { n: 'Boiler', p: 'main', x: 400 },
@@ -74,6 +75,9 @@ export const SHIP_LAYOUT = {
     'Fore Sponson': { bx: 1270, by: 812, aim: 1.0, arc: 0.7 },
     'Ventral Gun': { bx: 805, by: 948, aim: Math.PI / 2, arc: 1.2 },
   },
+
+  // Deflector shield: a band on an ellipse around the whole ship, swung round by the crew.
+  shield: { cx: 800, cy: 470, rx: 1020, ry: 660 },
 
   // Bomb bay doors in the belly, under the Bomb Bay station: bombs drop from here.
   bombBay: { x: 495, y: 815 },

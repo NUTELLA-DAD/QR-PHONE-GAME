@@ -33,6 +33,8 @@ export function createModules() {
     const s = station(name);
     add({ name, kind: 'gun', d: s.d, x: s.x, pos: { x: mount.bx, y: mount.by } });
   }
+  const defl = station('Deflector');
+  add({ name: 'Deflector', kind: 'shield', d: defl.d, x: defl.x, pos: { x: defl.x, y: P[defl.d].y - 60 } });
   const bay = station('Bomb Bay');
   add({ name: 'Bomb Bay', kind: 'bombbay', d: bay.d, x: bay.x, pos: { x: L.bombBay.x, y: L.bombBay.y - 30 } });
   for (const name of ['Boiler', 'Helm']) {
@@ -137,7 +139,7 @@ export function createModules() {
     const m = byName[name];
     if (!m) return '';
     if (m.broken) return `${name} is BROKEN - fix it with a hammer`;
-    if ((m.kind === 'helm' || m.kind === 'engine' || m.kind === 'lift') && !hasSteam(state, name)) return `${name} has no steam!`;
+    if ((m.kind === 'helm' || m.kind === 'engine' || m.kind === 'lift' || m.kind === 'shield') && !hasSteam(state, name)) return `${name} has no steam!`;
     if (m.hp < m.max * 0.5) return `${name} is damaged (${Math.round(m.hp)}%)`;
     return '';
   };

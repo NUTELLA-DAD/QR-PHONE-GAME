@@ -43,6 +43,13 @@ export const config = {
     TILT_SMOOTH: 3, // how quickly the tilt follows (higher = snappier)
     TILT_PIVOT: [800, 520], // the point the ship tips around (ship coordinates)
   },
+  // Deflector shield: a steam-powered arc the Deflector station swings around the ship. It
+  // blocks enemy bullets, bats, rockets and bombs that hit it.
+  SHIELD: {
+    SPAN: 0.42, // half-width of the arc (radians around the ship): bigger = covers more
+    TURN: 4.5, // how fast it swings round (radians per second)
+    STEAM_USE: 1.5, // extra steam used while it's up
+  },
   // Bomb bay: drops bombs on turrets and buildings below.
   BOMBS: {
     START: 3, // bombs aboard at the start

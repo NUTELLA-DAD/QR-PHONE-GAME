@@ -73,6 +73,7 @@ export function createSimulation() {
     ventOpen: SHIP_LAYOUT.vents.map(() => false), // which vent stacks are open
     wreck: null, // { t } while the ship is breaking apart
     bombBay: { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null },
+    shield: { ang: -Math.PI / 2, on: false, flash: 0 }, // the Deflector's arc (angle around the ship)
     upgrades: {}, // id -> times taken
     difficulty: config.START_DIFFICULTY,
     phase: 'lobby', // 'lobby' = moored at the mast while the crew joins; 'flying' after CAST OFF
@@ -109,7 +110,7 @@ export function createSimulation() {
   const modules = createModules();
   state.modules = modules.list;
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
-  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || !!state.GUNS[name];
+  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || !!state.GUNS[name];
 
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
@@ -225,6 +226,7 @@ export function createSimulation() {
     state.kills = 0;
     state.ventOpen.fill(false);
     Object.assign(state.bombBay, { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null });
+    Object.assign(state.shield, { ang: -Math.PI / 2, on: false, flash: 0 });
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
     for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: 6, max: 8, empty: 0, auto: 0 });
     raiders.reset();
@@ -242,6 +244,20 @@ export function createSimulation() {
     state.ev.warn = 5;
     state.ev.warnText = 'A NEW SHIP IS READY!';
   }
+
+  // Is world point (x, y) on the Deflector's arc right now? (Sparks and a flash if so.)
+  const shieldBlocks = (x, y) => {
+    const S = state.shield;
+    if (!S.on) return false;
+    const L = SHIP_LAYOUT.shield;
+    const u = (x - L.cx) / L.rx;
+    const v = (y + state.ship.alt - L.cy) / L.ry;
+    const r = Math.hypot(u, v);
+    if (r < 0.88 || r > 1.12 || Math.abs(angleDiff(Math.atan2(v, u), S.ang)) > config.SHIELD.SPAN) return false;
+    puff(x, y, '#9fe8ff', 6);
+    S.flash = 1;
+    return true;
+  };
 
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
   const impact = (x, y, power) => {
@@ -476,6 +492,15 @@ export function createSimulation() {
             state.ship.vy = (state.ship.vy || 0) + clamp(wantVy - (state.ship.vy || 0), -rate * dt, rate * dt);
             helmFlown = true;
           }
+        } else if (player.lock === 'Deflector') {
+          // Swing the shield round toward where the stick points.
+          if (working && Math.hypot(player.jx, player.jy) > 0.3) {
+            const want = Math.atan2(player.jy, player.jx);
+            const d = angleDiff(want, state.shield.ang);
+            const step = config.SHIELD.TURN * dt;
+            state.shield.ang += Math.max(-step, Math.min(step, d));
+            state.shield.ang = Math.atan2(Math.sin(state.shield.ang), Math.cos(state.shield.ang));
+          }
         } else if (player.lock === 'Bomb Bay') {
           // Bombardier: FIRE drops a bomb through the belly doors.
           const bay = state.bombBay;
@@ -604,13 +629,13 @@ export function createSimulation() {
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
-      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : null;
+      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : null;
       const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && taken(stationName);
       let label = 'Hey!';
       let hold = false;
       if (player.lock) {
         const working = modules.works(state, player.lock);
-        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
+        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
         hold = kind === 'gun' || kind === 'bombbay';
       } else if (player.act) {
         label = player.act.label;
@@ -648,7 +673,8 @@ export function createSimulation() {
       heat = BO.HEAT_PER_COAL * state.ship.fuel;
     }
     const openVents = state.ventOpen.filter(Boolean).length;
-    state.steamUse = modules.pressureDrain(state) + openVents * BO.VENT_RATE;
+    state.shield.on = taken('Deflector') && modules.works(state, 'Deflector') && state.phase === 'flying';
+    state.steamUse = modules.pressureDrain(state) + openVents * BO.VENT_RATE + (state.shield.on ? config.SHIELD.STEAM_USE : 0);
     state.ship.press = clamp(state.ship.press + (heat - (state.steamUse * state.ship.press) / BO.USE_REF) * dt, 0, 100);
     if (state.ship.press >= BO.WARN_AT && !state.pressureWarned && !state.ship.down) {
       state.pressureWarned = true;
@@ -789,6 +815,10 @@ export function createSimulation() {
         puff(bullet.x, bullet.y, '#8b6b4a', 4);
         continue;
       }
+      if (shieldBlocks(bullet.x, bullet.y)) {
+        bullet.life = 0;
+        continue;
+      }
       const sy = bullet.y + state.ship.alt;
       if (!bullet.miss && hitsShip(bullet.x, sy)) {
         bullet.life = 0;
@@ -796,6 +826,14 @@ export function createSimulation() {
         impact(bullet.x, sy, 1);
       }
     }
+
+    // The shield also swats bats, rockets and falling bombs.
+    if (state.shield.on) {
+      for (const b of state.bats) if (b.delay <= 0 && !b.dead && shieldBlocks(b.x, b.y)) (b.dead = true), (state.kills += 1);
+      for (const k of state.rockets || []) if (k.hp > 0 && shieldBlocks(k.x, k.y)) k.hp = 0;
+      for (const b of state.enemyBombs) if (!b.dead && shieldBlocks(b.x, b.y)) b.dead = true;
+    }
+    state.shield.flash = Math.max(0, state.shield.flash - dt * 3);
 
     for (const arr of [state.bullets, state.shells]) {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i].life <= 0) arr.splice(i, 1);

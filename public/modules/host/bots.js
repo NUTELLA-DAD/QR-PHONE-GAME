@@ -9,7 +9,7 @@ import { altWindow, altBounds, pilotPlan } from './course.js';
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
 const GUN_STATIONS = Object.keys(L.gunMounts);
-const MANNED_STATIONS = ['Helm', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
+const MANNED_STATIONS = ['Helm', 'Deflector', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -32,6 +32,22 @@ function firingSolution(state, gun) {
 }
 
 // Helm: altitude that dodges the next mine skimming the top or bottom of the ship (or null).
+// The nearest bullet, bat, rocket or bomb coming at the ship (for the Deflector), or null.
+function incoming(state) {
+  const S = L.shield;
+  let best = null;
+  let bestD = 1600;
+  const consider = (x, y) => {
+    const d = Math.hypot((x - S.cx) * 0.7, y + state.ship.alt - S.cy);
+    if (d < bestD) (bestD = d), (best = { x, y });
+  };
+  for (const b of state.bullets) if (!b.miss) consider(b.x, b.y);
+  for (const b of state.bats || []) if (b.delay <= 0 && !b.dead) consider(b.x, b.y);
+  for (const k of state.rockets || []) if (k.hp > 0) consider(k.x, k.y);
+  for (const b of state.enemyBombs || []) if (!b.dead) consider(b.x, b.y);
+  return best;
+}
+
 // Things below and ahead worth bombing, as world x ranges: live turrets and buildings.
 function groundTargets(state) {
   const c = state.course;
@@ -90,7 +106,7 @@ function listJobs(state, bot) {
   if (state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 1 });
   // Helm and boiler first, then guns that can reach the enemy right now. Skip broken ones.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
-  const reach = (n) => (n === 'Lookout' ? 3 : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : firingSolution(state, state.GUNS[n]) !== null ? 1 : 2);
+  const reach = (n) => (n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : firingSolution(state, state.GUNS[n]) !== null ? 1 : 2);
   const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   for (const n of open) jobs.push({ kind: 'station', obj: n, max: 1 });
   return jobs;
@@ -138,6 +154,16 @@ function operate(p, state, dt) {
     if (target !== null) p.jy = clamp((ship.alt - target) / 90 + (ship.vy || 0) / 260, -1, 1);
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
     else p.jy = 0;
+  } else if (p.lock === 'Deflector') {
+    // Swing the shield toward the nearest thing heading for the ship.
+    const t = incoming(state);
+    p.gunIdle = t ? 0 : (p.gunIdle || 0) + dt;
+    if (t) {
+      const S = L.shield;
+      const a = Math.atan2((t.y + state.ship.alt - S.cy) / S.ry, (t.x - S.cx) / S.rx);
+      p.jx = Math.cos(a);
+      p.jy = Math.sin(a);
+    }
   } else if (p.lock === 'Bomb Bay') {
     // Drop when the aiming ring sits on a turret or building; leave when there's nothing to bomb.
     const aim = state.bombBay.aim;

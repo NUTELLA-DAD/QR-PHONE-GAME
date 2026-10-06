@@ -322,7 +322,34 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.setLineDash([]);
   };
 
+  // Deflector shield: a glowing band on an oval around the ship, flashing when it blocks.
+  const drawShield = (time) => {
+    const S = state.shield;
+    if (!S || !S.on) return;
+    const L = SHIP_LAYOUT.shield;
+    const span = config.SHIELD.SPAN;
+    const arc = () => {
+      ctx.beginPath();
+      for (let k = 0; k <= 24; k++) {
+        const a = S.ang - span + (2 * span * k) / 24;
+        const x = L.cx + L.rx * Math.cos(a);
+        const y = L.cy - state.ship.alt + L.ry * Math.sin(a);
+        if (k === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+    };
+    ctx.lineCap = 'round';
+    const f = S.flash;
+    for (const [w, c] of [[120, `rgba(120,220,255,${0.15 + f * 0.25})`], [48, `rgba(120,220,255,${0.55 + f * 0.35})`], [14, `rgba(255,255,255,${0.75 + 0.2 * Math.sin(time * 10)})`]]) {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = w;
+      arc();
+      ctx.stroke();
+    }
+  };
+
   const drawEffects = (time, view) => {
+    drawShield(time);
     drawThreatGlows(time);
     drawFighterAim(time);
     threatArt.drawWrecks();
