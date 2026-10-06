@@ -2,10 +2,13 @@
 // Placeholder vector art (sprites: fx/turret, fx/turret-barrel if they exist).
 import { config } from '../../config.js';
 import { groundAt, ceilAt, elevAt } from './course.js';
+import { envIdOf, envOf } from './environments.js';
 
 const INK = config.INK;
 
-export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
+export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt }) {
+  // Frost Peaks / Ember Forge recolour the rock, floors and haze (Sky Isles = null = the original colours).
+  const envLook = () => (state.course && envIdOf(state) !== config.ENVIRONMENTS.DEFAULT ? envOf(state) : null);
   // Visible world x range for the current camera view.
   const span = (view, width) => {
     const half = width / 2 / view.zoom;
@@ -34,10 +37,11 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
   };
 
   const pine = (x, y, s, dark) => {
-    ctx.fillStyle = '#8a6444';
+    const frost = envLook() && envIdOf(state) === 'frost'; // snowy pines in Frost Peaks
+    ctx.fillStyle = frost ? '#6b7c8c' : '#8a6444';
     ctx.fillRect(x - 4 * s, y - 14 * s, 8 * s, 16 * s);
     ctx.strokeRect(x - 4 * s, y - 14 * s, 8 * s, 16 * s);
-    ctx.fillStyle = dark ? '#2f5e3a' : '#3d7a47';
+    ctx.fillStyle = frost ? (dark ? '#bcd3e4' : '#e4eff7') : dark ? '#2f5e3a' : '#3d7a47';
     for (let k = 0; k < 3; k++) {
       const by = y - 12 * s - k * 22 * s;
       const w = (30 - k * 7) * s;
@@ -80,15 +84,19 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
   // ---------- Mission maps: caves drawn with smooth edges (marching squares) ----------
   // A tiling rock texture (layers and stones), made once.
   let rockPattern = null;
+  let rockPatternEnv = null;
   const getRockPattern = () => {
-    if (rockPattern) return rockPattern;
+    const look = envLook();
+    const key = look ? look.name : '';
+    if (rockPattern && rockPatternEnv === key) return rockPattern;
+    rockPatternEnv = key;
     const c = document.createElement('canvas');
     c.width = c.height = 400;
     const g = c.getContext('2d');
-    g.fillStyle = PALETTE.rock;
+    g.fillStyle = look ? look.rock : PALETTE.rock;
     g.fillRect(0, 0, 400, 400);
     for (let k = 0; k < 4; k++) {
-      g.strokeStyle = k % 2 ? 'rgba(40,30,25,.12)' : 'rgba(255,240,220,.08)';
+      g.strokeStyle = look ? look.rockStripes[k % 2] : k % 2 ? 'rgba(40,30,25,.12)' : 'rgba(255,240,220,.08)';
       g.lineWidth = 34;
       g.beginPath();
       for (let x = 0; x <= 400; x += 20) {
@@ -144,6 +152,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
         ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
       }
     }
+    if (envArt && by1 > by0) envArt.lava(view, width, height, map, { x0: bx0, x1: bx1, y0: by0, y1: by1 }); // Ember Forge: lava (drawn under the rock)
     if (skyArt) skyArt.fogBack(view, width, height); // fog banks behind the rock
     ctx.fillStyle = 'rgba(70,60,80,.5)';
     for (let i = i0; i <= i1 && false; i += 3) {
@@ -191,7 +200,8 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
     if (pat.setTransform) pat.setTransform(new DOMMatrix([1, 0, 0, 1, -(dist % 400), 0]));
     ctx.fillStyle = pat;
     ctx.fill(fill);
-    ctx.fillStyle = HAZE;
+    const look = envLook();
+    ctx.fillStyle = look ? look.rockHaze : HAZE;
     ctx.fill(fill);
 
     // Edges: ink outline, grass on floors, drips/vines/crystals under ceilings.
@@ -206,7 +216,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
       else if (rockAt(mx, my - 40) && !rockAt(mx, my + 40)) ceilings.push(sg);
     }
     ctx.lineCap = 'round';
-    ctx.strokeStyle = '#4f7f3c';
+    ctx.strokeStyle = look ? look.edgeDark : '#4f7f3c';
     ctx.lineWidth = 20;
     ctx.beginPath();
     for (const [[ax, ay], [bx2, by2]] of floors) {
@@ -214,9 +224,19 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
       ctx.lineTo(bx2, by2 + 8);
     }
     ctx.stroke();
-    ctx.strokeStyle = '#7fb24f';
+    ctx.strokeStyle = look ? look.edgeLight : '#7fb24f';
     ctx.lineWidth = 4.2;
-    ctx.stroke();
+    if (look) { // a light rim along every rock edge so dark rock (Ember) and pale rock (Frost) still read against the backdrop
+      ctx.strokeStyle = look.rim;
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      for (const [[ax, ay], [bx2, by2]] of segs) {
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx2, by2);
+      }
+      ctx.stroke();
+    }
+    ink();
     ink();
     ctx.lineWidth = 3.2;
     ctx.beginPath();
@@ -227,7 +247,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
     ctx.stroke();
     // (Tufts on floors - off in the simple style.)
     // Open sky: pine trees on the hills.
-    if (map.open) {
+    if (map.open && envIdOf(state) !== 'ember') {
       ink();
       ctx.lineWidth = 2.8;
       for (const [[ax, ay], [bx2, by2], i, j] of floors) {
@@ -242,7 +262,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
       const y = (ay + by2) / 2;
       if (h < 0.18) {
         const len = 30 + hash(i, 56) * 50;
-        ctx.fillStyle = '#6e5646';
+        ctx.fillStyle = look ? (envIdOf(state) === 'frost' ? '#dcecf7' : '#2c1c1e') : '#6e5646';
         ink();
         ctx.lineWidth = 2.8;
         ctx.beginPath();
@@ -254,7 +274,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
         ctx.stroke();
       } else if (h < 0.28) {
         const len = 60 + hash(j, 57) * 140;
-        ctx.strokeStyle = '#3f6e30';
+        ctx.strokeStyle = look ? (envIdOf(state) === 'frost' ? '#eaf5fd' : '#ff7a2a') : '#3f6e30';
         ctx.lineWidth = 3.2;
         ctx.beginPath();
         ctx.moveTo(x, y);
@@ -454,7 +474,8 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt }) {
     }
 
     // A light haze over the land pushes it back, so ships, enemies and shots read clearly.
-    ctx.fillStyle = HAZE;
+    const look = envLook();
+    ctx.fillStyle = look ? look.rockHaze : HAZE;
     ctx.beginPath();
     ctx.moveTo(xs[0], bottom);
     trace(xs, gs, () => 0, 0, last, false);

@@ -3,11 +3,14 @@
 import { config } from '../../config.js';
 import { drawBiplane, drawTailNumber } from './planeArt.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { envOf } from './environments.js';
 
 const INK = config.INK;
 const P = SHIP_LAYOUT.platforms;
 
 export function createThreatArt({ ctx, state, ink, sprites }) {
+  // Bats are dark purple, but glowing orange 'magma bats' in the Ember Forge (so they read on dark rock).
+  const batColor = () => { const b = state.course && envOf(state).bat; return b ? b.body : '#3b2c4c'; };
   // Ember Pact insignia: a flame inside a triangle.
   const insignia = (x, y, s) => {
     if (sprites.box(ctx, 'crests/monsters', x - 16 * s, y - 16 * s, 32 * s, 32 * s)) return;
@@ -223,7 +226,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     ctx.scale(1.7, hang ? -1.7 : 1.7);
     ink();
     ctx.lineWidth = 3;
-    ctx.fillStyle = '#3b2c4c';
+    ctx.fillStyle = batColor();
     // folded wings (two pointed shapes hugging the body)
     for (const side of [-1, 1]) {
       ctx.beginPath();
@@ -282,7 +285,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.scale(b.vx < 0 ? -1.7 : 1.7, 1.7); // drawn big enough to read on a TV
       ink();
       ctx.lineWidth = 3;
-      ctx.fillStyle = '#3b2c4c';
+      ctx.fillStyle = batColor();
       for (const side of [-1, 1]) {
         ctx.beginPath();
         ctx.moveTo(0, 0);

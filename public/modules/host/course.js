@@ -10,6 +10,7 @@
 // World y grows downward; the ship is drawn shifted up by its altitude (alt).
 import { config } from '../../config.js';
 import { pop } from './popups.js';
+import { pickEnvironment } from './environments.js';
 import { makeMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
 
 const K = config.COURSE;
@@ -172,7 +173,8 @@ export function gasFor(state, target) {
   const vy = state.ship.vy || 0;
   const wantVy = Math.max(-320, Math.min(320, (target - state.ship.alt) * 1.3));
   const needAccel = (wantVy - vy) * 2.5 + vy * G.DRAG;
-  const wantGas = G.NEUTRAL + needAccel / G.LIFT;
+  const env = state.env; // ice weight and lava thermals shift the gas level she needs to hover (environments.js)
+  const wantGas = G.NEUTRAL + needAccel / G.LIFT + (env ? env.sink - env.lift / G.LIFT : 0);
   return Math.max(-1, Math.min(1, (wantGas - state.ship.gas) / 8));
 }
 
@@ -931,13 +933,14 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
   };
 
   // Start mission n on a fresh map: the ship at the start, the beacon somewhere ahead.
-  function startMission(n) {
+  function startMission(n, opts = {}) {
     const MP = config.MAPS;
     const kind = MP.FORCE_KIND || MP.KINDS[(n - 1) % MP.KINDS.length];
     const map = makeMap(kind, n, course.rand);
     const d = Math.min(1, (n - 1) / 4);
     Object.assign(course, {
       map,
+      environment: pickEnvironment(opts && opts.environment), // 'skyisles' (the original look and rules), 'frost', 'ember'...
       lap: n,
       leg: 'out',
       dist: map.start.x - 800,
