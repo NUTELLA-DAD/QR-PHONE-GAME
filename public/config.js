@@ -511,6 +511,33 @@ export const config = {
     JUMP_DODGE: 28, // height (px) above the deck at which a jumper dodges a raider's swing
     JUMP_COOLDOWN: 0.15, // seconds after landing before the next hop
   },
+  // Airborne play (jumping off the ship, falling onto lower decks, being thrown about).
+  AIR: {
+    GRAVITY: 1900, // px/s² while falling free (same as the hop, so a jump off an edge feels continuous)
+    MAX_FALL: 1150, // terminal falling speed (px/s)
+    STEER_ACCEL: 520, // px/s² of sideways push from the stick in the air
+    DRAG: 2.2, // sideways air drag (per second); steer speed tops out near STEER_ACCEL / DRAG (~240 px/s)
+    SHIP_DRIFT: 150, // px/s the air carries a faller backwards at full ship speed (the ship flies on without them)
+    EDGE_HOLD: 0.3, // seconds of pushing at the end of an OUTSIDE deck before you step off it
+    EDGE_HOP: 0.5, // stick push (0-1) needed at a deck end during a jump to leave the deck
+    VAULT_DROP: 140, // px/s downward shove when you jump over the rail with the stick held DOWN (outside decks)
+    STUN_HEIGHT: 330, // fall height (px) above which landing stuns you
+    STUN_TIME: 0.9, // seconds of stun after a big fall
+    SQUASH_TIME: 0.28, // seconds of landing squash (drawing only)
+    OVERBOARD_Y: 1150, // fall below this (ship coordinates) and you are overboard
+    OVERBOARD_X: 520, // or this far beyond the ship's ends (px past 0 / 1600)
+    TUMBLE_SPIN: 9, // radians/s of tumbling once overboard
+    TUMBLE_ACCEL: 1500, // px/s² a tumbling faller speeds up (they drop away fast)
+    STAGGER_POWER: 0.8, // a hit this strong makes standing crew on OUTSIDE decks stagger
+    STAGGER_KICK: 380, // px/s sideways shove per hit power (capped at 3x), about 30-60 px of slide
+    STAGGER_TIME: 0.45, // seconds a stagger lasts (drawn as a lean)
+    KNOCK_POWER: 2.4, // a hit this big can throw an outside-deck player off their feet and over the rail
+    KNOCK_CHANCE: 0.22, // chance per eligible player of being thrown by such a hit
+    KNOCK_VX: 240, // sideways launch speed when thrown
+    KNOCK_VY: 380, // upward launch speed when thrown (they land on the deck below, or go overboard)
+    PITCH_STAGGER: 0.035, // ship pitch (radians; max is 0.06) beyond which outside-deck crew slide toward the low end
+    PITCH_SLIDE: 260, // px/s slide at full pitch
+  },
   // Tools and close combat.
   TOOLS: {
     REACH: 65, // how close you must stand to a rack, hook or valve (generous: no pixel-perfect standing)

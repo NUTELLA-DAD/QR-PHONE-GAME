@@ -11,6 +11,7 @@ import { createEscort } from './escort.js';
 import { createSpecials } from './specials.js';
 import { createCoil } from './coil.js';
 import { createGunship, MAIN_X1 } from './gunship.js';
+import { createAirborne } from './airborne.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
 import { assistAim } from './aim.js';
@@ -374,6 +375,7 @@ export function createSimulation() {
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
   const impact = (x, y, power) => {
     state.ship.shake = Math.max(state.ship.shake, Math.min(0.6, 0.22 * power));
+    air.shove(power, x);
     if (power >= 1.5) {
       pop(state, x, y - 40 - state.ship.alt, 'bigHit', '#ff7b00', Math.min(1.6, 0.6 + power * 0.3));
       // Every phone feels the big ones.
@@ -539,6 +541,7 @@ export function createSimulation() {
   const coil = createCoil({ state, puff, credit });
   const gunship = createGunship({ state, puff, impact, credit });
   const weather = createWeather({ state, impact, puff });
+  const air = createAirborne({ state, puff, phoneFx });
 
   const emitPlayerUi = (playerId, ui) => {
     if (socket && !state.players[playerId]?.bot) socket.emit('host:ui', { id: playerId, ui });
@@ -579,7 +582,9 @@ export function createSimulation() {
         player.jumpQ = false;
         player.air = false;
         player.jz = 0;
-        fall(player, dt, 260, (w) => {
+        player.fly = false;
+        fall(player, dt, player.tumble ? air.tumble(player, dt) : 260, (w) => {
+          air.clear(w);
           // Fell off the ship (or off a gunship): back aboard in the medical bay, dazed.
           const mb = SHIP_LAYOUT.medbay;
           w.d = PLATFORMS.findIndex((p) => p.id === mb.p);
@@ -599,8 +604,12 @@ export function createSimulation() {
         player.fire = false;
         player.actQ = false;
         player.jumpQ = false;
-        player.air = false;
-        player.jz = 0;
+        if (player.fly) air.step(player, dt, false); // knocked out mid-air: still falls
+        else {
+          player.air = false;
+          player.jz = 0;
+          air.standing(player, dt);
+        }
         player.moving = false;
         player.climb = false;
         if ((player.ko -= dt) <= 0) {
@@ -714,21 +723,31 @@ export function createSimulation() {
           player.air = true;
           player.vy = M.JUMP_VY;
           player.jz = 0;
+          air.vault(player); // outside deck + stick held down: hop over the rail into free flight
         }
         player.jumpQ = false;
-        if (player.air) {
+        if (player.fly) {
+          air.step(player, dt); // free flight (off a deck end, over the rail, or thrown)
+        } else if (player.air) {
           // Steer (a bit less than on the ground), no ladders while airborne.
           moveWalker(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED);
           player.vy -= M.JUMP_GRAVITY * dt;
           player.jz += player.vy * dt;
-          if (player.jz <= 0) {
-            player.jz = 0;
-            player.vy = 0;
-            player.air = false;
-            player.jumpCd = M.JUMP_COOLDOWN;
-            puff(player.x, player.y - 4, '#d9cbb0', 3);
+          if (!air.edgeCheck(player, dt, true)) {
+            if (player.jz <= 0) {
+              player.jz = 0;
+              player.vy = 0;
+              player.air = false;
+              player.jumpCd = M.JUMP_COOLDOWN;
+              player.squash = 0.4;
+              puff(player.x, player.y - 4, '#d9cbb0', 3);
+            }
           }
-        } else moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED);
+        } else {
+          moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED);
+          air.edgeCheck(player, dt, false); // walking off the end of an outside deck
+        }
+        if (!player.fly) air.standing(player, dt);
         player.moving = !player.climb && Math.abs(player.jx) > 0.15;
         const act = interaction(player, station);
         player.act = act;
@@ -832,6 +851,7 @@ export function createSimulation() {
         label = player.act.label;
         hold = !!player.act.hold;
       }
+      if (player.fly) label = player.fvy > 0 ? 'Falling!' : 'Airborne';
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
@@ -1133,6 +1153,7 @@ export function createSimulation() {
     specials,
     course,
     gunship,
+    air,
     restart: () => restartGame(),
     puff,
     setSocket,

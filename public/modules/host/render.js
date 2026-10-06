@@ -1125,13 +1125,19 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.translate(player.x, player.y - bob - hop);
       const size = player.scale || 1;
       if (size !== 1) ctx.scale(size, size);
+      if (player.rot) {
+        ctx.translate(0, -30);
+        ctx.rotate(player.rot);
+        ctx.translate(0, 30);
+      }
+      if (player.squash > 0) ctx.scale(1 + 0.4 * player.squash, 1 - 0.35 * player.squash);
       if (player.ko > 0) {
         ctx.rotate(-1.4 * face);
         ctx.translate(0, 10);
       }
       ink();
       ctx.lineWidth = 2.8;
-      if (player.fall) {
+      if (player.fall && !player.tumble) {
         ctx.fillStyle = player.color;
         ctx.beginPath();
         ctx.arc(0, -120, 50, Math.PI, 0);

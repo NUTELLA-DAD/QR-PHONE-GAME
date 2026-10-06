@@ -59,6 +59,13 @@ export function createCharacterArt({ ctx, sprites, drawItem }) {
     ctx.save();
     ctx.translate(p.x, p.y - lift);
     ctx.scale(face * (p.scale || 1), p.scale || 1);
+    // Airborne / staggering / landing: lean or tumble about the middle of the body, squash on landing.
+    if (p.rot) {
+      ctx.translate(0, -30);
+      ctx.rotate(p.rot * face);
+      ctx.translate(0, 30);
+    }
+    if (p.squash > 0) ctx.scale(1 + 0.4 * p.squash, 1 - 0.35 * p.squash);
 
     // Whole-body poses, if drawn.
     const whole = p.ko > 0 ? 'ko' : p.climb ? 'climb' : p.windup > 0 ? 'windup' : null;
@@ -77,7 +84,13 @@ export function createCharacterArt({ ctx, sprites, drawItem }) {
     let backLeg = -walk * 0.55;
     let frontArm = -walk * 0.5;
     let backArm = walk * 0.5;
-    if (p.climb) {
+    if (p.fly || p.tumble) {
+      frontArm = backArm = -2.9 + Math.sin(time * 14) * 0.25; // arms up, flailing
+      frontLeg = 0.5 + Math.sin(time * 14) * 0.2;
+      backLeg = -0.4 - Math.sin(time * 14) * 0.2;
+    } else if (p.air) {
+      frontArm = backArm = -2.6; // mid-hop: arms up
+    } else if (p.climb) {
       frontArm = -2.8 + Math.sin(time * 10) * 0.4;
       backArm = -2.8 - Math.sin(time * 10) * 0.4;
       frontLeg = Math.sin(time * 10) * 0.3;
