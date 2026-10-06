@@ -624,8 +624,23 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
       // Aim at the middle of the ship.
       const ty = 640 - state.ship.alt;
       t.aim = Math.atan2(ty - t.y, 800 - wx);
+      t.charging = false;
       if (Math.hypot(800 - wx, ty - t.y) > K.TURRET_RANGE || state.ship.down) continue;
+      // Rock in the way? Then it can't see us - terrain is cover.
+      let clear = true;
+      for (let k = 1; k < 12 && clear; k++) if (inRock(state, t.x + ((800 - t.x) * k) / 12, t.y - 30 + ((ty - t.y + 30) * k) / 12)) clear = false;
+      if (!clear) {
+        t.cd = Math.max(t.cd, 0.9);
+        continue;
+      }
+      // Warn before firing: it glows and shows its line for the last moment.
+      if (t.cd < K.TURRET_WARN) {
+        if (!t.warned) state.sfxQ && state.sfxQ.push(['charge']);
+        t.warned = true;
+        t.charging = true;
+      }
       if ((t.cd -= dt) <= 0) {
+        t.warned = false;
         t.cd = (r(K.TURRET_FIRE_MIN, K.TURRET_FIRE_MAX) / (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace) * (course.map && course.map.open ? 1.3 : 1);
         const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
         const miss = course.rand() < K.FLAK_MISS || (helm && Math.abs(helm.jy) > 0.3 && course.rand() < 0.4);
@@ -638,6 +653,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
           state.rockets.push({ x: t.x, y: t.y - 30, ang: -Math.PI / 2, life: K.ROCKET_LIFE, hp: 1 });
         } else state.bullets.push({ x: t.x, y: t.y, vx: ((tx - t.x) / d) * K.FLAK_SPEED, vy: ((aimY - t.y) / d) * K.FLAK_SPEED, miss, life: 5, flak: true });
         puff(t.x + Math.cos(t.aim) * 40, t.y + Math.sin(t.aim) * 40, '#555', 4);
+        if (state.flashes) state.flashes.push({ x: t.x + Math.cos(t.aim) * 60, y: t.y - 26 + Math.sin(t.aim) * 60, ang: t.aim, t: 0.1, color: '#ffcf80', size: 1.4 });
       }
     }
     // Rockets turn toward the middle of the ship.

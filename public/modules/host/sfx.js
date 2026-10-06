@@ -112,6 +112,11 @@ export function createSfx(state) {
       tone('sine', 1320, 1310, 0.7, 0.12);
     },
     fanfare: () => [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, f, 0.18, 0.25, i * 0.11)),
+    impact: () => {
+      noise('bandpass', 1200, 0.12, 0.3, 0, 2);
+      tone('square', 300, 120, 0.08, 0.08);
+    },
+    charge: () => tone('sawtooth', 220, 700, 0.7, 0.07),
     clang: (big) => {
       tone('triangle', big ? 180 : 260, big ? 70 : 120, 0.4, big ? 0.4 : 0.25);
       tone('square', 520, 300, 0.12, 0.08);

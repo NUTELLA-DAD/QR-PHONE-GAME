@@ -801,6 +801,26 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.restore();
         continue;
       }
+      if (t.charging) {
+        // About to fire: a growing red glow and a dotted line where it's aiming.
+        const k = 1 - Math.max(0, t.cd) / config.COURSE.TURRET_WARN;
+        ctx.fillStyle = `rgba(255,40,60,${0.25 + 0.45 * k})`;
+        ctx.beginPath();
+        ctx.arc(0, -26, 30 + 40 * k, 0, 7);
+        ctx.fill();
+        ctx.save();
+        ctx.translate(0, -26);
+        ctx.rotate(t.aim);
+        ctx.strokeStyle = `rgba(255,40,60,${0.4 + 0.5 * k})`;
+        ctx.lineWidth = 6;
+        ctx.setLineDash([20, 18]);
+        ctx.beginPath();
+        ctx.moveTo(60, 0);
+        ctx.lineTo(700, 0);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
       if (t.rocket) {
         // Rocket battery: a sloped launch rail with a rocket waiting on it.
         ink();

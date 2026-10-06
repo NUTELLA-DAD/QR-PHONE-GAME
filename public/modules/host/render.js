@@ -407,6 +407,46 @@ export function createRenderer({ ctx, state, canvas }) {
     }
   };
 
+  // Muzzle flashes (a bright star at the barrel) and impact rings (a quick expanding burst).
+  const drawFlashesAndRings = () => {
+    for (const f of state.flashes || []) {
+      const k = f.t / 0.1;
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.rotate(f.ang);
+      ctx.globalAlpha = Math.min(1, k * 1.5);
+      ctx.fillStyle = f.color;
+      ctx.beginPath();
+      const s = 34 * f.size;
+      ctx.moveTo(s * 1.6, 0);
+      ctx.lineTo(s * 0.3, s * 0.35);
+      ctx.lineTo(0, s * 0.8);
+      ctx.lineTo(-s * 0.2, s * 0.25);
+      ctx.lineTo(-s * 0.5, 0);
+      ctx.lineTo(-s * 0.2, -s * 0.25);
+      ctx.lineTo(0, -s * 0.8);
+      ctx.lineTo(s * 0.3, -s * 0.35);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, s * 0.3, 0, 7);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    for (const r of state.rings || []) {
+      const k = 1 - r.t / r.max;
+      ctx.strokeStyle = r.color;
+      ctx.globalAlpha = 1 - k;
+      ctx.lineWidth = 10 * (1 - k) + 2;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, 10 + r.size * k, 0, 7);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  };
+
   const drawEffects = (time, view) => {
     drawCoil(time);
     drawShield(time);
@@ -421,6 +461,7 @@ export function createRenderer({ ctx, state, canvas }) {
     threatArt.drawStrafers(time);
     threatArt.drawRockets();
     drawSpecials(time);
+    drawFlashesAndRings();
     drawPopups(view.zoom);
     drawEnemy(time);
     // Cartoon puffs: swell up, then shrink and fade, with an ink outline and a highlight.

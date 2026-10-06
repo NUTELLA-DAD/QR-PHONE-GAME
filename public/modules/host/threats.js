@@ -168,6 +168,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
         const ny = e.y + Math.sin(e.heading) * 40;
         state.bullets.push({ x: nx, y: ny, vx: Math.cos(dir) * F.BULLET_SPEED, vy: Math.sin(dir) * F.BULLET_SPEED, miss, life: 3 });
         puff(nx, ny, '#ffe9a8', 2);
+        if (state.flashes) state.flashes.push({ x: nx, y: ny, ang: dir, t: 0.07, color: '#ffb3b3', size: 0.8 });
       }
     }
   };

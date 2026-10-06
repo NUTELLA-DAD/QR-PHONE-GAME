@@ -76,6 +76,8 @@ export function createSimulation() {
     wreck: null, // { t } while the ship is breaking apart
     bombBay: { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null },
     sfxQ: [], // sounds asked for by name: [name, arg]
+    flashes: [], // muzzle flashes { x, y, ang, t, color }
+    rings: [], // impact rings { x, y, t, max, color, size }
     gasValve: { input: 0, auto: false }, // +1 = pumping hot steam into the gasbag, -1 = venting
     shield: { ang: -Math.PI / 2, on: false, flash: 0 }, // the Deflector's arc (angle around the ship)
     upgrades: {}, // id -> times taken
@@ -569,6 +571,7 @@ export function createSimulation() {
                 owner: player.id,
               });
               puff(gx + Math.cos(angle) * 64, gy - state.ship.alt + Math.sin(angle) * 64, '#ffe9a8', 4);
+              state.flashes.push({ x: gx + Math.cos(angle) * 70, y: gy - state.ship.alt + Math.sin(angle) * 70, ang: angle, t: 0.09, color: '#fff2b0', size: 1.3 });
             }
           }
         }
@@ -874,8 +877,15 @@ export function createSimulation() {
     }
     state.shield.flash = Math.max(0, state.shield.flash - dt * 3);
 
+    // Shots that hit something (life set to exactly 0) leave an impact ring; expired ones just go.
+    for (const sh of state.shells) if (sh.life === 0) state.rings.push({ x: sh.x, y: sh.y, t: 0.3, max: 0.3, color: '#ffd23f', size: 90 });
+    for (const b of state.bullets) if (b.life === 0) state.rings.push({ x: b.x, y: b.y, t: 0.25, max: 0.25, color: '#ff7b4a', size: 70 });
+    if (state.shells.some((sh) => sh.life === 0)) state.sfxQ.push(['impact']);
     for (const arr of [state.bullets, state.shells]) {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i].life <= 0) arr.splice(i, 1);
+    }
+    for (const list of [state.flashes, state.rings]) {
+      for (let i = list.length - 1; i >= 0; i--) if ((list[i].t -= dt) <= 0) list.splice(i, 1);
     }
 
     for (let i = state.puffs.length - 1; i >= 0; i--) {
@@ -921,7 +931,7 @@ export function createSimulation() {
       if (state.phase !== 'lobby') return;
       state.phase = 'flying';
       state.ev.warn = 4;
-      state.ev.warnText = 'CAST OFF! NEXT STOP: THE TURNING BEACON';
+      state.ev.warnText = 'CAST OFF!';
     },
     onMarker,
     squadrons,

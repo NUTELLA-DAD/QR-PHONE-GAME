@@ -173,6 +173,7 @@ export const config = {
     TURRET_FIRE_MIN: 4, // seconds between flak shots
     TURRET_FIRE_MAX: 6.5,
     TURRET_RANGE: 2000,
+    TURRET_WARN: 0.9, // seconds a ground gun glows and shows its aim before firing
     FLAK_MISS: 0.3, // share of flak that misses anyway (weaving at the helm adds more)
     FLAK_SPEED: 520,
     ROCKET_SHARE: 0.45, // share of turrets that are rocket batteries at full difficulty
