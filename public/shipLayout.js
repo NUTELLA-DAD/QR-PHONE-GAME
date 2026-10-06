@@ -50,6 +50,7 @@ export const SHIP_LAYOUT = {
     { n: 'Aft Dorsal Gun', p: 'nest', x: 660 },
     { n: 'Lookout', p: 'nest', x: 770 },
     { n: 'Deflector', p: 'catwalk', x: 940 },
+    { n: 'Gas Valve', p: 'catwalk', x: 450 },
     { n: 'Dorsal Gun', p: 'nest', x: 940 },
     { n: 'Tail Gun', p: 'main', x: 180 },
     { n: 'Lightning Coil', p: 'main', x: 710 },

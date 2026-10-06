@@ -29,9 +29,7 @@ export const config = {
   // How far the helm can climb/dive (world pixels either way) and how fast.
   SHIP: {
     ALT_RANGE: 420, // how far the ship can climb or dive from the middle
-    CLIMB_SPEED: 210,
-    CLIMB_ACCEL: 480, // how quickly she picks up climb/dive speed from the stick (momentum)
-    GLIDE_DRAG: 230, // how quickly the climb/dive fades after letting go (lower = floatier glide)
+    TRIM_ACCEL: 150, // push from the helm's small up/down trim engine (pixels per second squared)
     THRUST: 0.9, // throttle change per second from pushing the stick left/right
     TOP_SPEED: 560, // forward speed at full throttle (reverse is up to 40% of this)
     REVERSE: 0.4, // how much of the throttle is reverse
@@ -260,12 +258,13 @@ export const config = {
     START_FUEL: 40,
     COAL_FUEL: 25, // fuel added per load of coal
     FUEL_MAX: 100,
-    BURN_RATE: 1.6, // fuel burned per second
+    BURN_RATE: 0.35, // fuel burned per second (one load lasts about a minute)
     // Pressure in the line = heat in vs steam used. Heat comes from the coal in the firebox
-    // (more coal = hotter fire). Steam is used by everything powered (each open pipe valve),
-    // by open vents and by burst pipes, and all of them use more when the pressure is higher,
-    // so the pressure settles where heat and use balance.
-    HEAT_PER_COAL: 0.16, // pressure gained per second per unit of coal in the firebox
+    // (more coal = hotter fire, with diminishing returns). Steam is used by everything powered
+    // (each open pipe valve), by open vents, burst pipes and pumping the gasbag, and all of
+    // them use more when the pressure is higher, so the pressure settles where they balance.
+    HEAT_MAX: 10, // heat from a firebox stuffed full
+    HEAT_HALF: 20, // coal in the firebox that gives half that heat
     USE_REF: 60, // usage below is per second at this pressure (scales with pressure)
     USE_BASE: 1, // the boiler itself
     USE_ENGINE: 3, // each working engine, times the ship's speed
@@ -274,22 +273,22 @@ export const config = {
     WARN_AT: 90, // "vent steam!" warning
     BLOWOUT_AT: 100, // boiler blows: damages itself and bursts a pipe
   },
-  // Lift comes from the GAS in the gasbag (not straight from the boiler): too little and the ship
-  // sinks, too much and it floats up. The helm has to fight the drift.
-  BUOYANCY: {
-    SINKY_BELOW: 40, // below this much gas the ship drifts down...
-    FLOATY_ABOVE: 75, // ...above this it drifts up (open a vent to settle it)
-    DRIFT: 2.2, // altitude drift per second for each point of gas outside the band
-  },
-  // Gasbag: boiler pressure pumps gas in, the envelope seeps a little out, and holes leak more.
-  // With no holes the gas settles near the pressure; each hole costs about 13 points, so a
-  // leaky ship needs more pressure to stay up.
+  // The gasbag is the big up/down control. The Gas Valve station pumps hot steam in (she
+  // rises - fast when overfilled) or vents it (she drops - fast when deflated). At the neutral
+  // fill she hangs still. Hot gas cools and seeps out, and holes leak more, so the valve crew
+  // keep topping it up. The envelope visibly swells and shrinks with the gas.
   GAS: {
-    START: 65,
-    REFILL_RATE: 9, // gas pumped in per second at 100% pressure
-    SEEP: 9, // gas seeping out per second when the bag is full (less when emptier)
-    LEAK_PER_HOLE: 1.2, // extra gas lost per second per hole
-    SCRAPE_BELOW: 35, // at the lowest altitude with gas below this, the hull scrapes...
+    START: 50,
+    NEUTRAL: 50, // gas level at which she neither rises nor falls
+    LIFT: 8, // up/down push per point of gas away from neutral (pixels per second squared)
+    DRAG: 1.1, // air drag on climbing/falling (lower = longer, floatier swoops)
+    PUMP_RATE: 22, // gas pumped in per second (valve full open, good pressure)
+    PUMP_STEAM: 6, // boiler pressure used per second while pumping full
+    PUMP_MIN_PRESS: 15, // below this pressure the pump can't push any gas in
+    VENT_RATE: 30, // gas vented per second (valve full open the other way)
+    SEEP: 0.5, // gas cooling/seeping out per second
+    LEAK_PER_HOLE: 0.9, // extra gas lost per second per hole
+    SCRAPE_BELOW: 25, // grinding along the ground with gas below this, the hull scrapes...
     SCRAPE_DAMAGE: 5, // ...losing this much hull per second (before the difficulty multiplier)
     MAX_HOLES: 8,
     HOLE_CHANCE: 1, // chance a hit on the gasbag punches a hole

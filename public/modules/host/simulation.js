@@ -5,7 +5,7 @@ import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
 import { createModules } from './modules.js';
 import { createThreats } from './threats.js';
 import { createRaiders } from './raiders.js';
-import { createCourse, inRock, tilt, altBounds, pilotPlan } from './course.js';
+import { createCourse, inRock, tilt, altBounds, pilotPlan, gasFor } from './course.js';
 import { createSquadrons } from './squadrons.js';
 import { createSpecials } from './specials.js';
 import { createCoil } from './coil.js';
@@ -75,6 +75,7 @@ export function createSimulation() {
     ventOpen: SHIP_LAYOUT.vents.map(() => false), // which vent stacks are open
     wreck: null, // { t } while the ship is breaking apart
     bombBay: { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null },
+    gasValve: { input: 0, auto: false }, // +1 = pumping hot steam into the gasbag, -1 = venting
     shield: { ang: -Math.PI / 2, on: false, flash: 0 }, // the Deflector's arc (angle around the ship)
     upgrades: {}, // id -> times taken
     difficulty: config.START_DIFFICULTY,
@@ -112,7 +113,7 @@ export function createSimulation() {
   const modules = createModules();
   state.modules = modules.list;
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
-  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || !!state.GUNS[name];
+  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || name === 'Gas Valve' || !!state.GUNS[name];
 
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
@@ -217,7 +218,8 @@ export function createSimulation() {
   // Start the whole game over, moored at the mast (players stay connected).
   function restartGame() {
     restoreData(config, pristine);
-    Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0 });
+    Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
+    Object.assign(state.gasValve, { input: 0, auto: false });
     state.lastAlt = 0;
     state.wreck = null;
     state.phase = 'lobby';
@@ -427,7 +429,9 @@ export function createSimulation() {
   };
 
   const update = (dt) => {
-    let helmFlown = false; // did someone steer this frame (momentum is then theirs)
+    let helmFlown = false; // did someone steer this frame
+    let gasManned = false; // is someone on the Gas Valve
+    state.ship.trim = 0;
     // The lap scorecard pauses the action, then the upgrade vote starts.
     if (state.scorecard) {
       if ((state.scorecard.t -= dt) <= 0) {
@@ -485,19 +489,20 @@ export function createSimulation() {
         const working = modules.works(state, player.lock);
         if (player.lock === 'Helm') {
           if (working) {
-            // She flies with momentum. The lever sets the cruise speed; pushing the stick left/right
-            // thrusts backward/forward over it, and up/down climbs and dives. Let go and she glides
-            // on, slowly settling.
+            // The helm works the front/back engines (stick left/right; the lever sets the cruise
+            // speed) and the small up/down trim engine (stick up/down). Big climbs and drops come
+            // from the gasbag (the Gas Valve station).
             const SH = config.SHIP;
             const REV = -SH.REVERSE;
             if (Math.abs(player.jx) > 0.25) state.ship.speed = clamp(state.ship.speed + player.jx * SH.THRUST * dt, REV, 1);
             else if (player.thr != null) state.ship.speed += (clamp(player.thr, REV, 1) - state.ship.speed) * Math.min(1, dt * 0.9);
-            const climb = SH.CLIMB_SPEED * (0.4 + 0.6 * Math.min(1, state.ship.press / 50));
-            const wantVy = Math.abs(player.jy) > 0.15 ? -player.jy * climb : 0;
-            const rate = wantVy ? SH.CLIMB_ACCEL : SH.GLIDE_DRAG;
-            state.ship.vy = (state.ship.vy || 0) + clamp(wantVy - (state.ship.vy || 0), -rate * dt, rate * dt);
+            state.ship.trim = Math.abs(player.jy) > 0.15 ? -player.jy : 0;
             helmFlown = true;
           }
+        } else if (player.lock === 'Gas Valve') {
+          // Stick up pumps hot steam into the gasbag (she rises), down vents it (she drops).
+          state.gasValve.input = working && Math.abs(player.jy) > 0.15 ? -player.jy : 0;
+          gasManned = true;
         } else if (player.lock === 'Deflector') {
           // Swing the shield round toward where the stick points.
           if (working && Math.hypot(player.jx, player.jy) > 0.3) {
@@ -635,13 +640,13 @@ export function createSimulation() {
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
-      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : null;
+      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : stationName === 'Gas Valve' ? 'gasvalve' : null;
       const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && taken(stationName);
       let label = 'Hey!';
       let hold = false;
       if (player.lock) {
         const working = modules.works(state, player.lock);
-        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
+        label = !working && kind !== 'helm' && kind !== 'lookout' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'gasvalve' ? 'Valve' : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
         hold = kind === 'gun' || kind === 'bombbay' || kind === 'coil';
       } else if (player.act) {
         label = player.act.label;
@@ -650,9 +655,10 @@ export function createSimulation() {
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
-      const feel = state.buoyancy > 0 ? 'FLOATY - open a vent!' : state.buoyancy < 0 ? (state.gasHoles.length ? 'SINKY - patch the gasbag!' : 'SINKY - more coal!') : 'just right';
-      if (stationName === 'Boiler' && !status) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - gas ${Math.round(state.ship.gas / 5) * 5}% (${feel}) - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
-      if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag too full - she wants to rise!' : 'Gasbag low - she wants to sink!';
+      const feel = state.buoyancy > 0 ? 'RISING' : state.buoyancy < 0 ? 'FALLING' : 'holding';
+      if (stationName === 'Boiler' && !status) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
+      if (stationName === 'Gas Valve' && !status) status = `Gas ${Math.round(state.ship.gas)}% - ${feel}${state.ship.press < config.GAS.PUMP_MIN_PRESS ? ' - NO STEAM TO PUMP!' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' holes leaking' : ''}`;
+      if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag full - she is rising' : 'Gasbag low - she is dropping';
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
       const ammoText = gun ? gun.ammo : stationName === 'Bomb Bay' ? state.bombBay.bombs : null;
       const attackLabel = player.carry === 'sword' ? 'Swing' : 'Shove';
@@ -676,7 +682,8 @@ export function createSimulation() {
     let heat = 0;
     if (state.ship.fuel > 0 && !modules.byName.Boiler.broken) {
       state.ship.fuel = Math.max(0, state.ship.fuel - BO.BURN_RATE * dt);
-      heat = BO.HEAT_PER_COAL * state.ship.fuel;
+      // More coal = hotter fire, but with diminishing returns (a load lasts about a minute).
+      heat = (BO.HEAT_MAX * state.ship.fuel) / (state.ship.fuel + BO.HEAT_HALF);
     }
     const openVents = state.ventOpen.filter(Boolean).length;
     state.shield.on = taken('Deflector') && modules.works(state, 'Deflector') && state.phase === 'flying';
@@ -704,12 +711,6 @@ export function createSimulation() {
       state.ev.warnText = 'THE BOILER BLEW! A PIPE BURST!';
     }
 
-    // Gas: pumped in by boiler pressure, seeping out of the envelope, and leaking from holes.
-    const G = config.GAS;
-    if (!state.ship.down) {
-      state.ship.gas += ((G.REFILL_RATE * state.ship.press) / 100 - (G.SEEP * state.ship.gas) / 100 - G.LEAK_PER_HOLE * state.gasHoles.length) * dt;
-      state.ship.gas = clamp(state.ship.gas, 0, 100);
-    }
     const maxSpeed = clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state);
     if (state.ship.speed > maxSpeed) state.ship.speed += (maxSpeed - state.ship.speed) * Math.min(1, dt * 2);
     const maxReverse = -maxSpeed * config.SHIP.REVERSE;
@@ -732,56 +733,61 @@ export function createSimulation() {
         gun.ammo += 1;
       }
     }
-    // Vertical momentum: the ship glides on at its climb/dive speed, settling when nobody steers.
+    // ---------- Flight: engines, the gasbag and the trim engine ----------
+    const G = config.GAS;
     const SHM = config.SHIP;
-    if (!helmFlown) state.ship.vy = (state.ship.vy || 0) * Math.max(0, 1 - dt * 3);
-    if (state.ship.vy && !state.ship.down) {
+    const valve = state.gasValve;
+    const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
+    const flying = state.phase === 'flying' && !state.ship.down;
+    state.autopilot = false;
+    // Easy/Normal: with nobody at the helm (or on the Gas Valve) the ship flies itself, gently.
+    const assist = diff.autopilot && flying;
+    const plan = assist && (!getHelm() || !gasManned) ? pilotPlan(state, 4, 0.3) : null;
+    if (!getHelm()) {
+      if (plan && modules.works(state, 'Helm')) {
+        state.autopilot = true;
+        state.ship.speed += (plan.speed - state.ship.speed) * Math.min(1, dt * 0.8);
+        state.ship.trim = clamp((plan.target - state.ship.alt) / 150, -1, 1) * 0.6;
+      } else state.ship.speed += ((flying ? 0.2 : 0.3) - state.ship.speed) * dt * 0.5;
+    }
+    if (!gasManned) valve.input = plan ? gasFor(state, plan.target) * 0.6 : 0;
+    valve.auto = !gasManned && !!plan;
+
+    // Gas: the valve pumps hot steam in (costs pressure; needs steam) or vents it. Hot gas slowly
+    // cools and seeps out, and holes leak more.
+    if (flying) {
+      const pumping = Math.max(0, valve.input) * (state.ship.press > G.PUMP_MIN_PRESS && !modules.byName.Boiler.broken ? Math.min(1, state.ship.press / 60) : 0);
+      state.ship.gas += (pumping * G.PUMP_RATE + Math.min(0, valve.input) * G.VENT_RATE - G.SEEP - G.LEAK_PER_HOLE * state.gasHoles.length) * dt;
+      state.ship.press = Math.max(0, state.ship.press - pumping * G.PUMP_STEAM * dt);
+      state.ship.gas = clamp(state.ship.gas, 0, 100);
+    }
+    // Lift: above the neutral fill she accelerates up, below it she drops (fast at the extremes).
+    // The helm's little trim engine adds a nudge.
+    const lift = (state.ship.gas - G.NEUTRAL) * G.LIFT;
+    const trim = state.ship.trim * SHM.TRIM_ACCEL * (modules.works(state, 'Helm') ? 1 : 0);
+    state.buoyancy = state.ship.gas > G.NEUTRAL + 5 ? 1 : state.ship.gas < G.NEUTRAL - 5 ? -1 : 0;
+    state.sinking = state.buoyancy < 0;
+    if (flying) {
+      state.ship.vy = (state.ship.vy || 0) + (lift + trim - (state.ship.vy || 0) * G.DRAG) * dt;
       const bounds = altBounds(state);
-      // (A ship that sank below the usual floor isn't snapped back up; it has to climb out.)
-      const lo = Math.min(bounds.lo, state.ship.alt);
       const hi = Math.max(bounds.hi, state.ship.alt);
       state.ship.alt += state.ship.vy * dt;
-      if (state.ship.alt <= lo || state.ship.alt >= hi) {
-        state.ship.alt = clamp(state.ship.alt, lo, hi);
-        state.ship.vy = 0;
+      if (state.ship.alt > hi) {
+        state.ship.alt = hi;
+        state.ship.vy = Math.min(0, state.ship.vy);
       }
-    }
-    state.autopilot = false;
-    if (!getHelm()) {
-      const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
-      if (diff.autopilot && state.phase === 'flying' && modules.works(state, 'Helm')) {
-        // Autopilot: ease into the safe gap ahead (stopping to climb cliffs), slower than a real
-        // helmsman.
-        state.autopilot = true;
-        const plan = pilotPlan(state, 4, 0.3);
-        state.ship.speed += (plan.speed - state.ship.speed) * Math.min(1, dt * 0.8);
-        const step = config.SHIP.CLIMB_SPEED * config.AUTOPILOT_SPEED * dt;
-        state.ship.alt += Math.max(-step, Math.min(step, plan.target - state.ship.alt));
-      } else {
-        // Nobody steering: she drifts along slowly and holds her height.
-        state.ship.speed += ((state.phase === 'flying' ? 0.2 : 0.3) - state.ship.speed) * dt * 0.5;
-        if (state.phase !== 'flying') state.ship.alt *= 1 - dt * 0.4;
-      }
-    }
-    // Buoyancy from the gas: sinky below the band, floaty above it.
-    const BU = config.BUOYANCY;
-    const gas = state.ship.gas;
-    state.buoyancy = gas > BU.FLOATY_ABOVE ? gas - BU.FLOATY_ABOVE : gas < BU.SINKY_BELOW ? gas - BU.SINKY_BELOW : 0;
-    state.sinking = state.buoyancy < 0;
-    if (state.buoyancy && !state.ship.down && state.phase === 'flying') {
-      const bounds = altBounds(state);
-      // Sinking has no floor but the ground itself: she settles onto the rock and grinds along it.
-      const floor = state.buoyancy < 0 ? -Infinity : Math.min(bounds.lo, state.ship.alt);
-      state.ship.alt = clamp(state.ship.alt + state.buoyancy * BU.DRIFT * dt, floor, Math.max(bounds.hi, state.ship.alt));
-      const kind = state.buoyancy > 0 ? 'floaty' : 'sinky';
-      if (state.buoyWarned !== kind && Math.abs(state.buoyancy) > 4) {
-        state.buoyWarned = kind;
+      // Nearly out of gas on the ground: the hull grinds.
+      if (state.course && state.course.scraping && state.ship.gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
+      if (state.ship.gas < 12 && !state.gasWarned) {
+        state.gasWarned = true;
         state.ev.warn = 2.5;
-        state.ev.warnText = kind === 'floaty' ? 'TOO FLOATY - OPEN A VENT!' : state.gasHoles.length ? 'SINKING - PATCH THE GASBAG!' : 'SINKING - MORE STEAM!';
-      }
-      // Very low on gas at the bottom: the hull scrapes.
-      if (state.course && state.course.scraping && gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
-    } else if (!state.buoyancy) state.buoyWarned = null;
+        state.ev.warnText = state.gasHoles.length ? 'GASBAG EMPTY - PATCH IT AND PUMP!' : 'GASBAG EMPTY - PUMP IT UP!';
+      } else if (state.ship.gas > 25) state.gasWarned = false;
+    } else if (state.phase !== 'flying') {
+      // Moored at the mast.
+      state.ship.vy = 0;
+      state.ship.alt *= 1 - dt * 0.4;
+    }
     state.ship.shake = Math.max(0, state.ship.shake - dt);
     // Nose up while climbing, nose down while diving.
     const SH = config.SHIP;

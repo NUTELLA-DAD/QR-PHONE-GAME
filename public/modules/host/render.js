@@ -550,25 +550,29 @@ export function createRenderer({ ctx, state, canvas }) {
     const warnAt = config.BOILER.WARN_AT / 100;
     const p = state.ship.press;
     gauge(104, p, [[warnAt, 1, 'rgba(230,57,70,.55)']], p >= config.BOILER.WARN_AT ? '#e63946' : '#e8eef2');
-    // Gas in the envelope: sinky (blue), just right (green), floaty (yellow).
-    const BU = config.BUOYANCY;
+    // Gas in the envelope: below the neutral mark she drops (blue), above it she rises (yellow).
+    const GS = config.GAS;
     const gas = state.ship.gas;
+    const n = GS.NEUTRAL / 100;
     gauge(
       154,
       gas,
       [
-        [0, BU.SINKY_BELOW / 100, 'rgba(90,150,230,.5)'],
-        [BU.SINKY_BELOW / 100, BU.FLOATY_ABOVE / 100, 'rgba(120,200,110,.5)'],
-        [BU.FLOATY_ABOVE / 100, 1, 'rgba(240,200,60,.5)'],
+        [0, n - 0.05, 'rgba(90,150,230,.5)'],
+        [n - 0.05, n + 0.05, 'rgba(120,200,110,.6)'],
+        [n + 0.05, 1, 'rgba(240,200,60,.5)'],
       ],
-      gas > BU.FLOATY_ABOVE ? '#f2c53d' : gas < BU.SINKY_BELOW ? '#5a96e6' : '#a8d8a0',
+      gas > GS.NEUTRAL + 5 ? '#f2c53d' : gas < GS.NEUTRAL - 5 ? '#5a96e6' : '#a8d8a0',
     );
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(46 + 408 * n - 2, 150, 4, 22);
     ctx.fillStyle = config.INK;
     ctx.font = '700 16px Georgia';
     ctx.textAlign = 'left';
     const vents = (state.ventOpen || []).filter(Boolean).length;
     ctx.fillText('Steam' + (vents ? ` - ${vents} vent${vents > 1 ? 's' : ''} open` : ''), 46, 100);
-    ctx.fillText(`Gas${state.buoyancy > 0 ? ' - FLOATY' : state.buoyancy < 0 ? ' - SINKY' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}`, 46, 150);
+    const valve = state.gasValve || {};
+    ctx.fillText(`Gas${valve.input > 0.1 ? ' - PUMPING' : valve.input < -0.1 ? ' - VENTING' : ''}${state.buoyancy > 0 ? ' - RISING' : state.buoyancy < 0 ? ' - FALLING' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}`, 46, 150);
     ctx.textAlign = 'right';
     ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);
     if (state.autopilot) {

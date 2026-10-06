@@ -54,6 +54,12 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
 
   const drawGasbag = () => {
     const G = L.gasbag;
+    // The envelope swells when full and sags when empty (mostly in length, a little in height).
+    const g = Math.max(0, Math.min(1, (state.ship.gas ?? 50) / 100));
+    ctx.save();
+    ctx.translate(G.cx, G.cy);
+    ctx.scale(0.78 + 0.44 * g, 0.9 + 0.2 * g);
+    ctx.translate(-G.cx, -G.cy);
     // Better Rudders: bigger fins.
     const fin = 1 + 0.25 * has('rudders');
     ctx.save();
@@ -96,6 +102,19 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
     // Our crew's crest on the envelope.
     sprites.box(ctx, 'crests/crew', G.cx - 110, G.cy - 110, 220, 220);
+    // Nearly empty: wrinkles.
+    if (g < 0.35) {
+      ctx.strokeStyle = 'rgba(80,60,40,.5)';
+      ctx.lineWidth = 4;
+      for (let k = 0; k < 7; k++) {
+        const x = G.cx - G.rx * 0.8 + (k * G.rx * 1.6) / 6;
+        ctx.beginPath();
+        ctx.moveTo(x, G.cy - G.ry * 0.7);
+        ctx.quadraticCurveTo(x + 25, G.cy, x - 10, G.cy + G.ry * 0.7);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
     // Rigging down to the gondola.
     for (const x of [260, 520, 800, 1080, 1340]) line([[x - 40, 400], [x, 480]], 3);
   };

@@ -4,12 +4,12 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { steerTo } from './nav.js';
 import { bestTarget, targets } from './aim.js';
-import { altWindow, altBounds, pilotPlan } from './course.js';
+import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
 
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
 const GUN_STATIONS = Object.keys(L.gunMounts);
-const MANNED_STATIONS = ['Helm', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
+const MANNED_STATIONS = ['Helm', 'Gas Valve', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -114,10 +114,9 @@ function listJobs(state, bot) {
   const mods = state.modules || [];
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2 });
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
-  // Vents: open one when the gasbag is too full or pressure is near the top; close them when calm.
-  const BU = config.BUOYANCY;
-  const ventWanted = state.ship.gas > BU.FLOATY_ABOVE + 3 || state.ship.press > config.BOILER.WARN_AT - 5;
-  const ventCalm = state.ship.gas < BU.FLOATY_ABOVE - 12 && state.ship.press < config.BOILER.WARN_AT - 20;
+  // Vents: open one when the pressure is near the top; close them when it's calm again.
+  const ventWanted = state.ship.press > config.BOILER.WARN_AT - 5;
+  const ventCalm = state.ship.press < config.BOILER.WARN_AT - 20;
   const ventIdx = state.ventOpen.findIndex((open) => (ventWanted ? !open : ventCalm && open));
   if ((ventWanted || ventCalm) && ventIdx >= 0) jobs.push({ kind: 'vent', obj: L.vents[ventIdx], max: 1 });
   for (const bomb of state.bombs || []) jobs.push({ kind: 'defuse', obj: bomb, max: 1 });
@@ -131,7 +130,7 @@ function listJobs(state, bot) {
   else jobs.push(...fires, ...leaks, ...broken, ...holes);
   for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open) jobs.push({ kind: 'valve', obj: m, max: 1 });
   for (const m of mods) if (!m.broken && m.hp < 60) jobs.push({ kind: 'repair', obj: m, max: 1 });
-  if ((state.ship.fuel < 60 && state.ship.gas < BU.FLOATY_ABOVE - 10 && state.ship.press < config.BOILER.WARN_AT - 25) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
+  if ((state.ship.fuel < 25 && state.ship.press < config.BOILER.WARN_AT - 25) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
   const guns = GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
@@ -186,6 +185,12 @@ function operate(p, state, dt) {
     if (target !== null) p.jy = clamp((ship.alt - target) / 90 + (ship.vy || 0) / 260, -1, 1);
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
     else p.jy = 0;
+  } else if (p.lock === 'Gas Valve') {
+    // Fly her up and down: pump or vent toward the altitude the pilot plan wants.
+    const plan = pilotPlan(state, 3, B.HELM_SPEED);
+    const dodge = beamDodge(state);
+    p.jy = -gasFor(state, dodge ?? plan.target);
+    p.jx = 0;
   } else if (p.lock === 'Lightning Coil') {
     // Aim at the thickest bunch of enemies and charge while lined up.
     const shot = coilShot(state);
@@ -334,8 +339,8 @@ export function updateBot(p, state, dt) {
       const gunUseless = (p.gunIdle || 0) > 6 || (mod && mod.broken);
       if (gunUseless) p.gunIdle = 0;
       // Never wander off the helm while there's terrain to steer through.
-      if (p.lock === 'Helm' && config.COURSE.ENABLED) p.lockLeft = Math.max(p.lockLeft, 1);
-      if (p.lockLeft <= 0 || gunUseless || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
+      if ((p.lock === 'Helm' || p.lock === 'Gas Valve') && config.COURSE.ENABLED) p.lockLeft = Math.max(p.lockLeft, 1);
+      if (p.lockLeft <= 0 || gunUseless || (urgent > free && p.lock !== 'Helm' && p.lock !== 'Gas Valve' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;
         p.lockLeft = undefined;
         p.botJob = null;

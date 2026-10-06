@@ -138,6 +138,16 @@ export function pilotPlan(state, ahead, cruise) {
   return { target, speed: Math.abs(target - alt) > 120 ? 0.04 : cruise };
 }
 
+// The Gas Valve setting (-1 vent .. +1 pump) that brings the ship to altitude `target`.
+export function gasFor(state, target) {
+  const G = config.GAS;
+  const vy = state.ship.vy || 0;
+  const wantVy = Math.max(-320, Math.min(320, (target - state.ship.alt) * 1.3));
+  const needAccel = (wantVy - vy) * 2.5 + vy * G.DRAG;
+  const wantGas = G.NEUTRAL + needAccel / G.LIFT;
+  return Math.max(-1, Math.min(1, (wantGas - state.ship.gas) / 8));
+}
+
 // Keep something flying at (x, y) out of the rock, `margin` away from it, looking a little to
 // either side (`reach`) so it rises before a slope. `ahead` = seconds into the future (for aiming).
 export function keepClear(state, x, y, margin, ahead = 0, reach = 160) {
@@ -664,11 +674,11 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip }
     const alt = state.ship.alt;
     if (course.scraping && state.ship.speed < 0) return 'Backing off the wall - now climb or dive!';
     const plan = pilotPlan(state, 2.5, 0.5);
-    if (plan.speed < 0.1 && plan.target - alt > 120) return 'STOP (lever to the line) and CLIMB!';
-    if (plan.speed < 0.1 && alt - plan.target > 120) return 'STOP (lever to the line) and DIVE!';
+    if (plan.speed < 0.1 && plan.target - alt > 120) return 'STOP (lever to the line) - Gas Valve: PUMP to climb!';
+    if (plan.speed < 0.1 && alt - plan.target > 120) return 'STOP (lever to the line) - Gas Valve: VENT to drop!';
     if (w.min > w.max) return 'Squeeze through - hold the middle!';
-    if (alt < w.min) return 'CLIMB! Push the stick up';
-    if (alt > w.max) return 'DIVE! Pull the stick down';
+    if (alt < w.min) return 'CLIMB! (stick up - and pump the gas)';
+    if (alt > w.max) return 'DIVE! (stick down - and vent the gas)';
     return '';
   };
 

@@ -25,13 +25,14 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
 
 ## Jobs on board
 
-- **Helm** (bridge): steer up/down through mountains, under rock, through underpasses and
-  zig-zag runs (climb, dive, climb...), over mountain **fortresses** (gun towers on the walls) and
-  **factories** (tall smokestacks). The land climbs and falls: at a **cliff wall**, stop and climb
-  straight up; at a **cliff edge**, clear it, then dive down into the cave. The lever is the
-  cruise speed: up = ahead, the yellow STOP line = hover, below it = reverse. The ship has
-  momentum: push the stick any way (left/right = thrust back/forward) and she glides on after you
-  let go. Nobody at the helm? On Easy/Normal the autopilot steers gently.
+- **Helm** (bridge): the engines. Stick left/right = front/back engines, stick up/down = a small
+  up/down trim engine, the lever = cruise speed (yellow STOP line = hover, below it = reverse).
+  Steer over mountains, under rock, through zig-zags, past fortresses and factories, and stop
+  below cliff walls. Nobody at the helm? On Easy/Normal the autopilot steers gently.
+- **Gas Valve** (top catwalk): the big up/down control. Stick UP pumps hot steam into the gasbag
+  (she rises - fast when overfilled, and the envelope swells), DOWN vents it (she drops - fast
+  when empty, and it sags). The gas slowly cools and leaks from holes, so keep topping it up.
+  Pumping uses boiler steam.
 - **Guns** (6 of them, each turns only so far): aim near a target and the aim snaps on. Guns need
   **ammo** carried from the Ammo Hold.
 - **Lightning Coil** (main deck, Workshop): aim with the stick, HOLD to charge (uses lots of
@@ -42,12 +43,10 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
 - **Bomb Bay** (lower deck, Aft Gun Deck): press DROP to drop a bomb through the belly doors. A
   red ring on the TV shows where it will land. Bombs knock out gun turrets and flatten castle
   towers, walls and smokestacks (clearing your path). Reload with ammo crates (2 bombs each).
-- **Boiler**: carry **coal** from the Coal Bunker (lower deck). More coal = more steam pressure.
+- **Boiler**: carry **coal** from the Coal Bunker (lower deck) - about one load a minute. More
+  coal = more steam pressure.
   Everything powered (engines, helm, lift) uses steam; tap Action at a **vent** stack to open or
   close it. At 100% pressure the boiler blows.
-- **Gasbag**: steam pressure pumps gas into the bag; holes leak it out. The gas gauge shows
-  **sinky** (blue), **just right** (green) or **floaty** (yellow) - the ship drifts down or up and
-  the helm has to fight it. Patch holes and keep the pressure up to stay afloat.
 - **Tools** from the racks and hooks: **hammer** (patch holes, repair broken modules and gasbag
   tears), **extinguisher** (fires), **sword** (raiders). One thing at a time.
 - **Valves** on the steam pipes: close a burst pipe's valve to stop the leak.
