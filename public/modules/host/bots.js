@@ -18,8 +18,23 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 const stationNamed = (name) => L.stations.find((s) => s.n === name);
 
+let world = null; // the game state (set each bot update), so steer() knows about the gunship
+
 // Walk/climb toward platform d at position x. Returns true when there.
+// To get to (or back from) a gunship alongside, swing across the gap on the line.
 function steer(p, d, x, near = 12) {
+  const g = world && world.gunship;
+  if (g && g.rope && d === MAIN && p.d === MAIN && !p.swing) {
+    const mid = (MAIN_X1 + GS.x0) / 2;
+    if (x > mid !== p.x > mid) {
+      const edge = p.x > mid ? GS.x0 + 40 : MAIN_X1 - 15;
+      const step = steerTo(p, MAIN, edge, 12);
+      p.jx = step.jx;
+      p.jy = step.jy;
+      if (step.arrived) press(p);
+      return false;
+    }
+  }
   const step = steerTo(p, d, x, near);
   p.jx = step.jx;
   p.jy = step.jy;
@@ -154,6 +169,11 @@ function listJobs(state, bot) {
     else {
       for (const c of gs.crew) jobs.push({ kind: 'fight', obj: c, max: 1 });
       jobs.push({ kind: 'raid', obj: 'raid', max: 2 });
+    }
+    // Already aboard her? Finish the job there first: fight (if armed), then plant the charge.
+    if (gs.rope && bot.d === MAIN && bot.x > (MAIN_X1 + GS.x0) / 2) {
+      jobs.unshift({ kind: 'raid', obj: 'raid', max: 8 });
+      if (bot.carry === 'sword') for (const c of gs.crew) jobs.unshift({ kind: 'fight', obj: c, max: 2 });
     }
   }
   if ((state.ship.fuel < 25 && state.ship.press < config.BOILER.WARN_AT - 25) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
@@ -346,7 +366,7 @@ function wander(p) {
   if (!p.wanderTo || (p.wanderWait !== undefined && p.wanderWait <= 0)) {
     const d = (Math.random() * L.platforms.length) | 0;
     const plat = L.platforms[d];
-    p.wanderTo = { d, x: plat.x0 + 20 + Math.random() * (plat.x1 - plat.x0 - 40) };
+    p.wanderTo = { d, x: plat.x0 + 20 + Math.random() * ((plat.id === 'main' ? MAIN_X1 : plat.x1) - plat.x0 - 40) };
     p.wanderWait = undefined;
   }
   if (steer(p, p.wanderTo.d, p.wanderTo.x) && p.wanderWait === undefined) p.wanderWait = 1 + Math.random() * 2;
@@ -354,6 +374,7 @@ function wander(p) {
 
 // Called once per frame for each bot, before the game applies its input.
 export function updateBot(p, state, dt) {
+  world = state;
   p.pressCd = (p.pressCd || 0) - dt;
   p.whackCd = (p.whackCd || 0) - dt;
   if (p.wanderWait !== undefined) p.wanderWait -= dt;

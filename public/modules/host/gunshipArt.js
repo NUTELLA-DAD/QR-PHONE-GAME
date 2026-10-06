@@ -1,6 +1,6 @@
 // Drawing for an enemy gunship alongside (ship coordinates - drawn inside the ship's transform),
-// its crew, the rope bridge from our bow, and the charge ticking on its boiler.
-import { GS } from './gunship.js';
+// its crew at their posts, the swing line from its yardarm, and the charge ticking on its boiler.
+import { GS, POSTS, ANCHOR, MAIN_X1 } from './gunship.js';
 
 export function createGunshipArt({ ctx, state, ink }) {
   return (time) => {
@@ -17,29 +17,6 @@ export function createGunshipArt({ ctx, state, ink }) {
       ctx.translate(cx, y);
       ctx.rotate(g.sink * 0.15);
       ctx.translate(-cx, -y);
-    }
-    // Rope bridge from our bow (sagging, with planks).
-    if (g.rope) {
-      const ax = 1470;
-      const bx = x0;
-      ink();
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.moveTo(ax, y - 4);
-      ctx.quadraticCurveTo((ax + bx) / 2, y + 60, bx, y - 4);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(ax, y - 70);
-      ctx.quadraticCurveTo((ax + bx) / 2, y - 20, bx, y - 70);
-      ctx.stroke();
-      ctx.fillStyle = '#8a6a44';
-      for (let k = 1; k < 10; k++) {
-        const t = k / 10;
-        const px = ax + (bx - ax) * t;
-        const py = y - 4 + 4 * 60 * t * (1 - t) * 0.5;
-        ctx.fillRect(px - 10, py - 4, 20, 10);
-        ctx.strokeRect(px - 10, py - 4, 20, 10);
-      }
     }
     // Gasbag.
     ink();
@@ -79,6 +56,20 @@ export function createGunshipArt({ ctx, state, ink }) {
       ctx.lineTo(rx + 20, y - 80);
       ctx.stroke();
     }
+    // Yardarm sticking out toward us (the hookshot catches it).
+    const ax = ANCHOR.x + o;
+    const ay = ANCHOR.y + sink;
+    ink();
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(x0 + 120, ay + 40);
+    ctx.lineTo(ax, ay);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(x0 + 160, 520);
+    ctx.stroke();
     // Hull.
     ctx.lineWidth = 6;
     ctx.fillStyle = g.hit > 0 ? '#ffffff' : '#4a2626';
@@ -138,6 +129,27 @@ export function createGunshipArt({ ctx, state, ink }) {
       ctx.fill();
       ctx.stroke();
     }
+    // Her helm wheel.
+    const hx = POSTS.helm[0] + 40 + o;
+    ink();
+    ctx.lineWidth = 5;
+    ctx.fillStyle = '#8a6a44';
+    ctx.fillRect(hx - 6, y - 60, 12, 54);
+    ctx.strokeRect(hx - 6, y - 60, 12, 54);
+    ctx.save();
+    ctx.translate(hx, y - 78);
+    ctx.rotate(g.posts && !g.posts.helm ? time * 4 : Math.sin(time) * 0.3); // spins free with nobody on it
+    ctx.beginPath();
+    ctx.arc(0, 0, 26, 0, 7);
+    ctx.stroke();
+    for (let k = 0; k < 4; k++) {
+      ctx.rotate(Math.PI / 4);
+      ctx.beginPath();
+      ctx.moveTo(-34, 0);
+      ctx.lineTo(34, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
     // Crew: red horned raiders; they flash white while winding up a swing.
     for (const c of g.crew) {
       const px = c.x + o;
@@ -150,6 +162,17 @@ export function createGunshipArt({ ctx, state, ink }) {
       ctx.arc(px, y - 88, 20, 0, 7);
       ctx.fill();
       ctx.stroke();
+      // What they do, at a glance: gunners carry a rammer, the stoker a shovel, the helmsman a cap.
+      if (c.role === 'helm') {
+        ctx.fillStyle = '#1b1410';
+        ctx.fillRect(px - 22, y - 112, 44, 10);
+      } else if (c.role === 'gunner') {
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(px - 16, y - 44, 32, 14);
+      } else if (c.role === 'stoker') {
+        ctx.fillStyle = '#ff8c42';
+        ctx.fillRect(px - 16, y - 44, 32, 14);
+      }
       ctx.fillStyle = '#f1e2b8';
       for (const s of [-1, 1]) {
         ctx.beginPath();
@@ -171,12 +194,49 @@ export function createGunshipArt({ ctx, state, ink }) {
         ctx.fillRect(px - 18 + k * 13, y - 140, 9, 9);
       }
     }
+    // The swing line: tied off at our bow, or carrying someone across.
+    if (g.rope) {
+      const swingers = Object.values(state.players).filter((p) => p.swing);
+      ctx.strokeStyle = '#d8c79a';
+      ctx.lineWidth = 4;
+      for (const p of swingers) {
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(p.x, p.y - 90);
+        ctx.stroke();
+      }
+      if (!swingers.length) {
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.quadraticCurveTo((ax + MAIN_X1) / 2, y - 60, MAIN_X1 - 10, y - 50);
+        ctx.stroke();
+      }
+    }
     // Health bar over the gasbag.
     if (g.phase !== 'sinking') {
       ctx.fillStyle = '#1b1410';
       ctx.fillRect(cx - 200, 190, 400, 22);
       ctx.fillStyle = '#e63946';
       ctx.fillRect(cx - 196, 194, 392 * Math.max(0, g.hp / g.max), 14);
+      // Her systems: lit while crewed, dark and crossed out when you've knocked them out.
+      if (g.posts) {
+        const items = [['GUNS', g.posts.guns > 0], ['STEAM', g.posts.steam], ['HELM', g.posts.helm]];
+        ctx.font = '900 24px Georgia';
+        ctx.textAlign = 'center';
+        items.forEach(([name, on], i) => {
+          const tx = cx - 150 + i * 150;
+          ctx.fillStyle = on ? '#ffd23f' : 'rgba(255,255,255,.35)';
+          ctx.fillText(name, tx, 244);
+          if (!on) {
+            ctx.strokeStyle = '#e63946';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(tx - 44, 236);
+            ctx.lineTo(tx + 44, 228);
+            ctx.stroke();
+          }
+        });
+      }
     }
     ctx.restore();
   };

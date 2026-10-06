@@ -9,7 +9,7 @@ import { createCourse, inRock, tilt, altBounds, pilotPlan, gasFor } from './cour
 import { createSquadrons } from './squadrons.js';
 import { createSpecials } from './specials.js';
 import { createCoil } from './coil.js';
-import { createGunship } from './gunship.js';
+import { createGunship, MAIN_X1 } from './gunship.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
 import { assistAim } from './aim.js';
@@ -124,7 +124,7 @@ export function createSimulation() {
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
   const interaction = (player, station) => {
-    if (player.lock || player.conn != null || player.fall) return null;
+    if (player.lock || player.conn != null || player.fall || player.swing) return null;
     const here = (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r;
     const tool = player.carry;
     const revive = Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && q.conn == null && here(q, 65));
@@ -371,8 +371,8 @@ export function createSimulation() {
     if (d !== null) {
       const p = PLATFORMS[d];
       const holes = power >= 2 ? 2 : Math.random() < config.SHIP.HOLE_CHANCE ? 1 : 0;
-      for (let i = 0; i < holes && state.breaches.length < 10; i++) state.breaches.push({ x: clamp(x + (i - 0.5) * 70 * (holes - 1), p.x0 + 20, p.x1 - 20), d, prog: 0 });
-      if ((power >= 2 || Math.random() < 0.35) && state.fires.length < 8) state.fires.push({ x: clamp(x + (Math.random() - 0.5) * 80, p.x0 + 20, p.x1 - 20), d, t: 0, prog: 0 });
+      for (let i = 0; i < holes && state.breaches.length < 10; i++) state.breaches.push({ x: clamp(x + (i - 0.5) * 70 * (holes - 1), p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d, prog: 0 });
+      if ((power >= 2 || Math.random() < 0.35) && state.fires.length < 8) state.fires.push({ x: clamp(x + (Math.random() - 0.5) * 80, p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d, t: 0, prog: 0 });
     }
     damageHull(config.SHIP.HIT_DAMAGE * power);
   };
@@ -536,6 +536,11 @@ export function createSimulation() {
     }
     for (const player of Object.values(state.players)) {
       if (player.bot) updateBot(player, state, dt);
+      if (player.swing) {
+        gunship.swingStep(player, dt);
+        player.actQ = false;
+        continue;
+      }
       if (player.fall) {
         fall(player, dt, 260, (w) => {
           // Fell off the ship (or off a gunship): back aboard in the medical bay, dazed.
@@ -705,8 +710,9 @@ export function createSimulation() {
             gunship.fireHook();
             stat(player, 'boarding');
             puff(player.x + 200, player.y - 60 - state.ship.alt, '#ffe9a8', 8);
-            phoneFx(player, 'Hook fast! Across the rope - plant a charge at their boiler!', [40, 30, 40]);
-          } else if (type === 'rack') player.carry = player.carry === act.obj.kind ? null : act.obj.kind;
+            phoneFx(player, 'Hooked! Press Action at the bow to swing across!', [40, 30, 40]);
+          } else if (type === 'swing') gunship.swing(player);
+          else if (type === 'rack') player.carry = player.carry === act.obj.kind ? null : act.obj.kind;
           else if (type === 'vent') {
             const i = SHIP_LAYOUT.vents.indexOf(act.obj);
             state.ventOpen[i] = !state.ventOpen[i];
@@ -1003,7 +1009,7 @@ export function createSimulation() {
       if ((fire.t += dt) > config.FIRE.SPREAD_EVERY && state.fires.length < 8) {
         fire.t = 0;
         const p = PLATFORMS[fire.d];
-        state.fires.push({ x: clamp(fire.x + (Math.random() < 0.5 ? -1 : 1) * (100 + Math.random() * 60), p.x0 + 20, p.x1 - 20), d: fire.d, t: 0, prog: 0 });
+        state.fires.push({ x: clamp(fire.x + (Math.random() < 0.5 ? -1 : 1) * (100 + Math.random() * 60), p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d: fire.d, t: 0, prog: 0 });
         break;
       }
     }

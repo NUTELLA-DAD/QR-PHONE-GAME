@@ -90,15 +90,21 @@ export const config = {
     EVERY_MIN: 80,
     EVERY_MAX: 120,
     HP: 30, // shell hits to shoot one down (boarding is quicker)
-    CREW: 2, // crew aboard (more on later missions)
+    CREW: 4, // crew aboard: gunner, helmsman, stoker, guard (more on later missions)
     CREW_HP: 3, // sword hits count 2
     CREW_SPEED: 160,
     FIRE_EVERY: 7, // seconds between broadsides
-    SHOTS: 2, // cannonballs per broadside
+    SHOTS: 3, // most cannonballs per broadside (1 gunner = 2 shots, 2 gunners = 3)
     STAY: 75, // seconds alongside before it pulls away
     PLANT_TIME: 2.5, // holding Action at its boiler to set the charge
     FUSE: 8, // seconds to get back before it blows
     CUT_TIME: 7, // seconds its crew need to hack through the rope (they wait 3s first)
+    SWING_TIME: 0.9, // seconds to swing across on the line
+    SWING_DIP: 150, // how far below the deck the swing dips
+    STOMP_RANGE: 160, // landing on her deck knocks back crew this close
+    DRIFT_TIME: 6, // seconds without a helmsman (and nobody aboard her) before she drifts away
+    REFILL_TIME: 6, // seconds before a guard takes over an empty post (nobody aboard)
+    REPAIR_RATE: 0.15, // her hull points patched per second, per guard, while nobody is aboard
     RESPAWN_TIME: 4, // seconds dazed in the medical bay after falling off
     REWARD_HULL: 15,
     REWARD_COAL: 40,
