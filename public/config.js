@@ -1,7 +1,7 @@
 export const config = {
   W: 1600,
   H: 900,
-  INK: '#1b1410',
+  INK: '#2b2622',
   MAX_PLAYERS: 16,
   PLAYER_COLORS: ['#e63946', '#f4a261', '#f1c40f', '#2a9d8f', '#3a86ff', '#8338ec', '#ff5da2', '#06d6a0', '#ff7b00', '#00b4d8', '#9ef01a', '#b5179e', '#ffffff', '#7f5539', '#4cc9f0', '#d00000'],
   // Main loop: the simulation always advances in fixed steps so game speed is the same on any display.
@@ -459,13 +459,16 @@ export const config = {
   // caves); the ship in warm wood and cream; crew in their bright scarf colours; enemies and
   // their attacks in red; friendly shots in the shooter's colour; pickups and goals in gold.
   PALETTE: {
-    rock: '#8a7560',
-    cave: '#465060', // muted slate blue (soft, faded look - after Bomber XXL)
-    enemy: '#e63946',
-    gold: '#ffd23f',
-    ink: '#1b1410',
-    panel: '#f3ead6',
+    // Style 2026: "Bomber XXL soft flat" - faded pastels, thin dark outlines.
+    sky: '#cfe3ea', haze: '#e6ecea', rock: '#9a8670', cave: '#5d687a',
+    woodLight: '#b98a5a', woodDark: '#6b4a32', brass: '#c9a85a', canvas: '#ebdfc0', canvasShade: '#d6c7a2',
+    crew: '#ece3c8', crewGreen: '#8fb37a',
+    enemy: '#a8443f', enemyDark: '#4a4346', enemyLight: '#c9706a',
+    muzzle: '#f2d36b', fire: '#e8884a', smoke: '#9a9a9a',
+    gold: '#f2d36b', ink: '#2b2622', panel: '#f3ead6',
   },
+  // Outline weights (Style 2026, see art/ART_SPEC.md).
+  OUTLINE: { MAIN: 3.4, SMALL: 2.5, SHIP: 4 },
   // Old-film effects. All OFF (the user found them unpleasant). Raise a number or set
   // LINE_BOIL to true to bring one back.
   STYLE: {

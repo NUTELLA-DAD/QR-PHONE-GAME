@@ -34,7 +34,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
   };
 
   const pine = (x, y, s, dark) => {
-    ctx.fillStyle = '#5a3b26';
+    ctx.fillStyle = '#8a6444';
     ctx.fillRect(x - 4 * s, y - 14 * s, 8 * s, 16 * s);
     ctx.strokeRect(x - 4 * s, y - 14 * s, 8 * s, 16 * s);
     ctx.fillStyle = dark ? '#2f5e3a' : '#3d7a47';
@@ -208,10 +208,10 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     }
     ctx.stroke();
     ctx.strokeStyle = '#7fb24f';
-    ctx.lineWidth = 8;
+    ctx.lineWidth = 4.2;
     ctx.stroke();
     ink();
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 3.2;
     ctx.beginPath();
     for (const [[ax, ay], [bx2, by2]] of segs) {
       ctx.moveTo(ax, ay);
@@ -222,7 +222,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     // Open sky: pine trees on the hills.
     if (map.open) {
       ink();
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.8;
       for (const [[ax, ay], [bx2, by2], i, j] of floors) {
         if (Math.abs(by2 - ay) > 60 || hash(i * 13 + j, 58) > 0.14) continue;
         pine((ax + bx2) / 2, (ay + by2) / 2 + 6, 1.2 + hash(i, 59), hash(j, 60) < 0.4);
@@ -237,7 +237,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         const len = 30 + hash(i, 56) * 50;
         ctx.fillStyle = '#6e5646';
         ink();
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 2.8;
         ctx.beginPath();
         ctx.moveTo(x - 16, y - 4);
         ctx.lineTo(x, y + len);
@@ -248,7 +248,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       } else if (h < 0.28) {
         const len = 60 + hash(j, 57) * 140;
         ctx.strokeStyle = '#3f6e30';
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 3.2;
         ctx.beginPath();
         ctx.moveTo(x, y);
         ctx.quadraticCurveTo(x + 16, y + len * 0.5, x - 6, y + len);
@@ -259,7 +259,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.arc(x, y + 20, 60, 0, 7);
         ctx.fill();
         ink();
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 2.8;
         ctx.fillStyle = '#7fe6ff';
         for (const dx of [-18, 0, 18]) {
           ctx.beginPath();
@@ -349,7 +349,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     // Snow caps on the high peaks (the surface plus a jagged lower edge).
     ctx.fillStyle = '#f4f7fb';
     ink();
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 2.8;
     for (let i = 0; i < n; i++) {
       if (gs[i] >= snow[i]) continue;
       let j = i;
@@ -390,7 +390,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
 
     // Ink outline of the whole surface.
     ink();
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 3.2;
     ctx.beginPath();
     trace(xs, gs, () => 0);
     ctx.stroke();
@@ -413,7 +413,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       ctx.lineTo(x + 10, y - 13);
       ctx.stroke();
       if (h < 0.08) {
-        ctx.fillStyle = ['#ffd23f', '#ff8fa0', '#ffffff'][ids[i] % 3];
+        ctx.fillStyle = ['#f2d36b', '#ff8fa0', '#ffffff'][ids[i] % 3];
         ctx.beginPath();
         ctx.arc(x + 1, y - 20, 5, 0, 7);
         ctx.fill();
@@ -426,7 +426,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       (course.markers || []).some((m) => Math.abs(m.cx - cx) < 220) ||
       course.features.some((f) => f.blocks && f.blocks.some((b) => cx > b.x0 - 80 && cx < b.x1 + 80));
     ink();
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 2.8;
     for (let i = 1; i < last; i++) {
       if (ids[i] % 4 !== 0) continue;
       const h = hash(ids[i], 8);
@@ -513,7 +513,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
           ctx.arc(x, y, 75, 0, 7);
           ctx.fill();
           ink();
-          ctx.lineWidth = 5;
+          ctx.lineWidth = 3;
           ctx.fillStyle = '#7fe6ff';
           [-30, 0, 28].forEach((dx, m) => {
             const hgt = 40 + (m === 1 ? 30 : m * 8);
@@ -536,7 +536,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.closePath();
         ctx.fill();
         ink();
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 3.2;
         ctx.beginPath();
         trace(xs, ceilYs, () => 0, i, j);
         ctx.stroke();
@@ -544,7 +544,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
 
       // Stalactites and hanging vines (only where the rock is well down into view).
       ink();
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.8;
       for (let i = 1; i < last; i++) {
         if (!rock(i) || !rock(i - 1) || !rock(i + 1)) continue;
         const h = hash(ids[i], 12);
@@ -563,7 +563,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         } else if (ids[i] % 5 === 1 && h < 0.35) {
           const len = 40 + hash(ids[i], 15) * 110;
           ctx.strokeStyle = '#3f6e30';
-          ctx.lineWidth = 5;
+          ctx.lineWidth = 3;
           ctx.beginPath();
           ctx.moveTo(xs[i], cs[i]);
           ctx.quadraticCurveTo(xs[i] + 14, cs[i] + len * 0.5, xs[i] - 4, cs[i] + len);
@@ -575,7 +575,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
             ctx.fill();
           }
           ink();
-          ctx.lineWidth = 4;
+          ctx.lineWidth = 2.8;
         }
       }
     }
@@ -625,7 +625,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = '#1b1410';
+    ctx.fillStyle = '#2b2622';
     ctx.beginPath();
     ctx.moveTo(x - 10 * s, y + 34 * s);
     ctx.quadraticCurveTo(x - 14 * s, y + 14 * s, x - 4 * s, y + 10 * s);
@@ -722,7 +722,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
-          ctx.fillStyle = '#9fd3e6';
+          ctx.fillStyle = '#bcd9e3';
           ctx.fillRect(a + tw - 8, top + 8, 6, roofH - 10);
         }
         for (let x = x0 + 40; x < x1 - 30; x += 60) window2(x, top + roofH + 24, 26, 30, ((x - x0) / 60) % 2 < 1);
@@ -798,7 +798,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.translate(0, -26);
         ctx.rotate(t.aim);
         ctx.strokeStyle = `rgba(255,40,60,${0.4 + 0.5 * k})`;
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 3.2;
         ctx.setLineDash([20, 18]);
         ctx.beginPath();
         ctx.moveTo(60, 0);
@@ -810,12 +810,12 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       if (t.rocket) {
         // Rocket battery: a sloped launch rail with a rocket waiting on it.
         ink();
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 3.2;
         ctx.beginPath();
         ctx.moveTo(-20, -10);
         ctx.lineTo(10, -70);
         ctx.stroke();
-        ctx.fillStyle = t.cd < 1 ? '#c0392b' : '#7a2a22';
+        ctx.fillStyle = t.cd < 1 ? '#a8443f' : '#7a2a22';
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.ellipse(0, -48, 8, 18, 0.45, 0, 7);
@@ -826,7 +826,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.translate(0, -26);
         ctx.rotate(t.aim);
         ink();
-        ctx.fillStyle = '#4a4a4a';
+        ctx.fillStyle = '#5a5558';
         ctx.fillRect(0, -8, 58, 16);
         ctx.strokeRect(0, -8, 58, 16);
         ctx.restore();
@@ -842,13 +842,13 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#c0392b';
+        ctx.fillStyle = '#a8443f';
         ctx.beginPath();
         ctx.arc(0, -22, 7, 0, 7);
         ctx.fill();
       }
       for (let i = 0; i < t.hp; i++) {
-        ctx.fillStyle = '#e63946';
+        ctx.fillStyle = '#a8443f';
         ctx.fillRect(-18 + i * 13, -66, 9, 9);
       }
       ctx.restore();
@@ -890,7 +890,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
           ctx.stroke();
         }
         ink();
-        ctx.fillStyle = '#5a3b26';
+        ctx.fillStyle = '#8a6444';
         ctx.fillRect(x - 60, top - 12, 120, 24);
         ctx.strokeRect(x - 60, top - 12, 120, 24);
         ctx.beginPath();
@@ -908,7 +908,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         // Enemy outpost: a tall pole with the raiders' banner (gone once it's destroyed).
         const live = state.course.map && state.course.map.outposts.find((o) => o.x === m.mx && !o.done);
         if (!live) continue;
-        ctx.lineWidth = 8;
+        ctx.lineWidth = 4.2;
         ctx.beginPath();
         ctx.moveTo(x, g);
         ctx.lineTo(x, g - 420);
@@ -917,7 +917,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
       } else if (m.kind === 'checkpoint') {
         // Tall pole with a waving chequered flag.
         const top = g - 640 - LIFT;
-        ctx.lineWidth = 8;
+        ctx.lineWidth = 4.2;
         ctx.beginPath();
         ctx.moveTo(x, g);
         ctx.lineTo(x, top);
@@ -925,7 +925,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
         const wave = (k) => Math.sin(time * 5 + k) * 8;
         for (let i = 0; i < 4; i++) {
           for (let j = 0; j < 3; j++) {
-            ctx.fillStyle = (i + j) % 2 ? '#ffffff' : '#e63946';
+            ctx.fillStyle = (i + j) % 2 ? '#ffffff' : '#a8443f';
             ctx.beginPath();
             ctx.moveTo(x + i * 26, top + j * 24 + wave(i));
             ctx.lineTo(x + (i + 1) * 26, top + j * 24 + wave(i + 1));
@@ -945,7 +945,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
           const y1 = g - ((i + 1) * (820 + LIFT)) / 6;
           const w0 = 80 - (i * 40) / 6;
           const w1 = 80 - ((i + 1) * 40) / 6;
-          ctx.fillStyle = i % 2 ? '#ffffff' : '#c0392b';
+          ctx.fillStyle = i % 2 ? '#ffffff' : '#a8443f';
           ctx.beginPath();
           ctx.moveTo(x - w0, y0);
           ctx.lineTo(x - w1, y1);
@@ -955,7 +955,7 @@ export function createCourseArt({ ctx, state, ink, sprites }) {
           ctx.fill();
           ctx.stroke();
         }
-        ctx.fillStyle = '#ffd23f';
+        ctx.fillStyle = '#f2d36b';
         ctx.fillRect(x - 34, top - 60, 68, 60);
         ctx.strokeRect(x - 34, top - 60, 68, 60);
         ctx.fillStyle = '#3b2a1d';

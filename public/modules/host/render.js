@@ -25,7 +25,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const characterArt = createCharacterArt({ ctx, sprites, drawItem: (...a) => drawItemAt(...a) });
   const ink = () => {
     ctx.strokeStyle = config.INK;
-    ctx.lineWidth = 5;
+    ctx.lineWidth = config.OUTLINE.MAIN;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
   };
@@ -74,7 +74,7 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.restore();
       }
       if (!sprites.box(ctx, 'ship/gun-mount', gun.bx - 16, gun.by - 16, 32, 32)) {
-        ctx.fillStyle = '#e63946';
+        ctx.fillStyle = '#a8443f';
         ctx.beginPath();
         ctx.arc(gun.bx, gun.by, 16, 0, 7);
         ctx.fill();
@@ -102,7 +102,7 @@ export function createRenderer({ ctx, state, canvas }) {
       }
       const pip = Math.min(9, 72 / gun.max); // pip spacing: the row stays about 72 px wide however many shells a gun holds
       for (let i = 0; i < gun.max; i++) {
-        ctx.fillStyle = i < gun.ammo ? '#ffd23f' : 'rgba(27,20,16,.3)';
+        ctx.fillStyle = i < gun.ammo ? '#f2d36b' : 'rgba(27,20,16,.3)';
         ctx.beginPath();
         ctx.arc(gun.bx - 31 + i * pip, gun.by + 30, Math.min(3.6, pip * 0.42), 0, 7);
         ctx.fill();
@@ -110,9 +110,9 @@ export function createRenderer({ ctx, state, canvas }) {
       if (gun.empty > 0) {
         ctx.font = '900 24px Georgia';
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#e63946';
+        ctx.fillStyle = '#a8443f';
         ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 3;
         ctx.strokeText(gun.emptyText || 'EMPTY!', gun.bx, gun.by - 32);
         ctx.fillText(gun.emptyText || 'EMPTY!', gun.bx, gun.by - 32);
         ink();
@@ -173,7 +173,7 @@ export function createRenderer({ ctx, state, canvas }) {
       if (player.ko > 0) {
         ctx.font = '900 22px Georgia';
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#e63946';
+        ctx.fillStyle = '#a8443f';
         ctx.fillText('KO!', player.x, player.y - 80);
         drawBar(player.x, player.y - 70, player.prog);
       }
@@ -195,7 +195,7 @@ export function createRenderer({ ctx, state, canvas }) {
     // Devil's twin-boom fighter (after the reference sheet): grey boom with a twin tail and a
     // lightning bolt, engine with a red spinner, and a shark-mouthed pod with a devil in the cockpit.
     ink();
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 2.8;
     const grey = '#6b6a5e';
     // Tail fin with lightning bolt.
     ctx.fillStyle = grey;
@@ -206,7 +206,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = '#d9572b';
+    ctx.fillStyle = '#c9663a';
     ctx.beginPath();
     ctx.moveTo(-66, -26);
     ctx.lineTo(-72, -14);
@@ -226,7 +226,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.ellipse(40, 8, 20, 13, 0, 0, 7);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = '#c0392b';
+    ctx.fillStyle = '#a8443f';
     ctx.beginPath();
     ctx.moveTo(58, 0);
     ctx.lineTo(74, 8);
@@ -246,7 +246,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.ellipse(18, -12, 40, 14, 0, 0, 7);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = '#c0392b';
+    ctx.fillStyle = '#a8443f';
     ctx.beginPath();
     ctx.arc(56, -12, 7, 0, 7);
     ctx.fill();
@@ -265,17 +265,17 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.lineTo(37 + i * 5.5, -8);
       ctx.fill();
     }
-    ctx.fillStyle = '#1b1410';
+    ctx.fillStyle = '#2b2622';
     ctx.beginPath();
     ctx.arc(44, -17, 2.5, 0, 7);
     ctx.fill();
     // The devil pilot under a glass canopy.
-    ctx.fillStyle = '#c8372d';
+    ctx.fillStyle = '#a8443f';
     ctx.beginPath();
     ctx.arc(10, -26, 8, 0, 7);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = '#f1e2b8';
+    ctx.fillStyle = '#ebdfc0';
     for (const hx of [5, 15]) {
       ctx.beginPath();
       ctx.moveTo(hx - 3, -32);
@@ -319,7 +319,7 @@ export function createRenderer({ ctx, state, canvas }) {
     const d = Math.hypot(e.x - SHIP_LAYOUT.aimPoint.x, e.y - (SHIP_LAYOUT.aimPoint.y - state.ship.alt));
     if (d > config.ENEMY.FIRE_RANGE + 500) return;
     ctx.strokeStyle = `rgba(255,50,70,${0.45 + 0.3 * Math.sin(time * 14)})`;
-    ctx.lineWidth = 7;
+    ctx.lineWidth = 3.6;
     ctx.setLineDash([30, 24]);
     ctx.beginPath();
     ctx.moveTo(e.x + Math.cos(e.heading) * 60, e.y + Math.sin(e.heading) * 60);
@@ -363,12 +363,12 @@ export function createRenderer({ ctx, state, canvas }) {
     const x = M.x;
     const y = M.y - state.ship.alt;
     ink();
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 3;
     ctx.fillStyle = '#5a3b26';
     ctx.fillRect(x - 26, y + 20, 52, 26);
     ctx.strokeRect(x - 26, y + 20, 52, 26);
     ctx.strokeStyle = '#c87533';
-    ctx.lineWidth = 8;
+    ctx.lineWidth = 4.2;
     for (let k = 0; k < 4; k++) {
       ctx.beginPath();
       ctx.ellipse(x, y + 12 - k * 16, 22 - k * 3, 7, 0, 0, 7);
@@ -381,7 +381,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.arc(x, y - 60, 30 + c * 50 + Math.sin(time * 30) * 4 * c, 0, 7);
     ctx.fill();
     ink();
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 2.8;
     ctx.fillStyle = `rgb(${Math.round(120 + 135 * c)},${Math.round(200 + 55 * c)},255)`;
     ctx.beginPath();
     ctx.arc(x, y - 60, 18, 0, 7);
@@ -425,9 +425,9 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.arc(x, y, 260, 0, 7);
     ctx.fill();
     ink();
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 3;
     for (let k = 0; k < 6; k++) {
-      ctx.fillStyle = k % 2 ? '#ffffff' : '#e63946';
+      ctx.fillStyle = k % 2 ? '#ffffff' : '#a8443f';
       ctx.beginPath();
       ctx.ellipse(x, y - 60, 90, 110, 0, -Math.PI / 2 + (k * Math.PI) / 3 - Math.PI / 2, -Math.PI / 2 + ((k + 1) * Math.PI) / 3 - Math.PI / 2);
       ctx.lineTo(x, y - 60);
@@ -446,7 +446,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillStyle = '#a0784a';
     ctx.fillRect(x - 40, y + 90, 80, 60);
     ctx.strokeRect(x - 40, y + 90, 80, 60);
-    ctx.fillStyle = '#ffd23f';
+    ctx.fillStyle = '#f2d36b';
     ctx.font = '900 30px Georgia';
     ctx.textAlign = 'center';
     ctx.fillText('+', x, y + 132);
@@ -484,7 +484,7 @@ export function createRenderer({ ctx, state, canvas }) {
       const k = 1 - r.t / r.max;
       ctx.strokeStyle = r.color;
       ctx.globalAlpha = 1 - k;
-      ctx.lineWidth = 10 * (1 - k) + 2;
+      ctx.lineWidth = 6 * (1 - k) + 2;
       ctx.beginPath();
       ctx.arc(r.x, r.y, 10 + r.size * k, 0, 7);
       ctx.stroke();
@@ -554,8 +554,8 @@ export function createRenderer({ ctx, state, canvas }) {
     };
     ctx.lineCap = 'round';
     const big = (state.upgrades || {})['big-shells'] || 0;
-    for (const shell of state.shells) glowShot(shell, (state.players[shell.owner] || {}).color || '#ffd23f', 9 + 3 * big, 0.06);
-    for (const bullet of state.bullets) glowShot(bullet, bullet.flak ? '#ff8c1a' : '#ff2e55', bullet.flak ? 13 : 12, 0.09);
+    for (const shell of state.shells) glowShot(shell, (state.players[shell.owner] || {}).color || '#f2d36b', 9 + 3 * big, 0.06);
+    for (const bullet of state.bullets) glowShot(bullet, bullet.flak ? '#e8884a' : '#ff2e55', bullet.flak ? 13 : 12, 0.09);
   };
 
   // Lap progress: home mast, checkpoints, the beacon halfway, and the ship.
@@ -588,7 +588,7 @@ export function createRenderer({ ctx, state, canvas }) {
     const y0 = 16;
     ctx.fillStyle = 'rgba(241,226,184,.92)';
     ink();
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 2.8;
     rrect(x0 - 8, y0 - 8, w + 16, h + 16, 10);
     ctx.fill();
     ctx.stroke();
@@ -635,11 +635,11 @@ export function createRenderer({ ctx, state, canvas }) {
     const y = 52;
     ctx.fillStyle = 'rgba(241,226,184,.92)';
     ink();
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 2.8;
     rrect(x0 - 26, y - 22, w + 52, 44, 12);
     ctx.fill();
     ctx.stroke();
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 3.2;
     ctx.beginPath();
     ctx.moveTo(x0, y);
     ctx.lineTo(x0 + w, y);
@@ -786,7 +786,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.font = '900 32px Georgia';
       ctx.textAlign = 'center';
       ctx.lineJoin = 'round';
-      ctx.lineWidth = 8;
+      ctx.lineWidth = 5;
       ctx.strokeStyle = config.INK;
       ctx.strokeText(p.text, 0, 0);
       ctx.fillStyle = p.color;
@@ -993,7 +993,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fillRect(-8, -8, 22, 16);
       ctx.strokeRect(-8, -8, 22, 16);
     } else if (item === 'extinguisher') {
-      ctx.fillStyle = '#d62828';
+      ctx.fillStyle = '#a8443f';
       rrect(-4, -16, 14, 30, 6);
       ctx.fill();
       ctx.stroke();
@@ -1005,7 +1005,7 @@ export function createRenderer({ ctx, state, canvas }) {
       // Sword or hammer, raised and swung down when attacking.
       const swing = swingAge < 250 ? Math.sin((swingAge / 250) * Math.PI) * 1.6 : 0;
       ctx.rotate(-0.9 + swing);
-      ctx.lineWidth = 5;
+      ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.lineTo(0, -44);
@@ -1018,7 +1018,7 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.lineTo(8, -8);
         ctx.stroke();
       } else {
-        ctx.fillStyle = '#4a4a4a';
+        ctx.fillStyle = '#5a5558';
         ctx.fillRect(-11, -50, 22, 14);
         ctx.strokeRect(-11, -50, 22, 14);
       }
@@ -1067,12 +1067,12 @@ export function createRenderer({ ctx, state, canvas }) {
       const spot = actionSpot(p.act);
       if (!spot) continue;
       const pulse = 1 + Math.sin(time * 6) * 0.08;
-      ctx.lineWidth = 6;
+      ctx.lineWidth = 3.2;
       ctx.strokeStyle = config.INK;
       ctx.beginPath();
       ctx.arc(spot.x, spot.y, spot.r * pulse + 3, 0, 7);
       ctx.stroke();
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.8;
       ctx.strokeStyle = p.color;
       ctx.beginPath();
       ctx.arc(spot.x, spot.y, spot.r * pulse, 0, 7);
@@ -1097,7 +1097,7 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.translate(0, 10);
       }
       ink();
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.8;
       if (player.fall) {
         ctx.fillStyle = player.color;
         ctx.beginPath();
@@ -1123,13 +1123,13 @@ export function createRenderer({ ctx, state, canvas }) {
       if (swingAge < 200) {
         // White swoosh in front of the attacker.
         ctx.strokeStyle = 'rgba(255,255,255,.9)';
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 3.2;
         ctx.beginPath();
         const mid = face > 0 ? 0 : Math.PI;
         ctx.arc(face * 10, -40, player.carry === 'sword' ? 70 : 45, mid - 0.9, mid + 0.9);
         ctx.stroke();
         ink();
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 2.8;
       }
       ctx.fillStyle = species.fur;
       const ear = (side) => {
@@ -1156,7 +1156,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ear(-1);
       ear(1);
       if (species.horns) {
-        ctx.fillStyle = '#f1e2b8';
+        ctx.fillStyle = '#ebdfc0';
         [-1, 1].forEach((side) => {
           ctx.beginPath();
           ctx.moveTo(side * 8, -70);
@@ -1179,9 +1179,9 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.moveTo(12, -68);
         ctx.lineTo(6, -62);
         ctx.stroke();
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 2.8;
       }
-      ctx.fillStyle = '#f1e2b8';
+      ctx.fillStyle = '#ebdfc0';
       ctx.beginPath();
       ctx.ellipse(face * 10, -44, 11, 8, 0, 0, 7);
       ctx.fill();
@@ -1223,7 +1223,7 @@ export function createRenderer({ ctx, state, canvas }) {
 
     ctx.font = '700 18px Georgia';
     ctx.textAlign = 'center';
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 3;
     ctx.strokeStyle = '#fff';
     const nameY = art ? player.y - bob - hop + art.top - 10 : player.y - 96 * (player.scale || 1);
     ctx.strokeText(player.name, player.x, nameY);
@@ -1233,15 +1233,15 @@ export function createRenderer({ ctx, state, canvas }) {
       // Raider winding up to strike: big pulsing "!".
       const pulse = 1 + Math.sin(time * 30) * 0.15;
       ctx.font = `900 ${Math.round(44 * pulse)}px Georgia`;
-      ctx.lineWidth = 7;
+      ctx.lineWidth = 3.6;
       ctx.strokeStyle = '#fff';
       ctx.strokeText('!', player.x, nameY - 22);
-      ctx.fillStyle = '#e63946';
+      ctx.fillStyle = '#a8443f';
       ctx.fillText('!', player.x, nameY - 22);
     }
     if (actionAge < 900) {
       ctx.font = '900 26px Georgia';
-      ctx.lineWidth = 6;
+      ctx.lineWidth = 3.2;
       ctx.strokeStyle = config.INK;
       ctx.fillStyle = '#fff';
       ctx.strokeText('Hey!', player.x, player.y - 126 - hop);
@@ -1354,7 +1354,7 @@ export function createRenderer({ ctx, state, canvas }) {
       const pulse = 1 + Math.sin(time * 8) * 0.08;
       // Dotted drop line from the bay doors.
       ctx.strokeStyle = 'rgba(230,57,70,.6)';
-      ctx.lineWidth = 6;
+      ctx.lineWidth = 3.2;
       ctx.setLineDash([18, 22]);
       ctx.beginPath();
       ctx.moveTo(bay.from.x, bay.from.y);
@@ -1376,7 +1376,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.translate(b.x, b.y);
       ctx.rotate(Math.atan2(b.vy, b.vx) - Math.PI / 2);
       ink();
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.8;
       ctx.fillStyle = '#3a3a3a';
       ctx.beginPath();
       ctx.ellipse(0, 0, 14, 26, 0, 0, 7);

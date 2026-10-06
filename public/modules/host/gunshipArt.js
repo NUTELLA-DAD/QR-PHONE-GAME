@@ -20,25 +20,25 @@ export function createGunshipArt({ ctx, state, ink }) {
     }
     // Gasbag.
     ink();
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 3.2;
     ctx.fillStyle = g.hit > 0 ? '#ffffff' : '#3d2b4f';
     ctx.beginPath();
     ctx.ellipse(cx, 380, 660, 160, 0, 0, 7);
     ctx.fill();
     ctx.stroke();
     ctx.strokeStyle = 'rgba(255,255,255,.12)';
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 3;
     for (let k = -4; k <= 4; k++) {
       ctx.beginPath();
       ctx.ellipse(cx, 380, Math.abs(k) * 150 + 10, 160, 0, k < 0 ? Math.PI / 2 : -Math.PI / 2, k < 0 ? Math.PI * 1.5 : Math.PI / 2);
       ctx.stroke();
     }
     // Horns emblem.
-    ctx.fillStyle = '#c0392b';
+    ctx.fillStyle = '#a8443f';
     ctx.beginPath();
     ctx.arc(cx, 380, 60, 0, 7);
     ctx.fill();
-    ctx.fillStyle = '#1b1410';
+    ctx.fillStyle = '#2b2622';
     for (const s of [-1, 1]) {
       ctx.beginPath();
       ctx.moveTo(cx + s * 22, 410);
@@ -71,7 +71,7 @@ export function createGunshipArt({ ctx, state, ink }) {
     ctx.lineTo(x0 + 160, 520);
     ctx.stroke();
     // Hull.
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 3.2;
     ctx.fillStyle = g.hit > 0 ? '#ffffff' : '#4a2626';
     ctx.beginPath();
     ctx.moveTo(x0 - 60, y - 80);
@@ -88,12 +88,12 @@ export function createGunshipArt({ ctx, state, ink }) {
     for (let k = 0; k < 3; k++) {
       const py = y - 80 + 40 + k * 70 - 0;
       const glow = g.warnFire ? 0.5 + 0.5 * Math.sin(time * 30) : 0;
-      ctx.fillStyle = glow ? `rgba(255,${80 + 100 * (1 - glow)},60,1)` : '#1b1410';
+      ctx.fillStyle = glow ? `rgba(255,${80 + 100 * (1 - glow)},60,1)` : '#2b2622';
       ctx.beginPath();
       ctx.arc(x0 - 30, py, 16, 0, 7);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#3a3a3a';
+      ctx.fillStyle = '#4a4346';
       ctx.fillRect(x0 - 90, py - 8, 60, 16);
       ctx.strokeRect(x0 - 90, py - 8, 60, 16);
     }
@@ -109,7 +109,7 @@ export function createGunshipArt({ ctx, state, ink }) {
     ctx.stroke();
     if (g.charge) {
       const blink = Math.sin(time * (8 + (10 - g.charge.t) * 3)) > 0;
-      ctx.fillStyle = blink ? '#ff2e55' : '#ffd23f';
+      ctx.fillStyle = blink ? '#ff2e55' : '#f2d36b';
       ctx.beginPath();
       ctx.arc(bx + 40, y - 120, 22, 0, 7);
       ctx.fill();
@@ -132,7 +132,7 @@ export function createGunshipArt({ ctx, state, ink }) {
     // Her helm wheel.
     const hx = POSTS.helm[0] + 40 + o;
     ink();
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 3;
     ctx.fillStyle = '#8a6a44';
     ctx.fillRect(hx - 6, y - 60, 12, 54);
     ctx.strokeRect(hx - 6, y - 60, 12, 54);
@@ -153,7 +153,7 @@ export function createGunshipArt({ ctx, state, ink }) {
     // Crew: red horned raiders; they flash white while winding up a swing.
     for (const c of g.crew) {
       const px = c.x + o;
-      ctx.fillStyle = c.wind > 0 ? '#ffffff' : '#c0392b';
+      ctx.fillStyle = c.wind > 0 ? '#ffffff' : '#a8443f';
       ctx.beginPath();
       ctx.roundRect(px - 18, y - 70, 36, 64, 12);
       ctx.fill();
@@ -164,16 +164,16 @@ export function createGunshipArt({ ctx, state, ink }) {
       ctx.stroke();
       // What they do, at a glance: gunners carry a rammer, the stoker a shovel, the helmsman a cap.
       if (c.role === 'helm') {
-        ctx.fillStyle = '#1b1410';
+        ctx.fillStyle = '#2b2622';
         ctx.fillRect(px - 22, y - 112, 44, 10);
       } else if (c.role === 'gunner') {
-        ctx.fillStyle = '#3a3a3a';
+        ctx.fillStyle = '#4a4346';
         ctx.fillRect(px - 16, y - 44, 32, 14);
       } else if (c.role === 'stoker') {
-        ctx.fillStyle = '#ff8c42';
+        ctx.fillStyle = '#e8884a';
         ctx.fillRect(px - 16, y - 44, 32, 14);
       }
-      ctx.fillStyle = '#f1e2b8';
+      ctx.fillStyle = '#ebdfc0';
       for (const s of [-1, 1]) {
         ctx.beginPath();
         ctx.moveTo(px + s * 8, y - 102);
@@ -181,16 +181,16 @@ export function createGunshipArt({ ctx, state, ink }) {
         ctx.lineTo(px + s * 18, y - 98);
         ctx.fill();
       }
-      ctx.strokeStyle = '#5a3b26';
-      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#8a6444';
+      ctx.lineWidth = 3.2;
       ctx.beginPath();
       ctx.moveTo(px + c.face * 18, y - 40);
       ctx.lineTo(px + c.face * (c.wind > 0 ? 10 : 60), y - (c.wind > 0 ? 120 : 70));
       ctx.stroke();
       ink();
-      ctx.lineWidth = 6;
+      ctx.lineWidth = 3.2;
       for (let k = 0; k < c.hp; k++) {
-        ctx.fillStyle = '#e63946';
+        ctx.fillStyle = '#a8443f';
         ctx.fillRect(px - 18 + k * 13, y - 140, 9, 9);
       }
     }
@@ -198,7 +198,7 @@ export function createGunshipArt({ ctx, state, ink }) {
     if (g.rope) {
       const swingers = Object.values(state.players).filter((p) => p.swing);
       ctx.strokeStyle = '#d8c79a';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.8;
       for (const p of swingers) {
         ctx.beginPath();
         ctx.moveTo(ax, ay);
@@ -214,9 +214,9 @@ export function createGunshipArt({ ctx, state, ink }) {
     }
     // Health bar over the gasbag.
     if (g.phase !== 'sinking') {
-      ctx.fillStyle = '#1b1410';
+      ctx.fillStyle = '#2b2622';
       ctx.fillRect(cx - 200, 190, 400, 22);
-      ctx.fillStyle = '#e63946';
+      ctx.fillStyle = '#a8443f';
       ctx.fillRect(cx - 196, 194, 392 * Math.max(0, g.hp / g.max), 14);
       // Her systems: lit while crewed, dark and crossed out when you've knocked them out.
       if (g.posts) {
@@ -225,11 +225,11 @@ export function createGunshipArt({ ctx, state, ink }) {
         ctx.textAlign = 'center';
         items.forEach(([name, on], i) => {
           const tx = cx - 150 + i * 150;
-          ctx.fillStyle = on ? '#ffd23f' : 'rgba(255,255,255,.35)';
+          ctx.fillStyle = on ? '#f2d36b' : 'rgba(255,255,255,.35)';
           ctx.fillText(name, tx, 244);
           if (!on) {
-            ctx.strokeStyle = '#e63946';
-            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#a8443f';
+            ctx.lineWidth = 2.8;
             ctx.beginPath();
             ctx.moveTo(tx - 44, 236);
             ctx.lineTo(tx + 44, 228);
