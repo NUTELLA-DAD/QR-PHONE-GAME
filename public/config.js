@@ -239,7 +239,8 @@ export const config = {
     NODE_PASS: 260, // ring corners count as passed within this distance
     FIRE_RANGE: 2300, // her gunners only fire at our hull from this close (and with a clear line)
     // -- Gun ports (destroyable: when all are down, or her gunners are, she latches on) --
-    PORT_HP: 2.5, // shell damage a gun port takes (0.5 per shell)
+    PORT_HP: 6, // shell damage a gun port takes (0.5 per shell, so 12 shells)
+    APPROACH_GIVEUP: 25, // seconds she keeps trying to get in before giving up and leaving
     PORT_RADIUS: 55, // how close a shell must be to hit a port
     // -- Latching on --
     LATCH_RANGE: 760, // she fires her own grapple once her yardarm is this close to our bow

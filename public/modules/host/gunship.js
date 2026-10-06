@@ -775,6 +775,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     if (g.phase === 'approach') {
       // Engaged once she is close to where she is heading.
       if (!tgt.hold && Math.abs(g.dx - tgt.dx) < G.DOCK_DX && Math.abs(g.dy - tgt.dy) < G.DOCK_DY) g.phase = 'hunt';
+      // Can't get in (rock, or she's stuck behind us)? She gives up rather than hanging there forever.
+      else if ((g.approachT = (g.approachT || 0) + dt) > G.APPROACH_GIVEUP) leave('THE GUNSHIP GIVES UP THE CHASE', 2);
       return;
     }
     const inPos = !tgt.hold && tgt.dist < 450 && (g.temp || (g.node && G.NODES[g.node].fire));
