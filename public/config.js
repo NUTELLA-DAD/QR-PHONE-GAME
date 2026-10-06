@@ -530,6 +530,40 @@ export const config = {
   },
   // Outline weights (Style 2026, see art/ART_SPEC.md).
   OUTLINE: { MAIN: 3.4, SMALL: 2.5, SHIP: 4 },
+  // Sky effects (modules/host/skyArt.js): sun, god-rays, birds, far airships. All soft and faint.
+  SKY: {
+    ENABLED: true,
+    SUN: { X: 0.78, Y: 0.2, DUSK_DROP: 0.3, DISC: 0.04, GLOW: 0.32, GLOW_ALPHA: 0.3, DISC_ALPHA: 0.5, COLOR: '255,246,214', DUSK_COLOR: '255,196,140' },
+    RAYS: { COUNT: 6, ALPHA: 0.06, LENGTH: 0.7, SPREAD: 0.9, PULSE: 0.25, COLOR: '255,250,228', DUSK_COLOR: '255,208,160' }, // off in storms
+    BIRDS: { FLOCKS: 3, PER_FLOCK: 6, SPEED: 14, ALPHA: 0.4, SIZE: 0.011, PARALLAX: 0.05, COLOR: '58,66,78' },
+    SHIPS: { COUNT: 2, SPEED: 5, ALPHA: 0.16, SIZE: 0.085, PARALLAX: 0.02, COLOR: '104,120,138' },
+  },
+  // Fog banks in valleys and caves, cave backdrop, light shafts and dust (skyArt.js).
+  FOG: {
+    ENABLED: true,
+    COLOR: '226,233,234', DUSK_COLOR: '240,200,172', STORM_COLOR: '132,140,148',
+    // OPEN_LEVEL = world y of the fog surface in open country (ground is at COURSE.GROUND);
+    // CAVE_DEPTH = how far above the bottom of a cave map the fog top sits.
+    OPEN_LEVEL: 1380, CAVE_DEPTH: 700,
+    // Back layers sit BEHIND the rock (parallax = how much they follow the ground; less = farther).
+    LAYERS: [
+      { parallax: 0.55, alpha: 0.2, lift: -150, wave: 70, drift: 9, spacing: 70 },
+      { parallax: 0.8, alpha: 0.22, lift: 0, wave: 55, drift: 14, spacing: 55 },
+    ],
+    FRONT: { parallax: 1, alpha: 0.1, lift: 120, wave: 45, drift: 20, spacing: 50, cave: 1.3 }, // thin, over the rock
+    BOTTOM_BOOST: 1.6, // fog is this much thicker at the bottom than at its top
+    TALL: 700, // px from the fog top to where it reaches full thickness
+  },
+  CAVE_ATMOS: {
+    ENABLED: true,
+    TOP: '#3e4756', BOTTOM: '#566174', // far wall colours (top of the map to the bottom)
+    PILLARS: [
+      { parallax: 0.35, alpha: 0.2, spacing: 620, chance: 0.6, color: '30,36,48' },
+      { parallax: 0.6, alpha: 0.26, spacing: 760, chance: 0.55, color: '28,33,45' },
+    ],
+    SHAFTS: { SPACING: 9, CHANCE: 0.3, ALPHA: 0.085, LENGTH: 1500, WIDTH: 150, SPREAD: 320, PULSE: 0.3, COLOR: '236,242,248', DUSK_COLOR: '255,214,170' },
+    DUST: { TILE: 1000, ALPHA: 0.35, SIZE: 3.2, SPEED: 6 },
+  },
   // Old-film effects. All OFF (the user found them unpleasant). Raise a number or set
   // LINE_BOIL to true to bring one back.
   STYLE: {

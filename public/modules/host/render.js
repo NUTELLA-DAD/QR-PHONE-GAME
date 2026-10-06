@@ -6,6 +6,7 @@ import { installLineBoil, setBoilTime, createFilmLook } from './style.js';
 import { createSprites } from './sprites.js';
 import { createCharacterArt } from './characterArt.js';
 import { createCourseArt } from './courseArt.js';
+import { createSkyArt } from './skyArt.js';
 import { UPGRADES } from './upgrades.js';
 import { targets } from './aim.js';
 import { createSpecialsArt } from './specialsArt.js';
@@ -37,7 +38,8 @@ export function createRenderer({ ctx, state, canvas }) {
 
   const drawShip = createShipArt({ ctx, state, ink, rrect, sprites });
   const threatArt = createThreatArt({ ctx, state, ink, sprites });
-  const courseArt = createCourseArt({ ctx, state, ink, sprites });
+  const skyArt = createSkyArt({ ctx, state });
+  const courseArt = createCourseArt({ ctx, state, ink, sprites, skyArt });
   const drawSpecials = createSpecialsArt({ ctx, state, ink });
   const drawGunship = createGunshipArt({ ctx, state, ink });
   installLineBoil(ctx);
@@ -1456,10 +1458,12 @@ export function createRenderer({ ctx, state, canvas }) {
     gradient.addColorStop(1, mix('e3e6dc', 'e8865a', '585c60'));
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
+    skyArt.skyBack(width, height, view); // sun glow and god-rays
 
     // Cloud bands at different depths, the far ones fainter.
     drawCloudBand(width, height, view, 0.01, 0.2, 40, 'rgba(255,255,255,.22)');
     drawCloudBand(width, height, view, 0.03, 0.42, 60, 'rgba(255,255,255,.3)');
+    skyArt.skyShips(width, height, view); // faint far-off airships
     drawRidge(width, height, view, 0.02, 0.86, 170, 0.003, '#c2d0d8', { snow: '#eef3f8' });
     drawRidge(width, height, view, 0.04, 0.9, 120, 0.004, '#b2c3cc');
     // Haze: distant hills fade into the sky.
@@ -1476,6 +1480,7 @@ export function createRenderer({ ctx, state, canvas }) {
       const cx = wrap(x - (view.scroll + view.cx) * 0.15, span) - 250;
       cloud(cx * s, (y + (config.H / 2 - view.cy) * view.zoom * 0.1) * s, 0.55 * s);
     });
+    skyArt.skyBirds(width, height, view);
     drawRidge(width, height, view, 0.1, 0.97, 90, 0.007, '#9cb09c', { trees: '#8aa08b' });
   };
 
@@ -1534,17 +1539,20 @@ export function createRenderer({ ctx, state, canvas }) {
     const width = canvas.width;
     const height = canvas.height;
     setBoilTime(time);
+    skyArt.setTime(time / 1000);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     drawBackground(width, height, view);
 
     // World layer, positioned by the camera.
     ctx.setTransform(view.zoom, 0, 0, view.zoom, width / 2 - view.cx * view.zoom, height / 2 - view.cy * view.zoom);
     drawNearClouds(width, height, view);
+    if (!(state.course && state.course.map)) skyArt.fogBack(view, width, height); // (caves draw it themselves)
     courseArt.drawTerrain(view, width, height);
     courseArt.drawBuildings(view, width, time / 1000);
     courseArt.drawMarkers(time / 1000);
     courseArt.drawTurrets(time / 1000);
     drawBombs(time / 1000);
+    skyArt.fogFront(view, width, height); // thin fog over the rock, under the ship
 
     ctx.save();
     // A smooth, capped shake (no random jitter), a slow two-speed bob and a slight sway: she's a
