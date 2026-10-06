@@ -8,14 +8,14 @@ import { drawBiplane } from './planeArt.js';
 const L = SHIP_LAYOUT;
 const P = L.platforms;
 const INK = config.INK;
-const WOOD = '#8a5a34';
-const WOOD_DARK = '#3b2a1d';
-const IRON = '#4a4a4a';
+const WOOD = '#b98a5a';
+const WOOD_DARK = '#6b4a32';
+const IRON = '#6a6568';
 
 export function createShipArt({ ctx, state, ink, rrect, sprites }) {
   let liftY = P[L.connectors.find((c) => c.type === 'lift').bottom].y;
 
-  const line = (pts, width = 5, color = INK) => {
+  const line = (pts, width = 3.2, color = INK) => {
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
     ctx.beginPath();
@@ -60,7 +60,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       const g2 = Math.max(0, Math.min(1, (state.ship.gas ?? 50) / 100));
       line([[520, 0], [520, -60]], 4);
       line([[1100, 0], [1100, -60]], 4);
-      filled('#cdb683', () => ctx.ellipse(780, -60, (G.rx * 0.7) * (0.8 + 0.4 * g2), G.ry * 0.62 * (0.9 + 0.2 * g2), 0, 0, 7));
+      filled('#d6c7a2', () => ctx.ellipse(780, -60, (G.rx * 0.7) * (0.8 + 0.4 * g2), G.ry * 0.62 * (0.9 + 0.2 * g2), 0, 0, 7));
       ctx.lineWidth = 3;
       for (let i = -3; i <= 3; i++) {
         ctx.beginPath();
@@ -82,7 +82,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     ctx.translate(-40, -245);
     // Tail fins (behind the envelope, at the stern = left).
     if (!sprites.box(ctx, 'ship/fin-top', -95, 70, 135, 130)) {
-      filled('#a0522d', () => {
+      filled('#c49a74', () => {
         ctx.moveTo(40, 170);
         ctx.lineTo(-95, 70);
         ctx.lineTo(-80, 200);
@@ -90,7 +90,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       });
     }
     if (!sprites.box(ctx, 'ship/fin-bottom', -95, 290, 135, 130)) {
-      filled('#a0522d', () => {
+      filled('#c49a74', () => {
         ctx.moveTo(40, 320);
         ctx.lineTo(-95, 420);
         ctx.lineTo(-80, 290);
@@ -100,9 +100,20 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     ctx.restore();
     if (!sprites.box(ctx, 'ship/gasbag', G.cx - G.rx, G.cy - G.ry, G.rx * 2, G.ry * 2)) {
       // Rubberised Gasbag: darker rubber with patches.
-      filled(has('rubber-gasbag') ? '#b8a77a' : '#d9c18f', () => ctx.ellipse(G.cx, G.cy, G.rx, G.ry, 0, 0, 7));
-      if (has('rubber-gasbag')) for (const [px, py] of [[300, 200], [620, 320], [1050, 170], [1350, 300]]) filled('#8f8159', () => ctx.roundRect(px, py, 60, 34, 8));
-      ctx.lineWidth = 3;
+      filled(has('rubber-gasbag') ? '#cbbd96' : '#ebdfc0', () => ctx.ellipse(G.cx, G.cy, G.rx, G.ry, 0, 0, 7));
+      if (has('rubber-gasbag')) for (const [px, py] of [[300, 200], [620, 320], [1050, 170], [1350, 300]]) filled('#a89a72', () => ctx.roundRect(px, py, 60, 34, 8));
+      // One soft highlight band along the top of the envelope.
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(G.cx, G.cy, G.rx - 3, G.ry - 3, 0, 0, 7);
+      ctx.clip();
+      ctx.fillStyle = 'rgba(255,250,232,0.45)';
+      ctx.beginPath();
+      ctx.ellipse(G.cx - 20, G.cy - G.ry * 0.38, G.rx * 0.9, G.ry * 0.45, 0, 0, 7);
+      ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(43,38,34,0.55)';
+      ctx.lineWidth = 2;
       for (let i = -5; i <= 5; i++) {
         ctx.beginPath();
         const side = i < 0 ? Math.PI : 0;
@@ -119,7 +130,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     // Nearly empty: wrinkles.
     if (g < 0.35) {
       ctx.strokeStyle = 'rgba(80,60,40,.5)';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.8;
       for (let k = 0; k < 7; k++) {
         const x = G.cx - G.rx * 0.8 + (k * G.rx * 1.6) / 6;
         ctx.beginPath();
@@ -143,7 +154,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
   const drawNestParts = () => {
     line([[800, 8], [800, -60]], 5); // flag pole
     if (!sprites.box(ctx, 'crests/crew', 802, -64, 34, 34)) {
-      ctx.fillStyle = '#e63946';
+      ctx.fillStyle = '#a8443f';
       ctx.beginPath();
       ctx.moveTo(800, -60);
       ctx.lineTo(850, -48);
@@ -152,8 +163,8 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
     if (has('periscope')) {
       // Periscope sticking up from the crow's nest.
-      line([[720, 8], [720, -70], [748, -70]], 9, '#4a4a4a');
-      filled('#9fd3e6', () => ctx.arc(752, -70, 7, 0, 7));
+      line([[720, 8], [720, -70], [748, -70]], 9, '#6a6568');
+      filled('#bcd9e3', () => ctx.arc(752, -70, 7, 0, 7));
     }
     const n = P.find((q) => q.id === 'nest');
     if (sprites.box(ctx, 'ship/nest', n.x0, 6, n.x1 - n.x0, 80)) return;
@@ -175,7 +186,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
 
   const drawGondola = () => {
     const shell = sprites.has('ship/gondola');
-    if (!shell) filled('#5a3b26', gondolaPath);
+    if (!shell) filled('#8a6444', gondolaPath);
     ctx.save();
     ctx.beginPath();
     gondolaPath();
@@ -209,12 +220,12 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     ctx.stroke();
     // Bridge windows.
     for (const x of [1150, 1250, 1350]) {
-      filled('#9fd3e6', () => ctx.roundRect(x, 500, 80, 56, 10));
+      filled('#bcd9e3', () => ctx.roundRect(x, 500, 80, 56, 10));
       line([[x + 18, 512], [x + 40, 540]], 3, '#ffffff');
     }
     // Portholes along the lower deck.
     for (const x of [310, 560, 1010, 1260]) {
-      if (!sprites.box(ctx, 'ship/porthole', x - 16, 674, 32, 32)) filled('#9fd3e6', () => ctx.arc(x, 690, 16, 0, 7));
+      if (!sprites.box(ctx, 'ship/porthole', x - 16, 674, 32, 32)) filled('#bcd9e3', () => ctx.arc(x, 690, 16, 0, 7));
     }
   };
 
@@ -238,14 +249,14 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       }
       // Spinning propeller seen edge-on.
       const spin = Math.cos(time * 30) * 46;
-      filled('#3b2a1d', () => ctx.ellipse(e.x + out * 70, y, 6, Math.abs(spin) + 4, 0, 0, 7));
+      filled('#6b4a32', () => ctx.ellipse(e.x + out * 70, y, 6, Math.abs(spin) + 4, 0, 0, 7));
     }
   };
 
   const drawPod = () => {
     if (!sprites.box(ctx, 'ship/pod', 723, 822, 144, 116)) {
-      filled('#5a3b26', () => ctx.ellipse(795, 880, 72, 58, 0, 0, 7));
-      filled('#9fd3e6', () => ctx.arc(830, 880, 22, 0, 7));
+      filled('#8a6444', () => ctx.ellipse(795, 880, 72, 58, 0, 0, 7));
+      filled('#bcd9e3', () => ctx.arc(830, 880, 22, 0, 7));
     }
     ctx.fillStyle = WOOD_DARK;
     ctx.fillRect(735, P.find((q) => q.id === 'pod').y, 120, 8);
@@ -279,7 +290,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       const open = !m || m.open;
       if (sprites.box(ctx, 'ship/valve', vx - 14, vy - 14, 28, 28)) {
         // Small lamp shows open (green) or closed (red).
-        ctx.fillStyle = open ? '#2e9e4f' : '#c0392b';
+        ctx.fillStyle = open ? '#6fa07a' : '#a8443f';
         ctx.beginPath();
         ctx.arc(vx + 16, vy - 14, 6, 0, 7);
         ctx.fill();
@@ -287,7 +298,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       }
       ink();
       ctx.lineWidth = 3;
-      ctx.fillStyle = open ? '#2e9e4f' : '#c0392b'; // green = open, red = closed
+      ctx.fillStyle = open ? '#6fa07a' : '#a8443f'; // green = open, red = closed
       ctx.beginPath();
       ctx.arc(vx, vy, 14, 0, 7);
       ctx.fill();
@@ -318,7 +329,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     for (const e of L.extinguishers) {
       const y = P[e.d].y - 80;
       if (sprites.box(ctx, 'ship/extinguisher', e.x - 12, y - 10, 24, 60)) continue;
-      filled('#d62828', () => ctx.roundRect(e.x - 10, y, 20, 44, 8));
+      filled('#a8443f', () => ctx.roundRect(e.x - 10, y, 20, 44, 8));
       line([[e.x, y], [e.x + 10, y - 10]], 4);
     }
   };
@@ -361,7 +372,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
         line([[c.xTop, yTop - 150], [c.xTop, liftY - 128]], 3);
         if (sprites.box(ctx, 'ship/lift', c.xTop - 38, liftY - 128, 76, 132)) return;
         ink();
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 2.8;
         ctx.strokeRect(c.xTop - 38, liftY - 128, 76, 128);
         ctx.fillStyle = IRON;
         ctx.fillRect(c.xTop - 38, liftY - 4, 76, 10);
@@ -385,15 +396,15 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     } else {
       // Big Firebox: a wider boiler.
       const wide = 18 * has('firebox');
-      filled('#3d3d3d', () => ctx.roundRect(boiler.x - 70 - wide, by - 112, 90 + wide, 112, 16));
-      ctx.fillStyle = fuel > 0 ? `rgba(255,${120 + glow * 80},40,${0.3 + 0.7 * fuel})` : '#2b2b2b';
+      filled('#5a5558', () => ctx.roundRect(boiler.x - 70 - wide, by - 112, 90 + wide, 112, 16));
+      ctx.fillStyle = fuel > 0 ? `rgba(255,${120 + glow * 80},40,${0.3 + 0.7 * fuel})` : '#3a3538';
       ctx.fillRect(boiler.x - 50, by - 48, 50, 30);
     }
     const gx = boiler.x + 60;
     const gy = by - 90;
     const angle = -Math.PI * 1.15 + (state.ship.press / 100) * Math.PI * 1.3;
     if (!sprites.box(ctx, 'ship/gauge', gx - 28, gy - 28, 56, 56)) filled('#f1e2b8', () => ctx.arc(gx, gy, 28, 0, 7));
-    line([[gx, gy], [gx + Math.cos(angle) * 22, gy + Math.sin(angle) * 22]], 5, state.ship.press < config.BOILER.WARN_AT ? '#2e7d32' : '#c62828');
+    line([[gx, gy], [gx + Math.cos(angle) * 22, gy + Math.sin(angle) * 22]], 5, state.ship.press < config.BOILER.WARN_AT ? '#6fa07a' : '#a8443f');
 
     // Ship's wheel at the helm, turning with speed.
     const helm = L.stations.find((s) => s.n === 'Helm');
@@ -425,7 +436,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     const hold = L.stations.find((s) => s.n === 'Ammo Hold');
     const hy2 = P[hold.d].y;
     if (!sprites.box(ctx, 'ship/ammo-crates', hold.x + 20, hy2 - 50, 100, 50)) {
-      [[30, 0], [64, 0], [47, -26]].forEach(([x, y]) => filled('#b5833f', () => ctx.rect(hold.x + x, hy2 - 24 + y, 34, 24)));
+      [[30, 0], [64, 0], [47, -26]].forEach(([x, y]) => filled('#c9a05f', () => ctx.rect(hold.x + x, hy2 - 24 + y, 34, 24)));
     }
   };
 
@@ -446,17 +457,17 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
         }
         ctx.font = '900 22px Georgia';
         ctx.textAlign = 'center';
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 3;
         ctx.strokeStyle = '#fff';
         ctx.strokeText('BROKEN', x, y - 34);
-        ctx.fillStyle = '#c62828';
+        ctx.fillStyle = '#a8443f';
         ctx.fillText('BROKEN', x, y - 34);
       }
       if (m.hp < m.max) {
         const w = 60;
-        ctx.fillStyle = '#3b2a1d';
+        ctx.fillStyle = '#6b4a32';
         ctx.fillRect(x - w / 2, y - 26, w, 9);
-        ctx.fillStyle = m.hp > 50 ? '#8fe388' : m.hp > 0 ? '#f4a261' : '#c62828';
+        ctx.fillStyle = m.hp > 50 ? '#9cc99a' : m.hp > 0 ? '#f4a261' : '#a8443f';
         ctx.fillRect(x - w / 2, y - 26, (w * m.hp) / m.max, 9);
         ctx.strokeStyle = INK;
         ctx.lineWidth = 2;
@@ -471,7 +482,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       if (!sprites.box(ctx, 'fx/gas-hole', h.x - 20, h.y - 15, 40, 30)) {
         ink();
         ctx.lineWidth = 3;
-        ctx.fillStyle = '#3b2a1d';
+        ctx.fillStyle = '#6b4a32';
         ctx.beginPath();
         ctx.moveTo(h.x - 16, h.y - 8);
         ctx.lineTo(h.x - 4, h.y - 14);
@@ -490,9 +501,9 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
         ctx.fill();
       }
       if (h.prog > 0) {
-        ctx.fillStyle = '#3b2a1d';
+        ctx.fillStyle = '#6b4a32';
         ctx.fillRect(h.x - 24, h.y + 16, 48, 8);
-        ctx.fillStyle = '#8fe388';
+        ctx.fillStyle = '#9cc99a';
         ctx.fillRect(h.x - 24, h.y + 16, 48 * Math.min(1, h.prog), 8);
       }
     }
@@ -508,7 +519,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       if (!sprites.box(ctx, 'ship/vent', v.x - 16, y - 150, 32, 110)) {
         filled('#9aa1a6', () => ctx.rect(v.x - 9, y - 140, 18, 100));
         filled('#6d7378', () => ctx.rect(v.x - 16, y - 150, 32, 14));
-        filled(open ? '#4caf50' : high ? '#e63946' : '#c0392b', () => ctx.arc(v.x, y - 60, 13, 0, 7));
+        filled(open ? '#4caf50' : high ? '#a8443f' : '#a8443f', () => ctx.arc(v.x, y - 60, 13, 0, 7));
         if (open) line([[v.x, y - 73], [v.x, y - 47]], 3);
         else line([[v.x - 13, y - 60], [v.x + 13, y - 60]], 3);
       }
@@ -530,7 +541,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     const y = P[s.d].y;
     if (sprites.box(ctx, 'ship/coal-bunker', s.x - 50, y - 86, 100, 86)) return;
     filled(WOOD, () => ctx.rect(s.x - 50, y - 46, 100, 46));
-    filled('#2b2b2b', () => {
+    filled('#3a3538', () => {
       ctx.moveTo(s.x - 44, y - 44);
       ctx.quadraticCurveTo(s.x - 10, y - 86, s.x + 44, y - 44);
       ctx.closePath();
@@ -570,7 +581,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     for (let k = 0; k < armour; k++) {
       // Riveted steel plates along the hull's lower edge.
       for (let x = 270; x < 1330; x += 90) {
-        filled('#7d868c', () => ctx.rect(x, 770 - k * 22, 80, 20));
+        filled('#8d969b', () => ctx.rect(x, 770 - k * 22, 80, 20));
         ctx.fillStyle = INK;
         ctx.beginPath();
         ctx.arc(x + 8, 780 - k * 22, 2.5, 0, 7);
@@ -584,15 +595,15 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
         const top = p.y - (id === 'lower' ? 138 : 146);
         for (let x = p.x0 + 120; x < p.x1 - 60; x += 220) {
           line([[x, top], [x, top + 12]], 4, '#9aa1a6');
-          filled('#c0392b', () => ctx.arc(x, top + 15, 5, 0, 7));
+          filled('#a8443f', () => ctx.arc(x, top + 15, 5, 0, 7));
         }
       }
     }
     if (has('safety-valve')) {
       const b = L.stations.find((s) => s.n === 'Boiler');
       const y = P[b.d].y - 112;
-      line([[b.x - 30, y], [b.x - 30, y - 22]], 6, '#c9a54a');
-      filled('#c9a54a', () => ctx.roundRect(b.x - 38, y - 34, 16, 14, 4));
+      line([[b.x - 30, y], [b.x - 30, y - 22]], 6, '#c9a85a');
+      filled('#c9a85a', () => ctx.roundRect(b.x - 38, y - 34, 16, 14, 4));
     }
   };
 
@@ -605,20 +616,20 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     for (let i = 0; i < bay.bombs; i++) {
       const x = B.x - 50 + (i % 3) * 50;
       const y = deck - 30 - Math.floor(i / 3) * 34;
-      filled('#3a3a3a', () => ctx.ellipse(x, y, 12, 17, 0, 0, 7));
-      filled('#c0392b', () => ctx.rect(x - 9, y - 22, 18, 6));
+      filled('#4a4346', () => ctx.ellipse(x, y, 12, 17, 0, 0, 7));
+      filled('#a8443f', () => ctx.rect(x - 9, y - 22, 18, 6));
     }
     const open = Math.min(1, (bay.open || 0) * 3);
     const a = open * 1.2;
     ctx.save();
     ctx.translate(B.x - 44, B.y);
     ctx.rotate(a);
-    filled('#5a3b26', () => ctx.rect(0, -6, 44, 12));
+    filled('#8a6444', () => ctx.rect(0, -6, 44, 12));
     ctx.restore();
     ctx.save();
     ctx.translate(B.x + 44, B.y);
     ctx.rotate(-a);
-    filled('#5a3b26', () => ctx.rect(-44, -6, 44, 12));
+    filled('#8a6444', () => ctx.rect(-44, -6, 44, 12));
     ctx.restore();
   };
 
@@ -641,7 +652,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       const mb = L.medbay;
       const y = P.find((q) => q.id === mb.p).y - 120;
       filled('#f3ead6', () => ctx.roundRect(mb.x - 28, y - 28, 56, 56, 8));
-      ctx.fillStyle = '#e63946';
+      ctx.fillStyle = '#a8443f';
       ctx.fillRect(mb.x - 8, y - 20, 16, 40);
       ctx.fillRect(mb.x - 20, y - 8, 40, 16);
     }

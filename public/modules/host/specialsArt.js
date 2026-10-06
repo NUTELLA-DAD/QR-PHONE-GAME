@@ -10,7 +10,7 @@ export function createSpecialsArt({ ctx, state, ink }) {
     ctx.scale(1.5, 1.5);
     ctx.rotate(s.spin);
     ink();
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 2.8;
     ctx.fillStyle = s.hit > 0 ? '#ffffff' : '#c9ced3';
     ctx.beginPath();
     for (let k = 0; k < 16; k++) {
@@ -27,7 +27,7 @@ export function createSpecialsArt({ ctx, state, ink }) {
     ctx.fill();
     ctx.stroke();
     ctx.rotate(-s.spin);
-    ctx.fillStyle = s.mode === 'dash' ? '#ff2e55' : '#ffd23f';
+    ctx.fillStyle = s.mode === 'dash' ? '#ff2e55' : '#f2d36b';
     ctx.beginPath();
     ctx.arc(0, 0, 7, 0, 7);
     ctx.fill();
@@ -51,12 +51,12 @@ export function createSpecialsArt({ ctx, state, ink }) {
       ctx.fill();
       ctx.stroke();
     }
-    ctx.fillStyle = '#e63946';
+    ctx.fillStyle = '#a8443f';
     ctx.beginPath();
     ctx.arc(0, 0, 13, 0, 7);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = '#f1e2b8';
+    ctx.fillStyle = '#ebdfc0';
     for (const s of [-1, 1]) {
       ctx.beginPath();
       ctx.moveTo(s * 5, -10);
@@ -64,7 +64,7 @@ export function createSpecialsArt({ ctx, state, ink }) {
       ctx.lineTo(s * 11, -8);
       ctx.fill();
     }
-    ctx.fillStyle = '#ffd23f';
+    ctx.fillStyle = '#f2d36b';
     ctx.beginPath();
     ctx.arc(-4, -2, 3, 0, 7);
     ctx.arc(4, -2, 3, 0, 7);
@@ -87,14 +87,14 @@ export function createSpecialsArt({ ctx, state, ink }) {
     ctx.save();
     ctx.translate(z.x, z.y);
     ink();
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 3.2;
     ctx.fillStyle = z.hit > 0 ? '#ffffff' : '#3d2b4f';
     ctx.beginPath();
     ctx.ellipse(0, 0, 130, 50, 0, 0, 7);
     ctx.fill();
     ctx.stroke();
     ctx.strokeStyle = 'rgba(255,255,255,.15)';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 2.8;
     for (const x of [-70, -20, 30, 80]) {
       ctx.beginPath();
       ctx.moveTo(x, -46);
@@ -135,14 +135,14 @@ export function createSpecialsArt({ ctx, state, ink }) {
     if (g.mode === 'pull' && g.hook) {
       const hx = g.hook.x;
       const hy = g.hook.y - state.ship.alt;
-      ctx.strokeStyle = '#1b1410';
+      ctx.strokeStyle = '#2b2622';
       ctx.lineWidth = 10;
       ctx.beginPath();
       ctx.moveTo(g.x, g.y);
       ctx.lineTo(hx, hy);
       ctx.stroke();
-      ctx.strokeStyle = Math.sin(time * 12) > 0 ? '#ff2e55' : '#ffd23f';
-      ctx.lineWidth = 4;
+      ctx.strokeStyle = Math.sin(time * 12) > 0 ? '#ff2e55' : '#f2d36b';
+      ctx.lineWidth = 2.8;
       ctx.setLineDash([24, 18]);
       ctx.stroke();
       ctx.setLineDash([]);
@@ -174,7 +174,7 @@ export function createSpecialsArt({ ctx, state, ink }) {
     ctx.translate(g.x, g.y);
     if (g.side > 0) ctx.scale(-1, 1);
     ink();
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 3;
     ctx.fillStyle = g.hit > 0 ? '#ffffff' : '#7a4a2a';
     ctx.beginPath();
     ctx.roundRect(-60, -24, 110, 48, 14);
@@ -183,14 +183,14 @@ export function createSpecialsArt({ ctx, state, ink }) {
     ctx.fillStyle = '#3a2a1d';
     ctx.fillRect(-70, -36, 24, 72);
     ctx.strokeRect(-70, -36, 24, 72);
-    ctx.fillStyle = '#9fd3e6';
+    ctx.fillStyle = '#bcd9e3';
     ctx.beginPath();
     ctx.arc(20, -4, 11, 0, 7);
     ctx.fill();
     ctx.stroke();
     // Spinning prop.
     ctx.strokeStyle = 'rgba(30,20,15,.6)';
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 3.2;
     const p = Math.sin(time * 40) * 30;
     ctx.beginPath();
     ctx.moveTo(56, -p);
@@ -198,7 +198,7 @@ export function createSpecialsArt({ ctx, state, ink }) {
     ctx.stroke();
     // Harpoon gun on top.
     ink();
-    ctx.fillStyle = '#4a4a4a';
+    ctx.fillStyle = '#5a5558';
     ctx.fillRect(-20, -40, 50, 14);
     ctx.strokeRect(-20, -40, 50, 14);
     ctx.restore();

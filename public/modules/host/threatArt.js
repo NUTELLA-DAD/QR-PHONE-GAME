@@ -18,7 +18,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     ctx.lineTo(x - 13 * s, y + 10 * s);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#d62828';
+    ctx.fillStyle = '#a8443f';
     ctx.beginPath();
     ctx.moveTo(x, y - 6 * s);
     ctx.quadraticCurveTo(x + 7 * s, y + 4 * s, x, y + 7 * s);
@@ -37,13 +37,13 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
         if (!c.dropped && Math.abs(c.x - c.dropX) < 700) sprites.pivot(ctx, 'planes/cargo/door_open', R.door.x, R.door.y, 0.5, 0.5);
         ctx.restore();
         for (let i = 0; i < c.hp; i++) {
-          ctx.fillStyle = '#e63946';
+          ctx.fillStyle = '#a8443f';
           ctx.fillRect(c.x - c.hp * 6 + i * 12, c.y - 80, 9, 9);
         }
         continue;
       }
       ink();
-      ctx.lineWidth = 5;
+      ctx.lineWidth = 3;
       // Tail and fuselage.
       ctx.fillStyle = c.hit > 0 ? '#ffffff' : '#9c5a2b';
       ctx.beginPath();
@@ -87,7 +87,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.restore();
       // Health pips.
       for (let i = 0; i < c.hp; i++) {
-        ctx.fillStyle = '#e63946';
+        ctx.fillStyle = '#a8443f';
         ctx.fillRect(c.x - c.hp * 6 + i * 12, c.y - 64, 9, 9);
       }
     }
@@ -100,7 +100,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       // Mine art includes its balloon: the mine ball sits in the lower part of the picture.
       if (sprites.box(ctx, 'fx/mine', m.x - 50, y - 110, 100, 160)) continue;
       ink();
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.8;
       // Spikes.
       for (let k = 0; k < 8; k++) {
         const a = (k * Math.PI) / 4 + time * 0.3;
@@ -109,7 +109,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
         ctx.lineTo(m.x + Math.cos(a) * (r + 12), y + Math.sin(a) * (r + 12));
         ctx.stroke();
       }
-      ctx.fillStyle = '#3d3d3d';
+      ctx.fillStyle = '#4a4346';
       ctx.beginPath();
       ctx.arc(m.x, y, r, 0, 7);
       ctx.fill();
@@ -143,7 +143,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       if (w.kind === 'biplane' || w.kind === 'escort') {
         if (Math.cos(w.spin) < 0) ctx.scale(1, -1);
         ctx.scale(1.3, 1.3);
-        if (w.kind === 'escort') biplane(0, '#5f7a52', '#b89a5a', true, '#c8372d');
+        if (w.kind === 'escort') biplane(0, '#5f7a52', '#b89a5a', true, '#a8443f');
         else biplane(0, '#7d766a', '#7a3433', true);
         ctx.restore();
         continue;
@@ -153,14 +153,14 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
         continue;
       }
       ink();
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.8;
       ctx.fillStyle = '#3a2a22';
       const big = w.kind === 'cargo' ? 2.2 : 1;
       ctx.beginPath();
       ctx.ellipse(0, 0, 46 * big, 15 * big, 0, 0, 7);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#ff7b00';
+      ctx.fillStyle = '#e8884a';
       ctx.beginPath();
       ctx.arc(-20 * big, 0, 10 * big, 0, 7);
       ctx.fill();
@@ -173,9 +173,9 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     for (const b of state.bombs || []) {
       const y = P[b.d].y - 22;
       ink();
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.8;
       if (!sprites.box(ctx, 'fx/bomb', b.x - 24, y - 38, 48, 60)) {
-        ctx.fillStyle = '#1b1410';
+        ctx.fillStyle = '#2b2622';
         ctx.beginPath();
         ctx.arc(b.x, y, 22, 0, 7);
         ctx.fill();
@@ -187,23 +187,23 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
         ctx.quadraticCurveTo(b.x + 22, y - 36, b.x + 14, y - 44);
         ctx.stroke();
       }
-      ctx.fillStyle = Math.sin(time * 20) > 0 ? '#ffd23f' : '#ff5a1f';
+      ctx.fillStyle = Math.sin(time * 20) > 0 ? '#f2d36b' : '#e8884a';
       ctx.beginPath();
       ctx.arc(b.x + 14, y - 46, 6, 0, 7);
       ctx.fill();
       // Countdown.
       ctx.font = '900 30px Georgia';
       ctx.textAlign = 'center';
-      ctx.lineWidth = 6;
+      ctx.lineWidth = 3.2;
       ctx.strokeStyle = '#fff';
       const secs = Math.ceil(b.t);
       ctx.strokeText(secs, b.x, y - 56);
-      ctx.fillStyle = secs <= 3 ? '#e63946' : INK;
+      ctx.fillStyle = secs <= 3 ? '#a8443f' : INK;
       ctx.fillText(secs, b.x, y - 56);
       if (b.prog > 0) {
         ctx.fillStyle = '#3b2a1d';
         ctx.fillRect(b.x - 24, y + 28, 48, 8);
-        ctx.fillStyle = '#8fe388';
+        ctx.fillStyle = '#9cc99a';
         ctx.fillRect(b.x - 24, y + 28, 48 * Math.min(1, b.prog), 8);
       }
     }
@@ -215,7 +215,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
   const drawLookoutArrows = (width, height, view) => {
     const items = [];
     for (const c of state.cargo || []) items.push({ x: c.x, y: c.y, icon: '✈', color: '#9c5a2b', label: 'CARGO' });
-    for (const m of state.mines || []) items.push({ x: m.x, y: m.y, icon: '✹', color: '#3d3d3d', label: 'MINE' });
+    for (const m of state.mines || []) items.push({ x: m.x, y: m.y, icon: '✹', color: '#4a4346', label: 'MINE' });
     if (state.enemy.dead <= 0) items.push({ x: state.enemy.x, y: state.enemy.y, icon: '✈', color: '#8c2f2f', label: 'FIGHTER' });
     for (const p of state.bombers || []) items.push({ x: p.x, y: p.y, color: '#3d3a40', label: 'BOMBER' });
     if ((state.strafers || []).length) items.push({ x: state.strafers[0].x, y: state.strafers[0].y, color: '#26221f', label: 'SQUADRON' });
@@ -224,11 +224,11 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     if (bat) items.push({ x: bat.x, y: bat.y, color: '#3b2c4c', label: 'BATS' });
     const SP = state.specials;
     if (SP) {
-      for (const z of SP.snipers) items.push({ x: z.x, y: z.y, color: '#c0392b', label: 'SNIPER' });
+      for (const z of SP.snipers) items.push({ x: z.x, y: z.y, color: '#a8443f', label: 'SNIPER' });
       for (const g of SP.tugs) items.push({ x: g.x, y: g.y, color: '#7a4a2a', label: 'HARPOON' });
       if (SP.saws.length) items.push({ x: SP.saws[0].x, y: SP.saws[0].y, color: '#4a4f63', label: 'SAWS' });
       const imp = SP.imps.find((b) => b.delay <= 0);
-      if (imp) items.push({ x: imp.x, y: imp.y, color: '#e63946', label: 'IMPS' });
+      if (imp) items.push({ x: imp.x, y: imp.y, color: '#a8443f', label: 'IMPS' });
     }
     const margin = 46;
     const range = state.lookout ? 9000 : 3600;
@@ -243,9 +243,9 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       const ang = Math.atan2(sy - ay, sx - ax);
       ctx.save();
       ctx.translate(ax, ay);
-      ctx.fillStyle = '#f1e2b8';
+      ctx.fillStyle = '#ebdfc0';
       ctx.strokeStyle = INK;
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2.8;
       ctx.beginPath();
       ctx.arc(0, 0, 30, 0, 7);
       ctx.fill();
@@ -313,7 +313,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       if (p.vx < 0) ctx.scale(-1, 1);
       if (!sprites.plane(ctx, 'bomber', time)) {
         ink();
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 3;
         ctx.fillStyle = p.hit > 0 ? '#ffffff' : '#3d3a40';
         // Twin tails, long body, big wing with two engines.
         ctx.beginPath();
@@ -344,11 +344,11 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
           ctx.fill();
           ctx.stroke();
           const spin = Math.abs(Math.sin(time * 30)) * 26 + 4;
-          ctx.fillStyle = '#1b1410';
+          ctx.fillStyle = '#2b2622';
           ctx.fillRect(ex + 22, 14 - spin, 4, spin * 2);
         }
         // Open bomb bay.
-        ctx.fillStyle = '#1b1410';
+        ctx.fillStyle = '#2b2622';
         ctx.fillRect(-30, 20, 50, 8);
         insignia(-120, 0, 1);
       }
@@ -374,7 +374,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     ctx.scale(-1, 1); // faces the player's ship (left)
     if (!sprites.plane(ctx, 'boss', time)) {
       ink();
-      ctx.lineWidth = 6;
+      ctx.lineWidth = 3.2;
       // Fins, then a dark banded envelope.
       ctx.fillStyle = z.fin || '#5c1e1e';
       for (const s of [-1, 1]) {
@@ -406,18 +406,18 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.stroke();
       for (const g of z.guns) {
         // Live turrets are red with a barrel; shot-off ones are blackened stumps.
-        ctx.fillStyle = g.dead ? '#2a2a2a' : '#c0392b';
+        ctx.fillStyle = g.dead ? '#2a2a2a' : '#a8443f';
         ctx.beginPath();
         ctx.arc(-g.dx, 168, g.dead ? 12 : 16, 0, 7);
         ctx.fill();
         ctx.stroke();
         if (!g.dead) {
-          ctx.fillStyle = '#4a4a4a';
+          ctx.fillStyle = '#5a5558';
           ctx.fillRect(-g.dx - 5, 172, 10, 34);
           ctx.strokeRect(-g.dx - 5, 172, 10, 34);
         }
       }
-      ctx.fillStyle = '#ffd23f';
+      ctx.fillStyle = '#f2d36b';
       for (let k = -2; k <= 2; k++) {
         ctx.beginPath();
         ctx.arc(k * 70, 135, 8, 0, 7);
@@ -498,7 +498,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.rotate(esc.heading);
       if (Math.cos(esc.heading) < 0) ctx.scale(1, -1);
       ctx.scale(1.45, 1.45 * (1 - 0.45 * Math.min(1, Math.abs(esc.bank) || 0))); // banking squashes her
-      biplane(time, '#8fb37a', '#e8d8a8', false, '#c8372d');
+      biplane(time, '#8fb37a', '#e8d8a8', false, '#a8443f');
       ctx.restore();
     }
     drawChutes(time);
@@ -521,7 +521,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.rotate(k.ang);
       ink();
       ctx.lineWidth = 3;
-      ctx.fillStyle = '#c0392b';
+      ctx.fillStyle = '#a8443f';
       ctx.beginPath();
       ctx.moveTo(22, 0);
       ctx.lineTo(10, -7);
@@ -531,7 +531,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#4a4a4a';
+      ctx.fillStyle = '#5a5558';
       ctx.beginPath();
       ctx.moveTo(-16, -7);
       ctx.lineTo(-24, -14);
@@ -539,7 +539,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.lineTo(-16, 7);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#ffd23f';
+      ctx.fillStyle = '#f2d36b';
       ctx.beginPath();
       ctx.arc(-28, 0, 6 + Math.random() * 3, 0, 7);
       ctx.fill();
@@ -551,7 +551,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
   const drawHp = (x, y, hp, max, w) => {
     ctx.fillStyle = '#3b2a1d';
     ctx.fillRect(x - w / 2, y, w, 8);
-    ctx.fillStyle = '#e63946';
+    ctx.fillStyle = '#a8443f';
     ctx.fillRect(x - w / 2, y, (w * Math.max(0, hp)) / max, 8);
     ctx.strokeStyle = INK;
     ctx.lineWidth = 2;

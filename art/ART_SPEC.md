@@ -1,5 +1,27 @@
 # Airship Crew – Art Spec
 
+## Style 2026 ("Bomber XXL soft flat") - this overrides the older style notes below
+
+One look for the whole game: faded pastel colours, thin consistent dark outlines, flat shapes with at
+most ONE soft lighter highlight, layered hazy backgrounds, strong readable silhouettes for threats.
+No wobble, film grain or other old-film effects. Backgrounds and terrain stay fixed to the world.
+
+**Palette** (in `config.PALETTE`; ink and outline weights in `config.INK` / `config.OUTLINE`):
+sky `#cfe3ea`, haze `#e6ecea`, rock `#9a8670`, cave `#5d687a`, wood light `#b98a5a`, wood dark `#6b4a32`,
+brass `#c9a85a`, cream canvas `#ebdfc0` (shade `#d6c7a2`), our faction cream `#ece3c8` + sage `#8fb37a`,
+enemy oxblood `#a8443f` (light `#c9706a`) + charcoal `#4a4346`, muzzle yellow `#f2d36b`, fire orange `#e8884a`,
+smoke grey `#9a9a9a`, UI ink `#2b2622`, UI panel `#f3ead6`.
+
+**Outlines:** ink `#2b2622`. 2.5 px for small things, about 3.4 px standard, 4 px for the ship's main
+shapes (world pixels; they scale with the camera). Round joins and caps.
+
+**Shading:** flat fill plus one lighter highlight band (e.g. a pale stripe along the top of the gasbag).
+No gradients except sky and haze. Threat glows (red aim lines, bomb warnings) stay bright so they read.
+
+**Text:** one family, Georgia, weights 700 (labels) and 900 (shouts and popups); popups have a 5 px ink
+outline, labels a 2-3 px one.
+
+
 How to make art that drops straight into the game. The reference sheets in `art/reference/` set
 the look; this file sets the **pieces, sizes and file names**.
 

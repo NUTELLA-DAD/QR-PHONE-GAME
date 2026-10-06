@@ -16,7 +16,7 @@ export const WORDS = {
   boss: ['KA-BLOOEY!!'],
 };
 
-export function pop(state, x, y, kind, color = '#ffd23f', size = 1) {
+export function pop(state, x, y, kind, color = '#f2d36b', size = 1) {
   if (!state.popups) state.popups = [];
   if (state.popups.length > 10) state.popups.shift(); // a few at a time, not a pile
   state.popups.push({ x, y, text: pick(WORDS[kind] || [kind]), color, size, t: 0, tilt: (Math.random() - 0.5) * 0.4 });
