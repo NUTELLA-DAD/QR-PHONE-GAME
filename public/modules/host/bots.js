@@ -24,14 +24,15 @@ let world = null; // the game state (set each bot update), so steer() knows abou
 // To get to (or back from) a gunship alongside, swing across the gap on the line.
 function steer(p, d, x, near = 12) {
   const g = world && world.gunship;
-  if (g && g.rope && d === MAIN && p.d === MAIN && !p.swing) {
-    const mid = (MAIN_X1 + GS.x0) / 2;
-    if (x > mid !== p.x > mid) {
-      const edge = p.x > mid ? GS.x0 + 40 : MAIN_X1 - 15;
+  if (g && d === MAIN && p.d === MAIN && !p.swing) {
+    const mid = (MAIN_X1 + GS.x0) / 2; // targets past this are on her deck (her home frame)
+    if (x > mid !== !!p.onGunship) {
+      // Wrong side: walk to the swing spot, and swing only while the rope is hooked and in range.
+      const edge = p.onGunship ? GS.x0 + 40 : MAIN_X1 - 15;
       const step = steerTo(p, MAIN, edge, 12);
       p.jx = step.jx;
       p.jy = step.jy;
-      if (step.arrived) press(p);
+      if (step.arrived && g.rope) press(p); // (does nothing while she is out of swing range)
       return false;
     }
   }
@@ -172,15 +173,15 @@ function listJobs(state, bot) {
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1 });
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
   const gs = state.gunship;
-  if (gs && gs.charge && bot.d === MAIN && bot.x > MAIN_X1 - 20) jobs.unshift({ kind: 'flee', obj: 'flee', max: 8 });
+  if (gs && gs.charge && bot.onGunship) jobs.unshift({ kind: 'flee', obj: 'flee', max: 8 });
   if (gs && gs.phase === 'docked' && !gs.charge) {
-    if (!gs.rope) jobs.push({ kind: 'hook', obj: 'hook', max: 1 });
-    else {
+    if (!gs.rope && !bot.onGunship) jobs.push({ kind: 'hook', obj: 'hook', max: 1 });
+    else if (gs.rope || bot.onGunship) {
       for (const c of gs.crew) jobs.push({ kind: 'fight', obj: c, max: 1 });
       jobs.push({ kind: 'raid', obj: 'raid', max: 2 });
     }
     // Already aboard her? Finish the job there first: fight (if armed), then plant the charge.
-    if (gs.rope && bot.d === MAIN && bot.x > (MAIN_X1 + GS.x0) / 2) {
+    if (bot.onGunship) {
       jobs.unshift({ kind: 'raid', obj: 'raid', max: 8 });
       if (bot.carry === 'sword') for (const c of gs.crew) jobs.unshift({ kind: 'fight', obj: c, max: 2 });
     }

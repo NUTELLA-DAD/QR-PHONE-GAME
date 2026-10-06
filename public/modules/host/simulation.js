@@ -718,7 +718,7 @@ export function createSimulation() {
         player.jumpQ = false;
         if (player.air) {
           // Steer (a bit less than on the ground), no ladders while airborne.
-          moveWalker(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED);
+          (player.onGunship ? gunship.walk : moveWalker)(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED);
           player.vy -= M.JUMP_GRAVITY * dt;
           player.jz += player.vy * dt;
           if (player.jz <= 0) {
@@ -728,7 +728,7 @@ export function createSimulation() {
             player.jumpCd = M.JUMP_COOLDOWN;
             puff(player.x, player.y - 4, '#d9cbb0', 3);
           }
-        } else moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED);
+        } else (player.onGunship ? gunship.walk : moveWalker)(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED); // (aboard a gunship she carries them)
         player.moving = !player.climb && Math.abs(player.jx) > 0.15;
         const act = interaction(player, station);
         player.act = act;
@@ -768,10 +768,11 @@ export function createSimulation() {
           player.actQ = false;
           const type = act ? act.type : null;
           if (type === 'hook') {
-            gunship.fireHook();
-            stat(player, 'boarding');
-            puff(player.x + 200, player.y - 60 - state.ship.alt, '#ffe9a8', 8);
-            phoneFx(player, 'Hooked! Press Action at the bow to swing across!', [40, 30, 40]);
+            if (gunship.fireHook()) {
+              stat(player, 'boarding');
+              puff(player.x + 200, player.y - 60 - state.ship.alt, '#ffe9a8', 8);
+              phoneFx(player, 'Hooked! Press Action at the bow to swing across!', [40, 30, 40]);
+            } else phoneFx(player, 'Too far - the hook falls short! Get closer.', [40, 30, 40]);
           } else if (type === 'swing') gunship.swing(player);
           else if (type === 'rack') player.carry = player.carry === act.obj.kind ? null : act.obj.kind;
           else if (type === 'vent') {
