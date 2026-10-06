@@ -835,7 +835,13 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     }
     const d = distToGoal(map, sx, sy);
     if (Number.isFinite(d)) course.progress = Math.max(0, Math.min(0.99, 1 - d / Math.max(1, map.startDist)));
-    if (!course.done && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS) {
+    // At the Flagship the beacon only counts once she has been sunk.
+    const flagshipAlive = course.stop && course.stop.flagship && state.bossDownLap !== course.lap;
+    if (flagshipAlive && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS && !(state.ev.warn > 0)) {
+      state.ev.warn = 2;
+      state.ev.warnText = 'SINK THE FLAGSHIP FIRST!';
+    }
+    if (!course.done && !flagshipAlive && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS) {
       course.done = true;
       state.ship.hull = Math.min(100, state.ship.hull + K.CHECKPOINT_REPAIR);
       state.ev.warn = 4;

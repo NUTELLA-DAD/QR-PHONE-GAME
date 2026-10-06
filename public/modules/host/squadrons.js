@@ -85,12 +85,17 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     carrier: { name: 'THE BAT CARRIER', body: '#3b2c4c', fin: '#6a3a8c' },
     iron: { name: 'THE IRON DREADNOUGHT', body: '#4a5056', fin: '#2a2e33' },
   };
+  const flagshipStop = () => !!(state.course && state.course.stop && state.course.stop.flagship);
   const spawnBoss = () => {
-    const kind = lap() === 1 ? 'dread' : lap() === 2 ? 'carrier' : 'iron';
-    const hp = W.BOSS_HP + (lap() - 1) * W.BOSS_HP_PER_LAP;
+    // The last stop of a voyage is the Flagship: the Iron Dreadnought at her toughest.
+    const flagship = !!(state.course && state.course.stop && state.course.stop.flagship);
+    const kind = flagship ? 'iron' : lap() === 1 ? 'dread' : lap() === 2 ? 'carrier' : 'iron';
+    const hp = flagship ? W.BOSS_FLAGSHIP_HP : W.BOSS_HP + Math.min(lap() - 1, W.BOSS_HP_LAPS) * W.BOSS_HP_PER_LAP;
     state.boss = {
       kind,
       ...BOSSES[kind],
+      ...(flagship ? { name: 'THE FLAGSHIP' } : {}),
+      flagship,
       x: B.x1 + 3000,
       y: 250 - state.ship.alt,
       hp,
@@ -140,7 +145,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     if (state.ship.down || !Object.keys(state.players).length) return;
     const c = state.course;
     // Boss: once per lap, on the way home.
-    if (c && c.progress > W.BOSS_AT && c.progress < 0.9 && bossLap !== lap() && !state.boss && (!state.tempo || state.tempo.bossOk)) spawnBoss();
+    if (c && c.progress > W.BOSS_AT && (c.progress < 0.9 || flagshipStop()) && bossLap !== lap() && !state.boss && (!state.tempo || state.tempo.bossOk)) spawnBoss();
     // The trickle between set pieces: small bat swarms. The pacing director (simulation.js) sets how
     // fast this clock runs (0 in a calm) and calls the bigger set pieces itself.
     if ((waveT -= dt * (state.tempo ? state.tempo.rate : 1)) > 0) return;
@@ -419,7 +424,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     z.bob += dt;
     // Leave when the ship gets home, or after a crash.
     const c = state.course;
-    if (c && (c.progress < 0.5 || c.progress > 0.97)) z.leaving = true;
+    if (c && (c.progress < 0.5 || c.progress > 0.97) && !z.flagship) z.leaving = true; // (the Flagship never leaves)
     const homeX = z.leaving ? B.x1 + 4000 : W.BOSS_STATION_X;
     z.x += Math.sign(homeX - z.x) * Math.min(Math.abs(homeX - z.x), 220 * dt);
     const wantY = keepClear(state, z.x, 250 - state.ship.alt + Math.sin(z.bob * 0.6) * 60, 260, 0, 500);
@@ -548,6 +553,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
           pop(state, z.x, z.y - 160, 'boss', '#ff5a1f', 2.2);
           state.wrecks.push({ x: z.x, y: z.y, vx: -60, vy: -20, spin: 0, kind: 'cargo' });
           state.boss = null;
+          state.bossDownLap = lap(); // (the Flagship stop needs her sunk before the beacon counts)
           // Spoils of war: patch the ship up.
           state.ship.hull = Math.min(100, state.ship.hull + W.BOSS_REWARD_HULL);
           state.ship.gas = Math.min(100, state.ship.gas + 30);
@@ -580,6 +586,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     reset();
     state.boss = null;
     bossLap = 0;
+    state.bossDownLap = 0;
     waveT = W.FIRST_AFTER;
     nextWave = 'bats';
   };
@@ -605,7 +612,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   // Is this mission's boss still to come, and close? (The director holds its next set piece for the boss.)
   const bossSoon = () => {
     const c = state.course;
-    return !!c && !state.boss && bossLap !== lap() && c.progress > W.BOSS_AT - config.PACING.BOSS_LEAD && c.progress < 0.9;
+    return !!c && !state.boss && bossLap !== lap() && c.progress > W.BOSS_AT - config.PACING.BOSS_LEAD && (c.progress < 0.9 || flagshipStop());
   };
   return { update, reset, restart, bossSoon, withdraw, spawnBigSwarm, spawnBats, spawnBomber, spawnBoss, spawnStrafers };
 }

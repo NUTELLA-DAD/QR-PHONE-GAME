@@ -564,7 +564,9 @@ export const config = {
     BOMB_IMPACT: 1.0,
     BOSS_AT: 0.66, // lap progress (0-1) when the Dread Zeppelin shows up, on the way home
     BOSS_HP: 36,
-    BOSS_HP_PER_LAP: 20,
+    BOSS_HP_PER_LAP: 10, // extra boss toughness per mission...
+    BOSS_HP_LAPS: 4, // ...for at most this many missions
+    BOSS_FLAGSHIP_HP: 100, // the Flagship (last stop of a voyage)
     BOSS_STATION_X: 2700, // where it parks, ahead of the ship
     BOSS_FIRE_EVERY: 3.4,
     BOSS_BOARD_EVERY: 40, // seconds between boarding parties
