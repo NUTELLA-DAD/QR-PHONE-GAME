@@ -4,6 +4,7 @@ export function createControllerInput({ network, ui }) {
   const knob = document.getElementById('knob');
   const actButton = document.getElementById('act');
   const atkButton = document.getElementById('atk');
+  const jumpButton = document.getElementById('jump');
 
   let jx = 0;
   let jy = 0;
@@ -196,6 +197,9 @@ export function createControllerInput({ network, ui }) {
     },
     () => clearInterval(attackTimer),
   );
+
+  // Jump: one hop per tap.
+  pressable(jumpButton, () => network.sendInput({ jx, jy, jump: 1 }), () => {});
 
   addEventListener('contextmenu', (event) => event.preventDefault());
 

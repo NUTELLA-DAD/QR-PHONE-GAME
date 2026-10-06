@@ -125,7 +125,7 @@ export function createSimulation() {
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
   const interaction = (player, station) => {
-    if (player.lock || player.conn != null || player.fall || player.swing) return null;
+    if (player.lock || player.conn != null || player.fall || player.swing || player.air) return null;
     const here = (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r;
     const tool = player.carry;
     const revive = Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && q.conn == null && here(q, 65));
@@ -140,7 +140,8 @@ export function createSimulation() {
     if (hole && tool === 'hammer') return { type: 'hole', obj: hole, hold: true, time: T.PATCH_TIME, label: 'Patch hole' };
     // Standing right at a rack or hook always means take / put back.
     const pickup = PICKUPS.find((r) => here(r, T.REACH));
-    if (pickup) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : `Take ${pickup.kind}` };
+    // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)
+    if (pickup && !(station && (tool === 'ammo' || tool === 'coal'))) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : tool && tool !== 'ammo' && tool !== 'coal' ? `Swap to ${pickup.kind}` : `Take ${pickup.kind}` };
     const gasHole = state.gasHoles.find((o) => here(o, 60));
     if (gasHole && tool === 'hammer') return { type: 'gas', obj: gasHole, hold: true, time: T.PATCH_TIME, label: 'Patch gasbag' };
     const hurt = modules.list.find((m) => m.hp < m.max && here(m, T.REACH + 15));
@@ -542,9 +543,13 @@ export function createSimulation() {
       if (player.swing) {
         gunship.swingStep(player, dt);
         player.actQ = false;
+        player.jumpQ = false;
         continue;
       }
       if (player.fall) {
+        player.jumpQ = false;
+        player.air = false;
+        player.jz = 0;
         fall(player, dt, 260, (w) => {
           // Fell off the ship (or off a gunship): back aboard in the medical bay, dazed.
           const mb = SHIP_LAYOUT.medbay;
@@ -564,6 +569,9 @@ export function createSimulation() {
         player.lock = null;
         player.fire = false;
         player.actQ = false;
+        player.jumpQ = false;
+        player.air = false;
+        player.jz = 0;
         player.moving = false;
         player.climb = false;
         if ((player.ko -= dt) <= 0) {
@@ -585,7 +593,7 @@ export function createSimulation() {
         player.lock = null;
         player.fire = false;
       }
-      const station = !player.lock && player.conn == null ? SHIP_LAYOUT.stations.find((s) => s.d === player.d && Math.abs(player.x - s.x) < 55) : null;
+      const station = !player.lock && player.conn == null ? SHIP_LAYOUT.stations.filter((s) => s.d === player.d && Math.abs(player.x - s.x) < T.STATION_REACH).sort((a, b) => Math.abs(player.x - a.x) - Math.abs(player.x - b.x))[0] || null : null;
 
       if (player.lock) {
         player.moving = false;
@@ -666,9 +674,32 @@ export function createSimulation() {
         }
         if (gun) player.face = Math.cos(gun.aim) < 0 ? -1 : 1;
         player.actQ = false;
+        player.jumpQ = false;
         player.act = null;
       } else {
-        moveWalker(player, player.jx || 0, player.jy || 0, dt, config.MOVE.WALK_SPEED);
+        // Hop: a short arc over the deck (jz = height above it, vy = upward speed). Not on ladders
+        // or at a station. Kept simple so airborne play (jumping overboard) can extend it later.
+        const M = config.MOVE;
+        player.jumpCd = Math.max(0, (player.jumpCd || 0) - dt);
+        if (player.jumpQ && !player.air && player.conn == null && player.jumpCd <= 0) {
+          player.air = true;
+          player.vy = M.JUMP_VY;
+          player.jz = 0;
+        }
+        player.jumpQ = false;
+        if (player.air) {
+          // Steer (a bit less than on the ground), no ladders while airborne.
+          moveWalker(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED);
+          player.vy -= M.JUMP_GRAVITY * dt;
+          player.jz += player.vy * dt;
+          if (player.jz <= 0) {
+            player.jz = 0;
+            player.vy = 0;
+            player.air = false;
+            player.jumpCd = M.JUMP_COOLDOWN;
+            puff(player.x, player.y - 4, '#d9cbb0', 3);
+          }
+        } else moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED);
         player.moving = !player.climb && Math.abs(player.jx) > 0.15;
         const act = interaction(player, station);
         player.act = act;

@@ -31,27 +31,30 @@ label.opt input{width:28px;height:28px}
 #info .warn{color:#c62828;font-weight:900}
 #controls{flex:1;display:flex;align-items:center;justify-content:space-between;min-height:0}
 body.lefty #controls{flex-direction:row-reverse}
-#pad{position:relative;border:5px solid #1b1410;border-radius:50%;background:rgba(255,255,255,.35);width:min(44vw,62vh);aspect-ratio:1}
+#pad{position:relative;border:5px solid #1b1410;border-radius:50%;background:rgba(255,255,255,.35);width:min(40vw,62vh);aspect-ratio:1}
 #knob{position:absolute;width:38%;height:38%;left:31%;top:31%;border-radius:50%;background:#f1e2b8;border:5px solid #1b1410;box-shadow:0 5px 0 #1b1410}
-#buttons{position:relative;width:min(46vw,66vh);height:min(62vh,100%)}
+#buttons{--a:min(38vh,160px);--j:min(27vh,112px);--k:min(30vh,124px);position:relative;width:min(54vw,92vh);height:min(66vh,100%)}
 .btn{position:absolute;border:5px solid #1b1410;border-radius:50%;color:#fff;font:inherit;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.05;box-shadow:0 6px 0 #1b1410;padding:6px}
-.btn .ic{font-size:2.1em;line-height:1}
+.btn .ic{font-size:2.3em;line-height:1}
+.btn .tx{max-width:92%;overflow-wrap:anywhere}
 .btn.down{transform:translateY(5px);box-shadow:0 1px 0 #1b1410;filter:brightness(.9)}
-/* Action: big, lower right. Attack: smaller, up and to the left along the thumb arc. */
-#act{width:min(40vh,170px);height:min(40vh,170px);right:0;bottom:0;background:#f1e2b8;color:#1b1410;font-size:clamp(13px,3.6vh,19px)}
-#atk{width:min(29vh,120px);height:min(29vh,120px);right:min(42vh,180px);top:0;background:#3a5a8c;font-size:clamp(12px,3.2vh,17px)}
+/* Action: biggest, lower right. JUMP: above it. Attack: to its left. */
+#act{width:var(--a);height:var(--a);right:0;bottom:0;background:#f1e2b8;color:#1b1410;font-size:clamp(14px,4vh,20px)}
+#atk{width:var(--k);height:var(--k);right:calc(var(--a) + 10px);bottom:0;background:#3a5a8c;font-size:clamp(13px,3.6vh,18px)}
+#jump{width:var(--j);height:var(--j);right:calc(var(--a) * .1);top:0;background:#2e8b57;font-size:clamp(13px,3.4vh,18px)}
 body.lefty #act{right:auto;left:0}
-body.lefty #atk{right:auto;left:min(42vh,180px)}
+body.lefty #atk{right:auto;left:calc(var(--a) + 10px)}
+body.lefty #jump{right:auto;left:calc(var(--a) * .1)}
 #act.hold::after{content:'HOLD';font-size:11px;opacity:.85}
 /* Helm throttle lever (replaces Attack while steering). */
-#lever{position:absolute;right:min(42vh,180px);top:0;width:min(20vh,84px);height:100%;border:5px solid #1b1410;border-radius:18px;background:#3b2a1d;display:none;touch-action:none}
-body.lefty #lever{right:auto;left:min(42vh,180px)}
+#lever{position:absolute;right:calc(var(--a) + 10px);top:0;width:min(20vh,84px);height:100%;border:5px solid #1b1410;border-radius:18px;background:#3b2a1d;display:none;touch-action:none}
+body.lefty #lever{right:auto;left:calc(var(--a) + 10px)}
 #lever .fill{position:absolute;left:0;right:0;bottom:0;background:#4caf50}
 #lever .stop{position:absolute;left:-4px;right:-4px;height:4px;margin-bottom:-2px;background:#ffd23f}
 #lever .rev{position:absolute;left:0;right:0;bottom:4px;text-align:center;color:#ff8a8a;font-size:11px;font-weight:900}
 #lever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f1e2b8;border:5px solid #1b1410;border-radius:10px}
-#plever{position:absolute;right:calc(min(42vh,180px) + min(20vh,84px) + 16px);top:0;width:min(20vh,84px);height:100%;border:5px solid #1b1410;border-radius:18px;background:#3b2a1d;display:none;touch-action:none}
-body.lefty #plever{right:auto;left:calc(min(42vh,180px) + min(20vh,84px) + 16px)}
+#plever{position:absolute;right:calc(var(--a) + min(20vh,84px) + 20px);top:0;width:min(20vh,84px);height:100%;border:5px solid #1b1410;border-radius:18px;background:#3b2a1d;display:none;touch-action:none}
+body.lefty #plever{right:auto;left:calc(var(--a) + min(20vh,84px) + 20px)}
 #plever .fill{position:absolute;left:0;right:0;bottom:50%}
 #plever .mid{position:absolute;left:-4px;right:-4px;top:50%;height:4px;margin-top:-2px;background:#ffd23f}
 #plever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f1e2b8;border:5px solid #1b1410;border-radius:10px}
@@ -94,6 +97,7 @@ body.lefty #plever{right:auto;left:calc(min(42vh,180px) + min(20vh,84px) + 16px)
     <div id="buttons">
       <div id="plever"><div class="fill"></div><div class="mid"></div><div class="tag">PUMP ▲</div><div class="rev">VENT ▼</div><div class="handle"></div></div>
       <div id="lever"><div class="fill"></div><div class="stop"></div><div class="tag">AHEAD</div><div class="rev">REVERSE</div><div class="handle"></div></div>
+      <button class="btn" id="jump"><span class="ic">⤴️</span><span class="tx">JUMP</span></button>
       <button class="btn" id="atk"><span class="ic">✋</span><span class="tx">Shove</span></button>
       <button class="btn" id="act"><span class="ic">👋</span><span class="tx">Hey!</span></button>
     </div>

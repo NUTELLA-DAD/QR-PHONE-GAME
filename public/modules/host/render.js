@@ -1085,7 +1085,7 @@ export function createRenderer({ ctx, state, canvas }) {
     const bob = player.moving ? Math.sin(time * 16) * 3 : player.climb ? Math.sin(time * 10) * 3 : 0;
     const face = player.face || 1;
     const actionAge = performance.now() - (player.actT || -1e9);
-    const hop = actionAge < 400 ? Math.sin(actionAge / 400 * Math.PI) * 40 : 0;
+    const hop = actionAge < 400 ? Math.sin(actionAge / 400 * Math.PI) * 40 + (player.jz || 0) : player.jz || 0;
     const art = characterArt.draw(player, time, bob + hop);
     if (!art) {
       ctx.save();

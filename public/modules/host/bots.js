@@ -395,6 +395,9 @@ export function updateBot(p, state, dt) {
     return;
   }
 
+  // Hop over a fire that is in the way (not the one they are going to put out).
+  if (!p.lock && !p.air && p.conn == null && Math.abs(p.jx) > 0.3 && state.fires.some((f) => f.d === p.d && f !== (p.botJob && p.botJob.obj) && (f.x - p.x) * p.jx > 0 && Math.abs(f.x - p.x) < 90 && Math.abs(f.x - p.x) > 50)) p.jumpQ = true;
+
   const bots = Object.values(state.players).filter((q) => q.bot);
   if ((p.think = (p.think || 0) - dt) <= 0) {
     p.think = B.THINK_EVERY;

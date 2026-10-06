@@ -52,7 +52,7 @@ export function createRaiders({ state, modules, puff, impact }) {
   const strike = (b, target) => {
     const t = R[b.type];
     b.cd = 1.5;
-    if (!target || target.ko > 0 || target.d !== b.d || target.conn != null || Math.abs(target.x - b.x) > t.reach + 12) {
+    if (!target || target.ko > 0 || target.d !== b.d || target.conn != null || (target.jz || 0) > config.MOVE.JUMP_DODGE || Math.abs(target.x - b.x) > t.reach + 12) {
       puff(b.x + b.face * 40, b.y - 50, '#ddd', 4); // swung at thin air
       return;
     }
