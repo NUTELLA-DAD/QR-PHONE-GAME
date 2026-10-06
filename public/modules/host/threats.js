@@ -79,10 +79,12 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     warn(text, 2.5);
   };
 
+  const rate = () => (state.tempo ? state.tempo.rate : 1); // the pacing director's spawn speed (0 in a calm)
   const updateFighter = (dt) => {
     const e = state.enemy;
+    if (rate() <= 0 && (e.dead > 0 || e.heading == null)) return; // calm: no new fighter
     if (e.dead > 0) {
-      e.dead -= dt;
+      e.dead -= dt * rate();
       if (e.dead <= 0) spawnFighter(e);
       return;
     }
@@ -147,7 +149,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
 
   const updateMines = (dt) => {
     const M = config.MINES;
-    if ((mineT -= dt) <= 0) {
+    if ((mineT -= dt * rate()) <= 0) {
       mineT = rand(M.EVERY_MIN, M.EVERY_MAX);
       if (crew() && !state.ship.down) {
         // Skim the top (gasbag) or bottom (keel/turret) so the helm can dodge, or come dead centre.
@@ -248,6 +250,16 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     state.wrecks.length = 0;
   };
 
+  // Calm: the fighter breaks off when it is far away (or at once when `force`); mines still far off are cleared.
+  // Returns how many are left.
+  const withdraw = (far, force) => {
+    const e = state.enemy;
+    const m = shipMid();
+    if (e.heading != null && e.dead <= 0 && (force || Math.hypot(e.x - m.x, e.y - m.y) > far)) e.dead = F.RESPAWN;
+    state.mines = state.mines.filter((o) => !force && o.x < B.x1 + 700);
+    return (e.heading != null && e.dead <= 0 ? 1 : 0) + state.mines.length;
+  };
+
   const update = (dt) => {
     updateFighter(dt);
     updateMines(dt);
@@ -257,5 +269,5 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     state.ev.warn = Math.max(0, state.ev.warn - dt);
   };
 
-  return { update, reset };
+  return { update, reset, withdraw };
 }

@@ -140,19 +140,15 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     if (state.ship.down || !Object.keys(state.players).length) return;
     const c = state.course;
     // Boss: once per lap, on the way home.
-    if (c && c.progress > W.BOSS_AT && c.progress < 0.9 && bossLap !== lap() && !state.boss) spawnBoss();
-    // Waves of bats and bombers, coming faster each lap.
-    if ((waveT -= dt * (state.tempo && state.tempo.phase === 'calm' ? 0 : state.tempo && state.tempo.phase === 'peak' ? 1.7 : 1)) > 0) return;
+    if (c && c.progress > W.BOSS_AT && c.progress < 0.9 && bossLap !== lap() && !state.boss && (!state.tempo || state.tempo.bossOk)) spawnBoss();
+    // The trickle between set pieces: small bat swarms. The pacing director (simulation.js) sets how
+    // fast this clock runs (0 in a calm) and calls the bigger set pieces itself.
+    if ((waveT -= dt * (state.tempo ? state.tempo.rate : 1)) > 0) return;
     const pace = Math.max(0.45, 1 - (lap() - 1) * 0.18) / (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
     // (Open-sky missions already have the outposts shooting: waves come less often.)
     waveT = rand(W.EVERY_MIN, W.EVERY_MAX) * pace * (c && c.map && c.map.open ? 2 : 1);
     if (state.boss) return; // the boss fight is enough on its own
-    const bomberOk = lap() > 1 || (c && c.progress > 0.25);
-    const strafersOk = lap() > 1 || (c && c.progress > 0.5);
-    if (nextWave === 'bomber' && bomberOk && !state.bombers.length) spawnBomber();
-    else if (nextWave === 'strafers' && strafersOk && !state.strafers.length) spawnStrafers();
-    else spawnBats();
-    nextWave = nextWave === 'bats' ? 'bomber' : nextWave === 'bomber' ? 'strafers' : 'bats';
+    spawnBats();
   };
 
   // ---- Movement and attacks ----
@@ -588,5 +584,28 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     nextWave = 'bats';
   };
 
-  return { update, reset, restart, spawnBats, spawnBomber, spawnBoss, spawnStrafers };
+  // A set piece: a big swarm (the director picks when).
+  const spawnBigSwarm = () => spawnBats(null, Math.min(W.BATS_MAX * 2, Math.round((W.BATS_BASE + (lap() - 1) * W.BATS_PER_LAP + Math.floor(crew() / 4)) * config.PACING.SWARM_MULT)));
+  // Calm: unlatched bats fly off; bombers and dogfighters further than `far` from the ship (or all of
+  // them when `force`) go. Returns how many bombers and dogfighters are still about.
+  const withdraw = (far, force) => {
+    const m = shipMid();
+    for (const b of state.bats) {
+      if (b.latched || b.leaving || b.delay > 0) continue;
+      b.leaving = true;
+      b.age = W.BAT_LIFE;
+      b.vx = (b.x < m.x ? -1 : 1) * W.BAT_SPEED;
+      b.vy = -W.BAT_SPEED * 0.5;
+    }
+    const stays = (p) => !force && Math.hypot(p.x - m.x, p.y - m.y) < far;
+    state.bombers = state.bombers.filter(stays);
+    state.strafers = state.strafers.filter(stays);
+    return state.bombers.length + state.strafers.length;
+  };
+  // Is this mission's boss still to come, and close? (The director holds its next set piece for the boss.)
+  const bossSoon = () => {
+    const c = state.course;
+    return !!c && !state.boss && bossLap !== lap() && c.progress > W.BOSS_AT - config.PACING.BOSS_LEAD && c.progress < 0.9;
+  };
+  return { update, reset, restart, bossSoon, withdraw, spawnBigSwarm, spawnBats, spawnBomber, spawnBoss, spawnStrafers };
 }

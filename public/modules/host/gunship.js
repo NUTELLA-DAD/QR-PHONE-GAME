@@ -104,7 +104,6 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
   state.gunship = null;
   state.paras = []; // paratroopers in the air (world coordinates, like shells)
   const S = (state.gsStats = { spawned: 0, dropped: 0, shot: 0, landed: 0, latches: 0, cut: 0, sent: 0, portsDown: 0, contacts: 0, collisions: 0, reverts: 0, maxDepth: 0, breakoffs: 0, shots: 0, turns: 0, strafes: 0, retreats: 0, aborts: 0, flees: 0, climbs: 0 });
-  let timer = G.FIRST_AFTER;
   const warn = (text, secs = 3.5) => {
     state.ev.warn = secs;
     state.ev.warnText = text;
@@ -934,13 +933,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     if (!g) {
       for (const p of Object.values(state.players)) if (p.onGunship) dropOff(p); // (nothing to stand on)
       if (state.phase !== 'flying' || state.ship.down || state.boss || !Object.keys(state.players).length) return;
-      if ((timer -= dt * (state.tempo && state.tempo.phase === 'calm' ? 0 : state.tempo && state.tempo.phase === 'peak' ? 1.7 : 1)) > 0) return;
-      if (!spawn()) {
-        timer = 3; // no clear sky off our bow right now: try again shortly
-        return;
-      }
-      timer = rand(G.EVERY_MIN, G.EVERY_MAX);
-      g = state.gunship;
+      return; // (the pacing director in simulation.js decides when she appears)
     }
     g.hit = Math.max(0, g.hit - dt);
     if (g.phase === 'sinking') {
@@ -1270,7 +1263,6 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     dropAll();
     state.gunship = null;
     state.paras.length = 0;
-    timer = G.FIRST_AFTER;
   };
 
   // Called again after the course has moved this step (rock slid past her): push her out once more so
@@ -1284,5 +1276,13 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     collide(g, dt);
   };
 
-  return { update, settle, reset, cutLine, interaction, fireHook, plant, hitCrew, swing, swingStep, walk, land, deckAt: (p) => deckAt(state.gunship, p.x, p.y), inSwingRange: () => !!state.gunship && inSwingRange(state.gunship), inHookRange: () => !!state.gunship && gap(state.gunship) <= G.HOOK_RANGE, spawn: () => !state.gunship && spawn() };
+  // Calm: she breaks off unless crew are fighting aboard or hooked to her. True once she is gone or going.
+  const retire = () => {
+    const g = state.gunship;
+    if (!g || g.phase === 'leaving' || g.phase === 'sinking') return true;
+    if (g.rope || g.charge || aboardAny()) return false;
+    leave('THE GUNSHIP BREAKS OFF!', 2);
+    return true;
+  };
+  return { update, settle, reset, retire, cutLine, interaction, fireHook, plant, hitCrew, swing, swingStep, walk, land, deckAt: (p) => deckAt(state.gunship, p.x, p.y), inSwingRange: () => !!state.gunship && inSwingRange(state.gunship), inHookRange: () => !!state.gunship && gap(state.gunship) <= G.HOOK_RANGE, spawn: () => !state.gunship && spawn() };
 }

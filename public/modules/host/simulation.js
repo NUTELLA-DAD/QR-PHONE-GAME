@@ -72,6 +72,9 @@ function saveRecord(r) {
   }
 }
 
+// Fresh pacing-director state (see updateTempo).
+const newTempo = () => ({ phase: 'build', t: config.PACING.BUILD, el: 0, mt: 0, rate: config.PACING.RATE_START, kind: null, last: null, spawned: false, tries: 0, peaks: 0, gunshipEnd: -999 });
+
 export function createSimulation() {
   let socket = null;
   const state = {
@@ -84,7 +87,7 @@ export function createSimulation() {
     sfxQ: [], // sounds asked for by name: [name, arg]
     flashes: [], // muzzle flashes { x, y, ang, t, color }
     rings: [], // impact rings { x, y, t, max, color, size }
-    tempo: { phase: 'build', t: config.PACING.BUILD }, // build-up -> peak -> calm (breather)
+    tempo: newTempo(), // build-up -> peak -> calm (breather)
     supply: null, // a supply balloon to catch during a calm { mx, my, t }
     gasValve: { input: 0, auto: false }, // +1 = pumping hot steam into the gasbag, -1 = venting
     shield: { ang: -Math.PI / 2, on: false, flash: 0 }, // the Deflector's arc (angle around the ship)
@@ -276,7 +279,7 @@ export function createSimulation() {
     Object.assign(state.bombBay, { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null, open: 0 });
     state.helmHit = 0;
     Object.assign(state.shield, { ang: -Math.PI / 2, on: false, flash: 0 });
-    state.tempo = { phase: 'build', t: config.PACING.BUILD };
+    state.tempo = newTempo();
     state.supply = null;
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
     for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, auto: 0 });
@@ -314,22 +317,116 @@ export function createSimulation() {
     return true;
   };
 
-  // Pacing: a build-up, then a peak (they come thick and fast), then a calm to catch your breath -
-  // with a supply balloon drifting nearby to fly into.
+  // ---- The pacing director ----
+  // One rhythm per mission: BUILD (a small trickle, rising) -> PEAK (one big set piece) -> CALM (nothing
+  // new; stragglers leave; supply balloon; "ALL CLEAR") -> BUILD again. Every spawner runs its clock at
+  // state.tempo.rate (0 = nothing spawns) and the director itself calls the set pieces.
+  const missionPace = () => (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
+  const lapNo = () => (state.course ? state.course.lap : 1);
+  const buildTime = () => Math.max(config.PACING.BUILD_MIN, (config.PACING.BUILD * (1 - Math.min(0.5, (lapNo() - 1) * config.PACING.BUILD_PER_MISSION))) / missionPace());
+  const sayBanner = (text, secs = 4) => {
+    state.ev.warn = secs;
+    state.ev.warnText = text;
+  };
+  const setPieces = {
+    gunship: { text: 'GUNSHIP ON THE HORIZON!', go: () => gunship.spawn(), alive: () => !!state.gunship, max: () => config.PACING.GUNSHIP_PEAK_MAX },
+    bombers: { text: 'BOMBER RAID INCOMING!', go: () => { const n = 1 + (lapNo() > 1 ? 1 : 0) + (Object.keys(state.players).length >= 10 ? 1 : 0); for (let i = 0; i < n; i++) squadrons.spawnBomber(); return true; }, alive: () => state.bombers.length > 0 },
+    strafers: { text: 'ENEMY SQUADRON - DOGFIGHTERS!', go: () => { squadrons.spawnStrafers(); return true; }, alive: () => state.strafers.length > 0 },
+    swarm: { text: 'HUGE BAT SWARM!', go: () => { squadrons.spawnBigSwarm(); return true; }, alive: () => state.bats.some((b) => !b.dead && b.hp > 0 && !b.leaving) },
+    imps: { text: 'IMP SWARM - GUNS AND SHIELD!', go: () => { specials.spawn.imps(); return true; }, alive: () => state.specials.imps.length > 0 },
+  };
+  const pickSetPiece = (tp) => {
+    const pool = [];
+    const add = (k, w) => { if (k !== tp.last) for (let i = 0; i < w; i++) pool.push(k); };
+    add('swarm', 2);
+    add('imps', 1);
+    if (tp.peaks >= 1 || lapNo() > 1) {
+      add('bombers', 2);
+      add('strafers', 2);
+      if (tp.mt > config.PACING.GUNSHIP_FIRST && tp.mt - tp.gunshipEnd > config.PACING.GUNSHIP_GAP && !state.gunship) add('gunship', 4);
+    }
+    return pool[(Math.random() * pool.length) | 0] || 'swarm';
+  };
+  const enterPhase = (tp, phase) => {
+    const PC = config.PACING;
+    tp.phase = phase;
+    tp.el = 0;
+    if (phase === 'build') {
+      tp.t = buildTime();
+      tp.rate = PC.RATE_START;
+    } else if (phase === 'peak') {
+      tp.kind = pickSetPiece(tp);
+      tp.spawned = false;
+      tp.tries = 0;
+      tp.t = PC.PEAK_MAX;
+      tp.peaks++;
+    } else {
+      tp.t = PC.CALM;
+      tp.rate = 0;
+      sayBanner('ALL CLEAR - REPAIR AND RESUPPLY', 5);
+      spawnSupply();
+    }
+  };
   const updateTempo = (dt) => {
     const PC = config.PACING;
     const tp = state.tempo;
-    if (state.ship.down || state.boss) return;
-    if ((tp.t -= dt) <= 0) {
-      tp.phase = tp.phase === 'build' ? 'peak' : tp.phase === 'peak' ? 'calm' : 'build';
-      tp.t = PC[tp.phase.toUpperCase()];
-      state.ev.warn = 3;
-      if (tp.phase === 'peak') state.ev.warnText = 'HERE THEY COME!';
-      if (tp.phase === 'calm') {
-        state.ev.warnText = 'ALL CLEAR - SUPPLY BALLOON SPOTTED! FLY INTO IT!';
-        spawnSupply();
+    if (state.ship.down) return;
+    tp.mt += dt;
+    tp.el += dt;
+    tp.bossOk = tp.phase === 'build' || (tp.phase === 'calm' && tp.el > PC.CALM * 0.5); // (the boss never arrives in the middle of a set piece or straight after one)
+    if (state.gunship) tp.gunshipEnd = tp.mt; // (the gap counts from when she is gone)
+    // The mission boss is its own big moment: it holds the peak until it is gone, then the calm comes.
+    if (state.boss) {
+      if (tp.phase !== 'peak' || tp.kind !== 'boss') {
+        tp.phase = 'peak';
+        tp.kind = 'boss';
+        tp.spawned = true;
+        tp.el = 0;
+        tp.peaks++;
       }
-      if (tp.phase === 'build') state.ev.warn = 0;
+      tp.rate = 0;
+      tp.t = PC.PEAK_MAX;
+    } else if (tp.kind === 'boss' && tp.phase === 'peak') {
+      tp.kind = null;
+      enterPhase(tp, 'calm');
+    } else if (tp.phase === 'build') {
+      tp.t -= dt;
+      tp.rate = PC.RATE_START + (PC.RATE_END - PC.RATE_START) * Math.min(1, tp.el / buildTime());
+      if (tp.t <= 0 && !squadrons.bossSoon()) enterPhase(tp, 'peak'); // (the boss is the next set piece when it is close)
+    } else if (tp.phase === 'peak') {
+      const SP = setPieces[tp.kind] || setPieces.swarm;
+      tp.rate = PC.PEAK_RATE;
+      if (!tp.spawned) {
+        // (the gunship needs clear sky off the bow: if she can't come, fall back to a swarm)
+        if (tp.kind === 'gunship' && !SP.go()) {
+          if ((tp.tries += dt) > 4) tp.kind = 'swarm';
+        } else {
+          if (tp.kind !== 'gunship') SP.go();
+          tp.spawned = true;
+          tp.last = tp.kind;
+          tp.el = 0;
+          sayBanner(SP.text, 4.5);
+        }
+        tp.t = PC.PEAK_MAX;
+      } else {
+        const over = (!SP.alive() || squadrons.bossSoon()) && tp.el >= PC.PEAK_MIN;
+        const cap = tp.el >= (SP.max ? SP.max() : PC.PEAK_MAX);
+        if (over || cap) enterPhase(tp, 'calm');
+        tp.t = Math.max(0, (SP.max ? SP.max() : PC.PEAK_MAX) - tp.el);
+      }
+    } else {
+      // CALM: nothing new; stragglers go home; then the next build-up.
+      tp.rate = 0;
+      tp.t -= dt;
+      if (tp.el > PC.CALM_LEAVE) {
+        const force = tp.el > PC.CALM_FORCE;
+        const far = PC.CALM_FAR;
+        gunship.retire();
+        squadrons.withdraw(far, force);
+        specials.withdraw(far, force);
+        threats.withdraw(far, force);
+      }
+      if (tp.t <= 0) enterPhase(tp, 'build');
     }
     const sp = state.supply;
     if (sp) {
@@ -1101,6 +1198,7 @@ export function createSimulation() {
         squadrons.reset();
         specials.reset();
         gunship.reset();
+        state.tempo = newTempo();
         state.enemy.dead = Math.max(state.enemy.dead, 6);
       }
       updateTempo(dt);

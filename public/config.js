@@ -336,9 +336,25 @@ export const config = {
   },
   // Pacing: each fight builds up, peaks, then eases off for a breather with a supply balloon.
   PACING: {
-    BUILD: 45, // seconds of normal pressure...
-    PEAK: 30, // ...then enemies come faster for this long...
-    CALM: 22, // ...then nothing new arrives for this long
+    // The director runs one rhythm per mission: BUILD (small trickle, rising) -> PEAK (one big set piece)
+    // -> CALM (nothing new; stragglers leave; supply balloon) -> repeat.
+    BUILD: 48, // seconds of build-up (shorter on later missions / harder settings, longer on easy)
+    BUILD_MIN: 30, // ...but never shorter than this
+    BUILD_PER_MISSION: 0.08, // build-up shrinks by this share per mission after the first
+    RATE_START: 0.45, // trickle speed at the start of a build-up (1 = the modules' own timers)...
+    RATE_END: 1.15, // ...rising to this by its end
+    PEAK_RATE: 0.35, // trickle speed while a set piece is on (the set piece is the main event)
+    PEAK_MIN: 20, // a set piece lasts at least this long...
+    PEAK_MAX: 50, // ...and is called off (calm) after this long even if enemies remain
+    GUNSHIP_PEAK_MAX: 120, // (the gunship fight gets longer)
+    GUNSHIP_GAP: 80, // seconds after one gunship before the next may be the set piece
+    GUNSHIP_FIRST: 70, // seconds into a mission before the first gunship may come
+    SWARM_MULT: 1.8, // a bat-swarm set piece is this many times a normal swarm
+    BOSS_LEAD: 0.12, // no new set piece starts within this share of the route before the boss (it is the next one)
+    CALM: 34, // nothing new arrives for this long after a set piece
+    CALM_LEAVE: 4, // seconds into a calm before far-off stragglers go home
+    CALM_FORCE: 16, // seconds into a calm before every straggler goes (unless crew are fighting them)
+    CALM_FAR: 2200, // "far off" = this many px from the ship
     SUPPLY_REACH: 750, // fly within this of the balloon to grab it
     SUPPLY_HULL: 12,
     SUPPLY_COAL: 25,
