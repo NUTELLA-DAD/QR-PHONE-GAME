@@ -49,10 +49,14 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
   towers, walls and smokestacks (clearing your path). Reload with ammo crates (2 bombs each).
 - **Boarding**: when an enemy **gunship** comes alongside (it fires broadsides - watch its gun
   ports glow), stand at the very front of the main deck and tap Action to **fire the hookshot**.
-  Run across the rope bridge, fight her crew (swords!), and hold Action at her boiler (yellow
-  arrow) to **plant a charge** - then run back before it blows. Blowing her up brings hull, coal
-  and ammo aboard. Her crew will cut the rope if nobody crosses. Anyone who falls comes round in
-  the **medical bay** (red cross, lower deck) after a few seconds.
+  Then tap Action at the bow to **swing across** (landing knocks her crew back). Her crew run her
+  systems (shown over her gasbag): take out the **gunners** and her guns go silent, the **stoker**
+  and her guns reload slowly, the **helmsman** and she drifts off once you leave her. Hold Action at
+  her boiler (yellow arrow) to **plant a charge**, then tap Action at her rail to swing back before
+  it blows. Blowing her up brings hull, coal and ammo aboard. Her guards cut the line if nobody
+  crosses, and fill empty posts. Anyone who falls comes round in the **medical bay** (red cross,
+  lower deck) after a few seconds.
+- **Bots** never block you: walk up to a station a bot is using and tap Action to take it over.
 - **Boiler**: carry **coal** from the Coal Bunker (lower deck) - about one load a minute. More
   coal = more steam pressure.
   Everything powered (engines, helm, lift) uses steam; tap Action at a **vent** stack to open or
