@@ -183,31 +183,68 @@ export const config = {
     PLANT_TIME: 2.5, // holding Action at its boiler to set the charge
     FUSE: 8, // seconds to get back before it blows
     CUT_TIME: 7, // seconds its crew need to hack through the rope (they wait 3s first)
-    // -- Her own flight (she has engines + gas lift of her own; positions are offsets from our ship) --
-    START_DX: 2600, // she appears this far ahead of our ship (pixels)...
-    START_DY: 120, // ...and up to this much above or below
+    // -- Her own flight: gasbag + engines + boiler + helm, like ours. Positions are offsets from our ship --
+    START_DX: 4200, // she appears this far ahead of our ship (pixels) as a small shape on the horizon (nearer if rock is in the way)...
+    START_DY: 300, // ...and up to this much above or below
+    START_VX: -330, // her world speed as she appears (she is flying toward us, nose left, engines roaring)
     HOLD_DX: 0, // the station her helmsman tries to hold, relative to our ship (0,0 = broadside off our bow, level)
     HOLD_DY: 0,
     DOCK_DX: 250, // "on station" once she is this close to it (sideways) and...
     DOCK_DY: 150, // ...this close (up/down)
-    MAX_SPEED: 800, // her top forward speed through the world (our top is 560, a bit more in overdrive)
-    MAX_BACK: 250, // her top reverse speed
-    ACCEL_X: 260, // engine push (pixels/s per second): lower = she lags more when we speed up or brake
-    ENGINE_GAIN: 1.4, // how hard she throttles toward the speed she wants (higher = snappier, less overshoot)
+    MAX_SPEED: 760, // her top forward speed through the world (our top is 560, a bit more in overdrive)
+    ENGINE_ACC: 430, // full-throttle engine push (pixels/s per second); top speed = this / DRAG_X
+    DRAG_X: 0.5, // air drag on her (per second): with the engines idle she coasts to a stop
+    REVERSE: 0.35, // share of full power available astern
+    THROTTLE_RESP: 2.5, // how quickly the engines spool up and down (per second)
+    ENGINE_GAIN: 1.4, // how hard her helmsman asks for throttle toward the speed he wants
     KX: 0.9, // how strongly she closes a sideways gap (wanted closing speed = KX x gap)
     MAX_CLOSE: 650, // fastest she will close on her station
-    DRAG_X: 0.15, // with nobody at the helm her engines idle and she coasts to a stop (per second)
-    MAX_VY: 220, // her fastest climb/dive
-    ACCEL_Y: 150, // gas-lift response (pixels/s per second): lower = slower to follow our dives and climbs
-    LIFT_GAIN: 1.5,
+    CLOSE_PASS: 1150, // fastest closing speed on a strafing run / retreat
+    LIFT_ACC: 900, // gasbag lift: acceleration = (gas - 0.5) x this; 0.5 = neutral buoyancy (like ours)
+    DRAG_Y: 1.2, // vertical drag (so full gas climbs at about 0.5 x LIFT_ACC / DRAG_Y)
+    GAS_RATE: 0.22, // how fast her crew can fill or vent the bag (fraction per second) at full steam
+    GAS_DAMP: 1.6, // helmsman damping when setting the gas
+    GAS_PUMP_MIN: 0.3, // pump speed with no steam (share of GAS_RATE)
+    LEAK_NOHELM: 0.025, // gas leaking per second when nobody tends the bag (she sags)
+    LEAK_DAMAGE: 0.02, // extra leak per second at zero hull (scaled by damage)
+    MAX_VY: 370, // her fastest climb/dive
     KY: 1.1, // how strongly she corrects being above/below her station
-    DRAG_Y: 0.8, // vertical drag with nobody at the helm
-    SAG: 25, // with nobody at the helm she slowly sags (pixels/s per second)
     REACT: 0.8, // seconds her helmsman takes to notice what our ship is doing (bigger = more lag)
     WOBBLE_X: 70, // she never sits perfectly still: slow sway around her station
     WOBBLE_Y: 40,
+    STEAM_FEED: 0.3, // boiler pressure gained per second while her stoker is at the boiler
+    STEAM_LOSS: 0.03, // ...and lost per second with nobody stoking
+    STEAM_USE: 0.14, // ...plus this much per second at full throttle
+    STEAM_MIN: 0.3, // engine power with the boiler cold (share of full)
+    ENGINE_HIT: 0.06, // chance a shell that hits her hull or bag also damages an engine
+    ENGINE_DMG: 0.25, // engine health lost per such hit (0..1)
+    ENGINE_REPAIR: 0.012, // engine health her crew patch back per second (a retreat repairs faster)
+    GAS_HIT: 0.012, // gas lost from the bag per shell that hits it
+    // -- Turning round (a squash through the middle, ~1.5 s; only when nobody is aboard and no rope is on) --
+    TURN_TIME: 1.5,
+    TURN_CD: 5, // seconds between turns
+    TURN_AHEAD: 1900, // she swings round to station heading this far out from a station
+    TURN_MIN_SPEED: 150, // wanted world speed that makes her point her nose that way
+    // -- Captain: what she does (scored from her health, guns, crew, room) --
+    STRAFE_CD: 22, // seconds between strafing runs
+    STRAFE_CHANCE: 0.5, // chance she goes for a strafing run (when allowed) each time her captain picks the next move
+    STRAFE_CLOSE: 750, // her closing speed along a strafing run (slow enough for a couple of broadsides)
+    WP_TIMEOUT: 22, // a strafing run that takes longer than this (blocked by rock) is abandoned
+    STRAFE_FIRE: 3.5, // seconds between broadsides while strafing (faster than at a station)
+    STRAFE_Y_HI: -1000, // strafing height above our ship (she passes over the top)...
+    STRAFE_Y_LO: 900, // ...or underneath
+    RETREAT_AT: 0.42, // she pulls out to repair when her hull is this fraction of full or lower
+    RETURN_AT: 0.8, // ...and comes back at this fraction
+    RETREATS: 1, // how many times
+    RETREAT_MAX: 35, // longest she stays away repairing
+    RETREAT_DX: 3600, // where she goes to repair (ahead of us)
+    REPAIR_SEA: 0.6, // hull points per second her crew patch while she is away (+0.2 per guard)
+    FLEE_AT: 0.15, // with her retreats used up, she flees when the hull is this fraction of full
+    WP_PASS: 380, // a waypoint on a run counts as reached within this
+    TILT_MAX: 0.14, // her nose-up / nose-down (radians) in a climb or dive (less while crew are aboard)
+    TILT_ABOARD: 0.03,
     // -- Terrain: she is solid. Her outline (gasbag + hull) is tested against rock every step --
-    MAX_SPEED_ANY: 600, // her speed in any direction never exceeds this, even when the rope yanks her
+    MAX_SPEED_ANY: 780, // her speed in any direction never exceeds this, even when the rope yanks her
     ROCK_MARGIN: 70, // her helmsman wants this much clear space around her when choosing where to sit
     PUSH_STEP: 30, // push-out search resolution (pixels)
     ROCK_BOUNCE: 0.25, // share of her speed that bounces back off a wall
@@ -226,11 +263,11 @@ export const config = {
       bow: { dx: 0, dy: 0, fire: true, w: 3, links: ['high', 'c1', 'c2'] },
       high: { dx: -300, dy: -800, fire: true, drop: true, w: 2, links: ['bow', 'c1'] },
       c1: { dx: 0, dy: -1100, links: ['bow', 'high', 'A'] },
-      A: { dx: -1900, dy: -1100, fire: true, w: 1, links: ['c1', 'c3'] },
+      A: { dx: -1700, dy: -1100, fire: true, w: 1, links: ['c1', 'c3'] },
       c3: { dx: -3700, dy: -1100, links: ['A', 'K'] },
-      K: { dx: -3700, dy: -100, fire: true, w: 1, links: ['c3', 'c4'] },
+      K: { dx: -3700, dy: -100, w: 1, links: ['c3', 'c4'] },
       c4: { dx: -3700, dy: 1000, links: ['K', 'B'] },
-      B: { dx: -1900, dy: 1000, fire: true, w: 1, links: ['c4', 'c2'] },
+      B: { dx: -1900, dy: 1000, w: 1, links: ['c4', 'c2'] },
       c2: { dx: 0, dy: 1000, links: ['B', 'bow'] },
     },
     STAY_MIN: 7, // seconds she stays at a firing spot before her captain moves her...
@@ -250,14 +287,14 @@ export const config = {
     CUT_HOLD: 3, // seconds of holding Action at our bow to cut her grapple line
     // -- Paratroopers: raiders jump from her deck and parachute onto our ship --
     PARA_FIRST: 12, // seconds after she gets on station before the first drop
-    PARA_EVERY_MIN: 22, // seconds between drops
-    PARA_EVERY_MAX: 34,
+    PARA_EVERY_MIN: 26, // seconds between drops
+    PARA_EVERY_MAX: 38,
     PARA_FALL: 85, // descent speed under the chute (pixels/s)
     PARA_STEER: 230, // sideways steering speed toward our deck
     PARA_HP: 1, // shell damage to kill one (0.5 per shell = 2 shells)
     PARA_MAX_AIR: 5, // no new drop while this many are still in the air
     PARA_MAX_BOARDERS: 3, // ...or while this many raiders are already on our ship
-    GONE_DIST: 4200, // lost for good (removed) if she gets this far from us in any direction
+    GONE_DIST: 6500, // lost for good (removed) if she gets this far from us in any direction
     // -- Her broadsides get less accurate the further she is from her station --
     MISS_BASE: 0.15, // chance a cannonball misses even when perfectly placed
     MISS_DX: 1500, // her guns are fully accurate within 1500px of our hull, then each this-many pixels further adds +100% miss chance
@@ -274,7 +311,7 @@ export const config = {
     TUG_VY: 0.35, // gentle tug on OUR ship's climb speed per pixel of stretch
     TUG_SPEED: 0.0005, // gentle tug on OUR ship's throttle (fraction of speed per second per pixel of stretch)
     TUG_CAP: 300, // stretch beyond this adds no more tug on our ship
-    TILT_PER_SPEED: 0.0004, // drawing only: her tilt (radians) per pixel/second of climb (capped at 0.04)
+    TILT_PER_SPEED: 0.0008, // her tilt (radians) per pixel/second of climb
     SWING_TIME: 0.9, // seconds to swing across on the line
     SWING_DIP: 150, // how far below the deck the swing dips
     STOMP_RANGE: 160, // landing on her deck knocks back crew this close

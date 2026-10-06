@@ -575,8 +575,8 @@ export function createSimulation() {
   air.addSurface({
     id: 'gunship',
     y: () => (onDeck() ? GS.deckY + state.gunship.dy : null),
-    x0: () => (onDeck() ? GS.x0 - 20 + state.gunship.dx : 0),
-    x1: () => (onDeck() ? GS.x1 + 40 + state.gunship.dx : 0),
+    x0: () => (onDeck() ? GS.x0 - 30 + state.gunship.dx : 0),
+    x1: () => (onDeck() ? GS.x1 + 30 + state.gunship.dx : 0),
     onLand: (p) => gunship.land(p),
   });
 
