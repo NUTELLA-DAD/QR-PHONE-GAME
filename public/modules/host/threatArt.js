@@ -1,7 +1,7 @@
 // Drawing for outside threats (mines, wrecks), sapper bombs, and the lookout's
 // off-screen arrows. Placeholder vector art until Phase 3. Ember Pact = fictional enemy faction.
 import { config } from '../../config.js';
-import { drawBiplane } from './planeArt.js';
+import { drawBiplane, drawTailNumber } from './planeArt.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 
 const INK = config.INK;
@@ -489,16 +489,18 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
   const drawStrafers = (time) => {
     if (state.enemy && !(state.enemy.dead > 0) && state.phase !== 'lobby') drawTrail(state.enemy.trail);
     for (const p of state.strafers || []) drawTrail(p.trail);
-    const esc = state.escort;
-    if (esc && esc.flying) {
+    for (const esc of state.escorts || [state.escort]) {
+      if (!esc || !esc.flying) continue;
       drawTrail(esc.trail);
-      // Our escort fighter: green and cream, so she never looks like an enemy.
+      // Our patrol planes: green and cream, so they never look like an enemy.
       ctx.save();
       ctx.translate(esc.x, esc.y);
       ctx.rotate(esc.heading);
-      if (Math.cos(esc.heading) < 0) ctx.scale(1, -1);
+      const flip = Math.cos(esc.heading) < 0;
+      if (flip) ctx.scale(1, -1);
       ctx.scale(1.45, 1.45 * (1 - 0.45 * Math.min(1, Math.abs(esc.bank) || 0))); // banking squashes her
       biplane(time, '#8fb37a', '#e8d8a8', false, '#a8443f');
+      drawTailNumber(ctx, esc.num || 1, flip);
       ctx.restore();
     }
     drawChutes(time);

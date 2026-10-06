@@ -17,6 +17,7 @@ const platforms = [
   { id: 'bay', name: 'Bomb Bay', y: 925, x0: 350, x1: 640 },
   { id: 'pod', name: 'Ball Turret', y: 905, x0: 735, x1: 855 },
   { id: 'hangar', name: 'Fighter Hatch', y: 905, x0: 1020, x1: 1110, outside: true },
+  { id: 'hangar2', name: 'Fore Fighter Hatch', y: 905, x0: 1215, x1: 1305, outside: true },
 ];
 
 const index = (id) => platforms.findIndex((p) => p.id === id);
@@ -39,6 +40,7 @@ export const SHIP_LAYOUT = {
     { type: 'ladder', top: 'lower', bottom: 'bay', xTop: 372, xBottom: 372, speed: 170 },
     { type: 'ladder', top: 'lower', bottom: 'pod', xTop: 760, xBottom: 760, speed: 170 },
     { type: 'ladder', top: 'lower', bottom: 'hangar', xTop: 1040, xBottom: 1040, speed: 170 },
+    { type: 'ladder', top: 'lower', bottom: 'hangar2', xTop: 1235, xBottom: 1235, speed: 170 },
   ].map((c) => ({ ...c, top: index(c.top), bottom: index(c.bottom) })),
 
   // Named areas, used for drawing and for telling players where things are.
@@ -74,6 +76,7 @@ export const SHIP_LAYOUT = {
     { n: 'Fore Sponson', p: 'lower', x: 1180 },
     { n: 'Ventral Gun', p: 'pod', x: 820 },
     { n: 'Escort Fighter', p: 'hangar', x: 1085 },
+    { n: 'Escort Fighter 2', p: 'hangar2', x: 1280 },
   ]),
 
   // Guns: where the barrel pivots (bx, by), the middle of its firing arc (aim, radians;
@@ -98,6 +101,11 @@ export const SHIP_LAYOUT = {
   medbay: { p: 'lower', x: 640 },
   // Where the escort fighter hangs on its hook under the hull (below the Fighter Hatch).
   escortDock: { x: 1075, y: 965 },
+  // Both patrol planes' hooks: n = station name, num = tail number, p = hatch platform.
+  escortDocks: [
+    { n: 'Escort Fighter', num: 1, p: 'hangar', x: 1075, y: 965 },
+    { n: 'Escort Fighter 2', num: 2, p: 'hangar2', x: 1265, y: 965 },
+  ],
 
   // Bomb bay doors in the bay floor beside the bombardier: bombs drop from here, and jumpX is
   // where you stand to jump out (parachute) - both are over the doors.
