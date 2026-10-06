@@ -189,6 +189,11 @@ after each phase.
 - G1 done: guns hold 20, crates give 10, free trickle every 4 s, ~3.5 shots/s, faster shells,
   half damage per shell. Empty-gun time 32-69% -> 7-25% (botsim). Normal is a touch harder
   since the bigger gasbag (watch it).
+- Round 3 merged: H1 controls/jump/one-tap grabbing, S steam choices, G2 bats latch on, G3 Style 2026
+  art. Lead fix: a held hammer now repairs before a nearby rack takes it back. Cave maps on Normal
+  are a touch harder with steam leaks (bots wreck ~0.7 per 5 min) - balance pass later.
+- User: the enemy gunship feels locked in place; it should be hooked by a hookshot and the two
+  ships should have separate physics -> F5a/F5b now (with H2 in parallel).
 - Workers now run several at once, each in its own git worktree; the lead merges them one by one.
 - Note: the .claude/agents files load in a NEW session; until then the lead runs the same
   instructions through a general-purpose agent with model = sonnet.
