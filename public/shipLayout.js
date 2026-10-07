@@ -160,6 +160,9 @@ export const SHIP_LAYOUT = {
     { kind: 'hammer', p: 'lower', x: 110 },
     { kind: 'hammer', p: 'catwalk', x: 480 },
     { kind: 'hammer', p: 'lower', x: 690 },
+    // Grappling hookshots (ATTACK fires, swing and launch across the sky): top deck and main deck.
+    { kind: 'hookshot', p: 'catwalk', x: 1150 },
+    { kind: 'hookshot', p: 'main', x: 960 },
   ]),
   extinguishers: withD([
     { p: 'lower', x: 1510 },

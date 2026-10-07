@@ -181,6 +181,46 @@ export const config = {
     BOT_MAX: 1, // bot crew will fly at most this many of the planes at once
     ORBIT_SPREAD: 0.4, // the second plane circles this much wider
   },
+  // Personal hookshot (a tool from the rack): ATTACK fires it, it catches the ship, rock, the gunship
+  // and big enemies, you swing on the rope, ACTION (hold) reels in, ATTACK/JUMP lets go and you launch.
+  HOOKSHOT: {
+    RANGE: 950, // how far the hook flies (px) before it falls short and reels back
+    SPEED: 2600, // hook flight speed (px/s)
+    BACK_SPEED: 3600, // reel-back speed after a miss (px/s)
+    MISS_COOLDOWN: 0.45, // seconds before you can fire again after a miss or a release
+    SKIP: 60, // the first px in front of you never catch (so you do not hook the floor under your own feet)
+    THICK: 16, // how thick a deck edge is for the hook to catch on (px)
+    GUNSHIP_DEPTH: 90, // the gunship's hull below her deck also catches (px)
+    BOMBER_HW: 130, BOMBER_HH: 50, // bomber body half size (px)
+    BOSS_HW: 300, BOSS_HH: 120, // boss body half size (px)
+    PLANE_R: 60, // a dogfighter catches the hook inside this radius
+    HAND: 55, // px above your feet where the rope is held
+    MIN_LEN: 50, // the rope is never shorter than this
+    POP: 420, // px/s kick toward the hook when it catches (lifts you off the deck)
+    POP_UP: 260, // ...and at least this much upward (px/s)
+    AUTO_REEL: 150, // px/s the rope winds in by itself (so you never hang forever); hold ACTION for REEL_SPEED
+    REEL_SPEED: 520, // px/s the rope shortens while ACTION is held
+    PUMP: 700, // px/s² extra swing push from the stick (on top of normal air steering)
+    RELEASE_LOCK: 0.35, // seconds after a catch before ATTACK/JUMP can let go (so a held button does not drop you)
+    BOOST: 1.12, // launch speed multiplier when you let go
+    MAX_SPEED: 1500, // speed cap while swinging / launching (px/s)
+    LEDGE_POP: 300, // reeling right up to a deck edge: upward kick so you land on top (px/s)
+    LEDGE_AT: 70, // reel in to this close to a deck anchor and you climb onto it (px)
+    BOARD_AT: 75, // reel in to this close to a dogfighter and you climb aboard (px)
+  },
+  // Hijack a small plane: touch a dogfighter in the air (or hook it and reel in), kick the pilot out, fly it.
+  HIJACK: {
+    RADIUS: 75, // how close an airborne player must get to a dogfighter to climb aboard (px)
+    KICKS: 3, // action taps to kick the pilot out (a short hold of KICK_HOLD seconds works too)
+    KICK_HOLD: 0.9, // seconds of holding ACTION that kick the pilot out
+    KICK_DECAY: 0.25, // kick progress lost per second when you stop (0..1 scale)
+    BOARD_SPEED: 300, // the plane slows to this while a stranger is on the wing (cruise)
+    BOARD_WOBBLE: 0.9, // radians/s of wobble while boarded
+    HP: 5, // enemy bullets the stolen plane can take
+    FUEL_TIME: 80, // seconds she flies before running dry (you bail out)
+    LEASH: 3400, // beyond this far from the ship she turns for home on her own
+    GREEN: '#8fb37a', CREAM: '#e8d8a8', // her new colours
+  },
   GUNSHIP: {
     FIRST_AFTER: 100, // seconds into a mission before the first
     EVERY_MIN: 80,

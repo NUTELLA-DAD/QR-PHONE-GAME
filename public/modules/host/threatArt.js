@@ -507,6 +507,46 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       drawTailNumber(ctx, esc.num || 1, flip);
       ctx.restore();
     }
+    // Stolen dogfighters (hijacked by a crewmate): ours now - green and cream, the rider in the cockpit.
+    for (const s of state.hijacks || []) {
+      try {
+        drawTrail(s.trail);
+        const rider = state.players[s.rider];
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(s.heading || 0);
+        const flip = Math.cos(s.heading || 0) < 0;
+        if (flip) ctx.scale(1, -1);
+        ctx.scale(1.3, 1.3 * (1 - 0.45 * Math.min(1, Math.abs(s.bank) || 0)));
+        biplane(time, config.HIJACK.GREEN, config.HIJACK.CREAM, false, '#a8443f');
+        // The rider's head and goggles in the cockpit.
+        ink();
+        ctx.lineWidth = 2.4;
+        ctx.fillStyle = (rider && rider.color) || '#ffffff';
+        ctx.beginPath();
+        ctx.arc(-4, -16, 8, 0, 7);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#e8f2f5';
+        ctx.fillRect(-2, -19, 8, 5);
+        ctx.restore();
+        if (s.phase === 'kick') {
+          // KICK THE PILOT: a little progress bar over the plane.
+          ctx.save();
+          ctx.translate(s.x, s.y - 70);
+          ink();
+          ctx.lineWidth = 3;
+          ctx.fillStyle = '#f2e6c8';
+          ctx.fillRect(-36, -7, 72, 14);
+          ctx.fillStyle = '#e0523f';
+          ctx.fillRect(-36, -7, 72 * Math.min(1, s.kickP || 0), 14);
+          ctx.strokeRect(-36, -7, 72, 14);
+          ctx.restore();
+        }
+      } catch (e) {
+        /* drawing never throws */
+      }
+    }
     drawChutes(time);
     for (const p of state.strafers || []) {
       ctx.save();

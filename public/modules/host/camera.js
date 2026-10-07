@@ -34,6 +34,7 @@ export function createCamera() {
     if (state.enemy.dead <= 0 && near(state.enemy, C.FRAME_RANGE)) things.push(state.enemy);
     for (const t of [...(state.mines || []), ...(state.bombers || [])]) if (near(t, C.FRAME_RANGE)) things.push(t);
     if (state.boss && near(state.boss, C.FRAME_RANGE + 600)) things.push(state.boss);
+    for (const t of state.hijacks || []) if (near(t, C.FRAME_RANGE + 600)) things.push(t); // a stolen plane stays in view
     for (const t of state.specials ? [...state.specials.snipers, ...state.specials.tugs] : []) if (near(t, C.FRAME_RANGE + 400)) things.push(t);
     if (state.supply && state.course) things.push({ x: state.supply.mx - state.course.dist, y: state.supply.my });
     if (state.gunship) { const gd = Math.min(state.gunship.dx, 1300); things.push({ x: 2600 + gd, y: 500 + state.gunship.dy - alt }, { x: 3300 + gd, y: 300 + state.gunship.dy - alt }); } // (far off on her way in she is only an edge arrow)

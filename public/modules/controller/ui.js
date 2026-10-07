@@ -4,6 +4,7 @@ export function createControllerUI({ network }) {
 
   // Icon for the Action button, picked from the start of its label.
   const ACTION_ICONS = [
+    ['Swap to hookshot', '🪝'], ['Take hookshot', '🪝'], ['Reel in', '🪝'], ['KICK', '🦶'], ['Auto guns', '🔫'],
     ['Swap to sword', '🗡️'], ['Swap to hammer', '🔨'], ['Swap to extinguisher', '🧯'], ['Take sword', '🗡️'], ['Take hammer', '🔨'], ['Take extinguisher', '🧯'], ['Put back', '↩️'],
     ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['Close valve', '🚱'], ['Open valve', '🚰'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
@@ -11,7 +12,7 @@ export function createControllerUI({ network }) {
     ['Take Helm', '☸️'], ['Take Boiler', '🔥'], ['Take', '🎯'],
     ['FIRE', '💥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
   ];
-  const CARRY = { sword: '🗡️ Sword', hammer: '🔨 Hammer', extinguisher: '🧯 Extinguisher', ammo: '📦 Ammo', coal: '⚫ Coal' };
+  const CARRY = { sword: '🗡️ Sword', hammer: '🔨 Hammer', extinguisher: '🧯 Extinguisher', ammo: '📦 Ammo', coal: '⚫ Coal', hookshot: '🪝 Hookshot' };
 
   let species = 'bulldog';
   let joined = null;
@@ -130,7 +131,7 @@ export function createControllerUI({ network }) {
     const icon = (ACTION_ICONS.find(([start]) => label.startsWith(start)) || [, '👋'])[1];
     setButton('act', icon, label);
     $('act').classList.toggle('hold', !!next.hold);
-    setButton('atk', next.attack === 'Swing' ? '🗡️' : '✋', next.attack || 'Shove');
+    setButton('atk', next.attack === 'Swing' ? '🗡️' : next.attack === 'Hook!' ? '🪝' : next.attack === 'Let go!' ? '🖐️' : next.attack === 'Kick!' ? '🦶' : '✋', next.attack || 'Shove');
 
     $('carry').textContent = next.carry ? CARRY[next.carry] || next.carry : 'Hands empty';
     if (next.hull != null) {
@@ -145,6 +146,7 @@ export function createControllerUI({ network }) {
           helm: 'Stick: engines (left/right) and trim (up/down). AHEAD lever: cruise speed (STOP line = hover). PUMP/VENT lever: the gasbag - up = rise, middle = hold, down = drop.',
           gun: 'Drag to aim - it snaps onto nearby targets. Hold FIRE. Needs ammo!',
           lookout: 'Keep watch! Arrows on the TV show what is coming from off screen.',
+          hijack: 'You hijacked a fighter! KICK THE PILOT: tap Action 3 times (or hold it). Then: stick steers, guns fire by themselves, LEAVE bails out with a parachute.',
           escort: 'You are flying the escort fighter! Point the stick where to fly - let go and she circles the ship. Her guns fire by themselves at anything in front. LEAVE flies her home.',
           coil: 'Aim with the stick, HOLD to charge the coil (uses lots of steam), let go to fire a giant bolt!',
           shield: 'Point the stick to swing the glowing shield round the ship - it blocks bullets, bats and rockets!',

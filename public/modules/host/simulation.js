@@ -13,6 +13,8 @@ import { createSpecials } from './specials.js';
 import { createCoil } from './coil.js';
 import { createGunship, MAIN_X1 } from './gunship.js';
 import { createAirborne } from './airborne.js';
+import { createHookshot } from './hookshot.js';
+import { createHijack } from './hijack.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
 import { createEnvironment, favour } from './environments.js';
@@ -209,6 +211,7 @@ export function createSimulation() {
 
   // Attack button: a sword hurts raiders; bare hands only shove them back.
   const attack = (player) => {
+    if (hookshot.onAttack(player)) return; // carrying the hookshot: fire it (or let go of the rope)
     if ((player.atkCd || 0) > 0 || player.lock || player.conn != null) return;
     const sword = player.carry === 'sword';
     player.atkCd = sword ? T.SWORD_COOLDOWN : T.SHOVE_COOLDOWN;
@@ -314,6 +317,7 @@ export function createSimulation() {
     threats.reset();
     squadrons.restart();
     escort.reset();
+    hijack.reset();
     specials.reset();
     coil.reset();
     gunship.reset();
@@ -932,6 +936,8 @@ export function createSimulation() {
   const weather = createWeather({ state, impact, puff });
   const env = createEnvironment({ state, puff, phoneFx, impact, damageHull }); // ice, thermals, blizzards (rules in environments.js)
   const air = createAirborne({ state, puff, phoneFx });
+  const hijack = createHijack({ state, puff, phoneFx, air }); // stolen dogfighters
+  const hookshot = createHookshot({ state, puff, phoneFx, air, hijack }); // personal grappling hook
   // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
   // Every deck of hers is a landing surface (she can have up to 4 stepped decks; the deck numbers run left to right as she is now).
   for (let k = 0; k < 4; k++) {
@@ -982,6 +988,7 @@ export function createSimulation() {
     for (const player of Object.values(state.players)) {
       if (player.bot) updateBot(player, state, dt);
       if (player.koGrace > 0) player.koGrace -= dt;
+      if (player.hook && (player.fall || player.ko > 0 || player.lock || player.swing || player.conn != null || player.connected === false)) hookshot.clear(player);
       if (player.swing) {
         gunship.swingStep(player, dt);
         player.actQ = false;
@@ -1037,6 +1044,7 @@ export function createSimulation() {
         player.leaveQ = false;
         player.lock = null;
         player.fire = false;
+        if (player.hj) hijack.leave(player); // LEAVE in a stolen plane: bail out under a parachute
       }
       if (player.connected === false) {
         player.lock = null;
@@ -1044,7 +1052,9 @@ export function createSimulation() {
       }
       const station = !player.lock && player.conn == null ? SHIP_LAYOUT.stations.filter((s) => s.d === player.d && Math.abs(player.x - s.x) < T.STATION_REACH).sort((a, b) => Math.abs(player.x - a.x) - Math.abs(player.x - b.x))[0] || null : null;
 
-      if (player.lock) {
+      if (player.hj) {
+        hijack.rider(player, dt); // flying a stolen dogfighter (kick the pilot out, then steer)
+      } else if (player.lock) {
         player.moving = false;
         player.climb = false;
         const gun = state.GUNS[player.lock];
@@ -1130,6 +1140,8 @@ export function createSimulation() {
         // or at a station. Kept simple so airborne play (jumping overboard) can extend it later.
         const M = config.MOVE;
         player.jumpCd = Math.max(0, (player.jumpCd || 0) - dt);
+        if (player.hook && player.jumpQ && hookshot.onJump(player)) player.jumpQ = false; // JUMP lets go of the rope
+        hookshot.fly(player, dt); // the hook's own flight (and its cooldown)
         if (player.jumpQ && player.conn != null && !player.air) air.jumpOff(player); // leap off a ladder into free flight
         if (player.jumpQ && !player.air && player.conn == null && player.jumpCd <= 0) {
           player.air = true;
@@ -1138,8 +1150,13 @@ export function createSimulation() {
           if (!player.onGunship) air.vault(player); // outside deck + stick held down: hop over the rail into free flight
         }
         player.jumpQ = false;
+        hookshot.pre(player, dt); // rope and reel (only if hooked on)
         if (player.fly) {
-          if (air.step(player, dt)) air.grab(player); // free flight (off a deck end, over the rail, or thrown); may catch a ladder
+          if (air.step(player, dt)) {
+            hookshot.post(player, dt);
+            // free flight (off a deck end, over the rail, thrown, or swinging): may land on a plane, or catch a ladder
+            if (!hijack.touch(player) && player.fly && air.grab(player)) hookshot.clear(player);
+          }
         } else if (player.air) {
           // Steer (a bit less than on the ground), no ladders while airborne.
           (player.onGunship ? gunship.walk : moveWalker)(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED * env.deep.walkMul(player) * wadeMul(player));
@@ -1265,8 +1282,8 @@ export function createSimulation() {
       player.atkCd = Math.max(0, (player.atkCd || 0) - dt);
 
       // Idle crew get an arrow to the most useful nearby job (phone + a chevron on the TV).
-      if (!player.bot) jobFinder.update(player, dt);
-      const jobUi = player.bot ? null : jobFinder.ui(player);
+      if (!player.bot && !player.hj) jobFinder.update(player, dt);
+      const jobUi = player.bot || player.hj ? null : jobFinder.ui(player);
 
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
@@ -1284,6 +1301,14 @@ export function createSimulation() {
         hold = !!player.act.hold;
       }
       if (player.fly) label = player.chuteOpen ? 'Steer!' : player.chute ? 'Chute...' : player.fvy > 0 ? 'Falling!' : 'Airborne';
+      if (player.hook && player.hook.phase === 'caught') {
+        label = 'Reel in (hold)';
+        hold = true;
+      }
+      if (player.hj) {
+        label = hijack.kickText(player);
+        hold = player.hj.phase === 'kick';
+      }
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
@@ -1299,13 +1324,19 @@ export function createSimulation() {
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
       if (!status && !player.bot) status = env.deep.status(player) || ''; // spores (cough), clogged engines, oxygen
       const ammoText = gun ? gun.ammo : stationName === 'Bomb Bay' ? state.bombBay.bombs : null;
-      const attackLabel = !player.lock && player.conn == null && batInReach(player, config.WAVES.BAT_NOTICE) ? 'Swat bat!' : player.carry === 'sword' ? 'Swing' : 'Shove';
+      let attackLabel = !player.lock && player.conn == null && batInReach(player, config.WAVES.BAT_NOTICE) ? 'Swat bat!' : player.carry === 'sword' ? 'Swing' : player.carry === 'hookshot' ? 'Hook!' : 'Shove';
+      if (player.hook && player.hook.phase === 'caught') attackLabel = 'Let go!';
+      if (player.hj) {
+        attackLabel = player.hj.phase === 'kick' ? 'Kick!' : 'Guns auto';
+        if (player.hj.phase === 'kick') status = 'Tap Action 3 times (or hold it) to throw the pilot out - LEAVE to jump off';
+        else status = 'Fuel ' + Math.max(0, Math.round(player.hj.fuel / 5) * 5) + 's - hull ' + Math.max(0, player.hj.hp) + '/' + player.hj.max;
+      }
       const hull = Math.round(state.ship.hull / 5) * 5;
-      const key = [stationName, kind, !!player.lock, takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, jobUi ? jobUi.label + '|' + jobUi.dir : ''].join('|');
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, jobUi ? jobUi.label + '|' + jobUi.dir : ''].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: stationName, kind, locked: !!player.lock, taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, job: jobUi };
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, job: jobUi };
           emitPlayerUi(player.id, player.ui);
         }
       }
@@ -1507,6 +1538,7 @@ export function createSimulation() {
       updateTempo(dt);
       squadrons.update(dt);
       escort.update(dt);
+      hijack.update(dt);
       specials.update(dt);
       gunship.update(dt);
       course.update(dt);
