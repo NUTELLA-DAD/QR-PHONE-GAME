@@ -1,8 +1,19 @@
 // Shared plane drawings.
 
+// Painted sprites (art/sprites/planes/dogfighter|escort), set once by threatArt. Optional.
+let planeSprites = null;
+export function setPlaneSprites(sprites) {
+  planeSprites = sprites;
+}
+// Which painted plane a call stands for, judged by its colours (other palettes, e.g. the
+// Aether's void corsairs, keep the drawn version).
+const SPRITE_KIND = { '#8fb37a': 'escort', '#5f7a52': 'escort', '#b9b1a0': 'dogfighter', '#7d766a': 'dogfighter' };
+
 // A small biplane (after Bomber XXL): soft flat colours, thin outlines, two stacked wings,
 // a round cowling and a blurred propeller. Drawn nose-right at the origin.
 export function drawBiplane(ctx, time, body, trim, wreck, pilot = '#efe9dc') {
+  const kind = SPRITE_KIND[body];
+  if (kind && planeSprites && planeSprites.plane(ctx, kind, time, wreck ? 'wreck' : 'body')) return;
   ctx.strokeStyle = '#2b2622';
   ctx.lineWidth = 2.5;
   ctx.lineJoin = 'round';

@@ -137,13 +137,80 @@ export function createSprites() {
 
   const rigFor = (key) => rig[key] || {};
 
+  // Painted planes (gouache sprites, side view facing right, NO propeller baked in). Sized in
+  // world units = the footprint of the old drawn plane before the caller's own scale:
+  // w = width, cx/cy = sprite centre in the old drawing's frame (so pivots match),
+  // props = translucent spinning blur discs drawn in code {x, y, r}. rig.json "planes/<name>"
+  // can override any of these.
+  const PLANE_DEFS = {
+    dogfighter: { w: 84, cx: -8, cy: -6, props: [{ x: 35, y: -1, r: 17 }] },
+    escort: { w: 84, cx: -8, cy: -6, props: [{ x: 35, y: -4, r: 17 }] },
+    fighter: { w: 160, cx: -2, cy: -9, props: [{ x: 79, y: -14, r: 22 }] },
+    bomber: { w: 270, cx: -10, cy: -5, props: [{ x: 66, y: -16, r: 28 }] },
+  };
+  const wrecks = new Map();
+  // A blackened, scorched copy of a body sprite (used when there is no wreck.png).
+  const wreckOf = (key) => {
+    if (wrecks.has(key)) return wrecks.get(key);
+    const img = images[key];
+    if (!img) return null;
+    const c = document.createElement('canvas');
+    c.width = img.width;
+    c.height = img.height;
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = 'rgba(28,20,16,.72)';
+    g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = 'rgba(0,0,0,.35)';
+    for (let i = 0; i < 9; i++) { // soot patches
+      g.beginPath();
+      g.ellipse((((i * 37) % 100) / 100) * c.width, (((i * 53) % 100) / 100) * c.height, c.width * 0.07, c.height * 0.09, 0, 0, 7);
+      g.fill();
+    }
+    wrecks.set(key, c);
+    return c;
+  };
+  const paintedPlane = (ctx, name, body, time, isWreck) => {
+    const R = { ...PLANE_DEFS[name], ...rigFor('planes/' + name) };
+    const w = R.w;
+    const h = (body.height / body.width) * w;
+    ctx.drawImage(body, R.cx - w / 2, R.cy - h / 2, w, h);
+    if (!isWreck) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(70,60,52,.4)';
+      for (const p of R.props) {
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, 3, p.r * (0.7 + 0.3 * Math.abs(Math.sin(time * 40 + p.x))), 0, 0, 7);
+        ctx.fill();
+      }
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.fillStyle = '#ff7b00';
+      ctx.beginPath();
+      ctx.arc(R.cx + w * 0.3, R.cy, 7 + Math.random() * 3, 0, 7);
+      ctx.fill();
+      ctx.restore();
+    }
+  };
+
   // A plane from art/sprites/planes/<name>/ (body, plus an edge-on prop that "spins" by
   // stretching), drawn centred on the origin facing right. part = 'body' or 'wreck'.
   // rig.json "planes/<name>": { "prop": { "x": 0.5, "y": 0 } } = prop position as fractions of
   // the body size from its centre (0.5 = right edge).
   const plane = (ctx, name, time, part = 'body') => {
-    const body = images[`planes/${name}/${part}`];
+    const isWreck = part === 'wreck';
+    const body = images[`planes/${name}/${part}`] || (isWreck && PLANE_DEFS[name] ? wreckOf(`planes/${name}/body`) : null);
     if (!body) return false;
+    if (PLANE_DEFS[name]) {
+      try {
+        paintedPlane(ctx, name, body, time, isWreck);
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
     const R = { scale: 0.5, prop: { x: 0.5, y: 0 }, ...rigFor('planes/' + name) };
     const w = body.width * R.scale;
     const h = body.height * R.scale;

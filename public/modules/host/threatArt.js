@@ -1,7 +1,7 @@
 // Drawing for outside threats (mines, wrecks), sapper bombs, and the lookout's
 // off-screen arrows. Placeholder vector art until Phase 3. Ember Pact = fictional enemy faction.
 import { config } from '../../config.js';
-import { drawBiplane, drawTailNumber } from './planeArt.js';
+import { drawBiplane, drawTailNumber, setPlaneSprites } from './planeArt.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { envOf } from './environments.js';
 
@@ -9,6 +9,7 @@ const INK = config.INK;
 const P = SHIP_LAYOUT.platforms;
 
 export function createThreatArt({ ctx, state, ink, sprites }) {
+  setPlaneSprites(sprites);
   // Bats are dark purple, but glowing orange 'magma bats' in the Ember Forge (so they read on dark rock).
   const batColor = () => { const b = state.course && envOf(state).bat; return b ? b.body : '#3b2c4c'; };
   // Ember Pact insignia: a flame inside a triangle.
