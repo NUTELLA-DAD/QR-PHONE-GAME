@@ -10,31 +10,29 @@
 // World y grows downward; the ship is drawn shifted up by its altitude (alt).
 import { firePace } from './crewscale.js';
 import { config } from '../../config.js';
+import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
 import { pickEnvironment } from './environments.js';
 import { makeMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
+import { kindOf } from '../../shipLayout.js';
 
 const K = config.COURSE;
 const TOP = -1400; // where ceilings start (far above the view)
 
-// Points around the ship's outline (ship coordinates) used to test for terrain contact.
-export const SHIP_SAMPLES = [
-  // underside
-  [-80, 410], [126, 662], [248, 815], [372, 942], [500, 942], [628, 942], [740, 935], [805, 975], [855, 935], [1100, 815], [1352, 815], [1470, 662],
-  [20, 862], [140, 862], [1460, 862], [1580, 862], [1512, 620], [1790, 198],
-  // top
-  [-235, 20], [-60, 90], [150, 5], [380, -50], [600, -100], [690, -86], [800, -154], [910, -86], [1000, -100], [1220, -50], [1450, 5], [1660, 90],
-];
-const BOTTOM_Y = 975; // lowest point of the ship (ventral gun)
-const TOP_Y = -154; // highest point (flag on the crow's nest)
+// Points around the ship's outline (ship coordinates) used to test for terrain contact (from the build; the lowest and
+// highest of them are SHIP_LAYOUT.bottomY / topY). REF = where the ship's middle is (world x = course.dist + REF.x,
+// world y = REF.y - alt); AIM = where enemy fire is aimed. All are updated in place when a new build is applied.
+export const SHIP_SAMPLES = SHIP_LAYOUT.samples;
+const REF = SHIP_LAYOUT.refPoint;
+const AIM = SHIP_LAYOUT.aimPoint;
 const MARGIN = 25;
 
 // A point on the ship (ship coordinates), tipped by the ship's current pitch.
 export function tilt(state, x, y) {
   const a = state.ship.pitch || 0;
   if (!a) return [x, y];
-  const [px, py] = config.SHIP.TILT_PIVOT;
+  const [px, py] = config.SHIP.TILT_PIVOT || SHIP_LAYOUT.tiltPivot;
   const c = Math.cos(a);
   const s = Math.sin(a);
   return [px + (x - px) * c - (y - py) * s, py + (x - px) * s + (y - py) * c];
@@ -145,7 +143,7 @@ export function pilotPlan(state, ahead, cruise) {
     const [lo0, hi0] = range(altWindow(state, 0));
     return { target: fit(lo0, hi0, alt), speed: 0.12 };
   }
-  const target = fit(lo, hi, course ? elevAt(course, course.dist + 800) : 0);
+  const target = fit(lo, hi, course ? elevAt(course, course.dist + REF.x) : 0);
   return { target, speed: Math.abs(target - alt) > 120 ? 0.04 : cruise };
 }
 
@@ -153,18 +151,18 @@ export function pilotPlan(state, ahead, cruise) {
 // it, and drive toward it (forward, backward, or hover when the way goes straight up/down).
 function mapPlan(state, cruise) {
   const course = state.course;
-  const sx = course.dist + 800;
-  const sy = 500 - state.ship.alt;
+  const sx = course.dist + REF.x;
+  const sy = REF.y - state.ship.alt;
   // Unsticking (the ship made no headway for a while): look further along the route, and for the
   // first moments back away from whatever is holding it.
   const un = course.unstick > 0;
   const p = routeAhead(course.map, sx, sy, un ? 14 : 7);
   if (!p) return { target: state.ship.alt, speed: 0, dx: 0, dy: 0 };
   // (Back off and rise: a ship wedged on a ledge must climb off it, whatever the route says.)
-  if (un && course.unstick > config.MAPS.UNSTICK_TIME / 2) return { target: Math.max(500 - p.y, state.ship.alt + config.MAPS.UNSTICK_RISE), speed: -0.4, dx: -300, dy: p.y - sy };
+  if (un && course.unstick > config.MAPS.UNSTICK_TIME / 2) return { target: Math.max(REF.y - p.y, state.ship.alt + config.MAPS.UNSTICK_RISE), speed: -0.4, dx: -300, dy: p.y - sy };
   const dx = p.x - sx;
   const dy = p.y - sy;
-  const target = 500 - p.y;
+  const target = REF.y - p.y;
   // Mostly vertical: hover and let the gas do the work.
   const speed = Math.abs(dx) < 120 ? 0 : Math.sign(dx) * (Math.abs(dy) > 350 ? 0.12 : cruise) * (dx < 0 ? 0.8 : 1);
   return { target, speed: Math.max(-config.SHIP.REVERSE, speed), dx, dy };
@@ -291,8 +289,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   const nearMarker = (x0, x1) => course.markers.find((m) => x1 > m.cx - K.MARKER_CLEAR && x0 < m.cx + K.MARKER_CLEAR);
 
   // Altitude the ship must be above to clear ground g / below to clear ceiling c.
-  const groundFor = (needAlt) => BOTTOM_Y + MARGIN - needAlt; // need alt > needAlt
-  const ceilFor = (maxAlt) => TOP_Y - MARGIN - maxAlt; // need alt < maxAlt
+  const groundFor = (needAlt) => SHIP_LAYOUT.bottomY + MARGIN - needAlt; // need alt > needAlt
+  const ceilFor = (maxAlt) => SHIP_LAYOUT.topY - MARGIN - maxAlt; // need alt < maxAlt
 
   const addTurrets = (f, n) => {
     for (let i = 0; i < n; i++) {
@@ -331,7 +329,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   const makeFactory = (d) => {
     const width = r(2600, 3200);
     const f = { type: 'factory', ground: K.GROUND - r(60, 140), rough: false, width, blocks: [] };
-    const baseNeed = BOTTOM_Y + MARGIN - f.ground;
+    const baseNeed = SHIP_LAYOUT.bottomY + MARGIN - f.ground;
     let x = width * 0.28;
     const end = width * 0.72;
     let sheds = 1; // start with a stack
@@ -586,10 +584,10 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       if (!worst || Math.max(down, up) > worst.depth) worst = { sx, sy, depth: Math.max(down, up) };
       // A wall face: a little way back toward the middle of the ship the rock isn't there, so
       // we flew into it sideways. Walls stop the ship instead of lifting it.
-      const back = sx > 800 ? -60 : 60;
+      const back = sx > REF.x ? -60 : 60;
       const wall = down > 0 ? wy < groundAt(course, sx + back) && down > 30 : wy > ceilAt(course, sx + back) && up > 30;
       if (wall) {
-        if (sx > 800) wallAhead = true;
+        if (sx > REF.x) wallAhead = true;
         else wallBehind = true;
         continue;
       }
@@ -631,13 +629,13 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       t.vx = -v;
       if (t.dead) continue;
       // Aim at the middle of the ship.
-      const ty = 640 - state.ship.alt;
-      t.aim = Math.atan2(ty - t.y, 800 - wx);
+      const ty = AIM.y - state.ship.alt;
+      t.aim = Math.atan2(ty - t.y, AIM.x - wx);
       t.charging = false;
-      if (Math.hypot(800 - wx, ty - t.y) > K.TURRET_RANGE || state.ship.down) continue;
+      if (Math.hypot(AIM.x - wx, ty - t.y) > K.TURRET_RANGE || state.ship.down) continue;
       // Rock in the way? Then it can't see us - terrain is cover.
       let clear = true;
-      for (let k = 1; k < 12 && clear; k++) if (inRock(state, t.x + ((800 - t.x) * k) / 12, t.y - 30 + ((ty - t.y + 30) * k) / 12)) clear = false;
+      for (let k = 1; k < 12 && clear; k++) if (inRock(state, t.x + ((AIM.x - t.x) * k) / 12, t.y - 30 + ((ty - t.y + 30) * k) / 12)) clear = false;
       if (!clear) {
         t.cd = Math.max(t.cd, 0.9);
         continue;
@@ -651,10 +649,10 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       if ((t.cd -= dt) <= 0) {
         t.warned = false;
         t.cd = (r(K.TURRET_FIRE_MIN, K.TURRET_FIRE_MAX) / firePace(state)) * (course.map && course.map.open ? 1.3 : 1);
-        const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
+        const helm = Object.values(state.players).find((q) => kindOf(q.lock) === 'helm');
         const miss = course.rand() < K.FLAK_MISS || (helm && Math.abs(helm.jy) > 0.3 && course.rand() < 0.4);
-        const tx = 300 + course.rand() * 1000;
-        const aimY = 400 + course.rand() * 400 - state.ship.alt + (miss ? -900 : 0);
+        const tx = REF.x - 500 + course.rand() * 1000;
+        const aimY = REF.y - 100 + course.rand() * 400 - state.ship.alt + (miss ? -900 : 0);
         const d = Math.hypot(tx - t.x, aimY - t.y) || 1;
         if (t.rocket) {
           // A slow homing rocket (gunners can shoot it down).
@@ -667,8 +665,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     }
     // Rockets turn toward the middle of the ship.
     for (const k of state.rockets) {
-      const tx = 800;
-      const ty = 600 - state.ship.alt;
+      const tx = AIM.x;
+      const ty = AIM.y - 40 - state.ship.alt;
       const want = Math.atan2(ty - k.y, tx - k.x);
       const diff = Math.atan2(Math.sin(want - k.ang), Math.cos(want - k.ang));
       k.ang += Math.max(-K.ROCKET_TURN * dt, Math.min(K.ROCKET_TURN * dt, diff));
@@ -789,8 +787,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   // On a mission map: how far along the route we are, and whether we've reached the beacon.
   const mapProgress = (dt = 0) => {
     const map = course.map;
-    const sx = course.dist + 800;
-    const sy = 500 - state.ship.alt;
+    const sx = course.dist + REF.x;
+    const sy = REF.y - state.ship.alt;
     course.dusk += (0 - course.dusk) * 0.02;
     // Stuck check: no real headway toward the goal for a while (pinned on rock, wedged, drifting).
     // Hovering right over the goal (bombing an outpost) doesn't count.
@@ -813,8 +811,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       course.lostT = 0;
       const t = routeAhead(map, sx, sy, 0);
       if (t) {
-        course.dist = t.x - 800;
-        state.ship.alt = 500 - t.y;
+        course.dist = t.x - REF.x;
+        state.ship.alt = REF.y - t.y;
         state.ship.vy = 0;
         state.ship.speed = Math.max(0, state.ship.speed);
         course.stuckBest = null;
@@ -876,7 +874,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
 
   const passMarkers = (dt = 0) => {
     if (course.map) return mapProgress(dt);
-    const shipX = course.dist + 800;
+    const shipX = course.dist + REF.x;
     for (const m of course.markers) {
       if (m.passed || m.cx > shipX) continue;
       m.passed = true;
@@ -925,7 +923,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
 
   const update = (dt) => {
     if (!K.ENABLED) return;
-    course.refY = 500 - state.ship.alt;
+    course.refY = REF.y - state.ship.alt;
     if (state.ship.down > 0) return; // the world waits while the crew patches up
     // (After a mission, the sky-dock and route votes in simulation.js pick the next one and call startMission.)
     course.dist += scrollSpeed(state) * dt;
@@ -951,7 +949,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   const reset = () => {
     state.rockets.length = 0;
     const m = course.lastMarker;
-    course.dist = m.cx - 800 - K.REWIND_BEFORE;
+    course.dist = m.cx - REF.x - K.REWIND_BEFORE;
     course.warned = null;
     for (const t of course.turrets) t.cd = Math.max(t.cd, 2);
     state.ev.warn = 3;
@@ -975,7 +973,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       modifiers: opts.modifiers || [],
       stop: opts.stop || null,
       leg: 'out',
-      dist: map.start.x - 800,
+      dist: map.start.x - REF.x,
       features: [],
       elev: [],
       elev0: 0,
@@ -1006,7 +1004,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       ].filter(Boolean),
     });
     course.lastMarker = course.markers[0];
-    course.homeAlt = 500 - map.start.y;
+    course.homeAlt = REF.y - map.start.y;
     state.ship.alt = course.homeAlt;
     state.ship.vy = 0;
     state.ship.speed = 0;

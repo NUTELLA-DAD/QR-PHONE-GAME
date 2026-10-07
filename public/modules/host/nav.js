@@ -120,7 +120,7 @@ export function fall(w, dt, speed, onMiss) {
   }
   if (w.y > 1600) {
     // Missed the ship: drop back onto the catwalk from above.
-    const cat = P.findIndex((p) => p.id === 'catwalk');
+    const cat = SHIP_LAYOUT.spawnPlatform;
     w.x = clamp(w.x, P[cat].x0 + 30, P[cat].x1 - 30);
     w.y = -60;
   }

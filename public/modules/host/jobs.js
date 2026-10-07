@@ -5,7 +5,7 @@
 // penalty for each crewmate already going there. A suggestion is kept for a few seconds so it
 // doesn't flicker, and only swapped for a clearly better one.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, nearest } from '../../shipLayout.js';
 import { travelTime, direction } from './nav.js';
 
 const L = SHIP_LAYOUT;
@@ -71,10 +71,16 @@ export function createJobFinder(state) {
     if (carry === 'ammo') {
       for (const n of GUN_NAMES) if (state.GUNS[n].ammo < state.GUNS[n].max) { const s = stationNamed(n); add('ammo', n, s.d, s.x, {}, `AMMO to ${n}`); }
     } else if (carry !== 'coal') {
-      for (const n of guns.slice(0, 2)) { const s = stationNamed(n); add('ammo', n, s.d, s.x, { fetch: 'Ammo Hold' }, `AMMO for ${n}`); }
+      const hold = nearest('ammo', p); // (the ammo hold nearest to this player)
+      for (const n of guns.slice(0, 2)) { const s = stationNamed(n); add('ammo', n, s.d, s.x, hold ? { fetch: hold.n } : {}, `AMMO for ${n}`); }
     }
     const fuelLow = state.ship.fuel < config.BOILER.FUEL_MAX * (J.COAL_LOW / 100);
-    if (carry === 'coal' || (fuelLow && carry !== 'ammo')) { const s = stationNamed('Boiler'); add('coal', 'Boiler', s.d, s.x, carry === 'coal' ? {} : { fetch: 'Coal Bunker' }, 'COAL for the Boiler'); }
+    if (carry === 'coal' || (fuelLow && carry !== 'ammo')) {
+      // Coal goes to the boiler nearest to where it is picked up (or nearest to the carrier, if already carrying).
+      const bunker = carry === 'coal' ? null : nearest('coal', p);
+      const s = nearest('boiler', bunker || p);
+      if (s) add('coal', s.n, s.d, s.x, carry === 'coal' || !bunker ? {} : { fetch: bunker.n }, `COAL for the ${s.n}`);
+    }
     return out;
   };
 

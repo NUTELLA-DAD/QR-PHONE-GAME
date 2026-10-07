@@ -412,7 +412,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
           // Sea spray where the keel cuts the water.
           if (num(s.spray) > 0.05) {
             const c = state.course;
-            const keel = (c && c.refY != null ? c.refY : 500 - state.ship.alt) + F.SEA.KEEL;
+            const keel = (c && c.refY != null ? c.refY : SHIP_LAYOUT.refPoint.y - state.ship.alt) + F.SEA.KEEL;
             for (let i = 0; i < 26; i++) {
               const ph = wrap(tm * 1.8 + hash(i, 611), 1);
               const x = 460 + hash(i, 612) * 700 + (hash(i, 613) - 0.5) * 60 * ph;

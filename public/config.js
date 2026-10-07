@@ -91,7 +91,7 @@ export const config = {
     TILT_MAX: 0.06, // most the nose tips up/down while climbing or diving (radians, about 3.5 degrees)
     TILT_PER_SPEED: 0.0004, // tilt per pixel/second of climb
     TILT_SMOOTH: 3, // how quickly the tilt follows (higher = snappier)
-    TILT_PIVOT: [800, 520], // the point the ship tips around (ship coordinates)
+    TILT_PIVOT: null, // the point the ship tips around: null = the ship's own (the layout's tiltPivot: [800, 520] on the classic ship), or [x, y] to force one
   },
   // Special enemies (see specials.js), one group every so often.
   SPECIALS: {
@@ -359,7 +359,7 @@ export const config = {
     LOOKAHEAD: 1.3, // seconds ahead her helmsman looks along her own velocity for rock
     PLAN_EVERY: 0.25, // seconds between her free-space checks (station spots)
     ROCK_BREAKOFF: 8, // seconds of "no room to manoeuvre" before she breaks off
-    SHIP_RECT: { x0: 100, x1: 1520, y0: -120, y1: 960 }, // our ship's box: she is nudged away if she overlaps it
+    SHIP_RECT: null, // our ship's box { x0, x1, y0, y1 }: she is nudged away if she overlaps it. null = the ship's own (the layout's hullRect)
     // -- Free manoeuvring: her captain flies a ring round our ship, stopping at firing spots (nodes) --
     // dx/dy = her offset from our ship. fire = she shoots from here, drop = paratroopers jump from here
     // (high up and ahead so they can drift down onto our catwalk), w = how often it is picked, links =
@@ -737,8 +737,8 @@ export const config = {
     HEIGHT_PER_LEVEL: 6,
     ROOMS: 8, // caverns along the way (more on later missions)
     BRANCHES: 3, // side caves that dead-end (network maps)
-    TUNNEL_CELLS: 8, // tunnel height (the ship needs 7)
-    SHAFT_CELLS: 12, // shaft width (the ship needs 11)
+    TUNNEL_SLACK: 1, // squares of spare room in a tunnel's height beyond what the ship needs (the layout's caveNeed: 7 on the classic ship)
+    SHAFT_SLACK: 1, // squares of spare room in a shaft's width beyond what the ship needs (caveNeed: 11 on the classic ship)
     GOAL_RADIUS: 700, // how close to the beacon counts as reaching it
     OPEN_WIDTH: 190, // open-sky map size (squares) for its first mission
     OPEN_HEIGHT: 50,
@@ -908,6 +908,7 @@ export const config = {
     COAL_FUEL: 25, // fuel added per load of coal
     FUEL_MAX: 100,
     BURN_RATE: 0.35, // fuel burned per second (one load lasts about a minute)
+    EXTRA_BOILER: 0.6, // a ship with several boilers: each extra working boiler adds this share of the first one's heat AND coal burn (one shared firebox and steam pool)
     // Pressure in the line = heat in vs steam used. Heat comes from the coal in the firebox
     // (more coal = hotter fire, with diminishing returns). Steam is used by everything powered
     // (each open pipe valve), by open vents, burst pipes and pumping the gasbag, and all of
@@ -1418,7 +1419,8 @@ export const config = {
     FIRE_CAP: 4, // at most this many crew on fires at once
     COAL_EMERGENCY: 15, // boiler fuel below this (with pressure not high): stoke it before anything else
     PRESS_EMERGENCY: 22, // steam below this (with coal not plentiful): same
-    CRITICAL: ['Helm', 'Helm Pipe', 'Boiler', 'Lift', 'Lift Pipe'], // parts the bots rebuild before anything else once they break
+    CRITICAL: ['helm', 'boiler', 'lift'], // module kinds (and the steam pipes feeding them) the bots rebuild before anything else once they break
+    BOILER_SPREAD: 400, // a ship with several boilers: walking px a bot will add per coal load already shovelled into a boiler, to spread coal between them
     CHORE_SHARE: 0.6, // at most this share of the crew works on chores (patching, fires, repairs) at once; the rest man stations
     JOB_HOLD: 2.5, // seconds a bot sticks to a job before it may swap to a more urgent kind (it never swaps to a merely closer job of the same kind)
     HELM_CALL: 0.7, // chance per think that a crew member leaves a station to take an empty helm

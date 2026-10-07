@@ -1,241 +1,396 @@
 {
+ "liftRepair": {
+  "p": "lower",
+  "x": 925
+ },
+ "coil": {
+  "x": 875,
+  "y": -114,
+  "aim": -1.5707963267948966,
+  "arc": 1.45
+ },
+ "medbay": {
+  "p": "lower",
+  "x": 640
+ },
+ "bombBay": {
+  "x": 550,
+  "y": 925,
+  "jumpX": 585,
+  "doorHalf": 48
+ },
+ "gasbag": {
+  "cx": 800,
+  "cy": 198,
+  "rx": 1000,
+  "ry": 232
+ },
+ "shield": {
+  "cx": 800,
+  "cy": 470,
+  "rx": 1020,
+  "ry": 660
+ },
+ "nestRise": 94,
+ "samples": [
+  [
+   -80,
+   410
+  ],
+  [
+   126,
+   662
+  ],
+  [
+   248,
+   815
+  ],
+  [
+   372,
+   942
+  ],
+  [
+   500,
+   942
+  ],
+  [
+   628,
+   942
+  ],
+  [
+   740,
+   935
+  ],
+  [
+   805,
+   975
+  ],
+  [
+   855,
+   935
+  ],
+  [
+   1100,
+   815
+  ],
+  [
+   1352,
+   815
+  ],
+  [
+   1470,
+   662
+  ],
+  [
+   20,
+   862
+  ],
+  [
+   140,
+   862
+  ],
+  [
+   1460,
+   862
+  ],
+  [
+   1580,
+   862
+  ],
+  [
+   1512,
+   620
+  ],
+  [
+   1790,
+   198
+  ],
+  [
+   -235,
+   20
+  ],
+  [
+   -60,
+   90
+  ],
+  [
+   150,
+   5
+  ],
+  [
+   380,
+   -50
+  ],
+  [
+   600,
+   -100
+  ],
+  [
+   690,
+   -86
+  ],
+  [
+   800,
+   -154
+  ],
+  [
+   910,
+   -86
+  ],
+  [
+   1000,
+   -100
+  ],
+  [
+   1220,
+   -50
+  ],
+  [
+   1450,
+   5
+  ],
+  [
+   1660,
+   90
+  ]
+ ],
  "platforms": [
   {
    "id": "nest",
    "name": "Crow's Nest",
-   "y": -42,
    "x0": 610,
    "x1": 990,
-   "outside": true
+   "outside": true,
+   "y": -42
   },
   {
    "id": "catwalk",
    "name": "Top Deck",
-   "y": 470,
    "x0": 240,
    "x1": 1360,
-   "outside": true
+   "outside": true,
+   "y": 470
   },
   {
    "id": "helm",
    "name": "Helm Mount",
-   "y": 420,
    "x0": 1195,
    "x1": 1315,
-   "outside": true
+   "outside": true,
+   "y": 420
   },
   {
    "id": "main",
    "name": "Main Deck",
-   "y": 640,
    "x0": 140,
-   "x1": 1470
+   "x1": 1470,
+   "y": 640
   },
   {
    "id": "lower",
    "name": "Lower Deck",
-   "y": 790,
    "x0": 20,
-   "x1": 1580
+   "x1": 1580,
+   "y": 790
   },
   {
    "id": "bay",
    "name": "Bomb Bay",
-   "y": 925,
    "x0": 350,
-   "x1": 640
+   "x1": 640,
+   "y": 925
   },
   {
    "id": "pod",
    "name": "Ball Turret",
-   "y": 905,
    "x0": 735,
-   "x1": 855
+   "x1": 855,
+   "y": 905
   },
   {
    "id": "hangar",
    "name": "Fighter Hatch",
-   "y": 905,
    "x0": 1020,
    "x1": 1110,
-   "outside": true
+   "outside": true,
+   "y": 905
   },
   {
    "id": "hangar2",
    "name": "Fore Fighter Hatch",
-   "y": 905,
    "x0": 1215,
    "x1": 1305,
-   "outside": true
+   "outside": true,
+   "y": 905
   },
   {
    "id": "lamp",
    "name": "Belly Lamp",
-   "y": 905,
    "x0": 1370,
    "x1": 1450,
-   "outside": true
+   "outside": true,
+   "y": 905
   }
  ],
  "connectors": [
   {
-   "type": "rope",
    "top": 0,
    "bottom": 1,
    "xTop": 720,
    "xBottom": 720,
+   "type": "rope",
    "speed": 150
   },
   {
-   "type": "ladder",
    "top": 2,
    "bottom": 1,
    "xTop": 1215,
    "xBottom": 1215,
+   "type": "ladder",
    "speed": 170
   },
   {
-   "type": "ladder",
    "top": 1,
    "bottom": 3,
    "xTop": 340,
    "xBottom": 340,
+   "type": "ladder",
    "speed": 170
   },
   {
-   "type": "ladder",
    "top": 1,
    "bottom": 3,
    "xTop": 1050,
    "xBottom": 1050,
+   "type": "ladder",
    "speed": 170
   },
   {
-   "type": "ladder",
    "top": 3,
    "bottom": 4,
    "xTop": 255,
    "xBottom": 255,
+   "type": "ladder",
    "speed": 170
   },
   {
-   "type": "stairs",
    "top": 3,
    "bottom": 4,
    "xTop": 560,
    "xBottom": 700,
+   "type": "stairs",
    "speed": 150
   },
   {
    "type": "lift",
+   "speed": 260,
    "top": 3,
    "bottom": 4,
    "xTop": 960,
-   "xBottom": 960,
-   "speed": 260
+   "xBottom": 960
   },
   {
-   "type": "ladder",
    "top": 3,
    "bottom": 4,
    "xTop": 1140,
    "xBottom": 1140,
+   "type": "ladder",
    "speed": 170
   },
   {
-   "type": "ladder",
    "top": 1,
    "bottom": 3,
    "xTop": 640,
    "xBottom": 640,
+   "type": "ladder",
    "speed": 170
   },
   {
-   "type": "rope",
    "top": 0,
    "bottom": 1,
    "xTop": 640,
    "xBottom": 640,
+   "type": "rope",
    "speed": 150
   },
   {
-   "type": "rope",
    "top": 0,
    "bottom": 1,
    "xTop": 905,
    "xBottom": 905,
+   "type": "rope",
    "speed": 150
   },
   {
-   "type": "pole",
    "top": 1,
    "bottom": 3,
    "xTop": 860,
    "xBottom": 860,
+   "type": "pole",
    "speed": 520
   },
   {
-   "type": "pole",
    "top": 3,
    "bottom": 4,
    "xTop": 860,
    "xBottom": 860,
+   "type": "pole",
    "speed": 520
   },
   {
-   "type": "pole",
    "top": 1,
    "bottom": 3,
    "xTop": 1300,
    "xBottom": 1300,
+   "type": "pole",
    "speed": 520
   },
   {
-   "type": "pole",
    "top": 3,
    "bottom": 4,
    "xTop": 1300,
    "xBottom": 1300,
+   "type": "pole",
    "speed": 520
   },
   {
-   "type": "ladder",
    "top": 4,
    "bottom": 5,
    "xTop": 372,
    "xBottom": 372,
+   "type": "ladder",
    "speed": 170
   },
   {
-   "type": "ladder",
    "top": 4,
    "bottom": 6,
    "xTop": 760,
    "xBottom": 760,
+   "type": "ladder",
    "speed": 170
   },
   {
-   "type": "ladder",
    "top": 4,
    "bottom": 7,
    "xTop": 1040,
    "xBottom": 1040,
+   "type": "ladder",
    "speed": 170
   },
   {
-   "type": "ladder",
    "top": 4,
    "bottom": 8,
    "xTop": 1235,
    "xBottom": 1235,
+   "type": "ladder",
    "speed": 170
   },
   {
-   "type": "ladder",
    "top": 4,
    "bottom": 9,
    "xTop": 1410,
    "xBottom": 1410,
+   "type": "ladder",
    "speed": 170
   }
  ],
@@ -324,235 +479,155 @@
  "stations": [
   {
    "n": "Aft Dorsal Gun",
+   "kind": "gun",
    "p": "nest",
    "x": 660,
    "d": 0
   },
   {
    "n": "Lookout",
+   "kind": "lookout",
    "p": "nest",
    "x": 770,
    "d": 0
   },
   {
    "n": "Deflector",
+   "kind": "deflector",
    "p": "catwalk",
    "x": 940,
    "d": 1
   },
   {
    "n": "Dorsal Gun",
+   "kind": "gun",
    "p": "nest",
    "x": 940,
    "d": 0
   },
   {
    "n": "Tail Gun",
+   "kind": "gun",
    "p": "catwalk",
    "x": 275,
    "d": 1
   },
   {
    "n": "Lightning Coil",
+   "kind": "coil",
    "p": "main",
    "x": 710,
    "d": 3
   },
   {
    "n": "Boiler",
+   "kind": "boiler",
    "p": "main",
    "x": 400,
    "d": 3
   },
   {
    "n": "Navigator",
+   "kind": "navigator",
    "p": "main",
    "x": 1215,
    "d": 3
   },
   {
    "n": "Helm",
+   "kind": "helm",
    "p": "helm",
    "x": 1275,
    "d": 2
   },
   {
    "n": "Nose Gun",
+   "kind": "gun",
    "p": "catwalk",
    "x": 1340,
    "d": 1
   },
   {
    "n": "Aft Sponson",
+   "kind": "gun",
    "p": "lower",
    "x": 420,
    "d": 4
   },
   {
    "n": "Coal Bunker",
+   "kind": "coal",
    "p": "lower",
    "x": 570,
    "d": 4
   },
   {
    "n": "Ammo Hold",
+   "kind": "ammo",
    "p": "lower",
    "x": 870,
    "d": 4
   },
   {
    "n": "Bomb Bay",
+   "kind": "bombBay",
    "p": "bay",
    "x": 520,
    "d": 5
   },
   {
    "n": "Fore Sponson",
+   "kind": "gun",
    "p": "lower",
    "x": 1180,
    "d": 4
   },
   {
    "n": "Ventral Gun",
+   "kind": "gun",
    "p": "pod",
    "x": 820,
    "d": 6
   },
   {
    "n": "Escort Fighter",
+   "kind": "escort",
    "p": "hangar",
    "x": 1085,
    "d": 7
   },
   {
    "n": "Escort Fighter 2",
+   "kind": "escort",
    "p": "hangar2",
    "x": 1280,
    "d": 8
   },
   {
    "n": "Nest Searchlight",
+   "kind": "searchlight",
    "p": "nest",
    "x": 815,
    "d": 0
   },
   {
    "n": "Belly Searchlight",
+   "kind": "searchlight",
    "p": "lamp",
    "x": 1410,
    "d": 9
   }
  ],
- "gunMounts": {
-  "Dorsal Gun": {
-   "bx": 950,
-   "by": -76,
-   "aim": -1.2,
-   "arc": 1.2
-  },
-  "Aft Dorsal Gun": {
-   "bx": 650,
-   "by": -76,
-   "aim": -1.95,
-   "arc": 1.2
-  },
-  "Tail Gun": {
-   "bx": 248,
-   "by": 418,
-   "aim": 3.491592653589793,
-   "arc": 1.1
-  },
-  "Nose Gun": {
-   "bx": 1372,
-   "by": 418,
-   "aim": -0.35,
-   "arc": 1.1
-  },
-  "Aft Sponson": {
-   "bx": 330,
-   "by": 812,
-   "aim": 2.15,
-   "arc": 0.7
-  },
-  "Fore Sponson": {
-   "bx": 1270,
-   "by": 812,
-   "aim": 1,
-   "arc": 0.7
-  },
-  "Ventral Gun": {
-   "bx": 805,
-   "by": 948,
-   "aim": 1.5707963267948966,
-   "arc": 1.2
-  }
- },
- "searchlights": {
-  "Nest Searchlight": {
-   "bx": 815,
-   "by": -176,
-   "aim": -1.5707963267948966,
-   "arc": 1.5,
-   "len": 44
-  },
-  "Belly Searchlight": {
-   "bx": 1410,
-   "by": 944,
-   "aim": 1.5707963267948966,
-   "arc": 1.5,
-   "len": 40
-  }
- },
- "coil": {
-  "x": 875,
-  "y": -114,
-  "aim": -1.5707963267948966,
-  "arc": 1.45
- },
- "shield": {
-  "cx": 800,
-  "cy": 470,
-  "rx": 1020,
-  "ry": 660
- },
- "medbay": {
-  "p": "lower",
-  "x": 640
- },
- "escortDock": {
-  "x": 1075,
-  "y": 965
- },
- "escortDocks": [
-  {
-   "n": "Escort Fighter",
-   "num": 1,
-   "p": "hangar",
-   "x": 1075,
-   "y": 965
-  },
-  {
-   "n": "Escort Fighter 2",
-   "num": 2,
-   "p": "hangar2",
-   "x": 1265,
-   "y": 965
-  }
- ],
- "bombBay": {
-  "x": 550,
-  "y": 925,
-  "jumpX": 585,
-  "doorHalf": 48
- },
  "engines": [
   {
+   "kind": "engine",
    "name": "Aft Engine",
    "p": "lower",
    "x": 70,
    "d": 4
   },
   {
+   "kind": "engine",
    "name": "Fore Engine",
    "p": "lower",
    "x": 1530,
@@ -686,17 +761,6 @@
    "d": 4
   }
  ],
- "gasbag": {
-  "cx": 800,
-  "cy": 198,
-  "rx": 1000,
-  "ry": 232
- },
- "nestRise": 94,
- "liftRepair": {
-  "p": "lower",
-  "x": 925
- },
  "racks": [
   {
    "kind": "sword",
@@ -801,14 +865,158 @@
    "p": "catwalk"
   }
  ],
+ "escortDocks": [
+  {
+   "n": "Escort Fighter",
+   "num": 1,
+   "p": "hangar",
+   "x": 1075,
+   "y": 965
+  },
+  {
+   "n": "Escort Fighter 2",
+   "num": 2,
+   "p": "hangar2",
+   "x": 1265,
+   "y": 965
+  }
+ ],
+ "gunMounts": {
+  "Dorsal Gun": {
+   "bx": 950,
+   "by": -76,
+   "aim": -1.2,
+   "arc": 1.2
+  },
+  "Aft Dorsal Gun": {
+   "bx": 650,
+   "by": -76,
+   "aim": -1.95,
+   "arc": 1.2
+  },
+  "Tail Gun": {
+   "bx": 248,
+   "by": 418,
+   "aim": 3.491592653589793,
+   "arc": 1.1
+  },
+  "Nose Gun": {
+   "bx": 1372,
+   "by": 418,
+   "aim": -0.35,
+   "arc": 1.1
+  },
+  "Aft Sponson": {
+   "bx": 330,
+   "by": 812,
+   "aim": 2.15,
+   "arc": 0.7
+  },
+  "Fore Sponson": {
+   "bx": 1270,
+   "by": 812,
+   "aim": 1,
+   "arc": 0.7
+  },
+  "Ventral Gun": {
+   "bx": 805,
+   "by": 948,
+   "aim": 1.5707963267948966,
+   "arc": 1.2
+  }
+ },
+ "searchlights": {
+  "Nest Searchlight": {
+   "bx": 815,
+   "by": -176,
+   "aim": -1.5707963267948966,
+   "arc": 1.5,
+   "len": 44
+  },
+  "Belly Searchlight": {
+   "bx": 1410,
+   "by": 944,
+   "aim": 1.5707963267948966,
+   "arc": 1.5,
+   "len": 40
+  }
+ },
+ "escortDock": {
+  "x": 1075,
+  "y": 965
+ },
+ "refPoint": {
+  "x": 800,
+  "y": 500
+ },
+ "midPoint": {
+  "x": 800,
+  "y": 470
+ },
+ "aimPoint": {
+  "x": 800,
+  "y": 640
+ },
+ "tiltPivot": [
+  800,
+  520
+ ],
+ "topY": -154,
+ "bottomY": 975,
  "bounds": {
   "x0": -240,
   "x1": 1810,
   "y0": -165,
   "y1": 975
  },
- "aimPoint": {
-  "x": 800,
-  "y": 640
- }
+ "fitBox": {
+  "x0": -100,
+  "x1": 1670,
+  "y0": -70,
+  "y1": 985
+ },
+ "hullRect": {
+  "x0": 100,
+  "x1": 1520,
+  "y0": -120,
+  "y1": 960
+ },
+ "caveNeed": {
+  "tunnel": 7,
+  "shaft": 11
+ },
+ "hitRects": [
+  {
+   "x0": 125,
+   "x1": 1500,
+   "y0": 475,
+   "y1": 815
+  },
+  {
+   "x0": 20,
+   "x1": 1580,
+   "y0": 745,
+   "y1": 800
+  },
+  {
+   "x0": 240,
+   "x1": 1380,
+   "y0": 330,
+   "y1": 475
+  },
+  {
+   "x0": 350,
+   "x1": 640,
+   "y0": 815,
+   "y1": 945
+  },
+  {
+   "x0": 735,
+   "x1": 855,
+   "y0": 815,
+   "y1": 935
+  }
+ ],
+ "lowDeckY": 790,
+ "spawnPlatform": 1
 }

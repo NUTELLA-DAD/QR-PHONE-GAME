@@ -137,8 +137,8 @@ export function createStormSea({ state, puff, impact, damageHull }) {
 
   // ============================== STORM FRONT ==============================
   const mannedCoil = () => {
-    const m = (state.modules || []).find((q) => q.name === 'Lightning Coil');
-    return !!m && !m.broken && Object.values(state.players).some((q) => q.lock === 'Lightning Coil');
+    const m = (state.modules || []).find((q) => q.kind === 'coil');
+    return !!m && !m.broken && Object.values(state.players).some((q) => q.lock === m.name);
   };
 
   const strike = (F, grounded) => {
@@ -234,8 +234,8 @@ export function createStormSea({ state, puff, impact, damageHull }) {
     }
     E.seaY = s.y;
     const FL = F.FLOOD;
-    const keel = (c.refY != null ? c.refY : 500 - state.ship.alt) + F.SEA.KEEL;
-    const cx = c.dist + 800; // map x of the ship's middle
+    const keel = (c.refY != null ? c.refY : SHIP_LAYOUT.refPoint.y - state.ship.alt) + F.SEA.KEEL;
+    const cx = c.dist + SHIP_LAYOUT.refPoint.x; // map x of the ship's middle
     let touching = 0;
     if (flying && !state.ship.down) {
       let over = false;
@@ -301,7 +301,7 @@ export function createStormSea({ state, puff, impact, damageHull }) {
     } else if (!near) warned.spout = false;
     // ---- rescue: a survivor under the ship catches the rope; hold Action at the winch to haul them up ----
     const bayX = SHIP_LAYOUT.bombBay.x;
-    const ropeY = (c.refY != null ? c.refY : 500 - state.ship.alt) + SHIP_LAYOUT.bombBay.y - 500;
+    const ropeY = (c.refY != null ? c.refY : SHIP_LAYOUT.refPoint.y - state.ship.alt) + SHIP_LAYOUT.bombBay.y - SHIP_LAYOUT.refPoint.y;
     const R = F.RESCUE;
     if (s.hook) {
       const h = s.hook;

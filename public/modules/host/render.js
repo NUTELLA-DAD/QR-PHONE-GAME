@@ -611,11 +611,11 @@ export function createRenderer({ ctx, state, canvas }) {
     // Ship.
     ctx.fillStyle = '#e63946';
     ctx.beginPath();
-    ctx.arc(px(c.dist + 800), py(500 - state.ship.alt), 6, 0, 7);
+    ctx.arc(px(c.dist + SHIP_LAYOUT.refPoint.x), py(SHIP_LAYOUT.refPoint.y - state.ship.alt), 6, 0, 7);
     ctx.fill();
     ctx.stroke();
     // The goal, small and always there: how far to the beacon, or how many outposts are left.
-    const dCells = distToGoal(map, c.dist + 800, 500 - state.ship.alt);
+    const dCells = distToGoal(map, c.dist + SHIP_LAYOUT.refPoint.x, SHIP_LAYOUT.refPoint.y - state.ship.alt);
     const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
     let goalText;
     if (c.done) goalText = map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
@@ -1764,7 +1764,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.translate(amp ? Math.sin(ts * 61) * amp : 0, -state.ship.alt + bob + (amp ? Math.cos(ts * 47) * amp * 0.6 : 0));
     {
       const sway = Math.sin(ts * 0.8) * 0.005 + Math.sin(ts * 0.31) * 0.004;
-      const [px, py] = config.SHIP.TILT_PIVOT;
+      const [px, py] = config.SHIP.TILT_PIVOT || SHIP_LAYOUT.tiltPivot;
       ctx.translate(px, py);
       ctx.rotate((state.ship.pitch || 0) + sway);
       ctx.translate(-px, -py);

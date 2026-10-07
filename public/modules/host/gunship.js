@@ -51,6 +51,7 @@ export { mx, landX, landSeg, landY, boilerX, boilerSeg, boilerY, portPos, routeS
 const G = config.GUNSHIP;
 const GP = config.GUNSHIP_PARTS;
 const P = SHIP_LAYOUT.platforms;
+const AIM = SHIP_LAYOUT.aimPoint; // where her fire is aimed on our ship (centre of our hull)
 // Worked out from the ship layout; refilled when a new ship build is applied.
 let MAIN, CAT;
 export let MAIN_X1; // the bow end of our main deck
@@ -290,7 +291,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     state.sfxQ && state.sfxQ.push(['swing']);
   };
   // Does her stern (where her guns are) face our ship?
-  const bearsOn = (g) => (800 - (g.bp.cx + g.dx)) * -g.m > -120;
+  const bearsOn = (g) => (AIM.x - (g.bp.cx + g.dx)) * -g.m > -120;
 
   // ---- Her flight: gasbag, boiler, engines, helmsman, and the rope ----
   // mode: 'hold' (fly the captain's course), 'leave' (run for it), 'dead' (no control: shot down / blown up)
@@ -341,7 +342,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       if (tgt.station && Math.abs(tgt.dx - g.dx) < G.TURN_AHEAD && g.seenVx > G.TURN_MIN_SPEED) wantM = 1;
       else if (Math.abs(wantVx) > G.TURN_MIN_SPEED) wantM = wantVx > 0 ? 1 : -1;
       // On a firing spot with her stern facing away from us? Swing round so the guns bear.
-      if (tgt.fire && tgt.dist < 450 && !g.bears) wantM = g.bp.cx + g.dx > 800 ? 1 : -1;
+      if (tgt.fire && tgt.dist < 450 && !g.bears) wantM = g.bp.cx + g.dx > AIM.x ? 1 : -1;
       // Vertical: the helmsman sets the gas so she climbs or sinks toward her station (and away from rock).
       let ty = tgt.dy + Math.sin(g.t * 0.7 + 1) * G.WOBBLE_Y;
       if (mode === 'leave') ty -= 300;
@@ -418,7 +419,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     g.dx += (g.wvx - ourVx) * dt;
     g.dy += dAlt - g.wvy * dt;
     // Our ship is solid too: if she overlaps its box she is nudged out the short way.
-    const R = G.SHIP_RECT;
+    const R = G.SHIP_RECT || SHIP_LAYOUT.hullRect;
     const l = g.bp.x0 - 75 + g.dx;
     const r = g.bp.x1 + 75 + g.dx;
     const top = g.bp.bagTop + 60 + g.dy;
@@ -1041,8 +1042,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     const cp = portPos(g, firstCannon(g));
     const gpx = cp.x + g.dx;
     const midY = bp.decks[0].y + 20; // the stern deck level (her ports are stacked at the stern end)
-    g.aim = Math.atan2(640 - (midY + g.dy), 800 - gpx);
-    g.dist = Math.hypot(gpx - 800, midY + g.dy - 640); // from her guns to our hull
+    g.aim = Math.atan2(AIM.y - (midY + g.dy), AIM.x - gpx);
+    g.dist = Math.hypot(gpx - AIM.x, midY + g.dy - AIM.y); // from her guns to our hull
     g.hangarOpen = Math.max(0, g.hangarOpen - dt);
     g.harpFlash = Math.max(0, g.harpFlash - dt);
     if (bp.special === 'ramp') g.ramp += ((g.phase === 'latch' ? (g.rope ? 1 : 0.35) : 0) - g.ramp) * Math.min(1, dt * 2.5);
@@ -1076,7 +1077,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     const steamF = 0.5 + 0.5 * clamp(g.steam / 0.4, 0, 1); // (a cold boiler slows her reloads)
     const missFor = (dist) => clamp(G.MISS_BASE + Math.max(0, dist - 1500) / G.MISS_DX, 0, G.MISS_MAX);
     const lineClear = (px, py) => {
-      for (let s = 1; s <= 8; s++) if (inRock(state, px + ((800 - px) * s) / 9, py + ((640 - py) * s) / 9 - alt)) return false;
+      for (let s = 1; s <= 8; s++) if (inRock(state, px + ((AIM.x - px) * s) / 9, py + ((AIM.y - py) * s) / 9 - alt)) return false;
       return true;
     };
     // Broadsides at our hull (with a glow first) - only while her gunners are at the guns. They
@@ -1113,7 +1114,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       const pp = portPos(g, k);
       const fx = pp.x + g.dx;
       const fy = pp.y + g.dy - alt;
-      const d = Math.hypot(fx - 800, pp.y + g.dy - 640);
+      const d = Math.hypot(fx - AIM.x, pp.y + g.dy - AIM.y);
       const C = pt.kind === 'turret' ? GP.TURRET_GUN : pt.kind === 'mortar' ? GP.MORTAR_GUN : GP.FLAK_GUN;
       const ready = heavyOk && d < C.RANGE && (pt.kind === 'mortar' || lineClear(fx, pp.y + g.dy));
       pt.glow = ready && pt.cd < 0.8;

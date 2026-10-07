@@ -1,7 +1,8 @@
 // Ship-building checks (Phase S). Headless, no browser.
 // Usage: node tools/buildsim.mjs --check-classic    the classic ship must still equal the frozen snapshot
-//        node tools/buildsim.mjs --lint             no module-level captures of derived layout values (they go stale)
+//        node tools/buildsim.mjs --lint             no module-level captures of derived layout values (they go stale), no hard-coded ship reference points
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt
+//        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
 //        node tools/buildsim.mjs --snapshot-classic --force   (S.0 only) rewrite tools/fixtures/classic-layout.json
 // Exit code 1 on any failure.
 import { pathToFileURL } from 'node:url';
@@ -49,6 +50,41 @@ async function checkClassic() {
   }
   const v = validate(BUILDS.classic);
   report(v.ok, 'validate(BUILDS.classic)' + (v.ok ? '' : ': ' + v.fails.join('; ')));
+  // Station kinds: every station and engine has one, names are unique (validate), and one()/all()/kindOf() agree with the classic ship.
+  const { one, all, kindOf } = await load('shipLayout.js');
+  const count = (kind) => all(kind).length;
+  const want = { helm: 1, boiler: 1, lookout: 1, coal: 1, ammo: 1, gun: 7, searchlight: 2, coil: 1, deflector: 1, bombBay: 1, navigator: 1, escort: 2, engine: 2 };
+  const got = Object.fromEntries(Object.keys(want).map((k) => [k, count(k)]));
+  report(JSON.stringify(got) === JSON.stringify(want), 'classic station kinds: ' + Object.entries(got).map(([k, n]) => k + ' x' + n).join(', '));
+  report(one('boiler').n === 'Boiler' && one('helm').n === 'Helm' && kindOf('Nest Searchlight') === 'searchlight' && kindOf('Aft Engine') === 'engine' && one('nothing') === undefined, 'one() / kindOf() answers on the classic ship');
+  return ok;
+}
+
+// S.3: the scratch multi-instance build (classic + a second boiler + a second lookout, tools/fixtures/multi-build.mjs) must
+// validate, and a 2-minute botsim of it must run with 0 errors with the bots using BOTH boilers (coal loaded) and BOTH lookouts.
+async function checkMulti() {
+  const { BUILDS, buildLayout, validate } = await load('modules/host/shipBuild.js');
+  const multi = (await import(pathToFileURL(path.join(root, 'tools', 'fixtures', 'multi-build.mjs')).href)).default(BUILDS);
+  let ok = true;
+  const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
+  const v = validate(multi);
+  report(v.ok, 'validate(multi build)' + (v.ok ? '' : ': ' + v.fails.join('; ')));
+  const layout = buildLayout(multi);
+  report(layout.stations.filter((s) => s.kind === 'boiler').length === 2 && layout.stations.filter((s) => s.kind === 'lookout').length === 2, 'multi build has 2 boilers and 2 lookouts');
+  // The validator must reject broken kinds / duplicate names / a second helm.
+  const bad = (extra) => validate([...multi, ...extra]);
+  report(!bad([{ part: 'station', n: 'Fore Boiler', kind: 'boiler', p: 'main', x: 300 }]).ok, 'validate rejects a duplicate station name');
+  report(!bad([{ part: 'station', n: 'Mystery', p: 'main', x: 300 }]).ok, 'validate rejects a station with no kind');
+  report(!bad([{ part: 'station', n: 'Second Helm', kind: 'helm', p: 'main', x: 300 }]).ok, 'validate rejects a second helm');
+  const out = spawnSync(process.execPath, ['tools/botsim.mjs', '--build', 'multi', '--minutes', '2', '--seed', '1', '--map', 'network'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 });
+  const text = (out.stdout || '') + (out.stderr || '');
+  const stats = (text.match(/^BUILD_STATS (.*)$/m) || [])[1];
+  report(out.status === 0 && /^errors: 0$/m.test(text) && !!stats, 'botsim --build multi --minutes 2: 0 errors' + (out.status === 0 ? '' : '\n' + text.split('\n').slice(-12).join('\n')));
+  if (stats) {
+    const { manned, boilerLoads } = JSON.parse(stats);
+    report((boilerLoads['Boiler'] || 0) > 0 && (boilerLoads['Fore Boiler'] || 0) > 0, `bots shovelled coal into both boilers (${JSON.stringify(boilerLoads)})`);
+    report((manned['Lookout'] || 0) > 0 && (manned['Aft Lookout'] || 0) > 0, `bots manned both lookouts (Lookout ${manned['Lookout'] || 0}s, Aft Lookout ${manned['Aft Lookout'] || 0}s)`);
+  }
   return ok;
 }
 
@@ -106,7 +142,18 @@ async function lint(publicDir) {
       }
     }
   }
-  console.log(bad ? `FAIL lint: ${bad} capture(s)` : 'PASS lint: no module-level captures of derived layout values');
+  // Second rule (S.2): the ship's reference points are layout fields (refPoint, midPoint, aimPoint), not numbers in the code.
+  // These spellings are how the classic ship's middle was hard-coded; use SHIP_LAYOUT.refPoint / midPoint / aimPoint instead.
+  const coords = [/\.dist\s*[+-]\s*800\b/, /\b(500|470|640)\s*-\s*(state\.ship\.alt|p\.y|t\.y|map\.start\.y)/, /\bTILT_PIVOT\b.*\[\s*800/, /\bSHIP_SAMPLES\s*=\s*\[/];
+  const hostDir = path.join(publicDir, 'modules', 'host');
+  for (const file of fs.readdirSync(hostDir).filter((f) => f.endsWith('.js') && !skip.has(f))) {
+    fs.readFileSync(path.join(hostDir, file), 'utf8').replace(/\r/g, '').split('\n').forEach((line, i) => {
+      if (/lint-ok/.test(line) || !coords.some((re) => re.test(line.replace(/\/\/.*$/, '')))) return;
+      bad++;
+      console.log(`FAIL ${path.relative(root, path.join(hostDir, file))}:${i + 1}: hard-coded ship reference point: ${line.trim().slice(0, 110)}`);
+    });
+  }
+  console.log(bad ? `FAIL lint: ${bad} problem(s)` : 'PASS lint: no module-level captures of derived layout values, no hard-coded ship reference points');
   return !bad;
 }
 
@@ -122,9 +169,11 @@ if (mode === '--snapshot-classic') {
   process.exit((await checkClassic()) ? 0 : 1);
 } else if (mode === '--check-botsim') {
   process.exit(checkBotsim() ? 0 : 1);
+} else if (mode === '--check-multi') {
+  process.exit((await checkMulti()) ? 0 : 1);
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --check-classic | --lint | --check-botsim | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --check-classic | --lint | --check-botsim | --check-multi | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }
