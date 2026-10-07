@@ -1177,7 +1177,7 @@ export const config = {
     // The strip is drawn this much taller than the screen so it can shift up and down a little with the camera.
     OVERSCAN: 1.1,
     // Each strip sits along the bottom of the screen: its height (share of the screen) and how opaque it is.
-    LAYERS: { far: { HEIGHT: 0.6, ALPHA: 0.7 }, mid: { HEIGHT: 0.45, ALPHA: 0.85 }, near: { HEIGHT: 0.28, ALPHA: 0.9 } },
+    LAYERS: { far: { HEIGHT: 0.6, ALPHA: 0.9 }, mid: { HEIGHT: 0.42, ALPHA: 1 }, near: { HEIGHT: 0.28, ALPHA: 1 } },
     // Cave texture: world units tall (the picture is scaled to this), how fast it follows the camera, and a dark wash over it (0-1).
     CAVE: { HEIGHT: 900, PARALLAX: 0.5, DIM: 0.25 },
   },
