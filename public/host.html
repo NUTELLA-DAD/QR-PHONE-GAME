@@ -1,23 +1,27 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Airship Crew - Host</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-html,body{margin:0;height:100%;overflow:hidden;background:#2b1d14;font-family:'Bookman Old Style',Georgia,serif}
+/* Bundled fonts (no internet needed). Limelight = titles/numbers, Libre Baskerville = labels/body. */
+@font-face{font-family:'Limelight';src:url(/fonts/Limelight-Regular.ttf) format('truetype');font-weight:400;font-display:block}
+@font-face{font-family:'Libre Baskerville';src:url(/fonts/LibreBaskerville.ttf) format('truetype');font-weight:400 700;font-display:block}
+html,body{margin:0;height:100%;overflow:hidden;background:#2b1d14;font-family:'Libre Baskerville',Georgia,serif}
 canvas{display:block;width:100vw;height:100vh}
-#join{position:fixed;top:14px;right:14px;background:#f1e2b8;border:5px solid #1b1410;border-radius:18px;padding:12px 14px;text-align:center;color:#1b1410;box-shadow:5px 6px 0 #1b1410}
-#join img{width:170px;height:170px;display:block;margin:0 auto;border-radius:6px}
-#code{font-size:46px;font-weight:900;letter-spacing:6px;line-height:1}
-#url{font-size:12px;max-width:190px;word-break:break-all;margin-top:4px}
-#count{font-weight:700;margin-top:6px}
+/* Captain's logbook look: cream paper, warm-brown ink. */
+#join{position:fixed;top:14px;right:14px;background:#f3ead6;border:3px solid #3a2c20;border-radius:10px;padding:12px 14px;text-align:center;color:#3a2c20;box-shadow:4px 5px 0 rgba(43,34,22,.35),inset 0 0 0 4px #f3ead6,inset 0 0 0 5px rgba(107,74,50,.45)}
+#join img{width:170px;height:170px;display:block;margin:0 auto;border-radius:4px;border:2px solid #3a2c20}
+#code{font-family:'Limelight',Georgia,serif;font-size:40px;font-weight:400;letter-spacing:5px;line-height:1.1}
+#url{font-size:11px;max-width:190px;word-break:break-all;margin-top:4px}
+#count{font-weight:700;margin-top:6px;font-size:14px}
 /* In flight the join panel shrinks to a small code badge in the corner. */
-#join.flying{top:auto;bottom:14px;padding:6px 12px;border-width:3px;box-shadow:3px 4px 0 #1b1410;opacity:.9}
+#join.flying{top:auto;bottom:14px;padding:6px 12px;border-width:3px;box-shadow:3px 4px 0 rgba(43,34,22,.35);opacity:.9}
 #join.flying img,#join.flying #url,#join.flying button{display:none}
 #join.flying #menuBtn{display:inline-block;margin-top:4px;font-size:13px;padding:3px 10px}
 #menuBtn{background:#3b2a1d}
 /* Pause menu. */
 #menu{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(20,14,10,.72);z-index:10}
-#menu .box{background:#f3ead6;border:5px solid #1b1410;border-radius:20px;padding:20px 26px;min-width:380px;max-width:640px;text-align:center;color:#1b1410;box-shadow:6px 8px 0 #1b1410}
-#menu h2{margin:0 0 10px;font-size:34px}
-#menu button{display:block;width:100%;margin:8px 0 0;font-size:20px;padding:9px 12px}
+#menu .box{background:#f3ead6;border:3px solid #3a2c20;border-radius:12px;padding:20px 26px;min-width:380px;max-width:640px;text-align:center;color:#3a2c20;box-shadow:6px 8px 0 rgba(0,0,0,.4),inset 0 0 0 5px #f3ead6,inset 0 0 0 6px rgba(107,74,50,.45)}
+#menu h2{margin:0 0 10px;font-family:'Limelight',Georgia,serif;font-weight:400;font-size:32px}
+#menu button{display:block;width:100%;margin:8px 0 0;font-size:17px;padding:9px 12px}
 #menu .row{display:flex;gap:8px}
 #menu .row button{flex:1}
 #mJoin{display:none;margin:10px 0}
@@ -26,15 +30,15 @@ canvas{display:block;width:100vw;height:100vh}
 #mErr{margin-top:10px;font-size:13px;color:#a12a2a;max-width:560px;word-break:break-word}
 #join.flying #code{font-size:22px;letter-spacing:3px}
 #join.flying #count{font-size:12px;margin-top:2px}
-button{margin-top:8px;font:inherit;font-weight:700;border:3px solid #1b1410;background:#e63946;color:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
+button{margin-top:8px;font:inherit;font-weight:700;border:3px solid #3a2c20;background:#e63946;color:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
 </style></head><body>
 <canvas id="c"></canvas>
 <div id="join"><img id="qr" alt="Join QR code"><div id="code">----</div><div id="url"></div><div id="count">0 / 16 aboard</div>
-<button id="castoff" style="background:#2e9e4f;font-size:20px">CAST OFF!</button><br><button id="bots">Add 4 bot crew</button><br><button id="difficulty" style="background:#3a5a8c">Difficulty: Normal</button><br><button id="sound" style="background:#555">Sound: on (M)</button><br><button id="menuBtn">Menu (Esc)</button></div>
+<button id="castoff" style="background:#2e9e4f;font-size:19px;font-family:'Limelight',Georgia,serif;font-weight:400">CAST OFF!</button><br><button id="bots">Add 4 bot crew</button><br><button id="difficulty" style="background:#3a5a8c">Difficulty: Normal</button><br><button id="sound" style="background:#555">Sound: on (M)</button><br><button id="menuBtn">Menu (Esc)</button></div>
 <div id="menu"><div class="box"><h2>Paused</h2>
 <button id="mResume" style="background:#2e9e4f">Resume</button>
 <button id="mQrToggle" style="background:#3a5a8c">Show join QR code</button>
-<div id="mJoin"><img id="mQr" alt="Join QR code"><div id="mCode" style="font-size:34px;font-weight:900;letter-spacing:5px"></div><div id="mUrl" style="font-size:13px"></div><div id="mCount" style="font-weight:700"></div></div>
+<div id="mJoin"><img id="mQr" alt="Join QR code"><div id="mCode" style="font-family:'Limelight',Georgia,serif;font-size:32px;font-weight:400;letter-spacing:5px"></div><div id="mUrl" style="font-size:13px"></div><div id="mCount" style="font-weight:700"></div></div>
 <div class="row"><button id="mBots">Add 4 bot crew</button><button id="mNoBots" style="background:#7a4a2a">Remove bots</button></div>
 <div class="row"><button id="mDifficulty" style="background:#3a5a8c">Difficulty</button><button id="mSound" style="background:#555">Sound</button></div>
 <div class="row"><button id="mNext" style="background:#8a6a2a">Skip to next map</button><button id="mRestart" style="background:#a12a2a">Restart from mission 1</button></div>

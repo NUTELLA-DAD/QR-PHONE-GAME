@@ -1,43 +1,46 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Airship Crew</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <style>
+/* Bundled fonts (no internet needed). Limelight = titles/shouts, Libre Baskerville = labels/body. */
+@font-face{font-family:'Limelight';src:url(/fonts/Limelight-Regular.ttf) format('truetype');font-weight:400;font-display:swap}
+@font-face{font-family:'Libre Baskerville';src:url(/fonts/LibreBaskerville.ttf) format('truetype');font-weight:400 700;font-display:swap}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;height:100%;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;font-family:'Bookman Old Style',Georgia,serif;color:#1b1410;background:#f1e2b8}
-body.play{background:var(--c,#f1e2b8)}
+html,body{margin:0;height:100%;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;font-family:'Libre Baskerville',Georgia,serif;color:#2b2622;background:#f3ead6}
+body.play{background:var(--c,#f3ead6)}
 .view{display:none;height:100%;padding:20px;flex-direction:column;gap:14px}.show{display:flex}
 h1{margin:0;font-size:30px}
-input{font:inherit;font-size:22px;padding:12px;border:4px solid #1b1410;border-radius:12px;background:#fff;width:100%;text-transform:none}
+input{font:inherit;font-size:22px;padding:12px;border:4px solid #2b2622;border-radius:12px;background:#fff;width:100%;text-transform:none}
 #species{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-#species button{font-size:34px;padding:8px 0;background:#fff;border:4px solid #1b1410;border-radius:14px}
-#species button.on{background:#e63946;transform:translate(0,-3px);box-shadow:0 4px 0 #1b1410}
-.big{font:inherit;font-weight:900;font-size:24px;padding:16px;border:5px solid #1b1410;border-radius:16px;background:#e63946;color:#fff;box-shadow:0 5px 0 #1b1410}
+#species button{font-size:34px;padding:8px 0;background:#fff;border:4px solid #2b2622;border-radius:14px}
+#species button.on{background:#e63946;transform:translate(0,-3px);box-shadow:0 4px 0 #2b2622}
+.big{font:inherit;font-weight:900;font-size:24px;padding:16px;border:5px solid #2b2622;border-radius:16px;background:#e63946;color:#fff;box-shadow:0 5px 0 #2b2622}
 #err{color:#b00020;font-weight:700;min-height:20px}
 label.opt{display:flex;align-items:center;gap:10px;font-size:18px}
 label.opt input{width:28px;height:28px}
 
 /* ---- Play screen: landscape gamepad ---- */
 #vplay{padding:max(8px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));gap:6px}
-#strip{display:flex;align-items:center;gap:10px;background:#f1e2b8;border:4px solid #1b1410;border-radius:14px;padding:4px 8px;min-height:44px}
+#strip{display:flex;align-items:center;gap:10px;background:#f3ead6;border:4px solid #2b2622;border-radius:14px;padding:4px 8px;min-height:44px}
 #me{display:flex;align-items:center;gap:6px;font-weight:900;font-size:18px;white-space:nowrap}
-#swatch{width:20px;height:20px;border-radius:50%;border:3px solid #1b1410;background:var(--c,#e63946)}
+#swatch{width:20px;height:20px;border-radius:50%;border:3px solid #2b2622;background:var(--c,#e63946)}
 #carry{font-size:16px;white-space:nowrap}
-#hull{flex:1;height:18px;border:3px solid #1b1410;border-radius:8px;background:#3b2a1d;position:relative;overflow:hidden;min-width:60px}
+#hull{flex:1;height:18px;border:3px solid #2b2622;border-radius:8px;background:#3b2a1d;position:relative;overflow:hidden;min-width:60px}
 #hfill{position:absolute;left:0;top:0;bottom:0;width:100%;background:#4caf50}
 #hull span{position:absolute;inset:0;text-align:center;color:#fff;font-size:12px;font-weight:700;line-height:12px}
-#leave{font:inherit;font-weight:900;font-size:24px;border:4px solid #1b1410;border-radius:14px;background:#c62828;color:#fff;padding:8px 30px;min-height:58px;min-width:150px;box-shadow:0 4px 0 #1b1410;display:none;touch-action:none}
-#leave:active{transform:translateY(3px);box-shadow:0 1px 0 #1b1410}
-#info{background:rgba(241,226,184,.9);border:3px solid #1b1410;border-radius:12px;padding:3px 10px;font-size:15px;line-height:1.25;min-height:26px}
+#leave{font:inherit;font-weight:900;font-size:24px;border:4px solid #2b2622;border-radius:14px;background:#c62828;color:#fff;padding:8px 30px;min-height:58px;min-width:150px;box-shadow:0 4px 0 #2b2622;display:none;touch-action:none}
+#leave:active{transform:translateY(3px);box-shadow:0 1px 0 #2b2622}
+#info{background:rgba(243,234,214,.9);border:3px solid #2b2622;border-radius:12px;padding:3px 10px;font-size:15px;line-height:1.25;min-height:26px}
 #info b{font-size:17px}
 #info .warn{color:#c62828;font-weight:900}
 #controls{flex:1;display:flex;align-items:center;justify-content:space-between;min-height:0}
 body.lefty #controls{flex-direction:row-reverse}
-#pad{position:relative;border:5px solid #1b1410;border-radius:50%;background:rgba(255,255,255,.35);width:min(36vw,58vh);aspect-ratio:1}
-#knob{position:absolute;width:38%;height:38%;left:31%;top:31%;border-radius:50%;background:#f1e2b8;border:5px solid #1b1410;box-shadow:0 5px 0 #1b1410}
+#pad{position:relative;border:5px solid #2b2622;border-radius:50%;background:rgba(255,255,255,.35);width:min(36vw,58vh);aspect-ratio:1}
+#knob{position:absolute;width:38%;height:38%;left:31%;top:31%;border-radius:50%;background:#f3ead6;border:5px solid #2b2622;box-shadow:0 5px 0 #2b2622}
 #buttons{--a:min(38vh,160px);--j:min(27vh,112px);--k:min(30vh,124px);position:relative;width:min(54vw,92vh);height:min(66vh,100%)}
-.btn{position:absolute;border:5px solid #1b1410;border-radius:50%;color:#fff;font:inherit;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.05;box-shadow:0 6px 0 #1b1410;padding:6px}
+.btn{position:absolute;border:5px solid #2b2622;border-radius:50%;color:#fff;font:inherit;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.05;box-shadow:0 6px 0 #2b2622;padding:6px}
 .btn .ic{font-size:2.3em;line-height:1}
 .btn .tx{max-width:92%;overflow-wrap:anywhere}
-.btn.down{transform:translateY(5px);box-shadow:0 1px 0 #1b1410;filter:brightness(.9)}
+.btn.down{transform:translateY(5px);box-shadow:0 1px 0 #2b2622;filter:brightness(.9)}
 /* Middle column between the stick and the buttons: the radar and/or the job arrow for idle crew. */
 #mid{display:none;flex:1;min-width:0;align-self:stretch;margin:0 4px;flex-direction:column;align-items:center;justify-content:center;gap:4px}
 #mid.on{display:flex}
@@ -50,19 +53,19 @@ body.lefty #controls{flex-direction:row-reverse}
 #mid.rd #jtext{font-size:12px}
 /* The right-hand buttons only need their own width unless the helm levers are out (leaves room for the radar). */
 body:not(.helm) #buttons{width:calc(var(--a) + var(--k) + 14px)}
-#help{font:inherit;font-weight:900;font-size:17px;border:4px solid #1b1410;border-radius:14px;background:#e63946;color:#fff;padding:2px 12px;min-height:44px;min-width:92px;box-shadow:0 3px 0 #1b1410;touch-action:none;white-space:nowrap}
-#help.down{transform:translateY(3px);box-shadow:0 0 0 #1b1410}
+#help{font:inherit;font-weight:900;font-size:17px;border:4px solid #2b2622;border-radius:14px;background:#e63946;color:#fff;padding:2px 12px;min-height:44px;min-width:92px;box-shadow:0 3px 0 #2b2622;touch-action:none;white-space:nowrap}
+#help.down{transform:translateY(3px);box-shadow:0 0 0 #2b2622}
 #help.wait{background:#7d6a5a;color:#e6d9c0}
 /* PRIME (left button while on a gun): fills up as you hold it, glows when ready. */
 #atk.prime{background:linear-gradient(to top,#ff8c1a var(--p,0%),#3a5a8c var(--p,0%));transition:none}
-#atk.prime.ready{background:#ffb347;color:#1b1410;animation:primed .5s ease-in-out infinite alternate}
-@keyframes primed{from{box-shadow:0 6px 0 #1b1410,0 0 10px 2px #ffd23f}to{box-shadow:0 6px 0 #1b1410,0 0 26px 10px #fff2b0}}
-#job{display:none;flex:1;min-width:0;align-self:center;width:100%;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 8px;background:#1b1410;color:#ffd23f;border:4px solid #f1e2b8;border-radius:16px;text-align:center;font-weight:900;pointer-events:none}
+#atk.prime.ready{background:#ffb347;color:#2b2622;animation:primed .5s ease-in-out infinite alternate}
+@keyframes primed{from{box-shadow:0 6px 0 #2b2622,0 0 10px 2px #ffd23f}to{box-shadow:0 6px 0 #2b2622,0 0 26px 10px #fff2b0}}
+#job{display:none;flex:1;min-width:0;align-self:center;width:100%;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 8px;background:#2b2622;color:#ffd23f;border:4px solid #f3ead6;border-radius:16px;text-align:center;font-weight:900;pointer-events:none}
 #job.show{display:flex}
 #jarrow{font-size:min(24vh,104px);line-height:1}
 #jtext{font-size:clamp(14px,4.4vh,22px);line-height:1.1;overflow-wrap:anywhere}
 /* Action: biggest, lower right. JUMP: above it. Attack: to its left. */
-#act{width:var(--a);height:var(--a);right:0;bottom:0;background:#f1e2b8;color:#1b1410;font-size:clamp(14px,4vh,20px)}
+#act{width:var(--a);height:var(--a);right:0;bottom:0;background:#f3ead6;color:#2b2622;font-size:clamp(14px,4vh,20px)}
 #atk{width:var(--k);height:var(--k);right:calc(var(--a) + 10px);bottom:0;background:#3a5a8c;font-size:clamp(13px,3.6vh,18px)}
 #jump{width:var(--j);height:var(--j);right:calc(var(--a) * .1);top:0;background:#2e8b57;font-size:clamp(13px,3.4vh,18px)}
 body.lefty #act{right:auto;left:0}
@@ -70,26 +73,26 @@ body.lefty #atk{right:auto;left:calc(var(--a) + 10px)}
 body.lefty #jump{right:auto;left:calc(var(--a) * .1)}
 #act.hold::after{content:'HOLD';font-size:11px;opacity:.85}
 /* Helm throttle lever (replaces Attack while steering). */
-#lever{position:absolute;right:calc(var(--a) + 10px);top:0;width:min(20vh,84px);height:100%;border:5px solid #1b1410;border-radius:18px;background:#3b2a1d;display:none;touch-action:none}
+#lever{position:absolute;right:calc(var(--a) + 10px);top:0;width:min(20vh,84px);height:100%;border:5px solid #2b2622;border-radius:18px;background:#3b2a1d;display:none;touch-action:none}
 body.lefty #lever{right:auto;left:calc(var(--a) + 10px)}
 #lever .fill{position:absolute;left:0;right:0;bottom:0;background:#4caf50}
 #lever .stop{position:absolute;left:-4px;right:-4px;height:4px;margin-bottom:-2px;background:#ffd23f}
 #lever .rev{position:absolute;left:0;right:0;bottom:4px;text-align:center;color:#ff8a8a;font-size:11px;font-weight:900}
-#lever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f1e2b8;border:5px solid #1b1410;border-radius:10px}
-#plever{position:absolute;right:calc(var(--a) + min(20vh,84px) + 20px);top:0;width:min(20vh,84px);height:100%;border:5px solid #1b1410;border-radius:18px;background:#3b2a1d;display:none;touch-action:none}
+#lever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f3ead6;border:5px solid #2b2622;border-radius:10px}
+#plever{position:absolute;right:calc(var(--a) + min(20vh,84px) + 20px);top:0;width:min(20vh,84px);height:100%;border:5px solid #2b2622;border-radius:18px;background:#3b2a1d;display:none;touch-action:none}
 body.lefty #plever{right:auto;left:calc(var(--a) + min(20vh,84px) + 20px)}
 #plever .fill{position:absolute;left:0;right:0;bottom:50%}
 #plever .mid{position:absolute;left:-4px;right:-4px;top:50%;height:4px;margin-top:-2px;background:#ffd23f}
-#plever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f1e2b8;border:5px solid #1b1410;border-radius:10px}
+#plever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f3ead6;border:5px solid #2b2622;border-radius:10px}
 #plever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
 #plever .rev{position:absolute;left:0;right:0;bottom:4px;text-align:center;color:#8ab8ff;font-size:11px;font-weight:900}
 #lever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
 /* Upgrade vote: three big cards over everything. */
-#vote{display:none;position:fixed;inset:0;background:rgba(27,20,16,.92);z-index:8;flex-direction:column;padding:10px;gap:8px}
-#vote h2{margin:0;color:#f1e2b8;font-size:22px;text-align:center}
+#vote{display:none;position:fixed;inset:0;background:rgba(43,38,34,.92);z-index:8;flex-direction:column;padding:10px;gap:8px}
+#vote h2{margin:0;color:#f3ead6;font-size:22px;text-align:center}
 #vote .cards{flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));grid-auto-rows:minmax(110px,1fr);gap:10px;min-height:0;overflow-y:auto;touch-action:pan-y}
 #vote .cards.route{grid-template-columns:1fr}
-#vote button{min-height:110px;font:inherit;border:5px solid #1b1410;border-radius:16px;background:#f1e2b8;color:#1b1410;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px;box-shadow:0 5px 0 #000}
+#vote button{min-height:110px;font:inherit;border:5px solid #2b2622;border-radius:16px;background:#f3ead6;color:#2b2622;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px;box-shadow:0 5px 0 #000}
 #vote button .ic{font-size:38px}
 #vote button em{font-style:normal;font-weight:900;font-size:17px;color:#7a4a00}
 #vote button.off{opacity:.4;background:#cdbf9a}
@@ -97,10 +100,28 @@ body.lefty #plever{right:auto;left:calc(var(--a) + min(20vh,84px) + 20px)}
 #vote button b{font-size:19px}
 #vote button small{font-size:14px;line-height:1.2}
 #vote button.on{background:#ffd23f;transform:translateY(-3px);outline:5px solid #fff}
-#toast{display:none;position:fixed;left:50%;top:22%;transform:translateX(-50%);background:#ffd23f;color:#1b1410;border:5px solid #1b1410;border-radius:16px;padding:10px 18px;font-size:24px;font-weight:900;z-index:7;box-shadow:0 5px 0 #1b1410;pointer-events:none;white-space:nowrap}
-#rotate{display:none;position:fixed;inset:0;background:#1b1410;color:#f1e2b8;font-size:24px;font-weight:900;text-align:center;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9}
+#toast{display:none;position:fixed;left:50%;top:22%;transform:translateX(-50%);background:#ffd23f;color:#2b2622;border:5px solid #2b2622;border-radius:16px;padding:10px 18px;font-size:24px;font-weight:900;z-index:7;box-shadow:0 5px 0 #2b2622;pointer-events:none;white-space:nowrap}
+#rotate{display:none;position:fixed;inset:0;background:#2b2622;color:#f3ead6;font-size:24px;font-weight:900;text-align:center;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9}
 #rotate .ic{font-size:70px}
 @media (orientation:portrait){body.play #rotate{display:flex}}
+/* ---- Captain's logbook look (matches the TV): Limelight for titles and shouts, cream paper, warm-brown ink. ---- */
+h1,.big,#leave,#help,#toast,#vote h2,#vote button em,#rotate,#job,#code{font-family:'Limelight',Georgia,serif;font-weight:400}
+h1{font-size:28px}
+.big{font-size:22px}
+#leave{font-size:21px}
+#help{font-size:15px}
+#toast{font-size:21px}
+#vote h2{font-size:20px}
+#vote button em{font-size:16px}
+#rotate{font-size:22px}
+#jtext{font-size:clamp(13px,4vh,20px)}
+#mid.rd #jtext{font-size:11px}
+#strip,#info{box-shadow:inset 0 0 0 2px #f3ead6,inset 0 0 0 3px rgba(107,74,50,.4)}
+#vote button{box-shadow:0 5px 0 #000,inset 0 0 0 2px #f3ead6,inset 0 0 0 3px rgba(107,74,50,.4)}
+#vote button.on{box-shadow:0 5px 0 #000}
+#me{font-weight:700}
+#info b{font-weight:700}
+#info .warn{color:#a8443f}
 </style></head><body>
 <div id="vjoin" class="view show">
   <h1>Join the crew</h1>

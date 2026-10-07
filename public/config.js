@@ -940,6 +940,21 @@ export const config = {
     muzzle: '#f2d36b', fire: '#e8884a', smoke: '#9a9a9a',
     gold: '#f2d36b', ink: '#2b2622', panel: '#f3ead6',
   },
+  // Bundled fonts (public/fonts/, @font-face in host.html / controller.html; nothing from the internet).
+  // DISPLAY (Limelight, Art Deco, one weight only) = titles, shouts, popups, big numbers.
+  // TEXT (Libre Baskerville, weights 400-700) = labels and body text.
+  FONTS: {
+    DISPLAY: "'Limelight', Georgia, serif",
+    TEXT: "'Libre Baskerville', Georgia, serif",
+  },
+  // "Captain's logbook" HUD: cream paper panels, warm-brown ink, brass corner pins, red stamp warnings.
+  LOGBOOK: {
+    PAPER: '#f3ead6', PAPER_SHADE: '#e4d7b8', RULE: 'rgba(107,74,50,0.16)', // panel fill / lower band / faint ruled lines
+    INK: '#3a2c20', INK_SOFT: '#6b4a32', // text and border (warm brown), secondary text
+    BORDER: 2.5, PIN: '#c9a85a', PIN_DARK: '#8a6c2e', // brass corner pins
+    STAMP: '#a8443f', STAMP_BG: 'rgba(243,234,214,0.92)', // red ink for warnings and alarm banners
+    SHADOW: 'rgba(43,34,22,0.28)',
+  },
   // Outline weights (Style 2026, see art/ART_SPEC.md).
   OUTLINE: { MAIN: 3.4, SMALL: 2.5, SHIP: 4 },
   // Sky effects (modules/host/skyArt.js): sun, god-rays, birds, far airships. All soft and faint.

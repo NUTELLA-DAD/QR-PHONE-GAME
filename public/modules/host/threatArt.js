@@ -129,7 +129,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.arc(b.x + 14, y - 46, 6, 0, 7);
       ctx.fill();
       // Countdown.
-      ctx.font = '900 30px Georgia';
+      ctx.font = '27px ' + config.FONTS.DISPLAY;
       ctx.textAlign = 'center';
       ctx.lineWidth = 3.2;
       ctx.strokeStyle = '#fff';
@@ -196,7 +196,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.fill();
       ctx.restore();
       if (state.lookout) {
-        ctx.font = '900 13px Georgia';
+        ctx.font = '12px ' + config.FONTS.DISPLAY;
         ctx.textAlign = 'center';
         ctx.fillStyle = it.color;
         ctx.fillText(it.label, ax, ay + 5);

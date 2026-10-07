@@ -287,7 +287,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     line([[560, y - 48], [560, y - 70]], 3);
     line([[650, y - 48], [650, y - 70]], 3);
     filled('#f3ead6', () => ctx.roundRect(540, y - 100, 130, 30, 5));
-    ctx.font = '900 19px Georgia';
+    ctx.font = '17px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
     ctx.fillStyle = INK;
     ctx.fillText('TOP DECK', 605, y - 79);
@@ -364,7 +364,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       ctx.strokeStyle = `rgba(230,57,70,${0.9 * t})`;
       ctx.lineWidth = 6;
       ctx.stroke();
-      ctx.font = '900 26px Georgia';
+      ctx.font = '23px ' + config.FONTS.DISPLAY;
       ctx.textAlign = 'center';
       ctx.lineWidth = 5;
       ctx.strokeStyle = '#fff';
@@ -681,7 +681,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
           ctx.arc(x + Math.sin(time * 3 + k) * 10 + (leaking ? t * 40 : 0), y - 20 - t * 70, 10 + t * 18, 0, 7);
           ctx.fill();
         }
-        ctx.font = '900 22px Georgia';
+        ctx.font = '20px ' + config.FONTS.DISPLAY;
         ctx.textAlign = 'center';
         ctx.lineWidth = 3;
         ctx.strokeStyle = '#fff';
@@ -776,7 +776,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
   };
 
   const drawLabels = () => {
-    ctx.font = '700 24px Georgia';
+    ctx.font = '700 24px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
     const placed = [];
     for (const s of [...L.stations].sort((a, b) => a.x - b.x)) {
@@ -915,7 +915,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     // Hatch up to the lower deck (the ladder is drawn with the other connectors).
     filled('#3d373b', () => ctx.rect(372 - 24, top + 8, 48, 8));
     // Stencilled name on the wall.
-    ctx.font = '900 22px Georgia';
+    ctx.font = '20px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#e8c9c4';
     ctx.fillText('BOMB BAY', (x0 + x1) / 2 - 20, top + 52);
@@ -927,14 +927,14 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     for (const sy of [fy - 30, fy - 68]) filled('#6b4a32', () => ctx.rect(rx0 - 8, sy, rx1 - rx0 + 14, 7));
     const shown = Math.min(bay.bombs, 6);
     for (let i = 0; i < shown; i++) drawBomb(rx0 + 28 + (i % 3) * 38, (i < 3 ? fy - 30 : fy - 68) - 10);
-    ctx.font = '900 18px Georgia';
+    ctx.font = '16px ' + config.FONTS.DISPLAY;
     ctx.fillStyle = bay.bombs > 0 ? '#f2d36b' : '#e8887f';
     ctx.fillText(bay.bombs > 0 ? 'BOMBS x' + bay.bombs : 'EMPTY', (rx0 + rx1) / 2, fy - 86);
     // Ammo point: crates stacked by the wall; bring an ammo crate to the bombardier to load bombs.
     filled('#c9a05f', () => ctx.rect(x1 - 52, fy - 34, 36, 34));
     line([[x1 - 52, fy - 34], [x1 - 16, fy]], 2.5, WOOD_DARK);
     filled('#b98a5a', () => ctx.rect(x1 - 44, fy - 66, 30, 32));
-    ctx.font = '900 13px Georgia';
+    ctx.font = '12px ' + config.FONTS.DISPLAY;
     ctx.fillStyle = INK;
     ctx.fillText('AMMO', x1 - 29, fy - 45);
     // Bombsight on a stand beside the bombardier, looking down through the doors.
@@ -962,7 +962,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     hazard(-half + 2, 1, half - 4, 6);
     ctx.restore();
     // JUMP sign over the doors (parachute!).
-    ctx.font = '900 16px Georgia';
+    ctx.font = '14px ' + config.FONTS.DISPLAY;
     ctx.fillStyle = '#f2d36b';
     ctx.fillText('JUMP', B.jumpX, fy - 74);
     ctx.fillStyle = '#f2d36b';
