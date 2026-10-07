@@ -11,7 +11,7 @@ import { spawnPace, firePace, crewMul } from './crewscale.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, scrollSpeed } from './course.js';
-import { shellDmg } from './aim.js';
+import { shellDmg, dazzled } from './aim.js';
 import { SHIP_SAMPLES } from './course.js';
 import { pop } from './popups.js';
 import { flyPlane, smoke, shootDown, angDiff, shoveShip, bumpShip, bounceStep } from './planes.js';
@@ -371,7 +371,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
           p.gunCd = D.SHOT_EVERY / crewMul(state, 'fire');
           const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
           const evading = helm && (Math.abs(helm.jy) > 0.2 || Math.abs(state.ship.speed) > 0.3);
-          const miss = Math.random() < 0.25 || (evading && Math.random() < 0.4);
+          const miss = Math.random() < 0.25 || (evading && Math.random() < 0.4) || dazzled(p);
           const dir = p.heading + Math.max(-0.15, Math.min(0.15, off)) + (miss ? (Math.random() < 0.5 ? -1 : 1) * 0.3 : rand(-0.05, 0.05));
           const nx = p.x + Math.cos(p.heading) * 30;
           const ny = p.y + Math.sin(p.heading) * 30;

@@ -84,6 +84,9 @@ export function bestTarget(state, gun) {
 }
 
 // Aim assist: if the stick points close to a target, bend the aim toward it.
+// A plane caught in a searchlight beam is dazzled: most of its shots go wide (config.SEARCHLIGHT.DAZZLE_MISS).
+export const dazzled = (o) => !!o && o.lit > 0 && Math.random() < (config.SEARCHLIGHT.DAZZLE_MISS || 0);
+
 export function assistAim(state, gun, wanted, maxAngle, strength) {
   let best = null;
   const SL = config.SEARCHLIGHT;
@@ -98,5 +101,7 @@ export function assistAim(state, gun, wanted, maxAngle, strength) {
     const reach = maxAngle * Math.max(spotted ? config.SPOT.ASSIST_ANGLE : 1, lit ? SL.LIT_AIM_ANGLE : 1);
     if (raw < reach && (!best || off < best.off)) best = { angle, off, lit };
   }
-  return best ? wanted + angleDiff(best.angle, wanted) * (best.lit ? Math.max(strength, SL.LIT_AIM_STRENGTH) : strength) : wanted;
+  // In the dark the gunners can only lock onto what a searchlight shows them.
+  const blind = 1 - Math.min(1, (state.darkNow || 0) * (SL.DARK_ASSIST || 0));
+  return best ? wanted + angleDiff(best.angle, wanted) * (best.lit ? Math.max(strength, SL.LIT_AIM_STRENGTH) : strength * blind) : wanted;
 }

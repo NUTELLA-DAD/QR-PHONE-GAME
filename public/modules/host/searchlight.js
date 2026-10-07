@@ -54,6 +54,7 @@ export function createSearchlights({ state }) {
   const update = (dt) => {
     const flying = state.phase === 'flying' || state.phase === 'lobby';
     const tgs = flying ? targets(state) : [];
+    state.darkNow = darkTarget(state); // (aim.js: in the dark the guns only lock onto lit targets)
     state.litTargets.length = 0;
     state.dimTargets.length = 0;
     // 1. The lamps: swing, focus, power.

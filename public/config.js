@@ -132,20 +132,22 @@ export const config = {
   // In dark places (DARK below + each environment's DARK) the world is dim and the beams cut light out of it.
   SEARCHLIGHT: {
     TURN: 2.2, // how fast the beam swings (radians per second)
-    RANGE: 1500, // how far the beam reaches (px); a cave wall stops it
-    FOCUS_RANGE: 2200, // ...when focused
-    HALF_ANGLE: 0.17, // half-width of the beam cone (radians)
-    FOCUS_HALF_ANGLE: 0.075,
+    RANGE: 1900, // how far the beam reaches (px); a cave wall stops it
+    FOCUS_RANGE: 2700, // ...when focused
+    HALF_ANGLE: 0.24, // half-width of the beam cone (radians)
+    FOCUS_HALF_ANGLE: 0.11,
     UNMANNED: 0.28, // power of a lamp nobody is working (0 = off): a faint short cone, no lit-target bonus
     POWER_RISE: 4, // how fast the lamp comes up to power / fades (per second)
     ASSIST_ANGLE: 0.22, // the stick snaps the beam onto a target within this angle of where you point (0 = off)
     ASSIST_STRENGTH: 0.6,
-    LIT_DAMAGE: 0.35, // extra damage to a lit target (a fraction of each hit's damage, added up over hits)
+    LIT_DAMAGE: 0.5, // extra damage to a lit target (a fraction of each hit's damage, added up over hits)
     LIT_HOLD: 0.3, // seconds something stays lit after the beam leaves it
     LIT_AIM_ANGLE: 1.9, // aim assist reaches this many times further for a lit target...
     LIT_AIM_STRENGTH: 0.95, // ...and snaps harder (normal: AIM_ASSIST)
     DAY_ALPHA: 0.12, // how visible the beam cone is in daylight (0..1)
-    DARK_ALPHA: 0.3, // ...in the dark
+    DARK_ALPHA: 0.45, // ...in the dark
+    DAZZLE_MISS: 0.7, // an enemy caught in a beam is dazzled: this share of its shots go wide
+    DARK_ASSIST: 0.85, // in the dark the guns can't see what isn't lit: aim assist on unlit targets drops by darkness x this
     DARK: {
       ENABLED: true,
       MAX: 0.82, // the darkest the overlay ever gets (0..1): the ship and crew stay readable

@@ -5,7 +5,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, groundAt, ceilAt, scrollSpeed } from './course.js';
 import { pop } from './popups.js';
-import { shellDmg } from './aim.js';
+import { shellDmg, dazzled } from './aim.js';
 import { flyPlane, smoke, shootDown, updateChutes, shoveShip, bumpShip, bounceStep } from './planes.js';
 
 const B = SHIP_LAYOUT.bounds;
@@ -138,7 +138,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
         e.fire = F.SHOT_EVERY;
         const helm = getHelm();
         const evading = helm && (Math.abs(helm.jy) > 0.2 || Math.abs(state.ship.speed) > 0.3);
-        const miss = evading && Math.random() < 0.5;
+        const miss = (evading && Math.random() < 0.5) || dazzled(e);
         const dir = e.heading + Math.max(-0.2, Math.min(0.2, off)) + (miss ? (Math.random() < 0.5 ? -1 : 1) * 0.3 : rand(-0.05, 0.05));
         const nx = e.x + Math.cos(e.heading) * 40;
         const ny = e.y + Math.sin(e.heading) * 40;
