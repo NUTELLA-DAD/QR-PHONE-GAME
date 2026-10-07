@@ -27,7 +27,7 @@ import { createLinks } from './links.js';
 import { createSpotter } from './spotter.js';
 import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { createGoingDown } from './goingDown.js';
-import { generateVoyage, stopById, stopName, envInfo, loadVoyageSave, saveVoyageSave } from './voyage.js';
+import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
 const platformY = (d) => PLATFORMS[d].y;
@@ -105,6 +105,8 @@ export function createSimulation() {
     shield: { ang: -Math.PI / 2, on: false, flash: 0 }, // the Deflector's arc (angle around the ship)
     upgrades: {}, // id -> times taken
     difficulty: config.START_DIFFICULTY,
+    mode: config.VOYAGE.START_MODE, // session length (config.VOYAGE.MODES), picked in the lobby
+    daily: false, // fly today's daily voyage (route seeded by the date)
     phase: 'lobby', // 'lobby' = moored at the mast while the crew joins; 'flying' after CAST OFF
     record: loadRecord(), // best run on this TV: { laps, kills }
     vote: null, // a vote in progress: the sky-dock shop or the route map
@@ -662,16 +664,41 @@ export function createSimulation() {
   const SH = config.SHOP;
   const VY = config.VOYAGE;
   state.save = loadVoyageSave(); // best run, total runs, unlocks (this TV)
+  Object.assign(state, loadModePrefs()); // the session mode picked last time (mode, daily)
 
-  // A fresh voyage: a new route map from a new seed, an empty purse.
+  // What the lobby has picked, as a text: when it differs from the route already made, the route is made again at CAST OFF.
+  const sessionKey = () => state.mode + '|' + (state.daily ? dailyVoyage().key : '');
+  // A fresh voyage: a new route map from a new seed (or from today's date), an empty purse.
   const newRun = () => {
-    const voyage = generateVoyage((Math.random() * 2 ** 31) | 0);
+    const daily = state.daily ? dailyVoyage() : null;
+    const voyage = generateVoyage(daily ? daily.seed : (Math.random() * 2 ** 31) | 0, { mode: state.mode });
     const first = voyage.columns[0][0];
-    state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0 };
+    const M = modeInfo(state.mode);
+    state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0,
+      mode: state.mode, key: sessionKey(), daily: daily && { key: daily.key, name: daily.name }, voyageNo: 1, voyages: M.voyages, base: 0, rival: M.rival };
     state.runEnd = null;
     state.salvagePop = null;
   };
   const curStop = () => stopById(state.run.voyage, state.run.stopId);
+  // The mission number of a stop (bigger maps and tougher gunships as it grows).
+  const missionNo = (stop) => stop.col + 1 + (state.run.voyageNo > 1 ? VY.SECOND.LEVEL_BONUS : 0);
+
+  // The Evening Campaign: the first Flagship is down, so the crew docks at a harbour (keeping salvage and upgrades)
+  // and a second, harder voyage is laid out from there.
+  const nextVoyage = () => {
+    const run = state.run;
+    run.base += run.voyage.columns.length - 1;
+    run.voyageNo++;
+    const seed = run.daily ? (dailyVoyage().seed ^ 0x5bd1e995) & 0x7fffffff : (Math.random() * 2 ** 31) | 0;
+    run.voyage = generateVoyage(seed, { mode: run.mode, voyageNo: run.voyageNo });
+    run.stopId = run.voyage.columns[0][0].id;
+    run.visited = [run.stopId];
+    run.spares = run.sparesMax;
+    addSalvage(VY.SECOND.SALVAGE_BONUS, 'mission');
+    state.ship.hull = Math.min(100, state.ship.hull + VY.SECOND.HARBOUR_REPAIR);
+    state.ev.warn = 5;
+    state.ev.warnText = 'FIRST VOYAGE COMPLETE - THE CREW DOCKS!';
+  };
 
   // What a stop asks of the course (see startMission in course.js).
   const missionOpts = (stop) => ({
@@ -679,7 +706,8 @@ export function createSimulation() {
     kind: stop.kind,
     danger: stop.danger,
     stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship },
-    title: `STOP ${stop.col + 1}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
+    lengthMul: modeInfo(state.run.mode).lengthMul,
+    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
   });
   const firstMission = () => missionOpts(curStop());
 
@@ -762,11 +790,15 @@ export function createSimulation() {
     const run = state.run;
     const stop = curStop();
     bankStats(false);
-    const done = victory ? stop.col + 1 : stop.col; // stops finished
+    const done = run.base + (victory ? stop.col + 1 : stop.col); // stops finished
     state.runEnd = {
       victory,
-      reached: stop.col + 1,
-      total: run.voyage.columns.length,
+      reached: stopNo(run, stop),
+      total: stopTotal(run),
+      modeLabel: modeInfo(run.mode).label,
+      voyageNo: run.voyageNo,
+      voyages: run.voyages,
+      daily: run.daily && run.daily.name,
       stopName: stopName(stop),
       done,
       salvage: run.earned,
@@ -783,6 +815,7 @@ export function createSimulation() {
       s.victories++;
       if (!s.unlocks.includes('flagship-medal')) s.unlocks.push('flagship-medal');
     }
+    if (run.daily) state.runEnd.dailyBest = recordDaily(s, run.daily.key, run.mode, { stops: done, victory, salvage: run.earned });
     saveVoyageSave(s);
     if (victory) {
       state.ev.warn = 6;
@@ -865,7 +898,7 @@ export function createSimulation() {
     const run = state.run;
     run.stopId = id;
     run.visited.push(id);
-    course.startMission(curStop().col + 1, missionOpts(curStop()));
+    course.startMission(missionNo(curStop()), missionOpts(curStop()));
   };
 
   // Bots vote sensibly: the dock - repair what's broken, else something they can afford, sometimes cast off.
@@ -1056,7 +1089,10 @@ export function createSimulation() {
         state.newRecord = false;
         const next = pendingVote;
         pendingVote = null;
-        if (next === 'victory') endRun(true);
+        if (next === 'victory' && state.run.voyageNo < state.run.voyages) {
+          nextVoyage();
+          startDock();
+        } else if (next === 'victory') endRun(true);
         else if (next === 'dock') startDock();
       }
       return;
@@ -1747,6 +1783,10 @@ export function createSimulation() {
     startRoute,
     castOff: () => {
       if (state.phase !== 'lobby') return;
+      if (state.run.key !== sessionKey()) { // (the lobby changed the mode or the daily voyage after the route was made)
+        newRun();
+        course.startMission(1, firstMission());
+      }
       updateCrewScale(state, 0); // (settle the spare gasbags and crew factors for the chosen difficulty)
       state.phase = 'flying';
       state.ev.warn = 4;
@@ -1759,6 +1799,16 @@ export function createSimulation() {
     gunship,
     air,
     restart: () => restartGame(),
+    // Pick the session mode / daily voyage (lobby and pause menu); remembered on this TV. Flying runs finish as they are.
+    setSession: (mode, daily) => {
+      if (config.VOYAGE.MODES[mode]) state.mode = mode;
+      if (daily != null) state.daily = !!daily;
+      saveModePrefs(state);
+    },
+    dailyInfo: () => {
+      const d = dailyVoyage();
+      return { ...d, best: dailyBest(state.save, d.key, state.mode) };
+    },
     puff,
     setSocket,
     countPlayers: () => Object.keys(state.players).length,

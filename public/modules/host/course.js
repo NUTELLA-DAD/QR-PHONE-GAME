@@ -964,7 +964,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   function startMission(n, opts = {}) {
     const MP = config.MAPS;
     const kind = MP.FORCE_KIND || opts.kind || MP.KINDS[(n - 1) % MP.KINDS.length];
-    const map = makeMap(kind, n, course.rand);
+    const map = makeMap(kind, n, course.rand, opts.lengthMul || 1);
     map.environment = pickEnvironment(opts.environment); // 'skyisles' (the original look and rules), 'frost', 'ember'...
     const d = Math.min(1, (n - 1) / 4);
     Object.assign(course, {

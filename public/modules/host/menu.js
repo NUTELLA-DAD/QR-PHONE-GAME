@@ -9,6 +9,8 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
 
   const sync = () => {
     $('mDifficulty').innerHTML = $('difficulty').innerHTML;
+    $('mMode').innerHTML = $('mode').innerHTML;
+    $('mDaily').innerHTML = $('daily').innerHTML;
     $('mSound').textContent = $('sound').textContent;
     $('mMusic').textContent = music && music.isOn() ? 'Music: on' : 'Music: off';
     $('mQr').src = $('qr').src;
@@ -45,6 +47,15 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
   };
   $('mDifficulty').onclick = () => {
     $('difficulty').click();
+    sync();
+  };
+  // Session mode and daily voyage (they apply to the next voyage; a voyage in flight carries on as it is).
+  $('mMode').onclick = () => {
+    $('mode').click();
+    sync();
+  };
+  $('mDaily').onclick = () => {
+    $('daily').click();
     sync();
   };
   // Screen: Smooth (fast) or Sharp (crisper on high-resolution screens, slower).
