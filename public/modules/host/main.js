@@ -57,8 +57,30 @@ const guard = (what, fn) => {
   }
 };
 
+// Speed check: press F to show frames per second, the slowest frame, and how long drawing takes.
+const meter = document.createElement('div');
+meter.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:50;font:bold 16px monospace;color:#fff;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:6px;display:none;pointer-events:none';
+document.body.appendChild(meter);
+addEventListener('keydown', (e) => (e.key === 'f' || e.key === 'F') && (meter.style.display = meter.style.display === 'none' ? 'block' : 'none'));
+let meterT = 0;
+let meterN = 0;
+let meterWorst = 0;
+let meterDraw = 0;
+const meterTick = (now, gap, drawMs) => {
+  meterN++;
+  meterWorst = Math.max(meterWorst, gap);
+  meterDraw += drawMs;
+  if (now - meterT < 1000) return;
+  if (meter.style.display !== 'none') meter.textContent = `${Math.round((meterN * 1000) / (now - meterT))} fps | slowest ${Math.round(meterWorst)} ms | draw ${(meterDraw / meterN).toFixed(1)} ms | ${canvas.width}x${canvas.height}`;
+  meterT = now;
+  meterN = 0;
+  meterWorst = 0;
+  meterDraw = 0;
+};
+
 function frame(now) {
   requestAnimationFrame(frame); // schedule the next frame first, whatever happens below
+  const gap = now - lastTime;
   const dt = Math.min(0.05, (now - lastTime) / 1000); // frame time for the camera
   const real = Math.min(config.LOOP.MAX_FRAME, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
@@ -75,7 +97,9 @@ function frame(now) {
   }
   guard('sound', () => sfx.update());
   const view = guard('camera', () => camera.update(paused ? 0 : dt, simulation.state, canvas.width, canvas.height));
+  const d0 = performance.now();
   if (view) guard('draw', () => renderer.renderFrame(now, view));
+  meterTick(now, gap, performance.now() - d0);
 }
 
 requestAnimationFrame(frame);
