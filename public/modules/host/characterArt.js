@@ -102,7 +102,7 @@ export function createCharacterArt({ ctx, sprites, drawItem }) {
       frontArm = -2.9;
     } else if (swingAge < 250) {
       frontArm = -2.7 + (swingAge / 250) * 2.2; // big overhead chop
-    } else if (p.carry === 'ammo' || p.carry === 'coal') {
+    } else if (p.carry === 'ammo' || p.carry === 'coal' || p.carry === 'ice') {
       frontArm = backArm = -1.1; // hugging a load
     } else if (p.carry || p.weapon) {
       frontArm = -0.6; // holding a tool ready

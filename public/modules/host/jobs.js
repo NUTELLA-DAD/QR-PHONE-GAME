@@ -16,6 +16,8 @@ const stationNamed = (n) => L.stations.find((s) => s.n === n);
 const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer' };
 export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', unclog: '#b6f06e', oxygen: '#bfe9ff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0', help: '#ff4d4d' };
 const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP' };
+TOOL.cool = 'ice'; // (GOING DOWN!: cooling the boiler wants a block of ice from the locker)
+JOB_COLORS.cool = '#9fdcff';
 
 // Name of the room (or deck) at a spot, for the label.
 const roomName = (d, x) => {
@@ -33,6 +35,8 @@ export function createJobFinder(state) {
 
   // Everything worth doing right now: { id (the thing), kind, d, x, label, urgency, max }.
   const list = (p) => {
+    const gdJobs = state.gdJobs && state.gdJobs(p); // GOING DOWN! (goingDown.js): while she falls, only the three emergency jobs matter
+    if (gdJobs) return gdJobs;
     const out = [];
     const add = (kind, obj, d, x, extra, label) => out.push({ kind, obj, d, x, urgency: J.URGENCY[kind], label: label || `${WORD[kind]} - ${roomName(d, x)}`, max: kind === 'fight' ? 2 : 1, ...extra });
     for (const b of state.boarders) if (!b.fall && b.hp > 0) { const s = spot(b); add('fight', b, s.d, b.x); }

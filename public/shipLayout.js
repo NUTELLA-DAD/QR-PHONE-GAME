@@ -176,6 +176,8 @@ export const SHIP_LAYOUT = {
     // Grappling hookshots (ATTACK fires, swing and launch across the sky): top deck and main deck.
     { kind: 'hookshot', p: 'catwalk', x: 1150 },
     { kind: 'hookshot', p: 'main', x: 960 },
+    // The ICE LOCKER, aft of the boiler (goingDown.js): take a block, throw it on the boiler to cool it. Drawn by goingDownArt.js.
+    { kind: 'ice', p: 'main', x: 285 },
   ]),
   extinguishers: withD([
     { p: 'lower', x: 1510 },
