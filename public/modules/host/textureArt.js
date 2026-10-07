@@ -35,6 +35,8 @@ export function loadTextures(ctx) {
   })();
 }
 
+const strength = () => Math.max(0, Math.min(4, Number(config.TEXTURES && config.TEXTURES.STRENGTH) || 1));
+
 export const hasTexture = (name) => on() && !!pats[name];
 
 // Fill the CURRENT path with the texture (overlay, so the flat colour underneath keeps its hue).
@@ -42,12 +44,16 @@ export function paintPath(ctx, name, alpha = 1) {
   try {
     const p = on() && pats[name];
     if (!p) return;
-    ctx.save();
-    ctx.globalCompositeOperation = 'overlay';
-    ctx.globalAlpha = alpha * (ctx.globalAlpha || 1);
-    ctx.fillStyle = p;
-    ctx.fill();
-    ctx.restore();
+    // STRENGTH: lay the (deliberately low-contrast) texture on this many times; 1.5 = once full, once at half.
+    const base = ctx.globalAlpha || 1;
+    for (let k = strength(); k > 0.01; k -= 1) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'overlay';
+      ctx.globalAlpha = alpha * base * Math.min(1, k);
+      ctx.fillStyle = p;
+      ctx.fill();
+      ctx.restore();
+    }
   } catch (e) { report(e); }
 }
 
@@ -55,11 +61,15 @@ export function paintRect(ctx, name, x, y, w, h, alpha = 1) {
   try {
     const p = on() && pats[name];
     if (!p) return;
-    ctx.save();
-    ctx.globalCompositeOperation = 'overlay';
-    ctx.globalAlpha = alpha * (ctx.globalAlpha || 1);
-    ctx.fillStyle = p;
-    ctx.fillRect(x, y, w, h);
-    ctx.restore();
+    // STRENGTH: lay the (deliberately low-contrast) texture on this many times; 1.5 = once full, once at half.
+    const base = ctx.globalAlpha || 1;
+    for (let k = strength(); k > 0.01; k -= 1) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'overlay';
+      ctx.globalAlpha = alpha * base * Math.min(1, k);
+      ctx.fillStyle = p;
+      ctx.fillRect(x, y, w, h);
+      ctx.restore();
+    }
   } catch (e) { report(e); }
 }

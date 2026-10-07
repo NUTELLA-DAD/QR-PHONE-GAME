@@ -1172,7 +1172,8 @@ export const config = {
   // Painted background images (art/backgrounds/<env>/sky|far|mid|near|cave .png) - see art/ART_PIPELINE.md.
   // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.
   // SCALE = size of one texture pixel in world units (the 512px tile covers 512*SCALE units; the airship is ~1500 wide).
-  TEXTURES: { ENABLED: true, SCALE: 1.1 },
+  // Painted textures on the ship and gunships. STRENGTH: how strongly they show (1 = subtle, 2 = clear, 3 = bold).
+  TEXTURES: { ENABLED: true, SCALE: 1.1, STRENGTH: 2 },
   BACKGROUNDS: {
     ENABLED: true,
     // How fast each strip slides past, as a share of the ship's speed (bigger = nearer). Same idea as the drawn ridges.
