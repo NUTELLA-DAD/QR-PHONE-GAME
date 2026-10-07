@@ -1400,6 +1400,11 @@ export const config = {
   // scaling) up to this cap; 1 = old soft look but lightest on slow computers.
   // SHARP (pause menu button, remembered on this computer) switches between 1 and SHARP_RATIO.
   DISPLAY: { MAX_PIXEL_RATIO: 1, SHARP_RATIO: 1.5 },
+  // Automatic detail (perf.js). When frames get slow (under MIN_FPS, or drawing over BUDGET_MS, for DROP_SECS) the game
+  // lowers detail one level (sharp screen, then textures/darkness resolution/background strips, then clouds and puffs);
+  // after RISE_SECS of comfortable speed it climbs back (a flip-flop doubles the wait, up to RISE_MAX_SECS).
+  // AUTO false = no automatic changes (the pause menu "Detail" button can still force a level).
+  PERF: { AUTO: true, BUDGET_MS: 12, MIN_FPS: 50, DROP_SECS: 2, RISE_SECS: 10, RISE_MAX_SECS: 160, DARK_RES_LOW: 6 },
   TEXTURES: { ENABLED: true, SCALE: 1.1, STRENGTH: 2 },
   BACKGROUNDS: {
     ENABLED: true,

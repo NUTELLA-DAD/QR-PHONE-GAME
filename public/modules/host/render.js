@@ -20,6 +20,7 @@ import { createBackgroundArt } from './backgroundArt.js';
 import { loadTextures } from './textureArt.js';
 import { envIdOf } from './environments.js';
 import { createSpotterArt } from './spotterArt.js';
+import { perfLowFx } from './perf.js';
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
 import { drawIceBlock, drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
@@ -325,10 +326,14 @@ export function createRenderer({ ctx, state, canvas }) {
       const p = t.at(0);
       if (!p || !Number.isFinite(p.x)) continue;
       const r = t.r * (1.9 + 0.2 * Math.sin(time * 6 + p.x * 0.01));
-      const g = ctx.createRadialGradient(p.x, p.y, t.r * 0.3, p.x, p.y, r);
-      g.addColorStop(0, 'rgba(255,60,80,.3)');
-      g.addColorStop(1, 'rgba(255,60,80,0)');
-      ctx.fillStyle = g;
+      if (perfLowFx()) {
+        ctx.fillStyle = 'rgba(255,60,80,.14)'; // (lowest detail: a flat glow, no gradient)
+      } else {
+        const g = ctx.createRadialGradient(p.x, p.y, t.r * 0.3, p.x, p.y, r);
+        g.addColorStop(0, 'rgba(255,60,80,.3)');
+        g.addColorStop(1, 'rgba(255,60,80,0)');
+        ctx.fillStyle = g;
+      }
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, 7);
       ctx.fill();
@@ -533,7 +538,10 @@ export function createRenderer({ ctx, state, canvas }) {
     drawPopups(view.zoom);
     drawEnemy(time);
     // Cartoon puffs: swell up, then shrink and fade, with an ink outline and a highlight.
+    const lowFx = perfLowFx(); // (lowest detail: every other puff, no highlight)
+    let puffN = 0;
     for (const puffItem of state.puffs) {
+      if (lowFx && (puffN++ & 1)) continue;
       const t = 1 - puffItem.life / puffItem.max;
       const r = 5 + 13 * Math.sin(Math.min(1, t * 1.6) * Math.PI * 0.5 + 0.15) * (1 - t * 0.45);
       ctx.globalAlpha = Math.max(0, 1 - t * t);
@@ -544,6 +552,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.strokeStyle = config.INK;
       ctx.lineWidth = 2.5;
       ctx.stroke();
+      if (lowFx) continue;
       ctx.fillStyle = 'rgba(255,255,255,.35)';
       ctx.beginPath();
       ctx.arc(puffItem.x - r * 0.3, puffItem.y - r * 0.3, r * 0.35, 0, 7);
@@ -1664,6 +1673,10 @@ export function createRenderer({ ctx, state, canvas }) {
     if (bgArt.draw(envIdOf(state), width, height, view, () => drawDrawnBackground(width, height, view))) return;
     drawDrawnBackground(width, height, view);
   };
+  let skyGrad = null;
+  let skyGradKey = '';
+  let hazeGrad = null;
+  let hazeGradH = -1;
   const drawDrawnBackground = (width, height, view) => {
     if (envArt.background(width, height, view)) return; // Frost Peaks / Ember Forge draw their own sky
     const s = height / config.H;
@@ -1678,12 +1691,18 @@ export function createRenderer({ ctx, state, canvas }) {
       const pc = rgb(c);
       return 'rgb(' + pa.map((v, i) => Math.round((v + (pb[i] - v) * dusk) * (1 - storm * 0.8) + pc[i] * storm * 0.8)).join(',') + ')';
     };
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    // Soft, faded colours (after Bomber XXL): dusty blue overhead, pale haze at the horizon.
-    gradient.addColorStop(0, mix('8fb3c9', '6a5a9c', '3a4048'));
-    gradient.addColorStop(0.7, mix('cfdde2', 'f4a46a', '6a6e72'));
-    gradient.addColorStop(1, mix('e3e6dc', 'e8865a', '585c60'));
-    ctx.fillStyle = gradient;
+    // (the sky gradient only changes with the screen height, dusk and storm: rebuilt only then, not every frame)
+    const skyKey = height + '|' + dusk.toFixed(3) + '|' + storm.toFixed(3);
+    if (skyKey !== skyGradKey || !skyGrad) {
+      const gradient = ctx.createLinearGradient(0, 0, 0, height);
+      // Soft, faded colours (after Bomber XXL): dusty blue overhead, pale haze at the horizon.
+      gradient.addColorStop(0, mix('8fb3c9', '6a5a9c', '3a4048'));
+      gradient.addColorStop(0.7, mix('cfdde2', 'f4a46a', '6a6e72'));
+      gradient.addColorStop(1, mix('e3e6dc', 'e8865a', '585c60'));
+      skyGrad = gradient;
+      skyGradKey = skyKey;
+    }
+    ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, width, height);
     skyArt.skyBack(width, height, view); // sun glow and god-rays
 
@@ -1694,10 +1713,13 @@ export function createRenderer({ ctx, state, canvas }) {
     drawRidge(width, height, view, 0.02, 0.86, 170, 0.003, '#c2d0d8', { snow: '#eef3f8' });
     drawRidge(width, height, view, 0.04, 0.9, 120, 0.004, '#b2c3cc');
     // Haze: distant hills fade into the sky.
-    const haze = ctx.createLinearGradient(0, height * 0.6, 0, height);
-    haze.addColorStop(0, 'rgba(225,232,232,0)');
-    haze.addColorStop(1, 'rgba(225,232,232,.45)');
-    ctx.fillStyle = haze;
+    if (hazeGradH !== height || !hazeGrad) {
+      hazeGrad = ctx.createLinearGradient(0, height * 0.6, 0, height);
+      hazeGrad.addColorStop(0, 'rgba(225,232,232,0)');
+      hazeGrad.addColorStop(1, 'rgba(225,232,232,.45)');
+      hazeGradH = height;
+    }
+    ctx.fillStyle = hazeGrad;
     ctx.fillRect(0, height * 0.6, width, height * 0.4);
     drawCloudBand(width, height, view, 0.06, 0.66, 70, 'rgba(255,255,255,.35)');
     // High thin clouds.

@@ -8,6 +8,7 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { darkTarget } from './searchlight.js';
+import { perfDarkRes } from './perf.js';
 
 const S = config.SEARCHLIGHT;
 const D = S.DARK;
@@ -134,6 +135,7 @@ export function createSearchlightArt({ ctx, state, ink }) {
   // ---- The darkness ----
   let off = null;
   let octx = null;
+  let shipGlowGrad = null;
   let dark = 0; // smoothed
   let lastTime = 0;
 
@@ -173,7 +175,7 @@ export function createSearchlightArt({ ctx, state, ink }) {
 
     // 1. The dark itself, with light cut out of it.
     if (alphaDark > 0.01) {
-      const RES = D.RES;
+      const RES = perfDarkRes(D.RES); // (coarser when the perf governor has stepped down)
       const w = Math.ceil(width / RES);
       const h = Math.ceil(height / RES);
       if (!off) {
@@ -199,14 +201,17 @@ export function createSearchlightArt({ ctx, state, ink }) {
         octx.setTransform(shipM.a * q, shipM.b * q, shipM.c * q, shipM.d * q, shipM.e * q, shipM.f * q);
         octx.translate(D.SHIP_GLOW_CX, D.SHIP_GLOW_CY);
         octx.scale(D.SHIP_GLOW_RX, D.SHIP_GLOW_RY);
-        const sg = octx.createRadialGradient(0, 0, 0, 0, 0, 1);
-        const G = D.SHIP_GLOW;
-        sg.addColorStop(0, 'rgba(0,0,0,1)');
-        sg.addColorStop(0.62, 'rgba(0,0,0,1)');
-        sg.addColorStop(0.78, `rgba(0,0,0,${(G * 0.8).toFixed(3)})`);
-        sg.addColorStop(0.9, `rgba(0,0,0,${(G * 0.35).toFixed(3)})`);
-        sg.addColorStop(1, 'rgba(0,0,0,0)');
-        octx.fillStyle = sg;
+        if (!shipGlowGrad) { // (the same every frame: built once; a gradient works on any transform)
+          const sg = octx.createRadialGradient(0, 0, 0, 0, 0, 1);
+          const G = D.SHIP_GLOW;
+          sg.addColorStop(0, 'rgba(0,0,0,1)');
+          sg.addColorStop(0.62, 'rgba(0,0,0,1)');
+          sg.addColorStop(0.78, `rgba(0,0,0,${(G * 0.8).toFixed(3)})`);
+          sg.addColorStop(0.9, `rgba(0,0,0,${(G * 0.35).toFixed(3)})`);
+          sg.addColorStop(1, 'rgba(0,0,0,0)');
+          shipGlowGrad = sg;
+        }
+        octx.fillStyle = shipGlowGrad;
         octx.fillRect(-1, -1, 2, 2);
       }
       octx.setTransform(q, 0, 0, q, 0, 0);

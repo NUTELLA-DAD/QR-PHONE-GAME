@@ -2,7 +2,7 @@
 // QR code, add/remove bots, difficulty, sound, next map, restart. While it's open the game is
 // paused. It also shows the last problem the game hit (if any), to help track bugs down.
 import { config } from '../../config.js';
-export function createMenu({ simulation, network, onPause }) {
+export function createMenu({ simulation, network, onPause, perf }) {
   const el = document.getElementById('menu');
   const $ = (id) => document.getElementById(id);
   let open = false;
@@ -14,6 +14,7 @@ export function createMenu({ simulation, network, onPause }) {
     $('mCode').textContent = $('code').textContent;
     $('mUrl').textContent = $('url').textContent;
     $('mCount').textContent = $('count').textContent;
+    if (perf) $('mDetail').textContent = perf.label();
     const errs = window.gameErrors || [];
     $('mErr').textContent = errs.length ? 'Last problem (the game kept going): ' + errs[errs.length - 1] : '';
   };
@@ -54,6 +55,16 @@ export function createMenu({ simulation, network, onPause }) {
     try { localStorage.setItem('airshipSharp', sharp ? '1' : '0'); } catch { /* (not remembered) */ }
     if (window.fitCanvas) window.fitCanvas();
     sharpLabel();
+  };
+  // Detail: Auto (the game lowers/raises detail by itself, shows the current level) / High / Medium / Low.
+  const detailLabel = () => {
+    if (perf) $('mDetail').textContent = perf.label();
+  };
+  detailLabel();
+  $('mDetail').onclick = () => {
+    if (!perf) return;
+    perf.cycleMode();
+    detailLabel();
   };
   $('mSound').onclick = () => {
     $('sound').click();
