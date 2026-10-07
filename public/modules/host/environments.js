@@ -12,6 +12,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { floorBelow } from './maps.js';
 import { createDeepEnv } from './envDeep.js'; // Fungal Depths (spores, clogged engines) and The Aether (low gravity, oxygen)
+import { createStormSea } from './envStormSea.js'; // Storm Front + Sunken Sea rules
 
 const P = SHIP_LAYOUT.platforms;
 const IDX = (id) => P.findIndex((p) => p.id === id);
@@ -58,11 +59,12 @@ export const favour = (state, kind) => {
   return f && f[kind] != null ? f[kind] : 1;
 };
 
-export function createEnvironment({ state, puff, phoneFx }) {
+export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) {
   state.icing = []; // ice crusts: { area: 'gasbag'|'topdeck'|'gun', gun?, x, d, lvl, prog }
   state.ice = { gasbag: 0, topdeck: 0, guns: 0 }; // how iced each area is (0-1)
-  state.env = { id: 'skyisles', sink: 0, lift: 0, wind: 0, blizzard: 0, smoke: 0, heat: 0, burn: 0, lavaY: null, thermalAt: 0, gravity: 1, engine: 1, accel: 1, o2: 1, lack: 0 };
+  state.env = { id: 'skyisles', sink: 0, lift: 0, wind: 0, blizzard: 0, smoke: 0, heat: 0, burn: 0, lavaY: null, thermalAt: 0, gravity: 1, engine: 1, accel: 1, o2: 1, lack: 0, drag: 0, gale: 0 };
   const deep = createDeepEnv({ state, puff, phoneFx: phoneFx || (() => {}) });
+  const ss = createStormSea({ state, puff, impact, damageHull }); // storm + sea rules (envStormSea.js)
   const CAT = IDX('catwalk');
   const LOWER = IDX('lower');
   const GUN_SPOTS = ['Tail Gun', 'Nose Gun', 'Dorsal Gun', 'Aft Dorsal Gun'].map((n) => {
@@ -81,7 +83,8 @@ export function createEnvironment({ state, puff, phoneFx }) {
   const clear = () => {
     state.icing.length = 0;
     Object.assign(state.ice, { gasbag: 0, topdeck: 0, guns: 0 });
-    Object.assign(state.env, { sink: 0, lift: 0, wind: 0, blizzard: 0, smoke: 0, heat: 0, burn: 0, lavaY: null });
+    Object.assign(state.env, { sink: 0, lift: 0, wind: 0, blizzard: 0, smoke: 0, heat: 0, burn: 0, lavaY: null, drag: 0, gale: 0 });
+    ss.clear();
     blizzLeft = smokeLeft = burnT = 0;
     warned = { blizzard: false, thermal: false, burn: false };
     deep.clear();
@@ -258,6 +261,8 @@ export function createEnvironment({ state, puff, phoneFx }) {
       lavaUpdate(dt, F, flying);
       smokeUpdate(dt, F, flying);
     } else if (id === 'fungal' || id === 'aether') deep.update(dt, id, flying);
+    else if (id === 'storm') ss.storm(dt, config.ENVIRONMENTS.storm, flying);
+    else if (id === 'sea') ss.sea(dt, config.ENVIRONMENTS.sea, flying);
   };
 
   // ---- ice, as the rest of the game asks about it ----
@@ -270,5 +275,5 @@ export function createEnvironment({ state, puff, phoneFx }) {
     if (i >= 0) state.icing.splice(i, 1);
   };
 
-  return { update, gunIce, gunJammed, gunCooldownMul, chip, clear, deep };
+  return { update, gunIce, gunJammed, gunCooldownMul, chip, clear, deep, stormSea: ss };
 }

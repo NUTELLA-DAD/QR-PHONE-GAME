@@ -449,6 +449,7 @@ export const config = {
     GUNSHIP_BOARDED: 45, // a gunship blown up by a boarding party
     GUNSHIP_SHOT: 15, // a gunship shot down
     BOSS: 70,
+    RESCUE: 12, // each survivor winched out of the Sunken Sea
     MISSION: 30, // bonus for finishing a mission (plus the stop's own reward)
   },
   // The SKY-DOCK shop between missions.
@@ -485,8 +486,8 @@ export const config = {
       skyisles: { name: 'Sky Isles', icon: '🏝️', color: '#7fb6d9', ready: true },
       frost: { name: 'Frost Peaks', icon: '❄️', color: '#bfe3f0', ready: true },
       ember: { name: 'Ember Forge', icon: '🌋', color: '#e0713a', ready: true },
-      storm: { name: 'Storm Front', icon: '⛈️', color: '#6a6f9a', ready: false },
-      sea: { name: 'Sunken Sea', icon: '🌊', color: '#3f8fa6', ready: false },
+      storm: { name: 'Storm Front', icon: '⛈️', color: '#6a6f9a', ready: true },
+      sea: { name: 'Sunken Sea', icon: '🌊', color: '#3f8fa6', ready: true },
       fungal: { name: 'Fungal Depths', icon: '🍄', color: '#8a6fb0', ready: true },
       aether: { name: 'The Aether', icon: '🌌', color: '#4b3f7a', ready: true },
     },
@@ -785,6 +786,93 @@ export const config = {
     DEFAULT: 'skyisles',
     FORCE: null,
     skyisles: { name: 'Sky Isles', favour: { swarm: 1, imps: 1, bombers: 1, strafers: 1, gunship: 1 } },
+    // STORM FRONT: dark slate cloud and rain. Wind gusts shove the ship; lightning CHARGES for a few seconds
+    // (warning) and strikes the top deck unless a crew member holds Action at a lightning rod (grounded).
+    // A manned Lightning Coil drinks a grounded bolt (instantly full charge). (rules: envStormSea.js)
+    storm: {
+      name: 'Storm Front',
+      favour: { swarm: 0.6, imps: 0.6, bombers: 0.7, strafers: 2.6, gunship: 1 }, // storm riders (dogfighters)
+      sky: ['1c2230', '3a4660', '6d7a90'], sun: '150,170,205', ridgeHaze: '70,82,104',
+      rock: '#566176', rockStripes: ['rgba(14,18,30,.3)', 'rgba(170,190,225,.16)'], rockHaze: 'rgba(80,92,116,.22)',
+      rim: 'rgba(190,210,240,.55)', edgeDark: '#3a4558', edgeLight: '#8fa6c8',
+      cave: ['#161c2a', '#2f3a52'], pillar: '10,14,24', fog: '84,96,120', shaft: '170,190,230',
+      ridges: [
+        { f: 0.02, base: 0.86, amp: 190, freq: 0.003, color: '#46526a', snow: null },
+        { f: 0.045, base: 0.92, amp: 130, freq: 0.004, color: '#363f55', snow: null },
+        { f: 0.1, base: 0.98, amp: 100, freq: 0.007, color: '#262d40', snow: null },
+      ],
+      strafer: { body: '#4a5676', trim: '#d8e24a' }, // storm riders
+      WEATHER: { // overrides of config.STORM while the mission is a Storm Front (weather.js)
+        STRIKE_CHANCE: 0, // (the rod system below makes the strikes)
+        GUST_EVERY_MIN: 8, GUST_EVERY_MAX: 14, GUST_TIME: 2.0, GUST_MIN: 45, GUST_MAX: 90, // up/down shove (px/s of altitude)
+        BOLT_EVERY_MIN: 2.5, BOLT_EVERY_MAX: 5, // frequent flashes (distant bolts)
+      },
+      WIND: 90, // px/s the gust also shoves the ship along the course (forward or back)
+      RAIN: { COUNT: 150, SLANT: 30, WIND_SLANT: 0.9, ALPHA: 0.5 }, // rain slants by the wind
+      ROD: {
+        SPOTS: [{ p: 'catwalk', x: 450 }, { p: 'catwalk', x: 1130 }], // lightning rods on the top deck (either one held grounds a bolt)
+        FIRST: 24, EVERY_MIN: 24, EVERY_MAX: 36, // seconds before the first strike warning, then between them
+        WARN: 4.5, // seconds a bolt charges before it hits
+        HOLD_GRACE: 0.3, // a rod counts as held this long after the last frame the button was down
+        POWER: 1.3, // how hard an un-grounded strike hits (1 = one enemy bullet): module damage, dents
+        MAX_FIRES: 6, // an un-grounded strike starts a fire unless this many burn already
+      },
+    },
+    // SUNKEN SEA: an ocean at the bottom of every map. Skimming it scrapes the hull and floods the lower deck
+    // (pump it out at the Bilge Pump). Waterspouts pull the ship in. Survivors bob on wreckage: fly low, a
+    // crew member holds Action at the winch in the bomb bay to haul them up for salvage. (rules: envStormSea.js)
+    sea: {
+      name: 'Sunken Sea',
+      favour: { swarm: 0.8, imps: 0.7, bombers: 2.0, strafers: 0.9, gunship: 1 }, // bombers (flak ships later)
+      sky: ['4d93b8', 'a6d3e0', 'e9f4ee'], sun: '255,246,214', ridgeHaze: '196,226,230',
+      rock: '#5d6b66', rockStripes: ['rgba(14,30,34,.26)', 'rgba(220,240,230,.2)'], rockHaze: 'rgba(160,205,215,.22)',
+      rim: 'rgba(230,248,240,.65)', edgeDark: '#6f7f6e', edgeLight: '#d9e8b4',
+      cave: ['#2a4650', '#5a8a92'], pillar: '16,34,40', fog: '190,224,230', shaft: '230,248,255',
+      ridges: [
+        { f: 0.02, base: 0.86, amp: 150, freq: 0.003, color: '#7fb0b8', snow: null },
+        { f: 0.045, base: 0.92, amp: 110, freq: 0.004, color: '#5f98a2', snow: null },
+        { f: 0.1, base: 0.98, amp: 90, freq: 0.007, color: '#437a86', snow: null },
+      ],
+      SEA: {
+        PATH_PCT: 0.92, // the surface is set from the route the ship flies: this share of the route is higher than the waves' skim line...
+        MARGIN: 150, // ...plus this much clearance (px) - so the lowest ~40% of the route dips the keel in the water if the helm follows it exactly
+        OPEN_SHARE: 0.5, ROWS_MIN: 3, ROWS_MAX: 40, // (fallback if a map has no route) the surface sits where this share of columns has open sky below; always 3-40 map rows (200 px each) deep
+        KEEL: 420, // the ship's underside is this far below her reference point (px)
+        SKIM: 25, // the keel touches the waves this far above the surface (px)
+        COLOR: ['#3fa3bd', '#1f6f8f', '#0e3d5a'], FOAM: '#f4fbff', WAVE_AMP: 14, // wave height (px; waves roll along fixed positions)
+        WRECKS: { EVERY: 2600, CHANCE: 0.45 }, // sunken hulls poking out of the water, on a fixed grid
+        GULLS: 7, // gulls wheeling over the water
+      },
+      FLOOD: {
+        RATE: 0.11, // flood level (0-1) gained per second while the keel is in the water
+        SCRAPE_EVERY: 2, SCRAPE_HULL: 0.6, // seconds between scrapes while in the water, and hull damage each
+        PUMP_X: 760, PUMP_RATE: 0.2, // the Bilge Pump (lower deck): flood level pumped out per second while someone holds Action
+        DRAIN: 0.003, // the water seeps out slowly by itself
+        SINK: 9, // a fully flooded ship needs this many more gas points to hover (she sinks)
+        SLOW_SHIP: 0.4, // ...and loses this share of her speed
+        SLOW_CREW: 0.55, // crew on the lower decks lose this share of walking speed when fully flooded
+        CRITICAL: 0.9, CRITICAL_HULL: 0.8, // above this level she is breaking up: hull damage per second
+        JOB_AT: 0.12, // flooding above this shows up as a job on idle phones and for the bots
+      },
+      SPOUT: {
+        EVERY: 4200, CHANCE: 0.6, // a waterspout every so far along the map (px) on average, by chance
+        SWAY: 450, // they wander this far from their spot (px, slowly)
+        RANGE: 800, // pulls the ship within this distance (px)...
+        PULL: 110, // ...up to this many px per second (at the core)
+        HEIGHT: 950, // only reaches ships whose keel is within this height above the water (px)
+        CORE: 70, // radius of the spinning core (px)
+        HIT_EVERY: 8, POWER: 0.6, // the core batters the ship if she is dragged into it
+      },
+      RESCUE: {
+        EVERY: 3300, CHANCE: 0.8, // survivors on wreckage: one every so far (px) on average, by chance
+        CATCH: 130, // the rope catches a survivor within this sideways distance of the bomb bay doors (px)
+        ROPE: 520, // ...if they are this far or less below the doors (px)
+        SLACK: 1300, // the rope slips when the ship has moved this far past them
+        SPOT: 1500, // the crew is told about survivors this far ahead (px)
+        WINCH_X: 420, TIME: 1.6, // where the winch is (bomb bay) and seconds of holding Action to haul one in
+        PROG_DECAY: 0.4, // winding progress lost per second when nobody works the winch
+      },
+    },
     // FROST PEAKS: ice builds up on the gasbag, top deck and guns. Chip it off with the hammer.
     frost: {
       name: 'Frost Peaks',
@@ -1047,7 +1135,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, repair: 1.1, ammo: 1, coal: 1 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

@@ -128,6 +128,23 @@ function beamDodge(state) {
   return null;
 }
 
+// Sunken Sea: the altitude that puts the bomb-bay rope just above the next survivor ahead (null = none worth a dip).
+function rescueAltitude(state) {
+  const s = state.sea;
+  const c = state.course;
+  if (!s || !c || !c.map || s.y == null || state.env.id !== 'sea' || state.ship.hull < 40 || s.flood > 0.5) return null;
+  const R = config.ENVIRONMENTS.sea.RESCUE;
+  const bx = c.dist + SHIP_LAYOUT.bombBay.x;
+  for (const sv of s.survivors) {
+    if (sv.saved || sv.lost) continue;
+    const dx = sv.mx - bx;
+    if (dx < -R.CATCH || dx > R.SPOT) continue;
+    const ropeAbove = 425; // the doors hang this far below the ship's reference point
+    return 500 - (sv.y - R.ROPE * 0.45 - ropeAbove); // alt = 500 - refY, and refY = (rope height) - 425
+  }
+  return null;
+}
+
 function dodgeAltitude(state) {
   const R = config.MINES.RADIUS;
   let soonest = null;
@@ -152,7 +169,14 @@ function listJobs(state, bot) {
   const mods = state.modules || [];
   // Nobody at the wheel in flight is the worst emergency of all: someone takes the helm first.
   if (state.phase === 'flying' && !players.some((q) => q.lock === 'Helm') && !mods.some((m) => m.name === 'Helm' && m.broken)) jobs.push({ kind: 'station', obj: 'Helm', max: 1 });
+  // Storm Front: a bolt is charging - one crew member holds a lightning rod (grounds it, the coil may drink it).
+  const sj = state.stormJob;
+  if (sj && sj.charge && !players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'rod' && !q.lock)) for (const r of sj.rods) jobs.push({ kind: 'rod', obj: r, max: 1 });
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2 });
+  // Sunken Sea: pump out a flooded hull (an emergency), winch up a survivor on the rope (a salvage bonus).
+  const sea = state.sea;
+  if (sea && sea.pump && sea.flood > config.ENVIRONMENTS.sea.FLOOD.JOB_AT) jobs.push({ kind: 'pump', obj: sea.pump, max: 1 });
+  if (sea && sea.winch) jobs.push({ kind: 'winch', obj: sea.winch, max: 1 });
   // A gasbag shot full of holes sinks the ship: patching it comes before swatting and repairs.
   if ((state.gasHoles || []).length >= B.GAS_EMERGENCY) for (const h of state.gasHoles) jobs.push({ kind: 'patch', obj: h, max: 1 });
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
@@ -229,7 +253,7 @@ function listJobs(state, bot) {
 }
 
 function isEmergency(job) {
-  return job.kind !== 'ammo' && job.kind !== 'station' && job.kind !== 'coal' && !(job.kind === 'repair' && !job.obj.broken);
+  return job.kind !== 'ammo' && job.kind !== 'station' && job.kind !== 'coal' && job.kind !== 'winch' && !(job.kind === 'repair' && !job.obj.broken);
 }
 
 function chooseJob(state, bot, bots) {
@@ -285,12 +309,15 @@ function operate(p, state, dt) {
     if (lo > hi || Math.abs(plan.target - ship.alt) > 120) target = plan.target;
     else if (dodge !== null && dodge > lo && dodge < hi) target = dodge;
     else if (ship.alt < lo + 15 || ship.alt > hi - 15) target = plan.target;
+    // Sunken Sea: a survivor in the water ahead - dip to rope height (only if the terrain window allows it).
+    const dip = rescueAltitude(state);
+    if (dip !== null && lo <= hi && dip > lo && dip < hi && (target === null || target === plan.target)) target = dip;
     // (Gentle enough not to overshoot now that she glides with momentum.)
     if (target !== null) p.jy = clamp((ship.alt - target) / 90 + (ship.vy || 0) / 260, -1, 1);
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
     else p.jy = 0;
     // The PRESSURE lever: pump or vent the gasbag toward the altitude the plan wants.
-    p.gas = gasFor(state, beamDodge(state) ?? plan.target);
+    p.gas = gasFor(state, beamDodge(state) ?? (dip !== null && target === dip ? dip : plan.target));
   } else if (p.lock === 'Lightning Coil') {
     // Aim at the thickest bunch of enemies and charge while lined up.
     const shot = coilShot(state);
@@ -401,6 +428,9 @@ function work(p, state) {
         p.whackCd = B.WHACK_EVERY;
       }
     }
+  } else if (job.kind === 'rod' || job.kind === 'pump' || job.kind === 'winch') {
+    // Stand at the rod / bilge pump / winch and hold Action (the job drops away once it is done).
+    if (steer(p, o.d, o.x, 15)) p.fire = true;
   } else if (job.kind === 'vent') {
     // Walk to the vent and flip it.
     if (steer(p, o.d, o.x, 10)) press(p);
@@ -478,7 +508,9 @@ export function updateBot(p, state, dt) {
       if (gunUseless) p.gunIdle = 0;
       // Never wander off the helm while there's terrain to steer through.
       if (p.lock === 'Helm' && config.COURSE.ENABLED) p.lockLeft = Math.max(p.lockLeft, 1);
-      if (p.lockLeft <= 0 || gunUseless || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
+      // A lightning bolt is charging and nobody is on their way to a rod: leave the station (not the helm).
+      const rodCall = p.lock !== 'Helm' && state.stormJob && state.stormJob.charge && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9;
+      if (p.lockLeft <= 0 || gunUseless || rodCall || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;
         p.lockLeft = undefined;
         p.botJob = null;

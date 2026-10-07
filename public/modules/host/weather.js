@@ -2,8 +2,9 @@
 // has to fight them), and lightning that sometimes strikes the ship.
 import { config } from '../../config.js';
 import { altBounds } from './course.js';
+import { envIdOf } from './environments.js';
 
-const S = config.STORM;
+let S = config.STORM; // (a Storm Front mission overrides some numbers: config.ENVIRONMENTS.storm.WEATHER)
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createWeather({ state, impact, puff }) {
@@ -17,6 +18,7 @@ export function createWeather({ state, impact, puff }) {
   const stormWanted = () => {
     const c = state.course;
     if (!c || state.phase !== 'flying') return 0;
+    if (envIdOf(state) === 'storm') return 1; // Storm Front: the whole mission is a storm
     for (const z of S.ZONES) {
       if (c.lap >= z.fromLap && c.progress > z.from && c.progress < z.to) return Math.min(1, 0.6 + 0.2 * (c.lap - z.fromLap));
     }
@@ -24,6 +26,7 @@ export function createWeather({ state, impact, puff }) {
   };
 
   const update = (dt) => {
+    S = envIdOf(state) === 'storm' ? { ...config.STORM, ...config.ENVIRONMENTS.storm.WEATHER } : config.STORM;
     const w = state.weather;
     const want = stormWanted();
     w.storm += (want - w.storm) * Math.min(1, dt * 0.5);
@@ -37,9 +40,11 @@ export function createWeather({ state, impact, puff }) {
     if (want === 0) announced = false;
     if (w.storm < 0.15 || state.ship.down) {
       w.gust = 0;
+      w.gusting = false;
       return;
     }
     // Wind gusts push the ship's altitude.
+    w.gusting = gustLeft > 0; // (envStormSea.js shoves her along as well)
     if (gustLeft > 0) {
       gustLeft -= dt;
       state.ship.alt += w.gust * w.storm * dt;

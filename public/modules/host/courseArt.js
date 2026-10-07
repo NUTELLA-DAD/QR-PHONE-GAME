@@ -153,6 +153,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt }) {
       }
     }
     if (envArt && by1 > by0) envArt.lava(view, width, height, map, { x0: bx0, x1: bx1, y0: by0, y1: by1 }); // Ember Forge: lava (drawn under the rock)
+    if (envArt && by1 > by0) envArt.sea(view, width, height, map, { x0: bx0, x1: bx1, y0: by0, y1: by1 }); // Sunken Sea: the ocean (drawn under the rock)
     if (skyArt) skyArt.fogBack(view, width, height); // fog banks behind the rock
     ctx.fillStyle = 'rgba(70,60,80,.5)';
     for (let i = i0; i <= i1 && false; i += 3) {
@@ -247,7 +248,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt }) {
     ctx.stroke();
     // (Tufts on floors - off in the simple style.)
     // Open sky: pine trees on the hills.
-    if (map.open && !['ember', 'fungal', 'aether'].includes(envIdOf(state))) {
+    if (map.open && !['ember', 'fungal', 'aether', 'sea'].includes(envIdOf(state))) {
       ink();
       ctx.lineWidth = 2.8;
       for (const [[ax, ay], [bx2, by2], i, j] of floors) {

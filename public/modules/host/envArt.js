@@ -7,6 +7,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { envIdOf, envOf, lavaLevel } from './environments.js';
 import { createDeepArt } from './envDeepArt.js'; // Fungal Depths and The Aether
+import { createStormSeaArt } from './envArtStormSea.js'; // Storm Front + Sunken Sea look
 
 const hash = (i, salt = 0) => {
   const v = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
@@ -20,6 +21,7 @@ const rgb = (hex) => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
 export function createEnvArt({ ctx, state, ink }) {
   let now = 0;
   const deepArt = createDeepArt({ ctx, state, ink });
+  const ssArt = createStormSeaArt({ ctx, state, ink, time: () => now });
   const GB = SHIP_LAYOUT.gasbag;
   const P = SHIP_LAYOUT.platforms;
   const isOther = () => envIdOf(state) !== config.ENVIRONMENTS.DEFAULT;
@@ -91,6 +93,7 @@ export function createEnvArt({ ctx, state, ink }) {
     if (!isOther() || !(width > 0) || !(height > 0)) return false;
     const deepDone = deepArt.background(width, height, view); // Fungal Depths / The Aether (null = not theirs)
     if (deepDone !== null) return deepDone;
+    if (ssArt.background(width, height, view)) return true; // Storm Front / Sunken Sea draw their own sky (envArtStormSea.js)
     try {
       const e = E();
       const g = ctx.createLinearGradient(0, 0, 0, height);
@@ -218,6 +221,7 @@ export function createEnvArt({ ctx, state, ink }) {
       const dd = num(state.course.dist);
       const e = E();
       const en = env();
+      if (ssArt.front(view, width, height, time)) return; // Storm Front / Sunken Sea weather and life
       if (envIdOf(state) === 'frost') {
         const S = e.SNOW;
         const n = Math.round(S.COUNT * (1 + (e.BLIZZARD.SNOW_MUL - 1) * en.blizzard));
@@ -371,5 +375,5 @@ export function createEnvArt({ ctx, state, ink }) {
     }
   };
 
-  return { setTime: (t) => { now = num(t); deepArt.setTime(t); }, background, lava, worldFront, drawIce, terrain: deepArt.terrain, drawDeep: deepArt.drawShip };
+  return { setTime: (t) => { now = num(t); deepArt.setTime(t); }, background, lava, worldFront, drawIce, terrain: deepArt.terrain, drawDeep: deepArt.drawShip, sea: ssArt.sea, drawShip: () => ssArt.ship(now) };
 }

@@ -8,7 +8,7 @@ const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') {
-    console.log('node tools/botsim.mjs [--bots 8] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether] [--seed N]');
+    console.log('node tools/botsim.mjs [--bots 8] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N]');
     process.exit(0);
   } else if (a.startsWith('--') && a.slice(2) in args) {
     const v = argv[++i];
@@ -86,6 +86,7 @@ const missionMins = []; let missionStartStep = 0;
 // Steam stats while flying: pressure sum, steps under 35 / over 70 / over 90, blowouts, steps in overdrive.
 let pSum = 0, pN = 0, pLow = 0, pOver70 = 0, pOver90 = 0, blowouts = 0, leakSteps = 0, lastPress = state.ship.press;
 let sporeCloudSteps = 0, sporedSteps = 0, clogSum = 0, clogMax = 0, engSum = 0, o2Sum = 0, o2Min = 1, lackSteps = 0, gasSum = 0, gasMax = 0, crewSteps = 0, envN = 0, iceG = 0, iceD = 0, iceGun = 0, iceMax = 0, sinkSum = 0, thermalSteps = 0, burnSteps = 0, heatSum = 0, climbSum = 0, climbN = 0, blizSteps = 0, smokeSteps = 0, fireSum = 0, fireMax = 0;
+let gapSum = 0, gapMin = 1e9, seaSteps = 0, floodSum = 0, floodHigh = 0, wetSteps = 0, galeSteps = 0;
 const t0 = realNow();
 
 for (let step = 1; step <= totalSteps; step++) {
@@ -126,6 +127,8 @@ for (let step = 1; step <= totalSteps; step++) {
     { let any = 0, n = 0; for (const q of Object.values(state.players)) { n++; if ((q.sporeT || 0) > 0) any++; } sporedSteps += any; crewSteps += n; }
     { const cl = Math.max(...(state.clogs || [{ lvl: 0 }]).map((c) => c.lvl)); clogSum += cl; clogMax = Math.max(clogMax, cl); engSum += E.engine; }
     o2Sum += E.o2; o2Min = Math.min(o2Min, E.o2); if (E.lack > 0) lackSteps++;
+    if (args.env === 'sea' && state.course && state.course.map && E.seaY != null) { const gp = E.seaY - ((state.course.refY ?? 500 - state.ship.alt) + config.ENVIRONMENTS.sea.SEA.KEEL); gapSum += gp; gapMin = Math.min(gapMin, gp); }
+    seaSteps++; floodSum += state.sea.flood; if (state.sea.flood > 0.3) floodHigh++; if (state.sea.spray > 0.5) wetSteps++; if (E.gale > 0.3) galeSteps++;
     if (E.blizzard > 0.3) blizSteps++; if (E.smoke > 0.3) smokeSteps++; fireSum += state.fires.length; fireMax = Math.max(fireMax, state.fires.length);
   }
   // Wreck sequence ends in the lobby: count it and cast off again.
@@ -165,6 +168,8 @@ if (args.env === 'frost' || args.env === 'ember') {
   if (args.env === 'fungal') console.log(`fungal: spore cloud aboard ${pe(sporeCloudSteps)} of flight, crew in spores ${crewSteps ? ((100 * sporedSteps) / crewSteps).toFixed(1) : 'n/a'}% of crew-time; worst engine clog avg ${av(clogSum)} peak ${clogMax.toFixed(2)}; engine power avg ${av(engSum)}; clogs cleared ${sum('clears')}`);
   if (args.env === 'aether') console.log(`aether: oxygen avg ${av(o2Sum)} min ${o2Min.toFixed(2)}, short of air ${pe(lackSteps)} of flight; oxygen refills ${sum('oxygen')}; engine x${state.env.engine}, gravity x${state.env.gravity}`);
 }
+if (args.env === 'storm') console.log(`storm: strikes grounded ${state.stormJob.caught}, struck the ship ${state.stormJob.struck}, coil drank ${state.stormJob.drank}; gusting ${seaSteps ? ((100 * galeSteps) / seaSteps).toFixed(1) : 'n/a'}% of flight`);
+if (args.env === "sea") console.log(`sea (this map: ${state.sea.survivors.length} survivors, ${state.sea.survivors.filter((q) => q.lost).length} lost, ${state.sea.survivors.filter((q) => q.told).length} flagged, ${state.sea.spouts.length} spouts): rescues ${state.sea.rescued}, hull dmg scrape ${(state.sea.dmgScrape || 0).toFixed(0)} flood ${(state.sea.dmgCrit || 0).toFixed(0)} spout hits ${state.sea.spoutHits || 0}, pump held ${(state.sea.pumpTime || 0).toFixed(0)}s, scrapes ${state.sea.scrapes}, keel gap above water avg ${seaSteps ? (gapSum / seaSteps).toFixed(0) : 'n/a'} min ${gapMin.toFixed(0)} px; in the water ${seaSteps ? ((100 * wetSteps) / seaSteps).toFixed(1) : 'n/a'}% of flight, flood avg ${seaSteps ? (floodSum / seaSteps).toFixed(2) : 'n/a'} (over 0.3 for ${seaSteps ? ((100 * floodHigh) / seaSteps).toFixed(1) : 'n/a'}%, peak ${state.sea.floodMax.toFixed(2)})`);
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);
