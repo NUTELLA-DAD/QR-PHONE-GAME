@@ -48,6 +48,8 @@ app.get('/api/textures', (q, r) => {
 });
 app.get('/api/info', (q, r) => r.json({ base: BASE }));
 app.get('/qr', async (q, r) => r.type('image/svg+xml').send(await QR.toString(String(q.query.t || '').slice(0, 200), { type: 'svg', margin: 1 })));
+// The bare address: phones typing it in land on the join page (the TV uses /host.html).
+app.get('/', (q, r) => r.redirect('/controller.html'));
 app.get('/join/:code', (q, r) => r.redirect('/controller.html?code=' + encodeURIComponent(q.params.code)));
 
 const rooms = {}; // code -> { host, players: { token: {token,name,species,color,sid} } }
