@@ -2,7 +2,7 @@
 // QR code, add/remove bots, difficulty, sound, next map, restart. While it's open the game is
 // paused. It also shows the last problem the game hit (if any), to help track bugs down.
 import { config } from '../../config.js';
-export function createMenu({ simulation, network, onPause, perf }) {
+export function createMenu({ simulation, network, onPause, perf, music }) {
   const el = document.getElementById('menu');
   const $ = (id) => document.getElementById(id);
   let open = false;
@@ -10,6 +10,7 @@ export function createMenu({ simulation, network, onPause, perf }) {
   const sync = () => {
     $('mDifficulty').innerHTML = $('difficulty').innerHTML;
     $('mSound').textContent = $('sound').textContent;
+    $('mMusic').textContent = music && music.isOn() ? 'Music: on' : 'Music: off';
     $('mQr').src = $('qr').src;
     $('mCode').textContent = $('code').textContent;
     $('mUrl').textContent = $('url').textContent;
@@ -68,6 +69,10 @@ export function createMenu({ simulation, network, onPause, perf }) {
   };
   $('mSound').onclick = () => {
     $('sound').click();
+    sync();
+  };
+  $('mMusic').onclick = () => {
+    if (music) music.toggle();
     sync();
   };
   $('mNext').onclick = () => {

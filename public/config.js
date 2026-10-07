@@ -782,6 +782,24 @@ export const config = {
     VOLUME: 0.5,
     START_MUTED: false,
   },
+  // Background music loops (on the TV; music.js). Three CC0 tracks in public/audio/, picked from the game state:
+  // dock = lobby / sky-dock shop / route map / scorecard / run end, calm = flying while the director builds or rests,
+  // combat = a peak, a boss, a gunship alongside, or GOING DOWN. Also muted by the Sound button / M key.
+  MUSIC: {
+    ENABLED: true,
+    VOLUME: 0.45, // overall music loudness (0-1)
+    CROSSFADE: 2.5, // seconds to fade from one track to the next
+    MIN_HOLD: 8, // a calm/combat track stays on at least this many seconds before the other can take over
+    FILES: { dock: '/audio/dock-adventurers-rag.mp3', calm: '/audio/calm-treasure-hunter.mp3', combat: '/audio/combat-determined-pursuit.mp3' },
+    TRACK_GAIN: { dock: 1, calm: 1, combat: 1 }, // per-track level trim (the files are mastered at different loudness)
+    SILENCE: 0.01, // sample level below which the start/end of a file counts as silence (trimmed off the loop)
+    EDGE_RATIO: 0.3, // if the loop's first/last 0.25 s is quieter than this share of the track's average, it fades in/out
+    //   instead of looping cleanly, so that track is looped with a crossfade (LOOP_FADE) rather than a hard seam
+    LOOP_FADE: 1.5, // seconds of overlap at the loop point for such tracks
+    DUCK: 0.55, // music level (x) while a big warning banner is up...
+    DUCK_IN: 0.12, // ...how fast it dips (seconds, smaller = faster)...
+    DUCK_OUT: 0.9, // ...and comes back
+  },
   // Difficulty presets (button on the TV). damage = hull damage taken; pace = how often waves,
   // flak and enemy fire come (higher = busier).
   // A wrecked ship ends the run, so damage is kept gentle (multiplier on all hull damage).
