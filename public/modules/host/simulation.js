@@ -25,7 +25,7 @@ import { assistAim } from './aim.js';
 import { createPrime } from './prime.js';
 import { createLinks } from './links.js';
 import { createSpotter } from './spotter.js';
-import { UPGRADES } from './upgrades.js';
+import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { createGoingDown } from './goingDown.js';
 import { generateVoyage, stopById, stopName, envInfo, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
@@ -348,9 +348,9 @@ export function createSimulation() {
     else goToStop(run.stopId); // (the very first stop: just try it again)
   }
 
-  // Settings as they were at the start (upgrades change them during a run).
+  // The settings upgrades change, as they were at the start (only those blocks: see UPGRADE_BLOCKS).
   const copyData = (v) => (Array.isArray(v) ? v.map(copyData) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, copyData(x)])) : v);
-  const pristine = copyData(config);
+  const pristine = copyData(Object.fromEntries(UPGRADE_BLOCKS.map((b) => [b, config[b]])));
   const restoreData = (target, from) => {
     for (const [k, v] of Object.entries(from)) {
       if (v && typeof v === 'object' && !Array.isArray(v) && target[k] && typeof target[k] === 'object') restoreData(target[k], v);

@@ -122,6 +122,11 @@ export const UPGRADES = [
   },
 ];
 
+// The config blocks the upgrades above change. These (and only these) are put back to normal when a
+// new voyage starts (simulation.js restartGame); other settings, like the menu's Sharp picture, stay.
+// A new upgrade that changes another block must add it here (tools/upgradereset.mjs checks this).
+export const UPGRADE_BLOCKS = ['GUNS', 'SHIP', 'BOILER', 'GAS', 'TOOLS', 'FIRE', 'MODULES'];
+
 // Three different upgrades that can still be taken.
 export function pickOffer(taken) {
   const open = UPGRADES.filter((u) => (taken[u.id] || 0) < u.max);
