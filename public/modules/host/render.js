@@ -1815,7 +1815,7 @@ export function createRenderer({ ctx, state, canvas }) {
 
     // World layer, positioned by the camera.
     ctx.setTransform(view.zoom, 0, 0, view.zoom, width / 2 - view.cx * view.zoom, height / 2 - view.cy * view.zoom);
-    drawNearClouds(width, height, view);
+    if (!bgArt.has(envIdOf(state))) drawNearClouds(width, height, view); // (a painted background brings its own clouds)
     if (!(state.course && state.course.map)) skyArt.fogBack(view, width, height); // (caves draw it themselves)
     courseArt.drawTerrain(view, width, height);
     courseArt.drawBuildings(view, width, time / 1000);

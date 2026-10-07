@@ -57,19 +57,26 @@ export function createBackgroundArt({ ctx, state }) {
   // True if this environment has any painted sky or strip (the cave texture alone doesn't count).
   const has = (env) => !!(get(env, 'sky') || get(env, 'far') || get(env, 'mid') || get(env, 'near'));
 
-  // A tileable strip, scaled to the screen height, scrolling at `f` of the ship's travel.
-  const strip = (img, width, height, view, f) => {
+  // A tileable strip along the bottom of the screen (its height a share of the screen's, per layer),
+  // scrolling at `f` of the ship's travel. Far layers sit lower and paler so the sky and the action read.
+  const strip = (img, width, height, view, f, kind) => {
     const B = config.BACKGROUNDS;
+    const L = (B.LAYERS && B.LAYERS[kind]) || {};
     const over = Math.max(1, num(B.OVERSCAN, 1.1));
-    const h = height * over;
+    const share = Math.max(0.05, Math.min(1, num(L.HEIGHT, 1)));
+    const h = height * share * over;
     const tw = Math.max(1, Math.round((img.naturalWidth * h) / img.naturalHeight));
     const s = height / config.H;
     const shift = (num(view.scroll) + num(view.cx)) * f * s;
     // Camera high = picture shifts down a little, low = up (inside the spare height).
     const v = Math.max(-1, Math.min(1, (num(view.cy, config.H / 2) - config.H / 2) / config.H));
-    const y = Math.round(-(h - height) * (0.5 + v * 0.5));
+    const spare = h - height * share;
+    const y = Math.round(height - h + spare * (0.5 + v * 0.5));
     let x = -Math.floor(wrap(shift, tw));
+    const a = ctx.globalAlpha;
+    ctx.globalAlpha = a * Math.max(0, Math.min(1, num(L.ALPHA, 1)));
     for (; x < width; x += tw) ctx.drawImage(img, x, y, tw + 1, Math.round(h)); // (+1: overlap, no hairline seams)
+    ctx.globalAlpha = a;
   };
 
   // Draws the painted layers for env. `fallback` draws the normal drawn sky when there is no sky.png.
@@ -87,7 +94,7 @@ export function createBackgroundArt({ ctx, state }) {
       } else if (fallback) fallback();
       for (const kind of ['far', 'mid', 'near']) {
         const img = get(env, kind);
-        if (img) strip(img, width, height, view, num(config.BACKGROUNDS.PARALLAX[kind], 0.05));
+        if (img) strip(img, width, height, view, num(config.BACKGROUNDS.PARALLAX[kind], 0.05), kind);
       }
       return true;
     } catch (e) {
