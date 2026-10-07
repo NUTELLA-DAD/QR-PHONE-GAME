@@ -190,6 +190,22 @@ S is about half a day of agent work, M is 1-2 days and L is 3 days or more. Para
 | P1.5 | Music loops + director crossfade | S | sfx.js, public/audio/, simulation.js | needs audio |
 | P1.6 | Perf tier: auto-drop textures/darkness when draw time > 12 ms | M | render.js, searchlightArt.js, textureArt.js | **lands before Phase 2 art** |
 
+**Phase 1 status: DONE** (perf tier, fonts + logbook HUD, background fixes, linked stations, ship's mates, music).
+
+### Phase S - Modular ship building (alongside Phase 2)
+Start with a small ship ("the Sparrow") and add parts at each sky-dock: hull bays, decks, gasbags, engines, lift engines, nests, mounts.
+Proved by a building simulator. Full plan: **[SHIP_BUILDING.md](SHIP_BUILDING.md)**.
+
+Order:
+1. S.0 snapshot.
+2. S.1 layout-from-parts.
+3. S.2 and S.3, in parallel.
+4. S.4 (art bake) and S.5 (building simulator), in parallel.
+5. S.6 parts + Shipwright UI.
+6. S.7 balance.
+
+Do S.1 before P2.1 (both touch gunship.js), and S.7 after P2.2 (save schema).
+
 ### Phase 2 - Story and stickiness
 
 | # | Package | Size | Files |

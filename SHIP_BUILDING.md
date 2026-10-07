@@ -1,0 +1,226 @@
+# Phase S - Modular ship building (plan, written with Fable)
+
+**Owner's idea:** start with a basic ship. Between levels, choose what to add (another gasbag, a longer hull, another deck, a middle crow's nest, lift engines), so each voyage you build the ship you want. Prove it works with a **building simulator**.
+
+## 0. In one paragraph
+
+Today the ship is one fixed drawing: every deck, ladder, gun and station is a number in `public/shipLayout.js`, and about 42 code files read those numbers.
+
+The plan turns the ship into **LEGO parts**: a short list of placed parts (hull bays, decks, gasbags, engines, nests, gun mounts...). From that list the game *generates* the deck layout, the art, the walking routes, the collision shape and the camera framing.
+
+The current ship becomes one saved recipe, **"classic"**, so nothing changes for players until we want it to. Then:
+1. A **building simulator** checks any recipe automatically: can everyone reach everything, does she float, is there enough steam, can the bots crew her?
+2. The crew **buys and places parts at the sky-dock**.
+
+The enemy gunships already work this way (`gunshipBlueprint.js` generates a ship from a seed), so the approach is proven in this codebase.
+
+## 1. Player experience
+
+### The starting ship, "the Sparrow"
+- **Shape:** compact, 2 decks and a catwalk, 4 hull bays.
+- **Lift and engines:** one gasbag and 2 engines.
+- **Stations:** one crow's nest (Lookout and Nest Searchlight), Helm, Boiler, Coal Bunker, Ammo Hold, a Workshop with racks, and a medbay.
+- **Guns:** 3 (Nose, Tail, Fore Sponson).
+- **Getting around:** 2 ladders and a slide pole.
+- **Why it's fun:** walking is short (under 25% of crew time) and everyone is needed.
+- **Why it's limited:**
+  - few guns;
+  - no bomb bay;
+  - one bag, so one bad hole sends her into a dive;
+  - slow.
+- **The classic (current) ship** is roughly what a crew reaches by stop 5-6. It stays the default for tests.
+
+### The build moment at the sky-dock ("Shipwright's Yard")
+- It reuses the existing dock vote, and part cards are mixed into the shop. At most **one part per dock**.
+- If the part fits in more than one place, a short second vote picks the spot (**A / B / C**). The TV blueprint shows lettered pins.
+- There's no drag-and-drop on phones; each vote fits on one phone line.
+- Crew-deal rule: a unanimous vote gets 25% off.
+- Parts cost 90-180 salvage. A Normal voyage earns about 450-650, so a crew can afford 3-4 parts plus repairs.
+- Stops 2 and 5 give a free "derelict" part.
+
+### The blueprint view
+- A logbook panel showing the ship drawn in ink only.
+- Dashed "ghost" slots with brass pins.
+- Three gauges at the bottom: **LIFT, STEAM, HANDS**.
+
+### In flight
+- The camera reframes automatically; the slow pull-back at cast-off is the "she grew!" moment.
+- A callout appears over the new part, e.g. "NEW: ENGINE POD".
+
+## 2. Part catalogue v1 and the three budgets
+
+### The budgets
+- **Lift:** gasbags and lift engines must carry the ship's weight.
+  - An overweight ship hovers at a higher gas level, which means more pumping, more steam and more holes to lose.
+  - Rule: the hover level must stay between 25 and 70.
+- **Steam:** boiler output against everything that uses it (engines, pump, coil, powered stations).
+  - Two extra engine pods starve the classic boiler, so you need a second boiler, which needs a second coal bunker.
+  - Rule: settled pressure at cruise is at least 55, and at idle at most 95.
+- **Hands:** manned stations against crew size.
+  - The guide is 1.5-3 stations per player; above 3 the gauge shows red.
+  - Station parts get cheaper for big crews; engines, armour and gasbags get cheaper for small crews.
+
+### Parts (v1, 12)
+
+| Part | Where it goes | What it does | The catch |
+|---|---|---|---|
+| Hull bay | fore or aft of the Hold | adds a room per deck, a ladder, racks, a vent and an extinguisher | heavier, a bigger target; a 2nd extra bay won't fit cave shafts, so she wedges and waits for the tug |
+| Extra deck | above main, or below lower | more rooms and 2 ladders | taller, so Storm gusts and lightning hit harder |
+| Gasbag (up to 3) | up top | +lift | a bigger target with more gas holes; a taller top hits cave ceilings |
+| Engine pod (up to 4) | outrigger | +speed, with diminishing returns | +steam use, +weight, needs a pipe and valve |
+| Lift engine | belly | upward thrust while steamed | uses steam; essential in the Aether, good in caves |
+| Crow's nest (mid/fore/aft) | on a gasbag | a Lookout plus 2 top mounts (gun, lamp or coil) | only pays if someone mans it |
+| Gun mount | deck-end, sponson, dorsal or ventral | one gun each | more ammo hauling |
+| Searchlight mount | nest or belly | a lamp | someone has to man it |
+| Bomb bay (one) | belly | the existing compartment | weight |
+| Second boiler | main-deck bay | more steam | fire risk; needs coal nearby |
+| Coal bunker / ammo hold | lower-deck bay | shorter hauling walks | where to put it is the puzzle |
+| Ice locker, medbay, armour plating, ladder/pole/steam lift, escort hangar | fittings | walking time is the hidden stat | weight |
+
+**Stat-only upgrades** (twin barrels, big shells and the rest) stay as cheap "fittings" in the shop.
+
+**Rule:** parts are pure data. Every effect is worked out into `state.build`, and `config` is never written to.
+
+## 3. Technical architecture (for builder agents)
+
+### New module `public/modules/host/shipBuild.js`
+It's pure and Node-safe, like `gunshipBlueprint.js`, and contains:
+- `PARTS`: part definitions (footprint on a 120 px column grid × deck rows, the platforms/rooms/stations/connectors/racks/gunMounts/searchlights/pipes each part emits, art key, mass/lift/steam/hands);
+- `BUILDS.classic` and `BUILDS.sparrow`;
+- `buildLayout(parts)`, returning the same shape as today's `SHIP_LAYOUT` plus `hullPolygon`, `samples`, `box`, `tiltPivot`, `aimPoint`, `refPoint` and `budgets`;
+- `validate(parts)`.
+
+### `shipLayout.js` becomes a live object
+- `applyBuild(parts)` replaces the contents **in place**, so the 37 import-time copies such as `const P = SHIP_LAYOUT.platforms` still see fresh arrays. It also bumps `SHIP_LAYOUT.version` and fires `onLayoutChange` listeners.
+- Builds change **only at the dock**. `applyBuild` must:
+  - reset `player.conn`;
+  - put crew back on their feet;
+  - clear breaches, fires and holes;
+  - recreate `state.GUNS` and `state.escorts`.
+
+### Derived values to migrate to rebuild hooks
+- `nav.js` route tables: wrap in `rebuildNav()`.
+- `modules.js` module list: `rebuild()`, keeping the hp of surviving modules by name.
+- `bots.js`: `MAIN/CATWALK/LOWER`.
+- `gunship.js`: `MAIN_X1/BOW`.
+- `links.js`: `BOILER/BOILER_Y`.
+- `escort.js`: `DOCKS`.
+- `searchlight.js`: `LIGHT_NAMES`.
+- `gunshipBlueprint.js`: `MAIN_Y`.
+- `shipArt.js`: `liftY`.
+
+### Hard-coded numbers that become layout fields
+- `course.js`:
+  - `SHIP_SAMPLES`, `BOTTOM_Y 975` and `TOP_Y -154` → `layout.samples`;
+  - `dist+800`, `500-alt` and `640-alt` → `layout.refPoint` and `layout.aimPoint`.
+- `config.SHIP.TILT_PIVOT` → `layout.tiltPivot`.
+- `maps.js SHIP_BOX` and `GUNSHIP.SHIP_RECT` → `layout.bounds`.
+- `camera.js 2600+gd` and the `bots.js:790` deck-end x positions → platform spans.
+- `nav.js fall()` → `layout.spawnPlatform`.
+- `shipArt.js` gondola path and bomb-bay/hatch positions → per-part drawers.
+
+### Station identity
+- Station names appear 96 times across 16 files.
+- Add a `kind` to every station and use `layout.one('boiler')` and `layout.all('engine')`.
+- Names stay unique and human, e.g. "Fore Boiler", because phones show them.
+
+### Art
+- Turn the shipArt drawers into one drawer per part.
+- Split each into a **static** layer, baked once per build and per perf level into an offscreen canvas, and a **live** layer (bag swell, props, doors, holes, labels).
+- Expected win: about half the ship's draw time.
+
+## 4. The building simulator
+
+### (a) Validator: `tools/buildsim.mjs --build <name|json>`
+
+| Check | Rule | Result if broken |
+|---|---|---|
+| Geometry | no overlaps; every slot exists; everything inside its platform | FAIL |
+| Connectivity | a route between every platform pair; a spawn platform; 2+ boarder entry points; catwalk and main exist | FAIL |
+| Walking | coal → boiler ≤ 9 s, ammo → farthest gun ≤ 14 s, nest → main ≤ 8 s | WARN; FAIL at 1.5× |
+| Lift | hover level 25-70 | FAIL; WARN above 62 |
+| Steam | cruise ≥ 55, idle ≤ 95 | FAIL / WARN |
+| Fit | width ≤ 2700 and height ≤ 1400 (TV readability) | FAIL |
+| Cave fit | ship vs cave tunnels and shafts | FAIL for starter builds; for player builds, WARN ("wedges in caves") |
+| Required kinds | helm, boiler, coal, ammo, engine, gun, medbay, lookout | FAIL |
+| Hands | more than 3 stations per player | WARN |
+| Bot run | 3 min botsim on network + open with 6 bots: 0 errors, every station kind manned, coal and ammo hauled, holes patched, hull > 60, ≤ 1 tug | FAIL on errors or a never-manned kind |
+| Classic regression | `buildLayout(BUILDS.classic)` deep-equals `tools/fixtures/classic-layout.json` | FAIL (this is the Phase A gate) |
+
+### (b) Dev page: `public/buildtest.html` + `buildTest.js`
+- **Parts:** a palette and the list of placed parts. Click a part, then click a slot.
+- **The ship:** shown live with 4 bots aboard.
+- **Overlay toggles:** nav graph, collision samples, slots, blueprint mode.
+- **Readouts:** the three gauges and the validator report.
+- **Buttons:** "Run 60 s bot test", plus copy build JSON and load it via `?build=`.
+
+### (c) Batch mode
+- Command: `node tools/buildsim.mjs --random 50 --seed 1 --minutes 4 --envs skyisles,fungal,storm,aether --bots 6`.
+- How builds are made: random but legal purchase paths from the Sparrow, using the real salvage pacing. Each build runs a botsim in a child process.
+- What it reports per build: mass, lift, steam, hands, validator result, and per environment the kills/min, hull, missions, wrecks, walking % and tug events.
+- Dominance summary per part:
+  - correlation above +0.25 in every environment = **dominant** (bad);
+  - below -0.25 = **trap** (bad);
+  - a sign that flips between environments = **situational** (the goal).
+- Exit code 1 on any FAIL, so it can gate commits.
+
+## 5. Balance and fun
+- **No single best ship.** Each environment favours something different:
+  - caves punish long ships;
+  - storms punish tall ones;
+  - the Aether needs lift;
+  - the Sunken Sea needs a low belly, because the lowest belly part sets the keel;
+  - Frost puts ice on every bag;
+  - Ember brings fires to every boiler.
+
+  The route map shows the next environment, so the dock choice is informed.
+- **Pacing:**
+  - part prices rise with how many you own;
+  - two derelict parts guarantee growth;
+  - target: 3-4 parts by the Flagship on Normal, and no part in more than 70% or fewer than 15% of winning builds.
+- **Limp home:** the newest part is "shaken loose", so its modules start broken but repairable. No part is lost. A full wreck ends the voyage as now, and the build is recorded in the Captain's Log.
+- **Crew scaling** decides which part offers are cheaper. Ship's mates can haul to new bunkers, because jobs are kind-based.
+
+## 6. Roadmap: Phase S
+
+Phase S runs after Phase 1, alongside Phase 2. No package edits `simulation.js` and `render.js` in the same batch.
+
+| # | Package | Size | Success measure |
+|---|---|---|---|
+| S.0 | Freeze the classic ship snapshot + `buildsim --check-classic` | S | deep-equal passes |
+| S.1 | Layout from parts (`shipBuild.js`, in-place `applyBuild`, rebuild hooks) | L | S.0 passes; botsim summaries identical to the baseline (3 seeds × 3 maps); a lint fails on new `= SHIP_LAYOUT.` captures |
+| S.2 | Derived geometry (samples/box/rect/tiltPivot/ref/aim points) | M | botsim within noise; seeded cave runs match contact counts |
+| S.3 | Station kinds and multiple instances (boilers, engines, lamps, nests) | M | all name lookups go through `one()/all()`; classic botsim identical |
+| S.4 | Art per part + static bake | M | ship draw time ≥ 40% faster |
+| S.5 | Building simulator (validator, dev page, batch) | M | classic and sparrow pass; 50 random builds run with 0 errors |
+| S.6a | Catalogue v1 + Sparrow + `state.build` effects + dock offers / slot vote | L | voyagesim Normal no worse than today |
+| S.6b | Shipwright UI (TV blueprint, gauges, slot pins, phone cards) | M | the cold-player test passes |
+| S.7 | Balance + persistence (environment modifiers, derelict parts, limp damage, Hangar builds after P2.2) | M | no dominant or trap parts; one situational part per environment |
+| S.8 | Add buildsim to the after-every-package checklist | S | |
+
+**Order:**
+1. S.0
+2. S.1
+3. S.2 and S.3 (in parallel)
+4. S.4 and S.5 (in parallel)
+5. S.6a and S.6b
+6. S.7
+7. S.8
+
+**Clashes with Phase 2:**
+- S.1 touches `gunship.js` lines 53-60, so do it before P2.1 (rival captain).
+- S.7 comes after P2.2 (Hangar save).
+
+## 7. Risks
+- **Stale copies of layout numbers:** in-place updates, the buildsim lint, builds only at the dock, and the classic gate.
+- **Hidden coordinates in code:** S.2 includes a grep list of them.
+- **Upgrades write to `config` and never reset between voyages (an existing bug):** parts never write config. Fix it separately by cloning a base config at voyage start.
+- **The ship shrinking on the TV as it grows:** a hard size cap in the validator.
+- **Draw time:** the bake (S.4) lands before the catalogue (S.6).
+- **Bots not knowing new parts:** parts reuse existing station kinds only.
+- **Party complexity:**
+  - one phone line per rule;
+  - votes, not drag-and-drop;
+  - one part per dock;
+  - v1 limits: +2 hull bays, +1 deck, 3 bags, 4 engines.
+- **Save data:** a versioned, tolerant schema (`hangar: { v: 1, builds: [] }`).
