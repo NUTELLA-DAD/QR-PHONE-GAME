@@ -20,6 +20,7 @@ import { createWeather } from './weather.js';
 import { createEnvironment, favour } from './environments.js';
 import { assistAim } from './aim.js';
 import { UPGRADES } from './upgrades.js';
+import { createGoingDown } from './goingDown.js';
 import { generateVoyage, stopById, stopName, envInfo, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
@@ -178,7 +179,8 @@ export function createSimulation() {
     // Otherwise standing at a rack or hook means take / swap / put back.
     const pickup = PICKUPS.find((r) => here(r, T.REACH));
     // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)
-    if (pickup && !(station && (tool === 'ammo' || tool === 'coal'))) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : tool && tool !== 'ammo' && tool !== 'coal' ? `Swap to ${pickup.kind}` : `Take ${pickup.kind}` };
+    if (pickup && pickup.kind === 'ice' && !(station && station.n === 'Boiler' && tool === 'ice')) return goingDown.lockerAction(player); // the ice locker
+    if (pickup && !(station && (tool === 'ammo' || tool === 'coal' || tool === 'ice'))) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : tool && tool !== 'ammo' && tool !== 'coal' ? `Swap to ${pickup.kind}` : `Take ${pickup.kind}` };
     const vent = SHIP_LAYOUT.vents.find((v) => here(v, T.REACH));
     if (vent) return { type: 'vent', obj: vent, label: state.ventOpen[SHIP_LAYOUT.vents.indexOf(vent)] ? 'Close vent' : 'Open vent' };
     const valve = modules.list.find((m) => m.kind === 'pipe' && here(m, T.REACH));
@@ -190,9 +192,10 @@ export function createSimulation() {
       if (station.n === 'Ammo Hold' && tool !== 'ammo') return { type: 'ammo', station, label: 'Grab ammo' };
       if (station.n === 'Coal Bunker' && tool !== 'coal') return { type: 'coal', station, label: 'Grab coal' };
       if (station.n === 'Boiler' && tool === 'coal') {
-        const full = state.ship.fuel > config.BOILER.FUEL_MAX - config.BOILER.COAL_FUEL;
-        return full ? { type: 'need', label: 'Firebox is full' } : { type: 'stoke', station, label: 'Load coal' };
+        const full = state.ship.fuel > config.BOILER.FUEL_MAX - config.BOILER.COAL_FUEL && !goingDown.active(); // (while she falls, every load counts)
+        return full ? { type: 'need', label: 'Firebox is full' } : { type: 'stoke', station, label: goingDown.active() ? 'LOAD COAL - LIFT!' : 'Load coal' };
       }
+      if (station.n === 'Boiler' && tool === 'ice') return goingDown.coolAction(station);
       if (LOCKABLE(station.n) && !taken(station.n)) return { type: 'station', station, label: 'Take ' + station.n };
       // Players can always bump a bot off a station.
       const botThere = !player.bot && Object.values(state.players).find((q) => q.bot && q.lock === station.n);
@@ -256,18 +259,23 @@ export function createSimulation() {
   const damageHull = (amount) => {
     const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
     const danger = 1 + (((state.course && state.course.danger) || 2) - 2) * config.VOYAGE.DANGER_DAMAGE; // skulls on the stop
+    if (goingDown.protect()) return; // falling (the last stand) or just saved: nothing can hurt her
     if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * diff.damage * danger) <= 0) wreck();
   };
 
   // The hull gave out: the ship breaks apart, then the whole game starts over.
   function wreck(text = "SHE'S BREAKING UP!") {
     if (state.ship.down) return;
+    if (goingDown.active()) return; // (she is already falling: the fall decides)
+    if (goingDown.tryStart()) return; // the first time in a mission: GOING DOWN! - a last stand instead
     state.ship.hull = 0;
-    state.ship.down = Math.max(config.WRECK.TIME, config.VOYAGE.WRECK_SUMMARY_TIME);
+    const limp = canLimp(); // a spare gasbag takes the blow: the voyage goes on
+    state.ship.down = limp ? config.LIMP.TIME : Math.max(config.WRECK.TIME, config.VOYAGE.WRECK_SUMMARY_TIME);
     state.wreck = { t: 0, lap: state.course ? state.course.lap : 1, kills: state.kills };
     state.ship.shake = 1.5;
     state.ev.warn = config.WRECK.TIME;
     state.ev.warnText = text;
+    if (limp) return startLimp();
     // Laps fully flown still count toward this TV's record.
     const laps = state.wreck.lap - 1;
     if (laps > state.record.laps || (laps === state.record.laps && state.kills > state.record.kills)) {
@@ -276,6 +284,57 @@ export function createSimulation() {
       state.newRecord = true;
     }
     endRun(false);
+  }
+
+  // ---- Limp home: a wreck in a voyage costs a spare gasbag, not the voyage ----
+  const canLimp = () => !!(state.run && state.run.spares > 0 && state.course && state.course.stop && !state.runEnd);
+  // The break-up starts: the spare is used, some salvage is lost, the card says where she is limping to.
+  function startLimp() {
+    const run = state.run;
+    run.spares -= 1;
+    run.limps = (run.limps || 0) + 1;
+    const lost = Math.round(run.salvage * config.LIMP.SALVAGE_LOSS);
+    run.salvage -= lost;
+    const prev = run.visited.length > 1 ? stopById(run.voyage, run.visited[run.visited.length - 2]) : null;
+    state.limp = { spares: run.spares, lost, back: prev ? stopName(prev) : null };
+    bankStats(true); // (what the crew did still counts for the awards)
+  }
+  // The break-up is over: patch her up and put her back at the last stop on the route (the first stop restarts itself).
+  function finishLimp() {
+    const run = state.run;
+    state.limp = null;
+    state.wreck = null;
+    state.ship.down = 0;
+    UPGRADES.find((u) => u.id === 'spare-parts').apply({ state, modules });
+    Object.assign(state.ship, { hull: config.LIMP.HULL, speed: 0.3, shake: 0, press: 65, fuel: Math.max(state.ship.fuel, config.BOILER.START_FUEL), gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
+    Object.assign(state.gasValve, { input: 0, auto: false });
+    state.ventOpen.fill(false);
+    Object.assign(state.bombBay, { cd: 0, empty: 0, aim: null, open: 0 });
+    Object.assign(state.shield, { on: false, flash: 0 });
+    state.tempo = newTempo();
+    state.supply = null;
+    for (const list of [state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
+    raiders.reset();
+    threats.reset();
+    squadrons.reset();
+    escort.reset();
+    hijack.reset();
+    specials.reset();
+    coil.reset();
+    gunship.reset();
+    goingDown.reset();
+    for (const player of Object.values(state.players)) {
+      const [e0, e1] = SHIP_LAYOUT.boarderEntryPoints;
+      Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x) });
+      player.uk = null;
+    }
+    state.ev.warn = 4;
+    state.ev.warnText = 'PATCHED UP - ' + run.spares + ' SPARE GASBAG' + (run.spares === 1 ? '' : 'S') + ' LEFT';
+    const back = run.visited.length > 1;
+    run.visited.pop(); // the stop she wrecked on does not count
+    if (run.visited.length) run.stopId = run.visited[run.visited.length - 1];
+    if (back) startDock(); // (the sky-dock of the stop she limps back to, then the route map)
+    else goToStop(run.stopId); // (the very first stop: just try it again)
   }
 
   // Settings as they were at the start (upgrades change them during a run).
@@ -295,6 +354,7 @@ export function createSimulation() {
     Object.assign(state.gasValve, { input: 0, auto: false });
     state.lastAlt = 0;
     state.wreck = null;
+    state.limp = null;
     state.phase = 'lobby';
     state.upgrades = {};
     state.periscope = false;
@@ -323,6 +383,7 @@ export function createSimulation() {
     gunship.reset();
     course.restart();
     modules.reset();
+    goingDown.reset();
     if (state.weather) Object.assign(state.weather, { storm: 0, gust: 0, flash: 0, bolt: null });
     for (const player of Object.values(state.players)) {
       // Drop everyone back aboard from above, as when joining.
@@ -574,6 +635,8 @@ export function createSimulation() {
     phoneFx(p, '+1 Shot down!', [30, 40, 30]);
   };
   let lastJolt = 0;
+  const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt }); // GOING DOWN! last stand + the ice locker (goingDown.js)
+  state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
 
   const raiders = createRaiders({ state, modules, puff, impact });
   const escort = createEscort({ state, puff, phoneFx });
@@ -588,7 +651,7 @@ export function createSimulation() {
   const newRun = () => {
     const voyage = generateVoyage((Math.random() * 2 ** 31) | 0);
     const first = voyage.columns[0][0];
-    state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [] };
+    state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: config.LIMP.SPARES, limps: 0 };
     state.runEnd = null;
     state.salvagePop = null;
   };
@@ -890,6 +953,7 @@ export function createSimulation() {
   let pendingVote = null;
   const onMarker = (m) => {
     if (m.kind !== 'home') return;
+    goingDown.missionDone(); // (reaching home while falling: she limps in)
     // A new record for this TV?
     const laps = m.lap - 1;
     if (laps > state.record.laps || (laps === state.record.laps && state.kills > state.record.kills)) {
@@ -1259,9 +1323,13 @@ export function createSimulation() {
             puff(act.station.x, player.y - 60, '#ffd23f', 8);
           } else if (type === 'ammo') player.carry = 'ammo';
           else if (type === 'coal') player.carry = 'coal';
+          else if (type === 'icetake') goingDown.takeIce(player);
+          else if (type === 'icegive') goingDown.giveIce(player);
+          else if (type === 'cool') goingDown.throwIce(player);
           else if (type === 'stoke') {
             state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + config.BOILER.COAL_FUEL);
             stat(player, 'coal');
+            goingDown.onStoke(player);
             player.carry = null;
             shipPuff(act.station.x - 30, PLATFORMS[act.station.d].y - 50, '#ff8c42', 8);
           }
@@ -1322,6 +1390,7 @@ export function createSimulation() {
       if (stationName === 'Helm' && player.lock && !status && (state.ship.press < config.GAS.PUMP_MIN_PRESS || state.gasHoles.length)) status = `Gas ${Math.round(state.ship.gas)}% - ${feel}${state.ship.press < config.GAS.PUMP_MIN_PRESS ? ' - NO STEAM TO PUMP!' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' holes leaking' : ''}`;
       if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag full - she is rising' : 'Gasbag low - she is dropping';
       if (gun && !status && env.gunIce(stationName) > 0.35) status = env.gunJammed(stationName) ? 'ICED - CHIP IT! (hammer)' : 'Gun is icing up - chip it (hammer)';
+      if (!status && !player.lock && goingDown.active()) status = goingDown.status();
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
       if (!status && !player.bot) status = env.deep.status(player) || ''; // spores (cough), clogged engines, oxygen
       const ammoText = gun ? gun.ammo : stationName === 'Bomb Bay' ? state.bombBay.bombs : null;
@@ -1499,12 +1568,13 @@ export function createSimulation() {
       state.ship.alt += (home - state.ship.alt) * Math.min(1, dt * 0.4);
     }
     state.ship.shake = Math.max(0, state.ship.shake - dt);
+    goingDown.update(dt); // the last stand: sinking, the meters, the ice locker (goingDown.js)
     // Nose up while climbing, nose down while diving.
     const SH = config.SHIP;
     const climbRate = dt > 0 && state.lastAlt != null ? (state.ship.alt - state.lastAlt) / dt : 0;
     state.lastAlt = state.ship.alt;
     // (Speeding up lifts the nose a touch, braking dips it: she has weight.)
-    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED - (state.ship.accelX || 0) * SH.PITCH_PER_ACCEL, -SH.TILT_MAX, SH.TILT_MAX);
+    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED - (state.ship.accelX || 0) * SH.PITCH_PER_ACCEL, -SH.TILT_MAX, SH.TILT_MAX) + goingDown.pitch();
     state.ship.pitch = (state.ship.pitch || 0) + (wantPitch - (state.ship.pitch || 0)) * Math.min(1, dt * SH.TILT_SMOOTH);
 
     // Breaking apart: pieces fall, explosions go off, then the whole game starts over.
@@ -1516,7 +1586,7 @@ export function createSimulation() {
         const y = 200 + Math.random() * 700;
         shipPuff(x, y + state.wreck.t * state.wreck.t * 60, Math.random() < 0.5 ? '#ff8c42' : '#555', 12);
       }
-      if (state.ship.down <= 0) restartGame();
+      if (state.ship.down <= 0) (state.limp ? finishLimp() : restartGame());
     }
 
     if (state.phase === 'lobby') {
@@ -1535,8 +1605,10 @@ export function createSimulation() {
         gunship.reset();
         state.tempo = newTempo();
         state.enemy.dead = Math.max(state.enemy.dead, 6);
+        goingDown.newMission(); // (the last stand is back for the new mission)
       }
       updateTempo(dt);
+      if (goingDown.active()) state.tempo.rate = Math.min(state.tempo.rate, config.GOING_DOWN.ENEMY_RATE); // (few new enemies while she falls)
       squadrons.update(dt);
       escort.update(dt);
       hijack.update(dt);
@@ -1611,7 +1683,7 @@ export function createSimulation() {
       }
     }
 
-    if (!state.ship.down) {
+    if (!state.ship.down && !goingDown.protect()) {
       const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
       state.ship.hull -= (state.breaches.length * 0.5 + state.fires.length * 0.35) * diff.damage * 2 * dt;
       if (state.ship.hull <= 0) wreck();

@@ -791,6 +791,47 @@ export const config = {
   WRECK: {
     TIME: 8, // seconds of breaking apart before the restart
   },
+  // "GOING DOWN!": the first time the hull hits 0 in a mission the ship does not break up at once. She FALLS for a
+  // while (goingDown.js) and the crew has three jobs at the same time: stoke the boiler (a LIFT meter), cool it with
+  // ice blocks from the ICE LOCKER (a HEAT meter - burst = lost) and patch the glowing gasbag leaks. All three in
+  // time and she levels out with a sliver of hull ("SHE HOLDS!"); otherwise she is wrecked as usual.
+  GOING_DOWN: {
+    ENABLED: true,
+    TIME: 22, // seconds of falling (with 8 crew)
+    TIME_PER_MISSING: 1.6, // extra seconds for each crew member under 8 (so 2 players get 6 x this more)
+    SURVIVE_HULL: 15, // hull left when she holds
+    HOLD_HULL: 2, // hull shown while she falls (nothing can hurt her meanwhile)
+    GRACE: 5, // seconds nothing can hurt her after she holds
+    FALL_RATE: 62, // sinking speed (px/s) at the end of the fall with nothing done; it starts at FALL_START of this
+    FALL_START: 0.45,
+    FALL_BRAKE: 0.8, // a full lift meter takes this share off the sinking
+    NOSE: 0.045, // extra nose-down tip while falling (radians)
+    LOADS_BASE: 1.5, // coal loads needed = BASE + crew * PER_CREW, within MIN..MAX
+    LOADS_PER_CREW: 0.33,
+    LOADS_MIN: 2,
+    LOADS_MAX: 7,
+    HEAT_SMALL: 1.2, // heat the needed coal puts in the boiler (1 = bursts): with 2 crew...
+    HEAT_BIG: 1.6, // ...up to 8+ crew. Ice blocks and time make up the difference
+    HEAT_SMALL_CREW: 2,
+    HEAT_BIG_CREW: 8,
+    HEAT_COOL: 0.02, // heat the boiler sheds by itself per second
+    ICE_COOL: 0.25, // heat one ice block takes off
+    LEAKS_MIN: 1, // gasbag leaks that must be patched: 1 + crew / 4, within MIN..MAX
+    LEAKS_MAX: 3,
+    ENEMY_RATE: 0.12, // enemy spawn speed while she falls (1 = normal)
+    ICE_PRESS_COOL: 7, // outside the emergency an ice block also takes this much pressure off the boiler (steam, not heat)
+    // The ice locker: blocks it holds, seconds for one new block, and the same per environment (frost: plenty; ember: few and slow).
+    LOCKER: { MAX: 4, EVERY: 6, ENV: { frost: { MAX: 6, EVERY: 2 }, ember: { MAX: 3, EVERY: 10 } } },
+    THROW_TIME: 0.35, // seconds an ice block flies to the boiler
+  },
+  // Spare gasbags: in a voyage a wreck is not final. Each wreck costs one spare, loses the stop's progress and a share
+  // of the salvage, and the ship limps back to the previous stop. No spares left = the voyage ends.
+  LIMP: {
+    SPARES: 3,
+    SALVAGE_LOSS: 0.3, // share of the salvage on board that is lost
+    HULL: 50, // hull she is patched up to
+    TIME: 7, // seconds of the break-up before she limps away (the "LIMPING HOME" card shows during it)
+  },
   // The look of the whole game, in one place. Simple style: calm, muted backgrounds (sky, rock,
   // caves); the ship in warm wood and cream; crew in their bright scarf colours; enemies and
   // their attacks in red; friendly shots in the shooter's colour; pickups and goals in gold.
@@ -1231,7 +1272,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, cool: 1 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

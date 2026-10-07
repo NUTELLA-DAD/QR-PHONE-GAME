@@ -19,6 +19,7 @@ import { distToGoal } from './maps.js';
 import { createBackgroundArt } from './backgroundArt.js';
 import { loadTextures } from './textureArt.js';
 import { envIdOf } from './environments.js';
+import { drawIceBlock, drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
@@ -817,6 +818,7 @@ export function createRenderer({ ctx, state, canvas }) {
           ctx.font = '900 18px Georgia';
           ctx.fillStyle = '#8a5a00';
           ctx.fillText('Salvage ' + run.salvage, 454, 204);
+          drawSpares(ctx, state, 470, 236, true, 0.8); // spare gasbags (lives)
           ctx.textAlign = 'left';
           ctx.fillStyle = state.salvagePop ? '#2e7d32' : '#5a4a3a';
           ctx.fillText(state.salvagePop ? `+${state.salvagePop.n} ${state.salvagePop.label}` : state.course.stop ? state.course.stop.name : '', 46, 204);
@@ -1039,6 +1041,13 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillStyle = '#ffd23f';
     if (v.kind === 'dock') ctx.fillText(`Salvage: ${run.salvage}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`, 800, 125);
     else ctx.fillText(`Vote on your phone - ${Math.max(0, Math.ceil(v.t))}s`, 800, 125);
+    // Spare gasbags (lives) in the corner.
+    ctx.fillStyle = '#f1e2b8';
+    ctx.font = '700 18px Georgia';
+    ctx.textAlign = 'right';
+    ctx.fillText('Spare gasbags', 1540, 48);
+    drawSpares(ctx, state, 1540, 90, true, 1.15);
+    ctx.textAlign = 'center';
     const voters = Object.values(state.players);
     if (v.kind === 'route') return drawRouteMap(v, voters);
     // The shop: up to 4 cards a row.
@@ -1293,6 +1302,11 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.scale(face, 1);
     if (item === 'hookshot') {
       drawHookshotGun(!!fired);
+      ctx.restore();
+      return;
+    }
+    if (item === 'ice') {
+      drawIceBlock(ctx, 4, 0, 0.8); // a block of ice from the locker (GOING DOWN!)
       ctx.restore();
       return;
     }
@@ -1896,6 +1910,8 @@ export function createRenderer({ ctx, state, canvas }) {
     const scale = Math.min(width / config.W, height / config.H);
     ctx.setTransform(scale, 0, 0, scale, (width - config.W * scale) / 2, (height - config.H * scale) / 2);
     drawHud();
+    drawGoingDown(ctx, state, time / 1000, config.W, config.H); // GOING DOWN! alarm, meters, "SHE HOLDS!"
+    drawLimpCard(ctx, state, config.W, config.H); // LIMPING HOME... (a spare gasbag was used)
     if (state.runEnd && (!state.wreck || state.wreck.t > 1.2)) {
       ctx.globalAlpha = state.wreck ? Math.min(1, (state.wreck.t - 1.2) * 2) : 1;
       drawRunEnd();

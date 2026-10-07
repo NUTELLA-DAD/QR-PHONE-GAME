@@ -7,6 +7,7 @@ import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
 import { GS, MAIN_X1, landX, boilerX, routeStep } from './gunship.js';
 import { isEscortStation, escortFor } from './escort.js';
+import { botJobs as goingDownJobs } from './goingDown.js';
 
 const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
 const CATWALK = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'catwalk');
@@ -166,6 +167,7 @@ function dodgeAltitude(state) {
 
 // List every job on the ship, most urgent first.
 function listJobs(state, bot) {
+  if (state.goingDown) return goingDownJobs(state, bot); // GOING DOWN!: split across coal, ice and leaks (goingDown.js)
   const jobs = [];
   const players = Object.values(state.players);
   const mods = state.modules || [];
@@ -476,6 +478,14 @@ function work(p, state) {
   } else if (job.kind === 'vent') {
     // Walk to the vent and flip it.
     if (steer(p, o.d, o.x, 10)) press(p);
+  } else if (job.kind === 'cool') {
+    // GOING DOWN!: a block of ice from the locker, then onto the boiler
+    const b = stationNamed('Boiler');
+    if (getTool(p, 'ice', b) && steer(p, b.d, b.x, 40)) press(p);
+  } else if (job.kind === 'coal' && p.carry === 'coal' && state.goingDown && state.goingDown.heat + state.goingDown.heatPer >= 0.97) {
+    // GOING DOWN!: another load now would burst the boiler - wait by it with the coal until the ice has cooled it
+    const b = stationNamed('Boiler');
+    steer(p, b.d, b.x - 50, 20);
   } else if (job.kind === 'coal') {
     const s = p.carry === 'coal' ? stationNamed('Boiler') : stationNamed('Coal Bunker');
     if (steer(p, s.d, s.x)) press(p);
@@ -904,7 +914,8 @@ export function updateBot(p, state, dt) {
       const rodCall = p.lock !== 'Helm' && state.stormJob && state.stormJob.charge && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9;
       // Nobody is at the wheel in flight and nobody is on the way: leave the station and take it.
       const helmCall = p.lock !== 'Helm' && state.phase === 'flying' && !Object.values(state.players).some((q) => q.lock === 'Helm' || (q.botJob && q.botJob.kind === 'station' && q.botJob.obj === 'Helm')) && !(state.modules || []).some((m) => m.name === 'Helm' && m.broken) && Math.random() < B.HELM_CALL;
-      if (p.lockLeft <= 0 || gunUseless || rodCall || helmCall || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
+      const fallCall = !!state.goingDown; // GOING DOWN!: everybody off their stations
+      if (p.lockLeft <= 0 || gunUseless || rodCall || helmCall || fallCall || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;
         p.lockLeft = undefined;
         p.botJob = null;

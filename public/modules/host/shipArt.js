@@ -5,6 +5,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { drawBiplane, drawTailNumber } from './planeArt.js';
 import { paintPath, paintRect } from './textureArt.js';
+import { drawIceLocker, drawIceFlights, drawBoilerHeat, drawHoleGlow } from './goingDownArt.js';
 
 // Which painted texture goes under which flat palette colour (anything not listed stays flat).
 const TEX_OF = {
@@ -508,6 +509,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
 
   const drawRacks = () => {
     for (const r of L.racks) {
+      if (r.kind === 'ice') continue; // (the ice locker is drawn by goingDownArt.js)
       const y = P[r.d].y - 115;
       if (sprites.box(ctx, 'ship/rack-' + r.kind, r.x - 34, y, 68, 70)) continue;
       filled(WOOD, () => ctx.roundRect(r.x - 34, y, 68, 70, 6));
@@ -703,6 +705,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
   // Gasbag holes: torn patches with gas wisping out.
   const drawGasHoles = (time) => {
     for (const h of state.gasHoles || []) {
+      if (h.gd) drawHoleGlow(ctx, h, time); // GOING DOWN!: the leaks that must be patched glow
       if (!sprites.box(ctx, 'fx/gas-hole', h.x - 20, h.y - 15, 40, 30)) {
         ink();
         ctx.lineWidth = 3;
@@ -983,6 +986,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     drawRacks();
     drawExtinguishers();
     drawProps(time);
+    drawIceLocker(ctx, state, time);
     drawCoal();
     drawBombBay();
     drawHelmMount();
@@ -1001,5 +1005,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     if (state.phase === 'lobby') drawLabels(); // (in flight each phone says where you are)
     drawGasHoles(time);
     drawModuleStatus(time);
+    drawBoilerHeat(ctx, state, time); // GOING DOWN!: the boiler's heat bar and the ice blocks in flight
+    drawIceFlights(ctx, state);
   };
 }
