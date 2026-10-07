@@ -1,10 +1,23 @@
 // Draws the airship from SHIP_LAYOUT. Uses art from art/sprites/ship/ where it exists, and
 // placeholder vector drawings everywhere else.
 // Everything is in ship coordinates; render.js has already shifted for altitude.
+//
+// Phase S.4: the ship is drawn PER PART, from the layout (platform spans, rooms, connectors, racks, mounts ...) so a longer
+// deck or a second gasbag lines up by itself. The classic ship's hand-tuned shapes are reproduced exactly from the same
+// layout numbers (see hullGeom / the offsets in each drawer).
+//
+// Two layers:
+//   STATIC - hull shell, rails, ladders, pipes, racks, walls, stencils, lobby labels: things that never move. Drawn once into
+//            an offscreen canvas ("the bake", in ship space) and blitted every frame under the ship's own tilt/bob transform.
+//            Re-baked when the layout version, the perf level (textures on/off), loaded sprites/textures/fonts, the ship's
+//            upgrades, the lobby/flight phase or the camera zoom (by more than ~25%) change.
+//   LIVE   - gasbag swell, propellers, lift cage, doors, valve lamps, gauges, fire glow, bombs, vents' steam, helm wheel,
+//            escort fighters, holes, damage and status.
+// Drawing never throws: the bake falls back to drawing the static layer straight onto the screen.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { drawBiplane, drawTailNumber } from './planeArt.js';
-import { paintPath, paintRect } from './textureArt.js';
+import { paintPath, paintRect, hasTexture } from './textureArt.js';
 import { drawIceLocker, drawIceFlights, drawBoilerHeat, drawHoleGlow } from './goingDownArt.js';
 
 // Which painted texture goes under which flat palette colour (anything not listed stays flat).
@@ -15,6 +28,19 @@ const TEX_OF = {
   '#c9a85a': 'brass', '#6d7378': 'brass', '#9aa1a6': 'brass', '#8d969b': 'brass', '#6a6568': 'brass', '#5a5558': 'brass',
 };
 
+// Sprites the STATIC layer may use: when one finishes loading, the bake is redone.
+const STATIC_SPRITES = [
+  'ship/nest', 'ship/catwalk', 'ship/gondola', 'ship/floor', 'ship/porthole', 'ship/outrigger', 'ship/engine', 'ship/pod',
+  'ship/valve', 'ship/extinguisher', 'ship/ladder', 'ship/rope-ladder', 'ship/stairs', 'ship/lift', 'ship/boiler', 'ship/gauge',
+  'ship/chart-table', 'ship/ammo-crates', 'ship/vent', 'ship/coal-bunker', 'crests/crew',
+  'ship/room-tail-turret', 'ship/room-boiler', 'ship/room-workshop', 'ship/room-bridge', 'ship/room-aft-gun-deck', 'ship/room-hold', 'ship/room-fore-gun-deck',
+  'ship/rack-sword', 'ship/rack-hammer', 'ship/rack-hookshot',
+];
+const STATIC_TEXTURES = ['canvas', 'wood', 'darkwood', 'charcoal', 'brass'];
+const STATIC_UPGRADES = ['armour', 'sprinklers', 'safety-valve', 'firebox', 'periscope'];
+const BAKE_SS = 1.5; // the bake is drawn at this many times the screen's own pixel density (so it stays crisp when blitted tilted)
+const BAKE_MAX = 4096; // largest side of the baked canvas (px)
+
 const L = SHIP_LAYOUT;
 const P = L.platforms;
 const INK = config.INK;
@@ -22,10 +48,29 @@ const WOOD = '#b98a5a';
 const WOOD_DARK = '#6b4a32';
 const IRON = '#6a6568';
 
-export function createShipArt({ ctx, state, ink, rrect, sprites }) {
-  const liftHome = () => P[L.connectors.find((c) => c.type === 'lift').bottom].y; // (the cage rests at the bottom of its shaft)
-  let liftY = liftHome();
-  onLayoutChange(() => { liftY = liftHome(); });
+export function createShipArt({ ctx: screenCtx, state, sprites }) {
+  // `ctx` is whatever we are drawing onto right now: the screen, or the offscreen canvas while baking.
+  let ctx = screenCtx;
+  const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
+  const plat = (id) => P.find((q) => q.id === id);
+  const station = (name) => L.stations.find((q) => q.n === name);
+
+  // (the cage of each lift rests at the bottom of its shaft until somebody rides it)
+  const liftHome = (c) => num(P[c.bottom] && P[c.bottom].y);
+  const liftYs = new Map();
+  onLayoutChange(() => { liftYs.clear(); });
+
+  // The same pen as render.js's ink(), but for whichever canvas we are drawing on.
+  const ink = () => {
+    ctx.strokeStyle = config.INK;
+    ctx.lineWidth = config.OUTLINE.MAIN;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+  };
+  const rrect = (x, y, w, h, r) => {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+  };
 
   const line = (pts, width = 3.2, color = INK) => {
     ctx.strokeStyle = color;
@@ -46,15 +91,29 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     ctx.stroke();
   };
 
-  // ---- Big pieces ----
+  // ---- Layout-derived geometry ----
+  // The gondola hull outline, from the main and top decks' spans (the classic ship: 130..1512 across, 480..815 down).
+  const hullGeom = () => {
+    const main = plat('main');
+    const lower = plat('lower');
+    const cat = plat('catwalk');
+    const top = cat.y + 10;
+    return {
+      xL: main.x0 - 10, xL2: main.x0 - 14, xR: main.x1 + 42, xNose: main.x1, xTopR: main.x1 - 40,
+      xKeelL: main.x0 + 108, xKeelR: main.x1 - 118,
+      top, yShoulder: main.y - 40, yTuck: main.y + 10, yTuck2: main.y + 22, yKeel: lower.y + 25,
+    };
+  };
+
   const gondolaPath = () => {
-    ctx.moveTo(130, 480);
-    ctx.lineTo(1430, 480);
-    ctx.quadraticCurveTo(1512, 484, 1512, 600);
-    ctx.quadraticCurveTo(1508, 650, 1470, 662);
-    ctx.lineTo(1352, 815);
-    ctx.lineTo(248, 815);
-    ctx.lineTo(126, 662);
+    const h = hullGeom();
+    ctx.moveTo(h.xL, h.top);
+    ctx.lineTo(h.xTopR, h.top);
+    ctx.quadraticCurveTo(h.xR, h.top + 4, h.xR, h.yShoulder);
+    ctx.quadraticCurveTo(h.xR - 4, h.yTuck, h.xNose, h.yTuck2);
+    ctx.lineTo(h.xKeelR, h.yKeel);
+    ctx.lineTo(h.xKeelL, h.yKeel);
+    ctx.lineTo(h.xL2, h.yTuck2);
     ctx.closePath();
   };
 
@@ -67,33 +126,48 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
 
   const has = (id) => (state.upgrades || {})[id] || 0;
 
+  // ================= GASBAGS (live: they swell with the gas) =================
+  const bags = () => (Array.isArray(L.gasbag) ? L.gasbag : [L.gasbag]).filter((b) => b && Number.isFinite(b.rx) && b.rx > 0 && b.ry > 0);
+
   const drawGasbag = () => {
-    const G = L.gasbag;
-    if (has('twin-gasbag')) {
+    const list = bags();
+    list.forEach((G, bi) => drawEnvelope(G, bi === 0));
+    // Rigging down to the gondola (from each bag, along its length).
+    const yBot = plat('catwalk').y + 10;
+    for (const G of list) for (const f of [-0.54, -0.28, 0, 0.28, 0.54]) {
+      const x = G.cx + Math.round(f * G.rx);
+      line([[x - 40, yBot - 80], [x, yBot]], 3);
+    }
+  };
+
+  const drawEnvelope = (G, first) => {
+    if (has('twin-gasbag') && first) {
       // The second envelope, riding higher behind the first, with its own rigging.
       const g2 = Math.max(0, Math.min(1, (state.ship.gas ?? 50) / 100));
-      line([[520, 0], [520, -60]], 4);
-      line([[1100, 0], [1100, -60]], 4);
+      const tx = G.cx - 20;
+      const ty = G.cy - 258;
+      line([[G.cx - 280, G.cy - 198], [G.cx - 280, ty]], 4);
+      line([[G.cx + 300, G.cy - 198], [G.cx + 300, ty]], 4);
       const r2x = (G.rx * 0.7) * (0.8 + 0.4 * g2);
       const r2y = G.ry * 0.62 * (0.9 + 0.2 * g2);
       if (sprites.has('ship/gasbag')) {
         // The same painted envelope, a little smaller, clipped to its ellipse, with a crisp outline on top.
         ctx.save();
         ctx.beginPath();
-        ctx.ellipse(780, -60, r2x, r2y, 0, 0, 7);
+        ctx.ellipse(tx, ty, r2x, r2y, 0, 0, 7);
         ctx.clip();
-        sprites.box(ctx, 'ship/gasbag', 780 - r2x, -60 - r2y, r2x * 2, r2y * 2);
+        sprites.box(ctx, 'ship/gasbag', tx - r2x, ty - r2y, r2x * 2, r2y * 2);
         ctx.restore();
         ink();
         ctx.beginPath();
-        ctx.ellipse(780, -60, r2x, r2y, 0, 0, 7);
+        ctx.ellipse(tx, ty, r2x, r2y, 0, 0, 7);
         ctx.stroke();
       } else {
-        filled('#d6c7a2', () => ctx.ellipse(780, -60, r2x, r2y, 0, 0, 7));
+        filled('#d6c7a2', () => ctx.ellipse(tx, ty, r2x, r2y, 0, 0, 7));
         ctx.lineWidth = 3;
         for (let i = -3; i <= 3; i++) {
           ctx.beginPath();
-          ctx.ellipse(780, -60, (G.rx * 0.7 * Math.abs(i)) / 3.6 + 4, G.ry * 0.62, 0, i < 0 ? Math.PI - 1.57 : -1.57, i < 0 ? Math.PI + 1.57 : 1.57);
+          ctx.ellipse(tx, ty, (G.rx * 0.7 * Math.abs(i)) / 3.6 + 4, G.ry * 0.62, 0, i < 0 ? Math.PI - 1.57 : -1.57, i < 0 ? Math.PI + 1.57 : 1.57);
           ctx.stroke();
         }
       }
@@ -104,30 +178,33 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     ctx.translate(G.cx, G.cy);
     ctx.scale(0.78 + 0.44 * g, 0.9 + 0.2 * g);
     ctx.translate(-G.cx, -G.cy);
-    // Better Rudders: bigger fins.
-    const fin = 1 + 0.25 * has('rudders');
-    ctx.save();
-    ctx.translate(-100, 198); // the stern of the bigger bag
-    ctx.scale(fin, fin);
-    ctx.translate(-40, -245);
-    // Tail fins (behind the envelope, at the stern = left).
-    if (!sprites.box(ctx, 'ship/fin-top', -95, 70, 135, 130)) {
-      filled('#c49a74', () => {
-        ctx.moveTo(40, 170);
-        ctx.lineTo(-95, 70);
-        ctx.lineTo(-80, 200);
-        ctx.closePath();
-      });
+    if (first) {
+      // Better Rudders: bigger fins.
+      const fin = 1 + 0.25 * has('rudders');
+      ctx.save();
+      ctx.translate(G.cx - G.rx + 200, G.cy - 198); // (the classic bag's stern is at -200, 198)
+      ctx.translate(-100, 198); // the stern of the bigger bag
+      ctx.scale(fin, fin);
+      ctx.translate(-40, -245);
+      // Tail fins (behind the envelope, at the stern = left).
+      if (!sprites.box(ctx, 'ship/fin-top', -95, 70, 135, 130)) {
+        filled('#c49a74', () => {
+          ctx.moveTo(40, 170);
+          ctx.lineTo(-95, 70);
+          ctx.lineTo(-80, 200);
+          ctx.closePath();
+        });
+      }
+      if (!sprites.box(ctx, 'ship/fin-bottom', -95, 290, 135, 130)) {
+        filled('#c49a74', () => {
+          ctx.moveTo(40, 320);
+          ctx.lineTo(-95, 420);
+          ctx.lineTo(-80, 290);
+          ctx.closePath();
+        });
+      }
+      ctx.restore();
     }
-    if (!sprites.box(ctx, 'ship/fin-bottom', -95, 290, 135, 130)) {
-      filled('#c49a74', () => {
-        ctx.moveTo(40, 320);
-        ctx.lineTo(-95, 420);
-        ctx.lineTo(-80, 290);
-        ctx.closePath();
-      });
-    }
-    ctx.restore();
     let painted = false;
     try {
       if (sprites.has('ship/gasbag')) {
@@ -162,7 +239,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     if (!painted) {
       // Rubberised Gasbag: darker rubber with patches.
       filled(has('rubber-gasbag') ? '#cbbd96' : '#ebdfc0', () => ctx.ellipse(G.cx, G.cy, G.rx, G.ry, 0, 0, 7));
-      if (has('rubber-gasbag')) for (const [px, py] of [[300, 200], [620, 320], [1050, 170], [1350, 300]]) filled('#a89a72', () => ctx.roundRect(px, py, 60, 34, 8));
+      if (has('rubber-gasbag')) for (const [px, py] of [[-500, 2], [-180, 122], [250, -28], [550, 102]]) filled('#a89a72', () => ctx.roundRect(G.cx + px, G.cy + py, 60, 34, 8));
       // One soft highlight band along the top of the envelope.
       ctx.save();
       ctx.beginPath();
@@ -206,41 +283,45 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       }
     }
     ctx.restore();
-    // Rigging down to the gondola.
-    for (const x of [260, 520, 800, 1080, 1340]) line([[x - 40, 400], [x, 480]], 3);
   };
 
+  // ================= CROW'S NEST (static) =================
   const drawNest = () => {
     ctx.save();
-    ctx.translate(0, -L.nestRise); // drawn at its old height, then lifted onto the bigger bag
+    ctx.translate(0, -num(L.nestRise)); // drawn at its old height, then lifted onto the bigger bag
     drawNestParts();
     ctx.restore();
   };
 
   const drawNestParts = () => {
-    line([[800, 8], [800, -60]], 5); // flag pole
-    if (!sprites.box(ctx, 'crests/crew', 802, -64, 34, 34)) {
+    const n = plat('nest');
+    if (!n) return;
+    const mid = (n.x0 + n.x1) / 2;
+    line([[mid, 8], [mid, -60]], 5); // flag pole
+    if (!sprites.box(ctx, 'crests/crew', mid + 2, -64, 34, 34)) {
       ctx.fillStyle = '#a8443f';
       ctx.beginPath();
-      ctx.moveTo(800, -60);
-      ctx.lineTo(850, -48);
-      ctx.lineTo(800, -36);
+      ctx.moveTo(mid, -60);
+      ctx.lineTo(mid + 50, -48);
+      ctx.lineTo(mid, -36);
       ctx.fill();
     }
     if (has('periscope')) {
       // Periscope sticking up from the crow's nest.
-      line([[720, 8], [720, -70], [748, -70]], 9, '#6a6568');
-      filled('#bcd9e3', () => ctx.arc(752, -70, 7, 0, 7));
+      const px = n.x0 + 110;
+      line([[px, 8], [px, -70], [px + 28, -70]], 9, '#6a6568');
+      filled('#bcd9e3', () => ctx.arc(px + 32, -70, 7, 0, 7));
     }
-    const n = P.find((q) => q.id === 'nest');
     if (sprites.box(ctx, 'ship/nest', n.x0, 6, n.x1 - n.x0, 80)) return;
     filled(WOOD, () => ctx.roundRect(n.x0, 52, n.x1 - n.x0, 34, 8));
     line([[n.x0, 8], [n.x1, 8]], 5);
     for (let x = n.x0 + 10; x <= n.x1 - 9; x += (n.x1 - n.x0 - 20) / 7) line([[x, 8], [x, 52]], 4);
   };
 
+  // ================= TOP DECK (static) =================
   const drawCatwalk = () => {
-    const p = P.find((q) => q.id === 'catwalk');
+    const p = plat('catwalk');
+    if (!p) return;
     const y = p.y;
     const w = p.x1 - p.x0;
     if (!tileRow('ship/catwalk', p.x0, p.x1, y - 40, 140, 50)) {
@@ -270,32 +351,37 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       }
     }
     // Fittings along the deck: lanterns on the rail, a stack of crates, barrels, a rope coil, a sign.
-    for (const lx of [640, 1120]) {
-      line([[lx, y - 46], [lx, y - 74]], 4);
-      filled('#f2d36b', () => ctx.roundRect(lx - 7, y - 94, 14, 20, 4));
+    // (Aft ones are measured from the deck's aft end, fore ones from its fore end; a short deck skips them.)
+    if (w >= 800) {
+      const a = p.x0;
+      const f = p.x1;
+      for (const lx of [a + 400, f - 240]) {
+        line([[lx, y - 46], [lx, y - 74]], 4);
+        filled('#f2d36b', () => ctx.roundRect(lx - 7, y - 94, 14, 20, 4));
+      }
+      filled('#c9a05f', () => ctx.rect(a + 210, y - 40, 44, 40));
+      line([[a + 210, y - 40], [a + 254, y]], 2.5, WOOD_DARK);
+      line([[a + 254, y - 40], [a + 210, y]], 2.5, WOOD_DARK);
+      filled('#b98a5a', () => ctx.rect(a + 222, y - 78, 36, 38));
+      line([[a + 222, y - 78], [a + 258, y - 40]], 2.5, WOOD_DARK);
+      for (const bx of [f - 232, f - 194]) {
+        filled('#8a6444', () => ctx.roundRect(bx - 16, y - 46, 32, 46, 8));
+        line([[bx - 16, y - 32], [bx + 16, y - 32]], 3);
+        line([[bx - 16, y - 14], [bx + 16, y - 14]], 3);
+      }
+      filled('#a87b4f', () => ctx.ellipse(a + 160, y - 8, 22, 8, 0, 0, 7));
+      filled('#bf9567', () => ctx.ellipse(a + 160, y - 17, 18, 7, 0, 0, 7));
+      line([[a + 320, y - 48], [a + 320, y - 70]], 3);
+      line([[a + 410, y - 48], [a + 410, y - 70]], 3);
+      filled('#f3ead6', () => ctx.roundRect(a + 300, y - 100, 130, 30, 5));
+      ctx.font = '17px ' + config.FONTS.DISPLAY;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = INK;
+      ctx.fillText('TOP DECK', a + 365, y - 79);
     }
-    filled('#c9a05f', () => ctx.rect(450, y - 40, 44, 40));
-    line([[450, y - 40], [494, y]], 2.5, WOOD_DARK);
-    line([[494, y - 40], [450, y]], 2.5, WOOD_DARK);
-    filled('#b98a5a', () => ctx.rect(462, y - 78, 36, 38));
-    line([[462, y - 78], [498, y - 40]], 2.5, WOOD_DARK);
-    for (const bx of [1128, 1166]) {
-      filled('#8a6444', () => ctx.roundRect(bx - 16, y - 46, 32, 46, 8));
-      line([[bx - 16, y - 32], [bx + 16, y - 32]], 3);
-      line([[bx - 16, y - 14], [bx + 16, y - 14]], 3);
-    }
-    filled('#a87b4f', () => ctx.ellipse(400, y - 8, 22, 8, 0, 0, 7));
-    filled('#bf9567', () => ctx.ellipse(400, y - 17, 18, 7, 0, 0, 7));
-    line([[560, y - 48], [560, y - 70]], 3);
-    line([[650, y - 48], [650, y - 70]], 3);
-    filled('#f3ead6', () => ctx.roundRect(540, y - 100, 130, 30, 5));
-    ctx.font = '17px ' + config.FONTS.DISPLAY;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = INK;
-    ctx.fillText('TOP DECK', 605, y - 79);
     // Deck guns: a post from the deck up to the mount, a base plate and sandbags on the outer side.
     for (const [name, m] of Object.entries(L.gunMounts)) {
-      const s = L.stations.find((q) => q.n === name);
+      const s = station(name);
       if (!s || P[s.d].id !== 'catwalk') continue;
       const out = Math.cos(m.aim) < 0 ? -1 : 1;
       line([[m.bx, m.by + 14], [m.bx, y]], 11);
@@ -307,12 +393,14 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
   };
 
-  // The helm: a ship's wheel on a little raised mount on the top deck, in the open. Whoever steers
+  // ================= HELM MOUNT =================
+  // A ship's wheel on a little raised mount on the top deck, in the open. Whoever steers
   // is exposed to enemy fire (a hit close to them can knock them out).
   const drawHelmMount = () => {
-    const hp = P.find((q) => q.id === 'helm');
-    const cat = P.find((q) => q.id === 'catwalk');
-    const st = L.stations.find((q) => q.n === 'Helm');
+    const hp = plat('helm');
+    const cat = plat('catwalk');
+    const st = station('Helm');
+    if (!hp || !cat || !st) return;
     const w = hp.x1 - hp.x0;
     // Trestle legs and cross brace down to the deck.
     for (const x of [hp.x0 + 8, hp.x1 - 8]) filled(WOOD_DARK, () => ctx.rect(x - 4, hp.y, 8, cat.y - hp.y));
@@ -338,8 +426,15 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     // Compass binnacle.
     filled(WOOD_DARK, () => ctx.rect(hp.x0 + 78, hp.y - 28, 16, 28));
     filled('#c9a85a', () => ctx.arc(hp.x0 + 86, hp.y - 34, 12, Math.PI, 0));
-    // The wheel on its pedestal (turning with the ship's speed).
+    // The pedestal the wheel turns on.
     filled(WOOD_DARK, () => ctx.roundRect(st.x - 13, hp.y - 44, 26, 44, 4));
+  };
+
+  // The wheel (turning with the ship's speed) and the hit warning: red flash over the helm and HELMSMAN HIT!
+  const liveHelm = () => {
+    const hp = plat('helm');
+    const st = station('Helm');
+    if (!hp || !st) return;
     const wy = hp.y - 70;
     if (!sprites.pivot(ctx, 'ship/wheel', st.x, wy, 0.5, 0.5, state.ship.speed * 6)) {
       ctx.save();
@@ -355,7 +450,6 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       }
       ctx.restore();
     }
-    // Hit warning: red flash over the helm and HELMSMAN HIT!
     const H = config.HELM_EXPOSED;
     if (state.helmHit > 0) {
       const t = Math.min(1, state.helmHit / H.WARN_TIME);
@@ -376,22 +470,26 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
   };
 
+  // ================= GONDOLA (static) =================
   // Room back walls: a picture per room if drawn, else flat colour.
   const ROOM_ART = { 'Tail Turret': 'tail-turret', 'Boiler Room': 'boiler', Workshop: 'workshop', Bridge: 'bridge', 'Aft Gun Deck': 'aft-gun-deck', Hold: 'hold', 'Fore Gun Deck': 'fore-gun-deck' };
 
   const drawGondola = () => {
+    const H = hullGeom();
     const shell = sprites.has('ship/gondola');
     if (!shell) filled('#8a6444', gondolaPath);
     ctx.save();
     ctx.beginPath();
     gondolaPath();
     ctx.clip();
+    const floors = [];
     for (const r of L.rooms) {
       if (r.outside || r.p === 'bay') continue; // (the bomb bay compartment is drawn by drawBombBay)
       const y = P[r.d].y;
       const h = P[r.d].id === 'lower' ? 140 : 148;
+      if (!floors.includes(r.p)) floors.push(r.p);
       if (!sprites.box(ctx, 'ship/room-' + ROOM_ART[r.name], r.x0, y - h, r.x1 - r.x0, h)) {
-        ctx.fillStyle = r.color;
+        ctx.fillStyle = r.color || '#b08250';
         ctx.fillRect(r.x0 + 3, y - 148, r.x1 - r.x0 - 6, 148);
         paintRect(ctx, 'darkwood', r.x0 + 3, y - 148, r.x1 - r.x0 - 6, 148, 0.9);
         // Header beam above each doorway between rooms.
@@ -399,9 +497,10 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
         ctx.fillRect(r.x0 - 4, y - 148, 8, 34);
       }
     }
-    // Floors.
-    for (const id of ['main', 'lower']) {
-      const p = P.find((q) => q.id === id);
+    // Floors (every deck that has rooms in the hull).
+    for (const id of floors) {
+      const p = plat(id);
+      if (!p) continue;
       if (!tileRow('ship/floor', p.x0 - 20, p.x1 + 20, p.y, 128, 12)) {
         ctx.fillStyle = WOOD_DARK;
         ctx.fillRect(p.x0 - 20, p.y, p.x1 - p.x0 + 40, 12);
@@ -410,28 +509,36 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
     ctx.restore();
     // The hull shell art (with see-through rooms) goes over the room walls.
-    if (sprites.box(ctx, 'ship/gondola', 126, 480, 1386, 335)) return;
+    if (sprites.box(ctx, 'ship/gondola', H.xL2, H.top, H.xR - H.xL2, H.yKeel - H.top)) return;
     ink();
     ctx.beginPath();
     gondolaPath();
     ctx.stroke();
     // Bridge windows.
-    for (const x of [1150, 1250, 1350]) {
-      filled('#bcd9e3', () => ctx.roundRect(x, 500, 80, 56, 10));
-      line([[x + 18, 512], [x + 40, 540]], 3, '#ffffff');
+    for (const dx of [-320, -220, -120]) {
+      const x = H.xNose + dx;
+      filled('#bcd9e3', () => ctx.roundRect(x, H.top + 20, 80, 56, 10));
+      line([[x + 18, H.top + 32], [x + 40, H.top + 60]], 3, '#ffffff');
     }
     // Portholes along the lower deck.
-    for (const x of [310, 560, 1010, 1260]) {
-      if (!sprites.box(ctx, 'ship/porthole', x - 16, 674, 32, 32)) filled('#bcd9e3', () => ctx.arc(x, 690, 16, 0, 7));
+    const main = plat('main');
+    for (const dx of [170, 420, 870, 1120]) {
+      const x = main.x0 + dx;
+      if (x > main.x1 - 40) continue;
+      if (!sprites.box(ctx, 'ship/porthole', x - 16, main.y + 34, 32, 32)) filled('#bcd9e3', () => ctx.arc(x, main.y + 50, 16, 0, 7));
     }
   };
 
-  const drawOutriggers = (time) => {
+  // ================= OUTRIGGERS & ENGINES =================
+  const midX = () => { const q = plat('lower') || plat('main'); return (q.x0 + q.x1) / 2; };
+
+  const drawOutriggers = () => {
+    const mid = midX();
     for (const r of L.rooms.filter((q) => q.outside)) {
       const y = P[r.d].y;
-      const inner = r.x0 < 800 ? r.x1 : r.x0;
+      const inner = r.x0 < mid ? r.x1 : r.x0;
       // Struts back to the hull.
-      line([[r.x0 < 800 ? r.x0 + 20 : r.x1 - 20, y + 10], [inner, y + 40]], 6);
+      line([[r.x0 < mid ? r.x0 + 20 : r.x1 - 20, y + 10], [inner, y + 40]], 6);
       if (tileRow('ship/outrigger', r.x0, r.x1, y - 40, 140, 50)) continue;
       for (let x = r.x0; x <= r.x1; x += 58) line([[x, y], [x, y - 40]], 4);
       line([[r.x0, y - 40], [r.x1, y - 40]], 4);
@@ -439,35 +546,57 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
     for (const e of L.engines) {
       const y = P[e.d].y + 38;
-      const out = e.x < 800 ? -1 : 1;
+      const out = e.x < mid ? -1 : 1;
       if (!sprites.box(ctx, 'ship/engine', e.x - 62, y - 24, 124, 48, out < 0)) {
         filled('#6d7378', () => ctx.ellipse(e.x, y, 62, 24, 0, 0, 7));
         filled(IRON, () => ctx.arc(e.x + out * 62, y, 9, 0, 7));
       }
-      // Spinning propeller seen edge-on.
+    }
+  };
+
+  // Spinning propellers seen edge-on.
+  const liveEngines = (time) => {
+    const mid = midX();
+    for (const e of L.engines) {
+      const y = P[e.d].y + 38;
+      const out = e.x < mid ? -1 : 1;
       const spin = Math.cos(time * 30) * 46;
       filled('#6b4a32', () => ctx.ellipse(e.x + out * 70, y, 6, Math.abs(spin) + 4, 0, 0, 7));
     }
   };
 
+  // ================= BALL TURRET POD (static) =================
   const drawPod = () => {
-    if (!sprites.box(ctx, 'ship/pod', 723, 822, 144, 116)) {
-      filled('#8a6444', () => ctx.ellipse(795, 880, 72, 58, 0, 0, 7));
-      filled('#bcd9e3', () => ctx.arc(830, 880, 22, 0, 7));
+    for (const pp of P.filter((q) => /^pod/.test(q.id))) {
+      const w = pp.x1 - pp.x0;
+      const mid = (pp.x0 + pp.x1) / 2;
+      if (!sprites.box(ctx, 'ship/pod', pp.x0 - 12, pp.y - 83, w + 24, 116)) {
+        filled('#8a6444', () => ctx.ellipse(mid, pp.y - 25, w / 2 + 12, 58, 0, 0, 7));
+        filled('#bcd9e3', () => ctx.arc(mid + 35, pp.y - 25, 22, 0, 7));
+      }
+      ctx.fillStyle = WOOD_DARK;
+      ctx.fillRect(pp.x0, pp.y, w, 8);
     }
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(735, P.find((q) => q.id === 'pod').y, 120, 8);
   };
 
-  // The fighter hatch under the hull, and the escort fighter hanging on its hook when she's home
-  // (a ghostly outline while a new one is being built).
-  const drawHangar = (time) => {
-    const docks = L.escortDocks || [{ p: 'hangar', num: 1, x: L.escortDock.x, y: L.escortDock.y }];
-    docks.forEach((dock, i) => {
-      const hp = P.find((q) => q.id === dock.p);
-      if (!hp) return;
+  // ================= ESCORT HANGARS =================
+  const docksOf = () => L.escortDocks || [{ p: 'hangar', num: 1, x: L.escortDock.x, y: L.escortDock.y }];
+
+  // The fighter hatch under the hull (static)...
+  const drawHangar = () => {
+    for (const dock of docksOf()) {
+      const hp = plat(dock.p);
+      if (!hp) continue;
       ctx.fillStyle = WOOD_DARK;
       ctx.fillRect(hp.x0, hp.y, hp.x1 - hp.x0, 8);
+    }
+  };
+
+  // ...and the escort fighter hanging on its hook when she's home (a ghostly outline while a new one is being built).
+  const liveHangar = () => {
+    docksOf().forEach((dock, i) => {
+      const hp = plat(dock.p);
+      if (!hp) return;
       const esc = (state.escorts || [state.escort])[i];
       if (!esc || esc.flying) return;
       line([[dock.x, hp.y + 8], [dock.x, dock.y - 32]], 5, INK);
@@ -481,11 +610,19 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     });
   };
 
-  // ---- Fittings ----
+  // ================= PIPES, RACKS, EXTINGUISHERS =================
+  const moduleFor = (name) => (state.modules || []).find((m) => m.name === name);
+
   const drawPipes = () => {
     for (const pipe of L.pipes) {
       line(pipe.points, 13, INK);
       line(pipe.points, 7, '#9aa1a6');
+    }
+  };
+
+  // The valves with their open (green) / closed (red) lamps.
+  const livePipes = () => {
+    for (const pipe of L.pipes) {
       const [vx, vy] = pipe.valve;
       const m = moduleFor(pipe.to + ' Pipe');
       const open = !m || m.open;
@@ -571,6 +708,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
   };
 
+  // ================= CONNECTORS (ladders, ropes, poles, stairs, lift shafts) =================
   // A ladder made of repeating rung tiles (32 wide, 26 tall), from top to bottom.
   const ladderTiles = (key, x, top, bottom) => {
     if (!sprites.has(key)) return false;
@@ -579,7 +717,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
   };
 
   const drawConnectors = () => {
-    L.connectors.forEach((c, i) => {
+    L.connectors.forEach((c) => {
       const yTop = P[c.top].y;
       const yBot = P[c.bottom].y;
       if (c.type === 'ladder' || c.type === 'rope') {
@@ -608,29 +746,78 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
         }
         line([[c.xTop + 20, yTop - 50], [c.xBottom + 20, yBot - 50]], 4); // handrail
       } else if (c.type === 'lift') {
-        // Shaft rails and a cage that follows whoever is riding it.
+        // Shaft rails (the cage is live).
         line([[c.xTop - 40, yTop - 150], [c.xTop - 40, yBot]], 4);
         line([[c.xTop + 40, yTop - 150], [c.xTop + 40, yBot]], 4);
-        const rider = [...Object.values(state.players), ...state.boarders].find((w) => w.conn === i);
-        if (rider) liftY = rider.y;
-        line([[c.xTop, yTop - 150], [c.xTop, liftY - 128]], 3);
-        if (sprites.box(ctx, 'ship/lift', c.xTop - 38, liftY - 128, 76, 132)) return;
-        ink();
-        ctx.lineWidth = 2.8;
-        ctx.strokeRect(c.xTop - 38, liftY - 128, 76, 128);
-        ctx.fillStyle = IRON;
-        ctx.fillRect(c.xTop - 38, liftY - 4, 76, 10);
       }
     });
   };
 
-  const drawProps = (time) => {
-    // Boiler with glowing firebox and pressure gauge.
-    const boiler = L.stations.find((s) => s.n === 'Boiler');
+  // The lift cage follows whoever is riding it.
+  const liveConnectors = () => {
+    L.connectors.forEach((c, i) => {
+      if (c.type !== 'lift') return;
+      const yTop = P[c.top].y;
+      let liftY = liftYs.has(i) ? liftYs.get(i) : liftHome(c);
+      const rider = [...Object.values(state.players), ...state.boarders].find((w) => w.conn === i);
+      if (rider) liftY = rider.y;
+      liftYs.set(i, liftY);
+      line([[c.xTop, yTop - 150], [c.xTop, liftY - 128]], 3);
+      if (sprites.box(ctx, 'ship/lift', c.xTop - 38, liftY - 128, 76, 132)) return;
+      ink();
+      ctx.lineWidth = 2.8;
+      ctx.strokeRect(c.xTop - 38, liftY - 128, 76, 128);
+      ctx.fillStyle = IRON;
+      ctx.fillRect(c.xTop - 38, liftY - 4, 76, 10);
+    });
+  };
+
+  // ================= STATION PROPS =================
+  const drawProps = () => {
+    // Boiler (the firebox glow and the gauge needle are live).
+    const boiler = station('Boiler');
+    if (boiler) {
+      const by = P[boiler.d].y;
+      if (!sprites.has('ship/boiler')) {
+        // Big Firebox: a wider boiler.
+        const wide = 18 * has('firebox');
+        filled('#5a5558', () => ctx.roundRect(boiler.x - 70 - wide, by - 112, 90 + wide, 112, 16));
+      } else sprites.box(ctx, 'ship/boiler', boiler.x - 70, by - 112, 90, 112);
+      const gx = boiler.x + 60;
+      const gy = by - 90;
+      if (!sprites.box(ctx, 'ship/gauge', gx - 28, gy - 28, 56, 56)) filled('#f1e2b8', () => ctx.arc(gx, gy, 28, 0, 7));
+    }
+
+    // (The ship's wheel is drawn by drawHelmMount, out on the top deck.)
+
+    // Chart table for the navigator.
+    const nav = station('Navigator');
+    if (nav) {
+      if (!sprites.box(ctx, 'ship/chart-table', nav.x - 40, P[nav.d].y - 52, 80, 52)) {
+        filled('#e9dcb5', () => ctx.rect(nav.x - 40, P[nav.d].y - 52, 80, 12));
+        line([[nav.x - 30, P[nav.d].y - 40], [nav.x - 30, P[nav.d].y]], 5);
+        line([[nav.x + 30, P[nav.d].y - 40], [nav.x + 30, P[nav.d].y]], 5);
+      }
+    }
+
+    // Ammo crates in the hold.
+    const hold = station('Ammo Hold');
+    if (hold) {
+      const hy2 = P[hold.d].y;
+      if (!sprites.box(ctx, 'ship/ammo-crates', hold.x + 20, hy2 - 50, 100, 50)) {
+        [[30, 0], [64, 0], [47, -26]].forEach(([x, y]) => filled('#c9a05f', () => ctx.rect(hold.x + x, hy2 - 24 + y, 34, 24)));
+      }
+    }
+  };
+
+  // Boiler fire glow and the pressure gauge needle.
+  const liveProps = (time) => {
+    const boiler = station('Boiler');
+    if (!boiler) return;
     const by = P[boiler.d].y;
     const glow = 0.5 + 0.5 * Math.sin(time * 6);
     const fuel = Math.min(1, (state.ship.fuel || 0) / 40);
-    if (sprites.box(ctx, 'ship/boiler', boiler.x - 70, by - 112, 90, 112)) {
+    if (sprites.has('ship/boiler')) {
       // Fire glow over the firebox door.
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
@@ -638,37 +825,14 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       ctx.fillRect(boiler.x - 50, by - 48, 50, 30);
       ctx.restore();
     } else {
-      // Big Firebox: a wider boiler.
-      const wide = 18 * has('firebox');
-      filled('#5a5558', () => ctx.roundRect(boiler.x - 70 - wide, by - 112, 90 + wide, 112, 16));
       ctx.fillStyle = fuel > 0 ? `rgba(255,${120 + glow * 80},40,${0.3 + 0.7 * fuel})` : '#3a3538';
       ctx.fillRect(boiler.x - 50, by - 48, 50, 30);
     }
     const gx = boiler.x + 60;
     const gy = by - 90;
     const angle = -Math.PI * 1.15 + (state.ship.press / 100) * Math.PI * 1.3;
-    if (!sprites.box(ctx, 'ship/gauge', gx - 28, gy - 28, 56, 56)) filled('#f1e2b8', () => ctx.arc(gx, gy, 28, 0, 7));
     line([[gx, gy], [gx + Math.cos(angle) * 22, gy + Math.sin(angle) * 22]], 5, state.ship.press < config.BOILER.WARN_AT ? '#6fa07a' : '#a8443f');
-
-    // (The ship's wheel is drawn by drawHelmMount, out on the top deck.)
-
-    // Chart table for the navigator.
-    const nav = L.stations.find((s) => s.n === 'Navigator');
-    if (!sprites.box(ctx, 'ship/chart-table', nav.x - 40, P[nav.d].y - 52, 80, 52)) {
-      filled('#e9dcb5', () => ctx.rect(nav.x - 40, P[nav.d].y - 52, 80, 12));
-      line([[nav.x - 30, P[nav.d].y - 40], [nav.x - 30, P[nav.d].y]], 5);
-      line([[nav.x + 30, P[nav.d].y - 40], [nav.x + 30, P[nav.d].y]], 5);
-    }
-
-    // Ammo crates in the hold.
-    const hold = L.stations.find((s) => s.n === 'Ammo Hold');
-    const hy2 = P[hold.d].y;
-    if (!sprites.box(ctx, 'ship/ammo-crates', hold.x + 20, hy2 - 50, 100, 50)) {
-      [[30, 0], [64, 0], [47, -26]].forEach(([x, y]) => filled('#c9a05f', () => ctx.rect(hold.x + x, hy2 - 24 + y, 34, 24)));
-    }
   };
-
-  const moduleFor = (name) => (state.modules || []).find((m) => m.name === name);
 
   // Health bars on damaged modules, smoke on broken ones, steam jets from burst pipes.
   const drawModuleStatus = (time) => {
@@ -738,17 +902,26 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
   };
 
-  // Steam vent stacks: open ones blow a big plume (handle turned); closed ones hiss a little
-  // when the pressure is high.
-  const drawVents = (time) => {
+  // ================= VENTS =================
+  // Steam vent stacks: the stack itself is static; open ones blow a big plume (handle turned) and closed ones hiss a
+  // little when the pressure is high (live).
+  const drawVents = () => {
+    L.vents.forEach((v) => {
+      const y = P[v.d].y;
+      if (sprites.box(ctx, 'ship/vent', v.x - 16, y - 150, 32, 110)) return;
+      filled('#9aa1a6', () => ctx.rect(v.x - 9, y - 140, 18, 100));
+      filled('#6d7378', () => ctx.rect(v.x - 16, y - 150, 32, 14));
+    });
+  };
+
+  const liveVents = (time) => {
     const high = state.ship.press >= config.BOILER.WARN_AT;
+    const sprite = sprites.has('ship/vent');
     L.vents.forEach((v, i) => {
       const y = P[v.d].y;
       const open = state.ventOpen && state.ventOpen[i];
-      if (!sprites.box(ctx, 'ship/vent', v.x - 16, y - 150, 32, 110)) {
-        filled('#9aa1a6', () => ctx.rect(v.x - 9, y - 140, 18, 100));
-        filled('#6d7378', () => ctx.rect(v.x - 16, y - 150, 32, 14));
-        filled(open ? '#4caf50' : high ? '#a8443f' : '#a8443f', () => ctx.arc(v.x, y - 60, 13, 0, 7));
+      if (!sprite) {
+        filled(open ? '#4caf50' : '#a8443f', () => ctx.arc(v.x, y - 60, 13, 0, 7));
         if (open) line([[v.x, y - 73], [v.x, y - 47]], 3);
         else line([[v.x - 13, y - 60], [v.x + 13, y - 60]], 3);
       }
@@ -765,7 +938,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
 
   // Coal bunker: a bin with a coal heap.
   const drawCoal = () => {
-    const s = L.stations.find((q) => q.n === 'Coal Bunker');
+    const s = station('Coal Bunker');
     if (!s) return;
     const y = P[s.d].y;
     if (sprites.box(ctx, 'ship/coal-bunker', s.x - 50, y - 86, 100, 86)) return;
@@ -777,6 +950,19 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     });
   };
 
+  // Medical bay sign (where anyone who falls off comes round).
+  const drawMedbay = () => {
+    const mb = L.medbay;
+    const mp = mb && plat(mb.p);
+    if (!mp) return;
+    const y = mp.y - 120;
+    filled('#f3ead6', () => ctx.roundRect(mb.x - 28, y - 28, 56, 56, 8));
+    ctx.fillStyle = '#a8443f';
+    ctx.fillRect(mb.x - 8, y - 20, 16, 40);
+    ctx.fillRect(mb.x - 20, y - 8, 40, 16);
+  };
+
+  // Station name boards (lobby only): the ship is still and nobody has a phone telling them where things are.
   const drawLabels = () => {
     ctx.font = '700 24px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
@@ -804,23 +990,25 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     }
   };
 
-  // Upgrade fittings: armour plates, sprinklers, the safety-valve whistle.
+  // Upgrade fittings: armour plates, sprinklers, the safety-valve whistle (static; the bake is redone when they change).
   const drawUpgradeFittings = () => {
     const armour = has('armour');
+    const lower = plat('lower');
+    const main = plat('main');
     for (let k = 0; k < armour; k++) {
       // Riveted steel plates along the hull's lower edge.
-      for (let x = 270; x < 1330; x += 90) {
-        filled('#8d969b', () => ctx.rect(x, 770 - k * 22, 80, 20));
+      for (let x = main.x0 + 130; x < main.x1 - 140; x += 90) {
+        filled('#8d969b', () => ctx.rect(x, lower.y - 20 - k * 22, 80, 20));
         ctx.fillStyle = INK;
         ctx.beginPath();
-        ctx.arc(x + 8, 780 - k * 22, 2.5, 0, 7);
-        ctx.arc(x + 72, 780 - k * 22, 2.5, 0, 7);
+        ctx.arc(x + 8, lower.y - 10 - k * 22, 2.5, 0, 7);
+        ctx.arc(x + 72, lower.y - 10 - k * 22, 2.5, 0, 7);
         ctx.fill();
       }
     }
     if (has('sprinklers')) {
       for (const id of ['main', 'lower']) {
-        const p = P.find((q) => q.id === id);
+        const p = plat(id);
         const top = p.y - (id === 'lower' ? 138 : 146);
         for (let x = p.x0 + 120; x < p.x1 - 60; x += 220) {
           line([[x, top], [x, top + 12]], 4, '#9aa1a6');
@@ -829,14 +1017,17 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       }
     }
     if (has('safety-valve')) {
-      const b = L.stations.find((s) => s.n === 'Boiler');
-      const y = P[b.d].y - 112;
-      line([[b.x - 30, y], [b.x - 30, y - 22]], 6, '#c9a85a');
-      filled('#c9a85a', () => ctx.roundRect(b.x - 38, y - 34, 16, 14, 4));
+      const b = station('Boiler');
+      if (b) {
+        const y = P[b.d].y - 112;
+        line([[b.x - 30, y], [b.x - 30, y - 22]], 6, '#c9a85a');
+        filled('#c9a85a', () => ctx.roundRect(b.x - 38, y - 34, 16, 14, 4));
+      }
     }
   };
 
-  // Bomb bay: a rack of bombs inside and two doors in the belly that swing open on a drop.
+  // ================= BOMB BAY =================
+  // A rack of bombs inside and two doors in the belly that swing open on a drop.
   // Hazard stripes (red and cream, slanted) in a box.
   const hazard = (x0, y0, w, h) => {
     ctx.save();
@@ -876,17 +1067,19 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
   // The bomb bay: its own dark compartment in the belly of the hull, reached by a hatch ladder from
   // the lower deck. Racks of bombs (they empty as bombs are dropped), a bombsight, an ammo point
   // where crates are brought to load bombs, and doors in the floor that swing open on a drop or a jump.
-  const drawBombBay = () => {
+  // This is the fixed part: the compartment, the shelves, the stencils. (Bombs, doors and the bombsight lamp are live.)
+  const bayGeom = () => {
     const B = L.bombBay;
-    const bay = state.bombBay || { bombs: 0 };
-    const bp = P.find((q) => q.id === 'bay');
-    const fy = bp.y; // floor
-    const x0 = bp.x0;
-    const x1 = bp.x1;
-    const top = 812;
-    const half = B.doorHalf;
-    const open = Math.min(1, (bay.open || 0) * 3);
-    const manned = Object.values(state.players).some((q) => q.lock === 'Bomb Bay');
+    const bp = B && plat('bay');
+    if (!bp) return null;
+    const hatch = L.connectors.find((c) => P[c.bottom] && P[c.bottom].id === 'bay');
+    return { B, bp, fy: bp.y, x0: bp.x0, x1: bp.x1, top: bp.y - 113, half: B.doorHalf, rx0: bp.x0 + 50, rx1: bp.x0 + 158, sx: bp.x0 + 186, hatchX: hatch ? hatch.xTop : bp.x0 + 22 };
+  };
+
+  const drawBombBay = () => {
+    const g = bayGeom();
+    if (!g) return;
+    const { B, fy, x0, x1, top, half, rx0, rx1, sx } = g;
     // Hull blister: dark metal with chamfered bottom corners.
     filled('#4a4346', () => {
       ctx.moveTo(x0, top);
@@ -915,23 +1108,16 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     hazard(x0 + 6, fy - 12, B.x - half - x0 - 6, 12);
     hazard(B.x + half, fy - 12, x1 - B.x - half - 6, 12);
     // Hatch up to the lower deck (the ladder is drawn with the other connectors).
-    filled('#3d373b', () => ctx.rect(372 - 24, top + 8, 48, 8));
+    filled('#3d373b', () => ctx.rect(g.hatchX - 24, top + 8, 48, 8));
     // Stencilled name on the wall.
     ctx.font = '20px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#e8c9c4';
     ctx.fillText('BOMB BAY', (x0 + x1) / 2 - 20, top + 52);
     // Bomb rack: a shelving frame with two shelves of three bombs; it empties as bombs are used.
-    const rx0 = 400;
-    const rx1 = 508;
     line([[rx0 - 4, top + 66], [rx0 - 4, fy]], 6, '#3d373b');
     line([[rx1, top + 66], [rx1, fy]], 6, '#3d373b');
     for (const sy of [fy - 30, fy - 68]) filled('#6b4a32', () => ctx.rect(rx0 - 8, sy, rx1 - rx0 + 14, 7));
-    const shown = Math.min(bay.bombs, 6);
-    for (let i = 0; i < shown; i++) drawBomb(rx0 + 28 + (i % 3) * 38, (i < 3 ? fy - 30 : fy - 68) - 10);
-    ctx.font = '16px ' + config.FONTS.DISPLAY;
-    ctx.fillStyle = bay.bombs > 0 ? '#f2d36b' : '#e8887f';
-    ctx.fillText(bay.bombs > 0 ? 'BOMBS x' + bay.bombs : 'EMPTY', (rx0 + rx1) / 2, fy - 86);
     // Ammo point: crates stacked by the wall; bring an ammo crate to the bombardier to load bombs.
     filled('#c9a05f', () => ctx.rect(x1 - 52, fy - 34, 36, 34));
     line([[x1 - 52, fy - 34], [x1 - 16, fy]], 2.5, WOOD_DARK);
@@ -940,12 +1126,40 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     ctx.fillStyle = INK;
     ctx.fillText('AMMO', x1 - 29, fy - 45);
     // Bombsight on a stand beside the bombardier, looking down through the doors.
-    const sx = 536;
     line([[sx, fy], [sx, fy - 54]], 6, IRON);
     line([[sx, fy - 54], [sx + 22, fy - 28]], 11, INK);
     line([[sx, fy - 54], [sx + 22, fy - 28]], 7, '#c9a85a');
-    filled(manned ? '#ff6a5c' : '#9a5a55', () => ctx.arc(sx + 24, fy - 26, 6, 0, 7));
+    filled('#9a5a55', () => ctx.arc(sx + 24, fy - 26, 6, 0, 7)); // (the lamp is redrawn live: bright when manned)
     filled('#c9a85a', () => ctx.roundRect(sx - 10, fy - 62, 20, 12, 3));
+    // JUMP sign over the doors (parachute!).
+    ctx.font = '14px ' + config.FONTS.DISPLAY;
+    ctx.fillStyle = '#f2d36b';
+    ctx.fillText('JUMP', B.jumpX, fy - 74);
+    ctx.fillStyle = '#f2d36b';
+    ctx.beginPath();
+    ctx.moveTo(B.jumpX - 9, fy - 66);
+    ctx.lineTo(B.jumpX + 9, fy - 66);
+    ctx.lineTo(B.jumpX, fy - 52);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  const liveBombBay = () => {
+    const g = bayGeom();
+    if (!g) return;
+    const { B, fy, rx0, rx1, sx, half } = g;
+    const bay = state.bombBay || { bombs: 0 };
+    const open = Math.min(1, (bay.open || 0) * 3);
+    // The bombs on the shelves, and the count.
+    const shown = Math.min(bay.bombs, 6);
+    for (let i = 0; i < shown; i++) drawBomb(rx0 + 28 + (i % 3) * 38, (i < 3 ? fy - 30 : fy - 68) - 10);
+    ctx.font = '16px ' + config.FONTS.DISPLAY;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = bay.bombs > 0 ? '#f2d36b' : '#e8887f';
+    ctx.fillText(bay.bombs > 0 ? 'BOMBS x' + bay.bombs : 'EMPTY', (rx0 + rx1) / 2, fy - 86);
+    // The bombsight's lamp is bright when somebody is manning it.
+    const manned = Object.values(state.players).some((q) => q.lock === 'Bomb Bay');
+    if (manned) filled('#ff6a5c', () => ctx.arc(sx + 24, fy - 26, 6, 0, 7));
     // Door slot in the floor: dark opening when the doors are open, leaves hinged at both sides.
     if (open > 0.02) {
       filled('#1d2630', () => ctx.rect(B.x - half, fy, half * 2, 17));
@@ -963,51 +1177,181 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     filled('#8a6444', () => ctx.rect(-half, 0, half, 12));
     hazard(-half + 2, 1, half - 4, 6);
     ctx.restore();
-    // JUMP sign over the doors (parachute!).
-    ctx.font = '14px ' + config.FONTS.DISPLAY;
-    ctx.fillStyle = '#f2d36b';
-    ctx.fillText('JUMP', B.jumpX, fy - 74);
-    ctx.fillStyle = '#f2d36b';
-    ctx.beginPath();
-    ctx.moveTo(B.jumpX - 9, fy - 66);
-    ctx.lineTo(B.jumpX + 9, fy - 66);
-    ctx.lineTo(B.jumpX, fy - 52);
-    ctx.closePath();
-    ctx.fill();
+  };
+
+  // ================= THE LAYERS =================
+  // Draw order, as in the old single pass: gasbag (live) < BACK (static) < the live bits that sit on the decks < FRONT
+  // (static: ladders, ropes, poles, the top deck - they pass in front of the boiler fire, the helm wheel, the steam ...)
+  // < lobby name boards < holes, damage and status (live).
+  // Each piece is drawn on its own save/restore and can never take the whole ship down with it.
+  const guard = (name, fn, ...args) => {
+    ctx.save();
+    try {
+      fn(...args);
+    } catch (e) {
+      const list = (globalThis.gameErrors = globalThis.gameErrors || []);
+      if (list.length < 50) list.push('shipArt ' + name + ': ' + (e && e.message));
+    } finally {
+      ctx.restore();
+    }
+  };
+
+  const drawBackLayer = () => {
+    guard('nest', drawNest);
+    guard('gondola', drawGondola);
+    guard('upgrades', drawUpgradeFittings);
+    guard('outriggers', drawOutriggers);
+    guard('pod', drawPod);
+    guard('hangar', drawHangar);
+    guard('pipes', drawPipes);
+    guard('racks', drawRacks);
+    guard('extinguishers', drawExtinguishers);
+    guard('props', drawProps);
+    guard('coal', drawCoal);
+    guard('bombBay', drawBombBay);
+    guard('helm', drawHelmMount);
+    guard('medbay', drawMedbay);
+    guard('vents', drawVents);
+  };
+
+  const drawFrontLayer = () => {
+    guard('connectors', drawConnectors);
+    guard('catwalk', drawCatwalk);
+  };
+
+  const drawLiveMid = (time) => {
+    guard('engines', liveEngines, time);
+    guard('escorts', liveHangar);
+    guard('valves', livePipes);
+    guard('boiler', liveProps, time);
+    guard('iceLocker', drawIceLocker, ctx, state, time);
+    guard('bombs', liveBombBay);
+    guard('wheel', liveHelm);
+    guard('steam', liveVents, time);
+    guard('lift', liveConnectors);
+  };
+
+  const drawLiveTop = (time) => {
+    if (state.phase === 'lobby') guard('labels', drawLabels); // (in flight each phone says where you are)
+    guard('holes', drawGasHoles, time);
+    guard('status', drawModuleStatus, time);
+    guard('heat', drawBoilerHeat, ctx, state, time); // GOING DOWN!: the boiler's heat bar and the ice blocks in flight
+    guard('ice', drawIceFlights, ctx, state);
+  };
+
+  // ---- The bake: one offscreen canvas per static layer, in ship space ----
+  const bake = { back: null, front: null, key: '', scale: 0, x: 0, y: 0, w: 0, h: 0, failed: false };
+  let sigCount = 0;
+  let sigCache = '';
+
+  // Everything (other than the zoom) that makes the baked pictures out of date.
+  const signature = () => {
+    if (sigCount++ % 20 === 0 || !sigCache) {
+      let s = '';
+      for (const k of STATIC_SPRITES) s += sprites.has(k) ? '1' : '0';
+      s += '|';
+      for (const t of STATIC_TEXTURES) s += hasTexture(t) ? '1' : '0';
+      s += '|';
+      try {
+        s += document.fonts.check('20px ' + config.FONTS.DISPLAY) ? '1' : '0';
+      } catch (e) { s += 'x'; }
+      sigCache = s;
+    }
+    return sigCache + '|' + L.version + '|' + STATIC_UPGRADES.map(has).join(',');
+  };
+
+  // The ship-space rectangle the bake covers: the drawing's outer edges, plus a margin.
+  const bakeRect = () => {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    const b = L.bounds;
+    if (b) { x0 = b.x0; y0 = b.y0; x1 = b.x1; y1 = b.y1; }
+    for (const p of P) {
+      x0 = Math.min(x0, p.x0 - 60);
+      x1 = Math.max(x1, p.x1 + 60);
+      y0 = Math.min(y0, p.y - 260);
+      y1 = Math.max(y1, p.y + 130);
+    }
+    for (const e of L.engines) { x0 = Math.min(x0, e.x - 160); x1 = Math.max(x1, e.x + 160); }
+    return { x: Math.floor(x0 - 30), y: Math.floor(y0 - 30), w: Math.ceil(x1 - x0 + 60), h: Math.ceil(y1 - y0 + 60) };
+  };
+
+  const rebake = (key, k) => {
+    const r = bakeRect();
+    let s = Math.max(0.2, Math.min(3, k)) * BAKE_SS;
+    s = Math.min(s, BAKE_MAX / r.w, BAKE_MAX / r.h);
+    const cw = Math.max(1, Math.ceil(r.w * s));
+    const ch = Math.max(1, Math.ceil(r.h * s));
+    const saved = ctx;
+    try {
+      for (const [name, draw] of [['back', drawBackLayer], ['front', drawFrontLayer]]) {
+        if (!bake[name]) bake[name] = document.createElement('canvas');
+        const cv = bake[name];
+        cv.width = cw; // (resizing also clears it)
+        cv.height = ch;
+        const bc = cv.getContext('2d');
+        ctx = bc;
+        bc.setTransform(s, 0, 0, s, -r.x * s, -r.y * s);
+        bc.lineJoin = 'round';
+        bc.lineCap = 'round';
+        draw();
+      }
+    } finally {
+      ctx = saved;
+    }
+    bake.key = key;
+    bake.scale = s;
+    bake.x = r.x;
+    bake.y = r.y;
+    bake.w = cw / s;
+    bake.h = ch / s;
+  };
+
+  // Blit one baked layer onto the screen.
+  const blit = (cv) => {
+    const smooth = ctx.imageSmoothingQuality;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    try {
+      ctx.drawImage(cv, bake.x, bake.y, bake.w, bake.h);
+    } catch (e) {
+      bake.failed = true;
+    }
+    ctx.imageSmoothingQuality = smooth;
+  };
+
+  // Make sure the bake is current for this zoom (a bake problem switches to drawing the old way, directly).
+  const ensureBake = () => {
+    if (bake.failed || typeof document === 'undefined') return false;
+    try {
+      const m = ctx.getTransform();
+      const k = Math.hypot(m.a, m.b) || 1; // screen pixels per ship unit right now (zoom x pixel ratio)
+      const key = signature();
+      const ratio = (k * BAKE_SS) / (bake.scale || 1);
+      if (!bake.back || key !== bake.key || ratio > 1.25 || ratio < 0.8) rebake(key, k);
+      return true;
+    } catch (e) {
+      bake.failed = true;
+      ctx = screenCtx;
+      const list = (globalThis.gameErrors = globalThis.gameErrors || []);
+      if (list.length < 50) list.push('shipArt bake: ' + (e && e.message));
+      return false;
+    }
   };
 
   return (time) => {
-    drawGasbag();
-    drawNest();
-    drawGondola();
-    drawUpgradeFittings();
-    drawOutriggers(time);
-    drawPod();
-    drawHangar(time);
-    drawPipes();
-    drawRacks();
-    drawExtinguishers();
-    drawProps(time);
-    drawIceLocker(ctx, state, time);
-    drawCoal();
-    drawBombBay();
-    drawHelmMount();
-    // Medical bay sign (where anyone who falls off comes round).
-    {
-      const mb = L.medbay;
-      const y = P.find((q) => q.id === mb.p).y - 120;
-      filled('#f3ead6', () => ctx.roundRect(mb.x - 28, y - 28, 56, 56, 8));
-      ctx.fillStyle = '#a8443f';
-      ctx.fillRect(mb.x - 8, y - 20, 16, 40);
-      ctx.fillRect(mb.x - 20, y - 8, 40, 16);
-    }
-    drawVents(time);
-    drawConnectors();
-    drawCatwalk();
-    if (state.phase === 'lobby') drawLabels(); // (in flight each phone says where you are)
-    drawGasHoles(time);
-    drawModuleStatus(time);
-    drawBoilerHeat(ctx, state, time); // GOING DOWN!: the boiler's heat bar and the ice blocks in flight
-    drawIceFlights(ctx, state);
+    ctx = screenCtx;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    guard('gasbag', drawGasbag); // (live; behind everything else)
+    const baked = ensureBake();
+    if (baked) blit(bake.back);
+    else drawBackLayer();
+    drawLiveMid(time);
+    if (baked) blit(bake.front);
+    else drawFrontLayer();
+    drawLiveTop(time);
   };
 }
