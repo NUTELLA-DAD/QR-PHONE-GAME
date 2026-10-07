@@ -786,7 +786,7 @@ export const config = {
   DIFFICULTY: {
     easy: { label: 'Easy', damage: 0.2, pace: 0.85, autopilot: true, gunHp: 0.85, spares: 4 },
     normal: { label: 'Normal', damage: 0.3, pace: 1.0, autopilot: true, gunHp: 1, spares: 4 },
-    veteran: { label: 'Veteran', damage: 0.35, pace: 1.15, autopilot: true, gunHp: 1.1, spares: 3 },
+    veteran: { label: 'Veteran', damage: 0.36, pace: 1.15, autopilot: true, gunHp: 1.1, spares: 3 },
     hard: { label: 'Hard', damage: 0.34, pace: 1.2, autopilot: false, gunHp: 1.2, spares: 2 },
   },
   // Crew-size scaling (crewscale.js). The number of crew aboard (connected players, bots included)
