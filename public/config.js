@@ -1170,6 +1170,9 @@ export const config = {
   // Animals players (and test bots) can be.
   CREW_SPRITES: false, // true = use crew sprite art from art/sprites/crew (only the bulldog has any); false = the drawn style for everyone
   // Painted background images (art/backgrounds/<env>/sky|far|mid|near|cave .png) - see art/ART_PIPELINE.md.
+  // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.
+  // SCALE = size of one texture pixel in world units (the 512px tile covers 512*SCALE units; the airship is ~1500 wide).
+  TEXTURES: { ENABLED: true, SCALE: 1.1 },
   BACKGROUNDS: {
     ENABLED: true,
     // How fast each strip slides past, as a share of the ship's speed (bigger = nearer). Same idea as the drawn ridges.
