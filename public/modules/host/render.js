@@ -2,6 +2,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { createShipArt } from './shipArt.js';
 import { createThreatArt } from './threatArt.js';
+import { createHookArt } from './hookArt.js';
 import { installLineBoil, setBoilTime, createFilmLook } from './style.js';
 import { createSprites } from './sprites.js';
 import { createCharacterArt } from './characterArt.js';
@@ -47,6 +48,7 @@ export function createRenderer({ ctx, state, canvas }) {
 
   const drawShip = createShipArt({ ctx, state, ink, rrect, sprites });
   const threatArt = createThreatArt({ ctx, state, ink, sprites });
+  const hookArt = createHookArt({ ctx, state, ink });
   const skyArt = createSkyArt({ ctx, state });
   const envArt = createEnvArt({ ctx, state, ink }); // Frost Peaks / Ember Forge look (sky, weather, lava, ice)
   const courseArt = createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgArt });
@@ -1866,7 +1868,7 @@ export function createRenderer({ ctx, state, canvas }) {
       drawHazards(time / 1000);
       threatArt.drawBombs(time / 1000);
       drawHighlights(time / 1000);
-      [...Object.values(state.players).filter((p) => !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying))), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => {
+      [...Object.values(state.players).filter((p) => !p.hj && !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying))), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => {
         // Crew aboard a gunship are stored in HER frame: draw them where she is.
         if (player.onGunship && state.gunship) {
           ctx.save();
@@ -1875,6 +1877,7 @@ export function createRenderer({ ctx, state, canvas }) {
           ctx.restore();
         } else drawPlayer(player, time / 1000);
       });
+      hookArt.drawRopes(); // hookshot ropes and hooks
       // Each crew member's colour marker above their head, easy to spot from the sofa.
       for (const p of Object.values(state.players)) {
         if (!p.color || p.connected === false) continue;

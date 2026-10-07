@@ -511,6 +511,25 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       const y = P[r.d].y - 115;
       if (sprites.box(ctx, 'ship/rack-' + r.kind, r.x - 34, y, 68, 70)) continue;
       filled(WOOD, () => ctx.roundRect(r.x - 34, y, 68, 70, 6));
+      if (r.kind === 'hookshot') {
+        // A coiled rope and an iron grapple on a peg.
+        line([[r.x - 20, y + 54], [r.x + 20, y + 54]], 4);
+        ctx.strokeStyle = '#b89968';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.ellipse(r.x - 8, y + 36, 16, 12, 0, 0, 7);
+        ctx.stroke();
+        filled(IRON, () => {
+          ctx.moveTo(r.x + 12, y + 12);
+          ctx.lineTo(r.x + 28, y + 30);
+          ctx.lineTo(r.x + 22, y + 32);
+          ctx.lineTo(r.x + 12, y + 24);
+          ctx.lineTo(r.x + 4, y + 32);
+          ctx.lineTo(r.x - 2, y + 30);
+          ctx.closePath();
+        });
+        continue;
+      }
       for (const dx of [-14, 14]) {
         if (r.kind === 'sword') {
           line([[r.x + dx, y + 8], [r.x + dx, y + 58]], 5, '#d8dde0');

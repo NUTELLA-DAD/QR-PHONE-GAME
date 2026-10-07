@@ -177,7 +177,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const shove = (power, hx) => {
     if (power < A.STAGGER_POWER) return;
     for (const p of Object.values(state.players)) {
-      if (p.bot || p.fly || p.air || p.fall || p.conn != null || p.lock || p.ko > 0 || p.swing || p.onGunship || p.d == null) continue; // bots keep their footing (balance)
+      if (p.bot || p.hj || p.fly || p.air || p.fall || p.conn != null || p.lock || p.ko > 0 || p.swing || p.onGunship || p.d == null) continue; // bots keep their footing (balance)
       const pl = P[p.d];
       if (!outsideAt(p.d, p.x)) continue;
       const dir = Math.abs(p.x - hx) < 8 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(p.x - hx);
@@ -236,7 +236,8 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     p.moving = false;
 
     // Landing: the highest surface we pass through from above.
-    if (p.fvy >= 0) {
+    if (p.noLand > 0) p.noLand -= dt; // (zipping on a hookshot rope: you pass through decks until the winch stops)
+    if (p.fvy >= 0 && !(p.noLand > 0)) {
       let best = null;
       for (const s of surfaces()) {
         const sy = val(s.y);
