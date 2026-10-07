@@ -174,7 +174,7 @@ export function createSearchlightArt({ ctx, state, ink }) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     // 1. The dark itself, with light cut out of it.
-    if (alphaDark > 0.01) {
+    if (alphaDark > 0.01 && width >= 1 && height >= 1) { // (a 0-size screen, e.g. a minimised window, has nothing to darken)
       const RES = perfDarkRes(D.RES); // (coarser when the perf governor has stepped down)
       const w = Math.ceil(width / RES);
       const h = Math.ceil(height / RES);
