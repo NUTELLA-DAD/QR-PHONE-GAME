@@ -1,6 +1,6 @@
 // Threats from outside the ship: the fighter, floating mines, falling
 // wrecks, plus the crew's shells hitting them. Anything that touches the ship crashes into it.
-import { firePace, spawnPace, crewMul } from './crewscale.js';
+import { firePace, spawnPace, crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, groundAt, ceilAt, scrollSpeed } from './course.js';
@@ -17,7 +17,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
   state.ev = { t: 0, warn: 0, warnText: '' };
   let mineT = config.MINES.FIRST_AFTER;
 
-  const crew = () => Object.keys(state.players).length;
+  const crew = () => crewHeads(state);
   const warn = (text, secs = 3.5) => {
     state.ev.warn = secs;
     state.ev.warnText = text;

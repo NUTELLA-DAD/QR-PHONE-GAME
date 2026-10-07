@@ -38,7 +38,7 @@
 // heights in g.bp.decks) and is shifted by (g.dx, g.dy) to reach ship coordinates - see deckAt().
 // No two gunships are alike: gunshipBlueprint.js generates each one's hull, decks, guns, special, crew and captain.
 // The rope only pulls when taut: a gentle tug on us, a hard one on her; it snaps if stretched too far.
-import { crewMul } from './crewscale.js';
+import { crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { inRock, scrollSpeed } from './course.js';
@@ -708,7 +708,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
 
   // ---- Paratroopers ----
   const dropParas = (g) => {
-    const crew = Object.keys(state.players).length;
+    const crew = crewHeads(state);
     const n = clamp(Math.round((1 + Math.floor(crew / 6) + (lap() >= 3 ? 1 : 0) + (g.bp.special === 'paras' ? GP.PARAS.EXTRA : 0)) * crewMul(state, 'raiders')), 1, 5);
     const alt = state.ship.alt;
     const sx = mx(g, g.bp.x0 + 80) + g.dx;

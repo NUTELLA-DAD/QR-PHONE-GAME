@@ -7,7 +7,7 @@
 //                 again. Shot down, they spiral into the ground and the pilot bails out.
 //   Dread Zeppelin - boss airship on the way home each lap: parks ahead, three turrets, and sends
 //                    boarders down grapple lines. Shooting it down patches your ship up.
-import { spawnPace, firePace, crewMul } from './crewscale.js';
+import { spawnPace, firePace, crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, scrollSpeed } from './course.js';
@@ -31,7 +31,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   let bossLap = 0; // lap the boss last appeared on
 
   const lap = () => (state.course ? state.course.lap : 1);
-  const crew = () => Object.keys(state.players).length;
+  const crew = () => crewHeads(state);
   const warn = (text, secs = 3) => {
     state.ev.warn = secs;
     state.ev.warnText = text;

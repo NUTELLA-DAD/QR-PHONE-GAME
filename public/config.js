@@ -810,6 +810,18 @@ export const config = {
       16: { spawn: 1.45, count: 1.7, fire: 1.45, damage: 1.65, raiders: 1.9, hp: 1.65, spread: 1.45, collateral: 1.4 },
     },
   },
+  // Ship's mates (mates.js): helpers for short-handed crews. They use the bot brain with a restricted job list (bots.js),
+  // man no stations, cast no votes, win no awards and do not count as crew for CREW_SCALE.
+  MATES: {
+    ENABLED: true,
+    DIFFICULTIES: ['easy', 'normal'], // only on these difficulties
+    MAX_CREW: 3, // this many human crew or fewer get mates (a 4th human sends them home)
+    COUNT: { 1: 2, 2: 2, 3: 1 }, // mates per number of humans aboard
+    SPAWN_GAP: 1.5, // seconds between one mate dropping aboard and the next
+    JOBS: ['coal', 'ammo', 'patch', 'fire', 'revive', 'cool'], // the only job kinds a mate takes (hauling and mending; GOING DOWN ice 'cool')
+    COLOR: '#8a6f4e', // jacket colour (khaki)
+    SCARF: '#b4b8bd', // the grey scarf that marks a mate
+  },
   START_DIFFICULTY: 'normal',
   AUTOPILOT_SPEED: 0.65, // an unmanned helm steers itself at this share of the climb speed (Easy/Normal)
   // Enemies get busier with each lap: their fire rate is multiplied by this (lap 1 first).

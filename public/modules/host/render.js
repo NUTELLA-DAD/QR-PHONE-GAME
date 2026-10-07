@@ -21,6 +21,8 @@ import { loadTextures } from './textureArt.js';
 import { envIdOf } from './environments.js';
 import { createSpotterArt } from './spotterArt.js';
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
+import { crewHeads } from './crewscale.js';
+import { matesWanted } from './mates.js';
 import { drawIceBlock, drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
 export function createRenderer({ ctx, state, canvas }) {
@@ -906,11 +908,12 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.strokeText('AIRSHIP CREW', 790, 175);
     ctx.fillStyle = '#ffd23f';
     ctx.fillText('AIRSHIP CREW', 790, 175);
-    const crew = Object.keys(state.players).length;
+    const crew = crewHeads(state);
+    const mates = matesWanted(state, 0, true); // (ship's mates who will come aboard on CAST OFF)
     const lines = [
       'Scan the code with your phone to climb aboard (hold it sideways).',
       'Practise with tools and stations while moored.',
-      crew ? `${crew} aboard - press CAST OFF (or Space) when ready!` : 'Waiting for crew...',
+      crew ? `${crew} aboard${mates ? ` + ${mates} ship's mate${mates > 1 ? 's' : ''}` : ''} - press CAST OFF (or Space) when ready!` : 'Waiting for crew...',
     ];
     const rec = state.record || { laps: 0 };
     if (rec.laps > 0) lines.push(`Record on this TV: ${rec.laps} mission${rec.laps > 1 ? 's' : ''}, ${rec.kills} shot down`);
@@ -1062,7 +1065,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillText('Spare gasbags', 1540, 48);
     drawSpares(ctx, state, 1540, 90, true, 1.15);
     ctx.textAlign = 'center';
-    const voters = Object.values(state.players);
+    const voters = Object.values(state.players).filter((p) => !p.mate);
     if (v.kind === 'route') return drawRouteMap(v, voters);
     // The shop: up to 4 cards a row.
     const n = v.options.length;

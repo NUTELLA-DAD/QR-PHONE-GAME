@@ -1,5 +1,6 @@
 import { createJobFinder } from './jobs.js';
-import { updateCrewScale, sparesFor, spawnPace, damageMul, crewMul, autopilotOn } from './crewscale.js';
+import { updateCrewScale, sparesFor, spawnPace, damageMul, crewMul, autopilotOn, crewHeads } from './crewscale.js';
+import { updateMates } from './mates.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { updateBot } from './bots.js';
@@ -200,7 +201,7 @@ export function createSimulation() {
         return full ? { type: 'need', label: 'Firebox is full' } : { type: 'stoke', station, label: goingDown.active() ? 'LOAD COAL - LIFT!' : 'Load coal' };
       }
       if (station.n === 'Boiler' && tool === 'ice') return goingDown.coolAction(station);
-      if (LOCKABLE(station.n) && !taken(station.n)) return { type: 'station', station, label: 'Take ' + station.n };
+      if (LOCKABLE(station.n) && !taken(station.n) && !player.mate) return { type: 'station', station, label: 'Take ' + station.n }; // (a ship's mate never takes a station)
       // Players can always bump a bot off a station.
       const botThere = !player.bot && Object.values(state.players).find((q) => q.bot && q.lock === station.n);
       if (botThere) return { type: 'station', station, bump: botThere, label: 'Take ' + station.n };
@@ -427,7 +428,7 @@ export function createSimulation() {
   };
   const setPieces = {
     gunship: { text: 'GUNSHIP ON THE HORIZON!', go: () => gunship.spawn(), alive: () => !!state.gunship, max: () => config.PACING.GUNSHIP_PEAK_MAX },
-    bombers: { text: 'BOMBER RAID INCOMING!', go: () => { const n = Math.max(1, Math.round((1 + (lapNo() > 1 ? 1 : 0) + (Object.keys(state.players).length >= 10 ? 1 : 0)) * crewMul(state, 'count'))); for (let i = 0; i < n; i++) squadrons.spawnBomber(); return true; }, alive: () => state.bombers.length > 0 },
+    bombers: { text: 'BOMBER RAID INCOMING!', go: () => { const n = Math.max(1, Math.round((1 + (lapNo() > 1 ? 1 : 0) + (crewHeads(state) >= 10 ? 1 : 0)) * crewMul(state, 'count'))); for (let i = 0; i < n; i++) squadrons.spawnBomber(); return true; }, alive: () => state.bombers.length > 0 },
     strafers: { text: 'ENEMY SQUADRON - DOGFIGHTERS!', go: () => { squadrons.spawnStrafers(); return true; }, alive: () => state.strafers.length > 0 },
     swarm: { text: 'HUGE BAT SWARM!', go: () => { squadrons.spawnBigSwarm(); return true; }, alive: () => state.bats.some((b) => !b.dead && b.hp > 0 && !b.leaving) },
     imps: { text: 'IMP SWARM - GUNS AND SHIELD!', go: () => { specials.spawn.imps(); return true; }, alive: () => state.specials.imps.length > 0 },
@@ -626,7 +627,7 @@ export function createSimulation() {
 
   // Per-player stats for the lap scorecard.
   const stat = (player, key, n = 1) => {
-    if (!player) return;
+    if (!player || player.mate) return; // (ship's mates win no awards)
     player.stats = player.stats || {};
     player.stats[key] = (player.stats[key] || 0) + n;
   };
@@ -726,6 +727,7 @@ export function createSimulation() {
   // Fold each player's per-mission stats into the run totals (for the end-of-run awards).
   const bankStats = (reset) => {
     for (const p of Object.values(state.players)) {
+      if (p.mate) continue;
       const c = (state.run.crew[p.id] = state.run.crew[p.id] || { name: p.name, color: p.color, stats: {} });
       c.name = p.name;
       c.color = p.color;
@@ -878,7 +880,7 @@ export function createSimulation() {
     const v = state.vote;
     v.t -= dt;
     v.total += dt;
-    const voters = Object.values(state.players).filter((p) => p.connected !== false);
+    const voters = Object.values(state.players).filter((p) => p.connected !== false && !p.mate);
     const valid = (i) => Number.isInteger(i) && i >= 0 && i < v.options.length && !(v.kind === 'dock' && cardOff(v.options[i]));
     for (const p of voters) {
       if (p.bot && p.vote == null && (p.voteAt -= dt) <= 0) p.vote = botChoice(v, p);
@@ -971,7 +973,7 @@ export function createSimulation() {
     const run = state.run;
     const stop = curStop();
     addSalvage(SV.MISSION + stop.reward, 'mission');
-    const rows = awardRows(Object.values(state.players), true);
+    const rows = awardRows(Object.values(state.players).filter((p) => !p.mate), true);
     bankStats(true);
     state.scorecard = {
       lap: m.lap - 1,
@@ -1034,6 +1036,7 @@ export function createSimulation() {
   };
 
   const update = (dt) => {
+    updateMates(state, dt); // (ship's mates come aboard or go home before the crew count is read)
     updateCrewScale(state, dt);
     let helmFlown = false; // did someone steer this frame
     let gasManned = false; // is someone working the gas (the helm's PRESSURE lever)

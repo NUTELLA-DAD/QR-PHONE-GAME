@@ -33,7 +33,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
   state.gdBanner = null; // { text, sub, color, t, max } big words in the middle of the TV
   state.gdGrace = 0; // seconds she cannot be hurt after holding
 
-  const crewCount = () => Math.max(1, Object.values(state.players).filter((p) => p.connected !== false).length);
+  const crewCount = () => Math.max(1, Object.values(state.players).filter((p) => p.connected !== false && !p.mate).length);
   const say = (text, secs = 3) => {
     state.ev.warn = secs;
     state.ev.warnText = text;

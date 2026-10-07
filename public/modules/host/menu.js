@@ -37,7 +37,7 @@ export function createMenu({ simulation, network, onPause }) {
     sync();
   };
   $('mNoBots').onclick = () => {
-    for (const [id, p] of Object.entries(simulation.state.players)) if (p.bot) delete simulation.state.players[id];
+    for (const [id, p] of Object.entries(simulation.state.players)) if (p.bot && !p.mate) delete simulation.state.players[id];
     network.count();
     sync();
   };
