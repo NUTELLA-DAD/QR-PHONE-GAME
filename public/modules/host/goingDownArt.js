@@ -253,7 +253,7 @@ export function drawGasbagIcon(ctx, x, y, s, full = true) {
 export function drawSpares(ctx, state, x, y, right = false, s = 1) {
   const run = state.run;
   if (!run || run.spares == null) return;
-  const max = config.LIMP.SPARES;
+  const max = run.sparesMax ?? config.LIMP.SPARES;
   const step = 30 * s;
   const w = max * step;
   const x0 = right ? x - w : x;
@@ -390,7 +390,7 @@ export function drawLimpCard(ctx, state, W = 1600, H = 900) {
   ctx.fillText(l.back ? `Back to the last stop: ${l.back}` : 'Back to the start of this stop', 800, 392);
   if (l.lost > 0) ctx.fillText(`${l.lost} salvage lost in the crash`, 800, 430);
   // spare gasbags: the one just used crossed out
-  const max = config.LIMP.SPARES;
+  const max = l.max ?? config.LIMP.SPARES;
   const step = 76;
   const x0 = 800 - ((max - 1) * step) / 2;
   for (let k = 0; k < max; k++) drawGasbagIcon(ctx, x0 + k * step, 540, 2, k < l.spares);

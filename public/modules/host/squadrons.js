@@ -7,6 +7,7 @@
 //                 again. Shot down, they spiral into the ground and the pilot bails out.
 //   Dread Zeppelin - boss airship on the way home each lap: parks ahead, three turrets, and sends
 //                    boarders down grapple lines. Shooting it down patches your ship up.
+import { spawnPace, firePace, crewMul } from './crewscale.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, scrollSpeed } from './course.js';
@@ -43,7 +44,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   // ---- Spawning ----
   // from = { x, y } to launch from a point (the boss's hangar), and n to set the swarm size.
   const spawnBats = (from = null, count = 0) => {
-    const n = count || Math.min(W.BATS_MAX, W.BATS_BASE + (lap() - 1) * W.BATS_PER_LAP + Math.floor(crew() / 4));
+    const n = count || Math.max(1, Math.round(Math.min(W.BATS_MAX, W.BATS_BASE + (lap() - 1) * W.BATS_PER_LAP + Math.floor(crew() / 4)) * crewMul(state, 'count')));
     const fromRight = Math.random() < 0.65;
     for (let i = 0; i < n; i++) {
       const [sx, sy] = SHIP_SAMPLES[(Math.random() * SHIP_SAMPLES.length) | 0];
@@ -91,7 +92,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     // The last stop of a voyage is the Flagship: the Iron Dreadnought at her toughest.
     const flagship = !!(state.course && state.course.stop && state.course.stop.flagship);
     const kind = flagship ? 'iron' : lap() === 1 ? 'dread' : lap() === 2 ? 'carrier' : 'iron';
-    const hp = flagship ? W.BOSS_FLAGSHIP_HP : W.BOSS_HP + Math.min(lap() - 1, W.BOSS_HP_LAPS) * W.BOSS_HP_PER_LAP;
+    const hp = Math.round((flagship ? W.BOSS_FLAGSHIP_HP : W.BOSS_HP + Math.min(lap() - 1, W.BOSS_HP_LAPS) * W.BOSS_HP_PER_LAP) * crewMul(state, 'hp'));
     state.boss = {
       kind,
       ...BOSSES[kind],
@@ -116,7 +117,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   const shipMid = () => ({ x: SHIP_LAYOUT.aimPoint.x, y: SHIP_LAYOUT.aimPoint.y - state.ship.alt });
   const nearShip = (x, y, pad) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - state.ship.alt - pad && y < B.y1 - state.ship.alt + pad;
   const spawnStrafers = () => {
-    const n = Math.min(D.MAX, D.COUNT + (lap() - 1) * D.PER_LAP);
+    const n = Math.max(1, Math.round(Math.min(D.MAX, D.COUNT + (lap() - 1) * D.PER_LAP) * crewMul(state, 'count')));
     const side = Math.random() < 0.5 ? -1 : 1;
     const mid = shipMid();
     const dir = Math.random() < 0.5 ? -1 : 1; // which way round they circle
@@ -127,8 +128,8 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         heading: side > 0 ? Math.PI : 0,
         vx: 0,
         vy: 0,
-        hp: D.HP,
-        max: D.HP,
+        hp: Math.max(1, Math.round(D.HP * crewMul(state, 'hp'))),
+        max: Math.max(1, Math.round(D.HP * crewMul(state, 'hp'))),
         mode: 'circle',
         modeT: rand(D.CIRCLE_MIN, D.CIRCLE_MAX) + i * 1.5, // they take turns to attack
         orbit: Math.atan2(-1, side) + i * 0.6,
@@ -150,7 +151,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     // The trickle between set pieces: small bat swarms. The pacing director (simulation.js) sets how
     // fast this clock runs (0 in a calm) and calls the bigger set pieces itself.
     if ((waveT -= dt * (state.tempo ? state.tempo.rate : 1)) > 0) return;
-    const pace = Math.max(0.45, 1 - (lap() - 1) * 0.18) / (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
+    const pace = Math.max(0.45, 1 - (lap() - 1) * 0.18) / spawnPace(state);
     // (Open-sky missions already have the outposts shooting: waves come less often.)
     waveT = rand(W.EVERY_MIN, W.EVERY_MAX) * pace * (c && c.map && c.map.open ? 2 : 1);
     if (state.boss) return; // the boss fight is enough on its own
@@ -308,7 +309,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       bumpShip(state, p, { hitsShip, impact, puff, hw: 150, hh: 25, size: config.BUMP.BOMBER_SIZE, hp: 'hp' });
       // Bombs away while over the ship.
       if (Math.abs(p.x - 800) < 950 && (p.dropCd -= dt) <= 0 && !state.ship.down) {
-        p.dropCd = W.BOMB_EVERY;
+        p.dropCd = W.BOMB_EVERY / crewMul(state, 'fire');
         state.enemyBombs.push({ x: p.x, y: p.y + 30, vx: p.vx * 0.4, vy: 40, hp: 1 });
       }
     }
@@ -367,7 +368,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         const off = angDiff(Math.atan2(ty - p.y, tx - p.x), p.heading);
         if (p.shots > 0 && p.gunCd <= 0 && Math.abs(off) < 0.35 && dist < D.FIRE_RANGE && !state.ship.down) {
           p.shots -= 1;
-          p.gunCd = D.SHOT_EVERY;
+          p.gunCd = D.SHOT_EVERY / crewMul(state, 'fire');
           const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
           const evading = helm && (Math.abs(helm.jy) > 0.2 || Math.abs(state.ship.speed) > 0.3);
           const miss = Math.random() < 0.25 || (evading && Math.random() < 0.4);
@@ -440,7 +441,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     // Turrets.
     for (const g of z.guns) {
       if (g.dead || (g.cd -= dt) > 0) continue;
-      g.cd = W.BOSS_FIRE_EVERY * rand(0.8, 1.2);
+      g.cd = (W.BOSS_FIRE_EVERY * rand(0.8, 1.2)) / firePace(state);
       const gx = z.x + g.dx;
       const gy = z.y + 150;
       const tx = rand(300, 1400);
@@ -457,7 +458,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     // The Bat Carrier (and the Dreadnought, less often) launch bat swarms from the hangar.
     if (z.kind !== 'dread' && (z.batCd -= dt) <= 0) {
       z.batCd = W.BOSS_BATS_EVERY * (z.kind === 'carrier' ? 0.6 : 1.4);
-      spawnBats({ x: z.x, y: z.y + 120 }, 3 + lap());
+      spawnBats({ x: z.x, y: z.y + 120 }, Math.max(1, Math.round((3 + lap()) * crewMul(state, 'count'))));
       warn('BATS FROM THE ZEPPELIN!');
     }
     // Boarding lines.

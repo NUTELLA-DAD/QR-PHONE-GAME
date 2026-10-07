@@ -2,16 +2,16 @@
 // Usage: node tools/voyagesim.mjs [--runs 10] [--difficulty normal] [--bots 8] [--topup] [--maxmin 45] [--stall 8] [--seed 1] [--verbose]
 //  natural mode (default): the run ends on a wreck or victory; the cause of the wreck is reported.
 //  --topup: the hull is kept full so the run cannot end; reports STALLS (no stop reached for --stall minutes).
-//  --runs N > 1 launches N child processes (seeds seed..seed+N-1, 4 at a time) and prints a table.
+//  --runs N > 1 launches N child processes (seeds seed..seed+N-1, 12 at a time) and prints a table.
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
-const args = { runs: 1, difficulty: 'normal', bots: 8, topup: false, maxmin: 45, seed: 1, verbose: false, child: false, trace: 0, dump: 0, stall: 8 };
+const args = { runs: 1, difficulty: 'normal', bots: 8, topup: false, maxmin: 45, seed: 1, verbose: false, child: false, trace: 0, dump: 0, stall: 8, set: '' };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
-  if (a === '--help' || a === '-h') { console.log('node tools/voyagesim.mjs [--runs 10] [--difficulty easy|normal|hard] [--bots 8] [--topup] [--maxmin 45] [--stall 8] [--seed 1] [--verbose]'); process.exit(0); }
+  if (a === '--help' || a === '-h') { console.log('node tools/voyagesim.mjs [--runs 10] [--difficulty easy|normal|hard] [--bots 8] [--topup] [--maxmin 45] [--stall 8] [--seed 1] [--verbose] [--set "CREW_SCALE.TABLE.4.fire=0.5;DIFFICULTY.normal.damage=0.2"]'); process.exit(0); }
   else if (a === '--topup' || a === '--verbose' || a === '--child') args[a.slice(2)] = true;
   else if (a.startsWith('--') && a.slice(2) in args) { const v = argv[++i]; args[a.slice(2)] = typeof args[a.slice(2)] === 'number' ? Number(v) : v; }
   else { console.error('Unknown option ' + a); process.exit(2); }
@@ -23,7 +23,7 @@ if (args.runs > 1 && !args.child) {
   const seeds = [];
   for (let i = 0; i < args.runs; i++) seeds.push(args.seed + i);
   const runOne = (seed) => new Promise((res) => {
-    const a = [me, '--child', '--seed', String(seed), '--difficulty', args.difficulty, '--bots', String(args.bots), '--maxmin', String(args.maxmin), "--stall", String(args.stall)];
+    const a = [me, '--child', '--seed', String(seed), '--difficulty', args.difficulty, '--bots', String(args.bots), '--maxmin', String(args.maxmin), '--stall', String(args.stall), '--set', args.set];
     if (args.topup) a.push('--topup');
     const c = spawn(process.execPath, a);
     let out = '';
@@ -31,7 +31,7 @@ if (args.runs > 1 && !args.child) {
     c.on('close', () => { const l = out.split('\n').find((x) => x.startsWith('RESULT ')); res(l ? JSON.parse(l.slice(7)) : { seed, error: out.slice(-300) }); });
   });
   let next = 0;
-  await Promise.all(Array.from({ length: 4 }, async () => { while (next < seeds.length) { const s = seeds[next++]; rows.push(await runOne(s)); } }));
+  await Promise.all(Array.from({ length: 12 }, async () => { while (next < seeds.length) { const s = seeds[next++]; rows.push(await runOne(s)); } }));
   rows.sort((a, b) => a.seed - b.seed);
   console.log(`--- voyagesim ${args.topup ? 'TOP-UP' : 'NATURAL'} ${args.difficulty}, ${args.bots} bots, ${args.runs} runs ---`);
   for (const r of rows) {
@@ -64,7 +64,10 @@ performance.now = () => simClock;
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', 'public');
 const load = (p) => import(pathToFileURL(path.join(root, p)).href);
 const { config } = await load('config.js');
+// --set "A.B.C=value;...": tweak config numbers for tuning runs
+for (const kv of args.set.split(';').filter(Boolean)) { const [k, v] = kv.split('='); const ks = k.split('.'); let o = config; for (const x of ks.slice(0, -1)) o = o[x] ??= {}; o[ks[ks.length - 1]] = Number(v); }
 const { SHIP_LAYOUT } = await load('shipLayout.js');
+const { damageMul } = await load('modules/host/crewscale.js');
 const { createSimulation } = await load('modules/host/simulation.js');
 const maps = await load("modules/host/maps.js");
 const course = await load("modules/host/course.js");
@@ -113,7 +116,7 @@ for (let step = 1; step <= maxSteps && !result; step++) {
     if (state.phase === 'flying' && !state.ship.down && step % 30 === 0) { snapshot = snap(); rolling.flying++; rolling.br += snapshot.breaches; rolling.fires += snapshot.fires; rolling.gh += snapshot.holes; for (const q of Object.values(state.players)) { const k = q.ko > 0 ? "ko" : q.lock ? "station" : q.botJob ? (["fire", "patch", "repair", "swat", "valve", "ice", "unclog", "oxygen", "vent", "coal", "ammo", "revive"].includes(q.botJob.kind) ? "chore" : q.botJob.kind === "fight" ? "fight" : "other") : "idle"; rolling.crew[k] = (rolling.crew[k] || 0) + 1; rolling.n++; } if (!snapshot.helmManned) rolling.helmEmpty++; }
     const h0 = state.ship.hull, nf = state.fires.length, nb = state.breaches.length, fl = state.phase === 'flying' && !state.ship.down;
     sim.update(dt);
-    if (fl && state.ship.hull < h0) { const dd = config.DIFFICULTY[state.difficulty].damage; const pf = nf * 0.35 * dd * 2 * dt, pb = nb * 0.5 * dd * 2 * dt, drop = h0 - state.ship.hull; dmg.fire += pf; dmg.breach += pb; dmg.direct += Math.max(0, drop - pf - pb); }
+    if (fl && state.ship.hull < h0) { const dd = damageMul(state); const pf = nf * 0.35 * dd * 2 * dt, pb = nb * 0.5 * dd * 2 * dt, drop = h0 - state.ship.hull; dmg.fire += pf; dmg.breach += pb; dmg.direct += Math.max(0, drop - pf - pb); }
   } catch (err) { errorCount++; if (errorCount < 4) console.error('ERR', err && err.stack); }
   if (state.phase === 'lobby' && !state.runEnd && !state.wreck) sim.castOff();
   const stopId = state.run && state.run.stopId;

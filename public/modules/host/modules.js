@@ -79,11 +79,11 @@ export function createModules() {
   };
 
   // An enemy hit at (x, y) in ship coordinates. power scales damage and blast size.
-  const hitAt = (x, y, puff, power = 1) => {
+  const hitAt = (x, y, puff, power = 1, mul = 1) => {
     const radius = M.HIT_RADIUS * Math.min(power, 1.6);
     for (const m of list) {
       const dist = m.kind === 'pipe' ? distToPath(x, y, m.points) : Math.hypot(x - m.pos.x, y - m.pos.y);
-      if (dist < radius) damage(m, M.HIT_DAMAGE * power * (1 - dist / radius), puff);
+      if (dist < radius) damage(m, M.HIT_DAMAGE * power * mul * (1 - dist / radius), puff);
     }
   };
 

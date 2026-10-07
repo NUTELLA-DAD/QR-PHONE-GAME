@@ -1,5 +1,6 @@
 // Threats from outside the ship: the fighter, floating mines, falling
 // wrecks, plus the crew's shells hitting them. Anything that touches the ship crashes into it.
+import { firePace, spawnPace, crewMul } from './crewscale.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, groundAt, ceilAt, scrollSpeed } from './course.js';
@@ -44,7 +45,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     e.mode = 'run';
     e.aim = { dx: rand(-500, 500), dy: rand(-120, 160) };
     const lapRate = config.LAP_FIRE_RATE[Math.min(config.LAP_FIRE_RATE.length - 1, ((state.course && state.course.lap) || 1) - 1)] * (1 + (((state.course && state.course.danger) || 2) - 2) * config.VOYAGE.DANGER_FIRE);
-    const pace = (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
+    const pace = firePace(state);
     e.shots = Math.max(2, Math.min(6, Math.round(F.SHOTS * lapRate * pace * (0.8 + Math.min(0.5, crew() * 0.04)))));
     e.side = Math.sign(e.x - mid.x) || 1;
   };
@@ -52,7 +53,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
   const spawnFighter = (e) => {
     const mid = shipMid();
     const side = Math.random() < 0.5 ? -1 : 1;
-    e.hp = e.max = 5 + Math.floor(crew() / 4);
+    e.hp = e.max = Math.max(2, Math.round((5 + Math.floor(crew() / 4)) * crewMul(state, 'hp')));
     e.trail = [];
     e.air = e.stalled = e.pullDir = null;
     e.bank = 0;
@@ -80,7 +81,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     warn(text, 2.5);
   };
 
-  const rate = () => (state.tempo ? state.tempo.rate : 1); // the pacing director's spawn speed (0 in a calm)
+  const rate = () => (state.tempo ? state.tempo.rate : 1) * spawnPace(state); // the pacing director's spawn speed (0 in a calm)
   const updateFighter = (dt) => {
     const e = state.enemy;
     if (rate() <= 0 && (e.dead > 0 || e.heading == null)) return; // calm: no new fighter

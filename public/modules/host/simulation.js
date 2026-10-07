@@ -1,4 +1,5 @@
 import { createJobFinder } from './jobs.js';
+import { updateCrewScale, sparesFor, spawnPace, damageMul, crewMul, autopilotOn } from './crewscale.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { updateBot } from './bots.js';
@@ -260,10 +261,9 @@ export function createSimulation() {
   const shipPuff = (x, y, color, count) => puff(x, y - state.ship.alt, color, count);
 
   const damageHull = (amount) => {
-    const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
     const danger = 1 + (((state.course && state.course.danger) || 2) - 2) * config.VOYAGE.DANGER_DAMAGE; // skulls on the stop
     if (goingDown.protect()) return; // falling (the last stand) or just saved: nothing can hurt her
-    if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * diff.damage * danger) <= 0) wreck();
+    if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * damageMul(state) * danger) <= 0) wreck();
   };
 
   // The hull gave out: the ship breaks apart, then the whole game starts over.
@@ -299,7 +299,7 @@ export function createSimulation() {
     const lost = Math.round(run.salvage * config.LIMP.SALVAGE_LOSS);
     run.salvage -= lost;
     const prev = run.visited.length > 1 ? stopById(run.voyage, run.visited[run.visited.length - 2]) : null;
-    state.limp = { spares: run.spares, lost, back: prev ? stopName(prev) : null };
+    state.limp = { spares: run.spares, max: run.sparesMax, lost, back: prev ? stopName(prev) : null };
     bankStats(true); // (what the crew did still counts for the awards)
   }
   // The break-up is over: patch her up and put her back at the last stop on the route (the first stop restarts itself).
@@ -418,7 +418,7 @@ export function createSimulation() {
   // One rhythm per mission: BUILD (a small trickle, rising) -> PEAK (one big set piece) -> CALM (nothing
   // new; stragglers leave; supply balloon; "ALL CLEAR") -> BUILD again. Every spawner runs its clock at
   // state.tempo.rate (0 = nothing spawns) and the director itself calls the set pieces.
-  const missionPace = () => (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
+  const missionPace = () => spawnPace(state);
   const lapNo = () => (state.course ? state.course.lap : 1);
   const buildTime = () => Math.max(config.PACING.BUILD_MIN, (config.PACING.BUILD * (1 - Math.min(0.5, (lapNo() - 1) * config.PACING.BUILD_PER_MISSION))) / missionPace());
   const sayBanner = (text, secs = 4) => {
@@ -427,7 +427,7 @@ export function createSimulation() {
   };
   const setPieces = {
     gunship: { text: 'GUNSHIP ON THE HORIZON!', go: () => gunship.spawn(), alive: () => !!state.gunship, max: () => config.PACING.GUNSHIP_PEAK_MAX },
-    bombers: { text: 'BOMBER RAID INCOMING!', go: () => { const n = 1 + (lapNo() > 1 ? 1 : 0) + (Object.keys(state.players).length >= 10 ? 1 : 0); for (let i = 0; i < n; i++) squadrons.spawnBomber(); return true; }, alive: () => state.bombers.length > 0 },
+    bombers: { text: 'BOMBER RAID INCOMING!', go: () => { const n = Math.max(1, Math.round((1 + (lapNo() > 1 ? 1 : 0) + (Object.keys(state.players).length >= 10 ? 1 : 0)) * crewMul(state, 'count'))); for (let i = 0; i < n; i++) squadrons.spawnBomber(); return true; }, alive: () => state.bombers.length > 0 },
     strafers: { text: 'ENEMY SQUADRON - DOGFIGHTERS!', go: () => { squadrons.spawnStrafers(); return true; }, alive: () => state.strafers.length > 0 },
     swarm: { text: 'HUGE BAT SWARM!', go: () => { squadrons.spawnBigSwarm(); return true; }, alive: () => state.bats.some((b) => !b.dead && b.hp > 0 && !b.leaving) },
     imps: { text: 'IMP SWARM - GUNS AND SHIELD!', go: () => { specials.spawn.imps(); return true; }, alive: () => state.specials.imps.length > 0 },
@@ -606,19 +606,20 @@ export function createSimulation() {
       }
     }
     shipPuff(x, y, '#ff7b00', Math.round(8 * power));
-    modules.hitAt(x, y, shipPuff, power);
+    const coll = crewMul(state, 'collateral'); // (small crews: hits break fewer things)
+    modules.hitAt(x, y, shipPuff, power, coll);
     helmsmanHit(x, y, power);
     if (onGasbag(x, y)) {
-      if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE) state.gasHoles.push(gasHoleAt(x, y));
+      if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll) state.gasHoles.push(gasHoleAt(x, y));
       damageHull(2 * power);
       return;
     }
     const d = roomPlatformAt(x, y);
     if (d !== null) {
       const p = PLATFORMS[d];
-      const holes = power >= 2 ? 2 : Math.random() < config.SHIP.HOLE_CHANCE ? 1 : 0;
+      const holes = power >= 2 ? (Math.random() < coll ? 2 : 1) : Math.random() < config.SHIP.HOLE_CHANCE * coll ? 1 : 0;
       for (let i = 0; i < holes && state.breaches.length < 10; i++) state.breaches.push({ x: clamp(x + (i - 0.5) * 70 * (holes - 1), p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d, prog: 0 });
-      if ((power >= 2 || Math.random() < 0.35) && state.fires.length < 8) state.fires.push({ x: clamp(x + (Math.random() - 0.5) * 80, p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d, t: 0, prog: 0 });
+      if (((power >= 2 && Math.random() < coll) || Math.random() < 0.35 * coll) && state.fires.length < 8) state.fires.push({ x: clamp(x + (Math.random() - 0.5) * 80, p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d, t: 0, prog: 0 });
     }
     damageHull(config.SHIP.HIT_DAMAGE * power);
   };
@@ -657,7 +658,7 @@ export function createSimulation() {
   const newRun = () => {
     const voyage = generateVoyage((Math.random() * 2 ** 31) | 0);
     const first = voyage.columns[0][0];
-    state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: config.LIMP.SPARES, limps: 0 };
+    state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0 };
     state.runEnd = null;
     state.salvagePop = null;
   };
@@ -1033,6 +1034,7 @@ export function createSimulation() {
   };
 
   const update = (dt) => {
+    updateCrewScale(state, dt);
     let helmFlown = false; // did someone steer this frame
     let gasManned = false; // is someone working the gas (the helm's PRESSURE lever)
     state.ship.trim = 0;
@@ -1525,11 +1527,10 @@ export function createSimulation() {
     const G = config.GAS;
     const SHM = config.SHIP;
     const valve = state.gasValve;
-    const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
     const flying = state.phase === 'flying' && !state.ship.down;
     state.autopilot = false;
     // Easy/Normal: with nobody at the helm the ship flies itself, gently.
-    const assist = diff.autopilot && flying;
+    const assist = autopilotOn(state) && flying;
     const plan = assist && (!getHelm() || !gasManned) ? pilotPlan(state, 4, 0.3) : null;
     if (!getHelm()) {
       if (plan && modules.works(state, 'Helm')) {
@@ -1701,7 +1702,7 @@ export function createSimulation() {
       object.worked = false;
     }
     for (const fire of state.fires) {
-      if ((fire.t += dt) > config.FIRE.SPREAD_EVERY && state.fires.length < 8) {
+      if ((fire.t += dt) > config.FIRE.SPREAD_EVERY / crewMul(state, 'spread') && state.fires.length < 8) {
         fire.t = 0;
         const p = PLATFORMS[fire.d];
         state.fires.push({ x: clamp(fire.x + (Math.random() < 0.5 ? -1 : 1) * (100 + Math.random() * 60), p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d: fire.d, t: 0, prog: 0 });
@@ -1710,8 +1711,7 @@ export function createSimulation() {
     }
 
     if (!state.ship.down && !goingDown.protect()) {
-      const diff = config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
-      state.ship.hull -= (state.breaches.length * 0.5 + state.fires.length * 0.35) * diff.damage * 2 * dt;
+      state.ship.hull -= (state.breaches.length * 0.5 + state.fires.length * 0.35) * damageMul(state) * 2 * dt;
       if (state.ship.hull <= 0) wreck();
     }
 
@@ -1730,6 +1730,7 @@ export function createSimulation() {
     startRoute,
     castOff: () => {
       if (state.phase !== 'lobby') return;
+      updateCrewScale(state, 0); // (settle the spare gasbags and crew factors for the chosen difficulty)
       state.phase = 'flying';
       state.ev.warn = 4;
       state.ev.warnText = 'CAST OFF!';

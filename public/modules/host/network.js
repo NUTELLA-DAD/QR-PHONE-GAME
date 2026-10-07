@@ -1,5 +1,6 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { crewAboard } from './crewscale.js';
 
 export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoinBot }) {
   const socket = io({ transports: ['websocket'] });
@@ -78,9 +79,16 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   // Back at the mast after the ship is lost: the button comes back.
   setInterval(showCastButton, 250);
 
-  // Difficulty button cycles Easy -> Normal -> Hard.
+  // Difficulty button cycles Easy -> Normal -> Veteran -> Hard.
   const diffButton = document.getElementById('difficulty');
-  const showDifficulty = () => (diffButton.textContent = 'Difficulty: ' + config.DIFFICULTY[simulation.state.difficulty].label);
+  // (small text under the label: the game is also tuned to the number of crew aboard, see config.CREW_SCALE)
+  const showDifficulty = () => {
+    const n = crewAboard(simulation.state);
+    const note = n > 0 && config.CREW_SCALE.ENABLED ? `<br><small style="font-size:12px;opacity:.75">tuned for ${n} crew</small>` : '';
+    const html = 'Difficulty: ' + config.DIFFICULTY[simulation.state.difficulty].label + note;
+    if (diffButton.innerHTML !== html) diffButton.innerHTML = html;
+  };
+  setInterval(showDifficulty, 500); // (follows players joining and leaving)
   diffButton.onclick = () => {
     const keys = Object.keys(config.DIFFICULTY);
     simulation.state.difficulty = keys[(keys.indexOf(simulation.state.difficulty) + 1) % keys.length];
