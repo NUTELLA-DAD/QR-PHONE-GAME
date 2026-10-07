@@ -98,7 +98,7 @@ const killHull = (sim) => { sim.state.ship.hull = 0; step(sim); };
   until(sim, () => !st.wreck && !st.limp && st.ship.down === 0, 20);
   step(sim, 60 * 3);
   const spares = st.run.spares;
-  check(spares === config.LIMP.SPARES - 1, `the wreck used a spare (${spares} left)`);
+  check(spares === st.run.sparesMax - 1, `the wreck used a spare (${spares} left)`);
   until(sim, () => !st.vote && st.phase === 'flying' && st.course.stop, 60);
   step(sim, 60 * 10);
   killHull(sim);
@@ -188,7 +188,7 @@ const killHull = (sim) => { sim.state.ship.hull = 0; step(sim); };
   s2.goingDown.t = s2.goingDown.time;
   step(sim2);
   until(sim2, () => !s2.limp && !s2.wreck, 30);
-  check(s2.run.stopId === id0 && s2.run.visited.length === 1 && s2.run.spares === config.LIMP.SPARES - 1 && !s2.vote, 'wreck on the very first stop: the same stop starts again');
+  check(s2.run.stopId === id0 && s2.run.visited.length === 1 && s2.run.spares === s2.run.sparesMax - 1 && !s2.vote, 'wreck on the very first stop: the same stop starts again');
 }
 
 // ---------------- (e) no spares: the voyage ends ----------------
@@ -209,7 +209,7 @@ const killHull = (sim) => { sim.state.ship.hull = 0; step(sim); };
   if (st.goingDown) { st.goingDown.t = st.goingDown.time; step(sim); }
   check(!!st.wreck && !st.limp && !!st.runEnd && !st.runEnd.victory, 'no spares: the wreck ends the voyage (summary shown)');
   const lobby = until(sim, () => st.phase === 'lobby', 40);
-  check(lobby && !st.runEnd && st.run.spares === config.LIMP.SPARES, 'back at the mast with a fresh voyage and fresh spares');
+  check(lobby && !st.runEnd && st.run.spares === st.run.sparesMax, 'back at the mast with a fresh voyage and fresh spares');
 }
 
 console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, 5).join('\n') : 'no errors');
