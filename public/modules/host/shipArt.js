@@ -783,8 +783,8 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       ctx.fill();
       const w = ctx.measureText(s.n).width + 20;
       const id = P[s.d].id;
-      let ly = id === 'nest' ? y - 100 : id === 'pod' || id === 'hangar' || id === 'bay' ? y - 20 : y - 134;
-      const lx = id === 'pod' || id === 'hangar' ? s.x + 130 : id === 'bay' ? s.x - 25 : s.x;
+      let ly = id === 'nest' ? y - 100 : id === 'pod' || id === 'hangar' || id === 'bay' || id === 'lamp' ? y - 20 : y - 134;
+      const lx = id === 'pod' || id === 'hangar' ? s.x + 130 : id === 'lamp' ? s.x + 125 : id === 'bay' ? s.x - 25 : s.x;
       // Drop a label one row if it would overlap its neighbour.
       while (placed.some((o) => Math.abs(o.ly - ly) < 30 && Math.abs(o.lx - lx) < (o.w + w) / 2 + 6)) ly += 36;
       placed.push({ lx, ly, w });

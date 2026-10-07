@@ -11,6 +11,7 @@ import { createSquadrons } from './squadrons.js';
 import { createEscort, isEscortStation, escortFor } from './escort.js';
 import { createSpecials } from './specials.js';
 import { createCoil } from './coil.js';
+import { createSearchlights, isSearchlight } from './searchlight.js';
 import { createGunship, MAIN_X1 } from './gunship.js';
 import { createAirborne } from './airborne.js';
 import { createHookshot } from './hookshot.js';
@@ -133,7 +134,7 @@ export function createSimulation() {
   const jobFinder = createJobFinder(state);
   state.modules = modules.list;
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
-  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || isEscortStation(name) || !!state.GUNS[name];
+  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || isSearchlight(name) || isEscortStation(name) || !!state.GUNS[name];
 
   // Sunken Sea: crew on the lower decks wade slowly while the ship is flooded.
   const wadeMul = (p) => (p.d != null && PLATFORMS[p.d] && PLATFORMS[p.d].y >= 790 && state.sea && state.sea.flood > 0 ? 1 - state.sea.flood * config.ENVIRONMENTS.sea.FLOOD.SLOW_CREW : 1);
@@ -320,6 +321,7 @@ export function createSimulation() {
     hijack.reset();
     specials.reset();
     coil.reset();
+    searchlights.reset();
     gunship.reset();
     course.restart();
     modules.reset();
@@ -932,6 +934,7 @@ export function createSimulation() {
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
   const coil = createCoil({ state, puff, credit });
+  const searchlights = createSearchlights({ state });
   const gunship = createGunship({ state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) });
   const weather = createWeather({ state, impact, puff });
   const env = createEnvironment({ state, puff, phoneFx, impact, damageHull }); // ice, thermals, blizzards (rules in environments.js)
@@ -1133,6 +1136,7 @@ export function createSimulation() {
           }
         }
         if (gun) player.face = Math.cos(gun.aim) < 0 ? -1 : 1;
+        else if (isSearchlight(player.lock)) player.face = Math.cos(state.searchlights.find((l) => l.n === player.lock).aim) < 0 ? -1 : 1;
         player.actQ = false;
         player.jumpQ = false;
         player.act = null;
@@ -1289,14 +1293,14 @@ export function createSimulation() {
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
-      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : isEscortStation(stationName) ? 'escort' : null;
+      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : isSearchlight(stationName) ? 'light' : isEscortStation(stationName) ? 'escort' : null;
       const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && Object.values(state.players).some((q) => q.lock === stationName && (q.bot ? player.bot : true));
       let label = 'Hey!';
       let hold = false;
       if (player.lock) {
         const working = modules.works(state, player.lock);
-        label = !working && kind !== 'helm' && kind !== 'lookout' && kind !== 'escort' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'escort' ? ((escortFor(state, player.lock) || {}).flying ? 'Auto guns' : 'Wait...') : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
-        hold = kind === 'gun' || kind === 'bombbay' || kind === 'coil';
+        label = !working && kind !== 'helm' && kind !== 'lookout' && kind !== 'light' && kind !== 'escort' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'escort' ? ((escortFor(state, player.lock) || {}).flying ? 'Auto guns' : 'Wait...') : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : kind === 'light' ? 'FOCUS!' : 'Honk!';
+        hold = kind === 'gun' || kind === 'bombbay' || kind === 'coil' || kind === 'light';
       } else if (player.act) {
         label = player.act.label;
         hold = !!player.act.hold;
@@ -1314,6 +1318,7 @@ export function createSimulation() {
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
       if (isEscortStation(stationName) && !status) status = escort.status(stationName);
+      if (kind === 'light' && player.lock && !status) status = searchlights.status(stationName);
       const feel = state.buoyancy > 0 ? 'RISING' : state.buoyancy < 0 ? 'FALLING' : 'holding';
       const leakNow = modules.leaks()[0];
       const leakText = leakNow ? (leakNow.pipe && leakNow.pipe.open ? `${leakNow.m.name} pipe leaking - close the valve or repair` : `${leakNow.m.name} leaking steam - repair it`) : '';
@@ -1359,6 +1364,7 @@ export function createSimulation() {
     state.shield.on = taken('Deflector') && modules.works(state, 'Deflector') && state.phase === 'flying';
     const coilOp = Object.values(state.players).find((q) => q.lock === 'Lightning Coil');
     coil.update(dt, coilOp || null, modules.works(state, 'Lightning Coil'));
+    searchlights.update(dt);
     const parts = modules.drainParts(state);
     parts.vents = openVents * BO.VENT_RATE;
     parts.shield = state.shield.on ? config.SHIELD.STEAM_USE : 0;

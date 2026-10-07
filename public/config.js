@@ -126,6 +126,42 @@ export const config = {
     STEAM_USE: 9, // extra steam used while charging
     COOLDOWN: 4,
   },
+  // Searchlights (searchlight.js, searchlightArt.js): two crewed lamps, one on the crow's nest and one under the belly.
+  // The stick sweeps the beam; HOLD Action focuses it (narrower, longer, brighter). Anything in a manned beam is LIT:
+  // it takes bonus damage from the guns, the guns snap onto it more easily and it gets a bracket outline.
+  // In dark places (DARK below + each environment's DARK) the world is dim and the beams cut light out of it.
+  SEARCHLIGHT: {
+    TURN: 2.2, // how fast the beam swings (radians per second)
+    RANGE: 1500, // how far the beam reaches (px); a cave wall stops it
+    FOCUS_RANGE: 2200, // ...when focused
+    HALF_ANGLE: 0.17, // half-width of the beam cone (radians)
+    FOCUS_HALF_ANGLE: 0.075,
+    UNMANNED: 0.28, // power of a lamp nobody is working (0 = off): a faint short cone, no lit-target bonus
+    POWER_RISE: 4, // how fast the lamp comes up to power / fades (per second)
+    ASSIST_ANGLE: 0.22, // the stick snaps the beam onto a target within this angle of where you point (0 = off)
+    ASSIST_STRENGTH: 0.6,
+    LIT_DAMAGE: 0.35, // extra damage to a lit target (a fraction of each hit's damage, added up over hits)
+    LIT_HOLD: 0.3, // seconds something stays lit after the beam leaves it
+    LIT_AIM_ANGLE: 1.9, // aim assist reaches this many times further for a lit target...
+    LIT_AIM_STRENGTH: 0.95, // ...and snaps harder (normal: AIM_ASSIST)
+    DAY_ALPHA: 0.12, // how visible the beam cone is in daylight (0..1)
+    DARK_ALPHA: 0.3, // ...in the dark
+    DARK: {
+      ENABLED: true,
+      MAX: 0.82, // the darkest the overlay ever gets (0..1): the ship and crew stay readable
+      CAVE: 0.42, // darkness inside cave and tunnel maps (network / route)
+      DUSK: 0.25, // extra darkness at the end of a day (course.dusk = 1)
+      COLOR: '6,9,22', // the colour of the dark (r,g,b)
+      RES: 4, // the dark is drawn at 1/RES of the screen size and scaled up (cheap and soft)
+      SMOOTH: 1.6, // how fast the dark fades in and out (per second)
+      SHIP_GLOW: 0.8, // how clear the ship's own glow is just outside the hull (0..1; the ship itself is always clear)
+      SHIP_GLOW_CX: 800, SHIP_GLOW_CY: 500, // the ship's glow is an ellipse round the whole ship (ship coordinates, px)...
+      SHIP_GLOW_RX: 1350, SHIP_GLOW_RY: 760, // ...this wide and tall (it fades out over the outer third)
+      LAMP: 150, // glow radius of a flash, an explosion or a muzzle (px)
+      EYES: true, // unlit enemies in the dark show glowing eyes / lamps
+      EYE_ALPHA: 0.9,
+    },
+  },
   // Enemy gunships that come alongside to be boarded (see gunship.js).
   // Dogfighters: a squadron of small biplanes that circle the ship and take turns diving at it.
   DOGFIGHT: {
@@ -845,12 +881,13 @@ export const config = {
   ENVIRONMENTS: {
     DEFAULT: 'skyisles',
     FORCE: null,
-    skyisles: { name: 'Sky Isles', favour: { swarm: 1, imps: 1, bombers: 1, strafers: 1, gunship: 1 } },
+    skyisles: { name: 'Sky Isles', DARK: 0, favour: { swarm: 1, imps: 1, bombers: 1, strafers: 1, gunship: 1 } },
     // STORM FRONT: dark slate cloud and rain. Wind gusts shove the ship; lightning CHARGES for a few seconds
     // (warning) and strikes the top deck unless a crew member holds Action at a lightning rod (grounded).
     // A manned Lightning Coil drinks a grounded bolt (instantly full charge). (rules: envStormSea.js)
     storm: {
       name: 'Storm Front',
+      DARK: 0.6, // searchlights (searchlight.js): how dark this environment is, 0 (daylight) .. 1 (pitch black). A night storm.
       favour: { swarm: 0.6, imps: 0.6, bombers: 0.7, strafers: 2.6, gunship: 1 }, // storm riders (dogfighters)
       sky: ['1c2230', '3a4660', '6d7a90'], sun: '150,170,205', ridgeHaze: '70,82,104',
       rock: '#566176', rockStripes: ['rgba(14,18,30,.3)', 'rgba(170,190,225,.16)'], rockHaze: 'rgba(80,92,116,.22)',
@@ -883,6 +920,7 @@ export const config = {
     // crew member holds Action at the winch in the bomb bay to haul them up for salvage. (rules: envStormSea.js)
     sea: {
       name: 'Sunken Sea',
+      DARK: 0.12, // (a hint of gloom under the waterspouts)
       favour: { swarm: 0.8, imps: 0.7, bombers: 2.0, strafers: 0.9, gunship: 1 }, // bombers (flak ships later)
       sky: ['4d93b8', 'a6d3e0', 'e9f4ee'], sun: '255,246,214', ridgeHaze: '196,226,230',
       rock: '#5d6b66', rockStripes: ['rgba(14,30,34,.26)', 'rgba(220,240,230,.2)'], rockHaze: 'rgba(160,205,215,.22)',
@@ -936,6 +974,7 @@ export const config = {
     // FROST PEAKS: ice builds up on the gasbag, top deck and guns. Chip it off with the hammer.
     frost: {
       name: 'Frost Peaks',
+      DARK: 0.2, // (long polar dusk)
       favour: { swarm: 0.7, imps: 0.5, bombers: 1.6, strafers: 1, gunship: 1 }, // more bombers
       sky: ['6f9cc4', 'bcd8ec', 'eef5fa'], sun: '255,255,255', ridgeHaze: '232,242,250',
       rock: '#c6d7e6', rockStripes: ['rgba(60,90,130,.16)', 'rgba(255,255,255,.35)'], rockHaze: 'rgba(214,230,246,.2)',
@@ -966,6 +1005,7 @@ export const config = {
     // hull on fire and overheats the boiler. Smoke drifts across the screen (visual only).
     ember: {
       name: 'Ember Forge',
+      DARK: 0.25, // (smoky gloom; the lava itself glows)
       favour: { swarm: 2.2, imps: 1.4, bombers: 0.8, strafers: 0.8, gunship: 1 }, // magma bats
       sky: ['2a1216', '7a2e22', 'd4692e'], sun: '255,150,70', ridgeHaze: '150,60,40',
       rock: '#4c3a3e', rockStripes: ['rgba(10,4,6,.3)', 'rgba(255,110,50,.14)'], rockHaze: 'rgba(150,60,40,.2)',
@@ -998,6 +1038,7 @@ export const config = {
     // (their phone says SPORES!), and spores clog the engines (less power) until a crewmate clears them.
     fungal: {
       name: 'Fungal Depths',
+      DARK: 0.68, // (deep cave: lamps and searchlights only)
       favour: { swarm: 2, imps: 1.5, bombers: 0.7, strafers: 0.7, gunship: 0.9 }, // bat swarms and spore drones
       sky: ['0b0818', '1d1240', '2f2a5c'], sun: '110,255,210', ridgeHaze: '44,24,84',
       rock: '#2c2547', rockStripes: ['rgba(6,2,16,.34)', 'rgba(110,255,210,.1)'], rockHaze: 'rgba(70,36,120,.2)',
@@ -1034,6 +1075,7 @@ export const config = {
     // at the oxygen tank. Void corsairs (dogfighters) and gunships hunt here.
     aether: {
       name: 'The Aether',
+      DARK: 0.55, // (the thin dark air high above the sky)
       favour: { swarm: 0.4, imps: 0.5, bombers: 0.6, strafers: 2, gunship: 1.5 },
       sky: ['04020c', '150a30', '3b2a72'], sun: '190,160,255', ridgeHaze: '70,48,130',
       rock: '#5a5278', rockStripes: ['rgba(10,6,30,.3)', 'rgba(200,180,255,.14)'], rockHaze: 'rgba(120,96,190,.2)',

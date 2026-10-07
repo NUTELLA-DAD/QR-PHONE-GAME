@@ -80,11 +80,14 @@ export function bestTarget(state, gun) {
 // Aim assist: if the stick points close to a target, bend the aim toward it.
 export function assistAim(state, gun, wanted, maxAngle, strength) {
   let best = null;
+  const SL = config.SEARCHLIGHT;
   for (const t of targets(state)) {
     const angle = solution(state, gun, t);
     if (angle === null) continue;
     const off = Math.abs(angleDiff(angle, wanted));
-    if (off < maxAngle && (!best || off < best.off)) best = { angle, off };
+    // Anything caught in a searchlight beam (obj.lit, set by searchlight.js) is easier to hit: wider and stronger snap.
+    const lit = !!t.obj && t.obj.lit > 0;
+    if (off < (lit ? maxAngle * SL.LIT_AIM_ANGLE : maxAngle) && (!best || off < best.off)) best = { angle, off, lit };
   }
-  return best ? wanted + angleDiff(best.angle, wanted) * strength : wanted;
+  return best ? wanted + angleDiff(best.angle, wanted) * (best.lit ? Math.max(strength, SL.LIT_AIM_STRENGTH) : strength) : wanted;
 }

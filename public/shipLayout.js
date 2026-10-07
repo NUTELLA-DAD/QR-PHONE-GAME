@@ -18,6 +18,8 @@ const platforms = [
   { id: 'pod', name: 'Ball Turret', y: 905, x0: 735, x1: 855 },
   { id: 'hangar', name: 'Fighter Hatch', y: 905, x0: 1020, x1: 1110, outside: true },
   { id: 'hangar2', name: 'Fore Fighter Hatch', y: 905, x0: 1215, x1: 1305, outside: true },
+  // The belly lamp: a small blister hung under the fore outrigger, reached by a ladder from the lower deck. The belly searchlight lives here.
+  { id: 'lamp', name: 'Belly Lamp', y: 905, x0: 1370, x1: 1450, outside: true },
 ];
 
 const index = (id) => platforms.findIndex((p) => p.id === id);
@@ -49,6 +51,7 @@ export const SHIP_LAYOUT = {
     { type: 'ladder', top: 'lower', bottom: 'pod', xTop: 760, xBottom: 760, speed: 170 },
     { type: 'ladder', top: 'lower', bottom: 'hangar', xTop: 1040, xBottom: 1040, speed: 170 },
     { type: 'ladder', top: 'lower', bottom: 'hangar2', xTop: 1235, xBottom: 1235, speed: 170 },
+    { type: 'ladder', top: 'lower', bottom: 'lamp', xTop: 1410, xBottom: 1410, speed: 170 },
   ].map((c) => ({ ...c, top: index(c.top), bottom: index(c.bottom) })),
 
   // Named areas, used for drawing and for telling players where things are.
@@ -85,6 +88,8 @@ export const SHIP_LAYOUT = {
     { n: 'Ventral Gun', p: 'pod', x: 820 },
     { n: 'Escort Fighter', p: 'hangar', x: 1085 },
     { n: 'Escort Fighter 2', p: 'hangar2', x: 1280 },
+    { n: 'Nest Searchlight', p: 'nest', x: 815 },
+    { n: 'Belly Searchlight', p: 'lamp', x: 1410 },
   ]),
 
   // Guns: where the barrel pivots (bx, by), the middle of its firing arc (aim, radians;
@@ -97,6 +102,14 @@ export const SHIP_LAYOUT = {
     'Aft Sponson': { bx: 330, by: 812, aim: 2.15, arc: 0.7 },
     'Fore Sponson': { bx: 1270, by: 812, aim: 1.0, arc: 0.7 },
     'Ventral Gun': { bx: 805, by: 948, aim: Math.PI / 2, arc: 1.2 },
+  },
+
+  // Searchlights (searchlight.js): where the lamp pivots (bx, by), the middle of its sweep (aim, radians; 0 = right,
+  // PI/2 = down), how far it may swing either side of that (arc) and how long the drum is (len: the beam starts at the lens).
+  // The nest light covers up / fore / aft; the belly light covers down / fore / aft.
+  searchlights: {
+    'Nest Searchlight': { bx: 815, by: -176, aim: -Math.PI / 2, arc: 1.5, len: 44 },
+    'Belly Searchlight': { bx: 1410, by: 944, aim: Math.PI / 2, arc: 1.5, len: 40 },
   },
 
   // Lightning Coil emitter (on top of the crow's nest): fires up and out to the sides.
