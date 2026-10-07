@@ -47,6 +47,7 @@ const load = (p) => import(pathToFileURL(path.join(root, p)).href);
 const { config } = await load('config.js');
 const { SHIP_LAYOUT } = await load('shipLayout.js');
 if (process.env.NO_DARING) config.BOTS.DARING.ENABLED = false; // (compare runs with and without the bots' daring stunts)
+if (process.env.NO_LINKS) config.LINKS.ENABLED = false; // (compare runs without the linked stations: gun+loader, helm+lookout, boiler surge)
 if (!config.DIFFICULTY[args.difficulty]) { console.error('Bad difficulty; use ' + Object.keys(config.DIFFICULTY).join('|')); process.exit(2); }
 if (args.map) {
   if (!config.MAPS.KINDS.includes(args.map)) { console.error('Bad map; use ' + config.MAPS.KINDS.join('|')); process.exit(2); }
@@ -89,6 +90,7 @@ let pSum = 0, pN = 0, pLow = 0, pOver70 = 0, pOver90 = 0, blowouts = 0, leakStep
 let sporeCloudSteps = 0, sporedSteps = 0, clogSum = 0, clogMax = 0, engSum = 0, o2Sum = 0, o2Min = 1, lackSteps = 0, gasSum = 0, gasMax = 0, crewSteps = 0, envN = 0, iceG = 0, iceD = 0, iceGun = 0, iceMax = 0, sinkSum = 0, thermalSteps = 0, burnSteps = 0, heatSum = 0, climbSum = 0, climbN = 0, blizSteps = 0, smokeSteps = 0, fireSum = 0, fireMax = 0;
 let gapSum = 0, gapMin = 1e9, seaSteps = 0, floodSum = 0, floodHigh = 0, wetSteps = 0, galeSteps = 0;
 let lightSteps = 0, lightManned = [0, 0], lightLit = 0, litBonus = 0; // searchlights: flight steps, steps each lamp was manned, steps with something lit
+const actTally = {};
 const t0 = realNow();
 
 for (let step = 1; step <= totalSteps; step++) {
@@ -121,6 +123,7 @@ for (let step = 1; step <= totalSteps; step++) {
   lastPress = state.ship.press;
   if (state.phase === 'flying' && state.searchlights) { lightSteps++; state.searchlights.forEach((l, i) => { if (l.manned) lightManned[i]++; }); if (state.litTargets.length) lightLit++; }
   if (state.phase === 'flying') { hullSum += state.ship.hull; hullN++; }
+  if (process.env.BOT_ACT && state.phase === 'flying') for (const q of Object.values(state.players)) if (q.bot) { const k = q.lock ? 'at ' + q.lock : q.botJob ? q.botJob.kind : 'idle'; actTally[k] = (actTally[k] || 0) + 1; } // (BOT_ACT=1: what the bots spend their time on)
   if (state.phase === 'flying' && state.env) { // environment stats
     const E = state.env;
     envN++; iceG += state.ice.gasbag; iceD += state.ice.topdeck; iceGun += state.ice.guns; iceMax = Math.max(iceMax, state.ice.gasbag, state.ice.guns); sinkSum += E.sink;
@@ -182,6 +185,14 @@ if (args.env === "sea") console.log(`sea (this map: ${state.sea.survivors.length
   if (process.env.STUNT_LOG) for (const e of log) console.log(`  ${e.t}s ${e.bot}: ${e.text}`);
 }
 if (lightSteps) console.log(`searchlights: ${(state.searchlights || []).map((l, i) => l.n + ' manned ' + ((100 * lightManned[i]) / lightSteps).toFixed(0) + '%').join(', ')}; something lit ${((100 * lightLit) / lightSteps).toFixed(0)}% of flight`);
+{
+  // Linked stations (links.js): station time with both partners present, and gunners with nothing to do.
+  const S = state.linkStats;
+  const all = S.gunT + S.helmT + S.nestT;
+  const pr = (a, b) => (b > 0 ? ((100 * a) / b).toFixed(1) : 'n/a') + '%';
+  console.log(`links${config.LINKS.ENABLED ? '' : ' (OFF)'}: paired seconds ${(S.gunPair + S.helmPair + S.nestPair).toFixed(0)} of ${all.toFixed(0)} station seconds = ${pr(S.gunPair + S.helmPair + S.nestPair, all)} (gun+loader ${pr(S.gunPair, S.gunT)}, helm+lookout ${pr(S.helmPair, S.helmT)}, lookout+helm ${pr(S.nestPair, S.nestT)}); gunner idle ${pr(S.gunIdle, S.gunT)} of ${S.gunT.toFixed(0)}s; surge held ${S.surgeT.toFixed(0)}s`);
+}
+if (process.env.BOT_ACT) console.log('bot time: ' + Object.entries(actTally).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + ((100 * v) / Object.values(actTally).reduce((a, b) => a + b, 0)).toFixed(1) + '%').join(', '));
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);

@@ -217,7 +217,7 @@ export function inRock(state, x, y) {
 }
 
 // How fast the ship moves along the course (negative = backing up; 0 = hovering).
-export const scrollSpeed = (state) => state.ship.speed * config.SHIP.TOP_SPEED * (1 + config.BOILER.OD_ENGINE * (state.overdrive || 0)) * ((state.env && state.env.engine) || 1) * (1 - ((state.env && state.env.drag) || 0)); // overdrive steam = faster engines
+export const scrollSpeed = (state) => state.ship.speed * config.SHIP.TOP_SPEED * (1 + config.BOILER.OD_ENGINE * (state.overdrive || 0) + config.LINKS.SURGE.ENGINE * (state.surgeEngine || 0)) * ((state.env && state.env.engine) || 1) * (1 - ((state.env && state.env.drag) || 0)); // overdrive steam = faster engines
 
 // How high and low the ship may fly here: up to ALT_RANGE above the highest land under and just
 // ahead of it, and ALT_RANGE below the lowest.

@@ -244,9 +244,10 @@ function listJobs(state, bot) {
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
   const botPlanes = players.filter((q) => q.bot && isEscortStation(q.lock)).length; // the crew can only spare so many for the patrol planes
-  const reach = (n) => (isEscortStation(n) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : isSearchlight(n) ? lightReach(state, n) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
+  const reach = (n) => (isEscortStation(n) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : n === 'Lookout' ? lookoutReach(state) : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : isSearchlight(n) ? lightReach(state, n) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
+  jobs.push(...linkJobs(state, bot, true)); // (LINKED STATIONS block at the end of this file: loaders for guns with a target)
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
   const gs = state.gunship;
   if (gs && gs.charge && bot.onGunship) jobs.unshift({ kind: 'flee', obj: 'flee', max: 8 });
@@ -276,6 +277,7 @@ function listJobs(state, bot) {
   if (bombRun && state.bombBay && state.bombBay.bombs < config.MAPS.BOMB_RUN_STOCK) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 1 });
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   if (!bombRun && state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 1 });
+  jobs.push(...linkJobs(state, bot, false)); // (...and the quieter links: loaders for idle guns, the boiler surge)
   for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // Hovering over an outpost with bombs aboard: one bot drops everything and mans the bomb bay.
   if (bombRun && c.target && Math.hypot(c.target.x - (c.dist + 800), c.target.y - (500 - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken('Bomb Bay') && !players.some((q) => q.lock === 'Bomb Bay')) jobs.unshift({ kind: 'station', obj: 'Bomb Bay', max: 1 });
@@ -283,7 +285,7 @@ function listJobs(state, bot) {
 }
 
 function isEmergency(job) {
-  return !!job.urgent || job.kind !== 'ammo' && job.kind !== 'station' && job.kind !== 'coal' && job.kind !== 'winch' && !(job.kind === 'repair' && !job.obj.broken);
+  return !!job.urgent || job.kind !== 'ammo' && job.kind !== 'link' && job.kind !== 'surge' && job.kind !== 'station' && job.kind !== 'coal' && job.kind !== 'winch' && !(job.kind === 'repair' && !job.obj.broken);
 }
 
 const HELP_KINDS = { fire: 1, patch: 1, revive: 1, swat: 1, fight: 1, defuse: 1, repair: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1 };
@@ -483,6 +485,7 @@ function work(p, state) {
     if (steer(p, MAIN, MAIN_X1 - 15, 12)) press(p);
     return;
   }
+  if (job.kind === 'link' || job.kind === 'surge') return linkWork(p, state, job); // (LINKED STATIONS block at the end of this file)
   if (job.kind === 'cutline') {
     if (steer(p, MAIN, MAIN_X1 - 110, 25)) p.fire = true; // hold Action at the bow to hack her line
     return;
@@ -995,5 +998,69 @@ export function updateBot(p, state, dt) {
     operate(p, state, dt);
   } else {
     work(p, state);
+  }
+}
+
+// ===================== LINKED STATIONS (links.js, prime.js; config.LINKS) =====================
+// An otherwise idle bot may (1) stand beside a manned gun holding Action to prime its shell for the gunner (job 'link'),
+// (2) man the Lookout when the helm is manned (the helm answers faster; see lookoutReach, a station tier), and
+// (3) now and then hold the boiler surge for a few seconds when steam is comfortably high (job 'surge'), letting go before it blows.
+// All of these come after fires, breaches, the helm, gas emergencies and coal/ammo chores in listJobs.
+const LK = config.LINKS;
+const LINK_HOLD_MS = 25000; // a loader stays beside a busy gun (it has a target) whose shell is already primed for this long, then goes elsewhere
+const SURGE_GAP_MS = 30000; // bots surge at most this often
+const SURGE_STOP_PRESS = 85; // ...and let go when the pressure reaches this
+const SURGE_MAX_MS = 4000; // ...or after this long
+
+function lookoutReach(state) {
+  const helm = Object.values(state.players).some((q) => q.lock === 'Helm');
+  return LK.ENABLED && helm && state.phase === 'flying' ? 1.2 : 3; // (ahead of an idle gun, level with a gun that has a target, while the helm is manned)
+}
+
+function linkJobs(state, bot, early) {
+  const out = [];
+  if (!LK.ENABLED || state.phase !== 'flying' || state.ship.down || state.goingDown) return out;
+  const players = Object.values(state.players);
+  const mods = state.modules || [];
+  const now = performance.now();
+  for (const n of GUN_STATIONS) {
+    const gun = state.GUNS[n];
+    const gunner = players.find((q) => q.lock === n && !(q.ko > 0));
+    if (!gunner || gunner === bot || gun.ammo <= 0 || mods.some((m) => m.name === n && m.broken)) continue;
+    const staying = !!bot.botJob && bot.botJob.kind === 'link' && bot.botJob.obj === n && now - (bot.jobSince || 0) < LINK_HOLD_MS;
+    const busy = !!bestTarget(state, gun); // (a gun with a target uses shell after shell: that is where a loader earns its keep)
+    if (gun.primed && !(staying && busy)) continue;
+    if (busy === early) out.push({ kind: 'link', obj: n, max: 1, cap: 2 });
+  }
+  if (early) return out;
+  // Surge: steam is up, the helm is flying (engines matter), nothing is on fire.
+  const ship = state.ship;
+  if (bot.surgeStart > 0 && !(bot.botJob && bot.botJob.kind === 'surge')) bot.surgeStart = 0; // (interrupted: forget it)
+  const surging = bot.botJob && bot.botJob.kind === 'surge' && (bot.surgeStart || 0) > 0;
+  const calm = !state.fires.length && !mods.some((m) => m.broken && B.CRITICAL.includes(m.name)) && players.some((q) => q.lock === 'Helm');
+  if (surging ? ship.press < SURGE_STOP_PRESS + 1 : calm && ship.press >= LK.SURGE.MIN_PRESS + 4 && ship.press <= 78 && ship.fuel > 25 && now - (state.surgeBotAt || -1e9) > SURGE_GAP_MS && ship.speed > 0.25) out.push({ kind: 'surge', obj: 'surge', max: 1 });
+  return out;
+}
+
+function linkWork(p, state, job) {
+  if (job.kind === 'link') {
+    const s = stationNamed(job.obj);
+    if (steer(p, s.d, s.x, 20)) {
+      p.jx = 0;
+      p.fire = true; // hold Action: prime the shell for the gunner
+    }
+    return;
+  }
+  const b = stationNamed('Boiler');
+  if (!steer(p, b.d, b.x, 25)) return;
+  const now = performance.now();
+  if (!(p.surgeStart > 0)) p.surgeStart = now;
+  p.jx = 0;
+  p.fire = state.ship.press < SURGE_STOP_PRESS && now - p.surgeStart < SURGE_MAX_MS;
+  if (!p.fire) {
+    // Done (or it got too hot): let go, and don't surge again for a while.
+    state.surgeBotAt = now;
+    p.surgeStart = 0;
+    p.botJob = null;
   }
 }

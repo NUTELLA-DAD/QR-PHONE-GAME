@@ -539,6 +539,28 @@ export const config = {
     FRAG_LIFE: 0.13, // seconds they fly (speed x life = about 85 px blast radius)
     BLAST_SIZE: 150, // size of the burst ring on the TV
   },
+  // Linked stations (links.js, prime.js): two crew at once are worth more than two crew apart. Always a bonus; a lone crew member still plays.
+  LINKS: {
+    ENABLED: true, // false = no links at all (tools/botsim.mjs uses NO_LINKS=1 to compare)
+    // GUN + LOADER: a second crew member standing at a manned gun holds Action to prime its shell for the gunner.
+    SOLO_MUL: 1.6, // a gunner priming alone takes this many times PRIME.TIME (with a loader beside the gun they prime at the normal rate)
+    LOADER_TIME: 1.2, // seconds for a loader holding Action to fully prime a shell (stacks with the gunner priming too)
+    LOADER_HOLD: 0.15, // seconds the link stays lit after the loader's last frame of work
+    // HELM + LOOKOUT: someone in the crow's nest (Lookout or Nest Searchlight) makes the helm answer faster.
+    HELM_MAN: 0.15, // extra helm response (engine speed changes, trim engine, gasbag valve) while the nest is manned
+    HELM_SPOT: 0.25, // ...and this much while the nest has spotted something lately (radar tap or a lit enemy)
+    SPOT_RECENT: 8, // seconds a spot / lit enemy counts as "lately"
+    GUST_WARN: 3, // seconds ahead of a storm gust that the TV shows warning arrows (only while the nest is manned)
+    // BOILER SURGE: hold Action at the boiler (steam high enough) to push extra steam into one consumer. Pressure climbs: overdo it and she blows.
+    SURGE: {
+      MIN_PRESS: 60, // pressure needed before the boiler hand can surge
+      RAMP: 0.5, // seconds to reach full surge while held
+      FALL: 1.2, // seconds to fade after letting go
+      PRESS_RATE: 6, // pressure added per second at full surge (70 -> 100 in about 5 s; 100 blows the boiler)
+      ENGINE: 0.35, // extra ship speed at full surge (stacks with overdrive)
+      COIL: 1, // extra Lightning Coil charge speed at full surge (1 = double)
+    },
+  },
   // Radar on idle phones (spotter.js): a map of everything out there, tap a ping to SPOT it for the whole crew.
   RADAR: {
     RANGE: 4500, // px from the ship to the edge of the phone radar (farther things are pinned to the rim)

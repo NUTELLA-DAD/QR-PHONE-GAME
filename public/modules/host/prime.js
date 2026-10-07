@@ -2,32 +2,52 @@
 // charge the loaded shell. A fully primed shell hits harder, bursts into splinters, and the barrel
 // glows on the TV until it is fired. Never required: it is something to do between targets.
 // Numbers live in config.PRIME. Gun state: gun.prime (0-1 charge), gun.primed (ready to fire).
+// Linked stations (config.LINKS): a second crew member beside a manned gun can hold Action to LOAD it for the
+// gunner (assist below), much faster. A gunner priming alone is slower. gun.loadT > 0 = a loader is working it.
 import { config } from '../../config.js';
 
 const P = config.PRIME;
+const LK = config.LINKS;
 
 export function createPrime({ state, phoneFx }) {
+  // A shell reaches full charge (whoever did the last of it).
+  const finish = (gun, player, gunner) => {
+    gun.primed = true;
+    gun.prime = 1;
+    gun.primedFlash = 0.5;
+    state.sfxQ.push(['primed']);
+    phoneFx?.(gunner, 'PRIMED! Next shell hits hard', 0);
+    if (player !== gunner) phoneFx?.(player, 'Loaded for ' + gunner.name + '!', 0);
+  };
+
   // Called every frame for the player on a gun (working = the gun is not broken).
   const charge = (player, gun, working, dt) => {
     const holding = !!player.prime && working && gun.ammo > 0 && !player.fire && !player.actQ;
+    const linked = LK.ENABLED && (gun.loadT || 0) > 0 && working && gun.ammo > 0; // (a loader is on it: no solo penalty, no fading)
+    gun.loadT = Math.max(0, (gun.loadT || 0) - dt);
     if (gun.primed) {
       gun.prime = 1;
       return;
     }
     if (holding) {
-      gun.prime = Math.min(1, (gun.prime || 0) + dt / P.TIME);
-      if (gun.prime >= 1) {
-        gun.primed = true;
-        gun.primedFlash = 0.5;
-        state.sfxQ.push(['primed']);
-        phoneFx?.(player, 'PRIMED! Next shell hits hard', 0);
-      }
-    } else gun.prime = Math.max(0, (gun.prime || 0) - P.DECAY * dt);
+      gun.prime = Math.min(1, (gun.prime || 0) + dt / (linked || !LK.ENABLED ? P.TIME : P.TIME * LK.SOLO_MUL)); // (alone it takes longer)
+      if (gun.prime >= 1) finish(gun, player, player);
+    } else if (!linked) gun.prime = Math.max(0, (gun.prime || 0) - P.DECAY * dt);
+  };
+
+  // LINKED: a second crew member holds Action beside a manned gun to charge its shell for the gunner.
+  const assist = (loader, gun, gunner, dt) => {
+    if (gun.primed || gun.ammo <= 0) return;
+    gun.loadT = LK.LOADER_HOLD;
+    gun.loaderId = loader.id;
+    gun.prime = Math.min(1, (gun.prime || 0) + dt / LK.LOADER_TIME);
+    if (gun.prime >= 1) finish(gun, loader, gunner);
   };
 
   // A gun with nobody on it forgets a half-charge (a finished primed shell waits for the next gunner).
   const idle = (gun, dt) => {
     gun.primedFlash = Math.max(0, (gun.primedFlash || 0) - dt);
+    gun.loadT = 0;
     if (!gun.primed) gun.prime = Math.max(0, (gun.prime || 0) - P.DECAY * dt);
   };
 
@@ -51,5 +71,5 @@ export function createPrime({ state, phoneFx }) {
     }
   };
 
-  return { charge, idle, take, burst };
+  return { charge, assist, idle, take, burst };
 }

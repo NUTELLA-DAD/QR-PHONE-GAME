@@ -11,6 +11,7 @@ export function createWeather({ state, impact, puff }) {
   state.weather = { storm: 0, gust: 0, flash: 0, bolt: null };
   let gustT = 3;
   let gustLeft = 0;
+  let nextGust = null; // the next gust is rolled ahead of time so the lookout can warn about it (state.weather.gustIn / gustNext)
   let boltT = 5;
   let announced = false;
 
@@ -41,10 +42,14 @@ export function createWeather({ state, impact, puff }) {
     if (w.storm < 0.15 || state.ship.down) {
       w.gust = 0;
       w.gusting = false;
+      w.gustIn = 99;
       return;
     }
     // Wind gusts push the ship's altitude.
     w.gusting = gustLeft > 0; // (envStormSea.js shoves her along as well)
+    if (nextGust == null) nextGust = (Math.random() < 0.5 ? -1 : 1) * rand(S.GUST_MIN, S.GUST_MAX);
+    w.gustIn = gustLeft > 0 ? 0 : gustT; // seconds until the next gust (0 = blowing now)
+    w.gustNext = nextGust;
     if (gustLeft > 0) {
       gustLeft -= dt;
       state.ship.alt += w.gust * w.storm * dt;
@@ -54,7 +59,8 @@ export function createWeather({ state, impact, puff }) {
     } else if ((gustT -= dt) <= 0) {
       gustT = rand(S.GUST_EVERY_MIN, S.GUST_EVERY_MAX);
       gustLeft = S.GUST_TIME;
-      w.gust = (Math.random() < 0.5 ? -1 : 1) * rand(S.GUST_MIN, S.GUST_MAX);
+      w.gust = nextGust;
+      nextGust = (Math.random() < 0.5 ? -1 : 1) * rand(S.GUST_MIN, S.GUST_MAX);
     }
     // Lightning.
     if ((boltT -= dt) <= 0) {
