@@ -38,6 +38,7 @@
 // heights in g.bp.decks) and is shifted by (g.dx, g.dy) to reach ship coordinates - see deckAt().
 // No two gunships are alike: gunshipBlueprint.js generates each one's hull, decks, guns, special, crew and captain.
 // The rope only pulls when taut: a gentle tug on us, a hard one on her; it snaps if stretched too far.
+import { crewMul } from './crewscale.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { inRock, scrollSpeed } from './course.js';
@@ -164,7 +165,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     const at = spawnPos(bp);
     if (!at) return false;
     S.spawned++;
-    const hp = Math.round((G.HP + (lap() - 1) * 6) * bp.hpMul);
+    const hp = Math.round((G.HP + (lap() - 1) * 6) * bp.hpMul * (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).gunHp * crewMul(state, 'hp'));
     const parasMul = bp.special === 'paras' ? GP.PARAS.EVERY_MUL : 1;
     state.gunship = {
       bp,
@@ -707,7 +708,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
   // ---- Paratroopers ----
   const dropParas = (g) => {
     const crew = Object.keys(state.players).length;
-    const n = clamp(1 + Math.floor(crew / 6) + (lap() >= 3 ? 1 : 0) + (g.bp.special === 'paras' ? GP.PARAS.EXTRA : 0), 1, 4);
+    const n = clamp(Math.round((1 + Math.floor(crew / 6) + (lap() >= 3 ? 1 : 0) + (g.bp.special === 'paras' ? GP.PARAS.EXTRA : 0)) * crewMul(state, 'raiders')), 1, 5);
     const alt = state.ship.alt;
     const sx = mx(g, g.bp.x0 + 80) + g.dx;
     const sy = deckYAt(g, mx(g, g.bp.x0 + 80)) + g.dy - 110;
@@ -1077,7 +1078,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       canFire = lineClear(pp.x + g.dx, pp.y + g.dy);
     }
     if (canFire && (g.fireCd -= dt * steamF) <= 0) {
-      g.fireCd = (g.mode === 'strafe' ? G.STRAFE_FIRE : G.FIRE_EVERY) * g.cap.fireMul * rand(0.85, 1.2);
+      g.fireCd = ((g.mode === 'strafe' ? G.STRAFE_FIRE : G.FIRE_EVERY) * g.cap.fireMul * rand(0.85, 1.2)) / crewMul(state, 'fire');
       const missChance = missFor(g.dist);
       for (let i = 0; i < Math.min(G.SHOTS, gunners + 1, alive.length); i++) {
         const pp = portPos(g, alive[i]);
@@ -1110,7 +1111,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
         return;
       }
       if ((pt.cd -= dt * steamF) > 0) return;
-      pt.cd = C.EVERY * g.cap.fireMul * rand(0.85, 1.2);
+      pt.cd = (C.EVERY * g.cap.fireMul * rand(0.85, 1.2)) / crewMul(state, 'fire');
       const missChance = clamp(missFor(d) + (C.MISS - G.MISS_BASE), 0, G.MISS_MAX);
       const tx = rand(700, 1500);
       const ty = rand(480, 820) - alt;

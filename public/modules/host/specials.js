@@ -6,6 +6,7 @@
 //   then flashes as it locks: move out of the line or block it with the Deflector.
 // - Harpoon Tug: harpoons the hull and drags the ship down and backward until someone shoots
 //   the cable (or hacks it with a sword at the hook) or shoots the tug down.
+import { spawnPace, crewMul } from './crewscale.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, SHIP_SAMPLES } from './course.js';
@@ -49,7 +50,7 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
     warn('GYRO-SAWS! SHOOT THEM BEFORE THEY CUT IN!');
   };
   const spawnImps = () => {
-    const n = SP.IMP_COUNT + (lap() - 1) * 4;
+    const n = Math.max(2, Math.round((SP.IMP_COUNT + (lap() - 1) * 4) * crewMul(state, 'count')));
     for (let i = 0; i < n; i++) {
       const s = i % 2 ? -1 : 1;
       // (Aim a little inside the outline so they really reach the hull.)
@@ -77,7 +78,7 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
     if (state.ship.down || state.phase !== 'flying' || state.boss || !Object.keys(state.players).length) return;
     if (lap() === 1 && progress() < 0.1) return;
     if ((timer -= dt * (state.tempo ? state.tempo.rate : 1)) > 0) return;
-    const pace = (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace;
+    const pace = spawnPace(state);
     const open = state.course && state.course.map && state.course.map.open;
     timer = (rand(SP.EVERY_MIN, SP.EVERY_MAX) / pace / (1 + (lap() - 1) * 0.15)) * (open ? 2 : 1);
     const pool = [spawnSaws, spawnImps, spawnSniper];

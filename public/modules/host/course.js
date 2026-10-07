@@ -8,6 +8,7 @@
 //
 // Course position cx maps to world x as  wx = cx - dist  (dist = how far the ship has flown).
 // World y grows downward; the ship is drawn shifted up by its altitude (alt).
+import { firePace } from './crewscale.js';
 import { config } from '../../config.js';
 import { pop } from './popups.js';
 import { pickEnvironment } from './environments.js';
@@ -648,7 +649,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       }
       if ((t.cd -= dt) <= 0) {
         t.warned = false;
-        t.cd = (r(K.TURRET_FIRE_MIN, K.TURRET_FIRE_MAX) / (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).pace) * (course.map && course.map.open ? 1.3 : 1);
+        t.cd = (r(K.TURRET_FIRE_MIN, K.TURRET_FIRE_MAX) / firePace(state)) * (course.map && course.map.open ? 1.3 : 1);
         const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
         const miss = course.rand() < K.FLAK_MISS || (helm && Math.abs(helm.jy) > 0.3 && course.rand() < 0.4);
         const tx = 300 + course.rand() * 1000;

@@ -401,7 +401,7 @@ export const config = {
     },
     // chance weights [cutter, frigate, dreadnought] by mission number (the last row repeats)
     HULL_WEIGHTS: [[1, 1, 0], [1, 1, 0], [2, 3, 1], [1, 3, 2], [1, 2, 3]],
-    DIFF_SHIFT: { easy: -1, normal: 0, hard: 1 }, // added to the mission number for strength
+    DIFF_SHIFT: { easy: -1, normal: 0, veteran: 0, hard: 1 }, // added to the mission number for strength
     TWIN_BAG: 0.4, // chance of twin gasbags (cutters: half this)
     TURRET: [0.15, 0.12, 0.6], // top turret: [chance at mission 1, extra per mission, cap]
     MORTAR: [0.0, 0.12, 0.5], // mortar: starts at 0 on mission 1
@@ -710,9 +710,28 @@ export const config = {
   // flak and enemy fire come (higher = busier).
   // A wrecked ship ends the run, so damage is kept gentle (multiplier on all hull damage).
   DIFFICULTY: {
-    easy: { label: 'Easy', damage: 0.1, pace: 0.75, autopilot: true },
-    normal: { label: 'Normal', damage: 0.17, pace: 0.9, autopilot: true },
-    hard: { label: 'Hard', damage: 0.45, pace: 1.3, autopilot: false },
+    easy: { label: 'Easy', damage: 0.1, pace: 0.75, autopilot: true, gunHp: 0.85 },
+    normal: { label: 'Normal', damage: 0.17, pace: 0.9, autopilot: true, gunHp: 1 },
+    veteran: { label: 'Veteran', damage: 0.26, pace: 1.05, autopilot: false, gunHp: 1.1 },
+    hard: { label: 'Hard', damage: 0.34, pace: 1.2, autopilot: false, gunHp: 1.2 },
+  },
+  // Crew-size scaling (crewscale.js). The number of crew aboard (connected players, bots included)
+  // multiplies the difficulty above, anchored at 8 crew = 1.0 and interpolated between rows.
+  // spawn = how often waves/specials come; count = how many enemies in each; fire = enemy fire rate;
+  // damage = hull damage taken; raiders = paratroopers/boarders; hp = enemy toughness (gunship, fighters);
+  // spread = how fast fires spread; collateral = how often a hit also breaks things (modules, holes, fires).
+  CREW_SCALE: {
+    ENABLED: true,
+    RAMP: 0.25, // the effective crew number follows the real one at this many crew per second (no mid-wave jumps)
+    AUTOPILOT_MAX_CREW: 4, // this many crew or fewer: the helm autopilot stays on whatever the difficulty
+    TABLE: {
+      1: { spawn: 0.55, count: 0.55, fire: 0.6, damage: 0.5, raiders: 0.4, hp: 0.7, spread: 0.6, collateral: 0.3 },
+      2: { spawn: 0.65, count: 0.65, fire: 0.7, damage: 0.6, raiders: 0.55, hp: 0.8, spread: 0.7, collateral: 0.45 },
+      4: { spawn: 0.85, count: 0.85, fire: 0.88, damage: 0.8, raiders: 0.8, hp: 0.92, spread: 0.85, collateral: 0.75 },
+      8: { spawn: 1, count: 1, fire: 1, damage: 1, raiders: 1, hp: 1, spread: 1, collateral: 1 },
+      12: { spawn: 1.15, count: 1.3, fire: 1.12, damage: 1.2, raiders: 1.4, hp: 1.2, spread: 1.15, collateral: 1.15 },
+      16: { spawn: 1.3, count: 1.6, fire: 1.25, damage: 1.4, raiders: 1.8, hp: 1.4, spread: 1.3, collateral: 1.3 },
+    },
   },
   START_DIFFICULTY: 'normal',
   AUTOPILOT_SPEED: 0.65, // an unmanned helm steers itself at this share of the climb speed (Easy/Normal)
