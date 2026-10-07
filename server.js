@@ -29,6 +29,18 @@ app.get('/api/sprites', (q, r) => {
   walk(SPRITES, '');
   r.json(found);
 });
+// Painted backgrounds: art/backgrounds/<env>/<sky|far|mid|near|cave>.png (also .webp/.jpg/.svg), listed as "env/file".
+app.get('/api/backgrounds', (q, r) => {
+  const found = [];
+  const root = path.join(__dirname, 'art', 'backgrounds');
+  if (fs.existsSync(root)) {
+    for (const d of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!d.isDirectory()) continue;
+      for (const f of fs.readdirSync(path.join(root, d.name))) if (/\.(png|webp|jpe?g|svg)$/i.test(f)) found.push(d.name + '/' + f);
+    }
+  }
+  r.json(found);
+});
 app.get('/api/info', (q, r) => r.json({ base: BASE }));
 app.get('/qr', async (q, r) => r.type('image/svg+xml').send(await QR.toString(String(q.query.t || '').slice(0, 200), { type: 'svg', margin: 1 })));
 app.get('/join/:code', (q, r) => r.redirect('/controller.html?code=' + encodeURIComponent(q.params.code)));

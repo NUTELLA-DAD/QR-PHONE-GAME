@@ -14,11 +14,15 @@ import { targets } from './aim.js';
 import { createSpecialsArt } from './specialsArt.js';
 import { createGunshipArt } from './gunshipArt.js';
 import { distToGoal } from './maps.js';
+import { createBackgroundArt } from './backgroundArt.js';
+import { envIdOf } from './environments.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
   const sprites = createSprites();
   sprites.load();
+  const bgArt = createBackgroundArt({ ctx, state }); // optional painted backgrounds (art/backgrounds/)
+  bgArt.load();
   // Placeholder tool in a sprite character's hand (drawCarry draws relative to the body).
   const drawItemAt = (item, x, y, swingAge) => {
     ctx.save();
@@ -43,7 +47,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const threatArt = createThreatArt({ ctx, state, ink, sprites });
   const skyArt = createSkyArt({ ctx, state });
   const envArt = createEnvArt({ ctx, state, ink }); // Frost Peaks / Ember Forge look (sky, weather, lava, ice)
-  const courseArt = createCourseArt({ ctx, state, ink, sprites, skyArt, envArt });
+  const courseArt = createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgArt });
   const drawSpecials = createSpecialsArt({ ctx, state, ink });
   const drawGunship = createGunshipArt({ ctx, state, ink });
   installLineBoil(ctx);
@@ -1696,6 +1700,11 @@ export function createRenderer({ ctx, state, canvas }) {
 
   // Background drawn in screen space, back to front, each layer scrolling at its own speed.
   const drawBackground = (width, height, view) => {
+    // Painted images for this environment (if any) replace the drawn sky and ridges.
+    if (bgArt.draw(envIdOf(state), width, height, view, () => drawDrawnBackground(width, height, view))) return;
+    drawDrawnBackground(width, height, view);
+  };
+  const drawDrawnBackground = (width, height, view) => {
     if (envArt.background(width, height, view)) return; // Frost Peaks / Ember Forge draw their own sky
     const s = height / config.H;
     // Day sky, blending to sunset on the return leg of the course.
@@ -1945,5 +1954,5 @@ export function createRenderer({ ctx, state, canvas }) {
     filmLook(time, width, height);
   };
 
-  return { renderFrame, ink, drawBar };
+  return { renderFrame, ink, drawBar, drawBackground, bgArt, sprites };
 }

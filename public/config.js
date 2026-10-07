@@ -1169,6 +1169,16 @@ export const config = {
   },
   // Animals players (and test bots) can be.
   CREW_SPRITES: false, // true = use crew sprite art from art/sprites/crew (only the bulldog has any); false = the drawn style for everyone
+  // Painted background images (art/backgrounds/<env>/sky|far|mid|near|cave .png) - see art/ART_PIPELINE.md.
+  BACKGROUNDS: {
+    ENABLED: true,
+    // How fast each strip slides past, as a share of the ship's speed (bigger = nearer). Same idea as the drawn ridges.
+    PARALLAX: { far: 0.02, mid: 0.05, near: 0.1 },
+    // The strip is drawn this much taller than the screen so it can shift up and down a little with the camera.
+    OVERSCAN: 1.1,
+    // Cave texture: world units tall (the picture is scaled to this), how fast it follows the camera, and a dark wash over it (0-1).
+    CAVE: { HEIGHT: 900, PARALLAX: 0.5, DIM: 0.25 },
+  },
   CREW_SPECIES: ['bulldog', 'wolf', 'tiger', 'shiba', 'fox', 'bear', 'cat', 'rabbit'],
 };
 
