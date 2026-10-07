@@ -9,7 +9,7 @@
 //                    boarders down grapple lines. Shooting it down patches your ship up.
 import { spawnPace, firePace, crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, kindOf } from '../../shipLayout.js';
 import { keepClear, inRock, scrollSpeed } from './course.js';
 import { shellDmg, dazzled } from './aim.js';
 import { SHIP_SAMPLES } from './course.js';
@@ -369,7 +369,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         if (p.shots > 0 && p.gunCd <= 0 && Math.abs(off) < 0.35 && dist < D.FIRE_RANGE && !state.ship.down) {
           p.shots -= 1;
           p.gunCd = D.SHOT_EVERY / crewMul(state, 'fire');
-          const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
+          const helm = Object.values(state.players).find((q) => kindOf(q.lock) === 'helm');
           const evading = helm && (Math.abs(helm.jy) > 0.2 || Math.abs(state.ship.speed) > 0.3);
           const miss = Math.random() < 0.25 || (evading && Math.random() < 0.4) || dazzled(p);
           const dir = p.heading + Math.max(-0.15, Math.min(0.15, off)) + (miss ? (Math.random() < 0.5 ? -1 : 1) * 0.3 : rand(-0.05, 0.05));
@@ -447,7 +447,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       const tx = rand(300, 1400);
       const ty = rand(200, 800) - state.ship.alt;
       const d = Math.hypot(tx - gx, ty - gy) || 1;
-      const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
+      const helm = Object.values(state.players).find((q) => kindOf(q.lock) === 'helm');
       const miss = helm && Math.abs(helm.jy) > 0.3 && Math.random() < 0.35;
       if (z.kind === 'iron' && Math.random() < 0.5) {
         // The Iron Dreadnought's turrets also fire homing rockets.

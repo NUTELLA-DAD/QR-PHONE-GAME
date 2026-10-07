@@ -4,7 +4,7 @@
 // times a second, as one flat array of numbers. Phones send back { spot: n } (the n-th ping of the list
 // that phone last got) and { help: 1 }.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, kindOf } from '../../shipLayout.js';
 import { travelTime } from './nav.js';
 import { bestTarget } from './aim.js';
 import { botFree } from './bots.js';
@@ -69,7 +69,7 @@ export function createSpotter({ state, emit, phoneFx }) {
       p.rdBusy = 0;
       return (p.freeT || 0) >= R.IDLE_AFTER;
     }
-    if (p.lock === 'Lookout') return true;
+    if (kindOf(p.lock) === 'lookout') return true;
     const gun = state.GUNS[p.lock];
     if (!gun) return false;
     // A gunner: free = nothing in reach (or the gun can't fire anyway).

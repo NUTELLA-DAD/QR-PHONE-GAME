@@ -76,7 +76,7 @@ const load = (p) => import(pathToFileURL(path.join(root, p)).href);
 const { config } = await load('config.js');
 // --set "A.B.C=value;...": tweak config numbers for tuning runs
 for (const kv of args.set.split(';').filter(Boolean)) { const [k, v] = kv.split('='); const ks = k.split('.'); let o = config; for (const x of ks.slice(0, -1)) o = o[x] ??= {}; o[ks[ks.length - 1]] = Number(v); }
-const { SHIP_LAYOUT } = await load('shipLayout.js');
+const { SHIP_LAYOUT, kindOf } = await load('shipLayout.js');
 const { damageMul } = await load('modules/host/crewscale.js');
 const { createSimulation } = await load('modules/host/simulation.js');
 const maps = await load("modules/host/maps.js");
@@ -101,8 +101,8 @@ let snapshot = null;
 const rolling = { helmEmpty: 0, flying: 0, br: 0, fires: 0, gh: 0, crew: {}, n: 0 };
 const snap = () => {
   const players = Object.values(state.players);
-  const helmMan = players.find((q) => q.lock === 'Helm');
-  const helmMod = (state.modules || []).find((m) => m.name === 'Helm');
+  const helmMan = players.find((q) => kindOf(q.lock) === 'helm');
+  const helmMod = (state.modules || []).find((m) => m.kind === 'helm');
   const broken = (state.modules || []).filter((m) => m.broken).map((m) => m.name);
   return {
     stop: state.run ? state.run.stopId : null, mk: state.course && state.course.map ? state.course.map.kind + (state.course.map.open ? ':' + state.course.map.outposts.filter((o) => o.done).length + '/' + state.course.map.outposts.length : '') + ' spd ' + state.ship.speed.toFixed(2) : null,

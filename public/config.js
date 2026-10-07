@@ -908,6 +908,7 @@ export const config = {
     COAL_FUEL: 25, // fuel added per load of coal
     FUEL_MAX: 100,
     BURN_RATE: 0.35, // fuel burned per second (one load lasts about a minute)
+    EXTRA_BOILER: 0.6, // a ship with several boilers: each extra working boiler adds this share of the first one's heat AND coal burn (one shared firebox and steam pool)
     // Pressure in the line = heat in vs steam used. Heat comes from the coal in the firebox
     // (more coal = hotter fire, with diminishing returns). Steam is used by everything powered
     // (each open pipe valve), by open vents, burst pipes and pumping the gasbag, and all of
@@ -1418,7 +1419,8 @@ export const config = {
     FIRE_CAP: 4, // at most this many crew on fires at once
     COAL_EMERGENCY: 15, // boiler fuel below this (with pressure not high): stoke it before anything else
     PRESS_EMERGENCY: 22, // steam below this (with coal not plentiful): same
-    CRITICAL: ['Helm', 'Helm Pipe', 'Boiler', 'Lift', 'Lift Pipe'], // parts the bots rebuild before anything else once they break
+    CRITICAL: ['helm', 'boiler', 'lift'], // module kinds (and the steam pipes feeding them) the bots rebuild before anything else once they break
+    BOILER_SPREAD: 400, // a ship with several boilers: walking px a bot will add per coal load already shovelled into a boiler, to spread coal between them
     CHORE_SHARE: 0.6, // at most this share of the crew works on chores (patching, fires, repairs) at once; the rest man stations
     JOB_HOLD: 2.5, // seconds a bot sticks to a job before it may swap to a more urgent kind (it never swaps to a merely closer job of the same kind)
     HELM_CALL: 0.7, // chance per think that a crew member leaves a station to take an empty helm

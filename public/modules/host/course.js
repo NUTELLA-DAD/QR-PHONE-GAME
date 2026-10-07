@@ -14,6 +14,7 @@ import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
 import { pickEnvironment } from './environments.js';
 import { makeMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
+import { kindOf } from '../../shipLayout.js';
 
 const K = config.COURSE;
 const TOP = -1400; // where ceilings start (far above the view)
@@ -651,7 +652,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       if ((t.cd -= dt) <= 0) {
         t.warned = false;
         t.cd = (r(K.TURRET_FIRE_MIN, K.TURRET_FIRE_MAX) / firePace(state)) * (course.map && course.map.open ? 1.3 : 1);
-        const helm = Object.values(state.players).find((q) => q.lock === 'Helm');
+        const helm = Object.values(state.players).find((q) => kindOf(q.lock) === 'helm');
         const miss = course.rand() < K.FLAK_MISS || (helm && Math.abs(helm.jy) > 0.3 && course.rand() < 0.4);
         const tx = 300 + course.rand() * 1000;
         const aimY = 400 + course.rand() * 400 - state.ship.alt + (miss ? -900 : 0);

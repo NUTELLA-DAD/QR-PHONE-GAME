@@ -3,7 +3,7 @@
 // "LIMPING HOME" card. Same hand-inked look as shipArt.js: thin warm-brown ink, flat fills, no gradients.
 // Everything takes ctx (+ state) so render.js / shipArt.js only need one small call each.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, one } from '../../shipLayout.js';
 
 const INK = config.INK;
 const ICE = '#cdeaf2';
@@ -156,7 +156,7 @@ export function drawIceFlights(ctx, state) {
 export function drawBoilerHeat(ctx, state, time) {
   const g = state.goingDown;
   if (!g) return;
-  const boiler = SHIP_LAYOUT.stations.find((s) => s.n === 'Boiler');
+  const boiler = one('boiler');
   const by = SHIP_LAYOUT.platforms[boiler.d].y;
   const heat = Math.min(1, g.heat);
   ctx.save();

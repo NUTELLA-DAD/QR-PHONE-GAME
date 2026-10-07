@@ -95,7 +95,7 @@ export function createSearchlightArt({ ctx, state, ink }) {
     shipM = { a: m.a, b: m.b, c: m.c, d: m.d, e: m.e, f: m.f };
     anchors.length = 0;
     for (const l of lights) {
-      const floor = P.find((q) => q.id === (l.n === 'Nest Searchlight' ? 'nest' : 'lamp')).y;
+      const floor = P[L.stations.find((q) => q.n === l.n).d].y; // (the deck the lamp's station stands on)
       const lens = capture(m, l.bx + Math.cos(l.aim) * l.len, l.by + Math.sin(l.aim) * l.len);
       const dir = { x: m.a * Math.cos(l.aim) + m.c * Math.sin(l.aim), y: m.b * Math.cos(l.aim) + m.d * Math.sin(l.aim) };
       anchors.push({ n: l.n, x: lens.x, y: lens.y, a: Math.atan2(dir.y, dir.x), scale: Math.hypot(m.a, m.b), l });
