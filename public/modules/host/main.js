@@ -9,6 +9,10 @@ import { createMenu } from './menu.js';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 // Draw at the screen's real pixel density (sharp on scaled laptop screens and 4K TVs), capped in config.
+// "Sharp screen" (pause menu) is remembered on this computer; it costs speed on big screens.
+try {
+  if (localStorage.getItem('airshipSharp') === '1') config.DISPLAY.MAX_PIXEL_RATIO = config.DISPLAY.SHARP_RATIO;
+} catch { /* (no storage: use the default) */ }
 const fitCanvas = () => {
   const pr = Math.max(1, Math.min(Number(config.DISPLAY && config.DISPLAY.MAX_PIXEL_RATIO) || 1, window.devicePixelRatio || 1));
   canvas.width = Math.round(window.innerWidth * pr);
@@ -104,3 +108,4 @@ function frame(now) {
 
 requestAnimationFrame(frame);
 window.addEventListener('resize', fitCanvas);
+window.fitCanvas = fitCanvas; // (the pause menu's Screen button)

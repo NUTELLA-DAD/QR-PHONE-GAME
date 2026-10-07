@@ -1,6 +1,7 @@
 // Pause menu on the TV (Esc or P, or the Menu button on the corner badge): resume, show the join
 // QR code, add/remove bots, difficulty, sound, next map, restart. While it's open the game is
 // paused. It also shows the last problem the game hit (if any), to help track bugs down.
+import { config } from '../../config.js';
 export function createMenu({ simulation, network, onPause }) {
   const el = document.getElementById('menu');
   const $ = (id) => document.getElementById(id);
@@ -43,6 +44,16 @@ export function createMenu({ simulation, network, onPause }) {
   $('mDifficulty').onclick = () => {
     $('difficulty').click();
     sync();
+  };
+  // Screen: Smooth (fast) or Sharp (crisper on high-resolution screens, slower).
+  const sharpLabel = () => ($('mSharp').textContent = config.DISPLAY.MAX_PIXEL_RATIO > 1 ? 'Screen: Sharp' : 'Screen: Smooth (fast)');
+  sharpLabel();
+  $('mSharp').onclick = () => {
+    const sharp = !(config.DISPLAY.MAX_PIXEL_RATIO > 1);
+    config.DISPLAY.MAX_PIXEL_RATIO = sharp ? config.DISPLAY.SHARP_RATIO : 1;
+    try { localStorage.setItem('airshipSharp', sharp ? '1' : '0'); } catch { /* (not remembered) */ }
+    if (window.fitCanvas) window.fitCanvas();
+    sharpLabel();
   };
   $('mSound').onclick = () => {
     $('sound').click();

@@ -53,9 +53,13 @@ export function loadTextures(ctx) {
       const name = file.replace(/\.png$/i, '').toLowerCase();
       if (!NAMES.includes(name)) return resolve();
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         try {
-          const p = ctx.createPattern(shadeLayer(img), 'repeat');
+          // (an ImageBitmap lives on the graphics card; a plain canvas made for pixel reading would be
+          // re-uploaded every time the pattern is drawn, which was very slow)
+          let src = shadeLayer(img);
+          if (typeof createImageBitmap === 'function') src = await createImageBitmap(src);
+          const p = ctx.createPattern(src, 'repeat');
           if (p && p.setTransform) p.setTransform(new DOMMatrix().scale(scale));
           if (p) pats[name] = p;
         } catch (e) { report(e); }
