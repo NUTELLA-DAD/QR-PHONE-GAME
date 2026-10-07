@@ -1,10 +1,13 @@
-// Hijack a small plane (H5). An airborne player who touches an enemy dogfighter (or reels one in
+// Hijack a plane (H5): the small dogfighters, and the big enemy fighter (state.enemy). An airborne player who touches an enemy dogfighter (or reels one in
 // on the hookshot) climbs aboard: the plane slows and wobbles, the phone says KICK THE PILOT!,
 // and a few taps (or a short hold) of ACTION throw him out - he parachutes. Then the player FLIES
 // the plane like the escort fighter: the stick steers, the guns fire by themselves at anything in
 // front, LEAVE bails out (parachute, into normal airborne flight). She is OURS now: our guns and
 // bots ignore her, enemy bullets can shoot her down (the player bails out), and she runs dry after
-// a while. The plane is moved out of state.strafers into state.hijacks while stolen.
+// a while. The plane is moved out of state.strafers into state.hijacks while stolen. The big fighter (a bigger,
+// slower plane that keeps its ENEMY stats) is swapped out of state.enemy for a dead placeholder, so the enemy AI
+// stops flying her and the normal respawn timer runs once she is gone (it is held while she is stolen).
+// Bots only take part while they are on a daring stunt (p.daring, see bots.js).
 // Player fields: p.hj = the plane while riding. Plane fields: rider (player id), phase 'kick'|'fly'.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
@@ -16,6 +19,8 @@ import { pop } from './popups.js';
 const H = config.HIJACK;
 const E = config.ESCORT;
 const D = config.DOGFIGHT;
+const F = config.ENEMY;
+const HF = H.FIGHTER;
 const B = SHIP_LAYOUT.bounds;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -24,11 +29,23 @@ export function createHijack({ state, puff, phoneFx, air }) {
   const shipMid = () => ({ x: SHIP_LAYOUT.aimPoint.x, y: SHIP_LAYOUT.aimPoint.y - state.ship.alt });
   const nearShip = (x, y, pad) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - state.ship.alt - pad && y < B.y1 - state.ship.alt + pad;
 
-  // Climb aboard plane s (an enemy dogfighter in state.strafers).
+  const canRide = (p) => !!p && (!p.bot || p.daring) && !p.hj;
+  // The big enemy fighter, if she is flying (not shot down, not stolen).
+  const bigFighter = () => (state.enemy && state.enemy.dead <= 0 && state.enemy.heading != null && state.enemy.hp > 0 ? state.enemy : null);
+
+  // Climb aboard plane s (an enemy dogfighter in state.strafers, or the big fighter state.enemy).
   const board = (p, s) => {
-    if (!p || p.bot || p.hj || !s || !(s.hp > 0) || !state.strafers.includes(s)) return false;
-    state.strafers = state.strafers.filter((q) => q !== s);
-    Object.assign(s, { rider: p.id, phase: 'kick', kickP: 0, kickIdle: 0, fuel: H.FUEL_TIME, max: H.HP, hp: H.HP, gunCd: 0, orbit: Math.atan2(s.y - shipMid().y, s.x - shipMid().x), t: 0 });
+    if (!canRide(p) || !s || !(s.hp > 0)) return false;
+    if (s === state.enemy) {
+      if (!bigFighter()) return false;
+      // Swap a dead placeholder into state.enemy: the AI stops flying her, and she is not a live enemy any more.
+      state.enemy = { x: -2000, y: 300, vx: 0, vy: 0, hp: 5, fire: 0, dead: F.RESPAWN, heading: null };
+      Object.assign(s, { big: true, origHp: s.hp, origMax: s.max, rider: p.id, phase: 'kick', kickP: 0, kickIdle: 0, fuel: HF.FUEL_TIME, max: HF.HP, hp: HF.HP, gunCd: 0, orbit: Math.atan2(s.y - shipMid().y, s.x - shipMid().x), t: 0 });
+    } else {
+      if (!state.strafers.includes(s)) return false;
+      state.strafers = state.strafers.filter((q) => q !== s);
+      Object.assign(s, { rider: p.id, phase: 'kick', kickP: 0, kickIdle: 0, fuel: H.FUEL_TIME, max: H.HP, hp: H.HP, gunCd: 0, orbit: Math.atan2(s.y - shipMid().y, s.x - shipMid().x), t: 0 });
+    }
     state.hijacks.push(s);
     p.hj = s;
     p.fly = false;
@@ -45,16 +62,18 @@ export function createHijack({ state, puff, phoneFx, air }) {
     p.y = s.y + state.ship.alt;
     puff(s.x, s.y, '#ffffff', 8);
     pop(state, s.x, s.y - 60, 'WHUMP!', '#ffffff', 0.9);
-    phoneFx(p, 'You landed on a dogfighter! KICK THE PILOT OUT - tap Action!', null);
+    phoneFx(p, s.big ? 'You landed on the big fighter! KICK THE PILOT OUT - tap Action!' : 'You landed on a dogfighter! KICK THE PILOT OUT - tap Action!', null);
     return true;
   };
 
   // Called each frame for an airborne human: touching a dogfighter climbs aboard.
   const touch = (p) => {
-    if (p.bot || p.hj || !p.fly) return false;
+    if (!canRide(p) || !p.fly || performance.now() < (p.noBoardUntil || 0)) return false;
     for (const s of state.strafers) {
       if (s.hp > 0 && Math.hypot(p.x - s.x, p.y - (s.y + state.ship.alt)) < H.RADIUS) return board(p, s);
     }
+    const e = bigFighter();
+    if (e && Math.hypot(p.x - e.x, p.y - (e.y + state.ship.alt)) < HF.RADIUS) return board(p, e);
     return false;
   };
 
@@ -64,6 +83,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
     if (!s) return;
     p.hj = null;
     p.fire = false;
+    p.noBoardUntil = performance.now() + 1500; // (jumping off must not land you straight back on the same plane)
     state.hijacks = state.hijacks.filter((q) => q !== s);
     p.x = s.x;
     p.y = s.y + state.ship.alt - 20;
@@ -73,17 +93,30 @@ export function createHijack({ state, puff, phoneFx, air }) {
     p.face = (s.vx || 0) < 0 ? -1 : 1;
     if (wreckPlane || s.phase === 'fly') {
       // An empty plane just drops away in flames.
-      shootDown(state, s, 'biplane');
+      shootDown(state, s, s.big ? 'fighter' : 'biplane');
       state.chutes.pop(); // (no pilot to bail out)
       puff(s.x, s.y, '#ff5a1f', 14);
     } else {
       // We backed out before kicking him out: he flies on as an enemy.
       for (const k of ['rider', 'phase', 'kickP', 'kickIdle', 'fuel', 'orbit', 't']) delete s[k];
-      s.max = D.HP;
-      s.hp = Math.min(s.hp, D.HP);
-      s.mode = 'extend';
-      s.modeT = 1.5;
-      state.strafers.push(s);
+      if (s.big) {
+        // The big fighter goes back to the enemy AI (the placeholder is still waiting to respawn).
+        const side = Math.sign(s.x - shipMid().x) || 1;
+        delete s.big;
+        s.max = s.origMax;
+        s.hp = Math.max(1, Math.min(s.hp, s.origHp));
+        s.mode = 'extend';
+        s.wp = { x: shipMid().x + side * F.RUN_FROM, y: shipMid().y - 600 };
+        s.side = -side;
+        s.dead = 0;
+        state.enemy = s;
+      } else {
+        s.max = D.HP;
+        s.hp = Math.min(s.hp, D.HP);
+        s.mode = 'extend';
+        s.modeT = 1.5;
+        state.strafers.push(s);
+      }
     }
     if (why) phoneFx(p, why, null);
   };
@@ -154,11 +187,13 @@ export function createHijack({ state, puff, phoneFx, air }) {
       }
       s.t += dt;
       const mid = shipMid();
+      if (s.big && state.enemy !== s) state.enemy.dead = Math.max(state.enemy.dead, F.RESPAWN); // (no new enemy fighter while she is stolen)
       if (s.phase === 'kick') {
         // A stranger on the wing: she slows down and wobbles, but her pilot keeps flying her on.
         const tx = s.x + Math.cos(s.heading) * 800;
         const ty = s.y + Math.sin(s.heading) * 800;
-        flyPlane(state, s, tx, ty, dt, { speed: H.BOARD_SPEED, turn: D.TURN * 0.6, turnAvoid: D.TURN_AVOID, nearShip, midY: mid.y, forceTurn: Math.sin(s.t * 3.1) * H.BOARD_WOBBLE, fm: { ...D, STALL_SPEED: 120 }, max: s.max });
+        if (s.big) flyPlane(state, s, tx, ty, dt, { speed: F.SPEED * HF.BOARD_SPEED, turn: F.TURN * 0.6, turnAvoid: F.TURN_AVOID, nearShip, midY: mid.y, forceTurn: Math.sin(s.t * 3.1) * H.BOARD_WOBBLE * 0.7, fm: { ...F, STALL_SPEED: 120 }, max: s.max });
+        else flyPlane(state, s, tx, ty, dt, { speed: H.BOARD_SPEED, turn: D.TURN * 0.6, turnAvoid: D.TURN_AVOID, nearShip, midY: mid.y, forceTurn: Math.sin(s.t * 3.1) * H.BOARD_WOBBLE, fm: { ...D, STALL_SPEED: 120 }, max: s.max });
       } else {
         s.fuel -= dt;
         let tx;
@@ -172,13 +207,30 @@ export function createHijack({ state, puff, phoneFx, air }) {
           ty = s.y + p.jy * 1000;
         } else {
           s.orbit = (s.orbit || 0) + E.ORBIT_SPEED * dt;
-          tx = mid.x + Math.cos(s.orbit) * E.ORBIT * 1.3;
-          ty = mid.y + Math.sin(s.orbit) * E.ORBIT * 0.7;
+          const wide = s.big ? HF.ORBIT : 1;
+          tx = mid.x + Math.cos(s.orbit) * E.ORBIT * 1.3 * wide;
+          ty = mid.y + Math.sin(s.orbit) * E.ORBIT * 0.7 * wide;
         }
-        flyPlane(state, s, tx, ty, dt, { speed: E.SPEED, turn: E.TURN, turnAvoid: E.TURN_AVOID, nearShip, midY: mid.y, fm: E, max: s.max });
+        if (s.big) flyPlane(state, s, tx, ty, dt, { speed: F.SPEED * HF.SPEED, turn: F.TURN * HF.TURN, turnAvoid: F.TURN_AVOID, nearShip, midY: mid.y, fm: { ...F, THRUST: HF.THRUST, GRAVITY: HF.GRAVITY, STALL_SPEED: HF.STALL_SPEED }, max: s.max });
+        else flyPlane(state, s, tx, ty, dt, { speed: E.SPEED, turn: E.TURN, turnAvoid: E.TURN_AVOID, nearShip, midY: mid.y, fm: E, max: s.max });
         // Guns along the nose at anything in front (like the escort fighter, human accuracy).
         s.gunCd -= dt;
-        if (s.gunCd <= 0) {
+        if (s.gunCd <= 0 && s.big) {
+          // Two guns on the big fighter.
+          const hit = targets(state).some((t) => {
+            const q = t.at(0.3);
+            return Math.hypot(q.x - s.x, q.y - s.y) < E.FIRE_RANGE * 1.2 && Math.abs(angDiff(Math.atan2(q.y - s.y, q.x - s.x), s.heading)) < E.FIRE_CONE;
+          });
+          if (hit) {
+            s.gunCd = HF.SHOT_EVERY;
+            for (const off of [-12, 12]) {
+              const nx = s.x + Math.cos(s.heading) * 44 - Math.sin(s.heading) * off;
+              const ny = s.y + Math.sin(s.heading) * 44 + Math.cos(s.heading) * off;
+              state.shells.push({ x: nx, y: ny, vx: Math.cos(s.heading) * 1100 + s.vx * 0.3, vy: Math.sin(s.heading) * 1100 + s.vy * 0.3, life: 1.1, owner: p.id });
+              if (state.flashes) state.flashes.push({ x: nx, y: ny, ang: s.heading, t: 0.06, color: '#fff2b0', size: 0.8 });
+            }
+          }
+        } else if (s.gunCd <= 0) {
           const hit = targets(state).some((t) => {
             const q = t.at(0.3);
             return Math.hypot(q.x - s.x, q.y - s.y) < E.FIRE_RANGE && Math.abs(angDiff(Math.atan2(q.y - s.y, q.x - s.x), s.heading)) < E.FIRE_CONE;
@@ -199,7 +251,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
       smoke(s, s.max, puff);
       // Enemy fire hurts her, rock kills her.
       for (const b of state.bullets) {
-        if (b.life > 0 && Math.hypot(b.x - s.x, b.y - s.y) < 34) {
+        if (b.life > 0 && Math.hypot(b.x - s.x, b.y - s.y) < (s.big ? 50 : 34)) {
           b.life = 0;
           s.hp -= 1;
           puff(s.x, s.y, '#ffcf40', 6);
@@ -229,5 +281,5 @@ export function createHijack({ state, puff, phoneFx, air }) {
     state.hijacks = [];
   };
 
-  return { board, touch, bail, leave, rider, update, reset, kickText };
+  return { board, touch, bail, leave, rider, update, reset, kickText, bigFighter };
 }

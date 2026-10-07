@@ -220,6 +220,21 @@ export const config = {
     FUEL_TIME: 80, // seconds she flies before running dry (you bail out)
     LEASH: 3400, // beyond this far from the ship she turns for home on her own
     GREEN: '#8fb37a', CREAM: '#e8d8a8', // her new colours
+    // The big enemy fighter (the one that makes strafing runs) can be stolen too. It flies on its own ENEMY stats.
+    FIGHTER: {
+      HP: 10, // enemy bullets she can take once she is ours
+      FUEL_TIME: 60, // seconds she flies before running dry
+      SPEED: 0.85, // share of the enemy fighter's cruise speed
+      TURN: 0.9, // share of its turn rate
+      THRUST: 520, // her engines when she is ours (the enemy's own THRUST is tuned for boom-and-zoom runs; a stolen plane has to hold height circling the ship)
+      GRAVITY: 300, // pull along her flight path (lower = climbs cost less speed)
+      STALL_SPEED: 220, // she stalls below this airspeed
+      ORBIT: 1.0, // her circle round the ship, as a share of a small plane's (any wider and a rider who bails out lands past the ship's end and goes overboard)
+      SHOT_EVERY: 0.2, // two guns, one burst this often
+      SCALE: 1.7, // drawn this much bigger than a dogfighter
+      BOARD_SPEED: 0.55, // share of cruise speed while a stranger is on the wing
+      RADIUS: 95, // how close an airborne player must get to climb aboard (px)
+    },
   },
   GUNSHIP: {
     FIRST_AFTER: 100, // seconds into a mission before the first
@@ -1179,6 +1194,31 @@ export const config = {
     STATION_MAX: 40, // ...and at most this long, then rotate
     STATION_TIER_PX: 1800, // a station that is one 'usefulness point' better is worth walking this many extra px for
     LEAVE_FOR_EMERGENCY: 0.2, // chance per think to leave a station when help is short
+    // Bots now and then do something daring when they have nothing urgent to do: take a hookshot, hook the enemy
+    // gunship, swing about our own decks, or hook / jump onto a fighter, kick the pilot out, fly it, bail out over our ship.
+    DARING: {
+      ENABLED: true,
+      CHANCE_PER_MIN: 0.6, // per idle bot: chance each minute that it feels daring
+      TARGET_BOOST: 6, // ...times this while a plane is close to the ship or a gunship is roped on (a better excuse than a quiet moment)
+      MAX_AT_ONCE: 1, // at most this many bots on a daring stunt at once
+      COOLDOWN: 40, // seconds after any stunt ends before the next may start
+      MIN_CREW: 4, // not with fewer bots than this (the ship still needs hands)
+      MIN_HULL: 35, // not while the hull is below this
+      GET_TIMEOUT: 25, // seconds to fetch the hookshot from the rack
+      WAIT_TIMEOUT: 18, // seconds to wait for a target to come into reach
+      HOOK_TRIES: 3, // misses before it gives up
+      REEL_TIMEOUT: 6, // seconds on the rope before it lets go
+      TOTAL_TIMEOUT: 75, // a whole stunt never lasts longer than this (it stops controlling the bot)
+      KICK_TIMEOUT: 6, // seconds to kick the pilot out before it gives up and jumps off
+      FLY_TIME: 14, // seconds it flies a stolen plane before heading back over the ship to bail out
+      FLY_TIME_BIG: 18, // ...the big fighter
+      BAIL_OVER: 500, // bails out when the plane is within this sideways distance of the ship's middle...
+      BAIL_Y: -200, // ...and above this height (ship coordinates; the ship's top is -165, planes keep off the hull, the parachute does the rest)
+      REACH: 900, // only hooks a plane this close (px, ship coordinates; the hook flies 950)
+      GUN_REACH: 800, // only hooks the gunship when her deck is this close (and only while her rope to our bow is tied, so the crew can swing back as usual)
+      SHOW_REACH: 750, // show-off swings aim at our own decks this far
+      KINDS: { plane: 3, gun: 2, show: 1 }, // how often each stunt is picked when it is possible
+    },
   },
   // Job arrows on idle phones (the job finder, modules/host/jobs.js).
   JOBS: {

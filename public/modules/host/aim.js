@@ -15,7 +15,7 @@ const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 export function targets(state) {
   const list = [];
   const e = state.enemy;
-  if (e.dead <= 0) {
+  if (e.dead <= 0 && e !== state.stuntPlane) {
     list.push({ kind: 'fighter', obj: e, r: 46, at: (t) => ({ x: e.x + e.vx * t, y: e.y + e.vy * t }) });
   }
   for (const p of state.paras || []) list.push({ kind: 'para', obj: p, r: 42, at: (t) => ({ x: p.x + p.vx * t, y: p.y + p.vy * t }) });
@@ -29,7 +29,7 @@ export function targets(state) {
   }
   for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + m.vx * t, y: m.y }) });
   for (const b of state.bats || []) if (b.delay <= 0 && !b.latched) list.push({ kind: 'bat', obj: b, r: 26, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t }) });
-  for (const p of state.strafers || []) list.push({ kind: 'strafer', obj: p, r: 40, at: (t) => ({ x: p.x + p.vx * t, y: p.y + p.vy * t }) });
+  for (const p of state.strafers || []) if (p !== state.stuntPlane) list.push({ kind: 'strafer', obj: p, r: 40, at: (t) => ({ x: p.x + p.vx * t, y: p.y + p.vy * t }) });
   const SP = state.specials;
   if (SP) {
     for (const s of SP.saws) list.push({ kind: 'saw', obj: s, r: 52, at: (t) => ({ x: s.x + s.vx * t, y: s.y + s.vy * t }) });

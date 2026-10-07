@@ -517,7 +517,8 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
         ctx.rotate(s.heading || 0);
         const flip = Math.cos(s.heading || 0) < 0;
         if (flip) ctx.scale(1, -1);
-        ctx.scale(1.3, 1.3 * (1 - 0.45 * Math.min(1, Math.abs(s.bank) || 0)));
+        const sc = s.big ? config.HIJACK.FIGHTER.SCALE : 1.3; // (the stolen big fighter is drawn bigger)
+        ctx.scale(sc, sc * (1 - 0.45 * Math.min(1, Math.abs(s.bank) || 0)));
         biplane(time, config.HIJACK.GREEN, config.HIJACK.CREAM, false, '#a8443f');
         // The rider's head and goggles in the cockpit.
         ink();
@@ -533,7 +534,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
         if (s.phase === 'kick') {
           // KICK THE PILOT: a little progress bar over the plane.
           ctx.save();
-          ctx.translate(s.x, s.y - 70);
+          ctx.translate(s.x, s.y - (s.big ? 100 : 70));
           ink();
           ctx.lineWidth = 3;
           ctx.fillStyle = '#f2e6c8';
