@@ -76,19 +76,28 @@ export function createGunshipArt({ ctx, state, ink, sprites: given }) {
     }
   };
   // Tile a neutral plate sprite over a rect (call inside the clip): origin (ox, oy), world units per px = 0.5.
-  const overlayTile = (key, ox, oy, x, y, w, h, alpha = 1) => {
+  // The tile is blended with the flat colour ONCE (overlay, `passes` times) and cached per colour, then drawn
+  // with a plain fill: an overlay blend every frame was slow on the graphics card.
+  const overlayTile = (key, color, passes, ox, oy, x, y, w, h) => {
     try {
-      const img = sprites.get(key);
-      if (!img) return;
-      let p = patCache.get(key);
+      const id = key + color + passes;
+      let p = patCache.get(id);
       if (!p) {
-        p = ctx.createPattern(img, 'repeat');
-        patCache.set(key, p);
+        const img = sprites.get(key);
+        if (!img || typeof document === 'undefined') return;
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const g = c.getContext('2d');
+        g.fillStyle = color;
+        g.fillRect(0, 0, c.width, c.height);
+        g.globalCompositeOperation = 'overlay';
+        for (let i = 0; i < passes; i++) g.drawImage(img, 0, 0);
+        p = ctx.createPattern(c, 'repeat');
+        if (!p) return;
+        patCache.set(id, p);
       }
-      if (!p) return;
       ctx.save();
-      ctx.globalCompositeOperation = 'overlay';
-      ctx.globalAlpha = alpha;
       ctx.translate(ox, oy);
       ctx.scale(0.5, 0.5);
       ctx.fillStyle = p;
@@ -654,9 +663,8 @@ export function createGunshipArt({ ctx, state, ink, sprites: given }) {
         const ht = Math.min(...ds.map((d) => d.y)) - 90;
         // riveted iron plates, tiled along her length (anchored to the keel so they line up whatever her length)
         if (has('gunship/hullplate')) {
-          // (laid on twice: the hull colours are dark, so a single overlay barely shows the plates)
-          overlayTile('gunship/hullplate', x0 - 80, botY, hl, ht, hw, botY - ht + 4, 1);
-          overlayTile('gunship/hullplate', x0 - 80, botY, hl, ht, hw, botY - ht + 4, 1);
+          // (blended on twice: the hull colours are dark, so a single overlay barely shows the plates)
+          overlayTile('gunship/hullplate', bp.hullColor, 2, x0 - 80, botY, hl, ht, hw, botY - ht + 4);
           ctx.fillStyle = 'rgba(190,110,90,.10)'; // a lift of warm light so the iron reads oxblood, not black
           ctx.fillRect(hl, ht, hw, botY - ht + 4);
         }
