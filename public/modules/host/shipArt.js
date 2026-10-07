@@ -512,22 +512,38 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       if (sprites.box(ctx, 'ship/rack-' + r.kind, r.x - 34, y, 68, 70)) continue;
       filled(WOOD, () => ctx.roundRect(r.x - 34, y, 68, 70, 6));
       if (r.kind === 'hookshot') {
-        // A coiled rope and an iron grapple on a peg.
-        line([[r.x - 20, y + 54], [r.x + 20, y + 54]], 4);
-        ctx.strokeStyle = '#b89968';
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.ellipse(r.x - 8, y + 36, 16, 12, 0, 0, 7);
-        ctx.stroke();
-        filled(IRON, () => {
-          ctx.moveTo(r.x + 12, y + 12);
-          ctx.lineTo(r.x + 28, y + 30);
-          ctx.lineTo(r.x + 22, y + 32);
-          ctx.lineTo(r.x + 12, y + 24);
-          ctx.lineTo(r.x + 4, y + 32);
-          ctx.lineTo(r.x - 2, y + 30);
-          ctx.closePath();
-        });
+        // The harpoon-gun (same shape as the one a crew member carries) resting on two pegs.
+        try {
+          for (const px of [-18, 8]) line([[r.x + px, y + 40], [r.x + px, y + 52]], 4, WOOD_DARK);
+          ctx.save();
+          ctx.translate(r.x - 14, y + 30);
+          ctx.scale(0.75, 0.75);
+          const poly = (pts, fill) =>
+            filled(fill, () => {
+              pts.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
+              ctx.closePath();
+            });
+          filled('#d6bf8a', () => ctx.ellipse(16, 8, 8, 6, 0, 0, Math.PI * 2)); // rope coil
+          poly([[-19, -3], [-5, -7], [8, -7], [8, 2], [1, 4], [-4, 13], [-12, 13], [-10, 3], [-19, 3]], '#9a6a3e');
+          poly([[8, -9], [38, -9], [38, -1], [8, -1]], '#c9a54a');
+          poly([[17, -10], [20, -10], [20, 0], [17, 0]], '#8a6a2a');
+          poly([[36, -11], [42, -12], [42, 2], [36, 1]], '#a8863a');
+          line([[42, -5], [50, -5]], 4.6);
+          for (const [ex, ey] of [[58, -14], [61, -5], [58, 4]]) {
+            ctx.strokeStyle = INK;
+            ctx.lineWidth = 4.6;
+            ctx.beginPath();
+            ctx.moveTo(50, -5);
+            ctx.quadraticCurveTo(55, ey, ex, ey * 0.8 - 1);
+            ctx.stroke();
+            ctx.strokeStyle = '#8a8588';
+            ctx.lineWidth = 2.4;
+            ctx.stroke();
+          }
+          ctx.restore();
+        } catch (e) {
+          try { ctx.restore(); } catch (e2) {}
+        }
         continue;
       }
       for (const dx of [-14, 14]) {

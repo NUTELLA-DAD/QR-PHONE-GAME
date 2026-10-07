@@ -28,10 +28,10 @@ export function createRenderer({ ctx, state, canvas }) {
   bgArt.load();
   loadTextures(ctx); // painted ship/gunship textures (art/textures/)
   // Placeholder tool in a sprite character's hand (drawCarry draws relative to the body).
-  const drawItemAt = (item, x, y, swingAge) => {
+  const drawItemAt = (item, x, y, swingAge, fired) => {
     ctx.save();
     ctx.translate(x - 16, y + 24);
-    drawCarry(item, 1, swingAge);
+    drawCarry(item, 1, swingAge, fired);
     ctx.restore();
   };
   const crewArt = createCrewArt({ ctx });
@@ -1228,10 +1228,74 @@ export function createRenderer({ ctx, state, canvas }) {
   };
 
   // The item a player is holding. swingAge = ms since their last attack (for the swing pose).
-  const drawCarry = (item, face, swingAge) => {
+  // The player's harpoon-gun (hookshot), pointing forward (+x) from the hand at 0,0. When the
+  // hook is out (fired) the muzzle is bare; hookArt draws the rope and the flying hook.
+  const drawHookshotGun = (fired) => {
+    try {
+      ctx.save();
+      ctx.rotate(-0.3);
+      ctx.strokeStyle = config.INK;
+      ctx.lineWidth = 1.8;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      const poly = (pts, fill) => {
+        ctx.fillStyle = fill;
+        ctx.beginPath();
+        pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      };
+      // Coil of rope slung under the barrel.
+      ctx.fillStyle = '#d6bf8a';
+      ctx.beginPath();
+      ctx.ellipse(16, 6, 8, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = '#a88a54';
+      ctx.beginPath();
+      ctx.ellipse(16, 6, 4.5, 3, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = config.INK;
+      // Wooden stock and grip.
+      poly([[-19, -3], [-5, -7], [8, -7], [8, 2], [1, 4], [-4, 13], [-12, 13], [-10, 3], [-19, 3]], '#9a6a3e');
+      poly([[-19, -3], [-17, -3], [-17, 3], [-19, 3]], '#6b4a32');
+      // Brass barrel with two bands and a flared muzzle.
+      poly([[8, -9], [38, -9], [38, -1], [8, -1]], '#c9a54a');
+      poly([[8, -9], [38, -9], [38, -6], [8, -6]], '#dcc272');
+      poly([[17, -10], [20, -10], [20, 0], [17, 0]], '#8a6a2a');
+      poly([[36, -11], [42, -12], [42, 2], [36, 1]], '#a8863a');
+      if (!fired) {
+        // Three-prong grappling hook seated at the muzzle.
+        ctx.strokeStyle = config.INK;
+        ctx.lineWidth = 4.6;
+        ctx.beginPath();
+        ctx.moveTo(42, -5);
+        ctx.lineTo(50, -5);
+        for (const [ex, ey] of [[58, -14], [61, -5], [58, 4]]) {
+          ctx.moveTo(50, -5);
+          ctx.quadraticCurveTo(55, ey, ex, ey * 0.8 - 1);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = '#8a8588';
+        ctx.lineWidth = 2.6;
+        ctx.stroke();
+      }
+      ctx.restore();
+    } catch (e) {
+      try { ctx.restore(); } catch (e2) {}
+    }
+  };
+
+  const drawCarry = (item, face, swingAge, fired) => {
     ctx.save();
     ctx.translate(face * 16, -24);
     ctx.scale(face, 1);
+    if (item === 'hookshot') {
+      drawHookshotGun(!!fired);
+      ctx.restore();
+      return;
+    }
     if (sprites.pivot(ctx, 'items/' + item, 0, 0, 0.5, item === 'coal' || item === 'ammo' ? 0.5 : 0.85, swingAge < 250 ? -0.9 + (swingAge / 250) * 1.6 : 0)) {
       ctx.restore();
       return;

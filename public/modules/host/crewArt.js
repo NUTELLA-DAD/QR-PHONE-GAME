@@ -636,7 +636,7 @@ export function createCrewArt({ ctx }) {
         // Held tool/load: drawn by the game's item art, moved so it sits in the front hand.
         ctx.save();
         ctx.translate(face * f.hx - face * 16, f.hy + 24);
-        drawCarry(p.carry, face, f.o.swingAge);
+        drawCarry(p.carry, face, f.o.swingAge, !!p.hook);
         ctx.restore();
       }
       if (f.o.swingAge < 200) {

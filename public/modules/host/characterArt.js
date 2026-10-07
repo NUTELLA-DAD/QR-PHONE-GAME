@@ -138,7 +138,7 @@ export function createCharacterArt({ ctx, sprites, drawItem }) {
     if (held && load && !placeholder) sprites.pivot(ctx, held, hx + 4, hy - 4, 0.5, 0.5, 0, s);
     limb('arm', sh.x + R.armSpread, sh.y, frontArm, false);
     if (held && !load && !placeholder) sprites.pivot(ctx, held, hx, hy, R.item.px, R.item.py, frontArm + Math.PI, s);
-    if (placeholder && drawItem) drawItem(p.carry, hx, hy, swingAge);
+    if (placeholder && drawItem) drawItem(p.carry, hx, hy, swingAge, !!p.hook);
 
     ctx.restore();
     return { top: (R.neck.y - bob - headH * 0.92) * (p.scale || 1) };
