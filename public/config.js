@@ -334,6 +334,55 @@ export const config = {
     REWARD_HULL: 15,
     REWARD_COAL: 40,
   },
+  // Enemy gunship GENERATOR (see gunshipBlueprint.js): every gunship is built from these parts at spawn,
+  // so no two are alike. Strength grows with the mission number (shifted -1 on Easy, +1 on Hard).
+  GUNSHIP_PARTS: {
+    HULLS: {
+      // len = deck length (px); hp = hull hit points multiplier; crew = base crew; ports = cannon ports [min, max];
+      // engines = [min, max]; layouts = the deck arrangements this hull can have; ry = gasbag height
+      cutter: { len: 800, hp: 0.8, crew: 3, ports: [2, 2], engines: [1, 2], layouts: ['flush', 'quarter', 'sunkenstern', 'foredeck'], ry: 118 },
+      frigate: { len: 1100, hp: 1.0, crew: 4, ports: [2, 3], engines: [2, 2], layouts: ['flush', 'quarter', 'sunkenstern', 'foredeck', 'well'], ry: 160 },
+      dreadnought: { len: 1400, hp: 1.3, crew: 5, ports: [3, 4], engines: [2, 3], layouts: ['quarter', 'sunkenstern', 'well', 'tiered'], ry: 195 },
+    },
+    // chance weights [cutter, frigate, dreadnought] by mission number (the last row repeats)
+    HULL_WEIGHTS: [[1, 1, 0], [1, 1, 0], [2, 3, 1], [1, 3, 2], [1, 2, 3]],
+    DIFF_SHIFT: { easy: -1, normal: 0, hard: 1 }, // added to the mission number for strength
+    TWIN_BAG: 0.4, // chance of twin gasbags (cutters: half this)
+    TURRET: [0.15, 0.12, 0.6], // top turret: [chance at mission 1, extra per mission, cap]
+    MORTAR: [0.0, 0.12, 0.5], // mortar: starts at 0 on mission 1
+    FLAK: [0.0, 0.1, 0.4],
+    SPECIAL_CHANCE: 0.7, // chance of one special part
+    SPECIALS: ['hangar', 'ramp', 'harpoon', 'armoured', 'paras'],
+    SPECIAL_MIN_MISSION: { hangar: 2, harpoon: 2 },
+    CREW_MAX: 8,
+    ENGINE_POWER: [0, 0.82, 1, 1.12], // engine power share by pod count (index = number of pods)
+    // Extra weapons. EVERY = seconds between shots (while a gunner is aboard), RANGE = reach, HP = hits to wreck.
+    TURRET_GUN: { EVERY: 4.2, RANGE: 2100, SPEED: 560, MISS: 0.3, HP: 7 },
+    MORTAR_GUN: { EVERY: 8.5, RANGE: 2400, GRAVITY: 520, TIME: [1.4, 2.6], DAMAGE: 1.5, MISS: 0.25, HP: 8 },
+    FLAK_GUN: { EVERY: 6, RANGE: 2200, SPEED: 650, SPREAD: 0.13, MISS: 0.4, HP: 7 },
+    // Specials
+    HANGAR: { FIRST: 16, EVERY: 30, BATS: 2, MAX_BATS: 6 }, // a bat hangar launches small swarms
+    RAMP: { LATCH_RANGE: 1.3, LATCH_CD: 0.2, SEND_MUL: 0.7 }, // boarding ramp: latches faster and sends raiders sooner
+    HARPOON: { FIRST: 18, EVERY: 12, RANGE: 1100, LATCH_RANGE: 1.45 }, // fires her grapple from range
+    ARMOURED: { PLANT_MUL: 2.2 }, // armoured boiler: planting the charge takes this much longer
+    PARAS: { EXTRA: 1, EVERY_MUL: 0.7 }, // extra paratroopers, dropped more often
+    // Captain personalities: settings fed into her captain's choices (nodeW multiplies how often a ring spot is picked).
+    PERSONALITY: {
+      aggressive: { strafeChance: 0.85, strafeCd: 0.6, retreatAt: 0.3, retreats: 1, fleeAt: 0.1, latchAfter: 0, nodeW: { bow: 2.4, high: 1.3, A: 0.6 }, fireMul: 0.85 },
+      cautious: { strafeChance: 0.25, strafeCd: 1.4, retreatAt: 0.6, retreats: 2, fleeAt: 0.2, latchAfter: 0, nodeW: { bow: 0.4, high: 0.8, A: 3 }, fireMul: 1 },
+      boarder: { strafeChance: 0.3, strafeCd: 1.2, retreatAt: 0.35, retreats: 1, fleeAt: 0.12, latchAfter: 38, nodeW: { bow: 2.2 }, fireMul: 1 },
+      coward: { strafeChance: 0.2, strafeCd: 1.5, retreatAt: 0.0, retreats: 0, fleeAt: 0.55, latchAfter: 0, nodeW: { bow: 0.5, A: 2 }, fireMul: 1.1 },
+    },
+    NAME_ADJ: ['Iron', 'Crimson', 'Black', 'Rusty', 'Grim', 'Pale', 'Hollow', 'Scarlet', 'Ashen', 'Gilded', 'Wicked', 'Sullen', 'Brass', 'Cinder', 'Bitter', 'Thunder', 'Sour', 'Silent', 'Hungry', 'Lonely'],
+    NAME_NOUN: ['Widow', 'Gull', 'Kettle', 'Hornet', 'Magpie', 'Anvil', 'Lantern', 'Vulture', 'Thistle', 'Cormorant', 'Gallows', 'Maiden', 'Baron', 'Wasp', 'Bellows', 'Mule', 'Cleaver', 'Badger', 'Pelican', 'Tinker'],
+    // Flag colours (enemy palette). Cloth must be dark enough for a cream badge to read on it.
+    CLOTH: ['#a8443f', '#8c2f2f', '#5c1e1e', '#4a4346', '#8a6444', '#6b3a50', '#7a3a2a', '#59463a'],
+    TRIM: ['#f2d36b', '#e8884a', '#c9706a', '#ebdfc0', '#c9a24a', '#9a9a9a'],
+    HULL_COLORS: ['#4a2626', '#3a2a30', '#4a3a2a', '#3f2f3a', '#52302a', '#35303a'],
+    BAG_COLORS: ['#5a3a40', '#4a4346', '#6b3a34', '#3f3a48', '#5c2a2a', '#59463a'],
+    PATTERNS: ['band', 'diagonal', 'chevron', 'split', 'checks'],
+    EMBLEMS: ['horns', 'eye', 'band', 'chevrons', 'fangs'],
+  },
   // Pacing: each fight builds up, peaks, then eases off for a breather with a supply balloon.
   PACING: {
     // The director runs one rhythm per mission: BUILD (small trickle, rising) -> PEAK (one big set piece)

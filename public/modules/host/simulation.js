@@ -11,7 +11,7 @@ import { createSquadrons } from './squadrons.js';
 import { createEscort, isEscortStation, escortFor } from './escort.js';
 import { createSpecials } from './specials.js';
 import { createCoil } from './coil.js';
-import { createGunship, MAIN_X1, GS } from './gunship.js';
+import { createGunship, MAIN_X1 } from './gunship.js';
 import { createAirborne } from './airborne.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
@@ -903,19 +903,21 @@ export function createSimulation() {
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
   const coil = createCoil({ state, puff, credit });
-  const gunship = createGunship({ state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType });
+  const gunship = createGunship({ state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) });
   const weather = createWeather({ state, impact, puff });
   const env = createEnvironment({ state, puff }); // ice, thermals, blizzards (rules in environments.js)
   const air = createAirborne({ state, puff, phoneFx });
   // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
-  const onDeck = () => state.gunship && state.gunship.phase !== 'sinking' && state.gunship.phase !== 'leaving';
-  air.addSurface({
-    id: 'gunship',
-    y: () => (onDeck() ? GS.deckY + state.gunship.dy : null),
-    x0: () => (onDeck() ? GS.x0 - 30 + state.gunship.dx : 0),
-    x1: () => (onDeck() ? GS.x1 + 30 + state.gunship.dx : 0),
-    onLand: (p) => gunship.land(p),
-  });
+  // Every deck of hers is a landing surface (she can have up to 4 stepped decks; the deck numbers run left to right as she is now).
+  for (let k = 0; k < 4; k++) {
+    air.addSurface({
+      id: 'gunship' + k,
+      y: () => { const s = gunship.surface(k); return s ? s.y : null; },
+      x0: () => { const s = gunship.surface(k); return s ? s.x0 : 0; },
+      x1: () => { const s = gunship.surface(k); return s ? s.x1 : 0; },
+      onLand: (p) => gunship.land(p, k),
+    });
+  }
 
   const emitPlayerUi = (playerId, ui) => {
     if (socket && !state.players[playerId]?.bot) socket.emit('host:ui', { id: playerId, ui });
@@ -1472,6 +1474,7 @@ export function createSimulation() {
     }
 
     for (const bullet of state.bullets) {
+      if (bullet.ay) bullet.vy += bullet.ay * dt; // (a mortar shell lobs in an arc)
       bullet.x += bullet.vx * dt;
       bullet.y += bullet.vy * dt;
       bullet.life -= dt;
@@ -1488,7 +1491,7 @@ export function createSimulation() {
       if (!bullet.miss && hitsShip(bullet.x, sy)) {
         bullet.life = 0;
         puff(bullet.x, bullet.y, '#ff7b00', 8);
-        impact(bullet.x, sy, 1);
+        impact(bullet.x, sy, bullet.dmg || 1);
       }
     }
 

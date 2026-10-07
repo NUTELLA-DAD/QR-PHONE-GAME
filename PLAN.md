@@ -85,6 +85,7 @@ flagged so players remember them ("The Iron Widow").
 - V2 done: rhythm director (build -> set piece -> 34 s calm with ALL CLEAR + supply balloon).
 - V3 done: slide poles, extra ladders/racks, job arrows on idle phones; walking 48% -> 38%.
 - V4+V5 done: salvage + sky-dock shop (phone votes buy cards, Cast off), branching 6-8 stop route map vote, runs (victory or run summary, best run saved on the TV).
+- V7 done: gunship generator (gunshipBlueprint.js): cutter/frigate/dreadnought hulls, 1-3 stepped decks with ladders (each a landing surface), twin gasbags, 1-3 engine pods, 2-4 stern cannons + optional top turret / mortar / flak gun, one special (bat hangar, boarding ramp, harpoon gun, armoured boiler, para rack), captain personality (aggressive/cautious/boarder/coward), generated name + flag. Numbers in config GUNSHIP_PARTS.
 - Boss softened (HP 36, fires every 3.4 s, boarders every 40 s): 9 runs x 15 min went from
   13 wrecks / 24 missions to 9 wrecks / 27 missions.
 
