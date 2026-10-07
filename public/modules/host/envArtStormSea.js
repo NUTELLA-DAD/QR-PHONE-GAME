@@ -382,7 +382,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
             ctx.fill();
             ctx.stroke();
             ctx.fillStyle = '#e9f1ff';
-            ctx.font = '900 34px Georgia';
+            ctx.font = '31px ' + config.FONTS.DISPLAY;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(dir > 0 ? 'GUST  >>>' : '<<<  GUST', 0, 2);
@@ -468,7 +468,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
       ctx.arc(r.x, y - 150, R, 0, 7);
       ctx.stroke();
       if (live && !held) {
-        ctx.font = '900 34px Georgia';
+        ctx.font = '31px ' + config.FONTS.DISPLAY;
         ctx.textAlign = 'center';
         ctx.lineWidth = 5;
         ctx.strokeStyle = config.INK;
@@ -512,7 +512,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
             ctx.lineTo(cx + Math.cos(a) * 60, cy + Math.sin(a) * 60);
             ctx.stroke();
           }
-          ctx.font = '900 30px Georgia';
+          ctx.font = '27px ' + config.FONTS.DISPLAY;
           ctx.textAlign = 'center';
           ctx.lineWidth = 6;
           ctx.strokeStyle = config.INK;
@@ -570,7 +570,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
           ctx.moveTo(x, y - 64);
           ctx.lineTo(x + Math.cos(-0.9 + lev) * 52, y - 64 + Math.sin(-0.9 + lev) * 52);
           ctx.stroke();
-          ctx.font = '900 18px Georgia';
+          ctx.font = '16px ' + config.FONTS.DISPLAY;
           ctx.textAlign = 'center';
           ctx.lineWidth = 4;
           ctx.strokeStyle = config.INK;
@@ -602,7 +602,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
           ctx.moveTo(wx, bay.y - 22);
           ctx.lineTo(wx + Math.cos(tm * (s.hook ? 6 : 1)) * 22, bay.y - 22 + Math.sin(tm * (s.hook ? 6 : 1)) * 22);
           ctx.stroke();
-          ctx.font = '900 20px Georgia';
+          ctx.font = '18px ' + config.FONTS.DISPLAY;
           ctx.textAlign = 'center';
           ctx.lineWidth = 4;
           ctx.strokeStyle = config.INK;

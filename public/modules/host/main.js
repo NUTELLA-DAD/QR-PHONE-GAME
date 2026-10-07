@@ -117,6 +117,25 @@ function frame(now) {
   if (!paused) perf.update(now, gap, drawMs);
 }
 
-requestAnimationFrame(frame);
+// Canvas text needs the bundled fonts to be loaded first: start drawing once they are (or after 2 s at worst).
+{
+  let started = false;
+  const start = () => {
+    if (started) return;
+    started = true;
+    lastTime = performance.now();
+    requestAnimationFrame(frame);
+  };
+  try {
+    if (document.fonts && document.fonts.load) {
+      Promise.all([
+        document.fonts.load('20px Limelight'),
+        document.fonts.load('400 16px "Libre Baskerville"'),
+        document.fonts.load('700 16px "Libre Baskerville"'),
+      ]).then(start, start);
+      setTimeout(start, 2000);
+    } else start();
+  } catch { start(); }
+}
 window.addEventListener('resize', fitCanvas);
 window.fitCanvas = fitCanvas; // (the pause menu's Screen button)

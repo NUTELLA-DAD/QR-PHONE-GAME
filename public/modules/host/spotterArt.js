@@ -51,7 +51,7 @@ export function createSpotterArt({ ctx, state }) {
           }
         }
         const ly = Math.max(26, sy - half - 12);
-        outlined('SPOTTED by ' + name, sx, ly, color, '900 17px Georgia');
+        outlined('SPOTTED by ' + name, sx, ly, color, '15px ' + config.FONTS.DISPLAY);
         ctx.fillStyle = INK;
         ctx.fillRect(sx - 31, ly + 6, 62, 7);
         ctx.fillStyle = color;
@@ -79,8 +79,8 @@ export function createSpotterArt({ ctx, state }) {
         ctx.fill();
         ctx.stroke();
         ctx.rotate(-ang);
-        outlined(WHAT[s.kind] || '', 0, 5, '#fff', '900 11px Georgia');
-        outlined('SPOTTED by ' + name, 0, 40, color, '900 13px Georgia');
+        outlined(WHAT[s.kind] || '', 0, 5, '#fff', '10px ' + config.FONTS.DISPLAY);
+        outlined('SPOTTED by ' + name, 0, 40, color, '12px ' + config.FONTS.DISPLAY);
       }
       ctx.restore();
     }
@@ -122,7 +122,7 @@ export function createSpotterArt({ ctx, state }) {
     ctx.stroke();
     ctx.fillStyle = p.color;
     ctx.fillRect(-12, 24, 24, 6); // (hides the join between bubble and tail)
-    outlined('HELP!', 0, 11, '#fff', '900 34px Georgia');
+    outlined('HELP!', 0, 11, '#fff', '31px ' + config.FONTS.DISPLAY);
     ctx.restore();
   };
 

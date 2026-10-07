@@ -1,4 +1,5 @@
 // Shared plane drawings.
+import { config } from '../../config.js';
 
 // Painted sprites (art/sprites/planes/dogfighter|escort), set once by threatArt. Optional.
 let planeSprites = null;
@@ -90,7 +91,7 @@ export function drawTailNumber(ctx, num, flip = false) {
     ctx.translate(-33, -1);
     if (flip) ctx.scale(1, -1);
     ctx.fillStyle = '#2b2622';
-    ctx.font = '700 12px Georgia, serif';
+    ctx.font = '700 12px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(num), 0, 0);

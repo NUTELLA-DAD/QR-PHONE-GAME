@@ -74,7 +74,7 @@ export function createSearchlightArt({ ctx, state, ink }) {
     ctx.fillStyle = WOOD_DARK;
     ctx.fillRect(p.x0, fy, p.x1 - p.x0, 8);
     // Stencilled name.
-    ctx.font = '900 15px Georgia';
+    ctx.font = '14px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#e8d9b0';
     ctx.fillText('BELLY LAMP', (p.x0 + p.x1) / 2, top + 40);

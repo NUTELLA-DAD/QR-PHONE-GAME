@@ -428,7 +428,7 @@ export function createDeepArt({ ctx, state, ink }) {
     ctx.fillStyle = 'rgba(230,255,170,.8)';
     for (let k = 0; k < 4; k++) ctx.fillRect(x - 22 + hash(k + n, 512) * 44, y - 36 * lvl - hash(k, 513) * 14, 4, 4);
     if (lvl > 0.5) {
-      ctx.font = '700 22px Georgia';
+      ctx.font = '700 22px ' + config.FONTS.TEXT;
       ctx.textAlign = 'center';
       ctx.lineWidth = 5;
       ctx.strokeStyle = config.INK;
@@ -472,7 +472,7 @@ export function createDeepArt({ ctx, state, ink }) {
     ctx.fillStyle = col;
     ctx.fillRect(x - 10, y - 34 - 58 * o2, 20, 58 * o2);
     ctx.strokeRect(x - 12, y - 96, 24, 62);
-    ctx.font = '700 17px Georgia';
+    ctx.font = '700 17px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#1b1410';
     ctx.fillText('O2', x, y - 14);
@@ -484,7 +484,7 @@ export function createDeepArt({ ctx, state, ink }) {
       ctx.lineWidth = 5;
       ctx.strokeStyle = config.INK;
       ctx.fillStyle = o2 <= 0 ? '#ff5a4a' : '#ffd23f';
-      ctx.font = '700 22px Georgia';
+      ctx.font = '700 22px ' + config.FONTS.TEXT;
       ctx.strokeText(o2 <= 0 ? 'EMPTY!' : 'LOW O2', x, y - 146);
       ctx.fillText(o2 <= 0 ? 'EMPTY!' : 'LOW O2', x, y - 146);
     }

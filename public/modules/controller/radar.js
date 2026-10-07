@@ -167,7 +167,7 @@ export function createRadar({ canvas, box }) {
     }
     if (!items.length) {
       ctx.fillStyle = 'rgba(160,255,190,.8)';
-      ctx.font = '700 12px sans-serif';
+      ctx.font = "700 11px 'Libre Baskerville', Georgia, serif";
       ctx.textAlign = 'center';
       ctx.fillText('ALL CLEAR', c, c + R * 0.55);
     }

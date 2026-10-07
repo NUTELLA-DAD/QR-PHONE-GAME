@@ -122,7 +122,7 @@ export function drawIceLocker(ctx, state, time) {
   ctx.fill();
   ctx.stroke();
   ctx.fillStyle = INK;
-  ctx.font = '900 12px Georgia';
+  ctx.font = '11px ' + config.FONTS.DISPLAY;
   ctx.textAlign = 'center';
   ctx.fillText('ICE', x, y0 + 14);
   // frost wisps
@@ -136,7 +136,7 @@ export function drawIceLocker(ctx, state, time) {
   // how many are left (small pips under the sign when the locker is nearly empty)
   if (L.n < 1) {
     ctx.fillStyle = '#a8443f';
-    ctx.font = '900 11px Georgia';
+    ctx.font = '10px ' + config.FONTS.DISPLAY;
     ctx.fillText('EMPTY', x, y0 - 12);
   }
   ctx.restore();
@@ -174,7 +174,7 @@ export function drawBoilerHeat(ctx, state, time) {
   rr(ctx, x - 6, y - 24, 142, 38, 8);
   ctx.fill();
   ctx.fillStyle = '#f3ead6';
-  ctx.font = '900 14px Georgia';
+  ctx.font = '13px ' + config.FONTS.DISPLAY;
   ctx.textAlign = 'left';
   ctx.fillText('BOILER HEAT', x, y - 8);
   ctx.fillStyle = '#3b2a1d';
@@ -207,7 +207,7 @@ export function drawHoleGlow(ctx, h, time) {
   ctx.stroke();
   ctx.restore();
   ctx.fillStyle = INK;
-  ctx.font = '900 16px Georgia';
+  ctx.font = '14px ' + config.FONTS.DISPLAY;
   ctx.textAlign = 'center';
   ctx.fillText('PATCH!', h.x, h.y - 48 - pulse * 4);
 }
@@ -269,7 +269,7 @@ const meter = (ctx, x, y, w, title, value, color, text, done, bad) => {
   ctx.lineWidth = done || bad ? 4 : 2.5;
   ctx.stroke();
   ctx.fillStyle = '#f3ead6';
-  ctx.font = '900 17px Georgia';
+  ctx.font = '15px ' + config.FONTS.DISPLAY;
   ctx.textAlign = 'left';
   ctx.fillText(title, x + 14, y + 27);
   ctx.textAlign = 'right';
@@ -312,7 +312,7 @@ export function drawScreen(ctx, state, time, W = 1600, H = 900) {
     ctx.lineWidth = 4;
     ctx.stroke();
     ctx.fillStyle = pulse > 0.5 ? '#ff4d4d' : '#ff8a5c';
-    ctx.font = '900 66px Georgia';
+    ctx.font = '59px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
     ctx.fillText('GOING DOWN!', 0, 24);
     ctx.restore();
@@ -324,7 +324,7 @@ export function drawScreen(ctx, state, time, W = 1600, H = 900) {
     ctx.fillStyle = left < 6 ? '#ff4d4d' : '#ffb347';
     ctx.fillRect(488, 142, 744 * (left / g.time), 14);
     ctx.fillStyle = '#f3ead6';
-    ctx.font = '800 16px Georgia';
+    ctx.font = '700 16px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
     ctx.fillText(`FALLING - ${Math.ceil(left)}s to the ground!`, 860, 130);
     // the three jobs
@@ -351,12 +351,12 @@ export function drawScreen(ctx, state, time, W = 1600, H = 900) {
     ctx.lineWidth = 5;
     ctx.stroke();
     ctx.fillStyle = b.color;
-    ctx.font = '900 110px Georgia';
+    ctx.font = '99px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
     ctx.fillText(b.text, 0, 36);
     if (b.sub) {
       ctx.fillStyle = '#f3ead6';
-      ctx.font = '800 26px Georgia';
+      ctx.font = '700 26px ' + config.FONTS.TEXT;
       ctx.fillText(b.sub, 0, 78);
     }
     ctx.restore();
@@ -381,12 +381,12 @@ export function drawLimpCard(ctx, state, W = 1600, H = 900) {
   ctx.stroke();
   ctx.textAlign = 'center';
   ctx.fillStyle = '#b3261e';
-  ctx.font = '900 66px Georgia';
+  ctx.font = '59px ' + config.FONTS.DISPLAY;
   ctx.fillText('LIMPING HOME...', 800, 290);
   ctx.fillStyle = INK;
-  ctx.font = '700 30px Georgia';
+  ctx.font = '700 30px ' + config.FONTS.TEXT;
   ctx.fillText('A spare gasbag takes the strain!', 800, 342);
-  ctx.font = '700 26px Georgia';
+  ctx.font = '700 26px ' + config.FONTS.TEXT;
   ctx.fillText(l.back ? `Back to the last stop: ${l.back}` : 'Back to the start of this stop', 800, 392);
   if (l.lost > 0) ctx.fillText(`${l.lost} salvage lost in the crash`, 800, 430);
   // spare gasbags: the one just used crossed out
@@ -394,7 +394,7 @@ export function drawLimpCard(ctx, state, W = 1600, H = 900) {
   const step = 76;
   const x0 = 800 - ((max - 1) * step) / 2;
   for (let k = 0; k < max; k++) drawGasbagIcon(ctx, x0 + k * step, 540, 2, k < l.spares);
-  ctx.font = '800 24px Georgia';
+  ctx.font = '700 24px ' + config.FONTS.TEXT;
   ctx.fillStyle = l.spares > 0 ? INK : '#b3261e';
   ctx.fillText(l.spares > 0 ? `${l.spares} spare gasbag${l.spares > 1 ? 's' : ''} left` : 'That was the LAST spare gasbag!', 800, 596);
   ctx.restore();

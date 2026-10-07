@@ -21,6 +21,7 @@ import { loadTextures } from './textureArt.js';
 import { envIdOf } from './environments.js';
 import { createSpotterArt } from './spotterArt.js';
 import { perfLowFx } from './perf.js';
+import { createLogbook } from './logbookArt.js'; // cream paper panels + red stamps (the captain's logbook HUD)
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
 import { drawIceBlock, drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
@@ -51,6 +52,9 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, r);
   };
+
+  const book = createLogbook({ ctx }); // paper panels and red stamps for the HUD
+  const LB = config.LOGBOOK;
 
   const drawShip = createShipArt({ ctx, state, ink, rrect, sprites });
   const searchlightArt = createSearchlightArt({ ctx, state, ink });
@@ -131,7 +135,7 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.fill();
       }
       if (gun.empty > 0) {
-        ctx.font = '900 24px Georgia';
+        ctx.font = '22px ' + config.FONTS.DISPLAY;
         ctx.textAlign = 'center';
         ctx.fillStyle = '#a8443f';
         ctx.strokeStyle = '#fff';
@@ -194,7 +198,7 @@ export function createRenderer({ ctx, state, canvas }) {
     }
     for (const player of Object.values(state.players)) {
       if (player.ko > 0) {
-        ctx.font = '900 22px Georgia';
+        ctx.font = '20px ' + config.FONTS.DISPLAY;
         ctx.textAlign = 'center';
         ctx.fillStyle = '#a8443f';
         const gs = player.onGunship && state.gunship;
@@ -475,7 +479,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillRect(x - 40, y + 90, 80, 60);
     ctx.strokeRect(x - 40, y + 90, 80, 60);
     ctx.fillStyle = '#f2d36b';
-    ctx.font = '900 30px Georgia';
+    ctx.font = '27px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
     ctx.fillText('+', x, y + 132);
   };
@@ -626,12 +630,10 @@ export function createRenderer({ ctx, state, canvas }) {
     const h = Math.min(120, (w * map.H) / map.W);
     const x0 = 1600 - w - 22;
     const y0 = 16;
-    ctx.fillStyle = 'rgba(241,226,184,.92)';
+    book.paper(x0 - 12, y0 - 12, w + 24, h + 24, { r: 10 });
     ink();
-    ctx.lineWidth = 2.8;
-    rrect(x0 - 8, y0 - 8, w + 16, h + 16, 10);
-    ctx.fill();
-    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x0 - 0.5, y0 - 0.5, w + 1, h + 1);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(miniCanvas, x0, y0, w, h);
     ctx.imageSmoothingEnabled = true;
@@ -676,17 +678,12 @@ export function createRenderer({ ctx, state, canvas }) {
       const left = map.outposts.filter((o) => !o.done).length;
       goalText = 'OUTPOSTS ' + (total - left) + '/' + total + (km === null ? '' : km < 0.5 ? ' - BOMBS AWAY!' : ' - next ' + km.toFixed(1) + ' km');
     } else goalText = 'BEACON ' + (km === null ? '?' : km.toFixed(1) + ' km');
-    const gy0 = y0 + h + 22;
-    ctx.fillStyle = 'rgba(241,226,184,.92)';
-    ink();
-    ctx.lineWidth = 2.8;
-    rrect(x0 - 8, gy0, w + 16, 34, 10);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = config.INK;
-    ctx.font = '800 20px Georgia';
+    const gy0 = y0 + h + 24;
+    book.paper(x0 - 12, gy0, w + 24, 36, { r: 8, pins: false });
+    ctx.fillStyle = LB.INK;
+    ctx.font = '700 15px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
-    ctx.fillText(goalText, x0 + w / 2, gy0 + 24);
+    ctx.fillText(goalText, x0 + w / 2, gy0 + 24, w);
     ctx.textAlign = 'left';
   };
 
@@ -695,12 +692,8 @@ export function createRenderer({ ctx, state, canvas }) {
     const x0 = 560;
     const w = 480;
     const y = 52;
-    ctx.fillStyle = 'rgba(241,226,184,.92)';
+    book.paper(x0 - 30, y - 24, w + 60, 48, { r: 10, pins: false });
     ink();
-    ctx.lineWidth = 2.8;
-    rrect(x0 - 26, y - 22, w + 52, 44, 12);
-    ctx.fill();
-    ctx.stroke();
     ctx.lineWidth = 3.2;
     ctx.beginPath();
     ctx.moveTo(x0, y);
@@ -728,20 +721,19 @@ export function createRenderer({ ctx, state, canvas }) {
 
   // Screen overlay (hull/steam panel, warnings). Drawn on a fixed 1600x900 stage, not zoomed by the camera.
   const drawHud = () => {
-    ctx.fillStyle = '#f1e2b8';
+    book.paper(30, 28, 440, 184, { r: 12 });
     ink();
-    rrect(30, 28, 440, 184, 14);
-    ctx.fill();
-    ctx.stroke();
+    ctx.lineWidth = 2.5;
     ctx.fillStyle = '#3b2a1d';
     ctx.fillRect(46, 58, 408, 22);
     ctx.fillStyle = state.ship.hull > 35 ? '#4caf50' : '#e63946';
     ctx.fillRect(46, 58, 408 * state.ship.hull / 100, 22);
     ctx.strokeRect(46, 58, 408, 22);
-    ctx.fillStyle = config.INK;
-    ctx.font = '700 20px Georgia';
+    ctx.fillStyle = LB.INK;
+    ctx.font = '18px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'left';
-    ctx.fillText('Hull', 46, 50);
+    ctx.fillText('Hull', 46, 51);
+    ctx.font = '700 15px ' + config.FONTS.TEXT;
     ctx.textAlign = 'right';
     ctx.fillText('Raiders downed: ' + state.kills, 454, 50);
     // A gauge with coloured bands and a needle under the current value.
@@ -771,7 +763,7 @@ export function createRenderer({ ctx, state, canvas }) {
     gauge(104, p, [[odAt, warnAt, 'rgba(255,190,60,.55)'], [warnAt, 1, 'rgba(230,57,70,.55)']], p >= config.BOILER.WARN_AT ? '#e63946' : p >= config.BOILER.OVERDRIVE_AT ? '#ffd23f' : '#e8eef2');
     // Overdrive zone label, and a thin stacked bar of where the steam goes.
     ctx.fillStyle = 'rgba(60,40,10,.8)';
-    ctx.font = '700 10px Georgia';
+    ctx.font = '700 10px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
     ctx.fillText('OVERDRIVE', 46 + 408 * ((odAt + warnAt) / 2), 115);
     const sp = state.steamParts;
@@ -780,7 +772,7 @@ export function createRenderer({ ctx, state, canvas }) {
       let sx = 46;
       ctx.fillStyle = '#3b2a1d';
       ctx.fillRect(46, 130, 408, 8);
-      ctx.font = '700 8px Georgia';
+      ctx.font = '700 8px ' + config.FONTS.TEXT;
       for (const [k, col, name] of segs) {
         const w = Math.min(408 - (sx - 46), (408 * (sp[k] || 0)) / config.BOILER.USE_GAUGE);
         if (w < 1) continue;
@@ -809,18 +801,18 @@ export function createRenderer({ ctx, state, canvas }) {
     );
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(46 + 408 * n - 2, 150, 4, 22);
-    ctx.fillStyle = config.INK;
-    ctx.font = '700 16px Georgia';
+    ctx.fillStyle = LB.INK;
+    ctx.font = '700 14px ' + config.FONTS.TEXT;
     ctx.textAlign = 'left';
     const vents = (state.ventOpen || []).filter(Boolean).length;
     const leaking = state.steamParts && state.steamParts.leaks > 0.2;
-    ctx.fillText('Steam' + (vents ? ` - ${vents} vent${vents > 1 ? 's' : ''} open` : '') + (p >= config.BOILER.OVERDRIVE_AT && p < config.BOILER.WARN_AT ? ' - OVERDRIVE!' : ''), 46, 100);
+    const steamText = 'Steam' + (vents ? ` - ${vents} vent${vents > 1 ? 's' : ''} open` : '') + (p >= config.BOILER.OVERDRIVE_AT && p < config.BOILER.WARN_AT ? ' - OVERDRIVE!' : '');
+    ctx.fillText(steamText, 46, 100);
     if (leaking) {
-      ctx.fillStyle = '#c62828';
-      ctx.textAlign = 'center';
-      ctx.fillText('LEAKING', 352, 100);
-      ctx.fillStyle = config.INK;
-      ctx.textAlign = 'left';
+      const sw = ctx.measureText(steamText).width;
+      ctx.fillStyle = LB.STAMP;
+      ctx.fillText(' - LEAKING', 46 + sw, 100);
+      ctx.fillStyle = LB.INK;
     }
     const valve = state.gasValve || {};
     ctx.fillText(`Gas${valve.input > 0.1 ? ' - PUMPING' : valve.input < -0.1 ? ' - VENTING' : ''}${state.buoyancy > 0 ? ' - RISING' : state.buoyancy < 0 ? ' - FALLING' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}`, 46, 150);
@@ -838,7 +830,7 @@ export function createRenderer({ ctx, state, canvas }) {
         const stop = run && stopById(run.voyage, run.stopId);
         ctx.fillText(stop ? `Stop ${stop.col + 1}/${run.voyage.columns.length}` : 'Mission ' + state.course.lap, 454, 150);
         if (run) {
-          ctx.font = '900 18px Georgia';
+          ctx.font = '16px ' + config.FONTS.DISPLAY;
           ctx.fillStyle = '#8a5a00';
           ctx.fillText('Salvage ' + run.salvage, 454, 204);
           drawSpares(ctx, state, 470, 236, true, 0.8); // spare gasbags (lives)
@@ -847,7 +839,7 @@ export function createRenderer({ ctx, state, canvas }) {
           ctx.fillText(state.salvagePop ? `+${state.salvagePop.n} ${state.salvagePop.label}` : state.course.stop ? state.course.stop.name : '', 46, 204);
           ctx.textAlign = 'right';
           ctx.fillStyle = config.INK;
-          ctx.font = '700 20px Georgia';
+          ctx.font = '700 14px ' + config.FONTS.TEXT;
         }
         drawMinimap();
       } else {
@@ -859,18 +851,8 @@ export function createRenderer({ ctx, state, canvas }) {
     if (state.ev.warn > 0) {
       // A compact message bar along the bottom (clear of the HUD and the ship), fading out.
       const text = state.ev.warnText || 'BOARDERS ON THE CATWALK!';
-      ctx.font = '800 24px Georgia';
-      const w = Math.min(1100, ctx.measureText(text).width + 60);
       ctx.globalAlpha = Math.min(1, state.ev.warn * 2);
-      ctx.fillStyle = 'rgba(27,20,16,.82)';
-      rrect(800 - w / 2, 832, w, 44, 22);
-      ctx.fill();
-      ctx.fillStyle = '#e63946';
-      rrect(800 - w / 2, 832, 14, 44, 7);
-      ctx.fill();
-      ctx.fillStyle = '#f3ead6';
-      ctx.textAlign = 'center';
-      ctx.fillText(text, 800 + 7, 862);
+      book.stamp(text, 800, state.boss ? 786 : 854, { size: 22, maxW: 1100 }); // red-ink stamp
       ctx.globalAlpha = 1;
       ink();
     }
@@ -892,7 +874,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.rotate(p.tilt);
       ctx.scale(grow * p.size * screen, grow * p.size * screen);
       ctx.globalAlpha = alpha;
-      ctx.font = '900 32px Georgia';
+      ctx.font = '29px ' + config.FONTS.DISPLAY;
       ctx.textAlign = 'center';
       ctx.lineJoin = 'round';
       ctx.lineWidth = 5;
@@ -909,12 +891,13 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawLobby = () => {
     ctx.textAlign = 'center';
     ctx.lineJoin = 'round';
-    ctx.font = '900 76px Georgia';
-    ctx.lineWidth = 12;
-    ctx.strokeStyle = config.INK;
-    ctx.strokeText('AIRSHIP CREW', 790, 175);
-    ctx.fillStyle = '#ffd23f';
-    ctx.fillText('AIRSHIP CREW', 790, 175);
+    book.paper(500, 96, 600, 116, { r: 14 });
+    ctx.font = '62px ' + config.FONTS.DISPLAY;
+    ctx.fillStyle = LB.INK;
+    ctx.fillText('AIRSHIP CREW', 800, 170, 540);
+    ctx.font = '700 14px ' + config.FONTS.TEXT;
+    ctx.fillStyle = LB.INK_SOFT;
+    ctx.fillText("THE CAPTAIN'S LOGBOOK", 800, 196);
     const crew = Object.keys(state.players).length;
     const lines = [
       'Scan the code with your phone to climb aboard (hold it sideways).',
@@ -923,41 +906,36 @@ export function createRenderer({ ctx, state, canvas }) {
     ];
     const rec = state.record || { laps: 0 };
     if (rec.laps > 0) lines.push(`Record on this TV: ${rec.laps} mission${rec.laps > 1 ? 's' : ''}, ${rec.kills} shot down`);
-    ctx.font = '700 26px Georgia';
+    const ly = 688;
+    book.paper(300, ly, 840, 28 + lines.length * 30, { r: 12 });
+    ctx.font = '700 18px ' + config.FONTS.TEXT;
     lines.forEach((t, i) => {
-      ctx.lineWidth = 7;
-      ctx.strokeStyle = '#fff';
-      ctx.strokeText(t, 720, 760 + i * 40);
-      ctx.fillStyle = i === 2 ? '#2e7d32' : i === 3 ? '#8c2f2f' : config.INK;
-      ctx.fillText(t, 720, 760 + i * 40);
+      ctx.fillStyle = i === 2 ? '#2e7d32' : i === 3 ? LB.STAMP : LB.INK;
+      ctx.fillText(t, 720, ly + 36 + i * 30, 800);
     });
   };
 
   // Lap scorecard: who did the most of each job.
   const drawScorecard = () => {
     const sc = state.scorecard;
-    ctx.fillStyle = 'rgba(27,20,16,.7)';
+    ctx.fillStyle = 'rgba(43,34,22,.7)';
     ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
-    ctx.fillStyle = '#f1e2b8';
-    ink();
-    rrect(200, 110, 1200, 700, 26);
-    ctx.fill();
-    ctx.stroke();
+    book.paper(200, 110, 1200, 700, { r: 22 });
     ctx.textAlign = 'center';
-    ctx.fillStyle = config.INK;
-    ctx.font = '900 54px Georgia';
+    ctx.fillStyle = LB.INK;
+    ctx.font = '49px ' + config.FONTS.DISPLAY;
     ctx.fillText(sc.flagship ? 'THE FLAGSHIP IS DOWN!' : `${sc.stopName} cleared!`, 800, 185);
-    ctx.font = '700 26px Georgia';
+    ctx.font = '700 26px ' + config.FONTS.TEXT;
     ctx.fillText(sc.rows.length ? 'Crew awards' : 'Nobody did much this mission... next time!', 800, 228);
     const G = sc.gain || {};
     const names = { kills: 'enemies', outposts: 'outposts', gunships: 'gunships', boss: 'boss', rescue: 'survivors', mission: 'mission bonus' };
     ctx.fillStyle = '#8a5a00';
-    ctx.font = '900 26px Georgia';
+    ctx.font = '23px ' + config.FONTS.DISPLAY;
     ctx.fillText(`Salvage +${sc.gained} (${Object.keys(G).map((k) => names[k] + ' ' + G[k]).join(', ')})   -   total ${sc.total}`, 800, 775 - (state.newRecord ? 45 : 0));
     ctx.fillStyle = config.INK;
     if (state.newRecord) {
       ctx.fillStyle = '#c0392b';
-      ctx.font = '900 30px Georgia';
+      ctx.font = '27px ' + config.FONTS.DISPLAY;
       ctx.fillText('NEW RECORD FOR THIS CREW!', 800, 775);
       ctx.fillStyle = config.INK;
     }
@@ -969,17 +947,17 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.textAlign = 'left';
       ctx.font = '44px "Segoe UI Emoji", sans-serif';
       ctx.fillText(r.icon, x, y + 14);
-      ctx.font = '900 28px Georgia';
+      ctx.font = '25px ' + config.FONTS.DISPLAY;
       ctx.fillStyle = config.INK;
       ctx.fillText(r.title, x + 70, y);
       ctx.fillStyle = r.color;
       ctx.strokeStyle = config.INK;
       ctx.lineWidth = 4;
-      ctx.font = '900 26px Georgia';
+      ctx.font = '23px ' + config.FONTS.DISPLAY;
       ctx.strokeText(r.name, x + 70, y + 34);
       ctx.fillText(r.name, x + 70, y + 34);
       ctx.fillStyle = '#5a4a3a';
-      ctx.font = '400 22px Georgia';
+      ctx.font = '400 22px ' + config.FONTS.TEXT;
       ctx.fillText(`${r.value} ${r.unit}`, x + 80 + ctx.measureText(r.name).width + 40, y + 34);
       ctx.fillStyle = config.INK;
     });
@@ -989,17 +967,18 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawBossBar = () => {
     const z = state.boss;
     if (!z) return;
-    ctx.fillStyle = 'rgba(27,20,16,.8)';
-    rrect(450, 830, 700, 46, 12);
-    ctx.fill();
+    book.paper(450, 826, 700, 54, { r: 10 });
     ctx.fillStyle = '#3b2a1d';
-    ctx.fillRect(470, 852, 660, 14);
-    ctx.fillStyle = '#e63946';
-    ctx.fillRect(470, 852, (660 * Math.max(0, z.hp)) / z.maxHp, 14);
-    ctx.fillStyle = '#f1e2b8';
-    ctx.font = '900 18px Georgia';
+    ctx.fillRect(470, 856, 660, 14);
+    ctx.fillStyle = '#c0453f';
+    ctx.fillRect(470, 856, (660 * Math.max(0, z.hp)) / z.maxHp, 14);
+    ink();
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(470, 856, 660, 14);
+    ctx.fillStyle = LB.INK;
+    ctx.font = '15px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
-    ctx.fillText(z.name || 'THE DREAD ZEPPELIN', 800, 847);
+    ctx.fillText(z.name || 'THE DREAD ZEPPELIN', 800, 849, 640);
   };
 
   // Upgrades the ship has, as a row of icons under the status panel.
@@ -1015,7 +994,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fillStyle = config.INK;
       ctx.fillText(u.icon, x, 244);
       if (n > 1) {
-        ctx.font = '700 15px Georgia';
+        ctx.font = '700 15px ' + config.FONTS.TEXT;
         ctx.fillText('x' + n, x + 30, 244);
         ctx.font = '26px "Segoe UI Emoji", sans-serif';
       }
@@ -1053,20 +1032,20 @@ export function createRenderer({ ctx, state, canvas }) {
   // Votes: the sky-dock shop and the route map. Each player's vote is a dot in their colour.
   const drawVote = () => {
     const v = state.vote;
-    ctx.fillStyle = 'rgba(27,20,16,.72)';
+    ctx.fillStyle = 'rgba(43,34,22,.72)';
     ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#fff';
-    ctx.font = '900 50px Georgia';
-    ctx.fillText(v.kind === 'dock' ? 'SKY-DOCK' : 'ROUTE MAP - WHERE TO NEXT?', 800, 80);
-    ctx.font = '700 26px Georgia';
+    ctx.fillStyle = '#f3ead6';
+    ctx.font = '40px ' + config.FONTS.DISPLAY;
+    ctx.fillText(v.kind === 'dock' ? 'SKY-DOCK' : 'ROUTE MAP - WHERE TO NEXT?', 800, 82, 880);
+    ctx.font = '700 20px ' + config.FONTS.TEXT;
     const run = state.run;
     ctx.fillStyle = '#ffd23f';
-    if (v.kind === 'dock') ctx.fillText(`Salvage: ${run.salvage}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`, 800, 125);
+    if (v.kind === 'dock') ctx.fillText(`Salvage: ${run.salvage}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`, 800, 124, 1000);
     else ctx.fillText(`Vote on your phone - ${Math.max(0, Math.ceil(v.t))}s`, 800, 125);
     // Spare gasbags (lives) in the corner.
-    ctx.fillStyle = '#f1e2b8';
-    ctx.font = '700 18px Georgia';
+    ctx.fillStyle = '#f3ead6';
+    ctx.font = '700 18px ' + config.FONTS.TEXT;
     ctx.textAlign = 'right';
     ctx.fillText('Spare gasbags', 1540, 48);
     drawSpares(ctx, state, 1540, 90, true, 1.15);
@@ -1087,25 +1066,21 @@ export function createRenderer({ ctx, state, canvas }) {
       const y = 160 + row * (ch + 26);
       const off = o.kind !== 'cast' && (o.sold || o.cost > run.salvage);
       ctx.globalAlpha = off ? 0.5 : 1;
-      ctx.fillStyle = o.kind === 'cast' ? '#cfe3b8' : o.kind === 'repair' ? '#e8d8a8' : '#f1e2b8';
-      ink();
-      rrect(x, y, cw, ch, 20);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = config.INK;
+      book.paper(x, y, cw, ch, { r: 16, fill: o.kind === 'cast' ? '#d6e3bc' : o.kind === 'repair' ? '#ecdcae' : null });
+      ctx.fillStyle = LB.INK;
       ctx.textAlign = 'center';
       ctx.font = '64px "Segoe UI Emoji", sans-serif';
       ctx.fillText(o.icon, x + cw / 2, y + 82);
-      ctx.font = '900 30px Georgia';
+      ctx.font = '27px ' + config.FONTS.DISPLAY;
       ctx.fillText(o.name, x + cw / 2, y + 128);
-      ctx.font = '400 20px Georgia';
+      ctx.font = '400 20px ' + config.FONTS.TEXT;
       wrapLines(o.desc, cw - 40).slice(0, 3).forEach((l, k) => ctx.fillText(l, x + cw / 2, y + 160 + k * 25));
       if (o.kind !== 'cast') {
-        ctx.font = '900 28px Georgia';
+        ctx.font = '25px ' + config.FONTS.DISPLAY;
         ctx.fillStyle = off && !o.sold ? '#b3261e' : config.INK;
         ctx.fillText(o.sold ? 'SOLD' : `Salvage ${o.cost}`, x + cw / 2, y + 282);
         if (o.max > 1 && !o.sold) {
-          ctx.font = '700 16px Georgia';
+          ctx.font = '700 16px ' + config.FONTS.TEXT;
           ctx.fillStyle = config.INK;
           ctx.fillText(`Level ${o.level} of ${o.max}`, x + cw / 2, y + 252);
         }
@@ -1131,7 +1106,7 @@ export function createRenderer({ ctx, state, canvas }) {
           const t = stopById(run.voyage, id);
           const walked = run.visited.includes(s.id) && run.visited.includes(id);
           const ahead = s.id === cur.id;
-          ctx.strokeStyle = walked ? '#ffd23f' : ahead ? '#fff' : 'rgba(241,226,184,.35)';
+          ctx.strokeStyle = walked ? '#ffd23f' : ahead ? '#fff' : 'rgba(243,234,214,.35)';
           ctx.lineWidth = walked || ahead ? 6 : 3;
           ctx.setLineDash(walked ? [] : [10, 8]);
           ctx.beginPath();
@@ -1165,17 +1140,17 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.globalAlpha = 1;
         if (s.id === cur.id) {
           ctx.fillStyle = '#ffd23f';
-          ctx.font = '900 18px Georgia';
+          ctx.font = '16px ' + config.FONTS.DISPLAY;
           ctx.fillText('YOU ARE HERE', px(s.col), py(s) - r - 12);
         }
         if (!choice && !visited) {
-          ctx.fillStyle = 'rgba(241,226,184,.8)';
-          ctx.font = '700 16px Georgia';
+          ctx.fillStyle = 'rgba(243,234,214,.8)';
+          ctx.font = '700 16px ' + config.FONTS.TEXT;
           ctx.fillText(skulls(s.danger), px(s.col), py(s) + r + 22);
         }
         if (choice) {
           ctx.fillStyle = '#fff';
-          ctx.font = '900 22px Georgia';
+          ctx.font = '20px ' + config.FONTS.DISPLAY;
           ctx.fillText(s.flagship ? 'THE FLAGSHIP' : env.name, px(s.col), py(s) + r + 28);
           dots(voters.filter((p) => p.vote === idx), px(s.col), py(s) - r - 24);
         }
@@ -1187,48 +1162,39 @@ export function createRenderer({ ctx, state, canvas }) {
     v.options.forEach((o, i) => {
       const x = 800 - (n * w + (n - 1) * 20) / 2 + i * (w + 20);
       const y = 640;
-      ctx.fillStyle = '#f1e2b8';
-      ink();
-      rrect(x, y, w, 190, 18);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = config.INK;
+      book.paper(x, y, w, 190, { r: 14 });
+      ctx.fillStyle = LB.INK;
       ctx.textAlign = 'center';
-      ctx.font = '900 30px Georgia';
-      ctx.fillText(`${i + 1}. ${o.name}`, x + w / 2, y + 44);
-      ctx.font = '700 22px Georgia';
+      ctx.font = '25px ' + config.FONTS.DISPLAY;
+      ctx.fillText(`${i + 1}. ${o.name}`, x + w / 2, y + 46, w - 50);
+      ctx.font = '700 22px ' + config.FONTS.TEXT;
       ctx.fillText(o.kindName || '', x + w / 2, y + 82);
       ctx.font = '28px "Segoe UI Emoji", sans-serif';
       ctx.fillText(skulls(o.danger), x + w / 2, y + 122);
-      ctx.font = '700 22px Georgia';
+      ctx.font = '700 22px ' + config.FONTS.TEXT;
       ctx.fillText(`Reward: ${o.reward} salvage`, x + w / 2, y + 160);
     });
-    ctx.fillStyle = '#f1e2b8';
-    ctx.font = '700 20px Georgia';
+    ctx.fillStyle = '#f3ead6';
+    ctx.font = '700 20px ' + config.FONTS.TEXT;
     ctx.fillText(`Stop ${cur.col + 1} of ${cols.length} done - skulls = danger`, 800, 870);
   };
 
   // End of the run: victory, or the summary after the ship is lost.
   const drawRunEnd = () => {
     const e = state.runEnd;
-    ctx.fillStyle = 'rgba(27,20,16,.82)';
+    ctx.fillStyle = 'rgba(43,34,22,.82)';
     ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
-    ctx.fillStyle = '#f1e2b8';
-    ink();
-    rrect(250, 90, 1100, 720, 26);
-    ctx.fill();
-    ctx.stroke();
+    book.paper(250, 90, 1100, 720, { r: 22 });
     ctx.textAlign = 'center';
-    ctx.fillStyle = e.victory ? '#2e7d32' : '#b3261e';
-    ctx.font = '900 70px Georgia';
-    ctx.fillText(e.victory ? 'VICTORY!' : 'SHIP LOST!', 800, 185);
-    ctx.fillStyle = config.INK;
-    ctx.font = '700 32px Georgia';
+    book.stamp(e.victory ? 'VICTORY!' : 'SHIP LOST!', 800, 158, { size: 48, rot: -0.035, color: e.victory ? '#3f7a3c' : LB.STAMP });
+    ctx.textAlign = 'center';
+    ctx.fillStyle = LB.INK;
+    ctx.font = '700 32px ' + config.FONTS.TEXT;
     ctx.fillText(e.victory ? 'The Flagship is down - the Broken Skies are yours!' : `You reached Stop ${e.reached} - ${e.stopName}`, 800, 240);
-    ctx.font = '700 26px Georgia';
+    ctx.font = '700 26px ' + config.FONTS.TEXT;
     ctx.fillText(`Stops finished: ${e.done} of ${e.total}   -   Salvage earned: ${e.salvage}`, 800, 295);
     ctx.fillText(`Enemies shot down: ${e.kills}   -   Gunships destroyed: ${e.gunships}`, 800, 335);
-    ctx.font = '900 28px Georgia';
+    ctx.font = '25px ' + config.FONTS.DISPLAY;
     ctx.fillText(e.rows.length ? 'Crew awards' : '', 800, 395);
     e.rows.forEach((r, i) => {
       const x = 330 + (i % 2) * 520;
@@ -1237,24 +1203,24 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fillStyle = config.INK;
       ctx.font = '40px "Segoe UI Emoji", sans-serif';
       ctx.fillText(r.icon, x, y + 12);
-      ctx.font = '900 24px Georgia';
+      ctx.font = '22px ' + config.FONTS.DISPLAY;
       ctx.fillText(r.title, x + 62, y - 4);
       ctx.fillStyle = r.color;
       ink();
       ctx.lineWidth = 4;
-      ctx.font = '900 24px Georgia';
+      ctx.font = '22px ' + config.FONTS.DISPLAY;
       ctx.strokeText(r.name, x + 62, y + 28);
       ctx.fillText(r.name, x + 62, y + 28);
       ctx.fillStyle = '#5a4a3a';
-      ctx.font = '400 20px Georgia';
+      ctx.font = '400 20px ' + config.FONTS.TEXT;
       ctx.fillText(`${r.value} ${r.unit}`, x + 76 + ctx.measureText(r.name).width + 20, y + 28);
     });
     ctx.textAlign = 'center';
     ctx.fillStyle = config.INK;
-    ctx.font = '700 22px Georgia';
+    ctx.font = '700 22px ' + config.FONTS.TEXT;
     const s = state.save;
     if (s) ctx.fillText(`Best run: ${s.bestStops} stops   -   Runs flown: ${s.totalRuns}   -   Victories: ${s.victories}`, 800, 745);
-    ctx.font = '700 22px Georgia';
+    ctx.font = '700 22px ' + config.FONTS.TEXT;
     const left = e.victory ? e.t : state.ship.down;
     ctx.fillText(`A new voyage starts at the mooring mast in ${Math.max(1, Math.ceil(left))}...`, 800, 785);
   };
@@ -1493,7 +1459,7 @@ export function createRenderer({ ctx, state, canvas }) {
     const art = characterArt.draw(player, time, bob + hop);
     if (!art) crewArt.draw(player, time, bob, hop, drawCarry);
 
-    ctx.font = '700 18px Georgia';
+    ctx.font = '700 18px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
     ctx.lineWidth = 3;
     ctx.strokeStyle = '#fff';
@@ -1504,7 +1470,7 @@ export function createRenderer({ ctx, state, canvas }) {
     if (player.windup > 0) {
       // Raider winding up to strike: big pulsing "!".
       const pulse = 1 + Math.sin(time * 30) * 0.15;
-      ctx.font = `900 ${Math.round(44 * pulse)}px Georgia`;
+      ctx.font = `${Math.round(40 * pulse)}px ${config.FONTS.DISPLAY}`;
       ctx.lineWidth = 3.6;
       ctx.strokeStyle = '#fff';
       ctx.strokeText('!', player.x, nameY - 22);
@@ -1512,7 +1478,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fillText('!', player.x, nameY - 22);
     }
     if (actionAge < 900) {
-      ctx.font = '900 26px Georgia';
+      ctx.font = '23px ' + config.FONTS.DISPLAY;
       ctx.lineWidth = 3.2;
       ctx.strokeStyle = config.INK;
       ctx.fillStyle = '#fff';

@@ -1422,12 +1422,12 @@ export function createGunshipArt({ ctx, state, ink, sprites: given }) {
       const by = bp.bagTop - 30;
       ink();
       ctx.lineWidth = 5;
-      ctx.font = '900 26px Georgia';
+      ctx.font = '23px ' + config.FONTS.DISPLAY;
       ctx.textAlign = 'center';
       ctx.strokeText(bp.title, cx, by - 10);
       ctx.fillStyle = flag.b;
       ctx.fillText(bp.title, cx, by - 10);
-      ctx.font = '700 17px Georgia';
+      ctx.font = '700 17px ' + config.FONTS.TEXT;
       ctx.lineWidth = 4;
       const sub = bp.hull.toUpperCase() + ' - ' + bp.personality.toUpperCase() + (bp.special ? ' - ' + { hangar: 'BAT HANGAR', ramp: 'BOARDING RAMP', harpoon: 'HARPOON GUN', armoured: 'ARMOURED BOILER', paras: 'PARATROOPERS' }[bp.special] : '');
       ctx.strokeText(sub, cx, by + 52 + 40);
@@ -1443,7 +1443,7 @@ export function createGunshipArt({ ctx, state, ink, sprites: given }) {
         const portsUp = g.ports ? g.ports.filter((q) => !q.dead).length : bp.weapons.length;
         const engOk = num(g.engF, 1) > 0.5;
         const items = [['GUNS ' + portsUp + '/' + bp.weapons.length, g.posts.guns > 0 && portsUp > 0], ['STEAM', g.posts.steam], ['HELM', g.posts.helm], ['ENGINES', engOk]];
-        ctx.font = '900 22px Georgia';
+        ctx.font = '20px ' + config.FONTS.DISPLAY;
         ctx.textAlign = 'center';
         items.forEach(([name, on], i) => {
           const tx = cx - 225 + i * 150;
@@ -1462,7 +1462,7 @@ export function createGunshipArt({ ctx, state, ink, sprites: given }) {
       }
       if (g.charge) {
         ctx.fillStyle = '#ffffff';
-        ctx.font = '900 34px Georgia';
+        ctx.font = '31px ' + config.FONTS.DISPLAY;
         ctx.textAlign = 'center';
         ctx.fillText(Math.ceil(g.charge.t), mx(g, bp.boilerX + 40), segAtC(bp, bp.boilerX).y - 150);
       }

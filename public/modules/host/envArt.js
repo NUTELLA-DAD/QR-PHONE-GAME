@@ -358,7 +358,7 @@ export function createEnvArt({ ctx, state, ink }) {
           ctx.fill();
           // A jammed gun shows it.
           if (lvl >= config.ENVIRONMENTS.frost.ICE.JAM_AT) {
-            ctx.font = '700 22px Georgia';
+            ctx.font = '700 22px ' + config.FONTS.TEXT;
             ctx.textAlign = 'center';
             ctx.lineWidth = 5;
             ctx.strokeStyle = config.INK;
