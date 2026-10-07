@@ -6,7 +6,7 @@ import { envIdOf, envOf } from './environments.js';
 
 const INK = config.INK;
 
-export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt }) {
+export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgArt }) {
   // Frost Peaks / Ember Forge recolour the rock, floors and haze (Sky Isles = null = the original colours).
   const envLook = () => (state.course && envIdOf(state) !== config.ENVIRONMENTS.DEFAULT ? envOf(state) : null);
   // Visible world x range for the current camera view.
@@ -146,7 +146,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt }) {
     const by1 = Math.min(map.H * C, bottom);
     if (!map.open && bx1 > bx0 && by1 > by0) {
       // Layered backdrop (far wall, pillars, light shafts) - or the flat colour if that is off.
-      const done = skyArt && skyArt.caveBackdrop(view, width, height, map, { x0: bx0, x1: bx1, y0: by0, y1: by1 });
+      const done = (bgArt && bgArt.cave(envIdOf(state), view, { x0: bx0, x1: bx1, y0: by0, y1: by1 })) || (skyArt && skyArt.caveBackdrop(view, width, height, map, { x0: bx0, x1: bx1, y0: by0, y1: by1 }));
       if (!done) {
         ctx.fillStyle = PALETTE.cave;
         ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);

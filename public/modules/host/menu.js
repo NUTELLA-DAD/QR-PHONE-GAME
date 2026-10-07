@@ -28,6 +28,7 @@ export function createMenu({ simulation, network, onPause }) {
     if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') toggle();
   });
   $('menuBtn').onclick = toggle;
+  $('mArt').onclick = () => window.open('/styletest.html', '_blank'); // art style test page (new tab, the game stays paused)
   $('mResume').onclick = () => show(false);
   $('mQrToggle').onclick = () => $('mJoin').classList.toggle('on');
   $('mBots').onclick = () => {

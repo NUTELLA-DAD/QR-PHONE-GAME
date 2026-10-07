@@ -97,6 +97,6 @@ on the way home, and storms from lap 2.
 ## For tinkering
 
 All the numbers (damage, speeds, timers, difficulty) are in `public/config.js`. Game art goes in
-`art/sprites/` - see `art/ART_SPEC.md`.
+`art/sprites/` - see `art/ART_SPEC.md`. Painted backgrounds go in `art/backgrounds/<environment>/`; the full image list, sizes and ComfyUI tips are in `art/ART_PIPELINE.md`. To judge new art without playing, open the **Art test** page: http://localhost:3000/styletest.html (also the "Art test" button in the pause menu).
 
 Off-LAN / HTTPS testing: `ngrok http 3000`, then `PUBLIC_URL=https://xxxx.ngrok.app npm start`.
