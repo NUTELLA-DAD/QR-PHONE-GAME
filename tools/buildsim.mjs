@@ -29,12 +29,24 @@ function firstDiff(a, b, where = 'layout') {
 // Layout data as plain JSON (what the fixture holds); `version` is bookkeeping, not layout.
 const plain = (layout) => { const o = JSON.parse(JSON.stringify(layout)); delete o.version; return o; };
 
+// The classic ship, two ways: generated from its parts, and as live in the game. Both must equal the frozen
+// fixture, and the keyed collections must keep their key order (the game iterates them in order).
 async function checkClassic() {
   const fixture = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
+  const { BUILDS, buildLayout, validate } = await load('modules/host/shipBuild.js');
   const { SHIP_LAYOUT } = await load('shipLayout.js');
-  const d = firstDiff(plain(SHIP_LAYOUT), fixture);
-  console.log(d ? 'FAIL live SHIP_LAYOUT differs from the classic fixture at ' + d : 'PASS live SHIP_LAYOUT equals the classic fixture');
-  return !d;
+  let ok = true;
+  const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
+  for (const [name, got] of [['buildLayout(BUILDS.classic)', plain(buildLayout(BUILDS.classic))], ['live SHIP_LAYOUT', plain(SHIP_LAYOUT)]]) {
+    const d = firstDiff(got, fixture);
+    report(!d, d ? name + ' differs from the classic fixture at ' + d : name + ' equals the classic fixture');
+    for (const k of ['gunMounts', 'searchlights']) {
+      if (Object.keys(got[k]).join('|') !== Object.keys(fixture[k]).join('|')) report(false, name + ': ' + k + ' key order differs');
+    }
+  }
+  const v = validate(BUILDS.classic);
+  report(v.ok, 'validate(BUILDS.classic)' + (v.ok ? '' : ': ' + v.fails.join('; ')));
+  return ok;
 }
 
 const mode = argv[0];
