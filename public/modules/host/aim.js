@@ -11,6 +11,11 @@ export const SHELL_LIFE = config.GUNS.SHELL_LIFE;
 const RANGE = SHELL_SPEED * SHELL_LIFE;
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
+// Damage one crew shell does to something: normal, x PRIME.DAMAGE_MUL if the shell was primed (prime.js),
+// and +SPOT.BONUS if a crewmate has spotted the target from the radar (spotter.js sets obj.spotT).
+export const isSpotted = (obj) => !!obj && obj.spotT > 0;
+export const shellDmg = (shell, obj) => config.GUNS.DAMAGE * ((shell && shell.mul) || 1) * (isSpotted(obj) ? 1 + config.SPOT.BONUS : 1);
+
 // Everything currently shootable, with a way to predict where it will be in t seconds.
 export function targets(state) {
   const list = [];
@@ -72,7 +77,8 @@ export function bestTarget(state, gun) {
   for (const t of targets(state)) {
     const angle = solution(state, gun, t);
     if (angle === null) continue;
-    if (!best || order[t.kind] < order[best.target.kind]) best = { target: t, angle };
+    const rank = (u) => (isSpotted(u.obj) ? order[u.kind] - 20 : order[u.kind]); // (spotted targets come first)
+    if (!best || rank(t) < rank(best.target)) best = { target: t, angle };
   }
   return best;
 }
@@ -83,8 +89,10 @@ export function assistAim(state, gun, wanted, maxAngle, strength) {
   for (const t of targets(state)) {
     const angle = solution(state, gun, t);
     if (angle === null) continue;
-    const off = Math.abs(angleDiff(angle, wanted));
-    if (off < maxAngle && (!best || off < best.off)) best = { angle, off };
+    const spotted = isSpotted(t.obj); // (a spotted target is easier to lock onto: wider reach, counts as closer)
+    const raw = Math.abs(angleDiff(angle, wanted));
+    const off = spotted ? raw * config.SPOT.ASSIST_PULL : raw;
+    if (raw < maxAngle * (spotted ? config.SPOT.ASSIST_ANGLE : 1) && (!best || off < best.off)) best = { angle, off };
   }
   return best ? wanted + angleDiff(best.angle, wanted) * strength : wanted;
 }

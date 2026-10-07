@@ -10,6 +10,7 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, scrollSpeed } from './course.js';
+import { shellDmg } from './aim.js';
 import { SHIP_SAMPLES } from './course.js';
 import { pop } from './popups.js';
 import { flyPlane, smoke, shootDown, angDiff, shoveShip, bumpShip, bounceStep } from './planes.js';
@@ -469,7 +470,6 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
 
   // ---- Crew shells ----
   const shellHits = () => {
-    const dmg = config.GUNS.DAMAGE;
     for (const s of state.shells) {
       if (s.life <= 0) continue;
       for (const b of state.bats) {
@@ -496,7 +496,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       for (const p of state.strafers) {
         if (p.hp > 0 && Math.hypot(s.x - p.x, s.y - p.y) < 44) {
           s.life = 0;
-          p.hp -= dmg;
+          p.hp -= shellDmg(s, p);
           puff(s.x, s.y, '#ffcf40', 6);
           if (p.hp <= 0) {
             state.kills += 1;
@@ -512,7 +512,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       for (const p of state.bombers) {
         if (p.hp > 0 && Math.abs(s.x - p.x) < 120 && Math.abs(s.y - p.y) < 40) {
           s.life = 0;
-          p.hp -= dmg;
+          p.hp -= shellDmg(s, p);
           p.hit = 0.15;
           puff(s.x, s.y, '#ffcf40', 8);
           if (p.hp <= 0) {
@@ -531,7 +531,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       const gun = z && s.life > 0 && z.guns.find((g) => !g.dead && Math.hypot(s.x - (z.x + g.dx), s.y - (z.y + 168)) < 36);
       if (gun) {
         s.life = 0;
-        gun.hp -= dmg;
+        gun.hp -= shellDmg(s, z);
         puff(s.x, s.y, '#ffcf40', 8);
         if (gun.hp <= 0) {
           gun.dead = true;
@@ -543,7 +543,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       }
       if (s.life > 0 && z && Math.abs(s.x - z.x) < 330 && s.y > z.y - 150 && s.y < z.y + 190) {
         s.life = 0;
-        z.hp -= dmg;
+        z.hp -= shellDmg(s, z);
         z.hit = 0.12;
         puff(s.x, s.y, '#ffcf40', 8);
         if (z.hp <= 0) {

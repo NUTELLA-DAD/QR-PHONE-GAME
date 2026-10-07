@@ -1,3 +1,5 @@
+import { createRadar } from './radar.js';
+
 export function createControllerUI({ network }) {
   const $ = (id) => document.getElementById(id);
   const speciesNames = [['bulldog', '🐶'], ['wolf', '🐺'], ['tiger', '🐯'], ['shiba', '🐕'], ['fox', '🦊'], ['bear', '🐻'], ['cat', '🐱'], ['rabbit', '🐰']];
@@ -102,16 +104,33 @@ export function createControllerUI({ network }) {
 
   // Idle: a big arrow to the most useful job (the host picks it).
   const ARROWS = { left: '◀', right: '▶', up: '▲', down: '▼' };
+  let jobOn = false;
+  const showMid = () => {
+    $('mid').classList.toggle('on', jobOn || radar.isOn());
+    $('mid').classList.toggle('rd', radar.isOn());
+    if (radar.isOn()) radar.fit();
+  };
   const showJob = (job) => {
     const on = !!(job && ARROWS[job.dir]);
     $('job').classList.toggle('show', on);
-    if (!on) return;
-    $('jarrow').textContent = ARROWS[job.dir];
-    $('jtext').textContent = job.label;
+    jobOn = on;
+    if (on) {
+      $('jarrow').textContent = ARROWS[job.dir];
+      $('jtext').textContent = job.label;
+    }
+    showMid();
+  };
+
+  // Radar (radar.js): the host sends { rd } a few times a second while this phone should show it.
+  const radar = createRadar({ canvas: $('radar'), box: $('radarbox') });
+  const showRadar = (rd) => {
+    radar.set(rd);
+    showMid();
   };
 
   const updateUI = (next) => {
     if (next.fx) return showFx(next.fx);
+    if (next.rd) return showRadar(next.rd);
     showVote(next.vote);
     if (next.vote) return;
     uiState = next;
@@ -125,13 +144,19 @@ export function createControllerUI({ network }) {
       $('plever').style.display = 'none';
       $('atk').style.display = '';
       $('jump').style.display = 'none';
+      $('atk').classList.remove('prime', 'ready');
+      document.body.classList.remove('helm');
       return;
     }
     const label = next.label || 'Hey!';
     const icon = (ACTION_ICONS.find(([start]) => label.startsWith(start)) || [, '👋'])[1];
     setButton('act', icon, label);
     $('act').classList.toggle('hold', !!next.hold);
-    setButton('atk', next.attack === 'Swing' ? '🗡️' : next.attack === 'Hook!' ? '🪝' : next.attack === 'Let go!' ? '🖐️' : next.attack === 'Kick!' ? '🦶' : '✋', next.attack || 'Shove');
+    const priming = next.attack === 'Prime';
+    setButton('atk', priming ? (next.prime >= 10 ? '💥' : '⚡') : next.attack === 'Swing' ? '🗡️' : next.attack === 'Hook!' ? '🪝' : next.attack === 'Let go!' ? '🖐️' : next.attack === 'Kick!' ? '🦶' : '✋', priming ? (next.prime >= 10 ? 'PRIMED!' : 'Hold to prime') : next.attack || 'Shove');
+    $('atk').classList.toggle('prime', priming);
+    $('atk').classList.toggle('ready', priming && next.prime >= 10);
+    $('atk').style.setProperty('--p', (priming ? next.prime * 10 : 0) + '%');
 
     $('carry').textContent = next.carry ? CARRY[next.carry] || next.carry : 'Hands empty';
     if (next.hull != null) {
@@ -144,7 +169,7 @@ export function createControllerUI({ network }) {
     const hint = next.locked
       ? {
           helm: 'Stick: engines (left/right) and trim (up/down). AHEAD lever: cruise speed (STOP line = hover). PUMP/VENT lever: the gasbag - up = rise, middle = hold, down = drop.',
-          gun: 'Drag to aim - it snaps onto nearby targets. Hold FIRE. Needs ammo!',
+          gun: 'Drag to aim, hold FIRE. Quiet? Hold PRIME for a big shell, or tap radar blips to SPOT.',
           lookout: 'Keep watch! Arrows on the TV show what is coming from off screen.',
           hijack: 'You hijacked a fighter! KICK THE PILOT: tap Action 3 times (or hold it). Then: stick steers, guns fire by themselves, LEAVE bails out with a parachute.',
           escort: 'You are flying the escort fighter! Point the stick where to fly - let go and she circles the ship. Her guns fire by themselves at anything in front. LEAVE flies her home.',
@@ -165,6 +190,7 @@ export function createControllerUI({ network }) {
     $('info').innerHTML = `<b>${where}${ammo}</b> - ${hint}${warn}`;
     $('leave').style.display = next.locked ? 'block' : 'none';
     const helm = next.locked && next.kind === 'helm';
+    document.body.classList.toggle('helm', helm);
     $('lever').style.display = helm ? 'block' : 'none';
     $('plever').style.display = helm ? 'block' : 'none';
     $('atk').style.display = helm ? 'none' : '';
@@ -203,5 +229,5 @@ export function createControllerUI({ network }) {
     });
   };
 
-  return { species, setup, join, selectSpecies, setJoinError, updateUI, getState: () => uiState };
+  return { species, setup, join, selectSpecies, setJoinError, updateUI, getState: () => uiState, radarPick: (x, y) => radar.pick(x, y) };
 }

@@ -14,8 +14,8 @@ const GUN_NAMES = Object.keys(L.gunMounts);
 const PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
 const stationNamed = (n) => L.stations.find((s) => s.n === n);
 const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer' };
-export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', unclog: '#b6f06e', oxygen: '#bfe9ff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0' };
-const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL' };
+export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', unclog: '#b6f06e', oxygen: '#bfe9ff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0', help: '#ff4d4d' };
+const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP' };
 
 // Name of the room (or deck) at a spot, for the label.
 const roomName = (d, x) => {
@@ -37,6 +37,8 @@ export function createJobFinder(state) {
     const add = (kind, obj, d, x, extra, label) => out.push({ kind, obj, d, x, urgency: J.URGENCY[kind], label: label || `${WORD[kind]} - ${roomName(d, x)}`, max: kind === 'fight' ? 2 : 1, ...extra });
     for (const b of state.boarders) if (!b.fall && b.hp > 0) { const s = spot(b); add('fight', b, s.d, b.x); }
     for (const q of Object.values(state.players)) if (q !== p && q.ko > 0 && !q.fall && q.conn == null && q.d != null) add('revive', q, q.d, q.x, {}, `REVIVE ${q.name} - ${roomName(q.d, q.x)}`);
+    // HELP! calls (spotter.js): the crew sent to a caller get an arrow to them, in the caller's colour.
+    for (const c of state.helpCalls || []) if (c.caller !== p && c.who.includes(p.id) && c.caller.d != null) { const s = spot(c.caller); add('help', c.caller, s.d, s.x, {}, `HELP ${c.caller.name}! - ${roomName(s.d, s.x)}`); }
     for (const f of state.fires) add('fire', f, f.d, f.x);
     for (const h of state.breaches) add('hole', h, h.d, h.x);
     for (const h of state.gasHoles || []) add('gas', h, h.d, h.x);
@@ -140,7 +142,7 @@ export function createJobFinder(state) {
     const tgt = pick.r.via || j;
     const near = pick.r.via ? 40 : J.ARRIVE;
     const dir = direction(p, tgt.d, tgt.x, near);
-    p.job = { job: j, kind: j.kind, label: j.label + (pick.r.via ? ` (get ${pick.r.via.kind || pick.r.via.n})` : ''), dir: dir.arrived ? null : dir.dir, color: JOB_COLORS[j.kind] };
+    p.job = { job: j, kind: j.kind, label: j.label + (pick.r.via ? ` (get ${pick.r.via.kind || pick.r.via.n})` : ''), dir: dir.arrived ? null : dir.dir, color: j.kind === 'help' && j.obj.color ? j.obj.color : JOB_COLORS[j.kind] };
     // Arrived at the job (no rack needed): the arrow goes away and the suggestion is done.
     if (!pick.r.via && dir.arrived) p.job.dir = null;
   };

@@ -274,6 +274,8 @@ function isEmergency(job) {
   return !!job.urgent || job.kind !== 'ammo' && job.kind !== 'station' && job.kind !== 'coal' && job.kind !== 'winch' && !(job.kind === 'repair' && !job.obj.broken);
 }
 
+const HELP_KINDS = { fire: 1, patch: 1, revive: 1, swat: 1, fight: 1, defuse: 1, repair: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1 };
+
 function chooseJob(state, bot, bots) {
   const claims = (job) => bots.filter((o) => o !== bot && o.botJob && o.botJob.kind === job.kind && o.botJob.obj === job.obj).length;
   // (a job with a cap: no more than that many crew on this KIND of job at once, e.g. patching gasbag holes)
@@ -286,6 +288,13 @@ function chooseJob(state, bot, bots) {
   const cur = bot.botJob;
   const isCur = (j) => !!cur && j.kind === cur.kind && j.obj === cur.obj;
   const jobs = listJobs(state, bot).filter((j) => claims(j) < j.max && (j.cap == null || onKind(j) < j.cap) && (isCur(j) || !(choresFull && CHORE[j.kind] && !j.urgent)));
+  // Sent to help a crewmate who pressed HELP!: whatever needs doing near them, else just go and stand by.
+  const hf = bot.helpFor;
+  if (hf && hf.caller.d != null && !bot.onGunship) {
+    const c = hf.caller;
+    const near = jobs.filter((j) => HELP_KINDS[j.kind] && j.obj && j.obj.d != null && j.obj.conn == null && j.obj.d === c.d && Math.abs(j.obj.x - c.x) < config.HELP.NEAR).sort((a, b) => Math.abs(a.obj.x - c.x) - Math.abs(b.obj.x - c.x));
+    return near[0] || { kind: 'help', obj: c, max: 3 };
+  }
   // Among the most urgent kind, prefer the closest.
   if (!jobs.length) return null;
   const kind = jobs[0].kind;
@@ -313,6 +322,7 @@ function operate(p, state, dt) {
   p.jx = 0;
   p.jy = 0;
   p.fire = false;
+  p.prime = false;
   const ship = state.ship;
   if (isEscortStation(p.lock)) {
     // Fly the escort fighter at the nearest enemy (or let her circle the ship if there's none).
@@ -382,7 +392,10 @@ function operate(p, state, dt) {
     const angle = firingSolution(state, gun);
     // Count how long the enemy has been out of this gun's reach.
     p.gunIdle = angle === null ? (p.gunIdle || 0) + dt : 0;
-    if (angle === null) return;
+    if (angle === null) {
+      p.prime = gun.ammo > 0 && !gun.primed; // nothing to shoot: charge the loaded shell (hold PRIME)
+      return;
+    }
     p.jx = Math.cos(angle);
     p.jy = Math.sin(angle);
     const off = Math.abs(Math.atan2(Math.sin(angle - gun.aim), Math.cos(angle - gun.aim)));
@@ -481,6 +494,8 @@ function work(p, state) {
     if (steer(p, s.d, s.x)) press(p);
   } else if (job.kind === 'defuse') {
     if (steer(p, o.d, o.x, 25)) p.fire = true;
+  } else if (job.kind === 'help') {
+    steer(p, goalOf(o), o.x, 70); // (walk over to whoever called, then stand by)
   } else if (job.kind === 'revive') {
     if (steer(p, goalOf(o), o.x, 30)) p.fire = true;
   } else if (job.kind === 'fire') {
@@ -860,6 +875,13 @@ function dareStep(p, state, dt) {
     }
   }
   return false;
+}
+
+// Is this bot free to be sent on an errand (HELP! calls)? Idle bots always are; with `loose`, so are bots on a
+// job that is not an emergency (hauling, walking to a station).
+export function botFree(p, loose) {
+  if (p.helpFor) return false;
+  return !p.botJob || (!!loose && !isEmergency(p.botJob));
 }
 
 // Called once per frame for each bot, before the game applies its input.

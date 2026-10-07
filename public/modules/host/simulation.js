@@ -19,6 +19,8 @@ import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
 import { createEnvironment, favour } from './environments.js';
 import { assistAim } from './aim.js';
+import { createPrime } from './prime.js';
+import { createSpotter } from './spotter.js';
 import { UPGRADES } from './upgrades.js';
 import { generateVoyage, stopById, stopName, envInfo, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
@@ -312,7 +314,8 @@ export function createSimulation() {
     state.tempo = newTempo();
     state.supply = null;
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
-    for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, auto: 0 });
+    for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, auto: 0, prime: 0, primed: false });
+    spotter.reset();
     raiders.reset();
     threats.reset();
     squadrons.restart();
@@ -574,6 +577,7 @@ export function createSimulation() {
     phoneFx(p, '+1 Shot down!', [30, 40, 30]);
   };
   let lastJolt = 0;
+  const prime = createPrime({ state, phoneFx }); // primed shells: hold PRIME on a gun to charge the loaded shell (prime.js)
 
   const raiders = createRaiders({ state, modules, puff, impact });
   const escort = createEscort({ state, puff, phoneFx });
@@ -955,6 +959,8 @@ export function createSimulation() {
     if (socket && !state.players[playerId]?.bot) socket.emit('host:ui', { id: playerId, ui });
   };
 
+  const spotter = createSpotter({ state, emit: emitPlayerUi, phoneFx }); // phone radar, spotting and HELP! (spotter.js)
+
   const setSocket = (nextSocket) => {
     socket = nextSocket;
   };
@@ -1053,6 +1059,7 @@ export function createSimulation() {
       }
       const station = !player.lock && player.conn == null ? SHIP_LAYOUT.stations.filter((s) => s.d === player.d && Math.abs(player.x - s.x) < T.STATION_REACH).sort((a, b) => Math.abs(player.x - a.x) - Math.abs(player.x - b.x))[0] || null : null;
 
+      if (!player.lock) player.prime = false;
       if (player.hj) {
         hijack.rider(player, dt); // flying a stolen dogfighter (kick the pilot out, then steer)
       } else if (player.lock) {
@@ -1103,6 +1110,7 @@ export function createSimulation() {
           }
         } else if (gun) {
           gun.cd = Math.max(0, gun.cd - dt);
+          prime.charge(player, gun, working, dt);
           // Turn toward the stick, but only within this gun's firing arc (a broken gun is jammed).
           if (working && Math.hypot(player.jx, player.jy) > 0.25) {
             const A = config.AIM_ASSIST;
@@ -1119,6 +1127,7 @@ export function createSimulation() {
               gun.cd = config.GUNS.COOLDOWN * env.gunCooldownMul(player.lock);
               const angle = gun.aim + (state.ship.pitch || 0);
               const [gx, gy] = tilt(state, gun.bx, gun.by);
+              const primed = prime.take(gun); // a fully primed shell: harder hit, bigger blast (config PRIME)
               state.shells.push({
                 x: gx + Math.cos(angle) * 60,
                 y: gy - state.ship.alt + Math.sin(angle) * 60,
@@ -1126,9 +1135,14 @@ export function createSimulation() {
                 vy: Math.sin(angle) * config.GUNS.SHELL_SPEED,
                 life: config.GUNS.SHELL_LIFE,
                 owner: player.id,
+                ...(primed ? { mul: config.PRIME.DAMAGE_MUL, primed: true } : {}),
               });
-              puff(gx + Math.cos(angle) * 64, gy - state.ship.alt + Math.sin(angle) * 64, '#ffe9a8', 4);
-              state.flashes.push({ x: gx + Math.cos(angle) * 70, y: gy - state.ship.alt + Math.sin(angle) * 70, ang: angle, t: 0.09, color: '#fff2b0', size: 1.3 });
+              puff(gx + Math.cos(angle) * 64, gy - state.ship.alt + Math.sin(angle) * 64, primed ? '#ff9a2e' : '#ffe9a8', primed ? 12 : 4);
+              state.flashes.push({ x: gx + Math.cos(angle) * 70, y: gy - state.ship.alt + Math.sin(angle) * 70, ang: angle, t: primed ? 0.17 : 0.09, color: primed ? '#ff9a2e' : '#fff2b0', size: primed ? 2.7 : 1.3 });
+              if (primed) {
+                state.rings.push({ x: gx + Math.cos(angle) * 64, y: gy - state.ship.alt + Math.sin(angle) * 64, t: 0.3, max: 0.3, color: '#ffd23f', size: 110 });
+                state.sfxQ.push(['bigshot']);
+              }
             }
           }
         }
@@ -1327,17 +1341,19 @@ export function createSimulation() {
       const ammoText = gun ? gun.ammo : stationName === 'Bomb Bay' ? state.bombBay.bombs : null;
       let attackLabel = !player.lock && player.conn == null && batInReach(player, config.WAVES.BAT_NOTICE) ? 'Swat bat!' : player.carry === 'sword' ? 'Swing' : player.carry === 'hookshot' ? 'Hook!' : 'Shove';
       if (player.hook && player.hook.phase === 'caught') attackLabel = 'Let go!';
+      if (player.lock && gun && !player.hj) attackLabel = 'Prime'; // (on a gun the left button charges the shell)
+      const primePct = player.lock && gun ? (gun.primed ? 10 : Math.round((gun.prime || 0) * 10)) : 0;
       if (player.hj) {
         attackLabel = player.hj.phase === 'kick' ? 'Kick!' : 'Guns auto';
         if (player.hj.phase === 'kick') status = 'Tap Action 3 times (or hold it) to throw the pilot out - LEAVE to jump off';
         else status = 'Fuel ' + Math.max(0, Math.round(player.hj.fuel / 5) * 5) + 's - hull ' + Math.max(0, player.hj.hp) + '/' + player.hj.max;
       }
       const hull = Math.round(state.ship.hull / 5) * 5;
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, jobUi ? jobUi.label + '|' + jobUi.dir : ''].join('|');
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, jobUi ? jobUi.label + '|' + jobUi.dir : ''].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, job: jobUi };
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, job: jobUi };
           emitPlayerUi(player.id, player.ui);
         }
       }
@@ -1345,6 +1361,7 @@ export function createSimulation() {
 
     state.lookout = state.periscope || Object.values(state.players).some((q) => q.lock === 'Lookout');
     updatePopups(state, dt);
+    spotter.update(dt);
     modules.update(state, dt);
     // Steam pressure: heat from the coal in the firebox in, steam used by everything powered,
     // open vents and burst pipes out (all using more at higher pressure).
@@ -1419,8 +1436,10 @@ export function createSimulation() {
       bay.from = { x: bx, y: by - state.ship.alt + 20 };
       bay.aim = course.predictBomb(bx, by - state.ship.alt + 20);
     } else bay.aim = null;
-    for (const gun of Object.values(state.GUNS)) {
+    for (const [gunName, gun] of Object.entries(state.GUNS)) {
       gun.empty = Math.max(0, gun.empty - dt);
+      if (!taken(gunName)) prime.idle(gun, dt); // (a half-charge fades when nobody is holding it; the glow timer always runs)
+      else gun.primedFlash = Math.max(0, (gun.primedFlash || 0) - dt);
       // Auto-Loader upgrade: a free shell every so often.
       if (config.GUNS.AUTOLOAD_EVERY && gun.ammo < gun.max && (gun.auto = (gun.auto || 0) + dt) >= config.GUNS.AUTOLOAD_EVERY) {
         gun.auto = 0;
@@ -1581,6 +1600,7 @@ export function createSimulation() {
 
     // Shots that hit something (life set to exactly 0) leave an impact ring; expired ones just go.
     for (const sh of state.shells) if (sh.life === 0) state.rings.push({ x: sh.x, y: sh.y, t: 0.3, max: 0.3, color: '#ffd23f', size: 90 });
+    for (const sh of [...state.shells]) if (sh.life === 0 && sh.primed) prime.burst(sh); // (a primed shell bursts into splinters)
     for (const b of state.bullets) if (b.life === 0) state.rings.push({ x: b.x, y: b.y, t: 0.25, max: 0.25, color: '#ff7b4a', size: 70 });
     if (state.shells.some((sh) => sh.life === 0)) state.sfxQ.push(['impact']);
     for (const arr of [state.bullets, state.shells]) {

@@ -10,6 +10,7 @@
 // World y grows downward; the ship is drawn shifted up by its altitude (alt).
 import { config } from '../../config.js';
 import { pop } from './popups.js';
+import { shellDmg } from './aim.js';
 import { pickEnvironment } from './environments.js';
 import { makeMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
 
@@ -703,7 +704,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       for (const t of course.turrets) {
         if (t.dead || t.x == null || Math.hypot(shell.x - t.x, shell.y - t.y) > 42) continue;
         shell.life = 0;
-        t.hp -= config.GUNS.DAMAGE;
+        t.hp -= shellDmg(shell, t);
         puff(shell.x, shell.y, '#ffcf40', 8);
         if (t.hp <= 0) {
           t.dead = true;

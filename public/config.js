@@ -491,6 +491,44 @@ export const config = {
     SHELL_SPEED: 1300, // shell speed, px/s
     SHELL_LIFE: 1.17, // shell lifetime, seconds (speed x life = range, about 1520 px)
   },
+  // Primed shells (prime.js): hold PRIME on a gun to charge the loaded shell for a harder hit. Never required.
+  PRIME: {
+    TIME: 2.4, // seconds of holding PRIME to fully charge a shell
+    DECAY: 0.5, // charge lost per second when you let go early (a fully primed shell keeps until fired)
+    DAMAGE_MUL: 2, // a primed shell hits this many times harder than a normal one
+    FRAGS: 5, // little splinters thrown out where a primed shell bursts (they hurt other nearby targets too)
+    FRAG_SPEED: 650, // px/s of those splinters
+    FRAG_LIFE: 0.13, // seconds they fly (speed x life = about 85 px blast radius)
+    BLAST_SIZE: 150, // size of the burst ring on the TV
+  },
+  // Radar on idle phones (spotter.js): a map of everything out there, tap a ping to SPOT it for the whole crew.
+  RADAR: {
+    RANGE: 4500, // px from the ship to the edge of the phone radar (farther things are pinned to the rim)
+    HZ: 4.5, // radar updates sent per second to each phone showing it
+    IDLE_AFTER: 1.2, // seconds with nothing to do before a walking player's radar appears
+    GUN_IDLE_AFTER: 1, // seconds with nothing in reach before a gunner's radar appears
+    GUN_BUSY_AFTER: 0.8, // seconds with a target in reach before it goes away again
+    MAX_ITEMS: 30, // most pings sent (the nearest ones win)
+  },
+  // Spotting (tap a radar ping): a marker on the TV, extra damage, and aim assist that prefers it.
+  SPOT: {
+    TIME: 10, // seconds a target stays spotted
+    BONUS: 0.25, // spotted targets take this much extra damage from shells (0.25 = +25%)
+    ASSIST_ANGLE: 2.2, // aim assist reaches this many times farther for a spotted target
+    ASSIST_PULL: 0.45, // a spotted target counts as this much closer to your aim (lower = more preferred)
+    COOLDOWN: 0.4, // seconds between one player's taps
+    MAX_PER_PLAYER: 2, // most targets one player can have spotted at once (a new spot drops their oldest)
+  },
+  // HELP! button on every phone (spotter.js): call-out on the TV, and the nearest idle crew are sent over.
+  HELP: {
+    COOLDOWN: 8, // seconds before the same player can call again
+    SHOW: 5, // seconds the HELP! call-out shows over the caller
+    RESPONDERS: 2, // how many idle crew are sent
+    IDLE_FOR: 0.8, // a human must have been free this long to count as idle
+    BOT_HOLD: 9, // seconds a bot keeps helping near the caller
+    NEAR: 420, // px: bots help with jobs this close to the caller
+    ARRIVE: 90, // px: a human this close (same deck) has arrived, and goes back to the normal job arrow
+  },
   // Upgrade votes at the beacon and back home.
   VOTE: {
     TIME: 15, // seconds to vote
@@ -1231,7 +1269,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

@@ -187,16 +187,54 @@ export function createControllerInput({ network, ui }) {
     cease,
   );
 
-  // Attack: one swing per tap; holding keeps swinging.
+  // Attack: one swing per tap; holding keeps swinging. On a gun this button is PRIME: hold it to charge the shell.
   const swing = () => network.sendInput({ jx, jy, atk: 1 });
+  let priming = false;
   pressable(
     atkButton,
     () => {
+      if ((ui.getState ? ui.getState() : {}).attack === 'Prime') {
+        priming = true;
+        network.sendInput({ jx, jy, prime: 1 });
+        return;
+      }
       swing();
       attackTimer = setInterval(swing, 300);
     },
-    () => clearInterval(attackTimer),
+    () => {
+      clearInterval(attackTimer);
+      if (priming) {
+        priming = false;
+        network.sendInput({ jx, jy, prime: 0 });
+      }
+    },
   );
+
+  // HELP!: calls the nearest idle crew over (the host has its own cooldown; this just shows it).
+  const helpButton = document.getElementById('help');
+  let helpUntil = 0;
+  const showHelp = () => {
+    const left = Math.ceil((helpUntil - performance.now()) / 1000);
+    helpButton.classList.toggle('wait', left > 0);
+    helpButton.textContent = left > 0 ? '🆘 ' + left : '🆘 Help!';
+    if (left > 0) setTimeout(showHelp, 250);
+  };
+  pressable(
+    helpButton,
+    () => {
+      if (performance.now() < helpUntil) return;
+      network.sendInput({ jx, jy, help: 1 });
+      helpUntil = performance.now() + config.HELP.COOLDOWN * 1000;
+      showHelp();
+    },
+    () => {},
+  );
+
+  // Radar: tap a blip to spot it (a big, forgiving tap area; the stick keeps its value).
+  document.getElementById('radar').addEventListener('pointerdown', (event) => {
+    const hit = ui.radarPick ? ui.radarPick(event.clientX, event.clientY) : null;
+    if (hit) network.sendInput({ jx, jy, spot: hit.i, sq: hit.s });
+  });
 
   // Jump: one hop per tap.
   pressable(jumpButton, () => network.sendInput({ jx, jy, jump: 1 }), () => {});

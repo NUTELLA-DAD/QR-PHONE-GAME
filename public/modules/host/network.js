@@ -52,6 +52,9 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
       if ('vote' in data) player.vote = data.vote;
       if (data.leave) player.leaveQ = true;
       if ('fire' in data) player.fire = !!data.fire;
+      if ('prime' in data) player.prime = !!data.prime; // holding the PRIME button on a gun
+      if (data.help) player.helpQ = true; // HELP! button
+      if ('spot' in data) player.spotQ = { i: data.spot | 0, s: data.sq | 0 }; // tapped a radar ping
     }
   });
 
