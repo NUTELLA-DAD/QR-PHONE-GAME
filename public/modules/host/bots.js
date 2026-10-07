@@ -5,7 +5,7 @@ import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { steerTo, travelTime } from './nav.js';
 import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
-import { GS, MAIN_X1, landX, boilerX } from './gunship.js';
+import { GS, MAIN_X1, landX, boilerX, routeStep } from './gunship.js';
 import { isEscortStation, escortFor } from './escort.js';
 
 const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
@@ -27,10 +27,17 @@ function steer(p, d, x, near = 12) {
   const g = world && world.gunship;
   if (g && d === MAIN && p.d === MAIN && !p.swing) {
     const mid = (MAIN_X1 + GS.x0) / 2; // targets past this are on her deck (her home frame)
+    if (x > mid && p.onGunship) {
+      // Aboard her and the job is on her deck too: walk there, using the ladders between her decks.
+      const rs = routeStep(g, p, x, near);
+      p.jx = rs.jx;
+      p.jy = rs.jy;
+      return rs.arrived;
+    }
     if (x > mid !== !!p.onGunship) {
       // Wrong side: walk to the swing spot, and swing only while the rope is hooked and in range.
       const edge = p.onGunship ? landX(g) : MAIN_X1 - 15;
-      const step = steerTo(p, MAIN, edge, 12);
+      const step = p.onGunship ? routeStep(g, p, edge, 12) : steerTo(p, MAIN, edge, 12);
       p.jx = step.jx;
       p.jy = step.jy;
       if (step.arrived && g.rope) press(p); // (does nothing while she is out of swing range)

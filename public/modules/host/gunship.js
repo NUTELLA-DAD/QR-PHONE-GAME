@@ -34,59 +34,30 @@
 // paratroopers, RETREAT to patch her hull, FLEE, latch on - and shows it on a pennant on her mast (g.intent).
 // Her stern guns only bear on us when her stern faces us (g.bears).
 // Her position is stored as an offset from our ship (g.dx, g.dy, in ship coordinates; dy is down).
-// Everything on her (crew, posts, boarders) lives in her own "home frame" (x = GS.x0..GS.x1,
-// y = GS.deckY) and is shifted by (g.dx, g.dy) to reach ship coordinates - see deckAt().
+// Everything on her (crew, posts, boarders) lives in her own "home frame" (x = g.bp.x0..g.bp.x1, y = the deck
+// heights in g.bp.decks) and is shifted by (g.dx, g.dy) to reach ship coordinates - see deckAt().
+// No two gunships are alike: gunshipBlueprint.js generates each one's hull, decks, guns, special, crew and captain.
 // The rope only pulls when taut: a gentle tug on us, a hard one on her; it snaps if stretched too far.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { inRock, scrollSpeed } from './course.js';
 import { platformBelow } from './nav.js';
 import { pop } from './popups.js';
+import { generateBlueprint, X0, mx, decksOf, segAt, deckYAt, landX, landSeg, landY, boilerX, boilerSeg, boilerY, portPos, firstCannon, anchorPt, surfaces as bpSurfaces, routeStep } from './gunshipBlueprint.js';
 
+export { mx, landX, landSeg, landY, boilerX, boilerSeg, boilerY, portPos, routeStep, decksOf, segAt, deckYAt };
 const G = config.GUNSHIP;
+const GP = config.GUNSHIP_PARTS;
 const P = SHIP_LAYOUT.platforms;
 const MAIN = P.findIndex((p) => p.id === 'main');
 const CAT = P.findIndex((p) => p.id === 'catwalk');
 export const MAIN_X1 = P[MAIN].x1; // the bow end of our main deck
-export const GS = { x0: 2050, x1: 3150, deckY: P[MAIN].y, boilerX: 2950 };
-// Where each job stands on her deck (gunners stack up by the gun ports).
-export const POSTS = { gunner: [GS.x0 + 60, GS.x0 + 150], helm: [GS.x0 + 560], stoker: [GS.boilerX - 110] };
+// Legacy numbers (her stern end is always X0; her nose end and decks depend on the blueprint: g.bp).
+export const GS = { x0: X0, x1: X0 + 1100, deckY: P[MAIN].y };
 const ROLES = ['gunner', 'helm', 'stoker', 'guard', 'gunner', 'guard', 'guard', 'guard'];
-export const ANCHOR = { x: GS.x0 - 170, y: GS.deckY - 330 }; // her yardarm in her home frame, where the rope is caught
 export const BOW = { x: MAIN_X1 + 10, y: P[MAIN].y - 50 }; // where our end of the rope is tied (ship coords)
-const LAND_X = GS.x0 + 40; // where a swing lands on her deck (home frame, un-mirrored)
-// Her ship is mirrored when she turns round (g.m = -1): this maps a canonical home-frame x to where it is now.
-export const mx = (g, x) => (g && g.m < 0 ? GS.x0 + GS.x1 - x : x);
-export const landX = (g) => mx(g, LAND_X); // where a swing lands on her deck now
-export const boilerX = (g) => mx(g, GS.boilerX); // where her boiler is now
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-
-// Her outline in her home frame: points around the gasbag ellipse (every ~2.5 degrees), the hull box (every ~55px) and a few across the middle,
-// grown by m pixels. (Map squares are 200px; the look-ahead and spot-finding versions use fewer points.)
-function outline(m, n = 144, hn = 24) {
-  const cx = (GS.x0 + GS.x1) / 2;
-  const pts = [];
-  for (let k = 0; k < n; k++) {
-    const a = (k / n) * Math.PI * 2;
-    pts.push([cx + Math.cos(a) * (660 + m), 380 + Math.sin(a) * (160 + m)]);
-  }
-  const hx0 = GS.x0 - 75 - m; // (symmetrical: she is mirrored when she turns round)
-  const hx1 = GS.x1 + 75 + m;
-  const hy0 = GS.deckY - 80 - m;
-  const hy1 = GS.deckY + 120 + m;
-  for (let k = 0; k <= hn; k++) {
-    const x = hx0 + ((hx1 - hx0) * k) / hn;
-    pts.push([x, hy0], [x, hy1]);
-  }
-  pts.push([hx0, (hy0 + hy1) / 2], [hx1, (hy0 + hy1) / 2]);
-  for (const x of [GS.x0 + 100, cx, GS.x1 - 100]) pts.push([x, 470], [x, (hy0 + hy1) / 2]);
-  pts.push([cx, 380]);
-  return pts;
-}
-const PTS = outline(4); // collision (4px of slop covers rock corners that poke between the sample points)
-const PTS_LOOK = outline(30, 48, 10); // the helmsman's look-ahead
-const PTS_SPOT = outline(G.ROCK_MARGIN, 48, 10); // choosing somewhere to sit
 const DIRS = [[0, -1], [0, 1], [-1, 0], [1, 0]];
 const NODE_NAMES = Object.keys(G.NODES);
 
@@ -94,16 +65,24 @@ const NODE_NAMES = Object.keys(G.NODES);
 const engaged = (g) => g.phase === 'hunt' || g.phase === 'latch';
 
 // Where a player/point standing on her deck is, in ship coordinates (null if she isn't there).
-export function deckAt(g, x = 0, y = GS.deckY) {
+export function deckAt(g, x = 0, y = 0) {
   return g ? { x: x + g.dx, y: y + g.dy } : null;
 }
 // Her yardarm (where the rope hooks on), in ship coordinates.
-export const anchorAt = (g) => ({ x: mx(g, ANCHOR.x) + g.dx, y: ANCHOR.y + g.dy });
+export const anchorAt = (g) => {
+  const a = anchorPt(g);
+  return { x: a.x + g.dx, y: a.y + g.dy };
+};
+// Her outer ends (the same canonical or mirrored).
+const leftEnd = (g) => g.bp.x0;
+const rightEnd = (g) => g.bp.x1;
+// Does a weapon of this kind live on the gunship? (cannon ports are the broadside)
+const isCannon = (g, k) => g.bp.weapons[k].kind === 'cannon';
 
-export function createGunship({ state, puff, impact, credit, dropOne, pickType }) {
+export function createGunship({ state, puff, impact, credit, dropOne, pickType, spawnBats }) {
   state.gunship = null;
   state.paras = []; // paratroopers in the air (world coordinates, like shells)
-  const S = (state.gsStats = { spawned: 0, dropped: 0, shot: 0, landed: 0, latches: 0, cut: 0, sent: 0, portsDown: 0, contacts: 0, collisions: 0, reverts: 0, maxDepth: 0, breakoffs: 0, shots: 0, turns: 0, strafes: 0, retreats: 0, aborts: 0, flees: 0, climbs: 0 });
+  const S = (state.gsStats = { spawned: 0, dropped: 0, shot: 0, landed: 0, latches: 0, cut: 0, sent: 0, portsDown: 0, contacts: 0, collisions: 0, reverts: 0, maxDepth: 0, breakoffs: 0, shots: 0, turns: 0, strafes: 0, retreats: 0, aborts: 0, flees: 0, climbs: 0, mortars: 0, flaks: 0, turretShots: 0, bats: 0, harpoons: 0, ladders: 0 });
   const warn = (text, secs = 3.5) => {
     state.ev.warn = secs;
     state.ev.warnText = text;
@@ -116,7 +95,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     for (const [x, y] of pts) if (inRock(state, x + dx, y + dy - alt)) return true;
     return false;
   };
-  const freeAt = (dx, dy) => !hits(dx, dy, PTS_SPOT); // room to sit here, with a margin round her?
+  const freeAt = (g, dx, dy) => !hits(dx, dy, g.bp.pts.spot); // room to sit here, with a margin round her?
 
   // Distance from our bow to her yardarm, and whether she's within reach of hook / swing.
   const gap = (g) => {
@@ -164,24 +143,32 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
 
   // Somewhere to appear: far off our bow, clear of rock, with a clear flight path in to our station
   // (tries the full distance first, then nearer). Returns { dx, dy } or null.
-  const spawnPos = () => {
+  const spawnPos = (bp) => {
     for (const dx of [G.START_DX, 3400, 2600]) {
       for (let k = 0; k < 6; k++) {
         const dy = rand(-G.START_DY, G.START_DY);
-        if (hits(dx, dy, PTS)) continue;
+        if (hits(dx, dy, bp.pts.col)) continue;
         let clear = true;
-        for (let x = dx - 500; x > 0 && clear; x -= 500) if (hits(x, dy, PTS_LOOK)) clear = false;
+        for (let x = dx - 500; x > 0 && clear; x -= 500) if (hits(x, dy, bp.pts.look)) clear = false;
         if (clear) return { dx, dy };
       }
     }
     return null;
   };
-  const spawn = () => {
-    const n = Math.min(ROLES.length, G.CREW + Math.floor(lap() / 2));
-    const at = spawnPos();
+  const portHp = (kind) => (kind === 'turret' ? GP.TURRET_GUN.HP : kind === 'mortar' ? GP.MORTAR_GUN.HP : kind === 'flak' ? GP.FLAK_GUN.HP : G.PORT_HP);
+  // opt: a seed number, or { seed, hull, layout, special, personality, mission } to force parts (tests).
+  const spawn = (opt) => {
+    const o = opt && typeof opt === 'object' ? opt : {};
+    const seed = typeof opt === 'number' ? opt : o.seed != null ? o.seed : (Math.random() * 0x7fffffff) | 0;
+    const bp = generateBlueprint(seed, { mission: lap(), difficulty: state.difficulty, ...o });
+    const at = spawnPos(bp);
     if (!at) return false;
     S.spawned++;
+    const hp = Math.round((G.HP + (lap() - 1) * 6) * bp.hpMul);
+    const parasMul = bp.special === 'paras' ? GP.PARAS.EVERY_MUL : 1;
     state.gunship = {
+      bp,
+      cap: bp.cap, // her captain's personality settings
       phase: 'approach',
       mode: 'station', // what her captain is doing: 'station' (ring spots), 'strafe' or 'retreat' (waypoint runs)
       intent: 'approach', // shown on her mast pennant
@@ -194,7 +181,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       dx: at.dx, // her offset from our ship (ship coords; dy is down)
       dy: at.dy,
       okW: null, // last rock-free position (world coordinates), for emergencies
-      ports: [0, 1, 2].map(() => ({ hp: G.PORT_HP, dead: false })),
+      ports: bp.weapons.map((w) => ({ kind: w.kind, hp: portHp(w.kind), dead: false, cd: rand(2, 5) })),
       free: {}, // which ring spots are clear of rock right now
       node: null, // the ring spot she is heading for
       route: [], // ring spots still to pass on the way
@@ -205,17 +192,23 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       herRope: false,
       latchCd: 0,
       sendT: 0,
-      extra: G.LATCH_EXTRA,
-      paraT: G.PARA_FIRST,
+      extra: Math.round(G.LATCH_EXTRA * (bp.hull === 'cutter' ? 0.6 : bp.hull === 'dreadnought' ? 1.4 : 1)),
+      paraT: G.PARA_FIRST * parasMul,
       paraDue: false,
       cutObj: { x: BOW.x - 110, d: MAIN, prog: 0 }, // what the crew hold Action on to cut her line
       scrapeCd: 0,
+      huntT: 0, // seconds spent hunting (a boarder captain latches on after a while)
+      harpT: GP.HARPOON.FIRST, // harpoon gun: seconds until she may fire it
+      harpFlash: 0,
+      hangarT: GP.HANGAR.FIRST, // bat hangar: seconds until the next launch
+      hangarOpen: 0, // hangar door open (drawing)
+      ramp: 0, // boarding ramp extension 0..1 (drawing)
       // systems
       gas: 0.55, // gasbag fill (0..1; 0.5 neutral)
       steam: 0.8, // boiler pressure (0..1)
       thr: 0.7, // engine throttle along her nose (-REVERSE..1)
-      eng: [{ hp: 1 }, { hp: 1 }], // engine health
-      props: [rand(0, 6), rand(0, 6)], // propeller angles (drawing)
+      eng: bp.engines.map(() => ({ hp: 1 })), // engine health, one per pod
+      props: bp.engines.map(() => rand(0, 6)), // propeller angles (drawing)
       sput: 0, // sputtering engines (seconds left)
       pitch: 0, // nose up (+) / down (-), radians
       wheel: 0, // helm wheel angle (drawing)
@@ -229,8 +222,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       retreats: 0,
       repT: 0,
       hammerT: 0,
-      hp: G.HP + (lap() - 1) * 6,
-      max: G.HP + (lap() - 1) * 6,
+      hp,
+      max: hp,
       rope: false,
       ropeLen: 0,
       tension: 0,
@@ -242,11 +235,12 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       refill: 0,
       crew: [],
     };
-    for (const role of ROLES.slice(0, n)) {
+    const g = state.gunship;
+    for (const role of ROLES.slice(0, bp.crew)) {
       const post = postFor(role);
-      state.gunship.crew.push({ role, post, x: post, y: GS.deckY, d: MAIN, hp: G.CREW_HP, cd: rand(0.5, 1.5), face: state.gunship.m, wind: 0, cutT: 0, hammer: 0 });
+      g.crew.push({ role, post, x: post, y: deckYAt(g, post), d: MAIN, hp: G.CREW_HP, cd: rand(0.5, 1.5), face: g.m, wind: 0, cutT: 0, hammer: 0 });
     }
-    warn('ENEMY GUNSHIP! SHOOT OUT HER GUNS - OR HOOK AND BOARD HER!', 4);
+    warn(bp.title + ' APPROACHES - SHOOT OUT HER GUNS OR BOARD HER!', 4);
     return true;
   };
 
@@ -254,7 +248,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
   const postFor = (role) => {
     const g = state.gunship;
     const used = g ? g.crew.filter((c) => c.role === role).map((c) => c.post) : [];
-    const list = (POSTS[role] || [GS.x0 + 330, GS.x0 + 470, GS.x0 + 760, GS.x0 + 860, GS.x0 + 400]).map((x) => mx(g, x));
+    const list = (g.bp.posts[role] || g.bp.posts.guard).map((x) => mx(g, x));
     return list.find((x) => !used.includes(x)) ?? list[0];
   };
   const atPost = (role) => (state.gunship ? state.gunship.crew.filter((c) => c.role === role && Math.abs(c.x - c.post) < 25 && !c.wind) : []);
@@ -267,7 +261,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
   const flip = (g) => {
     g.m = -g.m;
     g.side = -g.m;
-    const sum = GS.x0 + GS.x1;
+    const sum = g.bp.x0 + g.bp.x1;
+    const nDecks = decksOf(g).length;
     for (const c of g.crew) {
       c.x = sum - c.x;
       c.post = sum - c.post;
@@ -276,13 +271,14 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     for (const p of Object.values(state.players)) {
       if (!p.onGunship) continue; // (only if someone dropped in mid-turn)
       p.x = sum - p.x;
+      p.gd = nDecks - 1 - (p.gd || 0); // (the decks are listed left to right: they reverse)
       p.vx = -(p.vx || 0);
       p.face = -(p.face || 1);
     }
     state.sfxQ && state.sfxQ.push(['swing']);
   };
   // Does her stern (where her guns are) face our ship?
-  const bearsOn = (g) => (800 - ((GS.x0 + GS.x1) / 2 + g.dx)) * -g.m > -120;
+  const bearsOn = (g) => (800 - (g.bp.cx + g.dx)) * -g.m > -120;
 
   // ---- Her flight: gasbag, boiler, engines, helmsman, and the rope ----
   // mode: 'hold' (fly the captain's course), 'leave' (run for it), 'dead' (no control: shot down / blown up)
@@ -304,14 +300,14 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     const stoker = !dead && atPost('stoker').length > 0;
     g.steam = clamp(g.steam + ((stoker ? G.STEAM_FEED : -G.STEAM_LOSS) - Math.abs(g.thr) * G.STEAM_USE) * dt, 0, 1);
     const sf = G.STEAM_MIN + (1 - G.STEAM_MIN) * clamp(g.steam / 0.5, 0, 1);
-    g.engF = (g.eng[0].hp + g.eng[1].hp) / 2;
+    g.engF = g.eng.reduce((a, e) => a + e.hp, 0) / g.eng.length;
     g.sput = Math.max(0, g.sput - dt);
     if (!dead && g.sput <= 0 && (g.engF < 0.55 || g.steam < 0.12) && Math.random() < dt * 1.2) g.sput = rand(0.3, 0.7); // engines cough
-    const power = sf * (0.25 + 0.75 * g.engF) * (g.sput > 0 ? 0.35 : 1);
+    const power = sf * (0.25 + 0.75 * g.engF) * (g.sput > 0 ? 0.35 : 1) * g.bp.enginePower;
     // Her helmsman looks ahead along her own motion (in the world) for rock, and brakes / turns away.
     const L = G.LOOKAHEAD;
-    const blockedX = helm && hits(g.dx + g.wvx * L, g.dy, PTS_LOOK);
-    const blockedY = helm && hits(g.dx, g.dy - g.wvy * L, PTS_LOOK);
+    const blockedX = helm && hits(g.dx + g.wvx * L, g.dy, g.bp.pts.look);
+    const blockedY = helm && hits(g.dx, g.dy - g.wvy * L, g.bp.pts.look);
     let wantVx = 0;
     let thrWant = 0;
     let wantM = g.m;
@@ -333,7 +329,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       if (tgt.station && Math.abs(tgt.dx - g.dx) < G.TURN_AHEAD && g.seenVx > G.TURN_MIN_SPEED) wantM = 1;
       else if (Math.abs(wantVx) > G.TURN_MIN_SPEED) wantM = wantVx > 0 ? 1 : -1;
       // On a firing spot with her stern facing away from us? Swing round so the guns bear.
-      if (tgt.fire && tgt.dist < 450 && !g.bears) wantM = (GS.x0 + GS.x1) / 2 + g.dx > 800 ? 1 : -1;
+      if (tgt.fire && tgt.dist < 450 && !g.bears) wantM = g.bp.cx + g.dx > 800 ? 1 : -1;
       // Vertical: the helmsman sets the gas so she climbs or sinks toward her station (and away from rock).
       let ty = tgt.dy + Math.sin(g.t * 0.7 + 1) * G.WOBBLE_Y;
       if (mode === 'leave') ty -= 300;
@@ -363,7 +359,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     if (g.turn) thrWant = 0; // (no way on while she swings round)
     // Engines: throttle follows the wish; the propellers spin with it.
     g.thr += (thrWant - g.thr) * Math.min(1, dt * G.THROTTLE_RESP);
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < g.eng.length; i++) {
       const e = g.eng[i];
       g.props[i] += dt * (5 + 38 * Math.abs(g.thr) * (g.sput > 0 ? 0.35 : 1) * (0.3 + 0.7 * e.hp)) * (g.thr < 0 ? -1 : 1);
     }
@@ -411,10 +407,10 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     g.dy += dAlt - g.wvy * dt;
     // Our ship is solid too: if she overlaps its box she is nudged out the short way.
     const R = G.SHIP_RECT;
-    const l = GS.x0 - 75 + g.dx;
-    const r = GS.x1 + 75 + g.dx;
-    const top = 220 + g.dy;
-    const bot = GS.deckY + 120 + g.dy;
+    const l = g.bp.x0 - 75 + g.dx;
+    const r = g.bp.x1 + 75 + g.dx;
+    const top = g.bp.bagTop + 60 + g.dy;
+    const bot = g.bp.hullBot + 8 + g.dy;
     if (r > R.x0 && l < R.x1 && bot > R.y0 && top < R.y1) {
       const ox = Math.min(r - R.x0, R.x1 - l);
       const oy = Math.min(bot - R.y0, R.y1 - top);
@@ -427,7 +423,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
   // ---- Her captain: which spot on the ring round our ship to fly to ----
   const nodeDist = (g, n) => Math.hypot(g.dx - n.dx, g.dy - n.dy);
   const refreshFree = (g) => {
-    for (const name of NODE_NAMES) g.free[name] = freeAt(G.NODES[name].dx, G.NODES[name].dy);
+    for (const name of NODE_NAMES) g.free[name] = freeAt(g, G.NODES[name].dx, G.NODES[name].dy);
   };
   const nearestFree = (g) => {
     let best = null;
@@ -458,7 +454,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     let best = null;
     for (let dx = 1200; dx >= -4200; dx -= 300) {
       for (let dy = -1200; dy <= 1200; dy += 300) {
-        if (!freeAt(dx, dy)) continue;
+        if (!freeAt(g, dx, dy)) continue;
         const cost = Math.hypot(dx, dy * 1.5) + Math.hypot(dx - g.dx, dy - g.dy) * 0.3;
         if (!best || cost < best.cost) best = { dx, dy, cost };
       }
@@ -475,8 +471,9 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     if (start && need) want = g.free.bow ? 'bow' : null;
     else if (start) {
       const options = NODE_NAMES.filter((n) => g.free[n] && n !== g.node && (g.paraDue ? G.NODES[n].drop : G.NODES[n].fire) && bfs(g, start, n));
-      let r = Math.random() * options.reduce((s, n) => s + G.NODES[n].w, 0);
-      for (const n of options) if ((r -= G.NODES[n].w) <= 0) { want = n; break; }
+      const wOf = (n) => G.NODES[n].w * (g.cap.nodeW[n] ?? 1);
+      let r = Math.random() * options.reduce((s, n) => s + wOf(n), 0);
+      for (const n of options) if ((r -= wOf(n)) <= 0) { want = n; break; }
       if (!want && options.length) want = options[0];
       if (!want && g.node && g.free[g.node] && !g.paraDue) want = g.node; // nowhere better: stay put
     }
@@ -499,7 +496,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
   // A straight run is only flown if rock is clear along the whole way.
   const runFree = (g, x0, y0, x1, y1) => {
     const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 450));
-    for (let k = 0; k <= n; k++) if (hits(x0 + ((x1 - x0) * k) / n, y0 + ((y1 - y0) * k) / n, PTS_LOOK)) return false;
+    for (let k = 0; k <= n; k++) if (hits(x0 + ((x1 - x0) * k) / n, y0 + ((y1 - y0) * k) / n, g.bp.pts.look)) return false;
     return true;
   };
   const endMode = (g) => {
@@ -513,16 +510,16 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     g.wpT = 0;
     g.atRetreat = false;
   };
-  const gunsReady = (g) => g.crew.some((c) => c.role === 'gunner') && g.ports.some((pt) => !pt.dead);
+  const gunsReady = (g) => g.crew.some((c) => c.role === 'gunner') && g.ports.some((pt) => !pt.dead && pt.kind === 'cannon');
   // A pass along our ship: climb (or dive) to one side, turn, then run across firing from the stern as she goes by.
   const startStrafe = (g) => {
-    if (!gunsReady(g) || g.paraDue || g.t - g.lastStrafe < G.STRAFE_CD || Math.random() > G.STRAFE_CHANCE) return false;
+    if (!gunsReady(g) || g.paraDue || g.t - g.lastStrafe < G.STRAFE_CD * g.cap.strafeCd || Math.random() > g.cap.strafeChance) return false;
     const heights = Math.random() < 0.5 ? [G.STRAFE_Y_HI, G.STRAFE_Y_LO] : [G.STRAFE_Y_LO, G.STRAFE_Y_HI];
     const leftward = g.dx > -600; // she is ahead of us: run back along our side toward the stern (else the other way)
     for (const dy of heights) {
       const entry = { dx: leftward ? Math.max(g.dx, 1400) : Math.min(g.dx, -3000), dy, close: G.STRAFE_CLOSE };
       const exit = { dx: leftward ? -3300 : 2600, dy, close: G.STRAFE_CLOSE, pass: 300 };
-      if (hits(entry.dx, entry.dy, PTS_SPOT) || hits(exit.dx, exit.dy, PTS_SPOT)) continue;
+      if (hits(entry.dx, entry.dy, g.bp.pts.spot) || hits(exit.dx, exit.dy, g.bp.pts.spot)) continue;
       if (!runFree(g, g.dx, g.dy, entry.dx, entry.dy) || !runFree(g, entry.dx, entry.dy, exit.dx, exit.dy)) continue;
       g.mode = 'strafe';
       g.wp = [entry, exit];
@@ -540,7 +537,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     const sd = g.dx < -600 ? -1 : 1; // (away from us, out the nearer end: never across our ship)
     const spots = [[sd * G.RETREAT_DX, -300], [sd * G.RETREAT_DX, 300], [sd * G.RETREAT_DX, -800], [sd * 3000, -1000], [sd * 3000, 900], [sd * G.RETREAT_DX, 800]];
     for (const [dx, dy] of spots) {
-      if (hits(dx, dy, PTS_SPOT) || !runFree(g, g.dx, g.dy, dx, dy)) continue;
+      if (hits(dx, dy, g.bp.pts.spot) || !runFree(g, g.dx, g.dy, dx, dy)) continue;
       g.mode = 'retreat';
       g.wp = [{ dx, dy, close: G.CLOSE_PASS, pass: 250, stay: true }];
       g.wpT = 0;
@@ -580,11 +577,11 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       g.planT = G.PLAN_EVERY;
       refreshFree(g);
       if (g.mode === 'station') {
-        const stale = g.temp ? !freeAt(g.temp.dx, g.temp.dy) || g.t - g.tempT > 2 : g.node ? !g.free[g.node] || g.route.some((n) => !g.free[n]) : true;
+        const stale = g.temp ? !freeAt(g, g.temp.dx, g.temp.dy) || g.t - g.tempT > 2 : g.node ? !g.free[g.node] || g.route.some((n) => !g.free[n]) : true;
         const wrongSpot = need && g.node !== 'bow' && !(g.temp && g.free.bow === false);
         const moveOn = g.arrived && g.stayT <= 0;
         const dropNow = g.paraDue && g.node && !G.NODES[g.node].drop && g.arrived && g.t - g.arrT > 2;
-        if (g.phase === 'hunt' && !contact && g.hp < G.RETREAT_AT * g.max && g.retreats < G.RETREATS && startRetreat(g)) {
+        if (g.phase === 'hunt' && !contact && g.hp < g.cap.retreatAt * g.max && g.retreats < g.cap.retreats && startRetreat(g)) {
           // (pulling out to repair)
         } else if (moveOn && g.phase === 'hunt' && !contact && !need && startStrafe(g)) {
           // (strafing run)
@@ -623,7 +620,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       let back = 0;
       let fwd = 0;
       let deep = null;
-      for (const [px, py] of PTS) {
+      for (const [px, py] of g.bp.pts.col) {
         const mx = px + g.dx;
         const my = py + g.dy - alt;
         if (!inRock(state, mx, my)) continue;
@@ -651,14 +648,14 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       g.dx += fwd - back;
       g.dy += down - up;
     }
-    if (buried && !first) first = { up: 0, down: 0, back: 0, fwd: 0, deep: { x: GS.x0 + g.dx, y: GS.deckY + g.dy } };
+    if (buried && !first) first = { up: 0, down: 0, back: 0, fwd: 0, deep: { x: g.bp.x0 + g.dx, y: g.bp.hullTop + g.dy } };
     if (!first) {
       // Clear: remember where (in the world) she was last fine.
       g.okW = { x: g.dx + dist, y: g.dy - alt };
       return false;
     }
     // Still inside rock after all that (squeezed between walls)? Go back to the last clear spot.
-    if (buried || hits(g.dx, g.dy, PTS)) {
+    if (buried || hits(g.dx, g.dy, g.bp.pts.col)) {
       if (g.okW && Math.abs(g.okW.x - dist - g.dx) < 1500 && Math.abs(g.okW.y + alt - g.dy) < 1500) {
         g.dx = g.okW.x - dist;
         g.dy = g.okW.y + alt;
@@ -699,8 +696,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       for (const p of Object.values(state.players)) {
         if (!p.onGunship || p.fall || p.swing) continue;
         let d = dir;
-        if (p.x < GS.x0 + 140) d = 1;
-        else if (p.x > GS.x1 - 140) d = -1;
+        if (p.x < g.bp.x0 + 140) d = 1;
+        else if (p.x > g.bp.x1 - 140) d = -1;
         p.vx = (p.vx || 0) + d * G.SCRAPE_SHOVE;
       }
     }
@@ -710,10 +707,10 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
   // ---- Paratroopers ----
   const dropParas = (g) => {
     const crew = Object.keys(state.players).length;
-    const n = clamp(1 + Math.floor(crew / 6) + (lap() >= 3 ? 1 : 0), 1, 3);
+    const n = clamp(1 + Math.floor(crew / 6) + (lap() >= 3 ? 1 : 0) + (g.bp.special === 'paras' ? GP.PARAS.EXTRA : 0), 1, 4);
     const alt = state.ship.alt;
-    const sx = mx(g, GS.x0 + 80) + g.dx;
-    const sy = GS.deckY + g.dy - 110;
+    const sx = mx(g, g.bp.x0 + 80) + g.dx;
+    const sy = deckYAt(g, mx(g, g.bp.x0 + 80)) + g.dy - 110;
     const fall = (P[CAT].y - sy) / G.PARA_FALL; // seconds to come down to our catwalk
     const aim = clamp(sx, P[CAT].x0 + 80, P[CAT].x1 - 80);
     if (fall < 1.5 || Math.abs(sx - aim) > G.PARA_STEER * fall * 0.7) return false; // can't reach us from here
@@ -772,7 +769,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     const out = !player.onGunship;
     // The swing path (a dip between the decks) must be clear of rock.
     const a = out ? { x: player.x, y: player.y } : { x: player.x + g.dx, y: player.y + g.dy };
-    const b = out ? { x: landX(g) + g.dx, y: GS.deckY + g.dy } : { x: MAIN_X1 - 30, y: P[MAIN].y };
+    const b = out ? { x: landX(g) + g.dx, y: landY(g) + g.dy } : { x: MAIN_X1 - 30, y: P[MAIN].y };
     for (let k = 1; k < 10; k++) {
       const u = k / 10;
       if (inRock(state, a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u + G.SWING_DIP * Math.sin(Math.PI * u) - state.ship.alt)) {
@@ -805,7 +802,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     const k = Math.min(1, s.t);
     const e = k * k * (3 - 2 * k);
     // The far end follows her as she moves.
-    const end = s.out ? { x: landX(g) + g.dx, y: GS.deckY + g.dy } : { x: MAIN_X1 - 30, y: P[MAIN].y };
+    const end = s.out ? { x: landX(g) + g.dx, y: landY(g) + g.dy } : { x: MAIN_X1 - 30, y: P[MAIN].y };
     p.x = s.from.x + (end.x - s.from.x) * e;
     p.y = s.from.y + (end.y - s.from.y) * e + G.SWING_DIP * Math.sin(Math.PI * k) - 40 * Math.sin(Math.PI * Math.min(1, k * 4)); // a hop off, then the dip
     p.face = end.x > s.from.x ? 1 : -1;
@@ -815,7 +812,9 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       if (s.out) {
         p.onGunship = true;
         p.x = landX(g);
-        p.y = GS.deckY;
+        p.y = landY(g);
+        p.gd = landSeg(g);
+        p.ladT = 0;
         p.d = MAIN;
         stomp(p);
       } else {
@@ -826,32 +825,70 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     }
   };
   // Walking about on her deck (called by the simulation instead of the ship's walker). Same feel
-  // as nav.js moveWalker: momentum, no ladders. Walking off either end = falling.
+  // as nav.js moveWalker: momentum. Her decks are steps along her length (p.gd = which one): the step is a wall, and
+  // pushing the stick up/down at it climbs the ladder to the next deck. Walking off either end = falling.
   const walk = (p, jx, jy, dt, speed) => {
-    if (!state.gunship) return dropOff(p);
+    const g = state.gunship;
+    if (!g) return dropOff(p);
     p.conn = null;
     p.climb = false;
+    const ds = decksOf(g);
+    let k = clamp(p.gd || 0, 0, ds.length - 1);
     const want = jx * speed;
     const v = p.vx || 0;
     const speedingUp = Math.abs(want) > Math.abs(v) && Math.sign(want) === Math.sign(v || want);
     const rate = (speedingUp ? config.MOVE.ACCEL : config.MOVE.BRAKE) * dt;
     p.vx = v + clamp(want - v, -rate, rate);
     p.x += p.vx * dt;
-    p.y = GS.deckY;
     if (Math.abs(jx) > 0.15) p.face = jx < 0 ? -1 : 1;
-    if (p.x < GS.x0 - 45 || p.x > GS.x1 + 45) {
+    // The ladder: stick up/down beside a step moves you to the deck on the other side.
+    p.ladT = Math.max(0, (p.ladT || 0) - dt);
+    if (Math.abs(jy) > 0.6 && p.ladT <= 0 && !p.air) {
+      for (const dir of [-1, 1]) {
+        const j = k + dir;
+        if (j < 0 || j >= ds.length) continue;
+        const xb = dir > 0 ? ds[k].x1 : ds[k].x0;
+        const higher = ds[j].y < ds[k].y;
+        if (Math.abs(p.x - xb) < 55 && (jy < 0) === higher) {
+          p.gd = k = j;
+          p.x = xb + dir * 26;
+          p.vx = 0;
+          p.ladT = 0.4;
+          S.ladders++;
+          puff(p.x + g.dx, ds[j].y + g.dy - 20 - state.ship.alt, '#d9cbb0', 4);
+          break;
+        }
+      }
+    }
+    p.gd = k;
+    // Stand on this deck (a quick climb when it just changed).
+    const ty = ds[k].y;
+    p.y = p.y == null || Math.abs(ty - p.y) > 400 ? ty : p.y + clamp(ty - p.y, -900 * dt, 900 * dt);
+    // Steps are walls; the two ends of her are the edge.
+    if (k > 0) p.x = Math.max(p.x, ds[k].x0);
+    else if (p.x < ds[k].x0 - 45) {
+      dropOff(p);
+      warn('OFF HER DECK! SHE\'S GONE BY - YOU FALL!', 1.5);
+      return;
+    }
+    if (k < ds.length - 1) p.x = Math.min(p.x, ds[k].x1);
+    else if (p.x > ds[k].x1 + 45) {
       dropOff(p);
       warn('OFF HER DECK! SHE\'S GONE BY - YOU FALL!', 1.5);
     }
   };
-  // A player in free flight (jumped or thrown) lands on her deck: from then on she carries them.
-  const land = (p) => {
+  // A player in free flight (jumped or thrown) lands on one of her decks (k = which, left to right): from then on she carries them.
+  const land = (p, k = 0) => {
     const g = state.gunship;
     if (!g) return;
+    const ds = decksOf(g);
+    k = clamp(k, 0, ds.length - 1);
     p.onGunship = true;
     p.d = MAIN;
-    p.x -= g.dx;
-    p.y = GS.deckY;
+    p.gd = k;
+    p.ladT = 0;
+    p.x = clamp(p.x - g.dx, ds[k].x0 - (k === 0 ? 30 : 0), ds[k].x1 + (k === ds.length - 1 ? 30 : 0));
+    p.y = ds[k].y;
     p.air = false;
     p.fly = false;
     p.jz = 0;
@@ -865,7 +902,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     state.rings && state.rings.push({ x: p.x + g.dx, y: p.y + g.dy - 20 - state.ship.alt, t: 0.3, max: 0.3, r: G.STOMP_RANGE, color: '#ffffff' });
     state.sfxQ && state.sfxQ.push(['hit', true]);
     for (const c of [...g.crew]) {
-      if (Math.abs(c.x - p.x) > G.STOMP_RANGE) continue;
+      if (Math.abs(c.x - p.x) > G.STOMP_RANGE || Math.abs(c.y - p.y) > 60) continue;
       c.wind = 0;
       c.cd = 1.2;
       c.x += g.m > 0 ? 150 : -150; // (shoved away from the stern end, where you land)
@@ -901,8 +938,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     g.sink = 0;
     setRope(false);
     dropAll();
-    for (let k = 0; k < 8; k++) puff(rand(GS.x0, GS.x1) + g.dx, rand(300, 760) + g.dy - state.ship.alt, k % 2 ? '#ff5a1f' : '#555', 24);
-    pop(state, (GS.x0 + GS.x1) / 2 + g.dx, 300 + g.dy - state.ship.alt, 'boss', '#ff5a1f', 1.6);
+    for (let k = 0; k < 8; k++) puff(rand(g.bp.x0, g.bp.x1) + g.dx, rand(g.bp.bagTop + 80, g.bp.hullBot) + g.dy - state.ship.alt, k % 2 ? '#ff5a1f' : '#555', 24);
+    pop(state, g.bp.cx + g.dx, g.bp.bagTop + 80 + g.dy - state.ship.alt, 'boss', '#ff5a1f', 1.6);
     state.ship.shake = Math.max(state.ship.shake, 0.5);
     state.kills += 1 + g.crew.length;
     if (byCrew) {
@@ -925,6 +962,15 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     g.intent = 'flee';
     g.mode = 'station';
     warn(text, secs);
+  };
+
+  // She turns to latching on (a boarder captain, a harpoon, or her guns being down).
+  const startLatch = (g, text) => {
+    g.phase = 'latch';
+    g.latchCd = g.bp.special === 'ramp' ? GP.RAMP.LATCH_CD : 1;
+    g.paraDue = false;
+    g.node = null; // (plan() will now send her alongside)
+    warn(text, 3.5);
   };
 
   const update = (dt) => {
@@ -972,15 +1018,22 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     // What her captain is up to (shown on her mast pennant).
     g.intent = g.phase === 'latch' ? 'latch' : g.phase === 'approach' ? 'approach' : g.mode === 'retreat' ? 'retreat' : g.mode === 'strafe' ? 'strafe' : g.paraDue || (g.node && G.NODES[g.node].drop && g.arrived) ? 'climb' : 'attack';
     // Badly hurt with her one retreat used up: she runs for it.
-    if (g.phase === 'hunt' && !contact && g.hp < G.FLEE_AT * g.max && g.retreats >= G.RETREATS) {
+    if (g.phase === 'hunt' && !contact && g.hp < g.cap.fleeAt * g.max && g.retreats >= g.cap.retreats) {
       S.flees++;
       leave('THE GUNSHIP IS BADLY HIT AND FLEES!', 2.5);
       return;
     }
     // Her stern guns (which swing round to face us when she turns) track our hull.
-    const gpx = mx(g, GS.x0 - 30) + g.dx;
-    g.aim = Math.atan2(640 - (GS.deckY + g.dy), 800 - gpx);
-    g.dist = Math.hypot(gpx - 800, GS.deckY + g.dy - 640); // from her guns to our hull
+    const bp = g.bp;
+    const alt = state.ship.alt;
+    const cp = portPos(g, firstCannon(g));
+    const gpx = cp.x + g.dx;
+    const midY = bp.decks[0].y + 20; // the stern deck level (her ports are stacked at the stern end)
+    g.aim = Math.atan2(640 - (midY + g.dy), 800 - gpx);
+    g.dist = Math.hypot(gpx - 800, midY + g.dy - 640); // from her guns to our hull
+    g.hangarOpen = Math.max(0, g.hangarOpen - dt);
+    g.harpFlash = Math.max(0, g.harpFlash - dt);
+    if (bp.special === 'ramp') g.ramp += ((g.phase === 'latch' ? (g.rope ? 1 : 0.35) : 0) - g.ramp) * Math.min(1, dt * 2.5);
     if (g.phase === 'approach') {
       // Engaged once she is close to where she is heading.
       if (!tgt.hold && Math.abs(g.dx - tgt.dx) < G.DOCK_DX && Math.abs(g.dy - tgt.dy) < G.DOCK_DY) g.phase = 'hunt';
@@ -1008,24 +1061,30 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       leave('NOBODY AT HER HELM - THE GUNSHIP DRIFTS AWAY', 2.5);
       return;
     }
+    const steamF = 0.5 + 0.5 * clamp(g.steam / 0.4, 0, 1); // (a cold boiler slows her reloads)
+    const missFor = (dist) => clamp(G.MISS_BASE + Math.max(0, dist - 1500) / G.MISS_DX, 0, G.MISS_MAX);
+    const lineClear = (px, py) => {
+      for (let s = 1; s <= 8; s++) if (inRock(state, px + ((800 - px) * s) / 9, py + ((640 - py) * s) / 9 - alt)) return false;
+      return true;
+    };
     // Broadsides at our hull (with a glow first) - only while her gunners are at the guns. They
     // aim from wherever she is now, so if you pull away from her (above, below, far off) more miss.
-    const alive = g.ports.map((pt, k) => k).filter((k) => !g.ports[k].dead);
+    const alive = g.ports.map((pt, k) => k).filter((k) => !g.ports[k].dead && g.ports[k].kind === 'cannon');
     // Her gunners fire from the gun ports that face us, when she is on a firing spot, in range, with a clear line.
     let canFire = g.phase === 'hunt' && gunners > 0 && alive.length > 0 && !g.charge && !state.ship.down && inPos && g.dist < G.FIRE_RANGE;
     if (canFire) {
-      const px = gpx;
-      const py = GS.deckY - 40 + 70 + g.dy;
-      for (let s = 1; s <= 8 && canFire; s++) if (inRock(state, px + ((800 - px) * s) / 9, py + ((640 - py) * s) / 9 - state.ship.alt)) canFire = false; // rock in the way
+      const pp = portPos(g, alive[0]);
+      canFire = lineClear(pp.x + g.dx, pp.y + g.dy);
     }
-    if (canFire && (g.fireCd -= dt * (0.5 + 0.5 * clamp(g.steam / 0.4, 0, 1))) <= 0) { // (a cold boiler slows her reloads)
-      g.fireCd = (g.mode === 'strafe' ? G.STRAFE_FIRE : G.FIRE_EVERY) * rand(0.85, 1.2);
-      const missChance = clamp(G.MISS_BASE + Math.max(0, g.dist - 1500) / G.MISS_DX, 0, G.MISS_MAX);
+    if (canFire && (g.fireCd -= dt * steamF) <= 0) {
+      g.fireCd = (g.mode === 'strafe' ? G.STRAFE_FIRE : G.FIRE_EVERY) * g.cap.fireMul * rand(0.85, 1.2);
+      const missChance = missFor(g.dist);
       for (let i = 0; i < Math.min(G.SHOTS, gunners + 1, alive.length); i++) {
-        const fx = gpx;
-        const fy = GS.deckY - 40 + alive[i] * 70 + g.dy - state.ship.alt;
+        const pp = portPos(g, alive[i]);
+        const fx = pp.x + g.dx;
+        const fy = pp.y + g.dy - alt;
         const tx = rand(700, 1500);
-        const ty = rand(480, 820) - state.ship.alt;
+        const ty = rand(480, 820) - alt;
         const d = Math.hypot(tx - fx, ty - fy) || 1;
         state.bullets.push({ x: fx, y: fy, vx: ((tx - fx) / d) * 620, vy: ((ty - fy) / d) * 620, life: 3, miss: Math.random() < missChance });
         state.flashes && state.flashes.push({ x: fx, y: fy, ang: Math.atan2(ty - fy, tx - fx), t: 0.12, color: '#ffcf80', size: 1.6 });
@@ -1035,18 +1094,78 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     }
     if (!canFire) g.fireCd = Math.max(g.fireCd, g.mode === 'strafe' ? 0.8 : 1.5); // a fresh gunner / a new spot needs a moment
     g.warnFire = canFire && g.fireCd < 1;
-    // Dead gun ports smoke.
+    // Her extra weapons (top turret, deck mortar, nose flak gun) fire on their own timers, whichever way she faces.
+    const heavyOk = g.phase === 'hunt' && gunners > 0 && !g.charge && !state.ship.down;
     g.ports.forEach((pt, k) => {
-      if (pt.dead && Math.random() < dt * 5) puff(gpx + (Math.random() - 0.5) * 30, GS.deckY - 40 + k * 70 + g.dy - state.ship.alt, '#555', 1);
+      if (pt.kind === 'cannon' || pt.dead) return;
+      const pp = portPos(g, k);
+      const fx = pp.x + g.dx;
+      const fy = pp.y + g.dy - alt;
+      const d = Math.hypot(fx - 800, pp.y + g.dy - 640);
+      const C = pt.kind === 'turret' ? GP.TURRET_GUN : pt.kind === 'mortar' ? GP.MORTAR_GUN : GP.FLAK_GUN;
+      const ready = heavyOk && d < C.RANGE && (pt.kind === 'mortar' || lineClear(fx, pp.y + g.dy));
+      pt.glow = ready && pt.cd < 0.8;
+      if (!ready) {
+        pt.cd = Math.max(pt.cd, 1.2);
+        return;
+      }
+      if ((pt.cd -= dt * steamF) > 0) return;
+      pt.cd = C.EVERY * g.cap.fireMul * rand(0.85, 1.2);
+      const missChance = clamp(missFor(d) + (C.MISS - G.MISS_BASE), 0, G.MISS_MAX);
+      const tx = rand(700, 1500);
+      const ty = rand(480, 820) - alt;
+      if (pt.kind === 'mortar') {
+        const T = rand(C.TIME[0], C.TIME[1]);
+        state.bullets.push({ x: fx, y: fy, vx: (tx - fx) / T, vy: (ty - fy) / T - 0.5 * C.GRAVITY * T, ay: C.GRAVITY, life: T + 0.05, miss: Math.random() < missChance, dmg: C.DAMAGE, mortar: true });
+        S.mortars++;
+        state.flashes && state.flashes.push({ x: fx, y: fy - 20, ang: -Math.PI / 2, t: 0.15, color: '#ffcf80', size: 1.8 });
+      } else {
+        const base = Math.atan2(ty - fy, tx - fx);
+        const nShots = pt.kind === 'flak' ? 3 : 1;
+        const speed = pt.kind === 'flak' ? C.SPEED : C.SPEED;
+        for (let i = 0; i < nShots; i++) {
+          const a = base + (nShots > 1 ? (i - 1) * C.SPREAD : 0);
+          state.bullets.push({ x: fx, y: fy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: 3.2, miss: Math.random() < missChance, flak: pt.kind === 'flak' });
+        }
+        if (pt.kind === 'flak') S.flaks++;
+        else S.turretShots++;
+        state.flashes && state.flashes.push({ x: fx, y: fy, ang: base, t: 0.12, color: '#ffcf80', size: 1.6 });
+      }
+      state.sfxQ && state.sfxQ.push(['cannon']);
     });
-    // Guns all down, or no gunners left: she gives up the broadside duel and latches on.
-    if (g.phase === 'hunt' && (!alive.length || !g.crew.some((c) => c.role === 'gunner'))) {
-      g.phase = 'latch';
-      g.latchCd = 1;
-      g.paraDue = false;
-      g.node = null; // (plan() will now send her alongside)
-      warn('HER GUNS ARE DOWN! SHE\'S COMING IN TO LATCH ON!', 3.5);
+    // Dead weapons smoke.
+    g.ports.forEach((pt, k) => {
+      if (!pt.dead || Math.random() >= dt * 5) return;
+      const pp = portPos(g, k);
+      puff(pp.x + g.dx + (Math.random() - 0.5) * 30, pp.y + g.dy - alt, '#555', 1);
+    });
+    // Captain's moves: a BOARDER latches on after a while, a HARPOON gun fires her grapple from range.
+    if (g.phase === 'hunt' && g.mode !== 'retreat') g.huntT += dt;
+    if (g.phase === 'hunt' && g.cap.latchAfter && g.huntT > g.cap.latchAfter && !g.charge && !g.rope) startLatch(g, 'HER BOARDERS ARE COMING IN TO LATCH ON!');
+    if (g.phase === 'hunt' && bp.special === 'harpoon' && !g.rope && !g.charge && g.mode === 'station' && !g.turn && !aboardAny() && (g.harpT -= dt) <= 0) {
+      if (g.gap <= GP.HARPOON.RANGE) {
+        g.harpT = GP.HARPOON.EVERY;
+        g.harpFlash = 0.5;
+        S.harpoons++;
+        startLatch(g, 'HARPOON! SHE FIRES HER GRAPPLE - CUT THE LINE AT THE BOW OR BOARD HER!');
+        setRope(true);
+        g.herRope = true;
+        S.latches++;
+        state.sfxQ && state.sfxQ.push(['swing']);
+      } else g.harpT = 2;
     }
+    // A bat hangar launches a small swarm now and then.
+    if (g.phase === 'hunt' && bp.special === 'hangar' && !g.charge && !state.ship.down && spawnBats && (g.hangarT -= dt) <= 0) {
+      if (state.bats.filter((b) => !b.dead && b.hp > 0).length >= GP.HANGAR.MAX_BATS) g.hangarT = 4;
+      else {
+        spawnBats({ x: mx(g, bp.hangar.x) + g.dx, y: bp.hangar.y + g.dy - alt }, GP.HANGAR.BATS + Math.floor(lap() / 3));
+        S.bats++;
+        g.hangarOpen = 1.6;
+        g.hangarT = GP.HANGAR.EVERY * rand(0.85, 1.2);
+      }
+    }
+    // Guns all down, or no gunners left: she gives up the broadside duel and latches on.
+    if (g.phase === 'hunt' && (!g.ports.some((q) => !q.dead) || !g.crew.some((c) => c.role === 'gunner'))) startLatch(g, 'HER GUNS ARE DOWN! SHE\'S COMING IN TO LATCH ON!');
     // Paratroopers: now and then, from a high spot, raiders jump from her deck and parachute down onto us.
     if (g.phase === 'hunt' && !g.rope && (g.paraT -= dt) <= 0) {
       g.paraDue = true;
@@ -1056,7 +1175,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
         else if (dropParas(g)) {
           S.climbs++;
           g.paraDue = false;
-          g.paraT = rand(G.PARA_EVERY_MIN, G.PARA_EVERY_MAX);
+          g.paraT = rand(G.PARA_EVERY_MIN, G.PARA_EVERY_MAX) * (g.bp.special === 'paras' ? GP.PARAS.EVERY_MUL : 1);
           g.stayT = Math.min(g.stayT, 3);
         } else g.paraT = 2;
       }
@@ -1064,7 +1183,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     // Latching on: close in alongside and fire her own grapple at our bow...
     if (g.phase === 'latch') {
       g.latchCd = Math.max(0, g.latchCd - dt);
-      if (!g.rope && g.latchCd <= 0 && g.gap <= G.LATCH_RANGE) {
+      const latchRange = G.LATCH_RANGE * (g.bp.special === 'ramp' ? GP.RAMP.LATCH_RANGE : g.bp.special === 'harpoon' ? GP.HARPOON.LATCH_RANGE : 1);
+      if (!g.rope && g.latchCd <= 0 && g.gap <= latchRange) {
         setRope(true);
         g.herRope = true;
         S.latches++;
@@ -1072,7 +1192,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
         warn('SHE FIRES HER GRAPPLE! CUT THE LINE AT THE BOW - OR BOARD HER!', 3.5);
       }
       // ...then her guards (and deckhands) cross the rope to board us.
-      if (g.rope && (g.sendT += dt) >= G.LATCH_SEND_EVERY) {
+      if (g.rope && (g.sendT += dt) >= G.LATCH_SEND_EVERY * (g.bp.special === 'ramp' ? GP.RAMP.SEND_MUL : 1)) {
         g.sendT = 0;
         const guard = g.crew.find((c) => c.role === 'guard');
         if (guard || g.extra > 0) {
@@ -1112,7 +1232,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
         for (const e of g.eng) e.hp = Math.min(1, e.hp + 0.04 * dt);
         if ((g.hammerT -= dt) <= 0) {
           g.hammerT = rand(0.25, 0.5);
-          puff(rand(GS.x0 + 100, GS.x1 - 100) + g.dx, GS.deckY + 60 + g.dy - state.ship.alt, '#d8c79a', 3);
+          puff(rand(g.bp.x0 + 100, g.bp.x1 - 100) + g.dx, g.bp.hullBot - 50 + g.dy - state.ship.alt, '#d8c79a', 3);
         }
       }
       if (g.hp >= G.RETURN_AT * g.max || g.repT > G.RETREAT_MAX) {
@@ -1126,22 +1246,25 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       // Guards chase boarders anywhere; the others only fight back when someone's right on them.
       if (foe && Math.abs(foe.x - c.x) < (c.role === 'guard' ? 700 : 200)) {
         c.face = foe.x < c.x ? -1 : 1;
-        if (Math.abs(foe.x - c.x) > 60) c.x += c.face * G.CREW_SPEED * dt;
+        const sameLevel = Math.abs(foe.y - c.y) < 60; // (on another deck they walk over the step to get at you)
+        if (Math.abs(foe.x - c.x) > 60 || !sameLevel) c.x += c.face * G.CREW_SPEED * dt;
         else if (c.cd <= 0 && !c.wind) c.wind = 0.5; // wind up (a readable tell)
         if (c.wind && (c.wind -= dt) <= 0) {
           c.wind = 0;
           c.cd = 1.2;
-          if (Math.abs(foe.x - c.x) < 80) {
+          if (Math.abs(foe.x - c.x) < 80 && Math.abs(foe.y - c.y) < 60) {
             foe.ko = config.RAIDERS.KO_TIME * 0.5;
             foe.x += c.face * 120;
-            if (foe.x < GS.x0 - 20 || foe.x > GS.x1 + 20) dropOff(foe); // knocked off her deck!
+            const seg = decksOf(g)[clamp(foe.gd || 0, 0, decksOf(g).length - 1)];
+            if (foe.x < g.bp.x0 - 20 || foe.x > g.bp.x1 + 20) dropOff(foe); // knocked off her deck!
+            else foe.x = clamp(foe.x, seg.x0, seg.x1); // (a step between decks is a wall)
             puff(foe.x + g.dx, foe.y + g.dy - 60 - state.ship.alt, '#ffffff', 8);
             pop(state, foe.x + g.dx, foe.y + g.dy - 150 - state.ship.alt, 'raider', '#ff5a5a', 0.9);
           }
         }
       } else if (c === guards[0] && g.rope && g.phase === 'hunt' && !boarders.length && g.ropeT > 3) {
         // Head for the rope and hack at it.
-        const endX = mx(g, GS.x0 + 30); // (the stern end, where the line is)
+        const endX = mx(g, g.bp.x0 + 30); // (the stern end, where the line is)
         c.face = endX < c.x ? -1 : 1;
         if (Math.abs(c.x - endX) > 5) c.x += Math.sign(endX - c.x) * Math.min(Math.abs(endX - c.x), G.CREW_SPEED * dt);
         else if ((c.cutT += dt) > G.CUT_TIME) {
@@ -1151,7 +1274,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
       } else if (c.role === 'guard' && g.mode === 'retreat' && g.atRetreat) {
         // Patching the hull: walk to a spot on the deck and hammer.
         if (c.patchX == null || (c.patchT -= dt) <= 0) {
-          c.patchX = rand(GS.x0 + 150, GS.x1 - 150);
+          c.patchX = rand(g.bp.x0 + 150, g.bp.x1 - 150);
           c.patchT = rand(2, 4);
         }
         const d = c.patchX - c.x;
@@ -1165,17 +1288,22 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
         c.face = Math.abs(d) > 5 ? Math.sign(d) : c.role === 'gunner' ? -1 : c.face;
         c.x += Math.sign(d) * Math.min(Math.abs(d), G.CREW_SPEED * dt);
       }
-      c.x = Math.max(GS.x0 + 20, Math.min(GS.x1 - 20, c.x));
+      c.x = Math.max(g.bp.x0 + 20, Math.min(g.bp.x1 - 20, c.x));
+      c.y = deckYAt(g, c.x); // (they step up and down between her decks)
     }
     // Crew shells hit her hull and gasbag.
     for (const sh of state.shells) {
       if (sh.life <= 0) continue;
       const sy = sh.y + state.ship.alt - g.dy;
       const sx = sh.x - g.dx;
-      // A hit on a gun port wrecks the port (not the hull).
-      const portX = mx(g, GS.x0 - 30);
-      const k = g.ports.findIndex((pt, i) => !pt.dead && Math.hypot(sx - portX, sy - (GS.deckY - 40 + i * 70)) < G.PORT_RADIUS);
+      // A hit on a gun port (or turret, mortar, flak gun) wrecks it (not the hull).
+      const k = g.ports.findIndex((pt, i) => {
+        if (pt.dead) return false;
+        const pp = portPos(g, i);
+        return Math.hypot(sx - pp.x, sy - pp.y) < G.PORT_RADIUS;
+      });
       if (k >= 0) {
+        const pp = portPos(g, k);
         sh.life = 0;
         g.hit = 0.1;
         const pt = g.ports[k];
@@ -1184,22 +1312,22 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
         if (pt.hp <= 0) {
           pt.dead = true;
           S.portsDown++;
-          puff(portX + g.dx, GS.deckY - 40 + k * 70 + g.dy - state.ship.alt, '#ff5a1f', 16);
-          pop(state, portX + g.dx, GS.deckY - 90 + k * 70 + g.dy - state.ship.alt, 'kill', '#ffd23f', 1);
+          puff(pp.x + g.dx, pp.y + g.dy - state.ship.alt, '#ff5a1f', 16);
+          pop(state, pp.x + g.dx, pp.y - 50 + g.dy - state.ship.alt, 'kill', '#ffd23f', 1);
           const left = g.ports.filter((q) => !q.dead).length;
           if (left) warn('GUN PORT DOWN!', 2);
         }
         continue;
       }
-      const inHull = sx > GS.x0 - 75 && sx < GS.x1 + 75 && sy > 560 && sy < 780;
-      const inBag = Math.hypot((sx - (GS.x0 + GS.x1) / 2) / 660, (sy - 380) / 160) < 1;
+      const inHull = sx > g.bp.x0 - 75 && sx < g.bp.x1 + 75 && sy > g.bp.hullTop && sy < g.bp.hullBot + 28;
+      const inBag = g.bp.bags.some((b) => Math.hypot((sx - b.cx) / b.rx, (sy - b.cy) / b.ry) < 1);
       if (!inHull && !inBag) continue;
       sh.life = 0;
       g.hp -= config.GUNS.DAMAGE;
       g.hit = 0.15;
       if (inBag) g.gas = Math.max(0, g.gas - G.GAS_HIT); // holed gasbag: she sags
       if (Math.random() < G.ENGINE_HIT) {
-        const e = g.eng[Math.random() < 0.5 ? 0 : 1];
+        const e = g.eng[Math.floor(Math.random() * g.eng.length)];
         e.hp = Math.max(0, e.hp - G.ENGINE_DMG); // a hit rattles an engine
         puff(sh.x, sh.y, '#555', 3);
       }
@@ -1215,7 +1343,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
   const hitCrew = (player, sword, range) => {
     const g = state.gunship;
     if (!g || !engaged(g) || !player.onGunship) return false;
-    const c = g.crew.filter((q) => Math.abs(q.x - player.x) < range).sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0];
+    const c = g.crew.filter((q) => Math.abs(q.x - player.x) < range && Math.abs(q.y - player.y) < 60).sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0];
     if (!c) return false;
     c.wind = 0;
     c.x += (c.x > player.x ? 1 : -1) * (sword ? 90 : 60);
@@ -1236,8 +1364,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     const g = state.gunship;
     if (!g || !engaged(g) || player.d !== MAIN) return null;
     if (player.onGunship) {
-      if (g.rope && inSwingRange(g) && Math.abs(player.x - landX(g)) < 110) return { type: 'swing', label: 'Swing back!' };
-      if (!g.charge && Math.abs(player.x - boilerX(g)) < 70) return { type: 'sabotage', obj: g, hold: true, time: G.PLANT_TIME, label: 'Plant charge!' };
+      if (g.rope && inSwingRange(g) && Math.abs(player.x - landX(g)) < 110 && (player.gd || 0) === landSeg(g)) return { type: 'swing', label: 'Swing back!' };
+      if (!g.charge && Math.abs(player.x - boilerX(g)) < 70 && (player.gd || 0) === boilerSeg(g)) return { type: 'sabotage', obj: g, hold: true, time: G.PLANT_TIME * (g.bp.special === 'armoured' ? GP.ARMOURED.PLANT_MUL : 1), label: g.bp.special === 'armoured' ? 'Plant charge (armoured boiler)!' : 'Plant charge!' };
       return null;
     }
     if (player.x > MAIN_X1 - 45) {
@@ -1284,5 +1412,11 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType }
     leave('THE GUNSHIP BREAKS OFF!', 2);
     return true;
   };
-  return { update, settle, reset, retire, cutLine, interaction, fireHook, plant, hitCrew, swing, swingStep, walk, land, deckAt: (p) => deckAt(state.gunship, p.x, p.y), inSwingRange: () => !!state.gunship && inSwingRange(state.gunship), inHookRange: () => !!state.gunship && gap(state.gunship) <= G.HOOK_RANGE, spawn: () => !state.gunship && spawn() };
+  // Her landing surfaces for the air module (ship coordinates), one per deck (k = left to right); null when she isn't boardable.
+  const surface = (k) => {
+    const g = state.gunship;
+    if (!g || g.phase === 'sinking' || g.phase === 'leaving') return null;
+    return bpSurfaces(g)[k] || null;
+  };
+  return { update, settle, reset, retire, cutLine, interaction, fireHook, plant, hitCrew, swing, swingStep, walk, land, surface, deckAt: (p) => deckAt(state.gunship, p.x, p.y), inSwingRange: () => !!state.gunship && inSwingRange(state.gunship), inHookRange: () => !!state.gunship && gap(state.gunship) <= G.HOOK_RANGE, spawn: (opt) => !state.gunship && spawn(opt) };
 }

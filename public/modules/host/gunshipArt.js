@@ -2,7 +2,7 @@
 // in her own home frame, shifted to wherever she is now (g.dx, g.dy). Everything on her shows what her
 // systems are doing (see gunship.js):
 //   - GASBAG swells and sags with g.gas (slack wrinkles when it's low)
-//   - two ENGINES with propellers that spin with the throttle, cough when damaged and smoke when hurt
+//   - 1-3 ENGINE pods with propellers that spin with the throttle, cough when damaged and smoke when hurt
 //   - BOILER with a smokestack that feeds off g.steam (cold boiler = no smoke, dim fire)
 //   - HELM wheel that turns as the helmsman steers
 //   - she pitches nose-up / nose-down in climbs and dives
@@ -11,9 +11,12 @@
 //   - a PENNANT on a mast shows what her captain intends: crossed swords = attack, swords + dashes = strafing run,
 //     arrow back = withdrawing, hammer = repairing, hook = latching on, up-arrow + chute = climbing to drop
 //     paratroopers, chevrons = closing in. Far off on her way in she is drawn smaller (a shape on the horizon).
+// Every gunship is drawn from her blueprint (g.bp, see gunshipBlueprint.js): hull length, stepped decks with ladders, one or
+// two gasbags, engine pods, her guns (stern cannon ports, top turret, mortar, flak gun), special gear (bat hangar door, boarding
+// ramp, harpoon gun, armoured boiler, parachute rack), her name and flag colours, so no two look alike.
 // Also: her crew, the grapple rope to our bow (sagging when slack, straight when taut), the swing line,
 // and the charge ticking on her boiler. Style 2026: enemy oxblood + charcoal, thin outlines.
-import { GS, POSTS, ANCHOR, BOW, mx } from './gunship.js';
+import { BOW, mx } from './gunship.js';
 import { config } from '../../config.js';
 
 const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
@@ -84,10 +87,12 @@ export function createGunshipArt({ ctx, state, ink }) {
     }
   };
 
-  // The intent pennant on her mast (canonical frame, mast foot at (mx0, my0)).
+  // The intent pennant on her mast (canonical frame, mast foot at (mx0, my0)). The cloth and trim are HER flag colours
+  // (each gunship has her own); the cream badge shows what her captain intends.
   const drawPennant = (g, time, mx0, my0) => {
     const intent = g.intent || 'attack';
-    const col = { attack: '#a8443f', strafe: '#a8443f', climb: '#c9706a', latch: '#8a6444', retreat: '#4a4346', flee: '#4a4346', approach: '#4a4346' }[intent] || '#a8443f';
+    const flag = g.bp.flag;
+    const col = flag.a;
     const top = my0 - 100;
     ink();
     ctx.lineWidth = 3;
@@ -102,16 +107,49 @@ export function createGunshipArt({ ctx, state, ink }) {
     const fx = mx0 + 2;
     const fy = top;
     const wav = (u) => Math.sin(time * 9 - u * 5) * fl * u;
+    const cloth = () => {
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      for (let k = 1; k <= 8; k++) ctx.lineTo(fx + (W * k) / 8, fy + wav(k / 8));
+      ctx.lineTo(fx + W, fy + H * 0.5 + wav(1));
+      ctx.lineTo(fx + W - 18, fy + H * 0.5 + wav(1) * 0.7); // swallow-tail
+      ctx.lineTo(fx + W, fy + H + wav(1));
+      for (let k = 7; k >= 0; k--) ctx.lineTo(fx + (W * k) / 8, fy + H + wav(k / 8));
+      ctx.closePath();
+    };
     ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(fx, fy);
-    for (let k = 1; k <= 8; k++) ctx.lineTo(fx + (W * k) / 8, fy + wav(k / 8));
-    ctx.lineTo(fx + W, fy + H * 0.5 + wav(1));
-    ctx.lineTo(fx + W - 18, fy + H * 0.5 + wav(1) * 0.7); // swallow-tail
-    ctx.lineTo(fx + W, fy + H + wav(1));
-    for (let k = 7; k >= 0; k--) ctx.lineTo(fx + (W * k) / 8, fy + H + wav(k / 8));
-    ctx.closePath();
+    cloth();
     ctx.fill();
+    // her own pattern on the outer part of the cloth (clear of the badge)
+    ctx.save();
+    cloth();
+    ctx.clip();
+    ctx.fillStyle = flag.b;
+    const px0 = fx + W * 0.66;
+    const pw = W - W * 0.66;
+    if (flag.pattern === 'band') ctx.fillRect(px0, fy + H * 0.36, pw, H * 0.28);
+    else if (flag.pattern === 'diagonal') {
+      ctx.beginPath();
+      ctx.moveTo(px0, fy + H);
+      ctx.lineTo(fx + W, fy + H);
+      ctx.lineTo(fx + W, fy);
+      ctx.closePath();
+      ctx.fill();
+    } else if (flag.pattern === 'chevron') {
+      ctx.beginPath();
+      ctx.moveTo(px0, fy);
+      ctx.lineTo(px0 + pw * 0.6, fy + H / 2);
+      ctx.lineTo(px0, fy + H);
+      ctx.lineTo(px0 + pw * 0.35, fy + H);
+      ctx.lineTo(px0 + pw * 0.95, fy + H / 2);
+      ctx.lineTo(px0 + pw * 0.35, fy);
+      ctx.closePath();
+      ctx.fill();
+    } else if (flag.pattern === 'split') ctx.fillRect(px0 + pw * 0.4, fy - 4, pw, H + 8);
+    else for (let r = 0; r < 4; r++) for (let c = 0; c < 2; c++) if ((r + c) % 2 === 0) ctx.fillRect(px0 + c * pw * 0.5, fy + r * (H / 4), pw * 0.5, H / 4);
+    ctx.restore();
+    ctx.lineWidth = 3;
+    cloth();
     ctx.stroke();
     // the badge, in cream, near the hoist so it stays readable
     ctx.save();
@@ -213,7 +251,7 @@ export function createGunshipArt({ ctx, state, ink }) {
   return (time) => {
     drawParas(time);
     const g = state.gunship;
-    if (!g) return;
+    if (!g || !g.bp) return;
     try {
       drawGunship(g, time);
     } catch (e) {
@@ -221,16 +259,109 @@ export function createGunshipArt({ ctx, state, ink }) {
     }
   };
 
+  // Bottom edge of the gasbags at x (or null if no bag is there).
+  function bagBottomAt(bp, x) {
+    let best = null;
+    for (const b of bp.bags) {
+      const u = (x - b.cx) / b.rx;
+      if (Math.abs(u) >= 1) continue;
+      const yy = b.cy + b.ry * Math.sqrt(1 - u * u);
+      if (best === null || yy > best) best = yy;
+    }
+    return best;
+  }
+  function segAtC(bp, x) {
+    return bp.decks.find((d) => x <= d.x1) || bp.decks[bp.decks.length - 1];
+  }
+
+  // The emblem on a gasbag.
+  function drawEmblem(kind, flag, b, gas) {
+    const sc = Math.min(1, b.ry / 160) * (0.8 + 0.2 * gas);
+    ctx.save();
+    ctx.translate(b.cx, b.cy);
+    ctx.scale(sc, sc);
+    ink();
+    ctx.lineWidth = 3;
+    if (kind === 'horns') {
+      ctx.fillStyle = flag.a;
+      ctx.beginPath();
+      ctx.arc(0, 0, 60, 0, 7);
+      ctx.fill();
+      ctx.fillStyle = '#2b2622';
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(s * 22, 30);
+        ctx.quadraticCurveTo(s * 40, -30, s * 10, -40);
+        ctx.quadraticCurveTo(s * 18, -5, s * 6, 25);
+        ctx.fill();
+      }
+    } else if (kind === 'eye') {
+      ctx.fillStyle = CREAM;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 72, 42, 0, 0, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = flag.a;
+      ctx.beginPath();
+      ctx.arc(0, 0, 30, 0, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#2b2622';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 8, 22, 0, 0, 7);
+      ctx.fill();
+    } else if (kind === 'band') {
+      ctx.fillStyle = flag.a;
+      ctx.fillRect(-b.rx * 0.5 / sc, -26, (b.rx * 1.0) / sc, 52);
+      ctx.fillStyle = flag.b;
+      ctx.fillRect(-b.rx * 0.5 / sc, -26, (b.rx * 1.0) / sc, 9);
+      ctx.fillRect(-b.rx * 0.5 / sc, 17, (b.rx * 1.0) / sc, 9);
+    } else if (kind === 'chevrons') {
+      ctx.strokeStyle = flag.b;
+      ctx.lineWidth = 14;
+      ctx.lineJoin = 'round';
+      for (const o of [-52, 0, 52]) {
+        ctx.beginPath();
+        ctx.moveTo(o - 22, -42);
+        ctx.lineTo(o + 20, 0);
+        ctx.lineTo(o - 22, 42);
+        ctx.stroke();
+      }
+    } else {
+      // fangs: a toothy red mouth
+      ctx.fillStyle = flag.a;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 64, 40, 0, 0, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = CREAM;
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(s * 18 - 10, -26);
+        ctx.lineTo(s * 18, 14);
+        ctx.lineTo(s * 18 + 10, -26);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   function drawGunship(g, time) {
     const GC = config.GUNSHIP;
+    const bp = g.bp;
     const dx = num(g.dx);
     const dy = num(g.dy);
     const m = g.m < 0 ? -1 : 1;
     const sink = g.phase === 'sinking' ? g.sink * g.sink * 120 : 0;
-    const x0 = GS.x0;
-    const x1 = GS.x1;
-    const y = GS.deckY + sink;
-    const cx = (x0 + x1) / 2;
+    const x0 = bp.x0;
+    const x1 = bp.x1;
+    const cx = bp.cx;
+    const flag = bp.flag;
+    const topY = bp.hullTop;
+    const botY = bp.hullBot;
+    const pivotY = botY - 190; // (she pitches and shrinks about about her middle)
     const gas = clamp(num(g.gas, 0.5), 0, 1);
     const hpF = clamp(num(g.hp, 1) / Math.max(1, num(g.max, 1)), 0, 1);
     const tk = g.turn ? Math.min(1, num(g.turn.t) / GC.TURN_TIME) : 0;
@@ -239,12 +370,14 @@ export function createGunshipArt({ ctx, state, ink }) {
     const far = clamp(1 - (Math.abs(dx) - 2200) / 5000, 0.5, 1); // a small shape on the horizon until she is close
     const thr = num(g.thr);
     const steam = clamp(num(g.steam, 0.8), 0, 1);
+    const crewAboard = Object.values(state.players).some((p) => p.onGunship);
 
     // The rope and swing line are drawn in ship coordinates, after her own transform is undone.
     const drawRope = () => {
       if (!g.rope) return;
-      const ax = mx(g, ANCHOR.x) + dx;
-      const ay = ANCHOR.y + dy + sink;
+      const ap = bp.anchor;
+      const ax = mx(g, ap.x) + dx;
+      const ay = ap.y + dy + sink;
       const swingers = Object.values(state.players).filter((p) => p.swing);
       ctx.strokeStyle = '#d8c79a';
       ctx.lineWidth = 2.8;
@@ -271,6 +404,12 @@ export function createGunshipArt({ ctx, state, ink }) {
       ctx.fill();
     };
 
+    // A gun barrel pointing at our ship: angle in the canonical frame from a point.
+    const aimFrom = (wx, wy) => {
+      const a = Math.atan2(640 - (wy + dy), 800 - (mx(g, wx) + dx));
+      return m > 0 ? a : Math.PI - a;
+    };
+
     // ---- The airframe, drawn in the canonical frame (nose right, stern + guns + yardarm at the left) ----
     const drawAirframe = () => {
       ink();
@@ -281,7 +420,7 @@ export function createGunshipArt({ ctx, state, ink }) {
         ctx.strokeStyle = 'rgba(255,255,255,.22)';
         ctx.lineWidth = 3;
         for (let k = 0; k < 4; k++) {
-          const yy = 330 + k * 85 + Math.sin(time * 7 + k) * 8;
+          const yy = bp.bagTop + 110 + k * ((botY - bp.bagTop - 150) / 3) + Math.sin(time * 7 + k) * 8;
           const off = (time * 900 + k * 130) % 260;
           ctx.beginPath();
           ctx.moveTo(x0 - 120 - off, yy);
@@ -290,74 +429,71 @@ export function createGunshipArt({ ctx, state, ink }) {
         }
         ink();
       }
-      // Gasbag: swells with the gas, goes slack when it is low.
-      const rx = 660 * (0.97 + 0.03 * gas);
-      const ry = 160 * (0.78 + 0.22 * gas);
-      ctx.lineWidth = 3.2;
-      ctx.fillStyle = flash ? '#ffffff' : BAG;
-      ctx.beginPath();
-      ctx.ellipse(cx, 380, rx, ry, 0, 0, 7);
-      ctx.fill();
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,255,255,.12)';
-      ctx.lineWidth = 3;
-      for (let k = -4; k <= 4; k++) {
+      // Gasbags (one or two): swell with the gas, go slack when it is low.
+      bp.bags.forEach((b, bi) => {
+        const rx = b.rx * (0.97 + 0.03 * gas);
+        const ry = b.ry * (0.78 + 0.22 * gas);
+        ctx.lineWidth = 3.2;
+        ctx.fillStyle = flash ? '#ffffff' : bp.bagColor;
         ctx.beginPath();
-        ctx.ellipse(cx, 380, Math.abs(k) * 150 + 10, ry, 0, k < 0 ? Math.PI / 2 : -Math.PI / 2, k < 0 ? Math.PI * 1.5 : Math.PI / 2);
+        ctx.ellipse(b.cx, b.cy, rx, ry, 0, 0, 7);
+        ctx.fill();
         ctx.stroke();
-      }
-      if (gas < 0.45) {
-        // slack fabric: wrinkles across the lower bag
-        ctx.strokeStyle = 'rgba(0,0,0,.28)';
+        ctx.strokeStyle = 'rgba(255,255,255,.12)';
         ctx.lineWidth = 3;
-        for (let k = 0; k < 3; k++) {
+        const step = b.rx * 0.227;
+        for (let k = -4; k <= 4; k++) {
           ctx.beginPath();
-          ctx.moveTo(cx - 330 + k * 40, 380 + ry * 0.35);
-          ctx.quadraticCurveTo(cx - 100 + k * 120, 380 + ry * (0.7 - k * 0.1) + Math.sin(time * 2 + k) * 4, cx + 330 - k * 40, 380 + ry * 0.35);
+          ctx.ellipse(b.cx, b.cy, Math.abs(k) * step + 10, ry, 0, k < 0 ? Math.PI / 2 : -Math.PI / 2, k < 0 ? Math.PI * 1.5 : Math.PI / 2);
           ctx.stroke();
         }
-      }
-      // Tail fins at the stern end of the bag.
-      ink();
-      ctx.lineWidth = 3;
-      ctx.fillStyle = flash ? '#ffffff' : '#3a2a30';
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(cx - 520, 380 + s * (ry * 0.62));
-        ctx.lineTo(cx - 640, 380 + s * (ry * 0.2 + 26));
-        ctx.lineTo(cx - 600, 380 + s * (ry * 0.62));
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      }
-      // Horns emblem.
-      ctx.fillStyle = '#a8443f';
-      ctx.beginPath();
-      ctx.arc(cx, 380, 60 * (0.8 + 0.2 * gas), 0, 7);
-      ctx.fill();
-      ctx.fillStyle = '#2b2622';
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(cx + s * 22, 410);
-        ctx.quadraticCurveTo(cx + s * 40, 350, cx + s * 10, 340);
-        ctx.quadraticCurveTo(cx + s * 18, 375, cx + s * 6, 405);
-        ctx.fill();
-      }
-      // Gas leaking from a holed bag (hurt, or nobody tending it).
-      if (hpF < 0.5 || (g.posts && !g.posts.helm)) plume(time, cx + 120, 250, 3, 60, -40, 5, 16, '200,200,200', 0.35);
+        if (gas < 0.45) {
+          // slack fabric: wrinkles across the lower bag
+          ctx.strokeStyle = 'rgba(0,0,0,.28)';
+          ctx.lineWidth = 3;
+          const w = b.rx * 0.5;
+          for (let k = 0; k < 3; k++) {
+            ctx.beginPath();
+            ctx.moveTo(b.cx - w + k * 40, b.cy + ry * 0.35);
+            ctx.quadraticCurveTo(b.cx - w * 0.3 + k * 120 * (w / 330), b.cy + ry * (0.7 - k * 0.1) + Math.sin(time * 2 + k) * 4, b.cx + w - k * 40, b.cy + ry * 0.35);
+            ctx.stroke();
+          }
+        }
+        // Tail fins at the stern end of the stern bag.
+        if (bi === 0) {
+          ink();
+          ctx.lineWidth = 3;
+          ctx.fillStyle = flash ? '#ffffff' : '#3a2a30';
+          for (const s of [-1, 1]) {
+            ctx.beginPath();
+            ctx.moveTo(b.cx - 0.79 * b.rx, b.cy + s * (ry * 0.62));
+            ctx.lineTo(b.cx - 0.97 * b.rx, b.cy + s * (ry * 0.2 + 26));
+            ctx.lineTo(b.cx - 0.91 * b.rx, b.cy + s * (ry * 0.62));
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
+        drawEmblem(bp.emblem, flag, b, gas);
+        // Gas leaking from a holed bag (hurt, or nobody tending it).
+        if (bi === 0 && (hpF < 0.5 || (g.posts && !g.posts.helm))) plume(time, b.cx + 120, b.cy - ry + 20, 3, 60, -40, 5, 16, '200,200,200', 0.35);
+        ink();
+      });
       // Rigging.
       ink();
       ctx.lineWidth = 3;
       for (let k = 0; k < 5; k++) {
         const rxk = x0 + 100 + k * ((x1 - x0 - 200) / 4);
+        const yb = bagBottomAt(bp, rxk);
+        if (yb === null) continue;
         ctx.beginPath();
-        ctx.moveTo(rxk, 380 + ry * 0.9);
-        ctx.lineTo(rxk + 20 * m * 0, y - 80);
+        ctx.moveTo(rxk, yb - 8);
+        ctx.lineTo(rxk, segAtC(bp, rxk).y - 80);
         ctx.stroke();
       }
       // Yardarm sticking out toward us (the hookshot catches it), at the stern end.
-      const ax = ANCHOR.x;
-      const ay = ANCHOR.y + sink;
+      const ax = bp.anchor.x;
+      const ay = bp.anchor.y;
       ctx.lineWidth = 10;
       ctx.beginPath();
       ctx.moveTo(x0 + 120, ay + 40);
@@ -366,129 +502,370 @@ export function createGunshipArt({ ctx, state, ink }) {
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(ax, ay);
-      ctx.lineTo(x0 + 160, 520);
+      ctx.lineTo(x0 + 160, topY - 40);
       ctx.stroke();
-      // Hull (symmetrical).
+      // Hull: stepped along the top where her decks step, flat underneath.
+      const ds = bp.decks;
       ctx.lineWidth = 3.2;
-      ctx.fillStyle = flash ? '#ffffff' : HULL;
+      ctx.fillStyle = flash ? '#ffffff' : bp.hullColor;
       ctx.beginPath();
-      ctx.moveTo(x0 - 75, y - 80);
-      ctx.lineTo(x1 + 75, y - 80);
-      ctx.lineTo(x1 + 30, y + 112);
-      ctx.lineTo(x0 - 30, y + 112);
+      ctx.moveTo(x0 - 75, ds[0].y - 80);
+      ds.forEach((d, i) => {
+        ctx.lineTo(i === ds.length - 1 ? x1 + 75 : d.x1, d.y - 80);
+        if (i < ds.length - 1) ctx.lineTo(d.x1, ds[i + 1].y - 80);
+      });
+      ctx.lineTo(x1 + 30, botY);
+      ctx.lineTo(x0 - 30, botY);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+      // Flag-coloured stripe along the hull and the deck planks.
+      ctx.fillStyle = flag.b;
+      ctx.fillRect(x0 - 28, botY - 50, x1 - x0 + 56, 7);
       ctx.fillStyle = '#2a1616';
-      ctx.fillRect(x0 - 30, y - 6, x1 - x0 + 60, 16); // deck
-      ctx.strokeRect(x0 - 30, y - 6, x1 - x0 + 60, 16);
-      // Portholes along the hull and a plank seam.
+      ds.forEach((d, i) => {
+        const l = d.x0 - (i === 0 ? 30 : 0);
+        const r = d.x1 + (i === ds.length - 1 ? 30 : 0);
+        ctx.fillRect(l, d.y - 6, r - l, 16);
+        ctx.strokeRect(l, d.y - 6, r - l, 16);
+      });
+      // Portholes along the hull.
       ctx.fillStyle = '#e8c070';
       for (let k = 0; k < 9; k++) {
+        const hx = x0 + 60 + k * ((x1 - x0 - 120) / 8);
+        if (bp.special === 'hangar' && Math.abs(hx - bp.hangar.x) < 64) continue;
         ctx.beginPath();
-        ctx.arc(x0 + 60 + k * ((x1 - x0 - 120) / 8), y + 30, 8, 0, 7);
+        ctx.arc(hx, segAtC(bp, hx).y + 30, 8, 0, 7);
         ctx.fill();
         ctx.stroke();
       }
-      ctx.strokeStyle = 'rgba(0,0,0,.25)';
-      ctx.beginPath();
-      ctx.moveTo(x0 - 40, y + 70);
-      ctx.lineTo(x1 + 40, y + 70);
-      ctx.stroke();
       ink();
+      // Ladders at each step between her decks (with arrows while someone is aboard).
+      for (let i = 0; i < ds.length - 1; i++) {
+        const xb = ds[i].x1;
+        const lowSide = ds[i].y > ds[i + 1].y ? -1 : 1; // which side of the step is the lower deck
+        const yLow = Math.max(ds[i].y, ds[i + 1].y);
+        const yHigh = Math.min(ds[i].y, ds[i + 1].y);
+        const lx = xb + lowSide * 14;
+        ctx.strokeStyle = '#b98a5a';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(lx - 7, yLow - 4);
+        ctx.lineTo(lx - 7, yHigh - 70);
+        ctx.moveTo(lx + 7, yLow - 4);
+        ctx.lineTo(lx + 7, yHigh - 70);
+        ctx.stroke();
+        ctx.lineWidth = 3;
+        for (let yy = yLow - 18; yy > yHigh - 66; yy -= 20) {
+          ctx.beginPath();
+          ctx.moveTo(lx - 7, yy);
+          ctx.lineTo(lx + 7, yy);
+          ctx.stroke();
+        }
+        if (crewAboard) {
+          ctx.fillStyle = `rgba(255,210,63,${0.5 + 0.4 * Math.sin(time * 6)})`;
+          ctx.beginPath();
+          ctx.moveTo(lx, yLow - 120 - 8);
+          ctx.lineTo(lx - 12, yLow - 100);
+          ctx.lineTo(lx + 12, yLow - 100);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ink();
+      }
       // Hull damage: smoke, and fire when she is nearly done.
-      if (hpF < 0.65) plume(time, cx - 150, y - 80, 4, 120, -60, 8, 30, '40,40,40', 0.55);
+      if (hpF < 0.65) plume(time, cx - 150, topY, 4, 120, -60, 8, 30, '40,40,40', 0.55);
       if (hpF < 0.35) {
-        plume(time + 0.3, cx + 260, y - 80, 4, 130, -50, 8, 32, '30,30,30', 0.6);
+        plume(time + 0.3, cx + 260, topY, 4, 130, -50, 8, 32, '30,30,30', 0.6);
         ctx.fillStyle = `rgba(255,${120 + Math.sin(time * 20) * 40},40,.85)`;
         ctx.beginPath();
-        ctx.ellipse(cx + 260, y - 78, 22, 14 + Math.sin(time * 18) * 4, 0, Math.PI, 0);
+        ctx.ellipse(cx + 260, topY + 2, 22, 14 + Math.sin(time * 18) * 4, 0, Math.PI, 0);
         ctx.fill();
       }
-      // Gun ports on the stern end (they swing to the end facing us when she turns), glowing before a
-      // broadside. A wrecked port is a smoking, blackened hole with a bent barrel.
-      const px = x0 - 30;
+      // Her weapons. A wrecked one is a smoking, blackened hole with a bent barrel. Stern cannon ports swing to the
+      // end facing us when she turns, glowing before a broadside.
       const baseAng = Math.PI;
-      const aimW = typeof g.aim === 'number' ? g.aim : Math.PI;
-      const aimC = m > 0 ? aimW : Math.PI - aimW; // world angle to canonical frame (mirrored when facing left)
-      for (let k = 0; k < 3; k++) {
-        const py = y - 80 + 40 + k * 70;
-        const dead = g.ports && g.ports[k] && g.ports[k].dead;
-        const glow = g.warnFire && !dead ? 0.5 + 0.5 * Math.sin(time * 30) : 0;
-        ctx.fillStyle = dead ? '#120d0d' : glow ? `rgba(255,${80 + 100 * (1 - glow)},60,1)` : '#2b2622';
-        ctx.beginPath();
-        ctx.arc(px, py, 16, 0, 7);
-        ctx.fill();
-        ctx.stroke();
-        ctx.save();
-        ctx.translate(px, py);
-        const ang = dead ? 2.4 : baseAng + clamp(Math.atan2(Math.sin(aimC - baseAng), Math.cos(aimC - baseAng)), -1.5, 1.5);
-        ctx.rotate(ang);
-        ctx.fillStyle = dead ? '#2a2526' : '#4a4346';
-        ctx.fillRect(0, -8, dead ? 32 : 60, 16);
-        ctx.strokeRect(0, -8, dead ? 32 : 60, 16);
-        ctx.restore();
+      bp.weapons.forEach((w, k) => {
+        const pt = (g.ports && g.ports[k]) || {};
+        const dead = !!pt.dead;
+        const px = w.x;
+        const py = w.y;
+        if (w.kind === 'cannon') {
+          const aimC = aimFrom(px, py);
+          const glow = g.warnFire && !dead ? 0.5 + 0.5 * Math.sin(time * 30) : 0;
+          ctx.fillStyle = dead ? '#120d0d' : glow ? `rgba(255,${80 + 100 * (1 - glow)},60,1)` : '#2b2622';
+          ctx.beginPath();
+          ctx.arc(px, py, 16, 0, 7);
+          ctx.fill();
+          ctx.stroke();
+          ctx.save();
+          ctx.translate(px, py);
+          const ang = dead ? 2.4 : baseAng + clamp(Math.atan2(Math.sin(aimC - baseAng), Math.cos(aimC - baseAng)), -1.5, 1.5);
+          ctx.rotate(ang);
+          ctx.fillStyle = dead ? '#2a2526' : '#4a4346';
+          ctx.fillRect(0, -8, dead ? 32 : 60, 16);
+          ctx.strokeRect(0, -8, dead ? 32 : 60, 16);
+          ctx.restore();
+        } else if (w.kind === 'turret') {
+          // A rotating dome on top of the gasbag: it fires over her bag, whichever way she faces.
+          const ang = dead ? -0.6 : aimFrom(px, py);
+          ctx.fillStyle = '#3a3438';
+          ctx.fillRect(px - 20, py + 2, 40, 14);
+          ctx.strokeRect(px - 20, py + 2, 40, 14);
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(ang);
+          ctx.fillStyle = dead ? '#2a2526' : pt.glow ? '#e8884a' : '#4a4346';
+          ctx.fillRect(0, -6, dead ? 30 : 62, 12);
+          ctx.strokeRect(0, -6, dead ? 30 : 62, 12);
+          ctx.restore();
+          ctx.fillStyle = dead ? '#120d0d' : pt.glow ? '#ff6a40' : '#5a5a5a';
+          ctx.beginPath();
+          ctx.arc(px, py, 20, Math.PI, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else if (w.kind === 'mortar') {
+          // A fat tube on the deck pointing up and back toward us, with a base plate.
+          ctx.fillStyle = '#3a3438';
+          ctx.fillRect(px - 30, py + 18, 60, 12);
+          ctx.strokeRect(px - 30, py + 18, 60, 12);
+          ctx.save();
+          ctx.translate(px, py + 18);
+          ctx.rotate(dead ? -0.3 : -Math.PI / 2 - 0.35);
+          ctx.fillStyle = dead ? '#2a2526' : pt.glow ? '#e8884a' : '#4a4346';
+          ctx.fillRect(0, -13, dead ? 30 : 60, 26);
+          ctx.strokeRect(0, -13, dead ? 30 : 60, 26);
+          ctx.fillStyle = dead ? '#120d0d' : '#2b2622';
+          ctx.fillRect(dead ? 24 : 54, -10, 6, 20);
+          ctx.restore();
+        } else {
+          // Flak gun on the nose: a cluster of three thin barrels with a ring sight.
+          ctx.fillStyle = '#3a3438';
+          ctx.fillRect(px - 24, py + 8, 48, 20);
+          ctx.strokeRect(px - 24, py + 8, 48, 20);
+          ctx.save();
+          ctx.translate(px, py + 8);
+          ctx.rotate(dead ? -0.2 : -0.9);
+          ctx.fillStyle = dead ? '#2a2526' : pt.glow ? '#e8884a' : '#4a4346';
+          for (const o of [-9, 0, 9]) {
+            ctx.fillRect(0, o - 3.5, dead ? 24 : 54, 7);
+            ctx.strokeRect(0, o - 3.5, dead ? 24 : 54, 7);
+          }
+          ctx.restore();
+          ctx.fillStyle = dead ? '#120d0d' : '#5a5a5a';
+          ctx.beginPath();
+          ctx.arc(px, py + 8, 13, 0, 7);
+          ctx.fill();
+          ctx.stroke();
+        }
         if (dead && Math.sin(time * 9 + k) > 0.2) {
           ctx.fillStyle = 'rgba(70,70,70,.55)';
           ctx.beginPath();
           ctx.arc(px - 10, py - 24 - ((time * 40 + k * 17) % 30), 9, 0, 7);
           ctx.fill();
         }
+      });
+      // ---- Special gear ----
+      const sp = bp.special;
+      if (sp === 'hangar') {
+        // Bat hangar: a door in the hull flank that slides up to launch a swarm (glowing eyes inside).
+        const h = bp.hangar;
+        const open = g.hangarOpen > 0 ? Math.min(1, g.hangarOpen / 0.4, (1.6 - g.hangarOpen) / 0.3 + 0.2) : 0;
+        ctx.fillStyle = '#120d0d';
+        ctx.fillRect(h.x - h.w / 2, h.y - h.h / 2, h.w, h.h);
+        ctx.strokeRect(h.x - h.w / 2, h.y - h.h / 2, h.w, h.h);
+        if (open > 0.3) {
+          ctx.fillStyle = '#f2d36b';
+          for (const ex of [-18, 6, 26]) {
+            ctx.beginPath();
+            ctx.arc(h.x + ex, h.y + 6, 4, 0, 7);
+            ctx.fill();
+          }
+        }
+        const dh = h.h * (1 - 0.85 * open);
+        ctx.fillStyle = '#3a2f4a';
+        ctx.fillRect(h.x - h.w / 2, h.y - h.h / 2, h.w, dh);
+        ctx.strokeRect(h.x - h.w / 2, h.y - h.h / 2, h.w, dh);
+        ctx.strokeStyle = 'rgba(0,0,0,.35)';
+        for (let yy = h.y - h.h / 2 + 12; yy < h.y - h.h / 2 + dh - 4; yy += 12) {
+          ctx.beginPath();
+          ctx.moveTo(h.x - h.w / 2 + 4, yy);
+          ctx.lineTo(h.x + h.w / 2 - 4, yy);
+          ctx.stroke();
+        }
+        ink();
+        if (dh > 30) {
+          // a bat badge on the door
+          ctx.fillStyle = CREAM;
+          ctx.beginPath();
+          ctx.moveTo(h.x, h.y - 6);
+          ctx.quadraticCurveTo(h.x - 14, h.y - 22, h.x - 30, h.y - 10);
+          ctx.quadraticCurveTo(h.x - 20, h.y - 4, h.x - 14, h.y + 6);
+          ctx.quadraticCurveTo(h.x - 6, h.y - 2, h.x, h.y + 8);
+          ctx.quadraticCurveTo(h.x + 6, h.y - 2, h.x + 14, h.y + 6);
+          ctx.quadraticCurveTo(h.x + 20, h.y - 4, h.x + 30, h.y - 10);
+          ctx.quadraticCurveTo(h.x + 14, h.y - 22, h.x, h.y - 6);
+          ctx.fill();
+        }
+      } else if (sp === 'ramp') {
+        // Boarding ramp hinged at the stern: stowed upright, lowered toward our ship when she latches on.
+        const r = bp.ramp;
+        const ang = 4.712 - 1.74 * num(g.ramp);
+        ctx.save();
+        ctx.translate(r.x, r.y);
+        ctx.rotate(ang);
+        ctx.fillStyle = '#8a6444';
+        ctx.fillRect(0, -7, 170, 14);
+        ctx.strokeRect(0, -7, 170, 14);
+        ctx.strokeStyle = 'rgba(0,0,0,.3)';
+        for (let xx = 18; xx < 165; xx += 22) {
+          ctx.beginPath();
+          ctx.moveTo(xx, -7);
+          ctx.lineTo(xx, 7);
+          ctx.stroke();
+        }
+        ink();
+        ctx.fillStyle = '#9a9a9a';
+        ctx.beginPath();
+        ctx.moveTo(170, -9);
+        ctx.lineTo(188, 0);
+        ctx.lineTo(170, 9);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = '#4a4346';
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, 9, 0, 7);
+        ctx.fill();
+        ctx.stroke();
+      } else if (sp === 'harpoon') {
+        // Harpoon gun on the stern rail: a mount, a long barrel with the harpoon head and a coil of rope.
+        const hp = bp.harpoon;
+        const fl = num(g.harpFlash);
+        ctx.fillStyle = '#4a4346';
+        ctx.fillRect(hp.x - 10, hp.y, 20, 36);
+        ctx.strokeRect(hp.x - 10, hp.y, 20, 36);
+        ctx.save();
+        ctx.translate(hp.x, hp.y);
+        ctx.rotate(Math.PI + 0.12);
+        ctx.fillRect(-(fl > 0 ? 6 : 0), -7, 84, 14);
+        ctx.strokeRect(-(fl > 0 ? 6 : 0), -7, 84, 14);
+        ctx.fillStyle = '#c9c3b2';
+        ctx.beginPath();
+        ctx.moveTo(84, -10);
+        ctx.lineTo(120, 0);
+        ctx.lineTo(84, 10);
+        ctx.closePath();
+        if (fl <= 0) {
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+        ctx.fillStyle = '#d8c79a';
+        ctx.beginPath();
+        ctx.arc(hp.x + 30, hp.y + 14, 14, 0, 7);
+        ctx.fill();
+        ctx.stroke();
+        if (fl > 0) {
+          ctx.fillStyle = `rgba(255,220,120,${fl * 1.6})`;
+          ctx.beginPath();
+          ctx.arc(hp.x - 90, hp.y, 24 * fl * 2, 0, 7);
+          ctx.fill();
+        }
+      } else if (sp === 'paras') {
+        // A rack of parachute packs on the stern wall.
+        const rk = bp.rack;
+        ctx.fillStyle = '#6b4a32';
+        ctx.fillRect(rk.x - 44, rk.y - 4, 88, 8);
+        ctx.strokeRect(rk.x - 44, rk.y - 4, 88, 8);
+        for (let i = 0; i < 3; i++) {
+          ctx.fillStyle = i % 2 ? CREAM : flag.a;
+          ctx.beginPath();
+          ctx.roundRect(rk.x - 40 + i * 28, rk.y + 4, 24, 38, 8);
+          ctx.fill();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(rk.x - 28 + i * 28, rk.y + 4);
+          ctx.lineTo(rk.x - 28 + i * 28, rk.y + 42);
+          ctx.stroke();
+        }
       }
-      // Boiler (the target) with the charge, a steam gauge and a smokestack.
-      const bx = GS.boilerX;
+      // Boiler (the target) with the charge, a steam gauge and a smokestack. An ARMOURED boiler has heavy plates and rivets.
+      const bx = bp.boilerX;
+      const by = segAtC(bp, bx).y;
       ctx.fillStyle = '#5a5a5a';
-      ctx.fillRect(bx - 50, y - 110, 100, 104);
-      ctx.strokeRect(bx - 50, y - 110, 100, 104);
+      ctx.fillRect(bx - 50, by - 110, 100, 104);
+      ctx.strokeRect(bx - 50, by - 110, 100, 104);
       ctx.fillStyle = '#4a4346';
-      ctx.fillRect(bx + 14, y - 180, 26, 70); // stack
-      ctx.strokeRect(bx + 14, y - 180, 26, 70);
-      ctx.fillRect(bx + 8, y - 190, 38, 12);
-      ctx.strokeRect(bx + 8, y - 190, 38, 12);
-      if (steam > 0.08) plume(time, bx + 27, y - 192, 5, 130, -70 - Math.abs(num(g.wvx)) * 0.08, 8, 26, '70,66,68', 0.25 + 0.4 * steam);
+      ctx.fillRect(bx + 14, by - 180, 26, 70); // stack
+      ctx.strokeRect(bx + 14, by - 180, 26, 70);
+      ctx.fillRect(bx + 8, by - 190, 38, 12);
+      ctx.strokeRect(bx + 8, by - 190, 38, 12);
+      if (steam > 0.08) plume(time, bx + 27, by - 192, 5, 130, -70 - Math.abs(num(g.wvx)) * 0.08, 8, 26, '70,66,68', 0.25 + 0.4 * steam);
       ctx.fillStyle = `rgba(255,120,40,${(0.15 + 0.7 * steam) * (0.85 + 0.15 * Math.sin(time * 6))})`;
       ctx.beginPath();
-      ctx.arc(bx - 14, y - 40, 20, 0, 7);
+      ctx.arc(bx - 14, by - 40, 20, 0, 7);
       ctx.fill();
       ctx.stroke();
+      if (sp === 'armoured') {
+        ctx.fillStyle = '#3d3d44';
+        ctx.fillRect(bx - 62, by - 120, 124, 22);
+        ctx.strokeRect(bx - 62, by - 120, 124, 22);
+        ctx.fillRect(bx - 62, by - 30, 124, 24);
+        ctx.strokeRect(bx - 62, by - 30, 124, 24);
+        ctx.fillRect(bx - 62, by - 98, 14, 68);
+        ctx.strokeRect(bx - 62, by - 98, 14, 68);
+        ctx.fillRect(bx + 48, by - 98, 14, 68);
+        ctx.strokeRect(bx + 48, by - 98, 14, 68);
+        ctx.fillStyle = '#9a9a9a';
+        for (let i = 0; i < 6; i++) {
+          ctx.beginPath();
+          ctx.arc(bx - 52 + i * 21, by - 109, 3.5, 0, 7);
+          ctx.arc(bx - 52 + i * 21, by - 18, 3.5, 0, 7);
+          ctx.fill();
+        }
+      }
       // pressure gauge
       ctx.fillStyle = CREAM;
       ctx.beginPath();
-      ctx.arc(bx - 14, y - 86, 14, 0, 7);
+      ctx.arc(bx - 14, by - 86, 14, 0, 7);
       ctx.fill();
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(bx - 14, y - 86);
+      ctx.moveTo(bx - 14, by - 86);
       const na = Math.PI * (0.85 + 1.3 * steam);
-      ctx.lineTo(bx - 14 + Math.cos(na) * 11, y - 86 + Math.sin(na) * 11);
+      ctx.lineTo(bx - 14 + Math.cos(na) * 11, by - 86 + Math.sin(na) * 11);
       ctx.stroke();
       if (g.charge) {
         const blink = Math.sin(time * (8 + (10 - g.charge.t) * 3)) > 0;
         ctx.fillStyle = blink ? '#ff2e55' : '#f2d36b';
         ctx.beginPath();
-        ctx.arc(bx + 40, y - 120, 22, 0, 7);
+        ctx.arc(bx + 40, by - 120, 22, 0, 7);
         ctx.fill();
         ctx.stroke();
       } else if (g.rope) {
         // A big arrow so boarders know where to go.
         ctx.fillStyle = `rgba(255,210,63,${0.6 + 0.4 * Math.sin(time * 6)})`;
         ctx.beginPath();
-        ctx.moveTo(bx, y - 130);
-        ctx.lineTo(bx - 30, y - 190);
-        ctx.lineTo(bx + 30, y - 190);
+        ctx.moveTo(bx, by - 130);
+        ctx.lineTo(bx - 30, by - 190);
+        ctx.lineTo(bx + 30, by - 190);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
       }
       // Her helm wheel: turns as her helmsman steers (spins free with nobody on it).
-      const hx = POSTS.helm[0] + 40;
+      const hx = bp.posts.helm[0] + 40;
+      const hy = segAtC(bp, hx).y;
       ink();
       ctx.lineWidth = 3;
       ctx.fillStyle = '#8a6a44';
-      ctx.fillRect(hx - 6, y - 60, 12, 54);
-      ctx.strokeRect(hx - 6, y - 60, 12, 54);
+      ctx.fillRect(hx - 6, hy - 60, 12, 54);
+      ctx.strokeRect(hx - 6, hy - 60, 12, 54);
       ctx.save();
-      ctx.translate(hx, y - 78);
+      ctx.translate(hx, hy - 78);
       ctx.rotate(g.posts && !g.posts.helm ? time * 4 : num(g.wheel) + Math.sin(time) * 0.1);
       ctx.beginPath();
       ctx.arc(0, 0, 26, 0, 7);
@@ -501,31 +878,37 @@ export function createGunshipArt({ ctx, state, ink }) {
         ctx.stroke();
       }
       ctx.restore();
-      // Engines: two pods on the hull flank with propellers at the stern end.
-      const engX = [x0 + 250, x0 + 480];
-      for (let i = 0; i < 2; i++) {
+      // Engines: one to three pods (flank-mounted or hung under the belly) with propellers at the stern end.
+      bp.engines.forEach((pod, i) => {
         const e = (g.eng && g.eng[i]) || { hp: 1 };
-        const ex = engX[i];
-        const ey = y + 72;
         ink();
         ctx.lineWidth = 3;
+        if (pod.y > botY - 20) {
+          // belly pod: hung from the hull on a strut
+          ctx.fillStyle = '#3a3438';
+          ctx.fillRect(pod.x - 6, botY - 14, 12, 40);
+          ctx.strokeRect(pod.x - 6, botY - 14, 12, 40);
+        }
+        ctx.save();
+        ctx.translate(pod.x, pod.y);
+        ctx.scale(pod.s, pod.s);
         ctx.fillStyle = '#4a4346';
         ctx.beginPath();
-        ctx.roundRect(ex - 36, ey - 20, 78, 40, 14);
+        ctx.roundRect(-36, -20, 78, 40, 14);
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = '#2b2622';
-        ctx.fillRect(ex - 6, ey - 34, 14, 16); // exhaust stack
-        ctx.strokeRect(ex - 6, ey - 34, 14, 16);
+        ctx.fillRect(-6, -34, 14, 16); // exhaust stack
+        ctx.strokeRect(-6, -34, 14, 16);
         const sputter = num(g.sput) > 0;
-        const px0 = ex - 50;
+        const px0 = -50;
         const R = 46;
         const a = num(g.props && g.props[i]);
         const fast = Math.abs(thr) * (sputter ? 0.35 : 1);
         if (fast > 0.35) {
           ctx.fillStyle = `rgba(235,223,192,${0.12 + 0.12 * fast})`;
           ctx.beginPath();
-          ctx.ellipse(px0, ey, 8, R, 0, 0, 7);
+          ctx.ellipse(px0, 0, 8, R, 0, 0, 7);
           ctx.fill();
         }
         ctx.strokeStyle = '#d6cdb8';
@@ -533,36 +916,40 @@ export function createGunshipArt({ ctx, state, ink }) {
         for (let b = 0; b < 3; b++) {
           const t = a + (b * Math.PI * 2) / 3;
           ctx.beginPath();
-          ctx.moveTo(px0, ey);
-          ctx.lineTo(px0 + Math.cos(t) * 5, ey + Math.sin(t) * R * (0.6 + 0.4 * Math.abs(Math.cos(t * 0.5))));
+          ctx.moveTo(px0, 0);
+          ctx.lineTo(px0 + Math.cos(t) * 5, Math.sin(t) * R * (0.6 + 0.4 * Math.abs(Math.cos(t * 0.5))));
           ctx.stroke();
         }
         ink();
         ctx.fillStyle = '#2b2622';
         ctx.beginPath();
-        ctx.arc(px0, ey, 7, 0, 7);
+        ctx.arc(px0, 0, 7, 0, 7);
         ctx.fill();
         ctx.stroke();
+        ctx.restore();
         // exhaust puffs scale with the throttle; coughing black when damaged; smoke and flames when hurt
-        if (steam > 0.05 && Math.abs(thr) > 0.15) plume(time + i * 0.4, ex + 1, ey - 36, 3, 40, 60 + 90 * Math.abs(thr), 5, 14, sputter ? '30,30,30' : '170,170,170', 0.2 + 0.3 * Math.abs(thr));
+        const ex = pod.x;
+        const ey = pod.y;
+        if (steam > 0.05 && Math.abs(thr) > 0.15) plume(time + i * 0.4, ex + 1, ey - 36 * pod.s, 3, 40, 60 + 90 * Math.abs(thr), 5, 14, sputter ? '30,30,30' : '170,170,170', 0.2 + 0.3 * Math.abs(thr));
         if (e.hp < 0.5) plume(time + i * 0.3, ex + 20, ey - 20, 4, 90, 40, 6, 22, '30,30,30', 0.55);
         if (e.hp < 0.25 || sputter) {
           ctx.fillStyle = `rgba(255,${110 + Math.sin(time * 25) * 50},40,.85)`;
           ctx.beginPath();
-          ctx.ellipse(ex + 30, ey - 2, 12 + Math.sin(time * 22) * 4, 8, 0, 0, 7);
+          ctx.ellipse(ex + 30 * pod.s, ey - 2, 12 + Math.sin(time * 22) * 4, 8, 0, 0, 7);
           ctx.fill();
         }
-      }
-      // Mast on top of the bag at the nose side, with the intent pennant.
-      if (g.phase !== 'sinking') drawPennant(g, time, cx + 330, 250);
+      });
+      // Mast on top of the bag with the intent pennant (her own flag).
+      if (g.phase !== 'sinking') drawPennant(g, time, bp.mast.x, bp.mast.y);
     };
 
     // ---- Her crew, in their real (already mirrored) places on the deck ----
     const drawCrew = () => {
       for (const c of g.crew) {
         const px = num(c.x);
+        const y = num(c.y, bp.decks[0].y);
         const face = c.face < 0 ? -1 : 1;
-        ctx.fillStyle = c.wind > 0 ? '#ffffff' : '#a8443f';
+        ctx.fillStyle = c.wind > 0 ? '#ffffff' : flag.a;
         ink();
         ctx.lineWidth = 3.2;
         ctx.beginPath();
@@ -573,16 +960,19 @@ export function createGunshipArt({ ctx, state, ink }) {
         ctx.arc(px, y - 88, 20, 0, 7);
         ctx.fill();
         ctx.stroke();
+        // A sash in her trim colour, so her crew read as hers.
+        ctx.fillStyle = flag.b;
+        ctx.fillRect(px - 16, y - 40, 32, 7);
         // What they do, at a glance: gunners carry a rammer, the stoker a shovel, the helmsman a cap.
         if (c.role === 'helm') {
           ctx.fillStyle = '#2b2622';
           ctx.fillRect(px - 22, y - 112, 44, 10);
         } else if (c.role === 'gunner') {
           ctx.fillStyle = '#4a4346';
-          ctx.fillRect(px - 16, y - 44, 32, 14);
+          ctx.fillRect(px - 16, y - 30, 32, 14);
         } else if (c.role === 'stoker') {
           ctx.fillStyle = '#e8884a';
-          ctx.fillRect(px - 16, y - 44, 32, 14);
+          ctx.fillRect(px - 16, y - 30, 32, 14);
         }
         ctx.fillStyle = CREAM;
         for (const s of [-1, 1]) {
@@ -624,15 +1014,15 @@ export function createGunshipArt({ ctx, state, ink }) {
     ctx.save();
     ctx.translate(dx, dy);
     if (far < 1) {
-      ctx.translate(cx, y - 120);
+      ctx.translate(cx, pivotY);
       ctx.scale(far, far);
-      ctx.translate(-cx, -(y - 120));
+      ctx.translate(-cx, -pivotY);
     }
     ctx.save();
-    ctx.translate(cx, y);
+    ctx.translate(cx, botY - 112 + sink);
     if (sink) ctx.rotate(g.sink * 0.15);
     else ctx.rotate(-num(g.pitch) * sx); // nose up in a climb, nose down in a dive (flips with her facing)
-    ctx.translate(-cx, -y);
+    ctx.translate(-cx, -(botY - 112));
     // airframe: mirrored by her facing, squashed through zero while she turns
     ctx.save();
     ctx.translate(cx, 0);
@@ -648,30 +1038,44 @@ export function createGunshipArt({ ctx, state, ink }) {
     drawCrew();
     ctx.restore();
     ctx.restore();
-    // Health bar over the gasbag, and her systems: lit while working, dark and crossed out when you've knocked them out.
+    // Name, health bar over the gasbag, and her systems: lit while working, dark and crossed out when you've knocked them out.
     if (g.phase !== 'sinking' && far >= 0.99) {
+      const by = bp.bagTop - 30;
+      ink();
+      ctx.lineWidth = 5;
+      ctx.font = '900 26px Georgia';
+      ctx.textAlign = 'center';
+      ctx.strokeText(bp.title, cx, by - 10);
+      ctx.fillStyle = flag.b;
+      ctx.fillText(bp.title, cx, by - 10);
+      ctx.font = '700 17px Georgia';
+      ctx.lineWidth = 4;
+      const sub = bp.hull.toUpperCase() + ' - ' + bp.personality.toUpperCase() + (bp.special ? ' - ' + { hangar: 'BAT HANGAR', ramp: 'BOARDING RAMP', harpoon: 'HARPOON GUN', armoured: 'ARMOURED BOILER', paras: 'PARATROOPERS' }[bp.special] : '');
+      ctx.strokeText(sub, cx, by + 52 + 40);
+      ctx.fillStyle = CREAM;
+      ctx.fillText(sub, cx, by + 52 + 40);
       ink();
       ctx.lineWidth = 3;
       ctx.fillStyle = '#2b2622';
-      ctx.fillRect(cx - 200, 190, 400, 22);
-      ctx.fillStyle = '#a8443f';
-      ctx.fillRect(cx - 196, 194, 392 * Math.max(0, g.hp / g.max), 14);
+      ctx.fillRect(cx - 200, by, 400, 22);
+      ctx.fillStyle = flag.a;
+      ctx.fillRect(cx - 196, by + 4, 392 * Math.max(0, g.hp / g.max), 14);
       if (g.posts) {
-        const portsUp = g.ports ? g.ports.filter((q) => !q.dead).length : 3;
+        const portsUp = g.ports ? g.ports.filter((q) => !q.dead).length : bp.weapons.length;
         const engOk = num(g.engF, 1) > 0.5;
-        const items = [['GUNS ' + portsUp + '/3', g.posts.guns > 0 && portsUp > 0], ['STEAM', g.posts.steam], ['HELM', g.posts.helm], ['ENGINES', engOk]];
+        const items = [['GUNS ' + portsUp + '/' + bp.weapons.length, g.posts.guns > 0 && portsUp > 0], ['STEAM', g.posts.steam], ['HELM', g.posts.helm], ['ENGINES', engOk]];
         ctx.font = '900 22px Georgia';
         ctx.textAlign = 'center';
         items.forEach(([name, on], i) => {
           const tx = cx - 225 + i * 150;
           ctx.fillStyle = on ? '#f2d36b' : 'rgba(255,255,255,.35)';
-          ctx.fillText(name, tx, 244);
+          ctx.fillText(name, tx, by + 54);
           if (!on) {
             ctx.strokeStyle = '#a8443f';
             ctx.lineWidth = 2.8;
             ctx.beginPath();
-            ctx.moveTo(tx - 44, 236);
-            ctx.lineTo(tx + 44, 228);
+            ctx.moveTo(tx - 44, by + 46);
+            ctx.lineTo(tx + 44, by + 38);
             ctx.stroke();
           }
         });
@@ -681,7 +1085,7 @@ export function createGunshipArt({ ctx, state, ink }) {
         ctx.fillStyle = '#ffffff';
         ctx.font = '900 34px Georgia';
         ctx.textAlign = 'center';
-        ctx.fillText(Math.ceil(g.charge.t), mx(g, GS.boilerX + 40), y - 150);
+        ctx.fillText(Math.ceil(g.charge.t), mx(g, bp.boilerX + 40), segAtC(bp, bp.boilerX).y - 150);
       }
     }
     ctx.restore();

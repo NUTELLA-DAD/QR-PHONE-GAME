@@ -4,10 +4,7 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 
-// (her home-frame numbers; same as GS in gunship.js, repeated here so aim.js has no import cycle)
-const GUNSHIP_X0 = 2050;
-const GUNSHIP_X1 = 3150;
-const GUNSHIP_DECK = SHIP_LAYOUT.platforms.find((p) => p.id === 'main').y;
+import { portPos } from './gunshipBlueprint.js'; // (pure geometry: no import cycle)
 
 export const SHELL_SPEED = config.GUNS.SHELL_SPEED;
 export const SHELL_LIFE = config.GUNS.SHELL_LIFE;
@@ -25,11 +22,10 @@ export function targets(state) {
   // The enemy gunship: her gun ports (to bring her guns down) and her gasbag/hull.
   const gs = state.gunship;
   if (gs && gs.ports && gs.phase !== 'sinking' && gs.phase !== 'leaving') {
-    const side = gs.side < 0 ? GUNSHIP_X0 - 30 : GUNSHIP_X1 + 30;
     gs.ports.forEach((pt, k) => {
-      if (!pt.dead) list.push({ kind: 'gport', obj: gs, r: 50, at: () => ({ x: side + gs.dx, y: GUNSHIP_DECK - 40 + k * 70 + gs.dy - state.ship.alt }) });
+      if (!pt.dead) list.push({ kind: 'gport', obj: gs, r: 50, at: () => { const pp = portPos(gs, k); return { x: pp.x + gs.dx, y: pp.y + gs.dy - state.ship.alt }; } });
     });
-    list.push({ kind: 'gunship', obj: gs, r: 200, at: () => ({ x: (GUNSHIP_X0 + GUNSHIP_X1) / 2 + gs.dx, y: GUNSHIP_DECK - 40 + gs.dy - state.ship.alt }) });
+    list.push({ kind: 'gunship', obj: gs, r: 200, at: () => ({ x: gs.bp.cx + gs.dx, y: (gs.bp.hullTop + gs.bp.hullBot) / 2 - 40 + gs.dy - state.ship.alt }) });
   }
   for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + m.vx * t, y: m.y }) });
   for (const b of state.bats || []) if (b.delay <= 0 && !b.latched) list.push({ kind: 'bat', obj: b, r: 26, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t }) });
