@@ -133,6 +133,8 @@ const killHull = (sim) => { sim.state.ship.hull = 0; step(sim); };
 // ---------------- (c) failure leads to a wreck ----------------
 {
   console.log('--- (c) nobody helps: she is wrecked ---');
+  const matesWas = config.MATES.ENABLED;
+  config.MATES.ENABLED = false; // (ship's mates would help: this test wants nobody helping)
   const sim = mk(0, 2); // two humans who do nothing
   const st = sim.state;
   st.run.spares = 0; // (so the wreck is final and easy to see)
@@ -144,6 +146,7 @@ const killHull = (sim) => { sim.state.ship.hull = 0; step(sim); };
   const gone = until(sim, () => !st.goingDown, 60);
   check(gone && !!st.wreck && !!st.runEnd, 'timeout with nothing done: wrecked and the voyage ends (no spares)');
   check(st.ship.hull === 0, 'hull is 0 after the wreck');
+  config.MATES.ENABLED = matesWas;
 }
 
 // ---------------- (d) voyage wreck = a spare gasbag ----------------

@@ -1,6 +1,6 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
-import { crewAboard } from './crewscale.js';
+import { crewAboard, crewHeads } from './crewscale.js';
 
 export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoinBot }) {
   const socket = io({ transports: ['websocket'] });
@@ -9,7 +9,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   simulation.setSocket?.(socket);
 
   const count = () => {
-    if (countNode) countNode.textContent = `${Object.keys(simulation.state.players).length} / ${config.MAX_PLAYERS} aboard`;
+    if (countNode) countNode.textContent = `${crewHeads(simulation.state)} / ${config.MAX_PLAYERS} aboard`;
   };
 
   socket.on('connect', () => socket.emit('host:create'));
@@ -99,12 +99,12 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   document.getElementById('bots').onclick = () => {
     const speciesNames = config.CREW_SPECIES;
     const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
-    for (let i = 0; i < 4 && Object.keys(simulation.state.players).length < config.MAX_PLAYERS; i++) {
+    for (let i = 0; i < 4 && crewHeads(simulation.state) < config.MAX_PLAYERS; i++) {
       const id = 'bot' + Math.random();
       simulation.state.players[id] = {
         id,
         bot: true,
-        name: 'Bot' + (Object.keys(simulation.state.players).length + 1),
+        name: 'Bot' + (crewHeads(simulation.state) + 1),
         species: speciesNames[Math.random() * speciesNames.length | 0],
         color: colors[Math.random() * colors.length | 0],
         x: SHIP_LAYOUT.boarderEntryPoints[0].x + Math.random() * (SHIP_LAYOUT.boarderEntryPoints[1].x - SHIP_LAYOUT.boarderEntryPoints[0].x),

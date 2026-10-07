@@ -436,6 +436,25 @@ export function createCrewArt({ ctx }) {
     ctx.restore();
   };
 
+  // A small navy patch with a cream anchor (ship's mates only), centred on (x, y).
+  const anchorBadge = (x, y) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.lineWidth = 1.5;
+    dot(0, 0, 5.6, '#2f3b4a');
+    ctx.strokeStyle = '#f2ead6';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(0, -3.4); // shank
+    ctx.lineTo(0, 3);
+    ctx.moveTo(-1.8, -1.8); // stock
+    ctx.lineTo(1.8, -1.8);
+    ctx.moveTo(-3, 0.6); // flukes
+    ctx.arc(0, 0.2, 3, Math.PI * 0.85, Math.PI * 0.15, true);
+    ctx.stroke();
+    ctx.restore();
+  };
+
   // ---------- whole character ----------
   const figure = (p, time) => {
     const type = p.type;
@@ -531,6 +550,7 @@ export function createCrewArt({ ctx }) {
       ctx.lineTo(4, -23);
       ctx.stroke();
       shape(rr(5.5, -38, 8, 8, 2), light(jacket), jacket);
+      if (p.mate) anchorBadge(-6.5, -34); // ship's mate: a tiny anchor patch on the chest
     } else if (kind === 'skel') {
       shape(rr(-tw + 1, -46, tw * 2 - 2, 29, 7), CHAR, '#352f32', 'charcoal', 0.5);
       // ribs showing through the torn front
@@ -564,7 +584,7 @@ export function createCrewArt({ ctx }) {
     // scarf (crew): pale tint of the player's colour, tail streaming behind
     if (kind === 'crew') {
       const fl = Math.sin(time * 9) * 3;
-      const sc = mix(cloth, PAPER, 0.5);
+      const sc = p.mate ? config.MATES.SCARF : mix(cloth, PAPER, 0.5); // (ship's mates wear a grey scarf)
       const lag = p.moving || p.fly || p.tumble ? 8 : 0;
       shape(poly(-8, -47, -26 - lag, -42 + fl, -28 - lag, -35 + fl, -22 - lag * 0.6, -33 + fl, -6, -40), sc, shade(sc));
       shape(rr(-11, -52, 22, 8.5, 4), sc, shade(sc), 'canvas', 0.5);

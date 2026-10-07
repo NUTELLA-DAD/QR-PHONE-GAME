@@ -7,7 +7,10 @@ import { config } from '../../config.js';
 const CS = () => config.CREW_SCALE;
 const KEYS = ['spawn', 'count', 'fire', 'damage', 'raiders', 'hp', 'spread', 'collateral'];
 
-export const crewAboard = (state) => Object.values(state.players).filter((p) => p.connected !== false).length;
+// (Ship's mates, see mates.js, are helpers and never count as crew.)
+export const crewAboard = (state) => Object.values(state.players).filter((p) => p.connected !== false && !p.mate).length;
+// Everyone on the roster (connected or not) except the mates: for tweaks that depend on the crew's size.
+export const crewHeads = (state) => Object.values(state.players).filter((p) => !p.mate).length;
 
 // The multiplier set for n crew (interpolated between the table rows; n may be fractional).
 export function scaleFor(n) {

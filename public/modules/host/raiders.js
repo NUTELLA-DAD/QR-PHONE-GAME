@@ -5,7 +5,7 @@
 //   Cutter - goes for the guns, pipes and engines and hacks them to bits.
 // All of them wind up (a "!" over their head) before striking, so crew can step back or
 // interrupt them with a hit.
-import { crewMul } from './crewscale.js';
+import { crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { moveWalker, steerTo, fall } from './nav.js';
@@ -34,7 +34,7 @@ export function createRaiders({ state, modules, puff, impact }) {
 
   // A squad arrives at (x, y) (boarding lines from the boss).
   const dropSquad = (x, y) => {
-    const crew = Object.keys(state.players).length;
+    const crew = crewHeads(state);
     const count = Math.max(1, Math.min(6, Math.round((1 + Math.floor(crew / 4)) * crewMul(state, 'raiders'))));
     for (let i = 0; i < count; i++) {
       const type = i === 0 ? 'grunt' : pickType();

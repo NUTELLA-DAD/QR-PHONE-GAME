@@ -9,6 +9,7 @@ import { GS, MAIN_X1, landX, boilerX, routeStep } from './gunship.js';
 import { isEscortStation, escortFor } from './escort.js';
 import { LIGHT_NAMES, isSearchlight, darkTarget } from './searchlight.js';
 import { botJobs as goingDownJobs } from './goingDown.js';
+import { autopilotOn } from './crewscale.js';
 
 const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
 const CATWALK = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'catwalk');
@@ -299,7 +300,7 @@ function chooseJob(state, bot, bots) {
   const choresFull = state.phase === 'flying' && onChores >= Math.max(3, Math.ceil(bots.length * B.CHORE_SHARE));
   const cur = bot.botJob;
   const isCur = (j) => !!cur && j.kind === cur.kind && j.obj === cur.obj;
-  const jobs = listJobs(state, bot).filter((j) => claims(j) < j.max && (j.cap == null || onKind(j) < j.cap) && (isCur(j) || !(choresFull && CHORE[j.kind] && !j.urgent)));
+  const jobs = roleJobs(state, bot, listJobs(state, bot)).filter((j) => claims(j) < j.max && (j.cap == null || onKind(j) < j.cap) && (isCur(j) || !(choresFull && CHORE[j.kind] && !j.urgent)));
   // Sent to help a crewmate who pressed HELP!: whatever needs doing near them, else just go and stand by.
   const hf = bot.helpFor;
   if (hf && hf.caller.d != null && !bot.onGunship) {
@@ -677,7 +678,7 @@ function dareKinds(state) {
 
 // Should this idle bot (job = what it would do now) feel daring? If so, start a stunt.
 function maybeDare(p, state, bots, job) {
-  if (!DR.ENABLED || p.dare || !state.stunts || state.phase !== 'flying' || state.ship.down || state.ship.hull < DR.MIN_HULL) return;
+  if (!DR.ENABLED || p.mate || p.dare || !state.stunts || state.phase !== 'flying' || state.ship.down || state.ship.hull < DR.MIN_HULL) return;
   if (bots.length < DR.MIN_CREW || bots.filter((q) => q.dare).length >= DR.MAX_AT_ONCE) return;
   if (state.stuntEnd !== undefined && performance.now() - state.stuntEnd < DR.COOLDOWN * 1000) return;
   if (p.lock || p.carry === 'coal' || p.carry === 'ammo' || p.onGunship || p.fly || p.air || p.conn != null || p.swing || p.hj || p.d == null) return;
@@ -922,9 +923,21 @@ function dareStep(p, state, dt) {
 // Is this bot free to be sent on an errand (HELP! calls)? Idle bots always are; with `loose`, so are bots on a
 // job that is not an emergency (hauling, walking to a station).
 export function botFree(p, loose) {
-  if (p.helpFor) return false;
+  if (p.helpFor || p.mate) return false; // (ship's mates keep to their chores: no errands)
   return !p.botJob || (!!loose && !isEmergency(p.botJob));
 }
+
+// ---------- Ship's mates (mates.js, config.MATES) ----------
+// A mate runs the same brain as a bot but only sees the hauling and mending jobs: never a station (guns, helm, searchlights,
+// bomb bay, lookout...), the hookshot and hijack stunts, or votes. Everything else is filtered out of its job list here.
+function roleJobs(state, bot, jobs) {
+  if (bot.mate) return jobs.filter((j) => config.MATES.JOBS.includes(j.kind));
+  if (humanAutopilot(bot, state)) return jobs.filter((j) => !(j.kind === 'station' && j.obj === 'Helm'));
+  return jobs;
+}
+// (Test sims only: a bot flagged { human: true } stands in for a person. With the autopilot on, a person goes to the guns,
+// not the wheel, so the stand-in leaves the helm alone too.)
+const humanAutopilot = (p, state) => !!p.human && autopilotOn(state);
 
 // Called once per frame for each bot, before the game applies its input.
 export function updateBot(p, state, dt) {
@@ -956,7 +969,7 @@ export function updateBot(p, state, dt) {
     p.think = B.THINK_EVERY;
     if (p.lock) {
       // Rotate off stations now and then, and leave early if fires/holes/raiders outnumber free hands.
-      const free = bots.filter((q) => !q.lock && !(q.ko > 0)).length;
+      const free = bots.filter((q) => !q.lock && !(q.ko > 0) && !q.mate).length; // (a mate cannot take the jobs a station-keeper would leave for)
       const urgent = listJobs(state, p).filter(isEmergency).length;
       if (p.lockLeft === undefined) p.lockLeft = B.STATION_MIN + Math.random() * (B.STATION_MAX - B.STATION_MIN);
       const mod = (state.modules || []).find((m) => m.name === p.lock);
@@ -967,7 +980,7 @@ export function updateBot(p, state, dt) {
       // A lightning bolt is charging and nobody is on their way to a rod: leave the station (not the helm).
       const rodCall = p.lock !== 'Helm' && state.stormJob && state.stormJob.charge && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9;
       // Nobody is at the wheel in flight and nobody is on the way: leave the station and take it.
-      const helmCall = p.lock !== 'Helm' && state.phase === 'flying' && !Object.values(state.players).some((q) => q.lock === 'Helm' || (q.botJob && q.botJob.kind === 'station' && q.botJob.obj === 'Helm')) && !(state.modules || []).some((m) => m.name === 'Helm' && m.broken) && Math.random() < B.HELM_CALL;
+      const helmCall = p.lock !== 'Helm' && !humanAutopilot(p, state) && state.phase === 'flying' && !Object.values(state.players).some((q) => q.lock === 'Helm' || (q.botJob && q.botJob.kind === 'station' && q.botJob.obj === 'Helm')) && !(state.modules || []).some((m) => m.name === 'Helm' && m.broken) && Math.random() < B.HELM_CALL;
       const fallCall = !!state.goingDown; // GOING DOWN!: everybody off their stations
       if (p.lockLeft <= 0 || gunUseless || rodCall || helmCall || fallCall || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;

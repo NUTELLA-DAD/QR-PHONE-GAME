@@ -1,14 +1,14 @@
 // Headless bot simulation: runs the REAL host simulation in Node (no browser) with bot crew.
-// Usage: node tools/botsim.mjs [--bots 8] [--minutes 5] [--difficulty normal] [--map network|route|open] [--seed 1] [--help]
+// Usage: node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty normal] [--map network|route|open] [--seed 1] [--help]
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
-const args = { bots: 8, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null };
+const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') {
-    console.log('node tools/botsim.mjs [--bots 8] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N]');
+    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N]');
     process.exit(0);
   } else if (a.startsWith('--') && a.slice(2) in args) {
     const v = argv[++i];
@@ -68,7 +68,7 @@ const e = SHIP_LAYOUT.boarderEntryPoints;
 for (let i = 0; i < args.bots; i++) {
   const id = 'bot' + Math.random();
   state.players[id] = {
-    id, bot: true, name: 'Bot' + (i + 1),
+    id, bot: true, human: i < args.humans, name: 'Bot' + (i + 1), // (--humans N: the first N stand in for human players, so ship's mates come aboard for N <= 3)
     species: config.CREW_SPECIES[(Math.random() * config.CREW_SPECIES.length) | 0],
     color: colors[(Math.random() * colors.length) | 0],
     x: e[0].x + Math.random() * (e[1].x - e[0].x),
@@ -89,12 +89,14 @@ let pSum = 0, pN = 0, pLow = 0, pOver70 = 0, pOver90 = 0, blowouts = 0, leakStep
 let sporeCloudSteps = 0, sporedSteps = 0, clogSum = 0, clogMax = 0, engSum = 0, o2Sum = 0, o2Min = 1, lackSteps = 0, gasSum = 0, gasMax = 0, crewSteps = 0, envN = 0, iceG = 0, iceD = 0, iceGun = 0, iceMax = 0, sinkSum = 0, thermalSteps = 0, burnSteps = 0, heatSum = 0, climbSum = 0, climbN = 0, blizSteps = 0, smokeSteps = 0, fireSum = 0, fireMax = 0;
 let gapSum = 0, gapMin = 1e9, seaSteps = 0, floodSum = 0, floodHigh = 0, wetSteps = 0, galeSteps = 0;
 let lightSteps = 0, lightManned = [0, 0], lightLit = 0, litBonus = 0; // searchlights: flight steps, steps each lamp was manned, steps with something lit
+let matesMax = 0;
 const t0 = realNow();
 
 for (let step = 1; step <= totalSteps; step++) {
   try {
     simClock += dt * 1000;
     sim.update(dt);
+    matesMax = Math.max(matesMax, Object.values(state.players).filter((q) => q.mate).length);
     for (const q of Object.values(state.players)) {
       const st = q.stats || {};
       for (const k of ['ammo', 'coal', 'fires', 'holes', 'ice', 'clears', 'oxygen']) {
@@ -149,7 +151,7 @@ for (let step = 1; step <= totalSteps; step++) {
 }
 
 console.log('--- botsim summary ---');
-console.log(`bots ${args.bots}, ${args.minutes} min, ${args.difficulty}, map ${args.map || 'mixed'}, seed ${args.seed ?? 'random'}`);
+console.log(`bots ${args.bots} (${args.humans} as humans; ship's mates seen: ${matesMax}), ${args.minutes} min, ${args.difficulty}, map ${args.map || 'mixed'}, seed ${args.seed ?? 'random'}`);
 console.log(`missions completed: ${missions}` + (missionMins.length ? `, minutes each: ${missionMins.map((m) => m.toFixed(1)).join(" ")}, average ${(missionMins.reduce((a, b) => a + b, 0) / missionMins.length).toFixed(1)}` : ""));
 console.log(`wrecks: ${wrecks}`);
 console.log(`average hull: ${hullN ? (hullSum / hullN).toFixed(1) : 'n/a'}`);
