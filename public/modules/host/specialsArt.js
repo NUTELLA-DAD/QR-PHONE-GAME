@@ -2,6 +2,7 @@
 // its warning line and beam, and the harpoon tug with its cable. Bold shapes and bright accents
 // so each reads at a glance from across the room.
 import { config } from '../../config.js';
+import { envOf } from './environments.js';
 
 export function createSpecialsArt({ ctx, state, ink }) {
   const drawSaw = (s) => {
@@ -41,7 +42,8 @@ export function createSpecialsArt({ ctx, state, ink }) {
     ink();
     ctx.lineWidth = 3;
     const w = Math.sin(b.flap) * 8;
-    ctx.fillStyle = '#5a1a1a';
+    const sd = state.course && envOf(state).imp; // 'spore drones' in the Fungal Depths
+    ctx.fillStyle = sd ? sd.wing : '#5a1a1a';
     for (const s of [-1, 1]) {
       ctx.beginPath();
       ctx.moveTo(s * 6, -2);
@@ -51,7 +53,7 @@ export function createSpecialsArt({ ctx, state, ink }) {
       ctx.fill();
       ctx.stroke();
     }
-    ctx.fillStyle = '#a8443f';
+    ctx.fillStyle = sd ? sd.body : '#a8443f';
     ctx.beginPath();
     ctx.arc(0, 0, 13, 0, 7);
     ctx.fill();
@@ -64,7 +66,7 @@ export function createSpecialsArt({ ctx, state, ink }) {
       ctx.lineTo(s * 11, -8);
       ctx.fill();
     }
-    ctx.fillStyle = '#f2d36b';
+    ctx.fillStyle = sd ? sd.eye : '#f2d36b';
     ctx.beginPath();
     ctx.arc(-4, -2, 3, 0, 7);
     ctx.arc(4, -2, 3, 0, 7);

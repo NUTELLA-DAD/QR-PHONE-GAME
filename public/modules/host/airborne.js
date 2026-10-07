@@ -212,6 +212,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     if (p.regrabCd > 0) p.regrabCd -= dt;
     const ctrl = controlled && !p.bot ? clamp(p.jx || 0, -1, 1) : 0;
     const drift = -Math.max(0, state.ship.speed || 0) * A.SHIP_DRIFT;
+    const gm = (state.env && state.env.gravity) || 1; // low gravity in The Aether (config.ENVIRONMENTS.aether.GRAVITY)
     if (p.chute > 0) {
       p.chute += dt;
       if (!p.chuteOpen && p.chute >= A.CHUTE_DELAY && p.fvy >= 0) p.chuteOpen = true;
@@ -220,11 +221,11 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       // Under the canopy: slow fall, strong steering (humans steer with the stick; others just drift).
       p.fvx += ctrl * A.CHUTE_STEER * dt;
       p.fvx -= (p.fvx - drift) * Math.min(1, A.CHUTE_DRAG * dt);
-      p.fvy = p.fvy > A.CHUTE_FALL ? Math.max(A.CHUTE_FALL, p.fvy - 3000 * dt) : Math.min(A.CHUTE_FALL, p.fvy + A.CHUTE_GRAVITY * dt);
+      p.fvy = p.fvy > A.CHUTE_FALL ? Math.max(A.CHUTE_FALL, p.fvy - 3000 * dt) : Math.min(A.CHUTE_FALL, p.fvy + A.CHUTE_GRAVITY * gm * dt);
     } else {
       p.fvx += ctrl * A.STEER_ACCEL * dt;
       p.fvx -= (p.fvx - drift) * Math.min(1, A.DRAG * dt);
-      p.fvy = Math.min(A.MAX_FALL, p.fvy + A.GRAVITY * dt);
+      p.fvy = Math.min(A.MAX_FALL, p.fvy + A.GRAVITY * gm * dt);
     }
     const py = p.y;
     p.x += p.fvx * dt;

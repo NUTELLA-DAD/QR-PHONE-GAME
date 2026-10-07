@@ -5,7 +5,7 @@ export function createControllerUI({ network }) {
   // Icon for the Action button, picked from the start of its label.
   const ACTION_ICONS = [
     ['Swap to sword', '🗡️'], ['Swap to hammer', '🔨'], ['Swap to extinguisher', '🧯'], ['Take sword', '🗡️'], ['Take hammer', '🔨'], ['Take extinguisher', '🧯'], ['Put back', '↩️'],
-    ['Spray fire', '🧯'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
+    ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['Close valve', '🚱'], ['Open valve', '🚰'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
     ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'],
     ['Take Helm', '☸️'], ['Take Boiler', '🔥'], ['Take', '🎯'],

@@ -8,7 +8,7 @@ const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') {
-    console.log('node tools/botsim.mjs [--bots 8] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember] [--seed N]');
+    console.log('node tools/botsim.mjs [--bots 8] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether] [--seed N]');
     process.exit(0);
   } else if (a.startsWith('--') && a.slice(2) in args) {
     const v = argv[++i];
@@ -52,7 +52,7 @@ if (args.map) {
   config.MAPS.FORCE_KIND = args.map; // set before the sim is created so mission 1 uses it
 }
 if (args.env) {
-  if (!config.ENVIRONMENTS[args.env] || !config.ENVIRONMENTS[args.env].name) { console.error('Bad env; use skyisles|frost|ember'); process.exit(2); }
+  if (!config.ENVIRONMENTS[args.env] || !config.ENVIRONMENTS[args.env].name) { console.error('Bad env; use ' + Object.keys(config.ENVIRONMENTS).filter((k) => config.ENVIRONMENTS[k] && config.ENVIRONMENTS[k].name).join('|')); process.exit(2); }
   config.ENVIRONMENTS.FORCE = args.env; // every mission happens in this environment
 }
 const { createSimulation } = await load('modules/host/simulation.js');
@@ -85,7 +85,7 @@ let lastKills = 0, stuckVoteSteps = 0;
 const missionMins = []; let missionStartStep = 0;
 // Steam stats while flying: pressure sum, steps under 35 / over 70 / over 90, blowouts, steps in overdrive.
 let pSum = 0, pN = 0, pLow = 0, pOver70 = 0, pOver90 = 0, blowouts = 0, leakSteps = 0, lastPress = state.ship.press;
-let envN = 0, iceG = 0, iceD = 0, iceGun = 0, iceMax = 0, sinkSum = 0, thermalSteps = 0, burnSteps = 0, heatSum = 0, climbSum = 0, climbN = 0, blizSteps = 0, smokeSteps = 0, fireSum = 0, fireMax = 0;
+let sporeCloudSteps = 0, sporedSteps = 0, clogSum = 0, clogMax = 0, engSum = 0, o2Sum = 0, o2Min = 1, lackSteps = 0, gasSum = 0, gasMax = 0, crewSteps = 0, envN = 0, iceG = 0, iceD = 0, iceGun = 0, iceMax = 0, sinkSum = 0, thermalSteps = 0, burnSteps = 0, heatSum = 0, climbSum = 0, climbN = 0, blizSteps = 0, smokeSteps = 0, fireSum = 0, fireMax = 0;
 const t0 = realNow();
 
 for (let step = 1; step <= totalSteps; step++) {
@@ -94,7 +94,7 @@ for (let step = 1; step <= totalSteps; step++) {
     sim.update(dt);
     for (const q of Object.values(state.players)) {
       const st = q.stats || {};
-      for (const k of ['ammo', 'coal', 'fires', 'holes', 'ice']) {
+      for (const k of ['ammo', 'coal', 'fires', 'holes', 'ice', 'clears', 'oxygen']) {
         const d = (st[k] || 0) - ((q.seen && q.seen[k]) || 0);
         if (d > 0) tally[k] = (tally[k] || 0) + d;
         (q.seen = q.seen || {})[k] = st[k] || 0;
@@ -121,6 +121,11 @@ for (let step = 1; step <= totalSteps; step++) {
     const E = state.env;
     envN++; iceG += state.ice.gasbag; iceD += state.ice.topdeck; iceGun += state.ice.guns; iceMax = Math.max(iceMax, state.ice.gasbag, state.ice.guns); sinkSum += E.sink;
     if (E.heat > 0.05) thermalSteps++; if (E.burn > 0.2) burnSteps++; heatSum += E.heat; if (E.heat > 0.05) { climbSum += Math.abs(state.ship.vy || 0); climbN++; }
+    gasSum += state.ship.gas; gasMax = Math.max(gasMax, state.ship.gas);
+    if ((state.spores || []).length) sporeCloudSteps++;
+    { let any = 0, n = 0; for (const q of Object.values(state.players)) { n++; if ((q.sporeT || 0) > 0) any++; } sporedSteps += any; crewSteps += n; }
+    { const cl = Math.max(...(state.clogs || [{ lvl: 0 }]).map((c) => c.lvl)); clogSum += cl; clogMax = Math.max(clogMax, cl); engSum += E.engine; }
+    o2Sum += E.o2; o2Min = Math.min(o2Min, E.o2); if (E.lack > 0) lackSteps++;
     if (E.blizzard > 0.3) blizSteps++; if (E.smoke > 0.3) smokeSteps++; fireSum += state.fires.length; fireMax = Math.max(fireMax, state.fires.length);
   }
   // Wreck sequence ends in the lobby: count it and cast off again.
@@ -152,6 +157,13 @@ if (args.env === 'frost' || args.env === 'ember') {
   const av = (n) => (envN ? (n / envN).toFixed(2) : 'n/a');
   if (args.env === 'frost') console.log(`frost: ice chipped ${sum('ice')}; coverage avg gasbag ${av(iceG)} / top deck ${av(iceD)} / guns(max crust) ${av(iceGun)}, peak ${iceMax.toFixed(2)}; weight sink avg ${av(sinkSum)} gas pts; blizzard ${pe(blizSteps)} of flight`);
   if (args.env === 'ember') console.log(`ember: thermal ${pe(thermalSteps)} of flight (avg heat ${av(heatSum)}, avg climb speed in thermals ${climbN ? (climbSum / climbN).toFixed(0) : 'n/a'} px/s), scorched ${pe(burnSteps)}, fires burning avg ${av(fireSum)} max ${fireMax}, smoke ${pe(smokeSteps)}`);
+}
+{
+  const pe = (n) => (envN ? ((100 * n) / envN).toFixed(1) : 'n/a') + '%';
+  const av = (n) => (envN ? (n / envN).toFixed(2) : 'n/a');
+  console.log(`gas (hover needs ~${(config.GAS.NEUTRAL + (state.env.sink || 0)).toFixed(0)}): avg ${av(gasSum)}, peak ${gasMax.toFixed(0)}`);
+  if (args.env === 'fungal') console.log(`fungal: spore cloud aboard ${pe(sporeCloudSteps)} of flight, crew in spores ${crewSteps ? ((100 * sporedSteps) / crewSteps).toFixed(1) : 'n/a'}% of crew-time; worst engine clog avg ${av(clogSum)} peak ${clogMax.toFixed(2)}; engine power avg ${av(engSum)}; clogs cleared ${sum('clears')}`);
+  if (args.env === 'aether') console.log(`aether: oxygen avg ${av(o2Sum)} min ${o2Min.toFixed(2)}, short of air ${pe(lackSteps)} of flight; oxygen refills ${sum('oxygen')}; engine x${state.env.engine}, gravity x${state.env.gravity}`);
 }
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);

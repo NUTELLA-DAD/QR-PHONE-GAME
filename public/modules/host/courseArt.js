@@ -247,7 +247,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt }) {
     ctx.stroke();
     // (Tufts on floors - off in the simple style.)
     // Open sky: pine trees on the hills.
-    if (map.open && envIdOf(state) !== 'ember') {
+    if (map.open && !['ember', 'fungal', 'aether'].includes(envIdOf(state))) {
       ink();
       ctx.lineWidth = 2.8;
       for (const [[ax, ay], [bx2, by2], i, j] of floors) {
@@ -262,7 +262,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt }) {
       const y = (ay + by2) / 2;
       if (h < 0.18) {
         const len = 30 + hash(i, 56) * 50;
-        ctx.fillStyle = look ? (envIdOf(state) === 'frost' ? '#dcecf7' : '#2c1c1e') : '#6e5646';
+        ctx.fillStyle = look ? (envIdOf(state) === 'frost' ? '#dcecf7' : look.stalac || '#2c1c1e') : '#6e5646';
         ink();
         ctx.lineWidth = 2.8;
         ctx.beginPath();
@@ -274,7 +274,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt }) {
         ctx.stroke();
       } else if (h < 0.28) {
         const len = 60 + hash(j, 57) * 140;
-        ctx.strokeStyle = look ? (envIdOf(state) === 'frost' ? '#eaf5fd' : '#ff7a2a') : '#3f6e30';
+        ctx.strokeStyle = look ? (envIdOf(state) === 'frost' ? '#eaf5fd' : look.vine || '#ff7a2a') : '#3f6e30';
         ctx.lineWidth = 3.2;
         ctx.beginPath();
         ctx.moveTo(x, y);
@@ -299,6 +299,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt }) {
         }
       }
     }
+    if (envArt) envArt.terrain(floors, ceilings); // Fungal Depths mushrooms / Aether crystals on the rock edges
   };
 
   const drawTerrain = (view, width, height) => {

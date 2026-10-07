@@ -1294,6 +1294,10 @@ export function createRenderer({ ctx, state, canvas }) {
         return o.area === 'gasbag' ? { x: o.x, y: 198 + 232 * Math.sqrt(Math.max(0, 1 - ((o.x - 800) / 1000) ** 2)) + 20, r: 60 } : o.gun ? { x: o.x, y: P[o.d].y - 50, r: 56 } : { x: o.x, y: P[o.d].y - 24, r: 52 };
       case 'gas':
         return { x: o.x, y: o.y, r: 40 };
+      case 'unclog':
+        return { x: o.x, y: P[o.d].y - 36, r: 54 };
+      case 'oxygen':
+        return { x: o.x, y: P[o.d].y - 60, r: 56 };
       case 'vent':
         return { x: o.x, y: P[o.d].y - 100, r: 42 };
       case 'coal':
@@ -1740,6 +1744,7 @@ export function createRenderer({ ctx, state, canvas }) {
 
   // Big clouds in the world, drifting past at full ship speed (behind the ship).
   const drawNearClouds = (width, height, view) => {
+    if (state.env && (state.env.id === 'fungal' || state.env.id === 'aether')) return; // (no fluffy white clouds in the mushroom caves or up in the Aether)
     const left = view.cx - width / 2 / view.zoom - 300;
     const top = view.cy - height / 2 / view.zoom;
     const viewW = width / view.zoom + 600;
@@ -1843,6 +1848,7 @@ export function createRenderer({ ctx, state, canvas }) {
       }
       drawGuns();
       envArt.drawIce(); // frost: ice crusts on the gasbag, top deck and guns
+      envArt.drawDeep(); // fungal: spore clouds and clogged engines; aether: the oxygen tank
       drawGunship(time / 1000);
       drawHazards(time / 1000);
       threatArt.drawBombs(time / 1000);

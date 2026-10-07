@@ -167,6 +167,9 @@ function listJobs(state, bot) {
   const fires = state.fires.map((f) => ({ kind: 'fire', obj: f, max: 1 }));
   const holes = [...state.breaches, ...(state.gasHoles || [])].map((h) => ({ kind: 'patch', obj: h, max: 1 }));
   const icy = (state.icing || []).filter((q) => q.lvl >= B.ICE_AT).map((q) => ({ kind: 'ice', obj: q, max: 1 })); // frost: crusts to chip with the hammer
+  // Fungal Depths: spores clogging an engine; The Aether: the oxygen tank running low (bare hands, hold Action at the spot).
+  const deep = (state.clogs || []).filter((c) => c.lvl >= config.ENVIRONMENTS.fungal.CLOG.BOT_AT).map((c) => ({ kind: 'unclog', obj: c, max: 1 }));
+  if (state.env && state.env.id === 'aether' && state.env.o2 < config.ENVIRONMENTS.aether.OXYGEN.BOT_AT) deep.push({ kind: 'oxygen', obj: state.o2tank, max: 1 });
   // Burst pipes with their valve open leak steam: shut the valve, then fix what's broken.
   const leaks = mods.filter((m) => m.kind === 'pipe' && m.broken && m.open).map((m) => ({ kind: 'valve', obj: m, max: 1 }));
   // Steam is short and a damaged module is leaking it? Shut that module's valve - unless it is
@@ -178,8 +181,8 @@ function listJobs(state, bot) {
   }
   const broken = mods.filter((m) => m.broken).map((m) => ({ kind: 'repair', obj: m, max: 1 }));
   // Use the tool already in hand first.
-  if (bot.carry === 'hammer') jobs.push(...leaks, ...broken, ...holes, ...icy, ...fires);
-  else jobs.push(...fires, ...leaks, ...broken, ...holes, ...icy);
+  if (bot.carry === 'hammer') jobs.push(...leaks, ...broken, ...holes, ...icy, ...deep, ...fires);
+  else jobs.push(...fires, ...leaks, ...broken, ...holes, ...icy, ...deep);
   for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open && (!leaky(m) || state.ship.press >= B.ENGINEER_PRESS + 25)) jobs.push({ kind: 'valve', obj: m, max: 1 });
   // Stations, most useful first. The vital ones (helm, gas valve, a gun or weapon with a target
   // right now) come before chores like topping up coal or patching dents.
@@ -414,6 +417,8 @@ function work(p, state) {
     if (getTool(p, 'hammer', o) && steer(p, o.d, o.x, 30)) p.fire = true;
   } else if (job.kind === 'ice') {
     if (getTool(p, 'hammer', o) && steer(p, o.d, o.x, 30)) p.fire = true;
+  } else if (job.kind === 'unclog' || job.kind === 'oxygen') {
+    if (steer(p, o.d, o.x, 25)) p.fire = true; // hold Action at the engine / the oxygen tank
   } else if (job.kind === 'repair') {
     if (getTool(p, 'hammer', o) && steer(p, o.d, o.x, 20)) p.fire = true;
   } else if (job.kind === 'valve') {

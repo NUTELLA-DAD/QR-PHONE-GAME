@@ -11,6 +11,7 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { floorBelow } from './maps.js';
+import { createDeepEnv } from './envDeep.js'; // Fungal Depths (spores, clogged engines) and The Aether (low gravity, oxygen)
 
 const P = SHIP_LAYOUT.platforms;
 const IDX = (id) => P.findIndex((p) => p.id === id);
@@ -57,10 +58,11 @@ export const favour = (state, kind) => {
   return f && f[kind] != null ? f[kind] : 1;
 };
 
-export function createEnvironment({ state, puff }) {
+export function createEnvironment({ state, puff, phoneFx }) {
   state.icing = []; // ice crusts: { area: 'gasbag'|'topdeck'|'gun', gun?, x, d, lvl, prog }
   state.ice = { gasbag: 0, topdeck: 0, guns: 0 }; // how iced each area is (0-1)
-  state.env = { id: 'skyisles', sink: 0, lift: 0, wind: 0, blizzard: 0, smoke: 0, heat: 0, burn: 0, lavaY: null, thermalAt: 0 };
+  state.env = { id: 'skyisles', sink: 0, lift: 0, wind: 0, blizzard: 0, smoke: 0, heat: 0, burn: 0, lavaY: null, thermalAt: 0, gravity: 1, engine: 1, accel: 1, o2: 1, lack: 0 };
+  const deep = createDeepEnv({ state, puff, phoneFx: phoneFx || (() => {}) });
   const CAT = IDX('catwalk');
   const LOWER = IDX('lower');
   const GUN_SPOTS = ['Tail Gun', 'Nose Gun', 'Dorsal Gun', 'Aft Dorsal Gun'].map((n) => {
@@ -82,6 +84,7 @@ export function createEnvironment({ state, puff }) {
     Object.assign(state.env, { sink: 0, lift: 0, wind: 0, blizzard: 0, smoke: 0, heat: 0, burn: 0, lavaY: null });
     blizzLeft = smokeLeft = burnT = 0;
     warned = { blizzard: false, thermal: false, burn: false };
+    deep.clear();
   };
 
   const spawnCrust = (F) => {
@@ -254,18 +257,18 @@ export function createEnvironment({ state, puff }) {
       const F = config.ENVIRONMENTS.ember;
       lavaUpdate(dt, F, flying);
       smokeUpdate(dt, F, flying);
-    }
+    } else if (id === 'fungal' || id === 'aether') deep.update(dt, id, flying);
   };
 
   // ---- ice, as the rest of the game asks about it ----
   const crustOf = (gunName) => state.icing.find((c) => c.gun === gunName) || null;
   const gunIce = (name) => (crustOf(name) ? crustOf(name).lvl : 0);
   const gunJammed = (name) => gunIce(name) >= config.ENVIRONMENTS.frost.ICE.JAM_AT;
-  const gunCooldownMul = (name) => 1 + gunIce(name) * config.ENVIRONMENTS.frost.ICE.GUN_SLOW;
+  const gunCooldownMul = (name) => (1 + gunIce(name) * config.ENVIRONMENTS.frost.ICE.GUN_SLOW) * deep.gunMul();
   const chip = (crust) => {
     const i = state.icing.indexOf(crust);
     if (i >= 0) state.icing.splice(i, 1);
   };
 
-  return { update, gunIce, gunJammed, gunCooldownMul, chip, clear };
+  return { update, gunIce, gunJammed, gunCooldownMul, chip, clear, deep };
 }

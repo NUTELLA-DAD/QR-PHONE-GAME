@@ -487,8 +487,8 @@ export const config = {
       ember: { name: 'Ember Forge', icon: '🌋', color: '#e0713a', ready: true },
       storm: { name: 'Storm Front', icon: '⛈️', color: '#6a6f9a', ready: false },
       sea: { name: 'Sunken Sea', icon: '🌊', color: '#3f8fa6', ready: false },
-      fungal: { name: 'Fungal Depths', icon: '🍄', color: '#8a6fb0', ready: false },
-      aether: { name: 'The Aether', icon: '🌌', color: '#4b3f7a', ready: false },
+      fungal: { name: 'Fungal Depths', icon: '🍄', color: '#8a6fb0', ready: true },
+      aether: { name: 'The Aether', icon: '🌌', color: '#4b3f7a', ready: true },
     },
     KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid' },
   },
@@ -846,6 +846,75 @@ export const config = {
       SMOKE: { FIRST: 35, EVERY_MIN: 35, EVERY_MAX: 60, TIME: 11, ALPHA: 0.34 },
       bat: { body: '#d2491f', wing: '#e8742a' }, // magma bats
     },
+    // FUNGAL DEPTHS: glowing mushroom caves. SPORE CLOUDS drift through the ship: crew inside move slower
+    // (their phone says SPORES!), and spores clog the engines (less power) until a crewmate clears them.
+    fungal: {
+      name: 'Fungal Depths',
+      favour: { swarm: 2, imps: 1.5, bombers: 0.7, strafers: 0.7, gunship: 0.9 }, // bat swarms and spore drones
+      sky: ['0b0818', '1d1240', '2f2a5c'], sun: '110,255,210', ridgeHaze: '44,24,84',
+      rock: '#2c2547', rockStripes: ['rgba(6,2,16,.34)', 'rgba(110,255,210,.1)'], rockHaze: 'rgba(70,36,120,.2)',
+      rim: 'rgba(120,255,214,.6)', edgeDark: '#1b4a4c', edgeLight: '#62f2cc', stalac: '#4a3a78', vine: '#4be0b0',
+      cave: ['#140a2a', '#0a2e34'], pillar: '10,4,26', fog: '74,40,128', shaft: '110,255,210',
+      ridges: [
+        { f: 0.02, base: 0.86, amp: 190, freq: 0.003, color: '#3a2c66', snow: null },
+        { f: 0.045, base: 0.92, amp: 130, freq: 0.004, color: '#2a2150', snow: null },
+        { f: 0.1, base: 0.98, amp: 100, freq: 0.007, color: '#1d1840', snow: null },
+      ],
+      MUSHROOMS: { CHANCE: 0.34, GIANT: 0.14, GLOW: 0.2, CAPS: ['#8b5cf6', '#19c3b0', '#e657b6', '#52c8ff'] }, // chance a rock edge carries a mushroom, share of those that are giants, halo alpha, cap colours
+      MOTES: { COUNT: 90, SPEED: 14, SIZE: 3.4, TILE_W: 2600, TILE_H: 1500, COLORS: ['150,255,220', '190,150,255'] },
+      SPORES: {
+        FIRST: 22, EVERY_MIN: 15, EVERY_MAX: 28, // seconds between clouds
+        MAX: 3, // clouds at once
+        RX: 200, RY: 135, // cloud radius (ship pixels)
+        SPEED: 70, // drift across the ship (px per second)
+        SLOW: 0.55, // crew inside walk at this share of normal speed
+        COLOR: '176,240,110',
+      },
+      CLOG: {
+        BASE: 0.002, // engine clog gained per second just from the spore-laden air
+        CLOUD: 0.04, // ...and per second while a cloud sits over the engine
+        POWER: 0.5, // a fully clogged engine loses this share of its power (both clogged: the ship crawls)
+        CLEAR_TIME: 2.2, // seconds of holding Action (at the engine) to clear one
+        JOB_AT: 0.3, // clogs thicker than this show as a job on idle phones
+        BOT_AT: 0.45, // ...and bots clear them from this thickness
+      },
+      bat: { body: '#7a4fc8', wing: '#34d1b0' }, // glowing cave bats
+      imp: { wing: '#2a6a62', body: '#7a4fb0', eye: '#9dffd8' }, // 'spore drones'
+    },
+    // THE AETHER: the top of the sky. Thin air: the gasbag lifts weakly (pump more gas to hover), the engines
+    // are strong, crew are light (low gravity: big jumps), and the ship's OXYGEN slowly drains - refill it
+    // at the oxygen tank. Void corsairs (dogfighters) and gunships hunt here.
+    aether: {
+      name: 'The Aether',
+      favour: { swarm: 0.4, imps: 0.5, bombers: 0.6, strafers: 2, gunship: 1.5 },
+      sky: ['04020c', '150a30', '3b2a72'], sun: '190,160,255', ridgeHaze: '70,48,130',
+      rock: '#5a5278', rockStripes: ['rgba(10,6,30,.3)', 'rgba(200,180,255,.14)'], rockHaze: 'rgba(120,96,190,.2)',
+      rim: 'rgba(205,190,255,.65)', edgeDark: '#2e2756', edgeLight: '#d2c4ff', stalac: '#8a7cc0', vine: '#9d8cff',
+      cave: ['#0c0824', '#1e1648'], pillar: '12,8,34', fog: '100,76,170', shaft: '176,156,255',
+      ridges: [], // (unused: the Aether draws the curve of the world instead)
+      STARS: { COUNT: 230, SIZE: 3.4, PARALLAX: 0.01 },
+      AURORA: { ALPHA: 0.2, COLORS: ['90,255,200', '150,110,255'], PARALLAX: 0.02 },
+      WORLD: { COLOR: ['#1a2a6a', '#3d6fb0'], ATMOS: '120,170,255', RISE: 0.8 }, // the planet below: its colours, the atmosphere glow, where its rim sits on the screen
+      ISLANDS: { COUNT: 7, PARALLAX: 0.05, COLOR: '#2a2252', GLOW: '176,156,255' }, // far floating rocks
+      GRAVITY: 0.33, // crew gravity multiplier (hops and falls: jumps go ~3x higher and longer)
+      SINK: 18, // thin air: she needs this many MORE points of gas to hover (50 -> 68)
+      ENGINE: 1.25, // engines are strong: forward speed multiplier
+      ENGINE_ACCEL: 1.4, // ...and she picks up speed this much faster
+      OXYGEN: {
+        DRAIN: 1 / 170, // oxygen (0-1) lost per second while flying: about 170 s from full to empty
+        TANK_X: 1405, // where the oxygen tank stands (main deck, by the bridge)
+        REFILL: 0.5, // oxygen gained each time a refill hold completes
+        REFILL_TIME: 2.6, // seconds of holding Action at the tank
+        LOW: 0.22, // below this the lack starts to bite, growing to full at zero
+        WALK: 0.62, // crew walk at this share of speed with none left
+        GUN: 1.0, // guns cool down this much slower with none left (1 = twice as slow = half speed)
+        HELM: 0.5, // the helm responds this much slower with none left (0.5 = half speed)
+        JOB_AT: 0.5, // below this the tank shows as a job on idle phones
+        BOT_AT: 0.4, // ...and bots go to refill it
+      },
+      bat: { body: '#5a4a9a', wing: '#9d8cff' },
+      strafer: { body: '#2b2146', trim: '#8a63ff' }, // void corsairs
+    },
   },
   // Old-film effects. All OFF (the user found them unpleasant). Raise a number or set
   // LINE_BOIL to true to bring one back.
@@ -978,7 +1047,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, repair: 1.1, ammo: 1, coal: 1 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, repair: 1.1, ammo: 1, coal: 1 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

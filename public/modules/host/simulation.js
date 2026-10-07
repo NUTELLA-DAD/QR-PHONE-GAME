@@ -156,6 +156,10 @@ export function createSimulation() {
     if (gasHole && tool === 'hammer') return { type: 'gas', obj: gasHole, hold: true, time: T.PATCH_TIME, label: 'Patch gasbag' };
     const ice = state.icing.find((o) => here(o, 80));
     if (ice && tool === 'hammer') return { type: 'ice', obj: ice, hold: true, time: config.ENVIRONMENTS.frost.ICE.CHIP_TIME, label: 'Chip ice' };
+    const clog = env.deep.clogNear(player); // Fungal Depths: spores on an engine (hold Action to clear)
+    if (clog) return { type: 'unclog', obj: clog, hold: true, time: config.ENVIRONMENTS.fungal.CLOG.CLEAR_TIME, label: 'Clear spores' };
+    const tank = env.deep.tankNear(player); // The Aether: the oxygen tank
+    if (tank) return { type: 'oxygen', obj: tank, hold: true, time: config.ENVIRONMENTS.aether.OXYGEN.REFILL_TIME, label: 'Refill oxygen' };
     const hurt = modules.list.find((m) => m.hp < m.max && here(m, T.REACH + 15));
     if (hurt && tool === 'hammer') return { type: 'repair', obj: hurt, hold: true, label: `Repair ${hurt.name}` };
     // Otherwise standing at a rack or hook means take / swap / put back.
@@ -482,7 +486,7 @@ export function createSimulation() {
     const SH = config.SHIP;
     const sp = state.ship.speed;
     const braking = Math.abs(want) < Math.abs(sp) || (Math.sign(want) !== Math.sign(sp) && Math.abs(sp) > 0.02);
-    const rate = (braking ? SH.BRAKE : SH.ACCEL) * Math.min(1, Math.abs(want - sp) * 4 + 0.25);
+    const rate = (braking ? SH.BRAKE : SH.ACCEL) * Math.min(1, Math.abs(want - sp) * 4 + 0.25) * env.deep.helmMul() * state.env.accel; // (The Aether: strong engines, thin air for the helmsman)
     state.ship.speed = sp + clamp(want - sp, -rate * dt, rate * dt);
     state.ship.accelX = dt > 0 ? (state.ship.speed - sp) / dt : 0;
   };
@@ -905,7 +909,7 @@ export function createSimulation() {
   const coil = createCoil({ state, puff, credit });
   const gunship = createGunship({ state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) });
   const weather = createWeather({ state, impact, puff });
-  const env = createEnvironment({ state, puff }); // ice, thermals, blizzards (rules in environments.js)
+  const env = createEnvironment({ state, puff, phoneFx }); // ice, thermals, blizzards (rules in environments.js)
   const air = createAirborne({ state, puff, phoneFx });
   // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
   // Every deck of hers is a landing surface (she can have up to 4 stepped decks; the deck numbers run left to right as she is now).
@@ -1117,8 +1121,8 @@ export function createSimulation() {
           if (air.step(player, dt)) air.grab(player); // free flight (off a deck end, over the rail, or thrown); may catch a ladder
         } else if (player.air) {
           // Steer (a bit less than on the ground), no ladders while airborne.
-          (player.onGunship ? gunship.walk : moveWalker)(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED);
-          player.vy -= M.JUMP_GRAVITY * dt;
+          (player.onGunship ? gunship.walk : moveWalker)(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED * env.deep.walkMul(player));
+          player.vy -= M.JUMP_GRAVITY * state.env.gravity * dt; // (low gravity in The Aether: higher, longer hops)
           player.jz += player.vy * dt;
           if (player.onGunship || !air.edgeCheck(player, dt, true)) {
             if (player.jz <= 0) {
@@ -1132,9 +1136,9 @@ export function createSimulation() {
           }
           if (player.air && !player.onGunship) air.grab(player); // a hop can catch a ladder
         } else if (player.onGunship) {
-          gunship.walk(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED); // aboard a gunship she carries them
+          gunship.walk(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED * env.deep.walkMul(player)); // aboard a gunship she carries them
         } else {
-          moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED, player.conn != null && !player.bot && Math.abs(player.jy || 0) > 0.9 ? config.AIR.CLIMB_FAST : 1);
+          moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED * env.deep.walkMul(player), player.conn != null && !player.bot && Math.abs(player.jy || 0) > 0.9 ? config.AIR.CLIMB_FAST : 1);
           air.edgeCheck(player, dt, false); // walking off the end of an outside deck
         }
         if (!player.fly && !player.onGunship) air.standing(player, dt);
@@ -1156,7 +1160,7 @@ export function createSimulation() {
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
-              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', defuse: 'defused', revive: 'revives', sabotage: 'sabotage', cutline: 'boarding' }[act.type]);
+              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', sabotage: 'sabotage', cutline: 'boarding' }[act.type]);
               if (act.type === 'fire') pop(state, object.x, player.y - 120 - state.ship.alt, 'fireOut', '#9fd3e6', 0.8);
               if (act.type === 'hole' || act.type === 'gas') pop(state, object.x, player.y - 120 - state.ship.alt, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
@@ -1166,6 +1170,8 @@ export function createSimulation() {
               } else if (act.type === 'defuse') state.bombs.splice(state.bombs.indexOf(object), 1);
               else if (act.type === 'gas') state.gasHoles.splice(state.gasHoles.indexOf(object), 1);
               else if (act.type === 'ice') env.chip(object);
+              else if (act.type === 'unclog') env.deep.unclog(object);
+              else if (act.type === 'oxygen') env.deep.refill();
               else if (act.type === 'sabotage') gunship.plant(player);
               else if (act.type === 'cutline') gunship.cutLine(player);
               else object.ko = 0;
@@ -1267,6 +1273,7 @@ export function createSimulation() {
       if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag full - she is rising' : 'Gasbag low - she is dropping';
       if (gun && !status && env.gunIce(stationName) > 0.35) status = env.gunJammed(stationName) ? 'ICED - CHIP IT! (hammer)' : 'Gun is icing up - chip it (hammer)';
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
+      if (!status && !player.bot) status = env.deep.status(player) || ''; // spores (cough), clogged engines, oxygen
       const ammoText = gun ? gun.ammo : stationName === 'Bomb Bay' ? state.bombBay.bombs : null;
       const attackLabel = !player.lock && player.conn == null && batInReach(player, config.WAVES.BAT_NOTICE) ? 'Swat bat!' : player.carry === 'sword' ? 'Swing' : 'Shove';
       const hull = Math.round(state.ship.hull / 5) * 5;
@@ -1398,7 +1405,7 @@ export function createSimulation() {
     // (ice weight shifts the level she needs to hover; lava thermals push her up - state.env, environments.js)
     const effGas = state.ship.gas - state.env.sink + state.env.lift / G.LIFT;
     const lift = (effGas - G.NEUTRAL) * G.LIFT;
-    const trim = state.ship.trim * SHM.TRIM_ACCEL * (modules.works(state, 'Helm') ? 1 : 0);
+    const trim = state.ship.trim * SHM.TRIM_ACCEL * (modules.works(state, 'Helm') ? 1 : 0) * env.deep.helmMul();
     state.buoyancy = effGas > G.NEUTRAL + 5 ? 1 : effGas < G.NEUTRAL - 5 ? -1 : 0;
     state.sinking = state.buoyancy < 0;
     if (flying) {
@@ -1522,7 +1529,7 @@ export function createSimulation() {
     }
 
     // Progress drains only while nobody is working on it.
-    for (const object of [...state.breaches, ...state.fires, ...state.bombs, ...state.gasHoles, ...state.icing]) {
+    for (const object of [...state.breaches, ...state.fires, ...state.bombs, ...state.gasHoles, ...state.icing, ...state.clogs, state.o2tank]) {
       if (!object.worked) object.prog = Math.max(0, (object.prog || 0) - dt * 0.4);
       object.worked = false;
     }

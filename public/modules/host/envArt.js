@@ -6,6 +6,7 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { envIdOf, envOf, lavaLevel } from './environments.js';
+import { createDeepArt } from './envDeepArt.js'; // Fungal Depths and The Aether
 
 const hash = (i, salt = 0) => {
   const v = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
@@ -18,6 +19,7 @@ const rgb = (hex) => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
 
 export function createEnvArt({ ctx, state, ink }) {
   let now = 0;
+  const deepArt = createDeepArt({ ctx, state, ink });
   const GB = SHIP_LAYOUT.gasbag;
   const P = SHIP_LAYOUT.platforms;
   const isOther = () => envIdOf(state) !== config.ENVIRONMENTS.DEFAULT;
@@ -87,6 +89,8 @@ export function createEnvArt({ ctx, state, ink }) {
   // Returns true when it drew the whole background (so render.js skips the Sky Isles one).
   const background = (width, height, view) => {
     if (!isOther() || !(width > 0) || !(height > 0)) return false;
+    const deepDone = deepArt.background(width, height, view); // Fungal Depths / The Aether (null = not theirs)
+    if (deepDone !== null) return deepDone;
     try {
       const e = E();
       const g = ctx.createLinearGradient(0, 0, 0, height);
@@ -204,6 +208,7 @@ export function createEnvArt({ ctx, state, ink }) {
   // ---------- Weather in the world (snow, blizzard haze, embers, smoke), drawn over the ship ----------
   const worldFront = (view, width, height, time) => {
     if (!isOther() || !state.course) return;
+    deepArt.worldFront(view, width, height, time); // fungal motes
     try {
       const zoom = num(view.zoom, 1);
       const left = num(view.cx) - width / 2 / zoom;
@@ -366,5 +371,5 @@ export function createEnvArt({ ctx, state, ink }) {
     }
   };
 
-  return { setTime: (t) => { now = num(t); }, background, lava, worldFront, drawIce };
+  return { setTime: (t) => { now = num(t); deepArt.setTime(t); }, background, lava, worldFront, drawIce, terrain: deepArt.terrain, drawDeep: deepArt.drawShip };
 }
