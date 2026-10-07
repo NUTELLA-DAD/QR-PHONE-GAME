@@ -2,6 +2,7 @@
 // It watches the game state each frame and plays sounds for what changed: shots, hits, kills,
 // warnings, upgrades, swings, pickups, hammering.
 import { config } from '../../config.js';
+import { createMusic } from './music.js';
 
 export function createSfx(state) {
   let ac = null;
@@ -9,6 +10,7 @@ export function createSfx(state) {
   let muted = config.SOUND.START_MUTED;
   let noiseBuf = null;
   const last = { shells: 0, bullets: 0, kills: 0, hull: 100, warn: '', vote: false, down: false, boss: false };
+  const music = createMusic(state); // the background loops (music.js); the Sound button / M key mute them too
   const perPlayer = new Map();
   const cooldown = {};
 
@@ -34,6 +36,7 @@ export function createSfx(state) {
   const toggle = () => {
     muted = !muted;
     if (master) master.gain.value = muted ? 0 : config.SOUND.VOLUME;
+    music.setSoundMuted(muted);
     return muted;
   };
 
@@ -155,6 +158,7 @@ export function createSfx(state) {
     const q = state.sfxQ || [];
     if (ac) for (const [name, arg] of q) if (S[name] && ready(name, 0.05)) play(name, arg);
     q.length = 0;
+    music.update();
     if (!ac) return;
     if (state.shells.length > last.shells && ready('cannon', 0.06)) play('cannon');
     if (state.bullets.length > last.bullets && ready('pew', 0.15)) play('pew');
@@ -184,5 +188,5 @@ export function createSfx(state) {
     last.warn = text;
   };
 
-  return { update, toggle, isMuted: () => muted };
+  return { update, toggle, isMuted: () => muted, music };
 }
