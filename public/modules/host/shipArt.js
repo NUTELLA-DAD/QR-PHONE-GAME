@@ -71,12 +71,28 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       const g2 = Math.max(0, Math.min(1, (state.ship.gas ?? 50) / 100));
       line([[520, 0], [520, -60]], 4);
       line([[1100, 0], [1100, -60]], 4);
-      filled('#d6c7a2', () => ctx.ellipse(780, -60, (G.rx * 0.7) * (0.8 + 0.4 * g2), G.ry * 0.62 * (0.9 + 0.2 * g2), 0, 0, 7));
-      ctx.lineWidth = 3;
-      for (let i = -3; i <= 3; i++) {
+      const r2x = (G.rx * 0.7) * (0.8 + 0.4 * g2);
+      const r2y = G.ry * 0.62 * (0.9 + 0.2 * g2);
+      if (sprites.has('ship/gasbag')) {
+        // The same painted envelope, a little smaller, clipped to its ellipse, with a crisp outline on top.
+        ctx.save();
         ctx.beginPath();
-        ctx.ellipse(780, -60, (G.rx * 0.7 * Math.abs(i)) / 3.6 + 4, G.ry * 0.62, 0, i < 0 ? Math.PI - 1.57 : -1.57, i < 0 ? Math.PI + 1.57 : 1.57);
+        ctx.ellipse(780, -60, r2x, r2y, 0, 0, 7);
+        ctx.clip();
+        sprites.box(ctx, 'ship/gasbag', 780 - r2x, -60 - r2y, r2x * 2, r2y * 2);
+        ctx.restore();
+        ink();
+        ctx.beginPath();
+        ctx.ellipse(780, -60, r2x, r2y, 0, 0, 7);
         ctx.stroke();
+      } else {
+        filled('#d6c7a2', () => ctx.ellipse(780, -60, r2x, r2y, 0, 0, 7));
+        ctx.lineWidth = 3;
+        for (let i = -3; i <= 3; i++) {
+          ctx.beginPath();
+          ctx.ellipse(780, -60, (G.rx * 0.7 * Math.abs(i)) / 3.6 + 4, G.ry * 0.62, 0, i < 0 ? Math.PI - 1.57 : -1.57, i < 0 ? Math.PI + 1.57 : 1.57);
+          ctx.stroke();
+        }
       }
     }
     // The envelope swells when full and sags when empty (mostly in length, a little in height).
@@ -109,7 +125,38 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       });
     }
     ctx.restore();
-    if (!sprites.box(ctx, 'ship/gasbag', G.cx - G.rx, G.cy - G.ry, G.rx * 2, G.ry * 2)) {
+    let painted = false;
+    try {
+      if (sprites.has('ship/gasbag')) {
+        // Painted envelope, stretched to the ellipse's box and clipped to the ellipse, with the ink outline kept on top.
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(G.cx, G.cy, G.rx, G.ry, 0, 0, 7);
+        ctx.clip();
+        painted = sprites.box(ctx, 'ship/gasbag', G.cx - G.rx, G.cy - G.ry, G.rx * 2, G.ry * 2);
+        ctx.restore();
+        if (painted) {
+          ink();
+          ctx.beginPath();
+          ctx.ellipse(G.cx, G.cy, G.rx, G.ry, 0, 0, 7);
+          ctx.stroke();
+          if (has('rubber-gasbag')) {
+            // Rubberised: a darker wash over the canvas.
+            ctx.save();
+            ctx.beginPath();
+            ctx.ellipse(G.cx, G.cy, G.rx - 2, G.ry - 2, 0, 0, 7);
+            ctx.clip();
+            ctx.fillStyle = 'rgba(120,98,60,0.22)';
+            ctx.fillRect(G.cx - G.rx, G.cy - G.ry, G.rx * 2, G.ry * 2);
+            ctx.restore();
+          }
+        }
+      }
+    } catch (e) {
+      ctx.restore();
+      painted = false;
+    }
+    if (!painted) {
       // Rubberised Gasbag: darker rubber with patches.
       filled(has('rubber-gasbag') ? '#cbbd96' : '#ebdfc0', () => ctx.ellipse(G.cx, G.cy, G.rx, G.ry, 0, 0, 7));
       if (has('rubber-gasbag')) for (const [px, py] of [[300, 200], [620, 320], [1050, 170], [1350, 300]]) filled('#a89a72', () => ctx.roundRect(px, py, 60, 34, 8));
