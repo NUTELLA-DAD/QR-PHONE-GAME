@@ -3,12 +3,12 @@
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
-const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0 };
+const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') {
-    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N]');
+    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi]');
     process.exit(0);
   } else if (a.startsWith('--') && a.slice(2) in args) {
     const v = argv[++i];
@@ -59,6 +59,13 @@ if (args.env) {
 }
 const { createSimulation } = await load('modules/host/simulation.js');
 
+// (--build NAME: fly a scratch build from tools/fixtures/NAME-build.mjs instead of the classic ship, e.g. --build multi)
+if (args.build && args.build !== 'classic') {
+  const { applyBuild } = await load('shipLayout.js');
+  const { BUILDS } = await load('modules/host/shipBuild.js');
+  const scratch = await import(pathToFileURL(path.join(root, '..', 'tools', 'fixtures', args.build + '-build.mjs')).href);
+  applyBuild(scratch.default(BUILDS));
+}
 const sim = createSimulation();
 const state = sim.state;
 state.difficulty = args.difficulty;
@@ -98,6 +105,7 @@ let gapSum = 0, gapMin = 1e9, seaSteps = 0, floodSum = 0, floodHigh = 0, wetStep
 let lightSteps = 0, lightManned = [0, 0], lightLit = 0, litBonus = 0; // searchlights: flight steps, steps each lamp was manned, steps with something lit
 let matesMax = 0;
 const actTally = {};
+const buildManned = {};
 const t0 = realNow();
 
 for (let step = 1; step <= totalSteps; step++) {
@@ -129,8 +137,9 @@ for (let step = 1; step <= totalSteps; step++) {
     if (state.boilerBlew) { blowouts++; state.boilerBlew = false; }
   }
   lastPress = state.ship.press;
-  if (state.phase === 'flying' && state.searchlights) { lightSteps++; state.searchlights.forEach((l, i) => { if (l.manned) lightManned[i]++; }); if (state.litTargets.length) lightLit++; }
+  if (state.phase === 'flying' && state.searchlights) { lightSteps++; state.searchlights.forEach((l, i) => { if (l.manned) lightManned[i] = (lightManned[i] || 0) + 1; }); if (state.litTargets.length) lightLit++; }
   if (state.phase === 'flying') { hullSum += state.ship.hull; hullN++; }
+  if (args.build && state.phase === 'flying') for (const q of Object.values(state.players)) if (q.lock) buildManned[q.lock] = (buildManned[q.lock] || 0) + 1; // (seconds x 60 each station was manned)
   if (process.env.BOT_ACT && state.phase === 'flying') for (const q of Object.values(state.players)) if (q.bot) { const k = q.lock ? 'at ' + q.lock : q.botJob ? q.botJob.kind : 'idle'; actTally[k] = (actTally[k] || 0) + 1; } // (BOT_ACT=1: what the bots spend their time on)
   if (state.phase === 'flying' && state.env) { // environment stats
     const E = state.env;
@@ -201,6 +210,7 @@ if (lightSteps) console.log(`searchlights: ${(state.searchlights || []).map((l, 
   console.log(`links${config.LINKS.ENABLED ? '' : ' (OFF)'}: paired seconds ${(S.gunPair + S.helmPair + S.nestPair).toFixed(0)} of ${all.toFixed(0)} station seconds = ${pr(S.gunPair + S.helmPair + S.nestPair, all)} (gun+loader ${pr(S.gunPair, S.gunT)}, helm+lookout ${pr(S.helmPair, S.helmT)}, lookout+helm ${pr(S.nestPair, S.nestT)}); gunner idle ${pr(S.gunIdle, S.gunT)} of ${S.gunT.toFixed(0)}s; surge held ${S.surgeT.toFixed(0)}s`);
 }
 if (process.env.BOT_ACT) console.log('bot time: ' + Object.entries(actTally).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + ((100 * v) / Object.values(actTally).reduce((a, b) => a + b, 0)).toFixed(1) + '%').join(', '));
+if (args.build) console.log('BUILD_STATS ' + JSON.stringify({ build: args.build, manned: Object.fromEntries(Object.entries(buildManned).map(([k, v]) => [k, Math.round(v / 60)])), boilerLoads: state.boilerLoads || {} })); // (read by tools/buildsim.mjs --check-multi)
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);

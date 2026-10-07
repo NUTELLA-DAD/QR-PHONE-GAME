@@ -2,7 +2,7 @@
 // Broken modules stop working until repaired with a hammer. The boiler's steam reaches the helm,
 // engines and lift through pipes; each pipe has a valve and can burst and leak.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, all, one } from '../../shipLayout.js';
 import { connScale } from './nav.js';
 
 const M = config.MODULES;
@@ -40,15 +40,13 @@ export function createModules() {
       const s = station(name);
       add({ name, kind: 'gun', d: s.d, x: s.x, pos: { x: mount.bx, y: mount.by } });
     }
-    const coilSt = station('Lightning Coil');
-    add({ name: 'Lightning Coil', kind: 'coil', d: coilSt.d, x: coilSt.x, pos: { x: coilSt.x, y: P[coilSt.d].y - 60 } });
-    const defl = station('Deflector');
-    add({ name: 'Deflector', kind: 'shield', d: defl.d, x: defl.x, pos: { x: defl.x, y: P[defl.d].y - 60 } });
-    const bay = station('Bomb Bay');
-    add({ name: 'Bomb Bay', kind: 'bombbay', d: bay.d, x: bay.x, pos: { x: L.bombBay.x, y: L.bombBay.y - 30 } });
-    for (const name of ['Boiler', 'Helm']) {
-      const s = station(name);
-      add({ name, kind: name.toLowerCase(), d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });
+    for (const s of all('coil')) add({ name: s.n, kind: 'coil', d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });
+    for (const s of all('deflector')) add({ name: s.n, kind: 'shield', d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });
+    const bay = one('bombBay'); // (one bomb bay compartment: L.bombBay)
+    add({ name: bay.n, kind: 'bombbay', d: bay.d, x: bay.x, pos: { x: L.bombBay.x, y: L.bombBay.y - 30 } });
+    // Boilers (a build may have several) then the helm.
+    for (const s of [...all('boiler'), ...all('helm').slice(0, 1)]) {
+      add({ name: s.n, kind: s.kind, d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });
     }
     for (const e of L.engines) add({ name: e.name, kind: 'engine', d: e.d, x: e.x, pos: { x: e.x, y: P[e.d].y + 38 } });
     const lr = L.liftRepair;
@@ -71,10 +69,13 @@ export function createModules() {
 
   const pipeTo = (name) => list.find((m) => m.kind === 'pipe' && m.to === name);
 
+  // Boilers: one steam pool serves the whole ship, so steam is up while ANY boiler is unbroken.
+  const boilers = () => list.filter((m) => m.kind === 'boiler');
+  const boilerUp = () => boilers().some((m) => !m.broken);
+
   // Does the boiler's steam reach this module right now?
   const hasSteam = (state, name) => {
-    const boiler = byName.Boiler;
-    if (boiler.broken || state.ship.press < M.STEAM_MIN) return false;
+    if (!boilerUp() || state.ship.press < M.STEAM_MIN) return false;
     const pipe = pipeTo(name);
     return !pipe || (pipe.open && !pipe.broken);
   };
@@ -187,5 +188,5 @@ export function createModules() {
     return '';
   };
 
-  return { list, byName, hasSteam, works, damage, hitAt, repair, update, pressureDrain, drainParts, leaks, leakRate, engineFactor, reset, status, rebuild };
+  return { list, byName, boilers, boilerUp, hasSteam, works, damage, hitAt, repair, update, pressureDrain, drainParts, leaks, leakRate, engineFactor, reset, status, rebuild };
 }

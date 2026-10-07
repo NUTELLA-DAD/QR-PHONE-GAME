@@ -4,6 +4,9 @@ export function createControllerUI({ network }) {
   const $ = (id) => document.getElementById(id);
   const speciesNames = [['bulldog', '🐶'], ['wolf', '🐺'], ['tiger', '🐯'], ['shiba', '🐕'], ['fox', '🦊'], ['bear', '🐻'], ['cat', '🐱'], ['rabbit', '🐰']];
 
+  // "Take <station>" gets its icon from the station's KIND (sent by the host as `kind`), not its name: a ship may have a "Fore Boiler" or a "Mid Nest Searchlight".
+  const TAKE_ICONS = { light: '🔦', helm: '☸️', boiler: '🔥' };
+
   // Icon for the Action button, picked from the start of its label.
   const ACTION_ICONS = [
     ['Swap to hookshot', '🪝'], ['Take hookshot', '🪝'], ['Reel in', '🪝'], ['KICK', '🦶'], ['Auto guns', '🔫'],
@@ -11,7 +14,7 @@ export function createControllerUI({ network }) {
     ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['SURGE', '🔥'], ['LOAD for', '📦'], ['Close valve', '🚱'], ['Open valve', '🚰'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
     ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'],
-    ['Take Nest Searchlight', '🔦'], ['Take Belly Searchlight', '🔦'], ['FOCUS', '🔦'], ['Take Helm', '☸️'],['Take Boiler', '🔥'], ['Take', '🎯'],
+    ['FOCUS', '🔦'], ['Take', '🎯'],
     ['FIRE', '💥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
   ];
   const CARRY = { sword: '🗡️ Sword', hammer: '🔨 Hammer', extinguisher: '🧯 Extinguisher', ammo: '📦 Ammo', coal: '⚫ Coal', hookshot: '🪝 Hookshot' };
@@ -149,7 +152,7 @@ export function createControllerUI({ network }) {
       return;
     }
     const label = next.label || 'Hey!';
-    const icon = (ACTION_ICONS.find(([start]) => label.startsWith(start)) || [, '👋'])[1];
+    const icon = (label === 'Take ' + next.station && TAKE_ICONS[next.kind]) || (ACTION_ICONS.find(([start]) => label.startsWith(start)) || [, '👋'])[1];
     setButton('act', icon, label);
     $('act').classList.toggle('hold', !!next.hold);
     $('act').classList.toggle('loading', next.load >= 0); // loading for a gunner: the button fills as the shell primes
@@ -187,9 +190,9 @@ export function createControllerUI({ network }) {
         : next.label && next.label !== 'Hey!'
           ? next.hold ? 'Hold the Action button' : 'Tap the Action button'
           : next.carry === 'ammo'
-            ? 'Bring the ammo to a gun or the Bomb Bay'
+            ? 'Bring the ammo to a gun or the bomb bay'
             : next.carry === 'coal'
-              ? 'Bring the coal to the Boiler (main deck)'
+              ? 'Bring the coal to a boiler'
             : 'Walk to a station, rack, fire or hole';
     const warn = next.status ? ` <span class="warn">${next.status}</span>` : '';
     $('info').innerHTML = `<b>${where}${ammo}</b> - ${hint}${warn}`;

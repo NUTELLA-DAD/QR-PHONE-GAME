@@ -9,7 +9,7 @@
 //   wind  - sideways shove (px/s) during a blizzard gust               -> applied here to course.dist
 //   heat/burn/blizzard/smoke - 0..1 amounts for the art and the TV
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, all } from '../../shipLayout.js';
 import { floorBelow } from './maps.js';
 import { createDeepEnv } from './envDeep.js'; // Fungal Depths (spores, clogged engines) and The Aether (low gravity, oxygen)
 import { createStormSea } from './envStormSea.js'; // Storm Front + Sunken Sea rules
@@ -67,10 +67,8 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) 
   const ss = createStormSea({ state, puff, impact, damageHull }); // storm + sea rules (envStormSea.js)
   const CAT = IDX('catwalk');
   const LOWER = IDX('lower');
-  const GUN_SPOTS = ['Tail Gun', 'Nose Gun', 'Dorsal Gun', 'Aft Dorsal Gun'].map((n) => {
-    const s = SHIP_LAYOUT.stations.find((q) => q.n === n);
-    return { gun: n, d: s.d, x: s.x };
-  });
+  // Guns out in the open (on the nest or the top deck) are the ones that ice up.
+  const gunSpots = () => all('gun').filter((s) => s.p === 'nest' || s.p === 'catwalk').map((s) => ({ gun: s.n, d: s.d, x: s.x }));
   let seenMap = null;
   let blizzT = 0;
   let blizzLeft = 0;
@@ -98,7 +96,7 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) 
     const area = r < A.gasbag ? 'gasbag' : r < A.gasbag + A.topdeck ? 'topdeck' : 'gun';
     let crust;
     if (area === 'gun') {
-      const free = GUN_SPOTS.filter((g) => !state.icing.some((c) => c.gun === g.gun));
+      const free = gunSpots().filter((g) => !state.icing.some((c) => c.gun === g.gun));
       if (!free.length) return;
       const g = free[(Math.random() * free.length) | 0];
       crust = { area, gun: g.gun, x: g.x, d: g.d };

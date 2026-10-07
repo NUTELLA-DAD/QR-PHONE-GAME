@@ -12,7 +12,7 @@
 // This file owns the rules; simulation.js calls the small hooks (tryStart, active/protect, onStoke, takeIce,
 // throwIce, update, newMission). Bots use botJobs(), idle phones jobsFor().
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, one, nearest } from '../../shipLayout.js';
 import { altBounds } from './course.js';
 import { pop } from './popups.js';
 
@@ -24,7 +24,7 @@ let MAIN_D, CAT_D, BOILER, LOCKER; // (worked out from the ship layout; refreshe
 function rebuildShipTables() {
   MAIN_D = L.platforms.findIndex((p) => p.id === 'main');
   CAT_D = L.platforms.findIndex((p) => p.id === 'catwalk');
-  BOILER = L.stations.find((s) => s.n === 'Boiler');
+  BOILER = one('boiler'); // (GOING DOWN! is about the first boiler; a ship with several still only has the one heat meter)
   LOCKER = L.racks.find((r) => r.kind === 'ice');
 }
 rebuildShipTables();
@@ -291,10 +291,9 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     const { g, open, coalLeft } = taskOrder();
     const out = [];
     const U = 3;
-    const bunker = L.stations.find((s) => s.n === 'Coal Bunker');
-    void bunker;
+    const bunker = nearest('coal', p);
     if (coalLeft > 0 || p.carry === 'coal') {
-      for (let k = 0; k < Math.min(3, Math.max(1, coalLeft)); k++) out.push({ kind: 'coal', obj: 'gdcoal' + k, d: BOILER.d, x: BOILER.x, urgency: U, max: 1, label: 'EMERGENCY COAL for the boiler!', ...(p.carry === 'coal' ? {} : { fetch: 'Coal Bunker' }) });
+      for (let k = 0; k < Math.min(3, Math.max(1, coalLeft)); k++) out.push({ kind: 'coal', obj: 'gdcoal' + k, d: BOILER.d, x: BOILER.x, urgency: U, max: 1, label: 'EMERGENCY COAL for the boiler!', ...(p.carry === 'coal' || !bunker ? {} : { fetch: bunker.n }) });
     }
     out.push({ kind: 'cool', obj: 'gdcool0', d: BOILER.d, x: BOILER.x, urgency: g.heat > 0.55 ? U * 1.4 : U * 0.8, max: 1, label: 'ICE for the boiler!' });
     if (g.heat > 0.4 || crewCount() >= 6) out.push({ kind: 'cool', obj: 'gdcool1', d: BOILER.d, x: BOILER.x, urgency: U * 0.7, max: 1, label: 'ICE for the boiler!' });

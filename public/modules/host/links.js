@@ -6,19 +6,17 @@
 //    manned. Pressure climbs while you hold: let go in time or she blows (the existing blowout).
 // Numbers live in config.LINKS. Also keeps state.linkStats (seconds of station time, paired and idle) for tools/botsim.mjs.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, one, nearest, kindOf, isNestStation } from '../../shipLayout.js';
 import { bestTarget } from './aim.js';
 
 const LK = config.LINKS;
 const SG = LK.SURGE;
-const NEST = ['Lookout', 'Nest Searchlight'];
 
 // Worked out from the ship layout; refilled when a new ship build is applied.
-let STATIONS, BOILER, BOILER_Y;
+let STATIONS, NEST;
 function rebuildShipTables() {
   STATIONS = Object.fromEntries(SHIP_LAYOUT.stations.map((q) => [q.n, q]));
-  BOILER = SHIP_LAYOUT.stations.find((q) => q.n === 'Boiler');
-  BOILER_Y = SHIP_LAYOUT.platforms[BOILER.d].y;
+  NEST = SHIP_LAYOUT.stations.filter((q) => isNestStation(q.n)).map((q) => q.n); // every lookout and nest lamp
 }
 rebuildShipTables();
 onLayoutChange(rebuildShipTables);
@@ -42,11 +40,14 @@ export function createLinks({ state, modules, shipPuff }) {
   };
 
   // Which consumer a surge feeds: the Lightning Coil if someone is charging it, otherwise the engines.
-  const surgeTarget = () => (onStation('Lightning Coil') && state.coil.cd <= 0 && modules.works(state, 'Lightning Coil') ? 'coil' : 'engine');
+  const surgeTarget = () => {
+    const c = one('coil');
+    return c && onStation(c.n) && state.coil.cd <= 0 && modules.works(state, c.n) ? 'coil' : 'engine';
+  };
 
-  // Standing at the boiler with steam up: hold Action to surge.
-  const surgeAction = () => {
-    if (!LK.ENABLED || state.phase !== 'flying' || state.ship.down || state.ship.press < SG.MIN_PRESS || !modules.works(state, 'Boiler')) return null;
+  // Standing at a boiler (`station`) with steam up: hold Action to surge.
+  const surgeAction = (station) => {
+    if (!LK.ENABLED || state.phase !== 'flying' || state.ship.down || state.ship.press < SG.MIN_PRESS || !modules.works(state, station.n)) return null;
     return { type: 'surge', hold: true, time: 1, label: 'SURGE ' + (surgeTarget() === 'coil' ? 'COIL' : 'ENGINES') };
   };
 
@@ -78,10 +79,11 @@ export function createLinks({ state, modules, shipPuff }) {
     }
     // ---- Helm + lookout ----
     const nestCrew = NEST.map(onStation).filter(Boolean);
-    const helm = onStation('Helm');
-    L.helmMan = !!helm && modules.works(state, 'Helm');
+    const helmSt = one('helm');
+    const helm = helmSt && onStation(helmSt.n);
+    L.helmMan = !!helm && modules.works(state, helmSt.n);
     L.nest = nestCrew.length > 0 && L.helmMan;
-    L.nestSpot = L.nest && (nestCrew.some((q) => (q.spotRecent || 0) > 0) || (!!onStation('Nest Searchlight') && state.litTargets && state.litTargets.length > 0));
+    L.nestSpot = L.nest && (nestCrew.some((q) => (q.spotRecent || 0) > 0) || (nestCrew.some((q) => kindOf(q.lock) === 'searchlight') && state.litTargets && state.litTargets.length > 0));
     L.helmMul = LK.ENABLED && L.nest ? 1 + (L.nestSpot ? LK.HELM_SPOT : LK.HELM_MAN) : 1;
     // ---- Gun + loader (who is loading which gun: read by linkArt.js) ----
     L.loaders.length = 0;
@@ -112,7 +114,8 @@ export function createLinks({ state, modules, shipPuff }) {
       s.level = Math.min(1, s.level + dt / SG.RAMP);
       S.surgeT += dt;
       state.ship.press = Math.min(100, state.ship.press + SG.PRESS_RATE * s.level * dt); // (the pressure line in simulation.js does the blowout at 100)
-      if (Math.random() < dt * 14) shipPuff(BOILER.x + (Math.random() - 0.5) * 70, BOILER_Y - 60, '#ffd23f', 2); // (gold sparks from the boiler)
+      const boiler = (s.by != null && state.players[s.by] && nearest('boiler', state.players[s.by])) || one('boiler'); // (the boiler being worked)
+      if (Math.random() < dt * 14) shipPuff(boiler.x + (Math.random() - 0.5) * 70, SHIP_LAYOUT.platforms[boiler.d].y - 60, '#ffd23f', 2); // (gold sparks from the boiler)
     } else {
       s.level = Math.max(0, s.level - dt / SG.FALL);
       if (s.level <= 0) s.active = false;

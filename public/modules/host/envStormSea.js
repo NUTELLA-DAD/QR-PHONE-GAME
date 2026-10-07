@@ -137,8 +137,8 @@ export function createStormSea({ state, puff, impact, damageHull }) {
 
   // ============================== STORM FRONT ==============================
   const mannedCoil = () => {
-    const m = (state.modules || []).find((q) => q.name === 'Lightning Coil');
-    return !!m && !m.broken && Object.values(state.players).some((q) => q.lock === 'Lightning Coil');
+    const m = (state.modules || []).find((q) => q.kind === 'coil');
+    return !!m && !m.broken && Object.values(state.players).some((q) => q.lock === m.name);
   };
 
   const strike = (F, grounded) => {

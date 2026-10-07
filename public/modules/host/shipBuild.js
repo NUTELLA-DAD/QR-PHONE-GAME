@@ -15,6 +15,13 @@
 
 export const COL = 120; // width of one column of the build grid (px)
 
+// Station kinds: what a station (or engine) IS, so code asks layout.one('boiler') / all('gun') rather than for a name.
+// A ship may have several of most kinds; ONE_PER_SHIP kinds are single so far (one helm, shield, bomb bay compartment, coil emitter).
+// Names stay unique and human ("Fore Boiler"): phones show them, and player.lock holds the name.
+export const STATION_KINDS = ['helm', 'boiler', 'lookout', 'coal', 'ammo', 'gun', 'searchlight', 'coil', 'deflector', 'bombBay', 'navigator', 'escort', 'engine'];
+
+export const ONE_PER_SHIP = ['helm', 'deflector', 'bombBay', 'coil', 'navigator'];
+
 // Deck rows: the y of each floor level. A deck part says `row`, so S.6 can stack decks by row.
 export const DECK_ROWS = { nest: -42, helm: 420, catwalk: 470, main: 640, lower: 790, belly: 905, bay: 925 };
 
@@ -84,17 +91,17 @@ export const PARTS = {
   // A station plus the gun on it: where the barrel pivots (bx, by), the middle of its arc (aim) and how far it turns (arc).
   gun: { mass: 0, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
     const { bx, by, aim, arc, n, ord } = p;
-    A.add('stations', { n, p: p.p, x: p.x });
+    A.add('stations', { n, kind: 'gun', p: p.p, x: p.x });
     A.add('gunMounts', { bx, by, aim, arc }, n, ord && ord.gunMounts);
   } },
   // A station plus its lamp. len = how long the drum is (the beam starts at the lens).
   searchlight: { mass: 0, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
     const { bx, by, aim, arc, len, n } = p;
-    A.add('stations', { n, p: p.p, x: p.x });
+    A.add('stations', { n, kind: 'searchlight', p: p.p, x: p.x });
     A.add('searchlights', { bx, by, aim, arc, len }, n);
   } },
   coil: piece('coil'),
-  engine: piece('engines'),
+  engine: { ...piece('engines'), emit: (p, A) => A.add('engines', { kind: 'engine', ...withoutPart(p) }) },
   pipe: piece('pipes'),
   vent: piece('vents'),
   rack: piece('racks'),
@@ -119,7 +126,7 @@ export const PARTS = {
 const deck = (id, row, name, x0, x1, outside) => ({ part: 'deck', id, row, name, x0, x1, ...(outside ? { outside: true } : {}) });
 const room = (name, p, x0, x1, color, outside) => ({ part: 'room', name, p, x0, x1, ...(color ? { color } : {}), ...(outside ? { outside: true } : {}) });
 const conn = (part, top, bottom, xTop, xBottom) => ({ part, top, bottom, xTop, xBottom });
-const station = (n, p, x) => ({ part: 'station', n, p, x });
+const station = (n, p, x, kind) => ({ part: 'station', n, kind, p, x });
 const rack = (kind, p, x) => ({ part: 'rack', kind, p, x });
 const extinguisher = (p, x) => ({ part: 'extinguisher', p, x });
 const vent = (p, x) => ({ part: 'vent', p, x });
@@ -175,23 +182,23 @@ BUILDS.classic = [
 
   // Stations (and the guns and lamps on them).
   { part: 'gun', n: 'Aft Dorsal Gun', p: 'nest', x: 660, bx: 650, by: -76, aim: -1.95, arc: 1.2 },
-  station('Lookout', 'nest', 770),
-  station('Deflector', 'catwalk', 940),
+  station('Lookout', 'nest', 770, 'lookout'),
+  station('Deflector', 'catwalk', 940, 'deflector'),
   { part: 'gun', n: 'Dorsal Gun', p: 'nest', x: 940, bx: 950, by: -76, aim: -1.2, arc: 1.2, ord: { gunMounts: -1 } },
   { part: 'gun', n: 'Tail Gun', p: 'catwalk', x: 275, bx: 248, by: 418, aim: Math.PI + 0.35, arc: 1.1 }, // top deck, aft: back and up
-  station('Lightning Coil', 'main', 710),
-  station('Boiler', 'main', 400),
-  station('Navigator', 'main', 1215),
-  station('Helm', 'helm', 1275),
+  station('Lightning Coil', 'main', 710, 'coil'),
+  station('Boiler', 'main', 400, 'boiler'),
+  station('Navigator', 'main', 1215, 'navigator'),
+  station('Helm', 'helm', 1275, 'helm'),
   { part: 'gun', n: 'Nose Gun', p: 'catwalk', x: 1340, bx: 1372, by: 418, aim: -0.35, arc: 1.1 }, // top deck, fore: forward and up
   { part: 'gun', n: 'Aft Sponson', p: 'lower', x: 420, bx: 330, by: 812, aim: 2.15, arc: 0.7 },
-  station('Coal Bunker', 'lower', 570),
-  station('Ammo Hold', 'lower', 870),
-  station('Bomb Bay', 'bay', 520),
+  station('Coal Bunker', 'lower', 570, 'coal'),
+  station('Ammo Hold', 'lower', 870, 'ammo'),
+  station('Bomb Bay', 'bay', 520, 'bombBay'),
   { part: 'gun', n: 'Fore Sponson', p: 'lower', x: 1180, bx: 1270, by: 812, aim: 1.0, arc: 0.7 },
   { part: 'gun', n: 'Ventral Gun', p: 'pod', x: 820, bx: 805, by: 948, aim: Math.PI / 2, arc: 1.2 },
-  station('Escort Fighter', 'hangar', 1085),
-  station('Escort Fighter 2', 'hangar2', 1280),
+  station('Escort Fighter', 'hangar', 1085, 'escort'),
+  station('Escort Fighter 2', 'hangar2', 1280, 'escort'),
   { part: 'searchlight', n: 'Nest Searchlight', p: 'nest', x: 815, bx: 815, by: -176, aim: -Math.PI / 2, arc: 1.5, len: 44 },
   { part: 'searchlight', n: 'Belly Searchlight', p: 'lamp', x: 1410, bx: 1410, by: 944, aim: Math.PI / 2, arc: 1.5, len: 40 },
 
@@ -405,5 +412,12 @@ export function validate(parts) {
   for (const kind of D_KINDS) for (const o of layout[kind]) if (o.d < 0) fails.push(kind + ' on unknown platform ' + o.p);
   for (const c of layout.connectors) if (c.top < 0 || c.bottom < 0) fails.push('connector between unknown platforms');
   for (const id of ['nest', 'catwalk', 'main', 'lower']) if (!ids.includes(id)) fails.push('missing deck ' + id);
+  // Station kinds (shipLayout.js one/all/kindOf): every station and engine has a known kind, and names (what phones show) are unique.
+  const named = [...layout.stations.map((s) => [s.n, s.kind]), ...layout.engines.map((e) => [e.name, e.kind])];
+  for (const [n, kind] of named) if (!STATION_KINDS.includes(kind)) fails.push(`${n} has ${kind ? 'unknown kind ' + kind : 'no kind'}`);
+  const seen = new Set();
+  for (const [n] of named) { if (seen.has(n)) fails.push('duplicate station name ' + n); seen.add(n); }
+  for (const kind of ['helm', 'boiler', 'coal', 'ammo']) if (!named.some(([, k]) => k === kind)) fails.push('no ' + kind + ' station');
+  for (const kind of ONE_PER_SHIP) if (named.filter(([, k]) => k === kind).length > 1) fails.push('more than one ' + kind + ' station (the game supports one)');
   return { ok: fails.length === 0, fails, warns };
 }
