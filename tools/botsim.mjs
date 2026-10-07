@@ -46,6 +46,7 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace
 const load = (p) => import(pathToFileURL(path.join(root, p)).href);
 const { config } = await load('config.js');
 const { SHIP_LAYOUT } = await load('shipLayout.js');
+if (process.env.NO_DARING) config.BOTS.DARING.ENABLED = false; // (compare runs with and without the bots' daring stunts)
 if (!config.DIFFICULTY[args.difficulty]) { console.error('Bad difficulty; use ' + Object.keys(config.DIFFICULTY).join('|')); process.exit(2); }
 if (args.map) {
   if (!config.MAPS.KINDS.includes(args.map)) { console.error('Bad map; use ' + config.MAPS.KINDS.join('|')); process.exit(2); }
@@ -170,6 +171,14 @@ if (args.env === 'frost' || args.env === 'ember') {
 }
 if (args.env === 'storm') console.log(`storm: strikes grounded ${state.stormJob.caught}, struck the ship ${state.stormJob.struck}, coil drank ${state.stormJob.drank}; gusting ${seaSteps ? ((100 * galeSteps) / seaSteps).toFixed(1) : 'n/a'}% of flight`);
 if (args.env === "sea") console.log(`sea (this map: ${state.sea.survivors.length} survivors, ${state.sea.survivors.filter((q) => q.lost).length} lost, ${state.sea.survivors.filter((q) => q.told).length} flagged, ${state.sea.spouts.length} spouts): rescues ${state.sea.rescued}, hull dmg scrape ${(state.sea.dmgScrape || 0).toFixed(0)} flood ${(state.sea.dmgCrit || 0).toFixed(0)} spout hits ${state.sea.spoutHits || 0}, pump held ${(state.sea.pumpTime || 0).toFixed(0)}s, scrapes ${state.sea.scrapes}, keel gap above water avg ${seaSteps ? (gapSum / seaSteps).toFixed(0) : 'n/a'} min ${gapMin.toFixed(0)} px; in the water ${seaSteps ? ((100 * wetSteps) / seaSteps).toFixed(1) : 'n/a'}% of flight, flood avg ${seaSteps ? (floodSum / seaSteps).toFixed(2) : 'n/a'} (over 0.3 for ${seaSteps ? ((100 * floodHigh) / seaSteps).toFixed(1) : 'n/a'}%, peak ${state.sea.floodMax.toFixed(2)})`);
+{
+  // Daring stunts (bots.js): how many started, how they ended.
+  const log = state.stuntLog || [];
+  const count = (re) => log.filter((e) => re.test(e.text)).length;
+  console.log(`daring stunts: started ${count(/^start/)} (plane ${count(/^start plane/)}, gun ${count(/^start gun/)}, show ${count(/^start show/)}); fighters stolen ${count(/-> fly$/)}; ended ${count(/^end/)}: ${[...new Set(log.filter((e) => /^end/.test(e.text)).map((e) => e.text.replace(/^end \w+ \(([^)]*)\).*/, '$1')))].map((w) => w + ' x' + count(new RegExp('^end \\w+ \\(' + w.replace(/[()]/g, '') + '\\)'))).join(', ')}`);
+  if (state.stuntStats) console.log('  plane aim checks: ' + Object.entries(state.stuntStats).map(([k, v]) => k + ' x' + v).join(', '));
+  if (process.env.STUNT_LOG) for (const e of log) console.log(`  ${e.t}s ${e.bot}: ${e.text}`);
+}
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);

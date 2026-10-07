@@ -85,6 +85,12 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
         if (a) return a;
       }
     }
+    // The big enemy fighter (she can be hijacked too).
+    const big = state.enemy;
+    if (big && big.dead <= 0 && big.heading != null && big.hp > 0 && Math.hypot(x - big.x, y - alt() - big.y) < H.PLANE_R * 1.3) {
+      const a = ent(big, H.PLANE_R * 1.3, H.PLANE_R * 1.3, { plane: big });
+      if (a) return a;
+    }
     return null;
   };
 
@@ -110,7 +116,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
 
   // The ATTACK button for someone carrying the hookshot: fire, or let go. True = handled (no shove).
   const onAttack = (p) => {
-    if (p.carry !== 'hookshot' || p.bot) return false;
+    if (p.carry !== 'hookshot' || (p.bot && !p.daring)) return false; // (a bot only fires it while on a daring stunt)
     const h = p.hook;
     if (h) {
       if (h.phase === 'caught' && h.t >= H.RELEASE_LOCK) release(p);
@@ -302,5 +308,5 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     return { from: o, to: { x: o.x + h.dx * h.len, y: o.y + h.dy * h.len }, caught: false };
   };
 
-  return { onAttack, onJump, release, pre, post, fly, clear, rope, cast };
+  return { onAttack, onJump, release, pre, post, fly, clear, rope, cast, origin };
 }

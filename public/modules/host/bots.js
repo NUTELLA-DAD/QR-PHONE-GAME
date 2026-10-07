@@ -9,6 +9,8 @@ import { GS, MAIN_X1, landX, boilerX, routeStep } from './gunship.js';
 import { isEscortStation, escortFor } from './escort.js';
 
 const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
+const CATWALK = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'catwalk');
+const LOWER = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'lower');
 
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
@@ -518,6 +520,348 @@ function wander(p) {
   if (steer(p, p.wanderTo.d, p.wanderTo.x) && p.wanderWait === undefined) p.wanderWait = 1 + Math.random() * 2;
 }
 
+// ---------- Daring stunts (config BOTS.DARING) ----------
+// An otherwise idle bot now and then takes a hookshot from a rack and: hooks the enemy gunship's deck (only while her
+// rope to our bow is tied, so the crew can swing back as usual), swings up onto another of our own decks, or hooks a fighter
+// (a dogfighter or the big one), kicks the pilot out, flies her for a while and bails out over our ship. The stunt
+// is a little state machine in p.dare = { kind, phase, t, ... }; p.daring is true while it runs (the game lets bots
+// steer in the air, fire the hookshot and board planes only then). It always ends with the bot back on a deck.
+const DR = B.DARING;
+const val = (v) => (typeof v === 'function' ? v() : v);
+const AIR_KINDS = ['fighter', 'strafer', 'bomber'];
+const stuntLog = (state, p, text) => {
+  const log = (state.stuntLog = state.stuntLog || []);
+  log.push({ t: Math.round(performance.now() / 100) / 10, bot: p.name, text });
+  if (log.length > 400) log.shift();
+};
+
+// Flying planes within hook reach of (ship coordinates) o: [{ s, x, y (ship coordinates), d }], nearest first.
+function planesNear(state, o, reach) {
+  const list = [...(state.strafers || []).filter((s) => s.hp > 0)];
+  const big = state.stunts.bigFighter && state.stunts.bigFighter();
+  if (big) list.push(big);
+  return list
+    .map((s) => ({ s, x: s.x, y: s.y + state.ship.alt, d: Math.hypot(s.x - o.x, s.y + state.ship.alt - o.y) }))
+    // (over the ship, and not flying away from it: a bot dragged out past the ship's ends would go overboard)
+    .filter((q) => q.d <= reach && q.x > -250 && q.x < 1900 && q.y > -350 && q.y < 880 && q.s.x + (q.s.vx || 0) * 1.5 > -250 && q.s.x + (q.s.vx || 0) * 1.5 < 1900 && q.y + (q.s.vy || 0) * 1.5 > -350 && q.y + (q.s.vy || 0) * 1.5 < 800)
+    .sort((a, b) => a.d - b.d);
+}
+
+// Angle search for a show-off swing: a hook that catches a deck of ours above us.
+function aimShow(state, p) {
+  const S = state.stunts;
+  const o = S.origin(p);
+  let best = null;
+  for (let a = -170; a <= -10; a += 10) {
+    const dx = Math.cos((a * Math.PI) / 180);
+    const dy = Math.sin((a * Math.PI) / 180);
+    const c = S.cast(o, dx, dy);
+    const an = c.anchor;
+    if (!an || !an.surf || an.kind !== 'ship' || c.dist < 150 || c.dist > DR.SHOW_REACH) continue;
+    const pos = an.pos();
+    if (!pos || pos.y > o.y - 60) continue;
+    const score = Math.random();
+    if (!best || score > best.score) best = { dx, dy, score, landX: pos.x };
+  }
+  return best;
+}
+
+// A ray that catches one of the enemy gunship's decks.
+function aimGun(state, p) {
+  const S = state.stunts;
+  const o = S.origin(p);
+  let best = null;
+  for (const s of S.surfaces()) {
+    if (typeof s.id !== 'string' || !s.id.startsWith('gunship')) continue;
+    const y = val(s.y);
+    if (y == null) continue;
+    const x0 = val(s.x0);
+    const x1 = val(s.x1);
+    for (const f of [0.5, 0.3, 0.7, 0.15, 0.85]) {
+      const tx = x0 + (x1 - x0) * f;
+      const ty = y + 4;
+      const m = Math.hypot(tx - o.x, ty - o.y);
+      if (m > DR.GUN_REACH || m < 90) continue;
+      const c = S.cast(o, (tx - o.x) / m, (ty - o.y) / m);
+      if (c.anchor && c.anchor.kind === 'gunship' && (!best || m < best.m)) best = { dx: (tx - o.x) / m, dy: (ty - o.y) / m, m, landX: tx };
+    }
+  }
+  return best;
+}
+
+// A ray that hits one of the flying planes in reach (the nearest first).
+function aimPlane(state, p) {
+  const S = state.stunts;
+  const o = S.origin(p);
+  for (const q of planesNear(state, o, DR.REACH)) {
+    const dx = (q.x - o.x) / (q.d || 1);
+    const dy = (q.y - o.y) / (q.d || 1);
+    if (q.d < 90) continue;
+    const c = S.cast(o, dx, dy);
+    const stat = (state.stuntStats = state.stuntStats || {});
+    const key = c.anchor && c.anchor.plane === q.s ? 'planeHit' : 'blocked by ' + (c.anchor ? c.anchor.kind : 'nothing');
+    stat[key] = (stat[key] || 0) + 1;
+    if (c.anchor && c.anchor.plane === q.s) return { dx, dy, plane: q.s };
+  }
+  return null;
+}
+
+// Which stunts are possible right now?
+function dareKinds(state) {
+  const kinds = [];
+  const o = { x: SHIP_LAYOUT.aimPoint.x, y: SHIP_LAYOUT.aimPoint.y };
+  // (any plane about is a reason to go and wait for it out on the top deck; hooking it needs it to come close and clear)
+  if ((state.strafers || []).some((s) => s.hp > 0 && Math.hypot(s.x - o.x, s.y + state.ship.alt - o.y) < 3000) || (state.stunts.bigFighter() && Math.hypot(state.enemy.x - o.x, state.enemy.y + state.ship.alt - o.y) < 3000)) kinds.push('plane');
+  const gs = state.gunship;
+  if (gs && gs.rope && !gs.charge && (gs.phase === 'hunt' || gs.phase === 'latch')) kinds.push('gun');
+  kinds.push('show');
+  return kinds;
+}
+
+// Should this idle bot (job = what it would do now) feel daring? If so, start a stunt.
+function maybeDare(p, state, bots, job) {
+  if (!DR.ENABLED || p.dare || !state.stunts || state.phase !== 'flying' || state.ship.down || state.ship.hull < DR.MIN_HULL) return;
+  if (bots.length < DR.MIN_CREW || bots.filter((q) => q.dare).length >= DR.MAX_AT_ONCE) return;
+  if (state.stuntEnd !== undefined && performance.now() - state.stuntEnd < DR.COOLDOWN * 1000) return;
+  if (p.lock || p.carry === 'coal' || p.carry === 'ammo' || p.onGunship || p.fly || p.air || p.conn != null || p.swing || p.hj || p.d == null) return;
+  if (job && !(job.kind === 'station' && job.obj !== 'Helm' && (job.tier ?? 1) >= 1)) return; // (anything but a spare station is work)
+  if (state.fires.length || state.breaches.length || (state.gasHoles || []).length || state.boarders.length || state.bats.some((b) => b.latched)) return;
+  if (listJobs(state, p).some((j) => j.urgent || j.kind === 'revive' || j.kind === 'defuse' || j.kind === 'flee' || j.kind === 'cutline')) return;
+  const kinds = dareKinds(state);
+  // (a plane to steal or a gunship alongside is a better excuse than a quiet moment)
+  if (Math.random() >= (DR.CHANCE_PER_MIN * (kinds.length > 1 ? DR.TARGET_BOOST : 1) * B.THINK_EVERY) / 60) return;
+  let pick = Math.random() * kinds.reduce((a, k) => a + DR.KINDS[k], 0);
+  let kind = kinds[0];
+  for (const k of kinds) {
+    pick -= DR.KINDS[k];
+    if (pick <= 0) {
+      kind = k;
+      break;
+    }
+  }
+  p.dare = { kind, phase: 'get', t: 0, pt: 0, tries: 0, aimCd: 0 };
+  p.daring = true;
+  p.botJob = null;
+  stuntLog(state, p, 'start ' + kind);
+}
+
+function endDare(p, state, why) {
+  if (!p.dare) return;
+  stuntLog(state, p, 'end ' + p.dare.kind + ' (' + why + ') t=' + p.dare.t.toFixed(0));
+  state.stuntPlane = null;
+  p.dare = null;
+  p.daring = false;
+  p.fire = false;
+  p.jx = p.jy = 0;
+  p.botJob = null;
+  p.jobSince = performance.now();
+  state.stuntEnd = performance.now();
+}
+
+function setPhase(p, state, phase) {
+  if (phase !== 'hooked' && state.stuntPlane && p.dare.phase === 'hooked') state.stuntPlane = null;
+  p.dare.phase = phase;
+  p.dare.pt = 0;
+  stuntLog(state, p, p.dare.kind + ' -> ' + phase);
+}
+
+// Steer the stick toward a point (ship coordinates, horizontal only).
+const steerAirTo = (p, x) => {
+  p.jx = clamp((x - p.x) / 120, -1, 1);
+  p.jy = 0;
+};
+
+// One frame of a stunt. Returns true while it is in charge of the bot.
+function dareStep(p, state, dt) {
+  const d = p.dare;
+  d.t += dt;
+  d.pt += dt;
+  d.aimCd -= dt;
+  p.botJob = null;
+  p.fire = false;
+  p.jx = p.jy = 0;
+  if (state.phase !== 'flying' || state.ship.down || !state.stunts) {
+    // The voyage ended under it: the game resets everyone; just stop.
+    endDare(p, state, 'voyage over');
+    return false;
+  }
+  if (d.t > DR.TOTAL_TIMEOUT + 45) {
+    endDare(p, state, 'hard timeout');
+    return false;
+  }
+  if (d.t > DR.TOTAL_TIMEOUT && d.phase !== 'return') {
+    setPhase(p, state, 'return');
+  }
+  const grounded = !p.fly && !p.hj && !p.hook && !p.air;
+  switch (d.phase) {
+    case 'get': {
+      if (p.carry === 'hookshot') return setPhase(p, state, 'aim'), true;
+      if (d.t > DR.GET_TIMEOUT || state.ship.hull < DR.MIN_HULL) return endDare(p, state, 'no hookshot'), false;
+      getTool(p, 'hookshot');
+      return true;
+    }
+    case 'aim': {
+      if (p.carry !== 'hookshot') return setPhase(p, state, 'get'), true;
+      if (p.fly || p.hj) return setPhase(p, state, p.hj ? 'kick' : 'land'), true;
+      if (d.pt > (d.kind === 'plane' ? DR.WAIT_TIMEOUT * 2 : DR.WAIT_TIMEOUT)) return endDare(p, state, 'nothing to aim at'), false;
+      if (!grounded || (p.hookCd || 0) > 0) return true;
+      let aim = null;
+      if (d.kind === 'gun') {
+        const gs = state.gunship;
+        if (!gs || !gs.rope || gs.charge) return endDare(p, state, 'gunship gone'), false;
+        // Stand at our bow, then find a ray onto her deck.
+        if (!steer(p, MAIN, MAIN_X1 - 70, 25)) return true;
+        if (d.aimCd <= 0) {
+          d.aimCd = 0.3;
+          aim = aimGun(state, p);
+        }
+      } else if (d.kind === 'plane') {
+        // Wait out at the end of the top deck on the side the nearest plane is on: the hook goes through nothing
+        // solid, but it catches the decks and the gasbag, so a clear shot is out past the ship's end.
+        const near = planesNear(state, { x: SHIP_LAYOUT.aimPoint.x, y: SHIP_LAYOUT.aimPoint.y }, 2200)[0];
+        // (a plane level with or below the main deck is shot at from the end of the lower deck instead)
+        const low = near && near.y > 600;
+        // The crew's guns spare the plane it has its eye on (the one nearest the ship), so it lives long enough to be hooked.
+        if (!state.stuntPlane || !(state.stuntPlane.hp > 0) || !(state.strafers.includes(state.stuntPlane) || state.stuntPlane === state.enemy)) {
+          const mid = SHIP_LAYOUT.aimPoint;
+          state.stuntPlane = [...state.strafers.filter((s) => s.hp > 0)].sort((a, b) => Math.hypot(a.x - mid.x, a.y + state.ship.alt - mid.y) - Math.hypot(b.x - mid.x, b.y + state.ship.alt - mid.y))[0] || null;
+        }
+        const there = steer(p, low ? LOWER : CATWALK, near && near.x < SHIP_LAYOUT.aimPoint.x ? (low ? 45 : 275) : low ? 1555 : 1325, 30);
+        if (there && d.aimCd <= 0) {
+          // (only from the spot: shooting upward while walking past a ladder would climb it instead of firing)
+          d.aimCd = 0.25;
+          aim = aimPlane(state, p);
+        }
+      } else if (d.aimCd <= 0) {
+        d.aimCd = 0.3;
+        aim = aimShow(state, p);
+        if (!aim) {
+          // No deck in reach from here: amble somewhere else on this deck and look again.
+          if (!d.walkTo || Math.abs(d.walkTo - p.x) < 20) {
+            const pl = L.platforms[p.d];
+            d.walkTo = pl.x0 + 40 + Math.random() * ((pl.id === 'main' ? MAIN_X1 : pl.x1) - pl.x0 - 80);
+          }
+        }
+      }
+      if (!aim && d.kind === 'show' && d.walkTo) steer(p, p.d, d.walkTo, 20);
+      if (aim && (p.hookCd || 0) <= 0 && p.conn == null && !p.lock) { // (the hookshot will not fire on a ladder)
+        p.jx = aim.dx;
+        p.jy = aim.dy;
+        p.atkQ = true;
+        d.tries++;
+        d.aim = aim;
+        d.landX = aim.landX;
+        if (aim.plane) state.stuntPlane = aim.plane; // (our own guns leave it alone while the bot is on the rope)
+        setPhase(p, state, 'hooked');
+      }
+      return true;
+    }
+    case 'hooked': {
+      const h = p.hook;
+      if (p.hj) return setPhase(p, state, 'kick'), true;
+      if (!h) {
+        if (d.pt < 0.1) return true; // (the shot is being fired this frame)
+        if (p.fly) return setPhase(p, state, 'land'), true; // (ledge climb / released: in the air now)
+        // A miss (or it never left): try again, a few times.
+        if (d.tries >= DR.HOOK_TRIES) return endDare(p, state, 'missed'), false;
+        return setPhase(p, state, 'aim'), true;
+      }
+      if (d.aim) {
+        p.jx = d.aim.dx * 0.5; // (a gentle pump while the hook flies)
+      }
+      if (h.phase === 'caught') {
+        p.fire = true; // reel in
+        // Dragged out toward the ship's ends (a plane flying off with her)? Let go while there is still ship to come back to.
+        const wayOut = d.kind === 'plane' && (p.x < -330 || p.x > 1980 || p.y > 720);
+        if ((d.pt > DR.REEL_TIMEOUT || wayOut) && h.t >= config.HOOKSHOT.RELEASE_LOCK) {
+          p.fire = false;
+          p.atkQ = true; // let go
+          return setPhase(p, state, 'land'), true;
+        }
+      }
+      return true;
+    }
+    case 'kick': {
+      const s = p.hj;
+      if (!s) return setPhase(p, state, 'land'), true;
+      if (s.phase === 'kick') {
+        p.fire = true; // hold Action: the pilot is booted out in under a second
+        if (d.pt > DR.KICK_TIMEOUT) {
+          p.leaveQ = true; // give up and jump off
+          return setPhase(p, state, 'land'), true;
+        }
+        return true;
+      }
+      d.big = !!s.big;
+      d.flyT = 0;
+      return setPhase(p, state, 'fly'), true;
+    }
+    case 'fly': {
+      const s = p.hj;
+      if (!s) return setPhase(p, state, 'land'), true;
+      d.flyT = (d.flyT || 0) + dt;
+      const mid = { x: SHIP_LAYOUT.aimPoint.x, y: SHIP_LAYOUT.aimPoint.y - state.ship.alt };
+      const homeBound = d.flyT > (d.big ? DR.FLY_TIME_BIG : DR.FLY_TIME) || s.fuel < 9 || s.hp <= 2 || Math.hypot(s.x - mid.x, s.y - mid.y) > 1500;
+      if (!homeBound) {
+        // Hunt the nearest enemy plane near the ship; with none, the plane circles the ship by herself.
+        let best = null;
+        for (const t of targets(state)) {
+          if (!AIR_KINDS.includes(t.kind)) continue;
+          const q = t.at(0.3);
+          const dm = Math.hypot(q.x - mid.x, q.y - mid.y);
+          if (dm > 1100) continue;
+          const ds = Math.hypot(q.x - s.x, q.y - s.y);
+          if (!best || ds < best.ds) best = { q, ds };
+        }
+        if (best) {
+          p.jx = (best.q.x - s.x) / (best.ds || 1);
+          p.jy = (best.q.y - s.y) / (best.ds || 1);
+        }
+        return true;
+      }
+      // Home: fly to the air above the ship's middle, and bail out when she is over it and clear of the hull.
+      const tx = mid.x;
+      const ty = SHIP_LAYOUT.bounds.y0 - state.ship.alt - 520;
+      const dm = Math.hypot(tx - s.x, ty - s.y) || 1;
+      p.jx = (tx - s.x) / dm;
+      p.jy = (ty - s.y) / dm;
+      d.homeT = (d.homeT || 0) + dt;
+      const above = s.y + state.ship.alt < DR.BAIL_Y;
+      // (Over the ship and clear of the hull is best; after a few seconds of trying, anywhere the parachute can still bring her home is fine.)
+      const sx = s.x - mid.x;
+      const chuteOk = Math.abs(sx) < 1200 && s.y + state.ship.alt < 800;
+      if ((Math.abs(sx) < DR.BAIL_OVER && above) || (d.homeT > 10 && chuteOk) || d.homeT > 30 || s.fuel < 2.5) {
+        p.leaveQ = true;
+        d.landX = SHIP_LAYOUT.aimPoint.x;
+        return setPhase(p, state, 'land'), true;
+      }
+      return true;
+    }
+    case 'land':
+    case 'return': {
+      if (p.hj) {
+        if (d.phase === 'return') p.leaveQ = true;
+        else return setPhase(p, state, 'kick'), true;
+        return true;
+      }
+      if (p.hook) {
+        const h = p.hook;
+        if (h.phase === 'caught' && (d.phase === 'return' || d.pt > DR.REEL_TIMEOUT) && h.t >= config.HOOKSHOT.RELEASE_LOCK) p.atkQ = true;
+        else p.fire = h.phase === 'caught';
+        return true;
+      }
+      if (p.fly) {
+        // Drift toward where we want to come down (a deck of ours; the gunship's deck for that stunt).
+        steerAirTo(p, d.kind === 'gun' && d.phase === 'land' && d.landX != null && state.gunship ? d.landX : SHIP_LAYOUT.aimPoint.x);
+        return true;
+      }
+      if (p.air) return true; // (a hop in the air)
+      return endDare(p, state, p.onGunship ? 'landed on her deck' : 'landed'), false;
+    }
+  }
+  return false;
+}
+
 // Called once per frame for each bot, before the game applies its input.
 export function updateBot(p, state, dt) {
   world = state;
@@ -526,9 +870,17 @@ export function updateBot(p, state, dt) {
   if (p.wanderWait !== undefined) p.wanderWait -= dt;
   if (p.phase === undefined) p.phase = Math.random() * 6.28;
   if (p.fall || p.ko > 0) {
+    if (p.dare) endDare(p, state, p.fall ? 'fell' : 'knocked out');
     p.botJob = null;
     p.jx = p.jy = 0;
     p.fire = false;
+    return;
+  }
+  // A daring stunt takes over the bot until it is safely back on a deck.
+  if (p.dare) {
+    if (dareStep(p, state, dt)) return;
+  } else if (p.hj) {
+    p.leaveQ = true; // (never left flying a plane without a stunt in charge)
     return;
   }
 
@@ -567,6 +919,8 @@ export function updateBot(p, state, dt) {
       if (job) p.wanderTo = null;
       if (!job || !p.botJob || job.kind !== p.botJob.kind || job.obj !== p.botJob.obj) p.jobSince = performance.now();
       p.botJob = job;
+      if (DR.ENABLED) maybeDare(p, state, bots, job); // (idle? maybe feel daring)
+      if (p.dare) return;
     }
   }
 

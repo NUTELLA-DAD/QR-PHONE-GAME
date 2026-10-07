@@ -938,6 +938,7 @@ export function createSimulation() {
   const air = createAirborne({ state, puff, phoneFx });
   const hijack = createHijack({ state, puff, phoneFx, air }); // stolen dogfighters
   const hookshot = createHookshot({ state, puff, phoneFx, air, hijack }); // personal grappling hook
+  state.stunts = { cast: hookshot.cast, origin: hookshot.origin, surfaces: air.surfaces, bigFighter: hijack.bigFighter }; // (read by the bots' daring stunts, bots.js)
   // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
   // Every deck of hers is a landing surface (she can have up to 4 stepped decks; the deck numbers run left to right as she is now).
   for (let k = 0; k < 4; k++) {

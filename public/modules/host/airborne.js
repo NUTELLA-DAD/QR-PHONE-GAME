@@ -210,7 +210,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const step = (p, dt, controlled = true) => {
     if (!p.fly) return false;
     if (p.regrabCd > 0) p.regrabCd -= dt;
-    const ctrl = controlled && !p.bot ? clamp(p.jx || 0, -1, 1) : 0;
+    const ctrl = controlled && (!p.bot || p.daring) ? clamp(p.jx || 0, -1, 1) : 0; // (bots only steer in the air on a daring stunt)
     const drift = -Math.max(0, state.ship.speed || 0) * A.SHIP_DRIFT;
     const gm = (state.env && state.env.gravity) || 1; // low gravity in The Aether (config.ENVIRONMENTS.aether.GRAVITY)
     if (p.chute > 0) {
