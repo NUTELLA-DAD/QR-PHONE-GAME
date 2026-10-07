@@ -2,7 +2,7 @@
 // placeholder vector drawings everywhere else.
 // Everything is in ship coordinates; render.js has already shifted for altitude.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { drawBiplane, drawTailNumber } from './planeArt.js';
 import { paintPath, paintRect } from './textureArt.js';
 import { drawIceLocker, drawIceFlights, drawBoilerHeat, drawHoleGlow } from './goingDownArt.js';
@@ -23,7 +23,9 @@ const WOOD_DARK = '#6b4a32';
 const IRON = '#6a6568';
 
 export function createShipArt({ ctx, state, ink, rrect, sprites }) {
-  let liftY = P[L.connectors.find((c) => c.type === 'lift').bottom].y;
+  const liftHome = () => P[L.connectors.find((c) => c.type === 'lift').bottom].y; // (the cage rests at the bottom of its shaft)
+  let liftY = liftHome();
+  onLayoutChange(() => { liftY = liftHome(); });
 
   const line = (pts, width = 3.2, color = INK) => {
     ctx.strokeStyle = color;

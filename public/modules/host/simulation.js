@@ -2,7 +2,7 @@ import { createJobFinder } from './jobs.js';
 import { updateCrewScale, sparesFor, spawnPace, damageMul, crewMul, autopilotOn, crewHeads } from './crewscale.js';
 import { updateMates } from './mates.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { updateBot } from './bots.js';
 import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
 import { createModules } from './modules.js';
@@ -31,7 +31,10 @@ import { generateVoyage, stopById, stopName, envInfo, loadVoyageSave, saveVoyage
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
 const platformY = (d) => PLATFORMS[d].y;
-const BAY_D = PLATFORMS.findIndex((p) => p.id === 'bay');
+let BAY_D; // the bomb bay's platform index (refreshed when a new ship build is applied)
+const rebuildBayD = () => { BAY_D = PLATFORMS.findIndex((p) => p.id === 'bay'); };
+rebuildBayD();
+onLayoutChange(rebuildBayD);
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 // Does a point (in ship coordinates) touch the ship? Gasbag, gondola, outriggers or ball turret.
@@ -139,7 +142,10 @@ export function createSimulation() {
   const modules = createModules();
   const jobFinder = createJobFinder(state);
   state.modules = modules.list;
-  const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
+  const PICKUPS = [];
+  const rebuildPickups = () => { PICKUPS.length = 0; PICKUPS.push(...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))); };
+  rebuildPickups();
+  onLayoutChange(rebuildPickups);
   const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || isSearchlight(name) || isEscortStation(name) || !!state.GUNS[name];
 
   // Sunken Sea: crew on the lower decks wade slowly while the ship is flooded.

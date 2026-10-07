@@ -40,7 +40,7 @@
 // The rope only pulls when taut: a gentle tug on us, a hard one on her; it snaps if stretched too far.
 import { crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { inRock, scrollSpeed } from './course.js';
 import { platformBelow } from './nav.js';
 import { pop } from './popups.js';
@@ -51,13 +51,23 @@ export { mx, landX, landSeg, landY, boilerX, boilerSeg, boilerY, portPos, routeS
 const G = config.GUNSHIP;
 const GP = config.GUNSHIP_PARTS;
 const P = SHIP_LAYOUT.platforms;
-const MAIN = P.findIndex((p) => p.id === 'main');
-const CAT = P.findIndex((p) => p.id === 'catwalk');
-export const MAIN_X1 = P[MAIN].x1; // the bow end of our main deck
+// Worked out from the ship layout; refilled when a new ship build is applied.
+let MAIN, CAT;
+export let MAIN_X1; // the bow end of our main deck
 // Legacy numbers (her stern end is always X0; her nose end and decks depend on the blueprint: g.bp).
-export const GS = { x0: X0, x1: X0 + 1100, deckY: P[MAIN].y };
+export const GS = { x0: X0, x1: X0 + 1100, deckY: 0 };
+export const BOW = { x: 0, y: 0 }; // where our end of the rope is tied (ship coords)
+function rebuildShipTables() {
+  MAIN = P.findIndex((p) => p.id === 'main');
+  CAT = P.findIndex((p) => p.id === 'catwalk');
+  MAIN_X1 = P[MAIN].x1;
+  GS.deckY = P[MAIN].y;
+  BOW.x = MAIN_X1 + 10;
+  BOW.y = P[MAIN].y - 50;
+}
+rebuildShipTables();
+onLayoutChange(rebuildShipTables);
 const ROLES = ['gunner', 'helm', 'stoker', 'guard', 'gunner', 'guard', 'guard', 'guard'];
-export const BOW = { x: MAIN_X1 + 10, y: P[MAIN].y - 50 }; // where our end of the rope is tied (ship coords)
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const DIRS = [[0, -1], [0, 1], [-1, 0], [1, 0]];

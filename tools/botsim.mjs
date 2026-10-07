@@ -3,12 +3,12 @@
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
-const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null };
+const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0 };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') {
-    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N]');
+    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N]');
     process.exit(0);
   } else if (a.startsWith('--') && a.slice(2) in args) {
     const v = argv[++i];
@@ -75,6 +75,12 @@ for (let i = 0; i < args.bots; i++) {
     x: e[0].x + Math.random() * (e[1].x - e[0].x),
     y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true,
   };
+}
+// (--reapply N: re-apply the classic ship build N times in the lobby; the run must still match the plain one)
+if (args.reapply) {
+  const { applyBuild } = await load('shipLayout.js');
+  const { BUILDS } = await load('modules/host/shipBuild.js');
+  for (let i = 0; i < args.reapply; i++) applyBuild(BUILDS.classic);
 }
 sim.castOff();
 

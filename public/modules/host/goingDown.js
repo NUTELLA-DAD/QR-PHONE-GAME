@@ -12,18 +12,23 @@
 // This file owns the rules; simulation.js calls the small hooks (tryStart, active/protect, onStoke, takeIce,
 // throwIce, update, newMission). Bots use botJobs(), idle phones jobsFor().
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { altBounds } from './course.js';
 import { pop } from './popups.js';
 
 const GD = config.GOING_DOWN;
 const L = SHIP_LAYOUT;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const MAIN_D = L.platforms.findIndex((p) => p.id === 'main');
-const CAT_D = L.platforms.findIndex((p) => p.id === 'catwalk');
-const BOILER = L.stations.find((s) => s.n === 'Boiler');
-const LOCKER = L.racks.find((r) => r.kind === 'ice');
 const GB = L.gasbag;
+let MAIN_D, CAT_D, BOILER, LOCKER; // (worked out from the ship layout; refreshed when a new ship build is applied)
+function rebuildShipTables() {
+  MAIN_D = L.platforms.findIndex((p) => p.id === 'main');
+  CAT_D = L.platforms.findIndex((p) => p.id === 'catwalk');
+  BOILER = L.stations.find((s) => s.n === 'Boiler');
+  LOCKER = L.racks.find((r) => r.kind === 'ice');
+}
+rebuildShipTables();
+onLayoutChange(rebuildShipTables);
 
 export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHoleAt }) {
   let used = false; // the last stand has been used in this mission
