@@ -31,15 +31,33 @@ label.opt input{width:28px;height:28px}
 #info .warn{color:#c62828;font-weight:900}
 #controls{flex:1;display:flex;align-items:center;justify-content:space-between;min-height:0}
 body.lefty #controls{flex-direction:row-reverse}
-#pad{position:relative;border:5px solid #1b1410;border-radius:50%;background:rgba(255,255,255,.35);width:min(40vw,62vh);aspect-ratio:1}
+#pad{position:relative;border:5px solid #1b1410;border-radius:50%;background:rgba(255,255,255,.35);width:min(36vw,58vh);aspect-ratio:1}
 #knob{position:absolute;width:38%;height:38%;left:31%;top:31%;border-radius:50%;background:#f1e2b8;border:5px solid #1b1410;box-shadow:0 5px 0 #1b1410}
 #buttons{--a:min(38vh,160px);--j:min(27vh,112px);--k:min(30vh,124px);position:relative;width:min(54vw,92vh);height:min(66vh,100%)}
 .btn{position:absolute;border:5px solid #1b1410;border-radius:50%;color:#fff;font:inherit;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.05;box-shadow:0 6px 0 #1b1410;padding:6px}
 .btn .ic{font-size:2.3em;line-height:1}
 .btn .tx{max-width:92%;overflow-wrap:anywhere}
 .btn.down{transform:translateY(5px);box-shadow:0 1px 0 #1b1410;filter:brightness(.9)}
-/* Job arrow for idle crew: the nearest useful job and which way to go (between the stick and the buttons). */
-#job{display:none;flex:1;min-width:0;align-self:center;margin:0 8px;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 8px;background:#1b1410;color:#ffd23f;border:4px solid #f1e2b8;border-radius:16px;text-align:center;font-weight:900;pointer-events:none}
+/* Middle column between the stick and the buttons: the radar and/or the job arrow for idle crew. */
+#mid{display:none;flex:1;min-width:0;align-self:stretch;margin:0 4px;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+#mid.on{display:flex}
+#radarbox{display:none;flex:1 1 0;min-height:0;width:100%;align-items:center;justify-content:center}
+#mid.rd #radarbox{display:flex}
+#radar{display:block;touch-action:none;border-radius:50%}
+/* With the radar showing, the job arrow shrinks to one line under it. */
+#mid.rd #job{flex:none;width:100%;flex-direction:row;gap:6px;padding:2px 6px;border-width:3px;border-radius:12px}
+#mid.rd #jarrow{font-size:20px}
+#mid.rd #jtext{font-size:12px}
+/* The right-hand buttons only need their own width unless the helm levers are out (leaves room for the radar). */
+body:not(.helm) #buttons{width:calc(var(--a) + var(--k) + 14px)}
+#help{font:inherit;font-weight:900;font-size:17px;border:4px solid #1b1410;border-radius:14px;background:#e63946;color:#fff;padding:2px 12px;min-height:44px;min-width:92px;box-shadow:0 3px 0 #1b1410;touch-action:none;white-space:nowrap}
+#help.down{transform:translateY(3px);box-shadow:0 0 0 #1b1410}
+#help.wait{background:#7d6a5a;color:#e6d9c0}
+/* PRIME (left button while on a gun): fills up as you hold it, glows when ready. */
+#atk.prime{background:linear-gradient(to top,#ff8c1a var(--p,0%),#3a5a8c var(--p,0%));transition:none}
+#atk.prime.ready{background:#ffb347;color:#1b1410;animation:primed .5s ease-in-out infinite alternate}
+@keyframes primed{from{box-shadow:0 6px 0 #1b1410,0 0 10px 2px #ffd23f}to{box-shadow:0 6px 0 #1b1410,0 0 26px 10px #fff2b0}}
+#job{display:none;flex:1;min-width:0;align-self:center;width:100%;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 8px;background:#1b1410;color:#ffd23f;border:4px solid #f1e2b8;border-radius:16px;text-align:center;font-weight:900;pointer-events:none}
 #job.show{display:flex}
 #jarrow{font-size:min(24vh,104px);line-height:1}
 #jtext{font-size:clamp(14px,4.4vh,22px);line-height:1.1;overflow-wrap:anywhere}
@@ -98,12 +116,16 @@ body.lefty #plever{right:auto;left:calc(var(--a) + min(20vh,84px) + 20px)}
     <div id="me"><div id="swatch"></div><span id="myname">Crew</span></div>
     <div id="carry">Hands empty</div>
     <div id="hull"><div id="hfill"></div><span>HULL</span></div>
+    <button id="help">🆘 Help!</button>
     <button id="leave">⬅ LEAVE</button>
   </div>
   <div id="info"><b>Walking</b> - walk to a station, rack, fire or hole</div>
   <div id="controls">
     <div id="pad"><div id="knob"></div></div>
-    <div id="job"><div id="jarrow"></div><div id="jtext"></div></div>
+    <div id="mid">
+      <div id="radarbox"><canvas id="radar"></canvas></div>
+      <div id="job"><div id="jarrow"></div><div id="jtext"></div></div>
+    </div>
     <div id="buttons">
       <div id="plever"><div class="fill"></div><div class="mid"></div><div class="tag">PUMP ▲</div><div class="rev">VENT ▼</div><div class="handle"></div></div>
       <div id="lever"><div class="fill"></div><div class="stop"></div><div class="tag">AHEAD</div><div class="rev">REVERSE</div><div class="handle"></div></div>

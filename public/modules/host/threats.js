@@ -5,6 +5,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, groundAt, ceilAt, scrollSpeed } from './course.js';
 import { pop } from './popups.js';
+import { shellDmg } from './aim.js';
 import { flyPlane, smoke, shootDown, updateChutes, shoveShip, bumpShip, bounceStep } from './planes.js';
 
 const B = SHIP_LAYOUT.bounds;
@@ -224,7 +225,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       const e = state.enemy;
       if (e.dead <= 0 && Math.hypot(shell.x - e.x, shell.y - e.y) < 46) {
         shell.life = 0;
-        e.hp -= config.GUNS.DAMAGE;
+        e.hp -= shellDmg(shell, e);
         puff(e.x, e.y, '#ffcf40', 8);
         if (e.hp <= 0) {
           e.dead = 4;

@@ -19,6 +19,9 @@ import { distToGoal } from './maps.js';
 import { createBackgroundArt } from './backgroundArt.js';
 import { loadTextures } from './textureArt.js';
 import { envIdOf } from './environments.js';
+import { createSpotterArt } from './spotterArt.js';
+import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
+import { drawIceBlock, drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
 export function createRenderer({ ctx, state, canvas }) {
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
@@ -49,12 +52,14 @@ export function createRenderer({ ctx, state, canvas }) {
   };
 
   const drawShip = createShipArt({ ctx, state, ink, rrect, sprites });
+  const searchlightArt = createSearchlightArt({ ctx, state, ink });
   const threatArt = createThreatArt({ ctx, state, ink, sprites });
   const hookArt = createHookArt({ ctx, state, ink });
   const skyArt = createSkyArt({ ctx, state });
   const envArt = createEnvArt({ ctx, state, ink }); // Frost Peaks / Ember Forge look (sky, weather, lava, ice)
   const courseArt = createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgArt });
   const drawSpecials = createSpecialsArt({ ctx, state, ink });
+  const spotterArt = createSpotterArt({ ctx, state }); // spotted-target brackets, HELP! call-outs, primed-gun glow
   const drawGunship = createGunshipArt({ ctx, state, ink, sprites });
   installLineBoil(ctx);
   const filmLook = createFilmLook(ctx);
@@ -97,6 +102,7 @@ export function createRenderer({ ctx, state, canvas }) {
         ink();
         ctx.stroke();
       }
+      spotterArt.drawGunGlow(gun, performance.now() / 1000); // charging / primed shell
       if ((state.upgrades || {})['auto-loader']) {
         // Auto-Loader: a little spinning gear on the mount.
         ctx.save();
@@ -570,7 +576,16 @@ export function createRenderer({ ctx, state, canvas }) {
     };
     ctx.lineCap = 'round';
     const big = (state.upgrades || {})['big-shells'] || 0;
-    for (const shell of state.shells) glowShot(shell, (state.players[shell.owner] || {}).color || '#f2d36b', 9 + 3 * big, 0.06);
+    for (const shell of state.shells) {
+      if (shell.primed) {
+        glowShot(shell, '#ff9a2e', 17 + 3 * big, 0.09); // a primed shell: big, hot, orange-white
+        ctx.strokeStyle = (state.players[shell.owner] || {}).color || '#f2d36b';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(shell.x, shell.y, 25 + 3 * big, 0, 7);
+        ctx.stroke();
+      } else glowShot(shell, shell.frag ? '#ffd23f' : (state.players[shell.owner] || {}).color || '#f2d36b', shell.frag ? 5 : 9 + 3 * big, 0.06);
+    }
     for (const bullet of state.bullets) glowShot(bullet, bullet.flak ? '#e8884a' : '#ff2e55', bullet.flak ? 13 : 12, 0.09);
   };
 
@@ -817,6 +832,7 @@ export function createRenderer({ ctx, state, canvas }) {
           ctx.font = '900 18px Georgia';
           ctx.fillStyle = '#8a5a00';
           ctx.fillText('Salvage ' + run.salvage, 454, 204);
+          drawSpares(ctx, state, 470, 236, true, 0.8); // spare gasbags (lives)
           ctx.textAlign = 'left';
           ctx.fillStyle = state.salvagePop ? '#2e7d32' : '#5a4a3a';
           ctx.fillText(state.salvagePop ? `+${state.salvagePop.n} ${state.salvagePop.label}` : state.course.stop ? state.course.stop.name : '', 46, 204);
@@ -1039,6 +1055,13 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillStyle = '#ffd23f';
     if (v.kind === 'dock') ctx.fillText(`Salvage: ${run.salvage}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`, 800, 125);
     else ctx.fillText(`Vote on your phone - ${Math.max(0, Math.ceil(v.t))}s`, 800, 125);
+    // Spare gasbags (lives) in the corner.
+    ctx.fillStyle = '#f1e2b8';
+    ctx.font = '700 18px Georgia';
+    ctx.textAlign = 'right';
+    ctx.fillText('Spare gasbags', 1540, 48);
+    drawSpares(ctx, state, 1540, 90, true, 1.15);
+    ctx.textAlign = 'center';
     const voters = Object.values(state.players);
     if (v.kind === 'route') return drawRouteMap(v, voters);
     // The shop: up to 4 cards a row.
@@ -1293,6 +1316,11 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.scale(face, 1);
     if (item === 'hookshot') {
       drawHookshotGun(!!fired);
+      ctx.restore();
+      return;
+    }
+    if (item === 'ice') {
+      drawIceBlock(ctx, 4, 0, 0.8); // a block of ice from the locker (GOING DOWN!)
       ctx.restore();
       return;
     }
@@ -1784,7 +1812,9 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.translate(-px, -py);
     }
     const drawShipAndCrew = () => {
+      searchlightArt.drawBellyPod(); // (under the hull: the ladder and outrigger draw over it)
       drawShip(time / 1000);
+      searchlightArt.drawLamps(time / 1000); // the two brass searchlights (also records where the beams start)
       lap('ship');
       // Close-call warnings: red chevrons on the hull pointing at nearby rock.
       for (const n of (state.course && state.course.near) || []) {
@@ -1864,6 +1894,7 @@ export function createRenderer({ ctx, state, canvas }) {
           ctx.stroke();
           ctx.restore();
         }
+        spotterArt.drawHelp(p, px, y, time / 1000); // HELP! call-out
       }
     };
     if (state.wreck) {
@@ -1891,11 +1922,15 @@ export function createRenderer({ ctx, state, canvas }) {
     drawStorm(width, height, view, time / 1000);
     envArt.worldFront(view, width, height, time / 1000); // snow, blizzard haze, embers, smoke
     lap('effects');
+    searchlightArt.draw(view, width, height, time / 1000); // darkness with light cut out, beams, lit-target brackets, glowing eyes
+    lap('dark');
 
     // Screen overlay on a fixed 1600x900 stage.
     const scale = Math.min(width / config.W, height / config.H);
     ctx.setTransform(scale, 0, 0, scale, (width - config.W * scale) / 2, (height - config.H * scale) / 2);
     drawHud();
+    drawGoingDown(ctx, state, time / 1000, config.W, config.H); // GOING DOWN! alarm, meters, "SHE HOLDS!"
+    drawLimpCard(ctx, state, config.W, config.H); // LIMPING HOME... (a spare gasbag was used)
     if (state.runEnd && (!state.wreck || state.wreck.t > 1.2)) {
       ctx.globalAlpha = state.wreck ? Math.min(1, (state.wreck.t - 1.2) * 2) : 1;
       drawRunEnd();
@@ -1907,6 +1942,7 @@ export function createRenderer({ ctx, state, canvas }) {
     const pr = canvas.width / (canvas.clientWidth || canvas.width) || 1;
     ctx.setTransform(pr, 0, 0, pr, 0, 0);
     threatArt.drawLookoutArrows(width / pr, height / pr, { ...view, zoom: view.zoom / pr });
+    spotterArt.drawSpots(width / pr, height / pr, { ...view, zoom: view.zoom / pr }, time / 1000); // SPOTTED marks (and edge arrows)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     filmLook(time, width, height);
     lap('film');

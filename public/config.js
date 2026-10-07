@@ -126,6 +126,42 @@ export const config = {
     STEAM_USE: 9, // extra steam used while charging
     COOLDOWN: 4,
   },
+  // Searchlights (searchlight.js, searchlightArt.js): two crewed lamps, one on the crow's nest and one under the belly.
+  // The stick sweeps the beam; HOLD Action focuses it (narrower, longer, brighter). Anything in a manned beam is LIT:
+  // it takes bonus damage from the guns, the guns snap onto it more easily and it gets a bracket outline.
+  // In dark places (DARK below + each environment's DARK) the world is dim and the beams cut light out of it.
+  SEARCHLIGHT: {
+    TURN: 2.2, // how fast the beam swings (radians per second)
+    RANGE: 1500, // how far the beam reaches (px); a cave wall stops it
+    FOCUS_RANGE: 2200, // ...when focused
+    HALF_ANGLE: 0.17, // half-width of the beam cone (radians)
+    FOCUS_HALF_ANGLE: 0.075,
+    UNMANNED: 0.28, // power of a lamp nobody is working (0 = off): a faint short cone, no lit-target bonus
+    POWER_RISE: 4, // how fast the lamp comes up to power / fades (per second)
+    ASSIST_ANGLE: 0.22, // the stick snaps the beam onto a target within this angle of where you point (0 = off)
+    ASSIST_STRENGTH: 0.6,
+    LIT_DAMAGE: 0.35, // extra damage to a lit target (a fraction of each hit's damage, added up over hits)
+    LIT_HOLD: 0.3, // seconds something stays lit after the beam leaves it
+    LIT_AIM_ANGLE: 1.9, // aim assist reaches this many times further for a lit target...
+    LIT_AIM_STRENGTH: 0.95, // ...and snaps harder (normal: AIM_ASSIST)
+    DAY_ALPHA: 0.12, // how visible the beam cone is in daylight (0..1)
+    DARK_ALPHA: 0.3, // ...in the dark
+    DARK: {
+      ENABLED: true,
+      MAX: 0.82, // the darkest the overlay ever gets (0..1): the ship and crew stay readable
+      CAVE: 0.42, // darkness inside cave and tunnel maps (network / route)
+      DUSK: 0.25, // extra darkness at the end of a day (course.dusk = 1)
+      COLOR: '6,9,22', // the colour of the dark (r,g,b)
+      RES: 4, // the dark is drawn at 1/RES of the screen size and scaled up (cheap and soft)
+      SMOOTH: 1.6, // how fast the dark fades in and out (per second)
+      SHIP_GLOW: 0.8, // how clear the ship's own glow is just outside the hull (0..1; the ship itself is always clear)
+      SHIP_GLOW_CX: 800, SHIP_GLOW_CY: 500, // the ship's glow is an ellipse round the whole ship (ship coordinates, px)...
+      SHIP_GLOW_RX: 1350, SHIP_GLOW_RY: 760, // ...this wide and tall (it fades out over the outer third)
+      LAMP: 150, // glow radius of a flash, an explosion or a muzzle (px)
+      EYES: true, // unlit enemies in the dark show glowing eyes / lamps
+      EYE_ALPHA: 0.9,
+    },
+  },
   // Enemy gunships that come alongside to be boarded (see gunship.js).
   // Dogfighters: a squadron of small biplanes that circle the ship and take turns diving at it.
   DOGFIGHT: {
@@ -491,6 +527,44 @@ export const config = {
     SHELL_SPEED: 1300, // shell speed, px/s
     SHELL_LIFE: 1.17, // shell lifetime, seconds (speed x life = range, about 1520 px)
   },
+  // Primed shells (prime.js): hold PRIME on a gun to charge the loaded shell for a harder hit. Never required.
+  PRIME: {
+    TIME: 2.4, // seconds of holding PRIME to fully charge a shell
+    DECAY: 0.5, // charge lost per second when you let go early (a fully primed shell keeps until fired)
+    DAMAGE_MUL: 2, // a primed shell hits this many times harder than a normal one
+    FRAGS: 5, // little splinters thrown out where a primed shell bursts (they hurt other nearby targets too)
+    FRAG_SPEED: 650, // px/s of those splinters
+    FRAG_LIFE: 0.13, // seconds they fly (speed x life = about 85 px blast radius)
+    BLAST_SIZE: 150, // size of the burst ring on the TV
+  },
+  // Radar on idle phones (spotter.js): a map of everything out there, tap a ping to SPOT it for the whole crew.
+  RADAR: {
+    RANGE: 4500, // px from the ship to the edge of the phone radar (farther things are pinned to the rim)
+    HZ: 4.5, // radar updates sent per second to each phone showing it
+    IDLE_AFTER: 1.2, // seconds with nothing to do before a walking player's radar appears
+    GUN_IDLE_AFTER: 1, // seconds with nothing in reach before a gunner's radar appears
+    GUN_BUSY_AFTER: 0.8, // seconds with a target in reach before it goes away again
+    MAX_ITEMS: 30, // most pings sent (the nearest ones win)
+  },
+  // Spotting (tap a radar ping): a marker on the TV, extra damage, and aim assist that prefers it.
+  SPOT: {
+    TIME: 10, // seconds a target stays spotted
+    BONUS: 0.25, // spotted targets take this much extra damage from shells (0.25 = +25%)
+    ASSIST_ANGLE: 2.2, // aim assist reaches this many times farther for a spotted target
+    ASSIST_PULL: 0.45, // a spotted target counts as this much closer to your aim (lower = more preferred)
+    COOLDOWN: 0.4, // seconds between one player's taps
+    MAX_PER_PLAYER: 2, // most targets one player can have spotted at once (a new spot drops their oldest)
+  },
+  // HELP! button on every phone (spotter.js): call-out on the TV, and the nearest idle crew are sent over.
+  HELP: {
+    COOLDOWN: 8, // seconds before the same player can call again
+    SHOW: 5, // seconds the HELP! call-out shows over the caller
+    RESPONDERS: 2, // how many idle crew are sent
+    IDLE_FOR: 0.8, // a human must have been free this long to count as idle
+    BOT_HOLD: 9, // seconds a bot keeps helping near the caller
+    NEAR: 420, // px: bots help with jobs this close to the caller
+    ARRIVE: 90, // px: a human this close (same deck) has arrived, and goes back to the normal job arrow
+  },
   // Upgrade votes at the beacon and back home.
   VOTE: {
     TIME: 15, // seconds to vote
@@ -810,6 +884,47 @@ export const config = {
   WRECK: {
     TIME: 8, // seconds of breaking apart before the restart
   },
+  // "GOING DOWN!": the first time the hull hits 0 in a mission the ship does not break up at once. She FALLS for a
+  // while (goingDown.js) and the crew has three jobs at the same time: stoke the boiler (a LIFT meter), cool it with
+  // ice blocks from the ICE LOCKER (a HEAT meter - burst = lost) and patch the glowing gasbag leaks. All three in
+  // time and she levels out with a sliver of hull ("SHE HOLDS!"); otherwise she is wrecked as usual.
+  GOING_DOWN: {
+    ENABLED: true,
+    TIME: 22, // seconds of falling (with 8 crew)
+    TIME_PER_MISSING: 1.6, // extra seconds for each crew member under 8 (so 2 players get 6 x this more)
+    SURVIVE_HULL: 15, // hull left when she holds
+    HOLD_HULL: 2, // hull shown while she falls (nothing can hurt her meanwhile)
+    GRACE: 5, // seconds nothing can hurt her after she holds
+    FALL_RATE: 62, // sinking speed (px/s) at the end of the fall with nothing done; it starts at FALL_START of this
+    FALL_START: 0.45,
+    FALL_BRAKE: 0.8, // a full lift meter takes this share off the sinking
+    NOSE: 0.045, // extra nose-down tip while falling (radians)
+    LOADS_BASE: 1.5, // coal loads needed = BASE + crew * PER_CREW, within MIN..MAX
+    LOADS_PER_CREW: 0.33,
+    LOADS_MIN: 2,
+    LOADS_MAX: 7,
+    HEAT_SMALL: 1.2, // heat the needed coal puts in the boiler (1 = bursts): with 2 crew...
+    HEAT_BIG: 1.6, // ...up to 8+ crew. Ice blocks and time make up the difference
+    HEAT_SMALL_CREW: 2,
+    HEAT_BIG_CREW: 8,
+    HEAT_COOL: 0.02, // heat the boiler sheds by itself per second
+    ICE_COOL: 0.25, // heat one ice block takes off
+    LEAKS_MIN: 1, // gasbag leaks that must be patched: 1 + crew / 4, within MIN..MAX
+    LEAKS_MAX: 3,
+    ENEMY_RATE: 0.12, // enemy spawn speed while she falls (1 = normal)
+    ICE_PRESS_COOL: 7, // outside the emergency an ice block also takes this much pressure off the boiler (steam, not heat)
+    // The ice locker: blocks it holds, seconds for one new block, and the same per environment (frost: plenty; ember: few and slow).
+    LOCKER: { MAX: 4, EVERY: 6, ENV: { frost: { MAX: 6, EVERY: 2 }, ember: { MAX: 3, EVERY: 10 } } },
+    THROW_TIME: 0.35, // seconds an ice block flies to the boiler
+  },
+  // Spare gasbags: in a voyage a wreck is not final. Each wreck costs one spare, loses the stop's progress and a share
+  // of the salvage, and the ship limps back to the previous stop. No spares left = the voyage ends.
+  LIMP: {
+    SPARES: 3,
+    SALVAGE_LOSS: 0.3, // share of the salvage on board that is lost
+    HULL: 50, // hull she is patched up to
+    TIME: 7, // seconds of the break-up before she limps away (the "LIMPING HOME" card shows during it)
+  },
   // The look of the whole game, in one place. Simple style: calm, muted backgrounds (sky, rock,
   // caves); the ship in warm wood and cream; crew in their bright scarf colours; enemies and
   // their attacks in red; friendly shots in the shooter's colour; pickups and goals in gold.
@@ -864,12 +979,13 @@ export const config = {
   ENVIRONMENTS: {
     DEFAULT: 'skyisles',
     FORCE: null,
-    skyisles: { name: 'Sky Isles', favour: { swarm: 1, imps: 1, bombers: 1, strafers: 1, gunship: 1 } },
+    skyisles: { name: 'Sky Isles', DARK: 0, favour: { swarm: 1, imps: 1, bombers: 1, strafers: 1, gunship: 1 } },
     // STORM FRONT: dark slate cloud and rain. Wind gusts shove the ship; lightning CHARGES for a few seconds
     // (warning) and strikes the top deck unless a crew member holds Action at a lightning rod (grounded).
     // A manned Lightning Coil drinks a grounded bolt (instantly full charge). (rules: envStormSea.js)
     storm: {
       name: 'Storm Front',
+      DARK: 0.6, // searchlights (searchlight.js): how dark this environment is, 0 (daylight) .. 1 (pitch black). A night storm.
       favour: { swarm: 0.6, imps: 0.6, bombers: 0.7, strafers: 2.6, gunship: 1 }, // storm riders (dogfighters)
       sky: ['1c2230', '3a4660', '6d7a90'], sun: '150,170,205', ridgeHaze: '70,82,104',
       rock: '#566176', rockStripes: ['rgba(14,18,30,.3)', 'rgba(170,190,225,.16)'], rockHaze: 'rgba(80,92,116,.22)',
@@ -902,6 +1018,7 @@ export const config = {
     // crew member holds Action at the winch in the bomb bay to haul them up for salvage. (rules: envStormSea.js)
     sea: {
       name: 'Sunken Sea',
+      DARK: 0.12, // (a hint of gloom under the waterspouts)
       favour: { swarm: 0.8, imps: 0.7, bombers: 2.0, strafers: 0.9, gunship: 1 }, // bombers (flak ships later)
       sky: ['4d93b8', 'a6d3e0', 'e9f4ee'], sun: '255,246,214', ridgeHaze: '196,226,230',
       rock: '#5d6b66', rockStripes: ['rgba(14,30,34,.26)', 'rgba(220,240,230,.2)'], rockHaze: 'rgba(160,205,215,.22)',
@@ -955,6 +1072,7 @@ export const config = {
     // FROST PEAKS: ice builds up on the gasbag, top deck and guns. Chip it off with the hammer.
     frost: {
       name: 'Frost Peaks',
+      DARK: 0.2, // (long polar dusk)
       favour: { swarm: 0.7, imps: 0.5, bombers: 1.6, strafers: 1, gunship: 1 }, // more bombers
       sky: ['6f9cc4', 'bcd8ec', 'eef5fa'], sun: '255,255,255', ridgeHaze: '232,242,250',
       rock: '#c6d7e6', rockStripes: ['rgba(60,90,130,.16)', 'rgba(255,255,255,.35)'], rockHaze: 'rgba(214,230,246,.2)',
@@ -985,6 +1103,7 @@ export const config = {
     // hull on fire and overheats the boiler. Smoke drifts across the screen (visual only).
     ember: {
       name: 'Ember Forge',
+      DARK: 0.25, // (smoky gloom; the lava itself glows)
       favour: { swarm: 2.2, imps: 1.4, bombers: 0.8, strafers: 0.8, gunship: 1 }, // magma bats
       sky: ['2a1216', '7a2e22', 'd4692e'], sun: '255,150,70', ridgeHaze: '150,60,40',
       rock: '#4c3a3e', rockStripes: ['rgba(10,4,6,.3)', 'rgba(255,110,50,.14)'], rockHaze: 'rgba(150,60,40,.2)',
@@ -1017,6 +1136,7 @@ export const config = {
     // (their phone says SPORES!), and spores clog the engines (less power) until a crewmate clears them.
     fungal: {
       name: 'Fungal Depths',
+      DARK: 0.68, // (deep cave: lamps and searchlights only)
       favour: { swarm: 2, imps: 1.5, bombers: 0.7, strafers: 0.7, gunship: 0.9 }, // bat swarms and spore drones
       sky: ['0b0818', '1d1240', '2f2a5c'], sun: '110,255,210', ridgeHaze: '44,24,84',
       rock: '#2c2547', rockStripes: ['rgba(6,2,16,.34)', 'rgba(110,255,210,.1)'], rockHaze: 'rgba(70,36,120,.2)',
@@ -1053,6 +1173,7 @@ export const config = {
     // at the oxygen tank. Void corsairs (dogfighters) and gunships hunt here.
     aether: {
       name: 'The Aether',
+      DARK: 0.55, // (the thin dark air high above the sky)
       favour: { swarm: 0.4, imps: 0.5, bombers: 0.6, strafers: 2, gunship: 1.5 },
       sky: ['04020c', '150a30', '3b2a72'], sun: '190,160,255', ridgeHaze: '70,48,130',
       rock: '#5a5278', rockStripes: ['rgba(10,6,30,.3)', 'rgba(200,180,255,.14)'], rockHaze: 'rgba(120,96,190,.2)',
@@ -1250,7 +1371,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, cool: 1 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

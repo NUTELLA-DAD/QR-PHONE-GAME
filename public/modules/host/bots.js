@@ -7,6 +7,8 @@ import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
 import { GS, MAIN_X1, landX, boilerX, routeStep } from './gunship.js';
 import { isEscortStation, escortFor } from './escort.js';
+import { LIGHT_NAMES, isSearchlight, darkTarget } from './searchlight.js';
+import { botJobs as goingDownJobs } from './goingDown.js';
 
 const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
 const CATWALK = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'catwalk');
@@ -15,7 +17,16 @@ const LOWER = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'lower');
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
 const GUN_STATIONS = Object.keys(L.gunMounts);
-const MANNED_STATIONS = ['Helm', 'Escort Fighter', 'Escort Fighter 2', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
+const MANNED_STATIONS = ['Helm', 'Escort Fighter', 'Escort Fighter 2', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout', ...LIGHT_NAMES];
+
+// How useful manning a searchlight is: in the dark (or with several enemies about) a lamp is worth a hand; otherwise it is the last resort.
+function lightReach(state, n) {
+  const threats = (state.litTargets ? state.litTargets.length : 0) + (state.dimTargets ? state.dimTargets.length : 0);
+  if (state.phase !== 'flying') return 5;
+  const nest = n === 'Nest Searchlight' ? 0.3 : 0; // (the nest lamp sees more of the sky: slightly preferred)
+  if (darkTarget(state) > 0.3) return (threats ? 2.2 : 3.4) - nest; // (after the guns that have a target, ahead of an idle gun or the lookout when there is something to light)
+  return (threats >= 2 ? 3.2 : 5) - nest;
+}
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -166,6 +177,7 @@ function dodgeAltitude(state) {
 
 // List every job on the ship, most urgent first.
 function listJobs(state, bot) {
+  if (state.goingDown) return goingDownJobs(state, bot); // GOING DOWN!: split across coal, ice and leaks (goingDown.js)
   const jobs = [];
   const players = Object.values(state.players);
   const mods = state.modules || [];
@@ -232,7 +244,7 @@ function listJobs(state, bot) {
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
   const botPlanes = players.filter((q) => q.bot && isEscortStation(q.lock)).length; // the crew can only spare so many for the patrol planes
-  const reach = (n) => (isEscortStation(n) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
+  const reach = (n) => (isEscortStation(n) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : isSearchlight(n) ? lightReach(state, n) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
@@ -274,6 +286,8 @@ function isEmergency(job) {
   return !!job.urgent || job.kind !== 'ammo' && job.kind !== 'station' && job.kind !== 'coal' && job.kind !== 'winch' && !(job.kind === 'repair' && !job.obj.broken);
 }
 
+const HELP_KINDS = { fire: 1, patch: 1, revive: 1, swat: 1, fight: 1, defuse: 1, repair: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1 };
+
 function chooseJob(state, bot, bots) {
   const claims = (job) => bots.filter((o) => o !== bot && o.botJob && o.botJob.kind === job.kind && o.botJob.obj === job.obj).length;
   // (a job with a cap: no more than that many crew on this KIND of job at once, e.g. patching gasbag holes)
@@ -286,6 +300,13 @@ function chooseJob(state, bot, bots) {
   const cur = bot.botJob;
   const isCur = (j) => !!cur && j.kind === cur.kind && j.obj === cur.obj;
   const jobs = listJobs(state, bot).filter((j) => claims(j) < j.max && (j.cap == null || onKind(j) < j.cap) && (isCur(j) || !(choresFull && CHORE[j.kind] && !j.urgent)));
+  // Sent to help a crewmate who pressed HELP!: whatever needs doing near them, else just go and stand by.
+  const hf = bot.helpFor;
+  if (hf && hf.caller.d != null && !bot.onGunship) {
+    const c = hf.caller;
+    const near = jobs.filter((j) => HELP_KINDS[j.kind] && j.obj && j.obj.d != null && j.obj.conn == null && j.obj.d === c.d && Math.abs(j.obj.x - c.x) < config.HELP.NEAR).sort((a, b) => Math.abs(a.obj.x - c.x) - Math.abs(b.obj.x - c.x));
+    return near[0] || { kind: 'help', obj: c, max: 3 };
+  }
   // Among the most urgent kind, prefer the closest.
   if (!jobs.length) return null;
   const kind = jobs[0].kind;
@@ -313,6 +334,7 @@ function operate(p, state, dt) {
   p.jx = 0;
   p.jy = 0;
   p.fire = false;
+  p.prime = false;
   const ship = state.ship;
   if (isEscortStation(p.lock)) {
     // Fly the escort fighter at the nearest enemy (or let her circle the ship if there's none).
@@ -370,6 +392,28 @@ function operate(p, state, dt) {
       p.jx = Math.cos(a);
       p.jy = Math.sin(a);
     }
+  } else if (isSearchlight(p.lock)) {
+    // Sweep the beam toward the enemy nearest the ship (in the dark with nothing about: a slow sweep); focus on it.
+    const l = (state.searchlights || []).find((q) => q.n === p.lock);
+    if (!l) return;
+    const sx = 800;
+    const sy = 470 - state.ship.alt;
+    const pitch = state.ship.pitch || 0;
+    let best = null;
+    for (const t of [...state.litTargets, ...state.dimTargets]) {
+      const a = Math.atan2(t.y - l.ey, t.x - l.ex) - pitch;
+      if (Math.abs(angleDiff(a, l.home)) > l.arc) continue;
+      const d = Math.hypot(t.x - sx, t.y - sy);
+      if (d < 2600 && (!best || d < best.d)) best = { a, d };
+    }
+    const dark = darkTarget(state) > 0.3;
+    p.gunIdle = best || dark ? 0 : (p.gunIdle || 0) + dt;
+    const a = best ? best.a : l.home + Math.sin(performance.now() / 1800 + p.phase) * l.arc * 0.8;
+    if (best || dark) {
+      p.jx = Math.cos(a);
+      p.jy = Math.sin(a);
+    }
+    p.fire = !!best && Math.abs(angleDiff(best.a, l.aim)) < 0.15; // (hold Action: focus the beam on it)
   } else if (p.lock === 'Bomb Bay') {
     // Drop when the aiming ring sits on a turret or building; leave when there's nothing to bomb.
     const aim = state.bombBay.aim;
@@ -382,7 +426,10 @@ function operate(p, state, dt) {
     const angle = firingSolution(state, gun);
     // Count how long the enemy has been out of this gun's reach.
     p.gunIdle = angle === null ? (p.gunIdle || 0) + dt : 0;
-    if (angle === null) return;
+    if (angle === null) {
+      p.prime = gun.ammo > 0 && !gun.primed; // nothing to shoot: charge the loaded shell (hold PRIME)
+      return;
+    }
     p.jx = Math.cos(angle);
     p.jy = Math.sin(angle);
     const off = Math.abs(Math.atan2(Math.sin(angle - gun.aim), Math.cos(angle - gun.aim)));
@@ -476,11 +523,21 @@ function work(p, state) {
   } else if (job.kind === 'vent') {
     // Walk to the vent and flip it.
     if (steer(p, o.d, o.x, 10)) press(p);
+  } else if (job.kind === 'cool') {
+    // GOING DOWN!: a block of ice from the locker, then onto the boiler
+    const b = stationNamed('Boiler');
+    if (getTool(p, 'ice', b) && steer(p, b.d, b.x, 40)) press(p);
+  } else if (job.kind === 'coal' && p.carry === 'coal' && state.goingDown && state.goingDown.heat + state.goingDown.heatPer >= 0.97) {
+    // GOING DOWN!: another load now would burst the boiler - wait by it with the coal until the ice has cooled it
+    const b = stationNamed('Boiler');
+    steer(p, b.d, b.x - 50, 20);
   } else if (job.kind === 'coal') {
     const s = p.carry === 'coal' ? stationNamed('Boiler') : stationNamed('Coal Bunker');
     if (steer(p, s.d, s.x)) press(p);
   } else if (job.kind === 'defuse') {
     if (steer(p, o.d, o.x, 25)) p.fire = true;
+  } else if (job.kind === 'help') {
+    steer(p, goalOf(o), o.x, 70); // (walk over to whoever called, then stand by)
   } else if (job.kind === 'revive') {
     if (steer(p, goalOf(o), o.x, 30)) p.fire = true;
   } else if (job.kind === 'fire') {
@@ -862,6 +919,13 @@ function dareStep(p, state, dt) {
   return false;
 }
 
+// Is this bot free to be sent on an errand (HELP! calls)? Idle bots always are; with `loose`, so are bots on a
+// job that is not an emergency (hauling, walking to a station).
+export function botFree(p, loose) {
+  if (p.helpFor) return false;
+  return !p.botJob || (!!loose && !isEmergency(p.botJob));
+}
+
 // Called once per frame for each bot, before the game applies its input.
 export function updateBot(p, state, dt) {
   world = state;
@@ -904,7 +968,8 @@ export function updateBot(p, state, dt) {
       const rodCall = p.lock !== 'Helm' && state.stormJob && state.stormJob.charge && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9;
       // Nobody is at the wheel in flight and nobody is on the way: leave the station and take it.
       const helmCall = p.lock !== 'Helm' && state.phase === 'flying' && !Object.values(state.players).some((q) => q.lock === 'Helm' || (q.botJob && q.botJob.kind === 'station' && q.botJob.obj === 'Helm')) && !(state.modules || []).some((m) => m.name === 'Helm' && m.broken) && Math.random() < B.HELM_CALL;
-      if (p.lockLeft <= 0 || gunUseless || rodCall || helmCall || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
+      const fallCall = !!state.goingDown; // GOING DOWN!: everybody off their stations
+      if (p.lockLeft <= 0 || gunUseless || rodCall || helmCall || fallCall || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;
         p.lockLeft = undefined;
         p.botJob = null;

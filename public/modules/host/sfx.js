@@ -117,6 +117,19 @@ export function createSfx(state) {
       tone('square', 300, 120, 0.08, 0.08);
     },
     charge: () => tone('sawtooth', 220, 700, 0.7, 0.07),
+    // Primed shells and the phone radar.
+    primed: () => {
+      tone('triangle', 660, 1320, 0.18, 0.22);
+      tone('sine', 1320, 1760, 0.28, 0.16, 0.12);
+    },
+    bigshot: () => {
+      tone('square', 180, 50, 0.22, 0.2);
+      noise('bandpass', 700, 0.22, 0.35, 0, 2);
+    },
+    ping: () => {
+      tone('sine', 1180, 1180, 0.1, 0.22);
+      tone('sine', 1570, 1570, 0.16, 0.18, 0.09);
+    },
     clang: (big) => {
       tone('triangle', big ? 180 : 260, big ? 70 : 120, 0.4, big ? 0.4 : 0.25);
       tone('square', 520, 300, 0.12, 0.08);

@@ -11,6 +11,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, SHIP_SAMPLES } from './course.js';
 import { pop } from './popups.js';
+import { shellDmg } from './aim.js';
 
 const SP = config.SPECIALS;
 const B = SHIP_LAYOUT.bounds;
@@ -296,14 +297,13 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
     return Math.hypot(px - ax - t * dx, py - ay - t * dy);
   };
   const shellHits = () => {
-    const dmg = config.GUNS.DAMAGE;
     for (const sh of state.shells) {
       if (sh.life <= 0) continue;
       const hitOne = (list, r, onKill) => {
         for (const e of list) {
           if (e.hp > 0 && Math.hypot(sh.x - e.x, (sh.y - e.y) * (r.squash || 1)) < r.r) {
             sh.life = 0;
-            e.hp -= dmg;
+            e.hp -= shellDmg(sh, e);
             e.hit = 0.15;
             puff(sh.x, sh.y, '#ffcf40', 6);
             if (e.hp <= 0) onKill(e);

@@ -44,6 +44,7 @@ import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { inRock, scrollSpeed } from './course.js';
 import { platformBelow } from './nav.js';
 import { pop } from './popups.js';
+import { shellDmg } from './aim.js';
 import { generateBlueprint, X0, mx, decksOf, segAt, deckYAt, landX, landSeg, landY, boilerX, boilerSeg, boilerY, portPos, firstCannon, anchorPt, surfaces as bpSurfaces, routeStep } from './gunshipBlueprint.js';
 
 export { mx, landX, landSeg, landY, boilerX, boilerSeg, boilerY, portPos, routeStep, decksOf, segAt, deckYAt };
@@ -737,7 +738,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       for (const sh of state.shells) {
         if (sh.life <= 0 || Math.hypot(sh.x - p.x, sh.y - p.y) > 42) continue;
         sh.life = 0;
-        p.hp -= config.GUNS.DAMAGE;
+        p.hp -= shellDmg(sh, p);
         puff(sh.x, sh.y, '#ffcf40', 6);
         if (p.hp <= 0) {
           p.dead = true;
@@ -1308,7 +1309,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
         sh.life = 0;
         g.hit = 0.1;
         const pt = g.ports[k];
-        pt.hp -= config.GUNS.DAMAGE;
+        pt.hp -= shellDmg(sh, g);
         puff(sh.x, sh.y, '#ffcf40', 8);
         if (pt.hp <= 0) {
           pt.dead = true;
@@ -1324,7 +1325,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       const inBag = g.bp.bags.some((b) => Math.hypot((sx - b.cx) / b.rx, (sy - b.cy) / b.ry) < 1);
       if (!inHull && !inBag) continue;
       sh.life = 0;
-      g.hp -= config.GUNS.DAMAGE;
+      g.hp -= shellDmg(sh, g);
       g.hit = 0.15;
       if (inBag) g.gas = Math.max(0, g.gas - G.GAS_HIT); // holed gasbag: she sags
       if (Math.random() < G.ENGINE_HIT) {

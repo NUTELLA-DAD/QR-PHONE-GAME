@@ -12,6 +12,7 @@ import { createSquadrons } from './squadrons.js';
 import { createEscort, isEscortStation, escortFor } from './escort.js';
 import { createSpecials } from './specials.js';
 import { createCoil } from './coil.js';
+import { createSearchlights, isSearchlight } from './searchlight.js';
 import { createGunship, MAIN_X1 } from './gunship.js';
 import { createAirborne } from './airborne.js';
 import { createHookshot } from './hookshot.js';
@@ -20,7 +21,10 @@ import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
 import { createEnvironment, favour } from './environments.js';
 import { assistAim } from './aim.js';
+import { createPrime } from './prime.js';
+import { createSpotter } from './spotter.js';
 import { UPGRADES } from './upgrades.js';
+import { createGoingDown } from './goingDown.js';
 import { generateVoyage, stopById, stopName, envInfo, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
@@ -134,7 +138,7 @@ export function createSimulation() {
   const jobFinder = createJobFinder(state);
   state.modules = modules.list;
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
-  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || isEscortStation(name) || !!state.GUNS[name];
+  const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || isSearchlight(name) || isEscortStation(name) || !!state.GUNS[name];
 
   // Sunken Sea: crew on the lower decks wade slowly while the ship is flooded.
   const wadeMul = (p) => (p.d != null && PLATFORMS[p.d] && PLATFORMS[p.d].y >= 790 && state.sea && state.sea.flood > 0 ? 1 - state.sea.flood * config.ENVIRONMENTS.sea.FLOOD.SLOW_CREW : 1);
@@ -179,7 +183,8 @@ export function createSimulation() {
     // Otherwise standing at a rack or hook means take / swap / put back.
     const pickup = PICKUPS.find((r) => here(r, T.REACH));
     // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)
-    if (pickup && !(station && (tool === 'ammo' || tool === 'coal'))) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : tool && tool !== 'ammo' && tool !== 'coal' ? `Swap to ${pickup.kind}` : `Take ${pickup.kind}` };
+    if (pickup && pickup.kind === 'ice' && !(station && station.n === 'Boiler' && tool === 'ice')) return goingDown.lockerAction(player); // the ice locker
+    if (pickup && !(station && (tool === 'ammo' || tool === 'coal' || tool === 'ice'))) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : tool && tool !== 'ammo' && tool !== 'coal' ? `Swap to ${pickup.kind}` : `Take ${pickup.kind}` };
     const vent = SHIP_LAYOUT.vents.find((v) => here(v, T.REACH));
     if (vent) return { type: 'vent', obj: vent, label: state.ventOpen[SHIP_LAYOUT.vents.indexOf(vent)] ? 'Close vent' : 'Open vent' };
     const valve = modules.list.find((m) => m.kind === 'pipe' && here(m, T.REACH));
@@ -191,9 +196,10 @@ export function createSimulation() {
       if (station.n === 'Ammo Hold' && tool !== 'ammo') return { type: 'ammo', station, label: 'Grab ammo' };
       if (station.n === 'Coal Bunker' && tool !== 'coal') return { type: 'coal', station, label: 'Grab coal' };
       if (station.n === 'Boiler' && tool === 'coal') {
-        const full = state.ship.fuel > config.BOILER.FUEL_MAX - config.BOILER.COAL_FUEL;
-        return full ? { type: 'need', label: 'Firebox is full' } : { type: 'stoke', station, label: 'Load coal' };
+        const full = state.ship.fuel > config.BOILER.FUEL_MAX - config.BOILER.COAL_FUEL && !goingDown.active(); // (while she falls, every load counts)
+        return full ? { type: 'need', label: 'Firebox is full' } : { type: 'stoke', station, label: goingDown.active() ? 'LOAD COAL - LIFT!' : 'Load coal' };
       }
+      if (station.n === 'Boiler' && tool === 'ice') return goingDown.coolAction(station);
       if (LOCKABLE(station.n) && !taken(station.n)) return { type: 'station', station, label: 'Take ' + station.n };
       // Players can always bump a bot off a station.
       const botThere = !player.bot && Object.values(state.players).find((q) => q.bot && q.lock === station.n);
@@ -256,18 +262,23 @@ export function createSimulation() {
 
   const damageHull = (amount) => {
     const danger = 1 + (((state.course && state.course.danger) || 2) - 2) * config.VOYAGE.DANGER_DAMAGE; // skulls on the stop
+    if (goingDown.protect()) return; // falling (the last stand) or just saved: nothing can hurt her
     if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * damageMul(state) * danger) <= 0) wreck();
   };
 
   // The hull gave out: the ship breaks apart, then the whole game starts over.
   function wreck(text = "SHE'S BREAKING UP!") {
     if (state.ship.down) return;
+    if (goingDown.active()) return; // (she is already falling: the fall decides)
+    if (goingDown.tryStart()) return; // the first time in a mission: GOING DOWN! - a last stand instead
     state.ship.hull = 0;
-    state.ship.down = Math.max(config.WRECK.TIME, config.VOYAGE.WRECK_SUMMARY_TIME);
+    const limp = canLimp(); // a spare gasbag takes the blow: the voyage goes on
+    state.ship.down = limp ? config.LIMP.TIME : Math.max(config.WRECK.TIME, config.VOYAGE.WRECK_SUMMARY_TIME);
     state.wreck = { t: 0, lap: state.course ? state.course.lap : 1, kills: state.kills };
     state.ship.shake = 1.5;
     state.ev.warn = config.WRECK.TIME;
     state.ev.warnText = text;
+    if (limp) return startLimp();
     // Laps fully flown still count toward this TV's record.
     const laps = state.wreck.lap - 1;
     if (laps > state.record.laps || (laps === state.record.laps && state.kills > state.record.kills)) {
@@ -276,6 +287,57 @@ export function createSimulation() {
       state.newRecord = true;
     }
     endRun(false);
+  }
+
+  // ---- Limp home: a wreck in a voyage costs a spare gasbag, not the voyage ----
+  const canLimp = () => !!(state.run && state.run.spares > 0 && state.course && state.course.stop && !state.runEnd);
+  // The break-up starts: the spare is used, some salvage is lost, the card says where she is limping to.
+  function startLimp() {
+    const run = state.run;
+    run.spares -= 1;
+    run.limps = (run.limps || 0) + 1;
+    const lost = Math.round(run.salvage * config.LIMP.SALVAGE_LOSS);
+    run.salvage -= lost;
+    const prev = run.visited.length > 1 ? stopById(run.voyage, run.visited[run.visited.length - 2]) : null;
+    state.limp = { spares: run.spares, lost, back: prev ? stopName(prev) : null };
+    bankStats(true); // (what the crew did still counts for the awards)
+  }
+  // The break-up is over: patch her up and put her back at the last stop on the route (the first stop restarts itself).
+  function finishLimp() {
+    const run = state.run;
+    state.limp = null;
+    state.wreck = null;
+    state.ship.down = 0;
+    UPGRADES.find((u) => u.id === 'spare-parts').apply({ state, modules });
+    Object.assign(state.ship, { hull: config.LIMP.HULL, speed: 0.3, shake: 0, press: 65, fuel: Math.max(state.ship.fuel, config.BOILER.START_FUEL), gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
+    Object.assign(state.gasValve, { input: 0, auto: false });
+    state.ventOpen.fill(false);
+    Object.assign(state.bombBay, { cd: 0, empty: 0, aim: null, open: 0 });
+    Object.assign(state.shield, { on: false, flash: 0 });
+    state.tempo = newTempo();
+    state.supply = null;
+    for (const list of [state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
+    raiders.reset();
+    threats.reset();
+    squadrons.reset();
+    escort.reset();
+    hijack.reset();
+    specials.reset();
+    coil.reset();
+    gunship.reset();
+    goingDown.reset();
+    for (const player of Object.values(state.players)) {
+      const [e0, e1] = SHIP_LAYOUT.boarderEntryPoints;
+      Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x) });
+      player.uk = null;
+    }
+    state.ev.warn = 4;
+    state.ev.warnText = 'PATCHED UP - ' + run.spares + ' SPARE GASBAG' + (run.spares === 1 ? '' : 'S') + ' LEFT';
+    const back = run.visited.length > 1;
+    run.visited.pop(); // the stop she wrecked on does not count
+    if (run.visited.length) run.stopId = run.visited[run.visited.length - 1];
+    if (back) startDock(); // (the sky-dock of the stop she limps back to, then the route map)
+    else goToStop(run.stopId); // (the very first stop: just try it again)
   }
 
   // Settings as they were at the start (upgrades change them during a run).
@@ -295,6 +357,7 @@ export function createSimulation() {
     Object.assign(state.gasValve, { input: 0, auto: false });
     state.lastAlt = 0;
     state.wreck = null;
+    state.limp = null;
     state.phase = 'lobby';
     state.upgrades = {};
     state.periscope = false;
@@ -312,7 +375,8 @@ export function createSimulation() {
     state.tempo = newTempo();
     state.supply = null;
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
-    for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, auto: 0 });
+    for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, auto: 0, prime: 0, primed: false });
+    spotter.reset();
     raiders.reset();
     threats.reset();
     squadrons.restart();
@@ -320,9 +384,11 @@ export function createSimulation() {
     hijack.reset();
     specials.reset();
     coil.reset();
+    searchlights.reset();
     gunship.reset();
     course.restart();
     modules.reset();
+    goingDown.reset();
     if (state.weather) Object.assign(state.weather, { storm: 0, gust: 0, flash: 0, bolt: null });
     for (const player of Object.values(state.players)) {
       // Drop everyone back aboard from above, as when joining.
@@ -575,6 +641,9 @@ export function createSimulation() {
     phoneFx(p, '+1 Shot down!', [30, 40, 30]);
   };
   let lastJolt = 0;
+  const prime = createPrime({ state, phoneFx }); // primed shells: hold PRIME on a gun to charge the loaded shell (prime.js)
+  const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt }); // GOING DOWN! last stand + the ice locker (goingDown.js)
+  state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
 
   const raiders = createRaiders({ state, modules, puff, impact });
   const escort = createEscort({ state, puff, phoneFx });
@@ -589,7 +658,7 @@ export function createSimulation() {
   const newRun = () => {
     const voyage = generateVoyage((Math.random() * 2 ** 31) | 0);
     const first = voyage.columns[0][0];
-    state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [] };
+    state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: config.LIMP.SPARES, limps: 0 };
     state.runEnd = null;
     state.salvagePop = null;
   };
@@ -891,6 +960,7 @@ export function createSimulation() {
   let pendingVote = null;
   const onMarker = (m) => {
     if (m.kind !== 'home') return;
+    goingDown.missionDone(); // (reaching home while falling: she limps in)
     // A new record for this TV?
     const laps = m.lap - 1;
     if (laps > state.record.laps || (laps === state.record.laps && state.kills > state.record.kills)) {
@@ -933,6 +1003,7 @@ export function createSimulation() {
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
   const coil = createCoil({ state, puff, credit });
+  const searchlights = createSearchlights({ state });
   const gunship = createGunship({ state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) });
   const weather = createWeather({ state, impact, puff });
   const env = createEnvironment({ state, puff, phoneFx, impact, damageHull }); // ice, thermals, blizzards (rules in environments.js)
@@ -955,6 +1026,8 @@ export function createSimulation() {
   const emitPlayerUi = (playerId, ui) => {
     if (socket && !state.players[playerId]?.bot) socket.emit('host:ui', { id: playerId, ui });
   };
+
+  const spotter = createSpotter({ state, emit: emitPlayerUi, phoneFx }); // phone radar, spotting and HELP! (spotter.js)
 
   const setSocket = (nextSocket) => {
     socket = nextSocket;
@@ -1055,6 +1128,7 @@ export function createSimulation() {
       }
       const station = !player.lock && player.conn == null ? SHIP_LAYOUT.stations.filter((s) => s.d === player.d && Math.abs(player.x - s.x) < T.STATION_REACH).sort((a, b) => Math.abs(player.x - a.x) - Math.abs(player.x - b.x))[0] || null : null;
 
+      if (!player.lock) player.prime = false;
       if (player.hj) {
         hijack.rider(player, dt); // flying a stolen dogfighter (kick the pilot out, then steer)
       } else if (player.lock) {
@@ -1105,6 +1179,7 @@ export function createSimulation() {
           }
         } else if (gun) {
           gun.cd = Math.max(0, gun.cd - dt);
+          prime.charge(player, gun, working, dt);
           // Turn toward the stick, but only within this gun's firing arc (a broken gun is jammed).
           if (working && Math.hypot(player.jx, player.jy) > 0.25) {
             const A = config.AIM_ASSIST;
@@ -1121,6 +1196,7 @@ export function createSimulation() {
               gun.cd = config.GUNS.COOLDOWN * env.gunCooldownMul(player.lock);
               const angle = gun.aim + (state.ship.pitch || 0);
               const [gx, gy] = tilt(state, gun.bx, gun.by);
+              const primed = prime.take(gun); // a fully primed shell: harder hit, bigger blast (config PRIME)
               state.shells.push({
                 x: gx + Math.cos(angle) * 60,
                 y: gy - state.ship.alt + Math.sin(angle) * 60,
@@ -1128,13 +1204,19 @@ export function createSimulation() {
                 vy: Math.sin(angle) * config.GUNS.SHELL_SPEED,
                 life: config.GUNS.SHELL_LIFE,
                 owner: player.id,
+                ...(primed ? { mul: config.PRIME.DAMAGE_MUL, primed: true } : {}),
               });
-              puff(gx + Math.cos(angle) * 64, gy - state.ship.alt + Math.sin(angle) * 64, '#ffe9a8', 4);
-              state.flashes.push({ x: gx + Math.cos(angle) * 70, y: gy - state.ship.alt + Math.sin(angle) * 70, ang: angle, t: 0.09, color: '#fff2b0', size: 1.3 });
+              puff(gx + Math.cos(angle) * 64, gy - state.ship.alt + Math.sin(angle) * 64, primed ? '#ff9a2e' : '#ffe9a8', primed ? 12 : 4);
+              state.flashes.push({ x: gx + Math.cos(angle) * 70, y: gy - state.ship.alt + Math.sin(angle) * 70, ang: angle, t: primed ? 0.17 : 0.09, color: primed ? '#ff9a2e' : '#fff2b0', size: primed ? 2.7 : 1.3 });
+              if (primed) {
+                state.rings.push({ x: gx + Math.cos(angle) * 64, y: gy - state.ship.alt + Math.sin(angle) * 64, t: 0.3, max: 0.3, color: '#ffd23f', size: 110 });
+                state.sfxQ.push(['bigshot']);
+              }
             }
           }
         }
         if (gun) player.face = Math.cos(gun.aim) < 0 ? -1 : 1;
+        else if (isSearchlight(player.lock)) player.face = Math.cos(state.searchlights.find((l) => l.n === player.lock).aim) < 0 ? -1 : 1;
         player.actQ = false;
         player.jumpQ = false;
         player.act = null;
@@ -1261,9 +1343,13 @@ export function createSimulation() {
             puff(act.station.x, player.y - 60, '#ffd23f', 8);
           } else if (type === 'ammo') player.carry = 'ammo';
           else if (type === 'coal') player.carry = 'coal';
+          else if (type === 'icetake') goingDown.takeIce(player);
+          else if (type === 'icegive') goingDown.giveIce(player);
+          else if (type === 'cool') goingDown.throwIce(player);
           else if (type === 'stoke') {
             state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + config.BOILER.COAL_FUEL);
             stat(player, 'coal');
+            goingDown.onStoke(player);
             player.carry = null;
             shipPuff(act.station.x - 30, PLATFORMS[act.station.d].y - 50, '#ff8c42', 8);
           }
@@ -1291,14 +1377,14 @@ export function createSimulation() {
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
-      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : isEscortStation(stationName) ? 'escort' : null;
+      const kind = stationName === 'Helm' ? 'helm' : gun ? 'gun' : stationName === 'Boiler' ? 'boiler' : stationName === 'Lookout' ? 'lookout' : stationName === 'Bomb Bay' ? 'bombbay' : stationName === 'Deflector' ? 'shield' : stationName === 'Lightning Coil' ? 'coil' : isSearchlight(stationName) ? 'light' : isEscortStation(stationName) ? 'escort' : null;
       const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && Object.values(state.players).some((q) => q.lock === stationName && (q.bot ? player.bot : true));
       let label = 'Hey!';
       let hold = false;
       if (player.lock) {
         const working = modules.works(state, player.lock);
-        label = !working && kind !== 'helm' && kind !== 'lookout' && kind !== 'escort' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'escort' ? ((escortFor(state, player.lock) || {}).flying ? 'Auto guns' : 'Wait...') : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : 'Honk!';
-        hold = kind === 'gun' || kind === 'bombbay' || kind === 'coil';
+        label = !working && kind !== 'helm' && kind !== 'lookout' && kind !== 'light' && kind !== 'escort' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'escort' ? ((escortFor(state, player.lock) || {}).flying ? 'Auto guns' : 'Wait...') : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : kind === 'light' ? 'FOCUS!' : 'Honk!';
+        hold = kind === 'gun' || kind === 'bombbay' || kind === 'coil' || kind === 'light';
       } else if (player.act) {
         label = player.act.label;
         hold = !!player.act.hold;
@@ -1316,6 +1402,7 @@ export function createSimulation() {
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       if (stationName === 'Helm' && player.lock && !status) status = course.helmHint();
       if (isEscortStation(stationName) && !status) status = escort.status(stationName);
+      if (kind === 'light' && player.lock && !status) status = searchlights.status(stationName);
       const feel = state.buoyancy > 0 ? 'RISING' : state.buoyancy < 0 ? 'FALLING' : 'holding';
       const leakNow = modules.leaks()[0];
       const leakText = leakNow ? (leakNow.pipe && leakNow.pipe.open ? `${leakNow.m.name} pipe leaking - close the valve or repair` : `${leakNow.m.name} leaking steam - repair it`) : '';
@@ -1324,22 +1411,25 @@ export function createSimulation() {
       if (stationName === 'Helm' && player.lock && !status && (state.ship.press < config.GAS.PUMP_MIN_PRESS || state.gasHoles.length)) status = `Gas ${Math.round(state.ship.gas)}% - ${feel}${state.ship.press < config.GAS.PUMP_MIN_PRESS ? ' - NO STEAM TO PUMP!' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' holes leaking' : ''}`;
       if (stationName === 'Helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag full - she is rising' : 'Gasbag low - she is dropping';
       if (gun && !status && env.gunIce(stationName) > 0.35) status = env.gunJammed(stationName) ? 'ICED - CHIP IT! (hammer)' : 'Gun is icing up - chip it (hammer)';
+      if (!status && !player.lock && goingDown.active()) status = goingDown.status();
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
       if (!status && !player.bot) status = env.deep.status(player) || ''; // spores (cough), clogged engines, oxygen
       const ammoText = gun ? gun.ammo : stationName === 'Bomb Bay' ? state.bombBay.bombs : null;
       let attackLabel = !player.lock && player.conn == null && batInReach(player, config.WAVES.BAT_NOTICE) ? 'Swat bat!' : player.carry === 'sword' ? 'Swing' : player.carry === 'hookshot' ? 'Hook!' : 'Shove';
       if (player.hook && player.hook.phase === 'caught') attackLabel = 'Let go!';
+      if (player.lock && gun && !player.hj) attackLabel = 'Prime'; // (on a gun the left button charges the shell)
+      const primePct = player.lock && gun ? (gun.primed ? 10 : Math.round((gun.prime || 0) * 10)) : 0;
       if (player.hj) {
         attackLabel = player.hj.phase === 'kick' ? 'Kick!' : 'Guns auto';
         if (player.hj.phase === 'kick') status = 'Tap Action 3 times (or hold it) to throw the pilot out - LEAVE to jump off';
         else status = 'Fuel ' + Math.max(0, Math.round(player.hj.fuel / 5) * 5) + 's - hull ' + Math.max(0, player.hj.hp) + '/' + player.hj.max;
       }
       const hull = Math.round(state.ship.hull / 5) * 5;
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, jobUi ? jobUi.label + '|' + jobUi.dir : ''].join('|');
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, jobUi ? jobUi.label + '|' + jobUi.dir : ''].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, job: jobUi };
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, job: jobUi };
           emitPlayerUi(player.id, player.ui);
         }
       }
@@ -1347,6 +1437,7 @@ export function createSimulation() {
 
     state.lookout = state.periscope || Object.values(state.players).some((q) => q.lock === 'Lookout');
     updatePopups(state, dt);
+    spotter.update(dt);
     modules.update(state, dt);
     // Steam pressure: heat from the coal in the firebox in, steam used by everything powered,
     // open vents and burst pipes out (all using more at higher pressure).
@@ -1361,6 +1452,7 @@ export function createSimulation() {
     state.shield.on = taken('Deflector') && modules.works(state, 'Deflector') && state.phase === 'flying';
     const coilOp = Object.values(state.players).find((q) => q.lock === 'Lightning Coil');
     coil.update(dt, coilOp || null, modules.works(state, 'Lightning Coil'));
+    searchlights.update(dt);
     const parts = modules.drainParts(state);
     parts.vents = openVents * BO.VENT_RATE;
     parts.shield = state.shield.on ? config.SHIELD.STEAM_USE : 0;
@@ -1421,8 +1513,10 @@ export function createSimulation() {
       bay.from = { x: bx, y: by - state.ship.alt + 20 };
       bay.aim = course.predictBomb(bx, by - state.ship.alt + 20);
     } else bay.aim = null;
-    for (const gun of Object.values(state.GUNS)) {
+    for (const [gunName, gun] of Object.entries(state.GUNS)) {
       gun.empty = Math.max(0, gun.empty - dt);
+      if (!taken(gunName)) prime.idle(gun, dt); // (a half-charge fades when nobody is holding it; the glow timer always runs)
+      else gun.primedFlash = Math.max(0, (gun.primedFlash || 0) - dt);
       // Auto-Loader upgrade: a free shell every so often.
       if (config.GUNS.AUTOLOAD_EVERY && gun.ammo < gun.max && (gun.auto = (gun.auto || 0) + dt) >= config.GUNS.AUTOLOAD_EVERY) {
         gun.auto = 0;
@@ -1500,12 +1594,13 @@ export function createSimulation() {
       state.ship.alt += (home - state.ship.alt) * Math.min(1, dt * 0.4);
     }
     state.ship.shake = Math.max(0, state.ship.shake - dt);
+    goingDown.update(dt); // the last stand: sinking, the meters, the ice locker (goingDown.js)
     // Nose up while climbing, nose down while diving.
     const SH = config.SHIP;
     const climbRate = dt > 0 && state.lastAlt != null ? (state.ship.alt - state.lastAlt) / dt : 0;
     state.lastAlt = state.ship.alt;
     // (Speeding up lifts the nose a touch, braking dips it: she has weight.)
-    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED - (state.ship.accelX || 0) * SH.PITCH_PER_ACCEL, -SH.TILT_MAX, SH.TILT_MAX);
+    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED - (state.ship.accelX || 0) * SH.PITCH_PER_ACCEL, -SH.TILT_MAX, SH.TILT_MAX) + goingDown.pitch();
     state.ship.pitch = (state.ship.pitch || 0) + (wantPitch - (state.ship.pitch || 0)) * Math.min(1, dt * SH.TILT_SMOOTH);
 
     // Breaking apart: pieces fall, explosions go off, then the whole game starts over.
@@ -1517,7 +1612,7 @@ export function createSimulation() {
         const y = 200 + Math.random() * 700;
         shipPuff(x, y + state.wreck.t * state.wreck.t * 60, Math.random() < 0.5 ? '#ff8c42' : '#555', 12);
       }
-      if (state.ship.down <= 0) restartGame();
+      if (state.ship.down <= 0) (state.limp ? finishLimp() : restartGame());
     }
 
     if (state.phase === 'lobby') {
@@ -1536,8 +1631,10 @@ export function createSimulation() {
         gunship.reset();
         state.tempo = newTempo();
         state.enemy.dead = Math.max(state.enemy.dead, 6);
+        goingDown.newMission(); // (the last stand is back for the new mission)
       }
       updateTempo(dt);
+      if (goingDown.active()) state.tempo.rate = Math.min(state.tempo.rate, config.GOING_DOWN.ENEMY_RATE); // (few new enemies while she falls)
       squadrons.update(dt);
       escort.update(dt);
       hijack.update(dt);
@@ -1582,6 +1679,7 @@ export function createSimulation() {
 
     // Shots that hit something (life set to exactly 0) leave an impact ring; expired ones just go.
     for (const sh of state.shells) if (sh.life === 0) state.rings.push({ x: sh.x, y: sh.y, t: 0.3, max: 0.3, color: '#ffd23f', size: 90 });
+    for (const sh of [...state.shells]) if (sh.life === 0 && sh.primed) prime.burst(sh); // (a primed shell bursts into splinters)
     for (const b of state.bullets) if (b.life === 0) state.rings.push({ x: b.x, y: b.y, t: 0.25, max: 0.25, color: '#ff7b4a', size: 70 });
     if (state.shells.some((sh) => sh.life === 0)) state.sfxQ.push(['impact']);
     for (const arr of [state.bullets, state.shells]) {
@@ -1612,7 +1710,7 @@ export function createSimulation() {
       }
     }
 
-    if (!state.ship.down) {
+    if (!state.ship.down && !goingDown.protect()) {
       state.ship.hull -= (state.breaches.length * 0.5 + state.fires.length * 0.35) * damageMul(state) * 2 * dt;
       if (state.ship.hull <= 0) wreck();
     }
