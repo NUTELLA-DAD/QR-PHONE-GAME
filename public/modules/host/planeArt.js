@@ -1,5 +1,6 @@
 // Shared plane drawings.
 import { config } from '../../config.js';
+import { drawFlame } from './vfxArt.js';
 
 // Painted sprites (art/sprites/planes/dogfighter|escort), set once by threatArt. Optional.
 let planeSprites = null;
@@ -76,10 +77,7 @@ export function drawBiplane(ctx, time, body, trim, wreck, pilot = '#efe9dc') {
     ctx.ellipse(33, -1, 3, 18 * (0.7 + 0.3 * Math.abs(Math.sin(time * 40))), 0, 0, 7);
     ctx.fill();
   } else {
-    ctx.fillStyle = '#ff7b00';
-    ctx.beginPath();
-    ctx.arc(26, -2, 7 + Math.random() * 3, 0, 7);
-    ctx.fill();
+    drawFlame(ctx, 26, 2, 16, 24, time, 0); // (a flat flame stepping through 4 frames: no random wobble)
   }
 }
 

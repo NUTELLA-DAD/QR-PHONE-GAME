@@ -18,6 +18,7 @@
 // and the charge ticking on her boiler. Style 2026: enemy oxblood + charcoal, thin outlines.
 import { BOW, mx } from './gunship.js';
 import { config } from '../../config.js';
+import { perfState } from './perf.js';
 import { paintPath, paintRect } from './textureArt.js';
 import { createSprites } from './sprites.js';
 
@@ -169,13 +170,23 @@ export function createGunshipArt({ ctx, state, ink, sprites: given }) {
   };
 
   // A plume of smoke puffs rising from (x, y): count puffs cycling with time. `back` drifts them sideways.
+  // Ink first: a thin ring round every puff, then the translucent fills over it, so ink shows mostly at the outside of the chain.
   const plume = (time, x, y, count, rise, back, r0, r1, rgb, alpha) => {
-    for (let k = 0; k < count; k++) {
-      const ph = (time * 0.7 + k / count) % 1;
-      ctx.fillStyle = `rgba(${rgb},${(1 - ph) * alpha})`;
-      ctx.beginPath();
-      ctx.arc(x + back * ph + Math.sin(time * 3 + k * 2) * 4, y - rise * ph, r0 + (r1 - r0) * ph, 0, 7);
-      ctx.fill();
+    const inked = perfState.level > 0; // (lowest detail: no ink)
+    for (let pass = inked ? 0 : 1; pass < 2; pass++) {
+      for (let k = 0; k < count; k++) {
+        const ph = (time * 0.7 + k / count) % 1;
+        ctx.beginPath();
+        ctx.arc(x + back * ph + Math.sin(time * 3 + k * 2) * 4, y - rise * ph, r0 + (r1 - r0) * ph, 0, 7);
+        if (pass) {
+          ctx.fillStyle = `rgba(${rgb},${(1 - ph) * alpha})`;
+          ctx.fill();
+        } else {
+          ctx.strokeStyle = `rgba(43,38,34,${(1 - ph) * 0.75})`;
+          ctx.lineWidth = 2.2;
+          ctx.stroke();
+        }
+      }
     }
   };
 

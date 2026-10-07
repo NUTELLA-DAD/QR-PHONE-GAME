@@ -4,6 +4,7 @@ import { config } from '../../config.js';
 import { drawBiplane, drawTailNumber, setPlaneSprites } from './planeArt.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { envOf } from './environments.js';
+import { drawFlame, drawSpark } from './vfxArt.js'; // flat gouache flames and sparks
 
 const INK = config.INK;
 const P = SHIP_LAYOUT.platforms;
@@ -72,6 +73,9 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     }
   };
 
+  // A burning wreck: one flat upright flame (4 stepped frames) above it, whatever way it is spinning.
+  const wreckFlame = (w) => drawFlame(ctx, w.x, w.y - 4, w.kind === 'cargo' ? 44 : 28, w.kind === 'cargo' ? 58 : 38, performance.now() / 1000, w.x * 0.01);
+
   const drawWrecks = () => {
     for (const w of state.wrecks || []) {
       ctx.save();
@@ -80,13 +84,15 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       if (w.kind === 'biplane' || w.kind === 'escort') {
         if (Math.cos(w.spin) < 0) ctx.scale(1, -1);
         ctx.scale(1.3, 1.3);
-        if (w.kind === 'escort') biplane(0, '#5f7a52', '#b89a5a', true, '#a8443f');
-        else biplane(0, '#7d766a', '#7a3433', true);
+        const tm = performance.now() / 1000; // (the wreck's flame steps through its 4 frames)
+        if (w.kind === 'escort') biplane(tm, '#5f7a52', '#b89a5a', true, '#a8443f');
+        else biplane(tm, '#7d766a', '#7a3433', true);
         ctx.restore();
         continue;
       }
       if (sprites.plane(ctx, w.kind === 'cargo' ? 'cargo' : 'fighter', 0, 'wreck')) {
         ctx.restore();
+        wreckFlame(w);
         continue;
       }
       ink();
@@ -102,6 +108,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.arc(-20 * big, 0, 10 * big, 0, 7);
       ctx.fill();
       ctx.restore();
+      wreckFlame(w);
     }
   };
 
@@ -124,10 +131,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
         ctx.quadraticCurveTo(b.x + 22, y - 36, b.x + 14, y - 44);
         ctx.stroke();
       }
-      ctx.fillStyle = Math.sin(time * 20) > 0 ? '#f2d36b' : '#e8884a';
-      ctx.beginPath();
-      ctx.arc(b.x + 14, y - 46, 6, 0, 7);
-      ctx.fill();
+      drawSpark(ctx, b.x + 14, y - 46, 10, Math.sin(time * 20) > 0 ? '#f2d36b' : '#e8884a', 4);
       // Countdown.
       ctx.font = '27px ' + config.FONTS.DISPLAY;
       ctx.textAlign = 'center';
@@ -587,10 +591,9 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.lineTo(-16, 7);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#f2d36b';
-      ctx.beginPath();
-      ctx.arc(-28, 0, 6 + Math.random() * 3, 0, 7);
-      ctx.fill();
+      ctx.translate(-23, 0);
+      ctx.rotate(-Math.PI / 2); // (the flame points backwards)
+      drawFlame(ctx, 0, 0, 14, 22, performance.now() / 1000, k.x * 0.01);
       ctx.restore();
     }
   };

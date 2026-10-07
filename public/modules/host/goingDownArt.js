@@ -161,12 +161,12 @@ export function drawBoilerHeat(ctx, state, time) {
   const heat = Math.min(1, g.heat);
   ctx.save();
   if (heat > 0.5) {
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = `rgba(255,${90 - heat * 40},30,${(heat - 0.5) * (0.35 + 0.2 * Math.sin(time * 14))})`;
+    // a flat orange disc that pulses in steps (4 frames at 8 fps), no blend mode
+    const step = Math.floor(time * 8) & 3;
+    ctx.fillStyle = `rgba(240,120,50,${(heat - 0.5) * (0.28 + 0.07 * step)})`;
     ctx.beginPath();
     ctx.arc(boiler.x - 25, by - 56, 90, 0, 7);
     ctx.fill();
-    ctx.globalCompositeOperation = 'source-over';
   }
   const x = boiler.x - 70;
   const y = by - 140;
@@ -190,13 +190,10 @@ export function drawBoilerHeat(ctx, state, time) {
 // A glowing ring round a gasbag leak that must be patched (called from shipArt's drawGasHoles).
 export function drawHoleGlow(ctx, h, time) {
   const pulse = 0.5 + 0.5 * Math.sin(time * 7);
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = `rgba(255,210,63,${0.22 + 0.25 * pulse})`;
+  ctx.fillStyle = `rgba(255,210,63,${0.2 + 0.2 * pulse})`; // (a flat disc: no blend mode)
   ctx.beginPath();
   ctx.arc(h.x, h.y, 38 + pulse * 8, 0, 7);
   ctx.fill();
-  ctx.restore();
   ctx.save();
   ctx.strokeStyle = GOLD;
   ctx.lineWidth = 4;

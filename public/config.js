@@ -1009,6 +1009,13 @@ export const config = {
   },
   // Outline weights (Style 2026, see art/ART_SPEC.md).
   OUTLINE: { MAIN: 3.4, SMALL: 2.5, SHIP: 4 },
+  // Effects in the storybook gouache style (modules/host/vfxArt.js): flat colours, ink from INK + OUTLINE, no gradients.
+  VFX: {
+    CHARCOAL: '#3a302c', ORANGE: '#f08a3c', CREAM: '#fff2cf', GOLD: '#f2c14e', // explosion rim / body / core, primed-shell ring
+    SMOKE: '#9a9490', STEAM: '#ffffff', // smoke grey (puffs are mixed halfway toward it); steam is pure white with no ink
+    FIRE_OUT: '#f08a3c', FIRE_IN: '#ffd35c', // flat flame: body and heart
+    TICK_SECS: 0.15, // how long the comic ink ticks stay on an impact
+  },
   // Sky effects (modules/host/skyArt.js): sun, god-rays, birds, far airships. All soft and faint.
   SKY: {
     ENABLED: true,

@@ -21,6 +21,7 @@ import { loadTextures } from './textureArt.js';
 import { envIdOf } from './environments.js';
 import { createSpotterArt } from './spotterArt.js';
 import { perfLowFx } from './perf.js';
+import { drawPuffs, drawRings, drawFlashes, drawFlame, drawFlakBurst } from './vfxArt.js'; // gouache explosions, smoke, ink ticks, flat flames
 import { createLogbook } from './logbookArt.js'; // cream paper panels + red stamps (the captain's logbook HUD)
 import { createLinkArt } from './linkArt.js'; // linked-station wires, gust warnings, surge rings
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
@@ -186,18 +187,10 @@ export function createRenderer({ ctx, state, canvas }) {
         drawBar(fire.x, y - 70, fire.prog);
         continue;
       }
-      for (let i = -1; i <= 1; i++) {
-        const height = 46 + Math.sin(time * 12 + i * 2) * 10 - (i ? 10 : 0);
-        const x = fire.x + i * 18;
-        ctx.fillStyle = i ? '#ff7b00' : '#ffcf40';
-        ctx.beginPath();
-        ctx.moveTo(x - 14, y);
-        ctx.quadraticCurveTo(x - 14, y - height * 0.6, x, y - height);
-        ctx.quadraticCurveTo(x + 14, y - height * 0.6, x + 14, y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      }
+      // Three flat flames, each stepping through 4 frames at 8 fps (no wobble).
+      drawFlame(ctx, fire.x - 20, y, 28, 36, time, 1 + fire.x * 0.013);
+      drawFlame(ctx, fire.x + 20, y, 28, 36, time, 2 + fire.x * 0.013);
+      drawFlame(ctx, fire.x, y, 36, 52, time, fire.x * 0.013);
       drawBar(fire.x, y - 70, fire.prog);
     }
     for (const player of Object.values(state.players)) {
@@ -488,44 +481,10 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillText('+', x, y + 132);
   };
 
-  // Muzzle flashes (a bright star at the barrel) and impact rings (a quick expanding burst).
+  // Muzzle flashes (flat stars at the barrel) and impact rings (a flat ring plus a few comic ink ticks); see vfxArt.js.
   const drawFlashesAndRings = () => {
-    for (const f of state.flashes || []) {
-      const k = f.t / 0.1;
-      ctx.save();
-      ctx.translate(f.x, f.y);
-      ctx.rotate(f.ang);
-      ctx.globalAlpha = Math.min(1, k * 1.5);
-      ctx.fillStyle = f.color;
-      ctx.beginPath();
-      const s = 34 * f.size;
-      ctx.moveTo(s * 1.6, 0);
-      ctx.lineTo(s * 0.3, s * 0.35);
-      ctx.lineTo(0, s * 0.8);
-      ctx.lineTo(-s * 0.2, s * 0.25);
-      ctx.lineTo(-s * 0.5, 0);
-      ctx.lineTo(-s * 0.2, -s * 0.25);
-      ctx.lineTo(0, -s * 0.8);
-      ctx.lineTo(s * 0.3, -s * 0.35);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(0, 0, s * 0.3, 0, 7);
-      ctx.fill();
-      ctx.restore();
-    }
-    ctx.globalAlpha = 1;
-    for (const r of state.rings || []) {
-      const k = 1 - r.t / r.max;
-      ctx.strokeStyle = r.color;
-      ctx.globalAlpha = 1 - k;
-      ctx.lineWidth = 6 * (1 - k) + 2;
-      ctx.beginPath();
-      ctx.arc(r.x, r.y, 10 + r.size * k, 0, 7);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
+    drawFlashes(ctx, state.flashes);
+    drawRings(ctx, state.rings);
   };
 
   const drawEffects = (time, view) => {
@@ -545,28 +504,8 @@ export function createRenderer({ ctx, state, canvas }) {
     drawSupply(time);
     drawPopups(view.zoom);
     drawEnemy(time);
-    // Cartoon puffs: swell up, then shrink and fade, with an ink outline and a highlight.
-    const lowFx = perfLowFx(); // (lowest detail: every other puff, no highlight)
-    let puffN = 0;
-    for (const puffItem of state.puffs) {
-      if (lowFx && (puffN++ & 1)) continue;
-      const t = 1 - puffItem.life / puffItem.max;
-      const r = 5 + 13 * Math.sin(Math.min(1, t * 1.6) * Math.PI * 0.5 + 0.15) * (1 - t * 0.45);
-      ctx.globalAlpha = Math.max(0, 1 - t * t);
-      ctx.fillStyle = puffItem.c;
-      ctx.beginPath();
-      ctx.arc(puffItem.x, puffItem.y, r, 0, 7);
-      ctx.fill();
-      ctx.strokeStyle = config.INK;
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-      if (lowFx) continue;
-      ctx.fillStyle = 'rgba(255,255,255,.35)';
-      ctx.beginPath();
-      ctx.arc(puffItem.x - r * 0.3, puffItem.y - r * 0.3, r * 0.35, 0, 7);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    // Cartoon puffs: gouache explosions (rim, body, core), smoke inked on its outer edge only, plain white steam.
+    drawPuffs(ctx, state.puffs);
     // Shots: bright glowing orbs with trails. Crew shells glow in the shooter's own colour (so you
     // can follow your fire); enemy bullets are hot red, flak orange.
     const glowShot = (p, color, r, trail) => {
@@ -603,7 +542,10 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.stroke();
       } else glowShot(shell, shell.frag ? '#ffd23f' : (state.players[shell.owner] || {}).color || '#f2d36b', shell.frag ? 5 : 9 + 3 * big, 0.06);
     }
-    for (const bullet of state.bullets) glowShot(bullet, bullet.flak ? '#e8884a' : '#ff2e55', bullet.flak ? 13 : 12, 0.09);
+    for (const bullet of state.bullets) {
+      if (bullet.flak) drawFlakBurst(ctx, bullet.x, bullet.y, 13); // (flak: a flat gouache burst)
+      else glowShot(bullet, '#ff2e55', 12, 0.09);
+    }
   };
 
   // Lap progress: home mast, checkpoints, the beacon halfway, and the ship.

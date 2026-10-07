@@ -62,7 +62,7 @@ export function createPrime({ state, phoneFx }) {
   // Where a primed shell burst (it hit something: life is exactly 0): throw splinters so
   // other targets nearby are hit too. Splinters are ordinary short-lived shells (credit goes to the shooter).
   const burst = (shell) => {
-    state.rings.push({ x: shell.x, y: shell.y, t: 0.45, max: 0.45, color: '#ff9a2e', size: P.BLAST_SIZE });
+    state.rings.push({ x: shell.x, y: shell.y, t: 0.45, max: 0.45, color: '#ff9a2e', size: P.BLAST_SIZE, kind: 'prime' });
     state.flashes.push({ x: shell.x, y: shell.y, ang: 0, t: 0.18, color: '#fff2b0', size: 2.2 });
     const a0 = Math.random() * 6.28;
     for (let i = 0; i < P.FRAGS; i++) {
