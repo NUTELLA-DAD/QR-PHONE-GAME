@@ -6,12 +6,13 @@
 // it copy the screen for every ship shape, every frame). If a texture is missing, or config.TEXTURES.ENABLED
 // is false, nothing happens and the flat fill stays. Patterns are built once; drawing never throws.
 import { config } from '../../config.js';
+import { perfTextures } from './perf.js';
 
 const NAMES = ['canvas', 'wood', 'brass', 'darkwood', 'oxblood', 'charcoal', 'enemycanvas'];
 const pats = {};
 let started = false;
 const report = (e) => { const list = (globalThis.gameErrors = globalThis.gameErrors || []); if (list.length < 50) list.push('texture: ' + (e && e.message)); };
-const on = () => !!(config.TEXTURES && config.TEXTURES.ENABLED);
+const on = () => !!(config.TEXTURES && config.TEXTURES.ENABLED) && perfTextures(); // (the perf governor drops textures on a slow screen)
 
 // The texture as light/shade on a see-through layer (see the top of this file).
 function shadeLayer(img) {

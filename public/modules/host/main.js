@@ -5,6 +5,7 @@ import { createRenderer } from './render.js';
 import { createCamera } from './camera.js';
 import { createSfx } from './sfx.js';
 import { createMenu } from './menu.js';
+import { createPerfGovernor, perfState } from './perf.js';
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -14,11 +15,19 @@ try {
   if (localStorage.getItem('airshipSharp') === '1') config.DISPLAY.MAX_PIXEL_RATIO = config.DISPLAY.SHARP_RATIO;
 } catch { /* (no storage: use the default) */ }
 const fitCanvas = () => {
-  const pr = Math.max(1, Math.min(Number(config.DISPLAY && config.DISPLAY.MAX_PIXEL_RATIO) || 1, window.devicePixelRatio || 1));
+  // (the perf governor drops to ratio 1 below detail level 3)
+  const cap = perfState.level >= 3 ? Number(config.DISPLAY && config.DISPLAY.MAX_PIXEL_RATIO) || 1 : 1;
+  const pr = Math.max(1, Math.min(cap, window.devicePixelRatio || 1));
   canvas.width = Math.round(window.innerWidth * pr);
   canvas.height = Math.round(window.innerHeight * pr);
   ctx.imageSmoothingQuality = 'high';
 };
+// Automatic detail: lowers quality when frames get slow and brings it back later (see perf.js, config.PERF).
+const perf = createPerfGovernor({
+  onChange: () => fitCanvas(),
+  sharpOn: () => (Number(config.DISPLAY && config.DISPLAY.MAX_PIXEL_RATIO) || 1) > 1 && (window.devicePixelRatio || 1) > 1,
+});
+window.perfGov = perf; // handy for debugging in the browser console
 fitCanvas();
 
 const simulation = createSimulation();
@@ -42,7 +51,7 @@ let lastTime = performance.now();
 const STEP = config.LOOP.STEP;
 let acc = 0; // real time not yet simulated
 let paused = false;
-const menu = createMenu({ simulation, network, onPause: (on) => (paused = on) });
+const menu = createMenu({ simulation, network, perf, onPause: (on) => (paused = on) });
 
 // If anything ever goes wrong in a frame, note it and keep going (the game must never just
 // freeze). The pause menu shows the last problem.
@@ -75,7 +84,7 @@ const meterTick = (now, gap, drawMs) => {
   meterWorst = Math.max(meterWorst, gap);
   meterDraw += drawMs;
   if (now - meterT < 1000) return;
-  if (meter.style.display !== 'none') meter.textContent = `${Math.round((meterN * 1000) / (now - meterT))} fps | slowest ${Math.round(meterWorst)} ms | draw ${(meterDraw / meterN).toFixed(1)} ms | ${canvas.width}x${canvas.height}`;
+  if (meter.style.display !== 'none') meter.textContent = `${Math.round((meterN * 1000) / (now - meterT))} fps | slowest ${Math.round(meterWorst)} ms | draw ${(meterDraw / meterN).toFixed(1)} ms | ${canvas.width}x${canvas.height} | ${perf.label()}`;
   meterT = now;
   meterN = 0;
   meterWorst = 0;
@@ -103,7 +112,9 @@ function frame(now) {
   const view = guard('camera', () => camera.update(paused ? 0 : dt, simulation.state, canvas.width, canvas.height));
   const d0 = performance.now();
   if (view) guard('draw', () => renderer.renderFrame(now, view));
-  meterTick(now, gap, performance.now() - d0);
+  const drawMs = performance.now() - d0;
+  meterTick(now, gap, drawMs);
+  if (!paused) perf.update(now, gap, drawMs);
 }
 
 requestAnimationFrame(frame);

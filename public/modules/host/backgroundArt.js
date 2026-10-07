@@ -5,6 +5,7 @@
 // Everything is fixed to the world (strips slide at a steady fraction of the ship's travel, tiles
 // are drawn in whole pixels so no seams or shimmer), and drawing never throws.
 import { config } from '../../config.js';
+import { perfSkipLayer } from './perf.js';
 
 const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const wrap = (v, span) => ((v % span) + span) % span;
@@ -98,7 +99,7 @@ export function createBackgroundArt({ ctx, state }) {
       // Clouds and mist drift on their own (DRIFT), as well as sliding past with the ship.
       // Back to front: clouds, far, mist, mid, near.
       for (const kind of ['clouds', 'far', 'mist', 'mid', 'near']) {
-        const img = get(env, kind);
+        const img = perfSkipLayer(kind) ? null : get(env, kind); // (a slow screen skips some strips)
         if (img) strip(img, width, height, view, num(config.BACKGROUNDS.PARALLAX[kind], 0.05), kind);
       }
       return true;
