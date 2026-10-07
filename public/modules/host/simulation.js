@@ -23,6 +23,7 @@ import { createWeather } from './weather.js';
 import { createEnvironment, favour } from './environments.js';
 import { assistAim } from './aim.js';
 import { createPrime } from './prime.js';
+import { createLinks } from './links.js';
 import { createSpotter } from './spotter.js';
 import { UPGRADES } from './upgrades.js';
 import { createGoingDown } from './goingDown.js';
@@ -201,6 +202,12 @@ export function createSimulation() {
         return full ? { type: 'need', label: 'Firebox is full' } : { type: 'stoke', station, label: goingDown.active() ? 'LOAD COAL - LIFT!' : 'Load coal' };
       }
       if (station.n === 'Boiler' && tool === 'ice') return goingDown.coolAction(station);
+      if (station.n === 'Boiler' && tool !== 'coal' && !player.mate) {
+        const surge = links.surgeAction(); // steam is up: hold Action to push it into the engines (or the coil)
+        if (surge) return surge;
+      }
+      const loader = !player.mate && links.loaderAction(player, station); // a manned gun: hold Action to prime the shell for the gunner
+      if (loader) return loader;
       if (LOCKABLE(station.n) && !taken(station.n) && !player.mate) return { type: 'station', station, label: 'Take ' + station.n }; // (a ship's mate never takes a station)
       // Players can always bump a bot off a station.
       const botThere = !player.bot && Object.values(state.players).find((q) => q.bot && q.lock === station.n);
@@ -568,7 +575,7 @@ export function createSimulation() {
     const SH = config.SHIP;
     const sp = state.ship.speed;
     const braking = Math.abs(want) < Math.abs(sp) || (Math.sign(want) !== Math.sign(sp) && Math.abs(sp) > 0.02);
-    const rate = (braking ? SH.BRAKE : SH.ACCEL) * Math.min(1, Math.abs(want - sp) * 4 + 0.25) * env.deep.helmMul() * state.env.accel; // (The Aether: strong engines, thin air for the helmsman)
+    const rate = (braking ? SH.BRAKE : SH.ACCEL) * Math.min(1, Math.abs(want - sp) * 4 + 0.25) * env.deep.helmMul() * state.env.accel * state.links.helmMul; // (The Aether: strong engines, thin air for the helmsman)
     state.ship.speed = sp + clamp(want - sp, -rate * dt, rate * dt);
     state.ship.accelX = dt > 0 ? (state.ship.speed - sp) / dt : 0;
   };
@@ -643,6 +650,7 @@ export function createSimulation() {
   };
   let lastJolt = 0;
   const prime = createPrime({ state, phoneFx }); // primed shells: hold PRIME on a gun to charge the loaded shell (prime.js)
+  const links = createLinks({ state, modules, shipPuff }); // linked stations: gun + loader, helm + lookout, boiler surge (links.js)
   const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt }); // GOING DOWN! last stand + the ice locker (goingDown.js)
   state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
 
@@ -1284,6 +1292,8 @@ export function createSimulation() {
           } else if (act.type === 'rod') env.stormSea.rodHold(object);
           else if (act.type === 'pump') env.stormSea.pumpWork(dt);
           else if (act.type === 'winch') env.stormSea.winchWork(object, dt);
+          else if (act.type === 'prime') prime.assist(player, object, act.gunner, dt);
+          else if (act.type === 'surge') links.surgeHold(player);
           else {
             object.worked = true;
             object.prog = (object.prog || 0) + dt / act.time;
@@ -1422,17 +1432,20 @@ export function createSimulation() {
       if (player.hook && player.hook.phase === 'caught') attackLabel = 'Let go!';
       if (player.lock && gun && !player.hj) attackLabel = 'Prime'; // (on a gun the left button charges the shell)
       const primePct = player.lock && gun ? (gun.primed ? 10 : Math.round((gun.prime || 0) * 10)) : 0;
+      const loadAct = !player.lock && player.act && player.act.type === 'prime' ? player.act : null; // loading for a gunner: the Action button shows the meter
+      const loadPct = loadAct ? Math.round((loadAct.obj.prime || 0) * 10) : -1;
+      if (gun && player.lock && !status && (gun.loadT || 0) > 0 && state.players[gun.loaderId]) status = state.players[gun.loaderId].name + ' is loading for you!';
       if (player.hj) {
         attackLabel = player.hj.phase === 'kick' ? 'Kick!' : 'Guns auto';
         if (player.hj.phase === 'kick') status = 'Tap Action 3 times (or hold it) to throw the pilot out - LEAVE to jump off';
         else status = 'Fuel ' + Math.max(0, Math.round(player.hj.fuel / 5) * 5) + 's - hull ' + Math.max(0, player.hj.hp) + '/' + player.hj.max;
       }
       const hull = Math.round(state.ship.hull / 5) * 5;
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, jobUi ? jobUi.label + '|' + jobUi.dir : ''].join('|');
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : ''].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, job: jobUi };
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, load: loadPct, job: jobUi };
           emitPlayerUi(player.id, player.ui);
         }
       }
@@ -1441,6 +1454,7 @@ export function createSimulation() {
     state.lookout = state.periscope || Object.values(state.players).some((q) => q.lock === 'Lookout');
     updatePopups(state, dt);
     spotter.update(dt);
+    links.update(dt);
     modules.update(state, dt);
     // Steam pressure: heat from the coal in the firebox in, steam used by everything powered,
     // open vents and burst pipes out (all using more at higher pressure).
@@ -1550,7 +1564,7 @@ export function createSimulation() {
     if (flying) {
       const pumping = Math.max(0, valve.input) * (state.ship.press > G.PUMP_MIN_PRESS && !modules.byName.Boiler.broken ? Math.min(1, state.ship.press / 60) : 0);
       state.steamParts.pump = pumping * G.PUMP_STEAM;
-      state.ship.gas += (pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) + Math.min(0, valve.input) * G.VENT_RATE - G.SEEP - G.LEAK_PER_HOLE * state.gasHoles.length) * dt;
+      state.ship.gas += (pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) * state.links.helmMul + Math.min(0, valve.input) * G.VENT_RATE * state.links.helmMul - G.SEEP - G.LEAK_PER_HOLE * state.gasHoles.length) * dt;
       state.ship.press = Math.max(0, state.ship.press - pumping * G.PUMP_STEAM * dt);
       state.ship.gas = clamp(state.ship.gas, 0, 100);
       // Emergency ballast: the gasbag is empty and the ship is dropping - the crew cuts loose ballast so she hovers for a
@@ -1571,7 +1585,7 @@ export function createSimulation() {
     // (ice weight shifts the level she needs to hover; lava thermals push her up - state.env, environments.js)
     const effGas = state.ship.gas - state.env.sink + state.env.lift / G.LIFT;
     const lift = (effGas - G.NEUTRAL) * G.LIFT;
-    const trim = state.ship.trim * SHM.TRIM_ACCEL * (modules.works(state, 'Helm') ? 1 : 0) * env.deep.helmMul();
+    const trim = state.ship.trim * SHM.TRIM_ACCEL * (modules.works(state, 'Helm') ? 1 : 0) * env.deep.helmMul() * state.links.helmMul; // (a lookout in the nest sharpens the helm: links.js)
     state.buoyancy = effGas > G.NEUTRAL + 5 ? 1 : effGas < G.NEUTRAL - 5 ? -1 : 0;
     state.sinking = state.buoyancy < 0;
     if (flying) {

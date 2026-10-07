@@ -148,6 +148,7 @@ export function createSpotter({ state, emit, phoneFx }) {
     const mine = state.spots.filter((s) => s.by === p.id);
     if (mine.length >= SP.MAX_PER_PLAYER) unspot(state.spots.indexOf(mine[0]));
     obj.spotT = SP.TIME;
+    p.spotRecent = config.LINKS.SPOT_RECENT; // (a lookout who spots something sharpens the helm: links.js)
     state.spots.push({ obj, item: it, by: p.id, kind: it.kind });
     p.stats = p.stats || {};
     p.stats.spots = (p.stats.spots || 0) + 1;
@@ -208,6 +209,7 @@ export function createSpotter({ state, emit, phoneFx }) {
     for (const p of Object.values(state.players)) {
       if (p.helpCd > 0) p.helpCd -= dt;
       if (p.spotCd > 0) p.spotCd -= dt;
+      if (p.spotRecent > 0) p.spotRecent -= dt;
       if (p.helpQ) {
         p.helpQ = false;
         callHelp(p);

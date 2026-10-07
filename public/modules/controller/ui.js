@@ -9,7 +9,7 @@ export function createControllerUI({ network }) {
     ['Swap to hookshot', '🪝'], ['Take hookshot', '🪝'], ['Reel in', '🪝'], ['KICK', '🦶'], ['Auto guns', '🔫'],
     ['Swap to sword', '🗡️'], ['Swap to hammer', '🔨'], ['Swap to extinguisher', '🧯'], ['Take sword', '🗡️'], ['Take hammer', '🔨'], ['Take extinguisher', '🧯'], ['Put back', '↩️'],
     ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
-    ['Close valve', '🚱'], ['Open valve', '🚰'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
+    ['SURGE', '🔥'], ['LOAD for', '📦'], ['Close valve', '🚱'], ['Open valve', '🚰'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
     ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'],
     ['Take Nest Searchlight', '🔦'], ['Take Belly Searchlight', '🔦'], ['FOCUS', '🔦'], ['Take Helm', '☸️'],['Take Boiler', '🔥'], ['Take', '🎯'],
     ['FIRE', '💥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
@@ -152,6 +152,8 @@ export function createControllerUI({ network }) {
     const icon = (ACTION_ICONS.find(([start]) => label.startsWith(start)) || [, '👋'])[1];
     setButton('act', icon, label);
     $('act').classList.toggle('hold', !!next.hold);
+    $('act').classList.toggle('loading', next.load >= 0); // loading for a gunner: the button fills as the shell primes
+    $('act').style.setProperty('--p', (next.load >= 0 ? next.load * 10 : 0) + '%');
     const priming = next.attack === 'Prime';
     setButton('atk', priming ? (next.prime >= 10 ? '💥' : '⚡') : next.attack === 'Swing' ? '🗡️' : next.attack === 'Hook!' ? '🪝' : next.attack === 'Let go!' ? '🖐️' : next.attack === 'Kick!' ? '🦶' : '✋', priming ? (next.prime >= 10 ? 'PRIMED!' : 'Hold to prime') : next.attack || 'Shove');
     $('atk').classList.toggle('prime', priming);
@@ -178,6 +180,8 @@ export function createControllerUI({ network }) {
           shield: 'Point the stick to swing the glowing shield round the ship - it blocks bullets, bats and rockets!',
           bombbay: 'Watch the red ring on the TV - press DROP when it is on a gun or building. Needs ammo crates!',
         }[next.kind]
+      : next.load >= 0
+        ? 'Hold the Action button to load the shell for the gunner - it fills as the shell primes'
       : next.taken
         ? 'Someone is already here'
         : next.label && next.label !== 'Hey!'

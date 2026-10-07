@@ -22,6 +22,7 @@ import { envIdOf } from './environments.js';
 import { createSpotterArt } from './spotterArt.js';
 import { perfLowFx } from './perf.js';
 import { createLogbook } from './logbookArt.js'; // cream paper panels + red stamps (the captain's logbook HUD)
+import { createLinkArt } from './linkArt.js'; // linked-station wires, gust warnings, surge rings
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
 import { crewHeads } from './crewscale.js';
 import { matesWanted } from './mates.js';
@@ -67,6 +68,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const courseArt = createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgArt });
   const drawSpecials = createSpecialsArt({ ctx, state, ink });
   const spotterArt = createSpotterArt({ ctx, state }); // spotted-target brackets, HELP! call-outs, primed-gun glow
+  const linkArt = createLinkArt({ ctx, state });
   const drawGunship = createGunshipArt({ ctx, state, ink, sprites });
   installLineBoil(ctx);
   const filmLook = createFilmLook(ctx);
@@ -1844,6 +1846,7 @@ export function createRenderer({ ctx, state, canvas }) {
         } else drawPlayer(player, time / 1000);
       });
       hookArt.drawRopes(); // hookshot ropes and hooks
+      linkArt.drawWires(time / 1000); // loader <-> gunner and lookout <-> helm wires, the boiler's SURGE ring
       // Each crew member's colour marker above their head, easy to spot from the sofa.
       for (const p of Object.values(state.players)) {
         if (!p.color || p.connected === false) continue;
@@ -1933,6 +1936,7 @@ export function createRenderer({ ctx, state, canvas }) {
     const pr = canvas.width / (canvas.clientWidth || canvas.width) || 1;
     ctx.setTransform(pr, 0, 0, pr, 0, 0);
     threatArt.drawLookoutArrows(width / pr, height / pr, { ...view, zoom: view.zoom / pr });
+    linkArt.drawGust(width / pr, height / pr, { ...view, zoom: view.zoom / pr }, time / 1000); // gust / updraft warning arrows ahead of the ship
     spotterArt.drawSpots(width / pr, height / pr, { ...view, zoom: view.zoom / pr }, time / 1000); // SPOTTED marks (and edge arrows)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     filmLook(time, width, height);
