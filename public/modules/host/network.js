@@ -96,6 +96,40 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   };
   showDifficulty();
 
+  // Session length: QUICK VOYAGE / VOYAGE / EVENING CAMPAIGN (config.VOYAGE.MODES), remembered on this TV.
+  const modeButton = document.getElementById('mode');
+  const showMode = () => {
+    const st = simulation.state;
+    const M = config.VOYAGE.MODES[st.mode] || config.VOYAGE.MODES[config.VOYAGE.START_MODE];
+    const html = 'Mode: ' + M.label + `<br><small style="font-size:12px;opacity:.75">${M.blurb}, ${M.time}</small>`;
+    if (modeButton.innerHTML !== html) modeButton.innerHTML = html;
+  };
+  modeButton.onclick = () => {
+    const keys = Object.keys(config.VOYAGE.MODES);
+    simulation.setSession(keys[(keys.indexOf(simulation.state.mode) + 1) % keys.length]);
+    showMode();
+    showDaily();
+  };
+  // Daily voyage: the route map comes from today's date, with a name for the day and a best result to beat.
+  const dailyButton = document.getElementById('daily');
+  const showDaily = () => {
+    const st = simulation.state;
+    let html = 'Daily voyage: off';
+    if (st.daily) {
+      const d = simulation.dailyInfo();
+      const b = d.best;
+      html = 'DAILY: ' + d.name + `<br><small style="font-size:12px;opacity:.75">Today's best: ${b ? (b.victory ? 'VICTORY, ' : b.stops + ' stops, ') + b.salvage + ' salvage' : 'none yet'}</small>`;
+    }
+    if (dailyButton.innerHTML !== html) dailyButton.innerHTML = html;
+  };
+  dailyButton.onclick = () => {
+    simulation.setSession(null, !simulation.state.daily);
+    showDaily();
+  };
+  setInterval(() => { showMode(); showDaily(); }, 500); // (a finished daily voyage updates today's best)
+  showMode();
+  showDaily();
+
   document.getElementById('bots').onclick = () => {
     const speciesNames = config.CREW_SPECIES;
     const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];

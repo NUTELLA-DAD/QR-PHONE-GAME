@@ -11,7 +11,7 @@ import { createCourseArt } from './courseArt.js';
 import { createSkyArt } from './skyArt.js';
 import { createEnvArt } from './envArt.js';
 import { UPGRADES } from './upgrades.js';
-import { stopById } from './voyage.js';
+import { stopById, stopNo, stopTotal, modeInfo, dailyVoyage, dailyBest } from './voyage.js';
 import { targets } from './aim.js';
 import { createSpecialsArt } from './specialsArt.js';
 import { createGunshipArt } from './gunshipArt.js';
@@ -832,8 +832,11 @@ export function createRenderer({ ctx, state, canvas }) {
       if (state.course.map) {
         const run = state.run;
         const stop = run && stopById(run.voyage, run.stopId);
-        ctx.fillText(stop ? `Stop ${stop.col + 1}/${run.voyage.columns.length}` : 'Mission ' + state.course.lap, 454, 150);
+        ctx.fillText(stop ? `Stop ${stopNo(run, stop)}/${stopTotal(run)}` : 'Mission ' + state.course.lap, 454, 150);
         if (run) {
+          ctx.font = '700 13px ' + config.FONTS.TEXT;
+          ctx.fillStyle = '#5a4a3a';
+          ctx.fillText(modeLine(run), 454, 176, 200);
           ctx.font = '16px ' + config.FONTS.DISPLAY;
           ctx.fillStyle = '#8a5a00';
           ctx.fillText('Salvage ' + run.salvage, 454, 204);
@@ -912,6 +915,19 @@ export function createRenderer({ ctx, state, canvas }) {
     const rec = state.record || { laps: 0 };
     if (rec.laps > 0) lines.push(`Record on this TV: ${rec.laps} mission${rec.laps > 1 ? 's' : ''}, ${rec.kills} shot down`);
     const ly = 688;
+    { // the chosen session mode, and the daily voyage with today's best
+      const M = modeInfo(state.mode);
+      let t = `${M.label}: ${M.blurb}, ${M.time}`;
+      if (state.daily) {
+        const d = dailyVoyage();
+        const b = dailyBest(state.save, d.key, state.mode);
+        t = `DAILY: ${d.name}  -  ${M.label}  -  today's best: ${b ? (b.victory ? 'VICTORY, ' : b.stops + ' stops, ') + b.salvage + ' salvage' : 'none yet'}`;
+      }
+      book.paper(300, ly - 52, 840, 40, { r: 12 });
+      ctx.font = '700 18px ' + config.FONTS.TEXT;
+      ctx.fillStyle = LB.INK;
+      ctx.fillText(t, 720, ly - 26, 810);
+    }
     book.paper(300, ly, 840, 28 + lines.length * 30, { r: 12 });
     ctx.font = '700 18px ' + config.FONTS.TEXT;
     lines.forEach((t, i) => {
@@ -1033,6 +1049,8 @@ export function createRenderer({ ctx, state, canvas }) {
     });
   };
   const skulls = (n) => '💀'.repeat(n);
+  // "QUICK VOYAGE - voyage 2 of 2 - DAILY" (what this run is, for the HUD and the route map)
+  const modeLine = (run) => modeInfo(run.mode).label + (run.voyages > 1 ? ` - voyage ${run.voyageNo} of ${run.voyages}` : '') + (run.daily ? ' - DAILY' : '');
 
   // Votes: the sky-dock shop and the route map. Each player's vote is a dot in their colour.
   const drawVote = () => {
@@ -1179,9 +1197,10 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.font = '700 22px ' + config.FONTS.TEXT;
       ctx.fillText(`Reward: ${o.reward} salvage`, x + w / 2, y + 160);
     });
-    ctx.fillStyle = '#f3ead6';
+    book.paper(400, 842, 800, 44, { r: 12 });
+    ctx.fillStyle = LB.INK;
     ctx.font = '700 20px ' + config.FONTS.TEXT;
-    ctx.fillText(`Stop ${cur.col + 1} of ${cols.length} done - skulls = danger`, 800, 870);
+    ctx.fillText(`${modeLine(run)}${run.daily ? ': ' + run.daily.name : ''}  -  stop ${stopNo(run, cur)} of ${stopTotal(run)} done  -  skulls = danger`, 800, 871, 770);
   };
 
   // End of the run: victory, or the summary after the ship is lost.
@@ -1196,6 +1215,10 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillStyle = LB.INK;
     ctx.font = '700 32px ' + config.FONTS.TEXT;
     ctx.fillText(e.victory ? 'The Flagship is down - the Broken Skies are yours!' : `You reached Stop ${e.reached} - ${e.stopName}`, 800, 240);
+    ctx.font = '700 20px ' + config.FONTS.TEXT;
+    ctx.fillStyle = LB.INK_SOFT;
+    ctx.fillText(`${e.modeLabel}${e.voyages > 1 ? ' - voyage ' + e.voyageNo + ' of ' + e.voyages : ''}${e.daily ? ' - DAILY: ' + e.daily + (e.dailyBest ? ' (NEW BEST FOR TODAY!)' : '') : ''}`, 800, 205, 1000);
+    ctx.fillStyle = LB.INK;
     ctx.font = '700 26px ' + config.FONTS.TEXT;
     ctx.fillText(`Stops finished: ${e.done} of ${e.total}   -   Salvage earned: ${e.salvage}`, 800, 295);
     ctx.fillText(`Enemies shot down: ${e.kills}   -   Gunships destroyed: ${e.gunships}`, 800, 335);

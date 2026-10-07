@@ -13,12 +13,12 @@ import { config } from '../../config.js';
 export const SHIP_BOX = { left: -900, right: 870, up: -570, down: 485 };
 
 // Build a map, checking the ship really can get from the start to the beacon (try again if not).
-export function makeMap(kind, level, rand) {
+export function makeMap(kind, level, rand, lengthMul = 1) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES)
   let map = null;
   for (let tries = 0; tries < 40; tries++) {
     // (Late-voyage open maps are so crowded with peaks and islands that no layout may pass the checks below; rather than
     // settle for the last, unplayable try, ease off one level every few failures so a playable map always comes out.)
-    map = kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand) : buildMap(kind, level, rand);
+    map = kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul) : buildMap(kind, level, rand, lengthMul);
     if (map.startDist >= 1e9) continue;
     if (map.open) {
       // Every outpost must be reachable too.
@@ -60,12 +60,12 @@ export function makeMap(kind, level, rand) {
   return map;
 }
 
-function buildMap(kind, level, rand) {
+function buildMap(kind, level, rand, lengthMul = 1) {
   const M = config.MAPS;
   const C = M.CELL;
   const r = (a, b) => a + rand() * (b - a);
   const ri = (a, b) => Math.floor(r(a, b + 1));
-  const W = Math.round((M.WIDTH + M.WIDTH_PER_LEVEL * (level - 1)) * M.LENGTH[kind]);
+  const W = Math.round((M.WIDTH + M.WIDTH_PER_LEVEL * (level - 1)) * M.LENGTH[kind] * lengthMul);
   const H = Math.round(M.HEIGHT + M.HEIGHT_PER_LEVEL * (level - 1));
   const solid = new Uint8Array(W * H).fill(1);
   const idx = (i, j) => j * W + i;
@@ -164,12 +164,12 @@ function buildMap(kind, level, rand) {
 
 // Open sky: hills and mountains below, floating rock islands, and enemy outposts (gun nests and
 // rocket batteries) to destroy in any order.
-function buildOpenMap(level, rand) {
+function buildOpenMap(level, rand, lengthMul = 1) {
   const M = config.MAPS;
   const C = M.CELL;
   const r = (a, b) => a + rand() * (b - a);
   const ri = (a, b) => Math.floor(r(a, b + 1));
-  const W = Math.round((M.OPEN_WIDTH + M.WIDTH_PER_LEVEL * (level - 1)) * M.LENGTH.open);
+  const W = Math.round((M.OPEN_WIDTH + M.WIDTH_PER_LEVEL * (level - 1)) * M.LENGTH.open * lengthMul);
   const H = Math.round(M.OPEN_HEIGHT + M.HEIGHT_PER_LEVEL * (level - 1));
   const solid = new Uint8Array(W * H);
   const idx = (i, j) => j * W + i;

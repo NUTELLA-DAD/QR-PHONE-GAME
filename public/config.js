@@ -622,8 +622,25 @@ export const config = {
   },
   // THE VOYAGE: a branching route of stops across the Broken Skies; one run = one voyage.
   VOYAGE: {
-    STOPS_MIN: 6, // columns on the map, first (launch) and last (the Flagship) included
-    STOPS_MAX: 8,
+    // Session-length modes (chosen in the lobby / pause menu, remembered on this TV; voyage.js, simulation.js).
+    // stopsMin/Max: columns on the map, first (launch) and last (the Flagship) included (per voyage).
+    // dangerRamp: how far the skulls climb from the first stop to the last (bigger = danger ramps faster).
+    // lengthMul: multiplies every mission map's length (so the flying time). voyages: 2 = two voyages back to back.
+    // rival: whether the rival captain's gunship hunts the crew (read by gunship.js once the rival exists).
+    // time: the playing time this mode is tuned for, in minutes (shown in the lobby; checked by tools/voyagesim.mjs).
+    MODES: {
+      quick: { label: 'QUICK VOYAGE', blurb: '4 stops', time: '15-20 min', stopsMin: 4, stopsMax: 4, dangerRamp: 2.4, lengthMul: 0.85, voyages: 1, rival: false },
+      voyage: { label: 'VOYAGE', blurb: '6-8 stops', time: '30-35 min', stopsMin: 6, stopsMax: 8, dangerRamp: 1.6, lengthMul: 1, voyages: 1, rival: true },
+      campaign: { label: 'EVENING CAMPAIGN', blurb: 'two voyages', time: 'about an hour', stopsMin: 5, stopsMax: 7, dangerRamp: 1.6, lengthMul: 1, voyages: 2, rival: true },
+    },
+    START_MODE: 'voyage',
+    // The harder second voyage of the Evening Campaign, started after the first Flagship falls.
+    SECOND: {
+      DANGER_BONUS: 1, // every stop (and the Flagship) is this many skulls harder (danger may go above 3)
+      LEVEL_BONUS: 2, // missions are numbered this much higher (bigger maps, tougher gunships)
+      HARBOUR_REPAIR: 45, // hull repaired free at the harbour between the voyages (the sky-dock shop opens too)
+      SALVAGE_BONUS: 30, // free salvage handed over at the harbour
+    },
     CHOICES_MIN: 2, // stops to choose between in each middle column
     CHOICES_MAX: 3,
     ROUTE_TIME: 20, // seconds to vote on the next stop

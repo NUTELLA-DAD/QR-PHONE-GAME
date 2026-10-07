@@ -14,13 +14,21 @@ const mulberry = (seed) => {
 
 export const envInfo = (id) => config.VOYAGE.ENVIRONMENTS[id] || config.VOYAGE.ENVIRONMENTS.skyisles;
 
+export const modeInfo = (id) => config.VOYAGE.MODES[id] || config.VOYAGE.MODES[config.VOYAGE.START_MODE];
+
 // columns[c] = list of stops { id, col, row, env, play, kind, danger, reward, flagship, next: [ids] }.
 // env = the planned environment (shown); play = what actually flies (Sky Isles until others exist).
-export function generateVoyage(seed) {
+// opts: { mode: a key of config.VOYAGE.MODES, voyageNo: 2 for the harder second voyage of a campaign, which
+// starts at a harbour (a stop that is not flown: the crew is docked there, then votes where to go) }.
+export function generateVoyage(seed, opts = {}) {
   const V = config.VOYAGE;
+  const mode = modeInfo(opts.mode);
+  const second = (opts.voyageNo || 1) > 1;
+  const bonus = second ? V.SECOND.DANGER_BONUS : 0;
+  const h = second ? 1 : 0; // (the harbour column)
   const rand = mulberry(seed);
   const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
-  const n = ri(V.STOPS_MIN, V.STOPS_MAX);
+  const n = ri(mode.stopsMin, mode.stopsMax) + h;
   const envIds = Object.keys(V.ENVIRONMENTS).filter((e) => e !== 'skyisles' && e !== 'aether');
   const kinds = config.MAPS.KINDS;
   const columns = [];
@@ -33,7 +41,8 @@ export function generateVoyage(seed) {
       let env = c === 0 ? 'skyisles' : last ? 'aether' : envIds[ri(0, envIds.length - 1)];
       for (let tries = 0; tries < 6 && used.has(env) && !last && c > 0; tries++) env = envIds[ri(0, envIds.length - 1)]; // (different choices in a column)
       used.add(env);
-      const danger = last ? 3 : c === 0 ? 1 : Math.max(1, Math.min(3, Math.round(1 + (c / (n - 2)) * 1.6 + (rand() - 0.5) * 1.4)));
+      const ramp = Math.max(0, Math.min(1, (c - h) / Math.max(1, n - h - 2))); // 0 at the first stop flown, 1 at the last before the Flagship
+      const danger = last ? 3 + bonus : c === 0 ? 1 : Math.max(1, Math.min(3 + bonus, Math.round(1 + ramp * mode.dangerRamp + (rand() - 0.5) * 1.4) + bonus));
       col.push({
         id: c + '.' + r,
         col: c,
@@ -44,6 +53,7 @@ export function generateVoyage(seed) {
         danger,
         reward: V.REWARD_BASE + danger * V.REWARD_PER_DANGER + ri(0, V.REWARD_RANDOM),
         flagship: last,
+        harbour: second && c === 0,
         next: [],
       });
     }
@@ -65,7 +75,7 @@ export function generateVoyage(seed) {
       a[s].next.push(t.id);
     });
   }
-  return { seed, columns };
+  return { seed, columns, mode: opts.mode, voyageNo: opts.voyageNo || 1 };
 }
 
 export const stopById = (voyage, id) => {
@@ -73,14 +83,39 @@ export const stopById = (voyage, id) => {
   return null;
 };
 
-export const stopName = (s) => (s.flagship ? 'The Flagship' : envInfo(s.env).name);
+export const stopName = (s) => (s.flagship ? 'The Flagship' : s.harbour ? 'The Harbour' : envInfo(s.env).name);
+
+// Stop numbers run on across the voyages of a campaign: run.base = stops finished before this voyage's harbour.
+export const stopNo = (run, s) => run.base + s.col + 1;
+export const stopTotal = (run) => run.base + run.voyage.columns.length;
+
+// ---- Daily voyage: the route seed and a playful 1930s name come from today's date ----
+const NAME_ADJ = ['Rusty', 'Grumpy', 'Gallant', 'Dented', 'Wobbly', 'Singing', 'Brass', 'Sleepy', 'Daring', 'Lucky', 'Soggy', 'Whistling', 'Patched', 'Tipsy', 'Humble', 'Roaring', 'Peculiar', 'Gilded', 'Moth-Eaten', 'Bashful', 'Jolly', 'Cranky', 'Mighty', 'Hiccuping', 'Plucky', 'Dapper'];
+const NAME_NOUN = ['Kettle', 'Teapot', 'Biscuit', 'Kipper', 'Crumpet', 'Walrus', 'Goose', 'Sprocket', 'Trombone', 'Pudding', 'Barnacle', 'Marmot', 'Gasket', 'Umbrella', 'Weathervane', 'Spanner', 'Pigeon', 'Teacup', 'Bloater', 'Cuckoo', 'Whisk', 'Lantern', 'Haddock', 'Bagpipe', 'Porridge', 'Thimble'];
+const NAME_FORMS = [(a, n) => 'Voyage of the ' + a + ' ' + n, (a, n) => 'The ' + a + ' ' + n + ' Expedition', (a, n) => 'Flight of the ' + a + ' ' + n, (a, n) => 'The Great ' + n + ' Run'];
+const pad2 = (v) => String(v).padStart(2, '0');
+export const dateKey = (d = new Date()) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+// Everyone playing on the same day gets the same name and the same route map.
+export function dailyVoyage(d = new Date()) {
+  const key = dateKey(d);
+  let seed = 2166136261; // (FNV hash of the date text)
+  for (const ch of key) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const rand = mulberry(seed);
+  const pick = (list) => list[Math.floor(rand() * list.length)];
+  return { key, seed: seed & 0x7fffffff, name: pick(NAME_FORMS)(pick(NAME_ADJ), pick(NAME_NOUN)) };
+}
 
 // ---- Saved progress on this TV (never let storage problems break the game) ----
 const KEY = 'airshipVoyage';
-const blank = () => ({ bestStops: 0, bestSalvage: 0, totalRuns: 0, victories: 0, unlocks: [] });
+// daily: { date, best: { <mode>: { stops, victory, salvage } } } - the best result for today's daily voyage, per mode.
+const blank = () => ({ version: 2, bestStops: 0, bestSalvage: 0, totalRuns: 0, victories: 0, unlocks: [], daily: null });
 export function loadVoyageSave() {
   try {
-    return { ...blank(), ...(JSON.parse(localStorage.getItem(KEY)) || {}) };
+    const v = { ...blank(), ...(JSON.parse(localStorage.getItem(KEY)) || {}) };
+    if (!v.daily || typeof v.daily !== 'object' || !v.daily.best || typeof v.daily.best !== 'object') v.daily = null; // (tolerate odd saves)
+    if (!Array.isArray(v.unlocks)) v.unlocks = [];
+    v.version = 2;
+    return v;
   } catch {
     return blank();
   }
@@ -88,6 +123,37 @@ export function loadVoyageSave() {
 export function saveVoyageSave(v) {
   try {
     localStorage.setItem(KEY, JSON.stringify(v));
+  } catch {
+    // ignore
+  }
+}
+
+// Today's best daily result for a mode, or null.
+export const dailyBest = (save, key, mode) => (save.daily && save.daily.date === key && save.daily.best[mode]) || null;
+// Record a finished daily voyage: it counts as better with a victory, else more stops, else more salvage.
+// Returns true when it is today's new best. (Yesterday's results are dropped.)
+export function recordDaily(save, key, mode, r) {
+  if (!save.daily || save.daily.date !== key) save.daily = { date: key, best: {} };
+  const old = save.daily.best[mode];
+  const score = (x) => (x.victory ? 1e6 : 0) + x.stops * 1000 + Math.min(999, x.salvage);
+  if (old && score(old) >= score(r)) return false;
+  save.daily.best[mode] = { stops: r.stops, victory: !!r.victory, salvage: r.salvage };
+  return true;
+}
+
+// ---- Which session mode the lobby has chosen (remembered on this TV) ----
+const PREF_KEY = 'airshipMode';
+export function loadModePrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PREF_KEY)) || {};
+    return { mode: config.VOYAGE.MODES[p.mode] ? p.mode : config.VOYAGE.START_MODE, daily: !!p.daily };
+  } catch {
+    return { mode: config.VOYAGE.START_MODE, daily: false };
+  }
+}
+export function saveModePrefs(p) {
+  try {
+    localStorage.setItem(PREF_KEY, JSON.stringify({ mode: p.mode, daily: !!p.daily }));
   } catch {
     // ignore
   }
