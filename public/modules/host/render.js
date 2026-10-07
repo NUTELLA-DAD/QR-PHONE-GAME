@@ -1670,7 +1670,18 @@ export function createRenderer({ ctx, state, canvas }) {
     }
   };
 
+  // Debugging: set window.renderProfile = {} and each frame adds the ms spent per stage to it.
+  let lapT = 0;
+  const lap = (name) => {
+    const P = globalThis.renderProfile;
+    if (!P) return;
+    const now = performance.now();
+    if (name) P[name] = (P[name] || 0) + now - lapT;
+    lapT = now;
+  };
+
   const renderFrame = (time, view) => {
+    lap();
     const width = canvas.width;
     const height = canvas.height;
     setBoilTime(time);
@@ -1678,6 +1689,7 @@ export function createRenderer({ ctx, state, canvas }) {
     envArt.setTime(time / 1000);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     drawBackground(width, height, view);
+    lap('background');
 
     // World layer, positioned by the camera.
     ctx.setTransform(view.zoom, 0, 0, view.zoom, width / 2 - view.cx * view.zoom, height / 2 - view.cy * view.zoom);
@@ -1689,6 +1701,7 @@ export function createRenderer({ ctx, state, canvas }) {
     courseArt.drawTurrets(time / 1000);
     drawBombs(time / 1000);
     skyArt.fogFront(view, width, height); // thin fog over the rock, under the ship
+    lap('terrain');
 
     ctx.save();
     // A smooth, capped shake (no random jitter), a slow two-speed bob and a slight sway: she's a
@@ -1706,6 +1719,7 @@ export function createRenderer({ ctx, state, canvas }) {
     }
     const drawShipAndCrew = () => {
       drawShip(time / 1000);
+      lap('ship');
       // Close-call warnings: red chevrons on the hull pointing at nearby rock.
       for (const n of (state.course && state.course.near) || []) {
         const a = n.close * (0.55 + 0.45 * Math.sin(time / 90));
@@ -1726,10 +1740,13 @@ export function createRenderer({ ctx, state, canvas }) {
       envArt.drawIce(); // frost: ice crusts on the gasbag, top deck and guns
       envArt.drawDeep(); // fungal: spore clouds and clogged engines; aether: the oxygen tank
       envArt.drawShip(); // storm rods, sea pump, winch and flood water
+      lap('guns+env');
       drawGunship(time / 1000);
+      lap('gunship');
       drawHazards(time / 1000);
       threatArt.drawBombs(time / 1000);
       drawHighlights(time / 1000);
+      lap('hazards');
       [...Object.values(state.players).filter((p) => !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying))), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => {
         // Crew aboard a gunship are stored in HER frame: draw them where she is.
         if (player.onGunship && state.gunship) {
@@ -1802,9 +1819,11 @@ export function createRenderer({ ctx, state, canvas }) {
       });
     } else drawShipAndCrew();
     ctx.restore();
+    lap('crew');
     drawEffects(time / 1000, view);
     drawStorm(width, height, view, time / 1000);
     envArt.worldFront(view, width, height, time / 1000); // snow, blizzard haze, embers, smoke
+    lap('effects');
 
     // Screen overlay on a fixed 1600x900 stage.
     const scale = Math.min(width / config.W, height / config.H);
@@ -1816,8 +1835,14 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.globalAlpha = 1;
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    threatArt.drawLookoutArrows(width, height, view);
+    lap('hud');
+    // Lookout arrows are sized in screen points, so undo the extra pixel density of sharp screens.
+    const pr = canvas.width / (canvas.clientWidth || canvas.width) || 1;
+    ctx.setTransform(pr, 0, 0, pr, 0, 0);
+    threatArt.drawLookoutArrows(width / pr, height / pr, { ...view, zoom: view.zoom / pr });
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     filmLook(time, width, height);
+    lap('film');
   };
 
   return { renderFrame, ink, drawBar, drawBackground, bgArt, sprites };

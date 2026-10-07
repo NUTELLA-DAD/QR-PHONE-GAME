@@ -8,8 +8,14 @@ import { createMenu } from './menu.js';
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+// Draw at the screen's real pixel density (sharp on scaled laptop screens and 4K TVs), capped in config.
+const fitCanvas = () => {
+  const pr = Math.max(1, Math.min(Number(config.DISPLAY && config.DISPLAY.MAX_PIXEL_RATIO) || 1, window.devicePixelRatio || 1));
+  canvas.width = Math.round(window.innerWidth * pr);
+  canvas.height = Math.round(window.innerHeight * pr);
+  ctx.imageSmoothingQuality = 'high';
+};
+fitCanvas();
 
 const simulation = createSimulation();
 const camera = createCamera();
@@ -73,7 +79,4 @@ function frame(now) {
 }
 
 requestAnimationFrame(frame);
-window.addEventListener('resize', () => {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-});
+window.addEventListener('resize', fitCanvas);

@@ -1,7 +1,10 @@
 // Tileable painted textures for the ship and enemy gunships (art/textures/<name>.png, 512x512, seamless both ways).
-// Each is a LOW-CONTRAST mid-grey-ish painting that is laid over the flat palette colour with the 'overlay' blend,
-// so the palette stays exactly as it is and only gains a gentle gouache/paper grain. If a texture is missing, or
-// config.TEXTURES.ENABLED is false, nothing happens and the flat fill stays. Patterns are built once; drawing never throws.
+// Each is a LOW-CONTRAST mid-grey-ish painting. When it loads it is turned ONCE into a "light and shade" layer:
+// pixels lighter than the painting's average become see-through white, darker ones see-through dark brown
+// (config.TEXTURES.STRENGTH sets how strong). That layer is laid over the flat palette colour with a plain
+// normal blend, which looks like the old 'overlay' grain but is far cheaper for the graphics card (overlay made
+// it copy the screen for every ship shape, every frame). If a texture is missing, or config.TEXTURES.ENABLED
+// is false, nothing happens and the flat fill stays. Patterns are built once; drawing never throws.
 import { config } from '../../config.js';
 
 const NAMES = ['canvas', 'wood', 'brass', 'darkwood', 'oxblood', 'charcoal', 'enemycanvas'];
@@ -9,6 +12,35 @@ const pats = {};
 let started = false;
 const report = (e) => { const list = (globalThis.gameErrors = globalThis.gameErrors || []); if (list.length < 50) list.push('texture: ' + (e && e.message)); };
 const on = () => !!(config.TEXTURES && config.TEXTURES.ENABLED);
+
+// The texture as light/shade on a see-through layer (see the top of this file).
+function shadeLayer(img) {
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height);
+  const px = d.data;
+  const n = px.length / 4;
+  const lum = new Float32Array(n);
+  let mean = 0;
+  for (let i = 0; i < n; i++) mean += lum[i] = (px[i * 4] * 0.3 + px[i * 4 + 1] * 0.59 + px[i * 4 + 2] * 0.11) / 255;
+  mean /= n;
+  // STRENGTH 1 is about one old overlay pass; each extra point adds another.
+  const gain = 1.6 * strength();
+  for (let i = 0; i < n; i++) {
+    const v = lum[i] - mean;
+    const a = Math.min(1, Math.abs(v) * gain);
+    const light = v > 0;
+    px[i * 4] = light ? 255 : 34;
+    px[i * 4 + 1] = light ? 250 : 22;
+    px[i * 4 + 2] = light ? 238 : 12;
+    px[i * 4 + 3] = Math.round(a * 255);
+  }
+  g.putImageData(d, 0, 0);
+  return c;
+}
 
 export function loadTextures(ctx) {
   if (started || typeof fetch !== 'function' || typeof Image === 'undefined') return;
@@ -23,7 +55,7 @@ export function loadTextures(ctx) {
       const img = new Image();
       img.onload = () => {
         try {
-          const p = ctx.createPattern(img, 'repeat');
+          const p = ctx.createPattern(shadeLayer(img), 'repeat');
           if (p && p.setTransform) p.setTransform(new DOMMatrix().scale(scale));
           if (p) pats[name] = p;
         } catch (e) { report(e); }
@@ -44,16 +76,11 @@ export function paintPath(ctx, name, alpha = 1) {
   try {
     const p = on() && pats[name];
     if (!p) return;
-    // STRENGTH: lay the (deliberately low-contrast) texture on this many times; 1.5 = once full, once at half.
-    const base = ctx.globalAlpha || 1;
-    for (let k = strength(); k > 0.01; k -= 1) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'overlay';
-      ctx.globalAlpha = alpha * base * Math.min(1, k);
-      ctx.fillStyle = p;
-      ctx.fill();
-      ctx.restore();
-    }
+    ctx.save();
+    ctx.globalAlpha = alpha * (ctx.globalAlpha || 1);
+    ctx.fillStyle = p;
+    ctx.fill();
+    ctx.restore();
   } catch (e) { report(e); }
 }
 
@@ -61,15 +88,10 @@ export function paintRect(ctx, name, x, y, w, h, alpha = 1) {
   try {
     const p = on() && pats[name];
     if (!p) return;
-    // STRENGTH: lay the (deliberately low-contrast) texture on this many times; 1.5 = once full, once at half.
-    const base = ctx.globalAlpha || 1;
-    for (let k = strength(); k > 0.01; k -= 1) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'overlay';
-      ctx.globalAlpha = alpha * base * Math.min(1, k);
-      ctx.fillStyle = p;
-      ctx.fillRect(x, y, w, h);
-      ctx.restore();
-    }
+    ctx.save();
+    ctx.globalAlpha = alpha * (ctx.globalAlpha || 1);
+    ctx.fillStyle = p;
+    ctx.fillRect(x, y, w, h);
+    ctx.restore();
   } catch (e) { report(e); }
 }

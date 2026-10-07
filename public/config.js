@@ -1173,6 +1173,9 @@ export const config = {
   // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.
   // SCALE = size of one texture pixel in world units (the 512px tile covers 512*SCALE units; the airship is ~1500 wide).
   // Painted textures on the ship and gunships. STRENGTH: how strongly they show (1 = subtle, 2 = clear, 3 = bold).
+  // Screen sharpness. The game draws at the screen's real pixel density (e.g. 1.5x on a laptop with display
+  // scaling) up to this cap; 1 = old soft look but lightest on slow computers.
+  DISPLAY: { MAX_PIXEL_RATIO: 2 },
   TEXTURES: { ENABLED: true, SCALE: 1.1, STRENGTH: 2 },
   BACKGROUNDS: {
     ENABLED: true,
