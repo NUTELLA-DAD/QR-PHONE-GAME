@@ -954,6 +954,7 @@ export function createSimulation() {
     }
     for (const player of Object.values(state.players)) {
       if (player.bot) updateBot(player, state, dt);
+      if (player.koGrace > 0) player.koGrace -= dt;
       if (player.swing) {
         gunship.swingStep(player, dt);
         player.actQ = false;
@@ -997,6 +998,7 @@ export function createSimulation() {
         if ((player.ko -= dt) <= 0) {
           player.ko = 0;
           player.prog = 0;
+          player.koGrace = config.RAIDERS.WAKE_GRACE;
         }
         if (player.uk !== 'ko') {
           player.uk = 'ko';

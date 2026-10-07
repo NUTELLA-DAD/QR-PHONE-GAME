@@ -143,7 +143,11 @@ function listJobs(state, bot) {
   const jobs = [];
   const players = Object.values(state.players);
   const mods = state.modules || [];
+  // Nobody at the wheel in flight is the worst emergency of all: someone takes the helm first.
+  if (state.phase === 'flying' && !players.some((q) => q.lock === 'Helm') && !mods.some((m) => m.name === 'Helm' && m.broken)) jobs.push({ kind: 'station', obj: 'Helm', max: 1 });
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2 });
+  // A gasbag shot full of holes sinks the ship: patching it comes before swatting and repairs.
+  if ((state.gasHoles || []).length >= B.GAS_EMERGENCY) for (const h of state.gasHoles) jobs.push({ kind: 'patch', obj: h, max: 1 });
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
   // Bats latched on the ship: swat them before they chew holes (bare hands are enough).
   for (const b of state.bats || []) if (b.latched && b.landed && b.hp > 0) jobs.push({ kind: 'swat', obj: b, max: 1 });

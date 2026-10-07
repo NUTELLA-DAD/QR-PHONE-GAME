@@ -60,7 +60,8 @@ export function createRaiders({ state, modules, puff, impact }) {
   const strike = (b, target) => {
     const t = R[b.type];
     b.cd = 1.5;
-    if (!target || target.ko > 0 || target.d !== b.d || target.conn != null || (target.jz || 0) > config.MOVE.JUMP_DODGE || target.fly || Math.abs(target.x - b.x) > t.reach + 12) {
+    // (just back on their feet? a moment's grace, so one raider can't keep a whole crew down)
+    if (!target || target.ko > 0 || target.koGrace > 0 || target.d !== b.d || target.conn != null || (target.jz || 0) > config.MOVE.JUMP_DODGE || target.fly || Math.abs(target.x - b.x) > t.reach + 12) {
       puff(b.x + b.face * 40, b.y - 50, '#ddd', 4); // swung at thin air
       return;
     }
@@ -171,7 +172,7 @@ export function createRaiders({ state, modules, puff, impact }) {
         const y = P[bomb.d].y - 40;
         impact(bomb.x, y, config.IMPACT.BOMB);
         for (const q of Object.values(state.players)) {
-          if (q.d === bomb.d && q.conn == null && Math.abs(q.x - bomb.x) < 90 && !(q.ko > 0)) {
+          if (q.d === bomb.d && q.conn == null && Math.abs(q.x - bomb.x) < 90 && !(q.ko > 0) && !(q.koGrace > 0)) {
             q.ko = R.KO_TIME;
             q.lock = null;
             q.carry = null;

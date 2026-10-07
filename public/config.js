@@ -611,6 +611,7 @@ export const config = {
   LAP_FIRE_RATE: [0.6, 0.8, 1.0, 1.15, 1.3],
   // Raider types. windup = seconds of warning ("!") before they strike.
   RAIDERS: {
+    WAKE_GRACE: 3, // seconds after coming round when raiders (and bombs) can't knock you down again
     grunt: { name: 'Raider', hp: 3, speed: 85, windup: 0.6, reach: 40, species: 'skeleton', color: '#8c2f2f', scale: 1 },
     brute: { name: 'Brute', hp: 7, speed: 55, windup: 1.0, reach: 52, species: 'devil', color: '#5c2a1a', scale: 1.35, knockback: 140, noShove: true },
     sapper: { name: 'Sapper', hp: 2, speed: 100, windup: 0.6, reach: 40, species: 'skeleton', color: '#7a6420', scale: 0.95 },
@@ -909,6 +910,7 @@ export const config = {
     BOILER_LOW: 55, // start stoking below this pressure
     BOILER_HIGH: 85, // stop stoking above this pressure
     HELM_SPEED: 0.55, // cruising speed the bot helmsman holds (0-1)
+    GAS_EMERGENCY: 3, // this many gasbag holes and patching them jumps ahead of other chores
     AMMO_LOW: 10, // fetch ammo when a gun has this many shells or fewer
     AIM_TOLERANCE: 0.12, // fire when aim is within this many radians
     STATION_MIN: 20, // stay at a station at least this long...
