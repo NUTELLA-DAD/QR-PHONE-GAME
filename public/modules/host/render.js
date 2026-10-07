@@ -15,6 +15,7 @@ import { createSpecialsArt } from './specialsArt.js';
 import { createGunshipArt } from './gunshipArt.js';
 import { distToGoal } from './maps.js';
 import { createBackgroundArt } from './backgroundArt.js';
+import { loadTextures } from './textureArt.js';
 import { envIdOf } from './environments.js';
 
 export function createRenderer({ ctx, state, canvas }) {
@@ -23,6 +24,7 @@ export function createRenderer({ ctx, state, canvas }) {
   sprites.load();
   const bgArt = createBackgroundArt({ ctx, state }); // optional painted backgrounds (art/backgrounds/)
   bgArt.load();
+  loadTextures(ctx); // painted ship/gunship textures (art/textures/)
   // Placeholder tool in a sprite character's hand (drawCarry draws relative to the body).
   const drawItemAt = (item, x, y, swingAge) => {
     ctx.save();

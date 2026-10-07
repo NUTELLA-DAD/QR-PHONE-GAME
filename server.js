@@ -41,6 +41,11 @@ app.get('/api/backgrounds', (q, r) => {
   }
   r.json(found);
 });
+// Painted textures: art/textures/<name>.png
+app.get('/api/textures', (q, r) => {
+  const root = path.join(__dirname, 'art', 'textures');
+  r.json(fs.existsSync(root) ? fs.readdirSync(root).filter((f) => /\.png$/i.test(f)) : []);
+});
 app.get('/api/info', (q, r) => r.json({ base: BASE }));
 app.get('/qr', async (q, r) => r.type('image/svg+xml').send(await QR.toString(String(q.query.t || '').slice(0, 200), { type: 'svg', margin: 1 })));
 app.get('/join/:code', (q, r) => r.redirect('/controller.html?code=' + encodeURIComponent(q.params.code)));

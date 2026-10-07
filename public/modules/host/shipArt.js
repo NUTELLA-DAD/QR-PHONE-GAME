@@ -4,6 +4,15 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { drawBiplane, drawTailNumber } from './planeArt.js';
+import { paintPath, paintRect } from './textureArt.js';
+
+// Which painted texture goes under which flat palette colour (anything not listed stays flat).
+const TEX_OF = {
+  '#ebdfc0': 'canvas', '#d6c7a2': 'canvas', '#cbbd96': 'canvas', '#c49a74': 'canvas',
+  '#b98a5a': 'wood', '#8a6444': 'wood', '#a87b4f': 'wood', '#bf9567': 'wood', '#c9a05f': 'wood',
+  '#6b4a32': 'darkwood', '#4a4346': 'charcoal',
+  '#c9a85a': 'brass', '#6d7378': 'brass', '#9aa1a6': 'brass', '#8d969b': 'brass', '#6a6568': 'brass', '#5a5558': 'brass',
+};
 
 const L = SHIP_LAYOUT;
 const P = L.platforms;
@@ -29,6 +38,8 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     ctx.beginPath();
     path();
     ctx.fill();
+    const tx = TEX_OF[color];
+    if (tx) paintPath(ctx, tx, tx === 'brass' ? 0.8 : 1);
     ctx.stroke();
   };
 
@@ -110,6 +121,11 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       ctx.fillStyle = 'rgba(255,250,232,0.45)';
       ctx.beginPath();
       ctx.ellipse(G.cx - 20, G.cy - G.ry * 0.38, G.rx * 0.9, G.ry * 0.45, 0, 0, 7);
+      ctx.fill();
+      // ...and one soft shadow band along the belly (painted, flat, no gradient).
+      ctx.fillStyle = 'rgba(120,96,70,0.2)';
+      ctx.beginPath();
+      ctx.ellipse(G.cx + 30, G.cy + G.ry * 0.78, G.rx * 0.95, G.ry * 0.42, 0, 0, 7);
       ctx.fill();
       ctx.restore();
       ctx.strokeStyle = 'rgba(43,38,34,0.55)';
@@ -327,6 +343,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       if (!sprites.box(ctx, 'ship/room-' + ROOM_ART[r.name], r.x0, y - h, r.x1 - r.x0, h)) {
         ctx.fillStyle = r.color;
         ctx.fillRect(r.x0 + 3, y - 148, r.x1 - r.x0 - 6, 148);
+        paintRect(ctx, 'darkwood', r.x0 + 3, y - 148, r.x1 - r.x0 - 6, 148, 0.9);
         // Header beam above each doorway between rooms.
         ctx.fillStyle = WOOD_DARK;
         ctx.fillRect(r.x0 - 4, y - 148, 8, 34);
@@ -338,6 +355,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
       if (!tileRow('ship/floor', p.x0 - 20, p.x1 + 20, p.y, 128, 12)) {
         ctx.fillStyle = WOOD_DARK;
         ctx.fillRect(p.x0 - 20, p.y, p.x1 - p.x0 + 40, 12);
+        paintRect(ctx, 'wood', p.x0 - 20, p.y, p.x1 - p.x0 + 40, 12);
       }
     }
     ctx.restore();
@@ -795,6 +813,7 @@ export function createShipArt({ ctx, state, ink, rrect, sprites }) {
     // Back wall, panelled, with rivets.
     ctx.fillStyle = '#5f585d';
     ctx.fillRect(x0 + 6, top + 12, x1 - x0 - 12, fy - top - 12);
+    paintRect(ctx, 'charcoal', x0 + 6, top + 12, x1 - x0 - 12, fy - top - 12);
     ctx.fillStyle = 'rgba(255,255,255,.08)';
     ctx.fillRect(x0 + 6, top + 12, x1 - x0 - 12, 10);
     for (let x = x0 + 46; x < x1 - 20; x += 62) line([[x, top + 14], [x, fy]], 2, '#3d373b');

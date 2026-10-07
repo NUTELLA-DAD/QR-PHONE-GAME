@@ -18,6 +18,7 @@
 // and the charge ticking on her boiler. Style 2026: enemy oxblood + charcoal, thin outlines.
 import { BOW, mx } from './gunship.js';
 import { config } from '../../config.js';
+import { paintPath, paintRect } from './textureArt.js';
 
 const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -438,6 +439,23 @@ export function createGunshipArt({ ctx, state, ink }) {
         ctx.beginPath();
         ctx.ellipse(b.cx, b.cy, rx, ry, 0, 0, 7);
         ctx.fill();
+        if (!flash) {
+          paintPath(ctx, 'enemycanvas', 1);
+          // one soft painted highlight band on top and one shadow band underneath
+          ctx.save();
+          ctx.clip();
+          ctx.fillStyle = 'rgba(255,235,215,0.13)';
+          ctx.beginPath();
+          ctx.ellipse(b.cx - 20, b.cy - ry * 0.4, rx * 0.88, ry * 0.42, 0, 0, 7);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(20,8,10,0.2)';
+          ctx.beginPath();
+          ctx.ellipse(b.cx + 30, b.cy + ry * 0.8, rx * 0.95, ry * 0.4, 0, 0, 7);
+          ctx.fill();
+          ctx.restore();
+        }
+        ctx.beginPath();
+        ctx.ellipse(b.cx, b.cy, rx, ry, 0, 0, 7);
         ctx.stroke();
         ctx.strokeStyle = 'rgba(255,255,255,.12)';
         ctx.lineWidth = 3;
@@ -471,6 +489,7 @@ export function createGunshipArt({ ctx, state, ink }) {
             ctx.lineTo(b.cx - 0.91 * b.rx, b.cy + s * (ry * 0.62));
             ctx.closePath();
             ctx.fill();
+            if (!flash) paintPath(ctx, 'enemycanvas', 1);
             ctx.stroke();
           }
         }
@@ -518,6 +537,7 @@ export function createGunshipArt({ ctx, state, ink }) {
       ctx.lineTo(x0 - 30, botY);
       ctx.closePath();
       ctx.fill();
+      if (!flash) paintPath(ctx, 'oxblood', 1);
       ctx.stroke();
       // Flag-coloured stripe along the hull and the deck planks.
       ctx.fillStyle = flag.b;
@@ -527,6 +547,7 @@ export function createGunshipArt({ ctx, state, ink }) {
         const l = d.x0 - (i === 0 ? 30 : 0);
         const r = d.x1 + (i === ds.length - 1 ? 30 : 0);
         ctx.fillRect(l, d.y - 6, r - l, 16);
+        paintRect(ctx, 'charcoal', l, d.y - 6, r - l, 16);
         ctx.strokeRect(l, d.y - 6, r - l, 16);
       });
       // Portholes along the hull.
@@ -896,6 +917,7 @@ export function createGunshipArt({ ctx, state, ink }) {
         ctx.beginPath();
         ctx.roundRect(-36, -20, 78, 40, 14);
         ctx.fill();
+        paintPath(ctx, 'charcoal', 1);
         ctx.stroke();
         ctx.fillStyle = '#2b2622';
         ctx.fillRect(-6, -34, 14, 16); // exhaust stack
