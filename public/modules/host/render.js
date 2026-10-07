@@ -53,7 +53,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const envArt = createEnvArt({ ctx, state, ink }); // Frost Peaks / Ember Forge look (sky, weather, lava, ice)
   const courseArt = createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgArt });
   const drawSpecials = createSpecialsArt({ ctx, state, ink });
-  const drawGunship = createGunshipArt({ ctx, state, ink });
+  const drawGunship = createGunshipArt({ ctx, state, ink, sprites });
   installLineBoil(ctx);
   const filmLook = createFilmLook(ctx);
 
