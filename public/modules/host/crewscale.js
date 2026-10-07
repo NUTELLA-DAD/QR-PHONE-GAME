@@ -35,10 +35,16 @@ export function updateCrewScale(state, dt) {
   else cs.eff += Math.max(-CS().RAMP * dt, Math.min(CS().RAMP * dt, real - cs.eff));
   Object.assign(cs, CS().ENABLED ? scaleFor(cs.eff) : NEUTRAL);
   cs.real = real;
+  // (the difficulty button can change the spare gasbags until the first limp)
+  const run = state.run;
+  if (state.phase === 'lobby' && run && !run.limps) run.spares = run.sparesMax = sparesFor(state);
 }
 
 const scale = (state) => (CS().ENABLED && state.crewScale) || NEUTRAL;
 const diffOf = (state) => config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
+
+// Spare gasbags (limp-home lives) for this difficulty.
+export const sparesFor = (state) => diffOf(state).spares ?? config.LIMP.SPARES;
 
 // How fast waves and specials arrive (difficulty pace x crew spawn rate).
 export const spawnPace = (state) => diffOf(state).pace * scale(state).spawn;

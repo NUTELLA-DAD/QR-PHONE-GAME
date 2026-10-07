@@ -7,7 +7,7 @@ export function createMenu({ simulation, network, onPause }) {
   let open = false;
 
   const sync = () => {
-    $('mDifficulty').textContent = $('difficulty').textContent;
+    $('mDifficulty').innerHTML = $('difficulty').innerHTML;
     $('mSound').textContent = $('sound').textContent;
     $('mQr').src = $('qr').src;
     $('mCode').textContent = $('code').textContent;

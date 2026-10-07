@@ -784,10 +784,10 @@ export const config = {
   // flak and enemy fire come (higher = busier).
   // A wrecked ship ends the run, so damage is kept gentle (multiplier on all hull damage).
   DIFFICULTY: {
-    easy: { label: 'Easy', damage: 0.1, pace: 0.75, autopilot: true, gunHp: 0.85 },
-    normal: { label: 'Normal', damage: 0.17, pace: 0.9, autopilot: true, gunHp: 1 },
-    veteran: { label: 'Veteran', damage: 0.26, pace: 1.05, autopilot: false, gunHp: 1.1 },
-    hard: { label: 'Hard', damage: 0.34, pace: 1.2, autopilot: false, gunHp: 1.2 },
+    easy: { label: 'Easy', damage: 0.2, pace: 0.85, autopilot: true, gunHp: 0.85, spares: 4 },
+    normal: { label: 'Normal', damage: 0.3, pace: 1.0, autopilot: true, gunHp: 1, spares: 4 },
+    veteran: { label: 'Veteran', damage: 0.35, pace: 1.15, autopilot: true, gunHp: 1.1, spares: 3 },
+    hard: { label: 'Hard', damage: 0.34, pace: 1.2, autopilot: false, gunHp: 1.2, spares: 2 },
   },
   // Crew-size scaling (crewscale.js). The number of crew aboard (connected players, bots included)
   // multiplies the difficulty above, anchored at 8 crew = 1.0 and interpolated between rows.
@@ -799,12 +799,13 @@ export const config = {
     RAMP: 0.25, // the effective crew number follows the real one at this many crew per second (no mid-wave jumps)
     AUTOPILOT_MAX_CREW: 4, // this many crew or fewer: the helm autopilot stays on whatever the difficulty
     TABLE: {
-      1: { spawn: 0.55, count: 0.55, fire: 0.6, damage: 0.5, raiders: 0.4, hp: 0.7, spread: 0.6, collateral: 0.3 },
-      2: { spawn: 0.65, count: 0.65, fire: 0.7, damage: 0.6, raiders: 0.55, hp: 0.8, spread: 0.7, collateral: 0.45 },
-      4: { spawn: 0.85, count: 0.85, fire: 0.88, damage: 0.8, raiders: 0.8, hp: 0.92, spread: 0.85, collateral: 0.75 },
+      1: { spawn: 0.25, count: 0.25, fire: 0.2, damage: 0.2, raiders: 0.15, hp: 0.4, spread: 0.25, collateral: 0.2 },
+      2: { spawn: 0.35, count: 0.35, fire: 0.3, damage: 0.3, raiders: 0.25, hp: 0.55, spread: 0.35, collateral: 0.3 },
+      4: { spawn: 0.53, count: 0.53, fire: 0.47, damage: 0.47, raiders: 0.4, hp: 0.7, spread: 0.53, collateral: 0.47 },
+      6: { spawn: 0.86, count: 0.86, fire: 0.84, damage: 0.82, raiders: 0.8, hp: 0.91, spread: 0.86, collateral: 0.82 },
       8: { spawn: 1, count: 1, fire: 1, damage: 1, raiders: 1, hp: 1, spread: 1, collateral: 1 },
-      12: { spawn: 1.15, count: 1.3, fire: 1.12, damage: 1.2, raiders: 1.4, hp: 1.2, spread: 1.15, collateral: 1.15 },
-      16: { spawn: 1.3, count: 1.6, fire: 1.25, damage: 1.4, raiders: 1.8, hp: 1.4, spread: 1.3, collateral: 1.3 },
+      12: { spawn: 1.25, count: 1.5, fire: 1.25, damage: 1.4, raiders: 1.6, hp: 1.4, spread: 1.25, collateral: 1.25 },
+      16: { spawn: 1.45, count: 1.7, fire: 1.45, damage: 1.65, raiders: 1.9, hp: 1.65, spread: 1.45, collateral: 1.4 },
     },
   },
   START_DIFFICULTY: 'normal',

@@ -1,5 +1,5 @@
 import { createJobFinder } from './jobs.js';
-import { updateCrewScale, spawnPace, damageMul, crewMul, autopilotOn } from './crewscale.js';
+import { updateCrewScale, sparesFor, spawnPace, damageMul, crewMul, autopilotOn } from './crewscale.js';
 import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { updateBot } from './bots.js';
@@ -299,7 +299,7 @@ export function createSimulation() {
     const lost = Math.round(run.salvage * config.LIMP.SALVAGE_LOSS);
     run.salvage -= lost;
     const prev = run.visited.length > 1 ? stopById(run.voyage, run.visited[run.visited.length - 2]) : null;
-    state.limp = { spares: run.spares, lost, back: prev ? stopName(prev) : null };
+    state.limp = { spares: run.spares, max: run.sparesMax, lost, back: prev ? stopName(prev) : null };
     bankStats(true); // (what the crew did still counts for the awards)
   }
   // The break-up is over: patch her up and put her back at the last stop on the route (the first stop restarts itself).
@@ -658,7 +658,7 @@ export function createSimulation() {
   const newRun = () => {
     const voyage = generateVoyage((Math.random() * 2 ** 31) | 0);
     const first = voyage.columns[0][0];
-    state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: config.LIMP.SPARES, limps: 0 };
+    state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0 };
     state.runEnd = null;
     state.salvagePop = null;
   };
@@ -1730,6 +1730,7 @@ export function createSimulation() {
     startRoute,
     castOff: () => {
       if (state.phase !== 'lobby') return;
+      updateCrewScale(state, 0); // (settle the spare gasbags and crew factors for the chosen difficulty)
       state.phase = 'flying';
       state.ev.warn = 4;
       state.ev.warnText = 'CAST OFF!';
