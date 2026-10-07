@@ -183,8 +183,8 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) 
     let heat = 0;
     let burn = 0;
     if (flying && !state.ship.down) {
-      const keel = (c.refY != null ? c.refY : 500 - state.ship.alt) + L.KEEL;
-      const mx = c.dist + 800;
+      const keel = (c.refY != null ? c.refY : SHIP_LAYOUT.refPoint.y - state.ship.alt) + L.KEEL;
+      const mx = c.dist + SHIP_LAYOUT.refPoint.x;
       // Is there lava under the hull? (a column whose floor is below the lava surface)
       let over = false;
       for (const dx of [-500, -150, 150, 500]) if (floorBelow(c.map, mx + dx, Math.min(keel, E.lavaY - 1)) > E.lavaY + 1) over = true;
@@ -218,7 +218,7 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) 
           if (state.fires.length < L.MAX_FIRES) {
             const lo = P[LOWER];
             state.fires.push({ x: rand(lo.x0 + 80, lo.x1 - 80), d: LOWER, t: 0, prog: 0 });
-            puff(rand(lo.x0 + 80, lo.x1 - 80), 790 - state.ship.alt, '#ff8a34', 8);
+            puff(rand(lo.x0 + 80, lo.x1 - 80), lo.y - state.ship.alt, '#ff8a34', 8);
           }
         }
       } else if (E.burn < 0.05) warned.burn = false;

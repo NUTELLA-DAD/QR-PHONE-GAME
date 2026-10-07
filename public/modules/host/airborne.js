@@ -129,7 +129,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const jumpOff = (p) => {
     if (p.conn == null || p.bot) return false;
     const stick = p.jx || 0;
-    const dir = Math.abs(stick) > 0.3 ? Math.sign(stick) : p.x < 800 ? 1 : -1; // neutral: toward the middle of the ship
+    const dir = Math.abs(stick) > 0.3 ? Math.sign(stick) : p.x < SHIP_LAYOUT.midPoint.x ? 1 : -1; // neutral: toward the middle of the ship
     const i = p.conn;
     startFlight(p, dir * A.LADDER_JUMP_VX, -A.LADDER_JUMP_VY);
     p.regrabConn = i;

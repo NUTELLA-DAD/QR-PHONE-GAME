@@ -105,7 +105,7 @@ export function createLinkArt({ ctx, state }) {
     const dir = (w.gusting ? w.gust : w.gustNext) > 0 ? -1 : 1; // (gust > 0 lifts the ship = arrows point up the screen)
     const up = dir < 0;
     const sx0 = width / 2 + (1900 - view.cx) * view.zoom;
-    const sy0 = height / 2 + (470 - state.ship.alt - view.cy) * view.zoom;
+    const sy0 = height / 2 + (SHIP_LAYOUT.midPoint.y - state.ship.alt - view.cy) * view.zoom;
     const k = Math.max(0.6, view.zoom);
     const color = up ? '#ffd27a' : '#8fc8e8';
     const flash = w.gusting ? 1 : 0.55 + 0.45 * Math.sin(time * 12);

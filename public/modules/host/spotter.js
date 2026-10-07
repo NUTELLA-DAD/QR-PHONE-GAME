@@ -33,7 +33,7 @@ export function radarItems(state) {
   for (const p of state.strafers || []) if (p.hp > 0 && p !== state.stuntPlane) add('plane', p, at(p));
   if (state.boss) add('boss', state.boss, at(state.boss));
   const gs = state.gunship;
-  if (gs && gs.phase !== 'sinking') add('gunship', gs, () => (gs.bp ? { x: gs.bp.cx + gs.dx, y: (gs.bp.hullTop + gs.bp.hullBot) / 2 + gs.dy - state.ship.alt } : { x: 2600 + gs.dx, y: 500 + gs.dy - state.ship.alt }));
+  if (gs && gs.phase !== 'sinking') add('gunship', gs, () => (gs.bp ? { x: gs.bp.cx + gs.dx, y: (gs.bp.hullTop + gs.bp.hullBot) / 2 + gs.dy - state.ship.alt } : { x: L.bounds.x1 + 790 + gs.dx, y: L.refPoint.y + gs.dy - state.ship.alt }));
   for (const b of state.bats || []) if (b.delay <= 0 && !b.latched && b.hp > 0) add('bat', b, at(b));
   const S = state.specials;
   if (S) {
@@ -95,8 +95,8 @@ export function createSpotter({ state, emit, phoneFx }) {
       if (!it) unspot(i);
       else s.item = it;
     }
-    const cx = 800;
-    const cy = 470 - state.ship.alt;
+    const cx = L.midPoint.x;
+    const cy = L.midPoint.y - state.ship.alt;
     const near = last
       .map((it) => {
         const p = it.pos();

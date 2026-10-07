@@ -40,12 +40,9 @@ const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 // Does a point (in ship coordinates) touch the ship? Gasbag, gondola, outriggers or ball turret.
 function hitsShip(x, y) {
   const gas = ((x - SHIP_LAYOUT.gasbag.cx) / SHIP_LAYOUT.gasbag.rx) ** 2 + ((y - SHIP_LAYOUT.gasbag.cy) / SHIP_LAYOUT.gasbag.ry) ** 2 < 1;
-  const gondola = x > 125 && x < 1500 && y > 475 && y < 815;
-  const outriggers = x > 20 && x < 1580 && y > 745 && y < 800;
-  const pod = x > 735 && x < 855 && y > 815 && y < 935;
-  const bay = x > 350 && x < 640 && y > 815 && y < 945; // the bomb bay compartment under the hull
-  const deck = x > 240 && x < 1380 && y > 330 && y <= 475; // the open top deck, its guns and the helm mount
-  return gas || gondola || outriggers || pod || bay || deck;
+  if (gas) return true;
+  for (const r of SHIP_LAYOUT.hitRects) if (x > r.x0 && x < r.x1 && y > r.y0 && y <= r.y1) return true; // gondola, outriggers, top deck, belly compartments (from the build)
+  return false;
 }
 
 const GB = SHIP_LAYOUT.gasbag;
@@ -151,7 +148,7 @@ export function createSimulation() {
   const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || isSearchlight(name) || isEscortStation(name) || !!state.GUNS[name];
 
   // Sunken Sea: crew on the lower decks wade slowly while the ship is flooded.
-  const wadeMul = (p) => (p.d != null && PLATFORMS[p.d] && PLATFORMS[p.d].y >= 790 && state.sea && state.sea.flood > 0 ? 1 - state.sea.flood * config.ENVIRONMENTS.sea.FLOOD.SLOW_CREW : 1);
+  const wadeMul = (p) => (p.d != null && PLATFORMS[p.d] && PLATFORMS[p.d].y >= SHIP_LAYOUT.lowDeckY && state.sea && state.sea.flood > 0 ? 1 - state.sea.flood * config.ENVIRONMENTS.sea.FLOOD.SLOW_CREW : 1);
 
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
@@ -547,7 +544,7 @@ export function createSimulation() {
       sp.bob = (sp.bob || 0) + dt;
       const wx = sp.mx - state.course.dist;
       const wy = sp.my + Math.sin(sp.bob * 1.3) * 30;
-      if (Math.hypot(wx - 800, wy - (470 - state.ship.alt)) < PC.SUPPLY_REACH) {
+      if (Math.hypot(wx - SHIP_LAYOUT.midPoint.x, wy - (SHIP_LAYOUT.midPoint.y - state.ship.alt)) < PC.SUPPLY_REACH) {
         state.ship.hull = Math.min(100, state.ship.hull + PC.SUPPLY_HULL);
         state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + PC.SUPPLY_COAL);
         for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
@@ -566,8 +563,8 @@ export function createSimulation() {
     const c = state.course;
     if (!c) return;
     for (const [dx, dy] of [[1400, -500], [1800, 0], [1200, 400], [-600, -700], [2200, -300]]) {
-      const wx = 800 + dx;
-      const wy = 470 - state.ship.alt + dy;
+      const wx = SHIP_LAYOUT.midPoint.x + dx;
+      const wy = SHIP_LAYOUT.midPoint.y - state.ship.alt + dy;
       let clear = true;
       for (const [ox, oy] of [[0, 0], [150, 0], [-150, 0], [0, 150], [0, -150]]) if (inRock(state, wx + ox, wy + oy)) clear = false;
       if (clear) {

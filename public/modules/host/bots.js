@@ -159,8 +159,8 @@ function rescueAltitude(state) {
     if (sv.saved || sv.lost) continue;
     const dx = sv.mx - bx;
     if (dx < -R.CATCH || dx > R.SPOT) continue;
-    const ropeAbove = 425; // the doors hang this far below the ship's reference point
-    return 500 - (sv.y - R.ROPE * 0.45 - ropeAbove); // alt = 500 - refY, and refY = (rope height) - 425
+    const ropeAbove = SHIP_LAYOUT.bombBay.y - SHIP_LAYOUT.refPoint.y; // the doors hang this far below the ship's reference point (425 on the classic ship)
+    return SHIP_LAYOUT.refPoint.y - (sv.y - R.ROPE * 0.45 - ropeAbove); // alt = ref y - refY, and refY = (rope height) - ropeAbove
   }
   return null;
 }
@@ -192,8 +192,8 @@ function listJobs(state, bot) {
   if (state.phase === 'flying' && !players.some((q) => q.lock === 'Helm') && !mods.some((m) => m.name === 'Helm' && m.broken)) jobs.push({ kind: 'station', obj: 'Helm', max: 1 });
   // Outpost raid: the bomb bay is how outposts die. Bombs run out while the ship hovers over a gun: someone fetches more, now.
   const c = state.course;
-  const bombRun = !!(c && c.map && c.map.open && !c.done && c.target && Math.hypot(c.target.x - (c.dist + 800), c.target.y - (500 - state.ship.alt)) < config.MAPS.BOMB_RUN_RANGE);
-  const bombStarved = bombRun && state.bombBay && state.bombBay.bombs <= 0 && !mods.some((m) => m.name === 'Bomb Bay' && m.broken) && Math.hypot(c.target.x - (c.dist + 800), c.target.y - (500 - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN * 2;
+  const bombRun = !!(c && c.map && c.map.open && !c.done && c.target && Math.hypot(c.target.x - (c.dist + SHIP_LAYOUT.refPoint.x), c.target.y - (SHIP_LAYOUT.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_RANGE);
+  const bombStarved = bombRun && state.bombBay && state.bombBay.bombs <= 0 && !mods.some((m) => m.name === 'Bomb Bay' && m.broken) && Math.hypot(c.target.x - (c.dist + SHIP_LAYOUT.refPoint.x), c.target.y - (SHIP_LAYOUT.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN * 2;
   // The boiler is dying (no coal, or the pressure has collapsed): nothing else works without steam - stoke it right away.
   const ship = state.ship;
   if (state.phase === 'flying' && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
@@ -287,7 +287,7 @@ function listJobs(state, bot) {
   jobs.push(...linkJobs(state, bot, false)); // (...and the quieter links: loaders for idle guns, the boiler surge)
   for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // Hovering over an outpost with bombs aboard: one bot drops everything and mans the bomb bay.
-  if (bombRun && c.target && Math.hypot(c.target.x - (c.dist + 800), c.target.y - (500 - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken('Bomb Bay') && !players.some((q) => q.lock === 'Bomb Bay')) jobs.unshift({ kind: 'station', obj: 'Bomb Bay', max: 1 });
+  if (bombRun && c.target && Math.hypot(c.target.x - (c.dist + SHIP_LAYOUT.refPoint.x), c.target.y - (SHIP_LAYOUT.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken('Bomb Bay') && !players.some((q) => q.lock === 'Bomb Bay')) jobs.unshift({ kind: 'station', obj: 'Bomb Bay', max: 1 });
   return jobs;
 }
 
@@ -405,8 +405,8 @@ function operate(p, state, dt) {
     // Sweep the beam toward the enemy nearest the ship (in the dark with nothing about: a slow sweep); focus on it.
     const l = (state.searchlights || []).find((q) => q.n === p.lock);
     if (!l) return;
-    const sx = 800;
-    const sy = 470 - state.ship.alt;
+    const sx = SHIP_LAYOUT.midPoint.x;
+    const sy = SHIP_LAYOUT.midPoint.y - state.ship.alt;
     const pitch = state.ship.pitch || 0;
     let best = null;
     for (const t of [...state.litTargets, ...state.dimTargets]) {
@@ -791,7 +791,8 @@ function dareStep(p, state, dt) {
           const mid = SHIP_LAYOUT.aimPoint;
           state.stuntPlane = [...state.strafers.filter((s) => s.hp > 0)].sort((a, b) => Math.hypot(a.x - mid.x, a.y + state.ship.alt - mid.y) - Math.hypot(b.x - mid.x, b.y + state.ship.alt - mid.y))[0] || null;
         }
-        const there = steer(p, low ? LOWER : CATWALK, near && near.x < SHIP_LAYOUT.aimPoint.x ? (low ? 45 : 275) : low ? 1555 : 1325, 30);
+        const deck = L.platforms[low ? LOWER : CATWALK]; // (25 px in from the end of the lower deck, 35 from the end of the top deck)
+        const there = steer(p, low ? LOWER : CATWALK, near && near.x < SHIP_LAYOUT.aimPoint.x ? (low ? deck.x0 + 25 : deck.x0 + 35) : low ? deck.x1 - 25 : deck.x1 - 35, 30);
         if (there && d.aimCd <= 0) {
           // (only from the spot: shooting upward while walking past a ladder would climb it instead of firing)
           d.aimCd = 0.25;

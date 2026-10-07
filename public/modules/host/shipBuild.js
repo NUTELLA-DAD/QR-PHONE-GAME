@@ -25,13 +25,15 @@ export const CONNECTOR_SPEED = { rope: 150, ladder: 170, stairs: 150, lift: 260,
 // (shifted by the part's column). Fields named in D_KINDS also get `d` (the platform index).
 const ARRAYS = ['platforms', 'connectors', 'rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers', 'boarderEntryPoints', 'escortDocks'];
 const KEYED = ['gunMounts', 'searchlights'];
-const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'gasbag', 'liftRepair', 'bounds', 'aimPoint'];
+const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'gasbag', 'liftRepair'];
 const X_FIELDS = {
   platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x'], vents: ['x'], racks: ['x'],
   extinguishers: ['x'], boarderEntryPoints: ['x'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
-  coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbag: ['cx'], liftRepair: ['x'], bounds: ['x0', 'x1'], aimPoint: ['x'],
+  coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbag: ['cx'], liftRepair: ['x'],
 };
 const D_KINDS = ['rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers'];
+// Derived fields a `frame` part may set by hand instead of letting deriveGeometry work them out.
+const OVERRIDES = ['samples', 'bounds', 'aimPoint', 'refPoint', 'midPoint', 'tiltPivot', 'fitBox', 'hullRect', 'hitRects', 'spawn'];
 
 // Copy of a piece moved `ox` px to the right (so builds are never aliased or mutated by buildLayout).
 function place(kind, item, ox) {
@@ -102,12 +104,13 @@ export const PARTS = {
   medbay: piece('medbay'),
   bombBay: piece('bombBay'),
   gasbag: piece('gasbag'),
-  // Ship-wide singletons that S.2 will derive from the parts instead.
+  // Ship-wide numbers: the shield band and the nest rise are given here; everything else (samples, bounds, aim and
+  // reference points ...) is DERIVED from the parts by buildLayout. A field named in OVERRIDES that is set here wins
+  // over the derived value (the classic ship keeps its hand-placed collision samples this way).
   frame: { mass: 0, lift: 0, steam: 0, hands: 0, emit: (p, A) => {
     A.add('shield', p.shield);
-    A.add('bounds', p.bounds);
-    A.add('aimPoint', p.aimPoint);
     A.setScalar('nestRise', p.nestRise);
+    for (const k of OVERRIDES) if (p[k] != null) A.setScalar(k, p[k]);
   } },
 };
 
@@ -238,15 +241,23 @@ BUILDS.classic = [
   { part: 'boarderEntry', x: 290, p: 'catwalk' },
   { part: 'boarderEntry', x: 1335, p: 'catwalk' },
 
-  // Ship-wide numbers: the deflector shield band, the outer edges of the drawing (the camera keeps all of it in view),
-  // where enemy fire is aimed, and how far the nest sits above where it was drawn when the bag was smaller.
-  { part: 'frame', nestRise: 94, shield: { cx: 800, cy: 470, rx: 1020, ry: 660 }, bounds: { x0: -240, x1: 1810, y0: -165, y1: 975 }, aimPoint: { x: 800, y: 640 } },
+  // Ship-wide numbers: the deflector shield band, how far the nest sits above where it was drawn when the bag was smaller,
+  // and the hull's collision outline (points round the ship tested against rock). Hand-placed here so the classic ship
+  // flies exactly as before; other builds get theirs from deriveSamples(). Bounds, aim point and the rest are derived.
+  { part: 'frame', nestRise: 94, shield: { cx: 800, cy: 470, rx: 1020, ry: 660 }, samples: [
+    // underside
+    [-80, 410], [126, 662], [248, 815], [372, 942], [500, 942], [628, 942], [740, 935], [805, 975], [855, 935], [1100, 815], [1352, 815], [1470, 662],
+    [20, 862], [140, 862], [1460, 862], [1580, 862], [1512, 620], [1790, 198],
+    // top
+    [-235, 20], [-60, 90], [150, 5], [380, -50], [600, -100], [690, -86], [800, -154], [910, -86], [1000, -100], [1220, -50], [1450, 5], [1660, 90],
+  ] },
 ];
 
 // ---- building the layout ---------------------------------------------------------------------------------
 
-// Turn a list of placed parts into layout data (same shape as the old hand-written SHIP_LAYOUT).
-export function buildLayout(parts) {
+// Turn a list of placed parts into layout data (same shape as the old hand-written SHIP_LAYOUT), plus the derived
+// geometry (deriveGeometry). opts.cell = the cave map's square size in px (config.MAPS.CELL), used for caveNeed.
+export function buildLayout(parts, opts = {}) {
   const rows = Object.fromEntries([...ARRAYS, ...KEYED].map((k) => [k, []]));
   const out = {};
   let seq = 0;
@@ -277,7 +288,100 @@ export function buildLayout(parts) {
   out.connectors = out.connectors.map((c) => ({ ...c, top: index(c.top), bottom: index(c.bottom) }));
   // The first escort hook doubles as the old single `escortDock`.
   if (out.escortDocks.length) out.escortDock = { x: out.escortDocks[0].x, y: out.escortDocks[0].y };
+  deriveGeometry(out, opts.cell || CAVE_CELL);
   return out;
+}
+
+// ---- derived geometry (S.2) ------------------------------------------------------------------------------
+// What the rest of the game used to hard-code about the ship's SHAPE is worked out here from the decks and the gasbag:
+//   samples        points round the hull and bag that are tested against rock (ship coordinates)
+//   topY, bottomY  the highest / lowest of those points
+//   refPoint       where the ship's middle sits in the world: world x = course.dist + refPoint.x, world y = refPoint.y - alt
+//   midPoint       the middle of the ship (what supplies, lamps and the spotter are measured from)
+//   aimPoint       where enemy fire is aimed
+//   tiltPivot      the point the ship tips around when climbing and diving
+//   bounds         outer edges of the drawing (the camera keeps all of it in view)
+//   fitBox         the box that has to fit through cave tunnels and shafts; caveNeed = how many map squares that takes
+//   hullRect       the box another gunship is nudged out of
+//   hitRects       boxes a shell or plane hits (the gasbag ellipse is separate)
+//   spawnPlatform  index of the deck anything that missed the ship drops back onto
+//   lowDeckY       the y of the lower deck (crew below this wade when the ship floods)
+// The offsets below are what make the classic ship come out exactly as it was hand-placed; a longer or taller build
+// moves the same edges with it. (A `frame` part can still set any of them by hand: see OVERRIDES.)
+export const CAVE_CELL = 200; // map square size used for caveNeed unless buildLayout is told otherwise (config.MAPS.CELL)
+const SAMPLE_GAP = 130; // most space between collision samples along a hull or bag edge (px)
+
+// Collision samples for a build with none of its own: hull shoulders, chine and keel, belly compartments, the bag's top and the nest.
+export function deriveSamples(out) {
+  const by = (id) => out.platforms.find((q) => q.id === id);
+  const main = by('main'), lower = by('lower'), nest = by('nest');
+  const pts = [];
+  const add = (x, y) => pts.push([Math.round(x), Math.round(y)]);
+  const row = (x0, x1, y) => {
+    const n = Math.max(1, Math.ceil((x1 - x0) / SAMPLE_GAP));
+    for (let k = 0; k <= n; k++) add(x0 + ((x1 - x0) * k) / n, y);
+  };
+  add(main.x0 - 14, main.y + 22); // shoulders, aft and fore
+  add(main.x1, main.y + 22);
+  row(lower.x0 + 228, lower.x1 - 228, lower.y + 25); // the chine
+  row(lower.x0, lower.x1, lower.y + 72); // the keel line, outriggers included
+  for (const q of out.platforms) {
+    if (q.outside || q.y <= lower.y) continue; // belly compartments: a flat bay, or a ball turret that hangs lower
+    if (q.x1 - q.x0 >= 200) row(q.x0 + 22, q.x1 - 12, q.y + 17);
+    else add(q.x0 + 5, q.y + 30), add((q.x0 + q.x1) / 2, q.y + 70), add(q.x1, q.y + 30);
+  }
+  const bag = out.gasbag;
+  if (bag) { // the bag's top half, a margin wider than the drawing
+    const m = 35;
+    const n = Math.max(6, Math.ceil((Math.PI * (bag.rx + bag.ry)) / 2 / SAMPLE_GAP));
+    for (let k = 0; k <= n; k++) {
+      const a = Math.PI + (Math.PI * k) / n;
+      add(bag.cx + Math.cos(a) * (bag.rx + m), bag.cy + Math.sin(a) * (bag.ry + m));
+    }
+  }
+  const nx = (nest.x0 + nest.x1) / 2; // the crow's nest and its flag
+  add(nx - 110, nest.y - 44), add(nx, nest.y - 112), add(nx + 110, nest.y - 44);
+  return pts;
+}
+
+function deriveGeometry(out, cell) {
+  const by = (id) => out.platforms.find((q) => q.id === id);
+  const main = by('main'), lower = by('lower'), cat = by('catwalk'), nest = by('nest');
+  if (!main || !lower || !cat || !nest) return; // validate() reports the missing deck
+  const set = (k, v) => { if (out[k] == null) out[k] = v; };
+  set('refPoint', { x: (lower.x0 + lower.x1) / 2, y: main.y - 140 });
+  const ref = out.refPoint;
+  set('midPoint', { x: ref.x, y: cat.y });
+  set('aimPoint', { x: ref.x, y: main.y });
+  set('tiltPivot', [ref.x, cat.y + 50]);
+  set('samples', deriveSamples(out));
+  out.samples = out.samples.map((s) => [s[0], s[1]]);
+  const xs = out.samples.map((s) => s[0]);
+  const ys = out.samples.map((s) => s[1]);
+  out.topY = Math.min(...ys);
+  out.bottomY = Math.max(...ys);
+  set('bounds', { x0: Math.min(...xs) - 5, x1: Math.max(...xs) + 20, y0: out.topY - 11, y1: out.bottomY });
+  const bagTop = out.gasbag ? out.gasbag.cy - out.gasbag.ry : nest.y - 44;
+  set('fitBox', { x0: lower.x0 - 120, x1: lower.x1 + 90, y0: bagTop - 36, y1: out.bottomY + 10 });
+  set('hullRect', { x0: lower.x0 + 80, x1: lower.x1 - 60, y0: bagTop - 86, y1: out.bottomY - 15 });
+  const F = out.fitBox;
+  out.caveNeed = { // map squares the ship takes: the box, measured from the ref point, rounded out to whole squares
+    tunnel: Math.ceil((ref.y - F.y0) / cell) + Math.ceil((F.y1 - ref.y) / cell) + 1,
+    shaft: Math.ceil((ref.x - F.x0) / cell) + Math.ceil((F.x1 - ref.x) / cell) + 1,
+  };
+  if (!out.hitRects) {
+    out.hitRects = [
+      { x0: main.x0 - 15, x1: main.x1 + 30, y0: cat.y + 5, y1: lower.y + 25 }, // the gondola
+      { x0: lower.x0, x1: lower.x1, y0: lower.y - 45, y1: lower.y + 10 }, // the outriggers
+      { x0: cat.x0, x1: cat.x1 + 20, y0: cat.y - 140, y1: cat.y + 5 }, // the open top deck, its guns and the helm mount
+    ];
+    for (const q of out.platforms) { // belly compartments
+      if (!q.outside && q.y > lower.y) out.hitRects.push({ x0: q.x0, x1: q.x1, y0: lower.y + 25, y1: q.y + (q.y >= DECK_ROWS.bay ? 20 : 30) });
+    }
+  }
+  out.lowDeckY = lower.y;
+  out.spawnPlatform = out.platforms.findIndex((q) => q.id === (out.spawn || 'catwalk'));
+  delete out.spawn;
 }
 
 // Budget numbers for a build (S.5/S.6 fill these in; the classic's pieces are all zero for now).

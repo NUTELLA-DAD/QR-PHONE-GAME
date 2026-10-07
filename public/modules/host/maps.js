@@ -8,9 +8,14 @@
 //   'network' - a branching cave network: find your way through to the goal.
 //   'route'   - one winding passage that climbs, drops and doubles back (no wrong turns).
 import { config } from '../../config.js';
+import { SHIP_LAYOUT } from '../../shipLayout.js';
 
-// The ship's box around its centre point (ship coords centre = 800, 500), in pixels.
-export const SHIP_BOX = { left: -900, right: 870, up: -570, down: 485 };
+// The ship's box around its centre point (the layout's refPoint: 800, 500 on the classic ship), in pixels.
+export function shipBox() {
+  const F = SHIP_LAYOUT.fitBox;
+  const R = SHIP_LAYOUT.refPoint;
+  return { left: F.x0 - R.x, right: F.x1 - R.x, up: F.y0 - R.y, down: F.y1 - R.y };
+}
 
 // Build a map, checking the ship really can get from the start to the beacon (try again if not).
 export function makeMap(kind, level, rand, lengthMul = 1) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES)
@@ -74,8 +79,8 @@ function buildMap(kind, level, rand, lengthMul = 1) {
       for (let i = Math.max(2, Math.min(i0, i1)); i <= Math.min(W - 3, Math.max(i0, i1)); i++) solid[idx(i, j)] = 0;
     }
   };
-  const TUN = M.TUNNEL_CELLS; // tunnel height (cells)
-  const SHAFT = M.SHAFT_CELLS; // shaft width (cells)
+  const TUN = SHIP_LAYOUT.caveNeed.tunnel + M.TUNNEL_SLACK; // tunnel height (cells)
+  const SHAFT = SHIP_LAYOUT.caveNeed.shaft + M.SHAFT_SLACK; // shaft width (cells)
   // Join two room centres: along, then up/down (or the other way round), wide enough for the ship.
   const join = (a, b) => {
     const hFirst = rand() < 0.5;
@@ -272,10 +277,11 @@ function finishMap(map, startCell, goalCell) {
     }
     return pre[(j1 + 1) * (W + 1) + i1 + 1] - pre[j0 * (W + 1) + i1 + 1] - pre[(j1 + 1) * (W + 1) + i0] + pre[j0 * (W + 1) + i0];
   };
-  const bl = Math.ceil(-SHIP_BOX.left / C);
-  const br = Math.ceil(SHIP_BOX.right / C);
-  const bu = Math.ceil(-SHIP_BOX.up / C);
-  const bd = Math.ceil(SHIP_BOX.down / C);
+  const box = shipBox();
+  const bl = Math.ceil(-box.left / C);
+  const br = Math.ceil(box.right / C);
+  const bu = Math.ceil(-box.up / C);
+  const bd = Math.ceil(box.down / C);
   map.fit = new Uint8Array(W * H);
   for (let jj = 0; jj < H; jj++) for (let ii = 0; ii < W; ii++) map.fit[idx(ii, jj)] = rockIn(ii - bl, jj - bu, ii + br, jj + bd) === 0 ? 1 : 0;
   const s = nearestFit(map, startCell.i, startCell.j);

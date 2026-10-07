@@ -10,6 +10,7 @@
 // must not be computed once at import time: recompute them in a function, or in an onLayoutChange(fn) hook
 // (tools/buildsim.mjs --lint flags new module-level captures). Builds only change at the dock.
 import { BUILDS, buildLayout } from './modules/host/shipBuild.js';
+import { config } from './config.js';
 
 export const SHIP_LAYOUT = { version: 0 };
 
@@ -24,7 +25,7 @@ export function onLayoutChange(fn) {
 // Replace the layout with the one built from `parts`: arrays are emptied and refilled, objects are
 // cleared and refilled, so every existing reference sees the new data. Bumps `version`, then tells the listeners.
 export function applyBuild(parts) {
-  const next = buildLayout(parts);
+  const next = buildLayout(parts, { cell: config.MAPS.CELL }); // (the derived cave fit depends on the map square size)
   for (const key of Object.keys(SHIP_LAYOUT)) if (key !== 'version' && !(key in next)) delete SHIP_LAYOUT[key];
   for (const [key, value] of Object.entries(next)) {
     const cur = SHIP_LAYOUT[key];
