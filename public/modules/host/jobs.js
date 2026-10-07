@@ -5,13 +5,18 @@
 // penalty for each crewmate already going there. A suggestion is kept for a few seconds so it
 // doesn't flicker, and only swapped for a clearly better one.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { travelTime, direction } from './nav.js';
 
 const L = SHIP_LAYOUT;
 const J = config.JOBS;
-const GUN_NAMES = Object.keys(L.gunMounts);
-const PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
+let GUN_NAMES, PICKUPS; // (worked out from the ship layout; refreshed when a new ship build is applied)
+function rebuildShipTables() {
+  GUN_NAMES = Object.keys(L.gunMounts);
+  PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
+}
+rebuildShipTables();
+onLayoutChange(rebuildShipTables);
 const stationNamed = (n) => L.stations.find((s) => s.n === n);
 const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer' };
 export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', unclog: '#b6f06e', oxygen: '#bfe9ff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0', help: '#ff4d4d' };

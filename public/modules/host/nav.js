@@ -3,7 +3,7 @@
 //
 // A "walker" (player or raider) has: x, y, d (platform index it stands on), and while climbing
 // conn (connector index) and s (0 = top end, 1 = bottom end).
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { config } from '../../config.js';
 
 const P = SHIP_LAYOUT.platforms;
@@ -12,30 +12,40 @@ const GRAB = 38; // how close (px) to a connector end you must be to grab it
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // Per-connector speed multiplier (e.g. the lift crawls without steam). Set by the game each frame.
-export const connScale = C.map(() => 1);
+export const connScale = []; // (one entry per connector, filled by rebuildNav)
 
 // Route-finding by TIME (seconds). Every connector has two end nodes (2i = top end, 2i+1 = bottom
 // end). Walking between two nodes on the same platform costs distance / walk speed, climbing costs
 // height / climb speed (poles are one-way: top -> bottom only). Floyd-Warshall gives the quickest
 // time between every pair of nodes; plan() adds the walk at each end.
+// The tables depend on the layout, so rebuildNav() fills them; it runs at load and whenever a new ship build is applied.
 const WALK = config.MOVE.WALK_SPEED;
 const GRAB_COST = 0.25; // seconds to get onto a ladder
 const isPole = (c) => c.type === 'pole';
 const nodeAt = (n) => ({ d: n % 2 ? C[n >> 1].bottom : C[n >> 1].top, x: n % 2 ? C[n >> 1].xBottom : C[n >> 1].xTop });
 const climbTime = (c) => (P[c.bottom].y - P[c.top].y) / c.speed + GRAB_COST;
-const NN = C.length * 2;
-const nodes = Array.from({ length: NN }, (_, n) => nodeAt(n));
-const nodesOn = P.map((_, d) => nodes.map((nd, n) => (nd.d === d ? n : -1)).filter((n) => n >= 0));
-const tt = Array.from({ length: NN }, () => Array(NN).fill(Infinity));
-for (let a = 0; a < NN; a++) {
-  tt[a][a] = 0;
-  for (const b of nodesOn[nodes[a].d]) tt[a][b] = Math.min(tt[a][b], Math.abs(nodes[a].x - nodes[b].x) / WALK);
+let nodes = [];
+let nodesOn = [];
+let tt = [];
+export function rebuildNav() {
+  const NN = C.length * 2;
+  connScale.length = C.length;
+  connScale.fill(1);
+  nodes = Array.from({ length: NN }, (_, n) => nodeAt(n));
+  nodesOn = P.map((_, d) => nodes.map((nd, n) => (nd.d === d ? n : -1)).filter((n) => n >= 0));
+  tt = Array.from({ length: NN }, () => Array(NN).fill(Infinity));
+  for (let a = 0; a < NN; a++) {
+    tt[a][a] = 0;
+    for (const b of nodesOn[nodes[a].d]) tt[a][b] = Math.min(tt[a][b], Math.abs(nodes[a].x - nodes[b].x) / WALK);
+  }
+  C.forEach((c, i) => {
+    tt[2 * i][2 * i + 1] = Math.min(tt[2 * i][2 * i + 1], climbTime(c));
+    if (!isPole(c)) tt[2 * i + 1][2 * i] = Math.min(tt[2 * i + 1][2 * i], climbTime(c));
+  });
+  for (let k = 0; k < NN; k++) for (let a = 0; a < NN; a++) for (let b = 0; b < NN; b++) if (tt[a][k] + tt[k][b] < tt[a][b]) tt[a][b] = tt[a][k] + tt[k][b];
 }
-C.forEach((c, i) => {
-  tt[2 * i][2 * i + 1] = Math.min(tt[2 * i][2 * i + 1], climbTime(c));
-  if (!isPole(c)) tt[2 * i + 1][2 * i] = Math.min(tt[2 * i + 1][2 * i], climbTime(c));
-});
-for (let k = 0; k < NN; k++) for (let a = 0; a < NN; a++) for (let b = 0; b < NN; b++) if (tt[a][k] + tt[k][b] < tt[a][b]) tt[a][b] = tt[a][k] + tt[k][b];
+rebuildNav();
+onLayoutChange(rebuildNav);
 
 // Quickest way from (d1, x1) to (d2, x2): { cost (seconds), node (the connector end to head for first) }.
 // node is -1 when already on the same platform (or there is no way).

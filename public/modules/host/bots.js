@@ -1,7 +1,7 @@
 // Test bot "brain". Bots press the same virtual buttons a phone does
 // (jx/jy joystick, actQ = tap Action, fire = hold Action), so they test the real game rules.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { steerTo, travelTime } from './nav.js';
 import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
@@ -11,14 +11,20 @@ import { LIGHT_NAMES, isSearchlight, darkTarget } from './searchlight.js';
 import { botJobs as goingDownJobs } from './goingDown.js';
 import { autopilotOn } from './crewscale.js';
 
-const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
-const CATWALK = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'catwalk');
-const LOWER = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'lower');
-
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
-const GUN_STATIONS = Object.keys(L.gunMounts);
-const MANNED_STATIONS = ['Helm', 'Escort Fighter', 'Escort Fighter 2', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout', ...LIGHT_NAMES];
+// Tables worked out from the ship layout; refilled when a new ship build is applied (see rebuildShipTables).
+let MAIN, CATWALK, LOWER, GUN_STATIONS, MANNED_STATIONS, PICKUPS;
+function rebuildShipTables() {
+  MAIN = L.platforms.findIndex((q) => q.id === 'main');
+  CATWALK = L.platforms.findIndex((q) => q.id === 'catwalk');
+  LOWER = L.platforms.findIndex((q) => q.id === 'lower');
+  GUN_STATIONS = Object.keys(L.gunMounts);
+  MANNED_STATIONS = ['Helm', 'Escort Fighter', 'Escort Fighter 2', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout', ...LIGHT_NAMES];
+  PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
+}
+rebuildShipTables();
+onLayoutChange(rebuildShipTables);
 
 // How useful manning a searchlight is: in the dark (or with several enemies about) a lamp is worth a hand; otherwise it is the last resort.
 function lightReach(state, n) {
@@ -453,8 +459,6 @@ function press(p) {
     p.pressCd = 0.4;
   }
 }
-
-const PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
 
 // Make sure the bot holds a tool; walks to the nearest rack/hook for it if not. True when held.
 function getTool(p, kind, to) {

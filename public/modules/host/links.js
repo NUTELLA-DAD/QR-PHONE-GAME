@@ -6,16 +6,22 @@
 //    manned. Pressure climbs while you hold: let go in time or she blows (the existing blowout).
 // Numbers live in config.LINKS. Also keeps state.linkStats (seconds of station time, paired and idle) for tools/botsim.mjs.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { bestTarget } from './aim.js';
 
 const LK = config.LINKS;
 const SG = LK.SURGE;
 const NEST = ['Lookout', 'Nest Searchlight'];
 
-const STATIONS = Object.fromEntries(SHIP_LAYOUT.stations.map((q) => [q.n, q]));
-const BOILER = SHIP_LAYOUT.stations.find((q) => q.n === 'Boiler');
-const BOILER_Y = SHIP_LAYOUT.platforms[BOILER.d].y;
+// Worked out from the ship layout; refilled when a new ship build is applied.
+let STATIONS, BOILER, BOILER_Y;
+function rebuildShipTables() {
+  STATIONS = Object.fromEntries(SHIP_LAYOUT.stations.map((q) => [q.n, q]));
+  BOILER = SHIP_LAYOUT.stations.find((q) => q.n === 'Boiler');
+  BOILER_Y = SHIP_LAYOUT.platforms[BOILER.d].y;
+}
+rebuildShipTables();
+onLayoutChange(rebuildShipTables);
 
 export function createLinks({ state, modules, shipPuff }) {
   state.links = { helmMul: 1, nest: false, nestSpot: false, helmMan: false, loaders: [], surge: { level: 0, held: 0, to: 'engine', by: null } };

@@ -6,7 +6,7 @@
 //
 // All the numbers live in config.SEARCHLIGHT; where each lamp sits is SHIP_LAYOUT.searchlights.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { targets } from './aim.js';
 import { tilt, inRock } from './course.js';
 import { pop } from './popups.js';
@@ -16,7 +16,10 @@ const S = config.SEARCHLIGHT;
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-export const LIGHT_NAMES = Object.keys(SHIP_LAYOUT.searchlights);
+export const LIGHT_NAMES = []; // (refilled in place when a new ship build is applied)
+const rebuildLightNames = () => { LIGHT_NAMES.length = 0; LIGHT_NAMES.push(...Object.keys(SHIP_LAYOUT.searchlights)); };
+rebuildLightNames();
+onLayoutChange(rebuildLightNames);
 export const isSearchlight = (name) => !!SHIP_LAYOUT.searchlights[name];
 
 // How dark the world is right now (0..1, before lightning flashes): the environment's DARK, the caves, and dusk, combined.

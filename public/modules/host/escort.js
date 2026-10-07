@@ -18,7 +18,7 @@ import { pop } from './popups.js';
 
 const E = config.ESCORT;
 const B = SHIP_LAYOUT.bounds;
-const DOCKS = SHIP_LAYOUT.escortDocks || [{ n: 'Escort Fighter', num: 1, x: SHIP_LAYOUT.escortDock.x, y: SHIP_LAYOUT.escortDock.y }];
+const DOCKS = SHIP_LAYOUT.escortDocks; // (filled in place when a new ship build is applied, so this stays current)
 export const DOCK = SHIP_LAYOUT.escortDock; // plane 1's hook, in ship coordinates
 
 // Is this station name one of the patrol planes?

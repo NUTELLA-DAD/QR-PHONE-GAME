@@ -2,13 +2,12 @@
 // Broken modules stop working until repaired with a hammer. The boiler's steam reaches the helm,
 // engines and lift through pipes; each pipe has a valve and can burst and leak.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { connScale } from './nav.js';
 
 const M = config.MODULES;
 const L = SHIP_LAYOUT;
 const P = L.platforms;
-const LIFT = L.connectors.findIndex((c) => c.type === 'lift');
 
 const station = (n) => L.stations.find((s) => s.n === n);
 
@@ -26,32 +25,50 @@ function distToPath(x, y, pts) {
 }
 
 export function createModules() {
+  // `list` and `byName` are filled IN PLACE by rebuild() (state.modules is the same array), which runs now
+  // and again whenever a new ship build is applied; modules that survive keep their hp, by name.
   const list = [];
+  const byName = {};
+  let LIFT = -1; // the lift connector's index
   const add = (m) => list.push({ hp: M.HP, max: M.HP, baseMax: M.HP, broken: false, ...m });
 
-  for (const [name, mount] of Object.entries(L.gunMounts)) {
-    const s = station(name);
-    add({ name, kind: 'gun', d: s.d, x: s.x, pos: { x: mount.bx, y: mount.by } });
-  }
-  const coilSt = station('Lightning Coil');
-  add({ name: 'Lightning Coil', kind: 'coil', d: coilSt.d, x: coilSt.x, pos: { x: coilSt.x, y: P[coilSt.d].y - 60 } });
-  const defl = station('Deflector');
-  add({ name: 'Deflector', kind: 'shield', d: defl.d, x: defl.x, pos: { x: defl.x, y: P[defl.d].y - 60 } });
-  const bay = station('Bomb Bay');
-  add({ name: 'Bomb Bay', kind: 'bombbay', d: bay.d, x: bay.x, pos: { x: L.bombBay.x, y: L.bombBay.y - 30 } });
-  for (const name of ['Boiler', 'Helm']) {
-    const s = station(name);
-    add({ name, kind: name.toLowerCase(), d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });
-  }
-  for (const e of L.engines) add({ name: e.name, kind: 'engine', d: e.d, x: e.x, pos: { x: e.x, y: P[e.d].y + 38 } });
-  const lr = L.liftRepair;
-  const liftD = P.findIndex((p) => p.id === lr.p);
-  add({ name: 'Lift', kind: 'lift', d: liftD, x: lr.x, pos: { x: L.connectors[LIFT].xTop, y: P[liftD].y - 80 } });
-  for (const pipe of L.pipes) {
-    add({ name: pipe.to + ' Pipe', kind: 'pipe', to: pipe.to, d: pipe.d, x: pipe.valve[0], pos: { x: pipe.valve[0], y: pipe.valve[1] }, points: pipe.points, open: true });
-  }
+  const rebuild = () => {
+    const old = Object.fromEntries(list.map((m) => [m.name, m]));
+    list.length = 0;
+    LIFT = L.connectors.findIndex((c) => c.type === 'lift');
+    for (const [name, mount] of Object.entries(L.gunMounts)) {
+      const s = station(name);
+      add({ name, kind: 'gun', d: s.d, x: s.x, pos: { x: mount.bx, y: mount.by } });
+    }
+    const coilSt = station('Lightning Coil');
+    add({ name: 'Lightning Coil', kind: 'coil', d: coilSt.d, x: coilSt.x, pos: { x: coilSt.x, y: P[coilSt.d].y - 60 } });
+    const defl = station('Deflector');
+    add({ name: 'Deflector', kind: 'shield', d: defl.d, x: defl.x, pos: { x: defl.x, y: P[defl.d].y - 60 } });
+    const bay = station('Bomb Bay');
+    add({ name: 'Bomb Bay', kind: 'bombbay', d: bay.d, x: bay.x, pos: { x: L.bombBay.x, y: L.bombBay.y - 30 } });
+    for (const name of ['Boiler', 'Helm']) {
+      const s = station(name);
+      add({ name, kind: name.toLowerCase(), d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });
+    }
+    for (const e of L.engines) add({ name: e.name, kind: 'engine', d: e.d, x: e.x, pos: { x: e.x, y: P[e.d].y + 38 } });
+    const lr = L.liftRepair;
+    const liftD = P.findIndex((p) => p.id === lr.p);
+    add({ name: 'Lift', kind: 'lift', d: liftD, x: lr.x, pos: { x: L.connectors[LIFT].xTop, y: P[liftD].y - 80 } });
+    for (const pipe of L.pipes) {
+      add({ name: pipe.to + ' Pipe', kind: 'pipe', to: pipe.to, d: pipe.d, x: pipe.valve[0], pos: { x: pipe.valve[0], y: pipe.valve[1] }, points: pipe.points, open: true });
+    }
 
-  const byName = Object.fromEntries(list.map((m) => [m.name, m]));
+    for (const m of list) {
+      const o = old[m.name];
+      if (o) Object.assign(m, { hp: o.hp, max: o.max, baseMax: o.baseMax, broken: o.broken });
+      if (o && m.kind === 'pipe') m.open = o.open;
+    }
+    for (const k of Object.keys(byName)) delete byName[k];
+    for (const m of list) byName[m.name] = m;
+  };
+  rebuild();
+  onLayoutChange(rebuild);
+
   const pipeTo = (name) => list.find((m) => m.kind === 'pipe' && m.to === name);
 
   // Does the boiler's steam reach this module right now?
@@ -170,5 +187,5 @@ export function createModules() {
     return '';
   };
 
-  return { list, byName, hasSteam, works, damage, hitAt, repair, update, pressureDrain, drainParts, leaks, leakRate, engineFactor, reset, status };
+  return { list, byName, hasSteam, works, damage, hitAt, repair, update, pressureDrain, drainParts, leaks, leakRate, engineFactor, reset, status, rebuild };
 }

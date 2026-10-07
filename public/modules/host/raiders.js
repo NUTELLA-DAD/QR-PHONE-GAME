@@ -7,12 +7,15 @@
 // interrupt them with a hit.
 import { crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
 import { moveWalker, steerTo, fall } from './nav.js';
 
 const R = config.RAIDERS;
 const P = SHIP_LAYOUT.platforms;
-const INSIDE = P.map((p, i) => i).filter((i) => P[i].id === 'main' || P[i].id === 'lower');
+let INSIDE; // platform indices of the decks inside the hull (refreshed when a new ship build is applied)
+const rebuildInside = () => { INSIDE = P.map((p, i) => i).filter((i) => P[i].id === 'main' || P[i].id === 'lower'); };
+rebuildInside();
+onLayoutChange(rebuildInside);
 
 export function createRaiders({ state, modules, puff, impact }) {
   state.bombs = [];
