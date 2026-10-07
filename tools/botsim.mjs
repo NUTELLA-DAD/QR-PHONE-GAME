@@ -88,6 +88,7 @@ const missionMins = []; let missionStartStep = 0;
 let pSum = 0, pN = 0, pLow = 0, pOver70 = 0, pOver90 = 0, blowouts = 0, leakSteps = 0, lastPress = state.ship.press;
 let sporeCloudSteps = 0, sporedSteps = 0, clogSum = 0, clogMax = 0, engSum = 0, o2Sum = 0, o2Min = 1, lackSteps = 0, gasSum = 0, gasMax = 0, crewSteps = 0, envN = 0, iceG = 0, iceD = 0, iceGun = 0, iceMax = 0, sinkSum = 0, thermalSteps = 0, burnSteps = 0, heatSum = 0, climbSum = 0, climbN = 0, blizSteps = 0, smokeSteps = 0, fireSum = 0, fireMax = 0;
 let gapSum = 0, gapMin = 1e9, seaSteps = 0, floodSum = 0, floodHigh = 0, wetSteps = 0, galeSteps = 0;
+let lightSteps = 0, lightManned = [0, 0], lightLit = 0, litBonus = 0; // searchlights: flight steps, steps each lamp was manned, steps with something lit
 const t0 = realNow();
 
 for (let step = 1; step <= totalSteps; step++) {
@@ -118,6 +119,7 @@ for (let step = 1; step <= totalSteps; step++) {
     if (state.boilerBlew) { blowouts++; state.boilerBlew = false; }
   }
   lastPress = state.ship.press;
+  if (state.phase === 'flying' && state.searchlights) { lightSteps++; state.searchlights.forEach((l, i) => { if (l.manned) lightManned[i]++; }); if (state.litTargets.length) lightLit++; }
   if (state.phase === 'flying') { hullSum += state.ship.hull; hullN++; }
   if (state.phase === 'flying' && state.env) { // environment stats
     const E = state.env;
@@ -179,6 +181,7 @@ if (args.env === "sea") console.log(`sea (this map: ${state.sea.survivors.length
   if (state.stuntStats) console.log('  plane aim checks: ' + Object.entries(state.stuntStats).map(([k, v]) => k + ' x' + v).join(', '));
   if (process.env.STUNT_LOG) for (const e of log) console.log(`  ${e.t}s ${e.bot}: ${e.text}`);
 }
+if (lightSteps) console.log(`searchlights: ${(state.searchlights || []).map((l, i) => l.n + ' manned ' + ((100 * lightManned[i]) / lightSteps).toFixed(0) + '%').join(', ')}; something lit ${((100 * lightLit) / lightSteps).toFixed(0)}% of flight`);
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);

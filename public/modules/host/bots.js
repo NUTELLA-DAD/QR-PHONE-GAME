@@ -7,6 +7,7 @@ import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
 import { GS, MAIN_X1, landX, boilerX, routeStep } from './gunship.js';
 import { isEscortStation, escortFor } from './escort.js';
+import { LIGHT_NAMES, isSearchlight, darkTarget } from './searchlight.js';
 
 const MAIN = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
 const CATWALK = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'catwalk');
@@ -15,7 +16,16 @@ const LOWER = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'lower');
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
 const GUN_STATIONS = Object.keys(L.gunMounts);
-const MANNED_STATIONS = ['Helm', 'Escort Fighter', 'Escort Fighter 2', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout'];
+const MANNED_STATIONS = ['Helm', 'Escort Fighter', 'Escort Fighter 2', 'Deflector', 'Lightning Coil', ...GUN_STATIONS, 'Bomb Bay', 'Lookout', ...LIGHT_NAMES];
+
+// How useful manning a searchlight is: in the dark (or with several enemies about) a lamp is worth a hand; otherwise it is the last resort.
+function lightReach(state, n) {
+  const threats = (state.litTargets ? state.litTargets.length : 0) + (state.dimTargets ? state.dimTargets.length : 0);
+  if (state.phase !== 'flying') return 5;
+  const nest = n === 'Nest Searchlight' ? 0.3 : 0; // (the nest lamp sees more of the sky: slightly preferred)
+  if (darkTarget(state) > 0.3) return (threats ? 2.2 : 3.4) - nest; // (after the guns that have a target, ahead of an idle gun or the lookout when there is something to light)
+  return (threats >= 2 ? 3.2 : 5) - nest;
+}
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -232,7 +242,7 @@ function listJobs(state, bot) {
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
   const botPlanes = players.filter((q) => q.bot && isEscortStation(q.lock)).length; // the crew can only spare so many for the patrol planes
-  const reach = (n) => (isEscortStation(n) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
+  const reach = (n) => (isEscortStation(n) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : n === 'Lookout' ? 3 : n === 'Deflector' ? (incoming(state) ? 0.6 : 4) : n === 'Lightning Coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : n === 'Bomb Bay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : isSearchlight(n) ? lightReach(state, n) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
@@ -380,6 +390,28 @@ function operate(p, state, dt) {
       p.jx = Math.cos(a);
       p.jy = Math.sin(a);
     }
+  } else if (isSearchlight(p.lock)) {
+    // Sweep the beam toward the enemy nearest the ship (in the dark with nothing about: a slow sweep); focus on it.
+    const l = (state.searchlights || []).find((q) => q.n === p.lock);
+    if (!l) return;
+    const sx = 800;
+    const sy = 470 - state.ship.alt;
+    const pitch = state.ship.pitch || 0;
+    let best = null;
+    for (const t of [...state.litTargets, ...state.dimTargets]) {
+      const a = Math.atan2(t.y - l.ey, t.x - l.ex) - pitch;
+      if (Math.abs(angleDiff(a, l.home)) > l.arc) continue;
+      const d = Math.hypot(t.x - sx, t.y - sy);
+      if (d < 2600 && (!best || d < best.d)) best = { a, d };
+    }
+    const dark = darkTarget(state) > 0.3;
+    p.gunIdle = best || dark ? 0 : (p.gunIdle || 0) + dt;
+    const a = best ? best.a : l.home + Math.sin(performance.now() / 1800 + p.phase) * l.arc * 0.8;
+    if (best || dark) {
+      p.jx = Math.cos(a);
+      p.jy = Math.sin(a);
+    }
+    p.fire = !!best && Math.abs(angleDiff(best.a, l.aim)) < 0.15; // (hold Action: focus the beam on it)
   } else if (p.lock === 'Bomb Bay') {
     // Drop when the aiming ring sits on a turret or building; leave when there's nothing to bomb.
     const aim = state.bombBay.aim;

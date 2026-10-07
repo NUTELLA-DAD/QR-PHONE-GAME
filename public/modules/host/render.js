@@ -20,6 +20,7 @@ import { createBackgroundArt } from './backgroundArt.js';
 import { loadTextures } from './textureArt.js';
 import { envIdOf } from './environments.js';
 import { createSpotterArt } from './spotterArt.js';
+import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
 
 export function createRenderer({ ctx, state, canvas }) {
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
@@ -50,6 +51,7 @@ export function createRenderer({ ctx, state, canvas }) {
   };
 
   const drawShip = createShipArt({ ctx, state, ink, rrect, sprites });
+  const searchlightArt = createSearchlightArt({ ctx, state, ink });
   const threatArt = createThreatArt({ ctx, state, ink, sprites });
   const hookArt = createHookArt({ ctx, state, ink });
   const skyArt = createSkyArt({ ctx, state });
@@ -1796,7 +1798,9 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.translate(-px, -py);
     }
     const drawShipAndCrew = () => {
+      searchlightArt.drawBellyPod(); // (under the hull: the ladder and outrigger draw over it)
       drawShip(time / 1000);
+      searchlightArt.drawLamps(time / 1000); // the two brass searchlights (also records where the beams start)
       lap('ship');
       // Close-call warnings: red chevrons on the hull pointing at nearby rock.
       for (const n of (state.course && state.course.near) || []) {
@@ -1904,6 +1908,8 @@ export function createRenderer({ ctx, state, canvas }) {
     drawStorm(width, height, view, time / 1000);
     envArt.worldFront(view, width, height, time / 1000); // snow, blizzard haze, embers, smoke
     lap('effects');
+    searchlightArt.draw(view, width, height, time / 1000); // darkness with light cut out, beams, lit-target brackets, glowing eyes
+    lap('dark');
 
     // Screen overlay on a fixed 1600x900 stage.
     const scale = Math.min(width / config.W, height / config.H);

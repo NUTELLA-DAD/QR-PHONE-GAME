@@ -246,7 +246,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     } else {
       let best = -1;
       P.forEach((p, i) => {
-        if (p.id === 'nest' || p.id === 'pod' || p.id === 'hangar') return;
+        if (p.id === 'nest' || p.id === 'pod' || p.id === 'hangar' || p.id === 'lamp') return;
         if (best < 0 || Math.abs(p.y - sy) < Math.abs(P[best].y - sy)) best = i;
       });
       b.kind = 'deck';

@@ -11,7 +11,7 @@ export function createControllerUI({ network }) {
     ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['Close valve', '🚱'], ['Open valve', '🚰'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
     ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'],
-    ['Take Helm', '☸️'], ['Take Boiler', '🔥'], ['Take', '🎯'],
+    ['Take Nest Searchlight', '🔦'], ['Take Belly Searchlight', '🔦'], ['FOCUS', '🔦'], ['Take Helm', '☸️'],['Take Boiler', '🔥'], ['Take', '🎯'],
     ['FIRE', '💥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
   ];
   const CARRY = { sword: '🗡️ Sword', hammer: '🔨 Hammer', extinguisher: '🧯 Extinguisher', ammo: '📦 Ammo', coal: '⚫ Coal', hookshot: '🪝 Hookshot' };
@@ -173,6 +173,7 @@ export function createControllerUI({ network }) {
           lookout: 'Keep watch! Arrows on the TV show what is coming from off screen.',
           hijack: 'You hijacked a fighter! KICK THE PILOT: tap Action 3 times (or hold it). Then: stick steers, guns fire by themselves, LEAVE bails out with a parachute.',
           escort: 'You are flying the escort fighter! Point the stick where to fly - let go and she circles the ship. Her guns fire by themselves at anything in front. LEAVE flies her home.',
+          light: 'Stick sweeps the beam. HOLD the button to focus it. Anything in the light takes extra damage and is easy to hit - and in the dark it lets the crew see!',
           coil: 'Aim with the stick, HOLD to charge the coil (uses lots of steam), let go to fire a giant bolt!',
           shield: 'Point the stick to swing the glowing shield round the ship - it blocks bullets, bats and rockets!',
           bombbay: 'Watch the red ring on the TV - press DROP when it is on a gun or building. Needs ammo crates!',
