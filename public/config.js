@@ -1173,11 +1173,12 @@ export const config = {
   BACKGROUNDS: {
     ENABLED: true,
     // How fast each strip slides past, as a share of the ship's speed (bigger = nearer). Same idea as the drawn ridges.
-    PARALLAX: { far: 0.02, mid: 0.05, near: 0.1 },
+    PARALLAX: { clouds: 0.01, far: 0.02, mist: 0.035, mid: 0.05, near: 0.1 },
     // The strip is drawn this much taller than the screen so it can shift up and down a little with the camera.
     OVERSCAN: 1.1,
     // Each strip sits along the bottom of the screen: its height (share of the screen) and how opaque it is.
-    LAYERS: { far: { HEIGHT: 0.6, ALPHA: 0.9 }, mid: { HEIGHT: 0.42, ALPHA: 1 }, near: { HEIGHT: 0.28, ALPHA: 1 } },
+    // clouds hang from TOP; DRIFT = pixels per second they move on their own (minus = leftwards).
+    LAYERS: { clouds: { TOP: 0, HEIGHT: 0.55, ALPHA: 1, DRIFT: 12 }, far: { HEIGHT: 0.6, ALPHA: 0.9 }, mist: { HEIGHT: 0.5, ALPHA: 0.8, DRIFT: -20 }, mid: { HEIGHT: 0.42, ALPHA: 1 }, near: { HEIGHT: 0.28, ALPHA: 1 } },
     // Cave texture: world units tall (the picture is scaled to this), how fast it follows the camera, and a dark wash over it (0-1).
     CAVE: { HEIGHT: 900, PARALLAX: 0.5, DIM: 0.25 },
   },

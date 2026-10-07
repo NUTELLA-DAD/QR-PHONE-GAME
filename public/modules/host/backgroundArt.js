@@ -9,7 +9,7 @@ import { config } from '../../config.js';
 const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const wrap = (v, span) => ((v % span) + span) % span;
 const report = (e) => { const list = (globalThis.gameErrors = globalThis.gameErrors || []); if (list.length < 50) list.push('background: ' + (e && e.message)); };
-const KINDS = ['sky', 'far', 'mid', 'near', 'cave'];
+const KINDS = ['sky', 'clouds', 'far', 'mist', 'mid', 'near', 'cave'];
 
 export function createBackgroundArt({ ctx, state }) {
   const imgs = {}; // 'env/kind' -> image
@@ -25,8 +25,8 @@ export function createBackgroundArt({ ctx, state }) {
     const files = {};
     const rank = (f) => (/\.png$/i.test(f) ? 3 : /\.webp$/i.test(f) ? 2 : /\.jpe?g$/i.test(f) ? 1 : 0);
     for (const file of list) {
-      const m = file.match(/^([a-z0-9_-]+)\/(sky|far|mid|near|cave)\.(png|webp|jpe?g|svg)$/i);
-      if (!m) continue;
+      const m = file.match(/^([a-z0-9_-]+)\/([a-z]+)\.(png|webp|jpe?g|svg)$/i);
+      if (!m || !KINDS.includes(m[2].toLowerCase())) continue; // (only the layer names the game knows)
       const key = m[1].toLowerCase() + '/' + m[2].toLowerCase();
       if (!files[key] || rank(file) > rank(files[key])) files[key] = file;
     }
@@ -55,7 +55,7 @@ export function createBackgroundArt({ ctx, state }) {
   const on = () => config.BACKGROUNDS && config.BACKGROUNDS.ENABLED;
   const get = (env, kind) => (on() ? imgs[env + '/' + kind] || null : null);
   // True if this environment has any painted sky or strip (the cave texture alone doesn't count).
-  const has = (env) => !!(get(env, 'sky') || get(env, 'far') || get(env, 'mid') || get(env, 'near'));
+  const has = (env) => !!(get(env, 'sky') || get(env, 'clouds') || get(env, 'far') || get(env, 'mist') || get(env, 'mid') || get(env, 'near'));
 
   // A tileable strip along the bottom of the screen (its height a share of the screen's, per layer),
   // scrolling at `f` of the ship's travel. Far layers sit lower and paler so the sky and the action read.
@@ -67,11 +67,14 @@ export function createBackgroundArt({ ctx, state }) {
     const h = height * share * over;
     const tw = Math.max(1, Math.round((img.naturalWidth * h) / img.naturalHeight));
     const s = height / config.H;
-    const shift = (num(view.scroll) + num(view.cx)) * f * s;
+    // DRIFT (pixels per second at TV size) moves clouds and mist on their own, whatever the ship does.
+    const drift = (num(performance.now()) / 1000) * num(L.DRIFT, 0) * s;
+    const shift = (num(view.scroll) + num(view.cx)) * f * s - drift;
     // Camera high = picture shifts down a little, low = up (inside the spare height).
     const v = Math.max(-1, Math.min(1, (num(view.cy, config.H / 2) - config.H / 2) / config.H));
     const spare = h - height * share;
-    const y = Math.round(height - h + spare * (0.5 + v * 0.5));
+    // Bottom-anchored by default; TOP (share of the screen) hangs a layer from there instead (clouds).
+    const y = L.TOP != null ? Math.round(height * num(L.TOP, 0) - spare * (0.5 - v * 0.5)) : Math.round(height - h + spare * (0.5 + v * 0.5));
     let x = -Math.floor(wrap(shift, tw));
     const a = ctx.globalAlpha;
     ctx.globalAlpha = a * Math.max(0, Math.min(1, num(L.ALPHA, 1)));
@@ -92,7 +95,9 @@ export function createBackgroundArt({ ctx, state }) {
         const h = sky.naturalHeight * k;
         ctx.drawImage(sky, (width - w) / 2, (height - h) / 2, w, h);
       } else if (fallback) fallback();
-      for (const kind of ['far', 'mid', 'near']) {
+      // Clouds and mist drift on their own (DRIFT), as well as sliding past with the ship.
+      // Back to front: clouds, far, mist, mid, near.
+      for (const kind of ['clouds', 'far', 'mist', 'mid', 'near']) {
         const img = get(env, kind);
         if (img) strip(img, width, height, view, num(config.BACKGROUNDS.PARALLAX[kind], 0.05), kind);
       }

@@ -29,7 +29,7 @@ app.get('/api/sprites', (q, r) => {
   walk(SPRITES, '');
   r.json(found);
 });
-// Painted backgrounds: art/backgrounds/<env>/<sky|far|mid|near|cave>.png (also .webp/.jpg/.svg), listed as "env/file".
+// Painted backgrounds: art/backgrounds/<env>/<sky|clouds|far|mist|mid|near|cave>.png (also .webp/.jpg/.svg), listed as "env/file".
 app.get('/api/backgrounds', (q, r) => {
   const found = [];
   const root = path.join(__dirname, 'art', 'backgrounds');
