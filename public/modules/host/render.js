@@ -915,7 +915,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.font = '700 26px Georgia';
     ctx.fillText(sc.rows.length ? 'Crew awards' : 'Nobody did much this mission... next time!', 800, 228);
     const G = sc.gain || {};
-    const names = { kills: 'enemies', outposts: 'outposts', gunships: 'gunships', boss: 'boss', mission: 'mission bonus' };
+    const names = { kills: 'enemies', outposts: 'outposts', gunships: 'gunships', boss: 'boss', rescue: 'survivors', mission: 'mission bonus' };
     ctx.fillStyle = '#8a5a00';
     ctx.font = '900 26px Georgia';
     ctx.fillText(`Salvage +${sc.gained} (${Object.keys(G).map((k) => names[k] + ' ' + G[k]).join(', ')})   -   total ${sc.total}`, 800, 775 - (state.newRecord ? 45 : 0));
@@ -1758,6 +1758,7 @@ export function createRenderer({ ctx, state, canvas }) {
     const top = view.cy - height / 2 / view.zoom;
     const vw = width / view.zoom;
     const vh = height / view.zoom;
+    const rainWind = (state.env && state.env.wind ? state.env.wind : 0) * (config.ENVIRONMENTS.storm.RAIN.WIND_SLANT);
     ctx.strokeStyle = `rgba(200,215,230,${0.45 * w.storm})`;
     ctx.lineWidth = 3 / view.zoom * 0.6;
     ctx.beginPath();
@@ -1766,7 +1767,7 @@ export function createRenderer({ ctx, state, canvas }) {
       const x = left + ((i * 937.13 + time * 900) % (vw + 400)) - 200;
       const y = top + ((i * 613.7 + time * 2600 + i * 31) % (vh + 200)) - 100;
       ctx.moveTo(x, y);
-      ctx.lineTo(x - 30, y + 90);
+      ctx.lineTo(x - 30 + rainWind, y + 90); // (a gust slants the rain)
     }
     ctx.stroke();
     if (w.bolt) {
@@ -1843,6 +1844,7 @@ export function createRenderer({ ctx, state, canvas }) {
       }
       drawGuns();
       envArt.drawIce(); // frost: ice crusts on the gasbag, top deck and guns
+      envArt.drawShip(); // storm rods, sea pump, winch and flood water
       drawGunship(time / 1000);
       drawHazards(time / 1000);
       threatArt.drawBombs(time / 1000);

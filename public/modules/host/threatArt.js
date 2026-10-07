@@ -513,7 +513,8 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       ctx.rotate(p.heading || 0);
       if (Math.cos(p.heading || 0) < 0) ctx.scale(1, -1); // keep the wheels down
       ctx.scale(1.3, 1.3 * (1 - 0.45 * Math.min(1, Math.abs(p.bank) || 0))); // banking squashes her
-      biplane(time, '#b9b1a0', '#b0413e');
+      const sf = state.course && envOf(state).strafer; // storm riders: recoloured dogfighters
+      biplane(time, sf ? sf.body : '#b9b1a0', sf ? sf.trim : '#b0413e');
       ctx.restore();
     }
   };

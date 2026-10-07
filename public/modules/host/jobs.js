@@ -14,8 +14,8 @@ const GUN_NAMES = Object.keys(L.gunMounts);
 const PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
 const stationNamed = (n) => L.stations.find((s) => s.n === n);
 const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer' };
-export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0' };
-const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL' };
+export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0' };
+const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL' };
 
 // Name of the room (or deck) at a spot, for the label.
 const roomName = (d, x) => {
@@ -41,6 +41,10 @@ export function createJobFinder(state) {
     for (const h of state.breaches) add('hole', h, h.d, h.x);
     for (const h of state.gasHoles || []) add('gas', h, h.d, h.x);
     for (const c of state.icing || []) if (c.lvl >= config.ENVIRONMENTS.frost.ICE.JOB_AT) add('ice', c, c.d, c.x, {}, c.gun ? `ICE on ${c.gun}` : c.area === 'gasbag' ? 'ICE on the gasbag' : 'ICE on the top deck');
+    // Storm Front / Sunken Sea (envStormSea.js): a charging bolt wants a hand on a rod; flooding wants the bilge pump; a survivor on the rope wants the winch.
+    if (state.stormJob && state.stormJob.charge) for (const r of state.stormJob.rods) add('rod', r, r.d, r.x, {}, 'HOLD A LIGHTNING ROD!');
+    if (state.sea && state.sea.pump && state.sea.flood > config.ENVIRONMENTS.sea.FLOOD.JOB_AT) add('pump', state.sea.pump, state.sea.pump.d, state.sea.pump.x, {}, 'PUMP OUT THE BILGE!');
+    if (state.sea && state.sea.winch) add('winch', state.sea.winch, state.sea.winch.d, state.sea.winch.x, {}, 'WINCH UP THE SURVIVOR!');
     for (const b of state.bats || []) if (b.latched && b.landed && b.hp > 0) add('swat', b, b.d, b.lx);
     const mods = state.modules || [];
     for (const m of mods) {

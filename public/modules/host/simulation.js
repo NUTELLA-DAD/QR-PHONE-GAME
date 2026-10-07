@@ -133,6 +133,9 @@ export function createSimulation() {
   const PICKUPS = [...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
   const LOCKABLE = (name) => name === 'Helm' || name === 'Lookout' || name === 'Bomb Bay' || name === 'Deflector' || name === 'Lightning Coil' || isEscortStation(name) || !!state.GUNS[name];
 
+  // Sunken Sea: crew on the lower decks wade slowly while the ship is flooded.
+  const wadeMul = (p) => (p.d != null && PLATFORMS[p.d] && PLATFORMS[p.d].y >= 790 && state.sea && state.sea.flood > 0 ? 1 - state.sea.flood * config.ENVIRONMENTS.sea.FLOOD.SLOW_CREW : 1);
+
   // What the Action button does for this player right now (or null).
   // hold = keep the button held to make progress; otherwise a tap does it.
   const interaction = (player, station) => {
@@ -145,6 +148,14 @@ export function createSimulation() {
     if (boarding) return boarding;
     // Standing over the open bomb bay doors: jump out (parachute). Not while carrying ammo - that loads the bombs.
     if (!player.bot && player.d === BAY_D && tool !== 'ammo' && Math.abs(player.x - SHIP_LAYOUT.bombBay.jumpX) < 40) return { type: 'jump', label: 'Jump!' };
+    // Storm Front: while a bolt is charging, a lightning rod in reach comes first (hold Action = grounded).
+    const rod = state.stormJob.charge && state.stormJob.rods.find((o) => here(o, 75));
+    if (rod) return { type: 'rod', obj: rod, hold: true, time: 1, label: 'HOLD THE ROD!' };
+    // Sunken Sea: the rescue winch in the bomb bay (a survivor is on the rope) and the bilge pump.
+    const wi = state.sea.winch;
+    if (wi && tool !== 'ammo' && here(wi, 75)) return { type: 'winch', obj: wi.obj, hold: true, time: 1, label: state.sea.hook === wi.obj ? 'WINCH UP THE SURVIVOR!' : 'Stand by the winch' };
+    const pu = state.sea.pump;
+    if (pu && state.sea.flood > 0.01 && here(pu, 75)) return { type: 'pump', obj: pu, hold: true, time: 1, label: 'Pump out the bilge' };
     const bomb = state.bombs.find((o) => here(o, 60));
     if (bomb) return { type: 'defuse', obj: bomb, hold: true, time: config.RAIDERS.DEFUSE_TIME, label: 'Defuse bomb' };
     const fire = state.fires.find((o) => here(o, 70));
@@ -606,6 +617,11 @@ export function createSimulation() {
       state.run.kills += d;
       addSalvage(d * SV.PER_KILL, 'kills');
     }
+    if (state.rescueAward) { // Sunken Sea survivors winched aboard (envStormSea.js)
+      addSalvage(state.rescueAward * SV.RESCUE, 'rescue', 'Survivor rescued!');
+      state.run.rescued = (state.run.rescued || 0) + state.rescueAward;
+      state.rescueAward = 0;
+    }
     const map = state.course && state.course.map;
     if (map !== watch.map) {
       watch.map = map;
@@ -905,7 +921,7 @@ export function createSimulation() {
   const coil = createCoil({ state, puff, credit });
   const gunship = createGunship({ state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) });
   const weather = createWeather({ state, impact, puff });
-  const env = createEnvironment({ state, puff }); // ice, thermals, blizzards (rules in environments.js)
+  const env = createEnvironment({ state, puff, impact, damageHull }); // ice, thermals, blizzards (rules in environments.js)
   const air = createAirborne({ state, puff, phoneFx });
   // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
   // Every deck of hers is a landing surface (she can have up to 4 stepped decks; the deck numbers run left to right as she is now).
@@ -1117,7 +1133,7 @@ export function createSimulation() {
           if (air.step(player, dt)) air.grab(player); // free flight (off a deck end, over the rail, or thrown); may catch a ladder
         } else if (player.air) {
           // Steer (a bit less than on the ground), no ladders while airborne.
-          (player.onGunship ? gunship.walk : moveWalker)(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED);
+          (player.onGunship ? gunship.walk : moveWalker)(player, (player.jx || 0) * M.JUMP_AIR_CONTROL, 0, dt, M.WALK_SPEED * wadeMul(player));
           player.vy -= M.JUMP_GRAVITY * dt;
           player.jz += player.vy * dt;
           if (player.onGunship || !air.edgeCheck(player, dt, true)) {
@@ -1134,7 +1150,7 @@ export function createSimulation() {
         } else if (player.onGunship) {
           gunship.walk(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED); // aboard a gunship she carries them
         } else {
-          moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED, player.conn != null && !player.bot && Math.abs(player.jy || 0) > 0.9 ? config.AIR.CLIMB_FAST : 1);
+          moveWalker(player, player.jx || 0, player.jy || 0, dt, M.WALK_SPEED * wadeMul(player), player.conn != null && !player.bot && Math.abs(player.jy || 0) > 0.9 ? config.AIR.CLIMB_FAST : 1);
           air.edgeCheck(player, dt, false); // walking off the end of an outside deck
         }
         if (!player.fly && !player.onGunship) air.standing(player, dt);
@@ -1151,7 +1167,10 @@ export function createSimulation() {
               stat(player, 'repairs');
               pop(state, object.pos.x, object.pos.y - 50 - state.ship.alt, 'repair', '#8fe388', 0.8);
             }
-          } else {
+          } else if (act.type === 'rod') env.stormSea.rodHold(object);
+          else if (act.type === 'pump') env.stormSea.pumpWork(dt);
+          else if (act.type === 'winch') env.stormSea.winchWork(object, dt);
+          else {
             object.worked = true;
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
