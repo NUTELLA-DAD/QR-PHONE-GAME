@@ -1,0 +1,156 @@
+// Full-voyage bot simulation. Plays whole voyages (8 stops) with bot crew and reports how far each got and why it died.
+// Usage: node tools/voyagesim.mjs [--runs 10] [--difficulty normal] [--bots 8] [--topup] [--maxmin 45] [--stall 8] [--seed 1] [--verbose]
+//  natural mode (default): the run ends on a wreck or victory; the cause of the wreck is reported.
+//  --topup: the hull is kept full so the run cannot end; reports STALLS (no stop reached for --stall minutes).
+//  --runs N > 1 launches N child processes (seeds seed..seed+N-1, 4 at a time) and prints a table.
+import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+
+const args = { runs: 1, difficulty: 'normal', bots: 8, topup: false, maxmin: 45, seed: 1, verbose: false, child: false, trace: 0, dump: 0, stall: 8 };
+const argv = process.argv.slice(2);
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === '--help' || a === '-h') { console.log('node tools/voyagesim.mjs [--runs 10] [--difficulty easy|normal|hard] [--bots 8] [--topup] [--maxmin 45] [--stall 8] [--seed 1] [--verbose]'); process.exit(0); }
+  else if (a === '--topup' || a === '--verbose' || a === '--child') args[a.slice(2)] = true;
+  else if (a.startsWith('--') && a.slice(2) in args) { const v = argv[++i]; args[a.slice(2)] = typeof args[a.slice(2)] === 'number' ? Number(v) : v; }
+  else { console.error('Unknown option ' + a); process.exit(2); }
+}
+
+if (args.runs > 1 && !args.child) {
+  const me = new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  const rows = [];
+  const seeds = [];
+  for (let i = 0; i < args.runs; i++) seeds.push(args.seed + i);
+  const runOne = (seed) => new Promise((res) => {
+    const a = [me, '--child', '--seed', String(seed), '--difficulty', args.difficulty, '--bots', String(args.bots), '--maxmin', String(args.maxmin), "--stall", String(args.stall)];
+    if (args.topup) a.push('--topup');
+    const c = spawn(process.execPath, a);
+    let out = '';
+    c.stdout.on('data', (d) => (out += d));
+    c.on('close', () => { const l = out.split('\n').find((x) => x.startsWith('RESULT ')); res(l ? JSON.parse(l.slice(7)) : { seed, error: out.slice(-300) }); });
+  });
+  let next = 0;
+  await Promise.all(Array.from({ length: 4 }, async () => { while (next < seeds.length) { const s = seeds[next++]; rows.push(await runOne(s)); } }));
+  rows.sort((a, b) => a.seed - b.seed);
+  console.log(`--- voyagesim ${args.topup ? 'TOP-UP' : 'NATURAL'} ${args.difficulty}, ${args.bots} bots, ${args.runs} runs ---`);
+  for (const r of rows) {
+    if (r.error) { console.log(`seed ${r.seed}: ERROR ${r.error}`); continue; }
+    console.log(`seed ${String(r.seed).padStart(3)}: stops ${r.done}/${r.total} ${r.victory ? 'VICTORY' : r.timeout ? 'TIMEOUT' : 'wreck'} ${(r.minutes || 0).toFixed(1)}min${args.topup ? ` stalls ${r.stalls} [${(r.stallInfo || []).join("; ")}]` : ""} | ${r.cause}`);
+  }
+  const ok = rows.filter((r) => !r.error);
+  const ds = ok.map((r) => r.done).sort((a, b) => a - b);
+  const med = ds.length ? (ds[(ds.length - 1) >> 1] + ds[ds.length >> 1]) / 2 : 0;
+  console.log(`median stops ${med}, mean ${(ds.reduce((a, b) => a + b, 0) / (ds.length || 1)).toFixed(1)}, victories ${ok.filter((r) => r.victory).length}/${ok.length}, timeouts ${ok.filter((r) => r.timeout).length}${args.topup ? `, runs with stalls ${ok.filter((r) => r.stalls).length}` : ''}, errors ${ok.reduce((a, r) => a + (r.errors || 0), 0)}`);
+  const causes = {};
+  for (const r of ok) for (const k of r.flags || []) causes[k] = (causes[k] || 0) + 1;
+  console.log('wreck flags: ' + Object.entries(causes).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(', '));
+  process.exit(0);
+}
+
+globalThis.window ??= globalThis;
+const store = new Map();
+globalThis.localStorage ??= { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+globalThis.requestAnimationFrame ??= (f) => setTimeout(f, 16);
+{
+  let s = args.seed >>> 0;
+  Math.random = () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  Date.now = () => 1700000000000 + args.seed;
+}
+const realNow = performance.now.bind(performance);
+let simClock = 0;
+performance.now = () => simClock;
+
+const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', 'public');
+const load = (p) => import(pathToFileURL(path.join(root, p)).href);
+const { config } = await load('config.js');
+const { SHIP_LAYOUT } = await load('shipLayout.js');
+const { createSimulation } = await load('modules/host/simulation.js');
+const maps = await load("modules/host/maps.js");
+const course = await load("modules/host/course.js");
+const sim = createSimulation();
+const state = sim.state;
+state.difficulty = args.difficulty;
+const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
+const e = SHIP_LAYOUT.boarderEntryPoints;
+for (let i = 0; i < args.bots; i++) {
+  const id = 'bot' + Math.random();
+  state.players[id] = { id, bot: true, name: 'Bot' + (i + 1), species: config.CREW_SPECIES[(Math.random() * config.CREW_SPECIES.length) | 0], color: colors[(Math.random() * colors.length) | 0], x: e[0].x + Math.random() * (e[1].x - e[0].x), y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
+}
+sim.castOff();
+
+const dt = 1 / 60;
+const maxSteps = Math.round(args.maxmin * 3600);
+let errorCount = 0;
+let lastCol = 0, lastProgress = 0, stalls = 0, stalled = false;
+let snapshot = null;
+const rolling = { helmEmpty: 0, flying: 0, br: 0, fires: 0, gh: 0, crew: {}, n: 0 };
+const snap = () => {
+  const players = Object.values(state.players);
+  const helmMan = players.find((q) => q.lock === 'Helm');
+  const helmMod = (state.modules || []).find((m) => m.name === 'Helm');
+  const broken = (state.modules || []).filter((m) => m.broken).map((m) => m.name);
+  return {
+    stop: state.run ? state.run.stopId : null, mk: state.course && state.course.map ? state.course.map.kind + (state.course.map.open ? ':' + state.course.map.outposts.filter((o) => o.done).length + '/' + state.course.map.outposts.length : '') + ' spd ' + state.ship.speed.toFixed(2) : null,
+    env: state.env && state.env.id,
+    helmManned: !!helmMan, helmBroken: !!(helmMod && helmMod.broken),
+    koCount: players.filter((q) => q.ko > 0).length,
+    gas: Math.round(state.ship.gas), holes: (state.gasHoles || []).length, breaches: state.breaches.length,
+    press: Math.round(state.ship.press), fuel: Math.round(state.ship.fuel), leaks: +(((state.steamParts && state.steamParts.leaks) || 0)).toFixed(1),
+    boarders: state.boarders.length, fires: state.fires.length, broken, alt: Math.round(state.ship.alt),
+    flood: state.sea ? +state.sea.flood.toFixed(2) : 0,
+    clog: Math.max(0, ...(state.clogs || []).map((c) => c.lvl)).toFixed(2), o2: state.env && state.env.o2 != null ? +state.env.o2.toFixed(2) : null,
+  };
+};
+const stallInfo = [];
+const dmg = { fire: 0, breach: 0, direct: 0 }; // hull points lost to fires, hull holes and everything else
+let result = null;
+for (let step = 1; step <= maxSteps && !result; step++) {
+  try {
+    simClock += dt * 1000;
+    if (args.topup && state.phase === 'flying' && !state.ship.down) state.ship.hull = 100;
+    // remember the recent past so we can describe the build-up to a wreck
+    if (state.phase === 'flying' && !state.ship.down && step % 30 === 0) { snapshot = snap(); rolling.flying++; rolling.br += snapshot.breaches; rolling.fires += snapshot.fires; rolling.gh += snapshot.holes; for (const q of Object.values(state.players)) { const k = q.ko > 0 ? "ko" : q.lock ? "station" : q.botJob ? (["fire", "patch", "repair", "swat", "valve", "ice", "unclog", "oxygen", "vent", "coal", "ammo", "revive"].includes(q.botJob.kind) ? "chore" : q.botJob.kind === "fight" ? "fight" : "other") : "idle"; rolling.crew[k] = (rolling.crew[k] || 0) + 1; rolling.n++; } if (!snapshot.helmManned) rolling.helmEmpty++; }
+    const h0 = state.ship.hull, nf = state.fires.length, nb = state.breaches.length, fl = state.phase === 'flying' && !state.ship.down;
+    sim.update(dt);
+    if (fl && state.ship.hull < h0) { const dd = config.DIFFICULTY[state.difficulty].damage; const pf = nf * 0.35 * dd * 2 * dt, pb = nb * 0.5 * dd * 2 * dt, drop = h0 - state.ship.hull; dmg.fire += pf; dmg.breach += pb; dmg.direct += Math.max(0, drop - pf - pb); }
+  } catch (err) { errorCount++; if (errorCount < 4) console.error('ERR', err && err.stack); }
+  if (state.phase === 'lobby' && !state.runEnd && !state.wreck) sim.castOff();
+  const stopId = state.run && state.run.stopId;
+  const col = stopId ? Number(stopId.split('.')[0]) : 0;
+  if (col !== lastCol && (args.verbose || args.trace)) console.error(`=== stop ${stopId} (${state.env && state.env.id}, ${state.course && state.course.kind}) at ${(step / 3600).toFixed(1)} min, hull ${Math.round(state.ship.hull)} salvage ${state.run.salvage} bought [${state.run.bought.join(",")}]`);
+  if (col !== lastCol) { lastCol = col; lastProgress = step; stalled = false; }
+  if (args.topup && step - lastProgress > args.stall * 3600 && !stalled) { stalls++; stalled = true; stallInfo.push(snap().stop + ' ' + snap().env + ' ' + snap().mk + ' g' + snap().gas + ' br' + snap().breaches + ' f' + snap().fires); if (args.verbose) console.error('STALL at', JSON.stringify(snap())); }
+  if (args.trace && step % (args.trace * 60) === 0) console.error(`t=${(step / 3600).toFixed(2)} dist ${Math.round(state.course.dist)} alt ${Math.round(state.ship.alt)} spd ${state.ship.speed.toFixed(2)} vy ${Math.round(state.ship.vy)} hull ${Math.round(state.ship.hull)} fires ${state.fires.length} br ${state.breaches.length} gh ${(state.gasHoles || []).length} bd ${state.boarders.length} KO ${Object.values(state.players).filter((q) => q.ko > 0).length} press ${Math.round(state.ship.press)} gas ${Math.round(state.ship.gas)} jobs ${Object.entries(Object.values(state.players).reduce((o, q) => { const k = q.ko > 0 ? 'KO' : q.lock ? 'S:' + q.lock : q.botJob ? q.botJob.kind : 'idle'; o[k] = (o[k] || 0) + 1; return o; }, {})).map(([k, v]) => k + v).join(' ')}`);
+  if (args.dump && step > args.dump * 3600 && step < args.dump * 3600 + 1200 && step % 120 === 0) console.error("POS " + Object.values(state.players).map((q) => q.name + ":" + (q.botJob && q.botJob.kind) + "@" + q.d + "/" + Math.round(q.x) + (q.carry ? "(" + q.carry + ")" : "")).join(" "));
+  if (args.dump && step === args.dump * 3600) { const c0 = state.course, m0 = c0.map, sx0 = c0.dist + 800, sy0 = 500 - state.ship.alt; const sg = c0.stationGun; const stc = sg && maps.stationCell(m0, { x: sg.mx, y: sg.my - 20 }); console.error("HELM", JSON.stringify({ gasValve: state.gasValve, helmP: Object.values(state.players).filter((q) => q.lock === "Helm").map((q) => ({ gas: q.gas, jx: q.jx, jy: q.jy })), mods: (state.modules || []).filter((m) => ["Helm", "Lift", "Boiler", "Helm Pipe", "Lift Pipe"].includes(m.name)).map((m) => [m.name, m.broken, Math.round(m.hp), m.open]), env: state.env, lava: state.lava, ship: state.ship })); console.error("ROUTE", JSON.stringify({ scraping: c0.scraping, contact: c0.lastContact, stuckT: c0.stuckT, unstick: c0.unstick, unstuck: c0.unstuck, stc, fitAt: stc && m0.fit[stc.j * m0.W + stc.i], sx0, sy0, dNow: maps.distToGoal(m0, sx0, sy0), p: maps.routeAhead(m0, sx0, sy0, 7), plan: course.pilotPlan(state, 2.5, 0.55), goal: m0.goal, W: m0.W, H: m0.H, C: m0.CELL, cellDist: m0.dist[Math.floor(sy0 / m0.CELL) * m0.W + Math.floor(sx0 / m0.CELL)] })); }
+  if (args.dump && step === args.dump * 3600) console.error(JSON.stringify({ boarders: state.boarders, bots: Object.values(state.players).map((q) => ({ n: q.name, d: q.d, x: Math.round(q.x), y: Math.round(q.y), job: q.botJob && q.botJob.kind, carry: q.carry, ko: q.ko, lock: q.lock, onG: q.onGunship })), bats: (state.bats || []).map((b) => ({ k: b.kind, d: b.d, lx: b.lx, hp: b.hp, latched: b.latched, landed: b.landed, x: Math.round(b.x), y: Math.round(b.y) })), gunship: state.gunship && state.gunship.phase, bombBay: state.bombBay, shipBombs: (state.shipBombs || []).length, stationGun: state.course.stationGun, sx: state.course.dist + 800, sy: 500 - state.ship.alt, bayBroken: (state.modules || []).filter((m) => /Bomb/.test(m.name)).map((m) => [m.name, m.broken, m.hp]), ship: state.ship, course: { mapkind: state.course.map && Object.keys(state.course.map), open: state.course.map && state.course.map.open, outposts: state.course.map && state.course.map.outposts && state.course.map.outposts.map((o) => [o.x, o.y, o.done]), unstick: state.course.unstick, dist: state.course.dist, target: state.course.target, done: state.course.done, kind: state.course.kind, lap: state.course.lap }, env: state.env }, (k, v) => (k === 'p' || k === 'obj' ? undefined : v), 1));
+  if (args.verbose && step % 3600 === 0) console.error(`min ${step / 3600} hull ${Math.round(state.ship.hull)} ${JSON.stringify(snap())}`);
+  if (state.runEnd) {
+    const r = state.runEnd;
+    const s = snapshot || snap();
+    const flags = [];
+    if (!r.victory) {
+      if (!s.helmManned) flags.push('helmEmpty');
+      if (s.gas < 25) flags.push('gasLow');
+      if (s.holes >= 4) flags.push('manyHoles');
+      if (s.press < 20) flags.push('noPressure');
+      if (s.leaks > 5) flags.push('steamLeaks');
+      if (s.boarders >= 2) flags.push('raiders');
+      if (s.koCount >= 3) flags.push('crewKO');
+      if (s.fires >= 3) flags.push('fires');
+      if (s.fuel < 10) flags.push('noCoal');
+      if (s.flood > 0.5) flags.push('flooded');
+      if (!flags.length) flags.push('hullShot');
+    }
+    const hp = rolling.flying ? Math.round((100 * rolling.helmEmpty) / rolling.flying) : 0;
+    const avg = (v) => (rolling.flying ? +(v / rolling.flying).toFixed(1) : 0); const crew = Object.fromEntries(Object.entries(rolling.crew).map(([k, v]) => [k, Math.round((100 * v) / rolling.n)]));
+    result = { avg: { br: avg(rolling.br), fires: avg(rolling.fires), gh: avg(rolling.gh), crew }, seed: args.seed, done: r.done, total: r.total, victory: r.victory, minutes: step / 3600, stalls, stallInfo, errors: errorCount, flags,
+      cause: r.victory ? 'flagship down' : `dmg fire ${Math.round(dmg.fire)} breach ${Math.round(dmg.breach)} direct ${Math.round(dmg.direct)} | stop ${r.reached} ${s.env} | helm ${s.helmManned ? 'manned' : s.helmBroken ? 'BROKEN' : 'EMPTY'} (empty ${hp}% of run) gas ${s.gas} holes ${s.holes} press ${s.press} fuel ${s.fuel} leaks ${s.leaks} raiders ${s.boarders} KO ${s.koCount} fires ${s.fires} broken [${s.broken.join(',')}] clog ${s.clog} o2 ${s.o2} flood ${s.flood} [${flags.join(',')}]` };
+  }
+}
+if (!result) {
+  const stopId = state.run.stopId;
+  result = { seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
+}
+console.log('RESULT ' + JSON.stringify(result));

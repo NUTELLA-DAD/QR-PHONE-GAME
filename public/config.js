@@ -464,7 +464,8 @@ export const config = {
     REPAIR_HULL: 40, // full hull, every hole and every broken part
     REPAIR_GAS: 25, // gasbag refilled and holes patched
     REPAIR_COAL: 20, // boiler topped up with coal, guns with shells
-    BOT_CAST_CHANCE: 0.3, // bots: chance to cast off on each round
+    BOT_CAST_CHANCE: 0.12, // bots: chance to cast off on each round
+    BOT_REPAIR_HULL: 85, // bots: buy the full hull repair first when the hull is below this
   },
   // THE VOYAGE: a branching route of stops across the Broken Skies; one run = one voyage.
   VOYAGE: {
@@ -573,6 +574,8 @@ export const config = {
     OPEN_HEIGHT: 50,
     OUTPOSTS: 3, // outposts to destroy on an open-sky map (more later)
     STUCK_AFTER: 25, // seconds without real headway before the pilot plan tries to unstick the ship
+    TOW_AFTER: 40, // seconds wedged where the ship does not fit before a tug hauls it clear
+    UNSTICK_RISE: 450, // the unstick manoeuvre also climbs this far (px) so a ship resting on a ledge lifts off it
     UNSTICK_TIME: 8, // seconds the unstick manoeuvre lasts (back off, then take a longer look ahead)
     KM: 4000, // map pixels shown as one "km" on the TV goal readout
     LENGTH: { network: 1.2, route: 1.15, open: 1.2 }, // length knob per mission type: multiplies the map width (so the flying time)
@@ -581,6 +584,7 @@ export const config = {
     BOMB_RUN_MAN: 2600, // within this distance of the outpost one bot drops everything to man the bomb bay (px)
     BOMB_RUN_STOCK: 4, // ...and keep it stocked to at least this many bombs
     DETOUR: 1.6, // an open map is rebuilt if the way from the start to an outpost (or between outposts) is more than this many times the straight trip (mountains in the way)
+    EASE_EVERY: 3, // an open map that keeps failing the checks is rebuilt one level easier every this many tries (so it always ends up playable)
     STATION_SLACK: 3, // an outpost's hover spot may be at most this many squares lower than planned (else the map is rebuilt)
   },
   // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
@@ -725,6 +729,7 @@ export const config = {
     SCRAPE_BELOW: 25, // grinding along the ground with gas below this, the hull scrapes...
     SCRAPE_DAMAGE: 5, // ...losing this much hull per second (before the difficulty multiplier)
     MAX_HOLES: 8,
+    BALLAST: { BELOW: 4, TO: 56, COOLDOWN: 75 }, // emergency ballast drop: gas below BELOW jumps to TO (a brief hover), at most once per COOLDOWN seconds
     HOLE_CHANCE: 1, // chance a hit on the gasbag punches a hole
   },
   // When the hull gives out the ship breaks apart and the whole game starts over at the mast.
@@ -1116,7 +1121,18 @@ export const config = {
     BOILER_LOW: 55, // start stoking below this pressure
     BOILER_HIGH: 85, // stop stoking above this pressure
     HELM_SPEED: 0.55, // cruising speed the bot helmsman holds (0-1)
-    GAS_EMERGENCY: 3, // this many gasbag holes and patching them jumps ahead of other chores
+    GAS_EMERGENCY: 3, // this many gasbag holes (and the gas running low, or ruin below) and patching them jumps ahead of other chores
+    GAS_LOW: 32, // ...gas below this counts as running low
+    GAS_RUIN: 6, // ...or this many holes is ruin whatever the gas level is
+    GAS_CAP: 3, // at most this many crew patch the gasbag at once
+    FIRE_BLAZE: 3, // this many fires at once is a blaze: putting them out comes before gasbag patching
+    FIRE_CAP: 4, // at most this many crew on fires at once
+    COAL_EMERGENCY: 15, // boiler fuel below this (with pressure not high): stoke it before anything else
+    PRESS_EMERGENCY: 22, // steam below this (with coal not plentiful): same
+    CRITICAL: ['Helm', 'Helm Pipe', 'Boiler', 'Lift', 'Lift Pipe'], // parts the bots rebuild before anything else once they break
+    CHORE_SHARE: 0.6, // at most this share of the crew works on chores (patching, fires, repairs) at once; the rest man stations
+    JOB_HOLD: 2.5, // seconds a bot sticks to a job before it may swap to a more urgent kind (it never swaps to a merely closer job of the same kind)
+    HELM_CALL: 0.7, // chance per think that a crew member leaves a station to take an empty helm
     AMMO_LOW: 10, // fetch ammo when a gun has this many shells or fewer
     AIM_TOLERANCE: 0.12, // fire when aim is within this many radians
     STATION_MIN: 20, // stay at a station at least this long...

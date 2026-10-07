@@ -789,7 +789,12 @@ export function createSimulation() {
     const ok = v.options.map((o, i) => i).filter((i) => !cardOff(v.options[i]) && v.options[i].kind !== 'cast');
     const cast = v.options.findIndex((o) => o.kind === 'cast');
     if (v.kind === 'route') return (Math.random() * v.options.length) | 0;
-    if (!ok.length || Math.random() < SH.BOT_CAST_CHANCE) return cast;
+    if (!ok.length) return cast;
+    // A sensible crew fixes what is badly hurt first: the hull, then the gasbag, then coal and shells.
+    const want = (id) => ok.find((i) => v.options[i].id === id);
+    if (state.ship.hull < SH.BOT_REPAIR_HULL && want('repair-hull') != null) return want('repair-hull');
+    if ((state.gasHoles.length >= 2 || state.ship.gas < 30) && want('repair-gas') != null) return want('repair-gas');
+    if (Math.random() < SH.BOT_CAST_CHANCE) return cast;
     const rep = ok.filter((i) => v.options[i].kind === 'repair');
     if (rep.length && Math.random() < 0.7) return rep[(Math.random() * rep.length) | 0];
     return ok[(Math.random() * ok.length) | 0];
@@ -1418,6 +1423,18 @@ export function createSimulation() {
       state.ship.gas += (pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) + Math.min(0, valve.input) * G.VENT_RATE - G.SEEP - G.LEAK_PER_HOLE * state.gasHoles.length) * dt;
       state.ship.press = Math.max(0, state.ship.press - pumping * G.PUMP_STEAM * dt);
       state.ship.gas = clamp(state.ship.gas, 0, 100);
+      // Emergency ballast: the gasbag is empty and the ship is dropping - the crew cuts loose ballast so she hovers for a
+      // moment (time to patch and pump). Once in a while only; it is a lifeline, not a fix.
+      const BL = G.BALLAST;
+      state.ballastCd = Math.max(0, (state.ballastCd || 0) - dt);
+      if (BL && state.ship.gas < BL.BELOW && state.ballastCd <= 0) {
+        state.ship.gas = BL.TO;
+        state.ship.vy = Math.max(state.ship.vy || 0, 0);
+        state.ballastCd = BL.COOLDOWN;
+        state.ev.warn = 3;
+        state.ev.warnText = 'BALLAST DROPPED! PATCH THE BAG AND PUMP!';
+        shipPuff(800, 700, '#c9a85a', 14);
+      }
     }
     // Lift: above the neutral fill she accelerates up, below it she drops (fast at the extremes).
     // The helm's little trim engine adds a nudge.

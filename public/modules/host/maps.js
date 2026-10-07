@@ -16,7 +16,9 @@ export const SHIP_BOX = { left: -900, right: 870, up: -570, down: 485 };
 export function makeMap(kind, level, rand) {
   let map = null;
   for (let tries = 0; tries < 40; tries++) {
-    map = kind === 'open' ? buildOpenMap(level, rand) : buildMap(kind, level, rand);
+    // (Late-voyage open maps are so crowded with peaks and islands that no layout may pass the checks below; rather than
+    // settle for the last, unplayable try, ease off one level every few failures so a playable map always comes out.)
+    map = kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand) : buildMap(kind, level, rand);
     if (map.startDist >= 1e9) continue;
     if (map.open) {
       // Every outpost must be reachable too.

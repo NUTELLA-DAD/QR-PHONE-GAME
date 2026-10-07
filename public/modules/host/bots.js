@@ -169,17 +169,34 @@ function listJobs(state, bot) {
   const mods = state.modules || [];
   // Nobody at the wheel in flight is the worst emergency of all: someone takes the helm first.
   if (state.phase === 'flying' && !players.some((q) => q.lock === 'Helm') && !mods.some((m) => m.name === 'Helm' && m.broken)) jobs.push({ kind: 'station', obj: 'Helm', max: 1 });
+  // Outpost raid: the bomb bay is how outposts die. Bombs run out while the ship hovers over a gun: someone fetches more, now.
+  const c = state.course;
+  const bombRun = !!(c && c.map && c.map.open && !c.done && c.target && Math.hypot(c.target.x - (c.dist + 800), c.target.y - (500 - state.ship.alt)) < config.MAPS.BOMB_RUN_RANGE);
+  const bombStarved = bombRun && state.bombBay && state.bombBay.bombs <= 0 && !mods.some((m) => m.name === 'Bomb Bay' && m.broken) && Math.hypot(c.target.x - (c.dist + 800), c.target.y - (500 - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN * 2;
+  // The boiler is dying (no coal, or the pressure has collapsed): nothing else works without steam - stoke it right away.
+  const ship = state.ship;
+  if (state.phase === 'flying' && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
+  // The parts everything else hangs on (the helm and its steam pipe, the boiler, the lift): a broken one is fixed first,
+  // otherwise the gasbag can never be pumped up again and the ship just sits there burning.
+  for (const m of mods) if (m.broken && B.CRITICAL.includes(m.name)) jobs.push({ kind: 'repair', obj: m, max: 1, cap: 3, urgent: true });
   // Storm Front: a bolt is charging - one crew member holds a lightning rod (grounds it, the coil may drink it).
   const sj = state.stormJob;
   if (sj && sj.charge && !players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'rod' && !q.lock)) for (const r of sj.rods) jobs.push({ kind: 'rod', obj: r, max: 1 });
-  for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2 });
+  // Raiders: fight them, but never with more than about half the crew (the rest keep the ship going).
+  for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2, cap: Math.max(2, Math.ceil(players.filter((q) => q.bot).length / 2)) });
   // Sunken Sea: pump out a flooded hull (an emergency), winch up a survivor on the rope (a salvage bonus).
   const sea = state.sea;
   if (sea && sea.pump && sea.flood > config.ENVIRONMENTS.sea.FLOOD.JOB_AT) jobs.push({ kind: 'pump', obj: sea.pump, max: 1 });
   if (sea && sea.winch) jobs.push({ kind: 'winch', obj: sea.winch, max: 1 });
   // A gasbag shot full of holes sinks the ship: patching it comes before swatting and repairs.
-  if ((state.gasHoles || []).length >= B.GAS_EMERGENCY) for (const h of state.gasHoles) jobs.push({ kind: 'patch', obj: h, max: 1 });
+  // (Only when the gas is actually running out or the bag is in ruins, and never more than a few hands at once.)
+  const gasHoles = state.gasHoles || [];
+  const gasCrisis = gasHoles.length >= B.GAS_EMERGENCY && (ship.gas < B.GAS_LOW || gasHoles.length >= B.GAS_RUIN);
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
+  if (bombStarved) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 2, cap: 2 });
+  // A real blaze (fires spread and eat the hull) comes before patching holes in the gasbag.
+  if (state.fires.length >= B.FIRE_BLAZE) for (const f of state.fires) jobs.push({ kind: 'fire', obj: f, max: 1, cap: B.FIRE_CAP });
+  if (gasCrisis) for (const h of gasHoles) jobs.push({ kind: 'patch', obj: h, max: 1, cap: B.GAS_CAP });
   // Bats latched on the ship: swat them before they chew holes (bare hands are enough).
   for (const b of state.bats || []) if (b.latched && b.landed && b.hp > 0) jobs.push({ kind: 'swat', obj: b, max: 1 });
   // Vents: open one when the pressure is near the top; close them when it's calm again.
@@ -189,7 +206,8 @@ function listJobs(state, bot) {
   if ((ventWanted || ventCalm) && ventIdx >= 0) jobs.push({ kind: 'vent', obj: L.vents[ventIdx], max: 1 });
   for (const bomb of state.bombs || []) jobs.push({ kind: 'defuse', obj: bomb, max: 1 });
   const fires = state.fires.map((f) => ({ kind: 'fire', obj: f, max: 1 }));
-  const holes = [...state.breaches, ...(state.gasHoles || [])].map((h) => ({ kind: 'patch', obj: h, max: 1 }));
+  const holes = (state.gasHoles || []).map((h) => ({ kind: "patch", obj: h, max: 1 }));
+  const hullHoles = state.breaches.map((h) => ({ kind: "patch", obj: h, max: 1 })); // (each open hull hole costs hull every second: patch them before repairing guns)
   const icy = (state.icing || []).filter((q) => q.lvl >= B.ICE_AT).map((q) => ({ kind: 'ice', obj: q, max: 1 })); // frost: crusts to chip with the hammer
   // Fungal Depths: spores clogging an engine; The Aether: the oxygen tank running low (bare hands, hold Action at the spot).
   const deep = (state.clogs || []).filter((c) => c.lvl >= config.ENVIRONMENTS.fungal.CLOG.BOT_AT).map((c) => ({ kind: 'unclog', obj: c, max: 1 }));
@@ -205,8 +223,8 @@ function listJobs(state, bot) {
   }
   const broken = mods.filter((m) => m.broken).map((m) => ({ kind: 'repair', obj: m, max: 1 }));
   // Use the tool already in hand first.
-  if (bot.carry === 'hammer') jobs.push(...leaks, ...broken, ...holes, ...icy, ...deep, ...fires);
-  else jobs.push(...fires, ...leaks, ...broken, ...holes, ...icy, ...deep);
+  if (bot.carry === "hammer") jobs.push(...hullHoles, ...leaks, ...broken, ...holes, ...icy, ...deep, ...fires);
+  else jobs.push(...fires, ...hullHoles, ...leaks, ...broken, ...holes, ...icy, ...deep);
   for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open && (!leaky(m) || state.ship.press >= B.ENGINEER_PRESS + 25)) jobs.push({ kind: 'valve', obj: m, max: 1 });
   // Stations, most useful first. The vital ones (helm, gas valve, a gun or weapon with a target
   // right now) come before chores like topping up coal or patching dents.
@@ -241,8 +259,6 @@ function listJobs(state, bot) {
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
   // Bombing run coming up (an outpost to destroy is near): bombs are the weapon that matters,
   // so loading the bay comes before topping up the guns.
-  const c = state.course;
-  const bombRun = !!(c && c.map && c.map.open && !c.done && c.target && Math.hypot(c.target.x - (c.dist + 800), c.target.y - (500 - state.ship.alt)) < config.MAPS.BOMB_RUN_RANGE);
   if (bombRun && state.bombBay && state.bombBay.bombs < config.MAPS.BOMB_RUN_STOCK) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 1 });
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   if (!bombRun && state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: 'Bomb Bay', max: 1 });
@@ -253,15 +269,28 @@ function listJobs(state, bot) {
 }
 
 function isEmergency(job) {
-  return job.kind !== 'ammo' && job.kind !== 'station' && job.kind !== 'coal' && job.kind !== 'winch' && !(job.kind === 'repair' && !job.obj.broken);
+  return !!job.urgent || job.kind !== 'ammo' && job.kind !== 'station' && job.kind !== 'coal' && job.kind !== 'winch' && !(job.kind === 'repair' && !job.obj.broken);
 }
 
 function chooseJob(state, bot, bots) {
   const claims = (job) => bots.filter((o) => o !== bot && o.botJob && o.botJob.kind === job.kind && o.botJob.obj === job.obj).length;
-  const jobs = listJobs(state, bot).filter((j) => claims(j) < j.max);
+  // (a job with a cap: no more than that many crew on this KIND of job at once, e.g. patching gasbag holes)
+  const onKind = (job) => bots.filter((o) => o !== bot && o.botJob && o.botJob.kind === job.kind && o.botJob.cap != null).length;
+  // Chores (patching, fires, repairs, swatting...) can take only so many hands: the rest keep the guns manned and the
+  // ship running. Without this a ship full of holes sends the WHOLE crew to patch and nobody shoots back (a death spiral).
+  const CHORE = { fire: 1, patch: 1, repair: 1, swat: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1 };
+  const onChores = bots.filter((o) => o !== bot && !o.lock && !(o.ko > 0) && o.botJob && CHORE[o.botJob.kind] && !o.botJob.urgent).length;
+  const choresFull = state.phase === 'flying' && onChores >= Math.max(3, Math.ceil(bots.length * B.CHORE_SHARE));
+  const cur = bot.botJob;
+  const isCur = (j) => !!cur && j.kind === cur.kind && j.obj === cur.obj;
+  const jobs = listJobs(state, bot).filter((j) => claims(j) < j.max && (j.cap == null || onKind(j) < j.cap) && (isCur(j) || !(choresFull && CHORE[j.kind] && !j.urgent)));
   // Among the most urgent kind, prefer the closest.
   if (!jobs.length) return null;
   const kind = jobs[0].kind;
+  // Stick with the job in hand: without this the crew re-picks the "closest" job every 0.3 s, swaps targets
+  // as they walk, and never actually finishes anything (a fire and a raider can keep eight bots busy for ever).
+  const sticky = jobs.find(isCur);
+  if (sticky && (sticky.kind === kind || sticky.urgent === undefined && performance.now() - (bot.jobSince || 0) < B.JOB_HOLD * 1000) && !(jobs[0].urgent && !sticky.urgent)) return sticky;
   // Walking time (slide poles, ladders and stairs included) to the job, as pixels of walking.
   const dist = (j) => {
     let o = j.obj;
@@ -310,7 +339,8 @@ function operate(p, state, dt) {
     else if (dodge !== null && dodge > lo && dodge < hi) target = dodge;
     else if (ship.alt < lo + 15 || ship.alt > hi - 15) target = plan.target;
     // Sunken Sea: a survivor in the water ahead - dip to rope height (only if the terrain window allows it).
-    const dip = rescueAltitude(state);
+    // (Only while actually flying forward past it: hovering at rope height over a survivor the ship is not moving toward would hold the helm there for ever.)
+    const dip = plan.speed > 0.05 && ship.speed > 0.05 ? rescueAltitude(state) : null;
     if (dip !== null && lo <= hi && dip > lo && dip < hi && (target === null || target === plan.target)) target = dip;
     // (Gentle enough not to overshoot now that she glides with momentum.)
     if (target !== null) p.jy = clamp((ship.alt - target) / 90 + (ship.vy || 0) / 260, -1, 1);
@@ -376,11 +406,21 @@ const PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extin
 
 // Make sure the bot holds a tool; walks to the nearest rack/hook for it if not. True when held.
 function getTool(p, kind, to) {
-  if (p.carry === kind) return true;
+  if (p.carry === kind) {
+    p.rackT = undefined;
+    return true;
+  }
   // (the rack that makes the whole trip - rack, then the job - shortest)
   const cost = (r) => (p.d == null ? 0 : travelTime(p, r.d, r.x) + (to && to.d != null ? travelTime({ d: r.d, x: r.x, conn: null }, to.d, to.x) : 0));
   const rack = PICKUPS.filter((r) => r.kind === kind).sort((a, b) => cost(a) - cost(b))[0];
-  if (steer(p, rack.d, rack.x)) press(p);
+  if (steer(p, rack.d, rack.x)) {
+    press(p);
+    // A hole, fire or hurt module within reach of the rack wins over the rack while we hold the matching tool, so a tap
+    // does nothing (the deadlock that left bots "fighting" with a hammer forever): hold Action to work it away.
+    const now = performance.now();
+    if (p.rackT === undefined) p.rackT = now;
+    else if (now - p.rackT > 1200) p.fire = true;
+  } else p.rackT = undefined;
   return false;
 }
 
@@ -510,7 +550,9 @@ export function updateBot(p, state, dt) {
       if (p.lock === 'Helm' && config.COURSE.ENABLED) p.lockLeft = Math.max(p.lockLeft, 1);
       // A lightning bolt is charging and nobody is on their way to a rod: leave the station (not the helm).
       const rodCall = p.lock !== 'Helm' && state.stormJob && state.stormJob.charge && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9;
-      if (p.lockLeft <= 0 || gunUseless || rodCall || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
+      // Nobody is at the wheel in flight and nobody is on the way: leave the station and take it.
+      const helmCall = p.lock !== 'Helm' && state.phase === 'flying' && !Object.values(state.players).some((q) => q.lock === 'Helm' || (q.botJob && q.botJob.kind === 'station' && q.botJob.obj === 'Helm')) && !(state.modules || []).some((m) => m.name === 'Helm' && m.broken) && Math.random() < B.HELM_CALL;
+      if (p.lockLeft <= 0 || gunUseless || rodCall || helmCall || (urgent > free && p.lock !== 'Helm' && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;
         p.lockLeft = undefined;
         p.botJob = null;
@@ -521,8 +563,9 @@ export function updateBot(p, state, dt) {
     } else {
       p.restCd = (p.restCd || 0) - B.THINK_EVERY;
       let job = chooseJob(state, p, bots);
-      if (job && job.kind === 'station' && p.restCd > 0) job = null;
+      if (job && job.kind === 'station' && job.obj !== 'Helm' && p.restCd > 0) job = null; // (the helm is never "resting")
       if (job) p.wanderTo = null;
+      if (!job || !p.botJob || job.kind !== p.botJob.kind || job.obj !== p.botJob.obj) p.jobSince = performance.now();
       p.botJob = job;
     }
   }

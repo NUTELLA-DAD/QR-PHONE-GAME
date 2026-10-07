@@ -158,7 +158,8 @@ function mapPlan(state, cruise) {
   const un = course.unstick > 0;
   const p = routeAhead(course.map, sx, sy, un ? 14 : 7);
   if (!p) return { target: state.ship.alt, speed: 0, dx: 0, dy: 0 };
-  if (un && course.unstick > config.MAPS.UNSTICK_TIME / 2) return { target: 500 - p.y, speed: -0.4, dx: -300, dy: p.y - sy };
+  // (Back off and rise: a ship wedged on a ledge must climb off it, whatever the route says.)
+  if (un && course.unstick > config.MAPS.UNSTICK_TIME / 2) return { target: Math.max(500 - p.y, state.ship.alt + config.MAPS.UNSTICK_RISE), speed: -0.4, dx: -300, dy: p.y - sy };
   const dx = p.x - sx;
   const dy = p.y - sy;
   const target = 500 - p.y;
@@ -793,13 +794,31 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     // Hovering right over the goal (bombing an outpost) doesn't count.
     const dNow = distToGoal(map, sx, sy);
     if (course.unstick > 0) course.unstick -= dt;
-    if (!Number.isFinite(dNow) || dNow <= 3 || !(dNow > (course.stuckBest ?? Infinity) - 2)) {
-      course.stuckBest = Number.isFinite(dNow) ? dNow : null;
+    // (A ship resting somewhere it does not "fit" - on a ledge after running out of gas - has no distance to the goal at all:
+    // that counts as no headway too, otherwise nothing ever tries to unstick it.)
+    if (Number.isFinite(dNow) && (dNow <= 3 || !(dNow > (course.stuckBest ?? Infinity) - 2))) {
+      course.stuckBest = dNow;
       course.stuckT = 0;
     } else if ((course.stuckT += dt) > config.MAPS.STUCK_AFTER) {
       course.stuckT = 0;
       course.unstick = config.MAPS.UNSTICK_TIME;
       course.unstuck = (course.unstuck || 0) + 1;
+    }
+    // Lost for good: wedged where the ship does not fit (a trench or slot after sinking) and not getting out by itself -
+    // a tug hauls it to the nearest open water of sky, so one bad moment is never the end of the run.
+    if (Number.isFinite(dNow)) course.lostT = 0;
+    else if (state.phase === 'flying' && !state.ship.down && (course.lostT = (course.lostT || 0) + dt) > config.MAPS.TOW_AFTER) {
+      course.lostT = 0;
+      const t = routeAhead(map, sx, sy, 0);
+      if (t) {
+        course.dist = t.x - 800;
+        state.ship.alt = 500 - t.y;
+        state.ship.vy = 0;
+        state.ship.speed = Math.max(0, state.ship.speed);
+        course.stuckBest = null;
+        state.ev.warn = 3.5;
+        state.ev.warnText = 'STUCK FAST! A TUG HAULS YOU CLEAR';
+      }
     }
     if (map.open) {
       // Open sky: knock out every outpost (all its guns), nearest first.
