@@ -1875,6 +1875,7 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.restore();
       });
     } else drawShipAndCrew();
+    if (view.shipOverlay) view.shipOverlay(ctx, ts); // (dev pages draw on the ship's own coordinates: public/buildtest.html)
     ctx.restore();
     lap('crew');
     drawEffects(time / 1000, view);

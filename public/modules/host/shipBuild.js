@@ -54,19 +54,31 @@ function place(kind, item, ox) {
 }
 
 // ---- the parts -------------------------------------------------------------------------------------------
-// mass / lift / steam / hands are the budget numbers (S.5/S.6 fill them in; 0 for the classic's loose pieces).
+// mass / lift / steam / hands are the budget numbers (S.5; each is a number, or a function of the placed part):
+//   mass   weight in GAS POINTS: a ship hovers at gas level  GAS.NEUTRAL + (total mass - total lift)  (the same scale as an iced bag's `sink`)
+//   lift   gas points of buoyancy (a gasbag by its size; lift engines will add theirs)
+//   steam  steam use at full speed, in config.BOILER units per second (an engine = BOILER.USE_ENGINE); pipes and boilers are worked out by buildCheck.js
+//   hands  1 for a station somebody has to man (a gun, the helm ...), 0 for the rest
+// buildCheck.js judges a build by these against config.BUILD_CHECK.
 const piece = (kind, extra = {}) => ({ mass: 0, lift: 0, steam: 0, hands: 0, ...extra, emit: (p, A) => A.add(kind, withoutPart(p)) });
 const withoutPart = (p) => { const o = { ...p }; delete o.part; delete o.col; delete o.ord; return o; };
-const connector = { mass: 0, lift: 0, steam: 0, hands: 0, emit: (p, A) => {
+const connector = { mass: 0.5, lift: 0, steam: 0, hands: 0, emit: (p, A) => {
   const o = withoutPart(p);
   o.speed ??= CONNECTOR_SPEED[o.type];
   A.add('connectors', o);
 } };
-const asType = (type) => ({ ...connector, emit: (p, A) => connector.emit({ ...p, type }, A) });
+const asType = (type, mass) => ({ ...connector, mass, emit: (p, A) => connector.emit({ ...p, type }, A) });
+// What a station of each kind weighs and whether it needs a person (engines are driven by steam; coal and ammo are pick-up points).
+export const KIND_STATS = {
+  helm: { mass: 4, hands: 1 }, boiler: { mass: 8, hands: 1 }, lookout: { mass: 1, hands: 1 }, coal: { mass: 3, hands: 0 }, ammo: { mass: 3, hands: 0 },
+  gun: { mass: 3, hands: 1 }, searchlight: { mass: 2, hands: 1 }, coil: { mass: 5, hands: 1 }, deflector: { mass: 5, hands: 1 }, bombBay: { mass: 6, hands: 1 },
+  navigator: { mass: 1, hands: 1 }, escort: { mass: 3, hands: 1 },
+};
+const kindStat = (key) => (p) => (KIND_STATS[p.kind] || {})[key] || 0;
 
 export const PARTS = {
   // A walkable floor. `row` is a DECK_ROWS name (y comes from it), x0/x1 are its span.
-  deck: { mass: 0, lift: 0, steam: 0, hands: 0, emit: (p, A) => {
+  deck: { mass: (p) => ((p.x1 - p.x0) / 100) * (p.outside ? 0.5 : 1), lift: 0, steam: 0, hands: 0, emit: (p, A) => {
     const o = withoutPart(p);
     o.y = DECK_ROWS[o.row];
     delete o.row;
@@ -75,42 +87,42 @@ export const PARTS = {
   // A named area on a deck (drawing, and telling players where things are).
   room: piece('rooms'),
   // Ways between decks. top/bottom are platform ids.
-  ladder: asType('ladder'),
-  rope: asType('rope'),
-  stairs: asType('stairs'),
-  lift: { ...connector, emit: (p, A) => {
+  ladder: asType('ladder', 0.6),
+  rope: asType('rope', 0.3),
+  stairs: asType('stairs', 1),
+  lift: { ...connector, mass: 3, emit: (p, A) => {
     const o = withoutPart(p);
     const repair = o.repair; // where to stand to repair the lift's gas
     delete o.repair;
     A.add('connectors', { type: 'lift', speed: CONNECTOR_SPEED.lift, ...o });
     if (repair) A.add('liftRepair', repair);
   } },
-  pole: asType('pole'),
+  pole: asType('pole', 0.3),
   // A place a player can stand to do a job.
-  station: piece('stations'),
+  station: piece('stations', { mass: kindStat('mass'), hands: kindStat('hands') }),
   // A station plus the gun on it: where the barrel pivots (bx, by), the middle of its arc (aim) and how far it turns (arc).
-  gun: { mass: 0, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
+  gun: { mass: KIND_STATS.gun.mass, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
     const { bx, by, aim, arc, n, ord } = p;
     A.add('stations', { n, kind: 'gun', p: p.p, x: p.x });
     A.add('gunMounts', { bx, by, aim, arc }, n, ord && ord.gunMounts);
   } },
   // A station plus its lamp. len = how long the drum is (the beam starts at the lens).
-  searchlight: { mass: 0, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
+  searchlight: { mass: KIND_STATS.searchlight.mass, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
     const { bx, by, aim, arc, len, n } = p;
     A.add('stations', { n, kind: 'searchlight', p: p.p, x: p.x });
     A.add('searchlights', { bx, by, aim, arc, len }, n);
   } },
-  coil: piece('coil'),
-  engine: { ...piece('engines'), emit: (p, A) => A.add('engines', { kind: 'engine', ...withoutPart(p) }) },
-  pipe: piece('pipes'),
-  vent: piece('vents'),
-  rack: piece('racks'),
-  extinguisher: piece('extinguishers'),
+  coil: piece('coil'), // (the Lightning Coil's weight is on its station)
+  engine: { ...piece('engines', { mass: 6, steam: 3 }), emit: (p, A) => A.add('engines', { kind: 'engine', ...withoutPart(p) }) },
+  pipe: piece('pipes', { mass: 0.5 }),
+  vent: piece('vents', { mass: 0.3 }),
+  rack: piece('racks', { mass: 0.2 }),
+  extinguisher: piece('extinguishers', { mass: 0.2 }),
   boarderEntry: piece('boarderEntryPoints'),
   escortDock: piece('escortDocks'),
-  medbay: piece('medbay'),
-  bombBay: piece('bombBay'),
-  gasbag: piece('gasbag'),
+  medbay: piece('medbay', { mass: 3 }),
+  bombBay: piece('bombBay'), // (the bomb bay's weight is on its station)
+  gasbag: piece('gasbag', { mass: 6, lift: (p) => Math.round((p.rx * p.ry) / 1560) }), // buoyancy by the envelope's size
   // Ship-wide numbers: the shield band and the nest rise are given here; everything else (samples, bounds, aim and
   // reference points ...) is DERIVED from the parts by buildLayout. A field named in OVERRIDES that is set here wins
   // over the derived value (the classic ship keeps its hand-placed collision samples this way).
@@ -391,33 +403,15 @@ function deriveGeometry(out, cell) {
   delete out.spawn;
 }
 
-// Budget numbers for a build (S.5/S.6 fill these in; the classic's pieces are all zero for now).
+// Budget numbers for a build: the sums of its parts' mass / lift / steam / hands (see PARTS above).
+// buildCheck.js turns them into the LIFT / STEAM / HANDS gauges and checks them (validate lives there).
+export function partStat(p, key) {
+  const def = PARTS[p.part];
+  const v = def && def[key];
+  return typeof v === 'function' ? v(p) || 0 : v || 0;
+}
 export function budgets(parts) {
   const b = { mass: 0, lift: 0, steam: 0, hands: 0 };
-  for (const p of parts) {
-    const def = PARTS[p.part];
-    if (def) for (const k of Object.keys(b)) b[k] += def[k] || 0;
-  }
+  for (const p of parts) for (const k of Object.keys(b)) b[k] += partStat(p, k);
   return b;
-}
-
-// Quick sanity check of a build (S.5 grows this into the full validator). Returns { ok, fails, warns }.
-export function validate(parts) {
-  const fails = [];
-  const warns = [];
-  let layout;
-  try { layout = buildLayout(parts); } catch (e) { return { ok: false, fails: [String(e.message || e)], warns }; }
-  const ids = layout.platforms.map((q) => q.id);
-  if (new Set(ids).size !== ids.length) fails.push('duplicate platform id');
-  for (const kind of D_KINDS) for (const o of layout[kind]) if (o.d < 0) fails.push(kind + ' on unknown platform ' + o.p);
-  for (const c of layout.connectors) if (c.top < 0 || c.bottom < 0) fails.push('connector between unknown platforms');
-  for (const id of ['nest', 'catwalk', 'main', 'lower']) if (!ids.includes(id)) fails.push('missing deck ' + id);
-  // Station kinds (shipLayout.js one/all/kindOf): every station and engine has a known kind, and names (what phones show) are unique.
-  const named = [...layout.stations.map((s) => [s.n, s.kind]), ...layout.engines.map((e) => [e.name, e.kind])];
-  for (const [n, kind] of named) if (!STATION_KINDS.includes(kind)) fails.push(`${n} has ${kind ? 'unknown kind ' + kind : 'no kind'}`);
-  const seen = new Set();
-  for (const [n] of named) { if (seen.has(n)) fails.push('duplicate station name ' + n); seen.add(n); }
-  for (const kind of ['helm', 'boiler', 'coal', 'ammo']) if (!named.some(([, k]) => k === kind)) fails.push('no ' + kind + ' station');
-  for (const kind of ONE_PER_SHIP) if (named.filter(([, k]) => k === kind).length > 1) fails.push('more than one ' + kind + ' station (the game supports one)');
-  return { ok: fails.length === 0, fails, warns };
 }

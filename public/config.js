@@ -953,6 +953,35 @@ export const config = {
     BALLAST: { BELOW: 4, TO: 56, COOLDOWN: 75 }, // emergency ballast drop: gas below BELOW jumps to TO (a brief hover), at most once per COOLDOWN seconds
     HOLE_CHANCE: 1, // chance a hit on the gasbag punches a hole
   },
+  // What the ship-building validator (modules/host/buildCheck.js, tools/buildsim.mjs --build, public/buildtest.html) holds a build to.
+  // Part weights, lifts and hands are data in modules/host/shipBuild.js (PARTS); these are the limits and the assumptions behind the gauges.
+  BUILD_CHECK: {
+    HOVER_MIN: 25, // LIFT: the gas level she hovers at (GAS.NEUTRAL + weight - lift) must be at least this...
+    HOVER_MAX: 70, // ...and at most this (FAIL outside)
+    HOVER_WARN: 62, // WARN above this (more pumping, more steam, more holes to lose)
+    PRESS_CRUISE_MIN: 55, // STEAM: settled pressure at cruise must be at least this (FAIL below)...
+    PRESS_IDLE_MAX: 95, // ...and at idle at most this (WARN above: she needs venting)
+    FUEL_SETTLED: 50, // coal in the firebox the settled pressure is worked out at (the crew keeps it around here)
+    CRUISE_SPEED: 0.5, // engine speed (0..1) counted as cruising...
+    IDLE_SPEED: 0.3, // ...and as idling
+    PUMP_DUTY: 0.1, // share of cruise time the gas pump runs (BOILER pressure used = GAS.PUMP_STEAM x this)
+    POWER_DUTY: 0.05, // share of cruise time the shield / coil draw their extra steam
+    WALK_COAL: 9, // seconds from a coal bunker to the boiler it feeds (WARN above; FAIL above x WALK_FAIL)
+    WALK_AMMO: 14, // seconds from an ammo hold to the farthest gun it feeds
+    WALK_NEST: 8, // seconds from the crow's nest to the main deck
+    WALK_FAIL: 1.5, // a walk this many times its budget is a FAIL
+    FIT_WIDTH: 2700, // the drawn ship may be at most this wide (px)...
+    FIT_HEIGHT: 1400, // ...and this tall, or she shrinks too small to read on a TV
+    CAVE_TUNNEL: 8, // the widest cave tunnel (map squares, tall) and shaft the map maker carves for a ship;
+    CAVE_SHAFT: 12, // a build needing more wedges in caves (WARN for player builds, FAIL for the starter ships)
+    CREW: 8, // HANDS: crew size the gauge is read at...
+    HANDS_PER_PLAYER: 3, // ...WARN above this many manned stations per player
+    MIN_GAP: 40, // two stations on one deck must be at least this far apart (px)
+    BOT_BOTS: 6, // the bot-run check: bots...
+    BOT_MINUTES: 3, // ...minutes (on a cave map and an open-sky map)...
+    BOT_HULL_MIN: 60, // ...average hull must stay above this...
+    BOT_TUGS_MAX: 1, // ...and she may be hauled out of a wedge at most this often
+  },
   // When the hull gives out the ship breaks apart and the whole game starts over at the mast.
   WRECK: {
     TIME: 8, // seconds of breaking apart before the restart

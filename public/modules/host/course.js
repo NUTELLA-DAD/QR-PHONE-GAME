@@ -816,6 +816,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         state.ship.vy = 0;
         state.ship.speed = Math.max(0, state.ship.speed);
         course.stuckBest = null;
+        state.tows = (state.tows || 0) + 1; // (counted for tools/buildsim.mjs: a build that wedges in caves)
         state.ev.warn = 3.5;
         state.ev.warnText = 'STUCK FAST! A TUG HAULS YOU CLEAR';
       }
