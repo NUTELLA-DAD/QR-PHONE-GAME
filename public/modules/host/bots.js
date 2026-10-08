@@ -17,6 +17,7 @@ import { solveThrow } from './cargo.js';
 import { cannonSeatName } from './shipBuild.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/captainAI.js';
+import { specOf } from './gunTypes.js';
 
 const B = config.BOTS;
 // Tables worked out per ship layout (rebuilt when a new ship build is applied to it): `tables(L).MAIN` ... Every function below gets its layout as
@@ -179,13 +180,44 @@ const paraGun = (L) => {
 // highest, then any gun with something in reach.
 function gunReach(state, n) {
   const L = mainShip(state).layout;
+  const g = state.GUNS[n];
+  if (g && g.type === 'mines') return g.ammo > 0 && mineWanted(state) ? 0.7 : 4; // (the mine layer: manned when the captain wants a field laid, else left alone)
+  if (g && g.type === 'harpoon') return harpoonWanted(state, g) ? 0.6 : 4;
   const best = bestTarget(state, state.GUNS[n]);
+  if (best && best.target.kind === 'flier') return 0.5; // (an enemy in the air: a flak gun's whole job)
+  if (best && best.target.kind === 'laid') return 0.6; // (a mine in the way: shoot it before it is a hole in the hull)
   // Paratroopers are about to jump (or are in the air): get up to the dorsal gun, it covers their approach.
   if (!best && n === paraGun(L) && state.gunship && (state.paras.length || state.gunship.paraDue)) return 0.7;
   if (!best) return 2;
   if (best.target.kind === 'para' || best.target.kind === 'gport') return 0.6; // paratroopers and gunship gun ports are worth manning a gun for
   if (best.target.kind.startsWith('rival')) return 0.6; // Versus: the other airship in range is what the guns are for (aim.js targets(): her guns, her bags, her boiler and helm, her hull)
   return best.target.kind === 'turret' ? 0.8 : 1;
+}
+
+// ---------- The weapons of the range bands (weapons.js, config.GUN_TYPES): the mine layer and the harpoon gun are not aimed at a target, they are used when the captain wants them ----------
+// Does the captain want a field of mines laid now? Versus: pvp/captainAI.js sets ship.captain.mines (retreating, or a choke ahead of the chaser). Co-op: something hunts her from astern (a plane,
+// the gunship), within a mine's reach.
+function mineWanted(state) {
+  const ship = mainShip(state);
+  if (state.rival) return !!(ship.captain && ship.captain.mines);
+  if (state.phase !== 'flying' || state.ship.down) return false;
+  const L = ship.layout, mx = toWorldX(ship, L.refPoint.x), my = toWorldY(ship, L.refPoint.y), f = ship.pose.f;
+  const behind = (o) => (o.x - mx) * f < -250 && Math.abs(o.x - mx) < 3400 && Math.abs(o.y - my) < 1600;
+  if (state.enemy.dead <= 0 && behind(state.enemy)) return true;
+  if ((state.strafers || []).some((p) => p.hp > 0 && behind(p))) return true;
+  if ((state.bombers || []).some((p) => p.hp > 0 && behind(p))) return true;
+  return (state.ships || []).some((s) => s.ai && !s.ctx.wreck && behind({ x: toWorldX(s, s.layout.aimPoint.x), y: toWorldY(s, s.layout.aimPoint.y) }));
+}
+// Does the captain want the harpoon fired? A target ship in the line of the barrel, not already on a harpoon line of ours, and (Versus) a captain who likes it close.
+function harpoonWanted(state, g) {
+  if (g.ammo <= 0 || g.cd > 0) return false;
+  const ship = mainShip(state);
+  if ((state.tows || []).some((t) => t.harpoon && t.a === ship)) return false;
+  if (state.rival) {
+    const c = ship.captain;
+    if (!c || !c.S || !(c.S.harpoon > 0) || state.ship.hull < config.PVP.BOT.HARPOON.MIN_HULL || c.harpoonCd > 0) return false;
+  }
+  return !!bestTarget(state, g);
 }
 
 // Things below and ahead worth bombing, as x ranges in SHIP coordinates (where the bomb bay is): live turrets and buildings.
@@ -692,6 +724,12 @@ function operate(p, state, dt) {
   } else {
     const gun = state.GUNS[p.lock];
     if (!gun) return;
+    if (gun.type === 'mines') { // the mine layer: stay while a field is wanted, FIRE (hold) drops one mine a cooldown
+      const want = mineWanted(state);
+      p.gunIdle = want && gun.ammo > 0 ? 0 : (p.gunIdle || 0) + dt;
+      p.fire = want && gun.ammo > 0;
+      return;
+    }
     const angle = firingSolution(state, gun);
     // Count how long the enemy has been out of this gun's reach.
     p.gunIdle = angle === null ? (p.gunIdle || 0) + dt : 0;
@@ -702,7 +740,8 @@ function operate(p, state, dt) {
     p.jx = Math.cos(angle);
     p.jy = Math.sin(angle);
     const off = Math.abs(Math.atan2(Math.sin(angle - gun.aim), Math.cos(angle - gun.aim)));
-    p.fire = gun.ammo > 0 && off < B.AIM_TOLERANCE && (!mainShip(state).ai || mainShip(state).ai.mayFire(p.lock)); // (the gunship fires broadsides from firing spots, with a glow first, not whenever a gun bears)
+    const tol = specOf(gun).tol ?? B.AIM_TOLERANCE; // (a long gun is aimed more truly than a broadside gun; a grapeshot gun less)
+    p.fire = gun.ammo > 0 && off < tol && (!mainShip(state).ai || mainShip(state).ai.mayFire(p.lock)) && (gun.type !== 'harpoon' || harpoonWanted(state, gun)); // (the gunship fires broadsides from firing spots, with a glow first, not whenever a gun bears)
   }
 }
 
@@ -1475,6 +1514,7 @@ const SURGE_MAX_MS = 4000; // ...or after this long
 function lookoutReach(state) {
   const L = mainShip(state).layout;
   const helm = Object.values(state.players).some((q) => isHelm(L, q.lock));
+  if (LK.ENABLED && helm && state.phase === 'flying' && state.rival && Object.values(state.GUNS).some((g) => g.type === 'mortar')) return 0.9; // (a mortar is wild without a spotter: somebody climbs to the nest)
   return LK.ENABLED && helm && state.phase === 'flying' ? 1.2 : 3; // (ahead of an idle gun, level with a gun that has a target, while the helm is manned)
 }
 

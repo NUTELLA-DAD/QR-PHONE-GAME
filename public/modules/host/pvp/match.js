@@ -29,8 +29,9 @@ const other = (t) => (t === 'red' ? 'blue' : 'red');
 // The numbers kept per side (a round, and the match so far). The last group is the space-and-range numbers (PVP.md): seconds and distance sampled every step, the weapons by kind.
 const fresh = () => ({ shots: 0, hits: 0, dmg: 0, bombs: 0, bumps: 0, boardings: 0, sabotage: 0, captures: 0, knockouts: 0, patches: 0,
   secs: 0, distSum: 0, bandShort: 0, bandMid: 0, bandLong: 0, bandFar: 0, longShots: 0, longHits: 0, mortarShots: 0, mortarHits: 0, scatterShots: 0, scatterHits: 0, flakShots: 0, flakBursts: 0,
-  minesLaid: 0, mineHits: 0, mineShot: 0, rams: 0, ramDmg: 0, harpoons: 0, harpoonHits: 0, stormSecs: 0 });
+  minesLaid: 0, mineHits: 0, mineShot: 0, rams: 0, ramRuns: 0, ramDmg: 0, harpoons: 0, harpoonHits: 0, stormSecs: 0 });
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const HIT_KEY = { long: 'longHits', mortar: 'mortarHits', scatter: 'scatterHits' }; // (the shell kinds of weapons.js whose hits are counted apart)
 
 // Small seeded random generator (the arena sky is repeatable).
 function rng(seed) {
@@ -379,8 +380,9 @@ export function createMatch(D) {
         if (!t.sim.hitsShip(tx, ty)) continue;
         const before = t.state.hull;
         t.sim.impact(tx, ty, P.SHELL_POWER * (sh.mul || 1));
+        if (sh.splash && t.sim.hitsShip(tx, ty + sh.splash.dy)) t.sim.impact(tx, ty + sh.splash.dy, P.SHELL_POWER * (sh.mul || 1) * sh.splash.mul); // (a mortar shell's burst goes on down through the hull)
         sh.life = 0;
-        if (team) { M.count(team, 'hits'); M.count(team, 'dmg', Math.max(0, before - t.state.hull)); }
+        if (team) { M.count(team, 'hits'); M.count(team, 'dmg', Math.max(0, before - t.state.hull)); if (HIT_KEY[sh.kind]) M.count(team, HIT_KEY[sh.kind]); }
         if (gunner && !gunner.mate) { gunner.stats = gunner.stats || {}; gunner.stats.pvpHits = (gunner.stats.pvpHits || 0) + 1; }
         break;
       }

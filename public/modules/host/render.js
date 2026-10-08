@@ -30,6 +30,7 @@ import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps
 import { createFleetArt } from './fleetArt.js'; // B.3: the panels, pennants and edge arrows of a sky with several ships
 import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, HUD, scoreboard (pvp/match.js)
 import { bandOf, metres, BAND_WORDS } from './pvp/range.js'; // the range bands: the TV's readout
+import { BARRELS, drawBarrel, drawChute, drawMines, drawRam, SHELL_LOOK } from './weaponsArt.js'; // the barrels of the gun types, laid mines, the ram prow
 import { createYardArt } from './yardArt.js'; // S.6b: the Shipwright's Yard (the sky-dock blueprint, the A / B / C vote, BUILT, "NEW: ...")
 import { createPartPictures } from './partArt.js'; // the little part pictures of the build tray, on the Yard's cards
 import { crewHeads } from './crewscale.js';
@@ -149,7 +150,15 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.closePath();
         ctx.fill();
       }
-      if (!sprites.pivot(ctx, 'ship/gun-barrel', gun.bx, gun.by, 0.12, 0.5, gun.aim)) {
+      if (gun.type === 'mines') drawChute(ctx, gun, performance.now() / 1000); // (the mine layer: a hatch in the floor and its mines, weaponsArt.js)
+      else if (gun.type && BARRELS[gun.type]) { // (the long gun, mortar, grapeshot, flak and harpoon: a barrel of their own)
+        ctx.save();
+        ctx.translate(gun.bx, gun.by);
+        ctx.rotate(gun.aim);
+        ink();
+        drawBarrel(ctx, gun.type, (color, path) => { ctx.fillStyle = color; ctx.beginPath(); path(); ctx.fill(); ctx.stroke(); });
+        ctx.restore();
+      } else if (!sprites.pivot(ctx, 'ship/gun-barrel', gun.bx, gun.by, 0.12, 0.5, gun.aim)) {
         // Upgrades show: Twin Barrels adds barrels, Big Shells makes them fatter.
         const up = state.upgrades || {};
         const barrels = 1 + Math.min(2, up['twin-barrels'] || 0);
@@ -168,7 +177,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         }
         ctx.restore();
       }
-      if (!sprites.box(ctx, 'ship/gun-mount', gun.bx - 16, gun.by - 16, 32, 32)) {
+      if (gun.type === 'mines') { /* (no mount: the chute is the mount) */ } else if (!sprites.box(ctx, 'ship/gun-mount', gun.bx - 16, gun.by - 16, 32, 32)) {
         ctx.fillStyle = '#a8443f';
         ctx.beginPath();
         ctx.arc(gun.bx, gun.by, 16, 0, 7);
@@ -197,7 +206,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.restore();
       }
       const pip = Math.min(9, 72 / gun.max); // pip spacing: the row stays about 72 px wide however many shells a gun holds
-      for (let i = 0; i < gun.max; i++) {
+      for (let i = 0; i < (gun.type === 'mines' ? 0 : gun.max); i++) {
         ctx.fillStyle = i < gun.ammo ? '#f2d36b' : 'rgba(27,20,16,.3)';
         ctx.beginPath();
         ctx.arc(gun.bx - 31 + i * pip, gun.by + 30, Math.min(3.6, pip * 0.42), 0, 7);
@@ -559,6 +568,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     drawFighterAim(time);
     threatArt.drawWrecks();
     threatArt.drawMines(time);
+    drawMines(ctx, world, time, view.zoom); // (mines laid by a mine layer, minefield.js)
     threatArt.drawBoss(time);
     threatArt.drawBombers(time);
     threatArt.drawBats(time);
@@ -597,7 +607,26 @@ export function createRenderer({ ctx, state: world, canvas }) {
     };
     ctx.lineCap = 'round';
     const big = (state.upgrades || {})['big-shells'] || 0;
+    const farSc = world.match && world.match.on ? Math.max(1, 0.34 / view.zoom) : 1; // (Versus, zoomed far out: shells grow so they can be followed)
     for (const shell of state.shells) {
+      const look = SHELL_LOOK[shell.kind];
+      if (look && !shell.primed) { // a long gun, mortar, grapeshot or flak shell
+        glowShot(shell, look.color, look.r * farSc, look.trail);
+        if (look.iron) { // the mortar's shell is a dark iron ball with a hot fuse
+          ctx.fillStyle = '#3a3a3e';
+          ctx.strokeStyle = config.INK;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(shell.x, shell.y, 11 * farSc, 0, 7);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#ffb347';
+          ctx.beginPath();
+          ctx.arc(shell.x - 5 * farSc, shell.y - 8 * farSc, 3.5 * farSc, 0, 7);
+          ctx.fill();
+        }
+        continue;
+      }
       if (shell.primed) {
         glowShot(shell, '#ff9a2e', 17 + 3 * big, 0.09); // a primed shell: big, hot, orange-white
         ctx.strokeStyle = (ship.world.players[shell.owner] || {}).color || '#f2d36b';
@@ -605,7 +634,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.beginPath();
         ctx.arc(shell.x, shell.y, 25 + 3 * big, 0, 7);
         ctx.stroke();
-      } else glowShot(shell, shell.frag ? '#ffd23f' : (ship.world.players[shell.owner] || {}).color || '#f2d36b', shell.frag ? 5 : 9 + 3 * big, 0.06);
+      } else glowShot(shell, shell.frag ? '#ffd23f' : (ship.world.players[shell.owner] || {}).color || '#f2d36b', (shell.frag ? 5 : 9 + 3 * big) * farSc, 0.06);
     }
     for (const bullet of state.bullets) {
       if (bullet.flak) drawFlakBurst(ctx, bullet.x, bullet.y, 13); // (flak: a flat gouache burst)
@@ -2182,6 +2211,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
           art.light.drawBellyPod(); // (under the hull: the ladder and outrigger draw over it)
           art.hull(time / 1000);
           art.light.drawLamps(time / 1000); // the two brass searchlights (also records where the beams start)
+          if (layout.ram && layout.platforms[layout.ram.d]) drawRam(ctx, layout.ram, layout.platforms[layout.ram.d].y); // (a ram prow: the reinforced nose, weaponsArt.js)
         }
         lap('ship');
         // Close-call warnings: red chevrons on the hull pointing at nearby rock.

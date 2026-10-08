@@ -24,6 +24,8 @@ import { createCannon } from './cannon.js';
 import { createCargo, cargoItem, isStocked } from './cargo.js';
 import { pop } from './popups.js';
 import { assistAim } from './aim.js';
+import { gunStock, loadOf, autoloadOf, specOf } from './gunTypes.js';
+import { fireTyped } from './weapons.js';
 import { createPrime } from './prime.js';
 import { createLinks } from './links.js';
 import { createGoingDown } from './goingDown.js';
@@ -693,7 +695,7 @@ export function createShipSim(world, ship, W) {
       act.obj.open = !act.obj.open;
       shipPuff(act.obj.pos.x, act.obj.pos.y, '#ffffff', 6);
     } else if (type === 'load') {
-      act.obj.ammo = Math.min(act.obj.max, act.obj.ammo + config.GUNS.LOAD);
+      act.obj.ammo = Math.min(act.obj.max, act.obj.ammo + loadOf(act.obj));
       stat(player, 'ammo');
       player.carry = null;
       shipPuff(act.station.x, player.y - 60, '#ffd23f', 8);
@@ -889,7 +891,7 @@ export function createShipSim(world, ship, W) {
           // Turn toward the stick, but only within this gun's firing arc (a broken gun is jammed).
           if (working && Math.hypot(player.jx, player.jy) > 0.25) {
             const A = config.AIM_ASSIST;
-            const wanted = assistAim(state, gun, Math.atan2(player.jy, player.jx), A.ANGLE, A.STRENGTH);
+            const wanted = assistAim(state, gun, Math.atan2(player.jy, player.jx), A.ANGLE * (gun.type === 'mortar' ? config.GUN_TYPES.mortar.ASSIST : 1), A.STRENGTH); // (a mortar's angle is its range: the assist reaches wider)
             gun.aim = gun.home + clamp(angleDiff(wanted, gun.home), -gun.arc, gun.arc);
           }
           if ((player.actQ || player.fire) && gun.cd <= 0 && !state.ship.down) {
@@ -903,7 +905,7 @@ export function createShipSim(world, ship, W) {
               gun.emptyText = !working ? 'BROKEN!' : gun.ammo <= 0 ? 'EMPTY!' : 'ICED - CHIP IT!';
             } else {
               gun.ammo -= 1;
-              gun.cd = config.GUNS.COOLDOWN * env.gunCooldownMul(player.lock);
+              gun.cd = (gun.type ? specOf(gun).cd : config.GUNS.COOLDOWN) * env.gunCooldownMul(player.lock);
               if (ship.ai) ship.ai.shoot(player, gun, player.lock); // (the enemy gunship's guns fire her own slow cannonballs, which hit the main ship and nothing else: gunshipShip.js)
               else {
               const angle = aimToWorld(ship, gun.aim + (state.ship.pitch || 0)); // (gun.aim is in ship space, the shell flies along the world)
@@ -911,6 +913,9 @@ export function createShipSim(world, ship, W) {
               const primed = prime.take(gun); // a fully primed shell: harder hit, bigger blast (config PRIME)
               const wgx = toWorldX(ship, gx); // (the muzzle, in the world; a shell leaves at SHELL_SPEED relative to the ship and keeps her speed)
               const wgy = toWorldY(ship, gy);
+              if (gun.type) {
+                if (!fireTyped({ ship, state, gun, player, angle, wx: wgx, wy: wgy, primed, puff, W })) { gun.ammo += 1; gun.cd = 0.8; gun.empty = 0.8; gun.emptyText = 'NO TARGET'; } // (a typed gun: weapons.js; a harpoon that found no deck in its line gives the shot back)
+              } else {
               state.shells.push({
                 x: wgx + Math.cos(angle) * 60,
                 y: wgy + Math.sin(angle) * 60,
@@ -926,6 +931,7 @@ export function createShipSim(world, ship, W) {
               if (primed) {
                 state.rings.push({ x: wgx + Math.cos(angle) * 64, y: wgy + Math.sin(angle) * 64, t: 0.3, max: 0.3, color: '#ffd23f', size: 110 });
                 state.sfxQ.push(['bigshot']);
+              }
               }
               }
             }
@@ -1244,7 +1250,7 @@ export function createShipSim(world, ship, W) {
       if (!taken(gunName)) prime.idle(gun, dt); // (a half-charge fades when nobody is holding it; the glow timer always runs)
       else gun.primedFlash = Math.max(0, (gun.primedFlash || 0) - dt);
       // Auto-Loader upgrade: a free shell every so often.
-      if (config.GUNS.AUTOLOAD_EVERY && gun.ammo < gun.max && (gun.auto = (gun.auto || 0) + dt) >= config.GUNS.AUTOLOAD_EVERY) {
+      if (config.GUNS.AUTOLOAD_EVERY && gun.ammo < gun.max && (gun.auto = (gun.auto || 0) + dt) >= autoloadOf(gun)) {
         gun.auto = 0;
         gun.ammo += 1;
       }
@@ -1405,7 +1411,7 @@ export function createShipSim(world, ship, W) {
     state.helmHit = 0;
     Object.assign(state.shield, { ang: -Math.PI / 2, on: false, flash: 0 });
     for (const list of [state.gasHoles, state.breaches, state.fires, state.bombs]) list.length = 0;
-    for (const [name, m] of Object.entries(layout.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, auto: 0, prime: 0, primed: false });
+    for (const [name, m] of Object.entries(layout.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ...gunStock(m), empty: 0, auto: 0, prime: 0, primed: false });
     raiders.reset();
     escort.reset();
     coil.reset();

@@ -222,6 +222,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
 
   const updateShells = (dt) => {
     for (const shell of state.shells) {
+      if (shell.g) shell.vy += shell.g * dt; // (a mortar shell lobs in an arc: weapons.js)
       shell.x += shell.vx * dt;
       shell.y += shell.vy * dt;
       shell.life -= dt;

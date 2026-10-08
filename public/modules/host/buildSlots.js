@@ -110,6 +110,14 @@ export const PALETTE = [
     }
     return out;
   } },
+  // The weapons of the range bands (PVP.md "Space and range", config.GUN_TYPES, weapons.js): each is a gun station with its own barrel, and the reach of its own band.
+  { id: 'gun_long', label: 'Long gun', hint: 'click a gun spot: a rifled long gun - slow, accurate, 6900 px of range. Heavy. A fast ship that keeps her distance wants two', slots: (L) => typedGunSlots(L, 'long') },
+  { id: 'gun_mortar', label: 'Mortar', hint: 'click a spot on the open top deck or nest: a high arc that drops onto a deck and a gasbag (up to 4400 px). Better with a lookout up or the rival spotted on the radar', slots: (L) => typedGunSlots(L, 'mortar') },
+  { id: 'gun_scatter', label: 'Grapeshot gun', hint: 'click a gun spot: a fan of pellets over a short reach - for a ship alongside, and for boarders', slots: (L) => typedGunSlots(L, 'scatter') },
+  { id: 'gun_flak', label: 'Flak gun', hint: 'click a spot on the open top deck or nest: its shells burst near planes, bats and enemy crew in the air', slots: (L) => typedGunSlots(L, 'flak') },
+  { id: 'gun_harpoon', label: 'Harpoon gun', hint: 'click a gun spot: fires a line at the nearest enemy deck the way it points; it latches and reels the two ships together. A sword cuts the line', slots: (L) => typedGunSlots(L, 'harpoon') },
+  { id: 'mineLayer', label: 'Mine layer', hint: 'click a spot on a lower deck: a chute in the belly; a crew member drops floating mines out of it (the ammo hold refills it). They arm after a few seconds and go off against ANY ship that touches them - yours too', slots: (L) => typedGunSlots(L, 'mines') },
+  { id: 'ramProw', label: 'Ram prow', hint: 'click the fore end of a deck: a reinforced iron nose. A ram hurts the other ship much more than yours. One per ship', slots: (L, parts) => (count(parts, (p) => p.part === 'ramProw') ? [] : ramSlots(L)) },
   { id: 'lookout', label: "Lookout (crow's nest)", hint: "click a spot on the crow's nest", slots: (L) => stationSlots(L, 'lookout') },
   { id: 'medbay', label: 'Medbay', hint: 'click a deck spot (one per ship)', slots: (L, parts) => {
     if (L.medbay) return [];
@@ -228,6 +236,31 @@ export const PALETTE = [
   { id: 'gasbag', label: 'Gasbag', hint: 'click a stretch of the gasbag row: one more bag beside the others (a row of small ones keeps flying if you lose one)', slots: (L, parts) => bagSlots(parts) },
 ];
 
+// A gun of one of the config.GUN_TYPES (the plain gun's spots, the mount the type wants): the long gun and the grapeshot gun on the same decks as a plain gun, the harpoon too; the mortar and the flak gun
+// only in the open air (a lob and a burst need no roof); the mine layer in the belly (lower and keel decks), pointing down. Names: "Long Gun", "Extra Long Gun 1" ...
+function typedGunSlots(L, gtype) {
+  const T = config.GUN_TYPES[gtype], out = [], open = gtype === 'mortar' || gtype === 'flak', belly = gtype === 'mines';
+  const decks = belly ? onRows(L, ['lower', ...KEEL_ROWS]) : L.platforms.filter((o) => ['crow2', 'nest', 'catwalk', 'lower'].includes(rowOf(o)) || (o.outside && ['main', ...KEEL_ROWS].includes(rowOf(o))));
+  for (const q of decks) {
+    if (open && !q.outside && !isNestRow(rowOf(q))) continue;
+    for (const x of spots(q)) {
+      if (!roomAt(L, q.id, x, false)) continue;
+      const fore = x > midX(L), base = gunMountFor(q, x, fore);
+      const m = belly ? { bx: x, by: q.y + 8, aim: Math.PI / 2, arc: 0 }
+        : gtype === 'mortar' ? { bx: x + 10, by: q.y - 40, aim: fore ? -1.15 : -(Math.PI - 1.15), arc: 0.5 }
+          : { ...base, arc: Math.round(Math.min(1.5, base.arc * T.ARC) * 100) / 100 };
+      out.push({ p: q.id, x, label: `${T.LABEL} on the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part: 'gun', n: nameFor(ps, T.LABEL), p: q.id, x, ...m, gtype }] });
+    }
+  }
+  return out;
+}
+// The ram prow: the fore end of a full deck (the nose of the hull is the main deck's).
+function ramSlots(L) {
+  const out = [];
+  for (const q of onRows(L, ['main', 'lower', 'catwalk'])) out.push({ p: q.id, x: q.x1, label: `Ram prow on the ${q.name}, fore end (x ${q.x1})`, apply: (ps) => [...ps, { part: 'ramProw', p: q.id, x: q.x1 }] });
+  return out;
+}
+
 // The crew cannon (B.6): a barrel on an open-air deck with the gunner's post behind it (CANNON.GUNNER_DX toward the ship's middle), both clear of other stations, racks and ladders; the barrel
 // faces the way the ship's nearer end does (fore half: forward and up, aft half: aft and up), and cannons stand at least 2 posts apart.
 function cannonSlots(L) {
@@ -333,7 +366,9 @@ const RACK_ROWS = ['catwalk', 'main', 'lower'];
 const RULES = {
   helm: { rows: ['catwalk', 'main'], once: (parts) => count(parts, (p) => p.part === 'station' && p.kind === 'helm') > 0, onceText: 'A ship has one helm.' },
   boiler: { rows: ['main', 'lower'] }, coal: { rows: ['lower', 'main', 'keel', 'deep'] }, ammo: { rows: ['lower', 'main', 'keel', 'deep'] },
-  engine: { rows: ['lower', 'main'] }, engineSwivel: { rows: ['lower', 'main'] }, gun: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, lookout: { rows: ['nest', 'crow2'] }, searchlight: { rows: ['crow2', 'nest', 'catwalk'], open: true }, sail: { rows: ['crow2', 'nest', 'catwalk'], open: true },
+  engine: { rows: ['lower', 'main'] }, engineSwivel: { rows: ['lower', 'main'] }, gun: { rows: ['crow2', 'nest', 'catwalk', 'lower'] },
+  gun_long: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, gun_scatter: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, gun_harpoon: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, gun_mortar: { rows: ['crow2', 'nest', 'catwalk'], open: true }, gun_flak: { rows: ['crow2', 'nest', 'catwalk'], open: true },
+  mineLayer: { rows: ['lower', 'keel', 'deep'] }, ramProw: { rows: ['catwalk', 'main', 'lower'], once: (parts) => count(parts, (p) => p.part === 'ramProw') > 0, onceText: 'A ship has one ram prow.' }, lookout: { rows: ['nest', 'crow2'] }, searchlight: { rows: ['crow2', 'nest', 'catwalk'], open: true }, sail: { rows: ['crow2', 'nest', 'catwalk'], open: true },
   medbay: { rows: ['main', 'lower', 'keel', 'deep'], once: (parts) => count(parts, (p) => p.part === 'medbay') > 0, onceText: 'A ship has one medbay.' },
   bombBay: { rows: ['lower'], once: (parts) => count(parts, (p) => p.part === 'bombBay' || (p.part === 'deck' && p.id === 'bay')) > 0, onceText: 'A ship has one bomb bay.' },
   lift: { rows: ['main'], once: (parts) => count(parts, (p) => p.part === 'lift') > 0, onceText: 'A ship has one lift.' },

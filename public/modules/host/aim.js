@@ -7,6 +7,7 @@ import { portPos } from './gunshipBlueprint.js'; // (pure geometry: no import cy
 import { mainShip } from './ships.js';
 import { toWorldX, toWorldY, aimToShip, aimToWorld } from './pose.js';
 import { solidAt } from './maps.js';
+import { typedSolution } from './gunTypes.js';
 
 export const SHELL_SPEED = config.GUNS.SHELL_SPEED;
 export const SHELL_LIFE = config.GUNS.SHELL_LIFE;
@@ -72,6 +73,18 @@ export function targets(state) {
   const rv = state.rival;
   if (rv && !rv.down) rivalTargets(list, state, ship, rv, vs);
   for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + (m.vx - vs) * t, y: m.y }) });
+  // Laid mines (minefield.js) that lie in the way: another crew's, or any in co-op, within MINE_SHOOT px and ahead of her (or very close). Shooting them blows them up where they float.
+  if (state.laid && state.laid.length) {
+    const ax = toWorldX(ship, ship.layout.aimPoint.x), ay = toWorldY(ship, ship.layout.aimPoint.y), S = config.MINEFIELD;
+    for (const m of state.laid) {
+      if (m.dead || (ship.team && m.team === ship.team.id)) continue;
+      const d = Math.hypot(m.x - ax, m.y - ay);
+      if (d > S.SHOOT_RANGE || (d > S.SHOOT_NEAR && (m.x - ax) * (ship.pose.vx || 0) <= 0)) continue; // (a mine astern of her is no danger)
+      list.push({ kind: 'laid', obj: m, r: 44, at: (t) => ({ x: m.x + (m.vx - vs) * t, y: m.y + m.vy * t }) });
+    }
+  }
+  // An enemy crewman in the air (a boarder's leap, a crew cannon's shot): flak shells burst on him (bestTarget lets only a flak gun aim at him).
+  for (const q of Object.values(state.players)) if (q.fly && q.team && ship.team && q.team !== ship.team.id) list.push({ kind: 'flier', obj: q, r: 60, at: (t) => ({ x: q.x + ((q.fvx || 0) - vs) * t, y: q.y + (q.fvy || 0) * t }) });
   for (const b of state.bats || []) if (b.delay <= 0 && !b.latched) list.push({ kind: 'bat', obj: b, r: 26, at: (t) => ({ x: b.x + (b.vx - vs) * t, y: b.y + b.vy * t }) });
   for (const p of state.strafers || []) if (p !== state.stuntPlane) list.push({ kind: 'strafer', obj: p, r: 40, at: (t) => ({ x: p.x + (p.vx - vs) * t, y: p.y + p.vy * t }) });
   const SP = state.specials;
@@ -103,6 +116,7 @@ export function solution(state, gun, target) {
   const ship = mainShip(state);
   const gx = toWorldX(ship, gun.bx);
   const gy = toWorldY(ship, gun.by);
+  if (gun.type) return typedSolution(state, ship, gun, target, gx, gy); // (a long gun, a mortar ...: gunTypes.js)
   let p = target.at(0);
   for (let i = 0; i < 3; i++) p = target.at(Math.hypot(p.x - gx, p.y - gy) / SHELL_SPEED);
   if (Math.hypot(p.x - gx, p.y - gy) > RANGE * (gun.reach || 1)) return null; // (a gun on a high crow's nest reaches further: config.NEST)
@@ -112,9 +126,12 @@ export function solution(state, gun, target) {
 
 // The most useful target this gun can hit right now (mines, turrets, cargo, then fighter).
 export function bestTarget(state, gun) {
-  const order = { cable: -1, bomb: 0, rocket: 1, saw: 1.5, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rivalGun: 8, rivalBag: 8.4, rivalCore: 8.8, rival: 9.2 };
+  const order = { flier: -2, cable: -1, bomb: 0, rocket: 1, saw: 1.5, laid: 1.8, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rivalGun: 8, rivalBag: 8.4, rivalCore: 8.8, rival: 9.2 };
   let best = null;
   for (const t of targets(state)) {
+    if (t.kind === 'flier' && gun.type !== 'flak') continue; // (only flak shells burst on a man in the air)
+    if (t.kind === 'laid' && (gun.type === 'mortar' || gun.type === 'harpoon')) continue; // (a lob is no way to hit a mine, and a harpoon is for ships)
+    if (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship') continue;
     const angle = solution(state, gun, t);
     if (angle === null) continue;
     const rank = (u) => (isSpotted(u.obj) ? order[u.kind] - 20 : order[u.kind]); // (spotted targets come first)
@@ -131,6 +148,7 @@ export function assistAim(state, gun, wanted, maxAngle, strength) {
   let best = null;
   const SL = config.SEARCHLIGHT;
   for (const t of targets(state)) {
+    if ((t.kind === 'flier' && gun.type !== 'flak') || (t.kind === 'laid' && gun.type === 'mortar') || (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship')) continue;
     const angle = solution(state, gun, t);
     if (angle === null) continue;
     const spotted = isSpotted(t.obj); // (a spotted target is easier to lock onto: wider reach, counts as closer)

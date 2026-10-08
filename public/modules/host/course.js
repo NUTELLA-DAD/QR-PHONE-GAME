@@ -183,7 +183,8 @@ function rivalPlan(state) {
   const hurt = state.ship.hull < B.RETREAT_HULL && holes > B.RETREAT_HOLES;
   const hooking = performance.now() - (state.boardAt || -1e9) < 1200; // (a crewman of hers is going across on a hook: close in so her decks are within his reach)
   const stand = P.STANDOFF + ((ship.captain && ship.captain.rangeAdj) || 0) + (ship.layout.bounds.x1 - ship.layout.bounds.x0) / 2 + (R.layout.bounds.x1 - R.layout.bounds.x0) / 2 - 2 * P.REF_HALF; // (PVP.STANDOFF is for two classic hulls: longer ships keep further apart so their noses are as far from each other)
-  const err = gap - dir * (hurt ? stand * 2 : stand - (hooking ? B.BOARD_CLOSE : 0)); // + = too far (or too close) to close the range by going on
+  const kite = !!(ship.captain && ship.captain.play === 'kite'); // (a long-band captain closed on: run from the rival, like the retreat, but only to a little past her hold)
+  const err = gap - dir * (hurt ? stand * 2 : kite ? stand * 1.4 : stand - (hooking ? B.BOARD_CLOSE : 0)); // + = too far (or too close) to close the range by going on
   let w = Math.max(-1, Math.min(1, err / P.APPROACH)); // the speed we want along the world's x (+ = to the right)
   if (state.rockSide && now < state.rockSide.until && Math.sign(w) === state.rockSide.dir) w = 0; // (not into the rock that just had us)
   const m = state.match;
@@ -209,7 +210,7 @@ function rivalPlan(state) {
   let target = AIM.y - y;
   const win = altWindow(state, 2); // (the altitudes where the whole hull clears the rock under and over the next two seconds of flight: the plan never asks for one outside it)
   target = win.min <= win.max ? Math.max(win.min + 20, Math.min(win.max - 20, target)) : (win.min + win.max) / 2;
-  return { target, speed: Math.max(-config.SHIP.REVERSE, Math.min(0.6, w * f)), dx: (hurt ? -1 : 1) * gap * f, dy: R.mid.y - my };
+  return { target, speed: Math.max(-config.SHIP.REVERSE, Math.min(0.6, w * f)), dx: (hurt || kite ? -1 : 1) * gap * f, dy: R.mid.y - my };
 }
 
 // Manners in a fleet (co-op ?ships=N): shipCollide.js is the wall, this is what a pilot does before it. A ship does not carry on while another ship is AHEAD of her (in the way she is going) inside the

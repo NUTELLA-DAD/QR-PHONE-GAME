@@ -356,5 +356,26 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     p.stag = 0;
   };
 
-  return { addSurface, removeSurface, addProvider, removeProvider, surfaces, outsideAt, popChute, startFlight, jumpChute, grab, jumpOff, edgeCheck, vault, shove, standing, step, tumble, clear };
+  // Knocked out of the sky (a flak burst, weapons.js): the flier falls like a man overboard, and the existing fall -> medical bay of his own ship takes it from there.
+  const shotDown = (p) => {
+    if (!p.fly) return false;
+    const sx = toShipX(ship, p.x), sy = toShipY(ship, p.y);
+    p.fly = false;
+    p.air = false;
+    p.cannon = false;
+    p.trail = null;
+    cutChute(p);
+    p.x = sx;
+    p.y = sy;
+    p.fall = true;
+    p.tumble = true;
+    p.tvy = 200;
+    p.tvx = 0;
+    p.carry = null;
+    p.moving = false;
+    puff(toWorldX(ship, sx), toWorldY(ship, sy), '#ffd23f', 8);
+    return true;
+  };
+
+  return { addSurface, removeSurface, addProvider, removeProvider, surfaces, outsideAt, popChute, startFlight, jumpChute, grab, jumpOff, edgeCheck, vault, shove, standing, step, tumble, clear, shotDown };
 }

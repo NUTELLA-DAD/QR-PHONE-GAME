@@ -11,7 +11,7 @@
 //   towing.ends(tow) -> { a: {x, y}, b: {x, y} }        where the line is made fast, in the world (the TV draws it)
 //   tow = { id, a (the towing ship), b (the towed one), from: {x, y} on a, to: {x, y} on b (ship coordinates), len, t (the grapple's flight so far), fly (its flight time, 0 = made fast), by (player id) }
 import { config } from '../../config.js';
-import { toWorldX, toWorldY, toShipX, driveVx, driveGain } from './pose.js';
+import { toWorldX, toWorldY, toShipX, toShipY, driveVx, driveGain } from './pose.js';
 import { applyForce, pivotOf as massOf } from './forces.js';
 import { pop } from './popups.js';
 
@@ -27,14 +27,15 @@ export function createTowing({ world, puff, phoneFx = () => {} }) {
   const ends = (t) => ({ a: worldOf(t.a, t.from), b: worldOf(t.b, t.to) });
 
   // The nearest point of another ship's decks to a world point (the grapple's target): { ship, x, y (ship coordinates), d (px) }. dir: a unit vector the target must lie roughly toward (null: any way).
-  const nearestDeck = (ship, o, dir) => {
+  const nearestDeck = (ship, o, dir, range = T().RANGE, cone = 0.35, foesOnly = false) => {
     let best = null;
     for (const sh of world.ships) {
       if (sh === ship || sh.state.down > 0 || sh.ctx.wreck) continue;
+      if (foesOnly && ship.team && sh.team && ship.team.id === sh.team.id) continue; // (a harpoon is for the other side)
       sh.layout.platforms.forEach((pl) => {
         const sx = clamp(toShipX(sh, o.x), pl.x0, pl.x1), wx = toWorldX(sh, sx), wy = toWorldY(sh, pl.y);
         const d = Math.hypot(wx - o.x, wy - o.y);
-        if (d > T().RANGE || (dir && d > 1 && ((wx - o.x) * dir.x + (wy - o.y) * dir.y) / d < 0.35)) return;
+        if (d > range || (dir && d > 1 && ((wx - o.x) * dir.x + (wy - o.y) * dir.y) / d < cone)) return;
         if (!best || d < best.d) best = { ship: sh, x: sx, y: pl.y, d };
       });
     }
@@ -85,6 +86,21 @@ export function createTowing({ world, puff, phoneFx = () => {} }) {
     return true;
   };
 
+  // The HARPOON GUN (weapons.js, config.GUN_TYPES.harpoon): a line shot from the muzzle at world (wx, wy) the way the barrel points (world angle `ang`) at the nearest enemy deck in that direction. It
+  // is an ordinary tow (a spring between the two poses, a sword cuts it) with a stronger reel: it hauls the two ships in to HARPOON.LEN and snaps only past HARPOON.SNAP. null: no deck in the line.
+  const fireHarpoon = (ship, ang, wx, wy, p) => {
+    const H = config.GUN_TYPES.harpoon;
+    const hit = nearestDeck(ship, { x: wx, y: wy }, { x: Math.cos(ang), y: Math.sin(ang) }, H.RANGE, 0.8, true);
+    if (!hit) return null;
+    const from = { x: toShipX(ship, wx), y: toShipY(ship, wy) };
+    const tow = link(ship, hit.ship, from, { x: hit.x, y: hit.y - 10 }, hit.d / H.SPEED + 0.05, p ? p.id : null);
+    if (!tow) return null;
+    Object.assign(tow, { harpoon: true, reel: H.REEL, minLen: H.LEN, snap: H.SNAP, maxAcc: H.MAX_ACC, k: H.K, hp: H.HP });
+    world.ev.warn = 2.2;
+    world.ev.warnText = (ship.team ? ship.team.id.toUpperCase() + ' ' : '') + 'HARPOONS ' + String(hit.ship.name || 'THE SHIP').toUpperCase() + '!';
+    return tow;
+  };
+
   const cutNear = (ship, p) => {
     for (const t of tows) {
       const end = t.a === ship ? t.from : t.b === ship && t.fly <= 0 ? t.to : null;
@@ -111,21 +127,28 @@ export function createTowing({ world, puff, phoneFx = () => {} }) {
       if (!live(a) || !live(b) || a.state.down > 0 || (b.state.down > 0 && !b.ai) || a.ctx.wreck) { cut(t, ''); continue; }
       if (t.fly > 0) { // the grapple is still in the air
         t.t += dt;
-        if (t.t >= t.fly) { t.fly = 0; const e = ends(t); puff(e.b.x, e.b.y, '#ffe9a8', 5); world.sfxQ.push(['clang', true]); }
+        if (t.t >= t.fly) {
+          t.fly = 0;
+          const e = ends(t);
+          puff(e.b.x, e.b.y, '#ffe9a8', 5);
+          world.sfxQ.push(['clang', true]);
+          if (t.harpoon && world.match && world.match.on && a.team) world.match.count(a.team.id, 'harpoonHits'); // (the harpoon latched)
+        }
         continue;
       }
       const e = ends(t);
       const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, d = Math.hypot(dx, dy) || 1;
-      t.len = Math.max(T().LEN, t.len - T().REEL * dt); // she hauls the line in, as far as its rest length
+      t.len = Math.max(t.minLen ?? T().LEN, t.len - (t.reel ?? T().REEL) * dt); // she hauls the line in, as far as its rest length (a harpoon: faster and shorter, its own numbers)
       t.d = d;
       t.tension = 0;
-      if (d > T().SNAP) { cut(t, 'THE TOWLINE SNAPS!'); continue; }
+      const snapAt = t.snap ?? T().SNAP;
+      if (d > snapAt) { cut(t, t.harpoon ? 'THE HARPOON LINE SNAPS!' : 'THE TOWLINE SNAPS!'); continue; }
       if (d <= t.len) continue;
       const nx = dx / d, ny = dy / d; // from the towing ship toward the towed one
       const stretch = d - t.len, va = vel(a), vb = vel(b);
       const sep = (vb.x - va.x) * nx + (vb.y - va.y) * ny; // how fast they are moving apart along the line
-      const acc = clamp(T().K * stretch + T().DAMP * Math.max(0, sep), 0, T().MAX_ACC);
-      t.tension = clamp(stretch / (T().SNAP - t.len), 0, 1);
+      const acc = clamp((t.k ?? T().K) * stretch + T().DAMP * Math.max(0, sep), 0, t.maxAcc ?? T().MAX_ACC);
+      t.tension = clamp(stretch / (snapAt - t.len), 0, 1);
       const ma = mass(a), mb = mass(b), sa = mb / (ma + mb), sb = ma / (ma + mb); // (the heavier ship moves less)
       shove(a, nx * acc * sa * dt, ny * acc * sa * dt);
       shove(b, -nx * acc * sb * dt, -ny * acc * sb * dt);
@@ -136,5 +159,5 @@ export function createTowing({ world, puff, phoneFx = () => {} }) {
     }
   };
 
-  return { throwLine, cutNear, step, link, cut, ends, tows };
+  return { throwLine, fireHarpoon, cutNear, step, link, cut, ends, tows };
 }

@@ -17,7 +17,7 @@
 // Ships that are down (patching, wrecked) are not solid: the old Versus rule, a wreck is out of the fight. A ship that is moored (the lobby) is not moving, so nothing runs before CAST OFF.
 // Tunables: config.COLLIDE.
 import { config } from '../../config.js';
-import { pivotOf as mirrorPivot, toShipX, toShipY, driveVx, driveGain } from './pose.js';
+import { pivotOf as mirrorPivot, toShipX, toShipY, toWorldX, toWorldY, driveVx, driveGain } from './pose.js';
 import { pivotOf as massOf, kickForce } from './forces.js';
 
 const SIDES = 24; // the ellipses become 24-sided polygons...
@@ -156,6 +156,14 @@ function addVelocity(sh, dx, dy) {
   sh.pose.vy += dy;
 }
 
+// Is the contact c at this ship's ram prow (layout.ram: PVP.md "Space and range", config.RAM)? Her ram tip is the nose of the deck it stands at, in the world.
+function ramOf(S, c) {
+  const r = S.layout.ram;
+  if (!r || r.d == null || !S.layout.platforms[r.d]) return false;
+  const tx = toWorldX(S, r.x + config.RAM.TIP), ty = toWorldY(S, S.layout.platforms[r.d].y);
+  return Math.hypot(c.x - tx, c.y - ty) < config.RAM.REACH;
+}
+
 // D = { world, puff(x, y, colour, n) }
 export function createShipCollide(D) {
   const world = D.world;
@@ -207,13 +215,21 @@ export function createShipCollide(D) {
     if (!hard || k.hurt > 0) return;
     k.hurt = C.COOLDOWN;
     stats.hits++;
+    const base = (C.DAMAGE * c.closing) / 100;
+    const rammer = ramOf(A, c) ? A : ramOf(B, c) ? B : null; // (a reinforced prow at the contact: the other ship takes the brunt, PVP.md "Space and range")
+    if (rammer) {
+      const R = config.RAM, M = world.match;
+      if (M && M.on && rammer.team) { M.count(rammer.team.id, 'rams'); M.count(rammer.team.id, 'ramDmg', Math.min(R.MAX_POWER, base * R.MUL) * 3); }
+      world.ev.warn = 2;
+      world.ev.warnText = (rammer.team ? rammer.team.id.toUpperCase() + ' ' : '') + 'RAMS!';
+    }
     for (const [S, sign] of [[A, 1], [B, -1]]) {
       const sx = toShipX(S, c.x), sy = toShipY(S, c.y);
-      S.sim.impact(sx, sy, Math.min(C.MAX_POWER, (C.DAMAGE * c.closing) / 100));
+      S.sim.impact(sx, sy, rammer ? (S === rammer ? base * config.RAM.SELF : Math.min(config.RAM.MAX_POWER, base * config.RAM.MUL)) : Math.min(C.MAX_POWER, base));
       kickForce(S.ctx, { x: sx, y: sy }, sign * c.nx * S.pose.f, sign * c.ny, C.KICK * Math.min(3, c.closing / 150)); // (her bow's x: the world's times her facing)
     }
-    world.ev.warn = 1.5;
-    world.ev.warnText = 'THE SHIPS COLLIDE!';
+    if (!rammer) world.ev.warn = 1.5;
+    if (!rammer) world.ev.warnText = 'THE SHIPS COLLIDE!';
   }
 
   // The world's once-a-step call, after the ships have moved.

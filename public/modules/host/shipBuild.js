@@ -42,11 +42,11 @@ export const CONNECTOR_SPEED = { rope: 150, ladder: 170, stairs: 150, lift: 260,
 const ARRAYS = ['platforms', 'connectors', 'rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers', 'boarderEntryPoints', 'escortDocks', 'gasbags'];
 const KEYED = ['gunMounts', 'searchlights'];
 const OPTIONAL = ['ballast', 'gasValves', 'sails', 'armour', 'cannons']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
-const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'liftRepair'];
+const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'liftRepair', 'ram'];
 const X_FIELDS = {
   platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x', 'sx'], vents: ['x'], racks: ['x'],
   extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], sails: ['x'], cannons: ['x'], armour: ['x0', 'x1'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
-  coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbags: ['cx'], liftRepair: ['x'],
+  coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbags: ['cx'], liftRepair: ['x'], ram: ['x'],
 };
 const D_KINDS = ['rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers'];
 // Derived fields a `frame` part may set by hand instead of letting deriveGeometry work them out.
@@ -172,11 +172,14 @@ export const PARTS = {
   // A place a player can stand to do a job.
   station: piece('stations', { mass: kindStat('mass'), hands: kindStat('hands') }),
   // A station plus the gun on it: where the barrel pivots (bx, by), the middle of its arc (aim) and how far it turns (arc).
-  gun: { mass: () => M().kind.gun, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
-    const { bx, by, aim, arc, n, ord } = p;
+  // (`gtype` makes it one of the gun types of the range bands, config.GUN_TYPES: long, mortar, scatter, flak, harpoon, or the mine layer 'mines'; weapons.js. None: the plain broadside gun.)
+  gun: { mass: (p) => M().kind[p.gtype === 'mines' ? 'mineLayer' : p.gtype ? 'gun_' + p.gtype : 'gun'] ?? M().kind.gun, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
+    const { bx, by, aim, arc, n, ord, gtype } = p;
     A.add('stations', { n, kind: 'gun', p: p.p, x: p.x });
-    A.add('gunMounts', { bx, by, aim, arc }, n, ord && ord.gunMounts);
+    A.add('gunMounts', { bx, by, aim, arc, ...(gtype ? { type: gtype } : {}) }, n, ord && ord.gunMounts);
   } },
+  // The RAM PROW (PVP.md "Space and range", config.RAM): a reinforced iron nose on the end of a deck (x = the deck's fore end). A ship that rams with it hurts the other ship far more than herself (shipCollide.js).
+  ramProw: { mass: () => M().kind.ram, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('ram', { p: p.p, x: p.x }) },
   // A station plus its lamp. len = how long the drum is (the beam starts at the lens).
   searchlight: { mass: () => M().kind.searchlight, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
     const { bx, by, aim, arc, len, n } = p;
@@ -474,6 +477,7 @@ export function buildLayout(parts, opts = {}) {
   for (const kind of D_KINDS) out[kind] = out[kind].map((o) => ({ ...o, d: index(o.p) }));
   if (out.sails) out.sails = out.sails.map((o) => ({ ...o, d: index(o.p) }));
   if (out.cannons) out.cannons = out.cannons.map((o) => ({ ...o, d: index(o.p) }));
+  if (out.ram) out.ram = { ...out.ram, d: index(out.ram.p) };
   if (out.armour) out.armour = out.armour.map((o) => ({ ...o, d: index(o.p) }));
   if (out.gasValves) out.gasValves =out.gasValves.map((o) => ({ ...o, d: index(o.p), bag: bagNearX(out.gasbags, o.bx != null ? o.bx : o.x) })); // (the bag it feeds: tail to nose, as in gasbags; -1 with no bag)
   if (out.ballast) out.ballast =out.ballast.map((o) => { const d = index(o.p); return { ...o, d, y: d < 0 ? 0 : out.platforms[d].y + (o.hang ? config.BALANCE.BALLAST_HANG : 0) }; });

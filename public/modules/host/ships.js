@@ -49,6 +49,7 @@ import { SHIP_LAYOUT, createLayout } from '../../shipLayout.js';
 import { config } from '../../config.js';
 import { createPose, bindBody, pivotOf } from './pose.js';
 import { mainNav, createNav } from './nav.js';
+import { gunStock } from './gunTypes.js';
 
 // The state keys that belong to ONE ship. Ship 0's context forwards them to the world state; another ship's context owns them (undefined until its factory, or
 // shipInit below, makes them). A key a ship's subsystems write must be listed, or it is written to the context only (see the check in --check-two-ships).
@@ -73,7 +74,7 @@ export const SHIP_KEYS = [
 // The world keys a second ship's code is allowed to READ through the prototype: the sky she shares (the enemies and shots and wrecks in it, the weather and the
 // environment, the clock and the banner, the sound queue, the difficulty and the crew scale). Every other key a ship needs is her own (SHIP_KEYS), or tools/buildsim.mjs
 // --check-two-ships fails and names it: a read that quietly fell through to ship 0 would be a cross-talk bug.
-export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'difficulty', 'enemy', 'enemyBombs', 'ev', 'flashes', 'mines', 'paras', 'periscope', 'phase', 'popups', 'rings', 'match', 'rockets', 'sfxQ', 'shells', 'specials', 'strafers', 'tempo', 'weather', 'wrecks', 'hijacks', 'chutes', 'shipBombs', 'puffs', 'kills', 'scroll', 'ships', 'paused', 'mode', 'thrown', 'tows'];
+export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'difficulty', 'enemy', 'enemyBombs', 'ev', 'flashes', 'mines', 'paras', 'periscope', 'phase', 'popups', 'rings', 'match', 'rockets', 'sfxQ', 'shells', 'specials', 'strafers', 'tempo', 'weather', 'wrecks', 'hijacks', 'chutes', 'shipBombs', 'puffs', 'kills', 'scroll', 'ships', 'paused', 'mode', 'thrown', 'tows', 'laid'];
 // World keys a ship's code WRITES as a plain number (a context would shadow them): they pass through to the world on every context.
 export const WORLD_WRITES = ['kills'];
 
@@ -83,7 +84,7 @@ export const newBody = () => ({ alt: 0, speed: 0.3, order: 0.3, hull: 100, shake
 // One gun record per mount of the layout (name -> { bx, by, aim, home, arc, cd, ammo ... }).
 export const newGuns = (layout) =>
   Object.fromEntries(
-    Object.entries(layout.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, reach: 1 + config.NEST.TIER_BONUS * layout.nestTier((layout.stations.find((s) => s.n === name) || {}).p) }]),
+    Object.entries(layout.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ...gunStock(m), empty: 0, reach: 1 + config.NEST.TIER_BONUS * layout.nestTier((layout.stations.find((s) => s.n === name) || {}).p) }]),
   );
 
 // The starting values of a ship's own keys (ship 0 gets its from createSimulation's state literal; another ship's context is filled from here).

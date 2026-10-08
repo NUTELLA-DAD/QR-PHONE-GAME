@@ -16,10 +16,32 @@ import { toWorldX, toWorldY, toShipX, toShipY } from '../pose.js';
 import { mainShip } from '../ships.js';
 import { altWindow } from '../course.js';
 import { solidAt } from '../maps.js';
+import { holdFor } from './range.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rnd = (r) => r[0] + Math.random() * (r[1] - r[0]);
 const smooth = (x) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
+
+// What a ship has to fight with, gun by gun (the layout's gun mounts and her ram prow).
+export function profileOf(L) {
+  const p = { long: 0, mortar: 0, scatter: 0, flak: 0, harpoon: 0, mines: 0, plain: 0, ram: L.ram ? 1 : 0 };
+  for (const m of Object.values(L.gunMounts)) { if (m.type) p[m.type] = (p[m.type] || 0) + 1; else p.plain++; }
+  return p;
+}
+// The band a captain plays in: the one her style likes, moved by what her ship can fight with (config.PVP.BOT.RANGE). A band the ship has nothing to fight in is not chosen (a sniper with no long gun and no
+// mortar plays the longest band she CAN fight in); with no guns at all it is the short band, the ram and the boarders.
+export function chooseBand(S, prof) {
+  const R = config.PVP.BOT.RANGE;
+  const sc = { short: 0, mid: 0, long: 0 };
+  sc[S.band || 'mid'] += R.STYLE;
+  sc.long += R.LONG_GUN * prof.long + R.MORTAR * prof.mortar;
+  sc.mid += R.PLAIN * prof.plain + R.FLAK * prof.flak;
+  sc.short += R.SCATTER * prof.scatter + R.HARPOON * prof.harpoon + R.RAM * prof.ram;
+  const can = { short: true, mid: prof.plain + prof.flak > 0, long: prof.long + prof.mortar > 0 };
+  let best = 'short';
+  for (const b of ['short', 'mid', 'long']) if (can[b] && sc[b] > sc[best]) best = b;
+  return best;
+}
 
 // The captain of this ship for this round (made when the round changes: a fresh style, fresh counters).
 export function captainOf(state) {
@@ -40,8 +62,13 @@ export function captainOf(state) {
     round, style, S: S[style], t: 0, think: 0, play: 'duel', leg: '', legT: 0, rangeAdj: 0, bombRun: false, side: null, ca: false, behindT: 0, lastTurn: 0,
     blockT: 0, blockL: false, blockR: false, jAlt: 0, jAltT: 0, jThr: 0, jThrT: 0, rWob: 0, rWobT: 0, lastSign: 1,
     dodge: null, dodgeCd: 0, scanT: 0, threat: null, grappleUntil: 0, passCd: rnd([6, 14]), ramCd: 8, grappleCd: rnd([10, 24]), backoffUntil: 0, calloutAt: -99,
-    stats: { jinks: 0, dodges: 0, passes: 0, bombRuns: 0, rams: 0, grapples: 0, noRoom: 0, chases: 0, retreats: 0, turns: 0 },
+    stats: { jinks: 0, dodges: 0, passes: 0, bombRuns: 0, rams: 0, grapples: 0, noRoom: 0, chases: 0, retreats: 0, turns: 0, kites: 0, mineRuns: 0, harpoons: 0 },
+    losT: 0, openT: 0, losShift: 0, losPickT: 0,
+    mines: false, mineGap: 0, mineUntil: 0, kiteCd: rnd([4, 12]), kiteUntil: 0, harpoonCd: rnd([6, 14]), harpoonT: 0, mineSaid: false,
   };
+  c.prof = profileOf(ship.layout);
+  c.band = chooseBand(S[style], c.prof);
+  c.hold = holdFor(c.band) + S[style].stand * config.PVP.STANDOFF * 0.4; // (px between the aim points of two classic hulls that she likes: the band's hold, nudged by her style)
   return c;
 }
 
@@ -133,6 +160,8 @@ export function captainFly(state, p, plan, dt) {
   const TOP = config.SHIP.TOP_SPEED;
   c.t += dt;
   c.legT += dt;
+  c.harpoonCd -= dt;
+  c.kiteCd -= dt;
   const hullS = L.bounds, rS = R.layout.bounds;
   const half = (hullS.x1 - hullS.x0) / 2 + (rS.x1 - rS.x0) / 2; // how far apart the aim points are when the hulls just touch end to end
   const stand = P.STANDOFF + (hullS.x1 - hullS.x0) / 2 + (rS.x1 - rS.x0) / 2 - 2 * P.REF_HALF;
@@ -192,16 +221,37 @@ export function captainFly(state, p, plan, dt) {
     c.passCd -= 0.4; c.ramCd -= 0.4; c.grappleCd -= 0.4;
     if (!gun && c.play === 'duel' && !turning && state.turning && state.turning.t === 0) {
       const dtk = 0.4;
-      const R_ = B.RAM;
-      if (S.ram > 0 && facing && c.ramCd <= 0 && my_h >= R_.MY_HULL && their_h < R_.THEIR_HULL && my_h > their_h + R_.EDGE && dist < 3200 && !wedged && Math.random() < R_.RATE * S.ram * dtk * (their_h < 30 ? 3 : 1)) {
+      const R_ = B.RAM, RP = c.prof.ram ? B.RAMPROW : null; // (a ram prow: the ram run is flown against any rival, much more keenly)
+      const keen = Math.max(S.ram, RP ? 1 : 0);
+      if (keen > 0 && facing && c.ramCd <= 0 && my_h >= (RP ? RP.MY_HULL : R_.MY_HULL) && their_h < (RP ? RP.THEIR_HULL : R_.THEIR_HULL) && my_h > their_h + (RP ? RP.EDGE : R_.EDGE) && dist < (RP ? RP.REACH : 3200) && !wedged && Math.random() < R_.RATE * keen * (RP ? RP.RATE_MUL : 1) * dtk * (their_h < 30 ? 3 : 1)) {
         c.play = 'ram'; c.legT = 0; c.rammed = false;
         callout(state, 'RAM RUN!', 2);
+      } else if (c.band === 'long' && c.kiteCd <= 0 && !wedged && dist < (stand + (c.rangeAdj || 0)) * B.RANGE.KITE_AT && their_h > 8) {
+        c.play = 'kite'; c.legT = 0; c.kiteUntil = c.t + rnd(B.RANGE.KITE_TIME); // (closed on at long range: turn tail and run, laying mines behind, until there is room to shoot again)
+        c.stats.kites++;
+        callout(state, 'KEEPS HER DISTANCE!');
       } else if (facing && c.passCd <= 0 && enough && dist < B.PASS.MAX_DIST && dist > stand * 0.5 && Math.random() < B.PASS.RATE * S.pass * dtk) {
         startPass(state, c, ship, R, L, B);
       } else if (c.grappleCd <= 0 && enough && S.raid >= 1 && dist < stand * 1.8 && Math.random() < config.PVP.BOT.RAID.GRAPPLE * S.raid * dtk) {
         c.play = 'grapple'; c.legT = 0; c.grappleUntil = c.t + rnd(config.PVP.BOT.RAID.GRAPPLE_TIME);
         c.stats.grapples++;
         callout(state, 'CLOSES IN TO BOARD!');
+      }
+    }
+  }
+
+  // ---- a rock island between the two ships: nobody can shoot (a shell dies in rock), so a captain who is not hiding climbs or dives to a height where the line is open ----
+  const map = state.course && state.course.map;
+  if (!gun && map) {
+    const LOS = B.LOS;
+    if (lineOpen(map, mx, my, R.mid.x, R.mid.y)) { c.losT = 0; c.openT += dt; if (c.openT > LOS.RESET) c.losShift = 0; }
+    else if (!hurt && my_h + 10 >= their_h) {
+      c.openT = 0;
+      c.losT += dt;
+      if (c.losT > LOS.AFTER && c.t >= c.losPickT) {
+        c.losPickT = c.t + LOS.HOLD;
+        c.losShift = 0;
+        for (const d of LOS.TRY) if (lineOpen(map, mx, my + d, R.mid.x, R.mid.y) && !solidAt(map, mx, my + d)) { c.losShift = d; break; }
       }
     }
   }
@@ -218,13 +268,14 @@ export function captainFly(state, p, plan, dt) {
   let speed = plan.speed; // along the bow
   let ca = false;
   c.bombRun = false;
-  let rangeAdj = S.stand * P.STANDOFF + c.rWob;
+  let rangeAdj = gun ? S.stand * P.STANDOFF + c.rWob : c.hold - P.STANDOFF + c.rWob; // (the band she plays in: where she holds the rival, wandering a little)
+  const holdNow = stand + (c.rangeAdj || 0);
 
   if (c.play === 'ram') {
     // full ahead at her; touch or lose heart
     target = clampAlt(AIMY - (R.mid.y + R.vy * Math.min(1, dist / 1500) + c.jAlt * 0.15));
     speed = Math.min(1, dir * f * 1.0);
-    if (dist < B.RAM.REACH && !c.rammed) { c.rammed = true; c.stats.rams++; count(state, 'rams'); callout(state, 'RAMMED!', 2); }
+    if (dist < B.RAM.REACH && !c.rammed) { c.rammed = true; c.stats.rams++; count(state, 'ramRuns'); callout(state, c.prof.ram ? 'RAMS WITH HER PROW!' : 'RAMMED!', 2); }
     if (c.rammed || c.legT > B.RAM.TIME || my_h < B.RAM.MY_HULL - 15 || their_h > B.RAM.THEIR_HULL + 25 || !facing || wedged) {
       c.play = 'duel'; c.ramCd = B.RAM.CD; c.backoffUntil = c.t + 4;
     }
@@ -233,7 +284,7 @@ export function captainFly(state, p, plan, dt) {
     if (r) ({ target, speed, ca } = { target: r.target, speed: r.speed, ca: r.ca });
   } else {
     // duel (and grapple / chase, which are the duel with another standoff)
-    let alt = plan.target + (c.jAlt + (c.dodge ? c.dodge.alt : 0)) * (hurt ? 0.6 : 1);
+    let alt = plan.target + (c.jAlt + (c.dodge ? c.dodge.alt : 0)) * (hurt ? 0.6 : 1) - c.losShift;
     target = clampAlt(alt);
     if (state.ship.gas < B.JINK.LOW_GAS || state.ship.alt < win.min + B.JINK.FLOOR) target = Math.max(target, Math.min(plan.target, state.ship.alt) - 30); // (low on gas or close to the ground: no dives; every dive vents lift she cannot spare)
     let thr = c.jThr * (hurt ? 0.5 : 1) + (c.dodge ? c.dodge.thr : 0);
@@ -244,7 +295,16 @@ export function captainFly(state, p, plan, dt) {
       thr += clamp((R.vx - ship.pose.vx) / TOP, -0.5, 0.5) * 0.8;
       if (c.t > c.grappleUntil || hurt || state.ship.hull < B.RAID.MIN_HULL) { c.play = 'duel'; c.grappleCd = rnd([22, 40]); }
     }
-    if (!gun && !hurt && their_h < B.CHASE.HULL && my_h >= B.CHASE.MY_HULL) {
+    if (c.play === 'kite') { // running from a chaser at long range (rivalPlan flies the retreat): until there is room, or the time is up
+      thr = 0;
+      if (c.t > c.kiteUntil || dist > holdNow * 1.3 || wedged || hurt) { c.play = 'duel'; c.kiteCd = B.RANGE.KITE_CD; }
+    }
+    const lineOn = !gun && (state.tows || []).find((t) => t.harpoon && t.a === ship); // our harpoon has latched: press in and board
+    if (lineOn && c.play !== 'grapple' && c.play !== 'kite') {
+      c.play = 'grapple'; c.legT = 0; c.grappleUntil = c.t + B.HARPOON.GRAPPLE_TIME; c.harpoonCd = B.HARPOON.CD; c.stats.harpoons++;
+      callout(state, 'HARPOONS HER - REELING IN!', 2);
+    }
+    if (!gun && !hurt && their_h < B.CHASE.HULL && my_h >= B.CHASE.MY_HULL && c.band !== 'long') {
       rangeAdj -= B.CHASE.CLOSE;
       if (c.play !== 'chase') { c.play = 'chase'; c.stats.chases++; callout(state, 'GIVES CHASE!'); }
     } else if (c.play === 'chase') c.play = 'duel';
@@ -270,10 +330,57 @@ export function captainFly(state, p, plan, dt) {
   }
   c.rangeAdj = c.play === 'duel' || c.play === 'grapple' || c.play === 'chase' ? Math.max(rangeAdj, B.MIN_GAP - P.STANDOFF) : 0; // (never press the hulls together unless she means to: the noses touch about MIN_GAP apart)
   speed = clamp(speed, -config.SHIP.REVERSE, 1);
+  if (!gun) {
+    // ---- mines: a field across the chaser's path, and a wide berth round the ones already laid ----
+    const MN = B.MINES;
+    const awayV = -(ship.pose.vx - R.vx) * dir; // how fast she is drawing away from the rival (px/s)
+    const wish = c.prof.mines > 0 && dist < MN.MAX_DIST && awayV > MN.AWAY && ((MN.RETREAT && (hurt || c.play === 'kite')) || (c.band === 'long' && dist < holdNow * MN.CLOSING_BAND));
+    c.mineGap -= dt;
+    if (wish && c.mineGap <= 0) { c.mineGap = MN.EVERY; c.mineUntil = c.t + MN.WINDOW; }
+    c.mines = wish && c.t < c.mineUntil;
+    if (c.mines && !c.mineSaid) { c.mineSaid = true; c.stats.mineRuns++; callout(state, 'LAYS A MINEFIELD!', 2); } else if (!c.mines) c.mineSaid = false;
+    if (c.play !== 'ram' && c.play !== 'pass' && state.laid && state.laid.length) {
+      const av = mineAvoid(state, ship, L, clamp(win.min, -1e9, 1e9), clampAlt, target);
+      if (av) { target = av.target; if (av.stop && Math.abs(speed) > 0.1) speed *= 0.3; }
+    }
+  }
   plan.target = target;
   plan.speed = speed;
   c.ca = ca;
   return { ca, play: c.play };
+}
+
+// Is the sky between two world points free of rock? (twelve samples along the line, a couple of hits are a shut line: the same test aim.js uses to find the rival)
+function lineOpen(map, x0, y0, x1, y1) {
+  let shut = 0;
+  for (let k = 1; k <= 12; k++) if (solidAt(map, x0 + ((x1 - x0) * k) / 13, y0 + ((y1 - y0) * k) / 13)) shut++;
+  return shut < 2;
+}
+
+// Mines in the way (config.PVP.BOT.MINES.AVOID): any laid mine, ours too, in the box ahead of her nose (the way she is moving) that her hull would touch at her height; she climbs over it or dives
+// under it, whichever is the shorter way the sky and the wall allow. Returns { target (the altitude to fly at), stop (no way round: slow down; the gunners are shooting) } or null.
+function mineAvoid(state, ship, L, _unused, clampAlt, target) {
+  const AV = config.PVP.BOT.MINES.AVOID, K = config.MINEFIELD, b = L.bounds, f = ship.pose.f;
+  const xa = toWorldX(ship, b.x0), xb = toWorldX(ship, b.x1), x0 = Math.min(xa, xb), x1 = Math.max(xa, xb);
+  const vx = ship.pose.vx, way = Math.abs(vx) > 40 ? Math.sign(vx) : f;
+  const look = AV.LOOK + Math.abs(vx) * AV.SPEED_LOOK;
+  const lo = way > 0 ? x1 - 150 : x0 - look, hi = way > 0 ? x1 + look : x0 + 150;
+  const top = ship.pose.y + b.y0, bottom = ship.pose.y + b.y1;
+  let up = 0, down = 0, n = 0;
+  for (const m of state.laid) {
+    if (m.dead || m.x < lo || m.x > hi) continue;
+    const r = K.RADIUS * 1.5 + AV.MARGIN;
+    if (m.y < top - r || m.y > bottom + r) continue;
+    n++;
+    up = Math.max(up, bottom - (m.y - r)); // climb this far and her belly is above the mine
+    down = Math.max(down, m.y + r - top); // ...or dive this far and her top is below it
+  }
+  if (!n) return null;
+  const alt = state.ship.alt, goUp = clampAlt(alt + up), goDown = clampAlt(alt - down);
+  const upOk = goUp >= alt + up - 40, downOk = goDown <= alt - down + 40;
+  if (upOk && (!downOk || up <= down)) return { target: Math.max(target, goUp), stop: false };
+  if (downOk) return { target: Math.min(target, goDown), stop: false };
+  return { target, stop: true };
 }
 
 // ---- the pass: over or under the rival, to her other side, then come about ----

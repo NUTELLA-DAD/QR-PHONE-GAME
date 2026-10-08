@@ -436,6 +436,29 @@ export function validate(parts, opts = {}) {
   if (L.racks.some((r) => r.kind === 'sandbag' || r.kind === 'crate')) info('Cargo', `${L.racks.filter((r) => r.kind === 'sandbag' || r.kind === 'crate').length} cargo rack(s): ATTACK on an open deck throws what you carry (a sandbag weighs ${config.CROSS.CARGO.ITEMS.sandbag.w}, a crate ${config.CROSS.CARGO.ITEMS.crate.w}); it lands on whatever ship it hits as dead weight and tips her until somebody shovels it off. At the rail, Action dumps a sandbag for a quick lift`);
   if (L.racks.some((r) => r.kind === 'towline')) info('Towing', `a towline reel: ATTACK throws the grapple at a ship within ${config.CROSS.TOW.RANGE} px and tows her (a spring between the two ships that twists both); a sword cuts it`);
 
+  // --- The weapons of the range bands (config.GUN_TYPES, weapons.js) and the ram prow: what each does, and the roofs that spoil them.
+  {
+    const GTs = config.GUN_TYPES, count = {};
+    for (const [name, m] of Object.entries(L.gunMounts)) {
+      if (!m.type || !GTs[m.type]) continue;
+      count[m.type] = (count[m.type] || 0) + 1;
+      const st = L.stations.find((s) => s.n === name), q = st && byId[st.p];
+      if ((m.type === 'mortar' || m.type === 'flak') && q && !q.outside && !isNestRow(rowOf(q))) warn(GTs[m.type].LABEL, `${name} stands on the ${q.name}, a covered deck: a ${m.type === 'mortar' ? 'lob' : 'burst'} needs the open air above it (make the deck outdoor, or move it)`);
+    }
+    const word = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    const px = (v) => Math.round(v / 100) * 100;
+    if (count.long) info('Long gun', `${word(count.long, 'long gun', 'long guns')}: shells reach about ${px(GTs.long.SPEED * GTs.long.LIFE)} px (a broadside gun: ${px(config.GUNS.SHELL_SPEED * config.GUNS.SHELL_LIFE)}), one shot every ${GTs.long.COOLDOWN} s, each ${GTs.long.MUL}x the blow of a broadside shell and tightly aimed; ${GTs.long.MAX_AMMO} shells; weighs ${BALANCE.MASS.kind.gun_long} each. It wants a ship that keeps her distance`);
+    if (count.mortar) info('Mortar', `${word(count.mortar, 'mortar', 'mortars')}: lobs a shell up to ${px((GTs.mortar.SPEED * GTs.mortar.SPEED) / GTs.mortar.GRAVITY)} px on a high arc (it takes ${(((2 * GTs.mortar.SPEED) / GTs.mortar.GRAVITY) * 0.707).toFixed(1)} s to land) that drops onto a deck and a gasbag and splashes down through the hull; wild unless a lookout is up in the nest or the rival is spotted on the radar; ${GTs.mortar.MAX_AMMO} shells; weighs ${BALANCE.MASS.kind.gun_mortar} each`);
+    if (count.scatter) info('Grapeshot', `${word(count.scatter, 'grapeshot gun', 'grapeshot guns')}: a fan of ${GTs.scatter.PELLETS} pellets over ${px(GTs.scatter.SPEED * GTs.scatter.LIFE)} px, once a second - a ship alongside, and boarders; weighs ${BALANCE.MASS.kind.gun_scatter} each`);
+    if (count.flak) info('Flak', `${word(count.flak, 'flak gun', 'flak guns')}: shells that burst when a plane, a bat or an enemy crewman in the air comes within ${GTs.flak.FUSE} px - a boarder's leap is knocked out of the sky; weighs ${BALANCE.MASS.kind.gun_flak} each`);
+    if (count.harpoon) info('Harpoon', `${word(count.harpoon, 'harpoon gun', 'harpoon guns')}: fires a line up to ${GTs.harpoon.RANGE} px at the nearest enemy deck where it points; it latches and reels the two ships together to ${GTs.harpoon.LEN} px (a sword cuts it, it snaps at ${GTs.harpoon.SNAP} px); ${GTs.harpoon.MAX_AMMO} harpoons, one every ${GTs.harpoon.COOLDOWN} s; weighs ${BALANCE.MASS.kind.gun_harpoon} each`);
+    if (count.mines) {
+      info('Mine layer', `${word(count.mines, 'mine layer', 'mine layers')}: a crew member drops floating mines out of the belly (${GTs.mines.MAX_AMMO} in the chute, ${GTs.mines.LOAD} more per ammo crate). A mine arms after ${config.MINEFIELD.ARM} s and goes off against ANY ship that touches it - yours too - and against planes; a shell sets it off; weighs ${BALANCE.MASS.kind.mineLayer} each`);
+      if (!L.stations.some((s) => s.kind === 'ammo')) warn('Mine layer', 'no ammo hold: the mine layer cannot be refilled once it is empty');
+    }
+    if (L.ram) info('Ram prow', `a reinforced prow: when the ships meet nose first a ram hurts the other ship ${config.RAM.MUL}x as much, and her own only ${config.RAM.SELF}x; weighs ${BALANCE.MASS.kind.ram}. It wants speed and a bold captain`);
+  }
+
   // --- Advice: the parts she would be better for (a missing one is a strong WARN, never a FAIL).
   const list = checklist(L, routesOk);
   for (const c of list) if (c.tier === 'rec' && !c.ok && c.applies) warn('Advice', c.why);

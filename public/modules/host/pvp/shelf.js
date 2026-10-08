@@ -42,6 +42,23 @@ function fourBags() {
 // The Boarder's Barge (B.6, config.PVP.SHELF.CROSS): the classic ship with her top deck two columns longer for a crew cannon on the new end, a sandbag rack, a crate stack and a towline reel.
 const bargeParts = () => [...drawDeck(BUILDS.classic, 'catwalk', 1360, 1600).parts, { part: 'crewCannon', n: 'Crew Cannon', p: 'catwalk', x: 1500, aim: config.CROSS.CANNON.AIM, arc: config.CROSS.CANNON.ARC }, { part: 'rack', kind: 'sandbag', p: 'catwalk', x: 400 }, { part: 'rack', kind: 'crate', p: 'catwalk', x: 760 }, { part: 'rack', kind: 'towline', p: 'catwalk', x: 1210 }];
 
+// ---- the range-band ships (PVP.md "Space and range"; config.PVP.SHELF.RANGE): the classic ship with some of her guns turned into the weapons of one band ----
+// Turn the named gun into one of the gun types (its mount re-aimed the way the type wants: a mortar lobs up, a long barrel swings less, a grapeshot gun wider).
+function retype(parts, name, gtype) {
+  return parts.map((p) => {
+    if (p.part !== 'gun' || p.n !== name) return p;
+    const fore = Math.cos(p.aim) >= 0, T = config.GUN_TYPES[gtype];
+    const o = { ...p, gtype };
+    if (gtype === 'mortar') { o.aim = fore ? -1.15 : -(Math.PI - 1.15); o.arc = 0.5; } else o.arc = Math.round(Math.min(1.5, p.arc * T.ARC) * 100) / 100;
+    return o;
+  });
+}
+const withPart = (parts, type, test) => { const s = slotsFor(type, parts).filter(test).sort((a, b) => a.x - b.x)[0]; return s ? s.apply(parts) : parts; };
+// SNIPER: two long guns and a mortar (and a lookout to spot for it), and a mine layer in the belly. BRAWLER: grapeshot on the sponsons and flak on the nest. RAM: a ram prow, a harpoon and grapeshot.
+const sniperParts = () => withPart(retype(retype(retype(BUILDS.classic, 'Nose Gun', 'long'), 'Tail Gun', 'long'), 'Dorsal Gun', 'mortar'), 'mineLayer', (s) => s.p === 'lower' && s.x > 700);
+const brawlerParts = () => retype(retype(retype(BUILDS.classic, 'Fore Sponson', 'scatter'), 'Aft Sponson', 'scatter'), 'Dorsal Gun', 'flak');
+const ramParts = () => withPart(retype(retype(retype(BUILDS.classic, 'Nose Gun', 'harpoon'), 'Fore Sponson', 'scatter'), 'Aft Sponson', 'scatter'), 'ramProw', (s) => s.p === 'main');
+
 // One shelf entry from a parts list (or null when the validator FAILs it).
 function entry(id, name, blurb, parts) {
   let v;
@@ -57,7 +74,7 @@ export const tonnageCap = () => Math.round(budgets(BUILDS.classic).mass * config
 const cache = new Map();
 // The shelf for a seed (cached). Always starts with the classic ship, so index 0 is a safe default.
 export function buildShelf(seed = config.PVP.SHELF.SEED) {
-  const key = seed + '|' + config.PVP.TONNAGE + '|' + config.PVP.SHELF.RANDOM + '|' + !!config.PVP.SHELF.CROSS;
+  const key = seed + '|' + config.PVP.TONNAGE + '|' + config.PVP.SHELF.RANDOM + '|' + !!config.PVP.SHELF.CROSS + '|' + !!config.PVP.SHELF.RANGE;
   if (cache.has(key)) return cache.get(key);
   const cap = tonnageCap();
   const shelf = [];
@@ -86,6 +103,11 @@ export function buildShelf(seed = config.PVP.SHELF.SEED) {
     const n = shelf.filter((e) => e.id.startsWith('var')).length;
     const e = entry('var' + n, 'Variant ' + letters[n % letters.length], 'The classic ship with ' + tags.join(' and '), parts);
     if (e && e.mass <= cap) { seen.add(key2); shelf.push(e); }
+  }
+  if (config.PVP.SHELF.RANGE) { // (last but for the barge, so the seeded variants keep their places)
+    add(entry('sniper', 'Sniper', 'Two long guns, a mortar and a mine layer', sniperParts()));
+    add(entry('brawler', 'Brawler', 'Grapeshot sponsons and a flak gun', brawlerParts()));
+    add(entry('ram', 'Ram', 'A ram prow, a harpoon and grapeshot', ramParts()));
   }
   if (config.PVP.SHELF.CROSS) add(entry('barge', "Boarder's Barge", 'A crew cannon, sandbags and a towline', bargeParts())); // (B.6, dev: host.html?versus=1&cross=1 - last on the shelf, so the others keep their places)
   cache.set(key, shelf);

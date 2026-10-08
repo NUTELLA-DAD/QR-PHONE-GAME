@@ -19,6 +19,8 @@ import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
 import { createTowing } from './towing.js';
 import { stepThrown, cargoItem } from './cargo.js';
+import { stepMines } from './minefield.js';
+import { stepFlak } from './weapons.js';
 import { newBot } from './network.js';
 import { BUILDS } from './shipBuild.js';
 import { powerRatio } from './shipPower.js';
@@ -84,6 +86,7 @@ export function createSimulation() {
     kills: 0,
     thrown: [], // B.6: sandbags, crates and sacks of coal in the air (cargo.js; map coordinates like a shell)
     tows: [], // B.6: towlines made fast between two ships (towing.js)
+    laid: [], // laid mines drifting in the sky (minefield.js; map coordinates like a shell)
     popups: [], // the words that pop up over a hit ("KABOOM"): made here so a ship's context never makes its own (popups.js)
     chutes: [], // parachutes drifting down from planes that were shot down (planes.js)
     scroll: 0,
@@ -305,12 +308,12 @@ export function createSimulation() {
     Object.assign(state.shield, { ang: -Math.PI / 2, on: false, flash: 0 });
     state.tempo = newTempo();
     state.supply = null;
-    state.thrown.length = 0; state.tows.length = 0; // (B.6: loads in the air and towlines are gone with the voyage, and so are the ship's own loads, cannon records and rack stocks)
+    state.thrown.length = 0; state.tows.length = 0; state.laid.length = 0; // (B.6: loads in the air and towlines are gone with the voyage, and so are the ship's own loads, cannon records and rack stocks)
     if (state.loads) state.loads.length = 0;
     if (state.cannons) state.cannons = {};
     if (state.rackStock) state.rackStock = {};
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
-    for (const [name, m] of Object.entries(layout.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, auto: 0, prime: 0, primed: false });
+    for (const [name, m] of Object.entries(layout.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ...gunStock(m), empty: 0, auto: 0, prime: 0, primed: false });
     spotter.reset();
     raiders.reset();
     threats.reset();
@@ -1102,6 +1105,8 @@ export function createSimulation() {
     shipCollide.step(dt); // (every ship has moved: two hulls that overlap are pushed apart, bounce and hurt - shipCollide.js)
     if (state.tows.length) W.towing.step(dt); // (B.6: a towline pulls both ships and twists them)
     if (state.thrown.length) stepThrown(state, dt, puff); // (B.6: thrown sandbags, crates and sacks land on the first deck they cross)
+    if (state.laid.length) stepMines(state, dt, puff); // (laid mines drift, arm, and go off against ships, planes and shells: minefield.js)
+    if (state.shells.length) stepFlak(state, dt, puff); // (flak shells burst near planes and enemy fliers: weapons.js)
 
     // Enemy fire against every ship: rock gives cover, a Deflector stops it, a hit on the hull is that ship's impact.
     for (const bullet of state.bullets) {

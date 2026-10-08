@@ -581,6 +581,22 @@ export const config = {
     SHELL_SPEED: 1300, // shell speed, px/s
     SHELL_LIFE: 1.17, // shell lifetime, seconds (speed x life = range, about 1520 px)
   },
+  // GUN TYPES (weapons.js; PVP.md "Space and range"): a gun part may be one of these instead of the plain broadside gun above (the gun part's `gtype`, the layout's gunMounts[n].type). They are the
+  // weapons of the range bands: LONG (the long gun: slow, accurate, far; the mortar: a high arc that drops onto the deck and the gasbag, better with a spotter), MID (the broadside above; flak),
+  // SHORT (grapeshot; the harpoon, which latches and reels the ships together). Each is a normal station: a person (or a bot) mans it, the stick aims, FIRE fires, the ammo hold feeds it.
+  // SPEED / LIFE = the shell's speed (px/s, relative to the ship) and how long it flies (s): speed x life x the nest bonus = range; COOLDOWN = seconds between shots; MUL = the blow of a shell (x PVP.SHELL_POWER
+  // on a rival ship; x the plain shell's damage on a plane); MAX_AMMO / START_AMMO / LOAD = shells a gun holds, starts with and gets from one ammo crate; ARC = the share of the usual firing arc (a long barrel
+  // swings less); TOL = how true (radians) a bot's aim must be to fire; MASS is in BALANCE.MASS.kind (gun_long ...). SHOP: the sky-dock's part cards may offer them. POWER = the points this gun adds to the
+  // ship's power over a plain gun's YARD.POWER.GUN (shipPower.js: the danger of a voyage follows the power).
+  GUN_TYPES: {
+    SHOP: true,
+    long: { LABEL: 'Long gun', POWER: 1.2, SPEED: 2700, LIFE: 2.55, COOLDOWN: 1.8, MUL: 4.2, MAX_AMMO: 12, START_AMMO: 10, LOAD: 6, ARC: 0.7, TOL: 0.025, SPREAD: 0.004, AUTOLOAD: 7 }, // rifled: range about 6900 px, a tight spread, a heavy blow; a shell takes 2 s to cross 5000 px, so a target that holds still is a target that dies
+    mortar: { LABEL: 'Mortar', POWER: 1, SPEED: 2000, GRAVITY: 900, LIFE: 7, COOLDOWN: 3.2, MUL: 3.6, MAX_AMMO: 10, START_AMMO: 8, LOAD: 5, ARC: 1, TOL: 0.05, SPREAD: 0.075, SPREAD_SPOTTED: 0.02, SPLASH: 150, SPLASH_MUL: 0.6, SPLASH_DY: 330, AUTOLOAD: 6, ASSIST: 3 }, // a high arc (range 1000-4400 px by the barrel's angle); it falls onto a deck and a gasbag, and a SPLASH of SPLASH_MUL x the blow goes on SPLASH_DY px down through the hull; SPREAD (radians) shrinks to SPREAD_SPOTTED when a lookout is manned or the rival is spotted
+    scatter: { LABEL: 'Grapeshot gun', POWER: 0.4, SPEED: 1250, LIFE: 0.62, COOLDOWN: 1.0, MUL: 0.55, PELLETS: 8, CONE: 0.3, MAX_AMMO: 14, START_AMMO: 12, LOAD: 7, ARC: 1.25, TOL: 0.2, AUTOLOAD: 3.5 }, // a fan of PELLETS across CONE radians, about 800 px: hulls alongside, boarders on the way
+    flak: { LABEL: 'Flak gun', POWER: 0.2, SPEED: 1500, LIFE: 1.5, COOLDOWN: 0.75, MUL: 0.5, FUSE: 150, BURST: 230, MAX_AMMO: 24, START_AMMO: 20, LOAD: 12, ARC: 1, TOL: 0.1, PLANE_MUL: 3, AUTOLOAD: 3 }, // the shell bursts when it is FUSE px from a plane, a bat or an enemy crewman in the air; the burst (BURST px) knocks every enemy flier in it out of the sky (he falls to his own medical bay) and hurts a plane PLANE_MUL x a shell
+    mines: { LABEL: 'Mine layer', POWER: 0.6, COOLDOWN: 1.3, MAX_AMMO: 6, START_AMMO: 6, LOAD: 3, ARC: 0, TOL: 3, AUTOLOAD: 14 }, // a chute in the belly: FIRE drops a mine (config.MINEFIELD); the ammo is the mines it holds, an ammo crate adds LOAD
+    harpoon: { LABEL: 'Harpoon gun', POWER: 0.8, SPEED: 2600, RANGE: 2600, COOLDOWN: 9, MAX_AMMO: 4, START_AMMO: 3, LOAD: 2, ARC: 1, TOL: 0.09, LEN: 760, REEL: 300, SNAP: 4300, MAX_ACC: 520, K: 3.2, HP: 3, AUTOLOAD: 12 }, // fires a line at the nearest enemy deck in the way it points; it latches, then REEL px/s shortens the line to LEN px (a spring between the two poses: towing.js); the line snaps past SNAP px, a sword cuts it (HP blows)
+  },
   // Primed shells (prime.js): hold PRIME on a gun to charge the loaded shell for a harder hit. Never required.
   PRIME: {
     TIME: 2.4, // seconds of holding PRIME to fully charge a shell
@@ -675,7 +691,7 @@ export const config = {
   // The SHIPWRIGHT'S YARD (S.6a, modules/host/partsShop.js): ship PARTS as cards in the sky-dock shop, at most one per dock. A part is a pure build edit (the voyage's parts list,
   // simulation.js run.build), checked by the validator (never a FAIL) and fitted to ship 0 at the dock; its effects are weight, lift, steam and stations in the build, never config.
   PARTS_SHOP: {
-    PRICES: { hullBay: 130, keel: 150, gasbag: 160, engine: 120, liftEngine: 170, nest: 140, gun: 100, lamp: 90, bombBay: 150, boiler: 170, coal: 90, ammo: 90, armour: 120, sail: 110, ballast: 90, ladder: 90, pole: 90, lift: 130, crewCannon: 140 }, // base salvage price of each part
+    PRICES: { hullBay: 130, keel: 150, gasbag: 160, engine: 120, liftEngine: 170, nest: 140, gun: 100, lamp: 90, bombBay: 150, boiler: 170, coal: 90, ammo: 90, armour: 120, sail: 110, ballast: 90, ladder: 90, pole: 90, lift: 130, crewCannon: 140, gun_long: 160, gun_mortar: 150, gun_scatter: 110, gun_flak: 120, gun_harpoon: 150, mineLayer: 130, ramProw: 130 }, // base salvage price of each part
     REPEAT_PRICE: 0.3, // each part already bought this voyage adds this share of the base price (the price rises with how many you own)
     CREW_SMALL: 3, // a crew of this many players or fewer finds engines, armour and gasbags cheaper...
     SMALL_MUL: 0.85, // ...by this factor
@@ -822,6 +838,27 @@ export const config = {
     EVERY_MAX: 28,
     EDGE_CHANCE: 0.6, // chance a mine skims the top/bottom (dodge it); otherwise it's dead centre (shoot it)
     RADIUS: 34,
+  },
+  // LAID MINES (minefield.js; the mine layer is a gun type: GUN_TYPES.mines below): floating iron mines a crew member drops out of the belly. They arm after a few seconds, go off against ANY ship that
+  // touches them (the layer's own too), against planes, and when shot. Works in co-op (mines for the things that chase you) and in Versus (a field across the chaser's path).
+  MINEFIELD: {
+    SHOP: true, // the sky-dock's part cards may offer the mine layer
+    ARM: 3.2, // seconds after the drop before a mine is live (it floats clear of the layer first)
+    DRIFT: 26, // px/s it drifts on, the way the layer was going; it sinks at SINK px/s; DRAG = how quickly (per second) it settles to those from the layer's speed
+    SINK: 12,
+    DRAG: 1.4,
+    LIFE: 110, // seconds before it rusts away
+    MAX: 36, // mines in the sky at once (the oldest goes first)
+    RADIUS: 40, // its body (px): a shell within RADIUS + 10 shoots it
+    TRIGGER: 60, // a ship's hull within this many px sets it off
+    POWER: 2.6, // the blow on the ship it goes off against (1 = one enemy bullet = 3 hull; Versus scales the holes and fires of a blow by it)
+    BLAST: 280, // the bang reaches this far (px): a ship within it, but not touching, takes BLAST_MUL of the blow
+    BLAST_MUL: 0.5,
+    KICK: 2.4, // the forces.js kick away from it (RAM_KICK multiples)
+    PLANE: 240, // a plane or a bat this close (an enemy crewman in the air: 0.6 x this) sets it off; a plane within BLAST takes PLANE_MUL shells' worth
+    PLANE_MUL: 14,
+    SHOOT_RANGE: 1800, // the gunners shoot another crew's mine (any mine, in co-op) that lies within this many px of her aim point and ahead of her ...
+    SHOOT_NEAR: 700, // ... or within this many px whichever way it lies
   },
   // How hard different explosions hit the ship (1 = one enemy bullet).
   IMPACT: {
@@ -1151,7 +1188,7 @@ export const config = {
     MASS: {
       deck: 0.3, // per 100 px of deck (an outside deck weighs half)
       link: { ladder: 0.4, rope: 0.3, stairs: 1, lift: 3, pole: 0.3 }, // ways between decks
-      kind: { helm: 5, boiler: 16, lookout: 1, coal: 10, ammo: 6, gun: 3, searchlight: 2, coil: 5, deflector: 5, bombBay: 10, navigator: 1, escort: 5, sail: 4, cannon: 9, cannonSeat: 0 }, // stations by kind (B.6: the crew cannon's brass barrel and carriage weigh on its gunner's station; the seat in the barrel is just a place to stand)
+      kind: { helm: 5, boiler: 16, lookout: 1, coal: 10, ammo: 6, gun: 3, searchlight: 2, coil: 5, deflector: 5, bombBay: 10, navigator: 1, escort: 5, sail: 4, cannon: 9, cannonSeat: 0, gun_long: 6, gun_mortar: 5, gun_scatter: 4, gun_flak: 4, gun_harpoon: 5, mineLayer: 6, ram: 8 }, // stations by kind (B.6: the crew cannon's brass barrel and carriage weigh on its gunner's station; the seat in the barrel is just a place to stand). The gun_* ones are the gun types of GUN_TYPES (a plain gun is 3); mineLayer is the mine chute and its racks, ram the reinforced prow
       engine: 9, pipe: 0.5, vent: 0.3, gasValve: 0.4, rack: 0.2, extinguisher: 0.2, medbay: 3,
       bag: 6, bagTwin: 4, // a gasbag's rigging, and the twin envelope's
       ballast: 5, // one sandbag: cheap and dense, the trimming tool
@@ -1255,6 +1292,9 @@ export const config = {
     KICK: 1.6, // the forces.js kick where they touched (RAM_KICK multiples, at most x3 per 150 px/s of closing speed)
     GIVE_WAY: { TIME: 1.5, MARGIN: 150 }, // bot pilots in a fleet (course.js giveWay): a ship does not fly on while another is inside the box she sweeps over the next TIME seconds, grown by MARGIN px, and AHEAD of her
   },
+  // The RAM PROW (shipBuild.js ramProw, shipCollide.js): a reinforced iron nose. When two ships meet and the contact is within REACH px of one's ram tip, the OTHER ship takes MUL x the usual blow (at most
+  // MAX_POWER) and the rammer only SELF x; both are kicked, and a ram counts for the stats (match.js rams). A ram that touches below COLLIDE.MIN_CLOSING hurts nothing, as any bump.
+  RAM: { POWER: 1.2, MUL: 3.2, SELF: 0.3, REACH: 480, MAX_POWER: 9, TIP: 42, SHOP: true }, // (TIP = how far past the end of her deck the nose reaches, px; SHOP: the sky-dock's part cards may offer it)
   // CROSS-SHIP PLAY (B.6): things that cross from one ship to another, or change what another ship weighs. All of it is per-part and per-ship: a classic co-op ship has none of these parts and nothing here runs.
   CROSS: {
     // The CREW CANNON (cannon.js): a brass cannon on an open deck that fires a CREW MEMBER across the sky. Two stations: the SEAT in the barrel (Action while it is empty: you climb in) and the
@@ -1440,7 +1480,7 @@ export const config = {
     HAND_REACH: 80, // px: how close a boarder stands to the helm / the boiler to work it
     BOARD_RANGE: 1700, // bots look for a way across when the rival's middle is this close (px) and their own ship is calm
     TONNAGE: 1.15, // the shelf's weight cap: the classic ship's mass x this (shipBuild.js budgets mass: 150 x 1.15 = 172), the same for both teams
-    SHELF: { RANDOM: 3, SEED: 11, CROSS: false }, // (CROSS: also the Boarder's Barge, the cross-ship dev ship: host.html?versus=1&cross=1) random valid builds on the shelf (seeded mutations of the classic ship that validate and fit the cap) and their seed
+    SHELF: { RANDOM: 3, SEED: 11, CROSS: false, RANGE: true }, // (RANGE: the Sniper, Brawler and Ram ships of the range bands are on the shelf after the variants; CROSS: also the Boarder's Barge, the cross-ship dev ship: host.html?versus=1&cross=1) random valid builds on the shelf (seeded mutations of the classic ship that validate and fit the cap) and their seed
     HANDICAP: { // crew-size scaling in Versus (replaces CREW_SCALE.TABLE): only the damage and collateral columns matter, and gently: a small crew takes a little less, a big one a little more
       1: { spawn: 1, count: 1, fire: 1, damage: 0.7, raiders: 1, hp: 1, spread: 0.8, collateral: 0.7 },
       2: { spawn: 1, count: 1, fire: 1, damage: 0.78, raiders: 1, hp: 1, spread: 0.85, collateral: 0.78 },
@@ -1461,14 +1501,28 @@ export const config = {
       MIN_GAP: 2000, // the closest she holds the rival in a duel, a grapple or a chase (px between the aim points of two classic hulls; they touch nose to nose at about 1700-2000: a ram run or a pass goes in anyway)
       TURN_BEHIND: 1.5, // seconds the rival must stay behind her bow before the captain comes about (co-op bots wait TURN.BOT_BEHIND)
       CALLOUT_GAP: 6, // seconds between TV call-outs for plays (a boarding or a ram may cut in after 2)
+      // RANGE BANDS (pvp/captainAI.js chooseBand; PVP.md "Space and range"): each style likes a band (STYLES[..].band), but the captain also reads her SHIP: every gun that works in a band is points for it.
+      // A band the ship has nothing to fight with (a sniper without a long gun or a mortar) is not chosen; the nearest one she can fight in is. The captain then holds PVP.RANGE.HOLD[band] from the rival.
+      RANGE: {
+        STYLE: 3, // points for the band the style likes
+        LONG_GUN: 1.6, MORTAR: 1, // ... per long gun / mortar for LONG
+        PLAIN: 0.35, FLAK: 0.2, // ... per ordinary broadside gun / flak gun for MID
+        SCATTER: 1.2, HARPOON: 1.2, RAM: 3, // ... per grapeshot gun / harpoon gun / a ram prow for SHORT
+        KITE_AT: 0.72, KITE_TIME: [7, 13], KITE_CD: 9, // a long-band ship closed on to this share of her hold turns tail and runs (KITE) for KITE_TIME s, then at least KITE_CD s before the next run
+        HOLD_JITTER: 350, // how far (px) the hold wanders from the band's middle, and the extra she keeps from the storm wall
+      },
+      MINES: { RETREAT: true, CLOSING_BAND: 1.25, AWAY: 150, EVERY: 3.2, WINDOW: 1.4, MAX_DIST: 6800, AVOID: { LOOK: 1500, SPEED_LOOK: 1.6, MARGIN: 260 } }, // when the captain wants a mine field laid (captain.mines, read by bots.js): only while she is moving AWAY from the rival (faster than AWAY px/s: a field dropped on the spot would be her own hazard), while she retreats or runs from a chaser (RETREAT), or holds the long band with the rival inside CLOSING_BAND x her hold; the rival must be within MAX_DIST; the wish comes in a WINDOW (s) once every EVERY s (about one mine each); AVOID: she steers over or under mines in the box LOOK px (+ SPEED_LOOK s of speed) ahead, MARGIN px clear
+      LOS: { AFTER: 2.5, HOLD: 6, RESET: 3, TRY: [-700, 700, -1400, 1400, -2100, 2100, -3000, 3000] }, // a rock island on the line between the ships for AFTER s: the captain (not a hurt or losing one, who hides on purpose) shifts her height to the nearest of TRY px (world y, + = lower) where the line is open and keeps it HOLD s; the shift is dropped once the line has stayed open RESET s
+      HARPOON: { MIN_HULL: 40, CD: 25, GRAPPLE_TIME: 10 }, // a captain with the harpoon fires it once her hull is over MIN_HULL, then waits CD s; once it latches she presses in (GRAPPLE) for GRAPPLE_TIME s
+      RAMPROW: { RATE_MUL: 4, THEIR_HULL: 101, EDGE: -100, MY_HULL: 28, REACH: 3600 }, // with a ram prow the ram run is flown against any rival (not only a weak one): the chance is x RATE_MUL, the hull rules loosen
       RAID: { CHANCE_PER_MIN: 7, BOOST: 5, COOLDOWN: 9, MAX: 2, MIN_HULL: 26, KEEP: 3, BUSY: 0.6, DROP_REACH: 1250, DROP_BELOW: 120, GRAPPLE: 0.03, GRAPPLE_TIME: [8, 14], GRAPPLE_CLOSE: 420 }, // crew going across (hookshot or parachute): chance per idle bot per minute (x style), x BOOST when a deck is in reach, the pause after a raid (s), raiders at once, the lowest hull % it still dares from, the crew that must stay home (and the helm, a gun and a lit boiler), the chance a busy hand goes anyway, the parachute drop's sideways reach (px) and how far below the bay floor her deck must be; and the captain's "grapple": chance per second (x style) to close in for GRAPPLE_TIME s, GRAPPLE_CLOSE px inside the standoff, so the decks are in hook range
       STYLE: null, // a style name here puts every captain in it (tests); null = rolled at random for each ship each round
       BOMB: { LOOK: 2.4, STEP: 0.05 }, // the bombardier drops when a bomb let go now would pass through her hull: how many seconds of fall are followed and the step (s)
       STYLES: { // captain personalities (the gunship captains' aggressive / cautious / boarder, plus a daredevil): picked at random for each ship each round by WEIGHT; stand = standoff change (x STANDOFF), jink = weave size, pass / ram / raid = how keen on those plays, bomb = chance of bombing runs, dodge = how readily she dodges
-        brawler: { WEIGHT: 3, stand: -0.12, jink: 0.9, pass: 0.7, ram: 1.4, raid: 1.2, bomb: 0.6, dodge: 0.8 },
-        sniper: { WEIGHT: 2, stand: 0.14, jink: 1.25, pass: 0.4, ram: 0, raid: 0.3, bomb: 0.2, dodge: 1.2 },
-        boarder: { WEIGHT: 2, stand: -0.28, jink: 0.8, pass: 0.6, ram: 0.3, raid: 3, bomb: 0.2, dodge: 0.9 },
-        daredevil: { WEIGHT: 2, stand: -0.06, jink: 1.5, pass: 2, ram: 1.6, raid: 2.2, bomb: 1, dodge: 1 },
+        brawler: { WEIGHT: 3, band: 'mid', stand: -0.12, jink: 0.9, pass: 0.7, ram: 1.4, raid: 1.2, bomb: 0.6, dodge: 0.8, harpoon: 1 },
+        sniper: { WEIGHT: 2, band: 'long', stand: 0.14, jink: 1.25, pass: 0.4, ram: 0, raid: 0.3, bomb: 0.2, dodge: 1.2, harpoon: 0 },
+        boarder: { WEIGHT: 2, band: 'short', stand: -0.28, jink: 0.8, pass: 0.6, ram: 0.3, raid: 3, bomb: 0.2, dodge: 0.9, harpoon: 2 },
+        daredevil: { WEIGHT: 2, band: 'short', stand: -0.06, jink: 1.5, pass: 2, ram: 1.6, raid: 2.2, bomb: 1, dodge: 1, harpoon: 1.5 },
       },
     },
   },

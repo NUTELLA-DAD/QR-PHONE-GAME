@@ -7,6 +7,7 @@
 //   pics.refresh()                                     forget the cache (call when sprites or textures finish loading)
 import { config } from '../../config.js';
 import { paintPath } from './textureArt.js';
+import { drawBarrel } from './weaponsArt.js';
 
 const INK = () => config.INK;
 const WOOD = '#b98a5a', WOOD_DARK = '#6b4a32', IRON = '#6a6568', BRASS = '#c9a85a', RED = '#a8443f', CANVAS = '#ebdfc0';
@@ -27,6 +28,16 @@ function pen(g) {
   return { ink, filled, line };
 }
 
+// A gun of one of the config.GUN_TYPES on its red mount: its own barrel (weaponsArt.js), scaled to the 100 px box and tipped up.
+function typedGun(g, { filled }, type, sc, rot, mx, my) {
+  g.save(); g.translate(mx, my); g.rotate(rot); g.scale(sc, sc);
+  drawBarrel(g, type, filled);
+  g.restore();
+  filled(RED, () => g.arc(mx, my, 15, 0, 7));
+  filled(IRON, () => g.arc(mx, my, 5, 0, 7));
+  filled(WOOD_DARK, () => g.rect(mx - 16, my + 16, 34, 10));
+}
+
 const DRAW = {
   gun(g, { filled, ink }, sprites) {
     g.save(); g.translate(30, 58); g.rotate(-0.42); // the barrel, tipped up on its mount
@@ -39,6 +50,29 @@ const DRAW = {
     filled(RED, () => g.arc(30, 58, 17, 0, 7)); // the red mount
     filled(IRON, () => g.arc(30, 58, 6, 0, 7));
     filled(WOOD_DARK, () => g.rect(14, 74, 34, 10));
+  },
+  // The weapons of the range bands (weaponsArt.js draws the barrels; the same ones the ship wears)
+  gun_long(g, p) { typedGun(g, p, 'long', 0.62, -0.3, 14, 62); },
+  gun_mortar(g, p) { typedGun(g, p, 'mortar', 1.05, -1.05, 30, 66); },
+  gun_scatter(g, p) { typedGun(g, p, 'scatter', 0.95, -0.25, 16, 58); },
+  gun_flak(g, p) { typedGun(g, p, 'flak', 1.0, -0.6, 18, 60); },
+  gun_harpoon(g, p) { typedGun(g, p, 'harpoon', 0.8, -0.3, 22, 58); },
+  mineLayer(g, { filled, line }) { // a trap door in the floor with a floating mine falling out of it
+    filled(WOOD_DARK, () => g.rect(8, 16, 84, 14));
+    filled('#2a2a2a', () => g.rect(26, 16, 48, 14));
+    filled(WOOD, () => { g.moveTo(26, 16); g.lineTo(74, 16); g.lineTo(62, 42); g.lineTo(38, 42); g.closePath(); });
+    g.save(); g.translate(50, 68);
+    filled('#3a3a3e', () => { for (let k = 0; k < 20; k++) { const a = (k / 20) * Math.PI * 2 + 0.15, r = k % 2 ? 17 : 27; k ? g.lineTo(Math.cos(a) * r, Math.sin(a) * r) : g.moveTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); });
+    filled('#55555b', () => g.arc(0, 0, 17, 0, 7));
+    filled('#ff6a3a', () => g.arc(0, -19, 5, 0, 7)); // the lamp
+    g.restore();
+    line([[50, 30], [50, 36]], 3);
+  },
+  ramProw(g, { filled, line }) { // the reinforced beak on the end of a deck
+    filled(WOOD, () => g.rect(6, 40, 40, 22));
+    filled('#6d7378', () => { g.moveTo(34, 30); g.lineTo(76, 44); g.lineTo(96, 52); g.lineTo(76, 66); g.lineTo(34, 74); g.closePath(); });
+    filled(BRASS, () => { g.moveTo(70, 42); g.lineTo(96, 52); g.lineTo(70, 64); g.closePath(); });
+    for (const [x, y] of [[42, 40], [56, 44], [42, 66], [56, 62]]) { g.fillStyle = '#d9d3c4'; g.beginPath(); g.arc(x, y, 2.6, 0, 7); g.fill(); }
   },
   searchlight(g, { filled, line }) {
     g.fillStyle = 'rgba(255,238,160,0.55)'; g.beginPath(); g.moveTo(52, 46); g.lineTo(98, 14); g.lineTo(98, 78); g.closePath(); g.fill(); // the beam
