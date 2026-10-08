@@ -1174,6 +1174,20 @@ export const config = {
     STAMP: '#a8443f', STAMP_BG: 'rgba(243,234,214,0.92)', // red ink for warnings and alarm banners
     SHADOW: 'rgba(43,34,22,0.28)',
   },
+  // PvP arena look (modules/host/pvp/arenaCamera.js, pvpArt.js; Phase V). Soft faded team colours, logbook style.
+  PVP_ART: {
+    RED: '#c4574d', RED_DARK: '#8f3a34', RED_PALE: '#e8b7ae', // team red: flag / bar / outline / light tint
+    BLUE: '#4d7fb3', BLUE_DARK: '#34577d', BLUE_PALE: '#b3cbe3',
+    CAMERA: {
+      MARGIN_X: 240, MARGIN_Y: 120, // empty sky kept round the two ships (world pixels)
+      PAD_Y: 90, // sky kept above and below each ship (as the co-op camera)
+      CREW_H: 130, MIN_CREW_PX: 21, // a crew member is about this tall in the world; never zoom out past this many screen pixels (readable from the sofa). Keep minZoom >= 0.16: below it shipArt's bake (scale floor 0.2) re-bakes every frame
+      SMOOTHING: 2.0, ZOOM_IN: 0.7, ZOOM_OUT: 2.0, // pan speed; zoom speed in (calm) and out (quicker, so a ship never slips off screen)
+    },
+    PENNANT: { POLE: 100, LEN: 150, HEIGHT: 56, WAVE: 0.2 }, // the team flag on a pole above each gasbag (world pixels)
+    HUD: { Y: 24, W: 470, H: 104, BAR_W: 360, BAR_H: 22, LOW: 35 }, // the two side panels on the 1600x900 stage
+    BANG: { SIZE: 30 }, // the "!" over an enemy on your deck (world pixels)
+  },
   // Outline weights (Style 2026, see art/ART_SPEC.md).
   OUTLINE: { MAIN: 3.4, SMALL: 2.5, SHIP: 4 },
   // Effects in the storybook gouache style (modules/host/vfxArt.js): flat colours, ink from INK + OUTLINE, no gradients.

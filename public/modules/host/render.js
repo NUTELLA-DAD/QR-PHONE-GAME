@@ -1793,38 +1793,61 @@ export function createRenderer({ ctx, state, canvas }) {
     lapT = now;
   };
 
-  const renderFrame = (time, view) => {
+  // renderFrame(time, view, opts): opts is optional and only used by the PvP arena (public/modules/host/pvp/), where two
+  // renderers (one per ship) draw onto the SAME canvas with ONE shared camera. With no opts it draws everything as before (co-op).
+  //   opts.layers       which parts to draw (array or Set; default = all):
+  //                       'background'  sky, painted layers, clouds, rock, buildings, markers, turrets, bombs (shared scenery: renderer A only)
+  //                       'ship'        this ship, her guns, crew, hazards, hooks and crew markers
+  //                       'effects'     threats, shells, flashes, puffs, rain, snow and smoke
+  //                       'dark'        the darkness overlay (dark skies)
+  //                       'hud'         the co-op hull / steam / route panels and full-screen cards
+  //                       'arrows'      lookout, gust and spotter arrows at the screen edge
+  //                       'film'        the old-film look (off by default, config.STYLE)
+  //   opts.worldOffset  { dx, dy }: where THIS ship's world sits in the shared camera's world (world pixels); everything
+  //                       world-space (ship, crew, effects, arrows) is drawn shifted by it.
+  //   opts.noClear      skip the sky fill (the first renderer already painted it); the other layers still draw.
+  //   opts.bobPhase     seconds added to this ship's bob and sway, so two ships do not rock in step.
+  const renderFrame = (time, view, opts) => {
     lap();
     const width = canvas.width;
     const height = canvas.height;
+    const layers = opts && opts.layers ? (opts.layers instanceof Set ? opts.layers : new Set(opts.layers)) : null;
+    const has = (name) => !layers || layers.has(name);
+    const off = opts && opts.worldOffset;
+    const odx = off && Number.isFinite(off.dx) ? off.dx : 0;
+    const ody = off && Number.isFinite(off.dy) ? off.dy : 0;
+    const wv = odx || ody ? { ...view, cx: view.cx - odx, cy: view.cy - ody } : view; // (the camera as THIS ship's world sees it)
     setBoilTime(time);
     skyArt.setTime(time / 1000);
     envArt.setTime(time / 1000);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    drawBackground(width, height, view);
+    if (has('background') && !(opts && opts.noClear)) drawBackground(width, height, view);
     lap('background');
 
     // World layer, positioned by the camera.
-    ctx.setTransform(view.zoom, 0, 0, view.zoom, width / 2 - view.cx * view.zoom, height / 2 - view.cy * view.zoom);
-    if (!bgArt.has(envIdOf(state))) drawNearClouds(width, height, view); // (a painted background brings its own clouds)
-    if (!(state.course && state.course.map)) skyArt.fogBack(view, width, height); // (caves draw it themselves)
-    courseArt.drawTerrain(view, width, height);
-    courseArt.drawBuildings(view, width, time / 1000);
-    courseArt.drawMarkers(time / 1000);
-    courseArt.drawTurrets(time / 1000);
-    drawBombs(time / 1000);
-    skyArt.fogFront(view, width, height); // thin fog over the rock, under the ship
+    ctx.setTransform(view.zoom, 0, 0, view.zoom, width / 2 - wv.cx * view.zoom, height / 2 - wv.cy * view.zoom);
+    if (has('background')) {
+      if (!bgArt.has(envIdOf(state))) drawNearClouds(width, height, wv); // (a painted background brings its own clouds)
+      if (!(state.course && state.course.map)) skyArt.fogBack(wv, width, height); // (caves draw it themselves)
+      courseArt.drawTerrain(wv, width, height);
+      courseArt.drawBuildings(wv, width, time / 1000);
+      courseArt.drawMarkers(time / 1000);
+      courseArt.drawTurrets(time / 1000);
+      drawBombs(time / 1000);
+      skyArt.fogFront(wv, width, height); // thin fog over the rock, under the ship
+    }
     lap('terrain');
 
     ctx.save();
     // A smooth, capped shake (no random jitter), a slow two-speed bob and a slight sway: she's a
     // big thing hanging in the air. (Visual only - collisions use the steady ship.)
     const ts = time / 1000;
+    const bts = ts + (opts && Number.isFinite(opts.bobPhase) ? opts.bobPhase : 0);
     const amp = Math.min(config.CAMERA.SHAKE_MAX, state.ship.shake * config.CAMERA.SHAKE_SCALE);
-    const bob = Math.sin(ts * 1.1) * 5 + Math.sin(ts * 0.37 + 1) * 3;
+    const bob = Math.sin(bts * 1.1) * 5 + Math.sin(bts * 0.37 + 1) * 3;
     ctx.translate(amp ? Math.sin(ts * 61) * amp : 0, -state.ship.alt + bob + (amp ? Math.cos(ts * 47) * amp * 0.6 : 0));
     {
-      const sway = Math.sin(ts * 0.8) * 0.005 + Math.sin(ts * 0.31) * 0.004;
+      const sway = Math.sin(bts * 0.8) * 0.005 + Math.sin(bts * 0.31) * 0.004;
       const [px, py] = config.SHIP.TILT_PIVOT || SHIP_LAYOUT.tiltPivot;
       ctx.translate(px, py);
       ctx.rotate((state.ship.pitch || 0) + sway);
@@ -1917,7 +1940,7 @@ export function createRenderer({ ctx, state, canvas }) {
         spotterArt.drawHelp(p, px, y, time / 1000); // HELP! call-out
       }
     };
-    if (state.wreck) {
+    if (!has('ship')) { /* (another renderer draws this ship's layer, or none) */ } else if (state.wreck) {
       // Breaking apart: the gasbag and the two halves of the gondola tumble away separately.
       const t = state.wreck.t;
       [
@@ -1936,37 +1959,43 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.restore();
       });
     } else drawShipAndCrew();
-    if (view.shipOverlay) view.shipOverlay(ctx, ts); // (dev pages draw on the ship's own coordinates: public/buildtest.html)
+    if (view.shipOverlay && has('ship')) view.shipOverlay(ctx, ts); // (dev pages draw on the ship's own coordinates: public/buildtest.html)
     ctx.restore();
     lap('crew');
-    drawEffects(time / 1000, view);
-    drawStorm(width, height, view, time / 1000);
-    envArt.worldFront(view, width, height, time / 1000); // snow, blizzard haze, embers, smoke
+    if (has('effects')) {
+      drawEffects(time / 1000, wv);
+      drawStorm(width, height, wv, time / 1000);
+      envArt.worldFront(wv, width, height, time / 1000); // snow, blizzard haze, embers, smoke
+    }
     lap('effects');
-    searchlightArt.draw(view, width, height, time / 1000); // darkness with light cut out, beams, lit-target brackets, glowing eyes
+    if (has('dark')) searchlightArt.draw(wv, width, height, time / 1000); // darkness with light cut out, beams, lit-target brackets, glowing eyes
     lap('dark');
 
-    // Screen overlay on a fixed 1600x900 stage.
-    const scale = Math.min(width / config.W, height / config.H);
-    ctx.setTransform(scale, 0, 0, scale, (width - config.W * scale) / 2, (height - config.H * scale) / 2);
-    drawHud();
-    drawGoingDown(ctx, state, time / 1000, config.W, config.H); // GOING DOWN! alarm, meters, "SHE HOLDS!"
-    drawLimpCard(ctx, state, config.W, config.H); // LIMPING HOME... (a spare gasbag was used)
-    if (state.runEnd && (!state.wreck || state.wreck.t > 1.2)) {
-      ctx.globalAlpha = state.wreck ? Math.min(1, (state.wreck.t - 1.2) * 2) : 1;
-      drawRunEnd();
-      ctx.globalAlpha = 1;
+    if (has('hud')) {
+      // Screen overlay on a fixed 1600x900 stage.
+      const scale = Math.min(width / config.W, height / config.H);
+      ctx.setTransform(scale, 0, 0, scale, (width - config.W * scale) / 2, (height - config.H * scale) / 2);
+      drawHud();
+      drawGoingDown(ctx, state, time / 1000, config.W, config.H); // GOING DOWN! alarm, meters, "SHE HOLDS!"
+      drawLimpCard(ctx, state, config.W, config.H); // LIMPING HOME... (a spare gasbag was used)
+      if (state.runEnd && (!state.wreck || state.wreck.t > 1.2)) {
+        ctx.globalAlpha = state.wreck ? Math.min(1, (state.wreck.t - 1.2) * 2) : 1;
+        drawRunEnd();
+        ctx.globalAlpha = 1;
+      }
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     lap('hud');
-    // Lookout arrows are sized in screen points, so undo the extra pixel density of sharp screens.
-    const pr = canvas.width / (canvas.clientWidth || canvas.width) || 1;
-    ctx.setTransform(pr, 0, 0, pr, 0, 0);
-    threatArt.drawLookoutArrows(width / pr, height / pr, { ...view, zoom: view.zoom / pr });
-    linkArt.drawGust(width / pr, height / pr, { ...view, zoom: view.zoom / pr }, time / 1000); // gust / updraft warning arrows ahead of the ship
-    spotterArt.drawSpots(width / pr, height / pr, { ...view, zoom: view.zoom / pr }, time / 1000); // SPOTTED marks (and edge arrows)
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    filmLook(time, width, height);
+    if (has('arrows')) {
+      // Lookout arrows are sized in screen points, so undo the extra pixel density of sharp screens.
+      const pr = canvas.width / (canvas.clientWidth || canvas.width) || 1;
+      ctx.setTransform(pr, 0, 0, pr, 0, 0);
+      threatArt.drawLookoutArrows(width / pr, height / pr, { ...wv, zoom: view.zoom / pr });
+      linkArt.drawGust(width / pr, height / pr, { ...wv, zoom: view.zoom / pr }, time / 1000); // gust / updraft warning arrows ahead of the ship
+      spotterArt.drawSpots(width / pr, height / pr, { ...wv, zoom: view.zoom / pr }, time / 1000); // SPOTTED marks (and edge arrows)
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    if (has('film')) filmLook(time, width, height);
     lap('film');
   };
 
