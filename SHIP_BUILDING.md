@@ -154,6 +154,17 @@ It's pure and Node-safe, like `gunshipBlueprint.js`, and contains:
 - **Readouts:** the three gauges and the validator report.
 - **Buttons:** "Run 60 s bot test", plus copy build JSON and load it via `?build=`.
 
+### (b2) Blueprint editor (S.5b) - draw the ship
+The owner's idea: "I draw a short line - that's the deck. I draw another - that's the below deck. I erase some, the ship gets smaller. I add some, it gets bigger."
+- **Where:** the top half of `buildtest.html`: the ship in ink on cream paper, with the 120 px column grid (numbered) and the **deck rows** (crow's nest, top deck, main, lower, **keel**, **deep**; the last two are new rows under the lower deck).
+- **Pencil ("Draw deck"):** drag along a row. It snaps to deck ends and to the column grid; a ghost line shows the column count and what will happen.
+  Along an existing deck it makes it longer (rooms, hull and collision outline follow). On an empty stretch it makes a **new deck**: a room for the hull to enclose, plus the minimum connector (a ladder to the nearest deck above, or below, at a free spot).
+  Refused with a hint: a stroke inside or above the gasbag, a crow's nest off the end of the bag, a keel deck across the belly blisters (ball turret, bomb bay ...), a deck with no deck it can climb to.
+- **Eraser:** drag along a deck. It gets shorter, is cut in two (the far piece becomes its own deck id, e.g. `catwalk2`; the crow's nest cannot be cut in the middle) or goes. Whatever stood on the rubbed-out stretch (stations, guns, engines, racks, vents, ladders, pipes, the medbay ...) goes with it and is listed under the paper as `removed: ...`. **Undo** puts it all back. Erasing something the game needs is allowed: the validator FAILs clearly ("CANNOT FLY" stamp) and the live ship below keeps flying the last build that could.
+- **Gasbag:** "Bag -" / "Bag +" (one column of length each) and "Twin bag" (the second envelope; its lift is worked out like the first). The LIFT gauge follows; the validator WARNs when the bag does not cover the decks.
+- **Mass and lift:** deck mass is per column (`PARTS.deck`), so a longer or deeper ship hovers higher and wants a longer bag.
+- **Code:** the operations are pure functions of a parts list in `modules/host/buildEdit.js` (re-exported from `buildSlots.js`): `drawDeck(parts, row, x0, x1)`, `erase(parts, row, x0, x1)`, `setBag(parts, { grow, twin })`, plus `snapX` and `rowAtY`. Each returns `{ ok, parts, hint, added, removed, ... }` and never touches its input. The hull outline (`hullGeom` in `shipBuild.js`) is shared by the ship art, the blueprint (`blueprintArt.js`) and the collision samples. `node tools/buildsim.mjs --check-edit` is the gate.
+
 ### (c) Batch mode
 - Command: `node tools/buildsim.mjs --random 50 --seed 1 --minutes 4 --envs skyisles,fungal,storm,aether --bots 6`.
 - How builds are made: random but legal purchase paths from the Sparrow, using the real salvage pacing. Each build runs a botsim in a child process.
@@ -193,6 +204,7 @@ Phase S runs after Phase 1, alongside Phase 2. No package edits `simulation.js` 
 | S.3 | Station kinds and multiple instances (boilers, engines, lamps, nests) | M | all name lookups go through `one()/all()`; classic botsim identical |
 | S.4 | Art per part + static bake | M | ship draw time ≥ 40% faster |
 | S.5 | Building simulator (validator, dev page, batch) | M | classic and sparrow pass; 50 random builds run with 0 errors |
+| S.5b | Blueprint draw / erase editor on the dev page (pure `drawDeck` / `erase` / `setBag`) | M | `buildsim --check-edit`: new keel deck, +2 main columns, cut top deck: valid, 0-error botsim |
 | S.6a | Catalogue v1 + Sparrow + `state.build` effects + dock offers / slot vote | L | voyagesim Normal no worse than today |
 | S.6b | Shipwright UI (TV blueprint, gauges, slot pins, phone cards) | M | the cold-player test passes |
 | S.7 | Balance + persistence (environment modifiers, derelict parts, limp damage, Hangar builds after P2.2) | M | no dominant or trap parts; one situational part per environment |

@@ -1,13 +1,15 @@
 // Build test page (Phase S.5): put parts on the ship, watch the validator and the three gauges (LIFT / STEAM / HANDS), fly her with 4 bots.
 //   left   the part palette (click a part, then a brass pin on the ship) and the list of placed parts (x removes one)
-//   centre the live ship with bots; toggles draw the nav graph (travel-time heat from the boiler), the collision samples, the slots, a blueprint
+//   centre the BLUEPRINT (ink on cream paper): the pencil draws decks along the deck rows, the eraser rubs them out, "Bag -/+" and "Twin bag" change the
+//          gasbag, and part pins show here too; below it the live ship with bots; toggles draw the nav graph (travel-time heat from the boiler), the collision samples, the slots, a blue overlay
 //   bottom the gauges and the validator report; "Run 60 s bot test" flies a fast copy and reports; "Copy build JSON" for ?build= and tools/buildsim.mjs
 // Same skeleton as styleTest.js. Load a build with ?build=classic | multi | [JSON parts list].
 import { config } from '../../config.js';
 import { SHIP_LAYOUT, applyBuild } from '../../shipLayout.js';
-import { BUILDS } from './shipBuild.js';
+import { BUILDS, DECK_ROWS, rowOf } from './shipBuild.js';
 import { validate, makePlanner, judgeBotRuns } from './buildCheck.js';
-import { PALETTE, slotsFor } from './buildSlots.js';
+import { PALETTE, slotsFor, drawDeck, erase, setBag, snapX, rowAtY, summarize } from './buildSlots.js';
+import { blueprintView, drawBlueprint } from './blueprintArt.js';
 import { createRunStats } from './buildStats.js';
 import { createLogbook } from './logbookArt.js';
 import { createSimulation } from './simulation.js';
@@ -21,6 +23,8 @@ for (const [k, v] of [['--paper', L.PAPER], ['--shade', L.PAPER_SHADE], ['--ink'
 
 const scene = $('scene');
 const gauges = $('gauges');
+const bp = $('bp');
+const bctx = bp.getContext('2d');
 const ctx = scene.getContext('2d');
 const gctx = gauges.getContext('2d');
 const logbook = createLogbook({ ctx: gctx });
@@ -31,7 +35,8 @@ const fitCanvas = (c) => {
   if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
 };
 fitCanvas(scene);
-addEventListener('resize', () => { fitCanvas(scene); drawGauges(); });
+fitCanvas(bp);
+addEventListener('resize', () => { fitCanvas(scene); fitCanvas(bp); drawGauges(); });
 
 // ---- the build being edited -------------------------------------------------------------------------------------
 const multi = () => [...BUILDS.classic, { part: 'station', n: 'Fore Boiler', kind: 'boiler', p: 'main', x: 1090 }, { part: 'station', n: 'Aft Lookout', kind: 'lookout', p: 'nest', x: 700 }];
@@ -57,6 +62,13 @@ let envId = config.ENVIRONMENTS.DEFAULT;
 let sim = null, renderer = null, shipMatrix = null;
 let live = null; // the last bot-test report
 const flag = { nav: false, samples: false, slots: true, blue: false };
+// the blueprint editor
+let tool = 'draw'; // 'draw' (pencil) | 'erase' | 'place' (part pins)
+let editing = true; // the blueprint panel is shown
+let bpLayout = null; // the layout of the build being edited (it can differ from the live ship when the edit cannot fly)
+let bv = null; // the blueprint's paper-to-ship transform, set each frame
+let drag = null; // a stroke in progress: { tool, row, a (where it started), b (where it is now) }
+let bpHover = null; // { row, cursor } while the pointer is over the paper without a stroke
 
 // ---- the live ship ------------------------------------------------------------------------------------------------
 const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
@@ -87,22 +99,47 @@ function edit(next) {
 }
 function removePart(i) {
   const p = parts[i];
+  if (p.part === 'deck') return applyEdit(erase(parts, p.row, p.x0, p.x1)); // (a deck takes what stands on it with it)
   const name = p.n || p.name;
   edit(parts.filter((o, j) => j !== i && !(name && (o.to === name || (o.part === 'escortDock' && o.n === name)))));
 }
+const toolButtons = () => { for (const [id, name] of [['tDraw', 'draw'], ['tErase', 'erase'], ['tPlace', 'place']]) $(id).className = tool === name ? 'on' : ''; };
+function setTool(t) {
+  tool = t;
+  if (t !== 'place') picked = null;
+  toolButtons();
+  drag = null;
+  showPicked();
+  if (t !== 'place') $('hint').textContent = t === 'draw' ? 'Pencil: drag along a deck row on the blueprint. Along a deck it gets longer; on an empty stretch it makes a new deck with a ladder.' : 'Eraser: drag along a deck. What stood on that stretch goes with it (listed below the blueprint); Undo brings it back.';
+}
 function pick(id) {
   picked = picked === id ? null : id;
+  if (picked) { tool = 'place'; toolButtons(); }
   showPicked();
 }
 function showPicked() {
   slots = picked && info[picked] ? info[picked].legal : [];
   hover = null;
+  if (!picked && tool === 'place') $('hint').textContent = 'Click a part in the palette, then a brass pin on the blueprint or the ship.';
   drawPalette();
   const t = PALETTE.find((q) => q.id === picked);
   $('hint').textContent = t ? `${t.label}: ${slots.length} legal spot${slots.length === 1 ? '' : 's'} - ${t.hint}` : '';
 }
+// Apply a blueprint edit (drawDeck / erase / setBag result): the ship regenerates (layout, art bake, a fresh sim with bots) and the note says what happened.
+function applyEdit(r) {
+  if (!r.ok) { note(r.hint, true); return false; }
+  edit(r.parts);
+  const why = result.ok ? '' : '  CANNOT FLY: ' + result.fails[0];
+  note((r.kind === 'erase' ? (r.removed.length ? 'removed: ' + summarize(r.removed) : 'removed: nothing else was on it') + '. ' : '') + r.hint.replace(/ removed: .*$/, '') + why + '  (Undo puts it back.)', !result.ok);
+  return true;
+}
+function note(text, bad) {
+  $('bpNote').textContent = text;
+  $('bpNote').className = bad ? 'bad' : '';
+}
 function refresh() {
   result = validate(parts, { cell: config.MAPS.CELL });
+  if (result.layout) bpLayout = result.layout;
   if (result.ok) startLive(parts);
   info = {};
   for (const t of PALETTE) { const all = slotsFor(t.id, parts, { legalOnly: false }); info[t.id] = { all, legal: all.filter((s) => s.ok) }; }
@@ -304,6 +341,81 @@ function overlay(g, t) {
   }
 }
 
+// ---- the blueprint: pencil, eraser, pins ------------------------------------------------------------------------------
+const bpPoint = (e) => {
+  const r = bp.getBoundingClientRect();
+  return bv ? bv.toWorld(((e.clientX - r.left) * bp.width) / r.width, ((e.clientY - r.top) * bp.height) / r.height) : null;
+};
+// Which row a stroke at this height means: the pencil snaps to the nearest drawable row; the eraser to the nearest deck under the pointer.
+function rowFor(w) {
+  if (tool === 'draw') return rowAtY(w.y);
+  const near = bpLayout.platforms.filter((q) => w.x > q.x0 - 40 && w.x < q.x1 + 40 && Math.abs(q.y - w.y) < 45).sort((a, b) => Math.abs(a.y - w.y) - Math.abs(b.y - w.y))[0];
+  return near ? { row: rowOf(near) } : { why: 'No deck there: drag the eraser along a deck.' };
+}
+const strokeOf = (d) => [Math.min(d.a, d.b), Math.max(d.a, d.b)];
+// What the stroke would do (a ghost for the paper and a note): { tool, row, x0, x1, ok, label }.
+function ghostOf(d) {
+  const [x0, x1] = strokeOf(d);
+  const g = { tool: d.tool, row: d.row, x0, x1, ok: false, label: '' };
+  if (x1 - x0 < 20) { g.label = d.tool === 'draw' ? 'drag along the row' : 'drag along the deck'; return g; }
+  const r = d.tool === 'draw' ? drawDeck(parts, d.row, x0, x1) : erase(parts, d.row, x0, x1);
+  g.ok = r.ok;
+  if (!r.ok) g.label = r.hint;
+  else if (d.tool === 'draw') g.label = (r.kind === 'new' ? 'new ' + r.deck + ' (with a ladder)' : r.deck + ' +' + r.grew + ' column' + (r.grew === 1 ? '' : 's')) + '   ' + r.cols + ' col = ' + Math.round(x1 - x0) + ' px';
+  else g.label = 'erase ' + r.cols + ' column' + (r.cols === 1 ? '' : 's') + (r.removed.length ? ' - removes ' + summarize(r.removed) : '');
+  return g;
+}
+bp.addEventListener('pointerdown', (e) => {
+  const w = bpPoint(e);
+  if (!w || tool === 'place') return;
+  e.preventDefault();
+  const r = rowFor(w);
+  if (!r.row) { note(r.why, true); return; }
+  bp.setPointerCapture(e.pointerId);
+  const x = snapX(parts, w.x);
+  drag = { tool, row: r.row, a: x, b: x };
+  note('', false);
+});
+bp.addEventListener('pointermove', (e) => {
+  const w = bpPoint(e);
+  if (!w) return;
+  if (tool === 'place') {
+    hover = null;
+    if (picked && bv) {
+      let best = 22 * bv.k;
+      for (const s of slots) { const d = Math.hypot(bv.X(s.x) - bv.X(w.x), bv.Y(s.y) - 18 * bv.k - bv.Y(w.y)); if (d < best) { best = d; hover = s; } }
+    }
+    bp.style.cursor = hover ? 'pointer' : 'default';
+    if (hover) $('hint').textContent = hover.label + (hover.warns.length ? '  (warning: ' + hover.warns[0] + ')' : '');
+    return;
+  }
+  if (drag) { drag.b = snapX(parts, w.x); return; }
+  const r = rowFor(w);
+  bpHover = r.row ? { row: r.row, cursor: { x: snapX(parts, w.x), y: DECK_ROWS[r.row] } } : { why: r.why, cursor: null };
+});
+bp.addEventListener('pointerup', (e) => {
+  if (tool === 'place') { if (hover) { edit(hover.apply(parts)); note('', false); } return; }
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  const [x0, x1] = strokeOf(d);
+  if (x1 - x0 < 20) return;
+  applyEdit(d.tool === 'draw' ? drawDeck(parts, d.row, x0, x1) : erase(parts, d.row, x0, x1));
+});
+bp.addEventListener('pointercancel', () => { drag = null; });
+bp.addEventListener('pointerleave', () => { bpHover = null; if (tool === 'place') hover = null; });
+function drawBp() {
+  bp.style.display = editing ? 'block' : 'none';
+  if (!editing) return;
+  fitCanvas(bp);
+  if (!bpLayout || !bp.width) return;
+  bv = blueprintView(bpLayout, bp.width, bp.height, Math.min(2, devicePixelRatio || 1));
+  const ghost = drag ? ghostOf(drag) : null;
+  const status = result && !result.ok ? { ok: false, text: 'CANNOT FLY: ' + result.fails[0] } : null;
+  drawBlueprint(bctx, bv, bpLayout, { rowHover: drag ? drag.row : bpHover && bpHover.row, cursor: !drag && bpHover && bpHover.cursor, ghost, slots: tool === 'place' && picked ? slots : [], hover: tool === 'place' ? hover : null, status });
+  if (!drag && bpHover && bpHover.why && tool !== 'place') $('hint').textContent = bpHover.why;
+}
+
 // ---- clicking slots --------------------------------------------------------------------------------------------------
 const toShip = (e) => {
   if (!shipMatrix) return null;
@@ -333,8 +445,15 @@ const envs = Object.keys(config.ENVIRONMENTS).filter((k) => config.ENVIRONMENTS[
 for (const id of envs) { const o = document.createElement('option'); o.value = id; o.textContent = config.ENVIRONMENTS[id].name; $('env').appendChild(o); }
 $('env').value = envId;
 $('env').onchange = () => { envId = $('env').value; startLive(); };
-$('undo').onclick = () => { if (history.length) { parts = history.pop(); refresh(); } };
-$('reset').onclick = () => edit(BUILDS.classic.map((p) => ({ ...p })));
+$('undo').onclick = () => { if (history.length) { parts = history.pop(); note('', false); refresh(); } };
+$('oEdit').onchange = () => { editing = $('oEdit').checked; $('centre').classList.toggle('editing', editing); };
+$('tDraw').onclick = () => setTool('draw');
+$('tErase').onclick = () => setTool('erase');
+$('tPlace').onclick = () => setTool('place');
+$('bagShort').onclick = () => applyEdit(setBag(parts, { grow: -1 }));
+$('bagLong').onclick = () => applyEdit(setBag(parts, { grow: 1 }));
+$('bagTwin').onclick = () => applyEdit(setBag(parts, { twin: 'toggle' }));
+$('reset').onclick = () => { note('', false); edit(BUILDS.classic.map((p) => ({ ...p }))); };
 $('copy').onclick = async () => {
   const text = JSON.stringify(parts);
   try { await navigator.clipboard.writeText(text); } catch {
@@ -389,6 +508,7 @@ $('run').onclick = () => { $('bot').textContent = 'Running...'; setTimeout(runBo
 refresh();
 if (!sim) startLive(BUILDS.classic); // (a ?build= that cannot fly: show the classic ship until it is fixed)
 window.buildTest = { get parts() { return parts; }, get result() { return result; }, get sim() { return sim; }, get live() { return live; }, edit, pick, slotsFor, info: () => info, runBotTest, startLive, flag, validate: () => result,
+  tool: () => tool, setTool, applyEdit, drawDeck, erase, setBag, bpScreen: (x, y) => { const r = bp.getBoundingClientRect(); return bv ? { x: r.left + (bv.X(x) * r.width) / bp.width, y: r.top + (bv.Y(y) * r.height) / bp.height } : null; }, // (bpScreen: ship coordinates to page pixels on the blueprint, for tests)
   screen: (x, y) => { const p = shipMatrix.transformPoint(new DOMPoint(x, y)), r = scene.getBoundingClientRect(); return { x: r.left + (p.x * r.width) / scene.width, y: r.top + (p.y * r.height) / scene.height }; } }; // (screen: ship coordinates to page pixels, for tests)
 
 let last = performance.now();
@@ -399,6 +519,7 @@ const frame = (now) => {
   last = now;
   try {
     fitCanvas(scene);
+    drawBp();
     acc += dt;
     let n = 0;
     while (acc >= config.LOOP.STEP && n++ < config.LOOP.MAX_STEPS) {

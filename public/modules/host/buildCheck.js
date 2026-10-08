@@ -5,7 +5,7 @@
 // (tools/buildsim.mjs), the batch runner and the dev page (public/buildtest.html) all use it.
 // A check is { group, level: 'PASS' | 'WARN' | 'FAIL', text }; ok means no FAIL.
 import { config } from '../../config.js';
-import { buildLayout, budgets as partBudgets, STATION_KINDS, ONE_PER_SHIP, KIND_STATS } from './shipBuild.js';
+import { buildLayout, budgets as partBudgets, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf } from './shipBuild.js';
 
 const BC = config.BUILD_CHECK;
 const GRAB_COST = 0.25; // seconds to get onto a ladder (the same number as nav.js)
@@ -263,6 +263,16 @@ export function validate(parts, opts = {}) {
       const text = `needs a ${n.tunnel}-square tunnel and ${n.shaft}-square shaft (caves carve ${BC.CAVE_TUNNEL} x ${BC.CAVE_SHAFT}): wedges in caves and waits for the tug`;
       if (opts.starter) fail('Cave fit', text); else warn('Cave fit', text);
     } else pass('Cave fit', `needs a ${n.tunnel}-square tunnel and ${n.shaft}-square shaft (caves carve ${BC.CAVE_TUNNEL} x ${BC.CAVE_SHAFT})`);
+  }
+
+  // --- The gasbag should reach the whole ship (a longer ship with the same bag leaves its ends bare).
+  if (L.gasbag && L.gasbag.rx) {
+    const reach = L.gasbag.rx * config.BUILD_EDIT.BAG_COVER;
+    const decks = L.platforms.filter((q) => ['catwalk', 'main', 'lower', 'keel', 'deep'].includes(rowOf(q)));
+    if (decks.length) {
+      const d0 = Math.min(...decks.map((q) => q.x0)), d1 = Math.max(...decks.map((q) => q.x1));
+      if (d0 < L.gasbag.cx - reach || d1 > L.gasbag.cx + reach) warn('Gasbag', `the gasbag covers x ${Math.round(L.gasbag.cx - reach)} to ${Math.round(L.gasbag.cx + reach)} but the decks run ${d0} to ${d1}: make the bag longer`);
+    }
   }
 
   // --- Required kinds, kind sanity.

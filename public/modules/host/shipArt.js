@@ -19,6 +19,7 @@
 // Drawing never throws: the bake falls back to drawing the static layer straight onto the screen.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf } from '../../shipLayout.js';
+import { hullGeom as layoutHull, TWIN_SIZE } from './shipBuild.js';
 import { drawBiplane, drawTailNumber } from './planeArt.js';
 import { paintPath, paintRect, hasTexture } from './textureArt.js';
 import { drawIceLocker, drawIceFlights, drawBoilerHeat, drawHoleGlow } from './goingDownArt.js';
@@ -96,18 +97,9 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   };
 
   // ---- Layout-derived geometry ----
-  // The gondola hull outline, from the main and top decks' spans (the classic ship: 130..1512 across, 480..815 down).
-  const hullGeom = () => {
-    const main = plat('main');
-    const lower = plat('lower');
-    const cat = plat('catwalk');
-    const top = cat.y + 10;
-    return {
-      xL: main.x0 - 10, xL2: main.x0 - 14, xR: main.x1 + 42, xNose: main.x1, xTopR: main.x1 - 40,
-      xKeelL: main.x0 + 108, xKeelR: main.x1 - 118,
-      top, yShoulder: main.y - 40, yTuck: main.y + 10, yTuck2: main.y + 22, yKeel: lower.y + 25,
-    };
-  };
+  // The gondola hull outline, worked out from the decks (shipBuild.js hullGeom: the classic ship is 130..1512 across, 480..815 down;
+  // full decks added under the lower deck hang in `boxes` of their own).
+  const hullGeom = () => layoutHull(P, L.rooms);
 
   const gondolaPath = () => {
     const h = hullGeom();
@@ -118,6 +110,17 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     ctx.lineTo(h.xKeelR, h.yKeel);
     ctx.lineTo(h.xKeelL, h.yKeel);
     ctx.lineTo(h.xL2, h.yTuck2);
+    ctx.closePath();
+  };
+
+  // A keel box: the hull round a full deck under the lower deck (square top hidden behind the gondola, chamfered keel).
+  const boxPath = (b) => {
+    ctx.moveTo(b.x0, b.y0);
+    ctx.lineTo(b.x1, b.y0);
+    ctx.lineTo(b.x1, b.y1 - 26);
+    ctx.lineTo(b.x1 - 26, b.y1);
+    ctx.lineTo(b.x0 + 26, b.y1);
+    ctx.lineTo(b.x0, b.y1 - 26);
     ctx.closePath();
   };
 
@@ -138,7 +141,8 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
 
   // The ship-space box a bag's picture is painted in (room on the left for the tail fins), and the twin envelope's.
   const bagRect = (G) => ({ x: Math.floor(G.cx - G.rx - 220), y: Math.floor(G.cy - G.ry - 50), w: Math.ceil(G.rx * 2 + 250), h: Math.ceil(G.ry * 2 + 100) });
-  const twinGeom = (G) => ({ tx: G.cx - 20, ty: G.cy - 258, rx: G.rx * 0.7, ry: G.ry * 0.62 });
+  const twinGeom = (G) => ({ tx: G.cx - 20, ty: G.cy - 258, rx: G.rx * TWIN_SIZE.rx, ry: G.ry * TWIN_SIZE.ry });
+  const twinOn = () => has('twin-gasbag') || !!(bags()[0] && bags()[0].twin); // (the upgrade, or a twin bag built into the ship)
   const twinRect = (G) => { const t = twinGeom(G); return { x: Math.floor(t.tx - t.rx - 20), y: Math.floor(t.ty - t.ry - 20), w: Math.ceil(t.rx * 2 + 40), h: Math.ceil(t.ry * 2 + 40) }; };
 
   // Draw a baked (or directly painted) picture swollen about (cx, cy).
@@ -157,7 +161,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     const g = gasFill();
     list.forEach((G, bi) => {
       const first = bi === 0;
-      if (first && has('twin-gasbag')) {
+      if (first && twinOn()) {
         // The second envelope, riding higher behind the first, with its own rigging.
         const t = twinGeom(G);
         line([[G.cx - 280, G.cy - 198], [G.cx - 280, t.ty]], 4);
@@ -347,9 +351,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   };
 
   // ================= TOP DECK (static) =================
-  const drawCatwalk = () => {
-    const p = plat('catwalk');
-    if (!p) return;
+  const catwalkPiece = (p) => {
     const y = p.y;
     const w = p.x1 - p.x0;
     if (!tileRow('ship/catwalk', p.x0, p.x1, y - 40, 140, 50)) {
@@ -360,7 +362,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
       for (let x = p.x0 + 44; x < p.x1; x += 44) line([[x, y], [x, y + 14]], 2, WOOD_DARK);
       filled(WOOD_DARK, () => ctx.rect(p.x0 - 6, y + 14, w + 12, 8));
       // Railings (broken where a ladder or rope comes up through the deck): posts, a top rail and a rope.
-      const gaps = L.connectors.filter((c) => P[c.top].id === 'catwalk' || P[c.bottom].id === 'catwalk').map((c) => (P[c.top].id === 'catwalk' ? c.xTop : c.xBottom));
+      const gaps = L.connectors.filter((c) => P[c.top].y === y || P[c.bottom].y === y).map((c) => (P[c.top].y === y ? c.xTop : c.xBottom));
       const open = (x) => gaps.some((g) => Math.abs(x - g) < 30);
       const rail = (x0, x1) => {
         line([[x0, y - 46], [x1, y - 46]], 5);
@@ -407,10 +409,18 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
       ctx.fillStyle = INK;
       ctx.fillText('TOP DECK', a + 365, y - 79);
     }
+  };
+
+  // The top deck: every piece of it (the blueprint editor can cut it in two), then the deck guns.
+  const drawCatwalk = () => {
+    const cat = plat('catwalk');
+    if (!cat) return;
+    const y = cat.y;
+    for (const p of P.filter((q) => q.y === y)) catwalkPiece(p);
     // Deck guns: a post from the deck up to the mount, a base plate and sandbags on the outer side.
     for (const [name, m] of Object.entries(L.gunMounts)) {
       const s = station(name);
-      if (!s || P[s.d].id !== 'catwalk') continue;
+      if (!s || P[s.d].y !== y) continue;
       const out = Math.cos(m.aim) < 0 ? -1 : 1;
       line([[m.bx, m.by + 14], [m.bx, y]], 11);
       line([[m.bx, m.by + 14], [m.bx, y]], 6, IRON);
@@ -505,10 +515,12 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   const drawGondola = () => {
     const H = hullGeom();
     const shell = sprites.has('ship/gondola');
+    for (const b of H.boxes) filled('#8a6444', () => boxPath(b)); // (the keel boxes sit behind the gondola)
     if (!shell) filled('#8a6444', gondolaPath);
     ctx.save();
     ctx.beginPath();
     gondolaPath();
+    for (const b of H.boxes) boxPath(b);
     ctx.clip();
     const floors = [];
     for (const r of L.rooms) {
@@ -536,6 +548,17 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
       }
     }
     ctx.restore();
+    for (const b of H.boxes) { // the keel boxes' walls and keel, over their room walls
+      ink();
+      ctx.beginPath();
+      ctx.moveTo(b.x0, b.y0 + 12);
+      ctx.lineTo(b.x0, b.y1 - 26);
+      ctx.lineTo(b.x0 + 26, b.y1);
+      ctx.lineTo(b.x1 - 26, b.y1);
+      ctx.lineTo(b.x1, b.y1 - 26);
+      ctx.lineTo(b.x1, b.y0 + 12);
+      ctx.stroke();
+    }
     // The hull shell art (with see-through rooms) goes over the room walls.
     if (sprites.box(ctx, 'ship/gondola', H.xL2, H.top, H.xR - H.xL2, H.yKeel - H.top)) return;
     ink();
@@ -1402,7 +1425,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     const front = paintTo(bake.front, r, s, drawFrontLayer);
     const list = bags();
     const bagPics = list.map((G, i) => paintTo(bake.bags[i], bagRect(G), s, () => guard('bag', paintBag, G, i === 0)));
-    const twin = list.length && has('twin-gasbag') ? paintTo(bake.twin, twinRect(list[0]), s, () => guard('twin', paintTwin, list[0])) : null;
+    const twin = list.length && twinOn() ? paintTo(bake.twin, twinRect(list[0]), s, () => guard('twin', paintTwin, list[0])) : null;
     bake.back = back;
     bake.front = front;
     bake.bags = bagPics;

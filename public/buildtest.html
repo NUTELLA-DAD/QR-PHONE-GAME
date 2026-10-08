@@ -29,6 +29,10 @@
   #parts li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #centre{display:flex;flex-direction:column;min-height:0;padding:6px}
   #scene{flex:1;min-height:0;width:100%;border-radius:6px;background:#8fb4d0;cursor:crosshair}
+  /* the blueprint editor: cream paper above the live ship (buildTest.js draws it, ink on paper) */
+  #bp{flex:2.6;min-height:0;width:100%;border-radius:6px;background:var(--paper);border:2px solid var(--ink);margin-bottom:2px;cursor:crosshair;touch-action:none;display:none}
+  .editing #bp{display:block}
+  #bpNote{padding:2px 4px 4px;font-size:12px;color:var(--soft);min-height:18px} #bpNote.bad{color:var(--stamp);font-weight:700}
   #hint{padding:3px 4px 0;font-size:12px;color:var(--soft);min-height:18px}
   #bottom{display:grid;grid-template-columns:minmax(420px,1fr) 1.3fr;gap:8px;height:270px}
   #bottom .panel{overflow:auto}
@@ -41,7 +45,9 @@
 <div id="app">
   <header id="top" class="panel">
     <h1>Build test</h1>
-    <div class="grp"><label class="chk"><input type="checkbox" id="oNav"> Nav graph</label><label class="chk"><input type="checkbox" id="oSamples"> Collision samples</label><label class="chk"><input type="checkbox" id="oSlots" checked> Slots</label><label class="chk"><input type="checkbox" id="oBlue"> Blueprint</label></div>
+    <div class="grp"><label class="chk"><input type="checkbox" id="oEdit" checked> Blueprint</label><button id="tDraw" class="on" title="Pencil: drag along a deck row to draw a deck or make one longer">Draw deck</button><button id="tErase" title="Eraser: drag along a deck to rub it out (what stood on it goes too)">Erase</button><button id="tPlace" title="Click a part in the palette, then a brass pin">Place parts</button>
+      <button id="bagShort" title="Gasbag one column shorter">Bag -</button><button id="bagLong" title="Gasbag one column longer">Bag +</button><button id="bagTwin" title="Add or remove the twin envelope">Twin bag</button></div>
+    <div class="grp"><label class="chk"><input type="checkbox" id="oNav"> Nav graph</label><label class="chk"><input type="checkbox" id="oSamples"> Collision samples</label><label class="chk"><input type="checkbox" id="oSlots" checked> Slots</label><label class="chk"><input type="checkbox" id="oBlue"> Blue overlay</label></div>
     <div class="grp"><select id="env"></select><button id="undo">Undo</button><button id="reset">Reset to classic</button><button id="copy">Copy build JSON</button><button id="run" class="go">Run 60 s bot test</button></div>
     <div class="grp"><a href="/host.html" style="color:var(--soft)">Back to the game</a></div>
   </header>
@@ -52,7 +58,7 @@
     <h2>Placed parts <span id="partCount"></span></h2>
     <ul id="parts"></ul>
   </aside>
-  <section id="centre" class="panel"><canvas id="scene"></canvas><div id="hint"></div></section>
+  <section id="centre" class="panel editing"><canvas id="bp"></canvas><div id="bpNote"></div><canvas id="scene"></canvas><div id="hint"></div></section>
   <section id="bottom">
     <div class="panel"><canvas id="gauges"></canvas><div id="live"></div></div>
     <div class="panel"><div id="verdict"></div><div id="report"></div><div id="bot"></div></div>

@@ -982,6 +982,16 @@ export const config = {
     BOT_HULL_MIN: 60, // ...average hull must stay above this...
     BOT_TUGS_MAX: 1, // ...and she may be hauled out of a wedge at most this often
   },
+  // The blueprint editor (modules/host/buildEdit.js; the dev page's draw / erase tools).
+  BUILD_EDIT: {
+    SNAP_ROW: 60, // a pen stroke counts as drawing on a deck row when it is this close to it (px)
+    SNAP_X: 45, // a stroke's end snaps to a deck end this close (px), otherwise to the 120 px column grid
+    MIN_PIECE: 60, // an erase never leaves a sliver of deck shorter than this (px): it clears to the end instead
+    ERASE_MARGIN: 14, // things standing this close to an erased stretch (px) go with it
+    BAG_STEP: 60, // the gasbag gets this much longer or shorter (px of half-length: one column in all) per click...
+    BAG_MIN: 500, BAG_MAX: 1900, // ...between these half-lengths
+    BAG_COVER: 0.9, // the share of the gasbag's half-length that counts as covering the ship (the ends of the ellipse are thin): validator WARN beyond it
+  },
   // When the hull gives out the ship breaks apart and the whole game starts over at the mast.
   WRECK: {
     TIME: 8, // seconds of breaking apart before the restart

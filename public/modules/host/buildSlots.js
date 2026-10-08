@@ -3,10 +3,13 @@
 // uses the same slots to grow random builds from the classic ship. A slot is { type, p, x, y, label, apply(parts) -> new parts };
 // a slot is LEGAL when the build it makes passes validate() with no FAIL (warnings are allowed: the player is told).
 // Until the catalogue (S.6) there is no Sparrow, so every part here is built from the existing pieces (shipBuild.js PARTS).
-import { buildLayout, COL } from './shipBuild.js';
+import { buildLayout, COL, rowOf } from './shipBuild.js';
+import { drawDeck, GRID_X0 } from './buildEdit.js';
 import { validate } from './buildCheck.js';
 import { config } from '../../config.js';
 
+// The blueprint editing operations (draw a deck, erase, lengthen the gasbag) are pure functions of a parts list: re-exported here with the slots.
+export { drawDeck, erase, setBag, snapX, rowAtY, summarize, EDIT_ROWS, DRAW_ROWS, GRID_X0 } from './buildEdit.js';
 const STEP = 40; // slots sit on a grid this far apart along a deck (px)
 const clone = (parts) => parts.map((p) => ({ ...p }));
 const names = (parts) => new Set(parts.map((p) => p.n || p.name).filter(Boolean));
@@ -46,17 +49,19 @@ export const PALETTE = [
       if (!q) continue;
       for (const side of [-1, 1]) {
         out.push({ p: id, x: side < 0 ? q.x0 : q.x1, label: `${q.name}, ${side < 0 ? 'aft' : 'fore'} end +1 column`, apply: (ps) => {
-          const next = clone(ps);
-          const deck = next.find((o) => o.part === 'deck' && o.id === id);
-          const edge = side < 0 ? deck.x0 : deck.x1;
-          if (side < 0) deck.x0 -= COL; else deck.x1 += COL;
-          const room = next.find((o) => o.part === 'room' && o.p === id && (side < 0 ? o.x0 === edge : o.x1 === edge));
-          if (room) { if (side < 0) room.x0 -= COL; else room.x1 += COL; }
-          const frame = next.find((o) => o.part === 'frame');
-          if (frame) delete frame.samples; // the hand-placed collision outline no longer fits: let it be derived again
-          return next;
+          const r = drawDeck(ps, id, side < 0 ? q.x0 - COL : q.x1, side < 0 ? q.x0 : q.x1 + COL); // (the same operation as drawing along the deck: rooms, collision outline and shield follow)
+          return r.ok ? r.parts : clone(ps);
         } });
       }
+    }
+    return out;
+  } },
+  { id: 'keel', label: 'Keel deck (2 columns)', hint: 'click a spot under the lower deck', slots: (L, parts) => {
+    const out = [], q = L.platforms.find((d) => d.id === 'lower');
+    if (!q) return out;
+    for (let x = GRID_X0 + Math.ceil((q.x0 - GRID_X0) / COL) * COL; x + 2 * COL <= q.x1; x += COL) { // (a pin on the lower deck for every free two-column stretch under it)
+      if (!drawDeck(parts, 'keel', x, x + 2 * COL).ok) continue;
+      out.push({ p: 'lower', x: x + COL, label: `Keel deck under the lower deck, columns from x ${x}`, apply: (ps) => { const r = drawDeck(ps, 'keel', x, x + 2 * COL); return r.ok ? r.parts : clone(ps); } });
     }
     return out;
   } },
@@ -110,7 +115,9 @@ export const PALETTE = [
   ...['ladder', 'pole'].map((type) => ({
     id: type, label: type === 'ladder' ? 'Ladder' : 'Slide pole (down only)', hint: 'click a spot between two decks', slots: (L) => {
       const out = [];
-      for (const [top, bottom] of [['catwalk', 'main'], ['main', 'lower']]) {
+      const ROWS = ['catwalk', 'main', 'lower', 'keel', 'deep']; // each deck with the decks on the next row down
+      const pairs = ROWS.slice(0, -1).flatMap((r, i) => L.platforms.filter((a) => rowOf(a) === r).flatMap((a) => L.platforms.filter((b) => rowOf(b) === ROWS[i + 1]).map((b) => [a.id, b.id])));
+      for (const [top, bottom] of pairs) {
         const a = L.platforms.find((d) => d.id === top), b = L.platforms.find((d) => d.id === bottom);
         if (!a || !b) continue;
         const ti = L.platforms.indexOf(a), bi = L.platforms.indexOf(b);
@@ -181,7 +188,7 @@ export function removals(parts) {
 // One random legal mutation of a build: { tag, label, parts } or null if nothing fits. rng() gives 0..1.
 // prefer: a type to try first most of the time (the batch asks for an engine pod right after a second boiler, the only way one fits).
 // weights: how often each type is tried (the batch wants engines and boilers as often as guns).
-const WEIGHTS = { extend: 3, gun: 3, searchlight: 2, lookout: 2, boiler: 3, coal: 1, ammo: 1, engine: 3, ladder: 2, pole: 1, rack: 1, extinguisher: 1, vent: 1, remove: 2 };
+const WEIGHTS = { extend: 3, keel: 1, gun: 3, searchlight: 2, lookout: 2, boiler: 3, coal: 1, ammo: 1, engine: 3, ladder: 2, pole: 1, rack: 1, extinguisher: 1, vent: 1, remove: 2 };
 export function randomMutation(parts, rng, prefer) {
   const bag = Object.entries(WEIGHTS).flatMap(([t, w]) => Array(w).fill(t));
   for (let tries = 0; tries < 12; tries++) {
