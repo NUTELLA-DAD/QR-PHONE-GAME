@@ -21,7 +21,7 @@ export function createEngines({ state, modules }) {
   const E = config.ENGINES;
   const layout = mainShip(state).layout; // (this ship's own layout)
   state.engines = [];
-  state.thrust = { factor: 1, back: 0, drive: true };
+  state.thrust = { factor: 1, back: 0, drive: true, drivers: 2 };
   state.engineStats = { turnSecs: 0, mannedSecs: 0 }; // (botsim and the gate: how much the swivels were used)
   let version = -1, drivers = 1;
 
@@ -58,6 +58,7 @@ export function createEngines({ state, modules }) {
     }
     T.factor = Math.max(config.MODULES.NO_ENGINE_SPEED, Math.min(1, (fwd - back) / drivers)); // (engines pointing back take thrust away)
     T.back = Math.min(1, back / drivers);
+    T.drivers = drivers; // (how many engines were built to push ahead: flight.js gives a ship with more than two of them the push to match)
     T.drive = drive;
   };
 

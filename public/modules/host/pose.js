@@ -19,10 +19,10 @@
 // RULES for all new code: see ships.js. Do NOT write `x + course.dist` or `y - state.ship.alt` in new code; call toWorld / toShip.
 import { scrollSpeed } from './course.js';
 
-// Where her engines (and sails) carry the ship along the sky, px/s along the world x: her speed along her bow (course.js scrollSpeed) the way her facing f points. This is the velocity
-// the movement model reads; pose.vx is what she really moved at.
-export const driveVx = (ship, f = ship.pose.f) => f * scrollSpeed(ship.ctx || ship.world);
-// How much that changes for one more unit of her speed (a share of the top speed; the sails, overdrive and the sky are in it): a shove of dv px/s is dv / driveGain of ship.speed.
+// How fast the forces on her carry the ship along the sky, px/s along the world x: her velocity along her bow (course.js scrollSpeed, which flight.js integrates) the way her facing f
+// points. Since M.4 this IS the ship's world velocity, pose.vx.
+export const driveVx = (ship, f = ship.pose.f) => { const st = ship.ctx || ship.world; return st.phase === 'lobby' ? 0 : f * scrollSpeed(st); }; // (moored at the mast in the lobby she goes nowhere, whatever the wheel turns at)
+// How much that changes for one more unit of her speed (a share of the top speed): a shove of dv px/s is dv / driveGain of ship.speed.
 export function driveGain(ship) {
   const b = ship.ctx.ship, s0 = b.speed, v0 = driveVx(ship);
   b.speed = s0 + 1;
@@ -31,13 +31,11 @@ export function driveGain(ship) {
   return g;
 }
 
-// Build the pose object for `ship`: its own x, y, vy, f, pitch and turn. vx is the speed she REALLY moved at in the last step (simulation.js measures it): a ship
-// pressed against the rock, shoved by the wind or hanging in a calm moves at that and everything that goes along with her goes along with THAT. What her
-// engines ask of her is course.js scrollSpeed; until her first step vx is the same.
+// Build the pose object for `ship`: its own x, y, vy, f, pitch and turn. vx is her world velocity along x: f times her speed along her bow, which flight.js integrates from the
+// forces on her (engines, sails, drag) and the rock, a collision or a tow shove directly. It flips with her bow at the middle of a COME ABOUT (u flips sign), so it is continuous.
 export function createPose(ship, { x = 0, y = 0 } = {}) {
-  let vx;
   const pose = Object.defineProperties({ x, y, vy: 0, f: 1, pitch: 0, turn: 0 }, {
-    vx: { enumerable: true, get: () => (vx !== undefined ? vx : driveVx(ship, pose.f)), set: (v) => { vx = v; } },
+    vx: { enumerable: true, get: () => driveVx(ship, pose.f) },
   });
   return pose;
 }

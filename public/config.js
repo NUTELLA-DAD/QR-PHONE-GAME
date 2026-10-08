@@ -79,9 +79,6 @@ export const config = {
   SHIP: {
     ALT_RANGE: 420, // how far the ship can climb or dive from the middle
     TRIM_ACCEL: 150, // push from the helm's small up/down trim engine (pixels per second squared)
-    THRUST: 0.9, // (old) throttle change per second from the stick; see ACCEL/BRAKE
-    ACCEL: 0.45, // how fast she picks up speed (share of full speed per second) - she's heavy
-    BRAKE: 0.9, // how fast she sheds speed when braking or reversing
     PITCH_PER_ACCEL: 0.03, // nose lift when speeding up / dip when braking
     TOP_SPEED: 560, // forward speed at full throttle (reverse is up to 40% of this)
     REVERSE: 0.4, // how much of the throttle is reverse
@@ -92,6 +89,24 @@ export const config = {
     TILT_PER_SPEED: 0.0004, // tilt per pixel/second of climb
     TILT_SMOOTH: 3, // how quickly the tilt follows (higher = snappier)
     TILT_PIVOT: null, // the point the ship tips around: null = the ship's own (the layout's tiltPivot: [800, 520] on the classic ship), or [x, y] to force one
+    // MOTION (flight.js, M.4): FORCES drive every ship's pose. Her engines push, her sails push, the air drags (partly linear, partly quadratic in the speed relative to the air, which the
+    // wind carries), and a = force / weight. Accelerations below are quoted in px/s^2 for a ship that weighs REF_MASS; a heavier ship does everything slower, a lighter one quicker. The helm's
+    // lever is a speed ORDER: the engines open until she holds it (feed-forward for the drag + GOVERN x the speed error), within what they can make (THRUST ahead, BRAKE astern).
+    MOTION: {
+      REF_MASS: 160, // the weight (gas points: the build plus the crew, coal, shells and bombs aboard) the figures below are quoted for; the classic ship with a crew weighs about this
+      MASS_SCALE_MIN: 0.4, // how much slower the heaviest ship responds (REF_MASS / weight, never below this): a giant build feels heavy...
+      MASS_SCALE_MAX: 1.25, // ...and how much quicker the lightest does (never above this): a tiny ship feels nimble
+      DRAG: 300, // the drag on her at TOP_SPEED in still air (px/s^2); it falls away with the speed: mostly linearly, partly with its square
+      DRAG_LIN: 0.9, // the linear share of that drag (the rest is quadratic): it brings a ship nobody drives back to the speed of the wind
+      THRUST: 400, // what her working engines can push with at full steam (px/s^2): top speed is set by the helm's order, this sets how fast she gets there (a rudders upgrade raises it)
+      BRAKE: 350, // the most her engines can slow her (astern, px/s^2)
+      REF_ENGINES: 2, // the number of engines THRUST is quoted for (the classic ship has two): a ship built with more has that many times the push (top speed is still set by the helm's order: more engines add acceleration and safety)
+      GOVERN: 2.5, // how hard the engines chase the ordered speed (1/s): the gap between the speed ordered and the speed she has, times this, is the push asked on top of the drag
+      SAIL_PUSH: 275, // a raised sail's push, as an acceleration (px/s^2) per share of top speed its pull gives (SAIL.BONUS): alone in a calm sky a sail speeds her by about its pull
+      TURN_MASS: 0.5, // COME ABOUT takes TURN.TIME x (weight / REF_MASS) to this power: a heavy ship comes round slower
+      TURN_MIN: 0.7, TURN_MAX: 1.8, // ...never faster or slower than these multiples of TURN.TIME
+      PITCH_RESPONSE: 0.5, // how much the weight slows the nose's tilt (the tilt follows at TILT_SMOOTH x (REF_MASS / weight) to this power)
+    },
     // COME ABOUT (shipSim.js comeAbout, M.3): turning the ship round, on the helmsman's command only. The picture squashes through zero and comes out mirrored; at the middle
     // the ship's facing flips (and her speed along her bow flips with it, so she keeps moving the same way over the ground).
     TURN: {

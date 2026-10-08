@@ -502,7 +502,7 @@ function operate(p, state, dt) {
     // Terrain first: keep inside the safe altitude window, stopping to climb cliffs.
     const plan = pilotPlan(state, 2.5, B.HELM_SPEED);
     const cap = state.rival ? captainFly(state, p, plan, dt) : null; // (Versus: the lively captain weaves, dodges, passes and rams, pvp/captainAI.js; it changes the plan in place)
-    p.jx = clamp((plan.speed - ship.speed) * 4, -1, 1);
+    p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1); // (pace: her speed on the lever's scale, without the sails and overdrive, flight.js)
     // COME ABOUT (config.SHIP.TURN.BOT_TURNS): the way to the goal has been behind her for a while, so hold the turn command like a phone's button (plan.dx is how far the route point is ahead of her bow).
     const TN = config.SHIP.TURN;
     p.behindT = plan.dx < -TN.BOT_FAR && !(state.course.unstick > 0) ? (p.behindT || 0) + dt : 0;

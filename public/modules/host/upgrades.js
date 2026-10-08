@@ -75,7 +75,7 @@ export const UPGRADES = [
   {
     id: 'rudders', name: 'Better Rudders', icon: '🧭', max: 2,
     desc: 'Engines and the trim engine are 35% stronger.',
-    apply: () => ((config.SHIP.TRIM_ACCEL *= 1.35), (config.SHIP.ACCEL *= 1.35), (config.SHIP.BRAKE *= 1.35)),
+    apply: () => ((config.SHIP.TRIM_ACCEL *= 1.35), (config.SHIP.MOTION.THRUST *= 1.35), (config.SHIP.MOTION.BRAKE *= 1.35), (config.SHIP.MOTION.GOVERN *= 1.35)),
   },
   {
     id: 'cutlasses', name: 'Steel Cutlasses', icon: '🗡️', max: 2,

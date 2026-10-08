@@ -75,7 +75,7 @@ export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'difficulty',
 export const WORLD_WRITES = ['kills'];
 
 // The body of a fresh ship (today's state.ship at the start).
-export const newBody = () => ({ alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START });
+export const newBody = () => ({ alt: 0, speed: 0.3, order: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START });
 
 // One gun record per mount of the layout (name -> { bx, by, aim, home, arc, cd, ammo ... }).
 export const newGuns = (layout) =>

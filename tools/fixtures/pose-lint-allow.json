@@ -4,7 +4,7 @@
   "modules/host/course.js": 6,
   "modules/host/goingDown.js": 1,
   "modules/host/gunship.js": 2,
-  "modules/host/shipSim.js": 3,
+  "modules/host/shipSim.js": 2,
   "modules/host/squadrons.js": 1
  },
  "scroll": {
