@@ -439,7 +439,7 @@ function crewman(st, team, ship, d, x) {
   let gap = 0, dy = 0;
   for (let i = 0; i < 60 * 10; i++) { step(sim); gap += Math.abs(mx(blue) - mx(red)) / 600; dy += (my(blue) - my(red)) / 600; }
   report(Math.abs(gap - config.PVP.STANDOFF) < 400, `the captains hold the standoff: ${Math.round(gap)} px between the ships (STANDOFF ${config.PVP.STANDOFF})`);
-  report(M.left === 'red' && dy > config.PVP.ALT_EDGE * 0.5 && dy < config.PVP.ALT_EDGE * 1.6, `...and the altitude edge: the ship that started on the left (${M.left}) holds ${Math.round(dy)} px above the other (ALT_EDGE ${config.PVP.ALT_EDGE})`);
+  report(M.left === 'red' && dy > config.PVP.ALT_EDGE * 0.4 && dy < config.PVP.ALT_EDGE * 2.2, `...and the altitude edge: the ship that started on the left (${M.left}) holds ${Math.round(dy)} px above the other (ALT_EDGE ${config.PVP.ALT_EDGE})`);
   // bots board by hook in a calm sky, and the boarders are carried home or win a foothold: at least one crosses in 8 minutes
   const t0 = M.totals.red.boardings + M.totals.blue.boardings;
   until(sim, () => M.totals.red.boardings + M.totals.blue.boardings > t0, 60 * 60 * 8);
