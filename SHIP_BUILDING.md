@@ -288,3 +288,81 @@ Thrust acts where the engine sits, so an engine at the nose pointing up also lif
   - one part per dock;
   - v1 limits: +2 hull bays, +1 deck, 3 bags, 4 engines.
 - **Save data:** a versioned, tolerant schema (`hangar: { v: 1, builds: [] }`).
+
+## Part catalogue v2: every customisation option (owner: "add it all")
+
+Every part below is buildable in the blueprint editor (drag-and-drop or draw), with:
+- a weight (balance and lift);
+- a steam/hands cost where it applies;
+- a validator line;
+- a palette picture.
+
+Built in tiers. Each part plugs into existing systems.
+
+### Tier 1: biggest fun per effort (build first, after S.5e-S.5h)
+- **Crew cannon (owner request).** A big brass cannon station that fires a CREW MEMBER across the map, to board enemy gunships or reach a far deck. A player climbs into the barrel; a second player aims and fires (a linked station). The flyer becomes airborne (airborne.js), and can steer a little, grab a ladder, deploy a parachute, or land on an enemy deck. It reuses hookshot/airborne/boarding code. Cooldown and steam cost. Bots can use it to board a latched gunship.
+- **Gas types per bag:**
+  - Hydrogen: cheap, strong lift, explodes when it catches fire.
+  - Helium: safe, weaker.
+  - Hot air: needs boiler heat, so crew keep it up.
+- **Lifts, chutes, zip-lines, outside catwalks** (fast movement; the hidden walking stat).
+- **Ballast dump tanks.** Crew dump water to shoot up; refill at the dock.
+- **Anchor / grapple winch.** Hold position, or snag and reel in an enemy ship.
+- **Cargo hold.** Salvage crates add weight and pay at the dock; dump them in an emergency.
+- **Looks:** paint schemes, trim colours, hull stripes, figureheads, name plates, flags/pennants, gasbag crest, porthole styles, lantern strings, and a ship's mascot (parrot / cat / dog wandering the decks). Looks only; these are Hangar unlocks.
+
+### Tier 2: handling and lift
+- **Fins:** rudder and elevator fins, sized (turn/climb vs gust risk).
+- **Propellers:** propeller types (big-slow vs small-fast; pusher vs puller).
+- **Drogue chute:** an air brake.
+- **Bag shapes:** cigar / round / cluster.
+- **Bag protection:** bag netting / armoured skin.
+- **Inner gas cells:** inside one big bag.
+
+### Tier 3: weapons and defence
+- **Turret types:**
+  - Broadside cannon.
+  - Rotating dorsal turret.
+  - Flak.
+  - Harpoon gun.
+  - Mortar.
+  - Rear-gunner tail perch.
+- **Belly gondola:** a gun pod on a winch cable.
+- **Torpedo tubes.**
+- **Ram prow:** reinforced; smashes enemies and rock.
+- **Spiked hull:** hurts boarders.
+- **Smoke launchers:** hide from fighters briefly.
+- **Spark arrestors and sprinklers:** tie into S.5f fire.
+- **Armour plate walls in spots:** S.5g. Very heavy.
+
+### Tier 4: crew and systems
+- **Crew comfort:**
+  - Bunks: faster wake-up.
+  - Galley: a cook gives a crew speed buff.
+- **Signal bell / speaking tubes:** warnings shared between stations.
+- **Hookshot anchor points.**
+- **Steam extras:** second steam line, pipe valves, pressure tanks (store steam for bursts).
+- **Repair support:**
+  - Workshop: faster repairs, craft patches.
+  - Spare-parts locker.
+- **Radio room:** one supply drop or scout plane per mission.
+- **Observation:** observation dome / periscope (lookout range without a tall nest).
+- **Searchlight colours:** red dazzles, white reaches far.
+- **Hangar deck:** more escort fighters, or a scout plane to launch.
+
+### Tier 5: big wild builds
+- **Twin-hull catamaran:** two gondolas under one long bag, with a rope bridge.
+- **Detachable lifeboat / escape pod:** launch when going down, reboard later.
+- **Tethered kite / observation balloon:** a lookout on a cable above the ship.
+- **Towed second airship:** a "train" on a cable; cut it and it drifts away.
+
+### How the tiers will be built
+- Each tier is a batch of parallel worker tasks.
+- Each part needs:
+  1. part data + palette picture;
+  2. sim behaviour;
+  3. bot use where sensible;
+  4. validator line;
+  5. gate in `tools/buildsim.mjs`;
+  6. classic stays identical.
+- The random batch (`buildsim --random`) gains each new part, to catch dominant parts and traps.
