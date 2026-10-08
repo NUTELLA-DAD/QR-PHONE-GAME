@@ -1,6 +1,6 @@
 // SHIPS: the multi-ship machinery (MOVEMENT.md, Option B, stages B0 and B.2). Node-safe: no DOM.
 //
-// The game is ONE simulation that understands MANY ships (the player's, a PvP rival, later the enemy gunship), so more airships can always be added.
+// The game is ONE simulation that understands MANY ships (the player's, a PvP rival, the enemy gunship since B.5), so more airships can always be added.
 //
 //   ship = { id,        'player' for the main ship (ships[0]); 'ship1', 'ship2' ... for the others
 //            main,      true for ships[0], the one the sky scrolls past and the enemies hunt (until B7)
@@ -14,6 +14,7 @@
 //            pose,      pose.js: where she is and which way she faces
 //            ctx,       her CONTEXT VIEW (below): what her subsystems are handed instead of the world state
 //            rival,     Versus only: the nearest ship of the OTHER team as { ship, pose, layout, mid, vx, vy, hull, down, guns, bags, crew, helm, boiler } in WORLD coordinates (pvp/match.js refreshes it each step; ctx.rival answers it; null in co-op)
+//            ai,        B.5: set on the enemy gunship (gunshipShip.js makeAi): the captain that flies her (pilotPlan) and the hooks the ship rules call (shoot, hurt, onBoard ...); such a ship is never a target, a camera subject or a place to join
 //            sim }      her systems (shipSim.js createShipSim): modules, bags, guns, fires, crew handling ... set by simulation.js addShip
 //
 //   mainShip(state)           the ship `state` is about: the world answers ships[0], a ship's context answers that ship (so a subsystem built on ctx finds its OWN)

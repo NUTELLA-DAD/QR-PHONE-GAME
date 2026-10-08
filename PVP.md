@@ -101,7 +101,7 @@ Rounds are best of 3 with a 6-minute cap. On a timeout the higher hull % wins. S
 - **The gate.** `node tools/buildsim.mjs --check-match` (alias `--check-arena`): `tools/match-check.mjs`.
 
 ### What is still to come
-The enemy gunship as a Ship (B.5), `forces.js` driving every pose (M.4), cross-ship ballast throws, towing and the crew cannon (B.6), the Shipwright build phase (v2) and King of the Hill.
+(The enemy gunship as a Ship, B.5, and `forces.js` driving every pose, M.4, are in.) Cross-ship ballast throws, towing and the crew cannon (B.6), the Shipwright build phase (v2) and King of the Hill.
 
 ## 3. Bot evaluation arena (still to build, on top of `--check-match --mirror N`)
 
