@@ -5,50 +5,85 @@
 // Platforms are the walkable floors. Everything that sits on a floor says which one with `p`
 // (a platform id), and also gets `d` = the platform's index, which is what the game code uses.
 //
-// SHIP_LAYOUT is updated IN PLACE by applyBuild(), so `const P = SHIP_LAYOUT.platforms` style references
+// A layout is updated IN PLACE by applyBuild(), so `const P = SHIP_LAYOUT.platforms` style references
 // stay valid. Values DERIVED from the layout (a platform index, a station lookup, a route table ...)
-// must not be computed once at import time: recompute them in a function, or in an onLayoutChange(fn) hook
+// must not be computed once at import time: recompute them in a function, or with layoutTables(fn) below
 // (tools/buildsim.mjs --lint flags new module-level captures). Builds only change at the dock.
 import { BUILDS, buildLayout, balanceOf, deckRoles, rowOf, isNestRow } from './modules/host/shipBuild.js';
 import { config } from './config.js';
 
-export const SHIP_LAYOUT = { version: 0 };
-
-// The build's STATIC balance (shipBuild.js balanceOf, config.BALANCE): total weight, centre of mass (comX, comY) and centre of lift (colX, colY) in ship
-// coordinates, dx = COM - COL (+ = nose-heavy), the rest trim in radians (+ nose-down; 0 for a level ship such as the classic one). Updated in place like
-// SHIP_LAYOUT, but kept apart from it so the layout stays the pure shape of the ship. simulation.js adds the live loads (crew, coal ...) to it.
-export const SHIP_BALANCE = { mass: 0, comX: 0, comY: 0, colX: 0, colY: 0, dx: 0, deg: 0, restPitch: 0, k2: 0, bagLift: 0 }; // (k2: radius of gyration squared, bagLift: the bags' lift in gas points - forces.js)
-
-const listeners = [];
-
-// Run `fn` every time a new build is applied (it is not run for the build already applied at load).
-export function onLayoutChange(fn) {
-  listeners.push(fn);
-  return () => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); };
+// A LAYOUT is one ship's live layout object (B1, MOVEMENT.md Option B): createLayout(parts) makes an INSTANCE with its own arrays, objects, version, listeners and
+// balance. The station-kind helpers further down (all one kindOf is nearest ... hasKind) are also METHODS of it (layout.one('helm')), and applyBuild(parts) /
+// onChange(fn) act on that layout only. The methods are non-enumerable, so Object.keys(layout) and JSON stay the pure shape of the ship.
+//
+// The ship the game flies today is ship 0 and its layout is SHIP_LAYOUT: the exported SHIP_LAYOUT / SHIP_BALANCE / onLayoutChange / applyBuild (end of this file)
+// and the helpers' default argument are COMPATIBILITY forwards to it (ships.js: ship0.layout === SHIP_LAYOUT), kept until the last single-ship file moves over
+// (MOVEMENT.md B7). New code takes a layout (mainShip(state).layout / shipOf(state, player).layout) and hands it on.
+export function createLayout(parts) {
+  const layout = { version: 0 };
+  const listeners = [];
+  // The build's STATIC balance (shipBuild.js balanceOf, config.BALANCE): total weight, centre of mass (comX, comY) and centre of lift (colX, colY) in ship
+  // coordinates, dx = COM - COL (+ = nose-heavy), the rest trim in radians (+ nose-down; 0 for a level ship such as the classic one). Updated in place like
+  // the layout, but kept apart from it so the layout stays the pure shape of the ship. simulation.js adds the live loads (crew, coal ...) to it.
+  const balance = { mass: 0, comX: 0, comY: 0, colX: 0, colY: 0, dx: 0, deg: 0, restPitch: 0, k2: 0, bagLift: 0 }; // (k2: radius of gyration squared, bagLift: the bags' lift in gas points - forces.js)
+  const methods = {
+    balance,
+    // Run `fn` every time a new build is applied to THIS layout (it is not run for the build already applied at creation). Returns the unsubscribe function.
+    onChange(fn) {
+      listeners.push(fn);
+      return () => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); };
+    },
+    // Replace the layout with the one built from `newParts`: arrays are emptied and refilled, objects are
+    // cleared and refilled, so every existing reference sees the new data. Bumps `version`, then tells the listeners.
+    applyBuild(newParts) {
+      const next = buildLayout(newParts, { cell: config.MAPS.CELL }); // (the derived cave fit depends on the map square size)
+      for (const key of Object.keys(layout)) if (key !== 'version' && !(key in next)) delete layout[key];
+      for (const [key, value] of Object.entries(next)) {
+        const cur = layout[key];
+        if (Array.isArray(value) && Array.isArray(cur)) {
+          cur.length = 0;
+          cur.push(...value);
+        } else if (value && typeof value === 'object' && !Array.isArray(value) && cur && typeof cur === 'object' && !Array.isArray(cur)) {
+          for (const k of Object.keys(cur)) delete cur[k];
+          Object.assign(cur, value);
+        } else {
+          layout[key] = value;
+        }
+      }
+      const bal = balanceOf(newParts);
+      Object.assign(balance, { mass: bal.mass, comX: bal.com ? bal.com.x : 0, comY: bal.com ? bal.com.y : 0, colX: bal.col ? bal.col.x : 0, colY: bal.col ? bal.col.y : 0, dx: bal.dx, deg: bal.deg, restPitch: bal.restPitch, k2: bal.k2, bagLift: bal.bagLift });
+      layout.version++;
+      for (const fn of listeners.slice()) fn(layout);
+      return layout;
+    },
+    // the station-kind helpers below, bound to this layout
+    all: (kind) => all(kind, layout),
+    one: (kind) => one(kind, layout),
+    kindOf: (name) => kindOf(name, layout),
+    is: (name, kind) => is(name, kind, layout),
+    nearest: (kind, at) => nearest(kind, at, layout),
+    isNestDeck: (id) => isNestDeck(id, layout),
+    nestTier: (id) => nestTier(id, layout),
+    isNestStation: (name) => isNestStation(name, layout),
+    deckIndex: (role) => deckIndex(role, layout),
+    reviveSpot: () => reviveSpot(layout),
+    hasKind: (kind) => hasKind(kind, layout),
+  };
+  for (const [k, v] of Object.entries(methods)) Object.defineProperty(layout, k, { value: v, enumerable: false, writable: false, configurable: true });
+  layout.applyBuild(parts);
+  return layout;
 }
 
-// Replace the layout with the one built from `parts`: arrays are emptied and refilled, objects are
-// cleared and refilled, so every existing reference sees the new data. Bumps `version`, then tells the listeners.
-export function applyBuild(parts) {
-  const next = buildLayout(parts, { cell: config.MAPS.CELL }); // (the derived cave fit depends on the map square size)
-  for (const key of Object.keys(SHIP_LAYOUT)) if (key !== 'version' && !(key in next)) delete SHIP_LAYOUT[key];
-  for (const [key, value] of Object.entries(next)) {
-    const cur = SHIP_LAYOUT[key];
-    if (Array.isArray(value) && Array.isArray(cur)) {
-      cur.length = 0;
-      cur.push(...value);
-    } else if (value && typeof value === 'object' && !Array.isArray(value) && cur && typeof cur === 'object' && !Array.isArray(cur)) {
-      for (const k of Object.keys(cur)) delete cur[k];
-      Object.assign(cur, value);
-    } else {
-      SHIP_LAYOUT[key] = value;
-    }
-  }
-  const bal = balanceOf(parts);
-  Object.assign(SHIP_BALANCE, { mass: bal.mass, comX: bal.com ? bal.com.x : 0, comY: bal.com ? bal.com.y : 0, colX: bal.col ? bal.col.x : 0, colY: bal.col ? bal.col.y : 0, dx: bal.dx, deg: bal.deg, restPitch: bal.restPitch, k2: bal.k2, bagLift: bal.bagLift });
-  SHIP_LAYOUT.version++;
-  for (const fn of listeners.slice()) fn(SHIP_LAYOUT);
-  return SHIP_LAYOUT;
+// A table of values DERIVED from a layout (deck indices, station lists, route tables ...), kept per layout and rebuilt when that layout's version changes (a new
+// build was applied): `const tables = layoutTables((layout) => ({ MAIN: layout.deckIndex('main') }))`, then `tables(layout).MAIN` (no argument = ship 0's layout).
+// This replaces the old module-level `let X; rebuild(); onLayoutChange(rebuild)` captures: nothing is shared between two ships.
+export function layoutTables(build) {
+  const cache = new WeakMap();
+  return (layout = SHIP_LAYOUT) => {
+    let t = cache.get(layout);
+    if (!t || t.version !== layout.version) cache.set(layout, (t = { version: layout.version, value: build(layout) }));
+    return t.value;
+  };
 }
 
 // ---- station kinds ---------------------------------------------------------------------------------------
@@ -118,4 +153,8 @@ export function reviveSpot(layout = SHIP_LAYOUT) {
 // What the ship has (every instance counts; engines are in `engines`, not `stations`): the sim and the phones ask this before assuming a part exists.
 export const hasKind = (kind, layout = SHIP_LAYOUT) => (kind === 'engine' ? layout.engines.length > 0 : layout.stations.some((s) => s.kind === kind));
 
-applyBuild(BUILDS.classic);
+// ---- ship 0 (compatibility forwards, see createLayout) ------------------------------------------------------------------------------------------------
+export const SHIP_LAYOUT = createLayout(BUILDS.classic);
+export const SHIP_BALANCE = SHIP_LAYOUT.balance;
+export const onLayoutChange = (fn) => SHIP_LAYOUT.onChange(fn);
+export const applyBuild = (parts) => SHIP_LAYOUT.applyBuild(parts);
