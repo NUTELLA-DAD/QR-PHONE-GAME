@@ -9,7 +9,8 @@
 //   bottom the gauges and the validator report; "Run 60 s bot test" flies a fast copy and reports; "Copy build JSON" for ?build= and tools/buildsim.mjs
 // Same skeleton as styleTest.js. Load a build with ?build=classic | multi | [JSON parts list].
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, applyBuild } from '../../shipLayout.js';
+import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility forward: builds are applied here before a fresh simulation reads the layout)
+import { mainShip } from './ships.js';
 import { BUILDS, DECK_ROWS, rowOf, buildLayout, ENGINE_DIRS, dirName, normAngle } from './shipBuild.js';
 import { validate, makePlanner, judgeBotRuns } from './buildCheck.js';
 import { PALETTE, slotsFor, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, pickSlot, whyNot, thingAt, removeAt, setEngineDir, setEngineSwivel, emptyBuild, minimalBuild, snapX, rowAtY, summarize, addArmour } from './buildSlots.js';
@@ -80,7 +81,7 @@ const ALL_ROWS = Object.keys(DECK_ROWS);
 // ---- the live ship ------------------------------------------------------------------------------------------------
 const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
 const addBots = (s, n) => {
-  const [a, b] = SHIP_LAYOUT.boarderEntryPoints;
+  const [a, b] = mainShip(s.state).layout.boarderEntryPoints;
   for (let i = 0; i < n; i++) {
     const id = 'bot' + i;
     s.state.players[id] = { id, bot: true, name: 'Bot' + (i + 1), species: config.CREW_SPECIES[i % config.CREW_SPECIES.length], color: colors[i % colors.length], x: a.x + Math.random() * (b.x - a.x), y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
@@ -96,7 +97,7 @@ function startLive(p = flown) {
   sim.castOff();
   sim.course.startMission(1, { environment: envId });
   renderer = createRenderer({ ctx, state: sim.state, canvas: scene });
-  planner = makePlanner(SHIP_LAYOUT);
+  planner = makePlanner(mainShip(sim.state).layout);
 }
 
 // ---- editing ---------------------------------------------------------------------------------------------------------
@@ -483,7 +484,7 @@ setInterval(() => {
 const heat = (cost) => `hsl(${Math.round(120 - Math.min(1, cost / 12) * 120)},75%,42%)`;
 function overlay(g, t) {
   shipMatrix = g.getTransform();
-  const Ly = SHIP_LAYOUT;
+  const Ly = mainShip(sim.state).layout;
   if (flag.blue) {
     g.fillStyle = 'rgba(22,52,98,0.7)';
     g.fillRect(-4000, -4000, 9000, 9000);
@@ -782,13 +783,14 @@ function runBotTest() {
   if (!result.ok) { $('bot').textContent = 'Fix the build first (it has FAILs).'; return; }
   const keepMap = config.MAPS.FORCE_KIND, keepEnv = config.ENVIRONMENTS.FORCE, realNow = performance.now.bind(performance);
   let clock = 0;
-  let stats, errors = 0, firstError = '';
+  let stats, errors = 0, firstError = '', botLayout;
   const t0 = realNow();
   try {
     config.MAPS.FORCE_KIND = 'network';
     config.ENVIRONMENTS.FORCE = envId;
     performance.now = () => clock;
     const s = createSimulation();
+    botLayout = mainShip(s.state).layout;
     addBots(s, config.BUILD_CHECK.BOT_BOTS);
     s.castOff();
     const rs = createRunStats(s.state);
@@ -807,7 +809,7 @@ function runBotTest() {
   const head = document.createElement('div');
   head.innerHTML = `<b>60 s bot test</b> (${config.BUILD_CHECK.BOT_BOTS} bots, cave map, ${(realNow() - t0).toFixed(0)} ms): ${stats.kills} kills, hull ${stats.avgHull}, walking ${stats.walkPct}% of crew time, ${stats.wrecks} wreck${stats.wrecks === 1 ? '' : 's'}, ${stats.tows} tug rescue${stats.tows === 1 ? '' : 's'}${firstError ? ' - first error: ' + firstError : ''}`;
   el.appendChild(head);
-  for (const c of judgeBotRuns([stats], SHIP_LAYOUT, { strict: false })) {
+  for (const c of judgeBotRuns([stats], botLayout, { strict: false })) {
     const d = document.createElement('div');
     d.className = 'chk-line';
     d.innerHTML = `<span class="${c.level}">${c.level}</span><span>${c.group}</span><span></span>`;

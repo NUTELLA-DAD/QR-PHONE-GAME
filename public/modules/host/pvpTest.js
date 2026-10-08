@@ -1,11 +1,12 @@
 // PvP two-ship dev page (Phase V.1a): public/pvptest.html.
 // Ship A is the normal game module graph. Ship B is the SAME code loaded a second time from /b/... (server.js serves public/ twice),
-// so it has its own config, SHIP_LAYOUT, simulation, bots and renderer. Both fly with bots in ONE sky:
+// so it has its own config, ship layout, simulation, bots and renderer. Both fly with bots in ONE sky:
 //   renderer A draws sky + rock + A's ship + effects; renderer B composites B's ship + effects at its offset (opts.worldOffset, noClear);
 //   the arena camera frames both; pvpArt draws the pennants, edge arrows and the two-sided HUD. No cross-fire yet (that is the V.2 bridge).
 // Query: ?a=classic|multi|[parts JSON]  ?b=...  ?gap=3800 (world px between the ships)  ?dy=0  ?bots=4  ?nohud=1  ?free=1 (do not level B with A)
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, applyBuild } from '../../shipLayout.js';
+import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility forward: the build is applied before the simulation reads the layout)
+import { mainShip } from './ships.js';
 import { BUILDS } from './shipBuild.js';
 import { createSimulation } from './simulation.js';
 import { createRenderer } from './render.js';
@@ -55,8 +56,8 @@ const [simModB, renderModB, perfModB, cfgModB] = await Promise.all([
 const twoCopies = simModB.createSimulation !== createSimulation; // (sanity: really two copies)
 
 const COLORS = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
-const addBots = (sim, cfg, layout, n, tag) => {
-  const [a, b] = layout.boarderEntryPoints;
+const addBots = (sim, cfg, n, tag) => {
+  const [a, b] = mainShip(sim.state).layout.boarderEntryPoints;
   for (let i = 0; i < n; i++) {
     const id = tag + 'bot' + i;
     sim.state.players[id] = { id, bot: true, name: tag + (i + 1), species: cfg.CREW_SPECIES[i % cfg.CREW_SPECIES.length], color: COLORS[i % COLORS.length], x: a.x + Math.random() * (b.x - a.x), y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
@@ -65,8 +66,8 @@ const addBots = (sim, cfg, layout, n, tag) => {
 
 const simA = createSimulation();
 const simB = simModB.createSimulation();
-addBots(simA, config, SHIP_LAYOUT, NBOTS, 'R');
-addBots(simB, cfgModB.config, B.layoutMod.SHIP_LAYOUT, NBOTS, 'B');
+addBots(simA, config, NBOTS, 'R');
+addBots(simB, cfgModB.config, NBOTS, 'B');
 simA.castOff();
 simB.castOff();
 const rendA = createRenderer({ ctx, state: simA.state, canvas });
@@ -82,8 +83,8 @@ const offsetB = { dx: GAP, dy: DY }; // (kept level with ship A unless ?free=1: 
 const LAYERS_A = ['background', 'ship', 'effects', 'dark', 'arrows'];
 const LAYERS_B = ['ship', 'effects'];
 const shipsFor = () => [
-  { bounds: SHIP_LAYOUT.bounds, alt: simA.state.ship.alt, offset: { dx: 0, dy: 0 }, team: 'red', hull: simA.state.ship.hull },
-  { bounds: B.layoutMod.SHIP_LAYOUT.bounds, alt: simB.state.ship.alt, offset: offsetB, team: 'blue', hull: simB.state.ship.hull },
+  { bounds: mainShip(simA.state).layout.bounds, alt: simA.state.ship.alt, offset: { dx: 0, dy: 0 }, team: 'red', hull: simA.state.ship.hull },
+  { bounds: mainShip(simB.state).layout.bounds, alt: simB.state.ship.alt, offset: offsetB, team: 'blue', hull: simB.state.ship.hull },
 ];
 
 const STEP = config.LOOP.STEP;

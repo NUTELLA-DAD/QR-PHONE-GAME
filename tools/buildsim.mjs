@@ -7,7 +7,7 @@
 //        node tools/buildsim.mjs --check-golden     B0: re-run the golden behaviour baseline (voyagesim, botsim 3x3, cave contacts, capability) against tools/fixtures/golden.json; --snapshot-golden --force re-captures it
 //        node tools/buildsim.mjs --check-frames     B0: frame-by-frame old vs new (world x/y, hull, kills; tolerance 1e-6 -> 2% over 3 min) + noise bands; --snapshot-frames --force re-captures
 //        node tools/buildsim.mjs --check-pose       B0: pose.js / ships.js / layout-parameter helper unit checks (and B1's --check-layouts)
-//        node tools/buildsim.mjs --check-layouts    B1: several Layout + Nav instances side by side (classic, a copy, four bags, two boilers, a tiny ship) answer on their own, applyBuild/onChange never cross
+//        node tools/buildsim.mjs --check-layouts    B1/B.1b: several Layout + Nav instances side by side (classic, a copy, four bags, two boilers, a tiny ship) answer on their own, and three more whole ship contexts (modules, balance, forces, bags, sails, engines, airborne, art bake) run next to a real ship 0; applyBuild/onChange never cross
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
 //        node tools/buildsim.mjs --check-validator   S.5: broken builds must FAIL/WARN with the right message (the classic passes clean)
@@ -1879,6 +1879,177 @@ async function checkPose() {
   return (await checkLayouts()) && ok;
 }
 
+// ---- B.1b: whole SHIP CONTEXTS side by side ----
+// Besides ship 0 (a real simulation of the classic ship), three more ships are built in the same module graph from different builds (the four-bag ship, the two-boiler ship, the
+// tiny ship with a sail), each with its OWN Layout, Nav, modules, balance, forces, gasbags, sails, engines, airborne surfaces and art bake (a stub canvas). Every system reads its
+// ship through the handle it was created with, so each must answer for its own ship and nothing may reach another one or ship 0.
+async function checkShipContexts(report) {
+  const had = ['window', 'localStorage', 'requestAnimationFrame', 'document'].map((k) => [k, k in globalThis]);
+  globalThis.window ??= globalThis;
+  const store = new Map();
+  globalThis.localStorage ??= { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+  globalThis.requestAnimationFrame ??= (f) => setTimeout(f, 16);
+  const { config } = await load('config.js');
+  const { BUILDS } = await load('modules/host/shipBuild.js');
+  const { SHIP_LAYOUT, SHIP_BALANCE, createLayout } = await load('shipLayout.js');
+  const { createNav, mainNav } = await load('modules/host/nav.js');
+  const { createSimulation } = await load('modules/host/simulation.js');
+  const { createModules } = await load('modules/host/modules.js');
+  const { createBalance } = await load('modules/host/balance.js');
+  const FC = await load('modules/host/forces.js');
+  const GB = await load('modules/host/gasBags.js');
+  const { createSails } = await load('modules/host/sails.js');
+  const { createEngines } = await load('modules/host/engines.js');
+  const { createAirborne } = await load('modules/host/airborne.js');
+  const { createShipArt } = await load('modules/host/shipArt.js');
+  const { mainShip } = await load('modules/host/ships.js');
+  const bagsParts = await loadBuild('bags', BUILDS), multiParts = await loadBuild('multi', BUILDS), minParts = await loadBuild('min5', BUILDS);
+  const errorsBefore = (globalThis.gameErrors || []).length;
+
+  // ship 0: a real simulation of the classic ship, flown a few seconds
+  const sim0 = createSimulation();
+  const helm0 = SHIP_LAYOUT.stations.find((s) => s.kind === 'helm');
+  sim0.state.players.h = { id: 'h', name: 'Helmsman', species: config.CREW_SPECIES[0], color: '#fff', x: helm0.x, y: SHIP_LAYOUT.platforms[helm0.d].y, d: helm0.d, jx: 0, jy: 0, t: 0, connected: true, fall: false, ko: 0, lock: helm0.n, gas: 0 };
+  sim0.castOff();
+  for (let i = 0; i < 180; i++) sim0.update(1 / 60);
+  const s0 = sim0.state, ship0 = mainShip(s0);
+  const snap0 = () => JSON.stringify({ layout: SHIP_LAYOUT, bal: SHIP_BALANCE, balance: s0.balance, bags: s0.bags, ship: { gas: s0.ship.gas, hull: s0.ship.hull }, modules: s0.modules.map((m) => [m.name, m.hp, m.broken]), forces: { q: s0.forces.queue.length, th: s0.forces.theta }, sails: s0.sails, engines: s0.engines.map((e) => e.name), conn: [...mainNav.connScale], ventOpen: s0.ventOpen, guns: Object.keys(s0.GUNS) });
+  const before0 = snap0();
+
+  // a ship context from a parts list
+  const gunsOf = (L) => Object.fromEntries(Object.entries(L.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, reach: 1 }]));
+  const makeCtx = (id, parts) => {
+    const layout = createLayout(parts), nav = createNav(layout);
+    const body = { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START };
+    const ship = { id, team: null, layout, nav, state: body, world: null, pose: null };
+    const state = { ...s0, ship: body, ships: [ship], players: {}, gasHoles: [], fires: [], breaches: [], boarders: [], sfxQ: [], flashes: [], rings: [], puffs: [], popups: [], ev: { t: 20, warn: 0 }, upgrades: {}, ventOpen: layout.vents.map(() => false), GUNS: gunsOf(layout), bombBay: { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null }, phase: 'flying', scroll: 0 };
+    ship.world = state;
+    GB.installBags(state);
+    const modules = createModules(ship);
+    state.modules = modules.list;
+    const balance = createBalance(state);
+    const forces = FC.createForces(state);
+    const sails = createSails({ state, modules });
+    const engines = createEngines({ state, modules });
+    const air = createAirborne({ state, puff() {}, phoneFx() {} });
+    return { id, layout, nav, ship, state, modules, balance, forces, sails, engines, air };
+  };
+  const ctxs = [makeCtx('bags', bagsParts), makeCtx('multi', multiParts), makeCtx('tiny', minParts)];
+  const by = Object.fromEntries(ctxs.map((c) => [c.id, c]));
+  report(ctxs.every((c) => mainShip(c.state) === c.ship && c.ship.layout === c.layout && c.layout !== SHIP_LAYOUT && c.nav !== mainNav && c.nav.layout === c.layout) && snap0() === before0, 'three more ship contexts (four-bag, two-boiler, tiny) were built next to ship 0: each ship handle has its own Layout and Nav, ship 0 is untouched');
+
+  // modules: built from the ship's own layout
+  const names = (c) => c.modules.list.map((m) => m.name);
+  const wanted = (c) => [...Object.keys(c.layout.gunMounts), ...c.layout.engines.map((e) => e.name), ...(c.layout.sails || []).map((s) => s.n), ...c.layout.stations.filter((s) => s.kind === 'boiler').map((s) => s.n)];
+  report(ctxs.every((c) => wanted(c).every((n) => names(c).includes(n)) && c.modules.list.length === new Set(names(c)).size)
+    && names(by.multi).includes('Fore Boiler') && !names(by.bags).includes('Fore Boiler') && !s0.modules.some((m) => m.name === 'Fore Boiler')
+    && names(by.tiny).length !== s0.modules.length && (by.tiny.layout.sails || []).length > 0 && by.tiny.modules.list.some((m) => m.kind === 'sail') && !s0.modules.some((m) => m.kind === 'sail'),
+  `createModules(ship) builds each ship's modules from her own layout (bags ship ${names(by.bags).length}, two-boiler ship ${names(by.multi).length} incl. the Fore Boiler, tiny ship ${names(by.tiny).length} incl. a sail; ship 0 ${s0.modules.length}, with neither the Fore Boiler nor a sail)`);
+
+  // modules and the lift speed go to the ship's own nav
+  const liftIdx = (c) => c.layout.connectors.findIndex((q) => q.type === 'lift');
+  const conn0 = JSON.stringify(mainNav.connScale), navs = ctxs.map((c) => JSON.stringify(c.nav.connScale));
+  const lifted = ctxs.filter((c) => liftIdx(c) >= 0);
+  let liftOk = lifted.length >= 2;
+  for (const c of lifted) {
+    c.modules.damage(c.modules.byName.Lift, 999);
+    c.modules.update(c.state, 1 / 60);
+    const own = c.nav.connScale[liftIdx(c)] === config.MODULES.UNPOWERED_LIFT;
+    const others = ctxs.filter((q) => q !== c).every((q, i) => JSON.stringify(q.nav.connScale) === navs[ctxs.indexOf(q)] || lifted.includes(q));
+    liftOk = liftOk && own && others && JSON.stringify(mainNav.connScale) === conn0;
+    c.modules.byName.Lift.broken = false; c.modules.byName.Lift.hp = c.modules.byName.Lift.max;
+  }
+  report(liftOk, `a broken Lift slows only its own ship's lift (${lifted.map((c) => c.id).join(', ')} each in turn; ship 0's nav and the other navs kept their speeds)`);
+
+  // balance, forces
+  for (const c of ctxs) c.balance.update(1 / 60);
+  const masses = ctxs.map((c) => c.state.balance.mass);
+  report(ctxs.every((c) => c.state.balance.mass === c.layout.balance.mass && c.state.balance.comY === c.layout.balance.comY) && s0.balance.mass === SHIP_BALANCE.mass && new Set([...masses, s0.balance.mass]).size === 4,
+    `createBalance(state) reads her own static balance (masses ${masses.map((m) => Math.round(m)).join(' / ')} against ship 0's ${Math.round(s0.balance.mass)}: four different ships, four different weights)`);
+  report(ctxs.every((c) => FC.pivotOf(c.state).mass === c.layout.balance.mass && FC.pivotOf(c.state).x === c.state.balance.comX) && FC.pivotOf(s0).mass === SHIP_BALANCE.mass, 'forces.js pivotOf(state): every ship turns about her own centre of mass and weighs her own weight');
+  const q0 = s0.forces.queue.length;
+  let fOk = true;
+  for (const c of ctxs) {
+    const cx = c.state.balance.comX, cy = c.state.balance.comY;
+    FC.applyForce(c.state, { x: cx + 200, y: cy, fx: 0, fy: 100, source: 'engine' });
+    FC.applyForce(c.state, { x: cx - 200, y: cy, fx: 0, fy: 100, source: 'engine' });
+    const it = FC.forcesOf(c.state).items;
+    fOk = fOk && c.state.forces.queue.length === 2 && it[0].torque > 0 && it[1].torque < 0 && Math.abs(it[0].torque + it[1].torque) < 1e-9;
+    c.forces.update(1 / 60);
+    fOk = fOk && c.state.forces.queue.length === 0;
+  }
+  report(fOk && s0.forces.queue.length === q0, 'a push ahead of her own centre of mass tips her nose down and one behind it nose up, on each ship (the pivot is hers); the other ships\' force queues did not move');
+
+  // gasbags
+  const lx = ctxs.map((c) => GB.liveLiftX(c.state));
+  report(by.bags.state.bags.length === 4 && by.multi.state.bags.length === 1 && s0.bags.length === 1 && by.bags.state.bags.every((b, i) => b.w === Math.max(1, by.bags.layout.gasbags[i].lift)), `installBags(state): ${by.bags.state.bags.length} bags on the four-bag ship, 1 on the others, weighted by her own bags' lift`);
+  by.bags.state.bags[0].gas = 0;
+  const lift0 = JSON.stringify(s0.bags);
+  const lxAfter = GB.liveLiftX(by.bags.state);
+  report(lx[0] !== null && lxAfter !== null && lxAfter !== lx[0] && lx[1] === null && GB.liveLiftX(s0) === null && by.bags.state.ship.gas < config.GAS.START && lift0 === JSON.stringify(s0.bags), 'liveLiftX / the mean gas follow the ship\'s own bags: a flat tail bag moves the four-bag ship\'s centre of lift, a one-bag ship has none, ship 0\'s bags did not change');
+  // sails, engines, airborne surfaces
+  for (const c of ctxs) { c.sails.update(1 / 60); c.engines.update(1 / 60); }
+  report(ctxs.every((c) => c.state.sails.length === (c.layout.sails || []).length && c.state.engines.length === c.layout.engines.length) && by.tiny.state.sails.length > 0 && s0.sails.length === 0 && by.multi.state.engines.length === by.multi.layout.engines.length,
+    `createSails / createEngines mirror their own ship (sails: tiny ${by.tiny.state.sails.length}, others 0; engines: ${ctxs.map((c) => c.state.engines.length).join(' / ')}, ship 0 ${s0.engines.length})`);
+  report(ctxs.every((c) => c.air.surfaces().filter((q) => String(q.id).startsWith('ship:')).length === c.layout.platforms.length) && sim0.air.surfaces().filter((q) => String(q.id).startsWith('ship:')).length === SHIP_LAYOUT.platforms.length && by.tiny.layout.platforms.length !== SHIP_LAYOUT.platforms.length,
+    `createAirborne lands a flyer on the platforms of the ship she belongs to (${ctxs.map((c) => c.layout.platforms.length).join(' / ')} decks against ship 0's ${SHIP_LAYOUT.platforms.length})`);
+
+  // art: the bake of each ship is her own, keyed on her layout's version
+  const canvases = [];
+  let owner = null;
+  const fnv = (h, s) => { for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0; return h; };
+  const fmt = (a) => (typeof a === 'number' ? a.toFixed(2) : typeof a === 'string' ? a : a && a.__id != null ? 'cv' + a.__id : typeof a);
+  const stubCtx = (rec) => new Proxy({ imageSmoothingQuality: 'low' }, {
+    get(t, k) {
+      if (k in t) return t[k];
+      if (k === 'getTransform') return () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+      if (k === 'measureText') return (s) => ({ width: String(s).length * 9 });
+      if (k === 'getImageData') return (x, y, w, h) => ({ data: new Uint8ClampedArray(Math.max(1, w * h * 4)) });
+      if (k === 'createLinearGradient' || k === 'createRadialGradient' || k === 'createPattern' || k === 'createConicGradient') return () => ({ addColorStop() {} });
+      if (k === 'isPointInPath' || k === 'isPointInStroke') return () => false;
+      return (...args) => { rec.n++; rec.h = fnv(rec.h, k + ':' + args.map(fmt).join(',')); };
+    },
+    set(t, k, v) { t[k] = v; rec.h = fnv(rec.h, k + '=' + fmt(v)); return true; },
+  });
+  globalThis.document = {
+    fonts: { check: () => true },
+    createElement: () => {
+      const rec = { n: 0, h: 2166136261 };
+      const cv = { width: 0, height: 0, __id: owner.made++, owner, rec, getContext: () => (cv.c ||= stubCtx(rec)) };
+      owner.canvases.push(cv);
+      canvases.push(cv);
+      return cv;
+    },
+  };
+  const sprites = new Proxy({}, { get: (t, k) => (k === 'has' ? () => false : () => undefined) });
+  const mkArt = (state, ship) => {
+    const me = { made: 0, canvases: [], rec: { n: 0, h: 2166136261 }, errs: 0 };
+    owner = me;
+    me.draw = createShipArt({ ctx: stubCtx(me.rec), state, sprites, ship });
+    me.frame = (t) => { owner = me; me.rec.n = 0; me.rec.h = 2166136261; const e0 = (globalThis.gameErrors || []).length; me.draw(t); me.errs += (globalThis.gameErrors || []).length - e0; return me.rec.h; };
+    return me;
+  };
+  const a0 = mkArt(s0, ship0);
+  a0.frame(0.5);
+  const h0 = a0.frame(0.5), made0 = a0.canvases.length;
+  const aBags = mkArt(by.bags.state, by.bags.ship), aTiny = mkArt(by.tiny.state, by.tiny.ship);
+  aBags.frame(0.5); aTiny.frame(0.5);
+  report(made0 >= 3 && aBags.canvases.length >= made0 + 3 && aTiny.canvases.length >= 3 && aBags.canvases.length > aTiny.canvases.length, `createShipArt(ship) bakes her own layers (ship 0 ${made0} pictures, four-bag ship ${aBags.canvases.length}, tiny ship ${aTiny.canvases.length}: one per bag)`);
+  const sizes = (a) => a.canvases.slice(0, 2).map((c) => c.width + 'x' + c.height).join(',');
+  report(sizes(a0) !== sizes(aBags) && sizes(aBags) !== sizes(aTiny) && sizes(a0) !== sizes(aTiny), `each bake covers her own hull (back/front pictures ${sizes(a0)} / ${sizes(aBags)} / ${sizes(aTiny)})`);
+  const hAfter = a0.frame(0.5);
+  report(hAfter === h0 && a0.canvases.length === made0, 'ship 0\'s next frame is exactly the same drawing, with no re-bake, after the other ships were baked and drawn');
+  const sizesBags4 = sizes(aBags), sizes0 = sizes(a0), sizesTiny = sizes(aTiny), nTiny = aTiny.canvases.length;
+  by.bags.layout.applyBuild(BUILDS.classic);
+  GB.syncBags(by.bags.state);
+  aBags.frame(0.5); a0.frame(0.5); aTiny.frame(0.5);
+  report(sizesBags4 !== sizes(aBags) && sizes(aBags) === sizes0 && sizes(a0) === sizes0 && sizes(aTiny) === sizesTiny && a0.canvases.length === made0 && aTiny.canvases.length === nTiny && by.bags.state.bags.length === 1, 'a new build on the four-bag ship (she became the classic ship) re-bakes HER art because her layout version changed, and fits her bags; ship 0\'s and the tiny ship\'s art kept their bakes');
+  report((globalThis.gameErrors || []).length === errorsBefore && a0.errs + aBags.errs + aTiny.errs === 0, 'none of it logged a game error (every read found its own ship)');
+  report(snap0() === before0, 'ship 0\'s layout, balance, bags, modules, forces and lift speeds are exactly as before all the other ships were flown');
+  for (const [k, was] of had) if (!was) delete globalThis[k];
+  void globalThis.document;
+}
+
 // ---- B1: one Layout (and one Nav) per ship ----
 // Several layout instances live side by side (the classic ship, a copy of it, the four-bag ship, the two-boiler ship and the tiny two-deck ship), and each must answer
 // the helpers, the derived tables and the navigation on its OWN, with no cross-talk; applyBuild / onChange on one must never touch another. Also: the exported
@@ -1984,9 +2155,10 @@ async function checkLayouts() {
 
   // converted systems read their own layout
   const tiny = createLayout(minParts);
-  report(G.shipGeom(tiny).MAIN_X1 === tiny.platforms[tiny.deckIndex('main')].x1 && G.shipGeom(SHIP_LAYOUT).MAIN_X1 === G.MAIN_X1 && G.shipGeom(tiny).MAIN_X1 !== G.MAIN_X1 && G.shipGeom(tiny).BOW.x === tiny.platforms[0].x1 + 10, 'gunship.js shipGeom(layout): the rope\'s bow point and main deck end are per ship (the exported MAIN_X1 / BOW are ship 0\'s)');
+  report(G.shipGeom(tiny).MAIN_X1 === tiny.platforms[tiny.deckIndex('main')].x1 && G.shipGeom(SHIP_LAYOUT).MAIN_X1 === SHIP_LAYOUT.platforms[SHIP_LAYOUT.deckIndex('main')].x1 && G.shipGeom(tiny).MAIN_X1 !== G.shipGeom(SHIP_LAYOUT).MAIN_X1 && G.shipGeom(tiny).BOW.x === tiny.platforms[0].x1 + 10 && G.MAIN_X1 === undefined && G.BOW === undefined, 'gunship.js shipGeom(layout): the rope\'s bow point and main deck end are per ship (no ship-0 MAIN_X1 / BOW exports left)');
   report(SL.lightNames(SHIP_LAYOUT).length === 2 && SL.lightNames(tiny).length === 0 && SL.isSearchlight(SL.lightNames(SHIP_LAYOUT)[0]) && !SL.isSearchlight(SL.lightNames(SHIP_LAYOUT)[0], tiny), 'searchlight.js lightNames / isSearchlight are per layout');
-  report(ES.isEscortStation('Escort Fighter') && ES.isEscortStation('Escort Fighter', SHIP_LAYOUT) && !ES.isEscortStation('Escort Fighter', tiny), 'escort.js isEscortStation is per layout');
+  report(ES.isEscortStation('Escort Fighter', SHIP_LAYOUT) && !ES.isEscortStation('Escort Fighter', tiny), 'escort.js isEscortStation is per layout');
+  await checkShipContexts(report); // (B.1b: whole ship contexts side by side)
   return ok;
 }
 const one0 = (L, kind) => L.one(kind).n;

@@ -2,7 +2,6 @@ import { createJobFinder } from './jobs.js';
 import { updateCrewScale, sparesFor, spawnPace, damageMul, crewMul, autopilotOn, crewHeads } from './crewscale.js';
 import { updateMates } from './mates.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf, deckIndex, hasKind, isNestDeck, nestTier, reviveSpot } from '../../shipLayout.js';
 import { updateBot } from './bots.js';
 import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
 import { createModules } from './modules.js';
@@ -14,7 +13,7 @@ import { createEscort, isEscortStation, escortFor } from './escort.js';
 import { createSpecials } from './specials.js';
 import { createCoil } from './coil.js';
 import { createSearchlights, isSearchlight } from './searchlight.js';
-import { createGunship, MAIN_X1 } from './gunship.js';
+import { createGunship, shipGeom } from './gunship.js';
 import { createAirborne } from './airborne.js';
 import { createHookshot } from './hookshot.js';
 import { createHijack } from './hijack.js';
@@ -39,52 +38,53 @@ import { toWorld, toShipX } from './pose.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
-const PLATFORMS = SHIP_LAYOUT.platforms;
-const platformY = (d) => PLATFORMS[d].y;
-let BAY_D; // the bomb bay's platform index (refreshed when a new ship build is applied)
-const rebuildBayD = () => { BAY_D = PLATFORMS.findIndex((p) => p.id === 'bay'); };
-rebuildBayD();
-onLayoutChange(rebuildBayD);
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
-// Does a point (in ship coordinates) touch the ship? Gasbag, gondola, outriggers or ball turret.
-const BAGS = SHIP_LAYOUT.gasbags; // the gasbags side by side (S.5d), tail to nose
-function hitsShip(x, y) {
-  for (const b of BAGS) if (((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2 < 1) return true;
-  for (const r of SHIP_LAYOUT.hitRects) if (x > r.x0 && x < r.x1 && y > r.y0 && y <= r.y1) return true; // gondola, outriggers, top deck, belly compartments (from the build)
-  return false;
-}
-
-// Which gasbag a hit at (x, y) lands on (its index, tail to nose), or -1: inside an envelope and above the gondola.
-const onGasbag = (x, y) => (y < 455 ? BAGS.findIndex((b) => ((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2 < 1) : -1);
-
-// A gasbag hole where the crew can reach it: on top near the crow's nest, or on the underside
-// above the catwalk. (x, y) is the hole's drawn position on the envelope; bi = the bag it is in (the nearest, when not given).
-// The hole remembers its bag (hole.bag): it leaks from that bag only.
-function gasHoleAt(x, y, bi) {
-  const nest = PLATFORMS.findIndex((p) => rowOf(p) === 'nest' && x > p.x0 - 60 && x < p.x1 + 60); // (a crow's nest over the hit, if there is one: a cut nest has two)
-  const cat = deckIndex('catwalk');
-  const bag = bi != null && BAGS[bi] ? bi : Math.max(0, bagNearX(BAGS, x));
-  const GB = BAGS[bag];
-  const edge = (hx, top) => bagEdgeY(GB, hx, top);
-  if (y < GB.cy && nest >= 0) {
-    const hx = Math.max(PLATFORMS[nest].x0 + 15, Math.min(PLATFORMS[nest].x1 - 15, x));
-    return { x: hx, d: nest, y: edge(hx, true) + 34, prog: 0, bag };
+// The questions the simulation asks of a ship's body (where a hit lands, which bag, which floor): one set per layout, so nothing here is shared between two ships
+// (B.1b: no module-level capture of the layout).
+function shipQueries(layout) {
+  const PLATFORMS = layout.platforms;
+  const BAGS = layout.gasbags; // the gasbags side by side (S.5d), tail to nose
+  const { deckIndex, isNestDeck } = layout; // (the station-kind helpers, bound to this ship's layout)
+  // Does a point (in ship coordinates) touch the ship? Gasbag, gondola, outriggers or ball turret.
+  function hitsShip(x, y) {
+    for (const b of BAGS) if (((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2 < 1) return true;
+    for (const r of layout.hitRects) if (x > r.x0 && x < r.x1 && y > r.y0 && y <= r.y1) return true; // gondola, outriggers, top deck, belly compartments (from the build)
+    return false;
   }
-  let hx = Math.max(PLATFORMS[cat].x0 + 20, Math.min(PLATFORMS[cat].x1 - 20, x));
-  let ex = hx; // where on the envelope the hole is drawn
-  if (BAGS.length > 1) { // keep the hole under ITS bag when that bag is within reach of the top deck
-    const lo = Math.max(PLATFORMS[cat].x0 + 20, GB.x0 + 20), hi = Math.min(PLATFORMS[cat].x1 - 20, GB.x1 - 20);
-    if (lo <= hi) ex = hx = Math.max(lo, Math.min(hi, hx));
-    else ex = Math.max(GB.x0 + 40, Math.min(GB.x1 - 40, hx)); // a bag beyond the end of the top deck: patched from the deck's end, drawn on the bag's nearest edge
-  }
-  return { x: hx, d: cat, y: edge(ex, false) - 22, prog: 0, bag };
-}
 
-// Which indoor/outdoor floor a hit at (x, y) lands on (holes and fires go there), or null (e.g. gasbag).
-function roomPlatformAt(x, y) {
-  const d = PLATFORMS.findIndex((p) => !isNestDeck(p.id) && x >= p.x0 && x <= p.x1 && y <= p.y + 15 && y >= p.y - 170);
-  return d < 0 ? null : d;
+  // Which gasbag a hit at (x, y) lands on (its index, tail to nose), or -1: inside an envelope and above the gondola.
+  const onGasbag = (x, y) => (y < 455 ? BAGS.findIndex((b) => ((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2 < 1) : -1);
+
+  // A gasbag hole where the crew can reach it: on top near the crow's nest, or on the underside
+  // above the catwalk. (x, y) is the hole's drawn position on the envelope; bi = the bag it is in (the nearest, when not given).
+  // The hole remembers its bag (hole.bag): it leaks from that bag only.
+  function gasHoleAt(x, y, bi) {
+    const nest = PLATFORMS.findIndex((p) => rowOf(p) === 'nest' && x > p.x0 - 60 && x < p.x1 + 60); // (a crow's nest over the hit, if there is one: a cut nest has two)
+    const cat = deckIndex('catwalk');
+    const bag = bi != null && BAGS[bi] ? bi : Math.max(0, bagNearX(BAGS, x));
+    const GB = BAGS[bag];
+    const edge = (hx, top) => bagEdgeY(GB, hx, top);
+    if (y < GB.cy && nest >= 0) {
+      const hx = Math.max(PLATFORMS[nest].x0 + 15, Math.min(PLATFORMS[nest].x1 - 15, x));
+      return { x: hx, d: nest, y: edge(hx, true) + 34, prog: 0, bag };
+    }
+    let hx = Math.max(PLATFORMS[cat].x0 + 20, Math.min(PLATFORMS[cat].x1 - 20, x));
+    let ex = hx; // where on the envelope the hole is drawn
+    if (BAGS.length > 1) { // keep the hole under ITS bag when that bag is within reach of the top deck
+      const lo = Math.max(PLATFORMS[cat].x0 + 20, GB.x0 + 20), hi = Math.min(PLATFORMS[cat].x1 - 20, GB.x1 - 20);
+      if (lo <= hi) ex = hx = Math.max(lo, Math.min(hi, hx));
+      else ex = Math.max(GB.x0 + 40, Math.min(GB.x1 - 40, hx)); // a bag beyond the end of the top deck: patched from the deck's end, drawn on the bag's nearest edge
+    }
+    return { x: hx, d: cat, y: edge(ex, false) - 22, prog: 0, bag };
+  }
+
+  // Which indoor/outdoor floor a hit at (x, y) lands on (holes and fires go there), or null (e.g. gasbag).
+  function roomPlatformAt(x, y) {
+    const d = PLATFORMS.findIndex((p) => !isNestDeck(p.id) && x >= p.x0 && x <= p.x1 && y <= p.y + 15 && y >= p.y - 170);
+    return d < 0 ? null : d;
+  }
+  return { hitsShip, onGasbag, gasHoleAt, roomPlatformAt };
 }
 
 // Best run, remembered by this browser (the TV). Never let storage problems break the game.
@@ -113,7 +113,7 @@ export function createSimulation() {
     players: {},
     ship: { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START },
     gasHoles: [],
-    ventOpen: SHIP_LAYOUT.vents.map(() => false), // which vent stacks are open
+    ventOpen: [], // which vent stacks are open (one flag per vent of the ship's layout, filled in below)
     wreck: null, // { t } while the ship is breaking apart
     bombBay: { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null },
     sfxQ: [], // sounds asked for by name: [name, arg]
@@ -140,11 +140,22 @@ export function createSimulation() {
     ev: { t: 20, warn: 0 },
     kills: 0,
     scroll: 0,
-    GUNS: Object.fromEntries(
-      Object.entries(SHIP_LAYOUT.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, reach: 1 + config.NEST.TIER_BONUS * nestTier((SHIP_LAYOUT.stations.find((s) => s.n === name) || {}).p) }]),
-    ),
+    GUNS: {}, // (name -> { bx, by, aim, home, arc, cd, ammo ... }: one per gun mount of the ship's layout, filled in below)
   };
-  state.ships = [createMainShip(state)]; // (B0: the ships in this sky; ships[0] wraps state.ship, SHIP_LAYOUT and course.dist by reference: ships.js, pose.js)
+  state.ships = [createMainShip(state)]; // (B0: the ships in this sky; ships[0] wraps state.ship, its layout and course.dist by reference: ships.js, pose.js)
+  const layout = mainShip(state).layout; // (B.1b: this ship's own layout; every per-ship read below goes through it. B.2 splits this file per ship)
+  const { one, all, kindOf, hasKind, nestTier, reviveSpot } = layout; // (the station-kind helpers, bound to it)
+  const PLATFORMS = layout.platforms;
+  const platformY = (d) => PLATFORMS[d].y;
+  let BAY_D; // the bomb bay's platform index (refreshed when a new ship build is applied)
+  const rebuildBayD = () => { BAY_D = PLATFORMS.findIndex((p) => p.id === 'bay'); };
+  rebuildBayD();
+  layout.onChange(rebuildBayD);
+  const { hitsShip, onGasbag, gasHoleAt, roomPlatformAt } = shipQueries(layout);
+  state.ventOpen = layout.vents.map(() => false);
+  state.GUNS = Object.fromEntries(
+    Object.entries(layout.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, reach: 1 + config.NEST.TIER_BONUS * nestTier((layout.stations.find((s) => s.n === name) || {}).p) }]),
+  );
   installBags(state); // the gasbags side by side: state.bags, and state.ship.gas as their mean (gasBags.js)
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -168,16 +179,16 @@ export function createSimulation() {
   const jobFinder = createJobFinder(state);
   state.modules = modules.list;
   const PICKUPS = [];
-  const rebuildPickups = () => { PICKUPS.length = 0; PICKUPS.push(...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))); };
+  const rebuildPickups = () => { PICKUPS.length = 0; PICKUPS.push(...layout.racks, ...layout.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))); };
   rebuildPickups();
-  onLayoutChange(rebuildPickups);
+  layout.onChange(rebuildPickups);
   const LOCKABLE_KINDS = ['helm', 'lookout', 'bombBay', 'deflector', 'coil', 'searchlight', 'escort', 'gun', 'swivel'];
-  const LOCKABLE = (name) => LOCKABLE_KINDS.includes(kindOf(name)) || isSearchlight(name) || isEscortStation(name) || !!state.GUNS[name];
+  const LOCKABLE = (name) => LOCKABLE_KINDS.includes(kindOf(name)) || isSearchlight(name, layout) || isEscortStation(name, layout) || !!state.GUNS[name];
   // What the phone calls each kind of station (its button set and label).
   const PHONE_KIND = { helm: 'helm', gun: 'gun', boiler: 'boiler', lookout: 'lookout', bombBay: 'bombbay', deflector: 'shield', coil: 'coil', searchlight: 'light', escort: 'escort', swivel: 'swivel' };
 
   // Sunken Sea: crew on the lower decks wade slowly while the ship is flooded.
-  const wadeMul = (p) => (p.d != null && PLATFORMS[p.d] && PLATFORMS[p.d].y >= SHIP_LAYOUT.lowDeckY && state.sea && state.sea.flood > 0 ? 1 - state.sea.flood * config.ENVIRONMENTS.sea.FLOOD.SLOW_CREW : 1);
+  const wadeMul = (p) => (p.d != null && PLATFORMS[p.d] && PLATFORMS[p.d].y >= layout.lowDeckY && state.sea && state.sea.flood > 0 ? 1 - state.sea.flood * config.ENVIRONMENTS.sea.FLOOD.SLOW_CREW : 1);
 
   // What the Action button does for this player right now (or null) - the "use" half of interaction() below.
   // hold = keep the button held to make progress; otherwise a tap does it.
@@ -191,7 +202,7 @@ export function createSimulation() {
     const boarding = gunship.interaction(player);
     if (boarding) return boarding;
     // Standing over the open bomb bay doors: jump out (parachute). Not while carrying ammo - that loads the bombs.
-    if (!player.bot && player.d === BAY_D && tool !== 'ammo' && Math.abs(player.x - SHIP_LAYOUT.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return { type: 'jump', label: 'Jump!' };
+    if (!player.bot && player.d === BAY_D && tool !== 'ammo' && Math.abs(player.x - layout.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return { type: 'jump', label: 'Jump!' };
     // Storm Front: while a bolt is charging, a lightning rod in reach comes first (hold Action = grounded).
     const rod = state.stormJob.charge && state.stormJob.rods.find((o) => here(o, 75));
     if (rod) return { type: 'rod', obj: rod, hold: true, time: 1, label: 'HOLD THE ROD!' };
@@ -218,8 +229,8 @@ export function createSimulation() {
     const hurt = modules.list.find((m) => m.hp < m.max && here(m, T.REACH + 15));
     if (hurt && tool === 'hammer') return { type: 'repair', obj: hurt, hold: true, label: `Repair ${hurt.name}` };
     // A gas valve (S.5d): shut or open the feed to its gasbag. Turned from VALVE_REACH, closer than a rack's reach, so it still works on a crowded deck.
-    const gv = (SHIP_LAYOUT.gasValves || []).find((v) => here(v, T.VALVE_REACH));
-    if (gv) { const i = SHIP_LAYOUT.gasValves.indexOf(gv); return { type: 'gasvalve', obj: gv, label: `${state.gasValveOpen[i] === false ? 'Open' : 'Close'} ${bagName(gv.bag, SHIP_LAYOUT.gasbags.length).toLowerCase()} valve` }; }
+    const gv = (layout.gasValves || []).find((v) => here(v, T.VALVE_REACH));
+    if (gv) { const i = layout.gasValves.indexOf(gv); return { type: 'gasvalve', obj: gv, label: `${state.gasValveOpen[i] === false ? 'Open' : 'Close'} ${bagName(gv.bag, layout.gasbags.length).toLowerCase()} valve` }; }
     // A mast and sail (S.5e): hold Action to haul the sail up, tap it to let it down.
     const sl = sails.actionFor(player, here);
     if (sl) return sl;
@@ -232,8 +243,8 @@ export function createSimulation() {
       if (empty.type === 'need') return empty;
     }
     if (pickup && !(station && (tool === 'ammo' || tool === 'coal' || tool === 'ice'))) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : tool && tool !== 'ammo' && tool !== 'coal' ? `Swap to ${pickup.kind}` : `Take ${pickup.kind}` };
-    const vent = SHIP_LAYOUT.vents.find((v) => here(v, T.REACH));
-    if (vent) return { type: 'vent', obj: vent, label: state.ventOpen[SHIP_LAYOUT.vents.indexOf(vent)] ? 'Close vent' : 'Open vent' };
+    const vent = layout.vents.find((v) => here(v, T.REACH));
+    if (vent) return { type: 'vent', obj: vent, label: state.ventOpen[layout.vents.indexOf(vent)] ? 'Close vent' : 'Open vent' };
     const valve = modules.list.find((m) => m.kind === 'pipe' && here(m, T.REACH));
     if (valve) return { type: 'valve', obj: valve, label: valve.open ? 'Close valve' : 'Open valve' };
     if (station) {
@@ -431,7 +442,7 @@ export function createSimulation() {
     gunship.reset();
     goingDown.reset();
     for (const player of Object.values(state.players)) {
-      const [e0, e1] = SHIP_LAYOUT.boarderEntryPoints;
+      const [e0, e1] = layout.boarderEntryPoints;
       Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x) });
       player.uk = null;
     }
@@ -480,7 +491,7 @@ export function createSimulation() {
     state.tempo = newTempo();
     state.supply = null;
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
-    for (const [name, m] of Object.entries(SHIP_LAYOUT.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, auto: 0, prime: 0, primed: false });
+    for (const [name, m] of Object.entries(layout.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, auto: 0, prime: 0, primed: false });
     spotter.reset();
     raiders.reset();
     threats.reset();
@@ -497,7 +508,7 @@ export function createSimulation() {
     if (state.weather) Object.assign(state.weather, { storm: 0, gust: 0, flash: 0, bolt: null });
     for (const player of Object.values(state.players)) {
       // Drop everyone back aboard from above, as when joining.
-      const [e0, e1] = SHIP_LAYOUT.boarderEntryPoints;
+      const [e0, e1] = layout.boarderEntryPoints;
       Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x), stats: {} });
       player.uk = null; // resend the phone's buttons
     }
@@ -509,7 +520,7 @@ export function createSimulation() {
   const shieldBlocks = (x, y) => {
     const S = state.shield;
     if (!S.on) return false;
-    const L = SHIP_LAYOUT.shield;
+    const L = layout.shield;
     const u = (x - L.cx) / L.rx;
     const v = (y + state.ship.alt - L.cy) / L.ry;
     const r = Math.hypot(u, v);
@@ -636,7 +647,7 @@ export function createSimulation() {
       sp.bob = (sp.bob || 0) + dt;
       const wx = toShipX(mainShip(state), sp.mx);
       const wy = sp.my + Math.sin(sp.bob * 1.3) * 30;
-      if (Math.hypot(wx - SHIP_LAYOUT.midPoint.x, wy - (SHIP_LAYOUT.midPoint.y - state.ship.alt)) < PC.SUPPLY_REACH) {
+      if (Math.hypot(wx - layout.midPoint.x, wy - (layout.midPoint.y - state.ship.alt)) < PC.SUPPLY_REACH) {
         state.ship.hull = Math.min(100, state.ship.hull + PC.SUPPLY_HULL);
         state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + PC.SUPPLY_COAL);
         for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
@@ -655,8 +666,8 @@ export function createSimulation() {
     const c = state.course;
     if (!c) return;
     for (const [dx, dy] of [[1400, -500], [1800, 0], [1200, 400], [-600, -700], [2200, -300]]) {
-      const wx = SHIP_LAYOUT.midPoint.x + dx;
-      const wy = SHIP_LAYOUT.midPoint.y - state.ship.alt + dy;
+      const wx = layout.midPoint.x + dx;
+      const wy = layout.midPoint.y - state.ship.alt + dy;
       let clear = true;
       for (const [ox, oy] of [[0, 0], [150, 0], [-150, 0], [0, 150], [0, -150]]) if (inRock(state, wx + ox, wy + oy)) clear = false;
       if (clear) {
@@ -703,7 +714,7 @@ export function createSimulation() {
   const impact = (x, y, power) => {
     // Riveted plate (S.5g) on this stretch of hull wall or rail: the hit counts for much less, and rarely punches through.
     const d = onGasbag(x, y) < 0 ? roomPlatformAt(x, y) : null;
-    const plate = d !== null && !!armourOn(SHIP_LAYOUT, d, x);
+    const plate = d !== null && !!armourOn(layout, d, x);
     if (plate) {
       power *= config.ARMOUR.POWER_MUL;
       state.fireStats.plated++;
@@ -734,7 +745,7 @@ export function createSimulation() {
     if (d !== null) {
       const p = PLATFORMS[d];
       const holes = power >= 2 ? (Math.random() < coll ? 2 : 1) : Math.random() < config.SHIP.HOLE_CHANCE * coll * (plate ? config.ARMOUR.HOLE_MUL : 1) ? 1 : 0;
-      for (let i = 0; i < holes && state.breaches.length < 10; i++) state.breaches.push({ x: clamp(x + (i - 0.5) * 70 * (holes - 1), p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d, prog: 0 });
+      for (let i = 0; i < holes && state.breaches.length < 10; i++) state.breaches.push({ x: clamp(x + (i - 0.5) * 70 * (holes - 1), p.x0 + 20, (p.id === 'main' ? shipGeom(layout).MAIN_X1 : p.x1) - 20), d, prog: 0 });
       // (a fire starts more readily on tinder (the coal), and not at all on plate: the spot's flammability scales the chance, 1 on a plain deck)
       const ig = fireSys.igniteChance(d, x);
       if ((power >= 2 && Math.random() < coll * Math.min(1, ig)) || Math.random() < 0.35 * coll * ig) fireSys.ignite(d, x + (Math.random() - 0.5) * 80, 'hit');
@@ -1153,7 +1164,7 @@ export function createSimulation() {
       if (state.gasHoles.length < config.GAS.MAX_HOLES) state.gasHoles.push(gasHoleAt(x, y));
     } else if (state.breaches.length < 10) {
       const p = PLATFORMS[d];
-      state.breaches.push({ x: clamp(x, p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d, prog: 0 });
+      state.breaches.push({ x: clamp(x, p.x0 + 20, (p.id === 'main' ? shipGeom(layout).MAIN_X1 : p.x1) - 20), d, prog: 0 });
     }
   };
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull });
@@ -1248,12 +1259,12 @@ export function createSimulation() {
       player.carry = put ? null : act.obj.kind;
       grabbed(player, put);
     } else if (type === 'vent') {
-      const i = SHIP_LAYOUT.vents.indexOf(act.obj);
+      const i = layout.vents.indexOf(act.obj);
       state.ventOpen[i] = !state.ventOpen[i];
       stat(player, 'vent');
       shipPuff(act.obj.x, PLATFORMS[act.obj.d].y - 150, '#ffffff', 8);
     } else if (type === 'gasvalve') {
-      const i = SHIP_LAYOUT.gasValves.indexOf(act.obj);
+      const i = layout.gasValves.indexOf(act.obj);
       state.gasValveOpen[i] = !state.gasValveOpen[i];
       syncBags(state); // (the bag is cut off, or fed again, from this moment)
       shipPuff(act.obj.x, PLATFORMS[act.obj.d].y - 60, state.gasValveOpen[i] ? '#9cc99a' : '#e2a24a', 7);
@@ -1427,7 +1438,7 @@ export function createSimulation() {
         player.lock = null;
         player.fire = false;
       }
-      const nearStations = !player.lock && player.conn == null ? SHIP_LAYOUT.stations.filter((s) => s.d === player.d && Math.abs(player.x - s.x) < T.STATION_REACH) : [];
+      const nearStations = !player.lock && player.conn == null ? layout.stations.filter((s) => s.d === player.d && Math.abs(player.x - s.x) < T.STATION_REACH) : [];
       // (people keep the station they were already at until another is clearly closer; bots just take the nearest)
       const station = player.bot ? nearStations.sort((a, b) => Math.abs(player.x - a.x) - Math.abs(player.x - b.x))[0] || null : sticky(player, 'stKey', nearStations, (s) => Math.abs(player.x - s.x), (s) => s.n);
 
@@ -1479,7 +1490,7 @@ export function createSimulation() {
               bay.bombs -= 1;
               bay.cd = config.BOMBS.COOLDOWN;
               bay.open = 0.6;
-              const [bx, by] = tilt(state, SHIP_LAYOUT.bombBay.x, SHIP_LAYOUT.bombBay.y);
+              const [bx, by] = tilt(state, layout.bombBay.x, layout.bombBay.y);
               course.dropBomb(bx, by - state.ship.alt + 20, player.id);
             }
           }
@@ -1522,7 +1533,7 @@ export function createSimulation() {
           }
         }
         if (gun) player.face = Math.cos(gun.aim) < 0 ? -1 : 1;
-        else if (isSearchlight(player.lock)) player.face = Math.cos(state.searchlights.find((l) => l.n === player.lock).aim) < 0 ? -1 : 1;
+        else if (isSearchlight(player.lock, layout)) player.face = Math.cos(state.searchlights.find((l) => l.n === player.lock).aim) < 0 ? -1 : 1;
         player.actQ = false;
         player.jumpQ = false;
         player.act = null;
@@ -1655,7 +1666,7 @@ export function createSimulation() {
       const stationName = player.lock || (station && station.n) || null;
       const gun = state.GUNS[stationName];
       const stKind = kindOf(stationName); // (the station's kind from the layout; `kind` below is the phone's name for it)
-      const kind = PHONE_KIND[stKind] || (gun ? 'gun' : isSearchlight(stationName) ? 'light' : isEscortStation(stationName) ? 'escort' : null);
+      const kind = PHONE_KIND[stKind] || (gun ? 'gun' : isSearchlight(stationName, layout) ? 'light' : isEscortStation(stationName, layout) ? 'escort' : null);
       const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && Object.values(state.players).some((q) => q.lock === stationName && (q.bot ? player.bot : true));
       let label = 'Hey!';
       let hold = false;
@@ -1679,7 +1690,7 @@ export function createSimulation() {
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       if (kind === 'helm' && player.lock && !status) status = course.helmHint();
-      if (isEscortStation(stationName) && !status) status = escort.status(stationName);
+      if (isEscortStation(stationName, layout) && !status) status = escort.status(stationName);
       if (kind === 'light' && player.lock && !status) status = searchlights.status(stationName);
       if (kind === 'swivel' && player.lock && !status) status = engines.status(stationName);
       const feel = state.buoyancy > 0 ? 'RISING' : state.buoyancy < 0 ? 'FALLING' : 'holding';
@@ -1725,7 +1736,7 @@ export function createSimulation() {
     }
 
     state.lookout = state.periscope || Object.values(state.players).some((q) => kindOf(q.lock) === 'lookout');
-    state.lookoutBonus = Object.values(state.players).some((q) => kindOf(q.lock) === 'lookout' && nestTier((SHIP_LAYOUT.stations.find((s) => s.n === q.lock) || {}).p)) ? config.NEST.TIER_BONUS : 0; // (a lookout up on the high nest sees further ahead)
+    state.lookoutBonus = Object.values(state.players).some((q) => kindOf(q.lock) === 'lookout' && nestTier((layout.stations.find((s) => s.n === q.lock) || {}).p)) ? config.NEST.TIER_BONUS : 0; // (a lookout up on the high nest sees further ahead)
     updatePopups(state, dt);
     spotter.update(dt);
     links.update(dt);
@@ -1817,7 +1828,7 @@ export function createSimulation() {
     bay.open = Math.max(0, (bay.open || 0) - dt);
     state.helmHit = Math.max(0, (state.helmHit || 0) - dt);
     if (holder('bombBay') && state.phase === 'flying') {
-      const [bx, by] = tilt(state, SHIP_LAYOUT.bombBay.x, SHIP_LAYOUT.bombBay.y);
+      const [bx, by] = tilt(state, layout.bombBay.x, layout.bombBay.y);
       bay.from = { x: bx, y: by - state.ship.alt + 20 };
       bay.aim = course.predictBomb(bx, by - state.ship.alt + 20);
     } else bay.aim = null;

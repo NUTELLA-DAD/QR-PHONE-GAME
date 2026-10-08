@@ -1,37 +1,4 @@
 {
- "layoutImport": {
-  "modules/host/aim.js": 1,
-  "modules/host/airborne.js": 1,
-  "modules/host/balance.js": 1,
-  "modules/host/buildTest.js": 1,
-  "modules/host/engines.js": 1,
-  "modules/host/envArt.js": 1,
-  "modules/host/envArtStormSea.js": 1,
-  "modules/host/envDeepArt.js": 1,
-  "modules/host/escort.js": 1,
-  "modules/host/gasBags.js": 1,
-  "modules/host/goingDownArt.js": 1,
-  "modules/host/gunship.js": 1,
-  "modules/host/gunshipBlueprint.js": 1,
-  "modules/host/hookshot.js": 1,
-  "modules/host/linkArt.js": 1,
-  "modules/host/main.js": 1,
-  "modules/host/mates.js": 1,
-  "modules/host/modules.js": 1,
-  "modules/host/nav.js": 1,
-  "modules/host/network.js": 1,
-  "modules/host/pvpTest.js": 1,
-  "modules/host/render.js": 1,
-  "modules/host/sails.js": 1,
-  "modules/host/searchlightArt.js": 1,
-  "modules/host/shipArt.js": 1,
-  "modules/host/ships.js": 1,
-  "modules/host/simulation.js": 1,
-  "modules/host/spotter.js": 1,
-  "modules/host/styleTest.js": 1,
-  "modules/host/threatArt.js": 1,
-  "modules/host/weather.js": 1
- },
  "alt": {
   "modules/host/aim.js": 5,
   "modules/host/bots.js": 20,
@@ -84,5 +51,9 @@
   "modules/host/pose.js": 2,
   "modules/host/squadrons.js": 1,
   "modules/host/threats.js": 2
+ },
+ "layoutImport": {
+  "modules/host/nav.js": 1,
+  "modules/host/ships.js": 1
  }
 }

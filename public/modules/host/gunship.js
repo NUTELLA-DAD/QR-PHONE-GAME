@@ -40,14 +40,14 @@
 // The rope only pulls when taut: a gentle tug on us, a hard one on her; it snaps if stretched too far.
 import { crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, layoutTables } from '../../shipLayout.js';
+import { layoutTables } from '../../shipLayout.js';
 import { inRock, scrollSpeed } from './course.js';
 import { platformBelow } from './nav.js';
 import { mainShip } from './ships.js';
 import { pop } from './popups.js';
 import { applyForce } from './forces.js';
 import { shellDmg } from './aim.js';
-import { generateBlueprint, X0, mx, decksOf, segAt, deckYAt, landX, landSeg, landY, boilerX, boilerSeg, boilerY, portPos, firstCannon, anchorPt, surfaces as bpSurfaces, routeStep } from './gunshipBlueprint.js';
+import { generateBlueprint, mx, decksOf, segAt, deckYAt, landX, landSeg, landY, boilerX, boilerSeg, boilerY, portPos, firstCannon, anchorPt, surfaces as bpSurfaces, routeStep } from './gunshipBlueprint.js';
 
 export { mx, landX, landSeg, landY, boilerX, boilerSeg, boilerY, portPos, routeStep, decksOf, segAt, deckYAt };
 const G = config.GUNSHIP;
@@ -58,20 +58,7 @@ const tables = layoutTables((layout) => {
   return { MAIN, CAT, MAIN_X1, DECK_Y: P[MAIN].y, BOW: { x: MAIN_X1 + 10, y: P[MAIN].y - 50 } }; // (BOW: where our end of the rope is tied, ship coords)
 });
 export const shipGeom = (layout) => tables(layout);
-// Legacy numbers (her stern end is always X0; her nose end and decks depend on the blueprint: g.bp). GS, BOW and MAIN_X1 are SHIP 0's figures for the files that still
-// import them (bots.js, gunshipArt.js, simulation.js); the gunship itself reads shipGeom(layout).
-export const GS = { x0: X0, x1: X0 + 1100, deckY: 0 };
-export const BOW = { x: 0, y: 0 };
-export let MAIN_X1; // the bow end of our main deck
-function syncShip0() {
-  const t = tables(SHIP_LAYOUT);
-  MAIN_X1 = t.MAIN_X1;
-  GS.deckY = t.DECK_Y;
-  BOW.x = t.BOW.x;
-  BOW.y = t.BOW.y;
-}
-syncShip0();
-onLayoutChange(syncShip0);
+// (Her stern end is always X0, gunshipBlueprint.js; her nose end and decks depend on the blueprint: g.bp. Everyone reads OUR ship's figures through shipGeom(layout).)
 const ROLES = ['gunner', 'helm', 'stoker', 'guard', 'gunner', 'guard', 'guard', 'guard'];
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

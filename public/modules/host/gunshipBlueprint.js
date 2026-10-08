@@ -6,13 +6,12 @@
 // Everything is in her HOME FRAME (the numbers gunship.js, the art and the bots share): canonical = nose to the right,
 // stern (guns, yardarm, landing spot) at the LEFT end x0. When she turns round (g.m = -1) she is the mirror image
 // about her own middle, so helper functions take the gunship g and map x through mx(g, x).
-// This module is pure (config + ship layout only) so aim.js, bots.js, the art and gunship.js can all import it.
+// This module is pure (config + the layout of the ship she hunts, passed in) so aim.js, bots.js, the art and gunship.js can all import it.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
 
 const GP = config.GUNSHIP_PARTS;
-// (read when a gunship is built, so a new ship build is picked up; opts.shipLayout = the ship she hunts, ship 0's layout is the default for the test page and the tools)
-const mainY = (layout = SHIP_LAYOUT) => layout.platforms.find((p) => p.id === 'main').y;
+// (read when a gunship is built, so a new ship build is picked up; opts.shipLayout = the layout of the ship she hunts)
+const mainY = (layout) => layout.platforms.find((p) => p.id === 'main').y;
 export const X0 = 2050; // her stern end (every gunship; the nose end is X0 + length)
 const DECK_STEP = { up: -100, down: 90 };
 

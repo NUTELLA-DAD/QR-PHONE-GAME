@@ -1,6 +1,8 @@
 // Test page for the gunship art (public/gunshiptest.html): draws several generated gunships with the real gunshipArt.js
 // over the Sky Isles sky, in a grid: hull sizes, single / twin bags, mirrored, damaged, sinking.
 import { config } from '../../config.js';
+import { createLayout } from '../../shipLayout.js';
+import { BUILDS } from './shipBuild.js';
 import { generateBlueprint, mx, deckYAt } from './gunshipBlueprint.js';
 import { createGunshipArt } from './gunshipArt.js';
 import { createSprites } from './sprites.js';
@@ -9,7 +11,8 @@ import { loadTextures } from './textureArt.js';
 const cv = document.getElementById('c');
 const ctx = cv.getContext('2d');
 const sprites = createSprites();
-const state = { players: {}, paras: [], ship: { alt: 0, gas: 50, speed: 0 }, phase: 'flight', gunship: null };
+const shipLayout = createLayout(BUILDS.classic); // (the ship she hunts: her deck height comes from it)
+const state = { players: {}, paras: [], ship: { alt: 0, gas: 50, speed: 0 }, phase: 'flight', gunship: null, ships: [{ layout: shipLayout }] };
 const ink = () => {
   ctx.strokeStyle = config.INK;
   ctx.lineWidth = config.OUTLINE.MAIN;
@@ -22,7 +25,7 @@ loadTextures(ctx);
 // Find a seed that gives the wanted hull / twin bag.
 const find = (hull, twin, from = 1) => {
   for (let s = from; s < 3000; s++) {
-    const bp = generateBlueprint(s, { hull, mission: 5 });
+    const bp = generateBlueprint(s, { hull, mission: 5, shipLayout });
     if (!!bp.twin === twin) return s;
   }
   return from;
@@ -54,7 +57,7 @@ sprites.load();
 
 const mk = (c, i) => {
   const seed = (seeds[i] = seeds[i] || find(c.hull, c.twin, 1 + i * 7));
-  const bp = generateBlueprint(seed, { hull: c.hull, mission: 5 });
+  const bp = generateBlueprint(seed, { hull: c.hull, mission: 5, shipLayout });
   const g = {
     bp, dx: 0, dy: 0, m: c.m, gas: 0.8, hp: c.hp * 100, max: 100, thr: 0.6, steam: 0.8, intent: ['attack', 'strafe', 'retreat', 'latch', 'climb', 'approach'][i % 6],
     phase: c.sink ? 'sinking' : 'hunt', sink: c.sink || 0, props: [0, 0, 0], eng: bp.engines.map(() => ({ hp: c.hp < 0.4 ? 0.2 : c.hp < 0.6 ? 0.45 : 1 })), ports: bp.weapons.map((w, k) => ({ kind: w.kind, dead: !!c.dead && k % 2 === 0, glow: k === 1 })),

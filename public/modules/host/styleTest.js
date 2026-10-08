@@ -1,7 +1,7 @@
 // Art test page: shows every environment's background (painted images where they exist), and a live
 // bot-crewed mission so the ship, gunships, enemies and crew can be judged in a new style without playing.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { createSimulation } from './simulation.js';
 import { createRenderer } from './render.js';
 import { createCamera } from './camera.js';
@@ -30,7 +30,7 @@ let envId = ids.includes(asked) ? asked : ids[0];
 const addBots = () => {
   const names = config.CREW_SPECIES;
   const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0'];
-  const [a, b] = SHIP_LAYOUT.boarderEntryPoints;
+  const [a, b] = mainShip(sim.state).layout.boarderEntryPoints;
   for (let i = 0; i < 4; i++) {
     const id = 'bot' + i;
     sim.state.players[id] = { id, bot: true, name: 'Bot' + (i + 1), species: names[i % names.length], color: colors[i], x: a.x + Math.random() * (b.x - a.x), y: -60, fall: true, jx: 0, jy: 0, t: 0 };

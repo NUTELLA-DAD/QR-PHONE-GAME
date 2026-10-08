@@ -16,7 +16,8 @@
 // ramp, harpoon gun, armoured boiler, parachute rack), her name and flag colours, so no two look alike.
 // Also: her crew, the grapple rope to our bow (sagging when slack, straight when taut), the swing line,
 // and the charge ticking on her boiler. Style 2026: enemy oxblood + charcoal, thin outlines.
-import { BOW, mx } from './gunship.js';
+import { shipGeom, mx } from './gunship.js';
+import { mainShip } from './ships.js';
 import { config } from '../../config.js';
 import { perfState } from './perf.js';
 import { paintPath, paintRect } from './textureArt.js';
@@ -478,6 +479,7 @@ export function createGunshipArt({ ctx, state, ink, sprites: given }) {
     // The rope and swing line are drawn in ship coordinates, after her own transform is undone.
     const drawRope = () => {
       if (!g.rope) return;
+      const BOW = shipGeom(mainShip(state).layout).BOW; // (where our end of the rope is tied: our ship's own bow)
       const ap = bp.anchor;
       const ax = mx(g, ap.x) + dx;
       const ay = ap.y + dy + sink;

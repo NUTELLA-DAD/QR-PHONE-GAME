@@ -5,7 +5,8 @@ import { layoutTables, walkCost } from '../../shipLayout.js';
 import { steerTo, travelTime } from './nav.js';
 import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
-import { GS, shipGeom, landX, boilerX, routeStep } from './gunship.js';
+import { shipGeom, landX, boilerX, routeStep } from './gunship.js';
+import { X0 as GUNSHIP_X0 } from './gunshipBlueprint.js';
 import { isEscortStation, escortFor } from './escort.js';
 import { lightNames, isSearchlight, darkTarget } from './searchlight.js';
 import { botJobs as goingDownJobs } from './goingDown.js';
@@ -66,7 +67,7 @@ function steer(p, d, x, near = 12) {
   const L = world && mainShip(world).layout;
   if (g && d === tables(L).MAIN && p.d === tables(L).MAIN && !p.swing) {
     const MAIN = tables(L).MAIN, MAIN_X1 = shipGeom(L).MAIN_X1;
-    const mid = (MAIN_X1 + GS.x0) / 2; // targets past this are on her deck (her home frame)
+    const mid = (MAIN_X1 + GUNSHIP_X0) / 2; // targets past this are on her deck (her home frame)
     if (x > mid && p.onGunship) {
       // Aboard her and the job is on her deck too: walk there, using the ladders between her decks.
       const rs = routeStep(g, p, x, near);

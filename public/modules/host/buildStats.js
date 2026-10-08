@@ -1,6 +1,6 @@
 // Run statistics for a ship build, collected while bots fly her (tools/botsim.mjs --build ..., tools/buildsim.mjs, public/buildtest.html).
 // Call stats.step(dt) after every sim.update(dt); stats.result() gives the numbers buildCheck.js judges and the batch table prints.
-import { kindOf } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 
 export function createRunStats(state) {
   const R = { steps: 0, flightSteps: 0, hullSum: 0, kills: 0, wrecks: 0, missions: 0, walkSteps: 0, crewSteps: 0 };
@@ -48,7 +48,7 @@ export function createRunStats(state) {
       for (const [name, n] of Object.entries(manned)) {
         const s = Math.round((n * dtSum) / Math.max(1, R.steps));
         mannedNames[name] = s;
-        const kind = kindOf(name) || 'other';
+        const kind = mainShip(state).layout.kindOf(name) || 'other';
         mannedKinds[kind] = (mannedKinds[kind] || 0) + s;
       }
       return {

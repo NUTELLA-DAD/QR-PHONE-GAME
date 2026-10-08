@@ -1,5 +1,5 @@
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { crewAboard, crewHeads } from './crewscale.js';
 
 // What a phone's input message does to its player (also used by tools/controls.mjs, which plays a person without a socket).
@@ -39,6 +39,9 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
 
   simulation.setSocket?.(socket);
 
+  // Where a new arrival drops in from above: along the boarding span of the ship they join (the main ship; B.2 picks the ship per player).
+  const dropX = () => { const [e0, e1] = mainShip(simulation.state).layout.boarderEntryPoints; return e0.x + Math.random() * (e1.x - e0.x); };
+
   const count = () => {
     if (countNode) countNode.textContent = `${crewHeads(simulation.state)} / ${config.MAX_PLAYERS} aboard`;
   };
@@ -55,7 +58,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
 
   socket.on('player:joined', (m) => {
     const player = simulation.state.players[m.id] || (simulation.state.players[m.id] = {
-      x: SHIP_LAYOUT.boarderEntryPoints[0].x + Math.random() * (SHIP_LAYOUT.boarderEntryPoints[1].x - SHIP_LAYOUT.boarderEntryPoints[0].x),
+      x: dropX(),
       y: -60,
       fall: true,
       jx: 0,
@@ -157,7 +160,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
         name: 'Bot' + (crewHeads(simulation.state) + 1),
         species: speciesNames[Math.random() * speciesNames.length | 0],
         color: colors[Math.random() * colors.length | 0],
-        x: SHIP_LAYOUT.boarderEntryPoints[0].x + Math.random() * (SHIP_LAYOUT.boarderEntryPoints[1].x - SHIP_LAYOUT.boarderEntryPoints[0].x),
+        x: dropX(),
         y: -60,
         fall: true,
         jx: 0,

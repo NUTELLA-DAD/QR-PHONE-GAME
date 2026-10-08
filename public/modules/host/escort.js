@@ -10,7 +10,6 @@
 // Enemy bullets and rock hurt her. Shot down, the pilot bails out and comes round in the medical
 // bay, and the crew need a while to build another.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { flyPlane, smoke, shootDown, angDiff } from './planes.js';
 import { targets } from './aim.js';
 import { inRock, groundAt, ceilAt } from './course.js';
@@ -19,8 +18,8 @@ import { mainShip } from './ships.js';
 
 const E = config.ESCORT;
 
-// Is this station name one of the patrol planes? (of `layout`'s ship; no layout = ship 0)
-export const isEscortStation = (n, layout = SHIP_LAYOUT) => typeof n === 'string' && layout.escortDocks.some((d) => d.n === n);
+// Is this station name one of the patrol planes? (of `layout`'s ship)
+export const isEscortStation = (n, layout) => typeof n === 'string' && layout.escortDocks.some((d) => d.n === n);
 // The plane belonging to a station name (or undefined).
 export const escortFor = (state, n) => (state.escorts || []).find((e) => e.name === n);
 
