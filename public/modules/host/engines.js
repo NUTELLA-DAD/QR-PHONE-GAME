@@ -29,7 +29,8 @@ export function createEngines({ state, modules }) {
     const L = layout;
     if (version === L.version && state.engines.length === L.engines.length) return;
     version = L.version;
-    state.engines = L.engines.map((e, i) => ({ name: e.name, i, d: e.d, x: e.x, dir: e.dir || 0, home: e.dir || 0, swivel: !!e.swivel, fwd: 1, up: 0 }));
+    const old = new Map(state.engines.map((q) => [q.name, q])); // (an engine that is still there after a build change - a part broke off, S.5i - stays pointed where the crew turned it)
+    state.engines = L.engines.map((e, i) => ({ name: e.name, i, d: e.d, x: e.x, dir: old.has(e.name) && old.get(e.name).home === (e.dir || 0) ? old.get(e.name).dir : e.dir || 0, home: e.dir || 0, swivel: !!e.swivel, fwd: 1, up: 0 }));
     drivers = Math.max(1, state.engines.filter((e) => thrustVec(e.home).fwd >= E.DRIVE_COS).length); // (counted as built: turning one up does not make the others "all there is")
   };
   const byName = (name) => state.engines.find((e) => e.name === name);

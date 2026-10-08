@@ -11,7 +11,7 @@ import { config } from '../../config.js';
 
 const GP = config.GUNSHIP_PARTS;
 // (read when a gunship is built, so a new ship build is picked up; opts.shipLayout = the layout of the ship she hunts)
-const mainY = (layout) => layout.platforms.find((p) => p.id === 'main').y;
+const mainY = (layout) => { const i = layout.deckIndex ? layout.deckIndex('main') : layout.platforms.findIndex((p) => p.id === 'main'); return layout.platforms[i >= 0 ? i : 0].y; }; // (a ship that lost her main deck to a break-off lends the nearest deck, S.5i)
 export const X0 = 2050; // her stern end (every gunship; the nose end is X0 + length)
 const DECK_STEP = { up: -100, down: 90 };
 

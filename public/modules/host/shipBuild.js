@@ -41,11 +41,11 @@ export const CONNECTOR_SPEED = { rope: 150, ladder: 170, stairs: 150, lift: 260,
 // (shifted by the part's column). Fields named in D_KINDS also get `d` (the platform index).
 const ARRAYS = ['platforms', 'connectors', 'rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers', 'boarderEntryPoints', 'escortDocks', 'gasbags'];
 const KEYED = ['gunMounts', 'searchlights'];
-const OPTIONAL = ['ballast', 'gasValves', 'sails', 'armour', 'cannons']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
+const OPTIONAL = ['ballast', 'gasValves', 'sails', 'armour', 'cannons', 'scars']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
 const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'liftRepair'];
 const X_FIELDS = {
   platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x', 'sx'], vents: ['x'], racks: ['x'],
-  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], sails: ['x'], cannons: ['x'], armour: ['x0', 'x1'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
+  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], sails: ['x'], cannons: ['x'], armour: ['x0', 'x1'], scars: ['x0', 'x1'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
   coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbags: ['cx'], liftRepair: ['x'],
 };
 const D_KINDS = ['rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers'];
@@ -211,6 +211,9 @@ export const PARTS = {
   // Armour plate (S.5g): riveted iron on a stretch of a deck's hull wall (covered deck) or rail (open-air deck), x0 to x1 on deck `p`. Very heavy, does not burn, and hits on it do
   // far less (config.ARMOUR, config.FIRE.FLAMMABILITY.armour). It weighs by its length.
   armour: { mass: (p) => ((p.x1 - p.x0) / 100) * M().armour, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('armour', withoutPart(p)) },
+  // A SCAR (S.5i): the hole a part that broke off left in the hull, x0..x1 by y0..y1 in ship coordinates. It weighs nothing and does nothing but take the hull away there: the art carves it out of the
+  // baked picture, shells and rock pass through it (hit boxes and collision points inside it are dropped). The ship's parts list carries it until the crew pays for the section at a sky-dock.
+  scar: piece('scars'),
   pipe: piece('pipes', { mass: () => M().pipe }),
   vent: piece('vents', { mass: () => M().vent }),
   // A gas valve (S.5d): a wheel on a deck that opens or shuts the feed to ONE gasbag (the one nearest `bx`, the x of the bag it was linked to when placed). A shut bag
@@ -445,7 +448,7 @@ export function buildLayout(parts, opts = {}) {
       else if (SINGLES.includes(kind)) out[kind] = o;
       else throw new Error('shipBuild: unknown piece kind ' + kind);
     },
-    setScalar(name, v) { out[name] = v; },
+    setScalar(name, v) { out[name] = v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v; }, // (a copy: layout.applyBuild refills the live layout's objects IN PLACE, which must never reach back into a parts list; S.5i found the gunship's frame overrides emptied by a second build)
   };
   for (const p of parts) {
     const def = PARTS[p.part];
@@ -614,6 +617,26 @@ export function deriveSamples(out) {
   return pts;
 }
 
+// The boxes `rects` with the boxes `holes` taken out of them (what is left of each, as up to four boxes; slivers under 12 px go).
+export function cutRects(rects, holes) {
+  let list = rects;
+  for (const h of holes) {
+    const next = [];
+    for (const r of list) {
+      if (h.x1 <= r.x0 || h.x0 >= r.x1 || h.y1 <= r.y0 || h.y0 >= r.y1) { next.push(r); continue; }
+      const keep = [
+        { x0: r.x0, x1: Math.max(r.x0, h.x0), y0: r.y0, y1: r.y1 },
+        { x0: Math.min(r.x1, h.x1), x1: r.x1, y0: r.y0, y1: r.y1 },
+        { x0: Math.max(r.x0, h.x0), x1: Math.min(r.x1, h.x1), y0: r.y0, y1: Math.max(r.y0, h.y0) },
+        { x0: Math.max(r.x0, h.x0), x1: Math.min(r.x1, h.x1), y0: Math.min(r.y1, h.y1), y1: r.y1 },
+      ];
+      for (const k of keep) if (k.x1 - k.x0 >= 12 && k.y1 - k.y0 >= 12) next.push(k);
+    }
+    list = next;
+  }
+  return list;
+}
+
 function deriveGeometry(out, cell) {
   if (!out.platforms.length) return; // validate() reports that there is no deck to stand on
   const { main, lower, cat, nest } = deckRoles(out.platforms); // (a minimal ship lends one deck all three parts)
@@ -628,6 +651,7 @@ function deriveGeometry(out, cell) {
   set('tiltPivot', [ref.x, cat.y + 50]);
   set('samples', deriveSamples(out));
   out.samples = out.samples.map((s) => [s[0], s[1]]);
+  if (out.scars) { const open = out.samples.filter((s) => !out.scars.some((c) => s[0] > c.x0 && s[0] < c.x1 && s[1] > c.y0 && s[1] < c.y1)); if (open.length >= 3) out.samples = open; } // (rock passes through the hole a broken-off part left)
   const xs = out.samples.map((s) => s[0]);
   const ys = out.samples.map((s) => s[1]);
   out.topY = Math.min(...ys);
@@ -654,6 +678,7 @@ function deriveGeometry(out, cell) {
       if (!q.outside && q.y > lower.y) out.hitRects.push({ x0: q.x0, x1: q.x1, y0: lower.y + 25, y1: q.y + (KEEL_ROWS.includes(rowOf(q)) ? 25 : q.y >= DECK_ROWS.bay ? 20 : 30) });
     }
   }
+  if (out.scars) out.hitRects = cutRects(out.hitRects, out.scars); // (...and so do shells)
   out.lowDeckY = lower.y;
   out.spawnPlatform = out.platforms.findIndex((q) => q.id === (out.spawn || cat.id));
   delete out.spawn;

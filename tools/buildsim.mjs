@@ -2,6 +2,7 @@
 // Usage: node tools/buildsim.mjs --build <classic|multi|file.json|file.mjs> [--bots-check]   the build validator (S.5): PASS/WARN/FAIL report + the LIFT / STEAM / HANDS gauges
 //        node tools/buildsim.mjs --random 50 --seed 1 --minutes 4 --envs skyisles,fungal,storm,aether --bots 6   random legal builds, botsim each, table + which parts dominate
 //        node tools/buildsim.mjs --check-crossship  B.6: the crew cannon, thrown ballast and shovel jobs, dumping for lift, towing, stolen coal, bots using all of it (tools/crossship-check.mjs)
+//        node tools/buildsim.mjs --check-breakoff   S.5i: parts break off for real (tools/breakoff-check.mjs): a bomb bay explosion and a heavy hit / crash / ram / ripped bag take the right parts, she keeps flying with the new shape, crew on them fall, debris tumbles, armour lowers the chance, REBUILD cards at the dock, the gunship and a second ship lose parts too, 0 errors over a 3-minute botsim with high break-off settings
 //        node tools/buildsim.mjs --check-classic    the classic ship must still equal the frozen snapshot
 //        node tools/buildsim.mjs --lint             no module-level captures of derived layout values (they go stale), no hard-coded ship reference points
 //        node tools/buildsim.mjs --lint-pose        (also part of --lint) B0: no NEW single-ship spellings (+course.dist, +-state.ship.alt, scrollSpeed, SHIP_LAYOUT imports, module-level per-ship captures) against tools/fixtures/pose-lint-allow.json
@@ -636,6 +637,7 @@ async function checkEdit() {
       applyBuild(mixed);
       const open = outdoorDecks();
       const lowIdx2 = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'lower');
+      const lowY = SHIP_LAYOUT.platforms[lowIdx2].y;
       const deckCrusts = [], gunCrusts = [];
       for (let k = 1; k <= 5; k++) { // (a few seeded frost runs: where the ice settles is chance)
         calm();
@@ -643,7 +645,8 @@ async function checkEdit() {
         const sf = createSimulation();
         sf.castOff();
         for (let i = 0; i < 120 * 60; i++) sf.update(1 / 60);
-        deckCrusts.push(...sf.state.icing.filter((c) => c.area === 'topdeck'));
+        // (a hard hit in 2 minutes of flying can break an end off her, S.5i: the lower deck may be two decks now, and the decks are numbered again: a crust on any deck at the lower deck's height counts as on it)
+        deckCrusts.push(...sf.state.icing.filter((c) => c.area === 'topdeck').map((c) => ({ ...c, d: SHIP_LAYOUT.platforms[c.d] && SHIP_LAYOUT.platforms[c.d].y === lowY ? lowIdx2 : c.d })));
         gunCrusts.push(...sf.state.icing.filter((c) => c.area === 'gun'));
       }
       report(open.length === 1 && open[0] === lowIdx2 && deckCrusts.length > 0 && deckCrusts.every((c) => c.d === lowIdx2) && gunCrusts.length > 0 && gunCrusts.every((c) => !/Tail Gun|Nose Gun/.test(c.gun)), `weather follows the flag (lower deck outdoor, top deck covered): outdoorDecks() = ${open.map((d) => SHIP_LAYOUT.platforms[d].id).join()}, ${deckCrusts.length} frost crusts on decks, all on it; ${gunCrusts.length} on guns (${[...new Set(gunCrusts.map((c) => c.gun))].join(', ')}), none on the covered top deck's Tail Gun or Nose Gun`);
@@ -2273,6 +2276,8 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'collide-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-yard') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'yard-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-breakoff') {
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'breakoff-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-crossship') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'crossship-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-gunship-ship') {
@@ -2312,6 +2317,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-turn | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-breakoff | --check-turn | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

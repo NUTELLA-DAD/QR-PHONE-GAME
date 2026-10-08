@@ -53,6 +53,7 @@ if (args.runs > 1 && !args.child) {
   console.log(`MODE ${args.mode}: median ${medMin.toFixed(1)} min (victories only: ${medVic.toFixed(1)}; range ${(mins[0] || 0).toFixed(1)}-${(mins[mins.length - 1] || 0).toFixed(1)}), victory rate ${ok.filter((r) => r.victory).length}/${ok.length}`);
   console.log(`median stops ${med}, mean ${(ds.reduce((a, b) => a + b, 0) / (ds.length || 1)).toFixed(1)}, victories ${ok.filter((r) => r.victory).length}/${ok.length}, timeouts ${ok.filter((r) => r.timeout).length}${args.topup ? `, runs with stalls ${ok.filter((r) => r.stalls).length}` : ''}, errors ${ok.reduce((a, r) => a + (r.errors || 0), 0)}`);
   { const m = ok.map((r) => r.mates || {}); const jobs = {}; for (const x of m) for (const [k, v] of Object.entries(x.jobs || {})) jobs[k] = (jobs[k] || 0) + v; const tot = Object.values(jobs).reduce((a, b) => a + b, 0) || 1; console.log(`ship's mates: max aboard ${Math.max(0, ...m.map((x) => x.max || 0))}, station snapshots ${m.reduce((a, x) => a + (x.locks || 0), 0)}, in awards ${m.filter((x) => x.inAwards).length} runs; mate time: ${Object.entries(jobs).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + Math.round((100 * v) / tot) + '%').join(', ') || 'n/a'}`); }
+  { const n = ok.reduce((a, r) => a + (r.breaks || 0), 0); if (n) console.log(`parts broke off ${n} time(s) in ${ok.filter((r) => r.breaks).length} of ${ok.length} voyages: ${[...new Set(ok.flatMap((r) => r.breakCauses || []))].join(', ')}`); }
   const causes = {};
   for (const r of ok) for (const k of r.flags || []) causes[k] = (causes[k] || 0) + 1;
   if (args.build) { console.log('salvage earned per run: ' + ok.map((r) => r.earned).join(', ')); const pc = ok.map((r) => (r.parts || []).length); const win = ok.filter((r) => r.victory).map((r) => (r.parts || []).length); const all = {}; for (const r of ok) for (const id of r.parts || []) all[id] = (all[id] || 0) + 1; console.log(`parts bought by the end (start ship ${args.build}): mean ${(pc.reduce((a, b) => a + b, 0) / (pc.length || 1)).toFixed(1)}, victories only ${(win.reduce((a, b) => a + b, 0) / (win.length || 1)).toFixed(1)}; which: ${Object.entries(all).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + '=' + v).join(', ')}`); }
@@ -76,6 +77,7 @@ performance.now = () => simClock;
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', 'public');
 const load = (p) => import(pathToFileURL(path.join(root, p)).href);
 const { config } = await load('config.js');
+if (process.env.NO_BREAKOFF) config.BREAKOFF.ENABLED = false; // (compare voyages with parts never breaking off: S.5i)
 // --set "A.B.C=value;...": tweak config numbers for tuning runs
 for (const kv of args.set.split(';').filter(Boolean)) { const [k, v] = kv.split('='); const ks = k.split('.'); let o = config; for (const x of ks.slice(0, -1)) o = o[x] ??= {}; o[ks[ks.length - 1]] = Number(v); }
 const { SHIP_LAYOUT, kindOf } = await load('shipLayout.js');
@@ -181,4 +183,6 @@ if (!result) {
   const stopId = state.run.stopId;
   result = { earned: state.run.earned, parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
 }
+result.breaks = state.breakStats ? state.breakStats.events : 0; // (S.5i: how often parts broke off in this voyage, and what did it)
+result.breakCauses = state.breakStats && state.breakStats.causes ? state.breakStats.causes.map((c) => c.split('@')[0]) : [];
 console.log('RESULT ' + JSON.stringify(result));

@@ -14,6 +14,8 @@ export const WORDS = {
   repair: ['CLANK!', 'GOOD AS NEW!'],
   boiler: ['KABLOOIE!'],
   boss: ['KA-BLOOEY!!'],
+  bayBoom: ['KA-BLAMMM!!', 'BOOOOM!!'], // a bomb bay going up (shipSim.js breakOff)
+  snap: ['KRAKK!', 'SNAP!', 'CRRRACK!'], // a part breaking off
 };
 
 export function pop(state, x, y, kind, color = '#f2d36b', size = 1) {
