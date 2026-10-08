@@ -17,6 +17,7 @@ export const config = {
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
     SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
     ZOOM_SMOOTHING: 0.6, // how quickly it zooms (low = calm, no pumping)
+    PULL_SMOOTHING: 0.22, // ...and this slowly in the pull-back after a part was built at the sky-dock (YARD.PULL_TIME): the "she grew!" moment
     LEAD_TIME: 0.6, // look this many seconds ahead of where she's heading
     LEAD_SMOOTHING: 1.2,
     SHAKE_SCALE: 14, // screen shake per unit of 'shake'...
@@ -649,6 +650,37 @@ export const config = {
     BOT_CAST_CHANCE: 0.12, // bots: chance to cast off on each round
     BOT_REPAIR_HULL: 85, // bots: buy the full hull repair first when the hull is below this
   },
+  // The SHIPWRIGHT'S YARD (S.6a, modules/host/partsShop.js): ship PARTS as cards in the sky-dock shop, at most one per dock. A part is a pure build edit (the voyage's parts list,
+  // simulation.js run.build), checked by the validator (never a FAIL) and fitted to ship 0 at the dock; its effects are weight, lift, steam and stations in the build, never config.
+  PARTS_SHOP: {
+    PRICES: { hullBay: 130, keel: 150, gasbag: 160, engine: 120, liftEngine: 170, nest: 140, gun: 100, lamp: 90, bombBay: 150, boiler: 170, coal: 90, ammo: 90, armour: 120, sail: 110, ballast: 90, ladder: 90, pole: 90, lift: 130 }, // base salvage price of each part
+    REPEAT_PRICE: 0.15, // each part already bought this voyage adds this share of the base price (the price rises with how many you own)
+    CREW_SMALL: 3, // a crew of this many players or fewer finds engines, armour and gasbags cheaper...
+    SMALL_MUL: 0.85, // ...by this factor
+    CREW_BIG: 6, // a crew of this many or more finds station parts (guns, lamps, boilers, bunkers, bomb bay, sails) cheaper...
+    BIG_MUL: 0.85, // ...by this factor
+    DERELICT_STOPS: [2, 5], // after these stops of a voyage a derelict part is found: the part card is FREE
+    BAGS_MAX: 3, // a ship may carry this many gasbags (v1: the editor allows more)
+    ENGINES_MAX: 4, // ...this many engine pods (all kinds)
+    BOILERS_MAX: 2,
+    HULL_BAYS_MAX: 2, // hull bays bought (a longer hull each)
+    NEST_MAX: 2, // gun nests on the bag
+    GUNS_MAX: 8,
+    CANDIDATES: 18, // how many candidate spots of a part are tried by the validator when an offer is made (the best spread are kept)
+  },
+  // The Yard's votes and screens (S.6b).
+  YARD: {
+    SLOT_TIME: 10, // seconds to vote on where a bought part goes (A / B / C) when it fits in more than one place
+    SLOT_MAX: 3, // at most this many places to choose between
+    DEAL: 0.25, // crew deal: a UNANIMOUS vote for the part card takes this share off the price
+    DEAL_VOTERS: 2, // ...when at least this many players voted (a lone player does not get it every time)
+    BUILT_STAMP: 3.4, // seconds the BUILT stamp shows on the blueprint after a part is placed
+    NEW_CALLOUT: 7, // seconds the "NEW: ENGINE POD" call-out hangs over the new part after cast off
+    PULL_TIME: 8, // seconds the camera takes its slow pull-back after cast off (the ship grew)
+    BOT_PART_CHANCE: 0.55, // bots: chance to vote for the part card when they can afford it
+    SHAKEN_HP: 0, // limp home: the newest part's modules start with this share of their health (0 = broken, a hammer mends them)
+    SHAKEN_HOLES: 1, // limp home: a newest gasbag starts with this many holes
+  },
   // THE VOYAGE: a branching route of stops across the Broken Skies; one run = one voyage.
   VOYAGE: {
     // Session-length modes (chosen in the lobby / pause menu, remembered on this TV; voyage.js, simulation.js).
@@ -663,6 +695,7 @@ export const config = {
       campaign: { label: 'EVENING CAMPAIGN', blurb: 'two voyages', time: 'about an hour', stopsMin: 5, stopsMax: 7, dangerRamp: 1.6, lengthMul: 1, voyages: 2, rival: true },
     },
     START_MODE: 'voyage',
+    START_BUILD: 'sparrow', // the ship a Voyage / Quick / Campaign starts with in the browser host ('classic' = the old full ship; the pause menu toggles it). Headless tools stay on the classic ship unless they ask (sim.setStartBuild)
     // The harder second voyage of the Evening Campaign, started after the first Flagship falls.
     SECOND: {
       DANGER_BONUS: 1, // every stop (and the Flagship) is this many skulls harder (danger may go above 3)

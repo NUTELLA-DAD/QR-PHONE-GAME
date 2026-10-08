@@ -36,7 +36,7 @@ import { createForces, hitForce } from './forces.js';
 import { installBags, syncBags, stepBags, watchBags } from './gasBags.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToWorld } from './pose.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
-import { transfer, newGuns, teamOf } from './ships.js';
+import { transfer, newGuns, teamOf, shipOf } from './ships.js';
 
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
@@ -1357,12 +1357,51 @@ export function createShipSim(world, ship, W) {
     respawn({ crew: false });
   }
 
+  // A build was fitted to this ship AT THE SKY-DOCK (the Shipwright's Yard, S.6, simulation.js fitShip): unlike refit() above (a whole new ship that starts over) she keeps what she is
+  // carrying - hull, gas, coal, shells, bombs and the damage the crew has not mended - and everything made from the layout is made again: the guns (their shells and magazines kept
+  // by name), the lamps, the coil, the patrol planes. Breaches, fires and holes keep their place on the deck or bag they were on; the crew are put back on their feet aboard her.
+  // The modules, the bags, the vents and valves, the engines, the nav tables and the art follow layout.version by themselves. Returns what is new: { newBomb }.
+  function fitBuild(parts, { crew = true } = {}) {
+    const ids = layout.platforms.map((q) => q.id), bagX = layout.gasbags.map((b) => b.cx), hadBay = !!layout.bombBay;
+    const kept = Object.fromEntries(Object.entries(state.GUNS).map(([k, g]) => [k, { ammo: g.ammo, max: g.max }]));
+    layout.applyBuild(parts);
+    const moved = (d) => (ids[d] != null ? layout.platforms.findIndex((q) => q.id === ids[d]) : -1);
+    for (const list of [state.breaches, state.fires]) {
+      for (let i = list.length - 1; i >= 0; i--) { const d = moved(list[i].d); if (d < 0) list.splice(i, 1); else list[i].d = d; }
+    }
+    const bags = layout.gasbags;
+    for (const h of state.gasHoles) { // a hole stays in the bag it was in (by the bag's middle), wherever that bag is in the list now
+      const at = bagX[h.bag | 0];
+      let best = 0;
+      bags.forEach((b, i) => { if (Math.abs(b.cx - at) < Math.abs(bags[best].cx - at)) best = i; });
+      h.bag = best;
+    }
+    for (const k of Object.keys(state.GUNS)) delete state.GUNS[k];
+    Object.assign(state.GUNS, newGuns(layout));
+    for (const [k, g] of Object.entries(state.GUNS)) if (kept[k]) Object.assign(g, kept[k]);
+    searchlights.refit();
+    coil.refit();
+    escort.reset();
+    forces.reset();
+    const newBomb = !!layout.bombBay && !hadBay;
+    if (newBomb) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.START);
+    if (crew) {
+      for (const player of Object.values(state.players)) {
+        if (shipOf(world, player) !== ship) continue; // (another ship's crew are not touched)
+        const [e0, e1] = layout.boarderEntryPoints;
+        Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x) });
+        player.uk = null; // (resend the phone's buttons: the stations have changed)
+      }
+    }
+    return { newBomb };
+  }
+
   return {
     ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, goingDown, raiders, escort, coil, searchlights, air,
     get hookshot() { return hookshot; },
     get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
     hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop,
     interaction, taken, holder, getHelm, worksKind, isHostile, homeOf, sendHome,
-    preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn, refit, comeAbout,
+    preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn, refit, fitBuild, comeAbout,
   };
 }

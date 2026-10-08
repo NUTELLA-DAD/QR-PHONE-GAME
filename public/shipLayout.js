@@ -22,6 +22,7 @@ import { config } from './config.js';
 export function createLayout(parts) {
   const layout = { version: 0 };
   const listeners = [];
+  let current = null; // the parts list this layout was last built from (layout.parts: the voyage's build is kept as a list, simulation.js run.build)
   // The build's STATIC balance (shipBuild.js balanceOf, config.BALANCE): total weight, centre of mass (comX, comY) and centre of lift (colX, colY) in ship
   // coordinates, dx = COM - COL (+ = nose-heavy), the rest trim in radians (+ nose-down; 0 for a level ship such as the classic one). Updated in place like
   // the layout, but kept apart from it so the layout stays the pure shape of the ship. simulation.js adds the live loads (crew, coal ...) to it.
@@ -50,6 +51,7 @@ export function createLayout(parts) {
           layout[key] = value;
         }
       }
+      current = newParts;
       const bal = balanceOf(newParts);
       Object.assign(balance, { mass: bal.mass, comX: bal.com ? bal.com.x : 0, comY: bal.com ? bal.com.y : 0, colX: bal.col ? bal.col.x : 0, colY: bal.col ? bal.col.y : 0, dx: bal.dx, deg: bal.deg, restPitch: bal.restPitch, k2: bal.k2, bagLift: bal.bagLift });
       layout.version++;
@@ -71,6 +73,7 @@ export function createLayout(parts) {
     hasKind: (kind) => hasKind(kind, layout),
   };
   for (const [k, v] of Object.entries(methods)) Object.defineProperty(layout, k, { value: v, enumerable: false, writable: false, configurable: true });
+  Object.defineProperty(layout, 'parts', { get: () => current, enumerable: false, configurable: true }); // (read only, and not part of the layout's data)
   layout.applyBuild(parts);
   return layout;
 }

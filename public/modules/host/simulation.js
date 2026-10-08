@@ -17,6 +17,8 @@ import { createMainShip, createShip, shipOf, eachShip, newGuns, transfer } from 
 import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
 import { newBot } from './network.js';
+import { BUILDS } from './shipBuild.js';
+import { offerPart, partPrice, moduleNames, newModules } from './partsShop.js';
 import { createShipSim, flushPresses } from './shipSim.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
@@ -63,7 +65,9 @@ export function createSimulation() {
     daily: false, // fly today's daily voyage (route seeded by the date)
     phase: 'lobby', // 'lobby' = moored at the mast while the crew joins; 'flying' after CAST OFF
     record: loadRecord(), // best run on this TV: { laps, kills }
-    vote: null, // a vote in progress: the sky-dock shop or the route map
+    vote: null, // a vote in progress: the sky-dock shop, where a bought part goes, or the route map
+    startBuild: null, // the ship a new voyage starts with ('sparrow' | 'classic', setStartBuild; the browser host picks it from config.VOYAGE.START_BUILD); null = whatever ship 0 is (headless tools) and no PART cards in the shop
+    yard: { built: null, newPart: null, hold: false, pull: 0 }, // the Shipwright's Yard (S.6b): the BUILT stamp, the "NEW: ..." call-out, the camera hold at the dock and the slow pull-back after cast off
     enemy: { x: -2000, y: 300, vx: 0, vy: 0, hp: 5, fire: 0, dead: 3, heading: null },
     shells: [],
     bullets: [],
@@ -160,6 +164,7 @@ export function createSimulation() {
   Object.defineProperty(state, 'rival', { get: () => (state.ships[0] && state.ships[0].rival) || null, enumerable: false, configurable: true }); // (Versus: ship 0's rival, ships.js; every ship's context answers its own)
   const main = addShip(null); // (B.2: this file is the WORLD. What belongs to one ship is shipSim.js; the voyage, the pacing director, the wreck and restart rules below work on the main ship, ships[0])
   const layout = main.layout;
+  main.buildId = 'classic'; // (which build she wears: 'classic' | 'sparrow' | 'yard' = a start build that parts have been added to; Versus' shelf sets its own)
   // (the world's rules below that reach into the main ship: the wreck and restart, the supply balloon, the sky-dock shop, what the world's enemies shoot at)
   const { modules, engines, forces, raiders, escort, coil, searchlights, goingDown, fireSys, air, hitsShip, gasHoleAt, impact, damageHull, shieldBlocks, gnaw, interaction, taken, getHelm, prime } = main.sim;
 
@@ -229,8 +234,9 @@ export function createSimulation() {
       Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x) });
       player.uk = null;
     }
+    const loose = shakeLoose(run);
     state.ev.warn = 4;
-    state.ev.warnText = 'PATCHED UP - ' + run.spares + ' SPARE GASBAG' + (run.spares === 1 ? '' : 'S') + ' LEFT';
+    state.ev.warnText = 'PATCHED UP - ' + run.spares + ' SPARE GASBAG' + (run.spares === 1 ? '' : 'S') + ' LEFT' + (loose ? ' - THE NEW ' + loose.toUpperCase() + ' SHOOK LOOSE' : '');
     const back = run.visited.length > 1;
     run.visited.pop(); // the stop she wrecked on does not count
     if (run.visited.length) run.stopId = run.visited[run.visited.length - 1];
@@ -465,11 +471,21 @@ export function createSimulation() {
     const first = voyage.columns[0][0];
     const M = modeInfo(state.mode);
     state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0,
-      mode: state.mode, key: sessionKey(), daily: daily && { key: daily.key, name: daily.name }, voyageNo: 1, voyages: M.voyages, base: 0, rival: M.rival };
+      mode: state.mode, key: sessionKey(), daily: daily && { key: daily.key, name: daily.name }, voyageNo: 1, voyages: M.voyages, base: 0, rival: M.rival,
+      build: null, parts: [], lastPart: null }; // (build: this voyage's ship as a parts list; parts: what the crew has bought, newest last: { id, name, names, bag }; lastPart: the card of the last dock)
+    const start = state.startBuild && BUILDS[state.startBuild];
+    state.run.build = copyData(start || layout.parts || BUILDS.classic);
+    if (start && main.buildId !== state.startBuild) fitShip(state.run.build, state.startBuild); // (a new voyage starts with the start build, whatever the last one grew into)
+    Object.assign(state.yard, { built: null, newPart: null, hold: false, pull: 0 });
     state.runEnd = null;
     state.salvagePop = null;
   };
   const curStop = () => stopById(state.run.voyage, state.run.stopId);
+  // Fit a parts list to ship 0 AT THE DOCK (or in the lobby): her layout is replaced in place, what is made from it is made again (shipSim.js fitBuild). id = which build she wears.
+  function fitShip(parts, id) {
+    main.sim.fitBuild(parts);
+    main.buildId = id;
+  }
   // The mission number of a stop (bigger maps and tougher gunships as it grows).
   const missionNo = (stop) => stop.col + 1 + (state.run.voyageNo > 1 ? VY.SECOND.LEVEL_BONUS : 0);
 
@@ -484,6 +500,8 @@ export function createSimulation() {
     run.stopId = run.voyage.columns[0][0].id;
     run.visited = [run.stopId];
     run.spares = run.sparesMax;
+    if (main.buildId === 'yard' && layout.parts !== run.build) fitShip(run.build, 'yard'); // (the second voyage flies the ship the first one built)
+    persistBuild();
     addSalvage(VY.SECOND.SALVAGE_BONUS, 'mission');
     state.ship.hull = Math.min(100, state.ship.hull + VY.SECOND.HARBOUR_REPAIR);
     state.ev.warn = 5;
@@ -637,11 +655,62 @@ export function createSimulation() {
   const needsGas = () => state.bags.some((b) => b.gas < config.GAS.START * 0.95) || state.gasHoles.length;
   const needsCoal = () => state.ship.fuel < config.BOILER.FUEL_MAX * 0.85 || Object.values(state.GUNS).some((g) => g.ammo < g.max * 0.7) || state.bombBay.bombs < config.BOMBS.MAX;
   const upgradePrice = (u) => Math.round((SH.PRICES[u.id] || SH.PRICE_DEFAULT) * (1 + SH.REPEAT_PRICE * (state.upgrades[u.id] || 0)) / 5) * 5;
+  // ---- The Shipwright's Yard (S.6): ship PARTS in the shop (partsShop.js) ----
+  const YD = config.YARD;
+  const PS = config.PARTS_SHOP;
+  const ownedParts = () => { const o = {}; for (const p of state.run.parts) o[p.id] = (o[p.id] || 0) + 1; return o; };
+  // The leg of the voyage a stop is (the first stop flown is leg 1, in the second voyage of a campaign too): after the legs in PARTS_SHOP.DERELICT_STOPS a derelict is found and its part is free.
+  const legNo = (stop) => stop.col + (state.run.voyageNo > 1 ? 0 : 1);
+  // At most ONE part card per dock: a part this build can take, with up to YARD.SLOT_MAX places it can go (each already checked: never a FAIL).
+  const partCard = () => {
+    if (!state.startBuild) return null; // (headless tools without a start build keep the old shop)
+    const run = state.run;
+    const offer = offerPart(run.build, { owned: ownedParts(), crew: crewHeads(state), avoid: run.lastPart, only: state.yardOnly || null });
+    if (!offer) return null;
+    const e = offer.entry, found = PS.DERELICT_STOPS.includes(legNo(curStop()));
+    run.lastPart = e.id;
+    return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: found ? 0 : partPrice(e, run.parts.length, crewHeads(state)),
+      derelict: found, badge: found ? 'FREE: found in a wreck' : 'NEW PART', choices: offer.choices, now: offer.base.sum, spots: offer.choices.length };
+  };
+  const persistBuild = () => { // the run's ship, kept in the voyage save (versioned, tolerant: voyage.js)
+    const run = state.run;
+    if (!run || !state.startBuild) return;
+    state.save.build = { v: 1, parts: run.build, log: run.parts.map((p) => ({ id: p.id, name: p.name })), voyageNo: run.voyageNo };
+    saveVoyageSave(state.save);
+  };
+  // Put a chosen place of a part on the ship: the build is the choice's parts list (already validated), fitted to ship 0 at the dock.
+  const buildPart = (o, index) => {
+    const run = state.run, c = o.choices[index];
+    const before = moduleNames(layout);
+    run.build = c.parts;
+    fitShip(run.build, 'yard');
+    run.parts.push({ id: o.entry, name: o.baseName, names: newModules(before, moduleNames(layout)), bag: o.entry === 'gasbag' });
+    Object.assign(state.yard, { built: { t: YD.BUILT_STAMP, name: o.baseName, letter: c.letter, where: c.where }, newPart: { name: o.baseName.toUpperCase(), x: c.x, y: c.y, t: 0 }, hold: true });
+    persistBuild();
+    state.ev.warn = 3;
+    state.ev.warnText = `BUILT: ${o.baseName.toUpperCase()}!`;
+  };
+  // A limp home shakes the newest part loose: its modules start broken (a hammer mends them), a new gasbag starts with a hole. No part is ever lost. Returns its name.
+  const shakeLoose = (run) => {
+    const last = run.parts[run.parts.length - 1];
+    if (!last) return null;
+    for (const name of last.names) {
+      const m = modules.list.find((q) => q.name === name);
+      if (!m) continue;
+      m.hp = m.max * YD.SHAKEN_HP;
+      m.broken = YD.SHAKEN_HP <= 0;
+    }
+    if (last.bag) for (let i = 0; i < YD.SHAKEN_HOLES; i++) state.gasHoles.push(gasHoleAt(layout.gasbags[layout.gasbags.length - 1].cx, layout.gasbags[layout.gasbags.length - 1].cy, layout.gasbags.length - 1));
+    return last.name.toLowerCase();
+  };
+
   const buildOffers = () => {
     const offers = [];
     if (needsHull()) offers.push({ id: 'repair-hull', kind: 'repair', name: 'Full Repair', icon: '🔧', desc: 'Hull, holes, fires and every broken part, as good as new.', cost: SH.REPAIR_HULL });
     if (needsGas()) offers.push({ id: 'repair-gas', kind: 'repair', name: 'New Gas', icon: '🎈', desc: 'Patch the gasbag and fill it up.', cost: SH.REPAIR_GAS });
     if (needsCoal()) offers.push({ id: 'repair-coal', kind: 'repair', name: 'Coal and Shells', icon: '⛏️', desc: 'Stoke the boiler, fill every gun and the bomb bay.', cost: SH.REPAIR_COAL });
+    const part = partCard();
+    if (part) offers.push(part);
     const open = UPGRADES.filter((u) => u.id !== 'spare-parts' && (state.upgrades[u.id] || 0) < u.max);
     while (offers.length < SH.OFFERS && open.length) {
       const u = open.splice((Math.random() * open.length) | 0, 1)[0];
@@ -688,6 +757,8 @@ export function createSimulation() {
     const run = state.run;
     run.stopId = id;
     run.visited.push(id);
+    state.yard.hold = false; // (the camera lets go: if the ship grew, the pull-back starts now, and the new part gets its call-out)
+    if (state.yard.newPart) { state.yard.newPart.t = YD.NEW_CALLOUT; state.yard.pull = YD.PULL_TIME; }
     course.startMission(missionNo(curStop()), missionOpts(curStop()));
   };
 
@@ -695,17 +766,34 @@ export function createSimulation() {
   const botChoice = (v, p) => {
     const ok = v.options.map((o, i) => i).filter((i) => !cardOff(v.options[i]) && v.options[i].kind !== 'cast');
     const cast = v.options.findIndex((o) => o.kind === 'cast');
-    if (v.kind === 'route' || v.kind === 'shelf') return (Math.random() * v.options.length) | 0;
+    if (v.kind === 'route' || v.kind === 'shelf' || v.kind === 'slot') return (Math.random() * v.options.length) | 0;
     if (v.kind === 'rematch') return 0;
     if (!ok.length) return cast;
     // A sensible crew fixes what is badly hurt first: the hull, then the gasbag, then coal and shells.
     const want = (id) => ok.find((i) => v.options[i].id === id);
     if (state.ship.hull < SH.BOT_REPAIR_HULL && want('repair-hull') != null) return want('repair-hull');
     if ((state.gasHoles.length >= 2 || state.ship.gas < 30) && want('repair-gas') != null) return want('repair-gas');
+    const part = ok.find((i) => v.options[i].kind === 'part');
+    if (part != null && Math.random() < YD.BOT_PART_CHANCE) return part; // (a crew that can afford a part card likes to build)
     if (Math.random() < SH.BOT_CAST_CHANCE) return cast;
     const rep = ok.filter((i) => v.options[i].kind === 'repair');
     if (rep.length && Math.random() < 0.7) return rep[(Math.random() * rep.length) | 0];
     return ok[(Math.random() * ok.length) | 0];
+  };
+
+  // A part with several places: a short second vote picks the spot (A / B / C). The dock vote waits (v.back) and comes back when the part is placed.
+  const startSlotVote = (back, o) => {
+    closeVote();
+    const mark = o.dealt ? ' (CREW DEAL: 25% off)' : '';
+    state.ev.warn = 3;
+    state.ev.warnText = `BOUGHT: ${o.name.toUpperCase()}!${mark}`;
+    openVote({ kind: 'slot', title: `WHERE DOES THE ${o.baseName.toUpperCase()} GO?`, t: YD.SLOT_TIME, part: o, back,
+      options: o.choices.map((c) => ({ kind: 'slot', name: 'Place ' + c.letter, icon: c.letter, desc: c.desc, letter: c.letter })) });
+  };
+  const resumeDock = (back) => {
+    const left = !back.options.every((x) => x.kind === 'cast' || cardOff(x));
+    openVote({ ...back, t: left ? SH.TIME : YD.BUILT_STAMP });
+    state.vote.total = Math.min(back.total, SH.MAX_TIME - YD.BUILT_STAMP);
   };
 
   const updateVote = (dt) => {
@@ -724,10 +812,10 @@ export function createSimulation() {
           title: v.kind === 'dock' ? `SKY-DOCK - ${state.run.salvage} salvage` : v.kind === 'shelf' && p.team ? `${v.title} - ${p.team.toUpperCase()}` : v.title,
           t: Math.max(0, Math.ceil(v.t)),
           mine: valid(p.vote) ? p.vote : null,
-          options: v.options.map((o) => ({ name: o.name, icon: o.icon, desc: o.desc, cost: o.kind === 'cast' || o.kind === 'stop' ? null : o.cost, off: v.kind === 'dock' && cardOff(o), sold: !!o.sold })),
+          options: v.options.map((o) => ({ name: o.name, icon: o.icon, desc: o.desc, cost: o.kind === 'cast' || o.kind === 'stop' || v.kind === 'slot' ? null : o.cost, off: v.kind === 'dock' && cardOff(o), sold: !!o.sold, badge: o.kind === 'part' ? o.badge + (o.spots > 1 ? ` - ${o.spots} places` : '') : null })),
         },
       };
-      const key = 'vote|' + ui.vote.title + '|' + ui.vote.t + '|' + ui.vote.mine + '|' + ui.vote.options.map((o) => o.name + o.off + o.sold).join();
+      const key = 'vote|' + ui.vote.title + '|' + ui.vote.t + '|' + ui.vote.mine + '|' + ui.vote.options.map((o) => o.name + o.off + o.sold + o.desc + o.cost).join();
       if (key !== p.uk) {
         p.uk = key;
         emitPlayerUi(p.id, ui);
@@ -753,7 +841,7 @@ export function createSimulation() {
     const best = Math.max(...counts);
     const idx = v.options.map((_, i) => i);
     let pick;
-    if (best === 0) pick = v.kind === 'dock' ? v.options.findIndex((o) => o.kind === 'cast') : (Math.random() * v.options.length) | 0;
+    if (best === 0) pick = v.kind === 'dock' ? v.options.findIndex((o) => o.kind === 'cast') : v.kind === 'slot' ? 0 : (Math.random() * v.options.length) | 0;
     else {
       const tied = idx.filter((i) => counts[i] === best);
       pick = tied[(Math.random() * tied.length) | 0];
@@ -764,21 +852,43 @@ export function createSimulation() {
       closeVote();
       return goToStop(o.id);
     }
+    if (v.kind === 'slot') { // where the part goes: the place with the most votes (nobody voting: A), then back to the dock
+      closeVote();
+      buildPart(v.part, pick);
+      return resumeDock(v.back);
+    }
     if (o.kind === 'cast') {
       closeVote();
       return startRoute();
     }
     // Buy it, then keep shopping while there is anything left to afford.
-    state.run.salvage -= o.cost;
-    applyOffer(o);
-    o.sold = true;
-    state.ev.warn = 3;
-    state.ev.warnText = `BOUGHT: ${o.name.toUpperCase()}!`;
-    if (v.options.every((x) => x.kind === 'cast' || cardOff(x))) {
-      closeVote();
-      return startRoute();
+    let price = o.cost;
+    if (o.kind === 'part') { // crew deal: everybody voted for the part (two or more of them): a quarter off
+      const deal = price > 0 && voters.length >= YD.DEAL_VOTERS && voters.every((q) => q.vote === pick);
+      if (deal) price = Math.round((price * (1 - YD.DEAL)) / 5) * 5;
+      o.dealt = deal;
     }
-    v.t = SH.TIME;
+    state.run.salvage -= price;
+    if (o.kind === 'part') {
+      o.sold = true;
+      state.run.bought.push(o.id);
+      if (o.choices.length > 1) return startSlotVote(v, o); // (several places: the crew picks A / B / C)
+      buildPart(o, 0);
+      if (o.dealt) state.ev.warnText += ' CREW DEAL: ALL AGREED, 25% OFF';
+    } else applyOffer(o);
+    o.sold = true;
+    if (o.kind !== 'part') {
+      state.ev.warn = 3;
+      state.ev.warnText = `BOUGHT: ${o.name.toUpperCase()}!`;
+    }
+    if (v.options.every((x) => x.kind === 'cast' || cardOff(x))) {
+      if (o.kind !== 'part') {
+        closeVote();
+        return startRoute();
+      }
+      v.t = YD.BUILT_STAMP; // (a part was just built: the dock stays open while the BUILT stamp shows, then she casts off)
+      v.total = Math.min(v.total, SH.MAX_TIME - YD.BUILT_STAMP);
+    } else v.t = SH.TIME;
     for (const p of Object.values(state.players)) {
       p.vote = null;
       p.uk = null;
@@ -893,6 +1003,7 @@ export function createSimulation() {
       return;
     }
     if (state.salvagePop && (state.salvagePop.t -= dt) <= 0) state.salvagePop = null;
+    { const Y = state.yard; if (Y.built && (Y.built.t -= dt) <= 0) Y.built = null; if (Y.newPart && Y.newPart.t > 0) Y.newPart.t -= dt; if (Y.pull > 0) Y.pull -= dt; }
     // While the crew votes on an upgrade, the action is paused.
     if (state.vote) {
       flushAll();
@@ -1050,6 +1161,7 @@ export function createSimulation() {
       if (mode === 'versus') { // (the lobby's Mode button: VERSUS is the last of the session lengths; only from the lobby, and not in the middle of a match)
         if (state.phase !== 'lobby' || state.mode === 'versus') return;
         state.mode = 'versus';
+        if (main.buildId !== 'classic') fitShip(BUILDS.classic, 'classic'); // (Versus' own ships: the classic one, then the shelf)
         match.enter();
       } else if (mode && config.VOYAGE.MODES[mode]) {
         if (state.mode === 'versus') {
@@ -1061,6 +1173,17 @@ export function createSimulation() {
       if (daily != null) state.daily = !!daily;
       saveModePrefs(state);
     },
+    // The ship a new voyage starts with: 'sparrow', 'classic' or null (= whatever ship 0 is; no parts in the shop). In the lobby the new voyage is made now (with that ship, with the first
+    // mission's map made for her); mid-voyage it is the next voyage's.
+    setStartBuild: (id) => {
+      if (id != null && !BUILDS[id]) return;
+      state.startBuild = id || null;
+      if (state.phase === 'lobby' && !match.on) {
+        newRun();
+        course.startMission(1, firstMission());
+      }
+    },
+    fitShip,
     dailyInfo: () => {
       const d = dailyVoyage();
       return { ...d, best: dailyBest(state.save, d.key, state.mode) };

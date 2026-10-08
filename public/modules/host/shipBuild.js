@@ -366,6 +366,53 @@ BUILDS.classic = [
   ] },
 ];
 
+// ---- the Sparrow ------------------------------------------------------------------------------------------
+// The starter ship of a Voyage (SHIP_BUILDING.md section 1): a compact gondola with two decks and a catwalk, one gasbag, two engines, a crow's nest with the Lookout and a lamp, the helm,
+// boiler, coal bunker, ammo hold, a workshop with racks, a medbay and a steam lift, three guns (Tail, Nose, Fore Sponson). Short walks, everybody needed; few guns, no bomb bay, one bag and
+// slow to answer. Made with the blueprint editor's own operations (buildSlots.js minimalBuild) and written out here as data. The shop (partsShop.js) grows her from here.
+BUILDS.sparrow = [
+  { part: 'frame', nestRise: 94, shield: { cx: 520, cy: 414, rx: 660, ry: 604 } },
+  { part: 'deck', id: 'main', row: 'main', name: 'Main Deck', x0: 140, x1: 860 },
+  { part: 'deck', id: 'lower', row: 'lower', name: 'Lower Deck', x0: 20, x1: 980 },
+  { part: 'room', name: 'Boiler Room', p: 'main', x0: 140, x1: 480, color: '#b08250' },
+  { part: 'room', name: 'Workshop', p: 'main', x0: 480, x1: 860, color: '#c9a46a' },
+  { part: 'room', name: 'Engine Room', p: 'lower', x0: 20, x1: 360, color: '#a8814f' },
+  { part: 'room', name: 'Hold', p: 'lower', x0: 360, x1: 700, color: '#9c7646' },
+  { part: 'room', name: 'Fore Gun Deck', p: 'lower', x0: 700, x1: 980, color: '#a8814f' },
+  { part: 'ladder', top: 'main', bottom: 'lower', xTop: 500, xBottom: 500 },
+  { part: 'deck', id: 'catwalk', row: 'catwalk', name: 'Top Deck', x0: 260, x1: 860, outside: true },
+  { part: 'ladder', top: 'catwalk', bottom: 'main', xTop: 570, xBottom: 570 },
+  { part: 'gasbag', cx: 520, cy: 198, rx: 640, ry: 232 },
+  { part: 'deck', id: 'nest', row: 'nest', name: 'Crow\'s Nest', x0: 380, x1: 620, outside: true },
+  { part: 'rope', top: 'nest', bottom: 'catwalk', xTop: 500, xBottom: 500 },
+  { part: 'station', n: 'Boiler', kind: 'boiler', p: 'main', x: 240 },
+  { part: 'station', n: 'Coal Bunker', kind: 'coal', p: 'lower', x: 680 },
+  { part: 'station', n: 'Ammo Hold', kind: 'ammo', p: 'lower', x: 400 },
+  { part: 'station', n: 'Helm', kind: 'helm', p: 'catwalk', x: 760 },
+  { part: 'pipe', to: 'Helm', p: 'main', points: [[270, 560], [270, 335], [760, 335], [760, 445]], valve: [515, 335] },
+  { part: 'engine', name: 'Aft Engine', p: 'lower', x: 50 },
+  { part: 'pipe', to: 'Aft Engine', p: 'lower', points: [[210, 610], [210, 690], [50, 690], [50, 765]], valve: [130, 690] },
+  { part: 'engine', name: 'Fore Engine', p: 'lower', x: 950 },
+  { part: 'pipe', to: 'Fore Engine', p: 'lower', points: [[270, 610], [270, 700], [950, 700], [950, 765]], valve: [610, 700] },
+  { part: 'gun', n: 'Tail Gun', p: 'catwalk', x: 320, bx: 293, by: 418, aim: 3.491592653589793, arc: 1.1 },
+  { part: 'gun', n: 'Nose Gun', p: 'catwalk', x: 680, bx: 712, by: 418, aim: -0.35, arc: 1.1 },
+  { part: 'gun', n: 'Fore Sponson', p: 'lower', x: 880, bx: 970, by: 812, aim: 1, arc: 0.7 },
+  { part: 'station', n: 'Lookout', kind: 'lookout', p: 'nest', x: 440 },
+  { part: 'searchlight', n: 'Nest Searchlight', p: 'nest', x: 560, bx: 560, by: -176, aim: -1.5707963267948966, arc: 1.5, len: 44 },
+  { part: 'medbay', p: 'lower', x: 520 },
+  { part: 'lift', top: 'main', bottom: 'lower', xTop: 320, xBottom: 320, repair: { p: 'lower', x: 285 } },
+  { part: 'pipe', to: 'Lift', p: 'main', points: [[270, 560], [270, 535], [320, 535], [320, 615]], valve: [295, 535] },
+  { part: 'boarderEntry', p: 'catwalk', x: 480 },
+  { part: 'boarderEntry', p: 'catwalk', x: 800 },
+  { part: 'rack', kind: 'hammer', p: 'main', x: 560 },
+  { part: 'rack', kind: 'sword', p: 'main', x: 760 },
+  { part: 'rack', kind: 'hammer', p: 'lower', x: 200 },
+  { part: 'rack', kind: 'hammer', p: 'catwalk', x: 480 },
+  { part: 'extinguisher', p: 'lower', x: 280 },
+  { part: 'extinguisher', p: 'main', x: 600 },
+  { part: 'vent', p: 'main', x: 400 },
+];
+
 // ---- building the layout ---------------------------------------------------------------------------------
 
 // Turn a list of placed parts into layout data (same shape as the old hand-written SHIP_LAYOUT), plus the derived

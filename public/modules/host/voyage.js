@@ -108,12 +108,17 @@ export function dailyVoyage(d = new Date()) {
 // ---- Saved progress on this TV (never let storage problems break the game) ----
 const KEY = 'airshipVoyage';
 // daily: { date, best: { <mode>: { stops, victory, salvage } } } - the best result for today's daily voyage, per mode.
-const blank = () => ({ version: 2, bestStops: 0, bestSalvage: 0, totalRuns: 0, victories: 0, unlocks: [], daily: null });
+// build: the ship of the last voyage as a parts list ({ v: 1, parts: [...], log: [{ id, name }], voyageNo }): written at every part bought at the sky-dock (simulation.js persistBuild), so a campaign's second voyage
+// keeps the ship it built (and the Captain's Log can show it). Tolerant: a save without it, or with a build that does not look like a parts list, just has none.
+const blank = () => ({ version: 2, bestStops: 0, bestSalvage: 0, totalRuns: 0, victories: 0, unlocks: [], daily: null, build: null });
+export const validBuild = (b) => !!b && typeof b === 'object' && b.v === 1 && Array.isArray(b.parts) && b.parts.length > 0 && b.parts.every((p) => p && typeof p === 'object' && typeof p.part === 'string');
 export function loadVoyageSave() {
   try {
     const v = { ...blank(), ...(JSON.parse(localStorage.getItem(KEY)) || {}) };
     if (!v.daily || typeof v.daily !== 'object' || !v.daily.best || typeof v.daily.best !== 'object') v.daily = null; // (tolerate odd saves)
     if (!Array.isArray(v.unlocks)) v.unlocks = [];
+    if (!validBuild(v.build)) v.build = null;
+    else if (!Array.isArray(v.build.log)) v.build.log = [];
     v.version = 2;
     return v;
   } catch {
