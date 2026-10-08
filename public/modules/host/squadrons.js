@@ -434,6 +434,12 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     state.strafers = state.strafers.filter((p) => p.hp > 0 && Math.abs(p.x - toWorldRefX()) < 7000);
   };
 
+  // Where the boss parks (ship space, x): BOSS_STATION_X ahead on the classic ship, but never farther than BOSS_STATION_GAP beyond her foremost gun. A short ship (the Sparrow) would
+  // otherwise leave it out of shell range for good (SHELL_SPEED x SHELL_LIFE is about 1520 px) and could never sink the Flagship.
+  const stationX = () => {
+    const xs = Object.values(layout.gunMounts).map((m) => m.bx);
+    return xs.length ? Math.min(W.BOSS_STATION_X, Math.max(...xs) + W.BOSS_STATION_GAP) : W.BOSS_STATION_X;
+  };
   const updateBoss = (dt) => {
     const z = state.boss;
     if (!z) return;
@@ -442,7 +448,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     // Leave when the ship gets home, or after a crash.
     const c = state.course;
     if (c && (c.progress < 0.5 || c.progress > 0.97) && !z.flagship) z.leaving = true; // (the Flagship never leaves)
-    const homeX = z.leaving ? toWorldX(ship, B.x1 + 4000) : toWorldX(ship, W.BOSS_STATION_X);
+    const homeX = z.leaving ? toWorldX(ship, B.x1 + 4000) : toWorldX(ship, stationX());
     z.x += Math.sign(homeX - z.x) * Math.min(Math.abs(homeX - z.x), 220 * dt) + ship.pose.vx * dt; // (her 220 px/s is against the ship, carried along with her)
     const wantY = keepClear(state, z.x, toWorldY(ship, 250) + Math.sin(z.bob * 0.6) * 60, 260, 0, 500);
     z.y += (wantY - z.y) * Math.min(1, dt * 1.2);
@@ -453,7 +459,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       state.boss = null;
       return;
     }
-    if (fb * (z.x - toWorldX(ship, W.BOSS_STATION_X + 400)) > 0 || state.ship.down) return; // not in range yet
+    if (fb * (z.x - toWorldX(ship, stationX() + 400)) > 0 || state.ship.down) return; // not in range yet
     // Turrets.
     for (const g of z.guns) {
       if (g.dead || (g.cd -= dt) > 0) continue;
@@ -595,6 +601,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     state.enemyBombs.length = 0;
     state.strafers.length = 0;
     if (state.boss) state.boss.leaving = true;
+    bossLap = 0; // (a limp home flies the stop again with the same lap number: the boss must be able to come back, or the Flagship stop could never be won - the Aether stall)
     waveT = Math.max(waveT, 12);
   };
 

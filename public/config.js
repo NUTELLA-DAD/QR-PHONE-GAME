@@ -691,9 +691,29 @@ export const config = {
     BUILT_STAMP: 3.4, // seconds the BUILT stamp shows on the blueprint after a part is placed
     NEW_CALLOUT: 7, // seconds the "NEW: ENGINE POD" call-out hangs over the new part after cast off
     PULL_TIME: 8, // seconds the camera takes its slow pull-back after cast off (the ship grew)
-    BOT_PART_CHANCE: 0.55, // bots: chance to vote for the part card when they can afford it
+    BOT_PART_CHANCE: 0.55, // bots: chance to vote for the part card when they can afford it...
+    BOT_REC_CHANCE: 0.9, // ...and when the card is RECOMMENDED (it fixes the ship's weakest budget, partsShop.js fitOf)
+    BOT_SLOT_PICK: 0.8, // bots: chance to vote for the place the validator scores best (else a random place)
+    REC: { // what "recommended" reads (partsShop.js needsOf / fitOf)
+      MIN: 2.5, // a part card scoring this or more wears the RECOMMENDED tag and wins the bots' vote more often
+      GUNS_WANT: 5, // fewer guns than this and a gun part is wanted
+      HEAVY_HOVER: 55, // hover gas above this: she is getting heavy, lift parts are wanted (gasbag, lift engine) and heavy ones are not
+      STEAM_SHORT: 62, // settled cruise pressure below this: a boiler is wanted
+      HANDS_MAX: 2.5, // manned stations per crew member above this: no more stations are wanted
+      TILT_DEG: 1, // a trim this far off level: ballast is wanted
+      RAID_STOPS: 1, // this many outpost raids still ahead on the route and a bomb bay is wanted (if she has none)
+      AETHER_LIFT: 1.5, // extra score for a lift engine when the Aether (the Flagship's sky) is still ahead and she has none
+    },
     SHAKEN_HP: 0, // limp home: the newest part's modules start with this share of their health (0 = broken, a hammer mends them)
     SHAKEN_HOLES: 1, // limp home: a newest gasbag starts with this many holes
+    // DANGER THAT FOLLOWS THE SHIP (shipPower.js, read by crewscale.js): a voyage's enemies scale with the ship's fighting strength as well as the crew. Her power (guns, bomb bay, coil,
+    // escorts, armour, engines ...) is worked out from the build once per build, as a share of the classic ship's; the classic ship is 1.0 = full danger, nothing changes for her.
+    POWER_SCALE: 0.9, // how much of the danger a weak ship is spared: 0 = none (every ship meets the classic danger), 1 = danger in proportion to her power
+    POWER_FLOOR: 0.4, // ...but never less than this share of the full danger (a bare hull still gets shot at)
+    POWER: {
+      BASE: 3, GUN: 1, BOMB_BAY: 1.5, COIL: 2, ESCORT: 1, DEFLECTOR: 1, ARMOUR: 1.2, ENGINE: 0.6, SPARE_BAG: 1, // power points: the hull and deck; per gun; the bomb bay; the coil; per escort fighter; the deflector; per 100 px of armour plate; per engine pod; per gasbag beyond the first
+      KEYS: { spawn: 1, count: 1, fire: 1, damage: 1, raiders: 1, hp: 1 }, // which crew-scale numbers follow it, and how fully (1 = all of the relief, 0 = none)
+    },
   },
   // THE VOYAGE: a branching route of stops across the Broken Skies; one run = one voyage.
   VOYAGE: {
@@ -910,6 +930,7 @@ export const config = {
     BOSS_HP_LAPS: 4, // ...for at most this many missions
     BOSS_FLAGSHIP_HP: 100, // the Flagship (last stop of a voyage)
     BOSS_STATION_X: 2700, // where it parks, ahead of the ship
+    BOSS_STATION_GAP: 1400, // ...but no farther than this beyond her foremost gun (the classic ship's nose gun is 1328 short of 2700, so she parks as always; a shorter ship's gun can still reach it)
     BOSS_FIRE_EVERY: 3.4,
     BOSS_BOARD_EVERY: 40, // seconds between boarding parties
     BOSS_REWARD_HULL: 35,

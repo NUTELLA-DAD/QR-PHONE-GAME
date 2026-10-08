@@ -4,6 +4,7 @@
 // below so one place decides how difficulty and crew size combine.
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
+import { powerMul } from './shipPower.js';
 
 const CS = () => config.CREW_SCALE;
 const TABLE = () => (config.PVP.ENABLED ? config.PVP.HANDICAP : CS().TABLE); // (Versus has its own, gentler table: what a small or a big crew changes about the damage a ship takes)
@@ -43,6 +44,9 @@ export function updateCrewScale(state, dt) {
   cs.real = real;
   // (the difficulty button can change the spare gasbags until the first limp)
   const run = mainShip(state).main ? state.run : null; // (the run and its spare gasbags belong to the main ship)
+  // (The Yard: the danger follows the ship's fighting strength too, shipPower.js: a small starting ship meets lighter enemies, a built-up one the classic danger. Only on a voyage that started
+  // with a build, and only for ship 0, whose numbers the world's enemies use; the classic ship's ratio is 1, so her numbers are not touched.)
+  if (run && run.power != null && CS().ENABLED && !config.PVP.ENABLED) for (const k of Object.keys(config.YARD.POWER.KEYS)) cs[k] *= powerMul(run.power, k);
   if (state.phase === 'lobby' && run && !run.limps) run.spares = run.sparesMax = sparesFor(state);
 }
 
