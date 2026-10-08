@@ -55,6 +55,7 @@ export function createModules(ship) {
     for (const pipe of L.pipes) {
       add({ name: pipe.to + ' Pipe', kind: 'pipe', to: pipe.to, d: pipe.d, x: pipe.valve[0], pos: { x: pipe.valve[0], y: pipe.valve[1] }, points: pipe.points, open: true });
     }
+    for (const s of all('cannon')) add({ name: s.n, kind: 'cannon', d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } }); // (B.6: the crew cannon's gunner post is a module: a hit can break the carriage, a hammer mends it)
     for (const s of L.sails || []) add({ name: s.n, kind: 'sail', d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - s.h * 0.55 } }); // a sail is hit and torn like any module; a hammer mends it
 
     for (const m of list) {

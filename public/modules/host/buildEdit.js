@@ -66,7 +66,7 @@ export const emptyBuild = () => ensureFrame([]);
 // ---- what a part is tied to ------------------------------------------------------------------------------------
 // refs(o): the (deck id, x) points a part stands on, each with a setter to move it to another deck. Pieces that stand on a deck are
 // removed when that stretch of deck is erased; connectors have two ends, the lift also its repair spot.
-const POINT = ['station', 'gun', 'searchlight', 'sail', 'engine', 'rack', 'vent', 'gasValve', 'extinguisher', 'boarderEntry', 'escortDock', 'medbay', 'ballast'];
+const POINT = ['station', 'gun', 'searchlight', 'sail', 'crewCannon', 'engine', 'rack', 'vent', 'gasValve', 'extinguisher', 'boarderEntry', 'escortDock', 'medbay', 'ballast'];
 const LINK = ['ladder', 'rope', 'stairs', 'lift', 'pole'];
 function refs(o) {
   const r = [];
@@ -84,7 +84,7 @@ const nameOf = (o) => o.n || o.name;
 // A short human label for the "removed: ..." note.
 function labelOf(o) {
   switch (o.part) {
-    case 'station': case 'gun': case 'searchlight': case 'sail': return o.n;
+    case 'station': case 'gun': case 'searchlight': case 'sail': case 'crewCannon': return o.n;
     case 'engine': return o.name;
     case 'rack': return `${o.kind} rack`;
     case 'ladder': case 'rope': case 'stairs': case 'pole': case 'lift': return o.part;
@@ -672,7 +672,7 @@ export function thingAt(parts, x, y, slop = 0) {
     const base = dy(o.p);
     if (base == null || o.x == null) return;
     switch (o.part) {
-      case 'station': case 'gun': case 'searchlight': case 'sail': consider(index, o, labelOf(o), o.x, base - 11, 18); break;
+      case 'station': case 'gun': case 'searchlight': case 'sail': case 'crewCannon': consider(index, o, labelOf(o), o.x, base - 11, 18); break;
       case 'engine': consider(index, o, labelOf(o), o.x, base + 14, 18); break;
       case 'rack': case 'vent': case 'gasValve': case 'extinguisher': case 'boarderEntry': consider(index, o, labelOf(o), o.x, base - 5, 14); break;
       case 'medbay': consider(index, o, labelOf(o), o.x, base - 8, 18); break;

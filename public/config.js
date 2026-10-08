@@ -666,7 +666,7 @@ export const config = {
   // The SHIPWRIGHT'S YARD (S.6a, modules/host/partsShop.js): ship PARTS as cards in the sky-dock shop, at most one per dock. A part is a pure build edit (the voyage's parts list,
   // simulation.js run.build), checked by the validator (never a FAIL) and fitted to ship 0 at the dock; its effects are weight, lift, steam and stations in the build, never config.
   PARTS_SHOP: {
-    PRICES: { hullBay: 130, keel: 150, gasbag: 160, engine: 120, liftEngine: 170, nest: 140, gun: 100, lamp: 90, bombBay: 150, boiler: 170, coal: 90, ammo: 90, armour: 120, sail: 110, ballast: 90, ladder: 90, pole: 90, lift: 130 }, // base salvage price of each part
+    PRICES: { hullBay: 130, keel: 150, gasbag: 160, engine: 120, liftEngine: 170, nest: 140, gun: 100, lamp: 90, bombBay: 150, boiler: 170, coal: 90, ammo: 90, armour: 120, sail: 110, ballast: 90, ladder: 90, pole: 90, lift: 130, crewCannon: 140 }, // base salvage price of each part
     REPEAT_PRICE: 0.3, // each part already bought this voyage adds this share of the base price (the price rises with how many you own)
     CREW_SMALL: 3, // a crew of this many players or fewer finds engines, armour and gasbags cheaper...
     SMALL_MUL: 0.85, // ...by this factor
@@ -1121,7 +1121,7 @@ export const config = {
     MASS: {
       deck: 0.3, // per 100 px of deck (an outside deck weighs half)
       link: { ladder: 0.4, rope: 0.3, stairs: 1, lift: 3, pole: 0.3 }, // ways between decks
-      kind: { helm: 5, boiler: 16, lookout: 1, coal: 10, ammo: 6, gun: 3, searchlight: 2, coil: 5, deflector: 5, bombBay: 10, navigator: 1, escort: 5, sail: 4 }, // stations by kind
+      kind: { helm: 5, boiler: 16, lookout: 1, coal: 10, ammo: 6, gun: 3, searchlight: 2, coil: 5, deflector: 5, bombBay: 10, navigator: 1, escort: 5, sail: 4, cannon: 9, cannonSeat: 0 }, // stations by kind (B.6: the crew cannon's brass barrel and carriage weigh on its gunner's station; the seat in the barrel is just a place to stand)
       engine: 9, pipe: 0.5, vent: 0.3, gasValve: 0.4, rack: 0.2, extinguisher: 0.2, medbay: 3,
       bag: 6, bagTwin: 4, // a gasbag's rigging, and the twin envelope's
       ballast: 5, // one sandbag: cheap and dense, the trimming tool
@@ -1224,6 +1224,74 @@ export const config = {
     MAX_POWER: 5, // ...at most this much
     KICK: 1.6, // the forces.js kick where they touched (RAM_KICK multiples, at most x3 per 150 px/s of closing speed)
     GIVE_WAY: { TIME: 1.5, MARGIN: 150 }, // bot pilots in a fleet (course.js giveWay): a ship does not fly on while another is inside the box she sweeps over the next TIME seconds, grown by MARGIN px, and AHEAD of her
+  },
+  // CROSS-SHIP PLAY (B.6): things that cross from one ship to another, or change what another ship weighs. All of it is per-part and per-ship: a classic co-op ship has none of these parts and nothing here runs.
+  CROSS: {
+    // The CREW CANNON (cannon.js): a brass cannon on an open deck that fires a CREW MEMBER across the sky. Two stations: the SEAT in the barrel (Action while it is empty: you climb in) and the
+    // GUNNER'S post beside it (stick aims, hold to charge, let go to fire). Nobody at the post: the one in the barrel can fire himself (weaker, and straight along the barrel's aim).
+    CANNON: {
+      AIM: -0.8, // the barrel's middle angle in ship space (radians, y down: -0.8 is forward and up; a cannon on the stern half of a ship faces aft: PI + 0.8)
+      ARC: 0.75, // how far the gunner can swing the barrel either side of AIM
+      TURN: 1.5, // radians per second the barrel swings
+      SPEED: 1750, // launch speed at full power, relative to the cannon (px/s)
+      MIN_POWER: 0.3, // a tap fires at this share of SPEED
+      CHARGE_TIME: 1.3, // seconds of holding to reach full power
+      SOLO_POWER: 0.62, // the self-fired shot: this share of SPEED, whatever the barrel
+      COOLDOWN: 8, // seconds before the cannon can fire again
+      STEAM: 14, // boiler pressure points a shot uses up
+      MIN_PRESS: 22, // ...and the pressure it needs to fire at all
+      GUNNER_DX: 85, // the gunner's post stands this far behind the barrel (px, along the ship)
+      MUZZLE: 78, // the crewman leaves the barrel this far along its aim (px)
+      DRAG: 0.18, // sideways air drag on a flying crewman fired from it (per second; a walker's is AIR.DRAG): he really carries
+      NO_LAND: 0.45, // seconds after firing that he cannot land (he flies through the decks round the muzzle)
+      OVERBOARD_X: 3400, // a cannon flyer is only overboard this far (px) beyond the ends of the ship he left
+      RECOIL: 2.2, // the kick the barrel gives the ship (RAM_KICK multiples), tipping the end it stands on
+      FLYER_STEER: 1, // stick steering in the air as a share of the normal (AIR.STEER_ACCEL); the parachute steers harder
+      SOLVE_ANGLES: 30, // the bots' aim search: barrel angles tried ...
+      SOLVE_POWERS: 7, // ... and powers tried
+      SHOP: false, // true: the sky-dock shop sells the cannon (off so the voyage's balance and part rolls stay as tuned; the build page and the dev flags place it)
+    },
+    // THROWABLE BALLAST and cargo (cargo.js): sandbags and crates come from racks, coal from the bunker. ATTACK on an open deck throws what you hold; it lands as a LIVE LOAD on the deck it falls on.
+    CARGO: {
+      ITEMS: { sandbag: { w: 6, label: 'Sandbag' }, crate: { w: 9, label: 'Crate' }, coal: { w: 3, label: 'Coal sack' } }, // what each weighs on a ship (gas points; a crew member is 1.2), whether carried or lying on a deck
+      THROW_SPEED: 1000, // px/s of a throw
+      THROW_UP: 0.45, // ...with this much upward tilt added to the stick's way
+      GRAVITY: 1300, // px/s^2 on a thrown load (a sack falls slower than a person)
+      FLIGHT: 6, // seconds before a thrown load is given up for lost
+      OPEN_ONLY: true, // a throw needs an open-air deck (inside the hull there is nowhere to throw it)
+      STOCK: 4, // sandbags (or crates) a rack holds
+      REFILL: 30, // seconds for a rack to grow one back
+      MAX_LOADS: 10, // loads on one ship at once; the oldest goes over the side when there are more
+      SHOVEL_TIME: 1.8, // seconds of holding Action to shovel one load overboard
+      DUMP_REACH: 90, // px from the end of an open deck (the rail) within which the Action button dumps the sandbag you carry
+      DUMP_GAS: 6, // gas points a dumped sandbag adds to the bag's lift (a brief climb, the helm's pump takes it back) ...
+      DUMP_KICK: 55, // ...and a push upward (px/s at REF_MASS), at the deck's end: it lifts that end first
+      DROP_SPEED: 160, // a load let fall from the bomb bay leaves the ship with this downward speed
+      STEAL_FUEL: 9, // firebox fuel (of BOILER.FUEL_MAX) one sack of coal lifted from an enemy ship's bunker takes out of her; it feeds the thief's own boiler as a normal load (BOILER.COAL_FUEL)
+    },
+    // TOWING (towing.js): carry a towline from a rack (Action at the rack), ATTACK throws its grapple at another ship in reach; the line pulls both ships (a spring between the two poses)
+    // and twists both about their centres of mass. Cut it with a sword (ATTACK at its end) or let it snap.
+    TOW: {
+      RANGE: 1000, // px a grapple flies and hooks a ship's deck or hull
+      SPEED: 2200, // px/s of the flying grapple (the TV draws it)
+      LEN: 520, // rest length (px) of the line once it has caught; she hauls in to it
+      REEL: 120, // px/s the line shortens while it holds
+      K: 2.4, // spring: acceleration (px/s^2) per px of stretch ...
+      DAMP: 1.6, // ...and per px/s of the ships moving apart
+      MAX_ACC: 420, // ...at most this
+      SNAP: 1500, // px: the line parts when the ships are further apart than this
+      TORQUE: 1, // the twist of each pull (forces.js 'tether', FORCES.TETHER_ACC multiples per 100 px of stretch)
+      CUT_REACH: 90, // px from the end of the line on a deck within which a sword cuts it
+      PRIZE: 150, // salvage paid at the dock for arriving with a captured enemy gunship still in tow
+    },
+    BOTS: {
+      CANNON_CHANCE: 1.4, // per minute, per think: the chance a quiet bot crew goes for the crew cannon when the target is in reach (also gated by the hull and the cooldown)
+      CANNON_MIN_CREW: 3, // not with fewer hands
+      CANNON_WAIT: 14, // seconds the seat waits for a gunner before firing solo
+      THROW_CHANCE: 1.2, // per minute: a bot crew with a sandbag rack throws sandbags at a rival ship that is close under or beside them
+      THROW_RANGE: 650, // ...when she is this close (px)
+      TOW_RANGE: 800, // a bot with a towline hooks a ship that is this near
+    },
   },
   // ---- S.5e: a ship needs only a gasbag and a deck to fly. Everything else is optional; what is missing just takes control away. ----
   // WIND: with no helm (or no engines, or no boiler) the ship simply DRIFTS with the wind. Speeds are shares of SHIP.TOP_SPEED (the throttle scale).
@@ -1878,7 +1946,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, cool: 1, trim: 0.9, sail: 1.3, reef: 3 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, cool: 1, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

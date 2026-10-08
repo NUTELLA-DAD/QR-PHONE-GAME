@@ -24,11 +24,12 @@ export function createBalance(state) {
     const add = (w, x) => { m += w; mx += w * x; ix += w * (x - SB.comX) ** 2; };
     for (const p of Object.values(state.players)) {
       if (p.d == null || p.fall || p.air || p.fly || p.onGunship || p.connected === false) continue;
-      const w = W.crew + (p.carry === 'coal' || p.carry === 'ammo' ? W.carry : 0);
+      const w = W.crew + (p.carry === 'coal' || p.carry === 'ammo' ? W.carry : (config.CROSS.CARGO.ITEMS[p.carry] || { w: 0 }).w); // (B.6: a sandbag or crate in your hands weighs what it weighs on a deck)
       add(w, p.x);
       cm += w * (p.x - SB.comX);
     }
     if (config.FORCES.LIVE) for (const b of state.boarders || []) if (b.d != null && !b.fall && b.conn == null && b.hp > 0) { add(config.FORCES.BOARDER_MASS, b.x); cm += config.FORCES.BOARDER_MASS * (b.x - SB.comX); } // raiders on deck weigh too
+    for (const ld of state.loads || []) { add(ld.w, ld.x); cm += ld.w * (ld.x - SB.comX); } // (B.6: sandbags, crates and sacks lying on her decks - thrown there by anyone - tip her like a crowd)
     const boilers = L.stations.filter((s) => s.kind === 'boiler');
     if (boilers.length) for (const s of boilers) add((state.ship.fuel * W.fuel) / boilers.length, s.x);
     for (const [name, g] of Object.entries(state.GUNS || {})) add(g.ammo * W.ammo, g.bx != null ? g.bx : (L.gunMounts[name] || {}).bx || 0);

@@ -203,6 +203,7 @@ export function validate(parts, opts = {}) {
   placed(L.boarderEntryPoints, (o) => `a boarding point (${o.p} ${o.x})`);
   placed(L.ballast || [], (o) => `a sandbag (${o.p} ${o.x})`);
   placed(L.sails || [], (o) => `sail ${o.n}`);
+  placed(L.cannons || [], (o) => `crew cannon ${o.n}`);
   placed(L.gasValves || [], (o) => `a gas valve (${o.p} ${o.x})`);
   placed(L.escortDocks, (o) => `escort hook ${o.n}`);
   if (L.medbay) placed([L.medbay], () => 'the medbay');
@@ -419,6 +420,21 @@ export function validate(parts, opts = {}) {
     const S = config.SAIL, k = Array.from({ length: L.sails.length }, (_, i) => S.BONUS_DIM ** i).reduce((a, b) => a + b, 0);
     info('Sails', `${L.sails.length} sail${L.sails.length === 1 ? '' : 's'}: raised, they add about +${Math.round(S.BONUS * k * 100)}% of top speed in a calm sky (more in a gale, less in caves); a gust can tear a sail left up`);
   }
+
+  // --- Cross-ship parts (B.6, config.CROSS): the crew cannon needs the open air and two hands; the racks are advice-free (they just have to be reachable).
+  for (const c of L.cannons || []) {
+    const q = byId[c.p];
+    if (q && !q.outside) warn('Crew cannon', `${c.n} stands on the ${q.name}, a covered deck: the barrel needs the open air to fire into (make the deck outdoor, or move it)`);
+  }
+  if ((L.cannons || []).length) {
+    const K = config.CROSS.CANNON, g = config.AIR.GRAVITY;
+    let x = 0, y = 0, vx = Math.cos(Math.PI / 4) * K.SPEED, vy = -Math.sin(Math.PI / 4) * K.SPEED; // (a 45 degree shot at full power, the airborne.js flight with the cannon flyer's drag)
+    for (let t = 0; t < 8 && !(vy > 0 && y >= 0); t += 0.02) { vx -= vx * Math.min(1, K.DRAG * 0.02); vy = Math.min(config.AIR.MAX_FALL, vy + g * 0.02); x += vx * 0.02; y += vy * 0.02; }
+    info('Crew cannon', `${L.cannons.length} crew cannon${L.cannons.length === 1 ? '' : 's'}: fires a crewman about ${Math.round(x / 10) * 10} px across the sky at full power on the level (a second crewman aims, or the one inside fires himself at ${Math.round(K.SOLO_POWER * 100)}% power); weighs ${BALANCE.MASS.kind.cannon} each, uses ${K.STEAM} points of steam pressure a shot, reloads in ${K.COOLDOWN} s. He can land on any ship's deck: an enemy's means boarding her`);
+    if (!L.stations.some((s) => s.kind === 'boiler')) warn('Crew cannon', 'no boiler: the cannon is fired with steam pressure and will not fire');
+  }
+  if (L.racks.some((r) => r.kind === 'sandbag' || r.kind === 'crate')) info('Cargo', `${L.racks.filter((r) => r.kind === 'sandbag' || r.kind === 'crate').length} cargo rack(s): ATTACK on an open deck throws what you carry (a sandbag weighs ${config.CROSS.CARGO.ITEMS.sandbag.w}, a crate ${config.CROSS.CARGO.ITEMS.crate.w}); it lands on whatever ship it hits as dead weight and tips her until somebody shovels it off. At the rail, Action dumps a sandbag for a quick lift`);
+  if (L.racks.some((r) => r.kind === 'towline')) info('Towing', `a towline reel: ATTACK throws the grapple at a ship within ${config.CROSS.TOW.RANGE} px and tows her (a spring between the two ships that twists both); a sword cuts it`);
 
   // --- Advice: the parts she would be better for (a missing one is a strong WARN, never a FAIL).
   const list = checklist(L, routesOk);

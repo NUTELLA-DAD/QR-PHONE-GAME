@@ -106,6 +106,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   // the connector's ends, unless the stick is held DOWN (that means "drop past it"). Humans only.
   const grab = (p) => {
     if (p.bot || p.conn != null || p.onGunship || p.lock || p.ko > 0) return false;
+    if (p.cannon && p.noLand > 0) return false; // (B.6: just fired from the cannon: he flies past the mast ropes round the muzzle)
     if (!(p.fly || p.air)) return false;
     if ((p.jy || 0) > 0.6) return false;
     const px = p.fly ? toShipX(ship, p.x) : p.x; // (a ladder is part of the ship: compare in ship coordinates)
@@ -223,7 +224,8 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const step = (p, dt, controlled = true) => {
     if (!p.fly) return false;
     if (p.regrabCd > 0) p.regrabCd -= dt;
-    const ctrl = controlled && (!p.bot || p.daring) ? clamp(p.jx || 0, -1, 1) * ship.pose.f : 0; /* (the stick is along the ship; in the air it steers along the world) */ // (bots only steer in the air on a daring stunt)
+    const cn = config.CROSS.CANNON; // (B.6: a crewman fired from a crew cannon carries on a long arc, steers a little, and trails smoke)
+    const ctrl = controlled && (!p.bot || p.daring) ? clamp(p.jx || 0, -1, 1) * ship.pose.f * (p.cannon ? cn.FLYER_STEER : 1) : 0; /* (the stick is along the ship; in the air it steers along the world) */ // (bots only steer in the air on a daring stunt)
     const drift = ship.pose.vx - ship.pose.f * Math.max(0, state.ship.speed || 0) * A.SHIP_DRIFT; // (the air streams past the ship: she hangs back from it by this much)
     const gm = (state.env && state.env.gravity) || 1; // low gravity in The Aether (config.ENVIRONMENTS.aether.GRAVITY)
     if (p.chute > 0) {
@@ -237,9 +239,10 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       p.fvy = p.fvy > A.CHUTE_FALL ? Math.max(A.CHUTE_FALL, p.fvy - 3000 * dt) : Math.min(A.CHUTE_FALL, p.fvy + A.CHUTE_GRAVITY * gm * dt);
     } else {
       p.fvx += ctrl * A.STEER_ACCEL * dt;
-      p.fvx -= (p.fvx - drift) * Math.min(1, A.DRAG * dt);
+      p.fvx -= (p.fvx - drift) * Math.min(1, (p.cannon ? cn.DRAG : A.DRAG) * dt);
       p.fvy = Math.min(A.MAX_FALL, p.fvy + A.GRAVITY * gm * dt);
     }
+    if (p.cannon) { const tr = (p.trail ||= []); tr.push([p.x, p.y]); if (tr.length > 18) tr.shift(); }
     const py = p.lsy != null ? p.lsy : toShipY(ship, p.y); // (where she was, on the ship, last step)
     p.x += p.fvx * dt;
     p.y += p.fvy * dt;
@@ -259,6 +262,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
         const surfY = val(s.y);
         if (surfY == null) continue; // (a surface that isn't there right now, e.g. no gunship)
         if (s.onLand === undefined && s.d === undefined) continue;
+        if (s.only && !s.only(p)) continue; // (B.6: a friendly ship's decks are only a landing place for a crewman fired from a crew cannon)
         if (sx < val(s.x0) || sx > val(s.x1)) continue;
         if (py < surfY && sy >= surfY && (!best || surfY < best.y)) best = { s, y: surfY };
       }
@@ -270,13 +274,16 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     // Overboard: well below the ship or far past either end.
     // (Past the bow counts only beyond any other deck out there, e.g. a gunship alongside.)
     // (Versus: the rival's decks are surfaces too, wherever she hangs in the sky: past THEM is overboard, not just past our own ends and below our own keel.)
-    const rs = extraProviders.length ? surfaces().filter((s) => typeof s.id === 'string' && s.id.startsWith('rival:')) : [];
-    const farX = Math.max(1600, ...extra.map((s) => (val(s.y) == null ? 0 : val(s.x1))), ...rs.map((s) => val(s.x1))) + A.OVERBOARD_X;
-    const nearX = Math.min(0, ...rs.map((s) => val(s.x0))) - A.OVERBOARD_X;
+    const rs = extraProviders.length ? surfaces().filter((s) => typeof s.id === 'string' && (s.id.startsWith('rival:') || s.id.startsWith('fleet:'))) : [];
+    const wide = p.cannon ? cn.OVERBOARD_X : 0; // (B.6: a cannon flyer crosses the sky: he is only overboard well beyond the ends)
+    const farX = Math.max(1600, ...extra.map((s) => (val(s.y) == null ? 0 : val(s.x1))), ...rs.map((s) => val(s.x1))) + A.OVERBOARD_X + wide;
+    const nearX = Math.min(0, ...rs.map((s) => val(s.x0))) - A.OVERBOARD_X - wide;
     const lowY = Math.max(p.chute > 0 ? A.CHUTE_OVERBOARD_Y : A.OVERBOARD_Y, ...rs.map((s) => val(s.y) + 320));
     if (sy > lowY || sx < nearX || sx > farX) {
       p.fly = false;
       p.air = false;
+      p.cannon = false;
+      p.trail = null;
       cutChute(p);
       p.x = sx; // (the fall and the tumble work in ship coordinates, relative to her)
       p.y = sy;
@@ -294,8 +301,10 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
 
   const land = (p, s, y) => {
     const speed = p.fvy - ship.pose.vy; // (how fast she meets the deck)
-    const height = p.chuteOpen ? 0 : y - p.apex; // a parachute landing is a soft one
+    const height = p.chuteOpen || p.cannon ? 0 : y - p.apex; // a parachute landing is a soft one (and a cannon flyer rolls out of it: his fall is an arc, not a drop)
     cutChute(p);
+    p.cannon = false;
+    p.trail = null;
     p.fly = false;
     p.air = false;
     p.jz = 0;
@@ -327,8 +336,19 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     return p.tvy;
   };
 
+  // Open the parachute by hand (a cannon flyer's Action): it opens after CHUTE_DELAY, once he is falling.
+  const popChute = (p) => {
+    if (!p.fly || p.chute > 0) return false;
+    p.chute = 0.001;
+    p.chuteOpen = false;
+    puff(p.x, p.y, '#ffffff', 4);
+    return true;
+  };
+
   const clear = (p) => {
     p.fly = false;
+    p.cannon = false;
+    p.trail = null;
     cutChute(p);
     p.tumble = false;
     p.rot = 0;
@@ -336,5 +356,5 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     p.stag = 0;
   };
 
-  return { addSurface, removeSurface, addProvider, removeProvider, surfaces, startFlight, jumpChute, grab, jumpOff, edgeCheck, vault, shove, standing, step, tumble, clear };
+  return { addSurface, removeSurface, addProvider, removeProvider, surfaces, outsideAt, popChute, startFlight, jumpChute, grab, jumpOff, edgeCheck, vault, shove, standing, step, tumble, clear };
 }

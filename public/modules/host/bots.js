@@ -11,7 +11,10 @@ import { lightNames, isSearchlight, darkTarget } from './searchlight.js';
 import { botJobs as goingDownJobs } from './goingDown.js';
 import { autopilotOn } from './crewscale.js';
 import { flamAt } from './fireModel.js';
-import { mainShip, hostileTo, foeOf } from './ships.js';
+import { mainShip, hostileTo, foeOf, areHostile } from './ships.js';
+import { cannonPlan } from './cannon.js';
+import { solveThrow } from './cargo.js';
+import { cannonSeatName } from './shipBuild.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/captainAI.js';
 
@@ -26,7 +29,7 @@ const tables = layoutTables((L) => {
     LOWER: L.deckIndex('lower'),
     GUN_STATIONS,
     // (every station a bot may man, by kind, most useful kinds first)
-    MANNED_STATIONS: [...L.all('helm'), ...L.all('escort'), ...L.all('deflector'), ...L.all('coil'), ...GUN_STATIONS, ...L.all('bombBay'), ...L.all('lookout'), ...L.all('swivel'), ...lightNames(L)].map((s) => (typeof s === 'string' ? s : s.n)),
+    MANNED_STATIONS: [...L.all('helm'), ...L.all('escort'), ...L.all('deflector'), ...L.all('coil'), ...GUN_STATIONS, ...L.all('bombBay'), ...L.all('lookout'), ...L.all('swivel'), ...L.all('cannon'), ...L.all('cannonSeat'), ...lightNames(L)].map((s) => (typeof s === 'string' ? s : s.n)),
     PICKUPS: [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))],
   };
 });
@@ -264,10 +267,79 @@ function boarderJobs(state, bot) {
   if (ship.ai && ship.ai.g.charge) jobs.push({ kind: 'swingback', obj: 'swingback', max: 8 });
   // a defender at the helm stops the capture, and one beside us stops everything: they come first
   for (const q of foes) if ((helm && q.d === helm.d && Math.abs(q.x - helm.x) < V.DEFEND_REACH * 1.5) || (q.d === bot.d && Math.abs(q.x - bot.x) < 260)) jobs.push({ kind: 'fight', obj: q, max: 2 });
+  if (bot.stealNow && bot.carry !== 'coal' && L.hasKind('coal')) jobs.unshift({ kind: 'steal', obj: 'steal', max: 1 }); // (B.6: sabotaged her boiler - now her coal)
   const holds = V.MODE === 'capture' && !ship.ai ? [helm && 'capture', boiler && 'sabotage'] : [boiler && 'sabotage', helm && 'capture']; // (the gunship: the charge first, as it always was)
   for (const k of holds) if (k && !(k === 'sabotage' && ship.ai && ship.ai.g.charge)) jobs.push({ kind: k, obj: k, max: 1 });
   for (const q of foes) jobs.push({ kind: 'fight', obj: q, max: 2 });
   return jobs;
+}
+
+// ---------- Cross-ship play (B.6, config.CROSS.BOTS): the crew cannon, thrown ballast, shovelling ----------
+const XB = config.CROSS.BOTS;
+// Are the cannon's two stations worth a bot's time right now? Rarely: when a hostile ship is in reach of a shot the solver can make, the cannon is loaded, there are hands to spare and a roll comes up.
+// The wish lasts 25 s (r.goUntil) so both stations get filled. 0.6 = a station worth taking, 4 = not now.
+function cannonReach(state, n) {
+  const ship = mainShip(state), L = ship.layout;
+  const c = (L.cannons || []).find((q) => q.n === n || cannonSeatName(q.n) === n);
+  if (!c || state.phase !== 'flying' || state.ship.down || state.goingDown) return 4;
+  const r = ship.sim.cannon.rec(c), now = performance.now();
+  if (r.cd > 0 || state.ship.press < config.CROSS.CANNON.MIN_PRESS) return 4;
+  if (r.goUntil > now) return 0.6;
+  if (now - (r.tryAt || 0) < 1000) return 4;
+  r.tryAt = now;
+  if (Object.values(state.players).filter((q) => q.bot && !q.mate && !(q.ko > 0)).length < XB.CANNON_MIN_CREW || state.ship.hull < config.BOTS.DARING.MIN_HULL) return 4;
+  if (!(cannonPlan(ship, c, r) || cannonPlan(ship, c, r, { solo: true })) || Math.random() >= XB.CANNON_CHANCE / 60) return 4;
+  r.goUntil = now + 25000;
+  return 0.6;
+}
+// A bot at one of the cannon's stations: the one at the post aims the solved angle and holds until the charge is right, then lets go; the one in the barrel waits for a gunner, and fires himself after a while.
+function cannonOperate(p, state, dt) {
+  const ship = mainShip(state), cn = ship.sim.cannon, c = cn.cannonOf(p.lock);
+  if (!c) return;
+  const r = cn.rec(c), seat = p.lock === cannonSeatName(c.n);
+  if (seat && cn.gunnerOf(c)) { r.seatT = 0; p.gunIdle = 0; return; } // (hold on: the gunner fires)
+  if (seat) r.seatT = (r.seatT || 0) + dt;
+  const plan = cannonPlan(ship, c, r, { solo: seat });
+  if (!plan) { p.gunIdle = (p.gunIdle || 0) + dt; return; }
+  p.gunIdle = 0;
+  p.jx = Math.cos(plan.aim);
+  p.jy = Math.sin(plan.aim);
+  const off = Math.abs(angleDiff(plan.aim, r.aim));
+  if (seat) { if (r.seatT > XB.CANNON_WAIT && off < 0.05 && r.cd <= 0) p.actQ = true; return; }
+  if (!cn.riderOf(c)) { p.gunIdle += dt; return; }
+  p.fire = r.cd <= 0 && !(off < 0.05 && r.charge >= plan.charge);
+}
+// Shovel jobs for the loads lying on the ship; and now and then a throw at a hostile ship that is close (from the nearest sandbag or crate rack, off the end of an open deck).
+function crossJobs(state, bot, early) {
+  const ship = mainShip(state), L = ship.layout, out = [];
+  if (early) { for (const ld of state.loads || []) out.push({ kind: 'shovel', obj: ld, max: 1 }); return out; }
+  const kind = tables(L).PICKUPS.some((r) => r.kind === 'sandbag') ? 'sandbag' : tables(L).PICKUPS.some((r) => r.kind === 'crate') ? 'crate' : null;
+  if (!kind || state.phase !== 'flying' || state.ship.down || state.goingDown || bot.mate || bot.team === 'enemy' || ship.ai) return out;
+  const now = performance.now();
+  const foe = ship.world.ships.filter((o) => o !== ship && areHostile(ship, o) && !(o.state.down > 0)).map((o) => ({ o, d: Math.hypot(o.pose.x - ship.pose.x, o.pose.y - ship.pose.y) })).sort((a, b) => a.d - b.d)[0];
+  if (!foe || foe.d > XB.THROW_RANGE * 2.2) { bot.throwUntil = 0; return out; }
+  if (!(bot.throwUntil > now) && (bot.carry === 'sandbag' || bot.carry === 'crate' || Math.random() < (XB.THROW_CHANCE * B.THINK_EVERY) / 60)) bot.throwUntil = now + 18000;
+  if (bot.throwUntil > now) out.push({ kind: 'throw', obj: foe.o, max: 2, throwKind: kind });
+  return out;
+}
+// Carry out a throw job: fetch a sandbag, walk to the end of the top deck that faces the target, and throw when the arc lands on her deck.
+function throwWork(p, state, job) {
+  const ship = mainShip(state), L = ship.layout, target = job.obj;
+  if (target.state.down > 0 || !ship.world.ships.includes(target)) { p.botJob = null; return; }
+  if (p.carry !== 'sandbag' && p.carry !== 'crate') { getTool(state, p, job.throwKind); return; }
+  const deck = L.platforms[tables(L).CATWALK];
+  const side = toWorldX(target, target.layout.refPoint.x) > toWorldX(ship, L.refPoint.x) ? 1 : -1; // (world side the target lies on)
+  const sx = side * ship.pose.f > 0 ? deck.x1 - 30 : deck.x0 + 30;
+  if (!steer(p, tables(L).CATWALK, sx, 14)) return;
+  const o = { x: toWorldX(ship, p.x), y: toWorldY(ship, p.y - 70) };
+  const sol = solveThrow(ship, o, target, side);
+  p.jx = 0;
+  p.jy = 0;
+  if (!sol) { job.wait = (job.wait || 0) + 0.01; if (job.wait > 8) { p.carry = null; p.botJob = null; p.throwUntil = 0; } return; }
+  p.jx = sol.jx * ship.pose.f; // (the stick is along the ship; the load flies along the world)
+  p.jy = sol.jy;
+  p.throwNow = true;
+  p.atkQ = true;
 }
 
 // List every job on the ship, most urgent first.
@@ -372,8 +444,9 @@ function listJobs(state, bot) {
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
   const botPlanes = players.filter((q) => q.bot && isEscortStation(q.lock, L)).length; // the crew can only spare so many for the patrol planes
-  const reach = (n) => (isEscortStation(n, L) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : L.kindOf(n) === 'lookout' ? lookoutReach(state) : L.kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : L.kindOf(n) === 'coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : L.kindOf(n) === 'bombBay' ? ((groundTargets(state).length || bombRunOn(state)) && state.bombBay.bombs > 0 ? 0.5 : 4) : L.kindOf(n) === 'swivel' ? (swivelOff(state, n) > 0.3 ? 0.5 : 4) : isSearchlight(n, L) ? lightReach(state, n) : !tables(L).GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
+  const reach = (n) => (isEscortStation(n, L) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : L.kindOf(n) === 'lookout' ? lookoutReach(state) : L.kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : L.kindOf(n) === 'coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : L.kindOf(n) === 'bombBay' ? ((groundTargets(state).length || bombRunOn(state)) && state.bombBay.bombs > 0 ? 0.5 : 4) : L.kindOf(n) === 'swivel' ? (swivelOff(state, n) > 0.3 ? 0.5 : 4) : L.kindOf(n) === 'cannon' || L.kindOf(n) === 'cannonSeat' ? cannonReach(state, n) : isSearchlight(n, L) ? lightReach(state, n) : !tables(L).GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = tables(L).MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
+  jobs.push(...crossJobs(state, bot, true)); // (B.6: loads thrown onto the deck: shovel them off)
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   jobs.push(...linkJobs(state, bot, true)); // (LINKED STATIONS block at the end of this file: loaders for guns with a target)
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
@@ -410,6 +483,7 @@ function listJobs(state, bot) {
   for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // Hovering over an outpost with bombs aboard: one bot drops everything and mans the bomb bay.
   if (bay && bombRun && c.target && Math.hypot(c.target.x - toWorldX(mainShip(state), L.refPoint.x), c.target.y - toWorldY(mainShip(state), L.refPoint.y)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken(bay) && !players.some((q) => L.kindOf(q.lock) === 'bombBay')) jobs.unshift({ kind: 'station', obj: bay, max: 1 });
+  jobs.push(...crossJobs(state, bot, false)); // (B.6: a throw at a rival that is close)
   return jobs;
 }
 
@@ -556,6 +630,8 @@ function operate(p, state, dt) {
       p.jx = Math.cos(want);
       p.jy = Math.sin(want);
     }
+  } else if (L.kindOf(p.lock) === 'cannon' || L.kindOf(p.lock) === 'cannonSeat') {
+    cannonOperate(p, state, dt); // (B.6: the crew cannon)
   } else if (L.kindOf(p.lock) === 'deflector') {
     // Swing the shield toward the nearest thing heading for the ship.
     const t = incoming(state);
@@ -665,6 +741,24 @@ function work(p, state) {
     return;
   }
   if (job.kind === 'link' || job.kind === 'surge') return linkWork(p, state, job); // (LINKED STATIONS block at the end of this file)
+  if (job.kind === 'throw') return throwWork(p, state, job); // (B.6)
+  if (job.kind === 'shovel') { // (B.6: a load thrown onto the deck: hold Action beside it)
+    if (!(state.loads || []).includes(o)) return;
+    if (steer(p, o.d, o.x, 20)) {
+      p.jx = 0;
+      p.fire = true;
+    }
+    return;
+  }
+  if (job.kind === 'steal') { // (B.6: a boarder who has sabotaged her boiler lifts a sack from her coal bunker)
+    const st = L.nearest('coal', p);
+    if (!st || p.carry === 'coal') { p.stealNow = false; return; }
+    if (steer(p, st.d, st.x, 20)) {
+      p.jx = 0;
+      press(p);
+    }
+    return;
+  }
   if (job.kind === 'cutline') {
     if (steer(p, tables(L).MAIN, shipGeom(L).MAIN_X1 - 110, 25)) p.fire = true; // hold Action at the bow to hack her line
     return;
@@ -1219,6 +1313,14 @@ function dareStep(p, state, dt) {
         const h = p.hook;
         if (h.phase === 'caught' && (d.phase === 'return' || d.pt > DR.REEL_TIMEOUT) && h.t >= config.HOOKSHOT.RELEASE_LOCK) p.atkQ = true;
         else p.fire = h.phase === 'caught';
+        return true;
+      }
+      if (p.fly && d.kind === 'cannon') { // (B.6: fired from the crew cannon: drift onto the target ship's top deck, open the parachute above it)
+        const tg = d.target;
+        if (!tg || tg.state.down > 0) { if (!p.chute && p.fvy > 0) press(p); return true; }
+        steerAirTo(p, toWorldX(tg, tg.layout.refPoint.x));
+        const deckY = toWorldY(tg, Math.min(...tg.layout.platforms.map((q) => q.y)));
+        if (!p.chute && p.fvy > 0 && p.y > deckY - 450 && d.pt > 0.8) press(p);
         return true;
       }
       if (p.fly) {

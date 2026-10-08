@@ -17,6 +17,8 @@ import { refillBags } from './gasBags.js';
 import { createMainShip, createShip, shipOf, eachShip, newGuns, transfer, areHostile } from './ships.js';
 import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
+import { createTowing } from './towing.js';
+import { stepThrown, cargoItem } from './cargo.js';
 import { newBot } from './network.js';
 import { BUILDS } from './shipBuild.js';
 import { offerPart, partPrice, moduleNames, newModules, summaryOf } from './partsShop.js';
@@ -79,6 +81,8 @@ export function createSimulation() {
     boarders: [],
     ev: { t: 20, warn: 0 },
     kills: 0,
+    thrown: [], // B.6: sandbags, crates and sacks of coal in the air (cargo.js; map coordinates like a shell)
+    tows: [], // B.6: towlines made fast between two ships (towing.js)
     popups: [], // the words that pop up over a hit ("KABOOM"): made here so a ship's context never makes its own (popups.js)
     chutes: [], // parachutes drifting down from planes that were shot down (planes.js)
     scroll: 0,
@@ -114,6 +118,7 @@ export function createSimulation() {
   };
   // What a ship's systems may ask of the world: the helpers above, and (filled in as they are made) the world's systems and the run-level rules.
   const W = { puff, phoneFx, stat, credit, emitPlayerUi, wreck: (text) => wreck(text), finishLimp: () => finishLimp(), restartGame: () => restartGame() };
+  W.towing = createTowing({ world: state, puff, phoneFx }); // (B.6: towlines between ships - every ship's ATTACK asks it)
 
   // Add a ship to this sky and give her her systems (shipSim.js). The first is the main ship: her body, layout and course position are the world state's own (parts = null).
   // Another ship (the dev flag ?ships=2, the --check-two-ships gate; PvP and the gunship come later) takes her build (a parts list; opts.layout = a ready Layout), her `id`
@@ -130,7 +135,7 @@ export function createSimulation() {
     sh.sim = createShipSim(state, sh, W);
     if (hijack) sh.sim.attach({ hijack });
     if (!sh.main && W.course && opts.place !== false) W.course.place(sh); // (M.2: another ship flies from her own pose; she starts at her station, in open air. The enemy gunship is put where she appears by her own code: opts.place false)
-    for (const o of state.ships) if (o !== sh) { sh.sim.air.addProvider(rivalDecks(sh, o)); o.sim.air.addProvider(rivalDecks(o, sh)); } // (Versus: each ship's crew can leap onto the other's decks)
+    for (const o of state.ships) if (o !== sh) { sh.sim.air.addProvider(rivalDecks(sh, o)); o.sim.air.addProvider(rivalDecks(o, sh)); sh.sim.air.addProvider(fleetDecks(sh, o)); o.sim.air.addProvider(fleetDecks(o, sh)); } // (Versus: each ship's crew can leap onto the other's decks; B.6: a crewman fired from a crew cannon lands on any ship's)
     return sh;
   };
   // Versus (B.4): the decks of a ship of ANOTHER team are landing places (and hook anchors) for a crewman of `me` in the air - a leap, a parachute or a swing across and he is aboard her
@@ -142,10 +147,23 @@ export function createSimulation() {
       return { id: 'rival:' + rv.id + ':' + d, y: toShipY(me, toWorldY(rv, pl.y)), x0: Math.min(a, b), x1: Math.max(a, b), onLand: (player) => boardShip(player, me, rv, d) };
     });
   };
+  // B.6: a ship that is NOT an enemy of `me` (a Versus teammate, a co-op fleet ship): her decks catch only a crewman fired from a crew cannon (`only`), who walks off as her crew.
+  const fleetDecks = (me, rv) => () => {
+    if (!state.ships.includes(rv) || areHostile(me, rv) || rv.state.down > 0 || rv.ai) return [];
+    return rv.layout.platforms.map((pl, d) => {
+      const a = toShipX(me, toWorldX(rv, pl.x0)), b = toShipX(me, toWorldX(rv, pl.x1));
+      return { id: 'fleet:' + rv.id + ':' + d, y: toShipY(me, toWorldY(rv, pl.y)), x0: Math.min(a, b), x1: Math.max(a, b), only: (p) => !!p.cannon, onLand: (player) => {
+        const rx = toShipX(rv, toWorldX(me, player.x));
+        transfer(state, player, rv, d, rx);
+        player.chute = 0; player.chuteOpen = false; player.tumble = false;
+        phoneFx(player, "You're aboard " + (rv.name || 'the other ship') + '!', [60, 40, 60]);
+      } };
+    });
+  };
   const boardShip = (player, me, rv, d) => {
     transfer(state, player, rv, d, toShipX(rv, toWorldX(me, player.x)));
     player.hook = null;
-    player.carry = null; // (the hookshot stays on the ship he left: aboard her he fights with his hands)
+    if (!cargoItem(player.carry)) player.carry = null; // (the hookshot stays on the ship he left: aboard her he fights with his hands; a sack of coal he lifted from her does not)
     player.chute = 0;
     player.chuteOpen = false;
     player.tumble = false;
@@ -286,6 +304,10 @@ export function createSimulation() {
     Object.assign(state.shield, { ang: -Math.PI / 2, on: false, flash: 0 });
     state.tempo = newTempo();
     state.supply = null;
+    state.thrown.length = 0; state.tows.length = 0; // (B.6: loads in the air and towlines are gone with the voyage, and so are the ship's own loads, cannon records and rack stocks)
+    if (state.loads) state.loads.length = 0;
+    if (state.cannons) state.cannons = {};
+    if (state.rackStock) state.rackStock = {};
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
     for (const [name, m] of Object.entries(layout.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, auto: 0, prime: 0, primed: false });
     spotter.reset();
@@ -1063,6 +1085,8 @@ export function createSimulation() {
     }
 
     shipCollide.step(dt); // (every ship has moved: two hulls that overlap are pushed apart, bounce and hurt - shipCollide.js)
+    if (state.tows.length) W.towing.step(dt); // (B.6: a towline pulls both ships and twists them)
+    if (state.thrown.length) stepThrown(state, dt, puff); // (B.6: thrown sandbags, crates and sacks land on the first deck they cross)
 
     // Enemy fire against every ship: rock gives cover, a Deflector stops it, a hit on the hull is that ship's impact.
     for (const bullet of state.bullets) {
@@ -1148,6 +1172,7 @@ export function createSimulation() {
     addShip,
     removeShip,
     shipCollide, // (ship-ship collision, shipCollide.js: stats = { contacts, hits } for the gates)
+    towing: W.towing, // (B.6: towlines, towing.js)
     match, // (Versus, pvp/match.js: the lobby's two teams, the shelf, the rounds; match.on while Versus is selected)
     forces, // (forces at places: forces.js)
     interaction,

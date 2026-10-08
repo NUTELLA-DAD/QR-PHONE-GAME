@@ -31,6 +31,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     // The enemy gunship's decks and hull (and our own decks): horizontal edges.
     for (const s of air.surfaces()) {
       if (s.onLand === undefined && s.d === undefined) continue;
+      if (s.only) continue; // (B.6: a friendly ship's decks are a cannon flyer's landing place, not a hook anchor)
       const sy = val(s.y);
       if (sy == null) continue;
       const x0 = val(s.x0);

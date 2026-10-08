@@ -20,6 +20,8 @@ import { createSearchlights, isSearchlight } from './searchlight.js';
 import { shipGeom } from './gunship.js';
 import { createAirborne } from './airborne.js';
 import { createHookshot } from './hookshot.js';
+import { createCannon } from './cannon.js';
+import { createCargo, cargoItem, isStocked } from './cargo.js';
 import { pop } from './popups.js';
 import { assistAim } from './aim.js';
 import { createPrime } from './prime.js';
@@ -152,10 +154,10 @@ export function createShipSim(world, ship, W) {
   const rebuildPickups = () => { PICKUPS.length = 0; PICKUPS.push(...layout.racks, ...layout.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))); };
   rebuildPickups();
   layout.onChange(rebuildPickups);
-  const LOCKABLE_KINDS = ['helm', 'lookout', 'bombBay', 'deflector', 'coil', 'searchlight', 'escort', 'gun', 'swivel'];
+  const LOCKABLE_KINDS = ['helm', 'lookout', 'bombBay', 'deflector', 'coil', 'searchlight', 'escort', 'gun', 'swivel', 'cannon', 'cannonSeat'];
   const LOCKABLE = (name) => LOCKABLE_KINDS.includes(kindOf(name)) || isSearchlight(name, layout) || isEscortStation(name, layout) || !!state.GUNS[name];
   // What the phone calls each kind of station (its button set and label).
-  const PHONE_KIND = { helm: 'helm', gun: 'gun', boiler: 'boiler', lookout: 'lookout', bombBay: 'bombbay', deflector: 'shield', coil: 'coil', searchlight: 'light', escort: 'escort', swivel: 'swivel' };
+  const PHONE_KIND = { helm: 'helm', gun: 'gun', boiler: 'boiler', lookout: 'lookout', bombBay: 'bombbay', deflector: 'shield', coil: 'coil', searchlight: 'light', escort: 'escort', swivel: 'swivel', cannon: 'cannon', cannonSeat: 'cannonseat' };
 
   // Sunken Sea: crew on the lower decks wade slowly while the ship is flooded.
   const wadeMul = (p) => (p.d != null && PLATFORMS[p.d] && PLATFORMS[p.d].y >= layout.lowDeckY && state.sea && state.sea.flood > 0 ? 1 - state.sea.flood * config.ENVIRONMENTS.sea.FLOOD.SLOW_CREW : 1);
@@ -163,7 +165,9 @@ export function createShipSim(world, ship, W) {
   // What the Action button does for this player right now (or null) - the "use" half of interaction() below.
   // hold = keep the button held to make progress; otherwise a tap does it.
   // legacy (bots): one combined button, so racks, ammo, coal and stations are decided here too; people get those on GRAB (grabsFor).
+  const takeLabel = (s) => (s.kind === 'cannonSeat' ? 'Climb into the cannon' : s.kind === 'cannon' ? 'Man the cannon' : 'Take ' + s.n);
   const useFor = (player, station, legacy) => {
+    if (player.fly && player.cannon && !player.chute && !player.hj && player.ko <= 0) return { type: 'chute', label: 'PARACHUTE!' }; // (B.6: fired from the crew cannon - Action opens the parachute)
     if (player.lock || player.conn != null || player.fall || player.swing || player.air) return null;
     const here = (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r;
     const tool = player.carry;
@@ -172,8 +176,13 @@ export function createShipSim(world, ship, W) {
     if (revive) return { type: 'revive', obj: revive, hold: true, time: T.REVIVE_TIME, label: `Revive ${revive.name}` };
     const boarding = gunship.interaction(player);
     if (boarding) return boarding;
-    // Standing over the open bomb bay doors: jump out (parachute). Not while carrying ammo - that loads the bombs.
+    // Standing over the open bomb bay doors: jump out (parachute). Not while carrying ammo - that loads the bombs. (B.6: carrying a sandbag or crate there, Action lets IT fall through the belly instead.)
+    const dropC = cargo.dropAction(player);
+    if (dropC && player.d === BAY_D && Math.abs(player.x - layout.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return dropC;
     if ((!player.bot || (player.dare && player.dare.kind === 'drop')) && player.d === BAY_D && tool !== 'ammo' && Math.abs(player.x - layout.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return { type: 'jump', label: 'Jump!' };
+    // B.6: at the rail with a sandbag or crate in your hands, Action dumps it overboard for a quick lift; a load lying on the deck by your feet wants shovelling off.
+    const dumpC = cargo.dumpAction(player) || cargo.shovelAction(player, here);
+    if (dumpC) return dumpC;
     // Storm Front: while a bolt is charging, a lightning rod in reach comes first (hold Action = grounded).
     const rod = state.stormJob.charge && state.stormJob.rods.find((o) => here(o, 75));
     if (rod) return { type: 'rod', obj: rod, hold: true, time: 1, label: 'HOLD THE ROD!' };
@@ -235,7 +244,7 @@ export function createShipSim(world, ship, W) {
       }
       const loader = !player.mate && links.loaderAction(player, station); // a manned gun: hold Action to prime the shell for the gunner
       if (loader) return loader;
-      if (legacy && LOCKABLE(station.n) && !taken(station.n) && !player.mate) return { type: 'station', station, label: 'Take ' + station.n }; // (a ship's mate never takes a station)
+      if (legacy && LOCKABLE(station.n) && !taken(station.n) && !player.mate) return { type: 'station', station, label: takeLabel(station) }; // (a ship's mate never takes a station)
       // (people can always bump a bot off a station: that is a GRAB action too, see grabsFor)
     }
     if (fire) return { type: 'need', label: 'Need an extinguisher' };
@@ -247,6 +256,9 @@ export function createShipSim(world, ship, W) {
   const hostileUse = (player, here) => {
     const V = config.PVP;
     const helm = one('helm'), boiler = one('boiler');
+    // B.6: a boarder at the enemy's coal bunker can lift a sack of her coal and carry it off: her firebox is the lighter for it (and so is her steam), and his own boiler eats it.
+    const bunker = (!player.bot || player.stealNow) && player.carry !== 'coal' && state.ship.fuel > 0 && all('coal').find((s) => here(s, V.HAND_REACH)); // (a bot only after it has sabotaged her boiler: sabotageBoiler sets stealNow)
+    const steal = bunker ? { type: 'steal', station: bunker, label: 'Steal her coal!' } : null;
     if (ship.ai) { // the enemy gunship: the rope's swing back across (at her stern), the charge at her boiler (hold), her helm (hold: she surrenders)
       const back = gunship.interaction(player);
       if (back) return back;
@@ -255,14 +267,14 @@ export function createShipSim(world, ship, W) {
         return defender ? { type: 'need', label: 'Her helmsman is in the way!' } : { type: 'capture', obj: captureJob, hold: true, time: V.CAPTURE_TIME, label: 'TAKE HER HELM!' };
       }
       if (boiler && here(boiler, V.HAND_REACH) && !ship.ai.g.charge) return { type: 'sabotage', obj: sabotageJob, hold: true, time: ship.ai.plantTime(), label: ship.ai.plantLabel() };
-      return null;
+      return steal;
     }
     if (helm && here(helm, V.HAND_REACH)) {
       const defender = Object.values(state.players).some((q) => q !== player && !isHostile(q) && !q.fall && !(q.ko > 0) && q.conn == null && q.d === helm.d && Math.abs(q.x - helm.x) < V.DEFEND_REACH);
       return defender ? { type: 'need', label: 'Defenders in the way!' } : { type: 'capture', obj: captureJob, hold: true, time: V.CAPTURE_TIME, label: 'TAKE THE HELM!' };
     }
     if (boiler && here(boiler, V.HAND_REACH)) return { type: 'sabotage', obj: sabotageJob, hold: true, time: V.SABOTAGE_TIME, label: 'Sabotage the boiler' };
-    return null;
+    return steal;
   };
 
   // The GRAB half (people only): take a tool, swap or put one back, grab ammo / coal / ice, hop onto a station.
@@ -286,10 +298,10 @@ export function createShipSim(world, ship, W) {
     if (station) {
       if (station.kind === 'ammo' && tool !== 'ammo') add({ type: 'ammo', station, label: 'Grab ammo' }, station.x, 'ammo|' + station.n);
       if (station.kind === 'coal' && tool !== 'coal') add({ type: 'coal', station, label: 'Grab coal' }, station.x, 'coal|' + station.n);
-      if (LOCKABLE(station.n) && !taken(station.n) && !player.mate) add({ type: 'station', station, label: 'Take ' + station.n, swap: false }, station.x, 'station|' + station.n); // (a ship's mate never takes a station)
+      if (LOCKABLE(station.n) && !taken(station.n) && !player.mate) add({ type: 'station', station, label: takeLabel(station), swap: false }, station.x, 'station|' + station.n); // (a ship's mate never takes a station)
       else {
         const botThere = !player.mate && Object.values(state.players).find((q) => q.bot && q.lock === station.n); // (people can always bump a bot off a station)
-        if (botThere) add({ type: 'station', station, bump: botThere, label: 'Take ' + station.n, swap: false }, station.x, 'station|' + station.n);
+        if (botThere) add({ type: 'station', station, bump: botThere, label: takeLabel(station), swap: false }, station.x, 'station|' + station.n);
       }
     }
     const best = sticky(player, 'grabKey', out, (o) => Math.abs(o.x - player.x), (o) => o.key);
@@ -364,10 +376,15 @@ export function createShipSim(world, ship, W) {
     shipPop(victim.x, victim.y - 130, 'KO', '#ffd23f', 1);
   };
 
+  // Is there something here a shove would hit (a raider, a foe, a latched bat)? Then ATTACK shoves, even with a sandbag in your hands.
+  const shoveNear = (player) => state.boarders.some((b) => !b.fall && b.conn == null && b.d === player.d && Math.abs(b.x - player.x) < T.SHOVE_RANGE) || !!foeInReach(player, T.SHOVE_RANGE) || !!batInReach(player, T.SHOVE_RANGE);
   // Attack button: a sword hurts raiders; bare hands only shove them back.
   const attack = (player) => {
     if (hookshot.onAttack(player)) return; // carrying the hookshot: fire it (or let go of the rope)
     if ((player.atkCd || 0) > 0 || player.lock || player.conn != null) return;
+    if (cargo.wantsThrow(player, () => shoveNear(player))) return cargo.throwItem(player); // (B.6: on an open deck, ATTACK throws the sandbag, crate or sack of coal you carry - unless there is something to shove)
+    if (player.carry === 'towline' && W.towing && W.towing.throwLine(ship, player)) return; // (B.6: ATTACK throws the towline's grapple at another ship)
+    if (player.carry === 'sword' && W.towing && W.towing.cutNear(ship, player)) return; // (...and a sword cuts a line where it is made fast to this ship)
     const sword = player.carry === 'sword';
     player.atkCd = sword ? T.SWORD_COOLDOWN : T.SHOVE_COOLDOWN;
     player.swingT = performance.now();
@@ -533,6 +550,8 @@ export function createShipSim(world, ship, W) {
   // (Ship 0's copy is the world's: simulation.js makes it, and her context forwards state.env, icing ... to it.) What stays shared is the sky itself: one weather record, one lightning bolt, one sea level.
   if (!ship.main) ownEnv = createEnvironment({ state, puff, phoneFx, impact, damageHull, ignite: fireSys.ignite });
   const air = createAirborne({ state, puff, phoneFx });
+  const cannon = createCannon({ state, ship, air, modules, puff, phoneFx, stat }); // the crew cannon's two stations (cannon.js)
+  const cargo = createCargo({ state, ship, air, puff, phoneFx, stat }); // thrown ballast, loads on her decks, shovelling and dumping (cargo.js)
 
   // After any pickup / put-back / swap / station take: a short buzz (two pulses for letting go) and the grab lockout, so a
   // second press right behind the first (a double tap) can't undo it. Bots have no phone and no lockout.
@@ -599,6 +618,7 @@ export function createShipSim(world, ship, W) {
     state.ev.warn = 3;
     state.ev.warnText = 'THE ' + (ship.team ? ship.team.name + ' ' : '') + 'BOILER IS SABOTAGED!';
     tally(player, 'sabotage');
+    if (player.bot && all('coal').length) player.stealNow = true; // (B.6: ...and now he loots her bunker)
     phoneFx(player, 'Boiler sabotaged!', [60, 60, 60]);
   };
   const takeHelm = (player) => {
@@ -632,8 +652,24 @@ export function createShipSim(world, ship, W) {
     } else if (type === 'swing') gunship.swing(player);
     else if (type === 'rack') {
       const put = player.carry === act.obj.kind;
-      player.carry = put ? null : act.obj.kind;
-      grabbed(player, put);
+      if (isStocked(act.obj.kind)) { if (cargo.rack(player, act.obj)) grabbed(player, put); } // (B.6: sandbags and crates come from a finite stock)
+      else {
+        player.carry = put ? null : act.obj.kind;
+        grabbed(player, put);
+      }
+    } else if (type === 'dump') cargo.dump(player);
+    else if (type === 'dropcargo') cargo.drop(player);
+    else if (type === 'chute') {
+      if (air.popChute(player)) phoneFx(player, 'Parachute coming out - steer with the stick!', [40]);
+    } else if (type === 'steal') {
+      state.ship.fuel = Math.max(0, state.ship.fuel - config.CROSS.CARGO.STEAL_FUEL); // her coal bunker is the lighter for it: the sack goes with the thief
+      player.carry = 'coal';
+      player.stealNow = false;
+      grabbed(player, false);
+      stat(player, 'stolen');
+      shipPuff(act.station.x, PLATFORMS[act.station.d].y - 50, '#2b2b2b', 8);
+      tally(player, 'stolen');
+      phoneFx(player, 'Coal sack lifted! Get it home to YOUR boiler', [50, 30, 50]);
     } else if (type === 'vent') {
       const i = layout.vents.indexOf(act.obj);
       state.ventOpen[i] = !state.ventOpen[i];
@@ -827,6 +863,10 @@ export function createShipSim(world, ship, W) {
           }
         } else if (kindOf(player.lock) === 'swivel') {
           engines.turn(player, dt); // the stick turns the engine (engines.js)
+        } else if (kindOf(player.lock) === 'cannon') {
+          cannon.gunner(player, dt); // the crew cannon's gunner: the stick aims the barrel, hold to charge, let go to fire (cannon.js)
+        } else if (kindOf(player.lock) === 'cannonSeat') {
+          cannon.seat(player, dt); // ...and the one in the barrel: with nobody at the post he aims and fires himself
         } else if (kindOf(player.lock) === 'bombBay') {
           // Bombardier: FIRE drops a bomb through the belly doors.
           const bay = state.bombBay;
@@ -978,7 +1018,7 @@ export function createShipSim(world, ship, W) {
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
-              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', sabotage: 'sabotage', cutline: 'boarding', capture: 'captures' }[act.type]);
+              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', sabotage: 'sabotage', cutline: 'boarding', capture: 'captures', shovel: 'shovels' }[act.type]);
               if (act.type === 'fire') shipPop(object.x, player.y - 120, 'fireOut', '#9fd3e6', 0.8);
               if (act.type === 'hole' || act.type === 'gas') shipPop(object.x, player.y - 120, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
@@ -993,6 +1033,7 @@ export function createShipSim(world, ship, W) {
               else if (act.type === 'sabotage') (isHostile(player) ? sabotageBoiler(player) : gunship.plant(player));
               else if (act.type === 'capture') takeHelm(player);
               else if (act.type === 'cutline') gunship.cutLine(player);
+              else if (act.type === 'shovel') cargo.shovel(object, player); // (B.6: a load goes over the rail)
               else object.ko = 0;
               shipPuff(object.x, player.y - 50, '#8fe388', 10);
             }
@@ -1031,15 +1072,18 @@ export function createShipSim(world, ship, W) {
       const takenBySomeone = !player.lock && !!stationName && LOCKABLE(stationName) && Object.values(state.players).some((q) => q.lock === stationName && (q.bot ? player.bot : true));
       let label = 'Hey!';
       let hold = false;
+      let cannonStatus = '';
       if (player.lock) {
         const working = modules.works(state, player.lock);
         label = !working && kind !== 'helm' && kind !== 'lookout' && kind !== 'light' && kind !== 'escort' && kind !== 'swivel' ? 'BROKEN' : kind === 'swivel' ? 'Swivel engine' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'escort' ? ((escortFor(state, player.lock) || {}).flying ? 'Auto guns' : 'Wait...') : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : kind === 'light' ? 'FOCUS!' : 'Honk!';
         hold = kind === 'gun' || kind === 'bombbay' || kind === 'coil' || kind === 'light';
+        const cph = kind === 'cannon' || kind === 'cannonseat' ? cannon.phone(player) : null; // (B.6: the crew cannon's own words)
+        if (cph) { label = cph.label; hold = cph.hold; cannonStatus = cph.status; }
       } else if (player.act) {
         label = player.act.label;
         hold = !!player.act.hold;
       }
-      if (player.fly) label = player.chuteOpen ? 'Steer!' : player.chute ? 'Chute...' : player.fvy > 0 ? 'Falling!' : 'Airborne';
+      if (player.fly) label = player.chuteOpen ? 'Steer!' : player.chute ? 'Chute...' : player.cannon ? 'PARACHUTE!' : player.fvy > 0 ? 'Falling!' : 'Airborne';
       if (player.hook && player.hook.phase === 'caught') {
         label = 'Reel in (hold)';
         hold = true;
@@ -1050,6 +1094,7 @@ export function createShipSim(world, ship, W) {
       }
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
+      if (!status && cannonStatus) status = cannonStatus;
       if (kind === 'helm' && player.lock && !status) status = course.helmHint();
       if (isEscortStation(stationName, layout) && !status) status = escort.status(stationName);
       if (kind === 'light' && player.lock && !status) status = searchlights.status(stationName);
@@ -1067,7 +1112,7 @@ export function createShipSim(world, ship, W) {
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
       if (!status && !player.bot) status = env.deep.status(player) || ''; // spores (cough), clogged engines, oxygen
       const ammoText = gun ? gun.ammo : kind === 'bombbay' ? state.bombBay.bombs : null;
-      let attackLabel = !player.lock && player.conn == null && batInReach(player, config.WAVES.BAT_NOTICE) ? 'Swat bat!' : player.carry === 'sword' ? 'Swing' : player.carry === 'hookshot' ? 'Hook!' : 'Shove';
+      let attackLabel = !player.lock && player.conn == null && batInReach(player, config.WAVES.BAT_NOTICE) ? 'Swat bat!' : player.carry === 'sword' ? 'Swing' : player.carry === 'hookshot' ? 'Hook!' : player.carry === 'towline' ? 'Hook a ship!' : !player.bot && cargo.wantsThrow(player, () => shoveNear(player)) ? 'Throw!' : 'Shove';
       if (player.hook && player.hook.phase === 'caught') attackLabel = 'Let go!';
       if (player.lock && gun && !player.hj) attackLabel = 'Prime'; // (on a gun the left button charges the shell)
       const primePct = player.lock && gun ? (gun.primed ? 10 : Math.round((gun.prime || 0) * 10)) : 0;
@@ -1104,6 +1149,8 @@ export function createShipSim(world, ship, W) {
   // A2: modules, steam, the engines and the gasbag, the flight, the wreck.
   const stepSystems = (dt) => {
     links.update(dt);
+    if (state.cannons) cannon.update(dt); // (B.6: the crew cannon reloads; a ship with none skips both)
+    if (state.loads || state.rackStock) cargo.update(dt);
     modules.update(state, dt);
     sails.update(dt); // (raised sails: the extra speed, gust tears)
     // What the ship has to fly with (S.5e): none of these is needed to fly, each one missing just takes some control away.
@@ -1313,7 +1360,7 @@ export function createShipSim(world, ship, W) {
   // B2: holes, fires and bombs wear off when nobody works on them; fire spreads; the hull takes what burns and leaks; raiders.
   const stepUpkeep = (dt) => {
     // Progress drains only while nobody is working on it.
-    for (const object of [...state.breaches, ...state.fires, ...state.bombs, ...state.gasHoles, ...state.icing, ...state.clogs, state.o2tank, ...hostileJobs]) {
+    for (const object of [...state.breaches, ...state.fires, ...state.bombs, ...state.gasHoles, ...state.icing, ...state.clogs, state.o2tank, ...hostileJobs, ...(state.loads || [])]) {
       if (!object.worked) object.prog = Math.max(0, (object.prog || 0) - dt * 0.4);
       object.worked = false;
     }
@@ -1366,6 +1413,9 @@ export function createShipSim(world, ship, W) {
     modules.reset();
     goingDown.reset();
     comeAbout.reset();
+    if (state.loads) state.loads.length = 0; // (B.6: a rebuilt ship carries no one else's loads, and her cannons and racks start fresh)
+    if (state.cannons) state.cannons = {};
+    if (state.rackStock) state.rackStock = {};
     for (const player of crew ? Object.values(state.players) : []) {
       const [e0, e1] = layout.boarderEntryPoints;
       Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x) });
@@ -1424,7 +1474,7 @@ export function createShipSim(world, ship, W) {
   }
 
   return {
-    ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, goingDown, raiders, escort, coil, searchlights, air,
+    ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, goingDown, raiders, escort, coil, searchlights, air, cannon, cargo,
     get hookshot() { return hookshot; },
     get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
     hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop,

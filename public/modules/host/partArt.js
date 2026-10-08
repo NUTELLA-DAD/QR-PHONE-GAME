@@ -172,6 +172,35 @@ const DRAW = {
     filled(RED, () => { g.moveTo(24, 3); g.quadraticCurveTo(38, 1, 50, 6); g.lineTo(38, 9); g.closePath(); }); // the pennant
     filled(WOOD, () => g.rect(6, 88, 88, 8));
   },
+  crewCannon(g, { filled, line }) { // B.6: a big brass cannon on a wooden carriage, tipped up, with a little crewman's head showing at the muzzle (the same cannon the ship wears: shipArt.js liveCannons)
+    filled(WOOD_DARK, () => g.roundRect(14, 70, 62, 14, 4)); // the carriage
+    for (const x of [28, 62]) filled(IRON, () => g.arc(x, 82, 9, 0, 7)); // the wheels
+    g.save(); g.translate(30, 62); g.rotate(-0.62); // the barrel
+    filled(BRASS, () => { g.moveTo(-8, -13); g.lineTo(50, -10); g.lineTo(50, 10); g.lineTo(-8, 13); g.closePath(); });
+    filled('#a8863a', () => g.rect(46, -14, 12, 28)); // the muzzle ring
+    filled(BRASS, () => g.arc(-10, 0, 13, 0, 7)); // the breech
+    filled('#2b2622', () => g.ellipse(58, 0, 3.4, 9, 0, 0, 7)); // the dark mouth
+    g.restore();
+    filled('#e9c9a0', () => g.arc(82, 22, 9, 0, 7)); // the crewman's head at the muzzle
+    filled(RED, () => { g.moveTo(73, 20); g.quadraticCurveTo(82, 8, 91, 20); g.closePath(); }); // his cap
+  },
+  rack_sandbag(g, { filled, line }) {
+    filled(WOOD, () => g.roundRect(10, 12, 80, 76, 6));
+    const sack = (x, y, w, h) => filled('#b79a63', () => g.roundRect(x - w / 2, y - h, w, h, 9));
+    sack(32, 80, 36, 24); sack(68, 80, 36, 24); sack(50, 56, 36, 24);
+    line([[40, 46], [60, 46]], 2.4);
+    g.fillStyle = INK(); g.beginPath(); g.moveTo(50, 16); g.lineTo(44, 24); g.lineTo(56, 24); g.closePath(); g.fill(); // an arrow: it is thrown
+  },
+  rack_crate(g, { filled, line }) {
+    filled(WOOD, () => g.roundRect(10, 12, 80, 76, 6));
+    for (const [x, y] of [[16, 48], [52, 48], [34, 14]]) { filled('#c9a05f', () => g.rect(x, y, 34, 34)); line([[x, y], [x + 34, y + 34]], 2.4, WOOD_DARK); line([[x + 34, y], [x, y + 34]], 2.4, WOOD_DARK); }
+  },
+  rack_towline(g, { filled, line }) {
+    filled(WOOD, () => g.roundRect(10, 12, 80, 76, 6));
+    filled('#d6bf8a', () => g.arc(40, 52, 24, 0, 7)); filled(WOOD, () => g.arc(40, 52, 9, 0, 7)); // a coil of rope
+    g.strokeStyle = '#a89868'; g.lineWidth = 2.4; for (const r of [13, 17, 21]) { g.beginPath(); g.arc(40, 52, r, 0, 7); g.stroke(); }
+    g.strokeStyle = '#8a8588'; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(62, 44); g.quadraticCurveTo(80, 30, 82, 18); g.moveTo(62, 44); g.quadraticCurveTo(84, 50, 80, 72); g.stroke(); // the grapple
+  },
   armour(g, { filled, line }) { // riveted iron plate: three bolted panels with a seam between, a rivet at every corner and a pale sheen (the same plate the ship wears: shipArt.js drawArmour)
     filled('#7b7f84', () => g.roundRect(8, 24, 84, 52, 5));
     g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(12, 28, 76, 9); // the sheen

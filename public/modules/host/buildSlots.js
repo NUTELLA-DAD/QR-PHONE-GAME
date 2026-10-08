@@ -87,7 +87,7 @@ export function gunMountFor(q, x, fore) {
 // The full decks (and nests) that are open air: where a mast, a lamp or a boarding point may stand (a covered deck has a roof).
 const BODY_ROWS = ['catwalk', 'main', 'lower', 'keel', 'deep'];
 const openDecks = (L, rows = BODY_ROWS) => L.platforms.filter((q) => q.outside && rows.includes(rowOf(q)));
-const RACK_LABEL = { hammer: 'Hammer rack', sword: 'Sword rack', hookshot: 'Hookshot rack', ice: 'Ice locker' };
+const RACK_LABEL = { hammer: 'Hammer rack', sword: 'Sword rack', hookshot: 'Hookshot rack', ice: 'Ice locker', sandbag: 'Sandbag rack', crate: 'Crate stack', towline: 'Towline reel' };
 const BAY_W = 290; // a bomb bay compartment (the classic one is this wide)
 
 // The palette, in the order a ship is usually built: each type lists its candidate slots for a build (L = its layout).
@@ -154,6 +154,9 @@ export const PALETTE = [
     return out;
   } },
   ...['hammer', 'sword', 'hookshot', 'ice'].map((kind) => ({ id: 'rack_' + kind, label: RACK_LABEL[kind], hint: 'click a deck spot', slots: (L) => rackSlots(L, 'rack', RACK_LABEL[kind].toLowerCase(), kind) })),
+  // Cross-ship play (B.6, config.CROSS): cargo racks (ATTACK throws what you take: a sandbag or crate lands as a live load on whatever deck it hits), and a towline reel (hook another ship and tow her).
+  ...['sandbag', 'crate', 'towline'].map((kind) => ({ id: 'rack_' + kind, label: RACK_LABEL[kind], hint: kind === 'towline' ? 'click a deck spot: take the line, ATTACK throws its grapple at another ship in reach and tows her' : 'click a deck spot: take one and throw it (ATTACK on an open deck); it lands as dead weight and tips whatever ship it hits', slots: (L) => rackSlots(L, 'rack', RACK_LABEL[kind].toLowerCase(), kind) })),
+  { id: 'crewCannon', label: 'Crew cannon', hint: 'click a spot on an open-air deck: a brass cannon that fires a crew member across the sky. One climbs into the barrel, a second aims and fires from the post behind it (or the one inside fires himself, weaker). Heavy; needs room for the post', slots: (L) => cannonSlots(L) },
   { id: 'searchlight', label: 'Searchlight', hint: 'click a spot on the nest or top deck', slots: (L) => {
     const out = [];
     for (const q of L.platforms.filter((o) => ['crow2', 'nest'].includes(rowOf(o)) || (o.outside && BODY_ROWS.includes(rowOf(o))))) { // (a lamp needs the open air)
@@ -224,6 +227,22 @@ export const PALETTE = [
   { id: 'gasValve', label: 'Gas valve', hint: 'drop it on the nest, top or main deck: it feeds the bag over it (the nearest). A shut valve cuts that bag off from the pump', slots: (L) => valveSlots(L) },
   { id: 'gasbag', label: 'Gasbag', hint: 'click a stretch of the gasbag row: one more bag beside the others (a row of small ones keeps flying if you lose one)', slots: (L, parts) => bagSlots(parts) },
 ];
+
+// The crew cannon (B.6): a barrel on an open-air deck with the gunner's post behind it (CANNON.GUNNER_DX toward the ship's middle), both clear of other stations, racks and ladders; the barrel
+// faces the way the ship's nearer end does (fore half: forward and up, aft half: aft and up), and cannons stand at least 2 posts apart.
+function cannonSlots(L) {
+  const out = [], K = config.CROSS.CANNON, mid = midX(L);
+  for (const q of openDecks(L)) {
+    for (const x of spots(q, 100)) {
+      const fore = x > mid, dir = fore ? 1 : -1;
+      if ((L.cannons || []).some((c) => c.p === q.id && Math.abs(c.x - x) < 2 * K.GUNNER_DX + 60) || !roomAt(L, q.id, x, true)) continue;
+      const side = [-dir, dir].find((s) => { const gx = x + s * K.GUNNER_DX; return gx > q.x0 + 25 && gx < q.x1 - 25 && roomAt(L, q.id, gx, true); }); // (the post aft of the barrel if there is room, else in front of it)
+      if (side == null) continue;
+      out.push({ p: q.id, x, label: `Crew cannon on the ${q.name}, x ${x} (faces ${fore ? 'forward' : 'aft'})`, apply: (ps) => [...ps, { part: 'crewCannon', n: nameFor(ps, 'Crew Cannon'), p: q.id, x, aim: fore ? K.AIM : Math.PI - K.AIM, arc: K.ARC, ...(side === -dir ? {} : { post: side }) }] });
+    }
+  }
+  return out;
+}
 
 // Armour plate (S.5g): a slot is a two-column stretch of a deck's hull wall (covered deck) or rail (open-air deck), from the deck's aft end along, plus the stretch at its fore end;
 // not one that is already (nearly) plated. It sits on the deck row (y = the deck's), the pin in the middle of the stretch.
@@ -318,7 +337,7 @@ const RULES = {
   medbay: { rows: ['main', 'lower', 'keel', 'deep'], once: (parts) => count(parts, (p) => p.part === 'medbay') > 0, onceText: 'A ship has one medbay.' },
   bombBay: { rows: ['lower'], once: (parts) => count(parts, (p) => p.part === 'bombBay' || (p.part === 'deck' && p.id === 'bay')) > 0, onceText: 'A ship has one bomb bay.' },
   lift: { rows: ['main'], once: (parts) => count(parts, (p) => p.part === 'lift') > 0, onceText: 'A ship has one lift.' },
-  boarding: { rows: ['catwalk', 'main', 'lower', 'keel', 'deep'], open: true }, armour: { rows: BODY_ROWS }, rack_hammer: { rows: RACK_ROWS }, rack_sword: { rows: RACK_ROWS }, rack_hookshot: { rows: RACK_ROWS }, rack_ice: { rows: RACK_ROWS },
+  boarding: { rows: ['catwalk', 'main', 'lower', 'keel', 'deep'], open: true }, armour: { rows: BODY_ROWS }, rack_hammer: { rows: RACK_ROWS }, rack_sword: { rows: RACK_ROWS }, rack_hookshot: { rows: RACK_ROWS }, rack_ice: { rows: RACK_ROWS }, rack_sandbag: { rows: RACK_ROWS }, rack_crate: { rows: RACK_ROWS }, rack_towline: { rows: RACK_ROWS }, crewCannon: { rows: BODY_ROWS, open: true },
   extinguisher: { rows: RACK_ROWS }, vent: { rows: ['catwalk', 'main', 'lower', 'keel', 'deep'] }, gasValve: { rows: ['nest', 'catwalk', 'main'], needsBag: true }, ballast: { rows: ['main', 'lower', 'keel', 'deep'] }, ballast_hang: { rows: ['lower', 'keel', 'deep'] },
   ladder: { link: true }, pole: { link: true },
 };

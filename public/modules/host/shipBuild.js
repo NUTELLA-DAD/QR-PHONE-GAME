@@ -21,7 +21,7 @@ export const TWIN_SIZE = { rx: 0.7, ry: 0.62 }; // the twin envelope relative to
 // Station kinds: what a station (or engine) IS, so code asks layout.one('boiler') / all('gun') rather than for a name.
 // A ship may have several of most kinds; ONE_PER_SHIP kinds are single so far (one helm, shield, bomb bay compartment, coil emitter).
 // Names stay unique and human ("Fore Boiler"): phones show them, and player.lock holds the name.
-export const STATION_KINDS = ['helm', 'boiler', 'lookout', 'coal', 'ammo', 'gun', 'searchlight', 'coil', 'deflector', 'bombBay', 'navigator', 'escort', 'engine', 'sail', 'swivel'];
+export const STATION_KINDS = ['helm', 'boiler', 'lookout', 'coal', 'ammo', 'gun', 'searchlight', 'coil', 'deflector', 'bombBay', 'navigator', 'escort', 'engine', 'sail', 'swivel', 'cannon', 'cannonSeat'];
 
 export const ONE_PER_SHIP = ['helm', 'deflector', 'bombBay', 'coil', 'navigator'];
 
@@ -41,11 +41,11 @@ export const CONNECTOR_SPEED = { rope: 150, ladder: 170, stairs: 150, lift: 260,
 // (shifted by the part's column). Fields named in D_KINDS also get `d` (the platform index).
 const ARRAYS = ['platforms', 'connectors', 'rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers', 'boarderEntryPoints', 'escortDocks', 'gasbags'];
 const KEYED = ['gunMounts', 'searchlights'];
-const OPTIONAL = ['ballast', 'gasValves', 'sails', 'armour']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
+const OPTIONAL = ['ballast', 'gasValves', 'sails', 'armour', 'cannons']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
 const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'liftRepair'];
 const X_FIELDS = {
   platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x', 'sx'], vents: ['x'], racks: ['x'],
-  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], sails: ['x'], armour: ['x0', 'x1'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
+  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], sails: ['x'], cannons: ['x'], armour: ['x0', 'x1'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
   coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbags: ['cx'], liftRepair: ['x'],
 };
 const D_KINDS = ['rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers'];
@@ -83,7 +83,7 @@ const asType = (type) => ({ ...connector, mass: () => M().link[type], emit: (p, 
 export const KIND_STATS = {
   helm: { hands: 1 }, boiler: { hands: 1 }, lookout: { hands: 1 }, coal: { hands: 0 }, ammo: { hands: 0 },
   gun: { hands: 1 }, searchlight: { hands: 1 }, coil: { hands: 1 }, deflector: { hands: 1 }, bombBay: { hands: 1 },
-  navigator: { hands: 1 }, escort: { hands: 1 }, sail: { hands: 1 }, swivel: { hands: 1 },
+  navigator: { hands: 1 }, escort: { hands: 1 }, sail: { hands: 1 }, swivel: { hands: 1 }, cannon: { hands: 1 }, cannonSeat: { hands: 0 },
 };
 const kindStat = (key) => (p) => (key === 'mass' ? M().kind[p.kind] : (KIND_STATS[p.kind] || {})[key]) || 0;
 
@@ -140,6 +140,7 @@ const clean = (v) => Math.round(v * 1e6) / 1e6 + 0; // (cos(PI/2) is 6e-17, not 
 export const thrustVec = (dir) => ({ fwd: clean(Math.cos(dir || 0)), up: clean(-Math.sin(dir || 0)) });
 export const dirName = (dir) => { const a = normAngle(dir || 0), i = ENGINE_DIRS.findIndex((d) => Math.abs(normAngle(d) - a) < 0.02); return i >= 0 ? ENGINE_DIR_NAMES[i] : Math.round((a * 180) / Math.PI) + ' degrees'; };
 export const swivelName = (engineName) => 'Swivel ' + engineName;
+export const cannonSeatName = (cannonName) => cannonName + ' Seat'; // (B.6: the seat in the barrel of the crew cannon named so)
 // Gas points of lift an engine pod makes pointing as placed (up positive, down negative): what the hover budget counts.
 const engineLift = (p) => thrustVec(p.dir).up * config.ENGINES.LIFT_GAS;
 // Steam an engine burns at throttle `speed` (0..1): its forward share runs with the throttle, its vertical share all the time (config.ENGINES.VERT_USE).
@@ -188,6 +189,14 @@ export const PARTS = {
     const { n, h, w } = p;
     A.add('stations', { n, kind: 'sail', p: p.p, x: p.x });
     A.add('sails', { n, p: p.p, x: p.x, h: h || config.SAIL.MAST_H, w: w || config.SAIL.WIDTH });
+  } },
+  // The CREW CANNON (B.6, cannon.js): a brass cannon on an open deck that fires a crewman across the sky. It is two stations: the gunner's post (kind 'cannon', behind the barrel: aims and fires) and
+  // the seat in the barrel (kind 'cannonSeat': climb in), plus the cannon itself (n = the gunner's post's name, x = the barrel's pivot, aim = its middle angle, arc = how far it swings).
+  crewCannon: { mass: () => M().kind.cannon, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
+    const { n, x, aim, arc } = p, dir = Math.cos(aim ?? config.CROSS.CANNON.AIM) < 0 ? -1 : 1, side = p.post ?? -dir; // (post: which side of the barrel the gunner's post stands on, -1 aft of a forward barrel by default)
+    A.add('stations', { n, kind: 'cannon', p: p.p, x: x + side * config.CROSS.CANNON.GUNNER_DX });
+    A.add('stations', { n: cannonSeatName(n), kind: 'cannonSeat', p: p.p, x });
+    A.add('cannons', { n, p: p.p, x, aim: aim ?? config.CROSS.CANNON.AIM, arc: arc ?? config.CROSS.CANNON.ARC });
   } },
   coil: piece('coil'), // (the Lightning Coil's weight is on its station)
   // An engine pod (S.5h): `dir` is the way it pushes (thrustVec; none = forward, as the classic pods). Up thrust counts as lift and down thrust as negative lift (the hover budget);
@@ -464,6 +473,7 @@ export function buildLayout(parts, opts = {}) {
   const index = (id) => out.platforms.findIndex((q) => q.id === id);
   for (const kind of D_KINDS) out[kind] = out[kind].map((o) => ({ ...o, d: index(o.p) }));
   if (out.sails) out.sails = out.sails.map((o) => ({ ...o, d: index(o.p) }));
+  if (out.cannons) out.cannons = out.cannons.map((o) => ({ ...o, d: index(o.p) }));
   if (out.armour) out.armour = out.armour.map((o) => ({ ...o, d: index(o.p) }));
   if (out.gasValves) out.gasValves =out.gasValves.map((o) => ({ ...o, d: index(o.p), bag: bagNearX(out.gasbags, o.bx != null ? o.bx : o.x) })); // (the bag it feeds: tail to nose, as in gasbags; -1 with no bag)
   if (out.ballast) out.ballast =out.ballast.map((o) => { const d = index(o.p); return { ...o, d, y: d < 0 ? 0 : out.platforms[d].y + (o.hang ? config.BALANCE.BALLAST_HANG : 0) }; });

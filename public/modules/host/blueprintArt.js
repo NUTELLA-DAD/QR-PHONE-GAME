@@ -13,7 +13,7 @@ import { EDIT_ROWS, DRAW_ROWS, GRID_X0 } from './buildEdit.js';
 
 const LB = () => config.LOGBOOK;
 const PAD = { l: 100, r: 28, t: 30, b: 46 }; // paper margins (CSS px, times k): row labels on the left, column numbers on top, the ship's size underneath
-const GLYPH = { helm: 'H', boiler: 'B', lookout: 'L', coal: 'C', ammo: 'A', gun: 'G', searchlight: 'S', coil: 'Z', deflector: 'D', bombBay: 'M', navigator: 'N', escort: 'F', engine: 'E', sail: 'W', swivel: 'X' };
+const GLYPH = { helm: 'H', boiler: 'B', lookout: 'L', coal: 'C', ammo: 'A', gun: 'G', searchlight: 'S', coil: 'Z', deflector: 'D', bombBay: 'M', navigator: 'N', escort: 'F', engine: 'E', sail: 'W', swivel: 'X', cannon: 'K', cannonSeat: 'k' };
 
 export function blueprintView(Ly, w, h, k = 1, clean = false) {
   const b = Ly.bounds || { x0: -240, x1: 1860, y0: -200, y1: 1000 };
@@ -196,6 +196,8 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     if (!q) continue;
     const m = (Ly.gunMounts || {})[st.n] || (Ly.searchlights || {})[st.n];
     if (m) line([[X(m.bx), Y(m.by)], [X(m.bx + Math.cos(m.aim) * 34), Y(m.by + Math.sin(m.aim) * 34)]], 2.4, L.INK_SOFT);
+    const cn = st.kind === 'cannonSeat' ? (Ly.cannons || []).find((c) => c.n + ' Seat' === st.n) : null; // (B.6: the crew cannon's barrel, drawn from its seat)
+    if (cn) line([[X(cn.x), Y(q.y) - 14 * k], [X(cn.x + Math.cos(cn.aim) * 70), Y(q.y - 14 + Math.sin(cn.aim) * 70)]], 4.2, L.INK_SOFT);
     disc(X(st.x), Y(q.y) - 11 * k, GLYPH[st.kind] || '?', 7.5);
   }
   for (const e of Ly.engines) { // an engine: a disc under its deck with a thrust arrow (the way it pushes); the brass dot at the tip is a handle to turn it (S.5h)

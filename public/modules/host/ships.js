@@ -65,13 +65,15 @@ export const SHIP_KEYS = [
   // worked out every step
   'rig', 'steamParts', 'steamUse', 'overdrive', 'buoyancy', 'sinking', 'autopilot', 'pressureWarned', 'warnBeep', 'boilerBlew', 'helmHit', 'ballastCd', 'gasWarned', 'lastAlt', 'noPump',
   'lookout', 'lookoutBonus', 'valveLog', 'valveShuts', 'boilerLoads',
+  // cross-ship play (B.6): the crew cannons' records, the loads lying on her decks (cargo.js), the stock of her sandbag racks
+  'cannons', 'loads', 'rackStock',
   // the environment's hazards that ride on her (B.3: every ship runs her own copy of the rules, shipSim.js: ice, thermals, spores, oxygen, storm rods, the sea) and what they put on her
   'env', 'icing', 'ice', 'clogs', 'spores', 'o2tank', 'stormJob', 'sea',
 ];
 // The world keys a second ship's code is allowed to READ through the prototype: the sky she shares (the enemies and shots and wrecks in it, the weather and the
 // environment, the clock and the banner, the sound queue, the difficulty and the crew scale). Every other key a ship needs is her own (SHIP_KEYS), or tools/buildsim.mjs
 // --check-two-ships fails and names it: a read that quietly fell through to ship 0 would be a cross-talk bug.
-export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'difficulty', 'enemy', 'enemyBombs', 'ev', 'flashes', 'mines', 'paras', 'periscope', 'phase', 'popups', 'rings', 'match', 'rockets', 'sfxQ', 'shells', 'specials', 'strafers', 'tempo', 'weather', 'wrecks', 'hijacks', 'chutes', 'shipBombs', 'puffs', 'kills', 'scroll', 'ships', 'paused', 'mode'];
+export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'difficulty', 'enemy', 'enemyBombs', 'ev', 'flashes', 'mines', 'paras', 'periscope', 'phase', 'popups', 'rings', 'match', 'rockets', 'sfxQ', 'shells', 'specials', 'strafers', 'tempo', 'weather', 'wrecks', 'hijacks', 'chutes', 'shipBombs', 'puffs', 'kills', 'scroll', 'ships', 'paused', 'mode', 'thrown', 'tows'];
 // World keys a ship's code WRITES as a plain number (a context would shadow them): they pass through to the world on every context.
 export const WORLD_WRITES = ['kills'];
 
