@@ -251,6 +251,12 @@ Also **metal armour walls in spots**: drag or draw riveted iron plate onto stret
 - It's heavy (balance and lift).
 - It's drawn as riveted plate in the storybook style.
 Art, collision and the validator follow the choice | M | toggle works on the dev page; classic unchanged; botsim 0 errors on mixed builds |
+| S.5h | **Pointed engines** (owner request): every engine has a direction set when you place it. Rotate the ghost while dragging, or pick an arrow on the blueprint.
+- Forward / back = speed.
+- Up = lift thrust (climb without gas).
+- Down = dive.
+- Angled = a mix.
+Thrust acts where the engine sits, so an engine at the nose pointing up also lifts the nose (pitch control, ties into balance). Optional **swivel mount**: a crew station that turns the engine in flight. Engines are heavy and use steam | M | each direction measurably changes speed / climb / pitch in a sim test; classic engines keep today's behaviour |
 | S.6a | Catalogue v1 + Sparrow + `state.build` effects + dock offers / slot vote | L | voyagesim Normal no worse than today |
 | S.6b | Shipwright UI (TV blueprint, gauges, slot pins, phone cards) | M | the cold-player test passes |
 | S.7 | Balance + persistence (environment modifiers, derelict parts, limp damage, Hangar builds after P2.2) | M | no dominant or trap parts; one situational part per environment |
