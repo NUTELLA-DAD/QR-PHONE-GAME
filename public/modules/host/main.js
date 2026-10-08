@@ -81,7 +81,15 @@ simulation.setStartBuild(loadStartBuild()); // (the browser host starts a Voyage
     if (n > 0) {
       simulation.match.addBots('red', n);
       simulation.match.addBots('blue', n);
-      simulation.match.begin({ shelf: q.get('shelf') === '1' });
+      // (B.6, &cross=1: both sides fly the Boarder's Barge - a crew cannon, a sandbag rack, a crate stack and a towline reel - picked for them at once)
+      if (q.get('cross') === '1') config.PVP.SHELF.CROSS = true;
+      simulation.match.begin({ shelf: q.get('shelf') === '1' || q.get('cross') === '1' });
+      const vote = simulation.state.vote;
+      if (q.get('cross') === '1' && vote && vote.onDone) {
+        const i = simulation.match.shelf.findIndex((e) => e.id === 'barge');
+        simulation.state.vote = null;
+        vote.onDone({ red: i, blue: i });
+      }
     }
   }
 }

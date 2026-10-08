@@ -11,7 +11,7 @@ import { config } from '../../../config.js';
 import { BUILDS, budgets } from '../shipBuild.js';
 import { validate, liftGauge } from '../buildCheck.js';
 import { randomMutation, slotsFor } from '../buildSlots.js';
-import { erase, drawBag } from '../buildEdit.js';
+import { erase, drawBag, drawDeck } from '../buildEdit.js';
 
 function mulberry(seed) {
   let a = seed >>> 0;
@@ -39,6 +39,9 @@ function fourBags() {
   return p;
 }
 
+// The Boarder's Barge (B.6, config.PVP.SHELF.CROSS): the classic ship with her top deck two columns longer for a crew cannon on the new end, a sandbag rack, a crate stack and a towline reel.
+const bargeParts = () => [...drawDeck(BUILDS.classic, 'catwalk', 1360, 1600).parts, { part: 'crewCannon', n: 'Crew Cannon', p: 'catwalk', x: 1500, aim: config.CROSS.CANNON.AIM, arc: config.CROSS.CANNON.ARC }, { part: 'rack', kind: 'sandbag', p: 'catwalk', x: 400 }, { part: 'rack', kind: 'crate', p: 'catwalk', x: 760 }, { part: 'rack', kind: 'towline', p: 'catwalk', x: 1210 }];
+
 // One shelf entry from a parts list (or null when the validator FAILs it).
 function entry(id, name, blurb, parts) {
   let v;
@@ -54,7 +57,7 @@ export const tonnageCap = () => Math.round(budgets(BUILDS.classic).mass * config
 const cache = new Map();
 // The shelf for a seed (cached). Always starts with the classic ship, so index 0 is a safe default.
 export function buildShelf(seed = config.PVP.SHELF.SEED) {
-  const key = seed + '|' + config.PVP.TONNAGE + '|' + config.PVP.SHELF.RANDOM;
+  const key = seed + '|' + config.PVP.TONNAGE + '|' + config.PVP.SHELF.RANDOM + '|' + !!config.PVP.SHELF.CROSS;
   if (cache.has(key)) return cache.get(key);
   const cap = tonnageCap();
   const shelf = [];
@@ -84,6 +87,7 @@ export function buildShelf(seed = config.PVP.SHELF.SEED) {
     const e = entry('var' + n, 'Variant ' + letters[n % letters.length], 'The classic ship with ' + tags.join(' and '), parts);
     if (e && e.mass <= cap) { seen.add(key2); shelf.push(e); }
   }
+  if (config.PVP.SHELF.CROSS) add(entry('barge', "Boarder's Barge", 'A crew cannon, sandbags and a towline', bargeParts())); // (B.6, dev: host.html?versus=1&cross=1 - last on the shelf, so the others keep their places)
   cache.set(key, shelf);
   return shelf;
 }

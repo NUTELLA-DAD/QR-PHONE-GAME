@@ -356,7 +356,7 @@ Every part below is buildable in the blueprint editor (drag-and-drop or draw), w
 Built in tiers. Each part plugs into existing systems.
 
 ### Tier 1: biggest fun per effort (build first, after S.5e-S.5h)
-- **Crew cannon (owner request).** A big brass cannon station that fires a CREW MEMBER across the map, to board enemy gunships or reach a far deck. A player climbs into the barrel; a second player aims and fires (a linked station). The flyer becomes airborne (airborne.js), and can steer a little, grab a ladder, deploy a parachute, or land on an enemy deck. It reuses hookshot/airborne/boarding code. Cooldown and steam cost. Bots can use it to board a latched gunship.
+- **Crew cannon (owner request). DONE in B.6 (MOVEMENT.md): the part, its two stations, the bots, the gate.** A big brass cannon station that fires a CREW MEMBER across the map, to board enemy gunships or reach a far deck. A player climbs into the barrel; a second player aims and fires (a linked station). The flyer becomes airborne (airborne.js), and can steer a little, grab a ladder, deploy a parachute, or land on an enemy deck. It reuses hookshot/airborne/boarding code. Cooldown and steam cost. Bots can use it to board a latched gunship.
 - **Gas types per bag:**
   - Hydrogen: cheap, strong lift, explodes when it catches fire.
   - Helium: safe, weaker.
@@ -449,5 +449,5 @@ Every airship, ours, the AI gunships and the PvP rival, uses the same weight-and
 
 **Build order:**
 1. (Done by MOVEMENT.md B.5: the gunship is a Ship, so her mass, centre of mass and torque, her crew, our boarders and dropped weights all use the ordinary rules.) After forces.js lands (S.5h), give gunship.js the same live centre-of-mass and torque model, fed by her crew, our boarders and dropped weights. Classic co-op stays within noise; measure and re-baseline.
-2. Then the throwable-ballast item.
+2. Then the throwable-ballast item. (Done, B.6: racks, throwing, live loads, the shovel job, dumping, bomb-bay drops, towing, stolen coal; MOVEMENT.md B.6.)
 3. Then the weight-war tricks, one at a time, each with a bot-arena check so none becomes a must-use exploit.

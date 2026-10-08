@@ -1423,7 +1423,7 @@ export const config = {
     HAND_REACH: 80, // px: how close a boarder stands to the helm / the boiler to work it
     BOARD_RANGE: 1700, // bots look for a way across when the rival's middle is this close (px) and their own ship is calm
     TONNAGE: 1.15, // the shelf's weight cap: the classic ship's mass x this (shipBuild.js budgets mass: 150 x 1.15 = 172), the same for both teams
-    SHELF: { RANDOM: 3, SEED: 11 }, // random valid builds on the shelf (seeded mutations of the classic ship that validate and fit the cap) and their seed
+    SHELF: { RANDOM: 3, SEED: 11, CROSS: false }, // (CROSS: also the Boarder's Barge, the cross-ship dev ship: host.html?versus=1&cross=1) random valid builds on the shelf (seeded mutations of the classic ship that validate and fit the cap) and their seed
     HANDICAP: { // crew-size scaling in Versus (replaces CREW_SCALE.TABLE): only the damage and collateral columns matter, and gently: a small crew takes a little less, a big one a little more
       1: { spawn: 1, count: 1, fire: 1, damage: 0.7, raiders: 1, hp: 1, spread: 0.8, collateral: 0.7 },
       2: { spawn: 1, count: 1, fire: 1, damage: 0.78, raiders: 1, hp: 1, spread: 0.85, collateral: 0.78 },

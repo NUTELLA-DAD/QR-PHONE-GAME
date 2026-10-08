@@ -1,6 +1,6 @@
 # Phase V - PvP airship battles ("Versus") - plan written with Fable
 
-**Status (B.4): Versus is built on the one-world design (section 2): two Ships in ONE World, `pvp/match.js`, `node tools/buildsim.mjs --check-match`. Broadside and Capture are in; King of the Hill, the Shipwright build phase (v2), the crew cannon and the Elo arena tool of section 3 are still to come. The roadmap table in section 4 is the original plan.**
+**Status (B.4): Versus is built on the one-world design (section 2): two Ships in ONE World, `pvp/match.js`, `node tools/buildsim.mjs --check-match`. Broadside and Capture are in; King of the Hill, the Shipwright build phase (v2), the Elo arena tool of section 3 are still to come (the crew cannon is in: B.6, host.html?versus=1&cross=1). The roadmap table in section 4 is the original plan.**
 
 ## 1. Player experience
 
@@ -101,7 +101,7 @@ Rounds are best of 3 with a 6-minute cap. On a timeout the higher hull % wins. S
 - **The gate.** `node tools/buildsim.mjs --check-match` (alias `--check-arena`): `tools/match-check.mjs`.
 
 ### What is still to come
-(The enemy gunship as a Ship, B.5, and `forces.js` driving every pose, M.4, are in.) Cross-ship ballast throws, towing and the crew cannon (B.6), the Shipwright build phase (v2) and King of the Hill.
+(The enemy gunship as a Ship, B.5, and `forces.js` driving every pose, M.4, are in.) Cross-ship ballast throws, towing, stolen coal and the crew cannon are in (B.6, MOVEMENT.md); still to come: the Shipwright build phase (v2) and King of the Hill.
 
 ## 3. Bot evaluation arena (still to build, on top of `--check-match --mirror N`)
 
