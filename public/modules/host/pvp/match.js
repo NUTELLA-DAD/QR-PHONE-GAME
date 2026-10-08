@@ -3,7 +3,7 @@
 // This file is the MATCH: the lobby's two teams, the shelf of ships they pick from, the rounds (best of three), the sides that swap, the count-in, the fight, the finale, the
 // scoreboard, the rematch - and the three things that only exist when two crews share a sky:
 //   * CROSS-FIRE   every shell and bomb is tested against every OTHER ship (hitsShip / shieldBlocks / impact of that ship, in her coordinates through pose.js): one shell list;
-//   * BUMPS        two hulls do not pass through each other: they are pushed apart, hurt a little by the speed they met at and kicked by a forces.js moment where they touched;
+//   * BUMPS        two hulls do not pass through each other: shipCollide.js (the whole world's ship-ship collision) pushes them apart; Versus only counts the bumps (count('bumps'));
 //   * RIVALS       every ship has `ship.rival` (ctx.rival): the nearest ship of the other team, in WORLD coordinates (her aim point, her guns, bags, crew, helm and boiler), which the
 //                  bot captains (course.js rivalPlan, aim.js targets) and the TV read.
 // The rules a boarder lives by (fight, sabotage, take the helm, carried home when knocked out) are the ship's own (shipSim.js: isHostile, hostileUse, hitCrew, sendHome).
@@ -20,7 +20,6 @@ import { config } from '../../../config.js';
 import { toWorldX, toWorldY, toShipX, toShipY, pivotOf } from '../pose.js';
 import { transfer } from '../ships.js';
 import { inRock } from '../course.js';
-import { kickForce } from '../forces.js';
 import { BUILDS } from '../shipBuild.js';
 import { buildShelf, tonnageCap } from './shelf.js';
 
@@ -391,56 +390,6 @@ export function createMatch(D) {
     }
   }
 
-  // ---- bumps: two hulls touching are pushed apart, and hurt by the speed they met at ----
-  let bumpCd = 0;
-  function bump(dt) {
-    bumpCd = Math.max(0, bumpCd - dt);
-    if (M.phase !== 'fight' && M.phase !== 'finale') return;
-    const [A, B] = sideShips();
-    if (!A || !B || A.state.down > 0 || B.state.down > 0 || wrecked(A) || wrecked(B)) return;
-    const bx = (sh) => { const b = sh.layout.bounds, u = toWorldX(sh, b.x0), w = toWorldX(sh, b.x1); return [Math.min(u, w), Math.max(u, w), sh.pose.y + b.y0, sh.pose.y + b.y1]; };
-    const a = bx(A), b = bx(B);
-    if (a[1] < b[0] || b[1] < a[0] || a[3] < b[2] || b[3] < a[2]) return; // (the boxes do not even touch)
-    const probe = (S, T) => { // a point of S's outline (or half way between two) that is inside T
-      const pts = S.layout.samples;
-      for (let i = 0; i < pts.length; i++) {
-        for (const k of [0, 0.5]) {
-          const q = pts[i], r = pts[(i + 1) % pts.length];
-          const sx = q[0] + (r[0] - q[0]) * k, sy = q[1] + (r[1] - q[1]) * k;
-          const wx = toWorldX(S, sx), wy = toWorldY(S, sy);
-          if (T.sim.hitsShip(toShipX(T, wx), toShipY(T, wy))) return { x: wx, y: wy };
-        }
-      }
-      return null;
-    };
-    const hit = probe(A, B) || probe(B, A);
-    if (!hit) return;
-    const K = V().BUMP;
-    const ma = { x: toWorldX(A, A.layout.aimPoint.x), y: toWorldY(A, A.layout.aimPoint.y) };
-    const mb = { x: toWorldX(B, B.layout.aimPoint.x), y: toWorldY(B, B.layout.aimPoint.y) };
-    let nx = (ma.x - mb.x) / 1000, ny = (ma.y - mb.y) / 550; // (a hull is wider than it is tall: scale the way apart)
-    const len = Math.hypot(nx, ny) || 1;
-    nx /= len; ny /= len;
-    const push = K.PUSH * dt * 0.5;
-    A.pose.x += nx * push; A.pose.y += ny * push;
-    B.pose.x -= nx * push; B.pose.y -= ny * push;
-    const closing = Math.max(0, -((A.pose.vx - B.pose.vx) * nx + (A.pose.vy - B.pose.vy) * ny));
-    if (bumpCd > 0) return;
-    bumpCd = K.COOLDOWN;
-    M.count('red', 'bumps'); M.count('blue', 'bumps');
-    world.sfxQ.push(['clang', true]);
-    for (let k = 0; k < 4; k++) D.puff(hit.x, hit.y, k % 2 ? '#ffe9a8' : '#ffffff', 5);
-    if (closing < K.MIN_CLOSING) return;
-    for (const [S, sign] of [[A, 1], [B, -1]]) {
-      const sx = toShipX(S, hit.x), sy = toShipY(S, hit.y);
-      S.sim.impact(sx, sy, (K.DAMAGE * closing) / 100);
-      kickForce(S.ctx, { x: sx, y: sy }, sign * nx * S.pose.f, sign * ny, K.KICK * Math.min(3, closing / 150));
-      S.ctx.ship.speed *= K.BOUNCE; // (what is left of her speed along her bow)
-    }
-    world.ev.warn = 1.5;
-    world.ev.warnText = 'THE SHIPS COLLIDE!';
-  }
-
   // ---- the arena's soft wall: a wind pushes a ship back that goes too far behind the start, too far along, or too high ----
   function arena(dt) {
     const A = V().ARENA, map = world.course && world.course.map, st = map && map.start;
@@ -504,6 +453,6 @@ export function createMatch(D) {
     }
   }
 
-  Object.assign(M, { enter, leave, begin, startRound, swapTeam, addBots, teamForJoiner, toLobby, applyPicks, pre, post, bump, crossFire, shipOfTeam, crewOfTeam, assign, refreshRivals });
+  Object.assign(M, { enter, leave, begin, startRound, swapTeam, addBots, teamForJoiner, toLobby, applyPicks, pre, post, crossFire, shipOfTeam, crewOfTeam, assign, refreshRivals });
   return M;
 }

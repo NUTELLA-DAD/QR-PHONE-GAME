@@ -19,13 +19,25 @@
 // RULES for all new code: see ships.js. Do NOT write `x + course.dist` or `y - state.ship.alt` in new code; call toWorld / toShip.
 import { scrollSpeed } from './course.js';
 
+// Where her engines (and sails) carry the ship along the sky, px/s along the world x: her speed along her bow (course.js scrollSpeed) the way her facing f points. This is the velocity
+// the movement model reads; pose.vx is what she really moved at.
+export const driveVx = (ship, f = ship.pose.f) => f * scrollSpeed(ship.ctx || ship.world);
+// How much that changes for one more unit of her speed (a share of the top speed; the sails, overdrive and the sky are in it): a shove of dv px/s is dv / driveGain of ship.speed.
+export function driveGain(ship) {
+  const b = ship.ctx.ship, s0 = b.speed, v0 = driveVx(ship);
+  b.speed = s0 + 1;
+  const g = driveVx(ship) - v0;
+  b.speed = s0;
+  return g;
+}
+
 // Build the pose object for `ship`: its own x, y, vy, f, pitch and turn. vx is the speed she REALLY moved at in the last step (simulation.js measures it): a ship
 // pressed against the rock, shoved by the wind or hanging in a calm moves at that and everything that goes along with her goes along with THAT. What her
 // engines ask of her is course.js scrollSpeed; until her first step vx is the same.
 export function createPose(ship, { x = 0, y = 0 } = {}) {
   let vx;
   const pose = Object.defineProperties({ x, y, vy: 0, f: 1, pitch: 0, turn: 0 }, {
-    vx: { enumerable: true, get: () => (vx !== undefined ? vx : pose.f * scrollSpeed(ship.ctx || ship.world)), set: (v) => { vx = v; } }, // (scrollSpeed is along her bow; the world's x runs the way f says)
+    vx: { enumerable: true, get: () => (vx !== undefined ? vx : driveVx(ship, pose.f)), set: (v) => { vx = v; } },
   });
   return pose;
 }

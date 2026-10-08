@@ -42,7 +42,7 @@ const { scrollSpeed } = await load('modules/host/course.js');
 const { createLayout } = await load('shipLayout.js');
 const { pilotPlan } = await load('modules/host/course.js');
 
-const SAVE = { shell: config.PVP.SHELL_POWER, bump: config.PVP.BUMP.DAMAGE, minClosing: config.PVP.BUMP.MIN_CLOSING, round: config.PVP.ROUND_TIME, stagger: config.AIR.PITCH_STAGGER, koChance: config.HELM_EXPOSED.KO_CHANCE }; // (the tunables the experiments below change)
+const SAVE = { shell: config.PVP.SHELL_POWER, bump: config.COLLIDE.DAMAGE, minClosing: config.COLLIDE.MIN_CLOSING, round: config.PVP.ROUND_TIME, stagger: config.AIR.PITCH_STAGGER, koChance: config.HELM_EXPOSED.KO_CHANCE }; // (the tunables the experiments below change)
 const DT = 1 / 60;
 let errors = 0;
 const firstErrors = [];
@@ -303,7 +303,7 @@ function crewman(st, team, ship, d, x) {
   blue.pose.x += mx(red) + 900 - mx(blue); // overlapping noses
   blue.pose.y += my(red) - my(blue);
   const gap0 = mx(blue) - mx(red);
-  config.PVP.BUMP.MIN_CLOSING = 0;
+  config.COLLIDE.MIN_CLOSING = 0;
   const hr = red.state.hull, hb = blue.state.hull;
   const k0 = (red.ctx.forces.kicks || 0);
   let crossed = false, minGap = gap0;
@@ -311,7 +311,7 @@ function crewman(st, team, ship, d, x) {
   const hit = (sh, S) => S.layout.samples.some(([sx, sy]) => { const wx = T.toWorldX(S, sx), wy = T.toWorldY(S, sy); return sh.sim.hitsShip(T.toShipX(sh, wx), T.toShipY(sh, wy)); });
   report(!crossed && mx(blue) - mx(red) > gap0 && !hit(blue, red) && M.stats.red.bumps >= 1, `two hulls pushed together are pushed apart again (${Math.round(gap0)} px apart overlapping -> ${Math.round(mx(blue) - mx(red))}), nobody passed through (closest ${Math.round(minGap)}); ${M.stats.red.bumps} bump(s)`);
   report(red.state.hull < hr && blue.state.hull < hb && (red.ctx.forces.kicks || 0) > k0, `the bump hurt both ships (red ${hr.toFixed(1)} -> ${red.state.hull.toFixed(1)}, blue ${hb.toFixed(1)} -> ${blue.state.hull.toFixed(1)}) and kicked them about the place they touched (forces.js)`);
-  config.PVP.BUMP.MIN_CLOSING = SAVE.minClosing;
+  config.COLLIDE.MIN_CLOSING = SAVE.minClosing;
 }
 {
   // the rival accessor, targetShip and the handicap
@@ -341,7 +341,7 @@ function crewman(st, team, ship, d, x) {
   const { sim, st, M, red, blue } = bare();
   // calm: nothing shoots, a bump does no harm and the deck does not slope under the boarders' feet (the helm deck is in the open air)
   config.PVP.SHELL_POWER = 0;
-  config.PVP.BUMP.MIN_CLOSING = 1e9;
+  config.COLLIDE.MIN_CLOSING = 1e9;
   config.AIR.PITCH_STAGGER = 9;
   config.HELM_EXPOSED.KO_CHANCE = 0; // (nobody at the wheel is knocked out by the odd shell: the patrol planes of the autopilots are shooting)
   const mainD = blue.layout.deckIndex('main'), P = blue.layout.platforms[mainD];
@@ -401,7 +401,7 @@ function crewman(st, team, ship, d, x) {
   report(boarder.lock === helm.n && blue.sim.holder('helm') === boarder && M.stats.red.captures === 1 && /HELM TAKEN/.test(banner) && M.phase === 'fight', `uncontested for ${config.PVP.CAPTURE_TIME} s the helm is taken (${banner}) - in Broadside that steers her, it does not end the round`);
   boarder.fire = false;
   config.PVP.SHELL_POWER = SAVE.shell;
-  config.PVP.BUMP.MIN_CLOSING = SAVE.minClosing;
+  config.COLLIDE.MIN_CLOSING = SAVE.minClosing;
   config.AIR.PITCH_STAGGER = SAVE.stagger;
   config.HELM_EXPOSED.KO_CHANCE = SAVE.koChance;
 }
@@ -409,7 +409,7 @@ function crewman(st, team, ship, d, x) {
   // Capture: HELM TAKEN ends the round for the boarders
   config.PVP.MODE = 'capture';
   config.PVP.SHELL_POWER = 0;
-  config.PVP.BUMP.MIN_CLOSING = 1e9; // (calm: the wheel is out in the open - a bump or a shell could knock the boarder off it)
+  config.COLLIDE.MIN_CLOSING = 1e9; // (calm: the wheel is out in the open - a bump or a shell could knock the boarder off it)
   config.AIR.PITCH_STAGGER = 9;
   config.HELM_EXPOSED.KO_CHANCE = 0; // (nobody at the wheel is knocked out by the odd shell: the patrol planes of the autopilots are shooting)
   const { sim, st, M, red, blue } = bare();
@@ -422,7 +422,7 @@ function crewman(st, team, ship, d, x) {
   report(!!r && r.winner === 'red' && r.cause === 'captured' && M.phase === 'finale' && M.score.red === 1 && r.stats.red.captures === 1, `Capture mode: holding her wheel ends the round - ${r ? r.winner + ' wins by ' + r.cause : 'no result'}`);
   config.PVP.MODE = 'broadside';
   config.PVP.SHELL_POWER = SAVE.shell;
-  config.PVP.BUMP.MIN_CLOSING = SAVE.minClosing;
+  config.COLLIDE.MIN_CLOSING = SAVE.minClosing;
   config.AIR.PITCH_STAGGER = SAVE.stagger;
   config.HELM_EXPOSED.KO_CHANCE = SAVE.koChance;
 }
@@ -431,7 +431,7 @@ function crewman(st, team, ship, d, x) {
 {
   // calm sky (nobody shoots): the captains hold the standoff and the altitude edge
   config.PVP.SHELL_POWER = 0;
-  config.PVP.BUMP.MIN_CLOSING = 1e9;
+  config.COLLIDE.MIN_CLOSING = 1e9;
   const { sim, st, M, red, blue } = versus({ bots: 6 });
   const mx = (sh) => T.toWorldX(sh, sh.layout.aimPoint.x), my = (sh) => T.toWorldY(sh, sh.layout.aimPoint.y);
   step(sim, 60 * 40);
@@ -444,13 +444,13 @@ function crewman(st, team, ship, d, x) {
   until(sim, () => M.totals.red.boardings + M.totals.blue.boardings > t0, 60 * 60 * 8);
   report(M.totals.red.boardings + M.totals.blue.boardings > t0, `a bot hooks across to the rival's deck on his own when the sky is calm and her decks are in his reach (${M.totals.red.boardings + M.totals.blue.boardings} boardings, ${M.totals.red.knockouts + M.totals.blue.knockouts} knock-outs, ${M.totals.red.sabotage + M.totals.blue.sabotage} sabotaged boilers so far)`);
   config.PVP.SHELL_POWER = SAVE.shell;
-  config.PVP.BUMP.MIN_CLOSING = SAVE.minClosing;
+  config.COLLIDE.MIN_CLOSING = SAVE.minClosing;
 }
 {
   // both bows point the same way: the one with the rival behind her comes about
   config.PVP.FACE_OFF = false;
   config.PVP.SHELL_POWER = 0;
-  config.PVP.BUMP.MIN_CLOSING = 1e9;
+  config.COLLIDE.MIN_CLOSING = 1e9;
   const { sim, st, M, red, blue } = versus({ bots: 4 });
   const startF = blue.pose.f;
   let turned = false;
@@ -459,7 +459,7 @@ function crewman(st, team, ship, d, x) {
   report(startF === 1 && turned && blue.pose.f === -1 && red.pose.f === 1, `with the rival behind her bow, the helm bot comes about by itself (blue turned to face red: f ${startF} -> ${blue.pose.f}; red, already facing blue, did not)`);
   config.PVP.FACE_OFF = true;
   config.PVP.SHELL_POWER = SAVE.shell;
-  config.PVP.BUMP.MIN_CLOSING = SAVE.minClosing;
+  config.COLLIDE.MIN_CLOSING = SAVE.minClosing;
 }
 {
   // gunnery: her manned guns that bear on us, then her gasbags, then her boiler and helm, then her hull
