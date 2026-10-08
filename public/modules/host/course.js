@@ -176,12 +176,12 @@ function rivalPlan(state) {
     const c = cc.lastContact;
     if (!state.scrapeSince) state.scrapeSince = now;
     if (c.dx) state.rockSide = { dir: -c.dx, until: now + 3500 };
-    if (now - state.scrapeSince > 700) return { target: state.ship.alt + (c.dy < 0 ? 350 : c.dy > 0 ? -350 : 120), speed: Math.max(-config.SHIP.REVERSE, Math.min(0.6, c.dx * f * 0.6)), dx: gap * f, dy: R.mid.y - my };
+    if (now - state.scrapeSince > 700) return { target: state.ship.alt + (c.dy < 0 ? 350 : c.dy > 0 ? -350 : 120), speed: Math.max(-config.SHIP.REVERSE, Math.min(0.6, c.dx * f * 0.6)), dx: gap * f, dy: R.mid.y - my, wedged: true };
   } else state.scrapeSince = 0;
   const holes = state.breaches.length + state.gasHoles.length;
   const hurt = state.ship.hull < B.RETREAT_HULL && holes > B.RETREAT_HOLES;
   const hooking = performance.now() - (state.boardAt || -1e9) < 1200; // (a crewman of hers is going across on a hook: close in so her decks are within his reach)
-  const stand = P.STANDOFF + (ship.layout.bounds.x1 - ship.layout.bounds.x0) / 2 + (R.layout.bounds.x1 - R.layout.bounds.x0) / 2 - 2 * P.REF_HALF; // (PVP.STANDOFF is for two classic hulls: longer ships keep further apart so their noses are as far from each other)
+  const stand = P.STANDOFF + ((ship.captain && ship.captain.rangeAdj) || 0) + (ship.layout.bounds.x1 - ship.layout.bounds.x0) / 2 + (R.layout.bounds.x1 - R.layout.bounds.x0) / 2 - 2 * P.REF_HALF; // (PVP.STANDOFF is for two classic hulls: longer ships keep further apart so their noses are as far from each other)
   const err = gap - dir * (hurt ? stand * 2 : stand - (hooking ? B.BOARD_CLOSE : 0)); // + = too far (or too close) to close the range by going on
   let w = Math.max(-1, Math.min(1, err / P.APPROACH)); // the speed we want along the world's x (+ = to the right)
   if (state.rockSide && now < state.rockSide.until && Math.sign(w) === state.rockSide.dir) w = 0; // (not into the rock that just had us)

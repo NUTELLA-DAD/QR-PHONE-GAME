@@ -172,7 +172,7 @@ export function createShipSim(world, ship, W) {
     const boarding = gunship.interaction(player);
     if (boarding) return boarding;
     // Standing over the open bomb bay doors: jump out (parachute). Not while carrying ammo - that loads the bombs.
-    if (!player.bot && player.d === BAY_D && tool !== 'ammo' && Math.abs(player.x - layout.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return { type: 'jump', label: 'Jump!' };
+    if ((!player.bot || (player.dare && player.dare.kind === 'drop')) && player.d === BAY_D && tool !== 'ammo' && Math.abs(player.x - layout.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return { type: 'jump', label: 'Jump!' };
     // Storm Front: while a bolt is charging, a lightning rod in reach comes first (hold Action = grounded).
     const rod = state.stormJob.charge && state.stormJob.rods.find((o) => here(o, 75));
     if (rod) return { type: 'rod', obj: rod, hold: true, time: 1, label: 'HOLD THE ROD!' };
