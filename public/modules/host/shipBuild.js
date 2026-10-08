@@ -21,14 +21,17 @@ export const TWIN_SIZE = { rx: 0.7, ry: 0.62 }; // the twin envelope relative to
 // Station kinds: what a station (or engine) IS, so code asks layout.one('boiler') / all('gun') rather than for a name.
 // A ship may have several of most kinds; ONE_PER_SHIP kinds are single so far (one helm, shield, bomb bay compartment, coil emitter).
 // Names stay unique and human ("Fore Boiler"): phones show them, and player.lock holds the name.
-export const STATION_KINDS = ['helm', 'boiler', 'lookout', 'coal', 'ammo', 'gun', 'searchlight', 'coil', 'deflector', 'bombBay', 'navigator', 'escort', 'engine'];
+export const STATION_KINDS = ['helm', 'boiler', 'lookout', 'coal', 'ammo', 'gun', 'searchlight', 'coil', 'deflector', 'bombBay', 'navigator', 'escort', 'engine', 'sail'];
 
 export const ONE_PER_SHIP = ['helm', 'deflector', 'bombBay', 'coil', 'navigator'];
 
 // Deck rows: the y of each floor level. A deck part says `row`, so S.6 can stack decks by row.
 // keel and deep are the rows the blueprint editor (buildEdit.js) adds under the lower deck: full decks inside the hull (belly and bay are small blisters).
-export const DECK_ROWS = { nest: -42, helm: 420, catwalk: 470, main: 640, lower: 790, belly: 905, bay: 925, keel: 950, deep: 1110 };
+// crow2 is a second, higher crow's nest tier on a mast above the nest (S.5e): a longer view, but weight and wind up high.
+export const DECK_ROWS = { crow2: -210, nest: -42, helm: 420, catwalk: 470, main: 640, lower: 790, belly: 905, bay: 925, keel: 950, deep: 1110 };
 export const KEEL_ROWS = ['keel', 'deep'];
+export const NEST_ROWS = ['nest', 'crow2']; // the decks on top of the gasbag(s): a ship may have several (the eraser cuts one in two) and two heights
+export const isNestRow = (row) => NEST_ROWS.includes(row);
 export const rowOf = (q) => Object.keys(DECK_ROWS).find((k) => DECK_ROWS[k] === q.y); // the row name of a built platform (its y is a row's y)
 
 // Climbing speeds (px/s) by connector type; a connector part may override with `speed`.
@@ -38,11 +41,11 @@ export const CONNECTOR_SPEED = { rope: 150, ladder: 170, stairs: 150, lift: 260,
 // (shifted by the part's column). Fields named in D_KINDS also get `d` (the platform index).
 const ARRAYS = ['platforms', 'connectors', 'rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers', 'boarderEntryPoints', 'escortDocks', 'gasbags'];
 const KEYED = ['gunMounts', 'searchlights'];
-const OPTIONAL = ['ballast', 'gasValves']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
+const OPTIONAL = ['ballast', 'gasValves', 'sails']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
 const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'liftRepair'];
 const X_FIELDS = {
   platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x'], vents: ['x'], racks: ['x'],
-  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
+  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], sails: ['x'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
   coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbags: ['cx'], liftRepair: ['x'],
 };
 const D_KINDS = ['rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers'];
@@ -80,7 +83,7 @@ const asType = (type) => ({ ...connector, mass: () => M().link[type], emit: (p, 
 export const KIND_STATS = {
   helm: { hands: 1 }, boiler: { hands: 1 }, lookout: { hands: 1 }, coal: { hands: 0 }, ammo: { hands: 0 },
   gun: { hands: 1 }, searchlight: { hands: 1 }, coil: { hands: 1 }, deflector: { hands: 1 }, bombBay: { hands: 1 },
-  navigator: { hands: 1 }, escort: { hands: 1 },
+  navigator: { hands: 1 }, escort: { hands: 1 }, sail: { hands: 1 },
 };
 const kindStat = (key) => (p) => (key === 'mass' ? M().kind[p.kind] : (KIND_STATS[p.kind] || {})[key]) || 0;
 
@@ -129,7 +132,7 @@ export const bagName = (i, n) => (n <= 1 ? 'GASBAG' : i === 0 ? 'AFT BAG' : i ==
 
 export const PARTS = {
   // A walkable floor. `row` is a DECK_ROWS name (y comes from it), x0/x1 are its span.
-  deck: { mass: (p) => ((p.x1 - p.x0) / 100) * M().deck * (p.outside ? 0.5 : 1), lift: 0, steam: 0, hands: 0, emit: (p, A) => {
+  deck: { mass: (p) => ((p.x1 - p.x0) / 100) * M().deck * (p.outside ? 0.5 : 1) + (p.row === 'crow2' ? M().mast : 0), lift: 0, steam: 0, hands: 0, emit: (p, A) => {
     const o = withoutPart(p);
     o.y = DECK_ROWS[o.row];
     delete o.row;
@@ -162,6 +165,13 @@ export const PARTS = {
     const { bx, by, aim, arc, len, n } = p;
     A.add('stations', { n, kind: 'searchlight', p: p.p, x: p.x });
     A.add('searchlights', { bx, by, aim, arc, len }, n);
+  } },
+  // A mast and sail (S.5e): a station somebody works to haul the sail up or let it down, and the sail itself (n = its name, h = how tall the mast stands above its deck,
+  // w = the canvas width). In flight a raised sail catches the wind for extra forward speed (config.SAIL).
+  sail: { mass: () => M().kind.sail, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
+    const { n, h, w } = p;
+    A.add('stations', { n, kind: 'sail', p: p.p, x: p.x });
+    A.add('sails', { n, p: p.p, x: p.x, h: h || config.SAIL.MAST_H, w: w || config.SAIL.WIDTH });
   } },
   coil: piece('coil'), // (the Lightning Coil's weight is on its station)
   engine: { ...piece('engines', { mass: () => M().engine, steam: 3 }), emit: (p, A) => A.add('engines', { kind: 'engine', ...withoutPart(p) }) },
@@ -376,11 +386,21 @@ export function buildLayout(parts, opts = {}) {
   // Platform indices: d on everything that stands on a deck, top/bottom on connectors.
   const index = (id) => out.platforms.findIndex((q) => q.id === id);
   for (const kind of D_KINDS) out[kind] = out[kind].map((o) => ({ ...o, d: index(o.p) }));
-  if (out.gasValves) out.gasValves = out.gasValves.map((o) => ({ ...o, d: index(o.p), bag: bagNearX(out.gasbags, o.bx != null ? o.bx : o.x) })); // (the bag it feeds: tail to nose, as in gasbags; -1 with no bag)
+  if (out.sails) out.sails = out.sails.map((o) => ({ ...o, d: index(o.p) }));
+  if (out.gasValves) out.gasValves =out.gasValves.map((o) => ({ ...o, d: index(o.p), bag: bagNearX(out.gasbags, o.bx != null ? o.bx : o.x) })); // (the bag it feeds: tail to nose, as in gasbags; -1 with no bag)
   if (out.ballast) out.ballast =out.ballast.map((o) => { const d = index(o.p); return { ...o, d, y: d < 0 ? 0 : out.platforms[d].y + (o.hang ? config.BALANCE.BALLAST_HANG : 0) }; });
   out.connectors = out.connectors.map((c) => ({ ...c, top: index(c.top), bottom: index(c.bottom) }));
   // The first escort hook doubles as the old single `escortDock`.
   if (out.escortDocks.length) out.escortDock = { x: out.escortDocks[0].x, y: out.escortDocks[0].y };
+  // Raiders and new crew drop in at the boarding points; a ship with fewer than two gets default ones over the ends of her top deck (flagged `auto`: not a part,
+  // the validator still advises placing real ones).
+  if (out.boarderEntryPoints.length < 2 && out.platforms.length) {
+    const top = deckRoles(out.platforms).cat, span = rowSpan(out.platforms, top), have = out.boarderEntryPoints;
+    const ends = [span.x0 + Math.min(70, (span.x1 - span.x0) * 0.2), span.x1 - Math.min(70, (span.x1 - span.x0) * 0.2)];
+    const mine = ends.filter((x) => !have.some((o) => Math.abs(o.x - x) < 80)).map((x) => ({ x: Math.round(x), p: top.id, auto: true }));
+    out.boarderEntryPoints = [...have, ...mine].slice(0, Math.max(2, have.length)).sort((a, b) => a.x - b.x);
+    if (out.boarderEntryPoints.length < 2) out.boarderEntryPoints.push({ x: Math.round(span.x1 - 20), p: top.id, auto: true });
+  }
   deriveGeometry(out, opts.cell || CAVE_CELL);
   return out;
 }
@@ -439,9 +459,24 @@ export function hullGeom(platforms, rooms = []) {
   };
 }
 
+// The decks that play the part of the main deck, the lower deck, the top deck and the (first) crow's nest. A full ship has them by id; a minimal one (S.5e: any one
+// deck will do) lends whichever deck is nearest: the main deck is the one nearest the main row, the lower deck the lowest deck, the top deck the highest (of the
+// hull and top decks; the nest and the belly blisters only when nothing else is there). nest is null with no crow's nest.
+export function deckRoles(platforms) {
+  const by = (id) => platforms.find((q) => q.id === id);
+  const body = platforms.filter((q) => ['catwalk', 'main', 'lower', ...KEEL_ROWS].includes(rowOf(q)));
+  const pool = body.length ? body : platforms;
+  const nearest = (y) => pool.reduce((a, b) => (Math.abs(b.y - y) < Math.abs(a.y - y) ? b : a), pool[0]);
+  return {
+    main: by('main') || nearest(DECK_ROWS.main),
+    lower: by('lower') || pool.reduce((a, b) => (b.y > a.y ? b : a), pool[0]),
+    cat: by('catwalk') || pool.reduce((a, b) => (b.y < a.y ? b : a), pool[0]),
+    nest: by('nest') || platforms.find((q) => rowOf(q) === 'nest') || null,
+  };
+}
+
 export function deriveSamples(out) {
-  const by = (id) => out.platforms.find((q) => q.id === id);
-  const main = by('main'), lower = by('lower'), nest = by('nest');
+  const { main, lower, nest } = deckRoles(out.platforms);
   const mainS = rowSpan(out.platforms, main), lowerS = rowSpan(out.platforms, lower);
   const pts = [];
   const add = (x, y) => pts.push([Math.round(x), Math.round(y)]);
@@ -478,16 +513,17 @@ export function deriveSamples(out) {
       }
     }
   }
-  const nx = (nest.x0 + nest.x1) / 2; // the crow's nest and its flag
-  add(nx - 110, nest.y - 44), add(nx, nest.y - 112), add(nx + 110, nest.y - 44);
+  for (const q of out.platforms.filter((o) => isNestRow(rowOf(o)))) { // each crow's nest and its flag (a high tier on its mast; a cut nest has two)
+    const nx = (q.x0 + q.x1) / 2, nn = q === nest || q.id === 'nest' ? 1 : 0.7;
+    add(nx - 110 * nn, q.y - 44), add(nx, q.y - 112), add(nx + 110 * nn, q.y - 44);
+  }
   return pts;
 }
 
 function deriveGeometry(out, cell) {
-  const by = (id) => out.platforms.find((q) => q.id === id);
-  const main = by('main'), lower = by('lower'), cat = by('catwalk'), nest = by('nest');
-  if (!main || !lower || !cat || !nest) return; // validate() reports the missing deck
-  const set = (k, v) => { if (out[k] == null) out[k] = v; };
+  if (!out.platforms.length) return; // validate() reports that there is no deck to stand on
+  const { main, lower, cat, nest } = deckRoles(out.platforms); // (a minimal ship lends one deck all three parts)
+  const set =(k, v) => { if (out[k] == null) out[k] = v; };
   const mainS = rowSpan(out.platforms, main), lowerS = rowSpan(out.platforms, lower), catS = rowSpan(out.platforms, cat);
   const keels = out.platforms.filter((q) => !q.outside && KEEL_ROWS.includes(rowOf(q))); // full decks added under the lower deck
   const lowX0 = Math.min(lowerS.x0, ...keels.map((q) => q.x0)), lowX1 = Math.max(lowerS.x1, ...keels.map((q) => q.x1));
@@ -503,7 +539,7 @@ function deriveGeometry(out, cell) {
   out.topY = Math.min(...ys);
   out.bottomY = Math.max(...ys);
   set('bounds', { x0: Math.min(...xs) - 5, x1: Math.max(...xs) + 20, y0: out.topY - 11, y1: out.bottomY });
-  const bagTop = out.gasbags.length ? Math.min(...out.gasbags.map((b) => b.cy - b.ry)) : nest.y - 44;
+  const bagTop = out.gasbags.length ? Math.min(...out.gasbags.map((b) => b.cy - b.ry)) : (nest || cat).y - 44;
   set('fitBox', { x0: lowX0 - 120, x1: lowX1 + 90, y0: bagTop - 36, y1: out.bottomY + 10 });
   set('hullRect', { x0: lowX0 + 80, x1: lowX1 - 60, y0: bagTop - 86, y1: out.bottomY - 15 });
   const F = out.fitBox;
@@ -517,12 +553,13 @@ function deriveGeometry(out, cell) {
       { x0: lowerS.x0, x1: lowerS.x1, y0: lower.y - 45, y1: lower.y + 10 }, // the outriggers
       { x0: catS.x0, x1: catS.x1 + 20, y0: cat.y - 140, y1: cat.y + 5 }, // the open top deck, its guns and the helm mount
     ];
+    for (const q of out.platforms) if (rowOf(q) === 'crow2') out.hitRects.push({ x0: q.x0 - 10, x1: q.x1 + 10, y0: q.y - 120, y1: q.y + 20 }); // a high nest sticks out above the bag: a bigger target
     for (const q of out.platforms) { // belly compartments (and full decks under the lower deck)
       if (!q.outside && q.y > lower.y) out.hitRects.push({ x0: q.x0, x1: q.x1, y0: lower.y + 25, y1: q.y + (KEEL_ROWS.includes(rowOf(q)) ? 25 : q.y >= DECK_ROWS.bay ? 20 : 30) });
     }
   }
   out.lowDeckY = lower.y;
-  out.spawnPlatform = out.platforms.findIndex((q) => q.id === (out.spawn || 'catwalk'));
+  out.spawnPlatform = out.platforms.findIndex((q) => q.id === (out.spawn || cat.id));
   delete out.spawn;
 }
 

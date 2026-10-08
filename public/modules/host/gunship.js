@@ -40,7 +40,7 @@
 // The rope only pulls when taut: a gentle tug on us, a hard one on her; it snaps if stretched too far.
 import { crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, deckIndex } from '../../shipLayout.js';
 import { inRock, scrollSpeed } from './course.js';
 import { platformBelow } from './nav.js';
 import { pop } from './popups.js';
@@ -59,8 +59,8 @@ export let MAIN_X1; // the bow end of our main deck
 export const GS = { x0: X0, x1: X0 + 1100, deckY: 0 };
 export const BOW = { x: 0, y: 0 }; // where our end of the rope is tied (ship coords)
 function rebuildShipTables() {
-  MAIN = P.findIndex((p) => p.id === 'main');
-  CAT = P.findIndex((p) => p.id === 'catwalk');
+  MAIN = deckIndex('main');
+  CAT = deckIndex('catwalk');
   MAIN_X1 = P[MAIN].x1;
   GS.deckY = P[MAIN].y;
   BOW.x = MAIN_X1 + 10;

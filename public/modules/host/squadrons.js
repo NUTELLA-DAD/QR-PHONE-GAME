@@ -9,7 +9,7 @@
 //                    boarders down grapple lines. Shooting it down patches your ship up.
 import { spawnPace, firePace, crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, kindOf } from '../../shipLayout.js';
+import { SHIP_LAYOUT, kindOf, deckIndex, isNestDeck } from '../../shipLayout.js';
 import { keepClear, inRock, scrollSpeed } from './course.js';
 import { shellDmg, dazzled } from './aim.js';
 import { SHIP_SAMPLES } from './course.js';
@@ -229,7 +229,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   // the gasbag's underside (above the catwalk) or the nearest deck floor.
   const latchOn = (b) => {
     const P = SHIP_LAYOUT.platforms;
-    const cat = P.findIndex((p) => p.id === 'catwalk');
+    const cat = deckIndex('catwalk');
     const sx = b.x;
     const sy = b.y + state.ship.alt;
     const BG = SHIP_LAYOUT.gasbags; // (the bag it grazed: the nearest of the gasbags side by side)
@@ -250,7 +250,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     } else {
       let best = -1;
       P.forEach((p, i) => {
-        if (p.id === 'nest' || p.id === 'pod' || p.id === 'hangar' || p.id === 'lamp') return;
+        if (isNestDeck(p.id) || p.id === 'pod' || p.id === 'hangar' || p.id === 'lamp') return;
         if (best < 0 || Math.abs(p.y - sy) < Math.abs(P[best].y - sy)) best = i;
       });
       b.kind = 'deck';

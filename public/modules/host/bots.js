@@ -1,7 +1,7 @@
 // Test bot "brain". Bots press the same virtual buttons a phone does
 // (jx/jy joystick, actQ = tap Action, fire = hold Action), so they test the real game rules.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf, nearest, walkCost, isNestStation } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf, nearest, walkCost, isNestStation, isNestDeck, deckIndex, hasKind } from '../../shipLayout.js';
 import { steerTo, travelTime } from './nav.js';
 import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
@@ -16,9 +16,9 @@ const B = config.BOTS;
 // Tables worked out from the ship layout; refilled when a new ship build is applied (see rebuildShipTables).
 let MAIN, CATWALK, LOWER, GUN_STATIONS, MANNED_STATIONS, PICKUPS;
 function rebuildShipTables() {
-  MAIN = L.platforms.findIndex((q) => q.id === 'main');
-  CATWALK = L.platforms.findIndex((q) => q.id === 'catwalk');
-  LOWER = L.platforms.findIndex((q) => q.id === 'lower');
+  MAIN = deckIndex('main');
+  CATWALK = deckIndex('catwalk');
+  LOWER = deckIndex('lower');
   GUN_STATIONS = Object.keys(L.gunMounts);
   // (every station a bot may man, by kind, most useful kinds first)
   MANNED_STATIONS = [...all('helm'), ...all('escort'), ...all('deflector'), ...all('coil'), ...GUN_STATIONS, ...all('bombBay'), ...all('lookout'), ...LIGHT_NAMES].map((s) => (typeof s === 'string' ? s : s.n));
@@ -131,7 +131,7 @@ function incoming(state) {
 
 // The gun that covers the paratroopers' approach: the most forward gun up on the crow's nest.
 const paraGun = () => {
-  const nest = all('gun').filter((s) => s.p === 'nest');
+  const nest = all('gun').filter((s) => isNestDeck(s.p));
   return nest.length ? nest.reduce((a, b) => (b.x > a.x ? b : a)).n : null;
 };
 
@@ -215,10 +215,10 @@ function listJobs(state, bot) {
   const c = state.course;
   const bombRun = !!(c && c.map && c.map.open && !c.done && c.target && Math.hypot(c.target.x - (c.dist + SHIP_LAYOUT.refPoint.x), c.target.y - (SHIP_LAYOUT.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_RANGE);
   const bay = bayName();
-  const bombStarved = bombRun && state.bombBay && state.bombBay.bombs <= 0 && !mods.some((m) => m.name === bay && m.broken) && Math.hypot(c.target.x - (c.dist + SHIP_LAYOUT.refPoint.x), c.target.y - (SHIP_LAYOUT.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN * 2;
+  const bombStarved = bombRun && !!bay && hasKind('ammo') && state.bombBay && state.bombBay.bombs <= 0 && !mods.some((m) => m.name === bay && m.broken) && Math.hypot(c.target.x - (c.dist + SHIP_LAYOUT.refPoint.x), c.target.y - (SHIP_LAYOUT.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN * 2;
   // The boiler is dying (no coal, or the pressure has collapsed): nothing else works without steam - stoke it right away.
   const ship = state.ship;
-  if (state.phase === 'flying' && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
+  if (state.phase === 'flying' && hasKind('boiler') && hasKind('coal') && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
   // The parts everything else hangs on (the helm and its steam pipe, the boiler, the lift): a broken one is fixed first,
   // otherwise the gasbag can never be pumped up again and the ship just sits there burning.
   for (const m of mods) if (m.broken && critical(mods, m)) jobs.push({ kind: 'repair', obj: m, max: 1, cap: 3, urgent: true });
@@ -305,19 +305,19 @@ function listJobs(state, bot) {
   }
   // Now and then the crew shovels extra coal to push into overdrive.
   const pushing = Math.floor(performance.now() / 1000 / B.OVERDRIVE_PUSH_EVERY) % 3 === 0;
-  if ((state.ship.fuel < (pushing ? 60 : 25) && state.ship.press < config.BOILER.WARN_AT - (pushing ? 10 : 25)) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
+  if (hasKind('boiler') && hasKind('coal') && (state.ship.fuel < (pushing ? 60 : 25) && state.ship.press < config.BOILER.WARN_AT - (pushing ? 10 : 25)) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
   for (const m of mods) if (!m.broken && m.hp < (['engine', 'helm', 'lift', 'shield', 'coil'].includes(m.kind) ? m.max * config.MODULES.LEAK_BELOW - 1 : 60)) jobs.push({ kind: 'repair', obj: m, max: 1 });
-  const guns = GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
+  const guns = !hasKind('ammo') ? [] : GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
   // Bombing run coming up (an outpost to destroy is near): bombs are the weapon that matters,
   // so loading the bay comes before topping up the guns.
-  if (bombRun && state.bombBay && state.bombBay.bombs < config.MAPS.BOMB_RUN_STOCK) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
+  if (bombRun && bay && hasKind('ammo') && state.bombBay && state.bombBay.bombs < config.MAPS.BOMB_RUN_STOCK) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
-  if (!bombRun && state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
+  if (!bombRun && bay && hasKind('ammo') && state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   jobs.push(...linkJobs(state, bot, false)); // (...and the quieter links: loaders for idle guns, the boiler surge)
   for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // Hovering over an outpost with bombs aboard: one bot drops everything and mans the bomb bay.
-  if (bombRun && c.target && Math.hypot(c.target.x - (c.dist + SHIP_LAYOUT.refPoint.x), c.target.y - (SHIP_LAYOUT.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken(bay) && !players.some((q) => kindOf(q.lock) === 'bombBay')) jobs.unshift({ kind: 'station', obj: bay, max: 1 });
+  if (bay && bombRun && c.target && Math.hypot(c.target.x - (c.dist + SHIP_LAYOUT.refPoint.x), c.target.y - (SHIP_LAYOUT.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken(bay) && !players.some((q) => kindOf(q.lock) === 'bombBay')) jobs.unshift({ kind: 'station', obj: bay, max: 1 });
   return jobs;
 }
 
@@ -572,6 +572,7 @@ function work(p, state) {
     steer(p, b.d, b.x - 50, 20);
   } else if (job.kind === 'coal') {
     const s = p.carry === 'coal' ? boilerFor(state, p) : nearest('coal', p);
+    if (!s) { p.carry = null; return wander(p); } // (no coal bunker or boiler on this ship: nothing to haul)
     if (steer(p, s.d, s.x)) press(p);
   } else if (job.kind === 'defuse') {
     if (steer(p, o.d, o.x, 25)) p.fire = true;
@@ -593,6 +594,7 @@ function work(p, state) {
     if (steer(p, o.d, o.x, 10)) press(p);
   } else if (job.kind === 'ammo') {
     const s = p.carry === 'ammo' ? stationNamed(o) : nearest('ammo', p);
+    if (!s) { p.carry = null; return wander(p); }
     if (steer(p, s.d, s.x)) press(p);
   } else if (job.kind === 'station') {
     const s = stationNamed(o);
@@ -1086,7 +1088,7 @@ function linkJobs(state, bot, early) {
   const ship = state.ship;
   if (bot.surgeStart > 0 && !(bot.botJob && bot.botJob.kind === 'surge')) bot.surgeStart = 0; // (interrupted: forget it)
   const surging = bot.botJob && bot.botJob.kind === 'surge' && (bot.surgeStart || 0) > 0;
-  const calm = !state.fires.length && !mods.some((m) => m.broken && critical(mods, m)) && players.some((q) => isHelm(q.lock));
+  const calm = hasKind('boiler') && !state.fires.length && !mods.some((m) => m.broken && critical(mods, m)) && players.some((q) => isHelm(q.lock));
   if (surging ? ship.press < SURGE_STOP_PRESS + 1 : calm && ship.press >= LK.SURGE.MIN_PRESS + 4 && ship.press <= 78 && ship.fuel > 25 && now - (state.surgeBotAt || -1e9) > SURGE_GAP_MS && ship.speed > 0.25) out.push({ kind: 'surge', obj: 'surge', max: 1 });
   return out;
 }

@@ -2,7 +2,7 @@ import { createJobFinder } from './jobs.js';
 import { updateCrewScale, sparesFor, spawnPace, damageMul, crewMul, autopilotOn, crewHeads } from './crewscale.js';
 import { updateMates } from './mates.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf, deckIndex, hasKind, isNestDeck, reviveSpot } from '../../shipLayout.js';
 import { updateBot } from './bots.js';
 import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
 import { createModules } from './modules.js';
@@ -28,8 +28,9 @@ import { createSpotter } from './spotter.js';
 import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { createGoingDown } from './goingDown.js';
 import { createBalance } from './balance.js';
+import { createSails, windSpeed } from './sails.js';
 import { installBags, syncBags, refillBags, stepBags, watchBags } from './gasBags.js';
-import { bagNearX, bagEdgeY, bagName } from './shipBuild.js';
+import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
@@ -55,12 +56,12 @@ const onGasbag = (x, y) => (y < 455 ? BAGS.findIndex((b) => ((x - b.cx) / b.rx) 
 // above the catwalk. (x, y) is the hole's drawn position on the envelope; bi = the bag it is in (the nearest, when not given).
 // The hole remembers its bag (hole.bag): it leaks from that bag only.
 function gasHoleAt(x, y, bi) {
-  const nest = PLATFORMS.findIndex((p) => p.id === 'nest');
-  const cat = PLATFORMS.findIndex((p) => p.id === 'catwalk');
+  const nest = PLATFORMS.findIndex((p) => rowOf(p) === 'nest' && x > p.x0 - 60 && x < p.x1 + 60); // (a crow's nest over the hit, if there is one: a cut nest has two)
+  const cat = deckIndex('catwalk');
   const bag = bi != null && BAGS[bi] ? bi : Math.max(0, bagNearX(BAGS, x));
   const GB = BAGS[bag];
   const edge = (hx, top) => bagEdgeY(GB, hx, top);
-  if (y < GB.cy && x > PLATFORMS[nest].x0 - 60 && x < PLATFORMS[nest].x1 + 60) {
+  if (y < GB.cy && nest >= 0) {
     const hx = Math.max(PLATFORMS[nest].x0 + 15, Math.min(PLATFORMS[nest].x1 - 15, x));
     return { x: hx, d: nest, y: edge(hx, true) + 34, prog: 0, bag };
   }
@@ -76,7 +77,7 @@ function gasHoleAt(x, y, bi) {
 
 // Which indoor/outdoor floor a hit at (x, y) lands on (holes and fires go there), or null (e.g. gasbag).
 function roomPlatformAt(x, y) {
-  const d = PLATFORMS.findIndex((p) => p.id !== 'nest' && x >= p.x0 && x <= p.x1 && y <= p.y + 15 && y >= p.y - 170);
+  const d = PLATFORMS.findIndex((p) => !isNestDeck(p.id) && x >= p.x0 && x <= p.x1 && y <= p.y + 15 && y >= p.y - 170);
   return d < 0 ? null : d;
 }
 
@@ -211,6 +212,9 @@ export function createSimulation() {
     // A gas valve (S.5d): shut or open the feed to its gasbag. Turned from VALVE_REACH, closer than a rack's reach, so it still works on a crowded deck.
     const gv = (SHIP_LAYOUT.gasValves || []).find((v) => here(v, T.VALVE_REACH));
     if (gv) { const i = SHIP_LAYOUT.gasValves.indexOf(gv); return { type: 'gasvalve', obj: gv, label: `${state.gasValveOpen[i] === false ? 'Open' : 'Close'} ${bagName(gv.bag, SHIP_LAYOUT.gasbags.length).toLowerCase()} valve` }; }
+    // A mast and sail (S.5e): hold Action to haul the sail up, tap it to let it down.
+    const sl = sails.actionFor(player, here);
+    if (sl) return sl;
     // Otherwise standing at a rack or hook means take / swap / put back.
     const pickup = legacy ? PICKUPS.find((r) => here(r, T.REACH)) : null;
     // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)
@@ -737,6 +741,7 @@ export function createSimulation() {
   let lastJolt = 0;
   const prime = createPrime({ state, phoneFx }); // primed shells: hold PRIME on a gun to charge the loaded shell (prime.js)
   const links = createLinks({ state, modules, shipPuff }); // linked stations: gun + loader, helm + lookout, boiler surge (links.js)
+  const sails = createSails({ state, modules }); // wind and sails: the extra speed of raised sails, gust tears (sails.js)
   const balance = createBalance(state); // the seesaw: live centre of mass against the bag's lift (balance.js)
   const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt }); // GOING DOWN! last stand + the ice locker (goingDown.js)
   state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
@@ -1232,6 +1237,12 @@ export function createSimulation() {
       pop(state, act.obj.x, PLATFORMS[act.obj.d].y - 140 - state.ship.alt, `${bagName(act.obj.bag, state.bags.length)} VALVE ${state.gasValveOpen[i] ? 'OPEN' : 'SHUT'}`, state.gasValveOpen[i] ? '#9cc99a' : '#e2a24a', 0.9);
       state.valveLog = (state.valveLog || 0) + 1; // (how many times a gas valve was turned: botsim reports it)
       if (!state.gasValveOpen[i]) state.valveShuts = (state.valveShuts || 0) + 1;
+    } else if (type === 'sail') {
+      if (!act.hold) {
+        sails.lower(act.obj);
+        stat(player, 'sails');
+        phoneFx(player, 'Sail coming down', [30]);
+      }
     } else if (type === 'valve') {
       act.obj.open = !act.obj.open;
       puff(act.obj.pos.x, act.obj.pos.y - state.ship.alt, '#ffffff', 6);
@@ -1344,15 +1355,15 @@ export function createSimulation() {
         player.fly = false;
         fall(player, dt, player.tumble ? air.tumble(player, dt) : 260, (w) => {
           air.clear(w);
-          // Fell off the ship (or off a gunship): back aboard in the medical bay, dazed.
-          const mb = SHIP_LAYOUT.medbay;
-          w.d = PLATFORMS.findIndex((p) => p.id === mb.p);
-          w.x = mb.x + (Math.random() - 0.5) * 60;
+          // Fell off the ship (or off a gunship): back aboard in the medical bay, dazed (no medbay: on the spawn deck at a boarding point).
+          const rv = reviveSpot();
+          w.d = rv.d;
+          w.x = rv.medbay ? rv.x + (Math.random() - 0.5) * 60 : rv.x;
           w.y = PLATFORMS[w.d].y;
           w.fall = false;
           w.ko = config.GUNSHIP.RESPAWN_TIME;
           w.carry = null;
-          phoneFx(w, 'You fell! Coming round in the medical bay...', [80, 40, 80]);
+          phoneFx(w, rv.medbay ? 'You fell! Coming round in the medical bay...' : 'You fell! You scramble back aboard, dazed...', [80, 40, 80]);
         });
         continue;
       }
@@ -1563,7 +1574,11 @@ export function createSimulation() {
           else if (act.type === 'winch') env.stormSea.winchWork(object, dt);
           else if (act.type === 'prime') prime.assist(player, object, act.gunner, dt);
           else if (act.type === 'surge') links.surgeHold(player);
-          else {
+          else if (act.type === 'sail') {
+            const before = object.hoist;
+            sails.haul(object, dt);
+            if (before < 1 && object.hoist >= 1) { stat(player, 'sails'); state.sailStats.raised++; pop(state, player.x, player.y - 150 - state.ship.alt, 'SAIL UP!', '#e9dcc0', 0.8); }
+          } else {
             object.worked = true;
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
@@ -1687,6 +1702,12 @@ export function createSimulation() {
     spotter.update(dt);
     links.update(dt);
     modules.update(state, dt);
+    sails.update(dt); // (raised sails: the extra speed, gust tears)
+    // What the ship has to fly with (S.5e): none of these is needed to fly, each one missing just takes some control away.
+    const rig = { helm: hasKind('helm'), boiler: hasKind('boiler'), engine: hasKind('engine') };
+    rig.powered = rig.boiler && rig.engine; // (engines to push her and steam to drive them; otherwise the wind alone carries her, plus her sails)
+    rig.pump = rig.boiler && rig.helm; // (the helm's pressure lever works the pump and the vent)
+    state.rig = rig;
     // Steam pressure: heat from the coal in the firebox in, steam used by everything powered,
     // open vents and burst pipes out (all using more at higher pressure).
     const BO = config.BOILER;
@@ -1734,7 +1755,7 @@ export function createSimulation() {
         state.sfxQ.push(['alarm']);
       }
     }
-    if (state.ship.press >= BO.BLOWOUT_AT || (hot > 0 && Math.random() < BO.BLOWOUT_RATE * hot * dt)) {
+    if (rig.boiler && (state.ship.press >= BO.BLOWOUT_AT || (hot > 0 && Math.random() < BO.BLOWOUT_RATE * hot * dt))) {
       // The boiler blows: damage it and burst a random steam pipe.
       state.ship.press = 75;
       state.boilerBlew = true; // (read by tools/botsim.mjs)
@@ -1751,7 +1772,8 @@ export function createSimulation() {
     }
 
     balance.update(dt);
-    const maxSpeed = clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state) * (1 - state.balance.slow); // (a tail-heavy ship drags her tail)
+    const wind = windSpeed(state); // (the wind alone: what a ship with no engines, no steam or nobody steering makes)
+    const maxSpeed = rig.powered ? clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state) * (1 - state.balance.slow) : wind * (1 - state.balance.slow); // (a tail-heavy ship drags her tail)
     if (state.ship.speed > maxSpeed) state.ship.speed += (maxSpeed - state.ship.speed) * Math.min(1, dt * 2);
     const maxReverse = -maxSpeed * config.SHIP.REVERSE;
     if (state.ship.speed < maxReverse) state.ship.speed += (maxReverse - state.ship.speed) * Math.min(1, dt * 2);
@@ -1784,13 +1806,13 @@ export function createSimulation() {
     state.autopilot = false;
     // Easy/Normal: with nobody at the helm the ship flies itself, gently.
     const assist = autopilotOn(state) && flying;
-    const plan = assist && (!getHelm() || !gasManned) ? pilotPlan(state, 4, 0.3) : null;
+    const plan = assist && rig.helm && (!getHelm() || !gasManned) ? pilotPlan(state, 4, 0.3) : null;
     if (!getHelm()) {
       if (plan && worksKind('helm')) {
         state.autopilot = true;
         driveSpeed(plan.speed, dt);
         state.ship.trim = clamp((plan.target - state.ship.alt) / 150, -1, 1) * 0.6;
-      } else driveSpeed(flying ? 0.2 : 0.3, dt);
+      } else driveSpeed(flying ? (rig.helm ? 0.2 : wind) : 0.3, dt); // (no helm at all: nobody can steer, she goes where the wind takes her)
     }
     if (!gasManned) valve.input = plan ? gasFor(state, plan.target) * 0.6 : 0;
     valve.auto = !gasManned && !!plan;
@@ -1798,6 +1820,7 @@ export function createSimulation() {
     // Gas: the valve pumps hot steam in (costs pressure; needs steam) or vents it. Hot gas slowly
     // cools and seeps out, and holes leak more.
     if (flying) {
+      state.noPump = !rig.pump; // (no helm or no boiler: nobody can ever top her up, so the bag only seeps very slowly, see gasBags.js)
       const pumping = Math.max(0, valve.input) * (state.ship.press > G.PUMP_MIN_PRESS && modules.boilerUp() ? Math.min(1, state.ship.press / 60) : 0);
       state.steamParts.pump = pumping * G.PUMP_STEAM;
       // The pump and the vent act on every gasbag at once; seepage and holes are per bag (gasBags.js: with one bag this is the old single gas value).
@@ -1822,7 +1845,7 @@ export function createSimulation() {
     // (ice weight shifts the level she needs to hover; lava thermals push her up - state.env, environments.js)
     const effGas = state.ship.gas - state.env.sink + state.env.lift / G.LIFT;
     const lift = (effGas - G.NEUTRAL) * G.LIFT;
-    const trim = state.ship.trim * SHM.TRIM_ACCEL * (worksKind('helm') ? 1 : 0) * env.deep.helmMul() * state.links.helmMul; // (a lookout in the nest sharpens the helm: links.js)
+    const trim = state.ship.trim * SHM.TRIM_ACCEL * (worksKind('helm') ? (modules.handWheel() ? config.WIND.HAND_TRIM : 1) : 0) * env.deep.helmMul() * state.links.helmMul; // (a lookout in the nest sharpens the helm: links.js)
     state.buoyancy = effGas > G.NEUTRAL + 5 ? 1 : effGas < G.NEUTRAL - 5 ? -1 : 0;
     state.sinking = state.buoyancy < 0;
     if (flying) {

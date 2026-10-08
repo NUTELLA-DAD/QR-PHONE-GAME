@@ -5,7 +5,7 @@
 // penalty for each crewmate already going there. A suggestion is kept for a few seconds so it
 // doesn't flicker, and only swapped for a clearly better one.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, nearest } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, nearest, deckIndex } from '../../shipLayout.js';
 import { travelTime, direction } from './nav.js';
 
 const L = SHIP_LAYOUT;
@@ -85,7 +85,7 @@ export function createJobFinder(state) {
     // A lopsided ship (balance.js): idle crew walk to the light end of the main deck, their weight trims her.
     const bal = state.balance;
     if (bal && bal.warn && state.phase === 'flying') {
-      const d = L.platforms.findIndex((q) => q.id === 'main');
+      const d = deckIndex('main');
       if (d >= 0) add('trim', 'trim', d, bal.deg > 0 ? L.platforms[d].x0 + 90 : L.platforms[d].x1 - 90, {}, `TRIM HER! ${bal.deg > 0 ? 'NOSE' : 'TAIL'}-HEAVY - go ${bal.deg > 0 ? 'aft' : 'fore'}`);
     }
     return out;

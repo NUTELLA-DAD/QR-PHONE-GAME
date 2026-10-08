@@ -17,12 +17,12 @@
 //   state.sea       { y, flood, spouts, survivors, hook, winch, pump, rescued, scrapes }
 //   state.env       wind (px/s along the course), sink (gas points), drag (0-1 speed lost to flooding)
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, deckIndex } from '../../shipLayout.js';
 import { floorBelow } from './maps.js';
 import { pop } from './popups.js';
 
 const P = SHIP_LAYOUT.platforms;
-const IDX = (id) => P.findIndex((p) => p.id === id);
+const IDX = (id) => deckIndex(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
 const hash = (i, salt = 0) => {

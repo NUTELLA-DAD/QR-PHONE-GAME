@@ -7,7 +7,7 @@
 // Everything sits on grids fixed to the world (it only slides past); waves roll smoothly with time.
 // Drawing never throws: problems are reported to the pause menu instead. Nothing from the internet.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, deckIndex } from '../../shipLayout.js';
 import { envIdOf, envOf } from './environments.js';
 import { seaLevel } from './envStormSea.js';
 import { solidAt } from './maps.js';
@@ -22,8 +22,8 @@ const report = (e) => { const list = (globalThis.gameErrors = globalThis.gameErr
 
 export function createStormSeaArt({ ctx, state, ink, time }) {
   const P = SHIP_LAYOUT.platforms;
-  const CAT = P.findIndex((p) => p.id === 'catwalk');
-  const LOWER = P.findIndex((p) => p.id === 'lower');
+  const CAT = deckIndex('catwalk');
+  const LOWER = deckIndex('lower');
   const isStorm = () => envIdOf(state) === 'storm';
   const isSea = () => envIdOf(state) === 'sea';
 

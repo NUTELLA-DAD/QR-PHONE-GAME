@@ -12,7 +12,7 @@
 // This file owns the rules; simulation.js calls the small hooks (tryStart, active/protect, onStoke, takeIce,
 // throwIce, update, newMission). Bots use botJobs(), idle phones jobsFor().
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, one, nearest } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, one, nearest, deckIndex, hasKind } from '../../shipLayout.js';
 import { altBounds } from './course.js';
 import { pop } from './popups.js';
 import { refillBags } from './gasBags.js';
@@ -23,8 +23,8 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const GB = L.gasbag;
 let MAIN_D, CAT_D, BOILER, LOCKER; // (worked out from the ship layout; refreshed when a new ship build is applied)
 function rebuildShipTables() {
-  MAIN_D = L.platforms.findIndex((p) => p.id === 'main');
-  CAT_D = L.platforms.findIndex((p) => p.id === 'catwalk');
+  MAIN_D = deckIndex('main');
+  CAT_D = deckIndex('catwalk');
   BOILER = one('boiler'); // (GOING DOWN! is about the first boiler; a ship with several still only has the one heat meter)
   LOCKER = L.racks.find((r) => r.kind === 'ice');
 }
@@ -152,6 +152,8 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
       crew: n,
       beep: 0,
     });
+    // A ship with no boiler (or no coal bunker to feed one) cannot be lifted by shovelling: only the leaks decide it (S.5e). The lift meter starts full.
+    if (!BOILER || !hasKind('coal')) Object.assign(g, { lift: 1, loads: 0, heatPer: 0 });
     spawnHoles(g);
     state.ship.hull = GD.HOLD_HULL;
     state.ship.shake = 1.4;
@@ -209,7 +211,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     state.ship.hull = GD.HOLD_HULL;
     state.ship.shake = Math.max(state.ship.shake, 0.35);
     // The boiler gauge follows the heat (kept just under the point where it would rattle and blow on its own).
-    state.ship.press += (66 + 22 * clamp(g.heat, 0, 1) - state.ship.press) * Math.min(1, dt * 3);
+    if (BOILER) state.ship.press += (66 + 22 * clamp(g.heat, 0, 1) - state.ship.press) * Math.min(1, dt * 3);
     // The sinking: faster the longer it goes, slower the more lift there is. Never into the rock (the course pushes her
     // out and she scrapes harmlessly), and never below the lowest height a plain course allows.
     const u = clamp(g.t / g.time, 0, 1);
@@ -278,6 +280,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     const g = state.goingDown;
     if (!g) return '';
     const open = g.holes.filter((h) => state.gasHoles.includes(h)).length;
+    if (!g.loads) return `GOING DOWN! ${Math.ceil(Math.max(0, g.time - g.t))}s - ${open} leak${open === 1 ? '' : 's'} to patch`;
     return `GOING DOWN! ${Math.ceil(Math.max(0, g.time - g.t))}s - lift ${g.loadsDone}/${g.loads}, heat ${Math.round(g.heat * 100)}%, ${open} leak${open === 1 ? '' : 's'} to patch`;
   };
 
@@ -295,11 +298,11 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     const out = [];
     const U = 3;
     const bunker = nearest('coal', p);
-    if (coalLeft > 0 || p.carry === 'coal') {
+    if (g.loads && (coalLeft > 0 || p.carry === 'coal')) {
       for (let k = 0; k < Math.min(3, Math.max(1, coalLeft)); k++) out.push({ kind: 'coal', obj: 'gdcoal' + k, d: BOILER.d, x: BOILER.x, urgency: U, max: 1, label: 'EMERGENCY COAL for the boiler!', ...(p.carry === 'coal' || !bunker ? {} : { fetch: bunker.n }) });
     }
-    out.push({ kind: 'cool', obj: 'gdcool0', d: BOILER.d, x: BOILER.x, urgency: g.heat > 0.55 ? U * 1.4 : U * 0.8, max: 1, label: 'ICE for the boiler!' });
-    if (g.heat > 0.4 || crewCount() >= 6) out.push({ kind: 'cool', obj: 'gdcool1', d: BOILER.d, x: BOILER.x, urgency: U * 0.7, max: 1, label: 'ICE for the boiler!' });
+    if (g.loads) out.push({ kind: 'cool', obj: 'gdcool0', d: BOILER.d, x: BOILER.x, urgency: g.heat > 0.55 ? U * 1.4 : U * 0.8, max: 1, label: 'ICE for the boiler!' });
+    if (g.loads && (g.heat > 0.4 || crewCount() >= 6)) out.push({ kind: 'cool', obj: 'gdcool1', d: BOILER.d, x: BOILER.x, urgency: U * 0.7, max: 1, label: 'ICE for the boiler!' });
     for (const h of open) out.push({ kind: 'gas', obj: h, d: h.d, x: h.x, urgency: U, max: 1, label: 'PATCH THE GLOWING LEAK!' });
     return out;
   };
@@ -317,7 +320,7 @@ export function botJobs(state, bot) {
   const open = g.holes.filter((h) => state.gasHoles.includes(h));
   const coalLeft = g.loads - g.loadsDone;
   const coalSlots = coalLeft > 0 ? Math.min(coalLeft, clamp(Math.round(n * 0.4), 1, 3)) : 0;
-  const iceSlots = n >= 6 ? 2 : 1;
+  const iceSlots = !g.loads ? 0 : n >= 6 ? 2 : 1; // (no boiler to cool when the last stand is only about the leaks)
   const coal = [];
   for (let k = 0; k < coalSlots; k++) coal.push({ kind: 'coal', obj: 'gdcoal' + k, max: 1, urgent: true });
   const ice = [];
@@ -325,8 +328,8 @@ export function botJobs(state, bot) {
   const leaks = open.map((h) => ({ kind: 'patch', obj: h, max: 1, urgent: true }));
   // Someone carrying coal/ice finishes that delivery first.
   const jobs = [];
-  if (bot.carry === 'coal' && coalLeft > 0) jobs.push({ kind: 'coal', obj: 'gdcoal0', max: 1, urgent: true });
-  if (bot.carry === 'ice') jobs.push({ kind: 'cool', obj: 'gdcool0', max: 1, urgent: true });
+  if (g.loads && bot.carry === 'coal' && coalLeft > 0) jobs.push({ kind: 'coal', obj: 'gdcoal0', max: 1, urgent: true });
+  if (g.loads && bot.carry === 'ice') jobs.push({ kind: 'cool', obj: 'gdcool0', max: 1, urgent: true });
   // The boiler is close to bursting: ice before anything else. Otherwise coal, a leak, ice - one of each in turn.
   const hot = g.heat > 0.6;
   const order = hot ? [ice, coal, leaks] : [coal, leaks, ice];

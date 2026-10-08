@@ -12,13 +12,13 @@
 //   gravity (crew gravity multiplier)  engine (forward speed multiplier)  accel (engine pickup multiplier)
 //   sink (extra gas to hover - shared with frost's ice)  o2 / lack  walkMul(player)  helmMul()
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, deckIndex } from '../../shipLayout.js';
 
 const P = SHIP_LAYOUT.platforms;
 let MAIN, DECKS; // (worked out from the ship layout; refreshed when a new ship build is applied)
 function rebuildShipTables() {
-  MAIN = P.findIndex((p) => p.id === 'main');
-  DECKS = ['catwalk', 'main', 'lower'].map((id) => P.findIndex((p) => p.id === id));
+  MAIN = deckIndex('main');
+  DECKS = ['catwalk', 'main', 'lower'].map(deckIndex).filter((d, i, a) => d >= 0 && a.indexOf(d) === i);
 }
 rebuildShipTables();
 onLayoutChange(rebuildShipTables);

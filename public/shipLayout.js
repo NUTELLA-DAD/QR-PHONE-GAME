@@ -9,7 +9,7 @@
 // stay valid. Values DERIVED from the layout (a platform index, a station lookup, a route table ...)
 // must not be computed once at import time: recompute them in a function, or in an onLayoutChange(fn) hook
 // (tools/buildsim.mjs --lint flags new module-level captures). Builds only change at the dock.
-import { BUILDS, buildLayout, balanceOf } from './modules/host/shipBuild.js';
+import { BUILDS, buildLayout, balanceOf, deckRoles, rowOf, isNestRow } from './modules/host/shipBuild.js';
 import { config } from './config.js';
 
 export const SHIP_LAYOUT = { version: 0 };
@@ -83,10 +83,36 @@ export function nearest(kind, at) {
   if (list.length < 2 || !at) return list[0];
   return list.reduce((best, s) => (walkCost(s, at) < walkCost(best, at) ? s : best));
 }
-// A crow's-nest station: a lookout, or a searchlight standing on the nest deck (links.js, linkArt.js, spotter.js).
+// Is this deck (a platform id) a crow's nest? A ship may have several (the eraser cuts the nest in two) and a second, higher tier (S.5e).
+export const isNestDeck = (id) => { const q = SHIP_LAYOUT.platforms.find((o) => o.id === id); return !!q && isNestRow(rowOf(q)); };
+// How high a nest stands: 0 = the nest on the bag, 1 = the high tier (a longer view, config.NEST).
+export const nestTier = (id) => { const q = SHIP_LAYOUT.platforms.find((o) => o.id === id); return q && rowOf(q) === 'crow2' ? 1 : 0; };
+// A crow's-nest station: a lookout, or a searchlight standing on a nest deck (links.js, linkArt.js, spotter.js).
 export const isNestStation = (name) => {
   const s = SHIP_LAYOUT.stations.find((q) => q.n === name);
-  return !!s && (s.kind === 'lookout' || (s.kind === 'searchlight' && s.p === 'nest'));
+  return !!s && (s.kind === 'lookout' || (s.kind === 'searchlight' && isNestDeck(s.p)));
 };
+
+// The index of the platform that plays a ROLE ('main', 'lower', 'catwalk', 'nest') or has that id, or -1. A minimal ship (S.5e: a bag and any one deck) has
+// not got every deck, so the roles are lent: the main deck is the deck nearest the main row, the lower deck the lowest, the top deck ('catwalk') the highest.
+// 'nest' is -1 without a crow's nest (strict: no lending). Other ids ('bay', 'pod' ...) are exact. Not cached across builds: call it from a rebuild hook or a function.
+export function deckIndex(role) {
+  const P = SHIP_LAYOUT.platforms;
+  if (!P.length) return -1;
+  const roles = deckRoles(P), q = role === 'main' ? roles.main : role === 'lower' ? roles.lower : role === 'catwalk' ? roles.cat : role === 'nest' ? roles.nest : P.find((o) => o.id === role);
+  return q ? P.indexOf(q) : -1;
+}
+// Where somebody who fell off the ship (or bailed out of a plane) comes round: the medical bay, or with no medbay (S.5e) just aboard again on the spawn deck at a
+// boarding point (they wake where they fell, with nobody to nurse them). Returns { d, x, medbay }.
+export function reviveSpot() {
+  const mb = SHIP_LAYOUT.medbay;
+  if (mb) { const d = SHIP_LAYOUT.platforms.findIndex((q) => q.id === mb.p); if (d >= 0) return { d, x: mb.x, medbay: true }; }
+  const e = SHIP_LAYOUT.boarderEntryPoints, d = Math.max(0, SHIP_LAYOUT.spawnPlatform);
+  const p = SHIP_LAYOUT.platforms[d];
+  const x = e.length ? e[0].x + Math.random() * (e[e.length - 1].x - e[0].x) : (p.x0 + p.x1) / 2;
+  return { d, x: Math.max(p.x0 + 20, Math.min(p.x1 - 20, x)), medbay: false };
+}
+// What the ship has (every instance counts; engines are in `engines`, not `stations`): the sim and the phones ask this before assuming a part exists.
+export const hasKind = (kind) => (kind === 'engine' ? SHIP_LAYOUT.engines.length > 0 : SHIP_LAYOUT.stations.some((s) => s.kind === kind));
 
 applyBuild(BUILDS.classic);

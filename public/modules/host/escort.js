@@ -10,7 +10,7 @@
 // Enemy bullets and rock hurt her. Shot down, the pilot bails out and comes round in the medical
 // bay, and the crew need a while to build another.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, reviveSpot } from '../../shipLayout.js';
 import { flyPlane, smoke, shootDown, angDiff } from './planes.js';
 import { targets } from './aim.js';
 import { inRock, groundAt, ceilAt } from './course.js';
@@ -60,12 +60,12 @@ export function createEscort({ state, puff, phoneFx }) {
     const p = pilot(s);
     if (p) {
       p.lock = null;
-      const mb = SHIP_LAYOUT.medbay;
-      p.d = SHIP_LAYOUT.platforms.findIndex((q) => q.id === mb.p);
-      p.x = mb.x;
+      const rv = reviveSpot();
+      p.d = rv.d;
+      p.x = rv.x;
       p.y = SHIP_LAYOUT.platforms[p.d].y;
       p.ko = config.GUNSHIP.RESPAWN_TIME;
-      phoneFx?.(p, why + ' You bailed out - coming round in the medical bay...');
+      phoneFx?.(p, why + (rv.medbay ? ' You bailed out - coming round in the medical bay...' : ' You bailed out - you come round on deck...'));
     }
     Object.assign(s, { docked: true, flying: false, returning: false, auto: false, hp: E.HP, rebuild: E.REBUILD });
     state.ev.warn = 2.5;

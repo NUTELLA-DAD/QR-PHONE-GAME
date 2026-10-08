@@ -946,6 +946,7 @@ export const config = {
     PUMP_MIN_PRESS: 15, // below this pressure the pump can't push any gas in
     VENT_RATE: 30, // gas vented per second (valve full open the other way)
     SEEP: 0.5, // gas cooling/seeping out per second
+    SEEP_NO_PUMP: 0.004, // ...a ship that can never pump (no helm or no boiler) loses gas this slowly: a tight bag nobody tops up, she sinks only over many minutes
     LEAK_PER_HOLE: 0.9, // extra gas lost per second per hole
     SCRAPE_BELOW: 25, // grinding along the ground with gas below this, the hull scrapes...
     SCRAPE_DAMAGE: 5, // ...losing this much hull per second (before the difficulty multiplier)
@@ -1000,10 +1001,11 @@ export const config = {
     MASS: {
       deck: 0.3, // per 100 px of deck (an outside deck weighs half)
       link: { ladder: 0.4, rope: 0.3, stairs: 1, lift: 3, pole: 0.3 }, // ways between decks
-      kind: { helm: 5, boiler: 16, lookout: 1, coal: 10, ammo: 6, gun: 3, searchlight: 2, coil: 5, deflector: 5, bombBay: 10, navigator: 1, escort: 5 }, // stations by kind
+      kind: { helm: 5, boiler: 16, lookout: 1, coal: 10, ammo: 6, gun: 3, searchlight: 2, coil: 5, deflector: 5, bombBay: 10, navigator: 1, escort: 5, sail: 4 }, // stations by kind
       engine: 9, pipe: 0.5, vent: 0.3, gasValve: 0.4, rack: 0.2, extinguisher: 0.2, medbay: 3,
       bag: 6, bagTwin: 4, // a gasbag's rigging, and the twin envelope's
       ballast: 5, // one sandbag: cheap and dense, the trimming tool
+      mast: 3, // the mast of a high crow's nest tier (crow2): weight way up high
     },
     LEVEL_PX: 30, // COM within this many px of COL counts as level (no trim at all: the classic ship is exactly level)
     WARN_PX: 80, // WARN beyond this ("nose-heavy 2 degrees")...
@@ -1045,6 +1047,35 @@ export const config = {
     DROP_ROW: 75, // ...and only a spot whose deck is within this many px up or down of the drop point (a gun dropped on the main deck does not jump to the top deck)
     BAG_CY: 198, BAG_RY: 232, // a gasbag drawn from nothing sits at this height with this half-height (the classic bag's)
     BAG_COVER: 0.9, // the share of the gasbag's half-length that counts as covering the ship (the ends of the ellipse are thin): validator WARN beyond it
+  },
+  // ---- S.5e: a ship needs only a gasbag and a deck to fly. Everything else is optional; what is missing just takes control away. ----
+  // WIND: with no helm (or no engines, or no boiler) the ship simply DRIFTS with the wind. Speeds are shares of SHIP.TOP_SPEED (the throttle scale).
+  WIND: {
+    BASE: 0.22, // drift speed in a calm sky (about 120 px/s; the engines' idle cruise is 0.2, full ahead 1.0)
+    ENV: { skyisles: 1, frost: 1.2, ember: 0.8, fungal: 0.35, aether: 1.3, storm: 1.7, sea: 1.45 }, // how windy each environment is (multiplies BASE and a sail's pull)
+    CAVE: 0.45, // maps with rock walls and tunnels: sheltered, so the wind (and the sails) count for this much
+    HAND_TRIM: 0.4, // a helm with no boiler is a hand wheel: its little up/down trim works at this share of its power (nothing is steam-powered)
+  },
+  // SAIL: a mast and canvas on the top deck or a nest. A crew member hauls it up (hold Action) or lets it down (tap); a raised sail catches the wind for extra forward speed.
+  SAIL: {
+    MAST_H: 190, WIDTH: 150, // the mast's height above its deck and the canvas width (px, the drawing; a part may set its own)
+    BONUS: 0.13, // forward speed one fully raised sail adds (share of top speed) in a windless-neutral sky; times WIND.ENV (and WIND.CAVE on rock maps)
+    BONUS_DIM: 0.8, // each further raised sail adds this share of the one before it (diminishing returns)
+    HAUL_TIME: 3.2, // seconds of holding Action to haul a sail all the way up
+    LOWER_TIME: 1.1, // seconds for a sail to drop once the crew taps Lower
+    GUST_WARN: 3.5, // a storm gust due within this many seconds: a raised sail should be reefed now (the TV and phone say so)
+    TEAR_CHANCE: 0.55, // a gust blowing on a raised sail tears it with this chance per second, times how high it is up (torn: broken module, mend it with a hammer)
+    GUST_SHOVE: 0.5, // a gust also shoves a ship with her sails up this much harder (per fully raised sail, as a share of the shove)
+    SPEED_RATE: 1.2, // how quickly the ship's speed follows the sails' pull (per second, as a share of the difference): the canvas fills, she gathers way
+    REACH: 70, // how close to the mast a crew member must stand to work the sail (px)
+    COLORS: ['#e9dcc0', '#d9b88a', '#c97a5a', '#e7c9a0'], // canvas colours (the TV picks one per sail)
+  },
+  // NEST (S.5e): the crow's nest may be cut in two, and a second higher tier (crow2) stands on a mast above it. Height buys a longer view, but weighs on the ship, is a bigger
+  // target and catches the wind.
+  NEST: {
+    TIER_BONUS: 0.18, // a lookout / searchlight / gun on the high tier sees, lights and shoots this much further (warning time, beam length, shell life)
+    GUST_PER_TIER: 0.2, // a storm gust shoves the ship this much harder per high tier she carries (share of the shove)
+    MAST_CLEAR: 40, // the high nest sits at least this far inside the end of the nest it is climbed from (px)
   },
   // When the hull gives out the ship breaks apart and the whole game starts over at the mast.
   WRECK: {

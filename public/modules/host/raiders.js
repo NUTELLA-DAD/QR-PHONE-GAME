@@ -7,13 +7,13 @@
 // interrupt them with a hit.
 import { crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, deckIndex } from '../../shipLayout.js';
 import { moveWalker, steerTo, fall } from './nav.js';
 
 const R = config.RAIDERS;
 const P = SHIP_LAYOUT.platforms;
 let INSIDE; // platform indices of the decks inside the hull (refreshed when a new ship build is applied)
-const rebuildInside = () => { INSIDE = P.map((p, i) => i).filter((i) => P[i].id === 'main' || P[i].id === 'lower'); };
+const rebuildInside = () => { INSIDE = [deckIndex('main'), deckIndex('lower')].filter((d, i, a) => d >= 0 && a.indexOf(d) === i); };
 rebuildInside();
 onLayoutChange(rebuildInside);
 

@@ -253,10 +253,10 @@ async function checkValidator() {
     ['a ladder that goes up', plus({ part: 'ladder', top: 'lower', bottom: 'main', xTop: 400, xBottom: 400 }), 'FAIL', /does not go downward/],
     ['a deck nobody can reach', plus({ part: 'deck', id: 'attic', row: 'belly', name: 'Attic', x0: 100, x1: 200 }), 'FAIL', /no way from/],
     ['a deck nobody can leave (poles only down)', plus({ part: 'deck', id: 'pit', row: 'belly', name: 'Pit', x0: 100, x1: 200 }, { part: 'pole', top: 'lower', bottom: 'pit', xTop: 150, xBottom: 150 }), 'FAIL', /no way from the Pit/],
-    ['one boarding point', without((p) => p.part === 'boarderEntry' && p.x === 290), 'FAIL', /boarding point/],
-    ['no medbay', without((p) => p.part === 'medbay'), 'FAIL', /no medbay/],
-    ['no coal bunker', without((p) => p.n === 'Coal Bunker'), 'FAIL', /no coal/],
-    ['no bomb bay (the game still needs one)', without((p) => p.n === 'Bomb Bay'), 'FAIL', /bomb bay/],
+    ['one boarding point', without((p) => p.part === 'boarderEntry' && p.x === 290), 'WARN', /boarding points/],
+    ['no medbay', without((p) => p.part === 'medbay'), 'WARN', /No medbay/],
+    ['no coal bunker', without((p) => p.n === 'Coal Bunker'), 'WARN', /No coal bunker/],
+    ['no bomb bay: she flies without one', without((p) => p.n === 'Bomb Bay' || p.part === 'bombBay'), 'OK', /./],
     ['a gasbag too small to lift her', C.map((p) => (p.part === 'gasbag' ? { ...p, rx: 700 } : p)), 'FAIL', /too heavy/],
     ['two more engines and no more steam', plus({ part: 'engine', name: 'E3', p: 'lower', x: 170 }, { part: 'engine', name: 'E4', p: 'lower', x: 1430 }, { part: 'pipe', to: 'E3', p: 'lower', points: [[400, 610], [400, 700], [200, 700], [200, 765]], valve: [300, 700] }, { part: 'pipe', to: 'E4', p: 'lower', points: [[430, 610], [430, 710], [1450, 710], [1450, 765]], valve: [800, 710] }), 'FAIL', /cannot keep up/],
     ['a ship far too long', wider('lower', 'x1', 12), 'FAIL', /too big to read/],
@@ -270,7 +270,7 @@ async function checkValidator() {
   report(base.ok && !base.warns.length, 'the classic ship passes with no warnings');
   for (const [name, parts, want, re, opts] of cases) {
     const v = validate(parts, opts || {});
-    const list = want === 'FAIL' ? v.fails : v.warns;
+    const list = want === 'FAIL' ? v.fails : want === 'OK' ? ['ok'] : v.warns;
     report(list.some((t) => re.test(t)) && (want === 'FAIL' ? !v.ok : v.ok), `${name}: ${want} ${re}${list.some((t) => re.test(t)) ? '' : ' (got: ' + (v.fails.concat(v.warns).join(' | ') || 'nothing') + ')'}`);
   }
   // A walk over 1.5x its budget FAILs, over the budget WARNs (squeeze the budgets to see both).
@@ -336,7 +336,10 @@ async function checkEdit() {
   // 2. rejected strokes: inside or above the gasbag, a crow's nest off the bag, a cut in the middle of the nest, a deck nothing can reach
   report(/cross the gasbag/.test(E.rowAtY(250).why) && /above the gasbag/.test(E.rowAtY(-300).why) && E.rowAtY(645).row === 'main' && E.rowAtY(955).row === 'keel', 'rowAtY: a stroke inside the bag or above it is refused with a hint; near a row it snaps');
   report(!E.drawDeck(C, 'nest', 600, 1800).ok, "the crow's nest cannot be drawn off the end of the gasbag");
-  report(!E.erase(C, 'nest', 700, 800).ok, "the crow's nest cannot be cut in the middle");
+  const nc = E.erase(C, 'nest', 850, 880);
+  const nests = nc.parts.filter((p) => p.part === 'deck' && p.row === 'nest');
+  const vnc = validate(nc.parts);
+  report(nc.ok && nests.length === 2 && nests.every((d) => nc.parts.some((p) => p.part === 'rope' && (p.top === d.id || p.bottom === d.id))) && nc.parts.some((p) => p.part === 'station' && p.n === 'Lookout' && p.p === nests[0].id) && nc.parts.some((p) => p.part === 'gun' && p.n === 'Dorsal Gun' && p.p === nests[1].id) && vnc.ok, "the crow's nest cut in the middle: two nests " + nests.map((d) => d.id + ' ' + d.x0 + '-' + d.x1).join(', ') + ', each with its rope and stations, and it validates' + (vnc.ok ? '' : ': ' + vnc.fails.join('; ')));
   report(!E.drawDeck(C, 'deep', 1700, 1900).ok, 'a deck with no deck above it to climb to is refused');
   // 3. extend the main deck by 2 columns: the end room grows, the ship gets bigger and heavier, the bag may no longer cover it
   const d2 = E.drawDeck(d1.parts, 'main', 1470, 1470 + 2 * COL);
@@ -362,7 +365,7 @@ async function checkEdit() {
   report(pod.ok && !deck(pod.parts, 'pod') && pod.removed.includes('Ventral Gun') && !pod.parts.some((p) => p.bottom === 'pod'), 'erasing the Ball Turret takes its gun and ladder with it: removed ' + E.summarize(pod.removed));
   const boiler = E.erase(C, 'main', 330, 470);
   const vb = validate(boiler.parts);
-  report(boiler.ok && boiler.removed.includes('Boiler') && !vb.ok && vb.fails.some((t) => /no boiler/.test(t)), 'erasing the boiler room is allowed and the validator FAILs: ' + (vb.fails[0] || '?'));
+  report(boiler.ok && boiler.removed.includes('Boiler') && vb.ok && vb.warns.some((t) => /No boiler/.test(t)), 'erasing the boiler room is allowed; she still flies, with a strong WARN: ' + (vb.warns.find((t) => /No boiler/.test(t)) || '?').slice(0, 60));
   // 6. the build JSON round-trips (Copy build JSON / ?build=)
   const back = JSON.parse(JSON.stringify(d3.parts));
   report(JSON.stringify(buildLayout(back)) === JSON.stringify(buildLayout(d3.parts)), 'the edited build survives a JSON round trip');
@@ -384,7 +387,7 @@ async function checkEdit() {
   const re = E.removeAt(C, 70, 804);
   report(re.ok && re.removed.includes('Aft Engine') && re.removed.includes('steam pipe to Aft Engine') && !re.parts.some((p) => p.name === 'Aft Engine'), 'deleting an engine takes its steam pipe with it: removed ' + E.summarize(re.removed));
   const rb = E.removeAt(C, 400, 629);
-  report(rb.ok && !validate(rb.parts).ok && validate(rb.parts).needs.includes('a boiler'), 'deleting the boiler is allowed; the validator says she needs a boiler');
+  report(rb.ok && validate(rb.parts).ok && validate(rb.parts).advice.some((a) => a.key === 'boiler'), 'deleting the boiler is allowed; she still flies, and the validator advises a boiler');
   const kl = d1.parts.find((p) => p.part === "ladder" && p.bottom === "keel"), rs = E.removeAt(d1.parts, kl.xTop, 870); // (the ladder drawDeck added to the new Keel Deck)
   const vs = validate(rs.parts);
   report(rs.ok && rs.removed.includes('ladder') && !vs.ok && vs.fails.some((t) => /no way from .* to the Keel Deck|no way from the Keel Deck/.test(t)), 'the ladder drawDeck added is deletable like any other; the validator then shows the Keel Deck as unreachable');
@@ -404,7 +407,7 @@ async function checkEdit() {
   } catch (e) { crashed = e.stack.split('\n').slice(0, 3).join(' | '); }
   report(!crashed, 'an empty build (and one erased from the classic ship) does not crash buildLayout, hullGeom, budgets, validate or the blueprint' + (crashed ? ': ' + crashed : ''));
   const vn = validate(none);
-  report(none.every((p) => p.part === 'frame') && !vn.ok && vn.needs.includes('a main deck') && vn.needs.includes('a helm') && vn.needs.includes('a gasbag'), 'erasing everything leaves just the frame; the validator lists what she needs: ' + vn.needs.slice(0, 5).join(', ') + ' ...');
+  report(none.every((p) => p.part === 'frame') && !vn.ok && vn.needs.includes('a deck to stand on') && vn.needs.includes('a gasbag') && vn.needs.length === 2, 'erasing everything leaves just the frame; the validator lists the only two needs: ' + vn.needs.join(', '));
   // the first deck anywhere needs no ladder; later decks get one; the nest needs a bag
   const f1 = E.drawDeck(E.emptyBuild(), 'lower', 200, 800);
   report(f1.ok && f1.kind === 'new' && !f1.parts.some((p) => p.part === 'ladder'), 'from nothing: the first deck (lower, anywhere) is accepted with no ladder');

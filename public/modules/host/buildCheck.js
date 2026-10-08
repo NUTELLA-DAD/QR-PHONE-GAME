@@ -5,7 +5,7 @@
 // (tools/buildsim.mjs), the batch runner and the dev page (public/buildtest.html) all use it.
 // A check is { group, level: 'PASS' | 'WARN' | 'FAIL', text }; ok means no FAIL.
 import { config } from '../../config.js';
-import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf } from './shipBuild.js';
+import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf, isNestRow } from './shipBuild.js';
 
 const BC = config.BUILD_CHECK;
 const BALANCE = config.BALANCE;
@@ -15,34 +15,39 @@ const GRAB_COST = 0.25; // seconds to get onto a ladder (the same number as nav.
 // (Searchlights, the coil and the navigator are manned only when it is dark, when there are targets, or by humans.)
 export const BOT_MANNED_KINDS = ['helm', 'lookout', 'gun', 'deflector', 'bombBay', 'escort'];
 
-// What the game code needs of a ship until the part catalogue (S.6) teaches it to cope without: these single pieces must exist.
-const ENGINE_NEEDS = [
-  ['bombBay', (L) => !!L.bombBay && L.stations.some((s) => s.kind === 'bombBay'), 'a bomb bay (the bomb bay station and its doors: modules.js builds a module for it)'],
-  ['lift', (L) => L.connectors.some((c) => c.type === 'lift') && !!L.liftRepair, 'a lift (modules.js builds a module for it, with its repair spot)'],
-  ['gasbag', (L) => !!L.gasbag, 'a gasbag'],
-  ['shield', (L) => !!L.shield, 'a deflector shield band'],
-  ['hammer rack', (L) => L.racks.some((r) => r.kind === 'hammer'), 'a hammer rack (repairs)'],
-  ['hookshot rack', (L) => L.racks.some((r) => r.kind === 'hookshot'), 'a hookshot rack'],
-  ['sword rack', (L) => L.racks.some((r) => r.kind === 'sword'), 'a sword rack (raiders)'],
-  ['ice locker', (L) => L.racks.some((r) => r.kind === 'ice'), 'an ice locker (GOING DOWN!)'],
-  ['extinguisher', (L) => L.extinguishers.length > 0, 'an extinguisher (fires)'],
-];
-
-// The things a ship needs before she can fly, in the order a builder would add them (the dev page shows what is still missing: "Needs: ...").
-// Each is [key, label, test(layout, routesOk)]. Parts that are not here (guns beyond the first, lamps ...) are optional.
+// A ship needs only TWO things to fly (S.5e): a gasbag, and a deck to stand on. Everything else is optional; what she lacks just takes some control away, and the
+// game copes with every missing part (see config.WIND, sails.js and the guards in the sim). The checklist lists the two needs first, then the recommended parts
+// with what you lose without them (the dev page shows them as chips; the validator turns each missing one into a strong WARN).
 const has = (L, kind) => L.stations.some((s) => s.kind === kind) || L.engines.some((e) => e.kind === kind);
-const deckThere = (row) => (L) => L.platforms.some((q) => rowOf(q) === row);
+const hasRack = (L, kind) => L.racks.some((r) => r.kind === kind);
+const hasPlate = (L, id) => L.platforms.some((q) => rowOf(q) === id);
+// Each is [key, label, test(layout, routesOk), tier, why-not text, applies(layout)]. tier 'need' = cannot fly without it; 'rec' = recommended (a missing one WARNs);
+// 'opt' = shown as a chip only. applies: the line is only worth saying when this is true (no coal bunker matters only if there is a boiler).
 export const CHECKLIST = [
-  ['main', 'a main deck', deckThere('main')], ['lower', 'a lower deck', deckThere('lower')], ['catwalk', 'a top deck', deckThere('catwalk')],
-  ['routes', 'ladders between the decks', (L, routesOk) => routesOk && L.platforms.length > 0],
-  ['gasbag', 'a gasbag', (L) => !!L.gasbag], ['nest', "a crow's nest (on the bag)", deckThere('nest')],
-  ['helm', 'a helm', (L) => has(L, 'helm')], ['boiler', 'a boiler', (L) => has(L, 'boiler')], ['coal', 'a coal bunker', (L) => has(L, 'coal')], ['ammo', 'an ammo hold', (L) => has(L, 'ammo')],
-  ['engine', 'an engine', (L) => has(L, 'engine')], ['gun', 'a gun', (L) => has(L, 'gun')], ['lookout', 'a lookout', (L) => has(L, 'lookout')], ['medbay', 'a medbay', (L) => !!L.medbay],
-  ['bombBay', 'a bomb bay', ENGINE_NEEDS[0][1]], ['lift', 'a lift', ENGINE_NEEDS[1][1]], ['boarding', 'two boarding points', (L) => L.boarderEntryPoints.length >= 2],
-  ['hammer', 'a hammer rack', ENGINE_NEEDS[4][1]], ['sword', 'a sword rack', ENGINE_NEEDS[6][1]], ['hookshot', 'a hookshot rack', ENGINE_NEEDS[5][1]], ['ice', 'an ice locker', ENGINE_NEEDS[7][1]], ['extinguisher', 'an extinguisher', ENGINE_NEEDS[8][1]],
+  ['deck', 'a deck to stand on', (L) => L.platforms.length > 0, 'need', 'There is nothing to stand on: draw a deck.'],
+  ['gasbag', 'a gasbag', (L) => !!L.gasbag, 'need', 'There is nothing to float her: draw a gasbag.'],
+  ['routes', 'ladders between the decks', (L, routesOk) => routesOk, 'need', 'Some decks cannot be reached: join them with ladders.'],
+  ['helm', 'a helm', (L) => has(L, 'helm'), 'rec', "No helm: she can't steer. Nobody works the speed or the up/down trim, she drifts with the wind."],
+  ['boiler', 'a boiler', (L) => has(L, 'boiler'), 'rec', 'No boiler: no steam. She cannot pump her gasbag, so there is no climb control (the helm can only vent gas to drop) and the engines are dead.'],
+  ['coal', 'a coal bunker', (L) => has(L, 'coal'), 'rec', "No coal bunker: nobody can feed the boiler; its fire runs dry in a minute or two.", (L) => has(L, 'boiler')],
+  ['engine', 'an engine', (L) => has(L, 'engine'), 'rec', 'No engine: wind only. She goes no faster than the breeze (sails help).'],
+  ['gun', 'a gun', (L) => has(L, 'gun'), 'rec', "No guns: she can't shoot back."],
+  ['ammo', 'an ammo hold', (L) => has(L, 'ammo'), 'rec', 'No ammo hold: the guns fire their first shells and then go quiet.', (L) => has(L, 'gun') || !!L.bombBay],
+  ['lookout', 'a lookout', (L) => has(L, 'lookout'), 'rec', 'No lookout: no early warning of rock and enemies, and no sharper helm.'],
+  ['medbay', 'a medbay', (L) => !!L.medbay, 'rec', 'No medbay: crew who fall off the ship come round on deck, dazed, where they fell.'],
+  ['hammer', 'a hammer rack', (L) => hasRack(L, 'hammer'), 'rec', 'No hammer rack: nobody can patch holes or mend broken parts, and a holed gasbag sinks her.'],
+  ['extinguisher', 'an extinguisher', (L) => L.extinguishers.length > 0, 'rec', 'No extinguisher: fires can only burn out, and they eat the hull while they do.'],
+  ['sword', 'a sword rack', (L) => hasRack(L, 'sword'), 'rec', 'No sword rack: raiders can only be shoved back with bare hands.'],
+  ['ice', 'an ice locker', (L) => hasRack(L, 'ice'), 'opt', 'No ice locker: GOING DOWN! has no ice to cool the boiler.', (L) => has(L, 'boiler')],
+  ['boarding', 'two boarding points', (L) => L.boarderEntryPoints.filter((e) => !e.auto).length >= 2, 'rec', 'Fewer than two boarding points: raiders and new crew drop in over the ends of the top deck.'],
+  ['nest', "a crow's nest (on the bag)", (L) => hasPlate(L, 'nest'), 'opt', "No crow's nest: no lookout post on top."],
+  ['bombBay', 'a bomb bay', (L) => !!L.bombBay && has(L, 'bombBay'), 'opt', 'No bomb bay: no bombing runs (outposts must be shot instead).'],
+  ['lift', 'a lift', (L) => L.connectors.some((c) => c.type === 'lift') && !!L.liftRepair, 'opt', 'No lift.'],
+  ['hookshot', 'a hookshot rack', (L) => hasRack(L, 'hookshot'), 'opt', 'No hookshot rack.'],
+  ['sail', 'a sail', (L) => has(L, 'sail'), 'opt', 'No sail: no extra speed from the wind.'],
 ];
 export function checklist(L, routesOk = true) {
-  return CHECKLIST.map(([key, label, test]) => ({ key, label, ok: !!test(L, routesOk) }));
+  return CHECKLIST.map(([key, label, test, tier, why, applies]) => ({ key, label, ok: !!test(L, routesOk), tier, why, applies: applies ? !!applies(L) : true }));
 }
 
 // ---- walking: the same route-finding as nav.js, on any layout -----------------------------------------------
@@ -124,7 +129,7 @@ export function steamGauge(L) {
   const useCruise = use(BC.CRUISE_SPEED, true);
   const useIdle = use(BC.IDLE_SPEED, false);
   const cruise = settle(useCruise), idle = settle(useIdle);
-  const level = cruise < BC.PRESS_CRUISE_MIN ? 'FAIL' : idle > BC.PRESS_IDLE_MAX ? 'WARN' : 'PASS';
+  const level = !boilers ? 'NONE' : cruise < BC.PRESS_CRUISE_MIN ? 'FAIL' : idle > BC.PRESS_IDLE_MAX ? 'WARN' : 'PASS';
   return { boilers, heat: +heat.toFixed(2), useCruise: +useCruise.toFixed(2), useIdle: +useIdle.toFixed(2), cruise: +cruise.toFixed(1), idle: +idle.toFixed(1), level };
 }
 
@@ -195,6 +200,7 @@ export function validate(parts, opts = {}) {
   placed(L.extinguishers, (o) => `an extinguisher (${o.p} ${o.x})`);
   placed(L.boarderEntryPoints, (o) => `a boarding point (${o.p} ${o.x})`);
   placed(L.ballast || [], (o) => `a sandbag (${o.p} ${o.x})`);
+  placed(L.sails || [], (o) => `sail ${o.n}`);
   placed(L.gasValves || [], (o) => `a gas valve (${o.p} ${o.x})`);
   placed(L.escortDocks, (o) => `escort hook ${o.n}`);
   if (L.medbay) placed([L.medbay], () => 'the medbay');
@@ -239,7 +245,6 @@ export function validate(parts, opts = {}) {
   const K = 'Connectivity';
   const kbad = [];
   let routesOk = true;
-  for (const id of ['nest', 'catwalk', 'main', 'lower']) if (!byId[id]) kbad.push(`there is no ${id} deck`);
   if (!cbad.length && L.platforms.length > 1) {
     const planner = makePlanner(L);
     const lost = [];
@@ -248,9 +253,8 @@ export function validate(parts, opts = {}) {
     kbad.push(...lost.slice(0, 4));
     if (lost.length > 4) kbad.push(`...and ${lost.length - 4} more broken routes`);
   }
-  if (!(L.spawnPlatform >= 0)) kbad.push('there is no spawn deck for crew that miss the ship');
-  if (L.boarderEntryPoints.length < 2) kbad.push(`only ${L.boarderEntryPoints.length} boarding point(s); raiders and new crew need at least 2`);
-  group(K, kbad, `every deck reaches every other (poles only downward), spawn deck ${L.platforms[L.spawnPlatform] ? L.platforms[L.spawnPlatform].name : '?'}, ${L.boarderEntryPoints.length} boarding points`);
+  if (L.platforms.length && !(L.spawnPlatform >= 0)) kbad.push('there is no spawn deck for crew that miss the ship');
+  group(K, kbad, `every deck reaches every other (poles only downward), spawn deck ${L.platforms[L.spawnPlatform] ? L.platforms[L.spawnPlatform].name : '?'}, ${L.boarderEntryPoints.filter((e) => !e.auto).length} boarding points`);
 
   // --- Walking budgets.
   const W = 'Walking';
@@ -273,11 +277,13 @@ export function validate(parts, opts = {}) {
   // --- Lift, steam, hands.
   const lift = liftGauge(parts);
   const hoverText = `hover at gas ${lift.hover} (weight ${lift.mass}, lift ${lift.lift}; allowed ${BC.HOVER_MIN}-${BC.HOVER_MAX})`;
-  if (lift.level === 'FAIL') fail('Lift', hoverText + (lift.hover > BC.HOVER_MAX ? ': too heavy for her bags' : ': too much lift, she will not stay down'));
+  if (lift.level === 'FAIL' && lift.hover > BC.HOVER_MAX) fail('Lift', hoverText + ': too heavy for her bags');
+  else if (lift.level === 'FAIL') warn('Lift', hoverText + ': a lot of lift for her weight: she rides high and wants venting or ballast to hold her down');
   else if (lift.level === 'WARN') warn('Lift', hoverText + `: above ${BC.HOVER_WARN}, lots of pumping`);
   else pass('Lift', hoverText);
   const steam = steamGauge(L);
-  if (steam.cruise < BC.PRESS_CRUISE_MIN) fail('Steam', `settled pressure at cruise ${steam.cruise} (needs ${BC.PRESS_CRUISE_MIN}): the boiler cannot keep up${steam.boilers ? '' : ' (no boiler)'}`);
+  if (!steam.boilers) info('Steam', 'no boiler: no steam for engines, the pump or the helm (see the advice below)');
+  else if (steam.cruise < BC.PRESS_CRUISE_MIN) fail('Steam', `settled pressure at cruise ${steam.cruise} (needs ${BC.PRESS_CRUISE_MIN}): the boiler cannot keep up`);
   else if (steam.idle > BC.PRESS_IDLE_MAX) warn('Steam', `settled pressure at idle ${steam.idle} (over ${BC.PRESS_IDLE_MAX}): the crew will be venting`);
   else pass('Steam', `settled pressure ${steam.cruise} at cruise, ${steam.idle} at idle (${steam.boilers} boiler${steam.boilers === 1 ? '' : 's'})`);
   const hands = handsGauge(L);
@@ -322,9 +328,11 @@ export function validate(parts, opts = {}) {
       }
     }
     // The crow's nest sits on a bag (any one).
-    const nestDeck = L.platforms.find((q) => rowOf(q) === 'nest');
-    if (nestDeck && !bagCover(bags).some((c) => nestDeck.x0 >= c.lo && nestDeck.x1 <= c.hi)) {
-      fail('Gasbag', `the crow's nest (x ${nestDeck.x0} to ${nestDeck.x1}) hangs off the end of the gasbag${bags.length > 1 ? 's (it must sit on a bag, or a row of touching bags)' : ''}: make the bag longer or the nest shorter`);
+    // (a cut crow's nest is two nests, a high tier is one more: each must sit on a bag)
+    for (const nestDeck of L.platforms.filter((q) => isNestRow(rowOf(q)))) {
+      if (!bagCover(bags).some((c) => nestDeck.x0 >= c.lo && nestDeck.x1 <= c.hi)) {
+        fail('Gasbag', `the ${nestDeck.name} (x ${nestDeck.x0} to ${nestDeck.x1}) hangs off the end of the gasbag${bags.length > 1 ? 's (it must sit on a bag, or a row of touching bags)' : ''}: make the bag longer or the nest shorter`);
+      }
     }
     if (bags.length > config.BUILD_EDIT.BAGS_MAX) fail('Gasbag', `${bags.length} gasbags (at most ${config.BUILD_EDIT.BAGS_MAX})`);
     // Redundancy: does she keep flying with her biggest bag gone? (a ruptured bag stays on the ship, weighing the same, but lifts nothing)
@@ -357,14 +365,26 @@ export function validate(parts, opts = {}) {
   for (const [n, kind] of named) if (!STATION_KINDS.includes(kind)) rbad.push(`${n} has ${kind ? 'unknown kind ' + kind : 'no kind'}`);
   const seen = new Set();
   for (const [n] of named) { if (seen.has(n)) rbad.push('duplicate station name ' + n); seen.add(n); }
-  for (const kind of ['helm', 'boiler', 'coal', 'ammo', 'engine', 'gun', 'lookout']) if (!named.some(([, k]) => k === kind)) rbad.push('no ' + kind + ' station');
-  if (!L.medbay) rbad.push('no medbay');
   for (const kind of ONE_PER_SHIP) if (named.filter(([, k]) => k === kind).length > 1) rbad.push('more than one ' + kind + ' station (the game supports one)');
-  for (const [key, ok, what] of ENGINE_NEEDS) if (!ok(L)) rbad.push(`no ${key}: the game still needs ${what}`);
-  group(R, rbad, 'helm, boiler, coal, ammo, engine, gun, lookout and medbay are all there');
+  // The only parts a ship cannot fly without (S.5e): something to stand on, and something to float her.
+  if (!L.platforms.length) rbad.push('no deck: she needs a deck to stand on');
+  if (!L.gasbag) rbad.push('no gasbag: she needs a gasbag to float');
+  group(R, rbad, 'a deck and a gasbag: she can fly (everything else is optional)');
+  for (const s of L.sails || []) {
+    const q = byId[s.p];
+    if (q && !['nest', 'crow2', 'catwalk'].includes(rowOf(q))) warn('Sails', `${s.n} stands on the ${q.name}: a mast belongs on the top deck or a crow's nest, where it catches the wind`);
+  }
+  if ((L.sails || []).length) {
+    const S = config.SAIL, k = Array.from({ length: L.sails.length }, (_, i) => S.BONUS_DIM ** i).reduce((a, b) => a + b, 0);
+    info('Sails', `${L.sails.length} sail${L.sails.length === 1 ? '' : 's'}: raised, they add about +${Math.round(S.BONUS * k * 100)}% of top speed in a calm sky (more in a gale, less in caves); a gust can tear a sail left up`);
+  }
 
+  // --- Advice: the parts she would be better for (a missing one is a strong WARN, never a FAIL).
   const list = checklist(L, routesOk);
-  return result(L, { budgets: { lift, steam, hands, walk, fit, balance: bal }, checklist: list, needs: list.filter((c) => !c.ok).map((c) => c.label) });
+  for (const c of list) if (c.tier === 'rec' && !c.ok && c.applies) warn('Advice', c.why);
+  const hardNeeds = list.filter((c) => c.tier === 'need' && !c.ok);
+  const advice = list.filter((c) => c.tier !== 'need' && !c.ok && c.applies);
+  return result(L, { budgets: { lift, steam, hands, walk, fit, balance: bal }, checklist: list, needs: hardNeeds.map((c) => c.label), advice: advice.map((c) => ({ key: c.key, label: c.label, why: c.why, tier: c.tier })) });
 }
 
 // ---- bot-run check ---------------------------------------------------------------------------------------------
