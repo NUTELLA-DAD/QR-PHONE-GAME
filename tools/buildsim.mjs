@@ -1853,7 +1853,10 @@ async function checkPose() {
   report(count === 1, 'eachShip visits the one ship');
   const p = ship.pose;
   report(p.x === st.course.dist && p.y === -st.ship.alt && p.f === 1 && p.pitch === (st.ship.pitch || 0) && p.turn === 0 && P.poseOf(ship) === p, `pose reads the old numbers (x ${p.x.toFixed(1)} = course.dist, y ${p.y.toFixed(1)} = -alt, f +1)`);
-  report(p.vx === (await load('modules/host/course.js')).scrollSpeed(st) && p.vy === -(st.ship.vy || 0), 'pose.vx / vy are the scroll speed and the climb rate');
+  const scroll = (await load('modules/host/course.js')).scrollSpeed(st);
+  report(p.vx === st.shipVx && p.vy === -(st.ship.vy || 0) && Math.abs(p.vx - scroll) < 40, `pose.vx is the speed she really moved at in the last step (${p.vx.toFixed(1)} px/s; the engines ask ${scroll.toFixed(1)}), vy the climb rate`);
+  const fresh = createSimulation();
+  report(fresh.state.ships[0].pose.vx === (await load('modules/host/course.js')).scrollSpeed(fresh.state),'before her first step pose.vx is the speed the engines ask');
   let exact = true;
   for (let i = 0; i < 2000; i++) {
     const sx = (Math.random() - 0.5) * 3000, sy = (Math.random() - 0.5) * 3000;

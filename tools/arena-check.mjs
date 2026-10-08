@@ -130,7 +130,8 @@ report(br.results.every((r) => r.cause === 'timeout' || r.cause === 'sunk' || r.
   while (br.phase === 'count') tick();
   const before = sB.ship.hull;
   const mid = br.S.B.layout.aimPoint;
-  sA.shipBombs.push({ x: mid.x + sA.rival.dx, y: mid.y + sA.rival.dy - sA.ship.alt, vx: 0, vy: 0, owner: 'x' }); // (put inside B's hull, in A's frame)
+  const poseB = sB.ships[0].pose;
+  sA.shipBombs.push({ x: mid.x + poseB.x, y: mid.y + poseB.y, vx: 0, vy: 0, owner: 'x' }); // (put inside B's hull: B's aim point in the shared sky, M.1 world coordinates)
   tick();
   report(br.stats.A.bombs === 1 && sB.ship.hull < before, `a bomb of A through B hits her (hull ${before.toFixed(1)} -> ${sB.ship.hull.toFixed(1)})`);
 }

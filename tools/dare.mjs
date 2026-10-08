@@ -51,11 +51,13 @@ function mk(nBots, withHuman) {
   sim0 = sim;
   return sim;
 }
-const nearShip = (e) => e.dead <= 0 && e.heading != null && Math.abs(e.x - 800) < 1200 && e.y + (sim0.state.ship.alt) > -100 && e.y + (sim0.state.ship.alt) < 900;
+// (M.1: the sky is in world coordinates; the helpers below talk about places on the ship, so they go through her pose)
+const poseOf = () => sim0.state.ships[0].pose;
+const nearShip = (e) => e.dead <= 0 && e.heading != null && Math.abs(e.x - poseOf().x - 800) < 1200 && e.y - poseOf().y > -100 && e.y - poseOf().y < 900;
 let sim0 = null;
 const placeNear = (e) => {
-  e.x = 1950; // just past the bow, outside the hull
-  e.y = 300 - sim0.state.ship.alt;
+  e.x = poseOf().x + 1950; // just past the bow, outside the hull
+  e.y = poseOf().y + 300;
   e.heading = 0;
   e.air = 560;
 };
@@ -114,11 +116,11 @@ const step = (sim, n = 1) => {
     // The dogfighters here circle far below the hull, behind the decks: bring one past the end of the top deck, where a hook can reach it.
     {
       const b = pl().find((p) => p.dare && p.dare.kind === 'plane' && p.dare.phase === 'aim' && p.d === 1 && (p.x > 1250 || p.x < 330) && !p.fly);
-      if (b && st.strafers.length && !st.strafers.some((s) => Math.abs(s.x - b.x) < 900 && Math.abs(s.y + st.ship.alt - b.y) < 400)) {
+      if (b && st.strafers.length && !st.strafers.some((s) => Math.abs(s.x - poseOf().x - b.x) < 900 && Math.abs(s.y - poseOf().y - b.y) < 400)) {
         const side = b.x > 800 ? 1 : -1;
         const s = st.strafers[0];
-        s.x = b.x + side * 520;
-        s.y = b.y - 150 - st.ship.alt;
+        s.x = poseOf().x + b.x + side * 520;
+        s.y = poseOf().y + b.y - 150;
         s.heading = side > 0 ? Math.PI + 0.35 : -0.35; // coming in past the end of the top deck (heading toward the ship, climbing a little)
         s.air = 470;
         s.mode = 'circle';
@@ -168,8 +170,8 @@ const step = (sim, n = 1) => {
     placeNear(e);
     Object.assign(h, { hj: null, fall: false, ko: 0, lock: null, chute: 0, chuteOpen: false, d: 1 });
     sim.air.startFlight(h, 0, 0);
-    h.x = e.x;
-    h.y = e.y + st.ship.alt;
+    h.x = e.x; // (in flight she is a world object: the plane's own place)
+    h.y = e.y;
     h.jx = h.jy = 0;
     step(sim);
   };
