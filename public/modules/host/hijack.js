@@ -162,7 +162,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
       if (s.kickP >= 1) {
         s.phase = 'fly';
         s.kickP = 1;
-        state.chutes = state.chutes || [];
+        state.chutes ||= [];
         state.chutes.push({ x: s.x, y: s.y - 20, vx: ((s.vx || 0) - ship.pose.vx) * 0.2, vy: -260, t: 0 });
         puff(s.x, s.y, '#ffffff', 10);
         pop(state, s.x, s.y - 70, 'OUT YOU GO!', '#ffd23f', 1.1);

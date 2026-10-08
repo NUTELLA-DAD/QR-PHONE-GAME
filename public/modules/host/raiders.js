@@ -8,7 +8,6 @@
 import { crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
-import { moveWalker, steerTo, fall } from './nav.js';
 import { mainShip } from './ships.js';
 import { toWorldX, toWorldY } from './pose.js';
 
@@ -19,6 +18,7 @@ const tables = layoutTables((layout) => ({ INSIDE: [layout.deckIndex('main'), la
 export function createRaiders({ state, modules, puff, impact }) {
   const ship = mainShip(state); // (B1: the ship the raiders board; B2 makes this one per ship)
   const layout = ship.layout;
+  const { moveWalker, steerTo, fall } = ship.nav; // (raiders walk on the ship they boarded)
   const P = layout.platforms;
   const shipPuff = (x, y, color, count) => puff(toWorldX(ship, x), toWorldY(ship, y), color, count); // (raiders are on the ship: a puff at a point in ship coordinates)
   state.bombs = [];

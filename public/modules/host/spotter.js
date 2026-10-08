@@ -4,9 +4,8 @@
 // times a second, as one flat array of numbers. Phones send back { spot: n } (the n-th ping of the list
 // that phone last got) and { help: 1 }.
 import { config } from '../../config.js';
-import { mainShip } from './ships.js';
+import { mainShip, shipOf } from './ships.js';
 import { toWorldX, toWorldY } from './pose.js';
-import { travelTime } from './nav.js';
 import { bestTarget } from './aim.js';
 import { botFree } from './bots.js';
 
@@ -185,7 +184,8 @@ export function createSpotter({ state, emit, phoneFx }) {
     if (c.d == null) return;
     const here = spotOf(c, L);
     const sent = call.who.length + call.bots.length;
-    const pool = Object.values(state.players).filter((q) => q !== c && free(q) && !call.bots.includes(q) && !call.who.includes(q.id));
+    const travelTime = shipOf(state, c).nav.travelTime; // (only crewmates on the caller's own ship answer, and they walk by her navigation)
+    const pool = Object.values(state.players).filter((q) => q !== c && shipOf(state, q) === shipOf(state, c) && free(q) && !call.bots.includes(q) && !call.who.includes(q.id));
     const idle = pool.filter((q) => (q.bot ? botFree(q) : (q.freeT || 0) >= HP.IDLE_FOR));
     const rank = (q) => travelTime(q, here.d, here.x);
     let list = idle.map((q) => ({ q, t: rank(q) })).filter((r) => isFinite(r.t)).sort((a, b) => a.t - b.t);

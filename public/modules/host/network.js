@@ -1,12 +1,12 @@
 import { config } from '../../config.js';
-import { mainShip } from './ships.js';
+import { mainShip, shipOf, crewOf } from './ships.js';
 import { crewAboard, crewHeads } from './crewscale.js';
 
 // What a phone's input message does to its player (also used by tools/controls.mjs, which plays a person without a socket).
 // Button presses are queued flags the simulation eats next frame; `aid` is the id of the label the phone was showing (see aidOf in
 // simulation.js). While the game is not taking input (pause, scorecard, vote, run-end screen) presses are simply ignored.
 export function applyPlayerInput(state, player, data) {
-  const taking = !(state.paused || state.scorecard || state.vote || (state.runEnd && !state.wreck));
+  const taking = !(state.paused || state.scorecard || state.vote || (state.runEnd && !shipOf(state, player).ctx.wreck)); // (input goes to the ship the player is aboard: its own wreck state)
   player.jx = data.jx || 0;
   player.jy = data.jy || 0;
   if (taking && data.act) {
@@ -33,14 +33,37 @@ export function applyPlayerInput(state, player, data) {
   if ('spot' in data) player.spotQ = { i: data.spot | 0, s: data.sq | 0 }; // tapped a radar ping
 }
 
+// A bot crewman (the recipe of the "Add 4 bot crew" button) dropping in over `ship`: along the boarding span of that ship.
+export function newBot(state, ship, name) {
+  const speciesNames = config.CREW_SPECIES;
+  const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
+  const [e0, e1] = ship.layout.boarderEntryPoints;
+  const id = 'bot' + Math.random();
+  return {
+    id,
+    bot: true,
+    name,
+    species: speciesNames[Math.random() * speciesNames.length | 0],
+    color: colors[Math.random() * colors.length | 0],
+    x: e0.x + Math.random() * (e1.x - e0.x),
+    y: -60,
+    fall: true,
+    jx: 0,
+    jy: 0,
+    t: 0,
+    ...(state.ships.length > 1 ? { ship: ship.id } : {}), // (with several ships in the sky a player says which one they are aboard; with one they need not)
+  };
+}
+
 export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoinBot }) {
   const socket = io({ transports: ['websocket'] });
   const countNode = document.getElementById('count');
 
   simulation.setSocket?.(socket);
 
-  // Where a new arrival drops in from above: along the boarding span of the ship they join (the main ship; B.2 picks the ship per player).
-  const dropX = () => { const [e0, e1] = mainShip(simulation.state).layout.boarderEntryPoints; return e0.x + Math.random() * (e1.x - e0.x); };
+  // The ship a new arrival joins: the main ship, or (with several in the sky) the one with the fewest aboard. They drop in along its boarding span.
+  const joinShip = () => simulation.state.ships.reduce((best, s) => (crewOf(simulation.state, s).length < crewOf(simulation.state, best).length ? s : best), mainShip(simulation.state));
+  const dropX = (ship) => { const [e0, e1] = ship.layout.boarderEntryPoints; return e0.x + Math.random() * (e1.x - e0.x); };
 
   const count = () => {
     if (countNode) countNode.textContent = `${crewHeads(simulation.state)} / ${config.MAX_PLAYERS} aboard`;
@@ -57,13 +80,15 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   });
 
   socket.on('player:joined', (m) => {
+    const joined = joinShip();
     const player = simulation.state.players[m.id] || (simulation.state.players[m.id] = {
-      x: dropX(),
+      x: dropX(joined),
       y: -60,
       fall: true,
       jx: 0,
       jy: 0,
       station: null,
+      ...(simulation.state.ships.length > 1 ? { ship: joined.id } : {}),
     });
     Object.assign(player, m, { connected: true, uk: null }); // uk: null = resend button labels to the phone
     count();
@@ -150,23 +175,9 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   showDaily();
 
   document.getElementById('bots').onclick = () => {
-    const speciesNames = config.CREW_SPECIES;
-    const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
     for (let i = 0; i < 4 && crewHeads(simulation.state) < config.MAX_PLAYERS; i++) {
-      const id = 'bot' + Math.random();
-      simulation.state.players[id] = {
-        id,
-        bot: true,
-        name: 'Bot' + (crewHeads(simulation.state) + 1),
-        species: speciesNames[Math.random() * speciesNames.length | 0],
-        color: colors[Math.random() * colors.length | 0],
-        x: dropX(),
-        y: -60,
-        fall: true,
-        jx: 0,
-        jy: 0,
-        t: 0,
-      };
+      const bot = newBot(simulation.state, joinShip(), 'Bot' + (crewHeads(simulation.state) + 1));
+      simulation.state.players[bot.id] = bot;
     }
     count();
   };

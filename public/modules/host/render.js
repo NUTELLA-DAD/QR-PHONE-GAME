@@ -542,12 +542,12 @@ export function createRenderer({ ctx, state, canvas }) {
     for (const shell of state.shells) {
       if (shell.primed) {
         glowShot(shell, '#ff9a2e', 17 + 3 * big, 0.09); // a primed shell: big, hot, orange-white
-        ctx.strokeStyle = (state.players[shell.owner] || {}).color || '#f2d36b';
+        ctx.strokeStyle = (ship.world.players[shell.owner] || {}).color || '#f2d36b';
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(shell.x, shell.y, 25 + 3 * big, 0, 7);
         ctx.stroke();
-      } else glowShot(shell, shell.frag ? '#ffd23f' : (state.players[shell.owner] || {}).color || '#f2d36b', shell.frag ? 5 : 9 + 3 * big, 0.06);
+      } else glowShot(shell, shell.frag ? '#ffd23f' : (ship.world.players[shell.owner] || {}).color || '#f2d36b', shell.frag ? 5 : 9 + 3 * big, 0.06);
     }
     for (const bullet of state.bullets) {
       if (bullet.flak) drawFlakBurst(ctx, bullet.x, bullet.y, 13); // (flak: a flat gouache burst)
@@ -1863,9 +1863,10 @@ export function createRenderer({ ctx, state, canvas }) {
     }
     lap('terrain');
 
-    // Each ship's art is drawn under her pose (one art bake, crew list and renderer per ship comes with B.2: only ship 0 has them now).
-    eachShip(state, (sh, shipIdx) => {
-      if (shipIdx !== 0) return;
+    // Each ship's art is drawn under her pose. This renderer is made for ONE ship (its `state` is her context: her crew, her guns, fires and art bake), so it draws her;
+    // another ship has a renderer of her own (main.js), drawing the 'ship' layer only.
+    eachShip(state, (sh) => {
+      if (sh !== ship) return;
       ctx.save();
       // A smooth, capped shake (no random jitter), a slow two-speed bob and a slight sway: she's a
       // big thing hanging in the air. (Visual only - collisions use the steady ship.)
@@ -1908,7 +1909,7 @@ export function createRenderer({ ctx, state, canvas }) {
         envArt.drawDeep(); // fungal: spore clouds and clogged engines; aether: the oxygen tank
         envArt.drawShip(); // storm rods, sea pump, winch and flood water
         lap('guns+env');
-        drawGunship(time / 1000);
+        if (ship.main) drawGunship(time / 1000); // (the gunship hunts the main ship: she is drawn in HER frame)
         lap('gunship');
         drawHazards(time / 1000);
         threatArt.drawBombs(time / 1000);
@@ -1991,6 +1992,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.restore();
     });
     if (has('ship')) drawAirborne(time / 1000); // crew in the air and their ropes live in the world, not in the ship's frame
+    if (opts && opts.layers && has('shipfx')) { drawCoil(time / 1000); drawShield(time / 1000); } // (another ship's own effects; the first renderer's 'effects' layer draws its own)
     lap('crew');
     if (has('effects')) {
       drawEffects(time / 1000, wv);

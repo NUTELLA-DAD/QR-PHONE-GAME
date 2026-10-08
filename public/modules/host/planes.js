@@ -180,7 +180,7 @@ export function smoke(e, max, puff) {
 // Shot down: the plane spirals away trailing smoke, and the pilot bails out.
 export function shootDown(state, e, kind = 'fighter') {
   state.wrecks.push({ x: e.x, y: e.y, vx: (e.vx - mainShip(state).pose.vx) * 0.6, vy: e.vy * 0.4 - 60, spin: e.heading || 0, kind, spiral: Math.random() < 0.5 ? -1 : 1, grace: 0.8 }); // grace: can't hit the ship straight away (a plane that rammed us already did)
-  (state.chutes = state.chutes || []).push({ x: e.x, y: e.y - 20, vx: (e.vx - mainShip(state).pose.vx) * 0.2, vy: -220, t: 0 });
+  (state.chutes ||= []).push({ x: e.x, y: e.y - 20, vx: (e.vx - mainShip(state).pose.vx) * 0.2, vy: -220, t: 0 });
 }
 
 // Parachutes drift down, sway, and are gone after a while (or on landing).

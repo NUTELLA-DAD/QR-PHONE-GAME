@@ -6,7 +6,6 @@
 // doesn't flicker, and only swapped for a clearly better one.
 import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
-import { travelTime, direction } from './nav.js';
 import { mainShip } from './ships.js';
 
 const J = config.JOBS;
@@ -25,7 +24,8 @@ JOB_COLORS.sail = '#e9dcc0'; // (S.5e: raise a sail in a fair wind...)
 JOB_COLORS.reef = '#ff8c1a'; // (...or reef it before a gust)
 
 export function createJobFinder(state) {
-  const L = mainShip(state).layout; // (B1: the ship these jobs are on; B2 makes the finder one per ship)
+  const L = mainShip(state).layout; // (the ship these jobs are on: the finder is made per ship, on that ship's context)
+  const { travelTime, direction } = mainShip(state).nav;
   const stationNamed = (n) => L.stations.find((s) => s.n === n);
   // Name of the room (or deck) at a spot, for the label.
   const roomName = (d, x) => {

@@ -136,6 +136,7 @@ export function pilotPlan(state, ahead, cruise) {
   const course = state.course;
   const ship = mainShip(state);
   const alt = state.ship.alt;
+  if (ship.formation) return { target: ship.world.ships[0].state.alt + ship.formation.dalt, speed: 0.2 }; // (a second ship holds her height from the lead's, B.2: she has no rock contact of her own yet)
   if (state.rival) return rivalPlan(state); // (Versus: the rival, not the beacon, is the goal)
   if (course && course.map) return mapPlan(state, cruise);
   const B = altBounds(state);

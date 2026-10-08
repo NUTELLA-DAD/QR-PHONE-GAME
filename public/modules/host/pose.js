@@ -36,6 +36,24 @@ export function createPose(ship) {
     turn: { enumerable: true, get: () => turn, set: (v) => { turn = v; } },
   });
 }
+
+// The pose of a SECOND ship (B.2): she keeps station on a lead ship (hers is the only one the course scrolls past), `offset.dx` along the sky from her, and flies her
+// own altitude (y = -alt, like the main ship; the formation's dalt is how far above or below the lead's altitude her pilot holds her, see course.js pilotPlan).
+// Same shape as the main pose, so nothing downstream can tell them apart. (Until the pose owns position, M.2, a ship has no x of her own: the sky around her moves with the lead.)
+export function createFormationPose(ship, lead, offset) {
+  const S = ship.state;
+  let turn = 0;
+  const readOnly = (what) => () => { throw new Error('pose.' + what + ' is read-only until the pose owns position (MOVEMENT.md B4)'); };
+  return Object.defineProperties({}, {
+    x: { enumerable: true, get: () => lead.pose.x + offset.dx, set: (v) => { offset.dx = v - lead.pose.x; } },
+    y: { enumerable: true, get: () => -S.alt, set: (v) => { S.alt = -v; } },
+    vx: { enumerable: true, get: () => lead.pose.vx, set: readOnly('vx') },
+    vy: { enumerable: true, get: () => -(S.vy || 0), set: readOnly('vy') },
+    f: { enumerable: true, get: () => 1, set: (v) => { if (v !== 1) throw new Error('pose.f is fixed at +1 until COME ABOUT exists (MOVEMENT.md B5)'); } },
+    pitch: { enumerable: true, get: () => S.pitch || 0, set: (v) => { S.pitch = v; } },
+    turn: { enumerable: true, get: () => turn, set: (v) => { turn = v; } },
+  });
+}
 export const poseOf = (ship) => ship.pose;
 
 // Facing mirrors ship space about the middle of the ship (layout.midPoint). With f = +1 this is the plain offset, written so it is the same additions as before.

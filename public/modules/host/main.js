@@ -1,5 +1,5 @@
 import { config } from '../../config.js';
-import { initHostNetwork } from './network.js';
+import { initHostNetwork, newBot } from './network.js';
 import { createSimulation } from './simulation.js';
 import { createRenderer } from './render.js';
 import { createCamera } from './camera.js';
@@ -7,7 +7,8 @@ import { createSfx } from './sfx.js';
 import { createMenu } from './menu.js';
 import { createPerfGovernor, perfState } from './perf.js';
 import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility forward: the dev build below is applied before the simulation reads the layout)
-import { mainShip } from './ships.js';
+import { mainShip, eachShip } from './ships.js';
+import { BUILDS } from './shipBuild.js';
 
 // Dev: host.html?build=[parts JSON] flies another ship than the classic one (copy a build from the build page, buildtest.html, "Copy build JSON").
 try {
@@ -39,6 +40,25 @@ window.perfGov = perf; // handy for debugging in the browser console
 fitCanvas();
 
 const simulation = createSimulation();
+// Dev (B.2): host.html?ships=2 puts a SECOND airship in the sky (a copy of the classic one, or host.html?ships=2&build2=[parts JSON]), kept a little behind ours and
+// below her, each with four bot crew. They are one simulation: each ship has her own hull, gas, guns, fires, crew and art. (?ships=3 adds a third.)
+{
+  const q = new URLSearchParams(location.search);
+  const asked = Math.max(1, Math.min(3, Number(q.get('ships')) || 1));
+  for (let i = 1; i < asked; i++) {
+    let parts = BUILDS.classic;
+    try { if (q.get('build2')) parts = JSON.parse(q.get('build2')); } catch (e) { console.warn('bad ?build2=', e); }
+    simulation.addShip({ parts, formation: { dx: -250 * i, dalt: -1150 * i } });
+  }
+  if (asked > 1) {
+    for (const sh of simulation.state.ships) {
+      for (let k = 0; k < 4; k++) {
+        const bot = newBot(simulation.state, sh, 'Bot' + (Object.keys(simulation.state.players).length + 1));
+        simulation.state.players[bot.id] = bot;
+      }
+    }
+  }
+}
 // PvP (PVP.md V.0): host.html?pvp=1 (or config.PVP.ENABLED) loads a SECOND, fully independent copy of the game for ship B. The same
 // files are served under /b (server.js), and ES modules are one instance per URL, so /b/modules/host/simulation.js has its own
 // config, layout and state. Co-op never takes this branch. (Drawing ship B is the arena camera's job, V.1a.)
@@ -59,7 +79,18 @@ if (pvpAsked) {
   }).catch((e) => console.error('PvP: ship B could not be loaded', e));
 }
 const camera = createCamera();
-const renderer = createRenderer({ ctx, state: simulation.state, canvas });
+// One renderer per ship (the context view is the ship's own state: ships.js): the first draws the sky, the effects and the HUD as well; the others only their ship.
+const renderers = new Map();
+const rendererOf = (sh) => renderers.get(sh) || (renderers.set(sh, createRenderer({ ctx, state: sh.ctx, canvas })), renderers.get(sh));
+const renderer = rendererOf(mainShip(simulation.state));
+// One frame: with one ship the renderer draws everything as it always did; with more, the sky and the first ship, then each other ship, then the effects, the darkness and the HUD on top.
+const drawFrame = (now, view) => {
+  const st = simulation.state;
+  if (st.ships.length < 2) return renderer.renderFrame(now, view);
+  renderer.renderFrame(now, view, { layers: ['background', 'ship'] });
+  eachShip(st, (sh, i) => { if (i > 0) rendererOf(sh).renderFrame(now, view, { layers: ['ship', 'shipfx'], noClear: true, bobPhase: 2.7 * i }); });
+  renderer.renderFrame(now, view, { layers: ['effects', 'dark', 'hud', 'arrows', 'film'], noClear: true });
+};
 const network = initHostNetwork({ simulation });
 window.game = simulation; // handy for debugging in the browser console
 const sfx = createSfx(simulation.state);
@@ -73,7 +104,7 @@ addEventListener('keydown', (e) => (e.key === 'm' || e.key === 'M') && setTimeou
 showSound();
 window.music = sfx.music; // handy for debugging in the browser console (music.debug())
 // Debugging: draw one frame now (useful when the page isn't animating, e.g. a hidden tab).
-window.renderNow = (dt = 0.016) => renderer.renderFrame(performance.now(), camera.update(dt, simulation.state, canvas.width, canvas.height));
+window.renderNow = (dt = 0.016) => drawFrame(performance.now(), camera.update(dt, simulation.state, canvas.width, canvas.height));
 
 let lastTime = performance.now();
 const STEP = config.LOOP.STEP;
@@ -144,7 +175,7 @@ function frame(now) {
   guard('sound', () => sfx.update());
   const view = guard('camera', () => camera.update(paused ? 0 : dt, simulation.state, canvas.width, canvas.height));
   const d0 = performance.now();
-  if (view) guard('draw', () => renderer.renderFrame(now, view));
+  if (view) guard('draw', () => drawFrame(now, view));
   const drawMs = performance.now() - d0;
   meterTick(now, gap, drawMs);
   if (!paused) perf.update(now, gap, drawMs);

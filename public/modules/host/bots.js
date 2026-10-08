@@ -2,7 +2,6 @@
 // (jx/jy joystick, actQ = tap Action, fire = hold Action), so they test the real game rules.
 import { config } from '../../config.js';
 import { layoutTables, walkCost } from '../../shipLayout.js';
-import { steerTo, travelTime } from './nav.js';
 import { bestTarget, targets } from './aim.js';
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
 import { shipGeom, landX, boilerX, routeStep } from './gunship.js';
@@ -66,6 +65,7 @@ let world = null; // the game state (set each bot update), so steer() knows abou
 function steer(p, d, x, near = 12) {
   const g = world && world.gunship;
   const L = world && mainShip(world).layout;
+  const { steerTo } = mainShip(world).nav; // (a bot walks on ITS ship)
   if (g && d === tables(L).MAIN && p.d === tables(L).MAIN && !p.swing) {
     const MAIN = tables(L).MAIN, MAIN_X1 = shipGeom(L).MAIN_X1;
     const mid = (MAIN_X1 + GUNSHIP_X0) / 2; // targets past this are on her deck (her home frame)
@@ -403,6 +403,7 @@ const HELP_KINDS = { fire: 1, patch: 1, revive: 1, swat: 1, fight: 1, defuse: 1,
 
 function chooseJob(state, bot, bots) {
   const L = mainShip(state).layout;
+  const { travelTime } = mainShip(state).nav;
   const claims = (job) => bots.filter((o) => o !== bot && o.botJob && o.botJob.kind === job.kind && o.botJob.obj === job.obj).length;
   // (a job with a cap: no more than that many crew on this KIND of job at once, e.g. patching gasbag holes)
   const onKind = (job) => bots.filter((o) => o !== bot && o.botJob && o.botJob.kind === job.kind && o.botJob.cap != null).length;
@@ -578,6 +579,7 @@ function press(p) {
 // Make sure the bot holds a tool; walks to the nearest rack/hook for it if not. True when held.
 function getTool(state, p, kind, to) {
   const L = mainShip(state).layout;
+  const { travelTime } = mainShip(state).nav;
   if (p.carry === kind) {
     p.rackT = undefined;
     return true;

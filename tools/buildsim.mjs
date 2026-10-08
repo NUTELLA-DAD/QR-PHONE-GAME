@@ -8,6 +8,7 @@
 //        node tools/buildsim.mjs --check-frames     B0: frame-by-frame old vs new (world x/y, hull, kills; tolerance 1e-6 -> 2% over 3 min) + noise bands; --snapshot-frames --force re-captures
 //        node tools/buildsim.mjs --check-pose       B0: pose.js / ships.js / layout-parameter helper unit checks (and B1's --check-layouts)
 //        node tools/buildsim.mjs --check-layouts    B1/B.1b: several Layout + Nav instances side by side (classic, a copy, four bags, two boilers, a tiny ship) answer on their own, and three more whole ship contexts (modules, balance, forces, bags, sails, engines, airborne, art bake) run next to a real ship 0; applyBuild/onChange never cross
+//        node tools/buildsim.mjs --check-two-ships  B.2: the classic ship and a second build (the four-bag ship, then the minimum two-engine one) in ONE simulation, six bots each assigned by player.ship, 2 minutes, 0 errors; hull / gas / fires / holes / steam / bags / balance never cross between them, each crewman walks HIS ship's nav, the camera frames both (tools/two-ships-check.mjs)
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
 //        node tools/buildsim.mjs --check-validator   S.5: broken builds must FAIL/WARN with the right message (the classic passes clean)
@@ -2193,6 +2194,11 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-arena') {
   const arena = spawnSync(process.execPath, [path.join(root, 'tools', 'arena-check.mjs')], { cwd: root, stdio: 'inherit' });
   process.exit(arena.status === 0 && checkBotsim() ? 0 : 1);
+} else if (mode === '--check-two-ships') {
+  const run = (args) => spawnSync(process.execPath, [path.join(root, 'tools', 'two-ships-check.mjs'), ...args], { cwd: root, stdio: 'inherit' }).status === 0;
+  const bags = run(['--build', 'bags', '--minutes', '2']); // (the classic ship + the four-bag ship: the same decks, another gasbag layout)
+  const small = run(['--build', 'min4', '--minutes', '1']); // (the classic ship + the one-deck helm, boiler and two engines: a different Nav, no guns)
+  process.exit(bags && small ? 0 : 1);
 } else if (mode === '--check-engines') {
   process.exit((await checkEngines()) ? 0 : 1);
 } else if (mode === '--check-forces') {
@@ -2226,6 +2232,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-arena | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-arena | --check-two-ships | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }
