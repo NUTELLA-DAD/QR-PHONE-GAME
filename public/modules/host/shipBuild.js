@@ -21,7 +21,7 @@ export const TWIN_SIZE = { rx: 0.7, ry: 0.62 }; // the twin envelope relative to
 // Station kinds: what a station (or engine) IS, so code asks layout.one('boiler') / all('gun') rather than for a name.
 // A ship may have several of most kinds; ONE_PER_SHIP kinds are single so far (one helm, shield, bomb bay compartment, coil emitter).
 // Names stay unique and human ("Fore Boiler"): phones show them, and player.lock holds the name.
-export const STATION_KINDS = ['helm', 'boiler', 'lookout', 'coal', 'ammo', 'gun', 'searchlight', 'coil', 'deflector', 'bombBay', 'navigator', 'escort', 'engine', 'sail'];
+export const STATION_KINDS = ['helm', 'boiler', 'lookout', 'coal', 'ammo', 'gun', 'searchlight', 'coil', 'deflector', 'bombBay', 'navigator', 'escort', 'engine', 'sail', 'swivel'];
 
 export const ONE_PER_SHIP = ['helm', 'deflector', 'bombBay', 'coil', 'navigator'];
 
@@ -44,7 +44,7 @@ const KEYED = ['gunMounts', 'searchlights'];
 const OPTIONAL = ['ballast', 'gasValves', 'sails']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
 const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'liftRepair'];
 const X_FIELDS = {
-  platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x'], vents: ['x'], racks: ['x'],
+  platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x', 'sx'], vents: ['x'], racks: ['x'],
   extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], sails: ['x'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
   coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbags: ['cx'], liftRepair: ['x'],
 };
@@ -83,7 +83,7 @@ const asType = (type) => ({ ...connector, mass: () => M().link[type], emit: (p, 
 export const KIND_STATS = {
   helm: { hands: 1 }, boiler: { hands: 1 }, lookout: { hands: 1 }, coal: { hands: 0 }, ammo: { hands: 0 },
   gun: { hands: 1 }, searchlight: { hands: 1 }, coil: { hands: 1 }, deflector: { hands: 1 }, bombBay: { hands: 1 },
-  navigator: { hands: 1 }, escort: { hands: 1 }, sail: { hands: 1 },
+  navigator: { hands: 1 }, escort: { hands: 1 }, sail: { hands: 1 }, swivel: { hands: 1 },
 };
 const kindStat = (key) => (p) => (key === 'mass' ? M().kind[p.kind] : (KIND_STATS[p.kind] || {})[key]) || 0;
 
@@ -130,6 +130,21 @@ export function ventBoiler(L, v) {
 // What a bag is called on the TV when it goes down: "FORE BAG", "AFT BAG", "BAG 2" (a ship with one bag just says "GASBAG").
 export const bagName = (i, n) => (n <= 1 ? 'GASBAG' : i === 0 ? 'AFT BAG' : i === n - 1 ? 'FORE BAG' : `BAG ${i + 1}`);
 
+// ---- pointed engines (S.5h) -------------------------------------------------------------------------------------
+// An engine's direction is an angle in the ship's own frame: 0 = forward (the nose, +x), -PI/2 = up, PI/2 = down, PI = back (y runs down). thrustVec splits it into the share that pushes
+// the ship forward (fwd, -1..1) and up (up, -1..1; negative = down). The classic pods have no `dir`: 0, so fwd 1 and up 0 exactly.
+export const ENGINE_DIRS = [0, -Math.PI / 4, -Math.PI / 2, (-3 * Math.PI) / 4, Math.PI, (3 * Math.PI) / 4, Math.PI / 2, Math.PI / 4]; // forward, forward-up, up, back-up, back, back-down, down, forward-down
+export const ENGINE_DIR_NAMES = ['forward', 'forward and up', 'up', 'back and up', 'back', 'back and down', 'down', 'forward and down'];
+export const normAngle = (a) => { const r = ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI; return Math.abs(r) < 1e-4 ? 0 : +r.toFixed(4); }; // (-PI..PI, 4 decimals)
+const clean = (v) => Math.round(v * 1e6) / 1e6 + 0; // (cos(PI/2) is 6e-17, not 0; and no -0)
+export const thrustVec = (dir) => ({ fwd: clean(Math.cos(dir || 0)), up: clean(-Math.sin(dir || 0)) });
+export const dirName = (dir) => { const a = normAngle(dir || 0), i = ENGINE_DIRS.findIndex((d) => Math.abs(normAngle(d) - a) < 0.02); return i >= 0 ? ENGINE_DIR_NAMES[i] : Math.round((a * 180) / Math.PI) + ' degrees'; };
+export const swivelName = (engineName) => 'Swivel ' + engineName;
+// Gas points of lift an engine pod makes pointing as placed (up positive, down negative): what the hover budget counts.
+const engineLift = (p) => thrustVec(p.dir).up * config.ENGINES.LIFT_GAS;
+// Steam an engine burns at throttle `speed` (0..1): its forward share runs with the throttle, its vertical share all the time (config.ENGINES.VERT_USE).
+export const engineUse = (dir, speed) => { const v = thrustVec(dir); return config.BOILER.USE_ENGINE * (speed * Math.abs(v.fwd) + config.ENGINES.VERT_USE * Math.abs(v.up)); };
+
 export const PARTS = {
   // A walkable floor. `row` is a DECK_ROWS name (y comes from it), x0/x1 are its span.
   deck: { mass: (p) => ((p.x1 - p.x0) / 100) * M().deck * (p.outside ? 0.5 : 1) + (p.row === 'crow2' ? M().mast : 0), lift: 0, steam: 0, hands: 0, emit: (p, A) => {
@@ -174,7 +189,12 @@ export const PARTS = {
     A.add('sails', { n, p: p.p, x: p.x, h: h || config.SAIL.MAST_H, w: w || config.SAIL.WIDTH });
   } },
   coil: piece('coil'), // (the Lightning Coil's weight is on its station)
-  engine: { ...piece('engines', { mass: () => M().engine, steam: 3 }), emit: (p, A) => A.add('engines', { kind: 'engine', ...withoutPart(p) }) },
+  // An engine pod (S.5h): `dir` is the way it pushes (thrustVec; none = forward, as the classic pods). Up thrust counts as lift and down thrust as negative lift (the hover budget);
+  // `swivel: true` adds a crew station at `sx` (the crank, toward the middle of the ship) that turns it in flight.
+  engine: { ...piece('engines', { mass: (p) => M().engine + (p.swivel ? M().swivel : 0), steam: 3, hands: (p) => (p.swivel ? 1 : 0), lift: (p) => engineLift(p) }), emit: (p, A) => {
+    A.add('engines', { kind: 'engine', ...withoutPart(p) });
+    if (p.swivel) A.add('stations', { n: swivelName(p.name), kind: 'swivel', p: p.p, x: p.sx != null ? p.sx : p.x + config.ENGINES.SWIVEL_OFFSET, eng: p.name });
+  } },
   // A sandbag (trim weight): `p` is its deck and x where it stands; `hang: true` hangs it from the hull under the deck instead. Cheap, but a long way out
   // from the middle it moves the centre of mass (balanceOf).
   ballast: { mass: () => M().ballast, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('ballast', withoutPart(p)) },
@@ -609,13 +629,16 @@ export function balanceOf(parts) {
   const ys = deckYs(parts);
   let m = 0, mx = 0, my = 0, w = 0, wx = 0, wy = 0;
   const lift = (x, y, v) => { w += v; wx += x * v; wy += y * v; };
+  const placed = [];
   for (const p of parts) {
     const pos = partPos(p, ys), mass = partStat(p, 'mass');
-    if (pos && mass > 0) { m += mass; mx += mass * pos.x; my += mass * pos.y; }
+    if (pos && mass > 0) { m += mass; mx += mass * pos.x; my += mass * pos.y; placed.push([mass, pos.x, pos.y]); }
     if (p.part === 'gasbag') {
       for (const q of bagLiftPoints(p)) lift(q.x, q.y, q.v);
-    } else if (pos && partStat(p, 'lift') > 0) lift(pos.x, pos.y, partStat(p, 'lift'));
+    } else if (p.part !== 'engine' && pos && partStat(p, 'lift') > 0) lift(pos.x, pos.y, partStat(p, 'lift')); // (an engine's thrust is a force that twists her, forces.js, not a lift point)
   }
   const com = m > 0 ? { x: mx / m, y: my / m } : null, col = w > 0 ? { x: wx / w, y: wy / w } : null;
-  return { com, col, mass: m, ...trimOf(com && col ? com.x - col.x : 0, !!(com && col)) };
+  // The radius of gyration squared (px^2): how spread out her weight is about the centre of mass. A long, heavy-ended ship turns slower (forces.js).
+  const k2 = com ? placed.reduce((n, [q, x, y]) => n + q * ((x - com.x) ** 2 + (y - com.y) ** 2), 0) / m : 0;
+  return { com, col, mass: m, k2, bagLift: w, ...trimOf(com && col ? com.x - col.x : 0, !!(com && col)) };
 }
