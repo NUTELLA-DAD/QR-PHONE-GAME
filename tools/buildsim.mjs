@@ -637,6 +637,7 @@ async function checkEdit() {
       applyBuild(mixed);
       const open = outdoorDecks();
       const lowIdx2 = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'lower');
+      const lowY = SHIP_LAYOUT.platforms[lowIdx2].y;
       const deckCrusts = [], gunCrusts = [];
       for (let k = 1; k <= 5; k++) { // (a few seeded frost runs: where the ice settles is chance)
         calm();
@@ -644,7 +645,8 @@ async function checkEdit() {
         const sf = createSimulation();
         sf.castOff();
         for (let i = 0; i < 120 * 60; i++) sf.update(1 / 60);
-        deckCrusts.push(...sf.state.icing.filter((c) => c.area === 'topdeck'));
+        // (a hard hit in 2 minutes of flying can break an end off her, S.5i: the lower deck may be two decks now, and the decks are numbered again: a crust on any deck at the lower deck's height counts as on it)
+        deckCrusts.push(...sf.state.icing.filter((c) => c.area === 'topdeck').map((c) => ({ ...c, d: SHIP_LAYOUT.platforms[c.d] && SHIP_LAYOUT.platforms[c.d].y === lowY ? lowIdx2 : c.d })));
         gunCrusts.push(...sf.state.icing.filter((c) => c.area === 'gun'));
       }
       report(open.length === 1 && open[0] === lowIdx2 && deckCrusts.length > 0 && deckCrusts.every((c) => c.d === lowIdx2) && gunCrusts.length > 0 && gunCrusts.every((c) => !/Tail Gun|Nose Gun/.test(c.gun)), `weather follows the flag (lower deck outdoor, top deck covered): outdoorDecks() = ${open.map((d) => SHIP_LAYOUT.platforms[d].id).join()}, ${deckCrusts.length} frost crusts on decks, all on it; ${gunCrusts.length} on guns (${[...new Set(gunCrusts.map((c) => c.gun))].join(', ')}), none on the covered top deck's Tail Gun or Nose Gun`);

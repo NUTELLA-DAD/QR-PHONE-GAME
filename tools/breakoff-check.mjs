@@ -218,7 +218,7 @@ const multiParts = await loadBuild('multi', BUILDS);
   const bay = ours.layout.bombBay, d = ours.layout.deckIndex('bay');
   st.bombBay.bombs = 3;
   let t = -1;
-  for (let i = 0; i < secs(40) && t < 0; i++) {
+  for (let i = 0; i < secs(BOC.BAY.COOKOFF + 15) && t < 0; i++) {
     st.fires.splice(0, st.fires.length, { x: bay.x, d, t: 0, prog: 0 }); // (ONE fire, and the crew never get to it)
     step(sim, 1);
     if (st.breakStats.bay) t = i / 60;

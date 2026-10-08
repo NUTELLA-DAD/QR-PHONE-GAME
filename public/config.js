@@ -818,9 +818,9 @@ export const config = {
     BAY: {
       HIT_RADIUS: 150, // a hit this close to the middle of a LOADED bomb bay can set the bombs off...
       MIN_POWER: 2, // ...if it is at least this powerful (an enemy bullet is 1, a mine or bomb 2, a plane crash 3)
-      HIT_CHANCE: 0.3, // chance per such hit with a full bay (fewer bombs aboard, less chance)
+      HIT_CHANCE: 0.2, // chance per such hit with a full bay (fewer bombs aboard, less chance)
       FIRE_RADIUS: 170, // fire in the bay's compartment this close to its middle heats the bombs...
-      COOKOFF: 18, // ...and when it has burned for this many seconds in all (the crew can spray it out, the heat fades) they cook off
+      COOKOFF: 45, // ...and when it has burned for this many seconds in all (the crew can spray it out, the heat fades) they cook off
       RADIUS: 230, // the blast blows off every deck stretch, room, gun, engine and rack within this many px of the bay (the classic ship loses the bay, her ball turret, the coal bunker and what stands round it)
       ARMOUR_HOLD: 0.6, // a blown deck stretch that is armoured all along holds with this chance
       BAG_REACH: 0.25, // a gasbag whose envelope is within this share of the radius from the blast is torn away

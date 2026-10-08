@@ -649,6 +649,7 @@ export function createShipSim(world, ship, W) {
     ship.buildId = 'broken';
     const S = state.breakStats;
     S.events++; S.parts += plan.labels.length; S.scars += plan.scars.length;
+    (S.causes ||= []).push(entry.cause + '@' + Math.round(world.ev ? world.ev.t || 0 : 0)); // (what broke her, and when on the director's clock: botsim prints it)
     S[spec.cause === 'ram' ? 'ram' : spec.cause === 'crash' ? 'crash' : spec.kind === 'blast' ? 'bay' : spec.kind === 'bag' ? 'bag' : 'hit']++;
     breakCd = B.GRACE;
     // show it: smoke and sparks, the word, the shake, the kick, the pieces
@@ -1579,7 +1580,7 @@ export function createShipSim(world, ship, W) {
     const bay = layout.bombBay;
     if (bay && BOC().ENABLED && BAY_D >= 0 && state.bombBay.bombs > 0 && !state.ship.down) { // fire in the bomb bay's compartment heats the bombs; long enough and they cook off (S.5i)
       const burning = state.fires.filter((f) => f.d === BAY_D && Math.abs(f.x - bay.x) < BOC().BAY.FIRE_RADIUS).length;
-      bayHeat = burning ? bayHeat + dt * (1 + 0.5 * (burning - 1)) : Math.max(0, bayHeat - dt * 0.5);
+      bayHeat = burning ? bayHeat + dt * Math.min(2, 1 + 0.25 * (burning - 1)) : Math.max(0, bayHeat - dt * 0.5);
       if (bayHeat >= BOC().BAY.COOKOFF / (ship.ai || config.PVP.ENABLED ? 1 : BOC().DIFFICULTY[world.difficulty] ?? 1)) explodeBay('fire');
     } else bayHeat = 0;
 
