@@ -206,6 +206,18 @@ Order:
 
 Do S.1 before P2.1 (both touch gunship.js), and S.7 after P2.2 (save schema).
 
+### Phase V - PvP airship battles (planned with Fable)
+Two crews, each on their own built ship, one TV. Ways to win:
+- sink the other ship;
+- capture her helm;
+- hold the ring.
+
+It also includes a bot arena (`tools/arena.mjs`): ship-vs-ship ratings and part balance.
+
+How it's built: two copies of the game side by side, linked by a bridge, so co-op is untouched. Full plan: **[PVP.md](PVP.md)**.
+
+V.0, V.1a and V.2 can start alongside Phase S.
+
 ### Phase 2 - Story and stickiness
 
 | # | Package | Size | Files |
