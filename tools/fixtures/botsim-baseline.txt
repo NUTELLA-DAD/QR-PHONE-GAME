@@ -1,4 +1,8 @@
 # Baseline botsim summaries, captured BEFORE Phase S.1 (classic ship, hard-coded layout).
+# RE-SNAPSHOTTED in S.5c with the live balance on (config.BALANCE.LIVE: crew, carried loads, coal, ammo and bombs shift the ship's trim, balance.js).
+# That legitimately changes classic flight a little (compared over 3 seeds x 3 maps, hull / kills / wrecks are within noise). The old numbers still
+# were reproduced byte for byte with NO_LIVE=1 (live balance off) before this re-snapshot: the static balance alone changes nothing, the classic ship is exactly level.
+# (The pre-S.5c numbers are in git history for this file.)
 # Each block is the output of the command on its '$' line, from '--- botsim summary ---' down (the real-time line is dropped).
 # Check with: node tools/buildsim.mjs --check-botsim
 
@@ -7,14 +11,14 @@ $ node tools/botsim.mjs --minutes 3 --seed 1 --map network
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map network, seed 1
 missions completed: 0
 wrecks: 0
-average hull: 96.2
-kills: 21
-hauled: 4 ammo loads, 3 coal loads; fires out 0, holes patched 5
-steam: mean 71.5, <35 0.0%, >70 51.9%, >90 1.6%, blowouts 0, leaking 4.3%
-gas (hover needs ~50): avg 48.26, peak 100
-daring stunts: started 2 (plane 1, gun 0, show 1); fighters stolen 0; ended 2: nothing to aim at x1, landed x1
+average hull: 95.5
+kills: 23
+hauled: 4 ammo loads, 3 coal loads; fires out 2, holes patched 7
+steam: mean 70.3, <35 0.0%, >70 58.3%, >90 0.0%, blowouts 0, leaking 2.6%
+gas (hover needs ~50): avg 48.60, peak 100
+daring stunts: started 1 (plane 1, gun 0, show 0); fighters stolen 0; ended 1: nothing to aim at x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 177 of 419 station seconds = 42.3% (gun+loader 1.8%, helm+lookout 63.3%, lookout+helm 99.8%); gunner idle 69.2% of 195s; surge held 4s
+links: paired seconds 154 of 408 station seconds = 37.8% (gun+loader 1.8%, helm+lookout 54.1%, lookout+helm 97.5%); gunner idle 64.5% of 191s; surge held 2s
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 2 --map network
@@ -22,14 +26,14 @@ $ node tools/botsim.mjs --minutes 3 --seed 2 --map network
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map network, seed 2
 missions completed: 0
 wrecks: 0
-average hull: 95.5
-kills: 19
-hauled: 6 ammo loads, 3 coal loads; fires out 0, holes patched 5
-steam: mean 68.7, <35 0.0%, >70 44.4%, >90 0.0%, blowouts 0, leaking 21.2%
-gas (hover needs ~50): avg 48.34, peak 100
+average hull: 96.4
+kills: 24
+hauled: 7 ammo loads, 3 coal loads; fires out 1, holes patched 9
+steam: mean 68.8, <35 0.0%, >70 44.8%, >90 1.7%, blowouts 0, leaking 8.6%
+gas (hover needs ~50): avg 51.25, peak 100
 daring stunts: started 1 (plane 0, gun 0, show 1); fighters stolen 0; ended 1: landed x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 204 of 476 station seconds = 42.9% (gun+loader 2.2%, helm+lookout 72.2%, lookout+helm 99.7%); gunner idle 56.5% of 238s; surge held 8s
+links: paired seconds 110 of 423 station seconds = 26.0% (gun+loader 2.0%, helm+lookout 40.0%, lookout+helm 100.0%); gunner idle 56.2% of 239s; surge held 10s
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 3 --map network
@@ -52,14 +56,14 @@ $ node tools/botsim.mjs --minutes 3 --seed 1 --map route
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map route, seed 1
 missions completed: 0
 wrecks: 0
-average hull: 94.9
-kills: 24
-hauled: 7 ammo loads, 2 coal loads; fires out 1, holes patched 1
-steam: mean 68.7, <35 0.0%, >70 47.1%, >90 4.0%, blowouts 0, leaking 6.9%
-gas (hover needs ~50): avg 46.37, peak 100
+average hull: 95.0
+kills: 26
+hauled: 7 ammo loads, 3 coal loads; fires out 0, holes patched 4
+steam: mean 67.6, <35 0.0%, >70 42.4%, >90 1.9%, blowouts 0, leaking 7.1%
+gas (hover needs ~50): avg 46.00, peak 100
 daring stunts: started 1 (plane 1, gun 0, show 0); fighters stolen 0; ended 1: nothing to aim at x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 122 of 555 station seconds = 22.0% (gun+loader 1.6%, helm+lookout 36.2%, lookout+helm 100.0%); gunner idle 74.2% of 335s; surge held 11s
+links: paired seconds 84 of 486 station seconds = 17.4% (gun+loader 1.5%, helm+lookout 25.0%, lookout+helm 100.0%); gunner idle 65.1% of 285s; surge held 10s
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 2 --map route
@@ -67,14 +71,14 @@ $ node tools/botsim.mjs --minutes 3 --seed 2 --map route
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map route, seed 2
 missions completed: 0
 wrecks: 0
-average hull: 92.3
-kills: 23
-hauled: 4 ammo loads, 3 coal loads; fires out 1, holes patched 3
-steam: mean 65.9, <35 0.0%, >70 33.5%, >90 0.1%, blowouts 0, leaking 3.5%
-gas (hover needs ~50): avg 55.31, peak 100
+average hull: 93.8
+kills: 28
+hauled: 3 ammo loads, 3 coal loads; fires out 1, holes patched 2
+steam: mean 71.0, <35 0.0%, >70 54.6%, >90 1.5%, blowouts 0, leaking 0.0%
+gas (hover needs ~50): avg 55.13, peak 100
 daring stunts: started 0 (plane 0, gun 0, show 0); fighters stolen 0; ended 0: 
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 254 of 602 station seconds = 42.1% (gun+loader 0.9%, helm+lookout 80.8%, lookout+helm 100.0%); gunner idle 77.2% of 322s; surge held 6s
+links: paired seconds 250 of 605 station seconds = 41.3% (gun+loader 2.8%, helm+lookout 77.8%, lookout+helm 100.0%); gunner idle 75.3% of 330s; surge held 5s
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 3 --map route
@@ -101,7 +105,7 @@ average hull: 99.4
 kills: 32
 hauled: 4 ammo loads, 2 coal loads; fires out 0, holes patched 1
 steam: mean 71.4, <35 0.0%, >70 53.6%, >90 0.0%, blowouts 0, leaking 0.0%
-gas (hover needs ~50): avg 52.06, peak 100
+gas (hover needs ~50): avg 52.05, peak 100
 daring stunts: started 1 (plane 1, gun 0, show 0); fighters stolen 0; ended 1: nothing to aim at x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
 links: paired seconds 226 of 478 station seconds = 47.3% (gun+loader 4.0%, helm+lookout 78.2%, lookout+helm 100.0%); gunner idle 54.5% of 231s; surge held 8s
@@ -112,14 +116,14 @@ $ node tools/botsim.mjs --minutes 3 --seed 2 --map open
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map open, seed 2
 missions completed: 0
 wrecks: 0
-average hull: 98.2
-kills: 23
-hauled: 10 ammo loads, 2 coal loads; fires out 4, holes patched 10
-steam: mean 70.8, <35 0.4%, >70 55.8%, >90 2.8%, blowouts 1, leaking 12.5%
-gas (hover needs ~50): avg 53.29, peak 95
-daring stunts: started 1 (plane 0, gun 0, show 1); fighters stolen 0; ended 1: landed x1
+average hull: 97.7
+kills: 29
+hauled: 10 ammo loads, 2 coal loads; fires out 2, holes patched 5
+steam: mean 67.8, <35 1.7%, >70 45.5%, >90 3.8%, blowouts 1, leaking 14.4%
+gas (hover needs ~50): avg 53.00, peak 95
+daring stunts: started 1 (plane 1, gun 0, show 0); fighters stolen 0; ended 1: nothing to aim at x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 134 of 524 station seconds = 25.6% (gun+loader 3.3%, helm+lookout 37.0%, lookout+helm 100.0%); gunner idle 58.6% of 293s; surge held 12s
+links: paired seconds 141 of 530 station seconds = 26.7% (gun+loader 2.2%, helm+lookout 38.9%, lookout+helm 100.0%); gunner idle 62.7% of 289s; surge held 13s
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 3 --map open
@@ -128,11 +132,12 @@ bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map open, seed 3
 missions completed: 0
 wrecks: 0
 average hull: 98.2
-kills: 22
+kills: 23
 hauled: 2 ammo loads, 2 coal loads; fires out 3, holes patched 7
-steam: mean 69.3, <35 0.0%, >70 44.4%, >90 1.4%, blowouts 0, leaking 10.7%
-gas (hover needs ~50): avg 49.42, peak 93
-daring stunts: started 2 (plane 1, gun 0, show 1); fighters stolen 0; ended 1: nothing to aim at x1
+steam: mean 69.2, <35 0.0%, >70 44.6%, >90 1.4%, blowouts 0, leaking 15.6%
+gas (hover needs ~50): avg 49.44, peak 93
+daring stunts: started 1 (plane 1, gun 0, show 0); fighters stolen 0; ended 1: nothing to aim at x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 170 of 508 station seconds = 33.5% (gun+loader 3.4%, helm+lookout 53.8%, lookout+helm 100.0%); gunner idle 71.9% of 278s; surge held 4s
+links: paired seconds 172 of 516 station seconds = 33.3% (gun+loader 3.8%, helm+lookout 53.7%, lookout+helm 100.0%); gunner idle 70.5% of 285s; surge held 4s
 errors: 0
+

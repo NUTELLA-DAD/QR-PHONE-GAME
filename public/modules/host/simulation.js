@@ -27,6 +27,7 @@ import { createLinks } from './links.js';
 import { createSpotter } from './spotter.js';
 import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { createGoingDown } from './goingDown.js';
+import { createBalance } from './balance.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
@@ -718,6 +719,7 @@ export function createSimulation() {
   let lastJolt = 0;
   const prime = createPrime({ state, phoneFx }); // primed shells: hold PRIME on a gun to charge the loaded shell (prime.js)
   const links = createLinks({ state, modules, shipPuff }); // linked stations: gun + loader, helm + lookout, boiler surge (links.js)
+  const balance = createBalance(state); // the seesaw: live centre of mass against the bag's lift (balance.js)
   const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt }); // GOING DOWN! last stand + the ice locker (goingDown.js)
   state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
 
@@ -1721,7 +1723,8 @@ export function createSimulation() {
       state.ev.warnText = 'THE BOILER BLEW! A PIPE BURST!';
     }
 
-    const maxSpeed = clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state);
+    balance.update(dt);
+    const maxSpeed = clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state) * (1 - state.balance.slow); // (a tail-heavy ship drags her tail)
     if (state.ship.speed > maxSpeed) state.ship.speed += (maxSpeed - state.ship.speed) * Math.min(1, dt * 2);
     const maxReverse = -maxSpeed * config.SHIP.REVERSE;
     if (state.ship.speed < maxReverse) state.ship.speed += (maxReverse - state.ship.speed) * Math.min(1, dt * 2);
@@ -1795,7 +1798,7 @@ export function createSimulation() {
     state.buoyancy = effGas > G.NEUTRAL + 5 ? 1 : effGas < G.NEUTRAL - 5 ? -1 : 0;
     state.sinking = state.buoyancy < 0;
     if (flying) {
-      state.ship.vy = (state.ship.vy || 0) + (lift + trim - (state.ship.vy || 0) * G.DRAG) * dt;
+      state.ship.vy = (state.ship.vy || 0) + (lift + trim + state.balance.push - (state.ship.vy || 0) * G.DRAG) * dt;
       const bounds = altBounds(state);
       const hi = Math.max(bounds.hi, state.ship.alt);
       state.ship.alt += state.ship.vy * dt;
@@ -1805,6 +1808,7 @@ export function createSimulation() {
       }
       // Nearly out of gas on the ground: the hull grinds.
       if (state.course && state.course.scraping && state.ship.gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
+      if (state.course && state.course.scraping && state.balance.scrape) damageHull(state.balance.scrape * dt); // a nose-heavy bow digs in
       if (state.ship.gas < 12 && !state.gasWarned) {
         state.gasWarned = true;
         state.ev.warn = 2.5;
@@ -1823,7 +1827,7 @@ export function createSimulation() {
     const climbRate = dt > 0 && state.lastAlt != null ? (state.ship.alt - state.lastAlt) / dt : 0;
     state.lastAlt = state.ship.alt;
     // (Speeding up lifts the nose a touch, braking dips it: she has weight.)
-    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED - (state.ship.accelX || 0) * SH.PITCH_PER_ACCEL, -SH.TILT_MAX, SH.TILT_MAX) + goingDown.pitch();
+    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED - (state.ship.accelX || 0) * SH.PITCH_PER_ACCEL, -SH.TILT_MAX, SH.TILT_MAX) + goingDown.pitch() + state.balance.restPitch; // (restPitch: the trim of an unbalanced ship, balance.js)
     state.ship.pitch = (state.ship.pitch || 0) + (wantPitch - (state.ship.pitch || 0)) * Math.min(1, dt * SH.TILT_SMOOTH);
 
     // Breaking apart: pieces fall, explosions go off, then the whole game starts over.

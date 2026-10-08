@@ -492,6 +492,7 @@ function getTool(p, kind, to) {
   // (the rack that makes the whole trip - rack, then the job - shortest)
   const cost = (r) => (p.d == null ? 0 : travelTime(p, r.d, r.x) + (to && to.d != null ? travelTime({ d: r.d, x: r.x, conn: null }, to.d, to.x) : 0));
   const rack = PICKUPS.filter((r) => r.kind === kind).sort((a, b) => cost(a) - cost(b))[0];
+  if (!rack) return false; // (a built ship may have none of this kind: the validator asks for one, but do not crash)
   if (steer(p, rack.d, rack.x)) {
     press(p);
     // A hole, fire or hurt module within reach of the rack wins over the rack while we hold the matching tool, so a tap

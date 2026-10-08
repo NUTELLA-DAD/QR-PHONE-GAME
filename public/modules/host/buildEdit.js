@@ -6,7 +6,11 @@
 //                                  stretch it makes a new deck (rooms for the hull to enclose, plus a ladder to the nearest deck so it can be reached)
 //   erase(parts, row, x0, x1)      rub out a stretch of deck: it gets shorter, splits in two, or goes; whatever stood on the rubbed-out stretch
 //                                  (stations, guns, racks, ladders, vents, pipes ...) goes with it and is listed in `removed`
-//   setBag(parts, { grow, twin })  the gasbag a column (BAG_STEP) longer or shorter, or the twin envelope on / off
+//   setBag(parts, { grow, twin })  the gasbag a column (BAG_STEP) longer or shorter, or the twin envelope on / off (a ship with no bag gets one)
+//   drawBag(parts, x0, x1)         a span dragged along the gasbag row: the main bag from nothing / resized, or (elsewhere) the twin envelope
+//   placeConnector(parts, x, rowA, rowB, type)   a ladder, slide pole or rope straight down between two deck rows at x
+//   thingAt(parts, x, y, slop) / removeAt(parts, x, y, slop) the single placed thing under a point (ladders, stations, guns, racks, sandbags ...); delete it
+//   emptyBuild() / ensureFrame(parts)            a ship of nothing (just its frame): every operation works on it, the first deck needs no ladder
 // Result: { ok, parts, hint, added: [labels], removed: [labels], cols, deck, kind }. ok false = nothing changed and `hint` says why.
 // The result may well FAIL validate() (erase the last boiler ...): that is the editor's job to show, not to prevent.
 import { buildLayout, BUILDS, COL, DECK_ROWS, KEEL_ROWS, rowOf } from './shipBuild.js';
@@ -41,10 +45,21 @@ const uniqueId = (parts, base) => {
 };
 const cols = (len) => +(len / COL).toFixed(1);
 
+// Every edit makes sure the ship has its frame part (the deflector band and nest rise; a build started from nothing begins with only this).
+export function ensureFrame(parts) {
+  if (!parts.some((p) => p.part === 'frame')) {
+    const c = BUILDS.classic.find((p) => p.part === 'frame');
+    parts.push({ part: 'frame', nestRise: c.nestRise, shield: { ...c.shield } });
+  }
+  return parts;
+}
+// A ship with nothing on it: just the frame. The blueprint editor can build a whole ship from here.
+export const emptyBuild = () => ensureFrame([]);
+
 // ---- what a part is tied to ------------------------------------------------------------------------------------
 // refs(o): the (deck id, x) points a part stands on, each with a setter to move it to another deck. Pieces that stand on a deck are
 // removed when that stretch of deck is erased; connectors have two ends, the lift also its repair spot.
-const POINT = ['station', 'gun', 'searchlight', 'engine', 'rack', 'vent', 'extinguisher', 'boarderEntry', 'escortDock', 'medbay'];
+const POINT = ['station', 'gun', 'searchlight', 'engine', 'rack', 'vent', 'extinguisher', 'boarderEntry', 'escortDock', 'medbay', 'ballast'];
 const LINK = ['ladder', 'rope', 'stairs', 'lift', 'pole'];
 function refs(o) {
   const r = [];
@@ -68,7 +83,9 @@ function labelOf(o) {
     case 'extinguisher': return 'extinguisher';
     case 'boarderEntry': return 'boarding point';
     case 'escortDock': return `escort hook ${o.n}`;
+    case 'gasbag': return 'gasbag';
     case 'medbay': return 'medbay';
+    case 'ballast': return o.hang ? 'hanging sandbag' : 'sandbag';
     case 'deck': return `${o.name} (deck)`;
     default: return o.part;
   }
@@ -149,11 +166,12 @@ function coverRooms(next, deck, info) {
 
 // ---- a spot for the ladder of a new deck -------------------------------------------------------------------------
 // x on deck `p` (of layout L) between lo and hi where nothing is in the way (stations, racks, vents, valves, other ladders), nearest the middle.
-function freeSpot(L, p, lo, hi) {
+function freeSpot(L, p, lo, hi, avoid = []) {
   const gap = config.BUILD_CHECK.MIN_GAP + 15, near = config.TOOLS.REACH + 5;
   const q = L.platforms.find((d) => d.id === p), di = L.platforms.indexOf(q);
   const clear = (x, strict) => {
     if ([...L.stations, ...L.engines].some((s) => s.p === p && Math.abs(s.x - x) < gap)) return false;
+    if (avoid.some((a) => Math.abs(a - x) < gap + 30)) return false;
     if (!strict) return true;
     if ([...L.racks, ...L.vents, ...L.extinguishers].some((o) => o.p === p && Math.abs(o.x - x) < near)) return false;
     if (L.pipes.some((o) => o.p === p && Math.abs(o.valve[0] - x) < near)) return false;
@@ -177,7 +195,8 @@ export function drawDeck(parts, row, x0, x1) {
   let L;
   try { L = buildLayout(parts); } catch { return no(parts, 'The parts do not build: undo the last change first.'); }
   const bag = L.gasbag;
-  if (row === 'nest' && bag) {
+  if (row === 'nest') {
+    if (!bag) return no(parts, "The crow's nest sits on top of the gasbag: draw the gasbag first (the Gasbag tool).");
     const reach = bag.rx * BE().BAG_COVER;
     if (lo < bag.cx - reach || hi > bag.cx + reach) return no(parts, "The crow's nest sits on top of the gasbag: keep it over the bag (make the bag longer first).");
   }
@@ -199,6 +218,7 @@ export function drawDeck(parts, row, x0, x1) {
       if (blocker) return no(parts, `The ${blocker.name} hangs in the way: draw the keel deck clear of it, or erase it first.`);
     }
   }
+  ensureFrame(next);
   const added = [];
   let deck;
   if (touch.length) {
@@ -219,34 +239,55 @@ export function drawDeck(parts, row, x0, x1) {
     refit(next);
     return { ok: true, parts: next, added, removed: [], kind: 'extend', deck: deck.name, cols: cols(f1 - f0), grew: cols(fresh.reduce((n, [a, b]) => n + b - a, 0)), span: [f0, f1], hint: `${deck.name} made ${cols(fresh.reduce((n, [a, b]) => n + b - a, 0))} column(s) longer.` };
   }
-  // A new deck: it needs a way up or down, so it must sit under (or over) a deck it can climb to.
+  // A new deck. The very first deck of a ship (nothing to climb to yet) is simply accepted; any later one needs a way to the nearest deck above
+  // and below it that it overlaps, so it can be reached: a ladder (a rope up to the crow's nest).
   const y = DECK_ROWS[row];
+  const nestOf = (q) => rowOf(q) === 'nest';
   const linkable = L.platforms.filter((q) => ['catwalk', 'main', 'lower', ...KEEL_ROWS].includes(rowOf(q)) && q.y !== y);
+  const reachable = [...linkable, ...(row === 'catwalk' ? L.platforms.filter(nestOf) : [])];
   const overlap = (q) => Math.min(q.x1, hi) - Math.max(q.x0, lo);
-  let parent = null;
-  for (const above of [true, false]) { // the nearest deck above that it overlaps, else the nearest below
-    const cands = linkable.filter((q) => (above ? q.y < y : q.y > y) && overlap(q) >= 80).sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y));
+  const links = [];
+  for (const above of [true, false]) { // the nearest deck above that it overlaps, and the nearest below
+    const cands = reachable.filter((q) => (above ? q.y < y : q.y > y) && overlap(q) >= 80).sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y));
     for (const q of cands) {
-      const x = freeSpot(L, q.id, Math.max(q.x0, lo), Math.min(q.x1, hi));
-      if (x !== null) { parent = { q, x, above }; break; }
+      const x = freeSpot(L, q.id, Math.max(q.x0, lo), Math.min(q.x1, hi), links.map((l) => l.x));
+      if (x !== null) { links.push({ q, x, above }); break; }
     }
-    if (parent) break;
   }
-  if (!parent) return no(parts, 'A new deck needs a way to climb to the deck above (or below) it: draw it so it overlaps one, with a free spot for a ladder.');
+  if (!links.length && linkable.length) return no(parts, 'A new deck needs a way to climb to the deck above (or below) it: draw it so it overlaps one, with a free spot for a ladder.');
   const id = uniqueId(next, info.id);
   const n = next.filter((p) => p.part === 'deck' && p.row === row).length;
   deck = { part: 'deck', id, row, name: info.name + (n ? ' ' + (n + 1) : ''), x0: lo, x1: hi, ...(info.outside ? { outside: true } : {}) };
   next.push(deck);
   coverRooms(next, deck, info);
-  const top = parent.above ? parent.q.id : id, bottom = parent.above ? id : parent.q.id;
-  next.push({ part: row === 'nest' ? 'rope' : 'ladder', top, bottom, xTop: parent.x, xBottom: parent.x });
-  added.push(`${deck.name}`, `ladder to the ${parent.q.name}`);
+  for (const l of links) {
+    const top = l.above ? l.q.id : id, bottom = l.above ? id : l.q.id;
+    next.push({ part: nestOf(l.q) || row === 'nest' ? 'rope' : 'ladder', top, bottom, xTop: l.x, xBottom: l.x });
+    added.push(`ladder to the ${l.q.name}`);
+  }
+  added.unshift(deck.name);
   refit(next);
-  return { ok: true, parts: next, added, removed: [], kind: 'new', deck: deck.name, cols: cols(hi - lo), grew: cols(hi - lo), span: [lo, hi], hint: `New ${deck.name}, ${cols(hi - lo)} columns, with a ladder up to the ${parent.q.name}.` };
+  return { ok: true, parts: next, added, removed: [], kind: 'new', deck: deck.name, cols: cols(hi - lo), grew: cols(hi - lo), span: [lo, hi], hint: links.length ? `New ${deck.name}, ${cols(hi - lo)} columns, with a ladder to the ${links.map((l) => l.q.name).join(' and the ')}.` : `New ${deck.name}, ${cols(hi - lo)} columns: the first deck. Draw the next one under or over it and a ladder comes with it.` };
 }
 
 // ---- erasing ------------------------------------------------------------------------------------------------------
+// What goes with a part that was taken away: a steam pipe leading to a gone engine / helm / lift, the coil or bomb-bay doors of a gone station, an escort's
+// hook, and anything still pointing at a deck that no longer exists (a ladder from another deck ...). Their labels are added to `removed`.
+function dropDependents(list, goneParts, removed) {
+  const names = new Set(goneParts.map(nameOf).filter(Boolean));
+  if (goneParts.some((o) => o.part === 'lift')) names.add('Lift');
+  const kinds = new Set(goneParts.filter((o) => o.part === 'station').map((o) => o.kind));
+  const dropMore = (o) => (o.part === 'pipe' && names.has(o.to)) || (o.part === 'coil' && kinds.has('coil')) || (o.part === 'bombBay' && kinds.has('bombBay')) || (o.part === 'escortDock' && names.has(o.n));
+  const deckIds = new Set(list.filter((o) => o.part === 'deck').map((o) => o.id));
+  const orphan = (o) => refs(o).some((r) => !deckIds.has(r.id)) || (o.part === 'room' && !deckIds.has(o.p));
+  return list.filter((o) => {
+    if (dropMore(o) || orphan(o)) { if (o.part !== 'room') removed.push(labelOf(o)); return false; }
+    return true;
+  });
+}
+
 export function erase(parts, row, x0, x1) {
+  if (row === 'gasbag') return eraseBag(parts);
   const info = rowInfo(row);
   if (!info) return no(parts, 'There is no deck row there.');
   const a = Math.round(Math.min(x0, x1)), b = Math.round(Math.max(x0, x1));
@@ -291,31 +332,60 @@ export function erase(parts, row, x0, x1) {
       if (pieces.length === 2) for (const r of rs) if (r.x >= pieces[1][0]) r.to(ids[1]);
     });
   }
-  // Things that went with their owners: the steam pipe of a gun-less ... engine or helm, the lift's pipe, the coil emitter, the bomb bay doors.
-  let out = next.filter((o, i) => !gone.has(i));
+  // Things that went with their owners (the steam pipe of an engine or the helm, the lift's pipe, the coil emitter, the bomb bay doors ...), and anything left on a deck that is gone.
   const goneParts = next.filter((o, i) => gone.has(i));
-  const names = new Set(goneParts.map(nameOf).filter(Boolean));
-  if (goneParts.some((o) => o.part === 'lift')) names.add('Lift');
-  const kinds = new Set(goneParts.filter((o) => o.part === 'station').map((o) => o.kind));
-  const dropMore = (o) => (o.part === 'pipe' && names.has(o.to)) || (o.part === 'coil' && kinds.has('coil')) || (o.part === 'bombBay' && kinds.has('bombBay'));
-  // Anything left pointing at a deck that no longer exists (a ladder from another deck ...) goes too.
-  const deckIds = new Set(out.filter((o) => o.part === 'deck').map((o) => o.id));
-  const orphan = (o) => refs(o).some((r) => !deckIds.has(r.id)) || (o.part === 'room' && !deckIds.has(o.p));
-  out = out.filter((o) => {
-    if (dropMore(o) || orphan(o)) { if (o.part !== 'room') removed.push(labelOf(o)); return false; }
-    return true;
-  });
+  let out = dropDependents(next.filter((o, i) => !gone.has(i)), goneParts, removed);
   refit(out);
   const cut = targets.reduce((n, d) => n + Math.min(b, d.x1) - Math.max(a, d.x0), 0);
   return { ok: true, parts: out, added: [], removed, kind: 'erase', deck: targets.map((d) => d.name).join(', '), cols: cols(cut), span: [a, b], hint: `Erased ${cols(cut)} column(s) of ${targets.map((d) => d.name).join(', ')}.${removed.length ? ' removed: ' + summarize(removed) : ''}` };
 }
 
 // ---- the gasbag ------------------------------------------------------------------------------------------------------
+const bagOf = (parts) => parts.find((p) => p.part === 'gasbag');
+// A gasbag drawn along the gasbag row: from nothing it creates the main bag between the two ends; across the existing bag it resizes it (the new ends);
+// somewhere else on the row it is the twin envelope (it rides above and behind the main bag).
+export function drawBag(parts, x0, x1) {
+  const lo = Math.round(Math.min(x0, x1)), hi = Math.round(Math.max(x0, x1));
+  if (hi - lo < 40) return no(parts, 'Drag along the gasbag row to draw the bag (as long as you like).');
+  const next = clone(parts);
+  const bag = bagOf(next);
+  const rx = (a, b) => Math.max(BE().BAG_MIN, Math.min(BE().BAG_MAX, Math.round((b - a) / 20) * 10));
+  ensureFrame(next);
+  let kind = 'bag', hint;
+  if (!bag) {
+    next.push({ part: 'gasbag', cx: Math.round((lo + hi) / 2), cy: BE().BAG_CY, rx: rx(lo, hi), ry: BE().BAG_RY });
+    hint = `Gasbag drawn: ${rx(lo, hi) * 2} px long.`;
+  } else if (hi > bag.cx - bag.rx && lo < bag.cx + bag.rx) {
+    bag.cx = Math.round((lo + hi) / 2);
+    bag.rx = rx(lo, hi);
+    hint = `Gasbag now ${bag.rx * 2} px long.`;
+  } else {
+    if (bag.twin) return no(parts, 'She already has a twin envelope: draw across the main bag to resize it.');
+    bag.twin = true;
+    kind = 'twin';
+    hint = 'Twin envelope added (it rides above and behind the main bag).';
+  }
+  refit(next);
+  return { ok: true, parts: next, added: ['gasbag'], removed: [], kind, cols: 0, hint };
+}
+// Rub out the gasbag (and its twin).
+function eraseBag(parts) {
+  if (!bagOf(parts)) return no(parts, 'There is no gasbag to erase.');
+  const out = clone(parts).filter((p) => p.part !== 'gasbag');
+  refit(out);
+  return { ok: true, parts: out, added: [], removed: ['gasbag'], kind: 'erase', deck: 'gasbag', cols: 0, hint: 'Erased the gasbag. removed: gasbag' };
+}
 // grow: +1 / -1 = one column (BAG_STEP of half-length) longer / shorter. twin: true / false / 'toggle' = the second envelope.
+// A ship with no bag gets one (grow +1) sized to cover her decks.
 export function setBag(parts, { grow = 0, twin } = {}) {
   const next = clone(parts);
-  const bag = next.find((p) => p.part === 'gasbag');
-  if (!bag) return no(parts, 'This ship has no gasbag.');
+  let bag = bagOf(next);
+  if (!bag) {
+    if (grow <= 0) return no(parts, 'This ship has no gasbag: draw one with the Gasbag tool (or press Bag +).');
+    const decks = parts.filter((p) => p.part === 'deck' && !['nest', 'helm'].includes(p.row));
+    const d0 = decks.length ? Math.min(...decks.map((p) => p.x0)) : 0, d1 = decks.length ? Math.max(...decks.map((p) => p.x1)) : 2 * BE().BAG_MIN;
+    return drawBag(parts, d0 - 40, d1 + 40);
+  }
   if (grow) {
     const rx = Math.max(BE().BAG_MIN, Math.min(BE().BAG_MAX, bag.rx + grow * BE().BAG_STEP));
     if (rx === bag.rx) return no(parts, grow > 0 ? 'The gasbag is as long as it gets.' : 'The gasbag is as short as it gets.');
@@ -324,4 +394,82 @@ export function setBag(parts, { grow = 0, twin } = {}) {
   if (twin !== undefined) bag.twin = twin === 'toggle' ? !bag.twin : !!twin;
   refit(next);
   return { ok: true, parts: next, added: [], removed: [], kind: 'bag', cols: 0, hint: `Gasbag ${bag.rx * 2} px long${bag.twin ? ', with a twin envelope' : ''}.` };
+}
+
+// ---- ladders and deleting single things ---------------------------------------------------------------------------------
+const deckYs = (parts) => Object.fromEntries(parts.filter((p) => p.part === 'deck').map((d) => [d.id, DECK_ROWS[d.row]]));
+const deckAtX = (parts, row, x) => parts.find((p) => p.part === 'deck' && p.row === row && x >= p.x0 - 10 && x <= p.x1 + 10);
+// A ladder / slide pole / rope drawn straight down from one deck row to another at x (the two rows may be given in either order). Snaps x to 10 px and
+// keeps it inside the stretch both decks share. Refused (with a hint) when there is no deck at both ends, a deck lies between, or something is in the way.
+export function placeConnector(parts, x, rowA, rowB, type = 'ladder') {
+  if (!['ladder', 'pole', 'rope'].includes(type)) return no(parts, 'A connector is a ladder, a slide pole or a rope.');
+  if (DECK_ROWS[rowA] == null || DECK_ROWS[rowB] == null) return no(parts, 'Draw the ladder from one deck down to another: start and end the drag on a deck.');
+  if (DECK_ROWS[rowA] === DECK_ROWS[rowB]) return no(parts, 'A ladder joins two different decks: drag up or down, not along.');
+  const [topRow, botRow] = DECK_ROWS[rowA] < DECK_ROWS[rowB] ? [rowA, rowB] : [rowB, rowA];
+  const t = deckAtX(parts, topRow, x), b = deckAtX(parts, botRow, x);
+  const label = (row) => (EDIT_ROWS[row] ? EDIT_ROWS[row].name : row);
+  if (!t || !b) return no(parts, `No deck at both ends: there is no ${!t ? label(topRow) : label(botRow)} at that spot. Start and end the drag on decks.`);
+  const lo = Math.max(t.x0, b.x0) + 14, hi = Math.min(t.x1, b.x1) - 14;
+  if (hi < lo) return no(parts, `The ${t.name} and the ${b.name} do not overlap there: a ladder needs both decks over each other.`);
+  const px = Math.max(lo, Math.min(hi, Math.round(x / 10) * 10));
+  const ys = deckYs(parts);
+  const between = parts.find((p) => p.part === 'deck' && p !== t && p !== b && ys[p.id] > ys[t.id] && ys[p.id] < ys[b.id] && px >= p.x0 - 5 && px <= p.x1 + 5);
+  if (between) return no(parts, `The ${between.name} is in the way: join ${t.name} to it, and it to ${b.name}.`);
+  const gap = config.BUILD_CHECK.MIN_GAP;
+  const twin = parts.find((p) => LINK.includes(p.part) && p.top === t.id && p.bottom === b.id && Math.abs(p.xTop - px) < gap);
+  if (twin) return no(parts, `There is already a ${twin.part} there (keep them ${gap} px apart).`);
+  const mate = parts.find((p) => (p.part === 'station' || p.part === 'gun' || p.part === 'searchlight' || p.part === 'engine') && ((p.p === t.id || p.p === b.id)) && Math.abs(p.x - px) < 26);
+  if (mate) return no(parts, `${nameOf(mate)} is in the way: slide the ladder along a little.`);
+  const next = clone(parts);
+  ensureFrame(next);
+  next.push({ part: type, top: t.id, bottom: b.id, xTop: px, xBottom: px });
+  refit(next);
+  return { ok: true, parts: next, added: [`${type} ${t.name} to ${b.name}`], removed: [], kind: 'connector', type, x: px, top: t.id, bottom: b.id, hint: `${type[0].toUpperCase()}${type.slice(1)} from the ${t.name} down to the ${b.name}${type === 'pole' ? ' (one way: down)' : ''}.` };
+}
+
+// The single placed thing nearest a point (ship coordinates), within reach of it: { index, label, x, y, r } or null. Decks, rooms, the frame and the gasbag are not
+// "things" (the pencil and eraser take those); the coil emitter and bomb-bay doors go with their station.
+export function thingAt(parts, x, y, slop = 0) {
+  const ys = deckYs(parts);
+  const dy = (id) => (ys[id] != null ? ys[id] : null);
+  let best = null;
+  const consider = (index, o, label, cx, cy, r) => {
+    r += slop; // (the page adds a few screen pixels so a thin ladder is easy to hit)
+    const d = Math.hypot(cx - x, cy - y) / r;
+    if (d <= 1 && (!best || d < best.d)) best = { index, label, x: cx, y: cy, r, d };
+  };
+  parts.forEach((o, index) => {
+    if (o.part === 'deck') return;
+    if (LINK.includes(o.part)) {
+      const y0 = dy(o.top), y1 = dy(o.bottom);
+      if (y0 == null || y1 == null) return;
+      const vx = o.xBottom - o.xTop, vy = y1 - y0, len2 = vx * vx + vy * vy || 1;
+      const t = Math.max(0, Math.min(1, ((x - o.xTop) * vx + (y - y0) * vy) / len2));
+      const px = o.xTop + vx * t, py = y0 + vy * t;
+      consider(index, o, labelOf(o), px, py, 18);
+      return;
+    }
+    if (o.part === 'pipe') { consider(index, o, labelOf(o), o.valve[0], o.valve[1], 20); return; }
+    const base = dy(o.p);
+    if (base == null || o.x == null) return;
+    switch (o.part) {
+      case 'station': case 'gun': case 'searchlight': consider(index, o, labelOf(o), o.x, base - 11, 18); break;
+      case 'engine': consider(index, o, labelOf(o), o.x, base + 14, 18); break;
+      case 'rack': case 'vent': case 'extinguisher': case 'boarderEntry': consider(index, o, labelOf(o), o.x, base - 5, 14); break;
+      case 'medbay': consider(index, o, labelOf(o), o.x, base - 8, 18); break;
+      case 'ballast': consider(index, o, labelOf(o), o.x, base + (o.hang ? config.BALANCE.BALLAST_HANG : -8), 16); break;
+      default: break;
+    }
+  });
+  return best ? { index: best.index, label: best.label, x: best.x, y: best.y, r: best.r } : null;
+}
+// Delete the single thing under a point (and what only exists for it: an engine's pipe, a gone station's doors ...). Undo puts it back.
+export function removeAt(parts, x, y, slop = 0) {
+  const t = thingAt(parts, x, y, slop);
+  if (!t) return no(parts, 'Nothing to delete there: click right on a ladder, a station, a gun, a rack, a vent, a sandbag ... (decks go with the eraser).');
+  const gone = parts[t.index];
+  const removed = [t.label];
+  const out = dropDependents(parts.filter((o, i) => i !== t.index).map((o) => ({ ...o })), [gone], removed);
+  refit(out);
+  return { ok: true, parts: out, added: [], removed, kind: 'delete', deck: t.label, thing: t, cols: 0, hint: `Deleted ${t.label}.${removed.length > 1 ? ' removed: ' + summarize(removed) : ''}` };
 }

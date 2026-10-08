@@ -6,7 +6,8 @@
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
 //        node tools/buildsim.mjs --check-validator   S.5: broken builds must FAIL/WARN with the right message (the classic passes clean)
-//        node tools/buildsim.mjs --check-edit        S.5b: the blueprint editor (draw a keel deck, extend main, lengthen the bag, cut the top deck, erase) validates and flies 2 min with 0 errors
+//        node tools/buildsim.mjs --check-edit        S.5b/S.5c: the blueprint editor (draw a keel deck, extend main, lengthen the bag, cut the top deck, erase; ladders and delete; erase everything and build a ship up from nothing) validates and flies 2 min with 0 errors
+//        node tools/buildsim.mjs --check-balance     S.5c: the seesaw in flight (a nose-heavy ship rests nose-down and dives faster, a tail-heavy one is slower; the classic ship is exactly level; live loads move the balance)
 //        node tools/buildsim.mjs --snapshot-classic --force   (S.0 only) rewrite tools/fixtures/classic-layout.json
 // Exit code 1 on any failure.
 import { pathToFileURL } from 'node:url';
@@ -277,15 +278,37 @@ async function checkValidator() {
   config.BUILD_CHECK.WALK_COAL = 1.0;
   report(validate(C).fails.some((t) => /coal bunker to its boiler/.test(t)), 'a coal walk over 1.5x its budget FAILs');
   Object.assign(config.BUILD_CHECK, keep);
+  // S.5c: centre of mass against the centre of lift. The classic ship is level (exactly: no trim at all); heavy things moved to the nose make her nose-heavy
+  // (WARN, then FAIL "nose-dive"); sandbags hung at the tail (with a longer bag to lift them) fix it.
+  const { balanceOf, budgets } = await load('modules/host/shipBuild.js');
+  const move = (list, moves) => list.map((p) => { const k = p.n || p.name; return moves[k] != null ? { ...p, x: moves[k] } : p; });
+  const warnMoves = { Boiler: 1090, 'Coal Bunker': 1100 };
+  const failMoves = { ...warnMoves, 'Aft Engine': 1480, Deflector: 1290, 'Ammo Hold': 1000, 'Aft Sponson': 940, 'Lightning Coil': 1140, 'Tail Gun': 1250 };
+  const tailMoves = { Boiler: 150, 'Coal Bunker': 30, 'Ammo Hold': 120 };
+  const b0 = balanceOf(C);
+  report(b0.level === 'PASS' && b0.deg === 0 && b0.restPitch === 0 && b0.side === 'level', `the classic ship is level: centre of mass x ${Math.round(b0.com.x)}, lift x ${Math.round(b0.col.x)}, no rest trim (${b0.restPitch})`);
+  report(budgets(C).com.x === b0.com.x && budgets(C).col.x === b0.col.x, 'budgets() carries the centre of mass and the centre of lift');
+  const vw = validate(move(C, warnMoves));
+  report(vw.ok && vw.warns.some((t) => /nose-heavy [\d.]+ degrees/.test(t)), 'boiler and coal moved to the nose: nose-heavy WARN (' + (vw.warns.find((t) => /nose-heavy/.test(t)) || 'none').slice(0, 60) + '...)');
+  const vf = validate(move(C, failMoves));
+  report(!vf.ok && vf.fails.some((t) => /nose-dive/.test(t)), 'most of the weight at the nose: FAIL "she will nose-dive"');
+  const vt = validate(move(C, tailMoves));
+  report(vt.ok && vt.warns.some((t) => /tail-heavy/.test(t)), 'weight moved aft: tail-heavy WARN');
+  const sandbags = Array.from({ length: 12 }, (_, i) => ({ part: 'ballast', p: 'lower', x: 40 + i * 36, hang: true }));
+  const fixed = [...move(C, failMoves).map((p) => (p.part === 'gasbag' ? { ...p, rx: 1380 } : p)), ...sandbags];
+  const vx = validate(fixed);
+  report(vx.ok && !vx.warns.some((t) => /heavy/.test(t)) && Math.abs(balanceOf(fixed).dx) < config.BALANCE.WARN_PX, `12 sandbags hung at the tail (and a longer bag to carry them) fix it: dx ${balanceOf(move(C, failMoves)).dx} -> ${balanceOf(fixed).dx}${vx.ok ? '' : ': ' + vx.fails.join('; ')}`);
+  report(balanceOf([...C, ...sandbags.slice(0, 4)]).com.x < b0.com.x, 'a sandbag is a weight at its place: hanging bags at the tail pull the centre of mass aft');
   return ok;
 }
 
 // S.5b: the blueprint editor's pure operations (drawDeck, erase, setBag in modules/host/buildEdit.js). Draws a new keel deck ("lower-lower"),
 // extends the main deck by 2 columns, erases part of the top deck, then validates and flies the result for 2 minutes with 0 errors.
 async function checkEdit() {
-  const { BUILDS, buildLayout, hullGeom, COL, DECK_ROWS } = await load('modules/host/shipBuild.js');
+  const { BUILDS, buildLayout, hullGeom, budgets, COL, DECK_ROWS } = await load('modules/host/shipBuild.js');
   const { validate, liftGauge } = await load('modules/host/buildCheck.js');
   const E = await load('modules/host/buildEdit.js');
+  const S = await load('modules/host/buildSlots.js');
   let ok = true;
   const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
   const C = BUILDS.classic;
@@ -341,7 +364,86 @@ async function checkEdit() {
   // 6. the build JSON round-trips (Copy build JSON / ?build=)
   const back = JSON.parse(JSON.stringify(d3.parts));
   report(JSON.stringify(buildLayout(back)) === JSON.stringify(buildLayout(d3.parts)), 'the edited build survives a JSON round trip');
-  // 7. fly the three edits together (keel deck + main +2 columns + longer bag + top deck cut) for 2 minutes
+  // 7. ladders and deleting single things (the blueprint's Ladder and Delete tools)
+  const nconn = (parts) => parts.filter((p) => ['ladder', 'pole', 'rope'].includes(p.part)).length;
+  const lad = E.placeConnector(C, 600, 'main', 'lower', 'ladder');
+  report(lad.ok && nconn(lad.parts) === nconn(C) + 1 && lad.parts.some((p) => p.part === 'ladder' && p.top === 'main' && p.bottom === 'lower' && p.xTop === 600) && validate(lad.parts).ok, 'placeConnector(main -> lower at x 600): a new ladder joins the two decks and the ship still validates');
+  report(E.placeConnector(C, 100, 'catwalk', 'main').ok === false && /No deck at both ends/.test(E.placeConnector(C, 100, 'catwalk', 'main').hint), 'a ladder that does not land on decks at both ends is refused with a hint: ' + E.placeConnector(C, 100, 'catwalk', 'main').hint);
+  report(/in the way/.test(E.placeConnector(C, 1000, 'catwalk', 'lower').hint || ''), 'a ladder across the Main Deck (catwalk to lower) is refused: the main deck is in the way');
+  report(/already a ladder/.test(E.placeConnector(C, 340, 'catwalk', 'main').hint || ''), 'a second ladder on top of an existing one is refused');
+  report(/Fore Sponson is in the way/.test(E.placeConnector(C, 1180, 'main', 'lower').hint || ''), 'a ladder onto a station spot is refused (Fore Sponson is in the way)');
+  const pole = E.placeConnector(C, 1000, 'main', 'lower', 'pole');
+  report(pole.ok && pole.parts[pole.parts.length - 1].part === 'pole', 'a slide pole (one way, down) can be placed the same way');
+  report(E.placeConnector(C, 600, 'lower', 'lower').ok === false && E.placeConnector(C, 600, 'main', 'lower', 'ladder').parts !== C, 'a ladder needs two different decks; placing never changes its input');
+  const th1 = E.thingAt(C, 340, 555), th2 = E.thingAt(C, 400, 629), th3 = E.thingAt(C, 300, 300);
+  report(th1 && th1.label === "ladder" && th2 && th2.label === "Boiler" && !th3, 'thingAt finds the ladder at (340, 555) and the Boiler at (400, 629), and nothing in empty air');
+  const rl = E.removeAt(C, 340, 555);
+  report(rl.ok && nconn(rl.parts) === nconn(C) - 1 && rl.removed.join() === 'ladder', 'removeAt deletes exactly that one ladder (' + nconn(C) + ' -> ' + nconn(rl.parts) + ' ladders, poles and ropes)');
+  const re = E.removeAt(C, 70, 804);
+  report(re.ok && re.removed.includes('Aft Engine') && re.removed.includes('steam pipe to Aft Engine') && !re.parts.some((p) => p.name === 'Aft Engine'), 'deleting an engine takes its steam pipe with it: removed ' + E.summarize(re.removed));
+  const rb = E.removeAt(C, 400, 629);
+  report(rb.ok && !validate(rb.parts).ok && validate(rb.parts).needs.includes('a boiler'), 'deleting the boiler is allowed; the validator says she needs a boiler');
+  const kl = d1.parts.find((p) => p.part === "ladder" && p.bottom === "keel"), rs = E.removeAt(d1.parts, kl.xTop, 870); // (the ladder drawDeck added to the new Keel Deck)
+  const vs = validate(rs.parts);
+  report(rs.ok && rs.removed.includes('ladder') && !vs.ok && vs.fails.some((t) => /no way from .* to the Keel Deck|no way from the Keel Deck/.test(t)), 'the ladder drawDeck added is deletable like any other; the validator then shows the Keel Deck as unreachable');
+  report(E.removeAt(C, 5000, 5000).ok === false, 'deleting nothing is refused with a hint');
+  const eb = E.erase(C, 'gasbag', 0, 0);
+  report(eb.ok && !eb.parts.some((p) => p.part === 'gasbag') && !validate(eb.parts).ok, 'the eraser across the gasbag rubs it out');
+
+  // 8. S.5c: build from nothing. Erase every deck and the bag: nothing crashes anywhere (layout, hull, budgets, validator, blueprint), the build is just a frame.
+  const { drawBlueprint, blueprintView } = await load('modules/host/blueprintArt.js');
+  const stub = new Proxy({}, { get: (t, k) => (k in t ? t[k] : k === 'measureText' ? () => ({ width: 10 }) : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
+  const sheet = (parts, opts) => { const v = validate(parts); drawBlueprint(stub, blueprintView(v.layout, 1200, 700, 1), v.layout, { balance: v.budgets.balance, ...opts }); return v; };
+  let none = C;
+  for (const row of ['nest', 'helm', 'catwalk', 'main', 'lower', 'belly', 'bay', 'keel', 'deep', 'gasbag']) { const r = E.erase(none, row, -5000, 5000); if (r.ok) none = r.parts; }
+  let crashed = '';
+  try {
+    for (const parts of [[], E.emptyBuild(), none]) { buildLayout(parts); hullGeom(buildLayout(parts).platforms, buildLayout(parts).rooms); budgets(parts); sheet(parts, {}); }
+  } catch (e) { crashed = e.stack.split('\n').slice(0, 3).join(' | '); }
+  report(!crashed, 'an empty build (and one erased from the classic ship) does not crash buildLayout, hullGeom, budgets, validate or the blueprint' + (crashed ? ': ' + crashed : ''));
+  const vn = validate(none);
+  report(none.every((p) => p.part === 'frame') && !vn.ok && vn.needs.includes('a main deck') && vn.needs.includes('a helm') && vn.needs.includes('a gasbag'), 'erasing everything leaves just the frame; the validator lists what she needs: ' + vn.needs.slice(0, 5).join(', ') + ' ...');
+  // the first deck anywhere needs no ladder; later decks get one; the nest needs a bag
+  const f1 = E.drawDeck(E.emptyBuild(), 'lower', 200, 800);
+  report(f1.ok && f1.kind === 'new' && !f1.parts.some((p) => p.part === 'ladder'), 'from nothing: the first deck (lower, anywhere) is accepted with no ladder');
+  report(!E.drawDeck(E.emptyBuild(), 'nest', 200, 500).ok && /gasbag first/.test(E.drawDeck(E.emptyBuild(), 'nest', 200, 500).hint), "the crow's nest needs a bag under it: refused with no bag");
+  const f2 = E.drawDeck(f1.parts, 'main', 300, 700);
+  report(f2.ok && f2.parts.some((p) => p.part === 'ladder' && p.top === 'main' && p.bottom === 'lower'), 'the next deck gets a ladder to the nearest deck it overlaps');
+  report(!E.drawDeck(f1.parts, 'main', 1500, 1800).ok, 'a later deck that overlaps nothing is refused (no way to reach it)');
+  const bg = E.drawBag(f2.parts, 100, 900);
+  report(bg.ok && buildLayout(bg.parts).gasbag.rx === 400 && buildLayout(bg.parts).gasbag.cx === 500, 'drawBag from nothing makes the main bag between the two ends');
+  const bg2 = E.drawBag(bg.parts, 0, 1100);
+  const bg3 = E.drawBag(bg2.parts, 2000, 2400);
+  report(bg2.ok && buildLayout(bg2.parts).gasbag.rx === 550 && bg3.ok && bg3.kind === 'twin' && buildLayout(bg3.parts).gasbag.twin === true, 'drawBag across the bag resizes it; drawn elsewhere it adds the twin envelope');
+  const nest = E.drawDeck(bg.parts, 'nest', 300, 600);
+  report(nest.ok && nest.parts.some((p) => p.part === 'rope' && p.top === 'nest'), "with the bag there, the crow's nest goes up with a rope to the deck below");
+  // placing parts on an incomplete ship: legality is local (a deck, a span, no overlap, kind limits), not whole-ship validity
+  const half = E.drawDeck(E.emptyBuild(), 'main', 140, 860).parts;
+  report(!validate(half).ok && S.slotsFor('boiler', half).length > 3 && S.slotsFor('helm', half).length > 3 && S.slotsFor('engine', half).length === 0, 'an incomplete ship takes parts: boiler and helm slots on the main deck exist although the ship cannot fly (an engine pod wants the lower deck)');
+  const withHelm = S.slotsFor('helm', half)[0].apply(half);
+  report(S.slotsFor('helm', withHelm).length === 0 && withHelm.some((p) => p.n === 'Helm'), 'one helm per ship: no helm slot once she has one');
+  const lowHalf = E.drawDeck(half, 'lower', 20, 980).parts;
+  const e1 = S.slotsFor('engine', lowHalf)[0].apply(lowHalf);
+  const e2 = S.slotsFor('boiler', e1)[0].apply(e1);
+  report(!e1.some((p) => p.part === 'pipe') && e2.some((p) => p.part === 'pipe' && p.to === e1.find((q) => q.part === 'engine').name), 'an engine placed before the boiler gets its steam pipe when the boiler arrives');
+  report(S.slotsFor('boiler', half).every((s) => s.ok && s.warns.length === 0), 'slot legality does not run the validator (warnings come on demand with slot.check())');
+  // the guided build: a small ship made only from the tools above flies
+  let mini = null;
+  try { mini = S.minimalBuild(); } catch (e) { report(false, 'minimalBuild: ' + e.message); }
+  if (mini) {
+    const vm = validate(mini);
+    report(vm.ok && vm.needs.length === 0 && vm.budgets.balance.level === 'PASS', `a ship built from nothing (decks, bag, ${mini.length} parts) validates and is balanced${vm.ok ? ' (hover ' + vm.budgets.lift.hover + ', ' + vm.budgets.balance.text + ')' : ': ' + vm.fails.join('; ')}`);
+    const fileM = path.join(os.tmpdir(), `airship-mini-${process.pid}.json`);
+    fs.writeFileSync(fileM, JSON.stringify(mini));
+    const om = spawnSync(process.execPath, ['tools/botsim.mjs', '--build', fileM, '--minutes', '2', '--seed', '1', '--map', 'network'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 });
+    try { fs.unlinkSync(fileM); } catch { /* gone */ }
+    const tm = (om.stdout || '') + (om.stderr || '');
+    const sm = (tm.match(/^BUILD_STATS (.*)$/m) || [])[1];
+    report(om.status === 0 && /^errors: 0$/m.test(tm) && !!sm, 'botsim --build <ship built from nothing> --minutes 2: 0 errors' + (om.status === 0 ? '' : '\n' + tm.split('\n').slice(-12).join('\n')));
+    if (sm) { const s = JSON.parse(sm); report(['helm', 'gun', 'lookout', 'bombBay'].every((k) => s.mannedKinds[k] > 0) && s.hauled.coal > 0, `the bots man her helm, guns, lookout and bomb bay and haul coal (kills ${s.kills}, hull ${s.avgHull}, trim ${s.tilt} deg)`); }
+  }
+
+  // 9. fly the edits together (keel deck + main +2 columns + longer bag + top deck cut) for 2 minutes
   const file = path.join(os.tmpdir(), `airship-edit-${process.pid}.json`);
   fs.writeFileSync(file, JSON.stringify(d3.parts));
   const out = spawnSync(process.execPath, ['tools/botsim.mjs', '--build', file, '--minutes', '2', '--seed', '1', '--map', 'network'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 });
@@ -350,6 +452,53 @@ async function checkEdit() {
   const stats = (text.match(/^BUILD_STATS (.*)$/m) || [])[1];
   report(out.status === 0 && /^errors: 0$/m.test(text) && !!stats, 'botsim --build <edited ship> --minutes 2: 0 errors' + (out.status === 0 ? '' : '\n' + text.split('\n').slice(-12).join('\n')));
   if (stats) { const s = JSON.parse(stats); console.log(`      (kills ${s.kills}, avg hull ${s.avgHull}, walking ${s.walkPct}%, tows ${s.tows})`); }
+  return ok;
+}
+
+// S.5c: the seesaw in flight. A headless sim of the classic ship, a nose-heavy and a tail-heavy build.
+async function checkBalance() {
+  globalThis.window ??= globalThis;
+  const store = new Map();
+  globalThis.localStorage ??= { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+  globalThis.requestAnimationFrame ??= (f) => setTimeout(f, 16);
+  const { config } = await load('config.js');
+  const { BUILDS } = await load('modules/host/shipBuild.js');
+  const { applyBuild, SHIP_LAYOUT, SHIP_BALANCE } = await load('shipLayout.js');
+  const { createSimulation } = await load('modules/host/simulation.js');
+  let ok = true;
+  const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
+  const C = BUILDS.classic;
+  const move = (list, moves) => list.map((p) => { const k = p.n || p.name; return moves[k] != null ? { ...p, x: moves[k] } : p; });
+  const noseHeavy = move(C, { Boiler: 1090, 'Coal Bunker': 1100, 'Aft Engine': 1480, Deflector: 1290, 'Ammo Hold': 1000 });
+  const tailHeavy = move(C, { Boiler: 150, 'Coal Bunker': 30, 'Ammo Hold': 120, Helm: 1200 });
+  const fly = (parts, secs, live, setup, cast = true) => { // (cast false: moored at the mast, so the pitch is just the rest trim, with no climb or dive in it)
+    applyBuild(parts);
+    config.BALANCE.LIVE = live;
+    const sim = createSimulation();
+    const e = SHIP_LAYOUT.boarderEntryPoints;
+    for (let i = 0; i < 4; i++) sim.state.players['b' + i] = { id: 'b' + i, bot: true, name: 'B' + i, species: config.CREW_SPECIES[0], color: '#fff', x: e[0].x + 80 * i, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
+    if (cast) sim.castOff();
+    if (setup) setup(sim);
+    let minPitch = 0, maxPitch = 0, maxSpeed = 0;
+    for (let i = 0; i < secs * 60; i++) { sim.update(1 / 60); const p = sim.state.ship.pitch; minPitch = Math.min(minPitch, p); maxPitch = Math.max(maxPitch, p); }
+    return { state: sim.state, minPitch, maxPitch };
+  };
+  const keep = config.BALANCE.LIVE;
+  const c = fly(C, 12, false);
+  report(SHIP_BALANCE.restPitch === 0 && c.state.balance.restPitch === 0 && c.state.balance.push === 0 && c.state.balance.slow === 0 && c.state.balance.deg === 0, 'the classic ship (live loads off): rest trim, push and slow are exactly 0');
+  const cl = fly(C, 12, true);
+  report(Math.abs(cl.state.balance.deg) < config.BALANCE.WARN_DEG, `the classic ship with live loads (crew, coal, ammo): trim stays gentle (${cl.state.balance.deg} deg, live weight ${cl.state.balance.live.toFixed(1)})`);
+  const n = fly(noseHeavy, 12, false, null, false);
+  report(n.state.balance.deg > 0 && n.state.balance.restPitch > 0 && n.state.balance.push < 0 && n.state.ship.pitch > 0.003, `a nose-heavy ship rests nose-down (${n.state.balance.deg} deg gauge, pitch ${n.state.ship.pitch.toFixed(4)} rad) and is pushed down (${n.state.balance.push.toFixed(1)} px/s^2)`);
+  const t = fly(tailHeavy, 12, false, null, false);
+  report(t.state.balance.deg < 0 && t.state.ship.pitch < -0.002 && t.state.balance.push > 0 && t.state.balance.slow > 0, `a tail-heavy ship rests nose-up (pitch ${t.state.ship.pitch.toFixed(4)}), is pushed up and loses top speed (${(t.state.balance.slow * 100).toFixed(1)}%)`);
+  report(Math.abs(n.state.ship.pitch) < 0.035, 'the flying trim stays under the stagger limit (AIRBORNE.PITCH_STAGGER), so crew do not slide');
+  // live loads: the same ship, the crew all aboard at the nose versus at the tail
+  const crewAt = (x) => (sim) => { for (const p of Object.values(sim.state.players)) { p.fall = false; p.d = 0; p.x = x; p.y = 0; } };
+  const lf = fly(C, 1, true, crewAt(1500)), la = fly(C, 1, true, crewAt(60));
+  report(lf.state.balance.dx > la.state.balance.dx + 3, `live loads move the balance: crew at the nose dx ${lf.state.balance.dx.toFixed(1)}, at the tail ${la.state.balance.dx.toFixed(1)}`);
+  config.BALANCE.LIVE = keep;
+  applyBuild(C);
   return ok;
 }
 
@@ -451,6 +600,8 @@ if (mode === '--snapshot-classic') {
   process.exit((await checkValidator()) ? 0 : 1);
 } else if (mode === '--check-edit') {
   process.exit((await checkEdit()) ? 0 : 1);
+} else if (mode === '--check-balance') {
+  process.exit((await checkBalance()) ? 0 : 1);
 } else if (mode === '--build') {
   process.exit((await buildMode(argv[1] || 'classic')) ? 0 : 1);
 } else if (mode === '--random') {
@@ -458,6 +609,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

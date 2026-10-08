@@ -982,6 +982,41 @@ export const config = {
     BOT_HULL_MIN: 60, // ...average hull must stay above this...
     BOT_TUGS_MAX: 1, // ...and she may be hauled out of a wedge at most this often
   },
+  // Balance (S.5c): where the ship's weight hangs against where her lift is. The centre of mass (COM: every part's mass at its x, plus the live loads
+  // while flying) should sit under the centre of lift (COL: the bag's middle, lift engines when they exist). Ahead of it she is nose-heavy, behind it tail-heavy.
+  // The validator reads the build numbers (buildCheck.js), shipLayout.js turns them into SHIP_BALANCE, and simulation.js tips and slows the ship by them.
+  BALANCE: {
+    // What things weigh, in gas points (the same scale as a gasbag's lift: she hovers at GAS.NEUTRAL + weight - lift). The classic ship adds up to about
+    // 150, the lift of her bag, with her centre of mass a few px behind her bag's middle. Heavy things (boiler, coal, bomb bay, engines) are what tips the seesaw.
+    MASS: {
+      deck: 0.3, // per 100 px of deck (an outside deck weighs half)
+      link: { ladder: 0.4, rope: 0.3, stairs: 1, lift: 3, pole: 0.3 }, // ways between decks
+      kind: { helm: 5, boiler: 16, lookout: 1, coal: 10, ammo: 6, gun: 3, searchlight: 2, coil: 5, deflector: 5, bombBay: 10, navigator: 1, escort: 5 }, // stations by kind
+      engine: 9, pipe: 0.5, vent: 0.3, rack: 0.2, extinguisher: 0.2, medbay: 3,
+      bag: 6, bagTwin: 4, // a gasbag's rigging, and the twin envelope's
+      ballast: 5, // one sandbag: cheap and dense, the trimming tool
+    },
+    LEVEL_PX: 30, // COM within this many px of COL counts as level (no trim at all: the classic ship is exactly level)
+    WARN_PX: 80, // WARN beyond this ("nose-heavy 2 degrees")...
+    FAIL_PX: 220, // ...FAIL beyond this ("she will nose-dive")
+    DEG_PER_PX: 0.025, // the trim angle the gauge shows: degrees per px of offset beyond LEVEL_PX...
+    CAP_DEG: 6, // ...up to this many degrees
+    BALLAST_MAX: 16, // most sandbags a ship may carry
+    BALLAST_GAP: 36, // sandbags on one deck (or hanging from one) at least this far apart (px)
+    BALLAST_HANG: 52, // a hanging sandbag's centre is this far under its deck (px)
+    // ---- in flight (simulation.js) ----
+    SIM_SHARE: 0.3, // the flying ship rests tipped by only this share of the gauge angle (subtle, and under AIRBORNE.PITCH_STAGGER so crew do not slide)...
+    SIM_CAP_DEG: 1.8, // ...at most this many degrees, on top of the climb / dive tilt
+    DIVE_ACCEL: 14, // nose-heavy: extra downward push (px/s^2) at the full gauge angle (CAP_DEG); tail-heavy: the same upward. Gentle, and the helm trim engine counters it
+    SLOW_TAIL: 0.1, // tail-heavy: the share of top speed lost at the full gauge angle (she drags her tail)
+    SCRAPE_PER_DEG: 0.12, // nose-heavy: extra hull scraping per second per degree of gauge angle while she grinds along the ground (the bow digs in)
+    WARN_DEG: 3.5, // gauge angle (live) beyond which the TV shouts "NOSE-HEAVY! TRIM HER!" (and the phones get a job) ...
+    WARN_EVERY: 25, // ...at most this often (seconds)
+    // Live loads: while flying, the things that move or burn shift the centre of mass. LIVE false = only the build's own weight counts.
+    LIVE: true,
+    LIVE_MASS: { crew: 1.2, carry: 0.8, fuel: 0.06, ammo: 0.03, bomb: 0.8 }, // per crew member aboard / per load carried / per fuel point in the firebox / per round in a gun / per bomb in the bay
+    LIVE_SMOOTH: 1.5, // how quickly the live balance follows (per second): crew running about do not make her flutter
+  },
   // The blueprint editor (modules/host/buildEdit.js; the dev page's draw / erase tools).
   BUILD_EDIT: {
     SNAP_ROW: 60, // a pen stroke counts as drawing on a deck row when it is this close to it (px)
@@ -989,7 +1024,8 @@ export const config = {
     MIN_PIECE: 60, // an erase never leaves a sliver of deck shorter than this (px): it clears to the end instead
     ERASE_MARGIN: 14, // things standing this close to an erased stretch (px) go with it
     BAG_STEP: 60, // the gasbag gets this much longer or shorter (px of half-length: one column in all) per click...
-    BAG_MIN: 500, BAG_MAX: 1900, // ...between these half-lengths
+    BAG_MIN: 300, BAG_MAX: 1900, // ...between these half-lengths
+    BAG_CY: 198, BAG_RY: 232, // a gasbag drawn from nothing sits at this height with this half-height (the classic bag's)
     BAG_COVER: 0.9, // the share of the gasbag's half-length that counts as covering the ship (the ends of the ellipse are thin): validator WARN beyond it
   },
   // When the hull gives out the ship breaks apart and the whole game starts over at the mast.
@@ -1515,7 +1551,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, cool: 1 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, cool: 1, trim: 0.9 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

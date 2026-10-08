@@ -20,9 +20,10 @@ onLayoutChange(rebuildShipTables);
 const stationNamed = (n) => L.stations.find((s) => s.n === n);
 const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer' };
 export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', unclog: '#b6f06e', oxygen: '#bfe9ff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0', help: '#ff4d4d' };
-const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP' };
+const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP', trim: 'TRIM' };
 TOOL.cool = 'ice'; // (GOING DOWN!: cooling the boiler wants a block of ice from the locker)
 JOB_COLORS.cool = '#9fdcff';
+JOB_COLORS.trim = '#e8c25a'; // (a lopsided ship: go to the light end, balance.js)
 
 // Name of the room (or deck) at a spot, for the label.
 const roomName = (d, x) => {
@@ -80,6 +81,12 @@ export function createJobFinder(state) {
       const bunker = carry === 'coal' ? null : nearest('coal', p);
       const s = nearest('boiler', bunker || p);
       if (s) add('coal', s.n, s.d, s.x, carry === 'coal' || !bunker ? {} : { fetch: bunker.n }, `COAL for the ${s.n}`);
+    }
+    // A lopsided ship (balance.js): idle crew walk to the light end of the main deck, their weight trims her.
+    const bal = state.balance;
+    if (bal && bal.warn && state.phase === 'flying') {
+      const d = L.platforms.findIndex((q) => q.id === 'main');
+      if (d >= 0) add('trim', 'trim', d, bal.deg > 0 ? L.platforms[d].x0 + 90 : L.platforms[d].x1 - 90, {}, `TRIM HER! ${bal.deg > 0 ? 'NOSE' : 'TAIL'}-HEAVY - go ${bal.deg > 0 ? 'aft' : 'fore'}`);
     }
     return out;
   };

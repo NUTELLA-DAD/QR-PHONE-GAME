@@ -9,10 +9,15 @@
 // stay valid. Values DERIVED from the layout (a platform index, a station lookup, a route table ...)
 // must not be computed once at import time: recompute them in a function, or in an onLayoutChange(fn) hook
 // (tools/buildsim.mjs --lint flags new module-level captures). Builds only change at the dock.
-import { BUILDS, buildLayout } from './modules/host/shipBuild.js';
+import { BUILDS, buildLayout, balanceOf } from './modules/host/shipBuild.js';
 import { config } from './config.js';
 
 export const SHIP_LAYOUT = { version: 0 };
+
+// The build's STATIC balance (shipBuild.js balanceOf, config.BALANCE): total weight, centre of mass (comX, comY) and centre of lift (colX, colY) in ship
+// coordinates, dx = COM - COL (+ = nose-heavy), the rest trim in radians (+ nose-down; 0 for a level ship such as the classic one). Updated in place like
+// SHIP_LAYOUT, but kept apart from it so the layout stays the pure shape of the ship. simulation.js adds the live loads (crew, coal ...) to it.
+export const SHIP_BALANCE = { mass: 0, comX: 0, comY: 0, colX: 0, colY: 0, dx: 0, deg: 0, restPitch: 0 };
 
 const listeners = [];
 
@@ -39,6 +44,8 @@ export function applyBuild(parts) {
       SHIP_LAYOUT[key] = value;
     }
   }
+  const bal = balanceOf(parts);
+  Object.assign(SHIP_BALANCE, { mass: bal.mass, comX: bal.com ? bal.com.x : 0, comY: bal.com ? bal.com.y : 0, colX: bal.col ? bal.col.x : 0, colY: bal.col ? bal.col.y : 0, dx: bal.dx, deg: bal.deg, restPitch: bal.restPitch });
   SHIP_LAYOUT.version++;
   for (const fn of listeners.slice()) fn(SHIP_LAYOUT);
   return SHIP_LAYOUT;

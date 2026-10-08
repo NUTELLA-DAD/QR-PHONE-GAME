@@ -34,21 +34,24 @@
   .editing #bp{display:block}
   #bpNote{padding:2px 4px 4px;font-size:12px;color:var(--soft);min-height:18px} #bpNote.bad{color:var(--stamp);font-weight:700}
   #hint{padding:3px 4px 0;font-size:12px;color:var(--soft);min-height:18px}
-  #bottom{display:grid;grid-template-columns:minmax(420px,1fr) 1.3fr;gap:8px;height:270px}
+  #bottom{display:grid;grid-template-columns:minmax(560px,1.25fr) 1fr;gap:8px;height:270px}
   #bottom .panel{overflow:auto}
   #gauges{width:100%;height:160px;display:block}
   #live{font-size:12px;color:var(--soft);margin-top:4px}
   .chk-line{display:grid;grid-template-columns:44px 104px 1fr;gap:4px;padding:1px 0;font-size:12px}
   .PASS{color:#3b6b34}.WARN{color:#a5701a}.FAIL{color:var(--stamp);font-weight:700}
+  #needs{font-family:var(--display);font-size:14px;margin:2px 0 4px} #needs.ok{color:#3b6b34} #needs.bad{color:var(--stamp)}
+  #checklist{display:flex;flex-wrap:wrap;gap:3px 5px;margin:2px 0 6px}
+  .chip{font-size:11px;padding:1px 6px;border-radius:9px;border:1px solid rgba(107,74,50,.4)} .chip.done{background:rgba(79,127,63,.2);color:#3b6b34} .chip.todo{background:rgba(168,68,63,.1);color:var(--stamp)}
   #verdict{font-family:var(--display);font-size:16px} #bot{margin-top:6px;border-top:1px dashed var(--soft);padding-top:5px}
 </style></head><body>
 <div id="app">
   <header id="top" class="panel">
     <h1>Build test</h1>
-    <div class="grp"><label class="chk"><input type="checkbox" id="oEdit" checked> Blueprint</label><button id="tDraw" class="on" title="Pencil: drag along a deck row to draw a deck or make one longer">Draw deck</button><button id="tErase" title="Eraser: drag along a deck to rub it out (what stood on it goes too)">Erase</button><button id="tPlace" title="Click a part in the palette, then a brass pin">Place parts</button>
+    <div class="grp"><label class="chk"><input type="checkbox" id="oEdit" checked> Blueprint</label><button id="tDraw" class="on" title="Pencil: drag along a deck row to draw a deck or make one longer">Draw deck</button><button id="tBag" title="Gasbag: drag along the dashed bag row to draw the bag (or the twin envelope)">Gasbag</button><button id="tLadder" title="Ladder: drag straight down from one deck to another">Ladder</button><label class="chk" title="Place a one-way slide pole (down only) instead of a ladder"><input type="checkbox" id="oPole"> slide pole</label><button id="tErase" title="Eraser: drag along a deck to rub it out (what stood on it goes too)">Erase</button><button id="tDelete" title="Delete: click any one thing - a ladder, station, gun, rack, sandbag... (right-click works in every tool)">Delete</button><button id="tPlace" title="Click a part in the palette, then a brass pin">Place parts</button>
       <button id="bagShort" title="Gasbag one column shorter">Bag -</button><button id="bagLong" title="Gasbag one column longer">Bag +</button><button id="bagTwin" title="Add or remove the twin envelope">Twin bag</button></div>
     <div class="grp"><label class="chk"><input type="checkbox" id="oNav"> Nav graph</label><label class="chk"><input type="checkbox" id="oSamples"> Collision samples</label><label class="chk"><input type="checkbox" id="oSlots" checked> Slots</label><label class="chk"><input type="checkbox" id="oBlue"> Blue overlay</label></div>
-    <div class="grp"><select id="env"></select><button id="undo">Undo</button><button id="reset">Reset to classic</button><button id="copy">Copy build JSON</button><button id="run" class="go">Run 60 s bot test</button></div>
+    <div class="grp"><select id="env"></select><button id="undo">Undo</button><button id="clear" title="Erase the whole ship and start from nothing">Clear (start from nothing)</button><button id="minimal" title="A small flyable ship built with the same tools">Start from a minimal ship</button><button id="reset">Reset to classic</button><button id="copy">Copy build JSON</button><button id="run" class="go">Run 60 s bot test</button></div>
     <div class="grp"><a href="/host.html" style="color:var(--soft)">Back to the game</a></div>
   </header>
   <aside id="left" class="panel">
@@ -61,7 +64,7 @@
   <section id="centre" class="panel editing"><canvas id="bp"></canvas><div id="bpNote"></div><canvas id="scene"></canvas><div id="hint"></div></section>
   <section id="bottom">
     <div class="panel"><canvas id="gauges"></canvas><div id="live"></div></div>
-    <div class="panel"><div id="verdict"></div><div id="report"></div><div id="bot"></div></div>
+    <div class="panel"><div id="verdict"></div><div id="needs"></div><div id="checklist"></div><div id="report"></div><div id="bot"></div></div>
   </section>
 </div>
 <script type="module" src="/modules/host/buildTest.js"></script>

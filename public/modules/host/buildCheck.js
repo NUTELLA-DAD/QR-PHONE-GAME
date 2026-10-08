@@ -1,13 +1,14 @@
 // The ship-building validator (Phase S.5): is this list of parts a ship that can be flown?
-//   validate(parts, opts)  ->  { ok, fails, warns, checks, budgets, layout }
+//   validate(parts, opts)  ->  { ok, fails, warns, checks, budgets, layout, needs, checklist }   (needs: what a half-built ship still lacks, in building order)
 // It builds the layout (shipBuild.js buildLayout), then checks geometry, connectivity, walking times, lift, steam, size, cave fit,
 // required kinds and hands against the limits in config.BUILD_CHECK. Pure and Node-safe (no DOM, no live ship): the CLI
 // (tools/buildsim.mjs), the batch runner and the dev page (public/buildtest.html) all use it.
 // A check is { group, level: 'PASS' | 'WARN' | 'FAIL', text }; ok means no FAIL.
 import { config } from '../../config.js';
-import { buildLayout, budgets as partBudgets, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf } from './shipBuild.js';
+import { buildLayout, budgets as partBudgets, balanceOf, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf } from './shipBuild.js';
 
 const BC = config.BUILD_CHECK;
+const BALANCE = config.BALANCE;
 const GRAB_COST = 0.25; // seconds to get onto a ladder (the same number as nav.js)
 
 // Kinds the bots man within any 3 minutes of flying: a build where one of these is never manned has a station nobody can reach or use.
@@ -24,7 +25,25 @@ const ENGINE_NEEDS = [
   ['hookshot rack', (L) => L.racks.some((r) => r.kind === 'hookshot'), 'a hookshot rack'],
   ['sword rack', (L) => L.racks.some((r) => r.kind === 'sword'), 'a sword rack (raiders)'],
   ['ice locker', (L) => L.racks.some((r) => r.kind === 'ice'), 'an ice locker (GOING DOWN!)'],
+  ['extinguisher', (L) => L.extinguishers.length > 0, 'an extinguisher (fires)'],
 ];
+
+// The things a ship needs before she can fly, in the order a builder would add them (the dev page shows what is still missing: "Needs: ...").
+// Each is [key, label, test(layout, routesOk)]. Parts that are not here (guns beyond the first, lamps ...) are optional.
+const has = (L, kind) => L.stations.some((s) => s.kind === kind) || L.engines.some((e) => e.kind === kind);
+const deckThere = (row) => (L) => L.platforms.some((q) => rowOf(q) === row);
+export const CHECKLIST = [
+  ['main', 'a main deck', deckThere('main')], ['lower', 'a lower deck', deckThere('lower')], ['catwalk', 'a top deck', deckThere('catwalk')],
+  ['routes', 'ladders between the decks', (L, routesOk) => routesOk && L.platforms.length > 0],
+  ['gasbag', 'a gasbag', (L) => !!L.gasbag], ['nest', "a crow's nest (on the bag)", deckThere('nest')],
+  ['helm', 'a helm', (L) => has(L, 'helm')], ['boiler', 'a boiler', (L) => has(L, 'boiler')], ['coal', 'a coal bunker', (L) => has(L, 'coal')], ['ammo', 'an ammo hold', (L) => has(L, 'ammo')],
+  ['engine', 'an engine', (L) => has(L, 'engine')], ['gun', 'a gun', (L) => has(L, 'gun')], ['lookout', 'a lookout', (L) => has(L, 'lookout')], ['medbay', 'a medbay', (L) => !!L.medbay],
+  ['bombBay', 'a bomb bay', ENGINE_NEEDS[0][1]], ['lift', 'a lift', ENGINE_NEEDS[1][1]], ['boarding', 'two boarding points', (L) => L.boarderEntryPoints.length >= 2],
+  ['hammer', 'a hammer rack', ENGINE_NEEDS[4][1]], ['sword', 'a sword rack', ENGINE_NEEDS[6][1]], ['hookshot', 'a hookshot rack', ENGINE_NEEDS[5][1]], ['ice', 'an ice locker', ENGINE_NEEDS[7][1]], ['extinguisher', 'an extinguisher', ENGINE_NEEDS[8][1]],
+];
+export function checklist(L, routesOk = true) {
+  return CHECKLIST.map(([key, label, test]) => ({ key, label, ok: !!test(L, routesOk) }));
+}
 
 // ---- walking: the same route-finding as nav.js, on any layout -----------------------------------------------
 // Returns { plan(d1, x1, d2, x2) -> { cost (seconds), node }, reach(d1, d2) } for the layout's platforms and connectors.
@@ -67,6 +86,14 @@ export function makePlanner(L, walk = config.MOVE.WALK_SPEED) {
 // ---- the three gauges -----------------------------------------------------------------------------------------
 // LIFT: the gas level she hovers at. Weight and lift are in gas points (shipBuild.js), so it is the same arithmetic as the game's own
 // lift (simulation.js: lift = (gas - sink - NEUTRAL) x LIFT): an overweight ship needs more gas just to hang still.
+// BALANCE: the centre of mass against the centre of lift (shipBuild.js balanceOf; limits in config.BALANCE). Adds the text the dev page prints.
+export function balanceGauge(parts) {
+  const b = balanceOf(parts), B = config.BALANCE;
+  const kind = b.deg > 0 ? 'nose-heavy' : b.deg < 0 ? 'tail-heavy' : 'level';
+  const text = b.com && b.col ? (b.deg === 0 ? 'level' : `${kind} ${Math.abs(b.deg)} degrees`) : 'no weight or no bag yet';
+  return { ...b, kind, text, warnPx: B.WARN_PX, failPx: B.FAIL_PX };
+}
+
 export function liftGauge(parts) {
   const b = partBudgets(parts);
   const hover = config.GAS.NEUTRAL + b.mass - b.lift;
@@ -139,7 +166,7 @@ export function validate(parts, opts = {}) {
     return { ok: fails.length === 0, fails, warns, checks, layout, ...extra };
   };
   let L;
-  try { L = buildLayout(parts, { cell: opts.cell || config.MAPS.CELL }); } catch (e) { fail('Geometry', 'the parts do not build: ' + String(e.message || e)); return result(null, { budgets: {} }); }
+  try { L = buildLayout(parts, { cell: opts.cell || config.MAPS.CELL }); } catch (e) { fail('Geometry', 'the parts do not build: ' + String(e.message || e)); return result(null, { budgets: {}, checklist: [], needs: [] }); }
   const group = (name, problems, okText, level = 'FAIL') => {
     if (problems.length) for (const t of problems.slice(0, 6)) add(level, name, t);
     else pass(name, okText);
@@ -166,6 +193,7 @@ export function validate(parts, opts = {}) {
   placed(L.vents, (o) => `a vent (${o.p} ${o.x})`);
   placed(L.extinguishers, (o) => `an extinguisher (${o.p} ${o.x})`);
   placed(L.boarderEntryPoints, (o) => `a boarding point (${o.p} ${o.x})`);
+  placed(L.ballast || [], (o) => `a sandbag (${o.p} ${o.x})`);
   placed(L.escortDocks, (o) => `escort hook ${o.n}`);
   if (L.medbay) placed([L.medbay], () => 'the medbay');
   if (L.liftRepair) placed([L.liftRepair], () => 'the lift repair spot');
@@ -208,11 +236,13 @@ export function validate(parts, opts = {}) {
   // --- Connectivity: a route between every pair of decks, a spawn deck, boarding points, the decks the game needs.
   const K = 'Connectivity';
   const kbad = [];
+  let routesOk = true;
   for (const id of ['nest', 'catwalk', 'main', 'lower']) if (!byId[id]) kbad.push(`there is no ${id} deck`);
-  if (!kbad.length && !cbad.length) {
+  if (!cbad.length && L.platforms.length > 1) {
     const planner = makePlanner(L);
     const lost = [];
     for (let a = 0; a < L.platforms.length; a++) for (let b = 0; b < L.platforms.length; b++) if (a !== b && !planner.reach(a, b)) lost.push(`no way from the ${L.platforms[a].name} to the ${L.platforms[b].name}`);
+    routesOk = !lost.length;
     kbad.push(...lost.slice(0, 4));
     if (lost.length > 4) kbad.push(`...and ${lost.length - 4} more broken routes`);
   }
@@ -252,6 +282,16 @@ export function validate(parts, opts = {}) {
   if (hands.level === 'WARN') warn('Hands', `${hands.stations} manned stations is ${hands.perPlayer} per player at ${hands.crew} crew (over ${BC.HANDS_PER_PLAYER})`);
   else pass('Hands', `${hands.stations} manned stations: ${hands.perPlayer} per player at ${hands.crew} crew (${hands.at4} at 4, ${hands.at6} at 6)`);
 
+  // --- Balance: the centre of mass against the centre of lift.
+  const bal = balanceGauge(parts);
+  if (bal.com && bal.col) {
+    const px = Math.abs(bal.dx), ahead = bal.dx > 0;
+    const where = `centre of mass x ${Math.round(bal.com.x)}, lift x ${Math.round(bal.col.x)}: ${Math.round(px)} px ${ahead ? 'ahead of' : 'behind'} it`;
+    if (bal.level === 'FAIL') fail('Balance', `she will ${ahead ? 'nose-dive' : 'tail-slide'}: ${bal.kind} ${Math.abs(bal.deg)} degrees (${where}). Hang sandbags at the ${ahead ? 'tail' : 'nose'} or move the heavy things (boiler, coal, bomb bay) back to the middle`);
+    else if (bal.level === 'WARN') warn('Balance', `${bal.kind} ${Math.abs(bal.deg)} degrees (${where}): she rides tipped and handles worse; add sandbags at the ${ahead ? 'tail' : 'nose'}`);
+    else pass('Balance', `${bal.deg === 0 ? 'level' : bal.kind + ' ' + Math.abs(bal.deg) + ' degrees'} (${where})`);
+  }
+
   // --- Fit and cave fit.
   const B = L.bounds;
   const fit = B ? { width: Math.round(B.x1 - B.x0), height: Math.round(B.y1 - B.y0), caveNeed: L.caveNeed } : null;
@@ -275,6 +315,13 @@ export function validate(parts, opts = {}) {
     }
   }
 
+  // --- The crow's nest sits on the bag.
+  const nestDeck = L.platforms.find((q) => rowOf(q) === 'nest');
+  if (nestDeck && L.gasbag && L.gasbag.rx) {
+    const reach = L.gasbag.rx * config.BUILD_EDIT.BAG_COVER;
+    if (nestDeck.x0 < L.gasbag.cx - reach || nestDeck.x1 > L.gasbag.cx + reach) fail('Gasbag', `the crow's nest (x ${nestDeck.x0} to ${nestDeck.x1}) hangs off the end of the gasbag: make the bag longer or the nest shorter`);
+  }
+
   // --- Required kinds, kind sanity.
   const R = 'Required kinds';
   const named = [...L.stations.map((s) => [s.n, s.kind]), ...L.engines.map((e) => [e.name, e.kind])];
@@ -288,7 +335,8 @@ export function validate(parts, opts = {}) {
   for (const [key, ok, what] of ENGINE_NEEDS) if (!ok(L)) rbad.push(`no ${key}: the game still needs ${what}`);
   group(R, rbad, 'helm, boiler, coal, ammo, engine, gun, lookout and medbay are all there');
 
-  return result(L, { budgets: { lift, steam, hands, walk, fit } });
+  const list = checklist(L, routesOk);
+  return result(L, { budgets: { lift, steam, hands, walk, fit, balance: bal }, checklist: list, needs: list.filter((c) => !c.ok).map((c) => c.label) });
 }
 
 // ---- bot-run check ---------------------------------------------------------------------------------------------
@@ -334,6 +382,7 @@ export function formatReport(res, title = 'build') {
     const bar = (v, lo, hi, w = 24) => { const n = Math.max(0, Math.min(w, Math.round(((v - lo) / (hi - lo)) * w))); return '[' + '#'.repeat(n) + '.'.repeat(w - n) + ']'; };
     lines.push('', `  LIFT   ${bar(b.lift.hover, 0, 100)} hover at gas ${b.lift.hover}  (weight ${b.lift.mass}, lift ${b.lift.lift}; ok ${BC.HOVER_MIN}-${BC.HOVER_MAX})  ${b.lift.level}`);
     lines.push(`  STEAM  ${bar(b.steam.cruise, 0, 100)} ${b.steam.cruise} at cruise, ${b.steam.idle} at idle  (${b.steam.boilers} boiler${b.steam.boilers === 1 ? '' : 's'}; ok cruise >= ${BC.PRESS_CRUISE_MIN}, idle <= ${BC.PRESS_IDLE_MAX})  ${b.steam.level}`);
+    if (b.balance && b.balance.com) lines.push(`  BALANCE ${b.balance.text}  (centre of mass x ${Math.round(b.balance.com.x)}, lift x ${Math.round(b.balance.col.x)}; level within ${BALANCE.LEVEL_PX} px, warn ${BALANCE.WARN_PX}, fail ${BALANCE.FAIL_PX})  ${b.balance.level}`);
     lines.push(`  HANDS  ${bar(b.hands.perPlayer, 0, 4)} ${b.hands.perPlayer} stations per player at ${b.hands.crew} crew  (${b.hands.stations} manned stations; ${b.hands.at4} at 4, ${b.hands.at6} at 6; ok <= ${BC.HANDS_PER_PLAYER})  ${b.hands.level}`);
   }
   return lines.join('\n');

@@ -1,7 +1,7 @@
 // The ship as LEGO PARTS (Phase S). A build is a list of placed parts; buildLayout(parts) turns it into the
 // layout data the whole game reads (the same shape SHIP_LAYOUT always had). public/shipLayout.js applies it.
 //
-// This module is PURE and Node-safe (no config, no DOM) like gunshipBlueprint.js, so tools/buildsim.mjs can use it.
+// This module is PURE and Node-safe (no DOM; it reads only the BALANCE weights from config) like gunshipBlueprint.js, so tools/buildsim.mjs can use it.
 //
 // Placement: x runs on a 120 px COLUMN grid (a part has `col`, and everything it emits is shifted by col * COL);
 // y runs on named DECK ROWS (DECK_ROWS). The classic ship predates the grid, so its parts all sit at col 0 and
@@ -12,6 +12,8 @@
 // object (coil, gasbag ...). Array order follows the order parts are listed, unless a part gives `ord: { kind: n }`
 // to sort earlier or later (the classic ship needs that in a couple of places to match today's order exactly).
 // Items name their platform with `p` (an id); buildLayout adds the platform index `d` the game code uses.
+
+import { config } from '../../config.js';
 
 export const COL = 120; // width of one column of the build grid (px)
 export const TWIN_SIZE = { rx: 0.7, ry: 0.62 }; // the twin envelope relative to the first (shipArt.js twinGeom uses the same numbers)
@@ -36,10 +38,11 @@ export const CONNECTOR_SPEED = { rope: 150, ladder: 170, stairs: 150, lift: 260,
 // (shifted by the part's column). Fields named in D_KINDS also get `d` (the platform index).
 const ARRAYS = ['platforms', 'connectors', 'rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers', 'boarderEntryPoints', 'escortDocks'];
 const KEYED = ['gunMounts', 'searchlights'];
+const OPTIONAL = ['ballast']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
 const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'gasbag', 'liftRepair'];
 const X_FIELDS = {
   platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x'], vents: ['x'], racks: ['x'],
-  extinguishers: ['x'], boarderEntryPoints: ['x'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
+  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
   coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbag: ['cx'], liftRepair: ['x'],
 };
 const D_KINDS = ['rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers'];
@@ -58,7 +61,7 @@ function place(kind, item, ox) {
 }
 
 // ---- the parts -------------------------------------------------------------------------------------------
-// mass / lift / steam / hands are the budget numbers (S.5; each is a number, or a function of the placed part):
+// mass / lift / steam / hands are the budget numbers (S.5; each is a number, or a function of the placed part). Weights are the BALANCE.MASS table in config.js:
 //   mass   weight in GAS POINTS: a ship hovers at gas level  GAS.NEUTRAL + (total mass - total lift)  (the same scale as an iced bag's `sink`)
 //   lift   gas points of buoyancy (a gasbag by its size; lift engines will add theirs)
 //   steam  steam use at full speed, in config.BOILER units per second (an engine = BOILER.USE_ENGINE); pipes and boilers are worked out by buildCheck.js
@@ -66,23 +69,24 @@ function place(kind, item, ox) {
 // buildCheck.js judges a build by these against config.BUILD_CHECK.
 const piece = (kind, extra = {}) => ({ mass: 0, lift: 0, steam: 0, hands: 0, ...extra, emit: (p, A) => A.add(kind, withoutPart(p)) });
 const withoutPart = (p) => { const o = { ...p }; delete o.part; delete o.col; delete o.ord; return o; };
+const M = () => config.BALANCE.MASS;
 const connector = { mass: 0.5, lift: 0, steam: 0, hands: 0, emit: (p, A) => {
   const o = withoutPart(p);
   o.speed ??= CONNECTOR_SPEED[o.type];
   A.add('connectors', o);
 } };
-const asType = (type, mass) => ({ ...connector, mass, emit: (p, A) => connector.emit({ ...p, type }, A) });
-// What a station of each kind weighs and whether it needs a person (engines are driven by steam; coal and ammo are pick-up points).
+const asType = (type) => ({ ...connector, mass: () => M().link[type], emit: (p, A) => connector.emit({ ...p, type }, A) });
+// Whether a station of each kind needs a person (engines are driven by steam; coal and ammo are pick-up points). What it weighs is BALANCE.MASS.kind.
 export const KIND_STATS = {
-  helm: { mass: 4, hands: 1 }, boiler: { mass: 8, hands: 1 }, lookout: { mass: 1, hands: 1 }, coal: { mass: 3, hands: 0 }, ammo: { mass: 3, hands: 0 },
-  gun: { mass: 3, hands: 1 }, searchlight: { mass: 2, hands: 1 }, coil: { mass: 5, hands: 1 }, deflector: { mass: 5, hands: 1 }, bombBay: { mass: 6, hands: 1 },
-  navigator: { mass: 1, hands: 1 }, escort: { mass: 3, hands: 1 },
+  helm: { hands: 1 }, boiler: { hands: 1 }, lookout: { hands: 1 }, coal: { hands: 0 }, ammo: { hands: 0 },
+  gun: { hands: 1 }, searchlight: { hands: 1 }, coil: { hands: 1 }, deflector: { hands: 1 }, bombBay: { hands: 1 },
+  navigator: { hands: 1 }, escort: { hands: 1 },
 };
-const kindStat = (key) => (p) => (KIND_STATS[p.kind] || {})[key] || 0;
+const kindStat = (key) => (p) => (key === 'mass' ? M().kind[p.kind] : (KIND_STATS[p.kind] || {})[key]) || 0;
 
 export const PARTS = {
   // A walkable floor. `row` is a DECK_ROWS name (y comes from it), x0/x1 are its span.
-  deck: { mass: (p) => ((p.x1 - p.x0) / 100) * (p.outside ? 0.5 : 1), lift: 0, steam: 0, hands: 0, emit: (p, A) => {
+  deck: { mass: (p) => ((p.x1 - p.x0) / 100) * M().deck * (p.outside ? 0.5 : 1), lift: 0, steam: 0, hands: 0, emit: (p, A) => {
     const o = withoutPart(p);
     o.y = DECK_ROWS[o.row];
     delete o.row;
@@ -91,44 +95,47 @@ export const PARTS = {
   // A named area on a deck (drawing, and telling players where things are).
   room: piece('rooms'),
   // Ways between decks. top/bottom are platform ids.
-  ladder: asType('ladder', 0.6),
-  rope: asType('rope', 0.3),
-  stairs: asType('stairs', 1),
-  lift: { ...connector, mass: 3, emit: (p, A) => {
+  ladder: asType('ladder'),
+  rope: asType('rope'),
+  stairs: asType('stairs'),
+  lift: { ...connector, mass: () => M().link.lift, emit: (p, A) => {
     const o = withoutPart(p);
     const repair = o.repair; // where to stand to repair the lift's gas
     delete o.repair;
     A.add('connectors', { type: 'lift', speed: CONNECTOR_SPEED.lift, ...o });
     if (repair) A.add('liftRepair', repair);
   } },
-  pole: asType('pole', 0.3),
+  pole: asType('pole'),
   // A place a player can stand to do a job.
   station: piece('stations', { mass: kindStat('mass'), hands: kindStat('hands') }),
   // A station plus the gun on it: where the barrel pivots (bx, by), the middle of its arc (aim) and how far it turns (arc).
-  gun: { mass: KIND_STATS.gun.mass, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
+  gun: { mass: () => M().kind.gun, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
     const { bx, by, aim, arc, n, ord } = p;
     A.add('stations', { n, kind: 'gun', p: p.p, x: p.x });
     A.add('gunMounts', { bx, by, aim, arc }, n, ord && ord.gunMounts);
   } },
   // A station plus its lamp. len = how long the drum is (the beam starts at the lens).
-  searchlight: { mass: KIND_STATS.searchlight.mass, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
+  searchlight: { mass: () => M().kind.searchlight, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
     const { bx, by, aim, arc, len, n } = p;
     A.add('stations', { n, kind: 'searchlight', p: p.p, x: p.x });
     A.add('searchlights', { bx, by, aim, arc, len }, n);
   } },
   coil: piece('coil'), // (the Lightning Coil's weight is on its station)
-  engine: { ...piece('engines', { mass: 6, steam: 3 }), emit: (p, A) => A.add('engines', { kind: 'engine', ...withoutPart(p) }) },
-  pipe: piece('pipes', { mass: 0.5 }),
-  vent: piece('vents', { mass: 0.3 }),
-  rack: piece('racks', { mass: 0.2 }),
-  extinguisher: piece('extinguishers', { mass: 0.2 }),
+  engine: { ...piece('engines', { mass: () => M().engine, steam: 3 }), emit: (p, A) => A.add('engines', { kind: 'engine', ...withoutPart(p) }) },
+  // A sandbag (trim weight): `p` is its deck and x where it stands; `hang: true` hangs it from the hull under the deck instead. Cheap, but a long way out
+  // from the middle it moves the centre of mass (balanceOf).
+  ballast: { mass: () => M().ballast, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('ballast', withoutPart(p)) },
+  pipe: piece('pipes', { mass: () => M().pipe }),
+  vent: piece('vents', { mass: () => M().vent }),
+  rack: piece('racks', { mass: () => M().rack }),
+  extinguisher: piece('extinguishers', { mass: () => M().extinguisher }),
   boarderEntry: piece('boarderEntryPoints'),
   escortDock: piece('escortDocks'),
-  medbay: piece('medbay', { mass: 3 }),
+  medbay: piece('medbay', { mass: () => M().medbay }),
   bombBay: piece('bombBay'), // (the bomb bay's weight is on its station)
   // buoyancy by the envelope's size; `twin: true` adds the second, smaller envelope riding behind it (shipArt's twin-gasbag art), which
   // lifts TWIN_SIZE.rx x TWIN_SIZE.ry of the first and adds a little rigging weight
-  gasbag: piece('gasbag', { mass: (p) => 6 + (p.twin ? 4 : 0), lift: (p) => Math.round((p.rx * p.ry * (1 + (p.twin ? TWIN_SIZE.rx * TWIN_SIZE.ry : 0))) / 1560) }),
+  gasbag: piece('gasbag', { mass: (p) => M().bag + (p.twin ? M().bagTwin : 0), lift: (p) => Math.round((p.rx * p.ry * (1 + (p.twin ? TWIN_SIZE.rx * TWIN_SIZE.ry : 0))) / 1560) }),
   // Ship-wide numbers: the shield band and the nest rise are given here; everything else (samples, bounds, aim and
   // reference points ...) is DERIVED from the parts by buildLayout. A field named in OVERRIDES that is set here wins
   // over the derived value (the classic ship keeps its hand-placed collision samples this way).
@@ -283,7 +290,7 @@ BUILDS.classic = [
 // Turn a list of placed parts into layout data (same shape as the old hand-written SHIP_LAYOUT), plus the derived
 // geometry (deriveGeometry). opts.cell = the cave map's square size in px (config.MAPS.CELL), used for caveNeed.
 export function buildLayout(parts, opts = {}) {
-  const rows = Object.fromEntries([...ARRAYS, ...KEYED].map((k) => [k, []]));
+  const rows = Object.fromEntries([...ARRAYS, ...KEYED, ...OPTIONAL].map((k) => [k, []]));
   const out = {};
   let seq = 0;
   let ox = 0;
@@ -291,7 +298,7 @@ export function buildLayout(parts, opts = {}) {
     add(kind, item, key, ord) {
       const o = place(kind, item, ox);
       if (KEYED.includes(kind)) rows[kind].push({ key, o, ord: ord ?? seq++ });
-      else if (ARRAYS.includes(kind)) rows[kind].push({ o, ord: seq++ });
+      else if (ARRAYS.includes(kind) || OPTIONAL.includes(kind)) rows[kind].push({ o, ord: seq++ });
       else if (SINGLES.includes(kind)) out[kind] = o;
       else throw new Error('shipBuild: unknown piece kind ' + kind);
     },
@@ -306,10 +313,12 @@ export function buildLayout(parts, opts = {}) {
   const sorted = (list) => list.map((r, i) => ({ ...r, i })).sort((a, b) => a.ord - b.ord || a.i - b.i);
   for (const kind of ARRAYS) out[kind] = sorted(rows[kind]).map((r) => r.o);
   for (const kind of KEYED) out[kind] = Object.fromEntries(sorted(rows[kind]).map((r) => [r.key, r.o]));
+  for (const kind of OPTIONAL) if (rows[kind].length) out[kind] = sorted(rows[kind]).map((r) => r.o);
 
   // Platform indices: d on everything that stands on a deck, top/bottom on connectors.
   const index = (id) => out.platforms.findIndex((q) => q.id === id);
   for (const kind of D_KINDS) out[kind] = out[kind].map((o) => ({ ...o, d: index(o.p) }));
+  if (out.ballast) out.ballast = out.ballast.map((o) => { const d = index(o.p); return { ...o, d, y: d < 0 ? 0 : out.platforms[d].y + (o.hang ? config.BALANCE.BALLAST_HANG : 0) }; });
   out.connectors = out.connectors.map((c) => ({ ...c, top: index(c.top), bottom: index(c.bottom) }));
   // The first escort hook doubles as the old single `escortDock`.
   if (out.escortDocks.length) out.escortDock = { x: out.escortDocks[0].x, y: out.escortDocks[0].y };
@@ -349,8 +358,11 @@ export function rowSpan(platforms, q) {
 // in `boxes` of their own: { x0, x1, y0, y1 } with the walls a little outside the decks.
 export function hullGeom(platforms, rooms = []) {
   const find = (id) => platforms.find((q) => q.id === id);
-  const main = find('main'), lower = find('lower'), cat = find('catwalk');
-  if (!main || !lower || !cat) return null;
+  // (A half-built ship from the blueprint editor has no main / lower / top deck yet: the hull wraps whatever hull decks there are.)
+  const inHull = platforms.filter((q) => !q.outside && ['main', 'lower', ...KEEL_ROWS].includes(rowOf(q))).sort((a, b) => a.y - b.y);
+  const main = find('main') || inHull[0], lower = find('lower') || inHull[inHull.length - 1];
+  if (!main || !lower) return null;
+  const cat = find('catwalk') || { y: main.y - 170 };
   const m = rowSpan(platforms, main);
   const inside = rooms.filter((r) => !r.outside && (find(r.p) || {}).y === lower.y); // the lower deck's rooms that are inside the hull (not the outriggers)
   const lowMin = inside.length ? Math.min(...inside.map((r) => r.x0)) : Infinity;
@@ -466,5 +478,50 @@ export function partStat(p, key) {
 export function budgets(parts) {
   const b = { mass: 0, lift: 0, steam: 0, hands: 0 };
   for (const p of parts) for (const k of Object.keys(b)) b[k] += partStat(p, k);
-  return b;
+  const bal = balanceOf(parts);
+  return { ...b, com: bal.com, col: bal.col, balance: bal };
+}
+
+// ---- balance (S.5c) --------------------------------------------------------------------------------------------
+// Where a part is, for the centre of mass: { x, y } in ship coordinates, or null when it has no place (rooms, the frame ...).
+// ys = deck id -> y. A deck weighs at its middle, a connector midway between its decks, a pipe at the middle of its run.
+const LINKS = ['ladder', 'rope', 'stairs', 'lift', 'pole'];
+const deckYs = (parts) => Object.fromEntries(parts.filter((p) => p.part === 'deck').map((d) => [d.id, DECK_ROWS[d.row]]));
+export function partPos(p, ys) {
+  const y = (id) => (ys[id] != null ? ys[id] : DECK_ROWS.main);
+  if (p.part === 'deck') return { x: (p.x0 + p.x1) / 2, y: DECK_ROWS[p.row] };
+  if (p.part === 'gasbag') return { x: p.cx, y: p.cy };
+  if (p.part === 'coil' || p.part === 'bombBay') return { x: p.x, y: p.y };
+  if (LINKS.includes(p.part)) return { x: (p.xTop + p.xBottom) / 2, y: (y(p.top) + y(p.bottom)) / 2 };
+  if (p.part === 'pipe') return { x: p.points.reduce((n, q) => n + q[0], 0) / p.points.length, y: p.points.reduce((n, q) => n + q[1], 0) / p.points.length };
+  if (p.part === 'ballast') return { x: p.x, y: y(p.p) + (p.hang ? config.BALANCE.BALLAST_HANG : 0) };
+  if (p.x != null && p.p != null) return { x: p.x, y: y(p.p) };
+  return null;
+}
+// The trim a centre-of-mass offset makes (dx = COM - COL, px; positive = nose-heavy): the angle the gauge shows (signed degrees, + nose-down),
+// the level of the check, and what the flying ship rests tipped by (radians, + nose-down; 0 when level).
+export function trimOf(dx, known = true) {
+  const B = config.BALANCE, a = Math.abs(dx);
+  const deg = a <= B.LEVEL_PX ? 0 : Math.min(B.CAP_DEG, (a - B.LEVEL_PX) * B.DEG_PER_PX) * Math.sign(dx);
+  const restDeg = Math.min(B.SIM_CAP_DEG, Math.abs(deg) * B.SIM_SHARE) * Math.sign(deg);
+  return { dx: +dx.toFixed(1), deg: +deg.toFixed(1), side: deg > 0 ? 'nose' : deg < 0 ? 'tail' : 'level', level: !known ? 'PASS' : a > B.FAIL_PX ? 'FAIL' : a > B.WARN_PX ? 'WARN' : 'PASS', restPitch: (restDeg * Math.PI) / 180 || 0 };
+}
+// The centre of mass and the centre of lift of a build, and what the difference does to her (x runs along the ship, bow on the right):
+// COM = every part's mass at its place; COL = the bag(s) centre(s) weighted by their lift (a twin envelope rides behind and above; parts with
+// lift of their own, the lift engines to come, count at their place). mass is the total weight of the parts that have a place.
+export function balanceOf(parts) {
+  const ys = deckYs(parts);
+  let m = 0, mx = 0, my = 0, w = 0, wx = 0, wy = 0;
+  const lift = (x, y, v) => { w += v; wx += x * v; wy += y * v; };
+  for (const p of parts) {
+    const pos = partPos(p, ys), mass = partStat(p, 'mass');
+    if (pos && mass > 0) { m += mass; mx += mass * pos.x; my += mass * pos.y; }
+    if (p.part === 'gasbag') {
+      const base = (p.rx * p.ry) / 1560;
+      lift(p.cx, p.cy, base);
+      if (p.twin) lift(p.cx - 20, p.cy - 258, base * TWIN_SIZE.rx * TWIN_SIZE.ry);
+    } else if (pos && partStat(p, 'lift') > 0) lift(pos.x, pos.y, partStat(p, 'lift'));
+  }
+  const com = m > 0 ? { x: mx / m, y: my / m } : null, col = w > 0 ? { x: wx / w, y: wy / w } : null;
+  return { com, col, mass: m, ...trimOf(com && col ? com.x - col.x : 0, !!(com && col)) };
 }
