@@ -978,7 +978,7 @@ export function createSimulation() {
         newRun();
         course.startMission(1, firstMission());
       }
-      updateCrewScale(state, 0); // (settle the spare gasbags and crew factors for the chosen difficulty)
+      eachShip(state, (sh) => updateCrewScale(sh.ctx, 0)); // (settle the spare gasbags and crew factors for the chosen difficulty)
       state.phase = 'flying';
       state.ev.warn = 4;
       state.ev.warnText = 'CAST OFF!';

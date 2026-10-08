@@ -9,6 +9,7 @@
 //        node tools/buildsim.mjs --check-pose       B0: pose.js / ships.js / layout-parameter helper unit checks (and B1's --check-layouts)
 //        node tools/buildsim.mjs --check-layouts    B1/B.1b: several Layout + Nav instances side by side (classic, a copy, four bags, two boilers, a tiny ship) answer on their own, and three more whole ship contexts (modules, balance, forces, bags, sails, engines, airborne, art bake) run next to a real ship 0; applyBuild/onChange never cross
 //        node tools/buildsim.mjs --check-two-ships  B.2: the classic ship and a second build (the four-bag ship, then the minimum two-engine one) in ONE simulation, six bots each assigned by player.ship, 2 minutes, 0 errors; hull / gas / fires / holes / steam / bags / balance never cross between them, each crewman walks HIS ship's nav, the camera frames both (tools/two-ships-check.mjs)
+//                                                    and (B.3, tools/fleet-check.mjs) crew scaling per ship, the sky's hazards on the second ship in all seven environments, the phone radar and spotting per ship, a target lit by any ship's beam, ships placed clear of each other, and render.js drawing EVERY ship under her own pose on a stub canvas (the HUD with one ship is the old one, with two a panel each, the darkness cuts light for both, an edge arrow for the one off screen)
 //        node tools/buildsim.mjs --check-turn       M.3: COME ABOUT: the helm's command (the phone's button or the stick astern, held), the manoeuvre (squash through zero, f flips at the middle, her speed along the bow flips so the ground speed does not jump, speed held down, no guns, the camera's zoom held), the refusals (too fast, already turning, cooling down, falling, a gunship alongside, a hookshot line, the mirrored hull in rock), rock on the right side, the Nose Gun's shells, a person's screen-relative stick (also one held across the flip), a headless bot helm turning on a route map and flying back to a goal behind her, a second ship turning on her own, the bots' jobs through a turn (tools/turn-check.mjs)
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
@@ -2205,7 +2206,8 @@ if (mode === '--snapshot-classic') {
   const run = (args) => spawnSync(process.execPath, [path.join(root, 'tools', 'two-ships-check.mjs'), ...args], { cwd: root, stdio: 'inherit' }).status === 0;
   const bags = run(['--build', 'bags', '--minutes', '2']); // (the classic ship + the four-bag ship: the same decks, another gasbag layout)
   const small = run(['--build', 'min4', '--minutes', '1']); // (the classic ship + the one-deck helm, boiler and two engines: a different Nav, no guns)
-  process.exit(bags && small ? 0 : 1);
+  const fleet = spawnSync(process.execPath, [path.join(root, 'tools', 'fleet-check.mjs')], { cwd: root, stdio: 'inherit' }).status === 0; // (B.3: the systems that were ship 0's alone, run for every ship; and the TV drawing every ship, on a stub canvas)
+  process.exit(bags && small && fleet ? 0 : 1);
 } else if (mode === '--check-turn') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'turn-check.mjs')], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-engines') {

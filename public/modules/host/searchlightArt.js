@@ -158,11 +158,33 @@ export function createSearchlightArt({ ctx, state, ink }) {
     return ((lx - G.cx) / (G.rx + 60)) ** 2 + ((ly - G.cy) / (G.ry + 60)) ** 2 < 1 || (lx > -60 && lx < 1660 && ly > 380 && ly < 990);
   };
 
-  const draw = (view, width, height, time) => {
+  // The ellipse of this ship's own glow in the dark (ship coordinates): the classic ship's is config; another ship's follows her own bounds.
+  const glowOf = () => {
+    const G = D;
+    if (mainShip(state).main) return { cx: G.SHIP_GLOW_CX, cy: G.SHIP_GLOW_CY, rx: G.SHIP_GLOW_RX, ry: G.SHIP_GLOW_RY };
+    const b = L.bounds;
+    return { cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, rx: ((b.x1 - b.x0) / 2) * 1.25 + 150, ry: ((b.y1 - b.y0) / 2) * 1.25 + 150 };
+  };
+
+  // What the dark needs to know about this ship once her lamps have been drawn this frame (render.js hands every ship's to ONE darkness: B.3).
+  const source = () => ({ anchors, shipM, onShip, glow: glowOf(), lit: state.litTargets || [], dim: state.dimTargets || [] });
+
+  // The darkness for the whole sky. `others`: the searchlightArt of every OTHER ship in it. Every ship's glow and beams cut light out of the one overlay, and a target lit by ANY
+  // ship's lamp is lit (brackets) and not dim (no eyes). With no others this is exactly the single-ship darkness.
+  const draw = (view, width, height, time, others = []) => {
     const dt = Math.min(0.1, Math.max(0, time - lastTime));
     lastTime = time;
     const lights = state.searchlights;
-    if (!lights || !anchors.length) return;
+    const sources = [source(), ...others.map((o) => o.source())];
+    if (!lights || !sources.some((s) => s.anchors.length)) return;
+    const allAnchors = sources.length === 1 ? anchors : sources.flatMap((s) => s.anchors);
+    let litAll = sources[0].lit;
+    let dimAll = sources[0].dim;
+    if (sources.length > 1) {
+      const once = (list, skip) => { const seen = new Set(skip); return list.filter((t) => { const k = t.x + ',' + t.y; if (seen.has(k)) return false; seen.add(k); return true; }); };
+      litAll = once(sources.flatMap((s) => s.lit));
+      dimAll = once(sources.flatMap((s) => s.dim), litAll.map((t) => t.x + ',' + t.y));
+    }
     const flash = state.weather ? Math.min(1, state.weather.flash * 1.2) : 0;
     const target = darkTarget(state);
     dark += (target - dark) * Math.min(1, dt * D.SMOOTH);
@@ -196,12 +218,14 @@ export function createSearchlightArt({ ctx, state, ink }) {
       octx.fillRect(0, 0, w, h);
       octx.globalCompositeOperation = 'destination-out';
       octx.fillStyle = '#000';
-      // The ship's own glow: the gasbag and the gondola, grown outward in a few soft layers.
-      if (shipM) {
+      // The ships' own glow: the gasbag and the gondola, grown outward in a few soft layers (one for each ship in the sky).
+      for (const src of sources) {
+        const sM = src.shipM;
+        if (!sM) continue;
         // One soft ellipse (a radial gradient squashed to the ship's shape): clear over the whole ship, fading out beyond it.
-        octx.setTransform(shipM.a * q, shipM.b * q, shipM.c * q, shipM.d * q, shipM.e * q, shipM.f * q);
-        octx.translate(D.SHIP_GLOW_CX, D.SHIP_GLOW_CY);
-        octx.scale(D.SHIP_GLOW_RX, D.SHIP_GLOW_RY);
+        octx.setTransform(sM.a * q, sM.b * q, sM.c * q, sM.d * q, sM.e * q, sM.f * q);
+        octx.translate(src.glow.cx, src.glow.cy);
+        octx.scale(src.glow.rx, src.glow.ry);
         if (!shipGlowGrad) { // (the same every frame: built once; a gradient works on any transform)
           const sg = octx.createRadialGradient(0, 0, 0, 0, 0, 1);
           const G = D.SHIP_GLOW;
@@ -216,8 +240,8 @@ export function createSearchlightArt({ ctx, state, ink }) {
         octx.fillRect(-1, -1, 2, 2);
       }
       octx.setTransform(q, 0, 0, q, 0, 0);
-      // Beams.
-      for (const an of anchors) {
+      // Beams (every ship's lamps).
+      for (const an of allAnchors) {
         const l = an.l;
         const R = l.reach * an.scale;
         if (R < 20 || l.power < 0.05) continue;
@@ -265,7 +289,7 @@ export function createSearchlightArt({ ctx, state, ink }) {
 
     // 2. The beams you can see (a soft warm cone), and lens flares.
     const aBeam = alphaDark > 0.15 ? S.DARK_ALPHA : S.DAY_ALPHA;
-    for (const an of anchors) {
+    for (const an of allAnchors) {
       const l = an.l;
       const R = l.reach * an.scale;
       if (R < 20 || l.power < 0.05) continue;
@@ -294,7 +318,7 @@ export function createSearchlightArt({ ctx, state, ink }) {
     ctx.globalAlpha = 1;
 
     // 3. Lit targets: warm brackets (and a faint halo) round everything in a manned beam.
-    for (const t of state.litTargets || []) {
+    for (const t of litAll) {
       const px = sx(t.x);
       const py = sy(t.y);
       const r = Math.max(t.r, 24) * k * (1.15 + 0.06 * Math.sin(time * 9 + t.x));
@@ -327,11 +351,11 @@ export function createSearchlightArt({ ctx, state, ink }) {
     // 4. In the dark, enemies outside the light show glowing eyes (or a lamp): you know something is there.
     if (D.EYES && alphaDark > 0.12) {
       const a = Math.min(1, alphaDark * 1.4) * D.EYE_ALPHA;
-      for (const t of state.dimTargets || []) {
+      for (const t of dimAll) {
         const px = sx(t.x);
         const py = sy(t.y);
         if (px < -40 || px > width + 40 || py < -40 || py > height + 40) continue;
-        if (onShip(px, py)) continue; // (right on the ship it is plainly visible)
+        if (sources.some((s) => s.onShip(px, py))) continue; // (right on a ship it is plainly visible)
         const r = Math.max(2.4, Math.min(9, t.r * 0.13 * k));
         const pulse = 0.75 + 0.25 * Math.sin(time * 6 + t.x * 0.01);
         let eyes = [[-0.32, -0.08], [0.32, -0.08]];
@@ -362,5 +386,5 @@ export function createSearchlightArt({ ctx, state, ink }) {
     ctx.restore();
   };
 
-  return { drawBellyPod, drawLamps, draw };
+  return { drawBellyPod, drawLamps, draw, source };
 }

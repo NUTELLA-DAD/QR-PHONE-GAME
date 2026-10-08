@@ -1299,7 +1299,7 @@ export const config = {
       brass: { name: 'CREW', color: '#b59a5a', trim: '#8a6c2e', dark: '#6b5424', pale: '#e8dcb4' }, // no team: the edge arrows and panel band of a ship that has none
     },
     DEV_TEAMS: ['red', 'blue', 'green'], // host.html?teams=1 and botsim --teams: ship 1, 2, 3 take these in turn
-    PANEL: { W: 238, H: 108, GAP: 8, Y: 8, CENTER: 870 }, // the compact logbook panel of each ship, on the 1600x900 stage, in a row centred on CENTER (between the big panel and the minimap)
+    PANEL: { W: 238, H: 116, GAP: 8, Y: 8, CENTER: 870 }, // the compact logbook panel of each ship, on the 1600x900 stage, in a row centred on CENTER (between the big panel and the minimap)
     TRIM: { HULL: 9, BELT: 0.1, BELT_AT: 0.3 }, // team trim: the stripe along the hull (ship px thick); the belt round the gasbag (share of its width, where along it: share of its half width)
     CREW_BAND: 6, // px (ship units) of team-coloured scarf band on a crewman's marker
     ARROW_PAD: 46, // px from the screen edge where the arrow to an off-screen ship sits

@@ -1048,13 +1048,17 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     const map = course.map;
     const x0 = ship.pose.x + sh.formation.dx;
     const y0 = ship.pose.y - sh.formation.dalt;
+    const mine = sh.layout.bounds, idx = state.ships.indexOf(sh);
+    const others = state.ships.filter((o) => o !== sh && (o.main || state.ships.indexOf(o) < idx)); // (the ships already in the sky: she is put clear of them)
+    const clear = (x, y) => others.every((o) => { const b = o.layout.bounds; return x + mine.x0 >= o.pose.x + b.x1 + 150 || x + mine.x1 <= o.pose.x + b.x0 - 150 || y + mine.y0 >= o.pose.y + b.y1 + 100 || y + mine.y1 <= o.pose.y + b.y0 - 100; });
     const fits = (x, y) => {
+      if (!clear(x, y)) return false;
       if (!map) return true;
       for (const [sx, sy] of sh.layout.samples) for (const [ox, oy] of [[0, 0], [0, -70], [0, 70], [-70, 0], [70, 0]]) if (solidAt(map, x + sx + ox, y + sy + oy)) return false;
       return true;
     };
     let at = null;
-    for (let r = 0; r <= 3000 && !at; r += r < 600 ? 100 : 200) {
+    for (let r = 0; r <= 6000 && !at; r += r < 600 ? 100 : 200) { // (the first ships take the near open air: a third has to look further)
       const n = r ? Math.max(8, Math.round(r / 60)) : 1;
       for (let k = 0; k < n && !at; k++) {
         const a = (k / n) * Math.PI * 2 - Math.PI / 2; // (up first: she is moored above a pit rather than inside one)

@@ -7,7 +7,7 @@ import { createSfx } from './sfx.js';
 import { createMenu } from './menu.js';
 import { createPerfGovernor, perfState } from './perf.js';
 import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility forward: the dev build below is applied before the simulation reads the layout)
-import { mainShip, eachShip } from './ships.js';
+import { mainShip } from './ships.js';
 import { BUILDS } from './shipBuild.js';
 
 // Dev: host.html?build=[parts JSON] flies another ship than the classic one (copy a build from the build page, buildtest.html, "Copy build JSON").
@@ -48,8 +48,13 @@ const simulation = createSimulation();
   for (let i = 1; i < asked; i++) {
     let parts = BUILDS.classic;
     try { if (q.get('build2')) parts = JSON.parse(q.get('build2')); } catch (e) { console.warn('bad ?build2=', e); }
-    simulation.addShip(parts, { formation: { dx: -250 * i, dalt: -1150 * i } });
+    // (?gap=1800&drop=300 spreads them out: how far behind each next ship keeps station, and how far below)
+    const gap = Number(q.get('gap')) || 250;
+    const drop = q.get('drop') != null ? Number(q.get('drop')) : 1150;
+    simulation.addShip(parts, { formation: { dx: -gap * i, dalt: -drop * i } });
   }
+  // Dev (B.3): host.html?teams=1 gives the ships a side each (red, blue, green): trim on hull and gasbag, a mast pennant, a scarf band on the crew, the colour on her HUD panel.
+  if (q.get('teams') === '1') simulation.state.ships.forEach((sh, i) => { sh.team = config.FLEET.DEV_TEAMS[i % config.FLEET.DEV_TEAMS.length]; });
   if (asked > 1) {
     for (const sh of simulation.state.ships) {
       for (let k = 0; k < 4; k++) {
@@ -79,18 +84,9 @@ if (pvpAsked) {
   }).catch((e) => console.error('PvP: ship B could not be loaded', e));
 }
 const camera = createCamera();
-// One renderer per ship (the context view is the ship's own state: ships.js): the first draws the sky, the effects and the HUD as well; the others only their ship.
-const renderers = new Map();
-const rendererOf = (sh) => renderers.get(sh) || (renderers.set(sh, createRenderer({ ctx, state: sh.ctx, canvas })), renderers.get(sh));
-const renderer = rendererOf(mainShip(simulation.state));
-// One frame: with one ship the renderer draws everything as it always did; with more, the sky and the first ship, then each other ship, then the effects, the darkness and the HUD on top.
-const drawFrame = (now, view) => {
-  const st = simulation.state;
-  if (st.ships.length < 2) return renderer.renderFrame(now, view);
-  renderer.renderFrame(now, view, { layers: ['background', 'ship'] });
-  eachShip(st, (sh, i) => { if (i > 0) rendererOf(sh).renderFrame(now, view, { layers: ['ship', 'shipfx'], noClear: true, bobPhase: 2.7 * i }); });
-  renderer.renderFrame(now, view, { layers: ['effects', 'dark', 'hud', 'arrows', 'film'], noClear: true });
-};
+// ONE renderer draws the whole sky: the background once, then every ship (her own art, crew and effects), the darkness and the HUD (render.js).
+const renderer = createRenderer({ ctx, state: simulation.state, canvas });
+const drawFrame = (now, view) => renderer.renderFrame(now, view);
 const network = initHostNetwork({ simulation });
 window.game = simulation; // handy for debugging in the browser console
 const sfx = createSfx(simulation.state);

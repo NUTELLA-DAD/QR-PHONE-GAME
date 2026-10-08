@@ -20,7 +20,7 @@ let ok = true;
 const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
 
 installShims();
-const clock = seedRandom(seed);
+let clock = seedRandom(seed); // (boot() seeds it again: every scenario flies its own repeatable sky, so one scenario's random draws do not decide the next one's)
 const load = (p) => import(pathToFileURL(path.join(publicDir, p)).href);
 const { config } = await load('config.js');
 const { createSimulation } = await load('modules/host/simulation.js');
@@ -41,6 +41,7 @@ function boot({ kind = 'open', calm = true, bots = 6, second = false } = {}) {
   config.MAPS.FORCE_KIND = kind;
   config.ENVIRONMENTS.FORCE = 'skyisles';
   if (calm) { config.PACING.RATE_START = config.PACING.RATE_END = config.PACING.PEAK_RATE = 0; config.PACING.BUILD = 1e6; config.SPECIALS.FIRST_AFTER = 1e9; }
+  clock = seedRandom(seed);
   const sim = createSimulation();
   const st = sim.state;
   const ships = [st.ships[0]];

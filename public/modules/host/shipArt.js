@@ -1570,6 +1570,44 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     guard('ice', drawIceFlights, ctx, state);
   };
 
+  // ---- Team trim (B.3): a ship with a team (ships.js teamOf) wears its colour: a belt round each gasbag and a stripe along the hull. Drawn live over the baked pictures (a
+  // team can change between rounds), a few rectangles; a ship with no team, as in co-op, draws nothing here. ----
+  const drawTeamBelts = () => {
+    const T = ship.team;
+    if (!T) return;
+    const F = config.FLEET.TRIM;
+    for (const G of bags()) {
+      const w = G.rx * 2 * F.BELT;
+      const x = G.cx + G.rx * F.BELT_AT - w / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(G.cx, G.cy, G.rx, G.ry, 0, 0, 7);
+      ctx.clip();
+      ctx.fillStyle = T.trim;
+      ctx.fillRect(x, G.cy - G.ry, w, G.ry * 2);
+      ctx.strokeStyle = T.dark;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x, G.cy - G.ry);
+      ctx.lineTo(x, G.cy + G.ry);
+      ctx.moveTo(x + w, G.cy - G.ry);
+      ctx.lineTo(x + w, G.cy + G.ry);
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+  const drawTeamStripe = () => {
+    const T = ship.team;
+    const q = T && roles().main;
+    if (!q) return;
+    const F = config.FLEET.TRIM;
+    ctx.fillStyle = T.trim;
+    ctx.fillRect(q.x0 + 14, q.y + 8, q.x1 - q.x0 - 28, F.HULL);
+    ctx.strokeStyle = T.dark;
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(q.x0 + 14, q.y + 8, q.x1 - q.x0 - 28, F.HULL);
+  };
+
   // ---- The bake: one offscreen canvas per static layer, in ship space ----
   const bake = { back: null, front: null, bags: [], twins: [], key: '', scale: 0, x: 0, y: 0, w: 0, h: 0, failed: false };
   let sigCount = 0;
@@ -1758,7 +1796,8 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
       const k = Math.hypot(m.c, m.d) || 1; // screen pixels per ship unit right now (zoom x pixel ratio; the y axis, which a mirror or the squash of a COME ABOUT does not change)
       const key = signature();
       const ratio = (k * bakeSS()) / (bake.scale || 1);
-      const zoomStep = Math.max(0.05, Number(ART().BAKE_ZOOM) || 0.25);
+      // (the camera zooms for every ship at once: each ship's bake waits a little longer than the one before it, so they re-bake in different frames, not all in one hitch)
+      const zoomStep = Math.max(0.05, Number(ART().BAKE_ZOOM) || 0.25) * (1 + 0.2 * Math.max(0, ((ship.world && ship.world.ships) || []).indexOf(ship)));
       if (!bake.back || key !== bake.key || ratio > 1 + zoomStep || ratio < 1 / (1 + zoomStep)) rebake(key, k);
       return true;
     } catch (e) {
@@ -1791,9 +1830,11 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     lap('bake');
     if (!baked) { bake.bags = []; bake.twins = []; }
     guard('gasbag', drawGasbag); // (behind everything else)
+    if (ship.team) guard('belt', drawTeamBelts);
     lap('gasbag');
     if (baked) blit(bake.back);
     else drawBackLayer();
+    if (ship.team) guard('stripe', drawTeamStripe);
     lap('back');
     drawLiveMid(time);
     lap('liveMid');

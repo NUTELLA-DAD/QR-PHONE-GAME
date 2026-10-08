@@ -3,9 +3,9 @@
 // steps every ship's stages between the world's own, so with ONE ship the order of everything, and of every Math.random call, is the old single-ship order.
 //
 // Everything here is written against `state = ship.ctx`, the ship's CONTEXT VIEW (ships.js): her own ship-scoped keys (state.ship, state.GUNS, state.bags, state.fires ...)
-// and the world's shared things (state.shells, state.tempo, state.env, state.sfxQ ...) by the prototype. Ship 0's context forwards to the world state, so for her
+// and the world's shared things (state.shells, state.tempo, state.weather, state.sfxQ ...) by the prototype. Ship 0's context forwards to the world state, so for her
 // `state.X` here IS `world.X`. The world's systems are made after this ship's, so they are asked for when used (W.course ...); a ship that is not the main one has no
-// gunship or environment rules of her own (they run for ship 0 only until B7) and gets the neutral stand-ins below.
+// gunship (she hunts ship 0 only until B.5: the stand-in below) but runs the sky's hazards on her own copy of the environment rules (B.3: state.env, icing, spores ... are hers).
 import { createJobFinder } from './jobs.js';
 import { damageMul, crewMul, autopilotOn } from './crewscale.js';
 import { config } from '../../config.js';
