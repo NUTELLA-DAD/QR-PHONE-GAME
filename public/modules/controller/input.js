@@ -265,6 +265,34 @@ export function createControllerInput({ network, ui }) {
     },
   );
 
+  // COME ABOUT (helm only): HOLD it for config.SHIP.TURN.HOLD seconds and the ring fills; the host does the holding too (it counts the seconds from "ca") and turns the ship
+  // round if she may, or says why not (a toast). The stick held hard astern does the same.
+  const turnButton = document.getElementById('turn');
+  let turnRaf = 0;
+  const turnFill = (f) => turnButton.style.setProperty('--p', Math.round(f * 100) + '%');
+  const turnStop = () => {
+    cancelAnimationFrame(turnRaf);
+    turnRaf = 0;
+    turnFill(0);
+  };
+  pressable(
+    turnButton,
+    () => {
+      if (state().tn) return; // (already turning)
+      const start = performance.now();
+      network.sendInput({ jx, jy, ca: 1 });
+      const tick = () => {
+        turnFill(Math.min(1, (performance.now() - start) / (config.SHIP.TURN.HOLD * 1000)));
+        turnRaf = requestAnimationFrame(tick);
+      };
+      turnRaf = requestAnimationFrame(tick);
+    },
+    () => {
+      turnStop();
+      network.sendInput({ jx, jy, ca: 0 });
+    },
+  );
+
   // HELP!: calls the nearest idle crew over (the host has its own cooldown; this just shows it).
   const helpButton = document.getElementById('help');
   let helpUntil = 0;

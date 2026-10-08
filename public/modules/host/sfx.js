@@ -138,6 +138,12 @@ export function createSfx(state) {
       tone('square', 520, 300, 0.12, 0.08);
       noise('bandpass', 900, 0.3, big ? 0.45 : 0.3, 0, 2);
     },
+    // COME ABOUT: the airframe groans round, a rush of wind, and a deep bell as the bow swings through.
+    comeabout: () => {
+      tone('sawtooth', 150, 70, 1.3, 0.22);
+      noise('bandpass', 500, 1.2, 0.3, 0, 1.5);
+      tone('sine', 196, 190, 0.9, 0.3, 1.2);
+    },
     horn: () => {
       tone('sawtooth', 70, 65, 1.6, 0.35);
       tone('sawtooth', 104, 98, 1.6, 0.2);
@@ -169,7 +175,7 @@ export function createSfx(state) {
     if (state.vote && !last.vote) play('fanfare');
     if (state.boss && !last.boss) play('horn');
     const text = state.ev.warn > 0 ? state.ev.warnText : '';
-    if (text && text !== last.warn) play(/CHECKPOINT|HOME|BEACON|UPGRADE|DOWN!/.test(text) ? 'bell' : 'alarm');
+    if (text && text !== last.warn && !/COMING ABOUT/.test(text)) play(/CHECKPOINT|HOME|BEACON|UPGRADE|DOWN!/.test(text) ? 'bell' : 'alarm'); // (a turn has its own sound, comeabout)
     for (const p of Object.values(state.players)) {
       const prev = perPlayer.get(p.id) || {};
       if (p.swingT && p.swingT !== prev.swingT) play('swing');

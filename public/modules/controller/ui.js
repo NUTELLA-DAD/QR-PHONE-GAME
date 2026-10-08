@@ -203,7 +203,7 @@ export function createControllerUI({ network }) {
     // (one short line: the info bar never wraps; a warning from the host replaces the hint)
     const hint = next.locked
       ? {
-          helm: 'Stick: engines + trim. Levers: speed, and gasbag pump / vent.',
+          helm: 'Stick: engines + trim (right = right on the TV). HOLD the turn button to come about.',
           gun: 'Drag to aim, hold FIRE. Hold PRIME for a big shell.',
           lookout: 'Keep watch! TV arrows show what is coming.',
           hijack: 'Kick the pilot: tap any button 3 times, or hold Action.',
@@ -237,6 +237,9 @@ export function createControllerUI({ network }) {
     $('lever').style.display = helm ? 'block' : 'none';
     $('plever').style.display = helm ? 'block' : 'none';
     $('atk').style.display = helm ? 'none' : '';
+    // The helm: the ship may be facing left (she comes about on command), so say which way ahead is on the screen, and grey COME ABOUT while she turns.
+    $('lever').querySelector('.tag').textContent = next.fc < 0 ? '◀ AHEAD' : 'AHEAD ▶';
+    $('turn').classList.toggle('busy', !!next.tn);
     $('jump').style.display = next.locked ? 'none' : ''; // no hopping while at a station
   };
 

@@ -1609,7 +1609,23 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     return { x: Math.floor(x0 - 30), y: Math.floor(y0 - 30), w: Math.ceil(x1 - x0 + 60), h: Math.ceil(y1 - y0 + 60) };
   };
 
-  // Paint `draw` into a canvas covering the ship-space box r at scale s; returns { canvas, x, y, w, h } (w, h in ship units).
+  // Lettering on the ship (station names, "BOMB BAY" ...) is NOT painted into the bake: a ship that comes about is drawn mirrored, and painted letters would read backwards.
+  // While a layer is painted its text calls are only recorded (with the transform and style in force), and drawPic draws them live after the picture, where the renderer's
+  // upright-text wrapper (uprightText.js) turns them the right way round.
+  const recordText = (bc, list) => {
+    if (!bc.__recText) {
+      bc.__recText = true;
+      for (const kind of ['fillText', 'strokeText']) {
+        bc[kind] = (t, x, y, w) => {
+          if (!bc.__texts) return;
+          bc.__texts.push({ kind, t, x, y, w, m: bc.getTransform(), font: bc.font, align: bc.textAlign, base: bc.textBaseline, fill: bc.fillStyle, stroke: bc.strokeStyle, lw: bc.lineWidth, alpha: bc.globalAlpha });
+        };
+      }
+    }
+    bc.__texts = list;
+  };
+
+  // Paint `draw` into a canvas covering the ship-space box r at scale s; returns { canvas, x, y, w, h, texts } (w, h in ship units).
   const paintTo = (slot, r, s, draw) => {
     const cw = Math.max(1, Math.min(BAKE_MAX, Math.ceil(r.w * s)));
     const ch = Math.max(1, Math.min(BAKE_MAX, Math.ceil(r.h * s)));
@@ -1619,6 +1635,8 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     const bc = cv.getContext('2d');
     const saved = ctx;
     ctx = bc;
+    const texts = [];
+    recordText(bc, texts);
     try {
       bc.setTransform(s, 0, 0, s, -r.x * s, -r.y * s);
       bc.lineJoin = 'round';
@@ -1627,7 +1645,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     } finally {
       ctx = saved;
     }
-    return { canvas: cv, x: r.x, y: r.y, w: cw / s, h: ch / s, s, rects: sparseRects(cv) };
+    return { canvas: cv, x: r.x, y: r.y, w: cw / s, h: ch / s, s, rects: sparseRects(cv), texts };
   };
 
   // Which parts of a baked picture actually have something on them: a short list of source rectangles (canvas px) covering every
@@ -1691,6 +1709,21 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     try {
       if (!pic.rects) ctx.drawImage(pic.canvas, pic.x, pic.y, pic.w, pic.h);
       else for (const q of pic.rects) ctx.drawImage(pic.canvas, q.sx, q.sy, q.sw, q.sh, pic.x + q.sx / pic.s, pic.y + q.sy / pic.s, q.sw / pic.s, q.sh / pic.s);
+      for (const q of pic.texts || []) { // (the lettering recorded while the picture was painted: back into ship space, then drawn live)
+        const m = q.m;
+        ctx.save();
+        ctx.transform(m.a / pic.s, m.b / pic.s, m.c / pic.s, m.d / pic.s, (m.e + pic.x * pic.s) / pic.s, (m.f + pic.y * pic.s) / pic.s);
+        ctx.font = q.font;
+        ctx.textAlign = q.align;
+        ctx.textBaseline = q.base;
+        ctx.fillStyle = q.fill;
+        ctx.strokeStyle = q.stroke;
+        ctx.lineWidth = q.lw;
+        ctx.globalAlpha = q.alpha;
+        if (q.w === undefined) ctx[q.kind](q.t, q.x, q.y);
+        else ctx[q.kind](q.t, q.x, q.y, q.w);
+        ctx.restore();
+      }
     } catch (e) {
       bake.failed = true;
     }
@@ -1722,7 +1755,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     if (bake.failed || ART().OFF || typeof document === 'undefined') return false;
     try {
       const m = ctx.getTransform();
-      const k = Math.hypot(m.a, m.b) || 1; // screen pixels per ship unit right now (zoom x pixel ratio)
+      const k = Math.hypot(m.c, m.d) || 1; // screen pixels per ship unit right now (zoom x pixel ratio; the y axis, which a mirror or the squash of a COME ABOUT does not change)
       const key = signature();
       const ratio = (k * bakeSS()) / (bake.scale || 1);
       const zoomStep = Math.max(0.05, Number(ART().BAKE_ZOOM) || 0.25);

@@ -81,6 +81,13 @@ body.lefty #act{right:auto;left:0}
 body.lefty #atk{right:auto;left:calc(var(--a) + var(--gap))}
 body.lefty #jump{right:auto;left:calc(var(--a) + var(--gap) + (var(--k) - var(--j)) / 2)}
 body.lefty #grab{right:auto;left:0}
+/* COME ABOUT (the helm only, where GRAB sits): hold it and the ring fills; the host turns the ship round when it is full. Greyed while she is turning. */
+#turn{width:var(--g);height:var(--g);right:0;top:0;background:conic-gradient(#ffd23f var(--p,0%),#6b4a8c 0);font-size:clamp(9px,2.4vh,12px);padding:3px;gap:1px;display:none;touch-action:none}
+#turn .ic{font-size:1.5em}
+#turn .tx{line-height:1;max-width:90%}
+body.helm #turn{display:flex}
+body.lefty #turn{right:auto;left:0}
+#turn.busy{filter:grayscale(.8) brightness(.9);opacity:.6}
 /* Hold-to-swap on GRAB fills like a loading Action button; just after a grab it is greyed (the host ignores it for a moment). */
 #grab.loading{background:linear-gradient(to top,#ff8c1a var(--p,0%),#f2b134 var(--p,0%))}
 #grab.swap::after{content:'HOLD';font-size:10px;background:#2b2622;color:#ffd23f;border-radius:8px;padding:0 6px;line-height:1.3}
@@ -184,6 +191,7 @@ h1{font-size:28px}
       <div id="lever"><div class="fill"></div><div class="stop"></div><div class="tag">AHEAD</div><div class="rev">REVERSE</div><div class="handle"></div></div>
       <button class="btn" id="jump"><span class="ic">⤴️</span><span class="tx">JUMP</span></button>
       <button class="btn" id="atk"><span class="ic">✋</span><span class="tx">Shove</span></button>
+      <button class="btn" id="turn"><span class="ic">🔄</span><span class="tx">COME ABOUT</span></button>
       <button class="btn" id="grab" style="display:none"><span class="ic">🤲</span><span class="tx">Grab</span></button>
       <button class="btn idle" id="act"><span class="held" id="held"></span><span class="ic">👋</span><span class="tx">Hey!</span></button>
     </div>

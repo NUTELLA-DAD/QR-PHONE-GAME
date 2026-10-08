@@ -1,6 +1,7 @@
 import { config } from '../../config.js';
 import { mainShip, eachShip } from './ships.js';
-import { toWorldX, toWorldY } from './pose.js';
+import { toWorldX, toWorldY, aimToWorld, pivotOf } from './pose.js';
+import { installUprightText } from './uprightText.js';
 import { createShipArt } from './shipArt.js';
 import { createThreatArt } from './threatArt.js';
 import { createHookArt } from './hookArt.js';
@@ -77,6 +78,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const linkArt = createLinkArt({ ctx, state });
   const drawGunship = createGunshipArt({ ctx, state, ink, sprites });
   installLineBoil(ctx);
+  installUprightText(ctx); // (text drawn under a mirror - a ship that has come about - still reads the right way round)
   const filmLook = createFilmLook(ctx);
 
   const drawGuns = () => {
@@ -429,7 +431,8 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.setLineDash([26, 20]);
       ctx.beginPath();
       ctx.moveTo(x, y - 60);
-      ctx.lineTo(x + Math.cos(C.aim) * 2400, y - 60 + Math.sin(C.aim) * 2400);
+      const wa = aimToWorld(ship, C.aim); // (C.aim is in ship space, the line is drawn in the world)
+      ctx.lineTo(x + Math.cos(wa) * 2400, y - 60 + Math.sin(wa) * 2400);
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -680,6 +683,47 @@ export function createRenderer({ ctx, state, canvas }) {
   };
 
   // Screen overlay (hull/steam panel, warnings). Drawn on a fixed 1600x900 stage, not zoomed by the camera.
+  // The bow pennant (M.3): which way her bow points on the screen. While the helm holds COME ABOUT a bar fills under it, and during the turn it shows the progress; the
+  // pennant squashes through zero and comes out the other way round with the ship. (Drawn on the HUD stage, between the Hull label and the raiders count.)
+  const drawFacing = () => {
+    const f = ship.pose.f;
+    const g = state.turning || { hold: 0 };
+    const T = config.SHIP.TURN;
+    const turning = ship.pose.turn > 0;
+    const cx = 222;
+    const cy = 41;
+    const squash = turning ? Math.abs(Math.cos(Math.PI * ship.pose.turn)) : 1;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = LB.INK;
+    ctx.font = '700 11px ' + config.FONTS.TEXT;
+    ctx.textAlign = 'center';
+    ctx.fillText(turning ? 'COMING ABOUT' : 'AHEAD', 0, 4);
+    // the pennant: a little pole and a flag that points the way the bow points (flipping with the ship)
+    ctx.save();
+    ctx.translate(f * 44, 0);
+    ctx.scale(f * Math.max(0.02, squash), 1);
+    ink();
+    ctx.lineWidth = 2;
+    ctx.fillStyle = LB.STAMP;
+    ctx.beginPath();
+    ctx.moveTo(-9, -8);
+    ctx.lineTo(10, 0);
+    ctx.lineTo(-9, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    if (turning || g.hold > 0) {
+      const frac = turning ? ship.pose.turn : g.hold / T.HOLD;
+      ctx.fillStyle = '#3b2a1d';
+      ctx.fillRect(-40, 9, 80, 5);
+      ctx.fillStyle = turning ? '#ffd23f' : '#ff8c1a';
+      ctx.fillRect(-40, 9, 80 * Math.min(1, frac), 5);
+    }
+    ctx.restore();
+  };
+
   const drawHud = () => {
     book.paper(30, 28, 440, 184, { r: 12 });
     ink();
@@ -1874,8 +1918,18 @@ export function createRenderer({ ctx, state, canvas }) {
       const bts = ts + (opts && Number.isFinite(opts.bobPhase) ? opts.bobPhase : 0);
       const amp = Math.min(config.CAMERA.SHAKE_MAX, state.ship.shake * config.CAMERA.SHAKE_SCALE);
       const bob = Math.sin(bts * 1.1) * 5 + Math.sin(bts * 0.37 + 1) * 3;
-      ctx.translate(sh.pose.x + (amp ? Math.sin(ts * 61) * amp : 0), sh.pose.y + bob + (amp ? Math.cos(ts * 47) * amp * 0.6 : 0)); // (the ship's art lives in her own frame: it is drawn where her pose says she is)
-      ctx.scale(sh.pose.f, 1); // (facing: +1 bow to the right; the art is mirrored for -1 when COME ABOUT arrives)
+      // (the ship's art lives in her own frame: it is drawn where her pose says she is. Facing left it is mirrored about the middle of her bounds, and during a COME ABOUT
+      // it is squashed through zero width: |cos| of the turn's progress, so the picture is thin at the middle of the turn, exactly when the facing flips.)
+      const shipX = sh.pose.x + (amp ? Math.sin(ts * 61) * amp : 0);
+      const shipY = sh.pose.y + bob + (amp ? Math.cos(ts * 47) * amp * 0.6 : 0);
+      const squash = sh.pose.turn > 0 ? Math.max(0.02, Math.abs(Math.cos(Math.PI * sh.pose.turn))) : 1;
+      if (sh.pose.f === 1 && squash === 1) ctx.translate(shipX, shipY);
+      else {
+        const pv = pivotOf(sh);
+        ctx.translate(shipX + pv, shipY);
+        ctx.scale(sh.pose.f * squash, 1);
+        ctx.translate(-pv, 0);
+      }
       {
         const sway = Math.sin(bts * 0.8) * 0.005 + Math.sin(bts * 0.31) * 0.004;
         const [px, py] = config.SHIP.TILT_PIVOT || layout.tiltPivot;
@@ -2008,6 +2062,7 @@ export function createRenderer({ ctx, state, canvas }) {
       const scale = Math.min(width / config.W, height / config.H);
       ctx.setTransform(scale, 0, 0, scale, (width - config.W * scale) / 2, (height - config.H * scale) / 2);
       drawHud();
+      drawFacing();
       drawGoingDown(ctx, state, time / 1000, config.W, config.H); // GOING DOWN! alarm, meters, "SHE HOLDS!"
       drawLimpCard(ctx, state, config.W, config.H); // LIMPING HOME... (a spare gasbag was used)
       if (state.runEnd && (!state.wreck || state.wreck.t > 1.2)) {
