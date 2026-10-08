@@ -143,6 +143,7 @@ function gunReach(state, n) {
   if (!best && n === paraGun() && state.gunship && (state.paras.length || state.gunship.paraDue)) return 0.7;
   if (!best) return 2;
   if (best.target.kind === 'para' || best.target.kind === 'gport') return 0.6; // paratroopers and gunship gun ports are worth manning a gun for
+  if (best.target.kind === 'rival') return 0.6; // Versus: the other airship in range is what the guns are for (aim.js targets())
   return best.target.kind === 'turret' ? 0.8 : 1;
 }
 

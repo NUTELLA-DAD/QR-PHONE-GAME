@@ -90,6 +90,7 @@ function loadRecord() {
   }
 }
 function saveRecord(r) {
+  if (config.PVP.ENABLED) return; // (a Versus game never writes the co-op saves)
   try {
     localStorage.setItem('airshipRecord', JSON.stringify(r));
   } catch {
@@ -1913,13 +1914,14 @@ export function createSimulation() {
         state.enemy.dead = Math.max(state.enemy.dead, 6);
         goingDown.newMission(); // (the last stand is back for the new mission)
       }
-      updateTempo(dt);
+      if (config.PVP.ENABLED) state.tempo.rate = 0; // (Versus: no pacing director and no AI enemies, only the other ship)
+      else updateTempo(dt);
       if (goingDown.active()) state.tempo.rate = Math.min(state.tempo.rate, config.GOING_DOWN.ENEMY_RATE); // (few new enemies while she falls)
-      squadrons.update(dt);
+      if (!config.PVP.ENABLED) squadrons.update(dt);
       escort.update(dt);
       hijack.update(dt);
-      specials.update(dt);
-      gunship.update(dt);
+      if (!config.PVP.ENABLED) specials.update(dt);
+      if (!config.PVP.ENABLED) gunship.update(dt);
       course.update(dt);
       weather.update(dt);
       env.update(dt);
@@ -2006,6 +2008,9 @@ export function createSimulation() {
     getHelm,
     impact, // (a hit on the ship at ship coordinates; the gasbag gate in tools/buildsim.mjs shoots her with it)
     gasHoleAt,
+    // What the PvP bridge may do to this ship from outside (pvp/bridge.js; ship coordinates, like impact): is a point on the ship,
+    // hit it, open a gasbag hole, and where a ship point is in the world (world x along the course, world y downward: the same frame as shells and the map).
+    external: { hitsShip, impact, gasHoleAt, worldPos: (x, y) => ({ x: x + (state.course ? state.course.dist : 0), y: y - state.ship.alt }) },
     interaction,
     modules,
     startDock,

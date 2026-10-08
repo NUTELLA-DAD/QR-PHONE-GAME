@@ -32,6 +32,9 @@ export function targets(state) {
     });
     list.push({ kind: 'gunship', obj: gs, r: 200, at: () => ({ x: gs.bp.cx + gs.dx, y: (gs.bp.hullTop + gs.bp.hullBot) / 2 - 40 + gs.dy - state.ship.alt }) });
   }
+  // Versus (pvp/bridge.js): the rival airship's middle. rival.mid is in our ship coordinates (y downward, incl. our altitude); vx / vy = how her middle moves in our view.
+  const rv = state.rival;
+  if (rv && !rv.down) list.push({ kind: 'rival', obj: rv, r: 220, at: (t) => ({ x: rv.mid.x + rv.vx * t, y: rv.mid.y - state.ship.alt + rv.vy * t }) });
   for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + m.vx * t, y: m.y }) });
   for (const b of state.bats || []) if (b.delay <= 0 && !b.latched) list.push({ kind: 'bat', obj: b, r: 26, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t }) });
   for (const p of state.strafers || []) if (p !== state.stuntPlane) list.push({ kind: 'strafer', obj: p, r: 40, at: (t) => ({ x: p.x + p.vx * t, y: p.y + p.vy * t }) });
@@ -72,7 +75,7 @@ export function solution(state, gun, target) {
 
 // The most useful target this gun can hit right now (mines, turrets, cargo, then fighter).
 export function bestTarget(state, gun) {
-  const order = { cable: -1, bomb: 0, rocket: 1, saw: 1.5, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10 };
+  const order = { cable: -1, bomb: 0, rocket: 1, saw: 1.5, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rival: 9.2 };
   let best = null;
   for (const t of targets(state)) {
     const angle = solution(state, gun, t);
