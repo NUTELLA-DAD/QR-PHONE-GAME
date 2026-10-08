@@ -31,7 +31,11 @@ import { createBalance } from './balance.js';
 import { createSails, windSpeed } from './sails.js';
 import { createFire } from './fire.js';
 import { armourOn } from './fireModel.js';
+import { createEngines } from './engines.js';
+import { createForces, hitForce } from './forces.js';
 import { installBags, syncBags, refillBags, stepBags, watchBags } from './gasBags.js';
+import { createMainShip, mainShip } from './ships.js';
+import { toWorld, toShipX } from './pose.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
@@ -92,6 +96,7 @@ function loadRecord() {
   }
 }
 function saveRecord(r) {
+  if (config.PVP.ENABLED) return; // (a Versus game never writes the co-op saves)
   try {
     localStorage.setItem('airshipRecord', JSON.stringify(r));
   } catch {
@@ -139,6 +144,7 @@ export function createSimulation() {
       Object.entries(SHIP_LAYOUT.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, reach: 1 + config.NEST.TIER_BONUS * nestTier((SHIP_LAYOUT.stations.find((s) => s.n === name) || {}).p) }]),
     ),
   };
+  state.ships = [createMainShip(state)]; // (B0: the ships in this sky; ships[0] wraps state.ship, SHIP_LAYOUT and course.dist by reference: ships.js, pose.js)
   installBags(state); // the gasbags side by side: state.bags, and state.ship.gas as their mean (gasBags.js)
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -165,10 +171,10 @@ export function createSimulation() {
   const rebuildPickups = () => { PICKUPS.length = 0; PICKUPS.push(...SHIP_LAYOUT.racks, ...SHIP_LAYOUT.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))); };
   rebuildPickups();
   onLayoutChange(rebuildPickups);
-  const LOCKABLE_KINDS = ['helm', 'lookout', 'bombBay', 'deflector', 'coil', 'searchlight', 'escort', 'gun'];
+  const LOCKABLE_KINDS = ['helm', 'lookout', 'bombBay', 'deflector', 'coil', 'searchlight', 'escort', 'gun', 'swivel'];
   const LOCKABLE = (name) => LOCKABLE_KINDS.includes(kindOf(name)) || isSearchlight(name) || isEscortStation(name) || !!state.GUNS[name];
   // What the phone calls each kind of station (its button set and label).
-  const PHONE_KIND = { helm: 'helm', gun: 'gun', boiler: 'boiler', lookout: 'lookout', bombBay: 'bombbay', deflector: 'shield', coil: 'coil', searchlight: 'light', escort: 'escort' };
+  const PHONE_KIND = { helm: 'helm', gun: 'gun', boiler: 'boiler', lookout: 'lookout', bombBay: 'bombbay', deflector: 'shield', coil: 'coil', searchlight: 'light', escort: 'escort', swivel: 'swivel' };
 
   // Sunken Sea: crew on the lower decks wade slowly while the ship is flooded.
   const wadeMul = (p) => (p.d != null && PLATFORMS[p.d] && PLATFORMS[p.d].y >= SHIP_LAYOUT.lowDeckY && state.sea && state.sea.flood > 0 ? 1 - state.sea.flood * config.ENVIRONMENTS.sea.FLOOD.SLOW_CREW : 1);
@@ -406,7 +412,7 @@ export function createSimulation() {
     state.wreck = null;
     state.ship.down = 0;
     UPGRADES.find((u) => u.id === 'spare-parts').apply({ state, modules });
-    Object.assign(state.ship, { hull: config.LIMP.HULL, speed: 0.3, shake: 0, press: 65, fuel: Math.max(state.ship.fuel, config.BOILER.START_FUEL), gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
+    Object.assign(state.ship, { hull: config.LIMP.HULL, speed: 0.3, shake: 0, press: 65, fuel: Math.max(state.ship.fuel, config.BOILER.START_FUEL), gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 }); forces.reset();
     Object.assign(state.gasValve, { input: 0, auto: false });
     state.ventOpen.fill(false);
     state.gasValveOpen.fill(true); // (every gas valve open again)
@@ -451,7 +457,7 @@ export function createSimulation() {
   // Start the whole game over, moored at the mast (players stay connected).
   function restartGame() {
     restoreData(config, pristine);
-    Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
+    Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 }); forces.reset();
     Object.assign(state.gasValve, { input: 0, auto: false });
     state.lastAlt = 0;
     state.wreck = null;
@@ -628,7 +634,7 @@ export function createSimulation() {
     if (sp) {
       sp.t -= dt;
       sp.bob = (sp.bob || 0) + dt;
-      const wx = sp.mx - state.course.dist;
+      const wx = toShipX(mainShip(state), sp.mx);
       const wy = sp.my + Math.sin(sp.bob * 1.3) * 30;
       if (Math.hypot(wx - SHIP_LAYOUT.midPoint.x, wy - (SHIP_LAYOUT.midPoint.y - state.ship.alt)) < PC.SUPPLY_REACH) {
         state.ship.hull = Math.min(100, state.ship.hull + PC.SUPPLY_HULL);
@@ -706,6 +712,7 @@ export function createSimulation() {
     }
     state.ship.shake = Math.max(state.ship.shake, Math.min(0.6, 0.22 * power));
     air.shove(power, x);
+    hitForce(state, x, y, power); // (a burst against the hull kicks her about the place it struck: forces.js)
     if (power >= 1.5) {
       pop(state, x, y - 40 - state.ship.alt, 'bigHit', '#ff7b00', Math.min(1.6, 0.6 + power * 0.3));
       // Every phone feels the big ones.
@@ -755,6 +762,8 @@ export function createSimulation() {
   const prime = createPrime({ state, phoneFx }); // primed shells: hold PRIME on a gun to charge the loaded shell (prime.js)
   const links = createLinks({ state, modules, shipPuff }); // linked stations: gun + loader, helm + lookout, boiler surge (links.js)
   const sails = createSails({ state, modules }); // wind and sails: the extra speed of raised sails, gust tears (sails.js)
+  const engines = createEngines({ state, modules }); // pointed engines: the thrust of each, swivel mounts (engines.js)
+  const forces = createForces(state); // forces at places: engines, sails, gusts, hits ... twist her about her centre of mass (forces.js)
   const balance = createBalance(state); // the seesaw: live centre of mass against the bag's lift (balance.js)
   const fireSys = createFire({ state, shipPuff }); // fire that cares where things are: flammability, spreading, the coal blaze (fire.js, fireModel.js)
   const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt }); // GOING DOWN! last stand + the ice locker (goingDown.js)
@@ -1456,6 +1465,8 @@ export function createSimulation() {
             state.shield.ang += Math.max(-step, Math.min(step, d));
             state.shield.ang = Math.atan2(Math.sin(state.shield.ang), Math.cos(state.shield.ang));
           }
+        } else if (kindOf(player.lock) === 'swivel') {
+          engines.turn(player, dt); // the stick turns the engine (engines.js)
         } else if (kindOf(player.lock) === 'bombBay') {
           // Bombardier: FIRE drops a bomb through the belly doors.
           const bay = state.bombBay;
@@ -1650,7 +1661,7 @@ export function createSimulation() {
       let hold = false;
       if (player.lock) {
         const working = modules.works(state, player.lock);
-        label = !working && kind !== 'helm' && kind !== 'lookout' && kind !== 'light' && kind !== 'escort' ? 'BROKEN' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'escort' ? ((escortFor(state, player.lock) || {}).flying ? 'Auto guns' : 'Wait...') : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : kind === 'light' ? 'FOCUS!' : 'Honk!';
+        label = !working && kind !== 'helm' && kind !== 'lookout' && kind !== 'light' && kind !== 'escort' && kind !== 'swivel' ? 'BROKEN' : kind === 'swivel' ? 'Swivel engine' : kind === 'gun' ? 'FIRE!' : kind === 'bombbay' ? 'DROP!' : kind === 'shield' ? 'Swing!' : kind === 'escort' ? ((escortFor(state, player.lock) || {}).flying ? 'Auto guns' : 'Wait...') : kind === 'coil' ? (state.coil.cd > 0 ? 'Cooling...' : 'CHARGE!') : kind === 'boiler' ? 'SHOVEL!' : kind === 'lookout' ? 'Ahoy!' : kind === 'light' ? 'FOCUS!' : 'Honk!';
         hold = kind === 'gun' || kind === 'bombbay' || kind === 'coil' || kind === 'light';
       } else if (player.act) {
         label = player.act.label;
@@ -1670,6 +1681,7 @@ export function createSimulation() {
       if (kind === 'helm' && player.lock && !status) status = course.helmHint();
       if (isEscortStation(stationName) && !status) status = escort.status(stationName);
       if (kind === 'light' && player.lock && !status) status = searchlights.status(stationName);
+      if (kind === 'swivel' && player.lock && !status) status = engines.status(stationName);
       const feel = state.buoyancy > 0 ? 'RISING' : state.buoyancy < 0 ? 'FALLING' : 'holding';
       const leakNow = modules.leaks()[0];
       const leakText = leakNow ? (leakNow.pipe && leakNow.pipe.open ? `${leakNow.m.name} pipe leaking - close the valve or repair` : `${leakNow.m.name} leaking steam - repair it`) : '';
@@ -1789,11 +1801,14 @@ export function createSimulation() {
       state.ev.warnText = 'THE BOILER BLEW! A PIPE BURST!';
     }
 
+    engines.update(dt); // (pointed engines: the speed they allow, the lift they make, engines.js)
     balance.update(dt);
+    forces.update(dt); // (everything that pushed her at a place this frame twists her: forces.js)
     const wind = windSpeed(state); // (the wind alone: what a ship with no engines, no steam or nobody steering makes)
-    const maxSpeed = rig.powered ? clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state) * (1 - state.balance.slow) : wind * (1 - state.balance.slow); // (a tail-heavy ship drags her tail)
-    if (state.ship.speed > maxSpeed) state.ship.speed = rig.powered ? state.ship.speed + (maxSpeed - state.ship.speed) * Math.min(1, dt * 2) : maxSpeed; // (nothing pushes a ship with no engines or no steam faster than the wind, whatever the lever says)
-    const maxReverse = -maxSpeed * config.SHIP.REVERSE;
+    const driven = rig.powered && state.thrust.drive; // (engines all pointing up, down or back do not push her ahead: the wind does)
+    const maxSpeed = driven ? clamp(state.ship.press / 50, 0.05, 1) * state.thrust.factor * (1 - state.balance.slow) : wind * (1 - state.balance.slow); // (a tail-heavy ship drags her tail)
+    if (state.ship.speed > maxSpeed) state.ship.speed = driven ? state.ship.speed + (maxSpeed - state.ship.speed) * Math.min(1, dt * 2) : maxSpeed; // (nothing pushes a ship with no engines or no steam faster than the wind, whatever the lever says)
+    const maxReverse = driven && state.thrust.back > 0 ? -Math.max(maxSpeed * config.SHIP.REVERSE, clamp(state.ship.press / 50, 0.05, 1) * state.thrust.back * (1 - state.balance.slow)) : -maxSpeed * config.SHIP.REVERSE; // (engines pointing back give her real reverse)
     if (state.ship.speed < maxReverse) state.ship.speed += (maxReverse - state.ship.speed) * Math.min(1, dt * 2);
 
     const bay = state.bombBay;
@@ -1867,7 +1882,7 @@ export function createSimulation() {
     state.buoyancy = effGas > G.NEUTRAL + 5 ? 1 : effGas < G.NEUTRAL - 5 ? -1 : 0;
     state.sinking = state.buoyancy < 0;
     if (flying) {
-      state.ship.vy = (state.ship.vy || 0) + (lift + trim + state.balance.push - (state.ship.vy || 0) * G.DRAG) * dt;
+      state.ship.vy = (state.ship.vy || 0) + (lift + trim + state.balance.push + state.forces.vyAcc - (state.ship.vy || 0) * G.DRAG) * dt; // (vyAcc: lift engines pointing up / dive engines down, forces.js)
       const bounds = altBounds(state);
       const hi = Math.max(bounds.hi, state.ship.alt);
       state.ship.alt += state.ship.vy * dt;
@@ -1896,7 +1911,7 @@ export function createSimulation() {
     const climbRate = dt > 0 && state.lastAlt != null ? (state.ship.alt - state.lastAlt) / dt : 0;
     state.lastAlt = state.ship.alt;
     // (Speeding up lifts the nose a touch, braking dips it: she has weight.)
-    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED - (state.ship.accelX || 0) * SH.PITCH_PER_ACCEL, -SH.TILT_MAX, SH.TILT_MAX) + goingDown.pitch() + state.balance.restPitch; // (restPitch: the trim of an unbalanced ship, balance.js)
+    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED - (state.ship.accelX || 0) * SH.PITCH_PER_ACCEL, -SH.TILT_MAX, SH.TILT_MAX) + goingDown.pitch() + state.balance.restPitch + state.forces.theta; // (restPitch: the trim of an unbalanced ship, balance.js; theta: what the forces on her twist her by, forces.js)
     state.ship.pitch = (state.ship.pitch || 0) + (wantPitch - (state.ship.pitch || 0)) * Math.min(1, dt * SH.TILT_SMOOTH);
 
     // Breaking apart: pieces fall, explosions go off, then the whole game starts over.
@@ -1929,13 +1944,14 @@ export function createSimulation() {
         state.enemy.dead = Math.max(state.enemy.dead, 6);
         goingDown.newMission(); // (the last stand is back for the new mission)
       }
-      updateTempo(dt);
+      if (config.PVP.ENABLED) state.tempo.rate = 0; // (Versus: no pacing director and no AI enemies, only the other ship)
+      else updateTempo(dt);
       if (goingDown.active()) state.tempo.rate = Math.min(state.tempo.rate, config.GOING_DOWN.ENEMY_RATE); // (few new enemies while she falls)
-      squadrons.update(dt);
+      if (!config.PVP.ENABLED) squadrons.update(dt);
       escort.update(dt);
       hijack.update(dt);
-      specials.update(dt);
-      gunship.update(dt);
+      if (!config.PVP.ENABLED) specials.update(dt);
+      if (!config.PVP.ENABLED) gunship.update(dt);
       course.update(dt);
       weather.update(dt);
       env.update(dt);
@@ -2016,6 +2032,11 @@ export function createSimulation() {
     impact, // (a hit on the ship at ship coordinates; the gasbag gate in tools/buildsim.mjs shoots her with it)
     fire: fireSys, // (fire.js: ignite() / update(); the --check-fire gate lights fires with it)
     gasHoleAt,
+    // What the PvP bridge may do to this ship from outside (pvp/bridge.js; ship coordinates, like impact): is a point on the ship,
+    // hit it, open a gasbag hole, and where a ship point is in the world (world x along the course, world y downward: the same frame as shells and the map).
+    external: { hitsShip, impact, gasHoleAt, worldPos: (x, y) => toWorld(mainShip(state), x, y) },
+    engines, // (pointed engines, swivel turning: engines.js)
+    forces, // (forces at places: forces.js)
     interaction,
     modules,
     startDock,

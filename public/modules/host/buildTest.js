@@ -10,10 +10,10 @@
 // Same skeleton as styleTest.js. Load a build with ?build=classic | multi | [JSON parts list].
 import { config } from '../../config.js';
 import { SHIP_LAYOUT, applyBuild } from '../../shipLayout.js';
-import { BUILDS, DECK_ROWS, rowOf, buildLayout } from './shipBuild.js';
+import { BUILDS, DECK_ROWS, rowOf, buildLayout, ENGINE_DIRS, dirName, normAngle } from './shipBuild.js';
 import { validate, makePlanner, judgeBotRuns } from './buildCheck.js';
-import { PALETTE, slotsFor, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, pickSlot, whyNot, thingAt, removeAt, emptyBuild, minimalBuild, snapX, rowAtY, summarize, addArmour } from './buildSlots.js';
-import { blueprintView, drawBlueprint } from './blueprintArt.js';
+import { PALETTE, slotsFor, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, pickSlot, whyNot, thingAt, removeAt, setEngineDir, setEngineSwivel, emptyBuild, minimalBuild, snapX, rowAtY, summarize, addArmour } from './buildSlots.js';
+import { blueprintView, drawBlueprint, engineArrow } from './blueprintArt.js';
 import { createPartPictures } from './partArt.js';
 import { createSprites } from './sprites.js';
 import { createRunStats } from './buildStats.js';
@@ -111,7 +111,7 @@ function removePart(i) {
   const name = p.n || p.name;
   edit(parts.filter((o, j) => j !== i && !(name && (o.to === name || (o.part === 'escortDock' && o.n === name)))));
 }
-const TOOLS = [['tDraw', 'draw'], ['tBag', 'bag'], ['tLadder', 'ladder'], ['tArmour', 'armour'], ['tErase', 'erase'], ['tDelete', 'delete'], ['tPlace', 'place']];
+const TOOLS = [['tDraw', 'draw'], ['tBag', 'bag'], ['tLadder', 'ladder'], ['tArmour', 'armour'], ['tErase', 'erase'], ['tDelete', 'delete'], ['tPlace', 'place'], ['tAim', 'aim']];
 const toolButtons = () => { for (const [id, name] of TOOLS) $(id).className = tool === name ? 'on' : ''; };
 // The pencil's OUTDOOR / COVERED toggle (S.5g): '' = the row's own kind (the top deck is open air, the hull rows are covered), 'outdoor' = an open-air walkway with rails, 'covered' = inside the hull.
 let kind = '';
@@ -124,6 +124,7 @@ const TOOL_HINT = {
   ladder: 'Ladder: drag straight down from one deck to another. Tick "slide pole" for a one-way pole (down only). Refused if a deck is missing at either end or something is in the way.',
   erase: 'Eraser: drag along a deck (or across the gasbag). What stood on that stretch goes with it (listed below the blueprint); Undo brings it back. A click on a thing deletes just that thing.',
   delete: 'Delete: click any one placed thing - a ladder, pole, station, gun, rack, vent, sandbag... (or right-click it anywhere). Undo brings it back.',
+  aim: 'Aim engine: click an engine, then pick an arrow on the left (or drag the brass dot at the tip of its red thrust arrow, in any tool). Forward is speed, up lifts her (and tips the end it sits at), down dives.',
 };
 function setTool(t) {
   tool = t;
@@ -168,6 +169,7 @@ function refresh() {
   for (const t of PALETTE) { const all = slotsFor(t.id, parts, { legalOnly: false }); info[t.id] = { all, legal: all.filter((s) => s.ok) }; }
   showPicked();
   drawParts();
+  drawEnginePanel();
   drawReport();
   drawGauges();
   if (!result.ok) $('hint').textContent = 'This build cannot fly yet (see the report): ' + (flown ? 'the ship shown is the last one that could. ' : 'nothing is flying until it can. ') + 'Keep building, or Undo.';
@@ -197,10 +199,57 @@ function drawPalette() {
 const sprites = createSprites();
 const pics = createPartPictures({ sprites });
 sprites.load().then(() => { pics.refresh(); drawTray(); }).catch(() => {});
-const TRAY = [['gasbag', 'Gasbag'], ['gasValve', 'Gas valve'], ['helm', 'Helm'], ['boiler', 'Boiler'], ['coal', 'Coal bunker'], ['ammo', 'Ammo hold'], ['engine', 'Engine pod'], ['gun', 'Gun'], ['searchlight', 'Searchlight'], ['lookout', 'Lookout'],
+const TRAY = [['gasbag', 'Gasbag'], ['gasValve', 'Gas valve'], ['helm', 'Helm'], ['boiler', 'Boiler'], ['coal', 'Coal bunker'], ['ammo', 'Ammo hold'], ['engine', 'Engine pod'], ['engineSwivel', 'Swivel engine'], ['gun', 'Gun'], ['searchlight', 'Searchlight'], ['lookout', 'Lookout'],
   ['medbay', 'Medbay'], ['bombBay', 'Bomb bay'], ['lift', 'Lift'], ['boarding', 'Boarding point'], ['rack_hammer', 'Hammer rack'], ['rack_sword', 'Sword rack'], ['rack_hookshot', 'Hookshot rack'],
   ['rack_ice', 'Ice locker'], ['extinguisher', 'Extinguisher'], ['armour', 'Armour plate'], ['vent', 'Steam vent'], ['sail', 'Mast and sail'], ['ladder', 'Ladder'], ['pole', 'Slide pole'], ['ballast', 'Sandbag'], ['ballast_hang', 'Hanging sandbag']];
 const tray = { id: null, moved: false, slots: [], target: null, ptr: null, why: '', img: null, x0: 0, y0: 0 }; // the tile being dragged (moved = it has left the tile)
+// ---- pointed engines (S.5h) -------------------------------------------------------------------------------------------
+// engDir is the way the NEXT engine will point (rotate it with the wheel or R while dragging an engine, or the arrows on the left); selEngine is the engine whose arrow the page is editing.
+// Every engine on the blueprint has a red thrust arrow and a brass dot at its tip: drag the dot to turn that engine (snaps to 15 degrees); Aim engine + click an engine, then pick an arrow.
+const ARROWS = ['→', '↗', '↑', '↖', '←', '↙', '↓', '↘']; // (ENGINE_DIRS in order: forward, up-forward, up, up-back, back, down-back, down, down-forward)
+const isEngineTile = (id) => id === 'engine' || id === 'engineSwivel';
+let engDir = 0;
+let selEngine = null; // the name of the selected engine
+let aim = null; // a drag of an engine's handle: { name, dir }
+const engineNamed = (name) => parts.find((p) => p.part === 'engine' && p.name === name);
+const stepDir = (dir, n) => normAngle(dir + (n * Math.PI) / 4);
+function drawEnginePanel() {
+  const mk = (el, cur, pick) => {
+    el.textContent = '';
+    ENGINE_DIRS.forEach((d, i) => {
+      const b = document.createElement('button');
+      b.textContent = ARROWS[i];
+      b.title = dirName(d);
+      b.className = Math.abs(normAngle(cur) - normAngle(d)) < 0.02 ? 'cur' : '';
+      b.onclick = () => pick(d);
+      el.appendChild(b);
+    });
+  };
+  mk($('engArrows'), engDir, (d) => { engDir = d; drawTray(); drawEnginePanel(); });
+  const e = selEngine && engineNamed(selEngine);
+  if (selEngine && !e) selEngine = null;
+  $('engSel').style.display = e ? 'block' : 'none';
+  if (!e) return;
+  $('engName').textContent = e.name;
+  $('engSay').textContent = 'points ' + dirName(e.dir || 0);
+  mk($('engSelArrows'), e.dir || 0, (d) => applyEdit(setEngineDir(parts, e.name, d)));
+  $('engSwivel').checked = !!e.swivel;
+}
+function rotateEngine(n) { // wheel / R / the rotate buttons: the dragged engine, else the selected one, else the next one
+  if (tray.id && isEngineTile(tray.id)) { engDir = stepDir(engDir, n); regrabGhost(); drawEnginePanel(); return; }
+  const e = selEngine && engineNamed(selEngine);
+  if (e) { applyEdit(setEngineDir(parts, e.name, stepDir(e.dir || 0, n))); return; }
+  engDir = stepDir(engDir, n);
+  drawTray();
+  drawEnginePanel();
+}
+function regrabGhost() { // the picture on the ghost and on the paper follows the new direction
+  if (!tray.id || !tray.moved) return;
+  tray.img = pics.get(tray.id, 64, { dir: engDir });
+  const g = $('ghost').getContext('2d');
+  g.clearRect(0, 0, 136, 136);
+  g.drawImage(pics.get(tray.id, 68, { dir: engDir }), 0, 0, 136, 136);
+}
 const dropReach = () => (bv ? (config.BUILD_EDIT.DROP_SNAP * bv.k) / bv.s : 200); // a snap distance in ship px
 function drawTray() {
   const el = $('tray');
@@ -215,7 +264,7 @@ function drawTray() {
     tile.title = (def ? def.hint : name) + (n ? '' : ' (no room right now: drag it to see why)');
     const c = document.createElement('canvas');
     c.width = c.height = Math.round(60 * dpr);
-    c.getContext('2d').drawImage(pics.get(id, 60), 0, 0, c.width, c.height);
+    c.getContext('2d').drawImage(pics.get(id, 60, isEngineTile(id) ? { dir: engDir } : {}), 0, 0, c.width, c.height);
     const b = document.createElement('b'), i = document.createElement('i');
     b.textContent = name;
     i.textContent = n ? `${n} spot${n === 1 ? '' : 's'}` : 'no room';
@@ -237,10 +286,7 @@ function trayMove(e) {
     if (Math.hypot(e.clientX - tray.x0, e.clientY - tray.y0) < 6) return; // (still a click)
     tray.moved = true;
     tray.slots = info[tray.id] ? info[tray.id].legal : [];
-    tray.img = pics.get(tray.id, 64);
-    const g = $('ghost').getContext('2d');
-    g.clearRect(0, 0, 136, 136);
-    g.drawImage(pics.get(tray.id, 68), 0, 0, 136, 136);
+    regrabGhost();
   }
   const gh = $('ghost'), r = bp.getBoundingClientRect();
   const inside = !!bv && editing && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
@@ -269,16 +315,22 @@ function trayUp(e) {
   trayEnd();
   if (!moved) { pick(id); return; } // a click on a tile: the old way (pick it, then a brass pin)
   if (!ptr) { note('Cancelled: a part is placed by dropping it on the blueprint.', false); return; }
-  const r = placePart(parts, id, ptr.x, ptr.y, { maxDist: dropReach() });
+  const r = placePart(parts, id, ptr.x, ptr.y, { maxDist: dropReach(), dir: isEngineTile(id) ? engDir : undefined });
   if (!r.ok) { note('Cannot drop it there: ' + r.hint, true); return; }
   applyEdit(r);
+  if (isEngineTile(id)) selectNewEngine();
+}
+function selectNewEngine() { // (a just-placed engine is the selected one: its arrows show on the left)
+  const e = [...parts].reverse().find((p) => p.part === 'engine');
+  selEngine = e ? e.name : null;
+  drawEnginePanel();
 }
 
 const label = (p) => {
   switch (p.part) {
     case 'station': return `${p.n} (${p.kind})`;
     case 'gun': case 'searchlight': return `${p.part}: ${p.n}`;
-    case 'engine': return `engine: ${p.name}`;
+    case 'engine': return `engine: ${p.name} (${dirName(p.dir || 0)}${p.swivel ? ', swivel' : ''})`;
     case 'deck': return `deck: ${p.name} ${p.x0}-${p.x1} (${p.outside ? 'outdoor' : 'covered'})`;
     case 'armour': return `armour plate (${p.p} ${p.x0}-${p.x1})`;
     case 'room': return `room: ${p.name}`;
@@ -563,7 +615,24 @@ bp.addEventListener('contextmenu', (e) => { // right-click anywhere on a thing d
 });
 bp.addEventListener('pointerdown', (e) => {
   const w = bpPoint(e);
-  if (!w || tool === 'place' || e.button === 2) return;
+  if (!w || e.button === 2) return;
+  const handle = engineHandleAt(e);
+  if (handle) { // the brass dot at the tip of an engine's thrust arrow: drag it round to aim the engine
+    e.preventDefault();
+    bp.setPointerCapture(e.pointerId);
+    aim = { name: handle.name, dir: handle.dir || 0 };
+    selEngine = handle.name;
+    drawEnginePanel();
+    return;
+  }
+  if (tool === 'aim') { // Aim engine: click an engine to pick its arrow on the left
+    const t = thingAt(parts, w.x, w.y, slop()), o = t && parts[t.index];
+    selEngine = o && o.part === 'engine' ? o.name : null;
+    drawEnginePanel();
+    note(selEngine ? `${selEngine}: pick an arrow on the left (or drag the brass dot).` : 'Click an engine (the E under a deck) or drag the brass dot on its arrow.', false);
+    return;
+  }
+  if (tool === 'place') return;
   e.preventDefault();
   if (tool === 'delete') { applyEdit(removeAt(parts, w.x, w.y, slop())); return; }
   const r = rowFor(w);
@@ -576,9 +645,26 @@ bp.addEventListener('pointerdown', (e) => {
   drag = { tool, row: r.row, a: x, b: x, start: w };
   note('', false);
 });
+// The engine whose aim handle (the brass dot on its thrust arrow) is under the pointer, or null.
+const paperPoint = (e) => { const r = bp.getBoundingClientRect(); return { x: ((e.clientX - r.left) * bp.width) / r.width, y: ((e.clientY - r.top) * bp.height) / r.height }; };
+function engineHandleAt(e) {
+  if (!bv || !bpLayout) return null;
+  const pt = paperPoint(e);
+  for (const en of bpLayout.engines) {
+    const q = bpLayout.platforms[en.d], tip = q && engineArrow(bv, en, q);
+    if (tip && Math.hypot(tip.x - pt.x, tip.y - pt.y) < 11 * bv.k) return en;
+  }
+  return null;
+}
 bp.addEventListener('pointermove', (e) => {
   const w = bpPoint(e);
   if (!w) return;
+  if (aim) { // turning an engine: it follows the pointer round its disc, in 15 degree steps
+    const en = bpLayout.engines.find((q) => q.name === aim.name), q = en && bpLayout.platforms[en.d], pt = paperPoint(e);
+    if (q) aim.dir = normAngle(Math.round(Math.atan2(pt.y - (bv.Y(q.y) + 14 * bv.k), pt.x - bv.X(en.x)) / (Math.PI / 12)) * (Math.PI / 12));
+    return;
+  }
+  if (!drag && tool !== 'place' && engineHandleAt(e)) { bp.style.cursor = 'grab'; return; }
   if (tool === 'place') {
     hover = null;
     if (picked && bv) {
@@ -608,7 +694,8 @@ bp.addEventListener('pointermove', (e) => {
   bpHover = r.row ? { row: r.row, cursor: tool === 'ladder' ? null : { x: snapX(parts, w.x), y: r.row === 'gasbag' ? config.BUILD_EDIT.BAG_CY : DECK_ROWS[r.row] } } : { why: r.why, cursor: null };
 });
 bp.addEventListener('pointerup', (e) => {
-  if (tool === 'place') { if (hover) { edit(hover.apply(parts)); note('', false); } return; }
+  if (aim) { const a = aim; aim = null; applyEdit(setEngineDir(parts, a.name, a.dir)); return; }
+  if (tool === 'place') { if (hover) { edit(hover.apply(parts, { dir: engDir })); note('', false); if (picked && isEngineTile(picked)) selectNewEngine(); } return; }
   if (!drag) return;
   const d = drag;
   drag = null;
@@ -624,7 +711,7 @@ bp.addEventListener('pointerup', (e) => {
   }
   applyEdit(d.tool === 'draw' ? drawDeck(parts, d.row, x0, x1, { covered: coveredOpt() }) : d.tool === 'bag' ? drawBag(parts, x0, x1) : d.tool === 'armour' ? addArmour(parts, d.row, x0, x1) : erase(parts, d.row, x0, x1));
 });
-bp.addEventListener('pointercancel', () => { drag = null; });
+bp.addEventListener('pointercancel', () => { drag = null; aim = null; });
 bp.addEventListener('pointerleave', () => { bpHover = null; if (tool === 'place') hover = null; });
 function drawBp() {
   bp.style.display = editing ? 'block' : 'none';
@@ -634,7 +721,7 @@ function drawBp() {
   bv = blueprintView(bpLayout, bp.width, bp.height, Math.min(2, devicePixelRatio || 1));
   const ghost = drag ? ghostOf(drag) : null;
   const status = result && !result.ok ? { ok: false, text: 'CANNOT FLY yet - needs: ' + (result.needs.length ? result.needs.slice(0, 4).join(', ') + (result.needs.length > 4 ? ' ...' : '') : result.fails[0]) } : null;
-  drawBlueprint(bctx, bv, bpLayout, { rowHover: drag ? drag.row : bpHover && bpHover.row, cursor: !drag && bpHover && bpHover.cursor, ghost, slots: tray.moved ? tray.slots : tool === 'place' && picked ? slots : [], hover: tray.moved ? tray.target : tool === 'place' ? hover : null, status, balance: result && result.budgets.balance, target: tool === 'delete' && bpHover ? bpHover.target : null, bagHandles: tool === 'bag', drop: tray.moved ? { slots: tray.slots, target: tray.target, ptr: tray.ptr, img: tray.img, why: tray.why } : null });
+  drawBlueprint(bctx, bv, bpLayout, { rowHover: drag ? drag.row : bpHover && bpHover.row, cursor: !drag && bpHover && bpHover.cursor, ghost, slots: tray.moved ? tray.slots : tool === 'place' && picked ? slots : [], hover: tray.moved ? tray.target : tool === 'place' ? hover : null, status, balance: result && result.budgets.balance, target: tool === 'delete' && bpHover ? bpHover.target : null, bagHandles: tool === 'bag', engine: selEngine, aim, drop: tray.moved ? { slots: tray.slots, target: tray.target, ptr: tray.ptr, img: tray.img, why: tray.why } : null });
   if (!drag && bpHover && bpHover.why && tool !== 'place') $('hint').textContent = bpHover.why;
 }
 
@@ -655,8 +742,8 @@ scene.addEventListener('mousemove', (e) => {
   scene.style.cursor = hover ? 'pointer' : 'crosshair';
   if (hover) { const v = hover.check(); $('hint').textContent = hover.label + (v.warns.length ? '  (warning: ' + v.warns[0] + ')' : ''); }
 });
-scene.addEventListener('click', () => { if (hover) edit(hover.apply(parts)); });
-addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (tray.id) { trayEnd(); note('Cancelled.', false); } else if (picked) pick(picked); } });
+scene.addEventListener('click', () => { if (hover) edit(hover.apply(parts, { dir: engDir })); });
+addEventListener('keydown', (e) => { if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey && !/INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || '')) { rotateEngine(e.shiftKey ? -1 : 1); return; } if (e.key === 'Escape') { if (tray.id) { trayEnd(); note('Cancelled.', false); } else if (picked) pick(picked); } });
 
 // ---- buttons ---------------------------------------------------------------------------------------------------------
 for (const [id, key] of [['oNav', 'nav'], ['oSamples', 'samples'], ['oSlots', 'slots'], ['oBlue', 'blue']]) {
@@ -672,6 +759,10 @@ $('oEdit').onchange = () => { editing = $('oEdit').checked; $('centre').classLis
 for (const [id, name] of TOOLS) $(id).onclick = () => setTool(name);
 $('kOut').onclick = () => { setKind('outdoor'); setTool('draw'); };
 $('kIn').onclick = () => { setKind('covered'); setTool('draw'); };
+addEventListener('wheel', (e) => { if (tray.id && tray.moved && isEngineTile(tray.id)) { e.preventDefault(); rotateEngine(e.deltaY > 0 ? 1 : -1); } }, { passive: false }); // (the wheel turns the engine you are dragging)
+$('engL').onclick = () => rotateEngine(-1);
+$('engR').onclick = () => rotateEngine(1);
+$('engSwivel').onchange = () => { if (selEngine) applyEdit(setEngineSwivel(parts, selEngine, $('engSwivel').checked)); };
 $('bagShort').onclick = () => applyEdit(setBag(parts, { grow: -1 }));
 $('bagLong').onclick = () => applyEdit(setBag(parts, { grow: 1 }));
 $('bagTwin').onclick = () => applyEdit(setBag(parts, { twin: 'toggle' }));
@@ -731,7 +822,7 @@ $('run').onclick = () => { $('bot').textContent = 'Running...'; setTimeout(runBo
 // ---- go ------------------------------------------------------------------------------------------------------------------
 refresh(); // (a ?build= that cannot fly: nothing flies until it can, the live pane says what is missing)
 window.buildTest = { get parts() { return parts; }, get result() { return result; }, get sim() { return sim; }, get live() { return live; }, edit, pick, slotsFor, info: () => info, runBotTest, startLive, flag, validate: () => result,
-  tool: () => tool, setTool, setKind, kind: () => kind, addArmour, applyEdit, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, removeAt, thingAt, emptyBuild, minimalBuild, tray: () => tray, bpScreen: (x, y) => { const r = bp.getBoundingClientRect(); return bv ? { x: r.left + (bv.X(x) * r.width) / bp.width, y: r.top + (bv.Y(y) * r.height) / bp.height } : null; }, // (bpScreen: ship coordinates to page pixels on the blueprint, for tests)
+  tool: () => tool, setTool, setKind, kind: () => kind, addArmour, applyEdit, setEngineDir, setEngineSwivel, engDir: () => engDir, selEngine: () => selEngine, aim: () => aim, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, removeAt, thingAt, emptyBuild, minimalBuild, tray: () => tray, bpScreen: (x, y) => { const r = bp.getBoundingClientRect(); return bv ? { x: r.left + (bv.X(x) * r.width) / bp.width, y: r.top + (bv.Y(y) * r.height) / bp.height } : null; }, // (bpScreen: ship coordinates to page pixels on the blueprint, for tests)
   screen: (x, y) => { const p = shipMatrix.transformPoint(new DOMPoint(x, y)), r = scene.getBoundingClientRect(); return { x: r.left + (p.x * r.width) / scene.width, y: r.top + (p.y * r.height) / scene.height }; } }; // (screen: ship coordinates to page pixels, for tests)
 
 // While the build cannot fly: a stamp over the live pane saying what she still needs.

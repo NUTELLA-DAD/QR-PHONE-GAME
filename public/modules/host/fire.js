@@ -7,14 +7,17 @@
 //   load()                    the hull-eating weight of every fire (a big one counts more)
 // A fire is { x, d, t (its spread clock), prog (how far it has been sprayed out), big? }. state.blaze = { d, x } while a blaze burns.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, all } from '../../shipLayout.js';
+import { all } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
+import { toWorldY } from './pose.js';
 import { crewMul } from './crewscale.js';
 import { pop } from './popups.js';
 import { flamAt, fireCap, spreadSpots, coalAt } from './fireModel.js';
 
 export function createFire({ state, shipPuff }) {
   const F = config.FIRE, B = F.BLAZE;
-  const P = SHIP_LAYOUT.platforms;
+  const ship = mainShip(state); // (the ship the fires burn on: its layout is read through the handle, never imported)
+  const SL = ship.layout, P = SL.platforms;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   state.fireStats = { lit: 0, hit: 0, spread: 0, boiler: 0, env: 0, blazes: 0, plated: 0 }; // (what lit each fire, blazes, hits that struck armour plate: read by tools/botsim.mjs and the --check-fire gate)
   state.blaze = null;
@@ -22,11 +25,11 @@ export function createFire({ state, shipPuff }) {
 
   let capV = -1, capN = 0;
   const cap = () => { // (cached per layout version: the sum runs over every deck)
-    if (capV !== SHIP_LAYOUT.version) { capV = SHIP_LAYOUT.version; capN = fireCap(SHIP_LAYOUT); }
+    if (capV !== SL.version) { capV = SL.version; capN = fireCap(SL); }
     return capN;
   };
 
-  const igniteChance = (d, x) => clamp(flamAt(SHIP_LAYOUT, d, x) / F.FLAMMABILITY.deck, 0, F.HIT_IGNITE_MAX);
+  const igniteChance = (d, x) => clamp(flamAt(SL, d, x) / F.FLAMMABILITY.deck, 0, F.HIT_IGNITE_MAX);
 
   // A blaze: the coal has caught. B.FIRES more big fires round the bunker at once, a call-out, a shake, black smoke.
   const flare = (fire) => {
@@ -36,7 +39,7 @@ export function createFire({ state, shipPuff }) {
     const p = P[fire.d];
     for (let i = 0; i < B.FIRES && state.fires.length < cap() + B.EXTRA_CAP; i++) {
       const x = clamp(fire.x + (i % 2 ? 1 : -1) * (45 + 40 * Math.floor(i / 2) + Math.random() * 30), p.x0 + 20, p.x1 - 20);
-      if (flamAt(SHIP_LAYOUT, fire.d, x) <= 0) continue;
+      if (flamAt(SL, fire.d, x) <= 0) continue;
       state.fires.push({ x, d: fire.d, t: 0, prog: 0, big: true });
       state.fireStats.lit++;
     }
@@ -44,7 +47,7 @@ export function createFire({ state, shipPuff }) {
     state.ev.warn = 4;
     state.ev.warnText = B.CALL;
     state.sfxQ.push(['alarm']);
-    pop(state, fire.x, p.y - 150 - state.ship.alt, 'WHOOOOSH!', '#ff5a1f', 1.5);
+    pop(state, fire.x, toWorldY(ship, p.y - 150), 'WHOOOOSH!', '#ff5a1f', 1.5);
     shipPuff(fire.x, p.y - 60, '#3b3b3b', 14);
   };
 
@@ -52,7 +55,7 @@ export function createFire({ state, shipPuff }) {
     const p = P[d];
     if (!p) return null;
     const cx = clamp(x, p.x0 + 20, p.x1 - 20);
-    const fl = flamAt(SHIP_LAYOUT, d, cx);
+    const fl = flamAt(SL, d, cx);
     if (fl <= 0) return null; // plate, or ground that cannot burn
     if (state.fires.length >= cap() + (opts.over ? B.EXTRA_CAP : 0)) return null;
     const fire = { x: cx, d, t: 0, prog: 0 };
@@ -60,7 +63,7 @@ export function createFire({ state, shipPuff }) {
     state.fires.push(fire);
     state.fireStats.lit++;
     if (why in state.fireStats) state.fireStats[why]++;
-    if (fl >= B.FLAME_AT && coalAt(SHIP_LAYOUT, d, cx)) { // it has reached the coal
+    if (fl >= B.FLAME_AT && coalAt(SL, d, cx)) { // it has reached the coal
       fire.big = true;
       if (!state.blaze && state.blazeCd <= 0) flare(fire);
     }
@@ -81,17 +84,17 @@ export function createFire({ state, shipPuff }) {
     // Overheating: sparks fly round the boiler.
     const hot = clamp((state.ship.press - config.BOILER.WARN_AT) / (100 - config.BOILER.WARN_AT), 0, 1);
     if (hot > 0 && state.phase === 'flying' && !state.ship.down && Math.random() < F.HOT_RATE * hot * dt) {
-      const boilers = all('boiler');
+      const boilers = all('boiler', SL);
       if (boilers.length) lightBoiler(boilers[(Math.random() * boilers.length) | 0]);
     }
     for (const f of state.fires) {
       if (f.big && Math.random() < dt * B.SMOKE_RATE) shipPuff(f.x + (Math.random() - 0.5) * 40, P[f.d].y - 60 - Math.random() * 50, '#3b3b3b', 2);
     }
     for (const fire of state.fires) {
-      const here = clamp(flamAt(SHIP_LAYOUT, fire.d, fire.x), F.SPREAD_MIN_MUL, F.SPREAD_MAX_MUL) * (fire.big ? B.SPREAD_MUL : 1);
+      const here = clamp(flamAt(SL, fire.d, fire.x), F.SPREAD_MIN_MUL, F.SPREAD_MAX_MUL) * (fire.big ? B.SPREAD_MUL : 1);
       if ((fire.t += dt) > F.SPREAD_EVERY / crewMul(state, 'spread') / here && state.fires.length < cap() + (state.blaze ? B.EXTRA_CAP : 0)) {
         fire.t = 0;
-        const spots = spreadSpots(SHIP_LAYOUT, fire);
+        const spots = spreadSpots(SL, fire);
         const total = spots.reduce((n, s) => n + s.w, 0);
         if (total > 0) {
           let r = Math.random() * total;

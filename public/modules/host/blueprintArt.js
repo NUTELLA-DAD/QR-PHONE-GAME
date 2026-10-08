@@ -11,7 +11,7 @@ import { EDIT_ROWS, DRAW_ROWS, GRID_X0 } from './buildEdit.js';
 
 const LB = () => config.LOGBOOK;
 const PAD = { l: 100, r: 28, t: 30, b: 46 }; // paper margins (CSS px, times k): row labels on the left, column numbers on top, the ship's size underneath
-const GLYPH = { helm: 'H', boiler: 'B', lookout: 'L', coal: 'C', ammo: 'A', gun: 'G', searchlight: 'S', coil: 'Z', deflector: 'D', bombBay: 'M', navigator: 'N', escort: 'F', engine: 'E', sail: 'W' };
+const GLYPH = { helm: 'H', boiler: 'B', lookout: 'L', coal: 'C', ammo: 'A', gun: 'G', searchlight: 'S', coil: 'Z', deflector: 'D', bombBay: 'M', navigator: 'N', escort: 'F', engine: 'E', sail: 'W', swivel: 'X' };
 
 export function blueprintView(Ly, w, h, k = 1) {
   const b = Ly.bounds || { x0: -240, x1: 1860, y0: -200, y1: 1000 };
@@ -21,6 +21,12 @@ export function blueprintView(Ly, w, h, k = 1) {
   const s = Math.min((w - pl - pr) / (wx1 - wx0), (h - pt - pb) / (wy1 - wy0));
   const ox = pl - wx0 * s + 4 * k, oy = pt + ((h - pt - pb) - (wy1 - wy0) * s) / 2 - wy0 * s; // (the ship hugs the left margin; the key goes on the right)
   return { s, ox, oy, k, w, h, world: { x0: wx0, x1: wx1, y0: wy0, y1: wy1 }, X: (x) => ox + x * s, Y: (y) => oy + y * s, toWorld: (px, py) => ({ x: (px - ox) / s, y: (py - oy) / s }) };
+}
+
+// Where the tip of an engine's thrust arrow is on the paper (paper pixels): 26 px of paper out from the engine's disc, along its direction (the page hit-tests the turning handle here).
+export function engineArrow(v, e, q) {
+  const dir = e.dir || 0, len = 26 * v.k;
+  return { x: v.X(e.x) + Math.cos(dir) * len, y: v.Y(q.y) + 14 * v.k + Math.sin(dir) * len };
 }
 
 export function drawBlueprint(g, v, Ly, o = {}) {
@@ -170,6 +176,11 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     g.strokeStyle = L.INK; g.lineWidth = 1.6 * k; g.stroke();
     text(ch, x, y + 3.5 * k, 10, L.INK, 'center', true);
   };
+  const arrow = (x0, y0, x1, y1, color) => { // a thrust arrow with a head
+    const a = Math.atan2(y1 - y0, x1 - x0), h = 6 * k;
+    line([[x0, y0], [x1, y1]], 2.6, color);
+    line([[x1 - Math.cos(a - 0.45) * h, y1 - Math.sin(a - 0.45) * h], [x1, y1], [x1 - Math.cos(a + 0.45) * h, y1 - Math.sin(a + 0.45) * h]], 2.6, color);
+  };
   for (const st of Ly.stations) {
     const q = P[st.d];
     if (!q) continue;
@@ -177,7 +188,16 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     if (m) line([[X(m.bx), Y(m.by)], [X(m.bx + Math.cos(m.aim) * 34), Y(m.by + Math.sin(m.aim) * 34)]], 2.4, L.INK_SOFT);
     disc(X(st.x), Y(q.y) - 11 * k, GLYPH[st.kind] || '?', 7.5);
   }
-  for (const e of Ly.engines) { const q = P[e.d]; if (q) disc(X(e.x), Y(q.y) + 14 * k, 'E', 7.5, 'rgba(201,168,90,0.5)'); }
+  for (const e of Ly.engines) { // an engine: a disc under its deck with a thrust arrow (the way it pushes); the brass dot at the tip is a handle to turn it (S.5h)
+    const q = P[e.d];
+    if (!q) continue;
+    const { x, y } = engineArrow(v, o.aim && o.aim.name === e.name ? { ...e, dir: o.aim.dir } : e, q), cx = X(e.x), cy = Y(q.y) + 14 * k, sel = o.engine === e.name;
+    if (e.swivel) { g.beginPath(); g.arc(cx, cy, 15 * k, 0, 6.2832); g.strokeStyle = L.INK_SOFT; g.lineWidth = 1.2 * k; g.setLineDash([3 * k, 3 * k]); g.stroke(); g.setLineDash([]); }
+    if (sel) { g.beginPath(); g.arc(cx, cy, 17 * k, 0, 6.2832); g.fillStyle = 'rgba(201,168,90,0.35)'; g.fill(); }
+    disc(cx, cy, 'E', 7.5, 'rgba(201,168,90,0.5)');
+    arrow(cx, cy, x, y, L.STAMP);
+    g.beginPath(); g.arc(x, y, (sel ? 5.5 : 4) * k, 0, 6.2832); g.fillStyle = L.PIN; g.fill(); g.strokeStyle = L.INK; g.lineWidth = 1.2 * k; g.stroke();
+  }
   g.fillStyle = L.INK_SOFT;
   for (const r of [...Ly.racks, ...Ly.vents, ...Ly.extinguishers]) { const q = P[r.d]; if (q) g.fillRect(X(r.x) - 2 * k, Y(q.y) - 8 * k, 4 * k, 8 * k); }
   for (const gv of Ly.gasValves || []) { // gas valves: a wheel on the deck, a dotted line up to the bag it feeds
@@ -217,9 +237,9 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   // The key, on the empty paper to the right of the ship.
   const kx = X(W.x1) + 16 * k;
   if (v.w - kx > 200 * k) {
-    const rows = ['PENCIL: drag along a deck row.', 'Along a deck it gets longer; on an', 'empty stretch it makes a new deck', '(rooms, hull and a ladder come too).', 'GASBAG: drag along the bag row (in', 'empty space = one more bag; drag a', 'bag end to resize it).', 'PARTS: drag a picture from the tray', 'onto the ship; it snaps to a spot.', 'LADDER: drag down from one deck to', 'another (a pole is one way, down).', 'ERASER: drag along a deck (it gets', 'shorter or goes, with what stood on', 'it). DELETE: click any one thing.', 'OUTDOOR / COVERED: under the pencil.', 'Open air has rails (weather, raiders,', 'overboard); covered has a roof.', 'ARMOUR: drag iron plate along a deck.', '', 'Lines snap to the column grid and', 'to deck ends.', '', 'H helm  B boiler  L lookout', 'C coal  A ammo  G gun  S lamp', 'Z coil  D deflector  M bomb bay', 'N navigator  F fighter  E engine'];
+    const rows = ['PENCIL: drag along a deck row.', 'Along a deck it gets longer; on an', 'empty stretch it makes a new deck', '(rooms, hull and a ladder come too).', 'GASBAG: drag along the bag row (in', 'empty space = one more bag; drag a', 'bag end to resize it).', 'PARTS: drag a picture from the tray', 'onto the ship; it snaps to a spot.', 'LADDER: drag down from one deck to', 'another (a pole is one way, down).', 'ERASER: drag along a deck (it gets', 'shorter or goes, with what stood on', 'it). DELETE: click any one thing.', 'OUTDOOR / COVERED: under the pencil.', 'Open air has rails (weather, raiders,', 'overboard); covered has a roof.', 'ARMOUR: drag iron plate along a deck.', '', 'Lines snap to the column grid and', 'to deck ends.', '', 'H helm  B boiler  L lookout', 'C coal  A ammo  G gun  S lamp', 'Z coil  D deflector  M bomb bay', 'N navigator  F fighter  E engine', 'X swivel crank (red arrow = thrust,', 'brass dot = drag it to aim the engine)'];
     text('HOW TO', kx, PAD.t * k + 16 * k, 14, L.INK, 'left', true);
-    rows.forEach((t, i) => text(t, kx, PAD.t * k + 36 * k + i * 15 * k, 11, i < rows.length - 4 ? L.INK_SOFT : L.INK));
+    rows.forEach((t, i) => text(t, kx, PAD.t * k + 36 * k + i * 15 * k, 11, i < rows.length - 6 ? L.INK_SOFT : L.INK));
   }
 
   // A part picture being dragged in from the tray (S.5d): everything it cannot go is dimmed, the legal spots stay bright, the picture snaps to the nearest one.

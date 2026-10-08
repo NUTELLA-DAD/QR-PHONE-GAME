@@ -18,7 +18,7 @@
 //   emptyBuild() / ensureFrame(parts)            a ship of nothing (just its frame): every operation works on it, the first deck needs no ladder
 // Result: { ok, parts, hint, added: [labels], removed: [labels], cols, deck, kind }. ok false = nothing changed and `hint` says why.
 // The result may well FAIL validate() (erase the last boiler ...): that is the editor's job to show, not to prevent.
-import { buildLayout, BUILDS, COL, DECK_ROWS, KEEL_ROWS, rowOf, isNestRow, bagCover } from './shipBuild.js';
+import { buildLayout, BUILDS, COL, DECK_ROWS, KEEL_ROWS, rowOf, isNestRow, bagCover, normAngle, thrustVec, dirName, swivelName } from './shipBuild.js';
 import { config } from '../../config.js';
 import { slotsFor, pickSlot, whyNot, gunMountFor } from './buildSlots.js'; // (a cycle: buildSlots.js re-exports these operations; each side only calls the other at run time)
 
@@ -70,7 +70,10 @@ const POINT = ['station', 'gun', 'searchlight', 'sail', 'engine', 'rack', 'vent'
 const LINK = ['ladder', 'rope', 'stairs', 'lift', 'pole'];
 function refs(o) {
   const r = [];
-  if (POINT.includes(o.part)) r.push({ id: o.p, x: o.x, to: (id) => { o.p = id; } });
+  if (POINT.includes(o.part)) {
+    r.push({ id: o.p, x: o.x, to: (id) => { o.p = id; } });
+    if (o.part === 'engine' && o.swivel && o.sx != null) r.push({ id: o.p, x: o.sx, to: (id) => { o.p = id; } }); // (a swivel engine's crank stands on the deck too)
+  }
   else if (LINK.includes(o.part)) {
     r.push({ id: o.top, x: o.xTop, to: (id) => { o.top = id; } }, { id: o.bottom, x: o.xBottom, to: (id) => { o.bottom = id; } });
     if (o.repair) r.push({ id: o.repair.p, x: o.repair.x, to: (id) => { o.repair = { ...o.repair, p: id }; } });
@@ -570,11 +573,41 @@ export function setBag(parts, { grow = 0, twin } = {}) {
 // ---- dropping a part from the tray (S.5d) ----------------------------------------------------------------------------------
 // The part picture is dropped at (x, y) in ship coordinates: the nearest LEGAL slot of that palette type within `maxDist` takes it (slots are buildSlots.js's:
 // the same ones the click-a-pin way uses). Returns { ok, parts, hint, slot, kind: 'place', type } or { ok: false, hint: why not }. Pure: the input is never touched.
-export function placePart(parts, type, x, y, { maxDist = BE().DROP_REACH } = {}) {
+// `dir` points a dropped engine (radians: 0 forward, -PI/2 up; S.5h).
+export function placePart(parts, type, x, y, { maxDist = BE().DROP_REACH, dir } = {}) {
   const slot = pickSlot(slotsFor(type, parts), x, y, maxDist);
   if (!slot) return no(parts, whyNot(parts, type, x, y));
-  const next = slot.apply(parts);
+  const next = slot.apply(parts, { dir });
   return { ok: true, parts: next, added: [slot.label], removed: [], kind: 'place', type, slot, hint: slot.label };
+}
+
+// ---- pointed engines (S.5h) --------------------------------------------------------------------------------------------
+// setEngineDir(parts, id, angle): point the engine named `id` (radians: 0 forward, -PI/2 up, PI/2 down, PI back; presets are shipBuild.js ENGINE_DIRS). setEngineSwivel(parts, id, on): add or
+// take away its swivel mount (a crew station beside it that turns it in flight; the station goes where the engine has room, toward the middle of the ship).
+const engineIndex = (parts, id) => parts.findIndex((p) => p.part === 'engine' && p.name === id);
+export function setEngineDir(parts, id, angle) {
+  const i = engineIndex(parts, id);
+  if (i < 0) return no(parts, `There is no engine called ${id}.`);
+  if (!Number.isFinite(angle)) return no(parts, 'An engine points at an angle (radians).');
+  const next = clone(parts), dir = normAngle(angle);
+  next[i].dir = dir;
+  const v = thrustVec(dir);
+  return { ok: true, parts: next, added: [], removed: [], kind: 'engineDir', engine: id, dir, hint: `${id} now points ${dirName(dir)}${v.up > 0.05 ? ' - it lifts her (and tips the end it sits at upward)' : v.up < -0.05 ? ' - it pushes her down' : ''}${v.fwd < -0.05 ? ' - it pushes her back' : ''}.` };
+}
+export function setEngineSwivel(parts, id, on) {
+  const i = engineIndex(parts, id);
+  if (i < 0) return no(parts, `There is no engine called ${id}.`);
+  const next = clone(parts), e = next[i];
+  if (!on) { delete e.swivel; delete e.sx; return { ok: true, parts: next, added: [], removed: ['swivel mount'], kind: 'engineSwivel', engine: id, hint: `${id} has no swivel mount.` }; }
+  const L = buildLayout(parts), q = L.platforms.find((d) => d.id === e.p);
+  const mid = L.refPoint ? L.refPoint.x : e.x, gap = config.BUILD_CHECK.MIN_GAP + 15;
+  const free = (x) => !!q && x > q.x0 + 25 && x < q.x1 - 25 && ![...L.stations, ...L.engines].some((s) => s.p === e.p && s.n !== swivelName(id) && Math.abs(s.x - x) < gap && s.name !== id);
+  const off = config.ENGINES.SWIVEL_OFFSET, towards = e.x < mid ? 1 : -1;
+  const sx = [e.x + towards * off, e.x - towards * off].find(free);
+  if (sx == null) return no(parts, `No room for a swivel crank beside ${id} on its deck.`);
+  e.swivel = true;
+  e.sx = sx;
+  return { ok: true, parts: next, added: ['swivel mount'], removed: [], kind: 'engineSwivel', engine: id, hint: `${id} gets a swivel mount: a crew member at the crank turns it in flight.` };
 }
 
 // ---- ladders and deleting single things ---------------------------------------------------------------------------------

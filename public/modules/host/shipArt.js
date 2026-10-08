@@ -708,6 +708,15 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     for (const e of L.engines) {
       const y = P[e.d].y + 38;
       const out = e.x < mid ? -1 : 1;
+      if (e.swivel) { // the swivel crank on the deck (S.5h): a post and a brass wheel, with a rod down to the engine
+        const sx = (L.stations.find((s) => s.eng === e.name) || { x: e.x + out * -64 }).x, dy = P[e.d].y;
+        line([[sx, dy], [sx, dy - 34]], 5);
+        line([[sx, dy - 18], [e.x, y - 6]], 2.4, '#6b4a32');
+        filled("#c9a85a", () => ctx.arc(sx, dy - 40, 11, 0, 7));
+        line([[sx - 9, dy - 40], [sx + 9, dy - 40]], 3);
+        line([[sx, dy - 49], [sx, dy - 31]], 3);
+      }
+      if (e.swivel || e.dir) continue; // (a pointed engine is drawn turned, in the live layer: liveEngines)
       if (!sprites.box(ctx, 'ship/engine', e.x - 62, y - 24, 124, 48, out < 0)) {
         filled('#6d7378', () => ctx.ellipse(e.x, y, 62, 24, 0, 0, 7));
         filled(IRON, () => ctx.arc(e.x + out * 62, y, 9, 0, 7));
@@ -722,6 +731,29 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
       const y = P[e.d].y + 38;
       const out = e.x < mid ? -1 : 1;
       const spin = Math.cos(time * 30) * 46;
+      if (e.swivel || e.dir) { // a pointed engine (S.5h): the pod turned to the way it pushes (a swivel engine as it is now), its propeller at the end, a steam jet out of the back while it pushes
+        const live = (state.engines || []).find((q) => q.name === e.name), dir = live ? live.dir : e.dir || 0;
+        const works = !live || live.works !== false;
+        ctx.save();
+        ctx.translate(e.x, y);
+        ctx.rotate(dir);
+        if (!sprites.box(ctx, 'ship/engine', -62, -24, 124, 48, out < 0)) {
+          filled('#6d7378', () => ctx.ellipse(0, 0, 62, 24, 0, 0, 7));
+          filled(IRON, () => ctx.arc(out * 62, 0, 9, 0, 7));
+        }
+        filled('#6b4a32', () => ctx.ellipse(out * 70, 0, 6, Math.abs(spin) + 4, 0, 0, 7));
+        ctx.restore();
+        if (works && state.phase === 'flying') { // exhaust puffs trail opposite the push
+          for (let k = 0; k < 3; k++) {
+            const t = (time * 3 + k / 3) % 1, d = 70 + t * 70;
+            ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - t)})`;
+            ctx.beginPath();
+            ctx.arc(e.x - Math.cos(dir) * d, y - Math.sin(dir) * d, 7 + t * 9, 0, 7);
+            ctx.fill();
+          }
+        }
+        continue;
+      }
       filled('#6b4a32', () => ctx.ellipse(e.x + out * 70, y, 6, Math.abs(spin) + 4, 0, 0, 7));
     }
   };

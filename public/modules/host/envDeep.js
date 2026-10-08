@@ -18,7 +18,7 @@ const P = SHIP_LAYOUT.platforms;
 let MAIN, DECKS; // (worked out from the ship layout; refreshed when a new ship build is applied)
 function rebuildShipTables() {
   MAIN = deckIndex('main');
-  DECKS = ['catwalk', 'main', 'lower'].map(deckIndex).filter((d, i, a) => d >= 0 && a.indexOf(d) === i);
+  DECKS = ['catwalk', 'main', 'lower'].map((r) => deckIndex(r)).filter((d, i, a) => d >= 0 && a.indexOf(d) === i);
 }
 rebuildShipTables();
 onLayoutChange(rebuildShipTables);

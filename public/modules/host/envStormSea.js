@@ -20,6 +20,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT, deckIndex } from '../../shipLayout.js';
 import { floorBelow } from './maps.js';
 import { pop } from './popups.js';
+import { applyForce } from './forces.js';
 
 const P = SHIP_LAYOUT.platforms;
 const IDX = (id) => deckIndex(id);
@@ -185,6 +186,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
     E.gale = gustAmt;
     E.wind = (E.windDir || 1) * F.WIND * gustAmt;
     if (E.wind && flying && !state.ship.down && state.course) state.course.dist += E.wind * dt; // (the rock collision shoves her back out)
+    if (E.wind && flying && SHIP_LAYOUT.gasbag) applyForce(state, { x: SHIP_LAYOUT.gasbag.cx, y: SHIP_LAYOUT.gasbag.cy, fx: (E.wind / F.WIND) * config.FORCES.GUST_WIND, fy: 0, source: 'gust' }); // (the gust leans on the tall gasbag: it tips her, forces.js)
     if (gusting && !warned.gust) {
       warned.gust = true;
       warn(1.8, 'WIND GUST - HOLD ON!');

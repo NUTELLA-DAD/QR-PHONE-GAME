@@ -5,7 +5,8 @@
 // (tools/buildsim.mjs), the batch runner and the dev page (public/buildtest.html) all use it.
 // A check is { group, level: 'PASS' | 'WARN' | 'FAIL', text }; ok means no FAIL.
 import { config } from '../../config.js';
-import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf, isNestRow } from './shipBuild.js';
+import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf, isNestRow, thrustVec, engineUse } from './shipBuild.js';
+import { staticPitch } from './forces.js';
 import { fireRisk } from './fireModel.js';
 
 const BC = config.BUILD_CHECK;
@@ -115,10 +116,10 @@ export function steamGauge(L) {
   const boilers = L.stations.filter((s) => s.kind === 'boiler').length;
   const fuel = BC.FUEL_SETTLED;
   const heat = boilers ? ((B.HEAT_MAX * fuel) / (fuel + B.HEAT_HALF)) * (1 + (boilers - 1) * B.EXTRA_BOILER) : 0;
-  const engineNames = new Set(L.engines.map((e) => e.name));
+  const engineDir = new Map(L.engines.map((e) => [e.name, e.dir]));
   const use = (speed, busy) => {
     let u = B.USE_BASE;
-    for (const pipe of L.pipes) u += engineNames.has(pipe.to) ? B.USE_ENGINE * speed : B.USE_POWERED;
+    for (const pipe of L.pipes) u += engineDir.has(pipe.to) ? engineUse(engineDir.get(pipe.to), speed) : B.USE_POWERED;
     if (busy) {
       u += BC.PUMP_DUTY * config.GAS.PUMP_STEAM;
       if (L.stations.some((s) => s.kind === 'deflector')) u += BC.POWER_DUTY * config.SHIELD.STEAM_USE;
@@ -299,6 +300,25 @@ export function validate(parts, opts = {}) {
     if (bal.level === 'FAIL') fail('Balance', `she will ${ahead ? 'nose-dive' : 'tail-slide'}: ${bal.kind} ${Math.abs(bal.deg)} degrees (${where}). Hang sandbags at the ${ahead ? 'tail' : 'nose'} or move the heavy things (boiler, coal, bomb bay) back to the middle`);
     else if (bal.level === 'WARN') warn('Balance', `${bal.kind} ${Math.abs(bal.deg)} degrees (${where}): she rides tipped and handles worse; add sandbags at the ${ahead ? 'tail' : 'nose'}`);
     else pass('Balance', `${bal.deg === 0 ? 'level' : bal.kind + ' ' + Math.abs(bal.deg) + ' degrees'} (${where})`);
+  }
+
+  // --- Thrust (S.5h): which way the engines push, and how the engines and sails tip her. INFO lines, with WARNs for engines fighting each other and for a tilt nobody can trim away.
+  if (L.engines.length) {
+    const E = config.ENGINES, vs = L.engines.map((e) => ({ e, v: thrustVec(e.dir) }));
+    const drive = Math.max(1, vs.filter((q) => q.v.fwd >= E.DRIVE_COS).length);
+    const ahead = vs.reduce((n, q) => n + Math.max(0, q.v.fwd), 0) / drive, astern = vs.reduce((n, q) => n + Math.max(0, -q.v.fwd), 0) / drive;
+    const up = vs.reduce((n, q) => n + Math.max(0, q.v.up), 0), down = vs.reduce((n, q) => n + Math.max(0, -q.v.up), 0);
+    const net = Math.min(1, ahead) - Math.min(1, astern), swivels = L.engines.filter((e) => e.swivel).length;
+    const sp = bal.com ? staticPitch(L, { x: bal.com.x, y: bal.com.y, k2: bal.k2 }) : null;
+    info('Thrust', `${L.engines.length} engine${L.engines.length === 1 ? '' : 's'}: forward ${Math.round(Math.min(1, ahead) * 100)}% of full speed, back ${Math.round(Math.min(1, astern) * 100)}%, up ${(up * E.LIFT_GAS).toFixed(0)} gas points of lift, down ${(down * E.LIFT_GAS).toFixed(0)}${swivels ? `; ${swivels} swivel mount${swivels === 1 ? '' : 's'} (crew turn the engine in flight)` : ''}${sp && sp.engines ? `; pitch torque: ${sp.engines > 0 ? 'nose down' : 'nose up'} ${Math.abs(sp.engines)} degrees with steam up` : ''}`);
+    if (ahead > 0 && astern > 0 && Math.abs(net) < E.OPPOSE_NET) warn('Thrust', `the engines push against each other: ${Math.round(ahead * 100)}% ahead and ${Math.round(astern * 100)}% astern cancel out (net ${Math.round(net * 100)}%): she barely moves`);
+    if (!drive || (ahead === 0 && up + down > 0)) info('Thrust', 'no engine pushes her ahead: only the wind (and sails) drive her forward');
+    if (sp && Math.abs(sp.engines) >= E.PITCH_WARN_DEG && !swivels) warn('Thrust', `the engines tip her ${sp.engines > 0 ? 'nose down' : 'nose up'} ${Math.abs(sp.engines)} degrees (the lift sits ${sp.engines > 0 ? 'behind' : 'ahead of'} the middle of her weight) and nothing can turn them back: put a lift engine at the other end, or give one a swivel mount`);
+  }
+  if ((L.sails || []).length && bal.com) {
+    const sp = staticPitch(L, { x: bal.com.x, y: bal.com.y, k2: bal.k2 }), gust = staticPitch(L, { x: bal.com.x, y: bal.com.y, k2: bal.k2 }, { gust: true });
+    info('Sails', `sails up: nose-${sp.sails >= 0 ? 'down' : 'up'} ${Math.abs(sp.sails)} degrees in a steady wind, ${Math.abs(gust.sails)} in a gust (the wind pushes high up the mast, above her centre of mass; a tall mast or an upper-nest sail tips her more; an engine at the nose pointing up, or sandbags at the nose, hold her level)`);
+    if (Math.abs(sp.sails) >= config.ENGINES.PITCH_WARN_DEG && !L.engines.some((e) => thrustVec(e.dir).up > 0.5)) warn('Sails', `her sails tip her nose down ${Math.abs(sp.sails)} degrees with the wind in them: a shorter mast, a lower deck, or a lift engine at the nose would level her`);
   }
 
   // --- Fit and cave fit.

@@ -1052,6 +1052,7 @@ export const config = {
       armour: 4.5, // riveted iron plate, per 100 px of stretch (a 360 px stretch weighs about a boiler)
       coveredDeck: 1, outdoorDeck: 0.5, // S.5g: a covered deck (walls, roof, rooms) weighs this times deck per column; an open-air walkway with rails only this much
       mast: 3, // the mast of a high crow's nest tier (crow2): weight way up high
+      swivel: 2, // S.5h: a swivel mount (the crank and the gimbal) on an engine
     },
     LEVEL_PX: 30, // COM within this many px of COL counts as level (no trim at all: the classic ship is exactly level)
     WARN_PX: 80, // WARN beyond this ("nose-heavy 2 degrees")...
@@ -1094,6 +1095,44 @@ export const config = {
     BAG_CY: 198, BAG_RY: 232, // a gasbag drawn from nothing sits at this height with this half-height (the classic bag's)
     BAG_COVER: 0.9, // the share of the gasbag's half-length that counts as covering the ship (the ends of the ellipse are thin): validator WARN beyond it
   },
+  // ---- S.5h: POINTED ENGINES. Every engine has a direction (an angle, 0 = forward, -PI/2 = up, PI/2 = down, PI = back). Forward / back thrust is speed, up thrust is lift (climb without gas,
+  // costs steam), down thrust is a dive. Thrust acts where the engine sits, so a vertical push also pitches the ship (forces.js). A swivel mount is a crew station that turns the engine in flight.
+  ENGINES: {
+    DRIVE_COS: 0.5, // an engine pointing within 60 degrees of forward counts as a drive engine (top speed = working drive thrust / drive engines; more engines add safety, not speed)
+    LIFT_GAS: 16, // one engine pointing straight up lifts like this many gas points (a bag of 150 lifts the classic ship); pointing down it drags her down as much
+    VERT_USE: 0.5, // steam an engine burns for vertical thrust, relative to full forward use (BOILER.USE_ENGINE), whatever the throttle is
+    BODY_DY: 38, // an engine hangs this far under its deck (px): the height its thrust acts at
+    SWIVEL_OFFSET: 64, // the swivel crank stands this far from its engine, toward the middle of the ship (px)
+    SWIVEL_RATE: 1.6, // radians per second the engine turns when the stick points elsewhere
+    SWIVEL_ARC: 1.75, // a swivel mount turns this far either side of the direction it was placed with (radians, 100 degrees: forward reaches up and down but not back)
+    SWIVEL_STICK: 0.3, // the stick must be pushed this far to turn it
+    OPPOSE_NET: 0.15, // validator: engines whose net forward thrust is under this share while some push forward and some back (WARN)
+    PITCH_WARN_DEG: 1.2, // validator: engines (and sails) that tip her more than this many degrees at rest (WARN, unless a swivel mount can counter them)
+    BOT_CLIMB_GAS: 34, // bots point a swivel engine UP when the gasbag is under this (she is sinking) ...
+    BOT_DIVE_DY: 140, // ...and DOWN when the helm wants to be this many px lower than she is, or on a bombing run
+  },
+  // FORCES (S.5h): one model for everything that shoves the ship at a point: engine thrust, sails' wind, gusts, hits and explosions, rock scrapes, rams, the gunship's tether. A force is applied at
+  // a place (forces.js applyForce) and twists the ship about her live centre of mass: torque / (her radius of gyration squared), a longer or more spread-out ship turns slower. The tilt then
+  // swings like a weight on a spring (K, DAMP) and settles back. Gains scale each source's torque. LIVE false = only the engines, sails and the weight move her pitch (the S.5c ship).
+  FORCES: {
+    LIVE: true, // hits, gusts, scrapes, rams and the tether twist the ship too (false: only engines and sails do)
+    K: 14, // how hard the ship swings back to level (1/s^2): she hangs from her bag
+    DAMP: 4.5, // damping of the swing (1/s): critical is about 7.5
+    MAX_DEG: 1.8, // most the forces tip her (degrees), on top of the rest trim and the climb tilt: kept small so crew do not slide (AIRBORNE.PITCH_STAGGER, 2 degrees)
+    MAX_RATE: 0.7, // fastest she can tip (radians per second)
+    REF_MASS: 150, // the weight (gas points) the hit and ram kicks are quoted for: a heavier ship is shoved less
+    GAIN: { engine: 0.7, sail: 1, gust: 1, hit: 1, scrape: 1, ram: 1, tether: 1 }, // torque gain per source
+    HIT_KICK: 20, // a power-1 hit changes the ship's velocity by this much (px/s) at REF_MASS: it twists her about the point it struck
+    HIT_SIDEWAYS: 0.35, // ...mostly up or down (away from the middle of the ship's height), with this much sideways
+    GUST_WIND: 110, // a storm gust's side wind pushes the gasbag with this acceleration (px/s^2), at the gasbag's height: it tips her nose down
+    GUST_LIFT: 1, // the up/down part of a gust pushes the front of the bag with this share of its alt shove
+    SCRAPE_ACC: 70, // grinding along rock pushes back at the contact point with this acceleration (px/s^2) at 60 px deep
+    RAM_KICK: 25, // a plane ramming the ship kicks her this hard (px/s at REF_MASS), at the plane's place
+    TETHER_ACC: 30, // the gunship's rope pulls the bow with this acceleration (px/s^2) per 100 px of stretch
+    CREW_DEG_PER_PX: 0.022, // a crowd's weight pulling the centre of mass this many px toward the bow tips her nose down by this many degrees per px (to the stern: nose up); six crew at the bow is about 0.6 degrees
+    CREW_MAX_DEG: 1.2, // ...at most this much
+    BOARDER_MASS: 1.2, // a raider on deck weighs this much in the live centre of mass (like a crew member)
+  },
   // ---- S.5e: a ship needs only a gasbag and a deck to fly. Everything else is optional; what is missing just takes control away. ----
   // WIND: with no helm (or no engines, or no boiler) the ship simply DRIFTS with the wind. Speeds are shares of SHIP.TOP_SPEED (the throttle scale).
   WIND: {
@@ -1115,6 +1154,8 @@ export const config = {
     SPEED_RATE: 1.2, // how quickly the ship's speed follows the sails' pull (per second, as a share of the difference): the canvas fills, she gathers way
     REACH: 70, // how close to the mast a crew member must stand to work the sail (px)
     COLORS: ['#d9a86a', '#c97a5a', '#e0c070', '#b8a07a'], // canvas colours (the TV picks one per sail): warm, so a sail shows against the cream gasbag
+    FORCE_ACC: 900, // S.5h: the wind's push on a raised sail, as a ship acceleration (px/s^2) per share of top speed its pull gives. It acts high up on the mast, so it tips her nose down (forces.js)
+    GUST_FORCE: 2.5, // ...and a gust blows the push up this many times
   },
   // NEST (S.5e): the crow's nest may be cut in two, and a second higher tier (crow2) stands on a mast above it. Height buys a longer view, but weighs on the ship, is a bigger
   // target and catches the wind.
@@ -1168,6 +1209,31 @@ export const config = {
     HULL: 50, // hull she is patched up to
     TIME: 7, // seconds of the break-up before she limps away (the "LIMPING HOME" card shows during it)
   },
+  // PvP "Versus" (PVP.md, Phase V): two crews, two complete copies of the game, one sky. OFF in the co-op game.
+  // ENABLED is switched on in BOTH copies by host.html?pvp=1 (main.js) or by the bridge (pvp/bridge.js).
+  PVP: {
+    ENABLED: false, // on = no pacing director, no AI enemies, no limp-home spares, no co-op saves (simulation.js, crewscale.js, voyage.js read this)
+    MODE: 'broadside', // how a round is won: 'broadside' (sink or wreck the other ship; the only mode built so far)
+    WINS_NEEDED: 2, // rounds to win the match (best of three)
+    ROUND_TIME: 360, // seconds: the round cap; on a timeout the ship with the higher hull % wins
+    COUNT_IN: 3, // seconds both ships stay moored before CAST OFF
+    FINALE: 4, // seconds the sky keeps running after the deciding blow (the wreck plays out) before the round is closed; under WRECK.TIME
+    BETWEEN: 3, // seconds between a closed round and the next count-in
+    START_GAP: 2400, // centre-to-centre distance of the two ships at cast off (px); the left one starts on the map's start
+    SHELL_POWER: 0.4, // impact power of one crew shell on a rival ship (1 = one enemy bullet, 3 hull)
+    BOMB_POWER: 3, // impact power of a bomb dropped through a rival ship
+    STANDOFF: 1100, // pilots (bots and the autopilot) hold this centre-to-centre distance from the rival (px): close, so the stern guns of the ship behind reach too
+    APPROACH: 900, // px of range error for full throttle when holding the standoff
+    ALT_EDGE: 450, // the rear ship holds this far above the rival, the lead ship this far below (px): the guns arc up and down, not only forward
+    ROCK_MARGIN: 520, // pilots keep this far from rock (px)
+    MAP_SEED: 7, // arena sky: the map seed of round 1 (+ the round number); both ships get the same sky
+    MAP_KIND: 'open', // arena sky: 'open' (islands and hills) | 'network' | 'route'
+    ENVIRONMENT: 'skyisles', // arena sky: which of the seven environments
+    TEAMS: { // the two sides: scarf / pennant colour and hull trim
+      red: { name: 'RED', color: '#d6453d', trim: '#9c2f2a' },
+      blue: { name: 'BLUE', color: '#3a7bd5', trim: '#27559a' },
+    },
+  },
   // The look of the whole game, in one place. Simple style: calm, muted backgrounds (sky, rock,
   // caves); the ship in warm wood and cream; crew in their bright scarf colours; enemies and
   // their attacks in red; friendly shots in the shooter's colour; pickups and goals in gold.
@@ -1194,6 +1260,20 @@ export const config = {
     BORDER: 2.5, PIN: '#c9a85a', PIN_DARK: '#8a6c2e', // brass corner pins
     STAMP: '#a8443f', STAMP_BG: 'rgba(243,234,214,0.92)', // red ink for warnings and alarm banners
     SHADOW: 'rgba(43,34,22,0.28)',
+  },
+  // PvP arena look (modules/host/pvp/arenaCamera.js, pvpArt.js; Phase V). Soft faded team colours, logbook style.
+  PVP_ART: {
+    RED: '#c4574d', RED_DARK: '#8f3a34', RED_PALE: '#e8b7ae', // team red: flag / bar / outline / light tint
+    BLUE: '#4d7fb3', BLUE_DARK: '#34577d', BLUE_PALE: '#b3cbe3',
+    CAMERA: {
+      MARGIN_X: 240, MARGIN_Y: 120, // empty sky kept round the two ships (world pixels)
+      PAD_Y: 90, // sky kept above and below each ship (as the co-op camera)
+      CREW_H: 130, MIN_CREW_PX: 21, // a crew member is about this tall in the world; never zoom out past this many screen pixels (readable from the sofa). Keep minZoom >= 0.16: below it shipArt's bake (scale floor 0.2) re-bakes every frame
+      SMOOTHING: 2.0, ZOOM_IN: 0.7, ZOOM_OUT: 2.0, // pan speed; zoom speed in (calm) and out (quicker, so a ship never slips off screen)
+    },
+    PENNANT: { POLE: 100, LEN: 150, HEIGHT: 56, WAVE: 0.2 }, // the team flag on a pole above each gasbag (world pixels)
+    HUD: { Y: 24, W: 470, H: 104, BAR_W: 360, BAR_H: 22, LOW: 35 }, // the two side panels on the 1600x900 stage
+    BANG: { SIZE: 30 }, // the "!" over an enemy on your deck (world pixels)
   },
   // Outline weights (Style 2026, see art/ART_SPEC.md).
   OUTLINE: { MAIN: 3.4, SMALL: 2.5, SHIP: 4 },

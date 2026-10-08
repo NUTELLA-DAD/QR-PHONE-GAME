@@ -22,7 +22,7 @@ function rebuildShipTables() {
   LOWER = deckIndex('lower');
   GUN_STATIONS = Object.keys(L.gunMounts);
   // (every station a bot may man, by kind, most useful kinds first)
-  MANNED_STATIONS = [...all('helm'), ...all('escort'), ...all('deflector'), ...all('coil'), ...GUN_STATIONS, ...all('bombBay'), ...all('lookout'), ...LIGHT_NAMES].map((s) => (typeof s === 'string' ? s : s.n));
+  MANNED_STATIONS = [...all('helm'), ...all('escort'), ...all('deflector'), ...all('coil'), ...GUN_STATIONS, ...all('bombBay'), ...all('lookout'), ...all('swivel'), ...LIGHT_NAMES].map((s) => (typeof s === 'string' ? s : s.n));
   PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
 }
 rebuildShipTables();
@@ -114,6 +114,26 @@ function coilShot(state) {
   return best;
 }
 
+// Swivel engines (S.5h): the way a bot at the crank wants its engine to point. Forward in cruise; UP when she is sinking (the gasbag low, falling, the last stand); DOWN on a bombing
+// run or when the helm wants to be well below where she is. Returns an angle (radians); the mount's arc limits how far it really turns. null = no such engine.
+function swivelWant(state, name) {
+  const st = stationNamed(name), e = st && state.engines && state.engines.find((q) => q.name === st.eng);
+  if (!e) return null;
+  const E = config.ENGINES, ship = state.ship;
+  if (state.phase !== 'flying' || ship.down) return e.home;
+  if (state.buoyancy < 0 || ship.gas < E.BOT_CLIMB_GAS || state.goingDown) return -Math.PI / 2;
+  const bombing = state.bombBay && state.bombBay.bombs > 0 && groundTargets(state).length > 0;
+  if (bombing || pilotPlan(state, 2.5, B.HELM_SPEED).target < ship.alt - E.BOT_DIVE_DY) return Math.PI / 2;
+  return e.home;
+}
+// How far an engine is from the way a bot would point it (radians; 0 when it is right).
+const swivelOff = (state, name) => {
+  const want = swivelWant(state, name), st = stationNamed(name), e = st && state.engines.find((q) => q.name === st.eng);
+  if (want == null || !e) return 0;
+  const lim = e.home + Math.max(-config.ENGINES.SWIVEL_ARC, Math.min(config.ENGINES.SWIVEL_ARC, angleDiff(want, e.home)));
+  return Math.abs(angleDiff(lim, e.dir));
+};
+
 // The nearest bullet, bat, rocket or bomb coming at the ship (for the Deflector), or null.
 function incoming(state) {
   const S = L.shield;
@@ -144,6 +164,7 @@ function gunReach(state, n) {
   if (!best && n === paraGun() && state.gunship && (state.paras.length || state.gunship.paraDue)) return 0.7;
   if (!best) return 2;
   if (best.target.kind === 'para' || best.target.kind === 'gport') return 0.6; // paratroopers and gunship gun ports are worth manning a gun for
+  if (best.target.kind === 'rival') return 0.6; // Versus: the other airship in range is what the guns are for (aim.js targets())
   return best.target.kind === 'turret' ? 0.8 : 1;
 }
 
@@ -290,7 +311,7 @@ function listJobs(state, bot) {
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
   const botPlanes = players.filter((q) => q.bot && isEscortStation(q.lock)).length; // the crew can only spare so many for the patrol planes
-  const reach = (n) => (isEscortStation(n) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : kindOf(n) === 'lookout' ? lookoutReach(state) : kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : kindOf(n) === 'coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : kindOf(n) === 'bombBay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : isSearchlight(n) ? lightReach(state, n) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
+  const reach = (n) => (isEscortStation(n) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : kindOf(n) === 'lookout' ? lookoutReach(state) : kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : kindOf(n) === 'coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : kindOf(n) === 'bombBay' ? (groundTargets(state).length && state.bombBay.bombs > 0 ? 0.5 : 4) : kindOf(n) === 'swivel' ? (swivelOff(state, n) > 0.3 ? 0.5 : 4) : isSearchlight(n) ? lightReach(state, n) : !GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   jobs.push(...linkJobs(state, bot, true)); // (LINKED STATIONS block at the end of this file: loaders for guns with a target)
@@ -446,6 +467,14 @@ function operate(p, state, dt) {
       p.jy = Math.sin(shot.angle);
       const off = Math.abs(Math.atan2(Math.sin(shot.angle - state.coil.aim), Math.cos(shot.angle - state.coil.aim)));
       p.fire = off < 0.1 && state.coil.cd <= 0;
+    }
+  } else if (kindOf(p.lock) === 'swivel') {
+    // Turn the engine to where it is wanted (swivelWant) and stay until it is there and the wish has held a while.
+    const want = swivelWant(state, p.lock), off = swivelOff(state, p.lock);
+    p.gunIdle = off > 0.08 ? 0 : (p.gunIdle || 0) + dt;
+    if (want != null && off > 0.02) {
+      p.jx = Math.cos(want);
+      p.jy = Math.sin(want);
     }
   } else if (kindOf(p.lock) === 'deflector') {
     // Swing the shield toward the nearest thing heading for the ship.

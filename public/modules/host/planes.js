@@ -5,6 +5,8 @@
 // it spirals into the ground trailing smoke while the pilot bails out under a parachute.
 import { config } from '../../config.js';
 import { groundAt, ceilAt, inRock, scrollSpeed } from './course.js';
+import { kickForce } from './forces.js';
+const hullPoint = (state, x, y) => ({ x, y: y + state.ship.alt }); // (a plane's place in its own frame as a point on the ship: the one conversion the ram kicks need, as impact() callers make)
 
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 export { angDiff };
@@ -96,6 +98,7 @@ export function flyPlane(state, e, tx, ty, dt, o) {
 export function shoveShip(state, e, scale = 1) {
   const dir = -Math.max(-1, Math.min(1, (e.vy || 0) / Math.max(1, e.air || 400)));
   state.ship.vy = (state.ship.vy || 0) + dir * config.FLIGHT.RAM_KICK * scale;
+  kickForce(state, hullPoint(state, e.x, e.y), 0, -dir, scale); // (and the blow twists her about the place it struck: forces.js)
 }
 
 // Big enemies (bombers, the cargo plane, the boss) don't crash into the ship, they bump off it.
@@ -150,6 +153,7 @@ export function bumpShip(state, e, o) {
   // Our ship is shoved the other way, jolted and hurt; the enemy takes a knock too (never a kill).
   state.ship.vy = (state.ship.vy || 0) - dy * B.SHIP_KICK * o.size;
   state.ship.speed = Math.max(-0.4, Math.min(1, state.ship.speed - dx * B.SHIP_SPEED * o.size));
+  kickForce(state, hullPoint(state, cx, cy), -dx, -dy, o.size); // (shoved the other way at the place they met: forces.js)
   o.impact(cx, cy + state.ship.alt, B.DAMAGE * o.size);
   o.puff(cx, cy, '#ffe9a8', 8);
   if (e[o.hp] != null) e[o.hp] = Math.max(1, e[o.hp] - B.SELF_DAMAGE);

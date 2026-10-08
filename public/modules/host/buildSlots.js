@@ -5,13 +5,13 @@
 // It does NOT have to leave a flyable ship (S.5c: you build a ship up from nothing, so half-built ships take parts): the validator says what is
 // still missing. slotsFor(type, parts, { whole: true }) also demands that the result passes validate() (the random batch wants that).
 // Every placement ends with finish(): the frame part is there and every engine, the helm and the lift have a steam pipe from the boiler (routePipes).
-import { buildLayout, COL, rowOf, DECK_ROWS, KEEL_ROWS, isNestRow, bagNearX, bagName, ventBoiler } from './shipBuild.js';
+import { buildLayout, COL, rowOf, DECK_ROWS, KEEL_ROWS, isNestRow, bagNearX, bagName, ventBoiler, normAngle, ENGINE_DIRS } from './shipBuild.js';
 import { drawDeck, drawBag, placeConnector, GRID_X0, ensureFrame, emptyBuild, erase, setBag, addArmour, ARMOUR_ROWS } from './buildEdit.js';
 import { validate } from './buildCheck.js';
 import { config } from '../../config.js';
 
 // The blueprint editing operations (draw a deck, erase, lengthen the gasbag, place a ladder, delete a thing) are pure functions of a parts list: re-exported here with the slots.
-export { drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, thingAt, removeAt, emptyBuild, ensureFrame, snapX, rowAtY, summarize, EDIT_ROWS, DRAW_ROWS, GRID_X0, addArmour, ARMOUR_ROWS, isOutdoorRow } from './buildEdit.js';
+export { drawDeck, drawBag, resizeBag, erase, setBag, setEngineDir, setEngineSwivel, placeConnector, placePart, thingAt, removeAt, emptyBuild, ensureFrame, snapX, rowAtY, summarize, EDIT_ROWS, DRAW_ROWS, GRID_X0, addArmour, ARMOUR_ROWS, isOutdoorRow } from './buildEdit.js';
 const STEP = 40; // slots sit on a grid this far apart along a deck (px)
 const clone = (parts) => parts.map((p) => ({ ...p }));
 const names = (parts) => new Set(parts.map((p) => p.n || p.name).filter(Boolean));
@@ -96,14 +96,8 @@ export const PALETTE = [
   { id: 'boiler', label: 'Boiler', hint: 'click a spot on the main or lower deck', slots: (L) => stationSlots(L, 'boiler') },
   { id: 'coal', label: 'Coal bunker', hint: 'click a spot on a lower deck', slots: (L) => stationSlots(L, 'coal') },
   { id: 'ammo', label: 'Ammo hold', hint: 'click a spot on a lower deck', slots: (L) => stationSlots(L, 'ammo') },
-  { id: 'engine', label: 'Engine pod', hint: 'click an outrigger spot on the lower or main deck (it gets a steam pipe from the boiler)', slots: (L) => {
-    const out = [];
-    for (const q of onRows(L, ['lower', 'main'])) {
-      const xs = [q.x0 + 30, q.x0 + 90, q.x0 + 150, q.x1 - 150, q.x1 - 90, q.x1 - 30].filter((x) => x > q.x0 + 10 && x < q.x1 - 10);
-      for (const x of xs) if (roomAt(L, q.id, x, false)) out.push({ p: q.id, x, label: `Engine pod on the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part: 'engine', name: nameFor(ps, 'Pod Engine'), p: q.id, x }] });
-    }
-    return out;
-  } },
+  { id: 'engine', label: 'Engine pod', hint: 'click an outrigger spot on the lower or main deck (it gets a steam pipe from the boiler). Rotate it (wheel / R / the arrows) before you drop it: forward is speed, up lifts her, down dives', slots: (L) => engineSlots(L, false) },
+  { id: 'engineSwivel', label: 'Swivel engine', hint: 'an engine pod with a swivel crank beside it: a crew member turns the engine in flight (forward in cruise, up to climb, down to dive). Needs room for the crank', slots: (L) => engineSlots(L, true) },
   { id: 'gun', label: 'Gun mount', hint: 'click a deck spot', slots: (L) => {
     const out = [];
     // (S.5g: any open-air deck takes a gun on a rail post with a wide arc; a covered deck takes it as a port or sponson with a narrow one: the lower deck's sponsons, or a top deck turned covered)
@@ -254,6 +248,26 @@ function armourSlots(L) {
   return out;
 }
 
+// Engine pods (S.5h): a spot on an outrigger of the lower or main deck. apply(ps, { dir }) points the new engine (radians; none = forward). A swivel engine also needs a free spot beside it for the crank
+// (toward the middle of the ship, else the other side), which the layout makes a station of kind 'swivel'.
+function engineSlots(L, swivel) {
+  const out = [], E = config.ENGINES, mid = midX(L);
+  for (const q of onRows(L, ['lower', 'main'])) {
+    const xs = [q.x0 + 30, q.x0 + 90, q.x0 + 150, q.x1 - 150, q.x1 - 90, q.x1 - 30].filter((x) => x > q.x0 + 10 && x < q.x1 - 10);
+    for (const x of xs) {
+      if (!roomAt(L, q.id, x, false)) continue;
+      let sx = null;
+      if (swivel) {
+        const towards = x < mid ? 1 : -1;
+        sx = [x + towards * E.SWIVEL_OFFSET, x - towards * E.SWIVEL_OFFSET].find((c) => c > q.x0 + 25 && c < q.x1 - 25 && roomAt(L, q.id, c, true)); // (the crank is worked with Action: clear of racks, vents and ladders that would take the button first)
+        if (sx == null) continue;
+      }
+      out.push({ p: q.id, x, label: `${swivel ? 'Swivel engine' : 'Engine pod'} on the ${q.name}, x ${x}`, apply: (ps, o = {}) => [...ps, { part: 'engine', name: nameFor(ps, swivel ? 'Swivel Pod' : 'Pod Engine'), p: q.id, x, ...(o.dir != null ? { dir: normAngle(o.dir) } : {}), ...(swivel ? { swivel: true, sx } : {}) }] });
+    }
+  }
+  return out;
+}
+
 // Gasbags (S.5d): a slot is a stretch of the empty gasbag row a new bag (BAG_DROP half-length, less where a neighbour is close) fits in: touching the bag beside it,
 // or centred on a column line. Not a point on a deck: the slot carries its `span` and sits on the bag row (y = BAG_CY).
 function bagSlots(parts) {
@@ -300,7 +314,7 @@ const RACK_ROWS = ['catwalk', 'main', 'lower'];
 const RULES = {
   helm: { rows: ['catwalk', 'main'], once: (parts) => count(parts, (p) => p.part === 'station' && p.kind === 'helm') > 0, onceText: 'A ship has one helm.' },
   boiler: { rows: ['main', 'lower'] }, coal: { rows: ['lower', 'main', 'keel', 'deep'] }, ammo: { rows: ['lower', 'main', 'keel', 'deep'] },
-  engine: { rows: ['lower', 'main'] }, gun: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, lookout: { rows: ['nest', 'crow2'] }, searchlight: { rows: ['crow2', 'nest', 'catwalk'], open: true }, sail: { rows: ['crow2', 'nest', 'catwalk'], open: true },
+  engine: { rows: ['lower', 'main'] }, engineSwivel: { rows: ['lower', 'main'] }, gun: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, lookout: { rows: ['nest', 'crow2'] }, searchlight: { rows: ['crow2', 'nest', 'catwalk'], open: true }, sail: { rows: ['crow2', 'nest', 'catwalk'], open: true },
   medbay: { rows: ['main', 'lower', 'keel', 'deep'], once: (parts) => count(parts, (p) => p.part === 'medbay') > 0, onceText: 'A ship has one medbay.' },
   bombBay: { rows: ['lower'], once: (parts) => count(parts, (p) => p.part === 'bombBay' || (p.part === 'deck' && p.id === 'bay')) > 0, onceText: 'A ship has one bomb bay.' },
   lift: { rows: ['main'], once: (parts) => count(parts, (p) => p.part === 'lift') > 0, onceText: 'A ship has one lift.' },
@@ -415,7 +429,7 @@ export function slotsFor(type, parts, { legalOnly = true, whole = false } = {}) 
   const out = [];
   for (const s of def.slots(L, parts)) {
     const place = s.apply;
-    s.apply = (ps) => finish(place(ps));
+    s.apply = (ps, o) => finish(place(ps, o));
     s.type = type;
     if (s.y == null) s.y = decks[s.p] ? decks[s.p].y : 0;
     s.ok = true;
@@ -474,7 +488,7 @@ export function removals(parts) {
 // One random legal mutation of a build: { tag, label, parts } or null if nothing fits. rng() gives 0..1.
 // prefer: a type to try first most of the time (the batch asks for an engine pod right after a second boiler, the only way one fits).
 // weights: how often each type is tried (the batch wants engines and boilers as often as guns).
-const WEIGHTS = { extend: 3, keel: 1, gun: 3, searchlight: 2, lookout: 2, boiler: 3, coal: 1, ammo: 1, engine: 3, ladder: 2, pole: 1, rack_hammer: 1, extinguisher: 1, vent: 1, ballast: 1, sail: 1, armour: 1, flip: 1, remove: 2 };
+const WEIGHTS = { extend: 3, keel: 1, gun: 3, searchlight: 2, lookout: 2, boiler: 3, coal: 1, ammo: 1, engine: 3, engineSwivel: 1, ladder: 2, pole: 1, rack_hammer: 1, extinguisher: 1, vent: 1, ballast: 1, sail: 1, armour: 1, flip: 1, remove: 2 };
 export function randomMutation(parts, rng, prefer) {
   const bag = Object.entries(WEIGHTS).flatMap(([t, w]) => Array(w).fill(t));
   for (let tries = 0; tries < 12; tries++) {
@@ -493,7 +507,16 @@ export function randomMutation(parts, rng, prefer) {
       continue;
     }
     const slots = slotsFor(type, parts, { whole: true });
-    if (slots.length) { const s = slots[Math.floor(rng() * slots.length)]; return { tag: type, label: s.label, parts: s.apply(parts) }; }
+    if (slots.length) {
+      const s = slots[Math.floor(rng() * slots.length)];
+      let next = s.apply(parts);
+      if (type === 'engine' || type === 'engineSwivel') { // (an engine may be pointed some other way than forward, if she still flies)
+        const dir = rng() < 0.4 ? ENGINE_DIRS[1 + Math.floor(rng() * (ENGINE_DIRS.length - 1))] : null;
+        const pointed = dir == null ? null : s.apply(parts, { dir });
+        if (pointed && validate(pointed).ok) next = pointed;
+      }
+      return { tag: type, label: s.label, parts: next };
+    }
   }
   return null;
 }
