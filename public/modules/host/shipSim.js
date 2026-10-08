@@ -36,7 +36,7 @@ import { createForces, hitForce } from './forces.js';
 import { installBags, syncBags, stepBags, watchBags } from './gasBags.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToWorld } from './pose.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
-import { transfer, newGuns, teamOf, hostileTo, foeOf } from './ships.js';
+import { transfer, newGuns, teamOf, hostileTo, foeOf, shipOf } from './ships.js';
 
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
@@ -714,6 +714,7 @@ export function createShipSim(world, ship, W) {
     gasManned = false;
     comeAbout.begin();
     for (const player of Object.values(state.players)) {
+      if (world.ships.length > 1 && shipOf(world, player) !== ship) continue; // (carried to another ship earlier in this very loop: a captured gunship sends everyone aboard her home)
       if (player.bot) updateBot(player, state, dt);
       if (player.koGrace > 0) player.koGrace -= dt;
       if (player.hook && (player.fall || player.ko > 0 || player.lock || player.swing || player.conn != null || player.connected === false)) hookshot.clear(player);

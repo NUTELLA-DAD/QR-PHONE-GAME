@@ -461,7 +461,7 @@ export const config = {
   GUNSHIP_SHIP: {
     HIT_POWER: 0.12, // impact power of one crew shell on her hull (1 = one enemy bullet, 3 hull): the size of the blow, and with it how often a hit holes her deck, lights a fire or tears her gasbag (as a rival ship's: PVP.SHELL_POWER)
     SHELL_HULL: 1, // 1 = a shell takes the share of her hull that it took of the old gunship's hit points (shellDmg / her max; the difficulty button and her crew's size do not scale it). Tuned so she takes about as many shells to sink as the old one
-    DAMAGE_MUL: 1, // what every other blow costs her hull (a rock scrape, a collision, a bullet of the sky's), as a multiple of what it costs ours on Normal
+    DAMAGE_MUL: 0.35, // what every other blow costs her hull (a rock scrape, a collision with our ship), as a multiple of what it costs ours on Normal: the old gunship lost about 2.4% of her hull a second grinding along rock, a ship loses 3% every 0.45 s
     DRAIN_MUL: 1, // what an open hole or a fire costs her hull every second, as a multiple of what it costs ours on Normal
     FIRE_MUL: 1, // her guns reload this many times slower than the old broadside timers (G.FIRE_EVERY ...), per gun (each manned gun fires on its own timer now)
     SPEED_MUL: 1.35, // her engines' top speed against ours (the old gunship flew at up to G.MAX_SPEED 760 against our 560): body.topMul, course.js scrollSpeed, flight.js

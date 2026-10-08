@@ -71,6 +71,7 @@ async function runOne(mode, run) {
       out.hull0 = h.state.hull;
     }
     if (out.dmg && g) { out.dmg.total = (out.dmg.total || 0); out.dmg.last = g.ship.state.hull; }
+    if (process.env.DBG_REG && g && g.ship) { const odd = Object.values(g.ship.crewReg).filter((c) => !c.enemy); if (odd.length) console.log('ODD in crewReg at', step, odd.map((c) => c.id + ' ship ' + c.ship)); const lost = Object.values(g.ship.ctx.players).filter((c) => !c.enemy && c.ship !== 'gunship'); if (lost.length) console.log('FOREIGN in her ctx at', step, lost.map((c) => c.id + ' ship ' + c.ship + ' d ' + c.d)); }
     if (g) {
       last = g;
       if (g.phase === 'leaving' && !out.why) out.why = String(state.ev.warnText || '').replace(/^THE GUNSHIP /, '').slice(0, 24);

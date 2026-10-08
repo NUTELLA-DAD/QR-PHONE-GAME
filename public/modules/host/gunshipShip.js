@@ -876,10 +876,9 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
   const captured = (player) => {
     const g = state.gunship;
     if (!g || g.captured || g.phase === 'sinking' || g.phase === 'leaving') return;
-    g.captured = true;
+    g.captured = true; // (she goes down at the end of the step: this is called from inside her crew's loop, and everyone aboard is carried home)
     S.captured++;
     warn('THE GUNSHIP SURRENDERS! HER HELM IS YOURS - SUPPLIES ABOARD', 4);
-    sink(true, true);
   };
 
   // She is done: shot down (byCrew false), blown up by the charge (byCrew), or taken (quiet). She sinks for a few seconds, then she is gone.
@@ -999,6 +998,10 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
       g.sink += dt;
       command(g, dt, 'dead');
       if (g.sink > 4) remove();
+      return;
+    }
+    if (g.captured && g.phase !== 'leaving') { // her helm was taken: she strikes her colours
+      sink(true, true);
       return;
     }
     // Wrecked (her hull gave out)?
