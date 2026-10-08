@@ -62,7 +62,7 @@ export function createRadar({ canvas, box }) {
     if (now - lastDraw < 33) return; // ~30 fps is plenty
     lastDraw = now;
     fit();
-    if (!size) return;
+    if (!size || size < 24) return; // (too small to draw yet, e.g. a hidden panel: arcs would get a negative radius)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const c = size / 2;
     const R = c - 8; // radar radius in px (blips can sit right on the rim)
