@@ -226,6 +226,24 @@ Do S.1 before P2.1 (both touch gunship.js), and S.7 after P2.2 (save schema).
 | P3.4 | Painted Flagship + boss phases | L | art/sprites/gunship, gunshipArt.js, gunship.js |
 | P3.5 | Spectator + fail moments | S | goingDown.js, radar.js, render.js |
 
+### Phase C - Controller ergonomics (owner request, next after S.4)
+The problem: players grab or drop the wrong thing by accident. The owner picked up a hammer and dropped it again straight away.
+
+Direction:
+- The **big main button USES** what you hold.
+- A **smaller side button** does swaps, new pickups and hopping onto stations/modules.
+- The first pickup when empty-handed may use the big button.
+
+Plan:
+1. A controls assessment, running now.
+2. Then a phone + host change:
+   - controller/ui.js, controller.html;
+   - simulation.js `interaction()`;
+   - the bots' input;
+   - hint text.
+
+Success: no accidental swaps in a playtest, and the cold-player test passes.
+
 ### Phase 4 - Polish
 - Crew cosmetics art set.
 - Painted rooms.
