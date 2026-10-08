@@ -24,6 +24,15 @@ export function createWorldCamera() {
   // The ships to frame: opts.ships, or every ship of the game ([{ pose, bounds }]).
   const shipsOf = (state, opts) => (opts && opts.ships) || (state.ships || []).map((s) => ({ pose: s.pose, bounds: s.layout.bounds }));
 
+  // Where a ship's drawing is along the world, as [x0, x1] relative to pose.x: her bounds, or those mirrored about her middle while she faces left (a ship's hull
+  // stays where it is when she comes about: pose.js mirrors about the middle of the same bounds).
+  const spanOf = (s) => {
+    const b = s.bounds;
+    if (s.pose.f === 1) return [b.x0, b.x1];
+    const pv = (b.x0 + b.x1) / 2;
+    return [2 * pv - b.x1, 2 * pv - b.x0];
+  };
+
   const leadOf = (s) => {
     let l = leads.get(s.pose);
     if (!l) leads.set(s.pose, (l = { x: 0, y: 0 }));
@@ -37,20 +46,20 @@ export function createWorldCamera() {
     // (and the same box without the look-ahead, for the middle and for "do the ships fit")
     let sx0 = Infinity, sx1 = -Infinity, sy0 = Infinity, sy1 = -Infinity, bigW = 1, bigH = 1;
     for (const s of ships) {
-      const b = s.bounds, p = s.pose, ld = leadOf(s);
-      x0 = Math.min(x0, p.x + b.x0 + Math.min(0, ld.x));
-      x1 = Math.max(x1, p.x + b.x1 + Math.max(0, ld.x));
+      const b = s.bounds, p = s.pose, ld = leadOf(s), [bx0, bx1] = spanOf(s);
+      x0 = Math.min(x0, p.x + bx0 + Math.min(0, ld.x));
+      x1 = Math.max(x1, p.x + bx1 + Math.max(0, ld.x));
       y0 = Math.min(y0, p.y + b.y0 - PAD_Y + Math.min(0, ld.y));
       y1 = Math.max(y1, p.y + b.y1 + PAD_Y + Math.max(0, ld.y));
-      sx0 = Math.min(sx0, p.x + b.x0);
-      sx1 = Math.max(sx1, p.x + b.x1);
+      sx0 = Math.min(sx0, p.x + bx0);
+      sx1 = Math.max(sx1, p.x + bx1);
       sy0 = Math.min(sy0, p.y + b.y0 - PAD_Y);
       sy1 = Math.max(sy1, p.y + b.y1 + PAD_Y);
       bigW = Math.max(bigW, b.x1 - b.x0);
       bigH = Math.max(bigH, b.y1 - b.y0 + PAD_Y * 2);
     }
     // Frame threats that are actually close (farther ones get arrows at the screen edge instead).
-    const near = (t, r) => ships.some((s) => Math.hypot((t.x - (s.pose.x + (s.bounds.x0 + s.bounds.x1) / 2)) * 0.8, t.y - (s.pose.y + (s.bounds.y0 + s.bounds.y1) / 2)) < r);
+    const near = (t, r) => ships.some((s) => Math.hypot((t.x - (s.pose.x + (s.bounds.x0 + s.bounds.x1) / 2)) * 0.8, t.y - (s.pose.y + (s.bounds.y0 + s.bounds.y1) / 2)) < r); // (the middle of the bounds is the mirror's pivot: it is the same whichever way she faces)
     const things = [];
     if (state.enemy.dead <= 0 && near(state.enemy, C.FRAME_RANGE)) things.push(state.enemy);
     for (const t of [...(state.mines || []), ...(state.bombers || [])]) if (near(t, C.FRAME_RANGE)) things.push(t);
@@ -118,7 +127,7 @@ export function createWorldCamera() {
         view.cx = t.anchor + rel;
         view.cy += (t.cy - view.cy) * k;
         // Zoom changes slowly (no pumping in and out), panning a little quicker.
-        view.zoom += (t.zoom - view.zoom) * (1 - Math.exp(-C.ZOOM_SMOOTHING * dt));
+        if (!ships.some((s) => s.pose.turn > 0)) view.zoom += (t.zoom - view.zoom) * (1 - Math.exp(-C.ZOOM_SMOOTHING * dt)); // (the zoom holds still while a ship comes about: no pumping while the picture is squashing)
         view.zoom = Math.max(t.minZoom, view.zoom); // (the cap holds even mid-glide)
         view.minZoom = t.minZoom;
         view.clipped = t.clipped;

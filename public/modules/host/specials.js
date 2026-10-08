@@ -72,7 +72,7 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
   const spawnSniper = () => {
     if (S.snipers.length) return spawnSaws();
     const s = side();
-    S.snipers.push({ x: toWorldX(ship, layout.refPoint.x + s * 2600), y: mid().y - rand(300, 700), side: s, hp: SP.SNIPER_HP, mode: 'move', t: 2, aim: s > 0 ? Math.PI : 0, shots: SP.SNIPER_SHOTS, hit: 0 });
+    S.snipers.push({ x: toWorldX(ship, layout.refPoint.x + s * 2600), y: mid().y - rand(300, 700), side: s, hp: SP.SNIPER_HP, mode: 'move', t: 2, aim: s * ship.pose.f > 0 ? Math.PI : 0, shots: SP.SNIPER_SHOTS, hit: 0 });
     warn('SNIPER ZEPPELIN! WATCH FOR THE RED LINE!');
   };
   const spawnTug = () => {
@@ -299,7 +299,7 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
           warn('CABLE CUT!', 2);
         }
       } else {
-        g.x += (g.side * 400 + vs) * dt;
+        g.x += (g.side * ship.pose.f * 400 + vs) * dt; // (flees away from her: side is a ship side, f turns it into the world's)
         g.y -= 60 * dt;
       }
       if ((g.age = (g.age || 0) + dt) > 1.5 && inRock(state, g.x, g.y)) (g.hp = 0), kill(null, g.x, g.y);

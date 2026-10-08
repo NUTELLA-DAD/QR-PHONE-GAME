@@ -155,8 +155,8 @@ export function bumpShip(state, e, o) {
   e.ky = dy * B.BOUNCE;
   // Our ship is shoved the other way, jolted and hurt; the enemy takes a knock too (never a kill).
   state.ship.vy = (state.ship.vy || 0) - dy * B.SHIP_KICK * o.size;
-  state.ship.speed = Math.max(-0.4, Math.min(1, state.ship.speed - dx * B.SHIP_SPEED * o.size));
-  kickForce(state, hullPoint(state, cx, cy), -dx, -dy, o.size); // (shoved the other way at the place they met: forces.js)
+  state.ship.speed = Math.max(-0.4, Math.min(1, state.ship.speed - dx * mainShip(state).pose.f * B.SHIP_SPEED * o.size));
+  kickForce(state, hullPoint(state, cx, cy), -dx * mainShip(state).pose.f, -dy, o.size); // (shoved the other way at the place they met: forces.js)
   o.impact(toShipX(mainShip(state), cx), toShipY(mainShip(state), cy), B.DAMAGE * o.size);
   o.puff(cx, cy, '#ffe9a8', 8);
   if (e[o.hp] != null) e[o.hp] = Math.max(1, e[o.hp] - B.SELF_DAMAGE);

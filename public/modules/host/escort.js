@@ -127,7 +127,7 @@ export function createEscort({ state, puff, phoneFx }) {
       }
     } else if (p && Math.hypot(p.jx || 0, p.jy || 0) > 0.3) {
       // Fly where the stick points.
-      tx = s.x + p.jx * 1000;
+      tx = s.x + p.jx * ship.pose.f * 1000; // (the stick is along the ship; the plane flies along the world)
       ty = s.y + p.jy * 1000;
     } else if (hunt) {
       tx = hunt.q.x;

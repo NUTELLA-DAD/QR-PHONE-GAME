@@ -170,7 +170,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       }
     }
     for (const m of state.mines) {
-      m.vx = ship.pose.vx - (40 + state.ship.speed * 520); // the ship flies into them (almost at rest in the sky)
+      m.vx = ship.pose.vx - ship.pose.f * (40 + state.ship.speed * 520); // the ship flies into them (almost at rest in the sky; her bow points along the world by f)
       m.x += m.vx * dt;
       // Mines float in open air, never inside rock.
       m.y += (keepClear(state, m.x, m.baseY, M.RADIUS + 40, 0, 250) - m.y) * Math.min(1, dt * 3);
@@ -183,7 +183,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
         warn('MINE HIT!', 2);
       }
     }
-    state.mines = state.mines.filter((m) => !m.dead && m.x > toWorldX(ship, B.x0 - 600));
+    state.mines = state.mines.filter((m) => !m.dead && ship.pose.f * (m.x - toWorldX(ship, B.x0 - 600)) > 0); // (until it is 600 px astern of her)
   };
 
   const updateWrecks = (dt) => {
@@ -266,7 +266,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     const e = state.enemy;
     const m = shipMid();
     if (e.heading != null && e.dead <= 0 && (force || Math.hypot(e.x - m.x, e.y - m.y) > far)) e.dead = F.RESPAWN;
-    state.mines = state.mines.filter((o) => !force && o.x < toWorldX(ship, B.x1 + 700));
+    state.mines = state.mines.filter((o) => !force && ship.pose.f * (o.x - toWorldX(ship, B.x1 + 700)) < 0);
     return (e.heading != null && e.dead <= 0 ? 1 : 0) + state.mines.length;
   };
 

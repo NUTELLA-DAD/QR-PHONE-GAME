@@ -73,7 +73,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     p.climb = false;
     p.x = toWorldX(ship, p.x); // (from here she is a world object)
     p.y = toWorldY(ship, sy);
-    p.fvx = vx + ship.pose.vx;
+    p.fvx = vx * ship.pose.f + ship.pose.vx; if (p.face) p.face *= ship.pose.f; // (vx is along her own x, so a ship facing left turns it round; in the air p.face is the WORLD way she looks, on a deck it is the ship's)
     p.fvy = vy + ship.pose.vy;
     p.apex = sy;
     p.lsy = sy;
@@ -146,7 +146,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     startFlight(p, dir * A.LADDER_JUMP_VX, -A.LADDER_JUMP_VY);
     p.regrabConn = i;
     p.regrabCd = A.REGRAB_CD;
-    p.face = dir;
+    p.face = dir * ship.pose.f;
     puff(p.x, p.y, '#ffffff', 3);
     return true;
   };
@@ -222,8 +222,8 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const step = (p, dt, controlled = true) => {
     if (!p.fly) return false;
     if (p.regrabCd > 0) p.regrabCd -= dt;
-    const ctrl = controlled && (!p.bot || p.daring) ? clamp(p.jx || 0, -1, 1) : 0; // (bots only steer in the air on a daring stunt)
-    const drift = ship.pose.vx - Math.max(0, state.ship.speed || 0) * A.SHIP_DRIFT; // (the air streams past the ship: she hangs back from it by this much)
+    const ctrl = controlled && (!p.bot || p.daring) ? clamp(p.jx || 0, -1, 1) * ship.pose.f : 0; /* (the stick is along the ship; in the air it steers along the world) */ // (bots only steer in the air on a daring stunt)
+    const drift = ship.pose.vx - ship.pose.f * Math.max(0, state.ship.speed || 0) * A.SHIP_DRIFT; // (the air streams past the ship: she hangs back from it by this much)
     const gm = (state.env && state.env.gravity) || 1; // low gravity in The Aether (config.ENVIRONMENTS.aether.GRAVITY)
     if (p.chute > 0) {
       p.chute += dt;
@@ -278,7 +278,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       p.fall = true; // the existing fall -> medical bay respawn takes it from here
       p.tumble = true;
       p.tvy = Math.max(p.fvy - ship.pose.vy, 300);
-      p.tvx = p.fvx - ship.pose.vx;
+      p.tvx = (p.fvx - ship.pose.vx) * ship.pose.f;
       p.carry = null;
       p.moving = false;
       puff(toWorldX(ship, sx), toWorldY(ship, Math.min(sy, A.OVERBOARD_Y) - 20), '#ffffff', 5);
@@ -296,7 +296,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     p.jz = 0;
     p.x = toShipX(ship, p.x); // (on a deck: ship coordinates again)
     p.y = y;
-    p.vx = (p.fvx - ship.pose.vx) * 0.25;
+    p.vx = (p.fvx - ship.pose.vx) * 0.25 * ship.pose.f; if (p.face) p.face *= ship.pose.f; // (back on a deck: along the ship again)
     p.jumpCd = config.MOVE.JUMP_COOLDOWN;
     p.squash = clamp(0.35 + speed / 1400, 0.35, 1);
     p.rot = 0;

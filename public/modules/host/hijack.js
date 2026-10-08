@@ -95,7 +95,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
     const vrel = (s.vx || 0) - ship.pose.vx; // (the plane's speed as seen from the ship: the jump is made at half of it)
     p.x = toShipX(ship, s.x); // (startFlight takes a place on the ship and a velocity relative to her)
     p.y = toShipY(ship, s.y - 20);
-    air.startFlight(p, vrel * 0.5, -220);
+    air.startFlight(p, vrel * 0.5 * ship.pose.f, -220); // (the jump is along the world; startFlight takes it along the ship)
     p.chute = 0.001;
     p.chuteOpen = false;
     p.face = vrel < 0 ? -1 : 1;
@@ -211,7 +211,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
           tx = mid.x;
           ty = mid.y;
         } else if (Math.hypot(p.jx || 0, p.jy || 0) > 0.3) {
-          tx = s.x + p.jx * 1000;
+          tx = s.x + p.jx * ship.pose.f * 1000; // (the stick is along the ship; the plane flies along the world)
           ty = s.y + p.jy * 1000;
         } else {
           s.orbit = (s.orbit || 0) + E.ORBIT_SPEED * dt;

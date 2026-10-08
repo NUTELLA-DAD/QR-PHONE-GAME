@@ -1049,9 +1049,12 @@ export function createShipSim(world, ship, W) {
     const wind = windSpeed(state); // (the wind alone: what a ship with no engines, no steam or nobody steering makes)
     const driven = rig.powered && state.thrust.drive; // (engines all pointing up, down or back do not push her ahead: the wind does)
     const maxSpeed = driven ? clamp(state.ship.press / 50, 0.05, 1) * state.thrust.factor * (1 - state.balance.slow) : wind * (1 - state.balance.slow); // (a tail-heavy ship drags her tail)
-    if (state.ship.speed > maxSpeed) state.ship.speed = driven ? state.ship.speed + (maxSpeed - state.ship.speed) * Math.min(1, dt * 2) : maxSpeed; // (nothing pushes a ship with no engines or no steam faster than the wind, whatever the lever says)
+    const fw = driven ? 1 : ship.pose.f; // (the wind blows along the WORLD: a ship that only drifts is limited in the world's frame, so one facing left drifts with it too; an engine-driven ship in her own)
+    let spw = state.ship.speed * fw;
+    if (spw > maxSpeed) spw = driven ? spw + (maxSpeed - spw) * Math.min(1, dt * 2) : maxSpeed; // (nothing pushes a ship with no engines or no steam faster than the wind, whatever the lever says)
     const maxReverse = driven && state.thrust.back > 0 ? -Math.max(maxSpeed * config.SHIP.REVERSE, clamp(state.ship.press / 50, 0.05, 1) * state.thrust.back * (1 - state.balance.slow)) : -maxSpeed * config.SHIP.REVERSE; // (engines pointing back give her real reverse)
-    if (state.ship.speed < maxReverse) state.ship.speed += (maxReverse - state.ship.speed) * Math.min(1, dt * 2);
+    if (spw < maxReverse) spw += (maxReverse - spw) * Math.min(1, dt * 2);
+    state.ship.speed = spw * fw;
 
     const bay = state.bombBay;
     bay.cd = Math.max(0, bay.cd - dt);
@@ -1087,7 +1090,7 @@ export function createShipSim(world, ship, W) {
         state.autopilot = true;
         driveSpeed(plan.speed, dt);
         state.ship.trim = clamp((plan.target - state.ship.alt) / 150, -1, 1) * 0.6;
-      } else driveSpeed(flying ? (rig.helm ? 0.2 : wind) : 0.3, dt); // (no helm at all: nobody can steer, she goes where the wind takes her)
+      } else driveSpeed(flying ? (rig.helm ? 0.2 : wind * ship.pose.f) : 0.3, dt); // (no helm at all: nobody can steer, she goes where the wind takes her)
     }
     if (!gasManned) valve.input = plan ? gasFor(state, plan.target) * 0.6 : 0;
     valve.auto = !gasManned && !!plan;

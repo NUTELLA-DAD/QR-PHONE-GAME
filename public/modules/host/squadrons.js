@@ -75,9 +75,9 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       x: fromLeft ? toWorldX(ship, B.x0 - 2600) : toWorldX(ship, B.x1 + 2600),
       y,
       baseY: y,
-      vx: (fromLeft ? 1 : -1) * W.BOMBER_SPEED + ship.pose.vx, // (a bomber holds station against the ship: flyPlane noScroll)
+      vx: (fromLeft ? 1 : -1) * ship.pose.f * W.BOMBER_SPEED + ship.pose.vx, // (a bomber holds station against the ship: flyPlane noScroll; "left" is the ship's stern side, which is the world's left only while f = +1)
       vy: 0,
-      heading: fromLeft ? 0 : Math.PI,
+      heading: (fromLeft ? ship.pose.f : -ship.pose.f) > 0 ? 0 : Math.PI,
       hp: W.BOMBER_HP + (lap() - 1) * 3,
       maxHp: W.BOMBER_HP + (lap() - 1) * 3,
       dropCd: 0,
@@ -448,11 +448,12 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     z.y += (wantY - z.y) * Math.min(1, dt * 1.2);
     bounceStep(z, dt);
     bumpShip(state, z, { hitsShip, impact, puff, hw: 330, hh: 150, size: config.BUMP.BOSS_SIZE, hp: 'hp' });
-    if (z.leaving && z.x > toWorldX(ship, B.x1 + 3800)) {
+    const fb = ship.pose.f; // (she parks off her bow: "beyond" is along the world by f)
+    if (z.leaving && fb * (z.x - toWorldX(ship, B.x1 + 3800)) > 0) {
       state.boss = null;
       return;
     }
-    if (z.x > toWorldX(ship, W.BOSS_STATION_X + 400) || state.ship.down) return; // not in range yet
+    if (fb * (z.x - toWorldX(ship, W.BOSS_STATION_X + 400)) > 0 || state.ship.down) return; // not in range yet
     // Turrets.
     for (const g of z.guns) {
       if (g.dead || (g.cd -= dt) > 0) continue;
@@ -567,7 +568,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
           credit(s, 'boss');
           for (let k = 0; k < 6; k++) puff(z.x + rand(-250, 250), z.y + rand(-120, 150), '#ff5a1f', 20);
           pop(state, z.x, z.y - 160, 'boss', '#ff5a1f', 2.2);
-          state.wrecks.push({ x: z.x, y: z.y, vx: -60 + ship.pose.vx, vy: -20, spin: 0, kind: 'cargo' });
+          state.wrecks.push({ x: z.x, y: z.y, vx: -60 * ship.pose.f + ship.pose.vx, vy: -20, spin: 0, kind: 'cargo' });
           state.boss = null;
           state.bossDownLap = lap(); // (the Flagship stop needs her sunk before the beacon counts)
           // Spoils of war: patch the ship up.

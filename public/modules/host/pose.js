@@ -48,8 +48,13 @@ export function bindBody(body, pose) {
 }
 export const poseOf = (ship) => ship.pose;
 
-// Facing mirrors ship space about the middle of the ship (layout.midPoint). With f = +1 this is the plain offset, written so it is the same additions as before.
-const pivotX = (ship) => (ship.layout.midPoint ? ship.layout.midPoint.x : 0);
+// Facing mirrors ship space about the middle of the ship's drawing (the middle of layout.bounds, so her hull stays where it is when she comes about; a stand-in
+// without bounds uses layout.midPoint). With f = +1 this is the plain offset, written so it is the same additions as before.
+export const pivotOf = (ship) => {
+  const L = ship.layout;
+  return L.bounds ? (L.bounds.x0 + L.bounds.x1) / 2 : L.midPoint ? L.midPoint.x : 0;
+};
+const pivotX = pivotOf;
 
 // A point on the ship (ship coordinates) -> where it is in the world.
 export function toWorldX(ship, sx) {

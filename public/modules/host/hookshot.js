@@ -123,10 +123,10 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     }
     if ((p.hookCd || 0) > 0 || p.lock || p.conn != null || p.onGunship || p.ko > 0 || p.hj) return true;
     const o = origin(p);
-    let dx = p.jx || 0;
+    let dx = (p.jx || 0) * ship.pose.f; // (the stick is along the ship; the hook flies along the world)
     let dy = p.jy || 0;
     if (Math.hypot(dx, dy) < 0.3) {
-      dx = p.face || 1;
+      dx = (p.face || 1) * (p.fly ? 1 : ship.pose.f); // (face: the ship's way on a deck, the world's in the air)
       dy = -0.25;
     }
     const m = Math.hypot(dx, dy);
@@ -134,7 +134,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     dy /= m;
     const c = cast(o, dx, dy);
     p.hook = { phase: 'out', dx, dy, len: 0, anchor: c.anchor, dist: c.dist, t: 0 };
-    if (Math.abs(dx) > 0.2) p.face = dx < 0 ? -1 : 1;
+    if (Math.abs(dx) > 0.2) p.face = (dx < 0 ? -1 : 1) * (p.fly ? 1 : ship.pose.f);
     p.swingT = performance.now();
     puff(o.x, o.y, '#ffffff', 2);
     return true;
@@ -222,7 +222,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
         p.fvx += ((h.vax || 0) + nx * H.REEL_SPEED - p.fvx) * k;
         p.fvy += ((h.vay || 0) + ny * H.REEL_SPEED - p.fvy) * k;
       }
-      p.fvx += (p.jx || 0) * H.PUMP * dt;
+      p.fvx += (p.jx || 0) * ship.pose.f * H.PUMP * dt;
     }
   };
 

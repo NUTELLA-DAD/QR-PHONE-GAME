@@ -176,7 +176,7 @@ export function createSpecialsArt({ ctx, state, ink }) {
     }
     ctx.save();
     ctx.translate(g.x, g.y);
-    if (g.side > 0) ctx.scale(-1, 1);
+    if (g.side * mainShip(state).pose.f > 0) ctx.scale(-1, 1); // (g.side is a ship side; the tug faces the way the world is, f turns one into the other)
     ink();
     ctx.lineWidth = 3;
     ctx.fillStyle = g.hit > 0 ? '#ffffff' : '#7a4a2a';
