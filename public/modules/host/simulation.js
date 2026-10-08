@@ -120,6 +120,7 @@ export function createSimulation() {
     }
     sh.sim = createShipSim(state, sh, W);
     if (hijack) sh.sim.attach({ hijack });
+    if (!sh.main && W.course) W.course.place(sh); // (M.2: another ship flies from her own pose; she starts at her station, in open air)
     return sh;
   };
   const main = addShip(null); // (B.2: this file is the WORLD. What belongs to one ship is shipSim.js; the voyage, the pacing director, the wreck and restart rules below work on the main ship, ships[0])
@@ -939,12 +940,14 @@ export function createSimulation() {
   };
   // One step, and how fast she really moved along the sky in it (pose.vx for the next one: the things that go along with her read it).
   const update = (dt) => {
-    const x0 = main.pose.x;
+    const x0 = state.ships.map((sh) => sh.pose.x);
     try {
       stepWorld(dt);
     } finally {
-      const dx = main.pose.x - x0;
-      if (Math.abs(dx) < 60 && dt > 0) state.shipVx = dx / dt; // (a jump of the course, a new mission or a tow, is no speed)
+      state.ships.forEach((sh, i) => {
+        const dx = sh.pose.x - x0[i];
+        if (Math.abs(dx) < 60 && dt > 0) sh.pose.vx = dx / dt; // (a jump of the course, a new mission or a tow, is no speed)
+      });
     }
   };
 

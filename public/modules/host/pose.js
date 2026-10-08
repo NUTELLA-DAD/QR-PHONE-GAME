@@ -3,56 +3,48 @@
 // SHIP SPACE is the ship's own frame: the layout's coordinates (decks, stations, crew, fires, modules ...). It is NEVER mirrored.
 // WORLD SPACE is the sky: map coordinates, y pointing down. EVERYTHING in the sky is stored there since M.1 (shells, planes, bats, mines, wrecks, puffs,
 // crew in the air, hooks ...), at rest in the world and moving by its own velocity; the world is not pulled past a ship any more. A ship is where her pose says:
-//     world x = ship x + pose.x   (pose.x = course.dist)          world y = ship y + pose.y   (pose.y = -state.ship.alt)
-// The pose is still a set of GETTERS/SETTERS over those numbers (f fixed at +1) until the stages that make it OWN the position and turn on f (+1 bow to the
-// right, -1 facing left); with f = +1 the maths is `sx + x` and `sy + y`. Velocities are WORLD velocities. Things that steer by their speed RELATIVE to the ship
-// (bats, imps, saws, shots fired from or at her ...) add pose.vx to what they want; a shot leaves the barrel at its muzzle speed relative to her and keeps the
-// speed of her at that moment.
+//     world x = ship x + pose.x            world y = ship y + pose.y
+// Since M.2 the pose OWNS those numbers (plain data, one set per ship): ship 0's course.dist is a view of pose.x and every body's `alt` is a view of -pose.y (bindBody).
+// f is +1 for a bow to the right, -1 for a bow to the left (COME ABOUT flips it, M.3); with f = +1 the maths is `sx + x` and `sy + y`. Velocities are WORLD velocities.
+// Things that steer by their speed RELATIVE to the ship (bats, imps, saws, shots fired from or at her ...) add pose.vx to what they want; a shot leaves the barrel at
+// its muzzle speed relative to her and keeps the speed of her at that moment.
 //
 //   pose = { x, y,      where the ship's origin is in the world (y points down, so a ship that climbs has a smaller y)
-//            vx, vy,    its velocity in the world (px/s; READ-ONLY until the pose owns position)
-//            f,         facing: +1 bow to the right, -1 to the left (fixed +1 until the COME ABOUT stage)
+//            vx, vy,    its velocity in the world (px/s; vx is measured by simulation.js every step, vy is the climb rate negated)
+//            f,         facing: +1 bow to the right, -1 to the left (flips at the middle of a COME ABOUT)
 //            pitch,     nose tilt in radians (+ = nose down), the same number the art tilts by
-//            turn }     0 = not turning, 0..1 = progress of a COME ABOUT manoeuvre (0 until then)
+//            turn }     0 = not turning, 0..1 = progress of a COME ABOUT manoeuvre (shipSim.js comeAbout)
 //
 // Every function here takes a SHIP HANDLE (ships.js: { id, team, layout, state, world, pose }), not a global, so a second ship works the same way.
 // RULES for all new code: see ships.js. Do NOT write `x + course.dist` or `y - state.ship.alt` in new code; call toWorld / toShip.
 import { scrollSpeed } from './course.js';
 
-// Build the pose object for `ship`. It reads and writes the ship's existing numbers by reference (world = the host state, ship.state = state.ship).
-export function createPose(ship) {
-  const world = ship.world, S = ship.state;
-  let turn = 0;
-  const readOnly = (what) => () => { throw new Error('pose.' + what + ' is read-only until the pose owns position (MOVEMENT.md B4)'); };
-  return Object.defineProperties({}, {
-    x: { enumerable: true, get: () => (world.course ? world.course.dist : 0), set: (v) => { world.course.dist = v; } },
-    y: { enumerable: true, get: () => -S.alt, set: (v) => { S.alt = -v; } },
-    // (the velocity she really has: what the last step moved her by, so a ship pressed against the rock, shoved by the wind or hanging in a calm moves at that and
-    // everything that goes along with her goes along with THAT. What her engines ask of her is course.js scrollSpeed; until her first step it is the same.)
-    vx: { enumerable: true, get: () => (world.shipVx !== undefined ? world.shipVx : scrollSpeed(world)), set: readOnly('vx') },
-    vy: { enumerable: true, get: () => -(S.vy || 0), set: readOnly('vy') }, // (state.ship.vy is the climb rate: + = up)
-    f: { enumerable: true, get: () => 1, set: (v) => { if (v !== 1) throw new Error('pose.f is fixed at +1 until COME ABOUT exists (MOVEMENT.md B5)'); } },
-    pitch: { enumerable: true, get: () => S.pitch || 0, set: (v) => { S.pitch = v; } },
-    turn: { enumerable: true, get: () => turn, set: (v) => { turn = v; } },
+// Build the pose object for `ship`: its own x, y, vy, f, pitch and turn. vx is the speed she REALLY moved at in the last step (simulation.js measures it): a ship
+// pressed against the rock, shoved by the wind or hanging in a calm moves at that and everything that goes along with her goes along with THAT. What her
+// engines ask of her is course.js scrollSpeed; until her first step vx is the same.
+export function createPose(ship, { x = 0, y = 0 } = {}) {
+  let vx;
+  const pose = Object.defineProperties({ x, y, vy: 0, f: 1, pitch: 0, turn: 0 }, {
+    vx: { enumerable: true, get: () => (vx !== undefined ? vx : pose.f * scrollSpeed(ship.ctx || ship.world)), set: (v) => { vx = v; } }, // (scrollSpeed is along her bow; the world's x runs the way f says)
   });
+  return pose;
 }
 
-// The pose of a SECOND ship (B.2): she keeps station on a lead ship (hers is the only one the course scrolls past), `offset.dx` along the sky from her, and flies her
-// own altitude (y = -alt, like the main ship; the formation's dalt is how far above or below the lead's altitude her pilot holds her, see course.js pilotPlan).
-// Same shape as the main pose, so nothing downstream can tell them apart. (Until the pose owns position, M.2, a ship has no x of her own: the sky around her moves with the lead.)
-export function createFormationPose(ship, lead, offset) {
-  const S = ship.state;
-  let turn = 0;
-  const readOnly = (what) => () => { throw new Error('pose.' + what + ' is read-only until the pose owns position (MOVEMENT.md B4)'); };
-  return Object.defineProperties({}, {
-    x: { enumerable: true, get: () => lead.pose.x + offset.dx, set: (v) => { offset.dx = v - lead.pose.x; } },
-    y: { enumerable: true, get: () => -S.alt, set: (v) => { S.alt = -v; } },
-    vx: { enumerable: true, get: () => lead.pose.vx, set: readOnly('vx') },
-    vy: { enumerable: true, get: () => -(S.vy || 0), set: readOnly('vy') },
-    f: { enumerable: true, get: () => 1, set: (v) => { if (v !== 1) throw new Error('pose.f is fixed at +1 until COME ABOUT exists (MOVEMENT.md B5)'); } },
-    pitch: { enumerable: true, get: () => S.pitch || 0, set: (v) => { S.pitch = v; } },
-    turn: { enumerable: true, get: () => turn, set: (v) => { turn = v; } },
+// The body's old names over the pose (so every `state.ship.alt` / `.vy` / `.pitch` read and write still works, and writes land in the pose): alt = -pose.y,
+// vy = the climb rate (+ = up) = -pose.vy. Negation is exact in floating point, so `alt += d` and `pose.y -= d` give the same number to the last bit.
+export function bindBody(body, pose) {
+  pose.y = -(body.alt || 0);
+  pose.vy = -(body.vy || 0);
+  pose.pitch = body.pitch || 0;
+  delete body.alt;
+  delete body.vy;
+  delete body.pitch;
+  Object.defineProperties(body, {
+    alt: { enumerable: true, configurable: true, get: () => -pose.y, set: (v) => { pose.y = -v; } },
+    vy: { enumerable: true, configurable: true, get: () => -pose.vy, set: (v) => { pose.vy = -v; } },
+    pitch: { enumerable: true, configurable: true, get: () => pose.pitch, set: (v) => { pose.pitch = v; } },
   });
+  return body;
 }
 export const poseOf = (ship) => ship.pose;
 

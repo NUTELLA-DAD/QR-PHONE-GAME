@@ -222,7 +222,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     const lo = state.course ? altBounds(state).lo : -Infinity;
     let alt = state.ship.alt - rate * dt;
     if (isFinite(lo) && alt < lo) alt = Math.max(lo, state.ship.alt);
-    state.ship.alt = alt;
+    mainShip(state).pose.y = -(alt);
     state.ship.vy = Math.min(state.ship.vy || 0, 0);
     state.goingDownRate = rate;
     // Alarm bleeps.

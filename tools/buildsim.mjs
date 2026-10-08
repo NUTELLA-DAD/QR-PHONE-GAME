@@ -1855,7 +1855,7 @@ async function checkPose() {
   const p = ship.pose;
   report(p.x === st.course.dist && p.y === -st.ship.alt && p.f === 1 && p.pitch === (st.ship.pitch || 0) && p.turn === 0 && P.poseOf(ship) === p, `pose reads the old numbers (x ${p.x.toFixed(1)} = course.dist, y ${p.y.toFixed(1)} = -alt, f +1)`);
   const scroll = (await load('modules/host/course.js')).scrollSpeed(st);
-  report(p.vx === st.shipVx && p.vy === -(st.ship.vy || 0) && Math.abs(p.vx - scroll) < 40, `pose.vx is the speed she really moved at in the last step (${p.vx.toFixed(1)} px/s; the engines ask ${scroll.toFixed(1)}), vy the climb rate`);
+  report(Number.isFinite(p.vx) && p.vy === -(st.ship.vy || 0) && Math.abs(p.vx - scroll) < 40, `pose.vx is the speed she really moved at in the last step (${p.vx.toFixed(1)} px/s; the engines ask ${scroll.toFixed(1)}), vy the climb rate`);
   const fresh = createSimulation();
   report(fresh.state.ships[0].pose.vx === (await load('modules/host/course.js')).scrollSpeed(fresh.state),'before her first step pose.vx is the speed the engines ask');
   let exact = true;
@@ -1870,8 +1870,11 @@ async function checkPose() {
   report(exact, 'toWorld / toShip / aimTo* are bit-identical to the old inline arithmetic (2000 random points)');
   const d0 = st.course.dist; p.x = d0 + 5; const moved = st.course.dist === d0 + 5; p.x = d0;
   report(moved && st.course.dist === d0, 'writing pose.x moves course.dist');
-  let threw = false; try { p.f = -1; } catch { threw = true; }
-  report(threw && p.f === 1, 'pose.f is fixed at +1 until COME ABOUT exists');
+  // M.2: the pose OWNS her position (course.dist and the body's alt / vy / pitch are views of it)
+  const a0 = st.ship.alt; p.y -= 7; const climbed = st.ship.alt === a0 + 7; st.ship.alt = a0; p.pitch = 0.1; const tilted = st.ship.pitch === 0.1; st.ship.pitch = 0; p.vy = -3; const rising = st.ship.vy === 3; st.ship.vy = 0;
+  report(climbed && st.ship.alt === a0 && p.y === -a0 && tilted && rising && p.pitch === 0 && p.vy === 0 && p.f === 1, 'the pose owns position: pose.y = -alt, pose.vy = -(climb rate), pose.pitch = the body pitch, in both directions');
+  const kx = { ...st.ship };
+  report('alt' in kx && 'vy' in kx && 'pitch' in kx && Object.getOwnPropertyDescriptor(st.ship, 'alt').get && !Object.getOwnPropertyDescriptor(p, 'x').get, 'the body keeps alt / vy / pitch as enumerable views; the pose x is a plain number');
   // the mirror maths, on a stand-in ship (f = -1 about midPoint.x = 200)
   const fake = { pose: { x: 1000, y: -50, f: -1 }, layout: { midPoint: { x: 200 } } };
   const fw = P.toWorld(fake, 250, 30), fb = P.toShip(fake, fw.x, fw.y);

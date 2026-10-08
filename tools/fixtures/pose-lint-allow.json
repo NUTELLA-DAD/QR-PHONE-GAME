@@ -1,14 +1,13 @@
 {
  "alt": {
   "modules/host/bots.js": 4,
-  "modules/host/course.js": 8,
+  "modules/host/course.js": 6,
   "modules/host/goingDown.js": 1,
   "modules/host/gunship.js": 2,
   "modules/host/pvp/bridge.js": 1,
   "modules/host/pvpTest.js": 1,
-  "modules/host/shipSim.js": 4,
-  "modules/host/squadrons.js": 1,
-  "modules/host/weather.js": 1
+  "modules/host/shipSim.js": 3,
+  "modules/host/squadrons.js": 1
  },
  "scroll": {
   "modules/host/course.js": 5,

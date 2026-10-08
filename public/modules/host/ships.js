@@ -42,7 +42,7 @@
 //  5. Keep the update order and the Math.random order unchanged when you route something through here; the botsim baseline must stay byte-identical.
 import { SHIP_LAYOUT, createLayout } from '../../shipLayout.js';
 import { config } from '../../config.js';
-import { createPose, createFormationPose } from './pose.js';
+import { createPose, bindBody } from './pose.js';
 import { mainNav, createNav } from './nav.js';
 
 // The state keys that belong to ONE ship. Ship 0's context forwards them to the world state; another ship's context owns them (undefined until its factory, or
@@ -145,14 +145,18 @@ export function createShip(world, { id, main = false, layout = null, parts = nul
     get team() { return world.team || null; },
     layout: lay,
     nav: nav || createNav(lay),
-    state: body || (main ? null : { ...newBody(), alt: world.ships[0].state.alt + formation.dalt }),
+    state: body || newBody(),
     world,
     pose: null,
     ctx: null,
     sim: null,
     formation,
   };
-  ship.pose = main ? createPose(ship) : createFormationPose(ship, world.ships[0], formation);
+  // (her pose owns her position, M.2: a second ship starts at her formation station from ship 0, course.js place() then moves her to open air; her body's alt / vy / pitch are views of the pose)
+  const lead = main ? null : world.ships[0];
+  ship.pose = createPose(ship, main ? {} : { x: lead.pose.x + formation.dx, y: lead.pose.y - formation.dalt });
+  if (!main) ship.state.alt = -ship.pose.y;
+  bindBody(ship.state, ship.pose);
   ship.ctx = makeContext(ship);
   return ship;
 }

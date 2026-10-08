@@ -27,6 +27,9 @@ const { createSimulation } = await load('modules/host/simulation.js');
 const { BUILDS } = await load('modules/host/shipBuild.js');
 const S = await load('modules/host/ships.js');
 const { createWorldCamera } = await load('modules/host/camera.js');
+const { solidAt } = await load('modules/host/maps.js');
+const { scrollSpeed } = await load('modules/host/course.js');
+const T = await load('modules/host/pose.js');
 const parts = await loadBuild(buildName, BUILDS);
 const DT = 1 / 60;
 const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
@@ -70,7 +73,9 @@ const snap = (sh) => JSON.stringify({
   report(Object.keys(B.ctx.GUNS).join() === Object.keys(B.layout.gunMounts).join() && B.ctx.bags.length === B.layout.gasbags.length && B.ctx.ventOpen.length === B.layout.vents.length, 'the second ship has her own guns, bags and vents, made from HER layout');
   report(Object.entries(B.sim.walkers).every(([k, f]) => f === B.nav[k] && f !== A.nav[k]) && Object.entries(A.sim.walkers).every(([k, f]) => f === A.nav[k]) && S.mainShip(B.ctx).nav === B.nav && S.mainShip(A.ctx).nav === A.nav && S.mainShip(st).nav === A.nav, 'the crew of each ship walk (moveWalker, steerTo, fall ...) by THAT ship\'s navigation, and her context answers mainShip(state) with herself');
   report(B.ctx.modules !== A.ctx.modules && B.ctx.balance.mass !== undefined && A.ctx.balance !== B.ctx.balance && B.ctx.forces !== A.ctx.forces && B.ctx.links !== A.ctx.links && B.ctx.sails !== A.ctx.sails, 'modules, balance, forces, links, sails are each ship\'s own');
-  report(B.pose.x - A.pose.x === B.formation.dx && B.pose.y === -B.state.alt && Math.abs(B.pose.y - A.pose.y - 1150) < 1, `the pose follows: ship1 keeps station ${B.formation.dx} px along the sky and ${-B.formation.dalt} px below ship 0 (pose y ${B.pose.y.toFixed(0)} against ${A.pose.y.toFixed(0)})`);
+  // (M.2: her pose is her own. She starts at her station from ship 0 - or the nearest open air where all of her fits, the station can be inside the rock - and is moored there.)
+  const fitsOpen = (sh) => sh.layout.samples.every(([sx, sy]) => !solidAt(st.course.map, sh.pose.x + sx, sh.pose.y + sy));
+  report(B.pose.y === -B.state.alt && B.state.alt === B.moorAlt && fitsOpen(B) && Math.hypot(B.pose.x - (A.pose.x + B.formation.dx), B.pose.y - (A.pose.y - B.formation.dalt)) < 3000 && B.pose.f === 1 && B.state.vy === 0, `the pose is her own: ship1 starts ${Math.round(B.pose.x - A.pose.x)} px along the sky and ${Math.round(B.pose.y - A.pose.y)} px below ship 0 (station ${B.formation.dx} / ${-B.formation.dalt}), in open air, moored at altitude ${Math.round(B.moorAlt)}`);
   A.ctx.kills = 0;
   B.ctx.kills += 5;
   report(st.kills === 5 && !Object.getOwnPropertyDescriptor(B.ctx, 'kills').hasOwnProperty('value'), 'kills written through a context land on the world\'s count');
@@ -168,9 +173,58 @@ const snap = (sh) => JSON.stringify({
   for (const e of errs) console.log('  error: ' + e);
 }
 
+// ---- 3c. M.2: the second ship has her own pose integration and her own rock contact ----
+{
+  const { sim, st, A, B } = boot({ bots: 0 });
+  const map = st.course.map;
+  const buried = (sh) => sh.layout.samples.filter(([sx, sy]) => solidAt(map, sh.pose.x + sx, sh.pose.y + sy)).length;
+  step(sim, 120);
+  // each ship moves along the sky by HER OWN engines: pose.x += f * scrollSpeed(ctx) * dt
+  A.state.speed = 0.5; B.state.speed = 0.1;
+  const xa = A.pose.x, xb = B.pose.x;
+  sim.course.advance(0.5);
+  report(Math.abs(A.pose.x - xa - scrollSpeed(A.ctx) * 0.5) < 1e-6 && Math.abs(B.pose.x - xb - scrollSpeed(B.ctx) * 0.5) < 1e-6 && scrollSpeed(A.ctx) !== scrollSpeed(B.ctx), `each ship moves by her own speed, not by the lead's (ship 0 +${(A.pose.x - xa).toFixed(0)}, ship1 +${(B.pose.x - xb).toFixed(0)} px in 0.5 s)`);
+  // ship1 ends up in the rock: her contact (her own samples, pose and fields) pushes her out, and ship 0's contact fields are not hers
+  B.pose.f = 1;
+  const clearY = B.pose.y;
+  let y = clearY;
+  while (y < clearY + 4000 && !buried({ ...B, pose: { x: B.pose.x, y } })) y += 5;
+  const found = y < clearY + 4000;
+  B.pose.y = y + 90; // 90 px into the floor
+  B.state.vy = 0;
+  const hullA = A.state.hull, hullB = B.state.hull;
+  const aScrape = A.ctx.course.scraping;
+  const nBuried = buried(B);
+  sim.course.update(1 / 60);
+  report(found && nBuried > 0 && B.ctx.course.scraping === true && B.ctx.course.lastContact && B.ctx.course.lastContact !== A.ctx.course.lastContact && A.ctx.course.scraping === aScrape && Object.getPrototypeOf(B.ctx.course) === st.course && B.ctx.course.hasOwnProperty('scraping'), `ship1 pressed into the floor (${nBuried} of her points in rock) is in contact on HER OWN fields (scraping, lastContact), ship 0's are not hers`);
+  report(B.state.hull < hullB && A.state.hull === hullA, `... the scrape hurt ship1 (${hullB.toFixed(1)} -> ${B.state.hull.toFixed(1)}) and not ship 0`);
+  const yb = B.pose.y;
+  let freed = -1;
+  for (let i = 0; i < 180; i++) { step(sim, 1); if (freed < 0 && buried(B) === 0) freed = i; }
+  report(freed >= 0 && freed < 120 && B.pose.y < yb, `and the rock pushes her back up and out (clear after ${freed} steps, ${Math.round(yb - B.pose.y)} px higher)`);
+  // a wall: put her bow into the rock to her right with her whole height level: the side that is stuck is pushed out along the world
+  const sh = B;
+  let wallX = null;
+  for (let dx = 0; dx < 6000 && wallX === null; dx += 20) if (sh.layout.samples.some(([sx, sy]) => solidAt(map, sh.pose.x + sx + dx, sh.pose.y + sy))) wallX = dx;
+  if (wallX !== null && wallX > 0) {
+    const stood = sh.pose.x;
+    sh.pose.x += wallX + 60;
+    const xs = sh.pose.x;
+    sh.state.speed = 0;
+    sim.course.update(1 / 60);
+    report(buried(sh) === 0 || sh.pose.x !== xs || sh.pose.y !== yb, `and a ship pushed into rock sideways is shoved clear by the same rule (x ${Math.round(xs)} -> ${Math.round(sh.pose.x)})`);
+    sh.pose.x = stood;
+  }
+}
+
 // ---- 4. the long run: both crewed, 0 errors, nobody walks the wrong ship ----
 {
   const { sim, st, A, B } = boot();
+  const map4 = st.course.map;
+  const inRockNow = (sh) => sh.layout.samples.filter(([sx, sy]) => solidAt(map4, sh.pose.x + sx, sh.pose.y + sy)).length;
+  const midBuried = { A: 0, B: 0 }, anyBuried = { A: 0, B: 0 };
+  let samples4 = 0;
+  const startGap = B.pose.x - A.pose.x, startB = B.pose.x;
   // every world key a second ship reads through the prototype is one she legitimately shares
   const reads = new Set();
   const base = Object.getPrototypeOf(B.ctx);
@@ -195,6 +249,12 @@ const snap = (sh) => JSON.stringify({
           crewSteps++;
         }
       }
+      samples4++;
+      for (const [tag, sh] of ships) {
+        if (sh.state.down > 0) continue;
+        if (inRockNow(sh) > 0) anyBuried[tag]++;
+        if (solidAt(map4, sh.pose.x + sh.layout.refPoint.x, sh.pose.y + sh.layout.refPoint.y)) midBuried[tag]++;
+      }
       view = createWorldCamera().update(0, st, 1920, 1080); // (a fresh camera each time: its first view IS the target framing, without the glide)
       const half = { w: 1920 / 2 / view.zoom, h: 1080 / 2 / view.zoom };
       for (const sh of st.ships) {
@@ -205,6 +265,8 @@ const snap = (sh) => JSON.stringify({
   }
   for (const [k, n] of errors) console.log(`  error x${n}: ${k}`);
   report(errors.size === 0, `${minutes} min with ${nBots} bots on each ship: ${errors.size} errors`);
+  // M.2: ship1 flies her own course along the route and the rock holds her (the middle of her never in rock; her outline only for the odd moment of a scrape)
+  report(midBuried.B === 0 && anyBuried.B <= samples4 * 0.15 && Math.abs(B.pose.x - startB) > 800, `ship1 flew her own pose along the route (${Math.round(B.pose.x - startB)} px; now ${Math.round(B.pose.x - A.pose.x)} px from ship 0, was ${Math.round(startGap)}) without passing through terrain: middle in rock ${midBuried.B}, outline touching ${anyBuried.B} of ${samples4} looks (ship 0: ${midBuried.A} / ${anyBuried.A})`);
   report(wrongWalk.A === 0 && wrongWalk.B === 0 && crewSteps > 0, `every crewman stood on HIS ship's decks the whole run (${crewSteps} samples; off-deck: ship 0 ${wrongWalk.A}, ship1 ${wrongWalk.B})`);
   report(conn.B > 0 || B.layout.connectors.length === 0, `ship1's crew climbed her own ladders and lifts (${conn.B} samples on a connector; ship 0 ${conn.A})`);
   report(camBad === 0 && view && view.zoom > 0, `the camera framed both ships all along (zoom ${view && view.zoom.toFixed(2)}, floor ${view && view.minZoom.toFixed(2)}${view && view.clipped ? ', CLIPPED' : ''})`);

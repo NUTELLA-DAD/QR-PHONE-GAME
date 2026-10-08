@@ -59,11 +59,11 @@ export function createWeather({ state, impact, puff }) {
     w.gustNext = nextGust;
     if (gustLeft > 0) {
       gustLeft -= dt;
-      state.ship.alt += w.gust * w.storm * gustShove(state) * dt;
+      mainShip(state).pose.y -= w.gust * w.storm * gustShove(state) * dt;
       const bag = mainShip(state).layout.gasbag;
       if (bag) applyForce(state, { x: bag.cx + bag.rx * 0.4, y: bag.cy, fx: 0, fy: -w.gust * w.storm * gustShove(state) * config.FORCES.GUST_LIFT, source: 'gust' }); // (the gust lifts or drops the front of the bag: it rocks her, forces.js)
       const bounds = altBounds(state);
-      state.ship.alt = Math.max(Math.min(bounds.lo - 60, state.ship.alt), Math.min(bounds.hi + 60, state.ship.alt));
+      mainShip(state).pose.y = -Math.max(Math.min(bounds.lo - 60, state.ship.alt), Math.min(bounds.hi + 60, state.ship.alt));
       if (gustLeft <= 0) w.gust = 0;
     } else if ((gustT -= dt) <= 0) {
       gustT = rand(S.GUST_EVERY_MIN, S.GUST_EVERY_MAX);

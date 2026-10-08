@@ -1127,9 +1127,9 @@ export function createShipSim(world, ship, W) {
       state.ship.vy = (state.ship.vy || 0) + (lift + trim + state.balance.push + state.forces.vyAcc - (state.ship.vy || 0) * G.DRAG) * dt; // (vyAcc: lift engines pointing up / dive engines down, forces.js)
       const bounds = altBounds(state);
       const hi = Math.max(bounds.hi, state.ship.alt);
-      state.ship.alt += state.ship.vy * dt;
+      ship.pose.y -= state.ship.vy * dt;
       if (state.ship.alt > hi) {
-        state.ship.alt = hi;
+        ship.pose.y = -hi;
         state.ship.vy = Math.min(0, state.ship.vy);
       }
       // Nearly out of gas on the ground: the hull grinds.
@@ -1143,8 +1143,8 @@ export function createShipSim(world, ship, W) {
     } else if (state.phase !== 'flying') {
       // Moored at the mast.
       state.ship.vy = 0;
-      const home = ((state.course && state.course.homeAlt) || 0) + (ship.formation ? ship.formation.dalt : 0); // (a second ship is moored below or above the lead's mast height)
-      state.ship.alt += (home - state.ship.alt) * Math.min(1, dt * 0.4);
+      const home = ship.moorAlt != null ? ship.moorAlt : ((state.course && state.course.homeAlt) || 0); // (a second ship is moored where course.js place() put her, below or above the lead's mast height)
+      ship.pose.y -= (home - state.ship.alt) * Math.min(1, dt * 0.4);
     }
     state.ship.shake = Math.max(0, state.ship.shake - dt);
     goingDown.update(dt); // the last stand: sinking, the meters, the ice locker (goingDown.js)
@@ -1223,9 +1223,10 @@ export function createShipSim(world, ship, W) {
   // ... and rebuilt: a fresh ship with her crew dropped back aboard from above, as restartGame does for the main one.
   function respawn({ crew = true } = {}) {
     Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
+    if (!ship.main) W.course.place(ship); // (back at her station in open air; her pose is her own)
     forces.reset();
     Object.assign(state.gasValve, { input: 0, auto: false });
-    state.lastAlt = 0;
+    state.lastAlt = state.ship.alt;
     state.wreck = null;
     state.ventOpen.fill(false);
     state.gasValveOpen.fill(true);
