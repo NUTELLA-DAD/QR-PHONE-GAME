@@ -6,15 +6,18 @@
 //                                  stretch it makes a new deck (rooms for the hull to enclose, plus a ladder to the nearest deck so it can be reached)
 //   erase(parts, row, x0, x1)      rub out a stretch of deck: it gets shorter, splits in two, or goes; whatever stood on the rubbed-out stretch
 //                                  (stations, guns, racks, ladders, vents, pipes ...) goes with it and is listed in `removed`
-//   setBag(parts, { grow, twin })  the gasbag a column (BAG_STEP) longer or shorter, or the twin envelope on / off (a ship with no bag gets one)
-//   drawBag(parts, x0, x1)         a span dragged along the gasbag row: the main bag from nothing / resized, or (elsewhere) the twin envelope
+//   setBag(parts, { grow, twin })  the biggest gasbag a column (BAG_STEP) longer or shorter, or its twin envelope on / off (a ship with no bag gets one)
+//   drawBag(parts, x0, x1)         a span dragged along the gasbag row: a NEW bag on empty row space (any number side by side, S.5d), or the bag the
+//                                  stroke crosses resized; resizeBag(parts, i, side, x) moves one end of bag i (bags are numbered tail to nose)
+//   placePart(parts, type, x, y)   drop a part picture from the tray: the nearest legal slot of that palette type (buildSlots.js) takes it, or a hint says why not
 //   placeConnector(parts, x, rowA, rowB, type)   a ladder, slide pole or rope straight down between two deck rows at x
 //   thingAt(parts, x, y, slop) / removeAt(parts, x, y, slop) the single placed thing under a point (ladders, stations, guns, racks, sandbags ...); delete it
 //   emptyBuild() / ensureFrame(parts)            a ship of nothing (just its frame): every operation works on it, the first deck needs no ladder
 // Result: { ok, parts, hint, added: [labels], removed: [labels], cols, deck, kind }. ok false = nothing changed and `hint` says why.
 // The result may well FAIL validate() (erase the last boiler ...): that is the editor's job to show, not to prevent.
-import { buildLayout, BUILDS, COL, DECK_ROWS, KEEL_ROWS, rowOf } from './shipBuild.js';
+import { buildLayout, BUILDS, COL, DECK_ROWS, KEEL_ROWS, rowOf, bagCover } from './shipBuild.js';
 import { config } from '../../config.js';
+import { slotsFor, pickSlot, whyNot } from './buildSlots.js'; // (a cycle: buildSlots.js re-exports these operations; each side only calls the other at run time)
 
 export const GRID_X0 = 20; // the column grid: lines at GRID_X0 + k x COL (the classic main and lower decks' aft ends sit on it)
 
@@ -108,9 +111,9 @@ function subtract(lo, hi, spans) {
 }
 
 // Where an x snaps to: the nearest deck end (any deck) within SNAP_X, else the nearest column line of the grid.
-export function snapX(parts, x) {
+export function snapX(parts, x, bags = false) { // (bags: the gasbag tool snaps to the ends of other bags, not to deck ends)
   let best = null;
-  for (const p of parts) if (p.part === 'deck') for (const e of [p.x0, p.x1]) if (Math.abs(e - x) <= BE().SNAP_X && (best === null || Math.abs(e - x) < Math.abs(best - x))) best = e;
+  for (const p of parts) if (bags ? p.part === 'gasbag' : p.part === 'deck') for (const e of bags ? [p.cx - p.rx, p.cx + p.rx] : [p.x0, p.x1]) if (Math.abs(e - x) <= BE().SNAP_X && (best === null || Math.abs(e - x) < Math.abs(best - x))) best = e;
   return best !== null ? best : GRID_X0 + Math.round((x - GRID_X0) / COL) * COL;
 }
 
@@ -194,11 +197,9 @@ export function drawDeck(parts, row, x0, x1) {
   if (hi - lo < 40) return no(parts, 'Drag along the row to draw a deck (a column or more).');
   let L;
   try { L = buildLayout(parts); } catch { return no(parts, 'The parts do not build: undo the last change first.'); }
-  const bag = L.gasbag;
   if (row === 'nest') {
-    if (!bag) return no(parts, "The crow's nest sits on top of the gasbag: draw the gasbag first (the Gasbag tool).");
-    const reach = bag.rx * BE().BAG_COVER;
-    if (lo < bag.cx - reach || hi > bag.cx + reach) return no(parts, "The crow's nest sits on top of the gasbag: keep it over the bag (make the bag longer first).");
+    if (!L.gasbags.length) return no(parts, "The crow's nest sits on top of the gasbag: draw the gasbag first (the Gasbag tool).");
+    if (!bagCover(L.gasbags).some((c) => lo >= c.lo && hi <= c.hi)) return no(parts, "The crow's nest sits on top of the gasbag: keep it over a bag, or a row of touching bags (make the bag longer first).");
   }
   const next = clone(parts);
   const here = decksOn(next, row);
@@ -287,7 +288,7 @@ function dropDependents(list, goneParts, removed) {
 }
 
 export function erase(parts, row, x0, x1) {
-  if (row === 'gasbag') return eraseBag(parts);
+  if (row === 'gasbag') return eraseBag(parts, x0, x1);
   const info = rowInfo(row);
   if (!info) return no(parts, 'There is no deck row there.');
   const a = Math.round(Math.min(x0, x1)), b = Math.round(Math.max(x0, x1));
@@ -340,60 +341,117 @@ export function erase(parts, row, x0, x1) {
   return { ok: true, parts: out, added: [], removed, kind: 'erase', deck: targets.map((d) => d.name).join(', '), cols: cols(cut), span: [a, b], hint: `Erased ${cols(cut)} column(s) of ${targets.map((d) => d.name).join(', ')}.${removed.length ? ' removed: ' + summarize(removed) : ''}` };
 }
 
-// ---- the gasbag ------------------------------------------------------------------------------------------------------
-const bagOf = (parts) => parts.find((p) => p.part === 'gasbag');
-// A gasbag drawn along the gasbag row: from nothing it creates the main bag between the two ends; across the existing bag it resizes it (the new ends);
-// somewhere else on the row it is the twin envelope (it rides above and behind the main bag).
+/// ---- the gasbags -------------------------------------------------------------------------------------------------------
+// A ship may have any number of bags side by side on the gasbag row (BAGS_MAX): four small ones so that losing one leaves three, or one giant one. Each is a
+// `gasbag` part { cx, cy, rx, ry, twin? } (rx = half its length, between BAG_MIN and BAG_MAX); two bags never overlap. Bags are numbered from the tail (0) to the nose.
+const bagParts = (parts) => parts.filter((p) => p.part === 'gasbag').sort((a, b) => a.cx - b.cx);
+const bagOf = (parts) => bagParts(parts).reduce((best, b) => (!best || b.rx > best.rx ? b : best), null); // the biggest (the main bag; the twin envelope rides on it)
+const bagSpan = (b) => [b.cx - b.rx, b.cx + b.rx];
+const bagHalf = (a, b) => Math.max(BE().BAG_MIN, Math.min(BE().BAG_MAX, Math.round((b - a) / 20) * 10)); // the half-length a dragged span means
+// Where a bag at `self` may reach: the free stretch between its neighbours, as [from, to] (infinite when nothing is beside it).
+function bagRoom(bags, self, mid) {
+  let from = -Infinity, to = Infinity;
+  for (const b of bags) {
+    if (b === self) continue;
+    const [a, z] = bagSpan(b);
+    if (b.cx <= mid) from = Math.max(from, z); else to = Math.min(to, a);
+  }
+  return [from, to];
+}
+const bagText = (b) => `${Math.round(b.rx * 2)} px long`;
+
+// A span dragged along the gasbag row. Crossing one bag it resizes that bag to the new ends (kept clear of its neighbours); across two it is refused; on empty
+// row space it draws a NEW bag there (at least BAG_MIN each way, kept clear of the bags beside it).
 export function drawBag(parts, x0, x1) {
   const lo = Math.round(Math.min(x0, x1)), hi = Math.round(Math.max(x0, x1));
-  if (hi - lo < 40) return no(parts, 'Drag along the gasbag row to draw the bag (as long as you like).');
+  if (hi - lo < 40) return no(parts, 'Drag along the gasbag row to draw a bag (as long as you like; draw more beside it for a row of bags).');
   const next = clone(parts);
-  const bag = bagOf(next);
-  const rx = (a, b) => Math.max(BE().BAG_MIN, Math.min(BE().BAG_MAX, Math.round((b - a) / 20) * 10));
+  const bags = bagParts(next);
+  const hits = bags.filter((b) => Math.min(b.cx + b.rx, hi) - Math.max(b.cx - b.rx, lo) > 20);
   ensureFrame(next);
-  let kind = 'bag', hint;
-  if (!bag) {
-    next.push({ part: 'gasbag', cx: Math.round((lo + hi) / 2), cy: BE().BAG_CY, rx: rx(lo, hi), ry: BE().BAG_RY });
-    hint = `Gasbag drawn: ${rx(lo, hi) * 2} px long.`;
-  } else if (hi > bag.cx - bag.rx && lo < bag.cx + bag.rx) {
-    bag.cx = Math.round((lo + hi) / 2);
-    bag.rx = rx(lo, hi);
-    hint = `Gasbag now ${bag.rx * 2} px long.`;
+  let hint;
+  if (hits.length > 1) return no(parts, `That stroke crosses ${hits.length} bags: drag along one bag to resize it, or in the empty space beside them to add another.`);
+  if (hits.length === 1) {
+    const bag = hits[0];
+    const [from, to] = bagRoom(bags, bag, bag.cx);
+    const a = Math.max(lo, from), b = Math.min(hi, to);
+    if (b - a < 2 * BE().BAG_MIN) return no(parts, 'The neighbouring bags leave no room for a bag that short.');
+    bag.rx = Math.min(bagHalf(a, b), Math.floor((b - a) / 2));
+    bag.cx = Math.round((a + b) / 2);
+    hint = `Gasbag now ${bagText(bag)}.`;
   } else {
-    if (bag.twin) return no(parts, 'She already has a twin envelope: draw across the main bag to resize it.');
-    bag.twin = true;
-    kind = 'twin';
-    hint = 'Twin envelope added (it rides above and behind the main bag).';
+    if (bags.length >= BE().BAGS_MAX) return no(parts, `A ship has at most ${BE().BAGS_MAX} gasbags.`);
+    const [from, to] = bagRoom(bags, null, (lo + hi) / 2);
+    let a = Math.max(lo, from), b = Math.min(hi, to);
+    if (b - a < 2 * BE().BAG_MIN) { // too short a stroke: grow it to the shortest bag that fits in the room
+      if (to - from < 2 * BE().BAG_MIN) return no(parts, `No room for a bag there: the bags beside it leave less than ${2 * BE().BAG_MIN} px.`);
+      const c = (a + b) / 2;
+      a = Math.max(from, Math.min(c - BE().BAG_MIN, to - 2 * BE().BAG_MIN));
+      b = a + 2 * BE().BAG_MIN;
+    }
+    const rx = Math.min(bagHalf(a, b), Math.floor((b - a) / 2));
+    next.push({ part: 'gasbag', cx: Math.round((a + b) / 2), cy: BE().BAG_CY, rx, ry: BE().BAG_RY });
+    hint = bags.length ? `Gasbag ${bags.length + 1} drawn beside the others: ${rx * 2} px long. Each bag has its own gas; lose one and the rest still lift.` : `Gasbag drawn: ${rx * 2} px long.`;
   }
   refit(next);
-  return { ok: true, parts: next, added: ['gasbag'], removed: [], kind, cols: 0, hint };
+  return { ok: true, parts: next, added: ['gasbag'], removed: [], kind: 'bag', cols: 0, hint };
 }
-// Rub out the gasbag (and its twin).
-function eraseBag(parts) {
-  if (!bagOf(parts)) return no(parts, 'There is no gasbag to erase.');
-  const out = clone(parts).filter((p) => p.part !== 'gasbag');
+// Move one end of bag i (numbered tail to nose; side 'x0' = the tail end, 'x1' = the nose end) to x. Kept clear of its neighbours and within BAG_MIN..BAG_MAX.
+export function resizeBag(parts, i, side, x) {
+  const next = clone(parts);
+  const bags = bagParts(next), bag = bags[i];
+  if (!bag) return no(parts, 'There is no such gasbag.');
+  const [from, to] = bagRoom(bags, bag, bag.cx);
+  let [a, b] = bagSpan(bag);
+  if (side === 'x0') a = Math.max(from, Math.min(Math.round(x), b - 2 * BE().BAG_MIN)); else b = Math.min(to, Math.max(Math.round(x), a + 2 * BE().BAG_MIN));
+  const rx = Math.min(BE().BAG_MAX, Math.floor((b - a) / 20) * 10);
+  if (rx === bag.rx && Math.round((a + b) / 2) === bag.cx) return no(parts, 'That end cannot move there (a neighbouring bag, or the shortest bag).');
+  bag.rx = rx;
+  bag.cx = side === 'x0' ? Math.round(b - rx) : Math.round(a + rx);
+  refit(next);
+  return { ok: true, parts: next, added: [], removed: [], kind: 'bag', cols: 0, hint: `Gasbag ${i + 1} now ${bagText(bag)}.` };
+}
+// Rub out the bags under a stroke (those it crosses; a click inside one rubs out that one). Nothing under it: refused. Erasing a bag takes its twin envelope too.
+function eraseBag(parts, x0 = -Infinity, x1 = Infinity) {
+  const a = Math.min(x0, x1), b = Math.max(x0, x1);
+  const gone = bagParts(parts).filter((p) => (b - a < 20 ? a >= p.cx - p.rx && a <= p.cx + p.rx : Math.min(p.cx + p.rx, b) - Math.max(p.cx - p.rx, a) > 20));
+  if (!gone.length) return no(parts, bagParts(parts).length ? 'Drag the eraser across a gasbag to rub it out.' : 'There is no gasbag to erase.');
+  const out = clone(parts).filter((p) => !gone.some((g) => g.cx === p.cx && p.part === 'gasbag'));
   refit(out);
-  return { ok: true, parts: out, added: [], removed: ['gasbag'], kind: 'erase', deck: 'gasbag', cols: 0, hint: 'Erased the gasbag. removed: gasbag' };
+  const removed = gone.map(() => 'gasbag');
+  return { ok: true, parts: out, added: [], removed, kind: 'erase', deck: 'gasbag', cols: 0, hint: `Erased ${gone.length === 1 ? 'the gasbag' : gone.length + ' gasbags'}. removed: ${summarize(removed)}` };
 }
-// grow: +1 / -1 = one column (BAG_STEP of half-length) longer / shorter. twin: true / false / 'toggle' = the second envelope.
+// grow: +1 / -1 = one column (BAG_STEP of half-length) longer / shorter. twin: true / false / 'toggle' = the second envelope. Both act on the biggest bag.
 // A ship with no bag gets one (grow +1) sized to cover her decks.
 export function setBag(parts, { grow = 0, twin } = {}) {
   const next = clone(parts);
-  let bag = bagOf(next);
+  const bags = bagParts(next);
+  let bag = bags.reduce((best, b) => (!best || b.rx > best.rx ? b : best), null);
   if (!bag) {
     if (grow <= 0) return no(parts, 'This ship has no gasbag: draw one with the Gasbag tool (or press Bag +).');
     const decks = parts.filter((p) => p.part === 'deck' && !['nest', 'helm'].includes(p.row));
-    const d0 = decks.length ? Math.min(...decks.map((p) => p.x0)) : 0, d1 = decks.length ? Math.max(...decks.map((p) => p.x1)) : 2 * BE().BAG_MIN;
+    const d0 = decks.length ? Math.min(...decks.map((p) => p.x0)) : 0, d1 = decks.length ? Math.max(...decks.map((p) => p.x1)) : 2 * BE().BAG_DROP;
     return drawBag(parts, d0 - 40, d1 + 40);
   }
   if (grow) {
-    const rx = Math.max(BE().BAG_MIN, Math.min(BE().BAG_MAX, bag.rx + grow * BE().BAG_STEP));
-    if (rx === bag.rx) return no(parts, grow > 0 ? 'The gasbag is as long as it gets.' : 'The gasbag is as short as it gets.');
+    const [from, to] = bagRoom(bags, bag, bag.cx);
+    const rx = Math.max(BE().BAG_MIN, Math.min(BE().BAG_MAX, bag.rx + grow * BE().BAG_STEP, bag.cx - from, to - bag.cx));
+    if (rx === bag.rx) return no(parts, grow > 0 ? (bags.length > 1 ? 'The gasbag is as long as it gets here (the bags beside it touch).' : 'The gasbag is as long as it gets.') : 'The gasbag is as short as it gets.');
     bag.rx = rx;
   }
   if (twin !== undefined) bag.twin = twin === 'toggle' ? !bag.twin : !!twin;
   refit(next);
-  return { ok: true, parts: next, added: [], removed: [], kind: 'bag', cols: 0, hint: `Gasbag ${bag.rx * 2} px long${bag.twin ? ', with a twin envelope' : ''}.` };
+  return { ok: true, parts: next, added: [], removed: [], kind: 'bag', cols: 0, hint: `${bags.length > 1 ? 'The biggest gasbag is ' : 'Gasbag '}${bagText(bag)}${bag.twin ? ', with a twin envelope' : ''}.` };
+}
+
+// ---- dropping a part from the tray (S.5d) ----------------------------------------------------------------------------------
+// The part picture is dropped at (x, y) in ship coordinates: the nearest LEGAL slot of that palette type within `maxDist` takes it (slots are buildSlots.js's:
+// the same ones the click-a-pin way uses). Returns { ok, parts, hint, slot, kind: 'place', type } or { ok: false, hint: why not }. Pure: the input is never touched.
+export function placePart(parts, type, x, y, { maxDist = BE().DROP_REACH } = {}) {
+  const slot = pickSlot(slotsFor(type, parts), x, y, maxDist);
+  if (!slot) return no(parts, whyNot(parts, type, x, y));
+  const next = slot.apply(parts);
+  return { ok: true, parts: next, added: [slot.label], removed: [], kind: 'place', type, slot, hint: slot.label };
 }
 
 // ---- ladders and deleting single things ---------------------------------------------------------------------------------

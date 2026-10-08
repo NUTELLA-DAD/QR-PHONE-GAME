@@ -22,6 +22,15 @@
   #left{grid-row:2/4;overflow:auto}
   #palette{display:grid;grid-template-columns:1fr 1fr;gap:5px}
   #palette button{text-align:left;font-weight:400;padding:4px 7px;line-height:1.25} #palette button b{font-weight:700}
+  /* the parts tray (S.5d): little pictures of parts, dragged onto the blueprint (buildTest.js; the pictures are drawn by partArt.js) */
+  #tray{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .tile{border:2px solid var(--ink);border-radius:8px;background:#fbf3df;padding:3px 2px 2px;text-align:center;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;box-shadow:2px 2px 0 rgba(43,34,22,.3)}
+  .tile:hover{background:#fff6dc} .tile.on{background:var(--pin)} .tile.none{opacity:.6}
+  .tile canvas{width:60px;height:60px;display:block;margin:0 auto;pointer-events:none}
+  .tile b{display:block;font-size:10px;line-height:1.15;font-weight:700} .tile i{display:block;font-size:9px;font-style:normal;color:var(--soft)}
+  #ghost{position:fixed;left:0;top:0;width:68px;height:68px;pointer-events:none;z-index:60;display:none;opacity:.85;filter:drop-shadow(2px 3px 2px rgba(43,34,22,.45))}
+  #ghost.bad{opacity:.55;filter:grayscale(.6) drop-shadow(0 0 3px #a8443f)} #ghost.off{opacity:.4}
+  details summary{cursor:pointer;font:700 12px var(--text);margin:8px 0 4px}
   #parts{list-style:none;margin:0;padding:0;font-size:12px}
   #parts li{display:flex;justify-content:space-between;gap:6px;padding:2px 3px;border-bottom:1px solid rgba(107,74,50,.18)}
   #parts li.new{background:rgba(201,168,90,.28)} #parts li.sel{outline:2px solid var(--stamp)}
@@ -48,16 +57,17 @@
 <div id="app">
   <header id="top" class="panel">
     <h1>Build test</h1>
-    <div class="grp"><label class="chk"><input type="checkbox" id="oEdit" checked> Blueprint</label><button id="tDraw" class="on" title="Pencil: drag along a deck row to draw a deck or make one longer">Draw deck</button><button id="tBag" title="Gasbag: drag along the dashed bag row to draw the bag (or the twin envelope)">Gasbag</button><button id="tLadder" title="Ladder: drag straight down from one deck to another">Ladder</button><label class="chk" title="Place a one-way slide pole (down only) instead of a ladder"><input type="checkbox" id="oPole"> slide pole</label><button id="tErase" title="Eraser: drag along a deck to rub it out (what stood on it goes too)">Erase</button><button id="tDelete" title="Delete: click any one thing - a ladder, station, gun, rack, sandbag... (right-click works in every tool)">Delete</button><button id="tPlace" title="Click a part in the palette, then a brass pin">Place parts</button>
-      <button id="bagShort" title="Gasbag one column shorter">Bag -</button><button id="bagLong" title="Gasbag one column longer">Bag +</button><button id="bagTwin" title="Add or remove the twin envelope">Twin bag</button></div>
+    <div class="grp"><label class="chk"><input type="checkbox" id="oEdit" checked> Blueprint</label><button id="tDraw" class="on" title="Pencil: drag along a deck row to draw a deck or make one longer">Draw deck</button><button id="tBag" title="Gasbag: drag along the dashed bag row to draw a bag; in empty space beside a bag it adds another; drag a bag's end to resize it">Gasbag</button><button id="tLadder" title="Ladder: drag straight down from one deck to another">Ladder</button><label class="chk" title="Place a one-way slide pole (down only) instead of a ladder"><input type="checkbox" id="oPole"> slide pole</label><button id="tErase" title="Eraser: drag along a deck to rub it out (what stood on it goes too)">Erase</button><button id="tDelete" title="Delete: click any one thing - a ladder, station, gun, rack, sandbag... (right-click works in every tool)">Delete</button><button id="tPlace" title="Click a part in the palette, then a brass pin">Place parts</button>
+      <button id="bagShort" title="The biggest gasbag one column shorter">Bag -</button><button id="bagLong" title="The biggest gasbag one column longer (a ship with no bag gets one)">Bag +</button><button id="bagTwin" title="Add or remove the twin envelope on the biggest bag">Twin bag</button></div>
     <div class="grp"><label class="chk"><input type="checkbox" id="oNav"> Nav graph</label><label class="chk"><input type="checkbox" id="oSamples"> Collision samples</label><label class="chk"><input type="checkbox" id="oSlots" checked> Slots</label><label class="chk"><input type="checkbox" id="oBlue"> Blue overlay</label></div>
     <div class="grp"><select id="env"></select><button id="undo">Undo</button><button id="clear" title="Erase the whole ship and start from nothing">Clear (start from nothing)</button><button id="minimal" title="A small flyable ship built with the same tools">Start from a minimal ship</button><button id="reset">Reset to classic</button><button id="copy">Copy build JSON</button><button id="run" class="go">Run 60 s bot test</button></div>
     <div class="grp"><a href="/host.html" style="color:var(--soft)">Back to the game</a></div>
   </header>
   <aside id="left" class="panel">
-    <h2 style="margin-top:0">Parts</h2>
-    <div id="palette"></div>
-    <div id="palHint" style="margin:6px 0;color:var(--soft);font-size:12px">Click a part, then click a brass pin on the ship.</div>
+    <h2 style="margin-top:0">Parts tray</h2>
+    <div id="tray"></div>
+    <div id="palHint" style="margin:6px 0;color:var(--soft);font-size:12px">Drag a picture onto the blueprint: it snaps to the nearest legal spot (dimmed areas are no good; hover one to see why). Or click a picture, then a brass pin.</div>
+    <details><summary>Parts by name</summary><div id="palette"></div></details>
     <h2>Placed parts <span id="partCount"></span></h2>
     <ul id="parts"></ul>
   </aside>
@@ -67,5 +77,6 @@
     <div class="panel"><div id="verdict"></div><div id="needs"></div><div id="checklist"></div><div id="report"></div><div id="bot"></div></div>
   </section>
 </div>
+<canvas id="ghost" width="136" height="136"></canvas>
 <script type="module" src="/modules/host/buildTest.js"></script>
 </body></html>

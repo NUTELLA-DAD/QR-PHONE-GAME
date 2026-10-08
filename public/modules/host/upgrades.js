@@ -1,6 +1,7 @@
 // Ship upgrades. At the turning beacon and back home, the crew votes on one of three.
 // Each upgrade changes the ship's modules (via config / state) and can be taken up to `max` times.
 import { config } from '../../config.js';
+import { refillBags } from './gasBags.js';
 
 export const UPGRADES = [
   {
@@ -110,7 +111,7 @@ export const UPGRADES = [
     desc: 'Patch everything up right now: hull, gasbag and every module.',
     apply: ({ state, modules }) => {
       state.ship.hull = 100;
-      state.ship.gas = Math.max(state.ship.gas, config.GAS.START);
+      refillBags(state, config.GAS.START);
       state.breaches.length = 0;
       state.gasHoles.length = 0;
       state.fires.length = 0;

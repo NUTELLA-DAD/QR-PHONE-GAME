@@ -136,13 +136,17 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   // ================= GASBAGS (they swell with the gas) =================
   // The envelope's picture (tail fins, painted or drawn envelope, crest) never changes except with upgrades, so it is baked once
   // (see rebake) and drawn each frame under the swell scale; only the wrinkles and the rigging are drawn live.
-  const bags = () => (Array.isArray(L.gasbag) ? L.gasbag : [L.gasbag]).filter((b) => b && Number.isFinite(b.rx) && b.rx > 0 && b.ry > 0);
-  const gasFill = () => Math.max(0, Math.min(1, (state.ship.gas ?? 50) / 100));
+  // The gasbags, tail to nose (S.5d: any number side by side; a ship from before that has just L.gasbag).
+  const bags = () => (L.gasbags && L.gasbags.length ? L.gasbags : Array.isArray(L.gasbag) ? L.gasbag : [L.gasbag]).filter((b) => b && Number.isFinite(b.rx) && b.rx > 0 && b.ry > 0);
+  // How full bag bi is (0..1): each bag has its own gas (state.bags, gasBags.js). A bag that has gone flat also sags: `sag` 0..1 is how crumpled it is.
+  const gasFill = (bi = 0) => Math.max(0, Math.min(1, ((state.bags && state.bags[bi] ? state.bags[bi].gas : state.ship.gas) ?? 50) / 100));
+  const sagOf = (bi) => (state.bags && state.bags.length > 1 && state.bags[bi] && state.bags[bi].down ? Math.max(0, Math.min(1, 1 - state.bags[bi].gas / (config.GAS.BAG_UP - 2))) : 0);
 
-  // The ship-space box a bag's picture is painted in (room on the left for the tail fins), and the twin envelope's.
-  const bagRect = (G) => ({ x: Math.floor(G.cx - G.rx - 220), y: Math.floor(G.cy - G.ry - 50), w: Math.ceil(G.rx * 2 + 250), h: Math.ceil(G.ry * 2 + 100) });
+  // The ship-space box a bag's picture is painted in (room on the left for the tail fins, and on the right for the nose fins of a row of bags), and the twin envelope's.
+  const bagRect = (G, wide) => ({ x: Math.floor(G.cx - G.rx - 220), y: Math.floor(G.cy - G.ry - 50), w: Math.ceil(G.rx * 2 + 250 + (wide ? 60 : 0)), h: Math.ceil(G.ry * 2 + 100) });
   const twinGeom = (G) => ({ tx: G.cx - 20, ty: G.cy - 258, rx: G.rx * TWIN_SIZE.rx, ry: G.ry * TWIN_SIZE.ry });
-  const twinOn = () => has('twin-gasbag') || !!(bags()[0] && bags()[0].twin); // (the upgrade, or a twin bag built into the ship)
+  const mainBag = () => bags().reduce((best, b, i, a) => (b.rx > a[best].rx ? i : best), 0); // the biggest bag: the twin-gasbag upgrade's second envelope rides on it
+  const twinOn = (G, bi) => !!G.twin || (has('twin-gasbag') && bi === mainBag()); // (a twin envelope built onto this bag, or the upgrade)
   const twinRect = (G) => { const t = twinGeom(G); return { x: Math.floor(t.tx - t.rx - 20), y: Math.floor(t.ty - t.ry - 20), w: Math.ceil(t.rx * 2 + 40), h: Math.ceil(t.ry * 2 + 40) }; };
 
   // Draw a baked (or directly painted) picture swollen about (cx, cy).
@@ -158,26 +162,28 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
 
   const drawGasbag = () => {
     const list = bags();
-    const g = gasFill();
     list.forEach((G, bi) => {
-      const first = bi === 0;
-      if (first && twinOn()) {
+      const g = gasFill(bi);
+      const sag = sagOf(bi); // (a flat bag in a row of bags: it droops from its rigging and is flattened, with deep folds)
+      const sy = (0.9 + 0.2 * g) * (1 - 0.42 * sag);
+      const anchorY = G.cy + G.ry * 0.6 * sag; // (the sag squeezes it toward its underside)
+      if (twinOn(G, bi)) {
         // The second envelope, riding higher behind the first, with its own rigging.
         const t = twinGeom(G);
         line([[G.cx - 280, G.cy - 198], [G.cx - 280, t.ty]], 4);
         line([[G.cx + 300, G.cy - 198], [G.cx + 300, t.ty]], 4);
-        swollen(t.tx, t.ty, 0.8 + 0.4 * g, 0.9 + 0.2 * g, bake.twin, () => paintTwin(G));
+        swollen(t.tx, t.ty, 0.8 + 0.4 * g, 0.9 + 0.2 * g, bake.twins[bi], () => paintTwin(G));
       }
       // The envelope swells when full and sags when empty (mostly in length, a little in height).
-      swollen(G.cx, G.cy, 0.78 + 0.44 * g, 0.9 + 0.2 * g, bake.bags[bi], () => paintBag(G, first));
+      swollen(G.cx, anchorY, 0.78 + 0.44 * g, sy, bake.bags[bi], () => paintBag(G, bi === 0, list.length > 1 && bi === list.length - 1));
       // Nearly empty: wrinkles.
       if (g < 0.35) {
         ctx.save();
-        ctx.translate(G.cx, G.cy);
-        ctx.scale(0.78 + 0.44 * g, 0.9 + 0.2 * g);
-        ctx.translate(-G.cx, -G.cy);
-        ctx.strokeStyle = 'rgba(80,60,40,.5)';
-        ctx.lineWidth = 2.8;
+        ctx.translate(G.cx, anchorY);
+        ctx.scale(0.78 + 0.44 * g, sy);
+        ctx.translate(-G.cx, -anchorY);
+        ctx.strokeStyle = sag > 0.5 ? 'rgba(60,44,30,.7)' : 'rgba(80,60,40,.5)';
+        ctx.lineWidth = 2.8 + 2 * sag;
         for (let k = 0; k < 7; k++) {
           const x = G.cx - G.rx * 0.8 + (k * G.rx * 1.6) / 6;
           ctx.beginPath();
@@ -223,14 +229,20 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   };
 
   // One gasbag at its resting size: tail fins (the first bag only), the envelope, our crew's crest.
-  const paintBag = (G, first) => {
-    if (first) {
+  const paintBag = (G, first, fore) => {
+    for (const end of [first ? 1 : 0, fore ? -1 : 0]) { // fins on the END bags only: the tail fins on the first, smaller nose fins (mirrored) on the last of a row
+      if (!end) continue;
       // Better Rudders: bigger fins.
-      const fin = 1 + 0.25 * has('rudders');
+      const fin = (1 + 0.25 * has('rudders')) * (end < 0 ? 0.7 : 1);
       ctx.save();
-      ctx.translate(G.cx - G.rx + 200, G.cy - 198); // (the classic bag's stern is at -200, 198)
-      ctx.translate(-100, 198); // the stern of the bigger bag
-      ctx.scale(fin, fin);
+      if (end > 0) {
+        ctx.translate(G.cx - G.rx + 200, G.cy - 198); // (the classic bag's stern is at -200, 198)
+        ctx.translate(-100, 198); // the stern of the bigger bag
+        ctx.scale(fin, fin);
+      } else {
+        ctx.translate(G.cx + G.rx - 100, G.cy); // the nose of the last bag, fins mirrored
+        ctx.scale(-fin, fin);
+      }
       ctx.translate(-40, -245);
       // Tail fins (behind the envelope, at the stern = left).
       if (!sprites.box(ctx, 'ship/fin-top', -95, 70, 135, 130)) {
@@ -1308,7 +1320,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   };
 
   // ---- The bake: one offscreen canvas per static layer, in ship space ----
-  const bake = { back: null, front: null, bags: [], twin: null, key: '', scale: 0, x: 0, y: 0, w: 0, h: 0, failed: false };
+  const bake = { back: null, front: null, bags: [], twins: [], key: '', scale: 0, x: 0, y: 0, w: 0, h: 0, failed: false };
   let sigCount = 0;
   let sigCache = '';
 
@@ -1441,12 +1453,12 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     const back = paintTo(bake.back, r, s, drawBackLayer);
     const front = paintTo(bake.front, r, s, drawFrontLayer);
     const list = bags();
-    const bagPics = list.map((G, i) => paintTo(bake.bags[i], bagRect(G), s, () => guard('bag', paintBag, G, i === 0)));
-    const twin = list.length && twinOn() ? paintTo(bake.twin, twinRect(list[0]), s, () => guard('twin', paintTwin, list[0])) : null;
+    const bagPics = list.map((G, i) => paintTo(bake.bags[i], bagRect(G, list.length > 1 && i === list.length - 1), s, () => guard('bag', paintBag, G, i === 0, list.length > 1 && i === list.length - 1)));
+    const twins = list.map((G, i) => (twinOn(G, i) ? paintTo(bake.twins[i], twinRect(G), s, () => guard('twin', paintTwin, G)) : null));
     bake.back = back;
     bake.front = front;
     bake.bags = bagPics;
-    bake.twin = twin;
+    bake.twins = twins;
     bake.key = key;
     bake.scale = s;
   };
@@ -1493,7 +1505,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     lap();
     const baked = ensureBake();
     lap('bake');
-    if (!baked) { bake.bags = []; bake.twin = null; }
+    if (!baked) { bake.bags = []; bake.twins = []; }
     guard('gasbag', drawGasbag); // (behind everything else)
     lap('gasbag');
     if (baked) blit(bake.back);

@@ -17,7 +17,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function createHookshot({ state, puff, phoneFx, air, hijack }) {
   const alt = () => state.ship.alt;
-  const gb = SHIP_LAYOUT.gasbag;
+  const bagF = (x, y) => { let f = Infinity; for (const b of SHIP_LAYOUT.gasbags) f = Math.min(f, ((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2); return f; }; // < 1 inside any of the gasbags
   const val = (v) => (typeof v === 'function' ? v() : v);
   const origin = (p) => ({ x: p.x, y: p.y - H.HAND - (p.fly ? 0 : p.jz || 0) });
 
@@ -48,7 +48,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
       }
     }
     // The gasbag: crossing its outline either way.
-    const f = ((x - gb.cx) / gb.rx) ** 2 + ((y - gb.cy) / gb.ry) ** 2;
+    const f = bagF(x, y);
     if (prev != null && (prev - 1) * (f - 1) <= 0) {
       const ax = x;
       const ay = y;
@@ -100,7 +100,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     for (let d = 0; d <= H.RANGE; d += 12) {
       const x = o.x + dx * d;
       const y = o.y + dy * d;
-      const f = ((x - gb.cx) / gb.rx) ** 2 + ((y - gb.cy) / gb.ry) ** 2;
+      const f = bagF(x, y);
       if (d >= H.SKIP) {
         const a = probe(x, y, prev);
         if (a) return { dist: d, anchor: a };

@@ -11,7 +11,7 @@ import { validate } from './buildCheck.js';
 import { config } from '../../config.js';
 
 // The blueprint editing operations (draw a deck, erase, lengthen the gasbag, place a ladder, delete a thing) are pure functions of a parts list: re-exported here with the slots.
-export { drawDeck, drawBag, erase, setBag, placeConnector, thingAt, removeAt, emptyBuild, ensureFrame, snapX, rowAtY, summarize, EDIT_ROWS, DRAW_ROWS, GRID_X0 } from './buildEdit.js';
+export { drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, thingAt, removeAt, emptyBuild, ensureFrame, snapX, rowAtY, summarize, EDIT_ROWS, DRAW_ROWS, GRID_X0 } from './buildEdit.js';
 const STEP = 40; // slots sit on a grid this far apart along a deck (px)
 const clone = (parts) => parts.map((p) => ({ ...p }));
 const names = (parts) => new Set(parts.map((p) => p.n || p.name).filter(Boolean));
@@ -171,7 +171,7 @@ export const PALETTE = [
         const ti = L.platforms.indexOf(a), bi = L.platforms.indexOf(b);
         for (const x of spots({ x0: Math.max(a.x0, b.x0), x1: Math.min(a.x1, b.x1) }, 40)) {
           if (L.connectors.some((c) => c.top === ti && c.bottom === bi && Math.abs(c.xTop - x) < 90)) continue;
-          out.push({ p: top, x, label: `${type === 'ladder' ? 'Ladder' : 'Pole'} ${a.name} to ${b.name}, x ${x}`, apply: (ps) => [...ps, { part: type === 'ladder' && rowOf(a) === 'nest' ? 'rope' : type, top, bottom, xTop: x, xBottom: x }] });
+          out.push({ p: top, x, hy: (a.y + b.y) / 2, hr: (b.y - a.y) / 2 + 20, label: `${type === 'ladder' ? 'Ladder' : 'Pole'} ${a.name} to ${b.name}, x ${x}`, apply: (ps) => [...ps, { part: type === 'ladder' && rowOf(a) === 'nest' ? 'rope' : type, top, bottom, xTop: x, xBottom: x }] });
         }
       }
       return out;
@@ -204,7 +204,86 @@ export const PALETTE = [
   { id: 'ballast_hang', label: 'Sandbag (hanging)', hint: 'click a lower or keel deck: it hangs from the hull under it', slots: (L, parts) => ballastSlots(L, parts, true) },
   { id: 'extinguisher', label: 'Extinguisher', hint: 'click a deck spot', slots: (L) => rackSlots(L, 'extinguisher', 'an extinguisher') },
   { id: 'vent', label: 'Steam vent', hint: 'click a deck spot', slots: (L) => rackSlots(L, 'vent', 'a steam vent') },
+  { id: 'gasbag', label: 'Gasbag', hint: 'click a stretch of the gasbag row: one more bag beside the others (a row of small ones keeps flying if you lose one)', slots: (L, parts) => bagSlots(parts) },
 ];
+
+// Gasbags (S.5d): a slot is a stretch of the empty gasbag row a new bag (BAG_DROP half-length, less where a neighbour is close) fits in: touching the bag beside it,
+// or centred on a column line. Not a point on a deck: the slot carries its `span` and sits on the bag row (y = BAG_CY).
+function bagSlots(parts) {
+  const E = config.BUILD_EDIT, R = E.BAG_DROP;
+  const bags = parts.filter((p) => p.part === 'gasbag').sort((a, b) => a.cx - b.cx);
+  if (bags.length >= E.BAGS_MAX) return [];
+  const gaps = [];
+  let cursor = -Infinity;
+  for (const b of bags) { gaps.push([cursor, b.cx - b.rx]); cursor = b.cx + b.rx; }
+  gaps.push([cursor, Infinity]);
+  const out = [], seen = new Set();
+  const add = (a, z) => {
+    a = Math.round(a); z = Math.round(z);
+    if (z - a < 2 * E.BAG_MIN || seen.has(a + ':' + z)) return;
+    seen.add(a + ':' + z);
+    const rx = Math.min(E.BAG_MAX, Math.floor((z - a) / 20) * 10);
+    const cx = Math.round((a + z) / 2);
+    out.push({ p: null, x: cx, y: E.BAG_CY, span: [cx - rx, cx + rx], bag: true, label: `Gasbag ${rx * 2} px long, x ${cx - rx} to ${cx + rx}`, apply: (ps) => [...ps, { part: 'gasbag', cx, cy: E.BAG_CY, rx, ry: E.BAG_RY }] });
+  };
+  for (const [from, to] of gaps) {
+    if (Number.isFinite(from)) add(from, Math.min(to, from + 2 * R)); // touching the bag on its tail side
+    if (Number.isFinite(to)) add(Math.max(from, to - 2 * R), to); // ...or on its nose side
+    for (let c = GRID_X0 + Math.ceil((Math.max(from, -300) - GRID_X0) / COL) * COL; c <= Math.min(to, 2400); c += COL) add(Math.max(from, c - R), Math.min(to, c + R)); // on the column grid
+  }
+  return out;
+}
+
+// How far a slot is from a point (ship coordinates): a pin on a deck by its distance from the pin; a bag stretch by its centre, and only for a point up on the bag row.
+export function slotDistance(s, x, y) {
+  if (s.bag) return Math.abs(y - s.y) < config.BUILD_EDIT.BAG_RY + 50 ? Math.abs(x - s.x) : Infinity;
+  const dy = Math.abs((s.hy ?? s.y - 14) - y); // (a ladder's pin hangs mid-way between its two decks: hy / hr)
+  return dy > (s.hr ?? config.BUILD_EDIT.DROP_ROW) ? Infinity : Math.hypot(s.x - x, dy);
+}
+// The nearest of `slots` to a point within maxDist, or null.
+export function pickSlot(slots, x, y, maxDist = config.BUILD_EDIT.DROP_REACH) {
+  let best = null, bd = maxDist;
+  for (const s of slots) { const d = slotDistance(s, x, y); if (d <= bd) { bd = d; best = s; } }
+  return best;
+}
+
+// Why a part cannot be dropped at a point: where each palette type may stand (deck rows) and its one-per-ship limits. A sentence for the hover note.
+const ROW_NAME = { nest: "crow's nest", catwalk: 'top deck', main: 'main deck', lower: 'lower deck', keel: 'keel deck', deep: 'deep deck', helm: 'helm mount', belly: 'belly', bay: 'bomb bay' };
+const RACK_ROWS = ['catwalk', 'main', 'lower'];
+const RULES = {
+  helm: { rows: ['catwalk', 'main'], once: (parts) => count(parts, (p) => p.part === 'station' && p.kind === 'helm') > 0, onceText: 'A ship has one helm.' },
+  boiler: { rows: ['main', 'lower'] }, coal: { rows: ['lower', 'main', 'keel', 'deep'] }, ammo: { rows: ['lower', 'main', 'keel', 'deep'] },
+  engine: { rows: ['lower'] }, gun: { rows: ['nest', 'catwalk', 'lower'] }, lookout: { rows: ['nest'] }, searchlight: { rows: ['nest', 'catwalk'] },
+  medbay: { rows: ['main', 'lower', 'keel', 'deep'], once: (parts) => count(parts, (p) => p.part === 'medbay') > 0, onceText: 'A ship has one medbay.' },
+  bombBay: { rows: ['lower'], once: (parts) => count(parts, (p) => p.part === 'bombBay' || (p.part === 'deck' && p.id === 'bay')) > 0, onceText: 'A ship has one bomb bay.' },
+  lift: { rows: ['main'], once: (parts) => count(parts, (p) => p.part === 'lift') > 0, onceText: 'A ship has one lift.' },
+  boarding: { rows: ['catwalk'] }, rack_hammer: { rows: RACK_ROWS }, rack_sword: { rows: RACK_ROWS }, rack_hookshot: { rows: RACK_ROWS }, rack_ice: { rows: RACK_ROWS },
+  extinguisher: { rows: RACK_ROWS }, vent: { rows: RACK_ROWS }, ballast: { rows: ['main', 'lower', 'keel', 'deep'] }, ballast_hang: { rows: ['lower', 'keel', 'deep'] },
+  ladder: { link: true }, pole: { link: true },
+};
+export function whyNot(parts, type, x, y) {
+  const def = PALETTE.find((t) => t.id === type), rule = RULES[type] || {}, what = def ? def.label.toLowerCase() : type;
+  let L;
+  try { L = buildLayout(parts); } catch { return 'The parts do not build: undo the last change first.'; }
+  if (type === 'gasbag') {
+    const E = config.BUILD_EDIT;
+    if (count(parts, (p) => p.part === 'gasbag') >= E.BAGS_MAX) return `A ship has at most ${E.BAGS_MAX} gasbags.`;
+    if (Math.abs(y - E.BAG_CY) >= E.BAG_RY + 50) return 'Drop a gasbag on the gasbag row, above the decks.';
+    return `No room for a bag there: the bags beside it leave less than ${2 * E.BAG_MIN} px (drop it in a wider gap, or shorten a neighbour).`;
+  }
+  if (rule.once && rule.once(parts)) return rule.onceText;
+  const decks = L.platforms.filter((q) => x > q.x0 - 70 && x < q.x1 + 70 && Math.abs(q.y - y) < 130).sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y));
+  const deck = decks[0];
+  if (!deck) return `Drop the ${what} on a deck of the ship.`;
+  const row = rowOf(deck);
+  if (rule.link) return `A ${what} joins two decks that overlap: drop it where another deck lies directly above or below the ${deck.name}, clear of ladders and stations.`;
+  if (rule.rows && !rule.rows.includes(row)) return `A ${what} goes on the ${rule.rows.map((r) => ROW_NAME[r]).join(' or ')}, not the ${deck.name}.`;
+  if (x < deck.x0 + 25 || x > deck.x1 - 25) return `Too close to the end of the ${deck.name}.`;
+  const gap = config.BUILD_CHECK.MIN_GAP + 15;
+  const near = [...L.stations.map((s) => ({ n: s.n, p: s.p, x: s.x })), ...L.engines.map((e) => ({ n: e.name, p: e.p, x: e.x }))].filter((s) => s.p === deck.id && Math.abs(s.x - x) < gap).sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x))[0];
+  if (near) return `${near.n} is in the way (keep ${gap} px clear on the ${deck.name}).`;
+  return `No clear spot for a ${what} there on the ${deck.name}: something is standing too close (a ladder, a rack, a vent or another ${what}).`;
+}
 
 function stationSlots(L, kind) {
   const [rows, haul] = STATION_AT[kind];

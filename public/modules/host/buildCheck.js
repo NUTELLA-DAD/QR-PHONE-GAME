@@ -5,7 +5,7 @@
 // (tools/buildsim.mjs), the batch runner and the dev page (public/buildtest.html) all use it.
 // A check is { group, level: 'PASS' | 'WARN' | 'FAIL', text }; ok means no FAIL.
 import { config } from '../../config.js';
-import { buildLayout, budgets as partBudgets, balanceOf, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf } from './shipBuild.js';
+import { buildLayout, budgets as partBudgets, balanceOf, bagCover, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf } from './shipBuild.js';
 
 const BC = config.BUILD_CHECK;
 const BALANCE = config.BALANCE;
@@ -160,6 +160,7 @@ export function validate(parts, opts = {}) {
   const fail = (group, text) => add('FAIL', group, text);
   const warn = (group, text) => add('WARN', group, text);
   const pass = (group, text) => add('PASS', group, text);
+  const info = (group, text) => add('INFO', group, text); // (a note, not a verdict: the report shows it and nothing fails)
   const result = (layout, extra = {}) => {
     const fails = checks.filter((c) => c.level === 'FAIL').map((c) => c.text);
     const warns = checks.filter((c) => c.level === 'WARN').map((c) => c.text);
@@ -305,21 +306,34 @@ export function validate(parts, opts = {}) {
     } else pass('Cave fit', `needs a ${n.tunnel}-square tunnel and ${n.shaft}-square shaft (caves carve ${BC.CAVE_TUNNEL} x ${BC.CAVE_SHAFT})`);
   }
 
-  // --- The gasbag should reach the whole ship (a longer ship with the same bag leaves its ends bare).
-  if (L.gasbag && L.gasbag.rx) {
-    const reach = L.gasbag.rx * config.BUILD_EDIT.BAG_COVER;
+  // --- The gasbags should reach the whole ship (a longer ship with the same bags leaves its ends bare, and a gap between two bags leaves a stretch of deck unlifted).
+  const bags = L.gasbags || [];
+  if (bags.length) {
+    const cover = config.BUILD_EDIT.BAG_COVER;
     const decks = L.platforms.filter((q) => ['catwalk', 'main', 'lower', 'keel', 'deep'].includes(rowOf(q)));
     if (decks.length) {
       const d0 = Math.min(...decks.map((q) => q.x0)), d1 = Math.max(...decks.map((q) => q.x1));
-      if (d0 < L.gasbag.cx - reach || d1 > L.gasbag.cx + reach) warn('Gasbag', `the gasbag covers x ${Math.round(L.gasbag.cx - reach)} to ${Math.round(L.gasbag.cx + reach)} but the decks run ${d0} to ${d1}: make the bag longer`);
+      const lo = bags[0].cx - bags[0].rx * cover, hi = bags[bags.length - 1].cx + bags[bags.length - 1].rx * cover;
+      if (d0 < lo || d1 > hi) warn('Gasbag', `the gasbag${bags.length > 1 ? 's cover' : ' covers'} x ${Math.round(lo)} to ${Math.round(hi)} but the decks run ${d0} to ${d1}: make the bag${bags.length > 1 ? 's' : ''} longer`);
+      for (let i = 1; i < bags.length; i++) {
+        const gap = bags[i].x0 - bags[i - 1].x1;
+        if (gap > BC.BAG_GAP_WARN && decks.some((q) => q.x1 > bags[i - 1].x1 && q.x0 < bags[i].x0)) warn('Gasbag', `${Math.round(gap)} px of open sky between bag ${i} and bag ${i + 1}: the deck under it has no lift`);
+      }
     }
-  }
-
-  // --- The crow's nest sits on the bag.
-  const nestDeck = L.platforms.find((q) => rowOf(q) === 'nest');
-  if (nestDeck && L.gasbag && L.gasbag.rx) {
-    const reach = L.gasbag.rx * config.BUILD_EDIT.BAG_COVER;
-    if (nestDeck.x0 < L.gasbag.cx - reach || nestDeck.x1 > L.gasbag.cx + reach) fail('Gasbag', `the crow's nest (x ${nestDeck.x0} to ${nestDeck.x1}) hangs off the end of the gasbag: make the bag longer or the nest shorter`);
+    // The crow's nest sits on a bag (any one).
+    const nestDeck = L.platforms.find((q) => rowOf(q) === 'nest');
+    if (nestDeck && !bagCover(bags).some((c) => nestDeck.x0 >= c.lo && nestDeck.x1 <= c.hi)) {
+      fail('Gasbag', `the crow's nest (x ${nestDeck.x0} to ${nestDeck.x1}) hangs off the end of the gasbag${bags.length > 1 ? 's (it must sit on a bag, or a row of touching bags)' : ''}: make the bag longer or the nest shorter`);
+    }
+    if (bags.length > config.BUILD_EDIT.BAGS_MAX) fail('Gasbag', `${bags.length} gasbags (at most ${config.BUILD_EDIT.BAGS_MAX})`);
+    // Redundancy: does she keep flying with her biggest bag gone? (a ruptured bag stays on the ship, weighing the same, but lifts nothing)
+    const lift = liftGauge(parts);
+    const big = bags.reduce((a, b) => (b.lift > a.lift ? b : a), bags[0]);
+    if (bags.length === 1) info('Redundancy', `one gasbag: if it is lost she falls (it lifts ${big.lift}). Several bags side by side keep her up when one is shot away`);
+    else {
+      const left = lift.lift - big.lift, hover = +(config.GAS.NEUTRAL + lift.mass - left).toFixed(1);
+      info('Redundancy', `${bags.length} gasbags. Lose one bag: hover ${hover}, ${hover <= BC.HOVER_MAX ? 'still flies' : hover <= 100 ? 'she limps (the pump at its limit)' : 'she falls'} (lift ${left} of ${lift.lift}; with all bags, hover ${lift.hover})`);
+    }
   }
 
   // --- Required kinds, kind sanity.

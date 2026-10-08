@@ -8,6 +8,7 @@
 //        node tools/buildsim.mjs --check-validator   S.5: broken builds must FAIL/WARN with the right message (the classic passes clean)
 //        node tools/buildsim.mjs --check-edit        S.5b/S.5c: the blueprint editor (draw a keel deck, extend main, lengthen the bag, cut the top deck, erase; ladders and delete; erase everything and build a ship up from nothing) validates and flies 2 min with 0 errors
 //        node tools/buildsim.mjs --check-balance     S.5c: the seesaw in flight (a nose-heavy ship rests nose-down and dives faster, a tail-heavy one is slower; the classic ship is exactly level; live loads move the balance)
+//        node tools/buildsim.mjs --check-bags        S.5d: many gasbags (four in a row, one giant) validate; drop-from-the-tray (placePart); rupture the fore bag in flight: she flies lower, tips toward it, the TV calls it out, patching + pumping restores it; both botsim 2 min with 0 errors
 //        node tools/buildsim.mjs --snapshot-classic --force   (S.0 only) rewrite tools/fixtures/classic-layout.json
 // Exit code 1 on any failure.
 import { pathToFileURL } from 'node:url';
@@ -181,10 +182,11 @@ const num = (v, d = 1) => (v == null || Number.isNaN(v) ? 'n/a' : (+v).toFixed(d
 
 // Run tools/botsim.mjs on a build in a child process. Resolves { stats (BUILD_STATS or null), errors, text }.
 let tmpN = 0;
-function runBotsim(parts, { map, env, minutes = 3, bots = 6, seed = 1 } = {}) {
+function runBotsim(parts, { map, env, minutes = 3, bots = 6, seed = 1, rupture = 0 } = {}) {
   const file = path.join(os.tmpdir(), `airship-build-${process.pid}-${tmpN++}.json`);
   fs.writeFileSync(file, JSON.stringify(parts));
   const a = ['tools/botsim.mjs', '--build', file, '--bots', String(bots), '--minutes', String(minutes), '--seed', String(seed)];
+  if (rupture) a.push('--rupture', String(rupture));
   if (map) a.push('--map', map);
   if (env) a.push('--env', env);
   return new Promise((resolve) => {
@@ -414,7 +416,7 @@ async function checkEdit() {
   report(bg.ok && buildLayout(bg.parts).gasbag.rx === 400 && buildLayout(bg.parts).gasbag.cx === 500, 'drawBag from nothing makes the main bag between the two ends');
   const bg2 = E.drawBag(bg.parts, 0, 1100);
   const bg3 = E.drawBag(bg2.parts, 2000, 2400);
-  report(bg2.ok && buildLayout(bg2.parts).gasbag.rx === 550 && bg3.ok && bg3.kind === 'twin' && buildLayout(bg3.parts).gasbag.twin === true, 'drawBag across the bag resizes it; drawn elsewhere it adds the twin envelope');
+  report(bg2.ok && buildLayout(bg2.parts).gasbag.rx === 550 && bg3.ok && buildLayout(bg3.parts).gasbags.length === 2 && E.setBag(bg2.parts, { twin: true }).ok && buildLayout(E.setBag(bg2.parts, { twin: true }).parts).gasbag.twin === true, 'drawBag across the bag resizes it; drawn on empty row space it adds a second bag (S.5d); the twin envelope is the Twin bag toggle');
   const nest = E.drawDeck(bg.parts, 'nest', 300, 600);
   report(nest.ok && nest.parts.some((p) => p.part === 'rope' && p.top === 'nest'), "with the bag there, the crow's nest goes up with a rope to the deck below");
   // placing parts on an incomplete ship: legality is local (a deck, a span, no overlap, kind limits), not whole-ship validity
@@ -499,6 +501,136 @@ async function checkBalance() {
   report(lf.state.balance.dx > la.state.balance.dx + 3, `live loads move the balance: crew at the nose dx ${lf.state.balance.dx.toFixed(1)}, at the tail ${la.state.balance.dx.toFixed(1)}`);
   config.BALANCE.LIVE = keep;
   applyBuild(C);
+  return ok;
+}
+
+/// S.5d: many gasbags and drag-and-drop. (1) the editor: bags drawn side by side, resized, erased, dropped from the tray (placePart); the validator (lift sums the
+// bags, the redundancy note, coverage). (2) in flight: rupture the fore bag of a four-bag ship (gas to 0 and holes in it): she keeps flying but lower, tips toward
+// the lost bag, the TV calls it out ("FORE BAG DOWN!"), patching + pumping brings the bag back. (3) one giant bag validates and flies; both fly 2 minutes
+// in a botsim with 0 errors. A classic ship still has exactly one bag whose gas IS state.ship.gas (tools/buildsim.mjs --check-botsim holds her to the old numbers).
+async function checkBags() {
+  globalThis.window ??= globalThis;
+  const store = new Map();
+  globalThis.localStorage ??= { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+  globalThis.requestAnimationFrame ??= (f) => setTimeout(f, 16);
+  const { config } = await load('config.js');
+  const { BUILDS, buildLayout, balanceOf, bagCover } = await load('modules/host/shipBuild.js');
+  const { validate } = await load('modules/host/buildCheck.js');
+  const E = await load('modules/host/buildEdit.js');
+  const S = await load('modules/host/buildSlots.js');
+  const { applyBuild, SHIP_LAYOUT } = await load('shipLayout.js');
+  const { createSimulation } = await load('modules/host/simulation.js');
+  let ok = true;
+  const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
+  const C = BUILDS.classic;
+  const four = await loadBuild('bags', BUILDS), giant = await loadBuild('giantbag', BUILDS);
+  const nbags = (parts) => parts.filter((p) => p.part === 'gasbag').length;
+
+  // 1. the editor and the validator
+  const v4 = validate(four), vg = validate(giant);
+  const L4 = buildLayout(four);
+  report(v4.ok && L4.gasbags.length === 4 && L4.gasbags.every((b, i, a) => !i || Math.abs(b.x0 - a[i - 1].x1) < 1), `four small bags side by side validate (hover ${v4.budgets.lift.hover}, lift ${v4.budgets.lift.lift} = ${L4.gasbags.map((b) => b.lift).join('+')}, balance ${v4.budgets.balance.text})${v4.ok ? '' : ': ' + v4.fails.join('; ')}`);
+  report(L4.gasbags.map((b) => b.id).join() === 'bag1,bag2,bag3,bag4' && L4.gasbag.n === 4 && Math.abs(L4.gasbag.cx - 800) < 1, 'layout.gasbags lists them tail to nose (bag1..bag4) and layout.gasbag spans the lot (the old single-bag field)');
+  const red = v4.checks.find((c) => c.group === 'Redundancy');
+  report(!!red && red.level === 'INFO' && /Lose one bag: hover [\d.]+, (still flies|she limps|she falls)/.test(red.text), 'the validator has a redundancy note: ' + (red ? red.text : 'MISSING'));
+  report(vg.ok && buildLayout(giant).gasbags.length === 1 && buildLayout(giant).gasbags[0].rx === 1200, `one giant bag (2400 px long, sandbags to weigh her down) validates (hover ${vg.budgets.lift.hover})${vg.ok ? '' : ': ' + vg.fails.join('; ')}`);
+  report(validate(C).checks.some((c) => c.group === 'Redundancy' && /one gasbag/.test(c.text)) && validate(C).ok && !validate(C).warns.length, 'the classic ship still validates clean (the redundancy note just says she has one bag)');
+  // too big a bag, too many bags, a gap, a nest off the bags
+  const huge = E.drawBag(E.erase(C, 'gasbag', 0, 0).parts, -2000, 4000);
+  report(huge.ok && buildLayout(huge.parts).gasbags[0].rx === config.BUILD_EDIT.BAG_MAX && !validate(huge.parts).ok, `a bag is capped at ${config.BUILD_EDIT.BAG_MAX * 2} px and a ship that big is too wide for the TV: FAIL (${(validate(huge.parts).fails.find((t) => /too big/.test(t)) || '?').slice(0, 40)}...)`);
+  const tiny = E.drawBag(E.erase(C, 'gasbag', 0, 0).parts, 100, 150);
+  report(!tiny.ok || buildLayout(tiny.parts).gasbags[0].rx >= config.BUILD_EDIT.BAG_MIN, 'a bag is never shorter than ' + config.BUILD_EDIT.BAG_MIN * 2 + ' px');
+  const gap = (() => { let p = E.erase(C, 'gasbag', 0, 0).parts; p = E.drawBag(p, -400, 400).parts; return E.drawBag(p, 800, 1600).parts; })();
+  report(validate(gap).warns.some((t) => /open sky between bag 1 and bag 2/.test(t)), 'a gap between two bags over a deck WARNs: ' + (validate(gap).warns.find((t) => /open sky/.test(t)) || 'MISSING'));
+  report(!E.drawBag(four, 300, 1300).ok && /crosses 2 bags/.test(E.drawBag(four, 300, 1300).hint), 'a stroke across several bags is refused: ' + E.drawBag(four, 300, 1300).hint);
+  const rs = E.resizeBag(four, 3, 'x1', 1800);
+  report(rs.ok && buildLayout(rs.parts).gasbags[3].x1 === 1800 && buildLayout(rs.parts).gasbags[3].x0 === 1400, 'resizeBag drags one end of one bag: bag 4 now ends at 1800 (' + rs.hint + ')');
+  report(!E.resizeBag(four, 1, 'x1', 1000).ok || buildLayout(E.resizeBag(four, 1, 'x1', 1000).parts).gasbags[1].x1 <= 800 + 1e-6, 'a bag cannot be dragged into its neighbour');
+  const er = E.erase(four, 'gasbag', 1100, 1100);
+  report(er.ok && nbags(er.parts) === 3 && er.removed.length === 1, 'the eraser (a click) rubs out the one bag under it: 4 bags -> ' + nbags(er.parts));
+  const er2 = validate(er.parts);
+  report(er2.ok === false || er2.warns.some((t) => /gap|open sky|covers/.test(t)) || er2.ok, 'a ship with a bag rubbed out is judged (' + (er2.ok ? 'valid' : 'FAIL: ' + er2.fails[0]) + (er2.warns.length ? '; WARN: ' + er2.warns[0] : '') + ')');
+  const twin = E.setBag(four, { twin: true });
+  report(twin.ok && buildLayout(twin.parts).gasbags.filter((b) => b.twin).length === 1 && validate(twin.parts).budgets.lift.lift > v4.budgets.lift.lift, 'the twin envelope rides on the biggest bag and adds its lift');
+  // 1b. drag and drop from the tray: placePart
+  let dropped = E.erase(C, 'gasbag', 0, 0).parts;
+  const drops = [-100, 380, 860, 1340, 1820].map((x) => { const r = E.placePart(dropped, 'gasbag', x, 198); if (r.ok) dropped = r.parts; return r.ok; });
+  const Ld = buildLayout(dropped);
+  report(drops.every(Boolean) && Ld.gasbags.length === 5 && Ld.gasbags.every((b, i, a) => !i || b.x0 >= a[i - 1].x1 - 1e-6), `five gasbag pictures dropped in a row make five bags that do not overlap (${Ld.gasbags.map((b) => b.x0 + '..' + b.x1).join(', ')})`);
+  const gunDrop = E.placePart(C, 'gun', 600, 455);
+  report(gunDrop.ok && gunDrop.kind === 'place' && gunDrop.parts.filter((p) => p.part === 'gun').length === C.filter((p) => p.part === 'gun').length + 1 && gunDrop.parts !== C && S.slotsFor('gun', C).some((s) => s.label === gunDrop.slot.label), 'placePart(gun) dropped onto the top deck takes the nearest legal slot (' + gunDrop.hint + ') and leaves its input alone');
+  const wrongRow = E.placePart(C, 'gun', 600, 625);
+  report(!wrongRow.ok && /goes on the .*not the Main Deck/.test(wrongRow.hint), 'a gun dropped on the main deck is refused with the reason: ' + wrongRow.hint);
+  report(/Drop the .* on a deck/.test(E.placePart(C, 'boiler', 300, 120).hint || '') && /one helm/.test(E.placePart(C, 'helm', 1270, 455).hint || ''), 'a drop in empty air says "drop it on a deck"; a second helm says "a ship has one helm"');
+  const lad = E.placePart(C, 'ladder', 700, 560);
+  report(lad.ok && lad.parts.filter((p) => p.part === 'ladder').length === C.filter((p) => p.part === 'ladder').length + 1, 'a ladder picture dropped between two decks makes a ladder: ' + (lad.hint || ''));
+  const near = E.placePart(C, 'rack_hammer', 6000, 455);
+  report(!near.ok, 'a drop far from any deck is refused: ' + near.hint);
+
+  // 2. in flight (headless sim, seeded so the runs differ only by what we do to them)
+  const seedRandom = (seed) => { let s = seed >>> 0; Math.random = () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+  const realRandom = Math.random, realNow = performance.now.bind(performance);
+  let clock = 0;
+  performance.now = () => clock;
+  const flyIt = (parts, secs, { rupture, noPump, patchAt, at = 25, tail } = {}) => {
+    seedRandom(5);
+    clock = 0;
+    config.MAPS.FORCE_KIND = 'open';
+    applyBuild(parts);
+    const sim = createSimulation();
+    const e = SHIP_LAYOUT.boarderEntryPoints;
+    for (let i = 0; i < 4; i++) sim.state.players['b' + i] = { id: 'b' + i, bot: true, name: 'B' + i, species: config.CREW_SPECIES[0], color: '#fff', x: e[0].x + 80 * i, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
+    sim.castOff();
+    const out = { warn: null, snap: {} }, keep = {};
+    const last = tail ? 0 : sim.state.bags.length - 1; // (the bag to lose: the fore one, or the tail one)
+    for (let i = 0; i < secs * 60; i++) {
+      clock += 1000 / 60;
+      if (rupture && i === at * 60) { // the fore bag: its gas to nothing, and three holes in it
+        sim.state.bags[last].gas = 0;
+        for (const x of tail ? [260, 300, 280] : [1300, 1340, 1320]) sim.state.gasHoles.push(sim.gasHoleAt(x, 450, last));
+      }
+      if (patchAt && i === patchAt * 60) sim.state.gasHoles.length = 0; // (the crew has patched them)
+      if (noPump && i === at * 60) { keep.pump = config.GAS.PUMP_RATE; keep.vent = config.GAS.VENT_RATE; config.GAS.PUMP_RATE = 0; config.GAS.VENT_RATE = 0; } // (nobody can pump or vent from here: what the bag lost stays lost, and the pilot cannot make it up)
+      sim.update(1 / 60);
+      if (!out.warn && sim.state.ev.warn > 0 && /BAG DOWN/.test(sim.state.ev.warnText || '')) out.warn = { t: i / 60 - at, text: sim.state.ev.warnText };
+      if (i % 60 === 0) out.snap[i / 60] = { alt: sim.state.ship.alt, pitch: sim.state.ship.pitch, rest: sim.state.balance.restPitch, deg: sim.state.balance.deg, gas: sim.state.bags.map((b) => b.gas), mean: sim.state.ship.gas, down: sim.state.bags.map((b) => b.down), holes: sim.state.gasHoles.length };
+    }
+    if (keep.pump != null) { config.GAS.PUMP_RATE = keep.pump; config.GAS.VENT_RATE = keep.vent; }
+    out.state = sim.state;
+    return out;
+  };
+  try {
+    applyBuild(C);
+    const c0 = createSimulation();
+    report(c0.state.bags.length === 1 && c0.state.ship.gas === c0.state.bags[0].gas, 'a classic ship has exactly one bag, and state.ship.gas IS that bag\'s gas (so she flies as she always did)');
+    const t1 = flyIt(four, 60, { noPump: true });
+    const t2 = flyIt(four, 60, { rupture: true, noPump: true });
+    const a = t2.snap[35], b = t1.snap[35];
+    report(t2.warn && t2.warn.t < 2 && /FORE BAG DOWN/.test(t2.warn.text) && t2.state.bagAlert && t2.state.bagAlert.name === 'FORE BAG', 'the TV calls it out: "' + (t2.warn ? t2.warn.text : 'nothing') + '" ' + (t2.warn ? t2.warn.t.toFixed(1) + ' s after the hit' : ''));
+    report(!t1.warn, 'no false alarm without a rupture (venting every bag is not "a bag down")');
+    report(t2.state.ship.down === 0 && t2.state.ship.hull > 40 && t2.state.phase === 'flying', `she keeps flying with the fore bag down (hull ${t2.state.ship.hull.toFixed(0)}, gas ${a.gas.map((g) => g.toFixed(0)).join('/')})`);
+    report(a.alt < b.alt - 100, `...but lower: 10 s after the rupture she is ${(b.alt - a.alt).toFixed(0)} px under the same ship with all four bags (alt ${a.alt.toFixed(0)} vs ${b.alt.toFixed(0)})`);
+    report(a.deg >= 3 && a.rest > b.rest + 0.01, `...and tips toward the lost bag: nose-heavy ${a.deg} deg, rests ${a.rest.toFixed(3)} rad nose-down (all four bags: ${b.deg} deg, ${b.rest.toFixed(3)})`);
+    // a tail bag lost tips the other way
+    const t3 = flyIt(four, 40, { rupture: true, noPump: true, tail: true }).snap[35];
+    report(t3.deg <= -3 && t3.rest < b.rest - 0.005, `lose the TAIL bag instead and she tips the other way: tail-heavy ${-t3.deg} deg, rests ${t3.rest.toFixed(3)} rad (nose-up)`);
+    const fix = flyIt(four, 100, { rupture: true, patchAt: 32 });
+    const s0 = fix.snap[25], s99 = fix.snap[99]; // (the moment she is hit, and 75 s later: the holes were patched at 32 s, the helm pumped)
+    report(s0.holes >= 3 && s0.gas[3] < 5 && s0.down[3] && fix.snap[33].holes < s0.holes && s99.gas[3] > config.GAS.BAG_UP + 8 && !s99.down[3], `patching the holes and pumping brings the bag back (fore bag gas ${s0.gas[3].toFixed(0)}, flat, ${s0.holes} holes -> ${fix.snap[33].holes} holes at 33 s, gas ${s99.gas[3].toFixed(0)} at the end, deflated: ${s99.down[3]})`);
+  } finally {
+    performance.now = realNow;
+    Math.random = realRandom;
+    config.MAPS.FORCE_KIND = null;
+    applyBuild(C);
+  }
+
+  // 3. both new ships fly 2 minutes in a botsim with 0 errors
+  for (const [name, parts, rupture] of [['four bags', four, 0], ['four bags, fore bag shot flat at 40 s', four, 40], ['one giant bag', giant, 0]]) {
+    const r = await runBotsim(parts, { map: 'network', minutes: 2, bots: 6, seed: 1, rupture });
+    const s = r.stats || {};
+    report(r.code === 0 && r.errors === 0 && !!r.stats, `botsim --build <${name}> --minutes 2: 0 errors${r.stats ? ` (kills ${s.kills}, hull ${s.avgHull}, bags ${s.bags}, a bag went flat ${s.bagDowns}x)` : '\n' + r.text.split('\n').slice(-10).join('\n')}`);
+    if (rupture && r.stats) report(s.bagDowns >= 1 && s.healedAt != null && s.healedAt < 70, `...the bots patched the holes and pumped the fore bag back up (flat ${s.bagDowns}x, repaired ${s.healedAt == null ? 'NEVER' : s.healedAt.toFixed(0) + ' s'} after it was shot)`);
+  }
   return ok;
 }
 
@@ -602,6 +734,8 @@ if (mode === '--snapshot-classic') {
   process.exit((await checkEdit()) ? 0 : 1);
 } else if (mode === '--check-balance') {
   process.exit((await checkBalance()) ? 0 : 1);
+} else if (mode === '--check-bags') {
+  process.exit((await checkBags()) ? 0 : 1);
 } else if (mode === '--build') {
   process.exit((await buildMode(argv[1] || 'classic')) ? 0 : 1);
 } else if (mode === '--random') {
@@ -609,6 +743,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

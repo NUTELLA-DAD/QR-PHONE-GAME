@@ -952,6 +952,10 @@ export const config = {
     MAX_HOLES: 8,
     BALLAST: { BELOW: 4, TO: 56, COOLDOWN: 75 }, // emergency ballast drop: gas below BELOW jumps to TO (a brief hover), at most once per COOLDOWN seconds
     HOLE_CHANCE: 1, // chance a hit on the gasbag punches a hole
+    // Several gasbags side by side (S.5d): each has its own gas and holes; the pump and the vent act on all of them, and the ship's lift follows the
+    // lift-weighted average of their gas. A bag at or below BAG_DOWN is deflated (it sags, the TV calls it out) while the rest of the bags hold at least BAG_REST
+    // more gas than it (venting every bag empty is not "a bag down"); it counts as back up above BAG_UP.
+    BAG_DOWN: 4, BAG_UP: 22, BAG_REST: 15,
   },
   // What the ship-building validator (modules/host/buildCheck.js, tools/buildsim.mjs --build, public/buildtest.html) holds a build to.
   // Part weights, lifts and hands are data in modules/host/shipBuild.js (PARTS); these are the limits and the assumptions behind the gauges.
@@ -977,6 +981,7 @@ export const config = {
     CREW: 8, // HANDS: crew size the gauge is read at...
     HANDS_PER_PLAYER: 3, // ...WARN above this many manned stations per player
     MIN_GAP: 40, // two stations on one deck must be at least this far apart (px)
+    BAG_GAP_WARN: 60, // WARN when two gasbags leave more than this much open sky between them over a deck (px)
     BOT_BOTS: 6, // the bot-run check: bots...
     BOT_MINUTES: 3, // ...minutes (on a cave map and an open-sky map)...
     BOT_HULL_MIN: 60, // ...average hull must stay above this...
@@ -1016,6 +1021,7 @@ export const config = {
     LIVE: true,
     LIVE_MASS: { crew: 1.2, carry: 0.8, fuel: 0.06, ammo: 0.03, bomb: 0.8 }, // per crew member aboard / per load carried / per fuel point in the firebox / per round in a gun / per bomb in the bay
     LIVE_SMOOTH: 1.5, // how quickly the live balance follows (per second): crew running about do not make her flutter
+    BAG_COL: true, // several bags: the live centre of lift follows each bag's gas (a deflated bag stops lifting, so she tips toward it); false = the build's static one
   },
   // The blueprint editor (modules/host/buildEdit.js; the dev page's draw / erase tools).
   BUILD_EDIT: {
@@ -1024,7 +1030,12 @@ export const config = {
     MIN_PIECE: 60, // an erase never leaves a sliver of deck shorter than this (px): it clears to the end instead
     ERASE_MARGIN: 14, // things standing this close to an erased stretch (px) go with it
     BAG_STEP: 60, // the gasbag gets this much longer or shorter (px of half-length: one column in all) per click...
-    BAG_MIN: 300, BAG_MAX: 1900, // ...between these half-lengths
+    BAG_MIN: 120, BAG_MAX: 1900, // ...between these half-lengths (a small bag is 240 px long, a giant one 3800)
+    BAG_DROP: 240, // the half-length of a bag dragged in from the part tray
+    BAGS_MAX: 8, // most gasbags side by side
+    DROP_SNAP: 90, // dragging a part from the tray: it snaps to a legal spot this near the pointer (screen px)
+    DROP_REACH: 220, // placePart (the pure drop, no screen): the nearest legal spot within this many ship px takes the part...
+    DROP_ROW: 75, // ...and only a spot whose deck is within this many px up or down of the drop point (a gun dropped on the main deck does not jump to the top deck)
     BAG_CY: 198, BAG_RY: 232, // a gasbag drawn from nothing sits at this height with this half-height (the classic bag's)
     BAG_COVER: 0.9, // the share of the gasbag's half-length that counts as covering the ship (the ends of the ellipse are thin): validator WARN beyond it
   },

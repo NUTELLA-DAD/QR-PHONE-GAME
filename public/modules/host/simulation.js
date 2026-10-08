@@ -28,6 +28,8 @@ import { createSpotter } from './spotter.js';
 import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { createGoingDown } from './goingDown.js';
 import { createBalance } from './balance.js';
+import { installBags, syncBags, refillBags, stepBags, watchBags } from './gasBags.js';
+import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
@@ -39,28 +41,37 @@ onLayoutChange(rebuildBayD);
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 // Does a point (in ship coordinates) touch the ship? Gasbag, gondola, outriggers or ball turret.
+const BAGS = SHIP_LAYOUT.gasbags; // the gasbags side by side (S.5d), tail to nose
 function hitsShip(x, y) {
-  const gas = ((x - SHIP_LAYOUT.gasbag.cx) / SHIP_LAYOUT.gasbag.rx) ** 2 + ((y - SHIP_LAYOUT.gasbag.cy) / SHIP_LAYOUT.gasbag.ry) ** 2 < 1;
-  if (gas) return true;
+  for (const b of BAGS) if (((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2 < 1) return true;
   for (const r of SHIP_LAYOUT.hitRects) if (x > r.x0 && x < r.x1 && y > r.y0 && y <= r.y1) return true; // gondola, outriggers, top deck, belly compartments (from the build)
   return false;
 }
 
-const GB = SHIP_LAYOUT.gasbag;
-const onGasbag = (x, y) => ((x - GB.cx) / GB.rx) ** 2 + ((y - GB.cy) / GB.ry) ** 2 < 1 && y < 455;
+// Which gasbag a hit at (x, y) lands on (its index, tail to nose), or -1: inside an envelope and above the gondola.
+const onGasbag = (x, y) => (y < 455 ? BAGS.findIndex((b) => ((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2 < 1) : -1);
 
 // A gasbag hole where the crew can reach it: on top near the crow's nest, or on the underside
-// above the catwalk. (x, y) is the hole's drawn position on the envelope.
-function gasHoleAt(x, y) {
+// above the catwalk. (x, y) is the hole's drawn position on the envelope; bi = the bag it is in (the nearest, when not given).
+// The hole remembers its bag (hole.bag): it leaks from that bag only.
+function gasHoleAt(x, y, bi) {
   const nest = PLATFORMS.findIndex((p) => p.id === 'nest');
   const cat = PLATFORMS.findIndex((p) => p.id === 'catwalk');
-  const edge = (hx, top) => GB.cy + (top ? -1 : 1) * GB.ry * Math.sqrt(Math.max(0, 1 - ((hx - GB.cx) / GB.rx) ** 2));
+  const bag = bi != null && BAGS[bi] ? bi : Math.max(0, bagNearX(BAGS, x));
+  const GB = BAGS[bag];
+  const edge = (hx, top) => bagEdgeY(GB, hx, top);
   if (y < GB.cy && x > PLATFORMS[nest].x0 - 60 && x < PLATFORMS[nest].x1 + 60) {
     const hx = Math.max(PLATFORMS[nest].x0 + 15, Math.min(PLATFORMS[nest].x1 - 15, x));
-    return { x: hx, d: nest, y: edge(hx, true) + 34, prog: 0 };
+    return { x: hx, d: nest, y: edge(hx, true) + 34, prog: 0, bag };
   }
-  const hx = Math.max(PLATFORMS[cat].x0 + 20, Math.min(PLATFORMS[cat].x1 - 20, x));
-  return { x: hx, d: cat, y: edge(hx, false) - 22, prog: 0 };
+  let hx = Math.max(PLATFORMS[cat].x0 + 20, Math.min(PLATFORMS[cat].x1 - 20, x));
+  let ex = hx; // where on the envelope the hole is drawn
+  if (BAGS.length > 1) { // keep the hole under ITS bag when that bag is within reach of the top deck
+    const lo = Math.max(PLATFORMS[cat].x0 + 20, GB.x0 + 20), hi = Math.min(PLATFORMS[cat].x1 - 20, GB.x1 - 20);
+    if (lo <= hi) ex = hx = Math.max(lo, Math.min(hi, hx));
+    else ex = Math.max(GB.x0 + 40, Math.min(GB.x1 - 40, hx)); // a bag beyond the end of the top deck: patched from the deck's end, drawn on the bag's nearest edge
+  }
+  return { x: hx, d: cat, y: edge(ex, false) - 22, prog: 0, bag };
 }
 
 // Which indoor/outdoor floor a hit at (x, y) lands on (holes and fires go there), or null (e.g. gasbag).
@@ -125,6 +136,7 @@ export function createSimulation() {
       Object.entries(SHIP_LAYOUT.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0 }]),
     ),
   };
+  installBags(state); // the gasbags side by side: state.bags, and state.ship.gas as their mean (gasBags.js)
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -685,8 +697,9 @@ export function createSimulation() {
     const coll = crewMul(state, 'collateral'); // (small crews: hits break fewer things)
     modules.hitAt(x, y, shipPuff, power, coll);
     helmsmanHit(x, y, power);
-    if (onGasbag(x, y)) {
-      if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll) state.gasHoles.push(gasHoleAt(x, y));
+    const hitBag = onGasbag(x, y);
+    if (hitBag >= 0) {
+      if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll) state.gasHoles.push(gasHoleAt(x, y, hitBag));
       damageHull(2 * power);
       return;
     }
@@ -911,7 +924,7 @@ export function createSimulation() {
 
   // Sky-dock offers: repairs that are actually needed, then random upgrades, then 'Cast off!'.
   const needsHull = () => state.ship.hull < 99 || state.breaches.length || state.fires.length || modules.list.some((m) => m.broken || m.hp < m.max - 0.5);
-  const needsGas = () => state.ship.gas < config.GAS.START * 0.95 || state.gasHoles.length;
+  const needsGas = () => state.bags.some((b) => b.gas < config.GAS.START * 0.95) || state.gasHoles.length;
   const needsCoal = () => state.ship.fuel < config.BOILER.FUEL_MAX * 0.85 || Object.values(state.GUNS).some((g) => g.ammo < g.max * 0.7) || state.bombBay.bombs < config.BOMBS.MAX;
   const upgradePrice = (u) => Math.round((SH.PRICES[u.id] || SH.PRICE_DEFAULT) * (1 + SH.REPEAT_PRICE * (state.upgrades[u.id] || 0)) / 5) * 5;
   const buildOffers = () => {
@@ -933,7 +946,7 @@ export function createSimulation() {
       state.upgrades[o.id] = (state.upgrades[o.id] || 0) + 1;
     } else if (o.id === 'repair-hull') UPGRADES.find((u) => u.id === 'spare-parts').apply({ state, modules });
     else if (o.id === 'repair-gas') {
-      state.ship.gas = Math.max(state.ship.gas, config.GAS.START);
+      refillBags(state, config.GAS.START);
       state.gasHoles.length = 0;
     } else if (o.id === 'repair-coal') {
       state.ship.fuel = config.BOILER.FUEL_MAX;
@@ -1264,6 +1277,7 @@ export function createSimulation() {
   const flushAll = () => { for (const p of Object.values(state.players)) flushPresses(p); };
 
   const update = (dt) => {
+    syncBags(state); // (a new build was applied at the dock: fit the gasbags to it)
     updateMates(state, dt); // (ship's mates come aboard or go home before the crew count is read)
     updateCrewScale(state, dt);
     let helmFlown = false; // did someone steer this frame
@@ -1773,9 +1787,10 @@ export function createSimulation() {
     if (flying) {
       const pumping = Math.max(0, valve.input) * (state.ship.press > G.PUMP_MIN_PRESS && modules.boilerUp() ? Math.min(1, state.ship.press / 60) : 0);
       state.steamParts.pump = pumping * G.PUMP_STEAM;
-      state.ship.gas += (pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) * state.links.helmMul + Math.min(0, valve.input) * G.VENT_RATE * state.links.helmMul - G.SEEP - G.LEAK_PER_HOLE * state.gasHoles.length) * dt;
+      // The pump and the vent act on every gasbag at once; seepage and holes are per bag (gasBags.js: with one bag this is the old single gas value).
+      stepBags(state, pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) * state.links.helmMul + Math.min(0, valve.input) * G.VENT_RATE * state.links.helmMul, dt);
       state.ship.press = Math.max(0, state.ship.press - pumping * G.PUMP_STEAM * dt);
-      state.ship.gas = clamp(state.ship.gas, 0, 100);
+      watchBags(state); // a bag going flat: "FORE BAG DOWN!"
       // Emergency ballast: the gasbag is empty and the ship is dropping - the crew cuts loose ballast so she hovers for a
       // moment (time to patch and pump). Once in a while only; it is a lifeline, not a fix.
       const BL = G.BALLAST;
@@ -1951,6 +1966,8 @@ export function createSimulation() {
     clamp,
     taken,
     getHelm,
+    impact, // (a hit on the ship at ship coordinates; the gasbag gate in tools/buildsim.mjs shoots her with it)
+    gasHoleAt,
     interaction,
     modules,
     startDock,

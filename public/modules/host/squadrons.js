@@ -14,6 +14,7 @@ import { keepClear, inRock, scrollSpeed } from './course.js';
 import { shellDmg, dazzled } from './aim.js';
 import { SHIP_SAMPLES } from './course.js';
 import { pop } from './popups.js';
+import { bagNearX } from './shipBuild.js';
 import { flyPlane, smoke, shootDown, angDiff, shoveShip, bumpShip, bounceStep } from './planes.js';
 
 const W = config.WAVES;
@@ -228,10 +229,11 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   // the gasbag's underside (above the catwalk) or the nearest deck floor.
   const latchOn = (b) => {
     const P = SHIP_LAYOUT.platforms;
-    const GB = SHIP_LAYOUT.gasbag;
     const cat = P.findIndex((p) => p.id === 'catwalk');
     const sx = b.x;
     const sy = b.y + state.ship.alt;
+    const BG = SHIP_LAYOUT.gasbags; // (the bag it grazed: the nearest of the gasbags side by side)
+    const GB = BG[Math.max(0, bagNearX(BG, sx))];
     // (a little generous: a bat grazing the envelope's skin counts as hitting the gasbag)
     const hitGas = ((sx - GB.cx) / (GB.rx * 1.15)) ** 2 + ((sy - GB.cy) / (GB.ry * 1.2)) ** 2 < 1 && sy < 455;
     b.latched = true;
@@ -243,7 +245,8 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       b.kind = 'gas';
       b.d = cat;
       b.lx = Math.max(P[cat].x0 + 40, Math.min(P[cat].x1 - 40, sx));
-      b.ls = GB.cy + GB.ry * Math.sqrt(Math.max(0, 1 - ((b.lx - GB.cx) / GB.rx) ** 2)) - 18;
+      const GL = BG[Math.max(0, bagNearX(BG, b.lx))]; // (the bag over the spot it crawls to)
+      b.ls = GL.cy + GL.ry * Math.sqrt(Math.max(0, 1 - ((b.lx - GL.cx) / GL.rx) ** 2)) - 18;
     } else {
       let best = -1;
       P.forEach((p, i) => {
@@ -557,7 +560,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
           state.bossDownLap = lap(); // (the Flagship stop needs her sunk before the beacon counts)
           // Spoils of war: patch the ship up.
           state.ship.hull = Math.min(100, state.ship.hull + W.BOSS_REWARD_HULL);
-          state.ship.gas = Math.min(100, state.ship.gas + 30);
+          for (const b of state.bags) b.gas = Math.min(100, b.gas + 30); // (every gasbag)
           warn(z.name.replace('THE ', '') + ' DOWN! SALVAGE PATCHES THE HULL!', 4);
         }
       }

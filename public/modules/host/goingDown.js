@@ -15,6 +15,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT, onLayoutChange, one, nearest } from '../../shipLayout.js';
 import { altBounds } from './course.js';
 import { pop } from './popups.js';
+import { refillBags } from './gasBags.js';
 
 const GD = config.GOING_DOWN;
 const L = SHIP_LAYOUT;
@@ -120,9 +121,11 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     g.holes = pool;
     let guard = 0;
     while (g.holes.length < want && guard++ < 40) {
-      const x = 400 + Math.random() * 640;
+      let x = 400 + Math.random() * 640;
+      const nb = L.gasbags.length, bag = nb > 1 ? L.gasbags[g.holes.length % nb] : null; // (several bags: the leaks are spread over them, one bag after another)
+      if (bag) x = clamp(x, bag.x0 + 30, bag.x1 - 30);
       if (g.holes.some((h) => Math.abs(h.x - x) < 140)) continue;
-      const h = gasHoleAt(x, GB.cy + 120);
+      const h = gasHoleAt(x, GB.cy + 120, bag ? g.holes.length % nb : undefined);
       h.prog = 0;
       state.gasHoles.push(h);
       g.holes.push(h);
@@ -170,7 +173,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     state.ship.hull = GD.SURVIVE_HULL;
     state.ship.vy = 0;
     state.ship.shake = 1.2;
-    state.ship.gas = Math.max(state.ship.gas, config.GAS.NEUTRAL + 6);
+    refillBags(state, config.GAS.NEUTRAL + 6);
     state.gdGrace = GD.GRACE;
     state.gdBanner = { text: 'SHE HOLDS!', sub: why || 'Levelling out with a sliver of hull...', color: '#7bdc8a', t: 3.5, max: 3.5 };
     say('SHE HOLDS! PATCH HER UP!', 4);

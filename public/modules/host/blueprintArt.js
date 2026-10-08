@@ -6,7 +6,7 @@
 //     balance: shipBuild.js balanceOf (the centre of mass / lift markers), target: { x, y, r, label } the thing the delete tool is over, needs: what a half-built ship still lacks
 //   v.toWorld(px, py) -> { x, y } in ship coordinates     v.X(x), v.Y(y) -> paper pixels
 import { config } from '../../config.js';
-import { COL, DECK_ROWS, rowOf, hullGeom } from './shipBuild.js';
+import { COL, DECK_ROWS, rowOf, hullGeom, bagList } from './shipBuild.js';
 import { EDIT_ROWS, DRAW_ROWS, GRID_X0 } from './buildEdit.js';
 
 const LB = () => config.LOGBOOK;
@@ -65,8 +65,9 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     const y = Y(config.BUILD_EDIT.BAG_CY), hot = o.rowHover === 'gasbag';
     if (hot) { g.fillStyle = 'rgba(201,168,90,0.28)'; g.fillRect(PAD.l * k - 8 * k, y - 22 * k, X(W.x1) - PAD.l * k + 8 * k, 44 * k); }
     if (!Ly.gasbag || hot) line([[PAD.l * k - 8 * k, y], [X(W.x1), y]], hot ? 1.5 : 1, hot ? L.INK_SOFT : 'rgba(107,74,50,0.32)', [8, 6]);
-    text('GASBAG', PAD.l * k - 12 * k, y + 4 * k, 11, Ly.gasbag ? L.INK : L.INK_SOFT, 'right');
-    if (!Ly.gasbag) text('(none: drag to draw)', PAD.l * k - 12 * k, y + 18 * k, 9, L.INK_SOFT, 'right');
+    const nb = bagList(Ly).length;
+    text(nb > 1 ? `GASBAGS x${nb}` : 'GASBAG', PAD.l * k - 12 * k, y + 4 * k, 11, Ly.gasbag ? L.INK : L.INK_SOFT, 'right');
+    text(Ly.gasbag ? '(drag: add more)' : '(none: drag to draw)', PAD.l * k - 12 * k, y + 18 * k, 9, L.INK_SOFT, 'right');
   }
   if (!Ly.platforms.length && !Ly.gasbag) { // an empty sheet
     const cx = X(560), ty = Y(DECK_ROWS.catwalk) - 40 * k;
@@ -76,9 +77,9 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     text('Gasbag tool: draw the bag. Parts come from the palette.', cx, ty + 38 * k, 12, L.INK_SOFT, 'center');
   }
 
-  // The gasbag(s), light hatching inside.
-  const bag = Ly.gasbag;
-  if (bag) {
+  // The gasbag(s) side by side, light hatching inside, with a handle at each end to drag (the Gasbag tool).
+  const bags = bagList(Ly);
+  if (bags.length) {
     const env = (cx, cy, rx, ry, tag) => {
       g.beginPath(); g.ellipse(X(cx), Y(cy), rx * s, ry * s, 0, 0, 6.2832);
       g.fillStyle = 'rgba(107,74,50,0.07)'; g.fill();
@@ -86,10 +87,15 @@ export function drawBlueprint(g, v, Ly, o = {}) {
       g.save(); g.clip();
       for (let hx = cx - rx - ry; hx < cx + rx; hx += 46) line([[X(hx), Y(cy + ry)], [X(hx + ry), Y(cy - ry)]], 1, 'rgba(107,74,50,0.14)');
       g.restore();
-      text(tag, X(cx), Y(cy - ry * 0.55) + 5 * k, 14, L.INK_SOFT, 'center', true);
+      if (tag) text(tag, X(cx), Y(cy - ry * 0.55) + 5 * k, bags.length > 2 ? 11 : 14, L.INK_SOFT, 'center', true);
     };
-    if (bag.twin) env(bag.cx - 20, bag.cy - 258, bag.rx * 0.7, bag.ry * 0.62, 'twin');
-    env(bag.cx, bag.cy, bag.rx, bag.ry, `GASBAG  ${Math.round(bag.rx * 2)} px`);
+    bags.forEach((bag, i) => {
+      if (bag.twin) env(bag.cx - 20, bag.cy - 258, bag.rx * 0.7, bag.ry * 0.62, 'twin');
+      env(bag.cx, bag.cy, bag.rx, bag.ry, bags.length === 1 ? `GASBAG  ${Math.round(bag.rx * 2)} px` : `BAG ${i + 1}  ${Math.round(bag.rx * 2)} px`);
+    });
+    if (o.bagHandles) for (const bag of bags) for (const x of [bag.cx - bag.rx, bag.cx + bag.rx]) { // the ends: grab one to resize
+      g.beginPath(); g.arc(X(x), Y(bag.cy), 6 * k, 0, 6.2832); g.fillStyle = L.PIN; g.fill(); g.strokeStyle = L.INK; g.lineWidth = 1.6 * k; g.stroke();
+    }
   }
 
   // The hull, as the art encloses the decks.
@@ -185,19 +191,75 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   // The key, on the empty paper to the right of the ship.
   const kx = X(W.x1) + 16 * k;
   if (v.w - kx > 200 * k) {
-    const rows = ['PENCIL: drag along a deck row.', 'Along a deck it gets longer; on an', 'empty stretch it makes a new deck', '(rooms, hull and a ladder come too).', 'GASBAG: drag along the bag row.', 'LADDER: drag down from one deck to', 'another (a pole is one way, down).', 'ERASER: drag along a deck (it gets', 'shorter or goes, with what stood on', 'it). DELETE: click any one thing.', '', 'Lines snap to the column grid and', 'to deck ends.', '', 'H helm  B boiler  L lookout', 'C coal  A ammo  G gun  S lamp', 'Z coil  D deflector  M bomb bay', 'N navigator  F fighter  E engine'];
+    const rows = ['PENCIL: drag along a deck row.', 'Along a deck it gets longer; on an', 'empty stretch it makes a new deck', '(rooms, hull and a ladder come too).', 'GASBAG: drag along the bag row (in', 'empty space = one more bag; drag a', 'bag end to resize it).', 'PARTS: drag a picture from the tray', 'onto the ship; it snaps to a spot.', 'LADDER: drag down from one deck to', 'another (a pole is one way, down).', 'ERASER: drag along a deck (it gets', 'shorter or goes, with what stood on', 'it). DELETE: click any one thing.', '', 'Lines snap to the column grid and', 'to deck ends.', '', 'H helm  B boiler  L lookout', 'C coal  A ammo  G gun  S lamp', 'Z coil  D deflector  M bomb bay', 'N navigator  F fighter  E engine'];
     text('HOW TO', kx, PAD.t * k + 16 * k, 14, L.INK, 'left', true);
-    rows.forEach((t, i) => text(t, kx, PAD.t * k + 36 * k + i * 15 * k, 11, i < 13 ? L.INK_SOFT : L.INK));
+    rows.forEach((t, i) => text(t, kx, PAD.t * k + 36 * k + i * 15 * k, 11, i < 17 ? L.INK_SOFT : L.INK));
+  }
+
+  // A part picture being dragged in from the tray (S.5d): everything it cannot go is dimmed, the legal spots stay bright, the picture snaps to the nearest one.
+  //   o.drop = { slots: the legal slots, target: the slot it would drop on (or null), ptr: { x, y } the pointer in ship coordinates, img: the picture (canvas), why: why not (when no target) }
+  const dr = o.drop;
+  if (dr && typeof document !== 'undefined') {
+    const BE = config.BUILD_EDIT;
+    if (!drawBlueprint.veil) drawBlueprint.veil = document.createElement('canvas');
+    const veil = drawBlueprint.veil;
+    if (veil.width !== v.w || veil.height !== v.h) { veil.width = v.w; veil.height = v.h; }
+    const vg = veil.getContext('2d');
+    vg.setTransform(1, 0, 0, 1, 0, 0);
+    vg.globalCompositeOperation = 'source-over';
+    vg.clearRect(0, 0, v.w, v.h);
+    vg.fillStyle = 'rgba(243,234,214,0.62)';
+    vg.fillRect(0, 0, v.w, v.h);
+    vg.globalCompositeOperation = 'destination-out';
+    vg.fillStyle = '#000';
+    for (const sl of dr.slots) { // the windows: bright strips where the part can go
+      if (sl.bag) vg.fillRect(X(sl.span[0]), Y(BE.BAG_CY) - BE.BAG_RY * s - 8 * k, (sl.span[1] - sl.span[0]) * s, 2 * BE.BAG_RY * s + 16 * k);
+      else if (sl.hr != null) vg.fillRect(X(sl.x) - 14 * k, Y(sl.hy) - sl.hr * s - 4 * k, 28 * k, 2 * sl.hr * s + 8 * k);
+      else vg.fillRect(X(sl.x) - 24 * k, Y(sl.y) - 58 * k, 48 * k, 74 * k);
+    }
+    vg.globalCompositeOperation = 'source-over';
+    g.drawImage(veil, 0, 0);
   }
 
   // Part slots (brass pins) when a part is picked from the palette.
   for (const sl of o.slots || []) {
+    if (sl.bag) continue; // (a bag's slot is a stretch of the bag row, drawn as the bag it would make)
     const on = o.hover === sl, y = Y(sl.y) - 30 * k * 0.6;
     g.beginPath(); g.arc(X(sl.x), y, (on ? 9 : 6) * k, 0, 6.2832);
     g.fillStyle = on ? '#ffe9a0' : L.PIN; g.fill();
     g.strokeStyle = L.INK; g.lineWidth = 1.8 * k; g.stroke();
   }
-  if (o.hover && o.hover.label) text(o.hover.label, X(o.hover.x), Y(o.hover.y) - 38 * k, 12, L.INK, 'center', true);
+  if (o.hover && o.hover.bag && !dr) { // (click-a-part way) the bag the hovered stretch would make
+    const t = o.hover;
+    g.beginPath(); g.ellipse(X(t.x), Y(config.BUILD_EDIT.BAG_CY), ((t.span[1] - t.span[0]) / 2) * s, config.BUILD_EDIT.BAG_RY * s, 0, 0, 6.2832);
+    g.strokeStyle = '#4f7f3f'; g.lineWidth = 3 * k; g.setLineDash([10 * k, 6 * k]); g.stroke(); g.setLineDash([]);
+  }
+  if (o.hover && o.hover.label && !dr) text(o.hover.label, X(o.hover.x), Y(o.hover.y) - 38 * k, 12, L.INK, 'center', true);
+
+  if (dr) { // the picture itself: on the spot it would drop on, or (no legal spot near) the reason, by the pointer
+    const BE = config.BUILD_EDIT, t = dr.target, size = 64 * k;
+    const note = (txt, x, y, color) => {
+      g.font = font(12, false);
+      const tw = g.measureText(txt).width, tx = Math.max(PAD.l * k, Math.min(v.w - tw - 14 * k, x - tw / 2)), ty = Math.max(24 * k, y);
+      g.fillStyle = 'rgba(243,234,214,0.95)'; g.fillRect(tx - 6 * k, ty - 14 * k, tw + 12 * k, 20 * k);
+      g.strokeStyle = color; g.lineWidth = 1.4 * k; g.strokeRect(tx - 6 * k, ty - 14 * k, tw + 12 * k, 20 * k);
+      text(txt, tx, ty, 12, color);
+    };
+    if (t) {
+      if (t.bag) { // the bag it would make, as a dashed envelope
+        g.beginPath(); g.ellipse(X(t.x), Y(BE.BAG_CY), ((t.span[1] - t.span[0]) / 2) * s, BE.BAG_RY * s, 0, 0, 6.2832);
+        g.fillStyle = 'rgba(79,127,63,0.14)'; g.fill();
+        g.strokeStyle = '#4f7f3f'; g.lineWidth = 3 * k; g.setLineDash([10 * k, 6 * k]); g.stroke(); g.setLineDash([]);
+        if (dr.img) g.drawImage(dr.img, X(t.x) - size / 2, Y(BE.BAG_CY) - size / 2, size, size);
+        note(t.label, X(t.x), Y(BE.BAG_CY) - BE.BAG_RY * s - 10 * k, '#3b6b34');
+      } else {
+        const px = X(t.x), py = Y(t.hy != null ? t.hy : t.y) - (t.hy != null ? 0 : size * 0.5 + 4 * k);
+        g.beginPath(); g.arc(px, py, size * 0.62, 0, 6.2832); g.fillStyle = 'rgba(255,233,160,0.45)'; g.fill(); g.strokeStyle = '#4f7f3f'; g.lineWidth = 2.4 * k; g.stroke();
+        if (dr.img) g.drawImage(dr.img, px - size / 2, py - size / 2, size, size);
+        note(t.label, px, py - size * 0.7, '#3b6b34');
+      }
+    } else if (dr.ptr && dr.why) note(dr.why, X(dr.ptr.x), Y(dr.ptr.y) - 40 * k, L.STAMP);
+  }
 
   // The pen and eraser.
   if (o.cursor) { line([[X(o.cursor.x), Y(o.cursor.y) - 8 * k], [X(o.cursor.x), Y(o.cursor.y) + 8 * k]], 2, L.STAMP); line([[X(o.cursor.x) - 8 * k, Y(o.cursor.y)], [X(o.cursor.x) + 8 * k, Y(o.cursor.y)]], 2, L.STAMP); }
@@ -209,21 +271,21 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   }
   const gh = o.ghost;
   if (gh) {
-    const y = gh.tool === 'bag' ? Y(config.BUILD_EDIT.BAG_CY) : gh.tool === 'ladder' ? Y(DECK_ROWS[gh.row]) : Y(DECK_ROWS[gh.row]), good = gh.ok;
+    const y = gh.tool === 'bag' || gh.row === 'gasbag' ? Y(config.BUILD_EDIT.BAG_CY) : Y(DECK_ROWS[gh.row]), good = gh.ok;
     if (gh.tool === 'ladder') {
       const y1 = Y(DECK_ROWS[gh.row1]);
       line([[X(gh.x0), y], [X(gh.x0), y1]], 5, good ? '#4f7f3f' : L.STAMP, good ? (gh.type === 'pole' ? [3, 6] : null) : [10, 8]);
       for (const yy of [y, y1]) line([[X(gh.x0) - 10 * k, yy], [X(gh.x0) + 10 * k, yy]], 3, good ? '#4f7f3f' : L.STAMP);
       if (gh.label) text(gh.label, Math.min(v.w - 260 * k, X(gh.x0) + 14 * k), (y + y1) / 2, 12, good ? L.INK : L.STAMP);
     } else if (gh.tool === 'bag') {
-      const b = gh.bag;
-      if (b) { g.beginPath(); g.ellipse(X(b.cx), Y(b.cy), b.rx * s, b.ry * s, 0, 0, 6.2832); g.strokeStyle = good ? '#4f7f3f' : L.STAMP; g.lineWidth = 3 * k; g.setLineDash([10 * k, 6 * k]); g.stroke(); g.setLineDash([]); }
+      for (const b of gh.bags || []) { g.beginPath(); g.ellipse(X(b.cx), Y(b.cy), b.rx * s, b.ry * s, 0, 0, 6.2832); g.strokeStyle = good ? '#4f7f3f' : L.STAMP; g.lineWidth = 3 * k; g.setLineDash([10 * k, 6 * k]); g.stroke(); g.setLineDash([]); }
       line([[X(gh.x0), y], [X(gh.x1), y]], 5, good ? '#4f7f3f' : L.STAMP);
       if (gh.label) text(gh.label, Math.max(PAD.l * k, X((gh.x0 + gh.x1) / 2) - 120 * k), y - 28 * k, 12, good ? L.INK : L.STAMP);
     } else if (gh.tool === 'erase') {
+      const hh = gh.row === 'gasbag' ? config.BUILD_EDIT.BAG_RY * s : 26 * k; // (rubbing out a bag: a band as tall as the bag)
       g.fillStyle = good ? 'rgba(168,68,63,0.22)' : 'rgba(107,74,50,0.12)';
-      g.fillRect(X(gh.x0), y - 26 * k, (gh.x1 - gh.x0) * s, 52 * k);
-      for (let hx = gh.x0; hx < gh.x1; hx += 24) line([[X(hx), y + 26 * k], [X(Math.min(gh.x1, hx + 14)), y - 26 * k]], 1.4, good ? L.STAMP : L.INK_SOFT);
+      g.fillRect(X(gh.x0), y - hh, (gh.x1 - gh.x0) * s, 2 * hh);
+      for (let hx = gh.x0; hx < gh.x1; hx += 24) line([[X(hx), y + hh], [X(Math.min(gh.x1, hx + 14)), y - hh]], 1.4, good ? L.STAMP : L.INK_SOFT);
     } else {
       line([[X(gh.x0), y], [X(gh.x1), y]], 7, good ? '#4f7f3f' : L.STAMP, good ? null : [10, 8]);
       for (const x of [gh.x0, gh.x1]) line([[X(x), y - 12 * k], [X(x), y + 12 * k]], 3, good ? '#4f7f3f' : L.STAMP);

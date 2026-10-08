@@ -3,12 +3,12 @@
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
-const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null };
+const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0 };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') {
-    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi]');
+    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi|bags|giantbag] [--rupture SECONDS (several gasbags: shoot the fore bag flat then, S.5d)]');
     process.exit(0);
   } else if (a.startsWith('--') && a.slice(2) in args) {
     const v = argv[++i];
@@ -101,6 +101,8 @@ const totalSteps = Math.round(args.minutes * 60 * 60);
 const errors = new Map(); let errorCount = 0;
 let wrecks = 0, killsTotal = 0, hullSum = 0, hullN = 0, missions = 0, maxLap = state.course.lap;
 let lastKills = 0, stuckVoteSteps = 0;
+let bagDowns = 0, lastBagAlert = null, bagMin = 100; // several gasbags (S.5d): times a bag went flat, and the emptiest any bag got
+let ruptured = false, healedAt = null; // --rupture: the fore bag shot flat at that second (gas 0 and three holes in it); when did the crew get it back above BAG_UP
 const missionMins = []; let missionStartStep = 0;
 // Steam stats while flying: pressure sum, steps under 35 / over 70 / over 90, blowouts, steps in overdrive.
 let pSum = 0, pN = 0, pLow = 0, pOver70 = 0, pOver90 = 0, blowouts = 0, leakSteps = 0, lastPress = state.ship.press;
@@ -114,7 +116,14 @@ const t0 = realNow();
 for (let step = 1; step <= totalSteps; step++) {
   try {
     simClock += dt * 1000;
+    if (args.rupture && step === Math.round(args.rupture * 60) && state.bags.length > 1 && state.phase === 'flying') {
+      const last = state.bags.length - 1;
+      state.bags[last].gas = 0;
+      for (const x of [1300, 1340, 1320]) state.gasHoles.push(sim.gasHoleAt(x, 450, last));
+      ruptured = true;
+    }
     sim.update(dt);
+    if (ruptured && healedAt === null && state.gasHoles.length === 0 && state.bags[state.bags.length - 1].gas > config.GAS.BAG_UP) healedAt = step / 60 - args.rupture;
     if (runStats) runStats.step(dt);
     matesMax = Math.max(matesMax, Object.values(state.players).filter((q) => q.mate).length);
     for (const q of Object.values(state.players)) {
@@ -141,6 +150,7 @@ for (let step = 1; step <= totalSteps; step++) {
     if (state.boilerBlew) { blowouts++; state.boilerBlew = false; }
   }
   lastPress = state.ship.press;
+  if (state.bags.length > 1) { if (state.bagAlert && state.bagAlert !== lastBagAlert) { bagDowns++; lastBagAlert = state.bagAlert; } if (state.phase === 'flying') for (const b of state.bags) bagMin = Math.min(bagMin, b.gas); }
   if (state.phase === 'flying' && state.searchlights) { lightSteps++; state.searchlights.forEach((l, i) => { if (l.manned) lightManned[i] = (lightManned[i] || 0) + 1; }); if (state.litTargets.length) lightLit++; }
   if (state.phase === 'flying') { hullSum += state.ship.hull; hullN++; }
   if (process.env.BOT_ACT && state.phase === 'flying') for (const q of Object.values(state.players)) if (q.bot) { const k = q.lock ? 'at ' + q.lock : q.botJob ? q.botJob.kind : 'idle'; actTally[k] = (actTally[k] || 0) + 1; } // (BOT_ACT=1: what the bots spend their time on)
@@ -213,7 +223,8 @@ if (lightSteps) console.log(`searchlights: ${(state.searchlights || []).map((l, 
   console.log(`links${config.LINKS.ENABLED ? '' : ' (OFF)'}: paired seconds ${(S.gunPair + S.helmPair + S.nestPair).toFixed(0)} of ${all.toFixed(0)} station seconds = ${pr(S.gunPair + S.helmPair + S.nestPair, all)} (gun+loader ${pr(S.gunPair, S.gunT)}, helm+lookout ${pr(S.helmPair, S.helmT)}, lookout+helm ${pr(S.nestPair, S.nestT)}); gunner idle ${pr(S.gunIdle, S.gunT)} of ${S.gunT.toFixed(0)}s; surge held ${S.surgeT.toFixed(0)}s`);
 }
 if (process.env.BOT_ACT) console.log('bot time: ' + Object.entries(actTally).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + ((100 * v) / Object.values(actTally).reduce((a, b) => a + b, 0)).toFixed(1) + '%').join(', '));
-if (runStats) console.log('BUILD_STATS ' + JSON.stringify({ build: args.build, ...runStats.result(), manned: runStats.result().mannedNames, errors: errorCount })); // (read by tools/buildsim.mjs)
+if (state.bags.length > 1) console.log(`gasbags: ${state.bags.length} bags side by side; a bag went flat ${bagDowns} time${bagDowns === 1 ? '' : 's'}, emptiest ${bagMin.toFixed(0)}; now ${state.bags.map((b) => b.gas.toFixed(0)).join('/')}${ruptured ? `; fore bag shot flat at ${args.rupture}s: ${healedAt === null ? 'NOT repaired' : `holes patched and bag back above ${config.GAS.BAG_UP} after ${healedAt.toFixed(0)}s`}` : ''}`);
+if (runStats) console.log('BUILD_STATS ' + JSON.stringify({ build: args.build, ...runStats.result(), manned: runStats.result().mannedNames, bags: state.bags.length, bagDowns, ruptured, healedAt, errors: errorCount })); // (read by tools/buildsim.mjs)
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);

@@ -36,14 +36,14 @@ export const CONNECTOR_SPEED = { rope: 150, ladder: 170, stairs: 150, lift: 260,
 
 // Pieces that live in arrays vs keyed objects vs single objects, and which of their fields are x positions
 // (shifted by the part's column). Fields named in D_KINDS also get `d` (the platform index).
-const ARRAYS = ['platforms', 'connectors', 'rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers', 'boarderEntryPoints', 'escortDocks'];
+const ARRAYS = ['platforms', 'connectors', 'rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers', 'boarderEntryPoints', 'escortDocks', 'gasbags'];
 const KEYED = ['gunMounts', 'searchlights'];
 const OPTIONAL = ['ballast']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
-const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'gasbag', 'liftRepair'];
+const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'liftRepair'];
 const X_FIELDS = {
   platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x'], vents: ['x'], racks: ['x'],
   extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
-  coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbag: ['cx'], liftRepair: ['x'],
+  coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbags: ['cx'], liftRepair: ['x'],
 };
 const D_KINDS = ['rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers'];
 // Derived fields a `frame` part may set by hand instead of letting deriveGeometry work them out.
@@ -83,6 +83,43 @@ export const KIND_STATS = {
   navigator: { hands: 1 }, escort: { hands: 1 },
 };
 const kindStat = (key) => (p) => (key === 'mass' ? M().kind[p.kind] : (KIND_STATS[p.kind] || {})[key]) || 0;
+
+// ---- gasbags (S.5d) ---------------------------------------------------------------------------------------------
+// A bag is an ellipse { cx, cy, rx, ry } (rx = half its length). Its lift is by its size (area / 1560, in gas points); the twin envelope adds TWIN_SIZE of that.
+export const bagBase = (b) => (b.rx * b.ry) / 1560;
+export const bagLift = (b) => Math.round((b.rx * b.ry * (1 + (b.twin ? TWIN_SIZE.rx * TWIN_SIZE.ry : 0))) / 1560);
+// The points a bag lifts at (for the centre of lift): the envelope's middle, and the twin riding above and behind it. v = the lift at each, x / y = where.
+export const bagLiftPoints = (b) => {
+  const base = bagBase(b), pts = [{ x: b.cx, y: b.cy, v: base }];
+  if (b.twin) pts.push({ x: b.cx - 20, y: b.cy - 258, v: base * TWIN_SIZE.rx * TWIN_SIZE.ry });
+  return pts;
+};
+// The bags of a layout as a list (a layout from before S.5d has only `gasbag`).
+export const bagList = (L) => (L && L.gasbags && L.gasbags.length ? L.gasbags : L && L.gasbag ? [L.gasbag] : []);
+// The bag whose envelope holds (x, y) (the ellipse grown by `grow`), or -1; the y of an envelope's edge at x (top or underside; clamped to its ends);
+// the bag nearest to an x (the one that holds it, else the closest end).
+export function bagAtPoint(bags, x, y, grow = 1) {
+  for (let i = 0; i < bags.length; i++) if (((x - bags[i].cx) / (bags[i].rx * grow)) ** 2 + ((y - bags[i].cy) / (bags[i].ry * grow)) ** 2 < 1) return i;
+  return -1;
+}
+export const bagEdgeY = (b, x, top) => b.cy + (top ? -1 : 1) * b.ry * Math.sqrt(Math.max(0, 1 - ((x - b.cx) / b.rx) ** 2));
+export function bagNearX(bags, x) {
+  let best = -1, bd = Infinity;
+  bags.forEach((b, i) => { const d = x < b.cx - b.rx ? b.cx - b.rx - x : x > b.cx + b.rx ? x - b.cx - b.rx : 0; if (d < bd) { bd = d; best = i; } });
+  return best;
+}
+// Where a crow's nest may stand: the stretches the bags cover, as [{ lo, hi }]. A run of bags that touch (within BAG_GAP_WARN) is one stretch; the thin
+// ends of its end bags do not count (BAG_COVER of their half-length does).
+export function bagCover(bags) {
+  const cover = config.BUILD_EDIT.BAG_COVER, gap = config.BUILD_CHECK.BAG_GAP_WARN, out = [];
+  for (const b of bags.slice().sort((p, q) => p.cx - q.cx)) {
+    const last = out[out.length - 1];
+    if (last && b.cx - b.rx - last.end <= gap) { last.hi = b.cx + b.rx * cover; last.end = b.cx + b.rx; } else out.push({ lo: b.cx - b.rx * cover, hi: b.cx + b.rx * cover, end: b.cx + b.rx });
+  }
+  return out;
+}
+// What a bag is called on the TV when it goes down: "FORE BAG", "AFT BAG", "BAG 2" (a ship with one bag just says "GASBAG").
+export const bagName = (i, n) => (n <= 1 ? 'GASBAG' : i === 0 ? 'AFT BAG' : i === n - 1 ? 'FORE BAG' : `BAG ${i + 1}`);
 
 export const PARTS = {
   // A walkable floor. `row` is a DECK_ROWS name (y comes from it), x0/x1 are its span.
@@ -134,8 +171,9 @@ export const PARTS = {
   medbay: piece('medbay', { mass: () => M().medbay }),
   bombBay: piece('bombBay'), // (the bomb bay's weight is on its station)
   // buoyancy by the envelope's size; `twin: true` adds the second, smaller envelope riding behind it (shipArt's twin-gasbag art), which
-  // lifts TWIN_SIZE.rx x TWIN_SIZE.ry of the first and adds a little rigging weight
-  gasbag: piece('gasbag', { mass: (p) => M().bag + (p.twin ? M().bagTwin : 0), lift: (p) => Math.round((p.rx * p.ry * (1 + (p.twin ? TWIN_SIZE.rx * TWIN_SIZE.ry : 0))) / 1560) }),
+  // lifts TWIN_SIZE.rx x TWIN_SIZE.ry of the first and adds a little rigging weight. A ship may have several of these side by side (S.5d): each is
+  // its own envelope with its own gas and holes in flight, and the ship's lift is the sum.
+  gasbag: piece('gasbags', { mass: (p) => M().bag + (p.twin ? M().bagTwin : 0), lift: (p) => bagLift(p) }),
   // Ship-wide numbers: the shield band and the nest rise are given here; everything else (samples, bounds, aim and
   // reference points ...) is DERIVED from the parts by buildLayout. A field named in OVERRIDES that is set here wins
   // over the derived value (the classic ship keeps its hand-placed collision samples this way).
@@ -312,6 +350,17 @@ export function buildLayout(parts, opts = {}) {
   }
   const sorted = (list) => list.map((r, i) => ({ ...r, i })).sort((a, b) => a.ord - b.ord || a.i - b.i);
   for (const kind of ARRAYS) out[kind] = sorted(rows[kind]).map((r) => r.o);
+  // The gasbags, side by side from the tail to the nose (ids bag1, bag2 ...). `gasbag` stays as the old single-bag field: the bag itself when there is one
+  // (the classic ship reads exactly what it always did), otherwise the envelope spanning all of them (code that only knows one bag still sees the ship's top).
+  if (out.gasbags.length) {
+    const raw = out.gasbags.slice().sort((a, b) => a.cx - b.cx);
+    out.gasbags = raw.map((b) => ({ ...b, x0: b.cx - b.rx, x1: b.cx + b.rx, lift: bagLift(b) })).map((b, i) => ({ ...b, id: 'bag' + (i + 1) }));
+    if (raw.length === 1) out.gasbag = raw[0];
+    else {
+      const x0 = raw[0].cx - raw[0].rx, x1 = raw[raw.length - 1].cx + raw[raw.length - 1].rx;
+      out.gasbag = { cx: (x0 + x1) / 2, cy: raw[0].cy, rx: (x1 - x0) / 2, ry: Math.max(...raw.map((b) => b.ry)), n: raw.length, ...(raw.some((b) => b.twin) ? { twin: true } : {}) };
+    }
+  }
   for (const kind of KEYED) out[kind] = Object.fromEntries(sorted(rows[kind]).map((r) => [r.key, r.o]));
   for (const kind of OPTIONAL) if (rows[kind].length) out[kind] = sorted(rows[kind]).map((r) => r.o);
 
@@ -404,8 +453,7 @@ export function deriveSamples(out) {
     if (q.x1 - q.x0 >= 200) row(q.x0 + 22, q.x1 - 12, q.y + 17);
     else add(q.x0 + 5, q.y + 30), add((q.x0 + q.x1) / 2, q.y + 70), add(q.x1, q.y + 30);
   }
-  const bag = out.gasbag;
-  if (bag) { // the bag's top half, a margin wider than the drawing
+  for (const bag of out.gasbags) { // each bag's top half, a margin wider than the drawing
     const m = 35;
     const n = Math.max(6, Math.ceil((Math.PI * (bag.rx + bag.ry)) / 2 / SAMPLE_GAP));
     for (let k = 0; k <= n; k++) {
@@ -445,7 +493,7 @@ function deriveGeometry(out, cell) {
   out.topY = Math.min(...ys);
   out.bottomY = Math.max(...ys);
   set('bounds', { x0: Math.min(...xs) - 5, x1: Math.max(...xs) + 20, y0: out.topY - 11, y1: out.bottomY });
-  const bagTop = out.gasbag ? out.gasbag.cy - out.gasbag.ry : nest.y - 44;
+  const bagTop = out.gasbags.length ? Math.min(...out.gasbags.map((b) => b.cy - b.ry)) : nest.y - 44;
   set('fitBox', { x0: lowX0 - 120, x1: lowX1 + 90, y0: bagTop - 36, y1: out.bottomY + 10 });
   set('hullRect', { x0: lowX0 + 80, x1: lowX1 - 60, y0: bagTop - 86, y1: out.bottomY - 15 });
   const F = out.fitBox;
@@ -517,9 +565,7 @@ export function balanceOf(parts) {
     const pos = partPos(p, ys), mass = partStat(p, 'mass');
     if (pos && mass > 0) { m += mass; mx += mass * pos.x; my += mass * pos.y; }
     if (p.part === 'gasbag') {
-      const base = (p.rx * p.ry) / 1560;
-      lift(p.cx, p.cy, base);
-      if (p.twin) lift(p.cx - 20, p.cy - 258, base * TWIN_SIZE.rx * TWIN_SIZE.ry);
+      for (const q of bagLiftPoints(p)) lift(q.x, q.y, q.v);
     } else if (pos && partStat(p, 'lift') > 0) lift(pos.x, pos.y, partStat(p, 'lift'));
   }
   const com = m > 0 ? { x: mx / m, y: my / m } : null, col = w > 0 ? { x: wx / w, y: wy / w } : null;

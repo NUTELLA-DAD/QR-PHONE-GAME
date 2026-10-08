@@ -234,7 +234,7 @@ function listJobs(state, bot) {
   // A gasbag shot full of holes sinks the ship: patching it comes before swatting and repairs.
   // (Only when the gas is actually running out or the bag is in ruins, and never more than a few hands at once.)
   const gasHoles = state.gasHoles || [];
-  const gasCrisis = gasHoles.length >= B.GAS_EMERGENCY && (ship.gas < B.GAS_LOW || gasHoles.length >= B.GAS_RUIN);
+  const gasCrisis = (gasHoles.length >= B.GAS_EMERGENCY && (ship.gas < B.GAS_LOW || gasHoles.length >= B.GAS_RUIN)) || (gasHoles.length > 0 && (state.bags || []).some((b) => b.down)); // (a flat bag in a row of bags: patch its holes)
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
   if (bombStarved) jobs.push({ kind: 'ammo', obj: bay, max: 2, cap: 2 });
   // A real blaze (fires spread and eat the hull) comes before patching holes in the gasbag.

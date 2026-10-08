@@ -1,0 +1,98 @@
+// The gasbags in flight (Phase S.5d): any number of bags side by side, each with its own gas and its own holes.
+//   state.bags = [{ gas (0..100), w (its lift share), down (deflated) }], in the same order as SHIP_LAYOUT.gasbags (tail to nose)
+//   state.ship.gas stays the one number the rest of the game reads (the HUD, the helm, the bots, the shop): the lift-weighted MEAN of the bags' gas.
+//   Writing it sets every bag, so "refill to 50" and the like keep working; refillBags() tops each bag up without lowering a fuller one.
+// The helm's pump and vent act on all the bags at once; seepage is per bag and each hole leaks from its own bag (hole.bag). A bag at BAG_DOWN or less is
+// DEFLATED: it lifts nothing (its gas counts as nothing in the mean), the art crumples it and the TV calls it out. Patch its holes and pump to bring it back.
+// With ONE bag every number here reduces to the old single gas value exactly (the classic ship flies as it always did).
+import { config } from '../../config.js';
+import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { bagName, bagLiftPoints } from './shipBuild.js';
+
+const BAGS = SHIP_LAYOUT.gasbags; // (updated in place when a build is applied)
+const clamp100 = (v) => Math.max(0, Math.min(100, v));
+
+const makeBags = (level) => Array.from({ length: Math.max(1, BAGS.length) }, (_, i) => ({ gas: level, w: BAGS[i] ? Math.max(1, BAGS[i].lift) : 1, down: false }));
+
+// The lift-weighted mean of the bags' gas (one bag: that bag's gas, exactly).
+export function bagMean(bags) {
+  if (bags.length === 1) return bags[0].gas;
+  let s = 0, w = 0;
+  for (const b of bags) { s += b.gas * b.w; w += b.w; }
+  return w > 0 ? s / w : 0;
+}
+
+// Give a new simulation's state its bags, and make state.ship.gas the mean of them.
+export function installBags(state) {
+  state.bags = makeBags(state.ship.gas);
+  state.bagsVersion = SHIP_LAYOUT.version;
+  Object.defineProperty(state.ship, 'gas', {
+    enumerable: true,
+    configurable: true,
+    get: () => bagMean(state.bags),
+    set: (v) => { for (const b of state.bags) b.gas = v; },
+  });
+}
+
+// A new ship build was applied (the dock): fit the bags to it, keeping the mean gas.
+export function syncBags(state) {
+  if (state.bagsVersion === SHIP_LAYOUT.version && state.bags.length === Math.max(1, BAGS.length)) return;
+  const level = state.ship.gas;
+  state.bags = makeBags(level);
+  state.bagsVersion = SHIP_LAYOUT.version;
+  for (const h of state.gasHoles || []) if (!(h.bag < state.bags.length)) h.bag = 0;
+}
+
+// Top every bag up to at least `level` (a repair, a shop refill): a fuller bag keeps its gas.
+export function refillBags(state, level) {
+  for (const b of state.bags) b.gas = Math.max(b.gas, level);
+}
+
+// How many holes leak from each bag.
+export function holesPerBag(state) {
+  const n = state.bags.length, out = new Array(n).fill(0);
+  for (const h of state.gasHoles) out[h.bag < n ? h.bag | 0 : 0]++;
+  return out;
+}
+
+// One step of gas: `moved` = what the pump and the vent move per second (+ in, - out), the same for every bag. Seep is per bag; holes leak from their own bag.
+export function stepBags(state, moved, dt) {
+  const G = config.GAS, bags = state.bags;
+  if (bags.length === 1) { bags[0].gas = clamp100(bags[0].gas + (moved - G.SEEP - G.LEAK_PER_HOLE * state.gasHoles.length) * dt); return; }
+  const holes = holesPerBag(state);
+  bags.forEach((b, i) => { b.gas = clamp100(b.gas + (moved - G.SEEP - G.LEAK_PER_HOLE * holes[i]) * dt); });
+}
+
+// A bag going flat (or coming back) while several are fitted: mark it and shout on the TV.
+export function watchBags(state) {
+  const G = config.GAS, bags = state.bags;
+  if (bags.length < 2) return;
+  const holes = holesPerBag(state);
+  bags.forEach((b, i) => {
+    let rs = 0, rw = 0; // the other bags' gas (weighted): a bag is "down" when it is flat and the rest are not
+    bags.forEach((o, j) => { if (j !== i) { rs += o.gas * o.w; rw += o.w; } });
+    if (!b.down && b.gas <= G.BAG_DOWN && rs / rw >= b.gas + G.BAG_REST) {
+      b.down = true;
+      const name = bagName(i, bags.length);
+      state.ev.warn = 3.2;
+      state.ev.warnText = `${name} DOWN! ${holes[i] ? 'PATCH IT AND PUMP!' : 'PUMP IT UP!'}`;
+      state.bagAlert = { i, name, text: state.ev.warnText, at: state.scroll };
+      state.sfxQ.push(['alarm']);
+    } else if (b.down && b.gas > G.BAG_UP) b.down = false;
+  });
+}
+
+// The live centre of lift (ship x) when several bags are fitted: each bag lifts by its size AND how full it is, so a flat bag stops pulling its end of the ship
+// up (balance.js turns the shift into a tip). null = use the build's static one (a single bag, or BAG_COL off).
+export function liveLiftX(state) {
+  if (!config.BALANCE.BAG_COL || state.bags.length < 2 || BAGS.length !== state.bags.length) return null;
+  let m = 0, mx = 0;
+  BAGS.forEach((g, i) => {
+    for (const q of bagLiftPoints(g)) { // (a bag's lift in gas points, scaled by how full it is)
+      const w = q.v * (state.bags[i].gas / 100);
+      m += w;
+      mx += w * q.x;
+    }
+  });
+  return m > 0.01 ? mx / m : null;
+}

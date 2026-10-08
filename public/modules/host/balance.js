@@ -8,6 +8,7 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT, SHIP_BALANCE } from '../../shipLayout.js';
 import { trimOf } from './shipBuild.js';
+import { liveLiftX } from './gasBags.js';
 
 export function createBalance(state) {
   const bal = { dx: 0, deg: 0, side: 'level', comX: 0, restPitch: 0, push: 0, slow: 0, scrape: 0, warn: false, cd: 0, live: 0 };
@@ -34,15 +35,19 @@ export function createBalance(state) {
     const B = config.BALANCE, S = SHIP_BALANCE;
     let target = S.dx;
     bal.live = 0;
+    // Several gasbags: the centre of lift moves to the bags that still hold gas, so losing one end bag tips her toward it (gasBags.js). One bag: the build's own.
+    const liftX = liveLiftX(state);
+    const colX = liftX == null ? S.colX : liftX;
+    if (liftX != null) target = S.comX - colX;
     if (B.LIVE && S.mass > 0) {
       const l = loads();
       bal.live = l.m;
-      target = (S.mass * S.comX + l.mx) / (S.mass + l.m) - S.colX;
+      target = (S.mass * S.comX + l.mx) / (S.mass + l.m) - colX;
     }
     if (!B.LIVE || !primed) bal.dx = target;
     else bal.dx += (target - bal.dx) * Math.min(1, dt * B.LIVE_SMOOTH);
     primed = true;
-    bal.comX = S.colX + bal.dx;
+    bal.comX = colX + bal.dx;
     const t = trimOf(bal.dx);
     bal.deg = t.deg;
     bal.side = t.side;

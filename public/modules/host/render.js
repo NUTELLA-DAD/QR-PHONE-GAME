@@ -26,6 +26,7 @@ import { createLogbook } from './logbookArt.js'; // cream paper panels + red sta
 import { createLinkArt } from './linkArt.js'; // linked-station wires, gust warnings, surge rings
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
 import { crewHeads } from './crewscale.js';
+import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
 import { drawIceBlock, drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
@@ -788,6 +789,20 @@ export function createRenderer({ ctx, state, canvas }) {
     }
     const valve = state.gasValve || {};
     ctx.fillText(`Gas${valve.input > 0.1 ? ' - PUMPING' : valve.input < -0.1 ? ' - VENTING' : ''}${state.buoyancy > 0 ? ' - RISING' : state.buoyancy < 0 ? ' - FALLING' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}`, 46, 150);
+    if (state.bags && state.bags.length > 1) { // several gasbags: a pip for each, tail to nose (green = full, amber = low, red cross = flat)
+      const bw = 16, gap = 4, x0 = 454 - state.bags.length * (bw + gap) + gap;
+      state.bags.forEach((b, i) => {
+        const x = x0 + i * (bw + gap), fill = Math.max(0, Math.min(1, b.gas / 100));
+        ctx.fillStyle = '#3b2a1d';
+        ctx.fillRect(x, 137, bw, 12);
+        ctx.fillStyle = b.down ? '#a8443f' : fill < 0.3 ? '#e2a24a' : '#7fbf6f';
+        ctx.fillRect(x + 1, 148 - 10 * fill, bw - 2, 10 * fill);
+        ctx.strokeStyle = LB.INK;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x, 137, bw, 12);
+        if (b.down) { ctx.beginPath(); ctx.moveTo(x + 2, 139); ctx.lineTo(x + bw - 2, 147); ctx.moveTo(x + bw - 2, 139); ctx.lineTo(x + 2, 147); ctx.stroke(); }
+      });
+    }
     ctx.textAlign = 'right';
     ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);
     if (state.autopilot) {
@@ -1365,7 +1380,7 @@ export function createRenderer({ ctx, state, canvas }) {
       case 'hole':
         return { x: o.x, y: P[o.d].y - 58, r: 42 };
       case 'ice':
-        return o.area === 'gasbag' ? { x: o.x, y: SHIP_LAYOUT.gasbag.cy + SHIP_LAYOUT.gasbag.ry * Math.sqrt(Math.max(0, 1 - ((o.x - SHIP_LAYOUT.gasbag.cx) / SHIP_LAYOUT.gasbag.rx) ** 2)) + 20, r: 60 } : o.gun ? { x: o.x, y: P[o.d].y - 50, r: 56 } : { x: o.x, y: P[o.d].y - 24, r: 52 };
+        return o.area === 'gasbag' ? { x: o.x, y: bagEdgeY(SHIP_LAYOUT.gasbags[Math.max(0, bagNearX(SHIP_LAYOUT.gasbags, o.x))], o.x, false) + 20, r: 60 } : o.gun ? { x: o.x, y: P[o.d].y - 50, r: 56 } : { x: o.x, y: P[o.d].y - 24, r: 52 };
       case 'gas':
         return { x: o.x, y: o.y, r: 40 };
       case 'unclog':
