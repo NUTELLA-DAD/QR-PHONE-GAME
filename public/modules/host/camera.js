@@ -132,7 +132,8 @@ export function createWorldCamera() {
         view.cx = t.anchor + rel;
         view.cy += (t.cy - view.cy) * k;
         // Zoom changes slowly (no pumping in and out), panning a little quicker.
-        if (!ships.some((s) => s.pose.turn > 0)) view.zoom += (t.zoom - view.zoom) * (1 - Math.exp(-C.ZOOM_SMOOTHING * dt)); // (the zoom holds still while a ship comes about: no pumping while the picture is squashing)
+        const yd = state.yard; // (the Shipwright's Yard: while the crew builds at the dock the zoom holds, then she grows into the picture slowly after cast off)
+        if (!ships.some((s) => s.pose.turn > 0) && !(yd && yd.hold)) view.zoom += (t.zoom - view.zoom) * (1 - Math.exp(-(yd && yd.pull > 0 ? C.PULL_SMOOTHING : C.ZOOM_SMOOTHING) * dt)); // (the zoom holds still while a ship comes about: no pumping while the picture is squashing)
         view.zoom = Math.max(t.minZoom, view.zoom); // (the cap holds even mid-glide)
         view.minZoom = t.minZoom;
         view.clipped = t.clipped;

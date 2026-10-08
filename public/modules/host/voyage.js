@@ -165,3 +165,22 @@ export function saveModePrefs(p) {
     // ignore
   }
 }
+
+// ---- Which ship a new voyage starts with (remembered on this TV): the Sparrow, or the classic full ship ----
+const SHIP_KEY = 'airshipShip';
+export const START_BUILDS = ['sparrow', 'classic'];
+export function loadStartBuild() {
+  try {
+    const v = localStorage.getItem(SHIP_KEY);
+    return START_BUILDS.includes(v) ? v : config.VOYAGE.START_BUILD;
+  } catch {
+    return config.VOYAGE.START_BUILD;
+  }
+}
+export function saveStartBuild(id) {
+  try {
+    localStorage.setItem(SHIP_KEY, id);
+  } catch {
+    // ignore
+  }
+}

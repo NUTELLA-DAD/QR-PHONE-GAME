@@ -5,6 +5,8 @@
 //   drawBlueprint(ctx, v, layout, opts)                   opts: { rowHover, cursor, ghost, slots, hover, status, balance, target, needs }
 //     balance: shipBuild.js balanceOf (the centre of mass / lift markers), target: { x, y, r, label } the thing the delete tool is over, needs: what a half-built ship still lacks
 //   v.toWorld(px, py) -> { x, y } in ship coordinates     v.X(x), v.Y(y) -> paper pixels
+// The in-game Shipwright's Yard (S.6b, yardArt.js) draws it CLEAN: blueprintView(layout, w, h, k, true) fits the ship with small margins, and opts.clean skips the grid, the row guides, the
+// key and the size line. opts.pins = [{ x, y, letter, ghost }]: the places a part could go (a dashed ghost box, a brass pin with its letter); opts.stamp = { text, sub }: a red stamp (BUILT).
 import { config } from '../../config.js';
 import { COL, DECK_ROWS, rowOf, hullGeom, bagList } from './shipBuild.js';
 import { EDIT_ROWS, DRAW_ROWS, GRID_X0 } from './buildEdit.js';
@@ -13,8 +15,15 @@ const LB = () => config.LOGBOOK;
 const PAD = { l: 100, r: 28, t: 30, b: 46 }; // paper margins (CSS px, times k): row labels on the left, column numbers on top, the ship's size underneath
 const GLYPH = { helm: 'H', boiler: 'B', lookout: 'L', coal: 'C', ammo: 'A', gun: 'G', searchlight: 'S', coil: 'Z', deflector: 'D', bombBay: 'M', navigator: 'N', escort: 'F', engine: 'E', sail: 'W', swivel: 'X' };
 
-export function blueprintView(Ly, w, h, k = 1) {
+export function blueprintView(Ly, w, h, k = 1, clean = false) {
   const b = Ly.bounds || { x0: -240, x1: 1860, y0: -200, y1: 1000 };
+  if (clean) { // (the Yard: just the ship, with room for a ghost bay at either end and a keel deck under her)
+    const pad = { l: 14, r: 14, t: 14, b: 14 };
+    const wx0 = b.x0 - 150, wx1 = b.x1 + 150, wy0 = Math.min(b.y0, -40) - 40, wy1 = Math.max(b.y1, DECK_ROWS.keel + 20) + 50;
+    const s = Math.min((w - (pad.l + pad.r) * k) / (wx1 - wx0), (h - (pad.t + pad.b) * k) / (wy1 - wy0));
+    const ox = (w - (wx1 - wx0) * s) / 2 - wx0 * s, oy = (h - (wy1 - wy0) * s) / 2 - wy0 * s;
+    return { s, ox, oy, k, w, h, pad, clean: true, world: { x0: wx0, x1: wx1, y0: wy0, y1: wy1 }, X: (x) => ox + x * s, Y: (y) => oy + y * s, toWorld: (px, py) => ({ x: (px - ox) / s, y: (py - oy) / s }) };
+  }
   const wx0 = Math.min(b.x0, -240) - 20, wx1 = Math.max(b.x1, 1860) + 2 * COL; // (room to draw two columns beyond the ship before the view refits)
   const wy0 = Math.min(b.y0, DECK_ROWS.crow2 - 40) - 10, wy1 = Math.max(b.y1, DECK_ROWS.deep + 90);
   const pl = PAD.l * k, pr = PAD.r * k, pt = PAD.t * k, pb = PAD.b * k;
@@ -31,6 +40,7 @@ export function engineArrow(v, e, q) {
 
 export function drawBlueprint(g, v, Ly, o = {}) {
   const L = LB(), k = v.k, { X, Y, s } = v;
+  const pad = v.pad || PAD, clean = !!o.clean;
   const font = (px, display) => `${Math.round(px * k)}px ${display ? config.FONTS.DISPLAY : config.FONTS.TEXT}`;
   g.save();
   g.setTransform(1, 0, 0, 1, 0, 0);
@@ -55,27 +65,27 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   };
   const W = v.world;
   // The column grid, numbered along the top, and the rows decks can be drawn on.
-  for (let x = GRID_X0 + Math.ceil((W.x0 - GRID_X0) / COL) * COL, n = Math.ceil((W.x0 - GRID_X0) / COL); x <= W.x1; x += COL, n++) {
-    line([[X(x), PAD.t * k - 6 * k], [X(x), v.h - PAD.b * k + 8 * k]], 1, 'rgba(107,74,50,0.2)', [3, 5]);
-    text(String(n), X(x), PAD.t * k - 10 * k, 9, L.INK_SOFT, 'center');
+  if (!clean) for (let x = GRID_X0 + Math.ceil((W.x0 - GRID_X0) / COL) * COL, n = Math.ceil((W.x0 - GRID_X0) / COL); x <= W.x1; x += COL, n++) {
+    line([[X(x), pad.t * k - 6 * k], [X(x), v.h - pad.b * k + 8 * k]], 1, 'rgba(107,74,50,0.2)', [3, 5]);
+    text(String(n), X(x), pad.t * k - 10 * k, 9, L.INK_SOFT, 'center');
   }
-  for (const row of DRAW_ROWS) {
+  if (!clean) for (const row of DRAW_ROWS) {
     const y = Y(DECK_ROWS[row]), hot = o.rowHover === row;
-    if (hot) { g.fillStyle = 'rgba(201,168,90,0.28)'; g.fillRect(PAD.l * k - 8 * k, y - 22 * k, X(W.x1) - PAD.l * k + 8 * k, 44 * k); }
-    line([[PAD.l * k - 8 * k, y], [X(W.x1), y]], hot ? 1.5 : 1, hot ? L.INK_SOFT : 'rgba(107,74,50,0.32)', [8, 6]);
+    if (hot) { g.fillStyle = 'rgba(201,168,90,0.28)'; g.fillRect(pad.l * k - 8 * k, y - 22 * k, X(W.x1) - pad.l * k + 8 * k, 44 * k); }
+    line([[pad.l * k - 8 * k, y], [X(W.x1), y]], hot ? 1.5 : 1, hot ? L.INK_SOFT : 'rgba(107,74,50,0.32)', [8, 6]);
     const have = Ly.platforms.some((q) => q.y === DECK_ROWS[row]);
-    text(EDIT_ROWS[row].name.toUpperCase(), PAD.l * k - 12 * k, y + 4 * k, 11, have ? L.INK : L.INK_SOFT, 'right');
-    if (!have) text('(empty row)', PAD.l * k - 12 * k, y + 18 * k, 9, L.INK_SOFT, 'right');
+    text(EDIT_ROWS[row].name.toUpperCase(), pad.l * k - 12 * k, y + 4 * k, 11, have ? L.INK : L.INK_SOFT, 'right');
+    if (!have) text('(empty row)', pad.l * k - 12 * k, y + 18 * k, 9, L.INK_SOFT, 'right');
   }
-  { // the gasbag row: a band where the bag is drawn (a dashed line while there is no bag)
+  if (!clean) { // the gasbag row: a band where the bag is drawn (a dashed line while there is no bag)
     const y = Y(config.BUILD_EDIT.BAG_CY), hot = o.rowHover === 'gasbag';
-    if (hot) { g.fillStyle = 'rgba(201,168,90,0.28)'; g.fillRect(PAD.l * k - 8 * k, y - 22 * k, X(W.x1) - PAD.l * k + 8 * k, 44 * k); }
-    if (!Ly.gasbag || hot) line([[PAD.l * k - 8 * k, y], [X(W.x1), y]], hot ? 1.5 : 1, hot ? L.INK_SOFT : 'rgba(107,74,50,0.32)', [8, 6]);
+    if (hot) { g.fillStyle = 'rgba(201,168,90,0.28)'; g.fillRect(pad.l * k - 8 * k, y - 22 * k, X(W.x1) - pad.l * k + 8 * k, 44 * k); }
+    if (!Ly.gasbag || hot) line([[pad.l * k - 8 * k, y], [X(W.x1), y]], hot ? 1.5 : 1, hot ? L.INK_SOFT : 'rgba(107,74,50,0.32)', [8, 6]);
     const nb = bagList(Ly).length;
-    text(nb > 1 ? `GASBAGS x${nb}` : 'GASBAG', PAD.l * k - 12 * k, y + 4 * k, 11, Ly.gasbag ? L.INK : L.INK_SOFT, 'right');
-    text(Ly.gasbag ? '(drag: add more)' : '(none: drag to draw)', PAD.l * k - 12 * k, y + 18 * k, 9, L.INK_SOFT, 'right');
+    text(nb > 1 ? `GASBAGS x${nb}` : 'GASBAG', pad.l * k - 12 * k, y + 4 * k, 11, Ly.gasbag ? L.INK : L.INK_SOFT, 'right');
+    text(Ly.gasbag ? '(drag: add more)' : '(none: drag to draw)', pad.l * k - 12 * k, y + 18 * k, 9, L.INK_SOFT, 'right');
   }
-  if (!Ly.platforms.length && !Ly.gasbag) { // an empty sheet
+  if (!clean && !Ly.platforms.length && !Ly.gasbag) { // an empty sheet
     const cx = X(560), ty = Y(DECK_ROWS.catwalk) - 40 * k;
     g.fillStyle = 'rgba(243,234,214,0.9)'; g.fillRect(cx - 250 * k, ty - 22 * k, 500 * k, 70 * k);
     text('An empty sheet.', cx, ty, 15, L.INK, 'center', true);
@@ -144,7 +154,7 @@ export function drawBlueprint(g, v, Ly, o = {}) {
       g.fillStyle = 'rgba(201,168,90,0.16)'; g.fillRect(X(q.x0) - 4 * k, top, (q.x1 - q.x0) * s + 8 * k, Y(q.y) - top);
       g.strokeStyle = L.INK; g.lineWidth = 2.4 * k; g.strokeRect(X(q.x0) - 4 * k, top, (q.x1 - q.x0) * s + 8 * k, Y(q.y) - top);
     }
-    if (q.x1 - q.x0 > 220) text(q.name + (body ? (q.outside ? ' (outdoor)' : ' (covered)') : ''), X(q.x0) + 4 * k, Y(q.y) + 14 * k, 9, L.INK_SOFT);
+    if (!clean && q.x1 - q.x0 > 220) text(q.name + (body ? (q.outside ? ' (outdoor)' : ' (covered)') : ''), X(q.x0) + 4 * k, Y(q.y) + 14 * k, 9, L.INK_SOFT);
   }
   for (const a of Ly.armour || []) { // ARMOUR plate (S.5g): a riveted iron band along the hull wall under a covered deck, or the rail of an open one
     const q = P[a.d];
@@ -227,8 +237,8 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   }
 
   // The size of the ship, along the bottom and the right edge.
-  if (Ly.bounds) {
-    const B = Ly.bounds, yb = v.h - PAD.b * k + 22 * k;
+  if (Ly.bounds && !clean) {
+    const B = Ly.bounds, yb = v.h - pad.b * k + 22 * k;
     line([[X(B.x0), yb], [X(B.x1), yb]], 1.2, L.INK_SOFT);
     for (const x of [B.x0, B.x1]) line([[X(x), yb - 4 * k], [X(x), yb + 4 * k]], 1.2, L.INK_SOFT);
     text(`${Math.round(B.x1 - B.x0)} px = ${((B.x1 - B.x0) / COL).toFixed(1)} columns long, ${Math.round(B.y1 - B.y0)} px tall`, X((B.x0 + B.x1) / 2), yb + 14 * k, 11, L.INK_SOFT, 'center');
@@ -236,10 +246,10 @@ export function drawBlueprint(g, v, Ly, o = {}) {
 
   // The key, on the empty paper to the right of the ship.
   const kx = X(W.x1) + 16 * k;
-  if (v.w - kx > 200 * k) {
+  if (!clean && v.w - kx > 200 * k) {
     const rows = ['PENCIL: drag along a deck row.', 'Along a deck it gets longer; on an', 'empty stretch it makes a new deck', '(rooms, hull and a ladder come too).', 'GASBAG: drag along the bag row (in', 'empty space = one more bag; drag a', 'bag end to resize it).', 'PARTS: drag a picture from the tray', 'onto the ship; it snaps to a spot.', 'LADDER: drag down from one deck to', 'another (a pole is one way, down).', 'ERASER: drag along a deck (it gets', 'shorter or goes, with what stood on', 'it). DELETE: click any one thing.', 'OUTDOOR / COVERED: under the pencil.', 'Open air has rails (weather, raiders,', 'overboard); covered has a roof.', 'ARMOUR: drag iron plate along a deck.', '', 'Lines snap to the column grid and', 'to deck ends.', '', 'H helm  B boiler  L lookout', 'C coal  A ammo  G gun  S lamp', 'Z coil  D deflector  M bomb bay', 'N navigator  F fighter  E engine', 'X swivel crank (red arrow = thrust,', 'brass dot = drag it to aim the engine)'];
-    text('HOW TO', kx, PAD.t * k + 16 * k, 14, L.INK, 'left', true);
-    rows.forEach((t, i) => text(t, kx, PAD.t * k + 36 * k + i * 15 * k, 11, i < rows.length - 6 ? L.INK_SOFT : L.INK));
+    text('HOW TO', kx, pad.t * k + 16 * k, 14, L.INK, 'left', true);
+    rows.forEach((t, i) => text(t, kx, pad.t * k + 36 * k + i * 15 * k, 11, i < rows.length - 6 ? L.INK_SOFT : L.INK));
   }
 
   // A part picture being dragged in from the tray (S.5d): everything it cannot go is dimmed, the legal spots stay bright, the picture snaps to the nearest one.
@@ -286,7 +296,7 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     const BE = config.BUILD_EDIT, t = dr.target, size = 64 * k;
     const note = (txt, x, y, color) => {
       g.font = font(12, false);
-      const tw = g.measureText(txt).width, tx = Math.max(PAD.l * k, Math.min(v.w - tw - 14 * k, x - tw / 2)), ty = Math.max(24 * k, y);
+      const tw = g.measureText(txt).width, tx = Math.max(pad.l * k, Math.min(v.w - tw - 14 * k, x - tw / 2)), ty = Math.max(24 * k, y);
       g.fillStyle = 'rgba(243,234,214,0.95)'; g.fillRect(tx - 6 * k, ty - 14 * k, tw + 12 * k, 20 * k);
       g.strokeStyle = color; g.lineWidth = 1.4 * k; g.strokeRect(tx - 6 * k, ty - 14 * k, tw + 12 * k, 20 * k);
       text(txt, tx, ty, 12, color);
@@ -326,7 +336,7 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     } else if (gh.tool === 'bag') {
       for (const b of gh.bags || []) { g.beginPath(); g.ellipse(X(b.cx), Y(b.cy), b.rx * s, b.ry * s, 0, 0, 6.2832); g.strokeStyle = good ? '#4f7f3f' : L.STAMP; g.lineWidth = 3 * k; g.setLineDash([10 * k, 6 * k]); g.stroke(); g.setLineDash([]); }
       line([[X(gh.x0), y], [X(gh.x1), y]], 5, good ? '#4f7f3f' : L.STAMP);
-      if (gh.label) text(gh.label, Math.max(PAD.l * k, X((gh.x0 + gh.x1) / 2) - 120 * k), y - 28 * k, 12, good ? L.INK : L.STAMP);
+      if (gh.label) text(gh.label, Math.max(pad.l * k, X((gh.x0 + gh.x1) / 2) - 120 * k), y - 28 * k, 12, good ? L.INK : L.STAMP);
     } else if (gh.tool === 'erase') {
       const hh = gh.row === 'gasbag' ? config.BUILD_EDIT.BAG_RY * s : 26 * k; // (rubbing out a bag: a band as tall as the bag)
       g.fillStyle = good ? 'rgba(168,68,63,0.22)' : 'rgba(107,74,50,0.12)';
@@ -346,16 +356,43 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     }
     if (gh.label && gh.tool !== 'ladder' && gh.tool !== 'bag') {
       g.font = font(12, false);
-      const tw = g.measureText(gh.label).width, tx = Math.max(PAD.l * k, Math.min(v.w - tw - 14 * k, X((gh.x0 + gh.x1) / 2) - tw / 2)), ty = y - 36 * k;
+      const tw = g.measureText(gh.label).width, tx = Math.max(pad.l * k, Math.min(v.w - tw - 14 * k, X((gh.x0 + gh.x1) / 2) - tw / 2)), ty = y - 36 * k;
       g.fillStyle = 'rgba(243,234,214,0.94)'; g.fillRect(tx - 6 * k, ty - 14 * k, tw + 12 * k, 20 * k);
       g.strokeStyle = good ? L.INK : L.STAMP; g.lineWidth = 1.4 * k; g.strokeRect(tx - 6 * k, ty - 14 * k, tw + 12 * k, 20 * k);
       text(gh.label, tx, ty, 12, good ? L.INK : L.STAMP);
     }
   }
+  // The Yard's places (S.6b): a dashed ghost where the part would stand and a brass pin with its letter.
+  for (const pn of o.pins || []) {
+    const gh = pn.ghost;
+    g.setLineDash([9 * k, 6 * k]);
+    g.lineWidth = 2.6 * k;
+    g.strokeStyle = '#4f7f3f';
+    g.fillStyle = 'rgba(79,127,63,0.13)';
+    if (gh && gh.ellipse) { g.beginPath(); g.ellipse(X(gh.cx), Y(gh.cy), gh.rx * s, gh.ry * s, 0, 0, 6.2832); g.fill(); g.stroke(); }
+    else if (gh) { g.fillRect(X(gh.x0), Y(gh.y0), (gh.x1 - gh.x0) * s, (gh.y1 - gh.y0) * s); g.strokeRect(X(gh.x0), Y(gh.y0), (gh.x1 - gh.x0) * s, (gh.y1 - gh.y0) * s); }
+    g.setLineDash([]);
+    const px = X(pn.x), py = Y(pn.y) - (gh && gh.ellipse ? 0 : 46 * k);
+    if (!(gh && gh.ellipse)) line([[px, py + 13 * k], [px, Y(pn.y) - 10 * k]], 1.8, L.INK_SOFT);
+    g.beginPath(); g.arc(px, py, 15 * k, 0, 6.2832); g.fillStyle = L.PIN; g.fill(); g.strokeStyle = L.INK; g.lineWidth = 2.2 * k; g.stroke();
+    text(pn.letter, px, py + 6 * k, 18, L.INK, 'center', true);
+  }
+  if (o.stamp) { // BUILT: a red stamp at the top right
+    g.save();
+    g.translate(v.w - 150 * k, 70 * k);
+    g.rotate(-0.1);
+    g.font = font(40, true);
+    const tw = Math.max(g.measureText(o.stamp.text).width, o.stamp.sub ? (g.font = font(13, false), g.measureText(o.stamp.sub).width) : 0) + 30 * k;
+    g.fillStyle = L.STAMP_BG; g.fillRect(-tw / 2, -34 * k, tw, o.stamp.sub ? 70 * k : 52 * k);
+    g.strokeStyle = L.STAMP; g.lineWidth = 3.4 * k; g.strokeRect(-tw / 2, -34 * k, tw, o.stamp.sub ? 70 * k : 52 * k);
+    g.textAlign = 'center'; g.fillStyle = L.STAMP; g.font = font(40, true); g.fillText(o.stamp.text, 0, 6 * k);
+    if (o.stamp.sub) { g.font = font(13, false); g.fillText(o.stamp.sub, 0, 28 * k); }
+    g.restore();
+  }
   // Can she fly?
   if (o.status && !o.status.ok) {
     g.save();
-    g.translate(v.w - PAD.r * k - 6 * k, v.h - PAD.b * k - 14 * k); // (bottom right, clear of the key)
+    g.translate(v.w - pad.r * k - 6 * k, v.h - pad.b * k - 14 * k); // (bottom right, clear of the key)
     g.rotate(-0.03);
     g.font = font(14, true);
     const tw = Math.min(v.w * 0.6, g.measureText(o.status.text).width);

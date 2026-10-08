@@ -1,4 +1,4 @@
-// Find a ship build for the tools. spec = 'classic', a fixture name ('multi' = tools/fixtures/multi-build.mjs), a path to a .json file
+// Find a ship build for the tools. spec = 'classic', 'sparrow', a fixture name ('multi' = tools/fixtures/multi-build.mjs), a path to a .json file
 // (a parts array, or { parts: [...] }), a path to a .mjs file (default export: a parts array, or a function(BUILDS) returning one),
 // or the JSON text itself ('[{"part":...}]').
 import fs from 'node:fs';
@@ -9,6 +9,7 @@ const toolsDir = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-
 
 export async function loadBuild(spec, BUILDS) {
   if (!spec || spec === 'classic') return BUILDS.classic;
+  if (spec === 'sparrow') return BUILDS.sparrow; // (S.6a: the Voyage's starter ship)
   const asParts = (v) => (Array.isArray(v) ? v : v && Array.isArray(v.parts) ? v.parts : null);
   if (/^\s*[[{]/.test(spec)) return asParts(JSON.parse(spec));
   const fixture = path.join(toolsDir, 'fixtures', spec + '-build.mjs');

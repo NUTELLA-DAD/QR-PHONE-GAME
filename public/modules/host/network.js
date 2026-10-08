@@ -1,6 +1,7 @@
 import { config } from '../../config.js';
 import { mainShip, shipOf, crewOf } from './ships.js';
 import { crewAboard, crewHeads } from './crewscale.js';
+import { saveStartBuild } from './voyage.js';
 
 // What a phone's input message does to its player (also used by tools/controls.mjs, which plays a person without a socket).
 // Button presses are queued flags the simulation eats next frame; `aid` is the id of the label the phone was showing (see aidOf in
@@ -181,7 +182,21 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
     simulation.setSession(null, !simulation.state.daily);
     showDaily();
   };
-  setInterval(() => { showMode(); showDaily(); }, 500); // (a finished daily voyage updates today's best)
+  // The ship a new voyage starts with: the Sparrow (build up from a small ship at the sky-docks) or the classic full ship. Remembered on this TV; picked in the lobby it is fitted at once.
+  const shipButton = document.getElementById('shipBtn');
+  const showShip = () => {
+    const sb = simulation.state.startBuild;
+    const html = 'Ship: ' + (sb === 'classic' ? 'Classic' : 'Sparrow') + `<br><small style="font-size:12px;opacity:.75">${sb === 'classic' ? 'the full ship from the start' : 'start small, build at the sky-docks'}</small>`;
+    if (shipButton.innerHTML !== html) shipButton.innerHTML = html;
+  };
+  shipButton.onclick = () => {
+    const next = simulation.state.startBuild === 'classic' ? 'sparrow' : 'classic';
+    simulation.setStartBuild(next);
+    saveStartBuild(next);
+    showShip();
+  };
+  setInterval(() => { showMode(); showDaily(); showShip(); }, 500); // (a finished daily voyage updates today's best)
+  showShip();
   showMode();
   showDaily();
 

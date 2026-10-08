@@ -11,6 +11,7 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
     $('mDifficulty').innerHTML = $('difficulty').innerHTML;
     $('mMode').innerHTML = $('mode').innerHTML;
     $('mDaily').innerHTML = $('daily').innerHTML;
+    $('mShip').innerHTML = $('shipBtn').innerHTML;
     $('mSound').textContent = $('sound').textContent;
     $('mMusic').textContent = music && music.isOn() ? 'Music: on' : 'Music: off';
     $('mQr').src = $('qr').src;
@@ -57,6 +58,10 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
   };
   $('mDaily').onclick = () => {
     $('daily').click();
+    sync();
+  };
+  $('mShip').onclick = () => { // (the Sparrow or the classic ship: fitted at once in the lobby, otherwise for the next voyage)
+    $('shipBtn').click();
     sync();
   };
   // Screen: Smooth (fast) or Sharp (crisper on high-resolution screens, slower).

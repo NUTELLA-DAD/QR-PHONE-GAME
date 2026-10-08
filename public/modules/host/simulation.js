@@ -18,7 +18,8 @@ import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
 import { newBot } from './network.js';
 import { BUILDS } from './shipBuild.js';
-import { offerPart, partPrice, moduleNames, newModules } from './partsShop.js';
+import { offerPart, partPrice, moduleNames, newModules, summaryOf } from './partsShop.js';
+import { validate } from './buildCheck.js';
 import { createShipSim, flushPresses } from './shipSim.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
@@ -669,6 +670,7 @@ export function createSimulation() {
     if (!offer) return null;
     const e = offer.entry, found = PS.DERELICT_STOPS.includes(legNo(curStop()));
     run.lastPart = e.id;
+    state.yard.sum = offer.base.sum; // (the TV's gauges: the ship as she is)
     return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: found ? 0 : partPrice(e, run.parts.length, crewHeads(state)),
       derelict: found, badge: found ? 'FREE: found in a wreck' : 'NEW PART', choices: offer.choices, now: offer.base.sum, spots: offer.choices.length };
   };
@@ -686,6 +688,7 @@ export function createSimulation() {
     fitShip(run.build, 'yard');
     run.parts.push({ id: o.entry, name: o.baseName, names: newModules(before, moduleNames(layout)), bag: o.entry === 'gasbag' });
     Object.assign(state.yard, { built: { t: YD.BUILT_STAMP, name: o.baseName, letter: c.letter, where: c.where }, newPart: { name: o.baseName.toUpperCase(), x: c.x, y: c.y, t: 0 }, hold: true });
+    state.yard.sum = summaryOf(validate(run.build));
     persistBuild();
     state.ev.warn = 3;
     state.ev.warnText = `BUILT: ${o.baseName.toUpperCase()}!`;
@@ -788,7 +791,7 @@ export function createSimulation() {
     state.ev.warn = 3;
     state.ev.warnText = `BOUGHT: ${o.name.toUpperCase()}!${mark}`;
     openVote({ kind: 'slot', title: `WHERE DOES THE ${o.baseName.toUpperCase()} GO?`, t: YD.SLOT_TIME, part: o, back,
-      options: o.choices.map((c) => ({ kind: 'slot', name: 'Place ' + c.letter, icon: c.letter, desc: c.desc, letter: c.letter })) });
+      options: o.choices.map((c) => ({ kind: 'slot', name: c.where, icon: c.letter, desc: c.note, letter: c.letter })) });
   };
   const resumeDock = (back) => {
     const left = !back.options.every((x) => x.kind === 'cast' || cardOff(x));

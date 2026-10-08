@@ -29,6 +29,8 @@ import { createLinkArt } from './linkArt.js'; // linked-station wires, gust warn
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
 import { createFleetArt } from './fleetArt.js'; // B.3: the panels, pennants and edge arrows of a sky with several ships
 import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, HUD, scoreboard (pvp/match.js)
+import { createYardArt } from './yardArt.js'; // S.6b: the Shipwright's Yard (the sky-dock blueprint, the A / B / C vote, BUILT, "NEW: ...")
+import { createPartPictures } from './partArt.js'; // the little part pictures of the build tray, on the Yard's cards
 import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
@@ -94,6 +96,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.restore();
   };
   const versusArt = createVersusArt({ ctx, fleet, drawCrewAt }); // (the TV for a Versus match: pvp/versusArt.js)
+  let yardArt = null; // (made at its first use: it needs wrapLines and dots, defined further down)
   // Each SHIP's art, made the first time she is drawn on HER context: her baked picture (one bake per ship, keyed on her layout), her lamps, her bombs, ropes, wires, call-outs and the
   // hazards that ride on her (ice, spores, storm rods, the sea). Nothing is shared between ships.
   const arts = new Map();
@@ -1216,6 +1219,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
     }
     ctx.fillStyle = 'rgba(43,34,22,.72)';
     ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
+    yardArt = yardArt || createYardArt({ ctx, book, dots, wrapLines, ink, pics: createPartPictures({ sprites }), spares: drawSpares, world });
+    if (yardArt.isYard(v)) return yardArt.draw(v, Object.values(state.players).filter((p) => !p.mate)); // (a dock with a PART card, or where the part goes: the blueprint screen)
     ctx.textAlign = 'center';
     ctx.fillStyle = '#f3ead6';
     ctx.font = '40px ' + config.FONTS.DISPLAY;
@@ -2093,6 +2098,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
           } else drawPlayer(player, time / 1000);
         });
         art.link.drawWires(time / 1000); // loader <-> gunner and lookout <-> helm wires, the boiler's SURGE ring
+        if (ship.main && yardArt) yardArt.drawNew(time / 1000); // "NEW: ENGINE POD" over the part just built at the sky-dock
         // Each crew member's colour marker above their head, easy to spot from the sofa.
         for (const p of Object.values(state.players)) {
           if (!p.color || p.connected === false || p.fly) continue; // (a flying player is a world object: drawn after the ship, below)

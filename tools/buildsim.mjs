@@ -23,6 +23,7 @@
 //        node tools/buildsim.mjs --check-match      B.4: VERSUS on one World (tools/match-check.mjs): two Ships in one sky with bot crews - the lobby's teams and swap, the shelf and its vote, rounds (count-in, a wreck ends one, the sides swap, the score and the scoreboard numbers, the cap by hull %, the match winner, the rematch vote), cross-fire / bumps / the rival accessor / targetShip / the handicap, boarding (a leap, fight, sabotage, take the helm, Capture, carried home), the bot captains (standoff, altitude edge, come about, gunnery order, retreat, boarding by hook), no co-op saves, leaving Versus - AND co-op botsim still identical. --check-arena is the same check (its old name); add --mirror N to play N mirror matches too
 //        node tools/buildsim.mjs --check-engines    S.5h: pointed engines: forward = classic speed, back reduces / reverses, up climbs with no gas, down dives, a nose engine up lifts the nose, a person turns a swivel engine with the stick and the thrust follows, the bots use the swivel (2 min, 0 errors)
 //        node tools/buildsim.mjs --check-forces     S.5h: forces at places (forces.js): a nose hit kicks the nose, a tail hit the tail, a tall sail tips her nose down, an engine at the nose pointing up cancels it, gusts rock her and she settles, crew walking to the bow tip her
+//        node tools/buildsim.mjs --check-yard       S.6: the Shipwright's Yard (tools/yard-check.mjs): the Sparrow, part cards in the sky-dock shop (prices, the validator on every place, the 25% crew deal), the A / B / C slot vote, the refit at the dock that keeps hull / coal / shells, the whole catalogue, derelict stops (free), limp home shaking the newest part loose, the build in the voyage save and kept by a campaign's second voyage, the phones' cards, the TV (blueprint, gauges, pins, BUILT, NEW call-out) on a stub canvas, the camera's hold and pull-back, bots buying parts, Versus fitting the classic ship
 //        node tools/buildsim.mjs --snapshot-classic --force   (S.0 only) rewrite tools/fixtures/classic-layout.json
 // Exit code 1 on any failure.
 import { pathToFileURL } from 'node:url';
@@ -2268,6 +2269,8 @@ if (mode === '--snapshot-classic') {
   process.exit(bags && small && fleet ? 0 : 1);
 } else if (mode === '--check-collide') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'collide-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-yard') {
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'yard-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-turn') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'turn-check.mjs')], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-engines') {
@@ -2303,6 +2306,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-turn | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-turn | --check-yard | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

@@ -73,15 +73,17 @@ export function createControllerUI({ network }) {
     box.style.display = 'flex';
     $('vtitle').textContent = `${v.title} - ${v.t}s`;
     const cards = $('vcards');
-    const sig = v.options.map((o) => o.name + '|' + o.off + '|' + o.sold).join('/');
+    const sig = v.kind + '|' + v.options.map((o) => o.name + '|' + o.off + '|' + o.sold + '|' + o.desc + '|' + o.cost + '|' + (o.badge || '')).join('/');
     if (cards.dataset.sig !== sig) {
       cards.dataset.sig = sig;
       cards.innerHTML = '';
-      cards.classList.toggle('route', v.kind === 'route');
+      cards.classList.toggle('route', v.kind === 'route' || v.kind === 'slot'); // (one big card per place when the crew picks where a part goes: A / B / C)
       v.options.forEach((o, i) => {
         const b = document.createElement('button');
         const price = o.sold ? 'SOLD' : o.cost != null ? 'Salvage ' + o.cost : '';
-        b.innerHTML = `<span class="ic">${o.icon}</span><b>${o.name}</b><small>${o.desc}</small>${price ? '<em>' + price + '</em>' : ''}`;
+        b.innerHTML = `${o.badge ? '<i class="bd">' + o.badge + '</i>' : ''}<span class="ic">${o.icon}</span><b>${o.name}</b><small>${o.desc}</small>${price ? '<em>' + price + '</em>' : ''}`;
+        b.classList.toggle('slot', v.kind === 'slot');
+        b.classList.toggle('part', !!o.badge);
         b.classList.toggle('off', !!o.off);
         b.classList.toggle('cast', o.name === 'Cast off!');
         b.addEventListener('pointerdown', () => {

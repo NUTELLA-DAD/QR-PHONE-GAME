@@ -8,6 +8,7 @@ import { createMenu } from './menu.js';
 import { createPerfGovernor, perfState } from './perf.js';
 import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility forward: the dev build below is applied before the simulation reads the layout)
 import { BUILDS } from './shipBuild.js';
+import { loadStartBuild } from './voyage.js';
 
 // Dev: host.html?build=[parts JSON] flies another ship than the classic one (copy a build from the build page, buildtest.html, "Copy build JSON").
 try {
@@ -39,6 +40,7 @@ window.perfGov = perf; // handy for debugging in the browser console
 fitCanvas();
 
 const simulation = createSimulation();
+simulation.setStartBuild(loadStartBuild()); // (the browser host starts a Voyage with the Sparrow, or the classic ship: the pause menu's Ship button; headless tools keep whatever ship they apply)
 // Dev (B.2): host.html?ships=2 puts a SECOND airship in the sky (a copy of the classic one, or host.html?ships=2&build2=[parts JSON]), kept a little behind ours and
 // below her, each with four bot crew. They are one simulation: each ship has her own hull, gas, guns, fires, crew and art. (?ships=3 adds a third.)
 {
