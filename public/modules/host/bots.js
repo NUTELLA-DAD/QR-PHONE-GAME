@@ -208,6 +208,9 @@ function listJobs(state, bot) {
   const jobs = [];
   const players = Object.values(state.players);
   const mods = state.modules || [];
+  // (no hammer rack, no extinguisher on the ship: nobody can be sent to patch or spray, S.5e; a bot that already carries the tool still can)
+  const hasTool = (kind) => bot.carry === kind || PICKUPS.some((r) => r.kind === kind);
+  const canHammer = hasTool('hammer'), canSpray = hasTool('extinguisher');
   // Nobody at the wheel in flight is the worst emergency of all: someone takes the helm first.
   const helmSt = one('helm');
   if (state.phase === 'flying' && helmSt && !players.some((q) => isHelm(q.lock)) && !mods.some((m) => m.name === helmSt.n && m.broken)) jobs.push({ kind: 'station', obj: helmSt.n, max: 1 });
@@ -222,7 +225,7 @@ function listJobs(state, bot) {
   if (state.phase === 'flying' && hasKind('boiler') && hasKind('coal') && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
   // The parts everything else hangs on (the helm and its steam pipe, the boiler, the lift): a broken one is fixed first,
   // otherwise the gasbag can never be pumped up again and the ship just sits there burning.
-  for (const m of mods) if (m.broken && critical(mods, m)) jobs.push({ kind: 'repair', obj: m, max: 1, cap: 3, urgent: true });
+  for (const m of mods) if (canHammer && m.broken && critical(mods, m)) jobs.push({ kind: 'repair', obj: m, max: 1, cap: 3, urgent: true });
   // Storm Front: a bolt is charging - one crew member holds a lightning rod (grounds it, the coil may drink it).
   const sj = state.stormJob;
   if (sj && sj.charge && !players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'rod' && !q.lock)) for (const r of sj.rods) jobs.push({ kind: 'rod', obj: r, max: 1 });
@@ -239,7 +242,7 @@ function listJobs(state, bot) {
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
   if (bombStarved) jobs.push({ kind: 'ammo', obj: bay, max: 2, cap: 2 });
   // A real blaze (fires spread and eat the hull) comes before patching holes in the gasbag.
-  if (state.fires.length >= B.FIRE_BLAZE) for (const f of state.fires) jobs.push({ kind: 'fire', obj: f, max: 1, cap: B.FIRE_CAP });
+  if (canSpray && state.fires.length >= B.FIRE_BLAZE) for (const f of state.fires) jobs.push({ kind: 'fire', obj: f, max: 1, cap: B.FIRE_CAP });
   // Gas valves (S.5d): shut the valve of a ruptured bag (holes in it, or flat) so it stops draining the feed, before patching; open it again once the holes are patched.
   (L.gasValves || []).forEach((v, i) => {
     const holes = gasHoles.filter((h) => (h.bag | 0) === v.bag).length, bag = (state.bags || [])[v.bag];
@@ -247,7 +250,7 @@ function listJobs(state, bot) {
     if (open && bag && state.bags.length > 1 && (holes >= 2 || (bag.down && holes))) jobs.push({ kind: 'gasvalve', obj: v, max: 1 });
     else if (!open && holes === 0) jobs.push({ kind: 'gasvalve', obj: v, max: 1 });
   });
-  if (gasCrisis) for (const h of gasHoles) jobs.push({ kind: 'patch', obj: h, max: 1, cap: B.GAS_CAP });
+  if (gasCrisis && canHammer) for (const h of gasHoles) jobs.push({ kind: 'patch', obj: h, max: 1, cap: B.GAS_CAP });
   // Bats latched on the ship: swat them before they chew holes (bare hands are enough).
   for (const b of state.bats || []) if (b.latched && b.landed && b.hp > 0) jobs.push({ kind: 'swat', obj: b, max: 1 });
   // Vents: open one when the pressure is near the top; close them when it's calm again.
@@ -256,10 +259,10 @@ function listJobs(state, bot) {
   const ventIdx = state.ventOpen.findIndex((open) => (ventWanted ? !open : ventCalm && open));
   if ((ventWanted || ventCalm) && ventIdx >= 0) jobs.push({ kind: 'vent', obj: L.vents[ventIdx], max: 1 });
   for (const bomb of state.bombs || []) jobs.push({ kind: 'defuse', obj: bomb, max: 1 });
-  const fires = state.fires.map((f) => ({ kind: 'fire', obj: f, max: 1 }));
-  const holes = (state.gasHoles || []).map((h) => ({ kind: "patch", obj: h, max: 1 }));
-  const hullHoles = state.breaches.map((h) => ({ kind: "patch", obj: h, max: 1 })); // (each open hull hole costs hull every second: patch them before repairing guns)
-  const icy = (state.icing || []).filter((q) => q.lvl >= B.ICE_AT).map((q) => ({ kind: 'ice', obj: q, max: 1 })); // frost: crusts to chip with the hammer
+  const fires = !canSpray ? [] : state.fires.map((f) => ({ kind: 'fire', obj: f, max: 1 }));
+  const holes = !canHammer ? [] : (state.gasHoles || []).map((h) => ({ kind: "patch", obj: h, max: 1 }));
+  const hullHoles = !canHammer ? [] : state.breaches.map((h) => ({ kind: "patch", obj: h, max: 1 })); // (each open hull hole costs hull every second: patch them before repairing guns)
+  const icy = !canHammer ? [] : (state.icing || []).filter((q) => q.lvl >= B.ICE_AT).map((q) => ({ kind: 'ice', obj: q, max: 1 })); // frost: crusts to chip with the hammer
   // Fungal Depths: spores clogging an engine; The Aether: the oxygen tank running low (bare hands, hold Action at the spot).
   const deep = (state.clogs || []).filter((c) => c.lvl >= config.ENVIRONMENTS.fungal.CLOG.BOT_AT).map((c) => ({ kind: 'unclog', obj: c, max: 1 }));
   if (state.env && state.env.id === 'aether' && state.env.o2 < config.ENVIRONMENTS.aether.OXYGEN.BOT_AT) deep.push({ kind: 'oxygen', obj: state.o2tank, max: 1 });
@@ -273,7 +276,7 @@ function listJobs(state, bot) {
     const vital = (m) => { const t = mods.find((q) => q.name === m.to); return !!t && (t.kind === 'helm' || t.kind === 'engine'); }; // (the helm and the engines stay on while flying)
     for (const m of mods) if (m.open && leaky(m) && !(flying && vital(m))) leaks.push({ kind: 'valve', obj: m, max: 1 });
   }
-  const broken = mods.filter((m) => m.broken).map((m) => ({ kind: 'repair', obj: m, max: 1 }));
+  const broken = !canHammer ? [] : mods.filter((m) => m.broken).map((m) => ({ kind: 'repair', obj: m, max: 1 }));
   // Use the tool already in hand first.
   if (bot.carry === "hammer") jobs.push(...hullHoles, ...leaks, ...broken, ...holes, ...icy, ...deep, ...fires);
   else jobs.push(...fires, ...hullHoles, ...leaks, ...broken, ...holes, ...icy, ...deep);
@@ -307,7 +310,7 @@ function listJobs(state, bot) {
   // Now and then the crew shovels extra coal to push into overdrive.
   const pushing = Math.floor(performance.now() / 1000 / B.OVERDRIVE_PUSH_EVERY) % 3 === 0;
   if (hasKind('boiler') && hasKind('coal') && (state.ship.fuel < (pushing ? 60 : 25) && state.ship.press < config.BOILER.WARN_AT - (pushing ? 10 : 25)) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
-  for (const m of mods) if (!m.broken && m.hp < (['engine', 'helm', 'lift', 'shield', 'coil'].includes(m.kind) ? m.max * config.MODULES.LEAK_BELOW - 1 : 60)) jobs.push({ kind: 'repair', obj: m, max: 1 });
+  if (canHammer) for (const m of mods) if (!m.broken && m.hp < (['engine', 'helm', 'lift', 'shield', 'coil'].includes(m.kind) ? m.max * config.MODULES.LEAK_BELOW - 1 : 60)) jobs.push({ kind: 'repair', obj: m, max: 1 });
   const guns = !hasKind('ammo') ? [] : GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
   // Bombing run coming up (an outpost to destroy is near): bombs are the weapon that matters,
@@ -554,7 +557,7 @@ function work(p, state) {
   }
   if (job.kind === 'fight') {
     const crew = state.gunship && state.gunship.crew.includes(o);
-    if (o.fall || !(state.boarders.includes(o) || crew) || !getTool(p, 'sword')) return;
+    if (o.fall || !(state.boarders.includes(o) || crew) || (!getTool(p, 'sword') && PICKUPS.some((r) => r.kind === 'sword'))) return; // (no sword rack aboard: fight bare-handed, shoving them back)
     if (steer(p, goalOf(o), o.x, 45) || (Math.abs(o.y - p.y) < 20 && Math.abs(o.x - p.x) < 70)) {
       p.jx = 0;
       p.face = o.x < p.x ? -1 : 1;

@@ -912,6 +912,33 @@ async function checkMinimum() {
   report(rows[4].speed > rows[0].speed && rows[3].speed > rows[0].speed, `flown by the bots, the engines and the sail get her further than the bare bag (net ${Math.round(rows[0].speed)} -> ${Math.round(rows[3].speed)} -> ${Math.round(rows[4].speed)} px/s)`);
   report(rows[4].prog > rows[0].prog && rows[4].prog >= rows[3].prog, `... and further along the route (progress ${rows[0].prog.toFixed(0)}% -> ${rows[4].prog.toFixed(0)}%)`);
 
+  // 3b. a person mashing every button on each step (the Action / Grab / attack / jump presses, the stick, climbing, walking off the ends): nothing may throw
+  for (const s of steps) {
+    calm();
+    applyBuild(s.parts);
+    let msg = null;
+    try {
+      const sim = createSimulation();
+      const q = { id: 'm', name: 'Masher', species: config.CREW_SPECIES[0], color: '#fff', x: SHIP_LAYOUT.boarderEntryPoints[0].x, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
+      sim.state.players.m = q;
+      sim.castOff();
+      let seed = 7 * s.step;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      for (let i = 0; i < 60 * 45; i++) {
+        if (i % 20 === 0) { q.jx = rnd() * 2 - 1; q.jy = rnd() < 0.3 ? rnd() * 2 - 1 : 0; q.fire = rnd() < 0.4; }
+        if (rnd() < 0.03) q.actQ = true;
+        if (rnd() < 0.02) q.grabQ = true;
+        if (rnd() < 0.02) q.atkQ = true;
+        if (rnd() < 0.01) q.jumpQ = true;
+        if (rnd() < 0.004) q.leaveQ = true;
+        sim.update(1 / 60);
+      }
+    } catch (e) { msg = (e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : String(e)); }
+    report(msg === null, `step ${names[s.step - 1]}: a person mashing every button for 45 s: no errors${msg ? ': ' + msg : ''}`);
+    restore();
+  }
+  applyBuild(BUILDS.classic);
+
   // 4. a person works the sail through the Action button; the gust test
   {
     calm();

@@ -6,6 +6,13 @@ import { createCamera } from './camera.js';
 import { createSfx } from './sfx.js';
 import { createMenu } from './menu.js';
 import { createPerfGovernor, perfState } from './perf.js';
+import { applyBuild } from '../../shipLayout.js';
+
+// Dev: host.html?build=[parts JSON] flies another ship than the classic one (copy a build from the build page, buildtest.html, "Copy build JSON").
+try {
+  const asked = new URLSearchParams(location.search).get('build');
+  if (asked && asked !== 'classic') applyBuild(JSON.parse(asked));
+} catch (e) { console.warn('bad ?build=', e); }
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');

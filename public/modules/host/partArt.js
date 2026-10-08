@@ -147,6 +147,16 @@ const DRAW = {
     filled('#6b4a32', () => g.ellipse(94, 48, 4, 24, 0, 0, 7)); // the propeller, edge on
     line([[28, 68], [28, 90], [4, 90]], 4); // the steam pipe in
   },
+  sail(g, { filled, line }) {
+    line([[22, 12], [60, 90]], 3, IRON); line([[22, 12], [10, 90]], 3, IRON); // the stays
+    filled('#d9a86a', () => { g.moveTo(26, 14); g.lineTo(26, 78); g.lineTo(88, 78); g.quadraticCurveTo(66, 52, 26, 14); g.closePath(); }); // the canvas, belling toward the bow
+    g.strokeStyle = 'rgba(90,64,40,.45)'; g.lineWidth = 2; for (const y of [40, 60]) { g.beginPath(); g.moveTo(27, y); g.lineTo(27 + (y - 14) * 0.9, y); g.stroke(); }
+    filled(WOOD_DARK, () => g.rect(19, 6, 9, 84)); // the mast
+    filled(WOOD_DARK, () => g.rect(19, 76, 70, 7)); // the boom
+    filled(BRASS, () => g.arc(24, 7, 5, 0, 7));
+    filled(RED, () => { g.moveTo(24, 3); g.quadraticCurveTo(38, 1, 50, 6); g.lineTo(38, 9); g.closePath(); }); // the pennant
+    filled(WOOD, () => g.rect(6, 88, 88, 8));
+  },
   ladder(g, { filled, line }) {
     line([[34, 6], [34, 94]], 6, WOOD_DARK); line([[66, 6], [66, 94]], 6, WOOD_DARK);
     for (let y = 16; y < 92; y += 15) line([[34, y], [66, y]], 5, WOOD);

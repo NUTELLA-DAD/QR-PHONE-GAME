@@ -24,7 +24,7 @@ export const GRID_X0 = 20; // the column grid: lines at GRID_X0 + k x COL (the c
 // The rows a deck can be drawn on (top to bottom). hull: its rooms are inside the gondola hull (the art encloses them);
 // split: an erase may cut it in two; multi: more than one deck can share the row (the others are single decks that get longer or shorter).
 export const EDIT_ROWS = {
-  crow2: { id: 'crow2', name: "High Crow's Nest", outside: true, hull: false, split: true, multi: false },
+  crow2: { id: 'crow2', name: 'Upper Nest', outside: true, hull: false, split: true, multi: false },
   nest: { id: 'nest', name: "Crow's Nest", outside: true, hull: false, split: true, multi: false },
   catwalk: { id: 'catwalk', name: 'Top Deck', outside: true, hull: false, split: true, multi: false },
   main: { id: 'main', name: 'Main Deck', outside: false, hull: true, split: true, multi: false },
@@ -259,7 +259,8 @@ export function drawDeck(parts, row, x0, x1) {
   for (const above of [true, false]) { // the nearest deck above that it overlaps, and the nearest below
     const cands = reachable.filter((q) => (above ? q.y < y : q.y > y) && overlap(q) >= 80).sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y));
     for (const q of cands) {
-      const x = freeSpot(L, q.id, Math.max(q.x0, lo), Math.min(q.x1, hi), links.map((l) => l.x));
+      let x = freeSpot(L, q.id, Math.max(q.x0, lo), Math.min(q.x1, hi), links.map((l) => l.x));
+      if (x === null && isNestRow(rowOf(q))) x = ropeSpot(L, q, Math.max(q.x0, lo), Math.min(q.x1, hi)); // (a rope up to a crowded nest may stand close to its stations)
       if (x !== null) { links.push({ q, x, above }); break; }
     }
   }
@@ -295,6 +296,18 @@ function dropDependents(list, goneParts, removed) {
   });
 }
 
+// Where a rope may come up through deck `o` between lo and hi: a free spot, else on a crowded deck (the classic crow's nest) the spot furthest from anything standing there,
+// if it is at least a body's width clear. null = no room.
+function ropeSpot(L, o, lo, hi) {
+  const x = freeSpot(L, o.id, lo, hi);
+  if (x !== null) return x;
+  const oi = L.platforms.indexOf(o);
+  const things = [...L.stations, ...L.engines].filter((s) => s.p === o.id).map((s) => s.x).concat(L.connectors.filter((c) => c.top === oi || c.bottom === oi).map((c) => (c.top === oi ? c.xTop : c.xBottom)));
+  let best = -1, at = null;
+  for (let t = Math.ceil((lo + 25) / 10) * 10; t <= hi - 25; t += 10) { const d = Math.min(Infinity, ...things.map((s) => Math.abs(s - t))); if (d > best) { best = d; at = t; } }
+  return best >= 28 ? at : null;
+}
+
 // A crow's nest cut in two (or one that lost its ropes with the stretch rubbed out) must still be climbable: any nest-row deck with no rope or ladder of its own
 // gets one to the nearest deck it overlaps below (the top deck; a high nest: the nest under it) at a free spot. Pushes the rope into `out`, a label into `added`.
 function reconnectNests(out, added) {
@@ -307,14 +320,7 @@ function reconnectNests(out, added) {
     const below = L.platforms.filter((o) => o.y > q.y && (rowOf(q) === 'crow2' ? rowOf(o) === 'nest' : rowOf(o) === 'catwalk') && Math.min(o.x1, q.x1) - Math.max(o.x0, q.x0) >= 80).sort((p, r) => p.y - r.y);
     for (const o of below) {
       const lo = Math.max(o.x0, q.x0), hi = Math.min(o.x1, q.x1);
-      let x = freeSpot(L, o.id, lo, hi);
-      if (x === null) { // a crowded deck (the classic nest): the spot furthest from anything standing there, if it is at least a body's width clear
-        const oi = L.platforms.indexOf(o);
-        const things = [...L.stations, ...L.engines].filter((s) => s.p === o.id).map((s) => s.x).concat(L.connectors.filter((c) => c.top === oi || c.bottom === oi).map((c) => (c.top === oi ? c.xTop : c.xBottom)));
-        let best = -1;
-        for (let t = Math.ceil((lo + 25) / 10) * 10; t <= hi - 25; t += 10) { const d = Math.min(Infinity, ...things.map((s) => Math.abs(s - t))); if (d > best) { best = d; x = t; } }
-        if (best < 28) x = null;
-      }
+      const x = ropeSpot(L, o, lo, hi);
       if (x === null) continue;
       out.push({ part: 'rope', top: q.id, bottom: o.id, xTop: x, xBottom: x });
       added.push(`rope from the ${q.name} to the ${o.name}`);

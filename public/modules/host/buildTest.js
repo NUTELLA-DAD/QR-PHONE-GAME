@@ -194,7 +194,7 @@ const pics = createPartPictures({ sprites });
 sprites.load().then(() => { pics.refresh(); drawTray(); }).catch(() => {});
 const TRAY = [['gasbag', 'Gasbag'], ['gasValve', 'Gas valve'], ['helm', 'Helm'], ['boiler', 'Boiler'], ['coal', 'Coal bunker'], ['ammo', 'Ammo hold'], ['engine', 'Engine pod'], ['gun', 'Gun'], ['searchlight', 'Searchlight'], ['lookout', 'Lookout'],
   ['medbay', 'Medbay'], ['bombBay', 'Bomb bay'], ['lift', 'Lift'], ['boarding', 'Boarding point'], ['rack_hammer', 'Hammer rack'], ['rack_sword', 'Sword rack'], ['rack_hookshot', 'Hookshot rack'],
-  ['rack_ice', 'Ice locker'], ['extinguisher', 'Extinguisher'], ['vent', 'Steam vent'], ['ladder', 'Ladder'], ['pole', 'Slide pole'], ['ballast', 'Sandbag'], ['ballast_hang', 'Hanging sandbag']];
+  ['rack_ice', 'Ice locker'], ['extinguisher', 'Extinguisher'], ['vent', 'Steam vent'], ['sail', 'Mast and sail'], ['ladder', 'Ladder'], ['pole', 'Slide pole'], ['ballast', 'Sandbag'], ['ballast_hang', 'Hanging sandbag']];
 const tray = { id: null, moved: false, slots: [], target: null, ptr: null, why: '', img: null, x0: 0, y0: 0 }; // the tile being dragged (moved = it has left the tile)
 const dropReach = () => (bv ? (config.BUILD_EDIT.DROP_SNAP * bv.k) / bv.s : 200); // a snap distance in ship px
 function drawTray() {
@@ -315,12 +315,14 @@ function drawReport() {
   $('verdict').innerHTML = `<span class="${r.ok ? 'PASS' : 'FAIL'}">${r.ok ? 'PASS' : 'FAIL'}</span>${r.warns.length ? ` <span class="WARN" style="font-size:13px">${r.warns.length} warning${r.warns.length === 1 ? '' : 's'}</span>` : ''}`;
   const need = $('needs');
   need.className = r.ok ? 'ok' : 'bad';
-  need.textContent = r.ok ? 'She can fly.' : 'Needs: ' + (r.needs.length ? r.needs.join(', ') : r.fails[0]);
+  const better = (r.advice || []).filter((a) => a.tier === 'rec').map((a) => a.label.replace(/^(a|an|two) /, ''));
+  need.textContent = r.ok ? 'She can fly (a deck and a gasbag are all she needs).' + (better.length ? ' She would be better with: ' + better.join(', ') + '.' : '') : 'Needs: ' + (r.needs.length ? r.needs.join(', ') : r.fails[0]);
   const list = $('checklist');
   list.textContent = '';
   for (const c of r.checklist) {
     const li = document.createElement('span');
-    li.className = 'chip ' + (c.ok ? 'done' : 'todo');
+    li.className = 'chip ' + (c.ok ? 'done' : c.tier === 'need' ? 'todo' : c.tier === 'rec' && c.applies ? 'rec' : 'opt'); // (red = she cannot fly without it, amber = recommended, dashed = just nice to have)
+    li.title = c.ok ? '' : c.why;
     li.textContent = (c.ok ? '\u2713 ' : '\u25cb ') + c.label.replace(/^(a|an|two) /, '');
     list.appendChild(li);
   }

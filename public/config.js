@@ -1058,7 +1058,7 @@ export const config = {
   },
   // SAIL: a mast and canvas on the top deck or a nest. A crew member hauls it up (hold Action) or lets it down (tap); a raised sail catches the wind for extra forward speed.
   SAIL: {
-    MAST_H: 190, WIDTH: 150, // the mast's height above its deck and the canvas width (px, the drawing; a part may set its own)
+    MAST_H: 250, WIDTH: 190, // the mast's height above its deck and the canvas width (px, the drawing; a part may set its own)
     BONUS: 0.13, // forward speed one fully raised sail adds (share of top speed) in a windless-neutral sky; times WIND.ENV (and WIND.CAVE on rock maps)
     BONUS_DIM: 0.8, // each further raised sail adds this share of the one before it (diminishing returns)
     HAUL_TIME: 3.2, // seconds of holding Action to haul a sail all the way up
@@ -1068,7 +1068,7 @@ export const config = {
     GUST_SHOVE: 0.5, // a gust also shoves a ship with her sails up this much harder (per fully raised sail, as a share of the shove)
     SPEED_RATE: 1.2, // how quickly the ship's speed follows the sails' pull (per second, as a share of the difference): the canvas fills, she gathers way
     REACH: 70, // how close to the mast a crew member must stand to work the sail (px)
-    COLORS: ['#e9dcc0', '#d9b88a', '#c97a5a', '#e7c9a0'], // canvas colours (the TV picks one per sail)
+    COLORS: ['#d9a86a', '#c97a5a', '#e0c070', '#b8a07a'], // canvas colours (the TV picks one per sail): warm, so a sail shows against the cream gasbag
   },
   // NEST (S.5e): the crow's nest may be cut in two, and a second higher tier (crow2) stands on a mast above it. Height buys a longer view, but weighs on the ship, is a bigger
   // target and catches the wind.

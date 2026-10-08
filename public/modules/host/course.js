@@ -803,12 +803,18 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       course.stuckT = 0;
       course.unstick = config.MAPS.UNSTICK_TIME;
       course.unstuck = (course.unstuck || 0) + 1;
+      if (!SHIP_LAYOUT.stations.some((s) => s.kind === 'helm')) course.tugNow = true; // (nobody can steer her off the rock: a drifting ship with no helm is not left there)
     }
     // Lost for good: wedged where the ship does not fit (a trench or slot after sinking) and not getting out by itself -
     // a tug hauls it to the nearest open water of sky, so one bad moment is never the end of the run.
+    let tow = false;
     if (Number.isFinite(dNow)) course.lostT = 0;
     else if (state.phase === 'flying' && !state.ship.down && (course.lostT = (course.lostT || 0) + dt) > config.MAPS.TOW_AFTER) {
       course.lostT = 0;
+      tow = true;
+    }
+    if (course.tugNow && state.phase === 'flying' && !state.ship.down) { course.tugNow = false; tow = true; }
+    if (tow) {
       const t = routeAhead(map, sx, sy, 0);
       if (t) {
         course.dist = t.x - REF.x;

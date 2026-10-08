@@ -1334,7 +1334,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
       const mh = y - h - 2;
       filled('#a8443f', () => { ctx.moveTo(x, mh - 6); ctx.quadraticCurveTo(x + 24, mh - 6 + flap * 5 * (0.4 + wind), x + 56, mh + flap2 * 6 * (0.4 + wind)); ctx.lineTo(x + 56, mh + 8 + flap * 4); ctx.quadraticCurveTo(x + 24, mh + 8 + flap2 * 3, x, mh + 6); ctx.closePath(); });
       if (st.torn || (state.modules && state.modules.some((m) => m.name === s.n && m.broken))) { // torn: a few ragged strips hang from the boom
-        ctx.fillStyle = st.color || '#e9dcc0';
+        ctx.fillStyle = st.color || '#d9a86a';
         ink();
         ctx.lineWidth = 2;
         for (let k = 0; k < 4; k++) {
@@ -1350,7 +1350,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
         return;
       }
       if (f < 0.04) { // furled: a roll of canvas lashed along the boom
-        filled(st.color || '#e9dcc0', () => ctx.roundRect(tip.x + 8, footY - 15, w - 6, 15, 7));
+        filled(st.color || '#d9a86a', () => ctx.roundRect(tip.x + 8, footY - 15, w - 6, 15, 7));
         for (let k = 1; k <= 3; k++) line([[x - 14 - (k * (w - 10)) / 4, footY - 15], [x - 14 - (k * (w - 10)) / 4, footY + 1]], 3, WOOD_DARK);
         return;
       }
@@ -1360,7 +1360,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
       const clew = { x: x - 12 - (w + 4) * Math.min(1, 0.25 + 0.75 * f), y: footY - 4 };
       const bulge = (6 + 20 * wind) * f;
       const cx = (head.x + clew.x) / 2 + 10 + bulge * (0.6 + 0.4 * flap), cy = (head.y + clew.y) / 2 - bulge * 0.2;
-      filled(st.color || '#e9dcc0', () => { ctx.moveTo(head.x, head.y); ctx.lineTo(tack.x, tack.y); ctx.lineTo(clew.x, clew.y); ctx.quadraticCurveTo(cx, cy, head.x, head.y); ctx.closePath(); });
+      filled(st.color || '#d9a86a', () => { ctx.moveTo(head.x, head.y); ctx.lineTo(tack.x, tack.y); ctx.lineTo(clew.x, clew.y); ctx.quadraticCurveTo(cx, cy, head.x, head.y); ctx.closePath(); });
       ctx.save(); // seams, clipped inside the canvas
       ctx.beginPath();
       ctx.moveTo(head.x, head.y);

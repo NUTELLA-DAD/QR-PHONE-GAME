@@ -437,7 +437,7 @@ export function removals(parts) {
 // One random legal mutation of a build: { tag, label, parts } or null if nothing fits. rng() gives 0..1.
 // prefer: a type to try first most of the time (the batch asks for an engine pod right after a second boiler, the only way one fits).
 // weights: how often each type is tried (the batch wants engines and boilers as often as guns).
-const WEIGHTS = { extend: 3, keel: 1, gun: 3, searchlight: 2, lookout: 2, boiler: 3, coal: 1, ammo: 1, engine: 3, ladder: 2, pole: 1, rack_hammer: 1, extinguisher: 1, vent: 1, ballast: 1, remove: 2 };
+const WEIGHTS = { extend: 3, keel: 1, gun: 3, searchlight: 2, lookout: 2, boiler: 3, coal: 1, ammo: 1, engine: 3, ladder: 2, pole: 1, rack_hammer: 1, extinguisher: 1, vent: 1, ballast: 1, sail: 1, remove: 2 };
 export function randomMutation(parts, rng, prefer) {
   const bag = Object.entries(WEIGHTS).flatMap(([t, w]) => Array(w).fill(t));
   for (let tries = 0; tries < 12; tries++) {
