@@ -64,7 +64,7 @@ export function captainOf(state) {
     dodge: null, dodgeCd: 0, scanT: 0, threat: null, grappleUntil: 0, passCd: rnd([6, 14]), ramCd: 8, grappleCd: rnd([10, 24]), backoffUntil: 0, calloutAt: -99,
     stats: { jinks: 0, dodges: 0, passes: 0, bombRuns: 0, rams: 0, grapples: 0, noRoom: 0, chases: 0, retreats: 0, turns: 0, kites: 0, mineRuns: 0, harpoons: 0 },
     losT: 0, openT: 0, losShift: 0, losPickT: 0,
-    mines: false, mineGap: 0, mineUntil: 0, kiteCd: rnd([4, 12]), kiteUntil: 0, harpoonCd: rnd([6, 14]), harpoonT: 0, mineSaid: false,
+    mines: false, mineGap: 0, mineUntil: 0, kiteCd: ship.ai ? 0 : rnd([4, 12]), kiteUntil: 0, harpoonCd: ship.ai ? 0 : rnd([6, 14]), harpoonT: 0, mineSaid: false,
   };
   c.prof = profileOf(ship.layout);
   c.band = chooseBand(S[style], c.prof);
@@ -376,8 +376,8 @@ function mineAvoid(state, ship, L, _unused, clampAlt, target) {
     down = Math.max(down, m.y + r - top); // ...or dive this far and her top is below it
   }
   if (!n) return null;
-  const alt = state.ship.alt, goUp = clampAlt(alt + up), goDown = clampAlt(alt - down);
-  const upOk = goUp >= alt + up - 40, downOk = goDown <= alt - down + 40;
+  const here = state.ship.alt, goUp = clampAlt(here + up), goDown = clampAlt(here - down);
+  const upOk = goUp >= here + up - 40, downOk = goDown <= here - down + 40;
   if (upOk && (!downOk || up <= down)) return { target: Math.max(target, goUp), stop: false };
   if (downOk) return { target: Math.min(target, goDown), stop: false };
   return { target, stop: true };

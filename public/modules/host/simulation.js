@@ -21,6 +21,7 @@ import { createTowing } from './towing.js';
 import { stepThrown, cargoItem } from './cargo.js';
 import { stepMines } from './minefield.js';
 import { stepFlak } from './weapons.js';
+import { gunStock } from './gunTypes.js';
 import { newBot } from './network.js';
 import { BUILDS } from './shipBuild.js';
 import { powerRatio } from './shipPower.js';
