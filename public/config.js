@@ -455,7 +455,7 @@ export const config = {
     RESPAWN_TIME: 4, // seconds dazed in the medical bay after falling off
     REWARD_HULL: 15,
     REWARD_COAL: 40,
-    AS_SHIP: false, // true = the gunship is a real Ship in the sky (gunshipShip.js, MOVEMENT.md B.5): her own flight, collisions, fires, holes, steam and a bot crew; false = the old offset-from-our-ship gunship (gunship.js)
+    AS_SHIP: true, // true = the gunship is a real Ship in the sky (gunshipShip.js, MOVEMENT.md B.5): her own flight, collisions, fires, holes, steam and a bot crew; false = the old offset-from-our-ship gunship (gunship.js)
   },
   // The enemy gunship as a SHIP (gunshipShip.js; only when GUNSHIP.AS_SHIP is on). The old GUNSHIP numbers above still say how she hunts, fires, latches and boards; these say how the ship rules treat her.
   GUNSHIP_SHIP: {
