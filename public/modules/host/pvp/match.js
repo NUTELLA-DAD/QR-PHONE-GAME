@@ -229,7 +229,7 @@ export function createMatch(D) {
     M.slow = 1;
     M.left = M.round % 2 === 1 ? 'red' : 'blue'; // sides swap every round
     M.stats = { red: fresh(), blue: fresh() };
-    for (const k of ['shells', 'bullets', 'shipBombs', 'rockets', 'puffs', 'flashes', 'rings', 'popups', 'bats', 'bombers', 'strafers', 'enemyBombs', 'paras', 'mines', 'chutes', 'wrecks', 'hijacks', 'laid', 'thrown', 'tows']) if (Array.isArray(world[k])) world[k].length = 0;
+    for (const k of ['shells', 'bullets', 'shipBombs', 'rockets', 'puffs', 'flashes', 'rings', 'popups', 'bats', 'bombers', 'strafers', 'enemyBombs', 'paras', 'mines', 'chutes', 'wrecks', 'hijacks', 'laid', 'thrown', 'tows', 'debris']) if (Array.isArray(world[k])) world[k].length = 0;
     world.supply = null;
     world.enemy.dead = Math.max(world.enemy.dead, 60);
     for (const sh of world.ships) {

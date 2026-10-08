@@ -228,8 +228,8 @@ export function createShipCollide(D) {
       S.sim.impact(sx, sy, rammer ? (S === rammer ? base * config.RAM.SELF : Math.min(config.RAM.MAX_POWER, base * config.RAM.MUL)) : Math.min(C.MAX_POWER, base));
       kickForce(S.ctx, { x: sx, y: sy }, sign * c.nx * S.pose.f, sign * c.ny, C.KICK * Math.min(3, c.closing / 150)); // (her bow's x: the world's times her facing)
     }
-    if (!rammer) world.ev.warn = 1.5;
-    if (!rammer) world.ev.warnText = 'THE SHIPS COLLIDE!';
+    for (const S of [A, B]) S.sim.crash(toShipX(S, c.x), toShipY(S, c.y), c.closing, 'ram', rammer ? (S === rammer ? config.RAM.BREAK_SELF : config.RAM.BREAK_OTHER) : 1); // (a hard ram can break off the part at the contact point, S.5i; shipSim.js crash. A ram prow keeps the rammer's own parts on and breaks the other ship's more)
+    if (!rammer) { world.ev.warn = 1.5; world.ev.warnText = 'THE SHIPS COLLIDE!'; }
   }
 
   // The world's once-a-step call, after the ships have moved.

@@ -622,6 +622,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     cc.lastContact = worst;
     if (!worst) return;
     scrapeForce(st, f, worst);
+    if (!cc.wasScraping && !st.ship.down) { const closing = -(pose.vx * worst.dx + pose.vy * worst.dy); if (closing > 0) sh.sim.crash(worst.sx, worst.sy, closing, 'crash'); } // (the first touch of rock, fast enough, can break off the part that hit it: S.5i)
     const step = 600 * dt;
     pose.y -= Math.min(pushUp, step) - Math.min(pushDown, step);
     if (pushUp && st.ship.vy < 0) st.ship.vy = 0;
@@ -716,6 +717,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     cc.lastContact = worst;
     if (!worst) return;
     scrapeForce(st, f, worst);
+    if (!cc.wasScraping && !st.ship.down) { const closing = -(pose.vx * worst.dx + pose.vy * worst.dy); if (closing > 0) sh.sim.crash(worst.sx, worst.sy, closing, 'crash'); } // (the first touch of rock, fast enough, can break off the part that hit it: S.5i)
     // Shove the ship out of the rock (a hard bump), and slow it down.
     pose.y -= Math.sign(push) * Math.min(Math.abs(push), 600 * dt);
     if ((push > 0 && st.ship.vy < 0) || (push < 0 && st.ship.vy > 0)) st.ship.vy = 0; // momentum stops on the rock

@@ -8,6 +8,7 @@ import { config } from '../../config.js';
 import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf, isNestRow, thrustVec, engineUse } from './shipBuild.js';
 import { staticPitch } from './forces.js';
 import { fireRisk } from './fireModel.js';
+import { planBreak } from './breakOff.js';
 
 const BC = config.BUILD_CHECK;
 const BALANCE = config.BALANCE;
@@ -416,6 +417,17 @@ export function validate(parts, opts = {}) {
   const fr = fireRisk(L);
   if (fr.coalBoiler !== null && fr.coalBoiler < BC.FIRE_NEAR) warn('Fire', `coal bunker beside the boiler: fire risk (${fr.coalBoiler} px of fire path apart, under ${BC.FIRE_NEAR}). A blowout lights the coal, which flares into a blaze; put them on different decks or further apart (it costs walking)`);
   if (L.platforms.length) info('Fire', `fire risk ${fr.score}/10 (${fr.level})${fr.notes.length ? ': ' + fr.notes.join('; ') : ''}; up to ${fr.cap} fires at once for her size`);
+  // --- Parts break off (S.5i): a bomb bay that goes up blows the parts round it off the ship, and sets fire to any coal or ammunition in reach
+  {
+    const BO = config.BREAKOFF;
+    const near = [['boiler', fr.bayBoiler], ['coal bunker', fr.bayCoal]].filter(([, d]) => d !== null && d !== undefined && d < BO.BAY.CHAIN_WARN);
+    if (L.bombBay && near.length) warn('Break-off', `bomb bay beside the ${near.map(([k]) => k).join(' and the ')}: chain-reaction risk (${near.map(([k, d]) => d + ' px of fire path from the ' + k).join(', ')}, under ${BO.BAY.CHAIN_WARN}). If the bombs go up the blast takes the ${near.map(([k]) => k).join(' and the ')} with the bay and lights what is left, which flares into a blaze; keep the bay well away from them (it costs walking)`);
+    if (L.bombBay && L.stations.some((s) => s.kind === 'bombBay')) {
+      const bay = L.bombBay, plan = planBreak(parts, { kind: 'blast', x: bay.x, y: bay.y - 30, r: BO.BAY.RADIUS }, () => 1);
+      if (plan.ok) info('Break-off', `a bomb bay explosion (a hard hit on the loaded bay, or fire in it for ${BO.BAY.COOKOFF} s) blows off about ${plan.names.length ? plan.names.slice(0, 6).join(', ') + (plan.names.length > 6 ? ' and ' + (plan.names.length - 6) + ' more' : '') : 'the bay'} (${Math.round(plan.mass)} of her weight); keep the loaded bay clear of what you cannot do without, or empty it`);
+    }
+    if (L.platforms.length) info('Break-off', `very heavy hits, hard crashes and rams can break off the end or limb they strike (a deck end with its guns and engines, a belly pod, a nest); armour plate on that stretch cuts the chance to ${Math.round(BO.ARMOUR_MUL * 100)}%${(L.armour || []).length ? ' (' + L.armour.length + ' stretch' + (L.armour.length === 1 ? '' : 'es') + ' plated)' : ''}. What breaks off stays gone until it is rebuilt at a sky-dock`);
+  }
   if ((L.sails || []).length) {
     const S = config.SAIL, k = Array.from({ length: L.sails.length }, (_, i) => S.BONUS_DIM ** i).reduce((a, b) => a + b, 0);
     info('Sails', `${L.sails.length} sail${L.sails.length === 1 ? '' : 's'}: raised, they add about +${Math.round(S.BONUS * k * 100)}% of top speed in a calm sky (more in a gale, less in caves); a gust can tear a sail left up`);

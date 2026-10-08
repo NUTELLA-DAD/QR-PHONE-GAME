@@ -27,6 +27,7 @@ import { powerRatio } from './shipPower.js';
 import { offerPart, partPrice, moduleNames, newModules, summaryOf, choiceScore } from './partsShop.js';
 import { validate } from './buildCheck.js';
 import { createShipSim, flushPresses } from './shipSim.js';
+import { createDebris } from './debris.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
@@ -123,6 +124,8 @@ export function createSimulation() {
   // What a ship's systems may ask of the world: the helpers above, and (filled in as they are made) the world's systems and the run-level rules.
   const W = { puff, phoneFx, stat, credit, emitPlayerUi, wreck: (text) => wreck(text), finishLimp: () => finishLimp(), restartGame: () => restartGame() };
   W.towing = createTowing({ world: state, puff, phoneFx }); // (B.6: towlines between ships - every ship's ATTACK asks it)
+  W.afterBreak = (sh) => { if (sh.main) refreshPower(); }; // (a ship that lost her guns is a weaker ship: the voyage's danger follows her, like a part bought)
+  W.debris = createDebris({ world: state, puff }); // (S.5i: the parts that broke off a ship tumble through the sky - shipSim.js breakOff)
 
   // Add a ship to this sky and give her her systems (shipSim.js). The first is the main ship: her body, layout and course position are the world state's own (parts = null).
   // Another ship (the dev flag ?ships=2, the --check-two-ships gate; PvP and the gunship come later) takes her build (a parts list; opts.layout = a ready Layout), her `id`
@@ -308,7 +311,8 @@ export function createSimulation() {
     Object.assign(state.shield, { ang: -Math.PI / 2, on: false, flash: 0 });
     state.tempo = newTempo();
     state.supply = null;
-    state.thrown.length = 0; state.tows.length = 0; state.laid.length = 0; // (B.6: loads in the air and towlines are gone with the voyage, and so are the ship's own loads, cannon records and rack stocks)
+    W.debris.clear(); // (S.5i: pieces of broken-off parts are gone with the voyage)
+    state.thrown.length = 0; state.tows.length = 0; state.laid.length = 0; // (B.6: loads in the air and towlines are gone with the voyage, and so are the ship's own loads, cannon records and rack stocks; laid mines too)
     if (state.loads) state.loads.length = 0;
     if (state.cannons) state.cannons = {};
     if (state.rackStock) state.rackStock = {};
@@ -498,16 +502,18 @@ export function createSimulation() {
   const sessionKey = () => state.mode + '|' + (state.daily ? dailyVoyage().key : '');
   // A fresh voyage: a new route map from a new seed (or from today's date), an empty purse.
   const newRun = () => {
+    const prevLost = state.run && state.run.lost && state.run.lost.length ? state.run.lost[0] : null; // (a ship that had lost parts: the voyage starts again with her whole)
     const daily = state.daily ? dailyVoyage() : null;
     const voyage = generateVoyage(daily ? daily.seed : (Math.random() * 2 ** 31) | 0, { mode: state.mode, gentle: !!state.startBuild && state.startBuild !== 'classic' });
     const first = voyage.columns[0][0];
     const M = modeInfo(state.mode);
     state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0,
       mode: state.mode, key: sessionKey(), daily: daily && { key: daily.key, name: daily.name }, voyageNo: 1, voyages: M.voyages, base: 0, rival: M.rival,
-      build: null, parts: [], lastPart: null }; // (build: this voyage's ship as a parts list; parts: what the crew has bought, newest last: { id, name, names, bag }; lastPart: the card of the last dock)
+      build: null, parts: [], lastPart: null, lost: [] }; // (build: this voyage's ship as a parts list; parts: what the crew has bought, newest last: { id, name, names, bag }; lastPart: the card of the last dock; lost: parts that broke off in flight and are not rebuilt yet, oldest first, S.5i)
     const start = state.startBuild && BUILDS[state.startBuild];
-    state.run.build = copyData(start || layout.parts || BUILDS.classic);
+    state.run.build = copyData(start || (prevLost ? prevLost.before : layout.parts) || BUILDS.classic);
     if (start && main.buildId !== state.startBuild) fitShip(state.run.build, state.startBuild); // (a new voyage starts with the start build, whatever the last one grew into)
+    else if (!start && prevLost) fitShip(state.run.build, prevLost.buildId); // (...and with no start build, the ship she was before anything broke off)
     refreshPower();
     Object.assign(state.yard, { built: null, newPart: null, hold: false, pull: 0 });
     state.runEnd = null;
@@ -703,7 +709,8 @@ export function createSimulation() {
   // At most ONE part card per dock: a part this build can take, with up to YARD.SLOT_MAX places it can go (each already checked: never a FAIL).
   const partCard = () => {
     if (!state.startBuild) return null; // (headless tools without a start build keep the old shop)
-    const run = state.run, found = PS.DERELICT_STOPS.includes(legNo(curStop()));
+    if (state.run.lost && state.run.lost.length) return null; // (no new parts for a ship with sections missing: rebuild first - the REBUILD cards)
+    const run = state.run, found =PS.DERELICT_STOPS.includes(legNo(curStop()));
     if (!found && !state.yardOnly && Math.random() >= PS.CARD_CHANCE) return null; // (not every dock has a part for sale)
     const ahead = run.voyage.columns.slice(curStop().col + 1).flat(); // (what is still on the route: raids need a bomb bay, the Aether is the Flagship's sky)
     const offer = offerPart(run.build, { owned: ownedParts(), crew: crewHeads(state), avoid: run.lastPart, only: state.yardOnly || null, route: { raids: ahead.filter((x) => x.kind === 'open').length, aether: ahead.some((x) => x.env === 'aether') } });
@@ -717,7 +724,7 @@ export function createSimulation() {
   const persistBuild = () => { // the run's ship, kept in the voyage save (versioned, tolerant: voyage.js)
     const run = state.run;
     if (!run || !state.startBuild) return;
-    state.save.build = { v: 1, parts: run.build, log: run.parts.map((p) => ({ id: p.id, name: p.name })), voyageNo: run.voyageNo };
+    state.save.build = { v: 1, parts: run.lost && run.lost.length ? run.lost[0].before : run.build, log: run.parts.map((p) => ({ id: p.id, name: p.name })), voyageNo: run.voyageNo };
     saveVoyageSave(state.save);
   };
   // Put a chosen place of a part on the ship: the build is the choice's parts list (already validated), fitted to ship 0 at the dock.
@@ -747,11 +754,31 @@ export function createSimulation() {
     return last.name.toLowerCase();
   };
 
+  // REBUILD / REPAIR (S.5i): the card for the k-th time parts broke off. It restores the ship as she was BEFORE that (so everything lost since comes back too); it costs what those events cost.
+  const rebuildCard = (e, k) => {
+    const list = state.run.lost, upto = list.slice(k);
+    const names = [...new Set(upto.flatMap((q) => q.names))];
+    const what = names.length ? names[0] + (names.length > 1 ? ' +' + (names.length - 1) : '') : e.label.split(',')[0]; // (a card's title is short: "Rebuild: Aft Engine +3")
+    return { id: 'rebuild-' + e.id, kind: 'repair', rebuild: k, name: 'Rebuild: ' + what, icon: '🛠️', desc: 'Mend what broke off: ' + (names.length ? names.join(', ') : upto.map((q) => q.label).join('; ')).slice(0, 96), cost: upto.reduce((n, q) => n + q.price, 0) };
+  };
+  // Put the lost parts back: the ship is fitted as she was before the k-th break-off (the Yard's fit path: she keeps her hull, coal, shells and the damage not yet mended).
+  const rebuildLost = (k) => {
+    const run = state.run, lost = run.lost, e = lost[k];
+    if (!e) return;
+    state.breakStats.rebuilt = (state.breakStats.rebuilt || 0) + lost.length - k; // (how many break-offs were mended: botsim and the gate print it)
+    lost.length = k;
+    fitShip(copyData(e.before), lost.length ? 'broken' : e.buildId);
+    persistBuild();
+    state.ev.warn = 3;
+    state.ev.warnText = 'REBUILT: ' + (e.names.join(', ') || e.label).toUpperCase().slice(0, 60);
+  };
+
   const buildOffers = () => {
     const offers = [];
     if (needsHull()) offers.push({ id: 'repair-hull', kind: 'repair', name: 'Full Repair', icon: '🔧', desc: 'Hull, holes, fires and every broken part, as good as new.', cost: SH.REPAIR_HULL });
     if (needsGas()) offers.push({ id: 'repair-gas', kind: 'repair', name: 'New Gas', icon: '🎈', desc: 'Patch the gasbag and fill it up.', cost: SH.REPAIR_GAS });
     if (needsCoal()) offers.push({ id: 'repair-coal', kind: 'repair', name: 'Coal and Shells', icon: '⛏️', desc: 'Stoke the boiler, fill every gun and the bomb bay.', cost: SH.REPAIR_COAL });
+    (state.run.lost || []).forEach((e, k) => offers.push(rebuildCard(e, k))); // (S.5i: a card for each time parts broke off - mending an older one mends the newer ones too)
     const part = partCard();
     if (part) offers.push(part);
     const open = UPGRADES.filter((u) => u.id !== 'spare-parts' && (state.upgrades[u.id] || 0) < u.max);
@@ -766,6 +793,9 @@ export function createSimulation() {
     if (o.kind === 'upgrade') {
       UPGRADES.find((u) => u.id === o.id).apply({ state, modules });
       state.upgrades[o.id] = (state.upgrades[o.id] || 0) + 1;
+    } else if (o.rebuild != null) {
+      rebuildLost(o.rebuild);
+      if (state.vote) for (const x of state.vote.options) if (x.rebuild != null && x.rebuild >= o.rebuild) x.sold = true; // (...and every newer break-off came back with it)
     } else if (o.id === 'repair-hull') UPGRADES.find((u) => u.id === 'spare-parts').apply({ state, modules });
     else if (o.id === 'repair-gas') {
       refillBags(state, config.GAS.START);
@@ -826,6 +856,8 @@ export function createSimulation() {
     const want = (id) => ok.find((i) => v.options[i].id === id);
     if (state.ship.hull < SH.BOT_REPAIR_HULL && want('repair-hull') != null) return want('repair-hull');
     if ((state.gasHoles.length >= 2 || state.ship.gas < 30) && want('repair-gas') != null) return want('repair-gas');
+    const rebuild = ok.find((i) => v.options[i].rebuild != null); // (S.5i: the oldest REBUILD card they can pay for: it mends the newer ones too)
+    if (rebuild != null && Math.random() < config.BREAKOFF.BOT_REBUILD) return rebuild;
     const part = ok.find((i) => v.options[i].kind === 'part');
     if (part != null && Math.random() < (v.options[part].rec ? YD.BOT_REC_CHANCE : YD.BOT_PART_CHANCE)) return part; // (a crew that can afford a part card likes to build)
     if (Math.random() < SH.BOT_CAST_CHANCE) return cast;
@@ -1152,6 +1184,7 @@ export function createSimulation() {
       for (let i = list.length - 1; i >= 0; i--) if ((list[i].t -= dt) <= 0) list.splice(i, 1);
     }
 
+    if (state.debris.length) W.debris.update(dt);
     for (let i = state.puffs.length - 1; i >= 0; i--) {
       const puffItem = state.puffs[i];
       puffItem.x += puffItem.vx * dt;
@@ -1222,6 +1255,7 @@ export function createSimulation() {
         if (state.phase !== 'lobby' || state.mode === 'versus') return;
         state.mode = 'versus';
         if (main.buildId !== 'classic') fitShip(BUILDS.classic, 'classic'); // (Versus' own ships: the classic one, then the shelf)
+        if (state.run && state.run.lost) state.run.lost.length = 0;
         match.enter();
       } else if (mode && config.VOYAGE.MODES[mode]) {
         if (state.mode === 'versus') {

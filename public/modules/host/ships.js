@@ -50,6 +50,7 @@ import { config } from '../../config.js';
 import { createPose, bindBody, pivotOf } from './pose.js';
 import { mainNav, createNav } from './nav.js';
 import { gunStock } from './gunTypes.js';
+import { brokenOf } from './breakOff.js';
 
 // The state keys that belong to ONE ship. Ship 0's context forwards them to the world state; another ship's context owns them (undefined until its factory, or
 // shipInit below, makes them). A key a ship's subsystems write must be listed, or it is written to the context only (see the check in --check-two-ships).
@@ -68,13 +69,15 @@ export const SHIP_KEYS = [
   'lookout', 'lookoutBonus', 'valveLog', 'valveShuts', 'boilerLoads',
   // cross-ship play (B.6): the crew cannons' records, the loads lying on her decks (cargo.js), the stock of her sandbag racks
   'cannons', 'loads', 'rackStock',
+  // parts breaking off (S.5i): the counters of what broke, and how much lift she lost with a gasbag (flight.js uses it as extra weight)
+  'breakStats', 'liftDeficit',
   // the environment's hazards that ride on her (B.3: every ship runs her own copy of the rules, shipSim.js: ice, thermals, spores, oxygen, storm rods, the sea) and what they put on her
   'env', 'icing', 'ice', 'clogs', 'spores', 'o2tank', 'stormJob', 'sea',
 ];
 // The world keys a second ship's code is allowed to READ through the prototype: the sky she shares (the enemies and shots and wrecks in it, the weather and the
 // environment, the clock and the banner, the sound queue, the difficulty and the crew scale). Every other key a ship needs is her own (SHIP_KEYS), or tools/buildsim.mjs
 // --check-two-ships fails and names it: a read that quietly fell through to ship 0 would be a cross-talk bug.
-export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'difficulty', 'enemy', 'enemyBombs', 'ev', 'flashes', 'mines', 'paras', 'periscope', 'phase', 'popups', 'rings', 'match', 'rockets', 'sfxQ', 'shells', 'specials', 'strafers', 'tempo', 'weather', 'wrecks', 'hijacks', 'chutes', 'shipBombs', 'puffs', 'kills', 'scroll', 'ships', 'paused', 'mode', 'thrown', 'tows', 'laid'];
+export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'difficulty', 'enemy', 'enemyBombs', 'ev', 'flashes', 'mines', 'paras', 'periscope', 'phase', 'popups', 'rings', 'match', 'rockets', 'sfxQ', 'shells', 'specials', 'strafers', 'tempo', 'weather', 'wrecks', 'hijacks', 'chutes', 'shipBombs', 'puffs', 'kills', 'scroll', 'ships', 'paused', 'mode', 'thrown', 'tows', 'laid', 'debris'];
 // World keys a ship's code WRITES as a plain number (a context would shadow them): they pass through to the world on every context.
 export const WORLD_WRITES = ['kills'];
 
@@ -204,7 +207,12 @@ export function createShip(world, { id, main = false, layout = null, parts = nul
 }
 
 // The main ship, wrapping today's singletons: ship.state === state.ship, ship.layout === SHIP_LAYOUT.
-export const createMainShip = (state) => createShip(state, { id: 'player', main: true, layout: SHIP_LAYOUT, nav: mainNav, body: state.ship });
+export const createMainShip = (state) => {
+  const rec = brokenOf.get(SHIP_LAYOUT); // (S.5i: a tool that makes a second simulation in one process finds the global layout as the last one's break-offs left her: she is mended; a build applied since is left alone)
+  if (rec && SHIP_LAYOUT.parts === rec.broken) SHIP_LAYOUT.applyBuild(rec.intact);
+  brokenOf.delete(SHIP_LAYOUT);
+  return createShip(state, { id: 'player', main: true, layout: SHIP_LAYOUT, nav: mainNav, body: state.ship });
+};
 
 export const mainShip = (state) => state.self || state.ships[0];
 // The ship an enemy hunts: the one place that decides (B.3). The enemy systems ask here for the ship they aim at, fire at and fly round; it is ships[0] today. B.4 / B.7 make it a

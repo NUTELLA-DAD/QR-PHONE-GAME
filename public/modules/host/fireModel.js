@@ -123,5 +123,5 @@ export function fireRisk(L) {
   if (bayBoiler) notes.push(`the bomb bay is ${bayBoiler.dist} px from the ${bayBoiler.b.n}`);
   if (coals.length) notes.push(`${extCoal} extinguisher${extCoal === 1 ? '' : 's'} within reach of the coal`);
   if (plated) notes.push(`${plated} of the boiler / coal stand by armour plate`);
-  return { score, level, notes, coalBoiler: coalBoiler ? coalBoiler.dist : null, bayBoiler: bayBoiler ? bayBoiler.dist : null, extCoal, extBoiler, cap: L.platforms.length ? fireCap(L) : 0 };
+  return { score, level, notes, coalBoiler: coalBoiler ? coalBoiler.dist : null, bayBoiler: bayBoiler ? bayBoiler.dist : null, bayCoal: bayCoal ? bayCoal.dist : null, extCoal, extBoiler, cap: L.platforms.length ? fireCap(L) : 0 };
 }

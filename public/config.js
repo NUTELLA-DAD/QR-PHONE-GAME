@@ -831,6 +831,80 @@ export const config = {
     MIN_LEN: 120, // the shortest stretch that can be drawn (px)
     SNAP: 60, // a stroke along a deck snaps to the deck's ends this close (px)
   },
+  // PARTS BREAK OFF FOR REAL (S.5i; breakOff.js plans it, shipSim.js breakOff() does it mid-flight, debris.js tumbles the pieces). A bomb bay that is hit hard or reached by fire goes up and blows the
+  // parts round it off the ship; very heavy hits, hard crashes into rock and rams break off the end or limb that took them; a ripped, empty gasbag can tear away. Lost is lost: the parts stay gone
+  // until the crew pays for a REBUILD card at a sky-dock. Gentle by default (a co-op ship on Normal should rarely lose anything); every chance is multiplied by DIFFICULTY and by the armour on the spot.
+  BREAKOFF: {
+    ENABLED: true, // false = nothing ever breaks off (the old game)
+    DIFFICULTY: { easy: 0.4, normal: 1, veteran: 1.25, hard: 1.5 }, // chance multiplier by the difficulty button's name (no entry = 1)
+    ARMOUR_MUL: 0.25, // plate on the spot a hit or crash lands on: this share of the break-off chance is left
+    STUB: 240, // a stretch of deck left standing at the end of a cut that is shorter than this goes too (no little floating stubs)
+    GRACE: 6, // seconds after a break-off during which the same ship cannot lose another part to a hit, crash or ram (a bomb bay going up ignores it)
+    BAY: {
+      HIT_RADIUS: 150, // a hit this close to the middle of a LOADED bomb bay can set the bombs off...
+      MIN_POWER: 2, // ...if it is at least this powerful (an enemy bullet is 1, a mine or bomb 2, a plane crash 3)
+      HIT_CHANCE: 0.12, // chance per such hit with a full bay (fewer bombs aboard, less chance)
+      FIRE_RADIUS: 170, // fire in the bay's compartment this close to its middle heats the bombs...
+      COOKOFF: 60, // ...and when it has burned for this many seconds in all (the crew can spray it out, the heat fades) they cook off
+      RADIUS: 230, // the blast blows off every deck stretch, room, gun, engine and rack within this many px of the bay (the classic ship loses the bay, her ball turret, the coal bunker and what stands round it)
+      ARMOUR_HOLD: 0.6, // a blown deck stretch that is armoured all along holds with this chance
+      BAG_REACH: 0.25, // a gasbag whose envelope is within this share of the radius from the blast is torn away
+      HULL: 12, // hull points the blast costs (before the damage scale)
+      POWER: 4, // forces.js kick of the blast (hit power: tips the ship about her centre of mass)
+      SHAKE: 1.2, // screen shake
+      CHAIN_RADIUS: 560, // fires start in surviving coal, ammo and boiler this close to the blast (the coal flares into a blaze, fire.js)
+      FIRES: 3, // ...at most this many fires in all
+      THROW: 380, // crew on the blown deck are thrown out with this speed (px/s)
+      CHAIN_WARN: 450, // the validator WARNs when the bomb bay is closer than this (px of fire path: along a deck, 150 per ladder) to a boiler or a coal bunker (the classic ship's bay is 496 from her coal and 710 from her boiler)
+    },
+    HIT: {
+      MIN_POWER: 2.4, // a hit this powerful (before armour) can break off the end or limb it struck ...
+      CHANCE: 0.06, // ... with this chance at MIN_POWER ...
+      PER_POWER: 0.05, // ... and this much more for each point of power above it
+      MAX: 0.4, // ... but never more than this
+      END_REACH: 230, // a deck's end this close to the hit goes (the outrigger, the tail, the nose); a small deck (a belly pod, a nest) goes whole
+      LIMB: 220, // how much of a deck's end breaks off (px)
+    },
+    CRASH: {
+      MIN_CLOSING: 420, // the first touch of rock at least this fast (px/s; her top speed is 560) can break off the part that hit it
+      FULL_CLOSING: 700, // closing speed at which the chance is MAX
+      CHANCE: 0.06, // chance at MIN_CLOSING
+      MAX: 0.4, // chance at FULL_CLOSING
+      END_REACH: 260, // the end or limb within this many px of where the hull met the rock goes ...
+      FAR: 620, // ... and when there is none (the rock took the nose of the gasbag, far ahead of the hull) the nearest one within this many px: the bow crumples
+    },
+    RAM: {
+      MIN_CLOSING: 300, // two ships meeting at least this fast (px/s of closing speed) can each lose the part at the contact point
+      FULL_CLOSING: 600,
+      CHANCE: 0.1,
+      MAX: 0.5,
+      FAR: 620, // as CRASH.FAR: where the two hulls met is the gasbags' noses, the deck ends behind them go
+    },
+    BAG: {
+      MIN_BAGS: 2, // only a ship with at least this many gasbags can lose one this way (a single bag is her lifeline)
+      HOLES: 3, // a bag with at least this many holes in it ...
+      FLAT: 3, // ... that is down to this much gas (0..100) ...
+      TEAR_TIME: 10, // ... for this many seconds tears away
+    },
+    LIFT_FAIL: 100, // a ship whose lift is so short that her hover level would be above this cannot hold her bags up at all: she is as heavy as the pump can lift
+    REBUILD: {
+      MASS_PRICE: 6, // salvage per point of weight lost (the classic ship weighs about 150) ...
+      LIFT_PRICE: 2, // ... and per point of gasbag lift lost ...
+      DECK_PRICE: 5, // ... and per 100 px of deck lost
+      MIN: 40, // dearer than nothing, ...
+      MAX: 280, // ... never more than this
+    },
+    BOT_REBUILD: 0.85, // the bots' crews vote for a REBUILD card (the oldest they can afford) with this chance
+    DEBRIS: {
+      LIFE: 7, // seconds a piece tumbles in the sky before it is gone
+      GRAVITY: 520, // px/s^2
+      SPIN: 1.1, // rad/s at most, either way
+      SPREAD: 220, // px/s the blast throws pieces apart by
+      SMOKE: 0.35, // chance per second per 100 px of piece of a puff of smoke
+      FIRE: 0.5, // share of pieces that burn (orange puffs) when they come from a blast
+      MAX: 12, // pieces in the sky at once (the oldest goes first)
+    },
+  },
   // Floating mines drifting toward the bow.
   MINES: {
     FIRST_AFTER: 30,
@@ -1294,7 +1368,7 @@ export const config = {
   },
   // The RAM PROW (shipBuild.js ramProw, shipCollide.js): a reinforced iron nose. When two ships meet and the contact is within REACH px of one's ram tip, the OTHER ship takes MUL x the usual blow (at most
   // MAX_POWER) and the rammer only SELF x; both are kicked, and a ram counts for the stats (match.js rams). A ram that touches below COLLIDE.MIN_CLOSING hurts nothing, as any bump.
-  RAM: { POWER: 1.2, MUL: 3.2, SELF: 0.3, REACH: 480, MAX_POWER: 9, TIP: 42, SHOP: true }, // (TIP = how far past the end of her deck the nose reaches, px; SHOP: the sky-dock's part cards may offer it)
+  RAM: { BREAK_SELF: 0.2, BREAK_OTHER: 1.8, POWER: 1.2, MUL: 3.2, SELF: 0.3, REACH: 480, MAX_POWER: 9, TIP: 42, SHOP: true }, // (TIP = how far past the end of her deck the nose reaches, px; SHOP: the sky-dock's part cards may offer it)
   // CROSS-SHIP PLAY (B.6): things that cross from one ship to another, or change what another ship weighs. All of it is per-part and per-ship: a classic co-op ship has none of these parts and nothing here runs.
   CROSS: {
     // The CREW CANNON (cannon.js): a brass cannon on an open deck that fires a CREW MEMBER across the sky. Two stations: the SEAT in the barrel (Action while it is empty: you climb in) and the
