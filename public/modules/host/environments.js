@@ -68,7 +68,8 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull, ig
   state.env = { id: 'skyisles', sink: 0, lift: 0, wind: 0, blizzard: 0, smoke: 0, heat: 0, burn: 0, lavaY: null, thermalAt: 0, gravity: 1, engine: 1, accel: 1, o2: 1, lack: 0, drag: 0, gale: 0 };
   const deep = createDeepEnv({ state, puff, phoneFx: phoneFx || (() => {}) });
   const ss = createStormSea({ state, puff, impact, damageHull, ignite }); // storm + sea rules (envStormSea.js)
-  const LOWER = IDX('lower');
+  let LOWER = IDX('lower');
+  layout.onChange(() => { LOWER = IDX('lower'); }); // (a build fitted at the sky-dock, S.6)
   // Guns out in the open (on a nest or an outdoor deck: the top deck on the classic ship) are the ones that ice up; a covered deck is sheltered (S.5g).
   const gunSpots = () => { const open = new Set(layout.outdoorDecks().map((d) => P[d].id)); return layout.all('gun').filter((s) => layout.isNestDeck(s.p) || open.has(s.p)).map((s) => ({ gun: s.n, d: s.d, x: s.x })); };
   let seenMap = null;

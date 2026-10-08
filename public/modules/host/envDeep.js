@@ -31,6 +31,11 @@ export function createDeepEnv({ state, puff, phoneFx }) {
   state.spores = []; // clouds: { x, y, rx, ry, vx, seed } in ship coordinates
   state.clogs = layout.engines.map((e) => ({ name: e.name, d: e.d, x: e.x, lvl: 0, prog: 0 })); // spores on each engine (0-1)
   state.o2tank = { name: 'Oxygen Tank', d: tables(layout).MAIN, x: config.ENVIRONMENTS.aether.OXYGEN.TANK_X, prog: 0 };
+  layout.onChange(() => { // a build fitted at the sky-dock (S.6): an engine clog for each engine she has now (the old ones keep their spores), the oxygen tank on the main deck she has now
+    const old = Object.fromEntries(state.clogs.map((c) => [c.name, c]));
+    state.clogs = layout.engines.map((e) => ({ name: e.name, d: e.d, x: e.x, lvl: old[e.name] ? old[e.name].lvl : 0, prog: 0 }));
+    state.o2tank.d = tables(layout).MAIN;
+  });
   let sporeT = 0;
   let seed = 1;
   let warned = { spore: false, clog: false, o2low: false, o2out: false };

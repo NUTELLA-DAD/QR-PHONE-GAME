@@ -18,7 +18,7 @@ export const modeInfo = (id) => config.VOYAGE.MODES[id] || config.VOYAGE.MODES[c
 
 // columns[c] = list of stops { id, col, row, env, play, kind, danger, reward, flagship, next: [ids] }.
 // env = the planned environment (shown); play = what actually flies (Sky Isles until others exist).
-// opts: { mode: a key of config.VOYAGE.MODES, voyageNo: 2 for the harder second voyage of a campaign, which
+// opts: { gentle: true = the first stop is never an outpost raid (the Sparrow's start, S.6), mode: a key of config.VOYAGE.MODES, voyageNo: 2 for the harder second voyage of a campaign, which
 // starts at a harbour (a stop that is not flown: the crew is docked there, then votes where to go) }.
 export function generateVoyage(seed, opts = {}) {
   const V = config.VOYAGE;
@@ -49,7 +49,7 @@ export function generateVoyage(seed, opts = {}) {
         row: r,
         env,
         play: V.ENVIRONMENTS[env] && V.ENVIRONMENTS[env].ready ? env : 'skyisles',
-        kind: last ? 'network' : kinds[ri(0, kinds.length - 1)],
+        kind: last ? 'network' : ((k) => (opts.gentle && c === h && k === 'open' ? 'network' : k))(kinds[ri(0, kinds.length - 1)]), // (gentle: the first stop flown is never an outpost raid - a small ship with no bomb bay learns the ropes in a cave run)
         danger,
         reward: V.REWARD_BASE + danger * V.REWARD_PER_DANGER + ri(0, V.REWARD_RANDOM),
         flagship: last,

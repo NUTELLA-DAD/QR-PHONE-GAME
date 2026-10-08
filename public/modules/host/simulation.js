@@ -468,7 +468,7 @@ export function createSimulation() {
   // A fresh voyage: a new route map from a new seed (or from today's date), an empty purse.
   const newRun = () => {
     const daily = state.daily ? dailyVoyage() : null;
-    const voyage = generateVoyage(daily ? daily.seed : (Math.random() * 2 ** 31) | 0, { mode: state.mode });
+    const voyage = generateVoyage(daily ? daily.seed : (Math.random() * 2 ** 31) | 0, { mode: state.mode, gentle: !!state.startBuild && state.startBuild !== 'classic' });
     const first = voyage.columns[0][0];
     const M = modeInfo(state.mode);
     state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0,
@@ -769,6 +769,10 @@ export function createSimulation() {
   const botChoice = (v, p) => {
     const ok = v.options.map((o, i) => i).filter((i) => !cardOff(v.options[i]) && v.options[i].kind !== 'cast');
     const cast = v.options.findIndex((o) => o.kind === 'cast');
+    if (v.kind === 'route' && state.startBuild) { // (the Yard's crews read the route map: an outpost raid is bombs-or-nothing, so a ship without a bomb bay goes round it; fewer skulls first)
+      const score = (o) => o.danger + (o.kindName === VY.KIND_NAMES.open && !layout.bombBay ? 3 : 0) + Math.random() * 0.9;
+      return v.options.reduce((best, o, i) => (score(o) < score(v.options[best]) ? i : best), 0);
+    }
     if (v.kind === 'route' || v.kind === 'shelf' || v.kind === 'slot') return (Math.random() * v.options.length) | 0;
     if (v.kind === 'rematch') return 0;
     if (!ok.length) return cast;

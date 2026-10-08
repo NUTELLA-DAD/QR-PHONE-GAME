@@ -102,6 +102,24 @@ function bayCandidates(parts, L) {
   return out;
 }
 
+// A bomb bay hangs under the lower deck and wants a clear stretch of it. A packed ship has none, so then the hull is lengthened at one end first (a hull bay) and the bay goes there.
+const bayGhost = (s) => ({ x0: s.x - 145, x1: s.x + 145, y0: DECK_ROWS.bay - 30, y1: DECK_ROWS.bay + 24 });
+function bombCandidates(parts, L) {
+  const direct = fromPalette('bombBay', { ghost: bayGhost })(parts, L);
+  if (direct.length) return direct;
+  const out = [];
+  for (const b of bayCandidates(parts, L)) {
+    const ext = b.apply(parts);
+    let L2;
+    try { L2 = buildLayout(ext); } catch { continue; }
+    const slots = slotsFor('bombBay', ext).sort((p, q) => (b.x < L.refPoint.x ? p.x - q.x : q.x - p.x)); // (the one nearest the new end)
+    const s = slots[0];
+    if (s) out.push({ x: s.x, y: s.y, where: `${b.x < L.refPoint.x ? 'Aft' : 'Fore'} end: the hull grows a room for it`, ghost: bayGhost(s), apply: (ps) => s.apply(b.apply(ps)) });
+    void L2;
+  }
+  return out;
+}
+
 // A second gasbag, or a bigger one.
 function bagCandidates(parts, L) {
   const out = [];
@@ -156,7 +174,7 @@ export const CATALOGUE = [
   { id: 'nest', name: 'Gun nest', icon: '\u{1F52D}', group: 'station', pic: 'lookout', blurb: "A crow's nest on the bag with a dorsal gun. Only pays if somebody climbs up.", allowed: (p, o) => (o.nest || 0) < PS().NEST_MAX, cands: nestCandidates, w: () => 1.2 },
   { id: 'gun', name: 'Gun mount', icon: '\u{1F52B}', group: 'station', pic: 'gun', blurb: 'One more gun. More ammo to haul.', allowed: (p) => count(p, (q) => q.part === 'gun') < PS().GUNS_MAX, cands: fromPalette('gun'), w: () => 3 },
   { id: 'lamp', name: 'Searchlight', icon: '\u{1F4A1}', group: 'station', pic: 'searchlight', blurb: 'A lamp to see and spot with. Somebody has to man it.', allowed: (p) => count(p, (q) => q.part === 'searchlight') < 3, cands: fromPalette('searchlight'), w: () => 1 },
-  { id: 'bombBay', name: 'Bomb bay', icon: '\u{1F4A3}', group: 'station', pic: 'bombBay', blurb: 'Bombs for outposts, dropped from the belly. Heavy.', allowed: (p) => !p.some((q) => q.part === 'bombBay'), cands: fromPalette('bombBay'), w: () => 2.2 },
+  { id: 'bombBay', name: 'Bomb bay', icon: '\u{1F4A3}', group: 'station', pic: 'bombBay', blurb: 'Bombs for outposts, dropped from the belly. Heavy.', allowed: (p) => !p.some((q) => q.part === 'bombBay'), cands: bombCandidates, w: () => 2.2 },
   { id: 'boiler', name: 'Second boiler', icon: '\u{1F525}', group: 'station', pic: 'boiler', blurb: 'More steam for more engines. A fire risk, and it eats coal.', allowed: (p) => stationsOf(p, 'boiler') < PS().BOILERS_MAX, cands: fromPalette('boiler'), w: (c) => (c.sum.cruise < 62 ? 3 : 1) },
   { id: 'coal', name: 'Coal bunker', icon: '⚫', group: 'station', pic: 'coal', blurb: 'Coal closer to the boiler: shorter hauls. Coal burns.', allowed: (p) => stationsOf(p, 'coal') < 2, cands: fromPalette('coal'), w: () => 1 },
   { id: 'ammo', name: 'Ammo hold', icon: '\u{1F4E6}', group: 'station', pic: 'ammo', blurb: 'Shells closer to the guns: shorter hauls.', allowed: (p) => stationsOf(p, 'ammo') < 2, cands: fromPalette('ammo'), w: () => 1 },

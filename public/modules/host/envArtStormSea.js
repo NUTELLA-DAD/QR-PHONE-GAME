@@ -25,8 +25,10 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
   const mship = mainShip(state); // (the ship; `ship` below is the layer drawn on her)
   const layout = mship.layout; // (this ship's own layout)
   const P = layout.platforms;
-  const CAT = layout.deckIndex('catwalk');
-  const LOWER = layout.deckIndex('lower');
+  let CAT, LOWER; // (deck indices: worked out again when a build is fitted to the ship at the sky-dock, S.6)
+  const fitDecks = () => { CAT = layout.deckIndex('catwalk'); LOWER = layout.deckIndex('lower'); };
+  fitDecks();
+  layout.onChange(fitDecks);
   const isStorm = () => envIdOf(state) === 'storm';
   const isSea = () => envIdOf(state) === 'sea';
 

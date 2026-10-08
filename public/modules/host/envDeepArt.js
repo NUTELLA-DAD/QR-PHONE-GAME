@@ -23,7 +23,8 @@ export function createDeepArt({ ctx, state, ink }) {
   let now = 0;
   const layout = mainShip(state).layout; // (this ship's own layout)
   const P = layout.platforms;
-  const MAIN = layout.deckIndex('main');
+  let MAIN = layout.deckIndex('main');
+  layout.onChange(() => { MAIN = layout.deckIndex('main'); }); // (a build fitted at the sky-dock, S.6)
   const E = () => envOf(state);
   const id = () => envIdOf(state);
 

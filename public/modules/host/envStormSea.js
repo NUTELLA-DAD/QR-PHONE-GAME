@@ -109,9 +109,9 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
   const P = layout.platforms;
   const IDX = (id) => layout.deckIndex(id);
   const E = state.env;
-  const LOWER = IDX('lower');
-  const CAT = IDX('catwalk');
-  const BAY = IDX('bay');
+  let LOWER = IDX('lower'), CAT = IDX('catwalk'), BAY = IDX('bay');
+  const fitDecks = () => { LOWER = IDX('lower'); CAT = IDX('catwalk'); BAY = IDX('bay'); }; // (a build fitted at the sky-dock, S.6: the decks are somewhere else)
+  layout.onChange(() => { fitDecks(); pumpSpot.d = LOWER; winchSpot.d = BAY; });
 
   state.stormJob = { rods: [], charge: null, caught: 0, struck: 0, drank: 0, nextT: 0 };
   state.sea = { y: null, flood: 0, spouts: [], survivors: [], hook: null, winch: null, pump: null, rescued: 0, scrapes: 0, t: 0, spray: 0, scrapeT: 0, floodMax: 0, hitT: 0 };
