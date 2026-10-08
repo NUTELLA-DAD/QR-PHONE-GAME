@@ -708,7 +708,7 @@ export const config = {
     SHAKEN_HOLES: 1, // limp home: a newest gasbag starts with this many holes
     // DANGER THAT FOLLOWS THE SHIP (shipPower.js, read by crewscale.js): a voyage's enemies scale with the ship's fighting strength as well as the crew. Her power (guns, bomb bay, coil,
     // escorts, armour, engines ...) is worked out from the build once per build, as a share of the classic ship's; the classic ship is 1.0 = full danger, nothing changes for her.
-    POWER_SCALE: 0.9, // how much of the danger a weak ship is spared: 0 = none (every ship meets the classic danger), 1 = danger in proportion to her power
+    POWER_SCALE: 0.1, // how much of the danger a weak ship is spared: 0 = none (every ship meets the classic danger), 1 = danger in proportion to her power (kept low: the Sparrow wins about as often as the classic ship)
     POWER_FLOOR: 0.4, // ...but never less than this share of the full danger (a bare hull still gets shot at)
     POWER: {
       BASE: 3, GUN: 1, BOMB_BAY: 1.5, COIL: 2, ESCORT: 1, DEFLECTOR: 1, ARMOUR: 1.2, ENGINE: 0.6, SPARE_BAG: 1, CANNON: 1, CARGO_RACK: 0.3, TOWLINE: 0.5, // (B.6: a crew cannon, a sandbag or crate rack, a towline reel) power points: the hull and deck; per gun; the bomb bay; the coil; per escort fighter; the deflector; per 100 px of armour plate; per engine pod; per gasbag beyond the first
@@ -981,11 +981,12 @@ export const config = {
   // Difficulty presets (button on the TV). damage = hull damage taken; pace = how often waves,
   // flak and enemy fire come (higher = busier).
   // A wrecked ship ends the run, so damage is kept gentle (multiplier on all hull damage).
+  // Re-tuned with tools/voyagesim.mjs (8 bots, --build classic and sparrow, 48 seeds): win rates about Easy 90%, Normal 55%, Veteran 35%, Hard 15%.
   DIFFICULTY: {
-    easy: { label: 'Easy', damage: 0.2, pace: 0.85, autopilot: true, gunHp: 0.85, spares: 4 },
-    normal: { label: 'Normal', damage: 0.3, pace: 1.0, autopilot: true, gunHp: 1, spares: 4 },
-    veteran: { label: 'Veteran', damage: 0.36, pace: 1.15, autopilot: true, gunHp: 1.1, spares: 3 },
-    hard: { label: 'Hard', damage: 0.34, pace: 1.2, autopilot: false, gunHp: 1.2, spares: 2 },
+    easy: { label: 'Easy', damage: 0.12, pace: 0.72, autopilot: true, gunHp: 0.72, spares: 4 },
+    normal: { label: 'Normal', damage: 0.225, pace: 0.93, autopilot: true, gunHp: 0.93, spares: 4 },
+    veteran: { label: 'Veteran', damage: 0.295, pace: 1.0, autopilot: true, gunHp: 1.0, spares: 4 },
+    hard: { label: 'Hard', damage: 0.245, pace: 0.98, autopilot: false, gunHp: 0.98, spares: 3 },
   },
   // Crew-size scaling (crewscale.js). The number of crew aboard (connected players, bots included)
   // multiplies the difficulty above, anchored at 8 crew = 1.0 and interpolated between rows.
@@ -999,11 +1000,11 @@ export const config = {
     TABLE: {
       1: { spawn: 0.25, count: 0.25, fire: 0.2, damage: 0.2, raiders: 0.15, hp: 0.4, spread: 0.25, collateral: 0.2 },
       2: { spawn: 0.35, count: 0.35, fire: 0.3, damage: 0.3, raiders: 0.25, hp: 0.55, spread: 0.35, collateral: 0.3 },
-      4: { spawn: 0.53, count: 0.53, fire: 0.47, damage: 0.47, raiders: 0.4, hp: 0.7, spread: 0.53, collateral: 0.47 },
+      4: { spawn: 0.45, count: 0.45, fire: 0.4, damage: 0.4, raiders: 0.34, hp: 0.62, spread: 0.45, collateral: 0.4 },
       6: { spawn: 0.86, count: 0.86, fire: 0.84, damage: 0.82, raiders: 0.8, hp: 0.91, spread: 0.86, collateral: 0.82 },
       8: { spawn: 1, count: 1, fire: 1, damage: 1, raiders: 1, hp: 1, spread: 1, collateral: 1 },
       12: { spawn: 1.25, count: 1.5, fire: 1.25, damage: 1.4, raiders: 1.6, hp: 1.4, spread: 1.25, collateral: 1.25 },
-      16: { spawn: 1.45, count: 1.7, fire: 1.45, damage: 1.65, raiders: 1.9, hp: 1.65, spread: 1.45, collateral: 1.4 },
+      16: { spawn: 1.35, count: 1.55, fire: 1.35, damage: 1.5, raiders: 1.7, hp: 1.5, spread: 1.45, collateral: 1.4 },
     },
   },
   // Ship's mates (mates.js): helpers for short-handed crews. They use the bot brain with a restricted job list (bots.js),
