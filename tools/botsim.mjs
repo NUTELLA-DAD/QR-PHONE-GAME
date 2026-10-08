@@ -2,17 +2,19 @@
 // Usage: node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty normal] [--map network|route|open] [--seed 1] [--help]
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
+import fs from 'node:fs';
 
-const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0 };
+const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0, trace: null, traceEvery: 30 };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') {
-    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi|bags|giantbag] [--rupture SECONDS (several gasbags: shoot the fore bag flat then, S.5d)]');
+    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi|bags|giantbag] [--rupture SECONDS (several gasbags: shoot the fore bag flat then, S.5d)] [--trace FILE [--trace-every 30] (B0: a per-step dump of the ship, tab separated, for tools/buildsim.mjs --check-frames)]');
     process.exit(0);
-  } else if (a.startsWith('--') && a.slice(2) in args) {
+  } else if (a.startsWith('--') && a.slice(2).replace(/-([a-z])/g, (m, c) => c.toUpperCase()) in args) {
+    const key = a.slice(2).replace(/-([a-z])/g, (m, c) => c.toUpperCase()); // (--trace-every -> traceEvery)
     const v = argv[++i];
-    args[a.slice(2)] = typeof args[a.slice(2)] === 'number' ? Number(v) : v;
+    args[key] = typeof args[key] === 'number' ? Number(v) : v;
   } else {
     console.error('Unknown option ' + a + ' (try --help)');
     process.exit(2);
@@ -110,9 +112,11 @@ let sporeCloudSteps = 0, sporedSteps = 0, clogSum = 0, clogMax = 0, engSum = 0, 
 let gapSum = 0, gapMin = 1e9, seaSteps = 0, floodSum = 0, floodHigh = 0, wetSteps = 0, galeSteps = 0;
 let lightSteps = 0, lightManned = [0, 0], lightLit = 0, litBonus = 0; // searchlights: flight steps, steps each lamp was manned, steps with something lit
 let matesMax = 0;
+let contacts = 0, wasScrape = false;
 let segSteps = 0, altRef = null, vySum = 0, scrapeSteps = 0;
 let distPrev = null, distTravel = 0, flightSteps = 0, altMin = Infinity, altMax = -Infinity, progMax = 0, speedSum = 0, distBack = 0; // S.5e: how far and how fast she got, and how much altitude she covered
 const actTally = {};
+const traceRows = args.trace ? ['step\tphase\tlap\tx\ty\talt\tdist\tspeed\tpitch\tvy\thull\tgas\tkills\twrecks'] : null; // (--trace)
 const t0 = realNow();
 
 for (let step = 1; step <= totalSteps; step++) {
@@ -164,6 +168,7 @@ for (let step = 1; step <= totalSteps; step++) {
     if (altRef != null) { altMin = Math.min(altMin, state.ship.alt - altRef); altMax = Math.max(altMax, state.ship.alt - altRef); }
     progMax = Math.max(progMax, state.course.progress || 0);
     vySum += Math.abs(state.ship.vy || 0); if (state.course.scraping) scrapeSteps++;
+    if (state.course.scraping && !wasScrape) contacts++; wasScrape = !!state.course.scraping; // (B0: rock contacts = scrape episodes, for the cave golden)
   } else distPrev = null;
   if (process.env.BOT_ACT && state.phase === 'flying') for (const q of Object.values(state.players)) if (q.bot) { const k = q.lock ? 'at ' + q.lock : q.botJob ? q.botJob.kind : 'idle'; actTally[k] = (actTally[k] || 0) + 1; } // (BOT_ACT=1: what the bots spend their time on)
   if (state.phase === 'flying' && state.env) { // environment stats
@@ -185,6 +190,11 @@ for (let step = 1; step <= totalSteps; step++) {
     maxLap = state.course.lap; lastKills = 0;
     sim.castOff();
   }
+  // --trace FILE: every N steps the ship's numbers at full precision (x, y = the pose's world position; alt/dist are what they are made of).
+  if (traceRows && step % args.traceEvery === 0) {
+    const sh = state.ships[0], p = sh.pose;
+    traceRows.push([step, state.phase, state.course.lap, p.x, p.y, state.ship.alt, state.course.dist, state.ship.speed, state.ship.pitch || 0, state.ship.vy || 0, state.ship.hull, state.ship.gas, killsTotal, wrecks].join('\t'));
+  }
   // Watchdog: a vote that never resolves.
   stuckVoteSteps = state.vote ? stuckVoteSteps + 1 : 0;
   if (stuckVoteSteps > 60 * 60) { errorCount++; errors.set('vote stalled for over a minute', ''); state.vote = null; stuckVoteSteps = 0; }
@@ -194,6 +204,7 @@ for (let step = 1; step <= totalSteps; step++) {
   }
 }
 
+if (traceRows) fs.writeFileSync(args.trace, traceRows.join('\n') + '\n');
 console.log('--- botsim summary ---');
 console.log(`bots ${args.bots} (${args.humans} as humans; ship's mates seen: ${matesMax}), ${args.minutes} min, ${args.difficulty}, map ${args.map || 'mixed'}, seed ${args.seed ?? 'random'}`);
 console.log(`missions completed: ${missions}` + (missionMins.length ? `, minutes each: ${missionMins.map((m) => m.toFixed(1)).join(" ")}, average ${(missionMins.reduce((a, b) => a + b, 0) / missionMins.length).toFixed(1)}` : ""));
@@ -238,7 +249,7 @@ if (lightSteps) console.log(`searchlights: ${(state.searchlights || []).map((l, 
 if (process.env.BOT_ACT) console.log('bot time: ' + Object.entries(actTally).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + ((100 * v) / Object.values(actTally).reduce((a, b) => a + b, 0)).toFixed(1) + '%').join(', '));
 if (state.bags.length > 1) console.log(`gasbags: ${state.bags.length} bags side by side; a bag went flat ${bagDowns} time${bagDowns === 1 ? '' : 's'}, emptiest ${bagMin.toFixed(0)}; gas valves turned ${state.valveLog || 0}x (shut ${state.valveShuts || 0}x), now ${(state.gasValveOpen || []).filter((o) => !o).length} shut; now ${state.bags.map((b) => b.gas.toFixed(0)).join("/")}${ruptured ? `; fore bag shot flat at ${args.rupture}s: ${healedAt === null ? 'NOT repaired' : `holes patched and bag back above ${config.GAS.BAG_UP} after ${healedAt.toFixed(0)}s`}` : ''}`);
 if (args.build || process.env.FLIGHT) console.log(`flight: net speed ${flightSteps ? (distTravel / (flightSteps / 60)).toFixed(0) : 'n/a'} px/s (throttle+sails ${flightSteps ? (speedSum / flightSteps).toFixed(2) : 'n/a'}), altitude moved ${altMin === Infinity ? 'n/a' : Math.round(altMin) + ' to +' + Math.round(altMax)} from where she settled (span ${altMin === Infinity ? 0 : Math.round(altMax - altMin)}), avg climb rate ${flightSteps ? (vySum / flightSteps).toFixed(0) : 'n/a'} px/s, on the rocks ${flightSteps ? ((100 * scrapeSteps) / flightSteps).toFixed(0) : 'n/a'}%, furthest progress ${(progMax * 100).toFixed(0)}%, sails raised ${(state.sailStats && state.sailStats.raised) || 0}x (up ${state.sailStats ? state.sailStats.upSecs.toFixed(0) : 0}s), torn ${(state.sailStats && state.sailStats.torn) || 0}`);
-if (runStats) console.log('BUILD_STATS ' + JSON.stringify({ build: args.build, ...runStats.result(), flight: { speed: flightSteps ? distTravel / (flightSteps / 60) : 0, throttle: flightSteps ? speedSum / flightSteps : 0, altMin: altMin === Infinity ? 0 : altMin, altMax: altMax === -Infinity ? 0 : altMax, climb: flightSteps ? vySum / flightSteps : 0, rocks: flightSteps ? scrapeSteps / flightSteps : 0, progress: progMax, sailsRaised: (state.sailStats && state.sailStats.raised) || 0, sailsUpSecs: state.sailStats ? state.sailStats.upSecs : 0, sailsTorn: (state.sailStats && state.sailStats.torn) || 0, tows: state.tows || 0 }, manned: runStats.result().mannedNames, bags: state.bags.length, bagDowns, valveLog: state.valveLog || 0, valveShuts: state.valveShuts || 0, shutAtEnd: (state.gasValveOpen || []).filter((o) => !o).length, ruptured, healedAt, errors: errorCount })); // (read by tools/buildsim.mjs)
+if (runStats) console.log('BUILD_STATS ' + JSON.stringify({ build: args.build, ...runStats.result(), flight: { speed: flightSteps ? distTravel / (flightSteps / 60) : 0, throttle: flightSteps ? speedSum / flightSteps : 0, altMin: altMin === Infinity ? 0 : altMin, altMax: altMax === -Infinity ? 0 : altMax, climb: flightSteps ? vySum / flightSteps : 0, rocks: flightSteps ? scrapeSteps / flightSteps : 0, progress: progMax, sailsRaised: (state.sailStats && state.sailStats.raised) || 0, sailsUpSecs: state.sailStats ? state.sailStats.upSecs : 0, sailsTorn: (state.sailStats && state.sailStats.torn) || 0, tows: state.tows || 0, contacts }, manned: runStats.result().mannedNames, bags: state.bags.length, bagDowns, valveLog: state.valveLog || 0, valveShuts: state.valveShuts || 0, shutAtEnd: (state.gasValveOpen || []).filter((o) => !o).length, ruptured, healedAt, errors: errorCount })); // (read by tools/buildsim.mjs)
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);
