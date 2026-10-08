@@ -291,3 +291,16 @@ Success: no accidental swaps in a playtest, and the cold-player test passes.
   - botsim (3 seeds × 3 maps) and voyagesim (10 runs, Normal) after every package.
 - **Art consistency:** locked prompts per world, the bible, and the Art test page as the review gate.
 - **Save data:** a versioned, tolerant schema.
+
+### Queued (owner requests, next up)
+- **Crew health: 3 hearts.**
+  - Fires hurt players standing in them.
+  - Shell hits, raider blows and falls take a heart; big hits (explosions, bomb bay blasts, heavy shells) knock you out in one go.
+  - At 0 hearts you're knocked out, as today.
+  - Hearts show on the phone controller.
+  - The medbay heals hearts over time, and reviving gives 1 heart back.
+- **PvP range tactics:** running now.
+  - a big arena;
+  - spyglass inset camera for far ships;
+  - long guns, mortars, mine layers, ram prow, harpoon;
+  - captain AI by range band.
