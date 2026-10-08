@@ -36,7 +36,7 @@ import { createForces, hitForce } from './forces.js';
 import { installBags, syncBags, stepBags, watchBags } from './gasBags.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToWorld } from './pose.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
-import { transfer, newGuns, teamOf, shipOf } from './ships.js';
+import { transfer, newGuns, teamOf, hostileTo, foeOf, shipOf } from './ships.js';
 
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
@@ -109,7 +109,8 @@ export function createShipSim(world, ship, W) {
   const { one, all, kindOf, hasKind, nestTier, reviveSpot } = layout; // (the station-kind helpers, bound to it)
   const { puff, phoneFx, stat, credit, emitPlayerUi } = W;
   const { moveWalker, steerTo, fall, detach, platformBelow } = ship.nav; // (walkers use THEIR ship's navigation)
-  const gunship = ship.main ? late(() => W.gunship) : NO_GUNSHIP;
+  const gunship = ship.main || ship.ai ? late(() => W.gunship) : NO_GUNSHIP; // (B.5: the enemy gunship's own ship asks the director too: swinging back, the charge, the helm)
+  const dmgMul = () => (ship.ai ? ship.ai.damageMul() : damageMul(state)); // (the gunship's hull is tuned by her own multiplier, not by the difficulty button and her crew's size)
   let ownEnv = null; // (another ship's own copy of the sky's hazards, made below; ship 0's is the world's, made in simulation.js)
   const env = ship.main ? late(() => W.env) : late(() => ownEnv);
   const course = ship.main ? late(() => W.course) : { dropBomb: (...a) => W.course.dropBomb(...a), predictBomb: (...a) => W.course.predictBomb(...a), helmHint: () => '' }; // (the helm's hint about the rock ahead is about ship 0's course)
@@ -129,8 +130,8 @@ export function createShipSim(world, ship, W) {
 
   // ---- Versus (B.4, pvp/match.js): a crewman whose TEAM is not this ship's is a boarder. He fights, sabotages the boiler (hold) or takes the helm (hold); falling overboard or being
   // knocked out carries him back to his own ship's medical bay. Co-op players have no team: none of this runs. ----
-  const isHostile = (p) => !!p.team && !!ship.team && p.team !== ship.team.id;
-  const homeOf = (p) => world.ships.find((q) => q.team && q.team.id === p.team) || ship; // (the ship a crewman belongs to)
+  const isHostile = (p) => hostileTo(p, ship); // (ships.js: different teams in Versus; the enemy gunship's side against everyone else's)
+  const homeOf = (p) => world.ships.find((q) => q.team && q.team.id === p.team) || (!p.team && !ship.main ? world.ships[0] : ship); // (the ship a crewman belongs to: his team's, or, with no team, the main ship - our crew who boarded the gunship go home to ours)
   const hostileJobs = [{ name: 'capture', prog: 0 }, { name: 'sabotage', prog: 0 }]; // the two hold actions of a boarder (stepUpkeep lets their progress wear off)
   const [captureJob, sabotageJob] = hostileJobs;
   const tally = (p, key) => { if (state.match && p && p.team) state.match.count(p.team, key); };
@@ -246,6 +247,16 @@ export function createShipSim(world, ship, W) {
   const hostileUse = (player, here) => {
     const V = config.PVP;
     const helm = one('helm'), boiler = one('boiler');
+    if (ship.ai) { // the enemy gunship: the rope's swing back across (at her stern), the charge at her boiler (hold), her helm (hold: she surrenders)
+      const back = gunship.interaction(player);
+      if (back) return back;
+      if (helm && here(helm, V.HAND_REACH)) {
+        const defender = Object.values(state.players).some((q) => q !== player && !isHostile(q) && !q.fall && !(q.ko > 0) && q.conn == null && q.d === helm.d && Math.abs(q.x - helm.x) < V.DEFEND_REACH);
+        return defender ? { type: 'need', label: 'Her helmsman is in the way!' } : { type: 'capture', obj: captureJob, hold: true, time: V.CAPTURE_TIME, label: 'TAKE HER HELM!' };
+      }
+      if (boiler && here(boiler, V.HAND_REACH) && !ship.ai.g.charge) return { type: 'sabotage', obj: sabotageJob, hold: true, time: ship.ai.plantTime(), label: ship.ai.plantLabel() };
+      return null;
+    }
     if (helm && here(helm, V.HAND_REACH)) {
       const defender = Object.values(state.players).some((q) => q !== player && !isHostile(q) && !q.fall && !(q.ko > 0) && q.conn == null && q.d === helm.d && Math.abs(q.x - helm.x) < V.DEFEND_REACH);
       return defender ? { type: 'need', label: 'Defenders in the way!' } : { type: 'capture', obj: captureJob, hold: true, time: V.CAPTURE_TIME, label: 'TAKE THE HELM!' };
@@ -314,15 +325,25 @@ export function createShipSim(world, ship, W) {
 
   // Versus: the nearest awake crewman of another team on this player's deck within range.
   const foeInReach = (player, range) => {
-    if (!player.team) return null;
+    if (!player.team && !ship.ai) return null; // (co-op people have no team: no foes - except aboard the enemy gunship, whose crew are theirs)
     return Object.values(state.players)
-      .filter((q) => q !== player && q.team && q.team !== player.team && !q.fall && !q.fly && q.conn == null && !(q.ko > 0) && q.d === player.d && Math.abs(q.x - player.x) < range)
+      .filter((q) => q !== player && foeOf(q, player) && !q.fall && !q.fly && q.conn == null && !(q.ko > 0) && q.d === player.d && Math.abs(q.x - player.x) < range)
       .sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0] || null;
   };
   // ...and a blow at him: a shove or a sword knocks him back and wears down his hit points; at zero he is out for a while (a boarder is carried home).
   const hitCrew = (player, victim, sword) => {
     const F = config.PVP.FIGHT;
     player.face = victim.x < player.x ? -1 : 1;
+    if (victim.team === 'enemy' && ship.ai) { // (a gunship's crewman has her old hit points: three, a sword takes two; at zero he is dead - the director counts him and the TV shows it)
+      const pl = PLATFORMS[victim.d];
+      if (pl) victim.x = clamp(victim.x + player.face * F.KNOCK, pl.x0 + 10, pl.x1 - 10);
+      victim.wind = 0;
+      shipPuff(victim.x, victim.y - 40, '#fff', 6);
+      if (sword) shipPop(victim.x, victim.y - 110, 'whack', '#ffffff', 0.8);
+      ship.ai.hurt(victim, sword ? 2 : 1, player);
+      stat(player, 'raiders');
+      return;
+    }
     victim.pvpHp = (victim.pvpHp ?? F.HP) - (sword ? F.SWORD : F.SHOVE);
     const pl = PLATFORMS[victim.d];
     if (pl) victim.x = clamp(victim.x + player.face * F.KNOCK, pl.x0 + 10, pl.x1 - 10);
@@ -393,7 +414,7 @@ export function createShipSim(world, ship, W) {
   const damageHull = (amount) => {
     const danger = 1 + (((state.course && state.course.danger) || 2) - 2) * config.VOYAGE.DANGER_DAMAGE; // skulls on the stop
     if (goingDown.protect()) return; // falling (the last stand) or just saved: nothing can hurt her
-    if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * damageMul(state) * danger) <= 0) wreck();
+    if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * dmgMul() * danger) <= 0) wreck();
   };
 
   // Is world point (x, y) on the Deflector's arc right now? (Sparks and a flash if so.)
@@ -436,7 +457,7 @@ export function createShipSim(world, ship, W) {
   };
 
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
-  const impact = (x, y, power) => {
+  const impact = (x, y, power, hullMul = 1) => { // (hullMul: the hull a blow costs, apart from the size of the blow: our shells on the enemy gunship, gunshipShip.js)
     // Riveted plate (S.5g) on this stretch of hull wall or rail: the hit counts for much less, and rarely punches through.
     const d = onGasbag(x, y) < 0 ? roomPlatformAt(x, y) : null;
     const plate = d !== null && !!armourOn(layout, d, x);
@@ -459,13 +480,13 @@ export function createShipSim(world, ship, W) {
     }
     shipPuff(x, y, '#ff7b00', Math.round(8 * power));
     const coll = crewMul(state, 'collateral'); // (small crews: hits break fewer things)
-    const pm = config.PVP.ENABLED ? Math.min(1, power) : 1; // (Versus: a crew shell is a small blow - it chips the hull and only now and then breaks something or lights a fire, in proportion to its power)
+    const pm = config.PVP.ENABLED || ship.ai ? Math.min(1, power) : 1; // (the enemy gunship too: our shells are small blows on her, as on a rival ship. Versus: a crew shell is a small blow - it chips the hull and only now and then breaks something or lights a fire, in proportion to its power)
     modules.hitAt(x, y, shipPuff, power, coll);
     helmsmanHit(x, y, power);
     const hitBag = onGasbag(x, y);
     if (hitBag >= 0) {
       if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll * pm) state.gasHoles.push(gasHoleAt(x, y, hitBag));
-      damageHull(2 * power);
+      damageHull(2 * power * hullMul);
       return;
     }
     if (d !== null) {
@@ -476,7 +497,7 @@ export function createShipSim(world, ship, W) {
       const ig = fireSys.igniteChance(d, x);
       if ((power >= 2 && Math.random() < coll * Math.min(1, ig)) || Math.random() < 0.35 * coll * ig * pm) fireSys.ignite(d, x + (Math.random() - 0.5) * 80, 'hit');
     }
-    damageHull(config.SHIP.HIT_DAMAGE * power);
+    damageHull(config.SHIP.HIT_DAMAGE * power * hullMul);
   };
 
   let lastJolt = 0;
@@ -567,6 +588,7 @@ export function createShipSim(world, ship, W) {
   const sabotageBoiler = (player) => {
     const boiler = one('boiler');
     if (!boiler) return;
+    if (ship.ai) return gunship.plant(player); // (the gunship: the charge is set, run!)
     fireSys.lightBoiler(boiler, 2);
     const pipes = modules.list.filter((m) => m.kind === 'pipe' && !m.broken);
     if (pipes.length) modules.damage(pipes[(Math.random() * pipes.length) | 0], 999, shipPuff);
@@ -582,6 +604,7 @@ export function createShipSim(world, ship, W) {
   const takeHelm = (player) => {
     const helm = one('helm');
     if (!helm) return;
+    if (ship.ai) return gunship.captured(player); // (the gunship: her helm is taken, she surrenders)
     const old = holder('helm');
     if (old && old !== player) { old.lock = null; old.fire = false; old.restCd = 4; old.x = helm.x + 60; }
     player.lock = helm.n; // (he is at the wheel now: whoever is on the other end of the ship's team is flying her until he lets go)
@@ -691,6 +714,7 @@ export function createShipSim(world, ship, W) {
     gasManned = false;
     comeAbout.begin();
     for (const player of Object.values(state.players)) {
+      if (world.ships.length > 1 && shipOf(world, player) !== ship) continue; // (carried to another ship earlier in this very loop: a captured gunship sends everyone aboard her home)
       if (player.bot) updateBot(player, state, dt);
       if (player.koGrace > 0) player.koGrace -= dt;
       if (player.hook && (player.fall || player.ko > 0 || player.lock || player.swing || player.conn != null || player.connected === false)) hookshot.clear(player);
@@ -840,6 +864,8 @@ export function createShipSim(world, ship, W) {
             } else {
               gun.ammo -= 1;
               gun.cd = config.GUNS.COOLDOWN * env.gunCooldownMul(player.lock);
+              if (ship.ai) ship.ai.shoot(player, gun, player.lock); // (the enemy gunship's guns fire her own slow cannonballs, which hit the main ship and nothing else: gunshipShip.js)
+              else {
               const angle = aimToWorld(ship, gun.aim + (state.ship.pitch || 0)); // (gun.aim is in ship space, the shell flies along the world)
               const [gx, gy] = tilt(state, gun.bx, gun.by);
               const primed = prime.take(gun); // a fully primed shell: harder hit, bigger blast (config PRIME)
@@ -860,6 +886,7 @@ export function createShipSim(world, ship, W) {
               if (primed) {
                 state.rings.push({ x: wgx + Math.cos(angle) * 64, y: wgy + Math.sin(angle) * 64, t: 0.3, max: 0.3, color: '#ffd23f', size: 110 });
                 state.sfxQ.push(['bigshot']);
+              }
               }
             }
           }
@@ -1182,7 +1209,7 @@ export function createShipSim(world, ship, W) {
     const flying = state.phase === 'flying' && !state.ship.down;
     state.autopilot = false;
     // Easy/Normal: with nobody at the helm the ship flies itself, gently.
-    const assist = autopilotOn(state) && flying;
+    const assist = autopilotOn(state) && flying && !ship.ai; // (the gunship has no autopilot: with no helmsman she drifts)
     const plan = assist && rig.helm && (!getHelm() || !gasManned) ? pilotPlan(state, 4, 0.3) : null;
     if (!getHelm()) {
       if (plan && worksKind('helm')) {
@@ -1293,7 +1320,7 @@ export function createShipSim(world, ship, W) {
     fireSys.update(dt); // (fires spread towards what burns best, big ones smoke, an overheating boiler throws sparks: fire.js)
 
     if (!state.ship.down && !goingDown.protect()) {
-      state.ship.hull -= (state.breaches.length * 0.5 + fireSys.load() * 0.35) * damageMul(state) * 2 * dt;
+      state.ship.hull -= (state.breaches.length * 0.5 + fireSys.load() * 0.35) * (ship.ai ? ship.ai.drainMul() : damageMul(state)) * 2 * dt;
       if (state.ship.hull <= 0) wreck();
     }
 
@@ -1311,7 +1338,7 @@ export function createShipSim(world, ship, W) {
   function wreckAside() {
     if (state.ship.down) return;
     if (goingDown.active()) return;
-    if (goingDown.tryStart()) return;
+    if (!ship.ai && goingDown.tryStart()) return; // (the enemy gunship has no last stand)
     state.ship.hull = 0;
     state.ship.down = config.WRECK.TIME;
     state.wreck = { t: 0, lap: state.course ? state.course.lap : 1, kills: state.kills };

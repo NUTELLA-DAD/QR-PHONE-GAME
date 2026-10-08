@@ -1,6 +1,6 @@
 // SHIPS: the multi-ship machinery (MOVEMENT.md, Option B, stages B0 and B.2). Node-safe: no DOM.
 //
-// The game is ONE simulation that understands MANY ships (the player's, a PvP rival, later the enemy gunship), so more airships can always be added.
+// The game is ONE simulation that understands MANY ships (the player's, a PvP rival, the enemy gunship since B.5), so more airships can always be added.
 //
 //   ship = { id,        'player' for the main ship (ships[0]); 'ship1', 'ship2' ... for the others
 //            main,      true for ships[0], the one the sky scrolls past and the enemies hunt (until B7)
@@ -14,6 +14,7 @@
 //            pose,      pose.js: where she is and which way she faces
 //            ctx,       her CONTEXT VIEW (below): what her subsystems are handed instead of the world state
 //            rival,     Versus only: the nearest ship of the OTHER team as { ship, pose, layout, mid, vx, vy, hull, down, guns, bags, crew, helm, boiler } in WORLD coordinates (pvp/match.js refreshes it each step; ctx.rival answers it; null in co-op)
+//            ai,        B.5: set on the enemy gunship (gunshipShip.js makeAi): the captain that flies her (pilotPlan) and the hooks the ship rules call (shoot, hurt, onBoard ...); such a ship is never a target, a camera subject or a place to join
 //            sim }      her systems (shipSim.js createShipSim): modules, bags, guns, fires, crew handling ... set by simulation.js addShip
 //
 //   mainShip(state)           the ship `state` is about: the world answers ships[0], a ship's context answers that ship (so a subsystem built on ctx finds its OWN)
@@ -118,6 +119,21 @@ function crewView(world, ship) {
   });
 }
 
+// The enemy gunship's crew (B.5): a ship with her own `crewReg` (an object of bots that live on HER and in no player registry: the phones, the lobby, the votes and the scorecard never see
+// them) sees those PLUS whoever of the world's players is aboard her (our boarders).
+function crewViewMerged(world, ship) {
+  const mine = (id) => { const p = world.players[id]; return !!p && shipOf(world, p) === ship; };
+  const own = (t, k) => Object.prototype.hasOwnProperty.call(t, k);
+  return new Proxy(ship.crewReg, {
+    get: (t, k) => (typeof k !== 'string' || own(t, k) ? t[k] : mine(k) ? world.players[k] : undefined),
+    has: (t, k) => typeof k === 'string' && (own(t, k) || mine(k)),
+    ownKeys: (t) => [...Reflect.ownKeys(t), ...Object.keys(world.players).filter((k) => !own(t, k) && mine(k))],
+    getOwnPropertyDescriptor: (t, k) => (typeof k === 'string' && !own(t, k) ? (mine(k) ? { value: world.players[k], writable: true, enumerable: true, configurable: true } : undefined) : Reflect.getOwnPropertyDescriptor(t, k)),
+    set: (t, k, v) => { t[k] = v; return true; },
+    deleteProperty: (t, k) => delete t[k],
+  });
+}
+
 // ship.ctx: the context view (see the top of this file).
 function makeContext(ship) {
   const world = ship.world;
@@ -126,8 +142,8 @@ function makeContext(ship) {
   Object.defineProperty(ctx, 'rival', { get: () => ship.rival || null, enumerable: false, configurable: true }); // (B.4 Versus: the other team's ship as seen from this one, in WORLD coordinates; pvp/match.js refreshes ship.rival every step. Null in co-op.)
   const def = (k, d) => Object.defineProperty(ctx, k, { enumerable: true, configurable: true, ...d });
   for (const k of WORLD_WRITES) def(k, { get: () => world[k], set: (v) => { world[k] = v; } });
-  let view = null; // this ship's crew view, made once there is another ship
-  def('players', { get: () => (world.ships.length > 1 ? (view ||= crewView(world, ship)) : world.players) });
+  let view = null, merged = null; // this ship's crew view, made once there is another ship
+  def('players', { get: () => (ship.crewReg ? (merged ||= crewViewMerged(world, ship)) : world.ships.length > 1 ? (view ||= crewView(world, ship)) : world.players) });
   if (ship.main) {
     for (const k of SHIP_KEYS) def(k, { get: () => world[k], set: (v) => { world[k] = v; } }); // (ship 0: the existing `state.X` names are the same objects)
     return ctx;
@@ -155,7 +171,7 @@ export function teamOf(team) {
 
 // Make a ship. `main`: ships[0], wrapping the world's own body, layout and course position by reference. Another ship takes `formation` ({ dx, dalt }: how far along
 // the sky from ship 0 she keeps station, and how far above her altitude she is held; dalt < 0 = below) and a `parts` list (or a layout) of her own.
-export function createShip(world, { id, main = false, layout = null, parts = null, nav = null, body = null, formation = null, team = null, name = null } = {}) {
+export function createShip(world, { id, main = false, layout = null, parts = null, nav = null, body = null, formation = null, team = null, name = null, ai = null } = {}) {
   const lay = layout || (parts ? createLayout(parts) : SHIP_LAYOUT);
   let side = teamOf(team);
   const ship = {
@@ -173,6 +189,7 @@ export function createShip(world, { id, main = false, layout = null, parts = nul
     sim: null,
     rival: null, // (Versus, pvp/match.js: the other team's nearest ship as this one sees her, in world coordinates; ctx.rival reads it)
     formation,
+    ai, // (B.5: the enemy gunship's brain, gunshipShip.js: a ship with an `ai` is flown and fought by her own bot crew, hunts the main ship and is nobody's target; null for every other ship)
   };
   // (her pose owns her position, M.2: a second ship starts at her formation station from ship 0, course.js place() then moves her to open air; her body's alt / vy / pitch are views of the pose)
   const lead = main ? null : world.ships[0];
@@ -197,13 +214,30 @@ export const targetShip = (state, enemy) => {
   if (!enemy || list.length < 2 || !Number.isFinite(enemy.x) || !Number.isFinite(enemy.y)) return list[0];
   let best = null, bd = Infinity;
   for (const sh of list) {
-    if (sh.state.down > 0 || sh.ctx.wreck) continue;
+    if (sh.state.down > 0 || sh.ctx.wreck || sh.ai) continue; // (the enemy gunship is on the enemies' side: nobody hunts her)
     const b = sh.layout.bounds;
     const d = Math.hypot(enemy.x - (sh.pose.x + pivotOf(sh)), enemy.y - (sh.pose.y + (b.y0 + b.y1) / 2));
     if (d < bd) { bd = d; best = sh; }
   }
   return best || list[0];
 };
+// WHO IS WHOSE ENEMY (B.5). A crewman is an enemy of a ship when his side is not hers: in Versus the two teams, and since the gunship is a ship the enemy side ('enemy') against everyone
+// else (the co-op crew have no team and no ship of theirs has one). In co-op without a gunship, and in a fleet without teams, nobody is anybody's enemy: nothing changes.
+export const ENEMY = 'enemy';
+export function hostileTo(player, ship) {
+  const pt = player.team || null, st = ship.team ? ship.team.id : null;
+  if (pt && st) return pt !== st;
+  return (pt === ENEMY) !== (st === ENEMY);
+}
+// Are two crewmen foes? (the same rule, between people)
+export const foeOf = (a, b) => (a.team && b.team ? a.team !== b.team : (a.team === ENEMY) !== (b.team === ENEMY));
+// Are two ships on opposite sides? (Versus: different teams while it is on; always: the enemy gunship against any other ship)
+export function areHostile(a, b) {
+  const ta = a.team ? a.team.id : null, tb = b.team ? b.team.id : null;
+  if ((ta === ENEMY) !== (tb === ENEMY)) return true;
+  return !!config.PVP.ENABLED && !!ta && !!tb && ta !== tb;
+}
+
 export function shipOf(state, player) {
   const id = player && player.ship;
   if (id == null || id === 'player') return state.ships[0];
@@ -224,6 +258,8 @@ export function transfer(state, player, ship, platform, x) {
   player.climb = false;
   player.fire = false;
   player.onGunship = false;
+  player.botJob = null; // (a bot's errand was about the ship he left)
+  player.wanderTo = null;
   if (platform != null) {
     const P = ship.layout.platforms[platform];
     player.d = platform;

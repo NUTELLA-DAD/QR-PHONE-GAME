@@ -157,7 +157,7 @@ export function createFleetArt({ ctx }) {
   const drawPanels = (world) => {
     try {
       const F = config.FLEET.PANEL;
-      const ships = world.ships;
+      const ships = world.ships.filter((s) => !s.ai); // (the enemy gunship has her pennant on her mast, not a panel)
       const n = ships.length;
       const room = 760;
       const w = Math.min(F.W, (room - (n - 1) * F.GAP) / n);
@@ -171,7 +171,7 @@ export function createFleetArt({ ctx }) {
 
   // The team's flag on top of each teamed ship's mast, in the world (the camera's world transform is set up by pvpArt.drawWorld itself).
   const drawPennants = (world, view, w, h, time) => {
-    const list = world.ships.filter((s) => s.team).map((s) => ({ bounds: s.layout.bounds, alt: -s.pose.y, offset: { dx: s.pose.x, dy: 0 }, team: s.team.id }));
+    const list = world.ships.filter((s) => s.team && !s.ai).map((s) => ({ bounds: s.layout.bounds, alt: -s.pose.y, offset: { dx: s.pose.x, dy: 0 }, team: s.team.id }));
     if (list.length) pvp.drawWorld(list, view, w, h, time);
   };
 
@@ -182,6 +182,7 @@ export function createFleetArt({ ctx }) {
       const pad = config.FLEET.ARROW_PAD;
       ctx.save();
       for (const sh of world.ships) {
+        if (sh.ai) continue;
         const b = sh.layout.bounds;
         const wx = sh.pose.x + pivotOf(sh);
         const wy = sh.pose.y + (b.y0 + b.y1) / 2;

@@ -136,6 +136,7 @@ export function pilotPlan(state, ahead, cruise) {
   const course = state.course;
   const ship = mainShip(state);
   const alt = state.ship.alt;
+  if (ship.ai) return ship.ai.plan(state); // (the enemy gunship: her captain's ring spots, strafing runs and retreats, gunshipShip.js)
   if (state.rival) return rivalPlan(state); // (Versus: the rival, not the beacon, is the goal; every ship has her own)
   if (course && course.map) return giveWay(state, ship, mapPlan(state, cruise));
   const B = altBounds(state);
@@ -222,7 +223,7 @@ function giveWay(state, ship, plan) {
   const wa = toWorldX(ship, b.x0), wb = toWorldX(ship, b.x1);
   const mine = { x0: Math.min(wa, wb) + Math.min(0, ex) - G.MARGIN, x1: Math.max(wa, wb) + Math.max(0, ex) + G.MARGIN, y0: p.y + b.y0 - G.MARGIN, y1: p.y + b.y1 + G.MARGIN };
   for (const o of ships) {
-    if (o === ship || o.state.down > 0 || o.ctx.wreck) continue;
+    if (o === ship || o.state.down > 0 || o.ctx.wreck || o.ai) continue; // (the gunship gives way to us, not we to her)
     const ob = o.layout.bounds, oa = toWorldX(o, ob.x0), oc = toWorldX(o, ob.x1);
     const ox0 = Math.min(oa, oc), ox1 = Math.max(oa, oc), oy0 = o.pose.y + ob.y0, oy1 = o.pose.y + ob.y1;
     if (ox0 >= mine.x1 || mine.x0 >= ox1 || oy0 >= mine.y1 || mine.y0 >= oy1) continue;
@@ -301,7 +302,7 @@ export function inRock(state, x, y) {
 }
 
 // How fast the ship moves along her bow, px/s (negative = backing up; 0 = hovering): her body-frame velocity u, which flight.js integrates from the forces on her (state.ship.speed is it as a share of TOP_SPEED).
-export const scrollSpeed = (state) => state.ship.speed * config.SHIP.TOP_SPEED;
+export const scrollSpeed = (state) => state.ship.speed * config.SHIP.TOP_SPEED * (state.ship.topMul || 1); // (the enemy gunship's engines are quicker than ours: her body's topMul, B.5)
 
 // How high and low the ship may fly here: up to ALT_RANGE above the highest land under and just
 // ahead of it, and ALT_RANGE below the lowest.

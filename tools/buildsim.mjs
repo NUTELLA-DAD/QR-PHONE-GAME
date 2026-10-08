@@ -11,6 +11,7 @@
 //        node tools/buildsim.mjs --check-two-ships  B.2: the classic ship and a second build (the four-bag ship, then the minimum two-engine one) in ONE simulation, six bots each assigned by player.ship, 2 minutes, 0 errors; hull / gas / fires / holes / steam / bags / balance never cross between them, each crewman walks HIS ship's nav, the camera frames both (tools/two-ships-check.mjs)
 //                                                    and (B.3, tools/fleet-check.mjs) crew scaling per ship, the sky's hazards on the second ship in all seven environments, the phone radar and spotting per ship, a target lit by any ship's beam, ships placed clear of each other, and render.js drawing EVERY ship under her own pose on a stub canvas (the HUD with one ship is the old one, with two a panel each, the darkness cuts light for both, an edge arrow for the one off screen)
 //        node tools/buildsim.mjs --check-collide    ship-ship collision (tools/collide-check.mjs): two ships flown at each other never overlap and bounce, a heavier ship is moved less, COME ABOUT next to another ship, 3 ships in formation and a Versus round never overlap, a ram hurts both and kicks the pitch, one ship runs nothing
+//        node tools/buildsim.mjs --check-gunship-ship  B.5: the enemy gunship as a SHIP (tools/gunship-ship-check.mjs): she spawns with a real layout and a bot crew who live on her, flies and comes about on her own pose and flight, fights (her cannonballs, our shells, the ports), LATCHES with a rope that is a spring between two poses and sends her guards across, our crew board her (swing, fight, plant the charge, swing back, take her helm), she can be sunk, a fire on her spreads, a natural pacing-director run; then the parity bands against the old gunship (tools/gunship-parity.mjs)
 //        node tools/buildsim.mjs --check-turn       M.3: COME ABOUT: the helm's command (the phone's button or the stick astern, held), the manoeuvre (squash through zero, f flips at the middle, her speed along the bow flips so the ground speed does not jump, speed held down, no guns, the camera's zoom held), the refusals (too fast, already turning, cooling down, falling, a gunship alongside, a hookshot line, the mirrored hull in rock), rock on the right side, the Nose Gun's shells, a person's screen-relative stick (also one held across the flip), a headless bot helm turning on a route map and flying back to a goal behind her, a second ship turning on her own, the bots' jobs through a turn (tools/turn-check.mjs)
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
@@ -2271,6 +2272,8 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'collide-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-yard') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'yard-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-gunship-ship') {
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gunship-ship-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-turn') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'turn-check.mjs')], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-engines') {
@@ -2306,6 +2309,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-turn | --check-yard | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-turn | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

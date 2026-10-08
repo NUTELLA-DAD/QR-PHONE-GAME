@@ -2,13 +2,13 @@
  "captured": "2026-10-08",
  "voyage": {
   "normal": {
-   "medianMin": 39.7,
-   "wins": 6,
+   "medianMin": 40.9,
+   "wins": 5,
    "runs": 10
   },
   "easy": {
-   "medianMin": 43.6,
-   "wins": 5,
+   "medianMin": 40.3,
+   "wins": 6,
    "runs": 10
   }
  },
@@ -16,24 +16,24 @@
   "network-1": {
    "missions": 3,
    "minPerMission": 3.3,
-   "hull": 93,
-   "kills": 101,
+   "hull": 94.1,
+   "kills": 103,
    "wrecks": 0,
-   "hauls": 57,
+   "hauls": 49,
    "blowouts": 0,
-   "contacts": 114,
+   "contacts": 111,
    "tows": 0,
    "errors": 0
   },
   "network-2": {
    "missions": 2,
-   "minPerMission": 3.5,
-   "hull": 88.2,
-   "kills": 88,
+   "minPerMission": 3.4,
+   "hull": 91.2,
+   "kills": 116,
    "wrecks": 0,
-   "hauls": 49,
+   "hauls": 63,
    "blowouts": 0,
-   "contacts": 150,
+   "contacts": 95,
    "tows": 0,
    "errors": 0
   },
@@ -168,23 +168,23 @@
   },
   {
    "speed": 122.92137387678369,
-   "climb": 52.14027388310611,
-   "dive": 418.6405511405381
+   "climb": 52.60012661396265,
+   "dive": 417.4763981357412
   },
   {
    "speed": 122.92137387678369,
-   "climb": 502.2796359757033,
-   "dive": 460.38566115493103
+   "climb": 501.8361403481507,
+   "dive": 460.88264282952866
   },
   {
-   "speed": 559.6832876840751,
-   "climb": 500.8218930702026,
-   "dive": 461.1462706843708
+   "speed": 559.8361816481588,
+   "climb": 500.8122611975397,
+   "dive": 461.0288673182907
   },
   {
-   "speed": 628.0746621913343,
-   "climb": 500.21468148581175,
-   "dive": 461.76132515734395
+   "speed": 628.0639065082244,
+   "climb": 500.5725703022298,
+   "dive": 461.98994448241365
   }
  ]
 }

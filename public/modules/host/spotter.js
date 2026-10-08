@@ -44,7 +44,7 @@ export function radarItems(state) {
     for (const b of S.imps) if (b.delay <= 0) add('imp', b, at(b));
   }
   // (B.3) Every airship in the sky is a blip too (a phone leaves out its own: spotter.js nearFor), so a crew can see where the others are.
-  if (state.ships.length > 1) for (const o of state.ships) add('ship', o.state, () => ({ x: toWorldX(o, o.layout.midPoint.x), y: toWorldY(o, o.layout.midPoint.y) }));
+  if (state.ships.length > 1) for (const o of state.ships) if (!o.ai) add('ship', o.state, () => ({ x: toWorldX(o, o.layout.midPoint.x), y: toWorldY(o, o.layout.midPoint.y) }));
   return out;
 }
 

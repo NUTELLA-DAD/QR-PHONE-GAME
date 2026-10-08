@@ -41,14 +41,14 @@ export function createFlight({ state, ship }) {
 
   // The air drag on her at body-frame velocity `rel` (px/s) relative to the air, as an acceleration (positive = against motion ahead).
   const dragAcc = (rel) => {
-    const P = config.SHIP.MOTION, TOP = config.SHIP.TOP_SPEED, x = rel / TOP;
+    const P = config.SHIP.MOTION, TOP = config.SHIP.TOP_SPEED * (body.topMul || 1), x = rel / TOP; // (the enemy gunship has quicker engines: body.topMul, B.5)
     return P.DRAG * (P.DRAG_LIN * Math.abs(x) + (1 - P.DRAG_LIN) * x * x) * Math.sign(x);
   };
 
   // One step along her bow. wind: how fast the wind carries a ship (a share of top speed, sails.js windSpeed); driven: some working engine pushes ahead or astern (otherwise nothing but
   // the air and the sails move her); helm: how well the helmsman can work the engines (envDeep.js helmMul).
   const surge = (dt, { wind, driven, helm = 1 }) => {
-    const P = config.SHIP.MOTION, SH = config.SHIP, TOP = SH.TOP_SPEED;
+    const P = config.SHIP.MOTION, SH = config.SHIP, TOP = SH.TOP_SPEED * (body.topMul || 1);
     const T = state.thrust, bal = state.balance, env = state.env || {};
     const v0 = body.speed * TOP;
     const sc = respond();
