@@ -62,7 +62,7 @@ export const emptyBuild = () => ensureFrame([]);
 // ---- what a part is tied to ------------------------------------------------------------------------------------
 // refs(o): the (deck id, x) points a part stands on, each with a setter to move it to another deck. Pieces that stand on a deck are
 // removed when that stretch of deck is erased; connectors have two ends, the lift also its repair spot.
-const POINT = ['station', 'gun', 'searchlight', 'engine', 'rack', 'vent', 'extinguisher', 'boarderEntry', 'escortDock', 'medbay', 'ballast'];
+const POINT = ['station', 'gun', 'searchlight', 'engine', 'rack', 'vent', 'gasValve', 'extinguisher', 'boarderEntry', 'escortDock', 'medbay', 'ballast'];
 const LINK = ['ladder', 'rope', 'stairs', 'lift', 'pole'];
 function refs(o) {
   const r = [];
@@ -83,6 +83,7 @@ function labelOf(o) {
     case 'ladder': case 'rope': case 'stairs': case 'pole': case 'lift': return o.part;
     case 'pipe': return `steam pipe to ${o.to}`;
     case 'vent': return 'steam vent';
+    case 'gasValve': return 'gas valve';
     case 'extinguisher': return 'extinguisher';
     case 'boarderEntry': return 'boarding point';
     case 'escortDock': return `escort hook ${o.n}`;
@@ -176,7 +177,7 @@ function freeSpot(L, p, lo, hi, avoid = []) {
     if ([...L.stations, ...L.engines].some((s) => s.p === p && Math.abs(s.x - x) < gap)) return false;
     if (avoid.some((a) => Math.abs(a - x) < gap + 30)) return false;
     if (!strict) return true;
-    if ([...L.racks, ...L.vents, ...L.extinguishers].some((o) => o.p === p && Math.abs(o.x - x) < near)) return false;
+    if ([...L.racks, ...L.vents, ...L.extinguishers, ...(L.gasValves || [])].some((o) => o.p === p && Math.abs(o.x - x) < near)) return false;
     if (L.pipes.some((o) => o.p === p && Math.abs(o.valve[0] - x) < near)) return false;
     return !L.connectors.some((c) => (c.top === di && Math.abs(c.xTop - x) < near) || (c.bottom === di && Math.abs(c.xBottom - x) < near));
   };
@@ -513,7 +514,7 @@ export function thingAt(parts, x, y, slop = 0) {
     switch (o.part) {
       case 'station': case 'gun': case 'searchlight': consider(index, o, labelOf(o), o.x, base - 11, 18); break;
       case 'engine': consider(index, o, labelOf(o), o.x, base + 14, 18); break;
-      case 'rack': case 'vent': case 'extinguisher': case 'boarderEntry': consider(index, o, labelOf(o), o.x, base - 5, 14); break;
+      case 'rack': case 'vent': case 'gasValve': case 'extinguisher': case 'boarderEntry': consider(index, o, labelOf(o), o.x, base - 5, 14); break;
       case 'medbay': consider(index, o, labelOf(o), o.x, base - 8, 18); break;
       case 'ballast': consider(index, o, labelOf(o), o.x, base + (o.hang ? config.BALANCE.BALLAST_HANG : -8), 16); break;
       default: break;

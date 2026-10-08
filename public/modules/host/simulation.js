@@ -29,7 +29,7 @@ import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { createGoingDown } from './goingDown.js';
 import { createBalance } from './balance.js';
 import { installBags, syncBags, refillBags, stepBags, watchBags } from './gasBags.js';
-import { bagNearX, bagEdgeY } from './shipBuild.js';
+import { bagNearX, bagEdgeY, bagName } from './shipBuild.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 const PLATFORMS = SHIP_LAYOUT.platforms;
@@ -208,6 +208,9 @@ export function createSimulation() {
     if (tank) return { type: 'oxygen', obj: tank, hold: true, time: config.ENVIRONMENTS.aether.OXYGEN.REFILL_TIME, label: 'Refill oxygen' };
     const hurt = modules.list.find((m) => m.hp < m.max && here(m, T.REACH + 15));
     if (hurt && tool === 'hammer') return { type: 'repair', obj: hurt, hold: true, label: `Repair ${hurt.name}` };
+    // A gas valve (S.5d): shut or open the feed to its gasbag. Turned from VALVE_REACH, closer than a rack's reach, so it still works on a crowded deck.
+    const gv = (SHIP_LAYOUT.gasValves || []).find((v) => here(v, T.VALVE_REACH));
+    if (gv) { const i = SHIP_LAYOUT.gasValves.indexOf(gv); return { type: 'gasvalve', obj: gv, label: `${state.gasValveOpen[i] === false ? 'Open' : 'Close'} ${bagName(gv.bag, SHIP_LAYOUT.gasbags.length).toLowerCase()} valve` }; }
     // Otherwise standing at a rack or hook means take / swap / put back.
     const pickup = legacy ? PICKUPS.find((r) => here(r, T.REACH)) : null;
     // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)
@@ -400,6 +403,7 @@ export function createSimulation() {
     Object.assign(state.ship, { hull: config.LIMP.HULL, speed: 0.3, shake: 0, press: 65, fuel: Math.max(state.ship.fuel, config.BOILER.START_FUEL), gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
     Object.assign(state.gasValve, { input: 0, auto: false });
     state.ventOpen.fill(false);
+    state.gasValveOpen.fill(true); // (every gas valve open again)
     Object.assign(state.bombBay, { cd: 0, empty: 0, aim: null, open: 0 });
     Object.assign(state.shield, { on: false, flash: 0 });
     state.tempo = newTempo();
@@ -457,6 +461,7 @@ export function createSimulation() {
     watch.boss = null;
     newRun();
     state.ventOpen.fill(false);
+    state.gasValveOpen.fill(true); // (every gas valve open again)
     Object.assign(state.bombBay, { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null, open: 0 });
     state.helmHit = 0;
     Object.assign(state.shield, { ang: -Math.PI / 2, on: false, flash: 0 });
@@ -1178,7 +1183,7 @@ export function createSimulation() {
     m.act = act;
   };
   // Actions that are safe to run a moment after their label went away (static things: racks, vents, valves, crates).
-  const REPLAY = ['rack', 'vent', 'valve', 'ammo', 'coal'];
+  const REPLAY = ['rack', 'vent', 'valve', 'gasvalve', 'ammo', 'coal'];
   // What a tapped button should run for a person: { ok, act }. Not ok = drop the press: its label is out of date, or it is a grab
   // inside the lockout. A press with no id (an old page, a test) is trusted. The big button never grabs with something in hand.
   const pressAct = (player, slot, aid, act) => {
@@ -1219,6 +1224,14 @@ export function createSimulation() {
       state.ventOpen[i] = !state.ventOpen[i];
       stat(player, 'vent');
       shipPuff(act.obj.x, PLATFORMS[act.obj.d].y - 150, '#ffffff', 8);
+    } else if (type === 'gasvalve') {
+      const i = SHIP_LAYOUT.gasValves.indexOf(act.obj);
+      state.gasValveOpen[i] = !state.gasValveOpen[i];
+      syncBags(state); // (the bag is cut off, or fed again, from this moment)
+      shipPuff(act.obj.x, PLATFORMS[act.obj.d].y - 60, state.gasValveOpen[i] ? '#9cc99a' : '#e2a24a', 7);
+      pop(state, act.obj.x, PLATFORMS[act.obj.d].y - 140 - state.ship.alt, `${bagName(act.obj.bag, state.bags.length)} VALVE ${state.gasValveOpen[i] ? 'OPEN' : 'SHUT'}`, state.gasValveOpen[i] ? '#9cc99a' : '#e2a24a', 0.9);
+      state.valveLog = (state.valveLog || 0) + 1; // (how many times a gas valve was turned: botsim reports it)
+      if (!state.gasValveOpen[i]) state.valveShuts = (state.valveShuts || 0) + 1;
     } else if (type === 'valve') {
       act.obj.open = !act.obj.open;
       puff(act.obj.pos.x, act.obj.pos.y - state.ship.alt, '#ffffff', 6);

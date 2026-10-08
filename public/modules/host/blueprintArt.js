@@ -160,6 +160,12 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   for (const e of Ly.engines) { const q = P[e.d]; if (q) disc(X(e.x), Y(q.y) + 14 * k, 'E', 7.5, 'rgba(201,168,90,0.5)'); }
   g.fillStyle = L.INK_SOFT;
   for (const r of [...Ly.racks, ...Ly.vents, ...Ly.extinguishers]) { const q = P[r.d]; if (q) g.fillRect(X(r.x) - 2 * k, Y(q.y) - 8 * k, 4 * k, 8 * k); }
+  for (const gv of Ly.gasValves || []) { // gas valves: a wheel on the deck, a dotted line up to the bag it feeds
+    const q = P[gv.d], bag = (Ly.gasbags || [])[gv.bag];
+    if (!q) continue;
+    if (bag) line([[X(gv.x), Y(q.y) - 14 * k], [X(bag.cx), Y(bag.cy + bag.ry * 0.5)]], 1.2, 'rgba(79,127,63,0.7)', [3, 4]);
+    disc(X(gv.x), Y(q.y) - 12 * k, 'V', 6.5, 'rgba(111,160,122,0.7)');
+  }
   if (Ly.medbay) { const q = P.find((d) => d.id === Ly.medbay.p); if (q) text('+', X(Ly.medbay.x), Y(q.y) - 4 * k, 16, L.STAMP, 'center', true); }
   for (const b of Ly.ballast || []) { // sandbags: a sack on the deck, or hanging under it on a rope
     const bx = X(b.x), by = Y(b.y);

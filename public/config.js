@@ -956,6 +956,10 @@ export const config = {
     // lift-weighted average of their gas. A bag at or below BAG_DOWN is deflated (it sags, the TV calls it out) while the rest of the bags hold at least BAG_REST
     // more gas than it (venting every bag empty is not "a bag down"); it counts as back up above BAG_UP.
     BAG_DOWN: 4, BAG_UP: 22, BAG_REST: 15,
+    // Gas valves (a part on a deck; one per bag at most matters): a SHUT valve cuts its bag off from the helm's pump and vent. While the helm pumps, each hole in a bag
+    // whose valve is OPEN bleeds this much gas per second out of the shared feed (shared by the open bags), so a ruptured bag starves the others until the crew
+    // shuts its valve (or patches it). A bag with no valve is always open; a ship with one bag is unchanged.
+    HOLE_BLEED: 10,
   },
   // What the ship-building validator (modules/host/buildCheck.js, tools/buildsim.mjs --build, public/buildtest.html) holds a build to.
   // Part weights, lifts and hands are data in modules/host/shipBuild.js (PARTS); these are the limits and the assumptions behind the gauges.
@@ -997,7 +1001,7 @@ export const config = {
       deck: 0.3, // per 100 px of deck (an outside deck weighs half)
       link: { ladder: 0.4, rope: 0.3, stairs: 1, lift: 3, pole: 0.3 }, // ways between decks
       kind: { helm: 5, boiler: 16, lookout: 1, coal: 10, ammo: 6, gun: 3, searchlight: 2, coil: 5, deflector: 5, bombBay: 10, navigator: 1, escort: 5 }, // stations by kind
-      engine: 9, pipe: 0.5, vent: 0.3, rack: 0.2, extinguisher: 0.2, medbay: 3,
+      engine: 9, pipe: 0.5, vent: 0.3, gasValve: 0.4, rack: 0.2, extinguisher: 0.2, medbay: 3,
       bag: 6, bagTwin: 4, // a gasbag's rigging, and the twin envelope's
       ballast: 5, // one sandbag: cheap and dense, the trimming tool
     },
@@ -1033,6 +1037,9 @@ export const config = {
     BAG_MIN: 120, BAG_MAX: 1900, // ...between these half-lengths (a small bag is 240 px long, a giant one 3800)
     BAG_DROP: 240, // the half-length of a bag dragged in from the part tray
     BAGS_MAX: 8, // most gasbags side by side
+    VALVE_GAP: 100, // two gas valves on one deck at least this far apart (px)
+    VALVE_STATION: 52, // ...and from a station (px; more than TOOLS.VALVE_REACH, or a player working the station would turn the valve)
+    VALVE_CLEAR: 46, // a gas valve at least this far from any rack, vent, ladder or other valve (it only needs TOOLS.VALVE_REACH to work, so it fits on a crowded deck)
     DROP_SNAP: 90, // dragging a part from the tray: it snaps to a legal spot this near the pointer (screen px)
     DROP_REACH: 220, // placePart (the pure drop, no screen): the nearest legal spot within this many ship px takes the part...
     DROP_ROW: 75, // ...and only a spot whose deck is within this many px up or down of the drop point (a gun dropped on the main deck does not jump to the top deck)
@@ -1451,6 +1458,7 @@ export const config = {
   // Tools and close combat.
   TOOLS: {
     REACH: 65, // how close you must stand to a rack, hook or valve (generous: no pixel-perfect standing)
+    VALVE_REACH: 40, // a GAS valve (S.5d) is turned from this close: nearer than a rack, so it works on a crowded deck
     STATION_REACH: 85, // how close to a gun, boiler, bunker or bomb bay for Action to load/grab/take it
     SWORD_RANGE: 95,
     SWORD_DAMAGE: 1,

@@ -239,6 +239,13 @@ function listJobs(state, bot) {
   if (bombStarved) jobs.push({ kind: 'ammo', obj: bay, max: 2, cap: 2 });
   // A real blaze (fires spread and eat the hull) comes before patching holes in the gasbag.
   if (state.fires.length >= B.FIRE_BLAZE) for (const f of state.fires) jobs.push({ kind: 'fire', obj: f, max: 1, cap: B.FIRE_CAP });
+  // Gas valves (S.5d): shut the valve of a ruptured bag (holes in it, or flat) so it stops draining the feed, before patching; open it again once the holes are patched.
+  (L.gasValves || []).forEach((v, i) => {
+    const holes = gasHoles.filter((h) => (h.bag | 0) === v.bag).length, bag = (state.bags || [])[v.bag];
+    const open = state.gasValveOpen[i] !== false;
+    if (open && bag && state.bags.length > 1 && (holes >= 2 || (bag.down && holes))) jobs.push({ kind: 'gasvalve', obj: v, max: 1 });
+    else if (!open && holes === 0) jobs.push({ kind: 'gasvalve', obj: v, max: 1 });
+  });
   if (gasCrisis) for (const h of gasHoles) jobs.push({ kind: 'patch', obj: h, max: 1, cap: B.GAS_CAP });
   // Bats latched on the ship: swat them before they chew holes (bare hands are enough).
   for (const b of state.bats || []) if (b.latched && b.landed && b.hp > 0) jobs.push({ kind: 'swat', obj: b, max: 1 });
@@ -552,8 +559,8 @@ function work(p, state) {
   } else if (job.kind === 'rod' || job.kind === 'pump' || job.kind === 'winch') {
     // Stand at the rod / bilge pump / winch and hold Action (the job drops away once it is done).
     if (steer(p, o.d, o.x, 15)) p.fire = true;
-  } else if (job.kind === 'vent') {
-    // Walk to the vent and flip it.
+  } else if (job.kind === 'vent' || job.kind === 'gasvalve') {
+    // Walk to the vent (or the gas valve) and flip it.
     if (steer(p, o.d, o.x, 10)) press(p);
   } else if (job.kind === 'cool') {
     // GOING DOWN!: a block of ice from the locker, then onto the boiler

@@ -192,7 +192,7 @@ function drawPalette() {
 const sprites = createSprites();
 const pics = createPartPictures({ sprites });
 sprites.load().then(() => { pics.refresh(); drawTray(); }).catch(() => {});
-const TRAY = [['gasbag', 'Gasbag'], ['helm', 'Helm'], ['boiler', 'Boiler'], ['coal', 'Coal bunker'], ['ammo', 'Ammo hold'], ['engine', 'Engine pod'], ['gun', 'Gun'], ['searchlight', 'Searchlight'], ['lookout', 'Lookout'],
+const TRAY = [['gasbag', 'Gasbag'], ['gasValve', 'Gas valve'], ['helm', 'Helm'], ['boiler', 'Boiler'], ['coal', 'Coal bunker'], ['ammo', 'Ammo hold'], ['engine', 'Engine pod'], ['gun', 'Gun'], ['searchlight', 'Searchlight'], ['lookout', 'Lookout'],
   ['medbay', 'Medbay'], ['bombBay', 'Bomb bay'], ['lift', 'Lift'], ['boarding', 'Boarding point'], ['rack_hammer', 'Hammer rack'], ['rack_sword', 'Sword rack'], ['rack_hookshot', 'Hookshot rack'],
   ['rack_ice', 'Ice locker'], ['extinguisher', 'Extinguisher'], ['vent', 'Steam vent'], ['ladder', 'Ladder'], ['pole', 'Slide pole'], ['ballast', 'Sandbag'], ['ballast_hang', 'Hanging sandbag']];
 const tray = { id: null, moved: false, slots: [], target: null, ptr: null, why: '', img: null, x0: 0, y0: 0 }; // the tile being dragged (moved = it has left the tile)
@@ -279,6 +279,7 @@ const label = (p) => {
     case 'ladder': case 'rope': case 'pole': case 'stairs': case 'lift': return `${p.part} ${p.top}>${p.bottom} x${p.xTop}`;
     case 'rack': return `rack: ${p.kind} (${p.p} ${p.x})`;
     case 'pipe': return `pipe to ${p.to}`;
+    case 'gasValve': return `gas valve (${p.p} ${p.x})`;
     case 'vent': case 'extinguisher': case 'boarderEntry': return `${p.part} (${p.p} ${p.x})`;
     case 'escortDock': return `escort hook: ${p.n}`;
     case 'ballast': return `sandbag${p.hang ? ' (hanging)' : ''} (${p.p} ${p.x})`;

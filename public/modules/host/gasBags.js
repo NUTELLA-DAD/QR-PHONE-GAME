@@ -10,9 +10,10 @@ import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { bagName, bagLiftPoints } from './shipBuild.js';
 
 const BAGS = SHIP_LAYOUT.gasbags; // (updated in place when a build is applied)
-const clamp100 = (v) => Math.max(0, Math.min(100, v));
+const valves = () => SHIP_LAYOUT.gasValves || []; // (only a build that has some carries the list)
+const clamp100 =(v) => Math.max(0, Math.min(100, v));
 
-const makeBags = (level) => Array.from({ length: Math.max(1, BAGS.length) }, (_, i) => ({ gas: level, w: BAGS[i] ? Math.max(1, BAGS[i].lift) : 1, down: false }));
+const makeBags = (level) => Array.from({ length: Math.max(1, BAGS.length) }, (_, i) => ({ gas: level, w: BAGS[i] ? Math.max(1, BAGS[i].lift) : 1, down: false, closed: false }));
 
 // The lift-weighted mean of the bags' gas (one bag: that bag's gas, exactly).
 export function bagMean(bags) {
@@ -26,6 +27,7 @@ export function bagMean(bags) {
 export function installBags(state) {
   state.bags = makeBags(state.ship.gas);
   state.bagsVersion = SHIP_LAYOUT.version;
+  state.gasValveOpen = valves().map(() => true); // one flag per gas valve of the layout (a bag with no valve is always open)
   Object.defineProperty(state.ship, 'gas', {
     enumerable: true,
     configurable: true,
@@ -34,13 +36,21 @@ export function installBags(state) {
   });
 }
 
-// A new ship build was applied (the dock): fit the bags to it, keeping the mean gas.
+/// A new ship build was applied (the dock): fit the bags, the gas valves and the vents to it, keeping the mean gas. Every call also works out which bags are CUT OFF
+// (a gas valve of theirs is shut: state.gasValveOpen[i] false for any valve with bag i).
 export function syncBags(state) {
-  if (state.bagsVersion === SHIP_LAYOUT.version && state.bags.length === Math.max(1, BAGS.length)) return;
-  const level = state.ship.gas;
-  state.bags = makeBags(level);
-  state.bagsVersion = SHIP_LAYOUT.version;
-  for (const h of state.gasHoles || []) if (!(h.bag < state.bags.length)) h.bag = 0;
+  if (state.bagsVersion !== SHIP_LAYOUT.version || state.bags.length !== Math.max(1, BAGS.length)) {
+    const level = state.ship.gas;
+    state.bags = makeBags(level);
+    state.bagsVersion = SHIP_LAYOUT.version;
+    for (const h of state.gasHoles || []) if (!(h.bag < state.bags.length)) h.bag = 0;
+    state.gasValveOpen = valves().map(() => true); // (a new ship: every valve open)
+    if (state.ventOpen && state.ventOpen.length !== SHIP_LAYOUT.vents.length) state.ventOpen = SHIP_LAYOUT.vents.map(() => false);
+  }
+  const vs = valves();
+  if (!vs.length) { for (const b of state.bags) b.closed = false; return; }
+  for (const b of state.bags) b.closed = false;
+  vs.forEach((v, i) => { if (!state.gasValveOpen[i] && state.bags[v.bag]) state.bags[v.bag].closed = true; });
 }
 
 // Top every bag up to at least `level` (a repair, a shop refill): a fuller bag keeps its gas.
@@ -55,12 +65,20 @@ export function holesPerBag(state) {
   return out;
 }
 
-// One step of gas: `moved` = what the pump and the vent move per second (+ in, - out), the same for every bag. Seep is per bag; holes leak from their own bag.
+/// One step of gas: `moved` = what the pump and the vent move per second (+ in, - out), the same for every OPEN bag; a bag whose valve is shut gets none of it. Seep is per bag
+// and holes leak from their own bag. While the pump runs, each hole in an open bag also bleeds HOLE_BLEED out of the shared feed (shared by the open bags): a ruptured
+// bag starves the rest until its valve is shut or it is patched. One bag with no valve shut: the old single gas value, exactly.
 export function stepBags(state, moved, dt) {
   const G = config.GAS, bags = state.bags;
-  if (bags.length === 1) { bags[0].gas = clamp100(bags[0].gas + (moved - G.SEEP - G.LEAK_PER_HOLE * state.gasHoles.length) * dt); return; }
+  if (bags.length === 1 && !bags[0].closed) { bags[0].gas = clamp100(bags[0].gas + (moved - G.SEEP - G.LEAK_PER_HOLE * state.gasHoles.length) * dt); return; }
   const holes = holesPerBag(state);
-  bags.forEach((b, i) => { b.gas = clamp100(b.gas + (moved - G.SEEP - G.LEAK_PER_HOLE * holes[i]) * dt); });
+  let feed = moved;
+  if (moved > 0) {
+    let open = 0, bleed = 0;
+    bags.forEach((b, i) => { if (!b.closed) { open++; bleed += holes[i] * G.HOLE_BLEED; } });
+    feed = open ? Math.max(0, moved - bleed / open) : 0;
+  }
+  bags.forEach((b, i) => { b.gas = clamp100(b.gas + ((b.closed ? 0 : feed) - G.SEEP - G.LEAK_PER_HOLE * holes[i]) * dt); });
 }
 
 // A bag going flat (or coming back) while several are fitted: mark it and shout on the TV.

@@ -477,8 +477,9 @@ async function checkBalance() {
     applyBuild(parts);
     config.BALANCE.LIVE = live;
     const sim = createSimulation();
-    const e = SHIP_LAYOUT.boarderEntryPoints;
-    for (let i = 0; i < 4; i++) sim.state.players['b' + i] = { id: 'b' + i, bot: true, name: 'B' + i, species: config.CREW_SPECIES[0], color: '#fff', x: e[0].x + 80 * i, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
+    const helm = SHIP_LAYOUT.stations.find((s) => s.kind === 'helm'); // (a quiet ship: just a helmsman, holding the pump lever still, and pumping after the rupture unless nobody can)
+    const helmsman = { id: 'h', name: 'Helmsman', species: config.CREW_SPECIES[0], color: '#fff', x: helm.x, y: SHIP_LAYOUT.platforms[helm.d].y, d: helm.d, jx: 0, jy: 0, t: 0, connected: true, fall: false, ko: 0, lock: helm.n, gas: 0 };
+    sim.state.players.h = helmsman;
     if (cast) sim.castOff();
     if (setup) setup(sim);
     let minPitch = 0, maxPitch = 0, maxSpeed = 0;
@@ -564,6 +565,22 @@ async function checkBags() {
   report(/Drop the .* on a deck/.test(E.placePart(C, 'boiler', 300, 120).hint || '') && /one helm/.test(E.placePart(C, 'helm', 1270, 455).hint || ''), 'a drop in empty air says "drop it on a deck"; a second helm says "a ship has one helm"');
   const lad = E.placePart(C, 'ladder', 700, 560);
   report(lad.ok && lad.parts.filter((p) => p.part === 'ladder').length === C.filter((p) => p.part === 'ladder').length + 1, 'a ladder picture dropped between two decks makes a ladder: ' + (lad.hint || ''));
+  // gas valves and vents dropped from the tray: a valve links to the bag over it (the nearest), the end bags get spots too; a vent can go on any full deck and is tied to a boiler
+  const noValves = four.filter((p) => p.part !== 'gasValve');
+  const vs = S.slotsFor('gasValve', noValves);
+  report(new Set(vs.map((s) => s.feeds)).size === 4 && vs.every((s) => /feeds the (aft|fore|bag \d) bag/i.test(s.label) || /feeds the (aft|fore) bag|feeds the bag \d/i.test(s.label) || /feeds/.test(s.label)), `the gas valve slots reach every bag of the four-bag ship (${vs.length} spots; bags ${[...new Set(vs.map((s) => s.feeds + 1))].sort().join(', ')})`);
+  const vslot = vs.find((s) => s.feeds === 3);
+  const vdrop = E.placePart(noValves, 'gasValve', vslot.x, vslot.y - 14);
+  const Lv = buildLayout(vdrop.parts);
+  report(vdrop.ok && Lv.gasValves.length === 1 && Lv.gasValves[0].bag === 3 && /valve/.test(vdrop.hint) && validate(vdrop.parts).checks.some((c) => c.group === 'Gas valves' && c.level === 'INFO'), 'a gas valve dropped on a spot under the nose links to the fore bag: ' + vdrop.hint);
+  report(!E.placePart(C, 'gasValve', 900, 455).ok || buildLayout(C).gasbags.length > 0, 'a gas valve needs a bag (the classic ship takes one: it feeds her one bag)');
+  const noBag = E.erase(C, 'gasbag', 0, 0).parts;
+  report(/draw or drop a gasbag first/.test(E.placePart(noBag, 'gasValve', 900, 455).hint || ''), 'a gas valve on a ship with no bag says why: ' + E.placePart(noBag, 'gasValve', 900, 455).hint);
+  const ventSlots = S.slotsFor('vent', C);
+  report(new Set(ventSlots.map((s) => s.p)).size >= 3 && ventSlots.every((s) => /steam line/.test(s.label)), `steam vent spots are on every full deck (${[...new Set(ventSlots.map((s) => s.p))].join(', ')}) and each says whose steam line it is on: ${ventSlots[0].label}`);
+  const withKeel = E.drawDeck(C, 'keel', 20, 350).parts;
+  const vk = E.placePart(withKeel, 'vent', 150, 950 - 14);
+  report(vk.ok && buildLayout(vk.parts).vents.some((v) => v.p === 'keel') && validate(vk.parts).checks.some((c) => c.group === 'Steam vents' && /Boiler x4/.test(c.text)), 'a vent dropped on the new keel deck works, and the validator ties all four vents to the boiler: ' + (validate(vk.parts).checks.find((c) => c.group === 'Steam vents') || {}).text);
   const near = E.placePart(C, 'rack_hammer', 6000, 455);
   report(!near.ok, 'a drop far from any deck is refused: ' + near.hint);
 
@@ -578,8 +595,9 @@ async function checkBags() {
     config.MAPS.FORCE_KIND = 'open';
     applyBuild(parts);
     const sim = createSimulation();
-    const e = SHIP_LAYOUT.boarderEntryPoints;
-    for (let i = 0; i < 4; i++) sim.state.players['b' + i] = { id: 'b' + i, bot: true, name: 'B' + i, species: config.CREW_SPECIES[0], color: '#fff', x: e[0].x + 80 * i, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
+    const helm = SHIP_LAYOUT.stations.find((s) => s.kind === 'helm'); // (a quiet ship: just a helmsman holding the pump lever still, who pumps after the rupture unless nobody can)
+    const helmsman = { id: 'h', name: 'Helmsman', species: config.CREW_SPECIES[0], color: '#fff', x: helm.x, y: SHIP_LAYOUT.platforms[helm.d].y, d: helm.d, jx: 0, jy: 0, t: 0, connected: true, fall: false, ko: 0, lock: helm.n, gas: 0 };
+    sim.state.players.h = helmsman;
     sim.castOff();
     const out = { warn: null, snap: {} }, keep = {};
     const last = tail ? 0 : sim.state.bags.length - 1; // (the bag to lose: the fore one, or the tail one)
@@ -589,6 +607,8 @@ async function checkBags() {
         sim.state.bags[last].gas = 0;
         for (const x of tail ? [260, 300, 280] : [1300, 1340, 1320]) sim.state.gasHoles.push(sim.gasHoleAt(x, 450, last));
       }
+      if (rupture && i === at * 60 && !noPump) helmsman.gas = 1;
+      if (rupture && i === at * 60 && !noPump) helmsman.gas = 1;
       if (patchAt && i === patchAt * 60) sim.state.gasHoles.length = 0; // (the crew has patched them)
       if (noPump && i === at * 60) { keep.pump = config.GAS.PUMP_RATE; keep.vent = config.GAS.VENT_RATE; config.GAS.PUMP_RATE = 0; config.GAS.VENT_RATE = 0; } // (nobody can pump or vent from here: what the bag lost stays lost, and the pilot cannot make it up)
       sim.update(1 / 60);
@@ -614,9 +634,50 @@ async function checkBags() {
     // a tail bag lost tips the other way
     const t3 = flyIt(four, 40, { rupture: true, noPump: true, tail: true }).snap[35];
     report(t3.deg <= -3 && t3.rest < b.rest - 0.005, `lose the TAIL bag instead and she tips the other way: tail-heavy ${-t3.deg} deg, rests ${t3.rest.toFixed(3)} rad (nose-up)`);
-    const fix = flyIt(four, 100, { rupture: true, patchAt: 32 });
-    const s0 = fix.snap[25], s99 = fix.snap[99]; // (the moment she is hit, and 75 s later: the holes were patched at 32 s, the helm pumped)
-    report(s0.holes >= 3 && s0.gas[3] < 5 && s0.down[3] && fix.snap[33].holes < s0.holes && s99.gas[3] > config.GAS.BAG_UP + 8 && !s99.down[3], `patching the holes and pumping brings the bag back (fore bag gas ${s0.gas[3].toFixed(0)}, flat, ${s0.holes} holes -> ${fix.snap[33].holes} holes at 33 s, gas ${s99.gas[3].toFixed(0)} at the end, deflated: ${s99.down[3]})`);
+
+    // 2b. gas valves: rupture the fore bag while the helm pumps. With its valve OPEN the holes bleed the shared feed (the healthy bags fill slower); a crewman shuts the
+    // valve (a real tap on the Action button) and the feed is whole again; patch the holes, open the valve, and the bag fills.
+    const { applyPlayerInput } = await load('modules/host/network.js');
+    const valveRun = ({ close, patch, reopen, pumpOff }) => {
+      seedRandom(5);
+      clock = 0;
+      config.MAPS.FORCE_KIND = 'open';
+      applyBuild(four);
+      const sim = createSimulation();
+      const st = sim.state, L = SHIP_LAYOUT, fore = st.bags.length - 1;
+      const helm = L.stations.find((s) => s.kind === 'helm');
+      const gv = L.gasValves.find((v) => v.bag === fore);
+      const helmsman = { id: 'h', name: 'Helmsman', species: config.CREW_SPECIES[0], color: '#fff', x: helm.x, y: L.platforms[helm.d].y, d: helm.d, jx: 0, jy: 0, t: 0, connected: true, fall: false, ko: 0, lock: helm.n, gas: 0 };
+      const me = { id: 'me', name: 'Valve', species: config.CREW_SPECIES[0], color: '#e63946', x: gv.x, y: L.platforms[gv.d].y, d: gv.d, jx: 0, jy: 0, t: 0, connected: true, fall: false, ko: 0 };
+      st.players.h = helmsman; st.players.me = me;
+      sim.castOff();
+      const out = { taps: [], label: null, valveIndex: L.gasValves.indexOf(gv) };
+      const tap = () => { const u = sim.interaction(me, null).use; out.taps.push(u && u.type); if (!out.label && u) out.label = u.label; applyPlayerInput(st, me, { jx: 0, jy: 0, act: 1, aid: me.ui && me.ui.aid }); };
+      const at = (t) => Math.round(t * 60);
+      const total = () => st.bags.reduce((n, b) => n + b.gas, 0);
+      for (let i = 0; i <= at(24); i++) {
+        clock += 1000 / 60;
+        me.x = gv.x; me.d = gv.d; me.jx = 0; me.fall = false; me.grabLock = 0; // (the crewman stays at the valve)
+        if (i === at(8)) { for (let k = 0; k < fore; k++) st.bags[k].gas = 30; st.bags[fore].gas = 0; for (const x of [1300, 1340, 1320]) st.gasHoles.push(sim.gasHoleAt(x, 450, fore)); helmsman.gas = pumpOff ? 0 : 1; out.before = { healthy: st.bags.slice(0, fore).reduce((n, b) => n + b.gas, 0) / fore, total: total() }; }
+        if (close && i === at(8.4)) tap();
+        if (patch && i === at(11.5)) st.gasHoles.length = 0;
+        if (reopen && i === at(11.9)) tap();
+        sim.update(1 / 60);
+        if (i === at(10.5)) out.mid = { healthy: st.bags.slice(0, fore).reduce((n, b) => n + b.gas, 0) / fore, ruptured: st.bags[fore].gas, total: total(), closed: st.bags[fore].closed, valves: st.gasValveOpen.slice() };
+        if (i === at(24)) out.end = { ruptured: st.bags[fore].gas, closed: st.bags[fore].closed, down: st.bags[fore].down, valves: st.gasValveOpen.slice(), healthy: st.bags.slice(0, fore).reduce((n, b) => n + b.gas, 0) / fore };
+      }
+      return out;
+    };
+    const vOpen = valveRun({}), vShut = valveRun({ close: true }), vFull = valveRun({ close: true, patch: true, reopen: true });
+    const Lf = buildLayout(four);
+    report(Lf.gasValves.length === 4 && new Set(Lf.gasValves.map((v) => v.bag)).size === 4 && !buildLayout(C).gasValves, 'the four-bag test ship has a gas valve for every bag, each linked to the bag over it (feeds ' + Lf.gasValves.map((v) => 'bag ' + (v.bag + 1)).join(', ') + '); the classic ship has none (every bag always open)');
+    report(vShut.taps[0] === 'gasvalve' && /^Close (aft|fore|bag \d)/i.test(vShut.label || '') && /valve$/.test(vShut.label), 'the crewman at the fore valve is offered "' + vShut.label + '" and a tap turns it (the action is a normal Action-button tap)');
+    report(vShut.mid.closed === true && vShut.mid.valves[vShut.valveIndex] === false && vOpen.mid.closed === false, 'a SHUT valve cuts its bag off (state.bags[3].closed); open, it is fed');
+    report(vShut.mid.healthy > vOpen.mid.healthy + 8, `while the helm pumps, the ruptured bag's open holes bleed the shared feed: the three healthy bags are at ${vOpen.mid.healthy.toFixed(0)} with the valve open but ${vShut.mid.healthy.toFixed(0)} once it is shut (they fill at the whole pump rate again)`);
+    report(vShut.mid.ruptured < vOpen.mid.ruptured - 8, `the shut bag is cut off from the pump (gas ${vShut.mid.ruptured.toFixed(0)}, only its own leak) while the open one is fed (${vOpen.mid.ruptured.toFixed(0)}): the gas goes to the bags that hold it, not out of the holes`);
+    report(vFull.taps.length === 2 && vFull.end.valves[vFull.valveIndex] === true && !vFull.end.closed && vFull.end.ruptured > config.GAS.BAG_UP + 15 && !vFull.end.down, `patch the holes, open the valve again, and the bag recovers: fore bag gas ${vFull.end.ruptured.toFixed(0)} at the end (valve ${vFull.end.valves[vFull.valveIndex] ? 'open' : 'SHUT'})`);
+    const vStay = valveRun({ close: true, patch: true });
+    report(vStay.end.closed && vStay.end.ruptured < config.GAS.BAG_UP, `a bag whose valve stays shut is not refilled after patching (gas ${vStay.end.ruptured.toFixed(0)}): it needs the valve opened`);
   } finally {
     performance.now = realNow;
     Math.random = realRandom;

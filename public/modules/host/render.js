@@ -801,6 +801,7 @@ export function createRenderer({ ctx, state, canvas }) {
         ctx.lineWidth = 1.5;
         ctx.strokeRect(x, 137, bw, 12);
         if (b.down) { ctx.beginPath(); ctx.moveTo(x + 2, 139); ctx.lineTo(x + bw - 2, 147); ctx.moveTo(x + bw - 2, 139); ctx.lineTo(x + 2, 147); ctx.stroke(); }
+        if (b.closed) { ctx.fillStyle = '#e2a24a'; ctx.fillRect(x - 1, 132, bw + 2, 4); } // (its gas valve is shut: cut off from the pump)
       });
     }
     ctx.textAlign = 'right';
@@ -1389,6 +1390,8 @@ export function createRenderer({ ctx, state, canvas }) {
         return { x: o.x, y: P[o.d].y - 60, r: 56 };
       case 'vent':
         return { x: o.x, y: P[o.d].y - 100, r: 42 };
+      case 'gasvalve':
+        return { x: o.x, y: P[o.d].y - 70, r: 42 };
       case 'coal':
       case 'stoke':
         return { x: act.station.x, y: P[act.station.d].y - 50, r: 52 };

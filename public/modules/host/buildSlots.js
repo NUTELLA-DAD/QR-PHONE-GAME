@@ -5,7 +5,7 @@
 // It does NOT have to leave a flyable ship (S.5c: you build a ship up from nothing, so half-built ships take parts): the validator says what is
 // still missing. slotsFor(type, parts, { whole: true }) also demands that the result passes validate() (the random batch wants that).
 // Every placement ends with finish(): the frame part is there and every engine, the helm and the lift have a steam pipe from the boiler (routePipes).
-import { buildLayout, COL, rowOf, DECK_ROWS, KEEL_ROWS } from './shipBuild.js';
+import { buildLayout, COL, rowOf, DECK_ROWS, KEEL_ROWS, bagNearX, bagName, ventBoiler } from './shipBuild.js';
 import { drawDeck, drawBag, placeConnector, GRID_X0, ensureFrame, emptyBuild, erase, setBag } from './buildEdit.js';
 import { validate } from './buildCheck.js';
 import { config } from '../../config.js';
@@ -24,14 +24,12 @@ const midX = (L) => (L.refPoint ? L.refPoint.x : L.platforms.length ? (Math.min(
 const count = (parts, test) => parts.filter(test).length;
 
 // Is x on deck p free of other stations (and, for hauling stations, of anything the Action button would grab first)?
-function roomAt(L, p, x, haul) {
-  const gap = config.BUILD_CHECK.MIN_GAP + 15;
+function roomAt(L, p, x, haul, near = config.TOOLS.REACH + 5, gap = config.BUILD_CHECK.MIN_GAP + 15) {
   if ([...L.stations, ...L.engines].some((s) => s.p === p && Math.abs(s.x - x) < gap)) return false;
   if (!haul) return true;
-  const near = config.TOOLS.REACH + 5;
   const q = L.platforms.find((d) => d.id === p);
   const d = L.platforms.indexOf(q);
-  if ([...L.racks, ...L.vents, ...L.extinguishers].some((o) => o.p === p && Math.abs(o.x - x) < near)) return false;
+  if ([...L.racks, ...L.vents, ...L.extinguishers, ...(L.gasValves || [])].some((o) => o.p === p && Math.abs(o.x - x) < near)) return false;
   if (L.pipes.some((o) => o.p === p && Math.abs(o.valve[0] - x) < near)) return false;
   return !L.connectors.some((c) => (c.top === d && Math.abs(c.xTop - x) < near) || (c.bottom === d && Math.abs(c.xBottom - x) < near));
 }
@@ -203,7 +201,8 @@ export const PALETTE = [
   { id: 'ballast', label: 'Sandbag (on deck)', hint: 'click a spot on a main, lower or keel deck: cheap weight to trim her', slots: (L, parts) => ballastSlots(L, parts, false) },
   { id: 'ballast_hang', label: 'Sandbag (hanging)', hint: 'click a lower or keel deck: it hangs from the hull under it', slots: (L, parts) => ballastSlots(L, parts, true) },
   { id: 'extinguisher', label: 'Extinguisher', hint: 'click a deck spot', slots: (L) => rackSlots(L, 'extinguisher', 'an extinguisher') },
-  { id: 'vent', label: 'Steam vent', hint: 'click a deck spot', slots: (L) => rackSlots(L, 'vent', 'a steam vent') },
+  { id: 'vent', label: 'Steam vent', hint: 'click a deck spot', slots: (L) => rackSlots(L, 'vent', 'a steam vent', undefined, VENT_ROWS) },
+  { id: 'gasValve', label: 'Gas valve', hint: 'drop it on the nest, top or main deck: it feeds the bag over it (the nearest). A shut valve cuts that bag off from the pump', slots: (L) => valveSlots(L) },
   { id: 'gasbag', label: 'Gasbag', hint: 'click a stretch of the gasbag row: one more bag beside the others (a row of small ones keeps flying if you lose one)', slots: (L, parts) => bagSlots(parts) },
 ];
 
@@ -258,7 +257,7 @@ const RULES = {
   bombBay: { rows: ['lower'], once: (parts) => count(parts, (p) => p.part === 'bombBay' || (p.part === 'deck' && p.id === 'bay')) > 0, onceText: 'A ship has one bomb bay.' },
   lift: { rows: ['main'], once: (parts) => count(parts, (p) => p.part === 'lift') > 0, onceText: 'A ship has one lift.' },
   boarding: { rows: ['catwalk'] }, rack_hammer: { rows: RACK_ROWS }, rack_sword: { rows: RACK_ROWS }, rack_hookshot: { rows: RACK_ROWS }, rack_ice: { rows: RACK_ROWS },
-  extinguisher: { rows: RACK_ROWS }, vent: { rows: RACK_ROWS }, ballast: { rows: ['main', 'lower', 'keel', 'deep'] }, ballast_hang: { rows: ['lower', 'keel', 'deep'] },
+  extinguisher: { rows: RACK_ROWS }, vent: { rows: ['catwalk', 'main', 'lower', 'keel', 'deep'] }, gasValve: { rows: ['nest', 'catwalk', 'main'], needsBag: true }, ballast: { rows: ['main', 'lower', 'keel', 'deep'] }, ballast_hang: { rows: ['lower', 'keel', 'deep'] },
   ladder: { link: true }, pole: { link: true },
 };
 export function whyNot(parts, type, x, y) {
@@ -272,6 +271,7 @@ export function whyNot(parts, type, x, y) {
     return `No room for a bag there: the bags beside it leave less than ${2 * E.BAG_MIN} px (drop it in a wider gap, or shorten a neighbour).`;
   }
   if (rule.once && rule.once(parts)) return rule.onceText;
+  if (rule.needsBag && !L.gasbags.length) return `A ${what} feeds a gasbag: draw or drop a gasbag first.`;
   const decks = L.platforms.filter((q) => x > q.x0 - 70 && x < q.x1 + 70 && Math.abs(q.y - y) < 130).sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y));
   const deck = decks[0];
   if (!deck) return `Drop the ${what} on a deck of the ship.`;
@@ -302,16 +302,41 @@ function bayClear(L, x0) {
   return !L.platforms.some((q) => (KEEL_ROWS.includes(rowOf(q)) || ['belly', 'bay'].includes(rowOf(q))) && q.x0 < x0 + BAY_W + 14 && q.x1 > x0 - 14);
 }
 
-function rackSlots(L, part, what, kind) {
+const VENT_ROWS = ['catwalk', 'main', 'lower', 'keel', 'deep']; // a steam vent can stand on any full deck
+function rackSlots(L, part, what, kind, rows = ['catwalk', 'main', 'lower']) {
   const out = [];
-  for (const q of onRows(L, ['catwalk', 'main', 'lower'])) {
+  for (const q of onRows(L, rows)) {
+    const d = L.platforms.indexOf(q);
     for (const x of spots(q, 30)) {
       const list = part === 'rack' ? L.racks : part === 'vent' ? L.vents : L.extinguishers;
       if (list.some((o) => o.p === q.id && Math.abs(o.x - x) < 100)) continue;
-      out.push({ p: q.id, x, label: `${what[0].toUpperCase()}${what.slice(1)} on the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part, ...(part === 'rack' ? { kind } : {}), p: q.id, x }] });
+      if ((L.gasValves || []).some((o) => o.p === q.id && Math.abs(o.x - x) < 60)) continue; // (not on top of a gas valve)
+      const boiler = part === 'vent' ? ventBoiler(L, { x, d }) : null; // (a steam vent lets steam out of a boiler's line: the nearest boiler's)
+      out.push({ p: q.id, x, label: `${what[0].toUpperCase()}${what.slice(1)} on the ${q.name}, x ${x}${boiler ? ` (on the ${boiler.n}'s steam line)` : ''}`, apply: (ps) => [...ps, { part, ...(part === 'rack' ? { kind } : {}), p: q.id, x }] });
     }
   }
   return out;
+}
+
+// Gas valves (S.5d): a wheel on a deck that shuts or opens the feed to ONE gasbag. A spot links to the bag over it (the nearest bag); a bag no spot lies under (the end
+// bags beyond the top deck) gets the two spots nearest it, so every bag can have its valve. The part remembers `bx`, the bag's middle, so it stays linked as bags are resized.
+const VALVE_ROWS = ['nest', 'catwalk', 'main'];
+function valveSlots(L) {
+  const bags = L.gasbags;
+  if (!bags.length) return [];
+  const have = L.gasValves || [];
+  const cands = [];
+  for (const q of onRows(L, VALVE_ROWS)) for (const x of spots(q, 30)) {
+    if (!roomAt(L, q.id, x, true, config.BUILD_EDIT.VALVE_CLEAR, config.BUILD_EDIT.VALVE_STATION) || have.some((v) => v.p === q.id && Math.abs(v.x - x) < config.BUILD_EDIT.VALVE_GAP)) continue;
+    cands.push({ q, x, bag: Math.max(0, bagNearX(bags, x)) });
+  }
+  const count = (bi) => cands.filter((c) => c.bag === bi).length;
+  bags.forEach((b, bi) => { // a bag with no spot under it: the spots nearest it are its (taken from a bag that keeps at least one)
+    if (count(bi)) return;
+    const take = cands.filter((c) => count(c.bag) > 1 || c.bag === bi).sort((p, r) => Math.abs(p.x - b.cx) - Math.abs(r.x - b.cx));
+    for (const c of take.slice(0, 2)) if (count(c.bag) > 1) c.bag = bi;
+  });
+  return cands.map(({ q, x, bag }) => ({ p: q.id, x, feeds: bag, label: `Gas valve on the ${q.name}, x ${x} (feeds the ${bagName(bag, bags.length).toLowerCase().replace(/^bag /, "bag ")})`, apply: (ps) => [...ps, { part: 'gasValve', p: q.id, x, bx: Math.round(bags[bag].cx) }] }));
 }
 
 // Sandbags: on a deck (main / lower / keel / deep) or hanging under one with nothing hanging below it. Cheap, a fixed few per ship (BALANCE.BALLAST_MAX).

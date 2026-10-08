@@ -131,6 +131,13 @@ const DRAW = {
     filled(RED, () => g.arc(50, 38, 15, 0, 7)); line([[35, 38], [65, 38]], 3.4);
     g.fillStyle = 'rgba(255,255,255,0.85)'; for (const [x, y, r] of [[34, 22, 9], [52, 12, 12], [72, 20, 9], [60, 4, 7]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
   },
+  gasValve(g, { filled, line }) {
+    filled(CANVAS, () => g.ellipse(50, 14, 34, 16, 0, 0, 7)); // the bag it feeds, above
+    line([[50, 28], [50, 62]], 7, IRON); line([[50, 62], [50, 90]], 7, IRON); // the pipe
+    filled(IRON, () => g.rect(36, 84, 28, 9)); // the flange on the deck
+    for (let k = 0; k < 4; k++) { const a = (k * Math.PI) / 4; line([[50 - Math.cos(a) * 22, 58 - Math.sin(a) * 22], [50 + Math.cos(a) * 22, 58 + Math.sin(a) * 22]], 4.4, BRASS); }
+    filled('#6fa07a', () => g.arc(50, 58, 17, 0, 7)); filled(BRASS, () => g.arc(50, 58, 6, 0, 7)); // the wheel, green = open
+  },
   engine(g, { filled, line }, sprites) {
     if (!sprites || !sprites.box(g, 'ship/engine', 4, 26, 92, 40)) {
       filled('#6d7378', () => g.ellipse(46, 48, 40, 20, 0, 0, 7));

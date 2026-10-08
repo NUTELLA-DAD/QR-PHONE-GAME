@@ -38,11 +38,11 @@ export const CONNECTOR_SPEED = { rope: 150, ladder: 170, stairs: 150, lift: 260,
 // (shifted by the part's column). Fields named in D_KINDS also get `d` (the platform index).
 const ARRAYS = ['platforms', 'connectors', 'rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers', 'boarderEntryPoints', 'escortDocks', 'gasbags'];
 const KEYED = ['gunMounts', 'searchlights'];
-const OPTIONAL = ['ballast']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
+const OPTIONAL = ['ballast', 'gasValves']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
 const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'liftRepair'];
 const X_FIELDS = {
   platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x'], vents: ['x'], racks: ['x'],
-  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
+  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
   coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbags: ['cx'], liftRepair: ['x'],
 };
 const D_KINDS = ['rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers'];
@@ -118,6 +118,12 @@ export function bagCover(bags) {
   }
   return out;
 }
+// The boiler a steam vent belongs to (a vent lets steam out of the boiler's line): the nearest boiler, a deck apart counting like 450 px of walking. null with no boiler.
+export function ventBoiler(L, v) {
+  let best = null, bd = Infinity;
+  for (const s of L.stations) if (s.kind === 'boiler') { const d = Math.abs(s.x - v.x) + 450 * Math.abs(s.d - v.d); if (d < bd) { bd = d; best = s; } }
+  return best;
+}
 // What a bag is called on the TV when it goes down: "FORE BAG", "AFT BAG", "BAG 2" (a ship with one bag just says "GASBAG").
 export const bagName = (i, n) => (n <= 1 ? 'GASBAG' : i === 0 ? 'AFT BAG' : i === n - 1 ? 'FORE BAG' : `BAG ${i + 1}`);
 
@@ -164,6 +170,9 @@ export const PARTS = {
   ballast: { mass: () => M().ballast, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('ballast', withoutPart(p)) },
   pipe: piece('pipes', { mass: () => M().pipe }),
   vent: piece('vents', { mass: () => M().vent }),
+  // A gas valve (S.5d): a wheel on a deck that opens or shuts the feed to ONE gasbag (the one nearest `bx`, the x of the bag it was linked to when placed). A shut bag
+  // is cut off from the helm's pump and vent and its holes stop bleeding the shared feed. A bag with no valve is always open.
+  gasValve: piece('gasValves', { mass: () => M().gasValve }),
   rack: piece('racks', { mass: () => M().rack }),
   extinguisher: piece('extinguishers', { mass: () => M().extinguisher }),
   boarderEntry: piece('boarderEntryPoints'),
@@ -367,7 +376,8 @@ export function buildLayout(parts, opts = {}) {
   // Platform indices: d on everything that stands on a deck, top/bottom on connectors.
   const index = (id) => out.platforms.findIndex((q) => q.id === id);
   for (const kind of D_KINDS) out[kind] = out[kind].map((o) => ({ ...o, d: index(o.p) }));
-  if (out.ballast) out.ballast = out.ballast.map((o) => { const d = index(o.p); return { ...o, d, y: d < 0 ? 0 : out.platforms[d].y + (o.hang ? config.BALANCE.BALLAST_HANG : 0) }; });
+  if (out.gasValves) out.gasValves = out.gasValves.map((o) => ({ ...o, d: index(o.p), bag: bagNearX(out.gasbags, o.bx != null ? o.bx : o.x) })); // (the bag it feeds: tail to nose, as in gasbags; -1 with no bag)
+  if (out.ballast) out.ballast =out.ballast.map((o) => { const d = index(o.p); return { ...o, d, y: d < 0 ? 0 : out.platforms[d].y + (o.hang ? config.BALANCE.BALLAST_HANG : 0) }; });
   out.connectors = out.connectors.map((c) => ({ ...c, top: index(c.top), bottom: index(c.bottom) }));
   // The first escort hook doubles as the old single `escortDock`.
   if (out.escortDocks.length) out.escortDock = { x: out.escortDocks[0].x, y: out.escortDocks[0].y };

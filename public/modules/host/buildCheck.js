@@ -5,7 +5,7 @@
 // (tools/buildsim.mjs), the batch runner and the dev page (public/buildtest.html) all use it.
 // A check is { group, level: 'PASS' | 'WARN' | 'FAIL', text }; ok means no FAIL.
 import { config } from '../../config.js';
-import { buildLayout, budgets as partBudgets, balanceOf, bagCover, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf } from './shipBuild.js';
+import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf } from './shipBuild.js';
 
 const BC = config.BUILD_CHECK;
 const BALANCE = config.BALANCE;
@@ -195,6 +195,7 @@ export function validate(parts, opts = {}) {
   placed(L.extinguishers, (o) => `an extinguisher (${o.p} ${o.x})`);
   placed(L.boarderEntryPoints, (o) => `a boarding point (${o.p} ${o.x})`);
   placed(L.ballast || [], (o) => `a sandbag (${o.p} ${o.x})`);
+  placed(L.gasValves || [], (o) => `a gas valve (${o.p} ${o.x})`);
   placed(L.escortDocks, (o) => `escort hook ${o.n}`);
   if (L.medbay) placed([L.medbay], () => 'the medbay');
   if (L.liftRepair) placed([L.liftRepair], () => 'the lift repair spot');
@@ -334,6 +335,19 @@ export function validate(parts, opts = {}) {
       const left = lift.lift - big.lift, hover = +(config.GAS.NEUTRAL + lift.mass - left).toFixed(1);
       info('Redundancy', `${bags.length} gasbags. Lose one bag: hover ${hover}, ${hover <= BC.HOVER_MAX ? 'still flies' : hover <= 100 ? 'she limps (the pump at its limit)' : 'she falls'} (lift ${left} of ${lift.lift}; with all bags, hover ${lift.hover})`);
     }
+  }
+
+  // --- Gas valves (one per bag cuts it off from the pump; a bag with none is always open) and steam vents (each lets steam out of the nearest boiler's line).
+  if ((L.gasValves || []).length) {
+    const feeds = (L.gasbags || []).map((_, i) => (L.gasValves || []).filter((v) => v.bag === i).length);
+    const lacking = feeds.map((n, i) => (n ? null : i + 1)).filter(Boolean);
+    info('Gas valves', `${L.gasValves.length} valve${L.gasValves.length === 1 ? '' : 's'}: bag${feeds.length > 1 ? 's' : ''} ${feeds.map((n, i) => `${i + 1}${n ? '' : ' (none)'}`).join(', ')}${lacking.length ? `; a bag with no valve is always open (${lacking.join(', ')})` : '; every bag can be shut off'}`);
+    for (const v of L.gasValves) if (v.bag < 0) warn('Gas valves', `a gas valve (${v.p} ${v.x}) has no gasbag to feed`);
+  }
+  if ((L.vents || []).length) {
+    const tie = new Map();
+    for (const v of L.vents) { const b = ventBoiler(L, v); const k = b ? b.n : '(no boiler)'; tie.set(k, (tie.get(k) || 0) + 1); }
+    info('Steam vents', `${L.vents.length} vent${L.vents.length === 1 ? '' : 's'}, on the steam line of: ${[...tie].map(([n, c]) => `${n} x${c}`).join(', ')}`);
   }
 
   // --- Required kinds, kind sanity.

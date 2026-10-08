@@ -19,7 +19,7 @@
 // Drawing never throws: the bake falls back to drawing the static layer straight onto the screen.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf } from '../../shipLayout.js';
-import { hullGeom as layoutHull, TWIN_SIZE } from './shipBuild.js';
+import { hullGeom as layoutHull, TWIN_SIZE, bagName } from './shipBuild.js';
 import { drawBiplane, drawTailNumber } from './planeArt.js';
 import { paintPath, paintRect, hasTexture } from './textureArt.js';
 import { drawIceLocker, drawIceFlights, drawBoilerHeat, drawHoleGlow } from './goingDownArt.js';
@@ -1311,7 +1311,33 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     guard('lift', liveConnectors);
   };
 
+  // Gas valves (S.5d): a brass wheel on a stub of pipe on its deck, with a tag over it: which bag it feeds, OPEN or SHUT, and how full that bag is.
+  const drawGasValves = (time) => {
+    (L.gasValves || []).forEach((v, i) => {
+      const q = P[v.d];
+      if (!q) return;
+      const open = !state.gasValveOpen || state.gasValveOpen[i] !== false;
+      const bag = state.bags && state.bags[v.bag];
+      const y = q.y - 46;
+      line([[v.x, q.y], [v.x, y + 14]], 6, IRON);
+      filled(open ? '#6fa07a' : '#c0584f', () => ctx.arc(v.x, y, 15, 0, 7));
+      for (let k = 0; k < 4; k++) { const a = (k * Math.PI) / 4 + (open ? 0 : 0.4); line([[v.x - Math.cos(a) * 15, y - Math.sin(a) * 15], [v.x + Math.cos(a) * 15, y + Math.sin(a) * 15]], 3); }
+      const text = `${bagName(v.bag, (L.gasbags || []).length)} ${open ? 'OPEN' : 'SHUT'}${bag ? ' ' + Math.round(bag.gas) + '%' : ''}`;
+      ctx.font = '700 26px ' + config.FONTS.TEXT;
+      ctx.textAlign = 'center';
+      const w = ctx.measureText(text).width + 18;
+      ctx.fillStyle = open ? 'rgba(236,244,226,0.92)' : 'rgba(250,226,196,0.95)';
+      ctx.fillRect(v.x - w / 2, y - 84, w, 38);
+      ctx.strokeStyle = open ? '#4f7f3f' : '#a8443f';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(v.x - w / 2, y - 84, w, 38);
+      ctx.fillStyle = open ? '#2f5a2a' : '#8a2e28';
+      ctx.fillText(text, v.x, y - 57);
+    });
+  };
+
   const drawLiveTop = (time) => {
+    if ((L.gasValves || []).length) guard('gasValves', drawGasValves, time);
     if (state.phase === 'lobby') guard('labels', drawLabels); // (in flight each phone says where you are)
     guard('holes', drawGasHoles, time);
     guard('status', drawModuleStatus, time);
