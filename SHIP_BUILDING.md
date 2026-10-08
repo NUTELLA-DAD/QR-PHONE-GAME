@@ -389,3 +389,32 @@ Built in tiers. Each part plugs into existing systems.
   5. gate in `tools/buildsim.mjs`;
   6. classic stays identical.
 - The random batch (`buildsim --random`) gains each new part, to catch dominant parts and traps.
+
+## Cross-ship physics (owner: "the possibilities could be endless")
+
+Every airship, ours, the AI gunships and the PvP rival, uses the same weight-and-forces rules. That makes silly, creative strategies possible:
+- **Gunships have balance too.** The enemy gunship gets a live centre of mass from her parts, her crew and anyone aboard her. If our boarders crowd her bow, she tips; enough weight at one end pitches her guns off target or drives her nose into the rocks. In PvP both ships already run the full sim, so this comes for free there.
+- **Throwable ballast.** Sandbags (and coal sacks, crates, ice blocks) become carryable items you can:
+  - THROW with the attack button (an arc, like a thrown ice block);
+  - drop from the bomb bay;
+  - fire from the crew cannon;
+  - haul across on the hookshot.
+
+  Thrown onto another ship they land as dead weight at that spot and tip her. The other crew can shovel them overboard (a job arrow appears). We can lighten our own ship by dumping ballast overboard for a quick climb.
+- **Weight wars:**
+  - pile crew on one end of an enemy ship;
+  - cut her ballast lines;
+  - drop an anchor onto her deck;
+  - steal her coal (it lightens her and stalls her boiler);
+  - hook her with the grapple and drag her down with our weight.
+- **More ideas this unlocks:**
+  - towing a disabled enemy home as a prize;
+  - stacking crates to block her deck;
+  - jettisoning a burning bunker to save the ship;
+  - a "weight bomb" (an anvil) dropped onto a gasbag;
+  - balancing contests in King of the Hill.
+
+**Build order:**
+1. After forces.js lands (S.5h), give gunship.js the same live centre-of-mass and torque model, fed by her crew, our boarders and dropped weights. Classic co-op stays within noise; measure and re-baseline.
+2. Then the throwable-ballast item.
+3. Then the weight-war tricks, one at a time, each with a bot-arena check so none becomes a must-use exploit.
