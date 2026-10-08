@@ -245,6 +245,11 @@ Covered decks sit inside the hull:
 - protected rooms, where fires spread inside instead;
 - heavier;
 - guns limited to ports/sponsons.
+Also **metal armour walls in spots**: drag or draw riveted iron plate onto stretches of hull wall or rail.
+- Hits there do much less damage and rarely punch breaches.
+- Plate doesn't burn.
+- It's heavy (balance and lift).
+- It's drawn as riveted plate in the storybook style.
 Art, collision and the validator follow the choice | M | toggle works on the dev page; classic unchanged; botsim 0 errors on mixed builds |
 | S.6a | Catalogue v1 + Sparrow + `state.build` effects + dock offers / slot vote | L | voyagesim Normal no worse than today |
 | S.6b | Shipwright UI (TV blueprint, gauges, slot pins, phone cards) | M | the cold-player test passes |
