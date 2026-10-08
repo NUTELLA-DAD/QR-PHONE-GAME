@@ -769,6 +769,7 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.textAlign = 'center';
       ctx.fillText('AUTOPILOT', 170, 50);
       ctx.fillStyle = config.INK;
+      ctx.textAlign = 'right'; // (the labels below hang off the right edge: they were drifting out of the panel while the autopilot was on)
     }
     if (state.course && config.COURSE.ENABLED) {
       if (state.course.map) {
@@ -778,10 +779,10 @@ export function createRenderer({ ctx, state, canvas }) {
         if (run) {
           ctx.font = '700 13px ' + config.FONTS.TEXT;
           ctx.fillStyle = '#5a4a3a';
-          ctx.fillText(modeLine(run), 454, 176, 200);
+          ctx.fillText(modeLine(run), 454, 190, 200); // (below the gas bar and its needle, which reach down to y 178)
           ctx.font = '16px ' + config.FONTS.DISPLAY;
           ctx.fillStyle = '#8a5a00';
-          ctx.fillText('Salvage ' + run.salvage, 454, 204);
+          ctx.fillText('Salvage ' + run.salvage, 454, 208);
           drawSpares(ctx, state, 470, 236, true, 0.8); // spare gasbags (lives)
           ctx.textAlign = 'left';
           ctx.fillStyle = state.salvagePop ? '#2e7d32' : '#5a4a3a';
@@ -1364,24 +1365,28 @@ export function createRenderer({ ctx, state, canvas }) {
     }
   };
 
-  // A pulsing ring in each (human) player's colour around what their Action button will use.
+  // A pulsing ring in each (human) player's colour around what their Action button will use (dashed: what GRAB will take or swap).
   const drawHighlights = (time) => {
     for (const p of Object.values(state.players)) {
-      if (p.bot || !p.act || p.ko > 0) continue;
-      const spot = actionSpot(p.act);
-      if (!spot) continue;
-      const pulse = 1 + Math.sin(time * 6) * 0.08;
-      ctx.lineWidth = 3.2;
-      ctx.strokeStyle = config.INK;
-      ctx.beginPath();
-      ctx.arc(spot.x, spot.y, spot.r * pulse + 3, 0, 7);
-      ctx.stroke();
-      ctx.lineWidth = 2.8;
-      ctx.strokeStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(spot.x, spot.y, spot.r * pulse, 0, 7);
-      ctx.stroke();
+      if (p.bot || p.ko > 0) continue;
+      for (const act of [p.act, p.grabAct === p.act ? null : p.grabAct]) {
+        const spot = act && actionSpot(act);
+        if (!spot) continue;
+        const pulse = 1 + Math.sin(time * 6) * 0.08;
+        ctx.setLineDash(act === p.act ? [] : [7, 6]);
+        ctx.lineWidth = 3.2;
+        ctx.strokeStyle = config.INK;
+        ctx.beginPath();
+        ctx.arc(spot.x, spot.y, spot.r * pulse + 3, 0, 7);
+        ctx.stroke();
+        ctx.lineWidth = 2.8;
+        ctx.strokeStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(spot.x, spot.y, spot.r * pulse, 0, 7);
+        ctx.stroke();
+      }
     }
+    ctx.setLineDash([]);
   };
 
   const drawPlayer = (player, time) => {

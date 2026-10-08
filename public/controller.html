@@ -23,20 +23,25 @@ label.opt input{width:28px;height:28px}
 #strip{display:flex;align-items:center;gap:10px;background:#f3ead6;border:4px solid #2b2622;border-radius:14px;padding:4px 8px;min-height:44px}
 #me{display:flex;align-items:center;gap:6px;font-weight:900;font-size:18px;white-space:nowrap}
 #swatch{width:20px;height:20px;border-radius:50%;border:3px solid #2b2622;background:var(--c,#e63946)}
-#carry{font-size:16px;white-space:nowrap}
+/* What is in your hands: a big chip with the item's icon (amber when you hold something). */
+#carry{display:flex;align-items:center;gap:6px;font-size:18px;font-weight:700;white-space:nowrap;border:3px solid #2b2622;border-radius:12px;padding:0 10px 0 6px;min-height:34px;background:#e6dcc3;color:#6b5a48}
+#carry .cico{font-size:26px;line-height:1}
+#carry.has{background:#ffd23f;color:#2b2622}
 #hull{flex:1;height:18px;border:3px solid #2b2622;border-radius:8px;background:#3b2a1d;position:relative;overflow:hidden;min-width:60px}
 #hfill{position:absolute;left:0;top:0;bottom:0;width:100%;background:#4caf50}
 #hull span{position:absolute;inset:0;text-align:center;color:#fff;font-size:12px;font-weight:700;line-height:12px}
-#leave{font:inherit;font-weight:900;font-size:24px;border:4px solid #2b2622;border-radius:14px;background:#c62828;color:#fff;padding:8px 30px;min-height:58px;min-width:150px;box-shadow:0 4px 0 #2b2622;display:none;touch-action:none}
+#leave{font:inherit;font-weight:900;font-size:24px;border:4px solid #2b2622;border-radius:14px;background:#c62828;color:#fff;padding:4px 20px;min-height:44px;min-width:130px;box-shadow:0 4px 0 #2b2622;display:none;touch-action:none}
 #leave:active{transform:translateY(3px);box-shadow:0 1px 0 #2b2622}
-#info{background:rgba(243,234,214,.9);border:3px solid #2b2622;border-radius:12px;padding:3px 10px;font-size:15px;line-height:1.25;min-height:26px}
+#info{background:rgba(243,234,214,.9);border:3px solid #2b2622;border-radius:12px;padding:3px 10px;font-size:15px;line-height:1.25;min-height:26px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #info b{font-size:17px}
 #info .warn{color:#c62828;font-weight:900}
 #controls{flex:1;display:flex;align-items:center;justify-content:space-between;min-height:0}
 body.lefty #controls{flex-direction:row-reverse}
 #pad{position:relative;border:5px solid #2b2622;border-radius:50%;background:rgba(255,255,255,.35);width:min(36vw,58vh);aspect-ratio:1}
 #knob{position:absolute;width:38%;height:38%;left:31%;top:31%;border-radius:50%;background:#f3ead6;border:5px solid #2b2622;box-shadow:0 5px 0 #2b2622}
-#buttons{--a:min(38vh,160px);--j:min(27vh,112px);--k:min(30vh,124px);position:relative;width:min(54vw,92vh);height:min(66vh,100%)}
+/* Button sizes follow the height of the control area (--H, set from the real height by ui.js; 66vh until then) so the two columns
+   never touch: right = GRAB over ACTION, left = JUMP over ATTACK, and at least --gap between any two buttons. */
+#buttons{--H:60vh;--gap:14px;--a:min(calc(var(--H) * .55),160px);--g:min(calc(var(--H) * .34),88px);--k:min(calc(var(--H) * .5),124px);--j:min(calc(var(--H) * .34),88px);position:relative;width:min(54vw,92vh);height:100%}
 .btn{position:absolute;border:5px solid #2b2622;border-radius:50%;color:#fff;font:inherit;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.05;box-shadow:0 6px 0 #2b2622;padding:6px}
 .btn .ic{font-size:2.3em;line-height:1}
 .btn .tx{max-width:92%;overflow-wrap:anywhere}
@@ -52,7 +57,7 @@ body.lefty #controls{flex-direction:row-reverse}
 #mid.rd #jarrow{font-size:20px}
 #mid.rd #jtext{font-size:12px}
 /* The right-hand buttons only need their own width unless the helm levers are out (leaves room for the radar). */
-body:not(.helm) #buttons{width:calc(var(--a) + var(--k) + 14px)}
+body:not(.helm) #buttons{width:calc(var(--a) + var(--k) + var(--gap))}
 #help{font:inherit;font-weight:900;font-size:17px;border:4px solid #2b2622;border-radius:14px;background:#e63946;color:#fff;padding:2px 12px;min-height:44px;min-width:92px;box-shadow:0 3px 0 #2b2622;touch-action:none;white-space:nowrap}
 #help.down{transform:translateY(3px);box-shadow:0 0 0 #2b2622}
 #help.wait{background:#7d6a5a;color:#e6d9c0}
@@ -64,15 +69,35 @@ body:not(.helm) #buttons{width:calc(var(--a) + var(--k) + 14px)}
 #job.show{display:flex}
 #jarrow{font-size:min(24vh,104px);line-height:1}
 #jtext{font-size:clamp(14px,4.4vh,22px);line-height:1.1;overflow-wrap:anywhere}
-/* Action: biggest, lower right. JUMP: above it. Attack: to its left. */
+/* Action (uses what you hold): biggest, lower right. Attack: to its left. GRAB (take / swap / hop on a seat): small amber
+   square at the top right, well off the thumb's resting place. JUMP: top left of the cluster, above Attack. */
 #act{width:var(--a);height:var(--a);right:0;bottom:0;background:#f3ead6;color:#2b2622;font-size:clamp(14px,4vh,20px)}
-#atk{width:var(--k);height:var(--k);right:calc(var(--a) + 10px);bottom:0;background:#3a5a8c;font-size:clamp(13px,3.6vh,18px)}
-#jump{width:var(--j);height:var(--j);right:calc(var(--a) * .1);top:0;background:#2e8b57;font-size:clamp(13px,3.4vh,18px)}
+#atk{width:var(--k);height:var(--k);right:calc(var(--a) + var(--gap));bottom:0;background:#3a5a8c;font-size:clamp(13px,3.6vh,18px)}
+#jump{width:var(--j);height:var(--j);right:calc(var(--a) + var(--gap) + (var(--k) - var(--j)) / 2);top:0;background:#2e8b57;font-size:clamp(12px,3.2vh,17px)}
+#grab{width:var(--g);height:var(--g);right:0;top:0;border-radius:24%;background:#f2b134;color:#2b2622;font-size:clamp(10px,2.7vh,14px);padding:3px;gap:1px}
+#grab .ic{font-size:1.9em}
+#grab .tx{line-height:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 body.lefty #act{right:auto;left:0}
-body.lefty #atk{right:auto;left:calc(var(--a) + 10px)}
-body.lefty #jump{right:auto;left:calc(var(--a) * .1)}
+body.lefty #atk{right:auto;left:calc(var(--a) + var(--gap))}
+body.lefty #jump{right:auto;left:calc(var(--a) + var(--gap) + (var(--k) - var(--j)) / 2)}
+body.lefty #grab{right:auto;left:0}
+/* Hold-to-swap on GRAB fills like a loading Action button; just after a grab it is greyed (the host ignores it for a moment). */
+#grab.loading{background:linear-gradient(to top,#ff8c1a var(--p,0%),#f2b134 var(--p,0%))}
+#grab.swap::after{content:'HOLD';font-size:10px;background:#2b2622;color:#ffd23f;border-radius:8px;padding:0 6px;line-height:1.3}
+#grab.lock{filter:grayscale(.8) brightness(.9);opacity:.6}
 #act.loading{background:linear-gradient(to top,#ff8c1a var(--p,0%),#f1e2b8 var(--p,0%))}
-#act.hold::after{content:'HOLD';font-size:11px;opacity:.85}
+/* Nothing to use right now: greyed (it says what is in hand, e.g. "Hammer ready"). */
+#act.idle{background:#cfc6b0;color:#6b5a48;box-shadow:0 6px 0 #6b5a48}
+/* Hold actions: a dashed ring and a clear HOLD pill; the button fills as the job progresses. */
+#act.hold{outline:4px dashed #ff8c1a;outline-offset:4px}
+#act.hold::after{content:'HOLD';font-size:13px;background:#2b2622;color:#ffd23f;border-radius:10px;padding:0 9px;line-height:1.35;margin-top:2px}
+#act.nudge{animation:nudge .5s}
+#act.nudge::after{background:#c62828;color:#fff;content:'KEEP HOLDING!'}
+@keyframes nudge{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}50%{transform:translateX(7px)}80%{transform:translateX(-4px)}}
+/* The item in your hands, on the corner of the big button. */
+#act .held{position:absolute;top:-6px;left:-6px;width:38px;height:38px;border-radius:50%;background:#ffd23f;border:4px solid #2b2622;font-size:21px;line-height:30px;display:none}
+#act.has .held{display:block}
+body.lefty #act .held{left:auto;right:-6px}
 /* Helm throttle lever (replaces Attack while steering). */
 #lever{position:absolute;right:calc(var(--a) + 10px);top:0;width:min(20vh,84px);height:100%;border:5px solid #2b2622;border-radius:18px;background:#3b2a1d;display:none;touch-action:none}
 body.lefty #lever{right:auto;left:calc(var(--a) + 10px)}
@@ -136,7 +161,7 @@ h1{font-size:28px}
 <div id="vplay" class="view">
   <div id="strip">
     <div id="me"><div id="swatch"></div><span id="myname">Crew</span></div>
-    <div id="carry">Hands empty</div>
+    <div id="carry"><span class="cico">✋</span><span id="carrytx">Hands empty</span></div>
     <div id="hull"><div id="hfill"></div><span>HULL</span></div>
     <button id="help">🆘 Help!</button>
     <button id="leave">⬅ LEAVE</button>
@@ -153,7 +178,8 @@ h1{font-size:28px}
       <div id="lever"><div class="fill"></div><div class="stop"></div><div class="tag">AHEAD</div><div class="rev">REVERSE</div><div class="handle"></div></div>
       <button class="btn" id="jump"><span class="ic">⤴️</span><span class="tx">JUMP</span></button>
       <button class="btn" id="atk"><span class="ic">✋</span><span class="tx">Shove</span></button>
-      <button class="btn" id="act"><span class="ic">👋</span><span class="tx">Hey!</span></button>
+      <button class="btn" id="grab" style="display:none"><span class="ic">🤲</span><span class="tx">Grab</span></button>
+      <button class="btn idle" id="act"><span class="held" id="held"></span><span class="ic">👋</span><span class="tx">Hey!</span></button>
     </div>
   </div>
 </div>

@@ -62,7 +62,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
     p.y = s.y + state.ship.alt;
     puff(s.x, s.y, '#ffffff', 8);
     pop(state, s.x, s.y - 60, 'WHUMP!', '#ffffff', 0.9);
-    phoneFx(p, s.big ? 'You landed on the big fighter! KICK THE PILOT OUT - tap Action!' : 'You landed on a dogfighter! KICK THE PILOT OUT - tap Action!', null);
+    phoneFx(p, s.big ? 'You landed on the big fighter! KICK THE PILOT OUT - tap any button!' : 'You landed on a dogfighter! KICK THE PILOT OUT - tap any button!', null);
     return true;
   };
 

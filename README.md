@@ -22,8 +22,15 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
 ## The phone controls
 
 - **Joystick** (left): walk; push up/down at a ladder, stairs or the lift to climb.
-- **Action** (big cream button): does whatever it shows - take a tool, load a gun, man a station,
-  patch, repair, vent steam... Some say HOLD: keep pressing.
+- **Action** (big cream button): USES what you hold or what is in front of you - load a gun, patch,
+  repair, spray, vent steam... Some say HOLD: keep pressing until it fills. It greys out (and says e.g.
+  "Hammer ready") when there is nothing to use. Empty-handed, it also does the first pickup of a tool or
+  a seat.
+- **GRAB** (small amber square, top right of the buttons): take a tool or crate, **swap** or **put back**
+  what you hold (hold it for a third of a second), and hop onto a station. It always says what it will
+  do ("Swap to sword", "Put back hammer", "Take Helm"). After a grab it greys for a moment so a double
+  tap can't undo it. The item in your hands shows on the corner of the Action button and at the top.
+- **Jump** (green, top left of the buttons): hop.
 - **Attack** (blue button): swing your sword (or shove if empty-handed). Hold to keep swinging.
 - **Leave** (top right): step off a station.
 
@@ -61,7 +68,7 @@ TV buttons: **Add 4 bot crew** (bots crew stations for you, great for small grou
   it blows. Blowing her up brings hull, coal and ammo aboard. Her guards cut the line if nobody
   crosses, and fill empty posts. Anyone who falls comes round in the **medical bay** (red cross,
   lower deck) after a few seconds.
-- **Bots** never block you: walk up to a station a bot is using and tap Action to take it over.
+- **Bots** never block you: walk up to a station a bot is using and press GRAB to take it over.
 - **Boiler**: carry **coal** from the Coal Bunker (lower deck) - about one load a minute. More
   coal = more steam pressure.
   Everything powered (engines, helm, lift) uses steam; tap Action at a **vent** stack to open or

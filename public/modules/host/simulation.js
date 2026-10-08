@@ -1371,6 +1371,7 @@ export function createSimulation() {
       if (!player.lock) player.prime = false;
       if (player.hj) {
         hijack.rider(player, dt); // flying a stolen dogfighter (kick the pilot out, then steer)
+        if (!player.bot) player.act = player.grabAct = null;
       } else if (player.lock) {
         player.moving = false;
         player.climb = false;

@@ -165,7 +165,9 @@ export function createControllerInput({ network, ui }) {
   plever.addEventListener('pointercancel', pUp);
   showPLever();
 
-  const sendAction = () => network.sendInput({ jx, jy, act: 1 });
+  const state = () => (ui.getState ? ui.getState() : {});
+  // Every press carries the id (aid) of the label the phone was showing, so the host can tell a press made on an old label from a current one.
+  const sendAction = () => network.sendInput({ jx, jy, act: 1, aid: state().aid });
 
   const cease = () => {
     if (firing) {
@@ -175,31 +177,84 @@ export function createControllerInput({ network, ui }) {
   };
 
   // Action: tap does it; for hold actions (patch, repair, fire...) keep "fire" on while held.
+  // Let go of a hold action too soon and the button shakes: KEEP HOLDING.
+  let actDownAt = 0;
   pressable(
     actButton,
     () => {
+      actDownAt = performance.now();
       sendAction();
-      if ((ui.getState ? ui.getState() : {}).hold) {
+      const st = state();
+      if (st.hold) {
         firing = true;
-        network.sendInput({ jx, jy, fire: 1 });
+        network.sendInput({ jx, jy, fire: 1, aid: st.aid });
       }
     },
-    cease,
+    () => {
+      if (firing && !state().locked && performance.now() - actDownAt < config.CONTROLS.HOLD_TAP * 1000) ui.nudgeHold();
+      cease();
+    },
+  );
+
+  // GRAB (take / swap / put back / hop on a seat). Taking with empty hands is instant; swapping, putting back or replacing what
+  // is in your hands needs a short hold (config.CONTROLS.GRAB_HOLD) with a ring that fills up - so it can't happen by accident.
+  const grabButton = document.getElementById('grab');
+  let grabRaf = 0;
+  const grabFill = (f) => {
+    grabButton.classList.toggle('loading', f > 0);
+    grabButton.style.setProperty('--p', Math.round(f * 100) + '%');
+  };
+  const grabStop = () => {
+    cancelAnimationFrame(grabRaf);
+    grabRaf = 0;
+    grabFill(0);
+  };
+  pressable(
+    grabButton,
+    () => {
+      const st = state();
+      if (!st.grab || st.glock) return; // nothing to grab, or just grabbed (the host would ignore it)
+      const aid = st.gaid;
+      if (!st.gswap) {
+        network.sendInput({ jx, jy, grab: 1, aid });
+        return;
+      }
+      const start = performance.now();
+      const tick = () => {
+        const s = state();
+        if (!s.grab || s.gaid !== aid || s.glock) return grabStop(); // what the button would do changed under your thumb: start again
+        const f = (performance.now() - start) / (config.CONTROLS.GRAB_HOLD * 1000);
+        if (f >= 1) {
+          grabStop();
+          network.sendInput({ jx, jy, grab: 1, aid });
+          return;
+        }
+        grabFill(f);
+        grabRaf = requestAnimationFrame(tick);
+      };
+      grabRaf = requestAnimationFrame(tick);
+    },
+    grabStop,
   );
 
   // Attack: one swing per tap; holding keeps swinging. On a gun this button is PRIME: hold it to charge the shell.
+  // The hookshot is one shot per press (holding must not fire it again or let go of the rope).
   const swing = () => network.sendInput({ jx, jy, atk: 1 });
+  const hookAttack = () => ['Hook!', 'Let go!'].includes(state().attack);
   let priming = false;
   pressable(
     atkButton,
     () => {
-      if ((ui.getState ? ui.getState() : {}).attack === 'Prime') {
+      if (state().attack === 'Prime') {
         priming = true;
         network.sendInput({ jx, jy, prime: 1 });
         return;
       }
+      const hook = hookAttack();
       swing();
-      attackTimer = setInterval(swing, 300);
+      if (!hook) {
+        attackTimer = setInterval(() => (hookAttack() ? clearInterval(attackTimer) : swing()), 300);
+      }
     },
     () => {
       clearInterval(attackTimer);
