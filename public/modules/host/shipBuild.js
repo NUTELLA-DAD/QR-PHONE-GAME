@@ -14,6 +14,7 @@
 // Items name their platform with `p` (an id); buildLayout adds the platform index `d` the game code uses.
 
 export const COL = 120; // width of one column of the build grid (px)
+export const TWIN_SIZE = { rx: 0.7, ry: 0.62 }; // the twin envelope relative to the first (shipArt.js twinGeom uses the same numbers)
 
 // Station kinds: what a station (or engine) IS, so code asks layout.one('boiler') / all('gun') rather than for a name.
 // A ship may have several of most kinds; ONE_PER_SHIP kinds are single so far (one helm, shield, bomb bay compartment, coil emitter).
@@ -23,7 +24,10 @@ export const STATION_KINDS = ['helm', 'boiler', 'lookout', 'coal', 'ammo', 'gun'
 export const ONE_PER_SHIP = ['helm', 'deflector', 'bombBay', 'coil', 'navigator'];
 
 // Deck rows: the y of each floor level. A deck part says `row`, so S.6 can stack decks by row.
-export const DECK_ROWS = { nest: -42, helm: 420, catwalk: 470, main: 640, lower: 790, belly: 905, bay: 925 };
+// keel and deep are the rows the blueprint editor (buildEdit.js) adds under the lower deck: full decks inside the hull (belly and bay are small blisters).
+export const DECK_ROWS = { nest: -42, helm: 420, catwalk: 470, main: 640, lower: 790, belly: 905, bay: 925, keel: 950, deep: 1110 };
+export const KEEL_ROWS = ['keel', 'deep'];
+export const rowOf = (q) => Object.keys(DECK_ROWS).find((k) => DECK_ROWS[k] === q.y); // the row name of a built platform (its y is a row's y)
 
 // Climbing speeds (px/s) by connector type; a connector part may override with `speed`.
 export const CONNECTOR_SPEED = { rope: 150, ladder: 170, stairs: 150, lift: 260, pole: 520 };
@@ -122,7 +126,9 @@ export const PARTS = {
   escortDock: piece('escortDocks'),
   medbay: piece('medbay', { mass: 3 }),
   bombBay: piece('bombBay'), // (the bomb bay's weight is on its station)
-  gasbag: piece('gasbag', { mass: 6, lift: (p) => Math.round((p.rx * p.ry) / 1560) }), // buoyancy by the envelope's size
+  // buoyancy by the envelope's size; `twin: true` adds the second, smaller envelope riding behind it (shipArt's twin-gasbag art), which
+  // lifts TWIN_SIZE.rx x TWIN_SIZE.ry of the first and adds a little rigging weight
+  gasbag: piece('gasbag', { mass: (p) => 6 + (p.twin ? 4 : 0), lift: (p) => Math.round((p.rx * p.ry * (1 + (p.twin ? TWIN_SIZE.rx * TWIN_SIZE.ry : 0))) / 1560) }),
   // Ship-wide numbers: the shield band and the nest rise are given here; everything else (samples, bounds, aim and
   // reference points ...) is DERIVED from the parts by buildLayout. A field named in OVERRIDES that is set here wins
   // over the derived value (the classic ship keeps its hand-placed collision samples this way).
@@ -331,20 +337,57 @@ export const CAVE_CELL = 200; // map square size used for caveNeed unless buildL
 const SAMPLE_GAP = 130; // most space between collision samples along a hull or bag edge (px)
 
 // Collision samples for a build with none of its own: hull shoulders, chine and keel, belly compartments, the bag's top and the nest.
+// The x range a deck row covers: the union of every deck at the same y (a deck cut in two by the editor is still one row).
+export function rowSpan(platforms, q) {
+  const row = platforms.filter((o) => o.y === q.y);
+  return { x0: Math.min(...row.map((o) => o.x0)), x1: Math.max(...row.map((o) => o.x1)) };
+}
+
+// The gondola hull outline, worked out from the decks (shipArt.js draws it, the blueprint editor draws it, deriveGeometry measures it).
+// The classic ship comes out at today's numbers (130..1512 across, 480..815 down). The hull follows the main deck row's span, tapers to a
+// keel line that also covers the lower deck's rooms inside the hull, and full decks added under the lower deck (keel / deep rows) hang
+// in `boxes` of their own: { x0, x1, y0, y1 } with the walls a little outside the decks.
+export function hullGeom(platforms, rooms = []) {
+  const find = (id) => platforms.find((q) => q.id === id);
+  const main = find('main'), lower = find('lower'), cat = find('catwalk');
+  if (!main || !lower || !cat) return null;
+  const m = rowSpan(platforms, main);
+  const inside = rooms.filter((r) => !r.outside && (find(r.p) || {}).y === lower.y); // the lower deck's rooms that are inside the hull (not the outriggers)
+  const lowMin = inside.length ? Math.min(...inside.map((r) => r.x0)) : Infinity;
+  const lowMax = inside.length ? Math.max(...inside.map((r) => r.x1)) : -Infinity;
+  const decks = platforms.filter((q) => !q.outside && KEEL_ROWS.includes(rowOf(q))).sort((a, b) => a.x0 - b.x0);
+  const boxes = [];
+  for (const q of decks) {
+    const last = boxes[boxes.length - 1];
+    if (last && q.x0 - 14 <= last.x1) { last.x1 = Math.max(last.x1, q.x1 + 14); last.y1 = Math.max(last.y1, q.y + 25); } else boxes.push({ x0: q.x0 - 14, x1: q.x1 + 14, y0: lower.y, y1: q.y + 25 });
+  }
+  return {
+    xL: m.x0 - 10, xL2: m.x0 - 14, xR: m.x1 + 42, xNose: m.x1, xTopR: m.x1 - 40,
+    xKeelL: Math.min(m.x0 + 108, lowMin), xKeelR: Math.max(m.x1 - 118, lowMax),
+    top: cat.y + 10, yShoulder: main.y - 40, yTuck: main.y + 10, yTuck2: main.y + 22, yKeel: lower.y + 25, boxes,
+  };
+}
+
 export function deriveSamples(out) {
   const by = (id) => out.platforms.find((q) => q.id === id);
   const main = by('main'), lower = by('lower'), nest = by('nest');
+  const mainS = rowSpan(out.platforms, main), lowerS = rowSpan(out.platforms, lower);
   const pts = [];
   const add = (x, y) => pts.push([Math.round(x), Math.round(y)]);
   const row = (x0, x1, y) => {
     const n = Math.max(1, Math.ceil((x1 - x0) / SAMPLE_GAP));
     for (let k = 0; k <= n; k++) add(x0 + ((x1 - x0) * k) / n, y);
   };
-  add(main.x0 - 14, main.y + 22); // shoulders, aft and fore
-  add(main.x1, main.y + 22);
-  row(lower.x0 + 228, lower.x1 - 228, lower.y + 25); // the chine
-  row(lower.x0, lower.x1, lower.y + 72); // the keel line, outriggers included
+  add(mainS.x0 - 14, main.y + 22); // shoulders, aft and fore
+  add(mainS.x1, main.y + 22);
+  if (lowerS.x1 - lowerS.x0 > 456) row(lowerS.x0 + 228, lowerS.x1 - 228, lower.y + 25); // the chine
+  row(lowerS.x0, lowerS.x1, lower.y + 72); // the keel line, outriggers included
   for (const q of out.platforms) {
+    if (!q.outside && KEEL_ROWS.includes(rowOf(q))) { // a full deck under the lower deck: its walls and its keel
+      add(q.x0 - 14, q.y - 60), add(q.x1 + 14, q.y - 60);
+      row(q.x0 - 14, q.x1 + 14, q.y + 27);
+      continue;
+    }
     if (q.outside || q.y <= lower.y) continue; // belly compartments: a flat bay, or a ball turret that hangs lower
     if (q.x1 - q.x0 >= 200) row(q.x0 + 22, q.x1 - 12, q.y + 17);
     else add(q.x0 + 5, q.y + 30), add((q.x0 + q.x1) / 2, q.y + 70), add(q.x1, q.y + 30);
@@ -357,6 +400,13 @@ export function deriveSamples(out) {
       const a = Math.PI + (Math.PI * k) / n;
       add(bag.cx + Math.cos(a) * (bag.rx + m), bag.cy + Math.sin(a) * (bag.ry + m));
     }
+    if (bag.twin) { // the twin envelope rides higher behind it (shipArt.js twinGeom)
+      const t = { x: bag.cx - 20, y: bag.cy - 258, rx: bag.rx * TWIN_SIZE.rx, ry: bag.ry * TWIN_SIZE.ry };
+      for (let k = 1; k < 6; k++) {
+        const a = Math.PI + (Math.PI * k) / 6;
+        add(t.x + Math.cos(a) * (t.rx + m), t.y + Math.sin(a) * (t.ry + m));
+      }
+    }
   }
   const nx = (nest.x0 + nest.x1) / 2; // the crow's nest and its flag
   add(nx - 110, nest.y - 44), add(nx, nest.y - 112), add(nx + 110, nest.y - 44);
@@ -368,7 +418,10 @@ function deriveGeometry(out, cell) {
   const main = by('main'), lower = by('lower'), cat = by('catwalk'), nest = by('nest');
   if (!main || !lower || !cat || !nest) return; // validate() reports the missing deck
   const set = (k, v) => { if (out[k] == null) out[k] = v; };
-  set('refPoint', { x: (lower.x0 + lower.x1) / 2, y: main.y - 140 });
+  const mainS = rowSpan(out.platforms, main), lowerS = rowSpan(out.platforms, lower), catS = rowSpan(out.platforms, cat);
+  const keels = out.platforms.filter((q) => !q.outside && KEEL_ROWS.includes(rowOf(q))); // full decks added under the lower deck
+  const lowX0 = Math.min(lowerS.x0, ...keels.map((q) => q.x0)), lowX1 = Math.max(lowerS.x1, ...keels.map((q) => q.x1));
+  set('refPoint', { x: (lowerS.x0 + lowerS.x1) / 2, y: main.y - 140 });
   const ref = out.refPoint;
   set('midPoint', { x: ref.x, y: cat.y });
   set('aimPoint', { x: ref.x, y: main.y });
@@ -381,8 +434,8 @@ function deriveGeometry(out, cell) {
   out.bottomY = Math.max(...ys);
   set('bounds', { x0: Math.min(...xs) - 5, x1: Math.max(...xs) + 20, y0: out.topY - 11, y1: out.bottomY });
   const bagTop = out.gasbag ? out.gasbag.cy - out.gasbag.ry : nest.y - 44;
-  set('fitBox', { x0: lower.x0 - 120, x1: lower.x1 + 90, y0: bagTop - 36, y1: out.bottomY + 10 });
-  set('hullRect', { x0: lower.x0 + 80, x1: lower.x1 - 60, y0: bagTop - 86, y1: out.bottomY - 15 });
+  set('fitBox', { x0: lowX0 - 120, x1: lowX1 + 90, y0: bagTop - 36, y1: out.bottomY + 10 });
+  set('hullRect', { x0: lowX0 + 80, x1: lowX1 - 60, y0: bagTop - 86, y1: out.bottomY - 15 });
   const F = out.fitBox;
   out.caveNeed = { // map squares the ship takes: the box, measured from the ref point, rounded out to whole squares
     tunnel: Math.ceil((ref.y - F.y0) / cell) + Math.ceil((F.y1 - ref.y) / cell) + 1,
@@ -390,12 +443,12 @@ function deriveGeometry(out, cell) {
   };
   if (!out.hitRects) {
     out.hitRects = [
-      { x0: main.x0 - 15, x1: main.x1 + 30, y0: cat.y + 5, y1: lower.y + 25 }, // the gondola
-      { x0: lower.x0, x1: lower.x1, y0: lower.y - 45, y1: lower.y + 10 }, // the outriggers
-      { x0: cat.x0, x1: cat.x1 + 20, y0: cat.y - 140, y1: cat.y + 5 }, // the open top deck, its guns and the helm mount
+      { x0: mainS.x0 - 15, x1: mainS.x1 + 30, y0: cat.y + 5, y1: lower.y + 25 }, // the gondola
+      { x0: lowerS.x0, x1: lowerS.x1, y0: lower.y - 45, y1: lower.y + 10 }, // the outriggers
+      { x0: catS.x0, x1: catS.x1 + 20, y0: cat.y - 140, y1: cat.y + 5 }, // the open top deck, its guns and the helm mount
     ];
-    for (const q of out.platforms) { // belly compartments
-      if (!q.outside && q.y > lower.y) out.hitRects.push({ x0: q.x0, x1: q.x1, y0: lower.y + 25, y1: q.y + (q.y >= DECK_ROWS.bay ? 20 : 30) });
+    for (const q of out.platforms) { // belly compartments (and full decks under the lower deck)
+      if (!q.outside && q.y > lower.y) out.hitRects.push({ x0: q.x0, x1: q.x1, y0: lower.y + 25, y1: q.y + (KEEL_ROWS.includes(rowOf(q)) ? 25 : q.y >= DECK_ROWS.bay ? 20 : 30) });
     }
   }
   out.lowDeckY = lower.y;

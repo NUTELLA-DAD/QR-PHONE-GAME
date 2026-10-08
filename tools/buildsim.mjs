@@ -6,6 +6,7 @@
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
 //        node tools/buildsim.mjs --check-validator   S.5: broken builds must FAIL/WARN with the right message (the classic passes clean)
+//        node tools/buildsim.mjs --check-edit        S.5b: the blueprint editor (draw a keel deck, extend main, lengthen the bag, cut the top deck, erase) validates and flies 2 min with 0 errors
 //        node tools/buildsim.mjs --snapshot-classic --force   (S.0 only) rewrite tools/fixtures/classic-layout.json
 // Exit code 1 on any failure.
 import { pathToFileURL } from 'node:url';
@@ -279,6 +280,79 @@ async function checkValidator() {
   return ok;
 }
 
+// S.5b: the blueprint editor's pure operations (drawDeck, erase, setBag in modules/host/buildEdit.js). Draws a new keel deck ("lower-lower"),
+// extends the main deck by 2 columns, erases part of the top deck, then validates and flies the result for 2 minutes with 0 errors.
+async function checkEdit() {
+  const { BUILDS, buildLayout, hullGeom, COL, DECK_ROWS } = await load('modules/host/shipBuild.js');
+  const { validate, liftGauge } = await load('modules/host/buildCheck.js');
+  const E = await load('modules/host/buildEdit.js');
+  let ok = true;
+  const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
+  const C = BUILDS.classic;
+  const frozen = JSON.stringify(C);
+  const decks = (parts) => parts.filter((p) => p.part === 'deck');
+  const deck = (parts, id) => parts.find((p) => p.part === 'deck' && p.id === id);
+
+  // 1. draw a new deck under the lower deck: a keel deck with rooms, a ladder to the lower deck, a hull box round it
+  const d1 = E.drawDeck(C, 'keel', 20, 350);
+  report(d1.ok && d1.kind === 'new' && !!deck(d1.parts, 'keel') && d1.parts.some((p) => p.part === 'ladder' && p.top === 'lower' && p.bottom === 'keel') && d1.parts.some((p) => p.part === 'room' && p.p === 'keel'), 'drawDeck(keel, 20, 350): a new Keel Deck with a room and a ladder to the lower deck');
+  report(JSON.stringify(C) === frozen && d1.parts !== C, 'the operations leave the parts they were given alone (pure)');
+  const L1 = buildLayout(d1.parts);
+  const H1 = hullGeom(L1.platforms, L1.rooms);
+  report(H1.boxes.length === 1 && H1.boxes[0].x0 <= 20 && H1.boxes[0].x1 >= 350 && H1.boxes[0].y1 >= DECK_ROWS.keel + 25, 'the hull encloses the keel deck (one hull box ' + JSON.stringify(H1.boxes[0]) + ')');
+  report(L1.bounds.y1 >= DECK_ROWS.keel + 25 && L1.samples.some(([, y]) => y >= DECK_ROWS.keel + 25), 'the collision outline and bounds follow the new deck (bottom y ' + L1.bounds.y1 + ')');
+  report(validate(d1.parts, { starter: true }).ok, 'the build with the keel deck validates');
+  const into = E.drawDeck(d1.parts, 'keel', 350, 480);
+  report(!into.ok && /Bomb Bay hangs in the way/.test(into.hint), 'drawing on along the keel deck into the Bomb Bay is stopped');
+  const aft = E.drawDeck(d1.parts, 'keel', -100, 20);
+  report(aft.ok && aft.kind === 'extend' && deck(aft.parts, 'keel').x0 === -100 && aft.parts.filter((p) => p.part === 'room' && p.p === 'keel').every((r) => r.x0 >= -100) && validate(aft.parts).ok, 'drawing past the aft end makes the keel deck longer (rooms follow) and still validates');
+  const blocked = E.drawDeck(C, 'keel', 400, 640);
+  report(!blocked.ok && /Bomb Bay hangs in the way/.test(blocked.hint), 'a keel deck across the Bomb Bay is refused: ' + blocked.hint);
+  // 2. rejected strokes: inside or above the gasbag, a crow's nest off the bag, a cut in the middle of the nest, a deck nothing can reach
+  report(/cross the gasbag/.test(E.rowAtY(250).why) && /above the gasbag/.test(E.rowAtY(-300).why) && E.rowAtY(645).row === 'main' && E.rowAtY(955).row === 'keel', 'rowAtY: a stroke inside the bag or above it is refused with a hint; near a row it snaps');
+  report(!E.drawDeck(C, 'nest', 600, 1800).ok, "the crow's nest cannot be drawn off the end of the gasbag");
+  report(!E.erase(C, 'nest', 700, 800).ok, "the crow's nest cannot be cut in the middle");
+  report(!E.drawDeck(C, 'deep', 1700, 1900).ok, 'a deck with no deck above it to climb to is refused');
+  // 3. extend the main deck by 2 columns: the end room grows, the ship gets bigger and heavier, the bag may no longer cover it
+  const d2 = E.drawDeck(d1.parts, 'main', 1470, 1470 + 2 * COL);
+  const main2 = deck(d2.parts, 'main');
+  report(d2.ok && d2.kind === 'extend' && main2.x1 === 1470 + 2 * COL && d2.parts.some((p) => p.part === 'room' && p.p === 'main' && p.x1 === 1470 + 2 * COL), 'drawDeck(main, +2 columns): the main deck and its end room are 240 px longer');
+  const v2 = validate(d2.parts);
+  report(v2.ok && liftGauge(d2.parts).mass > liftGauge(d1.parts).mass, 'the longer ship validates and weighs more (' + liftGauge(d1.parts).mass + ' -> ' + liftGauge(d2.parts).mass + ')');
+  report(v2.warns.some((t) => /gasbag covers/.test(t)), 'the gasbag no longer covers the longer ship: WARN');
+  const b2 = E.setBag(d2.parts, { grow: 1 });
+  report(b2.ok && !validate(b2.parts).warns.some((t) => /gasbag covers/.test(t)) && liftGauge(b2.parts).lift > liftGauge(d2.parts).lift && liftGauge(b2.parts).hover < liftGauge(d2.parts).hover, 'setBag(grow 1): the bag covers her again and the LIFT gauge follows (hover ' + liftGauge(d2.parts).hover + ' -> ' + liftGauge(b2.parts).hover + ')');
+  const t2 = E.setBag(b2.parts, { twin: true });
+  report(t2.ok && buildLayout(t2.parts).gasbag.twin === true && liftGauge(t2.parts).lift > liftGauge(b2.parts).lift && buildLayout(t2.parts).bounds.y0 < buildLayout(b2.parts).bounds.y0, 'setBag(twin): the twin envelope adds lift and the bounds grow upward');
+  // 4. erase part of the top deck (the middle): it splits in two, what stood on it goes, the rest keeps working
+  const d3 = E.erase(b2.parts, 'catwalk', 400, 520);
+  const cats = decks(d3.parts).filter((p) => p.row === 'catwalk');
+  report(d3.ok && cats.length === 2 && cats[0].x1 === 400 && cats[1].x0 === 520, 'erase(catwalk, 400-520): the top deck is cut in two pieces: ' + cats.map((p) => p.id + ' ' + p.x0 + '-' + p.x1).join(', '));
+  report(d3.removed.includes('hammer rack') && !d3.parts.some((p) => p.part === 'rack' && p.p === 'catwalk' && p.x === 480), 'the hammer rack that stood on the erased stretch is gone: removed ' + E.summarize(d3.removed));
+  report(d3.parts.some((p) => p.part === 'rope' && p.bottom === 'catwalk2') && d3.parts.some((p) => p.part === 'gun' && p.n === 'Nose Gun' && p.p === 'catwalk2'), 'what stood on the far piece moved with it (ropes and the Nose Gun are on catwalk2)');
+  const v3 = validate(d3.parts);
+  report(v3.ok, 'the edited ship validates' + (v3.ok ? '' : ': ' + v3.fails.join('; ')) + (v3.warns.length ? ' (' + v3.warns.length + ' warning(s): ' + v3.warns.join('; ') + ')' : ''));
+  // 5. erasing whole decks and required things: allowed, listed, and the validator FAILs clearly
+  const pod = E.erase(C, 'belly', 735, 855);
+  report(pod.ok && !deck(pod.parts, 'pod') && pod.removed.includes('Ventral Gun') && !pod.parts.some((p) => p.bottom === 'pod'), 'erasing the Ball Turret takes its gun and ladder with it: removed ' + E.summarize(pod.removed));
+  const boiler = E.erase(C, 'main', 330, 470);
+  const vb = validate(boiler.parts);
+  report(boiler.ok && boiler.removed.includes('Boiler') && !vb.ok && vb.fails.some((t) => /no boiler/.test(t)), 'erasing the boiler room is allowed and the validator FAILs: ' + (vb.fails[0] || '?'));
+  // 6. the build JSON round-trips (Copy build JSON / ?build=)
+  const back = JSON.parse(JSON.stringify(d3.parts));
+  report(JSON.stringify(buildLayout(back)) === JSON.stringify(buildLayout(d3.parts)), 'the edited build survives a JSON round trip');
+  // 7. fly the three edits together (keel deck + main +2 columns + longer bag + top deck cut) for 2 minutes
+  const file = path.join(os.tmpdir(), `airship-edit-${process.pid}.json`);
+  fs.writeFileSync(file, JSON.stringify(d3.parts));
+  const out = spawnSync(process.execPath, ['tools/botsim.mjs', '--build', file, '--minutes', '2', '--seed', '1', '--map', 'network'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 });
+  try { fs.unlinkSync(file); } catch { /* gone */ }
+  const text = (out.stdout || '') + (out.stderr || '');
+  const stats = (text.match(/^BUILD_STATS (.*)$/m) || [])[1];
+  report(out.status === 0 && /^errors: 0$/m.test(text) && !!stats, 'botsim --build <edited ship> --minutes 2: 0 errors' + (out.status === 0 ? '' : '\n' + text.split('\n').slice(-12).join('\n')));
+  if (stats) { const s = JSON.parse(stats); console.log(`      (kills ${s.kills}, avg hull ${s.avgHull}, walking ${s.walkPct}%, tows ${s.tows})`); }
+  return ok;
+}
+
 // ---- --random: grow random legal builds from the classic ship, botsim each, compare ---------------------------------
 const mulberry = (seed) => { let s = seed >>> 0; return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 const pearson = (xs, ys) => {
@@ -375,6 +449,8 @@ if (mode === '--snapshot-classic') {
   process.exit((await checkMulti()) ? 0 : 1);
 } else if (mode === '--check-validator') {
   process.exit((await checkValidator()) ? 0 : 1);
+} else if (mode === '--check-edit') {
+  process.exit((await checkEdit()) ? 0 : 1);
 } else if (mode === '--build') {
   process.exit((await buildMode(argv[1] || 'classic')) ? 0 : 1);
 } else if (mode === '--random') {
@@ -382,6 +458,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }
