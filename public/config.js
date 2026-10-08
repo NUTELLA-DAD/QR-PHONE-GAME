@@ -1498,6 +1498,10 @@ export const config = {
   // after RISE_SECS of comfortable speed it climbs back (a flip-flop doubles the wait, up to RISE_MAX_SECS).
   // AUTO false = no automatic changes (the pause menu "Detail" button can still force a level).
   PERF: { AUTO: true, BUDGET_MS: 12, MIN_FPS: 50, DROP_SECS: 2, RISE_SECS: 10, RISE_MAX_SECS: 160, DARK_RES_LOW: 6 },
+  // Ship art (shipArt.js): the static parts of the ship are baked into offscreen pictures. BAKE_SS = how many times the screen's
+  // pixel density they are drawn at; SMOOTH = imageSmoothingQuality when they are blitted (low is fastest); BAKE_ZOOM = re-bake
+  // when the zoom has moved by this share; OFF true = always draw the ship directly (the old way).
+  SHIP_ART: { BAKE_SS: 1.5, SMOOTH: 'low', BAKE_ZOOM: 0.25, OFF: false },
   TEXTURES: { ENABLED: true, SCALE: 1.1, STRENGTH: 2 },
   BACKGROUNDS: {
     ENABLED: true,

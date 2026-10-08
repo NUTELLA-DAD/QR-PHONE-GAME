@@ -15,7 +15,7 @@
 //            escort fighters, holes, damage and status.
 // Drawing never throws: the bake falls back to drawing the static layer straight onto the screen.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf } from '../../shipLayout.js';
 import { drawBiplane, drawTailNumber } from './planeArt.js';
 import { paintPath, paintRect, hasTexture } from './textureArt.js';
 import { drawIceLocker, drawIceFlights, drawBoilerHeat, drawHoleGlow } from './goingDownArt.js';
@@ -30,15 +30,16 @@ const TEX_OF = {
 
 // Sprites the STATIC layer may use: when one finishes loading, the bake is redone.
 const STATIC_SPRITES = [
-  'ship/nest', 'ship/catwalk', 'ship/gondola', 'ship/floor', 'ship/porthole', 'ship/outrigger', 'ship/engine', 'ship/pod',
+  'ship/nest', 'ship/gasbag', 'ship/fin-top', 'ship/fin-bottom', 'ship/catwalk', 'ship/gondola', 'ship/floor', 'ship/porthole', 'ship/outrigger', 'ship/engine', 'ship/pod',
   'ship/valve', 'ship/extinguisher', 'ship/ladder', 'ship/rope-ladder', 'ship/stairs', 'ship/lift', 'ship/boiler', 'ship/gauge',
   'ship/chart-table', 'ship/ammo-crates', 'ship/vent', 'ship/coal-bunker', 'crests/crew',
   'ship/room-tail-turret', 'ship/room-boiler', 'ship/room-workshop', 'ship/room-bridge', 'ship/room-aft-gun-deck', 'ship/room-hold', 'ship/room-fore-gun-deck',
   'ship/rack-sword', 'ship/rack-hammer', 'ship/rack-hookshot',
 ];
 const STATIC_TEXTURES = ['canvas', 'wood', 'darkwood', 'charcoal', 'brass'];
-const STATIC_UPGRADES = ['armour', 'sprinklers', 'safety-valve', 'firebox', 'periscope'];
-const BAKE_SS = 1.5; // the bake is drawn at this many times the screen's own pixel density (so it stays crisp when blitted tilted)
+const STATIC_UPGRADES = ['armour', 'sprinklers', 'safety-valve', 'firebox', 'periscope', 'rudders', 'rubber-gasbag', 'twin-gasbag'];
+const ART = () => config.SHIP_ART || {};
+const bakeSS = () => Math.max(0.5, Math.min(3, Number(ART().BAKE_SS) || 1.5)); // the bake is drawn at this many times the screen's own pixel density
 const BAKE_MAX = 4096; // largest side of the baked canvas (px)
 
 const L = SHIP_LAYOUT;
@@ -126,12 +127,60 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
 
   const has = (id) => (state.upgrades || {})[id] || 0;
 
-  // ================= GASBAGS (live: they swell with the gas) =================
+  // ================= GASBAGS (they swell with the gas) =================
+  // The envelope's picture (tail fins, painted or drawn envelope, crest) never changes except with upgrades, so it is baked once
+  // (see rebake) and drawn each frame under the swell scale; only the wrinkles and the rigging are drawn live.
   const bags = () => (Array.isArray(L.gasbag) ? L.gasbag : [L.gasbag]).filter((b) => b && Number.isFinite(b.rx) && b.rx > 0 && b.ry > 0);
+  const gasFill = () => Math.max(0, Math.min(1, (state.ship.gas ?? 50) / 100));
+
+  // The ship-space box a bag's picture is painted in (room on the left for the tail fins), and the twin envelope's.
+  const bagRect = (G) => ({ x: Math.floor(G.cx - G.rx - 220), y: Math.floor(G.cy - G.ry - 50), w: Math.ceil(G.rx * 2 + 250), h: Math.ceil(G.ry * 2 + 100) });
+  const twinGeom = (G) => ({ tx: G.cx - 20, ty: G.cy - 258, rx: G.rx * 0.7, ry: G.ry * 0.62 });
+  const twinRect = (G) => { const t = twinGeom(G); return { x: Math.floor(t.tx - t.rx - 20), y: Math.floor(t.ty - t.ry - 20), w: Math.ceil(t.rx * 2 + 40), h: Math.ceil(t.ry * 2 + 40) }; };
+
+  // Draw a baked (or directly painted) picture swollen about (cx, cy).
+  const swollen = (cx, cy, sx, sy, baked, paint) => {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(sx, sy);
+    ctx.translate(-cx, -cy);
+    if (baked) drawPic(baked);
+    else paint();
+    ctx.restore();
+  };
 
   const drawGasbag = () => {
     const list = bags();
-    list.forEach((G, bi) => drawEnvelope(G, bi === 0));
+    const g = gasFill();
+    list.forEach((G, bi) => {
+      const first = bi === 0;
+      if (first && has('twin-gasbag')) {
+        // The second envelope, riding higher behind the first, with its own rigging.
+        const t = twinGeom(G);
+        line([[G.cx - 280, G.cy - 198], [G.cx - 280, t.ty]], 4);
+        line([[G.cx + 300, G.cy - 198], [G.cx + 300, t.ty]], 4);
+        swollen(t.tx, t.ty, 0.8 + 0.4 * g, 0.9 + 0.2 * g, bake.twin, () => paintTwin(G));
+      }
+      // The envelope swells when full and sags when empty (mostly in length, a little in height).
+      swollen(G.cx, G.cy, 0.78 + 0.44 * g, 0.9 + 0.2 * g, bake.bags[bi], () => paintBag(G, first));
+      // Nearly empty: wrinkles.
+      if (g < 0.35) {
+        ctx.save();
+        ctx.translate(G.cx, G.cy);
+        ctx.scale(0.78 + 0.44 * g, 0.9 + 0.2 * g);
+        ctx.translate(-G.cx, -G.cy);
+        ctx.strokeStyle = 'rgba(80,60,40,.5)';
+        ctx.lineWidth = 2.8;
+        for (let k = 0; k < 7; k++) {
+          const x = G.cx - G.rx * 0.8 + (k * G.rx * 1.6) / 6;
+          ctx.beginPath();
+          ctx.moveTo(x, G.cy - G.ry * 0.7);
+          ctx.quadraticCurveTo(x + 25, G.cy, x - 10, G.cy + G.ry * 0.7);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    });
     // Rigging down to the gondola (from each bag, along its length).
     const yBot = plat('catwalk').y + 10;
     for (const G of list) for (const f of [-0.54, -0.28, 0, 0.28, 0.54]) {
@@ -140,44 +189,34 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     }
   };
 
-  const drawEnvelope = (G, first) => {
-    if (has('twin-gasbag') && first) {
-      // The second envelope, riding higher behind the first, with its own rigging.
-      const g2 = Math.max(0, Math.min(1, (state.ship.gas ?? 50) / 100));
-      const tx = G.cx - 20;
-      const ty = G.cy - 258;
-      line([[G.cx - 280, G.cy - 198], [G.cx - 280, ty]], 4);
-      line([[G.cx + 300, G.cy - 198], [G.cx + 300, ty]], 4);
-      const r2x = (G.rx * 0.7) * (0.8 + 0.4 * g2);
-      const r2y = G.ry * 0.62 * (0.9 + 0.2 * g2);
-      if (sprites.has('ship/gasbag')) {
-        // The same painted envelope, a little smaller, clipped to its ellipse, with a crisp outline on top.
-        ctx.save();
+  // The second (twin) envelope at its resting size.
+  const paintTwin = (G) => {
+    const { tx, ty, rx, ry } = twinGeom(G);
+    if (sprites.has('ship/gasbag')) {
+      // The same painted envelope, a little smaller, clipped to its ellipse, with a crisp outline on top.
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(tx, ty, rx, ry, 0, 0, 7);
+      ctx.clip();
+      sprites.box(ctx, 'ship/gasbag', tx - rx, ty - ry, rx * 2, ry * 2);
+      ctx.restore();
+      ink();
+      ctx.beginPath();
+      ctx.ellipse(tx, ty, rx, ry, 0, 0, 7);
+      ctx.stroke();
+    } else {
+      filled('#d6c7a2', () => ctx.ellipse(tx, ty, rx, ry, 0, 0, 7));
+      ctx.lineWidth = 3;
+      for (let i = -3; i <= 3; i++) {
         ctx.beginPath();
-        ctx.ellipse(tx, ty, r2x, r2y, 0, 0, 7);
-        ctx.clip();
-        sprites.box(ctx, 'ship/gasbag', tx - r2x, ty - r2y, r2x * 2, r2y * 2);
-        ctx.restore();
-        ink();
-        ctx.beginPath();
-        ctx.ellipse(tx, ty, r2x, r2y, 0, 0, 7);
+        ctx.ellipse(tx, ty, (G.rx * 0.7 * Math.abs(i)) / 3.6 + 4, G.ry * 0.62, 0, i < 0 ? Math.PI - 1.57 : -1.57, i < 0 ? Math.PI + 1.57 : 1.57);
         ctx.stroke();
-      } else {
-        filled('#d6c7a2', () => ctx.ellipse(tx, ty, r2x, r2y, 0, 0, 7));
-        ctx.lineWidth = 3;
-        for (let i = -3; i <= 3; i++) {
-          ctx.beginPath();
-          ctx.ellipse(tx, ty, (G.rx * 0.7 * Math.abs(i)) / 3.6 + 4, G.ry * 0.62, 0, i < 0 ? Math.PI - 1.57 : -1.57, i < 0 ? Math.PI + 1.57 : 1.57);
-          ctx.stroke();
-        }
       }
     }
-    // The envelope swells when full and sags when empty (mostly in length, a little in height).
-    const g = Math.max(0, Math.min(1, (state.ship.gas ?? 50) / 100));
-    ctx.save();
-    ctx.translate(G.cx, G.cy);
-    ctx.scale(0.78 + 0.44 * g, 0.9 + 0.2 * g);
-    ctx.translate(-G.cx, -G.cy);
+  };
+
+  // One gasbag at its resting size: tail fins (the first bag only), the envelope, our crew's crest.
+  const paintBag = (G, first) => {
     if (first) {
       // Better Rudders: bigger fins.
       const fin = 1 + 0.25 * has('rudders');
@@ -233,7 +272,6 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
         }
       }
     } catch (e) {
-      ctx.restore();
       painted = false;
     }
     if (!painted) {
@@ -270,19 +308,6 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     }
     // Our crew's crest on the envelope.
     sprites.box(ctx, 'crests/crew', G.cx - 110, G.cy - 110, 220, 220);
-    // Nearly empty: wrinkles.
-    if (g < 0.35) {
-      ctx.strokeStyle = 'rgba(80,60,40,.5)';
-      ctx.lineWidth = 2.8;
-      for (let k = 0; k < 7; k++) {
-        const x = G.cx - G.rx * 0.8 + (k * G.rx * 1.6) / 6;
-        ctx.beginPath();
-        ctx.moveTo(x, G.cy - G.ry * 0.7);
-        ctx.quadraticCurveTo(x + 25, G.cy, x - 10, G.cy + G.ry * 0.7);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
   };
 
   // ================= CROW'S NEST (static) =================
@@ -399,7 +424,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   const drawHelmMount = () => {
     const hp = plat('helm');
     const cat = plat('catwalk');
-    const st = station('Helm');
+    const st = one('helm');
     if (!hp || !cat || !st) return;
     const w = hp.x1 - hp.x0;
     // Trestle legs and cross brace down to the deck.
@@ -433,7 +458,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   // The wheel (turning with the ship's speed) and the hit warning: red flash over the helm and HELMSMAN HIT!
   const liveHelm = () => {
     const hp = plat('helm');
-    const st = station('Helm');
+    const st = one('helm');
     if (!hp || !st) return;
     const wy = hp.y - 70;
     if (!sprites.pivot(ctx, 'ship/wheel', st.x, wy, 0.5, 0.5, state.ship.speed * 6)) {
@@ -775,8 +800,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   // ================= STATION PROPS =================
   const drawProps = () => {
     // Boiler (the firebox glow and the gauge needle are live).
-    const boiler = station('Boiler');
-    if (boiler) {
+    for (const boiler of all('boiler')) {
       const by = P[boiler.d].y;
       if (!sprites.has('ship/boiler')) {
         // Big Firebox: a wider boiler.
@@ -791,7 +815,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     // (The ship's wheel is drawn by drawHelmMount, out on the top deck.)
 
     // Chart table for the navigator.
-    const nav = station('Navigator');
+    const nav = one('navigator');
     if (nav) {
       if (!sprites.box(ctx, 'ship/chart-table', nav.x - 40, P[nav.d].y - 52, 80, 52)) {
         filled('#e9dcb5', () => ctx.rect(nav.x - 40, P[nav.d].y - 52, 80, 12));
@@ -801,7 +825,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     }
 
     // Ammo crates in the hold.
-    const hold = station('Ammo Hold');
+    const hold = one('ammo');
     if (hold) {
       const hy2 = P[hold.d].y;
       if (!sprites.box(ctx, 'ship/ammo-crates', hold.x + 20, hy2 - 50, 100, 50)) {
@@ -812,8 +836,10 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
 
   // Boiler fire glow and the pressure gauge needle.
   const liveProps = (time) => {
-    const boiler = station('Boiler');
-    if (!boiler) return;
+    for (const boiler of all('boiler')) liveBoiler(boiler, time);
+  };
+
+  const liveBoiler = (boiler, time) => {
     const by = P[boiler.d].y;
     const glow = 0.5 + 0.5 * Math.sin(time * 6);
     const fuel = Math.min(1, (state.ship.fuel || 0) / 40);
@@ -938,7 +964,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
 
   // Coal bunker: a bin with a coal heap.
   const drawCoal = () => {
-    const s = station('Coal Bunker');
+    const s = one('coal');
     if (!s) return;
     const y = P[s.d].y;
     if (sprites.box(ctx, 'ship/coal-bunker', s.x - 50, y - 86, 100, 86)) return;
@@ -1017,8 +1043,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
       }
     }
     if (has('safety-valve')) {
-      const b = station('Boiler');
-      if (b) {
+      for (const b of all('boiler')) {
         const y = P[b.d].y - 112;
         line([[b.x - 30, y], [b.x - 30, y - 22]], 6, '#c9a85a');
         filled('#c9a85a', () => ctx.roundRect(b.x - 38, y - 34, 16, 14, 4));
@@ -1158,7 +1183,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     ctx.fillStyle = bay.bombs > 0 ? '#f2d36b' : '#e8887f';
     ctx.fillText(bay.bombs > 0 ? 'BOMBS x' + bay.bombs : 'EMPTY', (rx0 + rx1) / 2, fy - 86);
     // The bombsight's lamp is bright when somebody is manning it.
-    const manned = Object.values(state.players).some((q) => q.lock === 'Bomb Bay');
+    const manned = Object.values(state.players).some((q) => kindOf(q.lock) === 'bombBay');
     if (manned) filled('#ff6a5c', () => ctx.arc(sx + 24, fy - 26, 6, 0, 7));
     // Door slot in the floor: dark opening when the doors are open, leaves hinged at both sides.
     if (open > 0.02) {
@@ -1240,7 +1265,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   };
 
   // ---- The bake: one offscreen canvas per static layer, in ship space ----
-  const bake = { back: null, front: null, key: '', scale: 0, x: 0, y: 0, w: 0, h: 0, failed: false };
+  const bake = { back: null, front: null, bags: [], twin: null, key: '', scale: 0, x: 0, y: 0, w: 0, h: 0, failed: false };
   let sigCount = 0;
   let sigCache = '';
 
@@ -1278,59 +1303,124 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     return { x: Math.floor(x0 - 30), y: Math.floor(y0 - 30), w: Math.ceil(x1 - x0 + 60), h: Math.ceil(y1 - y0 + 60) };
   };
 
-  const rebake = (key, k) => {
-    const r = bakeRect();
-    let s = Math.max(0.2, Math.min(3, k)) * BAKE_SS;
-    s = Math.min(s, BAKE_MAX / r.w, BAKE_MAX / r.h);
-    const cw = Math.max(1, Math.ceil(r.w * s));
-    const ch = Math.max(1, Math.ceil(r.h * s));
+  // Paint `draw` into a canvas covering the ship-space box r at scale s; returns { canvas, x, y, w, h } (w, h in ship units).
+  const paintTo = (slot, r, s, draw) => {
+    const cw = Math.max(1, Math.min(BAKE_MAX, Math.ceil(r.w * s)));
+    const ch = Math.max(1, Math.min(BAKE_MAX, Math.ceil(r.h * s)));
+    const cv = slot && slot.canvas ? slot.canvas : document.createElement('canvas');
+    cv.width = cw; // (resizing also clears it)
+    cv.height = ch;
+    const bc = cv.getContext('2d');
     const saved = ctx;
+    ctx = bc;
     try {
-      for (const [name, draw] of [['back', drawBackLayer], ['front', drawFrontLayer]]) {
-        if (!bake[name]) bake[name] = document.createElement('canvas');
-        const cv = bake[name];
-        cv.width = cw; // (resizing also clears it)
-        cv.height = ch;
-        const bc = cv.getContext('2d');
-        ctx = bc;
-        bc.setTransform(s, 0, 0, s, -r.x * s, -r.y * s);
-        bc.lineJoin = 'round';
-        bc.lineCap = 'round';
-        draw();
-      }
+      bc.setTransform(s, 0, 0, s, -r.x * s, -r.y * s);
+      bc.lineJoin = 'round';
+      bc.lineCap = 'round';
+      draw();
     } finally {
       ctx = saved;
     }
-    bake.key = key;
-    bake.scale = s;
-    bake.x = r.x;
-    bake.y = r.y;
-    bake.w = cw / s;
-    bake.h = ch / s;
+    return { canvas: cv, x: r.x, y: r.y, w: cw / s, h: ch / s, s, rects: sparseRects(cv) };
   };
 
-  // Blit one baked layer onto the screen.
-  const blit = (cv) => {
+  // Which parts of a baked picture actually have something on them: a short list of source rectangles (canvas px) covering every
+  // non-empty TILE px square, runs of tiles merged. Blitting just those saves filling the empty sky around a mostly empty layer.
+  // Each rectangle is grown by a pixel so neighbours overlap (no hairline seams when the ship tilts). null = blit it all.
+  const TILE = 64;
+  const sparseRects = (cv) => {
+    try {
+      const w = cv.width;
+      const h = cv.height;
+      const u32 = new Uint32Array(cv.getContext('2d').getImageData(0, 0, w, h).data.buffer);
+      const cols = Math.ceil(w / TILE);
+      const rows = Math.ceil(h / TILE);
+      const open = [];
+      const out = [];
+      for (let ty = 0; ty < rows; ty++) {
+        const y0 = ty * TILE;
+        const y1 = Math.min(h, y0 + TILE);
+        const next = new Map();
+        let tx = 0;
+        while (tx < cols) {
+          // is tile (tx, ty) occupied?
+          let used = false;
+          const x0 = tx * TILE;
+          const x1 = Math.min(w, x0 + TILE);
+          for (let y = y0; y < y1 && !used; y++) {
+            for (let i = y * w + x0, e = y * w + x1; i < e; i++) if (u32[i] >>> 24) { used = true; break; }
+          }
+          if (!used) { tx++; continue; }
+          let end = tx + 1;
+          for (; end < cols; end++) {
+            let u = false;
+            const a = end * TILE;
+            const b = Math.min(w, a + TILE);
+            for (let y = y0; y < y1 && !u; y++) for (let i = y * w + a, e = y * w + b; i < e; i++) if (u32[i] >>> 24) { u = true; break; }
+            if (!u) break;
+          }
+          const key = tx + ':' + end;
+          const prev = open.find((o) => o.key === key);
+          if (prev) { prev.y1 = y1; next.set(key, prev); } else { const o = { key, x0: tx * TILE, x1: Math.min(w, end * TILE), y0, y1 }; out.push(o); next.set(key, o); }
+          tx = end;
+        }
+        open.length = 0;
+        open.push(...next.values());
+      }
+      return out.map((o) => {
+        const sx = Math.max(0, o.x0 - 1);
+        const sy = Math.max(0, o.y0 - 1);
+        return { sx, sy, sw: Math.min(w, o.x1 + 1) - sx, sh: Math.min(h, o.y1 + 1) - sy };
+      });
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // Draw a baked picture (only its non-empty parts) in ship space, at its own pixel density.
+  const drawPic = (pic) => {
     const smooth = ctx.imageSmoothingQuality;
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = ART().SMOOTH || 'high';
     try {
-      ctx.drawImage(cv, bake.x, bake.y, bake.w, bake.h);
+      if (!pic.rects) ctx.drawImage(pic.canvas, pic.x, pic.y, pic.w, pic.h);
+      else for (const q of pic.rects) ctx.drawImage(pic.canvas, q.sx, q.sy, q.sw, q.sh, pic.x + q.sx / pic.s, pic.y + q.sy / pic.s, q.sw / pic.s, q.sh / pic.s);
     } catch (e) {
       bake.failed = true;
     }
     ctx.imageSmoothingQuality = smooth;
   };
 
+  const rebake = (key, k) => {
+    const r = bakeRect();
+    let s = Math.max(0.2, Math.min(3, k)) * bakeSS();
+    s = Math.min(s, BAKE_MAX / r.w, BAKE_MAX / r.h);
+    const back = paintTo(bake.back, r, s, drawBackLayer);
+    const front = paintTo(bake.front, r, s, drawFrontLayer);
+    const list = bags();
+    const bagPics = list.map((G, i) => paintTo(bake.bags[i], bagRect(G), s, () => guard('bag', paintBag, G, i === 0)));
+    const twin = list.length && has('twin-gasbag') ? paintTo(bake.twin, twinRect(list[0]), s, () => guard('twin', paintTwin, list[0])) : null;
+    bake.back = back;
+    bake.front = front;
+    bake.bags = bagPics;
+    bake.twin = twin;
+    bake.key = key;
+    bake.scale = s;
+  };
+
+  // Blit one baked layer onto the screen.
+  const blit = drawPic;
+
   // Make sure the bake is current for this zoom (a bake problem switches to drawing the old way, directly).
   const ensureBake = () => {
-    if (bake.failed || typeof document === 'undefined') return false;
+    if (bake.failed || ART().OFF || typeof document === 'undefined') return false;
     try {
       const m = ctx.getTransform();
       const k = Math.hypot(m.a, m.b) || 1; // screen pixels per ship unit right now (zoom x pixel ratio)
       const key = signature();
-      const ratio = (k * BAKE_SS) / (bake.scale || 1);
-      if (!bake.back || key !== bake.key || ratio > 1.25 || ratio < 0.8) rebake(key, k);
+      const ratio = (k * bakeSS()) / (bake.scale || 1);
+      const zoomStep = Math.max(0.05, Number(ART().BAKE_ZOOM) || 0.25);
+      if (!bake.back || key !== bake.key || ratio > 1 + zoomStep || ratio < 1 / (1 + zoomStep)) rebake(key, k);
       return true;
     } catch (e) {
       bake.failed = true;
@@ -1341,17 +1431,37 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     }
   };
 
+  // Debugging: set window.shipProfile = {} and each frame adds the ms spent per part of the ship to it (it forces the canvas
+  // to finish drawing at every step, so the numbers are real raster cost).
+  let lapT = 0;
+  const lap = (name) => {
+    const SP = globalThis.shipProfile;
+    if (!SP) return;
+    try { screenCtx.getImageData(0, 0, 1, 1); } catch (e) { /* (tainted canvas: just time the commands) */ }
+    const now = performance.now();
+    if (name) SP[name] = (SP[name] || 0) + now - lapT;
+    lapT = now;
+  };
+
   return (time) => {
     ctx = screenCtx;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    guard('gasbag', drawGasbag); // (live; behind everything else)
+    lap();
     const baked = ensureBake();
+    lap('bake');
+    if (!baked) { bake.bags = []; bake.twin = null; }
+    guard('gasbag', drawGasbag); // (behind everything else)
+    lap('gasbag');
     if (baked) blit(bake.back);
     else drawBackLayer();
+    lap('back');
     drawLiveMid(time);
+    lap('liveMid');
     if (baked) blit(bake.front);
     else drawFrontLayer();
+    lap('front');
     drawLiveTop(time);
+    lap('liveTop');
   };
 }
