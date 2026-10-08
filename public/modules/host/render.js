@@ -83,6 +83,9 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const spotterArt = createSpotterArt({ ctx, state }); // spotted-target brackets (HELP! call-outs and primed-gun glows are the ships': artsOf)
   const linkArt = createLinkArt({ ctx, state }); // gust / updraft arrows (the loader and lookout wires are the ships': artsOf)
   const drawGunship = createGunshipArt({ ctx, state, ink, sprites });
+  const fleetN = () => world.ships.reduce((n, s) => n + (s.ai ? 0 : 1), 0); // (the crew's ships: the enemy gunship has no panel, arrow or team flag of the fleet's kind)
+  // The gunship (B.5) as her own art wants her: in her home frame, unshifted, facing the way her layer mirrors her, her rope drawn separately, her crew drawn by the ship layer.
+  const gunStub = () => Object.assign(Object.create(world.gunship), { dx: 0, dy: 0, m: 1, turn: null, crew: [], rope: false, pitch: 0 });
   const fleet = createFleetArt({ ctx }); // what the TV adds with more than one ship: a panel for each, team pennants, edge arrows (fleetArt.js)
   // One crewman drawn standing at (x, y) at a scale, outside any ship (the Versus lobby's heads under each flag, the winners' faces): the same sprites as on the ship.
   const drawCrewAt = (p, x, y, scale, time) => {
@@ -2052,9 +2055,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.translate(-px, -py);
       }
       const drawShipAndCrew = () => {
-        art.light.drawBellyPod(); // (under the hull: the ladder and outrigger draw over it)
-        art.hull(time / 1000);
-        art.light.drawLamps(time / 1000); // the two brass searchlights (also records where the beams start)
+        if (ship.ai) drawGunship.body(gunStub(), time / 1000); // (B.5: the enemy gunship is drawn by her own art, in her home frame, which IS her layout's)
+        else {
+          art.light.drawBellyPod(); // (under the hull: the ladder and outrigger draw over it)
+          art.hull(time / 1000);
+          art.light.drawLamps(time / 1000); // the two brass searchlights (also records where the beams start)
+        }
         lap('ship');
         // Close-call warnings: red chevrons on the hull pointing at nearby rock.
         for (const n of (state.course && state.course.near) || []) {
@@ -2072,10 +2078,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
           ctx.stroke();
           ctx.restore();
         }
-        drawGuns();
-        art.env.drawIce(); // frost: ice crusts on the gasbag, top deck and guns
-        art.env.drawDeep(); // fungal: spore clouds and clogged engines; aether: the oxygen tank
-        art.env.drawShip(); // storm rods, sea pump, winch and flood water
+        if (!ship.ai) {
+          drawGuns();
+          art.env.drawIce(); // frost: ice crusts on the gasbag, top deck and guns
+          art.env.drawDeep(); // fungal: spore clouds and clogged engines; aether: the oxygen tank
+          art.env.drawShip(); // storm rods, sea pump, winch and flood water
+        }
         lap('guns+env');
         if (ship.main) drawGunship(time / 1000); // (the gunship hunts the main ship: she is drawn in HER frame)
         lap('gunship');
@@ -2095,7 +2103,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         art.link.drawWires(time / 1000); // loader <-> gunner and lookout <-> helm wires, the boiler's SURGE ring
         // Each crew member's colour marker above their head, easy to spot from the sofa.
         for (const p of Object.values(state.players)) {
-          if (!p.color || p.connected === false || p.fly) continue; // (a flying player is a world object: drawn after the ship, below)
+          if (!p.color || p.connected === false || p.fly || p.enemy) continue; // (a flying player is a world object: drawn after the ship, below; the gunship's crew wear no colour marker)
           const gs = p.onGunship && state.gunship;
           const y = p.y + (gs ? gs.dy : 0) - (p.ko > 0 ? 90 : 165) + Math.sin(time / 300 + p.x) * 4;
           ink();
@@ -2146,7 +2154,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
           art.spotter.drawHelp(p, px, y, time / 1000); // HELP! call-out
         }
       };
-      if (state.wreck) {
+      if (state.wreck && !ship.ai) {
         // Breaking apart: the gasbag and the two halves of the gondola tumble away separately.
         const t = state.wreck.t;
         [
@@ -2171,9 +2179,10 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const everyShip = (fn) => eachShip(world, (sh, i) => withShip(sh, () => fn(sh, i)));
     if (has('ship')) {
       everyShip(drawShipLayer);
+      if (world.gunship && world.gunship.asShip) drawGunship.rope(world.gunship, ts); // (the gunship's grapple line runs between two ships: it is drawn in the world)
       everyShip(() => drawAirborne(ts)); // crew in the air and their ropes live in the world, not in the ship's frame
-      everyShip(() => { drawCoil(ts); drawShield(ts); }); // each ship's Lightning Coil and Deflector band (world points)
-      if (world.ships.length > 1) fleet.drawPennants(world, wv, width, height, time); // the team flags on the masts
+      everyShip(() => { if (!ship.ai) { drawCoil(ts); drawShield(ts); } }); // each ship's Lightning Coil and Deflector band (world points)
+      if (fleetN() > 1) fleet.drawPennants(world, wv, width, height, time); // the team flags on the masts
     }
     lap('crew');
     if (has('effects')) {
@@ -2183,7 +2192,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     }
     lap('effects');
     if (has('dark')) { // ONE darkness with light cut out for every ship's glow and every ship's beams, the lit-target brackets (any ship's lamp), the glowing eyes
-      const lamps = world.ships.map((sh) => artsOf(sh).light);
+      const lamps = world.ships.filter((sh) => !sh.ai).map((sh) => artsOf(sh).light);
       lamps[0].draw(wv, width, height, ts, lamps.slice(1));
     }
     lap('dark');
@@ -2196,7 +2205,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       else {
         drawHud();
         drawFacing();
-        if (world.ships.length > 1) fleet.drawPanels(world); // a compact logbook panel for every ship (with one ship the HUD is the old one, exactly)
+        if (fleetN() > 1) fleet.drawPanels(world); // a compact logbook panel for every ship (with one ship the HUD is the old one, exactly)
       }
       drawGoingDown(ctx, state, time / 1000, config.W, config.H); // GOING DOWN! alarm, meters, "SHE HOLDS!"
       drawLimpCard(ctx, state, config.W, config.H); // LIMPING HOME... (a spare gasbag was used)
@@ -2215,7 +2224,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       threatArt.drawLookoutArrows(width / pr, height / pr, { ...wv, zoom: view.zoom / pr });
       linkArt.drawGust(width / pr, height / pr, { ...wv, zoom: view.zoom / pr }, time / 1000); // gust / updraft warning arrows ahead of the ship
       spotterArt.drawSpots(width / pr, height / pr, { ...wv, zoom: view.zoom / pr }, time / 1000); // SPOTTED marks (and edge arrows)
-      if (world.ships.length > 1) fleet.drawEdgeArrows(world, { ...wv, zoom: view.zoom / pr }, width / pr, height / pr, view.clipped, time / 1000); // an arrow to every ship that is off screen
+      if (fleetN() > 1) fleet.drawEdgeArrows(world, { ...wv, zoom: view.zoom / pr }, width / pr, height / pr, view.clipped, time / 1000); // an arrow to every ship that is off screen
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
     if (has('film')) filmLook(time, width, height);

@@ -11,7 +11,7 @@ import { lightNames, isSearchlight, darkTarget } from './searchlight.js';
 import { botJobs as goingDownJobs } from './goingDown.js';
 import { autopilotOn } from './crewscale.js';
 import { flamAt } from './fireModel.js';
-import { mainShip } from './ships.js';
+import { mainShip, hostileTo, foeOf } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/captainAI.js';
 
@@ -252,17 +252,20 @@ function dodgeAltitude(state) {
 
 // Versus (B.4): a bot of the OTHER team standing on this ship is a boarder. He does not mend her: he fights her crew, sabotages her boiler (hold) and takes her helm (hold) - never both
 // at once: the nearer defender first, then whichever of the two the rules of the round want (Capture: the helm).
-const hostile = (p, state) => { const t = mainShip(state).team; return !!p.team && !!t && p.team !== t.id; };
+const hostile = (p, state) => hostileTo(p, mainShip(state)); // (ships.js: different teams in Versus, the enemy gunship's side against ours)
 function boarderJobs(state, bot) {
-  const L = mainShip(state).layout;
+  const ship = mainShip(state);
+  const L = ship.layout;
   const V = config.PVP;
   const jobs = [];
-  const foes = Object.values(state.players).filter((q) => q.team && q.team !== bot.team && !q.fall && !(q.ko > 0) && q.d != null && q.conn == null);
+  const foes = Object.values(state.players).filter((q) => foeOf(q, bot) && !q.fall && !(q.ko > 0) && q.d != null && q.conn == null);
   const helm = L.one('helm'), boiler = L.one('boiler');
+  // the enemy gunship (B.5): the charge is set - everybody back across the rope before it blows
+  if (ship.ai && ship.ai.g.charge) jobs.push({ kind: 'swingback', obj: 'swingback', max: 8 });
   // a defender at the helm stops the capture, and one beside us stops everything: they come first
   for (const q of foes) if ((helm && q.d === helm.d && Math.abs(q.x - helm.x) < V.DEFEND_REACH * 1.5) || (q.d === bot.d && Math.abs(q.x - bot.x) < 260)) jobs.push({ kind: 'fight', obj: q, max: 2 });
-  const holds = V.MODE === 'capture' ? [helm && 'capture', boiler && 'sabotage'] : [boiler && 'sabotage', helm && 'capture'];
-  for (const k of holds) if (k) jobs.push({ kind: k, obj: k, max: 1 });
+  const holds = V.MODE === 'capture' && !ship.ai ? [helm && 'capture', boiler && 'sabotage'] : [boiler && 'sabotage', helm && 'capture']; // (the gunship: the charge first, as it always was)
+  for (const k of holds) if (k && !(k === 'sabotage' && ship.ai && ship.ai.g.charge)) jobs.push({ kind: k, obj: k, max: 1 });
   for (const q of foes) jobs.push({ kind: 'fight', obj: q, max: 2 });
   return jobs;
 }
@@ -287,10 +290,10 @@ function listJobs(state, bot) {
   const hotFires = !canSpray ? [] : state.fires.filter((f) => f.big || flamAt(L, f.d, f.x) >= config.FIRE.BLAZE.FLAME_AT);
   for (const f of hotFires) jobs.push({ kind: 'fire', obj: f, max: 2, cap: B.HOT_FIRE_CAP, urgent: true });
   // Versus: a boarder at the wheel or the boiler is the worst thing aboard (he is taking the ship): the defenders go for him before anything else, up to half the crew.
-  if (config.PVP.ENABLED && bot.team) {
+  if ((config.PVP.ENABLED || mainShip(state).ai) && bot.team) {
     const vsH = L.one('helm'), vsB = L.one('boiler');
     for (const q of players) {
-      if (!q.team || q.team === bot.team || q.fall || q.ko > 0 || q.d == null || q.conn != null) continue;
+      if (!foeOf(q, bot) || q.fall || q.ko > 0 || q.d == null || q.conn != null) continue;
       const atCore = (vsH && q.d === vsH.d && Math.abs(q.x - vsH.x) < config.PVP.HAND_REACH * 4) || (vsB && q.d === vsB.d && Math.abs(q.x - vsB.x) < config.PVP.HAND_REACH * 4);
       if (atCore) jobs.push({ kind: 'fight', obj: q, max: 3, urgent: true, cap: Math.max(2, Math.ceil(players.filter((r) => r.bot).length / 2)) });
     }
@@ -314,7 +317,7 @@ function listJobs(state, bot) {
   if (sj && sj.charge && !players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'rod' && !q.lock)) for (const r of sj.rods) jobs.push({ kind: 'rod', obj: r, max: 1 });
   // Raiders: fight them, but never with more than about half the crew (the rest keep the ship going).
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2, cap: Math.max(2, Math.ceil(players.filter((q) => q.bot).length / 2)) });
-  for (const q of players) if (q.team && bot.team && q.team !== bot.team && !q.fall && !(q.ko > 0)) jobs.push({ kind: 'fight', obj: q, max: 2, cap: Math.max(2, Math.ceil(players.filter((r) => r.bot).length / 2)) }); // (Versus: boarders from the other ship)
+  for (const q of players) if (foeOf(q, bot) && !q.fall && !(q.ko > 0)) jobs.push({ kind: 'fight', obj: q, max: 2, cap: Math.max(2, Math.ceil(players.filter((r) => r.bot).length / 2)) }); // (Versus: boarders from the other ship; the gunship's crew against ours)
   // Sunken Sea: pump out a flooded hull (an emergency), winch up a survivor on the rope (a salvage bonus).
   const sea = state.sea;
   if (sea && sea.pump && sea.flood > config.ENVIRONMENTS.sea.FLOOD.JOB_AT) jobs.push({ kind: 'pump', obj: sea.pump, max: 1 });
@@ -323,7 +326,7 @@ function listJobs(state, bot) {
   // (Only when the gas is actually running out or the bag is in ruins, and never more than a few hands at once.)
   const gasHoles = state.gasHoles || [];
   const gasCrisis = (gasHoles.length >= B.GAS_EMERGENCY && (ship.gas < B.GAS_LOW || gasHoles.length >= B.GAS_RUIN)) || (gasHoles.length > 0 && (state.bags || []).some((b) => b.down)); // (a flat bag in a row of bags: patch its holes)
-  for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
+  for (const q of players) if (q !== bot && q.ko > 0 && !q.fall && !foeOf(q, bot)) jobs.push({ kind: 'revive', obj: q, max: 1 }); // (nobody revives the other side's boarder)
   if (bombStarved) jobs.push({ kind: 'ammo', obj: bay, max: 2, cap: 2 });
   // A real blaze (fires spread and eat the hull) comes before patching holes in the gasbag.
   if (canSpray && state.fires.length >= B.FIRE_BLAZE) for (const f of state.fires) if (!hotFires.includes(f)) jobs.push({ kind: 'fire', obj: f, max: 1, cap: B.FIRE_CAP });
@@ -336,7 +339,7 @@ function listJobs(state, bot) {
   });
   if (gasCrisis && canHammer) for (const h of gasHoles) jobs.push({ kind: 'patch', obj: h, max: 1, cap: B.GAS_CAP });
   // Bats latched on the ship: swat them before they chew holes (bare hands are enough).
-  for (const b of state.bats || []) if (b.latched && b.landed && b.hp > 0) jobs.push({ kind: 'swat', obj: b, max: 1 });
+  if (!mainShip(state).ai) for (const b of state.bats || []) if (b.latched && b.landed && b.hp > 0) jobs.push({ kind: 'swat', obj: b, max: 1 }); // (the bats are on our ship, not on the gunship)
   // Vents: open one when the pressure is near the top; close them when it's calm again.
   const ventWanted = state.ship.press > config.BOILER.WARN_AT - 3;
   const ventCalm = state.ship.press < config.BOILER.WARN_AT - 14;
@@ -501,13 +504,21 @@ function operate(p, state, dt) {
   if (isHelm(L, p.lock)) {
     // Terrain first: keep inside the safe altitude window, stopping to climb cliffs.
     const plan = pilotPlan(state, 2.5, B.HELM_SPEED);
+    const gunshipAi = mainShip(state).ai;
+    const base = gunshipAi ? { target: plan.target, speed: plan.speed } : null;
     const cap = state.rival ? captainFly(state, p, plan, dt) : null; // (Versus: the lively captain weaves, dodges, passes and rams, pvp/captainAI.js; it changes the plan in place)
+    if (gunshipAi && cap) { // (the enemy gunship: only the weave and the dodge, as strong as config.GUNSHIP_SHIP.WEAVE says; her ring spots and runs are her director's)
+      const wv = config.GUNSHIP_SHIP.WEAVE;
+      plan.target = base.target + (plan.target - base.target) * wv;
+      plan.speed = base.speed + (plan.speed - base.speed) * wv;
+    }
     p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1); // (pace: her speed on the lever's scale, without the sails and overdrive, flight.js)
     // COME ABOUT (config.SHIP.TURN.BOT_TURNS): the way to the goal has been behind her for a while, so hold the turn command like a phone's button (plan.dx is how far the route point is ahead of her bow).
     const TN = config.SHIP.TURN;
     p.behindT = plan.dx < -TN.BOT_FAR && !(state.course.unstick > 0) ? (p.behindT || 0) + dt : 0;
     p.ca = (TN.BOT_TURNS || config.PVP.ENABLED) && p.behindT >= TN.BOT_BEHIND; // (Versus: the captain turns to face the rival)
     if (cap) p.ca = cap.ca; // (...sooner, and on her own terms: she knows when she has just passed the rival)
+    if (mainShip(state).ai) p.ca = (cap ? cap.ca : false) || mainShip(state).ai.wantsTurn(); // (the gunship's captain turns her stern to us to bring her guns to bear, gunshipShip.js)
     const w = altWindow(state, 2.5);
     const bounds = altBounds(state);
     const lo = Math.max(w.min, bounds.lo);
@@ -601,7 +612,7 @@ function operate(p, state, dt) {
     p.jx = Math.cos(angle);
     p.jy = Math.sin(angle);
     const off = Math.abs(Math.atan2(Math.sin(angle - gun.aim), Math.cos(angle - gun.aim)));
-    p.fire = gun.ammo > 0 && off < B.AIM_TOLERANCE;
+    p.fire = gun.ammo > 0 && off < B.AIM_TOLERANCE && (!mainShip(state).ai || mainShip(state).ai.mayFire(p.lock)); // (the gunship fires broadsides from firing spots, with a glow first, not whenever a gun bears)
   }
 }
 
@@ -666,6 +677,11 @@ function work(p, state) {
     steer(p, tables(L).MAIN, 1250, 30);
     return;
   }
+  if (job.kind === 'swingback') { // aboard the gunship with her charge set: to the stern where the rope is and swing back (the Action button says so when the rope is taut)
+    const g = mainShip(state).ai.g;
+    if (steer(p, 0, g.bp.landX, 40)) press(p);
+    return;
+  }
   if (job.kind === 'sabotage' || job.kind === 'capture') { // a boarder at the boiler / the helm: hold Action
     const st = L.one(job.kind === 'capture' ? 'helm' : 'boiler');
     if (st && steer(p, st.d, st.x, 20)) {
@@ -676,7 +692,8 @@ function work(p, state) {
   }
   if (job.kind === 'fight') {
     const crew = state.gunship && state.gunship.crew.includes(o);
-    const foe = !!o.team && o.team !== p.team; // (Versus: a crewman of the other team)
+    const foe = foeOf(o, p); // (Versus: a crewman of the other team; B.5: the gunship's crew and ours)
+    if (foe && !crew && !state.boarders.includes(o) && o.id != null && state.players[o.id] !== o) return; // (he left this ship - carried home, or swung back - since the job was picked)
     if (o.fall || !(state.boarders.includes(o) || crew || foe) || (!hostile(p, state) && !getTool(state, p, 'sword') && tables(L).PICKUPS.some((r) => r.kind === 'sword'))) return; // (no sword rack aboard: fight bare-handed, shoving them back; a boarder has no rack of his own to take a sword from)
     if (steer(p, goalOf(L, o), o.x, 45) || (Math.abs(o.y - p.y) < 20 && Math.abs(o.x - p.x) < 70)) {
       p.jx = 0;
@@ -916,7 +933,7 @@ function dareKinds(state) {
 function maybeDare(p, state, bots, job) {
   const L = mainShip(state).layout;
   const RD = config.PVP.ENABLED ? config.PVP.BOT.RAID : null; // (Versus: raids are bolder and more often than co-op stunts)
-  if (!DR.ENABLED || p.mate || p.dare || !state.stunts || state.phase !== 'flying' || state.ship.down || state.ship.hull < (RD ? RD.MIN_HULL : DR.MIN_HULL)) return;
+  if (!DR.ENABLED || p.mate || p.enemy || (mainShip(state).ai && hostile(p, state)) || p.dare || !state.stunts || state.phase !== 'flying' || state.ship.down || state.ship.hull < (RD ? RD.MIN_HULL : DR.MIN_HULL)) return; // (the gunship's crew are not daring; our boarders on her deck are busy)
   if (bots.length < DR.MIN_CREW || bots.filter((q) => q.dare).length >= (RD ? RD.MAX : DR.MAX_AT_ONCE)) return;
   if (state.stuntEnd !== undefined && performance.now() - state.stuntEnd < (RD ? RD.COOLDOWN : DR.COOLDOWN) * 1000) return;
   if (p.lock || p.carry === 'coal' || p.carry === 'ammo' || p.onGunship || p.fly || p.air || p.conn != null || p.swing || p.hj || p.d == null) return;
@@ -1229,8 +1246,26 @@ export function botFree(p, loose) {
 function roleJobs(state, bot, jobs) {
   const L = mainShip(state).layout;
   if (bot.mate) return jobs.filter((j) => config.MATES.JOBS.includes(j.kind));
+  if (bot.role) return enemyRoleJobs(state, bot, jobs, L);
   if (humanAutopilot(bot, state)) return jobs.filter((j) => !(j.kind === 'station' && isHelm(L, j.obj)));
   return jobs;
+}
+// The enemy gunship's crew (B.5, gunshipShip.js): each one has a ROLE from the old gunship (bot.role) and only sees the jobs of that role - the helmsman flies her, the gunners man the guns and
+// haul their shells, the stoker feeds the boiler and mends her steam, the guards fight boarders and patch the hull. Nobody mends a shot-out gun (a gun port stays down, as it always did).
+const ENEMY_KINDS = {
+  helm: ['station'],
+  gunner: ['station', 'ammo', 'fight', 'fire'],
+  stoker: ['coal', 'valve', 'vent', 'repair', 'fire', 'patch', 'fight'],
+  guard: ['fight', 'patch', 'fire', 'repair', 'revive', 'swat', 'defuse', 'vent', 'valve', 'coal', 'ammo'],
+};
+function enemyRoleJobs(state, bot, jobs, L) {
+  const keep = ENEMY_KINDS[bot.role] || ENEMY_KINDS.guard;
+  return jobs.filter((j) => {
+    if (!keep.includes(j.kind)) return false;
+    if (j.kind === 'station') return bot.role === 'helm' ? isHelm(L, j.obj) : tables(L).GUN_STATIONS.includes(j.obj);
+    if (j.kind === 'repair') return !j.obj || j.obj.kind !== 'gun';
+    return true;
+  });
 }
 // (Test sims only: a bot flagged { human: true } stands in for a person. With the autopilot on, a person goes to the guns,
 // not the wheel, so the stand-in leaves the helm alone too.)
@@ -1268,13 +1303,13 @@ export function updateBot(p, state, dt) {
     if (p.lock) {
       // Rotate off stations now and then, and leave early if fires/holes/raiders outnumber free hands.
       const free = bots.filter((q) => !q.lock && !(q.ko > 0) && !q.mate).length; // (a mate cannot take the jobs a station-keeper would leave for)
-      const urgent = listJobs(state, p).filter(isEmergency).length;
+      const urgent = (p.enemy ? enemyRoleJobs(state, p, listJobs(state, p), L) : listJobs(state, p)).filter(isEmergency).length; // (the gunship's crew only count the emergencies of their own role)
       if (p.lockLeft === undefined) p.lockLeft = B.STATION_MIN + Math.random() * (B.STATION_MAX - B.STATION_MIN);
       const mod = (state.modules || []).find((m) => m.name === p.lock);
-      const gunUseless = (p.gunIdle || 0) > 6 || (mod && mod.broken);
+      const gunUseless = (!p.enemy && (p.gunIdle || 0) > 6) || (mod && mod.broken);
       if (gunUseless) p.gunIdle = 0;
-      // Never wander off the helm while there's terrain to steer through.
-      if (isHelm(L, p.lock) && config.COURSE.ENABLED) p.lockLeft = Math.max(p.lockLeft, 1);
+      // Never wander off the helm while there's terrain to steer through (nor the gunship's crew off their posts).
+      if ((isHelm(L, p.lock) && config.COURSE.ENABLED) || p.enemy) p.lockLeft = Math.max(p.lockLeft, 1);
       // A lightning bolt is charging and nobody is on their way to a rod: leave the station (not the helm).
       const rodCall = !isHelm(L, p.lock) && state.stormJob && state.stormJob.charge && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9;
       // Nobody is at the wheel in flight and nobody is on the way: leave the station and take it.

@@ -136,6 +136,7 @@ export function pilotPlan(state, ahead, cruise) {
   const course = state.course;
   const ship = mainShip(state);
   const alt = state.ship.alt;
+  if (ship.ai) return ship.ai.plan(state); // (the enemy gunship: her captain's ring spots, strafing runs and retreats, gunshipShip.js)
   if (state.rival) return rivalPlan(state); // (Versus: the rival, not the beacon, is the goal; every ship has her own)
   if (course && course.map) return giveWay(state, ship, mapPlan(state, cruise));
   const B = altBounds(state);
@@ -222,7 +223,7 @@ function giveWay(state, ship, plan) {
   const wa = toWorldX(ship, b.x0), wb = toWorldX(ship, b.x1);
   const mine = { x0: Math.min(wa, wb) + Math.min(0, ex) - G.MARGIN, x1: Math.max(wa, wb) + Math.max(0, ex) + G.MARGIN, y0: p.y + b.y0 - G.MARGIN, y1: p.y + b.y1 + G.MARGIN };
   for (const o of ships) {
-    if (o === ship || o.state.down > 0 || o.ctx.wreck) continue;
+    if (o === ship || o.state.down > 0 || o.ctx.wreck || o.ai) continue; // (the gunship gives way to us, not we to her)
     const ob = o.layout.bounds, oa = toWorldX(o, ob.x0), oc = toWorldX(o, ob.x1);
     const ox0 = Math.min(oa, oc), ox1 = Math.max(oa, oc), oy0 = o.pose.y + ob.y0, oy1 = o.pose.y + ob.y1;
     if (ox0 >= mine.x1 || mine.x0 >= ox1 || oy0 >= mine.y1 || mine.y0 >= oy1) continue;

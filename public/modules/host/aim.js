@@ -51,6 +51,11 @@ export function targets(state) {
   const list = [];
   const ship = mainShip(state);
   const vs = ship.pose.vx;
+  if (ship.ai) { // the enemy gunship's guns see only our ship (B.5): the sky's enemies are her friends
+    const rv = state.rival;
+    if (rv && !rv.down) rivalTargets(list, state, ship, rv, vs);
+    return list.filter((t) => t.kind === 'rival'); // (her cannonballs go for our hull, as ever: not for our guns, our gasbag or our helm - that is what the Versus gunners pick)
+  }
   const e = state.enemy;
   if (e.dead <= 0 && e !== state.stuntPlane) {
     list.push({ kind: 'fighter', obj: e, r: 46, at: (t) => ({ x: e.x + (e.vx - vs) * t, y: e.y + e.vy * t }) });
