@@ -18,7 +18,8 @@ import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
 import { newBot } from './network.js';
 import { BUILDS } from './shipBuild.js';
-import { offerPart, partPrice, moduleNames, newModules, summaryOf } from './partsShop.js';
+import { powerRatio } from './shipPower.js';
+import { offerPart, partPrice, moduleNames, newModules, summaryOf, choiceScore } from './partsShop.js';
 import { validate } from './buildCheck.js';
 import { createShipSim, flushPresses } from './shipSim.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
@@ -477,6 +478,7 @@ export function createSimulation() {
     const start = state.startBuild && BUILDS[state.startBuild];
     state.run.build = copyData(start || layout.parts || BUILDS.classic);
     if (start && main.buildId !== state.startBuild) fitShip(state.run.build, state.startBuild); // (a new voyage starts with the start build, whatever the last one grew into)
+    refreshPower();
     Object.assign(state.yard, { built: null, newPart: null, hold: false, pull: 0 });
     state.runEnd = null;
     state.salvagePop = null;
@@ -486,6 +488,12 @@ export function createSimulation() {
   function fitShip(parts, id) {
     main.sim.fitBuild(parts);
     main.buildId = id;
+    refreshPower();
+  }
+  // The ship's fighting strength as a share of the classic ship's (shipPower.js), worked out once per build: crewscale.js makes the voyage's danger follow it (YARD.POWER_SCALE).
+  // Only a voyage that started with a build has one; the headless tools without a start build keep the old numbers.
+  function refreshPower() {
+    if (state.run) state.run.power = state.startBuild ? powerRatio(layout) : null;
   }
   // The mission number of a stop (bigger maps and tougher gunships as it grows).
   const missionNo = (stop) => stop.col + 1 + (state.run.voyageNo > 1 ? VY.SECOND.LEVEL_BONUS : 0);
@@ -667,13 +675,14 @@ export function createSimulation() {
     if (!state.startBuild) return null; // (headless tools without a start build keep the old shop)
     const run = state.run, found = PS.DERELICT_STOPS.includes(legNo(curStop()));
     if (!found && !state.yardOnly && Math.random() >= PS.CARD_CHANCE) return null; // (not every dock has a part for sale)
-    const offer = offerPart(run.build, { owned: ownedParts(), crew: crewHeads(state), avoid: run.lastPart, only: state.yardOnly || null });
+    const ahead = run.voyage.columns.slice(curStop().col + 1).flat(); // (what is still on the route: raids need a bomb bay, the Aether is the Flagship's sky)
+    const offer = offerPart(run.build, { owned: ownedParts(), crew: crewHeads(state), avoid: run.lastPart, only: state.yardOnly || null, route: { raids: ahead.filter((x) => x.kind === 'open').length, aether: ahead.some((x) => x.env === 'aether') } });
     if (!offer) return null;
     const e = offer.entry;
     run.lastPart = e.id;
     state.yard.sum = offer.base.sum; // (the TV's gauges: the ship as she is)
     return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: found ? 0 : partPrice(e, run.parts.length, crewHeads(state)),
-      derelict: found, badge: found ? 'FREE: found in a wreck' : 'NEW PART', choices: offer.choices, now: offer.base.sum, spots: offer.choices.length };
+      derelict: found, badge: found ? 'FREE: found in a wreck' : 'NEW PART' + (offer.fit.hint ? ': ' + offer.fit.hint : ''), rec: offer.fit.score >= YD.REC.MIN, choices: offer.choices, now: offer.base.sum, baseWarns: offer.base.res.warns, spots: offer.choices.length }; // (rec: it answers what she lacks, partsShop.js fitOf: the tag says what, the bots vote for it more often)
   };
   const persistBuild = () => { // the run's ship, kept in the voyage save (versioned, tolerant: voyage.js)
     const run = state.run;
@@ -774,6 +783,10 @@ export function createSimulation() {
       const score = (o) => o.danger + (o.kindName === VY.KIND_NAMES.open && !layout.bombBay ? 3 : 0) + Math.random() * 0.9;
       return v.options.reduce((best, o, i) => (score(o) < score(v.options[best]) ? i : best), 0);
     }
+    if (v.kind === 'slot' && v.part && v.part.choices && Math.random() < YD.BOT_SLOT_PICK) { // (the best place by the validator's numbers: no new warnings, hover and trim towards the middle; the rest is chance)
+      const sc = v.part.choices.map((c) => choiceScore(c, v.part.now, v.part.baseWarns));
+      return sc.indexOf(Math.max(...sc));
+    }
     if (v.kind === 'route' || v.kind === 'shelf' || v.kind === 'slot') return (Math.random() * v.options.length) | 0;
     if (v.kind === 'rematch') return 0;
     if (!ok.length) return cast;
@@ -782,7 +795,7 @@ export function createSimulation() {
     if (state.ship.hull < SH.BOT_REPAIR_HULL && want('repair-hull') != null) return want('repair-hull');
     if ((state.gasHoles.length >= 2 || state.ship.gas < 30) && want('repair-gas') != null) return want('repair-gas');
     const part = ok.find((i) => v.options[i].kind === 'part');
-    if (part != null && Math.random() < YD.BOT_PART_CHANCE) return part; // (a crew that can afford a part card likes to build)
+    if (part != null && Math.random() < (v.options[part].rec ? YD.BOT_REC_CHANCE : YD.BOT_PART_CHANCE)) return part; // (a crew that can afford a part card likes to build)
     if (Math.random() < SH.BOT_CAST_CHANCE) return cast;
     const rep = ok.filter((i) => v.options[i].kind === 'repair');
     if (rep.length && Math.random() < 0.7) return rep[(Math.random() * rep.length) | 0];

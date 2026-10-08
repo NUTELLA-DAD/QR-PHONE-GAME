@@ -9,6 +9,8 @@
 //   choicesFor(entry, parts, base)                  -> [{ letter, where, note, desc, x, y, ghost, apply(parts), summary, warns }]
 //   partPrice(entry, bought, crew)                  -> salvage
 //   summaryOf(validateResult)                       -> the four gauges as plain numbers (the TV bars)
+//   needsOf(base, ctx) / fitOf(entry, needs)        -> what the ship lacks (weakest gauge, few guns, no bomb bay before raids) and how well a part answers it: { score, hint }
+//   choiceScore(choice, now, baseWarns)             -> how good a place is by the validator's numbers (the bots vote with it)
 //   moduleNames(layout) / newModules(before, after) -> the stations, engines, pipes and sails a build has / has gained (the limp rule shakes the newest part's loose)
 import { config } from '../../config.js';
 import { buildLayout, rowOf, COL, DECK_ROWS, bagList, bagCover } from './shipBuild.js';
@@ -260,23 +262,73 @@ export function choicesFor(entry, parts, base) {
   return pick.map((c, i) => ({ letter: 'ABCDEFGH'[i], where: c.where, note: c.note, desc: `${c.where}: ${c.note}`, x: c.x, y: c.y, ghost: c.ghost, summary: c.summary, warns: c.warns, parts: c.parts, apply: c.apply }));
 }
 
+// ---- what she lacks, and what answers it -------------------------------------------------------------------------------------------------
+// The weakest of her budgets (LIFT, STEAM, HANDS, BALANCE) and her fighting kit, read from the validator's gauges (base = { res, sum } of the build as it is). ctx = { crew, raids, aether }:
+// players aboard, outpost raids still ahead on the route, whether the Aether is still ahead. The bots vote with this, and the phones show a RECOMMENDED tag on a part that answers it.
+export function needsOf(base, ctx = {}) {
+  const R = config.YARD.REC, sum = base.sum, L = base.res.layout;
+  const crew = Math.max(1, ctx.crew || 4);
+  const guns = L.stations.filter((s) => s.kind === 'gun').length;
+  return {
+    guns, bomb: !!L.bombBay, raids: ctx.raids || 0, aether: !!ctx.aether, engines: L.engines.length, liftEngines: L.engines.filter((e) => e.dir === UP).length,
+    heavy: sum.hover > R.HEAVY_HOVER || sum.hoverLevel !== 'PASS', // (LIFT: getting heavy)
+    steamShort: sum.cruise < R.STEAM_SHORT || sum.steamLevel !== 'PASS', // (STEAM)
+    crowded: sum.stations / crew > R.HANDS_MAX, // (HANDS: more stations than hands)
+    tilted: Math.abs(sum.deg) >= R.TILT_DEG, // (BALANCE)
+  };
+}
+// How well a catalogue entry answers the needs: { score (about 0.2..5), hint (a few words for the tag, '' when it is not special) }. A score of YARD.REC.MIN or more is RECOMMENDED.
+export function fitOf(entry, n) {
+  const R = config.YARD.REC;
+  const want = Math.max(0, R.GUNS_WANT - n.guns);
+  let score = 1, hint = '';
+  switch (entry.id) {
+    case 'gasbag': score = n.heavy ? 4 : 1; hint = 'FIXES LIFT'; break;
+    case 'liftEngine': score = (n.heavy ? 3.5 : 0.5) + (n.aether && !n.liftEngines ? R.AETHER_LIFT : 0); hint = n.heavy ? 'FIXES LIFT' : 'FOR THE AETHER'; break;
+    case 'boiler': score = n.steamShort ? 4 : 0.4; hint = 'FIXES STEAM'; break;
+    case 'engine': score = n.steamShort ? 0.3 : n.engines < 3 ? 2 : 0.6; hint = 'MORE SPEED'; break;
+    case 'gun': score = want ? 1.5 + want : 0.5; hint = 'MORE GUNS'; break;
+    case 'nest': score = want ? 1.2 + want * 0.8 : 0.5; hint = 'MORE GUNS'; break;
+    case 'bombBay': score = !n.bomb && n.raids >= R.RAID_STOPS ? 3.5 : 0.8; hint = 'FOR RAIDS'; break;
+    case 'ballast': score = n.tilted ? 5 : 0.2; hint = 'FIXES BALANCE'; break;
+    case 'armour': score = n.heavy ? 0.5 : 1.6; break;
+    case 'ammo': score = n.guns >= 4 ? 1.8 : 1; break;
+    case 'hullBay': case 'keel': score = n.heavy ? 0.3 : 1; break;
+    case 'sail': case 'ladder': case 'pole': case 'lift': score = 0.7; break;
+    default: score = 1;
+  }
+  if (n.crowded && ['gun', 'nest', 'lamp', 'bombBay', 'sail'].includes(entry.id)) score = Math.max(0.2, score - 2); // (no hands for more stations)
+  return { score: +score.toFixed(2), hint: score >= R.MIN ? hint : '' };
+}
+// How good a place is, by the validator's numbers: no new warnings, hover moving towards a healthy middle, the trim towards level, steam towards enough. Higher is better.
+export function choiceScore(c, now, baseWarns = []) {
+  const R = config.YARD.REC, s = c.summary;
+  if (!s || !now) return 0;
+  let v = -3 * (c.warns || []).filter((w) => !baseWarns.includes(w)).length;
+  v -= 0.08 * (Math.abs(s.hover - 48) - Math.abs(now.hover - 48));
+  v -= 0.5 * (Math.abs(s.deg) - Math.abs(now.deg));
+  if (now.cruise < R.STEAM_SHORT) v += 0.15 * (s.cruise - now.cruise);
+  return v;
+}
+
 // ---- the offer --------------------------------------------------------------------------------------------------------------------------
 // Pick one part this build can take and the places it can go. owned = { <entry id>: times bought } (hull bays and nests are limited by it), crew = players aboard, rng() -> 0..1,
-// avoid = an entry id not to offer twice running, only = force one entry (the gates). Returns { entry, choices, base } or null when nothing fits.
-export function offerPart(parts, { owned = {}, crew = 4, rng = Math.random, avoid = null, only = null } = {}) {
+// avoid = an entry id not to offer twice running, only = force one entry (the gates), route = { raids, aether } what is still ahead (needsOf). Returns { entry, choices, base, fit } or null when nothing fits.
+export function offerPart(parts, { owned = {}, crew = 4, rng = Math.random, avoid = null, only = null, route = {} } = {}) {
   const res = validate(parts);
   const base = { res, sum: summaryOf(res) };
   if (!base.sum) return null;
   const ctx = { sum: base.sum, engines: engines(parts) };
   let pool = CATALOGUE.filter((e) => (only ? e.id === only : e.allowed(parts, owned)));
-  const list = pool.map((e) => ({ e, w: Math.max(0.01, e.w(ctx)) * (e.id === avoid ? 0.15 : 1) }));
+  const needs = needsOf(base, { crew, ...route });
+  const list = pool.map((e) => ({ e, w: Math.max(0.01, e.w(ctx)) * (e.id === avoid ? 0.15 : 1) * (only ? 1 : 0.5 + 0.35 * fitOf(e, needs).score) })); // (a part that answers what she lacks is offered more often)
   while (list.length) {
     const total = list.reduce((a, x) => a + x.w, 0);
     let r = rng() * total, k = 0;
     while (k < list.length - 1 && (r -= list[k].w) > 0) k++;
     const { e } = list.splice(k, 1)[0];
     const choices = choicesFor(e, parts, base);
-    if (choices.length) return { entry: e, choices, base };
+    if (choices.length) return { entry: e, choices, base, fit: fitOf(e, needs) };
   }
   return null;
 }
