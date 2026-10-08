@@ -302,7 +302,7 @@ export function inRock(state, x, y) {
 }
 
 // How fast the ship moves along her bow, px/s (negative = backing up; 0 = hovering): her body-frame velocity u, which flight.js integrates from the forces on her (state.ship.speed is it as a share of TOP_SPEED).
-export const scrollSpeed = (state) => state.ship.speed * config.SHIP.TOP_SPEED;
+export const scrollSpeed = (state) => state.ship.speed * config.SHIP.TOP_SPEED * (state.ship.topMul || 1); // (the enemy gunship's engines are quicker than ours: her body's topMul, B.5)
 
 // How high and low the ship may fly here: up to ALT_RANGE above the highest land under and just
 // ahead of it, and ALT_RANGE below the lowest.

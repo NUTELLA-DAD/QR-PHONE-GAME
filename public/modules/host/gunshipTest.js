@@ -5,8 +5,41 @@ import { createLayout } from '../../shipLayout.js';
 import { BUILDS } from './shipBuild.js';
 import { generateBlueprint, mx, deckYAt } from './gunshipBlueprint.js';
 import { createGunshipArt } from './gunshipArt.js';
+import { gunshipParts } from './gunshipBuild.js';
 import { createSprites } from './sprites.js';
 import { loadTextures } from './textureArt.js';
+
+// B.5: ?layout=1 lays the gunship's SHIP LAYOUT over her art (gunshipBuild.js turns the blueprint into the parts list a Ship is made of): the decks and the hold, the stations (helm,
+// boiler, coal, ammo, guns), the engines, the steam valves, the racks and the extinguishers, the ladders, and the hull box and outline the ship rules use. The art and the layout share one
+// frame, so every dot should sit on the thing it stands for.
+const showLayout = new URLSearchParams(location.search).get('layout') === '1';
+function drawLayoutOverlay(ctx, bp) {
+  const L = createLayout(gunshipParts(bp).parts);
+  const P = L.platforms;
+  ctx.save();
+  ctx.lineWidth = 6;
+  P.forEach((p) => { ctx.strokeStyle = p.id === 'lower' ? 'rgba(80,160,255,.9)' : 'rgba(255,230,60,.95)'; ctx.beginPath(); ctx.moveTo(p.x0, p.y); ctx.lineTo(p.x1, p.y); ctx.stroke(); });
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(255,255,255,.8)';
+  for (const c of L.connectors) { ctx.beginPath(); ctx.moveTo(c.xTop, P[c.top].y); ctx.lineTo(c.xBottom, P[c.bottom].y); ctx.stroke(); }
+  ctx.font = '700 18px Georgia';
+  ctx.textAlign = 'center';
+  const dot = (x, y, color, label) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, 9, 0, 7); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke(); if (label) { ctx.fillStyle = '#fff'; ctx.strokeText(label, x, y - 14); ctx.fillText(label, x, y - 14); } };
+  const KC = { helm: '#ffd23f', boiler: '#ff7b00', coal: '#222', ammo: '#8a5', gun: '#f33' };
+  for (const s of L.stations) dot(s.x, P[s.d].y, KC[s.kind] || '#fff', s.kind === 'gun' ? '' : s.n);
+  for (const e of L.engines) dot(e.x, P[e.d].y + 40, '#7af', 'E');
+  for (const r of L.racks) dot(r.x, P[r.d].y - 20, r.kind === 'sword' ? '#ddd' : '#c96', r.kind[0].toUpperCase());
+  for (const r of L.extinguishers) dot(r.x, P[r.d].y - 20, '#6ee', 'X');
+  for (const v of L.vents) dot(v.x, P[v.d].y - 20, '#aaa', 'V');
+  for (const pp of L.pipes) dot(pp.valve[0], pp.valve[1], '#fa4', '');
+  for (const w of bp.weapons) dot(w.x, w.y, '#f33', '');
+  ctx.strokeStyle = 'rgba(255,0,255,.8)';
+  ctx.lineWidth = 3;
+  for (const r of L.hitRects) ctx.strokeRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+  ctx.fillStyle = 'rgba(0,255,0,.7)';
+  for (const [x, y] of L.samples) ctx.fillRect(x - 4, y - 4, 8, 8);
+  ctx.restore();
+}
 
 const cv = document.getElementById('c');
 const ctx = cv.getContext('2d');
@@ -97,6 +130,7 @@ const frame = (t) => {
     ctx.translate(col * CW + 15 - wL * s, row * CH + 25 - top * s);
     ctx.scale(s, s);
     draw(t / 1000);
+    if (showLayout) drawLayoutOverlay(ctx, bp);
     ctx.restore();
     ctx.fillStyle = '#fff';
     ctx.font = '700 16px Georgia';

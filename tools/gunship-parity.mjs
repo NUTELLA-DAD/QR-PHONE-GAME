@@ -64,6 +64,13 @@ async function runOne(mode, run) {
     }
     if (spawnAt === null) continue;
     const g = state.gunship;
+    if (process.env.DBG_DMG && g && g.ship && !g.ship.dbgWrapped) { // (--debug: where her hull went: our shells, the rest)
+      const h = g.ship; h.dbgWrapped = true; out.dmg = { shell: 0, n: 0, other: 0, collide: 0, rock: 0 };
+      const orig = h.sim.impact;
+      h.sim.impact = (x, y, p) => { const b = h.state.hull; orig(x, y, p); const d = Math.max(0, b - h.state.hull); const who = new Error().stack.split('\n')[2]; if (/hitByShells/.test(who)) { out.dmg.shell += d; out.dmg.n++; } else if (/shipCollide/.test(who)) out.dmg.collide += d; else out.dmg.rock += d; };
+      out.hull0 = h.state.hull;
+    }
+    if (out.dmg && g) { out.dmg.total = (out.dmg.total || 0); out.dmg.last = g.ship.state.hull; }
     if (g) {
       last = g;
       if (g.phase === 'leaving' && !out.why) out.why = String(state.ev.warnText || '').replace(/^THE GUNSHIP /, '').slice(0, 24);

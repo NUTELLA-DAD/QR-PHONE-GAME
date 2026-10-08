@@ -460,9 +460,11 @@ export const config = {
   // The enemy gunship as a SHIP (gunshipShip.js; only when GUNSHIP.AS_SHIP is on). The old GUNSHIP numbers above still say how she hunts, fires, latches and boards; these say how the ship rules treat her.
   GUNSHIP_SHIP: {
     HIT_POWER: 0.12, // impact power of one crew shell on her hull (1 = one enemy bullet, 3 hull): the size of the blow, and with it how often a hit holes her deck, lights a fire or tears her gasbag (as a rival ship's: PVP.SHELL_POWER)
-    DAMAGE_MUL: 1, // 1 = a shell takes the share of her hull that it took of the old gunship's hit points (shellDmg / her max); the difficulty button and her crew's size do not scale it. Tuned so she takes about as many shells to sink as the old one
+    SHELL_HULL: 1, // 1 = a shell takes the share of her hull that it took of the old gunship's hit points (shellDmg / her max; the difficulty button and her crew's size do not scale it). Tuned so she takes about as many shells to sink as the old one
+    DAMAGE_MUL: 1, // what every other blow costs her hull (a rock scrape, a collision, a bullet of the sky's), as a multiple of what it costs ours on Normal
     DRAIN_MUL: 1, // what an open hole or a fire costs her hull every second, as a multiple of what it costs ours on Normal
     FIRE_MUL: 1, // her guns reload this many times slower than the old broadside timers (G.FIRE_EVERY ...), per gun (each manned gun fires on its own timer now)
+    SPEED_MUL: 1.35, // her engines' top speed against ours (the old gunship flew at up to G.MAX_SPEED 760 against our 560): body.topMul, course.js scrollSpeed, flight.js
     BULLET_SPEED: 620, // her cannonballs (px/s)
     WEAVE: 0.12, // how much of the PvP captain's weave and dodge (pvp/captainAI.js) her helmsman flies on top of her director's course (0 = none, 1 = as a Versus ship)
     STYLE_MAP: { aggressive: 'brawler', cautious: 'sniper', boarder: 'boarder', coward: 'daredevil' }, // her blueprint's personality -> the PvP captain style (config.PVP.BOT.STYLES) that sets her weave and dodge

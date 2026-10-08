@@ -171,7 +171,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
   const ropeStep = (g, dt) => {
     g.tension = 0;
     if (!g.rope) return;
-    const h = g.ship, TOP = config.SHIP.TOP_SPEED;
+    const h = g.ship, TOP = config.SHIP.TOP_SPEED * (g.ship.state.topMul || 1); // (her top speed: quicker than ours)
     const a = anchorAt(g);
     const rx = a.x - geom().BOW.x;
     const ry = a.y - geom().BOW.y;
@@ -219,8 +219,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
     wantsTurn: () => !!(state.gunship && state.gunship.wantTurn),
     mayFire: (name) => mayFire(name),
     shoot: (player, gun, name) => shoot(player, gun, name),
-    // What a blow costs her hull: the old gunship lost 0.5 hit points of her max for a shell (shellDmg), as a share of her hull; a deck hit costs SHIP.HIT_DAMAGE x its power, so this scales it to that.
-    damageMul: () => { const g = state.gunship; return (GS().DAMAGE_MUL * ((100 * config.GUNS.DAMAGE) / (g ? g.max : 30))) / (config.SHIP.HIT_DAMAGE * GS().HIT_POWER); },
+    damageMul: () => GS().DAMAGE_MUL, // what any other blow costs her hull (a rock, a collision, a bullet of the sky's), x ours on Normal
     drainMul: () => GS().DRAIN_MUL, // what an open hole or a fire costs her hull every second (x ours at 1)
     hurt: (c, dmg, by) => hurt(c, dmg, by),
     onBoard: (p) => onBoard(p),
@@ -252,7 +251,8 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
     h.pose.y = ours.pose.y + at.dy;
     h.pose.turn = 0;
     const m = h.pose.f * ours.pose.f;
-    h.ctx.ship.speed = h.ctx.ship.order = clamp((m * G.START_VX) / config.SHIP.TOP_SPEED, -1, 1);
+    h.ctx.ship.topMul = GS().SPEED_MUL; // (her engines are quicker than ours: the old gunship flew at up to G.MAX_SPEED against our 560)
+    h.ctx.ship.speed = h.ctx.ship.order = clamp((m * G.START_VX) / (config.SHIP.TOP_SPEED * GS().SPEED_MUL), -1, 1);
     h.ctx.ship.vy = ours.state.vy || 0;
     const parasMul = bp.special === 'paras' ? GP.PARAS.EVERY_MUL : 1;
     const g = (state.gunship = {
@@ -542,7 +542,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
   // mode: 'hold' (fly the captain's course), 'leave' (run for it), 'dead' (nobody flies)
   const command = (g, dt, mode, tgt = { dx: G.HOLD_DX, dy: G.HOLD_DY }) => {
     g.t += dt;
-    const h = g.ship, TOP = config.SHIP.TOP_SPEED;
+    const h = g.ship, TOP = config.SHIP.TOP_SPEED * (g.ship.state.topMul || 1); // (her top speed: quicker than ours)
     const ourVx = ourU(); // (her offset from us moves by the speed the engines ask of us, as it always did)
     const ourVy = ours.state.vy || 0;
     const react = Math.min(1, dt / G.REACT);
@@ -976,7 +976,9 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
       sh.life = 0;
       g.hit = 0.15;
       const before = h.state.hull;
-      h.sim.impact(sx, sy, (GS().HIT_POWER * shellDmg(sh, g)) / config.GUNS.DAMAGE);
+      // The size of the blow is a small one (holes, fires and gas leaks come in proportion); the hull it costs is what a shell cost the old gunship: shellDmg of her max, as a share of her hull.
+      const dmg = shellDmg(sh, g), power = (GS().HIT_POWER * dmg) / config.GUNS.DAMAGE;
+      h.sim.impact(sx, sy, power, (GS().SHELL_HULL * ((100 * dmg) / g.max)) / (config.SHIP.HIT_DAMAGE * power));
       if (before > 0 && h.state.hull <= 0 && !g.credited) { g.credited = true; credit?.(sh); }
     }
   };

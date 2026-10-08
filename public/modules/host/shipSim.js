@@ -457,7 +457,7 @@ export function createShipSim(world, ship, W) {
   };
 
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
-  const impact = (x, y, power) => {
+  const impact = (x, y, power, hullMul = 1) => { // (hullMul: the hull a blow costs, apart from the size of the blow: our shells on the enemy gunship, gunshipShip.js)
     // Riveted plate (S.5g) on this stretch of hull wall or rail: the hit counts for much less, and rarely punches through.
     const d = onGasbag(x, y) < 0 ? roomPlatformAt(x, y) : null;
     const plate = d !== null && !!armourOn(layout, d, x);
@@ -486,7 +486,7 @@ export function createShipSim(world, ship, W) {
     const hitBag = onGasbag(x, y);
     if (hitBag >= 0) {
       if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll * pm) state.gasHoles.push(gasHoleAt(x, y, hitBag));
-      damageHull(2 * power);
+      damageHull(2 * power * hullMul);
       return;
     }
     if (d !== null) {
@@ -497,7 +497,7 @@ export function createShipSim(world, ship, W) {
       const ig = fireSys.igniteChance(d, x);
       if ((power >= 2 && Math.random() < coll * Math.min(1, ig)) || Math.random() < 0.35 * coll * ig * pm) fireSys.ignite(d, x + (Math.random() - 0.5) * 80, 'hit');
     }
-    damageHull(config.SHIP.HIT_DAMAGE * power);
+    damageHull(config.SHIP.HIT_DAMAGE * power * hullMul);
   };
 
   let lastJolt = 0;
