@@ -2,7 +2,6 @@
 // Shared by the game (aim assist) and the test bots.
 
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
 
 import { portPos } from './gunshipBlueprint.js'; // (pure geometry: no import cycle)
 

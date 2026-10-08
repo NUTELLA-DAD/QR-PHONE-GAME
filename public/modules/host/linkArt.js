@@ -2,14 +2,15 @@
 // the gunner they are priming for, a LOOKOUT <-> HELM wire (plus gust/updraft warning arrows ahead of the ship),
 // and the gold SURGE ring on whatever the boiler is feeding. A handful of strokes each, nothing else.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, kindOf, isNestStation } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 
 const INK = '#1b1410';
 const BRASS = '#d9a441';
 const GOLD = '#ffd23f';
-const PLATFORMS = SHIP_LAYOUT.platforms;
 
 export function createLinkArt({ ctx, state }) {
+  const layout = mainShip(state).layout; // (this ship's own layout)
+  const PLATFORMS = layout.platforms;
   const outlined = (text, x, y, color, font) => {
     ctx.font = font;
     ctx.textAlign = 'center';
@@ -63,8 +64,8 @@ export function createLinkArt({ ctx, state }) {
     // Helm + lookout: a long wire from the crow's nest to the wheel, with the link marker.
     if (L.nest) {
       const players = Object.values(state.players);
-      const helm = players.find((q) => kindOf(q.lock) === 'helm');
-      const nest = players.find((q) => isNestStation(q.lock));
+      const helm = players.find((q) => layout.kindOf(q.lock) === 'helm');
+      const nest = players.find((q) => layout.isNestStation(q.lock));
       if (helm && nest) {
         const a = { x: nest.x, y: nest.y - 80 };
         const b = { x: helm.x, y: helm.y - 80 };
@@ -75,7 +76,7 @@ export function createLinkArt({ ctx, state }) {
     // Boiler surge: a gold ring on the consumer being fed.
     const s = L.surge;
     if (s && s.level > 0.02) {
-      const spots = s.to === 'coil' ? [{ x: SHIP_LAYOUT.coil.x, y: SHIP_LAYOUT.coil.y }] : SHIP_LAYOUT.engines.map((e) => ({ x: e.x, y: PLATFORMS[e.d].y - 50 }));
+      const spots = s.to === 'coil' ? [{ x: layout.coil.x, y: layout.coil.y }] : layout.engines.map((e) => ({ x: e.x, y: PLATFORMS[e.d].y - 50 }));
       ctx.save();
       for (const e of spots) {
         const r = 52 + Math.sin(time * 14) * 4 + (1 - s.level) * 18;
@@ -104,7 +105,7 @@ export function createLinkArt({ ctx, state }) {
     const dir = (w.gusting ? w.gust : w.gustNext) > 0 ? -1 : 1; // (gust > 0 lifts the ship = arrows point up the screen)
     const up = dir < 0;
     const sx0 = width / 2 + (1900 - view.cx) * view.zoom;
-    const sy0 = height / 2 + (SHIP_LAYOUT.midPoint.y - state.ship.alt - view.cy) * view.zoom;
+    const sy0 = height / 2 + (layout.midPoint.y - state.ship.alt - view.cy) * view.zoom;
     const k = Math.max(0.6, view.zoom);
     const color = up ? '#ffd27a' : '#8fc8e8';
     const flash = w.gusting ? 1 : 0.55 + 0.45 * Math.sin(time * 12);

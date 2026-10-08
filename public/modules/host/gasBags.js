@@ -1,19 +1,20 @@
 // The gasbags in flight (Phase S.5d): any number of bags side by side, each with its own gas and its own holes.
-//   state.bags = [{ gas (0..100), w (its lift share), down (deflated) }], in the same order as SHIP_LAYOUT.gasbags (tail to nose)
+//   state.bags = [{ gas (0..100), w (its lift share), down (deflated) }], in the same order as the layout's gasbags (tail to nose)
 //   state.ship.gas stays the one number the rest of the game reads (the HUD, the helm, the bots, the shop): the lift-weighted MEAN of the bags' gas.
 //   Writing it sets every bag, so "refill to 50" and the like keep working; refillBags() tops each bag up without lowering a fuller one.
 // The helm's pump and vent act on all the bags at once; seepage is per bag and each hole leaks from its own bag (hole.bag). A bag at BAG_DOWN or less is
 // DEFLATED: it lifts nothing (its gas counts as nothing in the mean), the art crumples it and the TV calls it out. Patch its holes and pump to bring it back.
 // With ONE bag every number here reduces to the old single gas value exactly (the classic ship flies as it always did).
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { bagName, bagLiftPoints } from './shipBuild.js';
 
-const BAGS = SHIP_LAYOUT.gasbags; // (updated in place when a build is applied)
-const valves = () => SHIP_LAYOUT.gasValves || []; // (only a build that has some carries the list)
+const layoutOf = (state) => mainShip(state).layout; // (this ship's own layout; nothing here is captured at import)
+const bagsOf = (state) => layoutOf(state).gasbags; // (updated in place when a build is applied)
+const valves = (state) => layoutOf(state).gasValves || []; // (only a build that has some carries the list)
 const clamp100 =(v) => Math.max(0, Math.min(100, v));
 
-const makeBags = (level) => Array.from({ length: Math.max(1, BAGS.length) }, (_, i) => ({ gas: level, w: BAGS[i] ? Math.max(1, BAGS[i].lift) : 1, down: false, closed: false }));
+const makeBags = (state, level) => { const BAGS = bagsOf(state); return Array.from({ length: Math.max(1, BAGS.length) }, (_, i) => ({ gas: level, w: BAGS[i] ? Math.max(1, BAGS[i].lift) : 1, down: false, closed: false })); };
 
 // The lift-weighted mean of the bags' gas (one bag: that bag's gas, exactly).
 export function bagMean(bags) {
@@ -25,9 +26,9 @@ export function bagMean(bags) {
 
 // Give a new simulation's state its bags, and make state.ship.gas the mean of them.
 export function installBags(state) {
-  state.bags = makeBags(state.ship.gas);
-  state.bagsVersion = SHIP_LAYOUT.version;
-  state.gasValveOpen = valves().map(() => true); // one flag per gas valve of the layout (a bag with no valve is always open)
+  state.bags = makeBags(state, state.ship.gas);
+  state.bagsVersion = layoutOf(state).version;
+  state.gasValveOpen = valves(state).map(() => true); // one flag per gas valve of the layout (a bag with no valve is always open)
   Object.defineProperty(state.ship, 'gas', {
     enumerable: true,
     configurable: true,
@@ -39,15 +40,15 @@ export function installBags(state) {
 /// A new ship build was applied (the dock): fit the bags, the gas valves and the vents to it, keeping the mean gas. Every call also works out which bags are CUT OFF
 // (a gas valve of theirs is shut: state.gasValveOpen[i] false for any valve with bag i).
 export function syncBags(state) {
-  if (state.bagsVersion !== SHIP_LAYOUT.version || state.bags.length !== Math.max(1, BAGS.length)) {
+  if (state.bagsVersion !== layoutOf(state).version || state.bags.length !== Math.max(1, bagsOf(state).length)) {
     const level = state.ship.gas;
-    state.bags = makeBags(level);
-    state.bagsVersion = SHIP_LAYOUT.version;
+    state.bags = makeBags(state, level);
+    state.bagsVersion = layoutOf(state).version;
     for (const h of state.gasHoles || []) if (!(h.bag < state.bags.length)) h.bag = 0;
-    state.gasValveOpen = valves().map(() => true); // (a new ship: every valve open)
-    if (state.ventOpen && state.ventOpen.length !== SHIP_LAYOUT.vents.length) state.ventOpen = SHIP_LAYOUT.vents.map(() => false);
+    state.gasValveOpen = valves(state).map(() => true); // (a new ship: every valve open)
+    if (state.ventOpen && state.ventOpen.length !== layoutOf(state).vents.length) state.ventOpen = layoutOf(state).vents.map(() => false);
   }
-  const vs = valves();
+  const vs = valves(state);
   if (!vs.length) { for (const b of state.bags) b.closed = false; return; }
   for (const b of state.bags) b.closed = false;
   vs.forEach((v, i) => { if (!state.gasValveOpen[i] && state.bags[v.bag]) state.bags[v.bag].closed = true; });
@@ -104,6 +105,7 @@ export function watchBags(state) {
 // The live centre of lift (ship x) when several bags are fitted: each bag lifts by its size AND how full it is, so a flat bag stops pulling its end of the ship
 // up (balance.js turns the shift into a tip). null = use the build's static one (a single bag, or BAG_COL off).
 export function liveLiftX(state) {
+  const BAGS = bagsOf(state);
   if (!config.BALANCE.BAG_COL || state.bags.length < 2 || BAGS.length !== state.bags.length) return null;
   let m = 0, mx = 0;
   BAGS.forEach((g, i) => {

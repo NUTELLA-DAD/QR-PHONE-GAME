@@ -2,15 +2,9 @@
 // Broken modules stop working until repaired with a hammer. The boiler's steam reaches the helm,
 // engines and lift through pipes; each pipe has a valve and can burst and leak.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, all, one } from '../../shipLayout.js';
-import { connScale } from './nav.js';
 import { engineUse } from './shipBuild.js';
 
 const M = config.MODULES;
-const L = SHIP_LAYOUT;
-const P = L.platforms;
-
-const station = (n) => L.stations.find((s) => s.n === n);
 
 // Shortest distance from a point to a polyline.
 function distToPath(x, y, pts) {
@@ -25,7 +19,12 @@ function distToPath(x, y, pts) {
   return best;
 }
 
-export function createModules() {
+// `ship` = the ship these modules belong to (ships.js: its layout is what they are built from, its nav gets the lift's speed). Nothing is shared with another ship's modules.
+export function createModules(ship) {
+  const L = ship.layout;
+  const P = L.platforms;
+  const { all, one } = L; // (the station-kind helpers, bound to this ship's layout)
+  const station = (n) => L.stations.find((s) => s.n === n);
   // `list` and `byName` are filled IN PLACE by rebuild() (state.modules is the same array), which runs now
   // and again whenever a new ship build is applied; modules that survive keep their hp, by name.
   const list = [];
@@ -67,7 +66,7 @@ export function createModules() {
     for (const m of list) byName[m.name] = m;
   };
   rebuild();
-  onLayoutChange(rebuild);
+  L.onChange(rebuild);
 
   const pipeTo = (name) => list.find((m) => m.kind === 'pipe' && m.to === name);
 
@@ -126,7 +125,7 @@ export function createModules() {
       for (const m of list) if (m.d === f.d && Math.abs(m.x - f.x) < M.FIRE_RADIUS) damage(m, M.FIRE_DAMAGE * dt * (f.big ? config.FIRE.BLAZE.SCORCH_MUL : 1));
     }
     // Lift crawls without steam.
-    if (LIFT >= 0) connScale[LIFT] = works(state, 'Lift') ? 1 : M.UNPOWERED_LIFT;
+    if (LIFT >= 0) ship.nav.connScale[LIFT] = works(state, 'Lift') ? 1 : M.UNPOWERED_LIFT;
   };
 
   // Damaged steam-powered modules leak steam in proportion to the damage (broken = full leak).

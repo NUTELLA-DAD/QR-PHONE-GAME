@@ -164,7 +164,7 @@ export function createSimulation() {
 
   const T = config.TOOLS;
   const CTL = config.CONTROLS; // phone controls: grab lockout, hold-to-swap, hysteresis (Phase C)
-  const modules = createModules();
+  const modules = createModules(mainShip(state));
   const jobFinder = createJobFinder(state);
   state.modules = modules.list;
   const PICKUPS = [];

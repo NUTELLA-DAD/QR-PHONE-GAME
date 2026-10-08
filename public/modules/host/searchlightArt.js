@@ -6,14 +6,12 @@
 // explosions) and it is drawn scaled up over the world, under the HUD. No per-shape blend modes on the main canvas.
 // The lamps' screen positions are captured while the ship is drawn (so beams stay glued to the drums, bob and all).
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { darkTarget } from './searchlight.js';
 import { perfDarkRes } from './perf.js';
 
 const S = config.SEARCHLIGHT;
 const D = S.DARK;
-const L = SHIP_LAYOUT;
-const P = L.platforms;
 const INK = config.INK;
 const BRASS = '#c9a85a';
 const BRASS_LIGHT = '#e8d28c';
@@ -23,6 +21,8 @@ const WOOD_DARK = '#6b4a32';
 const WARM = '255,246,214';
 
 export function createSearchlightArt({ ctx, state, ink }) {
+  const L = mainShip(state).layout; // (this ship's own layout)
+  const P = L.platforms;
   const line = (pts, width = 3.2, color = INK) => {
     ctx.strokeStyle = color;
     ctx.lineWidth = width;

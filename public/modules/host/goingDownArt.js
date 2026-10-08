@@ -3,7 +3,7 @@
 // "LIMPING HOME" card. Same hand-inked look as shipArt.js: thin warm-brown ink, flat fills, no gradients.
 // Everything takes ctx (+ state) so render.js / shipArt.js only need one small call each.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, one } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 
 const INK = config.INK;
 const ICE = '#cdeaf2';
@@ -68,9 +68,10 @@ export function drawIceBlock(ctx, x, y, s = 1, tilt = 0) {
 // The ice locker standing on the deck (x = the layout rack's x, deck = floor y). Door ajar, blocks stacked inside
 // (one drawn per block held), frost wisps curling off the top.
 export function drawIceLocker(ctx, state, time) {
-  const r = SHIP_LAYOUT.racks.find((q) => q.kind === 'ice');
+  const lay = mainShip(state).layout; // (this ship's own layout)
+  const r = lay.racks.find((q) => q.kind === 'ice');
   if (!r) return;
-  const deck = SHIP_LAYOUT.platforms[r.d].y;
+  const deck = lay.platforms[r.d].y;
   const L = state.iceLocker || { n: 0, max: 4 };
   const x = r.x;
   const w = 62;
@@ -156,8 +157,9 @@ export function drawIceFlights(ctx, state) {
 export function drawBoilerHeat(ctx, state, time) {
   const g = state.goingDown;
   if (!g) return;
-  const boiler = one('boiler');
-  const by = SHIP_LAYOUT.platforms[boiler.d].y;
+  const lay = mainShip(state).layout;
+  const boiler = lay.one('boiler');
+  const by = lay.platforms[boiler.d].y;
   const heat = Math.min(1, g.heat);
   ctx.save();
   if (heat > 0.5) {

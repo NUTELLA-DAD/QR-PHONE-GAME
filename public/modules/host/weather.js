@@ -3,7 +3,6 @@
 import { config } from '../../config.js';
 import { altBounds } from './course.js';
 import { envIdOf } from './environments.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { mainShip } from './ships.js';
 import { rowOf } from './shipBuild.js';
 import { applyForce } from './forces.js';
@@ -11,7 +10,7 @@ import { applyForce } from './forces.js';
 let S = config.STORM; // (a Storm Front mission overrides some numbers: config.ENVIRONMENTS.storm.WEATHER)
 const rand = (a, b) => a + Math.random() * (b - a);
 // A gust shoves a ship harder with her sails up (S.5e) and for each high crow's nest tier she carries: 1 for a plain ship.
-const gustShove = (state) => 1 + config.SAIL.GUST_SHOVE * (state.sails || []).reduce((n, s) => n + (s.torn ? 0 : s.hoist), 0) + config.NEST.GUST_PER_TIER * SHIP_LAYOUT.platforms.filter((q) => rowOf(q) === 'crow2').length;
+const gustShove = (state) => 1 + config.SAIL.GUST_SHOVE * (state.sails || []).reduce((n, s) => n + (s.torn ? 0 : s.hoist), 0) + config.NEST.GUST_PER_TIER * mainShip(state).layout.platforms.filter((q) => rowOf(q) === 'crow2').length;
 
 export function createWeather({ state, impact, puff }) {
   state.weather = { storm: 0, gust: 0, flash: 0, bolt: null };
@@ -59,7 +58,7 @@ export function createWeather({ state, impact, puff }) {
     if (gustLeft > 0) {
       gustLeft -= dt;
       state.ship.alt += w.gust * w.storm * gustShove(state) * dt;
-      const bag = SHIP_LAYOUT.gasbag;
+      const bag = mainShip(state).layout.gasbag;
       if (bag) applyForce(state, { x: bag.cx + bag.rx * 0.4, y: bag.cy, fx: 0, fy: -w.gust * w.storm * gustShove(state) * config.FORCES.GUST_LIFT, source: 'gust' }); // (the gust lifts or drops the front of the bag: it rocks her, forces.js)
       const bounds = altBounds(state);
       state.ship.alt = Math.max(Math.min(bounds.lo - 60, state.ship.alt), Math.min(bounds.hi + 60, state.ship.alt));

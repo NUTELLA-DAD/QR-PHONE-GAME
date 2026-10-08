@@ -1,5 +1,5 @@
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { createShipArt } from './shipArt.js';
 import { createThreatArt } from './threatArt.js';
 import { createHookArt } from './hookArt.js';
@@ -32,6 +32,7 @@ import { windSpeed } from './sails.js';
 import { drawIceBlock, drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
 export function createRenderer({ ctx, state, canvas }) {
+  const layout = mainShip(state).layout; // (this ship's own layout: the art reads it, a build applied at the dock updates it in place)
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
   const sprites = createSprites();
   sprites.load();
@@ -62,7 +63,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const book = createLogbook({ ctx }); // paper panels and red stamps for the HUD
   const LB = config.LOGBOOK;
 
-  const drawShip = createShipArt({ ctx, state, ink, rrect, sprites });
+  const drawShip = createShipArt({ ctx, state, ink, rrect, sprites, ship: mainShip(state) });
   const searchlightArt = createSearchlightArt({ ctx, state, ink });
   const threatArt = createThreatArt({ ctx, state, ink, sprites });
   const hookArt = createHookArt({ ctx, state, ink });
@@ -157,7 +158,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawHazards = (time) => {
     ink();
     for (const breach of state.breaches) {
-      const y = SHIP_LAYOUT.platforms[breach.d].y - 58;
+      const y = layout.platforms[breach.d].y - 58;
       if (sprites.box(ctx, 'fx/hole', breach.x - 25, y - 30, 50, 60)) {
         drawBar(breach.x, y - 48, breach.prog);
         continue;
@@ -183,7 +184,7 @@ export function createRenderer({ ctx, state, canvas }) {
     }
     ink();
     for (const fire of state.fires) {
-      const y = SHIP_LAYOUT.platforms[fire.d].y;
+      const y = layout.platforms[fire.d].y;
       const frame = 1 + (Math.floor(time * 8 + fire.x) % 4);
       const k = fire.big ? 1.7 : 1; // a fire in the coal (S.5f) is a big one: taller flames, and the black smoke is puffed by fire.js
       if (sprites.box(ctx, `fx/fire-${frame}`, fire.x - 30 * k, y - 70 * k, 60 * k, 70 * k) || sprites.box(ctx, 'fx/fire-1', fire.x - 30 * k, y - 70 * k, 60 * k, 70 * k)) {
@@ -348,7 +349,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawFighterAim = (time) => {
     const e = state.enemy;
     if (e.dead > 0 || e.mode !== 'run' || !(e.shots > 0) || e.heading == null || state.phase === 'lobby') return;
-    const d = Math.hypot(e.x - SHIP_LAYOUT.aimPoint.x, e.y - (SHIP_LAYOUT.aimPoint.y - state.ship.alt));
+    const d = Math.hypot(e.x - layout.aimPoint.x, e.y - (layout.aimPoint.y - state.ship.alt));
     if (d > config.ENEMY.FIRE_RANGE + 500) return;
     ctx.strokeStyle = `rgba(255,50,70,${0.45 + 0.3 * Math.sin(time * 14)})`;
     ctx.lineWidth = 3.6;
@@ -364,7 +365,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawShield = (time) => {
     const S = state.shield;
     if (!S || !S.on) return;
-    const L = SHIP_LAYOUT.shield;
+    const L = layout.shield;
     const span = config.SHIELD.SPAN;
     const arc = () => {
       ctx.beginPath();
@@ -391,7 +392,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawCoil = (time) => {
     const C = state.coil;
     if (!C) return;
-    const M = SHIP_LAYOUT.coil;
+    const M = layout.coil;
     if (!M) return; // (a built ship may carry no Lightning Coil)
     const x = M.x;
     const y = M.y - state.ship.alt;
@@ -615,11 +616,11 @@ export function createRenderer({ ctx, state, canvas }) {
     // Ship.
     ctx.fillStyle = '#e63946';
     ctx.beginPath();
-    ctx.arc(px(c.dist + SHIP_LAYOUT.refPoint.x), py(SHIP_LAYOUT.refPoint.y - state.ship.alt), 6, 0, 7);
+    ctx.arc(px(c.dist + layout.refPoint.x), py(layout.refPoint.y - state.ship.alt), 6, 0, 7);
     ctx.fill();
     ctx.stroke();
     // The goal, small and always there: how far to the beacon, or how many outposts are left.
-    const dCells = distToGoal(map, c.dist + SHIP_LAYOUT.refPoint.x, SHIP_LAYOUT.refPoint.y - state.ship.alt);
+    const dCells = distToGoal(map, c.dist + layout.refPoint.x, layout.refPoint.y - state.ship.alt);
     const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
     let goalText;
     if (c.done) goalText = map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
@@ -1382,7 +1383,7 @@ export function createRenderer({ ctx, state, canvas }) {
 
   // Where a player's Action would land (ship coordinates), for the highlight ring.
   const actionSpot = (act) => {
-    const P = SHIP_LAYOUT.platforms;
+    const P = layout.platforms;
     const o = act.obj;
     switch (act.type) {
       case 'revive':
@@ -1394,7 +1395,7 @@ export function createRenderer({ ctx, state, canvas }) {
       case 'hole':
         return { x: o.x, y: P[o.d].y - 58, r: 42 };
       case 'ice':
-        return o.area === 'gasbag' ? { x: o.x, y: bagEdgeY(SHIP_LAYOUT.gasbags[Math.max(0, bagNearX(SHIP_LAYOUT.gasbags, o.x))], o.x, false) + 20, r: 60 } : o.gun ? { x: o.x, y: P[o.d].y - 50, r: 56 } : { x: o.x, y: P[o.d].y - 24, r: 52 };
+        return o.area === 'gasbag' ? { x: o.x, y: bagEdgeY(layout.gasbags[Math.max(0, bagNearX(layout.gasbags, o.x))], o.x, false) + 20, r: 60 } : o.gun ? { x: o.x, y: P[o.d].y - 50, r: 56 } : { x: o.x, y: P[o.d].y - 24, r: 52 };
       case 'gas':
         return { x: o.x, y: o.y, r: 40 };
       case 'unclog':
@@ -1849,7 +1850,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.translate(amp ? Math.sin(ts * 61) * amp : 0, -state.ship.alt + bob + (amp ? Math.cos(ts * 47) * amp * 0.6 : 0));
     {
       const sway = Math.sin(bts * 0.8) * 0.005 + Math.sin(bts * 0.31) * 0.004;
-      const [px, py] = config.SHIP.TILT_PIVOT || SHIP_LAYOUT.tiltPivot;
+      const [px, py] = config.SHIP.TILT_PIVOT || layout.tiltPivot;
       ctx.translate(px, py);
       ctx.rotate((state.ship.pitch || 0) + sway);
       ctx.translate(-px, -py);

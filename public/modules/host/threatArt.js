@@ -2,14 +2,15 @@
 // off-screen arrows. Placeholder vector art until Phase 3. Ember Pact = fictional enemy faction.
 import { config } from '../../config.js';
 import { drawBiplane, drawTailNumber, setPlaneSprites } from './planeArt.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { envOf } from './environments.js';
 import { drawFlame, drawSpark } from './vfxArt.js'; // flat gouache flames and sparks
 
 const INK = config.INK;
-const P = SHIP_LAYOUT.platforms;
 
 export function createThreatArt({ ctx, state, ink, sprites }) {
+  const layout = mainShip(state).layout; // (this ship's own layout)
+  const P = layout.platforms;
   setPlaneSprites(sprites);
   // Bats are dark purple, but glowing orange 'magma bats' in the Ember Forge (so they read on dark rock).
   const batColor = () => { const b = state.course && envOf(state).bat; return b ? b.body : '#3b2c4c'; };
@@ -160,7 +161,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     for (const p of state.bombers || []) items.push({ x: p.x, y: p.y, color: '#3d3a40', label: 'BOMBER' });
     if ((state.strafers || []).length) items.push({ x: state.strafers[0].x, y: state.strafers[0].y, color: '#26221f', label: 'SQUADRON' });
     if (state.boss) items.push({ x: state.boss.x, y: state.boss.y, color: '#5c1e1e', label: 'BOSS' });
-    if (state.gunship && state.gunship.phase !== 'sinking') items.push({ x: SHIP_LAYOUT.bounds.x1 + 790 + state.gunship.dx, y: SHIP_LAYOUT.refPoint.y + state.gunship.dy - state.ship.alt, color: '#a8443f', label: 'GUNSHIP', always: true }); // (coming in from the horizon)
+    if (state.gunship && state.gunship.phase !== 'sinking') items.push({ x: layout.bounds.x1 + 790 + state.gunship.dx, y: layout.refPoint.y + state.gunship.dy - state.ship.alt, color: '#a8443f', label: 'GUNSHIP', always: true }); // (coming in from the horizon)
     const bat = (state.bats || []).find((b) => b.delay <= 0 && !b.latched);
     if (bat) items.push({ x: bat.x, y: bat.y, color: '#3b2c4c', label: 'BATS' });
     const SP = state.specials;
@@ -173,9 +174,9 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     }
     const margin = 46;
     const range = state.lookout ? 9000 : 3600;
-    const shipY = SHIP_LAYOUT.midPoint.y - state.ship.alt;
+    const shipY = layout.midPoint.y - state.ship.alt;
     for (const it of items) {
-      if (!it.always && Math.hypot(it.x - SHIP_LAYOUT.midPoint.x, it.y - shipY) > range) continue;
+      if (!it.always && Math.hypot(it.x - layout.midPoint.x, it.y - shipY) > range) continue;
       const sx = width / 2 + (it.x - view.cx) * view.zoom;
       const sy = height / 2 + (it.y - view.cy) * view.zoom;
       if (sx > 0 && sx < width && sy > 0 && sy < height) continue;

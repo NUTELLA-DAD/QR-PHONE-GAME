@@ -181,7 +181,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
   const spawn = (opt) => {
     const o = opt && typeof opt === 'object' ? opt : {};
     const seed = typeof opt === 'number' ? opt : o.seed != null ? o.seed : (Math.random() * 0x7fffffff) | 0;
-    const bp = generateBlueprint(seed, { mission: lap(), difficulty: state.difficulty, ...o });
+    const bp = generateBlueprint(seed, { mission: lap(), difficulty: state.difficulty, shipLayout: layout, ...o });
     const at = spawnPos(bp);
     if (!at) return false;
     S.spawned++;

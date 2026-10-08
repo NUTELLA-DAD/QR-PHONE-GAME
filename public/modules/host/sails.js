@@ -7,7 +7,7 @@
 // A raised sail in a gust (a Storm Front gust, a Frost blizzard) can TEAR: the sail's module breaks (a hammer mends it) and the canvas falls. In a gust it also shoves the ship harder.
 // A ship with no sail part is untouched: nothing here runs for her (state.sailPush stays 0).
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { envIdOf } from './environments.js';
 import { pop } from './popups.js';
 import { applyForce, sailPoint, sailPush } from './forces.js';
@@ -30,6 +30,7 @@ export function gustState(state) {
 
 export function createSails({ state, modules }) {
   const S = config.SAIL;
+  const layout = mainShip(state).layout; // (this ship's own layout)
   state.sails = [];
   state.sailPush = 0;
   state.sailWarn = false;
@@ -37,16 +38,16 @@ export function createSails({ state, modules }) {
   let version = -1;
 
   const sync = () => {
-    if (version === SHIP_LAYOUT.version && state.sails.length === (SHIP_LAYOUT.sails || []).length) return;
-    version = SHIP_LAYOUT.version;
-    state.sails = (SHIP_LAYOUT.sails || []).map((s, i) => ({ n: s.n, name: s.n, d: s.d, x: s.x, i, hoist: 0, lowering: false, prog: 0, pull: 0, torn: false, worked: false, color: S.COLORS[i % S.COLORS.length] }));
+    if (version === layout.version && state.sails.length === (layout.sails || []).length) return;
+    version = layout.version;
+    state.sails = (layout.sails || []).map((s, i) => ({ n: s.n, name: s.n, d: s.d, x: s.x, i, hoist: 0, lowering: false, prog: 0, pull: 0, torn: false, worked: false, color: S.COLORS[i % S.COLORS.length] }));
   };
   const modOf = (sail) => modules.byName[sail.n];
   const isTorn = (sail) => { const m = modOf(sail); return !!m && m.broken; };
 
   // What Action does for a player standing at a mast (or null): hold to raise, tap to lower. `here(o, r)` is simulation.js's reach test.
   const actionFor = (player, here) => {
-    const lay = SHIP_LAYOUT.sails;
+    const lay = layout.sails;
     if (!lay || !lay.length) return null;
     sync();
     const i = lay.findIndex((s) => here(s, S.REACH));
@@ -88,7 +89,7 @@ export function createSails({ state, modules }) {
       if (sail.hoist > 0.3 && !sail.lowering) up++;
       // A gust on a raised sail can tear it.
       if (flying && gust === 2 && sail.hoist > 0.25 && !torn && Math.random() < S.TEAR_CHANCE * sail.hoist * dt) {
-        const m = modOf(sail), lay = SHIP_LAYOUT.sails[sail.i];
+        const m = modOf(sail), lay = layout.sails[sail.i];
         if (m) {
           modules.damage(m, 999);
           sail.torn = true;
@@ -96,7 +97,7 @@ export function createSails({ state, modules }) {
           state.sailStats.torn++;
           state.ev.warn = 3;
           state.ev.warnText = 'THE GUST TORE THE SAIL! MEND IT WITH A HAMMER';
-          pop(state, lay.x, SHIP_LAYOUT.platforms[lay.d].y - lay.h * 0.6 - state.ship.alt, 'RIIIP!', '#e63946', 1);
+          pop(state, lay.x, layout.platforms[lay.d].y - lay.h * 0.6 - state.ship.alt, 'RIIIP!', '#e63946', 1);
           state.sfxQ.push(['impact']);
         }
       }
@@ -117,8 +118,8 @@ export function createSails({ state, modules }) {
       if (sail.hoist > 0.05 && !sail.torn) k *= S.BONUS_DIM;
       push += sail.pull;
       // The wind pushes the canvas high up the mast, well above the ship's centre of mass: it tips her nose down (forces.js), a gust much harder, a tall mast more.
-      const lay = SHIP_LAYOUT.sails[sail.i];
-      if (sail.pull > 0 && lay && SHIP_LAYOUT.platforms[lay.d]) applyForce(state, { ...sailPoint(lay, SHIP_LAYOUT.platforms[lay.d].y), fx: sailPush(sail.pull, gust === 2), fy: 0, source: 'sail' });
+      const lay = layout.sails[sail.i];
+      if (sail.pull > 0 && lay && layout.platforms[lay.d]) applyForce(state, { ...sailPoint(lay, layout.platforms[lay.d].y), fx: sailPush(sail.pull, gust === 2), fy: 0, source: 'sail' });
     }
     state.sailPush += (push - state.sailPush) * Math.min(1, dt * S.SPEED_RATE);
     if (Math.abs(state.sailPush) < 1e-4) state.sailPush = 0;

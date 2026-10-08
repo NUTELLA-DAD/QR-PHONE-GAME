@@ -4,7 +4,7 @@
 // times a second, as one flat array of numbers. Phones send back { spot: n } (the n-th ping of the list
 // that phone last got) and { help: 1 }.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, kindOf } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { travelTime } from './nav.js';
 import { bestTarget } from './aim.js';
 import { botFree } from './bots.js';
@@ -12,7 +12,6 @@ import { botFree } from './bots.js';
 const R = config.RADAR;
 const SP = config.SPOT;
 const HP = config.HELP;
-const L = SHIP_LAYOUT;
 
 // Radar symbols, in the order the phone knows them (controller/ui.js has the same list).
 export const RADAR_KINDS = ['mine', 'fighter', 'bomber', 'plane', 'boss', 'gunship', 'bat', 'sniper', 'tug', 'saw', 'imp'];
@@ -23,6 +22,7 @@ export const SPOT_SIZE = { mine: 44, fighter: 54, bomber: 100, plane: 50, boss: 
 // Everything out there worth a ping (the same lists the TV's lookout arrows use, but every one of them).
 // Each: { k (kind index), kind, obj (the thing itself), pos() -> {x, y} live world position }.
 export function radarItems(state) {
+  const L = mainShip(state).layout;
   const out = [];
   const add = (kind, obj, pos) => out.push({ k: RADAR_KINDS.indexOf(kind), kind, obj, pos });
   const at = (o) => () => ({ x: o.x, y: o.y });
@@ -46,13 +46,15 @@ export function radarItems(state) {
 }
 
 // Where a walker really is for routing (the nearer end if on a ladder).
-const spotOf = (o) => {
+const spotOf = (o, L) => {
   if (o.conn == null) return { d: o.d, x: o.x };
   const c = L.connectors[o.conn];
   return o.s < 0.5 ? { d: c.top, x: c.xTop } : { d: c.bottom, x: c.xBottom };
 };
 
 export function createSpotter({ state, emit, phoneFx }) {
+  const L = mainShip(state).layout; // (this ship's own layout)
+  const kindOf = L.kindOf;
   state.spots = []; // { obj, item, by (player id), kind }
   state.helpCalls = []; // { caller, t, who: [human ids still on their way], bots: [bots sent] }
   let radarT = 0;
@@ -178,7 +180,7 @@ export function createSpotter({ state, emit, phoneFx }) {
   const assign = (call) => {
     const c = call.caller;
     if (c.d == null) return;
-    const here = spotOf(c);
+    const here = spotOf(c, L);
     const sent = call.who.length + call.bots.length;
     const pool = Object.values(state.players).filter((q) => q !== c && free(q) && !call.bots.includes(q) && !call.who.includes(q.id));
     const idle = pool.filter((q) => (q.bot ? botFree(q) : (q.freeT || 0) >= HP.IDLE_FOR));

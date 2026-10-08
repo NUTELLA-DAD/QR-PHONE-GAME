@@ -4,7 +4,7 @@
 // Everything sits on grids fixed to the world (it only slides past, never shimmers or wobbles),
 // and drawing never throws: problems are reported to the pause menu instead.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { envIdOf, envOf, lavaLevel } from './environments.js';
 import { bagNearX } from './shipBuild.js';
 import { createDeepArt } from './envDeepArt.js'; // Fungal Depths and The Aether
@@ -23,7 +23,8 @@ export function createEnvArt({ ctx, state, ink }) {
   let now = 0;
   const deepArt = createDeepArt({ ctx, state, ink });
   const ssArt = createStormSeaArt({ ctx, state, ink, time: () => now });
-  const P = SHIP_LAYOUT.platforms;
+  const layout = mainShip(state).layout; // (this ship's own layout)
+  const P = layout.platforms;
   const isOther = () => envIdOf(state) !== config.ENVIRONMENTS.DEFAULT;
   const E = () => envOf(state);
   const env = () => state.env || { blizzard: 0, smoke: 0, heat: 0, burn: 0, wind: 0 };
@@ -317,7 +318,7 @@ export function createEnvArt({ ctx, state, ink }) {
         ctx.lineWidth = 2.6;
         if (c.area === 'gasbag') {
           // A crust of ice on the underside of the envelope, with icicles, and a white cap on top.
-          const GB = SHIP_LAYOUT.gasbags[Math.max(0, bagNearX(SHIP_LAYOUT.gasbags, c.x))]; // (the bag the crust sits under)
+          const GB = layout.gasbags[Math.max(0, bagNearX(layout.gasbags, c.x))]; // (the bag the crust sits under)
           const dx = (c.x - GB.cx) / GB.rx;
           const edge = Math.sqrt(Math.max(0, 1 - dx * dx));
           const by = GB.cy + GB.ry * edge;

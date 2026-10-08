@@ -9,15 +9,16 @@
 // player.hook = { phase: 'out'|'back'|'caught', dx, dy (aim), len, anchor, t, ... }
 // An anchor = { kind, pos() -> {x, y} in ship coordinates (or null when it is gone), plane? }
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { inRock, scrollSpeed } from './course.js';
 
 const H = config.HOOKSHOT;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function createHookshot({ state, puff, phoneFx, air, hijack }) {
+  const layout = mainShip(state).layout; // (this ship's own layout)
   const alt = () => state.ship.alt;
-  const bagF = (x, y) => { let f = Infinity; for (const b of SHIP_LAYOUT.gasbags) f = Math.min(f, ((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2); return f; }; // < 1 inside any of the gasbags
+  const bagF = (x, y) => { let f = Infinity; for (const b of layout.gasbags) f = Math.min(f, ((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2); return f; }; // < 1 inside any of the gasbags
   const val = (v) => (typeof v === 'function' ? v() : v);
   const origin = (p) => ({ x: p.x, y: p.y - H.HAND - (p.fly ? 0 : p.jz || 0) });
 

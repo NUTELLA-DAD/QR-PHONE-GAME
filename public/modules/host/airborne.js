@@ -17,19 +17,20 @@
 //     sim.air.removeSurface('gunship-deck');   // or call remove()
 //   Alternatively pass `providers` (functions returning an array of surfaces each frame).
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const val = (v) => (typeof v === 'function' ? v() : v);
 
 export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const A = config.AIR;
-  const P = SHIP_LAYOUT.platforms;
+  const L = mainShip(state).layout; // (this ship's own layout)
+  const P = L.platforms;
   const extra = []; // surfaces added by other code
   const extraProviders = [...providers];
 
   // Is this spot open air (an outside deck, or an outrigger room)?
-  const outsideAt = (d, x) => !!P[d] && (!!P[d].outside || SHIP_LAYOUT.rooms.some((r) => r.outside && r.d === d && x >= r.x0 && x <= r.x1));
+  const outsideAt = (d, x) => !!P[d] && (!!P[d].outside || L.rooms.some((r) => r.outside && r.d === d && x >= r.x0 && x <= r.x1));
 
   const shipSurfaces = P.map((p, d) => ({ id: 'ship:' + p.id, d, y: p.y, x0: p.x0, x1: p.x1 }));
 
@@ -75,7 +76,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   // the fall is slow and the stick steers hard, so you can drift onto a gunship (or our own deck) below.
   // p.chute: 0 = none, otherwise the seconds since the jump; p.chuteOpen = canopy out.
   const jumpChute = (p) => {
-    const bay = SHIP_LAYOUT.bombBay;
+    const bay = L.bombBay;
     p.y = P[p.d].y + 3; // just below the bay floor so we do not land straight back on it
     startFlight(p, 0, 60);
     p.chute = 0.001;
@@ -98,8 +99,8 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     if (!(p.fly || p.air)) return false;
     if ((p.jy || 0) > 0.6) return false;
     const y = p.fly ? p.y : p.y - (p.jz || 0);
-    for (let i = 0; i < SHIP_LAYOUT.connectors.length; i++) {
-      const c = SHIP_LAYOUT.connectors[i];
+    for (let i = 0; i < L.connectors.length; i++) {
+      const c = L.connectors[i];
       if (c.type !== 'ladder' && c.type !== 'rope') continue;
       if (p.regrabCd > 0 && p.regrabConn === i) continue;
       const yt = P[c.top].y;
@@ -129,7 +130,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const jumpOff = (p) => {
     if (p.conn == null || p.bot) return false;
     const stick = p.jx || 0;
-    const dir = Math.abs(stick) > 0.3 ? Math.sign(stick) : p.x < SHIP_LAYOUT.midPoint.x ? 1 : -1; // neutral: toward the middle of the ship
+    const dir = Math.abs(stick) > 0.3 ? Math.sign(stick) : p.x < L.midPoint.x ? 1 : -1; // neutral: toward the middle of the ship
     const i = p.conn;
     startFlight(p, dir * A.LADDER_JUMP_VX, -A.LADDER_JUMP_VY);
     p.regrabConn = i;

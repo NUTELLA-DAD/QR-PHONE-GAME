@@ -10,7 +10,7 @@
 //   swivel          a station of kind 'swivel' beside an engine: the stick turns the engine (ENGINES.SWIVEL_RATE) within SWIVEL_ARC of the way it was built.
 // A ship whose engines all point forward is exactly the old ship (factor = working / engines, no vertical thrust).
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { thrustVec, dirName } from './shipBuild.js';
 import { applyForce } from './forces.js';
 
@@ -19,13 +19,14 @@ const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 export function createEngines({ state, modules }) {
   const E = config.ENGINES;
+  const layout = mainShip(state).layout; // (this ship's own layout)
   state.engines = [];
   state.thrust = { factor: 1, back: 0, drive: true };
   state.engineStats = { turnSecs: 0, mannedSecs: 0 }; // (botsim and the gate: how much the swivels were used)
   let version = -1, drivers = 1;
 
   const sync = () => {
-    const L = SHIP_LAYOUT;
+    const L = layout;
     if (version === L.version && state.engines.length === L.engines.length) return;
     version = L.version;
     state.engines = L.engines.map((e, i) => ({ name: e.name, i, d: e.d, x: e.x, dir: e.dir || 0, home: e.dir || 0, swivel: !!e.swivel, fwd: 1, up: 0 }));
@@ -52,7 +53,7 @@ export function createEngines({ state, modules }) {
       if (v.fwd > 0) fwd += v.fwd; else back -= v.fwd;
       if (v.up && flying) {
         const accel = v.up * E.LIFT_GAS * config.GAS.LIFT * pf * eng; // up positive
-        applyForce(state, { x: e.x, y: SHIP_LAYOUT.platforms[e.d].y + E.BODY_DY, fx: 0, fy: -accel, linear: true, balanced: true, source: 'engine' });
+        applyForce(state, { x: e.x, y: layout.platforms[e.d].y + E.BODY_DY, fx: 0, fy: -accel, linear: true, balanced: true, source: 'engine' });
       }
     }
     T.factor = Math.max(config.MODULES.NO_ENGINE_SPEED, Math.min(1, (fwd - back) / drivers)); // (engines pointing back take thrust away)
@@ -62,7 +63,7 @@ export function createEngines({ state, modules }) {
 
   // A person (or a bot) at a swivel crank: the stick turns the engine toward where it points, within the mount's arc.
   const turn = (player, dt) => {
-    const st = SHIP_LAYOUT.stations.find((s) => s.n === player.lock);
+    const st = layout.stations.find((s) => s.n === player.lock);
     const e = st && byName(st.eng);
     if (!e) return;
     state.engineStats.mannedSecs += dt;
@@ -75,7 +76,7 @@ export function createEngines({ state, modules }) {
 
   // The phone's status line at a swivel crank.
   const status = (name) => {
-    const st = SHIP_LAYOUT.stations.find((s) => s.n === name);
+    const st = layout.stations.find((s) => s.n === name);
     const e = st && byName(st.eng);
     if (!e) return '';
     if (!e.works) return `${e.name} is out (no steam or broken): it does not push`;

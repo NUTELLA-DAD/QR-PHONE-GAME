@@ -3,7 +3,7 @@
 // patch, fire, revive). They man no stations, cast no votes, win no awards and never count as crew for crew scaling
 // (crewscale.js). They come aboard once the voyage is under way and leave when a 4th human joins or the voyage ends.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 
 // A person at the table: a connected phone, or (in the test sims) a bot flagged { human: true } to stand in for one.
 export const isHuman = (p) => !p.mate && (!p.bot || !!p.human);
@@ -33,7 +33,7 @@ export function updateMates(state, dt) {
   state.mateT = (state.mateT || 0) - dt;
   if (mates.length < want && state.mateT <= 0) {
     state.mateT = config.MATES.SPAWN_GAP;
-    const [e0, e1] = SHIP_LAYOUT.boarderEntryPoints;
+    const [e0, e1] = mainShip(state).layout.boarderEntryPoints;
     const id = 'mate' + nextId++;
     state.players[id] = {
       id, bot: true, mate: true, name: 'Mate', connected: true,

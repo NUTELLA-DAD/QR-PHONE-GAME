@@ -1,4 +1,4 @@
-// Draws the airship from SHIP_LAYOUT. Uses art from art/sprites/ship/ where it exists, and
+// Draws an airship from its own layout (the ship handed to createShipArt). Uses art from art/sprites/ship/ where it exists, and
 // placeholder vector drawings everywhere else.
 // Everything is in ship coordinates; render.js has already shifted for altitude.
 //
@@ -18,7 +18,7 @@
 // config.SHIP_ART.OFF = true draws everything directly (the old way).
 // Drawing never throws: the bake falls back to drawing the static layer straight onto the screen.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { hullGeom as layoutHull, TWIN_SIZE, bagName, deckRoles, rowOf, isNestRow } from './shipBuild.js';
 import { drawBiplane, drawTailNumber } from './planeArt.js';
 import { paintPath, paintRect, hasTexture } from './textureArt.js';
@@ -47,14 +47,16 @@ const ART = () => config.SHIP_ART || {};
 const bakeSS = () => Math.max(0.5, Math.min(3, Number(ART().BAKE_SS) || 1.5)); // the bake is drawn at this many times the screen's own pixel density
 const BAKE_MAX = 4096; // largest side of the baked canvas (px)
 
-const L = SHIP_LAYOUT;
-const P = L.platforms;
 const INK = config.INK;
 const WOOD = '#b98a5a';
 const WOOD_DARK = '#6b4a32';
 const IRON = '#6a6568';
 
-export function createShipArt({ ctx: screenCtx, state, sprites }) {
+// `ship` = the ship to draw (ships.js; default the main ship): its layout is what is baked and drawn, the bake is keyed on that layout's version, and nothing is shared with another ship's art.
+export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(state) }) {
+  const L = ship.layout;
+  const P = L.platforms;
+  const { one, all, kindOf } = L; // (the station-kind helpers, bound to this ship's layout)
   // `ctx` is whatever we are drawing onto right now: the screen, or the offscreen canvas while baking.
   let ctx = screenCtx;
   const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
@@ -65,7 +67,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   // (the cage of each lift rests at the bottom of its shaft until somebody rides it)
   const liftHome = (c) => num(P[c.bottom] && P[c.bottom].y);
   const liftYs = new Map();
-  onLayoutChange(() => { liftYs.clear(); });
+  L.onChange(() => { liftYs.clear(); });
 
   // The same pen as render.js's ink(), but for whichever canvas we are drawing on.
   const ink = () => {

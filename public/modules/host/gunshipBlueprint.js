@@ -11,7 +11,8 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 
 const GP = config.GUNSHIP_PARTS;
-const mainY = () => SHIP_LAYOUT.platforms.find((p) => p.id === 'main').y; // (read when a gunship is built, so a new ship build is picked up)
+// (read when a gunship is built, so a new ship build is picked up; opts.shipLayout = the ship she hunts, ship 0's layout is the default for the test page and the tools)
+const mainY = (layout = SHIP_LAYOUT) => layout.platforms.find((p) => p.id === 'main').y;
 export const X0 = 2050; // her stern end (every gunship; the nose end is X0 + length)
 const DECK_STEP = { up: -100, down: 90 };
 
@@ -103,7 +104,7 @@ export function generateBlueprint(seed, opts = {}) {
 
   // ---- Decks (stepped segments left to right, joined by ladders at each step) ----
   const cuts = [0, ...LY.cuts, 1].map((f) => x0 + f * len);
-  const decks = LY.ys.map((dy, i) => ({ x0: cuts[i], x1: cuts[i + 1], y: mainY() + dy, k: i }));
+  const decks = LY.ys.map((dy, i) => ({ x0: cuts[i], x1: cuts[i + 1], y: mainY(opts.shipLayout) + dy, k: i }));
   const ys = decks.map((d) => d.y);
   const hullTop = Math.min(...ys) - 80;
   const hullBot = Math.max(...ys) + 112;

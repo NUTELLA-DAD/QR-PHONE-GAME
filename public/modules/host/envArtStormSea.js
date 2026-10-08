@@ -7,7 +7,7 @@
 // Everything sits on grids fixed to the world (it only slides past); waves roll smoothly with time.
 // Drawing never throws: problems are reported to the pause menu instead. Nothing from the internet.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, deckIndex } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { envIdOf, envOf } from './environments.js';
 import { seaLevel } from './envStormSea.js';
 import { solidAt } from './maps.js';
@@ -21,9 +21,10 @@ const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const report = (e) => { const list = (globalThis.gameErrors = globalThis.gameErrors || []); if (list.length < 50) list.push('storm/sea: ' + (e && e.message)); };
 
 export function createStormSeaArt({ ctx, state, ink, time }) {
-  const P = SHIP_LAYOUT.platforms;
-  const CAT = deckIndex('catwalk');
-  const LOWER = deckIndex('lower');
+  const layout = mainShip(state).layout; // (this ship's own layout)
+  const P = layout.platforms;
+  const CAT = layout.deckIndex('catwalk');
+  const LOWER = layout.deckIndex('lower');
   const isStorm = () => envIdOf(state) === 'storm';
   const isSea = () => envIdOf(state) === 'sea';
 
@@ -412,7 +413,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
           // Sea spray where the keel cuts the water.
           if (num(s.spray) > 0.05) {
             const c = state.course;
-            const keel = (c && c.refY != null ? c.refY : SHIP_LAYOUT.refPoint.y - state.ship.alt) + F.SEA.KEEL;
+            const keel = (c && c.refY != null ? c.refY : layout.refPoint.y - state.ship.alt) + F.SEA.KEEL;
             for (let i = 0; i < 26; i++) {
               const ph = wrap(tm * 1.8 + hash(i, 611), 1);
               const x = 460 + hash(i, 612) * 700 + (hash(i, 613) - 0.5) * 60 * ph;
@@ -613,7 +614,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
         }
         if (s.hook && c) {
           const sv = s.hook;
-          const door = SHIP_LAYOUT.bombBay;
+          const door = layout.bombBay;
           const hx = sv.mx - c.dist; // (ship x is world x)
           const hy = sv.y + state.ship.alt; // world y to ship y
           ctx.strokeStyle = '#d9c89a';

@@ -6,27 +6,29 @@
 // The helm's trim engine (state.ship.trim) pushes against `push` by itself. A bad angle shouts "NOSE-HEAVY! TRIM HER!" and sends idle crew to the light end (jobs.js).
 // A classic ship is level (its angle is exactly 0 until the live loads add up to more than BALANCE.LEVEL_PX), so with LIVE off nothing changes at all.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, SHIP_BALANCE } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { trimOf } from './shipBuild.js';
 import { liveLiftX } from './gasBags.js';
 
 export function createBalance(state) {
+  const layout = mainShip(state).layout; // (this ship's own layout and its static balance)
+  const SB = layout.balance;
   const bal = { dx: 0, deg: 0, side: 'level', comX: 0, comY: 0, mass: 0, k2: 0, restPitch: 0, push: 0, slow: 0, scrape: 0, warn: false, cd: 0, live: 0 };
   state.balance = bal;
   let primed = false;
 
   // The weight (m) and its moment (mx) of everything that moves, summed once per tick.
   function loads() {
-    const W = config.BALANCE.LIVE_MASS, L = SHIP_LAYOUT;
+    const W = config.BALANCE.LIVE_MASS, L = layout;
     let m = 0, mx = 0, ix = 0, cm = 0;
-    const add = (w, x) => { m += w; mx += w * x; ix += w * (x - SHIP_BALANCE.comX) ** 2; };
+    const add = (w, x) => { m += w; mx += w * x; ix += w * (x - SB.comX) ** 2; };
     for (const p of Object.values(state.players)) {
       if (p.d == null || p.fall || p.air || p.fly || p.onGunship || p.connected === false) continue;
       const w = W.crew + (p.carry === 'coal' || p.carry === 'ammo' ? W.carry : 0);
       add(w, p.x);
-      cm += w * (p.x - SHIP_BALANCE.comX);
+      cm += w * (p.x - SB.comX);
     }
-    if (config.FORCES.LIVE) for (const b of state.boarders || []) if (b.d != null && !b.fall && b.conn == null && b.hp > 0) { add(config.FORCES.BOARDER_MASS, b.x); cm += config.FORCES.BOARDER_MASS * (b.x - SHIP_BALANCE.comX); } // raiders on deck weigh too
+    if (config.FORCES.LIVE) for (const b of state.boarders || []) if (b.d != null && !b.fall && b.conn == null && b.hp > 0) { add(config.FORCES.BOARDER_MASS, b.x); cm += config.FORCES.BOARDER_MASS * (b.x - SB.comX); } // raiders on deck weigh too
     const boilers = L.stations.filter((s) => s.kind === 'boiler');
     if (boilers.length) for (const s of boilers) add((state.ship.fuel * W.fuel) / boilers.length, s.x);
     for (const [name, g] of Object.entries(state.GUNS || {})) add(g.ammo * W.ammo, g.bx != null ? g.bx : (L.gunMounts[name] || {}).bx || 0);
@@ -35,7 +37,7 @@ export function createBalance(state) {
   }
 
   function update(dt) {
-    const B = config.BALANCE, S = SHIP_BALANCE;
+    const B = config.BALANCE, S = SB;
     let target = S.dx;
     bal.live = 0;
     // Several gasbags: the centre of lift moves to the bags that still hold gas, so losing one end bag tips her toward it (gasBags.js). One bag: the build's own.
