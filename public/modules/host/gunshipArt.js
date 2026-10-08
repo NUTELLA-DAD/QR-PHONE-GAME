@@ -18,7 +18,7 @@
 // and the charge ticking on her boiler. Style 2026: enemy oxblood + charcoal, thin outlines.
 import { shipGeom, mx } from './gunship.js';
 import { mainShip } from './ships.js';
-import { toShipX, toShipY } from './pose.js';
+import { toShipX, toShipY, toWorldX, toWorldY } from './pose.js';
 import { config } from '../../config.js';
 import { perfState } from './perf.js';
 import { paintPath, paintRect } from './textureArt.js';
@@ -353,16 +353,69 @@ export function createGunshipArt({ ctx, state, ink, sprites: given }) {
     ink();
   };
 
-  return (time) => {
+  // The grapple line of a gunship that is a Ship (B.5), in the world: from her yardarm (a point on HER ship) to the bow of OURS, sagging when slack, straight (and flickering near the snap) when taut;
+  // a crewman swinging across hangs on a line from the yardarm.
+  function drawShipRope(g, time) {
+    if (!g.rope || !g.ship) return;
+    const h = g.ship, ours = state.ships[0];
+    const BOW = shipGeom(ours.layout).BOW;
+    const ap = g.bp.anchor;
+    const ax = toWorldX(h, ap.x), ay = toWorldY(h, ap.y);
+    const bx = toWorldX(ours, BOW.x), by = toWorldY(ours, BOW.y);
+    ctx.save();
+    ctx.strokeStyle = '#d8c79a';
+    ctx.lineWidth = 2.8;
+    for (const p of Object.values(state.players)) {
+      if (!p.swing) continue;
+      const cur = p.ship === h.id ? h : ours;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(toWorldX(cur, p.x), toWorldY(cur, p.y - 90));
+      ctx.stroke();
+    }
+    const len = Math.hypot(ax - bx, ay - by);
+    const slack = Math.max(0, (g.ropeLen || len) - len);
+    const sag = Math.min(160, Math.sqrt(slack * 400)) * (1 - 0.9 * Math.min(1, g.tension || 0));
+    ctx.strokeStyle = g.tension > 0.6 && Math.sin(time * 40) > 0 ? '#ffffff' : '#d8c79a'; // about to snap: it flickers
+    ctx.lineWidth = g.tension > 0 ? 3.6 : 3;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.quadraticCurveTo((ax + bx) / 2, (ay + by) / 2 + sag * 2, bx, by);
+    ctx.stroke();
+    ctx.fillStyle = '#8a8a8a'; // the grapple head on her yardarm
+    ctx.beginPath();
+    ctx.arc(ax, ay, 8, 0, 7);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  const draw = (time) => {
     drawParas(time);
     const g = state.gunship;
-    if (!g || !g.bp) return;
+    if (!g || !g.bp || g.asShip) return; // (a gunship that is a Ship is drawn by the ship layer: .body below)
     try {
       drawGunship(g, time);
     } catch (e) {
       report(e);
     }
   };
+  // B.5: the gunship as a Ship. body(g, time): her airframe, guns, engines, pennant and name drawn in her home frame (the ship layer has already put her pose, mirror and pitch on the canvas),
+  // g being a record with dx = dy = 0, m = 1 and no crew. rope(g, time): her grapple line, between her yardarm and our bow, drawn in the world.
+  draw.body = (g, time) => {
+    try {
+      drawGunship(g, time);
+    } catch (e) {
+      report(e);
+    }
+  };
+  draw.rope = (g, time) => {
+    try {
+      drawShipRope(g, time);
+    } catch (e) {
+      report(e);
+    }
+  };
+  return draw;
 
   // Bottom edge of the gasbags at x (or null if no bag is there).
   function bagBottomAt(bp, x) {

@@ -447,6 +447,6 @@ Every airship, ours, the AI gunships and the PvP rival, uses the same weight-and
   - balancing contests in King of the Hill.
 
 **Build order:**
-1. After forces.js lands (S.5h), give gunship.js the same live centre-of-mass and torque model, fed by her crew, our boarders and dropped weights. Classic co-op stays within noise; measure and re-baseline.
+1. (Done by MOVEMENT.md B.5: the gunship is a Ship, so her mass, centre of mass and torque, her crew, our boarders and dropped weights all use the ordinary rules.) After forces.js lands (S.5h), give gunship.js the same live centre-of-mass and torque model, fed by her crew, our boarders and dropped weights. Classic co-op stays within noise; measure and re-baseline.
 2. Then the throwable-ballast item.
 3. Then the weight-war tricks, one at a time, each with a bot-arena check so none becomes a must-use exploit.

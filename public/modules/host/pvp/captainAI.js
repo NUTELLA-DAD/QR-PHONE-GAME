@@ -30,6 +30,7 @@ export function captainOf(state) {
   const S = config.PVP.BOT.STYLES;
   const names = Object.keys(S);
   let style = config.PVP.BOT.STYLE && S[config.PVP.BOT.STYLE] ? config.PVP.BOT.STYLE : null;
+  if (!style && ship.ai && S[ship.ai.style]) style = ship.ai.style; // (B.5: the enemy gunship's captain flies in the style of her blueprint's personality, gunshipShip.js)
   if (!style) {
     let pick = Math.random() * names.reduce((a, n) => a + S[n].WEIGHT, 0);
     style = names[names.length - 1];
@@ -119,8 +120,9 @@ export function dropPossible(state) {
 export function captainFly(state, p, plan, dt) {
   const P = config.PVP, B = P.BOT;
   const R = state.rival;
-  if (!B.WEAVE || !R || R.down || !state.match || state.match.phase !== 'fight') return null;
   const ship = mainShip(state);
+  const gun = !!ship.ai; // (the enemy gunship, B.5: her director (gunshipShip.js) picks the ring spots, the strafing runs and the retreats; this is her WEAVE and her DODGE on top - no passes, rams, grapples or chases of the Versus captain)
+  if (!B.WEAVE || !R || R.down || (!gun && (!state.match || state.match.phase !== 'fight'))) return null;
   const c = captainOf(state);
   const S = c.S;
   const f = ship.pose.f, L = ship.layout, AIM = L.aimPoint;
@@ -188,7 +190,7 @@ export function captainFly(state, p, plan, dt) {
   if (c.think <= 0) {
     c.think = 0.4;
     c.passCd -= 0.4; c.ramCd -= 0.4; c.grappleCd -= 0.4;
-    if (c.play === 'duel' && !turning && state.turning && state.turning.t === 0) {
+    if (!gun && c.play === 'duel' && !turning && state.turning && state.turning.t === 0) {
       const dtk = 0.4;
       const R_ = B.RAM;
       if (S.ram > 0 && facing && c.ramCd <= 0 && my_h >= R_.MY_HULL && their_h < R_.THEIR_HULL && my_h > their_h + R_.EDGE && dist < 3200 && !wedged && Math.random() < R_.RATE * S.ram * dtk * (their_h < 30 ? 3 : 1)) {
@@ -242,7 +244,7 @@ export function captainFly(state, p, plan, dt) {
       thr += clamp((R.vx - ship.pose.vx) / TOP, -0.5, 0.5) * 0.8;
       if (c.t > c.grappleUntil || hurt || state.ship.hull < B.RAID.MIN_HULL) { c.play = 'duel'; c.grappleCd = rnd([22, 40]); }
     }
-    if (!hurt && their_h < B.CHASE.HULL && my_h >= B.CHASE.MY_HULL) {
+    if (!gun && !hurt && their_h < B.CHASE.HULL && my_h >= B.CHASE.MY_HULL) {
       rangeAdj -= B.CHASE.CLOSE;
       if (c.play !== 'chase') { c.play = 'chase'; c.stats.chases++; callout(state, 'GIVES CHASE!'); }
     } else if (c.play === 'chase') c.play = 'duel';

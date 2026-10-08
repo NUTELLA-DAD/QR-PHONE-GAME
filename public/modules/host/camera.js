@@ -22,7 +22,7 @@ export function createWorldCamera() {
   const leads = new Map(); // look-ahead in the direction each ship is moving (smoothed): ship pose -> { x, y }
 
   // The ships to frame: opts.ships, or every ship of the game ([{ pose, bounds }]).
-  const shipsOf = (state, opts) => (opts && opts.ships) || (state.ships || []).map((s) => ({ pose: s.pose, bounds: s.layout.bounds }));
+  const shipsOf = (state, opts) => (opts && opts.ships) || (state.ships || []).filter((s) => !s.ai).map((s) => ({ pose: s.pose, bounds: s.layout.bounds })); // (the enemy gunship is framed as a threat below, not as one of the crew's ships)
 
   // Where a ship's drawing is along the world, as [x0, x1] relative to pose.x: her bounds, or those mirrored about her middle while she faces left (a ship's hull
   // stays where it is when she comes about: pose.js mirrors about the middle of the same bounds).

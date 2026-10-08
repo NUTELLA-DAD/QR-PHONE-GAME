@@ -66,7 +66,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   simulation.setSocket?.(socket);
 
   // The ship a new arrival joins: the main ship, or (with several in the sky) the one with the fewest aboard. They drop in along its boarding span.
-  const joinShip = () => (simulation.match.on ? simulation.match.shipOfTeam(simulation.match.teamForJoiner()) : simulation.state.ships.reduce((best, s) => (crewOf(simulation.state, s).length < crewOf(simulation.state, best).length ? s : best), mainShip(simulation.state)));
+  const joinShip = () => (simulation.match.on ? simulation.match.shipOfTeam(simulation.match.teamForJoiner()) : simulation.state.ships.filter((s) => !s.ai).reduce((best, s) => (crewOf(simulation.state, s).length < crewOf(simulation.state, best).length ? s : best), mainShip(simulation.state)));
   const dropX = (ship) => { const [e0, e1] = ship.layout.boarderEntryPoints; return e0.x + Math.random() * (e1.x - e0.x); };
 
   const count = () => {

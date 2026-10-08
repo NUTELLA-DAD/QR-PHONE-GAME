@@ -39,6 +39,11 @@ const perf = createPerfGovernor({
 window.perfGov = perf; // handy for debugging in the browser console
 fitCanvas();
 
+// Dev (B.5): host.html?gunship=ship makes the enemy gunship a real Ship (gunshipShip.js); ?gunship=old keeps the old offset-from-our-ship one (config.GUNSHIP.AS_SHIP is the default).
+{
+  const g = new URLSearchParams(location.search).get('gunship');
+  if (g === 'ship' || g === 'old') config.GUNSHIP.AS_SHIP = g === 'ship';
+}
 const simulation = createSimulation();
 simulation.setStartBuild(loadStartBuild()); // (the browser host starts a Voyage with the Sparrow, or the classic ship: the pause menu's Ship button; headless tools keep whatever ship they apply)
 // Dev (B.2): host.html?ships=2 puts a SECOND airship in the sky (a copy of the classic one, or host.html?ships=2&build2=[parts JSON]), kept a little behind ours and

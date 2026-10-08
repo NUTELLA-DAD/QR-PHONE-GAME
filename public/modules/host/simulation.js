@@ -6,6 +6,7 @@ import { createCourse, inRock } from './course.js';
 import { createSquadrons } from './squadrons.js';
 import { createSpecials } from './specials.js';
 import { createGunship } from './gunship.js';
+import { createGunshipShip } from './gunshipShip.js';
 import { createHijack } from './hijack.js';
 import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
@@ -13,7 +14,7 @@ import { createEnvironment, favour } from './environments.js';
 import { createSpotter } from './spotter.js';
 import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { refillBags } from './gasBags.js';
-import { createMainShip, createShip, shipOf, eachShip, newGuns, transfer } from './ships.js';
+import { createMainShip, createShip, shipOf, eachShip, newGuns, transfer, areHostile } from './ships.js';
 import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
 import { newBot } from './network.js';
@@ -121,7 +122,7 @@ export function createSimulation() {
   // players with player.ship = her id (ships.js transfer()). She gets the same systems as ship 0 (the sky's hazards run for her too, B.3) except the gunship, which hunts ship 0 only. opts.team ('red' ...) and opts.name dress her for the TV.
   let hijack = null; // (made below, once the world's systems exist; every ship's hookshot needs it)
   const addShip = (parts, opts = {}) => {
-    const sh = state.ships.length === 0 ? createMainShip(state) : createShip(state, { id: opts.id || 'ship' + state.ships.length, parts, layout: opts.layout, formation: opts.formation || { dx: -250, dalt: -1150 }, team: opts.team, name: opts.name });
+    const sh = state.ships.length === 0 ? createMainShip(state) : createShip(state, { id: opts.id || 'ship' + state.ships.length, parts, layout: opts.layout, formation: opts.formation || { dx: -250, dalt: -1150 }, team: opts.team, name: opts.name, ai: opts.ai });
     state.ships.push(sh);
     if (sh.main) {
       state.ventOpen = sh.layout.vents.map(() => false);
@@ -129,14 +130,14 @@ export function createSimulation() {
     }
     sh.sim = createShipSim(state, sh, W);
     if (hijack) sh.sim.attach({ hijack });
-    if (!sh.main && W.course) W.course.place(sh); // (M.2: another ship flies from her own pose; she starts at her station, in open air)
+    if (!sh.main && W.course && opts.place !== false) W.course.place(sh); // (M.2: another ship flies from her own pose; she starts at her station, in open air. The enemy gunship is put where she appears by her own code: opts.place false)
     for (const o of state.ships) if (o !== sh) { sh.sim.air.addProvider(rivalDecks(sh, o)); o.sim.air.addProvider(rivalDecks(o, sh)); } // (Versus: each ship's crew can leap onto the other's decks)
     return sh;
   };
   // Versus (B.4): the decks of a ship of ANOTHER team are landing places (and hook anchors) for a crewman of `me` in the air - a leap, a parachute or a swing across and he is aboard her
   // (shipOf / transfer: from then on he lives by HER rules as a boarder, shipSim.js isHostile). The surfaces are in `me`'s ship coordinates, like all of airborne.js's.
   const rivalDecks = (me, rv) => () => {
-    if (!config.PVP.ENABLED || !state.ships.includes(rv) || !me.team || !rv.team || me.team.id === rv.team.id || rv.state.down > 0) return [];
+    if (!state.ships.includes(rv) || !areHostile(me, rv) || rv.state.down > 0) return []; // (Versus: the other team's ship; B.5: the enemy gunship, and she can board us the same way)
     return rv.layout.platforms.map((pl, d) => {
       const a = toShipX(me, toWorldX(rv, pl.x0)), b = toShipX(me, toWorldX(rv, pl.x1));
       return { id: 'rival:' + rv.id + ':' + d, y: toShipY(me, toWorldY(rv, pl.y)), x0: Math.min(a, b), x1: Math.max(a, b), onLand: (player) => boardShip(player, me, rv, d) };
@@ -150,6 +151,10 @@ export function createSimulation() {
     player.chuteOpen = false;
     player.tumble = false;
     if (state.match && player.team) state.match.count(player.team, 'boardings');
+    if (rv.ai) { // (B.5: our crew landing on the enemy gunship: she stomps, her own director tells the TV and the phone)
+      rv.ai.onBoard(player);
+      return;
+    }
     state.ev.warn = 3.5;
     state.ev.warnText = 'BOARDERS ON THE ' + String(rv.layout.platforms[d].name || 'DECK').toUpperCase() + '!';
     state.sfxQ.push(['alarm']);
@@ -567,7 +572,7 @@ export function createSimulation() {
     if (g && g.phase === 'sinking' && !g.paid) {
       g.paid = true;
       state.run.gunships++;
-      if (g.charge) addSalvage(SV.GUNSHIP_BOARDED, 'gunships', 'Gunship blown up by boarders!');
+      if (g.charge || g.captured) addSalvage(SV.GUNSHIP_BOARDED, 'gunships', g.captured ? 'Gunship captured by boarders!' : 'Gunship blown up by boarders!');
       else addSalvage(SV.GUNSHIP_SHOT, 'gunships', 'Gunship shot down');
     }
     if (state.boss) watch.boss = state.boss;
@@ -967,7 +972,8 @@ export function createSimulation() {
   const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip, firstMission });
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
-  const gunship = createGunship({ state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) });
+  const gunshipDeps = { state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) };
+  const gunship = config.GUNSHIP.AS_SHIP ? createGunshipShip({ ...gunshipDeps, addShip: (...a) => addShip(...a), removeShip: (...a) => removeShip(...a), W }) : createGunship(gunshipDeps); // (B.5: the gunship as a Ship, gunshipShip.js, when the flag is on; else the old offset-from-our-ship one)
   const weather = createWeather({ state, impact, puff });
   const env = createEnvironment({ state, puff, phoneFx, impact, damageHull, ignite: fireSys.ignite }); // ice, thermals, blizzards (rules in environments.js)
   const airFor = { startFlight: (player, ...a) => shipOf(state, player).sim.air.startFlight(player, ...a) }; // (a stolen plane's rider bails out of it from the ship they belong to)
@@ -1064,7 +1070,7 @@ export function createSimulation() {
       course.update(dt);
       weather.update(dt);
       env.update(dt);
-      eachShip(state, (sh, i) => { if (i > 0) sh.sim.env.update(dt); }); // (every other ship has the sky's hazards of her own: ice, thermals, spores, oxygen, storm rods, the sea)
+      eachShip(state, (sh, i) => { if (i > 0 && !sh.ai) sh.sim.env.update(dt); }); // (every other ship has the sky's hazards of her own: ice, thermals, spores, oxygen, storm rods, the sea; the enemy gunship flies in none of them)
       gunship.settle(dt);
       salvageWatch();
     }
@@ -1083,6 +1089,7 @@ export function createSimulation() {
         continue;
       }
       for (const sh of state.ships) {
+        if (sh.ai) continue; // (the enemy gunship is on the enemies' side: their fire passes through her)
         if (sh.sim.shieldBlocks(bullet.x, bullet.y)) {
           bullet.life = 0;
           break;

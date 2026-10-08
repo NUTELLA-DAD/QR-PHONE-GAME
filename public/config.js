@@ -456,6 +456,19 @@ export const config = {
     RESPAWN_TIME: 4, // seconds dazed in the medical bay after falling off
     REWARD_HULL: 15,
     REWARD_COAL: 40,
+    AS_SHIP: true, // true = the gunship is a real Ship in the sky (gunshipShip.js, MOVEMENT.md B.5): her own flight, collisions, fires, holes, steam and a bot crew; false = the old offset-from-our-ship gunship (gunship.js)
+  },
+  // The enemy gunship as a SHIP (gunshipShip.js; only when GUNSHIP.AS_SHIP is on). The old GUNSHIP numbers above still say how she hunts, fires, latches and boards; these say how the ship rules treat her.
+  GUNSHIP_SHIP: {
+    HIT_POWER: 0.12, // impact power of one crew shell on her hull (1 = one enemy bullet, 3 hull): the size of the blow, and with it how often a hit holes her deck, lights a fire or tears her gasbag (as a rival ship's: PVP.SHELL_POWER)
+    SHELL_HULL: 1, // 1 = a shell takes the share of her hull that it took of the old gunship's hit points (shellDmg / her max; the difficulty button and her crew's size do not scale it). Tuned so she takes about as many shells to sink as the old one
+    DAMAGE_MUL: 0.35, // what every other blow costs her hull (a rock scrape, a collision with our ship), as a multiple of what it costs ours on Normal: the old gunship lost about 2.4% of her hull a second grinding along rock, a ship loses 3% every 0.45 s
+    DRAIN_MUL: 1, // what an open hole or a fire costs her hull every second, as a multiple of what it costs ours on Normal
+    FIRE_MUL: 1, // her guns reload this many times slower than the old broadside timers (G.FIRE_EVERY ...), per gun (each manned gun fires on its own timer now)
+    SPEED_MUL: 1.35, // her engines' top speed against ours (the old gunship flew at up to G.MAX_SPEED 760 against our 560): body.topMul, course.js scrollSpeed, flight.js
+    BULLET_SPEED: 620, // her cannonballs (px/s)
+    WEAVE: 0.12, // how much of the PvP captain's weave and dodge (pvp/captainAI.js) her helmsman flies on top of her director's course (0 = none, 1 = as a Versus ship)
+    STYLE_MAP: { aggressive: 'brawler', cautious: 'sniper', boarder: 'boarder', coward: 'daredevil' }, // her blueprint's personality -> the PvP captain style (config.PVP.BOT.STYLES) that sets her weave and dodge
   },
   // Enemy gunship GENERATOR (see gunshipBlueprint.js): every gunship is built from these parts at spawn,
   // so no two are alike. Strength grows with the mission number (shifted -1 on Easy, +1 on Hard).
@@ -1423,6 +1436,7 @@ export const config = {
       green: { name: 'GREEN', color: '#5f9a5a', trim: '#47793f', dark: '#3b6236', pale: '#bcd9b3' },
       gold: { name: 'GOLD', color: '#d2a53d', trim: '#a8801f', dark: '#7a5a14', pale: '#ecd9a0' },
       brass: { name: 'CREW', color: '#b59a5a', trim: '#8a6c2e', dark: '#6b5424', pale: '#e8dcb4' }, // no team: the edge arrows and panel band of a ship that has none
+      enemy: { name: 'GUNSHIP', color: '#8c2f2f', trim: '#4a4346', dark: '#2f2326', pale: '#c9706a' }, // the enemy gunship as a ship (B.5, gunshipShip.js): oxblood, charcoal and iron
     },
     DEV_TEAMS: ['red', 'blue', 'green'], // host.html?teams=1 and botsim --teams: ship 1, 2, 3 take these in turn
     PANEL: { W: 238, H: 116, GAP: 8, Y: 8, CENTER: 870 }, // the compact logbook panel of each ship, on the 1600x900 stage, in a row centred on CENTER (between the big panel and the minimap)
