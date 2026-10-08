@@ -78,13 +78,14 @@ const perf = createPerfGovernor({ onChange: () => {} });
 window.perfGov = perf;
 window.pvp = { simA, simB, cam, GAP, DY, twoCopies, rendA, rendB, ctx, canvas, art };
 
-// Ship B sits GAP world pixels to the right of A (the sim keeps each ship at its own fixed x; the V.2 bridge will derive this from the real positions).
+// Ship B sits GAP world pixels to the right of A (the two sims here fly in their own worlds, so B's world is shifted into A's by offsetB; the bridge
+// shares one sky instead and needs no offset).
 const offsetB = { dx: GAP, dy: DY }; // (kept level with ship A unless ?free=1: each sim flies at its own altitude)
 const LAYERS_A = ['background', 'ship', 'effects', 'dark', 'arrows'];
 const LAYERS_B = ['ship', 'effects'];
 const shipsFor = () => [
-  { bounds: mainShip(simA.state).layout.bounds, alt: simA.state.ship.alt, offset: { dx: 0, dy: 0 }, team: 'red', hull: simA.state.ship.hull },
-  { bounds: mainShip(simB.state).layout.bounds, alt: simB.state.ship.alt, offset: offsetB, team: 'blue', hull: simB.state.ship.hull },
+  { bounds: mainShip(simA.state).layout.bounds, pose: mainShip(simA.state).pose, alt: simA.state.ship.alt, offset: { dx: 0, dy: 0 }, team: 'red', hull: simA.state.ship.hull },
+  { bounds: mainShip(simB.state).layout.bounds, pose: mainShip(simB.state).pose, alt: simB.state.ship.alt, offset: offsetB, team: 'blue', hull: simB.state.ship.hull },
 ];
 
 const STEP = config.LOOP.STEP;
@@ -95,9 +96,10 @@ let paused = false;
 window.pvpPause = (on) => { paused = !!on; };
 
 const drawFrame = (now, dt) => {
+  offsetB.dx = GAP + mainShip(simA.state).pose.x - mainShip(simB.state).pose.x; // (B's ship at GAP to the right of A's whatever each has flown)
   if (!q.has('free')) offsetB.dy = DY + simB.state.ship.alt - simA.state.ship.alt;
   const ships = shipsFor();
-  const view = cam.update(dt, ships, canvas.width, canvas.height, { scroll: simA.state.course ? simA.state.course.dist : undefined, pixelRatio: 1 });
+  const view = cam.update(dt, ships, canvas.width, canvas.height, { pixelRatio: 1 });
   perfModB.perfState.level = perfState.level; // one perf level for both copies
   rendA.renderFrame(now, view, { layers: LAYERS_A });
   rendB.renderFrame(now, view, { layers: LAYERS_B, worldOffset: offsetB, noClear: true, bobPhase: 1.7 });

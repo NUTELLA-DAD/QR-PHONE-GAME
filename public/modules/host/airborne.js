@@ -1,9 +1,12 @@
 // Airborne crew: jumping off the ship, falling onto lower decks, going overboard, and being
 // thrown about by hard hits. Walking and hopping on a deck stay in simulation.js / nav.js; this
-// module takes over once a player is in FREE FLIGHT (player.fly = true, ship coordinates).
+// module takes over once a player is in FREE FLIGHT (player.fly = true).
 //
-// Player fields while flying: fvx, fvy (px/s, y grows downward), apex (highest y reached, for
-// the fall height), rot (lean/tumble for drawing). After landing: squash (0..1, decays).
+// While flying a player is a WORLD object (M.1): p.x / p.y are map coordinates and fvx, fvy are world velocities (px/s, y grows downward).
+// startFlight() takes the place on the ship she leaves from (ship coordinates) and a velocity relative to the ship; landing, ladders and
+// overboard convert back with pose.js (toShip), because the surfaces below are in SHIP coordinates.
+// Other player fields while flying: apex (highest y reached, in SHIP coordinates, for the fall height), lsy (last y in ship coordinates, so a deck
+// that rises into her still catches her), rot (lean/tumble for drawing). After landing: squash (0..1, decays).
 //
 // LANDING SURFACES (so other bodies can be added later by other code)
 //   A surface is { id, y, x0, x1, onLand?, d? } where y / x0 / x1 are numbers OR functions
@@ -18,13 +21,15 @@
 //   Alternatively pass `providers` (functions returning an array of surfaces each frame).
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const val = (v) => (typeof v === 'function' ? v() : v);
 
 export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const A = config.AIR;
-  const L = mainShip(state).layout; // (this ship's own layout)
+  const ship = mainShip(state);
+  const L = ship.layout; // (this ship's own layout)
   const P = L.platforms;
   const extra = []; // surfaces added by other code
   const extraProviders = [...providers];
@@ -56,8 +61,9 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   };
   const addProvider = (f) => extraProviders.push(f);
 
-  // Leave the deck into free flight from (x, y) with velocity (vx, vy) (vy down is positive).
+  // Leave the deck into free flight from (p.x, p.y) on the ship with velocity (vx, vy) relative to her (vy down is positive).
   const startFlight = (p, vx, vy) => {
+    const sy = p.y;
     p.fly = true;
     p.air = true;
     p.jz = 0;
@@ -65,9 +71,12 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     p.vx = 0;
     p.conn = null;
     p.climb = false;
-    p.fvx = vx;
-    p.fvy = vy;
-    p.apex = p.y;
+    p.x = toWorldX(ship, p.x); // (from here she is a world object)
+    p.y = toWorldY(ship, sy);
+    p.fvx = vx + ship.pose.vx;
+    p.fvy = vy + ship.pose.vy;
+    p.apex = sy;
+    p.lsy = sy;
     p.stag = 0;
     p.chute = 0; // no parachute (set by jumpChute)
   };
@@ -98,7 +107,8 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     if (p.bot || p.conn != null || p.onGunship || p.lock || p.ko > 0) return false;
     if (!(p.fly || p.air)) return false;
     if ((p.jy || 0) > 0.6) return false;
-    const y = p.fly ? p.y : p.y - (p.jz || 0);
+    const px = p.fly ? toShipX(ship, p.x) : p.x; // (a ladder is part of the ship: compare in ship coordinates)
+    const y = p.fly ? toShipY(ship, p.y) : p.y - (p.jz || 0);
     for (let i = 0; i < L.connectors.length; i++) {
       const c = L.connectors[i];
       if (c.type !== 'ladder' && c.type !== 'rope') continue;
@@ -107,7 +117,8 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       const yb = P[c.bottom].y;
       if (y < yt + 6 || y > yb - 4) continue;
       const s = (y - yt) / (yb - yt);
-      if (Math.abs(p.x - (c.xTop + (c.xBottom - c.xTop) * s)) > A.GRAB_REACH) continue;
+      if (Math.abs(px - (c.xTop + (c.xBottom - c.xTop) * s)) > A.GRAB_REACH) continue;
+      p.x = px; // (back on the ship: ship coordinates again)
       p.fly = false;
       p.air = false;
       cutChute(p);
@@ -120,7 +131,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       p.conn = i;
       p.s = s;
       p.climb = true;
-      puff(p.x, y, '#ffffff', 3);
+      puff(toWorldX(ship, px), toWorldY(ship, y), '#ffffff', 3);
       return true;
     }
     return false;
@@ -212,7 +223,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     if (!p.fly) return false;
     if (p.regrabCd > 0) p.regrabCd -= dt;
     const ctrl = controlled && (!p.bot || p.daring) ? clamp(p.jx || 0, -1, 1) : 0; // (bots only steer in the air on a daring stunt)
-    const drift = -Math.max(0, state.ship.speed || 0) * A.SHIP_DRIFT;
+    const drift = ship.pose.vx - Math.max(0, state.ship.speed || 0) * A.SHIP_DRIFT; // (the air streams past the ship: she hangs back from it by this much)
     const gm = (state.env && state.env.gravity) || 1; // low gravity in The Aether (config.ENVIRONMENTS.aether.GRAVITY)
     if (p.chute > 0) {
       p.chute += dt;
@@ -228,10 +239,13 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       p.fvx -= (p.fvx - drift) * Math.min(1, A.DRAG * dt);
       p.fvy = Math.min(A.MAX_FALL, p.fvy + A.GRAVITY * gm * dt);
     }
-    const py = p.y;
+    const py = p.lsy != null ? p.lsy : toShipY(ship, p.y); // (where she was, on the ship, last step)
     p.x += p.fvx * dt;
     p.y += p.fvy * dt;
-    p.apex = Math.min(p.apex, p.y);
+    const sx = toShipX(ship, p.x); // (the surfaces and the ship's edges are in ship coordinates)
+    const sy = toShipY(ship, p.y);
+    p.lsy = sy;
+    p.apex = Math.min(p.apex, sy);
     p.rot = p.chuteOpen ? clamp(p.fvx * 0.0003, -0.2, 0.2) : clamp(p.fvx * 0.0008, -0.3, 0.3);
     if (Math.abs(ctrl) > 0.15) p.face = ctrl < 0 ? -1 : 1;
     p.moving = false;
@@ -241,11 +255,11 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     if (p.fvy >= 0 && !(p.noLand > 0)) {
       let best = null;
       for (const s of surfaces()) {
-        const sy = val(s.y);
-        if (sy == null) continue; // (a surface that isn't there right now, e.g. no gunship)
+        const surfY = val(s.y);
+        if (surfY == null) continue; // (a surface that isn't there right now, e.g. no gunship)
         if (s.onLand === undefined && s.d === undefined) continue;
-        if (p.x < val(s.x0) || p.x > val(s.x1)) continue;
-        if (py < sy && p.y >= sy && (!best || sy < best.y)) best = { s, y: sy };
+        if (sx < val(s.x0) || sx > val(s.x1)) continue;
+        if (py < surfY && sy >= surfY && (!best || surfY < best.y)) best = { s, y: surfY };
       }
       if (best) {
         land(p, best.s, best.y);
@@ -255,35 +269,38 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     // Overboard: well below the ship or far past either end.
     // (Past the bow counts only beyond any other deck out there, e.g. a gunship alongside.)
     const farX = Math.max(1600, ...extra.map((s) => (val(s.y) == null ? 0 : val(s.x1)))) + A.OVERBOARD_X;
-    if (p.y > (p.chute > 0 ? A.CHUTE_OVERBOARD_Y : A.OVERBOARD_Y) || p.x < -A.OVERBOARD_X || p.x > farX) {
+    if (sy > (p.chute > 0 ? A.CHUTE_OVERBOARD_Y : A.OVERBOARD_Y) || sx < -A.OVERBOARD_X || sx > farX) {
       p.fly = false;
       p.air = false;
       cutChute(p);
+      p.x = sx; // (the fall and the tumble work in ship coordinates, relative to her)
+      p.y = sy;
       p.fall = true; // the existing fall -> medical bay respawn takes it from here
       p.tumble = true;
-      p.tvy = Math.max(p.fvy, 300);
-      p.tvx = p.fvx;
+      p.tvy = Math.max(p.fvy - ship.pose.vy, 300);
+      p.tvx = p.fvx - ship.pose.vx;
       p.carry = null;
       p.moving = false;
-      puff(p.x, Math.min(p.y, A.OVERBOARD_Y) - 20, '#ffffff', 5);
+      puff(toWorldX(ship, sx), toWorldY(ship, Math.min(sy, A.OVERBOARD_Y) - 20), '#ffffff', 5);
       return false;
     }
     return true;
   };
 
   const land = (p, s, y) => {
-    const speed = p.fvy;
+    const speed = p.fvy - ship.pose.vy; // (how fast she meets the deck)
     const height = p.chuteOpen ? 0 : y - p.apex; // a parachute landing is a soft one
     cutChute(p);
     p.fly = false;
     p.air = false;
     p.jz = 0;
+    p.x = toShipX(ship, p.x); // (on a deck: ship coordinates again)
     p.y = y;
-    p.vx = p.fvx * 0.25;
+    p.vx = (p.fvx - ship.pose.vx) * 0.25;
     p.jumpCd = config.MOVE.JUMP_COOLDOWN;
     p.squash = clamp(0.35 + speed / 1400, 0.35, 1);
     p.rot = 0;
-    puff(p.x, y - 4, '#d9cbb0', 4 + Math.min(6, Math.round(speed / 200)));
+    puff(toWorldX(ship, p.x), toWorldY(ship, y - 4), '#d9cbb0', 4 + Math.min(6, Math.round(speed / 200)));
     if (s.d !== undefined) {
       p.d = s.d;
       p.x = clamp(p.x, P[s.d].x0, P[s.d].x1);
@@ -292,7 +309,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     if (height > A.STUN_HEIGHT) {
       p.ko = Math.max(p.ko || 0, A.STUN_TIME);
       p.prog = 0;
-      puff(p.x, y - 30, '#ffe9a8', 5);
+      puff(toWorldX(ship, p.x), toWorldY(ship, y - 30), '#ffe9a8', 5);
       phoneFx(p, 'Hard landing!', null);
     }
   };

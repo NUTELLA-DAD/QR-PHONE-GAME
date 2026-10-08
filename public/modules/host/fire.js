@@ -9,7 +9,7 @@
 import { config } from '../../config.js';
 import { all } from '../../shipLayout.js';
 import { mainShip } from './ships.js';
-import { toWorldY } from './pose.js';
+import { toWorldX, toWorldY } from './pose.js';
 import { crewMul } from './crewscale.js';
 import { pop } from './popups.js';
 import { flamAt, fireCap, spreadSpots, coalAt } from './fireModel.js';
@@ -47,7 +47,7 @@ export function createFire({ state, shipPuff }) {
     state.ev.warn = 4;
     state.ev.warnText = B.CALL;
     state.sfxQ.push(['alarm']);
-    pop(state, fire.x, toWorldY(ship, p.y - 150), 'WHOOOOSH!', '#ff5a1f', 1.5);
+    pop(state, toWorldX(ship, fire.x), toWorldY(ship, p.y - 150), 'WHOOOOSH!', '#ff5a1f', 1.5);
     shipPuff(fire.x, p.y - 60, '#3b3b3b', 14);
   };
 

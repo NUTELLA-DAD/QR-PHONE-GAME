@@ -3,6 +3,8 @@
 // so each reads at a glance from across the room.
 import { config } from '../../config.js';
 import { envOf } from './environments.js';
+import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 
 export function createSpecialsArt({ ctx, state, ink }) {
   const drawSaw = (s) => {
@@ -135,8 +137,8 @@ export function createSpecialsArt({ ctx, state, ink }) {
   const drawTug = (g, time) => {
     // Cable to the hook (flashing red so the crew know to shoot it).
     if (g.mode === 'pull' && g.hook) {
-      const hx = g.hook.x;
-      const hy = g.hook.y - state.ship.alt;
+      const hx = toWorldX(mainShip(state), g.hook.x); // (the hook is on the ship: ship coordinates)
+      const hy = toWorldY(mainShip(state), g.hook.y);
       ctx.strokeStyle = '#2b2622';
       ctx.lineWidth = 10;
       ctx.beginPath();

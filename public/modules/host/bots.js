@@ -13,6 +13,7 @@ import { botJobs as goingDownJobs } from './goingDown.js';
 import { autopilotOn } from './crewscale.js';
 import { flamAt } from './fireModel.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const B = config.BOTS;
 // Tables worked out per ship layout (rebuilt when a new ship build is applied to it): `tables(L).MAIN` ... Every function below gets its layout as
@@ -102,10 +103,11 @@ function firingSolution(state, gun) {
 // Helm: altitude that dodges the next mine skimming the top or bottom of the ship (or null).
 // Best direction for the Lightning Coil: the angle (within its arc) that lines up the most targets.
 function coilShot(state) {
-  const L = mainShip(state).layout;
+  const ship = mainShip(state);
+  const L = ship.layout;
   const M = L.coil;
-  const ex = M.x;
-  const ey = M.y - 60 - state.ship.alt;
+  const ex = toWorldX(ship, M.x); // (targets are in the world)
+  const ey = toWorldY(ship, M.y - 60);
   const angles = [];
   for (const t of targets(state)) {
     const p = t.at(0);
@@ -145,12 +147,12 @@ const swivelOff = (state, name) => {
 
 // The nearest bullet, bat, rocket or bomb coming at the ship (for the Deflector), or null.
 function incoming(state) {
-  const L = mainShip(state).layout;
-  const S = L.shield;
+  const ship = mainShip(state);
+  const S = ship.layout.shield;
   let best = null;
   let bestD = 1600;
   const consider = (x, y) => {
-    const d = Math.hypot((x - S.cx) * 0.7, y + state.ship.alt - S.cy);
+    const d = Math.hypot((toShipX(ship, x) - S.cx) * 0.7, toShipY(ship, y) - S.cy);
     if (d < bestD) (bestD = d), (best = { x, y });
   };
   for (const b of state.bullets) if (!b.miss) consider(b.x, b.y);
@@ -179,23 +181,25 @@ function gunReach(state, n) {
   return best.target.kind === 'turret' ? 0.8 : 1;
 }
 
-// Things below and ahead worth bombing, as world x ranges: live turrets and buildings.
+// Things below and ahead worth bombing, as x ranges in SHIP coordinates (where the bomb bay is): live turrets and buildings.
 function groundTargets(state) {
   const c = state.course;
   if (!c) return [];
+  const ship = mainShip(state);
   const out = [];
-  for (const t of c.turrets) if (!t.dead && t.x != null && t.x > -600 && t.x < 3200) out.push([t.x - 30, t.x + 30]);
-  for (const f of c.features) for (const b of f.blocks || []) if (b.x1 - c.dist > -600 && b.x0 - c.dist < 3200) out.push([b.x0 - c.dist, b.x1 - c.dist]);
+  for (const t of c.turrets) if (!t.dead && t.x != null && toShipX(ship, t.x) > -600 && toShipX(ship, t.x) < 3200) out.push([toShipX(ship, t.x) - 30, toShipX(ship, t.x) + 30]);
+  for (const f of c.features) for (const b of f.blocks || []) if (toShipX(ship, b.x1) > -600 && toShipX(ship, b.x0) < 3200) out.push([toShipX(ship, b.x0), toShipX(ship, b.x1)]);
   return out;
 }
 
 // A sniper about to fire with its line across the ship: climb or dive out of it.
 function beamDodge(state) {
-  const L = mainShip(state).layout;
+  const ship = mainShip(state);
+  const L = ship.layout;
   for (const z of (state.specials && state.specials.snipers) || []) {
     if (!(z.mode === 'lock' || (z.mode === 'charge' && z.t < 1.2))) continue;
-    const cy = L.shield.cy - state.ship.alt;
-    const lineY = z.y + Math.tan(z.aim) * (L.shield.cx - z.x);
+    const cy = toWorldY(ship, L.shield.cy);
+    const lineY = z.y + Math.tan(z.aim) * (toWorldX(ship, L.shield.cx) - z.x);
     if (Math.abs(Math.cos(z.aim)) < 0.2 || Math.abs(lineY - cy) > 520) continue;
     return state.ship.alt + (lineY > cy ? 380 : -380);
   }
@@ -204,12 +208,13 @@ function beamDodge(state) {
 
 // Sunken Sea: the altitude that puts the bomb-bay rope just above the next survivor ahead (null = none worth a dip).
 function rescueAltitude(state) {
-  const L = mainShip(state).layout;
+  const ship = mainShip(state);
+  const L = ship.layout;
   const s = state.sea;
   const c = state.course;
   if (!s || !c || !c.map || !L.bombBay || s.y == null || state.env.id !== 'sea' || state.ship.hull < 40 || s.flood > 0.5) return null; // (no bomb bay, no rope to rescue anyone with)
   const R = config.ENVIRONMENTS.sea.RESCUE;
-  const bx = c.dist + L.bombBay.x;
+  const bx = toWorldX(ship, L.bombBay.x);
   for (const sv of s.survivors) {
     if (sv.saved || sv.lost) continue;
     const dx = sv.mx - bx;
@@ -221,14 +226,17 @@ function rescueAltitude(state) {
 }
 
 function dodgeAltitude(state) {
-  const L = mainShip(state).layout;
+  const ship = mainShip(state);
+  const L = ship.layout;
   const R = config.MINES.RADIUS;
   let soonest = null;
   for (const m of state.mines || []) {
-    if (m.x < L.bounds.x0 || m.vx >= 0) continue;
-    const t = (m.x - L.bounds.x1) / -m.vx;
+    const mx = toShipX(ship, m.x); // (how far along her, and how fast it closes on her)
+    const closing = m.vx - ship.pose.vx;
+    if (mx < L.bounds.x0 || closing >= 0) continue;
+    const t = (mx - L.bounds.x1) / -closing;
     if (t > 6) continue;
-    const rel = m.y + state.ship.alt;
+    const rel = toShipY(ship, m.y);
     let target = null;
     if (rel > -10 - R && rel < 330) target = -10 - R - 30 - m.y; // dive under it
     else if (rel > 700 && rel < L.bounds.y1 + R) target = L.bounds.y1 + R + 30 - m.y; // climb over it
@@ -258,9 +266,12 @@ function listJobs(state, bot) {
   for (const f of hotFires) jobs.push({ kind: 'fire', obj: f, max: 2, cap: B.HOT_FIRE_CAP, urgent: true });
   // Outpost raid: the bomb bay is how outposts die. Bombs run out while the ship hovers over a gun: someone fetches more, now.
   const c = state.course;
-  const bombRun = !!(c && c.map && c.map.open && !c.done && c.target && Math.hypot(c.target.x - (c.dist + L.refPoint.x), c.target.y - (L.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_RANGE);
+  const shipH = mainShip(state);
+  const refX = toWorldX(shipH, L.refPoint.x); // (the middle of the ship, in the world: the outposts are in map coordinates)
+  const refY = toWorldY(shipH, L.refPoint.y);
+  const bombRun = !!(c && c.map && c.map.open && !c.done && c.target && Math.hypot(c.target.x - refX, c.target.y - refY) < config.MAPS.BOMB_RUN_RANGE);
   const bay = bayName(L);
-  const bombStarved = bombRun && !!bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs <= 0 && !mods.some((m) => m.name === bay && m.broken) && Math.hypot(c.target.x - (c.dist + L.refPoint.x), c.target.y - (L.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN * 2;
+  const bombStarved = bombRun && !!bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs <= 0 && !mods.some((m) => m.name === bay && m.broken) && Math.hypot(c.target.x - refX, c.target.y - refY) < config.MAPS.BOMB_RUN_MAN * 2;
   // The boiler is dying (no coal, or the pressure has collapsed): nothing else works without steam - stoke it right away.
   const ship = state.ship;
   if (state.phase === 'flying' && L.hasKind('boiler') && L.hasKind('coal') && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
@@ -363,7 +374,7 @@ function listJobs(state, bot) {
   jobs.push(...linkJobs(state, bot, false)); // (...and the quieter links: loaders for idle guns, the boiler surge)
   for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // Hovering over an outpost with bombs aboard: one bot drops everything and mans the bomb bay.
-  if (bay && bombRun && c.target && Math.hypot(c.target.x - (c.dist + L.refPoint.x), c.target.y - (L.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken(bay) && !players.some((q) => L.kindOf(q.lock) === 'bombBay')) jobs.unshift({ kind: 'station', obj: bay, max: 1 });
+  if (bay && bombRun && c.target && Math.hypot(c.target.x - toWorldX(mainShip(state), L.refPoint.x), c.target.y - toWorldY(mainShip(state), L.refPoint.y)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken(bay) && !players.some((q) => L.kindOf(q.lock) === 'bombBay')) jobs.unshift({ kind: 'station', obj: bay, max: 1 });
   return jobs;
 }
 
@@ -500,7 +511,7 @@ function operate(p, state, dt) {
     p.gunIdle = t ? 0 : (p.gunIdle || 0) + dt;
     if (t) {
       const S = L.shield;
-      const a = Math.atan2((t.y + state.ship.alt - S.cy) / S.ry, (t.x - S.cx) / S.rx);
+      const a = Math.atan2((toShipY(mainShip(state), t.y) - S.cy) / S.ry, (toShipX(mainShip(state), t.x) - S.cx) / S.rx);
       p.jx = Math.cos(a);
       p.jy = Math.sin(a);
     }
@@ -508,8 +519,8 @@ function operate(p, state, dt) {
     // Sweep the beam toward the enemy nearest the ship (in the dark with nothing about: a slow sweep); focus on it.
     const l = (state.searchlights || []).find((q) => q.n === p.lock);
     if (!l) return;
-    const sx = L.midPoint.x;
-    const sy = L.midPoint.y - state.ship.alt;
+    const sx = toWorldX(mainShip(state), L.midPoint.x);
+    const sy = toWorldY(mainShip(state), L.midPoint.y);
     const pitch = state.ship.pitch || 0;
     let best = null;
     for (const t of [...state.litTargets, ...state.dimTargets]) {
@@ -531,7 +542,8 @@ function operate(p, state, dt) {
     const aim = state.bombBay.aim;
     const targets = groundTargets(state);
     p.gunIdle = targets.length && state.bombBay.bombs > 0 ? 0 : (p.gunIdle || 0) + dt;
-    p.fire = !!aim && targets.some(([x0, x1]) => aim.x > x0 - 70 && aim.x < x1 + 70);
+    const aimX = aim ? toShipX(mainShip(state), aim.x) : 0; // (the aiming ring is in the world, the ranges are along the ship)
+    p.fire = !!aim && targets.some(([x0, x1]) => aimX > x0 - 70 && aimX < x1 + 70);
   } else {
     const gun = state.GUNS[p.lock];
     if (!gun) return;
@@ -718,15 +730,16 @@ const stuntLog = (state, p, text) => {
   if (log.length > 400) log.shift();
 };
 
-// Flying planes within hook reach of (ship coordinates) o: [{ s, x, y (ship coordinates), d }], nearest first.
+// Flying planes within hook reach of (world) o: [{ s, x, y (world), sx, sy (the same point in ship coordinates), d }], nearest first.
 function planesNear(state, o, reach) {
+  const ship = mainShip(state);
   const list = [...(state.strafers || []).filter((s) => s.hp > 0)];
   const big = state.stunts.bigFighter && state.stunts.bigFighter();
   if (big) list.push(big);
   return list
-    .map((s) => ({ s, x: s.x, y: s.y + state.ship.alt, d: Math.hypot(s.x - o.x, s.y + state.ship.alt - o.y) }))
+    .map((s) => ({ s, x: s.x, y: s.y, sx: toShipX(ship, s.x), sy: toShipY(ship, s.y), d: Math.hypot(s.x - o.x, s.y - o.y) }))
     // (over the ship, and not flying away from it: a bot dragged out past the ship's ends would go overboard)
-    .filter((q) => q.d <= reach && q.x > -250 && q.x < 1900 && q.y > -350 && q.y < 880 && q.s.x + (q.s.vx || 0) * 1.5 > -250 && q.s.x + (q.s.vx || 0) * 1.5 < 1900 && q.y + (q.s.vy || 0) * 1.5 > -350 && q.y + (q.s.vy || 0) * 1.5 < 800)
+    .filter((q) => q.d <= reach && q.sx > -250 && q.sx < 1900 && q.sy > -350 && q.sy < 880 && q.sx + ((q.s.vx || 0) - ship.pose.vx) * 1.5 > -250 && q.sx + ((q.s.vx || 0) - ship.pose.vx) * 1.5 < 1900 && q.sy + (q.s.vy || 0) * 1.5 > -350 && q.sy + (q.s.vy || 0) * 1.5 < 800)
     .sort((a, b) => a.d - b.d);
 }
 
@@ -761,8 +774,8 @@ function aimGun(state, p) {
     const x0 = val(s.x0);
     const x1 = val(s.x1);
     for (const f of [0.5, 0.3, 0.7, 0.15, 0.85]) {
-      const tx = x0 + (x1 - x0) * f;
-      const ty = y + 4;
+      const tx = toWorldX(mainShip(state), x0 + (x1 - x0) * f); // (the surfaces are on the ship; the hook flies in the world)
+      const ty = toWorldY(mainShip(state), y + 4);
       const m = Math.hypot(tx - o.x, ty - o.y);
       if (m > DR.GUN_REACH || m < 90) continue;
       const c = S.cast(o, (tx - o.x) / m, (ty - o.y) / m);
@@ -791,11 +804,12 @@ function aimPlane(state, p) {
 
 // Which stunts are possible right now?
 function dareKinds(state) {
-  const L = mainShip(state).layout;
+  const ship = mainShip(state);
+  const L = ship.layout;
   const kinds = [];
-  const o = { x: L.aimPoint.x, y: L.aimPoint.y };
+  const o = { x: toWorldX(ship, L.aimPoint.x), y: toWorldY(ship, L.aimPoint.y) };
   // (any plane about is a reason to go and wait for it out on the top deck; hooking it needs it to come close and clear)
-  if ((state.strafers || []).some((s) => s.hp > 0 && Math.hypot(s.x - o.x, s.y + state.ship.alt - o.y) < 3000) || (state.stunts.bigFighter() && Math.hypot(state.enemy.x - o.x, state.enemy.y + state.ship.alt - o.y) < 3000)) kinds.push('plane');
+  if ((state.strafers || []).some((s) => s.hp > 0 && Math.hypot(s.x - o.x, s.y - o.y) < 3000) || (state.stunts.bigFighter() && Math.hypot(state.enemy.x - o.x, state.enemy.y - o.y) < 3000)) kinds.push('plane');
   const gs = state.gunship;
   if (gs && gs.rope && !gs.charge && (gs.phase === 'hunt' || gs.phase === 'latch')) kinds.push('gun');
   kinds.push('show');
@@ -850,7 +864,7 @@ function setPhase(p, state, phase) {
   stuntLog(state, p, p.dare.kind + ' -> ' + phase);
 }
 
-// Steer the stick toward a point (ship coordinates, horizontal only).
+// Steer the stick toward a point (world x, horizontal only: the flyer is in the world).
 const steerAirTo = (p, x) => {
   p.jx = clamp((x - p.x) / 120, -1, 1);
   p.jy = 0;
@@ -904,16 +918,16 @@ function dareStep(p, state, dt) {
       } else if (d.kind === 'plane') {
         // Wait out at the end of the top deck on the side the nearest plane is on: the hook goes through nothing
         // solid, but it catches the decks and the gasbag, so a clear shot is out past the ship's end.
-        const near = planesNear(state, { x: L.aimPoint.x, y: L.aimPoint.y }, 2200)[0];
+        const near = planesNear(state, { x: toWorldX(mainShip(state), L.aimPoint.x), y: toWorldY(mainShip(state), L.aimPoint.y) }, 2200)[0];
         // (a plane level with or below the main deck is shot at from the end of the lower deck instead)
-        const low = near && near.y > 600;
+        const low = near && near.sy > 600;
         // The crew's guns spare the plane it has its eye on (the one nearest the ship), so it lives long enough to be hooked.
         if (!state.stuntPlane || !(state.stuntPlane.hp > 0) || !(state.strafers.includes(state.stuntPlane) || state.stuntPlane === state.enemy)) {
-          const mid = L.aimPoint;
-          state.stuntPlane = [...state.strafers.filter((s) => s.hp > 0)].sort((a, b) => Math.hypot(a.x - mid.x, a.y + state.ship.alt - mid.y) - Math.hypot(b.x - mid.x, b.y + state.ship.alt - mid.y))[0] || null;
+          const mid = { x: toWorldX(mainShip(state), L.aimPoint.x), y: toWorldY(mainShip(state), L.aimPoint.y) };
+          state.stuntPlane = [...state.strafers.filter((s) => s.hp > 0)].sort((a, b) => Math.hypot(a.x - mid.x, a.y - mid.y) - Math.hypot(b.x - mid.x, b.y - mid.y))[0] || null;
         }
         const deck = L.platforms[low ? tables(L).LOWER : tables(L).CATWALK]; // (25 px in from the end of the lower deck, 35 from the end of the top deck)
-        const there = steer(p, low ? tables(L).LOWER : tables(L).CATWALK, near && near.x < L.aimPoint.x ? (low ? deck.x0 + 25 : deck.x0 + 35) : low ? deck.x1 - 25 : deck.x1 - 35, 30);
+        const there = steer(p, low ? tables(L).LOWER : tables(L).CATWALK, near && near.sx < L.aimPoint.x ? (low ? deck.x0 + 25 : deck.x0 + 35) : low ? deck.x1 - 25 : deck.x1 - 35, 30);
         if (there && d.aimCd <= 0) {
           // (only from the spot: shooting upward while walking past a ladder would climb it instead of firing)
           d.aimCd = 0.25;
@@ -959,7 +973,7 @@ function dareStep(p, state, dt) {
       if (h.phase === 'caught') {
         p.fire = true; // reel in
         // Dragged out toward the ship's ends (a plane flying off with her)? Let go while there is still ship to come back to.
-        const wayOut = d.kind === 'plane' && (p.x < -330 || p.x > 1980 || p.y > 720);
+        const wayOut = d.kind === 'plane' && (toShipX(mainShip(state), p.x) < -330 || toShipX(mainShip(state), p.x) > 1980 || toShipY(mainShip(state), p.y) > 720);
         if ((d.pt > DR.REEL_TIMEOUT || wayOut) && h.t >= config.HOOKSHOT.RELEASE_LOCK) {
           p.fire = false;
           p.atkQ = true; // let go
@@ -987,7 +1001,7 @@ function dareStep(p, state, dt) {
       const s = p.hj;
       if (!s) return setPhase(p, state, 'land'), true;
       d.flyT = (d.flyT || 0) + dt;
-      const mid = { x: L.aimPoint.x, y: L.aimPoint.y - state.ship.alt };
+      const mid = { x: toWorldX(mainShip(state), L.aimPoint.x), y: toWorldY(mainShip(state), L.aimPoint.y) };
       const homeBound = d.flyT > (d.big ? DR.FLY_TIME_BIG : DR.FLY_TIME) || s.fuel < 9 || s.hp <= 2 || Math.hypot(s.x - mid.x, s.y - mid.y) > 1500;
       if (!homeBound) {
         // Hunt the nearest enemy plane near the ship; with none, the plane circles the ship by herself.
@@ -1008,18 +1022,18 @@ function dareStep(p, state, dt) {
       }
       // Home: fly to the air above the ship's middle, and bail out when she is over it and clear of the hull.
       const tx = mid.x;
-      const ty = L.bounds.y0 - state.ship.alt - 520;
+      const ty = toWorldY(mainShip(state), L.bounds.y0) - 520;
       const dm = Math.hypot(tx - s.x, ty - s.y) || 1;
       p.jx = (tx - s.x) / dm;
       p.jy = (ty - s.y) / dm;
       d.homeT = (d.homeT || 0) + dt;
-      const above = s.y + state.ship.alt < DR.BAIL_Y;
+      const above = toShipY(mainShip(state), s.y) < DR.BAIL_Y;
       // (Over the ship and clear of the hull is best; after a few seconds of trying, anywhere the parachute can still bring her home is fine.)
       const sx = s.x - mid.x;
-      const chuteOk = Math.abs(sx) < 1200 && s.y + state.ship.alt < 800;
+      const chuteOk = Math.abs(sx) < 1200 && toShipY(mainShip(state), s.y) < 800;
       if ((Math.abs(sx) < DR.BAIL_OVER && above) || (d.homeT > 10 && chuteOk) || d.homeT > 30 || s.fuel < 2.5) {
         p.leaveQ = true;
-        d.landX = L.aimPoint.x;
+        d.landX = mid.x;
         return setPhase(p, state, 'land'), true;
       }
       return true;
@@ -1039,7 +1053,7 @@ function dareStep(p, state, dt) {
       }
       if (p.fly) {
         // Drift toward where we want to come down (a deck of ours; the gunship's deck for that stunt).
-        steerAirTo(p, d.kind === 'gun' && d.phase === 'land' && d.landX != null && state.gunship ? d.landX : L.aimPoint.x);
+        steerAirTo(p, d.kind === 'gun' && d.phase === 'land' && d.landX != null && state.gunship ? d.landX : toWorldX(mainShip(state), L.aimPoint.x));
         return true;
       }
       if (p.air) return true; // (a hop in the air)

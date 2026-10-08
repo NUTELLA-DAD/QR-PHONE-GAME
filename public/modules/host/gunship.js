@@ -33,7 +33,8 @@
 // Her captain (decide / plan) scores what to do - hold a firing spot, STRAFE past us, climb above us for
 // paratroopers, RETREAT to patch her hull, FLEE, latch on - and shows it on a pennant on her mast (g.intent).
 // Her stern guns only bear on us when her stern faces us (g.bears).
-// Her position is stored as an offset from our ship (g.dx, g.dy, in ship coordinates; dy is down).
+// Her position is stored as an offset from our ship (g.dx, g.dy, in ship coordinates; dy is down). Where she meets the sky (rock tests, her shots and
+// paratroopers, puffs, shells that hit her) she is converted through pose.js: toWorld / toShip.
 // Everything on her (crew, posts, boarders) lives in her own "home frame" (x = g.bp.x0..g.bp.x1, y = the deck
 // heights in g.bp.decks) and is shifted by (g.dx, g.dy) to reach ship coordinates - see deckAt().
 // No two gunships are alike: gunshipBlueprint.js generates each one's hull, decks, guns, special, crew and captain.
@@ -44,6 +45,7 @@ import { layoutTables } from '../../shipLayout.js';
 import { inRock, scrollSpeed } from './course.js';
 import { platformBelow } from './nav.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { pop } from './popups.js';
 import { applyForce } from './forces.js';
 import { shellDmg } from './aim.js';
@@ -84,12 +86,15 @@ const rightEnd = (g) => g.bp.x1;
 const isCannon = (g, k) => g.bp.weapons[k].kind === 'cannon';
 
 export function createGunship({ state, puff, impact, credit, dropOne, pickType, spawnBats }) {
-  const layout = mainShip(state).layout; // (B1: OUR ship, the one she hunts; B2 makes this one per ship)
+  const ship = mainShip(state); // (B1: OUR ship, the one she hunts; B2 makes this one per ship)
+  const layout = ship.layout;
   const P = layout.platforms;
+  const sPuff = (x, y, c, n) => puff(toWorldX(ship, x), toWorldY(ship, y), c, n); // (a puff at a point in ship coordinates)
+  const sPop = (x, y, kind, color, size) => pop(state, toWorldX(ship, x), toWorldY(ship, y), kind, color, size);
   const AIM = layout.aimPoint; // where her fire is aimed on our ship (centre of our hull)
   const geom = () => shipGeom(layout);
   state.gunship = null;
-  state.paras = []; // paratroopers in the air (world coordinates, like shells)
+  state.paras = []; // paratroopers in the air (world coordinates, like shells; vx is a world velocity)
   const S = (state.gsStats = { spawned: 0, dropped: 0, shot: 0, landed: 0, latches: 0, cut: 0, sent: 0, portsDown: 0, contacts: 0, collisions: 0, reverts: 0, maxDepth: 0, breakoffs: 0, shots: 0, turns: 0, strafes: 0, retreats: 0, aborts: 0, flees: 0, climbs: 0, mortars: 0, flaks: 0, turretShots: 0, bats: 0, harpoons: 0, ladders: 0 });
   const warn = (text, secs = 3.5) => {
     state.ev.warn = secs;
@@ -99,8 +104,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
 
   // Is any of this outline (at offset dx, dy from our ship) inside rock?
   const hits = (dx, dy, pts) => {
-    const alt = state.ship.alt;
-    for (const [x, y] of pts) if (inRock(state, x + dx, y + dy - alt)) return true;
+    for (const [x, y] of pts) if (inRock(state, toWorldX(ship, x + dx), toWorldY(ship, y + dy))) return true;
     return false;
   };
   const freeAt = (g, dx, dy) => !hits(dx, dy, g.bp.pts.spot); // room to sit here, with a margin round her?
@@ -144,7 +148,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     const a = anchorAt(g);
     setRope(false);
     if (g.phase === 'latch') g.latchCd = G.LATCH_RETRY; // she'll try again
-    puff((a.x + geom().BOW.x) / 2, (a.y + geom().BOW.y) / 2 - state.ship.alt, '#d8c79a', 10);
+    sPuff((a.x + geom().BOW.x) / 2, (a.y + geom().BOW.y) / 2, '#d8c79a', 10);
     state.sfxQ && state.sfxQ.push(['hit']);
     warn(text, 2.5);
   };
@@ -292,7 +296,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
   // mode: 'hold' (fly the captain's course), 'leave' (run for it), 'dead' (no control: shot down / blown up)
   const fly = (g, dt, mode, tgt = { dx: G.HOLD_DX, dy: G.HOLD_DY }) => {
     g.t += dt;
-    const ourVx = scrollSpeed(state);
+    const ourVx = scrollSpeed(state); // (her offset from us moves by the speed the engines ask of us, as it always did)
     const ourVy = state.ship.vy || 0;
     const dAlt = state.ship.alt - g.prevAlt; // however OUR altitude changed (lift, rock bumps...), she is that much lower/higher on screen
     g.prevAlt = state.ship.alt;
@@ -618,8 +622,6 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
 
   // ---- Terrain: she is solid. Test her outline against rock and push her out the shortest way ----
   const collide = (g, dt) => {
-    const alt = state.ship.alt;
-    const dist = state.course ? state.course.dist : 0;
     g.scrapeCd = Math.max(0, g.scrapeCd - dt);
     let first = null;
     let buried = false;
@@ -630,8 +632,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       let fwd = 0;
       let deep = null;
       for (const [px, py] of g.bp.pts.col) {
-        const mx = px + g.dx;
-        const my = py + g.dy - alt;
+        const mx = toWorldX(ship, px + g.dx);
+        const my = toWorldY(ship, py + g.dy);
         if (!inRock(state, mx, my)) continue;
         let best = null;
         for (const [ddx, ddy] of DIRS) {
@@ -660,14 +662,14 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     if (buried && !first) first = { up: 0, down: 0, back: 0, fwd: 0, deep: { x: g.bp.x0 + g.dx, y: g.bp.hullTop + g.dy } };
     if (!first) {
       // Clear: remember where (in the world) she was last fine.
-      g.okW = { x: g.dx + dist, y: g.dy - alt };
+      g.okW = { x: toWorldX(ship, g.dx), y: toWorldY(ship, g.dy) };
       return false;
     }
     // Still inside rock after all that (squeezed between walls)? Go back to the last clear spot.
     if (buried || hits(g.dx, g.dy, g.bp.pts.col)) {
-      if (g.okW && Math.abs(g.okW.x - dist - g.dx) < 1500 && Math.abs(g.okW.y + alt - g.dy) < 1500) {
-        g.dx = g.okW.x - dist;
-        g.dy = g.okW.y + alt;
+      if (g.okW && Math.abs(toShipX(ship, g.okW.x) - g.dx) < 1500 && Math.abs(toShipY(ship, g.okW.y) - g.dy) < 1500) {
+        g.dx = toShipX(ship, g.okW.x);
+        g.dy = toShipY(ship, g.okW.y);
         g.wvx = 0;
         g.wvy = 0;
         S.reverts++;
@@ -698,8 +700,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       g.hp = Math.max(1, g.hp - G.ROCK_DAMAGE * clamp(vin / 200, 0.25, 3));
       g.hit = 0.15;
       state.sfxQ && state.sfxQ.push(['hit']);
-      puff(first.deep.x, first.deep.y - alt, '#a89c8a', 8);
-      puff(first.deep.x, first.deep.y - alt, '#555', 4);
+      sPuff(first.deep.x, first.deep.y, '#a89c8a', 8);
+      sPuff(first.deep.x, first.deep.y, '#555', 4);
       // Everyone on her deck staggers (but stays aboard: away from the ends).
       const dir = first.back > first.fwd ? 1 : first.fwd > first.back ? -1 : Math.random() < 0.5 ? -1 : 1;
       for (const p of Object.values(state.players)) {
@@ -717,29 +719,31 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
   const dropParas = (g) => {
     const crew = crewHeads(state);
     const n = clamp(Math.round((1 + Math.floor(crew / 6) + (lap() >= 3 ? 1 : 0) + (g.bp.special === 'paras' ? GP.PARAS.EXTRA : 0)) * crewMul(state, 'raiders')), 1, 5);
-    const alt = state.ship.alt;
     const sx = mx(g, g.bp.x0 + 80) + g.dx;
     const sy = deckYAt(g, mx(g, g.bp.x0 + 80)) + g.dy - 110;
     const fall = (P[geom().CAT].y - sy) / G.PARA_FALL; // seconds to come down to our catwalk
     const aim = clamp(sx, P[geom().CAT].x0 + 80, P[geom().CAT].x1 - 80);
     if (fall < 1.5 || Math.abs(sx - aim) > G.PARA_STEER * fall * 0.7) return false; // can't reach us from here
     for (let i = 0; i < n; i++) {
-      state.paras.push({ x: sx + i * 50, y: sy - alt, vx: sx > aim ? -120 : 120, vy: 0, hp: G.PARA_HP, t: -i * 0.35, tx: clamp(aim + rand(-200, 200), P[geom().CAT].x0 + 40, P[geom().CAT].x1 - 40), type: pickType ? pickType() : 'grunt' });
+      state.paras.push({ x: toWorldX(ship, sx + i * 50), y: toWorldY(ship, sy), vx: (sx > aim ? -120 : 120) + ship.pose.vx, vy: 0, hp: G.PARA_HP, t: -i * 0.35, tx: clamp(aim + rand(-200, 200), P[geom().CAT].x0 + 40, P[geom().CAT].x1 - 40), type: pickType ? pickType() : 'grunt' });
       S.dropped++;
     }
-    puff(sx, sy - alt, '#eee6d2', 8);
+    sPuff(sx, sy, '#eee6d2', 8);
     warn('PARATROOPERS! SHOOT THEM DOWN!', 2.5);
     return true;
   };
   const updateParas = (dt) => {
-    const alt = state.ship.alt;
+    const vs = ship.pose.vx;
     for (const p of state.paras) {
       p.t += dt;
-      if (p.t < 0) continue; // (still stepping out the door)
+      if (p.t < 0) { // (still stepping out the door: it goes along with her)
+        p.x += vs * dt;
+        continue;
+      }
       const open = p.t > 0.5;
       p.vy += ((open ? G.PARA_FALL : 320) - p.vy) * Math.min(1, dt * 2);
-      if (open) p.vx += (clamp((p.tx - p.x) * 1.2, -G.PARA_STEER, G.PARA_STEER) - p.vx) * Math.min(1, dt * 1.5);
-      const prevY = p.y + alt;
+      if (open) p.vx += (clamp((toWorldX(ship, p.tx) - p.x) * 1.2, -G.PARA_STEER, G.PARA_STEER) + vs - p.vx) * Math.min(1, dt * 1.5);
+      const prevY = toShipY(ship, p.y);
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       for (const sh of state.shells) {
@@ -758,13 +762,14 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
         break;
       }
       if (p.dead) continue;
-      const shipY = p.y + alt;
-      const d = platformBelow(p.x, prevY);
+      const shipY = toShipY(ship, p.y);
+      const shipX = toShipX(ship, p.x);
+      const d = platformBelow(shipX, prevY);
       if (d !== null && shipY >= P[d].y) {
         p.dead = true;
         S.landed++;
-        dropOne && dropOne(p.x, P[d].y - 4, p.type);
-        puff(p.x, P[d].y - alt - 10, '#eee6d2', 8);
+        dropOne && dropOne(shipX, P[d].y - 4, p.type);
+        sPuff(shipX, P[d].y - 10, '#eee6d2', 8);
       } else if (shipY > 1700 || p.t > 60 || inRock(state, p.x, p.y)) p.dead = true; // missed us and fell away
     }
     state.paras = state.paras.filter((p) => !p.dead);
@@ -781,7 +786,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     const b = out ? { x: landX(g) + g.dx, y: landY(g) + g.dy } : { x: geom().MAIN_X1 - 30, y: P[geom().MAIN].y };
     for (let k = 1; k < 10; k++) {
       const u = k / 10;
-      if (inRock(state, a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u + G.SWING_DIP * Math.sin(Math.PI * u) - state.ship.alt)) {
+      if (inRock(state, toWorldX(ship, a.x + (b.x - a.x) * u), toWorldY(ship, a.y + (b.y - a.y) * u + G.SWING_DIP * Math.sin(Math.PI * u)))) {
         warn('Rock in the way!', 1.5);
         return;
       }
@@ -864,7 +869,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
           p.vx = 0;
           p.ladT = 0.4;
           S.ladders++;
-          puff(p.x + g.dx, ds[j].y + g.dy - 20 - state.ship.alt, '#d9cbb0', 4);
+          sPuff(p.x + g.dx, ds[j].y + g.dy - 20, '#d9cbb0', 4);
           break;
         }
       }
@@ -907,8 +912,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
   // Landing on her deck knocks the nearby crew flying.
   const stomp = (p) => {
     const g = state.gunship;
-    puff(p.x + g.dx, p.y + g.dy - 10 - state.ship.alt, '#ffffff', 12);
-    state.rings && state.rings.push({ x: p.x + g.dx, y: p.y + g.dy - 20 - state.ship.alt, t: 0.3, max: 0.3, r: G.STOMP_RANGE, color: '#ffffff' });
+    sPuff(p.x + g.dx, p.y + g.dy - 10, '#ffffff', 12);
+    state.rings && state.rings.push({ x: toWorldX(ship, p.x + g.dx), y: toWorldY(ship, p.y + g.dy - 20), t: 0.3, max: 0.3, r: G.STOMP_RANGE, color: '#ffffff' });
     state.sfxQ && state.sfxQ.push(['hit', true]);
     for (const c of [...g.crew]) {
       if (Math.abs(c.x - p.x) > G.STOMP_RANGE || Math.abs(c.y - p.y) > 60) continue;
@@ -921,12 +926,12 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
   const hurt = (c, dmg) => {
     const g = state.gunship;
     c.hp -= dmg;
-    puff(c.x + g.dx, c.y + g.dy - 50 - state.ship.alt, '#ffffff', 6);
+    sPuff(c.x + g.dx, c.y + g.dy - 50, '#ffffff', 6);
     if (c.hp > 0) return;
     g.crew.splice(g.crew.indexOf(c), 1);
     state.kills += 1;
-    pop(state, c.x + g.dx, c.y + g.dy - 140 - state.ship.alt, 'raider', '#ffd23f', 1);
-    puff(c.x + g.dx, c.y + g.dy + 60 - state.ship.alt, '#c0392b', 10);
+    sPop(c.x + g.dx, c.y + g.dy - 140, 'raider', '#ffd23f', 1);
+    sPuff(c.x + g.dx, c.y + g.dy + 60, '#c0392b', 10);
     const lastGunner = c.role === 'gunner' && !g.crew.some((q) => q.role === 'gunner');
     const what = { gunner: lastGunner ? 'GUNNERS DOWN - HER GUNS ARE SILENT!' : '', stoker: 'STOKER DOWN - HER GUNS RELOAD SLOWLY', helm: 'HELMSMAN DOWN - SHE CAN\'T STEER OR HOLD STATION' }[c.role];
     if (what) warn(what, 2.5);
@@ -947,8 +952,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     g.sink = 0;
     setRope(false);
     dropAll();
-    for (let k = 0; k < 8; k++) puff(rand(g.bp.x0, g.bp.x1) + g.dx, rand(g.bp.bagTop + 80, g.bp.hullBot) + g.dy - state.ship.alt, k % 2 ? '#ff5a1f' : '#555', 24);
-    pop(state, g.bp.cx + g.dx, g.bp.bagTop + 80 + g.dy - state.ship.alt, 'boss', '#ff5a1f', 1.6);
+    for (let k = 0; k < 8; k++) sPuff(rand(g.bp.x0, g.bp.x1) + g.dx, rand(g.bp.bagTop + 80, g.bp.hullBot) + g.dy, k % 2 ? '#ff5a1f' : '#555', 24);
+    sPop(g.bp.cx + g.dx, g.bp.bagTop + 80 + g.dy, 'boss', '#ff5a1f', 1.6);
     state.ship.shake = Math.max(state.ship.shake, 0.5);
     state.kills += 1 + g.crew.length;
     if (byCrew) {
@@ -1034,7 +1039,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     }
     // Her stern guns (which swing round to face us when she turns) track our hull.
     const bp = g.bp;
-    const alt = state.ship.alt;
+    const vs = ship.pose.vx; // (her shots fly at their own speed as seen from our ship: her speed through the sky is added)
     const cp = portPos(g, firstCannon(g));
     const gpx = cp.x + g.dx;
     const midY = bp.decks[0].y + 20; // the stern deck level (her ports are stacked at the stern end)
@@ -1073,7 +1078,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     const steamF = 0.5 + 0.5 * clamp(g.steam / 0.4, 0, 1); // (a cold boiler slows her reloads)
     const missFor = (dist) => clamp(G.MISS_BASE + Math.max(0, dist - 1500) / G.MISS_DX, 0, G.MISS_MAX);
     const lineClear = (px, py) => {
-      for (let s = 1; s <= 8; s++) if (inRock(state, px + ((AIM.x - px) * s) / 9, py + ((AIM.y - py) * s) / 9 - alt)) return false;
+      for (let s = 1; s <= 8; s++) if (inRock(state, toWorldX(ship, px + ((AIM.x - px) * s) / 9), toWorldY(ship, py + ((AIM.y - py) * s) / 9))) return false;
       return true;
     };
     // Broadsides at our hull (with a glow first) - only while her gunners are at the guns. They
@@ -1090,12 +1095,12 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       const missChance = missFor(g.dist);
       for (let i = 0; i < Math.min(G.SHOTS, gunners + 1, alive.length); i++) {
         const pp = portPos(g, alive[i]);
-        const fx = pp.x + g.dx;
-        const fy = pp.y + g.dy - alt;
-        const tx = rand(700, 1500);
-        const ty = rand(480, 820) - alt;
+        const fx = toWorldX(ship, pp.x + g.dx);
+        const fy = toWorldY(ship, pp.y + g.dy);
+        const tx = toWorldX(ship, rand(700, 1500));
+        const ty = toWorldY(ship, rand(480, 820));
         const d = Math.hypot(tx - fx, ty - fy) || 1;
-        state.bullets.push({ x: fx, y: fy, vx: ((tx - fx) / d) * 620, vy: ((ty - fy) / d) * 620, life: 3, miss: Math.random() < missChance });
+        state.bullets.push({ x: fx, y: fy, vx: ((tx - fx) / d) * 620 + vs, vy: ((ty - fy) / d) * 620, life: 3, miss: Math.random() < missChance });
         state.flashes && state.flashes.push({ x: fx, y: fy, ang: Math.atan2(ty - fy, tx - fx), t: 0.12, color: '#ffcf80', size: 1.6 });
         S.shots++;
       }
@@ -1108,11 +1113,11 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     g.ports.forEach((pt, k) => {
       if (pt.kind === 'cannon' || pt.dead) return;
       const pp = portPos(g, k);
-      const fx = pp.x + g.dx;
-      const fy = pp.y + g.dy - alt;
-      const d = Math.hypot(fx - AIM.x, pp.y + g.dy - AIM.y);
+      const fx = toWorldX(ship, pp.x + g.dx);
+      const fy = toWorldY(ship, pp.y + g.dy);
+      const d = Math.hypot(pp.x + g.dx - AIM.x, pp.y + g.dy - AIM.y);
       const C = pt.kind === 'turret' ? GP.TURRET_GUN : pt.kind === 'mortar' ? GP.MORTAR_GUN : GP.FLAK_GUN;
-      const ready = heavyOk && d < C.RANGE && (pt.kind === 'mortar' || lineClear(fx, pp.y + g.dy));
+      const ready = heavyOk && d < C.RANGE && (pt.kind === 'mortar' || lineClear(pp.x + g.dx, pp.y + g.dy));
       pt.glow = ready && pt.cd < 0.8;
       if (!ready) {
         pt.cd = Math.max(pt.cd, 1.2);
@@ -1121,11 +1126,11 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       if ((pt.cd -= dt * steamF) > 0) return;
       pt.cd = (C.EVERY * g.cap.fireMul * rand(0.85, 1.2)) / crewMul(state, 'fire');
       const missChance = clamp(missFor(d) + (C.MISS - G.MISS_BASE), 0, G.MISS_MAX);
-      const tx = rand(700, 1500);
-      const ty = rand(480, 820) - alt;
+      const tx = toWorldX(ship, rand(700, 1500));
+      const ty = toWorldY(ship, rand(480, 820));
       if (pt.kind === 'mortar') {
         const T = rand(C.TIME[0], C.TIME[1]);
-        state.bullets.push({ x: fx, y: fy, vx: (tx - fx) / T, vy: (ty - fy) / T - 0.5 * C.GRAVITY * T, ay: C.GRAVITY, life: T + 0.05, miss: Math.random() < missChance, dmg: C.DAMAGE, mortar: true });
+        state.bullets.push({ x: fx, y: fy, vx: (tx - fx) / T + vs, vy: (ty - fy) / T - 0.5 * C.GRAVITY * T, ay: C.GRAVITY, life: T + 0.05, miss: Math.random() < missChance, dmg: C.DAMAGE, mortar: true });
         S.mortars++;
         state.flashes && state.flashes.push({ x: fx, y: fy - 20, ang: -Math.PI / 2, t: 0.15, color: '#ffcf80', size: 1.8 });
       } else {
@@ -1134,7 +1139,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
         const speed = pt.kind === 'flak' ? C.SPEED : C.SPEED;
         for (let i = 0; i < nShots; i++) {
           const a = base + (nShots > 1 ? (i - 1) * C.SPREAD : 0);
-          state.bullets.push({ x: fx, y: fy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: 3.2, miss: Math.random() < missChance, flak: pt.kind === 'flak' });
+          state.bullets.push({ x: fx, y: fy, vx: Math.cos(a) * speed + vs, vy: Math.sin(a) * speed, life: 3.2, miss: Math.random() < missChance, flak: pt.kind === 'flak' });
         }
         if (pt.kind === 'flak') S.flaks++;
         else S.turretShots++;
@@ -1146,7 +1151,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     g.ports.forEach((pt, k) => {
       if (!pt.dead || Math.random() >= dt * 5) return;
       const pp = portPos(g, k);
-      puff(pp.x + g.dx + (Math.random() - 0.5) * 30, pp.y + g.dy - alt, '#555', 1);
+      sPuff(pp.x + g.dx + (Math.random() - 0.5) * 30, pp.y + g.dy, '#555', 1);
     });
     // Captain's moves: a BOARDER latches on after a while, a HARPOON gun fires her grapple from range.
     if (g.phase === 'hunt' && g.mode !== 'retreat') g.huntT += dt;
@@ -1167,7 +1172,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     if (g.phase === 'hunt' && bp.special === 'hangar' && !g.charge && !state.ship.down && spawnBats && (g.hangarT -= dt) <= 0) {
       if (state.bats.filter((b) => !b.dead && b.hp > 0).length >= GP.HANGAR.MAX_BATS) g.hangarT = 4;
       else {
-        spawnBats({ x: mx(g, bp.hangar.x) + g.dx, y: bp.hangar.y + g.dy - alt }, GP.HANGAR.BATS + Math.floor(lap() / 3));
+        spawnBats({ x: toWorldX(ship, mx(g, bp.hangar.x) + g.dx), y: toWorldY(ship, bp.hangar.y + g.dy) }, GP.HANGAR.BATS + Math.floor(lap() / 3));
         S.bats++;
         g.hangarOpen = 1.6;
         g.hangarT = GP.HANGAR.EVERY * rand(0.85, 1.2);
@@ -1209,7 +1214,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
           else g.extra--;
           S.sent++;
           dropOne && dropOne(geom().BOW.x - 70 + rand(-40, 40), P[geom().MAIN].y - 70, pickType ? pickType() : 'grunt');
-          puff(geom().BOW.x - 40, geom().BOW.y - 40 - state.ship.alt, '#d8c79a', 8);
+          sPuff(geom().BOW.x - 40, geom().BOW.y - 40, '#d8c79a', 8);
           warn('RAIDERS CROSSING HER ROPE!', 2);
         }
       }
@@ -1241,7 +1246,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
         for (const e of g.eng) e.hp = Math.min(1, e.hp + 0.04 * dt);
         if ((g.hammerT -= dt) <= 0) {
           g.hammerT = rand(0.25, 0.5);
-          puff(rand(g.bp.x0 + 100, g.bp.x1 - 100) + g.dx, g.bp.hullBot - 50 + g.dy - state.ship.alt, '#d8c79a', 3);
+          sPuff(rand(g.bp.x0 + 100, g.bp.x1 - 100) + g.dx, g.bp.hullBot - 50 + g.dy, '#d8c79a', 3);
         }
       }
       if (g.hp >= G.RETURN_AT * g.max || g.repT > G.RETREAT_MAX) {
@@ -1267,8 +1272,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
             const seg = decksOf(g)[clamp(foe.gd || 0, 0, decksOf(g).length - 1)];
             if (foe.x < g.bp.x0 - 20 || foe.x > g.bp.x1 + 20) dropOff(foe); // knocked off her deck!
             else foe.x = clamp(foe.x, seg.x0, seg.x1); // (a step between decks is a wall)
-            puff(foe.x + g.dx, foe.y + g.dy - 60 - state.ship.alt, '#ffffff', 8);
-            pop(state, foe.x + g.dx, foe.y + g.dy - 150 - state.ship.alt, 'raider', '#ff5a5a', 0.9);
+            sPuff(foe.x + g.dx, foe.y + g.dy - 60, '#ffffff', 8);
+            sPop(foe.x + g.dx, foe.y + g.dy - 150, 'raider', '#ff5a5a', 0.9);
           }
         }
       } else if (c === guards[0] && g.rope && g.phase === 'hunt' && !boarders.length && g.ropeT > 3) {
@@ -1303,8 +1308,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     // Crew shells hit her hull and gasbag.
     for (const sh of state.shells) {
       if (sh.life <= 0) continue;
-      const sy = sh.y + state.ship.alt - g.dy;
-      const sx = sh.x - g.dx;
+      const sy = toShipY(ship, sh.y) - g.dy;
+      const sx = toShipX(ship, sh.x) - g.dx;
       // A hit on a gun port (or turret, mortar, flak gun) wrecks it (not the hull).
       const k = g.ports.findIndex((pt, i) => {
         if (pt.dead) return false;
@@ -1321,8 +1326,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
         if (pt.hp <= 0) {
           pt.dead = true;
           S.portsDown++;
-          puff(pp.x + g.dx, pp.y + g.dy - state.ship.alt, '#ff5a1f', 16);
-          pop(state, pp.x + g.dx, pp.y - 50 + g.dy - state.ship.alt, 'kill', '#ffd23f', 1);
+          sPuff(pp.x + g.dx, pp.y + g.dy, '#ff5a1f', 16);
+          sPop(pp.x + g.dx, pp.y - 50 + g.dy, 'kill', '#ffd23f', 1);
           const left = g.ports.filter((q) => !q.dead).length;
           if (left) warn('GUN PORT DOWN!', 2);
         }

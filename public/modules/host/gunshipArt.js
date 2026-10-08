@@ -18,6 +18,7 @@
 // and the charge ticking on her boiler. Style 2026: enemy oxblood + charcoal, thin outlines.
 import { shipGeom, mx } from './gunship.js';
 import { mainShip } from './ships.js';
+import { toShipX, toShipY } from './pose.js';
 import { config } from '../../config.js';
 import { perfState } from './perf.js';
 import { paintPath, paintRect } from './textureArt.js';
@@ -133,7 +134,7 @@ export function createGunshipArt({ ctx, state, ink, sprites: given }) {
       const rd = config.RAIDERS[p.type] || config.RAIDERS.grunt;
       const s = rd.scale || 1;
       ctx.save();
-      ctx.translate(p.x, p.y + state.ship.alt); // (this layer is in ship coordinates; paratroopers live in world coordinates)
+      ctx.translate(toShipX(mainShip(state), p.x), toShipY(mainShip(state), p.y)); // (this layer is in ship coordinates; paratroopers live in world coordinates)
       ctx.rotate(sway);
       ink();
       ctx.lineWidth = 2.4;

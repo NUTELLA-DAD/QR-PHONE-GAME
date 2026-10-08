@@ -5,17 +5,19 @@ import { config } from '../../config.js';
 import { targets } from './aim.js';
 import { pop } from './popups.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 
 const C = config.COIL;
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 export function createCoil({ state, puff, credit }) {
-  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const ship = mainShip(state); // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const layout = ship.layout;
   const M = layout.coil || { x: 0, y: 0, aim: -Math.PI / 2, arc: 0 }; // (a ship with no coil emitter: nobody can man it, so these are never used)
   const coil = (state.coil = { aim: M.aim, charge: 0, cd: 0, bolt: null, charging: false });
 
   // World position of the emitter.
-  const emitter = () => ({ x: M.x, y: M.y - 60 - state.ship.alt }); // the glowing ball on top
+  const emitter = () => ({ x: toWorldX(ship, M.x), y: toWorldY(ship, M.y - 60) }); // the glowing ball on top
 
   const fire = (owner) => {
     const power = coil.charge;
@@ -94,7 +96,7 @@ export function createCoil({ state, puff, credit }) {
       // Charging is slower on low steam.
       coil.charging = true;
       coil.charge = Math.min(1, coil.charge + (dt / C.CHARGE_TIME) * Math.min(1, state.ship.press / 50) * (1 + config.BOILER.OD_COIL * (state.overdrive || 0) + config.LINKS.SURGE.COIL * (state.surgeCoil || 0)));
-      if (Math.random() < dt * 20) puff(M.x + (Math.random() - 0.5) * 60, M.y - state.ship.alt - 40 - Math.random() * 40, '#9fe8ff', 2);
+      if (Math.random() < dt * 20) puff(toWorldX(ship, M.x + (Math.random() - 0.5) * 60), toWorldY(ship, M.y - 40 - Math.random() * 40), '#9fe8ff', 2);
       if (coil.charge >= 1) fire(player.id);
     } else if (coil.charge >= C.MIN_CHARGE) fire(player.id);
     else coil.charge = Math.max(0, coil.charge - dt);

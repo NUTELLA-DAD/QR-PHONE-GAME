@@ -2,12 +2,13 @@
 //
 // Each copy (a "side", A or B) is a normal createSimulation() from its own module instance (the browser loads B from /b/..., the
 // Node tools through tools/instances.mjs), so each has its own SHIP_LAYOUT, config and state. This file needs no DOM and imports
-// nothing: every side is handed in as { sim, config, layout }.
+// nothing but the stateless pose.js converters: every side is handed in as { sim, config, layout }.
 //
-//   ONE SKY        both copies get the same map seed / kind / environment; B's course is shifted along the sky. A point at ship
-//                  coordinates (x, y) of side `from` is at (x - dx, y - dy) of side `to`, where
-//                    dx = dist_to - dist_from        (the course distances: the ships' origins along the sky)
-//                    dy = alt_from - alt_to          (ship y points down, so the ship that is higher sees the other one lower)
+//   ONE SKY        both copies get the same map seed / kind / environment; B's course is shifted along the sky. Since M.1 the sky is stored in
+//                  MAP coordinates, so a shell, a bomb or a rock is at the same (x, y) in both copies and a world point reaches the other ship's
+//                  coordinates with one pose.js toShip. The offset between the ships' own frames (the rival mirror) is
+//                    dx = pose_to.x - pose_from.x    (where the ships' origins are along the sky)
+//                    dy = pose_to.y - pose_from.y    (pose.y = -alt and y points down, so the ship that is higher sees the other one lower)
 //   RIVAL MIRROR   every step each sim gets state.rival = { layout, dx, dy, mid, vx, vy, hull, down, guns, bags, crew, team }:
 //                  the other ship as seen from this one (mid = her middle in our ship coordinates). New code reads it behind `if (state.rival)`.
 //   CROSS-FIRE     shells and bombs of one side are tested against the other ship (sim.external.hitsShip) and land with
@@ -17,6 +18,8 @@
 //
 // Usage:  const br = createBridge({ A: { sim, config, layout }, B: { ... } });  br.startMatch();  then br.update(dt) INSTEAD of sim.update.
 // Tunables: config.PVP (A's copy is the master; the bridge copies it to B).
+
+import { toShipX, toShipY } from '../pose.js';
 
 const SIDES = ['A', 'B'];
 const other = (x) => (x === 'A' ? 'B' : 'A');
@@ -85,7 +88,7 @@ export function createBridge(sides, opts = {}) {
       c.turrets.length = 0; // no flak, no outposts: only the other ship
       for (const o of c.map.outposts || []) o.done = true;
       c.done = true; // (no beacon, no mission end)
-      if (x !== br.left) c.dist += P.START_GAP; // the right-hand ship starts START_GAP further along
+      if (x !== br.left) s.ships[0].pose.x += P.START_GAP; // the right-hand ship starts START_GAP further along
       s.team = { id: x === 'A' ? 'red' : 'blue', ...P.TEAMS[x === 'A' ? 'red' : 'blue'] };
       s.rival = null;
     }
@@ -135,8 +138,7 @@ export function createBridge(sides, opts = {}) {
       const fs = st(from), ts = st(to);
       if (ts.ship.down > 0 || ts.wreck) continue; // (a wreck is no target)
       const ext = S[to].sim.external;
-      const dx = ts.ships[0].pose.x - fs.ships[0].pose.x;
-      const dy = ts.ships[0].pose.y - fs.ships[0].pose.y;
+      const tShip = ts.ships[0]; // (shells and bombs are in the world, which both copies share: toShip puts them in her ship's coordinates)
       const stat = br.stats[from];
       for (let i = fs.shells.length - 1; i >= 0; i--) {
         const sh = fs.shells[i];
@@ -145,7 +147,7 @@ export function createBridge(sides, opts = {}) {
           stat.shots++;
         }
         if (sh.life <= 0) continue;
-        const tx = sh.x - dx, ty = sh.y + fs.ship.alt - dy; // the shell in the other ship's coordinates
+        const tx = toShipX(tShip, sh.x), ty = toShipY(tShip, sh.y); // the shell in the other ship's coordinates
         if (!ext.hitsShip(tx, ty)) continue;
         const before = ts.ship.hull;
         ext.impact(tx, ty, P.SHELL_POWER * (sh.mul || 1));
@@ -161,9 +163,10 @@ export function createBridge(sides, opts = {}) {
         fs.shells.splice(i, 1);
       }
       for (const b of fs.shipBombs || []) {
-        if (b.done || !ext.hitsShip(b.x - dx, b.y + fs.ship.alt - dy)) continue;
+        const bx = toShipX(tShip, b.x), by = toShipY(tShip, b.y);
+        if (b.done || !ext.hitsShip(bx, by)) continue;
         const before = ts.ship.hull;
-        ext.impact(b.x - dx, b.y + fs.ship.alt - dy, P.BOMB_POWER);
+        ext.impact(bx, by, P.BOMB_POWER);
         b.done = true; // (the bomb went off inside her)
         stat.bombs++;
         stat.dmg += Math.max(0, before - ts.ship.hull);

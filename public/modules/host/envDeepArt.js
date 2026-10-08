@@ -32,7 +32,7 @@ export function createDeepArt({ ctx, state, ink }) {
   const forest = (width, height, view, f, baseK, size, spacing, color, glow, salt) => {
     const s = height / config.H;
     const zoom = num(view.zoom, 1);
-    const shift = (num(view.scroll) + num(view.cx)) * f;
+    const shift = num(view.cx) * f;
     const y0 = height * baseK + (config.H / 2 - num(view.cy)) * zoom * f * 0.6;
     const k0 = Math.floor(shift / spacing) - 1;
     const k1 = Math.ceil((shift + width / s) / spacing) + 1;
@@ -94,7 +94,7 @@ export function createDeepArt({ ctx, state, ink }) {
     const e = E();
     const s = height / config.H;
     const zoom = num(view.zoom, 1);
-    const shift = (num(view.scroll) + num(view.cx));
+    const shift = num(view.cx);
     const dy = (config.H / 2 - num(view.cy)) * zoom;
     const g = ctx.createLinearGradient(0, 0, 0, height);
     g.addColorStop(0, '#' + e.sky[0]);
@@ -233,12 +233,12 @@ export function createDeepArt({ ctx, state, ink }) {
       const top = num(view.cy) - height / 2 / zoom;
       const vw = width / zoom;
       const vh = height / zoom;
-      const dd = num(state.course.dist);
+      const cam = num(view.cx); // (the motes slide slower than the world: they follow the camera)
       const M = E().MOTES;
       for (let i = 0; i < M.COUNT; i++) {
         const u = hash(i, 1) * M.TILE_W;
         const v = hash(i, 2) * M.TILE_H;
-        const x = left + wrap(u + 10 * time * hash(i, 4) - dd * 0.25 - left, M.TILE_W);
+        const x = left + wrap(u + 10 * time * hash(i, 4) + cam * 0.75 - left, M.TILE_W);
         const y = top + wrap(v - M.SPEED * (0.5 + hash(i, 3)) * time - top, M.TILE_H);
         if (x > left + vw || y > top + vh) continue;
         const sz = (M.SIZE * (0.5 + hash(i, 5))) / Math.max(0.6, zoom);

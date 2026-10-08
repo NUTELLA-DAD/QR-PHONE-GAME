@@ -10,14 +10,17 @@ import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
 import { moveWalker, steerTo, fall } from './nav.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 
 const R = config.RAIDERS;
 // Worked out per ship layout (rebuilt when a new ship build is applied to it): the platform indices of the decks inside the hull.
 const tables = layoutTables((layout) => ({ INSIDE: [layout.deckIndex('main'), layout.deckIndex('lower')].filter((d, i, a) => d >= 0 && a.indexOf(d) === i) }));
 
 export function createRaiders({ state, modules, puff, impact }) {
-  const layout = mainShip(state).layout; // (B1: the ship the raiders board; B2 makes this one per ship)
+  const ship = mainShip(state); // (B1: the ship the raiders board; B2 makes this one per ship)
+  const layout = ship.layout;
   const P = layout.platforms;
+  const shipPuff = (x, y, color, count) => puff(toWorldX(ship, x), toWorldY(ship, y), color, count); // (raiders are on the ship: a puff at a point in ship coordinates)
   state.bombs = [];
   let nextId = 0;
 
@@ -66,7 +69,7 @@ export function createRaiders({ state, modules, puff, impact }) {
     b.cd = 1.5;
     // (just back on their feet? a moment's grace, so one raider can't keep a whole crew down)
     if (!target || target.ko > 0 || target.koGrace > 0 || target.d !== b.d || target.conn != null || (target.jz || 0) > config.MOVE.JUMP_DODGE || target.fly || Math.abs(target.x - b.x) > t.reach + 12) {
-      puff(b.x + b.face * 40, b.y - 50, '#ddd', 4); // swung at thin air
+      shipPuff(b.x + b.face * 40, b.y - 50, '#ddd', 4); // swung at thin air
       return;
     }
     target.ko = R.KO_TIME;
@@ -78,7 +81,7 @@ export function createRaiders({ state, modules, puff, impact }) {
       const p = P[target.d];
       target.x = Math.max(p.x0, Math.min(p.x1, target.x + b.face * t.knockback));
     }
-    puff(target.x, target.y - 40, '#fff', 10);
+    shipPuff(target.x, target.y - 40, '#fff', 10);
   };
 
   // Cutters: the nearest module that still works.
@@ -138,7 +141,7 @@ export function createRaiders({ state, modules, puff, impact }) {
         if (b.conn == null && b.d === goalD && Math.abs(b.x - goalX) < 20) {
           b.planted = true;
           state.bombs.push({ x: b.x, d: b.d, t: R.BOMB_FUSE, prog: 0 });
-          puff(b.x, b.y - 20, '#333', 8);
+          shipPuff(b.x, b.y - 20, '#333', 8);
           state.ev.warn = 3;
           state.ev.warnText = 'A SAPPER PLANTED A BOMB!';
           continue;
@@ -151,8 +154,8 @@ export function createRaiders({ state, modules, puff, impact }) {
           if (b.conn == null && b.d === m.d && Math.abs(b.x - m.x) < 30) {
             b.cutting = m;
             b.face = m.pos.x < b.x ? -1 : 1;
-            modules.damage(m, R.CUT_DAMAGE * dt, (x, y, c, n) => puff(x, y - state.ship.alt, c, n));
-            if (Math.random() < dt * 8) puff(m.pos.x, m.pos.y - state.ship.alt, '#ffd23f', 2); // sparks
+            modules.damage(m, R.CUT_DAMAGE * dt, shipPuff);
+            if (Math.random() < dt * 8) shipPuff(m.pos.x, m.pos.y, '#ffd23f', 2); // sparks
             continue;
           }
         }
@@ -202,7 +205,7 @@ export function createRaiders({ state, modules, puff, impact }) {
       if (b.conn == null) b.x = clampX(b, b.x + push);
     }
     if (b.hp <= 0) {
-      puff(b.x, b.y - 40, '#ffcf40', 14);
+      shipPuff(b.x, b.y - 40, '#ffcf40', 14);
       state.boarders.splice(state.boarders.indexOf(b), 1);
     }
   };

@@ -15,6 +15,7 @@ import { targets } from './aim.js';
 import { inRock, groundAt, ceilAt } from './course.js';
 import { pop } from './popups.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const E = config.ESCORT;
 
@@ -24,7 +25,8 @@ export const isEscortStation = (n, layout) => typeof n === 'string' && layout.es
 export const escortFor = (state, n) => (state.escorts || []).find((e) => e.name === n);
 
 export function createEscort({ state, puff, phoneFx }) {
-  const layout = mainShip(state).layout; // (B1: the ship the patrol planes hang under; B2 makes this one per ship)
+  const ship = mainShip(state); // (B1: the ship the patrol planes hang under; B2 makes this one per ship)
+  const layout = ship.layout;
   const DOCKS = layout.escortDocks; // (filled in place when a new ship build is applied, so this stays current)
   const B = layout.bounds;
   const reset = () => {
@@ -33,9 +35,13 @@ export function createEscort({ state, puff, phoneFx }) {
   };
   reset();
 
-  const dockPoint = (s) => ({ x: s.dock.x, y: s.dock.y - state.ship.alt });
-  const shipMid = () => ({ x: layout.aimPoint.x, y: layout.aimPoint.y - state.ship.alt });
-  const nearShip = (x, y, pad) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - state.ship.alt - pad && y < B.y1 - state.ship.alt + pad;
+  const dockPoint = (s) => ({ x: toWorldX(ship, s.dock.x), y: toWorldY(ship, s.dock.y) }); // (the hook, in the world)
+  const shipMid = () => ({ x: toWorldX(ship, layout.aimPoint.x), y: toWorldY(ship, layout.aimPoint.y) });
+  const nearShip = (x, y, pad) => {
+    const sx = toShipX(ship, x);
+    const sy = toShipY(ship, y);
+    return sx > B.x0 - pad && sx < B.x1 + pad && sy > B.y0 - pad && sy < B.y1 + pad;
+  };
   const pilot = (s) => Object.values(state.players).find((p) => p.lock === s.name);
 
   // Ready to launch?
@@ -187,7 +193,7 @@ export function createEscort({ state, puff, phoneFx }) {
         s.gunCd = p ? E.SHOT_EVERY : E.PATROL_SHOT_EVERY;
         const nx = s.x + Math.cos(s.heading) * 34;
         const ny = s.y + Math.sin(s.heading) * 34;
-        state.shells.push({ x: nx, y: ny, vx: Math.cos(s.heading) * 1100 + s.vx * 0.3, vy: Math.sin(s.heading) * 1100 + s.vy * 0.3, life: 1.0, owner: p && p.id });
+        state.shells.push({ x: nx, y: ny, vx: Math.cos(s.heading) * 1100 + (s.vx - ship.pose.vx) * 0.3 + ship.pose.vx, vy: Math.sin(s.heading) * 1100 + s.vy * 0.3, life: 1.0, owner: p && p.id });
         if (state.flashes) state.flashes.push({ x: nx, y: ny, ang: s.heading, t: 0.06, color: '#fff2b0', size: 0.7 });
       }
     }

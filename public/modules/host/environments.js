@@ -13,6 +13,7 @@ import { floorBelow } from './maps.js';
 import { createDeepEnv } from './envDeep.js'; // Fungal Depths (spores, clogged engines) and The Aether (low gravity, oxygen)
 import { createStormSea } from './envStormSea.js'; // Storm Front + Sunken Sea rules
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -58,7 +59,8 @@ export const favour = (state, kind) => {
 };
 
 export function createEnvironment({ state, puff, phoneFx, impact, damageHull, ignite }) {
-  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const ship = mainShip(state); // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const layout = ship.layout;
   const P = layout.platforms;
   const IDX = (id) => layout.deckIndex(id);
   state.icing = []; // ice crusts: { area: 'gasbag'|'topdeck'|'gun', gun?, x, d, lvl, prog }
@@ -169,7 +171,7 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull, ig
       warned.blizzard = false;
     }
     E.wind = (E.windDir || 1) * B.WIND * E.blizzard;
-    if (E.wind && flying && !state.ship.down && state.course) state.course.dist += E.wind * dt; // (the rock collision shoves her back out)
+    if (E.wind && flying && !state.ship.down && state.course) ship.pose.x += E.wind * dt; // (the rock collision shoves her back out)
   };
 
   const lavaUpdate = (dt, F, flying) => {
@@ -184,8 +186,8 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull, ig
     let heat = 0;
     let burn = 0;
     if (flying && !state.ship.down) {
-      const keel = (c.refY != null ? c.refY : layout.refPoint.y - state.ship.alt) + L.KEEL;
-      const mx = c.dist + layout.refPoint.x;
+      const keel = (c.refY != null ? c.refY : toWorldY(ship, layout.refPoint.y)) + L.KEEL;
+      const mx = toWorldX(ship, layout.refPoint.x);
       // Is there lava under the hull? (a column whose floor is below the lava surface)
       let over = false;
       for (const dx of [-500, -150, 150, 500]) if (floorBelow(c.map, mx + dx, Math.min(keel, E.lavaY - 1)) > E.lavaY + 1) over = true;
@@ -219,7 +221,7 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull, ig
           if (state.fires.length < L.MAX_FIRES) {
             const lo = P[LOWER];
             ignite(LOWER, rand(lo.x0 + 80, lo.x1 - 80), 'env'); // (the lava scorches the belly: fire.js refuses plate and ground that cannot burn)
-            puff(rand(lo.x0 + 80, lo.x1 - 80), lo.y - state.ship.alt, '#ff8a34', 8);
+            puff(toWorldX(ship, rand(lo.x0 + 80, lo.x1 - 80)), toWorldY(ship, lo.y), '#ff8a34', 8);
           }
         }
       } else if (E.burn < 0.05) warned.burn = false;

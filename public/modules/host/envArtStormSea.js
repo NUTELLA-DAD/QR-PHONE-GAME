@@ -8,6 +8,7 @@
 // Drawing never throws: problems are reported to the pause menu instead. Nothing from the internet.
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toShipX, toShipY } from './pose.js';
 import { envIdOf, envOf } from './environments.js';
 import { seaLevel } from './envStormSea.js';
 import { solidAt } from './maps.js';
@@ -21,7 +22,8 @@ const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const report = (e) => { const list = (globalThis.gameErrors = globalThis.gameErrors || []); if (list.length < 50) list.push('storm/sea: ' + (e && e.message)); };
 
 export function createStormSeaArt({ ctx, state, ink, time }) {
-  const layout = mainShip(state).layout; // (this ship's own layout)
+  const mship = mainShip(state); // (the ship; `ship` below is the layer drawn on her)
+  const layout = mship.layout; // (this ship's own layout)
   const P = layout.platforms;
   const CAT = layout.deckIndex('catwalk');
   const LOWER = layout.deckIndex('lower');
@@ -31,7 +33,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
   // A long soft band across the sky, fixed to the landscape (same idea as the other environments).
   const band = (width, height, view, f, baseY, thick, color) => {
     const s = height / config.H;
-    const shift = (num(view.scroll) + num(view.cx)) * f;
+    const shift = num(view.cx) * f;
     const y0 = height * baseY + (config.H / 2 - num(view.cy)) * num(view.zoom, 1) * f * 0.6;
     const du = 24;
     const top = [];
@@ -53,7 +55,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
   };
   const ridge = (width, height, view, R) => {
     const s = height / config.H;
-    const shift = (num(view.scroll) + num(view.cx)) * R.f;
+    const shift = num(view.cx) * R.f;
     const y0 = height * R.base + (config.H / 2 - num(view.cy)) * num(view.zoom, 1) * R.f * 0.6;
     const du = 16;
     const fn = (u) => Math.sin(u * R.freq) * 0.45 + Math.sin(u * R.freq * 2.3 + 1) * 0.35 + Math.sin(u * R.freq * 5.7 + 2) * 0.2;
@@ -68,7 +70,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
   // Big rounded cloud masses on a fixed grid (storm).
   const clouds = (width, height, view, f, baseY, size, color) => {
     const s = height / config.H;
-    const shift = (num(view.scroll) + num(view.cx)) * f;
+    const shift = num(view.cx) * f;
     const y0 = height * baseY + (config.H / 2 - num(view.cy)) * num(view.zoom, 1) * f * 0.6;
     const du = size * 1.1;
     ctx.fillStyle = color;
@@ -264,7 +266,6 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
       if (!(y1 > y0) && b.y0 > y0) return;
       if (b.y1 < y0 - 1200) return; // (the window is entirely above the water and its tall things)
       const t = time();
-      const dd = num(state.course && state.course.dist);
       const x0 = b.x0;
       const x1 = b.x1;
       const A = L.WAVE_AMP;
@@ -276,57 +277,57 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
       ctx.fillStyle = body;
       ctx.beginPath();
       const du = 36;
-      const u0 = Math.floor((x0 + dd) / du) * du;
-      ctx.moveTo(u0 - dd, y1);
-      for (let u = u0; u - dd <= x1 + du; u += du) ctx.lineTo(u - dd, waveY(y0, u, t, A, 0));
+      const u0 = Math.floor(x0 / du) * du;
+      ctx.moveTo(u0, y1);
+      for (let u = u0; u <= x1 + du; u += du) ctx.lineTo(u, waveY(y0, u, t, A, 0));
       ctx.lineTo(x1 + du, y1);
       ctx.closePath();
       ctx.fill();
       // Sunken wrecks poking out (fixed grid along the map).
       const W = L.WRECKS;
-      const k0 = Math.floor((x0 + dd) / W.EVERY) - 1;
-      const k1 = Math.ceil((x1 + dd) / W.EVERY) + 1;
+      const k0 = Math.floor(x0 / W.EVERY) - 1;
+      const k1 = Math.ceil(x1 / W.EVERY) + 1;
       for (let k = k0; k <= k1; k++) {
         if (hash(k, 500) > W.CHANCE) continue;
         const mx = k * W.EVERY + hash(k, 501) * W.EVERY * 0.7;
         if (solidAt(map, mx, y0 + 40) || solidAt(map, mx - 160, y0 + 40) || solidAt(map, mx + 160, y0 + 40)) continue; // only on open water
-        if (mx - dd < x0 - 400 || mx - dd > x1 + 400) continue;
-        wreck(mx - dd, waveY(y0, mx, t, A, 0) + 10, 0.9 + hash(k, 502) * 0.7, k);
+        if (mx < x0 - 400 || mx > x1 + 400) continue;
+        wreck(mx, waveY(y0, mx, t, A, 0) + 10, 0.9 + hash(k, 502) * 0.7, k);
       }
       // A second, lighter wave layer in front of the wrecks (so their feet are in the water), foam on the crests.
       ctx.fillStyle = 'rgba(70,170,200,.55)';
       ctx.beginPath();
-      ctx.moveTo(u0 - dd, y1);
-      for (let u = u0; u - dd <= x1 + du; u += du) ctx.lineTo(u - dd, waveY(y0 + 8, u, t * 1.15, A * 1.1, 2.3));
+      ctx.moveTo(u0, y1);
+      for (let u = u0; u <= x1 + du; u += du) ctx.lineTo(u, waveY(y0 + 8, u, t * 1.15, A * 1.1, 2.3));
       ctx.lineTo(x1 + du, y1);
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = L.FOAM;
       ctx.lineWidth = 4;
       ctx.beginPath();
-      for (let u = u0; u - dd <= x1 + du; u += du) {
+      for (let u = u0; u <= x1 + du; u += du) {
         const y = waveY(y0 + 8, u, t * 1.15, A * 1.1, 2.3);
-        if (u === u0) ctx.moveTo(u - dd, y);
-        else ctx.lineTo(u - dd, y);
+        if (u === u0) ctx.moveTo(u, y);
+        else ctx.lineTo(u, y);
       }
       ctx.stroke();
       // Foam flecks and glints on a fixed grid.
       ctx.fillStyle = 'rgba(244,251,255,.7)';
-      for (let u = u0; u - dd <= x1; u += du * 3) {
+      for (let u = u0; u <= x1; u += du * 3) {
         const h = hash(u / du, 510);
         if (h > 0.5) continue;
-        ctx.fillRect(u - dd, waveY(y0 + 8, u, t * 1.15, A * 1.1, 2.3) + 10 + h * 80, 30 + h * 50, 3);
+        ctx.fillRect(u, waveY(y0 + 8, u, t * 1.15, A * 1.1, 2.3) + 10 + h * 80, 30 + h * 50, 3);
       }
       // Survivors on wreckage.
       for (const sv of state.sea.survivors) {
         if (sv.saved) continue;
-        const sx = sv.mx - dd;
+        const sx = sv.mx;
         if (sx < x0 - 200 || sx > x1 + 200) continue;
         survivor(sx, waveY(y0 + 8, sv.mx, t * 1.15, A * 1.1, 2.3) + 4, sv, t);
       }
       // Waterspouts.
       for (const sp of state.sea.spouts) {
-        const sx = sp.x - dd;
+        const sx = sp.x;
         if (sx < x0 - 400 || sx > x1 + 400) continue;
         spout(sx, waveY(y0, sp.x, t, A, 0), F.SPOUT.HEIGHT, sp.r, t, sp.id);
       }
@@ -346,7 +347,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
       const top = num(view.cy) - height / 2 / zoom;
       const vw = width / zoom;
       const vh = height / zoom;
-      const dd = num(state.course && state.course.dist);
+      const cam = num(view.cx); // (the gulls slide slower than the world: they follow the camera)
       const en = state.env || {};
       if (storm) {
         const gale = num(en.gale);
@@ -401,7 +402,7 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
           ctx.lineWidth = 3 / Math.max(0.6, zoom);
           ctx.lineCap = 'round';
           for (let i = 0; i < F.SEA.GULLS; i++) {
-            const x = left + wrap(hash(i, 601) * vw * 1.6 + tm * (40 + hash(i, 602) * 50) * (hash(i, 603) < 0.5 ? 1 : -1) - dd * 0.3, vw * 1.6) - vw * 0.3;
+            const x = left + wrap(hash(i, 601) * vw * 1.6 + tm * (40 + hash(i, 602) * 50) * (hash(i, 603) < 0.5 ? 1 : -1) + cam * 0.7, vw * 1.6) - vw * 0.3;
             const y = Math.min(y0 - 120, top + vh * 0.3 + hash(i, 604) * vh * 0.5) + Math.sin(tm * 0.8 + i) * 40;
             const flap = Math.sin(tm * 7 + i * 3) * 12;
             ctx.beginPath();
@@ -413,10 +414,10 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
           // Sea spray where the keel cuts the water.
           if (num(s.spray) > 0.05) {
             const c = state.course;
-            const keel = (c && c.refY != null ? c.refY : layout.refPoint.y - state.ship.alt) + F.SEA.KEEL;
+            const keel = (c && c.refY != null ? c.refY : mship.pose.y + layout.refPoint.y) + F.SEA.KEEL;
             for (let i = 0; i < 26; i++) {
               const ph = wrap(tm * 1.8 + hash(i, 611), 1);
-              const x = 460 + hash(i, 612) * 700 + (hash(i, 613) - 0.5) * 60 * ph;
+              const x = toWorldX(mship, 460 + hash(i, 612) * 700 + (hash(i, 613) - 0.5) * 60 * ph);
               const y = Math.min(keel + 20, y0 + 10) - Math.sin(ph * Math.PI) * (70 + hash(i, 614) * 90);
               ctx.fillStyle = `rgba(244,251,255,${0.75 * s.spray * (1 - ph * 0.5)})`;
               ctx.beginPath();
@@ -615,8 +616,8 @@ export function createStormSeaArt({ ctx, state, ink, time }) {
         if (s.hook && c) {
           const sv = s.hook;
           const door = layout.bombBay;
-          const hx = sv.mx - c.dist; // (ship x is world x)
-          const hy = sv.y + state.ship.alt; // world y to ship y
+          const hx = toShipX(mship, sv.mx); // (this layer is in ship coordinates)
+          const hy = toShipY(mship, sv.y);
           ctx.strokeStyle = '#d9c89a';
           ctx.lineWidth = 4;
           ctx.setLineDash([10, 6]);

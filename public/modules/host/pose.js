@@ -1,11 +1,13 @@
 // A ship's POSE and the only place world <-> ship coordinates are converted (MOVEMENT.md, B0/M.0). Node-safe: no DOM.
 //
 // SHIP SPACE is the ship's own frame: the layout's coordinates (decks, stations, crew, fires, modules ...). It is NEVER mirrored.
-// WORLD SPACE is the sky: map coordinates, y pointing down. Today the world strip is pulled past a ship nailed to the middle of the screen:
-//     world x = ship x + course.dist          world y = ship y - state.ship.alt
-// so the pose is { x: course.dist, y: -alt }. In M.0 the pose is a set of GETTERS/SETTERS over those numbers (f fixed at +1), so nothing moves and every
-// result is bit-identical to the old inline arithmetic (with f = +1 the maths is `sx + x` and `sy + y`: the same additions as before).
-// Later stages (MOVEMENT.md B3-B4) make the pose OWN its position and turn on f (+1 bow to the right, -1 facing left).
+// WORLD SPACE is the sky: map coordinates, y pointing down. EVERYTHING in the sky is stored there since M.1 (shells, planes, bats, mines, wrecks, puffs,
+// crew in the air, hooks ...), at rest in the world and moving by its own velocity; the world is not pulled past a ship any more. A ship is where her pose says:
+//     world x = ship x + pose.x   (pose.x = course.dist)          world y = ship y + pose.y   (pose.y = -state.ship.alt)
+// The pose is still a set of GETTERS/SETTERS over those numbers (f fixed at +1) until the stages that make it OWN the position and turn on f (+1 bow to the
+// right, -1 facing left); with f = +1 the maths is `sx + x` and `sy + y`. Velocities are WORLD velocities. Things that steer by their speed RELATIVE to the ship
+// (bats, imps, saws, shots fired from or at her ...) add pose.vx to what they want; a shot leaves the barrel at its muzzle speed relative to her and keeps the
+// speed of her at that moment.
 //
 //   pose = { x, y,      where the ship's origin is in the world (y points down, so a ship that climbs has a smaller y)
 //            vx, vy,    its velocity in the world (px/s; READ-ONLY until the pose owns position)
@@ -25,7 +27,9 @@ export function createPose(ship) {
   return Object.defineProperties({}, {
     x: { enumerable: true, get: () => (world.course ? world.course.dist : 0), set: (v) => { world.course.dist = v; } },
     y: { enumerable: true, get: () => -S.alt, set: (v) => { S.alt = -v; } },
-    vx: { enumerable: true, get: () => scrollSpeed(world), set: readOnly('vx') },
+    // (the velocity she really has: what the last step moved her by, so a ship pressed against the rock, shoved by the wind or hanging in a calm moves at that and
+    // everything that goes along with her goes along with THAT. What her engines ask of her is course.js scrollSpeed; until her first step it is the same.)
+    vx: { enumerable: true, get: () => (world.shipVx !== undefined ? world.shipVx : scrollSpeed(world)), set: readOnly('vx') },
     vy: { enumerable: true, get: () => -(S.vy || 0), set: readOnly('vy') }, // (state.ship.vy is the climb rate: + = up)
     f: { enumerable: true, get: () => 1, set: (v) => { if (v !== 1) throw new Error('pose.f is fixed at +1 until COME ABOUT exists (MOVEMENT.md B5)'); } },
     pitch: { enumerable: true, get: () => S.pitch || 0, set: (v) => { S.pitch = v; } },

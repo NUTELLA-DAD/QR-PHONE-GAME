@@ -90,7 +90,7 @@ const drawSheet = () => {
     g.translate(gap + i * (w + gap), gap);
     course.environment = id;
     try {
-      sheetR.drawBackground(w, h, { scroll: t * 60, cx: 800, cy: 450, zoom: 1 });
+      sheetR.drawBackground(w, h, { cx: 800 + t * 60, cy: 450, zoom: 1 });
     } catch (e) { /* keep going */ }
     g.restore();
     g.fillStyle = '#fff';

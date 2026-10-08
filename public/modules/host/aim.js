@@ -4,6 +4,8 @@
 import { config } from '../../config.js';
 
 import { portPos } from './gunshipBlueprint.js'; // (pure geometry: no import cycle)
+import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 
 export const SHELL_SPEED = config.GUNS.SHELL_SPEED;
 export const SHELL_LIFE = config.GUNS.SHELL_LIFE;
@@ -16,55 +18,60 @@ export const isSpotted = (obj) => !!obj && obj.spotT > 0;
 export const shellDmg = (shell, obj) => config.GUNS.DAMAGE * ((shell && shell.mul) || 1) * (isSpotted(obj) ? 1 + config.SPOT.BONUS : 1);
 
 // Everything currently shootable, with a way to predict where it will be in t seconds.
+// at(t) is a WORLD position (at(0) is where it is), but looked at from the ship: a shell leaves the barrel at SHELL_SPEED relative to her, so a target that
+// moves at v in the world is led by (v - her speed) x t. (Things that keep station on her carry her speed, so they come out still.)
 export function targets(state) {
   const list = [];
+  const ship = mainShip(state);
+  const vs = ship.pose.vx;
   const e = state.enemy;
   if (e.dead <= 0 && e !== state.stuntPlane) {
-    list.push({ kind: 'fighter', obj: e, r: 46, at: (t) => ({ x: e.x + e.vx * t, y: e.y + e.vy * t }) });
+    list.push({ kind: 'fighter', obj: e, r: 46, at: (t) => ({ x: e.x + (e.vx - vs) * t, y: e.y + e.vy * t }) });
   }
-  for (const p of state.paras || []) list.push({ kind: 'para', obj: p, r: 42, at: (t) => ({ x: p.x + p.vx * t, y: p.y + p.vy * t }) });
+  for (const p of state.paras || []) list.push({ kind: 'para', obj: p, r: 42, at: (t) => ({ x: p.x + (p.vx - vs) * t, y: p.y + p.vy * t }) });
   // The enemy gunship: her gun ports (to bring her guns down) and her gasbag/hull.
   const gs = state.gunship;
   if (gs && gs.ports && gs.phase !== 'sinking' && gs.phase !== 'leaving') {
     gs.ports.forEach((pt, k) => {
-      if (!pt.dead) list.push({ kind: 'gport', obj: gs, r: 50, at: () => { const pp = portPos(gs, k); return { x: pp.x + gs.dx, y: pp.y + gs.dy - state.ship.alt }; } });
+      if (!pt.dead) list.push({ kind: 'gport', obj: gs, r: 50, at: () => { const pp = portPos(gs, k); return { x: toWorldX(ship, pp.x + gs.dx), y: toWorldY(ship, pp.y + gs.dy) }; } });
     });
-    list.push({ kind: 'gunship', obj: gs, r: 200, at: () => ({ x: gs.bp.cx + gs.dx, y: (gs.bp.hullTop + gs.bp.hullBot) / 2 - 40 + gs.dy - state.ship.alt }) });
+    list.push({ kind: 'gunship', obj: gs, r: 200, at: () => ({ x: toWorldX(ship, gs.bp.cx + gs.dx), y: toWorldY(ship, (gs.bp.hullTop + gs.bp.hullBot) / 2 - 40 + gs.dy) }) });
   }
   // Versus (pvp/bridge.js): the rival airship's middle. rival.mid is in our ship coordinates (y downward, incl. our altitude); vx / vy = how her middle moves in our view.
   const rv = state.rival;
-  if (rv && !rv.down) list.push({ kind: 'rival', obj: rv, r: 220, at: (t) => ({ x: rv.mid.x + rv.vx * t, y: rv.mid.y - state.ship.alt + rv.vy * t }) });
-  for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + m.vx * t, y: m.y }) });
-  for (const b of state.bats || []) if (b.delay <= 0 && !b.latched) list.push({ kind: 'bat', obj: b, r: 26, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t }) });
-  for (const p of state.strafers || []) if (p !== state.stuntPlane) list.push({ kind: 'strafer', obj: p, r: 40, at: (t) => ({ x: p.x + p.vx * t, y: p.y + p.vy * t }) });
+  if (rv && !rv.down) list.push({ kind: 'rival', obj: rv, r: 220, at: (t) => ({ x: toWorldX(ship, rv.mid.x + rv.vx * t), y: toWorldY(ship, rv.mid.y) + rv.vy * t }) });
+  for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + (m.vx - vs) * t, y: m.y }) });
+  for (const b of state.bats || []) if (b.delay <= 0 && !b.latched) list.push({ kind: 'bat', obj: b, r: 26, at: (t) => ({ x: b.x + (b.vx - vs) * t, y: b.y + b.vy * t }) });
+  for (const p of state.strafers || []) if (p !== state.stuntPlane) list.push({ kind: 'strafer', obj: p, r: 40, at: (t) => ({ x: p.x + (p.vx - vs) * t, y: p.y + p.vy * t }) });
   const SP = state.specials;
   if (SP) {
-    for (const s of SP.saws) list.push({ kind: 'saw', obj: s, r: 52, at: (t) => ({ x: s.x + s.vx * t, y: s.y + s.vy * t }) });
-    for (const b of SP.imps) if (b.delay <= 0) list.push({ kind: 'imp', obj: b, r: 22, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t }) });
+    for (const s of SP.saws) list.push({ kind: 'saw', obj: s, r: 52, at: (t) => ({ x: s.x + (s.vx - vs) * t, y: s.y + s.vy * t }) });
+    for (const b of SP.imps) if (b.delay <= 0) list.push({ kind: 'imp', obj: b, r: 22, at: (t) => ({ x: b.x + (b.vx - vs) * t, y: b.y + b.vy * t }) });
     for (const z of SP.snipers) list.push({ kind: 'sniper', obj: z, r: 60, at: () => ({ x: z.x, y: z.y }) });
     for (const g of SP.tugs) {
       list.push({ kind: 'tug', obj: g, r: 50, at: () => ({ x: g.x, y: g.y }) });
-      if (g.mode === 'pull' && g.hook) list.push({ kind: 'cable', obj: g, r: 20, at: () => ({ x: (g.x + g.hook.x) / 2, y: (g.y + g.hook.y - state.ship.alt) / 2 }) });
+      if (g.mode === 'pull' && g.hook) list.push({ kind: 'cable', obj: g, r: 20, at: () => ({ x: (g.x + toWorldX(ship, g.hook.x)) / 2, y: (g.y + toWorldY(ship, g.hook.y)) / 2 }) });
     }
   }
-  for (const k of state.rockets || []) list.push({ kind: 'rocket', obj: k, r: 24, at: (t) => ({ x: k.x + k.vx * t, y: k.y + k.vy * t }) });
-  for (const p of state.bombers || []) list.push({ kind: 'bomber', obj: p, r: 80, at: (t) => ({ x: p.x + p.vx * t, y: p.y + (p.vy || 0) * t }) });
-  for (const b of state.enemyBombs || []) list.push({ kind: 'bomb', obj: b, r: 22, at: (t) => ({ x: b.x + b.vx * t, y: b.y + b.vy * t + 210 * t * t }) });
+  for (const k of state.rockets || []) list.push({ kind: 'rocket', obj: k, r: 24, at: (t) => ({ x: k.x + (k.vx - vs) * t, y: k.y + k.vy * t }) });
+  for (const p of state.bombers || []) list.push({ kind: 'bomber', obj: p, r: 80, at: (t) => ({ x: p.x + (p.vx - vs) * t, y: p.y + (p.vy || 0) * t }) });
+  for (const b of state.enemyBombs || []) list.push({ kind: 'bomb', obj: b, r: 22, at: (t) => ({ x: b.x + (b.vx - vs) * t, y: b.y + b.vy * t + 210 * t * t }) });
   if (state.boss) {
     const z = state.boss;
     for (const g of z.guns) if (!g.dead) list.push({ kind: 'bossgun', obj: g, r: 30, at: () => ({ x: z.x + g.dx, y: z.y + 168 }) });
     list.push({ kind: 'boss', obj: z, r: 200, at: () => ({ x: z.x, y: z.y + 20 }) });
   }
   for (const g of (state.course && state.course.turrets) || []) {
-    if (!g.dead && g.x != null) list.push({ kind: 'turret', obj: g, r: 40, at: (t) => ({ x: g.x + g.vx * t, y: g.y }) });
+    if (!g.dead && g.x != null) list.push({ kind: 'turret', obj: g, r: 40, at: (t) => ({ x: g.x + (g.vx - vs) * t, y: g.y }) });
   }
   return list;
 }
 
 // Angle a gun must point to hit this target, or null if it's out of the gun's arc or range.
 export function solution(state, gun, target) {
-  const gx = gun.bx;
-  const gy = gun.by - state.ship.alt;
+  const ship = mainShip(state);
+  const gx = toWorldX(ship, gun.bx);
+  const gy = toWorldY(ship, gun.by);
   let p = target.at(0);
   for (let i = 0; i < 3; i++) p = target.at(Math.hypot(p.x - gx, p.y - gy) / SHELL_SPEED);
   if (Math.hypot(p.x - gx, p.y - gy) > RANGE * (gun.reach || 1)) return null; // (a gun on a high crow's nest reaches further: config.NEST)

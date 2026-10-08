@@ -14,6 +14,7 @@
 import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 
 // Worked out per ship layout (rebuilt when a new ship build is applied to it).
 const tables = layoutTables((layout) => ({
@@ -24,7 +25,8 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createDeepEnv({ state, puff, phoneFx }) {
-  const layout = mainShip(state).layout; // (B1: the ship the spores and the oxygen tank belong to; B2 makes this one per ship)
+  const ship = mainShip(state);
+  const layout = ship.layout; // (B1: the ship the spores and the oxygen tank belong to; B2 makes this one per ship)
   const P = layout.platforms;
   state.spores = []; // clouds: { x, y, rx, ry, vx, seed } in ship coordinates
   state.clogs = layout.engines.map((e) => ({ name: e.name, d: e.d, x: e.x, lvl: 0, prog: 0 })); // spores on each engine (0-1)
@@ -98,7 +100,7 @@ export function createDeepEnv({ state, puff, phoneFx }) {
           p.sporeFx = 5;
           phoneFx(p, 'SPORES! (cough)', [40, 60, 40]);
         }
-        if (Math.random() < dt * 2) puff(p.x, p.y - 70 - state.ship.alt, '#b6f06e', 2);
+        if (Math.random() < dt * 2) puff(toWorldX(ship, p.x), toWorldY(ship, p.y - 70), '#b6f06e', 2);
       }
       p.sporeFx = Math.max(0, (p.sporeFx || 0) - dt);
     }
@@ -141,12 +143,12 @@ export function createDeepEnv({ state, puff, phoneFx }) {
   const unclog = (c) => {
     c.lvl = 0;
     c.prog = 0;
-    puff(c.x, P[c.d].y - 40 - state.ship.alt, '#b6f06e', 12);
+    puff(toWorldX(ship, c.x), toWorldY(ship, P[c.d].y - 40), '#b6f06e', 12);
   };
   const refill = () => {
     state.env.o2 = Math.min(1, state.env.o2 + config.ENVIRONMENTS.aether.OXYGEN.REFILL);
     state.o2tank.prog = 0;
-    puff(state.o2tank.x, P[tables(layout).MAIN].y - 60 - state.ship.alt, '#bfe9ff', 12);
+    puff(toWorldX(ship, state.o2tank.x), toWorldY(ship, P[tables(layout).MAIN].y - 60), '#bfe9ff', 12);
   };
   // Crew walking speed multiplier: spores slow, no oxygen slows.
   const walkMul = (p) => {

@@ -34,7 +34,7 @@ import { createEngines } from './engines.js';
 import { createForces, hitForce } from './forces.js';
 import { installBags, syncBags, refillBags, stepBags, watchBags } from './gasBags.js';
 import { createMainShip, mainShip } from './ships.js';
-import { toWorld, toShipX } from './pose.js';
+import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
@@ -143,7 +143,8 @@ export function createSimulation() {
     GUNS: {}, // (name -> { bx, by, aim, home, arc, cd, ammo ... }: one per gun mount of the ship's layout, filled in below)
   };
   state.ships = [createMainShip(state)]; // (B0: the ships in this sky; ships[0] wraps state.ship, its layout and course.dist by reference: ships.js, pose.js)
-  const layout = mainShip(state).layout; // (B.1b: this ship's own layout; every per-ship read below goes through it. B.2 splits this file per ship)
+  const ship = mainShip(state);
+  const layout = ship.layout; // (B.1b: this ship's own layout; every per-ship read below goes through it. B.2 splits this file per ship)
   const { one, all, kindOf, hasKind, nestTier, reviveSpot } = layout; // (the station-kind helpers, bound to it)
   const PLATFORMS = layout.platforms;
   const platformY = (d) => PLATFORMS[d].y;
@@ -167,6 +168,7 @@ export function createSimulation() {
   const worksKind = (kind) => { const s = one(kind); return !!s && modules.works(state, s.n); }; // is "the" station of this kind in working order
   const getHelm = () => holder('helm');
 
+  // puff() is at a point in the WORLD (map coordinates; the sky is stored in the world since M.1). shipPuff() / shipPop() take a point in SHIP coordinates.
   const puff = (x, y, color, count = 6) => {
     for (let i = 0; i < count; i++) {
       state.puffs.push({ x, y, vx: (Math.random() - 0.5) * 160, vy: (Math.random() - 0.5) * 160, life: 0.5, max: 0.5, c: color });
@@ -356,23 +358,24 @@ export function createSimulation() {
       }
       if (gunship.hitCrew(player, sword, range)) {
         stat(player, 'raiders');
-        if (sword) pop(state, player.x + player.face * 60, player.y - 110 - state.ship.alt, 'whack', '#ffffff', 0.8);
+        if (sword) shipPop(player.x + player.face * 60, player.y - 110, 'whack', '#ffffff', 0.8);
       }
       return;
     }
     player.face = target.x < player.x ? -1 : 1;
-    puff(target.x, target.y - 40, '#fff', 6);
-    if (sword) pop(state, target.x, target.y - 110 - state.ship.alt, 'whack', '#ffffff', 0.8);
+    shipPuff(target.x, target.y - 40, '#fff', 6);
+    if (sword) shipPop(target.x, target.y - 110, 'whack', '#ffffff', 0.8);
     raiders.onHit(target, sword, player.face * (sword ? T.SWORD_KNOCKBACK : T.SHOVE_KNOCKBACK));
     if (!state.boarders.includes(target)) {
       stat(player, 'raiders');
       phoneFx(player, '+1 Raider beaten!', [30, 40, 30]);
-      pop(state, target.x, target.y - 130 - state.ship.alt, 'raider', '#ffd23f', 1);
+      shipPop(target.x, target.y - 130, 'raider', '#ffd23f', 1);
     }
   };
 
-  // puff() at a point given in ship coordinates.
-  const shipPuff = (x, y, color, count) => puff(x, y - state.ship.alt, color, count);
+  // puff() / pop() at a point given in ship coordinates.
+  const shipPuff = (x, y, color, count) => puff(toWorldX(ship, x), toWorldY(ship, y), color, count);
+  const shipPop = (x, y, kind, color, size) => pop(state, toWorldX(ship, x), toWorldY(ship, y), kind, color, size);
 
   const damageHull = (amount) => {
     const danger = 1 + (((state.course && state.course.danger) || 2) - 2) * config.VOYAGE.DANGER_DAMAGE; // skulls on the stop
@@ -521,8 +524,8 @@ export function createSimulation() {
     const S = state.shield;
     if (!S.on) return false;
     const L = layout.shield;
-    const u = (x - L.cx) / L.rx;
-    const v = (y + state.ship.alt - L.cy) / L.ry;
+    const u = (toShipX(ship, x) - L.cx) / L.rx; // (the arc is part of the ship)
+    const v = (toShipY(ship, y) - L.cy) / L.ry;
     const r = Math.hypot(u, v);
     if (r < 0.88 || r > 1.12 || Math.abs(angleDiff(Math.atan2(v, u), S.ang)) > config.SHIELD.SPAN) return false;
     puff(x, y, '#9fe8ff', 6);
@@ -645,9 +648,9 @@ export function createSimulation() {
     if (sp) {
       sp.t -= dt;
       sp.bob = (sp.bob || 0) + dt;
-      const wx = toShipX(mainShip(state), sp.mx);
+      const wx = sp.mx; // (the balloon hangs in the world)
       const wy = sp.my + Math.sin(sp.bob * 1.3) * 30;
-      if (Math.hypot(wx - layout.midPoint.x, wy - (layout.midPoint.y - state.ship.alt)) < PC.SUPPLY_REACH) {
+      if (Math.hypot(wx - toWorldX(ship, layout.midPoint.x), wy - toWorldY(ship, layout.midPoint.y)) < PC.SUPPLY_REACH) {
         state.ship.hull = Math.min(100, state.ship.hull + PC.SUPPLY_HULL);
         state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + PC.SUPPLY_COAL);
         for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
@@ -666,12 +669,12 @@ export function createSimulation() {
     const c = state.course;
     if (!c) return;
     for (const [dx, dy] of [[1400, -500], [1800, 0], [1200, 400], [-600, -700], [2200, -300]]) {
-      const wx = layout.midPoint.x + dx;
-      const wy = layout.midPoint.y - state.ship.alt + dy;
+      const wx = toWorldX(ship, layout.midPoint.x + dx);
+      const wy = toWorldY(ship, layout.midPoint.y) + dy;
       let clear = true;
       for (const [ox, oy] of [[0, 0], [150, 0], [-150, 0], [0, 150], [0, -150]]) if (inRock(state, wx + ox, wy + oy)) clear = false;
       if (clear) {
-        state.supply = { mx: wx + c.dist, my: wy, t: config.PACING.CALM + 12 };
+        state.supply = { mx: wx, my: wy, t: config.PACING.CALM + 12 };
         return;
       }
     }
@@ -706,7 +709,7 @@ export function createSimulation() {
     victim.fire = false;
     stat(victim, 'ko');
     phoneFx(victim, 'You were hit at the helm!', [120, 50, 120]);
-    pop(state, st.x, cy - 70 - state.ship.alt, 'bigHit', '#e63946', 1.1);
+    shipPop(st.x, cy - 70, 'bigHit', '#e63946', 1.1);
     shipPuff(st.x, cy, '#e63946', 8);
   };
 
@@ -725,7 +728,7 @@ export function createSimulation() {
     air.shove(power, x);
     hitForce(state, x, y, power); // (a burst against the hull kicks her about the place it struck: forces.js)
     if (power >= 1.5) {
-      pop(state, x, y - 40 - state.ship.alt, 'bigHit', '#ff7b00', Math.min(1.6, 0.6 + power * 0.3));
+      shipPop(x, y - 40, 'bigHit', '#ff7b00', Math.min(1.6, 0.6 + power * 0.3));
       // Every phone feels the big ones.
       if (performance.now() - lastJolt > 1000) {
         lastJolt = performance.now();
@@ -1250,7 +1253,7 @@ export function createSimulation() {
     } else if (type === 'hook') {
       if (gunship.fireHook()) {
         stat(player, 'boarding');
-        puff(player.x + 200, player.y - 60 - state.ship.alt, '#ffe9a8', 8);
+        shipPuff(player.x + 200, player.y - 60, '#ffe9a8', 8);
         phoneFx(player, 'Hooked! Press Action at the bow to swing across!', [40, 30, 40]);
       } else phoneFx(player, 'Too far - the hook falls short! Get closer.', [40, 30, 40]);
     } else if (type === 'swing') gunship.swing(player);
@@ -1268,7 +1271,7 @@ export function createSimulation() {
       state.gasValveOpen[i] = !state.gasValveOpen[i];
       syncBags(state); // (the bag is cut off, or fed again, from this moment)
       shipPuff(act.obj.x, PLATFORMS[act.obj.d].y - 60, state.gasValveOpen[i] ? '#9cc99a' : '#e2a24a', 7);
-      pop(state, act.obj.x, PLATFORMS[act.obj.d].y - 140 - state.ship.alt, `${bagName(act.obj.bag, state.bags.length)} VALVE ${state.gasValveOpen[i] ? 'OPEN' : 'SHUT'}`, state.gasValveOpen[i] ? '#9cc99a' : '#e2a24a', 0.9);
+      shipPop(act.obj.x, PLATFORMS[act.obj.d].y - 140, `${bagName(act.obj.bag, state.bags.length)} VALVE ${state.gasValveOpen[i] ? 'OPEN' : 'SHUT'}`, state.gasValveOpen[i] ? '#9cc99a' : '#e2a24a', 0.9);
       state.valveLog = (state.valveLog || 0) + 1; // (how many times a gas valve was turned: botsim reports it)
       if (!state.gasValveOpen[i]) state.valveShuts = (state.valveShuts || 0) + 1;
     } else if (type === 'sail') {
@@ -1279,17 +1282,17 @@ export function createSimulation() {
       }
     } else if (type === 'valve') {
       act.obj.open = !act.obj.open;
-      puff(act.obj.pos.x, act.obj.pos.y - state.ship.alt, '#ffffff', 6);
+      shipPuff(act.obj.pos.x, act.obj.pos.y, '#ffffff', 6);
     } else if (type === 'load') {
       act.obj.ammo = Math.min(act.obj.max, act.obj.ammo + config.GUNS.LOAD);
       stat(player, 'ammo');
       player.carry = null;
-      puff(act.station.x, player.y - 60, '#ffd23f', 8);
+      shipPuff(act.station.x, player.y - 60, '#ffd23f', 8);
     } else if (type === 'loadBombs') {
       state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + config.BOMBS.LOAD);
       stat(player, 'ammo');
       player.carry = null;
-      puff(act.station.x, player.y - 60, '#ffd23f', 8);
+      shipPuff(act.station.x, player.y - 60, '#ffd23f', 8);
     } else if (type === 'ammo') {
       player.carry = 'ammo';
       grabbed(player, false);
@@ -1334,7 +1337,7 @@ export function createSimulation() {
   };
   const flushAll = () => { for (const p of Object.values(state.players)) flushPresses(p); };
 
-  const update = (dt) => {
+  const stepWorld = (dt) => {
     syncBags(state); // (a new build was applied at the dock: fit the gasbags to it)
     updateMates(state, dt); // (ship's mates come aboard or go home before the crew count is read)
     updateCrewScale(state, dt);
@@ -1370,6 +1373,7 @@ export function createSimulation() {
       updateVote(dt);
       return;
     }
+    if (state.phase !== 'lobby') course.advance(dt); // (she moves first: see course.js advance)
     for (const player of Object.values(state.players)) {
       if (player.bot) updateBot(player, state, dt);
       if (player.koGrace > 0) player.koGrace -= dt;
@@ -1491,7 +1495,7 @@ export function createSimulation() {
               bay.cd = config.BOMBS.COOLDOWN;
               bay.open = 0.6;
               const [bx, by] = tilt(state, layout.bombBay.x, layout.bombBay.y);
-              course.dropBomb(bx, by - state.ship.alt + 20, player.id);
+              course.dropBomb(toWorldX(ship, bx), toWorldY(ship, by) + 20, player.id);
             }
           }
         } else if (gun) {
@@ -1514,19 +1518,21 @@ export function createSimulation() {
               const angle = gun.aim + (state.ship.pitch || 0);
               const [gx, gy] = tilt(state, gun.bx, gun.by);
               const primed = prime.take(gun); // a fully primed shell: harder hit, bigger blast (config PRIME)
+              const wgx = toWorldX(ship, gx); // (the muzzle, in the world; a shell leaves at SHELL_SPEED relative to the ship and keeps her speed)
+              const wgy = toWorldY(ship, gy);
               state.shells.push({
-                x: gx + Math.cos(angle) * 60,
-                y: gy - state.ship.alt + Math.sin(angle) * 60,
-                vx: Math.cos(angle) * config.GUNS.SHELL_SPEED,
+                x: wgx + Math.cos(angle) * 60,
+                y: wgy + Math.sin(angle) * 60,
+                vx: Math.cos(angle) * config.GUNS.SHELL_SPEED + ship.pose.vx,
                 vy: Math.sin(angle) * config.GUNS.SHELL_SPEED,
                 life: config.GUNS.SHELL_LIFE * (gun.reach || 1),
                 owner: player.id,
                 ...(primed ? { mul: config.PRIME.DAMAGE_MUL, primed: true } : {}),
               });
-              puff(gx + Math.cos(angle) * 64, gy - state.ship.alt + Math.sin(angle) * 64, primed ? '#ff9a2e' : '#ffe9a8', primed ? 12 : 4);
-              state.flashes.push({ x: gx + Math.cos(angle) * 70, y: gy - state.ship.alt + Math.sin(angle) * 70, ang: angle, t: primed ? 0.17 : 0.09, color: primed ? '#ff9a2e' : '#fff2b0', size: primed ? 2.7 : 1.3 });
+              puff(wgx + Math.cos(angle) * 64, wgy + Math.sin(angle) * 64, primed ? '#ff9a2e' : '#ffe9a8', primed ? 12 : 4);
+              state.flashes.push({ x: wgx + Math.cos(angle) * 70, y: wgy + Math.sin(angle) * 70, ang: angle, t: primed ? 0.17 : 0.09, color: primed ? '#ff9a2e' : '#fff2b0', size: primed ? 2.7 : 1.3 });
               if (primed) {
-                state.rings.push({ x: gx + Math.cos(angle) * 64, y: gy - state.ship.alt + Math.sin(angle) * 64, t: 0.3, max: 0.3, color: '#ffd23f', size: 110 });
+                state.rings.push({ x: wgx + Math.cos(angle) * 64, y: wgy + Math.sin(angle) * 64, t: 0.3, max: 0.3, color: '#ffd23f', size: 110 });
                 state.sfxQ.push(['bigshot']);
               }
             }
@@ -1572,7 +1578,7 @@ export function createSimulation() {
               player.air = false;
               player.jumpCd = M.JUMP_COOLDOWN;
               player.squash = 0.4;
-              puff(player.x, player.y - 4, '#d9cbb0', 3);
+              shipPuff(player.x, player.y - 4, '#d9cbb0', 3);
             }
           }
           if (player.air && !player.onGunship) air.grab(player); // a hop can catch a ladder
@@ -1601,9 +1607,9 @@ export function createSimulation() {
           const object = act.obj;
           if (act.type === 'repair') {
             if (modules.repair(object, dt)) {
-              puff(object.pos.x, object.pos.y - state.ship.alt, '#8fe388', 10);
+              shipPuff(object.pos.x, object.pos.y, '#8fe388', 10);
               stat(player, 'repairs');
-              pop(state, object.pos.x, object.pos.y - 50 - state.ship.alt, 'repair', '#8fe388', 0.8);
+              shipPop(object.pos.x, object.pos.y - 50, 'repair', '#8fe388', 0.8);
             }
           } else if (act.type === 'rod') env.stormSea.rodHold(object);
           else if (act.type === 'pump') env.stormSea.pumpWork(dt);
@@ -1613,15 +1619,15 @@ export function createSimulation() {
           else if (act.type === 'sail') {
             const before = object.hoist;
             sails.haul(object, dt);
-            if (before < 1 && object.hoist >= 1) { stat(player, 'sails'); state.sailStats.raised++; pop(state, player.x, player.y - 150 - state.ship.alt, 'SAIL UP!', '#e9dcc0', 0.8); }
+            if (before < 1 && object.hoist >= 1) { stat(player, 'sails'); state.sailStats.raised++; shipPop(player.x, player.y - 150, 'SAIL UP!', '#e9dcc0', 0.8); }
           } else {
             object.worked = true;
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
               stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', sabotage: 'sabotage', cutline: 'boarding' }[act.type]);
-              if (act.type === 'fire') pop(state, object.x, player.y - 120 - state.ship.alt, 'fireOut', '#9fd3e6', 0.8);
-              if (act.type === 'hole' || act.type === 'gas') pop(state, object.x, player.y - 120 - state.ship.alt, 'patch', '#8fe388', 0.8);
+              if (act.type === 'fire') shipPop(object.x, player.y - 120, 'fireOut', '#9fd3e6', 0.8);
+              if (act.type === 'hole' || act.type === 'gas') shipPop(object.x, player.y - 120, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
               else if (act.type === 'hole') {
                 state.breaches.splice(state.breaches.indexOf(object), 1);
@@ -1634,7 +1640,7 @@ export function createSimulation() {
               else if (act.type === 'sabotage') gunship.plant(player);
               else if (act.type === 'cutline') gunship.cutLine(player);
               else object.ko = 0;
-              puff(object.x, player.y - 50, '#8fe388', 10);
+              shipPuff(object.x, player.y - 50, '#8fe388', 10);
             }
           }
         }
@@ -1800,8 +1806,8 @@ export function createSimulation() {
       state.boilerBlew = true; // (read by tools/botsim.mjs)
       const hotBoilers = all('boiler'); // (with several boilers, one of them blows)
       const boiler = hotBoilers.length > 1 ? hotBoilers[(Math.random() * hotBoilers.length) | 0] : hotBoilers[0];
-      puff(boiler.x, platformY(boiler.d) - 70 - state.ship.alt, '#fff', 20);
-      pop(state, boiler.x, platformY(boiler.d) - 160 - state.ship.alt, 'boiler', '#ff5a1f', 1.6);
+      shipPuff(boiler.x, platformY(boiler.d) - 70, '#fff', 20);
+      shipPop(boiler.x, platformY(boiler.d) - 160, 'boiler', '#ff5a1f', 1.6);
       modules.damage(modules.byName[boiler.n], config.MODULES.BOILER_BLOWOUT_DAMAGE, shipPuff);
       // The blowout throws flames about the firebox: a fire beside the boiler (and maybe a second), which spreads to whatever is near (the coal!).
       if (Math.random() < config.FIRE.BOILER_BLOWOUT_FIRES) fireSys.lightBoiler(boiler, Math.random() < 0.6 ? 2 : 1);
@@ -1829,8 +1835,8 @@ export function createSimulation() {
     state.helmHit = Math.max(0, (state.helmHit || 0) - dt);
     if (holder('bombBay') && state.phase === 'flying') {
       const [bx, by] = tilt(state, layout.bombBay.x, layout.bombBay.y);
-      bay.from = { x: bx, y: by - state.ship.alt + 20 };
-      bay.aim = course.predictBomb(bx, by - state.ship.alt + 20);
+      bay.from = { x: toWorldX(ship, bx), y: toWorldY(ship, by) + 20 }; // (the drop line, in the world)
+      bay.aim = course.predictBomb(bay.from.x, bay.from.y);
     } else bay.aim = null;
     for (const [gunName, gun] of Object.entries(state.GUNS)) {
       gun.empty = Math.max(0, gun.empty - dt);
@@ -1984,11 +1990,12 @@ export function createSimulation() {
         bullet.life = 0;
         continue;
       }
-      const sy = bullet.y + state.ship.alt;
-      if (!bullet.miss && hitsShip(bullet.x, sy)) {
+      const sx = toShipX(ship, bullet.x); // (hitsShip and impact work in ship coordinates)
+      const sy = toShipY(ship, bullet.y);
+      if (!bullet.miss && hitsShip(sx, sy)) {
         bullet.life = 0;
         puff(bullet.x, bullet.y, '#ff7b00', 8);
-        impact(bullet.x, sy, bullet.dmg || 1);
+        impact(sx, sy, bullet.dmg || 1);
       }
     }
 
@@ -2032,6 +2039,17 @@ export function createSimulation() {
     }
 
     raiders.update(dt);
+  };
+
+  // One step, and how fast she really moved along the sky in it (pose.vx for the next one: the things that go along with her read it).
+  const update = (dt) => {
+    const x0 = ship.pose.x;
+    try {
+      stepWorld(dt);
+    } finally {
+      const dx = ship.pose.x - x0;
+      if (Math.abs(dx) < 60 && dt > 0) state.shipVx = dx / dt; // (a jump of the course, a new mission or a tow, is no speed)
+    }
   };
 
   return {

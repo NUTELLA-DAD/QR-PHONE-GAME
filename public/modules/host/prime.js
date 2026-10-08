@@ -5,6 +5,7 @@
 // Linked stations (config.LINKS): a second crew member beside a manned gun can hold Action to LOAD it for the
 // gunner (assist below), much faster. A gunner priming alone is slower. gun.loadT > 0 = a loader is working it.
 import { config } from '../../config.js';
+import { mainShip } from './ships.js';
 
 const P = config.PRIME;
 const LK = config.LINKS;
@@ -67,7 +68,7 @@ export function createPrime({ state, phoneFx }) {
     const a0 = Math.random() * 6.28;
     for (let i = 0; i < P.FRAGS; i++) {
       const a = a0 + (i / P.FRAGS) * 6.283;
-      state.shells.push({ x: shell.x, y: shell.y, vx: Math.cos(a) * P.FRAG_SPEED, vy: Math.sin(a) * P.FRAG_SPEED, life: P.FRAG_LIFE, owner: shell.owner, frag: true });
+      state.shells.push({ x: shell.x, y: shell.y, vx: Math.cos(a) * P.FRAG_SPEED + mainShip(state).pose.vx, vy: Math.sin(a) * P.FRAG_SPEED, life: P.FRAG_LIFE, owner: shell.owner, frag: true });
     }
   };
 

@@ -1,8 +1,7 @@
 // Mission maps: a grid of rock and open air the ship flies through in any direction - caverns
 // joined by tunnels and vertical shafts, with side branches that dead-end.
 //
-// Map coordinates (mx, my) are pixels; the course turns them into world coordinates with
-// wx = mx - course.dist (the world scrolls past the ship), wy = my.
+// Map coordinates (mx, my) are pixels, and they ARE the world coordinates (M.1: wx = mx, wy = my; the ship's pose says where she is in them).
 //
 // Two kinds of map:
 //   'network' - a branching cave network: find your way through to the goal.

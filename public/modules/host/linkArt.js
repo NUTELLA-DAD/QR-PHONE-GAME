@@ -3,13 +3,15 @@
 // and the gold SURGE ring on whatever the boiler is feeding. A handful of strokes each, nothing else.
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 
 const INK = '#1b1410';
 const BRASS = '#d9a441';
 const GOLD = '#ffd23f';
 
 export function createLinkArt({ ctx, state }) {
-  const layout = mainShip(state).layout; // (this ship's own layout)
+  const ship = mainShip(state);
+  const layout = ship.layout; // (this ship's own layout)
   const PLATFORMS = layout.platforms;
   const outlined = (text, x, y, color, font) => {
     ctx.font = font;
@@ -104,8 +106,8 @@ export function createLinkArt({ ctx, state }) {
     if (!soon && !w.gusting) return;
     const dir = (w.gusting ? w.gust : w.gustNext) > 0 ? -1 : 1; // (gust > 0 lifts the ship = arrows point up the screen)
     const up = dir < 0;
-    const sx0 = width / 2 + (1900 - view.cx) * view.zoom;
-    const sy0 = height / 2 + (layout.midPoint.y - state.ship.alt - view.cy) * view.zoom;
+    const sx0 = width / 2 + (toWorldX(ship, 1900) - view.cx) * view.zoom;
+    const sy0 = height / 2 + (toWorldY(ship, layout.midPoint.y) - view.cy) * view.zoom;
     const k = Math.max(0.6, view.zoom);
     const color = up ? '#ffd27a' : '#8fc8e8';
     const flash = w.gusting ? 1 : 0.55 + 0.45 * Math.sin(time * 12);

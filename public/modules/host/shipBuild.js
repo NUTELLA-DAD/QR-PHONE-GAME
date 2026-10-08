@@ -434,7 +434,7 @@ export function buildLayout(parts, opts = {}) {
 // What the rest of the game used to hard-code about the ship's SHAPE is worked out here from the decks and the gasbag:
 //   samples        points round the hull and bag that are tested against rock (ship coordinates)
 //   topY, bottomY  the highest / lowest of those points
-//   refPoint       where the ship's middle sits in the world: world x = course.dist + refPoint.x, world y = refPoint.y - alt
+//   refPoint       where the ship's middle sits in her own frame (to the world with pose.js toWorld: x + pose.x, y + pose.y)
 //   midPoint       the middle of the ship (what supplies, lamps and the spotter are measured from)
 //   aimPoint       where enemy fire is aimed
 //   tiltPivot      the point the ship tips around when climbing and diving

@@ -17,6 +17,7 @@ import { altBounds } from './course.js';
 import { pop } from './popups.js';
 import { refillBags } from './gasBags.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 
 const GD = config.GOING_DOWN;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -29,8 +30,10 @@ const tables = layoutTables((L) => ({
 }));
 
 export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHoleAt }) {
-  const L = mainShip(state).layout; // (B1: the ship that falls; B2 makes this one per ship)
+  const ship = mainShip(state); // (B1: the ship that falls; B2 makes this one per ship)
+  const L = ship.layout;
   const tb = () => tables(L);
+  const shipPop = (x, y, kind, color, size) => pop(state, toWorldX(ship, x), toWorldY(ship, y), kind, color, size); // (a point on the ship)
   let used = false; // the last stand has been used in this mission
   state.goingDown = null; // { t, time, lift, heat, loads, loadsDone, heatPer, required, holes, crew }
   state.iceLocker = { n: GD.LOCKER.MAX, max: GD.LOCKER.MAX, every: GD.LOCKER.EVERY, t: 0, env: null };
@@ -79,7 +82,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     if (lk.n < 1) return false;
     lk.n -= 1;
     player.carry = 'ice';
-    puff(player.x, player.y - 60 - state.ship.alt, '#dff4fa', 6);
+    shipPuff(player.x, player.y - 60, '#dff4fa', 6);
     return true;
   };
   const giveIce = (player) => {
@@ -103,10 +106,10 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     const g = state.goingDown;
     if (g) {
       g.heat = Math.max(0, g.heat - GD.ICE_COOL);
-      pop(state, tb().BOILER.x - 25, by - 150 - state.ship.alt, 'PSSSHHH!', '#9fdcff', 1);
+      shipPop(tb().BOILER.x - 25, by - 150, 'PSSSHHH!', '#9fdcff', 1);
     } else {
       state.ship.press = Math.max(0, state.ship.press - GD.ICE_PRESS_COOL);
-      pop(state, tb().BOILER.x - 25, by - 150 - state.ship.alt, 'PSSSHHH!', '#9fdcff', 0.8);
+      shipPop(tb().BOILER.x - 25, by - 150, 'PSSSHHH!', '#9fdcff', 0.8);
     }
   };
 
@@ -245,7 +248,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
       g.loadsDone += 1;
       g.lift = Math.min(1, g.loadsDone / g.loads);
       g.heat += g.heatPer;
-      pop(state, tb().BOILER.x, L.platforms[tb().BOILER.d].y - 160 - state.ship.alt, g.lift >= 1 ? 'FULL LIFT!' : 'LIFT!', '#ffb347', 1);
+      shipPop(tb().BOILER.x, L.platforms[tb().BOILER.d].y - 160, g.lift >= 1 ? 'FULL LIFT!' : 'LIFT!', '#ffb347', 1);
       phoneFx(player, g.lift >= 1 ? 'Full lift! Keep the boiler cool!' : '+LIFT!', [40, 30, 40]);
     }
     state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel);

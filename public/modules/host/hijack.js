@@ -8,13 +8,14 @@
 // slower plane that keeps its ENEMY stats) is swapped out of state.enemy for a dead placeholder, so the enemy AI
 // stops flying her and the normal respawn timer runs once she is gone (it is held while she is stolen).
 // Bots only take part while they are on a daring stunt (p.daring, see bots.js).
-// Player fields: p.hj = the plane while riding. Plane fields: rider (player id), phase 'kick'|'fly'.
+// Player fields: p.hj = the plane while riding (then p.x / p.y are the plane's place in the WORLD). Plane fields: rider (player id), phase 'kick'|'fly'.
 import { config } from '../../config.js';
 import { flyPlane, smoke, shootDown, angDiff } from './planes.js';
 import { targets } from './aim.js';
 import { inRock } from './course.js';
 import { pop } from './popups.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const H = config.HIJACK;
 const E = config.ESCORT;
@@ -24,11 +25,16 @@ const HF = H.FIGHTER;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function createHijack({ state, puff, phoneFx, air }) {
-  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const ship = mainShip(state); // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const layout = ship.layout;
   const B = layout.bounds;
   state.hijacks = state.hijacks || [];
-  const shipMid = () => ({ x: layout.aimPoint.x, y: layout.aimPoint.y - state.ship.alt });
-  const nearShip = (x, y, pad) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - state.ship.alt - pad && y < B.y1 - state.ship.alt + pad;
+  const shipMid = () => ({ x: toWorldX(ship, layout.aimPoint.x), y: toWorldY(ship, layout.aimPoint.y) });
+  const nearShip = (x, y, pad) => {
+    const sx = toShipX(ship, x);
+    const sy = toShipY(ship, y);
+    return sx > B.x0 - pad && sx < B.x1 + pad && sy > B.y0 - pad && sy < B.y1 + pad;
+  };
 
   const canRide = (p) => !!p && (!p.bot || p.daring) && !p.hj;
   // The big enemy fighter, if she is flying (not shot down, not stolen).
@@ -60,7 +66,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
     p.fvx = p.fvy = 0;
     p.rot = 0;
     p.x = s.x;
-    p.y = s.y + state.ship.alt;
+    p.y = s.y;
     puff(s.x, s.y, '#ffffff', 8);
     pop(state, s.x, s.y - 60, 'WHUMP!', '#ffffff', 0.9);
     phoneFx(p, s.big ? 'You landed on the big fighter! KICK THE PILOT OUT - tap any button!' : 'You landed on a dogfighter! KICK THE PILOT OUT - tap any button!', null);
@@ -71,10 +77,10 @@ export function createHijack({ state, puff, phoneFx, air }) {
   const touch = (p) => {
     if (!canRide(p) || !p.fly || performance.now() < (p.noBoardUntil || 0)) return false;
     for (const s of state.strafers) {
-      if (s.hp > 0 && Math.hypot(p.x - s.x, p.y - (s.y + state.ship.alt)) < H.RADIUS) return board(p, s);
+      if (s.hp > 0 && Math.hypot(p.x - s.x, p.y - s.y) < H.RADIUS) return board(p, s);
     }
     const e = bigFighter();
-    if (e && Math.hypot(p.x - e.x, p.y - (e.y + state.ship.alt)) < HF.RADIUS) return board(p, e);
+    if (e && Math.hypot(p.x - e.x, p.y - e.y) < HF.RADIUS) return board(p, e);
     return false;
   };
 
@@ -86,12 +92,13 @@ export function createHijack({ state, puff, phoneFx, air }) {
     p.fire = false;
     p.noBoardUntil = performance.now() + 1500; // (jumping off must not land you straight back on the same plane)
     state.hijacks = state.hijacks.filter((q) => q !== s);
-    p.x = s.x;
-    p.y = s.y + state.ship.alt - 20;
-    air.startFlight(p, (s.vx || 0) * 0.5, -220);
+    const vrel = (s.vx || 0) - ship.pose.vx; // (the plane's speed as seen from the ship: the jump is made at half of it)
+    p.x = toShipX(ship, s.x); // (startFlight takes a place on the ship and a velocity relative to her)
+    p.y = toShipY(ship, s.y - 20);
+    air.startFlight(p, vrel * 0.5, -220);
     p.chute = 0.001;
     p.chuteOpen = false;
-    p.face = (s.vx || 0) < 0 ? -1 : 1;
+    p.face = vrel < 0 ? -1 : 1;
     if (wreckPlane || s.phase === 'fly') {
       // An empty plane just drops away in flames.
       shootDown(state, s, s.big ? 'fighter' : 'biplane');
@@ -156,7 +163,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
         s.phase = 'fly';
         s.kickP = 1;
         state.chutes = state.chutes || [];
-        state.chutes.push({ x: s.x, y: s.y - 20, vx: (s.vx || 0) * 0.2, vy: -260, t: 0 });
+        state.chutes.push({ x: s.x, y: s.y - 20, vx: ((s.vx || 0) - ship.pose.vx) * 0.2, vy: -260, t: 0 });
         puff(s.x, s.y, '#ffffff', 10);
         pop(state, s.x, s.y - 70, 'OUT YOU GO!', '#ffd23f', 1.1);
         state.ev.warn = 2.5;
@@ -166,7 +173,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
       }
     }
     p.x = s.x;
-    p.y = s.y + state.ship.alt;
+    p.y = s.y;
     p.face = Math.cos(s.heading || 0) < 0 ? -1 : 1;
   };
 
@@ -227,7 +234,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
             for (const off of [-12, 12]) {
               const nx = s.x + Math.cos(s.heading) * 44 - Math.sin(s.heading) * off;
               const ny = s.y + Math.sin(s.heading) * 44 + Math.cos(s.heading) * off;
-              state.shells.push({ x: nx, y: ny, vx: Math.cos(s.heading) * 1100 + s.vx * 0.3, vy: Math.sin(s.heading) * 1100 + s.vy * 0.3, life: 1.1, owner: p.id });
+              state.shells.push({ x: nx, y: ny, vx: Math.cos(s.heading) * 1100 + (s.vx - ship.pose.vx) * 0.3 + ship.pose.vx, vy: Math.sin(s.heading) * 1100 + s.vy * 0.3, life: 1.1, owner: p.id });
               if (state.flashes) state.flashes.push({ x: nx, y: ny, ang: s.heading, t: 0.06, color: '#fff2b0', size: 0.8 });
             }
           }
@@ -240,7 +247,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
             s.gunCd = E.SHOT_EVERY;
             const nx = s.x + Math.cos(s.heading) * 34;
             const ny = s.y + Math.sin(s.heading) * 34;
-            state.shells.push({ x: nx, y: ny, vx: Math.cos(s.heading) * 1100 + s.vx * 0.3, vy: Math.sin(s.heading) * 1100 + s.vy * 0.3, life: 1.0, owner: p.id });
+            state.shells.push({ x: nx, y: ny, vx: Math.cos(s.heading) * 1100 + (s.vx - ship.pose.vx) * 0.3 + ship.pose.vx, vy: Math.sin(s.heading) * 1100 + s.vy * 0.3, life: 1.0, owner: p.id });
             if (state.flashes) state.flashes.push({ x: nx, y: ny, ang: s.heading, t: 0.06, color: '#fff2b0', size: 0.7 });
           }
         }
@@ -265,7 +272,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
         continue;
       }
       p.x = s.x;
-      p.y = s.y + state.ship.alt;
+      p.y = s.y;
     }
   };
 
@@ -275,8 +282,9 @@ export function createHijack({ state, puff, phoneFx, air }) {
       if (p.hj) {
         p.hj = null;
         p.fly = false;
-        p.fall = true; // (the existing fall -> medical bay path)
-        p.y = clamp(p.y, -100, 900);
+        p.fall = true; // (the existing fall -> medical bay path, which works in ship coordinates)
+        p.x = toShipX(ship, p.x);
+        p.y = clamp(toShipY(ship, p.y), -100, 900);
       }
     }
     state.hijacks = [];

@@ -4,6 +4,7 @@ import { config } from '../../config.js';
 import { altBounds } from './course.js';
 import { envIdOf } from './environments.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 import { rowOf } from './shipBuild.js';
 import { applyForce } from './forces.js';
 
@@ -13,6 +14,7 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const gustShove = (state) => 1 + config.SAIL.GUST_SHOVE * (state.sails || []).reduce((n, s) => n + (s.torn ? 0 : s.hoist), 0) + config.NEST.GUST_PER_TIER * mainShip(state).layout.platforms.filter((q) => rowOf(q) === 'crow2').length;
 
 export function createWeather({ state, impact, puff }) {
+  const ship = mainShip(state);
   state.weather = { storm: 0, gust: 0, flash: 0, bolt: null };
   let gustT = 3;
   let gustLeft = 0;
@@ -82,13 +84,13 @@ export function createWeather({ state, impact, puff }) {
           const dk = open.length ? lay.platforms[open.length === 1 ? open[0] : open[(Math.random() * open.length) | 0]] : null;
           if (dk) { x = Math.max(dk.x0 + 30, Math.min(dk.x1 - 30, x)); y = dk.y - 15; } else y = rand(120, 380);
         }
-        w.bolt = { x, y: y - state.ship.alt, t: 0.25 };
-        puff(x, y - state.ship.alt, '#fff7a8', 10);
+        w.bolt = { x: toWorldX(ship, x), y: toWorldY(ship, y), t: 0.25 }; // (the bolt is drawn in the world)
+        puff(toWorldX(ship, x), toWorldY(ship, y), '#fff7a8', 10);
         impact(x, y, S.STRIKE_POWER);
         state.ev.warn = 1.5;
         state.ev.warnText = 'LIGHTNING STRIKE!';
       } else {
-        w.bolt = { x: rand(-800, 2400), y: null, t: 0.2 }; // a bolt in the distance
+        w.bolt = { x: toWorldX(ship, rand(-800, 2400)), y: null, t: 0.2 }; // a bolt in the distance
       }
     }
   };

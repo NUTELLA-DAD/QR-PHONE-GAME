@@ -32,7 +32,7 @@ export function createEnvArt({ ctx, state, ink }) {
   // ---------- Sky and far ridges (screen space; replaces the Sky Isles background) ----------
   const ridge = (width, height, view, R) => {
     const s = height / config.H;
-    const shift = (num(view.scroll) + num(view.cx)) * R.f;
+    const shift = num(view.cx) * R.f;
     const y0 = height * R.base + (config.H / 2 - num(view.cy)) * num(view.zoom, 1) * R.f * 0.6;
     const du = 16;
     const fn = (u) => Math.sin(u * R.freq) * 0.45 + Math.sin(u * R.freq * 2.3 + 1) * 0.35 + Math.sin(u * R.freq * 5.7 + 2) * 0.2;
@@ -68,7 +68,7 @@ export function createEnvArt({ ctx, state, ink }) {
   // A long soft cloud (frost) or smoke (ember) band across the sky, fixed to the landscape.
   const band = (width, height, view, f, baseY, thick, color) => {
     const s = height / config.H;
-    const shift = (num(view.scroll) + num(view.cx)) * f;
+    const shift = num(view.cx) * f;
     const y0 = height * baseY + (config.H / 2 - num(view.cy)) * num(view.zoom, 1) * f * 0.6;
     const du = 24;
     const top = [];
@@ -140,7 +140,6 @@ export function createEnvArt({ ctx, state, ink }) {
       const C = map.CELL;
       const y1 = Math.min(b.y1, map.H * C);
       if (!(y1 > y0) && b.y0 > y0) return;
-      const dd = num(state.course && state.course.dist);
       const x0 = b.x0;
       const x1 = b.x1;
       // Glow in the air above the surface.
@@ -162,12 +161,12 @@ export function createEnvArt({ ctx, state, ink }) {
       // Dark crust plates drifting slowly with the flow, and bright cracks between them (fixed grid).
       const du = 170;
       const flow = now * 12;
-      const k0 = Math.floor((x0 + dd + flow) / du) - 1;
-      const k1 = Math.ceil((x1 + dd + flow) / du) + 1;
+      const k0 = Math.floor((x0 + flow) / du) - 1;
+      const k1 = Math.ceil((x1 + flow) / du) + 1;
       for (let k = k0; k <= k1; k++) {
         const h = hash(k, 200);
         if (h > 0.55) continue;
-        const x = k * du - dd - flow + hash(k, 201) * du * 0.6;
+        const x = k * du - flow + hash(k, 201) * du * 0.6;
         const row = hash(k, 202);
         const y = y0 + 30 + row * Math.min(380, Math.max(0, y1 - y0 - 30));
         if (y > y1) continue;
@@ -187,15 +186,15 @@ export function createEnvArt({ ctx, state, ink }) {
       ctx.fillRect(x0, y0 - 2, x1 - x0, 5);
       // Smoke plumes rising from the lava (stacked soft puffs on a fixed grid).
       const step = L.PLUME_EVERY;
-      const p0 = Math.floor((x0 + dd) / step) - 1;
-      const p1 = Math.ceil((x1 + dd) / step) + 1;
+      const p0 = Math.floor(x0 / step) - 1;
+      const p1 = Math.ceil(x1 / step) + 1;
       for (let p = p0; p <= p1; p++) {
         if (hash(p, 210) > 0.7) continue;
         const mx = p * step + hash(p, 211) * step * 0.6;
         const i = Math.floor(mx / C);
         const j = Math.floor(y0 / C) + 1;
         if (i < 0 || i >= map.W || map.solid[j * map.W + i]) continue; // only where the lava is open to the air
-        const x = mx - dd;
+        const x = mx;
         for (let q = 0; q < 7; q++) {
           const r = 55 + q * 22;
           ctx.fillStyle = `rgba(40,22,22,${0.34 - q * 0.04})`;
@@ -219,7 +218,7 @@ export function createEnvArt({ ctx, state, ink }) {
       const top = num(view.cy) - height / 2 / zoom;
       const vw = width / zoom;
       const vh = height / zoom;
-      const dd = num(state.course.dist);
+      const cam = num(view.cx); // (the layers that slide slower than the world follow the camera)
       const e = E();
       const en = env();
       if (ssArt.front(view, width, height, time)) return; // Storm Front / Sunken Sea weather and life
@@ -233,7 +232,7 @@ export function createEnvArt({ ctx, state, ink }) {
           const spd = S.SPEED * (0.7 + 0.6 * hash(i, 3)) * (1 + en.blizzard * 0.8);
           const u = hash(i, 1) * S.TILE_W;
           const v = hash(i, 2) * S.TILE_H;
-          const x = left + wrap(u + slant * time * (0.6 + 0.4 * hash(i, 4)) - dd * 0.15 - left, S.TILE_W);
+          const x = left + wrap(u + slant * time * (0.6 + 0.4 * hash(i, 4)) + cam * 0.85 - left, S.TILE_W);
           const y = top + wrap(v + spd * time - top, S.TILE_H);
           if (x > left + vw || y > top + vh) continue;
           const sw = sz * (0.7 + hash(i, 5) * 0.9);
@@ -251,7 +250,7 @@ export function createEnvArt({ ctx, state, ink }) {
           const spd = S.SPEED * (0.6 + 0.8 * hash(i, 3));
           const u = hash(i, 1) * S.TILE_W;
           const v = hash(i, 2) * S.TILE_H;
-          const x = left + wrap(u + 14 * time * hash(i, 4) - dd * 0.2 - left, S.TILE_W);
+          const x = left + wrap(u + 14 * time * hash(i, 4) + cam * 0.8 - left, S.TILE_W);
           const y = top + wrap(v - spd * time - top, S.TILE_H);
           if (x > left + vw || y > top + vh || y > lavaY) continue;
           const a = 0.35 + 0.5 * (1 - (y - top) / vh);
@@ -265,10 +264,10 @@ export function createEnvArt({ ctx, state, ink }) {
           ctx.fillStyle = `rgba(36,18,18,${A * 0.55})`;
           ctx.fillRect(left, top, vw, vh);
           const du = 520;
-          const k0 = Math.floor((left + dd * 0.5 + time * 40) / du) - 1;
-          const k1 = Math.ceil((left + vw + dd * 0.5 + time * 40) / du) + 1;
+          const k0 = Math.floor((left - cam * 0.5 + time * 40) / du) - 1;
+          const k1 = Math.ceil((left + vw - cam * 0.5 + time * 40) / du) + 1;
           for (let k = k0; k <= k1; k++) {
-            const x = k * du - dd * 0.5 - time * 40;
+            const x = k * du + cam * 0.5 - time * 40;
             for (let r = 0; r < 3; r++) {
               const y = top + hash(k, 220 + r) * vh;
               ctx.fillStyle = `rgba(30,14,14,${A * 0.5})`;

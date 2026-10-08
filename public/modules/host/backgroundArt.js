@@ -70,7 +70,7 @@ export function createBackgroundArt({ ctx, state }) {
     const s = height / config.H;
     // DRIFT (pixels per second at TV size) moves clouds and mist on their own, whatever the ship does.
     const drift = (num(performance.now()) / 1000) * num(L.DRIFT, 0) * s;
-    const shift = (num(view.scroll) + num(view.cx)) * f * s - drift;
+    const shift = num(view.cx) * f * s - drift;
     // Camera high = picture shifts down a little, low = up (inside the spare height).
     const v = Math.max(-1, Math.min(1, (num(view.cy, config.H / 2) - config.H / 2) / config.H));
     const spare = h - height * share;

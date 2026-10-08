@@ -1,5 +1,6 @@
 import { config } from '../../config.js';
-import { mainShip } from './ships.js';
+import { mainShip, eachShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 import { createShipArt } from './shipArt.js';
 import { createThreatArt } from './threatArt.js';
 import { createHookArt } from './hookArt.js';
@@ -32,7 +33,8 @@ import { windSpeed } from './sails.js';
 import { drawIceBlock, drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
 export function createRenderer({ ctx, state, canvas }) {
-  const layout = mainShip(state).layout; // (this ship's own layout: the art reads it, a build applied at the dock updates it in place)
+  const ship = mainShip(state); // (M.1: the world is drawn in map coordinates; this ship's art is drawn under her pose)
+  const layout = ship.layout; // (this ship's own layout: the art reads it, a build applied at the dock updates it in place)
   // Real art from art/sprites/ where it exists; placeholder drawings everywhere else.
   const sprites = createSprites();
   sprites.load();
@@ -349,7 +351,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawFighterAim = (time) => {
     const e = state.enemy;
     if (e.dead > 0 || e.mode !== 'run' || !(e.shots > 0) || e.heading == null || state.phase === 'lobby') return;
-    const d = Math.hypot(e.x - layout.aimPoint.x, e.y - (layout.aimPoint.y - state.ship.alt));
+    const d = Math.hypot(e.x - toWorldX(ship, layout.aimPoint.x), e.y - toWorldY(ship, layout.aimPoint.y));
     if (d > config.ENEMY.FIRE_RANGE + 500) return;
     ctx.strokeStyle = `rgba(255,50,70,${0.45 + 0.3 * Math.sin(time * 14)})`;
     ctx.lineWidth = 3.6;
@@ -371,8 +373,8 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.beginPath();
       for (let k = 0; k <= 24; k++) {
         const a = S.ang - span + (2 * span * k) / 24;
-        const x = L.cx + L.rx * Math.cos(a);
-        const y = L.cy - state.ship.alt + L.ry * Math.sin(a);
+        const x = toWorldX(ship, L.cx + L.rx * Math.cos(a));
+        const y = toWorldY(ship, L.cy + L.ry * Math.sin(a));
         if (k === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
@@ -394,8 +396,8 @@ export function createRenderer({ ctx, state, canvas }) {
     if (!C) return;
     const M = layout.coil;
     if (!M) return; // (a built ship may carry no Lightning Coil)
-    const x = M.x;
-    const y = M.y - state.ship.alt;
+    const x = toWorldX(ship, M.x);
+    const y = toWorldY(ship, M.y);
     ink();
     ctx.lineWidth = 3;
     ctx.fillStyle = '#5a3b26';
@@ -449,7 +451,7 @@ export function createRenderer({ ctx, state, canvas }) {
   const drawSupply = (time) => {
     const sp = state.supply;
     if (!sp || !state.course) return;
-    const x = sp.mx - state.course.dist;
+    const x = sp.mx;
     const y = sp.my + Math.sin((sp.bob || 0) * 1.3) * 30;
     const g = ctx.createRadialGradient(x, y, 40, x, y, 260);
     g.addColorStop(0, 'rgba(255,220,90,.45)');
@@ -616,11 +618,11 @@ export function createRenderer({ ctx, state, canvas }) {
     // Ship.
     ctx.fillStyle = '#e63946';
     ctx.beginPath();
-    ctx.arc(px(c.dist + layout.refPoint.x), py(layout.refPoint.y - state.ship.alt), 6, 0, 7);
+    ctx.arc(px(toWorldX(ship, layout.refPoint.x)), py(toWorldY(ship, layout.refPoint.y)), 6, 0, 7);
     ctx.fill();
     ctx.stroke();
     // The goal, small and always there: how far to the beacon, or how many outposts are left.
-    const dCells = distToGoal(map, c.dist + layout.refPoint.x, layout.refPoint.y - state.ship.alt);
+    const dCells = distToGoal(map, toWorldX(ship, layout.refPoint.x), toWorldY(ship, layout.refPoint.y));
     const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
     let goalText;
     if (c.done) goalText = map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
@@ -1520,6 +1522,27 @@ export function createRenderer({ ctx, state, canvas }) {
     }
   };
 
+  // Crew in free flight (jumped, thrown or swinging on a hookshot) are world objects: drawn in map coordinates, after the ship, with their colour marker and rope.
+  const drawAirborne = (time) => {
+    hookArt.drawRopes(); // hookshot ropes and hooks (on the deck or in the air: the rope is in the world)
+    for (const p of Object.values(state.players)) {
+      if (!p.fly || p.hj || p.connected === false) continue;
+      drawPlayer(p, time);
+      if (!p.color) continue;
+      const y = p.y - (p.ko > 0 ? 90 : 165) + Math.sin(time * 1000 / 300 + p.x) * 4;
+      ink();
+      ctx.lineWidth = 4;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.moveTo(p.x - 16, y - 20);
+      ctx.lineTo(p.x + 16, y - 20);
+      ctx.lineTo(p.x, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  };
+
   const drawBar = (x, y, value) => {
     if (!value) return;
     ctx.fillStyle = '#3b2a1d';
@@ -1545,7 +1568,7 @@ export function createRenderer({ ctx, state, canvas }) {
   // Like the ridges, its shape is fixed to the landscape - it only slides past, never wobbles.
   const drawCloudBand = (width, height, view, f, baseY, thick, color) => {
     const s = height / config.H;
-    const shift = (view.scroll + view.cx) * f;
+    const shift = view.cx * f;
     const y0 = height * baseY + (config.H / 2 - view.cy) * view.zoom * f * 0.6;
     const du = 24;
     const top = [];
@@ -1569,7 +1592,7 @@ export function createRenderer({ ctx, state, canvas }) {
   // Samples sit on a grid fixed to the landscape (not the screen) so the outline doesn't shimmer.
   const drawRidge = (width, height, view, f, baseY, amp, freq, color, extra = {}) => {
     const s = height / config.H;
-    const shift = (view.scroll + view.cx) * f;
+    const shift = view.cx * f;
     const y0 = height * baseY + (config.H / 2 - view.cy) * view.zoom * f * 0.6;
     const du = 16;
     const ridge = (u) => Math.sin(u * freq) * 0.45 + Math.sin(u * freq * 2.3 + 1) * 0.35 + Math.sin(u * freq * 5.7 + 2) * 0.2;
@@ -1725,7 +1748,7 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.fillStyle = 'rgba(255,255,255,.45)';
     const span = width / s + 500;
     [[100, 140], [600, 90], [1100, 200], [1500, 60], [1900, 160], [2400, 110]].forEach(([x, y]) => {
-      const cx = wrap(x - (view.scroll + view.cx) * 0.15, span) - 250;
+      const cx = wrap(x - view.cx * 0.15, span) - 250;
       cloud(cx * s, (y + (config.H / 2 - view.cy) * view.zoom * 0.1) * s, 0.55 * s);
     });
     skyArt.skyBirds(width, height, view);
@@ -1741,7 +1764,7 @@ export function createRenderer({ ctx, state, canvas }) {
     const viewH = height / view.zoom;
     ctx.fillStyle = 'rgba(255,255,255,.85)';
     [[0, 0.1], [700, 0.75], [1300, 0.3], [1900, 0.9], [2600, 0.55], [3200, 0.2], [3900, 0.8]].forEach(([x, y], i) => {
-      cloud(left + wrap(x - view.scroll, Math.max(viewW, 4200)), top + y * viewH, 1 + (i % 3) * 0.3);
+      cloud(left + wrap(x - left, Math.max(viewW, 4200)), top + y * viewH, 1 + (i % 3) * 0.3); // (a pattern fixed to the world: they drift past the camera at ship speed)
     });
   };
 
@@ -1833,136 +1856,141 @@ export function createRenderer({ ctx, state, canvas }) {
       if (!(state.course && state.course.map)) skyArt.fogBack(wv, width, height); // (caves draw it themselves)
       courseArt.drawTerrain(wv, width, height);
       courseArt.drawBuildings(wv, width, time / 1000);
-      courseArt.drawMarkers(time / 1000);
+      courseArt.drawMarkers(wv, width, time / 1000);
       courseArt.drawTurrets(time / 1000);
       drawBombs(time / 1000);
       skyArt.fogFront(wv, width, height); // thin fog over the rock, under the ship
     }
     lap('terrain');
 
-    ctx.save();
-    // A smooth, capped shake (no random jitter), a slow two-speed bob and a slight sway: she's a
-    // big thing hanging in the air. (Visual only - collisions use the steady ship.)
-    const ts = time / 1000;
-    const bts = ts + (opts && Number.isFinite(opts.bobPhase) ? opts.bobPhase : 0);
-    const amp = Math.min(config.CAMERA.SHAKE_MAX, state.ship.shake * config.CAMERA.SHAKE_SCALE);
-    const bob = Math.sin(bts * 1.1) * 5 + Math.sin(bts * 0.37 + 1) * 3;
-    ctx.translate(amp ? Math.sin(ts * 61) * amp : 0, -state.ship.alt + bob + (amp ? Math.cos(ts * 47) * amp * 0.6 : 0));
-    {
-      const sway = Math.sin(bts * 0.8) * 0.005 + Math.sin(bts * 0.31) * 0.004;
-      const [px, py] = config.SHIP.TILT_PIVOT || layout.tiltPivot;
-      ctx.translate(px, py);
-      ctx.rotate((state.ship.pitch || 0) + sway);
-      ctx.translate(-px, -py);
-    }
-    const drawShipAndCrew = () => {
-      searchlightArt.drawBellyPod(); // (under the hull: the ladder and outrigger draw over it)
-      drawShip(time / 1000);
-      searchlightArt.drawLamps(time / 1000); // the two brass searchlights (also records where the beams start)
-      lap('ship');
-      // Close-call warnings: red chevrons on the hull pointing at nearby rock.
-      for (const n of (state.course && state.course.near) || []) {
-        const a = n.close * (0.55 + 0.45 * Math.sin(time / 90));
-        ctx.save();
-        ctx.translate(n.x + n.dx * 24, n.y + n.dy * 24);
-        ctx.rotate(Math.atan2(n.dy, n.dx));
-        ctx.strokeStyle = `rgba(255,40,60,${a})`;
-        ctx.lineWidth = 10;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(-14, -22);
-        ctx.lineTo(10, 0);
-        ctx.lineTo(-14, 22);
-        ctx.stroke();
-        ctx.restore();
+    // Each ship's art is drawn under her pose (one art bake, crew list and renderer per ship comes with B.2: only ship 0 has them now).
+    eachShip(state, (sh, shipIdx) => {
+      if (shipIdx !== 0) return;
+      ctx.save();
+      // A smooth, capped shake (no random jitter), a slow two-speed bob and a slight sway: she's a
+      // big thing hanging in the air. (Visual only - collisions use the steady ship.)
+      const ts = time / 1000;
+      const bts = ts + (opts && Number.isFinite(opts.bobPhase) ? opts.bobPhase : 0);
+      const amp = Math.min(config.CAMERA.SHAKE_MAX, state.ship.shake * config.CAMERA.SHAKE_SCALE);
+      const bob = Math.sin(bts * 1.1) * 5 + Math.sin(bts * 0.37 + 1) * 3;
+      ctx.translate(sh.pose.x + (amp ? Math.sin(ts * 61) * amp : 0), sh.pose.y + bob + (amp ? Math.cos(ts * 47) * amp * 0.6 : 0)); // (the ship's art lives in her own frame: it is drawn where her pose says she is)
+      ctx.scale(sh.pose.f, 1); // (facing: +1 bow to the right; the art is mirrored for -1 when COME ABOUT arrives)
+      {
+        const sway = Math.sin(bts * 0.8) * 0.005 + Math.sin(bts * 0.31) * 0.004;
+        const [px, py] = config.SHIP.TILT_PIVOT || layout.tiltPivot;
+        ctx.translate(px, py);
+        ctx.rotate((state.ship.pitch || 0) + sway);
+        ctx.translate(-px, -py);
       }
-      drawGuns();
-      envArt.drawIce(); // frost: ice crusts on the gasbag, top deck and guns
-      envArt.drawDeep(); // fungal: spore clouds and clogged engines; aether: the oxygen tank
-      envArt.drawShip(); // storm rods, sea pump, winch and flood water
-      lap('guns+env');
-      drawGunship(time / 1000);
-      lap('gunship');
-      drawHazards(time / 1000);
-      threatArt.drawBombs(time / 1000);
-      drawHighlights(time / 1000);
-      lap('hazards');
-      [...Object.values(state.players).filter((p) => !p.hj && !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying))), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => {
-        // Crew aboard a gunship are stored in HER frame: draw them where she is.
-        if (player.onGunship && state.gunship) {
+      const drawShipAndCrew = () => {
+        searchlightArt.drawBellyPod(); // (under the hull: the ladder and outrigger draw over it)
+        drawShip(time / 1000);
+        searchlightArt.drawLamps(time / 1000); // the two brass searchlights (also records where the beams start)
+        lap('ship');
+        // Close-call warnings: red chevrons on the hull pointing at nearby rock.
+        for (const n of (state.course && state.course.near) || []) {
+          const a = n.close * (0.55 + 0.45 * Math.sin(time / 90));
           ctx.save();
-          ctx.translate(state.gunship.dx, state.gunship.dy);
-          drawPlayer(player, time / 1000);
-          ctx.restore();
-        } else drawPlayer(player, time / 1000);
-      });
-      hookArt.drawRopes(); // hookshot ropes and hooks
-      linkArt.drawWires(time / 1000); // loader <-> gunner and lookout <-> helm wires, the boiler's SURGE ring
-      // Each crew member's colour marker above their head, easy to spot from the sofa.
-      for (const p of Object.values(state.players)) {
-        if (!p.color || p.connected === false) continue;
-        const gs = p.onGunship && state.gunship;
-        const y = p.y + (gs ? gs.dy : 0) - (p.ko > 0 ? 90 : 165) + Math.sin(time / 300 + p.x) * 4;
-        ink();
-        ctx.lineWidth = 4;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        const px = p.x + (gs ? gs.dx : 0);
-        ctx.moveTo(px - 16, y - 20);
-        ctx.lineTo(px + 16, y - 20);
-        ctx.lineTo(px, y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        // Job finder: a small chevron above an idle player, pointing the way to the job it picked.
-        const jb = p.job;
-        if (jb && jb.dir && !p.bot && (p.freeT || 0) >= config.JOBS.IDLE_AFTER) {
-          const v = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[jb.dir];
-          const cy = y - 44 + Math.sin(time / 180) * 3;
-          const cx = px + v[0] * 4;
-          const ux = v[0];
-          const uy = v[1];
-          ctx.save();
-          ctx.translate(cx, cy);
-          ink();
-          ctx.lineWidth = 3.4;
-          ctx.lineJoin = 'round';
-          ctx.fillStyle = jb.color;
+          ctx.translate(n.x + n.dx * 24, n.y + n.dy * 24);
+          ctx.rotate(Math.atan2(n.dy, n.dx));
+          ctx.strokeStyle = `rgba(255,40,60,${a})`;
+          ctx.lineWidth = 10;
+          ctx.lineCap = 'round';
           ctx.beginPath();
-          // an arrowhead: tip ahead, two wings behind
-          ctx.moveTo(ux * 16, uy * 16);
-          ctx.lineTo(-ux * 10 - uy * 14, -uy * 10 + ux * 14);
-          ctx.lineTo(-ux * 3, -uy * 3);
-          ctx.lineTo(-ux * 10 + uy * 14, -uy * 10 - ux * 14);
-          ctx.closePath();
-          ctx.fill();
+          ctx.moveTo(-14, -22);
+          ctx.lineTo(10, 0);
+          ctx.lineTo(-14, 22);
           ctx.stroke();
           ctx.restore();
         }
-        spotterArt.drawHelp(p, px, y, time / 1000); // HELP! call-out
-      }
-    };
-    if (!has('ship')) { /* (another renderer draws this ship's layer, or none) */ } else if (state.wreck) {
-      // Breaking apart: the gasbag and the two halves of the gondola tumble away separately.
-      const t = state.wreck.t;
-      [
-        { clip: [-500, -300, 2600, 730], c: [800, 245], dx: -15 * t, dy: 40 * t * t, rot: -0.05 * t },
-        { clip: [-500, 430, 1300, 900], c: [450, 700], dx: -60 * t, dy: 120 * t * t, rot: -0.12 * t * t },
-        { clip: [800, 430, 1300, 900], c: [1150, 700], dx: 70 * t, dy: 140 * t * t, rot: 0.15 * t * t },
-      ].forEach((piece) => {
-        ctx.save();
-        ctx.translate(piece.c[0] + piece.dx, piece.c[1] + piece.dy);
-        ctx.rotate(piece.rot);
-        ctx.translate(-piece.c[0], -piece.c[1]);
-        ctx.beginPath();
-        ctx.rect(...piece.clip);
-        ctx.clip();
-        drawShipAndCrew();
-        ctx.restore();
-      });
-    } else drawShipAndCrew();
-    if (view.shipOverlay && has('ship')) view.shipOverlay(ctx, ts); // (dev pages draw on the ship's own coordinates: public/buildtest.html)
-    ctx.restore();
+        drawGuns();
+        envArt.drawIce(); // frost: ice crusts on the gasbag, top deck and guns
+        envArt.drawDeep(); // fungal: spore clouds and clogged engines; aether: the oxygen tank
+        envArt.drawShip(); // storm rods, sea pump, winch and flood water
+        lap('guns+env');
+        drawGunship(time / 1000);
+        lap('gunship');
+        drawHazards(time / 1000);
+        threatArt.drawBombs(time / 1000);
+        drawHighlights(time / 1000);
+        lap('hazards');
+        [...Object.values(state.players).filter((p) => !p.hj && !p.fly && !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying))), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => {
+          // Crew aboard a gunship are stored in HER frame: draw them where she is.
+          if (player.onGunship && state.gunship) {
+            ctx.save();
+            ctx.translate(state.gunship.dx, state.gunship.dy);
+            drawPlayer(player, time / 1000);
+            ctx.restore();
+          } else drawPlayer(player, time / 1000);
+        });
+        linkArt.drawWires(time / 1000); // loader <-> gunner and lookout <-> helm wires, the boiler's SURGE ring
+        // Each crew member's colour marker above their head, easy to spot from the sofa.
+        for (const p of Object.values(state.players)) {
+          if (!p.color || p.connected === false || p.fly) continue; // (a flying player is a world object: drawn after the ship, below)
+          const gs = p.onGunship && state.gunship;
+          const y = p.y + (gs ? gs.dy : 0) - (p.ko > 0 ? 90 : 165) + Math.sin(time / 300 + p.x) * 4;
+          ink();
+          ctx.lineWidth = 4;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          const px = p.x + (gs ? gs.dx : 0);
+          ctx.moveTo(px - 16, y - 20);
+          ctx.lineTo(px + 16, y - 20);
+          ctx.lineTo(px, y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          // Job finder: a small chevron above an idle player, pointing the way to the job it picked.
+          const jb = p.job;
+          if (jb && jb.dir && !p.bot && (p.freeT || 0) >= config.JOBS.IDLE_AFTER) {
+            const v = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[jb.dir];
+            const cy = y - 44 + Math.sin(time / 180) * 3;
+            const cx = px + v[0] * 4;
+            const ux = v[0];
+            const uy = v[1];
+            ctx.save();
+            ctx.translate(cx, cy);
+            ink();
+            ctx.lineWidth = 3.4;
+            ctx.lineJoin = 'round';
+            ctx.fillStyle = jb.color;
+            ctx.beginPath();
+            // an arrowhead: tip ahead, two wings behind
+            ctx.moveTo(ux * 16, uy * 16);
+            ctx.lineTo(-ux * 10 - uy * 14, -uy * 10 + ux * 14);
+            ctx.lineTo(-ux * 3, -uy * 3);
+            ctx.lineTo(-ux * 10 + uy * 14, -uy * 10 - ux * 14);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          }
+          spotterArt.drawHelp(p, px, y, time / 1000); // HELP! call-out
+        }
+      };
+      if (!has('ship')) { /* (another renderer draws this ship's layer, or none) */ } else if (state.wreck) {
+        // Breaking apart: the gasbag and the two halves of the gondola tumble away separately.
+        const t = state.wreck.t;
+        [
+          { clip: [-500, -300, 2600, 730], c: [800, 245], dx: -15 * t, dy: 40 * t * t, rot: -0.05 * t },
+          { clip: [-500, 430, 1300, 900], c: [450, 700], dx: -60 * t, dy: 120 * t * t, rot: -0.12 * t * t },
+          { clip: [800, 430, 1300, 900], c: [1150, 700], dx: 70 * t, dy: 140 * t * t, rot: 0.15 * t * t },
+        ].forEach((piece) => {
+          ctx.save();
+          ctx.translate(piece.c[0] + piece.dx, piece.c[1] + piece.dy);
+          ctx.rotate(piece.rot);
+          ctx.translate(-piece.c[0], -piece.c[1]);
+          ctx.beginPath();
+          ctx.rect(...piece.clip);
+          ctx.clip();
+          drawShipAndCrew();
+          ctx.restore();
+        });
+      } else drawShipAndCrew();
+      if (view.shipOverlay && has('ship')) view.shipOverlay(ctx, ts); // (dev pages draw on the ship's own coordinates: public/buildtest.html)
+      ctx.restore();
+    });
+    if (has('ship')) drawAirborne(time / 1000); // crew in the air and their ropes live in the world, not in the ship's frame
     lap('crew');
     if (has('effects')) {
       drawEffects(time / 1000, wv);

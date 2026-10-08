@@ -4,9 +4,11 @@
 // still misjudge a mountain. It leaves contrails in hard turns and smoke when it's hurt; shot down,
 // it spirals into the ground trailing smoke while the pilot bails out under a parachute.
 import { config } from '../../config.js';
-import { groundAt, ceilAt, inRock, scrollSpeed } from './course.js';
+import { groundAt, ceilAt, inRock } from './course.js';
 import { kickForce } from './forces.js';
-const hullPoint = (state, x, y) => ({ x, y: y + state.ship.alt }); // (a plane's place in its own frame as a point on the ship: the one conversion the ram kicks need, as impact() callers make)
+import { mainShip } from './ships.js';
+import { toShip, toShipX, toShipY } from './pose.js';
+const hullPoint = (state, x, y) => toShip(mainShip(state), x, y); // (a plane's place in the world as a point on the ship: the one conversion the ram kicks need, as impact() callers make)
 
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 export { angDiff };
@@ -14,7 +16,8 @@ export { angDiff };
 // Fly plane e one step toward (tx, ty). o = { speed (cruise), turn, turnAvoid, nearShip(x, y, pad), midY }.
 // o.forceTurn (radians/s) overrides the steering - used for loops. o.fm = the plane type's config block
 // (THRUST, DRAG, STALL_SPEED, MAX_SPEED, GRAVITY, any of which falls back to config.FLIGHT), o.max = its
-// full hp (for damage handling), o.noScroll = don't subtract the ship's motion (bombers).
+// full hp (for damage handling), o.noScroll = fly in the ship's own frame, carried along by her motion (bombers).
+// Planes live in the WORLD (map coordinates): e.vx / e.vy are world velocities, nothing slides past.
 // The plane has an airspeed (e.air): thrust pulls it up to cruise, gravity trades it for height (climbs
 // bleed it, dives gain it), drag caps a dive. Slow planes turn sluggishly, and below stall speed the
 // nose drops until she picks up speed again (unless the rock is close - then she just keeps avoiding).
@@ -85,9 +88,9 @@ export function flyPlane(state, e, tx, ty, dt, o) {
   const gov = air < cruise ? Math.min(1, (cruise - air) / (cruise * 0.25)) : 0;
   const acc = thrust * gov * (1 - 0.4 * hurt) + (fm.GRAVITY != null ? fm.GRAVITY : FL.GRAVITY) * Math.sin(e.heading) - (fm.DRAG != null ? fm.DRAG : FL.DRAG) * Math.max(0, air - cruise);
   e.air = Math.max(cruise * FL.MIN_SHARE, Math.min(maxSpeed, air + acc * dt));
-  // On screen the ship's own motion carries everything else backward.
-  const scroll = o.noScroll ? 0 : scrollSpeed(state);
-  e.vx = Math.cos(e.heading) * e.air - scroll;
+  // (A plane that keeps station against the ship, like a bomber overhead, is carried along at her speed.)
+  const carry = o.noScroll ? mainShip(state).pose.vx : 0;
+  e.vx = Math.cos(e.heading) * e.air + carry;
   e.vy = Math.sin(e.heading) * e.air;
   e.x += e.vx * dt;
   e.y += e.vy * dt;
@@ -125,7 +128,7 @@ export function bumpShip(state, e, o) {
     for (const fy of [-1, 0, 1]) {
       const px = e.x + fx * o.hw;
       const py = e.y + fy * o.hh;
-      if (o.hitsShip(px, py + state.ship.alt)) {
+      if (o.hitsShip(toShipX(mainShip(state), px), toShipY(mainShip(state), py))) {
         n++;
         cx += px;
         cy += py;
@@ -154,7 +157,7 @@ export function bumpShip(state, e, o) {
   state.ship.vy = (state.ship.vy || 0) - dy * B.SHIP_KICK * o.size;
   state.ship.speed = Math.max(-0.4, Math.min(1, state.ship.speed - dx * B.SHIP_SPEED * o.size));
   kickForce(state, hullPoint(state, cx, cy), -dx, -dy, o.size); // (shoved the other way at the place they met: forces.js)
-  o.impact(cx, cy + state.ship.alt, B.DAMAGE * o.size);
+  o.impact(toShipX(mainShip(state), cx), toShipY(mainShip(state), cy), B.DAMAGE * o.size);
   o.puff(cx, cy, '#ffe9a8', 8);
   if (e[o.hp] != null) e[o.hp] = Math.max(1, e[o.hp] - B.SELF_DAMAGE);
   if (state.sfxQ) state.sfxQ.push(['clang', true]);
@@ -164,11 +167,7 @@ export function bumpShip(state, e, o) {
 // Contrail: a short line of points behind the plane, bright while it turns hard.
 export function trail(state, e, dt) {
   const t = (e.trail = e.trail || []);
-  const drift = scrollSpeed(state) * dt;
-  for (const p of t) {
-    p.x -= drift; // the air (and the trail in it) streams past the moving ship
-    p.a -= dt * 1.4;
-  }
+  for (const p of t) p.a -= dt * 1.4; // (the trail hangs in the air where it was drawn)
   t.push({ x: e.x, y: e.y, a: Math.min(1, 0.25 + (e.turning || 0) * 0.75) });
   while (t.length && (t.length > 40 || t[0].a <= 0)) t.shift();
 }
@@ -180,18 +179,17 @@ export function smoke(e, max, puff) {
 
 // Shot down: the plane spirals away trailing smoke, and the pilot bails out.
 export function shootDown(state, e, kind = 'fighter') {
-  state.wrecks.push({ x: e.x, y: e.y, vx: e.vx * 0.6, vy: e.vy * 0.4 - 60, spin: e.heading || 0, kind, spiral: Math.random() < 0.5 ? -1 : 1, grace: 0.8 }); // grace: can't hit the ship straight away (a plane that rammed us already did)
-  (state.chutes = state.chutes || []).push({ x: e.x, y: e.y - 20, vx: e.vx * 0.2, vy: -220, t: 0 });
+  state.wrecks.push({ x: e.x, y: e.y, vx: (e.vx - mainShip(state).pose.vx) * 0.6, vy: e.vy * 0.4 - 60, spin: e.heading || 0, kind, spiral: Math.random() < 0.5 ? -1 : 1, grace: 0.8 }); // grace: can't hit the ship straight away (a plane that rammed us already did)
+  (state.chutes = state.chutes || []).push({ x: e.x, y: e.y - 20, vx: (e.vx - mainShip(state).pose.vx) * 0.2, vy: -220, t: 0 });
 }
 
 // Parachutes drift down, sway, and are gone after a while (or on landing).
 export function updateChutes(state, dt) {
-  const drift = scrollSpeed(state) * dt;
   for (const c of state.chutes || []) {
     c.t += dt;
     c.vy += ((c.t > 0.6 ? 70 : 300) - c.vy) * Math.min(1, dt * 2);
     c.vx *= 1 - Math.min(1, dt);
-    c.x += c.vx * dt - drift;
+    c.x += c.vx * dt;
     c.y += c.vy * dt;
   }
   state.chutes = (state.chutes || []).filter((c) => c.t < 14 && !inRock(state, c.x, c.y + 20));

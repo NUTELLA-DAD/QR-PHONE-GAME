@@ -29,7 +29,6 @@ export function createSkyArt({ ctx, state }) {
     dusk: Math.max(0, Math.min(1, num(state.course && state.course.dusk))),
     storm: Math.max(0, Math.min(1, num(state.weather && state.weather.storm))),
   });
-  const dist = () => num(state.course && state.course.dist);
 
   // ---------- Open sky (screen space, drawn inside drawBackground) ----------
 
@@ -94,7 +93,7 @@ export function createSkyArt({ ctx, state }) {
       const a = C.ALPHA * (1 - storm * 0.6);
       if (a < 0.005) return;
       ctx.fillStyle = `rgba(${C.COLOR},${a})`;
-      const scroll = num(view && view.scroll);
+      const scroll = num(view && view.cx);
       for (let k = 0; k < C.COUNT; k++) {
         const L = Math.max(8, width * C.SIZE * (1 + hash(k, 94) * 0.5));
         const span = width + L * 6;
@@ -127,7 +126,7 @@ export function createSkyArt({ ctx, state }) {
       ctx.lineWidth = Math.max(1, height / 600);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      const scroll = num(view && view.scroll);
+      const scroll = num(view && view.cx);
       ctx.beginPath();
       for (let f = 0; f < C.FLOCKS; f++) {
         const span = width + 400;
@@ -174,7 +173,7 @@ export function createSkyArt({ ctx, state }) {
     if (bottom <= y0 - L.wave - 5) return; // view is entirely above this fog
     const half = width / 2 / zoom;
     const du = L.spacing;
-    const shift = dist() * L.parallax - now * L.drift; // screen x = u - shift
+    const shift = -num(view.cx) * (1 - L.parallax) - now * L.drift; // world x = u - shift (the bank slides at (1 - parallax) of the camera)
     const u0 = Math.floor((num(view.cx) - half - du - 200 + shift) / du) * du;
     const xMax = num(view.cx) + half + du + 200;
     const grad = ctx.createLinearGradient(0, y0 - L.wave, 0, y0 + FOG.TALL);
@@ -227,9 +226,8 @@ export function createSkyArt({ ctx, state }) {
     const T = D.TILE;
     const hw = width / 2 / zoom;
     const hh = height / 2 / zoom;
-    const dd = dist();
-    const i0 = Math.floor((num(view.cx) - hw + dd) / T) - 1;
-    const i1 = Math.floor((num(view.cx) + hw + dd) / T) + 1;
+    const i0 = Math.floor((num(view.cx) - hw) / T) - 1;
+    const i1 = Math.floor((num(view.cx) + hw) / T) + 1;
     const j0 = Math.floor((num(view.cy) - hh) / T) - 1;
     const j1 = Math.floor((num(view.cy) + hh) / T) + 1;
     if ((i1 - i0 + 1) * (j1 - j0 + 1) > 150) return;
@@ -241,7 +239,7 @@ export function createSkyArt({ ctx, state }) {
         const k = i * 131 + j * 7;
         if (hash(k, 110) > 0.8) continue;
         const ph = hash(k, 113) * 6.28;
-        const x = (i + hash(k, 111)) * T - dd + Math.sin(now * 0.13 + ph) * 40;
+        const x = (i + hash(k, 111)) * T + Math.sin(now * 0.13 + ph) * 40;
         const y = (j + hash(k, 112)) * T + Math.sin(now * 0.17 + ph * 1.3) * 30;
         ctx.moveTo(x + r, y);
         ctx.arc(x, y, r, 0, 7);
@@ -281,7 +279,6 @@ export function createSkyArt({ ctx, state }) {
       const C = map.CELL;
       const zoom = num(view.zoom, 1);
       const hw = width / 2 / zoom;
-      const dd = dist();
       const { dusk, storm } = mood();
       const mapH = map.H * C;
       const wall = ctx.createLinearGradient(0, 0, 0, mapH);
@@ -298,7 +295,7 @@ export function createSkyArt({ ctx, state }) {
       // Faint silhouettes of distant rock pillars, two depths with parallax.
       CAVE.PILLARS.forEach((P, layer) => {
         const sp = P.spacing;
-        const shift = dd * P.parallax;
+        const shift = -num(view.cx) * (1 - P.parallax); // (the pillars slide at (1 - parallax) of the camera)
         const k0 = Math.floor((num(view.cx) - hw - 400 + shift) / sp) - 1;
         const k1 = Math.ceil((num(view.cx) + hw + 400 + shift) / sp) + 1;
         ctx.fillStyle = `rgba(${look ? look.pillar : P.color},${P.alpha})`;
@@ -330,14 +327,14 @@ export function createSkyArt({ ctx, state }) {
       const sa = S.ALPHA * (1 - storm * 0.85);
       if (sa > 0.003) {
         const col = look ? look.shaft : mixRgb(S.COLOR, S.DUSK_COLOR, dusk);
-        const g0 = Math.floor((num(view.cx) - hw - S.LENGTH + dd) / (C * S.SPACING)) - 1;
-        const g1 = Math.ceil((num(view.cx) + hw + S.LENGTH + dd) / (C * S.SPACING)) + 1;
+        const g0 = Math.floor((num(view.cx) - hw - S.LENGTH) / (C * S.SPACING)) - 1;
+        const g1 = Math.ceil((num(view.cx) + hw + S.LENGTH) / (C * S.SPACING)) + 1;
         for (let g = g0; g <= g1; g++) {
           if (hash(g, 150) > S.CHANCE) continue;
           const i = g * S.SPACING + Math.floor(hash(g, 151) * S.SPACING);
           const y = openingY(map, i);
           if (y < 0) continue;
-          const x = i * C + C / 2 - dd;
+          const x = i * C + C / 2;
           const pulse = 1 - S.PULSE + S.PULSE * (0.5 + 0.5 * Math.sin(now * 0.3 + g * 2.3));
           const lean = 140 + hash(g, 152) * 160;
           const hwid = S.WIDTH / 2;

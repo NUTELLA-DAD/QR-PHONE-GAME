@@ -1,11 +1,14 @@
-// Drawing for the hookshot rope and hook (ship coordinates, called while the ship's frame is active).
+// Drawing for the hookshot rope and hook (WORLD coordinates since M.1: called outside the ship's frame; a player on a deck is converted with pose.js).
 // Never throws: a drawing problem must not stop the game.
 import { config } from '../../config.js';
+import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 
 export function createHookArt({ ctx, state, ink }) {
   const rope = (p) => {
     const h = p.hook;
-    const o = { x: p.x, y: p.y - config.HOOKSHOT.HAND - (p.fly ? 0 : p.jz || 0) };
+    const ship = mainShip(state);
+    const o = p.fly ? { x: p.x, y: p.y - config.HOOKSHOT.HAND } : { x: toWorldX(ship, p.x), y: toWorldY(ship, p.y - config.HOOKSHOT.HAND - (p.jz || 0)) };
     if (h.phase === 'caught') return { from: o, to: { x: h.ax, y: h.ay }, caught: true };
     return { from: o, to: { x: o.x + h.dx * h.len, y: o.y + h.dy * h.len }, caught: false };
   };

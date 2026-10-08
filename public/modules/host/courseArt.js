@@ -15,8 +15,8 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgAr
     return [view.cx - half - 60, view.cx + half + 60];
   };
 
-  // Everything below is placed on a grid fixed to the course (not to the screen), so the outline
-  // and the scenery stay put as the ground scrolls past instead of shimmering.
+  // Everything below is placed on a grid fixed to the course (the world, M.1: terrain is drawn once, in map coordinates), so the outline
+  // and the scenery stay put as the camera moves instead of shimmering.
   const STEP = 20;
   const HAZE = 'rgba(200,214,228,.32)'; // aerial haze over the rock (higher = calmer background)
   const PALETTE = config.PALETTE;
@@ -121,12 +121,11 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgAr
     const course = state.course;
     const map = course.map;
     const C = map.CELL;
-    const dist = course.dist;
     const [wx0, wx1] = span(view, width);
     const top = view.cy - height / 2 / view.zoom - C;
     const bottom = view.cy + height / 2 / view.zoom + C;
-    const i0 = Math.floor((wx0 + dist) / C) - 1;
-    const i1 = Math.ceil((wx1 + dist) / C) + 1;
+    const i0 = Math.floor(wx0 / C) - 1;
+    const i1 = Math.ceil(wx1 / C) + 1;
     const j0 = Math.floor(top / C) - 1;
     const j1 = Math.ceil(bottom / C) + 1;
     const S = (i, j) => (j < 0 && map.open && i >= 0 && i < map.W ? 0 : i < 0 || j < 0 || i >= map.W || j >= map.H ? 1 : map.solid[j * map.W + i]);
@@ -136,7 +135,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgAr
       const v = (S(i - 1, j - 1) + S(i, j - 1) + S(i - 1, j) + S(i, j)) / 4;
       return v === 0 || v === 1 ? v : v + (hash(i * 7919 + j, 50) - 0.5) * 0.3;
     };
-    const X = (i) => i * C - dist;
+    const X = (i) => i * C;
     const Y = (j) => j * C;
 
     // Cave backdrop: dark, so ships, enemies and shots stand out.
@@ -198,7 +197,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgAr
       }
     }
     const pat = getRockPattern();
-    if (pat.setTransform) pat.setTransform(new DOMMatrix([1, 0, 0, 1, -(dist % 400), 0]));
+    if (pat.setTransform) pat.setTransform(new DOMMatrix([1, 0, 0, 1, 0, 0])); // (the rock texture is fixed to the world)
     ctx.fillStyle = pat;
     ctx.fill(fill);
     const look = envLook();
@@ -206,7 +205,7 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgAr
     ctx.fill(fill);
 
     // Edges: ink outline, grass on floors, drips/vines/crystals under ceilings.
-    const rockAt = (x, y) => S(Math.floor((x + dist) / C), Math.floor(y / C)) === 1;
+    const rockAt = (x, y) => S(Math.floor(x / C), Math.floor(y / C)) === 1;
     const floors = [];
     const ceilings = [];
     for (const sg of segs) {
@@ -308,20 +307,19 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgAr
     const course = state.course;
     if (!course || !config.COURSE.ENABLED) return;
     const [wx0, wx1] = span(view, width);
-    const dist = course.dist;
     const bottom = view.cy + height / 2 / view.zoom + 200;
     const top = view.cy - height / 2 / view.zoom - 200;
 
     // Samples at fixed course positions.
-    const i0 = Math.floor((wx0 + dist) / STEP) - 1;
-    const i1 = Math.ceil((wx1 + dist) / STEP) + 1;
+    const i0 = Math.floor(wx0 / STEP) - 1;
+    const i1 = Math.ceil(wx1 / STEP) + 1;
     const ids = [];
     const xs = [];
     const gs = [];
     const cs = [];
     const snow = []; // snow line at each sample
     for (let i = i0; i <= i1; i++) {
-      const x = i * STEP - dist;
+      const x = i * STEP;
       ids.push(i);
       xs.push(x);
       gs.push(groundAt(course, x, false)); // bare rock (buildings are drawn separately)
@@ -678,15 +676,14 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgAr
     const course = state.course;
     if (!course) return;
     const [wx0, wx1] = span(view, width);
-    const dist = course.dist;
     // Draw tall things last so walls sit behind towers.
     const order = { wall: 0, shed: 1, keep: 2, tower: 3, chimney: 4 };
     const blocks = [];
-    for (const f of course.features) if (f.blocks) for (const b of f.blocks) if (b.x1 - dist > wx0 - 200 && b.x0 - dist < wx1 + 200) blocks.push(b);
+    for (const f of course.features) if (f.blocks) for (const b of f.blocks) if (b.x1 > wx0 - 200 && b.x0 < wx1 + 200) blocks.push(b);
     blocks.sort((a, b) => order[a.kind] - order[b.kind]);
     for (const b of blocks) {
-      const x0 = b.x0 - dist;
-      const x1 = b.x1 - dist;
+      const x0 = b.x0;
+      const x1 = b.x1;
       const cx = (x0 + x1) / 2;
       const top = b.top;
       const bottom = Math.max(groundAt(course, x0, false), groundAt(course, x1, false), groundAt(course, cx, false)) + 40;
@@ -886,13 +883,14 @@ export function createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgAr
   };
 
   // Route markers: home mooring mast, checkpoint flags, and the turning beacon (a lighthouse).
-  const drawMarkers = (time) => {
+  const drawMarkers = (view, width, time) => {
     const course = state.course;
     if (!course || !course.markers) return;
+    const [wx0, wx1] = span(view, width);
     for (const m of course.markers) {
       // (On a mission map markers sit on a cave floor; the mast reaches up to the ship.)
-      const x = (m.mx ?? m.cx) - course.dist;
-      if (x < -1500 || x > 4500) continue;
+      const x = m.mx ?? m.cx;
+      if (x < wx0 - 1500 || x > wx1 + 1500) continue;
       const g = m.my ?? groundAt(course, x);
       const mastH = m.top != null ? g - m.top : 900 + LIFT;
       ink();

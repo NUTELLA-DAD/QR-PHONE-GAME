@@ -5,6 +5,7 @@
 // that phone last got) and { help: 1 }.
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 import { travelTime } from './nav.js';
 import { bestTarget } from './aim.js';
 import { botFree } from './bots.js';
@@ -22,7 +23,8 @@ export const SPOT_SIZE = { mine: 44, fighter: 54, bomber: 100, plane: 50, boss: 
 // Everything out there worth a ping (the same lists the TV's lookout arrows use, but every one of them).
 // Each: { k (kind index), kind, obj (the thing itself), pos() -> {x, y} live world position }.
 export function radarItems(state) {
-  const L = mainShip(state).layout;
+  const ship = mainShip(state);
+  const L = ship.layout;
   const out = [];
   const add = (kind, obj, pos) => out.push({ k: RADAR_KINDS.indexOf(kind), kind, obj, pos });
   const at = (o) => () => ({ x: o.x, y: o.y });
@@ -33,7 +35,7 @@ export function radarItems(state) {
   for (const p of state.strafers || []) if (p.hp > 0 && p !== state.stuntPlane) add('plane', p, at(p));
   if (state.boss) add('boss', state.boss, at(state.boss));
   const gs = state.gunship;
-  if (gs && gs.phase !== 'sinking') add('gunship', gs, () => (gs.bp ? { x: gs.bp.cx + gs.dx, y: (gs.bp.hullTop + gs.bp.hullBot) / 2 + gs.dy - state.ship.alt } : { x: L.bounds.x1 + 790 + gs.dx, y: L.refPoint.y + gs.dy - state.ship.alt }));
+  if (gs && gs.phase !== 'sinking') add('gunship', gs, () => (gs.bp ? { x: toWorldX(ship, gs.bp.cx + gs.dx), y: toWorldY(ship, (gs.bp.hullTop + gs.bp.hullBot) / 2 + gs.dy) } : { x: toWorldX(ship, L.bounds.x1 + 790 + gs.dx), y: toWorldY(ship, L.refPoint.y + gs.dy) }));
   for (const b of state.bats || []) if (b.delay <= 0 && !b.latched && b.hp > 0) add('bat', b, at(b));
   const S = state.specials;
   if (S) {
@@ -97,8 +99,9 @@ export function createSpotter({ state, emit, phoneFx }) {
       if (!it) unspot(i);
       else s.item = it;
     }
-    const cx = L.midPoint.x;
-    const cy = L.midPoint.y - state.ship.alt;
+    const ship = mainShip(state);
+    const cx = toWorldX(ship, L.midPoint.x);
+    const cy = toWorldY(ship, L.midPoint.y);
     const near = last
       .map((it) => {
         const p = it.pos();

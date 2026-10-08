@@ -12,13 +12,15 @@ import { keepClear, inRock } from './course.js';
 import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const SP = config.SPECIALS;
 const rand = (a, b) => a + Math.random() * (b - a);
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks }) {
-  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const ship = mainShip(state); // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const layout = ship.layout;
   const B = layout.bounds;
   const SH = layout.shield;
   const S = (state.specials = { saws: [], imps: [], snipers: [], tugs: [], beams: [] });
@@ -29,11 +31,15 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
     state.ev.warn = secs;
     state.ev.warnText = text;
   };
-  const touches = (x, y, r) => {
-    const sy = y + state.ship.alt;
-    return [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]].some(([dx, dy]) => hitsShip(x + dx, sy + dy));
+  const touches = (x, y, r) => { // (a round thing at world (x, y): hitsShip wants ship coordinates)
+    const sx = toShipX(ship, x);
+    const sy = toShipY(ship, y);
+    return [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]].some(([dx, dy]) => hitsShip(sx + dx, sy + dy));
   };
-  const mid = () => ({ x: layout.aimPoint.x, y: layout.aimPoint.y - state.ship.alt });
+  const mid = () => ({ x: toWorldX(ship, layout.aimPoint.x), y: toWorldY(ship, layout.aimPoint.y) });
+  const refX = () => toWorldX(ship, layout.refPoint.x); // (the middle of the ship along the sky)
+  // (The specials keep station on the ship: their steering is by speed relative to her, so her own world speed is added to what they want and
+  // carried in their moves. At rest against her, vx = her speed.)
   const side = () => (Math.random() < 0.5 ? -1 : 1);
   const kill = (shell, x, y, size = 1) => {
     state.kills += 1;
@@ -47,7 +53,7 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
     const s = side();
     const n = SP.SAW_COUNT + (lap() > 1 ? 1 : 0);
     for (let i = 0; i < n; i++) {
-      S.saws.push({ x: layout.refPoint.x + s * (2200 + i * 200), y: mid().y + rand(-500, 400), vx: 0, vy: 0, hp: SP.SAW_HP, mode: 'orbit', t: rand(1, 2.5), ang: rand(0, 6.28), spin: 0, hit: 0 });
+      S.saws.push({ x: toWorldX(ship, layout.refPoint.x + s * (2200 + i * 200)), y: mid().y + rand(-500, 400), vx: ship.pose.vx, vy: 0, hp: SP.SAW_HP, mode: 'orbit', t: rand(1, 2.5), ang: rand(0, 6.28), spin: 0, hit: 0 });
     }
     warn('GYRO-SAWS! SHOOT THEM BEFORE THEY CUT IN!');
   };
@@ -59,20 +65,21 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
       const [ox, oy] = layout.samples[(Math.random() * layout.samples.length) | 0];
       const tx = ox + (SH.cx - ox) * 0.15;
       const ty = oy + (SH.cy - oy) * 0.15;
-      S.imps.push({ x: layout.refPoint.x + s * rand(1800, 2600), y: mid().y + rand(-900, 700), vx: 0, vy: 0, tx, ty, hp: 1, flap: rand(0, 6), delay: i * 0.12 });
+      S.imps.push({ x: toWorldX(ship, layout.refPoint.x + s * rand(1800, 2600)), y: mid().y + rand(-900, 700), vx: ship.pose.vx, vy: 0, tx, ty, hp: 1, flap: rand(0, 6), delay: i * 0.12 });
     }
     warn('IMP SWARM! ALL GUNS - AND SWING THAT SHIELD!');
   };
   const spawnSniper = () => {
     if (S.snipers.length) return spawnSaws();
     const s = side();
-    S.snipers.push({ x: layout.refPoint.x + s * 2600, y: mid().y - rand(300, 700), side: s, hp: SP.SNIPER_HP, mode: 'move', t: 2, aim: s > 0 ? Math.PI : 0, shots: SP.SNIPER_SHOTS, hit: 0 });
+    S.snipers.push({ x: toWorldX(ship, layout.refPoint.x + s * 2600), y: mid().y - rand(300, 700), side: s, hp: SP.SNIPER_HP, mode: 'move', t: 2, aim: s > 0 ? Math.PI : 0, shots: SP.SNIPER_SHOTS, hit: 0 });
     warn('SNIPER ZEPPELIN! WATCH FOR THE RED LINE!');
   };
   const spawnTug = () => {
     if (S.tugs.length) return spawnImps();
     const s = side();
-    S.tugs.push({ x: layout.refPoint.x + s * 2400, y: keepClear(state, layout.refPoint.x + s * 2400, mid().y + rand(200, 500), 160, 0, 300), side: s, hp: SP.TUG_HP, mode: 'approach', t: 0, hook: null, harpoon: null, cable: SP.CABLE_HP, hit: 0 });
+    const tx = toWorldX(ship, layout.refPoint.x + s * 2400);
+    S.tugs.push({ x: tx, y: keepClear(state, tx, mid().y + rand(200, 500), 160, 0, 300), side: s, hp: SP.TUG_HP, mode: 'approach', t: 0, hook: null, harpoon: null, cable: SP.CABLE_HP, hit: 0 });
     warn('HARPOON TUG! SHOOT THE CABLE IF IT HOOKS US!');
   };
 
@@ -90,6 +97,7 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
 
   // ---------- Behaviour ----------
   const updateSaws = (dt) => {
+    const vs = ship.pose.vx;
     for (const s of S.saws) {
       s.spin += dt * 14;
       s.hit = Math.max(0, s.hit - dt);
@@ -97,19 +105,21 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
       if (s.mode === 'orbit') {
         // Circle the ship at a distance (following round from wherever it is now), then pick a
         // spot and dash at it.
-        const here = Math.atan2((s.y + state.ship.alt - SH.cy) / SH.ry, (s.x - SH.cx) / SH.rx);
+        const here = Math.atan2((toShipY(ship, s.y) - SH.cy) / SH.ry, (toShipX(ship, s.x) - SH.cx) / SH.rx);
         s.ang = here + 0.4;
-        const tx = SH.cx + SH.rx * 1.4 * Math.cos(s.ang);
-        const ty = SH.cy - state.ship.alt + SH.ry * 1.4 * Math.sin(s.ang);
-        s.vx += ((tx - s.x) * 2 - s.vx) * Math.min(1, dt * 3);
+        const tx = toWorldX(ship, SH.cx + SH.rx * 1.4 * Math.cos(s.ang));
+        const ty = toWorldY(ship, SH.cy + SH.ry * 1.4 * Math.sin(s.ang));
+        s.vx += ((tx - s.x) * 2 + vs - s.vx) * Math.min(1, dt * 3);
         s.vy += ((ty - s.y) * 2 - s.vy) * Math.min(1, dt * 3);
-        const v = Math.hypot(s.vx, s.vy);
-        if (v > SP.SAW_SPEED) (s.vx *= SP.SAW_SPEED / v), (s.vy *= SP.SAW_SPEED / v);
+        const v = Math.hypot(s.vx - vs, s.vy);
+        if (v > SP.SAW_SPEED) (s.vx = vs + (s.vx - vs) * (SP.SAW_SPEED / v)), (s.vy *= SP.SAW_SPEED / v);
         if ((s.t -= dt) <= 0 && Math.hypot(s.x - m.x, s.y - m.y) < 2200) {
-          const [px, py] = layout.samples[(Math.random() * layout.samples.length) | 0];
-          const d = Math.hypot(px - s.x, py - state.ship.alt - s.y) || 1;
-          s.vx = ((px - s.x) / d) * SP.SAW_SPEED * 2.2;
-          s.vy = ((py - state.ship.alt - s.y) / d) * SP.SAW_SPEED * 2.2;
+          const [sx0, sy0] = layout.samples[(Math.random() * layout.samples.length) | 0];
+          const px = toWorldX(ship, sx0);
+          const py = toWorldY(ship, sy0);
+          const d = Math.hypot(px - s.x, py - s.y) || 1;
+          s.vx = ((px - s.x) / d) * SP.SAW_SPEED * 2.2 + vs;
+          s.vy = ((py - s.y) / d) * SP.SAW_SPEED * 2.2;
           s.mode = 'dash';
           s.t = 1.6;
         }
@@ -122,9 +132,9 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
       s.y = keepClear(state, s.x, s.y, 40);
       // Cut the hull, then bounce off and come round again.
       if (!state.ship.down && s.mode === 'dash' && touches(s.x, s.y, 26)) {
-        impact(s.x, s.y + state.ship.alt, SP.SAW_IMPACT);
+        impact(toShipX(ship, s.x), toShipY(ship, s.y), SP.SAW_IMPACT);
         puff(s.x, s.y, '#ffe9a8', 10);
-        s.vx *= -0.6;
+        s.vx = vs - (s.vx - vs) * 0.6;
         s.vy *= -0.6;
         s.mode = 'orbit';
         s.t = rand(4, 7);
@@ -132,7 +142,7 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
       // The Deflector knocks them back (and dents them).
       if (shieldBlocks(s.x, s.y)) {
         s.hp -= 1;
-        s.vx = (s.x - m.x) * 1.2;
+        s.vx = (s.x - m.x) * 1.2 + vs;
         s.vy = (s.y - m.y) * 1.2;
         s.mode = 'orbit';
         s.t = rand(2, 3);
@@ -143,15 +153,19 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
   };
 
   const updateImps = (dt) => {
+    const vs = ship.pose.vx;
     for (const b of S.imps) {
-      if ((b.delay -= dt) > 0) continue;
+      if ((b.delay -= dt) > 0) { // (still waiting to set off: it hangs in the air beside the ship, so it goes along with her)
+        b.x += vs * dt;
+        continue;
+      }
       b.flap += dt * 18;
-      const tx = b.tx;
-      const ty = b.ty - state.ship.alt;
+      const tx = toWorldX(ship, b.tx);
+      const ty = toWorldY(ship, b.ty);
       const dx = tx - b.x;
       const dy = ty - b.y;
       const d = Math.hypot(dx, dy) || 1;
-      b.vx += ((dx / d) * SP.IMP_SPEED - b.vx) * Math.min(1, dt * 1.8);
+      b.vx += ((dx / d) * SP.IMP_SPEED + vs - b.vx) * Math.min(1, dt * 1.8);
       b.vy += ((dy / d) * SP.IMP_SPEED - b.vy) * Math.min(1, dt * 1.8);
       b.x += b.vx * dt + Math.sin(b.flap * 0.4) * 60 * dt;
       b.y += b.vy * dt + Math.cos(b.flap * 0.3) * 60 * dt;
@@ -159,13 +173,13 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
       if (!state.ship.down && touches(b.x, b.y, 10)) {
         b.hp = 0;
         puff(b.x, b.y, '#c0392b', 6);
-        impact(b.x, b.y + state.ship.alt, SP.IMP_IMPACT);
+        impact(toShipX(ship, b.x), toShipY(ship, b.y), SP.IMP_IMPACT);
       } else if (shieldBlocks(b.x, b.y)) {
         b.hp = 0;
         state.kills += 1;
       }
     }
-    S.imps = S.imps.filter((b) => b.hp > 0 && Math.abs(b.x - layout.refPoint.x) < 6000);
+    S.imps = S.imps.filter((b) => b.hp > 0 && Math.abs(b.x - refX()) < 6000);
   };
 
   // Walk along the beam; it stops at the Deflector or the first part of the ship it meets.
@@ -182,14 +196,14 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
         blocked = true;
         break;
       }
-      if (hitsShip(x, y + state.ship.alt)) {
+      if (hitsShip(toShipX(ship, x), toShipY(ship, y))) {
         hitShip = { x, y };
         break;
       }
     }
     S.beams.push({ x: z.x, y: z.y, ang: z.aim, len, t: 0.35 });
     if (hitShip && !state.ship.down) {
-      impact(hitShip.x, hitShip.y + state.ship.alt, SP.SNIPER_IMPACT);
+      impact(toShipX(ship, hitShip.x), toShipY(ship, hitShip.y), SP.SNIPER_IMPACT);
       puff(hitShip.x, hitShip.y, '#ffffff', 16);
       pop(state, hitShip.x, hitShip.y - 60, 'bigHit', '#ff5a5a', 1.3);
     } else if (blocked) {
@@ -202,8 +216,8 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
       z.hit = Math.max(0, z.hit - dt);
       const m = mid();
       // Keep station far out to one side, above the ship.
-      const home = z.shots > 0 ? { x: layout.refPoint.x + z.side * 1650, y: m.y - 450 } : { x: layout.refPoint.x + z.side * 4200, y: m.y - 900 };
-      z.x += Math.max(-200 * dt, Math.min(200 * dt, home.x - z.x));
+      const home = z.shots > 0 ? { x: toWorldX(ship, layout.refPoint.x + z.side * 1650), y: m.y - 450 } : { x: toWorldX(ship, layout.refPoint.x + z.side * 4200), y: m.y - 900 };
+      z.x += Math.max(-200 * dt, Math.min(200 * dt, home.x - z.x)) + ship.pose.vx * dt; // (200 px/s against the ship, carried along with her)
       const wantY = keepClear(state, z.x, home.y, 160, 0, 300);
       z.y += Math.max(-120 * dt, Math.min(120 * dt, wantY - z.y));
       const want = Math.atan2(m.y - z.y, m.x - z.x);
@@ -221,12 +235,13 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
         z.t = rand(2.5, 4);
       }
     }
-    S.snipers = S.snipers.filter((z) => z.hp > 0 && !(z.shots <= 0 && Math.abs(z.x - layout.refPoint.x) > 4000));
+    S.snipers = S.snipers.filter((z) => z.hp > 0 && !(z.shots <= 0 && Math.abs(z.x - refX()) > 4000));
     for (const b of S.beams) b.t -= dt;
     S.beams = S.beams.filter((b) => b.t > 0);
   };
 
   const updateTugs = (dt) => {
+    const vs = ship.pose.vx;
     for (const g of S.tugs) {
       if (g.hp <= 0) continue; // shot down (removed below)
       g.hit = Math.max(0, g.hit - dt);
@@ -234,14 +249,16 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
       const m = mid();
       if (g.mode === 'approach') {
         // Close in below and to one side, then fire the harpoon.
-        const tx = layout.refPoint.x + g.side * 1300;
+        const tx = toWorldX(ship, layout.refPoint.x + g.side * 1300);
         const ty = m.y + 650;
-        g.x += Math.max(-320 * dt, Math.min(320 * dt, tx - g.x));
+        g.x += Math.max(-320 * dt, Math.min(320 * dt, tx - g.x)) + vs * dt;
         g.y += Math.max(-200 * dt, Math.min(200 * dt, keepClear(state, g.x, ty, 120, 0, 300) - g.y));
         if (Math.abs(g.x - tx) < 80 && !g.harpoon && (g.t -= dt) <= 0) {
-          const [hx, hy] = layout.samples[(Math.random() * 10) | 0]; // somewhere on the underside
-          const d = Math.hypot(hx - g.x, hy - state.ship.alt - g.y) || 1;
-          g.harpoon = { x: g.x, y: g.y, vx: ((hx - g.x) / d) * 900, vy: ((hy - state.ship.alt - g.y) / d) * 900, life: 2 };
+          const [sx0, sy0] = layout.samples[(Math.random() * 10) | 0]; // somewhere on the underside
+          const hx = toWorldX(ship, sx0);
+          const hy = toWorldY(ship, sy0);
+          const d = Math.hypot(hx - g.x, hy - g.y) || 1;
+          g.harpoon = { x: g.x, y: g.y, vx: ((hx - g.x) / d) * 900 + vs, vy: ((hy - g.y) / d) * 900, life: 2 };
           g.t = 3;
         }
         const h = g.harpoon;
@@ -250,8 +267,8 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
           h.y += h.vy * dt;
           h.life -= dt;
           if (shieldBlocks(h.x, h.y) || h.life <= 0) g.harpoon = null;
-          else if (hitsShip(h.x, h.y + state.ship.alt)) {
-            g.hook = { x: h.x, y: h.y + state.ship.alt }; // ship coordinates
+          else if (hitsShip(toShipX(ship, h.x), toShipY(ship, h.y))) {
+            g.hook = { x: toShipX(ship, h.x), y: toShipY(ship, h.y) }; // ship coordinates
             g.harpoon = null;
             g.mode = 'pull';
             g.cable = SP.CABLE_HP;
@@ -261,12 +278,12 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
         }
       } else if (g.mode === 'pull') {
         // Haul away down and backward, dragging the ship.
-        const tx = layout.refPoint.x + g.side * 1500;
+        const tx = toWorldX(ship, layout.refPoint.x + g.side * 1500);
         const ty = m.y + 900;
-        g.x += Math.max(-150 * dt, Math.min(150 * dt, tx - g.x));
+        g.x += Math.max(-150 * dt, Math.min(150 * dt, tx - g.x)) + vs * dt;
         g.y += Math.max(-150 * dt, Math.min(150 * dt, keepClear(state, g.x, ty, 120, 0, 300) - g.y));
         if (!state.ship.down) {
-          state.ship.alt -= SP.TUG_PULL * dt;
+          ship.pose.y += SP.TUG_PULL * dt; // (down: her y grows as she sinks)
           state.ship.speed += (-0.15 - state.ship.speed) * Math.min(1, dt * SP.TUG_SLOW);
         }
         // A crew member swinging a sword at the hook cuts the line.
@@ -282,12 +299,12 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
           warn('CABLE CUT!', 2);
         }
       } else {
-        g.x += g.side * 400 * dt;
+        g.x += (g.side * 400 + vs) * dt;
         g.y -= 60 * dt;
       }
       if ((g.age = (g.age || 0) + dt) > 1.5 && inRock(state, g.x, g.y)) (g.hp = 0), kill(null, g.x, g.y);
     }
-    S.tugs = S.tugs.filter((g) => g.hp > 0 && Math.abs(g.x - layout.refPoint.x) < 5000);
+    S.tugs = S.tugs.filter((g) => g.hp > 0 && Math.abs(g.x - refX()) < 5000);
   };
 
   // ---------- Crew shells ----------
@@ -315,12 +332,12 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
       };
       if (hitOne(S.imps, { r: 22 }, (e) => ((state.kills += 1), credit?.(sh), puff(e.x, e.y, '#c0392b', 6)))) continue;
       if (hitOne(S.saws, { r: 52 }, (e) => kill(sh, e.x, e.y, 0.9))) continue;
-      if (hitOne(S.snipers, { r: 130, squash: 2.6 }, (e) => (kill(sh, e.x, e.y, 1.4), state.wrecks.push({ x: e.x, y: e.y, vx: 0, vy: -40, spin: 0, kind: 'cargo' })))) continue;
+      if (hitOne(S.snipers, { r: 130, squash: 2.6 }, (e) => (kill(sh, e.x, e.y, 1.4), state.wrecks.push({ x: e.x, y: e.y, vx: ship.pose.vx, vy: -40, spin: 0, kind: 'cargo' })))) continue;
       if (hitOne(S.tugs, { r: 60 }, (e) => (kill(sh, e.x, e.y), (e.hook = null)))) continue;
       // The harpoon cable.
       for (const g of S.tugs) {
         if (g.mode !== 'pull' || !g.hook) continue;
-        if (distToSeg(sh.x, sh.y, g.x, g.y, g.hook.x, g.hook.y - state.ship.alt) < 22) {
+        if (distToSeg(sh.x, sh.y, g.x, g.y, toWorldX(ship, g.hook.x), toWorldY(ship, g.hook.y)) < 22) {
           sh.life = 0;
           g.cable -= 1;
           puff(sh.x, sh.y, '#ffe9a8', 6);

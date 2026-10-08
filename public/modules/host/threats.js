@@ -2,16 +2,18 @@
 // wrecks, plus the crew's shells hitting them. Anything that touches the ship crashes into it.
 import { firePace, spawnPace, crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
-import { keepClear, inRock, groundAt, ceilAt, scrollSpeed } from './course.js';
+import { keepClear, inRock, groundAt, ceilAt } from './course.js';
 import { pop } from './popups.js';
 import { shellDmg, dazzled } from './aim.js';
 import { flyPlane, smoke, shootDown, updateChutes, shoveShip, bumpShip, bounceStep } from './planes.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHelm, credit }) {
-  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const ship = mainShip(state); // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const layout = ship.layout;
   const B = layout.bounds;
   state.mines = [];
   state.wrecks = [];
@@ -23,12 +25,13 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     state.ev.warn = secs;
     state.ev.warnText = text;
   };
-  // Does a round thing at world (x, y) with radius r touch the ship?
+  // Does a round thing at world (x, y) with radius r touch the ship? (hitsShip wants ship coordinates)
   const touches = (x, y, r) => {
-    const sy = y + state.ship.alt;
-    return [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]].some(([dx, dy]) => hitsShip(x + dx, sy + dy));
+    const sx = toShipX(ship, x);
+    const sy = toShipY(ship, y);
+    return [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]].some(([dx, dy]) => hitsShip(sx + dx, sy + dy));
   };
-  // A falling wreck that can crash into the ship.
+  // A falling wreck that can crash into the ship (vx: its world velocity).
   const wreck = (x, y, vx, kind) => state.wrecks.push({ x, y, vx, vy: -60, spin: 0, kind });
 
   // ---------- The fighter: a real plane with momentum ----------
@@ -38,8 +41,12 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
   // ahead, but it can't turn on a sixpence: misjudge a mountain and it crashes.
   const F = config.ENEMY;
   const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
-  const shipMid = () => ({ x: layout.aimPoint.x, y: layout.aimPoint.y - state.ship.alt });
-  const nearShip = (x, y, pad) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - state.ship.alt - pad && y < B.y1 - state.ship.alt + pad;
+  const shipMid = () => ({ x: toWorldX(ship, layout.aimPoint.x), y: toWorldY(ship, layout.aimPoint.y) });
+  const nearShip = (x, y, pad) => {
+    const sx = toShipX(ship, x);
+    const sy = toShipY(ship, y);
+    return sx > B.x0 - pad && sx < B.x1 + pad && sy > B.y0 - pad && sy < B.y1 + pad;
+  };
 
   const startRun = (e) => {
     const mid = shipMid();
@@ -68,10 +75,10 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
   // Break off past the ship: go over it (or under, if there's room) and extend to the far side.
   const breakAway = (e) => {
     const mid = shipMid();
-    const groundGap = groundAt(state.course, mid.x) - (B.y1 - state.ship.alt);
+    const groundGap = groundAt(state.course, mid.x) - toWorldY(ship, B.y1);
     const over = e.y < mid.y || groundGap < 700 || Math.random() < 0.5;
     e.mode = 'extend';
-    e.wp = { x: mid.x - e.side * F.RUN_FROM, y: over ? B.y0 - state.ship.alt - rand(500, 900) - F.ZOOM : B.y1 - state.ship.alt + rand(350, 550) };
+    e.wp = { x: mid.x - e.side * F.RUN_FROM, y: over ? toWorldY(ship, B.y0) - rand(500, 900) - F.ZOOM : toWorldY(ship, B.y1) + rand(350, 550) };
   };
 
   const crashFighter = (e, text) => {
@@ -118,13 +125,13 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     // Flew into the rock: it crashes.
     if (course && inRock(state, e.x, e.y)) {
       state.kills += 1;
-      wreck(e.x, e.y - 20, e.vx * 0.3, 'fighter');
+      wreck(e.x, e.y - 20, (e.vx - ship.pose.vx) * 0.3 + ship.pose.vx, 'fighter'); // (a tenth of its speed relative to her, carried along)
       crashFighter(e, 'ENEMY FIGHTER FLEW INTO THE ROCKS!');
       return;
     }
     // Flew into the ship: it crashes, and that hurts.
     if (!state.ship.down && (touches(e.x, e.y, 30) || touches((e.x + px0) / 2, (e.y + py0) / 2, 30))) {
-      impact(e.x, e.y + state.ship.alt, config.IMPACT.PLANE_CRASH);
+      impact(toShipX(ship, e.x), toShipY(ship, e.y), config.IMPACT.PLANE_CRASH);
       shoveShip(state, e, 1.5);
       crashFighter(e, 'ENEMY PLANE CRASHED INTO US!');
       return;
@@ -143,7 +150,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
         const dir = e.heading + Math.max(-0.2, Math.min(0.2, off)) + (miss ? (Math.random() < 0.5 ? -1 : 1) * 0.3 : rand(-0.05, 0.05));
         const nx = e.x + Math.cos(e.heading) * 40;
         const ny = e.y + Math.sin(e.heading) * 40;
-        state.bullets.push({ x: nx, y: ny, vx: Math.cos(dir) * F.BULLET_SPEED, vy: Math.sin(dir) * F.BULLET_SPEED, miss, life: 3 });
+        state.bullets.push({ x: nx, y: ny, vx: Math.cos(dir) * F.BULLET_SPEED + ship.pose.vx, vy: Math.sin(dir) * F.BULLET_SPEED, miss, life: 3 }); // (fired at BULLET_SPEED from the ship's point of view)
         puff(nx, ny, '#ffe9a8', 2);
         if (state.flashes) state.flashes.push({ x: nx, y: ny, ang: dir, t: 0.07, color: '#ffb3b3', size: 0.8 });
       }
@@ -159,11 +166,11 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
         let shipY;
         if (Math.random() < M.EDGE_CHANCE) shipY = Math.random() < 0.5 ? rand(70, 150) : rand(800, 900);
         else shipY = rand(320, 680);
-        state.mines.push({ x: B.x1 + 1500, y: shipY - state.ship.alt, baseY: shipY - state.ship.alt, vx: 0, bob: Math.random() * 6 });
+        state.mines.push({ x: toWorldX(ship, B.x1 + 1500), y: toWorldY(ship, shipY), baseY: toWorldY(ship, shipY), vx: 0, bob: Math.random() * 6 });
       }
     }
     for (const m of state.mines) {
-      m.vx = -(40 + state.ship.speed * 520); // the ship flies into them
+      m.vx = ship.pose.vx - (40 + state.ship.speed * 520); // the ship flies into them (almost at rest in the sky)
       m.x += m.vx * dt;
       // Mines float in open air, never inside rock.
       m.y += (keepClear(state, m.x, m.baseY, M.RADIUS + 40, 0, 250) - m.y) * Math.min(1, dt * 3);
@@ -172,11 +179,11 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       if (!m.dead && !state.ship.down && touches(m.x, m.y, M.RADIUS)) {
         m.dead = true;
         puff(m.x, m.y, '#ff5a1f', 24);
-        impact(m.x, m.y + state.ship.alt, config.IMPACT.MINE);
+        impact(toShipX(ship, m.x), toShipY(ship, m.y), config.IMPACT.MINE);
         warn('MINE HIT!', 2);
       }
     }
-    state.mines = state.mines.filter((m) => !m.dead && m.x > B.x0 - 600);
+    state.mines = state.mines.filter((m) => !m.dead && m.x > toWorldX(ship, B.x0 - 600));
   };
 
   const updateWrecks = (dt) => {
@@ -186,7 +193,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
         w.spin += w.spiral * 3.2 * dt;
         w.vx += (Math.cos(w.spin) * 260 - w.vx) * Math.min(1, dt * 2);
         w.vy += (Math.sin(w.spin) * 200 + 260 - w.vy) * Math.min(1, dt * 2);
-        w.x += (w.vx - scrollSpeed(state)) * dt;
+        w.x += w.vx * dt;
         w.y += w.vy * dt;
         if (Math.random() < 0.9) puff(w.x, w.y, '#333', 1);
       } else {
@@ -206,11 +213,11 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
       else if (!w.dead && !state.ship.down && touches(w.x, w.y, 30)) {
         w.dead = true;
         puff(w.x, w.y, '#ff5a1f', 24);
-        impact(w.x, w.y + state.ship.alt, w.kind !== 'cargo' ? config.IMPACT.WRECK_SMALL : config.IMPACT.PLANE_CRASH);
+        impact(toShipX(ship, w.x), toShipY(ship, w.y), w.kind !== 'cargo' ? config.IMPACT.WRECK_SMALL : config.IMPACT.PLANE_CRASH);
         warn('WRECKAGE CRASHED ONTO US!');
       }
     }
-    state.wrecks = state.wrecks.filter((w) => !w.dead && w.y + state.ship.alt < 2500); // (measured from the ship: maps can be very deep)
+    state.wrecks = state.wrecks.filter((w) => !w.dead && toShipY(ship, w.y) < 2500); // (measured from the ship: maps can be very deep)
   };
 
   const updateShells = (dt) => {
@@ -259,7 +266,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     const e = state.enemy;
     const m = shipMid();
     if (e.heading != null && e.dead <= 0 && (force || Math.hypot(e.x - m.x, e.y - m.y) > far)) e.dead = F.RESPAWN;
-    state.mines = state.mines.filter((o) => !force && o.x < B.x1 + 700);
+    state.mines = state.mines.filter((o) => !force && o.x < toWorldX(ship, B.x1 + 700));
     return (e.heading != null && e.dead <= 0 ? 1 : 0) + state.mines.length;
   };
 

@@ -20,7 +20,9 @@
 //     tools/buildsim.mjs --lint fails new ones. Build them in a factory taking the ship, or recompute in a function.
 //  2. New code takes a ship HANDLE (a parameter), or gets one from shipOf / mainShip. It does not `import { SHIP_LAYOUT }` (the lint counts those down).
 //  3. World <-> ship conversions happen ONLY in pose.js: toWorld / toShip / aimToWorld / aimToShip. No `x + course.dist`, no `y - state.ship.alt`,
-//     no new `scrollSpeed` reads (the lint counts those down). Ship space is never mirrored; only the boundary (rock tests, hits, guns, lamps, camera, art) uses f.
+//     no new `scrollSpeed` reads (the lint counts those down; use pose.vx). Ship space is never mirrored; only the boundary (rock tests, hits, guns, lamps, camera, art) uses f.
+//     Since M.1 everything in the sky (shells, planes, bats, mines, puffs, crew in the air, hooks) is stored in WORLD (map) coordinates with world velocities:
+//     hitsShip / impact / the crew / the layout stay in ship coordinates, so a hit test is `hitsShip(toShipX(ship, x), toShipY(ship, y))` and a launch is toWorld.
 //  4. Per-ship things live UNDER the ship object as they get migrated (layout, nav, modules, bags, balance, GUNS, fires/holes, art bake).
 //     The shipLayout.js helpers (all/one/kindOf/is/nearest/hasKind/deckIndex/reviveSpot/isNestDeck/nestTier/isNestStation) take an optional layout last
 //     and are methods of the Layout (ship.layout.one('helm')); derived tables are built with layoutTables(fn) (per layout, rebuilt when its version changes).

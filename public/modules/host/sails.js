@@ -8,6 +8,7 @@
 // A ship with no sail part is untouched: nothing here runs for her (state.sailPush stays 0).
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 import { envIdOf } from './environments.js';
 import { pop } from './popups.js';
 import { applyForce, sailPoint, sailPush } from './forces.js';
@@ -30,7 +31,8 @@ export function gustState(state) {
 
 export function createSails({ state, modules }) {
   const S = config.SAIL;
-  const layout = mainShip(state).layout; // (this ship's own layout)
+  const ship = mainShip(state);
+  const layout = ship.layout; // (this ship's own layout)
   state.sails = [];
   state.sailPush = 0;
   state.sailWarn = false;
@@ -97,7 +99,7 @@ export function createSails({ state, modules }) {
           state.sailStats.torn++;
           state.ev.warn = 3;
           state.ev.warnText = 'THE GUST TORE THE SAIL! MEND IT WITH A HAMMER';
-          pop(state, lay.x, layout.platforms[lay.d].y - lay.h * 0.6 - state.ship.alt, 'RIIIP!', '#e63946', 1);
+          pop(state, toWorldX(ship, lay.x), toWorldY(ship, layout.platforms[lay.d].y - lay.h * 0.6), 'RIIIP!', '#e63946', 1);
           state.sfxQ.push(['impact']);
         }
       }

@@ -12,6 +12,7 @@ import { tilt, inRock } from './course.js';
 import { pop } from './popups.js';
 import { envOf } from './environments.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 
 const S = config.SEARCHLIGHT;
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -36,7 +37,8 @@ export function darkTarget(state) {
 }
 
 export function createSearchlights({ state }) {
-  const layout = mainShip(state).layout; // (B1: the ship the lamps are on; B2 makes this one per ship)
+  const ship = mainShip(state);
+  const layout = ship.layout; // (B1: the ship the lamps are on; B2 makes this one per ship)
   const lights = (state.searchlights = lightNames(layout).map((n) => {
     const m = layout.searchlights[n];
     return { n, bx: m.bx, by: m.by, home: m.aim, arc: m.arc, len: m.len, aim: m.aim, power: S.UNMANNED, focus: 0, manned: false, reach: S.RANGE, litCount: 0, ex: m.bx, ey: m.by, half: S.HALF_ANGLE, tierMul: 1 + config.NEST.TIER_BONUS * layout.nestTier((layout.stations.find((s) => s.n === n) || {}).p) };
@@ -50,7 +52,7 @@ export function createSearchlights({ state }) {
   const emitter = (l) => {
     const a = l.aim + (state.ship.pitch || 0);
     const [x, y] = tilt(state, l.bx, l.by);
-    return { x: x + Math.cos(a) * l.len, y: y - state.ship.alt + Math.sin(a) * l.len, a };
+    return { x: toWorldX(ship, x + Math.cos(a) * l.len), y: toWorldY(ship, y + Math.sin(a) * l.len), a };
   };
 
   const operatorOf = (l) => Object.values(state.players).find((q) => q.lock === l.n) || null;

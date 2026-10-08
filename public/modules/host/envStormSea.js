@@ -21,6 +21,7 @@ import { floorBelow } from './maps.js';
 import { pop } from './popups.js';
 import { applyForce } from './forces.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toWorldY } from './pose.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -103,7 +104,8 @@ function layoutSea(map, F) {
 }
 
 export function createStormSea({ state, puff, impact, damageHull, ignite }) {
-  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const ship = mainShip(state); // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const layout = ship.layout;
   const P = layout.platforms;
   const IDX = (id) => layout.deckIndex(id);
   const E = state.env;
@@ -149,18 +151,18 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
     const w = state.weather;
     const y = P[CAT].y - 30;
     if (w) {
-      w.bolt = { x: c.x, y: y - state.ship.alt, t: 0.3 };
+      w.bolt = { x: toWorldX(ship, c.x), y: toWorldY(ship, y), t: 0.3 }; // (c.x is a place on the ship: the bolt is drawn in the world)
       w.flash = 1;
     }
-    puff(c.x, y - state.ship.alt, '#fff7a8', 12);
+    puff(toWorldX(ship, c.x), toWorldY(ship, y), '#fff7a8', 12);
     if (grounded) {
       J.caught++;
-      pop(state, c.x, y - 90 - state.ship.alt, 'GROUNDED!', '#9fe8ff', 1.3);
+      pop(state, toWorldX(ship, c.x), toWorldY(ship, y - 90), 'GROUNDED!', '#9fe8ff', 1.3);
       if (mannedCoil() && state.coil) {
         state.coil.charge = 1; // the coil drinks the bolt: fully charged at once
         state.coil.cd = 0;
         J.drank++;
-        pop(state, 875, -150 - state.ship.alt, 'THE COIL DRINKS THE BOLT!', '#ffe97a', 1.4);
+        pop(state, toWorldX(ship, 875), toWorldY(ship, -150), 'THE COIL DRINKS THE BOLT!', '#ffe97a', 1.4);
         warn(2.5, 'GROUNDED - THE COIL DRINKS THE BOLT!');
       } else warn(2, 'GROUNDED!');
     } else {
@@ -186,7 +188,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
     if (gustAmt < 0.01) gustAmt = 0;
     E.gale = gustAmt;
     E.wind = (E.windDir || 1) * F.WIND * gustAmt;
-    if (E.wind && flying && !state.ship.down && state.course) state.course.dist += E.wind * dt; // (the rock collision shoves her back out)
+    if (E.wind && flying && !state.ship.down && state.course) ship.pose.x += E.wind * dt; // (the rock collision shoves her back out)
     if (E.wind && flying && layout.gasbag) applyForce(state, { x: layout.gasbag.cx, y: layout.gasbag.cy, fx: (E.wind / F.WIND) * config.FORCES.GUST_WIND, fy: 0, source: 'gust' }); // (the gust leans on the tall gasbag: it tips her, forces.js)
     if (gusting && !warned.gust) {
       warned.gust = true;
@@ -211,7 +213,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
     const c = J.charge;
     c.t -= dt;
     c.held = J.rods.some((r) => r.held > 0);
-    if (Math.random() < dt * 14) puff(c.x + rand(-50, 50), P[CAT].y - rand(40, 160) - state.ship.alt, '#cfe9ff', 2);
+    if (Math.random() < dt * 14) puff(toWorldX(ship, c.x + rand(-50, 50)), toWorldY(ship, P[CAT].y - rand(40, 160)), '#cfe9ff', 2);
     if (c.t <= 0) strike(F, c.held);
   };
 
@@ -238,8 +240,8 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
     }
     E.seaY = s.y;
     const FL = F.FLOOD;
-    const keel = (c.refY != null ? c.refY : layout.refPoint.y - state.ship.alt) + F.SEA.KEEL;
-    const cx = c.dist + layout.refPoint.x; // map x of the ship's middle
+    const keel = (c.refY != null ? c.refY : toWorldY(ship, layout.refPoint.y)) + F.SEA.KEEL;
+    const cx = toWorldX(ship, layout.refPoint.x); // map x of the ship's middle
     let touching = 0;
     if (flying && !state.ship.down) {
       let over = false;
@@ -254,7 +256,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
         s.scrapeT = FL.SCRAPE_EVERY;
         s.scrapes++;
         state.ship.shake = Math.max(state.ship.shake, 0.25);
-        puff(rand(500, 1100), 930 - state.ship.alt, '#cfe8f4', 8);
+        puff(toWorldX(ship, rand(500, 1100)), toWorldY(ship, 930), '#cfe8f4', 8);
         damageHull(FL.SCRAPE_HULL);
         s.dmgScrape = (s.dmgScrape || 0) + FL.SCRAPE_HULL;
       }
@@ -290,7 +292,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
       const k = 1 - Math.abs(dx) / F.SPOUT.RANGE;
       const tall = keel > s.y - F.SPOUT.HEIGHT; // only reaches ships that are low enough
       if (tall) {
-        c.dist += Math.sign(dx) * F.SPOUT.PULL * k * Math.min(1, Math.abs(dx) / 300) * dt; // (weaker near the core, so she is not pinned there)
+        ship.pose.x += Math.sign(dx) * F.SPOUT.PULL * k * Math.min(1, Math.abs(dx) / 300) * dt; // (weaker near the core, so she is not pinned there)
         if (!warned.spout) {
           warned.spout = true;
           warn(2.5, 'WATERSPOUT! IT IS PULLING THE SHIP IN - CLIMB!');
@@ -299,18 +301,19 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
           near.cool = F.SPOUT.HIT_EVERY; // spent for a while: it spits the ship back out
           impact(rand(500, 1100), 700, F.SPOUT.POWER);
           s.spoutHits = (s.spoutHits || 0) + 1;
-          c.dist -= Math.sign(dx) * 240;
+          ship.pose.x -= Math.sign(dx) * 240;
         }
       }
     } else if (!near) warned.spout = false;
     // ---- rescue: a survivor under the ship catches the rope; hold Action at the winch to haul them up ----
     if (!layout.bombBay) { s.hook = s.winch = null; return; } // (no bomb bay, no rope to rescue anyone with)
     const bayX = layout.bombBay.x;
-    const ropeY = (c.refY != null ? c.refY : layout.refPoint.y - state.ship.alt) + layout.bombBay.y - layout.refPoint.y;
+    const bayWX = toWorldX(ship, bayX); // (the rope hangs from the bay: where that is along the sky)
+    const ropeY = (c.refY != null ? c.refY : toWorldY(ship, layout.refPoint.y)) + layout.bombBay.y - layout.refPoint.y;
     const R = F.RESCUE;
     if (s.hook) {
       const h = s.hook;
-      const dx = h.mx - (c.dist + bayX);
+      const dx = h.mx - bayWX;
       const dy = h.y - ropeY;
       if (!flying || state.ship.down || Math.abs(dx) > R.SLACK || dy > R.ROPE + 120 || dy < -40) {
         if (!h.saved) {
@@ -323,7 +326,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
     if (!s.hook && flying && !state.ship.down) {
       for (const sv of s.survivors) {
         if (sv.saved || sv.lost) continue;
-        const dx = sv.mx - (c.dist + bayX);
+        const dx = sv.mx - bayWX;
         const dy = sv.y - ropeY;
         if (Math.abs(dx) < R.CATCH && dy > -20 && dy < R.ROPE) {
           s.hook = sv;
@@ -339,7 +342,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
     if (!s.hook && flying) {
       for (const sv of s.survivors) {
         if (sv.saved || sv.lost || sv.told) continue;
-        const dx = sv.mx - (c.dist + bayX);
+        const dx = sv.mx - bayWX;
         if (dx > 0 && dx < R.SPOT) {
           sv.told = true;
           warn(3, 'SURVIVORS IN THE WATER - FLY LOW AND WINCH THEM UP!');
@@ -349,7 +352,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
     // The winch is manned in advance: the first survivor close ahead (or the one on the rope) puts the winch on the job lists.
     let cand = s.hook;
     if (!cand && flying && !state.ship.down) {
-      cand = s.survivors.find((sv) => !sv.saved && !sv.lost && sv.mx - (c.dist + bayX) > -R.CATCH && sv.mx - (c.dist + bayX) < R.SPOT && sv.y - ropeY > -20 && sv.y - ropeY < R.ROPE + 250) || null;
+      cand = s.survivors.find((sv) => !sv.saved && !sv.lost && sv.mx - bayWX > -R.CATCH && sv.mx - bayWX < R.SPOT && sv.y - ropeY > -20 && sv.y - ropeY < R.ROPE + 250) || null;
     }
     winchSpot.x = R.WINCH_X;
     winchSpot.obj = cand;
@@ -362,8 +365,8 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
         h.saved = true;
         s.rescued++;
         s.hook = null;
-        pop(state, bayX, ropeY - 120, 'RESCUED!', '#8fe388', 1.4);
-        puff(bayX, 930 - state.ship.alt, '#8fe388', 12);
+        pop(state, bayWX, ropeY - 120, 'RESCUED!', '#8fe388', 1.4);
+        puff(bayWX, toWorldY(ship, 930), '#8fe388', 12);
         state.rescueAward = (state.rescueAward || 0) + h.n; // simulation.js turns this into salvage
         warn(2.5, h.n > 1 ? 'SURVIVORS RESCUED! +SALVAGE' : 'SURVIVOR RESCUED! +SALVAGE');
       }

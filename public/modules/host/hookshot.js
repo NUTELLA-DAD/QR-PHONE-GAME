@@ -7,23 +7,27 @@
 // Moving anchors (gunship, bombers, planes) carry the hook with them.
 //
 // player.hook = { phase: 'out'|'back'|'caught', dx, dy (aim), len, anchor, t, ... }
-// An anchor = { kind, pos() -> {x, y} in ship coordinates (or null when it is gone), plane? }
+// An anchor = { kind, pos() -> {x, y} in the WORLD (or null when it is gone), plane? }   (M.1: the hook, the rope and the swinging player are all world objects)
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
-import { inRock, scrollSpeed } from './course.js';
+import { inRock } from './course.js';
+import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const H = config.HOOKSHOT;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function createHookshot({ state, puff, phoneFx, air, hijack }) {
-  const layout = mainShip(state).layout; // (this ship's own layout)
-  const alt = () => state.ship.alt;
+  const ship = mainShip(state);
+  const layout = ship.layout; // (this ship's own layout)
   const bagF = (x, y) => { let f = Infinity; for (const b of layout.gasbags) f = Math.min(f, ((x - b.cx) / b.rx) ** 2 + ((y - b.cy) / b.ry) ** 2); return f; }; // < 1 inside any of the gasbags
   const val = (v) => (typeof v === 'function' ? v() : v);
-  const origin = (p) => ({ x: p.x, y: p.y - H.HAND - (p.fly ? 0 : p.jz || 0) });
+  // The player's hand, in the world (a flying player already is; one on a deck is in ship coordinates).
+  const origin = (p) => (p.fly ? { x: p.x, y: p.y - H.HAND } : { x: toWorldX(ship, p.x), y: toWorldY(ship, p.y - H.HAND - (p.jz || 0)) });
 
-  // What does a point (ship coordinates) catch on? Returns an anchor or null. prevF = gasbag value one step back.
-  const probe = (x, y, prev) => {
+  // What does a point (world coordinates) catch on? Returns an anchor or null. prev = gasbag value one step back.
+  const probe = (wx, wy, prev) => {
+    const x = toShipX(ship, wx); // (our own decks, the gunship's and the gasbag are in ship coordinates)
+    const y = toShipY(ship, wy);
     // The enemy gunship's decks and hull (and our own decks): horizontal edges.
     for (const s of air.surfaces()) {
       if (s.onLand === undefined && s.d === undefined) continue;
@@ -42,7 +46,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
           pos: () => {
             const t = air.surfaces().find((q) => q.id === id);
             if (!t || val(t.y) == null) return null;
-            return { x: val(t.x0) + ox, y: val(t.y) + oy };
+            return { x: toWorldX(ship, val(t.x0) + ox), y: toWorldY(ship, val(t.y) + oy) };
           },
           surf: true,
         };
@@ -53,24 +57,18 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     if (prev != null && (prev - 1) * (f - 1) <= 0) {
       const ax = x;
       const ay = y;
-      return { kind: 'ship', pos: () => ({ x: ax, y: ay }) };
+      return { kind: 'ship', pos: () => ({ x: toWorldX(ship, ax), y: toWorldY(ship, ay) }) };
     }
-    // Rock (world coordinates: slides back as the ship flies).
-    if (inRock(state, x, y - alt())) {
-      let wx = x;
-      const wy = y - alt();
-      return {
-        kind: 'rock',
-        pos: () => ({ x: wx, y: wy + alt() }),
-        drift: (dt) => { wx -= scrollSpeed(state) * dt; },
-      };
+    // Rock (it stays where it is in the world).
+    if (inRock(state, wx, wy)) {
+      return { kind: 'rock', pos: () => ({ x: wx, y: wy }) };
     }
     // Enemy bodies (world coordinates).
     const ent = (e, hw, hh, extra) => {
-      if (Math.abs(x - e.x) > hw || Math.abs(y - alt() - e.y) > hh) return null;
-      const ox = x - e.x;
-      const oy = y - alt() - e.y;
-      return { kind: 'enemy', ent: e, pos: () => ((e.hp != null && e.hp <= 0) ? null : { x: e.x + ox, y: e.y + oy + alt() }), ...extra };
+      if (Math.abs(wx - e.x) > hw || Math.abs(wy - e.y) > hh) return null;
+      const ox = wx - e.x;
+      const oy = wy - e.y;
+      return { kind: 'enemy', ent: e, pos: () => ((e.hp != null && e.hp <= 0) ? null : { x: e.x + ox, y: e.y + oy }), ...extra };
     };
     for (const b of state.bombers || []) {
       const a = ent(b, H.BOMBER_HW, H.BOMBER_HH);
@@ -81,14 +79,14 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
       if (a) return a;
     }
     for (const s of state.strafers || []) {
-      if (s.hp > 0 && Math.hypot(x - s.x, y - alt() - s.y) < H.PLANE_R) {
+      if (s.hp > 0 && Math.hypot(wx - s.x, wy - s.y) < H.PLANE_R) {
         const a = ent(s, H.PLANE_R, H.PLANE_R, { plane: s });
         if (a) return a;
       }
     }
     // The big enemy fighter (she can be hijacked too).
     const big = state.enemy;
-    if (big && big.dead <= 0 && big.heading != null && big.hp > 0 && Math.hypot(x - big.x, y - alt() - big.y) < H.PLANE_R * 1.3) {
+    if (big && big.dead <= 0 && big.heading != null && big.hp > 0 && Math.hypot(wx - big.x, wy - big.y) < H.PLANE_R * 1.3) {
       const a = ent(big, H.PLANE_R * 1.3, H.PLANE_R * 1.3, { plane: big });
       if (a) return a;
     }
@@ -101,7 +99,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     for (let d = 0; d <= H.RANGE; d += 12) {
       const x = o.x + dx * d;
       const y = o.y + dy * d;
-      const f = bagF(x, y);
+      const f = bagF(toShipX(ship, x), toShipY(ship, y));
       if (d >= H.SKIP) {
         const a = probe(x, y, prev);
         if (a) return { dist: d, anchor: a };
@@ -151,7 +149,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     p.fvx *= H.BOOST;
     p.fvy *= H.BOOST;
     capSpeed(p);
-    p.apex = p.y;
+    p.apex = toShipY(ship, p.y); // (the fall height is measured on the ship)
     puff(p.x, p.y - 30, '#ffffff', 3);
     return true;
   }
@@ -183,8 +181,8 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     if (!p.fly) {
       p.y -= (p.jz || 0) + 5; // lift clear of the deck so it does not land straight back
       air.startFlight(p, 0, 0);
-      p.fvx = (dx / d) * H.POP;
-      p.fvy = Math.min((dy / d) * H.POP, -H.POP_UP); // always a little up, so you leave the deck instead of landing straight back
+      p.fvx = (dx / d) * H.POP + ship.pose.vx;
+      p.fvy = Math.min((dy / d) * H.POP, -H.POP_UP) + ship.pose.vy; // always a little up, so you leave the deck instead of landing straight back
     }
     h.phase = 'caught';
     h.t = 0;
@@ -300,7 +298,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     }
   };
 
-  // Where the drawing finds the end of the rope: { from, to, caught } in ship coordinates, or null.
+  // Where the drawing finds the end of the rope: { from, to, caught } in the world, or null.
   const rope = (p) => {
     const h = p.hook;
     if (!h) return null;
