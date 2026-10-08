@@ -141,6 +141,7 @@ export function createSimulation() {
   };
 
   const T = config.TOOLS;
+  const CTL = config.CONTROLS; // phone controls: grab lockout, hold-to-swap, hysteresis (Phase C)
   const modules = createModules();
   const jobFinder = createJobFinder(state);
   state.modules = modules.list;
@@ -156,9 +157,10 @@ export function createSimulation() {
   // Sunken Sea: crew on the lower decks wade slowly while the ship is flooded.
   const wadeMul = (p) => (p.d != null && PLATFORMS[p.d] && PLATFORMS[p.d].y >= SHIP_LAYOUT.lowDeckY && state.sea && state.sea.flood > 0 ? 1 - state.sea.flood * config.ENVIRONMENTS.sea.FLOOD.SLOW_CREW : 1);
 
-  // What the Action button does for this player right now (or null).
+  // What the Action button does for this player right now (or null) - the "use" half of interaction() below.
   // hold = keep the button held to make progress; otherwise a tap does it.
-  const interaction = (player, station) => {
+  // legacy (bots): one combined button, so racks, ammo, coal and stations are decided here too; people get those on GRAB (grabsFor).
+  const useFor = (player, station, legacy) => {
     if (player.lock || player.conn != null || player.fall || player.swing || player.air) return null;
     const here = (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r;
     const tool = player.carry;
@@ -167,7 +169,7 @@ export function createSimulation() {
     const boarding = gunship.interaction(player);
     if (boarding) return boarding;
     // Standing over the open bomb bay doors: jump out (parachute). Not while carrying ammo - that loads the bombs.
-    if (!player.bot && player.d === BAY_D && tool !== 'ammo' && Math.abs(player.x - SHIP_LAYOUT.bombBay.jumpX) < 40) return { type: 'jump', label: 'Jump!' };
+    if (!player.bot && player.d === BAY_D && tool !== 'ammo' && Math.abs(player.x - SHIP_LAYOUT.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return { type: 'jump', label: 'Jump!' };
     // Storm Front: while a bolt is charging, a lightning rod in reach comes first (hold Action = grounded).
     const rod = state.stormJob.charge && state.stormJob.rods.find((o) => here(o, 75));
     if (rod) return { type: 'rod', obj: rod, hold: true, time: 1, label: 'HOLD THE ROD!' };
@@ -194,9 +196,13 @@ export function createSimulation() {
     const hurt = modules.list.find((m) => m.hp < m.max && here(m, T.REACH + 15));
     if (hurt && tool === 'hammer') return { type: 'repair', obj: hurt, hold: true, label: `Repair ${hurt.name}` };
     // Otherwise standing at a rack or hook means take / swap / put back.
-    const pickup = PICKUPS.find((r) => here(r, T.REACH));
+    const pickup = legacy ? PICKUPS.find((r) => here(r, T.REACH)) : null;
     // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)
     if (pickup && pickup.kind === 'ice' && !(station && station.kind === 'boiler' && tool === 'ice')) return goingDown.lockerAction(player); // the ice locker
+    if (!legacy && !(station && (tool === 'ammo' || tool === 'coal' || tool === 'ice')) && tool !== 'ice' && PICKUPS.some((r) => r.kind === 'ice' && here(r, T.REACH))) {
+      const empty = goingDown.lockerAction(player); // (people: an empty ice locker still says so; taking ice is a GRAB action)
+      if (empty.type === 'need') return empty;
+    }
     if (pickup && !(station && (tool === 'ammo' || tool === 'coal' || tool === 'ice'))) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : tool && tool !== 'ammo' && tool !== 'coal' ? `Swap to ${pickup.kind}` : `Take ${pickup.kind}` };
     const vent = SHIP_LAYOUT.vents.find((v) => here(v, T.REACH));
     if (vent) return { type: 'vent', obj: vent, label: state.ventOpen[SHIP_LAYOUT.vents.indexOf(vent)] ? 'Close vent' : 'Open vent' };
@@ -206,8 +212,8 @@ export function createSimulation() {
       const gun = state.GUNS[station.n];
       if (gun && tool === 'ammo' && gun.ammo < gun.max) return { type: 'load', obj: gun, station, label: 'Load ' + station.n };
       if (station.kind === 'bombBay' && tool === 'ammo' && state.bombBay.bombs < config.BOMBS.MAX) return { type: 'loadBombs', station, label: 'Load bombs' };
-      if (station.kind === 'ammo' && tool !== 'ammo') return { type: 'ammo', station, label: 'Grab ammo' };
-      if (station.kind === 'coal' && tool !== 'coal') return { type: 'coal', station, label: 'Grab coal' };
+      if (legacy && station.kind === 'ammo' && tool !== 'ammo') return { type: 'ammo', station, label: 'Grab ammo' };
+      if (legacy && station.kind === 'coal' && tool !== 'coal') return { type: 'coal', station, label: 'Grab coal' };
       if (station.kind === 'boiler' && tool === 'coal') {
         const full = state.ship.fuel > config.BOILER.FUEL_MAX - config.BOILER.COAL_FUEL && !goingDown.active(); // (while she falls, every load counts)
         return full ? { type: 'need', label: 'Firebox is full' } : { type: 'stoke', station, label: goingDown.active() ? 'LOAD COAL - LIFT!' : 'Load coal' };
@@ -219,15 +225,65 @@ export function createSimulation() {
       }
       const loader = !player.mate && links.loaderAction(player, station); // a manned gun: hold Action to prime the shell for the gunner
       if (loader) return loader;
-      if (LOCKABLE(station.n) && !taken(station.n) && !player.mate) return { type: 'station', station, label: 'Take ' + station.n }; // (a ship's mate never takes a station)
-      // Players can always bump a bot off a station.
-      const botThere = !player.bot && Object.values(state.players).find((q) => q.bot && q.lock === station.n);
-      if (botThere) return { type: 'station', station, bump: botThere, label: 'Take ' + station.n };
+      if (legacy && LOCKABLE(station.n) && !taken(station.n) && !player.mate) return { type: 'station', station, label: 'Take ' + station.n }; // (a ship's mate never takes a station)
+      // (people can always bump a bot off a station: that is a GRAB action too, see grabsFor)
     }
     if (fire) return { type: 'need', label: 'Need an extinguisher' };
     if (hole || hurt || gasHole) return { type: 'need', label: 'Need a hammer' };
     return null;
   };
+
+  // The GRAB half (people only): take a tool, swap or put one back, grab ammo / coal / ice, hop onto a station.
+  // Everything in reach is a candidate; the NEAREST wins, and the one you already had keeps the button until another is
+  // CTL.HYSTERESIS closer (so labels don't flicker where two racks overlap). swap = it costs what is in your hands (hold GRAB).
+  const grabsFor = (player, station) => {
+    if (player.lock || player.conn != null || player.fall || player.swing || player.air) return null;
+    const tool = player.carry;
+    const out = [];
+    const add = (act, x, key) => out.push({ act: { ...act, grab: true, swap: act.swap ?? !!tool }, x, key });
+    if (!(station && (tool === 'ammo' || tool === 'coal' || tool === 'ice'))) {
+      // (carrying ammo, coal or ice next to a station means use it there, not swap it for a tool)
+      for (const r of PICKUPS) {
+        if (r.d !== player.d || Math.abs(r.x - player.x) >= T.REACH) continue;
+        if (r.kind === 'ice') {
+          const a = goingDown.lockerAction(player); // the ice locker
+          if (a.type !== 'need') add(a, r.x, 'locker');
+        } else add({ type: 'rack', obj: r, label: tool === r.kind ? `Put back ${r.kind}` : tool ? `Swap to ${r.kind}` : `Take ${r.kind}`, swap: !!tool }, r.x, 'rack|' + r.kind + '|' + r.x);
+      }
+    }
+    if (station) {
+      if (station.kind === 'ammo' && tool !== 'ammo') add({ type: 'ammo', station, label: 'Grab ammo' }, station.x, 'ammo|' + station.n);
+      if (station.kind === 'coal' && tool !== 'coal') add({ type: 'coal', station, label: 'Grab coal' }, station.x, 'coal|' + station.n);
+      if (LOCKABLE(station.n) && !taken(station.n) && !player.mate) add({ type: 'station', station, label: 'Take ' + station.n, swap: false }, station.x, 'station|' + station.n); // (a ship's mate never takes a station)
+      else {
+        const botThere = !player.mate && Object.values(state.players).find((q) => q.bot && q.lock === station.n); // (people can always bump a bot off a station)
+        if (botThere) add({ type: 'station', station, bump: botThere, label: 'Take ' + station.n, swap: false }, station.x, 'station|' + station.n);
+      }
+    }
+    const best = sticky(player, 'grabKey', out, (o) => Math.abs(o.x - player.x), (o) => o.key);
+    return best ? best.act : null;
+  };
+
+  // Nearest of list (smaller distOf wins), but the one remembered in player[field] keeps it until another is CTL.HYSTERESIS closer.
+  const sticky = (player, field, list, distOf, keyOf) => {
+    if (!list.length) {
+      player[field] = null;
+      return null;
+    }
+    let best = list[0];
+    for (const o of list) if (distOf(o) < distOf(best)) best = o;
+    const prev = list.find((o) => keyOf(o) === player[field]);
+    if (prev && distOf(prev) <= distOf(best) + CTL.HYSTERESIS) best = prev;
+    player[field] = keyOf(best);
+    return best;
+  };
+
+  // What the two buttons do for this player right now: { use, grab } (grab is always null for bots, whose use is the old combined button).
+  const interaction = (player, station) => ({ use: useFor(player, station, !!player.bot), grab: player.bot ? null : grabsFor(player, station) });
+
+  // An id for a button action: the phone sends the id it was showing with each press, so the host can tell a press made on
+  // an old label from one made on the current label (walking changes labels fast). Grabs include what is in hand (take vs put back).
+  const aidOf = (act, carry) => (act ? act.type + '|' + (act.obj ? act.obj.name || act.obj.kind || act.obj.id || '' : act.station ? act.station.n : '') + (act.grab ? '|' + (carry || '') : '') : '');
 
   // The nearest latched bat this player can swat (same deck; gasbag bats are swatted from the catwalk), or null.
   const batInReach = (player, range, extra = 0) =>
@@ -1085,6 +1141,126 @@ export function createSimulation() {
     socket = nextSocket;
   };
 
+  // After any pickup / put-back / swap / station take: a short buzz (two pulses for letting go) and the grab lockout, so a
+  // second press right behind the first (a double tap) can't undo it. Bots have no phone and no lockout.
+  const grabbed = (player, drop) => {
+    if (player.bot) return;
+    player.grabLock = CTL.GRAB_LOCK;
+    phoneFx(player, null, drop ? [30, 50, 30] : [25]);
+  };
+
+  // The phone sends the id of the label it was showing with each press (see aidOf). trackAid remembers the ids the two
+  // buttons show now and just before, with the actions behind them; slot 'a' = Action, 'g' = Grab.
+  const trackAid = (player, slot, act) => {
+    const m = ((player.aids ??= {})[slot] ??= { cur: '', act: null, prev: null, prevAct: null, t: 0 });
+    const aid = aidOf(act, player.carry);
+    if (m.cur !== aid) {
+      m.prev = m.cur;
+      m.prevAct = m.act;
+      m.t = performance.now();
+      m.cur = aid;
+    }
+    m.act = act;
+  };
+  // Actions that are safe to run a moment after their label went away (static things: racks, vents, valves, crates).
+  const REPLAY = ['rack', 'vent', 'valve', 'ammo', 'coal'];
+  // What a tapped button should run for a person: { ok, act }. Not ok = drop the press: its label is out of date, or it is a grab
+  // inside the lockout. A press with no id (an old page, a test) is trusted. The big button never grabs with something in hand.
+  const pressAct = (player, slot, aid, act) => {
+    const m = player.aids && player.aids[slot];
+    let run = act;
+    if (aid !== undefined && m && aid !== m.cur) {
+      const grace = aid === m.prev && performance.now() - m.t < CTL.AID_GRACE * 1000 && m.prevAct && REPLAY.includes(m.prevAct.type);
+      if (!grace) return { ok: false };
+      run = m.prevAct;
+    }
+    if (run && run.grab && ((player.grabLock || 0) > 0 || (slot === 'a' && player.carry))) return { ok: false };
+    return { ok: true, act: run };
+  };
+  // Hold actions (fire:1) count only while the id the phone held on is still what the button shows.
+  const holdOk = (player) => player.bot || player.fireAid === undefined || !player.aids || !player.aids.a || player.fireAid === player.aids.a.cur;
+
+  // Run what a tapped button does (act may be null: a shout). The chain is one list for bots and people.
+  const doTap = (player, act) => {
+    const type = act ? act.type : null;
+    if (type === 'jump') {
+      state.bombBay.open = Math.max(state.bombBay.open || 0, 1.6); // the doors swing open under you
+      air.jumpChute(player);
+      stat(player, 'jumps');
+      phoneFx(player, 'Jumping! Steer with the stick - the chute opens in a moment', [60, 40, 60]);
+    } else if (type === 'hook') {
+      if (gunship.fireHook()) {
+        stat(player, 'boarding');
+        puff(player.x + 200, player.y - 60 - state.ship.alt, '#ffe9a8', 8);
+        phoneFx(player, 'Hooked! Press Action at the bow to swing across!', [40, 30, 40]);
+      } else phoneFx(player, 'Too far - the hook falls short! Get closer.', [40, 30, 40]);
+    } else if (type === 'swing') gunship.swing(player);
+    else if (type === 'rack') {
+      const put = player.carry === act.obj.kind;
+      player.carry = put ? null : act.obj.kind;
+      grabbed(player, put);
+    } else if (type === 'vent') {
+      const i = SHIP_LAYOUT.vents.indexOf(act.obj);
+      state.ventOpen[i] = !state.ventOpen[i];
+      stat(player, 'vent');
+      shipPuff(act.obj.x, PLATFORMS[act.obj.d].y - 150, '#ffffff', 8);
+    } else if (type === 'valve') {
+      act.obj.open = !act.obj.open;
+      puff(act.obj.pos.x, act.obj.pos.y - state.ship.alt, '#ffffff', 6);
+    } else if (type === 'load') {
+      act.obj.ammo = Math.min(act.obj.max, act.obj.ammo + config.GUNS.LOAD);
+      stat(player, 'ammo');
+      player.carry = null;
+      puff(act.station.x, player.y - 60, '#ffd23f', 8);
+    } else if (type === 'loadBombs') {
+      state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + config.BOMBS.LOAD);
+      stat(player, 'ammo');
+      player.carry = null;
+      puff(act.station.x, player.y - 60, '#ffd23f', 8);
+    } else if (type === 'ammo') {
+      player.carry = 'ammo';
+      grabbed(player, false);
+    } else if (type === 'coal') {
+      player.carry = 'coal';
+      grabbed(player, false);
+    } else if (type === 'icetake') {
+      if (goingDown.takeIce(player)) grabbed(player, false);
+    } else if (type === 'icegive') {
+      goingDown.giveIce(player);
+      grabbed(player, true);
+    } else if (type === 'cool') goingDown.throwIce(player);
+    else if (type === 'stoke') {
+      state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + config.BOILER.COAL_FUEL);
+      stat(player, 'coal');
+      (state.boilerLoads ??= {})[act.station.n] = (state.boilerLoads[act.station.n] || 0) + 1; // (loads per boiler: bots spread coal between boilers, tools/buildsim.mjs checks both are used)
+      goingDown.onStoke(player);
+      player.carry = null;
+      shipPuff(act.station.x - 30, PLATFORMS[act.station.d].y - 50, '#ff8c42', 8);
+    }
+    else if (type === 'station') {
+      if (act.bump) {
+        act.bump.lock = null;
+        act.bump.lockLeft = undefined;
+        act.bump.restCd = 4;
+        act.bump.fire = false;
+        act.bump.x = act.station.x + 50;
+      }
+      player.lock = act.station.n;
+      grabbed(player, false);
+      player.x = act.station.x;
+    } else if (!act || !act.hold) player.actT = performance.now();
+  };
+
+  // Throw away the presses and holds a person's phone queued up, so they can't fire later when the game is taking input again
+  // (scorecard, votes, the run-end screen, the pause menu, being knocked out or falling). Bots manage their own button state.
+  const flushPresses = (p) => {
+    if (p.bot) return;
+    p.actQ = p.atkQ = p.jumpQ = p.grabQ = false;
+    p.fire = false;
+    p.prime = false;
+  };
+  const flushAll = () => { for (const p of Object.values(state.players)) flushPresses(p); };
+
   const update = (dt) => {
     updateMates(state, dt); // (ship's mates come aboard or go home before the crew count is read)
     updateCrewScale(state, dt);
@@ -1093,6 +1269,7 @@ export function createSimulation() {
     state.ship.trim = 0;
     // The lap scorecard pauses the action, then the upgrade vote starts.
     if (state.scorecard) {
+      flushAll();
       if ((state.scorecard.t -= dt) <= 0) {
         state.scorecard = null;
         state.newRecord = false;
@@ -1108,12 +1285,14 @@ export function createSimulation() {
     }
     // The victory screen holds the game, then a new voyage starts back at the mast.
     if (state.runEnd && !state.wreck) {
+      flushAll();
       if ((state.runEnd.t -= dt) <= 0) restartGame();
       return;
     }
     if (state.salvagePop && (state.salvagePop.t -= dt) <= 0) state.salvagePop = null;
     // While the crew votes on an upgrade, the action is paused.
     if (state.vote) {
+      flushAll();
       updateVote(dt);
       return;
     }
@@ -1125,10 +1304,12 @@ export function createSimulation() {
         gunship.swingStep(player, dt);
         player.actQ = false;
         player.jumpQ = false;
+        flushPresses(player);
         continue;
       }
       if (player.fall) {
         player.jumpQ = false;
+        flushPresses(player);
         player.air = false;
         player.jz = 0;
         player.fly = false;
@@ -1153,6 +1334,7 @@ export function createSimulation() {
         player.fire = false;
         player.actQ = false;
         player.jumpQ = false;
+        flushPresses(player);
         if (player.fly) air.step(player, dt, false); // knocked out mid-air: still falls
         else {
           player.air = false;
@@ -1182,7 +1364,9 @@ export function createSimulation() {
         player.lock = null;
         player.fire = false;
       }
-      const station = !player.lock && player.conn == null ? SHIP_LAYOUT.stations.filter((s) => s.d === player.d && Math.abs(player.x - s.x) < T.STATION_REACH).sort((a, b) => Math.abs(player.x - a.x) - Math.abs(player.x - b.x))[0] || null : null;
+      const nearStations = !player.lock && player.conn == null ? SHIP_LAYOUT.stations.filter((s) => s.d === player.d && Math.abs(player.x - s.x) < T.STATION_REACH) : [];
+      // (people keep the station they were already at until another is clearly closer; bots just take the nearest)
+      const station = player.bot ? nearStations.sort((a, b) => Math.abs(player.x - a.x) - Math.abs(player.x - b.x))[0] || null : sticky(player, 'stKey', nearStations, (s) => Math.abs(player.x - s.x), (s) => s.n);
 
       if (!player.lock) player.prime = false;
       if (player.hj) {
@@ -1276,6 +1460,7 @@ export function createSimulation() {
         player.actQ = false;
         player.jumpQ = false;
         player.act = null;
+        player.grabAct = null;
       } else {
         // Hop: a short arc over the deck (jz = height above it, vy = upward speed). Not on ladders
         // or at a station. Kept simple so airborne play (jumping overboard) can extend it later.
@@ -1322,11 +1507,20 @@ export function createSimulation() {
         }
         if (!player.fly && !player.onGunship) air.standing(player, dt);
         player.moving = !player.climb && Math.abs(player.jx) > 0.15;
-        const act = interaction(player, station);
+        const sel = interaction(player, station);
+        let act = sel.use;
+        const grabAct = sel.grab;
+        if (!player.bot) {
+          // Empty hands and nothing to use: the first pickup is on the big button too (with something in hand it never swaps or drops).
+          if ((!act || act.type === 'need') && !player.carry && grabAct) act = grabAct;
+          trackAid(player, 'a', act);
+          trackAid(player, 'g', grabAct);
+        }
         player.act = act;
+        player.grabAct = grabAct;
 
         // Holding the button: revive, spray, patch or repair.
-        if (act && act.hold && player.fire) {
+        if (act && act.hold && player.fire && holdOk(player)) {
           const object = act.obj;
           if (act.type === 'repair') {
             if (modules.repair(object, dt)) {
@@ -1364,69 +1558,23 @@ export function createSimulation() {
           }
         }
 
-        // Tapping the button.
+        // Tapping the button (people: only if the id the phone sent matches what the button shows; GRAB has its own button).
         if (player.actQ) {
           player.actQ = false;
-          const type = act ? act.type : null;
-          if (type === 'jump') {
-            state.bombBay.open = Math.max(state.bombBay.open || 0, 1.6); // the doors swing open under you
-            air.jumpChute(player);
-            stat(player, 'jumps');
-            phoneFx(player, 'Jumping! Steer with the stick - the chute opens in a moment', [60, 40, 60]);
-          } else if (type === 'hook') {
-            if (gunship.fireHook()) {
-              stat(player, 'boarding');
-              puff(player.x + 200, player.y - 60 - state.ship.alt, '#ffe9a8', 8);
-              phoneFx(player, 'Hooked! Press Action at the bow to swing across!', [40, 30, 40]);
-            } else phoneFx(player, 'Too far - the hook falls short! Get closer.', [40, 30, 40]);
-          } else if (type === 'swing') gunship.swing(player);
-          else if (type === 'rack') player.carry = player.carry === act.obj.kind ? null : act.obj.kind;
-          else if (type === 'vent') {
-            const i = SHIP_LAYOUT.vents.indexOf(act.obj);
-            state.ventOpen[i] = !state.ventOpen[i];
-            stat(player, 'vent');
-            shipPuff(act.obj.x, PLATFORMS[act.obj.d].y - 150, '#ffffff', 8);
-          } else if (type === 'valve') {
-            act.obj.open = !act.obj.open;
-            puff(act.obj.pos.x, act.obj.pos.y - state.ship.alt, '#ffffff', 6);
-          } else if (type === 'load') {
-            act.obj.ammo = Math.min(act.obj.max, act.obj.ammo + config.GUNS.LOAD);
-            stat(player, 'ammo');
-            player.carry = null;
-            puff(act.station.x, player.y - 60, '#ffd23f', 8);
-          } else if (type === 'loadBombs') {
-            state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + config.BOMBS.LOAD);
-            stat(player, 'ammo');
-            player.carry = null;
-            puff(act.station.x, player.y - 60, '#ffd23f', 8);
-          } else if (type === 'ammo') player.carry = 'ammo';
-          else if (type === 'coal') player.carry = 'coal';
-          else if (type === 'icetake') goingDown.takeIce(player);
-          else if (type === 'icegive') goingDown.giveIce(player);
-          else if (type === 'cool') goingDown.throwIce(player);
-          else if (type === 'stoke') {
-            state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + config.BOILER.COAL_FUEL);
-            stat(player, 'coal');
-            (state.boilerLoads ??= {})[act.station.n] = (state.boilerLoads[act.station.n] || 0) + 1; // (loads per boiler: bots spread coal between boilers, tools/buildsim.mjs checks both are used)
-            goingDown.onStoke(player);
-            player.carry = null;
-            shipPuff(act.station.x - 30, PLATFORMS[act.station.d].y - 50, '#ff8c42', 8);
-          }
-          else if (type === 'station') {
-            if (act.bump) {
-              act.bump.lock = null;
-              act.bump.lockLeft = undefined;
-              act.bump.restCd = 4;
-              act.bump.fire = false;
-              act.bump.x = act.station.x + 50;
-            }
-            player.lock = act.station.n;
-            player.x = act.station.x;
-          } else if (!act || !act.hold) player.actT = performance.now();
+          const run = player.bot ? { ok: true, act } : pressAct(player, 'a', player.actAid, act);
+          if (run.ok) doTap(player, run.act);
+          else player.uk = null; // (stale label: resend the phone's buttons)
+        }
+        if (player.grabQ) {
+          player.grabQ = false;
+          const run = pressAct(player, 'g', player.grabAid, grabAct);
+          if (run.ok && run.act) doTap(player, run.act);
         }
         if (player.atkQ) attack(player);
       }
       player.atkQ = false;
+      player.grabQ = false;
+      if (player.grabLock > 0) player.grabLock = Math.max(0, player.grabLock - dt);
       player.atkCd = Math.max(0, (player.atkCd || 0) - dt);
 
       // Idle crew get an arrow to the most useful nearby job (phone + a chevron on the TV).
@@ -1484,15 +1632,21 @@ export function createSimulation() {
       if (gun && player.lock && !status && (gun.loadT || 0) > 0 && state.players[gun.loaderId]) status = state.players[gun.loaderId].name + ' is loading for you!';
       if (player.hj) {
         attackLabel = player.hj.phase === 'kick' ? 'Kick!' : 'Guns auto';
-        if (player.hj.phase === 'kick') status = 'Tap Action 3 times (or hold it) to throw the pilot out - LEAVE to jump off';
+        if (player.hj.phase === 'kick') status = 'Tap any button 3 times (or hold Action) to throw the pilot out - LEAVE to jump off';
         else status = 'Fuel ' + Math.max(0, Math.round(player.hj.fuel / 5) * 5) + 's - hull ' + Math.max(0, player.hj.hp) + '/' + player.hj.max;
       }
       const hull = Math.round(state.ship.hull / 5) * 5;
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : ''].join('|');
+      // (the two buttons: Action = label / id, Grab = the small amber button; ids go back with each press, see aidOf)
+      const grabNow = player.bot || player.lock || player.hj || player.fly ? null : player.grabAct;
+      const aid = player.bot || player.lock || player.hj ? '' : aidOf(player.act, player.carry);
+      const gaid = grabNow ? aidOf(grabNow, player.carry) : '';
+      const glock = !!(grabNow && player.grabLock > 0);
+      const progNow = !player.lock && player.act && player.act.hold && player.act.obj && typeof player.act.obj.prog === 'number' ? Math.round(player.act.obj.prog * 10) : -1; // (how far a hold action has got)
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, load: loadPct, job: jobUi };
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow };
           emitPlayerUi(player.id, player.ui);
         }
       }
@@ -1814,6 +1968,7 @@ export function createSimulation() {
     gunship,
     air,
     restart: () => restartGame(),
+    flushPresses: flushAll, // (the pause menu: presses made while paused must not fire on resume)
     // Pick the session mode / daily voyage (lobby and pause menu); remembered on this TV. Flying runs finish as they are.
     setSession: (mode, daily) => {
       if (config.VOYAGE.MODES[mode]) state.mode = mode;

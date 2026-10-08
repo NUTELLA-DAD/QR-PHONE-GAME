@@ -2,6 +2,37 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { crewAboard, crewHeads } from './crewscale.js';
 
+// What a phone's input message does to its player (also used by tools/controls.mjs, which plays a person without a socket).
+// Button presses are queued flags the simulation eats next frame; `aid` is the id of the label the phone was showing (see aidOf in
+// simulation.js). While the game is not taking input (pause, scorecard, vote, run-end screen) presses are simply ignored.
+export function applyPlayerInput(state, player, data) {
+  const taking = !(state.paused || state.scorecard || state.vote || (state.runEnd && !state.wreck));
+  player.jx = data.jx || 0;
+  player.jy = data.jy || 0;
+  if (taking && data.act) {
+    player.actQ = true;
+    player.actAid = data.aid;
+  }
+  if (taking && data.grab) {
+    player.grabQ = true;
+    player.grabAid = data.aid;
+  }
+  if (taking && data.atk) player.atkQ = true;
+  if (taking && data.jump) player.jumpQ = true;
+  if ('thr' in data) player.thr = data.thr;
+  if ('gas' in data) player.gas = data.gas;
+  if (data.perfect) player.perfect = true;
+  if ('vote' in data) player.vote = data.vote;
+  if (data.leave) player.leaveQ = true;
+  if ('fire' in data) {
+    player.fire = taking && !!data.fire;
+    if (data.fire) player.fireAid = data.aid; // (a hold only counts while the label it started on is still showing)
+  }
+  if ('prime' in data) player.prime = !!data.prime; // holding the PRIME button on a gun
+  if (data.help) player.helpQ = true; // HELP! button
+  if ('spot' in data) player.spotQ = { i: data.spot | 0, s: data.sq | 0 }; // tapped a radar ping
+}
+
 export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoinBot }) {
   const socket = io({ transports: ['websocket'] });
   const countNode = document.getElementById('count');
@@ -41,22 +72,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
 
   socket.on('player:input', ({ id, data }) => {
     const player = simulation.state.players[id];
-    if (player) {
-      player.jx = data.jx || 0;
-      player.jy = data.jy || 0;
-      if (data.act) player.actQ = true;
-      if (data.atk) player.atkQ = true;
-      if (data.jump) player.jumpQ = true;
-      if ('thr' in data) player.thr = data.thr;
-      if ('gas' in data) player.gas = data.gas;
-      if (data.perfect) player.perfect = true;
-      if ('vote' in data) player.vote = data.vote;
-      if (data.leave) player.leaveQ = true;
-      if ('fire' in data) player.fire = !!data.fire;
-      if ('prime' in data) player.prime = !!data.prime; // holding the PRIME button on a gun
-      if (data.help) player.helpQ = true; // HELP! button
-      if ('spot' in data) player.spotQ = { i: data.spot | 0, s: data.sq | 0 }; // tapped a radar ping
-    }
+    if (player) applyPlayerInput(simulation.state, player, data);
   });
 
   socket.on('room:closed', () => {

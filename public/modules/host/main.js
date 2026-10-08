@@ -52,7 +52,11 @@ let lastTime = performance.now();
 const STEP = config.LOOP.STEP;
 let acc = 0; // real time not yet simulated
 let paused = false;
-const menu = createMenu({ simulation, network, perf, music: sfx.music, onPause: (on) => (paused = on) });
+const menu = createMenu({ simulation, network, perf, music: sfx.music, onPause: (on) => {
+  paused = on;
+  simulation.state.paused = on; // (network.js ignores button presses while the game is paused)
+  simulation.flushPresses();
+} });
 
 // If anything ever goes wrong in a frame, note it and keep going (the game must never just
 // freeze). The pause menu shows the last problem.

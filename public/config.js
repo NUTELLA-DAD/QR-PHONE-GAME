@@ -1377,6 +1377,15 @@ export const config = {
     PATCH_TIME: 1.5, // seconds of hammering per hole
     REVIVE_TIME: 1.2,
   },
+  // Phone controls (Phase C): the big ACTION button uses what you hold; the small GRAB button takes, swaps and hops on stations.
+  CONTROLS: {
+    GRAB_LOCK: 0.6, // seconds after any pickup / put-back / swap / station take when the host ignores more grab presses from that player (job actions are exempt)
+    GRAB_HOLD: 0.35, // seconds GRAB must be held to swap, put back or replace what is in your hands (taking with empty hands is instant)
+    HYSTERESIS: 15, // px: the rack / station you were already near keeps the button until another is this much closer (no flickering labels)
+    AID_GRACE: 0.25, // seconds a press may still carry the PREVIOUS button label's id (the phone pressed just before the label changed)
+    BAY_JUMP_ZONE: 22, // px either side of the hatch: only here does Action say "Jump!" (the rest of the bay is for the bombardier's seat)
+    HOLD_TAP: 0.25, // a hold-action released sooner than this (seconds) counts as a tap: the phone nags "keep holding"
+  },
   // Ship modules (guns, boiler, helm, engines, lift, steam pipes).
   MODULES: {
     HP: 100,

@@ -137,8 +137,8 @@ export function createHijack({ state, puff, phoneFx, air }) {
       leave(p);
       return;
     }
-    const tap = p.actQ || p.atkQ || p.jumpQ;
-    p.actQ = p.atkQ = p.jumpQ = false;
+    const tap = p.actQ || p.atkQ || p.jumpQ || p.grabQ; // (any button counts)
+    p.actQ = p.atkQ = p.jumpQ = p.grabQ = false;
     if (s.phase === 'kick') {
       let add = 0;
       if (tap) add += 1 / H.KICKS;
