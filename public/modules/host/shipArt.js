@@ -19,10 +19,11 @@
 // Drawing never throws: the bake falls back to drawing the static layer straight onto the screen.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf } from '../../shipLayout.js';
-import { hullGeom as layoutHull, TWIN_SIZE, bagName } from './shipBuild.js';
+import { hullGeom as layoutHull, TWIN_SIZE, bagName, deckRoles, rowOf, isNestRow } from './shipBuild.js';
 import { drawBiplane, drawTailNumber } from './planeArt.js';
 import { paintPath, paintRect, hasTexture } from './textureArt.js';
 import { drawIceLocker, drawIceFlights, drawBoilerHeat, drawHoleGlow } from './goingDownArt.js';
+import { windFactor } from './sails.js';
 
 // Which painted texture goes under which flat palette colour (anything not listed stays flat).
 const TEX_OF = {
@@ -58,6 +59,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   let ctx = screenCtx;
   const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
   const plat = (id) => P.find((q) => q.id === id);
+  const roles = () => deckRoles(P); // (the main / lower / top decks, lent to a minimal ship that lacks them: shipBuild.js)
   const station = (name) => L.stations.find((q) => q.n === name);
 
   // (the cage of each lift rests at the bottom of its shaft until somebody rides it)
@@ -195,7 +197,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
       }
     });
     // Rigging down to the gondola (from each bag, along its length).
-    const yBot = plat('catwalk').y + 10;
+    const yBot = ((roles().cat) || P[0]).y + 10;
     for (const G of list) for (const f of [-0.54, -0.28, 0, 0.28, 0.54]) {
       const x = G.cx + Math.round(f * G.rx);
       line([[x - 40, yBot - 80], [x, yBot]], 3);
@@ -335,11 +337,45 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     ctx.translate(0, -num(L.nestRise)); // drawn at its old height, then lifted onto the bigger bag
     drawNestParts();
     ctx.restore();
+    drawHighNests();
   };
 
   const drawNestParts = () => {
-    const n = plat('nest');
-    if (!n) return;
+    const nests = P.filter((q) => rowOf(q) === 'nest'); // (the nest may be cut in two: each half gets its own flag and rails)
+    nests.forEach((n, i) => drawOneNest(n, i === 0));
+  };
+
+  // A high crow's nest (S.5e): a platform on a mast above the nest it is climbed to from, with rails, shrouds to the nest below and a pennant. Drawn where it stands
+  // (no nest rise), over the gasbag. The rope to the nest is an ordinary connector (drawConnectors).
+  const drawHighNests = () => {
+    for (const q of P.filter((o) => rowOf(o) === 'crow2')) {
+      const y = q.y, w = q.x1 - q.x0, mid = (q.x0 + q.x1) / 2;
+      const below = P.filter((o) => rowOf(o) === 'nest' && o.x1 > q.x0 && o.x0 < q.x1).sort((a, b) => Math.abs(a.x0 + a.x1 - 2 * mid) - Math.abs(b.x0 + b.x1 - 2 * mid))[0];
+      const base = below ? below.y + 10 : y + 170; // (the foot of the mast: the nest's planking)
+      for (const dx of [-1, 1]) line([[mid + dx * (w / 2 - 12), y + 14], [mid + dx * 7, base - 40]], 5, WOOD_DARK); // shrouds
+      filled(WOOD_DARK, () => ctx.rect(mid - 9, y, 18, base - y)); // the mast
+      line([[mid - 9, y + 60], [mid + 9, y + 72]], 3, WOOD);
+      filled(WOOD, () => ctx.rect(q.x0 - 6, y, w + 12, 12)); // planked platform
+      ctx.fillStyle = 'rgba(255,246,214,.35)';
+      ctx.fillRect(q.x0 - 2, y + 3, w + 4, 3);
+      filled(WOOD_DARK, () => ctx.rect(q.x0 - 6, y + 12, w + 12, 6));
+      line([[q.x0, y - 46], [q.x1, y - 46]], 5);
+      line([[q.x0, y - 22], [q.x1, y - 22]], 3, '#a87b4f');
+      for (let x = q.x0 + 4; x <= q.x1; x += Math.max(40, w / 5)) {
+        line([[x, y], [x, y - 46]], 5);
+        filled('#c9a85a', () => ctx.arc(x, y - 48, 4.5, 0, 7)); // brass cap
+      }
+      line([[mid, y - 46], [mid, y - 120]], 4); // a pennant on a pole
+      filled('#8fb37a', () => {
+        ctx.moveTo(mid, y - 120);
+        ctx.lineTo(mid + 46, y - 108);
+        ctx.lineTo(mid, y - 96);
+        ctx.closePath();
+      });
+    }
+  };
+
+  const drawOneNest = (n, first) => {
     const mid = (n.x0 + n.x1) / 2;
     line([[mid, 8], [mid, -60]], 5); // flag pole
     if (!sprites.box(ctx, 'crests/crew', mid + 2, -64, 34, 34)) {
@@ -350,7 +386,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
       ctx.lineTo(mid, -36);
       ctx.fill();
     }
-    if (has('periscope')) {
+    if (first && has('periscope')) {
       // Periscope sticking up from the crow's nest.
       const px = n.x0 + 110;
       line([[px, 8], [px, -70], [px + 28, -70]], 9, '#6a6568');
@@ -450,7 +486,15 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     const hp = plat('helm');
     const cat = plat('catwalk');
     const st = one('helm');
-    if (!hp || !cat || !st) return;
+    if (!st) return;
+    if (!hp || !cat || st.p !== 'helm') { // a helm placed on a deck of its own (the blueprint editor): just a pedestal and a binnacle there
+      const q = P[st.d];
+      if (!q) return;
+      filled(WOOD_DARK, () => ctx.roundRect(st.x - 13, q.y - 44, 26, 44, 4));
+      filled(WOOD_DARK, () => ctx.rect(st.x + 58, q.y - 28, 16, 28));
+      filled('#c9a85a', () => ctx.arc(st.x + 66, q.y - 34, 12, Math.PI, 0));
+      return;
+    }
     const w = hp.x1 - hp.x0;
     // Trestle legs and cross brace down to the deck.
     for (const x of [hp.x0 + 8, hp.x1 - 8]) filled(WOOD_DARK, () => ctx.rect(x - 4, hp.y, 8, cat.y - hp.y));
@@ -482,8 +526,8 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
 
   // The wheel (turning with the ship's speed) and the hit warning: red flash over the helm and HELMSMAN HIT!
   const liveHelm = () => {
-    const hp = plat('helm');
     const st = one('helm');
+    const hp = st && P[st.d]; // (the helm mount on the classic ship; the deck itself for a helm placed on a deck)
     if (!hp || !st) return;
     const wy = hp.y - 70;
     if (!sprites.pivot(ctx, 'ship/wheel', st.x, wy, 0.5, 0.5, state.ship.speed * 6)) {
@@ -526,6 +570,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
 
   const drawGondola = () => {
     const H = hullGeom();
+    if (!H) return; // (a minimal ship that is only a top deck and a bag has no gondola)
     const shell = sprites.has('ship/gondola');
     for (const b of H.boxes) filled('#8a6444', () => boxPath(b)); // (the keel boxes sit behind the gondola)
     if (!shell) filled('#8a6444', gondolaPath);
@@ -584,7 +629,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
       line([[x + 18, H.top + 32], [x + 40, H.top + 60]], 3, '#ffffff');
     }
     // Portholes along the lower deck.
-    const main = plat('main');
+    const main = roles().main;
     for (const dx of [170, 420, 870, 1120]) {
       const x = main.x0 + dx;
       if (x > main.x1 - 40) continue;
@@ -593,7 +638,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   };
 
   // ================= OUTRIGGERS & ENGINES =================
-  const midX = () => { const q = plat('lower') || plat('main'); return (q.x0 + q.x1) / 2; };
+  const midX = () => { const q = roles().lower; return (q.x0 + q.x1) / 2; };
 
   const drawOutriggers = () => {
     const mid = midX();
@@ -1054,7 +1099,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
       ctx.fill();
       const w = ctx.measureText(s.n).width + 20;
       const id = P[s.d].id;
-      let ly = id === 'nest' ? y - 100 : id === 'pod' || id === 'hangar' || id === 'bay' || id === 'lamp' ? y - 20 : y - 134;
+      let ly = isNestRow(rowOf(P[s.d])) ? y - 100 : id === 'pod' || id === 'hangar' || id === 'bay' || id === 'lamp' ? y - 20 : y - 134;
       const lx = id === 'pod' || id === 'hangar' ? s.x + 130 : id === 'lamp' ? s.x + 125 : id === 'bay' ? s.x - 25 : s.x;
       // Drop a label one row if it would overlap its neighbour.
       while (placed.some((o) => Math.abs(o.ly - ly) < 30 && Math.abs(o.lx - lx) < (o.w + w) / 2 + 6)) ly += 36;
@@ -1073,8 +1118,8 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   // Upgrade fittings: armour plates, sprinklers, the safety-valve whistle (static; the bake is redone when they change).
   const drawUpgradeFittings = () => {
     const armour = has('armour');
-    const lower = plat('lower');
-    const main = plat('main');
+    const lower = roles().lower;
+    const main = roles().main;
     for (let k = 0; k < armour; k++) {
       // Riveted steel plates along the hull's lower edge.
       for (let x = main.x0 + 130; x < main.x1 - 140; x += 90) {
@@ -1258,6 +1303,95 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     ctx.restore();
   };
 
+  // ================= MASTS AND SAILS (S.5e) =================
+  // Static: the mast, the boom it carries aft, the stays and the brass masthead. Live (liveSails): the canvas itself, furled in a roll on the boom or hauled up the mast,
+  // fluttering downwind (toward the bow, the right) the harder the wind blows; a torn sail hangs in tatters.
+  const drawMasts = () => {
+    for (const s of L.sails || []) {
+      const q = P[s.d];
+      if (!q) continue;
+      const x = s.x, y = q.y, h = s.h;
+      for (const sx of [x + 100, x - s.w - 40]) line([[x, y - h + 14], [sx, y]], 3, IRON); // stays down to the deck
+      filled(WOOD_DARK, () => ctx.rect(x - 7, y - h, 14, h)); // the mast
+      line([[x - 7, y - 60], [x + 7, y - 70]], 3, WOOD);
+      line([[x - 7, y - 110], [x + 7, y - 120]], 3, WOOD);
+      filled(WOOD, () => ctx.roundRect(x - 14, y - 40, 28, 16, 4)); // the gooseneck the boom swings from
+      line([[x - 6, y - 32], [x - s.w - 22, y - 26]], 8, WOOD_DARK); // the boom, aft of the mast, sagging a little at its tip
+      filled('#c9a85a', () => ctx.arc(x, y - h - 2, 8, 0, 7));
+    }
+  };
+
+  const liveSails = (time) => {
+    (L.sails || []).forEach((s, i) => {
+      const st = (state.sails || [])[i];
+      const q = P[s.d];
+      if (!st || !q) return;
+      const x = s.x, y = q.y, h = s.h, w = s.w;
+      const f = Math.max(0, Math.min(1, st.hoist));
+      const wind = Math.min(1, windFactor(state) / 1.7), flap = Math.sin(time * 2.6 + i * 1.7), flap2 = Math.sin(time * 4.1 + i);
+      const footY = y - 32, tip = { x: x - w - 14, y: footY + 5 };
+      // The masthead pennant, streaming toward the bow.
+      const mh = y - h - 2;
+      filled('#a8443f', () => { ctx.moveTo(x, mh - 6); ctx.quadraticCurveTo(x + 24, mh - 6 + flap * 5 * (0.4 + wind), x + 56, mh + flap2 * 6 * (0.4 + wind)); ctx.lineTo(x + 56, mh + 8 + flap * 4); ctx.quadraticCurveTo(x + 24, mh + 8 + flap2 * 3, x, mh + 6); ctx.closePath(); });
+      if (st.torn || (state.modules && state.modules.some((m) => m.name === s.n && m.broken))) { // torn: a few ragged strips hang from the boom
+        ctx.fillStyle = st.color || '#d9a86a';
+        ink();
+        ctx.lineWidth = 2;
+        for (let k = 0; k < 4; k++) {
+          const sx = x - 14 - (k * (w - 10)) / 4, len = 34 + ((k * 37) % 28) + flap2 * 3;
+          ctx.beginPath();
+          ctx.moveTo(sx, footY);
+          ctx.lineTo(sx - 18, footY + 4);
+          ctx.lineTo(sx - 9 + flap * 2, footY + len);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+        return;
+      }
+      if (f < 0.04) { // furled: a roll of canvas lashed along the boom
+        filled(st.color || '#d9a86a', () => ctx.roundRect(tip.x + 8, footY - 15, w - 6, 15, 7));
+        for (let k = 1; k <= 3; k++) line([[x - 14 - (k * (w - 10)) / 4, footY - 15], [x - 14 - (k * (w - 10)) / 4, footY + 1]], 3, WOOD_DARK);
+        return;
+      }
+      // Hauled up: a triangle from the masthead down the mast and along the boom, the leech (back edge) rippling downwind.
+      const head = { x: x - 9, y: footY - 8 - f * (h - 66) };
+      const tack = { x: x - 9, y: footY - 6 };
+      const clew = { x: x - 12 - (w + 4) * Math.min(1, 0.25 + 0.75 * f), y: footY - 4 };
+      const bulge = (6 + 20 * wind) * f;
+      const cx = (head.x + clew.x) / 2 + 10 + bulge * (0.6 + 0.4 * flap), cy = (head.y + clew.y) / 2 - bulge * 0.2;
+      filled(st.color || '#d9a86a', () => { ctx.moveTo(head.x, head.y); ctx.lineTo(tack.x, tack.y); ctx.lineTo(clew.x, clew.y); ctx.quadraticCurveTo(cx, cy, head.x, head.y); ctx.closePath(); });
+      ctx.save(); // seams, clipped inside the canvas
+      ctx.beginPath();
+      ctx.moveTo(head.x, head.y);
+      ctx.lineTo(tack.x, tack.y);
+      ctx.lineTo(clew.x, clew.y);
+      ctx.quadraticCurveTo(cx, cy, head.x, head.y);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(90,64,40,.45)';
+      ctx.lineWidth = 2;
+      for (const t of [0.34, 0.67]) {
+        ctx.beginPath();
+        ctx.moveTo(head.x - 4, head.y + (tack.y - head.y) * t);
+        ctx.lineTo(clew.x - 10, head.y + (tack.y - head.y) * t);
+        ctx.stroke();
+      }
+      if (f > 0.85) sprites.box(ctx, 'crests/crew', (head.x + clew.x) / 2 - 8, (head.y + tack.y) / 2 + 4, 30, 30);
+      ctx.restore();
+      line([[clew.x, clew.y], [clew.x - 6, y]], 2.5, IRON); // the sheet down to the deck
+      // A gust due while the sail is up: a flashing warning over the mast.
+      if (state.sailWarn && f > 0.5 && Math.sin(time * 9) > -0.2) {
+        ctx.font = '700 28px ' + config.FONTS.TEXT;
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#fff';
+        ctx.strokeText('REEF THE SAIL!', x - w / 2, y - h - 30);
+        ctx.fillStyle = '#c0282f';
+        ctx.fillText('REEF THE SAIL!', x - w / 2, y - h - 30);
+      }
+    });
+  };
+
   // ================= THE LAYERS =================
   // Draw order, as in the old single pass: gasbag (live) < BACK (static) < the live bits that sit on the decks < FRONT
   // (static: ladders, ropes, poles, the top deck - they pass in front of the boiler fire, the helm wheel, the steam ...)
@@ -1289,6 +1423,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     guard('props', drawProps);
     guard('coal', drawCoal);
     guard('bombBay', drawBombBay);
+    guard('masts', drawMasts);
     guard('helm', drawHelmMount);
     guard('medbay', drawMedbay);
     guard('vents', drawVents);
@@ -1307,6 +1442,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     guard('iceLocker', drawIceLocker, ctx, state, time);
     guard('bombs', liveBombBay);
     guard('wheel', liveHelm);
+    guard('sails', liveSails, time);
     guard('steam', liveVents, time);
     guard('lift', liveConnectors);
   };

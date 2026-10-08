@@ -215,7 +215,7 @@ export function inRock(state, x, y) {
 }
 
 // How fast the ship moves along the course (negative = backing up; 0 = hovering).
-export const scrollSpeed = (state) => state.ship.speed * config.SHIP.TOP_SPEED * (1 + config.BOILER.OD_ENGINE * (state.overdrive || 0) + config.LINKS.SURGE.ENGINE * (state.surgeEngine || 0)) * ((state.env && state.env.engine) || 1) * (1 - ((state.env && state.env.drag) || 0)); // overdrive steam = faster engines
+export const scrollSpeed = (state) => (state.ship.speed + (state.sailPush || 0)) * config.SHIP.TOP_SPEED * (1 + config.BOILER.OD_ENGINE * (state.overdrive || 0) + config.LINKS.SURGE.ENGINE * (state.surgeEngine || 0)) * ((state.rig && !state.rig.powered ? 1 : state.env && state.env.engine) || 1) * (1 - ((state.env && state.env.drag) || 0)); // overdrive steam = faster engines
 
 // How high and low the ship may fly here: up to ALT_RANGE above the highest land under and just
 // ahead of it, and ALT_RANGE below the lowest.
@@ -460,7 +460,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
 
   const warnAhead = (dt) => {
     const lookout = state.lookout;
-    const secs = lookout ? K.LOOKOUT_WARN_SECONDS : K.WARN_SECONDS;
+    const secs = (lookout ? K.LOOKOUT_WARN_SECONDS : K.WARN_SECONDS) * (1 + (state.lookoutBonus || 0));
     const v = scrollSpeed(state);
     const shipFront = 1670 + course.dist;
     const next = course.features.find((f) => f.type !== 'hills' && f.x0 > shipFront - 200 && f.x0 - shipFront < secs * v);
@@ -803,12 +803,18 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       course.stuckT = 0;
       course.unstick = config.MAPS.UNSTICK_TIME;
       course.unstuck = (course.unstuck || 0) + 1;
+      if (!SHIP_LAYOUT.stations.some((s) => s.kind === 'helm')) course.tugNow = true; // (nobody can steer her off the rock: a drifting ship with no helm is not left there)
     }
     // Lost for good: wedged where the ship does not fit (a trench or slot after sinking) and not getting out by itself -
     // a tug hauls it to the nearest open water of sky, so one bad moment is never the end of the run.
+    let tow = false;
     if (Number.isFinite(dNow)) course.lostT = 0;
     else if (state.phase === 'flying' && !state.ship.down && (course.lostT = (course.lostT || 0) + dt) > config.MAPS.TOW_AFTER) {
       course.lostT = 0;
+      tow = true;
+    }
+    if (course.tugNow && state.phase === 'flying' && !state.ship.down) { course.tugNow = false; tow = true; }
+    if (tow) {
       const t = routeAhead(map, sx, sy, 0);
       if (t) {
         course.dist = t.x - REF.x;

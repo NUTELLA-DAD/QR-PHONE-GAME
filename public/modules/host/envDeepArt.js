@@ -7,7 +7,7 @@
 //   terrain(floors, ceilings, map)   - mushrooms, vines and lanterns (fungal) / crystals (aether) on the rock edges (world space)
 //   drawShip()                       - spore clouds, clogged engines, the oxygen tank (ship coordinates)
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, deckIndex } from '../../shipLayout.js';
 import { envIdOf, envOf } from './environments.js';
 
 const hash = (i, salt = 0) => {
@@ -22,7 +22,7 @@ const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).joi
 export function createDeepArt({ ctx, state, ink }) {
   let now = 0;
   const P = SHIP_LAYOUT.platforms;
-  const MAIN = P.findIndex((p) => p.id === 'main');
+  const MAIN = deckIndex('main');
   const E = () => envOf(state);
   const id = () => envIdOf(state);
 

@@ -70,7 +70,8 @@ export function holesPerBag(state) {
 // bag starves the rest until its valve is shut or it is patched. One bag with no valve shut: the old single gas value, exactly.
 export function stepBags(state, moved, dt) {
   const G = config.GAS, bags = state.bags;
-  if (bags.length === 1 && !bags[0].closed) { bags[0].gas = clamp100(bags[0].gas + (moved - G.SEEP - G.LEAK_PER_HOLE * state.gasHoles.length) * dt); return; }
+  const seep = state.noPump ? G.SEEP_NO_PUMP : G.SEEP; // (a ship that can never pump seeps only very slowly, S.5e)
+  if (bags.length === 1 && !bags[0].closed) { bags[0].gas = clamp100(bags[0].gas + (moved - seep - G.LEAK_PER_HOLE * state.gasHoles.length) * dt); return; }
   const holes = holesPerBag(state);
   let feed = moved;
   if (moved > 0) {
@@ -78,7 +79,7 @@ export function stepBags(state, moved, dt) {
     bags.forEach((b, i) => { if (!b.closed) { open++; bleed += holes[i] * G.HOLE_BLEED; } });
     feed = open ? Math.max(0, moved - bleed / open) : 0;
   }
-  bags.forEach((b, i) => { b.gas = clamp100(b.gas + ((b.closed ? 0 : feed) - G.SEEP - G.LEAK_PER_HOLE * holes[i]) * dt); });
+  bags.forEach((b, i) => { b.gas = clamp100(b.gas + ((b.closed ? 0 : feed) - seep - G.LEAK_PER_HOLE * holes[i]) * dt); });
 }
 
 // A bag going flat (or coming back) while several are fitted: mark it and shout on the TV.

@@ -65,7 +65,7 @@ export function solution(state, gun, target) {
   const gy = gun.by - state.ship.alt;
   let p = target.at(0);
   for (let i = 0; i < 3; i++) p = target.at(Math.hypot(p.x - gx, p.y - gy) / SHELL_SPEED);
-  if (Math.hypot(p.x - gx, p.y - gy) > RANGE) return null;
+  if (Math.hypot(p.x - gx, p.y - gy) > RANGE * (gun.reach || 1)) return null; // (a gun on a high crow's nest reaches further: config.NEST)
   const angle = Math.atan2(p.y - gy, p.x - gx);
   return Math.abs(angleDiff(angle, gun.home)) <= gun.arc ? angle : null;
 }

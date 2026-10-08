@@ -9,13 +9,13 @@
 //   wind  - sideways shove (px/s) during a blizzard gust               -> applied here to course.dist
 //   heat/burn/blizzard/smoke - 0..1 amounts for the art and the TV
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, all } from '../../shipLayout.js';
+import { SHIP_LAYOUT, all, deckIndex, isNestDeck } from '../../shipLayout.js';
 import { floorBelow } from './maps.js';
 import { createDeepEnv } from './envDeep.js'; // Fungal Depths (spores, clogged engines) and The Aether (low gravity, oxygen)
 import { createStormSea } from './envStormSea.js'; // Storm Front + Sunken Sea rules
 
 const P = SHIP_LAYOUT.platforms;
-const IDX = (id) => P.findIndex((p) => p.id === id);
+const IDX = (id) => deckIndex(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -68,7 +68,7 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) 
   const CAT = IDX('catwalk');
   const LOWER = IDX('lower');
   // Guns out in the open (on the nest or the top deck) are the ones that ice up.
-  const gunSpots = () => all('gun').filter((s) => s.p === 'nest' || s.p === 'catwalk').map((s) => ({ gun: s.n, d: s.d, x: s.x }));
+  const gunSpots = () => all('gun').filter((s) => isNestDeck(s.p) || s.p === 'catwalk').map((s) => ({ gun: s.n, d: s.d, x: s.x }));
   let seenMap = null;
   let blizzT = 0;
   let blizzLeft = 0;

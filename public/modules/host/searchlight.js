@@ -6,7 +6,7 @@
 //
 // All the numbers live in config.SEARCHLIGHT; where each lamp sits is SHIP_LAYOUT.searchlights.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, nestTier } from '../../shipLayout.js';
 import { targets } from './aim.js';
 import { tilt, inRock } from './course.js';
 import { pop } from './popups.js';
@@ -38,7 +38,7 @@ export function darkTarget(state) {
 export function createSearchlights({ state }) {
   const lights = (state.searchlights = LIGHT_NAMES.map((n) => {
     const m = SHIP_LAYOUT.searchlights[n];
-    return { n, bx: m.bx, by: m.by, home: m.aim, arc: m.arc, len: m.len, aim: m.aim, power: S.UNMANNED, focus: 0, manned: false, reach: S.RANGE, litCount: 0, ex: m.bx, ey: m.by, half: S.HALF_ANGLE };
+    return { n, bx: m.bx, by: m.by, home: m.aim, arc: m.arc, len: m.len, aim: m.aim, power: S.UNMANNED, focus: 0, manned: false, reach: S.RANGE, litCount: 0, ex: m.bx, ey: m.by, half: S.HALF_ANGLE, tierMul: 1 + config.NEST.TIER_BONUS * nestTier((SHIP_LAYOUT.stations.find((s) => s.n === n) || {}).p) };
   }));
   state.litTargets = []; // [{ x, y, r, kind }] for the TV: brackets round everything lit
   state.dimTargets = []; // [{ x, y, r, kind }] hostile things NOT in a beam (the TV gives them glowing eyes in the dark)
@@ -94,7 +94,7 @@ export function createSearchlights({ state }) {
       const wantPower = l.manned ? 1 : S.UNMANNED;
       l.power += clamp(wantPower - l.power, -S.POWER_RISE * dt, S.POWER_RISE * dt);
       l.half = S.HALF_ANGLE + (S.FOCUS_HALF_ANGLE - S.HALF_ANGLE) * l.focus;
-      const maxLen = (S.RANGE + (S.FOCUS_RANGE - S.RANGE) * l.focus) * (0.45 + 0.55 * l.power);
+      const maxLen = (S.RANGE + (S.FOCUS_RANGE - S.RANGE) * l.focus) * (0.45 + 0.55 * l.power) * l.tierMul; // (a lamp on the high nest throws its beam further)
       // A cave wall stops the beam.
       l.reach = maxLen;
       if (state.course && state.course.map) {

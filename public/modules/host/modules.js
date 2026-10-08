@@ -42,19 +42,20 @@ export function createModules() {
     }
     for (const s of all('coil')) add({ name: s.n, kind: 'coil', d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });
     for (const s of all('deflector')) add({ name: s.n, kind: 'shield', d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });
-    const bay = one('bombBay'); // (one bomb bay compartment: L.bombBay)
-    add({ name: bay.n, kind: 'bombbay', d: bay.d, x: bay.x, pos: { x: L.bombBay.x, y: L.bombBay.y - 30 } });
+    const bay = one('bombBay'); // (one bomb bay compartment: L.bombBay; a ship may have none)
+    if (bay && L.bombBay) add({ name: bay.n, kind: 'bombbay', d: bay.d, x: bay.x, pos: { x: L.bombBay.x, y: L.bombBay.y - 30 } });
     // Boilers (a build may have several) then the helm.
     for (const s of [...all('boiler'), ...all('helm').slice(0, 1)]) {
       add({ name: s.n, kind: s.kind, d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });
     }
     for (const e of L.engines) add({ name: e.name, kind: 'engine', d: e.d, x: e.x, pos: { x: e.x, y: P[e.d].y + 38 } });
     const lr = L.liftRepair;
-    const liftD = P.findIndex((p) => p.id === lr.p);
-    add({ name: 'Lift', kind: 'lift', d: liftD, x: lr.x, pos: { x: L.connectors[LIFT].xTop, y: P[liftD].y - 80 } });
+    const liftD = lr ? P.findIndex((p) => p.id === lr.p) : -1;
+    if (lr && liftD >= 0 && LIFT >= 0) add({ name: 'Lift', kind: 'lift', d: liftD, x: lr.x, pos: { x: L.connectors[LIFT].xTop, y: P[liftD].y - 80 } }); // (no lift, no module)
     for (const pipe of L.pipes) {
       add({ name: pipe.to + ' Pipe', kind: 'pipe', to: pipe.to, d: pipe.d, x: pipe.valve[0], pos: { x: pipe.valve[0], y: pipe.valve[1] }, points: pipe.points, open: true });
     }
+    for (const s of L.sails || []) add({ name: s.n, kind: 'sail', d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - s.h * 0.55 } }); // a sail is hit and torn like any module; a hammer mends it
 
     for (const m of list) {
       const o = old[m.name];
@@ -81,9 +82,12 @@ export function createModules() {
   };
 
   // Is the module working (not broken, and powered if it needs steam)?
+  // A ship with no boiler at all (S.5e) has no steam to lack: her helm is a plain hand wheel (the pump and the engines still need steam).
+  const handWheel = () => boilers().length === 0;
   const works = (state, name) => {
     const m = byName[name];
     if (!m || m.broken) return false;
+    if (m.kind === 'helm' && handWheel()) return true;
     return m.kind === 'helm' || m.kind === 'engine' || m.kind === 'lift' ? hasSteam(state, name) : true;
   };
 
@@ -121,7 +125,7 @@ export function createModules() {
       for (const m of list) if (m.d === f.d && Math.abs(m.x - f.x) < M.FIRE_RADIUS) damage(m, M.FIRE_DAMAGE * dt);
     }
     // Lift crawls without steam.
-    connScale[LIFT] = works(state, 'Lift') ? 1 : M.UNPOWERED_LIFT;
+    if (LIFT >= 0) connScale[LIFT] = works(state, 'Lift') ? 1 : M.UNPOWERED_LIFT;
   };
 
   // Damaged steam-powered modules leak steam in proportion to the damage (broken = full leak).
@@ -160,6 +164,7 @@ export function createModules() {
 
   // Top speed allowed by the engines (1 = both working).
   const engineFactor = (state) => {
+    if (!L.engines.length) return 1; // (no engines at all: the wind alone drives her, see the flight code)
     const working = L.engines.filter((e) => works(state, e.name)).length;
     return Math.max(M.NO_ENGINE_SPEED, working / L.engines.length);
   };
@@ -182,11 +187,12 @@ export function createModules() {
       if (t && leakRate(t) > 0) return `${m.to} is leaking steam - close this valve (or repair it)`;
     }
     if (m.broken) return `${name} is BROKEN - fix it with a hammer${leakRate(m) > 0 ? ' (leaking steam)' : ''}`;
-    if ((m.kind === 'helm' || m.kind === 'engine' || m.kind === 'lift' || m.kind === 'shield' || m.kind === 'coil') && !hasSteam(state, name)) return `${name} has no steam!`;
+    if (m.kind === 'sail' && m.hp < m.max) return `${name} is torn - mend it with a hammer`;
+    if ((m.kind === 'helm' || m.kind === 'engine' || m.kind === 'lift' || m.kind === 'shield' || m.kind === 'coil') && !(m.kind === 'helm' && handWheel()) && !hasSteam(state, name)) return `${name} has no steam!`;
     if (leakRate(m) > 0) return `${name} is leaking steam - repair it${pipeTo(name) ? ' or close its valve' : ''}`;
     if (m.hp < m.max * 0.5) return `${name} is damaged (${Math.round(m.hp)}%)`;
     return '';
   };
 
-  return { list, byName, boilers, boilerUp, hasSteam, works, damage, hitAt, repair, update, pressureDrain, drainParts, leaks, leakRate, engineFactor, reset, status, rebuild };
+  return { list, byName, boilers, boilerUp, handWheel, hasSteam, works, damage, hitAt, repair, update, pressureDrain, drainParts, leaks, leakRate, engineFactor, reset, status, rebuild };
 }

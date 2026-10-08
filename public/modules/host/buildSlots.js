@@ -5,7 +5,7 @@
 // It does NOT have to leave a flyable ship (S.5c: you build a ship up from nothing, so half-built ships take parts): the validator says what is
 // still missing. slotsFor(type, parts, { whole: true }) also demands that the result passes validate() (the random batch wants that).
 // Every placement ends with finish(): the frame part is there and every engine, the helm and the lift have a steam pipe from the boiler (routePipes).
-import { buildLayout, COL, rowOf, DECK_ROWS, KEEL_ROWS, bagNearX, bagName, ventBoiler } from './shipBuild.js';
+import { buildLayout, COL, rowOf, DECK_ROWS, KEEL_ROWS, isNestRow, bagNearX, bagName, ventBoiler } from './shipBuild.js';
 import { drawDeck, drawBag, placeConnector, GRID_X0, ensureFrame, emptyBuild, erase, setBag } from './buildEdit.js';
 import { validate } from './buildCheck.js';
 import { config } from '../../config.js';
@@ -64,13 +64,14 @@ export function routePipes(parts) {
 const finish = (ps) => routePipes(ensureFrame(ps));
 
 // Station part types: the deck rows each may stand on, and whether it hauls (needs a clear spot).
-const STATION_AT = { lookout: [['nest'], false], boiler: [['main', 'lower'], true], coal: [['lower', 'main', 'keel', 'deep'], true], ammo: [['lower', 'main', 'keel', 'deep'], true], helm: [['catwalk', 'main'], false] };
+const STATION_AT = { lookout: [['nest', 'crow2'], false], boiler: [['main', 'lower'], true], coal: [['lower', 'main', 'keel', 'deep'], true], ammo: [['lower', 'main', 'keel', 'deep'], true], helm: [['catwalk', 'main'], false] };
 const LABEL = { lookout: 'Lookout', boiler: 'Boiler', coal: 'Coal Bunker', ammo: 'Ammo Hold', helm: 'Helm', gun: 'Gun', searchlight: 'Searchlight', engine: 'Engine' };
 const PLAIN = { lookout: 'Lookout', boiler: 'Boiler', coal: 'Coal Bunker', ammo: 'Ammo Hold', helm: 'Helm' };
 
 // How a gun sits on each deck (copied from the classic ship's own mounts): where the barrel pivots, the middle of its arc and its spread.
 const GUN_AT = {
   nest: (q, x, fore) => ({ bx: x + 10, by: q.y - 34, aim: fore ? -1.2 : -1.95, arc: 1.2 }),
+  crow2: (q, x, fore) => ({ bx: x + 10, by: q.y - 34, aim: fore ? -1.2 : -1.95, arc: 1.2 }),
   catwalk: (q, x, fore) => ({ bx: x + (fore ? 32 : -27), by: q.y - 52, aim: fore ? -0.35 : Math.PI + 0.35, arc: 1.1 }),
   lower: (q, x, fore) => ({ bx: x + (fore ? 90 : -90), by: q.y + 22, aim: fore ? 1.0 : 2.15, arc: 0.7 }),
 };
@@ -83,9 +84,9 @@ export const PALETTE = [
   { id: 'boiler', label: 'Boiler', hint: 'click a spot on the main or lower deck', slots: (L) => stationSlots(L, 'boiler') },
   { id: 'coal', label: 'Coal bunker', hint: 'click a spot on a lower deck', slots: (L) => stationSlots(L, 'coal') },
   { id: 'ammo', label: 'Ammo hold', hint: 'click a spot on a lower deck', slots: (L) => stationSlots(L, 'ammo') },
-  { id: 'engine', label: 'Engine pod', hint: 'click an outrigger spot on the lower deck (it gets a steam pipe from the boiler)', slots: (L) => {
+  { id: 'engine', label: 'Engine pod', hint: 'click an outrigger spot on the lower or main deck (it gets a steam pipe from the boiler)', slots: (L) => {
     const out = [];
-    for (const q of onRows(L, ['lower'])) {
+    for (const q of onRows(L, ['lower', 'main'])) {
       const xs = [q.x0 + 30, q.x0 + 90, q.x0 + 150, q.x1 - 150, q.x1 - 90, q.x1 - 30].filter((x) => x > q.x0 + 10 && x < q.x1 - 10);
       for (const x of xs) if (roomAt(L, q.id, x, false)) out.push({ p: q.id, x, label: `Engine pod on the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part: 'engine', name: nameFor(ps, 'Pod Engine'), p: q.id, x }] });
     }
@@ -93,7 +94,7 @@ export const PALETTE = [
   } },
   { id: 'gun', label: 'Gun mount', hint: 'click a deck spot', slots: (L) => {
     const out = [];
-    for (const q of onRows(L, ['nest', 'catwalk', 'lower'])) {
+    for (const q of onRows(L, ['crow2', 'nest', 'catwalk', 'lower'])) {
       const row = rowOf(q);
       for (const x of spots(q)) {
         if (!roomAt(L, q.id, x, false)) continue;
@@ -149,11 +150,22 @@ export const PALETTE = [
   ...['hammer', 'sword', 'hookshot', 'ice'].map((kind) => ({ id: 'rack_' + kind, label: RACK_LABEL[kind], hint: 'click a deck spot', slots: (L) => rackSlots(L, 'rack', RACK_LABEL[kind].toLowerCase(), kind) })),
   { id: 'searchlight', label: 'Searchlight', hint: 'click a spot on the nest or top deck', slots: (L) => {
     const out = [];
-    for (const q of onRows(L, ['nest', 'catwalk'])) {
+    for (const q of onRows(L, ['crow2', 'nest', 'catwalk'])) {
       const id = rowOf(q);
       for (const x of spots(q)) {
         if (!roomAt(L, q.id, x, false)) continue;
-        out.push({ p: q.id, x, label: `Searchlight on the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part: 'searchlight', n: nextName(ps, 'Extra Searchlight'), p: q.id, x, bx: x, by: q.y - (id === 'nest' ? 134 : 100), aim: -Math.PI / 2, arc: 1.5, len: 44 }] });
+        out.push({ p: q.id, x, label: `Searchlight on the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part: 'searchlight', n: nextName(ps, 'Extra Searchlight'), p: q.id, x, bx: x, by: q.y - (id === 'nest' || id === 'crow2' ? 134 : 100), aim: -Math.PI / 2, arc: 1.5, len: 44 }] });
+      }
+    }
+    return out;
+  } },
+  { id: 'sail', label: 'Mast and sail', hint: 'click a spot on the top deck or a crow\'s nest: a crew member raises the sail for extra speed from the wind', slots: (L) => {
+    const out = [];
+    for (const q of onRows(L, ['crow2', 'nest', 'catwalk'])) {
+      for (const x of spots(q, 60)) {
+        if (!roomAt(L, q.id, x, true)) continue;
+        if ((L.sails || []).some((s) => s.p === q.id && Math.abs(s.x - x) < config.SAIL.WIDTH + 30)) continue; // (two sails need room for their canvas)
+        out.push({ p: q.id, x, label: `Mast and sail on the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part: 'sail', n: nameFor(ps, 'Mainsail'), p: q.id, x }] });
       }
     }
     return out;
@@ -161,7 +173,7 @@ export const PALETTE = [
   ...['ladder', 'pole'].map((type) => ({
     id: type, label: type === 'ladder' ? 'Ladder' : 'Slide pole (down only)', hint: 'click a spot between two decks (or drag it on the blueprint with the Ladder tool)', slots: (L) => {
       const out = [];
-      const ROWS = ['nest', 'catwalk', 'main', 'lower', 'keel', 'deep']; // each deck with the decks on the next row down
+      const ROWS = ['crow2', 'nest', 'catwalk', 'main', 'lower', 'keel', 'deep']; // each deck with the decks on the next row down
       const pairs = ROWS.slice(0, -1).flatMap((r, i) => L.platforms.filter((a) => rowOf(a) === r).flatMap((a) => L.platforms.filter((b) => rowOf(b) === ROWS[i + 1]).map((b) => [a.id, b.id])));
       for (const [top, bottom] of pairs) {
         const a = L.platforms.find((d) => d.id === top), b = L.platforms.find((d) => d.id === bottom);
@@ -169,7 +181,7 @@ export const PALETTE = [
         const ti = L.platforms.indexOf(a), bi = L.platforms.indexOf(b);
         for (const x of spots({ x0: Math.max(a.x0, b.x0), x1: Math.min(a.x1, b.x1) }, 40)) {
           if (L.connectors.some((c) => c.top === ti && c.bottom === bi && Math.abs(c.xTop - x) < 90)) continue;
-          out.push({ p: top, x, hy: (a.y + b.y) / 2, hr: (b.y - a.y) / 2 + 20, label: `${type === 'ladder' ? 'Ladder' : 'Pole'} ${a.name} to ${b.name}, x ${x}`, apply: (ps) => [...ps, { part: type === 'ladder' && rowOf(a) === 'nest' ? 'rope' : type, top, bottom, xTop: x, xBottom: x }] });
+          out.push({ p: top, x, hy: (a.y + b.y) / 2, hr: (b.y - a.y) / 2 + 20, label: `${type === 'ladder' ? 'Ladder' : 'Pole'} ${a.name} to ${b.name}, x ${x}`, apply: (ps) => [...ps, { part: type === 'ladder' && isNestRow(rowOf(a)) ? 'rope' : type, top, bottom, xTop: x, xBottom: x }] });
         }
       }
       return out;
@@ -247,12 +259,12 @@ export function pickSlot(slots, x, y, maxDist = config.BUILD_EDIT.DROP_REACH) {
 }
 
 // Why a part cannot be dropped at a point: where each palette type may stand (deck rows) and its one-per-ship limits. A sentence for the hover note.
-const ROW_NAME = { nest: "crow's nest", catwalk: 'top deck', main: 'main deck', lower: 'lower deck', keel: 'keel deck', deep: 'deep deck', helm: 'helm mount', belly: 'belly', bay: 'bomb bay' };
+const ROW_NAME = { crow2: "high crow's nest", nest: "crow's nest", catwalk: 'top deck', main: 'main deck', lower: 'lower deck', keel: 'keel deck', deep: 'deep deck', helm: 'helm mount', belly: 'belly', bay: 'bomb bay' };
 const RACK_ROWS = ['catwalk', 'main', 'lower'];
 const RULES = {
   helm: { rows: ['catwalk', 'main'], once: (parts) => count(parts, (p) => p.part === 'station' && p.kind === 'helm') > 0, onceText: 'A ship has one helm.' },
   boiler: { rows: ['main', 'lower'] }, coal: { rows: ['lower', 'main', 'keel', 'deep'] }, ammo: { rows: ['lower', 'main', 'keel', 'deep'] },
-  engine: { rows: ['lower'] }, gun: { rows: ['nest', 'catwalk', 'lower'] }, lookout: { rows: ['nest'] }, searchlight: { rows: ['nest', 'catwalk'] },
+  engine: { rows: ['lower', 'main'] }, gun: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, lookout: { rows: ['nest', 'crow2'] }, searchlight: { rows: ['crow2', 'nest', 'catwalk'] }, sail: { rows: ['crow2', 'nest', 'catwalk'] },
   medbay: { rows: ['main', 'lower', 'keel', 'deep'], once: (parts) => count(parts, (p) => p.part === 'medbay') > 0, onceText: 'A ship has one medbay.' },
   bombBay: { rows: ['lower'], once: (parts) => count(parts, (p) => p.part === 'bombBay' || (p.part === 'deck' && p.id === 'bay')) > 0, onceText: 'A ship has one bomb bay.' },
   lift: { rows: ['main'], once: (parts) => count(parts, (p) => p.part === 'lift') > 0, onceText: 'A ship has one lift.' },
@@ -425,7 +437,7 @@ export function removals(parts) {
 // One random legal mutation of a build: { tag, label, parts } or null if nothing fits. rng() gives 0..1.
 // prefer: a type to try first most of the time (the batch asks for an engine pod right after a second boiler, the only way one fits).
 // weights: how often each type is tried (the batch wants engines and boilers as often as guns).
-const WEIGHTS = { extend: 3, keel: 1, gun: 3, searchlight: 2, lookout: 2, boiler: 3, coal: 1, ammo: 1, engine: 3, ladder: 2, pole: 1, rack_hammer: 1, extinguisher: 1, vent: 1, ballast: 1, remove: 2 };
+const WEIGHTS = { extend: 3, keel: 1, gun: 3, searchlight: 2, lookout: 2, boiler: 3, coal: 1, ammo: 1, engine: 3, ladder: 2, pole: 1, rack_hammer: 1, extinguisher: 1, vent: 1, ballast: 1, sail: 1, remove: 2 };
 export function randomMutation(parts, rng, prefer) {
   const bag = Object.entries(WEIGHTS).flatMap(([t, w]) => Array(w).fill(t));
   for (let tries = 0; tries < 12; tries++) {

@@ -11,12 +11,12 @@ import { EDIT_ROWS, DRAW_ROWS, GRID_X0 } from './buildEdit.js';
 
 const LB = () => config.LOGBOOK;
 const PAD = { l: 100, r: 28, t: 30, b: 46 }; // paper margins (CSS px, times k): row labels on the left, column numbers on top, the ship's size underneath
-const GLYPH = { helm: 'H', boiler: 'B', lookout: 'L', coal: 'C', ammo: 'A', gun: 'G', searchlight: 'S', coil: 'Z', deflector: 'D', bombBay: 'M', navigator: 'N', escort: 'F', engine: 'E' };
+const GLYPH = { helm: 'H', boiler: 'B', lookout: 'L', coal: 'C', ammo: 'A', gun: 'G', searchlight: 'S', coil: 'Z', deflector: 'D', bombBay: 'M', navigator: 'N', escort: 'F', engine: 'E', sail: 'W' };
 
 export function blueprintView(Ly, w, h, k = 1) {
   const b = Ly.bounds || { x0: -240, x1: 1860, y0: -200, y1: 1000 };
   const wx0 = Math.min(b.x0, -240) - 20, wx1 = Math.max(b.x1, 1860) + 2 * COL; // (room to draw two columns beyond the ship before the view refits)
-  const wy0 = Math.min(b.y0, -150) - 10, wy1 = Math.max(b.y1, DECK_ROWS.deep + 90);
+  const wy0 = Math.min(b.y0, DECK_ROWS.crow2 - 40) - 10, wy1 = Math.max(b.y1, DECK_ROWS.deep + 90);
   const pl = PAD.l * k, pr = PAD.r * k, pt = PAD.t * k, pb = PAD.b * k;
   const s = Math.min((w - pl - pr) / (wx1 - wx0), (h - pt - pb) / (wy1 - wy0));
   const ox = pl - wx0 * s + 4 * k, oy = pt + ((h - pt - pb) - (wy1 - wy0) * s) / 2 - wy0 * s; // (the ship hugs the left margin; the key goes on the right)

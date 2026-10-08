@@ -5,7 +5,7 @@
 // penalty for each crewmate already going there. A suggestion is kept for a few seconds so it
 // doesn't flicker, and only swapped for a clearly better one.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, nearest } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, nearest, deckIndex } from '../../shipLayout.js';
 import { travelTime, direction } from './nav.js';
 
 const L = SHIP_LAYOUT;
@@ -20,10 +20,12 @@ onLayoutChange(rebuildShipTables);
 const stationNamed = (n) => L.stations.find((s) => s.n === n);
 const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer' };
 export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', unclog: '#b6f06e', oxygen: '#bfe9ff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0', help: '#ff4d4d' };
-const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP', trim: 'TRIM' };
+const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP', trim: 'TRIM', sail: 'SAIL', reef: 'REEF' };
 TOOL.cool = 'ice'; // (GOING DOWN!: cooling the boiler wants a block of ice from the locker)
 JOB_COLORS.cool = '#9fdcff';
 JOB_COLORS.trim = '#e8c25a'; // (a lopsided ship: go to the light end, balance.js)
+JOB_COLORS.sail = '#e9dcc0'; // (S.5e: raise a sail in a fair wind...)
+JOB_COLORS.reef = '#ff8c1a'; // (...or reef it before a gust)
 
 // Name of the room (or deck) at a spot, for the label.
 const roomName = (d, x) => {
@@ -73,19 +75,29 @@ export function createJobFinder(state) {
       for (const n of GUN_NAMES) if (state.GUNS[n].ammo < state.GUNS[n].max) { const s = stationNamed(n); add('ammo', n, s.d, s.x, {}, `AMMO to ${n}`); }
     } else if (carry !== 'coal') {
       const hold = nearest('ammo', p); // (the ammo hold nearest to this player)
-      for (const n of guns.slice(0, 2)) { const s = stationNamed(n); add('ammo', n, s.d, s.x, hold ? { fetch: hold.n } : {}, `AMMO for ${n}`); }
+      if (hold) for (const n of guns.slice(0, 2)) { const s = stationNamed(n); add('ammo', n, s.d, s.x, { fetch: hold.n }, `AMMO for ${n}`); } // (no ammo hold on the ship: nothing to fetch)
     }
     const fuelLow = state.ship.fuel < config.BOILER.FUEL_MAX * (J.COAL_LOW / 100);
-    if (carry === 'coal' || (fuelLow && carry !== 'ammo')) {
+    if (carry === 'coal' || (fuelLow && carry !== 'ammo' && nearest('coal', p))) { // (no coal bunker: the fire just dies down, nothing to haul)
       // Coal goes to the boiler nearest to where it is picked up (or nearest to the carrier, if already carrying).
       const bunker = carry === 'coal' ? null : nearest('coal', p);
       const s = nearest('boiler', bunker || p);
       if (s) add('coal', s.n, s.d, s.x, carry === 'coal' || !bunker ? {} : { fetch: bunker.n }, `COAL for the ${s.n}`);
     }
+    // Sails (S.5e): a gust is due and a sail is up: reef it now. Otherwise, in open sky, a sail that is down is worth raising (a quiet suggestion).
+    if (state.phase === 'flying') {
+      const open = !(state.course && state.course.map && !state.course.map.open);
+      (state.sails || []).forEach((sl, i) => {
+        const s = (L.sails || [])[i];
+        if (!s || sl.torn || mods.some((m) => m.name === s.n && m.broken)) return;
+        if (state.sailWarn && sl.hoist > 0.1 && !sl.lowering) add('reef', sl, s.d, s.x, {}, `REEF THE SAIL! - ${s.n}: gust coming`);
+        else if (!state.sailWarn && open && sl.hoist < 0.5 && !sl.lowering) add('sail', sl, s.d, s.x, {}, `RAISE THE SAIL - ${s.n}, the wind is up`);
+      });
+    }
     // A lopsided ship (balance.js): idle crew walk to the light end of the main deck, their weight trims her.
     const bal = state.balance;
     if (bal && bal.warn && state.phase === 'flying') {
-      const d = L.platforms.findIndex((q) => q.id === 'main');
+      const d = deckIndex('main');
       if (d >= 0) add('trim', 'trim', d, bal.deg > 0 ? L.platforms[d].x0 + 90 : L.platforms[d].x1 - 90, {}, `TRIM HER! ${bal.deg > 0 ? 'NOSE' : 'TAIL'}-HEAVY - go ${bal.deg > 0 ? 'aft' : 'fore'}`);
     }
     return out;

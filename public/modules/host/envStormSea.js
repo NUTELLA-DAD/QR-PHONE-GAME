@@ -17,12 +17,12 @@
 //   state.sea       { y, flood, spouts, survivors, hook, winch, pump, rescued, scrapes }
 //   state.env       wind (px/s along the course), sink (gas points), drag (0-1 speed lost to flooding)
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { SHIP_LAYOUT, deckIndex } from '../../shipLayout.js';
 import { floorBelow } from './maps.js';
 import { pop } from './popups.js';
 
 const P = SHIP_LAYOUT.platforms;
-const IDX = (id) => P.findIndex((p) => p.id === id);
+const IDX = (id) => deckIndex(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
 const hash = (i, salt = 0) => {
@@ -175,7 +175,7 @@ export function createStormSea({ state, puff, impact, damageHull }) {
     const J = state.stormJob;
     const w = state.weather;
     const R = F.ROD;
-    if (!J.rods.length) J.rods = R.SPOTS.map((s) => ({ d: IDX(s.p), x: s.x, held: 0 }));
+    if (!J.rods.length) J.rods = R.SPOTS.map((s) => { const d = IDX(s.p), q = P[d]; return { d, x: q ? clamp(s.x, q.x0 + 30, q.x1 - 30) : s.x, held: 0 }; }); // (kept on the deck: a small ship's top deck is shorter)
     for (const r of J.rods) r.held = Math.max(0, r.held - dt);
     // ---- wind gusts: weather.js starts them (shoves her up/down); here they shove her along as well ----
     const gusting = !!(w && w.gusting && flying);
@@ -217,6 +217,7 @@ export function createStormSea({ state, puff, impact, damageHull }) {
     const s = state.sea;
     const c = state.course;
     s.t += dt;
+    { const q = P[LOWER]; if (q) { pumpSpot.d = LOWER; pumpSpot.x = clamp(config.ENVIRONMENTS.sea.FLOOD.PUMP_X, q.x0 + 30, q.x1 - 30); } } // (the bilge pump stands on the lower deck, kept on a short one)
     s.pump = flying && c && c.map ? pumpSpot : null;
     if (!c || !c.map) {
       s.hook = s.winch = null;
@@ -300,6 +301,7 @@ export function createStormSea({ state, puff, impact, damageHull }) {
       }
     } else if (!near) warned.spout = false;
     // ---- rescue: a survivor under the ship catches the rope; hold Action at the winch to haul them up ----
+    if (!SHIP_LAYOUT.bombBay) { s.hook = s.winch = null; return; } // (no bomb bay, no rope to rescue anyone with)
     const bayX = SHIP_LAYOUT.bombBay.x;
     const ropeY = (c.refY != null ? c.refY : SHIP_LAYOUT.refPoint.y - state.ship.alt) + SHIP_LAYOUT.bombBay.y - SHIP_LAYOUT.refPoint.y;
     const R = F.RESCUE;

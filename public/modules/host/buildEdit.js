@@ -15,7 +15,7 @@
 //   emptyBuild() / ensureFrame(parts)            a ship of nothing (just its frame): every operation works on it, the first deck needs no ladder
 // Result: { ok, parts, hint, added: [labels], removed: [labels], cols, deck, kind }. ok false = nothing changed and `hint` says why.
 // The result may well FAIL validate() (erase the last boiler ...): that is the editor's job to show, not to prevent.
-import { buildLayout, BUILDS, COL, DECK_ROWS, KEEL_ROWS, rowOf, bagCover } from './shipBuild.js';
+import { buildLayout, BUILDS, COL, DECK_ROWS, KEEL_ROWS, rowOf, isNestRow, bagCover } from './shipBuild.js';
 import { config } from '../../config.js';
 import { slotsFor, pickSlot, whyNot } from './buildSlots.js'; // (a cycle: buildSlots.js re-exports these operations; each side only calls the other at run time)
 
@@ -24,7 +24,8 @@ export const GRID_X0 = 20; // the column grid: lines at GRID_X0 + k x COL (the c
 // The rows a deck can be drawn on (top to bottom). hull: its rooms are inside the gondola hull (the art encloses them);
 // split: an erase may cut it in two; multi: more than one deck can share the row (the others are single decks that get longer or shorter).
 export const EDIT_ROWS = {
-  nest: { id: 'nest', name: "Crow's Nest", outside: true, hull: false, split: false, multi: false },
+  crow2: { id: 'crow2', name: 'Upper Nest', outside: true, hull: false, split: true, multi: false },
+  nest: { id: 'nest', name: "Crow's Nest", outside: true, hull: false, split: true, multi: false },
   catwalk: { id: 'catwalk', name: 'Top Deck', outside: true, hull: false, split: true, multi: false },
   main: { id: 'main', name: 'Main Deck', outside: false, hull: true, split: true, multi: false },
   lower: { id: 'lower', name: 'Lower Deck', outside: false, hull: true, split: true, multi: false },
@@ -62,7 +63,7 @@ export const emptyBuild = () => ensureFrame([]);
 // ---- what a part is tied to ------------------------------------------------------------------------------------
 // refs(o): the (deck id, x) points a part stands on, each with a setter to move it to another deck. Pieces that stand on a deck are
 // removed when that stretch of deck is erased; connectors have two ends, the lift also its repair spot.
-const POINT = ['station', 'gun', 'searchlight', 'engine', 'rack', 'vent', 'gasValve', 'extinguisher', 'boarderEntry', 'escortDock', 'medbay', 'ballast'];
+const POINT = ['station', 'gun', 'searchlight', 'sail', 'engine', 'rack', 'vent', 'gasValve', 'extinguisher', 'boarderEntry', 'escortDock', 'medbay', 'ballast'];
 const LINK = ['ladder', 'rope', 'stairs', 'lift', 'pole'];
 function refs(o) {
   const r = [];
@@ -77,7 +78,7 @@ const nameOf = (o) => o.n || o.name;
 // A short human label for the "removed: ..." note.
 function labelOf(o) {
   switch (o.part) {
-    case 'station': case 'gun': case 'searchlight': return o.n;
+    case 'station': case 'gun': case 'searchlight': case 'sail': return o.n;
     case 'engine': return o.name;
     case 'rack': return `${o.kind} rack`;
     case 'ladder': case 'rope': case 'stairs': case 'pole': case 'lift': return o.part;
@@ -198,9 +199,14 @@ export function drawDeck(parts, row, x0, x1) {
   if (hi - lo < 40) return no(parts, 'Drag along the row to draw a deck (a column or more).');
   let L;
   try { L = buildLayout(parts); } catch { return no(parts, 'The parts do not build: undo the last change first.'); }
-  if (row === 'nest') {
+  if (isNestRow(row)) {
     if (!L.gasbags.length) return no(parts, "The crow's nest sits on top of the gasbag: draw the gasbag first (the Gasbag tool).");
     if (!bagCover(L.gasbags).some((c) => lo >= c.lo && hi <= c.hi)) return no(parts, "The crow's nest sits on top of the gasbag: keep it over a bag, or a row of touching bags (make the bag longer first).");
+  }
+  if (row === 'crow2') { // the high tier stands on a mast above a crow's nest and is climbed to from it
+    const below = L.platforms.filter((q) => rowOf(q) === 'nest');
+    if (!below.length) return no(parts, "A high crow's nest stands on a mast above the crow's nest: draw the crow's nest first.");
+    if (!below.some((q) => Math.min(q.x1, hi) - Math.max(q.x0, lo) >= 80) && !decksOn(parts, 'crow2').some((d) => d.x1 >= lo - 1 && d.x0 <= hi + 1)) return no(parts, "A high crow's nest must stand over a crow's nest (it is climbed to by a rope from it): draw it above one.");
   }
   const next = clone(parts);
   const here = decksOn(next, row);
@@ -244,19 +250,21 @@ export function drawDeck(parts, row, x0, x1) {
   // A new deck. The very first deck of a ship (nothing to climb to yet) is simply accepted; any later one needs a way to the nearest deck above
   // and below it that it overlaps, so it can be reached: a ladder (a rope up to the crow's nest).
   const y = DECK_ROWS[row];
-  const nestOf = (q) => rowOf(q) === 'nest';
+  const nestOf = (q) => isNestRow(rowOf(q));
   const linkable = L.platforms.filter((q) => ['catwalk', 'main', 'lower', ...KEEL_ROWS].includes(rowOf(q)) && q.y !== y);
-  const reachable = [...linkable, ...(row === 'catwalk' ? L.platforms.filter(nestOf) : [])];
+  // (a high nest is climbed to from a nest below it only; a nest also reaches a high one above it; the top deck reaches the nests)
+  const reachable = row === 'crow2' ? L.platforms.filter((q) => rowOf(q) === 'nest') : [...linkable, ...(row === 'catwalk' ? L.platforms.filter(nestOf) : []), ...(row === 'nest' ? L.platforms.filter((q) => rowOf(q) === 'crow2') : [])];
   const overlap = (q) => Math.min(q.x1, hi) - Math.max(q.x0, lo);
   const links = [];
   for (const above of [true, false]) { // the nearest deck above that it overlaps, and the nearest below
     const cands = reachable.filter((q) => (above ? q.y < y : q.y > y) && overlap(q) >= 80).sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y));
     for (const q of cands) {
-      const x = freeSpot(L, q.id, Math.max(q.x0, lo), Math.min(q.x1, hi), links.map((l) => l.x));
+      let x = freeSpot(L, q.id, Math.max(q.x0, lo), Math.min(q.x1, hi), links.map((l) => l.x));
+      if (x === null && isNestRow(rowOf(q))) x = ropeSpot(L, q, Math.max(q.x0, lo), Math.min(q.x1, hi)); // (a rope up to a crowded nest may stand close to its stations)
       if (x !== null) { links.push({ q, x, above }); break; }
     }
   }
-  if (!links.length && linkable.length) return no(parts, 'A new deck needs a way to climb to the deck above (or below) it: draw it so it overlaps one, with a free spot for a ladder.');
+  if (!links.length && (linkable.length || row === 'crow2')) return no(parts, 'A new deck needs a way to climb to the deck above (or below) it: draw it so it overlaps one, with a free spot for a ladder.');
   const id = uniqueId(next, info.id);
   const n = next.filter((p) => p.part === 'deck' && p.row === row).length;
   deck = { part: 'deck', id, row, name: info.name + (n ? ' ' + (n + 1) : ''), x0: lo, x1: hi, ...(info.outside ? { outside: true } : {}) };
@@ -264,7 +272,7 @@ export function drawDeck(parts, row, x0, x1) {
   coverRooms(next, deck, info);
   for (const l of links) {
     const top = l.above ? l.q.id : id, bottom = l.above ? id : l.q.id;
-    next.push({ part: nestOf(l.q) || row === 'nest' ? 'rope' : 'ladder', top, bottom, xTop: l.x, xBottom: l.x });
+    next.push({ part: nestOf(l.q) || isNestRow(row) ? 'rope' : 'ladder', top, bottom, xTop: l.x, xBottom: l.x });
     added.push(`ladder to the ${l.q.name}`);
   }
   added.unshift(deck.name);
@@ -286,6 +294,39 @@ function dropDependents(list, goneParts, removed) {
     if (dropMore(o) || orphan(o)) { if (o.part !== 'room') removed.push(labelOf(o)); return false; }
     return true;
   });
+}
+
+// Where a rope may come up through deck `o` between lo and hi: a free spot, else on a crowded deck (the classic crow's nest) the spot furthest from anything standing there,
+// if it is at least a body's width clear. null = no room.
+function ropeSpot(L, o, lo, hi) {
+  const x = freeSpot(L, o.id, lo, hi);
+  if (x !== null) return x;
+  const oi = L.platforms.indexOf(o);
+  const things = [...L.stations, ...L.engines].filter((s) => s.p === o.id).map((s) => s.x).concat(L.connectors.filter((c) => c.top === oi || c.bottom === oi).map((c) => (c.top === oi ? c.xTop : c.xBottom)));
+  let best = -1, at = null;
+  for (let t = Math.ceil((lo + 25) / 10) * 10; t <= hi - 25; t += 10) { const d = Math.min(Infinity, ...things.map((s) => Math.abs(s - t))); if (d > best) { best = d; at = t; } }
+  return best >= 28 ? at : null;
+}
+
+// A crow's nest cut in two (or one that lost its ropes with the stretch rubbed out) must still be climbable: any nest-row deck with no rope or ladder of its own
+// gets one to the nearest deck it overlaps below (the top deck; a high nest: the nest under it) at a free spot. Pushes the rope into `out`, a label into `added`.
+function reconnectNests(out, added) {
+  let L;
+  try { L = buildLayout(out); } catch { return; }
+  for (const q of L.platforms) {
+    if (!isNestRow(rowOf(q))) continue;
+    const di = L.platforms.indexOf(q);
+    if (L.connectors.some((c) => c.top === di || c.bottom === di)) continue;
+    const below = L.platforms.filter((o) => o.y > q.y && (rowOf(q) === 'crow2' ? rowOf(o) === 'nest' : rowOf(o) === 'catwalk') && Math.min(o.x1, q.x1) - Math.max(o.x0, q.x0) >= 80).sort((p, r) => p.y - r.y);
+    for (const o of below) {
+      const lo = Math.max(o.x0, q.x0), hi = Math.min(o.x1, q.x1);
+      const x = ropeSpot(L, o, lo, hi);
+      if (x === null) continue;
+      out.push({ part: 'rope', top: q.id, bottom: o.id, xTop: x, xBottom: x });
+      added.push(`rope from the ${q.name} to the ${o.name}`);
+      break;
+    }
+  }
 }
 
 export function erase(parts, row, x0, x1) {
@@ -337,9 +378,11 @@ export function erase(parts, row, x0, x1) {
   // Things that went with their owners (the steam pipe of an engine or the helm, the lift's pipe, the coil emitter, the bomb bay doors ...), and anything left on a deck that is gone.
   const goneParts = next.filter((o, i) => gone.has(i));
   let out = dropDependents(next.filter((o, i) => !gone.has(i)), goneParts, removed);
+  const added = [];
+  if (isNestRow(row)) reconnectNests(out, added); // (a nest cut in two: each half gets a rope down if it lost its own)
   refit(out);
   const cut = targets.reduce((n, d) => n + Math.min(b, d.x1) - Math.max(a, d.x0), 0);
-  return { ok: true, parts: out, added: [], removed, kind: 'erase', deck: targets.map((d) => d.name).join(', '), cols: cols(cut), span: [a, b], hint: `Erased ${cols(cut)} column(s) of ${targets.map((d) => d.name).join(', ')}.${removed.length ? ' removed: ' + summarize(removed) : ''}` };
+  return { ok: true, parts: out, added, removed, kind: 'erase', deck: targets.map((d) => d.name).join(', '), cols: cols(cut), span: [a, b], hint: `Erased ${cols(cut)} column(s) of ${targets.map((d) => d.name).join(', ')}.${removed.length ? ' removed: ' + summarize(removed) : ''}` };
 }
 
 /// ---- the gasbags -------------------------------------------------------------------------------------------------------
@@ -477,7 +520,7 @@ export function placeConnector(parts, x, rowA, rowB, type = 'ladder') {
   const gap = config.BUILD_CHECK.MIN_GAP;
   const twin = parts.find((p) => LINK.includes(p.part) && p.top === t.id && p.bottom === b.id && Math.abs(p.xTop - px) < gap);
   if (twin) return no(parts, `There is already a ${twin.part} there (keep them ${gap} px apart).`);
-  const mate = parts.find((p) => (p.part === 'station' || p.part === 'gun' || p.part === 'searchlight' || p.part === 'engine') && ((p.p === t.id || p.p === b.id)) && Math.abs(p.x - px) < 26);
+  const mate = parts.find((p) => (p.part === 'station' || p.part === 'gun' || p.part === 'searchlight' || p.part === 'sail' || p.part === 'engine') && ((p.p === t.id || p.p === b.id)) && Math.abs(p.x - px) < 26);
   if (mate) return no(parts, `${nameOf(mate)} is in the way: slide the ladder along a little.`);
   const next = clone(parts);
   ensureFrame(next);
@@ -512,7 +555,7 @@ export function thingAt(parts, x, y, slop = 0) {
     const base = dy(o.p);
     if (base == null || o.x == null) return;
     switch (o.part) {
-      case 'station': case 'gun': case 'searchlight': consider(index, o, labelOf(o), o.x, base - 11, 18); break;
+      case 'station': case 'gun': case 'searchlight': case 'sail': consider(index, o, labelOf(o), o.x, base - 11, 18); break;
       case 'engine': consider(index, o, labelOf(o), o.x, base + 14, 18); break;
       case 'rack': case 'vent': case 'gasValve': case 'extinguisher': case 'boarderEntry': consider(index, o, labelOf(o), o.x, base - 5, 14); break;
       case 'medbay': consider(index, o, labelOf(o), o.x, base - 8, 18); break;
