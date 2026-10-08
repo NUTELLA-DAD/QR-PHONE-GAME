@@ -11,6 +11,7 @@ const COLORS = ['#e63946','#f4a261','#f1c40f','#2a9d8f','#3a86ff','#8338ec','#ff
                 '#ff7b00','#00b4d8','#9ef01a','#b5179e','#ffffff','#7f5539','#4cc9f0','#d00000'];
 
 app.use(express.static('public'));
+app.use('/b', express.static('public'));
 // Game art: files in art/sprites/ (PNG or SVG) are served, and listed so the host only loads
 // what exists. Each entry is the file path; the host prefers a PNG over an SVG of the same name.
 const path = require('path'), fs = require('fs');

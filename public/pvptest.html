@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Airship Crew - PvP two-ship test</title>
+<style>
+  @font-face{font-family:'Limelight';src:url(/fonts/Limelight-Regular.ttf) format('truetype');font-weight:400;font-display:block}
+  @font-face{font-family:'Libre Baskerville';src:url(/fonts/LibreBaskerville.ttf) format('truetype');font-weight:400 700;font-display:block}
+  html,body{margin:0;height:100%;overflow:hidden;background:#2b1d14;font-family:'Libre Baskerville',Georgia,serif}
+  canvas{display:block;width:100vw;height:100vh}
+  #meter{position:fixed;left:8px;bottom:8px;font:bold 15px monospace;color:#fff;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:6px;pointer-events:none}
+</style></head>
+<body>
+<!-- Dev page for Phase V.1a: two ships (each from its own simulation copy) in ONE sky on ONE canvas.
+     ?a=classic|multi|[parts JSON]  ?b=...  ship A / ship B     ?gap=3800  distance between them (world px)     ?dy=0  height difference -->
+<canvas id="c"></canvas>
+<div id="meter">loading...</div>
+<script type="module" src="/modules/host/pvpTest.js"></script>
+</body></html>
