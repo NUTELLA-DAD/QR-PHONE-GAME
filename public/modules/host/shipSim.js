@@ -12,7 +12,7 @@ import { config } from '../../config.js';
 import { updateBot } from './bots.js';
 import { createModules } from './modules.js';
 import { createRaiders } from './raiders.js';
-import { tilt, pilotPlan, gasFor, altBounds } from './course.js';
+import { tilt, pilotPlan, gasFor } from './course.js';
 import { createEscort, isEscortStation, escortFor } from './escort.js';
 import { createCoil } from './coil.js';
 import { createEnvironment } from './environments.js';
@@ -27,6 +27,7 @@ import { createLinks } from './links.js';
 import { createGoingDown } from './goingDown.js';
 import { createComeAbout } from './comeAbout.js';
 import { createBalance } from './balance.js';
+import { createFlight } from './flight.js';
 import { createSails, windSpeed } from './sails.js';
 import { createFire } from './fire.js';
 import { armourOn } from './fireModel.js';
@@ -409,16 +410,8 @@ export function createShipSim(world, ship, W) {
     return true;
   };
 
-  // Speed changes with weight: she builds speed gradually and brakes harder than she accelerates,
-  // easing in as she nears the speed asked for.
-  const driveSpeed = (want, dt) => {
-    const SH = config.SHIP;
-    const sp = state.ship.speed;
-    const braking = Math.abs(want) < Math.abs(sp) || (Math.sign(want) !== Math.sign(sp) && Math.abs(sp) > 0.02);
-    const rate = (braking ? SH.BRAKE : SH.ACCEL) * Math.min(1, Math.abs(want - sp) * 4 + 0.25) * env.deep.helmMul() * state.env.accel * state.links.helmMul; // (The Aether: strong engines, thin air for the helmsman)
-    state.ship.speed = sp + clamp(want - sp, -rate * dt, rate * dt);
-    state.ship.accelX = dt > 0 ? (state.ship.speed - sp) / dt : 0;
-  };
+  // The helm's lever (or the autopilot, or nobody) orders a speed; the engines chase it with the push they have, so a heavy ship builds speed slowly and a light one quickly (flight.js).
+  const driveSpeed = (want) => flight.order(want);
 
   // The helm is out in the open on the top deck: a hit right next to whoever is standing at it can
   // knock them out for a few seconds (red flash + HELMSMAN HIT!).
@@ -493,10 +486,11 @@ export function createShipSim(world, ship, W) {
   const engines = createEngines({ state, modules }); // pointed engines: the thrust of each, swivel mounts (engines.js)
   const forces = createForces(state); // forces at places: engines, sails, gusts, hits ... twist her about her centre of mass (forces.js)
   const balance = createBalance(state); // the seesaw: live centre of mass against the bag's lift (balance.js)
+  const flight = createFlight({ state, ship }); // the forces on her drive her pose: engines, sails, drag, buoyancy, weight (flight.js)
   const fireSys = createFire({ state, shipPuff }); // fire that cares where things are: flammability, spreading, the coal blaze (fire.js, fireModel.js)
   const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt }); // GOING DOWN! last stand + the ice locker (goingDown.js)
   state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
-  const comeAbout = createComeAbout(ship, W, { goingDown }); // turning her round on the helm's command (comeAbout.js)
+  const comeAbout = createComeAbout(ship, W, { goingDown, flight }); // turning her round on the helm's command (comeAbout.js)
 
   const raiders = createRaiders({ state, modules, puff, impact });
   const escort = createEscort({ state, puff, phoneFx });
@@ -790,8 +784,8 @@ export function createShipSim(world, ship, W) {
             const REV = -SH.REVERSE;
             // Stick left/right asks for full ahead / full reverse; let go and she goes back to the
             // lever's cruise speed (or holds her speed if the lever isn't used).
-            const want = player.jx > 0.25 ? player.jx : player.jx < -0.25 ? player.jx * SH.REVERSE : player.thr != null ? clamp(player.thr, REV, 1) : state.ship.speed;
-            driveSpeed(want, dt);
+            const want = player.jx > 0.25 ? player.jx : player.jx < -0.25 ? player.jx * SH.REVERSE : player.thr != null ? clamp(player.thr, REV, 1) : flight.order(); // (the lever stays where it was)
+            driveSpeed(want);
             state.ship.trim = Math.abs(player.jy) > 0.15 ? -player.jy : 0;
             state.gasValve.input = clamp(player.gas || 0, -1, 1);
             gasManned = true;
@@ -1160,14 +1154,6 @@ export function createShipSim(world, ship, W) {
     forces.update(dt); // (everything that pushed her at a place this frame twists her: forces.js)
     const wind = windSpeed(state); // (the wind alone: what a ship with no engines, no steam or nobody steering makes)
     const driven = rig.powered && state.thrust.drive; // (engines all pointing up, down or back do not push her ahead: the wind does)
-    const maxSpeed = driven ? clamp(state.ship.press / 50, 0.05, 1) * state.thrust.factor * (1 - state.balance.slow) : wind * (1 - state.balance.slow); // (a tail-heavy ship drags her tail)
-    const fw = driven ? 1 : ship.pose.f; // (the wind blows along the WORLD: a ship that only drifts is limited in the world's frame, so one facing left drifts with it too; an engine-driven ship in her own)
-    let spw = state.ship.speed * fw;
-    if (spw > maxSpeed) spw = driven ? spw + (maxSpeed - spw) * Math.min(1, dt * 2) : maxSpeed; // (nothing pushes a ship with no engines or no steam faster than the wind, whatever the lever says)
-    const maxReverse = driven && state.thrust.back > 0 ? -Math.max(maxSpeed * config.SHIP.REVERSE, clamp(state.ship.press / 50, 0.05, 1) * state.thrust.back * (1 - state.balance.slow)) : -maxSpeed * config.SHIP.REVERSE; // (engines pointing back give her real reverse)
-    if (spw < maxReverse) spw += (maxReverse - spw) * Math.min(1, dt * 2);
-    state.ship.speed = spw * fw;
-    comeAbout.fly(dt); // (a turn in progress: her speed is held down, the facing flips at the middle)
 
     const bay = state.bombBay;
     bay.cd = Math.max(0, bay.cd - dt);
@@ -1201,10 +1187,13 @@ export function createShipSim(world, ship, W) {
     if (!getHelm()) {
       if (plan && worksKind('helm')) {
         state.autopilot = true;
-        driveSpeed(plan.speed, dt);
+        driveSpeed(plan.speed);
         state.ship.trim = clamp((plan.target - state.ship.alt) / 150, -1, 1) * 0.6;
-      } else driveSpeed(flying ? (rig.helm ? 0.2 : wind * ship.pose.f) : 0.3, dt); // (no helm at all: nobody can steer, she goes where the wind takes her)
+      } else driveSpeed(flying ? (rig.helm ? 0.2 : wind * ship.pose.f) : 0.3); // (no helm at all: nobody can steer, she goes where the wind takes her)
     }
+    // Along her bow: the engines chase the speed the helm ordered, the sails push, the air drags (flight.js); a turn in progress holds her speed down and flips the facing at the middle.
+    flight.surge(dt, { wind, driven, helm: env.deep.helmMul() });
+    comeAbout.fly(dt);
     if (!gasManned) valve.input = plan ? gasFor(state, plan.target) * 0.6 : 0;
     valve.auto = !gasManned && !!plan;
 
@@ -1240,14 +1229,7 @@ export function createShipSim(world, ship, W) {
     state.buoyancy = effGas > G.NEUTRAL + 5 ? 1 : effGas < G.NEUTRAL - 5 ? -1 : 0;
     state.sinking = state.buoyancy < 0;
     if (flying) {
-      state.ship.vy = (state.ship.vy || 0) + (lift + trim + state.balance.push + state.forces.vyAcc - (state.ship.vy || 0) * G.DRAG) * dt; // (vyAcc: lift engines pointing up / dive engines down, forces.js)
-      const bounds = altBounds(state);
-      const hi = Math.max(bounds.hi, state.ship.alt);
-      ship.pose.y -= state.ship.vy * dt;
-      if (state.ship.alt > hi) {
-        ship.pose.y = -hi;
-        state.ship.vy = Math.min(0, state.ship.vy);
-      }
+      flight.climb(dt, lift + trim + state.balance.push + state.forces.vyAcc); // (the bags' buoyancy, the trim engine, the balance push, vyAcc: lift engines pointing up / dive engines down, forces.js; less the air's drag, over her weight)
       // Nearly out of gas on the ground: the hull grinds.
       if (state.course && state.course.scraping && state.ship.gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
       if (state.course && state.course.scraping && state.balance.scrape) damageHull(state.balance.scrape * dt); // a nose-heavy bow digs in
@@ -1264,13 +1246,9 @@ export function createShipSim(world, ship, W) {
     }
     state.ship.shake = Math.max(0, state.ship.shake - dt);
     goingDown.update(dt); // the last stand: sinking, the meters, the ice locker (goingDown.js)
-    // Nose up while climbing, nose down while diving.
-    const SH = config.SHIP;
-    const climbRate = dt > 0 && state.lastAlt != null ? (state.ship.alt - state.lastAlt) / dt : 0;
-    state.lastAlt = state.ship.alt;
-    // (Speeding up lifts the nose a touch, braking dips it: she has weight.)
-    const wantPitch = state.ship.down ? 0 : clamp(-climbRate * SH.TILT_PER_SPEED - (state.ship.accelX || 0) * SH.PITCH_PER_ACCEL, -SH.TILT_MAX, SH.TILT_MAX) + goingDown.pitch() + state.balance.restPitch + state.forces.theta; // (restPitch: the trim of an unbalanced ship, balance.js; theta: what the forces on her twist her by, forces.js)
-    state.ship.pitch = (state.ship.pitch || 0) + (wantPitch - (state.ship.pitch || 0)) * Math.min(1, dt * SH.TILT_SMOOTH);
+    // Nose up while climbing, nose down while diving, a touch up when she speeds up and down when she brakes; the trim of an unbalanced ship (balance.js restPitch), the going-down tilt and what the forces
+    // on her twist her by (forces.js theta) add (flight.js).
+    flight.pitch(dt, goingDown.pitch());
 
     // Breaking apart: pieces fall, explosions go off, then the whole game starts over.
     if (state.ship.down > 0) {
@@ -1341,7 +1319,7 @@ export function createShipSim(world, ship, W) {
   }
   // ... and rebuilt: a fresh ship with her crew dropped back aboard from above, as restartGame does for the main one.
   function respawn({ crew = true } = {}) {
-    Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
+    Object.assign(state.ship, { alt: 0, speed: 0.3, order: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
     if (!ship.main) W.course.place(ship); // (back at her station in open air; her pose is her own)
     forces.reset();
     Object.assign(state.gasValve, { input: 0, auto: false });
@@ -1380,7 +1358,7 @@ export function createShipSim(world, ship, W) {
   }
 
   return {
-    ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, fireSys, goingDown, raiders, escort, coil, searchlights, air,
+    ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, goingDown, raiders, escort, coil, searchlights, air,
     get hookshot() { return hookshot; },
     get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
     hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop,

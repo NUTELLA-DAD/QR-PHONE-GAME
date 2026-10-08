@@ -300,8 +300,8 @@ export function inRock(state, x, y) {
   return y > groundAt(course, x) || y < ceilAt(course, x);
 }
 
-// How fast the ship moves along the course (negative = backing up; 0 = hovering).
-export const scrollSpeed = (state) => (state.ship.speed + (state.sailPush || 0)) * config.SHIP.TOP_SPEED * (1 + config.BOILER.OD_ENGINE * (state.overdrive || 0) + config.LINKS.SURGE.ENGINE * (state.surgeEngine || 0)) * ((state.rig && !state.rig.powered ? 1 : state.env && state.env.engine) || 1) * (1 - ((state.env && state.env.drag) || 0)); // overdrive steam = faster engines
+// How fast the ship moves along her bow, px/s (negative = backing up; 0 = hovering): her body-frame velocity u, which flight.js integrates from the forces on her (state.ship.speed is it as a share of TOP_SPEED).
+export const scrollSpeed = (state) => state.ship.speed * config.SHIP.TOP_SPEED;
 
 // How high and low the ship may fly here: up to ALT_RANGE above the highest land under and just
 // ahead of it, and ALT_RANGE below the lowest.
@@ -1144,7 +1144,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     sh.pose.f = face;
     sh.pose.turn = 0;
     sh.ctx.ship.vy = 0;
-    sh.ctx.ship.speed = 0;
+    sh.ctx.ship.speed = sh.ctx.ship.order = 0;
     sh.moorAlt = -found.y;
     Object.assign(sh.ctx.course, { scraping: false, wasScraping: false, near: [], lastContact: null, scrapeCd: 0, unstick: 0, stuckT: 0, stuckBest: null });
   };
@@ -1211,7 +1211,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     course.homeAlt = REF.y - map.start.y;
     ship.pose.y = -course.homeAlt;
     state.ship.vy = 0;
-    state.ship.speed = 0;
+    state.ship.speed = state.ship.order = 0;
     for (const sh of state.ships) sh.sim && sh.sim.comeAbout.reset(); // (a new mission starts bow to the right, whichever way she finished the last)
     for (const sh of state.ships) place(sh); // (any other ship goes back to her station beside ours)
     if (map.open && state.bombBay) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX); // a full bay for the raid

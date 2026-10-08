@@ -308,7 +308,8 @@ function crewman(st, team, ship, d, x) {
   const k0 = (red.ctx.forces.kicks || 0);
   let crossed = false, minGap = gap0;
   for (let i = 0; i < 60 * 2; i++) { step(sim); const g = mx(blue) - mx(red); minGap = Math.min(minGap, g); if (g < 0) crossed = true; }
-  const hit = (sh, S) => S.layout.samples.some(([sx, sy]) => { const wx = T.toWorldX(S, sx), wy = T.toWorldY(S, sy); return sh.sim.hitsShip(T.toShipX(sh, wx), T.toShipY(sh, wy)); });
+  const SC = await load('modules/host/shipCollide.js');
+  const hit = (sh, S) => SC.overlapsAnother(st, S); // (M.4: the old test looked at the untilted outline points, which a resting contact between tilted hulls touches by a hair; this is the predicate the collision itself keeps false)
   report(!crossed && mx(blue) - mx(red) > gap0 && !hit(blue, red) && M.stats.red.bumps >= 1, `two hulls pushed together are pushed apart again (${Math.round(gap0)} px apart overlapping -> ${Math.round(mx(blue) - mx(red))}), nobody passed through (closest ${Math.round(minGap)}); ${M.stats.red.bumps} bump(s)`);
   report(red.state.hull < hr && blue.state.hull < hb && (red.ctx.forces.kicks || 0) > k0, `the bump hurt both ships (red ${hr.toFixed(1)} -> ${red.state.hull.toFixed(1)}, blue ${hb.toFixed(1)} -> ${blue.state.hull.toFixed(1)}) and kicked them about the place they touched (forces.js)`);
   config.COLLIDE.MIN_CLOSING = SAVE.minClosing;

@@ -45,7 +45,7 @@ export function createSimulation() {
   let socket = null;
   const state = {
     players: {},
-    ship: { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START },
+    ship: { alt: 0, speed: 0.3, order: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START },
     gasHoles: [],
     ventOpen: [], // which vent stacks are open (one flag per vent of the ship's layout, filled in below)
     wreck: null, // { t } while the ship is breaking apart
@@ -206,7 +206,7 @@ export function createSimulation() {
     state.wreck = null;
     state.ship.down = 0;
     UPGRADES.find((u) => u.id === 'spare-parts').apply({ state, modules });
-    Object.assign(state.ship, { hull: config.LIMP.HULL, speed: 0.3, shake: 0, press: 65, fuel: Math.max(state.ship.fuel, config.BOILER.START_FUEL), gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 }); forces.reset();
+    Object.assign(state.ship, { hull: config.LIMP.HULL, speed: 0.3, order: 0.3, shake: 0, press: 65, fuel: Math.max(state.ship.fuel, config.BOILER.START_FUEL), gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 }); forces.reset();
     Object.assign(state.gasValve, { input: 0, auto: false });
     state.ventOpen.fill(false);
     state.gasValveOpen.fill(true); // (every gas valve open again)
@@ -252,7 +252,7 @@ export function createSimulation() {
   function restartGame() {
     if (match.on) return match.toLobby(); // (Versus: the match starts over from its lobby; the voyage is not touched)
     restoreData(config, pristine);
-    Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 }); forces.reset();
+    Object.assign(state.ship, { alt: 0, speed: 0.3, order: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 }); forces.reset();
     Object.assign(state.gasValve, { input: 0, auto: false });
     state.lastAlt = 0;
     state.wreck = null;
@@ -991,19 +991,11 @@ export function createSimulation() {
 
     eachShip(state, (sh) => sh.sim.stepUpkeep(dt));
   };
-  // One step, and how fast she really moved along the sky in it (pose.vx for the next one: the things that go along with her read it).
+  // One step. (Since M.4 pose.vx is the ship's integrated velocity, flight.js: nothing is measured here any more.)
   const update = (dt) => {
-    const x0 = state.ships.map((sh) => sh.pose.x);
-    try {
-      if (match.on) match.pre(dt); // (Versus: each ship's view of her rival)
-      stepWorld(dt);
-      if (match.on) match.post(dt); // (...and the rules of the round, a vote open or not)
-    } finally {
-      state.ships.forEach((sh, i) => {
-        const dx = sh.pose.x - x0[i];
-        if (Math.abs(dx) < 60 && dt > 0) sh.pose.vx = dx / dt; // (a jump of the course, a new mission or a tow, is no speed)
-      });
-    }
+    if (match.on) match.pre(dt); // (Versus: each ship's view of her rival)
+    stepWorld(dt);
+    if (match.on) match.post(dt); // (...and the rules of the round, a vote open or not)
   };
 
   // CAST OFF without the voyage's rules (the voyage starts a map when the lobby changed the session: Versus has its own sky): the crew factors settle, the ships fly.

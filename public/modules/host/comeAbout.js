@@ -20,10 +20,10 @@ import { solidAt } from './maps.js';
 import { overlapsAnother } from './shipCollide.js';
 import { pivotOf } from './pose.js';
 
-export function createComeAbout(ship, W, { goingDown }) {
+export function createComeAbout(ship, W, { goingDown, flight }) {
   const state = ship.ctx;
   const T = config.SHIP.TURN;
-  const g = (state.turning = { hold: 0, ask: false, who: null, t: 0, cd: 0, msgCd: 0, flipped: false });
+  const g = (state.turning = { hold: 0, ask: false, who: null, t: 0, cd: 0, msgCd: 0, flipped: false, dur: T.TIME });
   const pose = ship.pose;
   const say = (who, text) => {
     if (who) W.phoneFx(who, text, [60, 60, 60]);
@@ -69,9 +69,10 @@ export function createComeAbout(ship, W, { goingDown }) {
     g.t = 1e-4;
     g.flipped = false;
     g.hold = 0;
-    pose.turn = g.t / T.TIME;
+    g.dur = T.TIME * (flight ? flight.turnScale() : 1); // (a heavy ship takes longer to come round, flight.js)
+    pose.turn = g.t / g.dur;
     if (ship.main) {
-      state.ev.warn = T.TIME;
+      state.ev.warn = g.dur;
       state.ev.warnText = 'COMING ABOUT!';
     }
     state.sfxQ.push(['comeabout']);
@@ -111,15 +112,16 @@ export function createComeAbout(ship, W, { goingDown }) {
     g.t += dt;
     const sh = state.ship;
     sh.speed = Math.max(-T.MAX_SPEED, Math.min(T.MAX_SPEED, sh.speed)); // (she brakes to the speed a turn is allowed at)
-    if (!g.flipped && (g.t >= T.TIME / 2 || sh.down > 0)) {
+    if (!g.flipped && (g.t >= g.dur / 2 || sh.down > 0)) {
       g.flipped = true;
       pose.f = -pose.f;
-      sh.speed = 0 - sh.speed - 2 * (state.sailPush || 0); // (what she covers over the ground, f * (speed + sails), is the same either side of the flip)
+      sh.speed = 0 - sh.speed; // (what she covers over the ground, f * speed, is the same either side of the flip: her velocity does not jump)
+      if (sh.order !== undefined) sh.order = 0 - sh.order; // (the helm's lever is along the bow too)
       sh.accelX = 0 - (sh.accelX || 0);
       for (const p of Object.values(state.players)) if (!p.bot) p.jx = (p.jxs || 0) * pose.f; // (a person's stick is on the screen: along the ship it is the other way now)
     }
-    pose.turn = Math.min(1, g.t / T.TIME);
-    if (g.t >= T.TIME || sh.down > 0) {
+    pose.turn = Math.min(1, g.t / g.dur);
+    if (g.t >= g.dur || sh.down > 0) {
       g.t = 0;
       g.cd = T.COOLDOWN;
       g.hold = 0;
