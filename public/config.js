@@ -1270,7 +1270,7 @@ export const config = {
       FLYER_STEER: 1, // stick steering in the air as a share of the normal (AIR.STEER_ACCEL); the parachute steers harder
       SOLVE_ANGLES: 30, // the bots' aim search: barrel angles tried ...
       SOLVE_POWERS: 7, // ... and powers tried
-      SHOP: false, // true: the sky-dock shop sells the cannon (off so the voyage's balance and part rolls stay as tuned; the build page and the dev flags place it)
+      SHOP: true, // true: the sky-dock shop sells the cannon (owner turned it on; false keeps it to the build page and the dev flags)
     },
     // THROWABLE BALLAST and cargo (cargo.js): sandbags and crates come from racks, coal from the bunker. ATTACK on an open deck throws what you hold; it lands as a LIVE LOAD on the deck it falls on.
     CARGO: {
