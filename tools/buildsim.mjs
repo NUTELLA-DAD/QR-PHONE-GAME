@@ -6,7 +6,8 @@
 //        node tools/buildsim.mjs --lint-pose        (also part of --lint) B0: no NEW single-ship spellings (+course.dist, +-state.ship.alt, scrollSpeed, SHIP_LAYOUT imports, module-level per-ship captures) against tools/fixtures/pose-lint-allow.json
 //        node tools/buildsim.mjs --check-golden     B0: re-run the golden behaviour baseline (voyagesim, botsim 3x3, cave contacts, capability) against tools/fixtures/golden.json; --snapshot-golden --force re-captures it
 //        node tools/buildsim.mjs --check-frames     B0: frame-by-frame old vs new (world x/y, hull, kills; tolerance 1e-6 -> 2% over 3 min) + noise bands; --snapshot-frames --force re-captures
-//        node tools/buildsim.mjs --check-pose       B0: pose.js / ships.js / layout-parameter helper unit checks
+//        node tools/buildsim.mjs --check-pose       B0: pose.js / ships.js / layout-parameter helper unit checks (and B1's --check-layouts)
+//        node tools/buildsim.mjs --check-layouts    B1: several Layout + Nav instances side by side (classic, a copy, four bags, two boilers, a tiny ship) answer on their own, applyBuild/onChange never cross
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
 //        node tools/buildsim.mjs --check-validator   S.5: broken builds must FAIL/WARN with the right message (the classic passes clean)
@@ -1379,7 +1380,7 @@ async function checkForces() {
 // --snapshot-frames --force   record 3-minute traces (botsim --trace) of three maps and the summary noise bands over 5 extra seeds (tools/fixtures/frames/)
 // --check-frames              re-run and compare old vs new frame by frame: ship world x/y, hull, kills; the tolerance grows from 1e-6 at t=0 to 2% at 3 min;
 //                             and the summaries of seeds 1-3 must sit inside the noise bands. This is the gate once byte-identical output is retired (M.1+).
-// --check-pose                unit checks of pose.js / ships.js / the layout-param helpers
+// --check-pose                unit checks of pose.js / ships.js / the layout-param helpers, then --check-layouts (B1)
 const GOLDEN = path.join(root, 'tools', 'fixtures', 'golden.json');
 const FRAMES = path.join(root, 'tools', 'fixtures', 'frames');
 const nodeOut = (args, env = {}) => new Promise((resolve) => {
@@ -1602,8 +1603,120 @@ async function checkPose() {
   const L2 = { version: 1, engines: [], stations: [{ n: 'Tiller', kind: 'helm', x: 10, d: 0 }, { n: 'Tiller 2', kind: 'helm', x: 90, d: 0 }], platforms: [{ id: 'main' }], spawnPlatform: 0, boarderEntryPoints: [{ x: 0 }, { x: 50 }] };
   report(all('gun').length === all('gun', SHIP_LAYOUT).length && one('helm') === one('helm', SHIP_LAYOUT) && kindOf('Helm') === kindOf('Helm', SHIP_LAYOUT) && hasKind('engine') === hasKind('engine', SHIP_LAYOUT) && deckIndex('main') === deckIndex('main', SHIP_LAYOUT), 'the layout argument defaults to the global SHIP_LAYOUT');
   report(one('helm', L2).n === 'Tiller' && all('helm', L2).length === 2 && kindOf('Tiller 2', L2) === 'helm' && kindOf('Tiller 2') === undefined && is('Tiller', 'helm', L2) && !hasKind('engine', L2) && hasKind('helm', L2) && nearest('helm', { d: 0, x: 80 }, L2).n === 'Tiller 2' && deckIndex('main', L2) === 0 && !isNestDeck('main', L2) && reviveSpot(L2).d === 0, 'a second layout is answered on its own (and does not leak into the global one)');
+  return (await checkLayouts()) && ok;
+}
+
+// ---- B1: one Layout (and one Nav) per ship ----
+// Several layout instances live side by side (the classic ship, a copy of it, the four-bag ship, the two-boiler ship and the tiny two-deck ship), and each must answer
+// the helpers, the derived tables and the navigation on its OWN, with no cross-talk; applyBuild / onChange on one must never touch another. Also: the exported
+// SHIP_LAYOUT / SHIP_BALANCE / onLayoutChange / applyBuild are forwards to ship 0's layout.
+async function checkLayouts() {
+  const { BUILDS } = await load('modules/host/shipBuild.js');
+  const LM = await load('shipLayout.js');
+  const { SHIP_LAYOUT, SHIP_BALANCE, createLayout, layoutTables } = LM;
+  const { createNav, mainNav } = await load('modules/host/nav.js');
+  const S = await load('modules/host/ships.js');
+  const G = await load('modules/host/gunship.js');
+  const SL = await load('modules/host/searchlight.js');
+  const ES = await load('modules/host/escort.js');
+  const { config } = await load('config.js');
+  let ok = true;
+  const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
+  const bagsParts = await loadBuild('bags', BUILDS), multiParts = await loadBuild('multi', BUILDS), minParts = await loadBuild('min5', BUILDS);
+  const globalBefore = JSON.stringify(SHIP_LAYOUT), balBefore = JSON.stringify(SHIP_BALANCE), versionBefore = SHIP_LAYOUT.version;
+  const navDump = (nav, L) => JSON.stringify(L.platforms.flatMap((_, a) => L.platforms.map((__, b) => nav.plan(a, 300, b, 900))));
+  const nav0Before = navDump(mainNav, SHIP_LAYOUT);
+
+  // ship 0
+  report(SHIP_BALANCE === SHIP_LAYOUT.balance && !Object.keys(SHIP_LAYOUT).includes('balance') && !Object.keys(SHIP_LAYOUT).includes('one'), 'SHIP_BALANCE is ship 0 layout.balance, and the methods and balance are not enumerable (the layout stays pure data)');
+  const fakeState = { ship: {}, ships: [] };
+  const fakeShip = S.createMainShip(fakeState);
+  report(fakeShip.layout === SHIP_LAYOUT && fakeShip.nav === mainNav, 'ships.js: ship 0 has layout === SHIP_LAYOUT and nav === the nav.js mainNav');
+
+  // instances
+  const classic2 = createLayout(BUILDS.classic), bags = createLayout(bagsParts), multi = createLayout(multiParts), mini = createLayout(minParts);
+  report(firstDiff(plain(classic2), plain(SHIP_LAYOUT)) === null && Object.keys(classic2).join() === Object.keys(SHIP_LAYOUT).join(), 'a second classic Layout instance equals ship 0 (data and key order)');
+  report(classic2 !== SHIP_LAYOUT && ['platforms', 'stations', 'connectors', 'engines', 'bounds', 'gunMounts', 'refPoint', 'balance'].every((k) => classic2[k] !== SHIP_LAYOUT[k]), 'it has its own arrays and objects (platforms, stations, bounds, balance ...)');
+  report(JSON.stringify(SHIP_LAYOUT) === globalBefore && JSON.stringify(SHIP_BALANCE) === balBefore && SHIP_LAYOUT.version === versionBefore, 'creating four more layouts left ship 0 untouched (layout, balance, version)');
+  report(bags.gasbags.length === 4 && SHIP_LAYOUT.gasbags.length === 1 && bags.balance.mass !== SHIP_BALANCE.mass && bags.balance.bagLift !== SHIP_BALANCE.bagLift, `each layout has its own build and balance (bags ship ${bags.gasbags.length} bags, mass ${bags.balance.mass.toFixed(0)}; classic ${SHIP_LAYOUT.gasbags.length} bag, mass ${SHIP_BALANCE.mass.toFixed(0)})`);
+
+  // helpers as methods and as layout-parameter functions
+  const mainIdx = (L) => L.deckIndex('main');
+  report(SHIP_LAYOUT.all('boiler').length === 1 && multi.all('boiler').length === 2 && classic2.all('boiler').length === 1 && mini.all('boiler').length === 1 && LM.all('boiler', multi).length === 2 && LM.all('boiler').length === 1, 'all(kind): the two-boiler ship has 2, the others 1 (method and layout-argument forms agree, the default is ship 0)');
+  report(multi.kindOf('Fore Boiler') === 'boiler' && SHIP_LAYOUT.kindOf('Fore Boiler') === undefined && multi.is('Fore Boiler', 'boiler') && !classic2.is('Fore Boiler', 'boiler') && LM.kindOf('Fore Boiler') === undefined, 'kindOf / is know a name only on the ship that has it (the kind tables are per layout)');
+  const at = { d: mainIdx(multi), x: 1100 }, atC = { d: mainIdx(SHIP_LAYOUT), x: 1100 };
+  report(multi.nearest('boiler', at).n === 'Fore Boiler' && SHIP_LAYOUT.nearest('boiler', atC).n === one0(SHIP_LAYOUT, 'boiler') && multi.all('lookout').length === 2 && SHIP_LAYOUT.all('lookout').length === 1, 'nearest / one / all pick from this layout only (the Fore Boiler is nearest on the multi ship; ship 0 has just her own)');
+  report(mini.deckIndex('main') === 0 && mini.deckIndex('catwalk') === 1 && mini.deckIndex('lower') === 0 && mini.deckIndex('nest') === -1 && SHIP_LAYOUT.deckIndex('nest') >= 0 && SHIP_LAYOUT.deckIndex('lower') !== SHIP_LAYOUT.deckIndex('main'), 'deckIndex: the tiny ship lends its roles (lower = main) and has no nest; the classic ship has them all');
+  report(mini.isNestDeck('nest') === false && SHIP_LAYOUT.isNestDeck('nest') === true && SHIP_LAYOUT.reviveSpot().medbay === true && mini.reviveSpot().medbay === false && mini.hasKind('gun') === false && SHIP_LAYOUT.hasKind('gun') === true && mini.hasKind('sail') === true && !SHIP_LAYOUT.hasKind('sail'), 'isNestDeck / reviveSpot / hasKind answer for their own ship (the tiny one: no nest, no medbay, no gun, a sail; the classic one the opposite)');
+
+  // derived tables
+  let builds = 0;
+  const tables = layoutTables((L) => { builds++; return { decks: L.platforms.length, tag: {} }; });
+  const tClassic = tables(SHIP_LAYOUT), tMini = tables(mini);
+  report(tClassic.decks === 10 && tMini.decks === 2 && tables() === tClassic && tables(SHIP_LAYOUT) === tClassic && tables(mini) === tMini && builds === 2, 'layoutTables: one table per layout, no argument = ship 0, memoised (2 builds for 5 calls)');
+  mini.applyBuild(BUILDS.classic);
+  const tMini2 = tables(mini);
+  report(tMini2 !== tMini && tMini2.decks === 10 && tables(SHIP_LAYOUT) === tClassic && builds === 3, 'applyBuild on one layout rebuilds only that layout\'s tables');
+  mini.applyBuild(minParts);
+
+  // listeners and applyBuild
+  const hits = { g: 0, g2: 0, c2: 0, bags: 0, multi: 0, mini: 0 }, got = {};
+  const offs = [SHIP_LAYOUT.onChange(() => hits.g++), LM.onLayoutChange(() => hits.g2++), classic2.onChange(() => hits.c2++), bags.onChange((l) => { hits.bags++; got.bags = l; }), multi.onChange(() => hits.multi++), mini.onChange(() => hits.mini++)];
+  const bagPlat = bags.platforms, bagVer = bags.version;
+  bags.applyBuild(BUILDS.classic);
+  report(hits.bags === 1 && got.bags === bags && hits.g + hits.g2 + hits.c2 + hits.multi + hits.mini === 0, 'applyBuild on one layout fires only its own listeners (given that layout), not ship 0\'s or the others\'');
+  report(bags.version === bagVer + 1 && SHIP_LAYOUT.version === versionBefore && bags.platforms === bagPlat && bags.gasbags.length === 1 && firstDiff(plain(bags), plain(SHIP_LAYOUT)) === null && bags.balance.mass === SHIP_BALANCE.mass, 'it applied in place (same arrays), bumped only its own version, and now equals the classic ship, balance included');
+  report(JSON.stringify(SHIP_LAYOUT) === globalBefore && JSON.stringify(SHIP_BALANCE) === balBefore, 'ship 0 and her balance did not change');
+  offs[3]();
+  bags.applyBuild(bagsParts);
+  report(hits.bags === 1 && bags.gasbags.length === 4, 'the unsubscribe function returned by onChange works');
+  classic2.applyBuild(multiParts);
+  report(hits.c2 === 1 && hits.g + hits.g2 + hits.bags + hits.multi + hits.mini === 1 && classic2.all('boiler').length === 2 && SHIP_LAYOUT.all('boiler').length === 1, 'the same for another layout; ship 0 still has one boiler');
+  classic2.applyBuild(BUILDS.classic);
+  SHIP_LAYOUT.applyBuild(BUILDS.classic); // (the same build again: the content stays, the listeners run)
+  const plat0 = SHIP_LAYOUT.platforms;
+  LM.applyBuild(BUILDS.classic);
+  report(hits.g === 2 && hits.g2 === 2 && plat0 === SHIP_LAYOUT.platforms && hits.multi === 0 && hits.mini === 0 && hits.bags === 1, 'the exported applyBuild / onLayoutChange are forwards to ship 0 (both listener styles fire, in place, nobody else notified)');
+  const before0 = JSON.parse(globalBefore);
+  delete before0.version;
+  report(firstDiff(plain(SHIP_LAYOUT), before0) === null, 'ship 0 is still the classic ship');
+  for (const off of offs) off();
+
+  // navigation
+  const refBelow = (L, x, y) => { let best = null; L.platforms.forEach((p, d) => { if (x >= p.x0 && x <= p.x1 && p.y >= y - 2 && (best === null || p.y < L.platforms[best].y)) best = d; }); return best; };
+  const navC2 = createNav(classic2), navBags = createNav(bags), navMini = createNav(mini);
+  const mc = mini.connectors[0];
+  const WALK = config.MOVE.WALK_SPEED;
+  const want = Math.abs(300 - mc.xBottom) / WALK + (mini.platforms[mc.bottom].y - mini.platforms[mc.top].y) / mc.speed + 0.25 + Math.abs(mc.xTop - 700) / WALK;
+  const got2 = navMini.plan(mc.bottom, 300, mc.top, 700);
+  report(Math.abs(got2.cost - want) < 1e-9 && got2.node >= 0 && navMini.plan(mc.top, 300, mc.bottom, 700).cost < Infinity, `createNav(layout): the tiny ship's one ladder plans correctly (${got2.cost.toFixed(3)} s, expected ${want.toFixed(3)})`);
+  report(navDump(navC2, classic2) === nav0Before && navDump(navBags, bags) === navDump(mainNav, SHIP_LAYOUT) && navDump(mainNav, SHIP_LAYOUT) === nav0Before, 'a nav built on a classic-shaped layout plans exactly like ship 0\'s, and ship 0\'s plans did not change');
+  report(navMini.connScale.length === 1 && mainNav.connScale.length === 20 && navBags.connScale !== mainNav.connScale, 'each nav has its own connector speed table');
+  navMini.connScale[0] = 0.25; navBags.connScale.fill(0.5);
+  report(mainNav.connScale.every((v) => v === 1) && navC2.connScale.every((v) => v === 1), 'changing one nav\'s lift speeds does not change the others\'');
+  let pb = true;
+  for (const [nav, L] of [[mainNav, SHIP_LAYOUT], [navMini, mini], [navBags, bags], [navC2, classic2]]) for (const x of [100, 300, 500, 700, 900, 1100, 1300, 1450]) for (const y of [-500, 100, 400, 700, 1000]) if (nav.platformBelow(x, y) !== refBelow(L, x, y)) pb = false;
+  report(pb, 'platformBelow answers from the nav\'s own platforms on all four layouts (96 points each)');
+  const wMini = { d: 0, x: 850, y: 0 }, wMain = { d: SHIP_LAYOUT.deckIndex('main'), x: 850, y: 0 };
+  for (let i = 0; i < 600; i++) { navMini.moveWalker(wMini, 1, 0, 1 / 60, 300); mainNav.moveWalker(wMain, 1, 0, 1 / 60, 300); }
+  report(wMini.x === mini.platforms[0].x1 && wMini.y === mini.platforms[0].y && wMain.x === SHIP_LAYOUT.platforms[wMain.d].x1 && wMain.y === SHIP_LAYOUT.platforms[wMain.d].y && wMini.x !== wMain.x, 'moveWalker clamps to the walker\'s own ship\'s deck (tiny ship ends at ' + wMini.x + ', classic main deck carries on to ' + wMain.x + ')');
+  const f1 = { x: 900, y: -200, d: 0 }, f2 = { x: 900, y: -200, d: 0 }; // (x 900 is past the tiny ship's decks: she misses and is dropped back onto HER spawn deck)
+  let n1 = 0, n2 = 0;
+  while (navMini.fall(f1, 1 / 60, 300) && n1++ < 2000);
+  while (mainNav.fall(f2, 1 / 60, 300) && n2++ < 2000);
+  report(f1.y === mini.platforms[f1.d].y && f2.y === SHIP_LAYOUT.platforms[f2.d].y && f2.x === 900 && f1.x <= mini.platforms[mini.spawnPlatform].x1 - 30 && f1.x >= mini.platforms[mini.spawnPlatform].x0 + 30, `fall lands on the walker's own ship (the tiny ship misses at x 900 and drops him back on her spawn deck at x ${f1.x}; the classic ship catches him at x ${f2.x})`);
+  mini.applyBuild(BUILDS.classic);
+  report(navMini.connScale.length === 20 && navMini.connScale.every((v) => v === 1) && navDump(navMini, mini) === nav0Before && navMini.layout === mini, 'a nav rebuilds when ITS layout gets a new build (the tiny ship became the classic one: 20 connectors, same plans)');
+  report(mainNav.connScale.length === 20 && navDump(mainNav, SHIP_LAYOUT) === nav0Before, 'and ship 0\'s nav did not');
+
+  // converted systems read their own layout
+  const tiny = createLayout(minParts);
+  report(G.shipGeom(tiny).MAIN_X1 === tiny.platforms[tiny.deckIndex('main')].x1 && G.shipGeom(SHIP_LAYOUT).MAIN_X1 === G.MAIN_X1 && G.shipGeom(tiny).MAIN_X1 !== G.MAIN_X1 && G.shipGeom(tiny).BOW.x === tiny.platforms[0].x1 + 10, 'gunship.js shipGeom(layout): the rope\'s bow point and main deck end are per ship (the exported MAIN_X1 / BOW are ship 0\'s)');
+  report(SL.lightNames(SHIP_LAYOUT).length === 2 && SL.lightNames(tiny).length === 0 && SL.isSearchlight(SL.lightNames(SHIP_LAYOUT)[0]) && !SL.isSearchlight(SL.lightNames(SHIP_LAYOUT)[0], tiny), 'searchlight.js lightNames / isSearchlight are per layout');
+  report(ES.isEscortStation('Escort Fighter') && ES.isEscortStation('Escort Fighter', SHIP_LAYOUT) && !ES.isEscortStation('Escort Fighter', tiny), 'escort.js isEscortStation is per layout');
   return ok;
 }
+const one0 = (L, kind) => L.one(kind).n;
 
 const mode = argv[0];
 if (mode === '--snapshot-classic') {
@@ -1656,6 +1769,8 @@ if (mode === '--snapshot-classic') {
   process.exit((await checkFrames()) ? 0 : 1);
 } else if (mode === '--check-pose') {
   process.exit((await checkPose()) ? 0 : 1);
+} else if (mode === '--check-layouts') {
+  process.exit((await checkLayouts()) ? 0 : 1);
 } else if (mode === '--lint-pose') {
   process.exit((await lintPose(path.join(root, 'public'))) ? 0 : 1);
 } else if (mode === '--lint') {
