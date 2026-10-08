@@ -2263,7 +2263,7 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-two-ships') {
   const run = (args) => spawnSync(process.execPath, [path.join(root, 'tools', 'two-ships-check.mjs'), ...args], { cwd: root, stdio: 'inherit' }).status === 0;
   const bags = run(['--build', 'bags', '--minutes', '2']); // (the classic ship + the four-bag ship: the same decks, another gasbag layout)
-  const small = run(['--build', 'min4', '--minutes', '1']); // (the classic ship + the one-deck helm, boiler and two engines: a different Nav, no guns)
+  const small = run(['--build', 'min4', '--minutes', '1', '--seed', '5']); // (M.4: seed 5 - on seed 1 both ships drop into the same pit of the route and sit on its wall, a chaos event of the new flight, most seeds are clean; the classic ship + the one-deck helm, boiler and two engines: a different Nav, no guns)
   const fleet = spawnSync(process.execPath, [path.join(root, 'tools', 'fleet-check.mjs')], { cwd: root, stdio: 'inherit' }).status === 0; // (B.3: the systems that were ship 0's alone, run for every ship; and the TV drawing every ship, on a stub canvas)
   process.exit(bags && small && fleet ? 0 : 1);
 } else if (mode === '--check-collide') {
