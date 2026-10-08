@@ -108,8 +108,8 @@ function crewView(world, ship) {
     has: (t, k) => typeof k === 'string' && mine(k),
     ownKeys: (t) => Reflect.ownKeys(t).filter((k) => typeof k !== 'string' || mine(k)),
     getOwnPropertyDescriptor: (t, k) => (typeof k === 'string' && !mine(k) ? undefined : Reflect.getOwnPropertyDescriptor(t, k)),
-    set: () => { throw new Error('ctx.players is a read-only view of this ship\'s crew; add players to state.players'); },
-    deleteProperty: () => { throw new Error('ctx.players is a read-only view of this ship\'s crew; remove players from state.players'); },
+    set: (t, k, v) => { t[k] = v; return true; }, // (a view owns nothing: a player added or removed through it is added to / removed from the registry)
+    deleteProperty: (t, k) => delete t[k],
   });
 }
 

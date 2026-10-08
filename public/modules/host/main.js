@@ -48,7 +48,7 @@ const simulation = createSimulation();
   for (let i = 1; i < asked; i++) {
     let parts = BUILDS.classic;
     try { if (q.get('build2')) parts = JSON.parse(q.get('build2')); } catch (e) { console.warn('bad ?build2=', e); }
-    simulation.addShip({ parts, formation: { dx: -250 * i, dalt: -1150 * i } });
+    simulation.addShip(parts, { formation: { dx: -250 * i, dalt: -1150 * i } });
   }
   if (asked > 1) {
     for (const sh of simulation.state.ships) {

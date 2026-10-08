@@ -34,7 +34,7 @@ const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'
 // A sim with the classic ship and the second one, nBots bots each (assigned by player.ship), cast off.
 function boot({ bots = nBots, flying = true } = {}) {
   const sim = createSimulation();
-  const second = sim.addShip({ parts });
+  const second = sim.addShip(parts);
   const st = sim.state;
   for (const sh of st.ships) {
     const e = sh.layout.boarderEntryPoints;
@@ -140,6 +140,32 @@ const snap = (sh) => JSON.stringify({
   report(!!B5.ctx.wreck && B5.state.down > 0 && !A5.ctx.wreck && A5.state.down === 0 && A5.state.hull === 100 && st5.runEnd == null && st5.limp == null, 'ship1 breaks up while ship 0 flies on and the run does not end');
   step(sim5, Math.ceil((config.WRECK.TIME + 1) * 60));
   report(B5.ctx.wreck == null && B5.state.down === 0 && B5.state.hull === 100 && st5.runEnd == null, 'and she is rebuilt afterwards (hull 100, crew dropped back aboard)');
+}
+
+// ---- 3b. the main ship's wreck, the limp home and a restart with another ship in the sky ----
+{
+  const errs = [];
+  const run = (sim, n) => { for (let i = 0; i < n; i++) { try { step(sim, 1); } catch (e) { errs.push(String(e && e.stack).split('\n').slice(0, 3).join(' | ')); if (errs.length > 3) return; } } };
+  const { sim, st, A, B } = boot();
+  run(sim, 300);
+  A.sim.goingDown.tryStart(); // (the last stand is used up, so the next wreck is a real one: the voyage's spare gasbag takes it, she limps home)
+  A.ctx.goingDown = null;
+  A.ctx.gdGrace = 0;
+  A.sim.damageHull(1000);
+  report(A.state.down > 0 && !B.ctx.wreck && B.state.down === 0, 'ship 0 breaks up (limping home on a spare gasbag) while ship1 flies on');
+  run(sim, Math.ceil((config.LIMP.TIME + 2) * 60));
+  report(A.state.down === 0 && !A.ctx.wreck && st.limp == null && A.state.hull > 0, `ship 0 is patched up and flying again (hull ${A.state.hull.toFixed(0)}), the voyage went on`);
+  B.state.hull = 40;
+  A.state.hull = 30;
+  for (const sh of st.ships) sh.ctx.fires.push({ x: 500, d: sh.layout.deckIndex('main'), t: 0, prog: 0 });
+  sim.restart();
+  report(A.state.hull === 100 && B.state.hull === 100 && A.ctx.fires.length === 0 && B.ctx.fires.length === 0 && st.phase === 'lobby', 'restart(): a new game rebuilds BOTH ships (hull 100, no fires) and moors at the mast');
+  const droppedOnOwn = Object.values(st.players).every((p) => { const [e0, e1] = S.shipOf(st, p).layout.boarderEntryPoints; return p.fall && p.x >= e0.x - 1 && p.x <= e1.x + 1; });
+  report(droppedOnOwn, 'everyone drops back in over THEIR ship\'s boarding span');
+  sim.castOff();
+  run(sim, 1800);
+  report(errs.length === 0, `and 30 s later both fly on: ${errs.length} errors`);
+  for (const e of errs) console.log('  error: ' + e);
 }
 
 // ---- 4. the long run: both crewed, 0 errors, nobody walks the wrong ship ----

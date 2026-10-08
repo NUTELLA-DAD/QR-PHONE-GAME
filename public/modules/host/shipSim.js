@@ -1221,7 +1221,7 @@ export function createShipSim(world, ship, W) {
     state.ship.shake = 1.5;
   }
   // ... and rebuilt: a fresh ship with her crew dropped back aboard from above, as restartGame does for the main one.
-  function respawn() {
+  function respawn({ crew = true } = {}) {
     Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
     forces.reset();
     Object.assign(state.gasValve, { input: 0, auto: false });
@@ -1240,7 +1240,7 @@ export function createShipSim(world, ship, W) {
     searchlights.reset();
     modules.reset();
     goingDown.reset();
-    for (const player of Object.values(state.players)) {
+    for (const player of crew ? Object.values(state.players) : []) {
       const [e0, e1] = layout.boarderEntryPoints;
       Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x) });
       player.uk = null;

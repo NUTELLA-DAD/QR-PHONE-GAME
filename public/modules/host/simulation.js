@@ -13,7 +13,7 @@ import { createEnvironment, favour } from './environments.js';
 import { createSpotter } from './spotter.js';
 import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { refillBags } from './gasBags.js';
-import { createMainShip, createShip, mainShip, shipOf, eachShip, newGuns } from './ships.js';
+import { createMainShip, createShip, shipOf, eachShip, newGuns } from './ships.js';
 import { createShipSim, flushPresses } from './shipSim.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
@@ -75,9 +75,7 @@ export function createSimulation() {
     scroll: 0,
     GUNS: {}, // (name -> { bx, by, aim, home, arc, cd, ammo ... }: one per gun mount of the ship's layout, filled in below)
   };
-  state.ships = [createMainShip(state)]; // (B0: the ships in this sky; ships[0] wraps state.ship, its layout and course.dist by reference: ships.js, pose.js)
-  const main = mainShip(state);
-  const layout = main.layout; // (B.2: this file is the WORLD. What belongs to one ship is shipSim.js, made per ship by addShip; the voyage, the pacing director, the wreck and restart rules below work on the main ship, ships[0])
+  state.ships = []; // (the ships in this sky, ships.js: ships[0] is the main ship and wraps state.ship, her layout and course.dist by reference; addShip below makes them)
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
   // puff() is at a point in the WORLD (map coordinates; the sky is stored in the world since M.1). A ship's shipPuff() / shipPop() take a point in SHIP coordinates.
@@ -108,9 +106,24 @@ export function createSimulation() {
   // What a ship's systems may ask of the world: the helpers above, and (filled in as they are made) the world's systems and the run-level rules.
   const W = { puff, phoneFx, stat, credit, emitPlayerUi, wreck: (text) => wreck(text), finishLimp: () => finishLimp(), restartGame: () => restartGame() };
 
-  state.ventOpen = layout.vents.map(() => false);
-  state.GUNS = newGuns(layout);
-  main.sim = createShipSim(state, main, W); // (the main ship's systems: modules, bags, guns, steam, crew rules ... shipSim.js)
+  // Add a ship to this sky and give her her systems (shipSim.js). The first is the main ship: her body, layout and course position are the world state's own (parts = null).
+  // Another ship (the dev flag ?ships=2, the --check-two-ships gate; PvP and the gunship come later) takes her build (a parts list; opts.layout = a ready Layout), her `id`
+  // ('ship1' ...) and `formation` ({ dx, dalt }: how far along the sky she keeps station from ship 0, and the altitude she is held at relative to hers). Her crew are the
+  // players with player.ship = her id (ships.js transfer()). She gets the same systems as ship 0 except the environment and the gunship, which run for ship 0 only.
+  let hijack = null; // (made below, once the world's systems exist; every ship's hookshot needs it)
+  const addShip = (parts, opts = {}) => {
+    const sh = state.ships.length === 0 ? createMainShip(state) : createShip(state, { id: opts.id || 'ship' + state.ships.length, parts, layout: opts.layout, formation: opts.formation || { dx: -250, dalt: -1150 } });
+    state.ships.push(sh);
+    if (sh.main) {
+      state.ventOpen = sh.layout.vents.map(() => false);
+      state.GUNS = newGuns(sh.layout);
+    }
+    sh.sim = createShipSim(state, sh, W);
+    if (hijack) sh.sim.attach({ hijack });
+    return sh;
+  };
+  const main = addShip(null); // (B.2: this file is the WORLD. What belongs to one ship is shipSim.js; the voyage, the pacing director, the wreck and restart rules below work on the main ship, ships[0])
+  const layout = main.layout;
   // (the world's rules below that reach into the main ship: the wreck and restart, the supply balloon, the sky-dock shop, what the world's enemies shoot at)
   const { modules, engines, forces, raiders, escort, coil, searchlights, goingDown, fireSys, air, hitsShip, gasHoleAt, impact, damageHull, shieldBlocks, gnaw, interaction, taken, getHelm, prime } = main.sim;
 
@@ -176,7 +189,7 @@ export function createSimulation() {
     gunship.reset();
     goingDown.reset();
     for (const player of Object.values(state.players)) {
-      const [e0, e1] = layout.boarderEntryPoints;
+      const [e0, e1] = shipOf(state, player).layout.boarderEntryPoints; // (back aboard their own ship)
       Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x) });
       player.uk = null;
     }
@@ -239,10 +252,11 @@ export function createSimulation() {
     course.restart();
     modules.reset();
     goingDown.reset();
+    eachShip(state, (sh) => { if (!sh.main) sh.sim.respawn({ crew: false }); }); // (another ship is rebuilt with the new game)
     if (state.weather) Object.assign(state.weather, { storm: 0, gust: 0, flash: 0, bolt: null });
     for (const player of Object.values(state.players)) {
       // Drop everyone back aboard from above, as when joining.
-      const [e0, e1] = layout.boarderEntryPoints;
+      const [e0, e1] = shipOf(state, player).layout.boarderEntryPoints;
       Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x), stats: {} });
       player.uk = null; // resend the phone's buttons
     }
@@ -777,7 +791,7 @@ export function createSimulation() {
   const weather = createWeather({ state, impact, puff });
   const env = createEnvironment({ state, puff, phoneFx, impact, damageHull, ignite: fireSys.ignite }); // ice, thermals, blizzards (rules in environments.js)
   const airFor = { startFlight: (player, ...a) => shipOf(state, player).sim.air.startFlight(player, ...a) }; // (a stolen plane's rider bails out of it from the ship they belong to)
-  const hijack = createHijack({ state, puff, phoneFx, air: airFor }); // stolen dogfighters
+  hijack = createHijack({ state, puff, phoneFx, air: airFor }); // stolen dogfighters
   Object.assign(W, { course, env, gunship, hijack });
   main.sim.attach({ hijack }); // (the personal grappling hook needs the hijack: shipSim.js)
   // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
@@ -932,17 +946,6 @@ export function createSimulation() {
       const dx = main.pose.x - x0;
       if (Math.abs(dx) < 60 && dt > 0) state.shipVx = dx / dt; // (a jump of the course, a new mission or a tow, is no speed)
     }
-  };
-
-  // Add another ship to this sky (B.2): her own build (a parts list) or layout, and where she keeps station from ship 0 ({ dx, dalt }: along the sky, and the altitude she is held at relative to hers). Her crew are the players with
-  // player.ship = her id (ships.js transfer()). Another ship gets the same systems as ship 0 (shipSim.js) except the environment and the gunship, which run for ship 0 only.
-  const addShip = ({ parts, layout: lay, id, formation } = {}) => {
-    const n = state.ships.length;
-    const sh = createShip(state, { id: id || 'ship' + n, parts, layout: lay, formation: formation || { dx: -250, dalt: -1150 } });
-    state.ships.push(sh);
-    sh.sim = createShipSim(state, sh, W);
-    sh.sim.attach({ hijack });
-    return sh;
   };
 
   return {
