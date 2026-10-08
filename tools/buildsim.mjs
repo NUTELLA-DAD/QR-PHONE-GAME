@@ -4,6 +4,9 @@
 //        node tools/buildsim.mjs --check-classic    the classic ship must still equal the frozen snapshot
 //        node tools/buildsim.mjs --lint             no module-level captures of derived layout values (they go stale), no hard-coded ship reference points
 //        node tools/buildsim.mjs --lint-pose        (also part of --lint) B0: no NEW single-ship spellings (+course.dist, +-state.ship.alt, scrollSpeed, SHIP_LAYOUT imports, module-level per-ship captures) against tools/fixtures/pose-lint-allow.json
+//        node tools/buildsim.mjs --check-golden     B0: re-run the golden behaviour baseline (voyagesim, botsim 3x3, cave contacts, capability) against tools/fixtures/golden.json; --snapshot-golden --force re-captures it
+//        node tools/buildsim.mjs --check-frames     B0: frame-by-frame old vs new (world x/y, hull, kills; tolerance 1e-6 -> 2% over 3 min) + noise bands; --snapshot-frames --force re-captures
+//        node tools/buildsim.mjs --check-pose       B0: pose.js / ships.js / layout-parameter helper unit checks
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
 //        node tools/buildsim.mjs --check-validator   S.5: broken builds must FAIL/WARN with the right message (the classic passes clean)
@@ -952,6 +955,7 @@ async function checkMinimum() {
   console.log('\n  capability (calm sky, helm flat out; sail fully raised at step 5)');
   console.log('  step                 top speed px/s   climb px/s   dive px/s');
   steps.forEach((s, i) => console.log('  ' + names[i].padEnd(20) + String(Math.round(caps[i].speed)).padStart(10) + String(Math.round(caps[i].climb)).padStart(14) + String(Math.round(caps[i].dive)).padStart(13)));
+  if (has('caps-only')) { console.log('CAPS ' + JSON.stringify(caps)); return ok; } // (B0: tools/buildsim.mjs --check-golden reads the capability table only)
   report(caps[1].speed >= caps[0].speed - 1 && caps[2].speed >= caps[1].speed - 1, 'a helm and a boiler do not slow her: the wind alone (' + Math.round(caps[0].speed) + ' px/s) is her top speed until she has engines');
   report(caps[3].speed > caps[2].speed * 1.5, `engines make her much faster (${Math.round(caps[2].speed)} -> ${Math.round(caps[3].speed)} px/s)`);
   report(caps[4].speed > caps[3].speed * 1.05, `a raised sail adds speed on top (${Math.round(caps[3].speed)} -> ${Math.round(caps[4].speed)} px/s)`);
@@ -1365,6 +1369,242 @@ async function checkForces() {
   return ok;
 }
 
+// ---- B0: the GOLDEN behaviour baseline, the frame-equivalence harness and the pose checks (MOVEMENT.md) --------------------------------------------------
+// --snapshot-golden --force   record what the game does today (tools/fixtures/golden.json + golden-table.txt): voyagesim win rate and median minutes (Normal and
+//                             Easy, 10 runs), botsim 3 seeds x 3 maps (missions, minutes per mission, hull, kills, wrecks, hauls, blowouts, cave contacts and tows),
+//                             the --check-minimum capability table (top speed, climb, dive) and 3 seeded cave runs' contact counts
+// --check-golden [--skip-voyage]   re-run all of it and compare, with tolerances: missions and wrecks exact, minutes +-15%, win rate inside a 10-run binomial
+//                             band, contacts +-20%, capability +-10%, the rest +-15% (each with a small absolute allowance). Prints a table; exit 1 on a miss.
+//                             Re-capture with --snapshot-golden --force when a PLANNED change moves the numbers (fire S.5f/g, engines S.5h, M.1 ...).
+// --snapshot-frames --force   record 3-minute traces (botsim --trace) of three maps and the summary noise bands over 5 extra seeds (tools/fixtures/frames/)
+// --check-frames              re-run and compare old vs new frame by frame: ship world x/y, hull, kills; the tolerance grows from 1e-6 at t=0 to 2% at 3 min;
+//                             and the summaries of seeds 1-3 must sit inside the noise bands. This is the gate once byte-identical output is retired (M.1+).
+// --check-pose                unit checks of pose.js / ships.js / the layout-param helpers
+const GOLDEN = path.join(root, 'tools', 'fixtures', 'golden.json');
+const FRAMES = path.join(root, 'tools', 'fixtures', 'frames');
+const nodeOut = (args, env = {}) => new Promise((resolve) => {
+  const c = spawn(process.execPath, args, { cwd: root, env: { ...process.env, ...env } });
+  let out = '';
+  c.stdout.on('data', (d) => (out += d));
+  c.stderr.on('data', (d) => (out += d));
+  c.on('close', (code) => resolve({ code, out }));
+});
+const GOLD_MAPS = ['network', 'route', 'open'];
+
+// voyagesim --runs 10 for one difficulty -> { wins, runs, medianMin }
+async function goldVoyage(difficulty) {
+  const r = await nodeOut(['tools/voyagesim.mjs', '--runs', '10', '--difficulty', difficulty]);
+  const m = r.out.match(/MODE \w+: median ([\d.]+) min .*victory rate (\d+)\/(\d+)/);
+  if (!m) throw new Error('voyagesim ' + difficulty + ' gave no MODE line:\n' + r.out.slice(-400));
+  return { medianMin: +m[1], wins: +m[2], runs: +m[3] };
+}
+// one botsim (classic, via --build classic so BUILD_STATS comes with it) -> the numbers the golden keeps
+async function goldBotsim({ map, seed, minutes }) {
+  const r = await nodeOut(['tools/botsim.mjs', '--build', 'classic', '--bots', '8', '--minutes', String(minutes), '--seed', String(seed), '--map', map]);
+  const j = r.out.match(/^BUILD_STATS (.*)$/m);
+  if (!j) throw new Error(`botsim ${map} seed ${seed} crashed:\n` + r.out.slice(-400));
+  const s = JSON.parse(j[1]);
+  const each = r.out.match(/minutes each: ([\d. ]+), average ([\d.]+)/);
+  const blow = r.out.match(/blowouts (\d+)/);
+  return {
+    missions: s.missions, minPerMission: each ? +each[2] : null, hull: s.avgHull, kills: s.kills, wrecks: s.wrecks,
+    hauls: s.hauled.ammo + s.hauled.coal + s.hauled.holes + s.hauled.fires, blowouts: blow ? +blow[1] : 0,
+    contacts: s.flight.contacts, tows: s.tows, errors: s.errors,
+  };
+}
+// the capability table of --check-minimum (calm sky, helm flat out)
+async function goldCaps() {
+  const r = await nodeOut(['tools/buildsim.mjs', '--check-minimum', '--caps-only']);
+  const m = r.out.match(/^CAPS (.*)$/m);
+  if (!m) throw new Error('--check-minimum --caps-only gave no CAPS line:\n' + r.out.slice(-400));
+  return JSON.parse(m[1]);
+}
+async function captureGolden({ skipVoyage = false } = {}) {
+  const g = { captured: new Date().toISOString().slice(0, 10), voyage: {}, botsim: {}, caves: {}, caps: null };
+  if (!skipVoyage) for (const d of ['normal', 'easy']) g.voyage[d] = await goldVoyage(d);
+  const jobs = [];
+  for (const map of GOLD_MAPS) for (const seed of [1, 2, 3]) jobs.push(async () => { g.botsim[map + '-' + seed] = await goldBotsim({ map, seed, minutes: 10 }); });
+  for (const seed of [11, 12, 13]) jobs.push(async () => { g.caves['network-' + seed] = await goldBotsim({ map: 'network', seed, minutes: 4 }); });
+  jobs.push(async () => { g.caps = await goldCaps(); });
+  await pool(jobs, 4);
+  g.botsim = Object.fromEntries(Object.entries(g.botsim).sort());
+  g.caves = Object.fromEntries(Object.entries(g.caves).sort());
+  return g;
+}
+const goldTable = (g) => {
+  const L = [];
+  L.push('GOLDEN behaviour baseline captured ' + g.captured + ' (node tools/buildsim.mjs --snapshot-golden --force to re-capture)');
+  for (const [d, v] of Object.entries(g.voyage || {})) L.push(`voyagesim ${d}: ${v.wins}/${v.runs} victories, median ${v.medianMin} min`);
+  L.push('botsim 10 min, 8 bots: run          missions  min/mission   hull  kills wrecks hauls blowouts contacts tows');
+  for (const [k, b] of Object.entries(g.botsim)) L.push('  ' + k.padEnd(28) + [b.missions, b.minPerMission == null ? '-' : b.minPerMission.toFixed(1), b.hull, b.kills, b.wrecks, b.hauls, b.blowouts, b.contacts, b.tows].map((v) => String(v).padStart(10)).join(''));
+  L.push('cave runs (network, 4 min):  contacts / tows ' + Object.entries(g.caves).map(([k, b]) => `${k} ${b.contacts}/${b.tows}`).join(', '));
+  if (g.caps) { L.push('capability px/s (speed climb dive): ' + g.caps.map((c, i) => `step${i + 1} ${Math.round(c.speed)}/${Math.round(c.climb)}/${Math.round(c.dive)}`).join(', ')); }
+  return L.join('\n') + '\n';
+};
+async function snapshotGolden() {
+  const g = await captureGolden();
+  fs.writeFileSync(GOLDEN, JSON.stringify(g, null, 1) + '\n');
+  fs.writeFileSync(path.join(root, 'tools', 'fixtures', 'golden-table.txt'), goldTable(g));
+  console.log(goldTable(g));
+  console.log('wrote ' + GOLDEN);
+}
+// tolerance helper: ok when |new-old| <= max(abs, rel * |old|)
+const within = (nu, old, rel, abs = 0) => Math.abs(nu - old) <= Math.max(abs, rel * Math.abs(old)) + 1e-9;
+async function checkGolden() {
+  if (!fs.existsSync(GOLDEN)) { console.log('FAIL no golden: run node tools/buildsim.mjs --snapshot-golden --force first'); return false; }
+  const old = JSON.parse(fs.readFileSync(GOLDEN, 'utf8'));
+  const skipVoyage = has('skip-voyage') || !Object.keys(old.voyage || {}).length;
+  const nu = await captureGolden({ skipVoyage });
+  let ok = true;
+  const rows = [];
+  const row = (what, o, n, band, good) => { rows.push({ what, o, n, band, good }); if (!good) ok = false; };
+  for (const [d, o] of Object.entries(old.voyage || {})) {
+    const n = nu.voyage[d];
+    if (!n) { console.log(`SKIP voyagesim ${d}`); continue; }
+    const p = Math.min(0.95, Math.max(0.05, o.wins / o.runs)); // (two 10-run samples differ by ~ sqrt(2 n p q); 2 sigma, at least 1 win)
+    const band = Math.max(1, Math.ceil(2 * Math.sqrt(2 * o.runs * p * (1 - p))));
+    row(`voyage ${d} victories /${o.runs}`, o.wins, n.wins, `+-${band}`, Math.abs(n.wins - o.wins) <= band);
+    row(`voyage ${d} median minutes`, o.medianMin, n.medianMin, '+-15%', within(n.medianMin, o.medianMin, 0.15, 0.3));
+  }
+  const cmp = (set, label) => {
+    for (const k of Object.keys(old[set])) {
+      const o = old[set][k], n = nu[set][k], tag = `${label} ${k}`;
+      row(tag + ' missions', o.missions, n.missions, 'exact', n.missions === o.missions);
+      if (o.minPerMission != null || n.minPerMission != null) row(tag + ' min/mission', o.minPerMission, n.minPerMission, '+-15%', o.minPerMission != null && n.minPerMission != null && within(n.minPerMission, o.minPerMission, 0.15, 0.2));
+      row(tag + ' wrecks', o.wrecks, n.wrecks, 'exact', n.wrecks === o.wrecks);
+      for (const f of ['hull', 'kills', 'hauls']) row(`${tag} ${f}`, o[f], n[f], '+-15%', within(n[f], o[f], 0.15, f === 'hull' ? 2 : 2));
+      row(tag + ' blowouts', o.blowouts, n.blowouts, 'exact', n.blowouts === o.blowouts);
+      row(tag + ' contacts', o.contacts, n.contacts, '+-20%', within(n.contacts, o.contacts, 0.2, 2));
+      row(tag + ' tows', o.tows, n.tows, '+-20%', within(n.tows, o.tows, 0.2, 1));
+      row(tag + ' errors', 0, n.errors, 'exact', n.errors === 0);
+    }
+  };
+  cmp('botsim', 'botsim');
+  cmp('caves', 'cave');
+  (old.caps || []).forEach((o, i) => ['speed', 'climb', 'dive'].forEach((f) => row(`capability step ${i + 1} ${f}`, Math.round(o[f]), Math.round(nu.caps[i][f]), '+-10%', within(nu.caps[i][f], o[f], 0.1, 3))));
+  const w = Math.max(...rows.map((r) => r.what.length));
+  if (has('verbose') || rows.some((r) => !r.good)) console.log(`${pad('check', w)}  ${pad('golden', 9)} ${pad('now', 9)} ${pad('band', 7)} result`);
+  for (const r of rows) if (!r.good || has('verbose')) console.log(`${pad(r.what, w)}  ${pad(r.o == null ? '-' : r.o, 9)} ${pad(r.n == null ? '-' : r.n, 9)} ${pad(r.band, 7)} ${r.good ? 'ok' : 'MISS'}`);
+  const bad = rows.filter((r) => !r.good).length;
+  console.log(`${bad ? 'FAIL' : 'PASS'} golden: ${rows.length - bad}/${rows.length} within their bands (captured ${old.captured}${skipVoyage ? '; voyagesim skipped' : ''}); add --verbose to list every row`);
+  return ok;
+}
+
+// ---- frame equivalence ----
+const FRAME_RUNS = GOLD_MAPS.map((map) => ({ map, seed: 1 }));
+const FRAME_MIN = 3;
+const NOISE_SEEDS = [1, 2, 3, 4, 5, 6, 7, 8]; // (the 3 golden seeds + 5 extra)
+async function traceRun({ map, seed }, file) {
+  const r = await nodeOut(['tools/botsim.mjs', '--build', 'classic', '--bots', '8', '--minutes', String(FRAME_MIN), '--seed', String(seed), '--map', map, '--trace', file, '--trace-every', '30']);
+  const j = r.out.match(/^BUILD_STATS (.*)$/m);
+  if (!j) throw new Error(`botsim ${map} seed ${seed} crashed:\n` + r.out.slice(-400));
+  const s = JSON.parse(j[1]);
+  return { kills: s.kills, hull: s.avgHull, hauls: s.hauled.ammo + s.hauled.coal + s.hauled.holes + s.hauled.fires, missions: s.missions, wrecks: s.wrecks, contacts: s.flight.contacts, dist: Math.round(s.flight.speed) };
+}
+const readTrace = (file) => fs.readFileSync(file, 'utf8').replace(/\r/g, '').trim().split('\n').slice(1).map((l) => { const c = l.split('\t'); return { step: +c[0], phase: c[1], x: +c[3], y: +c[4], hull: +c[10], kills: +c[12] }; });
+async function snapshotFrames() {
+  fs.mkdirSync(FRAMES, { recursive: true });
+  const summaries = {}, jobs = [];
+  for (const r of FRAME_RUNS) jobs.push(async () => { await traceRun(r, path.join(FRAMES, `ref-${r.map}-${r.seed}.tsv`)); });
+  for (const map of GOLD_MAPS) for (const seed of NOISE_SEEDS) jobs.push(async () => { (summaries[map] ??= {})[seed] = await traceRun({ map, seed }, path.join(os.tmpdir(), `airship-frames-${process.pid}-${map}-${seed}.tsv`)); });
+  await pool(jobs, 4);
+  const bands = {};
+  for (const map of GOLD_MAPS) {
+    bands[map] = {};
+    for (const f of ['kills', 'hull', 'hauls', 'missions', 'wrecks', 'contacts']) {
+      const v = NOISE_SEEDS.map((s) => summaries[map][s][f]);
+      bands[map][f] = { min: Math.min(...v), max: Math.max(...v) };
+    }
+  }
+  fs.writeFileSync(path.join(FRAMES, 'bands.json'), JSON.stringify({ captured: new Date().toISOString().slice(0, 10), seeds: NOISE_SEEDS, minutes: FRAME_MIN, bands, summaries }, null, 1) + '\n');
+  console.log('wrote ' + FRAMES + ' (3 reference traces + noise bands over seeds ' + NOISE_SEEDS.join(',') + ')');
+  for (const map of GOLD_MAPS) console.log('  ' + map.padEnd(8) + Object.entries(bands[map]).map(([f, b]) => `${f} ${b.min}..${b.max}`).join('  '));
+}
+async function checkFrames() {
+  const bandFile = path.join(FRAMES, 'bands.json');
+  if (!fs.existsSync(bandFile)) { console.log('FAIL no frame reference: run node tools/buildsim.mjs --snapshot-frames --force first'); return false; }
+  const ref = JSON.parse(fs.readFileSync(bandFile, 'utf8'));
+  let ok = true;
+  const jobs = [];
+  const res = {};
+  for (const r of FRAME_RUNS) jobs.push(async () => { const f = path.join(os.tmpdir(), `airship-frames-now-${process.pid}-${r.map}.tsv`); res[r.map] = { sum: await traceRun(r, f), file: f }; });
+  await pool(jobs, 3);
+  const T = FRAME_MIN * 60 * 60; // steps in the run
+  for (const r of FRAME_RUNS) {
+    const A = readTrace(path.join(FRAMES, `ref-${r.map}-${r.seed}.tsv`)), B = readTrace(res[r.map].file);
+    fs.unlinkSync(res[r.map].file);
+    // tolerance (relative to the value, with a floor of 1 so zeros and small counts do not blow up) grows linearly from 1e-6 to 2% over the run
+    let first = null, worst = 0, n = Math.min(A.length, B.length);
+    for (let i = 0; i < n && !first; i++) {
+      const tol = 1e-6 + (0.02 - 1e-6) * (A[i].step / T);
+      for (const f of ['x', 'y', 'hull', 'kills']) {
+        const e = Math.abs(A[i][f] - B[i][f]) / Math.max(1, Math.abs(A[i][f]));
+        worst = Math.max(worst, e / tol);
+        if (e > tol) { first = { i, f, a: A[i][f], b: B[i][f], step: A[i].step, tol }; break; }
+      }
+    }
+    const good = !first && A.length === B.length;
+    if (!good) ok = false;
+    console.log(`${good ? 'PASS' : 'FAIL'} frames ${r.map} seed ${r.seed}: ${n} frames compared (${A.length} reference, ${B.length} now), worst error ${(worst * 100).toFixed(0)}% of the tolerance${first ? `; first miss at step ${first.step} (${(first.step / 3600).toFixed(2)} min): ${first.f} ${first.a} -> ${first.b}, tolerance ${first.tol.toExponential(1)}` : ''}`);
+    // the summary of this run must sit inside the noise band of 8 seeds (a quarter of the spread, and 2, as allowance)
+    const s = res[r.map].sum;
+    const bad = [];
+    for (const [f, b] of Object.entries(ref.bands[r.map])) { const pad2 = Math.max(2, 0.25 * (b.max - b.min)); if (s[f] < b.min - pad2 || s[f] > b.max + pad2) bad.push(`${f} ${s[f]} outside ${b.min}..${b.max}`); }
+    if (bad.length) ok = false;
+    console.log(`${bad.length ? 'FAIL' : 'PASS'} noise bands ${r.map}: ${Object.entries(ref.bands[r.map]).map(([f, b]) => `${f} ${s[f]} in ${b.min}..${b.max}`).join(', ')}${bad.length ? '  <-- ' + bad.join('; ') : ''}`);
+  }
+  return ok;
+}
+
+// ---- pose / ship scaffolding checks ----
+async function checkPose() {
+  globalThis.window ??= globalThis;
+  const store = new Map();
+  globalThis.localStorage ??= { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+  globalThis.requestAnimationFrame ??= (f) => setTimeout(f, 16);
+  const { createSimulation } = await load('modules/host/simulation.js');
+  const { SHIP_LAYOUT, all, one, kindOf, is, hasKind, nearest, deckIndex, isNestDeck, reviveSpot } = await load('shipLayout.js');
+  const P = await load('modules/host/pose.js');
+  const S = await load('modules/host/ships.js');
+  let ok = true;
+  const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
+  const sim = createSimulation(), st = sim.state;
+  sim.castOff();
+  for (let i = 0; i < 600; i++) sim.update(1 / 60);
+  const ship = S.mainShip(st);
+  report(st.ships.length === 1 && ship === st.ships[0] && ship.id === 'player', 'state.ships = [the main ship, id "player"]');
+  report(ship.state === st.ship && ship.layout === SHIP_LAYOUT && ship.world === st, 'the main ship wraps state.ship, SHIP_LAYOUT and the host state by reference');
+  report(S.shipOf(st, {}) === ship && S.shipOf(st, { ship: 'player' }) === ship && S.shipOf(st, { ship: 'nobody' }) === ship && S.shipOf(st, null) === ship, 'shipOf: no ship / "player" / an unknown id all give the main ship');
+  let count = 0; S.eachShip(st, (s, i) => { if (s === ship && i === 0) count++; });
+  report(count === 1, 'eachShip visits the one ship');
+  const p = ship.pose;
+  report(p.x === st.course.dist && p.y === -st.ship.alt && p.f === 1 && p.pitch === (st.ship.pitch || 0) && p.turn === 0 && P.poseOf(ship) === p, `pose reads the old numbers (x ${p.x.toFixed(1)} = course.dist, y ${p.y.toFixed(1)} = -alt, f +1)`);
+  report(p.vx === (await load('modules/host/course.js')).scrollSpeed(st) && p.vy === -(st.ship.vy || 0), 'pose.vx / vy are the scroll speed and the climb rate');
+  let exact = true;
+  for (let i = 0; i < 2000; i++) {
+    const sx = (Math.random() - 0.5) * 3000, sy = (Math.random() - 0.5) * 3000;
+    const w = P.toWorld(ship, sx, sy);
+    if (w.x !== sx + st.course.dist || w.y !== sy - st.ship.alt) exact = false;
+    const b = P.toShip(ship, w.x, w.y);
+    if (b.x !== w.x - st.course.dist || b.y !== w.y + st.ship.alt) exact = false;
+    if (P.aimToWorld(ship, sx) !== sx || P.aimToShip(ship, sy) !== sy) exact = false;
+  }
+  report(exact, 'toWorld / toShip / aimTo* are bit-identical to the old inline arithmetic (2000 random points)');
+  const d0 = st.course.dist; p.x = d0 + 5; const moved = st.course.dist === d0 + 5; p.x = d0;
+  report(moved && st.course.dist === d0, 'writing pose.x moves course.dist');
+  let threw = false; try { p.f = -1; } catch { threw = true; }
+  report(threw && p.f === 1, 'pose.f is fixed at +1 until COME ABOUT exists');
+  // the mirror maths, on a stand-in ship (f = -1 about midPoint.x = 200)
+  const fake = { pose: { x: 1000, y: -50, f: -1 }, layout: { midPoint: { x: 200 } } };
+  const fw = P.toWorld(fake, 250, 30), fb = P.toShip(fake, fw.x, fw.y);
+  report(fw.x === 1150 && fw.y === -20 && fb.x === 250 && fb.y === 30 && Math.abs(P.aimToWorld(fake, 0) - Math.PI) < 1e-12 && Math.abs(P.aimToShip(fake, P.aimToWorld(fake, 0.7)) - 0.7) < 1e-12, 'a facing-left stand-in ship mirrors about her middle and round-trips');
+  // layout-param helpers: the default is the global layout; a second layout is answered on its own
+  const L2 = { version: 1, engines: [], stations: [{ n: 'Tiller', kind: 'helm', x: 10, d: 0 }, { n: 'Tiller 2', kind: 'helm', x: 90, d: 0 }], platforms: [{ id: 'main' }], spawnPlatform: 0, boarderEntryPoints: [{ x: 0 }, { x: 50 }] };
+  report(all('gun').length === all('gun', SHIP_LAYOUT).length && one('helm') === one('helm', SHIP_LAYOUT) && kindOf('Helm') === kindOf('Helm', SHIP_LAYOUT) && hasKind('engine') === hasKind('engine', SHIP_LAYOUT) && deckIndex('main') === deckIndex('main', SHIP_LAYOUT), 'the layout argument defaults to the global SHIP_LAYOUT');
+  report(one('helm', L2).n === 'Tiller' && all('helm', L2).length === 2 && kindOf('Tiller 2', L2) === 'helm' && kindOf('Tiller 2') === undefined && is('Tiller', 'helm', L2) && !hasKind('engine', L2) && hasKind('helm', L2) && nearest('helm', { d: 0, x: 80 }, L2).n === 'Tiller 2' && deckIndex('main', L2) === 0 && !isNestDeck('main', L2) && reviveSpot(L2).d === 0, 'a second layout is answered on its own (and does not leak into the global one)');
+  return ok;
+}
+
 const mode = argv[0];
 if (mode === '--snapshot-classic') {
   // Only meaningful before S.1 (when the layout was hand-written); after that it would snapshot the generated layout.
@@ -1404,6 +1644,18 @@ if (mode === '--snapshot-classic') {
   if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/pose-lint-allow.json from the current code (do this only when the counts went DOWN).'); process.exit(2); }
   fs.writeFileSync(POSE_ALLOW, JSON.stringify(poseCounts(path.join(root, 'public')), null, 1) + '\n');
   console.log('wrote ' + POSE_ALLOW);
+} else if (mode === '--snapshot-golden') {
+  if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/golden.json from the current code (do it when a PLANNED change legitimately moves the numbers).'); process.exit(2); }
+  await snapshotGolden();
+} else if (mode === '--check-golden') {
+  process.exit((await checkGolden()) ? 0 : 1);
+} else if (mode === '--snapshot-frames') {
+  if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/frames/ from the current code.'); process.exit(2); }
+  await snapshotFrames();
+} else if (mode === '--check-frames') {
+  process.exit((await checkFrames()) ? 0 : 1);
+} else if (mode === '--check-pose') {
+  process.exit((await checkPose()) ? 0 : 1);
 } else if (mode === '--lint-pose') {
   process.exit((await lintPose(path.join(root, 'public'))) ? 0 : 1);
 } else if (mode === '--lint') {
