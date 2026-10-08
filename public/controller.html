@@ -74,9 +74,9 @@ body:not(.helm) #buttons{width:calc(var(--a) + var(--k) + var(--gap))}
 #act{width:var(--a);height:var(--a);right:0;bottom:0;background:#f3ead6;color:#2b2622;font-size:clamp(14px,4vh,20px)}
 #atk{width:var(--k);height:var(--k);right:calc(var(--a) + var(--gap));bottom:0;background:#3a5a8c;font-size:clamp(13px,3.6vh,18px)}
 #jump{width:var(--j);height:var(--j);right:calc(var(--a) + var(--gap) + (var(--k) - var(--j)) / 2);top:0;background:#2e8b57;font-size:clamp(12px,3.2vh,17px)}
-#grab{width:var(--g);height:var(--g);right:0;top:0;border-radius:24%;background:#f2b134;color:#2b2622;font-size:clamp(10px,2.7vh,14px);padding:3px;gap:1px}
-#grab .ic{font-size:1.9em}
-#grab .tx{line-height:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#grab{width:var(--g);height:var(--g);right:0;top:0;border-radius:24%;background:#f2b134;color:#2b2622;font-size:clamp(9px,2.5vh,13px);padding:3px;gap:1px}
+#grab .ic{font-size:1.6em}
+#grab .tx{line-height:1;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 body.lefty #act{right:auto;left:0}
 body.lefty #atk{right:auto;left:calc(var(--a) + var(--gap))}
 body.lefty #jump{right:auto;left:calc(var(--a) + var(--gap) + (var(--k) - var(--j)) / 2)}
@@ -148,6 +148,12 @@ h1{font-size:28px}
 #me{font-weight:700}
 #info b{font-weight:700}
 #info .warn{color:#a8443f}
+#me{min-width:0}
+#myname{max-width:90px;overflow:hidden;text-overflow:ellipsis}
+#carry{min-width:0;flex:0 1 auto;overflow:hidden}
+#carrytx{overflow:hidden;text-overflow:ellipsis}
+/* Narrow phones: keep the top strip on ONE line even with LEAVE showing (the button area below is sized from what is left). */
+@media (max-width:660px){#carry{font-size:15px;padding:0 6px 0 4px}#carry .cico{font-size:22px}#leave{min-width:96px;padding:2px 10px;font-size:17px;min-height:40px}#help{min-width:76px;padding:2px 8px}#strip{gap:6px}}
 </style></head><body>
 <div id="vjoin" class="view show">
   <h1>Join the crew</h1>

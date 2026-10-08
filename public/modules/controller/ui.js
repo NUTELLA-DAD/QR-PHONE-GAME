@@ -180,7 +180,7 @@ export function createControllerUI({ network }) {
     const grab = !next.locked && next.grab ? next.grab : null;
     $('grab').style.display = grab ? '' : 'none';
     if (grab) {
-      setButton('grab', iconFor(grab), grab);
+      setButton('grab', iconFor(grab), grab.replace('extinguisher', 'fire ext.')); // (the small button has no room for the long word)
       $('grab').classList.toggle('swap', !!next.gswap);
       $('grab').classList.toggle('lock', !!next.glock);
     }

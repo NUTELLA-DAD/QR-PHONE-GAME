@@ -200,6 +200,45 @@ tapGrab();
 step(1);
 check(me.lock === 'Bomb Bay', 'Grab takes the seat');
 
+// Hold actions count only while the label they started on is still showing: a hold begun on another label does no work.
+stand('main', 700, 'hammer');
+state.breaches.push({ x: 700, d: D('main'), prog: 0 });
+step(3);
+check(ui().label === 'Patch hole' && ui().hold === true && ui().grab === 'Take Lightning Coil', `a hole in reach with a hammer in hand: Action "${ui().label}" (hold), Grab "${ui().grab}"`);
+applyPlayerInput(state, me, { jx: 0, jy: 0, fire: 1, aid: 'rack|sword|hammer' });
+step(30);
+check(state.breaches[0].prog === 0, 'holding on the wrong label does no work');
+applyPlayerInput(state, me, { jx: 0, jy: 0, fire: 1, aid: ui().aid });
+step(30);
+check(state.breaches[0].prog > 0.2 && ui().prog >= 0, `holding on the right label patches (progress ${state.breaches[0].prog.toFixed(2)}, shown to the phone as ${ui().prog}/10)`);
+applyPlayerInput(state, me, { jx: 0, jy: 0, fire: 0 });
+state.breaches.length = 0;
+step(3);
+
+// Soak: a person mashing every button at random while the ship is flying with bots aboard raises no errors and never loses the run.
+{
+  const sim2 = createSimulation();
+  const st2 = sim2.state;
+  const e = SHIP_LAYOUT.boarderEntryPoints;
+  for (let i = 0; i < 4; i++) st2.players['bot' + i] = { id: 'bot' + i, bot: true, name: 'Bot' + i, species: config.CREW_SPECIES[0], color: '#3a86ff', x: e[0].x + i * 40, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
+  const h = (st2.players.h = { id: 'h', name: 'Mash', species: config.CREW_SPECIES[0], color: '#e63946', x: e[0].x + 200, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true });
+  sim2.setSocket({ emit: () => {} });
+  sim2.castOff();
+  let n = 0;
+  let grabs = 0;
+  for (let i = 0; i < 60 * 150; i++) {
+    simClock += dt * 1000;
+    if (i % 15 === 0) {
+      const u = h.ui || {};
+      const r = Math.random();
+      applyPlayerInput(st2, h, { jx: Math.random() < 0.7 ? Math.sign(Math.random() - 0.5) * Math.random() : 0, jy: Math.random() < 0.1 ? (Math.random() < 0.5 ? -1 : 1) : 0, ...(r < 0.3 ? { act: 1, aid: Math.random() < 0.8 ? u.aid : 'stale' } : r < 0.5 ? { grab: 1, aid: u.gaid } : r < 0.6 ? { atk: 1 } : r < 0.65 ? { jump: 1 } : r < 0.8 ? { fire: 1, aid: u.aid } : { fire: 0 }) });
+      if (r >= 0.3 && r < 0.5) grabs++;
+    }
+    try { sim2.update(dt); n++; } catch (err) { errs.push(String(err.stack).split('\n').slice(0, 3).join(' | ')); break; }
+  }
+  check(n === 60 * 150, `soak: 150 s of random button mashing by a person (${grabs} grab presses), ship ${st2.phase}`);
+}
+
 // A knocked-out or falling player's queued presses are thrown away at once.
 for (const [what, set] of [['knocked out', () => { me.ko = 5; }], ['falling', () => { me.fall = true; }]]) {
   stand('main', 860);
