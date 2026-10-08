@@ -212,6 +212,7 @@ export function createShipCollide(D) {
       S.sim.impact(sx, sy, Math.min(C.MAX_POWER, (C.DAMAGE * c.closing) / 100));
       kickForce(S.ctx, { x: sx, y: sy }, sign * c.nx * S.pose.f, sign * c.ny, C.KICK * Math.min(3, c.closing / 150)); // (her bow's x: the world's times her facing)
     }
+    for (const S of [A, B]) S.sim.crash(toShipX(S, c.x), toShipY(S, c.y), c.closing, 'ram'); // (a hard ram can break off the part at the contact point, S.5i; shipSim.js crash)
     world.ev.warn = 1.5;
     world.ev.warnText = 'THE SHIPS COLLIDE!';
   }

@@ -31,6 +31,7 @@ import { createFleetArt } from './fleetArt.js'; // B.3: the panels, pennants and
 import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, HUD, scoreboard (pvp/match.js)
 import { createYardArt } from './yardArt.js'; // S.6b: the Shipwright's Yard (the sky-dock blueprint, the A / B / C vote, BUILT, "NEW: ...")
 import { createPartPictures } from './partArt.js'; // the little part pictures of the build tray, on the Yard's cards
+import { createDebrisArt } from './debrisArt.js'; // S.5i: the pieces of ship that broke off, tumbling through the sky
 import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
@@ -89,6 +90,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   // The gunship (B.5) as her own art wants her: in her home frame, unshifted, facing the way her layer mirrors her, her rope drawn separately, her crew drawn by the ship layer.
   const gunStub = () => Object.assign(Object.create(world.gunship), { dx: 0, dy: 0, m: 1, turn: null, crew: [], rope: false, pitch: 0 });
   const fleet = createFleetArt({ ctx }); // what the TV adds with more than one ship: a panel for each, team pennants, edge arrows (fleetArt.js)
+  const debrisArt = createDebrisArt({ ctx, state: world });
   // One crewman drawn standing at (x, y) at a scale, outside any ship (the Versus lobby's heads under each flag, the winners' faces): the same sprites as on the ship.
   const drawCrewAt = (p, x, y, scale, time) => {
     ctx.save();
@@ -116,6 +118,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         spotter: createSpotterArt({ ctx, state: st }),
         env: createEnvArt({ ctx, state: st, ink }),
       };
+      if (!sh.ai) sh.snapshotArt = (piece) => a.hull.snapshot(piece, performance.now() / 1000); // (S.5i: the picture of a part that is about to break off; the enemy gunship is drawn by her own art and gets plain planks)
       arts.set(sh, a);
     }
     return a;
@@ -2254,6 +2257,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     if (has('ship')) {
       everyShip(drawShipLayer);
       if (world.gunship && world.gunship.asShip) drawGunship.rope(world.gunship, ts); // (the gunship's grapple line runs between two ships: it is drawn in the world)
+      if (world.debris && world.debris.length) debrisArt.draw(); // (S.5i: broken-off parts tumble in the world)
       everyShip(() => drawAirborne(ts)); // crew in the air and their ropes live in the world, not in the ship's frame
       drawCross(ts); // (B.6: cannon smoke trails, thrown loads, towlines)
       everyShip(() => { if (!ship.ai) { drawCoil(ts); drawShield(ts); } }); // each ship's Lightning Coil and Deflector band (world points)

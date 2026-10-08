@@ -35,8 +35,9 @@ import { createFire } from './fire.js';
 import { armourOn } from './fireModel.js';
 import { createEngines } from './engines.js';
 import { createForces, hitForce } from './forces.js';
-import { installBags, syncBags, stepBags, watchBags } from './gasBags.js';
-import { toWorldX, toWorldY, toShipX, toShipY, aimToWorld } from './pose.js';
+import { installBags, syncBags, stepBags, watchBags, holesPerBag } from './gasBags.js';
+import { toWorldX, toWorldY, toShipX, toShipY, aimToWorld, pivotOf } from './pose.js';
+import { planBreak, makeRng, rebuildPrice, hoverOf, brokenOf } from './breakOff.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
 import { transfer, newGuns, teamOf, hostileTo, foeOf, shipOf } from './ships.js';
 
@@ -167,7 +168,7 @@ export function createShipSim(world, ship, W) {
   // legacy (bots): one combined button, so racks, ammo, coal and stations are decided here too; people get those on GRAB (grabsFor).
   const takeLabel = (s) => (s.kind === 'cannonSeat' ? 'Climb into the cannon' : s.kind === 'cannon' ? 'Man the cannon' : 'Take ' + s.n);
   const useFor = (player, station, legacy) => {
-    if (player.fly && player.cannon && !player.chute && !player.hj && player.ko <= 0) return { type: 'chute', label: 'PARACHUTE!' }; // (B.6: fired from the crew cannon - Action opens the parachute)
+    if (player.fly && (player.cannon || player.tossed) && !player.chute && !player.hj && player.ko <= 0) return { type: 'chute', label: 'PARACHUTE!' }; // (B.6: fired from the crew cannon - Action opens the parachute; S.5i: so does a crewman thrown off a part that broke off)
     if (player.lock || player.conn != null || player.fall || player.swing || player.air) return null;
     const here = (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r;
     const tool = player.carry;
@@ -474,7 +475,7 @@ export function createShipSim(world, ship, W) {
   };
 
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
-  const impact = (x, y, power, hullMul = 1) => { // (hullMul: the hull a blow costs, apart from the size of the blow: our shells on the enemy gunship, gunshipShip.js)
+  const impactBody = (x, y, power, hullMul = 1) => { // (hullMul: the hull a blow costs, apart from the size of the blow: our shells on the enemy gunship, gunshipShip.js)
     // Riveted plate (S.5g) on this stretch of hull wall or rail: the hit counts for much less, and rarely punches through.
     const d = onGasbag(x, y) < 0 ? roomPlatformAt(x, y) : null;
     const plate = d !== null && !!armourOn(layout, d, x);
@@ -515,6 +516,210 @@ export function createShipSim(world, ship, W) {
       if ((power >= 2 && Math.random() < coll * Math.min(1, ig)) || Math.random() < 0.35 * coll * ig * pm) fireSys.ignite(d, x + (Math.random() - 0.5) * 80, 'hit');
     }
     damageHull(config.SHIP.HIT_DAMAGE * power * hullMul);
+  };
+
+  // ---- PARTS BREAK OFF FOR REAL (S.5i; breakOff.js plans it, debris.js tumbles the pieces, config.BREAKOFF) ----
+  const BOC = () => config.BREAKOFF;
+  let breakRng = makeRng((0x9e3779b1 + 0x85ebca6b * (world.ships.indexOf(ship) + 1)) | 0); // (its own random source: a run in which nothing breaks off draws exactly the random numbers it always did)
+  let breakCd = 0; // seconds before a hit, crash or ram may break another part off
+  let bayHeat = 0; // seconds of fire that has burned in the bomb bay's compartment with bombs aboard
+  let bagTear = []; // per gasbag: seconds it has been flat and ripped
+  state.breakStats = { events: 0, bay: 0, hit: 0, crash: 0, ram: 0, bag: 0, parts: 0, fell: 0, scars: 0 }; // (read by botsim and the --check-breakoff gate)
+  state.liftDeficit = 0;
+  const lostList = () => (ship.main && world.run ? (world.run.lost ||= []) : (ship.lost ||= [])); // (what has broken off and not been rebuilt, oldest first: { id, cause, label, before, price ... })
+  // The chance multiplier of a cause: the difficulty button (co-op), and the armour plate on the spot that was struck.
+  const chanceMul = (x, y) => {
+    const diff = ship.ai || config.PVP.ENABLED ? 1 : BOC().DIFFICULTY[world.difficulty] ?? 1;
+    const d = x == null ? null : onGasbag(x, y) < 0 ? roomPlatformAt(x, y) : null;
+    return diff * (d !== null && !!armourOn(layout, d, x) ? BOC().ARMOUR_MUL : 1);
+  };
+
+  // Take parts off this ship NOW (spec: see breakOff.js planBreak; opts.force works with BREAKOFF.ENABLED off, for tests). The layout is replaced in place, so everything made from it follows: the
+  // modules keep their hit points by name, the guns / lamps / coil / bags / valves / vents are made again keeping what they hold, the nav tables, balance, forces, flight mass and the art follow the
+  // layout version. Crew standing on what went FALL (into the air, to land on a deck below or to parachute), walkers keep their deck and climbers their ladder if it is still there; holes, fires, breaches,
+  // ice and loads on a lost stretch go with it. She keeps flying with whatever is left. Returns { plan, entry } or null (nothing happened).
+  function breakOff(spec, opts = {}) {
+    const B = BOC();
+    if ((!B.ENABLED && !opts.force) || state.ship.down || state.wreck || !layout.parts) return null;
+    const plan = planBreak(layout.parts, spec, breakRng);
+    if (!plan.ok) return null;
+    const P = PLATFORMS;
+    const wearing = layout.parts;
+    const before = JSON.parse(JSON.stringify(wearing)); // (kept for the REBUILD card: the parts as they were)
+    const oldP = P.map((q) => ({ id: q.id, y: q.y, x0: q.x0, x1: q.x1 }));
+    const oldC = layout.connectors.map((c) => ({ type: c.type, xTop: c.xTop, xBottom: c.xBottom, yTop: P[c.top].y, yBottom: P[c.bottom].y }));
+    const oldBags = layout.gasbags.map((b, i) => ({ cx: b.cx, gas: state.bags[i] ? state.bags[i].gas : state.ship.gas, down: state.bags[i] ? state.bags[i].down : false }));
+    const oldValves = (layout.gasValves || []).map((v, i) => ({ x: v.x, p: v.p, open: state.gasValveOpen[i] !== false }));
+    const oldVents = layout.vents.map((v, i) => ({ x: v.x, p: v.p, open: !!state.ventOpen[i] }));
+    const keptGuns = Object.fromEntries(Object.entries(state.GUNS).map(([k, g]) => [k, { aim: g.aim, cd: g.cd, ammo: g.ammo, max: g.max, empty: g.empty, auto: g.auto, prime: g.prime, primed: g.primed }]));
+    const docks = layout.escortDocks.map((e) => e.n).join('|');
+    const pivot0 = pivotOf(ship);
+    const blast = spec.kind === 'blast';
+    const bx = spec.x ?? plan.pieces[0].box.x0, by = spec.y ?? plan.pieces[0].box.y0;
+    const pics = ship.snapshotArt ? plan.pieces.map((pc) => { try { return ship.snapshotArt(pc); } catch { return null; } }) : []; // (the picture of each piece, taken while the old ship is still what is drawn)
+    const crew = Object.values(state.players);
+    const onCut = (p) => { const q = oldP[p.d]; return !!q && plan.cuts.some((c) => c.id === q.id && p.x >= c.a - 24 && p.x <= c.b + 24); };
+    const falls = new Set(crew.filter((p) => !p.fly && !p.fall && !p.onGunship && !p.hj && p.conn == null && p.d != null && onCut(p)));
+
+    layout.applyBuild(plan.parts);
+    const was = brokenOf.get(layout);
+    brokenOf.set(layout, { broken: layout.parts, intact: was && was.broken === wearing ? was.intact : before }); // (the next simulation made in this process mends her: ships.js createMainShip)
+
+    if (ship.pose.f !== 1) ship.pose.x += 2 * (pivot0 - pivotOf(ship)); // (a ship facing left is mirrored about the middle of her bounds: keep her hull where it was)
+    const newDeck = (y, x) => P.findIndex((q) => q.y === y && x >= q.x0 - 2 && x <= q.x1 + 2);
+    const newConn = (i) => layout.connectors.findIndex((c) => c.type === oldC[i].type && c.xTop === oldC[i].xTop && c.xBottom === oldC[i].xBottom && P[c.top].y === oldC[i].yTop && P[c.bottom].y === oldC[i].yBottom);
+    // lists of things standing on a deck ({ d, x }): follow their deck, or go with it
+    const remap = (list) => {
+      if (!list) return;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const o = list[i];
+        if (o == null || o.d == null || !oldP[o.d]) continue;
+        const d = newDeck(oldP[o.d].y, o.x);
+        if (d < 0) list.splice(i, 1); else o.d = d;
+      }
+    };
+    // the crew
+    const toss = (p) => {
+      const away = Math.sign(p.x - bx) || (breakRng() < 0.5 ? -1 : 1);
+      p.lock = null;
+      p.fire = false;
+      p.prog = 0;
+      p.tossed = true; // (Action opens his parachute while he falls)
+      const keep = oldP[p.d] ? nearestDeck(oldP[p.d].y, p.x) : 0; // (p.d stays a real deck of what is left: the bots' routing reads it while they fall)
+      air.startFlight(p, away * (blast ? B.BAY.THROW : 140) * (0.5 + breakRng() * 0.6), blast ? -240 : 60);
+      p.d = keep;
+      p.face = away * ship.pose.f;
+      state.breakStats.fell++;
+      phoneFx(p, 'The deck is gone! You are falling - open the parachute or grab a ladder!', [120, 60, 120]);
+    };
+    const nearestDeck = (y, x) => P.reduce((best, q, d) => { const c = Math.abs(q.y - y) + (x == null ? 0 : 0.3 * Math.max(0, q.x0 - x, x - q.x1)); return c < best.c ? { c, d } : best; }, { c: Infinity, d: 0 }).d;
+    for (const p of crew) {
+      p.botJob = null; p.job = null; p.wanderTo = null; p.uk = null; // (walkers re-plan their routes against the new nav tables, the phones get their new buttons)
+      if (p.fly || p.fall || p.d == null || p.onGunship || p.hj) { // (somebody already in the air or falling keeps a valid deck number: the bots' routing reads it)
+        if (p.d != null && oldP[p.d] && !p.onGunship) p.d = nearestDeck(oldP[p.d].y, null); // (x is a world x in the air)
+        continue;
+      }
+      if (p.conn != null) {
+        const k = oldC[p.conn] ? newConn(p.conn) : -1;
+        if (k >= 0) { p.conn = k; const nd = oldP[p.d] ? newDeck(oldP[p.d].y, p.x) : -1; p.d = nd >= 0 ? nd : layout.connectors[k].top; } else { p.climb = false; toss(p); } // (a climber keeps his ladder if it is still there; his deck index follows too)
+        continue;
+      }
+      if (falls.has(p)) { toss(p); continue; }
+      const nd = oldP[p.d] ? newDeck(oldP[p.d].y, p.x) : -1;
+      if (nd < 0) toss(p); else p.d = nd;
+    }
+    for (const list of [state.breaches, state.fires, state.bombs, state.boarders, state.icing, state.loads]) remap(list);
+    for (const b of state.bats || []) if (b.latched && b.d != null && oldP[b.d]) { const d = newDeck(oldP[b.d].y, b.lx); if (d < 0) { b.latched = false; b.landed = false; } else b.d = d; }
+    if (state.cannons) for (const k of Object.keys(state.cannons)) if (!(layout.cannons || []).some((c) => c.n === k)) delete state.cannons[k];
+    // the guns, lamps, coil and escorts are made again from the layout, keeping what the survivors hold
+    for (const k of Object.keys(state.GUNS)) delete state.GUNS[k];
+    Object.assign(state.GUNS, newGuns(layout));
+    for (const [k, g] of Object.entries(state.GUNS)) if (keptGuns[k]) Object.assign(g, keptGuns[k]);
+    searchlights.refit();
+    coil.refit();
+    if (layout.escortDocks.map((e) => e.n).join('|') !== docks) escort.reset();
+    // whoever was on a station that is gone steps off it
+    for (const p of crew) if (p.lock && !LOCKABLE(p.lock)) { p.lock = null; p.fire = false; }
+    // the gasbags: each keeps its own gas (by where it hangs), valves and vents keep their setting, holes stay in their bag
+    syncBags(state);
+    layout.gasbags.forEach((b, i) => {
+      const o = oldBags.find((q) => Math.abs(q.cx - b.cx) < 1.5);
+      if (o && state.bags[i]) { state.bags[i].gas = o.gas; state.bags[i].down = o.down; }
+    });
+    state.gasValveOpen = (layout.gasValves || []).map((v) => { const o = oldValves.find((q) => q.x === v.x && q.p === v.p); return o ? o.open : true; });
+    state.ventOpen = layout.vents.map((v) => { const o = oldVents.find((q) => q.x === v.x && q.p === v.p); return o ? o.open : false; });
+    syncBags(state);
+    for (let i = state.gasHoles.length - 1; i >= 0; i--) {
+      const h = state.gasHoles[i];
+      const o = oldBags[h.bag | 0];
+      const nb = o ? layout.gasbags.findIndex((b) => Math.abs(b.cx - o.cx) < 1.5) : -1;
+      if (nb < 0) { state.gasHoles.splice(i, 1); continue; }
+      const nh = gasHoleAt(h.x, h.y, nb);
+      Object.assign(h, { bag: nb, d: nh.d, x: nh.x, y: nh.y });
+    }
+    bagTear = [];
+    // she is as heavy as she was but has less to lift her: the hover level rises, and past what the pump can hold she sinks (flight uses liftDeficit)
+    const intact = lostList().length ? lostList()[0].before : before;
+    state.liftDeficit = Math.max(0, hoverOf(plan.parts) - Math.max(config.BUILD_CHECK.HOVER_MAX, hoverOf(intact)));
+
+    // the ledger: what broke off, what it will cost to mend, and the parts as they were (a sky-dock REBUILD card brings them back)
+    const lost = lostList();
+    const entry = { id: 'lost' + (lost.length ? Math.max(...lost.map((e) => +e.id.slice(4) || 0)) + 1 : 1), cause: spec.cause || spec.kind, label: plan.summary, names: plan.names, before, price: rebuildPrice(plan), mass: plan.mass, lift: plan.lift, buildId: lost.length ? lost[0].buildId : ship.buildId };
+    lost.push(entry);
+    ship.buildId = 'broken';
+    const S = state.breakStats;
+    S.events++; S.parts += plan.labels.length; S.scars += plan.scars.length;
+    (S.causes ||= []).push(entry.cause + '@' + Math.round(world.ev ? world.ev.t || 0 : 0)); // (what broke her, and when on the director's clock: botsim prints it)
+    S[spec.cause === 'ram' ? 'ram' : spec.cause === 'crash' ? 'crash' : spec.kind === 'blast' ? 'bay' : spec.kind === 'bag' ? 'bag' : 'hit']++;
+    breakCd = B.GRACE;
+    // show it: smoke and sparks, the word, the shake, the kick, the pieces
+    shipPop(bx, by - 90, blast ? 'bayBoom' : 'snap', blast ? '#ff7b00' : '#e8d8b0', blast ? 1.8 : 1.3);
+    for (const pc of plan.pieces) for (let k = 0; k < (blast ? 14 : 8); k++) shipPuff(pc.box.x0 + breakRng() * (pc.box.x1 - pc.box.x0), pc.box.y0 + breakRng() * (pc.box.y1 - pc.box.y0), k % 3 ? '#555' : '#ff8c42', 1);
+    state.ship.shake = Math.max(state.ship.shake, blast ? B.BAY.SHAKE : 0.7);
+    hitForce(state, bx, by, blast ? B.BAY.POWER : 3);
+    state.sfxQ.push([blast ? 'alarm' : 'impact']);
+    for (const p of crew) phoneFx(p, null, blast ? [200, 60, 200] : [120, 40, 80]);
+    if (ship.main) {
+      state.ev.warn = 5;
+      const nm = plan.names.length ? plan.names.slice(0, 3).join(', ') + (plan.names.length > 3 ? ' +' + (plan.names.length - 3) + ' MORE' : '') : plan.summary.split(',')[0];
+      state.ev.warnText = (blast ? 'THE BOMB BAY EXPLODED! ' : spec.cause === 'bag' ? 'A GASBAG TORE AWAY! ' : 'PARTS BROKE OFF! ') + (nm ? 'LOST: ' + nm.toUpperCase() : '');
+    }
+    if (W.debris) W.debris.spawn(ship, plan, pics, { origin: { x: bx, y: by }, blast });
+    if (W.afterBreak) W.afterBreak(ship); // (the world: the danger of the voyage follows her strength, shipPower.js)
+    return { plan, entry };
+  }
+
+  // The loaded bomb bay goes up: the bombs are gone, the blast takes the parts round it (BREAKOFF.BAY), hurts the hull, and sets fire to the coal, ammunition and boiler within reach.
+  function explodeBay(cause = 'hit') {
+    const B = BOC().BAY, bay = layout.bombBay;
+    if (!bay) return null;
+    state.bombBay.bombs = 0;
+    bayHeat = 0;
+    const bx = bay.x, by = bay.y - 30;
+    const r = breakOff({ kind: 'blast', x: bx, y: by, r: B.RADIUS, cause: 'bombbay-' + cause });
+    damageHull(B.HULL);
+    modules.hitAt(bx, by, shipPuff, 3, 1);
+    let lit = 0;
+    const near = [...all('coal'), ...all('ammo'), ...all('boiler')].map((s) => ({ s, d: Math.hypot(s.x - bx, PLATFORMS[s.d].y - by) })).filter((o) => o.d < B.CHAIN_RADIUS).sort((a, b) => a.d - b.d);
+    for (const { s } of near) {
+      if (lit >= B.FIRES) break;
+      if (fireSys.ignite(s.d, s.x + (breakRng() - 0.5) * 80, 'hit', { over: true })) lit++; // (chain reaction: the coal flares into a blaze, fire.js)
+    }
+    if (!r) { // nothing came off (armour, or too little left to take): she is shaken and burned all the same
+      shipPop(bx, by - 90, 'bayBoom', '#ff7b00', 1.8);
+      state.ship.shake = Math.max(state.ship.shake, B.SHAKE);
+      hitForce(state, bx, by, B.POWER);
+      if (ship.main) { state.ev.warn = 4; state.ev.warnText = 'THE BOMB BAY EXPLODED!'; }
+    }
+    return r;
+  }
+
+  // A hit at (x, y) of this power (before armour): can it set off a loaded bomb bay, or break off the end or limb it struck?
+  function hardHit(x, y, power) {
+    const B = BOC();
+    if (!B.ENABLED || state.ship.down || goingDown.protect()) return;
+    const bay = layout.bombBay;
+    if (bay && state.bombBay.bombs >= 1 && power >= B.BAY.MIN_POWER && Math.hypot(x - bay.x, y - bay.y) < B.BAY.HIT_RADIUS) {
+      const p = B.BAY.HIT_CHANCE * Math.min(1, state.bombBay.bombs / config.BOMBS.START) * chanceMul(x, y);
+      if (breakRng() < p) { explodeBay('hit'); return; }
+    }
+    if (breakCd > 0 || power < B.HIT.MIN_POWER) return;
+    const chance = Math.min(B.HIT.MAX, B.HIT.CHANCE + (power - B.HIT.MIN_POWER) * B.HIT.PER_POWER) * chanceMul(x, y);
+    if (breakRng() < chance) breakOff({ kind: 'limb', x, y, reach: B.HIT.END_REACH, len: B.HIT.LIMB, cause: 'hit' });
+  }
+
+  // The hull met rock (kind 'crash') or another ship (kind 'ram') at (x, y) with this closing speed (px/s): the faster, the likelier the part at the contact breaks off.
+  function crash(x, y, closing, kind = 'crash') {
+    const B = BOC(), C = kind === 'ram' ? B.RAM : B.CRASH;
+    if (!B.ENABLED || breakCd > 0 || state.ship.down || closing < C.MIN_CLOSING || goingDown.protect()) return false;
+    const chance = (C.CHANCE + (C.MAX - C.CHANCE) * Math.max(0, Math.min(1, (closing - C.MIN_CLOSING) / (C.FULL_CLOSING - C.MIN_CLOSING)))) * chanceMul(x, y);
+    if (breakRng() >= chance) return false;
+    return !!(breakOff({ kind: 'limb', x, y, reach: C.END_REACH ?? B.HIT.END_REACH, len: B.HIT.LIMB, cause: kind }) || breakOff({ kind: 'limb', x, y, reach: C.FAR, len: B.HIT.LIMB, cause: kind })); // (nothing near the contact - the nose of the gasbag took the rock - and the bow crumples instead)
+  }
+
+  const impact = (x, y, power, hullMul = 1) => {
+    impactBody(x, y, power, hullMul);
+    if (power >= 2 && BOC().ENABLED) hardHit(x, y, power); // (the blow as it was struck: plate on the spot lowers the chance inside hardHit)
   };
 
   let lastJolt = 0;
@@ -1281,6 +1486,13 @@ export function createShipSim(world, ship, W) {
       stepBags(state, pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) * state.links.helmMul + Math.min(0, valve.input) * G.VENT_RATE * state.links.helmMul, dt);
       state.ship.press = Math.max(0, state.ship.press - pumping * G.PUMP_STEAM * dt);
       watchBags(state); // a bag going flat: "FORE BAG DOWN!"
+      breakCd = Math.max(0, breakCd - dt);
+      if (state.bags.length >= BOC().BAG.MIN_BAGS && BOC().ENABLED) { // a bag that is flat and ripped to rags for long enough tears away (S.5i)
+        const holes = holesPerBag(state);
+        state.bags.forEach((b, i) => { bagTear[i] = holes[i] >= BOC().BAG.HOLES && b.gas <= BOC().BAG.FLAT ? (bagTear[i] || 0) + dt : Math.max(0, (bagTear[i] || 0) - dt); });
+        const torn = bagTear.findIndex((t) => t >= BOC().BAG.TEAR_TIME);
+        if (torn >= 0) { bagTear = []; breakOff({ kind: 'bag', index: torn, cause: 'bag' }); }
+      }
       // Emergency ballast: the gasbag is empty and the ship is dropping - the crew cuts loose ballast so she hovers for a
       // moment (time to patch and pump). Once in a while only; it is a lifeline, not a fix.
       const BL = G.BALLAST;
@@ -1297,7 +1509,7 @@ export function createShipSim(world, ship, W) {
     // Lift: above the neutral fill she accelerates up, below it she drops (fast at the extremes).
     // The helm's little trim engine adds a nudge.
     // (ice weight shifts the level she needs to hover; lava thermals push her up - state.env, environments.js)
-    const effGas = state.ship.gas - state.env.sink + state.env.lift / G.LIFT;
+    const effGas = state.ship.gas - state.env.sink - state.liftDeficit + state.env.lift / G.LIFT; // (liftDeficit: gasbags torn away leave her heavy for the lift she has left, S.5i)
     const lift = (effGas - G.NEUTRAL) * G.LIFT;
     const trim = state.ship.trim * SHM.TRIM_ACCEL * (worksKind('helm') ? (modules.handWheel() ? config.WIND.HAND_TRIM : 1) : 0) * env.deep.helmMul() * state.links.helmMul; // (a lookout in the nest sharpens the helm: links.js)
     state.buoyancy = effGas > G.NEUTRAL + 5 ? 1 : effGas < G.NEUTRAL - 5 ? -1 : 0;
@@ -1365,6 +1577,12 @@ export function createShipSim(world, ship, W) {
       object.worked = false;
     }
     fireSys.update(dt); // (fires spread towards what burns best, big ones smoke, an overheating boiler throws sparks: fire.js)
+    const bay = layout.bombBay;
+    if (bay && BOC().ENABLED && BAY_D >= 0 && state.bombBay.bombs > 0 && !state.ship.down) { // fire in the bomb bay's compartment heats the bombs; long enough and they cook off (S.5i)
+      const burning = state.fires.filter((f) => f.d === BAY_D && Math.abs(f.x - bay.x) < BOC().BAY.FIRE_RADIUS).length;
+      bayHeat = burning ? bayHeat + dt * Math.min(2, 1 + 0.25 * (burning - 1)) : Math.max(0, bayHeat - dt * 0.5);
+      if (bayHeat >= BOC().BAY.COOKOFF / (ship.ai || config.PVP.ENABLED ? 1 : BOC().DIFFICULTY[world.difficulty] ?? 1)) explodeBay('fire');
+    } else bayHeat = 0;
 
     if (!state.ship.down && !goingDown.protect()) {
       state.ship.hull -= (state.breaches.length * 0.5 + fireSys.load() * 0.35) * (ship.ai ? ship.ai.drainMul() : damageMul(state)) * 2 * dt;
@@ -1393,6 +1611,8 @@ export function createShipSim(world, ship, W) {
   }
   // ... and rebuilt: a fresh ship with her crew dropped back aboard from above, as restartGame does for the main one.
   function respawn({ crew = true } = {}) {
+    if (!ship.main && ship.lost && ship.lost.length) { const first = ship.lost[0]; ship.lost.length = 0; fitBuild(first.before, { crew: false }); ship.buildId = first.buildId; } // (a ship that lost parts is rebuilt whole with the new game, S.5i)
+    state.liftDeficit = 0; bayHeat = 0; bagTear = []; breakCd = 0;
     Object.assign(state.ship, { alt: 0, speed: 0.3, order: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
     if (!ship.main) W.course.place(ship); // (back at her station in open air; her pose is her own)
     forces.reset();
@@ -1427,6 +1647,8 @@ export function createShipSim(world, ship, W) {
   // lamps, her coil and her patrol planes - and she starts over. (Everything that watches layout.version follows by itself: the bags, valves and vents (preStep), the engines,
   // sails, modules, nav, fire and the art.)
   function refit() {
+    if (ship.lost) ship.lost.length = 0; // (a new build: nothing that broke off before is owed to anyone)
+    if (ship.main && world.run && world.run.lost) world.run.lost.length = 0;
     for (const k of Object.keys(state.GUNS)) delete state.GUNS[k];
     Object.assign(state.GUNS, newGuns(layout));
     searchlights.refit();
@@ -1460,6 +1682,7 @@ export function createShipSim(world, ship, W) {
     coil.refit();
     escort.reset();
     forces.reset();
+    state.liftDeficit = 0; bayHeat = 0; bagTear = []; breakCd = 0; // (a build fitted at the dock starts clean: whatever had broken off is rebuilt or counted into it)
     const newBomb = !!layout.bombBay && !hadBay;
     if (newBomb) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.START);
     if (crew) {
@@ -1477,7 +1700,7 @@ export function createShipSim(world, ship, W) {
     ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, goingDown, raiders, escort, coil, searchlights, air, cannon, cargo,
     get hookshot() { return hookshot; },
     get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
-    hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop,
+    hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop, breakOff, explodeBay, crash, seedBreak: (n) => { breakRng = makeRng(n); }, // (the gate reseeds the break-off rolls)
     interaction, taken, holder, getHelm, worksKind, isHostile, homeOf, sendHome,
     preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn, refit, fitBuild, comeAbout,
   };

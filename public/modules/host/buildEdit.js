@@ -44,7 +44,7 @@ const BE = () => config.BUILD_EDIT;
 const clone = (parts) => parts.map((p) => ({ ...p }));
 const no = (parts, hint) => ({ ok: false, parts, hint, added: [], removed: [] });
 const decksOn = (parts, row) => parts.filter((p) => p.part === 'deck' && p.row === row);
-const uniqueId = (parts, base) => {
+export const uniqueId = (parts, base) => {
   const used = new Set(parts.filter((p) => p.part === 'deck').map((p) => p.id));
   let id = base, k = 2;
   while (used.has(id)) id = base + k++;
@@ -68,7 +68,7 @@ export const emptyBuild = () => ensureFrame([]);
 // removed when that stretch of deck is erased; connectors have two ends, the lift also its repair spot.
 const POINT = ['station', 'gun', 'searchlight', 'sail', 'crewCannon', 'engine', 'rack', 'vent', 'gasValve', 'extinguisher', 'boarderEntry', 'escortDock', 'medbay', 'ballast'];
 const LINK = ['ladder', 'rope', 'stairs', 'lift', 'pole'];
-function refs(o) {
+export function refs(o) {
   const r = [];
   if (POINT.includes(o.part)) {
     r.push({ id: o.p, x: o.x, to: (id) => { o.p = id; } });
@@ -82,7 +82,7 @@ function refs(o) {
 }
 const nameOf = (o) => o.n || o.name;
 // A short human label for the "removed: ..." note.
-function labelOf(o) {
+export function labelOf(o) {
   switch (o.part) {
     case 'station': case 'gun': case 'searchlight': case 'sail': case 'crewCannon': return o.n;
     case 'engine': return o.name;
@@ -365,12 +365,12 @@ export function addArmour(parts, row, x0, x1) {
 // ---- erasing ------------------------------------------------------------------------------------------------------
 // What goes with a part that was taken away: a steam pipe leading to a gone engine / helm / lift, the coil or bomb-bay doors of a gone station, an escort's
 // hook, and anything still pointing at a deck that no longer exists (a ladder from another deck ...). Their labels are added to `removed`.
-function dropDependents(list, goneParts, removed) {
+export function dropDependents(list, goneParts, removed) {
   const names = new Set(goneParts.map(nameOf).filter(Boolean));
   if (goneParts.some((o) => o.part === 'lift')) names.add('Lift');
   const kinds = new Set(goneParts.filter((o) => o.part === 'station').map((o) => o.kind));
   const dropMore = (o) => (o.part === 'pipe' && names.has(o.to)) || (o.part === 'coil' && kinds.has('coil')) || (o.part === 'bombBay' && kinds.has('bombBay')) || (o.part === 'escortDock' && names.has(o.n));
-  const deckIds = new Set(list.filter((o) => o.part === 'deck').map((o) => o.id));
+  const deckIds = new Set(list.filter((o) => o.part === 'deck' || o.part === 'enemyDeck').map((o) => o.id)); // (enemyDeck: the enemy gunship's decks, gunshipBuild.js; the break-off planner cuts her too)
   const orphan = (o) => refs(o).some((r) => !deckIds.has(r.id)) || ((o.part === 'room' || o.part === 'armour') && !deckIds.has(o.p));
   return list.filter((o) => {
     if (dropMore(o) || orphan(o)) { if (o.part !== 'room') removed.push(labelOf(o)); return false; }

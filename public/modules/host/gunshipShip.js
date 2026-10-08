@@ -630,6 +630,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
   const fireBall = (g, k) => {
     const h = g.ship, kind = g.ports[k].kind;
     const gun = h.ctx.GUNS[g.info.guns[k]];
+    if (!gun) { g.ports[k].dead = true; return; } // (the gun broke off her with the part of the hull it stood on, S.5i: that port is down for good)
     const C = kind === 'turret' ? GP.TURRET_GUN : kind === 'mortar' ? GP.MORTAR_GUN : kind === 'flak' ? GP.FLAK_GUN : null;
     const [gx, gy] = tilt(h.ctx, gun.bx, gun.by);
     const fx = toWorldX(h, gx), fy = toWorldY(h, gy);

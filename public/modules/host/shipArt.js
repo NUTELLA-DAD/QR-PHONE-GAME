@@ -1834,12 +1834,53 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     ctx.imageSmoothingQuality = smooth;
   };
 
+  // ---- SCARS (S.5i): the holes parts that broke off left in the hull. They are carved out of the baked pictures (destination-out) with a ragged edge, and a charred rim is
+  // laid over the hull left standing round them (source-atop: only on pixels that are there). Lettering recorded inside a hole goes with it.
+  const scarHash = (a, b) => { const n = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return n - Math.floor(n); };
+  const raggedPath = (c, q) => {
+    const pts = [];
+    const edge = (x0, y0, x1, y1, seed) => {
+      const n = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / 26));
+      for (let i = 0; i < n; i++) pts.push([x0 + (x1 - x0) * (i / n) + (scarHash(seed + i, 1) - 0.5) * 24, y0 + (y1 - y0) * (i / n) + (scarHash(seed + i, 2) - 0.5) * 24]);
+    };
+    edge(q.x0, q.y0, q.x1, q.y0, q.x0);
+    edge(q.x1, q.y0, q.x1, q.y1, q.y0 + 100);
+    edge(q.x1, q.y1, q.x0, q.y1, q.x1 + 200);
+    edge(q.x0, q.y1, q.x0, q.y0, q.y1 + 300);
+    pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+    c.closePath();
+  };
+  const carveScars = (pic, s) => {
+    const sc = L.scars;
+    if (!sc || !sc.length || !pic || !pic.canvas) return;
+    const bc = pic.canvas.getContext('2d');
+    bc.save();
+    bc.setTransform(s, 0, 0, s, -pic.x * s, -pic.y * s);
+    bc.globalCompositeOperation = 'destination-out';
+    bc.fillStyle = '#000';
+    for (const q of sc) { bc.beginPath(); raggedPath(bc, q); bc.fill(); }
+    bc.globalCompositeOperation = 'source-atop';
+    bc.strokeStyle = '#2a1d16';
+    bc.lineWidth = 9;
+    bc.lineJoin = 'round';
+    for (const q of sc) { bc.beginPath(); raggedPath(bc, q); bc.stroke(); }
+    bc.restore();
+    if (pic.texts) {
+      pic.texts = pic.texts.filter((q) => {
+        const m = q.m, X = pic.x + (m.a * q.x + m.c * q.y + m.e) / s, Y = pic.y + (m.b * q.x + m.d * q.y + m.f) / s;
+        return !sc.some((c) => X > c.x0 && X < c.x1 && Y > c.y0 && Y < c.y1);
+      });
+    }
+  };
+
   const rebake = (key, k) => {
     const r = bakeRect();
     let s = Math.max(0.2, Math.min(3, k)) * bakeSS();
     s = Math.min(s, BAKE_MAX / r.w, BAKE_MAX / r.h);
     const back = paintTo(bake.back, r, s, drawBackLayer);
     const front = paintTo(bake.front, r, s, drawFrontLayer);
+    carveScars(back, s);
+    carveScars(front, s);
     const list = bags();
     const bagPics = list.map((G, i) => paintTo(bake.bags[i], bagRect(G, list.length > 1 && i === list.length - 1), s, () => guard('bag', paintBag, G, i === 0, list.length > 1 && i === list.length - 1)));
     const twins = list.map((G, i) => (twinOn(G, i) ? paintTo(bake.twins[i], twinRect(G), s, () => guard('twin', paintTwin, G)) : null));
@@ -1887,7 +1928,40 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     lapT = now;
   };
 
-  return (time) => {
+  // The ship as she is NOW, painted into a picture clipped to the pieces of a break-off (S.5i): piece = { clips: [{ x0, y0, x1, y1 }], box, ellipse? } in ship coordinates (breakOff.js planBreak).
+  // debris.js hangs the picture on the piece that tumbles away. Taken before the new layout is applied, so it shows the part that is leaving. null when it cannot be painted (no canvas, a bake problem).
+  const snapshot = (piece, time = 0) => {
+    if (typeof document === 'undefined' || bake.failed || ART().OFF) return null;
+    const b = piece.box, pad = 10;
+    const s = Math.min(0.9, 900 / Math.max(1, b.x1 - b.x0 + 2 * pad), 900 / Math.max(1, b.y1 - b.y0 + 2 * pad));
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.ceil((b.x1 - b.x0 + 2 * pad) * s));
+    cv.height = Math.max(1, Math.ceil((b.y1 - b.y0 + 2 * pad) * s));
+    const bc = cv.getContext('2d');
+    const saved = ctx;
+    ctx = bc;
+    try {
+      bc.setTransform(s, 0, 0, s, -(b.x0 - pad) * s, -(b.y0 - pad) * s);
+      bc.lineJoin = 'round';
+      bc.lineCap = 'round';
+      bc.beginPath();
+      if (piece.ellipse) bc.ellipse(piece.ellipse.cx, piece.ellipse.cy, piece.ellipse.rx, piece.ellipse.ry, 0, 0, Math.PI * 2);
+      else for (const c of piece.clips) bc.rect(c.x0, c.y0, c.x1 - c.x0, c.y1 - c.y0);
+      bc.clip();
+      guard('gasbag', drawGasbag);
+      if (bake.back) drawPic(bake.back); else drawBackLayer();
+      drawLiveMid(time);
+      if (bake.front) drawPic(bake.front); else drawFrontLayer();
+      drawLiveTop(time);
+    } catch (e) {
+      return null;
+    } finally {
+      ctx = saved;
+    }
+    return { canvas: cv, x: b.x0 - pad, y: b.y0 - pad, w: b.x1 - b.x0 + 2 * pad, h: b.y1 - b.y0 + 2 * pad, s };
+  };
+
+  const draw = (time) => {
     ctx = screenCtx;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
@@ -1910,4 +1984,6 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     drawLiveTop(time);
     lap('liveTop');
   };
+  draw.snapshot = snapshot; // (debris.js hangs a picture of the leaving part on each piece that breaks off, S.5i)
+  return draw;
 }
