@@ -1122,6 +1122,31 @@ export const config = {
     HULL: 50, // hull she is patched up to
     TIME: 7, // seconds of the break-up before she limps away (the "LIMPING HOME" card shows during it)
   },
+  // PvP "Versus" (PVP.md, Phase V): two crews, two complete copies of the game, one sky. OFF in the co-op game.
+  // ENABLED is switched on in BOTH copies by host.html?pvp=1 (main.js) or by the bridge (pvp/bridge.js).
+  PVP: {
+    ENABLED: false, // on = no pacing director, no AI enemies, no limp-home spares, no co-op saves (simulation.js, crewscale.js, voyage.js read this)
+    MODE: 'broadside', // how a round is won: 'broadside' (sink or wreck the other ship; the only mode built so far)
+    WINS_NEEDED: 2, // rounds to win the match (best of three)
+    ROUND_TIME: 360, // seconds: the round cap; on a timeout the ship with the higher hull % wins
+    COUNT_IN: 3, // seconds both ships stay moored before CAST OFF
+    FINALE: 4, // seconds the sky keeps running after the deciding blow (the wreck plays out) before the round is closed; under WRECK.TIME
+    BETWEEN: 3, // seconds between a closed round and the next count-in
+    START_GAP: 2400, // centre-to-centre distance of the two ships at cast off (px); the left one starts on the map's start
+    SHELL_POWER: 0.4, // impact power of one crew shell on a rival ship (1 = one enemy bullet, 3 hull)
+    BOMB_POWER: 3, // impact power of a bomb dropped through a rival ship
+    STANDOFF: 1100, // pilots (bots and the autopilot) hold this centre-to-centre distance from the rival (px): close, so the stern guns of the ship behind reach too
+    APPROACH: 900, // px of range error for full throttle when holding the standoff
+    ALT_EDGE: 450, // the rear ship holds this far above the rival, the lead ship this far below (px): the guns arc up and down, not only forward
+    ROCK_MARGIN: 520, // pilots keep this far from rock (px)
+    MAP_SEED: 7, // arena sky: the map seed of round 1 (+ the round number); both ships get the same sky
+    MAP_KIND: 'open', // arena sky: 'open' (islands and hills) | 'network' | 'route'
+    ENVIRONMENT: 'skyisles', // arena sky: which of the seven environments
+    TEAMS: { // the two sides: scarf / pennant colour and hull trim
+      red: { name: 'RED', color: '#d6453d', trim: '#9c2f2a' },
+      blue: { name: 'BLUE', color: '#3a7bd5', trim: '#27559a' },
+    },
+  },
   // The look of the whole game, in one place. Simple style: calm, muted backgrounds (sky, rock,
   // caves); the ship in warm wood and cream; crew in their bright scarf colours; enemies and
   // their attacks in red; friendly shots in the shooter's colour; pickups and goals in gold.

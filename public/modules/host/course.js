@@ -134,6 +134,7 @@ export function altWindow(state, ahead = 2) {
 export function pilotPlan(state, ahead, cruise) {
   const course = state.course;
   const alt = state.ship.alt;
+  if (state.rival) return rivalPlan(state); // (Versus: the rival, not the beacon, is the goal)
   if (course && course.map) return mapPlan(state, cruise);
   const B = altBounds(state);
   const range = (w) => [Math.max(w.min, B.lo), Math.min(w.max, B.hi)];
@@ -145,6 +146,18 @@ export function pilotPlan(state, ahead, cruise) {
   }
   const target = fit(lo, hi, course ? elevAt(course, course.dist + REF.x) : 0);
   return { target, speed: Math.abs(target - alt) > 120 ? 0.04 : cruise };
+}
+
+// Versus (pvp/bridge.js sets state.rival): a minimal pilot - hold broadside range from the rival ship at about her height, clear of rock.
+// (The real captain AI, with cover and retreats, is V.3.) rival.mid is her middle in OUR ship coordinates, rival.dy = our altitude minus hers.
+function rivalPlan(state) {
+  const R = state.rival;
+  const P = config.PVP;
+  const gap = R.mid.x - AIM.x; // along the sky, + = she is ahead of us
+  const err = gap - (gap < 0 ? -1 : 1) * P.STANDOFF; // + = too far (or too close) to close the range by going on
+  const want = state.ship.alt - R.dy + (gap < 0 ? -1 : 1) * P.ALT_EDGE; // her height: the rear ship (rival ahead) holds ALT_EDGE above her, the lead ship ALT_EDGE below (the bow and belly guns of one, the stern and dorsal guns of the other, bear)
+  const y = keepClear(state, AIM.x, AIM.y - want, P.ROCK_MARGIN, 2.5);
+  return { target: AIM.y - y, speed: Math.max(-config.SHIP.REVERSE, Math.min(0.6, err / P.APPROACH)), dx: gap, dy: R.dy };
 }
 
 // On a mission map: follow the route to the goal. Aim for the height of a point a few steps along

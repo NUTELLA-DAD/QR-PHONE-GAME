@@ -10,6 +10,7 @@
 //        node tools/buildsim.mjs --check-balance     S.5c: the seesaw in flight (a nose-heavy ship rests nose-down and dives faster, a tail-heavy one is slower; the classic ship is exactly level; live loads move the balance)
 //        node tools/buildsim.mjs --check-bags        S.5d: many gasbags (four in a row, one giant) validate; drop-from-the-tray (placePart); rupture the fore bag in flight: she flies lower, tips toward it, the TV calls it out, patching + pumping restores it; both botsim 2 min with 0 errors
 //        node tools/buildsim.mjs --check-minimum    S.5e: a ship needs only a gasbag and a deck; the steps up from that (helm, boiler and coal, engines, a sail) validate, fly 2 minutes with 0 errors and each buys her something; a person raises and lowers a sail, a storm gust tears one left up
+//        node tools/buildsim.mjs --check-arena      V.2: the PvP bridge, two classic ships with bot crews (tools/arena-check.mjs: one sky, cross-fire, rounds, score, wreck and cap endings, no co-op saves) AND co-op botsim still identical
 //        node tools/buildsim.mjs --snapshot-classic --force   (S.0 only) rewrite tools/fixtures/classic-layout.json
 // Exit code 1 on any failure.
 import { pathToFileURL } from 'node:url';
@@ -133,7 +134,7 @@ function checkBotsim() {
 async function lint(publicDir) {
   const { SHIP_LAYOUT } = await load('shipLayout.js');
   const containers = Object.keys(SHIP_LAYOUT).filter((k) => SHIP_LAYOUT[k] && typeof SHIP_LAYOUT[k] === 'object');
-  const dirs = [publicDir, path.join(publicDir, 'modules', 'host')];
+  const dirs = [publicDir, path.join(publicDir, 'modules', 'host'), path.join(publicDir, 'modules', 'host', 'pvp')].filter((d) => fs.existsSync(d));
   const skip = new Set(['shipLayout.js', 'shipBuild.js']);
   let bad = 0;
   for (const dir of dirs) {
@@ -1043,6 +1044,9 @@ if (mode === '--snapshot-classic') {
   process.exit((await checkBalance()) ? 0 : 1);
 } else if (mode === '--check-minimum') {
   process.exit((await checkMinimum()) ? 0 : 1);
+} else if (mode === '--check-arena') {
+  const arena = spawnSync(process.execPath, [path.join(root, 'tools', 'arena-check.mjs')], { cwd: root, stdio: 'inherit' });
+  process.exit(arena.status === 0 && checkBotsim() ? 0 : 1);
 } else if (mode === '--check-bags') {
   process.exit((await checkBags()) ? 0 : 1);
 } else if (mode === '--build') {
@@ -1052,6 +1056,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-arena | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

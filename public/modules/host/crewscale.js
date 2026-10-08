@@ -47,7 +47,7 @@ const scale = (state) => (CS().ENABLED && state.crewScale) || NEUTRAL;
 const diffOf = (state) => config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal;
 
 // Spare gasbags (limp-home lives) for this difficulty.
-export const sparesFor = (state) => diffOf(state).spares ?? config.LIMP.SPARES;
+export const sparesFor = (state) => (config.PVP.ENABLED ? 0 : diffOf(state).spares ?? config.LIMP.SPARES); // (Versus: no limp-home, a wreck is final)
 
 // How fast waves and specials arrive (difficulty pace x crew spawn rate).
 export const spawnPace = (state) => diffOf(state).pace * scale(state).spawn;

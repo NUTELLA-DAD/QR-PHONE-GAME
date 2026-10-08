@@ -6,7 +6,7 @@ import { createCamera } from './camera.js';
 import { createSfx } from './sfx.js';
 import { createMenu } from './menu.js';
 import { createPerfGovernor, perfState } from './perf.js';
-import { applyBuild } from '../../shipLayout.js';
+import { applyBuild, SHIP_LAYOUT } from '../../shipLayout.js';
 
 // Dev: host.html?build=[parts JSON] flies another ship than the classic one (copy a build from the build page, buildtest.html, "Copy build JSON").
 try {
@@ -38,6 +38,25 @@ window.perfGov = perf; // handy for debugging in the browser console
 fitCanvas();
 
 const simulation = createSimulation();
+// PvP (PVP.md V.0): host.html?pvp=1 (or config.PVP.ENABLED) loads a SECOND, fully independent copy of the game for ship B. The same
+// files are served under /b (server.js), and ES modules are one instance per URL, so /b/modules/host/simulation.js has its own
+// config, SHIP_LAYOUT and state. Co-op never takes this branch. (Drawing ship B is the arena camera's job, V.1a.)
+// The bridge (pvp/bridge.js) puts both copies into one sky and runs the rounds; from then on it steps both ships instead of simulation.update.
+// (Dev state of V.2: ?pvp=1 starts a bot-crewed match at once; teams, the lobby button and drawing ship B come with V.1a / V.5.)
+let pvp = null; // the bridge, once ship B is loaded
+const pvpAsked = new URLSearchParams(location.search).get('pvp') === '1' || config.PVP.ENABLED;
+if (pvpAsked) {
+  Promise.all([import('/b/config.js'), import('/b/shipLayout.js'), import('/b/modules/host/simulation.js'), import('./pvp/bridge.js')]).then(([cfg, lay, sim, bridge]) => {
+    config.PVP.ENABLED = cfg.config.PVP.ENABLED = true;
+    const simB = sim.createSimulation();
+    window.gameB = simB; // handy for debugging in the browser console
+    pvp = bridge.createBridge({ A: { sim: simulation, config, layout: SHIP_LAYOUT }, B: { sim: simB, config: cfg.config, layout: lay.SHIP_LAYOUT } });
+    window.bridge = pvp;
+    pvp.addBots('A', 4);
+    pvp.addBots('B', 4);
+    pvp.startMatch();
+  }).catch((e) => console.error('PvP: ship B could not be loaded', e));
+}
 const camera = createCamera();
 const renderer = createRenderer({ ctx, state: simulation.state, canvas });
 const network = initHostNetwork({ simulation });
@@ -114,7 +133,8 @@ function frame(now) {
     acc += real;
     let steps = 0;
     while (acc >= STEP && steps < config.LOOP.MAX_STEPS) {
-      guard('update', () => simulation.update(STEP));
+      if (pvp) guard('update', () => pvp.update(STEP)); // (ship A, then ship B, then the cross-fire and the rounds)
+      else guard('update', () => simulation.update(STEP));
       acc -= STEP;
       steps++;
     }

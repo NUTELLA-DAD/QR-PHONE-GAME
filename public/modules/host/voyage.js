@@ -121,6 +121,7 @@ export function loadVoyageSave() {
   }
 }
 export function saveVoyageSave(v) {
+  if (config.PVP.ENABLED) return; // (a Versus game never writes the co-op saves)
   try {
     localStorage.setItem(KEY, JSON.stringify(v));
   } catch {
@@ -152,6 +153,7 @@ export function loadModePrefs() {
   }
 }
 export function saveModePrefs(p) {
+  if (config.PVP.ENABLED) return;
   try {
     localStorage.setItem(PREF_KEY, JSON.stringify({ mode: p.mode, daily: !!p.daily }));
   } catch {
