@@ -30,6 +30,7 @@ export function applyPlayerInput(state, player, data) {
     if (data.fire) player.fireAid = data.aid; // (a hold only counts while the label it started on is still showing)
   }
   if ('ca' in data) player.ca = !!data.ca; // holding COME ABOUT (the helm's button)
+  if (data.swap && state.match && state.match.on) state.match.swapTeam(player); // Versus lobby: "You're RED - tap to swap"
   if ('prime' in data) player.prime = !!data.prime; // holding the PRIME button on a gun
   if (data.help) player.helpQ = true; // HELP! button
   if ('spot' in data) player.spotQ = { i: data.spot | 0, s: data.sq | 0 }; // tapped a radar ping
@@ -64,7 +65,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   simulation.setSocket?.(socket);
 
   // The ship a new arrival joins: the main ship, or (with several in the sky) the one with the fewest aboard. They drop in along its boarding span.
-  const joinShip = () => simulation.state.ships.reduce((best, s) => (crewOf(simulation.state, s).length < crewOf(simulation.state, best).length ? s : best), mainShip(simulation.state));
+  const joinShip = () => (simulation.match.on ? simulation.match.shipOfTeam(simulation.match.teamForJoiner()) : simulation.state.ships.reduce((best, s) => (crewOf(simulation.state, s).length < crewOf(simulation.state, best).length ? s : best), mainShip(simulation.state)));
   const dropX = (ship) => { const [e0, e1] = ship.layout.boarderEntryPoints; return e0.x + Math.random() * (e1.x - e0.x); };
 
   const count = () => {
@@ -93,6 +94,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
       ...(simulation.state.ships.length > 1 ? { ship: joined.id } : {}),
     });
     Object.assign(player, m, { connected: true, uk: null }); // uk: null = resend button labels to the phone
+    if (simulation.match.on && !player.team) player.team = joined.team.id; // (Versus: the side of the ship they joined; the phone says "You're RED")
     count();
   });
 
@@ -113,8 +115,10 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   // CAST OFF starts the flight (also Space / Enter on the TV keyboard).
   const castButton = document.getElementById('castoff');
   const showCastButton = () => {
-    castButton.style.display = simulation.state.phase === 'lobby' ? '' : 'none';
-    document.getElementById('join').classList.toggle('flying', simulation.state.phase !== 'lobby');
+    const M = simulation.match;
+    const lobby = simulation.state.phase === 'lobby' && !(M.on && M.phase !== 'lobby'); // (Versus: the count-in is a moored sky too, but the lobby is over)
+    castButton.style.display = lobby ? '' : 'none';
+    document.getElementById('join').classList.toggle('flying', !lobby);
   };
   const castOff = () => {
     simulation.castOff();
@@ -122,6 +126,10 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   };
   castButton.onclick = castOff;
   addEventListener('keydown', (e) => (e.key === ' ' || e.key === 'Enter') && castOff());
+  // Versus lobby: C switches the rule between Broadside (sink her) and Capture (sink her, or hold her helm).
+  addEventListener('keydown', (e) => {
+    if ((e.key === 'c' || e.key === 'C') && simulation.match.on && simulation.match.phase === 'lobby') config.PVP.MODE = config.PVP.MODE === 'capture' ? 'broadside' : 'capture';
+  });
   // Back at the mast after the ship is lost: the button comes back.
   setInterval(showCastButton, 250);
 
@@ -142,16 +150,17 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   };
   showDifficulty();
 
-  // Session length: QUICK VOYAGE / VOYAGE / EVENING CAMPAIGN (config.VOYAGE.MODES), remembered on this TV.
+  // Session length: QUICK VOYAGE / VOYAGE / EVENING CAMPAIGN (config.VOYAGE.MODES), remembered on this TV - and VERSUS (pvp/match.js), which is not remembered.
+  const VERSUS_MODE = { label: 'VERSUS', blurb: 'two ships, best of 3', time: 'about 10 min' };
   const modeButton = document.getElementById('mode');
   const showMode = () => {
     const st = simulation.state;
-    const M = config.VOYAGE.MODES[st.mode] || config.VOYAGE.MODES[config.VOYAGE.START_MODE];
+    const M = st.mode === 'versus' ? VERSUS_MODE : config.VOYAGE.MODES[st.mode] || config.VOYAGE.MODES[config.VOYAGE.START_MODE];
     const html = 'Mode: ' + M.label + `<br><small style="font-size:12px;opacity:.75">${M.blurb}, ${M.time}</small>`;
     if (modeButton.innerHTML !== html) modeButton.innerHTML = html;
   };
   modeButton.onclick = () => {
-    const keys = Object.keys(config.VOYAGE.MODES);
+    const keys = [...Object.keys(config.VOYAGE.MODES), 'versus']; // (VERSUS is the last: two crews, two airships, one sky)
     simulation.setSession(keys[(keys.indexOf(simulation.state.mode) + 1) % keys.length]);
     showMode();
     showDaily();
@@ -177,6 +186,12 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   showDaily();
 
   document.getElementById('bots').onclick = () => {
+    if (simulation.match.on) { // (Versus: two bots to each side)
+      simulation.match.addBots('red', 2);
+      simulation.match.addBots('blue', 2);
+      count();
+      return;
+    }
     for (let i = 0; i < 4 && crewHeads(simulation.state) < config.MAX_PLAYERS; i++) {
       const bot = newBot(simulation.state, joinShip(), 'Bot' + (crewHeads(simulation.state) + 1));
       simulation.state.players[bot.id] = bot;

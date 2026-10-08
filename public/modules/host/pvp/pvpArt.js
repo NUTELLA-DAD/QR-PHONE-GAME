@@ -3,7 +3,7 @@
 // config.FONTS, config.LOGBOOK), soft faded team colours from config.PVP_ART. No wobble. Never throws.
 //
 //   const art = createPvpArt({ ctx });
-//   // after both renderers have drawn (see pvpTest.js):
+//   // (render.js and versusArt.js call these:)
 //   art.drawWorld(ships, view, w, h, now);   // team pennants, in world space
 //   art.drawEdgeArrows(ships, view, w, h);   // arrows to a ship that is off screen
 //   art.drawHud(hud, w, h, now);             // left red / right blue hull bars, round timer

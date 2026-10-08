@@ -11,7 +11,7 @@ export function createControllerUI({ network }) {
   const ACTION_ICONS = [
     ['Swap to hookshot', '🪝'], ['Take hookshot', '🪝'], ['Reel in', '🪝'], ['KICK', '🦶'], ['Auto guns', '🔫'],
     ['Swap to sword', '🗡️'], ['Swap to hammer', '🔨'], ['Swap to extinguisher', '🧯'], ['Take sword', '🗡️'], ['Take hammer', '🔨'], ['Take extinguisher', '🧯'], ['Put back', '↩️'],
-    ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
+    ['TAKE THE HELM', '☸️'], ['Sabotage', '🧨'], ['Defenders', '🛡️'], ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['SURGE', '🔥'], ['LOAD for', '📦'], ['Close valve', '🚱'], ['Open valve', '🚰'], ['Open vent', '💨'], ['Close vent', '💨'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
     ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'], ['Jump!', '🪂'], ['Take ice', '🧊'], ['Put the ice', '↩️'], ['Cool the boiler', '🧊'], ['THROW ICE', '🧊'], ['Ice locker', '🧊'], ['Swap to', '🔄'],
     ['Swivel engine', '⚙️'], ['Raise sail', '⛵'], ['Lower sail', '⛵'], ['The sail', '⛵'], ['Swivel engine', '⚙️'], ['FOCUS', '🔦'], ['Take', '🎯'],
@@ -94,6 +94,15 @@ export function createControllerUI({ network }) {
     [...cards.children].forEach((b, i) => b.classList.toggle('on', v.mine === i));
   };
 
+  // Versus: which side this phone is on. In the lobby (tm.swap) the bar under the top strip says so and a tap swaps sides; later the strip just wears the team's colour.
+  const showTeam = (tm) => {
+    document.body.classList.toggle('teamed', !!tm);
+    document.body.classList.toggle('team-swap', !!(tm && tm.swap));
+    if (!tm) return;
+    document.body.style.setProperty('--tc', tm.color);
+    $('teambar').textContent = "You're " + tm.name + ' - tap to swap';
+  };
+
   // A short message that pops up over the controls, plus a buzz.
   let toastTimer = null;
   // Phone buzz (where the browser allows it): the host's `buzz` pattern; a short pulse for a pickup, two for letting go.
@@ -143,6 +152,8 @@ export function createControllerUI({ network }) {
   const updateUI = (next) => {
     if (next.fx) return showFx(next.fx);
     if (next.rd) return showRadar(next.rd);
+    if (next.tm && Object.keys(next).length === 1) return showTeam(next.tm); // (Versus: just the side he is on, sent at once when he swaps)
+    showTeam(next.tm);
     showVote(next.vote);
     if (next.vote) return;
     uiState = next;
@@ -278,6 +289,7 @@ export function createControllerUI({ network }) {
       join();
     };
     $('leave').onclick = () => network.sendInput({ jx: 0, jy: 0, leave: 1 });
+    $('teambar').addEventListener('pointerdown', () => network.sendInput({ jx: 0, jy: 0, swap: 1 })); // (Versus lobby: swap sides)
     network.socket.on('join:error', (message) => setJoinError(message));
     network.socket.on('join:ok', (message) => {
       localStorage['tok' + message.code] = message.token;

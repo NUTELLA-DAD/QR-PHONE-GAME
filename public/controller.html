@@ -120,6 +120,11 @@ body.lefty #plever{right:auto;left:calc(var(--a) + min(20vh,84px) + 20px)}
 #plever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
 #plever .rev{position:absolute;left:0;right:0;bottom:4px;text-align:center;color:#8ab8ff;font-size:11px;font-weight:900}
 #lever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
+/* Versus (pvp/match.js): the side this phone is on. In the lobby a bar says "You're RED - tap to swap"; afterwards the strip wears the team's colour. */
+#teambar{display:none;font:inherit;font-weight:900;font-size:17px;border:4px solid #2b2622;border-radius:14px;color:#fff;padding:4px 12px;min-height:40px;touch-action:none;background:var(--tc,#c4574d);box-shadow:0 3px 0 #2b2622;text-align:center}
+#teambar.down{transform:translateY(3px);box-shadow:0 0 0 #2b2622}
+body.team-swap #teambar{display:block}
+body.teamed #strip{border-left:16px solid var(--tc,#c4574d)}
 /* Upgrade vote: three big cards over everything. */
 #vote{display:none;position:fixed;inset:0;background:rgba(43,38,34,.92);z-index:8;flex-direction:column;padding:10px;gap:8px}
 #vote h2{margin:0;color:#f3ead6;font-size:22px;text-align:center}
@@ -138,7 +143,7 @@ body.lefty #plever{right:auto;left:calc(var(--a) + min(20vh,84px) + 20px)}
 #rotate .ic{font-size:70px}
 @media (orientation:portrait){body.play #rotate{display:flex}}
 /* ---- Captain's logbook look (matches the TV): Limelight for titles and shouts, cream paper, warm-brown ink. ---- */
-h1,.big,#leave,#help,#toast,#vote h2,#vote button em,#rotate,#job,#code{font-family:'Limelight',Georgia,serif;font-weight:400}
+h1,.big,#leave,#help,#toast,#vote h2,#vote button em,#rotate,#job,#code,#teambar{font-family:'Limelight',Georgia,serif;font-weight:400}
 h1{font-size:28px}
 .big{font-size:22px}
 #leave{font-size:21px}
@@ -179,6 +184,7 @@ h1{font-size:28px}
     <button id="help">🆘 Help!</button>
     <button id="leave">⬅ LEAVE</button>
   </div>
+  <button id="teambar">You're RED - tap to swap</button>
   <div id="info"><b>Walking</b> - walk to a station, rack, fire or hole</div>
   <div id="controls">
     <div id="pad"><div id="knob"></div></div>

@@ -1,5 +1,5 @@
 import { config } from '../../config.js';
-import { mainShip, eachShip } from './ships.js';
+import { mainShip, eachShip, teamOf } from './ships.js';
 import { toWorldX, toWorldY, aimToWorld, pivotOf } from './pose.js';
 import { installUprightText } from './uprightText.js';
 import { createShipArt } from './shipArt.js';
@@ -28,6 +28,7 @@ import { createLogbook } from './logbookArt.js'; // cream paper panels + red sta
 import { createLinkArt } from './linkArt.js'; // linked-station wires, gust warnings, surge rings
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
 import { createFleetArt } from './fleetArt.js'; // B.3: the panels, pennants and edge arrows of a sky with several ships
+import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, HUD, scoreboard (pvp/match.js)
 import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
@@ -83,6 +84,16 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const linkArt = createLinkArt({ ctx, state }); // gust / updraft arrows (the loader and lookout wires are the ships': artsOf)
   const drawGunship = createGunshipArt({ ctx, state, ink, sprites });
   const fleet = createFleetArt({ ctx }); // what the TV adds with more than one ship: a panel for each, team pennants, edge arrows (fleetArt.js)
+  // One crewman drawn standing at (x, y) at a scale, outside any ship (the Versus lobby's heads under each flag, the winners' faces): the same sprites as on the ship.
+  const drawCrewAt = (p, x, y, scale, time) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    const fake = { ...p, x: 0, y: 0, face: 1, lock: null, carry: null, moving: false, climb: false, fall: false, fly: false, ko: 0, scale: 1 };
+    if (!characterArt.draw(fake, time, 0)) crewArt.draw(fake, time, 0, 0, drawCarry);
+    ctx.restore();
+  };
+  const versusArt = createVersusArt({ ctx, fleet, drawCrewAt }); // (the TV for a Versus match: pvp/versusArt.js)
   // Each SHIP's art, made the first time she is drawn on HER context: her baked picture (one bake per ship, keyed on her layout), her lamps, her bombs, ropes, wires, call-outs and the
   // hazards that ride on her (ice, spores, storm rods, the sea). Nothing is shared between ships.
   const arts = new Map();
@@ -1134,9 +1145,75 @@ export function createRenderer({ ctx, state: world, canvas }) {
   // "QUICK VOYAGE - voyage 2 of 2 - DAILY" (what this run is, for the HUD and the route map)
   const modeLine = (run) => modeInfo(run.mode).label + (run.voyages > 1 ? ` - voyage ${run.voyageNo} of ${run.voyages}` : '') + (run.daily ? ' - DAILY' : '');
 
+  // Versus (pvp/match.js): everything the TV adds on top of the sky, on the 1600x900 stage.
+  const drawVersus = (time, w, h) => {
+    const M = world.match;
+    if ((M.phase === 'lobby' || M.phase === 'shelf') && !state.vote) versusArt.drawLobby(world, time);
+    else versusArt.drawHud(world, w, h, time);
+    if (!state.vote) versusArt.drawBoard(world, time); // (the rematch vote has the stage to itself)
+    if (state.ev.warn > 0 && (M.phase === 'count' || M.phase === 'fight' || M.phase === 'finale')) { // the banner along the bottom (BOARDERS ON THE MAIN DECK!, HELM TAKEN ...)
+      ctx.globalAlpha = Math.min(1, state.ev.warn * 2);
+      book.stamp(state.ev.warnText || '', 800, 854, { size: 22, maxW: 1100 });
+      ctx.globalAlpha = 1;
+      ink();
+    }
+    if (state.vote) drawVote();
+  };
+  // The shelf (each team's ship) and the rematch: cards with the numbers, and each phone's vote as a dot with a ring in its team colour.
+  const drawShelfVote = (v) => {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f3ead6';
+    ctx.font = '44px ' + config.FONTS.DISPLAY;
+    ctx.fillText(v.kind === 'shelf' ? 'PICK YOUR SHIP' : v.title, 800, 82, 1200);
+    ctx.font = '700 20px ' + config.FONTS.TEXT;
+    ctx.fillStyle = '#ffd23f';
+    ctx.fillText(v.kind === 'shelf' ? `Each crew votes on its phones - the same weight cap for both (${shelfCap()} at most) - ${Math.max(0, Math.ceil(v.t))}s` : `Vote on your phone - ${Math.max(0, Math.ceil(v.t))}s`, 800, 124, 1300);
+    const voters = Object.values(state.players).filter((p) => !p.mate);
+    const n = v.options.length;
+    const perRow = n > 4 ? 3 : n;
+    const cw = n > 4 ? 440 : 360, ch = n > 4 ? 300 : 360, gap = 24;
+    v.options.forEach((o, i) => {
+      const row = Math.floor(i / perRow);
+      const inRow = Math.min(perRow, n - row * perRow);
+      const col = i - row * perRow;
+      const x = 800 - (inRow * cw + (inRow - 1) * gap) / 2 + col * (cw + gap);
+      const y = 170 + row * (ch + 24);
+      book.paper(x, y, cw, ch, { r: 16 });
+      ctx.fillStyle = LB.INK;
+      ctx.textAlign = 'center';
+      ctx.font = '60px "Segoe UI Emoji", sans-serif';
+      ctx.fillText(o.icon, x + cw / 2, y + 78);
+      ctx.font = '27px ' + config.FONTS.DISPLAY;
+      ctx.fillText(o.name, x + cw / 2, y + 122, cw - 30);
+      ctx.font = '400 19px ' + config.FONTS.TEXT;
+      wrapLines(o.desc, cw - 40).slice(0, 4).forEach((l, k) => ctx.fillText(l, x + cw / 2, y + 156 + k * 24));
+      for (const id of ['red', 'blue']) { // the votes of each side, a row each
+        const list = voters.filter((p) => p.vote === i && p.team === id);
+        const ry = y + ch - (id === 'red' ? 42 : 16);
+        list.forEach((p, k) => {
+          const dx = x + cw / 2 - (list.length - 1) * 13 + k * 26;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(dx, ry, 9, 0, 7);
+          ctx.fill();
+          ctx.strokeStyle = teamOf(id).color;
+          ctx.lineWidth = 4;
+          ctx.stroke();
+        });
+        if (!list.length) { ctx.fillStyle = 'rgba(58,44,32,.25)'; ctx.font = '700 12px ' + config.FONTS.TEXT; ctx.fillText(id.toUpperCase(), x + cw / 2, ry + 4); }
+      }
+    });
+  };
+  const shelfCap = () => (state.match && state.match.cap) || '?';
+
   // Votes: the sky-dock shop and the route map. Each player's vote is a dot in their colour.
   const drawVote = () => {
     const v = state.vote;
+    if (v.kind === 'shelf' || v.kind === 'rematch') {
+      ctx.fillStyle = 'rgba(43,34,22,.72)';
+      ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
+      return drawShelfVote(v);
+    }
     ctx.fillStyle = 'rgba(43,34,22,.72)';
     ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
     ctx.textAlign = 'center';
@@ -1899,8 +1976,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
     lapT = now;
   };
 
-  // renderFrame(time, view, opts): one call draws the whole frame: the sky and the terrain once, every ship, the effects, the darkness, the HUD. opts is optional and only used by
-  // the PvP arena harness (public/modules/host/pvp/, pvpTest.js), where two renderers (one per sim) draw onto the SAME canvas with ONE shared camera.
+  // renderFrame(time, view, opts): one call draws the whole frame: the sky and the terrain once, every ship, the effects, the darkness, the HUD. opts is optional (the layers, an offset
+  // and a bob phase are kept for dev pages that draw one frame in pieces; the game itself passes none).
   //   opts.layers       which parts to draw (array or Set; default = all):
   //                       'background'  sky, painted layers, clouds, rock, buildings, markers, turrets, bombs (shared scenery: renderer A only)
   //                       'ship'        every ship, her guns, crew, hazards, hooks, coil, shield and crew markers (and the team pennants)
@@ -2032,9 +2109,10 @@ export function createRenderer({ ctx, state: world, canvas }) {
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
-          if (ship.team) { // a ship with a team: her colour as a scarf band over the marker (B.3)
+          const side = p.team ? teamOf(p.team) : ship.team; // (Versus: a crewman wears HIS side's colour, aboard the rival too)
+          if (side) { // a ship with a team: her colour as a scarf band over the marker (B.3)
             const band = config.FLEET.CREW_BAND;
-            ctx.fillStyle = ship.team.color;
+            ctx.fillStyle = side.color;
             ctx.fillRect(px - 16, y - 20 - band - 2, 32, band);
             ctx.lineWidth = 2;
             ctx.strokeRect(px - 16, y - 20 - band - 2, 32, band);
@@ -2064,6 +2142,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
             ctx.stroke();
             ctx.restore();
           }
+          if (p.team && ship.team && p.team !== ship.team.id) versusArt.bang(px, y - 70, p.team, view, time / 1000); // (an enemy on this deck: a "!" over his head)
           art.spotter.drawHelp(p, px, y, time / 1000); // HELP! call-out
         }
       };
@@ -2113,9 +2192,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
       // Screen overlay on a fixed 1600x900 stage.
       const scale = Math.min(width / config.W, height / config.H);
       ctx.setTransform(scale, 0, 0, scale, (width - config.W * scale) / 2, (height - config.H * scale) / 2);
-      drawHud();
-      drawFacing();
-      if (world.ships.length > 1) fleet.drawPanels(world); // a compact logbook panel for every ship (with one ship the HUD is the old one, exactly)
+      if (world.match && world.match.on) drawVersus(time, width, height); // (Versus: the two-sided HUD, the lobby's flags, the scoreboard)
+      else {
+        drawHud();
+        drawFacing();
+        if (world.ships.length > 1) fleet.drawPanels(world); // a compact logbook panel for every ship (with one ship the HUD is the old one, exactly)
+      }
       drawGoingDown(ctx, state, time / 1000, config.W, config.H); // GOING DOWN! alarm, meters, "SHE HOLDS!"
       drawLimpCard(ctx, state, config.W, config.H); // LIMPING HOME... (a spare gasbag was used)
       if (state.runEnd && (!state.wreck || state.wreck.t > 1.2)) {

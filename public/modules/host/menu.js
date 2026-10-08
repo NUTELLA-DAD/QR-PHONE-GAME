@@ -88,6 +88,7 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
     sync();
   };
   $('mNext').onclick = () => {
+    if (simulation.match.on) return show(false); // (Versus has no maps to skip: the arena is one sky per round)
     const c = simulation.state.course;
     if (c && simulation.course.startMission) simulation.course.startMission(c.lap + 1);
     show(false);
