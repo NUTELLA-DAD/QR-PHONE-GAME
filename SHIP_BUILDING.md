@@ -257,6 +257,20 @@ Art, collision and the validator follow the choice | M | toggle works on the dev
 - Down = dive.
 - Angled = a mix.
 Thrust acts where the engine sits, so an engine at the nose pointing up also lifts the nose (pitch control, ties into balance). Optional **swivel mount**: a crew station that turns the engine in flight. Engines are heavy and use steam | M | each direction measurably changes speed / climb / pitch in a sim test; classic engines keep today's behaviour |
+| S.5i | **Parts break off for real** (owner request).
+
+**Bomb bay explosions:** a loaded bomb bay hit hard (or reached by fire) explodes and BLOWS NEARBY PARTS OFF THE SHIP: decks, rooms, guns, engines, a gasbag. The pieces tumble away with physics (reuse the wreck break-apart art); crew standing on them fall and must parachute or grab on.
+
+**Hard hits:** big rams, heavy shells, crashing into rock at speed, or a crash-landing break off the part that took the hit.
+
+**Lost is lost:**
+- Lost parts stay gone for the rest of the voyage until rebuilt (paid) at a sky-dock.
+- The ship really changes shape mid-flight: lift, balance, steam and stations update.
+- E.g. losing a nose engine makes her tail-heavy and slower.
+
+**Engine work:** mid-flight `applyBuild` (S.1 limited builds to the dock), with safe resets for crew, routes, holes, fires and modules.
+
+**Validator:** warns about "bomb bay next to the boiler / coal" chain-reaction risks. Armour plate reduces break-off chance | L | sim test: an explosion removes the right parts, the ship keeps flying with the new shape, crew on lost parts fall; classic baseline unchanged unless a break-off happens |
 | S.6a | Catalogue v1 + Sparrow + `state.build` effects + dock offers / slot vote | L | voyagesim Normal no worse than today |
 | S.6b | Shipwright UI (TV blueprint, gauges, slot pins, phone cards) | M | the cold-player test passes |
 | S.7 | Balance + persistence (environment modifiers, derelict parts, limp damage, Hangar builds after P2.2) | M | no dominant or trap parts; one situational part per environment |
