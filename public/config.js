@@ -708,8 +708,8 @@ export const config = {
     SHAKEN_HOLES: 1, // limp home: a newest gasbag starts with this many holes
     // DANGER THAT FOLLOWS THE SHIP (shipPower.js, read by crewscale.js): a voyage's enemies scale with the ship's fighting strength as well as the crew. Her power (guns, bomb bay, coil,
     // escorts, armour, engines ...) is worked out from the build once per build, as a share of the classic ship's; the classic ship is 1.0 = full danger, nothing changes for her.
-    POWER_SCALE: 0.75, // how much of the danger a weak ship is spared: 0 = none (every ship meets the classic danger), 1 = danger in proportion to her power
-    POWER_FLOOR: 0.45, // ...but never less than this share of the full danger (a bare hull still gets shot at)
+    POWER_SCALE: 0.9, // how much of the danger a weak ship is spared: 0 = none (every ship meets the classic danger), 1 = danger in proportion to her power
+    POWER_FLOOR: 0.4, // ...but never less than this share of the full danger (a bare hull still gets shot at)
     POWER: {
       BASE: 3, GUN: 1, BOMB_BAY: 1.5, COIL: 2, ESCORT: 1, DEFLECTOR: 1, ARMOUR: 1.2, ENGINE: 0.6, SPARE_BAG: 1, // power points: the hull and deck; per gun; the bomb bay; the coil; per escort fighter; the deflector; per 100 px of armour plate; per engine pod; per gasbag beyond the first
       KEYS: { spawn: 1, count: 1, fire: 1, damage: 1, raiders: 1, hp: 1 }, // which crew-scale numbers follow it, and how fully (1 = all of the relief, 0 = none)
