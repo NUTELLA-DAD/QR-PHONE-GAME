@@ -9,6 +9,7 @@ export function createRunStats(state) {
   const seen = new Map(); // player id -> the stat counts last time (the counters reset with the lap, so only increases count)
   let lastKills = 0, lastLap = state.course ? state.course.lap : 1, lastPhase = state.phase;
   let dtSum = 0;
+  let tiltSum = 0, tiltMax = 0; // the trim angle while flying (balance.js): mean |degrees| and the worst
   return {
     step(dt) {
       R.steps++;
@@ -32,6 +33,7 @@ export function createRunStats(state) {
       if (state.phase !== 'flying') return;
       R.flightSteps++;
       R.hullSum += state.ship.hull;
+      if (state.balance) { const a = Math.abs(state.balance.deg); tiltSum += a; if (a > tiltMax) tiltMax = a; }
       for (const q of Object.values(state.players)) {
         if (q.lock) manned[q.lock] = (manned[q.lock] || 0) + 1;
         if (!q.bot || q.fall) continue;
@@ -53,6 +55,7 @@ export function createRunStats(state) {
         flightMin: +flightMin.toFixed(2), kills: R.kills, killsPerMin: flightMin ? +(R.kills / flightMin).toFixed(2) : 0,
         missions: R.missions, wrecks: R.wrecks, avgHull: R.flightSteps ? +(R.hullSum / R.flightSteps).toFixed(1) : 0,
         walkPct: R.crewSteps ? +((100 * R.walkSteps) / R.crewSteps).toFixed(1) : 0, hauled: { ...hauled },
+        tilt: R.flightSteps ? +(tiltSum / R.flightSteps).toFixed(2) : 0, tiltMax: +tiltMax.toFixed(2),
         mannedKinds, mannedNames, tows: state.tows || 0, boilerLoads: { ...(state.boilerLoads || {}) },
       };
     },

@@ -759,6 +759,22 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     }
   };
 
+  // Sandbags (trim ballast, shipBuild.js): a stack on the deck, or a sack hanging by a rope under the hull. Only ships that carry some have the list.
+  const drawBallast = () => {
+    for (const b of L.ballast || []) {
+      const sack = (x, y, w, h) => filled('#b79a63', () => ctx.roundRect(x - w / 2, y - h, w, h, 8));
+      if (b.hang) {
+        line([[b.x, P[b.d].y + 20], [b.x, b.y - 18]], 3);
+        sack(b.x, b.y + 16, 34, 34);
+        line([[b.x - 8, b.y - 2], [b.x + 8, b.y - 2]], 2.4);
+      } else {
+        sack(b.x - 11, b.y, 28, 20);
+        sack(b.x + 12, b.y, 28, 20);
+        sack(b.x, b.y - 18, 28, 20);
+      }
+    }
+  };
+
   // ================= CONNECTORS (ladders, ropes, poles, stairs, lift shafts) =================
   // A ladder made of repeating rung tiles (32 wide, 26 tall), from top to bottom.
   const ladderTiles = (key, x, top, bottom) => {
@@ -1257,6 +1273,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     guard('pipes', drawPipes);
     guard('racks', drawRacks);
     guard('extinguishers', drawExtinguishers);
+    guard('ballast', drawBallast);
     guard('props', drawProps);
     guard('coal', drawCoal);
     guard('bombBay', drawBombBay);

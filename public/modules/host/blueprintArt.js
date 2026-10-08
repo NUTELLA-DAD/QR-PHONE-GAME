@@ -2,7 +2,8 @@
 // rows you can draw on, and the ghosts of what a pen or eraser stroke will do. Pure drawing: no state, no DOM (buildTest.js owns the
 // canvas and the pointer; the in-game Shipwright's Yard (S.6b) can reuse it).
 //   const v = blueprintView(layout, width, height, k)    the paper-to-ship transform (k = pixel ratio, for line weights and text)
-//   drawBlueprint(ctx, v, layout, opts)                   opts: { rowHover, cursor, ghost, slots, hover, status }
+//   drawBlueprint(ctx, v, layout, opts)                   opts: { rowHover, cursor, ghost, slots, hover, status, balance, target, needs }
+//     balance: shipBuild.js balanceOf (the centre of mass / lift markers), target: { x, y, r, label } the thing the delete tool is over, needs: what a half-built ship still lacks
 //   v.toWorld(px, py) -> { x, y } in ship coordinates     v.X(x), v.Y(y) -> paper pixels
 import { config } from '../../config.js';
 import { COL, DECK_ROWS, rowOf, hullGeom } from './shipBuild.js';
@@ -60,6 +61,20 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     text(EDIT_ROWS[row].name.toUpperCase(), PAD.l * k - 12 * k, y + 4 * k, 11, have ? L.INK : L.INK_SOFT, 'right');
     if (!have) text('(empty row)', PAD.l * k - 12 * k, y + 18 * k, 9, L.INK_SOFT, 'right');
   }
+  { // the gasbag row: a band where the bag is drawn (a dashed line while there is no bag)
+    const y = Y(config.BUILD_EDIT.BAG_CY), hot = o.rowHover === 'gasbag';
+    if (hot) { g.fillStyle = 'rgba(201,168,90,0.28)'; g.fillRect(PAD.l * k - 8 * k, y - 22 * k, X(W.x1) - PAD.l * k + 8 * k, 44 * k); }
+    if (!Ly.gasbag || hot) line([[PAD.l * k - 8 * k, y], [X(W.x1), y]], hot ? 1.5 : 1, hot ? L.INK_SOFT : 'rgba(107,74,50,0.32)', [8, 6]);
+    text('GASBAG', PAD.l * k - 12 * k, y + 4 * k, 11, Ly.gasbag ? L.INK : L.INK_SOFT, 'right');
+    if (!Ly.gasbag) text('(none: drag to draw)', PAD.l * k - 12 * k, y + 18 * k, 9, L.INK_SOFT, 'right');
+  }
+  if (!Ly.platforms.length && !Ly.gasbag) { // an empty sheet
+    const cx = X(560), ty = Y(DECK_ROWS.catwalk) - 40 * k;
+    g.fillStyle = 'rgba(243,234,214,0.9)'; g.fillRect(cx - 250 * k, ty - 22 * k, 500 * k, 70 * k);
+    text('An empty sheet.', cx, ty, 15, L.INK, 'center', true);
+    text('Pencil: drag along the MAIN DECK row for the first deck.', cx, ty + 20 * k, 12, L.INK_SOFT, 'center');
+    text('Gasbag tool: draw the bag. Parts come from the palette.', cx, ty + 38 * k, 12, L.INK_SOFT, 'center');
+  }
 
   // The gasbag(s), light hatching inside.
   const bag = Ly.gasbag;
@@ -71,7 +86,7 @@ export function drawBlueprint(g, v, Ly, o = {}) {
       g.save(); g.clip();
       for (let hx = cx - rx - ry; hx < cx + rx; hx += 46) line([[X(hx), Y(cy + ry)], [X(hx + ry), Y(cy - ry)]], 1, 'rgba(107,74,50,0.14)');
       g.restore();
-      text(tag, X(cx), Y(cy) + 5 * k, 14, L.INK_SOFT, 'center', true);
+      text(tag, X(cx), Y(cy - ry * 0.55) + 5 * k, 14, L.INK_SOFT, 'center', true);
     };
     if (bag.twin) env(bag.cx - 20, bag.cy - 258, bag.rx * 0.7, bag.ry * 0.62, 'twin');
     env(bag.cx, bag.cy, bag.rx, bag.ry, `GASBAG  ${Math.round(bag.rx * 2)} px`);
@@ -140,6 +155,24 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   g.fillStyle = L.INK_SOFT;
   for (const r of [...Ly.racks, ...Ly.vents, ...Ly.extinguishers]) { const q = P[r.d]; if (q) g.fillRect(X(r.x) - 2 * k, Y(q.y) - 8 * k, 4 * k, 8 * k); }
   if (Ly.medbay) { const q = P.find((d) => d.id === Ly.medbay.p); if (q) text('+', X(Ly.medbay.x), Y(q.y) - 4 * k, 16, L.STAMP, 'center', true); }
+  for (const b of Ly.ballast || []) { // sandbags: a sack on the deck, or hanging under it on a rope
+    const bx = X(b.x), by = Y(b.y);
+    if (b.hang) line([[bx, Y(P[b.d].y)], [bx, by - 4 * k]], 1.2, L.INK_SOFT);
+    g.beginPath(); g.ellipse(bx, b.hang ? by + 3 * k : by - 5 * k, 6 * k, 5 * k, 0, 0, 6.2832); g.fillStyle = 'rgba(183,154,99,0.85)'; g.fill();
+    g.strokeStyle = L.INK; g.lineWidth = 1.2 * k; g.stroke();
+  }
+  // Balance: the centre of lift (a pennant on the bag) and the centre of mass (a weight), joined by the beam they pull on.
+  const bal = o.balance;
+  if (bal && bal.com && bal.col) {
+    const cx = X(bal.col.x), cy = Y(bal.col.y), mx = X(bal.com.x), my = Y(bal.com.y);
+    const col = bal.level === 'FAIL' ? L.STAMP : bal.level === 'WARN' ? '#c9892a' : '#4f7f3f';
+    line([[cx, cy], [cx, my]], 1.2, 'rgba(107,74,50,0.5)', [4, 4]);
+    line([[cx, my], [mx, my]], 2.2, col);
+    g.beginPath(); g.moveTo(cx, cy - 8 * k); g.lineTo(cx + 9 * k, cy); g.lineTo(cx, cy + 8 * k); g.lineTo(cx - 9 * k, cy); g.closePath(); g.fillStyle = L.PAPER; g.fill(); g.strokeStyle = L.INK; g.lineWidth = 1.6 * k; g.stroke();
+    text('LIFT', cx, cy - 12 * k, 9, L.INK_SOFT, 'center');
+    g.beginPath(); g.arc(mx, my, 7 * k, 0, 6.2832); g.fillStyle = col; g.fill(); g.strokeStyle = L.INK; g.lineWidth = 1.6 * k; g.stroke();
+    text(`WEIGHT  ${bal.deg === 0 ? 'level' : (bal.deg > 0 ? 'nose-heavy ' : 'tail-heavy ') + Math.abs(bal.deg) + '\u00b0'}`, mx, my + 20 * k, 10, col, 'center');
+  }
 
   // The size of the ship, along the bottom and the right edge.
   if (Ly.bounds) {
@@ -152,7 +185,7 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   // The key, on the empty paper to the right of the ship.
   const kx = X(W.x1) + 16 * k;
   if (v.w - kx > 200 * k) {
-    const rows = ['PENCIL: drag along a deck row.', 'Along a deck it gets longer; on an', 'empty stretch it makes a new deck', '(rooms, hull and a ladder come too).', '', 'ERASER: drag along a deck. It gets', 'shorter, splits or goes, with what', 'stood on it (listed below).', '', 'Lines snap to the column grid and', 'to deck ends. Rows: top deck, main,', 'lower, keel, deep.', '', 'H helm  B boiler  L lookout', 'C coal  A ammo  G gun  S lamp', 'Z coil  D deflector  M bomb bay', 'N navigator  F fighter  E engine'];
+    const rows = ['PENCIL: drag along a deck row.', 'Along a deck it gets longer; on an', 'empty stretch it makes a new deck', '(rooms, hull and a ladder come too).', 'GASBAG: drag along the bag row.', 'LADDER: drag down from one deck to', 'another (a pole is one way, down).', 'ERASER: drag along a deck (it gets', 'shorter or goes, with what stood on', 'it). DELETE: click any one thing.', '', 'Lines snap to the column grid and', 'to deck ends.', '', 'H helm  B boiler  L lookout', 'C coal  A ammo  G gun  S lamp', 'Z coil  D deflector  M bomb bay', 'N navigator  F fighter  E engine'];
     text('HOW TO', kx, PAD.t * k + 16 * k, 14, L.INK, 'left', true);
     rows.forEach((t, i) => text(t, kx, PAD.t * k + 36 * k + i * 15 * k, 11, i < 13 ? L.INK_SOFT : L.INK));
   }
@@ -168,10 +201,26 @@ export function drawBlueprint(g, v, Ly, o = {}) {
 
   // The pen and eraser.
   if (o.cursor) { line([[X(o.cursor.x), Y(o.cursor.y) - 8 * k], [X(o.cursor.x), Y(o.cursor.y) + 8 * k]], 2, L.STAMP); line([[X(o.cursor.x) - 8 * k, Y(o.cursor.y)], [X(o.cursor.x) + 8 * k, Y(o.cursor.y)]], 2, L.STAMP); }
+  if (o.target) { // the delete tool is over a thing: ring it
+    const t = o.target;
+    g.beginPath(); g.arc(X(t.x), Y(t.y), (t.r * 0.7 + 4) * s * 1.2 + 6 * k, 0, 6.2832);
+    g.fillStyle = 'rgba(168,68,63,0.16)'; g.fill(); g.strokeStyle = L.STAMP; g.lineWidth = 2 * k; g.stroke();
+    text('delete ' + t.label, X(t.x), Y(t.y) - 22 * k, 11, L.STAMP, 'center');
+  }
   const gh = o.ghost;
   if (gh) {
-    const y = Y(DECK_ROWS[gh.row]), good = gh.ok;
-    if (gh.tool === 'erase') {
+    const y = gh.tool === 'bag' ? Y(config.BUILD_EDIT.BAG_CY) : gh.tool === 'ladder' ? Y(DECK_ROWS[gh.row]) : Y(DECK_ROWS[gh.row]), good = gh.ok;
+    if (gh.tool === 'ladder') {
+      const y1 = Y(DECK_ROWS[gh.row1]);
+      line([[X(gh.x0), y], [X(gh.x0), y1]], 5, good ? '#4f7f3f' : L.STAMP, good ? (gh.type === 'pole' ? [3, 6] : null) : [10, 8]);
+      for (const yy of [y, y1]) line([[X(gh.x0) - 10 * k, yy], [X(gh.x0) + 10 * k, yy]], 3, good ? '#4f7f3f' : L.STAMP);
+      if (gh.label) text(gh.label, Math.min(v.w - 260 * k, X(gh.x0) + 14 * k), (y + y1) / 2, 12, good ? L.INK : L.STAMP);
+    } else if (gh.tool === 'bag') {
+      const b = gh.bag;
+      if (b) { g.beginPath(); g.ellipse(X(b.cx), Y(b.cy), b.rx * s, b.ry * s, 0, 0, 6.2832); g.strokeStyle = good ? '#4f7f3f' : L.STAMP; g.lineWidth = 3 * k; g.setLineDash([10 * k, 6 * k]); g.stroke(); g.setLineDash([]); }
+      line([[X(gh.x0), y], [X(gh.x1), y]], 5, good ? '#4f7f3f' : L.STAMP);
+      if (gh.label) text(gh.label, Math.max(PAD.l * k, X((gh.x0 + gh.x1) / 2) - 120 * k), y - 28 * k, 12, good ? L.INK : L.STAMP);
+    } else if (gh.tool === 'erase') {
       g.fillStyle = good ? 'rgba(168,68,63,0.22)' : 'rgba(107,74,50,0.12)';
       g.fillRect(X(gh.x0), y - 26 * k, (gh.x1 - gh.x0) * s, 52 * k);
       for (let hx = gh.x0; hx < gh.x1; hx += 24) line([[X(hx), y + 26 * k], [X(Math.min(gh.x1, hx + 14)), y - 26 * k]], 1.4, good ? L.STAMP : L.INK_SOFT);
@@ -179,7 +228,7 @@ export function drawBlueprint(g, v, Ly, o = {}) {
       line([[X(gh.x0), y], [X(gh.x1), y]], 7, good ? '#4f7f3f' : L.STAMP, good ? null : [10, 8]);
       for (const x of [gh.x0, gh.x1]) line([[X(x), y - 12 * k], [X(x), y + 12 * k]], 3, good ? '#4f7f3f' : L.STAMP);
     }
-    if (gh.label) {
+    if (gh.label && gh.tool !== 'ladder' && gh.tool !== 'bag') {
       g.font = font(12, false);
       const tw = g.measureText(gh.label).width, tx = Math.max(PAD.l * k, Math.min(v.w - tw - 14 * k, X((gh.x0 + gh.x1) / 2) - tw / 2)), ty = y - 36 * k;
       g.fillStyle = 'rgba(243,234,214,0.94)'; g.fillRect(tx - 6 * k, ty - 14 * k, tw + 12 * k, 20 * k);

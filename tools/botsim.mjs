@@ -47,6 +47,7 @@ const load = (p) => import(pathToFileURL(path.join(root, p)).href);
 const { config } = await load('config.js');
 const { SHIP_LAYOUT } = await load('shipLayout.js');
 if (process.env.NO_DARING) config.BOTS.DARING.ENABLED = false; // (compare runs with and without the bots' daring stunts)
+if (process.env.NO_LIVE) config.BALANCE.LIVE = false; // (compare runs without the live balance: crew, coal and ammo shifting the ship's trim, balance.js)
 if (process.env.NO_LINKS) config.LINKS.ENABLED = false; // (compare runs without the linked stations: gun+loader, helm+lookout, boiler surge)
 if (!config.DIFFICULTY[args.difficulty]) { console.error('Bad difficulty; use ' + Object.keys(config.DIFFICULTY).join('|')); process.exit(2); }
 if (args.map) {

@@ -42,6 +42,7 @@ export function createSearchlightArt({ ctx, state, ink }) {
   // ---- The belly blister (drawn with the rest of the hull, before the ladders) ----
   const drawBellyPod = () => {
     const p = P.find((q) => q.id === 'lamp');
+    if (!p) return; // (a built ship may have no belly lamp blister)
     const fy = p.y;
     const x0 = p.x0 - 14;
     const x1 = p.x1 + 14;

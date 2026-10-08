@@ -389,6 +389,7 @@ export function createRenderer({ ctx, state, canvas }) {
     const C = state.coil;
     if (!C) return;
     const M = SHIP_LAYOUT.coil;
+    if (!M) return; // (a built ship may carry no Lightning Coil)
     const x = M.x;
     const y = M.y - state.ship.alt;
     ink();
@@ -747,6 +748,31 @@ export function createRenderer({ ctx, state, canvas }) {
     );
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(46 + 408 * n - 2, 150, 4, 22);
+    // Trim (balance.js): a little seesaw under the gas bar. The needle is the ship's centre of mass against the middle of her lift: ahead of it she is
+    // nose-heavy (needle right), behind it tail-heavy; it moves as the crew run about and the coal burns.
+    const bal = state.balance;
+    if (bal) {
+      const B = config.BALANCE, bx = 164, bw = 100, by = 196, k = Math.max(-1, Math.min(1, bal.dx / B.FAIL_PX));
+      const bad = Math.abs(bal.dx) > B.FAIL_PX ? '#c0392b' : Math.abs(bal.dx) > B.WARN_PX ? '#d89a1a' : '#5b9a4a';
+      ctx.fillStyle = '#3b2a1d';
+      ctx.fillRect(bx, by - 3, bw, 6);
+      ctx.fillStyle = 'rgba(120,200,110,.7)';
+      ctx.fillRect(bx + bw / 2 - (bw / 2) * (B.LEVEL_PX / B.FAIL_PX), by - 3, bw * (B.LEVEL_PX / B.FAIL_PX), 6);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(bx + bw / 2 - 1, by - 7, 2, 14);
+      ctx.save();
+      ctx.translate(bx + bw / 2 + (bw / 2) * k, by);
+      ctx.rotate(-Math.PI / 2 + (bal.deg * Math.PI) / 180 * 3);
+      ctx.fillStyle = bad;
+      ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(7, -5); ctx.lineTo(7, 5); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.font = '700 11px ' + config.FONTS.TEXT;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = LB.INK;
+      ctx.fillText('TRIM', 124, by + 4);
+      ctx.fillStyle = bad;
+      ctx.fillText(Math.abs(bal.deg) < 0.05 ? 'level' : (bal.deg > 0 ? 'nose ' : 'tail ') + Math.abs(bal.deg).toFixed(1) + '\u00b0', bx + bw + 10, by + 4);
+    }
     ctx.fillStyle = LB.INK;
     ctx.font = '700 14px ' + config.FONTS.TEXT;
     ctx.textAlign = 'left';
