@@ -12,23 +12,23 @@
 //   gravity (crew gravity multiplier)  engine (forward speed multiplier)  accel (engine pickup multiplier)
 //   sink (extra gas to hover - shared with frost's ice)  o2 / lack  walkMul(player)  helmMul()
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, deckIndex } from '../../shipLayout.js';
+import { layoutTables } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 
-const P = SHIP_LAYOUT.platforms;
-let MAIN, DECKS; // (worked out from the ship layout; refreshed when a new ship build is applied)
-function rebuildShipTables() {
-  MAIN = deckIndex('main');
-  DECKS = ['catwalk', 'main', 'lower'].map((r) => deckIndex(r)).filter((d, i, a) => d >= 0 && a.indexOf(d) === i);
-}
-rebuildShipTables();
-onLayoutChange(rebuildShipTables);
+// Worked out per ship layout (rebuilt when a new ship build is applied to it).
+const tables = layoutTables((layout) => ({
+  MAIN: layout.deckIndex('main'),
+  DECKS: ['catwalk', 'main', 'lower'].map((r) => layout.deckIndex(r)).filter((d, i, a) => d >= 0 && a.indexOf(d) === i),
+}));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createDeepEnv({ state, puff, phoneFx }) {
+  const layout = mainShip(state).layout; // (B1: the ship the spores and the oxygen tank belong to; B2 makes this one per ship)
+  const P = layout.platforms;
   state.spores = []; // clouds: { x, y, rx, ry, vx, seed } in ship coordinates
-  state.clogs = SHIP_LAYOUT.engines.map((e) => ({ name: e.name, d: e.d, x: e.x, lvl: 0, prog: 0 })); // spores on each engine (0-1)
-  state.o2tank = { name: 'Oxygen Tank', d: MAIN, x: config.ENVIRONMENTS.aether.OXYGEN.TANK_X, prog: 0 };
+  state.clogs = layout.engines.map((e) => ({ name: e.name, d: e.d, x: e.x, lvl: 0, prog: 0 })); // spores on each engine (0-1)
+  state.o2tank = { name: 'Oxygen Tank', d: tables(layout).MAIN, x: config.ENVIRONMENTS.aether.OXYGEN.TANK_X, prog: 0 };
   let sporeT = 0;
   let seed = 1;
   let warned = { spore: false, clog: false, o2low: false, o2out: false };
@@ -57,6 +57,7 @@ export function createDeepEnv({ state, puff, phoneFx }) {
         sporeT = rand(S.EVERY_MIN, S.EVERY_MAX);
         if (state.spores.length < S.MAX) {
           const dir = Math.random() < 0.5 ? -1 : 1;
+          const DECKS = tables(layout).DECKS;
           const d = DECKS[(Math.random() * DECKS.length) | 0];
           state.spores.push({ x: dir > 0 ? -S.RX - 80 : 1600 + S.RX + 80, y: P[d].y - 70, rx: S.RX * rand(0.85, 1.2), ry: S.RY * rand(0.85, 1.15), vx: dir * S.SPEED * rand(0.8, 1.2), seed: seed++ });
           if (!warned.spore) {
@@ -106,7 +107,7 @@ export function createDeepEnv({ state, puff, phoneFx }) {
   const aetherUpdate = (dt, F, flying) => {
     const O = F.OXYGEN;
     const E = state.env;
-    { const q = P[MAIN]; if (q) { state.o2tank.d = MAIN; state.o2tank.x = clamp(O.TANK_X, q.x0 + 30, q.x1 - 30); } } // (the oxygen tank stands on the main deck, kept on a short one)
+    { const MAIN = tables(layout).MAIN, q = P[MAIN]; if (q) { state.o2tank.d = MAIN; state.o2tank.x = clamp(O.TANK_X, q.x0 + 30, q.x1 - 30); } } // (the oxygen tank stands on the main deck, kept on a short one)
     E.gravity = F.GRAVITY;
     E.sink = F.SINK;
     E.engine = F.ENGINE;
@@ -145,7 +146,7 @@ export function createDeepEnv({ state, puff, phoneFx }) {
   const refill = () => {
     state.env.o2 = Math.min(1, state.env.o2 + config.ENVIRONMENTS.aether.OXYGEN.REFILL);
     state.o2tank.prog = 0;
-    puff(state.o2tank.x, P[MAIN].y - 60 - state.ship.alt, '#bfe9ff', 12);
+    puff(state.o2tank.x, P[tables(layout).MAIN].y - 60 - state.ship.alt, '#bfe9ff', 12);
   };
   // Crew walking speed multiplier: spores slow, no oxygen slows.
   const walkMul = (p) => {

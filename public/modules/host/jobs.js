@@ -5,19 +5,16 @@
 // penalty for each crewmate already going there. A suggestion is kept for a few seconds so it
 // doesn't flicker, and only swapped for a clearly better one.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, nearest, deckIndex } from '../../shipLayout.js';
+import { layoutTables } from '../../shipLayout.js';
 import { travelTime, direction } from './nav.js';
+import { mainShip } from './ships.js';
 
-const L = SHIP_LAYOUT;
 const J = config.JOBS;
-let GUN_NAMES, PICKUPS; // (worked out from the ship layout; refreshed when a new ship build is applied)
-function rebuildShipTables() {
-  GUN_NAMES = Object.keys(L.gunMounts);
-  PICKUPS = [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))];
-}
-rebuildShipTables();
-onLayoutChange(rebuildShipTables);
-const stationNamed = (n) => L.stations.find((s) => s.n === n);
+// Worked out per ship layout (rebuilt when a new ship build is applied to it).
+const tables = layoutTables((L) => ({
+  GUN_NAMES: Object.keys(L.gunMounts),
+  PICKUPS: [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))],
+}));
 const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer' };
 export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', unclog: '#b6f06e', oxygen: '#bfe9ff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0', help: '#ff4d4d' };
 const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP', trim: 'TRIM', sail: 'SAIL', reef: 'REEF' };
@@ -27,13 +24,14 @@ JOB_COLORS.trim = '#e8c25a'; // (a lopsided ship: go to the light end, balance.j
 JOB_COLORS.sail = '#e9dcc0'; // (S.5e: raise a sail in a fair wind...)
 JOB_COLORS.reef = '#ff8c1a'; // (...or reef it before a gust)
 
-// Name of the room (or deck) at a spot, for the label.
-const roomName = (d, x) => {
-  const r = L.rooms.find((q) => q.d === d && x >= q.x0 && x <= q.x1);
-  return r ? r.name : L.platforms[d].name;
-};
-
 export function createJobFinder(state) {
+  const L = mainShip(state).layout; // (B1: the ship these jobs are on; B2 makes the finder one per ship)
+  const stationNamed = (n) => L.stations.find((s) => s.n === n);
+  // Name of the room (or deck) at a spot, for the label.
+  const roomName = (d, x) => {
+    const r = L.rooms.find((q) => q.d === d && x >= q.x0 && x <= q.x1);
+    return r ? r.name : L.platforms[d].name;
+  };
   // Where a walker really is for routing (the nearer end if on a ladder).
   const spot = (o) => {
     if (o.conn == null) return { d: o.d, x: o.x };
@@ -70,18 +68,19 @@ export function createJobFinder(state) {
     }
     // Hauling: shells to a low gun, coal to a hungry boiler.
     const carry = p.carry;
+    const GUN_NAMES = tables(L).GUN_NAMES;
     const guns = GUN_NAMES.filter((n) => state.GUNS[n].ammo <= J.AMMO_LOW && !mods.some((m) => m.name === n && m.broken)).sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
     if (carry === 'ammo') {
       for (const n of GUN_NAMES) if (state.GUNS[n].ammo < state.GUNS[n].max) { const s = stationNamed(n); add('ammo', n, s.d, s.x, {}, `AMMO to ${n}`); }
     } else if (carry !== 'coal') {
-      const hold = nearest('ammo', p); // (the ammo hold nearest to this player)
+      const hold = L.nearest('ammo', p); // (the ammo hold nearest to this player)
       if (hold) for (const n of guns.slice(0, 2)) { const s = stationNamed(n); add('ammo', n, s.d, s.x, { fetch: hold.n }, `AMMO for ${n}`); } // (no ammo hold on the ship: nothing to fetch)
     }
     const fuelLow = state.ship.fuel < config.BOILER.FUEL_MAX * (J.COAL_LOW / 100);
-    if (carry === 'coal' || (fuelLow && carry !== 'ammo' && nearest('coal', p))) { // (no coal bunker: the fire just dies down, nothing to haul)
+    if (carry === 'coal' || (fuelLow && carry !== 'ammo' && L.nearest('coal', p))) { // (no coal bunker: the fire just dies down, nothing to haul)
       // Coal goes to the boiler nearest to where it is picked up (or nearest to the carrier, if already carrying).
-      const bunker = carry === 'coal' ? null : nearest('coal', p);
-      const s = nearest('boiler', bunker || p);
+      const bunker = carry === 'coal' ? null : L.nearest('coal', p);
+      const s = L.nearest('boiler', bunker || p);
       if (s) add('coal', s.n, s.d, s.x, carry === 'coal' || !bunker ? {} : { fetch: bunker.n }, `COAL for the ${s.n}`);
     }
     // Sails (S.5e): a gust is due and a sail is up: reef it now. Otherwise, in open sky, a sail that is down is worth raising (a quiet suggestion).
@@ -97,7 +96,7 @@ export function createJobFinder(state) {
     // A lopsided ship (balance.js): idle crew walk to the light end of the main deck, their weight trims her.
     const bal = state.balance;
     if (bal && bal.warn && state.phase === 'flying') {
-      const d = deckIndex('main');
+      const d = L.deckIndex('main');
       if (d >= 0) add('trim', 'trim', d, bal.deg > 0 ? L.platforms[d].x0 + 90 : L.platforms[d].x1 - 90, {}, `TRIM HER! ${bal.deg > 0 ? 'NOSE' : 'TAIL'}-HEAVY - go ${bal.deg > 0 ? 'aft' : 'fore'}`);
     }
     return out;
@@ -113,7 +112,7 @@ export function createJobFinder(state) {
     }
     if (need && p.carry !== need) {
       let best = null;
-      for (const r of PICKUPS) {
+      for (const r of tables(L).PICKUPS) {
         if (r.kind !== need) continue;
         const t = travelTime(p, r.d, r.x) + travelTime({ d: r.d, x: r.x, conn: null }, job.d, job.x);
         if (!best || t < best.time) best = { time: t, via: r };

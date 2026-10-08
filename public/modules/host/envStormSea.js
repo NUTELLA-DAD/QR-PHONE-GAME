@@ -17,13 +17,11 @@
 //   state.sea       { y, flood, spouts, survivors, hook, winch, pump, rescued, scrapes }
 //   state.env       wind (px/s along the course), sink (gas points), drag (0-1 speed lost to flooding)
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, deckIndex } from '../../shipLayout.js';
 import { floorBelow } from './maps.js';
 import { pop } from './popups.js';
 import { applyForce } from './forces.js';
+import { mainShip } from './ships.js';
 
-const P = SHIP_LAYOUT.platforms;
-const IDX = (id) => deckIndex(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
 const hash = (i, salt = 0) => {
@@ -105,6 +103,9 @@ function layoutSea(map, F) {
 }
 
 export function createStormSea({ state, puff, impact, damageHull, ignite }) {
+  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const P = layout.platforms;
+  const IDX = (id) => layout.deckIndex(id);
   const E = state.env;
   const LOWER = IDX('lower');
   const CAT = IDX('catwalk');
@@ -186,7 +187,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
     E.gale = gustAmt;
     E.wind = (E.windDir || 1) * F.WIND * gustAmt;
     if (E.wind && flying && !state.ship.down && state.course) state.course.dist += E.wind * dt; // (the rock collision shoves her back out)
-    if (E.wind && flying && SHIP_LAYOUT.gasbag) applyForce(state, { x: SHIP_LAYOUT.gasbag.cx, y: SHIP_LAYOUT.gasbag.cy, fx: (E.wind / F.WIND) * config.FORCES.GUST_WIND, fy: 0, source: 'gust' }); // (the gust leans on the tall gasbag: it tips her, forces.js)
+    if (E.wind && flying && layout.gasbag) applyForce(state, { x: layout.gasbag.cx, y: layout.gasbag.cy, fx: (E.wind / F.WIND) * config.FORCES.GUST_WIND, fy: 0, source: 'gust' }); // (the gust leans on the tall gasbag: it tips her, forces.js)
     if (gusting && !warned.gust) {
       warned.gust = true;
       warn(1.8, 'WIND GUST - HOLD ON!');
@@ -237,8 +238,8 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
     }
     E.seaY = s.y;
     const FL = F.FLOOD;
-    const keel = (c.refY != null ? c.refY : SHIP_LAYOUT.refPoint.y - state.ship.alt) + F.SEA.KEEL;
-    const cx = c.dist + SHIP_LAYOUT.refPoint.x; // map x of the ship's middle
+    const keel = (c.refY != null ? c.refY : layout.refPoint.y - state.ship.alt) + F.SEA.KEEL;
+    const cx = c.dist + layout.refPoint.x; // map x of the ship's middle
     let touching = 0;
     if (flying && !state.ship.down) {
       let over = false;
@@ -303,9 +304,9 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
       }
     } else if (!near) warned.spout = false;
     // ---- rescue: a survivor under the ship catches the rope; hold Action at the winch to haul them up ----
-    if (!SHIP_LAYOUT.bombBay) { s.hook = s.winch = null; return; } // (no bomb bay, no rope to rescue anyone with)
-    const bayX = SHIP_LAYOUT.bombBay.x;
-    const ropeY = (c.refY != null ? c.refY : SHIP_LAYOUT.refPoint.y - state.ship.alt) + SHIP_LAYOUT.bombBay.y - SHIP_LAYOUT.refPoint.y;
+    if (!layout.bombBay) { s.hook = s.winch = null; return; } // (no bomb bay, no rope to rescue anyone with)
+    const bayX = layout.bombBay.x;
+    const ropeY = (c.refY != null ? c.refY : layout.refPoint.y - state.ship.alt) + layout.bombBay.y - layout.refPoint.y;
     const R = F.RESCUE;
     if (s.hook) {
       const h = s.hook;

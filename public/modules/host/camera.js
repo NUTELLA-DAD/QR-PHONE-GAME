@@ -2,7 +2,6 @@
 // It always keeps the whole ship in view at no more than CAMERA.SHIP_SCREEN_FRACTION of the
 // screen width, and zooms out / pans to also frame the enemy plane, gliding smoothly.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { mainShip } from './ships.js';
 import { toShipX } from './pose.js';
 
@@ -15,7 +14,8 @@ export function createCamera() {
   let lead = { x: 0, y: 0 }; // look-ahead in the direction she's moving (smoothed)
 
   const target = (state, width, height) => {
-    const b = SHIP_LAYOUT.bounds;
+    const layout = mainShip(state).layout; // (B1: the camera frames ship 0; B3 frames every ship)
+    const b = layout.bounds;
     const alt = state.ship.alt;
     const shipW = b.x1 - b.x0;
     const shipH = b.y1 - b.y0 + PAD_Y * 2;
@@ -39,7 +39,7 @@ export function createCamera() {
     for (const t of state.hijacks || []) if (near(t, C.FRAME_RANGE + 600)) things.push(t); // a stolen plane stays in view
     for (const t of state.specials ? [...state.specials.snipers, ...state.specials.tugs] : []) if (near(t, C.FRAME_RANGE + 400)) things.push(t);
     if (state.supply && state.course) things.push({ x: toShipX(mainShip(state), state.supply.mx), y: state.supply.my });
-    if (state.gunship) { const gd = Math.min(state.gunship.dx, 1300); things.push({ x: b.x1 + 790 + gd, y: SHIP_LAYOUT.refPoint.y + state.gunship.dy - alt }, { x: b.x1 + 1490 + gd, y: SHIP_LAYOUT.refPoint.y - 200 + state.gunship.dy - alt }); } // (far off on her way in she is only an edge arrow)
+    if (state.gunship) { const gd = Math.min(state.gunship.dx, 1300); things.push({ x: b.x1 + 790 + gd, y: layout.refPoint.y + state.gunship.dy - alt }, { x: b.x1 + 1490 + gd, y: layout.refPoint.y - 200 + state.gunship.dy - alt }); } // (far off on her way in she is only an edge arrow)
     for (const e of things) {
       x0 = Math.min(x0, e.x - C.ENEMY_MARGIN);
       x1 = Math.max(x1, e.x + C.ENEMY_MARGIN);

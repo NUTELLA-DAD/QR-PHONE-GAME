@@ -10,23 +10,24 @@
 // Bots only take part while they are on a daring stunt (p.daring, see bots.js).
 // Player fields: p.hj = the plane while riding. Plane fields: rider (player id), phase 'kick'|'fly'.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { flyPlane, smoke, shootDown, angDiff } from './planes.js';
 import { targets } from './aim.js';
 import { inRock } from './course.js';
 import { pop } from './popups.js';
+import { mainShip } from './ships.js';
 
 const H = config.HIJACK;
 const E = config.ESCORT;
 const D = config.DOGFIGHT;
 const F = config.ENEMY;
 const HF = H.FIGHTER;
-const B = SHIP_LAYOUT.bounds;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function createHijack({ state, puff, phoneFx, air }) {
+  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const B = layout.bounds;
   state.hijacks = state.hijacks || [];
-  const shipMid = () => ({ x: SHIP_LAYOUT.aimPoint.x, y: SHIP_LAYOUT.aimPoint.y - state.ship.alt });
+  const shipMid = () => ({ x: layout.aimPoint.x, y: layout.aimPoint.y - state.ship.alt });
   const nearShip = (x, y, pad) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - state.ship.alt - pad && y < B.y1 - state.ship.alt + pad;
 
   const canRide = (p) => !!p && (!p.bot || p.daring) && !p.hj;

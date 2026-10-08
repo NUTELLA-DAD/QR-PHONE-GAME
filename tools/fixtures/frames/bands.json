@@ -18,11 +18,11 @@
     "max": 27
    },
    "hull": {
-    "min": 91.2,
-    "max": 99.7
+    "min": 90.8,
+    "max": 99.1
    },
    "hauls": {
-    "min": 11,
+    "min": 10,
     "max": 20
    },
    "missions": {
@@ -35,17 +35,17 @@
    },
    "contacts": {
     "min": 0,
-    "max": 68
+    "max": 69
    }
   },
   "route": {
    "kills": {
-    "min": 16,
+    "min": 17,
     "max": 31
    },
    "hull": {
     "min": 47.5,
-    "max": 97.6
+    "max": 98.6
    },
    "hauls": {
     "min": 9,
@@ -66,16 +66,16 @@
   },
   "open": {
    "kills": {
-    "min": 14,
-    "max": 30
+    "min": 24,
+    "max": 31
    },
    "hull": {
-    "min": 86.8,
+    "min": 57.1,
     "max": 99.9
    },
    "hauls": {
-    "min": 7,
-    "max": 18
+    "min": 9,
+    "max": 82
    },
    "missions": {
     "min": 0,
@@ -87,7 +87,7 @@
    },
    "contacts": {
     "min": 0,
-    "max": 0
+    "max": 53
    }
   }
  },
@@ -112,9 +112,9 @@
     "dist": 194
    },
    "3": {
-    "kills": 27,
-    "hull": 98.8,
-    "hauls": 11,
+    "kills": 22,
+    "hull": 95.4,
+    "hauls": 12,
     "missions": 0,
     "wrecks": 0,
     "contacts": 20,
@@ -122,35 +122,35 @@
    },
    "4": {
     "kills": 15,
-    "hull": 93,
-    "hauls": 14,
-    "missions": 0,
+    "hull": 90.8,
+    "hauls": 10,
+    "missions": 1,
     "wrecks": 0,
-    "contacts": 21,
+    "contacts": 24,
     "dist": 194
    },
    "5": {
     "kills": 27,
-    "hull": 91.2,
+    "hull": 91.9,
     "hauls": 20,
     "missions": 0,
     "wrecks": 0,
-    "contacts": 68,
+    "contacts": 69,
     "dist": 197
    },
    "6": {
     "kills": 23,
-    "hull": 99.7,
-    "hauls": 14,
+    "hull": 99.1,
+    "hauls": 13,
     "missions": 1,
     "wrecks": 0,
     "contacts": 0,
-    "dist": 205
+    "dist": 195
    },
    "7": {
     "kills": 22,
     "hull": 91.5,
-    "hauls": 14,
+    "hauls": 12,
     "missions": 0,
     "wrecks": 0,
     "contacts": 28,
@@ -159,40 +159,40 @@
    "8": {
     "kills": 22,
     "hull": 97.8,
-    "hauls": 12,
-    "missions": 0,
+    "hauls": 13,
+    "missions": 1,
     "wrecks": 0,
     "contacts": 0,
-    "dist": 194
+    "dist": 199
    }
   },
   "route": {
    "1": {
-    "kills": 16,
-    "hull": 90,
-    "hauls": 20,
-    "missions": 0,
-    "wrecks": 0,
-    "contacts": 62,
-    "dist": 188
-   },
-   "2": {
-    "kills": 23,
-    "hull": 90.1,
+    "kills": 27,
+    "hull": 95.4,
     "hauls": 9,
     "missions": 0,
     "wrecks": 0,
-    "contacts": 65,
-    "dist": 183
+    "contacts": 36,
+    "dist": 188
+   },
+   "2": {
+    "kills": 28,
+    "hull": 90.1,
+    "hauls": 11,
+    "missions": 0,
+    "wrecks": 0,
+    "contacts": 68,
+    "dist": 184
    },
    "3": {
     "kills": 31,
-    "hull": 95.4,
-    "hauls": 12,
+    "hull": 94.5,
+    "hauls": 10,
     "missions": 0,
     "wrecks": 0,
-    "contacts": 77,
-    "dist": 188
+    "contacts": 98,
+    "dist": 187
    },
    "4": {
     "kills": 28,
@@ -214,21 +214,21 @@
    },
    "6": {
     "kills": 28,
-    "hull": 97.6,
-    "hauls": 15,
+    "hull": 98.6,
+    "hauls": 11,
     "missions": 0,
     "wrecks": 0,
     "contacts": 4,
     "dist": 184
    },
    "7": {
-    "kills": 25,
-    "hull": 71.8,
-    "hauls": 70,
+    "kills": 24,
+    "hull": 77.4,
+    "hauls": 77,
     "missions": 0,
     "wrecks": 0,
-    "contacts": 254,
-    "dist": 166
+    "contacts": 240,
+    "dist": 170
    },
    "8": {
     "kills": 25,
@@ -243,7 +243,7 @@
   "open": {
    "1": {
     "kills": 25,
-    "hull": 96.3,
+    "hull": 96.6,
     "hauls": 16,
     "missions": 0,
     "wrecks": 0,
@@ -251,22 +251,22 @@
     "dist": 181
    },
    "2": {
-    "kills": 25,
-    "hull": 96.3,
-    "hauls": 18,
+    "kills": 24,
+    "hull": 97.7,
+    "hauls": 16,
     "missions": 0,
     "wrecks": 0,
     "contacts": 0,
-    "dist": 163
+    "dist": 172
    },
    "3": {
-    "kills": 23,
-    "hull": 98.3,
-    "hauls": 12,
+    "kills": 31,
+    "hull": 97.8,
+    "hauls": 15,
     "missions": 0,
     "wrecks": 0,
     "contacts": 0,
-    "dist": 191
+    "dist": 190
    },
    "4": {
     "kills": 25,
@@ -278,31 +278,31 @@
     "dist": 202
    },
    "5": {
-    "kills": 30,
-    "hull": 98.8,
-    "hauls": 7,
+    "kills": 29,
+    "hull": 96,
+    "hauls": 29,
     "missions": 0,
+    "wrecks": 0,
+    "contacts": 53,
+    "dist": 193
+   },
+   "6": {
+    "kills": 25,
+    "hull": 99.8,
+    "hauls": 13,
+    "missions": 1,
     "wrecks": 0,
     "contacts": 0,
     "dist": 190
    },
-   "6": {
-    "kills": 25,
-    "hull": 96.8,
-    "hauls": 16,
-    "missions": 0,
-    "wrecks": 0,
-    "contacts": 0,
-    "dist": 189
-   },
    "7": {
-    "kills": 14,
-    "hull": 86.8,
-    "hauls": 18,
+    "kills": 27,
+    "hull": 57.1,
+    "hauls": 82,
     "missions": 0,
     "wrecks": 0,
     "contacts": 0,
-    "dist": 185
+    "dist": 165
    },
    "8": {
     "kills": 29,

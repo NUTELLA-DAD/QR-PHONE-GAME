@@ -3,7 +3,8 @@
 import { config } from '../../config.js';
 import { altBounds } from './course.js';
 import { envIdOf } from './environments.js';
-import { SHIP_LAYOUT, outdoorDecks } from '../../shipLayout.js';
+import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { rowOf } from './shipBuild.js';
 import { applyForce } from './forces.js';
 
@@ -77,9 +78,9 @@ export function createWeather({ state, impact, puff }) {
         // Strike the gasbag or an outdoor deck (the top deck on the classic ship; a covered deck is safe from the weather: S.5g). Ship coordinates.
         let x = rand(300, 1300);
         let y = Math.random() < 0.6 ? rand(120, 380) : null;
-        const open = outdoorDecks();
+        const lay = mainShip(state).layout, open = lay.outdoorDecks();
         if (y === null) {
-          const dk = open.length ? SHIP_LAYOUT.platforms[open.length === 1 ? open[0] : open[(Math.random() * open.length) | 0]] : null;
+          const dk = open.length ? lay.platforms[open.length === 1 ? open[0] : open[(Math.random() * open.length) | 0]] : null;
           if (dk) { x = Math.max(dk.x0 + 30, Math.min(dk.x1 - 30, x)); y = dk.y - 15; } else y = rand(120, 380);
         }
         w.bolt = { x, y: y - state.ship.alt, t: 0.25 };

@@ -8,22 +8,21 @@
 //   'network' - a branching cave network: find your way through to the goal.
 //   'route'   - one winding passage that climbs, drops and doubles back (no wrong turns).
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
 
-// The ship's box around its centre point (the layout's refPoint: 800, 500 on the classic ship), in pixels.
-export function shipBox() {
-  const F = SHIP_LAYOUT.fitBox;
-  const R = SHIP_LAYOUT.refPoint;
+// The ship's box around its centre point (the layout's refPoint: 800, 500 on the classic ship), in pixels. (B1: the maps are fitted to the ship whose `layout` is passed.)
+export function shipBox(layout) {
+  const F = layout.fitBox;
+  const R = layout.refPoint;
   return { left: F.x0 - R.x, right: F.x1 - R.x, up: F.y0 - R.y, down: F.y1 - R.y };
 }
 
 // Build a map, checking the ship really can get from the start to the beacon (try again if not).
-export function makeMap(kind, level, rand, lengthMul = 1) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES)
+export function makeMap(kind, level, rand, lengthMul = 1, layout) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES)
   let map = null;
   for (let tries = 0; tries < 40; tries++) {
     // (Late-voyage open maps are so crowded with peaks and islands that no layout may pass the checks below; rather than
     // settle for the last, unplayable try, ease off one level every few failures so a playable map always comes out.)
-    map = kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul) : buildMap(kind, level, rand, lengthMul);
+    map = kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout);
     if (map.startDist >= 1e9) continue;
     if (map.open) {
       // Every outpost must be reachable too.
@@ -65,7 +64,7 @@ export function makeMap(kind, level, rand, lengthMul = 1) { // (lengthMul: a ses
   return map;
 }
 
-function buildMap(kind, level, rand, lengthMul = 1) {
+function buildMap(kind, level, rand, lengthMul = 1, layout) {
   const M = config.MAPS;
   const C = M.CELL;
   const r = (a, b) => a + rand() * (b - a);
@@ -79,8 +78,8 @@ function buildMap(kind, level, rand, lengthMul = 1) {
       for (let i = Math.max(2, Math.min(i0, i1)); i <= Math.min(W - 3, Math.max(i0, i1)); i++) solid[idx(i, j)] = 0;
     }
   };
-  const TUN = SHIP_LAYOUT.caveNeed.tunnel + M.TUNNEL_SLACK; // tunnel height (cells)
-  const SHAFT = SHIP_LAYOUT.caveNeed.shaft + M.SHAFT_SLACK; // shaft width (cells)
+  const TUN = layout.caveNeed.tunnel + M.TUNNEL_SLACK; // tunnel height (cells)
+  const SHAFT = layout.caveNeed.shaft + M.SHAFT_SLACK; // shaft width (cells)
   // Join two room centres: along, then up/down (or the other way round), wide enough for the ship.
   const join = (a, b) => {
     const hFirst = rand() < 0.5;
@@ -163,13 +162,13 @@ function buildMap(kind, level, rand, lengthMul = 1) {
     }
   }
   const map = { kind, level, CELL: C, W, H, solid, turrets, outposts: [] };
-  finishMap(map, rooms[0], rooms[rooms.length - 1]);
+  finishMap(map, rooms[0], rooms[rooms.length - 1], layout);
   return map;
 }
 
 // Open sky: hills and mountains below, floating rock islands, and enemy outposts (gun nests and
 // rocket batteries) to destroy in any order.
-function buildOpenMap(level, rand, lengthMul = 1) {
+function buildOpenMap(level, rand, lengthMul = 1, layout) {
   const M = config.MAPS;
   const C = M.CELL;
   const r = (a, b) => a + rand() * (b - a);
@@ -244,7 +243,7 @@ function buildOpenMap(level, rand, lengthMul = 1) {
   const turrets = outposts.flatMap((o) => o.guns);
   const map = { kind: 'open', level, CELL: C, W, H, solid, turrets, outposts, open: true };
   // Aim first for the station above the first outpost.
-  finishMap(map, { i: 12, j: H - 14 }, stationCell(map, outposts[0]));
+  finishMap(map, { i: 12, j: H - 14 }, stationCell(map, outposts[0]), layout);
   return map;
 }
 
@@ -262,7 +261,7 @@ export function stationCell(map, o) {
 }
 
 // Work out where the ship fits, then the route to the goal from everywhere.
-function finishMap(map, startCell, goalCell) {
+function finishMap(map, startCell, goalCell, layout) {
   const { W, H, CELL: C, solid } = map;
   const idx = (i, j) => j * W + i;
   const pre = new Int32Array((W + 1) * (H + 1));
@@ -277,7 +276,7 @@ function finishMap(map, startCell, goalCell) {
     }
     return pre[(j1 + 1) * (W + 1) + i1 + 1] - pre[j0 * (W + 1) + i1 + 1] - pre[(j1 + 1) * (W + 1) + i0] + pre[j0 * (W + 1) + i0];
   };
-  const box = shipBox();
+  const box = shipBox(layout);
   const bl = Math.ceil(-box.left / C);
   const br = Math.ceil(box.right / C);
   const bu = Math.ceil(-box.up / C);

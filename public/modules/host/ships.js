@@ -5,7 +5,8 @@
 //
 //   ship = { id,        'player' for the main ship
 //            team,      the PvP team object (state.team) or null (a getter: the bridge sets it after the sim is made)
-//            layout,    the ship's layout (today the global SHIP_LAYOUT, updated in place by applyBuild)
+//            layout,    the ship's Layout instance (shipLayout.js createLayout; ship 0's is SHIP_LAYOUT, updated in place by applyBuild)
+//            nav,       the ship's navigation (nav.js createNav(layout): route tables, lift speeds; ship 0's is nav.js mainNav)
 //            state,     the ship's own fields: hull, gas, alt, speed, pitch ... (today state.ship, the same object)
 //            world,     the host state it lives in (map, weather, enemies, players ...; a handle for the pose and the accessors)
 //            pose }     pose.js: where she is and which way she faces
@@ -20,11 +21,13 @@
 //  2. New code takes a ship HANDLE (a parameter), or gets one from shipOf / mainShip. It does not `import { SHIP_LAYOUT }` (the lint counts those down).
 //  3. World <-> ship conversions happen ONLY in pose.js: toWorld / toShip / aimToWorld / aimToShip. No `x + course.dist`, no `y - state.ship.alt`,
 //     no new `scrollSpeed` reads (the lint counts those down). Ship space is never mirrored; only the boundary (rock tests, hits, guns, lamps, camera, art) uses f.
-//  4. Per-ship things live UNDER the ship object as they get migrated (layout, modules, bags, balance, GUNS, fires/holes, nav tables, art bake).
-//     The shipLayout.js helpers (all/one/kindOf/is/nearest/hasKind/deckIndex/reviveSpot/isNestDeck/nestTier/isNestStation) take an optional layout last.
+//  4. Per-ship things live UNDER the ship object as they get migrated (layout, nav, modules, bags, balance, GUNS, fires/holes, art bake).
+//     The shipLayout.js helpers (all/one/kindOf/is/nearest/hasKind/deckIndex/reviveSpot/isNestDeck/nestTier/isNestStation) take an optional layout last
+//     and are methods of the Layout (ship.layout.one('helm')); derived tables are built with layoutTables(fn) (per layout, rebuilt when its version changes).
 //  5. Keep the update order and the Math.random order unchanged when you route something through here; the botsim baseline must stay byte-identical.
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { createPose } from './pose.js';
+import { mainNav } from './nav.js';
 
 // The main ship, wrapping today's singletons: ship.state === state.ship, ship.layout === SHIP_LAYOUT.
 export function createMainShip(state) {
@@ -32,6 +35,7 @@ export function createMainShip(state) {
     id: 'player',
     get team() { return state.team || null; },
     layout: SHIP_LAYOUT,
+    nav: mainNav,
     state: state.ship,
     world: state,
     pose: null,
