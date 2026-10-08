@@ -235,6 +235,17 @@ Phase S runs after Phase 1, alongside Phase 2. No package edits `simulation.js` 
 | S.5d | **Drag-and-drop parts** (owner request): a palette of little part pictures (gun, lamp, boiler...) dragged onto the blueprint, with a ghost and snap; **many gasbags**: any number of bags side by side (e.g. 4 small ones: lose one, 3 keep flying) or one giant bag. Each bag has its own gas, holes and lift in the sim; a ruptured bag deflates and drops its lift; art per bag | L | multi-bag sim gate (lose 1 of 4 bags: she still flies, lower); drag-drop works on the dev page. **Done**, see (b4) |
 | S.5e | Minimum ship = a gasbag + a deck (drifts on the wind, no control); helm/boiler+coal/engine optional but very helpful; game tolerates any missing part; SAILS (crew raise/lower, wind speed, tear in gusts); split crow's nest + higher nest tiers | L | --check-minimum table (speed/control improve per added part); classic identical |
 | S.5f | **Fire that cares where things are** (owner request): every part has a flammability. The COAL BUNKER is a tinderbox: a fire that reaches it flares into a big blaze that spreads fast. The boiler is an ignition source (blowouts, overheating start fires around it). Fire spreads between neighbouring parts and up/down through ladders and hatches, so placing coal next to the boiler is a real risk and keeping them apart costs walking. The validator warns "coal bunker beside the boiler: fire risk". Extinguishers and sprinklers matter more | M | botsim fire stats per build; a coal-beside-boiler build burns more than a separated one; classic stays within noise |
+| S.5g | **Outdoor or covered decks** (owner request): the pencil has an OUTDOOR / COVERED toggle.
+Outdoor decks are open-air walkways with rails:
+- wide gun arcs and the best view;
+- boarders and paratroopers land there;
+- crew can be knocked overboard;
+- weather (ice, rain, lightning, gusts) hits them.
+Covered decks sit inside the hull:
+- protected rooms, where fires spread inside instead;
+- heavier;
+- guns limited to ports/sponsons.
+Art, collision and the validator follow the choice | M | toggle works on the dev page; classic unchanged; botsim 0 errors on mixed builds |
 | S.6a | Catalogue v1 + Sparrow + `state.build` effects + dock offers / slot vote | L | voyagesim Normal no worse than today |
 | S.6b | Shipwright UI (TV blueprint, gauges, slot pins, phone cards) | M | the cold-player test passes |
 | S.7 | Balance + persistence (environment modifiers, derelict parts, limp damage, Hangar builds after P2.2) | M | no dominant or trap parts; one situational part per environment |
