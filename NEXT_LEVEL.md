@@ -214,7 +214,7 @@ Two crews, each on their own built ship, one TV. Ways to win:
 
 It also includes a bot arena (`tools/arena.mjs`): ship-vs-ship ratings and part balance.
 
-How it's built: two copies of the game side by side, linked by a bridge, so co-op is untouched. Full plan: **[PVP.md](PVP.md)**.
+How it's built (B.4): two Ships in ONE World (the game was changed to understand many airships), run by pvp/match.js, so co-op is untouched. Broadside and Capture are in, with the lobby button, teams, the shelf, rounds and the scoreboard; the hold-the-ring mode and the bot arena are still to come. Full plan: **[PVP.md](PVP.md)**.
 
 V.0, V.1a and V.2 can start alongside Phase S.
 

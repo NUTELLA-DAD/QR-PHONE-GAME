@@ -1,5 +1,7 @@
 # Phase V - PvP airship battles ("Versus") - plan written with Fable
 
+**Status (B.4): Versus is built on the one-world design (section 2): two Ships in ONE World, `pvp/match.js`, `node tools/buildsim.mjs --check-match`. Broadside and Capture are in; King of the Hill, the Shipwright build phase (v2), the crew cannon and the Elo arena tool of section 3 are still to come. The roadmap table in section 4 is the original plan.**
+
 ## 1. Player experience
 
 Two crews, each on a ship they built themselves, on one TV.
@@ -85,55 +87,30 @@ Rounds are best of 3 with a 6-minute cap. On a timeout the higher hull % wins. S
 
 ## 2. Technical architecture
 
-**Plain language:** the code assumes exactly one ship. Hundreds of places read "the ship" and "the layout", and the world scrolls past our ship. Rewriting that would be months of risky work.
+**Plain language (B.4, as built):** Versus is TWO SHIPS IN ONE WORLD. The game was changed (MOVEMENT.md, Option B) so one simulation understands many airships: each ship has her own hull, gas, guns, fires, crew and picture, and flies from her own position in one shared sky. Versus puts a red ship and a blue ship in that sky, and `pvp/match.js` runs the rounds. (This file's first draft planned two complete copies of the game stitched together by a "bridge"; that harness, with its `/b` server route, its Node loader hook and `pvptest.html`, was built as a stepping stone and was retired in B.4. Nothing of it is left.)
 
-Instead: **run two complete copies of the game side by side on the host**, each flying one ship with its own crew. A small **bridge** puts both ships in one sky, lets shells cross between them, and hands a player over when they jump ship. Co-op runs one copy with the bridge off, so it cannot change.
+### How it works
+- **The lobby.** The Mode button gains VERSUS (`simulation.setSession('versus')`, lobby only). `match.enter()` adds the second ship, sets `ship.team` red / blue, deals the crew out (`player.team`, `player.ship`) and keeps `config.PVP.ENABLED` on. New phones join the smaller side; a phone's `swap` input moves it; "Add bots" adds two to each side; CAST OFF fills the smaller crew with bots.
+- **The shelf.** `pvp/shelf.js`: the classic ship, Twin Boiler, Four Bags and three seeded random valid builds, every one validator-PASS and under `PVP.TONNAGE` (classic weight x 1.15). After CAST OFF each team votes on its phones (the dock vote's machinery, tallied per team). Red is the main ship: her layout is refitted in place (`shipSim.refit()`); blue is made afresh (`removeShip` / `addShip`).
+- **Rounds.** `match.js`: count-in (both ships moored at opposite ends of a fresh arena sky: the course generator's open sky with rock islands, no flak, `ARENA.LIFT` above the start, a soft wind wall at the edges), fight, finale (slow motion while the wreck plays out), scoreboard, next round with the sides swapped, best of three with a 6-minute cap (higher hull % wins; five rounds at most), match winner, rematch vote. Capture mode: `PVP.MODE = 'capture'`.
+- **Cross-ship combat.** One shell list and one bomb list. After the enemy fire of each step `match.crossFire()` tests every shell and bomb against every OTHER ship (`shieldBlocks`, `hitsShip`, `impact` of that ship, in her coordinates through `pose.js`); a rock island gives cover. Shells carry `from` (their ship). Two hulls that touch are pushed apart, hurt by the speed they met at and kicked by a `forces.js` moment where they touched (`match.bump`). The enemies' `targetShip(world, enemy)` picks the nearest ship still flying.
+- **The rival.** `ship.rival` / `ctx.rival` (refreshed each step): the other team's nearest ship in WORLD coordinates (aim point, guns with `manned`, gasbags, crew, helm, boiler). The bot captains (`course.js rivalPlan`) and gunners (`aim.js`) read it.
+- **Boarding.** Each ship's `air` has the other team's decks as landing surfaces (and hook anchors); an airborne crewman who lands on one is `transfer()`red to that ship and is a boarder (`shipSim.js isHostile`). A boarder's Action button: TAKE THE HELM (hold CAPTURE_TIME, not with a defender within DEFEND_REACH), SABOTAGE the boiler (hold SABOTAGE_TIME: fires and a burst pipe); ATTACK fights (`FIGHT` hit points; at zero a crewman is out cold). A knocked-out boarder is carried to his own medical bay; falling off wakes him there too. The TV shouts BOARDERS ON THE MAIN DECK!
+- **Bot captains.** Standoff and an altitude edge (the ship that started on the left holds the high ground), rock cover when losing, retreat to repair (hull < 35% and more than 2 holes), COME ABOUT when the rival is behind the bow, gunnery order (her manned guns that bear on us, her gasbags, her boiler and helm, her hull) with a lead, and a daring "board" stunt (hook across when her decks are in reach and the ship is calm; the captain closes in while he goes).
+- **Safety.** Everything sits behind `world.match` / `config.PVP.ENABLED`. Co-op runs one ship with none of it: `--check-botsim` stays byte-identical. A Versus game writes no co-op save (record, voyage, mode).
+- **The gate.** `node tools/buildsim.mjs --check-match` (alias `--check-arena`): `tools/match-check.mjs`.
 
-### Measured coupling
-- `SHIP_LAYOUT`:
-  - 306 references in 50 files;
-  - 32 module-level captures;
-  - 47 kind lookups.
-- `state.ship`: 589 references in 44 files, including `state.ship.alt` 220.
-- Also global:
-  - `state.players` 127;
-  - `state.course` 184;
-  - `state.gunship` 69;
-  - and more.
+### What is still to come
+The enemy gunship as a Ship (B.5), `forces.js` driving every pose (M.4), cross-ship ballast throws, towing and the crew cannon (B.6), the Shipwright build phase (v2) and King of the Hill.
 
-### Options considered
-| Option | Verdict |
-|---|---|
-| (a) Generalise the code to N ships | Not now: thousands of edits, and the regression gate would be at risk for weeks. |
-| (b) Player-driven gunship | Rejected as the end state: asymmetric and useless for evaluating real builds. Kept as a fallback demo. |
-| (c) **Two sim instances + a bridge** | **Recommended.** |
-
-### How option (c) works
-ES modules are instanced per URL, so loading the host module graph twice gives two independent `SHIP_LAYOUT`, `config`, `state`, nav tables, bakes and bots, with no code change.
-- **Browser:** `server.js` serves `/b` as a second path to `public/`, and PvP `main.js` imports `/b/modules/host/simulation.js` for ship B.
-- **Node (arena tool):** a small `module.register` resolve hook, or a temp copy of `public/`. Both instances step in lockstep with one seeded RNG, A then B.
-
-### The bridge (`pvp/bridge.js`, Node-safe)
-1. **One sky.** Same map seed and environment for both. B's frame offset is `dx = (dist_B + ref_B.x) - (dist_A + ref_A.x)`, `dy = alt_A - alt_B`, exactly like `state.gunship.dx/dy` today.
-2. **Rival mirror.** Each sim gets `state.rival = { layout, dx, dy, hull, guns, bags, crew, team }` every step. New code reads it behind `if (state.rival)`.
-3. **Projectiles and damage.** The sim exposes `external = { hitsShip, impact, gasHoleAt, worldPos }`. The bridge tests A's shells against B and calls B's `impact` (holes, breaches, fires, hull), credited to the gunner.
-4. **Transfers.** A player belongs to one sim at a time; `network.js` routes input by a `playerSim[id]` registry.
-   - Landing on a rival surface calls `bridge.transfer`.
-   - Overboard / KO transfers the player home.
-   - Hostiles get a tiny `useFor` branch (capture / sabotage), and `attack()` targets hostile players.
-5. **Render.** One canvas with a new `createArenaCamera`. `renderFrame(now, view, opts)` gains `opts.layers` (`background` | `ship` | `hud`) and `opts.worldOffset`; the background is drawn once and each ship draws at its offset. `pvpArt.js` draws the HUD, pennants, timer and scoreboard. The perf level is shared.
-6. **Rounds.** The bridge owns round, score and win logic. `config.PVP.ENABLED` turns off the director and AI spawns, and PvP never writes co-op saves.
-
-**Safety:** all new code sits behind `state.rival` / `config.PVP.ENABLED`. Co-op runs one instance, so `--check-botsim` must stay byte-identical. Memory roughly doubles. Sim CPU for two ships is about 3% of real time.
-
-## 3. Bot evaluation arena
+## 3. Bot evaluation arena (still to build, on top of `--check-match --mirror N`)
 
 **Plain language:** a tool pits ship A against ship B with bot crews over many rounds in several skies, and reports who wins, how fast, and why. Over a pool of ships it gives chess-style ratings and flags parts that win everywhere. This is the balance tool for catalogue v2.
 
 ### Running it
 `node tools/arena.mjs --a classic --b sparrow --rounds 10 --envs skyisles,fungal,storm --bots 6 --minutes 6 --seed 1 [--mode broadside|capture|koth] [--out arena.json]`
 
-It loads two instances, applies builds via `buildload.mjs`, crews each side with bots, steps in lockstep and swaps sides every round.
+It makes one world with two ships (`match.applyPicks`), crews each side with bots, steps it and swaps sides every round.
 
 ### What it reports
 - **Per round:**
@@ -209,6 +186,6 @@ V.3 should land before the catalogue v2 tiers, so every new part gets an arena r
 - **TV readability:** shared camera with a zoom cap, a bounded arena, scarf + pennant + HUD side, the enemy-aboard shout, and the validator's fit cap.
 - **Party complexity:** one phone line per rule, only three hostile actions, teams by scarf colour, a one-vote rematch.
 - **Network:** phones send the same inputs; the server is unchanged; the extra cost is host CPU, about 3%.
-- **Two module copies:** document them in CLAUDE.md and watch the shared globals (`localStorage`, `window.game`, `perfGov`, sfx queues).
+- **Shared globals:** `localStorage` and the sfx queues are shared by both crews (one World): a Versus game writes no co-op save.
 - **Balance:** side swaps, the mirror gate, uncontested-capture time, the GOING DOWN! comeback, and arena Elo.
-- **Determinism:** fixed A-then-B step order with one seeded RNG.
+- **Determinism:** one World, one step order, one seeded RNG.
