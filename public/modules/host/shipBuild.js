@@ -41,11 +41,11 @@ export const CONNECTOR_SPEED = { rope: 150, ladder: 170, stairs: 150, lift: 260,
 // (shifted by the part's column). Fields named in D_KINDS also get `d` (the platform index).
 const ARRAYS = ['platforms', 'connectors', 'rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers', 'boarderEntryPoints', 'escortDocks', 'gasbags'];
 const KEYED = ['gunMounts', 'searchlights'];
-const OPTIONAL = ['ballast', 'gasValves', 'sails']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
+const OPTIONAL = ['ballast', 'gasValves', 'sails', 'armour']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
 const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'liftRepair'];
 const X_FIELDS = {
   platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x'], vents: ['x'], racks: ['x'],
-  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], sails: ['x'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
+  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], sails: ['x'], armour: ['x0', 'x1'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
   coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbags: ['cx'], liftRepair: ['x'],
 };
 const D_KINDS = ['rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers'];
@@ -132,7 +132,8 @@ export const bagName = (i, n) => (n <= 1 ? 'GASBAG' : i === 0 ? 'AFT BAG' : i ==
 
 export const PARTS = {
   // A walkable floor. `row` is a DECK_ROWS name (y comes from it), x0/x1 are its span.
-  deck: { mass: (p) => ((p.x1 - p.x0) / 100) * M().deck * (p.outside ? 0.5 : 1) + (p.row === 'crow2' ? M().mast : 0), lift: 0, steam: 0, hands: 0, emit: (p, A) => {
+  // (S.5g: `outside` is the OUTDOOR / COVERED flag: an open-air walkway with rails, or a covered deck inside the hull. Rows have a default (the top deck and the nests are outdoor, main / lower / keel / deep covered); a deck part may set it either way.)
+  deck: { mass: (p) => ((p.x1 - p.x0) / 100) * M().deck * (p.outside ? M().outdoorDeck : M().coveredDeck) + (p.row === 'crow2' ? M().mast : 0), lift: 0, steam: 0, hands: 0, emit: (p, A) => {
     const o = withoutPart(p);
     o.y = DECK_ROWS[o.row];
     delete o.row;
@@ -178,6 +179,9 @@ export const PARTS = {
   // A sandbag (trim weight): `p` is its deck and x where it stands; `hang: true` hangs it from the hull under the deck instead. Cheap, but a long way out
   // from the middle it moves the centre of mass (balanceOf).
   ballast: { mass: () => M().ballast, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('ballast', withoutPart(p)) },
+  // Armour plate (S.5g): riveted iron on a stretch of a deck's hull wall (covered deck) or rail (open-air deck), x0 to x1 on deck `p`. Very heavy, does not burn, and hits on it do
+  // far less (config.ARMOUR, config.FIRE.FLAMMABILITY.armour). It weighs by its length.
+  armour: { mass: (p) => ((p.x1 - p.x0) / 100) * M().armour, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('armour', withoutPart(p)) },
   pipe: piece('pipes', { mass: () => M().pipe }),
   vent: piece('vents', { mass: () => M().vent }),
   // A gas valve (S.5d): a wheel on a deck that opens or shuts the feed to ONE gasbag (the one nearest `bx`, the x of the bag it was linked to when placed). A shut bag
@@ -387,6 +391,7 @@ export function buildLayout(parts, opts = {}) {
   const index = (id) => out.platforms.findIndex((q) => q.id === id);
   for (const kind of D_KINDS) out[kind] = out[kind].map((o) => ({ ...o, d: index(o.p) }));
   if (out.sails) out.sails = out.sails.map((o) => ({ ...o, d: index(o.p) }));
+  if (out.armour) out.armour = out.armour.map((o) => ({ ...o, d: index(o.p) }));
   if (out.gasValves) out.gasValves =out.gasValves.map((o) => ({ ...o, d: index(o.p), bag: bagNearX(out.gasbags, o.bx != null ? o.bx : o.x) })); // (the bag it feeds: tail to nose, as in gasbags; -1 with no bag)
   if (out.ballast) out.ballast =out.ballast.map((o) => { const d = index(o.p); return { ...o, d, y: d < 0 ? 0 : out.platforms[d].y + (o.hang ? config.BALANCE.BALLAST_HANG : 0) }; });
   out.connectors = out.connectors.map((c) => ({ ...c, top: index(c.top), bottom: index(c.bottom) }));
@@ -439,7 +444,8 @@ export function hullGeom(platforms, rooms = []) {
   const find = (id) => platforms.find((q) => q.id === id);
   // (A half-built ship from the blueprint editor has no main / lower / top deck yet: the hull wraps whatever hull decks there are.)
   const inHull = platforms.filter((q) => !q.outside && ['main', 'lower', ...KEEL_ROWS].includes(rowOf(q))).sort((a, b) => a.y - b.y);
-  const main = find('main') || inHull[0], lower = find('lower') || inHull[inHull.length - 1];
+  const covered = (id) => { const q = find(id); return q && !q.outside ? q : null; }; // (an open-air main or lower deck is a walkway with rails, not part of the hull: S.5g)
+  const main = covered('main') || inHull[0], lower = covered('lower') || inHull[inHull.length - 1];
   if (!main || !lower) return null;
   const cat = find('catwalk') || { y: main.y - 170 };
   const m = rowSpan(platforms, main);
@@ -489,6 +495,11 @@ export function deriveSamples(out) {
   if (lowerS.x1 - lowerS.x0 > 456) row(lowerS.x0 + 228, lowerS.x1 - 228, lower.y + 25); // the chine
   row(lowerS.x0, lowerS.x1, lower.y + 72); // the keel line, outriggers included
   for (const q of out.platforms) {
+    if (q.outside && [...KEEL_ROWS, 'main', 'lower'].includes(rowOf(q))) { // an open-air walkway in the hull rows (S.5g): its rail ends, and its underside if nothing else is under it
+      add(q.x0 - 10, q.y - 46), add(q.x1 + 10, q.y - 46);
+      if (rowOf(q) !== 'lower' && rowOf(q) !== 'main') row(q.x0, q.x1, q.y + 30);
+      continue;
+    }
     if (!q.outside && KEEL_ROWS.includes(rowOf(q))) { // a full deck under the lower deck: its walls and its keel
       add(q.x0 - 14, q.y - 60), add(q.x1 + 14, q.y - 60);
       row(q.x0 - 14, q.x1 + 14, q.y + 27);
@@ -554,6 +565,7 @@ function deriveGeometry(out, cell) {
       { x0: lowerS.x0, x1: lowerS.x1, y0: lower.y - 45, y1: lower.y + 10 }, // the outriggers
       { x0: catS.x0, x1: catS.x1 + 20, y0: cat.y - 140, y1: cat.y + 5 }, // the open top deck, its guns and the helm mount
     ];
+    for (const q of out.platforms) if (q.outside && [...KEEL_ROWS, 'main', 'lower'].includes(rowOf(q))) out.hitRects.push({ x0: q.x0 - 10, x1: q.x1 + 10, y0: q.y - 140, y1: q.y + 20 }); // an open-air walkway in the hull rows is a target of its own (S.5g)
     for (const q of out.platforms) if (rowOf(q) === 'crow2') out.hitRects.push({ x0: q.x0 - 10, x1: q.x1 + 10, y0: q.y - 120, y1: q.y + 20 }); // a high nest sticks out above the bag: a bigger target
     for (const q of out.platforms) { // belly compartments (and full decks under the lower deck)
       if (!q.outside && q.y > lower.y) out.hitRects.push({ x0: q.x0, x1: q.x1, y0: lower.y + 25, y1: q.y + (KEEL_ROWS.includes(rowOf(q)) ? 25 : q.y >= DECK_ROWS.bay ? 20 : 30) });
@@ -590,6 +602,7 @@ export function partPos(p, ys) {
   if (p.part === 'coil' || p.part === 'bombBay') return { x: p.x, y: p.y };
   if (LINKS.includes(p.part)) return { x: (p.xTop + p.xBottom) / 2, y: (y(p.top) + y(p.bottom)) / 2 };
   if (p.part === 'pipe') return { x: p.points.reduce((n, q) => n + q[0], 0) / p.points.length, y: p.points.reduce((n, q) => n + q[1], 0) / p.points.length };
+  if (p.part === 'armour') return { x: (p.x0 + p.x1) / 2, y: y(p.p) };
   if (p.part === 'ballast') return { x: p.x, y: y(p.p) + (p.hang ? config.BALANCE.BALLAST_HANG : 0) };
   if (p.x != null && p.p != null) return { x: p.x, y: y(p.p) };
   return null;

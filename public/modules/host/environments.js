@@ -9,7 +9,7 @@
 //   wind  - sideways shove (px/s) during a blizzard gust               -> applied here to course.dist
 //   heat/burn/blizzard/smoke - 0..1 amounts for the art and the TV
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, all, deckIndex, isNestDeck } from '../../shipLayout.js';
+import { SHIP_LAYOUT, all, deckIndex, isNestDeck, outdoorDecks } from '../../shipLayout.js';
 import { floorBelow } from './maps.js';
 import { createDeepEnv } from './envDeep.js'; // Fungal Depths (spores, clogged engines) and The Aether (low gravity, oxygen)
 import { createStormSea } from './envStormSea.js'; // Storm Front + Sunken Sea rules
@@ -59,16 +59,15 @@ export const favour = (state, kind) => {
   return f && f[kind] != null ? f[kind] : 1;
 };
 
-export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) {
+export function createEnvironment({ state, puff, phoneFx, impact, damageHull, ignite }) {
   state.icing = []; // ice crusts: { area: 'gasbag'|'topdeck'|'gun', gun?, x, d, lvl, prog }
   state.ice = { gasbag: 0, topdeck: 0, guns: 0 }; // how iced each area is (0-1)
   state.env = { id: 'skyisles', sink: 0, lift: 0, wind: 0, blizzard: 0, smoke: 0, heat: 0, burn: 0, lavaY: null, thermalAt: 0, gravity: 1, engine: 1, accel: 1, o2: 1, lack: 0, drag: 0, gale: 0 };
   const deep = createDeepEnv({ state, puff, phoneFx: phoneFx || (() => {}) });
-  const ss = createStormSea({ state, puff, impact, damageHull }); // storm + sea rules (envStormSea.js)
-  const CAT = IDX('catwalk');
+  const ss = createStormSea({ state, puff, impact, damageHull, ignite }); // storm + sea rules (envStormSea.js)
   const LOWER = IDX('lower');
-  // Guns out in the open (on the nest or the top deck) are the ones that ice up.
-  const gunSpots = () => all('gun').filter((s) => isNestDeck(s.p) || s.p === 'catwalk').map((s) => ({ gun: s.n, d: s.d, x: s.x }));
+  // Guns out in the open (on a nest or an outdoor deck: the top deck on the classic ship) are the ones that ice up; a covered deck is sheltered (S.5g).
+  const gunSpots = () => { const open = new Set(outdoorDecks().map((d) => P[d].id)); return all('gun').filter((s) => isNestDeck(s.p) || open.has(s.p)).map((s) => ({ gun: s.n, d: s.d, x: s.x })); };
   let seenMap = null;
   let blizzT = 0;
   let blizzLeft = 0;
@@ -101,6 +100,9 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) 
       const g = free[(Math.random() * free.length) | 0];
       crust = { area, gun: g.gun, x: g.x, d: g.d };
     } else {
+      const open = outdoorDecks(); // (ice settles on an outdoor deck; a ship with none, all under cover, gets none)
+      if (!open.length) return;
+      const CAT = open.length === 1 ? open[0] : open[(Math.random() * open.length) | 0];
       const cat = P[CAT];
       let x = 0;
       for (let k = 0; k < 8; k++) {
@@ -215,7 +217,7 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) 
           burnT = L.FIRE_EVERY;
           if (state.fires.length < L.MAX_FIRES) {
             const lo = P[LOWER];
-            state.fires.push({ x: rand(lo.x0 + 80, lo.x1 - 80), d: LOWER, t: 0, prog: 0 });
+            ignite(LOWER, rand(lo.x0 + 80, lo.x1 - 80), 'env'); // (the lava scorches the belly: fire.js refuses plate and ground that cannot burn)
             puff(rand(lo.x0 + 80, lo.x1 - 80), lo.y - state.ship.alt, '#ff8a34', 8);
           }
         }

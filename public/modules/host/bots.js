@@ -10,6 +10,7 @@ import { isEscortStation, escortFor } from './escort.js';
 import { LIGHT_NAMES, isSearchlight, darkTarget } from './searchlight.js';
 import { botJobs as goingDownJobs } from './goingDown.js';
 import { autopilotOn } from './crewscale.js';
+import { flamAt } from './fireModel.js';
 
 const L = SHIP_LAYOUT;
 const B = config.BOTS;
@@ -215,6 +216,10 @@ function listJobs(state, bot) {
   const helmSt = one('helm');
   if (state.phase === 'flying' && helmSt && !players.some((q) => isHelm(q.lock)) && !mods.some((m) => m.name === helmSt.n && m.broken)) jobs.push({ kind: 'station', obj: helmSt.n, max: 1 });
   jobs.push(...sailJobs(state, bot, true)); // (a gust is coming or she is in a cave: reef any sail that is up)
+  // A fire in the coal (S.5f: a big fire, or one on ground as flammable as the coal) is the worst fire aboard: a blaze there feeds itself and spreads fast. Everyone near
+  // runs to it at once, ahead of the other chores.
+  const hotFires = !canSpray ? [] : state.fires.filter((f) => f.big || flamAt(L, f.d, f.x) >= config.FIRE.BLAZE.FLAME_AT);
+  for (const f of hotFires) jobs.push({ kind: 'fire', obj: f, max: 2, cap: B.HOT_FIRE_CAP, urgent: true });
   // Outpost raid: the bomb bay is how outposts die. Bombs run out while the ship hovers over a gun: someone fetches more, now.
   const c = state.course;
   const bombRun = !!(c && c.map && c.map.open && !c.done && c.target && Math.hypot(c.target.x - (c.dist + SHIP_LAYOUT.refPoint.x), c.target.y - (SHIP_LAYOUT.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_RANGE);
@@ -242,7 +247,7 @@ function listJobs(state, bot) {
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
   if (bombStarved) jobs.push({ kind: 'ammo', obj: bay, max: 2, cap: 2 });
   // A real blaze (fires spread and eat the hull) comes before patching holes in the gasbag.
-  if (canSpray && state.fires.length >= B.FIRE_BLAZE) for (const f of state.fires) jobs.push({ kind: 'fire', obj: f, max: 1, cap: B.FIRE_CAP });
+  if (canSpray && state.fires.length >= B.FIRE_BLAZE) for (const f of state.fires) if (!hotFires.includes(f)) jobs.push({ kind: 'fire', obj: f, max: 1, cap: B.FIRE_CAP });
   // Gas valves (S.5d): shut the valve of a ruptured bag (holes in it, or flat) so it stops draining the feed, before patching; open it again once the holes are patched.
   (L.gasValves || []).forEach((v, i) => {
     const holes = gasHoles.filter((h) => (h.bag | 0) === v.bag).length, bag = (state.bags || [])[v.bag];
@@ -259,7 +264,7 @@ function listJobs(state, bot) {
   const ventIdx = state.ventOpen.findIndex((open) => (ventWanted ? !open : ventCalm && open));
   if ((ventWanted || ventCalm) && ventIdx >= 0) jobs.push({ kind: 'vent', obj: L.vents[ventIdx], max: 1 });
   for (const bomb of state.bombs || []) jobs.push({ kind: 'defuse', obj: bomb, max: 1 });
-  const fires = !canSpray ? [] : state.fires.map((f) => ({ kind: 'fire', obj: f, max: 1 }));
+  const fires = !canSpray ? [] : state.fires.filter((f) => !hotFires.includes(f)).map((f) => ({ kind: 'fire', obj: f, max: 1 }));
   const holes = !canHammer ? [] : (state.gasHoles || []).map((h) => ({ kind: "patch", obj: h, max: 1 }));
   const hullHoles = !canHammer ? [] : state.breaches.map((h) => ({ kind: "patch", obj: h, max: 1 })); // (each open hull hole costs hull every second: patch them before repairing guns)
   const icy = !canHammer ? [] : (state.icing || []).filter((q) => q.lvl >= B.ICE_AT).map((q) => ({ kind: 'ice', obj: q, max: 1 })); // frost: crusts to chip with the hammer
@@ -385,7 +390,7 @@ function chooseJob(state, bot, bots) {
   };
   // (Stations come in order of usefulness: weigh that over walking distance.)
   // (how useful it is counts for more than how far it is - but stations of EQUAL use go to whoever is nearest.)
-  const rank = (j) => (kind === 'station' ? (j.tier ?? 1) * B.STATION_TIER_PX : 0);
+  const rank = (j) => (kind === 'station' ? (j.tier ?? 1) * B.STATION_TIER_PX : kind === 'fire' && j.urgent ? -B.HOT_FIRE_PX : 0); // (a fire in the coal counts as nearer than it is)
   return jobs.filter((j) => j.kind === kind).sort((a, b) => rank(a) + dist(a) - rank(b) - dist(b))[0];
 }
 

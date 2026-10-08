@@ -6,6 +6,7 @@
 // A check is { group, level: 'PASS' | 'WARN' | 'FAIL', text }; ok means no FAIL.
 import { config } from '../../config.js';
 import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf, isNestRow } from './shipBuild.js';
+import { fireRisk } from './fireModel.js';
 
 const BC = config.BUILD_CHECK;
 const BALANCE = config.BALANCE;
@@ -372,8 +373,28 @@ export function validate(parts, opts = {}) {
   group(R, rbad, 'a deck and a gasbag: she can fly (everything else is optional)');
   for (const s of L.sails || []) {
     const q = byId[s.p];
-    if (q && !['nest', 'crow2', 'catwalk'].includes(rowOf(q))) warn('Sails', `${s.n} stands on the ${q.name}: a mast belongs on the top deck or a crow's nest, where it catches the wind`);
+    if (q && !q.outside) warn('Sails', `${s.n} stands on the ${q.name}, a covered deck: a mast needs the open air to catch the wind (make the deck outdoor, or move the mast)`);
+    else if (q && !['nest', 'crow2', 'catwalk'].includes(rowOf(q))) warn('Sails', `${s.n} stands on the ${q.name}: a mast belongs on the top deck or a crow's nest, where it catches the wind`);
   }
+  // --- Open-air and covered decks (S.5g): the pencil's OUTDOOR / COVERED toggle. Weather, boarders and the overboard drop reach outdoor decks only.
+  const BODY = ['catwalk', 'main', 'lower', 'keel', 'deep'];
+  const openDecks = L.platforms.filter((q) => q.outside && BODY.includes(rowOf(q))), coveredDecks = L.platforms.filter((q) => !q.outside && BODY.includes(rowOf(q)));
+  if (openDecks.length || coveredDecks.length) {
+    const names = (list) => list.map((q) => q.name).join(', ') || 'none';
+    info('Decks', `${openDecks.length} outdoor (${names(openDecks)}: rails, wide gun arcs, weather and boarders reach them, crew can be knocked overboard), ${coveredDecks.length} covered (${names(coveredDecks)}: protected rooms, heavier, fires spread inside, guns as ports)`);
+    if (!openDecks.length) info('Decks', 'no outdoor deck: boarders and falling crew land on a covered deck, no mast, lamp or boarding point has anywhere to stand, and nobody can be knocked overboard');
+  }
+  for (const e of L.boarderEntryPoints) { const q = byId[e.p]; if (q && !e.auto && !q.outside) warn('Decks', `a boarding point on the ${q.name}, a covered deck: raiders land on a roof (put boarding points on an outdoor deck)`); }
+  for (const s of L.stations) { const q = byId[s.p]; if (q && s.kind === 'searchlight' && !q.outside) warn('Decks', `${s.n} is on the ${q.name}, a covered deck: a lamp needs the open air`); }
+  for (const a of L.armour || []) { const q = byId[a.p]; if (!q) fail('Armour', `armour plate on a deck that does not exist (${a.p})`); else if (a.x0 < q.x0 - 1 || a.x1 > q.x1 + 1) warn('Armour', `armour plate on the ${q.name} runs off the end of the deck (x ${Math.round(a.x0)} to ${Math.round(a.x1)})`); }
+  if ((L.armour || []).length) {
+    const len = L.armour.reduce((n, a) => n + a.x1 - a.x0, 0), w = (len / 100) * BALANCE.MASS.armour;
+    info('Armour', `${L.armour.length} stretch${L.armour.length === 1 ? '' : 'es'} of riveted plate, ${Math.round(len)} px in all, weighing ${w.toFixed(0)} (about ${(w / BALANCE.MASS.kind.boiler).toFixed(1)} boilers): hits there count for ${Math.round(config.ARMOUR.POWER_MUL * 100)}%, rarely breach, and the plate does not burn`);
+  }
+  // --- Fire (S.5f): fire cares where things are. Coal is tinder and the boiler is where fires start.
+  const fr = fireRisk(L);
+  if (fr.coalBoiler !== null && fr.coalBoiler < BC.FIRE_NEAR) warn('Fire', `coal bunker beside the boiler: fire risk (${fr.coalBoiler} px of fire path apart, under ${BC.FIRE_NEAR}). A blowout lights the coal, which flares into a blaze; put them on different decks or further apart (it costs walking)`);
+  if (L.platforms.length) info('Fire', `fire risk ${fr.score}/10 (${fr.level})${fr.notes.length ? ': ' + fr.notes.join('; ') : ''}; up to ${fr.cap} fires at once for her size`);
   if ((L.sails || []).length) {
     const S = config.SAIL, k = Array.from({ length: L.sails.length }, (_, i) => S.BONUS_DIM ** i).reduce((a, b) => a + b, 0);
     info('Sails', `${L.sails.length} sail${L.sails.length === 1 ? '' : 's'}: raised, they add about +${Math.round(S.BONUS * k * 100)}% of top speed in a calm sky (more in a gale, less in caves); a gust can tear a sail left up`);
@@ -384,7 +405,7 @@ export function validate(parts, opts = {}) {
   for (const c of list) if (c.tier === 'rec' && !c.ok && c.applies) warn('Advice', c.why);
   const hardNeeds = list.filter((c) => c.tier === 'need' && !c.ok);
   const advice = list.filter((c) => c.tier !== 'need' && !c.ok && c.applies);
-  return result(L, { budgets: { lift, steam, hands, walk, fit, balance: bal }, checklist: list, needs: hardNeeds.map((c) => c.label), advice: advice.map((c) => ({ key: c.key, label: c.label, why: c.why, tier: c.tier })) });
+  return result(L, { budgets: { lift, steam, hands, walk, fit, balance: bal, fire: fr }, checklist: list, needs: hardNeeds.map((c) => c.label), advice: advice.map((c) => ({ key: c.key, label: c.label, why: c.why, tier: c.tier })) });
 }
 
 // ---- bot-run check ---------------------------------------------------------------------------------------------

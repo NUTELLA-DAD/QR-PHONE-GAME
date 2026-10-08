@@ -122,7 +122,7 @@ export function createModules() {
   const update = (state, dt) => {
     // Fires scorch nearby modules on the same deck.
     for (const f of state.fires) {
-      for (const m of list) if (m.d === f.d && Math.abs(m.x - f.x) < M.FIRE_RADIUS) damage(m, M.FIRE_DAMAGE * dt);
+      for (const m of list) if (m.d === f.d && Math.abs(m.x - f.x) < M.FIRE_RADIUS) damage(m, M.FIRE_DAMAGE * dt * (f.big ? config.FIRE.BLAZE.SCORCH_MUL : 1));
     }
     // Lift crawls without steam.
     if (LIFT >= 0) connScale[LIFT] = works(state, 'Lift') ? 1 : M.UNPOWERED_LIFT;

@@ -87,6 +87,9 @@ export function nearest(kind, at) {
 export const isNestDeck = (id) => { const q = SHIP_LAYOUT.platforms.find((o) => o.id === id); return !!q && isNestRow(rowOf(q)); };
 // How high a nest stands: 0 = the nest on the bag, 1 = the high tier (a longer view, config.NEST).
 export const nestTier = (id) => { const q = SHIP_LAYOUT.platforms.find((o) => o.id === id); return q && rowOf(q) === 'crow2' ? 1 : 0; };
+// The open-air walkways of the ship (S.5g): indices of the full decks that are OUTDOOR (the top deck on the classic ship; the pencil's OUTDOOR / COVERED toggle can make any
+// deck either). Weather (ice, lightning), boarders landing and crew being knocked overboard care about these; the crow's nests, the helm mount and the belly blisters are not counted.
+export const outdoorDecks = () => SHIP_LAYOUT.platforms.map((q, i) => (q.outside && ['catwalk', 'main', 'lower', 'keel', 'deep'].includes(rowOf(q)) ? i : -1)).filter((i) => i >= 0);
 // A crow's-nest station: a lookout, or a searchlight standing on a nest deck (links.js, linkArt.js, spotter.js).
 export const isNestStation = (name) => {
   const s = SHIP_LAYOUT.stations.find((q) => q.n === name);

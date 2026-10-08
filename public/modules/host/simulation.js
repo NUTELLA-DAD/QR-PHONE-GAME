@@ -29,6 +29,8 @@ import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { createGoingDown } from './goingDown.js';
 import { createBalance } from './balance.js';
 import { createSails, windSpeed } from './sails.js';
+import { createFire } from './fire.js';
+import { armourOn } from './fireModel.js';
 import { installBags, syncBags, refillBags, stepBags, watchBags } from './gasBags.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
@@ -195,7 +197,7 @@ export function createSimulation() {
     const bomb = state.bombs.find((o) => here(o, 60));
     if (bomb) return { type: 'defuse', obj: bomb, hold: true, time: config.RAIDERS.DEFUSE_TIME, label: 'Defuse bomb' };
     const fire = state.fires.find((o) => here(o, 70));
-    if (fire && tool === 'extinguisher') return { type: 'fire', obj: fire, hold: true, time: T.EXTINGUISH_TIME, label: 'Spray fire' };
+    if (fire && tool === 'extinguisher') return { type: 'fire', obj: fire, hold: true, time: T.EXTINGUISH_TIME * (fire.big ? config.FIRE.BLAZE.EXTINGUISH_MUL : 1), label: fire.big ? 'Spray the blaze' : 'Spray fire' };
     const hole = state.breaches.find((o) => here(o, 70));
     if (hole && tool === 'hammer') return { type: 'hole', obj: hole, hold: true, time: T.PATCH_TIME, label: 'Patch hole' };
     // Holding the right tool for a job in reach: the job wins over a nearby rack.
@@ -675,6 +677,7 @@ export function createSimulation() {
     const H = config.HELM_EXPOSED;
     const st = one('helm');
     if (!st) return;
+    if (!PLATFORMS[st.d].outside) return; // a helm on a covered deck (S.5g) is under a roof: nothing out in the open to hit
     const cy = PLATFORMS[st.d].y - H.HIT_CY;
     if (Math.hypot(x - st.x, y - cy) > H.HIT_RADIUS * Math.min(2, Math.max(1, power))) return;
     const victim = Object.values(state.players).find((q) => !q.fall && !q.fly && !(q.ko > 0) && q.conn == null && q.d === st.d && (kindOf(q.lock) === 'helm' || Math.abs(q.x - st.x) < 45));
@@ -692,6 +695,15 @@ export function createSimulation() {
 
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
   const impact = (x, y, power) => {
+    // Riveted plate (S.5g) on this stretch of hull wall or rail: the hit counts for much less, and rarely punches through.
+    const d = onGasbag(x, y) < 0 ? roomPlatformAt(x, y) : null;
+    const plate = d !== null && !!armourOn(SHIP_LAYOUT, d, x);
+    if (plate) {
+      power *= config.ARMOUR.POWER_MUL;
+      state.fireStats.plated++;
+      shipPuff(x, y, '#cfd8dc', 5);
+      state.sfxQ.push(['impact']);
+    }
     state.ship.shake = Math.max(state.ship.shake, Math.min(0.6, 0.22 * power));
     air.shove(power, x);
     if (power >= 1.5) {
@@ -712,12 +724,13 @@ export function createSimulation() {
       damageHull(2 * power);
       return;
     }
-    const d = roomPlatformAt(x, y);
     if (d !== null) {
       const p = PLATFORMS[d];
-      const holes = power >= 2 ? (Math.random() < coll ? 2 : 1) : Math.random() < config.SHIP.HOLE_CHANCE * coll ? 1 : 0;
+      const holes = power >= 2 ? (Math.random() < coll ? 2 : 1) : Math.random() < config.SHIP.HOLE_CHANCE * coll * (plate ? config.ARMOUR.HOLE_MUL : 1) ? 1 : 0;
       for (let i = 0; i < holes && state.breaches.length < 10; i++) state.breaches.push({ x: clamp(x + (i - 0.5) * 70 * (holes - 1), p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d, prog: 0 });
-      if (((power >= 2 && Math.random() < coll) || Math.random() < 0.35 * coll) && state.fires.length < 8) state.fires.push({ x: clamp(x + (Math.random() - 0.5) * 80, p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d, t: 0, prog: 0 });
+      // (a fire starts more readily on tinder (the coal), and not at all on plate: the spot's flammability scales the chance, 1 on a plain deck)
+      const ig = fireSys.igniteChance(d, x);
+      if ((power >= 2 && Math.random() < coll * Math.min(1, ig)) || Math.random() < 0.35 * coll * ig) fireSys.ignite(d, x + (Math.random() - 0.5) * 80, 'hit');
     }
     damageHull(config.SHIP.HIT_DAMAGE * power);
   };
@@ -743,6 +756,7 @@ export function createSimulation() {
   const links = createLinks({ state, modules, shipPuff }); // linked stations: gun + loader, helm + lookout, boiler surge (links.js)
   const sails = createSails({ state, modules }); // wind and sails: the extra speed of raised sails, gust tears (sails.js)
   const balance = createBalance(state); // the seesaw: live centre of mass against the bag's lift (balance.js)
+  const fireSys = createFire({ state, shipPuff }); // fire that cares where things are: flammability, spreading, the coal blaze (fire.js, fireModel.js)
   const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt }); // GOING DOWN! last stand + the ice locker (goingDown.js)
   state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
 
@@ -1139,7 +1153,7 @@ export function createSimulation() {
   const searchlights = createSearchlights({ state });
   const gunship = createGunship({ state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) });
   const weather = createWeather({ state, impact, puff });
-  const env = createEnvironment({ state, puff, phoneFx, impact, damageHull }); // ice, thermals, blizzards (rules in environments.js)
+  const env = createEnvironment({ state, puff, phoneFx, impact, damageHull, ignite: fireSys.ignite }); // ice, thermals, blizzards (rules in environments.js)
   const air = createAirborne({ state, puff, phoneFx });
   const hijack = createHijack({ state, puff, phoneFx, air }); // stolen dogfighters
   const hookshot = createHookshot({ state, puff, phoneFx, air, hijack }); // personal grappling hook
@@ -1766,6 +1780,8 @@ export function createSimulation() {
       puff(boiler.x, platformY(boiler.d) - 70 - state.ship.alt, '#fff', 20);
       pop(state, boiler.x, platformY(boiler.d) - 160 - state.ship.alt, 'boiler', '#ff5a1f', 1.6);
       modules.damage(modules.byName[boiler.n], config.MODULES.BOILER_BLOWOUT_DAMAGE, shipPuff);
+      // The blowout throws flames about the firebox: a fire beside the boiler (and maybe a second), which spreads to whatever is near (the coal!).
+      if (Math.random() < config.FIRE.BOILER_BLOWOUT_FIRES) fireSys.lightBoiler(boiler, Math.random() < 0.6 ? 2 : 1);
       const pipes = modules.list.filter((m) => m.kind === 'pipe' && !m.broken);
       if (pipes.length) modules.damage(pipes[(Math.random() * pipes.length) | 0], 999, shipPuff);
       state.ship.shake = 0.6;
@@ -1981,17 +1997,10 @@ export function createSimulation() {
       if (!object.worked) object.prog = Math.max(0, (object.prog || 0) - dt * 0.4);
       object.worked = false;
     }
-    for (const fire of state.fires) {
-      if ((fire.t += dt) > config.FIRE.SPREAD_EVERY / crewMul(state, 'spread') && state.fires.length < 8) {
-        fire.t = 0;
-        const p = PLATFORMS[fire.d];
-        state.fires.push({ x: clamp(fire.x + (Math.random() < 0.5 ? -1 : 1) * (100 + Math.random() * 60), p.x0 + 20, (p.id === 'main' ? MAIN_X1 : p.x1) - 20), d: fire.d, t: 0, prog: 0 });
-        break;
-      }
-    }
+    fireSys.update(dt); // (fires spread towards what burns best, big ones smoke, an overheating boiler throws sparks: fire.js)
 
     if (!state.ship.down && !goingDown.protect()) {
-      state.ship.hull -= (state.breaches.length * 0.5 + state.fires.length * 0.35) * damageMul(state) * 2 * dt;
+      state.ship.hull -= (state.breaches.length * 0.5 + fireSys.load() * 0.35) * damageMul(state) * 2 * dt;
       if (state.ship.hull <= 0) wreck();
     }
 
@@ -2005,6 +2014,7 @@ export function createSimulation() {
     taken,
     getHelm,
     impact, // (a hit on the ship at ship coordinates; the gasbag gate in tools/buildsim.mjs shoots her with it)
+    fire: fireSys, // (fire.js: ignite() / update(); the --check-fire gate lights fires with it)
     gasHoleAt,
     interaction,
     modules,

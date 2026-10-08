@@ -103,7 +103,7 @@ function layoutSea(map, F) {
   return out;
 }
 
-export function createStormSea({ state, puff, impact, damageHull }) {
+export function createStormSea({ state, puff, impact, damageHull, ignite }) {
   const E = state.env;
   const LOWER = IDX('lower');
   const CAT = IDX('catwalk');
@@ -164,7 +164,7 @@ export function createStormSea({ state, puff, impact, damageHull }) {
     } else {
       J.struck++;
       impact(c.x, P[CAT].y, F.ROD.POWER); // module damage, dents (and maybe a fire) where it lands
-      if (state.fires.length < F.ROD.MAX_FIRES) state.fires.push({ x: clamp(c.x + rand(-60, 60), P[CAT].x0 + 20, P[CAT].x1 - 20), d: CAT, t: 0, prog: 0 });
+      if (state.fires.length < F.ROD.MAX_FIRES) ignite(CAT, clamp(c.x + rand(-60, 60), P[CAT].x0 + 20, P[CAT].x1 - 20), 'env');
       warn(2.5, 'LIGHTNING STRIKE! NOBODY HELD A ROD!');
     }
     J.charge = null;

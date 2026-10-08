@@ -12,7 +12,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT, applyBuild } from '../../shipLayout.js';
 import { BUILDS, DECK_ROWS, rowOf, buildLayout } from './shipBuild.js';
 import { validate, makePlanner, judgeBotRuns } from './buildCheck.js';
-import { PALETTE, slotsFor, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, pickSlot, whyNot, thingAt, removeAt, emptyBuild, minimalBuild, snapX, rowAtY, summarize } from './buildSlots.js';
+import { PALETTE, slotsFor, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, pickSlot, whyNot, thingAt, removeAt, emptyBuild, minimalBuild, snapX, rowAtY, summarize, addArmour } from './buildSlots.js';
 import { blueprintView, drawBlueprint } from './blueprintArt.js';
 import { createPartPictures } from './partArt.js';
 import { createSprites } from './sprites.js';
@@ -111,10 +111,15 @@ function removePart(i) {
   const name = p.n || p.name;
   edit(parts.filter((o, j) => j !== i && !(name && (o.to === name || (o.part === 'escortDock' && o.n === name)))));
 }
-const TOOLS = [['tDraw', 'draw'], ['tBag', 'bag'], ['tLadder', 'ladder'], ['tErase', 'erase'], ['tDelete', 'delete'], ['tPlace', 'place']];
+const TOOLS = [['tDraw', 'draw'], ['tBag', 'bag'], ['tLadder', 'ladder'], ['tArmour', 'armour'], ['tErase', 'erase'], ['tDelete', 'delete'], ['tPlace', 'place']];
 const toolButtons = () => { for (const [id, name] of TOOLS) $(id).className = tool === name ? 'on' : ''; };
+// The pencil's OUTDOOR / COVERED toggle (S.5g): '' = the row's own kind (the top deck is open air, the hull rows are covered), 'outdoor' = an open-air walkway with rails, 'covered' = inside the hull.
+let kind = '';
+const coveredOpt = () => (kind === 'covered' ? true : kind === 'outdoor' ? false : undefined);
+function setKind(k) { kind = kind === k ? '' : k; $('kOut').className = kind === 'outdoor' ? 'on' : ''; $('kIn').className = kind === 'covered' ? 'on' : ''; }
 const TOOL_HINT = {
-  draw: 'Pencil: drag along a deck row on the blueprint. Along a deck it gets longer; on an empty stretch it makes a new deck (the first one needs no ladder, later ones get one).',
+  draw: 'Pencil: drag along a deck row on the blueprint. Along a deck it gets longer; on an empty stretch it makes a new deck (the first one needs no ladder, later ones get one). Outdoor / Covered: an open-air walkway with rails (weather, raiders, overboard), or a deck inside the hull; draw along a deck with the other kind to turn it over.',
+  armour: 'Armour: drag along a deck to plate its hull wall (covered deck) or rail (open deck) with riveted iron. Very heavy; plate does not burn and hits there do far less. The Delete tool takes a stretch off.',
   bag: 'Gasbag: drag along the dashed bag row. In empty space it draws a bag (beside another one: a row of bags, each with its own gas); across a bag it resizes it; or grab a bag\'s end (the brass dots) and drag. The twin envelope is the Twin bag button.',
   ladder: 'Ladder: drag straight down from one deck to another. Tick "slide pole" for a one-way pole (down only). Refused if a deck is missing at either end or something is in the way.',
   erase: 'Eraser: drag along a deck (or across the gasbag). What stood on that stretch goes with it (listed below the blueprint); Undo brings it back. A click on a thing deletes just that thing.',
@@ -194,7 +199,7 @@ const pics = createPartPictures({ sprites });
 sprites.load().then(() => { pics.refresh(); drawTray(); }).catch(() => {});
 const TRAY = [['gasbag', 'Gasbag'], ['gasValve', 'Gas valve'], ['helm', 'Helm'], ['boiler', 'Boiler'], ['coal', 'Coal bunker'], ['ammo', 'Ammo hold'], ['engine', 'Engine pod'], ['gun', 'Gun'], ['searchlight', 'Searchlight'], ['lookout', 'Lookout'],
   ['medbay', 'Medbay'], ['bombBay', 'Bomb bay'], ['lift', 'Lift'], ['boarding', 'Boarding point'], ['rack_hammer', 'Hammer rack'], ['rack_sword', 'Sword rack'], ['rack_hookshot', 'Hookshot rack'],
-  ['rack_ice', 'Ice locker'], ['extinguisher', 'Extinguisher'], ['vent', 'Steam vent'], ['sail', 'Mast and sail'], ['ladder', 'Ladder'], ['pole', 'Slide pole'], ['ballast', 'Sandbag'], ['ballast_hang', 'Hanging sandbag']];
+  ['rack_ice', 'Ice locker'], ['extinguisher', 'Extinguisher'], ['armour', 'Armour plate'], ['vent', 'Steam vent'], ['sail', 'Mast and sail'], ['ladder', 'Ladder'], ['pole', 'Slide pole'], ['ballast', 'Sandbag'], ['ballast_hang', 'Hanging sandbag']];
 const tray = { id: null, moved: false, slots: [], target: null, ptr: null, why: '', img: null, x0: 0, y0: 0 }; // the tile being dragged (moved = it has left the tile)
 const dropReach = () => (bv ? (config.BUILD_EDIT.DROP_SNAP * bv.k) / bv.s : 200); // a snap distance in ship px
 function drawTray() {
@@ -274,7 +279,8 @@ const label = (p) => {
     case 'station': return `${p.n} (${p.kind})`;
     case 'gun': case 'searchlight': return `${p.part}: ${p.n}`;
     case 'engine': return `engine: ${p.name}`;
-    case 'deck': return `deck: ${p.name} ${p.x0}-${p.x1}`;
+    case 'deck': return `deck: ${p.name} ${p.x0}-${p.x1} (${p.outside ? 'outdoor' : 'covered'})`;
+    case 'armour': return `armour plate (${p.p} ${p.x0}-${p.x1})`;
     case 'room': return `room: ${p.name}`;
     case 'ladder': case 'rope': case 'pole': case 'stairs': case 'lift': return `${p.part} ${p.top}>${p.bottom} x${p.xTop}`;
     case 'rack': return `rack: ${p.kind} (${p.p} ${p.x})`;
@@ -501,7 +507,7 @@ function deckRowAt(w, anyX = false) { // (anyX: the eraser may start off the end
 function rowFor(w) {
   if (tool === 'bag') return w.y > BAG_BAND[0] && w.y < BAG_BAND[1] ? { row: 'gasbag' } : { why: 'Drag along the dashed gasbag band to draw the bag.' };
   if (tool === 'draw') return rowAtY(w.y);
-  const hit = deckRowAt(w, tool === 'erase');
+  const hit = deckRowAt(w, tool === 'erase' || tool === 'armour');
   if (hit) return hit;
   if (tool === 'erase' && bpLayout && bpLayout.gasbags.some((bag) => Math.hypot((w.x - bag.cx) / bag.rx, (w.y - bag.cy) / bag.ry) < 1)) return { row: 'gasbag' };
   return { why: tool === 'ladder' ? 'Start the ladder on a deck and drag down to another deck.' : 'No deck there: drag the eraser along a deck.' };
@@ -536,9 +542,12 @@ function ghostOf(d) {
   const [x0, x1] = strokeOf(d);
   const g = { tool: d.tool, row: d.row, x0, x1, ok: false, label: '' };
   if (x1 - x0 < 20) { g.label = d.tool === 'draw' ? 'drag along the row' : d.tool === 'bag' ? 'drag along the bag row' : 'drag along the deck'; return g; }
-  const r = d.tool === 'draw' ? drawDeck(parts, d.row, x0, x1) : d.tool === 'bag' ? drawBag(parts, x0, x1) : erase(parts, d.row, x0, x1);
+  const r = d.tool === 'draw' ? drawDeck(parts, d.row, x0, x1, { covered: coveredOpt() }) : d.tool === 'bag' ? drawBag(parts, x0, x1) : d.tool === 'armour' ? addArmour(parts, d.row, x0, x1) : erase(parts, d.row, x0, x1);
   g.ok = r.ok;
+  if (d.tool === 'draw') g.cover = kind || (r.ok && r.outdoor !== undefined ? (r.outdoor ? 'outdoor' : 'covered') : '');
   if (!r.ok) g.label = r.hint;
+  else if (d.tool === 'armour') g.label = 'armour plate ' + r.cols + ' column' + (r.cols === 1 ? '' : 's') + ' (heavy, does not burn)';
+  else if (d.tool === 'draw' && r.kind === 'convert') g.label = r.hint;
   else if (d.tool === 'bag') {
     g.label = r.hint;
     try { g.bags = buildLayout(r.parts).gasbags; } catch { /* no preview */ }
@@ -613,7 +622,7 @@ bp.addEventListener('pointerup', (e) => {
     if (d.tool === 'erase' && d.start) { const t = thingAt(parts, d.start.x, d.start.y, slop()); if (t) applyEdit(removeAt(parts, d.start.x, d.start.y, slop())); }
     return;
   }
-  applyEdit(d.tool === 'draw' ? drawDeck(parts, d.row, x0, x1) : d.tool === 'bag' ? drawBag(parts, x0, x1) : erase(parts, d.row, x0, x1));
+  applyEdit(d.tool === 'draw' ? drawDeck(parts, d.row, x0, x1, { covered: coveredOpt() }) : d.tool === 'bag' ? drawBag(parts, x0, x1) : d.tool === 'armour' ? addArmour(parts, d.row, x0, x1) : erase(parts, d.row, x0, x1));
 });
 bp.addEventListener('pointercancel', () => { drag = null; });
 bp.addEventListener('pointerleave', () => { bpHover = null; if (tool === 'place') hover = null; });
@@ -661,6 +670,8 @@ $('env').onchange = () => { envId = $('env').value; startLive(); };
 $('undo').onclick = () => { if (history.length) { parts = history.pop(); note('', false); refresh(); } };
 $('oEdit').onchange = () => { editing = $('oEdit').checked; $('centre').classList.toggle('editing', editing); };
 for (const [id, name] of TOOLS) $(id).onclick = () => setTool(name);
+$('kOut').onclick = () => { setKind('outdoor'); setTool('draw'); };
+$('kIn').onclick = () => { setKind('covered'); setTool('draw'); };
 $('bagShort').onclick = () => applyEdit(setBag(parts, { grow: -1 }));
 $('bagLong').onclick = () => applyEdit(setBag(parts, { grow: 1 }));
 $('bagTwin').onclick = () => applyEdit(setBag(parts, { twin: 'toggle' }));
@@ -720,7 +731,7 @@ $('run').onclick = () => { $('bot').textContent = 'Running...'; setTimeout(runBo
 // ---- go ------------------------------------------------------------------------------------------------------------------
 refresh(); // (a ?build= that cannot fly: nothing flies until it can, the live pane says what is missing)
 window.buildTest = { get parts() { return parts; }, get result() { return result; }, get sim() { return sim; }, get live() { return live; }, edit, pick, slotsFor, info: () => info, runBotTest, startLive, flag, validate: () => result,
-  tool: () => tool, setTool, applyEdit, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, removeAt, thingAt, emptyBuild, minimalBuild, tray: () => tray, bpScreen: (x, y) => { const r = bp.getBoundingClientRect(); return bv ? { x: r.left + (bv.X(x) * r.width) / bp.width, y: r.top + (bv.Y(y) * r.height) / bp.height } : null; }, // (bpScreen: ship coordinates to page pixels on the blueprint, for tests)
+  tool: () => tool, setTool, setKind, kind: () => kind, addArmour, applyEdit, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, removeAt, thingAt, emptyBuild, minimalBuild, tray: () => tray, bpScreen: (x, y) => { const r = bp.getBoundingClientRect(); return bv ? { x: r.left + (bv.X(x) * r.width) / bp.width, y: r.top + (bv.Y(y) * r.height) / bp.height } : null; }, // (bpScreen: ship coordinates to page pixels on the blueprint, for tests)
   screen: (x, y) => { const p = shipMatrix.transformPoint(new DOMPoint(x, y)), r = scene.getBoundingClientRect(); return { x: r.left + (p.x * r.width) / scene.width, y: r.top + (p.y * r.height) / scene.height }; } }; // (screen: ship coordinates to page pixels, for tests)
 
 // While the build cannot fly: a stamp over the live pane saying what she still needs.

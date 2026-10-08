@@ -124,11 +124,31 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   // Decks (thick ink), room dividers, ways between decks.
   const P = Ly.platforms;
   for (const r of Ly.rooms) { const q = P[r.d]; if (q) for (const x of [r.x0, r.x1]) line([[X(x), Y(q.y) - 26 * k], [X(x), Y(q.y)]], 1, 'rgba(58,44,32,0.35)'); }
+  const BODY = ['catwalk', 'main', 'lower', 'keel', 'deep'];
   for (const q of P) {
-    const dashed = q.outside && rowOf(q) !== 'catwalk';
+    const body = BODY.includes(rowOf(q));
+    const dashed = q.outside && !body;
     line([[X(q.x0), Y(q.y)], [X(q.x1), Y(q.y)]], q.outside ? 3.5 : 5, L.INK, dashed ? [10, 4] : null);
     for (const x of [q.x0, q.x1]) line([[X(x), Y(q.y) - 5 * k], [X(x), Y(q.y) + 5 * k]], 2);
-    if (q.x1 - q.x0 > 220) text(q.name, X(q.x0) + 4 * k, Y(q.y) + 14 * k, 9, L.INK_SOFT);
+    if (q.outside && body) { // an OUTDOOR deck (S.5g): a rail with posts along it, open sky above
+      line([[X(q.x0), Y(q.y) - 22 * k], [X(q.x1), Y(q.y) - 22 * k]], 1.4, L.INK);
+      for (let x = q.x0 + 30; x < q.x1; x += 90) line([[X(x), Y(q.y)], [X(x), Y(q.y) - 22 * k]], 1.4, L.INK);
+    } else if (!q.outside && rowOf(q) === 'catwalk') { // a COVERED top deck: a cabin with a roof over it
+      const top = Y(q.y) - 66 * k;
+      g.fillStyle = 'rgba(201,168,90,0.16)'; g.fillRect(X(q.x0) - 4 * k, top, (q.x1 - q.x0) * s + 8 * k, Y(q.y) - top);
+      g.strokeStyle = L.INK; g.lineWidth = 2.4 * k; g.strokeRect(X(q.x0) - 4 * k, top, (q.x1 - q.x0) * s + 8 * k, Y(q.y) - top);
+    }
+    if (q.x1 - q.x0 > 220) text(q.name + (body ? (q.outside ? ' (outdoor)' : ' (covered)') : ''), X(q.x0) + 4 * k, Y(q.y) + 14 * k, 9, L.INK_SOFT);
+  }
+  for (const a of Ly.armour || []) { // ARMOUR plate (S.5g): a riveted iron band along the hull wall under a covered deck, or the rail of an open one
+    const q = P[a.d];
+    if (!q) continue;
+    const y0 = q.outside ? Y(q.y) - 24 * k : Y(q.y) + 4 * k, h = q.outside ? 24 * k : 22 * k;
+    g.fillStyle = 'rgba(58,44,32,0.62)'; g.fillRect(X(a.x0), y0, (a.x1 - a.x0) * s, h);
+    g.strokeStyle = L.INK; g.lineWidth = 1.6 * k; g.strokeRect(X(a.x0), y0, (a.x1 - a.x0) * s, h);
+    g.fillStyle = 'rgba(243,234,214,0.9)';
+    for (let x = a.x0 + 14; x < a.x1 - 6; x += 28) { g.beginPath(); g.arc(X(x), y0 + h / 2, 1.8 * k, 0, 6.2832); g.fill(); }
+    if (a.x1 - a.x0 > 160) text('ARMOUR', X((a.x0 + a.x1) / 2), y0 + h + 11 * k, 9, L.INK_SOFT, 'center');
   }
   for (const c of Ly.connectors) {
     const t = P[c.top], b = P[c.bottom];
@@ -197,9 +217,9 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   // The key, on the empty paper to the right of the ship.
   const kx = X(W.x1) + 16 * k;
   if (v.w - kx > 200 * k) {
-    const rows = ['PENCIL: drag along a deck row.', 'Along a deck it gets longer; on an', 'empty stretch it makes a new deck', '(rooms, hull and a ladder come too).', 'GASBAG: drag along the bag row (in', 'empty space = one more bag; drag a', 'bag end to resize it).', 'PARTS: drag a picture from the tray', 'onto the ship; it snaps to a spot.', 'LADDER: drag down from one deck to', 'another (a pole is one way, down).', 'ERASER: drag along a deck (it gets', 'shorter or goes, with what stood on', 'it). DELETE: click any one thing.', '', 'Lines snap to the column grid and', 'to deck ends.', '', 'H helm  B boiler  L lookout', 'C coal  A ammo  G gun  S lamp', 'Z coil  D deflector  M bomb bay', 'N navigator  F fighter  E engine'];
+    const rows = ['PENCIL: drag along a deck row.', 'Along a deck it gets longer; on an', 'empty stretch it makes a new deck', '(rooms, hull and a ladder come too).', 'GASBAG: drag along the bag row (in', 'empty space = one more bag; drag a', 'bag end to resize it).', 'PARTS: drag a picture from the tray', 'onto the ship; it snaps to a spot.', 'LADDER: drag down from one deck to', 'another (a pole is one way, down).', 'ERASER: drag along a deck (it gets', 'shorter or goes, with what stood on', 'it). DELETE: click any one thing.', 'OUTDOOR / COVERED: under the pencil.', 'Open air has rails (weather, raiders,', 'overboard); covered has a roof.', 'ARMOUR: drag iron plate along a deck.', '', 'Lines snap to the column grid and', 'to deck ends.', '', 'H helm  B boiler  L lookout', 'C coal  A ammo  G gun  S lamp', 'Z coil  D deflector  M bomb bay', 'N navigator  F fighter  E engine'];
     text('HOW TO', kx, PAD.t * k + 16 * k, 14, L.INK, 'left', true);
-    rows.forEach((t, i) => text(t, kx, PAD.t * k + 36 * k + i * 15 * k, 11, i < 17 ? L.INK_SOFT : L.INK));
+    rows.forEach((t, i) => text(t, kx, PAD.t * k + 36 * k + i * 15 * k, 11, i < rows.length - 4 ? L.INK_SOFT : L.INK));
   }
 
   // A part picture being dragged in from the tray (S.5d): everything it cannot go is dimmed, the legal spots stay bright, the picture snaps to the nearest one.
@@ -292,9 +312,17 @@ export function drawBlueprint(g, v, Ly, o = {}) {
       g.fillStyle = good ? 'rgba(168,68,63,0.22)' : 'rgba(107,74,50,0.12)';
       g.fillRect(X(gh.x0), y - hh, (gh.x1 - gh.x0) * s, 2 * hh);
       for (let hx = gh.x0; hx < gh.x1; hx += 24) line([[X(hx), y + hh], [X(Math.min(gh.x1, hx + 14)), y - hh]], 1.4, good ? L.STAMP : L.INK_SOFT);
+    } else if (gh.tool === 'armour') { // a band of plate on the wall / rail
+      g.fillStyle = good ? 'rgba(58,44,32,0.45)' : 'rgba(168,68,63,0.2)';
+      g.fillRect(X(gh.x0), y - 24 * k, (gh.x1 - gh.x0) * s, 48 * k);
+      line([[X(gh.x0), y], [X(gh.x1), y]], 5, good ? '#4f7f3f' : L.STAMP, good ? null : [10, 8]);
     } else {
       line([[X(gh.x0), y], [X(gh.x1), y]], 7, good ? '#4f7f3f' : L.STAMP, good ? null : [10, 8]);
       for (const x of [gh.x0, gh.x1]) line([[X(x), y - 12 * k], [X(x), y + 12 * k]], 3, good ? '#4f7f3f' : L.STAMP);
+      if (gh.tool === 'draw' && gh.cover) { // OUTDOOR (a rail over the line) or COVERED (a roof over it): what the stroke will draw
+        if (gh.cover === 'outdoor') { line([[X(gh.x0), y - 24 * k], [X(gh.x1), y - 24 * k]], 2, good ? '#4f7f3f' : L.STAMP); for (let x = gh.x0; x <= gh.x1; x += 90) line([[X(x), y], [X(x), y - 24 * k]], 2, good ? '#4f7f3f' : L.STAMP); }
+        else { g.strokeStyle = good ? '#4f7f3f' : L.STAMP; g.lineWidth = 2 * k; g.strokeRect(X(gh.x0), y - 40 * k, (gh.x1 - gh.x0) * s, 40 * k); }
+      }
     }
     if (gh.label && gh.tool !== 'ladder' && gh.tool !== 'bag') {
       g.font = font(12, false);

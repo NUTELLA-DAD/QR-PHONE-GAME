@@ -399,7 +399,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   };
 
   // ================= TOP DECK (static) =================
-  const catwalkPiece = (p) => {
+  const catwalkPiece = (p, fit = true) => { // fit: the top deck's lanterns, crates and sign (an open-air deck in the hull rows, S.5g, gets the rails only)
     const y = p.y;
     const w = p.x1 - p.x0;
     if (!tileRow('ship/catwalk', p.x0, p.x1, y - 40, 140, 50)) {
@@ -430,7 +430,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
     }
     // Fittings along the deck: lanterns on the rail, a stack of crates, barrels, a rope coil, a sign.
     // (Aft ones are measured from the deck's aft end, fore ones from its fore end; a short deck skips them.)
-    if (w >= 800) {
+    if (fit && w >= 800) {
       const a = p.x0;
       const f = p.x1;
       for (const lx of [a + 400, f - 240]) {
@@ -460,21 +460,74 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   };
 
   // The top deck: every piece of it (the blueprint editor can cut it in two), then the deck guns.
+  // Every OUTDOOR deck (S.5g: the top deck, and any main / lower / keel deck drawn open-air) is a walkway with rails; a covered top deck is a cabin instead (drawCabin).
+  const OPEN_ROWS = ['catwalk', 'main', 'lower', 'keel', 'deep'];
+  const isOpenDeck = (q) => !!q.outside && OPEN_ROWS.includes(rowOf(q));
   const drawCatwalk = () => {
-    const cat = plat('catwalk');
-    if (!cat) return;
-    const y = cat.y;
-    for (const p of P.filter((q) => q.y === y)) catwalkPiece(p);
+    for (const p of P) if (isOpenDeck(p)) catwalkPiece(p, rowOf(p) === 'catwalk');
     // Deck guns: a post from the deck up to the mount, a base plate and sandbags on the outer side.
     for (const [name, m] of Object.entries(L.gunMounts)) {
       const s = station(name);
-      if (!s || P[s.d].y !== y) continue;
+      if (!s || !P[s.d] || !isOpenDeck(P[s.d])) continue;
+      const y = P[s.d].y;
       const out = Math.cos(m.aim) < 0 ? -1 : 1;
       line([[m.bx, m.by + 14], [m.bx, y]], 11);
       line([[m.bx, m.by + 14], [m.bx, y]], 6, IRON);
       filled(IRON, () => ctx.roundRect(m.bx - 20, y - 8, 40, 8, 3));
       for (const [dx, dy, r] of [[out * 34, -9, 17], [out * 56, -9, 15], [out * 44, -25, 15]]) {
         filled('#cdbd92', () => ctx.ellipse(m.bx + dx, y + dy, r, r * 0.55, 0, 0, 7));
+      }
+    }
+  };
+
+  // A COVERED top deck (S.5g): a cabin on top of the hull, planked walls, a row of windows and a roof slab over the deck; its rooms show inside.
+  const drawCabin = () => {
+    for (const p of P) {
+      if (p.outside || rowOf(p) !== 'catwalk') continue;
+      const w = p.x1 - p.x0, top = p.y - 150;
+      filled('#8a6444', () => ctx.roundRect(p.x0 - 10, top, w + 20, 164, 8)); // the walls
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(p.x0 - 6, top + 4, w + 12, 154);
+      ctx.clip();
+      for (const r of L.rooms) if (r.p === p.id && !r.outside) {
+        ctx.fillStyle = r.color || '#b08250';
+        ctx.fillRect(r.x0 + 3, top + 4, r.x1 - r.x0 - 6, 146);
+        paintRect(ctx, 'darkwood', r.x0 + 3, top + 4, r.x1 - r.x0 - 6, 146, 0.9);
+      }
+      ctx.restore();
+      for (let x = p.x0 + 80; x < p.x1 - 60; x += 150) filled('#bcd9e3', () => ctx.roundRect(x, top + 36, 70, 50, 10)); // windows
+      filled(WOOD, () => ctx.rect(p.x0 - 6, p.y - 2, w + 12, 14)); // the floor
+      filled(WOOD_DARK, () => ctx.roundRect(p.x0 - 22, top - 16, w + 44, 22, 6)); // the roof slab
+    }
+  };
+
+  // ARMOUR plate (S.5g): riveted iron in the storybook gouache style. Over a covered deck it is a belt on the hull wall under the floor; over an open-air deck it is a solid bulwark
+  // in place of the rail. Panels of about 80 px, each with a pale sheen, a shadow on its lower edge and a rivet at every corner.
+  const drawArmour = () => {
+    for (const a of L.armour || []) {
+      const q = P[a.d];
+      if (!q) continue;
+      const open = !!q.outside, y0 = open ? q.y - 48 : q.y + 12, h = open ? 66 : 52, w = a.x1 - a.x0;
+      const n = Math.max(1, Math.round(w / 80)), pw = w / n;
+      for (let i = 0; i < n; i++) {
+        const x = a.x0 + i * pw;
+        filled('#6d7378', () => ctx.rect(x, y0, pw, h));
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.fillRect(x + 3, y0 + 3, pw - 6, h * 0.2);
+        ctx.fillStyle = 'rgba(43,38,34,0.24)';
+        ctx.fillRect(x + 3, y0 + h - 13, pw - 6, 10);
+        for (const rx of [x + 9, x + pw - 9]) {
+          for (const ry of [y0 + 9, y0 + h - 9]) {
+            ctx.beginPath();
+            ctx.arc(rx, ry, 3.6, 0, 7);
+            ctx.fillStyle = '#d9d3c4';
+            ctx.fill();
+            ctx.lineWidth = 1.3;
+            ctx.strokeStyle = INK;
+            ctx.stroke();
+          }
+        }
       }
     }
   };
@@ -1412,6 +1465,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   const drawBackLayer = () => {
     guard('nest', drawNest);
     guard('gondola', drawGondola);
+    guard('cabin', drawCabin);
     guard('upgrades', drawUpgradeFittings);
     guard('outriggers', drawOutriggers);
     guard('pod', drawPod);
@@ -1432,6 +1486,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites }) {
   const drawFrontLayer = () => {
     guard('connectors', drawConnectors);
     guard('catwalk', drawCatwalk);
+    guard('armour', drawArmour);
   };
 
   const drawLiveMid = (time) => {

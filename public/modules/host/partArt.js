@@ -157,6 +157,14 @@ const DRAW = {
     filled(RED, () => { g.moveTo(24, 3); g.quadraticCurveTo(38, 1, 50, 6); g.lineTo(38, 9); g.closePath(); }); // the pennant
     filled(WOOD, () => g.rect(6, 88, 88, 8));
   },
+  armour(g, { filled, line }) { // riveted iron plate: three bolted panels with a seam between, a rivet at every corner and a pale sheen (the same plate the ship wears: shipArt.js drawArmour)
+    filled('#7b7f84', () => g.roundRect(8, 24, 84, 52, 5));
+    g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(12, 28, 76, 9); // the sheen
+    for (const x of [36, 64]) line([[x, 24], [x, 76]], 3.4);
+    g.fillStyle = '#d9d3c4'; g.strokeStyle = INK(); g.lineWidth = 1.6;
+    for (const px of [18, 28, 46, 54, 72, 82]) for (const py of [34, 66]) { g.beginPath(); g.arc(px, py, 2.9, 0, 7); g.fill(); g.stroke(); }
+    g.fillStyle = 'rgba(43,38,34,0.18)'; g.fillRect(12, 62, 76, 10); // the shadow of the lower edge
+  },
   ladder(g, { filled, line }) {
     line([[34, 6], [34, 94]], 6, WOOD_DARK); line([[66, 6], [66, 94]], 6, WOOD_DARK);
     for (let y = 16; y < 92; y += 15) line([[34, y], [66, y]], 5, WOOD);

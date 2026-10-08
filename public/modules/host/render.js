@@ -185,15 +185,16 @@ export function createRenderer({ ctx, state, canvas }) {
     for (const fire of state.fires) {
       const y = SHIP_LAYOUT.platforms[fire.d].y;
       const frame = 1 + (Math.floor(time * 8 + fire.x) % 4);
-      if (sprites.box(ctx, `fx/fire-${frame}`, fire.x - 30, y - 70, 60, 70) || sprites.box(ctx, 'fx/fire-1', fire.x - 30, y - 70, 60, 70)) {
-        drawBar(fire.x, y - 70, fire.prog);
+      const k = fire.big ? 1.7 : 1; // a fire in the coal (S.5f) is a big one: taller flames, and the black smoke is puffed by fire.js
+      if (sprites.box(ctx, `fx/fire-${frame}`, fire.x - 30 * k, y - 70 * k, 60 * k, 70 * k) || sprites.box(ctx, 'fx/fire-1', fire.x - 30 * k, y - 70 * k, 60 * k, 70 * k)) {
+        drawBar(fire.x, y - 70 * k, fire.prog);
         continue;
       }
       // Three flat flames, each stepping through 4 frames at 8 fps (no wobble).
-      drawFlame(ctx, fire.x - 20, y, 28, 36, time, 1 + fire.x * 0.013);
-      drawFlame(ctx, fire.x + 20, y, 28, 36, time, 2 + fire.x * 0.013);
-      drawFlame(ctx, fire.x, y, 36, 52, time, fire.x * 0.013);
-      drawBar(fire.x, y - 70, fire.prog);
+      drawFlame(ctx, fire.x - 20 * k, y, 28 * k, 36 * k, time, 1 + fire.x * 0.013);
+      drawFlame(ctx, fire.x + 20 * k, y, 28 * k, 36 * k, time, 2 + fire.x * 0.013);
+      drawFlame(ctx, fire.x, y, 36 * k, 52 * k, time, fire.x * 0.013);
+      drawBar(fire.x, y - 70 * k, fire.prog);
     }
     for (const player of Object.values(state.players)) {
       if (player.ko > 0) {

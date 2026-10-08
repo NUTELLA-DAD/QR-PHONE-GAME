@@ -3,12 +3,12 @@
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
-const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0 };
+const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0, blowout: 0 };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') {
-    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi|bags|giantbag] [--rupture SECONDS (several gasbags: shoot the fore bag flat then, S.5d)]');
+    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi|bags|giantbag] [--rupture SECONDS (several gasbags: shoot the fore bag flat then, S.5d)] [--blowout SECONDS (S.5f: over-pressure the boiler every SECONDS of flight so it blows and lights a fire beside itself: a fire test)]');
     process.exit(0);
   } else if (a.startsWith('--') && a.slice(2) in args) {
     const v = argv[++i];
@@ -110,6 +110,7 @@ let sporeCloudSteps = 0, sporedSteps = 0, clogSum = 0, clogMax = 0, engSum = 0, 
 let gapSum = 0, gapMin = 1e9, seaSteps = 0, floodSum = 0, floodHigh = 0, wetSteps = 0, galeSteps = 0;
 let lightSteps = 0, lightManned = [0, 0], lightLit = 0, litBonus = 0; // searchlights: flight steps, steps each lamp was manned, steps with something lit
 let matesMax = 0;
+let fireSteps = 0, fireStarts = 0, fireHullEaten = 0, firePrev = 0, fireStepsAny = 0; // S.5f: fire exposure while flying (fires burning, new ones lit, hull they eat)
 let segSteps = 0, altRef = null, vySum = 0, scrapeSteps = 0;
 let distPrev = null, distTravel = 0, flightSteps = 0, altMin = Infinity, altMax = -Infinity, progMax = 0, speedSum = 0, distBack = 0; // S.5e: how far and how fast she got, and how much altitude she covered
 const actTally = {};
@@ -124,6 +125,7 @@ for (let step = 1; step <= totalSteps; step++) {
       for (const x of [1300, 1340, 1320]) state.gasHoles.push(sim.gasHoleAt(x, 450, last));
       ruptured = true;
     }
+    if (args.blowout && state.phase === 'flying' && step % Math.round(args.blowout * 60) === 0) state.ship.press = 100; // (the next step the boiler blows: a pipe bursts and a fire may start beside it)
     sim.update(dt);
     if (ruptured && healedAt === null && state.gasHoles.length === 0 && state.bags[state.bags.length - 1].gas > config.GAS.BAG_UP) healedAt = step / 60 - args.rupture;
     if (runStats) runStats.step(dt);
@@ -154,7 +156,7 @@ for (let step = 1; step <= totalSteps; step++) {
   lastPress = state.ship.press;
   if (state.bags.length > 1) { if (state.bagAlert && state.bagAlert !== lastBagAlert) { bagDowns++; lastBagAlert = state.bagAlert; } if (state.phase === 'flying') for (const b of state.bags) bagMin = Math.min(bagMin, b.gas); }
   if (state.phase === 'flying' && state.searchlights) { lightSteps++; state.searchlights.forEach((l, i) => { if (l.manned) lightManned[i] = (lightManned[i] || 0) + 1; }); if (state.litTargets.length) lightLit++; }
-  if (state.phase === 'flying') { hullSum += state.ship.hull; hullN++; }
+  if (state.phase === 'flying') { hullSum += state.ship.hull; hullN++; const nf = state.fires.length; fireSteps += nf; if (nf) fireStepsAny++; if (nf > firePrev) fireStarts += nf - firePrev; firePrev = nf; fireHullEaten += nf * 0.35 * 2 * dt; } else firePrev = 0;
   if (state.phase === 'flying' && !state.ship.down) {
     const dd = distPrev == null ? 0 : state.course.dist - distPrev;
     if (distPrev == null || Math.abs(dd) >= 200) { segSteps = 0; altRef = null; } else distTravel += dd; // (a new mission map or a restart resets the distance: skip that jump and start a new stretch)
@@ -201,6 +203,7 @@ console.log(`wrecks: ${wrecks}`);
 console.log(`average hull: ${hullN ? (hullSum / hullN).toFixed(1) : 'n/a'}`);
 console.log(`kills: ${killsTotal}`);
 const sum = (k) => tally[k] || 0;
+console.log(`fires: burning avg ${hullN ? (fireSteps / hullN).toFixed(2) : 'n/a'}, on fire ${hullN ? ((100 * fireStepsAny) / hullN).toFixed(1) : 'n/a'}% of flight, lit ${fireStarts}, hull eaten ~${fireHullEaten.toFixed(1)}; by hit ${state.fireStats.hit}, spread ${state.fireStats.spread}, boiler ${state.fireStats.boiler}, other ${state.fireStats.env}; blazes ${state.fireStats.blazes}, hits on plate ${state.fireStats.plated}`);
 console.log(`hauled: ${sum('ammo')} ammo loads, ${sum('coal')} coal loads; fires out ${sum('fires')}, holes patched ${sum('holes')}`);
 const pc = (n) => (pN ? ((100 * n) / pN).toFixed(1) : 'n/a') + '%';
 console.log(`steam: mean ${pN ? (pSum / pN).toFixed(1) : 'n/a'}, <35 ${pc(pLow)}, >70 ${pc(pOver70)}, >90 ${pc(pOver90)}, blowouts ${blowouts}, leaking ${pc(leakSteps)}`);

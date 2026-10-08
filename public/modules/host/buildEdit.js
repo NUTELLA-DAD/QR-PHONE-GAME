@@ -4,6 +4,9 @@
 //
 //   drawDeck(parts, row, x0, x1)   a line drawn along a deck ROW (EDIT_ROWS): along an existing deck it makes it longer, on an empty
 //                                  stretch it makes a new deck (rooms for the hull to enclose, plus a ladder to the nearest deck so it can be reached)
+//                                  (S.5g) a fifth argument { covered: true | false } draws it COVERED (inside the hull, rooms, ports) or OUTDOOR (open air, rails, wide arcs);
+//                                  undefined = the row's own kind. Drawn along a deck of the other kind it turns that deck over.
+//   addArmour(parts, row, x0, x1)  (S.5g) riveted iron plate along a stretch of a deck's hull wall or rail: heavy, does not burn, hits there do much less
 //   erase(parts, row, x0, x1)      rub out a stretch of deck: it gets shorter, splits in two, or goes; whatever stood on the rubbed-out stretch
 //                                  (stations, guns, racks, ladders, vents, pipes ...) goes with it and is listed in `removed`
 //   setBag(parts, { grow, twin })  the biggest gasbag a column (BAG_STEP) longer or shorter, or its twin envelope on / off (a ship with no bag gets one)
@@ -17,7 +20,7 @@
 // The result may well FAIL validate() (erase the last boiler ...): that is the editor's job to show, not to prevent.
 import { buildLayout, BUILDS, COL, DECK_ROWS, KEEL_ROWS, rowOf, isNestRow, bagCover } from './shipBuild.js';
 import { config } from '../../config.js';
-import { slotsFor, pickSlot, whyNot } from './buildSlots.js'; // (a cycle: buildSlots.js re-exports these operations; each side only calls the other at run time)
+import { slotsFor, pickSlot, whyNot, gunMountFor } from './buildSlots.js'; // (a cycle: buildSlots.js re-exports these operations; each side only calls the other at run time)
 
 export const GRID_X0 = 20; // the column grid: lines at GRID_X0 + k x COL (the classic main and lower decks' aft ends sit on it)
 
@@ -91,6 +94,7 @@ function labelOf(o) {
     case 'gasbag': return 'gasbag';
     case 'medbay': return 'medbay';
     case 'ballast': return o.hang ? 'hanging sandbag' : 'sandbag';
+    case 'armour': return 'armour plate';
     case 'deck': return `${o.name} (deck)`;
     default: return o.part;
   }
@@ -155,7 +159,7 @@ function refit(parts) {
 // Make sure the hull rows' rooms cover the whole deck: an uncovered stretch at a deck end lengthens the room beside it (up to two
 // columns), anything else gets a new room (so the hull art always has walls behind the deck).
 function coverRooms(next, deck, info) {
-  if (!info.hull) return;
+  if (!(deck.outside === false || (!deck.outside && info.hull))) return; // (only a covered deck has rooms: an open-air walkway is bare rails; S.5g)
   const rooms = () => next.filter((r) => r.part === 'room' && r.p === deck.id).sort((a, b) => a.x0 - b.x0);
   const gaps = [];
   let cursor = deck.x0;
@@ -167,6 +171,21 @@ function coverRooms(next, deck, info) {
     else if (g1 - g0 <= COL * 2 && g0 === deck.x0 && right) right.x0 = g0;
     else next.push({ part: 'room', name: deck.name + (g0 === deck.x0 && g1 === deck.x1 ? '' : ' Annex'), p: deck.id, x0: g0, x1: g1, color: '#a8814f' });
   }
+}
+
+// Turn a deck into an OUTDOOR walkway or a COVERED deck (S.5g), in place on `next`: its flag, its rooms (a covered deck is enclosed by rooms, an open one is bare rails) and the
+// guns standing on it (a covered deck's guns are ports with a narrow arc, an open deck's mounts are wide). Returns a short note for the hint ("; 2 guns refitted").
+function setDeckFlag(next, deck, outdoor) {
+  const info = EDIT_ROWS[deck.row];
+  delete deck.outside;
+  Object.assign(deck, deckFlag(deck.row, outdoor));
+  if (outdoor) { for (let i = next.length - 1; i >= 0; i--) if (next[i].part === 'room' && next[i].p === deck.id) next.splice(i, 1); }
+  else if (info) coverRooms(next, deck, info);
+  const mid = (next.filter((p) => p.part === 'deck' && p.row !== 'nest' && p.row !== 'crow2' && p.row !== 'helm').reduce((a, b) => [Math.min(a[0], b.x0), Math.max(a[1], b.x1)], [Infinity, -Infinity]));
+  const mx = (mid[0] + mid[1]) / 2;
+  let guns = 0;
+  for (const g of next) if (g.part === 'gun' && g.p === deck.id) { Object.assign(g, gunMountFor(deck, g.x, g.x > mx)); guns++; }
+  return guns ? `; ${guns} gun${guns === 1 ? '' : 's'} refitted (${deck.outside ? 'wide arcs on the open deck' : 'ports with narrow arcs'})` : '';
 }
 
 // ---- a spot for the ladder of a new deck -------------------------------------------------------------------------
@@ -192,11 +211,25 @@ function freeSpot(L, p, lo, hi, avoid = []) {
 }
 
 // ---- drawing ------------------------------------------------------------------------------------------------------
-export function drawDeck(parts, row, x0, x1) {
+// OUTDOOR / COVERED (S.5g): a deck is an open-air walkway with rails (crew can be knocked overboard, weather and boarders reach it, wide gun arcs) or a covered deck inside the
+// hull (protected rooms, fire spreads between them, heavier, guns only as ports). The deck part's `outside` field says which; a row has a default (the top deck and the nests are
+// outdoor, the hull rows covered) and the pencil's toggle overrides it. A crow's nest is always open air. deckFlag gives the field to store (nothing when it is the default of a
+// hull row, so the classic ship's parts are unchanged).
+export const isOutdoorRow = (row) => !!(EDIT_ROWS[row] && EDIT_ROWS[row].outside);
+const deckFlag = (row, outdoor) => {
+  if (isNestRow(row) || outdoor === undefined || outdoor === null) return isOutdoorRow(row) ? { outside: true } : {};
+  return outdoor ? { outside: true } : isOutdoorRow(row) ? { outside: false } : {};
+};
+// covered: true = covered, false = outdoor, undefined = the row's own default. Nest rows ignore it.
+const wantOutdoor = (row, covered) => (isNestRow(row) || covered === undefined || covered === null ? undefined : !covered);
+const flagText = (q) => (q.outside ? 'outdoor' : 'covered');
+
+export function drawDeck(parts, row, x0, x1, { covered } = {}) {
   const info = EDIT_ROWS[row];
   if (!info) return no(parts, 'Draw on a deck row: the crow\'s nest, top deck, main, lower, keel or deep deck. The helm mount and belly fittings are placed, not drawn.');
   let lo = Math.round(Math.min(x0, x1)), hi = Math.round(Math.max(x0, x1));
   if (hi - lo < 40) return no(parts, 'Drag along the row to draw a deck (a column or more).');
+  const outdoor = wantOutdoor(row, covered); // (undefined = leave it to the row)
   let L;
   try { L = buildLayout(parts); } catch { return no(parts, 'The parts do not build: undo the last change first.'); }
   if (isNestRow(row)) {
@@ -218,7 +251,15 @@ export function drawDeck(parts, row, x0, x1) {
   }
   const f0 = Math.min(lo, ...touch.map((d) => d.x0)), f1 = Math.max(hi, ...touch.map((d) => d.x1));
   const fresh = subtract(f0, f1, touch); // the stretch that is new deck
-  if (touch.length === 1 && !fresh.length) return no(parts, `That stretch is already the ${touch[0].name}: drag past its end to make it longer.`);
+  if (touch.length === 1 && !fresh.length) {
+    if (outdoor === undefined || !!touch[0].outside === outdoor) return no(parts, `That stretch is already the ${touch[0].name}${outdoor === undefined ? '' : ' (' + flagText(touch[0]) + ')'}: drag past its end to make it longer${outdoor === undefined ? '' : ', or pick the other kind of deck to change it'}.`);
+    const conv = clone(parts);
+    const dk = conv.find((o) => o.part === 'deck' && o.id === touch[0].id);
+    const note = setDeckFlag(conv, dk, outdoor);
+    ensureFrame(conv);
+    refit(conv);
+    return { ok: true, parts: conv, added: [], removed: [], kind: 'convert', deck: dk.name, cols: cols(dk.x1 - dk.x0), grew: 0, span: [dk.x0, dk.x1], outdoor, hint: `${dk.name} is now ${flagText(dk)}${note}.` };
+  }
   if (!touch.length && !fresh.length) return no(parts, 'Nothing to draw.');
   if (row === 'keel') { // the belly blisters hang in the keel deck's space
     for (const [a, b] of fresh) {
@@ -243,9 +284,10 @@ export function drawDeck(parts, row, x0, x1) {
     }
     deck.x0 = f0;
     deck.x1 = f1;
+    const flipped = outdoor !== undefined && !!deck.outside !== outdoor ? setDeckFlag(next, deck, outdoor) : null; // (drawn with the other kind of deck: the whole deck changes)
     coverRooms(next, deck, info);
     refit(next);
-    return { ok: true, parts: next, added, removed: [], kind: 'extend', deck: deck.name, cols: cols(f1 - f0), grew: cols(fresh.reduce((n, [a, b]) => n + b - a, 0)), span: [f0, f1], hint: `${deck.name} made ${cols(fresh.reduce((n, [a, b]) => n + b - a, 0))} column(s) longer.` };
+    return { ok: true, parts: next, added, removed: [], kind: 'extend', deck: deck.name, cols: cols(f1 - f0), grew: cols(fresh.reduce((n, [a, b]) => n + b - a, 0)), span: [f0, f1], hint: `${deck.name} made ${cols(fresh.reduce((n, [a, b]) => n + b - a, 0))} column(s) longer${flipped === null ? '' : ' and is now ' + flagText(deck) + flipped}.` };
   }
   // A new deck. The very first deck of a ship (nothing to climb to yet) is simply accepted; any later one needs a way to the nearest deck above
   // and below it that it overlaps, so it can be reached: a ladder (a rope up to the crow's nest).
@@ -267,7 +309,7 @@ export function drawDeck(parts, row, x0, x1) {
   if (!links.length && (linkable.length || row === 'crow2')) return no(parts, 'A new deck needs a way to climb to the deck above (or below) it: draw it so it overlaps one, with a free spot for a ladder.');
   const id = uniqueId(next, info.id);
   const n = next.filter((p) => p.part === 'deck' && p.row === row).length;
-  deck = { part: 'deck', id, row, name: info.name + (n ? ' ' + (n + 1) : ''), x0: lo, x1: hi, ...(info.outside ? { outside: true } : {}) };
+  deck = { part: 'deck', id, row, name: info.name + (n ? ' ' + (n + 1) : ''), x0: lo, x1: hi, ...deckFlag(row, outdoor) };
   next.push(deck);
   coverRooms(next, deck, info);
   for (const l of links) {
@@ -277,7 +319,44 @@ export function drawDeck(parts, row, x0, x1) {
   }
   added.unshift(deck.name);
   refit(next);
-  return { ok: true, parts: next, added, removed: [], kind: 'new', deck: deck.name, cols: cols(hi - lo), grew: cols(hi - lo), span: [lo, hi], hint: links.length ? `New ${deck.name}, ${cols(hi - lo)} columns, with a ladder to the ${links.map((l) => l.q.name).join(' and the ')}.` : `New ${deck.name}, ${cols(hi - lo)} columns: the first deck. Draw the next one under or over it and a ladder comes with it.` };
+  return { ok: true, parts: next, added, removed: [], kind: 'new', deck: deck.name, cols: cols(hi - lo), grew: cols(hi - lo), span: [lo, hi], outdoor: !!deck.outside, hint: links.length ? `New ${deck.name}${outdoor === undefined ? '' : ' (' + flagText(deck) + ')'}, ${cols(hi - lo)} columns, with a ladder to the ${links.map((l) => l.q.name).join(' and the ')}.` : `New ${deck.name}${outdoor === undefined ? '' : ' (' + flagText(deck) + ')'}, ${cols(hi - lo)} columns: the first deck. Draw the next one under or over it and a ladder comes with it.` };
+}
+
+// ---- armour plate (S.5g) ------------------------------------------------------------------------------------------
+// Riveted iron plate along a stretch of a deck's hull wall (covered deck) or rail (open-air deck): a `armour` part { p: deck id, x0, x1 }. A stroke along a deck row plates the part of
+// the deck it covers (its ends snap to the deck's ends within ARMOUR.SNAP; at least ARMOUR.MIN_LEN long); it joins plate already there. Heavy (BALANCE.MASS.armour per 100 px), does
+// not burn, and hits on it do much less (config.ARMOUR). The eraser takes plate off with the deck stretch it covers; the Delete tool removes a whole stretch.
+export const ARMOUR_ROWS = ['catwalk', 'main', 'lower', 'keel', 'deep'];
+export function addArmour(parts, row, x0, x1) {
+  const A = config.ARMOUR;
+  if (!ARMOUR_ROWS.includes(row)) return no(parts, "Armour plate goes on a deck's hull wall or rail: drag it along the top deck, main, lower, keel or deep deck.");
+  const a = Math.round(Math.min(x0, x1)), b = Math.round(Math.max(x0, x1));
+  const decks = decksOn(parts, row).filter((d) => d.x0 < b && d.x1 > a);
+  if (!decks.length) return no(parts, 'There is no deck there to plate: drag the plate along a deck.');
+  const next = clone(parts);
+  const added = [];
+  let grown = 0;
+  const names = [];
+  for (const dk of decks) {
+    let s0 = Math.max(a, dk.x0), s1 = Math.min(b, dk.x1);
+    if (s0 - dk.x0 < A.SNAP) s0 = dk.x0;
+    if (dk.x1 - s1 < A.SNAP) s1 = dk.x1;
+    if (s1 - s0 < Math.min(A.MIN_LEN, dk.x1 - dk.x0)) continue;
+    const mine = next.filter((o) => o.part === 'armour' && o.p === dk.id && o.x0 <= s1 + 1 && o.x1 >= s0 - 1);
+    const u0 = Math.min(s0, ...mine.map((o) => o.x0)), u1 = Math.max(s1, ...mine.map((o) => o.x1));
+    const had = mine.reduce((n, o) => n + o.x1 - o.x0, 0), gain = u1 - u0 - had;
+    if (mine.length === 1 && gain <= 0) continue;
+    for (const o of mine) next.splice(next.indexOf(o), 1);
+    next.push({ part: 'armour', p: dk.id, x0: u0, x1: u1 });
+    grown += Math.max(gain, 0);
+    names.push(dk.name);
+    added.push(`armour plate on the ${dk.name}`);
+  }
+  if (!names.length) return no(parts, decks.every((d) => d.x1 - d.x0 < A.MIN_LEN) || b - a < A.MIN_LEN ? `Plate is drawn in stretches of at least ${A.MIN_LEN} px: drag a little further.` : 'That stretch is already armoured.');
+  ensureFrame(next);
+  refit(next);
+  const mass = (grown / 100) * config.BALANCE.MASS.armour;
+  return { ok: true, parts: next, added, removed: [], kind: 'armour', deck: names.join(', '), cols: cols(grown), grew: cols(grown), span: [a, b], hint: `Armour plate on the ${names.join(' and the ')}: ${cols(grown)} columns, adds about ${mass.toFixed(0)} weight. It does not burn and hits there do far less.` };
 }
 
 // ---- erasing ------------------------------------------------------------------------------------------------------
@@ -289,7 +368,7 @@ function dropDependents(list, goneParts, removed) {
   const kinds = new Set(goneParts.filter((o) => o.part === 'station').map((o) => o.kind));
   const dropMore = (o) => (o.part === 'pipe' && names.has(o.to)) || (o.part === 'coil' && kinds.has('coil')) || (o.part === 'bombBay' && kinds.has('bombBay')) || (o.part === 'escortDock' && names.has(o.n));
   const deckIds = new Set(list.filter((o) => o.part === 'deck').map((o) => o.id));
-  const orphan = (o) => refs(o).some((r) => !deckIds.has(r.id)) || (o.part === 'room' && !deckIds.has(o.p));
+  const orphan = (o) => refs(o).some((r) => !deckIds.has(r.id)) || ((o.part === 'room' || o.part === 'armour') && !deckIds.has(o.p));
   return list.filter((o) => {
     if (dropMore(o) || orphan(o)) { if (o.part !== 'room') removed.push(labelOf(o)); return false; }
     return true;
@@ -360,10 +439,10 @@ export function erase(parts, row, x0, x1) {
     // Things standing on this deck.
     next.forEach((o, i) => {
       if (gone.has(i) || o.part === 'deck') return;
-      if (o.part === 'room') {
+      if (o.part === 'room' || o.part === 'armour') { // (a room or a stretch of plate on the deck keeps what is left of its stretch)
         if (o.p !== d.id) return;
         const bits = pieces.map(([p0, p1], k) => ({ x0: Math.max(o.x0, p0), x1: Math.min(o.x1, p1), k })).filter((s) => s.x1 - s.x0 >= 24);
-        if (!bits.length) { gone.add(i); return; }
+        if (!bits.length) { gone.add(i); if (o.part === 'armour') removed.push(labelOf(o)); return; }
         Object.assign(o, { x0: bits[0].x0, x1: bits[0].x1, p: pieces.length === 2 ? (bits[0].k === 0 ? d.id : ids[1]) : d.id });
         for (const s of bits.slice(1)) next.push({ ...o, x0: s.x0, x1: s.x1, p: s.k === 0 ? d.id : ids[1] });
         return;
@@ -552,6 +631,11 @@ export function thingAt(parts, x, y, slop = 0) {
       return;
     }
     if (o.part === 'pipe') { consider(index, o, labelOf(o), o.valve[0], o.valve[1], 20); return; }
+    if (o.part === 'armour') { // a long thing: the pointer anywhere along the plate (on the wall or rail band) picks it, but anything standing on it wins
+      const base = dy(o.p);
+      if (base != null && x >= o.x0 - slop && x <= o.x1 + slop && y >= base - 52 && y <= base + 72 && (!best || best.d > 1)) best = { index, label: labelOf(o), x: Math.max(o.x0, Math.min(o.x1, x)), y: base + 20, r: 24, d: 1 };
+      return;
+    }
     const base = dy(o.p);
     if (base == null || o.x == null) return;
     switch (o.part) {

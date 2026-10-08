@@ -665,8 +665,50 @@ export const config = {
     KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid' },
   },
   // Fires.
+  // S.5f: fire cares where things are (modules/host/fireModel.js reads this; fire.js runs it). Every spot of the ship has a flammability: a covered wooden deck is 1 (medium),
+  // coal is tinder, iron and armour plate barely burn. A fire spreads along its deck and up / down through ladders and hatches towards the more flammable neighbour; one that
+  // reaches the coal flares into a BLAZE. A boiler blowout or overheating lights fires beside the boiler.
   FIRE: {
-    SPREAD_EVERY: 7, // seconds before a fire spreads
+    SPREAD_EVERY: 7, // seconds before a fire tries to spread (shorter on very flammable ground, longer on damp / open-air ground; the crew-size 'spread' scale applies too)
+    CAP_BASE: 8, // most fires burning at once on a ship with CAP_REF_PX of deck (the classic ship): bigger ships hold more, small ones fewer
+    CAP_REF_PX: 5180, // total walkable deck width of the classic ship (px)
+    CAP_MIN: 3, CAP_MAX: 24, // ...and the cap never goes outside these
+    FLAMMABILITY: {
+      deck: 1, // a covered wooden deck or room: medium (everything else is measured against it)
+      outdoor: 0.85, // an open-air deck: the wind carries flames off a little
+      armour: 0, // riveted iron plate does not burn: a fire cannot start or spread onto it
+      gasbag: 1.5, // RESERVED for hydrogen bags (gas types, S.7): not used yet
+      // A spot within r px of one of these on the same deck takes its flammability instead of the deck's (the nearest wins). Coal and powder are tinder; iron housings give little to burn.
+      kind: { coal: { f: 4.5, r: 130 }, bombBay: { f: 3, r: 150 }, ammo: { f: 1.8, r: 100 }, boiler: { f: 0.35, r: 90 }, engine: { f: 0.35, r: 70 }, gun: { f: 0.6, r: 60 } },
+    },
+    SPREAD_MIN_MUL: 0.6, SPREAD_MAX_MUL: 2.5, // how much the flammability of the burning spot speeds up (or slows) the spread clock, within these
+    LADDER_REACH: 130, // a fire within this many px of a ladder / pole / rope / stairs end can climb or drop through it...
+    LADDER_UP: 0.35, LADDER_DOWN: 0.2, // ...as a share of the weight of a plain step along the deck (flames climb better than they fall)
+    HIT_IGNITE_MAX: 2.5, // a hit's chance to light a fire is multiplied by how flammable the spot is (a plain deck = 1), up to this
+    BOILER_BLOWOUT_FIRES: 0.7, // a boiler blowout lights a fire beside the boiler with this chance (and a second one with 60% of it)
+    BOILER_FIRE_SPREAD: 90, // ...within this many px of the boiler
+    HOT_RATE: 0.04, // overheating: chance per second of a spark fire beside the boiler at full over-pressure (from BOILER.WARN_AT up to 100)
+    // A fire that reaches the coal (a spot at least FLAME_AT flammable) flares into a blaze: several fires at once, spreading faster, bigger flames and smoke.
+    BLAZE: {
+      FLAME_AT: 3, // a fire on ground this flammable (coal) flares
+      FIRES: 3, // extra fires lit round it at once
+      EXTRA_CAP: 2, // a blaze may go this far over the fire cap
+      SPREAD_MUL: 1.8, // its fires spread this many times faster...
+      KIDS_BIG: 0.75, // ...and a fire born of a big one is big itself with this chance
+      HULL_MUL: 1.4, // a big fire eats this much more hull...
+      EXTINGUISH_MUL: 1.8, // ...and takes this much longer to spray out
+      SCORCH_MUL: 1.5, // ...and scorches nearby parts this much harder
+      REFLARE: 20, // seconds before the same ship can flare again
+      SMOKE_RATE: 5, // black smoke puffs per second from each big fire
+      CALL: "THE COAL'S ALIGHT!", // the TV call-out
+    },
+  },
+  // ARMOUR (S.5g): riveted iron plate drawn on a stretch of hull wall or rail. Very heavy (BALANCE.MASS.armour), does not burn, and hits landing on it do far less.
+  ARMOUR: {
+    POWER_MUL: 0.35, // a hit on plate counts as this share of its power (hull damage, broken parts, fires)
+    HOLE_MUL: 0.25, // ...and it punches a breach this much as often
+    MIN_LEN: 120, // the shortest stretch that can be drawn (px)
+    SNAP: 60, // a stroke along a deck snaps to the deck's ends this close (px)
   },
   // Floating mines drifting toward the bow.
   MINES: {
@@ -985,6 +1027,8 @@ export const config = {
     CAVE_SHAFT: 12, // a build needing more wedges in caves (WARN for player builds, FAIL for the starter ships)
     CREW: 8, // HANDS: crew size the gauge is read at...
     HANDS_PER_PLAYER: 3, // ...WARN above this many manned stations per player
+    FIRE_NEAR: 330, // FIRE (S.5f): a coal bunker closer than this (px of fire path: along a deck, 150 per ladder) to a boiler WARNs "coal bunker beside the boiler: fire risk" (the classic ship's are 440 apart)
+    FIRE_EXT_REACH: 350, // an extinguisher within this fire path of the coal / boiler counts as covering it in the fire-risk read-out
     MIN_GAP: 40, // two stations on one deck must be at least this far apart (px)
     BAG_GAP_WARN: 60, // WARN when two gasbags leave more than this much open sky between them over a deck (px)
     BOT_BOTS: 6, // the bot-run check: bots...
@@ -1005,6 +1049,8 @@ export const config = {
       engine: 9, pipe: 0.5, vent: 0.3, gasValve: 0.4, rack: 0.2, extinguisher: 0.2, medbay: 3,
       bag: 6, bagTwin: 4, // a gasbag's rigging, and the twin envelope's
       ballast: 5, // one sandbag: cheap and dense, the trimming tool
+      armour: 4.5, // riveted iron plate, per 100 px of stretch (a 360 px stretch weighs about a boiler)
+      coveredDeck: 1, outdoorDeck: 0.5, // S.5g: a covered deck (walls, roof, rooms) weighs this times deck per column; an open-air walkway with rails only this much
       mast: 3, // the mast of a high crow's nest tier (crow2): weight way up high
     },
     LEVEL_PX: 30, // COM within this many px of COL counts as level (no trim at all: the classic ship is exactly level)
@@ -1551,6 +1597,8 @@ export const config = {
     GAS_CAP: 3, // at most this many crew patch the gasbag at once
     FIRE_BLAZE: 3, // this many fires at once is a blaze: putting them out comes before gasbag patching
     FIRE_CAP: 4, // at most this many crew on fires at once
+    HOT_FIRE_CAP: 6, // a fire in the coal (a big one, S.5f) is the worst fire aboard: up to this many crew run to it, ahead of every other chore (two to a fire)
+    HOT_FIRE_PX: 900, // ...and among fires a coal fire counts as this many px of walking nearer than it is
     COAL_EMERGENCY: 15, // boiler fuel below this (with pressure not high): stoke it before anything else
     PRESS_EMERGENCY: 22, // steam below this (with coal not plentiful): same
     CRITICAL: ['helm', 'boiler', 'lift'], // module kinds (and the steam pipes feeding them) the bots rebuild before anything else once they break

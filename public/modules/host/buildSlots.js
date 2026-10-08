@@ -6,12 +6,12 @@
 // still missing. slotsFor(type, parts, { whole: true }) also demands that the result passes validate() (the random batch wants that).
 // Every placement ends with finish(): the frame part is there and every engine, the helm and the lift have a steam pipe from the boiler (routePipes).
 import { buildLayout, COL, rowOf, DECK_ROWS, KEEL_ROWS, isNestRow, bagNearX, bagName, ventBoiler } from './shipBuild.js';
-import { drawDeck, drawBag, placeConnector, GRID_X0, ensureFrame, emptyBuild, erase, setBag } from './buildEdit.js';
+import { drawDeck, drawBag, placeConnector, GRID_X0, ensureFrame, emptyBuild, erase, setBag, addArmour, ARMOUR_ROWS } from './buildEdit.js';
 import { validate } from './buildCheck.js';
 import { config } from '../../config.js';
 
 // The blueprint editing operations (draw a deck, erase, lengthen the gasbag, place a ladder, delete a thing) are pure functions of a parts list: re-exported here with the slots.
-export { drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, thingAt, removeAt, emptyBuild, ensureFrame, snapX, rowAtY, summarize, EDIT_ROWS, DRAW_ROWS, GRID_X0 } from './buildEdit.js';
+export { drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, thingAt, removeAt, emptyBuild, ensureFrame, snapX, rowAtY, summarize, EDIT_ROWS, DRAW_ROWS, GRID_X0, addArmour, ARMOUR_ROWS, isOutdoorRow } from './buildEdit.js';
 const STEP = 40; // slots sit on a grid this far apart along a deck (px)
 const clone = (parts) => parts.map((p) => ({ ...p }));
 const names = (parts) => new Set(parts.map((p) => p.n || p.name).filter(Boolean));
@@ -74,7 +74,19 @@ const GUN_AT = {
   crow2: (q, x, fore) => ({ bx: x + 10, by: q.y - 34, aim: fore ? -1.2 : -1.95, arc: 1.2 }),
   catwalk: (q, x, fore) => ({ bx: x + (fore ? 32 : -27), by: q.y - 52, aim: fore ? -0.35 : Math.PI + 0.35, arc: 1.1 }),
   lower: (q, x, fore) => ({ bx: x + (fore ? 90 : -90), by: q.y + 22, aim: fore ? 1.0 : 2.15, arc: 0.7 }),
+  port: (q, x, fore) => ({ bx: x + (fore ? 70 : -70), by: q.y - 50, aim: fore ? -0.1 : Math.PI + 0.1, arc: 0.7 }), // a gun port in the wall of a covered deck above the lower deck: a narrow arc out of the side
 };
+// How a gun sits on deck q (S.5g: it follows the OUTDOOR / COVERED flag): on an open-air deck a post on the rail with a wide arc (the top-deck mount), on a covered deck a port or sponson
+// with a narrow one (the lower deck's sponson; a port in the wall on the decks above). A crow's nest has its own. The classic ship comes out exactly as it was hand-placed.
+export function gunMountFor(q, x, fore) {
+  const row = rowOf(q);
+  if (isNestRow(row)) return GUN_AT.nest(q, x, fore);
+  if (q.outside) return GUN_AT.catwalk(q, x, fore);
+  return row === 'catwalk' || row === 'main' ? GUN_AT.port(q, x, fore) : GUN_AT.lower(q, x, fore);
+}
+// The full decks (and nests) that are open air: where a mast, a lamp or a boarding point may stand (a covered deck has a roof).
+const BODY_ROWS = ['catwalk', 'main', 'lower', 'keel', 'deep'];
+const openDecks = (L, rows = BODY_ROWS) => L.platforms.filter((q) => q.outside && rows.includes(rowOf(q)));
 const RACK_LABEL = { hammer: 'Hammer rack', sword: 'Sword rack', hookshot: 'Hookshot rack', ice: 'Ice locker' };
 const BAY_W = 290; // a bomb bay compartment (the classic one is this wide)
 
@@ -94,12 +106,12 @@ export const PALETTE = [
   } },
   { id: 'gun', label: 'Gun mount', hint: 'click a deck spot', slots: (L) => {
     const out = [];
-    for (const q of onRows(L, ['crow2', 'nest', 'catwalk', 'lower'])) {
-      const row = rowOf(q);
+    // (S.5g: any open-air deck takes a gun on a rail post with a wide arc; a covered deck takes it as a port or sponson with a narrow one: the lower deck's sponsons, or a top deck turned covered)
+    for (const q of L.platforms.filter((o) => ['crow2', 'nest', 'catwalk', 'lower'].includes(rowOf(o)) || (o.outside && ['main', ...KEEL_ROWS].includes(rowOf(o))))) {
       for (const x of spots(q)) {
         if (!roomAt(L, q.id, x, false)) continue;
         const fore = x > midX(L);
-        out.push({ p: q.id, x, label: `Gun on the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part: 'gun', n: nextName(ps, 'Extra Gun'), p: q.id, x, ...GUN_AT[row](q, x, fore) }] });
+        out.push({ p: q.id, x, label: `Gun on the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part: 'gun', n: nextName(ps, 'Extra Gun'), p: q.id, x, ...gunMountFor(q, x, fore) }] });
       }
     }
     return out;
@@ -139,9 +151,9 @@ export const PALETTE = [
     }
     return out;
   } },
-  { id: 'boarding', label: 'Boarding point', hint: 'click the top deck (raiders land here; a ship needs two)', slots: (L) => {
+  { id: 'boarding', label: 'Boarding point', hint: 'click an open-air deck, the top deck on most ships (raiders land here; a ship needs two)', slots: (L) => {
     const out = [];
-    for (const q of onRows(L, ['catwalk'])) for (const x of spots(q, 30)) {
+    for (const q of openDecks(L)) for (const x of spots(q, 30)) { // (S.5g: boarders only land on an OUTDOOR deck; a covered deck has a roof)
       if (L.boarderEntryPoints.some((o) => o.p === q.id && Math.abs(o.x - x) < 120)) continue;
       out.push({ p: q.id, x, label: `Boarding point on the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part: 'boarderEntry', p: q.id, x }] });
     }
@@ -150,7 +162,7 @@ export const PALETTE = [
   ...['hammer', 'sword', 'hookshot', 'ice'].map((kind) => ({ id: 'rack_' + kind, label: RACK_LABEL[kind], hint: 'click a deck spot', slots: (L) => rackSlots(L, 'rack', RACK_LABEL[kind].toLowerCase(), kind) })),
   { id: 'searchlight', label: 'Searchlight', hint: 'click a spot on the nest or top deck', slots: (L) => {
     const out = [];
-    for (const q of onRows(L, ['crow2', 'nest', 'catwalk'])) {
+    for (const q of L.platforms.filter((o) => ['crow2', 'nest'].includes(rowOf(o)) || (o.outside && BODY_ROWS.includes(rowOf(o))))) { // (a lamp needs the open air)
       const id = rowOf(q);
       for (const x of spots(q)) {
         if (!roomAt(L, q.id, x, false)) continue;
@@ -161,7 +173,7 @@ export const PALETTE = [
   } },
   { id: 'sail', label: 'Mast and sail', hint: 'click a spot on the top deck or a crow\'s nest: a crew member raises the sail for extra speed from the wind', slots: (L) => {
     const out = [];
-    for (const q of onRows(L, ['crow2', 'nest', 'catwalk'])) {
+    for (const q of L.platforms.filter((o) => ['crow2', 'nest'].includes(rowOf(o)) || (o.outside && BODY_ROWS.includes(rowOf(o))))) { // (a mast needs the open air)
       for (const x of spots(q, 60)) {
         if (!roomAt(L, q.id, x, true)) continue;
         if ((L.sails || []).some((s) => s.p === q.id && Math.abs(s.x - x) < config.SAIL.WIDTH + 30)) continue; // (two sails need room for their canvas)
@@ -213,10 +225,34 @@ export const PALETTE = [
   { id: 'ballast', label: 'Sandbag (on deck)', hint: 'click a spot on a main, lower or keel deck: cheap weight to trim her', slots: (L, parts) => ballastSlots(L, parts, false) },
   { id: 'ballast_hang', label: 'Sandbag (hanging)', hint: 'click a lower or keel deck: it hangs from the hull under it', slots: (L, parts) => ballastSlots(L, parts, true) },
   { id: 'extinguisher', label: 'Extinguisher', hint: 'click a deck spot', slots: (L) => rackSlots(L, 'extinguisher', 'an extinguisher') },
+  { id: 'armour', label: 'Armour plate', hint: 'click a deck: two columns of riveted iron on its hull wall or rail. Very heavy; it does not burn and hits there do far less', slots: (L) => armourSlots(L) },
   { id: 'vent', label: 'Steam vent', hint: 'click a deck spot', slots: (L) => rackSlots(L, 'vent', 'a steam vent', undefined, VENT_ROWS) },
   { id: 'gasValve', label: 'Gas valve', hint: 'drop it on the nest, top or main deck: it feeds the bag over it (the nearest). A shut valve cuts that bag off from the pump', slots: (L) => valveSlots(L) },
   { id: 'gasbag', label: 'Gasbag', hint: 'click a stretch of the gasbag row: one more bag beside the others (a row of small ones keeps flying if you lose one)', slots: (L, parts) => bagSlots(parts) },
 ];
+
+// Armour plate (S.5g): a slot is a two-column stretch of a deck's hull wall (covered deck) or rail (open-air deck), from the deck's aft end along, plus the stretch at its fore end;
+// not one that is already (nearly) plated. It sits on the deck row (y = the deck's), the pin in the middle of the stretch.
+function armourSlots(L) {
+  const out = [], len = 2 * COL, A = config.ARMOUR;
+  for (const q of L.platforms) {
+    const row = rowOf(q);
+    if (!ARMOUR_ROWS.includes(row) || q.x1 - q.x0 < A.MIN_LEN) continue;
+    const seen = new Set();
+    const starts = [];
+    for (let x0 = q.x0; x0 < q.x1 - A.MIN_LEN + 1; x0 += COL) starts.push(x0);
+    starts.push(Math.max(q.x0, q.x1 - len));
+    for (const s0 of starts) {
+      const x0 = Math.round(s0), x1 = Math.round(Math.min(q.x1, s0 + len));
+      if (seen.has(x0) || x1 - x0 < Math.min(A.MIN_LEN, q.x1 - q.x0)) continue;
+      seen.add(x0);
+      const plated = (L.armour || []).filter((a) => a.p === q.id).reduce((n, a) => n + Math.max(0, Math.min(a.x1, x1) - Math.max(a.x0, x0)), 0);
+      if (plated >= (x1 - x0) * 0.9) continue;
+      out.push({ p: q.id, x: (x0 + x1) / 2, y: q.y, label: `Armour plate on the ${q.name}, x ${x0} to ${x1}`, apply: (ps) => { const r = addArmour(ps, row, x0, x1); return r.ok ? r.parts : clone(ps); } });
+    }
+  }
+  return out;
+}
 
 // Gasbags (S.5d): a slot is a stretch of the empty gasbag row a new bag (BAG_DROP half-length, less where a neighbour is close) fits in: touching the bag beside it,
 // or centred on a column line. Not a point on a deck: the slot carries its `span` and sits on the bag row (y = BAG_CY).
@@ -264,11 +300,11 @@ const RACK_ROWS = ['catwalk', 'main', 'lower'];
 const RULES = {
   helm: { rows: ['catwalk', 'main'], once: (parts) => count(parts, (p) => p.part === 'station' && p.kind === 'helm') > 0, onceText: 'A ship has one helm.' },
   boiler: { rows: ['main', 'lower'] }, coal: { rows: ['lower', 'main', 'keel', 'deep'] }, ammo: { rows: ['lower', 'main', 'keel', 'deep'] },
-  engine: { rows: ['lower', 'main'] }, gun: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, lookout: { rows: ['nest', 'crow2'] }, searchlight: { rows: ['crow2', 'nest', 'catwalk'] }, sail: { rows: ['crow2', 'nest', 'catwalk'] },
+  engine: { rows: ['lower', 'main'] }, gun: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, lookout: { rows: ['nest', 'crow2'] }, searchlight: { rows: ['crow2', 'nest', 'catwalk'], open: true }, sail: { rows: ['crow2', 'nest', 'catwalk'], open: true },
   medbay: { rows: ['main', 'lower', 'keel', 'deep'], once: (parts) => count(parts, (p) => p.part === 'medbay') > 0, onceText: 'A ship has one medbay.' },
   bombBay: { rows: ['lower'], once: (parts) => count(parts, (p) => p.part === 'bombBay' || (p.part === 'deck' && p.id === 'bay')) > 0, onceText: 'A ship has one bomb bay.' },
   lift: { rows: ['main'], once: (parts) => count(parts, (p) => p.part === 'lift') > 0, onceText: 'A ship has one lift.' },
-  boarding: { rows: ['catwalk'] }, rack_hammer: { rows: RACK_ROWS }, rack_sword: { rows: RACK_ROWS }, rack_hookshot: { rows: RACK_ROWS }, rack_ice: { rows: RACK_ROWS },
+  boarding: { rows: ['catwalk', 'main', 'lower', 'keel', 'deep'], open: true }, armour: { rows: BODY_ROWS }, rack_hammer: { rows: RACK_ROWS }, rack_sword: { rows: RACK_ROWS }, rack_hookshot: { rows: RACK_ROWS }, rack_ice: { rows: RACK_ROWS },
   extinguisher: { rows: RACK_ROWS }, vent: { rows: ['catwalk', 'main', 'lower', 'keel', 'deep'] }, gasValve: { rows: ['nest', 'catwalk', 'main'], needsBag: true }, ballast: { rows: ['main', 'lower', 'keel', 'deep'] }, ballast_hang: { rows: ['lower', 'keel', 'deep'] },
   ladder: { link: true }, pole: { link: true },
 };
@@ -289,7 +325,8 @@ export function whyNot(parts, type, x, y) {
   if (!deck) return `Drop the ${what} on a deck of the ship.`;
   const row = rowOf(deck);
   if (rule.link) return `A ${what} joins two decks that overlap: drop it where another deck lies directly above or below the ${deck.name}, clear of ladders and stations.`;
-  if (rule.rows && !rule.rows.includes(row)) return `A ${what} goes on the ${rule.rows.map((r) => ROW_NAME[r]).join(' or ')}, not the ${deck.name}.`;
+  if (rule.open && !deck.outside && !isNestRow(row)) return `A ${what} needs the open air: the ${deck.name} is a covered deck (a roof over it). Draw an outdoor deck, or flip this one to outdoor with the pencil.`;
+  if (rule.open && deck.outside && !isNestRow(row)) { /* an open-air deck of any row will do */ } else if (rule.rows && !rule.rows.includes(row)) return `A ${what} goes on the ${rule.rows.map((r) => ROW_NAME[r]).join(' or ')}, not the ${deck.name}.`;
   if (x < deck.x0 + 25 || x > deck.x1 - 25) return `Too close to the end of the ${deck.name}.`;
   const gap = config.BUILD_CHECK.MIN_GAP + 15;
   const near = [...L.stations.map((s) => ({ n: s.n, p: s.p, x: s.x })), ...L.engines.map((e) => ({ n: e.name, p: e.p, x: e.x }))].filter((s) => s.p === deck.id && Math.abs(s.x - x) < gap).sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x))[0];
@@ -437,11 +474,19 @@ export function removals(parts) {
 // One random legal mutation of a build: { tag, label, parts } or null if nothing fits. rng() gives 0..1.
 // prefer: a type to try first most of the time (the batch asks for an engine pod right after a second boiler, the only way one fits).
 // weights: how often each type is tried (the batch wants engines and boilers as often as guns).
-const WEIGHTS = { extend: 3, keel: 1, gun: 3, searchlight: 2, lookout: 2, boiler: 3, coal: 1, ammo: 1, engine: 3, ladder: 2, pole: 1, rack_hammer: 1, extinguisher: 1, vent: 1, ballast: 1, sail: 1, remove: 2 };
+const WEIGHTS = { extend: 3, keel: 1, gun: 3, searchlight: 2, lookout: 2, boiler: 3, coal: 1, ammo: 1, engine: 3, ladder: 2, pole: 1, rack_hammer: 1, extinguisher: 1, vent: 1, ballast: 1, sail: 1, armour: 1, flip: 1, remove: 2 };
 export function randomMutation(parts, rng, prefer) {
   const bag = Object.entries(WEIGHTS).flatMap(([t, w]) => Array(w).fill(t));
   for (let tries = 0; tries < 12; tries++) {
     const type = prefer && tries === 0 && rng() < 0.7 ? prefer : bag[Math.floor(rng() * bag.length)];
+    if (type === 'flip') { // turn a deck over: open-air walkway <-> covered deck (S.5g)
+      const decks = parts.filter((p) => p.part === 'deck' && ARMOUR_ROWS.includes(p.row));
+      if (!decks.length) continue;
+      const d = decks[Math.floor(rng() * decks.length)];
+      const r = drawDeck(parts, d.row, d.x0 + 20, d.x1 - 20, { covered: !!d.outside });
+      if (r.ok && validate(r.parts).ok) return { tag: 'flip', label: `${d.name} ${d.outside ? 'covered' : 'outdoor'}`, parts: r.parts };
+      continue;
+    }
     if (type === 'remove') {
       const list = removals(parts).filter((r) => validate(r.apply(parts)).ok);
       if (list.length) { const r = list[Math.floor(rng() * list.length)]; return { tag: 'remove', label: 'remove ' + r.label, parts: r.apply(parts) }; }
