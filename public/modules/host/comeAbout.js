@@ -2,7 +2,7 @@
 //
 // Only on the helmsman's command: the phone's COME ABOUT button held for config.SHIP.TURN.HOLD seconds, or the stick held hard astern for as long (people only; a bot
 // holds the same command from bots.js when config.SHIP.TURN.BOT_TURNS is on). Refused (a toast on the helm's phone, a line on the TV for the main ship) when she is
-// going too fast, already turning or cooling down, falling, has a gunship alongside, has someone on a hookshot line, or would turn her hull into rock.
+// going too fast, already turning or cooling down, falling, has a gunship alongside, has someone on a hookshot line, or would turn her hull into rock or into another ship.
 //
 // The manoeuvre takes TURN.TIME seconds. pose.turn runs 0..1; the picture squashes through zero width (render.js) and comes out mirrored. At the middle pose.f flips and
 // her speed along her bow flips with it, so her velocity over the ground (f * speed) stays the same and she carries on drifting the way she was going while the bow comes
@@ -17,6 +17,7 @@
 import { config } from '../../config.js';
 import { tilt } from './course.js';
 import { solidAt } from './maps.js';
+import { overlapsAnother } from './shipCollide.js';
 import { pivotOf } from './pose.js';
 
 export function createComeAbout(ship, W, { goingDown }) {
@@ -60,6 +61,7 @@ export function createComeAbout(ship, W, { goingDown }) {
     if (Object.values(state.players).some((p) => p.hook)) return 'Someone is on a hookshot line';
     if (Math.abs(state.ship.speed) > T.MAX_SPEED) return 'Slow down to come about';
     if (mirroredInRock()) return 'No room to come about here';
+    if (overlapsAnother(state, ship, -pose.f)) return 'Another ship is in the way'; // (her mirrored hull would sit inside another ship: shipCollide.js)
     return null;
   };
 

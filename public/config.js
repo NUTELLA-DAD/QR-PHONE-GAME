@@ -1147,6 +1147,22 @@ export const config = {
     CREW_MAX_DEG: 1.2, // ...at most this much
     BOARDER_MASS: 1.2, // a raider on deck weighs this much in the live centre of mass (like a crew member)
   },
+  // SHIP-SHIP COLLISION (shipCollide.js): any two ships in one sky are solid to each other - co-op ?ships=N, every Versus phase while flying, later the gunship as a ship. Once per step, after the
+  // ships have moved, the hulls (the gasbag ellipses and hit boxes a shell hits) are pushed apart by the FULL overlap (a heavier ship moves less) and the closing speed along the contact is taken out of both.
+  COLLIDE: {
+    ENABLED: true, // false = ships pass through each other (the old co-op)
+    ITER: 6, // pushes per pair per step (a hull is several shapes; the first usually clears them all, a ship thrown deep into another may need a few)
+    PASSES: 2, // sweeps over all pairs per step (with three ships a push on one can shove her into the next)
+    SLOP: 0.5, // px of air left between two hulls that were pushed apart
+    RESTITUTION: 0.3, // the share of the closing speed they bounce back at (0 = they stick, 1 = a perfect bounce); only above MIN_CLOSING, a light touch just stops
+    MIN_CLOSING: 60, // closing speed (px/s) that hurts: below it the hulls just press
+    CLANG_CLOSING: 25, // closing speed (px/s) that clangs, puffs sparks and counts as a bump (a harder hit always does)
+    COOLDOWN: 0.9, // seconds before the same two ships can clang or hurt each other again
+    DAMAGE: 0.5, // impact power each ship takes per 100 px/s of closing speed (1 = one enemy bullet)
+    MAX_POWER: 5, // ...at most this much
+    KICK: 1.6, // the forces.js kick where they touched (RAM_KICK multiples, at most x3 per 150 px/s of closing speed)
+    GIVE_WAY: { TIME: 1.5, MARGIN: 150 }, // bot pilots in a fleet (course.js giveWay): a ship does not fly on while another is inside the box she sweeps over the next TIME seconds, grown by MARGIN px, and AHEAD of her
+  },
   // ---- S.5e: a ship needs only a gasbag and a deck to fly. Everything else is optional; what is missing just takes control away. ----
   // WIND: with no helm (or no engines, or no boiler) the ship simply DRIFTS with the wind. Speeds are shares of SHIP.TOP_SPEED (the throttle scale).
   WIND: {
@@ -1249,7 +1265,6 @@ export const config = {
     MAP_KIND: 'open', // arena sky: 'open' (islands and hills) | 'network' | 'route'
     ENVIRONMENT: 'skyisles', // arena sky: which of the seven environments
     ARENA: { LIFT: 2400, BACK: 1800, FRONT: 9500, TOP: 3400, PUSH: 0.9, PUSH_MAX: 420 }, // the arena: the ships start this far above the map's start (px; the start is a mooring mast near the ground, the fight is in the air among the islands), a ship may go this far behind the start and this far along it, and this far above the start's height; past that a soft wind pushes her back (px/s per px over, at most PUSH_MAX)
-    BUMP: { COOLDOWN: 0.9, MIN_CLOSING: 60, DAMAGE: 0.5, KICK: 1.6, PUSH: 520, BOUNCE: 0.25 }, // two hulls touching: seconds between bumps, the closing speed (px/s) that hurts, the impact power each takes per 100 px/s of closing speed, the forces.js kick (RAM_KICK multiples), how fast they are pushed apart (px/s) and the share of their speed that is left
     FIGHT: { HP: 4, SWORD: 2, SHOVE: 1, KNOCK: 70, KO_TIME: 8 }, // crew against crew on a deck: hit points of a crewman, what a sword blow and a shove take off, how far a blow knocks him back (px) and how long he is out cold at zero (s; a boarder is carried home)
     CAPTURE_TIME: 6, // seconds an enemy crewman holds Action at the rival's helm, with no defender in reach, to take it
     SABOTAGE_TIME: 3, // seconds an enemy crewman holds Action at the rival's boiler to start a fire and a steam leak

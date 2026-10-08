@@ -186,6 +186,7 @@ const human = (st, sh, id, platform, x) => {
 // ---- 5. a target in any ship's beam is lit ----
 {
   config.MAPS.FORCE_KIND = 'open'; // (open sky: no cave wall stops a beam short)
+  config.COLLIDE.ENABLED = false; // (the test lays one ship on top of the other, on purpose: the hulls would be pushed apart)
   const { sim, st, A, B } = boot({ bots: 0 });
   const nestOf = (sh) => sh.sim.searchlights.lights.find((l) => /Nest/.test(l.n));
   const lA = nestOf(A), lB = nestOf(B);
@@ -224,6 +225,7 @@ const human = (st, sh, id, platform, x) => {
 }
 
 config.MAPS.FORCE_KIND = null;
+config.COLLIDE.ENABLED = true;
 
 // ---- 6. ships put into the sky together do not start on top of each other ----
 {

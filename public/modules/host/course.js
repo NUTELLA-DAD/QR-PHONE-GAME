@@ -11,7 +11,7 @@
 import { firePace } from './crewscale.js';
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
-import { toWorldX, toWorldY, toShipX, toShipY, pivotOf } from './pose.js';
+import { toWorldX, toWorldY, toShipX, toShipY, pivotOf, driveVx } from './pose.js';
 import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
 import { pickEnvironment } from './environments.js';
@@ -137,7 +137,7 @@ export function pilotPlan(state, ahead, cruise) {
   const ship = mainShip(state);
   const alt = state.ship.alt;
   if (state.rival) return rivalPlan(state); // (Versus: the rival, not the beacon, is the goal; every ship has her own)
-  if (course && course.map) return mapPlan(state, cruise);
+  if (course && course.map) return giveWay(state, ship, mapPlan(state, cruise));
   const B = altBounds(state);
   const range = (w) => [Math.max(w.min, B.lo), Math.min(w.max, B.hi)];
   const [lo, hi] = range(altWindow(state, ahead));
@@ -209,6 +209,26 @@ function rivalPlan(state) {
   const win = altWindow(state, 2); // (the altitudes where the whole hull clears the rock under and over the next two seconds of flight: the plan never asks for one outside it)
   target = win.min <= win.max ? Math.max(win.min + 20, Math.min(win.max - 20, target)) : (win.min + win.max) / 2;
   return { target, speed: Math.max(-config.SHIP.REVERSE, Math.min(0.6, w * f)), dx: (hurt ? -1 : 1) * gap * f, dy: R.mid.y - my };
+}
+
+// Manners in a fleet (co-op ?ships=N): shipCollide.js is the wall, this is what a pilot does before it. A ship does not carry on while another ship is AHEAD of her (in the way she is going) inside the
+// box she sweeps over the next GIVE_WAY.TIME seconds, grown by MARGIN: she hovers until the box is clear, so the ship behind never grinds the one in front into the rock. One ship: untouched.
+function giveWay(state, ship, plan) {
+  const ships = state.ships;
+  if (!ships || ships.length < 2 || !config.COLLIDE.ENABLED || !plan.speed) return plan;
+  const G = config.COLLIDE.GIVE_WAY, b = ship.layout.bounds, p = ship.pose;
+  const dir = Math.sign(plan.speed) * p.f; // (the way along the sky she means to go)
+  const ex = driveVx(ship) * G.TIME; // (how far she sweeps: her engines' speed along the world, a ship facing left goes the other way)
+  const wa = toWorldX(ship, b.x0), wb = toWorldX(ship, b.x1);
+  const mine = { x0: Math.min(wa, wb) + Math.min(0, ex) - G.MARGIN, x1: Math.max(wa, wb) + Math.max(0, ex) + G.MARGIN, y0: p.y + b.y0 - G.MARGIN, y1: p.y + b.y1 + G.MARGIN };
+  for (const o of ships) {
+    if (o === ship || o.state.down > 0 || o.ctx.wreck) continue;
+    const ob = o.layout.bounds, oa = toWorldX(o, ob.x0), oc = toWorldX(o, ob.x1);
+    const ox0 = Math.min(oa, oc), ox1 = Math.max(oa, oc), oy0 = o.pose.y + ob.y0, oy1 = o.pose.y + ob.y1;
+    if (ox0 >= mine.x1 || mine.x0 >= ox1 || oy0 >= mine.y1 || mine.y0 >= oy1) continue;
+    if (((ox0 + ox1) / 2 - (Math.min(wa, wb) + Math.max(wa, wb)) / 2) * dir > 0) return { ...plan, speed: 0 };
+  }
+  return plan;
 }
 
 // On a mission map: follow the route to the goal. Aim for the height of a point a few steps along

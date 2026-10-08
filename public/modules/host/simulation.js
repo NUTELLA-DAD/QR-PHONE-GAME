@@ -15,6 +15,7 @@ import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { refillBags } from './gasBags.js';
 import { createMainShip, createShip, shipOf, eachShip, newGuns, transfer } from './ships.js';
 import { createMatch } from './pvp/match.js';
+import { createShipCollide } from './shipCollide.js';
 import { newBot } from './network.js';
 import { createShipSim, flushPresses } from './shipSim.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
@@ -899,7 +900,6 @@ export function createSimulation() {
       return;
     }
     if (state.phase !== 'lobby') course.advance(dt); // (she moves first: see course.js advance)
-    if (match.on) match.bump(dt); // (Versus: two hulls that touch are pushed apart)
     eachShip(state, (sh) => sh.sim.stepCrew(dt));
 
     updatePopups(state, dt);
@@ -936,6 +936,8 @@ export function createSimulation() {
       gunship.settle(dt);
       salvageWatch();
     }
+
+    shipCollide.step(dt); // (every ship has moved: two hulls that overlap are pushed apart, bounce and hurt - shipCollide.js)
 
     // Enemy fire against every ship: rock gives cover, a Deflector stops it, a hit on the hull is that ship's impact.
     for (const bullet of state.bullets) {
@@ -1011,6 +1013,7 @@ export function createSimulation() {
     state.ev.warn = 4;
     state.ev.warnText = 'CAST OFF!';
   };
+  const shipCollide = createShipCollide({ world: state, puff });
   const match = createMatch({ world: state, addShip: (...a) => addShip(...a), removeShip: (...a) => removeShip(...a), course: () => course, launch, restart: () => restartGame(), openVote, newBot, puff, phoneFx, emitUi: emitPlayerUi });
 
   return {
@@ -1026,6 +1029,7 @@ export function createSimulation() {
     ships: state.ships,
     addShip,
     removeShip,
+    shipCollide, // (ship-ship collision, shipCollide.js: stats = { contacts, hits } for the gates)
     match, // (Versus, pvp/match.js: the lobby's two teams, the shelf, the rounds; match.on while Versus is selected)
     forces, // (forces at places: forces.js)
     interaction,
