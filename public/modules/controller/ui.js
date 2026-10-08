@@ -12,12 +12,12 @@ export function createControllerUI({ network }) {
     ['Swap to hookshot', '🪝'], ['Take hookshot', '🪝'], ['Reel in', '🪝'], ['KICK', '🦶'], ['Auto guns', '🔫'],
     ['Swap to sword', '🗡️'], ['Swap to hammer', '🔨'], ['Swap to extinguisher', '🧯'], ['Take sword', '🗡️'], ['Take hammer', '🔨'], ['Take extinguisher', '🧯'], ['Put back', '↩️'],
     ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
-    ['SURGE', '🔥'], ['LOAD for', '📦'], ['Close valve', '🚱'], ['Open valve', '🚰'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
-    ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'],
+    ['SURGE', '🔥'], ['LOAD for', '📦'], ['Close valve', '🚱'], ['Open valve', '🚰'], ['Open vent', '💨'], ['Close vent', '💨'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
+    ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'], ['Jump!', '🪂'], ['Take ice', '🧊'], ['Put the ice', '↩️'], ['Cool the boiler', '🧊'], ['THROW ICE', '🧊'], ['Ice locker', '🧊'], ['Swap to', '🔄'],
     ['FOCUS', '🔦'], ['Take', '🎯'],
     ['FIRE', '💥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
   ];
-  const CARRY = { sword: '🗡️ Sword', hammer: '🔨 Hammer', extinguisher: '🧯 Extinguisher', ammo: '📦 Ammo', coal: '⚫ Coal', hookshot: '🪝 Hookshot' };
+  const CARRY = { sword: ['🗡️', 'Sword'], hammer: ['🔨', 'Hammer'], extinguisher: ['🧯', 'Extinguisher'], ammo: ['📦', 'Ammo'], coal: ['⚫', 'Coal'], hookshot: ['🪝', 'Hookshot'], ice: ['🧊', 'Ice'] };
 
   let species = 'bulldog';
   let joined = null;
@@ -96,7 +96,16 @@ export function createControllerUI({ network }) {
 
   // A short message that pops up over the controls, plus a buzz.
   let toastTimer = null;
+  // Phone buzz (where the browser allows it): the host's `buzz` pattern; a short pulse for a pickup, two for letting go.
+  const vibrate = (pattern) => {
+    try {
+      if (pattern && navigator.vibrate) navigator.vibrate(pattern);
+    } catch {
+      // ignore
+    }
+  };
   const showFx = (fx) => {
+    vibrate(fx.buzz);
     if (!fx.toast) return;
     const t = $('toast');
     t.textContent = fx.toast;
@@ -141,6 +150,9 @@ export function createControllerUI({ network }) {
     if (next.ko) {
       $('info').innerHTML = '<b>Knocked out!</b> Hang tight - a crewmate can revive you';
       setButton('act', '💤', 'Zzz');
+      $('act').classList.add('idle');
+      $('act').classList.remove('has', 'loading');
+      $('grab').style.display = 'none';
       $('act').classList.remove('hold');
       $('leave').style.display = 'none';
       $('lever').style.display = 'none';
@@ -152,18 +164,35 @@ export function createControllerUI({ network }) {
       return;
     }
     const label = next.label || 'Hey!';
-    const icon = (label === 'Take ' + next.station && TAKE_ICONS[next.kind]) || (ACTION_ICONS.find(([start]) => label.startsWith(start)) || [, '👋'])[1];
-    setButton('act', icon, label);
+    const iconFor = (text) => (text === 'Take ' + next.station && TAKE_ICONS[next.kind]) || (ACTION_ICONS.find(([start]) => text.startsWith(start)) || [, '👋'])[1];
+    const held = next.carry ? CARRY[next.carry] || ['🤲', next.carry] : null;
+    // Nothing to use: the big button greys out and says what is in hand ("Hammer ready"); GRAB handles swaps (below).
+    const idle = !next.locked && label === 'Hey!';
+    setButton('act', idle && held ? held[0] : iconFor(label), idle && held ? held[1] + ' ready' : label);
+    $('act').classList.toggle('idle', idle);
     $('act').classList.toggle('hold', !!next.hold);
-    $('act').classList.toggle('loading', next.load >= 0); // loading for a gunner: the button fills as the shell primes
-    $('act').style.setProperty('--p', (next.load >= 0 ? next.load * 10 : 0) + '%');
+    $('act').classList.toggle('has', !!held && !next.locked); // (the item in hand shows on the corner of the button)
+    $('held').textContent = held ? held[0] : '';
+    const fill = next.load >= 0 ? next.load : next.prog >= 0 ? next.prog : -1; // a shell priming for a gunner, or a hold action's progress
+    $('act').classList.toggle('loading', fill >= 0);
+    $('act').style.setProperty('--p', (fill >= 0 ? fill * 10 : 0) + '%');
+    // GRAB: the small amber button (take / swap / put back / hop on a seat). Not on a station, not when knocked out.
+    const grab = !next.locked && next.grab ? next.grab : null;
+    $('grab').style.display = grab ? '' : 'none';
+    if (grab) {
+      setButton('grab', iconFor(grab), grab.replace('extinguisher', 'fire ext.')); // (the small button has no room for the long word)
+      $('grab').classList.toggle('swap', !!next.gswap);
+      $('grab').classList.toggle('lock', !!next.glock);
+    }
     const priming = next.attack === 'Prime';
     setButton('atk', priming ? (next.prime >= 10 ? '💥' : '⚡') : next.attack === 'Swing' ? '🗡️' : next.attack === 'Hook!' ? '🪝' : next.attack === 'Let go!' ? '🖐️' : next.attack === 'Kick!' ? '🦶' : '✋', priming ? (next.prime >= 10 ? 'PRIMED!' : 'Hold to prime') : next.attack || 'Shove');
     $('atk').classList.toggle('prime', priming);
     $('atk').classList.toggle('ready', priming && next.prime >= 10);
     $('atk').style.setProperty('--p', (priming ? next.prime * 10 : 0) + '%');
 
-    $('carry').textContent = next.carry ? CARRY[next.carry] || next.carry : 'Hands empty';
+    $('carry').classList.toggle('has', !!held);
+    $('carry').querySelector('.cico').textContent = held ? held[0] : '✋';
+    $('carrytx').textContent = held ? held[1] : 'Hands empty';
     if (next.hull != null) {
       $('hfill').style.width = next.hull + '%';
       $('hfill').style.background = next.hull > 35 ? '#4caf50' : '#e63946';
@@ -171,31 +200,36 @@ export function createControllerUI({ network }) {
 
     const where = next.station || 'Walking';
     const ammo = next.ammo != null ? ` - ${next.ammo} ${next.kind === 'bombbay' ? 'bombs' : 'shells'}` : '';
+    // (one short line: the info bar never wraps; a warning from the host replaces the hint)
     const hint = next.locked
       ? {
-          helm: 'Stick: engines (left/right) and trim (up/down). AHEAD lever: cruise speed (STOP line = hover). PUMP/VENT lever: the gasbag - up = rise, middle = hold, down = drop.',
-          gun: 'Drag to aim, hold FIRE. Quiet? Hold PRIME for a big shell, or tap radar blips to SPOT.',
-          lookout: 'Keep watch! Arrows on the TV show what is coming from off screen.',
-          hijack: 'You hijacked a fighter! KICK THE PILOT: tap Action 3 times (or hold it). Then: stick steers, guns fire by themselves, LEAVE bails out with a parachute.',
-          escort: 'You are flying the escort fighter! Point the stick where to fly - let go and she circles the ship. Her guns fire by themselves at anything in front. LEAVE flies her home.',
-          light: 'Stick sweeps the beam. HOLD the button to focus it. Anything in the light takes extra damage and is easy to hit - and in the dark it lets the crew see!',
-          coil: 'Aim with the stick, HOLD to charge the coil (uses lots of steam), let go to fire a giant bolt!',
-          shield: 'Point the stick to swing the glowing shield round the ship - it blocks bullets, bats and rockets!',
-          bombbay: 'Watch the red ring on the TV - press DROP when it is on a gun or building. Needs ammo crates!',
+          helm: 'Stick: engines + trim. Levers: speed, and gasbag pump / vent.',
+          gun: 'Drag to aim, hold FIRE. Hold PRIME for a big shell.',
+          lookout: 'Keep watch! TV arrows show what is coming.',
+          hijack: 'Kick the pilot: tap any button 3 times, or hold Action.',
+          escort: 'Stick points where to fly. Guns fire by themselves.',
+          light: 'Stick sweeps the beam. HOLD to focus it.',
+          coil: 'Aim with the stick, HOLD to charge, let go to fire!',
+          shield: 'Point the stick to swing the shield round the ship.',
+          bombbay: 'Press DROP when the red ring is on a target.',
         }[next.kind]
       : next.load >= 0
-        ? 'Hold the Action button to load the shell for the gunner - it fills as the shell primes'
-      : next.taken
-        ? 'Someone is already here'
-        : next.label && next.label !== 'Hey!'
-          ? next.hold ? 'Hold the Action button' : 'Tap the Action button'
-          : next.carry === 'ammo'
-            ? 'Bring the ammo to a gun or the bomb bay'
-            : next.carry === 'coal'
-              ? 'Bring the coal to a boiler'
-            : 'Walk to a station, rack, fire or hole';
-    const warn = next.status ? ` <span class="warn">${next.status}</span>` : '';
-    $('info').innerHTML = `<b>${where}${ammo}</b> - ${hint}${warn}`;
+        ? 'Hold Action to load the shell for the gunner'
+        : next.taken
+          ? 'Someone is already here'
+          : next.label && next.label !== 'Hey!'
+            ? next.hold ? 'HOLD the big button' : 'Tap the big button'
+            : next.grab
+              ? next.gswap ? 'Hold GRAB to ' + (next.grab.startsWith('Put back') ? 'put it back' : 'swap') : 'Tap GRAB (or the big button)'
+              : next.carry === 'ammo'
+                ? 'Bring the ammo to a gun or the bomb bay'
+                : next.carry === 'coal'
+                  ? 'Bring the coal to a boiler'
+                  : next.carry
+                    ? 'Big button uses what you hold'
+                    : 'Walk to a station, rack, fire or hole';
+    const warn = next.status ? `<span class="warn">${next.status}</span>` : '';
+    $('info').innerHTML = `<b>${where}${ammo}</b> - ${warn || hint}`;
     $('leave').style.display = next.locked ? 'block' : 'none';
     const helm = next.locked && next.kind === 'helm';
     document.body.classList.toggle('helm', helm);
@@ -205,7 +239,27 @@ export function createControllerUI({ network }) {
     $('jump').style.display = next.locked ? 'none' : ''; // no hopping while at a station
   };
 
+  // A hold action was only tapped: the big button shakes and says KEEP HOLDING.
+  let nudgeTimer = null;
+  const nudgeHold = () => {
+    const a = $('act');
+    a.classList.remove('nudge');
+    void a.offsetWidth; // (restart the animation)
+    a.classList.add('nudge');
+    clearTimeout(nudgeTimer);
+    nudgeTimer = setTimeout(() => a.classList.remove('nudge'), 700);
+    vibrate([15, 40, 15]);
+  };
+
+  // The button sizes follow the real height of the control area (the CSS has a fallback until this runs).
+  const fitButtons = () => {
+    const h = $('controls').clientHeight;
+    if (h > 0) $('buttons').style.setProperty('--H', h + 'px');
+  };
+
   const setup = () => {
+    if (window.ResizeObserver) new ResizeObserver(fitButtons).observe($('controls'));
+    addEventListener('resize', fitButtons);
     $('code').value = (new URLSearchParams(location.search).get('code') || '').toUpperCase();
     $('name').value = localStorage.name || '';
     $('lefty').checked = localStorage.lefty === '1';
@@ -237,5 +291,5 @@ export function createControllerUI({ network }) {
     });
   };
 
-  return { species, setup, join, selectSpecies, setJoinError, updateUI, getState: () => uiState, radarPick: (x, y) => radar.pick(x, y) };
+  return { species, setup, join, selectSpecies, setJoinError, updateUI, getState: () => uiState, nudgeHold, vibrate, radarPick: (x, y) => radar.pick(x, y) };
 }
