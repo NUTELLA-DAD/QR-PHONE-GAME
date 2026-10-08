@@ -412,6 +412,9 @@ BUILDS.sparrow = [
   { part: 'extinguisher', p: 'lower', x: 590 },
   { part: 'extinguisher', p: 'main', x: 345 },
   { part: 'extinguisher', p: 'main', x: 480 },
+  { part: 'extinguisher', p: 'main', x: 640 },
+  { part: 'extinguisher', p: 'lower', x: 800 },
+  { part: 'rack', kind: 'hammer', p: 'lower', x: 760 },
   { part: 'vent', p: 'main', x: 400 },
   { part: 'station', n: 'Deflector', kind: 'deflector', p: 'catwalk', x: 430 },
 ];

@@ -665,10 +665,11 @@ export function createSimulation() {
   // At most ONE part card per dock: a part this build can take, with up to YARD.SLOT_MAX places it can go (each already checked: never a FAIL).
   const partCard = () => {
     if (!state.startBuild) return null; // (headless tools without a start build keep the old shop)
-    const run = state.run;
+    const run = state.run, found = PS.DERELICT_STOPS.includes(legNo(curStop()));
+    if (!found && !state.yardOnly && Math.random() >= PS.CARD_CHANCE) return null; // (not every dock has a part for sale)
     const offer = offerPart(run.build, { owned: ownedParts(), crew: crewHeads(state), avoid: run.lastPart, only: state.yardOnly || null });
     if (!offer) return null;
-    const e = offer.entry, found = PS.DERELICT_STOPS.includes(legNo(curStop()));
+    const e = offer.entry;
     run.lastPart = e.id;
     state.yard.sum = offer.base.sum; // (the TV's gauges: the ship as she is)
     return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: found ? 0 : partPrice(e, run.parts.length, crewHeads(state)),

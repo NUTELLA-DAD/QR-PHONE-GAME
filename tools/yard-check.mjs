@@ -294,14 +294,14 @@ let payments = 0, start = 2000;
   st.run.visited.push(st.run.stopId); // (she has somewhere to limp back to)
   st.run.salvage = 3000;
   st.ship.hull = -1;
-  for (let k = 0; k < 60 * 90 && !st.limp; k++) step(sim, 1); // (the first wreck of a mission is GOING DOWN!, a last stand: it ends in the limp)
+  for (let k = 0; k < 60 * 240 && !st.limp; k++) { if (k % 60 === 0 && !st.ship.down) st.ship.hull = -1; step(sim, 1); } // (the first wreck of a mission is GOING DOWN!, a last stand: it ends in the limp)
   const limping = !!st.limp;
-  step(sim, 60 * (config.LIMP.TIME + 3));
+  for (let k = 0; k < 60 * (config.LIMP.TIME + 10) && st.limp; k++) step(sim, 1); // (and look the moment she is patched up: the bots at the dock soon buy the Full Repair)
   const mods = newest ? newest.names.map((nm) => st.modules.find((m) => m.name === nm)).filter(Boolean) : [];
   report(limping && st.run.spares === spares - 1 && mods.length && mods.every((m) => m.broken) && st.run.parts.length >= 2 && st.run.build && layout.engines.length === sparrowEngines + 1, `limp home: the newest part (${newest && newest.name}) is shaken loose, its modules start broken (${mods.map((m) => m.name).join(', ')}) - and nothing is lost`);
   const others = st.modules.filter((m) => !newest.names.includes(m.name) && m.kind !== 'pipe');
   report(others.every((m) => !m.broken), 'every other module was patched up');
-  const hasRepair = st.vote && st.vote.options.some((o) => o.kind === 'repair' && /Repair/.test(o.name));
+  const hasRepair = st.vote && st.vote.kind === 'dock' && st.vote.options.some((o) => o.kind === 'repair' && /Repair/.test(o.name));
   report(!!hasRepair, 'the dock after the limp offers the Full Repair that mends it');
 }
 
@@ -402,6 +402,7 @@ function store(k, v) { globalThis.localStorage.setItem(k, v); }
   const salvage0 = 600;
   for (let k = 0; k < 6; k++) {
     st.run.salvage = salvage0;
+    st.run.stopId = st.run.voyage.columns[1 + (k % 3)][0].id; // (a stop with somewhere to go on)
     st.yardOnly = null;
     sim.startDock();
     if (!st.vote) continue;

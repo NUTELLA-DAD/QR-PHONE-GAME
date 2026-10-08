@@ -55,7 +55,7 @@ if (args.runs > 1 && !args.child) {
   { const m = ok.map((r) => r.mates || {}); const jobs = {}; for (const x of m) for (const [k, v] of Object.entries(x.jobs || {})) jobs[k] = (jobs[k] || 0) + v; const tot = Object.values(jobs).reduce((a, b) => a + b, 0) || 1; console.log(`ship's mates: max aboard ${Math.max(0, ...m.map((x) => x.max || 0))}, station snapshots ${m.reduce((a, x) => a + (x.locks || 0), 0)}, in awards ${m.filter((x) => x.inAwards).length} runs; mate time: ${Object.entries(jobs).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + Math.round((100 * v) / tot) + '%').join(', ') || 'n/a'}`); }
   const causes = {};
   for (const r of ok) for (const k of r.flags || []) causes[k] = (causes[k] || 0) + 1;
-  if (args.build) { const pc = ok.map((r) => (r.parts || []).length); const win = ok.filter((r) => r.victory).map((r) => (r.parts || []).length); const all = {}; for (const r of ok) for (const id of r.parts || []) all[id] = (all[id] || 0) + 1; console.log(`parts bought by the end (start ship ${args.build}): mean ${(pc.reduce((a, b) => a + b, 0) / (pc.length || 1)).toFixed(1)}, victories only ${(win.reduce((a, b) => a + b, 0) / (win.length || 1)).toFixed(1)}; which: ${Object.entries(all).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + '=' + v).join(', ')}`); }
+  if (args.build) { console.log('salvage earned per run: ' + ok.map((r) => r.earned).join(', ')); const pc = ok.map((r) => (r.parts || []).length); const win = ok.filter((r) => r.victory).map((r) => (r.parts || []).length); const all = {}; for (const r of ok) for (const id of r.parts || []) all[id] = (all[id] || 0) + 1; console.log(`parts bought by the end (start ship ${args.build}): mean ${(pc.reduce((a, b) => a + b, 0) / (pc.length || 1)).toFixed(1)}, victories only ${(win.reduce((a, b) => a + b, 0) / (win.length || 1)).toFixed(1)}; which: ${Object.entries(all).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + '=' + v).join(', ')}`); }
   console.log('wreck flags: ' + Object.entries(causes).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(', '));
   process.exit(0);
 }
@@ -173,12 +173,12 @@ for (let step = 1; step <= maxSteps && !result; step++) {
     }
     const hp = rolling.flying ? Math.round((100 * rolling.helmEmpty) / rolling.flying) : 0;
     const avg = (v) => (rolling.flying ? +(v / rolling.flying).toFixed(1) : 0); const crew = Object.fromEntries(Object.entries(rolling.crew).map(([k, v]) => [k, Math.round((100 * v) / rolling.n)]));
-    result = { parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), avg: { br: avg(rolling.br), fires: avg(rolling.fires), gh: avg(rolling.gh), crew }, seed: args.seed, done: r.done, total: r.total, victory: r.victory, minutes: step / 3600, stalls, stallInfo, errors: errorCount, flags,
+    result = { earned: state.run.earned, parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), avg: { br: avg(rolling.br), fires: avg(rolling.fires), gh: avg(rolling.gh), crew }, seed: args.seed, done: r.done, total: r.total, victory: r.victory, minutes: step / 3600, stalls, stallInfo, errors: errorCount, flags,
       cause: r.victory ? 'flagship down' : `dmg fire ${Math.round(dmg.fire)} breach ${Math.round(dmg.breach)} direct ${Math.round(dmg.direct)} | stop ${r.reached} ${s.env} | helm ${s.helmManned ? 'manned' : s.helmBroken ? 'BROKEN' : 'EMPTY'} (empty ${hp}% of run) gas ${s.gas} holes ${s.holes} press ${s.press} fuel ${s.fuel} leaks ${s.leaks} raiders ${s.boarders} KO ${s.koCount} fires ${s.fires} broken [${s.broken.join(',')}] clog ${s.clog} o2 ${s.o2} flood ${s.flood} [${flags.join(',')}]` };
   }
 }
 if (!result) {
   const stopId = state.run.stopId;
-  result = { parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
+  result = { earned: state.run.earned, parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
 }
 console.log('RESULT ' + JSON.stringify(result));

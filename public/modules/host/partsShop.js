@@ -41,6 +41,17 @@ export function moduleNames(L) {
 }
 export const newModules = (before, after) => { const had = new Set(before); return after.filter((n) => !had.has(n)); };
 
+// ---- stations the Action button cannot reach ----
+// A rack, a vent, an extinguisher or a steam valve nearer than HIJACK px to a station (on the same deck) takes the Action button before the station does: a bot stops a few px short of
+// its station and a hand reaches 65, so nobody could stoke that boiler or load that gun. A part may not make this worse than the ship already is.
+const HIJACK = 80;
+export function hijacks(L) {
+  const hs = [...L.racks, ...L.vents, ...L.extinguishers, ...L.pipes.map((p) => ({ d: p.d, x: p.valve[0] })), ...(L.gasValves || [])];
+  let n = 0;
+  for (const s of L.stations) for (const h of hs) if (h.d === s.d && Math.abs(h.x - s.x) < HIJACK) n++;
+  return n;
+}
+
 // ---- choosing places ---------------------------------------------------------------------------------------------------------------------
 // n of the list, spread along it (first, last, then the middle ones): the places the crew sees as A / B / C.
 function spread(list, n) {
@@ -228,6 +239,7 @@ export function choicesFor(entry, parts, base) {
   try { L = buildLayout(parts); } catch { return []; }
   const b = base || { res: validate(parts), sum: null };
   b.sum = b.sum || summaryOf(b.res);
+  if (b.hijack == null) b.hijack = b.res.layout ? hijacks(b.res.layout) : 0;
   const cands = entry.cands(parts, L);
   if (!cands.length) return [];
   const tried = spread(cands.slice().sort((p, q) => p.x - q.x || p.y - q.y), PS().CANDIDATES);
@@ -237,7 +249,7 @@ export function choicesFor(entry, parts, base) {
     try { next = c.apply(parts); } catch { continue; }
     if (!next || next.length === parts.length && JSON.stringify(next) === JSON.stringify(parts)) continue;
     const res = validate(next);
-    if (!res.ok) continue;
+    if (!res.ok || hijacks(res.layout) > b.hijack) continue;
     const sum = summaryOf(res);
     good.push({ ...c, parts: next, summary: sum, warns: res.warns, note: noteFor(b.sum, sum, res.warns, b.res.warns) });
   }

@@ -654,7 +654,7 @@ export const config = {
   // simulation.js run.build), checked by the validator (never a FAIL) and fitted to ship 0 at the dock; its effects are weight, lift, steam and stations in the build, never config.
   PARTS_SHOP: {
     PRICES: { hullBay: 130, keel: 150, gasbag: 160, engine: 120, liftEngine: 170, nest: 140, gun: 100, lamp: 90, bombBay: 150, boiler: 170, coal: 90, ammo: 90, armour: 120, sail: 110, ballast: 90, ladder: 90, pole: 90, lift: 130 }, // base salvage price of each part
-    REPEAT_PRICE: 0.15, // each part already bought this voyage adds this share of the base price (the price rises with how many you own)
+    REPEAT_PRICE: 0.3, // each part already bought this voyage adds this share of the base price (the price rises with how many you own)
     CREW_SMALL: 3, // a crew of this many players or fewer finds engines, armour and gasbags cheaper...
     SMALL_MUL: 0.85, // ...by this factor
     CREW_BIG: 6, // a crew of this many or more finds station parts (guns, lamps, boilers, bunkers, bomb bay, sails) cheaper...
@@ -666,6 +666,7 @@ export const config = {
     HULL_BAYS_MAX: 2, // hull bays bought (a longer hull each)
     NEST_MAX: 2, // gun nests on the bag
     GUNS_MAX: 8,
+    CARD_CHANCE: 0.55, // chance that a dock offers a part card at all (a derelict stop always does): about 4 parts in a 7-dock voyage
     CANDIDATES: 18, // how many candidate spots of a part are tried by the validator when an offer is made (the best spread are kept)
   },
   // The Yard's votes and screens (S.6b).
