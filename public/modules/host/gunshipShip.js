@@ -1001,6 +1001,19 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
       return;
     }
     if (g.captured && g.phase !== 'leaving') { // her helm was taken: she strikes her colours
+      if (config.CROSS.TOW.PRIZE > 0 && (state.tows || []).some((t) => t.b === h)) { // (B.6: ...but with our towline on her she is a PRIZE: she hangs dead in the tow, and pays at the sky-dock; cut the line and she goes down as ever)
+        if (!g.prize) {
+          g.prize = true;
+          sendAllHome(g);
+          for (const c of crewOf(g)) { c.lock = null; delete h.crewReg[c.id]; }
+          warn('A PRIZE! TOW HER HOME TO THE SKY-DOCK', 4);
+        }
+        h.state.order = 0;
+        h.state.fuel = 0;
+        h.state.press = 0;
+        return;
+      }
+      g.prize = false;
       sink(true, true);
       return;
     }
@@ -1274,6 +1287,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
   const retire = () => {
     const g = state.gunship;
     if (!g || g.phase === 'leaving' || g.phase === 'sinking') return true;
+    if (g.prize) return false; // (B.6: a prize in tow stays for the dock)
     if (g.rope || g.charge || aboardAny()) return false;
     leave('THE GUNSHIP BREAKS OFF!', 2);
     return true;

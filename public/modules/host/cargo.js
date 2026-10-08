@@ -163,6 +163,7 @@ export function solveThrow(ship, o, target, side) {
       x += vx * dt;
       y += vy * dt;
       if (vy <= 0) continue;
+      if (ship.layout.platforms.some((pl) => { const a = toWorldX(ship, pl.x0), b = toWorldX(ship, pl.x1), Y = toWorldY(ship, pl.y); return py < Y && y >= Y && x >= Math.min(a, b) - 30 && x <= Math.max(a, b) + 30; })) break; // (it comes down on the thrower's own deck: no throw)
       const mv = target.pose.vx * (t + dt), mvy = target.pose.vy * (t + dt);
       let hit = null;
       for (const D of decks) if (py < D.y + target.pose.vy * t && y >= D.y + mvy && x >= D.lo + mv && x <= D.hi + mv) hit = Math.min(x - D.lo - mv, D.hi + mv - x);

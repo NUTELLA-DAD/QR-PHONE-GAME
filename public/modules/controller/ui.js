@@ -15,9 +15,10 @@ export function createControllerUI({ network }) {
     ['SURGE', '🔥'], ['LOAD for', '📦'], ['Close valve', '🚱'], ['Open valve', '🚰'], ['Open vent', '💨'], ['Close vent', '💨'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
     ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'], ['Jump!', '🪂'], ['Take ice', '🧊'], ['Put the ice', '↩️'], ['Cool the boiler', '🧊'], ['THROW ICE', '🧊'], ['Ice locker', '🧊'], ['Swap to', '🔄'],
     ['Swivel engine', '⚙️'], ['Raise sail', '⛵'], ['Lower sail', '⛵'], ['The sail', '⛵'], ['Swivel engine', '⚙️'], ['FOCUS', '🔦'], ['Take', '🎯'],
+    ['Climb into', '💥'], ['Man the cannon', '💥'], ['PARACHUTE', '🪂'], ['Shovel', '⛏️'], ['Dump', '⚖️'], ['Drop the', '📦'], ['Steal', '⚫'], ['LET GO TO FIRE', '💥'], ['HOLD TO CHARGE', '💥'], ['Brace', '💥'], ['RELOADING', '⏳'],
     ['FIRE', '💥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
   ];
-  const CARRY = { sword: ['🗡️', 'Sword'], hammer: ['🔨', 'Hammer'], extinguisher: ['🧯', 'Extinguisher'], ammo: ['📦', 'Ammo'], coal: ['⚫', 'Coal'], hookshot: ['🪝', 'Hookshot'], ice: ['🧊', 'Ice'] };
+  const CARRY = { sword: ['🗡️', 'Sword'], hammer: ['🔨', 'Hammer'], extinguisher: ['🧯', 'Extinguisher'], ammo: ['📦', 'Ammo'], coal: ['⚫', 'Coal'], hookshot: ['🪝', 'Hookshot'], ice: ['🧊', 'Ice'], sandbag: ['⚖️', 'Sandbag'], crate: ['📦', 'Crate'], towline: ['🪢', 'Towline'] };
 
   let species = 'bulldog';
   let joined = null;
@@ -198,7 +199,7 @@ export function createControllerUI({ network }) {
       $('grab').classList.toggle('lock', !!next.glock);
     }
     const priming = next.attack === 'Prime';
-    setButton('atk', priming ? (next.prime >= 10 ? '💥' : '⚡') : next.attack === 'Swing' ? '🗡️' : next.attack === 'Hook!' ? '🪝' : next.attack === 'Let go!' ? '🖐️' : next.attack === 'Kick!' ? '🦶' : '✋', priming ? (next.prime >= 10 ? 'PRIMED!' : 'Hold to prime') : next.attack || 'Shove');
+    setButton('atk', priming ? (next.prime >= 10 ? '💥' : '⚡') : next.attack === 'Swing' ? '🗡️' : next.attack === 'Hook!' || next.attack === 'Hook a ship!' ? '🪝' : next.attack === 'Throw!' ? '🎯' : next.attack === 'Let go!' ? '🖐️' : next.attack === 'Kick!' ? '🦶' : '✋', priming ? (next.prime >= 10 ? 'PRIMED!' : 'Hold to prime') : next.attack || 'Shove');
     $('atk').classList.toggle('prime', priming);
     $('atk').classList.toggle('ready', priming && next.prime >= 10);
     $('atk').style.setProperty('--p', (priming ? next.prime * 10 : 0) + '%');
@@ -226,6 +227,8 @@ export function createControllerUI({ network }) {
           shield: 'Point the stick to swing the shield round the ship.',
           bombbay: 'Press DROP when the red ring is on a target.',
           swivel: 'Stick turns the engine: ahead to cruise, up to climb, down to dive.',
+          cannon: 'Stick aims the barrel. HOLD to charge, let go to FIRE the crewman in it!',
+          cannonseat: 'You are in the barrel: hold on. Alone, the stick aims and the big button fires you.',
         }[next.kind]
       : next.load >= 0
         ? 'Hold Action to load the shell for the gunner'

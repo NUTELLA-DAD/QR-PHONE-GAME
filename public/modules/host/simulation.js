@@ -769,6 +769,8 @@ export function createSimulation() {
   const cardOff = (o) => o.kind !== 'cast' && (o.sold || o.cost > state.run.salvage);
 
   const startDock = () => {
+    const prize = state.gunship && state.gunship.prize && state.tows.find((t) => t.b === state.gunship.ship); // (B.6: a captured gunship still in tow when we reach the dock: a salvage bonus, and she is released and goes down)
+    if (prize) { addSalvage(config.CROSS.TOW.PRIZE, 'gunships', 'PRIZE IN TOW!'); W.towing.cut(prize, ''); state.gunship.prize = false; }
     const options = buildOffers();
     if (options.every((o) => o.kind === 'cast' || cardOff(o))) return startRoute(); // nothing affordable: straight on
     openVote({ kind: 'dock', title: 'SKY-DOCK', options, t: SH.TIME });

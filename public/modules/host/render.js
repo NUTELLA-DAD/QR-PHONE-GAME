@@ -1511,6 +1511,29 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+    } else if (item === 'sandbag') { // B.6: cargo in the arms
+      ctx.fillStyle = '#b79a63';
+      rrect(-8, -12, 30, 22, 8);
+      ctx.fill();
+      ctx.stroke();
+    } else if (item === 'crate') {
+      ctx.fillStyle = '#c9a05f';
+      ctx.fillRect(-8, -16, 28, 28);
+      ctx.strokeRect(-8, -16, 28, 28);
+      ctx.beginPath();
+      ctx.moveTo(-8, -16);
+      ctx.lineTo(20, 12);
+      ctx.stroke();
+    } else if (item === 'towline') {
+      ctx.fillStyle = '#d6bf8a';
+      ctx.beginPath();
+      ctx.arc(6, -2, 13, 0, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#b98a5a';
+      ctx.beginPath();
+      ctx.arc(6, -2, 5, 0, 7);
+      ctx.fill();
     } else if (item === 'ammo') {
       ctx.fillStyle = '#b5833f';
       ctx.fillRect(-8, -8, 22, 16);
@@ -1566,6 +1589,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
         return o.area === 'gasbag' ? { x: o.x, y: bagEdgeY(layout.gasbags[Math.max(0, bagNearX(layout.gasbags, o.x))], o.x, false) + 20, r: 60 } : o.gun ? { x: o.x, y: P[o.d].y - 50, r: 56 } : { x: o.x, y: P[o.d].y - 24, r: 52 };
       case 'gas':
         return { x: o.x, y: o.y, r: 40 };
+      case 'shovel':
+        return { x: o.x, y: P[o.d].y - 24, r: 46 };
       case 'unclog':
         return { x: o.x, y: P[o.d].y - 36, r: 54 };
       case 'oxygen':
@@ -1576,6 +1601,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         return { x: o.x, y: P[o.d].y - 70, r: 42 };
       case 'coal':
       case 'stoke':
+      case 'steal':
         return { x: act.station.x, y: P[act.station.d].y - 50, r: 52 };
       case 'repair':
       case 'valve':
@@ -1706,6 +1732,48 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+    }
+  };
+
+  // B.6: what crosses between ships, in the world: the smoke trail behind a crewman fired from a crew cannon, sandbags / crates / sacks thrown or dumped, and the towlines.
+  const drawCross = (time) => {
+    for (const p of Object.values(state.players)) {
+      if (!p.fly || !p.cannon || !p.trail || p.trail.length < 2) continue;
+      ctx.lineCap = 'round';
+      for (let i = 1; i < p.trail.length; i++) {
+        const a = i / p.trail.length;
+        ctx.strokeStyle = `rgba(232,224,204,${0.55 * a})`;
+        ctx.lineWidth = 4 + 20 * a;
+        ctx.beginPath();
+        ctx.moveTo(p.trail[i - 1][0], p.trail[i - 1][1]);
+        ctx.lineTo(p.trail[i][0], p.trail[i][1]);
+        ctx.stroke();
+      }
+    }
+    for (const it of state.thrown || []) {
+      ctx.save();
+      ctx.translate(it.x, it.y);
+      ctx.rotate(it.rot || 0);
+      ink();
+      ctx.lineWidth = 3;
+      if (it.kind === 'crate') { ctx.fillStyle = '#c9a05f'; ctx.fillRect(-15, -15, 30, 30); ctx.strokeRect(-15, -15, 30, 30); ctx.beginPath(); ctx.moveTo(-15, -15); ctx.lineTo(15, 15); ctx.stroke(); }
+      else { ctx.fillStyle = it.kind === 'coal' ? '#2b2b2b' : '#b79a63'; rrect(-17, -12, 34, 24, 9); ctx.fill(); ctx.stroke(); }
+      ctx.restore();
+    }
+    for (const t of state.tows || []) {
+      const A = { x: toWorldX(t.a, t.from.x), y: toWorldY(t.a, t.from.y) }, B = { x: toWorldX(t.b, t.to.x), y: toWorldY(t.b, t.to.y) };
+      const f = t.fly > 0 ? Math.min(1, t.t / t.fly) : 1; // (the grapple is still flying: the line pays out)
+      const ex = A.x + (B.x - A.x) * f, ey = A.y + (B.y - A.y) * f;
+      const slack = t.fly > 0 ? 0.12 : Math.max(0, 1 - (t.d || 0) / Math.max(1, t.len)) * 0.35, sag = Math.hypot(ex - A.x, ey - A.y) * slack;
+      ink();
+      ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.quadraticCurveTo((A.x + ex) / 2, (A.y + ey) / 2 + sag, ex, ey); ctx.stroke();
+      ctx.strokeStyle = t.tension > 0.5 ? '#f2b04a' : '#d6bf8a';
+      ctx.lineWidth = 3.4;
+      ctx.stroke();
+      ctx.strokeStyle = '#8a8588'; // the grapple: three little claws
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(ex - 12, ey - 8); ctx.lineTo(ex, ey); ctx.lineTo(ex + 12, ey - 8); ctx.moveTo(ex, ey); ctx.lineTo(ex, ey + 12); ctx.stroke();
     }
   };
 
@@ -2187,6 +2255,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       everyShip(drawShipLayer);
       if (world.gunship && world.gunship.asShip) drawGunship.rope(world.gunship, ts); // (the gunship's grapple line runs between two ships: it is drawn in the world)
       everyShip(() => drawAirborne(ts)); // crew in the air and their ropes live in the world, not in the ship's frame
+      drawCross(ts); // (B.6: cannon smoke trails, thrown loads, towlines)
       everyShip(() => { if (!ship.ai) { drawCoil(ts); drawShield(ts); } }); // each ship's Lightning Coil and Deflector band (world points)
       if (fleetN() > 1) fleet.drawPennants(world, wv, width, height, time); // the team flags on the masts
     }

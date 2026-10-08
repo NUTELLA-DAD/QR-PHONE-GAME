@@ -42,6 +42,10 @@ export function shotLands(sh, c, aim, power, target) {
     x += vx * dt;
     y += vy * dt;
     if (t < k.NO_LAND || vy < 0) continue;
+    for (const pl of sh.layout.platforms) { // (coming down on his own ship's deck first is no shot at all)
+      const a = toWorldX(sh, pl.x0), b = toWorldX(sh, pl.x1), Y = toWorldY(sh, pl.y);
+      if (py < Y && y >= Y && x >= Math.min(a, b) - 70 && x <= Math.max(a, b) + 70) return null;
+    }
     const mv = target.pose.vx * (t + dt), mvy = target.pose.vy * (t + dt), pv = target.pose.vy * t;
     for (const D of decks) {
       if (!(py < D.y + pv && y >= D.y + mvy)) continue;

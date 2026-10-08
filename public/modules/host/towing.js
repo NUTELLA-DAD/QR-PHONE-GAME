@@ -116,7 +116,7 @@ export function createTowing({ world, puff, phoneFx = () => {} }) {
       }
       const e = ends(t);
       const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, d = Math.hypot(dx, dy) || 1;
-      t.len = Math.max(T().LEN * 0.55, t.len - T().REEL * dt); // she hauls the line in
+      t.len = Math.max(T().LEN, t.len - T().REEL * dt); // she hauls the line in, as far as its rest length
       t.d = d;
       t.tension = 0;
       if (d > T().SNAP) { cut(t, 'THE TOWLINE SNAPS!'); continue; }

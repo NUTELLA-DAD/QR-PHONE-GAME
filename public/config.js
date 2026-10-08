@@ -1289,7 +1289,7 @@ export const config = {
       CANNON_MIN_CREW: 3, // not with fewer hands
       CANNON_WAIT: 14, // seconds the seat waits for a gunner before firing solo
       THROW_CHANCE: 1.2, // per minute: a bot crew with a sandbag rack throws sandbags at a rival ship that is close under or beside them
-      THROW_RANGE: 650, // ...when she is this close (px)
+      THROW_RANGE: 2400, // ...a rival whose ship is within this many px of ours (origin to origin) is looked at; the throw only goes if the arc from the end of the top deck lands on one of her decks
       TOW_RANGE: 800, // a bot with a towline hooks a ship that is this near
     },
   },

@@ -882,6 +882,17 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
         }
         continue;
       }
+      if (r.kind === 'sandbag' || r.kind === 'crate' || r.kind === 'towline') { // B.6: cargo racks - a stack of sacks, a stack of crates, a reel of towline
+        const n = 3;
+        if (r.kind === 'sandbag') for (let k = 0; k < n; k++) filled('#b79a63', () => ctx.roundRect(r.x - 26 + (k % 2) * 24, y + 52 - k * 17, 32, 20, 8));
+        else if (r.kind === 'crate') for (let k = 0; k < n; k++) { filled('#c9a05f', () => ctx.rect(r.x - 24 + (k % 2) * 22, y + 40 - k * 18 + 12, 30, 30)); line([[r.x - 24 + (k % 2) * 22, y + 52 - k * 18], [r.x + 6 + (k % 2) * 22, y + 82 - k * 18]], 2, WOOD_DARK); }
+        else {
+          filled('#d6bf8a', () => ctx.arc(r.x - 8, y + 40, 22, 0, 7));
+          filled(WOOD, () => ctx.arc(r.x - 8, y + 40, 8, 0, 7));
+          line([[r.x + 10, y + 34], [r.x + 26, y + 18]], 4, '#8a8588');
+        }
+        continue;
+      }
       for (const dx of [-14, 14]) {
         if (r.kind === 'sword') {
           line([[r.x + dx, y + 8], [r.x + dx, y + 58]], 5, '#d8dde0');
@@ -1390,6 +1401,58 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     ctx.restore();
   };
 
+  // ================= THE CREW CANNON (B.6) =================
+  // Static: the wooden carriage, its two wheels and the brass trunnion post. Live (liveCannons): the barrel, aimed where the gunner has it (state.cannons[name].aim), kicking back
+  // when it fires, a glow at the muzzle while the charge builds, and a power bar over the gunner's post.
+  const drawCannonCarriages = () => {
+    for (const c of L.cannons || []) {
+      const q = P[c.d];
+      if (!q) continue;
+      filled(WOOD_DARK, () => ctx.roundRect(c.x - 44, q.y - 30, 88, 16, 5));
+      for (const dx of [-26, 26]) { filled(IRON, () => ctx.arc(c.x + dx, q.y - 14, 15, 0, 7)); filled(WOOD, () => ctx.arc(c.x + dx, q.y - 14, 6, 0, 7)); }
+      filled('#a8863a', () => ctx.roundRect(c.x - 9, q.y - 62, 18, 34, 4));
+    }
+  };
+  const liveCannons = (time) => {
+    for (const c of L.cannons || []) {
+      const q = P[c.d], r = (state.cannons || {})[c.n];
+      if (!q) continue;
+      const aim = r ? r.aim : c.aim, kick = r ? r.recoil : 0, left = Math.cos(aim) < 0;
+      ctx.save();
+      ctx.translate(c.x, q.y - 52);
+      ctx.rotate(left ? aim - Math.PI : aim); // (a barrel pointing aft is drawn mirrored, so the brass stays the right way up)
+      if (left) ctx.scale(-1, 1);
+      ctx.translate(-kick * 22, 0);
+      filled('#c9a85a', () => { ctx.moveTo(-18, -17); ctx.lineTo(74, -12); ctx.lineTo(74, 12); ctx.lineTo(-18, 17); ctx.closePath(); });
+      line([[10, -15], [10, 15]], 4, '#a8863a');
+      line([[40, -13], [40, 13]], 4, '#a8863a');
+      filled('#a8863a', () => ctx.roundRect(70, -16, 14, 32, 4)); // the muzzle ring
+      filled('#c9a85a', () => ctx.arc(-20, 0, 15, 0, 7)); // the breech
+      filled('#2b2622', () => ctx.ellipse(84, 0, 4, 10, 0, 0, 7)); // the dark mouth
+      const flash = r ? Math.max(r.flash || 0, r.charge || 0) : 0;
+      if (flash > 0.05) { ctx.fillStyle = `rgba(255,200,80,${0.15 + 0.5 * flash})`; ctx.beginPath(); ctx.arc(86, 0, 10 + 30 * flash * (r && r.flash > 0.05 ? 1.6 : 1), 0, 7); ctx.fill(); }
+      ctx.restore();
+      if (r && r.charge > 0.01) { // the power bar over the gunner's post
+        const post = L.stations.find((s) => s.n === c.n);
+        if (post) { ctx.fillStyle = 'rgba(40,34,30,0.8)'; ctx.fillRect(post.x - 30, q.y - 118, 60, 10); ctx.fillStyle = r.charge > 0.85 ? '#ff7b3a' : '#ffd23f'; ctx.fillRect(post.x - 28, q.y - 116, 56 * r.charge, 6); }
+      }
+    }
+  };
+  // Loads lying on a deck (thrown there, cargo.js): sacks, crates and sacks of coal, piled where they landed.
+  const liveLoads = () => {
+    const seen = {};
+    for (const ld of state.loads || []) {
+      const q = P[ld.d];
+      if (!q) continue;
+      const key = ld.d + ':' + Math.round(ld.x / 30), n = (seen[key] = (seen[key] || 0) + 1) - 1;
+      const x = ld.x + (n % 2) * 14 - 7, y = q.y - n * 17;
+      const drop = Math.max(0, 1 - ld.t * 5) * 24; // (it lands with a bounce)
+      if (ld.kind === 'crate') { filled('#c9a05f', () => ctx.rect(x - 15, y - 30 - drop, 30, 30)); line([[x - 15, y - 30 - drop], [x + 15, y - drop]], 2, WOOD_DARK); line([[x + 15, y - 30 - drop], [x - 15, y - drop]], 2, WOOD_DARK); }
+      else if (ld.kind === 'coal') { filled('#2b2b2b', () => ctx.roundRect(x - 16, y - 22 - drop, 32, 22, 8)); line([[x - 7, y - 20 - drop], [x + 7, y - 20 - drop]], 2.4, '#777'); }
+      else { filled('#b79a63', () => ctx.roundRect(x - 17, y - 24 - drop, 34, 24, 9)); line([[x - 8, y - 20 - drop], [x + 8, y - 20 - drop]], 2.4); }
+    }
+  };
+
   // ================= MASTS AND SAILS (S.5e) =================
   // Static: the mast, the boom it carries aft, the stays and the brass masthead. Live (liveSails): the canvas itself, furled in a roll on the boom or hauled up the mast,
   // fluttering downwind (toward the bow, the right) the harder the wind blows; a torn sail hangs in tatters.
@@ -1512,6 +1575,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     guard('coal', drawCoal);
     guard('bombBay', drawBombBay);
     guard('masts', drawMasts);
+    guard('cannonCarriages', drawCannonCarriages);
     guard('helm', drawHelmMount);
     guard('medbay', drawMedbay);
     guard('vents', drawVents);
@@ -1532,6 +1596,8 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     guard('bombs', liveBombBay);
     guard('wheel', liveHelm);
     guard('sails', liveSails, time);
+    guard('cannons', liveCannons, time);
+    guard('loads', liveLoads);
     guard('steam', liveVents, time);
     guard('lift', liveConnectors);
   };
