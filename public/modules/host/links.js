@@ -6,22 +6,21 @@
 //    manned. Pressure climbs while you hold: let go in time or she blows (the existing blowout).
 // Numbers live in config.LINKS. Also keeps state.linkStats (seconds of station time, paired and idle) for tools/botsim.mjs.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, one, nearest, kindOf, isNestStation } from '../../shipLayout.js';
+import { layoutTables } from '../../shipLayout.js';
 import { bestTarget } from './aim.js';
+import { mainShip } from './ships.js';
 
 const LK = config.LINKS;
 const SG = LK.SURGE;
 
-// Worked out from the ship layout; refilled when a new ship build is applied.
-let STATIONS, NEST;
-function rebuildShipTables() {
-  STATIONS = Object.fromEntries(SHIP_LAYOUT.stations.map((q) => [q.n, q]));
-  NEST = SHIP_LAYOUT.stations.filter((q) => isNestStation(q.n)).map((q) => q.n); // every lookout and nest lamp
-}
-rebuildShipTables();
-onLayoutChange(rebuildShipTables);
+// Worked out per ship layout (rebuilt when a new ship build is applied to it).
+const tables = layoutTables((layout) => ({
+  STATIONS: Object.fromEntries(layout.stations.map((q) => [q.n, q])),
+  NEST: layout.stations.filter((q) => layout.isNestStation(q.n)).map((q) => q.n), // every lookout and nest lamp
+}));
 
 export function createLinks({ state, modules, shipPuff }) {
+  const layout = mainShip(state).layout; // (B1: the ship whose crew are linked; B2 makes this one per ship)
   state.links = { helmMul: 1, nest: false, nestSpot: false, helmMan: false, loaders: [], surge: { level: 0, held: 0, to: 'engine', by: null } };
   state.surgeEngine = 0; // 0-1: how hard the engines are surging (read by course.js scrollSpeed and camera.js)
   state.surgeCoil = 0; // 0-1: how hard the coil is surging (read by coil.js)
@@ -41,7 +40,7 @@ export function createLinks({ state, modules, shipPuff }) {
 
   // Which consumer a surge feeds: the Lightning Coil if someone is charging it, otherwise the engines.
   const surgeTarget = () => {
-    const c = one('coil');
+    const c = layout.one('coil');
     return c && onStation(c.n) && state.coil.cd <= 0 && modules.works(state, c.n) ? 'coil' : 'engine';
   };
 
@@ -78,12 +77,12 @@ export function createLinks({ state, modules, shipPuff }) {
       return;
     }
     // ---- Helm + lookout ----
-    const nestCrew = NEST.map(onStation).filter(Boolean);
-    const helmSt = one('helm');
+    const nestCrew = tables(layout).NEST.map(onStation).filter(Boolean);
+    const helmSt = layout.one('helm');
     const helm = helmSt && onStation(helmSt.n);
     L.helmMan = !!helm && modules.works(state, helmSt.n);
     L.nest = nestCrew.length > 0 && L.helmMan;
-    L.nestSpot = L.nest && (nestCrew.some((q) => (q.spotRecent || 0) > 0) || (nestCrew.some((q) => kindOf(q.lock) === 'searchlight') && state.litTargets && state.litTargets.length > 0));
+    L.nestSpot = L.nest && (nestCrew.some((q) => (q.spotRecent || 0) > 0) || (nestCrew.some((q) => layout.kindOf(q.lock) === 'searchlight') && state.litTargets && state.litTargets.length > 0));
     L.helmMul = LK.ENABLED && L.nest ? 1 + (L.nestSpot ? LK.HELM_SPOT : LK.HELM_MAN) : 1;
     // ---- Gun + loader (who is loading which gun: read by linkArt.js) ----
     L.loaders.length = 0;
@@ -92,7 +91,7 @@ export function createLinks({ state, modules, shipPuff }) {
       if (!gunner) continue;
       S.gunT += dt;
       // (a loader is working when loadT is lit; one standing by with Action held counts as present too, e.g. waiting with the shell already primed)
-      const st = STATIONS[name];
+      const st = tables(layout).STATIONS[name];
       const working = (gun.loadT || 0) > 0 && state.players[gun.loaderId];
       const waiting = st && Object.values(state.players).find((q) => q !== gunner && !q.lock && q.fire && !(q.ko > 0) && q.d === st.d && Math.abs(q.x - st.x) < config.TOOLS.STATION_REACH);
       const loader = working || waiting;
@@ -114,8 +113,8 @@ export function createLinks({ state, modules, shipPuff }) {
       s.level = Math.min(1, s.level + dt / SG.RAMP);
       S.surgeT += dt;
       state.ship.press = Math.min(100, state.ship.press + SG.PRESS_RATE * s.level * dt); // (the pressure line in simulation.js does the blowout at 100)
-      const boiler = (s.by != null && state.players[s.by] && nearest('boiler', state.players[s.by])) || one('boiler'); // (the boiler being worked)
-      if (Math.random() < dt * 14) shipPuff(boiler.x + (Math.random() - 0.5) * 70, SHIP_LAYOUT.platforms[boiler.d].y - 60, '#ffd23f', 2); // (gold sparks from the boiler)
+      const boiler = (s.by != null && state.players[s.by] && layout.nearest('boiler', state.players[s.by])) || layout.one('boiler'); // (the boiler being worked)
+      if (Math.random() < dt * 14) shipPuff(boiler.x + (Math.random() - 0.5) * 70, layout.platforms[boiler.d].y - 60, '#ffd23f', 2); // (gold sparks from the boiler)
     } else {
       s.level = Math.max(0, s.level - dt / SG.FALL);
       if (s.level <= 0) s.active = false;

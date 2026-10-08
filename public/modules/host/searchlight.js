@@ -6,21 +6,21 @@
 //
 // All the numbers live in config.SEARCHLIGHT; where each lamp sits is SHIP_LAYOUT.searchlights.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, nestTier } from '../../shipLayout.js';
+import { layoutTables } from '../../shipLayout.js';
 import { targets } from './aim.js';
 import { tilt, inRock } from './course.js';
 import { pop } from './popups.js';
 import { envOf } from './environments.js';
+import { mainShip } from './ships.js';
 
 const S = config.SEARCHLIGHT;
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-export const LIGHT_NAMES = []; // (refilled in place when a new ship build is applied)
-const rebuildLightNames = () => { LIGHT_NAMES.length = 0; LIGHT_NAMES.push(...Object.keys(SHIP_LAYOUT.searchlights)); };
-rebuildLightNames();
-onLayoutChange(rebuildLightNames);
-export const isSearchlight = (name) => !!SHIP_LAYOUT.searchlights[name];
+// The lamp names of a ship layout (no layout = ship 0), rebuilt when a new ship build is applied to it.
+const tables = layoutTables((layout) => { const LIGHT_NAMES = Object.keys(layout.searchlights); return { LIGHT_NAMES, SET: new Set(LIGHT_NAMES) }; });
+export const lightNames = (layout) => tables(layout).LIGHT_NAMES;
+export const isSearchlight = (name, layout) => tables(layout).SET.has(name);
 
 // How dark the world is right now (0..1, before lightning flashes): the environment's DARK, the caves, and dusk, combined.
 // (searchlightArt.js smooths this and draws it; the bots use it to decide whether to man a lamp.)
@@ -36,9 +36,10 @@ export function darkTarget(state) {
 }
 
 export function createSearchlights({ state }) {
-  const lights = (state.searchlights = LIGHT_NAMES.map((n) => {
-    const m = SHIP_LAYOUT.searchlights[n];
-    return { n, bx: m.bx, by: m.by, home: m.aim, arc: m.arc, len: m.len, aim: m.aim, power: S.UNMANNED, focus: 0, manned: false, reach: S.RANGE, litCount: 0, ex: m.bx, ey: m.by, half: S.HALF_ANGLE, tierMul: 1 + config.NEST.TIER_BONUS * nestTier((SHIP_LAYOUT.stations.find((s) => s.n === n) || {}).p) };
+  const layout = mainShip(state).layout; // (B1: the ship the lamps are on; B2 makes this one per ship)
+  const lights = (state.searchlights = lightNames(layout).map((n) => {
+    const m = layout.searchlights[n];
+    return { n, bx: m.bx, by: m.by, home: m.aim, arc: m.arc, len: m.len, aim: m.aim, power: S.UNMANNED, focus: 0, manned: false, reach: S.RANGE, litCount: 0, ex: m.bx, ey: m.by, half: S.HALF_ANGLE, tierMul: 1 + config.NEST.TIER_BONUS * layout.nestTier((layout.stations.find((s) => s.n === n) || {}).p) };
   }));
   state.litTargets = []; // [{ x, y, r, kind }] for the TV: brackets round everything lit
   state.dimTargets = []; // [{ x, y, r, kind }] hostile things NOT in a beam (the TV gives them glowing eyes in the dark)

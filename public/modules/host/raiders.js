@@ -7,17 +7,17 @@
 // interrupt them with a hit.
 import { crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, deckIndex } from '../../shipLayout.js';
+import { layoutTables } from '../../shipLayout.js';
 import { moveWalker, steerTo, fall } from './nav.js';
+import { mainShip } from './ships.js';
 
 const R = config.RAIDERS;
-const P = SHIP_LAYOUT.platforms;
-let INSIDE; // platform indices of the decks inside the hull (refreshed when a new ship build is applied)
-const rebuildInside = () => { INSIDE = [deckIndex('main'), deckIndex('lower')].filter((d, i, a) => d >= 0 && a.indexOf(d) === i); };
-rebuildInside();
-onLayoutChange(rebuildInside);
+// Worked out per ship layout (rebuilt when a new ship build is applied to it): the platform indices of the decks inside the hull.
+const tables = layoutTables((layout) => ({ INSIDE: [layout.deckIndex('main'), layout.deckIndex('lower')].filter((d, i, a) => d >= 0 && a.indexOf(d) === i) }));
 
 export function createRaiders({ state, modules, puff, impact }) {
+  const layout = mainShip(state).layout; // (B1: the ship the raiders board; B2 makes this one per ship)
+  const P = layout.platforms;
   state.bombs = [];
   let nextId = 0;
 
@@ -129,6 +129,7 @@ export function createRaiders({ state, modules, puff, impact }) {
       let goalX = 0;
       if (b.type === 'sapper' && !b.planted) {
         if (!b.plantAt) {
+          const INSIDE = tables(layout).INSIDE;
           const d = INSIDE[(Math.random() * INSIDE.length) | 0];
           b.plantAt = { d, x: P[d].x0 + 120 + Math.random() * (P[d].x1 - P[d].x0 - 240) };
         }
@@ -160,7 +161,7 @@ export function createRaiders({ state, modules, puff, impact }) {
         // Chase the nearest crew member.
         const target = live.reduce((best, q) => (!best || Math.abs(q.x - b.x) + Math.abs(q.y - b.y) * 2 < Math.abs(best.x - b.x) + Math.abs(best.y - b.y) * 2 ? q : best), null);
         if (!target) continue;
-        goalD = target.conn == null ? target.d : SHIP_LAYOUT.connectors[target.conn][target.s < 0.5 ? 'top' : 'bottom'];
+        goalD = target.conn == null ? target.d : layout.connectors[target.conn][target.s < 0.5 ? 'top' : 'bottom'];
         goalX = target.x;
       }
       const step = steerTo(b, goalD, goalX, 20);

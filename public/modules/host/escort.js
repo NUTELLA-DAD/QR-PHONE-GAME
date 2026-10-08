@@ -10,23 +10,24 @@
 // Enemy bullets and rock hurt her. Shot down, the pilot bails out and comes round in the medical
 // bay, and the crew need a while to build another.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, reviveSpot } from '../../shipLayout.js';
+import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { flyPlane, smoke, shootDown, angDiff } from './planes.js';
 import { targets } from './aim.js';
 import { inRock, groundAt, ceilAt } from './course.js';
 import { pop } from './popups.js';
+import { mainShip } from './ships.js';
 
 const E = config.ESCORT;
-const B = SHIP_LAYOUT.bounds;
-const DOCKS = SHIP_LAYOUT.escortDocks; // (filled in place when a new ship build is applied, so this stays current)
-export const DOCK = SHIP_LAYOUT.escortDock; // plane 1's hook, in ship coordinates
 
-// Is this station name one of the patrol planes?
-export const isEscortStation = (n) => typeof n === 'string' && DOCKS.some((d) => d.n === n);
+// Is this station name one of the patrol planes? (of `layout`'s ship; no layout = ship 0)
+export const isEscortStation = (n, layout = SHIP_LAYOUT) => typeof n === 'string' && layout.escortDocks.some((d) => d.n === n);
 // The plane belonging to a station name (or undefined).
 export const escortFor = (state, n) => (state.escorts || []).find((e) => e.name === n);
 
 export function createEscort({ state, puff, phoneFx }) {
+  const layout = mainShip(state).layout; // (B1: the ship the patrol planes hang under; B2 makes this one per ship)
+  const DOCKS = layout.escortDocks; // (filled in place when a new ship build is applied, so this stays current)
+  const B = layout.bounds;
   const reset = () => {
     state.escorts = DOCKS.map((d, i) => ({ name: d.n, num: d.num || i + 1, idx: i, dock: d, docked: true, flying: false, returning: false, auto: false, idle: 0, x: 0, y: 0, vx: 0, vy: 0, heading: 0, hp: E.HP, max: E.HP, rebuild: 0, gunCd: 0, trail: [] }));
     state.escort = state.escorts[0]; // plane 1 (older code reads this)
@@ -34,7 +35,7 @@ export function createEscort({ state, puff, phoneFx }) {
   reset();
 
   const dockPoint = (s) => ({ x: s.dock.x, y: s.dock.y - state.ship.alt });
-  const shipMid = () => ({ x: SHIP_LAYOUT.aimPoint.x, y: SHIP_LAYOUT.aimPoint.y - state.ship.alt });
+  const shipMid = () => ({ x: layout.aimPoint.x, y: layout.aimPoint.y - state.ship.alt });
   const nearShip = (x, y, pad) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - state.ship.alt - pad && y < B.y1 - state.ship.alt + pad;
   const pilot = (s) => Object.values(state.players).find((p) => p.lock === s.name);
 
@@ -60,10 +61,10 @@ export function createEscort({ state, puff, phoneFx }) {
     const p = pilot(s);
     if (p) {
       p.lock = null;
-      const rv = reviveSpot();
+      const rv = layout.reviveSpot();
       p.d = rv.d;
       p.x = rv.x;
-      p.y = SHIP_LAYOUT.platforms[p.d].y;
+      p.y = layout.platforms[p.d].y;
       p.ko = config.GUNSHIP.RESPAWN_TIME;
       phoneFx?.(p, why + (rv.medbay ? ' You bailed out - coming round in the medical bay...' : ' You bailed out - you come round on deck...'));
     }
