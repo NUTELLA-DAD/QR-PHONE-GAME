@@ -91,8 +91,13 @@ export function createWorldCamera() {
     const keep = C.SHIP_KEEP_IN;
     const mx = (sx0 + sx1) / 2;
     const my = (sy0 + sy1) / 2; // (the sky padding is the same above and below, so this is the middle of the ships themselves)
-    const cx = clampTo((x0 + x1) / 2, mx - halfW * keep, mx + halfW * keep);
-    const cy = clampTo((y0 + y1) / 2, my - halfH * keep, my + halfH * keep);
+    let cx = clampTo((x0 + x1) / 2, mx - halfW * keep, mx + halfW * keep);
+    let cy = clampTo((y0 + y1) / 2, my - halfH * keep, my + halfH * keep);
+    if (ships.length > 1 && shipsFit >= minZoom - 1e-6) {
+      // (B.3: with several ships the middle staying in view is not enough: when the ships fit at all, EVERY ship stays whole on the screen, whatever far threats pull the box towards)
+      cx = clampTo(cx, sx1 - halfW, sx0 + halfW);
+      cy = clampTo(cy, sy1 - halfH, sy0 + halfH);
+    }
     return { cx, cy, zoom, anchor: mx, minZoom, clipped: ships.length > 1 && shipsFit < minZoom - 1e-6 };
   };
 

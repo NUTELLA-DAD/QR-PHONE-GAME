@@ -3,6 +3,7 @@
 // state.crewScale holds the live, smoothed numbers; the other modules read them through the helpers
 // below so one place decides how difficulty and crew size combine.
 import { config } from '../../config.js';
+import { mainShip } from './ships.js';
 
 const CS = () => config.CREW_SCALE;
 const KEYS = ['spawn', 'count', 'fire', 'damage', 'raiders', 'hp', 'spread', 'collateral'];
@@ -30,7 +31,8 @@ export function scaleFor(n) {
 
 const NEUTRAL = scaleFor(8);
 
-// Call every frame: eases the effective crew number toward the real one (instantly in the lobby).
+// Call every frame, once for each ship (B.3: with the SHIP's context, so `state.players` is her crew and `state.crewScale` is hers): eases the effective crew number toward the real one
+// (instantly in the lobby). Ship 0's is the world's (the enemies hunt her, so their numbers follow her crew); another ship's only scales what happens to HER.
 export function updateCrewScale(state, dt) {
   const real = Math.max(1, crewAboard(state) || 8);
   const cs = state.crewScale || (state.crewScale = { ...NEUTRAL, eff: real });
@@ -39,7 +41,7 @@ export function updateCrewScale(state, dt) {
   Object.assign(cs, CS().ENABLED ? scaleFor(cs.eff) : NEUTRAL);
   cs.real = real;
   // (the difficulty button can change the spare gasbags until the first limp)
-  const run = state.run;
+  const run = mainShip(state).main ? state.run : null; // (the run and its spare gasbags belong to the main ship)
   if (state.phase === 'lobby' && run && !run.limps) run.spares = run.sparesMax = sparesFor(state);
 }
 

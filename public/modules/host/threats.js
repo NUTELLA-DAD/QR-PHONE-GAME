@@ -6,13 +6,13 @@ import { keepClear, inRock, groundAt, ceilAt } from './course.js';
 import { pop } from './popups.js';
 import { shellDmg, dazzled } from './aim.js';
 import { flyPlane, smoke, shootDown, updateChutes, shoveShip, bumpShip, bounceStep } from './planes.js';
-import { mainShip } from './ships.js';
+import { targetShip } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHelm, credit }) {
-  const ship = mainShip(state); // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const ship = targetShip(state, null); // (B.3: the ship this system hunts and flies round: ships.js targetShip, ships[0] today; B.4 chooses per enemy)
   const layout = ship.layout;
   const B = layout.bounds;
   state.mines = [];

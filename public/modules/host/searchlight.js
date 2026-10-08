@@ -137,6 +137,7 @@ export function createSearchlights({ state }) {
       if (lit) {
         if (o && typeof o === 'object') {
           o.lit = S.LIT_HOLD;
+          o.litBy = ship.id; // (whose beam holds it: with several ships a thing in ANY manned beam is lit, and only the ship holding it lets its glow fade)
           nowLit.add(o);
         }
         state.litTargets.push({ x: p.x, y: p.y, r: t.r, kind: t.kind });
@@ -145,6 +146,7 @@ export function createSearchlights({ state }) {
     // The glow fades off things the beam left.
     for (const o of litObjs) {
       if (nowLit.has(o)) continue;
+      if (o.litBy !== ship.id && (o.lit || 0) > 0) { litObjs.delete(o); continue; } // (another ship's beam took it over: hers lets it fade)
       o.lit = Math.max(0, (o.lit || 0) - dt);
       if (o.lit <= 0) litObjs.delete(o);
     }

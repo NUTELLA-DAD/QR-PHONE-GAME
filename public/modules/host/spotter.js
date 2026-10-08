@@ -14,10 +14,10 @@ const SP = config.SPOT;
 const HP = config.HELP;
 
 // Radar symbols, in the order the phone knows them (controller/ui.js has the same list).
-export const RADAR_KINDS = ['mine', 'fighter', 'bomber', 'plane', 'boss', 'gunship', 'bat', 'sniper', 'tug', 'saw', 'imp'];
-const NAMES = { mine: 'MINE', fighter: 'FIGHTER', bomber: 'BOMBER', plane: 'PLANE', boss: 'BOSS', gunship: 'GUNSHIP', bat: 'BAT', sniper: 'SNIPER', tug: 'HARPOON', saw: 'SAW', imp: 'IMP' };
+export const RADAR_KINDS = ['mine', 'fighter', 'bomber', 'plane', 'boss', 'gunship', 'bat', 'sniper', 'tug', 'saw', 'imp', 'ship'];
+const NAMES = { mine: 'MINE', fighter: 'FIGHTER', bomber: 'BOMBER', plane: 'PLANE', boss: 'BOSS', gunship: 'GUNSHIP', bat: 'BAT', sniper: 'SNIPER', tug: 'HARPOON', saw: 'SAW', imp: 'IMP', ship: 'AIRSHIP' };
 // Rough size (px) of each thing, for the bracket drawn round a spotted one on the TV.
-export const SPOT_SIZE = { mine: 44, fighter: 54, bomber: 100, plane: 50, boss: 230, gunship: 230, bat: 34, sniper: 80, tug: 60, saw: 56, imp: 30 };
+export const SPOT_SIZE = { mine: 44, fighter: 54, bomber: 100, plane: 50, boss: 230, gunship: 230, bat: 34, sniper: 80, tug: 60, saw: 56, imp: 30, ship: 500 };
 
 // Everything out there worth a ping (the same lists the TV's lookout arrows use, but every one of them).
 // Each: { k (kind index), kind, obj (the thing itself), pos() -> {x, y} live world position }.
@@ -43,6 +43,8 @@ export function radarItems(state) {
     for (const s of S.saws) add('saw', s, at(s));
     for (const b of S.imps) if (b.delay <= 0) add('imp', b, at(b));
   }
+  // (B.3) Every airship in the sky is a blip too (a phone leaves out its own: spotter.js nearFor), so a crew can see where the others are.
+  if (state.ships.length > 1) for (const o of state.ships) add('ship', o.state, () => ({ x: toWorldX(o, o.layout.midPoint.x), y: toWorldY(o, o.layout.midPoint.y) }));
   return out;
 }
 
@@ -54,8 +56,7 @@ const spotOf = (o, L) => {
 };
 
 export function createSpotter({ state, emit, phoneFx }) {
-  const L = mainShip(state).layout; // (this ship's own layout)
-  const kindOf = L.kindOf;
+  // (B.3: one spotter for the sky; a player's radar, guns and layout are those of the SHIP he is aboard: shipOf)
   state.spots = []; // { obj, item, by (player id), kind }
   state.helpCalls = []; // { caller, t, who: [human ids still on their way], bots: [bots sent] }
   let radarT = 0;
@@ -72,12 +73,14 @@ export function createSpotter({ state, emit, phoneFx }) {
       p.rdBusy = 0;
       return (p.freeT || 0) >= R.IDLE_AFTER;
     }
-    if (kindOf(p.lock) === 'lookout') return true;
-    const gun = state.GUNS[p.lock];
+    const sh = shipOf(state, p);
+    if (sh.layout.kindOf(p.lock) === 'lookout') return true;
+    const st = sh.main ? state : sh.ctx; // (her own guns and modules)
+    const gun = st.GUNS[p.lock];
     if (!gun) return false;
     // A gunner: free = nothing in reach (or the gun can't fire anyway).
-    const mod = (state.modules || []).find((m) => m.name === p.lock);
-    const shooting = !(mod && mod.broken) && gun.ammo > 0 && !!bestTarget(state, gun);
+    const mod = (st.modules || []).find((m) => m.name === p.lock);
+    const shooting = !(mod && mod.broken) && gun.ammo > 0 && !!bestTarget(st, gun);
     if (shooting) {
       p.rdBusy = (p.rdBusy || 0) + dt;
       p.rdFree = 0;
@@ -98,16 +101,24 @@ export function createSpotter({ state, emit, phoneFx }) {
       if (!it) unspot(i);
       else s.item = it;
     }
-    const ship = mainShip(state);
-    const cx = toWorldX(ship, L.midPoint.x);
-    const cy = toWorldY(ship, L.midPoint.y);
-    const near = last
-      .map((it) => {
-        const p = it.pos();
-        return { it, dx: p.x - cx, dy: p.y - cy, d: Math.hypot(p.x - cx, p.y - cy) };
-      })
-      .sort((a, b) => a.d - b.d)
-      .slice(0, R.MAX_ITEMS);
+    // What each ship's phones see, nearest first: measured from HER middle, and without herself.
+    const nears = new Map();
+    const nearFor = (ship) => {
+      let near = nears.get(ship);
+      if (near) return near;
+      const cx = toWorldX(ship, ship.layout.midPoint.x);
+      const cy = toWorldY(ship, ship.layout.midPoint.y);
+      near = last
+        .filter((it) => it.obj !== ship.state)
+        .map((it) => {
+          const p = it.pos();
+          return { it, dx: p.x - cx, dy: p.y - cy, d: Math.hypot(p.x - cx, p.y - cy) };
+        })
+        .sort((a, b) => a.d - b.d)
+        .slice(0, R.MAX_ITEMS);
+      nears.set(ship, near);
+      return near;
+    };
     for (const p of Object.values(state.players)) {
       if (p.bot) continue;
       const want = wantsRadar(p, 1 / R.HZ);
@@ -119,6 +130,7 @@ export function createSpotter({ state, emit, phoneFx }) {
         }
         continue;
       }
+      const near = nearFor(shipOf(state, p));
       p.rdOn = true;
       p.rdSeq = ((p.rdSeq || 0) + 1) % 1000;
       p.rdLists = p.rdLists || {};
@@ -182,7 +194,7 @@ export function createSpotter({ state, emit, phoneFx }) {
   const assign = (call) => {
     const c = call.caller;
     if (c.d == null) return;
-    const here = spotOf(c, L);
+    const here = spotOf(c, shipOf(state, c).layout);
     const sent = call.who.length + call.bots.length;
     const travelTime = shipOf(state, c).nav.travelTime; // (only crewmates on the caller's own ship answer, and they walk by her navigation)
     const pool = Object.values(state.players).filter((q) => q !== c && shipOf(state, q) === shipOf(state, c) && free(q) && !call.bots.includes(q) && !call.who.includes(q.id));

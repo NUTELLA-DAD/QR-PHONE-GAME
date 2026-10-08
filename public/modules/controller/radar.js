@@ -15,6 +15,7 @@ const KINDS = [
   { c: '#d9a05b', r: 5.5, shape: 'dia' }, // harpoon tug
   { c: '#9fdcff', r: 5, shape: 'dot' }, // saw
   { c: '#ff9ad0', r: 3.5, shape: 'dot' }, // imp
+  { c: '#9fe3ff', r: 9, shape: 'sq' }, // another airship (B.3)
 ];
 const TAU = Math.PI * 2;
 

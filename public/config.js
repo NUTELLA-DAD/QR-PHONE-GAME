@@ -1289,6 +1289,21 @@ export const config = {
     HUD: { Y: 24, W: 470, H: 104, BAR_W: 360, BAR_H: 22, LOW: 35 }, // the two side panels on the 1600x900 stage
     BANG: { SIZE: 30 }, // the "!" over an enemy on your deck (world pixels)
   },
+  // Several airships on one TV (B.3: fleetArt.js, ships.js teamOf, render.js). With ONE ship none of this is drawn.
+  FLEET: {
+    TEAMS: { // a ship's side, soft faded colours like PVP_ART: color = pennant / panel band / arrows, trim = the stripe on her hull and gasbag, dark = outlines, pale = light tint
+      red: { name: 'RED', color: '#c4574d', trim: '#a13f38', dark: '#8f3a34', pale: '#e8b7ae' },
+      blue: { name: 'BLUE', color: '#4d7fb3', trim: '#3a6492', dark: '#34577d', pale: '#b3cbe3' },
+      green: { name: 'GREEN', color: '#5f9a5a', trim: '#47793f', dark: '#3b6236', pale: '#bcd9b3' },
+      gold: { name: 'GOLD', color: '#d2a53d', trim: '#a8801f', dark: '#7a5a14', pale: '#ecd9a0' },
+      brass: { name: 'CREW', color: '#b59a5a', trim: '#8a6c2e', dark: '#6b5424', pale: '#e8dcb4' }, // no team: the edge arrows and panel band of a ship that has none
+    },
+    DEV_TEAMS: ['red', 'blue', 'green'], // host.html?teams=1 and botsim --teams: ship 1, 2, 3 take these in turn
+    PANEL: { W: 238, H: 108, GAP: 8, Y: 8, CENTER: 870 }, // the compact logbook panel of each ship, on the 1600x900 stage, in a row centred on CENTER (between the big panel and the minimap)
+    TRIM: { HULL: 9, BELT: 0.1, BELT_AT: 0.3 }, // team trim: the stripe along the hull (ship px thick); the belt round the gasbag (share of its width, where along it: share of its half width)
+    CREW_BAND: 6, // px (ship units) of team-coloured scarf band on a crewman's marker
+    ARROW_PAD: 46, // px from the screen edge where the arrow to an off-screen ship sits
+  },
   // Outline weights (Style 2026, see art/ART_SPEC.md).
   OUTLINE: { MAIN: 3.4, SMALL: 2.5, SHIP: 4 },
   // Effects in the storybook gouache style (modules/host/vfxArt.js): flat colours, ink from INK + OUTLINE, no gradients.

@@ -11,7 +11,7 @@ import { config } from '../../config.js';
 import { keepClear, inRock } from './course.js';
 import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
-import { mainShip } from './ships.js';
+import { targetShip } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const SP = config.SPECIALS;
@@ -19,7 +19,7 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks }) {
-  const ship = mainShip(state); // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const ship = targetShip(state, null); // (B.3: the ship this system hunts and flies round: ships.js targetShip, ships[0] today; B.4 chooses per enemy)
   const layout = ship.layout;
   const B = layout.bounds;
   const SH = layout.shield;

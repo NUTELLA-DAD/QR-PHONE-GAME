@@ -4,7 +4,9 @@
 //
 //   ship = { id,        'player' for the main ship (ships[0]); 'ship1', 'ship2' ... for the others
 //            main,      true for ships[0], the one the sky scrolls past and the enemies hunt (until B7)
-//            team,      the PvP team object (state.team) or null (a getter: the bridge sets it after the sim is made)
+//            name,      what the TV calls her ('AIRSHIP', 'SHIP 2' ... or a name given when she was made)
+//            team,      her side (B.3): null in co-op, or an id ('red', 'blue' ...) / the PvP team object, which teamOf() turns into { id, name, color, trim, dark, pale }. A ship with a
+//                       team wears it: trim on her hull and gasbag, a mast pennant, a scarf band on her crew, her colour on the HUD panel. (A setter; ship 0 also answers the PvP bridge's state.team)
 //            layout,    the ship's Layout instance (shipLayout.js createLayout; ship 0's is SHIP_LAYOUT, updated in place by applyBuild)
 //            nav,       the ship's navigation (nav.js createNav(layout): route tables, lift speeds; ship 0's is nav.js mainNav)
 //            state,     the ship's BODY: hull, gas, alt, speed, pitch ... (ship 0: today's state.ship, the same object)
@@ -17,6 +19,7 @@
 //   shipOf(state, player)     the ship a player is aboard (player.ship = a ship id; none = the main ship)
 //   eachShip(state, fn)       fn(ship, index) for every ship
 //   crewOf(state, ship)       the players aboard her (player.ship === ship.id; none = ships[0])
+//   targetShip(state, enemy)  the ship an enemy hunts: the ONE place that decides (ships[0] today; B.4 / B.7 choose per enemy)
 //   transfer(state, player, ship, platform, x)   the only way a player changes ship
 //
 // ---- THE CONTEXT VIEW ------------------------------------------------------------------------------------------------------------------------------
@@ -54,18 +57,19 @@ export const SHIP_KEYS = [
   'modules', 'bags', 'bagsVersion', 'bagAlert', 'balance', 'forces', 'engines', 'engineStats', 'thrust',
   'sails', 'sailPush', 'sailWarn', 'sailWarned', 'sailStats', 'links', 'linkStats', 'surgeEngine', 'surgeCoil', 'surgeBotAt',
   'coil', 'searchlights', 'litTargets', 'dimTargets', 'darkNow', 'fireStats', 'blaze', 'blazeCd',
+  'crewScale', // (B.3: the multipliers for the size of THIS ship's crew: her raiders, the damage she takes; the world's enemies use ship 0's)
   'turning', 'goingDown', 'goingDownRate', 'iceLocker', 'iceFlights', 'gdBanner', 'gdGrace', 'gdJobs',
   'escorts', 'escort', 'escortCramped', 'stunts', 'stuntEnd', 'stuntLog', 'stuntPlane', 'stuntStats',
   // worked out every step
   'rig', 'steamParts', 'steamUse', 'overdrive', 'buoyancy', 'sinking', 'autopilot', 'pressureWarned', 'warnBeep', 'boilerBlew', 'helmHit', 'ballastCd', 'gasWarned', 'lastAlt', 'noPump',
   'lookout', 'lookoutBonus', 'valveLog', 'valveShuts', 'boilerLoads',
-  // the environment's hazards that ride on her (the rules run for ship 0 only: another ship has them neutral, shipInit)
-  'icing', 'ice', 'clogs', 'spores', 'o2tank', 'stormJob', 'sea',
+  // the environment's hazards that ride on her (B.3: every ship runs her own copy of the rules, shipSim.js: ice, thermals, spores, oxygen, storm rods, the sea) and what they put on her
+  'env', 'icing', 'ice', 'clogs', 'spores', 'o2tank', 'stormJob', 'sea',
 ];
 // The world keys a second ship's code is allowed to READ through the prototype: the sky she shares (the enemies and shots and wrecks in it, the weather and the
 // environment, the clock and the banner, the sound queue, the difficulty and the crew scale). Every other key a ship needs is her own (SHIP_KEYS), or tools/buildsim.mjs
 // --check-two-ships fails and names it: a read that quietly fell through to ship 0 would be a cross-talk bug.
-export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'crewScale', 'difficulty', 'enemy', 'enemyBombs', 'env', 'ev', 'flashes', 'mines', 'paras', 'periscope', 'phase', 'popups', 'rings', 'rival', 'rockets', 'sfxQ', 'shells', 'specials', 'strafers', 'tempo', 'weather', 'wrecks', 'hijacks', 'chutes', 'shipBombs', 'puffs', 'kills', 'scroll', 'ships', 'paused', 'mode'];
+export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'difficulty', 'enemy', 'enemyBombs', 'ev', 'flashes', 'mines', 'paras', 'periscope', 'phase', 'popups', 'rings', 'rival', 'rockets', 'sfxQ', 'shells', 'specials', 'strafers', 'tempo', 'weather', 'wrecks', 'hijacks', 'chutes', 'shipBombs', 'puffs', 'kills', 'scroll', 'ships', 'paused', 'mode'];
 // World keys a ship's code WRITES as a plain number (a context would shadow them): they pass through to the world on every context.
 export const WORLD_WRITES = ['kills'];
 
@@ -135,14 +139,29 @@ function makeContext(ship) {
   return ctx;
 }
 
+// A team as the TV draws it: { id, name, color, trim, dark, pale } (config.FLEET.TEAMS). `team` is an id ('red' ...), the PvP team object ({ id, name, color, trim }) or null. Cached per object.
+const teamCache = new WeakMap();
+export function teamOf(team) {
+  if (!team) return null;
+  if (typeof team === 'object' && teamCache.has(team)) return teamCache.get(team);
+  const T = config.FLEET.TEAMS;
+  const id = typeof team === 'string' ? team : team.id;
+  const out = { id, ...(T[id] || T.brass), ...(typeof team === 'object' ? team : {}) };
+  if (typeof team === 'object') teamCache.set(team, out);
+  return out;
+}
+
 // Make a ship. `main`: ships[0], wrapping the world's own body, layout and course position by reference. Another ship takes `formation` ({ dx, dalt }: how far along
 // the sky from ship 0 she keeps station, and how far above her altitude she is held; dalt < 0 = below) and a `parts` list (or a layout) of her own.
-export function createShip(world, { id, main = false, layout = null, parts = null, nav = null, body = null, formation = null } = {}) {
+export function createShip(world, { id, main = false, layout = null, parts = null, nav = null, body = null, formation = null, team = null, name = null } = {}) {
   const lay = layout || (parts ? createLayout(parts) : SHIP_LAYOUT);
+  let side = teamOf(team);
   const ship = {
     id,
     main,
-    get team() { return world.team || null; },
+    name: name || (main ? 'AIRSHIP' : 'SHIP ' + (world.ships.length + 1)),
+    get team() { return side || (main ? teamOf(world.team) : null); },
+    set team(t) { side = teamOf(t); },
     layout: lay,
     nav: nav || createNav(lay),
     state: body || newBody(),
@@ -165,6 +184,10 @@ export function createShip(world, { id, main = false, layout = null, parts = nul
 export const createMainShip = (state) => createShip(state, { id: 'player', main: true, layout: SHIP_LAYOUT, nav: mainNav, body: state.ship });
 
 export const mainShip = (state) => state.self || state.ships[0];
+// The ship an enemy hunts: the one place that decides (B.3). The enemy systems ask here for the ship they aim at, fire at and fly round; it is ships[0] today. B.4 / B.7 make it a
+// choice per enemy (the nearest ship, the weakest, the one that shot it: `enemy.target` already wins when it names a ship in the sky). `enemy` may be null when a system asks
+// for its ship before it has an enemy in mind (a factory).
+export const targetShip = (state, enemy) => (enemy && enemy.target && state.ships.includes(enemy.target) ? enemy.target : state.ships[0]);
 export function shipOf(state, player) {
   const id = player && player.ship;
   if (id == null || id === 'player') return state.ships[0];

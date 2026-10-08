@@ -109,10 +109,10 @@ export function createSimulation() {
   // Add a ship to this sky and give her her systems (shipSim.js). The first is the main ship: her body, layout and course position are the world state's own (parts = null).
   // Another ship (the dev flag ?ships=2, the --check-two-ships gate; PvP and the gunship come later) takes her build (a parts list; opts.layout = a ready Layout), her `id`
   // ('ship1' ...) and `formation` ({ dx, dalt }: how far along the sky she keeps station from ship 0, and the altitude she is held at relative to hers). Her crew are the
-  // players with player.ship = her id (ships.js transfer()). She gets the same systems as ship 0 except the environment and the gunship, which run for ship 0 only.
+  // players with player.ship = her id (ships.js transfer()). She gets the same systems as ship 0 (the sky's hazards run for her too, B.3) except the gunship, which hunts ship 0 only. opts.team ('red' ...) and opts.name dress her for the TV.
   let hijack = null; // (made below, once the world's systems exist; every ship's hookshot needs it)
   const addShip = (parts, opts = {}) => {
-    const sh = state.ships.length === 0 ? createMainShip(state) : createShip(state, { id: opts.id || 'ship' + state.ships.length, parts, layout: opts.layout, formation: opts.formation || { dx: -250, dalt: -1150 } });
+    const sh = state.ships.length === 0 ? createMainShip(state) : createShip(state, { id: opts.id || 'ship' + state.ships.length, parts, layout: opts.layout, formation: opts.formation || { dx: -250, dalt: -1150 }, team: opts.team, name: opts.name });
     state.ships.push(sh);
     if (sh.main) {
       state.ventOpen = sh.layout.vents.map(() => false);
@@ -820,7 +820,7 @@ export function createSimulation() {
   const stepWorld = (dt) => {
     eachShip(state, (sh) => sh.sim.preStep());
     updateMates(state, dt); // (ship's mates come aboard or go home before the crew count is read)
-    updateCrewScale(state, dt);
+    eachShip(state, (sh) => updateCrewScale(sh.ctx, dt)); // (each ship counts HER crew: her scale is her own; ship 0's is the world's, the enemies' numbers follow it)
     eachShip(state, (sh) => sh.sim.trimOff());
     // The lap scorecard pauses the action, then the upgrade vote starts.
     if (state.scorecard) {
@@ -884,6 +884,7 @@ export function createSimulation() {
       course.update(dt);
       weather.update(dt);
       env.update(dt);
+      eachShip(state, (sh, i) => { if (i > 0) sh.sim.env.update(dt); }); // (every other ship has the sky's hazards of her own: ice, thermals, spores, oxygen, storm rods, the sea)
       gunship.settle(dt);
       salvageWatch();
     }

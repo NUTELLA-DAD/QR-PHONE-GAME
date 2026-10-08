@@ -6,8 +6,8 @@ import { config } from '../../config.js';
 
 const INK = '#1b1410';
 // Rough size (px) of each thing, for the bracket drawn round it.
-const SIZE = { mine: 44, fighter: 54, bomber: 110, plane: 50, boss: 240, gunship: 240, bat: 34, sniper: 90, tug: 60, saw: 56, imp: 30 };
-const WHAT = { mine: 'MINE', fighter: 'FIGHTER', bomber: 'BOMBER', plane: 'PLANE', boss: 'BOSS', gunship: 'GUNSHIP', bat: 'BAT', sniper: 'SNIPER', tug: 'HARPOON', saw: 'SAW', imp: 'IMP' };
+const SIZE = { mine: 44, fighter: 54, bomber: 110, plane: 50, boss: 240, gunship: 240, bat: 34, sniper: 90, tug: 60, saw: 56, imp: 30, ship: 500 };
+const WHAT = { mine: 'MINE', fighter: 'FIGHTER', bomber: 'BOMBER', plane: 'PLANE', boss: 'BOSS', gunship: 'GUNSHIP', bat: 'BAT', sniper: 'SNIPER', tug: 'HARPOON', saw: 'SAW', imp: 'IMP', ship: 'AIRSHIP' };
 
 export function createSpotterArt({ ctx, state }) {
   const outlined = (text, x, y, color, font) => {

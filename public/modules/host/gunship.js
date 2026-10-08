@@ -44,7 +44,7 @@ import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
 import { inRock, scrollSpeed } from './course.js';
 import { platformBelow } from './nav.js';
-import { mainShip } from './ships.js';
+import { targetShip } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { pop } from './popups.js';
 import { applyForce } from './forces.js';
@@ -86,7 +86,7 @@ const rightEnd = (g) => g.bp.x1;
 const isCannon = (g, k) => g.bp.weapons[k].kind === 'cannon';
 
 export function createGunship({ state, puff, impact, credit, dropOne, pickType, spawnBats }) {
-  const ship = mainShip(state); // (B1: OUR ship, the one she hunts; B2 makes this one per ship)
+  const ship = targetShip(state, null); // (B.3: the ship this system hunts and flies round: ships.js targetShip, ships[0] today; B.4 chooses per enemy)
   const layout = ship.layout;
   const P = layout.platforms;
   const sPuff = (x, y, c, n) => puff(toWorldX(ship, x), toWorldY(ship, y), c, n); // (a puff at a point in ship coordinates)

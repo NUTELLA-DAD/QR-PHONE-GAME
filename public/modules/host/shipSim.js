@@ -15,6 +15,7 @@ import { createRaiders } from './raiders.js';
 import { tilt, pilotPlan, gasFor, altBounds } from './course.js';
 import { createEscort, isEscortStation, escortFor } from './escort.js';
 import { createCoil } from './coil.js';
+import { createEnvironment } from './environments.js';
 import { createSearchlights, isSearchlight } from './searchlight.js';
 import { shipGeom } from './gunship.js';
 import { createAirborne } from './airborne.js';
@@ -93,13 +94,8 @@ export function flushPresses(p) {
   p.prime = false;
 }
 
-// What a ship that is not the main one gets in place of the gunship and the environment rules (they run for ship 0 only): nothing to board, no ice, spores or storms.
+// What a ship that is not the main one gets in place of the gunship (she hunts ship 0 only, until B.5): nothing to board.
 const NO_GUNSHIP = { interaction: () => null, hitCrew: () => false, fireHook: () => false, swing: () => {}, swingStep: () => {}, walk: () => {}, plant: () => {}, cutLine: () => {} };
-const NEUTRAL_ENV = {
-  deep: { clogNear: () => null, tankNear: () => null, walkMul: () => 1, helmMul: () => 1, status: () => '' },
-  stormSea: { rodHold: () => {}, pumpWork: () => {}, winchWork: () => {} },
-  gunJammed: () => false, gunCooldownMul: () => 1, gunIce: () => 0, chip: () => {},
-};
 // A stand-in for a world system that is made after this ship: every use looks it up in W when it happens.
 const late = (get) => new Proxy({}, { get: (_, k) => get()[k] });
 
@@ -112,7 +108,8 @@ export function createShipSim(world, ship, W) {
   const { puff, phoneFx, stat, credit, emitPlayerUi } = W;
   const { moveWalker, steerTo, fall, detach, platformBelow } = ship.nav; // (walkers use THEIR ship's navigation)
   const gunship = ship.main ? late(() => W.gunship) : NO_GUNSHIP;
-  const env = ship.main ? late(() => W.env) : NEUTRAL_ENV;
+  let ownEnv = null; // (another ship's own copy of the sky's hazards, made below; ship 0's is the world's, made in simulation.js)
+  const env = ship.main ? late(() => W.env) : late(() => ownEnv);
   const course = ship.main ? late(() => W.course) : { dropBomb: (...a) => W.course.dropBomb(...a), predictBomb: (...a) => W.course.predictBomb(...a), helmHint: () => '' }; // (the helm's hint about the rock ahead is about ship 0's course)
   const hijack = late(() => W.hijack);
   const PLATFORMS = layout.platforms;
@@ -461,6 +458,9 @@ export function createShipSim(world, ship, W) {
 
   const coil = createCoil({ state, puff, credit });
   const searchlights = createSearchlights({ state });
+  // B.3: another ship has the sky's hazards of her own (ice, lava thermals, spores, oxygen, storm rods, the sea): the same rules, made with HER context and stepped from the world's step.
+  // (Ship 0's copy is the world's: simulation.js makes it, and her context forwards state.env, icing ... to it.) What stays shared is the sky itself: one weather record, one lightning bolt, one sea level.
+  if (!ship.main) ownEnv = createEnvironment({ state, puff, phoneFx, impact, damageHull, ignite: fireSys.ignite });
   const air = createAirborne({ state, puff, phoneFx });
 
   // After any pickup / put-back / swap / station take: a short buzz (two pulses for letting go) and the grab lockout, so a
@@ -1266,6 +1266,7 @@ export function createShipSim(world, ship, W) {
   return {
     ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, fireSys, goingDown, raiders, escort, coil, searchlights, air,
     get hookshot() { return hookshot; },
+    get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
     hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop,
     interaction, taken, holder, getHelm, worksKind,
     preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn, comeAbout,

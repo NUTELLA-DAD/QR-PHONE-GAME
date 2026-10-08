@@ -14,7 +14,7 @@ import { flyPlane, smoke, shootDown, angDiff } from './planes.js';
 import { targets } from './aim.js';
 import { inRock } from './course.js';
 import { pop } from './popups.js';
-import { mainShip } from './ships.js';
+import { targetShip } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const H = config.HIJACK;
@@ -25,7 +25,7 @@ const HF = H.FIGHTER;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function createHijack({ state, puff, phoneFx, air }) {
-  const ship = mainShip(state); // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const ship = targetShip(state, null); // (B.3: the ship this system hunts and flies round: ships.js targetShip, ships[0] today; B.4 chooses per enemy)
   const layout = ship.layout;
   const B = layout.bounds;
   state.hijacks = state.hijacks || [];

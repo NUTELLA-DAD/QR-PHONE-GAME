@@ -14,14 +14,14 @@ import { shellDmg, dazzled } from './aim.js';
 import { pop } from './popups.js';
 import { bagNearX } from './shipBuild.js';
 import { flyPlane, smoke, shootDown, angDiff, shoveShip, bumpShip, bounceStep } from './planes.js';
-import { mainShip } from './ships.js';
+import { targetShip } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const W = config.WAVES;
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, credit, gnaw, damageHull }) {
-  const ship = mainShip(state); // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const ship = targetShip(state, null); // (B.3: the ship this system hunts and flies round: ships.js targetShip, ships[0] today; B.4 chooses per enemy)
   const layout = ship.layout;
   const B = layout.bounds;
   const toWorldRefX = () => toWorldX(ship, layout.refPoint.x); // (where the middle of the ship is along the sky)
