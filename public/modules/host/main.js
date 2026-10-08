@@ -38,6 +38,18 @@ window.perfGov = perf; // handy for debugging in the browser console
 fitCanvas();
 
 const simulation = createSimulation();
+// PvP (PVP.md V.0): host.html?pvp=1 (or config.PVP.ENABLED) loads a SECOND, fully independent copy of the game for ship B. The same
+// files are served under /b (server.js), and ES modules are one instance per URL, so /b/modules/host/simulation.js has its own
+// config, SHIP_LAYOUT and state. Co-op never takes this branch. (Drawing ship B is the arena camera's job, V.1a.)
+let pvp = null; // { sim, config, layout } of ship B once loaded
+const pvpAsked = new URLSearchParams(location.search).get('pvp') === '1' || config.PVP.ENABLED;
+if (pvpAsked) {
+  Promise.all([import('/b/config.js'), import('/b/shipLayout.js'), import('/b/modules/host/simulation.js')]).then(([cfg, lay, sim]) => {
+    config.PVP.ENABLED = cfg.config.PVP.ENABLED = true;
+    pvp = { sim: sim.createSimulation(), config: cfg.config, layout: lay.SHIP_LAYOUT };
+    window.gameB = pvp.sim; // handy for debugging in the browser console
+  }).catch((e) => console.error('PvP: ship B could not be loaded', e));
+}
 const camera = createCamera();
 const renderer = createRenderer({ ctx, state: simulation.state, canvas });
 const network = initHostNetwork({ simulation });
@@ -115,6 +127,7 @@ function frame(now) {
     let steps = 0;
     while (acc >= STEP && steps < config.LOOP.MAX_STEPS) {
       guard('update', () => simulation.update(STEP));
+      if (pvp) guard('update B', () => pvp.sim.update(STEP)); // (ship B, stepped right after ship A)
       acc -= STEP;
       steps++;
     }

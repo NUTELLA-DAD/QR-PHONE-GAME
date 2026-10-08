@@ -1122,6 +1122,11 @@ export const config = {
     HULL: 50, // hull she is patched up to
     TIME: 7, // seconds of the break-up before she limps away (the "LIMPING HOME" card shows during it)
   },
+  // PvP "Versus" (PVP.md, Phase V): two crews, two complete copies of the game, one sky. OFF in the co-op game.
+  // ENABLED is switched on in BOTH copies by host.html?pvp=1 (main.js) or by the bridge (pvp/bridge.js).
+  PVP: {
+    ENABLED: false,
+  },
   // The look of the whole game, in one place. Simple style: calm, muted backgrounds (sky, rock,
   // caves); the ship in warm wood and cream; crew in their bright scarf colours; enemies and
   // their attacks in red; friendly shots in the shooter's colour; pickups and goals in gold.
