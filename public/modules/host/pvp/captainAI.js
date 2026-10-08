@@ -15,6 +15,7 @@ import { config } from '../../../config.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from '../pose.js';
 import { mainShip } from '../ships.js';
 import { altWindow } from '../course.js';
+import { solidAt } from '../maps.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rnd = (r) => r[0] + Math.random() * (r[1] - r[0]);
@@ -36,9 +37,9 @@ export function captainOf(state) {
   }
   c = ship.captain = {
     round, style, S: S[style], t: 0, think: 0, play: 'duel', leg: '', legT: 0, rangeAdj: 0, bombRun: false, side: null, ca: false, behindT: 0, lastTurn: 0,
-    jAlt: 0, jAltT: 0, jThr: 0, jThrT: 0, rWob: 0, rWobT: 0, lastSign: 1,
+    blockT: 0, blockL: false, blockR: false, jAlt: 0, jAltT: 0, jThr: 0, jThrT: 0, rWob: 0, rWobT: 0, lastSign: 1,
     dodge: null, dodgeCd: 0, scanT: 0, threat: null, grappleUntil: 0, passCd: rnd([6, 14]), ramCd: 8, grappleCd: rnd([10, 24]), backoffUntil: 0, calloutAt: -99,
-    stats: { jinks: 0, dodges: 0, passes: 0, bombRuns: 0, rams: 0, grapples: 0, chases: 0, retreats: 0, turns: 0 },
+    stats: { jinks: 0, dodges: 0, passes: 0, bombRuns: 0, rams: 0, grapples: 0, noRoom: 0, chases: 0, retreats: 0, turns: 0 },
   };
   return c;
 }
@@ -226,12 +227,13 @@ export function captainFly(state, p, plan, dt) {
       c.play = 'duel'; c.ramCd = B.RAM.CD; c.backoffUntil = c.t + 4;
     }
   } else if (c.play === 'pass') {
-    const r = passStep(state, c, ship, R, L, B, { plan, f, dir, gap, dyw, mx, my, stand, half, clampAlt, AIMY, facing, wedged, hurt, turning });
+    const r = passStep(state, c, ship, R, L, B, { dt, plan, f, dir, gap, dyw, mx, my, stand, half, clampAlt, AIMY, facing, wedged, hurt, turning });
     if (r) ({ target, speed, ca } = { target: r.target, speed: r.speed, ca: r.ca });
   } else {
     // duel (and grapple / chase, which are the duel with another standoff)
     let alt = plan.target + (c.jAlt + (c.dodge ? c.dodge.alt : 0)) * (hurt ? 0.6 : 1);
     target = clampAlt(alt);
+    if (state.ship.gas < B.JINK.LOW_GAS || state.ship.alt < win.min + B.JINK.FLOOR) target = Math.max(target, Math.min(plan.target, state.ship.alt) - 30); // (low on gas or close to the ground: no dives; every dive vents lift she cannot spare)
     let thr = c.jThr * (hurt ? 0.5 : 1) + (c.dodge ? c.dodge.thr : 0);
     if (c.play === 'grapple') {
       rangeAdj = -B.RAID.GRAPPLE_CLOSE;
@@ -247,14 +249,24 @@ export function captainFly(state, p, plan, dt) {
     if (hurt && !c.retreating) { c.retreating = true; c.stats.retreats++; callout(state, 'FALLS BACK TO REPAIR!'); }
     else if (!hurt) c.retreating = false;
     if (c.t < c.backoffUntil) rangeAdj += B.RAM.BACKOFF;
+    const room = Math.max(0, Math.abs(gap) - (B.MIN_GAP + 150)) / 700; // (no surge at her once the hulls are nearly touching)
+    if (thr * dir > room * 0.5) thr = dir * room * 0.5;
     speed = plan.speed + thr * f * 1; // the surge is along the world's x; with the bow pointing along it
+    c.blockT -= dt; // rock close ahead on either side? (looked at a few times a second): no surge, no drive into it
+    if (c.blockT <= 0) {
+      c.blockT = 0.3;
+      const reachX = 500 + Math.abs(ship.pose.vx);
+      c.blockL = !aheadFree(state, ship, my, mx, -1, reachX);
+      c.blockR = !aheadFree(state, ship, my, mx, 1, reachX);
+    }
+    if ((c.blockL && speed * f < 0) || (c.blockR && speed * f > 0)) speed = 0; // (speed * f = her way along the world)
     if (wedged) { speed = plan.speed; target = plan.target; }
     // come about when she stays behind the bow
     if (plan.dx < -TN.BOT_FAR && !wedged) c.behindT += dt; else c.behindT = 0;
     ca = c.behindT >= B.TURN_BEHIND;
     if (ca || turning) speed = clamp(speed, -0.25, 0.25);
   }
-  c.rangeAdj = c.play === 'duel' || c.play === 'grapple' || c.play === 'chase' ? rangeAdj : 0;
+  c.rangeAdj = c.play === 'duel' || c.play === 'grapple' || c.play === 'chase' ? Math.max(rangeAdj, B.MIN_GAP - P.STANDOFF) : 0; // (never press the hulls together unless she means to: the noses touch about MIN_GAP apart)
   speed = clamp(speed, -config.SHIP.REVERSE, 1);
   plan.target = target;
   plan.speed = speed;
@@ -263,18 +275,40 @@ export function captainFly(state, p, plan, dt) {
 }
 
 // ---- the pass: over or under the rival, to her other side, then come about ----
+// Is the whole strip of sky the hull would sweep, flying level with her aim point at aimY from world x0 to x1, free of rock? (a pass is only flown where it is)
+// Is the sky just beyond the hull's nose (dirW = +1: the right-hand end, -1: the left) for `reach` px free of rock? Only the new ground counts, so a ship already touching rock can still back away from it.
+function aheadFree(state, ship, aimY, mx, dirW, reach) {
+  const map = state.course && state.course.map;
+  if (!map) return true;
+  const b = ship.layout.bounds, A = ship.layout.aimPoint, f = ship.pose.f;
+  const left = f > 0 ? A.x - b.x0 : b.x1 - A.x, right = f > 0 ? b.x1 - A.x : A.x - b.x0;
+  const x0 = dirW > 0 ? mx + right : mx - left - reach, x1 = dirW > 0 ? mx + right + reach : mx - left;
+  for (let x = x0; x <= x1; x += map.CELL) for (let y = aimY + (b.y0 - A.y) + 40; y <= aimY + (b.y1 - A.y) - 40; y += 200) if (solidAt(map, x, y)) return false;
+  return true;
+}
+function corridorFree(state, ship, aimY, x0, x1, margin = 130) {
+  const map = state.course && state.course.map;
+  if (!map) return true;
+  const b = ship.layout.bounds, A = ship.layout.aimPoint, f = ship.pose.f;
+  const left = f > 0 ? A.x - b.x0 : b.x1 - A.x, right = f > 0 ? b.x1 - A.x : A.x - b.x0; // (how far the hull reaches to the left and right of the aim point in the world)
+  const lo = Math.min(x0, x1) - left - margin, hi = Math.max(x0, x1) + right + margin;
+  for (let x = lo; x <= hi; x += map.CELL) for (let y = aimY + (b.y0 - A.y) - margin; y <= aimY + (b.y1 - A.y) + margin; y += 200) if (solidAt(map, x, y)) return false;
+  return true;
+}
 function startPass(state, c, ship, R, L, B) {
   const AIMY = L.aimPoint.y;
   const st = state.course && state.course.map && state.course.map.start;
   const P = config.PVP;
   const win = altWindow(state, 2);
+  const mx = toWorldX(ship, L.aimPoint.x), dir0 = R.mid.x - mx < 0 ? -1 : 1;
+  const endX = R.mid.x + dir0 * (P.STANDOFF + 400);
   const feasible = (over) => {
-    const wantAlt = AIMY - (R.mid.y + (over ? -1 : 1) * passOffset(L, R, B, over));
+    const wantY = R.mid.y + (over ? -1 : 1) * passOffset(L, R, B, over);
     const altMax = st ? AIMY - (st.y - P.ARENA.TOP + 160) : Infinity;
-    return win.min <= win.max && wantAlt >= win.min + 20 - 120 && wantAlt <= Math.min(win.max - 20, altMax) + 120;
+    return win.min <= win.max && AIMY - wantY <= altMax && corridorFree(state, ship, wantY, mx, endX, 80);
   };
   const canOver = feasible(true), canUnder = feasible(false);
-  if (!canOver && !canUnder) { c.passCd = 6; return; }
+  if (!canOver && !canUnder) { c.passCd = 6; c.stats.noRoom++; return; }
   const bombs = !!L.bombBay && state.bombBay.bombs > 0;
   let over = canOver;
   if (canOver && canUnder) over = Math.random() < (bombs ? B.PASS.OVER_BOMB * (0.4 + c.S.bomb) : 0.3);
@@ -295,7 +329,12 @@ function passStep(state, c, ship, R, L, B, g) {
   const alt = clampAlt(AIMY - wantY);
   const P = B.PASS;
   const abort = () => { c.play = 'duel'; c.passCd = P.CD; c.leg = ''; c.bombRun = false; return null; };
-  if (wedged || hurt || state.ship.hull < P.MIN_HULL - 15) return abort();
+  if (wedged || hurt || state.ship.hull < P.MIN_HULL - 15 || (state.course && state.course.scraping)) return abort();
+  c.corrT = (c.corrT || 0) - g.dt;
+  if (c.corrT <= 0 && c.leg !== 'turn') { // (the strip ahead must stay clear of rock, looked at again a few times a second)
+    c.corrT = 0.4;
+    if (!corridorFree(state, ship, wantY, g.mx, g.mx + c.dir0 * 2600, 60)) return abort();
+  }
   const need = Math.abs(off);
   const apart = Math.abs(dyw); // current vertical distance between the aim points
   const clear = apart >= need * 0.8; // the hulls are far enough apart in height to slide past each other

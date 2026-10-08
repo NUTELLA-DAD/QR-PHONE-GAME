@@ -157,6 +157,14 @@ It makes one world with two ships (`match.applyPicks`), crews each side with bot
 - **Boarding:** hook across when in range and the own ship is calm. Aboard, capture the helm if it's unguarded, otherwise sabotage.
 - **Defence:** fight hostiles and cut the line.
 
+### The lively captain (built; `pvp/captainAI.js`, `config.PVP.BOT`)
+**Plain language:** the bot captains used to hover at a fixed distance with a gentle wobble. Now each ship's captain rolls a personality for every round (brawler, sniper, boarder, daredevil) and flies like one: she weaves (irregular climbs, dives and surges, never a sine), dodges shells that are flying at her hull, and now and then does something dramatic.
+- **Weave and dodge:** the wanted altitude, throttle and standoff jump about at random; every shell flying at the hull is followed (`scanShells`), and when one is coming she jumps up or down away from where it would land and surges. She never dives when low on gas or near the ground (a dive vents lift she cannot spare).
+- **Plays:** PASS (a high pass over her, the bombardier drops when a bomb let go now would fall through her hull, or a dive-under; then COME ABOUT to face her again; only flown where the whole strip of sky is free of rock), RAM RUN (a weak rival, a stronger ship; real collisions now, `shipCollide.js`), GRAPPLE (close in and match speed for a while so the decks are a hook's throw apart), CHASE (a nearly beaten rival), retreat-and-repair (as before). The TV banner calls them sparingly ("RED RAM RUN!", "BLUE DIVES UNDER!", "EVASIVE!", "IS BOARDING!").
+- **Raids:** `bots.js pvpRaid`: an idle (or now and then a busy) hand goes across by hookshot, or by a parachute jump from the bomb bay when her deck hangs below (`drop`). Fires and holes do not stop it; the wheel stays manned, the last gunner keeps his gun and `RAID.KEEP` hands stay home. Aboard, the old boarder jobs (fight, sabotage the boiler, take the helm). Defenders run at a boarder standing at the wheel or the boiler before anything else.
+- **Fairness:** the old 450 px altitude edge gave the left-hand ship about two wins in three, so `ALT_EDGE` is now 150 and the captains never press the hulls together (`BOT.MIN_GAP`).
+- **Numbers:** `node tools/pvp-stats.mjs --matches 12` prints per round: boardings, bumps, come abouts, shells dodged, altitude range, the captains' counters. Honest limit: a hull is a thousand pixels tall and a shell crosses the gap in about a second, so dodging by height saves few shells (1-2% of the aimed ones); the movement mostly changes WHERE they hit, and the range excursions, rock and the passes change how many are fired.
+
 ## 4. Roadmap
 
 | # | Package | Size | Files | Parallel-safe? |

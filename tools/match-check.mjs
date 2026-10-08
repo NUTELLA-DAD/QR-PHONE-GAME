@@ -490,6 +490,45 @@ function crewman(st, team, ship, d, x) {
 }
 function pilotPlanFor(sh) { return pilotPlan(sh.ctx, 2.5, 0.55); }
 
+// ---- 8b. the lively captains (pvp/captainAI.js): they weave and dodge, never sit still, pick plays by style, and the crews go across ----
+{
+  config.PVP.ROUND_TIME = cap;
+  const caps = new Set(), styles = new Set(), shouts = new Set();
+  let tried = 0, made = 0, rounds_ = 0, stall = 0, flips = 0, fightSecs = 0, matches_ = 0;
+  const e0 = errors;
+  for (let k = 0; k < 4 && (k < 2 || !(tried > 0 && made > 0)); k++) {
+    seedRandom(3000 + k);
+    matches_++;
+    const { sim, st, M, red, blue } = versus({ bots: nBots, fly: false });
+    const ships = [red, blue], last = ships.map((s) => ({ x: T.toWorldX(s, s.layout.aimPoint.x), y: T.toWorldY(s, s.layout.aimPoint.y), t: 0 })), lastVy = [0, 0];
+    let n = 0, text = '';
+    while (M.phase !== 'over' && n++ < 60 * 60 * 20) {
+      step(sim);
+      if (st.ev.warnText !== text) { text = st.ev.warnText || ''; if (/HIGH PASS|DIVES UNDER|RAM RUN|RAMMED|BOARDING|EVASIVE|PARACHUTES|CLOSES IN|CHASE|FALLS BACK/.test(text)) shouts.add(text.replace(/^(RED|BLUE) /, '')); }
+      if (M.phase !== 'fight') { last.forEach((l, i) => { l.t = 0; }); continue; }
+      fightSecs += DT;
+      ships.forEach((s, i) => {
+        if (s.captain) { caps.add(s.captain); styles.add(s.captain.style); }
+        const x = T.toWorldX(s, s.layout.aimPoint.x), y = T.toWorldY(s, s.layout.aimPoint.y), l = last[i];
+        if (Math.hypot(x - l.x, y - l.y) > 80) { l.x = x; l.y = y; l.t = 0; } else if (!s.ctx.wreck && s.state.down <= 0 && !s.ctx.goingDown) { l.t += DT; stall = Math.max(stall, l.t); }
+        const vy = s.pose.vy;
+        if (Math.abs(vy) > 40) { if (lastVy[i] && Math.sign(vy) !== lastVy[i]) flips++; lastVy[i] = Math.sign(vy); }
+      });
+    }
+    rounds_ += M.results.length;
+    made += M.totals.red.boardings + M.totals.blue.boardings;
+    for (const s of ships) for (const e of s.ctx.stuntLog || []) if (/^start (board|drop)/.test(e.text)) tried++;
+  }
+  const sum = (key) => [...caps].reduce((a, c) => a + (c.stats[key] || 0), 0);
+  report(sum('jinks') > 0 && sum('dodges') > 0, `the captains weave and dodge: ${sum('jinks')} altitude/throttle jinks and ${sum('dodges')} dodges of incoming shells in ${rounds_} rounds (${styles.size} styles seen: ${[...styles].join(', ')})`);
+  report(flips / Math.max(1, fightSecs / 60) / 2 >= 4, `...they change between climbing and diving ${(flips / Math.max(1, fightSecs / 60) / 2).toFixed(0)} times a minute each`);
+  report(stall < 15, `...and never sit still: the longest a ship stayed within 80 px of one spot was ${stall.toFixed(1)} s`);
+  report(tried > 0 && made > 0, `the crews go across: ${tried} raids started (hook or parachute), ${made} boardings made in ${matches_} matches / ${rounds_} rounds`);
+  report(shouts.size >= 2, `the TV calls the plays: ${[...shouts].join(' | ') || 'nothing'}`);
+  report(errors === e0, 'the lively captains run with 0 errors');
+  config.PVP.ROUND_TIME = SAVE.round;
+}
+
 // ---- 9. no co-op saves; leaving Versus puts the voyage back ----
 {
   const sim = createSimulation();

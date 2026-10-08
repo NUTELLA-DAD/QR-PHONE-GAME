@@ -865,7 +865,7 @@ function aimRival(state, p) {
 }
 
 // Versus: is one of the rival's decks within a hook's throw of the end of our top deck that faces her?
-function rivalWithinHook(state) {
+export function rivalWithinHook(state) {
   const R = state.rival;
   if (!R || R.down || !state.stunts) return false;
   const ship = mainShip(state);
@@ -950,7 +950,7 @@ function pvpRaid(p, state, bots, job) {
   if (!R || R.down || !m || m.phase !== 'fight') return;
   const c = captainOf(state);
   const home = bots.filter((q) => q !== p && !q.dare && !q.fall && !(q.ko > 0) && !q.mate);
-  if (home.length < RD.KEEP || !home.some((q) => isHelm(L, q.lock)) || !home.some((q) => q.lock && tables(L).GUN_STATIONS.includes(q.lock))) return; // (a wheel and a gun stay manned)
+  if (home.length < RD.KEEP || !home.some((q) => isHelm(L, q.lock) || (q.botJob && q.botJob.kind === 'station' && isHelm(L, q.botJob.obj)))) return; // (the wheel stays manned, and so does a gun: the last gunner never leaves his post, see updateBot)
   if (state.ship.press < 18 && state.ship.fuel < 8) return; // (...and the boiler is lit)
   const spare = !job || (job.kind === 'station' && !isHelm(L, job.obj) && (job.tier ?? 1) >= 1);
   if (!spare && Math.random() >= RD.BUSY) return; // (a busy hand goes now and then, the fires can wait)
