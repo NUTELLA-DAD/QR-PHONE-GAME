@@ -1338,7 +1338,7 @@ export function createRenderer({ ctx, state, canvas }) {
       case 'hole':
         return { x: o.x, y: P[o.d].y - 58, r: 42 };
       case 'ice':
-        return o.area === 'gasbag' ? { x: o.x, y: 198 + 232 * Math.sqrt(Math.max(0, 1 - ((o.x - 800) / 1000) ** 2)) + 20, r: 60 } : o.gun ? { x: o.x, y: P[o.d].y - 50, r: 56 } : { x: o.x, y: P[o.d].y - 24, r: 52 };
+        return o.area === 'gasbag' ? { x: o.x, y: SHIP_LAYOUT.gasbag.cy + SHIP_LAYOUT.gasbag.ry * Math.sqrt(Math.max(0, 1 - ((o.x - SHIP_LAYOUT.gasbag.cx) / SHIP_LAYOUT.gasbag.rx) ** 2)) + 20, r: 60 } : o.gun ? { x: o.x, y: P[o.d].y - 50, r: 56 } : { x: o.x, y: P[o.d].y - 24, r: 52 };
       case 'gas':
         return { x: o.x, y: o.y, r: 40 };
       case 'unclog':
