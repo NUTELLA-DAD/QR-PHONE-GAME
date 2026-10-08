@@ -14,7 +14,7 @@ export function createControllerUI({ network }) {
     ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['SURGE', '🔥'], ['LOAD for', '📦'], ['Close valve', '🚱'], ['Open valve', '🚰'], ['Open vent', '💨'], ['Close vent', '💨'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
     ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'], ['Jump!', '🪂'], ['Take ice', '🧊'], ['Put the ice', '↩️'], ['Cool the boiler', '🧊'], ['THROW ICE', '🧊'], ['Ice locker', '🧊'], ['Swap to', '🔄'],
-    ['FOCUS', '🔦'], ['Take', '🎯'],
+    ['Raise sail', '⛵'], ['Lower sail', '⛵'], ['The sail', '⛵'], ['FOCUS', '🔦'], ['Take', '🎯'],
     ['FIRE', '💥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
   ];
   const CARRY = { sword: ['🗡️', 'Sword'], hammer: ['🔨', 'Hammer'], extinguisher: ['🧯', 'Extinguisher'], ammo: ['📦', 'Ammo'], coal: ['⚫', 'Coal'], hookshot: ['🪝', 'Hookshot'], ice: ['🧊', 'Ice'] };

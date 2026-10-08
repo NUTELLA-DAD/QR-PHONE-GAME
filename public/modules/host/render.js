@@ -28,6 +28,7 @@ import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps
 import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
+import { windSpeed } from './sails.js';
 import { drawIceBlock, drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
 export function createRenderer({ ctx, state, canvas }) {
@@ -667,6 +668,13 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.stroke();
   };
 
+  // A ship with no boiler (S.5e) has no steam gauge: this line says what carries her instead (the wind), and what she lacks.
+  const drawWindLine = () => {
+    const r = state.rig || {};
+    const sails = state.sails && state.sails.length ? ' - sails ' + state.sails.filter((s) => s.hoist > 0.95).length + '/' + state.sails.length + (state.sailWarn ? ' - GUST! REEF!' : '') : '';
+    ctx.fillText(`Wind ${Math.round(windSpeed(state) * 100)}%${r.helm ? '' : ' - nobody steers'}${sails}`, 46, 100);
+  };
+
   // Screen overlay (hull/steam panel, warnings). Drawn on a fixed 1600x900 stage, not zoomed by the camera.
   const drawHud = () => {
     book.paper(30, 28, 440, 184, { r: 12 });
@@ -705,16 +713,18 @@ export function createRenderer({ ctx, state, canvas }) {
       ctx.fill();
     };
     // Steam pressure in the line: red zone at the top means open a vent!
+    // (A ship with no boiler (S.5e) has no steam to show: the steam gauge and the coal read-out give way to a wind line.)
+    const steamed = !state.rig || state.rig.boiler;
     const warnAt = config.BOILER.WARN_AT / 100;
     const p = state.ship.press;
     const odAt = config.BOILER.OVERDRIVE_AT / 100;
-    gauge(104, p, [[odAt, warnAt, 'rgba(255,190,60,.55)'], [warnAt, 1, 'rgba(230,57,70,.55)']], p >= config.BOILER.WARN_AT ? '#e63946' : p >= config.BOILER.OVERDRIVE_AT ? '#ffd23f' : '#e8eef2');
+    if (steamed) gauge(104, p, [[odAt, warnAt, 'rgba(255,190,60,.55)'], [warnAt, 1, 'rgba(230,57,70,.55)']], p >= config.BOILER.WARN_AT ? '#e63946' : p >= config.BOILER.OVERDRIVE_AT ? '#ffd23f' : '#e8eef2');
     // Overdrive zone label, and a thin stacked bar of where the steam goes.
     ctx.fillStyle = 'rgba(60,40,10,.8)';
     ctx.font = '700 10px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
-    ctx.fillText('OVERDRIVE', 46 + 408 * ((odAt + warnAt) / 2), 115);
-    const sp = state.steamParts;
+    if (steamed) ctx.fillText('OVERDRIVE', 46 + 408 * ((odAt + warnAt) / 2), 115);
+    const sp = steamed ? state.steamParts : null;
     if (sp) {
       const segs = [['engines', '#5b8fd9', 'ENG'], ['pump', '#6cc070', 'PUMP'], ['shield', '#9b7be0', 'SHLD'], ['coil', '#7fd8ee', 'COIL'], ['leaks', '#e63946', 'LEAK'], ['vents', '#d6d6d6', 'VENT'], ['other', '#8a7560', '']];
       let sx = 46;
@@ -779,9 +789,11 @@ export function createRenderer({ ctx, state, canvas }) {
     ctx.textAlign = 'left';
     const vents = (state.ventOpen || []).filter(Boolean).length;
     const leaking = state.steamParts && state.steamParts.leaks > 0.2;
-    const steamText = 'Steam' + (vents ? ` - ${vents} vent${vents > 1 ? 's' : ''} open` : '') + (p >= config.BOILER.OVERDRIVE_AT && p < config.BOILER.WARN_AT ? ' - OVERDRIVE!' : '');
-    ctx.fillText(steamText, 46, 100);
-    if (leaking) {
+    const sailTag = state.sails && state.sails.length ? ' - sails ' + state.sails.filter((s) => s.hoist > 0.95).length + '/' + state.sails.length + (state.sailWarn ? ' - GUST! REEF!' : '') : '';
+    const steamText = 'Steam' + (vents ? ` - ${vents} vent${vents > 1 ? 's' : ''} open` : '') + (p >= config.BOILER.OVERDRIVE_AT && p < config.BOILER.WARN_AT ? ' - OVERDRIVE!' : '') + (state.rig && !state.rig.engine ? ' - no engines' : '') + sailTag;
+    if (steamed) ctx.fillText(steamText, 46, 100);
+    else drawWindLine();
+    if (steamed && leaking) {
       const sw = ctx.measureText(steamText).width;
       ctx.fillStyle = LB.STAMP;
       ctx.fillText(' - LEAKING', 46 + sw, 100);
@@ -805,7 +817,7 @@ export function createRenderer({ ctx, state, canvas }) {
       });
     }
     ctx.textAlign = 'right';
-    ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);
+    if (steamed) ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);
     if (state.autopilot) {
       ctx.fillStyle = '#3a5a8c';
       ctx.textAlign = 'center';

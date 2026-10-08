@@ -172,7 +172,7 @@ function beamDodge(state) {
 function rescueAltitude(state) {
   const s = state.sea;
   const c = state.course;
-  if (!s || !c || !c.map || s.y == null || state.env.id !== 'sea' || state.ship.hull < 40 || s.flood > 0.5) return null;
+  if (!s || !c || !c.map || !SHIP_LAYOUT.bombBay || s.y == null || state.env.id !== 'sea' || state.ship.hull < 40 || s.flood > 0.5) return null; // (no bomb bay, no rope to rescue anyone with)
   const R = config.ENVIRONMENTS.sea.RESCUE;
   const bx = c.dist + SHIP_LAYOUT.bombBay.x;
   for (const sv of s.survivors) {
@@ -211,6 +211,7 @@ function listJobs(state, bot) {
   // Nobody at the wheel in flight is the worst emergency of all: someone takes the helm first.
   const helmSt = one('helm');
   if (state.phase === 'flying' && helmSt && !players.some((q) => isHelm(q.lock)) && !mods.some((m) => m.name === helmSt.n && m.broken)) jobs.push({ kind: 'station', obj: helmSt.n, max: 1 });
+  jobs.push(...sailJobs(state, bot, true)); // (a gust is coming or she is in a cave: reef any sail that is up)
   // Outpost raid: the bomb bay is how outposts die. Bombs run out while the ship hovers over a gun: someone fetches more, now.
   const c = state.course;
   const bombRun = !!(c && c.map && c.map.open && !c.done && c.target && Math.hypot(c.target.x - (c.dist + SHIP_LAYOUT.refPoint.x), c.target.y - (SHIP_LAYOUT.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_RANGE);
@@ -314,11 +315,28 @@ function listJobs(state, bot) {
   if (bombRun && bay && hasKind('ammo') && state.bombBay && state.bombBay.bombs < config.MAPS.BOMB_RUN_STOCK) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   if (!bombRun && bay && hasKind('ammo') && state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
+  jobs.push(...sailJobs(state, bot, false)); // (a sail to raise in a fair wind: after the chores, ahead of an idle gun post)
   jobs.push(...linkJobs(state, bot, false)); // (...and the quieter links: loaders for idle guns, the boiler surge)
   for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // Hovering over an outpost with bombs aboard: one bot drops everything and mans the bomb bay.
   if (bay && bombRun && c.target && Math.hypot(c.target.x - (c.dist + SHIP_LAYOUT.refPoint.x), c.target.y - (SHIP_LAYOUT.refPoint.y - state.ship.alt)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken(bay) && !players.some((q) => kindOf(q.lock) === 'bombBay')) jobs.unshift({ kind: 'station', obj: bay, max: 1 });
   return jobs;
+}
+
+// Sails (S.5e, low priority). Raise them in open sky when no gust is due; let them down before a gust and while she is in rock-walled caves (a sail only hauls her
+// into the walls there). early = the reefing jobs, which come ahead of the stations; otherwise the raising jobs, which come after the chores.
+function sailJobs(state, bot, early) {
+  const out = [];
+  if (!(state.sails && state.sails.length) || state.phase !== 'flying' || state.ship.down || state.goingDown) return out;
+  const c = state.course, cave = !!(c && c.map && !c.map.open);
+  const wantUp = !state.sailWarn && !cave;
+  state.sails.forEach((sl, i) => {
+    const s = (L.sails || [])[i];
+    if (!s || sl.torn || (state.modules || []).some((m) => m.name === s.n && m.broken)) return;
+    if (early && !wantUp && sl.hoist > 0.1 && !sl.lowering) out.push({ kind: 'sail', obj: sl, up: false, max: 1 });
+    else if (!early && wantUp && sl.hoist < 1 && !sl.lowering) out.push({ kind: 'sail', obj: sl, up: true, max: 1 });
+  });
+  return out;
 }
 
 function isEmergency(job) {
@@ -555,6 +573,15 @@ function work(p, state) {
         p.atkQ = true;
         p.whackCd = B.WHACK_EVERY;
       }
+    }
+  } else if (job.kind === 'sail') {
+    // Walk to the mast: hold Action to haul the sail up, tap it to let it down.
+    const s = (L.sails || [])[o.i];
+    if (!s) return;
+    if (steer(p, s.d, s.x, 15)) {
+      p.jx = 0;
+      if (job.up) p.fire = true;
+      else press(p);
     }
   } else if (job.kind === 'rod' || job.kind === 'pump' || job.kind === 'winch') {
     // Stand at the rod / bilge pump / winch and hold Action (the job drops away once it is done).

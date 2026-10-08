@@ -306,7 +306,15 @@ function reconnectNests(out, added) {
     if (L.connectors.some((c) => c.top === di || c.bottom === di)) continue;
     const below = L.platforms.filter((o) => o.y > q.y && (rowOf(q) === 'crow2' ? rowOf(o) === 'nest' : rowOf(o) === 'catwalk') && Math.min(o.x1, q.x1) - Math.max(o.x0, q.x0) >= 80).sort((p, r) => p.y - r.y);
     for (const o of below) {
-      const x = freeSpot(L, o.id, Math.max(o.x0, q.x0), Math.min(o.x1, q.x1));
+      const lo = Math.max(o.x0, q.x0), hi = Math.min(o.x1, q.x1);
+      let x = freeSpot(L, o.id, lo, hi);
+      if (x === null) { // a crowded deck (the classic nest): the spot furthest from anything standing there, if it is at least a body's width clear
+        const oi = L.platforms.indexOf(o);
+        const things = [...L.stations, ...L.engines].filter((s) => s.p === o.id).map((s) => s.x).concat(L.connectors.filter((c) => c.top === oi || c.bottom === oi).map((c) => (c.top === oi ? c.xTop : c.xBottom)));
+        let best = -1;
+        for (let t = Math.ceil((lo + 25) / 10) * 10; t <= hi - 25; t += 10) { const d = Math.min(Infinity, ...things.map((s) => Math.abs(s - t))); if (d > best) { best = d; x = t; } }
+        if (best < 28) x = null;
+      }
       if (x === null) continue;
       out.push({ part: 'rope', top: q.id, bottom: o.id, xTop: x, xBottom: x });
       added.push(`rope from the ${q.name} to the ${o.name}`);

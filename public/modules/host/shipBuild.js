@@ -539,6 +539,7 @@ function deriveGeometry(out, cell) {
   out.topY = Math.min(...ys);
   out.bottomY = Math.max(...ys);
   set('bounds', { x0: Math.min(...xs) - 5, x1: Math.max(...xs) + 20, y0: out.topY - 11, y1: out.bottomY });
+  if (!out.shield || out.shield.cx == null) out.shield = { cx: Math.round((out.bounds.x0 + out.bounds.x1) / 2), cy: Math.round((out.bounds.y0 + out.bounds.y1) / 2), rx: Math.round((out.bounds.x1 - out.bounds.x0) * 0.55), ry: Math.round((out.bounds.y1 - out.bounds.y0) * 0.6) }; // (a ship with no frame part still gets a deflector band round her)
   const bagTop = out.gasbags.length ? Math.min(...out.gasbags.map((b) => b.cy - b.ry)) : (nest || cat).y - 44;
   set('fitBox', { x0: lowX0 - 120, x1: lowX1 + 90, y0: bagTop - 36, y1: out.bottomY + 10 });
   set('hullRect', { x0: lowX0 + 80, x1: lowX1 - 60, y0: bagTop - 86, y1: out.bottomY - 15 });

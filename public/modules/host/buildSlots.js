@@ -84,9 +84,9 @@ export const PALETTE = [
   { id: 'boiler', label: 'Boiler', hint: 'click a spot on the main or lower deck', slots: (L) => stationSlots(L, 'boiler') },
   { id: 'coal', label: 'Coal bunker', hint: 'click a spot on a lower deck', slots: (L) => stationSlots(L, 'coal') },
   { id: 'ammo', label: 'Ammo hold', hint: 'click a spot on a lower deck', slots: (L) => stationSlots(L, 'ammo') },
-  { id: 'engine', label: 'Engine pod', hint: 'click an outrigger spot on the lower deck (it gets a steam pipe from the boiler)', slots: (L) => {
+  { id: 'engine', label: 'Engine pod', hint: 'click an outrigger spot on the lower or main deck (it gets a steam pipe from the boiler)', slots: (L) => {
     const out = [];
-    for (const q of onRows(L, ['lower'])) {
+    for (const q of onRows(L, ['lower', 'main'])) {
       const xs = [q.x0 + 30, q.x0 + 90, q.x0 + 150, q.x1 - 150, q.x1 - 90, q.x1 - 30].filter((x) => x > q.x0 + 10 && x < q.x1 - 10);
       for (const x of xs) if (roomAt(L, q.id, x, false)) out.push({ p: q.id, x, label: `Engine pod on the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part: 'engine', name: nameFor(ps, 'Pod Engine'), p: q.id, x }] });
     }
@@ -264,7 +264,7 @@ const RACK_ROWS = ['catwalk', 'main', 'lower'];
 const RULES = {
   helm: { rows: ['catwalk', 'main'], once: (parts) => count(parts, (p) => p.part === 'station' && p.kind === 'helm') > 0, onceText: 'A ship has one helm.' },
   boiler: { rows: ['main', 'lower'] }, coal: { rows: ['lower', 'main', 'keel', 'deep'] }, ammo: { rows: ['lower', 'main', 'keel', 'deep'] },
-  engine: { rows: ['lower'] }, gun: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, lookout: { rows: ['nest', 'crow2'] }, searchlight: { rows: ['crow2', 'nest', 'catwalk'] }, sail: { rows: ['crow2', 'nest', 'catwalk'] },
+  engine: { rows: ['lower', 'main'] }, gun: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, lookout: { rows: ['nest', 'crow2'] }, searchlight: { rows: ['crow2', 'nest', 'catwalk'] }, sail: { rows: ['crow2', 'nest', 'catwalk'] },
   medbay: { rows: ['main', 'lower', 'keel', 'deep'], once: (parts) => count(parts, (p) => p.part === 'medbay') > 0, onceText: 'A ship has one medbay.' },
   bombBay: { rows: ['lower'], once: (parts) => count(parts, (p) => p.part === 'bombBay' || (p.part === 'deck' && p.id === 'bay')) > 0, onceText: 'A ship has one bomb bay.' },
   lift: { rows: ['main'], once: (parts) => count(parts, (p) => p.part === 'lift') > 0, onceText: 'A ship has one lift.' },

@@ -38,7 +38,7 @@ export function createSails({ state, modules }) {
   const sync = () => {
     if (version === SHIP_LAYOUT.version && state.sails.length === (SHIP_LAYOUT.sails || []).length) return;
     version = SHIP_LAYOUT.version;
-    state.sails = (SHIP_LAYOUT.sails || []).map((s, i) => ({ n: s.n, i, hoist: 0, lowering: false, prog: 0, pull: 0, torn: false, worked: false, color: S.COLORS[i % S.COLORS.length] }));
+    state.sails = (SHIP_LAYOUT.sails || []).map((s, i) => ({ n: s.n, name: s.n, d: s.d, x: s.x, i, hoist: 0, lowering: false, prog: 0, pull: 0, torn: false, worked: false, color: S.COLORS[i % S.COLORS.length] }));
   };
   const modOf = (sail) => modules.byName[sail.n];
   const isTorn = (sail) => { const m = modOf(sail); return !!m && m.broken; };
@@ -52,7 +52,7 @@ export function createSails({ state, modules }) {
     if (i < 0) return null;
     const sail = state.sails[i];
     if (!sail || isTorn(sail)) return null; // (a torn sail is mended with a hammer: the repair action takes over)
-    if (sail.hoist >= 0.98 && !sail.lowering) return { type: 'sail', obj: sail, label: 'Lower sail' };
+    if (sail.hoist >= 1 && !sail.lowering) return { type: 'sail', obj: sail, label: 'Lower sail' };
     if (sail.lowering) return { type: 'need', label: 'The sail is coming down...' };
     return { type: 'sail', obj: sail, hold: true, time: S.HAUL_TIME, label: 'Raise sail' };
   };

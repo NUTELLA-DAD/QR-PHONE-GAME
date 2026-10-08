@@ -110,6 +110,8 @@ let sporeCloudSteps = 0, sporedSteps = 0, clogSum = 0, clogMax = 0, engSum = 0, 
 let gapSum = 0, gapMin = 1e9, seaSteps = 0, floodSum = 0, floodHigh = 0, wetSteps = 0, galeSteps = 0;
 let lightSteps = 0, lightManned = [0, 0], lightLit = 0, litBonus = 0; // searchlights: flight steps, steps each lamp was manned, steps with something lit
 let matesMax = 0;
+let segSteps = 0, altRef = null, vySum = 0, scrapeSteps = 0;
+let distPrev = null, distTravel = 0, flightSteps = 0, altMin = Infinity, altMax = -Infinity, progMax = 0, speedSum = 0, distBack = 0; // S.5e: how far and how fast she got, and how much altitude she covered
 const actTally = {};
 const t0 = realNow();
 
@@ -153,6 +155,16 @@ for (let step = 1; step <= totalSteps; step++) {
   if (state.bags.length > 1) { if (state.bagAlert && state.bagAlert !== lastBagAlert) { bagDowns++; lastBagAlert = state.bagAlert; } if (state.phase === 'flying') for (const b of state.bags) bagMin = Math.min(bagMin, b.gas); }
   if (state.phase === 'flying' && state.searchlights) { lightSteps++; state.searchlights.forEach((l, i) => { if (l.manned) lightManned[i] = (lightManned[i] || 0) + 1; }); if (state.litTargets.length) lightLit++; }
   if (state.phase === 'flying') { hullSum += state.ship.hull; hullN++; }
+  if (state.phase === 'flying' && !state.ship.down) {
+    const dd = distPrev == null ? 0 : state.course.dist - distPrev;
+    if (distPrev == null || Math.abs(dd) >= 200) { segSteps = 0; altRef = null; } else distTravel += dd; // (a new mission map or a restart resets the distance: skip that jump and start a new stretch)
+    distPrev = state.course.dist;
+    flightSteps++; speedSum += state.ship.speed + (state.sailPush || 0); segSteps++;
+    if (segSteps === 1200) altRef = state.ship.alt; // (20 s after a start she has settled: measure how far she moves from there)
+    if (altRef != null) { altMin = Math.min(altMin, state.ship.alt - altRef); altMax = Math.max(altMax, state.ship.alt - altRef); }
+    progMax = Math.max(progMax, state.course.progress || 0);
+    vySum += Math.abs(state.ship.vy || 0); if (state.course.scraping) scrapeSteps++;
+  } else distPrev = null;
   if (process.env.BOT_ACT && state.phase === 'flying') for (const q of Object.values(state.players)) if (q.bot) { const k = q.lock ? 'at ' + q.lock : q.botJob ? q.botJob.kind : 'idle'; actTally[k] = (actTally[k] || 0) + 1; } // (BOT_ACT=1: what the bots spend their time on)
   if (state.phase === 'flying' && state.env) { // environment stats
     const E = state.env;
@@ -176,6 +188,7 @@ for (let step = 1; step <= totalSteps; step++) {
   // Watchdog: a vote that never resolves.
   stuckVoteSteps = state.vote ? stuckVoteSteps + 1 : 0;
   if (stuckVoteSteps > 60 * 60) { errorCount++; errors.set('vote stalled for over a minute', ''); state.vote = null; stuckVoteSteps = 0; }
+  if (process.env.TRACE && step % 300 === 0) console.log(`t ${step / 60}s alt ${Math.round(state.ship.alt)} vy ${Math.round(state.ship.vy || 0)} gas ${state.ship.gas.toFixed(0)} holes ${state.gasHoles.length} speed ${state.ship.speed.toFixed(2)} sail ${(state.sailPush || 0).toFixed(2)} dist ${Math.round(state.course.dist)} scrape ${state.course.scraping} hull ${Math.round(state.ship.hull)}`);
   if (step % 3600 === 0) {
     console.log(`min ${step / 3600}: mission ${state.course.lap}, hull ${Math.round(state.ship.hull)}, kills ${killsTotal}, wrecks ${wrecks}`);
   }
@@ -224,7 +237,8 @@ if (lightSteps) console.log(`searchlights: ${(state.searchlights || []).map((l, 
 }
 if (process.env.BOT_ACT) console.log('bot time: ' + Object.entries(actTally).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + ((100 * v) / Object.values(actTally).reduce((a, b) => a + b, 0)).toFixed(1) + '%').join(', '));
 if (state.bags.length > 1) console.log(`gasbags: ${state.bags.length} bags side by side; a bag went flat ${bagDowns} time${bagDowns === 1 ? '' : 's'}, emptiest ${bagMin.toFixed(0)}; gas valves turned ${state.valveLog || 0}x (shut ${state.valveShuts || 0}x), now ${(state.gasValveOpen || []).filter((o) => !o).length} shut; now ${state.bags.map((b) => b.gas.toFixed(0)).join("/")}${ruptured ? `; fore bag shot flat at ${args.rupture}s: ${healedAt === null ? 'NOT repaired' : `holes patched and bag back above ${config.GAS.BAG_UP} after ${healedAt.toFixed(0)}s`}` : ''}`);
-if (runStats) console.log('BUILD_STATS ' + JSON.stringify({ build: args.build, ...runStats.result(), manned: runStats.result().mannedNames, bags: state.bags.length, bagDowns, valveLog: state.valveLog || 0, valveShuts: state.valveShuts || 0, shutAtEnd: (state.gasValveOpen || []).filter((o) => !o).length, ruptured, healedAt, errors: errorCount })); // (read by tools/buildsim.mjs)
+if (args.build || process.env.FLIGHT) console.log(`flight: net speed ${flightSteps ? (distTravel / (flightSteps / 60)).toFixed(0) : 'n/a'} px/s (throttle+sails ${flightSteps ? (speedSum / flightSteps).toFixed(2) : 'n/a'}), altitude moved ${altMin === Infinity ? 'n/a' : Math.round(altMin) + ' to +' + Math.round(altMax)} from where she settled (span ${altMin === Infinity ? 0 : Math.round(altMax - altMin)}), avg climb rate ${flightSteps ? (vySum / flightSteps).toFixed(0) : 'n/a'} px/s, on the rocks ${flightSteps ? ((100 * scrapeSteps) / flightSteps).toFixed(0) : 'n/a'}%, furthest progress ${(progMax * 100).toFixed(0)}%, sails raised ${(state.sailStats && state.sailStats.raised) || 0}x (up ${state.sailStats ? state.sailStats.upSecs.toFixed(0) : 0}s), torn ${(state.sailStats && state.sailStats.torn) || 0}`);
+if (runStats) console.log('BUILD_STATS ' + JSON.stringify({ build: args.build, ...runStats.result(), flight: { speed: flightSteps ? distTravel / (flightSteps / 60) : 0, throttle: flightSteps ? speedSum / flightSteps : 0, altMin: altMin === Infinity ? 0 : altMin, altMax: altMax === -Infinity ? 0 : altMax, climb: flightSteps ? vySum / flightSteps : 0, rocks: flightSteps ? scrapeSteps / flightSteps : 0, progress: progMax, sailsRaised: (state.sailStats && state.sailStats.raised) || 0, sailsUpSecs: state.sailStats ? state.sailStats.upSecs : 0, sailsTorn: (state.sailStats && state.sailStats.torn) || 0, tows: state.tows || 0 }, manned: runStats.result().mannedNames, bags: state.bags.length, bagDowns, valveLog: state.valveLog || 0, valveShuts: state.valveShuts || 0, shutAtEnd: (state.gasValveOpen || []).filter((o) => !o).length, ruptured, healedAt, errors: errorCount })); // (read by tools/buildsim.mjs)
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);

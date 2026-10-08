@@ -9,6 +9,7 @@
 //        node tools/buildsim.mjs --check-edit        S.5b/S.5c: the blueprint editor (draw a keel deck, extend main, lengthen the bag, cut the top deck, erase; ladders and delete; erase everything and build a ship up from nothing) validates and flies 2 min with 0 errors
 //        node tools/buildsim.mjs --check-balance     S.5c: the seesaw in flight (a nose-heavy ship rests nose-down and dives faster, a tail-heavy one is slower; the classic ship is exactly level; live loads move the balance)
 //        node tools/buildsim.mjs --check-bags        S.5d: many gasbags (four in a row, one giant) validate; drop-from-the-tray (placePart); rupture the fore bag in flight: she flies lower, tips toward it, the TV calls it out, patching + pumping restores it; both botsim 2 min with 0 errors
+//        node tools/buildsim.mjs --check-minimum    S.5e: a ship needs only a gasbag and a deck; the steps up from that (helm, boiler and coal, engines, a sail) validate, fly 2 minutes with 0 errors and each buys her something; a person raises and lowers a sail, a storm gust tears one left up
 //        node tools/buildsim.mjs --snapshot-classic --force   (S.0 only) rewrite tools/fixtures/classic-layout.json
 // Exit code 1 on any failure.
 import { pathToFileURL } from 'node:url';
@@ -311,6 +312,8 @@ async function checkEdit() {
   const { validate, liftGauge } = await load('modules/host/buildCheck.js');
   const E = await load('modules/host/buildEdit.js');
   const S = await load('modules/host/buildSlots.js');
+  const { config } = await load('config.js');
+  const drawBagOnly = () => E.drawBag(E.drawDeck(E.emptyBuild(), 'main', 140, 860).parts, -30, 1030).parts; // (a main deck and a bag, no crow's nest)
   let ok = true;
   const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
   const C = BUILDS.classic;
@@ -424,7 +427,7 @@ async function checkEdit() {
   report(nest.ok && nest.parts.some((p) => p.part === 'rope' && p.top === 'nest'), "with the bag there, the crow's nest goes up with a rope to the deck below");
   // placing parts on an incomplete ship: legality is local (a deck, a span, no overlap, kind limits), not whole-ship validity
   const half = E.drawDeck(E.emptyBuild(), 'main', 140, 860).parts;
-  report(!validate(half).ok && S.slotsFor('boiler', half).length > 3 && S.slotsFor('helm', half).length > 3 && S.slotsFor('engine', half).length === 0, 'an incomplete ship takes parts: boiler and helm slots on the main deck exist although the ship cannot fly (an engine pod wants the lower deck)');
+  report(!validate(half).ok && S.slotsFor('boiler', half).length > 3 && S.slotsFor('helm', half).length > 3 && S.slotsFor('engine', half).length > 0, 'an incomplete ship takes parts: boiler, helm and engine slots on the main deck exist although the ship cannot fly yet');
   const withHelm = S.slotsFor('helm', half)[0].apply(half);
   report(S.slotsFor('helm', withHelm).length === 0 && withHelm.some((p) => p.n === 'Helm'), 'one helm per ship: no helm slot once she has one');
   const lowHalf = E.drawDeck(half, 'lower', 20, 980).parts;
@@ -457,6 +460,34 @@ async function checkEdit() {
   const stats = (text.match(/^BUILD_STATS (.*)$/m) || [])[1];
   report(out.status === 0 && /^errors: 0$/m.test(text) && !!stats, 'botsim --build <edited ship> --minutes 2: 0 errors' + (out.status === 0 ? '' : '\n' + text.split('\n').slice(-12).join('\n')));
   if (stats) { const s = JSON.parse(stats); console.log(`      (kills ${s.kills}, avg hull ${s.avgHull}, walking ${s.walkPct}%, tows ${s.tows})`); }
+
+  // 10. S.5e: the crow's nest in two heights. A high tier is drawn on a mast above the nest: a rope up from the nest, a longer view for whoever stands there, weight and a bigger
+  // target up high. It must stand over a nest, and a nest on the bag.
+  const hi = E.drawDeck(C, 'crow2', 700, 940);
+  const crow = hi.ok && deck(hi.parts, 'crow2');
+  const vh = validate(hi.parts);
+  report(hi.ok && hi.kind === 'new' && !!crow && crow.y === undefined && hi.parts.some((p) => p.part === 'rope' && p.top === 'crow2' && p.bottom === 'nest') && vh.ok, 'drawDeck(crow2, 700, 940): a high nest with a rope down to the nest, and it validates' + (vh.ok ? '' : ': ' + vh.fails.join('; ')));
+  const Lh = buildLayout(hi.parts);
+  report(Lh.platforms.find((q) => q.id === 'crow2').y === DECK_ROWS.crow2 && Lh.bounds.y0 < buildLayout(C).bounds.y0 - 100 && Lh.hitRects.length > buildLayout(C).hitRects.length, 'the ship grows upward: taller bounds and a bigger target (hit box) for the high nest');
+  report(budgets(hi.parts).mass > budgets(C).mass + config.BALANCE.MASS.mast, 'the high nest is weight up high (mast ' + config.BALANCE.MASS.mast + ' + deck): ' + budgets(C).mass.toFixed(1) + ' -> ' + budgets(hi.parts).mass.toFixed(1));
+  report(!E.drawDeck(E.emptyBuild(), 'crow2', 200, 500).ok && !E.drawDeck(drawBagOnly(), 'crow2', 200, 500).ok && /nest/.test(E.drawDeck(drawBagOnly(), 'crow2', 200, 500).hint), "a high nest needs a crow's nest below it: refused without one: " + E.drawDeck(drawBagOnly(), 'crow2', 200, 500).hint.slice(0, 60));
+  report(!E.drawDeck(C, 'crow2', 100, 400).ok, "a high nest cannot be drawn off the crow's nest (over open sky): refused");
+  const up = E.placePart(hi.parts, 'gun', 800, DECK_ROWS.crow2 - 14);
+  const vu = validate(up.parts);
+  report(up.ok && up.parts.some((p) => p.part === 'gun' && p.p === 'crow2') && vu.ok, 'a gun and a lamp can be dropped on the high nest' + (up.ok ? '' : ': ' + up.hint));
+  const hi2 = E.drawDeck(C, 'crow2', 620, 980);
+  const cut2 = E.erase(hi2.parts, 'crow2', 790, 830);
+  const pieces2 = cut2.parts.filter((p) => p.part === 'deck' && p.row === 'crow2');
+  report(cut2.ok && pieces2.length === 2 && pieces2.every((d) => cut2.parts.some((p) => p.part === 'rope' && (p.top === d.id || p.bottom === d.id))) && validate(cut2.parts).ok, 'the high nest can be cut in two as well, each piece with its own rope: still valid' + (cut2.ok ? '' : ': ' + cut2.hint));
+  report(E.erase(up.parts, 'nest', 600, 1000).ok && !validate(E.erase(up.parts, 'nest', 600, 1000).parts).ok, 'rubbing out the nest under a high nest leaves it hanging: the validator FAILs (no way up)');
+  {
+    const f2 = path.join(os.tmpdir(), `airship-crow-${process.pid}.json`);
+    fs.writeFileSync(f2, JSON.stringify(up.parts));
+    const o2 = spawnSync(process.execPath, ['tools/botsim.mjs', '--build', f2, '--minutes', '2', '--seed', '1', '--map', 'open'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 });
+    try { fs.unlinkSync(f2); } catch { /* gone */ }
+    const t2 = (o2.stdout || '') + (o2.stderr || '');
+    report(o2.status === 0 && /^errors: 0$/m.test(t2), 'botsim --build <ship with a high nest and a gun on it> --minutes 2: 0 errors' + (o2.status === 0 ? '' : '\n' + t2.split('\n').slice(-12).join('\n')));
+  }
   return ok;
 }
 
@@ -778,6 +809,191 @@ async function randomMode() {
   return failTotal === 0 && errTotal === 0;
 }
 
+// S.5e: the minimum ship. A gasbag and one deck are all she needs; everything else is advice. Builds her up step by step with the editor's own operations
+// (tools/fixtures/minimum-lib.mjs): 1 deck + bag, 2 + helm, 3 + boiler and coal, 4 + engines, 5 + a top deck with a mast and sail. Each step: validates (WARNs listed,
+// no FAILs) and flies 2 minutes with 0 errors on three maps and three seeds. Prints a table of what each step buys her:
+//   capability (clean air, no enemies): top speed, climb and dive rate with the helm worked flat out
+//   a botsim average (what the bots made of her): net speed, how far she moved up and down, furthest progress, time on the rocks
+// then: a person raises and lowers a sail through the Action button (hold to haul, tap to lower), and a storm gust tears a sail left up (a hammer mends it; reefing in
+// time saves it).
+async function checkMinimum() {
+  globalThis.window ??= globalThis;
+  const store = new Map();
+  globalThis.localStorage ??= { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+  globalThis.requestAnimationFrame ??= (f) => setTimeout(f, 16);
+  const { config } = await load('config.js');
+  const { BUILDS } = await load('modules/host/shipBuild.js');
+  const { validate } = await load('modules/host/buildCheck.js');
+  const { applyBuild, SHIP_LAYOUT } = await load('shipLayout.js');
+  const { createSimulation } = await load('modules/host/simulation.js');
+  const { scrollSpeed } = await load('modules/host/course.js');
+  const { minimumBuild } = await import(pathToFileURL(path.join(root, 'tools', 'fixtures', 'minimum-lib.mjs')).href);
+  let ok = true;
+  const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
+  const steps = [1, 2, 3, 4, 5].map((s) => ({ step: s, parts: minimumBuild(s) }));
+  const names = ['1 deck + bag', '2 + helm', '3 + boiler, coal', '4 + engines', '5 + mast and sail'];
+
+  // 1. every step validates: no FAIL, the missing parts listed as WARNs
+  steps.forEach((s) => {
+    const v = validate(s.parts);
+    s.v = v;
+    report(v.ok && v.needs.length === 0, `step ${names[s.step - 1]}: validates (${v.warns.length} warnings, no FAIL)${v.ok ? '' : ': ' + v.fails.join('; ')}`);
+  });
+  const w1 = steps[0].v.warns.filter((t) => /^No |^Fewer/.test(t));
+  report(w1.length >= 8 && ['helm', 'boiler', 'engine', 'guns', 'medbay', 'extinguisher', 'lookout', 'hammer'].every((k) => w1.some((t) => t.toLowerCase().includes(k))), `step 1 lists what she lacks as strong WARNs (${w1.length}): ${w1.map((t) => t.split(':')[0]).join(' | ')}`);
+  report(steps[4].v.checks.some((c) => c.group === 'Sails' && c.level === 'INFO'), 'step 5 reports her sail (validator INFO)');
+  const empty = validate([]);
+  report(!empty.ok && empty.needs.join() === 'a deck to stand on,a gasbag', 'with no deck and no gasbag she cannot fly: the only two needs are "' + empty.needs.join('", "') + '"');
+
+  // 2. capability: a calm sky, nobody shooting. A person works the helm flat out (if there is one) and we read what she can do.
+  const keep = JSON.stringify([config.PACING, config.SPECIALS.FIRST_AFTER, config.MAPS.FORCE_KIND, config.ENVIRONMENTS.FORCE]);
+  const calm = () => { config.PACING.RATE_START = config.PACING.RATE_END = config.PACING.PEAK_RATE = 0; config.PACING.BUILD = 1e6; config.SPECIALS.FIRST_AFTER = 1e9; config.MAPS.FORCE_KIND = 'open'; config.ENVIRONMENTS.FORCE = 'skyisles'; };
+  const restore = () => { const [p, f, m, e] = JSON.parse(keep); Object.assign(config.PACING, p); config.SPECIALS.FIRST_AFTER = f; config.MAPS.FORCE_KIND = m; config.ENVIRONMENTS.FORCE = e; };
+  const human = (sim, o) => { const q = { id: o.id, name: o.id, species: config.CREW_SPECIES[0], color: '#fff', jx: 0, jy: 0, t: 0, connected: true, fall: false, ko: 0, ...o }; sim.state.players[o.id] = q; return q; };
+  const boot = (parts) => { applyBuild(parts); calm(); const sim = createSimulation(); sim.castOff(); return sim; };
+  const helmOf = () => SHIP_LAYOUT.stations.find((s) => s.kind === 'helm');
+  const capability = (parts, sailsUp) => {
+    // (a fresh calm ship for each measurement: the helm is worked flat out for a few seconds and we read the best she did; for a dive she first climbs 5 s so there is air below)
+    const measure = (secs, prelude, set) => {
+      const sim = boot(parts);
+      const hs = helmOf();
+      const p = hs ? human(sim, { id: 'h', x: hs.x, y: SHIP_LAYOUT.platforms[hs.d].y, d: hs.d, lock: hs.n, gas: 0 }) : null;
+      sim.update(1 / 60); // (the sails are fitted on the first frame)
+      if (sailsUp) for (const s of sim.state.sails) s.hoist = 1;
+      const best = { speed: 0, up: 0, down: 0 };
+      const go = (n, f, rec) => {
+        for (let i = 0; i < n * 60; i++) {
+          if (p) f(p);
+          sim.state.ship.press = Math.min(Math.max(sim.state.ship.press, 55), 80); // (a boiler hand keeps the steam up and the vents open)
+          sim.update(1 / 60);
+          const st = sim.state;
+          if (rec) { best.speed = Math.max(best.speed, scrollSpeed(st)); best.up = Math.max(best.up, st.ship.vy || 0); best.down = Math.max(best.down, -(st.ship.vy || 0)); }
+        }
+      };
+      go(2, (q) => { q.jx = 0; q.jy = 0; q.gas = 0; }, false); // settle
+      if (prelude) go(5, prelude, false);
+      go(secs, set, true);
+      return best;
+    };
+    const up = (q) => { q.jx = 0; q.jy = -1; q.gas = 1; };
+    return {
+      speed: measure(8, null, (q) => { q.jx = 1; q.jy = 0; q.gas = 0; }).speed,
+      climb: measure(6, null, up).up,
+      dive: measure(6, up, (q) => { q.jx = 0; q.jy = 1; q.gas = -1; }).down,
+    };
+  };
+  const caps = steps.map((s) => capability(s.parts, s.step === 5));
+  restore();
+  applyBuild(BUILDS.classic);
+  console.log('\n  capability (calm sky, helm flat out; sail fully raised at step 5)');
+  console.log('  step                 top speed px/s   climb px/s   dive px/s');
+  steps.forEach((s, i) => console.log('  ' + names[i].padEnd(20) + String(Math.round(caps[i].speed)).padStart(10) + String(Math.round(caps[i].climb)).padStart(14) + String(Math.round(caps[i].dive)).padStart(13)));
+  report(caps[1].speed >= caps[0].speed - 1 && caps[2].speed >= caps[1].speed - 1, 'a helm and a boiler do not slow her: the wind alone (' + Math.round(caps[0].speed) + ' px/s) is her top speed until she has engines');
+  report(caps[3].speed > caps[2].speed * 1.5, `engines make her much faster (${Math.round(caps[2].speed)} -> ${Math.round(caps[3].speed)} px/s)`);
+  report(caps[4].speed > caps[3].speed * 1.05, `a raised sail adds speed on top (${Math.round(caps[3].speed)} -> ${Math.round(caps[4].speed)} px/s)`);
+  report(caps[0].climb < 5 && caps[0].dive < 5, `step 1 has no control: she neither climbs nor dives on command (${Math.round(caps[0].climb)} / ${Math.round(caps[0].dive)} px/s)`);
+  report(caps[1].dive > caps[0].dive + 20 && caps[1].climb > caps[0].climb + 15, `a helm gives control without steam: the hand trim climbs slowly (${Math.round(caps[1].climb)} px/s), venting drops her (${Math.round(caps[1].dive)} px/s)`);
+  report(caps[2].climb > caps[1].climb * 1.5, `a boiler and coal give her the pump: she climbs much better (${Math.round(caps[1].climb)} -> ${Math.round(caps[2].climb)} px/s)`);
+
+  // 3. flight: 2 minutes on three maps and three seeds each: 0 errors; a table of what the bots made of her
+  console.log('\n  2-minute botsim, 3 maps x 3 seeds (route, open, network) per step: ');
+  const jobs = [];
+  for (const s of steps) for (const map of ['route', 'open', 'network']) for (const seed of [1, 2, 3]) jobs.push(() => runBotsim(s.parts, { map, minutes: 2, bots: 6, seed }).then((r) => ({ step: s.step, map, seed, r })));
+  const res = await pool(jobs, 4);
+  const avg = (list, f) => (list.length ? list.reduce((n, x) => n + f(x), 0) / list.length : 0);
+  console.log('  step                 net speed px/s   altitude span px   progress %   on the rocks %   tows   avg hull   errors');
+  const rows = steps.map((s) => {
+    const mine = res.filter((x) => x.step === s.step), st = mine.map((x) => x.r.stats).filter(Boolean);
+    const row = { speed: avg(st, (q) => q.flight.speed), span: avg(st, (q) => q.flight.altMax - q.flight.altMin), prog: avg(st, (q) => q.flight.progress * 100), rocks: avg(st, (q) => q.flight.rocks * 100), tows: avg(st, (q) => q.tows), hull: avg(st, (q) => q.avgHull), errors: mine.reduce((n, x) => n + (x.r.stats ? x.r.stats.errors : 1), 0), crashed: mine.length - st.length };
+    console.log('  ' + names[s.step - 1].padEnd(20) + [row.speed, row.span, row.prog, row.rocks].map((v) => String(Math.round(v)).padStart(12)).join('  ') + row.tows.toFixed(1).padStart(9) + String(Math.round(row.hull)).padStart(10) + String(row.errors).padStart(9));
+    return row;
+  });
+  steps.forEach((s, i) => report(rows[i].errors === 0 && rows[i].crashed === 0, `step ${names[i]}: 9 botsim runs of 2 minutes, 0 errors`));
+  report(rows[4].speed > rows[0].speed && rows[3].speed > rows[0].speed, `flown by the bots, the engines and the sail get her further than the bare bag (net ${Math.round(rows[0].speed)} -> ${Math.round(rows[3].speed)} -> ${Math.round(rows[4].speed)} px/s)`);
+  report(rows[4].prog > rows[0].prog && rows[4].prog >= rows[3].prog, `... and further along the route (progress ${rows[0].prog.toFixed(0)}% -> ${rows[4].prog.toFixed(0)}%)`);
+
+  // 4. a person works the sail through the Action button; the gust test
+  {
+    calm();
+    applyBuild(steps[4].parts);
+    const sim = createSimulation();
+    sim.castOff();
+    const mast = SHIP_LAYOUT.sails[0];
+    const p = human(sim, { id: 's', x: mast.x, y: SHIP_LAYOUT.platforms[mast.d].y, d: mast.d });
+    const tick = () => { p.x = mast.x; sim.update(1 / 60); }; // (the crew member keeps her feet at the mast, as a person walking back would)
+    for (let i = 0; i < 30; i++) tick();
+    report(p.ui && p.ui.label === 'Raise sail' && p.ui.hold === true, `at the mast the phone says "${p.ui && p.ui.label}" (hold the big button)`);
+    const sail = sim.state.sails[0];
+    p.fire = true;
+    let half = 0;
+    for (let i = 0; i < Math.round((config.SAIL.HAUL_TIME + 0.5) * 60); i++) { tick(); if (i === Math.round(config.SAIL.HAUL_TIME * 30)) half = sail.hoist; }
+    p.fire = false;
+    for (let i = 0; i < 20; i++) tick();
+    report(sail.hoist >= 0.99 && half > 0.3 && half < 0.7, `holding Action for ${config.SAIL.HAUL_TIME} s hauls the sail up (half way after half the time: ${half.toFixed(2)}; now ${sail.hoist.toFixed(2)})`);
+    report(p.ui.label === 'Lower sail' && !p.ui.hold, `with the sail up the button says "${p.ui.label}" (a tap)`);
+    for (let i = 0; i < 240; i++) tick();
+    const pushed = sim.state.sailPush;
+    report(pushed > 0.05, `a raised sail pulls: +${(pushed * 100).toFixed(0)}% of top speed (${Math.round(pushed * config.SHIP.TOP_SPEED)} px/s)`);
+    p.actQ = true;
+    p.actAid = p.ui.aid;
+    tick();
+    for (let i = 0; i < Math.round((config.SAIL.LOWER_TIME + 0.5) * 60); i++) tick();
+    report(sail.hoist === 0 && p.ui.label === 'Raise sail', 'a tap lets the sail down again (' + sail.hoist.toFixed(2) + '), the button is back to "Raise sail"');
+    // let go half way: it slips back
+    p.fire = true;
+    for (let i = 0; i < 90; i++) tick();
+    p.fire = false;
+    const mid = sail.hoist;
+    for (let i = 0; i < Math.round(config.SAIL.LOWER_TIME * 2.5 * 60); i++) tick();
+    report(mid > 0.2 && sail.hoist === 0, `let go half way (${mid.toFixed(2)}) the sail slips back down`);
+    restore();
+  }
+  {
+    // gusts: a Storm Front. Sail up and nobody about: the gusts tear it. With the bots about it is reefed in time (they lower it when the warning shows).
+    const gust = (crew) => {
+      calm();
+      config.ENVIRONMENTS.FORCE = 'storm';
+      applyBuild(steps[4].parts);
+      const sim = createSimulation();
+      if (crew) for (let i = 0; i < 4; i++) sim.state.players['b' + i] = { id: 'b' + i, bot: true, name: 'Bot' + i, species: config.CREW_SPECIES[0], color: '#fff', x: SHIP_LAYOUT.boarderEntryPoints[0].x + i * 40, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
+      sim.castOff();
+      sim.update(1 / 60); // (the sails are fitted on the first frame)
+      let warned = 0, torn = 0;
+      for (let i = 0; i < 150 * 60; i++) {
+        if (!crew && !sim.state.sails[0].torn && sim.state.sails[0].hoist < 1) sim.state.sails[0].hoist = 1; // (nobody reefs: keep her flying the sail)
+        sim.update(1 / 60);
+        if (sim.state.sailWarn) warned++;
+        torn = sim.state.sailStats.torn;
+      }
+      const m = sim.state.modules.find((q) => q.kind === 'sail');
+      const out = { warned, torn, brokenAtEnd: !!(m && m.broken), up: sim.state.sailStats.upSecs };
+      restore();
+      return out;
+    };
+    const left = gust(false);
+    report(left.warned > 60 && left.torn >= 1, `Storm Front, sail left up for 150 s: the TV warns of the gust (${left.warned} frames of "REEF!") and a gust tears the sail (${left.torn} tear${left.torn === 1 ? '' : 's'})`);
+    const tended = gust(true);
+    report(tended.torn <= left.torn, `with a crew about the sail is reefed before gusts: ${tended.torn} tear${tended.torn === 1 ? '' : 's'} (against ${left.torn} for the unattended one), up ${tended.up.toFixed(0)} s`);
+    // mending: a person with a hammer fixes a torn sail
+    calm();
+    config.ENVIRONMENTS.FORCE = 'storm';
+    applyBuild(steps[4].parts);
+    const sim = createSimulation();
+    sim.castOff();
+    const m = sim.state.modules.find((q) => q.kind === 'sail');
+    sim.modules.damage(m, 999);
+    for (let i = 0; i < 60; i++) sim.update(1 / 60);
+    const mast = SHIP_LAYOUT.sails[0];
+    const p = human(sim, { id: 'r', x: mast.x, y: SHIP_LAYOUT.platforms[mast.d].y, d: mast.d, carry: 'hammer' });
+    p.fire = true;
+    for (let i = 0; i < 20 * 60 && m.broken; i++) sim.update(1 / 60);
+    report(!m.broken && sim.state.sails[0].hoist === 0, 'a torn sail is mended with a hammer (hold Action at the mast) and can be raised again');
+    restore();
+  }
+  applyBuild(BUILDS.classic);
+  return ok;
+}
+
 const mode = argv[0];
 if (mode === '--snapshot-classic') {
   // Only meaningful before S.1 (when the layout was hand-written); after that it would snapshot the generated layout.
@@ -798,6 +1014,8 @@ if (mode === '--snapshot-classic') {
   process.exit((await checkEdit()) ? 0 : 1);
 } else if (mode === '--check-balance') {
   process.exit((await checkBalance()) ? 0 : 1);
+} else if (mode === '--check-minimum') {
+  process.exit((await checkMinimum()) ? 0 : 1);
 } else if (mode === '--check-bags') {
   process.exit((await checkBags()) ? 0 : 1);
 } else if (mode === '--build') {
@@ -807,6 +1025,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

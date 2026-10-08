@@ -1601,7 +1601,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, cool: 1, trim: 0.9 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, cool: 1, trim: 0.9, sail: 1.3, reef: 3 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

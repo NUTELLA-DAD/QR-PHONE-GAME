@@ -80,7 +80,7 @@ export function createDeepEnv({ state, puff, phoneFx }) {
       if (flying && !state.ship.down) c.lvl = Math.min(1, c.lvl + (C.BASE + (inCloud(c.x, P[c.d].y + 20, 30) ? C.CLOUD : 0)) * dt);
       power += 1 - C.POWER * c.lvl;
     }
-    E.engine = power / state.clogs.length;
+    E.engine = state.clogs.length ? power / state.clogs.length : 1; // (a ship with no engines has none to clog)
     const worst = Math.max(...state.clogs.map((c) => c.lvl));
     if (worst > 0.6 && !warned.clog) {
       warned.clog = true;
@@ -106,6 +106,7 @@ export function createDeepEnv({ state, puff, phoneFx }) {
   const aetherUpdate = (dt, F, flying) => {
     const O = F.OXYGEN;
     const E = state.env;
+    { const q = P[MAIN]; if (q) { state.o2tank.d = MAIN; state.o2tank.x = clamp(O.TANK_X, q.x0 + 30, q.x1 - 30); } } // (the oxygen tank stands on the main deck, kept on a short one)
     E.gravity = F.GRAVITY;
     E.sink = F.SINK;
     E.engine = F.ENGINE;

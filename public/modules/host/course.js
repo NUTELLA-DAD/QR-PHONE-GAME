@@ -215,7 +215,7 @@ export function inRock(state, x, y) {
 }
 
 // How fast the ship moves along the course (negative = backing up; 0 = hovering).
-export const scrollSpeed = (state) => (state.ship.speed + (state.sailPush || 0)) * config.SHIP.TOP_SPEED * (1 + config.BOILER.OD_ENGINE * (state.overdrive || 0) + config.LINKS.SURGE.ENGINE * (state.surgeEngine || 0)) * ((state.env && state.env.engine) || 1) * (1 - ((state.env && state.env.drag) || 0)); // overdrive steam = faster engines
+export const scrollSpeed = (state) => (state.ship.speed + (state.sailPush || 0)) * config.SHIP.TOP_SPEED * (1 + config.BOILER.OD_ENGINE * (state.overdrive || 0) + config.LINKS.SURGE.ENGINE * (state.surgeEngine || 0)) * ((state.rig && !state.rig.powered ? 1 : state.env && state.env.engine) || 1) * (1 - ((state.env && state.env.drag) || 0)); // overdrive steam = faster engines
 
 // How high and low the ship may fly here: up to ALT_RANGE above the highest land under and just
 // ahead of it, and ALT_RANGE below the lowest.
@@ -460,7 +460,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
 
   const warnAhead = (dt) => {
     const lookout = state.lookout;
-    const secs = lookout ? K.LOOKOUT_WARN_SECONDS : K.WARN_SECONDS;
+    const secs = (lookout ? K.LOOKOUT_WARN_SECONDS : K.WARN_SECONDS) * (1 + (state.lookoutBonus || 0));
     const v = scrollSpeed(state);
     const shipFront = 1670 + course.dist;
     const next = course.features.find((f) => f.type !== 'hills' && f.x0 > shipFront - 200 && f.x0 - shipFront < secs * v);

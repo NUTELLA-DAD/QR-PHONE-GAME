@@ -2,7 +2,7 @@ import { createJobFinder } from './jobs.js';
 import { updateCrewScale, sparesFor, spawnPace, damageMul, crewMul, autopilotOn, crewHeads } from './crewscale.js';
 import { updateMates } from './mates.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf, deckIndex, hasKind, isNestDeck, reviveSpot } from '../../shipLayout.js';
+import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf, deckIndex, hasKind, isNestDeck, nestTier, reviveSpot } from '../../shipLayout.js';
 import { updateBot } from './bots.js';
 import { moveWalker, steerTo, fall, detach, platformBelow } from './nav.js';
 import { createModules } from './modules.js';
@@ -134,7 +134,7 @@ export function createSimulation() {
     kills: 0,
     scroll: 0,
     GUNS: Object.fromEntries(
-      Object.entries(SHIP_LAYOUT.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0 }]),
+      Object.entries(SHIP_LAYOUT.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, reach: 1 + config.NEST.TIER_BONUS * nestTier((SHIP_LAYOUT.stations.find((s) => s.n === name) || {}).p) }]),
     ),
   };
   installBags(state); // the gasbags side by side: state.bags, and state.ship.gas as their mean (gasBags.js)
@@ -1483,7 +1483,7 @@ export function createSimulation() {
                 y: gy - state.ship.alt + Math.sin(angle) * 60,
                 vx: Math.cos(angle) * config.GUNS.SHELL_SPEED,
                 vy: Math.sin(angle) * config.GUNS.SHELL_SPEED,
-                life: config.GUNS.SHELL_LIFE,
+                life: config.GUNS.SHELL_LIFE * (gun.reach || 1),
                 owner: player.id,
                 ...(primed ? { mul: config.PRIME.DAMAGE_MUL, primed: true } : {}),
               });
@@ -1659,6 +1659,7 @@ export function createSimulation() {
       const feel = state.buoyancy > 0 ? 'RISING' : state.buoyancy < 0 ? 'FALLING' : 'holding';
       const leakNow = modules.leaks()[0];
       const leakText = leakNow ? (leakNow.pipe && leakNow.pipe.open ? `${leakNow.m.name} pipe leaking - close the valve or repair` : `${leakNow.m.name} leaking steam - repair it`) : '';
+      if (kind === 'helm' && player.lock && !status && state.rig && !state.rig.boiler) status = `Hand wheel - no boiler, no steam: the lever can only VENT gas (down), the trim is weak${state.rig.engine ? ', the engines are dead' : ''}. The wind carries her.`;
       if (kind === 'boiler' && !status && leakText) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - ${leakText}`;
       if (kind === 'boiler' && !status) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
       if (kind === 'helm' && player.lock && !status && (state.ship.press < config.GAS.PUMP_MIN_PRESS || state.gasHoles.length)) status = `Gas ${Math.round(state.ship.gas)}% - ${feel}${state.ship.press < config.GAS.PUMP_MIN_PRESS ? ' - NO STEAM TO PUMP!' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' holes leaking' : ''}`;
@@ -1698,6 +1699,7 @@ export function createSimulation() {
     }
 
     state.lookout = state.periscope || Object.values(state.players).some((q) => kindOf(q.lock) === 'lookout');
+    state.lookoutBonus = Object.values(state.players).some((q) => kindOf(q.lock) === 'lookout' && nestTier((SHIP_LAYOUT.stations.find((s) => s.n === q.lock) || {}).p)) ? config.NEST.TIER_BONUS : 0; // (a lookout up on the high nest sees further ahead)
     updatePopups(state, dt);
     spotter.update(dt);
     links.update(dt);
@@ -1774,7 +1776,7 @@ export function createSimulation() {
     balance.update(dt);
     const wind = windSpeed(state); // (the wind alone: what a ship with no engines, no steam or nobody steering makes)
     const maxSpeed = rig.powered ? clamp(state.ship.press / 50, 0.05, 1) * modules.engineFactor(state) * (1 - state.balance.slow) : wind * (1 - state.balance.slow); // (a tail-heavy ship drags her tail)
-    if (state.ship.speed > maxSpeed) state.ship.speed += (maxSpeed - state.ship.speed) * Math.min(1, dt * 2);
+    if (state.ship.speed > maxSpeed) state.ship.speed = rig.powered ? state.ship.speed + (maxSpeed - state.ship.speed) * Math.min(1, dt * 2) : maxSpeed; // (nothing pushes a ship with no engines or no steam faster than the wind, whatever the lever says)
     const maxReverse = -maxSpeed * config.SHIP.REVERSE;
     if (state.ship.speed < maxReverse) state.ship.speed += (maxReverse - state.ship.speed) * Math.min(1, dt * 2);
 

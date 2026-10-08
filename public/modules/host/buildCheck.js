@@ -102,7 +102,7 @@ export function balanceGauge(parts) {
 export function liftGauge(parts) {
   const b = partBudgets(parts);
   const hover = config.GAS.NEUTRAL + b.mass - b.lift;
-  const level = hover < BC.HOVER_MIN || hover > BC.HOVER_MAX ? 'FAIL' : hover > BC.HOVER_WARN ? 'WARN' : 'PASS';
+  const level = hover > BC.HOVER_MAX ? 'FAIL' : hover < BC.HOVER_MIN || hover > BC.HOVER_WARN ? 'WARN' : 'PASS'; // (too heavy FAILs; very buoyant is only a WARN: S.5e)
   return { mass: +b.mass.toFixed(1), lift: +b.lift.toFixed(1), hover: +hover.toFixed(1), level };
 }
 
@@ -277,8 +277,8 @@ export function validate(parts, opts = {}) {
   // --- Lift, steam, hands.
   const lift = liftGauge(parts);
   const hoverText = `hover at gas ${lift.hover} (weight ${lift.mass}, lift ${lift.lift}; allowed ${BC.HOVER_MIN}-${BC.HOVER_MAX})`;
-  if (lift.level === 'FAIL' && lift.hover > BC.HOVER_MAX) fail('Lift', hoverText + ': too heavy for her bags');
-  else if (lift.level === 'FAIL') warn('Lift', hoverText + ': a lot of lift for her weight: she rides high and wants venting or ballast to hold her down');
+  if (lift.level === 'FAIL') fail('Lift', hoverText + ': too heavy for her bags');
+  else if (lift.hover < BC.HOVER_MIN) warn('Lift', hoverText + ': a lot of lift for her weight: she rides high and wants venting or ballast to hold her down');
   else if (lift.level === 'WARN') warn('Lift', hoverText + `: above ${BC.HOVER_WARN}, lots of pumping`);
   else pass('Lift', hoverText);
   const steam = steamGauge(L);
