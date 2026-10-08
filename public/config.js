@@ -711,7 +711,7 @@ export const config = {
     POWER_SCALE: 0.9, // how much of the danger a weak ship is spared: 0 = none (every ship meets the classic danger), 1 = danger in proportion to her power
     POWER_FLOOR: 0.4, // ...but never less than this share of the full danger (a bare hull still gets shot at)
     POWER: {
-      BASE: 3, GUN: 1, BOMB_BAY: 1.5, COIL: 2, ESCORT: 1, DEFLECTOR: 1, ARMOUR: 1.2, ENGINE: 0.6, SPARE_BAG: 1, // power points: the hull and deck; per gun; the bomb bay; the coil; per escort fighter; the deflector; per 100 px of armour plate; per engine pod; per gasbag beyond the first
+      BASE: 3, GUN: 1, BOMB_BAY: 1.5, COIL: 2, ESCORT: 1, DEFLECTOR: 1, ARMOUR: 1.2, ENGINE: 0.6, SPARE_BAG: 1, CANNON: 1, CARGO_RACK: 0.3, TOWLINE: 0.5, // (B.6: a crew cannon, a sandbag or crate rack, a towline reel) power points: the hull and deck; per gun; the bomb bay; the coil; per escort fighter; the deflector; per 100 px of armour plate; per engine pod; per gasbag beyond the first
       KEYS: { spawn: 1, count: 1, fire: 1, damage: 1, raiders: 1, hp: 1 }, // which crew-scale numbers follow it, and how fully (1 = all of the relief, 0 = none)
     },
   },
