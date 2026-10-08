@@ -7,12 +7,15 @@
 // layout numbers (see hullGeom / the offsets in each drawer).
 //
 // Two layers:
-//   STATIC - hull shell, rails, ladders, pipes, racks, walls, stencils, lobby labels: things that never move. Drawn once into
-//            an offscreen canvas ("the bake", in ship space) and blitted every frame under the ship's own tilt/bob transform.
-//            Re-baked when the layout version, the perf level (textures on/off), loaded sprites/textures/fonts, the ship's
-//            upgrades, the lobby/flight phase or the camera zoom (by more than ~25%) change.
-//   LIVE   - gasbag swell, propellers, lift cage, doors, valve lamps, gauges, fire glow, bombs, vents' steam, helm wheel,
-//            escort fighters, holes, damage and status.
+//   STATIC - hull shell, rails, ladders, pipes, racks, walls, stencils, the gasbag picture: things that never move. Drawn once
+//            into offscreen canvases ("the bake", in ship space; BACK = behind the live bits, FRONT = ladders and the top deck
+//            in front of them, plus one picture per gasbag) and blitted every frame under the ship's own tilt/bob transform,
+//            only the non-empty tiles of each. Re-baked when the layout version, the perf level (textures on/off), loaded
+//            sprites/textures/fonts, the ship's upgrades or the camera zoom (by more than config.SHIP_ART.BAKE_ZOOM) change.
+//   LIVE   - gasbag swell and wrinkles, propellers, lift cage, doors, valve lamps, gauges, fire glow, bombs, vents' steam,
+//            helm wheel, escort fighters, lobby name boards, holes, damage and status.
+// Debug: window.shipProfile = {} adds the ms per part of the ship each frame (forces a flush each step).
+// config.SHIP_ART.OFF = true draws everything directly (the old way).
 // Drawing never throws: the bake falls back to drawing the static layer straight onto the screen.
 import { config } from '../../config.js';
 import { SHIP_LAYOUT, onLayoutChange, one, all, kindOf } from '../../shipLayout.js';
