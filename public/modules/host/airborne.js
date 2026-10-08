@@ -123,6 +123,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       p.x = px; // (back on the ship: ship coordinates again)
       p.fly = false;
       p.air = false;
+      p.tossed = false;
       cutChute(p);
       p.jz = 0;
       p.vy = 0;
@@ -283,6 +284,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       p.fly = false;
       p.air = false;
       p.cannon = false;
+      p.tossed = false;
       p.trail = null;
       cutChute(p);
       p.x = sx; // (the fall and the tumble work in ship coordinates, relative to her)
@@ -304,6 +306,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     const height = p.chuteOpen || p.cannon ? 0 : y - p.apex; // a parachute landing is a soft one (and a cannon flyer rolls out of it: his fall is an arc, not a drop)
     cutChute(p);
     p.cannon = false;
+    p.tossed = false;
     p.trail = null;
     p.fly = false;
     p.air = false;
@@ -348,6 +351,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const clear = (p) => {
     p.fly = false;
     p.cannon = false;
+    p.tossed = false;
     p.trail = null;
     cutChute(p);
     p.tumble = false;

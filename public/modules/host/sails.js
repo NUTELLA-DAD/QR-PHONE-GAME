@@ -42,7 +42,8 @@ export function createSails({ state, modules }) {
   const sync = () => {
     if (version === layout.version && state.sails.length === (layout.sails || []).length) return;
     version = layout.version;
-    state.sails = (layout.sails || []).map((s, i) => ({ n: s.n, name: s.n, d: s.d, x: s.x, i, hoist: 0, lowering: false, prog: 0, pull: 0, torn: false, worked: false, color: S.COLORS[i % S.COLORS.length] }));
+    const old = new Map(state.sails.map((q) => [q.n, q])); // (a sail that is still there after a build change - a part broke off, S.5i - keeps how far up it is)
+    state.sails = (layout.sails || []).map((s, i) => ({ n: s.n, name: s.n, d: s.d, x: s.x, i, hoist: old.has(s.n) ? old.get(s.n).hoist : 0, lowering: old.has(s.n) ? old.get(s.n).lowering : false, prog: 0, pull: 0, torn: false, worked: false, color: S.COLORS[i % S.COLORS.length] }));
   };
   const modOf = (sail) => modules.byName[sail.n];
   const isTorn = (sail) => { const m = modOf(sail); return !!m && m.broken; };
