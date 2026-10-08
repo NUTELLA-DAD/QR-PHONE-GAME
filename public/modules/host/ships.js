@@ -46,9 +46,9 @@ import { createPose, createFormationPose } from './pose.js';
 import { mainNav, createNav } from './nav.js';
 
 // The state keys that belong to ONE ship. Ship 0's context forwards them to the world state; another ship's context owns them (undefined until its factory, or
-// SHIP_INIT below, makes them). A key a ship's subsystems write must be listed, or it is written to the context only (see the check in --check-two-ships).
+// shipInit below, makes them). A key a ship's subsystems write must be listed, or it is written to the context only (see the check in --check-two-ships).
 export const SHIP_KEYS = [
-  // the body and what hangs on it (made by createSimulation / SHIP_INIT)
+  // the body and what hangs on it (made by createSimulation / shipInit)
   'ship', 'GUNS', 'bombBay', 'gasValve', 'gasValveOpen', 'ventOpen', 'shield', 'gasHoles', 'breaches', 'fires', 'boarders', 'bombs', 'wreck',
   // made by the subsystem factories
   'modules', 'bags', 'bagsVersion', 'bagAlert', 'balance', 'forces', 'engines', 'engineStats', 'thrust',
@@ -59,7 +59,7 @@ export const SHIP_KEYS = [
   // worked out every step
   'rig', 'steamParts', 'steamUse', 'overdrive', 'buoyancy', 'sinking', 'autopilot', 'pressureWarned', 'warnBeep', 'boilerBlew', 'helmHit', 'ballastCd', 'gasWarned', 'lastAlt', 'noPump',
   'lookout', 'lookoutBonus', 'valveLog', 'valveShuts', 'boilerLoads',
-  // the environment's hazards that ride on her (the rules run for ship 0 only: another ship has them neutral, SHIP_INIT)
+  // the environment's hazards that ride on her (the rules run for ship 0 only: another ship has them neutral, shipInit)
   'icing', 'ice', 'clogs', 'spores', 'o2tank', 'stormJob', 'sea',
 ];
 // The world keys a second ship's code is allowed to READ through the prototype: the sky she shares (the enemies and shots and wrecks in it, the weather and the

@@ -112,7 +112,7 @@ export function createShipSim(world, ship, W) {
   const { moveWalker, steerTo, fall, detach, platformBelow } = ship.nav; // (walkers use THEIR ship's navigation)
   const gunship = ship.main ? late(() => W.gunship) : NO_GUNSHIP;
   const env = ship.main ? late(() => W.env) : NEUTRAL_ENV;
-  const course = late(() => W.course);
+  const course = ship.main ? late(() => W.course) : { dropBomb: (...a) => W.course.dropBomb(...a), predictBomb: (...a) => W.course.predictBomb(...a), helmHint: () => '' }; // (the helm's hint about the rock ahead is about ship 0's course)
   const hijack = late(() => W.hijack);
   const PLATFORMS = layout.platforms;
   const platformY = (d) => PLATFORMS[d].y;

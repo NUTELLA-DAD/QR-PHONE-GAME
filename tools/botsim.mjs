@@ -4,12 +4,12 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0, blowout: 0, trace: null, traceEvery: 30 };
+const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0, blowout: 0, trace: null, traceEvery: 30, ships: 1, build2: 'classic' };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') {
-    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi|bags|giantbag] [--rupture SECONDS (several gasbags: shoot the fore bag flat then, S.5d)] [--blowout SECONDS (S.5f: over-pressure the boiler every SECONDS of flight so it blows and lights a fire beside itself: a fire test)] [--trace FILE [--trace-every 30] (B0: a per-step dump of the ship, tab separated, for tools/buildsim.mjs --check-frames)]');
+    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi|bags|giantbag] [--rupture SECONDS (several gasbags: shoot the fore bag flat then, S.5d)] [--blowout SECONDS (S.5f: over-pressure the boiler every SECONDS of flight so it blows and lights a fire beside itself: a fire test)] [--ships N [--build2 NAME] (B.2: N ships in one sky, the bots dealt out round the ships by player.ship; ship 0 is the classic one or --build, the others --build2; the summary is about ship 0, with one line per ship at the end)] [--trace FILE [--trace-every 30] (B0: a per-step dump of the ship, tab separated, for tools/buildsim.mjs --check-frames)]');
     process.exit(0);
   } else if (a.startsWith('--') && a.slice(2).replace(/-([a-z])/g, (m, c) => c.toUpperCase()) in args) {
     const key = a.slice(2).replace(/-([a-z])/g, (m, c) => c.toUpperCase()); // (--trace-every -> traceEvery)
@@ -74,15 +74,22 @@ if (args.build && args.build !== 'classic') {
 const { createRunStats } = await load('modules/host/buildStats.js');
 const sim = createSimulation();
 const state = sim.state;
+if (args.ships > 1) {
+  const { BUILDS } = await load('modules/host/shipBuild.js');
+  const { loadBuild } = await import(pathToFileURL(path.join(root, '..', 'tools', 'buildload.mjs')).href);
+  for (let k = 1; k < args.ships; k++) sim.addShip(await loadBuild(args.build2, BUILDS), { formation: { dx: -250 * k, dalt: -1150 * k } });
+}
 const runStats = args.build ? createRunStats(state) : null; // (--build: the per-run numbers tools/buildsim.mjs reads)
 state.difficulty = args.difficulty;
 
 // Same recipe as the "Add 4 bot crew" button in network.js.
 const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
-const e = SHIP_LAYOUT.boarderEntryPoints;
 for (let i = 0; i < args.bots; i++) {
+  const sh = state.ships[i % state.ships.length]; // (several ships: the bots are dealt out round them, each over his own ship's boarding span)
+  const e = sh.layout.boarderEntryPoints;
   const id = 'bot' + Math.random();
   state.players[id] = {
+    ...(state.ships.length > 1 ? { ship: sh.id } : {}),
     id, bot: true, human: i < args.humans, name: 'Bot' + (i + 1), // (--humans N: the first N stand in for human players, so ship's mates come aboard for N <= 3)
     species: config.CREW_SPECIES[(Math.random() * config.CREW_SPECIES.length) | 0],
     color: colors[(Math.random() * colors.length) | 0],
@@ -255,6 +262,7 @@ if (state.bags.length > 1) console.log(`gasbags: ${state.bags.length} bags side 
 if (args.build || process.env.FLIGHT) console.log(`flight: net speed ${flightSteps ? (distTravel / (flightSteps / 60)).toFixed(0) : 'n/a'} px/s (throttle+sails ${flightSteps ? (speedSum / flightSteps).toFixed(2) : 'n/a'}), altitude moved ${altMin === Infinity ? 'n/a' : Math.round(altMin) + ' to +' + Math.round(altMax)} from where she settled (span ${altMin === Infinity ? 0 : Math.round(altMax - altMin)}), avg climb rate ${flightSteps ? (vySum / flightSteps).toFixed(0) : 'n/a'} px/s, on the rocks ${flightSteps ? ((100 * scrapeSteps) / flightSteps).toFixed(0) : 'n/a'}%, furthest progress ${(progMax * 100).toFixed(0)}%, sails raised ${(state.sailStats && state.sailStats.raised) || 0}x (up ${state.sailStats ? state.sailStats.upSecs.toFixed(0) : 0}s), torn ${(state.sailStats && state.sailStats.torn) || 0}`);
 if (state.engines && state.engines.some((q) => q.swivel || q.home)) console.log(`engines: ${state.engines.map((q) => q.name + ' ' + (q.swivel ? 'swivel' : 'fixed') + ' now ' + (Math.round((q.dir * 180) / Math.PI)) + ' deg').join(', ')}; swivel cranks manned ${state.engineStats.mannedSecs.toFixed(0)}s, engines turned ${state.engineStats.turnSecs.toFixed(0)}s; pitch from forces peaked ${((state.forces.peak * 180) / Math.PI).toFixed(2)} deg`);
 if (runStats) console.log('BUILD_STATS ' + JSON.stringify({ build: args.build, ...runStats.result(), flight: { speed: flightSteps ? distTravel / (flightSteps / 60) : 0, throttle: flightSteps ? speedSum / flightSteps : 0, altMin: altMin === Infinity ? 0 : altMin, altMax: altMax === -Infinity ? 0 : altMax, climb: flightSteps ? vySum / flightSteps : 0, rocks: flightSteps ? scrapeSteps / flightSteps : 0, progress: progMax, sailsRaised: (state.sailStats && state.sailStats.raised) || 0, sailsUpSecs: state.sailStats ? state.sailStats.upSecs : 0, sailsTorn: (state.sailStats && state.sailStats.torn) || 0, tows: state.tows || 0, engineTurnSecs: state.engineStats.turnSecs, engineMannedSecs: state.engineStats.mannedSecs, pitchPeak: state.forces.peak, contacts }, manned: runStats.result().mannedNames, bags: state.bags.length, bagDowns, valveLog: state.valveLog || 0, valveShuts: state.valveShuts || 0, shutAtEnd: (state.gasValveOpen || []).filter((o) => !o).length, ruptured, healedAt, errors: errorCount })); // (read by tools/buildsim.mjs)
+if (state.ships.length > 1) for (const sh of state.ships) console.log(`ship ${sh.id}: hull ${sh.state.hull.toFixed(0)}, gas ${sh.state.gas.toFixed(0)}, ${Object.keys(sh.ctx.players).length} crew, ${sh.layout.platforms.length} decks, ${sh.layout.gasbags.length} bag(s)`);
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);
