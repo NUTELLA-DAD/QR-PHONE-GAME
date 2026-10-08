@@ -107,12 +107,14 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
     const list = bp.posts[role] || bp.posts.guard;
     const used = crewOf(g).filter((c) => c.role === role).map((c) => c.post);
     const post = list.find((x) => !used.includes(x)) ?? list[0];
-    const dk = segAt({ m: 1, bp }, post);
+    const below = role === 'stoker' || role === 'guard'; // (the stoker and the guards start in the hold, the helmsman and the gunners on the decks)
+    const H = g.info.hold;
+    const dk = below ? H.index : segAt({ m: 1, bp }, post);
     const id = 'e' + nextId++;
     const c = {
       id, bot: true, enemy: true, team: ENEMY_TEAM, ship: h.id, name: role === 'helm' ? 'Helmsman' : role === 'gunner' ? 'Gunner' : role === 'stoker' ? 'Stoker' : 'Raider', role,
       species: 'skeleton', type: 'grunt', color: '#8c2f2f', scale: 1, post, eHp: G.CREW_HP,
-      x: post, y: bp.decks[dk].y, d: dk, jx: 0, jy: 0, t: 0, connected: true, fall: false, face: -1,
+      x: below ? clamp(post, H.x0 + 40, H.x1 - 40) : post, y: below ? H.y : bp.decks[dk].y, d: dk, jx: 0, jy: 0, t: 0, connected: true, fall: false, face: -1,
     };
     h.crewReg[id] = c;
     return c;

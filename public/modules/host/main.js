@@ -38,6 +38,11 @@ const perf = createPerfGovernor({
 window.perfGov = perf; // handy for debugging in the browser console
 fitCanvas();
 
+// Dev (B.5): host.html?gunship=ship makes the enemy gunship a real Ship (gunshipShip.js); ?gunship=old keeps the old offset-from-our-ship one (config.GUNSHIP.AS_SHIP is the default).
+{
+  const g = new URLSearchParams(location.search).get('gunship');
+  if (g === 'ship' || g === 'old') config.GUNSHIP.AS_SHIP = g === 'ship';
+}
 const simulation = createSimulation();
 // Dev (B.2): host.html?ships=2 puts a SECOND airship in the sky (a copy of the classic one, or host.html?ships=2&build2=[parts JSON]), kept a little behind ours and
 // below her, each with four bot crew. They are one simulation: each ship has her own hull, gas, guns, fires, crew and art. (?ships=3 adds a third.)
