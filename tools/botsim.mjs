@@ -4,12 +4,12 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0, blowout: 0, trace: null, traceEvery: 30, ships: 1, build2: 'classic' };
+const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0, blowout: 0, trace: null, traceEvery: 30, ships: 1, build2: 'classic', botTurns: 0 };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') {
-    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi|bags|giantbag] [--rupture SECONDS (several gasbags: shoot the fore bag flat then, S.5d)] [--blowout SECONDS (S.5f: over-pressure the boiler every SECONDS of flight so it blows and lights a fire beside itself: a fire test)] [--ships N [--build2 NAME] (B.2: N ships in one sky, the bots dealt out round the ships by player.ship; ship 0 is the classic one or --build, the others --build2; the summary is about ship 0, with one line per ship at the end)] [--trace FILE [--trace-every 30] (B0: a per-step dump of the ship, tab separated, for tools/buildsim.mjs --check-frames)]');
+    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi|bags|giantbag] [--rupture SECONDS (several gasbags: shoot the fore bag flat then, S.5d)] [--blowout SECONDS (S.5f: over-pressure the boiler every SECONDS of flight so it blows and lights a fire beside itself: a fire test)] [--ships N [--build2 NAME] (B.2: N ships in one sky, the bots dealt out round the ships by player.ship; ship 0 is the classic one or --build, the others --build2; the summary is about ship 0, with one line per ship at the end)] [--bot-turns 1 (M.3: a bot at the helm may COME ABOUT when the goal has been behind her for a while; off by default so the baseline stands; prints a turns line)] [--trace FILE [--trace-every 30] (B0: a per-step dump of the ship, tab separated, for tools/buildsim.mjs --check-frames)]');
     process.exit(0);
   } else if (a.startsWith('--') && a.slice(2).replace(/-([a-z])/g, (m, c) => c.toUpperCase()) in args) {
     const key = a.slice(2).replace(/-([a-z])/g, (m, c) => c.toUpperCase()); // (--trace-every -> traceEvery)
@@ -79,6 +79,8 @@ if (args.ships > 1) {
   const { loadBuild } = await import(pathToFileURL(path.join(root, '..', 'tools', 'buildload.mjs')).href);
   for (let k = 1; k < args.ships; k++) sim.addShip(await loadBuild(args.build2, BUILDS), { formation: { dx: -250 * k, dalt: -1150 * k } });
 }
+if (args.botTurns) config.SHIP.TURN.BOT_TURNS = true;
+let turns = 0, lastFacing = state.ships[0].pose.f; // (--bot-turns: how often ship 0 came about)
 const runStats = args.build ? createRunStats(state) : null; // (--build: the per-run numbers tools/buildsim.mjs reads)
 state.difficulty = args.difficulty;
 
@@ -208,6 +210,7 @@ for (let step = 1; step <= totalSteps; step++) {
   // Watchdog: a vote that never resolves.
   stuckVoteSteps = state.vote ? stuckVoteSteps + 1 : 0;
   if (stuckVoteSteps > 60 * 60) { errorCount++; errors.set('vote stalled for over a minute', ''); state.vote = null; stuckVoteSteps = 0; }
+  if (state.ships[0].pose.f !== lastFacing) { turns++; lastFacing = state.ships[0].pose.f; }
   if (process.env.TRACE && step % 300 === 0) console.log(`t ${step / 60}s alt ${Math.round(state.ship.alt)} vy ${Math.round(state.ship.vy || 0)} gas ${state.ship.gas.toFixed(0)} holes ${state.gasHoles.length} speed ${state.ship.speed.toFixed(2)} sail ${(state.sailPush || 0).toFixed(2)} dist ${Math.round(state.course.dist)} scrape ${state.course.scraping} hull ${Math.round(state.ship.hull)}`);
   if (step % 3600 === 0) {
     console.log(`min ${step / 3600}: mission ${state.course.lap}, hull ${Math.round(state.ship.hull)}, kills ${killsTotal}, wrecks ${wrecks}`);
@@ -219,6 +222,7 @@ console.log('--- botsim summary ---');
 console.log(`bots ${args.bots} (${args.humans} as humans; ship's mates seen: ${matesMax}), ${args.minutes} min, ${args.difficulty}, map ${args.map || 'mixed'}, seed ${args.seed ?? 'random'}`);
 console.log(`missions completed: ${missions}` + (missionMins.length ? `, minutes each: ${missionMins.map((m) => m.toFixed(1)).join(" ")}, average ${(missionMins.reduce((a, b) => a + b, 0) / missionMins.length).toFixed(1)}` : ""));
 console.log(`wrecks: ${wrecks}`);
+if (args.botTurns) console.log(`turns (COME ABOUT, bot helm): ${turns}`);
 console.log(`average hull: ${hullN ? (hullSum / hullN).toFixed(1) : 'n/a'}`);
 console.log(`kills: ${killsTotal}`);
 const sum = (k) => tally[k] || 0;
