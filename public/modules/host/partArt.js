@@ -13,6 +13,13 @@ const WOOD = '#b98a5a', WOOD_DARK = '#6b4a32', IRON = '#6a6568', BRASS = '#c9a85
 const TEX = { [WOOD]: 'wood', [WOOD_DARK]: 'darkwood', '#5a5558': 'brass', [IRON]: 'brass', '#6d7378': 'brass', [BRASS]: 'brass', [CANVAS]: 'canvas', '#4a4346': 'charcoal' };
 
 // Every picture is drawn in a 100 x 100 box with the ink pen below; `g` is the canvas context, `sprites` may be null.
+// The thrust arrow of an engine picture: from (cx, cy) along `dir` (radians, 0 = forward, -PI/2 = up), a thick red shaft with a head, in the same ink.
+function thrustArrow(g, cx, cy, dir, len, filled) {
+  g.save(); g.translate(cx, cy); g.rotate(dir);
+  filled(RED, () => { g.moveTo(-4, -5); g.lineTo(len - 14, -5); g.lineTo(len - 14, -13); g.lineTo(len + 8, 0); g.lineTo(len - 14, 13); g.lineTo(len - 14, 5); g.lineTo(-4, 5); g.closePath(); });
+  g.restore();
+}
+
 function pen(g) {
   const ink = () => { g.strokeStyle = INK(); g.lineWidth = 3.4; g.lineJoin = 'round'; g.lineCap = 'round'; };
   const filled = (color, path) => { ink(); g.fillStyle = color; g.beginPath(); path(); g.fill(); const t = TEX[color]; if (t) paintPath(g, t, t === 'brass' ? 0.8 : 1); g.stroke(); };
@@ -138,7 +145,7 @@ const DRAW = {
     for (let k = 0; k < 4; k++) { const a = (k * Math.PI) / 4; line([[50 - Math.cos(a) * 22, 58 - Math.sin(a) * 22], [50 + Math.cos(a) * 22, 58 + Math.sin(a) * 22]], 4.4, BRASS); }
     filled('#6fa07a', () => g.arc(50, 58, 17, 0, 7)); filled(BRASS, () => g.arc(50, 58, 6, 0, 7)); // the wheel, green = open
   },
-  engine(g, { filled, line }, sprites) {
+  engine(g, { filled, line }, sprites, o = {}) {
     if (!sprites || !sprites.box(g, 'ship/engine', 4, 26, 92, 40)) {
       filled('#6d7378', () => g.ellipse(46, 48, 40, 20, 0, 0, 7));
       filled(IRON, () => g.arc(84, 48, 8, 0, 7));
@@ -146,6 +153,14 @@ const DRAW = {
     }
     filled('#6b4a32', () => g.ellipse(94, 48, 4, 24, 0, 0, 7)); // the propeller, edge on
     line([[28, 68], [28, 90], [4, 90]], 4); // the steam pipe in
+    thrustArrow(g, 46, 48, o.dir || 0, 36, filled); // the way it pushes
+  },
+  engineSwivel(g, p, sprites, o = {}) {
+    DRAW.engine(g, p, sprites, o);
+    const { filled, line } = p;
+    g.strokeStyle = INK(); g.lineWidth = 3; g.lineCap = 'round'; // the swivel ring round the pod
+    g.beginPath(); g.arc(46, 48, 44, -2.5, -0.7); g.stroke(); g.beginPath(); g.arc(46, 48, 44, 0.7, 2.5); g.stroke();
+    filled(BRASS, () => g.arc(14, 88, 7, 0, 7)); line([[14, 88], [14, 76]], 3.4); // the crank
   },
   sail(g, { filled, line }) {
     line([[22, 12], [60, 90]], 3, IRON); line([[22, 12], [10, 90]], 3, IRON); // the stays
@@ -192,17 +207,17 @@ const DRAW = {
 
 export function createPartPictures({ sprites = null } = {}) {
   const cache = new Map();
-  const make = (id, px) => {
+  const make = (id, px, opts) => {
     const dpr = Math.min(2, (typeof devicePixelRatio === 'number' && devicePixelRatio) || 1);
     const c = document.createElement('canvas');
     c.width = c.height = Math.round(px * dpr);
     const g = c.getContext('2d');
     g.scale((px * dpr) / 100, (px * dpr) / 100);
-    try { (DRAW[id] || DRAW.ballast)(g, pen(g), sprites); } catch (e) { (globalThis.gameErrors = globalThis.gameErrors || []).push('partArt ' + id + ': ' + e.message); }
+    try { (DRAW[id] || DRAW.ballast)(g, pen(g), sprites, opts); } catch (e) { (globalThis.gameErrors = globalThis.gameErrors || []).push('partArt ' + id + ': ' + e.message); }
     return c;
   };
   return {
-    get: (id, px = 72) => { const k = id + ':' + px; if (!cache.has(k)) cache.set(k, make(id, px)); return cache.get(k); },
+    get: (id, px = 72, opts = {}) => { const k = id + ':' + px + ':' + (opts.dir || 0); if (!cache.has(k)) cache.set(k, make(id, px, opts)); return cache.get(k); }, // (opts.dir: the way an engine points, radians)
     refresh: () => cache.clear(),
     ids: Object.keys(DRAW),
   };

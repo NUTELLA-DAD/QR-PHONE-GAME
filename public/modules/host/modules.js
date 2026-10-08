@@ -4,6 +4,7 @@
 import { config } from '../../config.js';
 import { SHIP_LAYOUT, onLayoutChange, all, one } from '../../shipLayout.js';
 import { connScale } from './nav.js';
+import { engineUse } from './shipBuild.js';
 
 const M = config.MODULES;
 const L = SHIP_LAYOUT;
@@ -151,7 +152,10 @@ export function createModules() {
       if (m.kind !== 'pipe' || !m.open) continue;
       if (m.broken) parts.leaks += M.PIPE_LEAK;
       else if (!byName[m.to] || byName[m.to].broken) continue;
-      else if (byName[m.to].kind === 'engine') parts.engines += B.USE_ENGINE * Math.abs(state.ship.speed);
+      else if (byName[m.to].kind === 'engine') {
+        const live = (state.engines || []).find((q) => q.name === m.to), built = L.engines.find((q) => q.name === m.to);
+        parts.engines += engineUse(live ? live.dir : built && built.dir, Math.abs(state.ship.speed)); // (a forward engine: USE_ENGINE x speed; a lift engine burns steam whatever the throttle)
+      }
       else parts.other += B.USE_POWERED;
     }
     for (const l of leaks()) parts.leaks += l.rate;
@@ -160,13 +164,6 @@ export function createModules() {
   const pressureDrain = (state) => {
     const p = drainParts(state);
     return p.other + p.engines + p.leaks;
-  };
-
-  // Top speed allowed by the engines (1 = both working).
-  const engineFactor = (state) => {
-    if (!L.engines.length) return 1; // (no engines at all: the wind alone drives her, see the flight code)
-    const working = L.engines.filter((e) => works(state, e.name)).length;
-    return Math.max(M.NO_ENGINE_SPEED, working / L.engines.length);
   };
 
   const reset = () => {
@@ -194,5 +191,5 @@ export function createModules() {
     return '';
   };
 
-  return { list, byName, boilers, boilerUp, handWheel, hasSteam, works, damage, hitAt, repair, update, pressureDrain, drainParts, leaks, leakRate, engineFactor, reset, status, rebuild };
+  return { list, byName, boilers, boilerUp, handWheel, hasSteam, works, damage, hitAt, repair, update, pressureDrain, drainParts, leaks, leakRate, reset, status, rebuild };
 }

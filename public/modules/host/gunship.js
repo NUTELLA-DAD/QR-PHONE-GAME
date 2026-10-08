@@ -44,6 +44,7 @@ import { SHIP_LAYOUT, onLayoutChange, deckIndex } from '../../shipLayout.js';
 import { inRock, scrollSpeed } from './course.js';
 import { platformBelow } from './nav.js';
 import { pop } from './popups.js';
+import { applyForce } from './forces.js';
 import { shellDmg } from './aim.js';
 import { generateBlueprint, X0, mx, decksOf, segAt, deckYAt, landX, landSeg, landY, boilerX, boilerSeg, boilerY, portPos, firstCannon, anchorPt, surfaces as bpSurfaces, routeStep } from './gunshipBlueprint.js';
 
@@ -411,6 +412,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
         const pull = Math.min(stretch, G.TUG_CAP);
         state.ship.vy = (state.ship.vy || 0) - ny * G.TUG_VY * pull * dt;
         state.ship.speed = clamp(state.ship.speed + nx * G.TUG_SPEED * pull * dt, -0.4, 1);
+        applyForce(state, { x: BOW.x, y: BOW.y, fx: nx * config.FORCES.TETHER_ACC * (pull / 100), fy: ny * config.FORCES.TETHER_ACC * (pull / 100), source: 'tether' }); // (the rope pulls the bow toward her: it drags the nose around, forces.js)
       }
     }
     g.wvx = clamp(g.wvx, -G.MAX_SPEED_ANY, G.MAX_SPEED_ANY); // (a rope yank can't throw her faster than this)

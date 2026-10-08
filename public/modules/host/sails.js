@@ -10,6 +10,7 @@ import { config } from '../../config.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { envIdOf } from './environments.js';
 import { pop } from './popups.js';
+import { applyForce, sailPoint, sailPush } from './forces.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -115,6 +116,9 @@ export function createSails({ state, modules }) {
       sail.pull = slack || sail.torn ? 0 : sail.hoist * S.BONUS * wind * k;
       if (sail.hoist > 0.05 && !sail.torn) k *= S.BONUS_DIM;
       push += sail.pull;
+      // The wind pushes the canvas high up the mast, well above the ship's centre of mass: it tips her nose down (forces.js), a gust much harder, a tall mast more.
+      const lay = SHIP_LAYOUT.sails[sail.i];
+      if (sail.pull > 0 && lay && SHIP_LAYOUT.platforms[lay.d]) applyForce(state, { ...sailPoint(lay, SHIP_LAYOUT.platforms[lay.d].y), fx: sailPush(sail.pull, gust === 2), fy: 0, source: 'sail' });
     }
     state.sailPush += (push - state.sailPush) * Math.min(1, dt * S.SPEED_RATE);
     if (Math.abs(state.sailPush) < 1e-4) state.sailPush = 0;
