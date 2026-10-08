@@ -105,8 +105,8 @@ export function createBridge(sides, opts = {}) {
     for (const x of SIDES) {
       const me = S[x], rv = S[other(x)];
       const ms = me.sim.state, rs = rv.sim.state;
-      const dx = rs.course.dist - ms.course.dist;
-      const dy = ms.ship.alt - rs.ship.alt;
+      const dx = rs.ships[0].pose.x - ms.ships[0].pose.x; // (the ships' poses: pose.js)
+      const dy = rs.ships[0].pose.y - ms.ships[0].pose.y;
       const prev = ms.rival;
       const mid = { x: rv.layout.aimPoint.x + dx, y: rv.layout.aimPoint.y + dy };
       const k = prev && dt > 0 ? 1 / dt : 0;
@@ -135,8 +135,8 @@ export function createBridge(sides, opts = {}) {
       const fs = st(from), ts = st(to);
       if (ts.ship.down > 0 || ts.wreck) continue; // (a wreck is no target)
       const ext = S[to].sim.external;
-      const dx = ts.course.dist - fs.course.dist;
-      const dy = fs.ship.alt - ts.ship.alt;
+      const dx = ts.ships[0].pose.x - fs.ships[0].pose.x;
+      const dy = ts.ships[0].pose.y - fs.ships[0].pose.y;
       const stat = br.stats[from];
       for (let i = fs.shells.length - 1; i >= 0; i--) {
         const sh = fs.shells[i];

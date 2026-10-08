@@ -30,6 +30,8 @@ import { createGoingDown } from './goingDown.js';
 import { createBalance } from './balance.js';
 import { createSails, windSpeed } from './sails.js';
 import { installBags, syncBags, refillBags, stepBags, watchBags } from './gasBags.js';
+import { createMainShip, mainShip } from './ships.js';
+import { toWorld, toShipX } from './pose.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
@@ -138,6 +140,7 @@ export function createSimulation() {
       Object.entries(SHIP_LAYOUT.gunMounts).map(([name, m]) => [name, { bx: m.bx, by: m.by, aim: m.aim, home: m.aim, arc: m.arc, cd: 0, ammo: config.GUNS.START_AMMO, max: config.GUNS.MAX_AMMO, empty: 0, reach: 1 + config.NEST.TIER_BONUS * nestTier((SHIP_LAYOUT.stations.find((s) => s.n === name) || {}).p) }]),
     ),
   };
+  state.ships = [createMainShip(state)]; // (B0: the ships in this sky; ships[0] wraps state.ship, SHIP_LAYOUT and course.dist by reference: ships.js, pose.js)
   installBags(state); // the gasbags side by side: state.bags, and state.ship.gas as their mean (gasBags.js)
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -627,7 +630,7 @@ export function createSimulation() {
     if (sp) {
       sp.t -= dt;
       sp.bob = (sp.bob || 0) + dt;
-      const wx = sp.mx - state.course.dist;
+      const wx = toShipX(mainShip(state), sp.mx);
       const wy = sp.my + Math.sin(sp.bob * 1.3) * 30;
       if (Math.hypot(wx - SHIP_LAYOUT.midPoint.x, wy - (SHIP_LAYOUT.midPoint.y - state.ship.alt)) < PC.SUPPLY_REACH) {
         state.ship.hull = Math.min(100, state.ship.hull + PC.SUPPLY_HULL);
@@ -2010,7 +2013,7 @@ export function createSimulation() {
     gasHoleAt,
     // What the PvP bridge may do to this ship from outside (pvp/bridge.js; ship coordinates, like impact): is a point on the ship,
     // hit it, open a gasbag hole, and where a ship point is in the world (world x along the course, world y downward: the same frame as shells and the map).
-    external: { hitsShip, impact, gasHoleAt, worldPos: (x, y) => ({ x: x + (state.course ? state.course.dist : 0), y: y - state.ship.alt }) },
+    external: { hitsShip, impact, gasHoleAt, worldPos: (x, y) => toWorld(mainShip(state), x, y) },
     interaction,
     modules,
     startDock,

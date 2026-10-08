@@ -3,6 +3,7 @@
 //        node tools/buildsim.mjs --random 50 --seed 1 --minutes 4 --envs skyisles,fungal,storm,aether --bots 6   random legal builds, botsim each, table + which parts dominate
 //        node tools/buildsim.mjs --check-classic    the classic ship must still equal the frozen snapshot
 //        node tools/buildsim.mjs --lint             no module-level captures of derived layout values (they go stale), no hard-coded ship reference points
+//        node tools/buildsim.mjs --lint-pose        (also part of --lint) B0: no NEW single-ship spellings (+course.dist, +-state.ship.alt, scrollSpeed, SHIP_LAYOUT imports, module-level per-ship captures) against tools/fixtures/pose-lint-allow.json
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
 //        node tools/buildsim.mjs --check-validator   S.5: broken builds must FAIL/WARN with the right message (the classic passes clean)
@@ -173,6 +174,66 @@ async function lint(publicDir) {
     });
   }
   console.log(bad ? `FAIL lint: ${bad} problem(s)` : 'PASS lint: no module-level captures of derived layout values, no hard-coded ship reference points');
+  const poseOk = await lintPose(publicDir);
+  return !bad && poseOk;
+}
+
+// ---- B0 lint: the multi-ship rules (MOVEMENT.md "Multi-ship architecture rules", public/modules/host/ships.js) -------------------------------------
+// Counts, per file, the spellings that tie code to ONE ship at a time, and fails when a count goes UP against tools/fixtures/pose-lint-allow.json (a
+// snapshot of today). So the counts can only go down: convert a site to pose.js / a ship handle, then lower the allow-list with
+//   node tools/buildsim.mjs --snapshot-pose-lint --force
+// Categories: dist  world<->ship conversions through course.dist     alt  ... through the ship's altitude     scroll  scrollSpeed (the strip being pulled past)
+//             layoutImport  import { SHIP_LAYOUT / SHIP_BALANCE }     capture  module-level (column 0) value taken from a per-ship helper such as one('helm')
+// (comments are ignored; the pose.js / ships.js files are where the conversions are ALLOWED to live, but they are counted too so nothing hides)
+const POSE_ALLOW = path.join(root, 'tools', 'fixtures', 'pose-lint-allow.json');
+const POSE_RULES = {
+  dist: [/[+-]=?\s*(?:\w+\.)*(?:course|c)\.dist\b/, /\b(?:course|c)\.dist\s*[+-]/],
+  alt: [/[+-]=?\s*(?:\w+\.)*ship\.alt\b/, /\b(?:\w+\.)*ship\.alt\s*[+-]/, /(?:^|[^\w.])alt\s*[+-]/, /[+-]\s*alt\b/],
+  scroll: [/\bscrollSpeed\b/],
+  layoutImport: [/^\s*import\s*\{[^}]*\b(?:SHIP_LAYOUT|SHIP_BALANCE)\b[^}]*\}/],
+  capture: [/^(?:export\s+)?(?:const|let|var)\s+\w+\s*=\s*(?:one|all|hasKind|deckIndex|kindOf|reviveSpot|nearest|isNestDeck|nestTier)\(/],
+};
+function poseCounts(publicDir) {
+  const out = {};
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) { if (!['audio', 'fonts'].includes(e.name)) walk(path.join(dir, e.name)); continue; }
+      if (!e.name.endsWith('.js')) continue;
+      const rel = path.relative(publicDir, path.join(dir, e.name)).replace(/\\/g, '/');
+      const lines = fs.readFileSync(path.join(dir, e.name), 'utf8').replace(/\r/g, '').split('\n');
+      let inBlock = false;
+      for (const raw of lines) {
+        let line = raw;
+        if (inBlock) { if (line.includes('*/')) { inBlock = false; line = line.slice(line.indexOf('*/') + 2); } else continue; }
+        if (/^\s*\/\*/.test(line) && !line.includes('*/')) { inBlock = true; continue; }
+        line = line.replace(/\/\*.*?\*\//g, '').replace(/(^|\s)\/\/.*$/, '$1');
+        for (const [cat, res] of Object.entries(POSE_RULES)) {
+          const n = res.reduce((k, re) => k + (re.test(line) ? 1 : 0), 0) > 0 ? 1 : 0; // (a line counts once per category)
+          if (n) ((out[cat] ??= {})[rel] ??= 0), out[cat][rel]++;
+        }
+      }
+    }
+  };
+  walk(publicDir);
+  return out;
+}
+async function lintPose(publicDir) {
+  const now = poseCounts(publicDir);
+  if (!fs.existsSync(POSE_ALLOW)) { console.log('FAIL lint-pose: ' + path.relative(root, POSE_ALLOW) + ' is missing (node tools/buildsim.mjs --snapshot-pose-lint --force)'); return false; }
+  const allow = JSON.parse(fs.readFileSync(POSE_ALLOW, 'utf8'));
+  let bad = 0, spare = 0;
+  const totals = {};
+  for (const cat of Object.keys(POSE_RULES)) {
+    const files = new Set([...Object.keys(now[cat] || {}), ...Object.keys((allow[cat]) || {})]);
+    for (const file of [...files].sort()) {
+      const n = (now[cat] && now[cat][file]) || 0, a = (allow[cat] && allow[cat][file]) || 0;
+      totals[cat] = (totals[cat] || 0) + n;
+      if (n > a) { bad++; console.log(`FAIL lint-pose ${cat}: ${file} has ${n}, allowed ${a} (new code: use pose.js toWorld/toShip, a ship handle from ships.js, no module-level captures; see MOVEMENT.md)`); }
+      else if (n < a) spare += a - n;
+    }
+  }
+  const summary = Object.entries(totals).map(([k, v]) => k + ' ' + v).join(', ');
+  console.log(bad ? `FAIL lint-pose: ${bad} file(s) over the allow-list` : `PASS lint-pose: no new single-ship spellings (now: ${summary}${spare ? `; ${spare} below the allow-list, lower it with --snapshot-pose-lint --force` : ''})`);
   return !bad;
 }
 
@@ -1053,6 +1114,12 @@ if (mode === '--snapshot-classic') {
   process.exit((await buildMode(argv[1] || 'classic')) ? 0 : 1);
 } else if (mode === '--random') {
   process.exit((await randomMode()) ? 0 : 1);
+} else if (mode === '--snapshot-pose-lint') {
+  if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/pose-lint-allow.json from the current code (do this only when the counts went DOWN).'); process.exit(2); }
+  fs.writeFileSync(POSE_ALLOW, JSON.stringify(poseCounts(path.join(root, 'public')), null, 1) + '\n');
+  console.log('wrote ' + POSE_ALLOW);
+} else if (mode === '--lint-pose') {
+  process.exit((await lintPose(path.join(root, 'public'))) ? 0 : 1);
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {

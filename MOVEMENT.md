@@ -52,6 +52,23 @@
 | M.5 | Facing-aware pilot/director/spawns, route turns, camera polish | golden + a turns-per-mission stat |
 | M.6 | Multi-ship (Option B) + the gunship on `pose.js` + boarding between moving ships | arena check, mirror match 45-55% |
 
+## Multi-ship architecture rules (B0/M.0, in force for ALL new code)
+The owner wants more airships to always be addable (Option B: one simulation, many ships). M.0 lays the foundations without changing behaviour:
+- **`public/modules/host/ships.js`:** `state.ships = [ship0]`. `ship0 = { id: 'player', team, layout, state, world, pose }` wraps today's singletons BY REFERENCE (`ship0.state === state.ship`, `ship0.layout === SHIP_LAYOUT`). Accessors: `mainShip(state)`, `shipOf(state, player)` (`player.ship` id; none = main ship), `eachShip(state, fn)`.
+- **`public/modules/host/pose.js`:** `createPose(ship)` / `poseOf(ship)` give `{ x, y, vx, vy, f, pitch, turn }` as getters/setters over `course.dist`, `-state.ship.alt`, `scrollSpeed`, `state.ship.pitch` (`f` fixed +1). Converters take a ship handle: `toWorld`, `toShip` (and `...X` / `...Y` forms), `aimToWorld`, `aimToShip`. With `f = +1` the arithmetic is exactly the old inline arithmetic.
+- **`shipLayout.js` helpers** (`all one kindOf is nearest hasKind deckIndex reviveSpot isNestDeck nestTier isNestStation`) take an optional LAYOUT as the last argument (default: the global). Never pass them bare to `.map()` (the index would be read as the layout).
+
+**The rules:**
+1. No new module-level captures of per-ship data. Build tables in a factory that takes the ship, or recompute in a function.
+2. New code takes a ship handle (or uses `shipOf` / `mainShip`). It does not add `import { SHIP_LAYOUT }`.
+3. World <-> ship conversions only through `pose.js`. No new `x + course.dist`, `y - state.ship.alt`, `scrollSpeed`. Ship space is never mirrored; only the boundary (rock tests, hits, guns, lamps, camera, art) uses `f`.
+4. Per-ship things (layout, modules, bags, balance, GUNS, fires/holes, nav tables, art bake) live under a ship object as they are migrated (B1+).
+5. Keep the update order and `Math.random` order when routing something through these.
+
+**Enforced by** `node tools/buildsim.mjs --lint` (its `--lint-pose` half): per-file counts of the spellings above are compared with `tools/fixtures/pose-lint-allow.json`, so they can only go down. After converting call sites, lower the list with `--snapshot-pose-lint --force`.
+
+**Gates added in B0:** `botsim --trace FILE` (per-step dump), `buildsim --check-golden` (behaviour bands against `tools/fixtures/golden.json`; re-capture with `--snapshot-golden --force` whenever a planned change legitimately moves the numbers), `buildsim --check-frames`, `buildsim --check-pose`.
+
 ## Riskiest pieces
 - **`course.js` scroll assumptions:** `altBounds`, `warnAhead`, `collide` "ahead", `mapCollide`, reset. Each gets an explicit `f` factor.
 - **Enemy spawning relative to the ship** (~48 lines): spawn at `toWorld(ahead)`, choosing sides by world velocity.
