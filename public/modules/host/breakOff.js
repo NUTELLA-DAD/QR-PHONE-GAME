@@ -189,12 +189,14 @@ function limbCut(L, spec) {
   return best ? [best] : [];
 }
 
-// Where a named station or engine stands (ship coordinates), or null.
-function anchorOf(L, name) {
+// The cut that takes a NAMED station, gun or engine off the ship (the gates, botsim --breakoff): a small deck goes whole, else the stretch of its deck from the nearer end past it.
+function partCut(L, name, len) {
   const s = L.stations.find((o) => o.n === name) || L.engines.find((o) => o.name === name);
-  if (!s) return null;
-  const q = L.platforms[s.d];
-  return q ? { x: s.x, y: q.y - 40 } : null;
+  const q = s && L.platforms[s.d];
+  if (!q) return null;
+  if (WHOLE_ROWS.includes(rowOf(q))) return { id: q.id, a: q.x0, b: q.x1, dist: 0 };
+  const reach = Math.max(80, (len || 0) / 2);
+  return s.x - q.x0 <= q.x1 - s.x ? { id: q.id, a: q.x0, b: Math.min(q.x1, s.x + reach), dist: 0 } : { id: q.id, a: Math.max(q.x0, s.x - reach), b: q.x1, dist: 0 };
 }
 
 const scarFor = (cut, platforms) => {
@@ -238,9 +240,9 @@ export function planBreak(parts, spec, rng = Math.random) {
     L0.gasbags.forEach((b) => { if (bagDist(b, spec.x, spec.y) <= R * BO().BAY.BAG_REACH) bagsGone.push(b); });
   } else if (spec.kind === 'limb') cuts = limbCut(L0, spec);
   else if (spec.kind === 'part') {
-    const at = anchorOf(L0, spec.name);
-    if (!at) return no('no such part: ' + spec.name);
-    cuts = limbCut(L0, { x: at.x, y: at.y, reach: spec.reach ?? 160, len: spec.len });
+    const cut = partCut(L0, spec.name, spec.len);
+    if (!cut) return no('no such part: ' + spec.name);
+    cuts = [cut];
   } else if (spec.kind === 'bag') {
     const b = L0.gasbags[spec.index];
     if (!b) return no('no such bag');

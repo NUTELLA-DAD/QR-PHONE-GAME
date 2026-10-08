@@ -410,6 +410,32 @@ const multiParts = await loadBuild('multi', BUILDS);
   report(JSON.stringify(o2.layout.parts) === classic && t2.run.lost.length === 0 && o2.layout.engines.length === 2 && o2.buildId === 'classic', 'a new voyage (the run ends / restart) starts her whole again');
 }
 
+{
+  // the Voyage's own ship, the Sparrow (what the browser game starts with): a limb breaks, the dock sells the rebuild (and no part card), she is the Sparrow again
+  restoreConfig();
+  const { sim, st, ours } = boot({ startBuild: 'sparrow', bots: 6 });
+  step(sim, secs(6));
+  const sparrowJson = JSON.stringify(BUILDS.sparrow);
+  const r1 = ours.sim.breakOff({ kind: 'part', name: 'Fore Engine' }, { force: true });
+  step(sim, secs(BOC.GRACE + 1));
+  const r2 = ours.sim.breakOff({ kind: 'part', name: 'Tail Gun' }, { force: true });
+  step(sim, secs(8));
+  report(!!r1 && !!r2 && st.run.lost.length === 2 && ours.layout.engines.length === 1 && !ours.layout.stations.some((s) => s.n === 'Tail Gun') && errors.length === 0, `the Sparrow loses her Fore Engine and her Tail Gun in flight (${r1 && r1.plan.summary.slice(0, 40)} / ${r2 && r2.plan.summary.slice(0, 40)}) and flies on for 8 s with 0 errors`);
+  st.players.h = { id: 'h', name: 'Pat', species: 'fox', color: '#fff', x: 300, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true, ko: 0, lock: null };
+  for (const p of Object.values(st.players)) if (p.bot) p.connected = false;
+  st.run.salvage = 2000;
+  sim.startDock();
+  const card = st.vote && st.vote.options.find((o) => o.rebuild === 0);
+  report(!!card && !st.vote.options.some((o) => o.kind === 'part') && card.cost === st.run.lost[0].price + st.run.lost[1].price, `the dock sells the Sparrow's REBUILD ("${card && card.name}", ${card && card.cost}) and no part card`);
+  if (card) {
+    st.players.h.vote = st.vote.options.indexOf(card);
+    step(sim, secs(12));
+    report(st.run.lost.length === 0 && JSON.stringify(ours.layout.parts) === sparrowJson && ours.buildId === 'sparrow' && JSON.stringify(st.run.build) === sparrowJson, 'bought: she is exactly the Sparrow again (parts, build id, the voyage\'s build)');
+  }
+  step(sim, secs(4));
+  report(errors.length === 0, 'and flies on');
+}
+
 // ---------------------------------------------------------------- (e) the gunship and a second ship; a ship facing left
 {
   restoreConfig();
@@ -425,8 +451,27 @@ const multiParts = await loadBuild('multi', BUILDS);
     const eng0 = hs.layout.engines.length, deck0 = hs.layout.platforms.length, guns0 = hs.layout.stations.filter((s) => s.kind === 'gun').length;
     const r = hs.sim.breakOff({ kind: 'part', name: hs.layout.engines[0].name }, { force: true });
     report(!!r && hs.layout.engines.length === eng0 - 1 && hs.lost && hs.lost.length === 1, `a part of the gunship breaks off (her ${hs.layout.engines[0] ? '' : 'engine'} lost: ${r ? r.plan.summary.slice(0, 60) : 'nothing'}); her ledger has it`);
-    const r2 = hs.sim.breakOff({ kind: 'blast', x: hs.layout.midPoint.x, y: hs.layout.platforms[0].y, r: 260 }, { force: true });
+    // a gun that broke off her while her other guns fire (a broadside is due every step): her port for it is down, nothing reads the missing gun
+    const cannons = g.ports.map((pt, i) => (pt.kind === 'cannon' ? i : -1)).filter((i) => i >= 0);
+    if (cannons.length >= 2) {
+      const gone = g.info.guns[cannons[cannons.length - 1]];
+      hs.sim.breakOff({ kind: 'part', name: gone, reach: 100, len: 100 }, { force: true });
+      const other = g.info.guns[cannons[0]]; // (her gunner fires the broadside - with the guns gone from under him a stand-in record is enough: the balls are made at her live ports)
+      try { hs.ai.shoot({ id: 'x' }, { cd: 0 }, other); } catch (e) { errors.push(String(e && e.stack).split('\n').slice(0, 3).join('|')); } // (her other gun fires the broadside: the port of the gun that broke off is down, and nothing reads the missing gun)
+      step(sim, secs(12), () => { g.fireOk = true; });
+      report(errors.length === 0 && !(gone in hs.ctx.GUNS), `a gun broke off the gunship while her broadside was due every step: 12 s, 0 errors${errors.length ? ' ' + errors[0] : ''}`);
+    }
+    // every one of her stations and engines, one after another (her captain, her gunners and her crew must cope with a ship that loses her guns, her helm, her boiler ...)
+    const each = [...hs.layout.stations.map((s) => s.n), ...hs.layout.engines.map((e) => e.name)];
+    let lostEach = 0;
+    for (const n of each) {
+      if (!st.ships.includes(hs)) break; // (she may be sunk meanwhile)
+      if (hs.sim.breakOff({ kind: 'part', name: n }, { force: true })) lostEach++;
+      step(sim, secs(4));
+    }
+    const r2 = st.ships.includes(hs) ? hs.sim.breakOff({ kind: 'blast', x: hs.layout.midPoint.x, y: hs.layout.platforms[0].y, r: 260 }, { force: true }) : null; // (...and then a blast through what is left of her)
     step(sim, secs(25));
+    report(errors.length === 0, `she lost her stations one after another (${lostEach} break-offs: guns, helm, boiler, coal ...) and the director, her captain and her crew coped: 0 errors${errors.length ? ' ' + errors[0] : ''}`);
     report(errors.length === 0 && hs.layout.platforms.length >= 1 && finiteDeep(hs.state) && finiteDeep(hs.pose), `she keeps flying and fighting with what is left (${hs.layout.platforms.length} decks of ${deck0}, ${hs.layout.stations.filter((s) => s.kind === 'gun').length} guns of ${guns0}; a blast took ${r2 ? r2.plan.names.length : 0} more): 25 s with 0 errors${errors.length ? ' ' + errors[0] : ''}`);
   }
 }
@@ -448,6 +493,15 @@ const multiParts = await loadBuild('multi', BUILDS);
   report(B.layout.engines.length === 2 && B.lost.length === 0 && JSON.stringify(B.layout.parts) === JSON.stringify(BUILDS.classic), 'a ship rebuilt after her wreck is whole again');
   step(sim, secs(5));
   report(errors.length === 0, 'and flies on (0 errors)');
+  // Versus: a team ship that lost parts in a round starts the next round whole (the match fits the shelf's build and refits her: refit() forgets what broke off)
+  B.team = 'blue';
+  B.sim.breakOff({ kind: 'part', name: 'Aft Engine' }, { force: true });
+  const lostIn = B.lost.length;
+  B.layout.applyBuild(BUILDS.classic);
+  B.sim.refit();
+  report(lostIn === 1 && B.lost.length === 0 && B.ctx.liftDeficit === 0 && B.layout.engines.length === 2, 'a team ship that lost a part in a Versus round: the next round\'s refit forgets it');
+  step(sim, secs(3));
+  report(errors.length === 0, 'and she flies on');
 }
 {
   // a ship facing LEFT: breaking off her aft end does not make her hull jump
