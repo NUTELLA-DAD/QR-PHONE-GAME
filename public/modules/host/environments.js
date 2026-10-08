@@ -9,13 +9,11 @@
 //   wind  - sideways shove (px/s) during a blizzard gust               -> applied here to course.dist
 //   heat/burn/blizzard/smoke - 0..1 amounts for the art and the TV
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, all, deckIndex, isNestDeck } from '../../shipLayout.js';
 import { floorBelow } from './maps.js';
 import { createDeepEnv } from './envDeep.js'; // Fungal Depths (spores, clogged engines) and The Aether (low gravity, oxygen)
 import { createStormSea } from './envStormSea.js'; // Storm Front + Sunken Sea rules
+import { mainShip } from './ships.js';
 
-const P = SHIP_LAYOUT.platforms;
-const IDX = (id) => deckIndex(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -60,6 +58,9 @@ export const favour = (state, kind) => {
 };
 
 export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) {
+  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const P = layout.platforms;
+  const IDX = (id) => layout.deckIndex(id);
   state.icing = []; // ice crusts: { area: 'gasbag'|'topdeck'|'gun', gun?, x, d, lvl, prog }
   state.ice = { gasbag: 0, topdeck: 0, guns: 0 }; // how iced each area is (0-1)
   state.env = { id: 'skyisles', sink: 0, lift: 0, wind: 0, blizzard: 0, smoke: 0, heat: 0, burn: 0, lavaY: null, thermalAt: 0, gravity: 1, engine: 1, accel: 1, o2: 1, lack: 0, drag: 0, gale: 0 };
@@ -68,7 +69,7 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) 
   const CAT = IDX('catwalk');
   const LOWER = IDX('lower');
   // Guns out in the open (on the nest or the top deck) are the ones that ice up.
-  const gunSpots = () => all('gun').filter((s) => isNestDeck(s.p) || s.p === 'catwalk').map((s) => ({ gun: s.n, d: s.d, x: s.x }));
+  const gunSpots = () => layout.all('gun').filter((s) => layout.isNestDeck(s.p) || s.p === 'catwalk').map((s) => ({ gun: s.n, d: s.d, x: s.x }));
   let seenMap = null;
   let blizzT = 0;
   let blizzLeft = 0;
@@ -181,8 +182,8 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull }) 
     let heat = 0;
     let burn = 0;
     if (flying && !state.ship.down) {
-      const keel = (c.refY != null ? c.refY : SHIP_LAYOUT.refPoint.y - state.ship.alt) + L.KEEL;
-      const mx = c.dist + SHIP_LAYOUT.refPoint.x;
+      const keel = (c.refY != null ? c.refY : layout.refPoint.y - state.ship.alt) + L.KEEL;
+      const mx = c.dist + layout.refPoint.x;
       // Is there lava under the hull? (a column whose floor is below the lava surface)
       let over = false;
       for (const dx of [-500, -150, 150, 500]) if (floorBelow(c.map, mx + dx, Math.min(keel, E.lavaY - 1)) > E.lavaY + 1) over = true;

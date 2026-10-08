@@ -2,16 +2,17 @@
 // wrecks, plus the crew's shells hitting them. Anything that touches the ship crashes into it.
 import { firePace, spawnPace, crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { keepClear, inRock, groundAt, ceilAt, scrollSpeed } from './course.js';
 import { pop } from './popups.js';
 import { shellDmg, dazzled } from './aim.js';
 import { flyPlane, smoke, shootDown, updateChutes, shoveShip, bumpShip, bounceStep } from './planes.js';
+import { mainShip } from './ships.js';
 
-const B = SHIP_LAYOUT.bounds;
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHelm, credit }) {
+  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const B = layout.bounds;
   state.mines = [];
   state.wrecks = [];
   state.ev = { t: 0, warn: 0, warnText: '' };
@@ -37,7 +38,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
   // ahead, but it can't turn on a sixpence: misjudge a mountain and it crashes.
   const F = config.ENEMY;
   const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
-  const shipMid = () => ({ x: SHIP_LAYOUT.aimPoint.x, y: SHIP_LAYOUT.aimPoint.y - state.ship.alt });
+  const shipMid = () => ({ x: layout.aimPoint.x, y: layout.aimPoint.y - state.ship.alt });
   const nearShip = (x, y, pad) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - state.ship.alt - pad && y < B.y1 - state.ship.alt + pad;
 
   const startRun = (e) => {

@@ -2,15 +2,16 @@
 // Aim with the stick and HOLD to charge (it drinks steam); let go to fire a huge lightning bolt
 // that hits everything along its path. The longer the charge, the harder it hits.
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { targets } from './aim.js';
 import { pop } from './popups.js';
+import { mainShip } from './ships.js';
 
 const C = config.COIL;
-const M = SHIP_LAYOUT.coil;
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 export function createCoil({ state, puff, credit }) {
+  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const M = layout.coil || { x: 0, y: 0, aim: -Math.PI / 2, arc: 0 }; // (a ship with no coil emitter: nobody can man it, so these are never used)
   const coil = (state.coil = { aim: M.aim, charge: 0, cd: 0, bolt: null, charging: false });
 
   // World position of the emitter.

@@ -10,7 +10,7 @@
 // World y grows downward; the ship is drawn shifted up by its altitude (alt).
 import { firePace } from './crewscale.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT } from '../../shipLayout.js';
+import { mainShip } from './ships.js';
 import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
 import { pickEnvironment } from './environments.js';
@@ -22,18 +22,16 @@ const K = config.COURSE;
 const TOP = -1400; // where ceilings start (far above the view)
 
 // Points around the ship's outline (ship coordinates) used to test for terrain contact (from the build; the lowest and
-// highest of them are SHIP_LAYOUT.bottomY / topY). REF = where the ship's middle is (world x = course.dist + REF.x,
-// world y = REF.y - alt); AIM = where enemy fire is aimed. All are updated in place when a new build is applied.
-export const SHIP_SAMPLES = SHIP_LAYOUT.samples;
-const REF = SHIP_LAYOUT.refPoint;
-const AIM = SHIP_LAYOUT.aimPoint;
+// highest of them are layout.bottomY / topY). REF = where the ship's middle is (world x = course.dist + REF.x,
+// world y = REF.y - alt); AIM = where enemy fire is aimed. All are the layout's own fields (layout.samples / refPoint / aimPoint), updated in place when a
+// new build is applied; each function below takes them from mainShip(state).layout (B1: ship 0; B2 passes the ship).
 const MARGIN = 25;
 
 // A point on the ship (ship coordinates), tipped by the ship's current pitch.
 export function tilt(state, x, y) {
   const a = state.ship.pitch || 0;
   if (!a) return [x, y];
-  const [px, py] = config.SHIP.TILT_PIVOT || SHIP_LAYOUT.tiltPivot;
+  const [px, py] = config.SHIP.TILT_PIVOT || mainShip(state).layout.tiltPivot;
   const c = Math.cos(a);
   const s = Math.sin(a);
   return [px + (x - px) * c - (y - py) * s, py + (x - px) * s + (y - py) * c];
@@ -112,6 +110,7 @@ function ceilFlat(course, cx) {
 // Returns { min, max } (min > max means there's no way through).
 export function altWindow(state, ahead = 2) {
   const course = state.course;
+  const SHIP_SAMPLES = mainShip(state).layout.samples;
   // Even when hovering, look a little way ahead in the direction we're facing.
   const sp = scrollSpeed(state);
   const v = sp >= 0 ? Math.max(sp, 180) : Math.min(sp, -120);
@@ -145,7 +144,7 @@ export function pilotPlan(state, ahead, cruise) {
     const [lo0, hi0] = range(altWindow(state, 0));
     return { target: fit(lo0, hi0, alt), speed: 0.12 };
   }
-  const target = fit(lo, hi, course ? elevAt(course, course.dist + REF.x) : 0);
+  const target = fit(lo, hi, course ? elevAt(course, course.dist + mainShip(state).layout.refPoint.x) : 0);
   return { target, speed: Math.abs(target - alt) > 120 ? 0.04 : cruise };
 }
 
@@ -154,6 +153,7 @@ export function pilotPlan(state, ahead, cruise) {
 function rivalPlan(state) {
   const R = state.rival;
   const P = config.PVP;
+  const AIM = mainShip(state).layout.aimPoint;
   const gap = R.mid.x - AIM.x; // along the sky, + = she is ahead of us
   const err = gap - (gap < 0 ? -1 : 1) * P.STANDOFF; // + = too far (or too close) to close the range by going on
   const want = state.ship.alt - R.dy + (gap < 0 ? -1 : 1) * P.ALT_EDGE; // her height: the rear ship (rival ahead) holds ALT_EDGE above her, the lead ship ALT_EDGE below (the bow and belly guns of one, the stern and dorsal guns of the other, bear)
@@ -165,6 +165,7 @@ function rivalPlan(state) {
 // it, and drive toward it (forward, backward, or hover when the way goes straight up/down).
 function mapPlan(state, cruise) {
   const course = state.course;
+  const REF = mainShip(state).layout.refPoint;
   const sx = course.dist + REF.x;
   const sy = REF.y - state.ship.alt;
   // Unsticking (the ship made no headway for a while): look further along the route, and for the
@@ -262,6 +263,10 @@ function rng(seed) {
 
 // onMarker(marker) is called when the ship passes the beacon or arrives home.
 export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, firstMission }) {
+  const layout = mainShip(state).layout; // (B1: the ship this course is flown by; B2 makes it one per ship)
+  const SHIP_SAMPLES = layout.samples;
+  const REF = layout.refPoint;
+  const AIM = layout.aimPoint;
   state.rockets = [];
   const hitsShipNow = (x, y) => hitsShip && hitsShip(x, y + state.ship.alt);
   const A = config.SHIP.ALT_RANGE - 30; // the most altitude we'll ever ask the helm for
@@ -303,8 +308,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   const nearMarker = (x0, x1) => course.markers.find((m) => x1 > m.cx - K.MARKER_CLEAR && x0 < m.cx + K.MARKER_CLEAR);
 
   // Altitude the ship must be above to clear ground g / below to clear ceiling c.
-  const groundFor = (needAlt) => SHIP_LAYOUT.bottomY + MARGIN - needAlt; // need alt > needAlt
-  const ceilFor = (maxAlt) => SHIP_LAYOUT.topY - MARGIN - maxAlt; // need alt < maxAlt
+  const groundFor = (needAlt) => layout.bottomY + MARGIN - needAlt; // need alt > needAlt
+  const ceilFor = (maxAlt) => layout.topY - MARGIN - maxAlt; // need alt < maxAlt
 
   const addTurrets = (f, n) => {
     for (let i = 0; i < n; i++) {
@@ -343,7 +348,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   const makeFactory = (d) => {
     const width = r(2600, 3200);
     const f = { type: 'factory', ground: K.GROUND - r(60, 140), rough: false, width, blocks: [] };
-    const baseNeed = SHIP_LAYOUT.bottomY + MARGIN - f.ground;
+    const baseNeed = layout.bottomY + MARGIN - f.ground;
     let x = width * 0.28;
     const end = width * 0.72;
     let sheds = 1; // start with a stack
@@ -822,7 +827,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       course.stuckT = 0;
       course.unstick = config.MAPS.UNSTICK_TIME;
       course.unstuck = (course.unstuck || 0) + 1;
-      if (!SHIP_LAYOUT.stations.some((s) => s.kind === 'helm')) course.tugNow = true; // (nobody can steer her off the rock: a drifting ship with no helm is not left there)
+      if (!layout.hasKind('helm')) course.tugNow = true; // (nobody can steer her off the rock: a drifting ship with no helm is not left there)
     }
     // Lost for good: wedged where the ship does not fit (a trench or slot after sinking) and not getting out by itself -
     // a tug hauls it to the nearest open water of sky, so one bad moment is never the end of the run.
@@ -988,7 +993,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   function startMission(n, opts = {}) {
     const MP = config.MAPS;
     const kind = MP.FORCE_KIND || opts.kind || MP.KINDS[(n - 1) % MP.KINDS.length];
-    const map = makeMap(kind, n, course.rand, opts.lengthMul || 1);
+    const map = makeMap(kind, n, course.rand, opts.lengthMul || 1, layout);
     map.environment = pickEnvironment(opts.environment); // 'skyisles' (the original look and rules), 'frost', 'ember'...
     const d = Math.min(1, (n - 1) / 4);
     Object.assign(course, {

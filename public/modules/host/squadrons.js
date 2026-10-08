@@ -9,19 +9,19 @@
 //                    boarders down grapple lines. Shooting it down patches your ship up.
 import { spawnPace, firePace, crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
-import { SHIP_LAYOUT, kindOf, deckIndex, isNestDeck } from '../../shipLayout.js';
 import { keepClear, inRock, scrollSpeed } from './course.js';
 import { shellDmg, dazzled } from './aim.js';
-import { SHIP_SAMPLES } from './course.js';
 import { pop } from './popups.js';
 import { bagNearX } from './shipBuild.js';
 import { flyPlane, smoke, shootDown, angDiff, shoveShip, bumpShip, bounceStep } from './planes.js';
+import { mainShip } from './ships.js';
 
 const W = config.WAVES;
-const B = SHIP_LAYOUT.bounds;
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, credit, gnaw, damageHull }) {
+  const layout = mainShip(state).layout; // (B1: the ship this system belongs to; B2 makes it one per ship)
+  const B = layout.bounds;
   state.bats = [];
   state.bombers = [];
   state.enemyBombs = [];
@@ -48,7 +48,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     const n = count || Math.max(1, Math.round(Math.min(W.BATS_MAX, W.BATS_BASE + (lap() - 1) * W.BATS_PER_LAP + Math.floor(crew() / 4)) * crewMul(state, 'count')));
     const fromRight = Math.random() < 0.65;
     for (let i = 0; i < n; i++) {
-      const [sx, sy] = SHIP_SAMPLES[(Math.random() * SHIP_SAMPLES.length) | 0];
+      const [sx, sy] = layout.samples[(Math.random() * layout.samples.length) | 0];
       state.bats.push({
         x: from ? from.x + rand(-40, 40) : fromRight ? B.x1 + 1500 + i * 70 : B.x0 - 1500 - i * 70,
         y: from ? from.y + rand(-30, 30) : rand(-300, 1000) - state.ship.alt,
@@ -115,7 +115,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   };
 
   const D = config.DOGFIGHT;
-  const shipMid = () => ({ x: SHIP_LAYOUT.aimPoint.x, y: SHIP_LAYOUT.aimPoint.y - state.ship.alt });
+  const shipMid = () => ({ x: layout.aimPoint.x, y: layout.aimPoint.y - state.ship.alt });
   const nearShip = (x, y, pad) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - state.ship.alt - pad && y < B.y1 - state.ship.alt + pad;
   const spawnStrafers = () => {
     const n = Math.max(1, Math.round(Math.min(D.MAX, D.COUNT + (lap() - 1) * D.PER_LAP) * crewMul(state, 'count')));
@@ -222,17 +222,17 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       b.y = keepClear(state, b.x, b.y, 30);
       if (!b.dead && !state.ship.down && touches(b.x, b.y, 14)) latchOn(b);
     }
-    state.bats = state.bats.filter((b) => !b.dead && b.hp > 0 && Math.abs(b.x - SHIP_LAYOUT.refPoint.x) < 6000 && !(b.leaving && b.age > W.BAT_LIFE + 4));
+    state.bats = state.bats.filter((b) => !b.dead && b.hp > 0 && Math.abs(b.x - layout.refPoint.x) < 6000 && !(b.leaving && b.age > W.BAT_LIFE + 4));
   };
 
   // A bat that reached the ship picks a landing spot (ship coordinates: lx, ls) and crawls to it:
   // the gasbag's underside (above the catwalk) or the nearest deck floor.
   const latchOn = (b) => {
-    const P = SHIP_LAYOUT.platforms;
-    const cat = deckIndex('catwalk');
+    const P = layout.platforms;
+    const cat = layout.deckIndex('catwalk');
     const sx = b.x;
     const sy = b.y + state.ship.alt;
-    const BG = SHIP_LAYOUT.gasbags; // (the bag it grazed: the nearest of the gasbags side by side)
+    const BG = layout.gasbags; // (the bag it grazed: the nearest of the gasbags side by side)
     const GB = BG[Math.max(0, bagNearX(BG, sx))];
     // (a little generous: a bat grazing the envelope's skin counts as hitting the gasbag)
     const hitGas = ((sx - GB.cx) / (GB.rx * 1.15)) ** 2 + ((sy - GB.cy) / (GB.ry * 1.2)) ** 2 < 1 && sy < 455;
@@ -250,7 +250,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     } else {
       let best = -1;
       P.forEach((p, i) => {
-        if (isNestDeck(p.id) || p.id === 'pod' || p.id === 'hangar' || p.id === 'lamp') return;
+        if (layout.isNestDeck(p.id) || p.id === 'pod' || p.id === 'hangar' || p.id === 'lamp') return;
         if (best < 0 || Math.abs(p.y - sy) < Math.abs(P[best].y - sy)) best = i;
       });
       b.kind = 'deck';
@@ -311,12 +311,12 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       bounceStep(p, dt);
       bumpShip(state, p, { hitsShip, impact, puff, hw: 150, hh: 25, size: config.BUMP.BOMBER_SIZE, hp: 'hp' });
       // Bombs away while over the ship.
-      if (Math.abs(p.x - SHIP_LAYOUT.refPoint.x) < 950 && (p.dropCd -= dt) <= 0 && !state.ship.down) {
+      if (Math.abs(p.x - layout.refPoint.x) < 950 && (p.dropCd -= dt) <= 0 && !state.ship.down) {
         p.dropCd = W.BOMB_EVERY / crewMul(state, 'fire');
         state.enemyBombs.push({ x: p.x, y: p.y + 30, vx: p.vx * 0.4, vy: 40, hp: 1 });
       }
     }
-    state.bombers = state.bombers.filter((p) => p.hp > 0 && Math.abs(p.x - SHIP_LAYOUT.refPoint.x) < 3500);
+    state.bombers = state.bombers.filter((p) => p.hp > 0 && Math.abs(p.x - layout.refPoint.x) < 3500);
     for (const b of state.enemyBombs) {
       b.vy += 420 * dt;
       b.x += b.vx * dt;
@@ -372,7 +372,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         if (p.shots > 0 && p.gunCd <= 0 && Math.abs(off) < 0.35 && dist < D.FIRE_RANGE && !state.ship.down) {
           p.shots -= 1;
           p.gunCd = D.SHOT_EVERY / crewMul(state, 'fire');
-          const helm = Object.values(state.players).find((q) => kindOf(q.lock) === 'helm');
+          const helm = Object.values(state.players).find((q) => layout.kindOf(q.lock) === 'helm');
           const evading = helm && (Math.abs(helm.jy) > 0.2 || Math.abs(state.ship.speed) > 0.3);
           const miss = Math.random() < 0.25 || (evading && Math.random() < 0.4) || dazzled(p);
           const dir = p.heading + Math.max(-0.15, Math.min(0.15, off)) + (miss ? (Math.random() < 0.5 ? -1 : 1) * 0.3 : rand(-0.05, 0.05));
@@ -419,7 +419,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         warn('A DOGFIGHTER RAMMED US!', 2);
       }
     }
-    state.strafers = state.strafers.filter((p) => p.hp > 0 && Math.abs(p.x - SHIP_LAYOUT.refPoint.x) < 7000);
+    state.strafers = state.strafers.filter((p) => p.hp > 0 && Math.abs(p.x - layout.refPoint.x) < 7000);
   };
 
   const updateBoss = (dt) => {
@@ -450,7 +450,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       const tx = rand(300, 1400);
       const ty = rand(200, 800) - state.ship.alt;
       const d = Math.hypot(tx - gx, ty - gy) || 1;
-      const helm = Object.values(state.players).find((q) => kindOf(q.lock) === 'helm');
+      const helm = Object.values(state.players).find((q) => layout.kindOf(q.lock) === 'helm');
       const miss = helm && Math.abs(helm.jy) > 0.3 && Math.random() < 0.35;
       if (z.kind === 'iron' && Math.random() < 0.5) {
         // The Iron Dreadnought's turrets also fire homing rockets.
@@ -467,7 +467,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     // Boarding lines.
     if ((z.boardCd -= dt) <= 0 && !state.boarders.length) {
       z.boardCd = W.BOSS_BOARD_EVERY;
-      dropSquad(SHIP_LAYOUT.boarderEntryPoints[SHIP_LAYOUT.boarderEntryPoints.length - 1].x, -200 - state.ship.alt);
+      dropSquad(layout.boarderEntryPoints[layout.boarderEntryPoints.length - 1].x, -200 - state.ship.alt);
       warn('BOARDING LINES! RAIDERS INCOMING!');
     }
   };
