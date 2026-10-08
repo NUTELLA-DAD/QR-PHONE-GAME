@@ -193,6 +193,7 @@ Phase S runs after Phase 1, alongside Phase 2. No package edits `simulation.js` 
 | S.3 | Station kinds and multiple instances (boilers, engines, lamps, nests) | M | all name lookups go through `one()/all()`; classic botsim identical |
 | S.4 | Art per part + static bake | M | ship draw time ≥ 40% faster |
 | S.5 | Building simulator (validator, dev page, batch) | M | classic and sparrow pass; 50 random builds run with 0 errors |
+| S.5b | **Blueprint draw/erase** (owner request): draw a line = a deck, drag along a deck = longer, erase = smaller; new decks get auto ladders; hull and gauges follow. Built as pure ops `drawDeck` / `erase`, reused by S.6b | M | works on the dev page; classic unchanged; edited builds validate and fly |
 | S.6a | Catalogue v1 + Sparrow + `state.build` effects + dock offers / slot vote | L | voyagesim Normal no worse than today |
 | S.6b | Shipwright UI (TV blueprint, gauges, slot pins, phone cards) | M | the cold-player test passes |
 | S.7 | Balance + persistence (environment modifiers, derelict parts, limp damage, Hangar builds after P2.2) | M | no dominant or trap parts; one situational part per environment |
