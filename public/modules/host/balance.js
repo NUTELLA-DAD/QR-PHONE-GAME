@@ -11,24 +11,27 @@ import { trimOf } from './shipBuild.js';
 import { liveLiftX } from './gasBags.js';
 
 export function createBalance(state) {
-  const bal = { dx: 0, deg: 0, side: 'level', comX: 0, restPitch: 0, push: 0, slow: 0, scrape: 0, warn: false, cd: 0, live: 0 };
+  const bal = { dx: 0, deg: 0, side: 'level', comX: 0, comY: 0, mass: 0, k2: 0, restPitch: 0, push: 0, slow: 0, scrape: 0, warn: false, cd: 0, live: 0 };
   state.balance = bal;
   let primed = false;
 
   // The weight (m) and its moment (mx) of everything that moves, summed once per tick.
   function loads() {
     const W = config.BALANCE.LIVE_MASS, L = SHIP_LAYOUT;
-    let m = 0, mx = 0;
-    const add = (w, x) => { m += w; mx += w * x; };
+    let m = 0, mx = 0, ix = 0, cm = 0;
+    const add = (w, x) => { m += w; mx += w * x; ix += w * (x - SHIP_BALANCE.comX) ** 2; };
     for (const p of Object.values(state.players)) {
       if (p.d == null || p.fall || p.air || p.fly || p.onGunship || p.connected === false) continue;
-      add(W.crew + (p.carry === 'coal' || p.carry === 'ammo' ? W.carry : 0), p.x);
+      const w = W.crew + (p.carry === 'coal' || p.carry === 'ammo' ? W.carry : 0);
+      add(w, p.x);
+      cm += w * (p.x - SHIP_BALANCE.comX);
     }
+    if (config.FORCES.LIVE) for (const b of state.boarders || []) if (b.d != null && !b.fall && b.conn == null && b.hp > 0) { add(config.FORCES.BOARDER_MASS, b.x); cm += config.FORCES.BOARDER_MASS * (b.x - SHIP_BALANCE.comX); } // raiders on deck weigh too
     const boilers = L.stations.filter((s) => s.kind === 'boiler');
     if (boilers.length) for (const s of boilers) add((state.ship.fuel * W.fuel) / boilers.length, s.x);
     for (const [name, g] of Object.entries(state.GUNS || {})) add(g.ammo * W.ammo, g.bx != null ? g.bx : (L.gunMounts[name] || {}).bx || 0);
     if (L.bombBay && state.bombBay) add(state.bombBay.bombs * W.bomb, L.bombBay.x);
-    return { m, mx };
+    return { m, mx, ix, cm };
   }
 
   function update(dt) {
@@ -39,10 +42,16 @@ export function createBalance(state) {
     const liftX = liveLiftX(state);
     const colX = liftX == null ? S.colX : liftX;
     if (liftX != null) target = S.comX - colX;
+    bal.k2 = S.k2;
+    bal.comY = S.comY; // (what forces.js turns her about, and what she weighs: per ship, read from her own balance)
+    bal.mass = S.mass;
+    let crowd = 0; // how far the crew and raiders alone pull the centre of mass toward the bow (px; negative = the stern)
     if (B.LIVE && S.mass > 0) {
       const l = loads();
+      crowd = l.cm / (S.mass + l.m);
       bal.live = l.m;
       target = (S.mass * S.comX + l.mx) / (S.mass + l.m) - colX;
+      bal.k2 = (S.mass * S.k2 + l.ix) / (S.mass + l.m); // the crowd and the coal spread her weight out: she turns a little slower (and changes how hits, sails and engines twist her, forces.js)
     }
     if (!B.LIVE || !primed) bal.dx = target;
     else bal.dx += (target - bal.dx) * Math.min(1, dt * B.LIVE_SMOOTH);
@@ -51,7 +60,10 @@ export function createBalance(state) {
     const t = trimOf(bal.dx);
     bal.deg = t.deg;
     bal.side = t.side;
-    bal.restPitch = t.restPitch;
+    // A crowd running to the bow tips her nose down, to the stern nose up, even on a level ship (no dead band): FORCES.CREW_DEG_PER_PX, smoothed like the rest of the live balance.
+    bal.crowd = (bal.crowd || 0) + (crowd - (bal.crowd || 0)) * Math.min(1, dt * B.LIVE_SMOOTH);
+    const crowdPitch = config.FORCES.LIVE ? (Math.max(-config.FORCES.CREW_MAX_DEG, Math.min(config.FORCES.CREW_MAX_DEG, bal.crowd * config.FORCES.CREW_DEG_PER_PX)) * Math.PI) / 180 : 0;
+    bal.restPitch = t.restPitch + crowdPitch;
     bal.push = (-B.DIVE_ACCEL * t.deg) / B.CAP_DEG; // (nose-heavy = positive angle = pushed down)
     bal.slow = t.deg < 0 ? (B.SLOW_TAIL * -t.deg) / B.CAP_DEG : 0;
     bal.scrape = t.deg > 0 ? B.SCRAPE_PER_DEG * t.deg : 0;

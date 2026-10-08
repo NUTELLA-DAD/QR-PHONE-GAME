@@ -16,6 +16,7 @@ import { shellDmg } from './aim.js';
 import { pickEnvironment } from './environments.js';
 import { makeMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
 import { kindOf } from '../../shipLayout.js';
+import { applyForce } from './forces.js';
 
 const K = config.COURSE;
 const TOP = -1400; // where ceilings start (far above the view)
@@ -497,6 +498,9 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     }
   };
 
+  // The rock pushes back on the hull point that is stuck in it, along the way out (forces.js): rock under the nose lifts the nose, a wall ahead kicks the bow back.
+  const scrapeForce = (w) => applyForce(state, { x: w.x0, y: w.y0, fx: w.dx * config.FORCES.SCRAPE_ACC * Math.min(1, w.depth / 60), fy: w.dy * config.FORCES.SCRAPE_ACC * Math.min(1, w.depth / 60), source: 'scrape' });
+
   // Rock contact on a mission map: each point of the ship stuck in rock is pushed out the shortest
   // way (up, down, back or forward), and scrapes.
   const mapCollide = (dt) => {
@@ -521,7 +525,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         }
       }
       if (!best) continue;
-      if (!worst || best.d > worst.depth) worst = { sx, sy, depth: best.d };
+      if (!worst || best.d > worst.depth) worst = { sx, sy, depth: best.d, x0: sx0, y0: sy0, dx: best.dx, dy: best.dy };
       if (best.dy < 0) pushUp = Math.max(pushUp, best.d);
       else if (best.dy > 0) pushDown = Math.max(pushDown, best.d);
       else if (best.dx < 0) pushBack = Math.max(pushBack, best.d);
@@ -531,6 +535,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     course.scraping = !!worst;
     course.lastContact = worst;
     if (!worst) return;
+    scrapeForce(worst);
     const step = 600 * dt;
     state.ship.alt += Math.min(pushUp, step) - Math.min(pushDown, step);
     if (pushUp && state.ship.vy < 0) state.ship.vy = 0;
@@ -594,7 +599,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       const down = wy - groundAt(course, sx);
       const up = ceilAt(course, sx) - wy;
       if (down <= 0 && up <= 0) continue;
-      if (!worst || Math.max(down, up) > worst.depth) worst = { sx, sy, depth: Math.max(down, up) };
+      if (!worst || Math.max(down, up) > worst.depth) worst = { sx, sy, depth: Math.max(down, up), x0: sx0, y0: sy0, dx: 0, dy: down > 0 ? -1 : 1 };
       // A wall face: a little way back toward the middle of the ship the rock isn't there, so
       // we flew into it sideways. Walls stop the ship instead of lifting it.
       const back = sx > REF.x ? -60 : 60;
@@ -611,6 +616,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     course.scraping = !!worst;
     course.lastContact = worst;
     if (!worst) return;
+    scrapeForce(worst);
     // Shove the ship out of the rock (a hard bump), and slow it down.
     state.ship.alt += Math.sign(push) * Math.min(Math.abs(push), 600 * dt);
     if ((push > 0 && state.ship.vy < 0) || (push < 0 && state.ship.vy > 0)) state.ship.vy = 0; // momentum stops on the rock

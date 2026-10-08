@@ -5,6 +5,7 @@ import { altBounds } from './course.js';
 import { envIdOf } from './environments.js';
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { rowOf } from './shipBuild.js';
+import { applyForce } from './forces.js';
 
 let S = config.STORM; // (a Storm Front mission overrides some numbers: config.ENVIRONMENTS.storm.WEATHER)
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -57,6 +58,8 @@ export function createWeather({ state, impact, puff }) {
     if (gustLeft > 0) {
       gustLeft -= dt;
       state.ship.alt += w.gust * w.storm * gustShove(state) * dt;
+      const bag = SHIP_LAYOUT.gasbag;
+      if (bag) applyForce(state, { x: bag.cx + bag.rx * 0.4, y: bag.cy, fx: 0, fy: -w.gust * w.storm * gustShove(state) * config.FORCES.GUST_LIFT, source: 'gust' }); // (the gust lifts or drops the front of the bag: it rocks her, forces.js)
       const bounds = altBounds(state);
       state.ship.alt = Math.max(Math.min(bounds.lo - 60, state.ship.alt), Math.min(bounds.hi + 60, state.ship.alt));
       if (gustLeft <= 0) w.gust = 0;

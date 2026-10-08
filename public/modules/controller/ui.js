@@ -5,7 +5,7 @@ export function createControllerUI({ network }) {
   const speciesNames = [['bulldog', '🐶'], ['wolf', '🐺'], ['tiger', '🐯'], ['shiba', '🐕'], ['fox', '🦊'], ['bear', '🐻'], ['cat', '🐱'], ['rabbit', '🐰']];
 
   // "Take <station>" gets its icon from the station's KIND (sent by the host as `kind`), not its name: a ship may have a "Fore Boiler" or a "Mid Nest Searchlight".
-  const TAKE_ICONS = { light: '🔦', helm: '☸️', boiler: '🔥' };
+  const TAKE_ICONS = { light: '🔦', helm: '☸️', boiler: '🔥', swivel: '⚙️' };
 
   // Icon for the Action button, picked from the start of its label.
   const ACTION_ICONS = [
@@ -14,7 +14,7 @@ export function createControllerUI({ network }) {
     ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['SURGE', '🔥'], ['LOAD for', '📦'], ['Close valve', '🚱'], ['Open valve', '🚰'], ['Open vent', '💨'], ['Close vent', '💨'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
     ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'], ['Jump!', '🪂'], ['Take ice', '🧊'], ['Put the ice', '↩️'], ['Cool the boiler', '🧊'], ['THROW ICE', '🧊'], ['Ice locker', '🧊'], ['Swap to', '🔄'],
-    ['Raise sail', '⛵'], ['Lower sail', '⛵'], ['The sail', '⛵'], ['FOCUS', '🔦'], ['Take', '🎯'],
+    ['Swivel engine', '⚙️'], ['Raise sail', '⛵'], ['Lower sail', '⛵'], ['The sail', '⛵'], ['Swivel engine', '⚙️'], ['FOCUS', '🔦'], ['Take', '🎯'],
     ['FIRE', '💥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
   ];
   const CARRY = { sword: ['🗡️', 'Sword'], hammer: ['🔨', 'Hammer'], extinguisher: ['🧯', 'Extinguisher'], ammo: ['📦', 'Ammo'], coal: ['⚫', 'Coal'], hookshot: ['🪝', 'Hookshot'], ice: ['🧊', 'Ice'] };
@@ -212,6 +212,7 @@ export function createControllerUI({ network }) {
           coil: 'Aim with the stick, HOLD to charge, let go to fire!',
           shield: 'Point the stick to swing the shield round the ship.',
           bombbay: 'Press DROP when the red ring is on a target.',
+          swivel: 'Stick turns the engine: ahead to cruise, up to climb, down to dive.',
         }[next.kind]
       : next.load >= 0
         ? 'Hold Action to load the shell for the gunner'

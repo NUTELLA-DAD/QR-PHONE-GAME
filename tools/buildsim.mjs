@@ -12,6 +12,8 @@
 //        node tools/buildsim.mjs --check-bags        S.5d: many gasbags (four in a row, one giant) validate; drop-from-the-tray (placePart); rupture the fore bag in flight: she flies lower, tips toward it, the TV calls it out, patching + pumping restores it; both botsim 2 min with 0 errors
 //        node tools/buildsim.mjs --check-minimum    S.5e: a ship needs only a gasbag and a deck; the steps up from that (helm, boiler and coal, engines, a sail) validate, fly 2 minutes with 0 errors and each buys her something; a person raises and lowers a sail, a storm gust tears one left up
 //        node tools/buildsim.mjs --check-arena      V.2: the PvP bridge, two classic ships with bot crews (tools/arena-check.mjs: one sky, cross-fire, rounds, score, wreck and cap endings, no co-op saves) AND co-op botsim still identical
+//        node tools/buildsim.mjs --check-engines    S.5h: pointed engines: forward = classic speed, back reduces / reverses, up climbs with no gas, down dives, a nose engine up lifts the nose, a person turns a swivel engine with the stick and the thrust follows, the bots use the swivel (2 min, 0 errors)
+//        node tools/buildsim.mjs --check-forces     S.5h: forces at places (forces.js): a nose hit kicks the nose, a tail hit the tail, a tall sail tips her nose down, an engine at the nose pointing up cancels it, gusts rock her and she settles, crew walking to the bow tip her
 //        node tools/buildsim.mjs --snapshot-classic --force   (S.0 only) rewrite tools/fixtures/classic-layout.json
 // Exit code 1 on any failure.
 import { pathToFileURL } from 'node:url';
@@ -1083,6 +1085,286 @@ async function checkMinimum() {
   return ok;
 }
 
+// ---- S.5h: pointed engines, and forces at places -------------------------------------------------------------------------
+// A calm sim to measure with: nobody shooting, an open sky, a person at the helm if the test wants one. Each helper boots a fresh ship from a list of parts.
+async function forceLab() {
+  globalThis.window ??= globalThis;
+  const store = new Map();
+  globalThis.localStorage ??= { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+  globalThis.requestAnimationFrame ??= (f) => setTimeout(f, 16);
+  const { config } = await load('config.js');
+  const shipBuild = await load('modules/host/shipBuild.js');
+  const slots = await load('modules/host/buildSlots.js');
+  const edit = await load('modules/host/buildEdit.js');
+  const { validate } = await load('modules/host/buildCheck.js');
+  const { applyBuild, SHIP_LAYOUT, SHIP_BALANCE } = await load('shipLayout.js');
+  const { createSimulation } = await load('modules/host/simulation.js');
+  const { scrollSpeed } = await load('modules/host/course.js');
+  const { applyForce, forcesOf } = await load('modules/host/forces.js');
+  const keep = JSON.stringify([config.PACING, config.SPECIALS.FIRST_AFTER, config.MAPS.FORCE_KIND, config.ENVIRONMENTS.FORCE, config.FORCES.LIVE]);
+  const lab = { config, ...shipBuild, ...slots, ...edit, validate, applyBuild, SHIP_LAYOUT, SHIP_BALANCE, createSimulation, scrollSpeed, applyForce, forcesOf };
+  lab.calm = (env = 'skyisles') => { config.PACING.RATE_START = config.PACING.RATE_END = config.PACING.PEAK_RATE = 0; config.PACING.BUILD = 1e6; config.SPECIALS.FIRST_AFTER = 1e9; config.MAPS.FORCE_KIND = 'open'; config.ENVIRONMENTS.FORCE = env; };
+  lab.restore = () => { const [p, f, m, e, l] = JSON.parse(keep); Object.assign(config.PACING, p); config.SPECIALS.FIRST_AFTER = f; config.MAPS.FORCE_KIND = m; config.ENVIRONMENTS.FORCE = e; config.FORCES.LIVE = l; applyBuild(shipBuild.BUILDS.classic); lab.unseed(); };
+  lab.human = (sim, o) => { const q = { id: o.id, name: o.id, species: config.CREW_SPECIES[0], color: '#fff', jx: 0, jy: 0, t: 0, connected: true, fall: false, ko: 0, ...o }; sim.state.players[o.id] = q; return q; };
+  // (every ship is booted on the same seeded sky, so a comparison between two builds is between the builds, not between two random maps)
+  const realRandom = Math.random, realNow = Date.now;
+  lab.boot = (parts, env, seed = 1) => {
+    let s = seed >>> 0;
+    Math.random = () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    Date.now = () => 1700000000000 + seed;
+    applyBuild(parts); lab.calm(env);
+    const sim = createSimulation(); sim.castOff(); sim.update(1 / 60);
+    return sim;
+  };
+  lab.unseed = () => { Math.random = realRandom; Date.now = realNow; };
+  // A person at the helm or at a station of this kind (stick jx / jy set by the caller each frame through `each`).
+  lab.at = (sim, kind, id = 'p') => { const s = SHIP_LAYOUT.stations.find((q) => q.kind === kind); return s ? lab.human(sim, { id, x: s.x, y: SHIP_LAYOUT.platforms[s.d].y, d: s.d, lock: s.n, gas: 0 }) : null; };
+  // Run secs of flight; `each(i, t)` runs before every frame. The steam is kept up (a boiler hand) so thrust is not what is being measured.
+  lab.run = (sim, secs, each) => { for (let i = 0; i < Math.round(secs * 60); i++) { if (each) each(i, i / 60); sim.state.ship.press = Math.min(Math.max(sim.state.ship.press, 60), 80); sim.state.ship.fuel = Math.max(sim.state.ship.fuel, 60); sim.update(1 / 60); } };
+  lab.withEngines = (parts, dirs) => parts.map((p) => (p.part === 'engine' && dirs[p.name] !== undefined ? { ...p, dir: dirs[p.name] } : { ...p }));
+  return lab;
+}
+const PI = Math.PI;
+
+async function checkEngines() {
+  const lab = await forceLab();
+  const { config, BUILDS, SHIP_LAYOUT } = lab;
+  let ok = true;
+  const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
+  const C = BUILDS.classic;
+  const both = (d) => lab.withEngines(C, { 'Aft Engine': d, 'Fore Engine': d });
+  const only = (name, d) => lab.withEngines(C, { [name]: d });
+  const near = (a, b, e) => Math.abs(a - b) <= e;
+
+  // ---- the pure operations and the validator
+  {
+    const before = JSON.stringify(C);
+    const r = lab.setEngineDir(C, 'Fore Engine', -PI / 2);
+    report(r.ok && r.parts.find((p) => p.name === 'Fore Engine').dir === -1.5708 && JSON.stringify(C) === before && !C.find((p) => p.name === 'Fore Engine').dir, `setEngineDir(parts, id, angle) points the engine on a copy and leaves the input alone: ${r.hint}`);
+    report(!lab.setEngineDir(C, 'No Such Engine', 0).ok && !lab.setEngineDir(C, 'Fore Engine', NaN).ok, 'setEngineDir refuses an engine that does not exist and an angle that is not a number');
+    const sw = lab.setEngineSwivel(C, 'Aft Engine', true);
+    const L = lab.buildLayout(sw.parts);
+    report(sw.ok && L.engines.find((e) => e.name === 'Aft Engine').swivel && L.stations.some((s) => s.kind === 'swivel' && s.eng === 'Aft Engine'), 'setEngineSwivel adds a crew station of kind "swivel" beside the engine: ' + sw.hint);
+    const off = lab.setEngineSwivel(sw.parts, 'Aft Engine', false);
+    report(off.ok && !lab.buildLayout(off.parts).stations.some((s) => s.kind === 'swivel'), 'and takes it away again');
+    const gone = lab.removeAt(sw.parts, L.engines.find((e) => e.name === 'Aft Engine').x, L.platforms[L.engines.find((e) => e.name === 'Aft Engine').d].y + 14);
+    report(gone.ok && !gone.parts.some((p) => p.name === 'Aft Engine') && !lab.buildLayout(gone.parts).stations.some((s) => s.kind === 'swivel'), 'deleting a swivel engine takes its crank with it');
+    const drop = lab.placePart(lab.withEngines(C, {}).filter((p) => !(p.part === 'engine' && p.name === 'Fore Engine') && !(p.part === 'pipe' && p.to === 'Fore Engine')), 'engine', 1500, 800, { dir: -PI / 2 });
+    report(drop.ok && drop.parts.some((p) => p.part === 'engine' && p.dir === -1.5708), `dropping an engine with a direction (placePart ..., { dir }) places it pointing up: ${drop.hint}`);
+    const v0 = lab.validate(C), vUp = lab.validate(only('Fore Engine', -PI / 2)), vOpp = lab.validate(only('Fore Engine', PI)), vSw = lab.validate(lab.setEngineSwivel(only('Fore Engine', -PI / 2), 'Fore Engine', true).parts);
+    const thrust = (v) => v.checks.filter((c) => c.group === 'Thrust');
+    report(thrust(v0).length === 1 && thrust(v0)[0].level === 'INFO' && v0.warns.length === 0, `the classic ship: one INFO line on thrust and no warning: "${thrust(v0)[0].text}"`);
+    report(thrust(vUp).some((c) => c.level === 'INFO' && /up 16 gas points/.test(c.text) && /nose up/.test(c.text)) && thrust(vUp).some((c) => c.level === 'WARN' && /nothing can turn them back/.test(c.text)), 'a nose engine pointing up: INFO (lift 16 gas points, nose-up torque) and a WARN that nothing can counter the tilt');
+    report(!thrust(vSw).some((c) => c.level === 'WARN'), 'the same engine with a swivel mount: no tilt WARN (a crew member can turn it)');
+    report(thrust(vOpp).some((c) => c.level === 'WARN' && /push against each other/.test(c.text)), 'one engine pushing ahead and one astern: WARN that they cancel out');
+    report(vUp.budgets.lift.lift > v0.budgets.lift.lift + 15, `an up-pointing engine counts as lift in the LIFT gauge (hover ${v0.budgets.lift.hover} -> ${vUp.budgets.lift.hover})`);
+  }
+
+  // ---- (a) forward engines give the classic speed; (b) back-pointing ones reduce it / reverse
+  const speeds = (parts) => { // the best scroll speed ahead (stick right) and astern (stick left) with the helm flat out
+    const out = {};
+    for (const [name, jx] of [['ahead', 1], ['astern', -1]]) {
+      const sim = lab.boot(parts);
+      const p = lab.at(sim, 'helm');
+      let best = 0;
+      lab.run(sim, 8, (i, t) => { p.jx = jx; p.jy = 0; p.gas = 0; if (t > 4.5 && sim.state.ship.speed * jx > 0) { const v = lab.scrollSpeed(sim.state); if (Math.abs(v) > Math.abs(best)) best = v; } }); // (the best she does between 4.5 and 8 s, once the start-up speed has died away: after about 10 s the mission map ends)
+      out[name] = best;
+    }
+    return out;
+  };
+  const sClassic = speeds(C), sZero = speeds(both(0)), sThree = speeds([...C, ...lab.setEngineDir(lab.slotsFor('engine', C)[0].apply(C), 'Pod Engine 1', 0).parts.filter((p) => p.name === 'Pod Engine 1' || (p.part === 'pipe' && p.to === 'Pod Engine 1'))]);
+  report(near(sClassic.ahead, config.SHIP.TOP_SPEED, 20), `classic top speed ${Math.round(sClassic.ahead)} px/s (full ahead is ${config.SHIP.TOP_SPEED})`);
+  report(sZero.ahead === sClassic.ahead && sZero.astern === sClassic.astern, `engines given dir 0 (forward) are exactly the classic ship (${Math.round(sZero.ahead)} / ${Math.round(sZero.astern)} px/s)`);
+  report(near(sThree.ahead, sClassic.ahead, 1), `a third forward engine adds safety, not speed (${Math.round(sThree.ahead)} px/s)`);
+  const sOne = speeds(only('Fore Engine', PI)), sBack = speeds(both(PI));
+  report(sOne.ahead < sClassic.ahead * 0.35, `one engine pushing astern cancels the other: top speed ${Math.round(sClassic.ahead)} -> ${Math.round(sOne.ahead)} px/s`);
+  report(sBack.ahead < sClassic.ahead * 0.4 && -sBack.astern >= -sClassic.astern, `both engines pointing back: only ${Math.round(sBack.ahead)} px/s ahead, but ${Math.round(-sBack.astern)} px/s astern (classic ${Math.round(-sClassic.astern)})`);
+  const sHalf = speeds(only('Fore Engine', -PI / 4));
+  report(sHalf.ahead < sClassic.ahead && sHalf.ahead > sClassic.ahead * 0.6, `an engine at 45 degrees gives a mix: ${Math.round(sHalf.ahead)} px/s ahead (and lift)`);
+  const sUp = speeds(both(-PI / 2));
+  report(sUp.ahead < sClassic.ahead * 0.4, `engines all pointing up do not push her ahead: ${Math.round(sUp.ahead)} px/s (the wind and the idle drift)`);
+
+  // ---- (c) up climbs with no gas, (d) down dives, (e) pitch
+  const climb = (parts, secs = 3) => {
+    const sim = lab.boot(parts);
+    const p = lab.at(sim, 'helm');
+    const g0 = sim.state.ship.gas, a0 = sim.state.ship.alt;
+    let vyMax = -1e9, vyMin = 1e9, pitchMin = 0, pitchMax = 0, steamUp = 0;
+    lab.run(sim, secs, () => { p.jx = 0; p.jy = 0; p.gas = 0; vyMax = Math.max(vyMax, sim.state.ship.vy || 0); vyMin = Math.min(vyMin, sim.state.ship.vy || 0); pitchMin = Math.min(pitchMin, sim.state.ship.pitch); pitchMax = Math.max(pitchMax, sim.state.ship.pitch); });
+    return { alt: sim.state.ship.alt - a0, gas: sim.state.ship.gas - g0, vyMax, vyMin, pitch: sim.state.ship.pitch, pitchMin, pitchMax, theta: sim.state.forces.theta, steam: sim.state.steamUse, press: sim.state.ship.press };
+  };
+  const cC = climb(C), cU = climb(both(-PI / 2)), cD = climb(both(PI / 2));
+  report(cU.alt > cC.alt + 80 && Math.abs(cU.gas - cC.gas) < 0.5, `engines pointing up climb with no gas change: +${Math.round(cU.alt)} px in 3 s against ${Math.round(cC.alt)} for the classic ship (gas ${cU.gas.toFixed(1)} vs ${cC.gas.toFixed(1)}), climb ${Math.round(cU.vyMax)} px/s`);
+  report(cD.alt < cC.alt - 80, `engines pointing down dive: ${Math.round(cD.alt)} px in 3 s against ${Math.round(cC.alt)} (dive ${Math.round(cD.vyMin)} px/s)`);
+  report(cU.steam > cC.steam + 1, `lift thrust costs steam (use ${cC.steam.toFixed(1)} -> ${cU.steam.toFixed(1)} per second at the same throttle)`);
+  const nose = climb(only('Fore Engine', -PI / 2), 5), tail = climb(only('Aft Engine', -PI / 2), 5), plain = climb(C, 5);
+  report(plain.theta === 0 && nose.theta < -0.002 && nose.pitch < plain.pitch - 0.002, `a nose engine pointing up lifts the nose: pitch ${(nose.pitch * 57.3).toFixed(2)} degrees against ${(plain.pitch * 57.3).toFixed(2)} (the forces tilt ${(nose.theta * 57.3).toFixed(2)})`);
+  report(tail.theta > 0.001, `a tail engine pointing up lifts the tail, nose down: tilt ${(tail.theta * 57.3).toFixed(2)} degrees`);
+  const bothUp = climb(both(-PI / 2), 5);
+  report(Math.abs(bothUp.theta) < Math.abs(nose.theta) * 0.7, `a pair at the two ends lift evenly: tilt ${(bothUp.theta * 57.3).toFixed(2)} degrees against ${(nose.theta * 57.3).toFixed(2)} for the nose engine alone`);
+
+  // ---- (f) a person turns a swivel engine with the stick; the thrust follows
+  {
+    const parts = await loadBuild('swivel', BUILDS);
+    const v = lab.validate(parts);
+    report(v.ok && v.checks.some((c) => c.group === 'Thrust' && /swivel mount/.test(c.text)), 'the swivel test ship validates and the report lists her swivel mount');
+    const sim = lab.boot(parts);
+    const st = SHIP_LAYOUT.stations.find((s) => s.kind === 'swivel');
+    const p = lab.at(sim, 'swivel'), h = lab.at(sim, 'helm', 'h'); // (a second person holds the helm still: no throttle, no trim, no pump)
+    const eng = () => sim.engines.byName(st.eng);
+    p.jx = p.jy = 0;
+    lab.run(sim, 1, () => { h.jx = h.jy = 0; });
+    report(p.ui && p.ui.label === 'Swivel engine' && p.ui.kind === 'swivel' && /points FORWARD/.test(p.ui.status || ''), `at the crank the phone says "${p.ui && p.ui.label}" (${p.ui && p.ui.status})`);
+    const f0 = sim.state.thrust.factor;
+    lab.run(sim, 2.5, () => { p.jx = 0; p.jy = -1; });
+    report(near(eng().dir, -PI / 2, 0.05) && eng().up > 0.99 && sim.state.forces.vyAcc > 50, `stick UP: the engine turns up (${(eng().dir * 57.3).toFixed(0)} degrees) and its lift follows (${sim.state.forces.vyAcc.toFixed(0)} px/s^2)`);
+    report(sim.state.thrust.factor < f0 * 0.6 && sim.state.ship.vy > 10, `...she loses forward thrust (${f0.toFixed(2)} -> ${sim.state.thrust.factor.toFixed(2)}) and climbs (${Math.round(sim.state.ship.vy)} px/s)`);
+    lab.run(sim, 2.5, () => { p.jx = 1; p.jy = 0; });
+    report(near(eng().dir, 0, 0.05) && eng().up === 0 && sim.state.forces.vyAcc === 0 && sim.state.thrust.factor === f0, 'stick forward: the engine turns back ahead, the lift stops, the speed is back');
+    lab.run(sim, 0.5, () => { p.jx = 0; p.jy = 1; });
+    const mid = eng().dir;
+    lab.run(sim, 3, () => { p.jx = 0; p.jy = 1; });
+    report(near(eng().dir, PI / 2, 0.05) && eng().up < -0.99 && mid > 0.3 && mid < PI / 2 - 0.1, `stick DOWN: it swings smoothly (${(mid * 57.3).toFixed(0)} degrees after 0.5 s) to straight down (${(eng().dir * 57.3).toFixed(0)}) and pushes her down (${sim.state.forces.vyAcc.toFixed(0)} px/s^2)`);
+    lab.run(sim, 4, () => { p.jx = -1; p.jy = 0; });
+    report(Math.abs(eng().dir) <= config.ENGINES.SWIVEL_ARC + 0.02 && Math.abs(eng().dir) > config.ENGINES.SWIVEL_ARC - 0.1, `the arc is limited: the stick pushed back stops at ${(eng().dir * 57.3).toFixed(0)} degrees (limit ${(config.ENGINES.SWIVEL_ARC * 57.3).toFixed(0)})`);
+    lab.restore();
+  }
+
+  // ---- (g) the bots fly the swivel ship for 2 minutes and use the crank
+  {
+    const parts = await loadBuild('swivel', BUILDS);
+    const runs = await Promise.all([1, 2, 3].map((seed) => runBotsim(parts, { map: ['route', 'open', 'network'][seed - 1], minutes: 2, bots: 6, seed })));
+    const st = runs.map((r) => r.stats);
+    const errors = runs.reduce((n, r) => n + (r.stats ? r.stats.errors : 1), 0);
+    const manned = st.reduce((n, s) => n + (s ? s.flight.engineMannedSecs : 0), 0), turned = st.reduce((n, s) => n + (s ? s.flight.engineTurnSecs : 0), 0);
+    report(errors === 0 && st.every(Boolean), `the swivel ship flown by 6 bots for 2 minutes on 3 maps: ${errors} errors`);
+    report(manned > 0 && turned > 0, `the bots use the swivel: crank manned ${manned.toFixed(0)} s, engine turned ${turned.toFixed(0)} s in all`);
+  }
+  lab.restore();
+  return ok;
+}
+
+async function checkForces() {
+  const lab = await forceLab();
+  const { config, BUILDS, SHIP_LAYOUT, SHIP_BALANCE } = lab;
+  let ok = true;
+  const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
+  const F = config.FORCES, C = BUILDS.classic, deg = (r) => (r * 180 / Math.PI).toFixed(2);
+  // A quiet ship: nobody aboard that moves, steam held. Returns { sim, peak (largest tilt in each direction while running) }.
+  const watch = (sim, secs, each) => { let hi = 0, lo = 0; lab.run(sim, secs, (i, t) => { if (each) each(i, t); hi = Math.max(hi, sim.state.forces.theta); lo = Math.min(lo, sim.state.forces.theta); }); return { hi, lo }; };
+  const hit = (x, y, power) => { const sim = lab.boot(C); lab.run(sim, 2); sim.impact(x, y, power); const w = watch(sim, 2); lab.run(sim, 8); return { ...w, after: sim.state.forces.theta, sim }; };
+
+  // ---- the classic ship is untouched until something pushes her
+  { const sim = lab.boot(C); lab.run(sim, 10); report(sim.state.forces.theta === 0 && sim.state.forces.omega === 0 && sim.state.forces.vyAcc === 0, 'a classic ship nobody shoots at sits at exactly 0 tilt from forces (her two forward engines twist nothing)'); }
+  // ---- hits kick the part of the ship they strike
+  const nose = hit(1500, 250, 2), tail = hit(110, 250, 2), noseLow = hit(1500, 900, 2);
+  report(nose.hi > 0.002 && nose.lo > -nose.hi * 0.3, `a hit on the top of the nose tips the nose down (peak ${deg(nose.hi)} degrees)`);
+  report(tail.lo < -0.002 && tail.hi < -tail.lo * 0.3, `a hit on the top of the tail lifts the nose (${deg(tail.lo)} degrees)`);
+  report(noseLow.lo < -0.002, `a hit on the belly of the nose kicks it up (${deg(noseLow.lo)} degrees)`);
+  report(Math.abs(nose.after) < 0.0006 && Math.abs(tail.after) < 0.0006, `she swings back and settles (after 8 s: ${deg(nose.after)} / ${deg(tail.after)} degrees)`);
+  { const mid = hit(800, 500, 2); report(Math.max(mid.hi, -mid.lo) < Math.max(nose.hi, -tail.lo) * 0.4, `a hit by her middle hardly twists her (${deg(Math.max(mid.hi, -mid.lo))} degrees against ${deg(nose.hi)})`); }
+  { const big = hit(1500, 250, 3); report(Math.max(big.hi, -big.lo) <= (F.MAX_DEG * Math.PI) / 180 + 1e-6, `however hard the blow, the tilt stays inside the cap (${deg(big.hi)} degrees; cap ${F.MAX_DEG}) and the crew-slide limit holds (AIRBORNE.PITCH_STAGGER ${(config.AIR.PITCH_STAGGER * 57.3).toFixed(1)} degrees)`); }
+  // a heavier ship is shoved less
+  {
+    const ps = [...C.map((p) => ({ ...p })), ...Array.from({ length: 10 }, (_, i) => ({ part: 'ballast', p: 'main', x: 700 + i * 40 }))]; // (ten sandbags by her middle: heavier, with the centre of mass about where it was)
+    const sim = lab.boot(ps);
+    lab.run(sim, 2); sim.impact(1500, 250, 2);
+    const w = watch(sim, 2);
+    report(w.hi < nose.hi * 0.97, `a heavier ship (+${(lab.balanceOf(ps).mass - lab.balanceOf(C).mass).toFixed(0)} weight in sandbags) is shoved less by the same blow (${deg(w.hi)} degrees against ${deg(nose.hi)})`);
+  }
+  // ---- FORCES.LIVE off: hits do not twist her
+  { config.FORCES.LIVE = false; const off = hit(1500, 250, 2); config.FORCES.LIVE = true; report(off.hi === 0 && off.lo === 0, 'with FORCES.LIVE off a hit twists nothing (the S.5c ship)'); }
+  // ---- forces at places: the direction of the twist
+  {
+    const probe = (x, y, fx, fy, extra = {}) => { const sim = lab.boot(C); lab.run(sim, 1); for (let i = 0; i < 90; i++) { lab.applyForce(sim.state, { x, y, fx, fy, source: 'scrape', ...extra }); lab.run(sim, 1 / 60); } return sim.state.forces.theta; };
+    const c = { x: 783, y: 654 };
+    report(probe(1500, c.y, 0, -150) < -0.002 && probe(100, c.y, 0, -150) > 0.002, 'a push UP at the nose lifts the nose; the same push at the tail lifts the tail');
+    report(probe(c.x, 200, 150, 0) > 0.002 && probe(c.x, 900, 150, 0) < -0.002, 'a push AHEAD high up (the gasbag) tips the nose down, low down (the keel) lifts it');
+    report(probe(c.x, 200, 150, 0, { balanced: true }) === 0, 'a "balanced" push (engine thrust held by drag along its line) has no sideways torque');
+    { // forcesOf(state): the ship's own body-frame totals (what the pose will integrate), read without changing anything
+      const s2 = lab.boot(C);
+      lab.run(s2, 1);
+      lab.applyForce(s2.state, { x: 1500, y: 654, fx: 30, fy: -100, source: 'scrape' });
+      lab.applyForce(s2.state, { x: 100, y: 654, fx: 0, fy: -100, impulse: true, source: 'hit' });
+      const tot = lab.forcesOf(s2.state);
+      report(tot.fwd === 30 && tot.up === 100 && tot.torque < 0 && tot.spin > 0 && tot.items.length === 2 && s2.state.forces.queue.length === 2, `forcesOf(state) gives the ship's own body-frame totals and changes nothing: ahead ${tot.fwd}, up ${tot.up}, torque ${tot.torque.toFixed(4)} rad/s^2, kick spin ${tot.spin.toFixed(4)} rad/s`);
+    }
+    report(probe(1500, c.y, 0, -150) < 0 && Math.abs(probe(c.x, c.y, 0, -150)) < Math.abs(probe(1500, c.y, 0, -150)) * 0.15, 'a push through the centre of mass twists nothing');
+  }
+  // ---- sails: a raised sail's wind pushes high on the mast
+  {
+    const withSail = (deck, x) => [...C.map((p) => ({ ...p })), { part: 'sail', n: 'Mainsail', p: deck, x }]; // (a mast stood on the deck where the classic ship has room: no slot is free on her crowded decks)
+    const flyWith = (parts, hoist, secs = 10) => {
+      const sim = lab.boot(parts);
+      lab.run(sim, 1);
+      for (const s of sim.state.sails) { s.hoist = hoist; s.lowering = hoist === 0; }
+      lab.run(sim, secs, () => { for (const s of sim.state.sails) { s.hoist = hoist; s.lowering = false; } });
+      return sim;
+    };
+    const top = withSail('catwalk', 720), nest = withSail('nest', 715);
+    report(!!top && !!nest, 'a sail fits on the top deck and on the crow\'s nest');
+    if (top && nest) {
+      const down = flyWith(top, 0), sTop = flyWith(top, 1), sNest = flyWith(nest, 1);
+      report(sTop.state.forces.theta > 0.002 && sTop.state.sailPush > 0.05, `a raised sail on the top deck pushes the nose down (${deg(sTop.state.forces.theta)} degrees, pull ${(sTop.state.sailPush * 100).toFixed(0)}%)`);
+      report(sNest.state.forces.theta > sTop.state.forces.theta * 1.15, `a sail up on the crow's nest tips her more (${deg(sNest.state.forces.theta)} degrees against ${deg(sTop.state.forces.theta)}): force times height`);
+      report(Math.abs(down.state.forces.theta) < 0.0004, `reefed (hoist 0) she sits level (${deg(down.state.forces.theta)})`);
+      { // the sail comes down: she returns
+        const sim = flyWith(top, 1, 8);
+        for (const s of sim.state.sails) s.lowering = true;
+        lab.run(sim, 8, () => { for (const s of sim.state.sails) s.lowering = true; });
+        report(Math.abs(sim.state.forces.theta) < 0.0006 && sim.state.sails[0].hoist === 0, `let down again she returns to level (${deg(sim.state.forces.theta)} degrees)`);
+      }
+      // an engine at the nose pointing up cancels it
+      const cancel = flyWith(lab.withEngines(top, { 'Fore Engine': -PI / 4 }), 1);
+      report(Math.abs(cancel.state.forces.theta) < Math.abs(sTop.state.forces.theta) * 0.35, `a nose engine pointing up and ahead (45 degrees) cancels the sail's tipping (${deg(sTop.state.forces.theta)} -> ${deg(cancel.state.forces.theta)} degrees)`);
+      const { sailPush } = await load('modules/host/forces.js');
+      report(sailPush(0.13, true) === sailPush(0.13, false) * config.SAIL.GUST_FORCE, `a gust blows the sail's push up ${config.SAIL.GUST_FORCE} times (SAIL.GUST_FORCE), on top of the gust shove and tearing she already had`);
+      const v = lab.validate(top);
+      report(v.checks.some((c) => c.group === 'Sails' && /sails up: nose-down/.test(c.text)), 'the validator says what the sail does: "' + ((v.checks.find((c) => c.group === 'Sails' && /nose-down/.test(c.text)) || {}).text || '').slice(0, 150) + '..."');
+    }
+  }
+  // ---- gusts: a push at the bag tips her and she settles; a real Storm Front stays inside the cap
+  {
+    const sim = lab.boot(C);
+    lab.run(sim, 1);
+    let hi = 0;
+    lab.run(sim, 1.6, () => { lab.applyForce(sim.state, { x: SHIP_LAYOUT.gasbag.cx, y: SHIP_LAYOUT.gasbag.cy, fx: F.GUST_WIND, fy: 0, source: 'gust' }); hi = Math.max(hi, sim.state.forces.theta); });
+    lab.run(sim, 8);
+    report(hi > 0.003 && Math.abs(sim.state.forces.theta) < 0.0006, `a side gust on the tall gasbag tips her nose down (${deg(hi)} degrees) and she settles back (${deg(sim.state.forces.theta)} after 8 s)`);
+    const top = [...C.map((p) => ({ ...p })), { part: 'sail', n: 'Mainsail', p: 'catwalk', x: 720 }];
+    const st = lab.boot(top, 'storm');
+    st.state.players.b0 = { id: 'b0', bot: true, name: 'Bot', species: config.CREW_SPECIES[0], color: '#fff', x: SHIP_LAYOUT.boarderEntryPoints[0].x, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
+    let peak = 0, gusts = 0, errs = 0;
+    for (let i = 0; i < 150 * 60; i++) { try { for (const s of st.state.sails) if (!s.torn && s.hoist < 1) s.hoist = 1; st.update(1 / 60); } catch (e) { errs++; } peak = Math.max(peak, Math.abs(st.state.forces.theta)); if (st.state.weather && st.state.weather.gusting) gusts++; }
+    report(errs === 0 && gusts > 60 && peak > 0.003 && peak <= (F.MAX_DEG * Math.PI) / 180 + 1e-6, `a Storm Front with a sail up (150 s, ${gusts} gust frames): the gusts rock her up to ${deg(peak)} degrees, inside the cap, ${errs} errors`);
+  }
+  // ---- crew and raiders walking about move the centre of mass (and the way she twists)
+  {
+    const crew = (x) => (sim) => { const d = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main'); Object.values(sim.state.players).forEach((q, i) => { q.fall = false; q.fly = false; q.air = false; q.d = d; q.x = x + i * 10; q.y = SHIP_LAYOUT.platforms[d].y; q.conn = null; q.lock = null; }); };
+    const sim = lab.boot(C);
+    for (let i = 0; i < 6; i++) lab.human(sim, { id: 'c' + i, x: 60, y: 640, d: 3 });
+    const place = (x) => crew(x)(sim);
+    const at = (x, secs) => { lab.run(sim, secs, () => place(x)); return { pitch: sim.state.balance.restPitch, dx: sim.state.balance.dx, k2: sim.state.balance.k2 }; }; // (the rest trim from her weight: the climb tilt of the unmanned helm would only add noise)
+    const stern = at(200, 8), bow = at(1380, 10), back = at(200, 10);
+    report(bow.pitch > stern.pitch + 0.006 && Math.abs(back.pitch - stern.pitch) < 0.002, `6 crew walk stern to bow: she tips nose-down (rest trim ${(stern.pitch * 57.3).toFixed(2)} -> ${(bow.pitch * 57.3).toFixed(2)} degrees) and comes back when they return (${(back.pitch * 57.3).toFixed(2)})`);
+    report(bow.dx > stern.dx + 20 && bow.k2 > 0, `the live centre of mass moves ${(bow.dx - stern.dx).toFixed(0)} px toward the bow, and the live radius of gyration follows the crowd (k2 ${stern.k2.toFixed(0)} at the stern, ${bow.k2.toFixed(0)} at the bow)`);
+    // raiders on deck weigh too
+    const main = SHIP_LAYOUT.platforms.findIndex((q) => q.id === 'main');
+    const base = lab.boot(C), raided = lab.boot(C);
+    for (let i = 0; i < 4; i++) raided.state.boarders.push({ id: 'r' + i, type: 'grunt', name: 'Raider', species: config.CREW_SPECIES[0], color: '#a33', scale: 1, x: 1450, y: 640, d: main, fall: false, hp: 5, hit: 0, cd: 0, windup: 0, face: 1 });
+    lab.run(base, 1); lab.run(raided, 1);
+    report(raided.state.balance.live > base.state.balance.live + 3, `raiders on deck weigh too: live load ${base.state.balance.live.toFixed(1)} -> ${raided.state.balance.live.toFixed(1)} with 4 at the bow`);
+  }
+  // ---- the engines' own twist is in the same model (and not a second one)
+  {
+    const fore = lab.boot(lab.withEngines(C, { 'Fore Engine': -PI / 2 }));
+    lab.run(fore, 6);
+    report(fore.state.forces.theta < -0.002 && Math.abs(fore.state.forces.torque) > 0, `engine thrust goes through applyForce too: the nose engine pointing up tilts her ${deg(fore.state.forces.theta)} degrees`);
+  }
+  lab.restore();
+  return ok;
+}
+
 const mode = argv[0];
 if (mode === '--snapshot-classic') {
   // Only meaningful before S.1 (when the layout was hand-written); after that it would snapshot the generated layout.
@@ -1108,6 +1390,10 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-arena') {
   const arena = spawnSync(process.execPath, [path.join(root, 'tools', 'arena-check.mjs')], { cwd: root, stdio: 'inherit' });
   process.exit(arena.status === 0 && checkBotsim() ? 0 : 1);
+} else if (mode === '--check-engines') {
+  process.exit((await checkEngines()) ? 0 : 1);
+} else if (mode === '--check-forces') {
+  process.exit((await checkForces()) ? 0 : 1);
 } else if (mode === '--check-bags') {
   process.exit((await checkBags()) ? 0 : 1);
 } else if (mode === '--build') {
