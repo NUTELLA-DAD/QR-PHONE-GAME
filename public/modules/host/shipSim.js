@@ -24,6 +24,7 @@ import { assistAim } from './aim.js';
 import { createPrime } from './prime.js';
 import { createLinks } from './links.js';
 import { createGoingDown } from './goingDown.js';
+import { createComeAbout } from './comeAbout.js';
 import { createBalance } from './balance.js';
 import { createSails, windSpeed } from './sails.js';
 import { createFire } from './fire.js';
@@ -31,7 +32,7 @@ import { armourOn } from './fireModel.js';
 import { createEngines } from './engines.js';
 import { createForces, hitForce } from './forces.js';
 import { installBags, syncBags, stepBags, watchBags } from './gasBags.js';
-import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
+import { toWorldX, toWorldY, toShipX, toShipY, aimToWorld } from './pose.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
 
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -442,6 +443,7 @@ export function createShipSim(world, ship, W) {
   const fireSys = createFire({ state, shipPuff }); // fire that cares where things are: flammability, spreading, the coal blaze (fire.js, fireModel.js)
   const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt }); // GOING DOWN! last stand + the ice locker (goingDown.js)
   state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
+  const comeAbout = createComeAbout(ship, W, { goingDown }); // turning her round on the helm's command (comeAbout.js)
 
   const raiders = createRaiders({ state, modules, puff, impact });
   const escort = createEscort({ state, puff, phoneFx });
@@ -597,6 +599,7 @@ export function createShipSim(world, ship, W) {
   const stepCrew = (dt) => {
     helmFlown = false;
     gasManned = false;
+    comeAbout.begin();
     for (const player of Object.values(state.players)) {
       if (player.bot) updateBot(player, state, dt);
       if (player.koGrace > 0) player.koGrace -= dt;
@@ -693,6 +696,7 @@ export function createShipSim(world, ship, W) {
             state.gasValve.input = clamp(player.gas || 0, -1, 1);
             gasManned = true;
             helmFlown = true;
+            if (player.ca || (!player.bot && player.jx < -SH.TURN.STICK)) comeAbout.ask(player); // COME ABOUT: the phone's button held, or the stick held hard astern (people only)
           }
         } else if (kindOf(player.lock) === 'deflector') {
           // Swing the shield round toward where the stick points.
@@ -731,14 +735,18 @@ export function createShipSim(world, ship, W) {
             gun.aim = gun.home + clamp(angleDiff(wanted, gun.home), -gun.arc, gun.arc);
           }
           if ((player.actQ || player.fire) && gun.cd <= 0 && !state.ship.down) {
-            if (!working || gun.ammo <= 0 || env.gunJammed(player.lock)) {
+            if (ship.pose.turn > 0) {
+              gun.cd = 0.3; // (the guns cannot fire while she comes about)
+              gun.empty = 0.6;
+              gun.emptyText = 'TURNING!';
+            } else if (!working || gun.ammo <= 0 || env.gunJammed(player.lock)) {
               gun.cd = 0.5;
               gun.empty = 0.8;
               gun.emptyText = !working ? 'BROKEN!' : gun.ammo <= 0 ? 'EMPTY!' : 'ICED - CHIP IT!';
             } else {
               gun.ammo -= 1;
               gun.cd = config.GUNS.COOLDOWN * env.gunCooldownMul(player.lock);
-              const angle = gun.aim + (state.ship.pitch || 0);
+              const angle = aimToWorld(ship, gun.aim + (state.ship.pitch || 0)); // (gun.aim is in ship space, the shell flies along the world)
               const [gx, gy] = tilt(state, gun.bx, gun.by);
               const primed = prime.take(gun); // a fully primed shell: harder hit, bigger blast (config PRIME)
               const wgx = toWorldX(ship, gx); // (the muzzle, in the world; a shell leaves at SHELL_SPEED relative to the ship and keeps her speed)
@@ -889,7 +897,8 @@ export function createShipSim(world, ship, W) {
 
       // Idle crew get an arrow to the most useful nearby job (phone + a chevron on the TV).
       if (!player.bot && !player.hj) jobFinder.update(player, dt);
-      const jobUi = player.bot || player.hj ? null : jobFinder.ui(player);
+      const jobShip = player.bot || player.hj ? null : jobFinder.ui(player);
+      const jobUi = jobShip && ship.pose.f < 0 && (jobShip.dir === 'left' || jobShip.dir === 'right') ? { ...jobShip, dir: jobShip.dir === 'left' ? 'right' : 'left' } : jobShip; // (the phone shows the way on the SCREEN: a ship facing left has her left and right the other way round)
 
       // Tell the phone what its buttons do now.
       const stationName = player.lock || (station && station.n) || null;
@@ -954,16 +963,17 @@ export function createShipSim(world, ship, W) {
       const gaid = grabNow ? aidOf(grabNow, player.carry) : '';
       const glock = !!(grabNow && player.grabLock > 0);
       const progNow = !player.lock && player.act && player.act.hold && player.act.obj && typeof player.act.obj.prog === 'number' ? Math.round(player.act.obj.prog * 10) : -1; // (how far a hold action has got)
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow].join('|');
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow };
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, fc: ship.pose.f, tn: state.turning.t > 0 };
           emitPlayerUi(player.id, player.ui);
         }
       }
     }
 
+    comeAbout.hold(dt); // (the COME ABOUT command counts up, and goes through once it has been held long enough)
     state.lookout = state.periscope || Object.values(state.players).some((q) => kindOf(q.lock) === 'lookout');
     state.lookoutBonus = Object.values(state.players).some((q) => kindOf(q.lock) === 'lookout' && nestTier((layout.stations.find((s) => s.n === q.lock) || {}).p)) ? config.NEST.TIER_BONUS : 0; // (a lookout up on the high nest sees further ahead)
   };
@@ -1055,6 +1065,7 @@ export function createShipSim(world, ship, W) {
     const maxReverse = driven && state.thrust.back > 0 ? -Math.max(maxSpeed * config.SHIP.REVERSE, clamp(state.ship.press / 50, 0.05, 1) * state.thrust.back * (1 - state.balance.slow)) : -maxSpeed * config.SHIP.REVERSE; // (engines pointing back give her real reverse)
     if (spw < maxReverse) spw += (maxReverse - spw) * Math.min(1, dt * 2);
     state.ship.speed = spw * fw;
+    comeAbout.fly(dt); // (a turn in progress: her speed is held down, the facing flips at the middle)
 
     const bay = state.bombBay;
     bay.cd = Math.max(0, bay.cd - dt);
@@ -1244,6 +1255,7 @@ export function createShipSim(world, ship, W) {
     searchlights.reset();
     modules.reset();
     goingDown.reset();
+    comeAbout.reset();
     for (const player of crew ? Object.values(state.players) : []) {
       const [e0, e1] = layout.boarderEntryPoints;
       Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x) });
@@ -1256,6 +1268,6 @@ export function createShipSim(world, ship, W) {
     get hookshot() { return hookshot; },
     hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop,
     interaction, taken, holder, getHelm, worksKind,
-    preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn,
+    preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn, comeAbout,
   };
 }

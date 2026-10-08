@@ -963,7 +963,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   const helmHint = () => {
     if (course.map) {
       const p = mapPlan(state, 0.5);
-      const h = p.dx > 300 ? 'AHEAD' : p.dx < -300 ? 'BACK' : '';
+      const h = p.dx > 300 ? 'AHEAD' : p.dx < -300 ? 'BEHIND - COME ABOUT!' : ''; // (p.dx: how far ahead of her bow the way goes; behind her, turning round is quicker than backing up)
       const v = p.dy < -250 ? 'UP (pump the gas!)' : p.dy > 250 ? 'DOWN (vent the gas!)' : '';
       return h || v ? (course.map.open ? 'Next outpost: ' : 'Way to the beacon: ') + [v, h].filter(Boolean).join(' and ') : course.map.open ? 'Outpost below - guns and bombs!' : '';
     }
@@ -1137,8 +1137,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     ship.pose.y = -course.homeAlt;
     state.ship.vy = 0;
     state.ship.speed = 0;
-    ship.pose.f = 1; // (a new mission starts bow to the right, whichever way she finished the last)
-    ship.pose.turn = 0;
+    for (const sh of state.ships) sh.sim && sh.sim.comeAbout.reset(); // (a new mission starts bow to the right, whichever way she finished the last)
     for (const sh of state.ships) place(sh); // (any other ship goes back to her station beside ours)
     if (map.open && state.bombBay) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX); // a full bay for the raid
     state.rockets.length = 0;

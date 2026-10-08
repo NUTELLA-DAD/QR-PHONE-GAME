@@ -5,7 +5,7 @@ import { config } from '../../config.js';
 import { targets } from './aim.js';
 import { pop } from './popups.js';
 import { mainShip } from './ships.js';
-import { toWorldX, toWorldY } from './pose.js';
+import { toWorldX, toWorldY, aimToWorld } from './pose.js';
 
 const C = config.COIL;
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -23,8 +23,9 @@ export function createCoil({ state, puff, credit }) {
     const power = coil.charge;
     const dmg = Math.max(1, Math.round(C.DAMAGE * power));
     const e = emitter();
-    const dx = Math.cos(coil.aim);
-    const dy = Math.sin(coil.aim);
+    const wa = aimToWorld(ship, coil.aim); // (coil.aim is in ship space; the bolt flies along the world)
+    const dx = Math.cos(wa);
+    const dy = Math.sin(wa);
     // A jagged bolt for the picture.
     const pts = [[e.x, e.y]];
     for (let k = 1; k <= 12; k++) {

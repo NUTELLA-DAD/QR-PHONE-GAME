@@ -5,7 +5,7 @@ import { config } from '../../config.js';
 
 import { portPos } from './gunshipBlueprint.js'; // (pure geometry: no import cycle)
 import { mainShip } from './ships.js';
-import { toWorldX, toWorldY } from './pose.js';
+import { toWorldX, toWorldY, aimToShip } from './pose.js';
 
 export const SHELL_SPEED = config.GUNS.SHELL_SPEED;
 export const SHELL_LIFE = config.GUNS.SHELL_LIFE;
@@ -67,7 +67,7 @@ export function targets(state) {
   return list;
 }
 
-// Angle a gun must point to hit this target, or null if it's out of the gun's arc or range.
+// Angle a gun must point to hit this target (in SHIP space, like gun.aim), or null if it's out of the gun's arc or range.
 export function solution(state, gun, target) {
   const ship = mainShip(state);
   const gx = toWorldX(ship, gun.bx);
@@ -75,7 +75,7 @@ export function solution(state, gun, target) {
   let p = target.at(0);
   for (let i = 0; i < 3; i++) p = target.at(Math.hypot(p.x - gx, p.y - gy) / SHELL_SPEED);
   if (Math.hypot(p.x - gx, p.y - gy) > RANGE * (gun.reach || 1)) return null; // (a gun on a high crow's nest reaches further: config.NEST)
-  const angle = Math.atan2(p.y - gy, p.x - gx);
+  const angle = aimToShip(ship, Math.atan2(p.y - gy, p.x - gx)); // (the world direction as the ship sees it: a ship facing left mirrors it; gun.home / gun.arc are in ship space)
   return Math.abs(angleDiff(angle, gun.home)) <= gun.arc ? angle : null;
 }
 

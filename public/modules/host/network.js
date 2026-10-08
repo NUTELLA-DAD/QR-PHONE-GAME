@@ -7,7 +7,8 @@ import { crewAboard, crewHeads } from './crewscale.js';
 // simulation.js). While the game is not taking input (pause, scorecard, vote, run-end screen) presses are simply ignored.
 export function applyPlayerInput(state, player, data) {
   const taking = !(state.paused || state.scorecard || state.vote || (state.runEnd && !shipOf(state, player).ctx.wreck)); // (input goes to the ship the player is aboard: its own wreck state)
-  player.jx = data.jx || 0;
+  player.jxs = data.jx || 0; // the stick as it is on the SCREEN...
+  player.jx = player.jxs * shipOf(state, player).pose.f; // ...and along the ship (she may be facing left): crew walk, guns and lamps aim, the helm steers by this one (comeAbout.js redoes it when she comes about)
   player.jy = data.jy || 0;
   if (taking && data.act) {
     player.actQ = true;
@@ -28,6 +29,7 @@ export function applyPlayerInput(state, player, data) {
     player.fire = taking && !!data.fire;
     if (data.fire) player.fireAid = data.aid; // (a hold only counts while the label it started on is still showing)
   }
+  if ('ca' in data) player.ca = !!data.ca; // holding COME ABOUT (the helm's button)
   if ('prime' in data) player.prime = !!data.prime; // holding the PRIME button on a gun
   if (data.help) player.helpQ = true; // HELP! button
   if ('spot' in data) player.spotQ = { i: data.spot | 0, s: data.sq | 0 }; // tapped a radar ping

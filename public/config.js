@@ -92,6 +92,20 @@ export const config = {
     TILT_PER_SPEED: 0.0004, // tilt per pixel/second of climb
     TILT_SMOOTH: 3, // how quickly the tilt follows (higher = snappier)
     TILT_PIVOT: null, // the point the ship tips around: null = the ship's own (the layout's tiltPivot: [800, 520] on the classic ship), or [x, y] to force one
+    // COME ABOUT (shipSim.js comeAbout, M.3): turning the ship round, on the helmsman's command only. The picture squashes through zero and comes out mirrored; at the middle
+    // the ship's facing flips (and her speed along her bow flips with it, so she keeps moving the same way over the ground).
+    TURN: {
+      HOLD: 1.0, // seconds the helm holds COME ABOUT (the phone's button) or the stick hard astern before she starts to turn
+      TIME: 2.6, // seconds the manoeuvre takes
+      MAX_SPEED: 0.4, // the fastest she may be going (share of full throttle, either way) to begin, and the most she is allowed while she turns
+      COOLDOWN: 4, // seconds after a turn before the next one may begin
+      STICK: 0.9, // how far astern (0..1) the helm's stick must be held to count as the command
+      REFUSE_COOLDOWN: 2, // seconds before a refused command can be tried again (so the phone is not buzzed every frame)
+      BOT_TURNS: false, // true = a bot at the helm turns her round when the way to the goal has been behind her for BOT_BEHIND seconds (tools/buildsim.mjs --check-turn); off in co-op until it is rebaselined
+      BOT_FAR: 600, // pixels the goal must be behind her bow for a bot helm to count it as behind
+      BOT_BEHIND: 4, // seconds the goal must stay behind her before a bot helm commands a turn
+      MARGIN: 20, // pixels of clear air the mirrored hull needs round each outline point to be allowed to turn
+    },
   },
   // Special enemies (see specials.js), one group every so often.
   SPECIALS: {

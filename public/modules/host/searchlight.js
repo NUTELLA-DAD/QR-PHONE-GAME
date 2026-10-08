@@ -12,7 +12,7 @@ import { tilt, inRock } from './course.js';
 import { pop } from './popups.js';
 import { envOf } from './environments.js';
 import { mainShip } from './ships.js';
-import { toWorldX, toWorldY } from './pose.js';
+import { toWorldX, toWorldY, aimToWorld, aimToShip } from './pose.js';
 
 const S = config.SEARCHLIGHT;
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -52,7 +52,7 @@ export function createSearchlights({ state }) {
   const emitter = (l) => {
     const a = l.aim + (state.ship.pitch || 0);
     const [x, y] = tilt(state, l.bx, l.by);
-    return { x: toWorldX(ship, x + Math.cos(a) * l.len), y: toWorldY(ship, y + Math.sin(a) * l.len), a };
+    return { x: toWorldX(ship, x + Math.cos(a) * l.len), y: toWorldY(ship, y + Math.sin(a) * l.len), a: aimToWorld(ship, a) }; // (a: which way the beam points in the WORLD; l.aim is in ship space)
   };
 
   const operatorOf = (l) => Object.values(state.players).find((q) => q.lock === l.n) || null;
@@ -77,7 +77,7 @@ export function createSearchlights({ state }) {
             let best = null;
             for (const t of tgs) {
               const p = t.at(0);
-              const a = Math.atan2(p.y - e.y, p.x - e.x) - (state.ship.pitch || 0);
+              const a = aimToShip(ship, Math.atan2(p.y - e.y, p.x - e.x)) - (state.ship.pitch || 0);
               const off = Math.abs(angleDiff(a, want));
               if (off < S.ASSIST_ANGLE && (!best || off < best.off) && Math.abs(angleDiff(a, l.home)) <= l.arc) best = { a, off };
             }

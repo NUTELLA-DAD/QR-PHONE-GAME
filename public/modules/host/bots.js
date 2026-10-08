@@ -12,7 +12,7 @@ import { botJobs as goingDownJobs } from './goingDown.js';
 import { autopilotOn } from './crewscale.js';
 import { flamAt } from './fireModel.js';
 import { mainShip } from './ships.js';
-import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
+import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 
 const B = config.BOTS;
 // Tables worked out per ship layout (rebuilt when a new ship build is applied to it): `tables(L).MAIN` ... Every function below gets its layout as
@@ -112,7 +112,7 @@ function coilShot(state) {
   for (const t of targets(state)) {
     const p = t.at(0);
     if (Math.hypot(p.x - ex, p.y - ey) > config.COIL.RANGE) continue;
-    const a = Math.atan2(p.y - ey, p.x - ex);
+    const a = aimToShip(ship, Math.atan2(p.y - ey, p.x - ex)); // (the angle as the ship sees it: coil.aim and the arc are in ship space)
     if (Math.abs(Math.atan2(Math.sin(a - M.aim), Math.cos(a - M.aim))) <= M.arc) angles.push(a);
   }
   let best = { angle: M.aim, count: 0 };
@@ -451,6 +451,7 @@ function operate(p, state, dt) {
   p.jy = 0;
   p.fire = false;
   p.prime = false;
+  p.ca = false; // (COME ABOUT is held again below, by a helm bot that wants it)
   const ship = state.ship;
   if (isEscortStation(p.lock, L)) {
     // Fly the escort fighter at the nearest enemy (or let her circle the ship if there's none).
@@ -459,7 +460,7 @@ function operate(p, state, dt) {
     if (list.length) {
       const q = list[0].q;
       const d = Math.hypot(q.x - esc.x, q.y - esc.y) || 1;
-      p.jx = (q.x - esc.x) / d;
+      p.jx = ((q.x - esc.x) / d) * mainShip(state).pose.f; // (jx is along the ship; the plane flies along the world)
       p.jy = (q.y - esc.y) / d;
     } else p.jx = p.jy = 0;
     p.gunIdle = list.length ? 0 : (p.gunIdle || 0) + dt;
@@ -469,6 +470,10 @@ function operate(p, state, dt) {
     // Terrain first: keep inside the safe altitude window, stopping to climb cliffs.
     const plan = pilotPlan(state, 2.5, B.HELM_SPEED);
     p.jx = clamp((plan.speed - ship.speed) * 4, -1, 1);
+    // COME ABOUT (config.SHIP.TURN.BOT_TURNS): the way to the goal has been behind her for a while, so hold the turn command like a phone's button (plan.dx is how far the route point is ahead of her bow).
+    const TN = config.SHIP.TURN;
+    p.behindT = plan.dx < -TN.BOT_FAR && !(state.course.unstick > 0) ? (p.behindT || 0) + dt : 0;
+    p.ca = TN.BOT_TURNS && p.behindT >= TN.BOT_BEHIND;
     const w = altWindow(state, 2.5);
     const bounds = altBounds(state);
     const lo = Math.max(w.min, bounds.lo);
@@ -525,7 +530,7 @@ function operate(p, state, dt) {
     const pitch = state.ship.pitch || 0;
     let best = null;
     for (const t of [...state.litTargets, ...state.dimTargets]) {
-      const a = Math.atan2(t.y - l.ey, t.x - l.ex) - pitch;
+      const a = aimToShip(mainShip(state), Math.atan2(t.y - l.ey, t.x - l.ex)) - pitch;
       if (Math.abs(angleDiff(a, l.home)) > l.arc) continue;
       const d = Math.hypot(t.x - sx, t.y - sy);
       if (d < 2600 && (!best || d < best.d)) best = { a, d };
@@ -948,7 +953,7 @@ function dareStep(p, state, dt) {
       }
       if (!aim && d.kind === 'show' && d.walkTo) steer(p, p.d, d.walkTo, 20);
       if (aim && (p.hookCd || 0) <= 0 && p.conn == null && !p.lock) { // (the hookshot will not fire on a ladder)
-        p.jx = aim.dx;
+        p.jx = aim.dx * mainShip(state).pose.f; // (the hook flies along the world, jx is along the ship)
         p.jy = aim.dy;
         p.atkQ = true;
         d.tries++;
@@ -970,7 +975,7 @@ function dareStep(p, state, dt) {
         return setPhase(p, state, 'aim'), true;
       }
       if (d.aim) {
-        p.jx = d.aim.dx * 0.5; // (a gentle pump while the hook flies)
+        p.jx = d.aim.dx * 0.5 * mainShip(state).pose.f; // (a gentle pump while the hook flies)
       }
       if (h.phase === 'caught') {
         p.fire = true; // reel in
@@ -1017,7 +1022,7 @@ function dareStep(p, state, dt) {
           if (!best || ds < best.ds) best = { q, ds };
         }
         if (best) {
-          p.jx = (best.q.x - s.x) / (best.ds || 1);
+          p.jx = ((best.q.x - s.x) / (best.ds || 1)) * mainShip(state).pose.f;
           p.jy = (best.q.y - s.y) / (best.ds || 1);
         }
         return true;
@@ -1026,7 +1031,7 @@ function dareStep(p, state, dt) {
       const tx = mid.x;
       const ty = toWorldY(mainShip(state), L.bounds.y0) - 520;
       const dm = Math.hypot(tx - s.x, ty - s.y) || 1;
-      p.jx = (tx - s.x) / dm;
+      p.jx = ((tx - s.x) / dm) * mainShip(state).pose.f;
       p.jy = (ty - s.y) / dm;
       d.homeT = (d.homeT || 0) + dt;
       const above = toShipY(mainShip(state), s.y) < DR.BAIL_Y;
