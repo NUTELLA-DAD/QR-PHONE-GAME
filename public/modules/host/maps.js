@@ -246,6 +246,73 @@ function buildOpenMap(level, rand, lengthMul = 1, layout) {
   return map;
 }
 
+// THE VERSUS ARENA (config.PVP.ARENA, pvp/match.js): a big open sky, the same on the left and the right (the left half is made, the right half is its mirror, so neither side has the better
+// ground). Rolling hills and a few tall spires on the ground, floating islands of every size, and one hollow island on each side (a pocket with its mouth toward the middle: somewhere to
+// hide and shoot from). The two launch points are START_GAP apart in the middle of the sky, clear of rock. No outposts and no flak: the one dummy outpost is already "done".
+// A = config.PVP.ARENA (SIZE [cells wide, cells high], ISLANDS, SPIRES, POCKETS, START_Y share of the height); gap = the distance between the two launch points (px).
+export function buildArenaMap(rand, layout, A, gap = 9000) {
+  const C = config.MAPS.CELL;
+  const [W, H] = A.SIZE;
+  const r = (a, b) => a + rand() * (b - a);
+  const ri = (a, b) => Math.floor(r(a, b + 1));
+  const solid = new Uint8Array(W * H);
+  const half = Math.floor(W / 2);
+  const idx = (i, j) => j * W + i;
+  const sj = Math.round(H * A.START_Y); // the row the ships start on
+  const spawnI = [Math.floor((W * C / 2 - gap / 2) / C), Math.floor((W * C / 2 + gap / 2) / C)]; // the cells of the two launch points
+  const keepOut = (ci, cj, rx, ry) => spawnI.some((si) => Math.abs(ci - si) < rx + 9) && Math.abs(cj - sj) < ry * 1.8 + 8; // (an island never sits on a launch point)
+  // Ground: rolling hills with spires (the left half; the right is mirrored below).
+  const s1 = r(0, 6), s2 = r(0, 6);
+  const peaks = Array.from({ length: A.SPIRES }, () => ({ i: ri(8, half - 6), h: r(0.2, 0.42) * H, w: r(5, 10) }));
+  const tops = [];
+  for (let i = 0; i < W; i++) {
+    const li = i < half ? i : W - 1 - i;
+    let h = 4 + 2.5 * Math.sin(li * 0.07 + s1) + 1.8 * Math.sin(li * 0.19 + s2);
+    for (const p of peaks) h = Math.max(h, p.h * Math.max(0, 1 - Math.abs(li - p.i) / p.w));
+    tops.push(Math.round(H - 2 - h));
+    for (let j = tops[i]; j < H; j++) solid[idx(i, j)] = 1;
+  }
+  // Floating islands (rounded top, pointy bottom), each also set at its mirror image.
+  const blob = (ci, cj, rx, ry) => {
+    for (const c of [ci, W - 1 - ci]) {
+      for (let j = Math.floor(cj - ry); j <= Math.ceil(cj + ry * 1.8); j++) {
+        for (let i = Math.floor(c - rx); i <= Math.ceil(c + rx); i++) {
+          if (i < 0 || j < 2 || i >= W || j >= H) continue;
+          const u = (i - c) / rx, v = j < cj ? (j - cj) / ry : (j - cj) / (ry * 1.8);
+          if (u * u + v * v <= 1) solid[idx(i, j)] = 1;
+        }
+      }
+    }
+  };
+  for (let k = 0, tries = 0; k < A.ISLANDS && tries < 400; tries++) {
+    const rx = r(3, 12), ry = r(2, 5), ci = ri(8, half + 2), cj = ri(10, H - 22);
+    if (keepOut(ci, cj, rx, ry) || tops[Math.min(W - 1, ci)] - cj < ry * 2.8 + 6) continue; // (not on the ground either)
+    blob(ci, cj, rx, ry);
+    k++;
+  }
+  // Hollow islands: a thick shell of rock round a cavity with its mouth toward the middle of the map.
+  for (let k = 0; k < A.POCKETS; k++) {
+    const rx = 14, ry = 9, ci = Math.round(W * 0.2) + k * 9, cj = ri(Math.round(H * 0.25), Math.round(H * 0.45));
+    for (const side of [1, -1]) { // 1: the left pocket (mouth to the right), -1: its mirror
+      const c = side > 0 ? ci : W - 1 - ci;
+      for (let j = cj - ry; j <= cj + ry; j++) for (let i = c - rx; i <= c + rx; i++) {
+        if (i < 0 || j < 2 || i >= W || j >= H) continue;
+        const u = (i - c) / rx, v = (j - cj) / ry;
+        const inner = ((i - c) / (rx * 0.62)) ** 2 + ((j - cj) / (ry * 0.55)) ** 2 < 1;
+        const mouth = side * (i - c) > 0 && Math.abs(j - cj) <= 4;
+        solid[idx(i, j)] = u * u + v * v <= 1 && !inner && !mouth ? 1 : 0;
+      }
+    }
+  }
+  // Clear the launch points (a generous box of open sky round each).
+  for (const si of spawnI) for (let j = sj - 8; j <= sj + 8; j++) for (let i = si - 14; i <= si + 14; i++) if (i >= 0 && j >= 0 && i < W && j < H) solid[idx(i, j)] = 0;
+  const outposts = [{ x: half * C, y: sj * C, done: true, guns: [] }]; // (a dummy: course.js divides by the outpost count)
+  const map = { kind: 'open', level: 1, CELL: C, W, H, solid, turrets: [], outposts, open: true, arena: { x0: 0, x1: W * C, y0: 0, y1: H * C, cx: (W * C) / 2, cy: (sj + 0.5) * C } };
+  finishMap(map, { i: spawnI[0], j: sj }, { i: half, j: sj }, layout);
+  map.start = { x: (W * C) / 2 - gap / 2, y: (sj + 0.5) * C }; // (the left ship's launch point; the right one is START_GAP further on)
+  return map;
+}
+
 // Path length (squares) from a point to an outpost's station (sets the route goal as a side effect).
 export function stationDist(map, o, mx, my) {
   setGoal(map, stationCell(map, o));

@@ -33,10 +33,10 @@ export function createPvpArt({ ctx }) {
   const worldTo = (view, w, h) => ctx.setTransform(view.zoom, 0, 0, view.zoom, w / 2 - view.cx * view.zoom, h / 2 - view.cy * view.zoom);
 
   // A swallow-tailed flag on a pole, streaming back (left) from (x, y) = the foot of the pole. Zoom keeps the ink line readable.
-  const pennant = (x, y, team, zoom, time, phase) => {
+  const pennant = (x, y, team, zoom, time, phase, sc = 1) => { // sc: the flag is drawn this much bigger (a zoomed-out Versus view: it must still read as a team flag)
     const p = P().PENNANT || {};
     const c = colors(team);
-    const pole = clamp(p.POLE, 20, 400), len = clamp(p.LEN, 30, 600), hgt = clamp(p.HEIGHT, 10, 300), wave = clamp(p.WAVE, 0, 0.6);
+    const pole = clamp(p.POLE, 20, 400) * sc, len = clamp(p.LEN, 30, 600) * sc, hgt = clamp(p.HEIGHT, 10, 300) * sc, wave = clamp(p.WAVE, 0, 0.6);
     const lw = clamp(1.8 / zoom, 3, 12);
     const topY = y - pole;
     inkLine(lw);
@@ -83,7 +83,21 @@ export function createPvpArt({ ctx }) {
         const o = s.offset || { dx: 0, dy: 0 };
         const x = (b.x0 + b.x1) / 2 + clamp(o.dx, -1e6, 1e6);
         const y = b.y0 - (Number.isFinite(s.alt) ? s.alt : 0) + clamp(o.dy, -1e6, 1e6) + 12;
-        pennant(x, y, s.team, view.zoom, time / 1000, i * 1.9);
+        const nz = (config.CAMERA.VERSUS || {}).NAME_ZOOM || 0;
+        const sc = nz && view.zoom < nz ? clamp(nz / view.zoom, 1, 2.6) : 1; // (zoomed far out the flag and the ship's name grow, so they read from the sofa)
+        pennant(x, y, s.team, view.zoom, time / 1000, i * 1.9, sc);
+        if (sc > 1.12 && s.name) { // the name over the flag, in the team colour with a white outline
+          const c = colors(s.team), size = Math.round(46 * sc);
+          ctx.font = size + 'px ' + config.FONTS.DISPLAY;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'alphabetic';
+          ctx.lineJoin = 'round';
+          ctx.lineWidth = size / 5;
+          ctx.strokeStyle = '#fff';
+          ctx.strokeText(String(s.name).slice(0, 22), x, y - (clamp(P().PENNANT.POLE, 20, 400) + 30) * sc);
+          ctx.fillStyle = c.dark;
+          ctx.fillText(String(s.name).slice(0, 22), x, y - (clamp(P().PENNANT.POLE, 20, 400) + 30) * sc);
+        }
       });
       ctx.restore();
     } catch (e) { try { ctx.restore(); } catch (e2) { /* ignore */ } }

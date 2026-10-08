@@ -10,6 +10,7 @@
 import { config } from '../../../config.js';
 import { createLogbook } from '../logbookArt.js';
 import { createPvpArt } from './pvpArt.js';
+import { metres, BAND_WORDS } from './range.js';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number.isFinite(v) ? v : lo));
 const fmtTime = (t) => {
@@ -108,6 +109,8 @@ export function createVersusArt({ ctx, fleet, drawCrewAt }) {
       ctx.save();
       for (const sh of world.ships) if (sh.team) fleet.panel(sh, sh.team.id === 'red' ? 30 : config.W - 30 - 238, 148, 238, 116);
       const cx = config.W / 2;
+      if ((M.phase === 'fight' || M.phase === 'count') && M.range && M.range.dist) drawRange(M.range.dist, M.range.band);
+      if (M.phase === 'fight' && M.storm && M.storm.s > 0) text(M.storm.s >= 1 ? 'THE STORM HAS CLOSED IN' : 'STORM CLOSING IN', cx, 166, 14, L().STAMP, 'center', config.FONTS.TEXT, 220);
       if (M.phase === 'count') {
         const n = Math.ceil(P.COUNT_IN - M.t);
         shout(n > 0 ? String(n) : 'GO!', cx, 330, 190, '#fff2cf');
@@ -184,5 +187,57 @@ export function createVersusArt({ ctx, fleet, drawCrewAt }) {
     } catch (e) { try { ctx.restore(); } catch (e2) { /* ignore */ } }
   };
 
-  return { drawLobby, drawHud, drawBoard, bang: pvp.drawBang, team };
+  // ---- the wind wall and the storm (world space: call with the camera's world transform set) ----
+  // R = the wall's rectangle in the world { x0, x1, y0, y1 } (match.wall), s = how far the storm has closed it in (0..1). Outside the wall the sky is dark storm cloud; just inside it the cloud
+  // thickens and wind streaks blow back toward the middle - the wall is soft, but you can see where it is, and the storm band is the part that bites.
+  const drawWall = (R, view, w, h, t, s) => {
+    try {
+      const z = view.zoom, vx0 = view.cx - w / 2 / z - 200, vx1 = view.cx + w / 2 / z + 200, vy0 = view.cy - h / 2 / z - 200, vy1 = view.cy + h / 2 / z + 200;
+      const IN = 1000, FAR = 4000, a0 = 0.5 + 0.22 * s;
+      const col = (a) => `rgba(52,58,84,${a})`;
+      ctx.save();
+      const slab = (xa, ya, xb, yb, gx0, gy0, gx1, gy1) => { // a rectangle filled with a gradient from (gx0, gy0) [alpha a0] to (gx1, gy1) [alpha 0]
+        const g = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
+        g.addColorStop(0, col(a0));
+        g.addColorStop(1, col(0));
+        ctx.fillStyle = g;
+        ctx.fillRect(xa, ya, xb - xa, yb - ya);
+      };
+      const solid = (xa, ya, xb, yb) => { ctx.fillStyle = col(a0); ctx.fillRect(xa, ya, xb - xa, yb - ya); };
+      const streaks = (horizontal, wall, dir) => { // a few wind streaks sliding from the wall toward the middle of the sky
+        ctx.strokeStyle = 'rgba(235,240,250,0.55)';
+        ctx.lineWidth = clamp(5 / z, 8, 40);
+        ctx.lineCap = 'round';
+        const n = 14;
+        for (let k = 0; k < n; k++) {
+          const along = (horizontal ? vy0 : vx0) + ((k * 0.6180339 + 0.21) % 1) * ((horizontal ? vy1 - vy0 : vx1 - vx0));
+          const ph = (t * 0.45 + k * 0.37) % 1;
+          const off = dir * (ph * (IN + 500) - 250), len = 420 + 160 * ((k * 7) % 3);
+          ctx.globalAlpha = Math.sin(ph * Math.PI) * 0.8;
+          ctx.beginPath();
+          if (horizontal) { ctx.moveTo(wall + off, along); ctx.lineTo(wall + off + dir * len, along); } else { ctx.moveTo(along, wall + off); ctx.lineTo(along, wall + off + dir * len); }
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      };
+      if (vx0 < R.x0) { solid(Math.min(vx0, R.x0 - FAR), vy0, R.x0, vy1); slab(R.x0, vy0, R.x0 + IN, vy1, R.x0, 0, R.x0 + IN, 0); streaks(true, R.x0, 1); }
+      if (vx1 > R.x1) { solid(R.x1, vy0, Math.max(vx1, R.x1 + FAR), vy1); slab(R.x1 - IN, vy0, R.x1, vy1, R.x1, 0, R.x1 - IN, 0); streaks(true, R.x1, -1); }
+      if (vy0 < R.y0) { solid(vx0, Math.min(vy0, R.y0 - FAR), vx1, R.y0); slab(vx0, R.y0, vx1, R.y0 + IN, 0, R.y0, 0, R.y0 + IN); streaks(false, R.y0, 1); }
+      if (R.y1 < 1e6 && vy1 > R.y1) { solid(vx0, R.y1, vx1, Math.max(vy1, R.y1 + FAR)); slab(vx0, R.y1 - IN, vx1, R.y1, 0, R.y1, 0, R.y1 - IN); streaks(false, R.y1, -1); }
+      ctx.restore();
+    } catch (e) { try { ctx.restore(); } catch (e2) { /* ignore */ } }
+  };
+  // The range plate under the round clock (on the 1600x900 stage): how far apart the ships are, in metres, and what kind of fight that is.
+  const drawRange = (d, band) => {
+    try {
+      const y = 104, cx = config.W / 2;
+      ctx.save();
+      book.paper(cx - 112, y, 224, 44, { r: 10, pins: false });
+      text(metres(d) + ' m', cx - 30, y + 32, 26, L().INK, 'center');
+      text(BAND_WORDS[band], cx + 62, y + 28, 12, band === 'far' || d > config.PVP.RANGE.FAR_WORD ? L().STAMP : L().INK_SOFT, 'center', config.FONTS.TEXT, 100);
+      ctx.restore();
+    } catch (e) { try { ctx.restore(); } catch (e2) { /* ignore */ } }
+  };
+
+  return { drawLobby, drawHud, drawBoard, drawWall, drawRange, bang: pvp.drawBang, team };
 }

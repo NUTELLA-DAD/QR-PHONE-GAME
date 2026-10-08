@@ -29,6 +29,7 @@ import { createLinkArt } from './linkArt.js'; // linked-station wires, gust warn
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
 import { createFleetArt } from './fleetArt.js'; // B.3: the panels, pennants and edge arrows of a sky with several ships
 import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, HUD, scoreboard (pvp/match.js)
+import { bandOf, metres, BAND_WORDS } from './pvp/range.js'; // the range bands: the TV's readout
 import { createYardArt } from './yardArt.js'; // S.6b: the Shipwright's Yard (the sky-dock blueprint, the A / B / C vote, BUILT, "NEW: ...")
 import { createPartPictures } from './partArt.js'; // the little part pictures of the build tray, on the Yard's cards
 import { crewHeads } from './crewscale.js';
@@ -1151,6 +1152,53 @@ export function createRenderer({ ctx, state: world, canvas }) {
   // "QUICK VOYAGE - voyage 2 of 2 - DAILY" (what this run is, for the HUD and the route map)
   const modeLine = (run) => modeInfo(run.mode).label + (run.voyages > 1 ? ` - voyage ${run.voyageNo} of ${run.voyages}` : '') + (run.daily ? ' - DAILY' : '');
 
+  // VERSUS, ships too far apart for even the widest view (camera.js splits it): the far ship in a framed PORTHOLE ("spyglass") over the bottom right - her own piece of sky, drawn again from her
+  // position at about the main zoom - with her name and the distance on a plate under it. `I` = view.inset { cx, cy, zoom, x, y, w, h, ship } in canvas pixels.
+  const drawInset = (time, I) => {
+    try {
+      const T = I.ship && I.ship.team ? versusArt.team(I.ship.team.id) : { color: '#c9a85a', dark: '#6b4a32', name: 'SHIP' };
+      const u = Math.max(0.7, canvas.height / 900); // the frame's furniture grows with the screen
+      const r = 16 * u;
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.beginPath();
+      ctx.roundRect(I.x, I.y, I.w, I.h, r);
+      ctx.clip();
+      renderFrame(time, { cx: I.cx, cy: I.cy, zoom: I.zoom }, { layers: ['background', 'ship', 'effects'], inset: true }); // (clipped to the porthole; no HUD, no arrows)
+      ctx.restore();
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.roundRect(I.x, I.y, I.w, I.h, r);
+      ctx.lineWidth = 9 * u; // the rim in the ship's team colour, an ink line each side of it, a brass rivet at the corners
+      ctx.strokeStyle = T.color;
+      ctx.stroke();
+      ctx.lineWidth = 3 * u;
+      ctx.strokeStyle = config.INK;
+      ctx.stroke();
+      ctx.fillStyle = config.LOGBOOK.PIN;
+      for (const [px, py] of [[I.x + 6 * u, I.y + 6 * u], [I.x + I.w - 6 * u, I.y + 6 * u], [I.x + 6 * u, I.y + I.h - 6 * u], [I.x + I.w - 6 * u, I.y + I.h - 6 * u]]) { ctx.beginPath(); ctx.arc(px, py, 5 * u, 0, 7); ctx.fill(); ctx.stroke(); }
+      // the plate: whose ship, how far
+      const m = world.match, d = m && m.range ? m.range.dist : 0;
+      const ph = 62 * u, pw = I.w * 0.86, px = I.x + (I.w - pw) / 2, py = I.y + I.h - ph - 10 * u;
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      book.paper(px, py, pw, ph, { r: 10 * u, pins: false });
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = T.dark;
+      ctx.font = Math.round(24 * u) + 'px ' + config.FONTS.DISPLAY;
+      ctx.fillText(String((I.ship && I.ship.name) || 'FAR SHIP').slice(0, 24), I.x + I.w / 2, py + 26 * u, pw - 20 * u);
+      ctx.fillStyle = config.LOGBOOK.INK;
+      ctx.font = '700 ' + Math.round(20 * u) + 'px ' + config.FONTS.TEXT;
+      ctx.fillText(rangeText(d), I.x + I.w / 2, py + 52 * u, pw - 20 * u);
+      ctx.restore();
+      ctx.restore();
+    } catch (e) { try { ctx.restore(); } catch (e2) { /* ignore */ } }
+  };
+  const rangeText = (d) => metres(d) + ' m - ' + BAND_WORDS[bandOf(d)];
+
   // Versus (pvp/match.js): everything the TV adds on top of the sky, on the 1600x900 stage.
   const drawVersus = (time, w, h) => {
     const M = world.match;
@@ -2094,6 +2142,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       courseArt.drawTurrets(time / 1000);
       drawBombs(time / 1000);
       skyArt.fogFront(wv, width, height); // thin fog over the rock, under the ship
+      if (world.match && world.match.on && world.match.wall && world.match.phase !== 'lobby' && world.match.phase !== 'shelf') versusArt.drawWall(world.match.wall, wv, width, height, time / 1000, world.match.storm.s); // (Versus: the wind wall, and the storm that closes it in)
     }
     lap('terrain');
 
@@ -2271,6 +2320,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
       lamps[0].draw(wv, width, height, ts, lamps.slice(1));
     }
     lap('dark');
+    if (view.inset && has('ship') && fleetN() > 1) drawInset(time, view.inset); // (Versus, ships too far apart: the porthole on the far one)
+    lap('inset');
 
     if (has('hud')) {
       // Screen overlay on a fixed 1600x900 stage.

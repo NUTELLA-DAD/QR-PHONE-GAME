@@ -209,8 +209,8 @@ export function captainFly(state, p, plan, dt) {
   // ---- the plan, composed ----
   const AIMY = AIM.y;
   const win = altWindow(state, 2);
-  const st = state.course && state.course.map && state.course.map.start;
-  const altMax = st ? AIMY - (st.y - P.ARENA.TOP + 160) : Infinity; // (the arena's soft ceiling: do not climb into the wind wall)
+  const wall = state.match && state.match.wall; // (the arena's wind wall: do not climb into it)
+  const altMax = wall ? AIMY - (wall.y0 + 260) : Infinity;
   const lo = win.min + 20, hi = Math.min(win.max - 20, altMax);
   const fits = win.min <= win.max;
   const clampAlt = (v) => (fits ? clamp(v, lo, Math.max(lo, hi)) : plan.target);
@@ -299,14 +299,14 @@ function corridorFree(state, ship, aimY, x0, x1, margin = 130) {
 }
 function startPass(state, c, ship, R, L, B) {
   const AIMY = L.aimPoint.y;
-  const st = state.course && state.course.map && state.course.map.start;
+  const wall = state.match && state.match.wall;
   const P = config.PVP;
   const win = altWindow(state, 2);
   const mx = toWorldX(ship, L.aimPoint.x), dir0 = R.mid.x - mx < 0 ? -1 : 1;
   const endX = R.mid.x + dir0 * (P.STANDOFF + 400);
   const feasible = (over) => {
     const wantY = R.mid.y + (over ? -1 : 1) * passOffset(L, R, B, over);
-    const altMax = st ? AIMY - (st.y - P.ARENA.TOP + 160) : Infinity;
+    const altMax = wall ? AIMY - (wall.y0 + 260) : Infinity;
     return win.min <= win.max && AIMY - wantY <= altMax && corridorFree(state, ship, wantY, mx, endX, 80);
   };
   const canOver = feasible(true), canUnder = feasible(false);

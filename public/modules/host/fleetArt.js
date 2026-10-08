@@ -9,6 +9,7 @@ import { createLogbook } from './logbookArt.js';
 import { createPvpArt } from './pvp/pvpArt.js';
 import { windSpeed } from './sails.js';
 import { pivotOf } from './pose.js';
+import { metres } from './pvp/range.js';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number.isFinite(v) ? v : lo));
 
@@ -171,7 +172,7 @@ export function createFleetArt({ ctx }) {
 
   // The team's flag on top of each teamed ship's mast, in the world (the camera's world transform is set up by pvpArt.drawWorld itself).
   const drawPennants = (world, view, w, h, time) => {
-    const list = world.ships.filter((s) => s.team && !s.ai).map((s) => ({ bounds: s.layout.bounds, alt: -s.pose.y, offset: { dx: s.pose.x, dy: 0 }, team: s.team.id }));
+    const list = world.ships.filter((s) => s.team && !s.ai).map((s) => ({ bounds: s.layout.bounds, alt: -s.pose.y, offset: { dx: s.pose.x, dy: 0 }, team: s.team.id, name: s.name }));
     if (list.length) pvp.drawWorld(list, view, w, h, time);
   };
 
@@ -218,6 +219,16 @@ export function createFleetArt({ ctx }) {
         ctx.strokeText(String(sh.name || sh.id), tx, ty);
         ctx.fillStyle = config.INK;
         ctx.fillText(String(sh.name || sh.id), tx, ty);
+        if (world.match && world.match.on) { // Versus: how far away she is, in metres, under her name
+          const o = world.ships.find((q) => q !== sh && !q.ai);
+          if (o) {
+            const d = Math.hypot(o.pose.x + pivotOf(o) - wx, o.pose.y + (o.layout.bounds.y0 + o.layout.bounds.y1) / 2 - wy);
+            const word = metres(d) + ' m', yy = ty + (ty < 0 ? -20 : 20);
+            ctx.font = '700 18px ' + config.FONTS.TEXT;
+            ctx.strokeText(word, tx, yy);
+            ctx.fillText(word, tx, yy);
+          }
+        }
         ctx.restore();
       }
       ctx.restore();

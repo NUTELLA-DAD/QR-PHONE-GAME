@@ -24,6 +24,15 @@ export const config = {
     SHAKE_MAX: 9, // ...but never more than this many pixels
     SHIP_KEEP_IN: 0.5, // the ship's middle stays within this share of the screen from the centre
     FRAME_RANGE: 1900, // threats closer than this are kept in view (farther ones get edge arrows)
+    // VERSUS (camera.js): the arena is big, so the camera may pull much further out (the ships shrink to silhouettes with a pennant and a name over them: pvpArt.js). When even that cannot
+    // fit both ships the view SPLITS: the main view follows the ship nearer the middle of the sky (zoomed to FAR_ZOOM x the normal view) and a framed "spyglass" porthole shows the other, with the
+    // distance (render.js drawInset). The split starts when the ships fit at less than ENTER x the widest zoom and ends when they fit again at more than EXIT x (so it does not flicker).
+    VERSUS: {
+      MAX_ZOOM_OUT: 2.9, // the widest view: this many times out from the normal one (the ship bake's floor is about zoom 0.16, so keep zoom >= 0.16 on a 1920 px screen)
+      ENTER: 0.97, EXIT: 1.12, FAR_ZOOM: 0.5, // see above; FAR_ZOOM = the main view's zoom in the split, as a share of the normal view's
+      INSET: { W: 0.34, H: 0.38, X: 0.012, Y: 0.5, ZOOM: 1, MAX_RATIO: 1.2, SMOOTHING: 3 }, // the porthole: size and place as shares of the screen (X from the right edge, Y from the top; it sits over the bottom right, clear of the panels and the banner), its zoom as a share of the main view's (never smaller than main / MAX_RATIO: the ship pictures are baked for one zoom and a very different one would re-bake them every frame), how quickly it follows the far ship
+      NAME_ZOOM: 0.34, // below this zoom the pennants and the ships' names are drawn bigger, so they read from the sofa (pvpArt.js)
+    },
   },
   // Flight model shared by every plane (see planes.js flyPlane). Per-type THRUST / DRAG / STALL_SPEED /
   // MAX_SPEED / GRAVITY in ENEMY, DOGFIGHT, ESCORT and WAVES override these.
@@ -1403,7 +1412,7 @@ export const config = {
     SHELF_TIME: 20, // seconds each team has to vote for its ship on the phones (the shelf), after CAST OFF in the lobby
     REMATCH_TIME: 25, // seconds the rematch vote on the phones lasts after the match winner is shown
     LOBBY_GAP: 2300, // in the lobby the blue ship moors this far AHEAD of the red one, so the two cards on the TV sit over their own ships (px)
-    START_GAP: 2600, // centre-to-centre distance of the two ships at cast off (px); the left one starts on the map's start
+    START_GAP: 8400, // centre-to-centre distance of the two ships at cast off (px; about 840 m, RANGE.PX_PER_M; just inside the widest view): the arena is big, they have to find each other; the left one starts on the map's start
     FACE_OFF: true, // the right-hand ship starts facing LEFT (a COME ABOUT's worth of bow turned already), so the two bows point at each other; false = both start bow-right
     SHELL_POWER: 0.12, // impact power of one crew shell on a rival ship (1 = one enemy bullet, 3 hull; the holes, fires and gas holes a hit may cause scale with it): a round of bot crews lasts about 100 s
     BOMB_POWER: 2, // impact power of a bomb dropped through a rival ship
@@ -1415,7 +1424,15 @@ export const config = {
     MAP_SEED: 7, // arena sky: the map seed of round 1 (+ the round number); both ships get the same sky
     MAP_KIND: 'open', // arena sky: 'open' (islands and hills) | 'network' | 'route'
     ENVIRONMENT: 'skyisles', // arena sky: which of the seven environments
-    ARENA: { LIFT: 2400, BACK: 1800, FRONT: 9500, TOP: 3400, PUSH: 0.9, PUSH_MAX: 420 }, // the arena: the ships start this far above the map's start (px; the start is a mooring mast near the ground, the fight is in the air among the islands), a ship may go this far behind the start and this far along it, and this far above the start's height; past that a soft wind pushes her back (px/s per px over, at most PUSH_MAX)
+    // THE ARENA (maps.js buildArenaMap): one big sky, the same on both sides (the left half is made, the right half is its mirror): hills, tall spires, floating islands and a hollow island on each side.
+    // SIZE = [cells wide, cells high] (a cell is MAPS.CELL px: 150 x 80 is 30000 x 16000 px, about five screens across at the widest zoom); ISLANDS = floating islands (each also set at its mirror image),
+    // SPIRES = tall rock spires on the ground, POCKETS = hollow islands (a cavity with its mouth toward the middle) on each side, START_Y = the height the ships start at (share of the map's height from the top).
+    // The WIND WALL is a rectangle: MARGIN px in from each side of the map, CEILING px from the top; a ship past it is pushed back (PUSH: px/s per px over, at most PUSH_MAX). The STORM closes that rectangle in on the middle
+    // of the sky after AFTER seconds of fighting, taking TIME seconds to shrink to MIN_W x MIN_H px (the ships have to meet in the end), and a ship caught in the storm band is hurt (DAMAGE hull % a second).
+    ARENA: { SIZE: [150, 80], ISLANDS: 14, SPIRES: 4, POCKETS: 1, START_Y: 0.4, MARGIN: 1400, CEILING: 1600, PUSH: 0.9, PUSH_MAX: 420, STORM: { AFTER: 120, TIME: 170, MIN_W: 6400, MIN_H: 4400, DAMAGE: 0.4 } },
+    // RANGE BANDS (centre to centre, px; RANGE.PX_PER_M px = 1 metre on the TV): SHORT is ramming, boarding and grapeshot; MID is the broadside guns; LONG is the long gun and the mortars. The captains
+    // pick a preferred band from their style and their ship's guns (pvp/captainAI.js), the stats count the seconds spent in each (match.js), the TV shows the range.
+    RANGE: { PX_PER_M: 10, SHORT: 2300, MID: 3800, LONG: 7000, HOLD: { short: 1900, mid: 2800, long: 5200 }, FAR_WORD: 9000 }, // (SHORT / MID / LONG are each band's upper limit, between the ships' aim points: a classic hull is 2000 wide, so under SHORT the hulls are nearly touching; a ship that likes a band holds HOLD px from the rival; FAR_WORD = the distance past which the TV says FAR APART in red)
     FIGHT: { HP: 4, SWORD: 2, SHOVE: 1, KNOCK: 70, KO_TIME: 8 }, // crew against crew on a deck: hit points of a crewman, what a sword blow and a shove take off, how far a blow knocks him back (px) and how long he is out cold at zero (s; a boarder is carried home)
     CAPTURE_TIME: 6, // seconds an enemy crewman holds Action at the rival's helm, with no defender in reach, to take it
     SABOTAGE_TIME: 3, // seconds an enemy crewman holds Action at the rival's boiler to start a fire and a steam leak

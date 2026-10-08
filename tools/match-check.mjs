@@ -135,12 +135,18 @@ const stop = (...ps) => ps.forEach((p) => { p.jx = p.jy = 0; });
   report(errors === 0, 'a refitted red ship and a fresh blue one fly their count-in and first seconds with 0 errors');
 }
 // A Versus sim with no crew at all (for the controlled experiments): the round is on and the ships are flying.
-function bare({ mode = null, phase = 'fight' } = {}) {
+function bare({ mode = null, phase = 'fight', near = true } = {}) {
   const sim = versus({ bots: 1, fly: false, mode });
   const { st, M } = sim;
   for (const id of Object.keys(st.players)) delete st.players[id];
   if (phase === 'fight') until(sim.sim, () => M.phase === 'fight', 60 * 10);
   step(sim.sim, 2);
+  if (near && phase === 'fight') { // (the arena is big and the ships start far apart: the controlled experiments below begin with them at the standoff, as they used to start)
+    const [r, b] = st.ships, aim = (sh, k) => (k === 'x' ? T.toWorldX(sh, sh.layout.aimPoint.x) : T.toWorldY(sh, sh.layout.aimPoint.y));
+    b.pose.x += aim(r, 'x') + config.PVP.STANDOFF - aim(b, 'x');
+    b.pose.y += aim(r, 'y') - aim(b, 'y');
+    step(sim.sim, 2);
+  }
   return sim;
 }
 // The wreck recipe of tools/two-ships-check.mjs: the last stand is used up, so the next blow is final.
@@ -173,13 +179,13 @@ function crewman(st, team, ship, d, x) {
     const e0 = errors;
     M.applyPicks({ red: i, blue: shelf.length - 1 - i });
     M.begin({ shelf: false });
-    step(sim, 60 * 35);
+    step(sim, 60 * 75); // (the ships start far apart in the big arena: about 30 s to close, then the fight)
     const [r, b] = sim.state.ships;
     const hurt = r.state.hull < 100 || b.state.hull < 100 || M.stats.red.shots + M.stats.blue.shots > 0;
     if (errors > e0 || M.phase === 'lobby' || !hurt) bad.push(shelf[i].name + (errors > e0 ? ' (errors)' : !hurt ? ' (no fight)' : ''));
     else flown++;
   }
-  report(bad.length === 0, `all ${flown}/${shelf.length} shelf builds fly 35 s as a refitted red ship against a fresh blue one, and fight${bad.length ? ' - trouble: ' + bad.join(', ') : ''}`);
+  report(bad.length === 0, `all ${flown}/${shelf.length} shelf builds fly 75 s as a refitted red ship against a fresh blue one, and fight${bad.length ? ' - trouble: ' + bad.join(', ') : ''}`);
 }
 
 // ---- 4. a best-of-three of bots ----

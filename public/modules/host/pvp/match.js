@@ -22,10 +22,14 @@ import { transfer } from '../ships.js';
 import { inRock } from '../course.js';
 import { BUILDS } from '../shipBuild.js';
 import { buildShelf, tonnageCap } from './shelf.js';
+import { bandOf } from './range.js';
 
 const TEAMS = ['red', 'blue'];
 const other = (t) => (t === 'red' ? 'blue' : 'red');
-const fresh = () => ({ shots: 0, hits: 0, dmg: 0, bombs: 0, bumps: 0, boardings: 0, sabotage: 0, captures: 0, knockouts: 0, patches: 0 });
+// The numbers kept per side (a round, and the match so far). The last group is the space-and-range numbers (PVP.md): seconds and distance sampled every step, the weapons by kind.
+const fresh = () => ({ shots: 0, hits: 0, dmg: 0, bombs: 0, bumps: 0, boardings: 0, sabotage: 0, captures: 0, knockouts: 0, patches: 0,
+  secs: 0, distSum: 0, bandShort: 0, bandMid: 0, bandLong: 0, bandFar: 0, longShots: 0, longHits: 0, mortarShots: 0, mortarHits: 0, scatterShots: 0, scatterHits: 0, flakShots: 0, flakBursts: 0,
+  minesLaid: 0, mineHits: 0, mineShot: 0, rams: 0, ramDmg: 0, harpoons: 0, harpoonHits: 0, stormSecs: 0 });
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // Small seeded random generator (the arena sky is repeatable).
@@ -67,6 +71,9 @@ export function createMatch(D) {
     slow: 1, // the speed of time (the finale slows it: main.js reads this)
     stepNo: 0,
     errors: 0,
+    storm: { s: 0, warned: 0 }, // how far the storm has closed the wall in (0..1; PVP.ARENA.STORM), and whether the TV has said so
+    range: { dist: 0, band: 'far' }, // the distance between the two ships (aim points, px) and its band (pvp/range.js): the TV's readout and the captains' hold
+    wall: null, // the wind wall as a rectangle in the world (the TV draws its band)
     // (called by the ships' rules, shipSim.js)
     count(team, key, n = 1) {
       if (!M.stats[team] || M.phase !== 'fight') return; // (what happens after the deciding blow is not in the round's numbers)
@@ -221,7 +228,7 @@ export function createMatch(D) {
     M.slow = 1;
     M.left = M.round % 2 === 1 ? 'red' : 'blue'; // sides swap every round
     M.stats = { red: fresh(), blue: fresh() };
-    for (const k of ['shells', 'bullets', 'shipBombs', 'rockets', 'puffs', 'flashes', 'rings', 'popups', 'bats', 'bombers', 'strafers', 'enemyBombs', 'paras', 'mines', 'chutes', 'wrecks', 'hijacks']) if (Array.isArray(world[k])) world[k].length = 0;
+    for (const k of ['shells', 'bullets', 'shipBombs', 'rockets', 'puffs', 'flashes', 'rings', 'popups', 'bats', 'bombers', 'strafers', 'enemyBombs', 'paras', 'mines', 'chutes', 'wrecks', 'hijacks', 'laid', 'thrown', 'tows']) if (Array.isArray(world[k])) world[k].length = 0;
     world.supply = null;
     world.enemy.dead = Math.max(world.enemy.dead, 60);
     for (const sh of world.ships) {
@@ -231,13 +238,17 @@ export function createMatch(D) {
     // the arena: a fresh open sky with rock islands (the course generator), the same for both ships, no flak and no outposts
     const course = D.course();
     course.rand = rng(P.MAP_SEED + M.round * 101);
-    course.startMission(1, { environment: P.ENVIRONMENT, kind: P.MAP_KIND, title: 'VERSUS - ROUND ' + M.round });
+    course.startMission(1, { environment: P.ENVIRONMENT, kind: P.MAP_KIND, arena: P.ARENA, arenaGap: P.START_GAP, title: 'VERSUS - ROUND ' + M.round });
     const c = world.course;
     c.turrets.length = 0;
     for (const o of c.map.outposts || []) o.done = true;
     c.done = true;
     c.target = null;
-    const start = { x: c.map.start.x, y: c.map.start.y - P.ARENA.LIFT };
+    c.markers.length = 0; // (the ships are moored in mid-air: no mast on the ground far below, no outpost flags)
+    const start = { x: c.map.start.x, y: c.map.start.y };
+    M.storm = { s: 0, warned: 0 };
+    M.range = { dist: 0, band: 'far' };
+    M.wall = wallRect();
     const left = shipOfTeam(M.left), right = shipOfTeam(other(M.left));
     stand(left, start, start.x, 1);
     stand(right, start, start.x + P.START_GAP, P.FACE_OFF ? -1 : 1);
@@ -260,7 +271,8 @@ export function createMatch(D) {
       M.totals[t].patches += M.stats[t].patches;
     }
     const mvp = crewOfTeam(winner || 'red').map((p) => ({ name: p.name, color: p.color, species: p.species, score: ((p.stats && p.stats.pvpHits) || 0) + 2 * ((p.stats && p.stats.ko) || 0) + ((p.stats && p.stats.holes) || 0) + 3 * ((p.stats && p.stats.captures) || 0) })).sort((a, b) => b.score - a.score)[0] || null;
-    M.results.push({ round: M.round, winner, cause, time: M.fightT, left: M.left, hull: { red: hullPct(sides.red), blue: hullPct(sides.blue) }, stats: { red: { ...M.stats.red }, blue: { ...M.stats.blue } }, mvp });
+    const secs = M.stats.red.secs || 0;
+    M.results.push({ round: M.round, winner, cause, time: M.fightT, left: M.left, hull: { red: hullPct(sides.red), blue: hullPct(sides.blue) }, stats: { red: { ...M.stats.red }, blue: { ...M.stats.blue } }, mvp, avgDist: secs ? M.stats.red.distSum / secs : 0, styles: { red: sides.red.captain && sides.red.captain.style, blue: sides.blue.captain && sides.blue.captain.style } });
     if (winner) M.score[winner]++;
     M.roundWinner = winner;
     M.cause = cause;
@@ -303,7 +315,8 @@ export function createMatch(D) {
       delete sh.moorAlt;
     }
     world.phase = 'lobby';
-    D.course().startMission(1, { environment: V().ENVIRONMENT, kind: V().MAP_KIND, title: 'VERSUS' }); // (the lobby's sky is an arena sky too)
+    D.course().startMission(1, { environment: V().ENVIRONMENT, kind: V().MAP_KIND, arena: V().ARENA, arenaGap: V().START_GAP, title: 'VERSUS' }); // (the lobby's sky is an arena sky too)
+    world.course.markers.length = 0;
     for (const p of players()) if (!p.mate && p.team) dropAboard(p, shipOfTeam(p.team));
   }
 
@@ -391,20 +404,57 @@ export function createMatch(D) {
   }
 
   // ---- the arena's soft wall: a wind pushes a ship back that goes too far behind the start, too far along, or too high ----
+  // The wall as a rectangle in the world { x0, x1, y0, y1 }: MARGIN in from the map's sides and CEILING from its top, closing in on the middle of the sky once the STORM begins (the
+  // round's late game: it forces the contact). Nothing below y1 = the map's floor; the rock is the floor.
+  function wallRect() {
+    const A = V().ARENA, a = world.course && world.course.map && world.course.map.arena;
+    if (!a) return null;
+    const S = A.STORM, s = M.storm.s;
+    const x0 = A.MARGIN, x1 = a.x1 - A.MARGIN, y0 = A.CEILING, y1 = a.y1;
+    const w = x1 - x0, cx = (x0 + x1) / 2;
+    const w1 = w + (Math.min(w, S.MIN_W) - w) * s;
+    return { x0: cx - w1 / 2, x1: cx + w1 / 2, y0: y0 + (Math.max(y0, a.cy - S.MIN_H / 2) - y0) * s, y1: y1 + (Math.min(y1, a.cy + S.MIN_H / 2) - y1) * s };
+  }
+  // The arena's soft wall: a wind pushes a ship back that goes too far out, in any direction; the storm closes the wall in late in the round, and a ship caught outside it is hurt.
   function arena(dt) {
-    const A = V().ARENA, map = world.course && world.course.map, st = map && map.start;
-    if (!st) return;
+    const A = V().ARENA, S = A.STORM;
+    if (M.phase === 'fight') M.storm.s = Math.max(0, Math.min(1, (M.fightT - S.AFTER) / S.TIME));
+    const R = wallRect();
+    M.wall = R;
+    if (!R) return;
+    if (M.storm.s > 0 && !M.storm.warned && M.phase === 'fight') { M.storm.warned = 1; world.ev.warn = 3; world.ev.warnText = 'THE STORM CLOSES IN!'; world.sfxQ.push(['bell']); }
     for (const sh of sideShips()) {
       if (sh.state.down > 0) continue;
       const mx = toWorldX(sh, sh.layout.refPoint.x), my = toWorldY(sh, sh.layout.refPoint.y);
-      const x0 = st.x - A.BACK, x1 = st.x + A.FRONT, top = st.y - A.TOP;
-      if (mx < x0) sh.pose.x += Math.min(A.PUSH_MAX, (x0 - mx) * A.PUSH) * dt;
-      else if (mx > x1) sh.pose.x -= Math.min(A.PUSH_MAX, (mx - x1) * A.PUSH) * dt;
-      if (my < top) {
-        sh.pose.y += Math.min(A.PUSH_MAX, (top - my) * A.PUSH) * dt;
+      const push = (over) => Math.min(A.PUSH_MAX, over * A.PUSH) * dt;
+      let out = false;
+      if (mx < R.x0) { sh.pose.x += push(R.x0 - mx); out = true; }
+      else if (mx > R.x1) { sh.pose.x -= push(mx - R.x1); out = true; }
+      if (my < R.y0) {
+        sh.pose.y += push(R.y0 - my);
         sh.ctx.ship.vy = Math.min(0, sh.ctx.ship.vy || 0); // (up is positive: she stops rising)
+        out = true;
+      } else if (my > R.y1) {
+        sh.pose.y -= push(my - R.y1);
+        sh.ctx.ship.vy = Math.max(0, sh.ctx.ship.vy || 0);
+        out = true;
+      }
+      if (out && M.storm.s > 0 && M.phase === 'fight') { // (the storm band: the wind alone hurts nothing, the storm does)
+        sh.sim.damageHull(S.DAMAGE * dt);
+        if (sh.team) M.count(sh.team.id, 'stormSecs', dt);
       }
     }
+  }
+  // The distance between the two ships now, and which band it is: kept for the TV and the numbers (once a step).
+  function sampleRange(dt) {
+    const [r, b] = [shipOfTeam('red'), shipOfTeam('blue')];
+    if (!r || !b) return;
+    const d = Math.hypot(toWorldX(r, r.layout.aimPoint.x) - toWorldX(b, b.layout.aimPoint.x), toWorldY(r, r.layout.aimPoint.y) - toWorldY(b, b.layout.aimPoint.y));
+    const band = bandOf(d);
+    M.range = { dist: d, band };
+    if (M.phase !== 'fight') return;
+    const key = 'band' + band[0].toUpperCase() + band.slice(1);
+    for (const t of TEAMS) { M.count(t, 'secs', dt); M.count(t, 'distSum', d * dt); M.count(t, key, dt); }
   }
 
   // ---- the step ----
@@ -418,6 +468,7 @@ export function createMatch(D) {
     if (!M.on) return;
     M.t += dt;
     const P = V();
+    sampleRange(dt);
     if (M.phase === 'count') {
       if (M.t >= P.COUNT_IN) {
         D.launch();

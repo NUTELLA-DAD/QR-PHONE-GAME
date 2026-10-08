@@ -15,7 +15,7 @@ import { toWorldX, toWorldY, toShipX, toShipY, pivotOf, driveVx } from './pose.j
 import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
 import { pickEnvironment } from './environments.js';
-import { makeMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
+import { makeMap, buildArenaMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
 import { applyForce } from './forces.js';
 
 const K = config.COURSE;
@@ -1167,7 +1167,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   function startMission(n, opts = {}) {
     const MP = config.MAPS;
     const kind = MP.FORCE_KIND || opts.kind || MP.KINDS[(n - 1) % MP.KINDS.length];
-    const map = makeMap(kind, n, course.rand, opts.lengthMul || 1, layout);
+    const map = opts.arena ? buildArenaMap(course.rand, layout, opts.arena, opts.arenaGap) : makeMap(kind, n, course.rand, opts.lengthMul || 1, layout); // (Versus: the big arena sky, maps.js buildArenaMap)
     map.environment = pickEnvironment(opts.environment); // 'skyisles' (the original look and rules), 'frost', 'ember'...
     const d = Math.min(1, (n - 1) / 4);
     Object.assign(course, {
