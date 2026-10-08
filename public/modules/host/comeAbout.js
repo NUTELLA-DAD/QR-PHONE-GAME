@@ -56,7 +56,7 @@ export function createComeAbout(ship, W, { goingDown }) {
     if (goingDown.active()) return "Can't come about while she is falling";
     if (!(state.course && state.course.map)) return 'No room to come about here';
     if (g.cd > 0) return 'Wait - she is still settling';
-    if (state.gunship || (ship.main && state.rival)) return "Can't come about with the gunship alongside";
+    if (state.gunship) return "Can't come about with the gunship alongside";
     if (Object.values(state.players).some((p) => p.hook)) return 'Someone is on a hookshot line';
     if (Math.abs(state.ship.speed) > T.MAX_SPEED) return 'Slow down to come about';
     if (mirroredInRock()) return 'No room to come about here';

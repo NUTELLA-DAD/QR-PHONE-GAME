@@ -13,7 +13,8 @@ const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 export function createCoil({ state, puff, credit }) {
   const ship = mainShip(state); // (B1: the ship this system belongs to; B2 makes it one per ship)
   const layout = ship.layout;
-  const M = layout.coil || { x: 0, y: 0, aim: -Math.PI / 2, arc: 0 }; // (a ship with no coil emitter: nobody can man it, so these are never used)
+  const NONE = { x: 0, y: 0, aim: -Math.PI / 2, arc: 0 };
+  let M = layout.coil || NONE; // (a ship with no coil emitter: nobody can man it, so these are never used; refit() looks again after a new build)
   const coil = (state.coil = { aim: M.aim, charge: 0, cd: 0, bolt: null, charging: false });
 
   // World position of the emitter.
@@ -104,6 +105,7 @@ export function createCoil({ state, puff, credit }) {
   };
 
   const reset = () => Object.assign(coil, { aim: M.aim, charge: 0, cd: 0, bolt: null, charging: false });
+  const refit = () => { M = layout.coil || NONE; reset(); }; // (a new build was applied to the ship: Versus' shelf)
 
-  return { update, reset, emitter };
+  return { update, reset, refit, emitter };
 }

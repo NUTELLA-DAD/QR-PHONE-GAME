@@ -10,7 +10,7 @@
 //   * the camera frames both ships, both are crewed and fly 2 minutes with 0 errors.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { installShims, seedRandom, publicDir } from './instances.mjs';
+import { installShims, seedRandom, publicDir } from './shims.mjs';
 import { loadBuild } from './buildload.mjs';
 
 const argv = process.argv.slice(2);

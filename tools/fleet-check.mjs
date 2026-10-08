@@ -15,7 +15,7 @@
 //   * a ship that is off screen gets an edge arrow with her name, the team pennants and trim are drawn, 0 game errors, 0 exceptions.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { installShims, seedRandom, publicDir } from './instances.mjs';
+import { installShims, seedRandom, publicDir } from './shims.mjs';
 import { loadBuild } from './buildload.mjs';
 
 const argv = process.argv.slice(2);

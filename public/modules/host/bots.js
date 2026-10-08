@@ -177,7 +177,7 @@ function gunReach(state, n) {
   if (!best && n === paraGun(L) && state.gunship && (state.paras.length || state.gunship.paraDue)) return 0.7;
   if (!best) return 2;
   if (best.target.kind === 'para' || best.target.kind === 'gport') return 0.6; // paratroopers and gunship gun ports are worth manning a gun for
-  if (best.target.kind === 'rival') return 0.6; // Versus: the other airship in range is what the guns are for (aim.js targets())
+  if (best.target.kind.startsWith('rival')) return 0.6; // Versus: the other airship in range is what the guns are for (aim.js targets(): her guns, her bags, her boiler and helm, her hull)
   return best.target.kind === 'turret' ? 0.8 : 1;
 }
 
@@ -246,9 +246,27 @@ function dodgeAltitude(state) {
   return soonest && soonest.target;
 }
 
+// Versus (B.4): a bot of the OTHER team standing on this ship is a boarder. He does not mend her: he fights her crew, sabotages her boiler (hold) and takes her helm (hold) - never both
+// at once: the nearer defender first, then whichever of the two the rules of the round want (Capture: the helm).
+const hostile = (p, state) => { const t = mainShip(state).team; return !!p.team && !!t && p.team !== t.id; };
+function boarderJobs(state, bot) {
+  const L = mainShip(state).layout;
+  const V = config.PVP;
+  const jobs = [];
+  const foes = Object.values(state.players).filter((q) => q.team && q.team !== bot.team && !q.fall && !(q.ko > 0) && q.d != null && q.conn == null);
+  const helm = L.one('helm'), boiler = L.one('boiler');
+  // a defender at the helm stops the capture, and one beside us stops everything: they come first
+  for (const q of foes) if ((helm && q.d === helm.d && Math.abs(q.x - helm.x) < V.DEFEND_REACH * 1.5) || (q.d === bot.d && Math.abs(q.x - bot.x) < 260)) jobs.push({ kind: 'fight', obj: q, max: 2 });
+  const holds = V.MODE === 'capture' ? [helm && 'capture', boiler && 'sabotage'] : [boiler && 'sabotage', helm && 'capture'];
+  for (const k of holds) if (k) jobs.push({ kind: k, obj: k, max: 1 });
+  for (const q of foes) jobs.push({ kind: 'fight', obj: q, max: 2 });
+  return jobs;
+}
+
 // List every job on the ship, most urgent first.
 function listJobs(state, bot) {
   const L = mainShip(state).layout;
+  if (hostile(bot, state)) return boarderJobs(state, bot);
   if (state.goingDown) return goingDownJobs(state, bot); // GOING DOWN!: split across coal, ice and leaks (goingDown.js)
   const jobs = [];
   const players = Object.values(state.players);
@@ -283,6 +301,7 @@ function listJobs(state, bot) {
   if (sj && sj.charge && !players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'rod' && !q.lock)) for (const r of sj.rods) jobs.push({ kind: 'rod', obj: r, max: 1 });
   // Raiders: fight them, but never with more than about half the crew (the rest keep the ship going).
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2, cap: Math.max(2, Math.ceil(players.filter((q) => q.bot).length / 2)) });
+  for (const q of players) if (q.team && bot.team && q.team !== bot.team && !q.fall && !(q.ko > 0)) jobs.push({ kind: 'fight', obj: q, max: 2, cap: Math.max(2, Math.ceil(players.filter((r) => r.bot).length / 2)) }); // (Versus: boarders from the other ship)
   // Sunken Sea: pump out a flooded hull (an emergency), winch up a survivor on the rope (a salvage bonus).
   const sea = state.sea;
   if (sea && sea.pump && sea.flood > config.ENVIRONMENTS.sea.FLOOD.JOB_AT) jobs.push({ kind: 'pump', obj: sea.pump, max: 1 });
@@ -473,7 +492,7 @@ function operate(p, state, dt) {
     // COME ABOUT (config.SHIP.TURN.BOT_TURNS): the way to the goal has been behind her for a while, so hold the turn command like a phone's button (plan.dx is how far the route point is ahead of her bow).
     const TN = config.SHIP.TURN;
     p.behindT = plan.dx < -TN.BOT_FAR && !(state.course.unstick > 0) ? (p.behindT || 0) + dt : 0;
-    p.ca = TN.BOT_TURNS && p.behindT >= TN.BOT_BEHIND;
+    p.ca = (TN.BOT_TURNS || config.PVP.ENABLED) && p.behindT >= TN.BOT_BEHIND; // (Versus: the captain turns to face the rival)
     const w = altWindow(state, 2.5);
     const bounds = altBounds(state);
     const lo = Math.max(w.min, bounds.lo);
@@ -628,9 +647,18 @@ function work(p, state) {
     steer(p, tables(L).MAIN, 1250, 30);
     return;
   }
+  if (job.kind === 'sabotage' || job.kind === 'capture') { // a boarder at the boiler / the helm: hold Action
+    const st = L.one(job.kind === 'capture' ? 'helm' : 'boiler');
+    if (st && steer(p, st.d, st.x, 20)) {
+      p.jx = 0;
+      p.fire = true;
+    }
+    return;
+  }
   if (job.kind === 'fight') {
     const crew = state.gunship && state.gunship.crew.includes(o);
-    if (o.fall || !(state.boarders.includes(o) || crew) || (!getTool(state, p, 'sword') && tables(L).PICKUPS.some((r) => r.kind === 'sword'))) return; // (no sword rack aboard: fight bare-handed, shoving them back)
+    const foe = !!o.team && o.team !== p.team; // (Versus: a crewman of the other team)
+    if (o.fall || !(state.boarders.includes(o) || crew || foe) || (!hostile(p, state) && !getTool(state, p, 'sword') && tables(L).PICKUPS.some((r) => r.kind === 'sword'))) return; // (no sword rack aboard: fight bare-handed, shoving them back; a boarder has no rack of his own to take a sword from)
     if (steer(p, goalOf(L, o), o.x, 45) || (Math.abs(o.y - p.y) < 20 && Math.abs(o.x - p.x) < 70)) {
       p.jx = 0;
       p.face = o.x < p.x ? -1 : 1;
@@ -792,6 +820,47 @@ function aimGun(state, p) {
   return best;
 }
 
+// Versus: a ray that catches one of the RIVAL's decks (config.BOTS.DARING.BOARD_REACH away at most); the hook must really end on her deck, not on one of ours on the way.
+function aimRival(state, p) {
+  const S = state.stunts;
+  const ship = mainShip(state);
+  const o = S.origin(p);
+  let best = null;
+  for (const s of S.surfaces()) {
+    if (typeof s.id !== 'string' || !s.id.startsWith('rival:')) continue;
+    const y = val(s.y);
+    if (y == null) continue;
+    const x0 = val(s.x0);
+    const x1 = val(s.x1);
+    for (const f of [0.5, 0.3, 0.7, 0.15, 0.85]) {
+      const tx = toWorldX(ship, x0 + (x1 - x0) * f);
+      const ty = toWorldY(ship, y + 4);
+      const m = Math.hypot(tx - o.x, ty - o.y);
+      if (m > DR.BOARD_REACH || m < 90) continue;
+      const c = S.cast(o, (tx - o.x) / m, (ty - o.y) / m);
+      const at = c.anchor && c.anchor.surf && c.anchor.pos();
+      if (at && Math.hypot(at.x - tx, at.y - ty) < 160 && (!best || m < best.m)) best = { dx: (tx - o.x) / m, dy: (ty - o.y) / m, m, landX: tx };
+    }
+  }
+  return best;
+}
+
+// Versus: is one of the rival's decks within a hook's throw of the end of our top deck that faces her?
+function rivalWithinHook(state) {
+  const R = state.rival;
+  if (!R || R.down || !state.stunts) return false;
+  const ship = mainShip(state);
+  const L = ship.layout;
+  const deck = L.platforms[tables(L).CATWALK];
+  const right = toShipX(ship, R.mid.x) > L.aimPoint.x;
+  const ex = toWorldX(ship, right ? deck.x1 - 35 : deck.x0 + 35), ey = toWorldY(ship, deck.y);
+  return state.stunts.surfaces().some((s) => {
+    if (typeof s.id !== 'string' || !s.id.startsWith('rival:') || val(s.y) == null) return false;
+    const a = toWorldX(ship, val(s.x0)), b = toWorldX(ship, val(s.x1)), wy = toWorldY(ship, val(s.y));
+    return Math.hypot(Math.max(Math.min(a, b) - ex, 0, ex - Math.max(a, b)), wy - ey) <= DR.BOARD_REACH + config.PVP.BOT.BOARD_CLOSE - 100; // (the captain closes in by BOARD_CLOSE while he is on his way)
+  });
+}
+
 // A ray that hits one of the flying planes in reach (the nearest first).
 function aimPlane(state, p) {
   const S = state.stunts;
@@ -819,6 +888,7 @@ function dareKinds(state) {
   if ((state.strafers || []).some((s) => s.hp > 0 && Math.hypot(s.x - o.x, s.y - o.y) < 3000) || (state.stunts.bigFighter() && Math.hypot(state.enemy.x - o.x, state.enemy.y - o.y) < 3000)) kinds.push('plane');
   const gs = state.gunship;
   if (gs && gs.rope && !gs.charge && (gs.phase === 'hunt' || gs.phase === 'latch')) kinds.push('gun');
+  if (config.PVP.ENABLED && state.ship.hull >= config.PVP.BOT.BOARD_CALM_HULL && rivalWithinHook(state)) kinds.push('board'); // Versus: a way across to the rival's decks
   kinds.push('show');
   return kinds;
 }
@@ -884,6 +954,7 @@ function dareStep(p, state, dt) {
   d.t += dt;
   d.pt += dt;
   d.aimCd -= dt;
+  if (d.kind === 'board') state.boardAt = performance.now(); // (the captain: bring her in close while a crewman crosses, course.js rivalPlan)
   p.botJob = null;
   p.fire = false;
   p.jx = p.jy = 0;
@@ -940,6 +1011,17 @@ function dareStep(p, state, dt) {
           d.aimCd = 0.25;
           aim = aimPlane(state, p);
         }
+      } else if (d.kind === 'board') {
+        const R = state.rival;
+        if (!R || R.down) return endDare(p, state, 'rival gone'), false;
+        // Stand at the end of the top deck that faces her, then find a ray onto one of her decks.
+        const deck = L.platforms[tables(L).CATWALK];
+        const right = toShipX(mainShip(state), R.mid.x) > L.aimPoint.x;
+        if (!steer(p, tables(L).CATWALK, right ? deck.x1 - 22 : deck.x0 + 22, 20)) return true; // (the very end: a slide pole starts a little further in, and a stick pushed down there would take it)
+        if (d.aimCd <= 0) {
+          d.aimCd = 0.3;
+          aim = aimRival(state, p);
+        }
       } else if (d.aimCd <= 0) {
         d.aimCd = 0.3;
         aim = aimShow(state, p);
@@ -953,8 +1035,9 @@ function dareStep(p, state, dt) {
       }
       if (!aim && d.kind === 'show' && d.walkTo) steer(p, p.d, d.walkTo, 20);
       if (aim && (p.hookCd || 0) <= 0 && p.conn == null && !p.lock) { // (the hookshot will not fire on a ladder)
-        p.jx = aim.dx * mainShip(state).pose.f; // (the hook flies along the world, jx is along the ship)
-        p.jy = aim.dy;
+        const soft = d.kind === 'board' ? 0.4 : 1; // (a gentle stick still aims the hook, but does not push him down a pole or a ladder in the same frame)
+        p.jx = aim.dx * mainShip(state).pose.f * soft; // (the hook flies along the world, jx is along the ship)
+        p.jy = aim.dy * soft;
         p.atkQ = true;
         d.tries++;
         d.aim = aim;
@@ -1060,7 +1143,7 @@ function dareStep(p, state, dt) {
       }
       if (p.fly) {
         // Drift toward where we want to come down (a deck of ours; the gunship's deck for that stunt).
-        steerAirTo(p, d.kind === 'gun' && d.phase === 'land' && d.landX != null && state.gunship ? d.landX : toWorldX(mainShip(state), L.aimPoint.x));
+        steerAirTo(p, d.kind === 'board' && state.rival ? state.rival.mid.x : d.kind === 'gun' && d.phase === 'land' && d.landX != null && state.gunship ? d.landX : toWorldX(mainShip(state), L.aimPoint.x));
         return true;
       }
       if (p.air) return true; // (a hop in the air)

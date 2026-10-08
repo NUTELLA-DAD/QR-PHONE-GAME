@@ -12,7 +12,7 @@ export const isHuman = (p) => !p.mate && (!p.bot || !!p.human);
 // With `lobbyToo` it also answers for the moored lobby (to tell the players what is coming).
 export function matesWanted(state, current = 0, lobbyToo = false) {
   const M = config.MATES;
-  if (!M.ENABLED || (state.phase === 'lobby' && !lobbyToo) || !M.DIFFICULTIES.includes(state.difficulty)) return 0;
+  if (!M.ENABLED || config.PVP.ENABLED || (state.phase === 'lobby' && !lobbyToo) || !M.DIFFICULTIES.includes(state.difficulty)) return 0; // (Versus: both crews are as big as they are, no helpers)
   const crew = Object.values(state.players).filter((p) => !p.mate);
   if (crew.some((p) => !isHuman(p))) return 0; // (test bots from the lobby button are crew: nobody is short-handed)
   const humans = crew.filter((p) => p.connected !== false).length;

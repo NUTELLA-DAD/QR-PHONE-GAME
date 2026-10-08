@@ -11,7 +11,7 @@
 import { firePace } from './crewscale.js';
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
-import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
+import { toWorldX, toWorldY, toShipX, toShipY, pivotOf } from './pose.js';
 import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
 import { pickEnvironment } from './environments.js';
@@ -136,7 +136,7 @@ export function pilotPlan(state, ahead, cruise) {
   const course = state.course;
   const ship = mainShip(state);
   const alt = state.ship.alt;
-  if (ship.main && state.rival) return rivalPlan(state); // (Versus: the rival, not the beacon, is the goal)
+  if (state.rival) return rivalPlan(state); // (Versus: the rival, not the beacon, is the goal; every ship has her own)
   if (course && course.map) return mapPlan(state, cruise);
   const B = altBounds(state);
   const range = (w) => [Math.max(w.min, B.lo), Math.min(w.max, B.hi)];
@@ -150,17 +150,65 @@ export function pilotPlan(state, ahead, cruise) {
   return { target, speed: Math.abs(target - alt) > 120 ? 0.04 : cruise };
 }
 
-// Versus (pvp/bridge.js sets state.rival): a minimal pilot - hold broadside range from the rival ship at about her height, clear of rock.
-// (The real captain AI, with cover and retreats, is V.3.) rival.mid is her middle in OUR ship coordinates, rival.dy = our altitude minus hers.
+// Versus (pvp/match.js sets ctx.rival every step: the other team's nearest ship in WORLD coordinates): the bot captain's plan, which the autopilot flies too.
+//   * holds PVP.STANDOFF px of sky between the two aim points (nose to nose at gun range), closing or backing off by how far out it is (APPROACH);
+//   * keeps an altitude edge: the ship that started on the left holds ALT_EDGE above the other, the one on the right ALT_EDGE below (they swap each round with the sides);
+//   * uses rock as cover: a ship that is losing (or hurt) picks, among a few heights, the one with rock across the line to the rival, as far as the edge allows;
+//   * retreats to repair: hull under BOT.RETREAT_HULL with more than BOT.RETREAT_HOLES holes in her, she backs off to twice the standoff (out of gun range) until the crew has patched her;
+//   * `dx` is how far AHEAD of her bow the rival is (behind = negative; while retreating, the way AWAY), so the helm bot comes about when the rival is behind (bots.js, TURN.BOT_TURNS or Versus).
+// rival.mid is the rival's aim point in the world; our own aim point is toWorld of layout.aimPoint.
 function rivalPlan(state) {
   const R = state.rival;
   const P = config.PVP;
-  const AIM = mainShip(state).layout.aimPoint;
-  const gap = R.mid.x - AIM.x; // along the sky, + = she is ahead of us
-  const err = gap - (gap < 0 ? -1 : 1) * P.STANDOFF; // + = too far (or too close) to close the range by going on
-  const want = state.ship.alt - R.dy + (gap < 0 ? -1 : 1) * P.ALT_EDGE; // her height: the rear ship (rival ahead) holds ALT_EDGE above her, the lead ship ALT_EDGE below (the bow and belly guns of one, the stern and dorsal guns of the other, bear)
-  const y = keepClear(state, toWorldX(mainShip(state), AIM.x), AIM.y - want, P.ROCK_MARGIN, 2.5);
-  return { target: AIM.y - y, speed: Math.max(-config.SHIP.REVERSE, Math.min(0.6, err / P.APPROACH)), dx: gap, dy: R.dy };
+  const B = P.BOT;
+  const ship = mainShip(state);
+  const f = ship.pose.f;
+  const AIM = ship.layout.aimPoint;
+  const mx = toWorldX(ship, AIM.x);
+  const my = toWorldY(ship, AIM.y);
+  const gap = R.mid.x - mx; // along the sky, + = she is to the right of us
+  const dir = gap < 0 ? -1 : 1;
+  // Wedged against a rock island (the hull has been grinding on it for most of a second): back out the way the rock pushes, and climb or dive out of it. For a few seconds after, the
+  // plan will not push into the side that rock was on.
+  const now = performance.now();
+  const cc = state.course;
+  if (cc && cc.scraping && cc.lastContact) {
+    const c = cc.lastContact;
+    if (!state.scrapeSince) state.scrapeSince = now;
+    if (c.dx) state.rockSide = { dir: -c.dx, until: now + 3500 };
+    if (now - state.scrapeSince > 700) return { target: state.ship.alt + (c.dy < 0 ? 350 : c.dy > 0 ? -350 : 120), speed: Math.max(-config.SHIP.REVERSE, Math.min(0.6, c.dx * f * 0.6)), dx: gap * f, dy: R.mid.y - my };
+  } else state.scrapeSince = 0;
+  const holes = state.breaches.length + state.gasHoles.length;
+  const hurt = state.ship.hull < B.RETREAT_HULL && holes > B.RETREAT_HOLES;
+  const hooking = performance.now() - (state.boardAt || -1e9) < 1200; // (a crewman of hers is going across on a hook: close in so her decks are within his reach)
+  const stand = P.STANDOFF + (ship.layout.bounds.x1 - ship.layout.bounds.x0) / 2 + (R.layout.bounds.x1 - R.layout.bounds.x0) / 2 - 2 * P.REF_HALF; // (PVP.STANDOFF is for two classic hulls: longer ships keep further apart so their noses are as far from each other)
+  const err = gap - dir * (hurt ? stand * 2 : stand - (hooking ? B.BOARD_CLOSE : 0)); // + = too far (or too close) to close the range by going on
+  let w = Math.max(-1, Math.min(1, err / P.APPROACH)); // the speed we want along the world's x (+ = to the right)
+  if (state.rockSide && now < state.rockSide.until && Math.sign(w) === state.rockSide.dir) w = 0; // (not into the rock that just had us)
+  const m = state.match;
+  const high = m && m.left && ship.team && R.team ? ship.team.id === m.left : String(ship.id) < String(R.ship.id); // (the left-hand ship at the start of the round holds the high ground)
+  const yWant = R.mid.y + (high ? -P.ALT_EDGE : P.ALT_EDGE);
+  let y = keepClear(state, mx, yWant, P.ROCK_MARGIN, 2.5);
+  const map = state.course && state.course.map;
+  if (map && (hurt || state.ship.hull + 10 < R.hull)) { // losing: look for a height with rock between us and her (worked out twice a second, not every frame)
+    const c = R.cover || (R.cover = { stamp: -1e9, y });
+    if (R.stamp - c.stamp >= 30) {
+      c.stamp = R.stamp;
+      let best = -Infinity;
+      for (const d of [0, -300, 300, -600, 600, -900, 900]) {
+        const yy = keepClear(state, mx, yWant + d, P.ROCK_MARGIN, 2.5);
+        let shut = 0;
+        for (let k = 1; k <= 10; k++) if (solidAt(map, mx + ((R.mid.x - mx) * k) / 11, yy + ((R.mid.y - yy) * k) / 11)) shut++;
+        const score = (shut / 10) * B.COVER_WEIGHT * 1000 - Math.abs(yy - yWant);
+        if (score > best) { best = score; c.y = yy; }
+      }
+    }
+    y = c.y;
+  }
+  let target = AIM.y - y;
+  const win = altWindow(state, 2); // (the altitudes where the whole hull clears the rock under and over the next two seconds of flight: the plan never asks for one outside it)
+  target = win.min <= win.max ? Math.max(win.min + 20, Math.min(win.max - 20, target)) : (win.min + win.max) / 2;
+  return { target, speed: Math.max(-config.SHIP.REVERSE, Math.min(0.6, w * f)), dx: (hurt ? -1 : 1) * gap * f, dy: R.mid.y - my };
 }
 
 // On a mission map: follow the route to the goal. Aim for the height of a point a few steps along
@@ -1043,38 +1091,41 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   // Put a second ship at her station from ship 0 (formation.dx along the sky, dalt above), then into the nearest open air where all of her fits: the formation
   // point can be inside the rock on a mission map. Called when she joins the sky, when a mission starts and when she is rebuilt. She is then moored there (shipSim.js
   // reads sh.moorAlt) until CAST OFF.
-  const place = (sh) => {
-    if (sh.main || !sh.formation) return;
+  // (Versus, pvp/match.js: `at` = { x, y, f } puts ANY ship, the main one too, at that spot - the nearest open air where all of her fits - facing f.)
+  const place = (sh, at) => {
+    if (!at && (sh.main || !sh.formation)) return;
     const map = course.map;
-    const x0 = ship.pose.x + sh.formation.dx;
-    const y0 = ship.pose.y - sh.formation.dalt;
+    const face = at && at.f === -1 ? -1 : 1;
+    const pv = pivotOf(sh);
+    const x0 = at ? at.x : ship.pose.x + sh.formation.dx;
+    const y0 = at ? at.y : ship.pose.y - sh.formation.dalt;
     const mine = sh.layout.bounds, idx = state.ships.indexOf(sh);
     const others = state.ships.filter((o) => o !== sh && (o.main || state.ships.indexOf(o) < idx)); // (the ships already in the sky: she is put clear of them)
     const clear = (x, y) => others.every((o) => { const b = o.layout.bounds; return x + mine.x0 >= o.pose.x + b.x1 + 150 || x + mine.x1 <= o.pose.x + b.x0 - 150 || y + mine.y0 >= o.pose.y + b.y1 + 100 || y + mine.y1 <= o.pose.y + b.y0 - 100; });
     const fits = (x, y) => {
       if (!clear(x, y)) return false;
       if (!map) return true;
-      for (const [sx, sy] of sh.layout.samples) for (const [ox, oy] of [[0, 0], [0, -70], [0, 70], [-70, 0], [70, 0]]) if (solidAt(map, x + sx + ox, y + sy + oy)) return false;
+      for (const [sx, sy] of sh.layout.samples) for (const [ox, oy] of [[0, 0], [0, -70], [0, 70], [-70, 0], [70, 0]]) if (solidAt(map, x + (face === 1 ? sx : 2 * pv - sx) + ox, y + sy + oy)) return false;
       return true;
     };
-    let at = null;
-    for (let r = 0; r <= 6000 && !at; r += r < 600 ? 100 : 200) { // (the first ships take the near open air: a third has to look further)
+    let found = null;
+    for (let r = 0; r <= 6000 && !found; r += r < 600 ? 100 : 200) { // (the first ships take the near open air: a third has to look further)
       const n = r ? Math.max(8, Math.round(r / 60)) : 1;
-      for (let k = 0; k < n && !at; k++) {
+      for (let k = 0; k < n && !found; k++) {
         const a = (k / n) * Math.PI * 2 - Math.PI / 2; // (up first: she is moored above a pit rather than inside one)
         const x = x0 + Math.cos(a) * r;
         const y = y0 + Math.sin(a) * r;
-        if (fits(x, y)) at = { x, y };
+        if (fits(x, y)) found = { x, y };
       }
     }
-    at = at || { x: x0, y: y0 };
-    sh.pose.x = at.x;
-    sh.pose.y = at.y;
-    sh.pose.f = 1;
+    found = found || { x: x0, y: y0 };
+    sh.pose.x = found.x;
+    sh.pose.y = found.y;
+    sh.pose.f = face;
     sh.pose.turn = 0;
     sh.ctx.ship.vy = 0;
     sh.ctx.ship.speed = 0;
-    sh.moorAlt = -at.y;
+    sh.moorAlt = -found.y;
     Object.assign(sh.ctx.course, { scraping: false, wasScraping: false, near: [], lastContact: null, scrapeCd: 0, unstick: 0, stuckT: 0, stuckBest: null });
   };
 

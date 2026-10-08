@@ -11,7 +11,7 @@
 //   * a headless ship turns on a route map and flies back to a goal behind her; a second ship turns on her own and the first is untouched.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { installShims, seedRandom, publicDir } from './instances.mjs';
+import { installShims, seedRandom, publicDir } from './shims.mjs';
 
 const argv = process.argv.slice(2);
 const flag = (n, d) => { const i = argv.indexOf('--' + n); return i < 0 ? d : argv[i + 1]; };

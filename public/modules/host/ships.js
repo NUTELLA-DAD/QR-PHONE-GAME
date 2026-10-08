@@ -13,13 +13,14 @@
 //            world,     the host state it lives in (map, weather, enemies, players ...; a handle for the pose and the accessors)
 //            pose,      pose.js: where she is and which way she faces
 //            ctx,       her CONTEXT VIEW (below): what her subsystems are handed instead of the world state
+//            rival,     Versus only: the nearest ship of the OTHER team as { ship, pose, layout, mid, vx, vy, hull, down, guns, bags, crew, helm, boiler } in WORLD coordinates (pvp/match.js refreshes it each step; ctx.rival answers it; null in co-op)
 //            sim }      her systems (shipSim.js createShipSim): modules, bags, guns, fires, crew handling ... set by simulation.js addShip
 //
 //   mainShip(state)           the ship `state` is about: the world answers ships[0], a ship's context answers that ship (so a subsystem built on ctx finds its OWN)
 //   shipOf(state, player)     the ship a player is aboard (player.ship = a ship id; none = the main ship)
 //   eachShip(state, fn)       fn(ship, index) for every ship
 //   crewOf(state, ship)       the players aboard her (player.ship === ship.id; none = ships[0])
-//   targetShip(state, enemy)  the ship an enemy hunts: the ONE place that decides (ships[0] today; B.4 / B.7 choose per enemy)
+//   targetShip(state, enemy)  the ship an enemy hunts: the ONE place that decides (ships[0] with one ship; B.4: the nearest ship still flying)
 //   transfer(state, player, ship, platform, x)   the only way a player changes ship
 //
 // ---- THE CONTEXT VIEW ------------------------------------------------------------------------------------------------------------------------------
@@ -45,7 +46,7 @@
 //  5. Keep the update order and the Math.random order unchanged when you route something through here; the botsim baseline must stay byte-identical.
 import { SHIP_LAYOUT, createLayout } from '../../shipLayout.js';
 import { config } from '../../config.js';
-import { createPose, bindBody } from './pose.js';
+import { createPose, bindBody, pivotOf } from './pose.js';
 import { mainNav, createNav } from './nav.js';
 
 // The state keys that belong to ONE ship. Ship 0's context forwards them to the world state; another ship's context owns them (undefined until its factory, or
@@ -58,7 +59,7 @@ export const SHIP_KEYS = [
   'sails', 'sailPush', 'sailWarn', 'sailWarned', 'sailStats', 'links', 'linkStats', 'surgeEngine', 'surgeCoil', 'surgeBotAt',
   'coil', 'searchlights', 'litTargets', 'dimTargets', 'darkNow', 'fireStats', 'blaze', 'blazeCd',
   'crewScale', // (B.3: the multipliers for the size of THIS ship's crew: her raiders, the damage she takes; the world's enemies use ship 0's)
-  'turning', 'goingDown', 'goingDownRate', 'iceLocker', 'iceFlights', 'gdBanner', 'gdGrace', 'gdJobs',
+  'turning', 'boardAt', 'scrapeSince', 'rockSide', 'goingDown', 'goingDownRate', 'iceLocker', 'iceFlights', 'gdBanner', 'gdGrace', 'gdJobs',
   'escorts', 'escort', 'escortCramped', 'stunts', 'stuntEnd', 'stuntLog', 'stuntPlane', 'stuntStats',
   // worked out every step
   'rig', 'steamParts', 'steamUse', 'overdrive', 'buoyancy', 'sinking', 'autopilot', 'pressureWarned', 'warnBeep', 'boilerBlew', 'helmHit', 'ballastCd', 'gasWarned', 'lastAlt', 'noPump',
@@ -69,7 +70,7 @@ export const SHIP_KEYS = [
 // The world keys a second ship's code is allowed to READ through the prototype: the sky she shares (the enemies and shots and wrecks in it, the weather and the
 // environment, the clock and the banner, the sound queue, the difficulty and the crew scale). Every other key a ship needs is her own (SHIP_KEYS), or tools/buildsim.mjs
 // --check-two-ships fails and names it: a read that quietly fell through to ship 0 would be a cross-talk bug.
-export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'difficulty', 'enemy', 'enemyBombs', 'ev', 'flashes', 'mines', 'paras', 'periscope', 'phase', 'popups', 'rings', 'rival', 'rockets', 'sfxQ', 'shells', 'specials', 'strafers', 'tempo', 'weather', 'wrecks', 'hijacks', 'chutes', 'shipBombs', 'puffs', 'kills', 'scroll', 'ships', 'paused', 'mode'];
+export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'difficulty', 'enemy', 'enemyBombs', 'ev', 'flashes', 'mines', 'paras', 'periscope', 'phase', 'popups', 'rings', 'match', 'rockets', 'sfxQ', 'shells', 'specials', 'strafers', 'tempo', 'weather', 'wrecks', 'hijacks', 'chutes', 'shipBombs', 'puffs', 'kills', 'scroll', 'ships', 'paused', 'mode'];
 // World keys a ship's code WRITES as a plain number (a context would shadow them): they pass through to the world on every context.
 export const WORLD_WRITES = ['kills'];
 
@@ -122,6 +123,7 @@ function makeContext(ship) {
   const world = ship.world;
   const ctx = Object.create(world);
   Object.defineProperty(ctx, 'self', { value: ship, enumerable: false });
+  Object.defineProperty(ctx, 'rival', { get: () => ship.rival || null, enumerable: false, configurable: true }); // (B.4 Versus: the other team's ship as seen from this one, in WORLD coordinates; pvp/match.js refreshes ship.rival every step. Null in co-op.)
   const def = (k, d) => Object.defineProperty(ctx, k, { enumerable: true, configurable: true, ...d });
   for (const k of WORLD_WRITES) def(k, { get: () => world[k], set: (v) => { world[k] = v; } });
   let view = null; // this ship's crew view, made once there is another ship
@@ -169,6 +171,7 @@ export function createShip(world, { id, main = false, layout = null, parts = nul
     pose: null,
     ctx: null,
     sim: null,
+    rival: null, // (Versus, pvp/match.js: the other team's nearest ship as this one sees her, in world coordinates; ctx.rival reads it)
     formation,
   };
   // (her pose owns her position, M.2: a second ship starts at her formation station from ship 0, course.js place() then moves her to open air; her body's alt / vy / pitch are views of the pose)
@@ -187,7 +190,20 @@ export const mainShip = (state) => state.self || state.ships[0];
 // The ship an enemy hunts: the one place that decides (B.3). The enemy systems ask here for the ship they aim at, fire at and fly round; it is ships[0] today. B.4 / B.7 make it a
 // choice per enemy (the nearest ship, the weakest, the one that shot it: `enemy.target` already wins when it names a ship in the sky). `enemy` may be null when a system asks
 // for its ship before it has an enemy in mind (a factory).
-export const targetShip = (state, enemy) => (enemy && enemy.target && state.ships.includes(enemy.target) ? enemy.target : state.ships[0]);
+// (B.4: with several ships in the sky an enemy that has a position and no target of its own hunts the NEAREST ship that is still flying; with one ship, or none flying, it is ships[0] as it always was.)
+export const targetShip = (state, enemy) => {
+  const list = state.ships;
+  if (enemy && enemy.target && list.includes(enemy.target)) return enemy.target;
+  if (!enemy || list.length < 2 || !Number.isFinite(enemy.x) || !Number.isFinite(enemy.y)) return list[0];
+  let best = null, bd = Infinity;
+  for (const sh of list) {
+    if (sh.state.down > 0 || sh.ctx.wreck) continue;
+    const b = sh.layout.bounds;
+    const d = Math.hypot(enemy.x - (sh.pose.x + pivotOf(sh)), enemy.y - (sh.pose.y + (b.y0 + b.y1) / 2));
+    if (d < bd) { bd = d; best = sh; }
+  }
+  return best || list[0];
+};
 export function shipOf(state, player) {
   const id = player && player.ship;
   if (id == null || id === 'player') return state.ships[0];

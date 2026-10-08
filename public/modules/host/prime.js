@@ -68,7 +68,7 @@ export function createPrime({ state, phoneFx }) {
     const a0 = Math.random() * 6.28;
     for (let i = 0; i < P.FRAGS; i++) {
       const a = a0 + (i / P.FRAGS) * 6.283;
-      state.shells.push({ x: shell.x, y: shell.y, vx: Math.cos(a) * P.FRAG_SPEED + mainShip(state).pose.vx, vy: Math.sin(a) * P.FRAG_SPEED, life: P.FRAG_LIFE, owner: shell.owner, frag: true });
+      state.shells.push({ x: shell.x, y: shell.y, vx: Math.cos(a) * P.FRAG_SPEED + mainShip(state).pose.vx, vy: Math.sin(a) * P.FRAG_SPEED, life: P.FRAG_LIFE, owner: shell.owner, frag: true, ...(shell.from ? { from: shell.from } : {}) });
     }
   };
 

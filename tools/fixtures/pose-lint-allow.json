@@ -4,8 +4,6 @@
   "modules/host/course.js": 6,
   "modules/host/goingDown.js": 1,
   "modules/host/gunship.js": 2,
-  "modules/host/pvp/bridge.js": 1,
-  "modules/host/pvpTest.js": 1,
   "modules/host/shipSim.js": 3,
   "modules/host/squadrons.js": 1
  },

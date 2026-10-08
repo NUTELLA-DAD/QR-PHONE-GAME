@@ -13,7 +13,9 @@ import { createEnvironment, favour } from './environments.js';
 import { createSpotter } from './spotter.js';
 import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { refillBags } from './gasBags.js';
-import { createMainShip, createShip, shipOf, eachShip, newGuns } from './ships.js';
+import { createMainShip, createShip, shipOf, eachShip, newGuns, transfer } from './ships.js';
+import { createMatch } from './pvp/match.js';
+import { newBot } from './network.js';
 import { createShipSim, flushPresses } from './shipSim.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
@@ -121,8 +123,40 @@ export function createSimulation() {
     sh.sim = createShipSim(state, sh, W);
     if (hijack) sh.sim.attach({ hijack });
     if (!sh.main && W.course) W.course.place(sh); // (M.2: another ship flies from her own pose; she starts at her station, in open air)
+    for (const o of state.ships) if (o !== sh) { sh.sim.air.addProvider(rivalDecks(sh, o)); o.sim.air.addProvider(rivalDecks(o, sh)); } // (Versus: each ship's crew can leap onto the other's decks)
     return sh;
   };
+  // Versus (B.4): the decks of a ship of ANOTHER team are landing places (and hook anchors) for a crewman of `me` in the air - a leap, a parachute or a swing across and he is aboard her
+  // (shipOf / transfer: from then on he lives by HER rules as a boarder, shipSim.js isHostile). The surfaces are in `me`'s ship coordinates, like all of airborne.js's.
+  const rivalDecks = (me, rv) => () => {
+    if (!config.PVP.ENABLED || !state.ships.includes(rv) || !me.team || !rv.team || me.team.id === rv.team.id || rv.state.down > 0) return [];
+    return rv.layout.platforms.map((pl, d) => {
+      const a = toShipX(me, toWorldX(rv, pl.x0)), b = toShipX(me, toWorldX(rv, pl.x1));
+      return { id: 'rival:' + rv.id + ':' + d, y: toShipY(me, toWorldY(rv, pl.y)), x0: Math.min(a, b), x1: Math.max(a, b), onLand: (player) => boardShip(player, me, rv, d) };
+    });
+  };
+  const boardShip = (player, me, rv, d) => {
+    transfer(state, player, rv, d, toShipX(rv, toWorldX(me, player.x)));
+    player.hook = null;
+    player.carry = null; // (the hookshot stays on the ship he left: aboard her he fights with his hands)
+    player.chute = 0;
+    player.chuteOpen = false;
+    player.tumble = false;
+    if (state.match && player.team) state.match.count(player.team, 'boardings');
+    state.ev.warn = 3.5;
+    state.ev.warnText = 'BOARDERS ON THE ' + String(rv.layout.platforms[d].name || 'DECK').toUpperCase() + '!';
+    state.sfxQ.push(['alarm']);
+    phoneFx(player, "You're aboard the " + (rv.team ? rv.team.name + ' ' : '') + 'ship! Fight, sabotage the boiler or take the helm', [60, 40, 60]);
+  };
+  // Take a ship out of the sky (Versus: the lobby's second ship when the mode changes, and a team's ship when a new one is picked from the shelf). Her crew are handed to ship 0;
+  // whoever asked drops them aboard where they belong.
+  const removeShip = (sh) => {
+    const i = state.ships.indexOf(sh);
+    if (i <= 0) return;
+    for (const player of Object.values(state.players)) if (shipOf(state, player) === sh) transfer(state, player, state.ships[0]);
+    state.ships.splice(i, 1);
+  };
+  Object.defineProperty(state, 'rival', { get: () => (state.ships[0] && state.ships[0].rival) || null, enumerable: false, configurable: true }); // (Versus: ship 0's rival, ships.js; every ship's context answers its own)
   const main = addShip(null); // (B.2: this file is the WORLD. What belongs to one ship is shipSim.js; the voyage, the pacing director, the wreck and restart rules below work on the main ship, ships[0])
   const layout = main.layout;
   // (the world's rules below that reach into the main ship: the wreck and restart, the supply balloon, the sky-dock shop, what the world's enemies shoot at)
@@ -215,6 +249,7 @@ export function createSimulation() {
 
   // Start the whole game over, moored at the mast (players stay connected).
   function restartGame() {
+    if (match.on) return match.toLobby(); // (Versus: the match starts over from its lobby; the voyage is not touched)
     restoreData(config, pristine);
     Object.assign(state.ship, { alt: 0, speed: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 }); forces.reset();
     Object.assign(state.gasValve, { input: 0, auto: false });
@@ -659,7 +694,8 @@ export function createSimulation() {
   const botChoice = (v, p) => {
     const ok = v.options.map((o, i) => i).filter((i) => !cardOff(v.options[i]) && v.options[i].kind !== 'cast');
     const cast = v.options.findIndex((o) => o.kind === 'cast');
-    if (v.kind === 'route') return (Math.random() * v.options.length) | 0;
+    if (v.kind === 'route' || v.kind === 'shelf') return (Math.random() * v.options.length) | 0;
+    if (v.kind === 'rematch') return 0;
     if (!ok.length) return cast;
     // A sensible crew fixes what is badly hurt first: the hull, then the gasbag, then coal and shells.
     const want = (id) => ok.find((i) => v.options[i].id === id);
@@ -684,7 +720,7 @@ export function createSimulation() {
       const ui = {
         vote: {
           kind: v.kind,
-          title: v.kind === 'dock' ? `SKY-DOCK - ${state.run.salvage} salvage` : v.title,
+          title: v.kind === 'dock' ? `SKY-DOCK - ${state.run.salvage} salvage` : v.kind === 'shelf' && p.team ? `${v.title} - ${p.team.toUpperCase()}` : v.title,
           t: Math.max(0, Math.ceil(v.t)),
           mine: valid(p.vote) ? p.vote : null,
           options: v.options.map((o) => ({ name: o.name, icon: o.icon, desc: o.desc, cost: o.kind === 'cast' || o.kind === 'stop' ? null : o.cost, off: v.kind === 'dock' && cardOff(o), sold: !!o.sold })),
@@ -700,6 +736,17 @@ export function createSimulation() {
     if (voters.length && voters.every((p) => p.vote != null)) v.t = Math.min(v.t, wait);
     if (v.kind === 'dock' && v.total > SH.MAX_TIME) v.t = Math.min(v.t, 0);
     if (v.t > 0) return;
+    if (v.onDone) { // (Versus: the shelf is tallied a team at a time, the rematch all together; the match decides what follows)
+      const tally = (list, none) => {
+        const c = v.options.map((_, i) => list.filter((q) => q.vote === i && valid(i)).length);
+        const top = Math.max(...c);
+        const tied = c.map((_, i) => i).filter((i) => c[i] === top);
+        return top === 0 ? none : tied[(Math.random() * tied.length) | 0];
+      };
+      const result = v.kind === 'shelf' ? { red: tally(voters.filter((q) => q.team === 'red'), 0), blue: tally(voters.filter((q) => q.team === 'blue'), 0) } : { all: tally(voters, 2) };
+      closeVote();
+      return v.onDone(result);
+    }
     // Count the votes; ties are settled at random. Nobody voting: the dock closes, the route picks at random.
     const counts = v.options.map((_, i) => voters.filter((p) => p.vote === i && valid(i)).length);
     const best = Math.max(...counts);
@@ -852,6 +899,7 @@ export function createSimulation() {
       return;
     }
     if (state.phase !== 'lobby') course.advance(dt); // (she moves first: see course.js advance)
+    if (match.on) match.bump(dt); // (Versus: two hulls that touch are pushed apart)
     eachShip(state, (sh) => sh.sim.stepCrew(dt));
 
     updatePopups(state, dt);
@@ -916,6 +964,8 @@ export function createSimulation() {
       }
     }
 
+    if (match.on) match.crossFire(); // (Versus: every shell and bomb against every other ship)
+
     eachShip(state, (sh) => sh.sim.stepShield(dt));
 
     // Shots that hit something (life set to exactly 0) leave an impact ring; expired ones just go.
@@ -943,7 +993,9 @@ export function createSimulation() {
   const update = (dt) => {
     const x0 = state.ships.map((sh) => sh.pose.x);
     try {
+      if (match.on) match.pre(dt); // (Versus: each ship's view of her rival)
       stepWorld(dt);
+      if (match.on) match.post(dt); // (...and the rules of the round, a vote open or not)
     } finally {
       state.ships.forEach((sh, i) => {
         const dx = sh.pose.x - x0[i];
@@ -951,6 +1003,15 @@ export function createSimulation() {
       });
     }
   };
+
+  // CAST OFF without the voyage's rules (the voyage starts a map when the lobby changed the session: Versus has its own sky): the crew factors settle, the ships fly.
+  const launch = () => {
+    eachShip(state, (sh) => updateCrewScale(sh.ctx, 0)); // (settle the spare gasbags and crew factors for the chosen difficulty)
+    state.phase = 'flying';
+    state.ev.warn = 4;
+    state.ev.warnText = 'CAST OFF!';
+  };
+  const match = createMatch({ world: state, addShip: (...a) => addShip(...a), removeShip: (...a) => removeShip(...a), course: () => course, launch, restart: () => restartGame(), openVote, newBot, puff, phoneFx, emitUi: emitPlayerUi });
 
   return {
     state,
@@ -961,12 +1022,11 @@ export function createSimulation() {
     impact, // (a hit on the ship at ship coordinates; the gasbag gate in tools/buildsim.mjs shoots her with it)
     fire: fireSys, // (fire.js: ignite() / update(); the --check-fire gate lights fires with it)
     gasHoleAt,
-    // What the PvP bridge may do to this ship from outside (pvp/bridge.js; ship coordinates, like impact): is a point on the ship,
-    // hit it, open a gasbag hole, and where a ship point is in the world (world x along the course, world y downward: the same frame as shells and the map).
-    external: { hitsShip, impact, gasHoleAt, worldPos: (x, y) => toWorld(mainShip(state), x, y) },
     engines, // (pointed engines, swivel turning: engines.js)
     ships: state.ships,
     addShip,
+    removeShip,
+    match, // (Versus, pvp/match.js: the lobby's two teams, the shelf, the rounds; match.on while Versus is selected)
     forces, // (forces at places: forces.js)
     interaction,
     modules,
@@ -974,14 +1034,12 @@ export function createSimulation() {
     startRoute,
     castOff: () => {
       if (state.phase !== 'lobby') return;
+      if (match.on) { match.begin(); return; } // (Versus: CAST OFF starts the match - the shelf, then the rounds)
       if (state.run.key !== sessionKey()) { // (the lobby changed the mode or the daily voyage after the route was made)
         newRun();
         course.startMission(1, firstMission());
       }
-      eachShip(state, (sh) => updateCrewScale(sh.ctx, 0)); // (settle the spare gasbags and crew factors for the chosen difficulty)
-      state.phase = 'flying';
-      state.ev.warn = 4;
-      state.ev.warnText = 'CAST OFF!';
+      launch();
     },
     onMarker,
     squadrons,
@@ -993,7 +1051,17 @@ export function createSimulation() {
     flushPresses: flushAll, // (the pause menu: presses made while paused must not fire on resume)
     // Pick the session mode / daily voyage (lobby and pause menu); remembered on this TV. Flying runs finish as they are.
     setSession: (mode, daily) => {
-      if (config.VOYAGE.MODES[mode]) state.mode = mode;
+      if (mode === 'versus') { // (the lobby's Mode button: VERSUS is the last of the session lengths; only from the lobby, and not in the middle of a match)
+        if (state.phase !== 'lobby' || state.mode === 'versus') return;
+        state.mode = 'versus';
+        match.enter();
+      } else if (mode && config.VOYAGE.MODES[mode]) {
+        if (state.mode === 'versus') {
+          if (match.phase !== 'lobby') return;
+          state.mode = mode;
+          match.leave();
+        } else state.mode = mode;
+      }
       if (daily != null) state.daily = !!daily;
       saveModePrefs(state);
     },

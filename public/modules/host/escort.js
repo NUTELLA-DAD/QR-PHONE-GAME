@@ -193,7 +193,7 @@ export function createEscort({ state, puff, phoneFx }) {
         s.gunCd = p ? E.SHOT_EVERY : E.PATROL_SHOT_EVERY;
         const nx = s.x + Math.cos(s.heading) * 34;
         const ny = s.y + Math.sin(s.heading) * 34;
-        state.shells.push({ x: nx, y: ny, vx: Math.cos(s.heading) * 1100 + (s.vx - ship.pose.vx) * 0.3 + ship.pose.vx, vy: Math.sin(s.heading) * 1100 + s.vy * 0.3, life: 1.0, owner: p && p.id });
+        state.shells.push({ x: nx, y: ny, vx: Math.cos(s.heading) * 1100 + (s.vx - ship.pose.vx) * 0.3 + ship.pose.vx, vy: Math.sin(s.heading) * 1100 + s.vy * 0.3, life: 1.0, owner: p && p.id, from: ship.id });
         if (state.flashes) state.flashes.push({ x: nx, y: ny, ang: s.heading, t: 0.06, color: '#fff2b0', size: 0.7 });
       }
     }

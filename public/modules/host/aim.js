@@ -5,7 +5,8 @@ import { config } from '../../config.js';
 
 import { portPos } from './gunshipBlueprint.js'; // (pure geometry: no import cycle)
 import { mainShip } from './ships.js';
-import { toWorldX, toWorldY, aimToShip } from './pose.js';
+import { toWorldX, toWorldY, aimToShip, aimToWorld } from './pose.js';
+import { solidAt } from './maps.js';
 
 export const SHELL_SPEED = config.GUNS.SHELL_SPEED;
 export const SHELL_LIFE = config.GUNS.SHELL_LIFE;
@@ -16,6 +17,32 @@ const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 // and +SPOT.BONUS if a crewmate has spotted the target from the radar (spotter.js sets obj.spotT).
 export const isSpotted = (obj) => !!obj && obj.spotT > 0;
 export const shellDmg = (shell, obj) => config.GUNS.DAMAGE * ((shell && shell.mul) || 1) * (isSpotted(obj) ? 1 + config.SPOT.BONUS : 1);
+
+// Versus (pvp/match.js, B.4): the other team's ship, in WORLD coordinates (state.rival: her aim point, guns, gasbags, helm and boiler, and how her middle moves). The parts of her worth
+// a shell, in the order the bot gunners want them (bestTarget's `order`): her manned guns that point at us, her gasbags, her boiler and helm, then her hull. A rock island between the
+// two ships hides her (a shell dies in rock), so there is nothing to aim at.
+function rivalTargets(list, state, ship, rv, vs) {
+  const B = config.PVP.BOT;
+  const mx = toWorldX(ship, ship.layout.aimPoint.x), my = toWorldY(ship, ship.layout.aimPoint.y);
+  const map = state.course && state.course.map;
+  if (!rv.los || rv.los.stamp !== rv.stamp) { // is there open sky between the two middles? (once a step, for everyone)
+    let shut = 0;
+    if (map) for (let k = 1; k <= 12; k++) if (solidAt(map, mx + ((rv.mid.x - mx) * k) / 13, my + ((rv.mid.y - my) * k) / 13)) shut++;
+    rv.los = { stamp: rv.stamp, open: shut < 2 };
+  }
+  if (!rv.los.open) return;
+  const at = (px, py) => (t) => ({ x: px + (rv.vx - vs) * t, y: py + rv.vy * t });
+  for (const g of rv.guns) {
+    if (!g.manned || g.ammo <= 0) continue;
+    const a = aimToWorld(rv.ship, g.aim + (rv.ship.ctx.ship.pitch || 0));
+    if (Math.abs(angleDiff(a, Math.atan2(my - g.y, mx - g.x))) > B.BEARING) continue; // (it is not pointing at us)
+    list.push({ kind: 'rivalGun', obj: rv, r: 60, at: at(g.x, g.y) });
+  }
+  for (const b of rv.bags) if (b.gas > 3) list.push({ kind: 'rivalBag', obj: rv, r: 90, at: at(b.x, b.y) });
+  if (rv.helm) list.push({ kind: 'rivalCore', obj: rv, r: 70, at: at(rv.helm.x, rv.helm.y) });
+  if (rv.boiler) list.push({ kind: 'rivalCore', obj: rv, r: 70, at: at(rv.boiler.x, rv.boiler.y) });
+  list.push({ kind: 'rival', obj: rv, r: 220, at: at(rv.mid.x, rv.mid.y) });
+}
 
 // Everything currently shootable, with a way to predict where it will be in t seconds.
 // at(t) is a WORLD position (at(0) is where it is), but looked at from the ship: a shell leaves the barrel at SHELL_SPEED relative to her, so a target that
@@ -37,9 +64,8 @@ export function targets(state) {
     });
     list.push({ kind: 'gunship', obj: gs, r: 200, at: () => ({ x: toWorldX(ship, gs.bp.cx + gs.dx), y: toWorldY(ship, (gs.bp.hullTop + gs.bp.hullBot) / 2 - 40 + gs.dy) }) });
   }
-  // Versus (pvp/bridge.js): the rival airship's middle. rival.mid is in our ship coordinates (y downward, incl. our altitude); vx / vy = how her middle moves in our view.
   const rv = state.rival;
-  if (rv && !rv.down) list.push({ kind: 'rival', obj: rv, r: 220, at: (t) => ({ x: toWorldX(ship, rv.mid.x + rv.vx * t), y: toWorldY(ship, rv.mid.y) + rv.vy * t }) });
+  if (rv && !rv.down) rivalTargets(list, state, ship, rv, vs);
   for (const m of state.mines || []) list.push({ kind: 'mine', obj: m, r: 40, at: (t) => ({ x: m.x + (m.vx - vs) * t, y: m.y }) });
   for (const b of state.bats || []) if (b.delay <= 0 && !b.latched) list.push({ kind: 'bat', obj: b, r: 26, at: (t) => ({ x: b.x + (b.vx - vs) * t, y: b.y + b.vy * t }) });
   for (const p of state.strafers || []) if (p !== state.stuntPlane) list.push({ kind: 'strafer', obj: p, r: 40, at: (t) => ({ x: p.x + (p.vx - vs) * t, y: p.y + p.vy * t }) });
@@ -81,7 +107,7 @@ export function solution(state, gun, target) {
 
 // The most useful target this gun can hit right now (mines, turrets, cargo, then fighter).
 export function bestTarget(state, gun) {
-  const order = { cable: -1, bomb: 0, rocket: 1, saw: 1.5, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rival: 9.2 };
+  const order = { cable: -1, bomb: 0, rocket: 1, saw: 1.5, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rivalGun: 8, rivalBag: 8.4, rivalCore: 8.8, rival: 9.2 };
   let best = null;
   for (const t of targets(state)) {
     const angle = solution(state, gun, t);

@@ -37,10 +37,10 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   // Is this spot open air (an outside deck, or an outrigger room)?
   const outsideAt = (d, x) => !!P[d] && (!!P[d].outside || L.rooms.some((r) => r.outside && r.d === d && x >= r.x0 && x <= r.x1));
 
-  const shipSurfaces = P.map((p, d) => ({ id: 'ship:' + p.id, d, y: p.y, x0: p.x0, x1: p.x1 }));
+  const shipSurfaces = () => P.map((p, d) => ({ id: 'ship:' + p.id, d, y: p.y, x0: p.x0, x1: p.x1 })); // (read each time: a new build applied to the ship, Versus' shelf, changes her decks in place)
 
   const surfaces = () => {
-    const list = [...shipSurfaces, ...extra];
+    const list = [...shipSurfaces(), ...extra];
     for (const f of extraProviders) {
       try {
         const got = f(state);
@@ -60,6 +60,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     for (let i = extra.length - 1; i >= 0; i--) if (extra[i].id === id) extra.splice(i, 1);
   };
   const addProvider = (f) => extraProviders.push(f);
+  const removeProvider = (f) => { const i = extraProviders.indexOf(f); if (i >= 0) extraProviders.splice(i, 1); };
 
   // Leave the deck into free flight from (p.x, p.y) on the ship with velocity (vx, vy) relative to her (vy down is positive).
   const startFlight = (p, vx, vy) => {
@@ -268,8 +269,12 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     }
     // Overboard: well below the ship or far past either end.
     // (Past the bow counts only beyond any other deck out there, e.g. a gunship alongside.)
-    const farX = Math.max(1600, ...extra.map((s) => (val(s.y) == null ? 0 : val(s.x1)))) + A.OVERBOARD_X;
-    if (sy > (p.chute > 0 ? A.CHUTE_OVERBOARD_Y : A.OVERBOARD_Y) || sx < -A.OVERBOARD_X || sx > farX) {
+    // (Versus: the rival's decks are surfaces too, wherever she hangs in the sky: past THEM is overboard, not just past our own ends and below our own keel.)
+    const rs = extraProviders.length ? surfaces().filter((s) => typeof s.id === 'string' && s.id.startsWith('rival:')) : [];
+    const farX = Math.max(1600, ...extra.map((s) => (val(s.y) == null ? 0 : val(s.x1))), ...rs.map((s) => val(s.x1))) + A.OVERBOARD_X;
+    const nearX = Math.min(0, ...rs.map((s) => val(s.x0))) - A.OVERBOARD_X;
+    const lowY = Math.max(p.chute > 0 ? A.CHUTE_OVERBOARD_Y : A.OVERBOARD_Y, ...rs.map((s) => val(s.y) + 320));
+    if (sy > lowY || sx < nearX || sx > farX) {
       p.fly = false;
       p.air = false;
       cutChute(p);
@@ -331,5 +336,5 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     p.stag = 0;
   };
 
-  return { addSurface, removeSurface, addProvider, surfaces, startFlight, jumpChute, grab, jumpOff, edgeCheck, vault, shove, standing, step, tumble, clear };
+  return { addSurface, removeSurface, addProvider, removeProvider, surfaces, startFlight, jumpChute, grab, jumpOff, edgeCheck, vault, shove, standing, step, tumble, clear };
 }

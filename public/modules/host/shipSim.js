@@ -35,6 +35,7 @@ import { createForces, hitForce } from './forces.js';
 import { installBags, syncBags, stepBags, watchBags } from './gasBags.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToWorld } from './pose.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
+import { transfer, newGuns, teamOf } from './ships.js';
 
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
@@ -121,9 +122,17 @@ export function createShipSim(world, ship, W) {
   const { hitsShip, onGasbag, gasHoleAt, roomPlatformAt } = shipQueries(layout);
   installBags(state); // the gasbags side by side: state.bags, and state.ship.gas as their mean (gasBags.js)
   let hookshot = null; // made by attach() once the world's hijack exists
-  const wreck = (text) => (ship.main ? W.wreck(text) : wreckAside(text)); // (the run ends with the main ship; another ship just breaks up and is rebuilt)
+  const wreck = (text) => (ship.main && !config.PVP.ENABLED ? W.wreck(text) : wreckAside(text)); // (the run ends with the main ship; another ship just breaks up and is rebuilt; in Versus a wreck ends the ROUND, whichever ship it is)
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  // ---- Versus (B.4, pvp/match.js): a crewman whose TEAM is not this ship's is a boarder. He fights, sabotages the boiler (hold) or takes the helm (hold); falling overboard or being
+  // knocked out carries him back to his own ship's medical bay. Co-op players have no team: none of this runs. ----
+  const isHostile = (p) => !!p.team && !!ship.team && p.team !== ship.team.id;
+  const homeOf = (p) => world.ships.find((q) => q.team && q.team.id === p.team) || ship; // (the ship a crewman belongs to)
+  const hostileJobs = [{ name: 'capture', prog: 0 }, { name: 'sabotage', prog: 0 }]; // the two hold actions of a boarder (stepUpkeep lets their progress wear off)
+  const [captureJob, sabotageJob] = hostileJobs;
+  const tally = (p, key) => { if (state.match && p && p.team) state.match.count(p.team, key); };
 
   const taken = (name) => Object.values(state.players).some((q) => q.lock === name);
 
@@ -156,6 +165,7 @@ export function createShipSim(world, ship, W) {
     if (player.lock || player.conn != null || player.fall || player.swing || player.air) return null;
     const here = (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r;
     const tool = player.carry;
+    if (isHostile(player)) return hostileUse(player, here);
     const revive = Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && q.conn == null && here(q, 65));
     if (revive) return { type: 'revive', obj: revive, hold: true, time: T.REVIVE_TIME, label: `Revive ${revive.name}` };
     const boarding = gunship.interaction(player);
@@ -231,11 +241,23 @@ export function createShipSim(world, ship, W) {
     return null;
   };
 
+  // What a boarder's Action button does (Versus): at the helm, TAKE THE HELM (hold; not while a defender stands by it); at the boiler, SABOTAGE (hold). Fighting is the ATTACK button.
+  const hostileUse = (player, here) => {
+    const V = config.PVP;
+    const helm = one('helm'), boiler = one('boiler');
+    if (helm && here(helm, V.HAND_REACH)) {
+      const defender = Object.values(state.players).some((q) => q !== player && !isHostile(q) && !q.fall && !(q.ko > 0) && q.conn == null && q.d === helm.d && Math.abs(q.x - helm.x) < V.DEFEND_REACH);
+      return defender ? { type: 'need', label: 'Defenders in the way!' } : { type: 'capture', obj: captureJob, hold: true, time: V.CAPTURE_TIME, label: 'TAKE THE HELM!' };
+    }
+    if (boiler && here(boiler, V.HAND_REACH)) return { type: 'sabotage', obj: sabotageJob, hold: true, time: V.SABOTAGE_TIME, label: 'Sabotage the boiler' };
+    return null;
+  };
+
   // The GRAB half (people only): take a tool, swap or put one back, grab ammo / coal / ice, hop onto a station.
   // Everything in reach is a candidate; the NEAREST wins, and the one you already had keeps the button until another is
   // CTL.HYSTERESIS closer (so labels don't flicker where two racks overlap). swap = it costs what is in your hands (hold GRAB).
   const grabsFor = (player, station) => {
-    if (player.lock || player.conn != null || player.fall || player.swing || player.air) return null;
+    if (player.lock || player.conn != null || player.fall || player.swing || player.air || isHostile(player)) return null;
     const tool = player.carry;
     const out = [];
     const add = (act, x, key) => out.push({ act: { ...act, grab: true, swap: act.swap ?? !!tool }, x, key });
@@ -289,6 +311,37 @@ export function createShipSim(world, ship, W) {
       .filter((b) => b.latched && b.landed && b.hp > 0 && b.d === player.d && Math.abs(b.lx - player.x) < range + extra + (b.kind === 'gas' ? config.WAVES.BAT_SWAT_REACH : 0))
       .sort((a, b) => Math.abs(a.lx - player.x) - Math.abs(b.lx - player.x))[0] || null;
 
+  // Versus: the nearest awake crewman of another team on this player's deck within range.
+  const foeInReach = (player, range) => {
+    if (!player.team) return null;
+    return Object.values(state.players)
+      .filter((q) => q !== player && q.team && q.team !== player.team && !q.fall && !q.fly && q.conn == null && !(q.ko > 0) && q.d === player.d && Math.abs(q.x - player.x) < range)
+      .sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0] || null;
+  };
+  // ...and a blow at him: a shove or a sword knocks him back and wears down his hit points; at zero he is out for a while (a boarder is carried home).
+  const hitCrew = (player, victim, sword) => {
+    const F = config.PVP.FIGHT;
+    player.face = victim.x < player.x ? -1 : 1;
+    victim.pvpHp = (victim.pvpHp ?? F.HP) - (sword ? F.SWORD : F.SHOVE);
+    const pl = PLATFORMS[victim.d];
+    if (pl) victim.x = clamp(victim.x + player.face * F.KNOCK, pl.x0 + 10, pl.x1 - 10);
+    shipPuff(victim.x, victim.y - 40, '#fff', 6);
+    if (sword) shipPop(victim.x, victim.y - 110, 'whack', '#ffffff', 0.8);
+    if (victim.pvpHp > 0) return;
+    victim.pvpHp = F.HP;
+    victim.ko = F.KO_TIME;
+    victim.prog = 0;
+    victim.lock = null;
+    victim.fire = false;
+    victim.carry = null;
+    stat(player, 'raiders');
+    stat(victim, 'ko');
+    tally(player, 'knockouts');
+    phoneFx(player, 'Knocked out ' + victim.name + '!', [30, 40, 30]);
+    phoneFx(victim, 'You were knocked out!', [120, 50, 120]);
+    shipPop(victim.x, victim.y - 130, 'KO', '#ffd23f', 1);
+  };
+
   // Attack button: a sword hurts raiders; bare hands only shove them back.
   const attack = (player) => {
     if (hookshot.onAttack(player)) return; // carrying the hookshot: fire it (or let go of the rope)
@@ -301,6 +354,8 @@ export function createShipSim(world, ship, W) {
       .filter((b) => !b.fall && b.conn == null && b.d === player.d && Math.abs(b.x - player.x) < range)
       .sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0];
     if (!target) {
+      const foe = foeInReach(player, range); // (Versus: a crewman of the other team on this deck)
+      if (foe) return hitCrew(player, foe, sword);
       // A bat latched on this deck (or hanging under the gasbag, above the catwalk): one hit is enough.
       const bat = batInReach(player, range);
       if (bat) {
@@ -411,21 +466,22 @@ export function createShipSim(world, ship, W) {
     }
     shipPuff(x, y, '#ff7b00', Math.round(8 * power));
     const coll = crewMul(state, 'collateral'); // (small crews: hits break fewer things)
+    const pm = config.PVP.ENABLED ? Math.min(1, power) : 1; // (Versus: a crew shell is a small blow - it chips the hull and only now and then breaks something or lights a fire, in proportion to its power)
     modules.hitAt(x, y, shipPuff, power, coll);
     helmsmanHit(x, y, power);
     const hitBag = onGasbag(x, y);
     if (hitBag >= 0) {
-      if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll) state.gasHoles.push(gasHoleAt(x, y, hitBag));
+      if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll * pm) state.gasHoles.push(gasHoleAt(x, y, hitBag));
       damageHull(2 * power);
       return;
     }
     if (d !== null) {
       const p = PLATFORMS[d];
-      const holes = power >= 2 ? (Math.random() < coll ? 2 : 1) : Math.random() < config.SHIP.HOLE_CHANCE * coll * (plate ? config.ARMOUR.HOLE_MUL : 1) ? 1 : 0;
+      const holes = power >= 2 ? (Math.random() < coll ? 2 : 1) : Math.random() < config.SHIP.HOLE_CHANCE * coll * pm * (plate ? config.ARMOUR.HOLE_MUL : 1) ? 1 : 0;
       for (let i = 0; i < holes && state.breaches.length < 10; i++) state.breaches.push({ x: clamp(x + (i - 0.5) * 70 * (holes - 1), p.x0 + 20, (p.id === 'main' ? shipGeom(layout).MAIN_X1 : p.x1) - 20), d, prog: 0 });
       // (a fire starts more readily on tinder (the coal), and not at all on plate: the spot's flammability scales the chance, 1 on a plain deck)
       const ig = fireSys.igniteChance(d, x);
-      if ((power >= 2 && Math.random() < coll * Math.min(1, ig)) || Math.random() < 0.35 * coll * ig) fireSys.ignite(d, x + (Math.random() - 0.5) * 80, 'hit');
+      if ((power >= 2 && Math.random() < coll * Math.min(1, ig)) || Math.random() < 0.35 * coll * ig * pm) fireSys.ignite(d, x + (Math.random() - 0.5) * 80, 'hit');
     }
     damageHull(config.SHIP.HIT_DAMAGE * power);
   };
@@ -501,6 +557,46 @@ export function createShipSim(world, ship, W) {
   };
   // Hold actions (fire:1) count only while the id the phone held on is still what the button shows.
   const holdOk = (player) => player.bot || player.fireAid === undefined || !player.aids || !player.aids.a || player.fireAid === player.aids.a.cur;
+
+  // A boarder who is out cold is carried to his own ship's medical bay, where he wakes (dazed) among his crewmates.
+  const sendHome = (p) => {
+    const home = homeOf(p);
+    if (home === ship) return;
+    detach(p);
+    const rv = home.layout.reviveSpot();
+    transfer(world, p, home, rv.d, rv.medbay ? rv.x + (Math.random() - 0.5) * 60 : rv.x);
+    p.carry = null;
+    p.hook = null;
+    phoneFx(p, 'Carried back to your own ship...', [60, 40, 60]);
+  };
+  // The boarder's two hold actions have run their course: the boiler sabotaged, the helm taken.
+  const sabotageBoiler = (player) => {
+    const boiler = one('boiler');
+    if (!boiler) return;
+    fireSys.lightBoiler(boiler, 2);
+    const pipes = modules.list.filter((m) => m.kind === 'pipe' && !m.broken);
+    if (pipes.length) modules.damage(pipes[(Math.random() * pipes.length) | 0], 999, shipPuff);
+    modules.damage(modules.byName[boiler.n], config.MODULES.BOILER_BLOWOUT_DAMAGE, shipPuff);
+    shipPuff(boiler.x, platformY(boiler.d) - 70, '#fff', 20);
+    shipPop(boiler.x, platformY(boiler.d) - 160, 'boiler', '#ff5a1f', 1.6);
+    state.ship.shake = Math.max(state.ship.shake, 0.6);
+    state.ev.warn = 3;
+    state.ev.warnText = 'THE ' + (ship.team ? ship.team.name + ' ' : '') + 'BOILER IS SABOTAGED!';
+    tally(player, 'sabotage');
+    phoneFx(player, 'Boiler sabotaged!', [60, 60, 60]);
+  };
+  const takeHelm = (player) => {
+    const helm = one('helm');
+    if (!helm) return;
+    const old = holder('helm');
+    if (old && old !== player) { old.lock = null; old.fire = false; old.restCd = 4; old.x = helm.x + 60; }
+    player.lock = helm.n; // (he is at the wheel now: whoever is on the other end of the ship's team is flying her until he lets go)
+    player.x = helm.x;
+    state.ev.warn = 4;
+    state.ev.warnText = 'HELM TAKEN BY ' + (player.team || '').toUpperCase() + '!';
+    tally(player, 'captures');
+    if (world.match && world.match.captured) world.match.captured(ship, player);
+  };
 
   // Run what a tapped button does (act may be null: a shout). The chain is one list for bots and people.
   const doTap = (player, act) => {
@@ -620,10 +716,13 @@ export function createShipSim(world, ship, W) {
         fall(player, dt, player.tumble ? air.tumble(player, dt) : 260, (w) => {
           air.clear(w);
           // Fell off the ship (or off a gunship): back aboard in the medical bay, dazed (no medbay: on the spawn deck at a boarding point).
-          const rv = reviveSpot();
+          // (A boarder who falls off the RIVAL's deck wakes in his own ship's medical bay.)
+          const dest = isHostile(w) ? homeOf(w) : ship;
+          const rv = dest === ship ? reviveSpot() : dest.layout.reviveSpot();
+          if (dest !== ship) transfer(world, w, dest, rv.d, rv.medbay ? rv.x + (Math.random() - 0.5) * 60 : rv.x);
           w.d = rv.d;
           w.x = rv.medbay ? rv.x + (Math.random() - 0.5) * 60 : rv.x;
-          w.y = PLATFORMS[w.d].y;
+          w.y = dest.layout.platforms[w.d].y;
           w.fall = false;
           w.ko = config.GUNSHIP.RESPAWN_TIME;
           w.carry = null;
@@ -633,6 +732,7 @@ export function createShipSim(world, ship, W) {
       }
       if (player.d == null) player.d = platformBelow(player.x, player.y) ?? 1;
       if (player.ko > 0) {
+        if (isHostile(player) && !player.fly) { sendHome(player); continue; } // (a boarder knocked out is carried back to his own ship)
         detach(player);
         player.lock = null;
         player.fire = false;
@@ -758,6 +858,7 @@ export function createShipSim(world, ship, W) {
                 vy: Math.sin(angle) * config.GUNS.SHELL_SPEED,
                 life: config.GUNS.SHELL_LIFE * (gun.reach || 1),
                 owner: player.id,
+                from: ship.id, // (the ship that fired it: Versus shells hit every OTHER ship, pvp/match.js)
                 ...(primed ? { mul: config.PRIME.DAMAGE_MUL, primed: true } : {}),
               });
               puff(wgx + Math.cos(angle) * 64, wgy + Math.sin(angle) * 64, primed ? '#ff9a2e' : '#ffe9a8', primed ? 12 : 4);
@@ -856,7 +957,7 @@ export function createShipSim(world, ship, W) {
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
-              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', sabotage: 'sabotage', cutline: 'boarding' }[act.type]);
+              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', sabotage: 'sabotage', cutline: 'boarding', capture: 'captures' }[act.type]);
               if (act.type === 'fire') shipPop(object.x, player.y - 120, 'fireOut', '#9fd3e6', 0.8);
               if (act.type === 'hole' || act.type === 'gas') shipPop(object.x, player.y - 120, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
@@ -868,7 +969,8 @@ export function createShipSim(world, ship, W) {
               else if (act.type === 'ice') env.chip(object);
               else if (act.type === 'unclog') env.deep.unclog(object);
               else if (act.type === 'oxygen') env.deep.refill();
-              else if (act.type === 'sabotage') gunship.plant(player);
+              else if (act.type === 'sabotage') (isHostile(player) ? sabotageBoiler(player) : gunship.plant(player));
+              else if (act.type === 'capture') takeHelm(player);
               else if (act.type === 'cutline') gunship.cutLine(player);
               else object.ko = 0;
               shipPuff(object.x, player.y - 50, '#8fe388', 10);
@@ -963,11 +1065,11 @@ export function createShipSim(world, ship, W) {
       const gaid = grabNow ? aidOf(grabNow, player.carry) : '';
       const glock = !!(grabNow && player.grabLock > 0);
       const progNow = !player.lock && player.act && player.act.hold && player.act.obj && typeof player.act.obj.prog === 'number' ? Math.round(player.act.obj.prog * 10) : -1; // (how far a hold action has got)
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0].join('|');
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : ''].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, fc: ship.pose.f, tn: state.turning.t > 0 };
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, fc: ship.pose.f, tn: state.turning.t > 0, tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
           emitPlayerUi(player.id, player.ui);
         }
       }
@@ -1174,12 +1276,15 @@ export function createShipSim(world, ship, W) {
     if (state.ship.down > 0) {
       state.ship.down -= dt;
       state.wreck.t += dt;
-      if (Math.random() < dt * 6) {
+      if ((!config.PVP.ENABLED || state.wreck.t < config.WRECK.TIME) && Math.random() < dt * 6) {
         const x = 100 + Math.random() * 1400;
         const y = 200 + Math.random() * 700;
         shipPuff(x, y + state.wreck.t * state.wreck.t * 60, Math.random() < 0.5 ? '#ff8c42' : '#555', 12);
       }
-      if (state.ship.down <= 0) (!ship.main ? respawn() : state.limp ? W.finishLimp() : W.restartGame());
+      if (state.ship.down <= 0) {
+        if (config.PVP.ENABLED) state.ship.down = 1e-3; // (Versus: a wreck stays a wreck until the match builds the next round)
+        else !ship.main ? respawn() : state.limp ? W.finishLimp() : W.restartGame();
+      }
     }
   };
 
@@ -1203,7 +1308,7 @@ export function createShipSim(world, ship, W) {
   // B2: holes, fires and bombs wear off when nobody works on them; fire spreads; the hull takes what burns and leaks; raiders.
   const stepUpkeep = (dt) => {
     // Progress drains only while nobody is working on it.
-    for (const object of [...state.breaches, ...state.fires, ...state.bombs, ...state.gasHoles, ...state.icing, ...state.clogs, state.o2tank]) {
+    for (const object of [...state.breaches, ...state.fires, ...state.bombs, ...state.gasHoles, ...state.icing, ...state.clogs, state.o2tank, ...hostileJobs]) {
       if (!object.worked) object.prog = Math.max(0, (object.prog || 0) - dt * 0.4);
       object.worked = false;
     }
@@ -1263,12 +1368,23 @@ export function createShipSim(world, ship, W) {
     }
   }
 
+  // A new build was applied to this ship's layout while she sat moored (Versus' shelf, pvp/match.js): what was made from the old layout is made again - her guns, her bomb bay, her
+  // lamps, her coil and her patrol planes - and she starts over. (Everything that watches layout.version follows by itself: the bags, valves and vents (preStep), the engines,
+  // sails, modules, nav, fire and the art.)
+  function refit() {
+    for (const k of Object.keys(state.GUNS)) delete state.GUNS[k];
+    Object.assign(state.GUNS, newGuns(layout));
+    searchlights.refit();
+    coil.refit();
+    respawn({ crew: false });
+  }
+
   return {
     ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, fireSys, goingDown, raiders, escort, coil, searchlights, air,
     get hookshot() { return hookshot; },
     get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
     hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop,
-    interaction, taken, holder, getHelm, worksKind,
-    preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn, comeAbout,
+    interaction, taken, holder, getHelm, worksKind, isHostile, homeOf, sendHome,
+    preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn, refit, comeAbout,
   };
 }

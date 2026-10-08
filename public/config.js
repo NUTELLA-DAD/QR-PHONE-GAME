@@ -1223,30 +1223,51 @@ export const config = {
     HULL: 50, // hull she is patched up to
     TIME: 7, // seconds of the break-up before she limps away (the "LIMPING HOME" card shows during it)
   },
-  // PvP "Versus" (PVP.md, Phase V): two crews, two complete copies of the game, one sky. OFF in the co-op game.
-  // ENABLED is switched on in BOTH copies by host.html?pvp=1 (main.js) or by the bridge (pvp/bridge.js).
+  // PvP "Versus" (PVP.md, Phase V; B.4: two Ships in ONE World, pvp/match.js). OFF in the co-op game.
+  // ENABLED is switched on by the lobby's Mode button (VERSUS) or the dev flag host.html?versus=1, and off again when the lobby goes back to a co-op mode.
   PVP: {
-    ENABLED: false, // on = no pacing director, no AI enemies, no limp-home spares, no co-op saves (simulation.js, crewscale.js, voyage.js read this)
-    MODE: 'broadside', // how a round is won: 'broadside' (sink or wreck the other ship; the only mode built so far)
+    ENABLED: false, // on = no pacing director, no AI enemies, no gunship, no limp-home spares, no co-op saves, the crew-size scaling is HANDICAP's (simulation.js, crewscale.js, voyage.js, shipSim.js read this)
+    MODE: 'broadside', // how a round is won: 'broadside' (sink or wreck the other ship) or 'capture' (an enemy crewman holds Action at the helm CAPTURE_TIME s with no defender in reach: HELM TAKEN). A wreck ends a round in both
     WINS_NEEDED: 2, // rounds to win the match (best of three)
     ROUND_TIME: 360, // seconds: the round cap; on a timeout the ship with the higher hull % wins
     COUNT_IN: 3, // seconds both ships stay moored before CAST OFF
     FINALE: 4, // seconds the sky keeps running after the deciding blow (the wreck plays out) before the round is closed; under WRECK.TIME
-    BETWEEN: 3, // seconds between a closed round and the next count-in
-    START_GAP: 2400, // centre-to-centre distance of the two ships at cast off (px); the left one starts on the map's start
-    SHELL_POWER: 0.4, // impact power of one crew shell on a rival ship (1 = one enemy bullet, 3 hull)
-    BOMB_POWER: 3, // impact power of a bomb dropped through a rival ship
-    STANDOFF: 1100, // pilots (bots and the autopilot) hold this centre-to-centre distance from the rival (px): close, so the stern guns of the ship behind reach too
+    BETWEEN: 6, // seconds the scoreboard stays up between a closed round and the next count-in
+    SHELF_TIME: 20, // seconds each team has to vote for its ship on the phones (the shelf), after CAST OFF in the lobby
+    REMATCH_TIME: 25, // seconds the rematch vote on the phones lasts after the match winner is shown
+    LOBBY_GAP: 2300, // in the lobby the blue ship moors this far AHEAD of the red one, so the two cards on the TV sit over their own ships (px)
+    START_GAP: 2600, // centre-to-centre distance of the two ships at cast off (px); the left one starts on the map's start
+    FACE_OFF: true, // the right-hand ship starts facing LEFT (a COME ABOUT's worth of bow turned already), so the two bows point at each other; false = both start bow-right
+    SHELL_POWER: 0.12, // impact power of one crew shell on a rival ship (1 = one enemy bullet, 3 hull; the holes, fires and gas holes a hit may cause scale with it): a round of bot crews lasts about 100 s
+    BOMB_POWER: 2, // impact power of a bomb dropped through a rival ship
+    STANDOFF: 1900, // pilots (bots and the autopilot) hold this centre-to-centre distance from the rival (px): nose to nose at gun range (a classic hull is 2000 wide, shells fly 1520), the bow decks a hook's throw apart
+    REF_HALF: 1025, // half the length of the classic hull (layout.bounds is 2050 wide): STANDOFF is the distance for two of them, a longer or shorter ship adds or takes off her own difference (px)
     APPROACH: 900, // px of range error for full throttle when holding the standoff
     ALT_EDGE: 450, // the rear ship holds this far above the rival, the lead ship this far below (px): the guns arc up and down, not only forward
     ROCK_MARGIN: 520, // pilots keep this far from rock (px)
     MAP_SEED: 7, // arena sky: the map seed of round 1 (+ the round number); both ships get the same sky
     MAP_KIND: 'open', // arena sky: 'open' (islands and hills) | 'network' | 'route'
     ENVIRONMENT: 'skyisles', // arena sky: which of the seven environments
-    TEAMS: { // the two sides: scarf / pennant colour and hull trim
-      red: { name: 'RED', color: '#d6453d', trim: '#9c2f2a' },
-      blue: { name: 'BLUE', color: '#3a7bd5', trim: '#27559a' },
+    ARENA: { LIFT: 2400, BACK: 1800, FRONT: 9500, TOP: 3400, PUSH: 0.9, PUSH_MAX: 420 }, // the arena: the ships start this far above the map's start (px; the start is a mooring mast near the ground, the fight is in the air among the islands), a ship may go this far behind the start and this far along it, and this far above the start's height; past that a soft wind pushes her back (px/s per px over, at most PUSH_MAX)
+    BUMP: { COOLDOWN: 0.9, MIN_CLOSING: 60, DAMAGE: 0.5, KICK: 1.6, PUSH: 520, BOUNCE: 0.25 }, // two hulls touching: seconds between bumps, the closing speed (px/s) that hurts, the impact power each takes per 100 px/s of closing speed, the forces.js kick (RAM_KICK multiples), how fast they are pushed apart (px/s) and the share of their speed that is left
+    FIGHT: { HP: 4, SWORD: 2, SHOVE: 1, KNOCK: 70, KO_TIME: 8 }, // crew against crew on a deck: hit points of a crewman, what a sword blow and a shove take off, how far a blow knocks him back (px) and how long he is out cold at zero (s; a boarder is carried home)
+    CAPTURE_TIME: 6, // seconds an enemy crewman holds Action at the rival's helm, with no defender in reach, to take it
+    SABOTAGE_TIME: 3, // seconds an enemy crewman holds Action at the rival's boiler to start a fire and a steam leak
+    DEFEND_REACH: 260, // px: a defender (a rival-team crewman on his own ship's helm deck, awake) this close to the helm stops a capture
+    HAND_REACH: 80, // px: how close a boarder stands to the helm / the boiler to work it
+    BOARD_RANGE: 1700, // bots look for a way across when the rival's middle is this close (px) and their own ship is calm
+    TONNAGE: 1.15, // the shelf's weight cap: the classic ship's mass x this (shipBuild.js budgets mass: 150 x 1.15 = 172), the same for both teams
+    SHELF: { RANDOM: 3, SEED: 11 }, // random valid builds on the shelf (seeded mutations of the classic ship that validate and fit the cap) and their seed
+    HANDICAP: { // crew-size scaling in Versus (replaces CREW_SCALE.TABLE): only the damage and collateral columns matter, and gently: a small crew takes a little less, a big one a little more
+      1: { spawn: 1, count: 1, fire: 1, damage: 0.7, raiders: 1, hp: 1, spread: 0.8, collateral: 0.7 },
+      2: { spawn: 1, count: 1, fire: 1, damage: 0.78, raiders: 1, hp: 1, spread: 0.85, collateral: 0.78 },
+      4: { spawn: 1, count: 1, fire: 1, damage: 0.9, raiders: 1, hp: 1, spread: 0.93, collateral: 0.9 },
+      6: { spawn: 1, count: 1, fire: 1, damage: 0.97, raiders: 1, hp: 1, spread: 0.98, collateral: 0.97 },
+      8: { spawn: 1, count: 1, fire: 1, damage: 1, raiders: 1, hp: 1, spread: 1, collateral: 1 },
+      12: { spawn: 1, count: 1, fire: 1, damage: 1.08, raiders: 1, hp: 1, spread: 1.05, collateral: 1.08 },
+      16: { spawn: 1, count: 1, fire: 1, damage: 1.15, raiders: 1, hp: 1, spread: 1.1, collateral: 1.15 },
     },
+    BOT: { RETREAT_HULL: 35, RETREAT_HOLES: 2, COVER_WEIGHT: 0.6, BEARING: 0.5, BOARD_CALM_HULL: 55, BOARD_CLOSE: 260 }, // bot captains: pull away to repair under this hull % with more than RETREAT_HOLES holes, how strongly a rock between the ships is valued, the angle (rad) a rival gun must be within of pointing at us to count as "bearing", the hull % above which a crew is calm enough to board, and how much closer than the standoff (px) the captain brings her while a crewman is hooking across
   },
   // The look of the whole game, in one place. Simple style: calm, muted backgrounds (sky, rock,
   // caves); the ship in warm wood and cream; crew in their bright scarf colours; enemies and
@@ -1275,7 +1296,7 @@ export const config = {
     STAMP: '#a8443f', STAMP_BG: 'rgba(243,234,214,0.92)', // red ink for warnings and alarm banners
     SHADOW: 'rgba(43,34,22,0.28)',
   },
-  // PvP arena look (modules/host/pvp/arenaCamera.js, pvpArt.js; Phase V). Soft faded team colours, logbook style.
+  // PvP look (modules/host/pvp/pvpArt.js: the flag, the two-sided hull bars, the "!" over an enemy). Soft faded team colours, logbook style.
   PVP_ART: {
     RED: '#c4574d', RED_DARK: '#8f3a34', RED_PALE: '#e8b7ae', // team red: flag / bar / outline / light tint
     BLUE: '#4d7fb3', BLUE_DARK: '#34577d', BLUE_PALE: '#b3cbe3',
@@ -1744,7 +1765,8 @@ export const config = {
       REACH: 900, // only hooks a plane this close (px, ship coordinates; the hook flies 950)
       GUN_REACH: 800, // only hooks the gunship when her deck is this close (and only while her rope to our bow is tied, so the crew can swing back as usual)
       SHOW_REACH: 750, // show-off swings aim at our own decks this far
-      KINDS: { plane: 3, gun: 2, show: 1 }, // how often each stunt is picked when it is possible
+      BOARD_REACH: 940, // Versus: a bot boards the rival by hook only when one of her decks is this close to the end of our top deck (the hook flies 950)
+      KINDS: { plane: 3, gun: 2, show: 1, board: 5 }, // how often each stunt is picked when it is possible
     },
   },
   // Job arrows on idle phones (the job finder, modules/host/jobs.js).

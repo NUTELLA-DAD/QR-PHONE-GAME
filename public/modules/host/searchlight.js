@@ -39,10 +39,11 @@ export function darkTarget(state) {
 export function createSearchlights({ state }) {
   const ship = mainShip(state);
   const layout = ship.layout; // (B1: the ship the lamps are on; B2 makes this one per ship)
-  const lights = (state.searchlights = lightNames(layout).map((n) => {
+  const makeLights = () => lightNames(layout).map((n) => {
     const m = layout.searchlights[n];
     return { n, bx: m.bx, by: m.by, home: m.aim, arc: m.arc, len: m.len, aim: m.aim, power: S.UNMANNED, focus: 0, manned: false, reach: S.RANGE, litCount: 0, ex: m.bx, ey: m.by, half: S.HALF_ANGLE, tierMul: 1 + config.NEST.TIER_BONUS * layout.nestTier((layout.stations.find((s) => s.n === n) || {}).p) };
-  }));
+  });
+  const lights = (state.searchlights = makeLights());
   state.litTargets = []; // [{ x, y, r, kind }] for the TV: brackets round everything lit
   state.dimTargets = []; // [{ x, y, r, kind }] hostile things NOT in a beam (the TV gives them glowing eyes in the dark)
   const litObjs = new Set();
@@ -186,6 +187,13 @@ export function createSearchlights({ state }) {
     state.dimTargets.length = 0;
   };
 
+  // A new build was applied to the ship (Versus' shelf): the lamps she has now.
+  const refit = () => {
+    lights.length = 0;
+    lights.push(...makeLights());
+    reset();
+  };
+
   // A line for the phone: what the beam is doing.
   const status = (name) => {
     const l = lights.find((q) => q.n === name);
@@ -193,5 +201,5 @@ export function createSearchlights({ state }) {
     return l.litCount ? `${l.litCount} lit - the guns hit harder!` : '';
   };
 
-  return { update, reset, emitter, status, lights };
+  return { update, reset, refit, emitter, status, lights };
 }

@@ -7,7 +7,6 @@ import { createSfx } from './sfx.js';
 import { createMenu } from './menu.js';
 import { createPerfGovernor, perfState } from './perf.js';
 import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility forward: the dev build below is applied before the simulation reads the layout)
-import { mainShip } from './ships.js';
 import { BUILDS } from './shipBuild.js';
 
 // Dev: host.html?build=[parts JSON] flies another ship than the classic one (copy a build from the build page, buildtest.html, "Copy build JSON").
@@ -64,24 +63,20 @@ const simulation = createSimulation();
     }
   }
 }
-// PvP (PVP.md V.0): host.html?pvp=1 (or config.PVP.ENABLED) loads a SECOND, fully independent copy of the game for ship B. The same
-// files are served under /b (server.js), and ES modules are one instance per URL, so /b/modules/host/simulation.js has its own
-// config, layout and state. Co-op never takes this branch. (Drawing ship B is the arena camera's job, V.1a.)
-// The bridge (pvp/bridge.js) puts both copies into one sky and runs the rounds; from then on it steps both ships instead of simulation.update.
-// (Dev state of V.2: ?pvp=1 starts a bot-crewed match at once; teams, the lobby button and drawing ship B come with V.1a / V.5.)
-let pvp = null; // the bridge, once ship B is loaded
-const pvpAsked = new URLSearchParams(location.search).get('pvp') === '1' || config.PVP.ENABLED;
-if (pvpAsked) {
-  Promise.all([import('/b/config.js'), import('/b/modules/host/simulation.js'), import('./pvp/bridge.js')]).then(([cfg, sim, bridge]) => {
-    config.PVP.ENABLED = cfg.config.PVP.ENABLED = true;
-    const simB = sim.createSimulation();
-    window.gameB = simB; // handy for debugging in the browser console
-    pvp = bridge.createBridge({ A: { sim: simulation, config, layout: mainShip(simulation.state).layout }, B: { sim: simB, config: cfg.config, layout: mainShip(simB.state).layout } });
-    window.bridge = pvp;
-    pvp.addBots('A', 4);
-    pvp.addBots('B', 4);
-    pvp.startMatch();
-  }).catch((e) => console.error('PvP: ship B could not be loaded', e));
+// Dev (B.4): host.html?versus=1 opens the lobby in VERSUS mode (two teams, two ships, one sky) and, with &bots=4, fills each side with bots and starts the match at once with
+// the first ships on the shelf (&shelf=1 shows the vote); the Mode button on the TV does the same by hand. host.html?versus=1&mode=capture plays Capture (hold the helm).
+{
+  const q = new URLSearchParams(location.search);
+  if (q.get('versus') === '1') {
+    if (q.get('mode') === 'capture') config.PVP.MODE = 'capture';
+    simulation.setSession('versus');
+    const n = Number(q.get('bots')) || 0;
+    if (n > 0) {
+      simulation.match.addBots('red', n);
+      simulation.match.addBots('blue', n);
+      simulation.match.begin({ shelf: q.get('shelf') === '1' });
+    }
+  }
 }
 const camera = createCamera();
 // ONE renderer draws the whole sky: the background once, then every ship (her own art, crew and effects), the darkness and the HUD (render.js).
@@ -158,11 +153,10 @@ function frame(now) {
   lastTime = now;
   if (!paused) {
     // Fixed timestep: run the simulation in exact STEP slices, however fast or slow frames arrive.
-    acc += real;
+    acc += real * ((simulation.state.match && simulation.state.match.slow) || 1); // (Versus: the finale of a round runs in slow motion)
     let steps = 0;
     while (acc >= STEP && steps < config.LOOP.MAX_STEPS) {
-      if (pvp) guard('update', () => pvp.update(STEP)); // (ship A, then ship B, then the cross-fire and the rounds)
-      else guard('update', () => simulation.update(STEP));
+      guard('update', () => simulation.update(STEP));
       acc -= STEP;
       steps++;
     }

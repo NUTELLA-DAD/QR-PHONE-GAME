@@ -6,6 +6,7 @@ import { config } from '../../config.js';
 import { mainShip } from './ships.js';
 
 const CS = () => config.CREW_SCALE;
+const TABLE = () => (config.PVP.ENABLED ? config.PVP.HANDICAP : CS().TABLE); // (Versus has its own, gentler table: what a small or a big crew changes about the damage a ship takes)
 const KEYS = ['spawn', 'count', 'fire', 'damage', 'raiders', 'hp', 'spread', 'collateral'];
 
 // (Ship's mates, see mates.js, are helpers and never count as crew.)
@@ -15,7 +16,7 @@ export const crewHeads = (state) => Object.values(state.players).filter((p) => !
 
 // The multiplier set for n crew (interpolated between the table rows; n may be fractional).
 export function scaleFor(n) {
-  const rows = Object.keys(CS().TABLE).map(Number).sort((a, b) => a - b);
+  const rows = Object.keys(TABLE()).map(Number).sort((a, b) => a - b);
   const out = { n };
   const x = Math.max(rows[0], Math.min(rows[rows.length - 1], n));
   let lo = rows[0];
@@ -25,7 +26,7 @@ export function scaleFor(n) {
     if (r >= x) { hi = r; break; }
   }
   const t = hi === lo ? 0 : (x - lo) / (hi - lo);
-  for (const k of KEYS) out[k] = CS().TABLE[lo][k] + (CS().TABLE[hi][k] - CS().TABLE[lo][k]) * t;
+  for (const k of KEYS) out[k] = TABLE()[lo][k] + (TABLE()[hi][k] - TABLE()[lo][k]) * t;
   return out;
 }
 
@@ -55,7 +56,7 @@ export const sparesFor = (state) => (config.PVP.ENABLED ? 0 : diffOf(state).spar
 export const spawnPace = (state) => diffOf(state).pace * scale(state).spawn;
 // How fast the enemy shoots (difficulty pace x crew fire rate).
 export const firePace = (state) => diffOf(state).pace * scale(state).fire;
-export const damageMul = (state) => diffOf(state).damage * scale(state).damage;
+export const damageMul = (state) => (config.PVP.ENABLED ? 1 : diffOf(state).damage) * scale(state).damage; // (Versus: the difficulty button is a co-op knob)
 export const crewMul = (state, key) => scale(state)[key];
 // Does the helm fly itself when nobody is at the wheel? (Easy/Normal, and any difficulty for a tiny crew.)
 export const autopilotOn = (state) => diffOf(state).autopilot || (CS().ENABLED && crewAboard(state) <= CS().AUTOPILOT_MAX_CREW);

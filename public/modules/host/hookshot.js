@@ -49,6 +49,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
             return { x: toWorldX(ship, val(t.x0) + ox), y: toWorldY(ship, val(t.y) + oy) };
           },
           surf: true,
+          rival: typeof id === 'string' && id.startsWith('rival:'), // (Versus: a deck of the other team's ship)
         };
       }
     }
@@ -265,6 +266,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
       p.fvy = -H.LEDGE_POP;
       p.fvx = 0;
       p.y = Math.min(p.y, h.ay - 12);
+      if (a.rival) p.apex = toShipY(ship, p.y); // (reeled up to her deck edge: the fall onto it is the hop, not the swing from where he started - a boarder is not stunned for a rope he climbed)
       puff(p.x, p.y, '#ffffff', 3);
     }
   };

@@ -19,7 +19,7 @@
 //        node tools/buildsim.mjs --check-bags        S.5d: many gasbags (four in a row, one giant) validate; drop-from-the-tray (placePart); rupture the fore bag in flight: she flies lower, tips toward it, the TV calls it out, patching + pumping restores it; both botsim 2 min with 0 errors
 //        node tools/buildsim.mjs --check-minimum    S.5e: a ship needs only a gasbag and a deck; the steps up from that (helm, boiler and coal, engines, a sail) validate, fly 2 minutes with 0 errors and each buys her something; a person raises and lowers a sail, a storm gust tears one left up
 //        node tools/buildsim.mjs --check-fire       S.5f/S.5g: fire cares where things are (coal is tinder, a fire that reaches it flares into a blaze, the boiler lights fires, the validator warns "coal bunker beside the boiler"), armour plate stops fire and cuts damage; coal beside the boiler burns more over seeded runs
-//        node tools/buildsim.mjs --check-arena      V.2: the PvP bridge, two classic ships with bot crews (tools/arena-check.mjs: one sky, cross-fire, rounds, score, wreck and cap endings, no co-op saves) AND co-op botsim still identical
+//        node tools/buildsim.mjs --check-match      B.4: VERSUS on one World (tools/match-check.mjs): two Ships in one sky with bot crews - the lobby's teams and swap, the shelf and its vote, rounds (count-in, a wreck ends one, the sides swap, the score and the scoreboard numbers, the cap by hull %, the match winner, the rematch vote), cross-fire / bumps / the rival accessor / targetShip / the handicap, boarding (a leap, fight, sabotage, take the helm, Capture, carried home), the bot captains (standoff, altitude edge, come about, gunnery order, retreat, boarding by hook), no co-op saves, leaving Versus - AND co-op botsim still identical. --check-arena is the same check (its old name); add --mirror N to play N mirror matches too
 //        node tools/buildsim.mjs --check-engines    S.5h: pointed engines: forward = classic speed, back reduces / reverses, up climbs with no gas, down dives, a nose engine up lifts the nose, a person turns a swivel engine with the stick and the thrust follows, the bots use the swivel (2 min, 0 errors)
 //        node tools/buildsim.mjs --check-forces     S.5h: forces at places (forces.js): a nose hit kicks the nose, a tail hit the tail, a tall sail tips her nose down, an engine at the nose pointing up cancels it, gusts rock her and she settles, crew walking to the bow tip her
 //        node tools/buildsim.mjs --snapshot-classic --force   (S.0 only) rewrite tools/fixtures/classic-layout.json
@@ -2199,9 +2199,9 @@ if (mode === '--snapshot-classic') {
   process.exit((await checkBalance()) ? 0 : 1);
 } else if (mode === '--check-minimum') {
   process.exit((await checkMinimum()) ? 0 : 1);
-} else if (mode === '--check-arena') {
-  const arena = spawnSync(process.execPath, [path.join(root, 'tools', 'arena-check.mjs')], { cwd: root, stdio: 'inherit' });
-  process.exit(arena.status === 0 && checkBotsim() ? 0 : 1);
+} else if (mode === '--check-match' || mode === '--check-arena') {
+  const match = spawnSync(process.execPath, [path.join(root, 'tools', 'match-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' });
+  process.exit(match.status === 0 && checkBotsim() ? 0 : 1);
 } else if (mode === '--check-two-ships') {
   const run = (args) => spawnSync(process.execPath, [path.join(root, 'tools', 'two-ships-check.mjs'), ...args], { cwd: root, stdio: 'inherit' }).status === 0;
   const bags = run(['--build', 'bags', '--minutes', '2']); // (the classic ship + the four-bag ship: the same decks, another gasbag layout)
@@ -2243,6 +2243,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-arena | --check-two-ships | --check-turn | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-turn | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }
