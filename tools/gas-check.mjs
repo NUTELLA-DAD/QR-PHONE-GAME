@@ -392,5 +392,18 @@ function seedRandomFor(n) { clock = seedRandom(n); }
   report(errs() === e1, 'the ship draws with a scorched bag, an alight bag and a cooling burner (0 errors)');
 }
 
+// ---------------------------------------------------------------- (g) the ship generator uses the gases
+{
+  const { generateShip } = await load('modules/host/shipGen.js');
+  const n = { hydrogen: 0, hot: 0, helium: 0, none: 0 }, bad = [];
+  for (let s = 1; s <= (quick ? 60 : 150); s++) {
+    const r = generateShip(s);
+    if (!r) { n.none++; continue; }
+    n[r.parts.find((p) => p.part === 'gasbag').gasType || 'helium']++;
+    if (validate(r.parts).fails.length) bad.push(s);
+  }
+  report(n.hydrogen >= 1 && n.hot >= 1 && n.none === 0 && !bad.length, `random ships take the new gases (${n.hydrogen} hydrogen, ${n.hot} hot air, ${n.helium} helium) and every one validates with no FAIL${bad.length ? ' (bad seeds ' + bad.join(',') + ')' : ''}`);
+}
+
 console.log(ok && errors.length === 0 ? '\nGAS GATE PASSED' : '\nGAS GATE FAILED' + (errors[0] ? '\n' + errors[0] : ''));
 process.exit(ok && errors.length === 0 ? 0 : 1);
