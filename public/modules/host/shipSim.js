@@ -1038,7 +1038,10 @@ export function createShipSim(world, ship, W) {
         const hpNow = config.HEALTH.ENABLED ? Math.round(heartsOf(player) * 2) / 2 : null;
         if (player.uk !== 'ko' + hpNow) {
           player.uk = 'ko' + hpNow;
-          if (!player.bot) player.ui = { ko: true, hp: hpNow, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT };
+          if (!player.bot) {
+            player.ui = { ko: true, hp: hpNow, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT };
+            emitPlayerUi(player.id, player.ui); // (it was never sent before: the phone kept its old buttons while knocked out)
+          }
         }
         continue;
       }
