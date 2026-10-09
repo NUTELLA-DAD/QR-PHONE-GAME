@@ -708,7 +708,7 @@ export const config = {
     SHAKEN_HOLES: 1, // limp home: a newest gasbag starts with this many holes
     // DANGER THAT FOLLOWS THE SHIP (shipPower.js, read by crewscale.js): a voyage's enemies scale with the ship's fighting strength as well as the crew. Her power (guns, bomb bay, coil,
     // escorts, armour, engines ...) is worked out from the build once per build, as a share of the classic ship's; the classic ship is 1.0 = full danger, nothing changes for her.
-    POWER_SCALE: 0.1, // how much of the danger a weak ship is spared: 0 = none (every ship meets the classic danger), 1 = danger in proportion to her power (kept low: the Sparrow wins about as often as the classic ship)
+    POWER_SCALE: 0.2, // how much of the danger a weak ship is spared: 0 = none (every ship meets the classic danger), 1 = danger in proportion to her power (kept low: the Sparrow wins about as often as the classic ship)
     POWER_FLOOR: 0.4, // ...but never less than this share of the full danger (a bare hull still gets shot at)
     POWER: {
       BASE: 3, GUN: 1, BOMB_BAY: 1.5, COIL: 2, ESCORT: 1, DEFLECTOR: 1, ARMOUR: 1.2, ENGINE: 0.6, SPARE_BAG: 1, CANNON: 1, CARGO_RACK: 0.3, TOWLINE: 0.5, // (B.6: a crew cannon, a sandbag or crate rack, a towline reel) power points: the hull and deck; per gun; the bomb bay; the coil; per escort fighter; the deflector; per 100 px of armour plate; per engine pod; per gasbag beyond the first
@@ -1058,9 +1058,9 @@ export const config = {
   // Re-tuned with tools/voyagesim.mjs (8 bots, --build classic and sparrow, 48 seeds): win rates about Easy 90%, Normal 55%, Veteran 35%, Hard 15%.
   DIFFICULTY: {
     easy: { label: 'Easy', damage: 0.12, pace: 0.72, autopilot: true, gunHp: 0.72, spares: 4 },
-    normal: { label: 'Normal', damage: 0.225, pace: 0.93, autopilot: true, gunHp: 0.93, spares: 4 },
-    veteran: { label: 'Veteran', damage: 0.295, pace: 1.0, autopilot: true, gunHp: 1.0, spares: 4 },
-    hard: { label: 'Hard', damage: 0.245, pace: 0.98, autopilot: false, gunHp: 0.98, spares: 3 },
+    normal: { label: 'Normal', damage: 0.22, pace: 0.91, autopilot: true, gunHp: 0.91, spares: 4 },
+    veteran: { label: 'Veteran', damage: 0.285, pace: 1.0, autopilot: true, gunHp: 1.0, spares: 4 },
+    hard: { label: 'Hard', damage: 0.24, pace: 0.97, autopilot: false, gunHp: 0.97, spares: 3 },
   },
   // Crew-size scaling (crewscale.js). The number of crew aboard (connected players, bots included)
   // multiplies the difficulty above, anchored at 8 crew = 1.0 and interpolated between rows.
