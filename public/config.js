@@ -618,7 +618,7 @@ export const config = {
     // what it does to a hostile ship
     IGNITE_RATE: 2.2, // chance a second that a deck spot in the cone catches, times the spot's flammability (a plain deck 1, coal 4.5, armour plate 0: ignite chance, fire.js)
     HULL_RATE: 0.5, // hull points a second a hull in the cone loses (less on armour plate: ARMOUR.POWER_MUL)
-    HOLE_RATE: 0.5, // chance a second that a gasbag in the cone gets a hole (hydrogen bags, when they come, burn much harder)
+    HOLE_RATE: 0.5, // chance a second that a gasbag in the cone gets a hole (a hydrogen bag in the cone is also scorched: GASES.HYDROGEN.FLAME_RATE)
     CREW_HEARTS: 1, CREW_EVERY: 0.8, // a foe standing in the cone loses CREW_HEARTS hearts every CREW_EVERY seconds
     CREW_REACH: 34, // px around a crewman that counts as in the cone
     PENETRATE: 240, // the cone stops at the first hull it meets, but goes on this far through a port into the room behind
@@ -836,7 +836,7 @@ export const config = {
       deck: 1, // a covered wooden deck or room: medium (everything else is measured against it)
       outdoor: 0.85, // an open-air deck: the wind carries flames off a little
       armour: 0, // riveted iron plate does not burn: a fire cannot start or spread onto it
-      gasbag: 1.5, // RESERVED for hydrogen bags (gas types, S.7): not used yet
+      gasbag: 1.5, // a HYDROGEN bag (config.GASES.HYDROGEN): a fire that reaches it scorches it this much faster (hydrogen.js); helium and hot air do not burn
       // A spot within r px of one of these on the same deck takes its flammability instead of the deck's (the nearest wins). Coal and powder are tinder; iron housings give little to burn.
       kind: { coal: { f: 4.5, r: 130 }, bombBay: { f: 3, r: 150 }, ammo: { f: 1.8, r: 100 }, boiler: { f: 0.35, r: 90 }, engine: { f: 0.35, r: 70 }, gun: { f: 0.6, r: 60 } },
     },
@@ -1259,6 +1259,51 @@ export const config = {
     // whose valve is OPEN bleeds this much gas per second out of the shared feed (shared by the open bags), so a ruptured bag starves the others until the crew
     // shuts its valve (or patches it). A bag with no valve is always open; a ship with one bag is unchanged.
     HOLE_BLEED: 10,
+  },
+  // GAS TYPES (catalogue v2 Tier 1; gases.js, hydrogen.js, gasBags.js). Every gasbag part has a `gasType` (absent = helium, so every older build is unchanged): the lift of a bag is its size times its gas's
+  // `lift`; the weight of a hot-air bag's burner is `mass`; `seep` multiplies how fast the bag loses gas by itself; `price` multiplies the dock's top-up (SHOP.REPAIR_GAS, helium = 1).
+  GASES: {
+    helium: { name: 'Helium', short: 'He', tint: 'rgba(120,180,225,0.22)', lift: 1, mass: 0, seep: 1, price: 1, blurb: 'safe, and the dearest to top up' },
+    hydrogen: { name: 'Hydrogen', short: 'H2', tint: 'rgba(205,70,50,0.24)', lift: 1.3, mass: 0, seep: 1.4, price: 0.5, blurb: '30% more lift and cheap, but it burns: a fire that reaches the bag sets it off' },
+    hot: { name: 'Hot air', short: 'HOT', tint: 'rgba(240,160,60,0.30)', lift: 0.6, mass: 1.5, seep: 1, price: 0, blurb: 'free, but weak and only as good as the boiler heat: keep her stoked' },
+    // HYDROGEN: a fire (or flame, or a lucky hit) reaching the bag SCORCHES it; at 1 it is ALIGHT, burns for FUSE seconds (venting its gas), then EXPLODES: the bag tears away (breakOff), fires start under it,
+    // the crew near it are blasted, and a hydrogen bag touching it catches too. A bag that has burned down below FIZZLE gas just fizzles (it still tears away, with no blast).
+    HYDROGEN: {
+      REACH_BELOW: 120, // a fire on a deck up to this many px below the envelope's underside (and under it, in x) reaches the bag; one on the nest decks on top of it does too
+      REACH_ABOVE: 260, // ...and a deck this far above the bag's top (a high crow's nest)
+      BIG_REACH: 110, // a BIG fire (a blaze) reaches this much farther down
+      SCORCH_RATE: 0.13, // scorch (0..1) a second per fire reaching the bag, times FIRE.FLAMMABILITY.gasbag; 1 = alight (about 5 s with one fire)
+      BIG_MUL: 1.8, // a big fire scorches this much faster
+      SCORCH_COOL: 0.12, // scorch lost a second when nothing burns near it
+      HIT_IGNITE: 0.05, // chance a hit's power 1 on a hydrogen bag sets it alight at once (more power, more chance)
+      FLAME_RATE: 1.6, // scorch a second a flamethrower's cone puts on the bag (0.7 s of flame lights it)
+      FUSE: 3, // seconds an ALIGHT bag burns before it explodes
+      BURN_LEAK: 7, // gas a second an alight bag loses
+      FIZZLE: 8, // an alight bag with less gas than this when the fuse ends fizzles instead of exploding
+      EMPTY: 6, // a bag with less gas than this has nothing left to burn: it cannot be scorched or lit
+      RELIGHT: 25, // seconds a bag that burnt out (her only bag, ripped open) cannot catch again
+      FIRE_EVERY: 0.9, // seconds between the big fires an alight bag drops on the decks under it
+      BLAST_RADIUS: 380, // crew within this many px of the underside of the bag are blasted (hearts: health.js)
+      BLAST_BIG: false, // true = knocked out at once like the bomb bay; false = one heart (BLAST_HEARTS)
+      BLAST_HEARTS: 1,
+      HULL: 8, // hull points the blast costs (before the damage scale), times the bag's fill
+      POWER: 3, // forces.js kick of the blast
+      SHAKE: 1, // screen shake
+      FIRES: 3, // fires lit on the decks under the bag when it goes
+      CHAIN_GAP: 40, // a hydrogen bag whose envelope is within this many px of the exploding one catches too...
+      CHAIN: 0.85, // ...with this chance...
+      CHAIN_FUSE: 0.5, // ...burning for this share of the fuse
+      WARN_NEAR: 260, // the validator WARNs for a boiler, coal bunker or flamethrower within this fire path of a hydrogen bag's reach
+    },
+    // HOT AIR: the bag's lift follows the boiler's heat. heat (0..1) chases PRESS_FULL-scaled boiler pressure, warming at WARM and cooling at COOL a second; a cold bag keeps COLD of its fill's lift.
+    HOT: {
+      PRESS_FULL: 45, // boiler pressure that gives full heat
+      WARM: 0.12, COOL: 0.035, // heat gained / lost a second (she cools slowly: a lull in the stoking is not a fall)
+      COLD: 0.3, // share of its lift a cold bag keeps
+      WARN_BELOW: 0.7, // the TV calls out "HOT AIR COOLING" below this heat; the bots stoke
+    },
+    OFFER_HOVER: 55, // the dock offers to convert a bag to hydrogen on a ship whose hover level is above this (heavy ships)
+    CONVERT: { hydrogen: 90, helium: 120, hot: 30 }, // dock price of converting one bag TO this gas
   },
   // What the ship-building validator (modules/host/buildCheck.js, tools/buildsim.mjs --build, public/buildtest.html) holds a build to.
   // Part weights, lifts and hands are data in modules/host/shipBuild.js (PARTS); these are the limits and the assumptions behind the gauges.

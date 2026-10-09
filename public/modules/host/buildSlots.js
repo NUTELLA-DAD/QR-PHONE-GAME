@@ -11,7 +11,7 @@ import { validate } from './buildCheck.js';
 import { config } from '../../config.js';
 
 // The blueprint editing operations (draw a deck, erase, lengthen the gasbag, place a ladder, delete a thing) are pure functions of a parts list: re-exported here with the slots.
-export { drawDeck, drawBag, resizeBag, erase, setBag, setEngineDir, setEngineSwivel, placeConnector, placePart, thingAt, removeAt, emptyBuild, ensureFrame, snapX, rowAtY, summarize, EDIT_ROWS, DRAW_ROWS, GRID_X0, addArmour, ARMOUR_ROWS, isOutdoorRow } from './buildEdit.js';
+export { drawDeck, drawBag, resizeBag, erase, setBag, setGas, setEngineDir, setEngineSwivel, placeConnector, placePart, thingAt, removeAt, emptyBuild, ensureFrame, snapX, rowAtY, summarize, EDIT_ROWS, DRAW_ROWS, GRID_X0, addArmour, ARMOUR_ROWS, isOutdoorRow } from './buildEdit.js';
 const STEP = 40; // slots sit on a grid this far apart along a deck (px)
 const clone = (parts) => parts.map((p) => ({ ...p }));
 const names = (parts) => new Set(parts.map((p) => p.n || p.name).filter(Boolean));

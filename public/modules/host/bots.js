@@ -420,7 +420,8 @@ function listJobs(state, bot) {
   jobs.push(...sailJobs(state, bot, true)); // (a gust is coming or she is in a cave: reef any sail that is up)
   // A fire in the coal (S.5f: a big fire, or one on ground as flammable as the coal) is the worst fire aboard: a blaze there feeds itself and spreads fast. Everyone near
   // runs to it at once, ahead of the other chores.
-  const hotFires = !canSpray ? [] : state.fires.filter((f) => f.big || flamAt(L, f.d, f.x) >= config.FIRE.BLAZE.FLAME_AT);
+  // (GAS TYPES: a fire that reaches a hydrogen bag, f.h2 from hydrogen.js, is just as bad: the bag will explode, so it is put out first)
+  const hotFires = !canSpray ? [] : state.fires.filter((f) => f.big || f.h2 || flamAt(L, f.d, f.x) >= config.FIRE.BLAZE.FLAME_AT);
   for (const f of hotFires) jobs.push({ kind: 'fire', obj: f, max: 2, cap: B.HOT_FIRE_CAP, urgent: true });
   // Versus: a boarder at the wheel or the boiler is the worst thing aboard (he is taking the ship): the defenders go for him before anything else, up to half the crew.
   if ((config.PVP.ENABLED || mainShip(state).ai) && bot.team) {
@@ -442,6 +443,8 @@ function listJobs(state, bot) {
   // The boiler is dying (no coal, or the pressure has collapsed): nothing else works without steam - stoke it right away.
   const ship = state.ship;
   if (state.phase === 'flying' && L.hasKind('boiler') && L.hasKind('coal') && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
+  // Hot-air bags lift only while the boiler is hot (GAS TYPES, gasBags.js): when the burner is cooling, somebody stokes it.
+  if (state.phase === 'flying' && state.hotAir && state.hotAir.n && state.hotAir.heat < config.GASES.HOT.WARN_BELOW + 0.1 && L.hasKind('boiler') && L.hasKind('coal') && ship.fuel < 85) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
   // The parts everything else hangs on (the helm and its steam pipe, the boiler, the lift): a broken one is fixed first,
   // otherwise the gasbag can never be pumped up again and the ship just sits there burning.
   for (const m of mods) if (canHammer && m.broken && critical(mods, m)) jobs.push({ kind: 'repair', obj: m, max: 1, cap: 3, urgent: true });

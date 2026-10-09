@@ -36,10 +36,11 @@ import { createFlight } from './flight.js';
 import { createSails, windSpeed } from './sails.js';
 import { createFire } from './fire.js';
 import { createHealth, hurt as hurtCrew, knockOut, wake, revived, hearts as heartsOf } from './health.js';
-import { armourOn } from './fireModel.js';
+import { armourOn, bagFireSpots } from './fireModel.js';
 import { createEngines } from './engines.js';
 import { createForces, hitForce } from './forces.js';
-import { installBags, syncBags, stepBags, watchBags, holesPerBag } from './gasBags.js';
+import { installBags, syncBags, stepBags, watchBags, holesPerBag, liftGas, stepHotAir } from './gasBags.js';
+import { createHydrogen } from './hydrogen.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToWorld, pivotOf } from './pose.js';
 import { planBreak, makeRng, rebuildPrice, hoverOf, brokenOf } from './breakOff.js';
 import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
@@ -524,6 +525,7 @@ export function createShipSim(world, ship, W) {
     crewHit(x, y, power);
     const hitBag = onGasbag(x, y);
     if (hitBag >= 0) {
+      if (state.bags[hitBag] && state.bags[hitBag].type === 'hydrogen') hydrogen.hit(hitBag, power * pm); // (a shell into a hydrogen bag: a spark can light it)
       if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll * pm) state.gasHoles.push(gasHoleAt(x, y, hitBag));
       damageHull(2 * power * hullMul);
       return;
@@ -569,7 +571,7 @@ export function createShipSim(world, ship, W) {
     const before = JSON.parse(JSON.stringify(wearing)); // (kept for the REBUILD card: the parts as they were)
     const oldP = P.map((q) => ({ id: q.id, y: q.y, x0: q.x0, x1: q.x1 }));
     const oldC = layout.connectors.map((c) => ({ type: c.type, xTop: c.xTop, xBottom: c.xBottom, yTop: P[c.top].y, yBottom: P[c.bottom].y }));
-    const oldBags = layout.gasbags.map((b, i) => ({ cx: b.cx, gas: state.bags[i] ? state.bags[i].gas : state.ship.gas, down: state.bags[i] ? state.bags[i].down : false }));
+    const oldBags = layout.gasbags.map((b, i) => ({ cx: b.cx, gas: state.bags[i] ? state.bags[i].gas : state.ship.gas, down: state.bags[i] ? state.bags[i].down : false, scorch: state.bags[i] ? state.bags[i].scorch : 0, burn: state.bags[i] ? state.bags[i].burn : 0, fireT: state.bags[i] ? state.bags[i].fireT : 0 }));
     const oldValves = (layout.gasValves || []).map((v, i) => ({ x: v.x, p: v.p, open: state.gasValveOpen[i] !== false }));
     const oldVents = layout.vents.map((v, i) => ({ x: v.x, p: v.p, open: !!state.ventOpen[i] }));
     const keptGuns = Object.fromEntries(Object.entries(state.GUNS).map(([k, g]) => [k, { aim: g.aim, cd: g.cd, ammo: g.ammo, max: g.max, empty: g.empty, auto: g.auto, prime: g.prime, primed: g.primed }]));
@@ -645,7 +647,7 @@ export function createShipSim(world, ship, W) {
     syncBags(state);
     layout.gasbags.forEach((b, i) => {
       const o = oldBags.find((q) => Math.abs(q.cx - b.cx) < 1.5);
-      if (o && state.bags[i]) { state.bags[i].gas = o.gas; state.bags[i].down = o.down; }
+      if (o && state.bags[i]) { state.bags[i].gas = o.gas; state.bags[i].down = o.down; state.bags[i].scorch = o.scorch; state.bags[i].burn = o.burn; state.bags[i].fireT = o.fireT; } // (a neighbour that is scorched or alight stays so)
     });
     state.gasValveOpen = (layout.gasValves || []).map((v) => { const o = oldValves.find((q) => q.x === v.x && q.p === v.p); return o ? o.open : true; });
     state.ventOpen = layout.vents.map((v) => { const o = oldVents.find((q) => q.x === v.x && q.p === v.p); return o ? o.open : false; });
@@ -683,7 +685,7 @@ export function createShipSim(world, ship, W) {
     if (ship.main) {
       state.ev.warn = 5;
       const nm = plan.names.length ? plan.names.slice(0, 3).join(', ') + (plan.names.length > 3 ? ' +' + (plan.names.length - 3) + ' MORE' : '') : plan.summary.split(',')[0];
-      state.ev.warnText = (blast ? 'THE BOMB BAY EXPLODED! ' : spec.cause === 'bag' ? 'A GASBAG TORE AWAY! ' : 'PARTS BROKE OFF! ') + (nm ? 'LOST: ' + nm.toUpperCase() : '');
+      state.ev.warnText = (blast ? 'THE BOMB BAY EXPLODED! ' : spec.cause === 'hydrogen' ? 'THE HYDROGEN BAG EXPLODED! ' : spec.cause === 'bag' ? 'A GASBAG TORE AWAY! ' : 'PARTS BROKE OFF! ') + (nm ? 'LOST: ' + nm.toUpperCase() : '');
     }
     if (W.debris) W.debris.spawn(ship, plan, pics, { origin: { x: bx, y: by }, blast });
     if (W.afterBreak) W.afterBreak(ship); // (the world: the danger of the voyage follows her strength, shipPower.js)
@@ -712,6 +714,50 @@ export function createShipSim(world, ship, W) {
       state.ship.shake = Math.max(state.ship.shake, B.SHAKE);
       hitForce(state, bx, by, B.POWER);
       if (ship.main) { state.ev.warn = 4; state.ev.warnText = 'THE BOMB BAY EXPLODED!'; }
+    }
+    return r;
+  }
+
+  // A hydrogen bag goes up (hydrogen.js, config.GASES.HYDROGEN): bag i tears away (breakOff: the bag, and the crow's nests it carried), fires start on the decks under it, the crew near it are blasted, hull is lost,
+  // and a hydrogen bag touching it catches too. blast = false: it had burnt down to nothing and only fizzles (it still tears away). The ship's ONLY bag cannot tear away (planBreak keeps the biggest bag): she is
+  // ripped open instead - empty and full of holes - and falls.
+  function explodeBag(i, blast = true) {
+    const H = config.GASES.HYDROGEN, bag = layout.gasbags[i], mine = state.bags[i];
+    if (!bag || !mine || state.ship.down) return null;
+    const fill = Math.max(0.2, Math.min(1, mine.gas / 100 + 0.2));
+    const bx = bag.cx, by = bag.cy + bag.ry + 40;
+    state.gasStats[blast ? 'exploded' : 'fizzled']++;
+    // the neighbours it touches catch (before the bags are made again: breakOff keeps what burns)
+    layout.gasbags.forEach((o, j) => {
+      const nb = state.bags[j];
+      if (j === i || !nb || nb.type !== 'hydrogen' || nb.burn > 0) return;
+      if (Math.max(o.x0 - bag.x1, bag.x0 - o.x1) <= H.CHAIN_GAP && breakRng() < H.CHAIN && hydrogen.light(j, H.CHAIN_FUSE, 'chain')) state.gasStats.chained++;
+    });
+    if (blast) {
+      health.blast(bx, by, H.BLAST_RADIUS, { big: H.BLAST_BIG, hearts: H.BLAST_HEARTS, cause: 'blast' });
+      damageHull(H.HULL * fill);
+    }
+    const r = layout.gasbags.length > 1 ? breakOff({ kind: 'bag', index: i, cause: 'hydrogen' }, { force: true }) : null; // (her only bag stays: planBreak keeps the biggest)
+    if (blast) {
+      let lit = 0;
+      const decks = bagFireSpots(layout, bag);
+      for (let k = 0; k < H.FIRES * 3 && lit < H.FIRES && decks.length; k++) {
+        const sp = decks[(breakRng() * decks.length) | 0];
+        if (fireSys.ignite(sp.d, sp.lo + breakRng() * (sp.hi - sp.lo), 'hit', { over: true, big: true })) lit++;
+      }
+      shipPop(bx, by - 120, 'bayBoom', '#ff7b00', 1.8);
+      for (let k = 0; k < 14; k++) shipPuff(bx + (breakRng() - 0.5) * bag.rx * 1.6, bag.cy + (breakRng() - 0.5) * bag.ry, k % 3 ? '#555' : '#ff8c42', 1);
+      state.ship.shake = Math.max(state.ship.shake, H.SHAKE);
+      hitForce(state, bx, by, H.POWER);
+      state.sfxQ.push(['alarm']);
+    }
+    if (!r) { // the only bag (or the ship is going down): it stays on her, burnt out
+      const now = state.bags[i];
+      if (now) { now.burn = 0; now.scorch = 0; if (blast) { now.gas = 0; now.cool = H.RELIGHT; } }
+    }
+    if (!r && blast) { // ...and ripped open: no gas, holes everywhere
+      for (let k = state.gasHoles.length; k < config.GAS.MAX_HOLES; k++) state.gasHoles.push(gasHoleAt(bag.cx + (k - 4) * 60, bag.cy, i));
+      if (ship.main) { state.ev.warn = 4; state.ev.warnText = 'THE HYDROGEN BAG EXPLODED! PATCH AND PUMP!'; }
     }
     return r;
   }
@@ -758,6 +804,7 @@ export function createShipSim(world, ship, W) {
   const comeAbout = createComeAbout(ship, W, { goingDown, flight }); // turning her round on the helm's command (comeAbout.js)
 
   const health = createHealth({ state, ship, phoneFx, emitPlayerUi, shipPuff, shipPop }); // crew health: hearts, burns, the medical bay (health.js)
+  const hydrogen = createHydrogen({ state, ship, fireSys, explode: (i, blast) => explodeBag(i, blast), shipPuff, rng: () => breakRng() }); // hydrogen bags: scorched by fire, alight, exploding (hydrogen.js, config.GASES.HYDROGEN)
   const raiders = createRaiders({ state, modules, puff, impact });
   const escort = createEscort({ state, puff, phoneFx });
 
@@ -1540,6 +1587,7 @@ export function createShipSim(world, ship, W) {
       stepBags(state, pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) * state.links.helmMul + Math.min(0, valve.input) * G.VENT_RATE * state.links.helmMul, dt);
       state.ship.press = Math.max(0, state.ship.press - pumping * G.PUMP_STEAM * dt);
       watchBags(state); // a bag going flat: "FORE BAG DOWN!"
+      stepHotAir(state, dt, hasKind('boiler') && modules.boilerUp()); // (hot-air bags: the burner's heat follows the boiler, gasBags.js)
       breakCd = Math.max(0, breakCd - dt);
       if (state.bags.length >= BOC().BAG.MIN_BAGS && BOC().ENABLED) { // a bag that is flat and ripped to rags for long enough tears away (S.5i)
         const holes = holesPerBag(state);
@@ -1563,7 +1611,7 @@ export function createShipSim(world, ship, W) {
     // Lift: above the neutral fill she accelerates up, below it she drops (fast at the extremes).
     // The helm's little trim engine adds a nudge.
     // (ice weight shifts the level she needs to hover; lava thermals push her up - state.env, environments.js)
-    const effGas = state.ship.gas - state.env.sink - state.liftDeficit + state.env.lift / G.LIFT; // (liftDeficit: gasbags torn away leave her heavy for the lift she has left, S.5i)
+    const effGas = liftGas(state) - state.env.sink - state.liftDeficit + state.env.lift / G.LIFT; // (liftDeficit: gasbags torn away leave her heavy for the lift she has left, S.5i)
     const lift = (effGas - G.NEUTRAL) * G.LIFT;
     const trim = state.ship.trim * SHM.TRIM_ACCEL * (worksKind('helm') ? (modules.handWheel() ? config.WIND.HAND_TRIM : 1) : 0) * env.deep.helmMul() * state.links.helmMul; // (a lookout in the nest sharpens the helm: links.js)
     state.buoyancy = effGas > G.NEUTRAL + 5 ? 1 : effGas < G.NEUTRAL - 5 ? -1 : 0;
@@ -1631,6 +1679,7 @@ export function createShipSim(world, ship, W) {
       object.worked = false;
     }
     fireSys.update(dt); // (fires spread towards what burns best, big ones smoke, an overheating boiler throws sparks: fire.js)
+    if (!state.ship.down) hydrogen.update(dt); // (a fire under a hydrogen bag scorches it; alight, it burns and explodes: hydrogen.js)
     const bay = layout.bombBay;
     if (bay && BOC().ENABLED && BAY_D >= 0 && state.bombBay.bombs > 0 && !state.ship.down) { // fire in the bomb bay's compartment heats the bombs; long enough and they cook off (S.5i)
       const burning = state.fires.filter((f) => f.d === BAY_D && Math.abs(f.x - bay.x) < BOC().BAY.FIRE_RADIUS).length;
@@ -1667,6 +1716,8 @@ export function createShipSim(world, ship, W) {
   function respawn({ crew = true } = {}) {
     if (!ship.main && ship.lost && ship.lost.length) { const first = ship.lost[0]; ship.lost.length = 0; fitBuild(first.before, { crew: false }); ship.buildId = first.buildId; } // (a ship that lost parts is rebuilt whole with the new game, S.5i)
     state.liftDeficit = 0; bayHeat = 0; bagTear = []; breakCd = 0;
+    if (state.hotAir) state.hotAir.heat = 1; // (a new ship: the burner is lit and no hydrogen bag is scorched)
+    for (const b of state.bags) { b.scorch = 0; b.burn = 0; b.cool = 0; }
     if (ship.ramHits) ship.ramHits = 0; // (the ram prow is mended: weaponsArt.js drawRam)
     Object.assign(state.ship, { alt: 0, speed: 0.3, order: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
     if (!ship.main) W.course.place(ship); // (back at her station in open air; her pose is her own)
@@ -1755,7 +1806,7 @@ export function createShipSim(world, ship, W) {
     ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, health, goingDown, raiders, escort, coil, searchlights, air, cannon, cargo,
     get hookshot() { return hookshot; },
     get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
-    hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop, breakOff, explodeBay, crash, seedBreak: (n) => { breakRng = makeRng(n); }, // (the gate reseeds the break-off rolls)
+    hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop, breakOff, explodeBay, explodeBag, hydrogen, crash, seedBreak: (n) => { breakRng = makeRng(n); }, // (the gate reseeds the break-off rolls)
     interaction, taken, holder, getHelm, worksKind, isHostile, homeOf, sendHome,
     preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn, refit, fitBuild, comeAbout,
   };

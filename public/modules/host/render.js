@@ -939,7 +939,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.fillStyle = LB.INK;
     }
     const valve = state.gasValve || {};
-    ctx.fillText(`Gas${valve.input > 0.1 ? ' - PUMPING' : valve.input < -0.1 ? ' - VENTING' : ''}${state.buoyancy > 0 ? ' - RISING' : state.buoyancy < 0 ? ' - FALLING' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}`, 46, 150);
+    ctx.fillText(`Gas${valve.input > 0.1 ? ' - PUMPING' : valve.input < -0.1 ? ' - VENTING' : ''}${state.buoyancy > 0 ? ' - RISING' : state.buoyancy < 0 ? ' - FALLING' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' leak' + (state.gasHoles.length > 1 ? 's' : '') : ''}${state.hotAir && state.hotAir.n ? ' - HEAT ' + Math.round(state.hotAir.heat * 100) + '%' : ''}`, 46, 150); // (hot-air bags: the burner's heat, gasBags.js)
     if (state.bags && state.bags.length > 1) { // several gasbags: a pip for each, tail to nose (green = full, amber = low, red cross = flat)
       const bw = 16, gap = 4, x0 = 454 - state.bags.length * (bw + gap) + gap;
       state.bags.forEach((b, i) => {

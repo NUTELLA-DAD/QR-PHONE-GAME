@@ -25,7 +25,8 @@ import { gunStock } from './gunTypes.js';
 import { newBot } from './network.js';
 import { BUILDS } from './shipBuild.js';
 import { powerRatio } from './shipPower.js';
-import { offerPart, partPrice, moduleNames, newModules, summaryOf, choiceScore } from './partsShop.js';
+import { offerPart, partPrice, moduleNames, newModules, summaryOf, choiceScore, gasTopUpCost, gasOffer } from './partsShop.js';
+import { setGas } from './buildEdit.js';
 import { validate } from './buildCheck.js';
 import { createShipSim, flushPresses } from './shipSim.js';
 import { createDebris } from './debris.js';
@@ -699,6 +700,7 @@ export function createSimulation() {
   // Sky-dock offers: repairs that are actually needed, then random upgrades, then 'Cast off!'.
   const needsHull = () => state.ship.hull < 99 || state.breaches.length || state.fires.length || modules.list.some((m) => m.broken || m.hp < m.max - 0.5);
   const needsGas = () => state.bags.some((b) => b.gas < config.GAS.START * 0.95) || state.gasHoles.length;
+  const mixedGas = () => layout.gasbags.some((b) => b.gasType);
   const needsCoal = () => state.ship.fuel < config.BOILER.FUEL_MAX * 0.85 || Object.values(state.GUNS).some((g) => g.ammo < g.max * 0.7) || state.bombBay.bombs < config.BOMBS.MAX;
   const upgradePrice = (u) => Math.round((SH.PRICES[u.id] || SH.PRICE_DEFAULT) * (1 + SH.REPEAT_PRICE * (state.upgrades[u.id] || 0)) / 5) * 5;
   // ---- The Shipwright's Yard (S.6): ship PARTS in the shop (partsShop.js) ----
@@ -777,7 +779,9 @@ export function createSimulation() {
   const buildOffers = () => {
     const offers = [];
     if (needsHull()) offers.push({ id: 'repair-hull', kind: 'repair', name: 'Full Repair', icon: '🔧', desc: 'Hull, holes, fires and every broken part, as good as new.', cost: SH.REPAIR_HULL });
-    if (needsGas()) offers.push({ id: 'repair-gas', kind: 'repair', name: 'New Gas', icon: '🎈', desc: 'Patch the gasbag and fill it up.', cost: SH.REPAIR_GAS });
+    if (needsGas()) offers.push({ id: 'repair-gas', kind: 'repair', name: 'New Gas', icon: '🎈', desc: mixedGas() ? 'Patch the bags and fill them up (helium dearest, hydrogen cheap, hot air free).' : 'Patch the gasbag and fill it up.', cost: gasTopUpCost(layout.gasbags, SH.REPAIR_GAS) }); // (GAS TYPES: the price follows the gases in the bags, partsShop.js)
+    const gasCard = state.startBuild && !(state.run.lost && state.run.lost.length) ? gasOffer(state.run.build) : null; // (...and a heavy ship may swap a bag for hydrogen, a hydrogen ship for helium)
+    if (gasCard) offers.push({ id: gasCard.id, kind: 'repair', name: gasCard.name, icon: gasCard.icon, desc: gasCard.desc, cost: gasCard.cost, gas: gasCard.to, bag: gasCard.bag });
     if (needsCoal()) offers.push({ id: 'repair-coal', kind: 'repair', name: 'Coal and Shells', icon: '⛏️', desc: 'Stoke the boiler, fill every gun and the bomb bay.', cost: SH.REPAIR_COAL });
     (state.run.lost || []).forEach((e, k) => offers.push(rebuildCard(e, k))); // (S.5i: a card for each time parts broke off - mending an older one mends the newer ones too)
     const part = partCard();
@@ -801,6 +805,15 @@ export function createSimulation() {
     else if (o.id === 'repair-gas') {
       refillBags(state, config.GAS.START);
       state.gasHoles.length = 0;
+    } else if (o.gas) { // GAS TYPES: one bag swapped to another gas (the build is edited, then fitted like any part)
+      const r = setGas(state.run.build, { bag: o.bag, gas: o.gas });
+      if (r.ok) {
+        state.run.build = r.parts;
+        fitShip(state.run.build, 'yard');
+        persistBuild();
+        state.ev.warn = 3;
+        state.ev.warnText = `${o.gas === 'hydrogen' ? 'HYDROGEN' : o.gas === 'hot' ? 'HOT AIR' : 'HELIUM'} IN THE BAG!`;
+      }
     } else if (o.id === 'repair-coal') {
       state.ship.fuel = config.BOILER.FUEL_MAX;
       for (const g of Object.values(state.GUNS)) g.ammo = g.max;
@@ -859,6 +872,8 @@ export function createSimulation() {
     if ((state.gasHoles.length >= 2 || state.ship.gas < 30) && want('repair-gas') != null) return want('repair-gas');
     const rebuild = ok.find((i) => v.options[i].rebuild != null); // (S.5i: the oldest REBUILD card they can pay for: it mends the newer ones too)
     if (rebuild != null && Math.random() < config.BREAKOFF.BOT_REBUILD) return rebuild;
+    const toHelium = ok.find((i) => v.options[i].gas === 'helium'); // (GAS TYPES: a crew whose hydrogen bag has been scorched swaps it for helium)
+    if (toHelium != null && state.gasStats && state.gasStats.scorched > 0) return toHelium;
     const part = ok.find((i) => v.options[i].kind === 'part');
     if (part != null && Math.random() < (v.options[part].rec ? YD.BOT_REC_CHANCE : YD.BOT_PART_CHANCE)) return part; // (a crew that can afford a part card likes to build)
     if (Math.random() < SH.BOT_CAST_CHANCE) return cast;

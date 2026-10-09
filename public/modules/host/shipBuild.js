@@ -14,6 +14,7 @@
 // Items name their platform with `p` (an id); buildLayout adds the platform index `d` the game code uses.
 
 import { config } from '../../config.js';
+import { gasLiftMul, gasInfo } from './gases.js';
 
 export const COL = 120; // width of one column of the build grid (px)
 export const TWIN_SIZE = { rx: 0.7, ry: 0.62 }; // the twin envelope relative to the first (shipArt.js twinGeom uses the same numbers)
@@ -89,8 +90,9 @@ const kindStat = (key) => (p) => (key === 'mass' ? M().kind[p.kind] : (KIND_STAT
 
 // ---- gasbags (S.5d) ---------------------------------------------------------------------------------------------
 // A bag is an ellipse { cx, cy, rx, ry } (rx = half its length). Its lift is by its size (area / 1560, in gas points); the twin envelope adds TWIN_SIZE of that.
-export const bagBase = (b) => (b.rx * b.ry) / 1560;
-export const bagLift = (b) => Math.round((b.rx * b.ry * (1 + (b.twin ? TWIN_SIZE.rx * TWIN_SIZE.ry : 0))) / 1560);
+// Its gas (gasType, gases.js) scales it: helium 1 (the default), hydrogen 1.3, hot air 0.6.
+export const bagBase = (b) => ((b.rx * b.ry) / 1560) * gasLiftMul(b);
+export const bagLift = (b) => Math.round(((b.rx * b.ry * (1 + (b.twin ? TWIN_SIZE.rx * TWIN_SIZE.ry : 0))) / 1560) * gasLiftMul(b));
 // The points a bag lifts at (for the centre of lift): the envelope's middle, and the twin riding above and behind it. v = the lift at each, x / y = where.
 export const bagLiftPoints = (b) => {
   const base = bagBase(b), pts = [{ x: b.cx, y: b.cy, v: base }];
@@ -231,7 +233,7 @@ export const PARTS = {
   // buoyancy by the envelope's size; `twin: true` adds the second, smaller envelope riding behind it (shipArt's twin-gasbag art), which
   // lifts TWIN_SIZE.rx x TWIN_SIZE.ry of the first and adds a little rigging weight. A ship may have several of these side by side (S.5d): each is
   // its own envelope with its own gas and holes in flight, and the ship's lift is the sum.
-  gasbag: piece('gasbags', { mass: (p) => M().bag + (p.twin ? M().bagTwin : 0), lift: (p) => bagLift(p) }),
+  gasbag: piece('gasbags', { mass: (p) => M().bag + (p.twin ? M().bagTwin : 0) + gasInfo(p).mass, lift: (p) => bagLift(p) }),
   // Ship-wide numbers: the shield band and the nest rise are given here; everything else (samples, bounds, aim and
   // reference points ...) is DERIVED from the parts by buildLayout. A field named in OVERRIDES that is set here wins
   // over the derived value (the classic ship keeps its hand-placed collision samples this way).

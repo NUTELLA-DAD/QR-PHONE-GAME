@@ -5,7 +5,11 @@
 //   spreadSpots(L, f, rnd)    the places a fire f could spread to, with weights: along its deck (either side) and up / down through ladders, poles, ropes and stairs
 //   fireDistance(L, a, b)     px of fire path between two places ({ d, x }): along decks, through connectors (each costs HOP)
 //   fireRisk(L)               the validator's fire-risk read-out: { score 0..10, level, notes, coalBoiler (px of fire path), ... }
+//   fireReachesBag(L, bag, d, x, big)   (gas types) does a fire at x on deck d reach this gasbag (config.GASES.HYDROGEN: under its underside, on its nest decks)? hydrogenBagsFor(L, d, x, big): the hydrogen bags it reaches
+//   bagFireSpots(L, bag)      the stretches of each deck from which a fire reaches the bag; hydrogenExposure(L): the boiler, coal bunker and flamethrower stations within a hydrogen bag's reach [{ bag, kind, name, dist }]
 import { config } from '../../config.js';
+import { bagEdgeY } from './shipBuild.js';
+import { isHydrogen } from './gases.js';
 
 const F = () => config.FIRE;
 const HOP = 150; // a ladder / hatch counts as this many px of fire path
@@ -124,4 +128,49 @@ export function fireRisk(L) {
   if (coals.length) notes.push(`${extCoal} extinguisher${extCoal === 1 ? '' : 's'} within reach of the coal`);
   if (plated) notes.push(`${plated} of the boiler / coal stand by armour plate`);
   return { score, level, notes, coalBoiler: coalBoiler ? coalBoiler.dist : null, bayBoiler: bayBoiler ? bayBoiler.dist : null, bayCoal: bayCoal ? bayCoal.dist : null, extCoal, extBoiler, cap: L.platforms.length ? fireCap(L) : 0 };
+}
+
+// ---- hydrogen bags (gas types): where a fire can reach one -----------------------------------------------------------------------------------------------------
+// A fire reaches a bag when it burns under its envelope (in x) on a deck at most REACH_BELOW px under the bag's underside there (BIG_REACH more for a blaze), or on a deck on top of it / up to REACH_ABOVE above it
+// (the crow's nests). The classic ship's top deck (470) is 40 px under her bag; her main deck (640) is out of reach of an ordinary fire.
+export function fireReachesBag(L, bag, d, x, big = false) {
+  const p = L.platforms[d], H = config.GASES.HYDROGEN;
+  if (!p || !bag || x < bag.x0 || x > bag.x1) return false;
+  const under = bagEdgeY(bag, x, false);
+  return p.y <= under + H.REACH_BELOW + (big ? H.BIG_REACH : 0) && p.y >= bag.cy - bag.ry - H.REACH_ABOVE;
+}
+// The indexes of the hydrogen bags a fire at x on deck d reaches.
+export function hydrogenBagsFor(L, d, x, big = false) {
+  const out = [];
+  (L.gasbags || []).forEach((b, i) => { if (isHydrogen(b) && fireReachesBag(L, b, d, x, big)) out.push(i); });
+  return out;
+}
+// The stretches of each deck from which a fire reaches this bag: [{ d, lo, hi }] (x from lo to hi).
+export function bagFireSpots(L, bag) {
+  const spots = [];
+  L.platforms.forEach((q, d) => {
+    const lo = Math.max(q.x0, bag.x0), hi = Math.min(q.x1, bag.x1);
+    if (lo <= hi && fireReachesBag(L, bag, d, (lo + hi) / 2)) spots.push({ d, lo, hi });
+  });
+  return spots;
+}
+// What a hydrogen bag is exposed to: a boiler (it throws sparks and blows out), a coal bunker (tinder, it blazes) or a flamethrower (its own backdraft) standing in the bag's reach, or within WARN_NEAR px of fire path
+// of it (a ladder counts HOP). dist 0 = right in the reach.
+export function hydrogenExposure(L) {
+  const H = config.GASES.HYDROGEN, out = [];
+  const bags = L.gasbags || [];
+  const hazards = L.stations.filter((s) => s.kind === 'boiler' || s.kind === 'coal' || (s.kind === 'gun' && L.gunMounts && L.gunMounts[s.n] && L.gunMounts[s.n].type === 'flame'));
+  bags.forEach((bag, bi) => {
+    if (!isHydrogen(bag)) return;
+    const spots = bagFireSpots(L, bag); // (the places on each deck where a fire would reach this bag)
+    for (const s of hazards) {
+      let best = null;
+      for (const sp of spots) {
+        const dist = sp.d === s.d && s.x >= sp.lo && s.x <= sp.hi ? 0 : fireDistance(L, s, { d: sp.d, x: clamp(s.x, sp.lo, sp.hi) });
+        if (dist !== null && (best === null || dist < best)) best = dist;
+      }
+      if (best !== null && best <= H.WARN_NEAR) out.push({ bag: bi, kind: s.kind === 'gun' ? 'flamethrower' : s.kind, name: s.n, dist: best });
+    }
+  });
+  return out;
 }

@@ -4,6 +4,7 @@
 //        node tools/buildsim.mjs --check-crossship  B.6: the crew cannon, thrown ballast and shovel jobs, dumping for lift, towing, stolen coal, bots using all of it (tools/crossship-check.mjs)
 //        node tools/buildsim.mjs --check-breakoff   S.5i: parts break off for real (tools/breakoff-check.mjs): a bomb bay explosion and a heavy hit / crash / ram / ripped bag take the right parts, she keeps flying with the new shape, crew on them fall, debris tumbles, armour lowers the chance, REBUILD cards at the dock, the gunship and a second ship lose parts too, 0 errors over a 3-minute botsim with high break-off settings
 //        node tools/buildsim.mjs --check-gen        the ship generator (tools/gen-check.mjs): 200 seeded random ships all validate with no FAIL and fit the Versus weight cap, are varied and repeatable, crossover / mutation children repair into valid ships, 10 fly a 1-minute botsim and 2 fight Versus rounds with 0 errors, the shelf's Hall of Fame cards and Surprise me! (tools/shipforge.mjs is the combo finder)
+//        node tools/buildsim.mjs --check-gas        GAS TYPES (tools/gas-check.mjs): a bag holds helium (default, unchanged), hydrogen (+30% lift, a fire that reaches it lights it and it explodes: the bag tears away, fires, hearts, a touching hydrogen bag catches) or hot air (-40% lift, lifts only while the boiler is hot); the LIFT gauge, the validator (INFO, hydrogen beside boiler / coal / flamethrower WARN), the edit, the dock prices and the convert card, bots putting out the fire and stoking the burner, the TV, 2-minute botsims of each gas with 0 errors
 //        node tools/buildsim.mjs --check-health    crew health (tools/health-check.mjs): fire hurts a crewman a heart per tick (hopping over and spraying are safe), three burns knock him out, BIG blasts (the bomb bay, a sapper's bomb, a heavy shell, a great fall) knock out at once, i-frames, a raider's blow takes one heart, a revive or waking gives 1 heart, the medbay heals a heart every few seconds, a bandage, the phone payload carries hearts and the job arrow points at the medbay, bots leave fires and go and heal, the old rules with hearts off, the TV pips
 //        node tools/buildsim.mjs --check-classic    the classic ship must still equal the frozen snapshot
 //        node tools/buildsim.mjs --lint             no module-level captures of derived layout values (they go stale), no hard-coded ship reference points
@@ -2284,6 +2285,8 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gen-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-flame') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'flame-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-gas') {
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gas-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-breakoff') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'breakoff-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-crossship') {
