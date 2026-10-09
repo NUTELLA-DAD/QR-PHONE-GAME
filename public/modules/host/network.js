@@ -186,11 +186,11 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   const shipButton = document.getElementById('shipBtn');
   const showShip = () => {
     const sb = simulation.state.startBuild;
-    const html = 'Ship: ' + (sb === 'classic' ? 'Classic' : 'Sparrow') + `<br><small style="font-size:12px;opacity:.75">${sb === 'classic' ? 'the full ship from the start' : 'start small, build at the sky-docks'}</small>`;
+    const html = sb === 'playtest' ? 'Ship: your build<br><small style="font-size:12px;opacity:.75">from the build page</small>' : 'Ship: ' + (sb === 'classic' ? 'Classic' : 'Sparrow') + `<br><small style="font-size:12px;opacity:.75">${sb === 'classic' ? 'the full ship from the start' : 'start small, build at the sky-docks'}</small>`;
     if (shipButton.innerHTML !== html) shipButton.innerHTML = html;
   };
   shipButton.onclick = () => {
-    const next = simulation.state.startBuild === 'classic' ? 'sparrow' : 'classic';
+    const next = simulation.state.startBuild === 'classic' ? 'sparrow' : 'classic'; // (a playtest build goes to classic first)
     simulation.setStartBuild(next);
     saveStartBuild(next);
     showShip();

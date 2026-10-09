@@ -1351,6 +1351,29 @@ export const config = {
     BAG_CY: 198, BAG_RY: 232, // a gasbag drawn from nothing sits at this height with this half-height (the classic bag's)
     BAG_COVER: 0.9, // the share of the gasbag's half-length that counts as covering the ship (the ends of the ellipse are thin): validator WARN beyond it
   },
+  // ---- The build page's big view and playtest (buildView.js, playtest.js, buildPlay.js) ----
+  BUILD_VIEW: {
+    ZOOM_MIN: 0.4, ZOOM_MAX: 10, // how far the blueprint zooms out and in (1 = the whole sheet fitted to the pane)
+    ZOOM_STEP: 1.25, // one press of the + / - buttons (or a key)
+    WHEEL_RATE: 0.0016, // zoom per wheel delta unit (an exponent: a notch of 100 is about 17%)
+    FIT_MARGIN: 70, // "Fit ship" leaves this many screen px of paper round the ship
+    PAN_TAP: 5, // a right-button drag shorter than this (screen px) is a right-click (it deletes the thing under it), longer is a pan
+    SIDE_MIN: 0.2, SIDE_MAX: 0.8, // the Split view's blueprint share of the pane (draggable divider)
+    SPLIT: 0.62, // ...starts at this
+    VIEW: 'bp', // the view the page opens with (then the last one used is remembered): 'bp' blueprint only, 'split', 'live'
+    UI_MAX: 3, // the page scales up on big screens: 1 at 1920x1080, 2 at 4K (never above this)
+    UI_STEPS: [0.8, 1, 1.25, 1.5, 2, 2.5], // the "UI size" choices (Auto picks one from the screen)
+    WORKING_DEBOUNCE: 400, // ms after an edit before the working build is saved to this computer
+  },
+  // ---- Playtest and My Ships (playtest.js): the build page hands a build to the real host game ----
+  PLAYTEST: {
+    DESIGNS_MAX: 60, // most named designs kept in My Ships (this computer's storage)
+    NAME_MAX: 32, // longest design name
+    CREW: [0, 2, 4, 8], // the "Crew" choices: 0 = phones only (the lobby with its QR code); else that many bots (Versus: per side) and the ship casts off at once
+    CREW_DEFAULT: 0,
+    FOE_DEFAULT: 'classic', // the shelf ship the Versus playtest fights by default
+    SHIP_ID: 'mine', // the shelf id of the playtest ship in a Versus match
+  },
   // ---- S.5h: POINTED ENGINES. Every engine has a direction (an angle, 0 = forward, -PI/2 = up, PI/2 = down, PI = back). Forward / back thrust is speed, up thrust is lift (climb without gas,
   // costs steam), down thrust is a dive. Thrust acts where the engine sits, so a vertical push also pitches the ship (forces.js). A swivel mount is a crew station that turns the engine in flight.
   ENGINES: {
