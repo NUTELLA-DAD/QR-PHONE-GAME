@@ -1263,7 +1263,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const n = v.options.length;
     const small = n > 6; // (the shelf has a dozen ships and more: small cards, five to a row, so every card fits on the TV)
     const perRow = small ? 5 : n > 4 ? 3 : n;
-    const cw = small ? 290 : n > 4 ? 440 : 360, ch = small ? 150 : n > 4 ? 300 : 360, gap = small ? 16 : 24;
+    const cw = small ? 290 : n > 4 ? 440 : 360, ch = small ? 172 : n > 4 ? 300 : 360, gap = small ? 16 : 24;
     v.options.forEach((o, i) => {
       const row = Math.floor(i / perRow);
       const inRow = Math.min(perRow, n - row * perRow);
@@ -1281,7 +1281,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       wrapLines(o.desc, cw - (small ? 24 : 40)).slice(0, small ? 3 : 4).forEach((l, k) => ctx.fillText(l, x + cw / 2, y + (small ? 86 : 156) + k * (small ? 16 : 24)));
       for (const id of ['red', 'blue']) { // the votes of each side, a row each
         const list = voters.filter((p) => p.vote === i && p.team === id);
-        const ry = y + ch - (small ? (id === 'red' ? 26 : 9) : id === 'red' ? 42 : 16);
+        const ry = y + ch - (small ? (id === 'red' ? 28 : 10) : id === 'red' ? 42 : 16);
         list.forEach((p, k) => {
           const dx = x + cw / 2 - (list.length - 1) * (small ? 9 : 13) + k * (small ? 18 : 26);
           ctx.fillStyle = p.color;
