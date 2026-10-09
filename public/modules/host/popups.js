@@ -16,6 +16,9 @@ export const WORDS = {
   boss: ['KA-BLOOEY!!'],
   bayBoom: ['KA-BLAMMM!!', 'BOOOOM!!'], // a bomb bay going up (shipSim.js breakOff)
   snap: ['KRAKK!', 'SNAP!', 'CRRRACK!'], // a part breaking off
+  hurt: ['OUCH!', 'YOWCH!', 'OW!'], // a crewman loses a heart (health.js)
+  burn: ['SIZZLE!', 'HOT!', 'YEOW!'], // ...burning
+  heal: ['+HEART'], // ...and gets one back
 };
 
 export function pop(state, x, y, kind, color = '#f2d36b', size = 1) {

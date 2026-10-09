@@ -53,6 +53,8 @@ if (process.env.NO_LIVE) config.BALANCE.LIVE = false; // (compare runs without t
 if (process.env.NO_FORCES) config.FORCES.LIVE = false; // (compare runs without hits, gusts, scrapes, rams and the tether twisting the ship: forces.js; engines and sails still do)
 if (process.env.NO_BREAKOFF) config.BREAKOFF.ENABLED = false; // (compare runs with parts never breaking off: S.5i)
 if (process.env.NO_LINKS) config.LINKS.ENABLED = false; // (compare runs without the linked stations: gun+loader, helm+lookout, boiler surge)
+if (process.env.NO_HEALTH) config.HEALTH.ENABLED = false; // (compare runs with the old crew rules: no hearts, a raider blow or a bomb knocks a crewman out in one go)
+if (process.env.HEALTH_CFG) { const merge = (a, b) => { for (const [k, v] of Object.entries(b)) { if (v && typeof v === 'object') merge(a[k], v); else a[k] = v; } }; merge(config.HEALTH, JSON.parse(process.env.HEALTH_CFG)); } // (tuning: HEALTH_CFG='{"SHELL":{"RADIUS":140}}' overrides config.HEALTH numbers)
 if (!config.DIFFICULTY[args.difficulty]) { console.error('Bad difficulty; use ' + Object.keys(config.DIFFICULTY).join('|')); process.exit(2); }
 if (args.map) {
   if (!config.MAPS.KINDS.includes(args.map)) { console.error('Bad map; use ' + config.MAPS.KINDS.join('|')); process.exit(2); }
@@ -125,6 +127,7 @@ let sporeCloudSteps = 0, sporedSteps = 0, clogSum = 0, clogMax = 0, engSum = 0, 
 let gapSum = 0, gapMin = 1e9, seaSteps = 0, floodSum = 0, floodHigh = 0, wetSteps = 0, galeSteps = 0;
 let lightSteps = 0, lightManned = [0, 0], lightLit = 0, litBonus = 0; // searchlights: flight steps, steps each lamp was manned, steps with something lit
 let matesMax = 0;
+let koEdges = 0, crewSteps2 = 0, heartSum = 0, lowSteps = 0; // crew health: times a crewman was knocked out, and the hearts the crew carried while flying
 let fireSteps = 0, fireStarts = 0, fireHullEaten = 0, firePrev = 0, fireStepsAny = 0; // S.5f: fire exposure while flying (fires burning, new ones lit, hull they eat)
 let contacts = 0, wasScrape = false;
 let segSteps = 0, altRef = null, vySum = 0, scrapeSteps = 0;
@@ -155,6 +158,12 @@ for (let step = 1; step <= totalSteps; step++) {
     if (runStats) runStats.step(dt);
     matesMax = Math.max(matesMax, Object.values(state.players).filter((q) => q.mate).length);
     for (const q of Object.values(state.players)) {
+      if (!q.enemy && state.phase === 'flying') { // (crew health: knock-outs counted as they start, and the hearts in the crew)
+        if (q.ko > 0 && !q.koSeen) { koEdges++; if (process.env.KO_LOG) console.log('KO', (step / 60).toFixed(0) + 's', q.name, 'ko', q.ko.toFixed(2), 'hearts', q.hearts); }
+        q.koSeen = q.ko > 0;
+        const hv = q.hearts == null ? config.HEALTH.MAX : q.hearts;
+        crewSteps2++; heartSum += hv; if (hv <= config.HEALTH.JOB_AT) lowSteps++;
+      }
       const st = q.stats || {};
       for (const k of ['ammo', 'coal', 'fires', 'holes', 'ice', 'clears', 'oxygen']) {
         const d = (st[k] || 0) - ((q.seen && q.seen[k]) || 0);
@@ -270,6 +279,12 @@ if (lightSteps) console.log(`searchlights: ${(state.searchlights || []).map((l, 
   const all = S.gunT + S.helmT + S.nestT;
   const pr = (a, b) => (b > 0 ? ((100 * a) / b).toFixed(1) : 'n/a') + '%';
   console.log(`links${config.LINKS.ENABLED ? '' : ' (OFF)'}: paired seconds ${(S.gunPair + S.helmPair + S.nestPair).toFixed(0)} of ${all.toFixed(0)} station seconds = ${pr(S.gunPair + S.helmPair + S.nestPair, all)} (gun+loader ${pr(S.gunPair, S.gunT)}, helm+lookout ${pr(S.helmPair, S.helmT)}, lookout+helm ${pr(S.nestPair, S.nestT)}); gunner idle ${pr(S.gunIdle, S.gunT)} of ${S.gunT.toFixed(0)}s; surge held ${S.surgeT.toFixed(0)}s`);
+}
+{
+  // Crew health (health.js): knock-outs, the hearts lost (by cause) and healed, and the crew's average hearts.
+  const hs = state.healthStats || { lost: {}, healed: 0, bandaged: 0, rested: 0, burnSecs: 0, ticks: 0 };
+  const lostSum = Object.values(hs.lost).reduce((a, b) => a + b, 0);
+  console.log(`crew${config.HEALTH.ENABLED ? '' : ' (hearts OFF)'}: knocked out ${koEdges}x; hearts lost ${lostSum.toFixed(1)} (${Object.entries(hs.lost).map(([k, v]) => k + " " + v.toFixed(1)).join(", ") || "none"}); by hearts to zero: ${Object.entries(hs.kos || {}).map(([k, v]) => k + " " + v).join(", ") || "none"}; healed ${hs.healed} in the medbay, ${hs.bandaged} bandaged, ${hs.rested} rested; burning ${hs.burnSecs.toFixed(0)}s (${hs.ticks} burns); avg hearts ${crewSteps2 ? (heartSum / crewSteps2).toFixed(2) : 'n/a'}, on the last heart ${crewSteps2 ? ((100 * lowSteps) / crewSteps2).toFixed(1) : 'n/a'}% of crew-time`);
 }
 if (process.env.BOT_ACT) console.log('bot time: ' + Object.entries(actTally).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + ((100 * v) / Object.values(actTally).reduce((a, b) => a + b, 0)).toFixed(1) + '%').join(', '));
 if (state.bags.length > 1) console.log(`gasbags: ${state.bags.length} bags side by side; a bag went flat ${bagDowns} time${bagDowns === 1 ? '' : 's'}, emptiest ${bagMin.toFixed(0)}; gas valves turned ${state.valveLog || 0}x (shut ${state.valveShuts || 0}x), now ${(state.gasValveOpen || []).filter((o) => !o).length} shut; now ${state.bags.map((b) => b.gas.toFixed(0)).join("/")}${ruptured ? `; fore bag shot flat at ${args.rupture}s: ${healedAt === null ? 'NOT repaired' : `holes patched and bag back above ${config.GAS.BAG_UP} after ${healedAt.toFixed(0)}s`}` : ''}`);

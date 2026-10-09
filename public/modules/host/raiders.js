@@ -10,6 +10,7 @@ import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
 import { mainShip } from './ships.js';
 import { toWorldX, toWorldY } from './pose.js';
+import { hurt, knockOut } from './health.js';
 
 const R = config.RAIDERS;
 // Worked out per ship layout (rebuilt when a new ship build is applied to it): the platform indices of the decks inside the hull.
@@ -72,11 +73,12 @@ export function createRaiders({ state, modules, puff, impact }) {
       shipPuff(b.x + b.face * 40, b.y - 50, '#ddd', 4); // swung at thin air
       return;
     }
-    target.ko = R.KO_TIME;
-    target.prog = 0;
-    target.lock = null;
-    target.carry = null;
-    target.fire = false;
+    const res = hurt(target, config.HEALTH.BLOW[b.type] ?? config.HEALTH.BLOW.default, { cause: 'raider', old: true }); // (crew health: a blow takes hearts; the last one knocks him out)
+    if (!res) { // (still in his i-frames: the blow glances off)
+      shipPuff(b.x + b.face * 40, b.y - 50, '#ddd', 4);
+      return;
+    }
+    if (res === 'ko') knockOut(target, R.KO_TIME);
     if (t.knockback) {
       const p = P[target.d];
       target.x = Math.max(p.x0, Math.min(p.x1, target.x + b.face * t.knockback));
@@ -180,10 +182,8 @@ export function createRaiders({ state, modules, puff, impact }) {
         const y = P[bomb.d].y - 40;
         impact(bomb.x, y, config.IMPACT.BOMB);
         for (const q of Object.values(state.players)) {
-          if (q.d === bomb.d && q.conn == null && Math.abs(q.x - bomb.x) < 90 && !(q.ko > 0) && !(q.koGrace > 0)) {
-            q.ko = R.KO_TIME;
-            q.lock = null;
-            q.carry = null;
+          if (q.d === bomb.d && q.conn == null && Math.abs(q.x - bomb.x) < config.HEALTH.BOMB_RADIUS && !(q.ko > 0) && !(q.koGrace > 0)) {
+            if (hurt(q, config.HEALTH.BIG, { big: true, cause: 'bomb', old: true }) === 'ko') knockOut(q, R.KO_TIME, { keepCarry: false }); // (a sapper's bomb is a BIG hit: knocked out at once)
           }
         }
       }

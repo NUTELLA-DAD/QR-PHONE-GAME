@@ -11,6 +11,7 @@ import { lightNames, isSearchlight, darkTarget } from './searchlight.js';
 import { botJobs as goingDownJobs } from './goingDown.js';
 import { autopilotOn } from './crewscale.js';
 import { flamAt } from './fireModel.js';
+import { hearts } from './health.js';
 import { mainShip, hostileTo, foeOf, areHostile } from './ships.js';
 import { cannonPlan } from './cannon.js';
 import { solveThrow } from './cargo.js';
@@ -487,6 +488,7 @@ function listJobs(state, bot) {
   if (bot.carry === "hammer") jobs.push(...hullHoles, ...leaks, ...broken, ...holes, ...icy, ...deep, ...fires);
   else jobs.push(...fires, ...hullHoles, ...leaks, ...broken, ...holes, ...icy, ...deep);
   for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open && (!leaky(m) || state.ship.press >= B.ENGINEER_PRESS + 25)) jobs.push({ kind: 'valve', obj: m, max: 1 });
+  jobs.push(...healJobs(state, bot)); // (crew health: the medbay for a bot on its last heart, a bandage for a hurt person)
   // Stations, most useful first. The vital ones (helm, gas valve, a gun or weapon with a target
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
@@ -550,8 +552,18 @@ function sailJobs(state, bot, early) {
   return out;
 }
 
+// Crew health (config.HEALTH): a bot on its last heart goes to the medbay when nothing urgent is on, and stays till it is whole; a bot bandages a hurt PERSON (not another bot: they heal themselves).
+function healJobs(state, bot) {
+  const HC = config.HEALTH, L = mainShip(state).layout;
+  const out = [];
+  if (!HC.ENABLED || bot.enemy || state.phase !== 'flying') return out;
+  if (L.medbay && (hearts(bot) <= HC.JOB_AT || (bot.botJob && bot.botJob.kind === 'heal' && hearts(bot) < HC.MAX))) out.push({ kind: 'heal', obj: 'medbay', max: 4 });
+  if (HC.BANDAGE.ENABLED && !bot.mate) for (const q of Object.values(state.players)) if (q !== bot && (!q.bot || q.human) && !q.mate && !q.enemy && hearts(q) <= HC.JOB_AT && !(q.ko > 0) && !q.fall && !q.fly && q.conn == null && q.d != null && !q.moving && !foeOf(q, bot)) out.push({ kind: 'bandage', obj: q, max: 1 });
+  return out;
+}
+
 function isEmergency(job) {
-  return !!job.urgent || job.kind !== 'ammo' && job.kind !== 'link' && job.kind !== 'surge' && job.kind !== 'station' && job.kind !== 'coal' && job.kind !== 'winch' && !(job.kind === 'repair' && !job.obj.broken);
+  return !!job.urgent || job.kind !== 'ammo' && job.kind !== 'link' && job.kind !== 'surge' && job.kind !== 'station' && job.kind !== 'coal' && job.kind !== 'winch' && job.kind !== 'heal' && job.kind !== 'bandage' && !(job.kind === 'repair' && !job.obj.broken);
 }
 
 const HELP_KINDS = { fire: 1, patch: 1, revive: 1, swat: 1, fight: 1, defuse: 1, repair: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1 };
@@ -791,6 +803,20 @@ function work(p, state) {
   const o = job.obj;
   if (job.kind === 'hook') {
     if (steer(p, tables(L).MAIN, shipGeom(L).MAIN_X1 - 15, 12)) press(p);
+    return;
+  }
+  if (job.kind === 'heal') { // crew health: rest on the medbay's cot until whole
+    const mb = L.medbay, d = mb ? L.platforms.findIndex((q) => q.id === mb.p) : -1;
+    if (d < 0) return wander(state, p);
+    if (steer(p, d, mb.x, 30)) p.jx = 0;
+    return;
+  }
+  if (job.kind === 'bandage') { // crew health: hold Action beside a hurt person
+    if (!o || o.d == null || o.fall || o.fly || o.ko > 0) return;
+    if (steer(p, goalOf(L, o), o.x, 30)) {
+      p.jx = 0;
+      p.fire = true;
+    }
     return;
   }
   if (job.kind === 'link' || job.kind === 'surge') return linkWork(p, state, job); // (LINKED STATIONS block at the end of this file)
@@ -1452,6 +1478,20 @@ export function updateBot(p, state, dt) {
   // Hop over a fire that is in the way (not the one they are going to put out).
   if (!p.lock && !p.air && p.conn == null && Math.abs(p.jx) > 0.3 && state.fires.some((f) => f.d === p.d && f !== (p.botJob && p.botJob.obj) && (f.x - p.x) * p.jx > 0 && Math.abs(f.x - p.x) < 90 && Math.abs(f.x - p.x) > 50)) p.jumpQ = true;
 
+  // Standing in a fire burns (config.HEALTH.FIRE): a bot that has been burning a moment steps out of it - unless it is on its way to put that fire out (spraying is safe).
+  if (config.HEALTH.ENABLED && p.inFire && (p.burnT || 0) > config.HEALTH.BOT.FLEE && !p.lock && !p.air && p.conn == null && !(p.botJob && p.botJob.kind === 'fire')) {
+    const f = state.fires.filter((q) => q.d === p.d).sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
+    if (f) {
+      const pl = L.platforms[p.d];
+      let away = p.x >= f.x ? 1 : -1;
+      if (pl && ((away > 0 && p.x > pl.x1 - 30) || (away < 0 && p.x < pl.x0 + 30))) away = -away; // (against the end of the deck: run through it instead)
+      p.jx = away;
+      p.jy = 0;
+      p.fire = false;
+      return;
+    }
+  }
+
   const bots = Object.values(state.players).filter((q) => q.bot);
   if ((p.think = (p.think || 0) - dt) <= 0) {
     p.think = B.THINK_EVERY;
@@ -1471,7 +1511,9 @@ export function updateBot(p, state, dt) {
       const helmCall = !isHelm(L, p.lock) && !humanAutopilot(p, state) && state.phase === 'flying' && !Object.values(state.players).some((q) => isHelm(L, q.lock) || (q.botJob && q.botJob.kind === 'station' && isHelm(L, q.botJob.obj))) && !(state.modules || []).some((m) => m.kind === 'helm' && m.broken) && Math.random() < B.HELM_CALL;
       const fallCall = !!state.goingDown; // GOING DOWN!: everybody off their stations
       const soleGun = config.PVP.ENABLED && tables(L).GUN_STATIONS.includes(p.lock) && !bots.some((q) => q !== p && q.lock && tables(L).GUN_STATIONS.includes(q.lock)); // (Versus: the last gunner keeps his gun, a ship needs one that shoots)
-      if ((p.lockLeft <= 0 && !soleGun) || gunUseless || rodCall || helmCall || fallCall || (urgent > free && !isHelm(L, p.lock) && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
+      const HC = config.HEALTH; // crew health: a bot burning at its station, or on its last heart, leaves it (the helm stays: the ship needs steering)
+      const hurtCall = HC.ENABLED && !p.enemy && !isHelm(L, p.lock) && !soleGun && ((p.inFire && (p.burnT || 0) > HC.BOT.FLEE) || (state.phase === 'flying' && L.medbay && hearts(p) <= HC.JOB_AT));
+      if ((p.lockLeft <= 0 && !soleGun) || gunUseless || rodCall || helmCall || fallCall || hurtCall || (urgent > free && !isHelm(L, p.lock) && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;
         p.lockLeft = undefined;
         p.botJob = null;

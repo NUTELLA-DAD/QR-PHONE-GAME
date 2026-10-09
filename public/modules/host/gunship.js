@@ -48,6 +48,7 @@ import { targetShip } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { pop } from './popups.js';
 import { applyForce } from './forces.js';
+import { hurt, knockOut } from './health.js';
 import { shellDmg } from './aim.js';
 import { generateBlueprint, mx, decksOf, segAt, deckYAt, landX, landSeg, landY, boilerX, boilerSeg, boilerY, portPos, firstCannon, anchorPt, surfaces as bpSurfaces, routeStep } from './gunshipBlueprint.js';
 
@@ -1267,7 +1268,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
           c.wind = 0;
           c.cd = 1.2;
           if (Math.abs(foe.x - c.x) < 80 && Math.abs(foe.y - c.y) < 60) {
-            foe.ko = config.RAIDERS.KO_TIME * 0.5;
+            if (hurt(foe, config.HEALTH.GUNSHIP_BLOW, { cause: 'melee', old: true }) === 'ko') knockOut(foe, config.RAIDERS.KO_TIME * 0.5, { keepCarry: true }); // (crew health: a blow takes a heart; the last one knocks him out)
             foe.x += c.face * 120;
             const seg = decksOf(g)[clamp(foe.gd || 0, 0, decksOf(g).length - 1)];
             if (foe.x < g.bp.x0 - 20 || foe.x > g.bp.x1 + 20) dropOff(foe); // knocked off her deck!

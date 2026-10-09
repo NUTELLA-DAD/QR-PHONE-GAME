@@ -293,7 +293,9 @@ Success: no accidental swaps in a playtest, and the cold-player test passes.
 - **Save data:** a versioned, tolerant schema.
 
 ### Queued (owner requests, next up)
-- **Crew health: 3 hearts.**
+- **Crew health: 3 hearts.** BUILT (`health.js`, `config.HEALTH`, gate `--check-health`; `NO_HEALTH=1` / `HEALTH_CFG='{...}'` for botsim).
+  - A fire burns whoever stands in it (a heart after 0.7 s, then one per 1.4 s; hopping over it or spraying it out is safe); a raider blow, a shell burst beside you, a sword and a hard landing take a heart; a bomb, the bomb bay going up, a heavy shell beside you and a great fall are BIG (knocked out at once). Revive / waking gives 1 heart; the medbay heals one per 5 s; hold Action on a hurt crewmate to bandage; phones show hearts, the arrow says GET TO THE MEDBAY!; the TV shows heart pips over a hurt crewman. Bots step out of fires and go to the medbay on their last heart.
+  - Original request:
   - Fires hurt players standing in them.
   - Shell hits, raider blows and falls take a heart; big hits (explosions, bomb bay blasts, heavy shells) knock you out in one go.
   - At 0 hearts you're knocked out, as today.

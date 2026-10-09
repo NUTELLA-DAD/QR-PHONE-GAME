@@ -34,6 +34,7 @@ import { createBalance } from './balance.js';
 import { createFlight } from './flight.js';
 import { createSails, windSpeed } from './sails.js';
 import { createFire } from './fire.js';
+import { createHealth, hurt as hurtCrew, knockOut, wake, revived, hearts as heartsOf } from './health.js';
 import { armourOn } from './fireModel.js';
 import { createEngines } from './engines.js';
 import { createForces, hitForce } from './forces.js';
@@ -177,6 +178,11 @@ export function createShipSim(world, ship, W) {
     if (isHostile(player)) return hostileUse(player, here);
     const revive = Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && q.conn == null && here(q, 65));
     if (revive) return { type: 'revive', obj: revive, hold: true, time: T.REVIVE_TIME, label: `Revive ${revive.name}` };
+    // Crew health: a hurt crewmate beside you (awake, same side): hold Action to bandage him, a heart back. (A bot sent to bandage somebody does it before anything else; for people it is the last thing the button offers.)
+    const HB = config.HEALTH;
+    const sore = HB.ENABLED && HB.BANDAGE.ENABLED && Object.values(state.players).find((q) => q !== player && !q.enemy && heartsOf(q) < HB.MAX && !(q.ko > 0) && !q.fall && !q.fly && q.conn == null && !isHostile(q) && !foeOf(q, player) && here(q, 65));
+    const bandageAct = sore && { type: 'bandage', obj: sore, hold: true, time: HB.BANDAGE.TIME, label: `Bandage ${sore.name}` };
+    if (sore && legacy && player.botJob && player.botJob.kind === 'bandage' && player.botJob.obj === sore) return bandageAct;
     const boarding = gunship.interaction(player);
     if (boarding) return boarding;
     // Standing over the open bomb bay doors: jump out (parachute). Not while carrying ammo - that loads the bombs. (B.6: carrying a sandbag or crate there, Action lets IT fall through the belly instead.)
@@ -250,6 +256,7 @@ export function createShipSim(world, ship, W) {
       if (legacy && LOCKABLE(station.n) && !taken(station.n) && !player.mate) return { type: 'station', station, label: takeLabel(station) }; // (a ship's mate never takes a station)
       // (people can always bump a bot off a station: that is a GRAB action too, see grabsFor)
     }
+    if (sore) return bandageAct;
     if (fire) return { type: 'need', label: 'Need an extinguisher' };
     if (hole || hurt || gasHole) return { type: 'need', label: 'Need a hammer' };
     return null;
@@ -359,18 +366,20 @@ export function createShipSim(world, ship, W) {
       stat(player, 'raiders');
       return;
     }
-    victim.pvpHp = (victim.pvpHp ?? F.HP) - (sword ? F.SWORD : F.SHOVE);
+    const HC = config.HEALTH;
+    let down;
+    if (HC.ENABLED) { // (crew health: the blow takes hearts; sword 1.5, shove 0.5)
+      const res = hurtCrew(victim, sword ? HC.SWORD : HC.SHOVE, { cause: 'melee', old: true, melee: true, iframes: HC.MELEE_IFRAMES });
+      down = res === 'ko';
+    } else down = (victim.pvpHp = (victim.pvpHp ?? F.HP) - (sword ? F.SWORD : F.SHOVE)) <= 0;
     const pl = PLATFORMS[victim.d];
     if (pl) victim.x = clamp(victim.x + player.face * F.KNOCK, pl.x0 + 10, pl.x1 - 10);
     shipPuff(victim.x, victim.y - 40, '#fff', 6);
     if (sword) shipPop(victim.x, victim.y - 110, 'whack', '#ffffff', 0.8);
-    if (victim.pvpHp > 0) return;
+    if (!down) return;
     victim.pvpHp = F.HP;
-    victim.ko = F.KO_TIME;
-    victim.prog = 0;
-    victim.lock = null;
-    victim.fire = false;
-    victim.carry = null;
+    if (HC.ENABLED && config.PVP.ENABLED) victim.hearts = HC.MAX; // (Versus: a crewman knocked out in a fight comes round whole, as he always did; co-op boarders wake with a heart and heal)
+    knockOut(victim, F.KO_TIME);
     stat(player, 'raiders');
     stat(victim, 'ko');
     tally(player, 'knockouts');
@@ -466,14 +475,22 @@ export function createShipSim(world, ship, W) {
     const victim = Object.values(state.players).find((q) => !q.fall && !q.fly && !(q.ko > 0) && q.conn == null && q.d === st.d && (kindOf(q.lock) === 'helm' || Math.abs(q.x - st.x) < 45));
     state.helmHit = H.WARN_TIME; // flash even if nobody is home
     if (!victim || Math.random() >= H.KO_CHANCE) return;
-    victim.ko = H.KO_TIME;
-    victim.prog = 0;
-    victim.lock = null;
-    victim.fire = false;
-    stat(victim, 'ko');
-    phoneFx(victim, 'You were hit at the helm!', [120, 50, 120]);
+    const res = hurtCrew(victim, power >= config.HEALTH.SHELL.BIG_POWER ? config.HEALTH.BIG : config.HEALTH.HELM_HEARTS, { cause: 'shell', old: true }); // (crew health: a heart, or all of them for a heavy hit)
+    if (res === 'ko') {
+      knockOut(victim, H.KO_TIME, { keepCarry: true });
+      stat(victim, 'ko');
+    }
+    if (res) phoneFx(victim, 'You were hit at the helm!', [120, 50, 120]);
     shipPop(st.x, cy - 70, 'bigHit', '#e63946', 1.1);
     shipPuff(st.x, cy, '#e63946', 8);
+  };
+
+  // A shell bursting in or against the ship hurts the crew standing near it (crew health): a heart each, or every heart for a heavy hit right beside you (a mine, a rocket, a crash).
+  const crewHit = (x, y, power) => {
+    const K = config.HEALTH, S = K.SHELL;
+    if (!K.ENABLED || power < S.MIN_POWER) return;
+    if (power >= S.BIG_POWER) health.blast(x, y, S.BIG_RADIUS, { big: true, cause: 'blast' });
+    health.blast(x, y, S.RADIUS * Math.min(1.5, 0.6 + 0.4 * power), { hearts: K.SHELL_HEARTS, cause: 'shell' });
   };
 
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
@@ -503,6 +520,7 @@ export function createShipSim(world, ship, W) {
     const pm = config.PVP.ENABLED || ship.ai ? Math.min(1, power) : 1; // (the enemy gunship too: our shells are small blows on her, as on a rival ship. Versus: a crew shell is a small blow - it chips the hull and only now and then breaks something or lights a fire, in proportion to its power)
     modules.hitAt(x, y, shipPuff, power, coll);
     helmsmanHit(x, y, power);
+    crewHit(x, y, power);
     const hitBag = onGasbag(x, y);
     if (hitBag >= 0) {
       if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll * pm) state.gasHoles.push(gasHoleAt(x, y, hitBag));
@@ -678,6 +696,7 @@ export function createShipSim(world, ship, W) {
     state.bombBay.bombs = 0;
     bayHeat = 0;
     const bx = bay.x, by = bay.y - 30;
+    health.blast(bx, by, config.HEALTH.BAY_RADIUS, { big: true, cause: 'blast' }); // (crew health: whoever is close to the bay when it goes up is knocked out at once)
     const r = breakOff({ kind: 'blast', x: bx, y: by, r: B.RADIUS, cause: 'bombbay-' + cause });
     damageHull(B.HULL);
     modules.hitAt(bx, by, shipPuff, 3, 1);
@@ -737,6 +756,7 @@ export function createShipSim(world, ship, W) {
   state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
   const comeAbout = createComeAbout(ship, W, { goingDown, flight }); // turning her round on the helm's command (comeAbout.js)
 
+  const health = createHealth({ state, ship, phoneFx, emitPlayerUi, shipPuff, shipPop }); // crew health: hearts, burns, the medical bay (health.js)
   const raiders = createRaiders({ state, modules, puff, impact });
   const escort = createEscort({ state, puff, phoneFx });
 
@@ -960,6 +980,7 @@ export function createShipSim(world, ship, W) {
       if (world.ships.length > 1 && shipOf(world, player) !== ship) continue; // (carried to another ship earlier in this very loop: a captured gunship sends everyone aboard her home)
       if (player.bot) updateBot(player, state, dt);
       if (player.koGrace > 0) player.koGrace -= dt;
+      health.step(player, dt); // (crew health: i-frames, burns, the medical bay, the flashes)
       if (player.hook && (player.fall || player.ko > 0 || player.lock || player.swing || player.conn != null || player.connected === false)) hookshot.clear(player);
       if (player.swing) {
         gunship.swingStep(player, dt);
@@ -975,6 +996,7 @@ export function createShipSim(world, ship, W) {
         player.jz = 0;
         player.fly = false;
         fall(player, dt, player.tumble ? air.tumble(player, dt) : 260, (w) => {
+          const overboard = !!w.tumble; // (blown or thrown off the ship; a crewman dropping in from the sky to join does not tumble)
           air.clear(w);
           // Fell off the ship (or off a gunship): back aboard in the medical bay, dazed (no medbay: on the spawn deck at a boarding point).
           // (A boarder who falls off the RIVAL's deck wakes in his own ship's medical bay.)
@@ -986,6 +1008,7 @@ export function createShipSim(world, ship, W) {
           w.y = dest.layout.platforms[w.d].y;
           w.fall = false;
           w.ko = config.GUNSHIP.RESPAWN_TIME;
+          if (overboard && config.HEALTH.ENABLED && !w.enemy) w.hearts = Math.max(Math.min(1, heartsOf(w)), heartsOf(w) - config.HEALTH.OVERBOARD); // (crew health: a fall overboard costs a heart, but never the last one)
           w.carry = null;
           phoneFx(w, rv.medbay ? 'You fell! Coming round in the medical bay...' : 'You fell! You scramble back aboard, dazed...', [80, 40, 80]);
         });
@@ -1012,10 +1035,15 @@ export function createShipSim(world, ship, W) {
           player.ko = 0;
           player.prog = 0;
           player.koGrace = config.RAIDERS.WAKE_GRACE;
+          wake(player); // (crew health: he comes round with a heart at least)
         }
-        if (player.uk !== 'ko') {
-          player.uk = 'ko';
-          if (!player.bot) player.ui = { ko: true };
+        const hpNow = config.HEALTH.ENABLED ? Math.round(heartsOf(player) * 2) / 2 : null;
+        if (player.uk !== 'ko' + hpNow) {
+          player.uk = 'ko' + hpNow;
+          if (!player.bot) {
+            player.ui = { ko: true, hp: hpNow, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT };
+            emitPlayerUi(player.id, player.ui); // (it was never sent before: the phone kept its old buttons while knocked out)
+          }
         }
         continue;
       }
@@ -1229,7 +1257,7 @@ export function createShipSim(world, ship, W) {
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
-              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', sabotage: 'sabotage', cutline: 'boarding', capture: 'captures', shovel: 'shovels' }[act.type]);
+              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', bandage: 'revives', sabotage: 'sabotage', cutline: 'boarding', capture: 'captures', shovel: 'shovels' }[act.type]);
               if (act.type === 'fire') shipPop(object.x, player.y - 120, 'fireOut', '#9fd3e6', 0.8);
               if (act.type === 'hole' || act.type === 'gas') shipPop(object.x, player.y - 120, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
@@ -1245,7 +1273,8 @@ export function createShipSim(world, ship, W) {
               else if (act.type === 'capture') takeHelm(player);
               else if (act.type === 'cutline') gunship.cutLine(player);
               else if (act.type === 'shovel') cargo.shovel(object, player); // (B.6: a load goes over the rail)
-              else object.ko = 0;
+              else if (act.type === 'bandage') health.bandage(object); // (crew health: a crewmate's bandage: a heart back)
+              else { object.ko = 0; revived(object); } // (a revive: he comes round with a heart)
               shipPuff(object.x, player.y - 50, '#8fe388', 10);
             }
           }
@@ -1336,17 +1365,18 @@ export function createShipSim(world, ship, W) {
         else status = 'Fuel ' + Math.max(0, Math.round(player.hj.fuel / 5) * 5) + 's - hull ' + Math.max(0, player.hj.hp) + '/' + player.hj.max;
       }
       const hull = Math.round(state.ship.hull / 5) * 5;
+      const hp = config.HEALTH.ENABLED && !player.enemy ? Math.round(heartsOf(player) * 2) / 2 : null; // (crew health: hearts, in halves; the phone draws them)
       // (the two buttons: Action = label / id, Grab = the small amber button; ids go back with each press, see aidOf)
       const grabNow = player.bot || player.lock || player.hj || player.fly ? null : player.grabAct;
       const aid = player.bot || player.lock || player.hj ? '' : aidOf(player.act, player.carry);
       const gaid = grabNow ? aidOf(grabNow, player.carry) : '';
       const glock = !!(grabNow && player.grabLock > 0);
       const progNow = !player.lock && player.act && player.act.hold && player.act.obj && typeof player.act.obj.prog === 'number' ? Math.round(player.act.obj.prog * 10) : -1; // (how far a hold action has got)
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : ''].join('|');
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : ''].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, fc: ship.pose.f, tn: state.turning.t > 0, tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, hp, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT, med: !!health.medbay(), fc: ship.pose.f, tn: state.turning.t > 0, tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
           emitPlayerUi(player.id, player.ui);
         }
       }
@@ -1425,6 +1455,7 @@ export function createShipSim(world, ship, W) {
       shipPuff(boiler.x, platformY(boiler.d) - 70, '#fff', 20);
       shipPop(boiler.x, platformY(boiler.d) - 160, 'boiler', '#ff5a1f', 1.6);
       modules.damage(modules.byName[boiler.n], config.MODULES.BOILER_BLOWOUT_DAMAGE, shipPuff);
+      if (config.HEALTH.ENABLED) health.blast(boiler.x, platformY(boiler.d) - 40, config.HEALTH.BLOWOUT.RADIUS, { hearts: config.HEALTH.BLOWOUT.HEARTS, cause: 'blast' }); // (crew health: whoever stands at the boiler when it blows loses a heart)
       // The blowout throws flames about the firebox: a fire beside the boiler (and maybe a second), which spreads to whatever is near (the coal!).
       if (Math.random() < config.FIRE.BOILER_BLOWOUT_FIRES) fireSys.lightBoiler(boiler, Math.random() < 0.6 ? 2 : 1);
       const pipes = modules.list.filter((m) => m.kind === 'pipe' && !m.broken);
@@ -1703,7 +1734,7 @@ export function createShipSim(world, ship, W) {
   }
 
   return {
-    ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, goingDown, raiders, escort, coil, searchlights, air, cannon, cargo,
+    ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, health, goingDown, raiders, escort, coil, searchlights, air, cannon, cargo,
     get hookshot() { return hookshot; },
     get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
     hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop, breakOff, explodeBay, crash, seedBreak: (n) => { breakRng = makeRng(n); }, // (the gate reseeds the break-off rolls)
