@@ -1643,6 +1643,11 @@ export const config = {
     KEEL_CHANCE: 0.22, OPEN_MAIN_CHANCE: 0.12, TALL_NEST_CHANCE: 0.15, NO_MAIN_CHANCE: 0.1, // a keel deck, an open-air main deck, an upper nest, a ship with no main deck at all
     TWIN_CHANCE: 0.1, BALLAST_CHANCE: 0.2, // a one-bag ship has a twin envelope, a sandbag aft
     NAME_MAX: 24, // longest ship name (characters)
+    GAS: { // the gas of a generated ship's bags (config.GASES): the chance a theme takes hydrogen (heavy ones) or hot air (light ones); WILD = any ship may take one of the two at random
+      hydrogen: { fortress: 0.45, brawler: 0.3, rammer: 0.3, bomber: 0.3, gunboat: 0.15, wildcard: 0.15 },
+      hot: { skiff: 0.3, kiter: 0.1, sapper: 0.1 },
+      WILD: 0.04,
+    },
   },
   PVP: {
     ENABLED: false, // on = no pacing director, no AI enemies, no gunship, no limp-home spares, no co-op saves, the crew-size scaling is HANDICAP's (simulation.js, crewscale.js, voyage.js, shipSim.js read this)

@@ -8,13 +8,14 @@
 //   describeShip(parts) / nameShip(seed, theme, parts) / tagsOf(parts)    -> the one-line summary, a fun name, the part-presence tags the statistics use
 //
 // A GENOME is plain JSON: the decks (x0, x1 in px, open-air or covered), a crow's nest (its width and where along the bag it sits), the bags (how many, twin envelope, the hover
-// level they are sized for) and ITEMS: { t: palette type (buildSlots.js PALETTE id), row: the deck row, u: 0..1 along that row, dir: an engine's way }. A genome is cheap to
+// level they are sized for, and their GAS: bags.gas 'hydrogen' | 'hot', none = helium) and ITEMS: { t: palette type (buildSlots.js PALETTE id), row: the deck row, u: 0..1 along that row, dir: an engine's way }. A genome is cheap to
 // cross over (items map by row and by u onto another hull) and every build is checked by validate(): the repair loop adds a ladder, a boiler or a sandbag, or drops the
 // heaviest extra, until nothing FAILs. The weights of the themes are data here, the dials are config.SHIPGEN.
 import { config } from '../../config.js';
 import { BUILDS, budgets, buildLayout, ENGINE_DIRS, COL } from './shipBuild.js';
 import { validate } from './buildCheck.js';
-import { emptyBuild, drawDeck, drawBag, erase, setBag, GRID_X0 } from './buildEdit.js';
+import { emptyBuild, drawDeck, drawBag, erase, setBag, setGas, GRID_X0 } from './buildEdit.js';
+import { gasLiftMul, gasInfo, GAS_KEYS } from './gases.js';
 import { slotsFor } from './buildSlots.js';
 
 // ---- a small seeded random source -----------------------------------------------------------------------------------
@@ -185,6 +186,16 @@ function crewKit(R, o) {
   add('ladder', 'catwalk', [bu - 0.05, bu - 0.05]); add('ladder', 'main', [bu + 0.06, bu + 0.06]); // (a way down beside the boiler: the coal walk)
 }
 
+// The gas of a new ship's bags: heavy themes may take hydrogen (30% more lift, but it burns), light skiffs hot air (free, weak, needs the boiler), anything may now and then (config.SHIPGEN.GAS).
+function pickGas(theme, seed) {
+  const r = makeRng(seed * 104729 + 7), GS = G().GAS;
+  const roll = r();
+  if (roll < (GS.hydrogen[theme] || 0)) return 'hydrogen';
+  if (roll >= 1 - (GS.hot[theme] || 0)) return 'hot';
+  if (r() < GS.WILD) return r() < 0.5 ? 'hydrogen' : 'hot';
+  return null;
+}
+
 // ---- making a genome -----------------------------------------------------------------------------------------------------
 export function newGenome(seed, theme) {
   const rng = makeRng(seed * 7919 + 17);
@@ -217,6 +228,8 @@ export function newGenome(seed, theme) {
     },
   };
   recipe(th, R);
+  const gas = pickGas(th, seed); // (its own random source: the rest of the genome is the same as before gas types)
+  if (gas) g.bags.gas = gas;
   const engs = g.items.filter((it) => it.t === 'engine' || it.t === 'engineSwivel').length;
   if (g.items.filter((it) => it.t === 'boiler').length === 1 && engs < 3 && !g.items.some((it) => it.t === 'lift')) R.add('lift', 'main', 'mid'); // (one boiler, two engines idles at full pressure: the steam lift is a second steam user)
   if (g.nest.tall) { R.add('gun', 'crow2', 'mid'); }
@@ -309,11 +322,12 @@ export function fitBags(p, bags) {
   const gone = erase(p, 'gasbag', -1e6, 1e6);
   let q = gone.ok ? gone.parts : p;
   const n = clamp(bags.n || 1, 1, E.BAGS_MAX);
-  const twinF = n === 1 && bags.twin ? 1 + 0.7 * 0.62 : 1;
+  const gasK = gasLiftMul({ gasType: bags.gas }), gasMass = gasInfo({ gasType: bags.gas }).mass * n; // (the gas scales the lift, and a hot-air burner weighs)
+  const twinF = (n === 1 && bags.twin ? 1 + 0.7 * 0.62 : 1) * gasK;
   for (let it = 0; it < 3; it++) {
     const now = budgets(q);
     const rest = budgets(q.filter((o) => o.part !== 'gasbag')); // (everything but the bags: lift engines pointing up lift too)
-    const mass = rest.mass + n * config.BALANCE.MASS.bag + (n === 1 && bags.twin ? config.BALANCE.MASS.bagTwin : 0);
+    const mass = rest.mass + gasMass + n * config.BALANCE.MASS.bag + (n === 1 && bags.twin ? config.BALANCE.MASS.bagTwin : 0);
     const lift = config.GAS.NEUTRAL + mass - rest.lift - bags.hover;
     let rx = clamp((lift * 1560) / ry / twinF, E.BAG_MIN * n, E.BAG_MAX * n); // total half-length
     rx = Math.round(rx / 10) * 10;
@@ -328,6 +342,7 @@ export function fitBags(p, bags) {
     q = r;
   }
   if (n === 1 && bags.twin) { const t = setBag(q, { twin: true }); if (t.ok) q = t.parts; }
+  if (bags.gas && bags.gas !== 'helium') { const t = setGas(q, { gas: bags.gas, all: true }); if (t.ok) q = t.parts; }
   return q;
 }
 
@@ -367,7 +382,7 @@ export function buildGenome(g) {
 }
 
 // ---- judging a build ----------------------------------------------------------------------------------------------------------
-const WARN_COST = { Advice: 4, Gasbag: 6, Lift: 6, Walking: 8, Steam: 6, Balance: 8, Fire: 8, 'Break-off': 5, Thrust: 5, Sails: 4, Decks: 3 };
+const WARN_COST = { Advice: 4, Gasbag: 6, Gas: 12, Lift: 6, Walking: 8, Steam: 6, Balance: 8, Fire: 8, 'Break-off': 5, Thrust: 5, Sails: 4, Decks: 3 };
 export function judge(parts, cap) {
   let v;
   try { v = validate(parts); } catch (e) { return { v: null, score: 1e6, fails: ['validate threw: ' + e.message], mass: 0 }; }
@@ -417,6 +432,8 @@ function repairOnce(g, j, rng, parts) {
     add({ t: 'ladder', row: rng.pick(['catwalk', 'main']), u: rng.range(0.05, 0.95) });
     return rng.chance(0.5) ? true : letGo();
   }
+  if (groups.has('Gas')) { delete g.bags.gas; return true; } // (hydrogen beside a boiler / coal / flamethrower, or hot air with no boiler: back to helium)
+  if (failGroups.has('Lift') && g.bags.gas === 'hot') { delete g.bags.gas; return true; } // (hot air is too weak for her)
   if (failGroups.has('Lift')) { g.bags.twin = !g.bags.twin; g.bags.hover = Math.min(g.bags.hover + 4, 60); return letGo() || true; }
   if (groups.has('Balance')) { if (count('ballast') < 6) { add({ t: 'ballast', row: 'lower', u: rng.pick([0.05, 0.95]) }); return true; } return letGo(); }
   if (groups.has('Gasbag') && /hangs off|off the end/.test(text)) { g.nest.w = Math.max(2, g.nest.w - 1); g.nest.u = 0.5; return true; }
@@ -469,7 +486,7 @@ export function mutateGenome(g0, rng) {
     else if (r < 0.46) { const idx = g.items.map((it, i) => [it, i]).filter(([it]) => !CORE.includes(it.t) && it.t !== 'gasValve'); if (idx.length) { const [it, i] = rng.pick(idx); g.items.splice(i, 1); tags.push('-' + it.t); } }
     else if (r < 0.64) { const idx = g.items.filter((it) => it.t !== 'gasValve' && !(it.row === 'nest')); if (idx.length) { const it = rng.pick(idx); it.u = +clamp(it.u + rng.range(-0.3, 0.3), 0.03, 0.97).toFixed(3); if (rng.chance(0.3) && ROWS_FOR[it.t]) it.row = rng.pick(ROWS_FOR[it.t]); tags.push('move ' + it.t); } }
     else if (r < 0.74) { const es = g.items.filter((it) => it.t === 'engine' || it.t === 'engineSwivel'); if (es.length) { const e = rng.pick(es); e.dir = ENGINE_DIRS[rng.int(0, 7)]; tags.push('aim engine'); } }
-    else if (r < 0.84) { const b = g.bags; if (rng.chance(0.5)) b.n = clamp(b.n + (rng.chance(0.5) ? 1 : -1), 1, 4); else if (rng.chance(0.5)) b.twin = !b.twin; else b.hover = clamp(b.hover + rng.int(-6, 6), 30, 56); tags.push('bags'); }
+    else if (r < 0.84) { const b = g.bags; if (rng.chance(0.5)) b.n = clamp(b.n + (rng.chance(0.5) ? 1 : -1), 1, 4); else if (rng.chance(0.4)) { const k = rng.pick(GAS_KEYS); if (k === 'helium') delete b.gas; else b.gas = k; } else if (rng.chance(0.5)) b.twin = !b.twin; else b.hover = clamp(b.hover + rng.int(-6, 6), 30, 56); tags.push('bags'); }
     else if (r < 0.94) { const rows = ['lower', 'main', 'catwalk'].filter((x) => g.decks[x]); const row = rng.pick(rows), d = g.decks[row]; const dx = rng.chance(0.5) ? COL : -COL; if (rng.chance(0.5)) d.x1 += dx; else d.x0 -= dx; if (d.x1 - d.x0 < 4 * COL) d.x1 = d.x0 + 4 * COL; tags.push('hull'); }
     else { const rows = ['main', 'catwalk'].filter((x) => g.decks[x]); const d = g.decks[rng.pick(rows)]; if (d) { d.out = d.out ? undefined : true; if (d.out === undefined) delete d.out; } tags.push('flip deck'); }
   }
@@ -498,7 +515,7 @@ export function crossGenome(a, b, rng) {
 // ---- describing a ship -------------------------------------------------------------------------------------------------------------
 // What a build has, as a count per kind of thing (from the PARTS list, so an evolved or hand-drawn ship is described right).
 export function inventory(parts) {
-  const c = { gun: 0, long: 0, mortar: 0, scatter: 0, flak: 0, harpoon: 0, flame: 0, mines: 0, ram: 0, cannon: 0, armour: 0, sails: 0, engines: 0, upEngines: 0, swivel: 0, bags: 0, twin: 0, bombBay: 0, boilers: 0, nests: 0, keel: 0, towline: 0, cargo: 0, lift: 0, hookshot: 0 };
+  const c = { gun: 0, long: 0, mortar: 0, scatter: 0, flak: 0, harpoon: 0, flame: 0, mines: 0, ram: 0, cannon: 0, armour: 0, sails: 0, engines: 0, upEngines: 0, swivel: 0, bags: 0, twin: 0, hydrogen: 0, hotAir: 0, bombBay: 0, boilers: 0, nests: 0, keel: 0, towline: 0, cargo: 0, lift: 0, hookshot: 0 };
   for (const p of parts) {
     if (p.part === 'gun') { if (p.gtype === 'mines') c.mines++; else if (p.gtype && c[p.gtype] != null) c[p.gtype]++; else c.gun++; }
     else if (p.part === 'mineLayer') c.mines++;
@@ -507,7 +524,7 @@ export function inventory(parts) {
     else if (p.part === 'armour') c.armour += (p.x1 - p.x0) / 100;
     else if (p.part === 'sail') c.sails++;
     else if (p.part === 'engine') { c.engines++; if (p.dir != null && Math.sin(p.dir) < -0.5) c.upEngines++; if (p.swivel) c.swivel++; }
-    else if (p.part === 'gasbag') { c.bags++; if (p.twin) c.twin++; }
+    else if (p.part === 'gasbag') { c.bags++; if (p.twin) c.twin++; if (p.gasType === 'hydrogen') c.hydrogen++; else if (p.gasType === 'hot') c.hotAir++; }
     else if (p.part === 'station' && p.kind === 'bombBay') c.bombBay++;
     else if (p.part === 'station' && p.kind === 'boiler') c.boilers++;
     else if (p.part === 'deck' && p.row === 'keel') c.keel++;
@@ -528,7 +545,7 @@ export function tagsOf(parts) {
   if (has('mortar')) t.push('mortar'); if (has('scatter')) t.push('grapeshot'); if (has('scatter', 3)) t.push('3+ grapeshot'); if (has('flak')) t.push('flak'); if (has('harpoon')) t.push('harpoon'); if (has('flame')) t.push('flamethrower');
   if (has('mines')) t.push('mine layer'); if (has('ram')) t.push('ram prow'); if (has('cannon')) t.push('crew cannon'); if (has('armour', 2)) t.push('armour 2+ cols'); if (has('armour', 5)) t.push('armour 5+ cols');
   if (has('sails')) t.push('sail'); if (has('upEngines')) t.push('lift engine'); if (has('swivel')) t.push('swivel engine'); if (has('engines', 4)) t.push('4+ engines'); if (c.engines <= 2) t.push('2 or fewer engines');
-  if (has('bags', 2)) t.push('2+ bags'); if (has('bags', 3)) t.push('3+ bags'); if (has('twin')) t.push('twin envelope bag'); if (has('bombBay')) t.push('bomb bay'); if (has('boilers', 2)) t.push('2+ boilers');
+  if (has('bags', 2)) t.push('2+ bags'); if (has('bags', 3)) t.push('3+ bags'); if (has('twin')) t.push('twin envelope bag'); if (has('hydrogen')) t.push('hydrogen bag'); if (has('hotAir')) t.push('hot-air bag'); if (has('bombBay')) t.push('bomb bay'); if (has('boilers', 2)) t.push('2+ boilers');
   if (has('nests', 2)) t.push('upper nest'); if (has('keel')) t.push('keel deck'); if (has('towline')) t.push('towline'); if (has('cargo')) t.push('cargo racks'); if (has('lift')) t.push('steam lift');
   if (c.gun + c.long + c.mortar + c.scatter + c.flak + c.harpoon + c.flame >= 6) t.push('6+ guns');
   if (parts.some((p) => p.part === 'ballast')) t.push('ballast'); if (parts.some((p) => p.part === 'gasValve')) t.push('gas valves'); if (parts.some((p) => p.part === 'searchlight')) t.push('searchlight');
@@ -538,7 +555,7 @@ export function tagsOf(parts) {
   if (lo && lo.x1 - lo.x0 >= 12 * COL) t.push('long hull'); if (lo && lo.x1 - lo.x0 <= 8 * COL) t.push('short hull');
   return t;
 }
-export const TAG_LIST = ['long gun', '2+ long guns', 'mortar', 'grapeshot', '3+ grapeshot', 'flak', 'harpoon', 'flamethrower', 'mine layer', 'ram prow', 'crew cannon', 'armour 2+ cols', 'armour 5+ cols', 'sail', 'lift engine', 'swivel engine', '4+ engines', '2 or fewer engines', '2+ bags', '3+ bags', 'twin envelope bag', 'bomb bay', '2+ boilers', 'upper nest', 'keel deck', 'towline', 'cargo racks', 'steam lift', '6+ guns', 'ballast', 'gas valves', 'searchlight', 'open main deck', 'long hull', 'short hull'];
+export const TAG_LIST = ['long gun', '2+ long guns', 'mortar', 'grapeshot', '3+ grapeshot', 'flak', 'harpoon', 'flamethrower', 'mine layer', 'ram prow', 'crew cannon', 'armour 2+ cols', 'armour 5+ cols', 'sail', 'lift engine', 'swivel engine', '4+ engines', '2 or fewer engines', '2+ bags', '3+ bags', 'twin envelope bag', 'hydrogen bag', 'hot-air bag', 'bomb bay', '2+ boilers', 'upper nest', 'keel deck', 'towline', 'cargo racks', 'steam lift', '6+ guns', 'ballast', 'gas valves', 'searchlight', 'open main deck', 'long hull', 'short hull'];
 
 // "long-range kiter with mortars and mines": the role from the weapon bands (what range she fights at), then her three most distinctive parts.
 export function roleOf(parts) {
@@ -564,6 +581,7 @@ export function describeShip(parts) {
   if (c.armour >= 5) f.push('heavy armour'); else if (c.armour >= 2) f.push('armour plate');
   if (c.sails) f.push(c.sails > 1 ? 'sails' : 'a sail'); if (c.upEngines) f.push('lift engines'); if (c.swivel) f.push('swivel engines');
   if (c.bags >= 3) f.push(c.bags + ' gasbags'); else if (c.twin) f.push('a twin-envelope bag');
+  if (c.hydrogen) f.push('hydrogen'); else if (c.hotAir) f.push('hot air');
   if (c.gun >= 4) f.push(c.gun + ' broadside guns');
   const pick = f.slice(0, 3);
   const role = roleOf(parts);
