@@ -232,9 +232,9 @@ export function createVersusArt({ ctx, fleet, drawCrewAt }) {
     try {
       const y = 104, cx = config.W / 2;
       ctx.save();
-      book.paper(cx - 112, y, 224, 44, { r: 10, pins: false });
-      text(metres(d) + ' m', cx - 30, y + 32, 26, L().INK, 'center');
-      text(BAND_WORDS[band], cx + 62, y + 28, 12, band === 'far' || d > config.PVP.RANGE.FAR_WORD ? L().STAMP : L().INK_SOFT, 'center', config.FONTS.TEXT, 100);
+      book.paper(cx - 140, y, 280, 44, { r: 10, pins: false });
+      text(metres(d) + ' m', cx - 62, y + 32, 26, L().INK, 'center');
+      text(BAND_WORDS[band], cx + 66, y + 28, 13, band === 'far' || d > config.PVP.RANGE.FAR_WORD ? L().STAMP : L().INK_SOFT, 'center', config.FONTS.TEXT, 130);
       ctx.restore();
     } catch (e) { try { ctx.restore(); } catch (e2) { /* ignore */ } }
   };

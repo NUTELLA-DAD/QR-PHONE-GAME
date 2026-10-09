@@ -9,6 +9,7 @@ import { createPerfGovernor, perfState } from './perf.js';
 import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility forward: the dev build below is applied before the simulation reads the layout)
 import { BUILDS } from './shipBuild.js';
 import { loadStartBuild } from './voyage.js';
+import { buildShelf } from './pvp/shelf.js';
 
 // Dev: host.html?build=[parts JSON] flies another ship than the classic one (copy a build from the build page, buildtest.html, "Copy build JSON").
 try {
@@ -83,6 +84,8 @@ simulation.setStartBuild(loadStartBuild()); // (the browser host starts a Voyage
       simulation.match.addBots('blue', n);
       // (B.6, &cross=1: both sides fly the Boarder's Barge - a crew cannon, a sandbag rack, a crate stack and a towline reel - picked for them at once)
       if (q.get('cross') === '1') config.PVP.SHELF.CROSS = true;
+      // (&pick=sniper,ram: the shelf ships each side flies, red then blue - classic, twin, bags, var0.., sniper, brawler, ram, barge)
+      if (q.get('pick')) { const M = simulation.match, ids = q.get('pick').split(','); M.shelf = buildShelf(); const ix = (id) => Math.max(0, M.shelf.findIndex((e) => e.id === id)); M.applyPicks({ red: ix(ids[0]), blue: ix(ids[1] || ids[0]) }); }
       simulation.match.begin({ shelf: q.get('shelf') === '1' || q.get('cross') === '1' });
       const vote = simulation.state.vote;
       if (q.get('cross') === '1' && vote && vote.onDone) {

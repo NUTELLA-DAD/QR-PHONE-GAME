@@ -30,7 +30,7 @@ export const config = {
     VERSUS: {
       MAX_ZOOM_OUT: 2.9, // the widest view: this many times out from the normal one (the ship bake's floor is about zoom 0.16, so keep zoom >= 0.16 on a 1920 px screen)
       ENTER: 0.97, EXIT: 1.12, FAR_ZOOM: 0.5, // see above; FAR_ZOOM = the main view's zoom in the split, as a share of the normal view's
-      INSET: { W: 0.34, H: 0.38, X: 0.012, Y: 0.5, ZOOM: 1, MAX_RATIO: 1.2, SMOOTHING: 3 }, // the porthole: size and place as shares of the screen (X from the right edge, Y from the top; it sits over the bottom right, clear of the panels and the banner), its zoom as a share of the main view's (never smaller than main / MAX_RATIO: the ship pictures are baked for one zoom and a very different one would re-bake them every frame), how quickly it follows the far ship
+      INSET: { W: 0.34, H: 0.38, X: 0.012, Y: 0.5, LEFT: true, ZOOM: 1, MAX_RATIO: 1.2, SMOOTHING: 3 }, // the porthole: size and place as shares of the screen (X from the left edge - or the right with LEFT false - and Y from the top; it sits over the bottom left, clear of the panels, the banner and the join-code card), its zoom as a share of the main view's (never smaller than main / MAX_RATIO: the ship pictures are baked for one zoom and a very different one would re-bake them every frame), how quickly it follows the far ship
       NAME_ZOOM: 0.34, // below this zoom the pennants and the ships' names are drawn bigger, so they read from the sofa (pvpArt.js)
     },
   },
@@ -1540,11 +1540,11 @@ export const config = {
     MAP_KIND: 'open', // arena sky: 'open' (islands and hills) | 'network' | 'route'
     ENVIRONMENT: 'skyisles', // arena sky: which of the seven environments
     // THE ARENA (maps.js buildArenaMap): one big sky, the same on both sides (the left half is made, the right half is its mirror): hills, tall spires, floating islands and a hollow island on each side.
-    // SIZE = [cells wide, cells high] (a cell is MAPS.CELL px: 150 x 80 is 30000 x 16000 px, about five screens across at the widest zoom); ISLANDS = floating islands (each also set at its mirror image),
+    // TOP_LEGACY = the ceiling above the map's start (px) the enemy gunship's captain keeps in CO-OP, where there is no arena wall (it was the old arena's top). SIZE = [cells wide, cells high] (a cell is MAPS.CELL px: 150 x 80 is 30000 x 16000 px, about five screens across at the widest zoom); ISLANDS = floating islands (each also set at its mirror image),
     // SPIRES = tall rock spires on the ground, POCKETS = hollow islands (a cavity with its mouth toward the middle) on each side, START_Y = the height the ships start at (share of the map's height from the top).
     // The WIND WALL is a rectangle: MARGIN px in from each side of the map, CEILING px from the top; a ship past it is pushed back (PUSH: px/s per px over, at most PUSH_MAX). The STORM closes that rectangle in on the middle
     // of the sky after AFTER seconds of fighting, taking TIME seconds to shrink to MIN_W x MIN_H px (the ships have to meet in the end), and a ship caught in the storm band is hurt (DAMAGE hull % a second).
-    ARENA: { SIZE: [150, 80], ISLANDS: 14, SPIRES: 4, POCKETS: 1, PAD: 2, START_Y: 0.4, MARGIN: 1400, CEILING: 1600, PUSH: 0.9, PUSH_MAX: 420, STORM: { AFTER: 120, TIME: 170, MIN_W: 6400, MIN_H: 4400, DAMAGE: 0.4 } },
+    ARENA: { TOP_LEGACY: 3400, SIZE: [150, 80], ISLANDS: 14, SPIRES: 4, POCKETS: 1, PAD: 2, START_Y: 0.4, MARGIN: 1400, CEILING: 1600, PUSH: 0.9, PUSH_MAX: 420, STORM: { AFTER: 120, TIME: 170, MIN_W: 6400, MIN_H: 4400, DAMAGE: 0.4 } },
     // RANGE BANDS (centre to centre, px; RANGE.PX_PER_M px = 1 metre on the TV): SHORT is ramming, boarding and grapeshot; MID is the broadside guns; LONG is the long gun and the mortars. The captains
     // pick a preferred band from their style and their ship's guns (pvp/captainAI.js), the stats count the seconds spent in each (match.js), the TV shows the range.
     RANGE: { PX_PER_M: 10, SHORT: 2300, MID: 3800, LONG: 7000, HOLD: { short: 1900, mid: 2800, long: 5200 }, FAR_WORD: 9000 }, // (SHORT / MID / LONG are each band's upper limit, between the ships' aim points: a classic hull is 2000 wide, so under SHORT the hulls are nearly touching; a ship that likes a band holds HOLD px from the rival; FAR_WORD = the distance past which the TV says FAR APART in red)

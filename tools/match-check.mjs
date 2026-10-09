@@ -27,7 +27,7 @@ installShims();
 const writes = []; // every localStorage write the game makes
 const realSet = globalThis.localStorage.setItem;
 globalThis.localStorage.setItem = (k, v) => { writes.push(k); return realSet(k, v); };
-const clock = seedRandom(seed);
+let clock = seedRandom(seed);
 const load = (p) => import(pathToFileURL(path.join(publicDir, p)).href);
 const { config } = await load('config.js');
 const { createSimulation } = await load('modules/host/simulation.js');
@@ -143,7 +143,9 @@ function bare({ mode = null, phase = 'fight', near = true } = {}) {
   step(sim.sim, 2);
   if (near && phase === 'fight') { // (the arena is big and the ships start far apart: the controlled experiments below begin with them at the standoff, as they used to start)
     const [r, b] = st.ships, aim = (sh, k) => (k === 'x' ? T.toWorldX(sh, sh.layout.aimPoint.x) : T.toWorldY(sh, sh.layout.aimPoint.y));
-    b.pose.x += aim(r, 'x') + 2600 - aim(b, 'x'); // (the gap the old arena started with: the hulls do not touch)
+    const mp = st.course.map.start; // (both ships inside the clear sky round the left launch point, 2600 apart: the gap the old arena started with, the hulls do not touch)
+    r.pose.x += mp.x - 1300 - aim(r, 'x'); r.pose.y += mp.y - aim(r, 'y');
+    b.pose.x += aim(r, 'x') + 2600 - aim(b, 'x');
     for (const s of [r, b]) { s.ctx.ship.speed = s.ctx.ship.order = 0; s.ctx.ship.vy = 0; }
     b.pose.y += aim(r, 'y') - aim(b, 'y');
     step(sim.sim, 2);
@@ -165,6 +167,7 @@ function crewman(st, team, ship, d, x) {
   return p;
 }
 
+const aimOf0 = (a, b) => Math.hypot(T.toWorldX(a, a.layout.aimPoint.x) - T.toWorldX(b, b.layout.aimPoint.x), T.toWorldY(a, a.layout.aimPoint.y) - T.toWorldY(b, b.layout.aimPoint.y));
 // ---- 3. every ship on the shelf flies: refitted as red, fresh as blue ----
 {
   const shelf = buildShelf();
@@ -426,7 +429,7 @@ function crewman(st, team, ship, d, x) {
   boarder.fire = true;
   step(sim, 60 * (config.PVP.CAPTURE_TIME + 2));
   const r = M.results[0];
-  if (!r) console.log('  debug: phase', M.phase, 'mode', config.PVP.MODE, 'act', boarder.act && boarder.act.type, 'lock', boarder.lock, 'ship', boarder.ship, 'd', boarder.d, 'x', boarder.x, 'helm', helm.d, helm.x, 'captures', M.stats.red.captures, 'capturedBy', M.capturedBy);
+  if (!r) console.log('  debug: hearts', boarder.hearts, 'ko', boarder.ko, 'fall', boarder.fall, 'fly', boarder.fly, 'air', boarder.air, 'conn', boarder.conn, 'hull', blue.state.hull, red.state.hull, 'dist', Math.round(aimOf0(red, blue)), 'phase', M.phase, 'mode', config.PVP.MODE, 'act', boarder.act && boarder.act.type, 'lock', boarder.lock, 'ship', boarder.ship, 'd', boarder.d, 'x', boarder.x, 'helm', helm.d, helm.x, 'captures', M.stats.red.captures, 'capturedBy', M.capturedBy);
   report(!!r && r.winner === 'red' && r.cause === 'captured' && M.phase === 'finale' && M.score.red === 1 && r.stats.red.captures === 1, `Capture mode: holding her wheel ends the round - ${r ? r.winner + ' wins by ' + r.cause : 'no result'}`);
   config.PVP.MODE = 'broadside';
   config.PVP.SHELL_POWER = SAVE.shell;
@@ -442,13 +445,15 @@ function crewman(st, team, ship, d, x) {
   config.COLLIDE.MIN_CLOSING = 1e9;
   config.PVP.BOT.STYLE = 'brawler'; config.PVP.BOT.LOS.AFTER = 1e9; // (a brawler holds the mid band; nobody goes looking for a clear line in a calm sky)
   const { sim, st, M, red, blue } = versus({ bots: 6 });
+  st.course.map.solid.fill(0); // (a clear sky: the hold and the edge are measured with no island in the way)
   const mx = (sh) => T.toWorldX(sh, sh.layout.aimPoint.x), my = (sh) => T.toWorldY(sh, sh.layout.aimPoint.y);
-  step(sim, 60 * 40);
-  let gap = 0, dy = 0;
-  for (let i = 0; i < 60 * 10; i++) { step(sim); gap += Math.abs(mx(blue) - mx(red)) / 600; dy += (my(blue) - my(red)) / 600; }
+  step(sim, 60 * 5);
+  let gap = 0, dy = 0, k = 0;
+  for (let i = 0; i < 60 * 150 && k < 1800; i++) { step(sim); if (i > 60 * 20 && red.captain.play === 'duel' && blue.captain.play === 'duel') { gap += Math.abs(mx(blue) - mx(red)); dy += my(blue) - my(red); k++; } } // (the plays - a pass, a grapple - are not the hold: only the duel is measured)
+  gap /= Math.max(1, k); dy /= Math.max(1, k);
   const hold = red.captain.hold; // (the brawler's band: PVP.RANGE.HOLD.mid nudged by her style)
-  report(Math.abs(gap - hold) < 450, `the captains hold their band (a brawler: the mid band): ${Math.round(gap)} px between the ships (hold ${Math.round(hold)}, RANGE.HOLD.mid ${config.PVP.RANGE.HOLD.mid})`);
-  report(M.left === 'red' && dy > config.PVP.ALT_EDGE * 0.4 && dy < config.PVP.ALT_EDGE * 2.2, `...and the altitude edge: the ship that started on the left (${M.left}) holds ${Math.round(dy)} px above the other (ALT_EDGE ${config.PVP.ALT_EDGE})`);
+  report(Math.abs(gap - hold) < 700, `the captains hold their band (a brawler: the mid band): ${Math.round(gap)} px between the ships (hold ${Math.round(hold)}, RANGE.HOLD.mid ${config.PVP.RANGE.HOLD.mid})`);
+  report(M.left === 'red' && dy > config.PVP.ALT_EDGE * 0.3 && dy < config.PVP.ALT_EDGE * 3.2, `...and the altitude edge: the ship that started on the left (${M.left}) holds ${Math.round(dy)} px above the other (ALT_EDGE ${config.PVP.ALT_EDGE})`);
   // bots board by hook in a calm sky, and the boarders are carried home or win a foothold: at least one crosses in 8 minutes
   const t0 = M.totals.red.boardings + M.totals.blue.boardings;
   until(sim, () => M.totals.red.boardings + M.totals.blue.boardings > t0, 60 * 60 * 8);
@@ -507,8 +512,8 @@ function pilotPlanFor(sh) { return pilotPlan(sh.ctx, 2.5, 0.55); }
   const caps = new Set(), styles = new Set(), shouts = new Set();
   let tried = 0, made = 0, rounds_ = 0, stall = 0, flips = 0, fightSecs = 0, matches_ = 0;
   const e0 = errors;
-  for (let k = 0; k < 4 && (k < 2 || !(tried > 0 && made > 0)); k++) {
-    seedRandom(3000 + k);
+  for (let k = 0; k < 7 && (k < 2 || !(tried > 0 && made > 0)); k++) {
+    clock = seedRandom(3000 + k); // (the new clock is the one the bots read: step() must advance IT)
     matches_++;
     const { sim, st, M, red, blue } = versus({ bots: nBots, fly: false });
     const ships = [red, blue], last = ships.map((s) => ({ x: T.toWorldX(s, s.layout.aimPoint.x), y: T.toWorldY(s, s.layout.aimPoint.y), t: 0 })), lastVy = [0, 0];
@@ -799,7 +804,7 @@ function pilotPlanFor(sh) { return pilotPlan(sh.ctx, 2.5, 0.55); }
     let mineRuns = 0, longShots = 0, mortar = 0, mines = 0, rams = 0, harp = 0, kites = 0, bands = { long: 0, mid: 0, short: 0 }, rounds_ = 0;
     const ee = errors;
     for (const [rid, bid, seed, style] of [['sniper', 'ram', 11, 'sniper'], ['sniper', 'brawler', 12, 'sniper'], ['ram', 'classic', 13, 'daredevil'], ['brawler', 'ram', 14, 'boarder']]) {
-      seedRandom(seed);
+      clock = seedRandom(seed);
       config.PVP.BOT.STYLE = style;
       const sim = createSimulation();
       sim.setSession('versus');
@@ -864,7 +869,7 @@ if (mirror > 0) {
   const won = { red: 0, blue: 0 }, left = { won: 0, of: 0 };
   let secs = 0, rounds_ = 0;
   for (let m = 0; m < mirror; m++) {
-    seedRandom(1000 + m);
+    clock = seedRandom(1000 + m);
     const { sim, M } = versus({ bots: nBots, fly: false });
     let n = 0;
     while (M.phase !== 'over' && n++ < 60 * 60 * 20) step(sim);

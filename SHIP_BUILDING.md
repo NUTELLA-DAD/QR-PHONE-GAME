@@ -392,7 +392,7 @@ Built in tiers. Each part plugs into existing systems.
 - **Inner gas cells:** inside one big bag.
 
 ### Tier 3: weapons and defence
-- **Turret types:**
+- **Turret types (DONE as gun types, PVP.md 3b: long gun, mortar, grapeshot, flak, harpoon, mine layer; the dorsal and tail perches are plain guns):**
   - Broadside cannon.
   - Rotating dorsal turret.
   - Flak.
@@ -401,7 +401,7 @@ Built in tiers. Each part plugs into existing systems.
   - Rear-gunner tail perch.
 - **Belly gondola:** a gun pod on a winch cable.
 - **Torpedo tubes.**
-- **Ram prow:** reinforced; smashes enemies and rock.
+- **Ram prow: DONE (PVP.md 3b): `ramProw`, the other ship takes 2.5x and the rammer 0.3x; smashing rock is not built.**
 - **Spiked hull:** hurts boarders.
 - **Smoke launchers:** hide from fighters briefly.
 - **Spark arrestors and sprinklers:** tie into S.5f fire.

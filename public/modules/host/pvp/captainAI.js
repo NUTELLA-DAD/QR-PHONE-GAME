@@ -103,7 +103,7 @@ function scanShells(state, ship, D) {
       const sx = toShipX(ship, wx), sy = toShipY(ship, wy);
       if (ship.sim.hitsShip(sx, sy)) {
         n++;
-        if (!best || t < best.t) best = { t, sy, sx };
+        if (!best || t < best.t) best = { t, sy, sx, lob };
         break;
       }
     }
@@ -188,7 +188,7 @@ export function captainFly(state, p, plan, dt) {
     const mid = (hullS.y0 + hullS.y1) / 2;
     let up = c.threat.sy > mid; // hit low on the hull: climb away from it; high: dive
     if (Math.random() < 0.12) up = !up;
-    c.dodge = { up, alt: (up ? 1 : -1) * B.DODGE.ALT * S.dodge * (0.8 + Math.random() * 0.4) * (c.threat.t > 1.1 ? B.DODGE.LONG_MUL : 1), thr: (Math.random() < 0.5 ? -1 : 1) * B.DODGE.THR, until: c.t + rnd(B.DODGE.HOLD) };
+    c.dodge = { up, alt: (up ? 1 : -1) * B.DODGE.ALT * S.dodge * (0.8 + Math.random() * 0.4) * (c.threat.lob && c.threat.t > 1.1 ? B.DODGE.LONG_MUL : 1), thr: (Math.random() < 0.5 ? -1 : 1) * B.DODGE.THR, until: c.t + rnd(B.DODGE.HOLD) };
     c.stats.dodges++;
     if (c.stats.dodges % 6 === 1) callout(state, 'EVASIVE!');
   }
@@ -261,7 +261,8 @@ export function captainFly(state, p, plan, dt) {
   const AIMY = AIM.y;
   const win = altWindow(state, 2);
   const wall = state.match && state.match.wall; // (the arena's wind wall: do not climb into it)
-  const altMax = wall ? AIMY - (wall.y0 + 260) : Infinity;
+  const st0 = state.course && state.course.map && state.course.map.start;
+  const altMax = wall ? AIMY - (wall.y0 + 260) : st0 ? AIMY - (st0.y - P.ARENA.TOP_LEGACY + 160) : Infinity; // (no arena wall - the enemy gunship in co-op: the ceiling she always had, TOP_LEGACY above the start)
   const lo = win.min + 20, hi = Math.min(win.max - 20, altMax);
   const fits = win.min <= win.max;
   const clampAlt = (v) => (fits ? clamp(v, lo, Math.max(lo, hi)) : plan.target);

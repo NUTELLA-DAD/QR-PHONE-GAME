@@ -1,6 +1,6 @@
 # Phase V - PvP airship battles ("Versus") - plan written with Fable
 
-**Status (B.4): Versus is built on the one-world design (section 2): two Ships in ONE World, `pvp/match.js`, `node tools/buildsim.mjs --check-match`. Broadside and Capture are in; King of the Hill, the Shipwright build phase (v2), the Elo arena tool of section 3 are still to come (the crew cannon is in: B.6, host.html?versus=1&cross=1). The roadmap table in section 4 is the original plan.**
+**Space and range (section 3b): a big mirrored arena with a closing storm, a far camera with a spyglass porthole, range bands, the long gun, mortar, grapeshot, flak, harpoon, ram prow and mine layer, captains that play a band, and mines. Status (B.4): Versus is built on the one-world design (section 2): two Ships in ONE World, `pvp/match.js`, `node tools/buildsim.mjs --check-match`. Broadside and Capture are in; King of the Hill, the Shipwright build phase (v2), the Elo arena tool of section 3 are still to come (the crew cannon is in: B.6, host.html?versus=1&cross=1). The roadmap table in section 4 is the original plan.**
 
 ## 1. Player experience
 
@@ -41,7 +41,7 @@ Co-op stays the main game; Versus is a separate lobby button.
   - caves favour short ships;
   - storms punish tall ones;
   - the Aether needs lift.
-- A soft wind wall marks the edge. After 4 minutes a shrinking "storm wall" forces contact.
+- A soft wind wall marks the edge. After 2 minutes a shrinking "storm wall" forces contact (built: section 3b).
 
 ### Win conditions
 | Mode | How to win |
@@ -68,7 +68,7 @@ Rounds are best of 3 with a 6-minute cap. On a timeout the higher hull % wins. S
   - the TV shouts "BOARDERS ON THE MAIN DECK!".
 
 ### Camera
-**One shared camera, not split-screen.** It frames both ships with a zoom cap, and the arena is sized so the cap holds. Things off screen get edge arrows.
+**One shared camera, not split-screen** - until the ships are too far apart for even the widest view, when a spyglass porthole shows the far one (section 3b). It frames both ships with a zoom cap; things off screen get edge arrows with the range in metres.
 
 ### Round flow
 1. Lobby.
@@ -164,6 +164,46 @@ It makes one world with two ships (`match.applyPicks`), crews each side with bot
 - **Raids:** `bots.js pvpRaid`: an idle (or now and then a busy) hand goes across by hookshot, or by a parachute jump from the bomb bay when her deck hangs below (`drop`). Fires and holes do not stop it; the wheel stays manned, the last gunner keeps his gun and `RAID.KEEP` hands stay home. Aboard, the old boarder jobs (fight, sabotage the boiler, take the helm). Defenders run at a boarder standing at the wheel or the boiler before anything else.
 - **Fairness:** the old 450 px altitude edge gave the left-hand ship about two wins in three, so `ALT_EDGE` is now 150 and the captains never press the hulls together (`BOT.MIN_GAP`).
 - **Numbers:** `node tools/pvp-stats.mjs --matches 12` prints per round: boardings, bumps, come abouts, shells dodged, altitude range, the captains' counters. Honest limit: a hull is a thousand pixels tall and a shell crosses the gap in about a second, so dodging by height saves few shells (1-2% of the aimed ones); the movement mostly changes WHERE they hit, and the range excursions, rock and the passes change how many are fired.
+
+## 3b. Space and range (owner: "the screen is limiting their movement ... long-range, short-range, mid-range ... airships should lay mines")
+
+**Plain language:** the arena used to be one screen's worth of sky with the two ships a hook's throw apart, so every fight was the same point-blank brawl. Now the sky is about five screens across and four tall, the ships start nearly a kilometre apart, and the guns, the captains and the camera all know about DISTANCE. Distance is measured between the two ships' middles and shown on the TV in metres (10 px = 1 m; a classic hull is 200 m long).
+
+### The arena (`maps.js buildArenaMap`, `config.PVP.ARENA`)
+- 30000 x 16000 px, **the same on the left and the right** (the left half is made, the right is its mirror: neither side has the better ground): rolling hills, a few tall spires, 14 floating islands of every size, and **a hollow island on each side** (a cave pocket with its mouth toward the middle, big enough to hide a hull in). The two launch points are `START_GAP` (8400 px) apart in mid-air, clear of rock. A sky that would wall the ships off from each other is built again with fewer islands. No mooring mast, no outposts, no flak.
+- **The wind wall** is a rectangle (`ARENA.MARGIN` from the map's sides, `CEILING` from the top): a ship past it is pushed back. **The STORM** closes that rectangle in on the middle of the sky after `STORM.AFTER` s (120) over `STORM.TIME` s (170) down to `MIN_W` x `MIN_H`, and a ship caught outside it loses hull (`STORM.DAMAGE` a second), so a round always ends in contact. The TV shows the wall as dark storm cloud with wind streaks.
+- **Routing.** Rock between the two ships (a rock island in the line of fire stops shells) or a captain that is going nowhere while far from the rival: the captain follows the map's own distance field round the island (`course.js rivalPlan`, `BOT.ROUTE`); a captain who can see a clearer line climbs or dives to it (`BOT.LOS`). The route never climbs into the wall.
+
+### The camera (`camera.js`, `config.CAMERA.VERSUS`, `render.js drawInset`)
+- The widest view is much wider (`MAX_ZOOM_OUT` 2.9: the ships shrink to silhouettes with an enlarged team pennant and a ship's name over each: `pvpArt.js`; shells, mines and the "!" grow too).
+- When even that cannot fit both ships the view **SPLITS**: the main view follows the ship nearer the middle of the sky, and a framed **spyglass porthole** (bottom left, brass rivets, a rim in the far ship's team colour) shows the other ship at the same scale with her name and the distance on a plate. A hysteresis (`ENTER` / `EXIT`) stops it flickering when the ships hover at the limit. Edge arrows carry the range in metres, a range plate under the round clock says `550 m LONG RANGE`.
+- Ship art is baked for one zoom: the porthole is never smaller than main / `INSET.MAX_RATIO` so nothing re-bakes every frame.
+
+### Range bands (`pvp/range.js`, `config.PVP.RANGE`)
+| band | distance | what is used |
+|---|---|---|
+| SHORT | under 2300 px | ram prow, grapeshot gun, harpoon, boarding, mine fields laid behind |
+| MID | 2300 - 3800 | broadside guns, flak |
+| LONG | 3800 - 7000 | long gun, mortar |
+| FAR | over 7000 | nothing reaches |
+The match counts the seconds in each band, the mean distance and the weapons by kind (`match.js fresh()`); `tools/pvp-stats.mjs --red sniper --blue classic` prints them.
+
+### The weapons (a gun part with a `gtype`: `gunTypes.js` numbers and aim, `weapons.js` firing, `config.GUN_TYPES`; every one is an ordinary station for a person or a bot, with its palette picture, validator INFO, a sky-dock shop card and a shipPower point)
+- **Long gun** - fast (2700 px/s), 6900 px, a tight spread, a heavy blow, one shot every 2.1 s. **Mortar** - a lobbed shell with gravity (`shell.g`), 1000-4400 px by the barrel's angle, that falls onto a deck and a gasbag and splashes down through the hull; wild unless a **lookout** is up in the nest or the rival is **spotted** on the radar (the spread falls from 0.075 to 0.02 rad). Aim assist for a mortar solves the high arc to the target (`gunTypes.lob`); the bots' gunners and a human's assist use the same solver.
+- **Grapeshot gun** - a fan of 8 pellets over 775 px (a ship alongside, boarders). **Flak gun** - its shell has a proximity fuse and bursts near a plane, a bat, or an enemy crewman in the air: a boarder's leap is knocked out of the sky (`airborne.js shotDown`; he falls to his own medical bay).
+- **Harpoon gun** - fires a line (2600 px) at the nearest enemy deck where it points; it latches (`towing.js fireHarpoon`, an ordinary tow with a stronger reel and its own snap distance) and reels the two ships together to 760 px; a sword cuts it.
+- **Ram prow** (`ramProw`, `config.RAM`) - a reinforced nose. In `shipCollide.js` a contact within `RAM.REACH` of a ship's ram tip is a RAM: the other ship takes `MUL` x the blow, the rammer `SELF` x, and the break-off chance (S.5i) of the rammer's own parts falls (`BREAK_SELF`) while the other ship's rises (`BREAK_OTHER`).
+- **Mine layer** (a gun of type `mines`, a chute in the belly, `config.MINEFIELD`; `minefield.js`) - FIRE drops a floating iron mine; the ammo hold refills it. A mine drifts and sinks slowly, **arms after 3.2 s**, and goes off against **any ship that touches it - the layer's own too** - against planes and bats, and when it is shot (the bang also hurts a ship within `BLAST`). A mine is a hard hit (power 2.6, `hardHit` can break a part off). Mines are world objects, so they work in co-op as well: bots with a mine layer lay mines for the planes and the gunship that hunt them from astern.
+
+### Captain AI by range (`pvp/captainAI.js`, `config.PVP.BOT.RANGE / MINES / HARPOON / RAMPROW / ROUTE / LOS`)
+- Each style likes a band (sniper long, brawler mid, boarder and daredevil short) but **reads her ship**: every gun of a band is points for it (`chooseBand`). A band the ship cannot fight in is never chosen (a classic ship with a sniper captain plays mid; a ship with long guns plays long; a ram prow plays short; no guns at all plays short). She then holds `RANGE.HOLD[band]` from the rival.
+- **Long band**: the sniper **kites** - closed on to 72% of her hold, she turns tail and runs, laying mines behind her, until there is room to shoot again - and shoots at the mines in her path (`aim.js` 'laid' targets), steers over or under mines that are laid (`mineAvoid`), and dodges long shells from further off.
+- **Short band**: the ram run is flown against any rival when she has a prow, the harpoon is fired and then she presses in to board.
+- Bots man the new stations (a hand stays at the mine layer all round and drops mines when the captain says so; a lookout climbs the nest when there is a mortar).
+
+### Balance and numbers (`node tools/pvp-stats.mjs --red sniper --blue classic --matches 10 --quiet 1`; the Sniper, Brawler and Ram ships are on the shelf after the variants, `PVP.SHELF.RANGE`; dev: `host.html?versus=1&bots=4&pick=sniper,ram`)
+- Classic mirror match within 35-65% (`--check-match --mirror N`). Sniper against classic about 50%, the Ram beats classic more than half the time and loses to the Sniper, the Brawler is the weakest: a rock-paper-scissors, none over 65% against the pool. (Numbers and the honest limits are in MOVEMENT.md "Space and range".)
+- Gate: `node tools/buildsim.mjs --check-match` section 8c: the arena (big, mirrored, hollow islands, both ships in open air), the storm, the far camera and its porthole (with hysteresis), the range sampling, the captains' band choice, long gun / mortar / lob solver, grapeshot, flak, mines (laid, arming, own ship, shot, planes), harpoon (latch, reel, cut), ram (the blows 6.6 against 0.8), and four bot fights with 0 errors.
 
 ## 4. Roadmap
 

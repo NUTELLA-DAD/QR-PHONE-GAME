@@ -1198,7 +1198,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.beginPath();
       ctx.roundRect(I.x, I.y, I.w, I.h, r);
       ctx.clip();
-      renderFrame(time, { cx: I.cx, cy: I.cy, zoom: I.zoom }, { layers: ['background', 'ship', 'effects'], inset: true }); // (clipped to the porthole; no HUD, no arrows)
+      const sx = I.x + I.w / 2 - canvas.width / 2, sy = I.y + I.h / 2 - canvas.height / 2; // (the renderer centres its view on the canvas: shift it so the far ship sits in the middle of the porthole)
+      renderFrame(time, { cx: I.cx - sx / I.zoom, cy: I.cy - sy / I.zoom, zoom: I.zoom }, { layers: ['background', 'ship', 'effects'], inset: true }); // (clipped to the porthole; no HUD, no arrows)
       ctx.restore();
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2364,8 +2365,6 @@ export function createRenderer({ ctx, state: world, canvas }) {
       lamps[0].draw(wv, width, height, ts, lamps.slice(1));
     }
     lap('dark');
-    if (view.inset && has('ship') && fleetN() > 1) drawInset(time, view.inset); // (Versus, ships too far apart: the porthole on the far one)
-    lap('inset');
 
     if (has('hud')) {
       // Screen overlay on a fixed 1600x900 stage.
@@ -2397,6 +2396,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
       if (fleetN() > 1) fleet.drawEdgeArrows(world, { ...wv, zoom: view.zoom / pr }, width / pr, height / pr, view.clipped, time / 1000); // an arrow to every ship that is off screen
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
+    if (view.inset && has('ship') && fleetN() > 1 && !(opts && opts.inset)) drawInset(time, view.inset); // (Versus, ships too far apart: the porthole on the far one, over everything but the film)
+    lap('inset');
     if (has('film')) filmLook(time, width, height);
     lap('film');
   };

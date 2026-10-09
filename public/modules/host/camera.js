@@ -175,7 +175,7 @@ export function createWorldCamera() {
           inset.cy += (fy - inset.cy) * ki;
           const fit = Math.min((w * 0.9) / Math.max(1, far.bounds.x1 - far.bounds.x0), (h * 0.85) / Math.max(1, far.bounds.y1 - far.bounds.y0 + 2 * PAD_Y));
           const zoom = Math.max(t.minZoom * 0.9, view.zoom / V.MAX_RATIO, Math.min(view.zoom * V.ZOOM, fit));
-          view.inset = { cx: inset.cx, cy: inset.cy, zoom, x: width - w - width * V.X, y: height * V.Y, w, h, ship: far.ship };
+          view.inset = { cx: inset.cx, cy: inset.cy, zoom, x: V.LEFT ? width * V.X : width - w - width * V.X, y: height * V.Y, w, h, ship: far.ship };
         } else inset = null;
         return { ...view };
       } catch (e) {
