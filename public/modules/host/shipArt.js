@@ -22,7 +22,7 @@ import { mainShip } from './ships.js';
 import { hullGeom as layoutHull, TWIN_SIZE, bagName, deckRoles, rowOf, isNestRow } from './shipBuild.js';
 import { drawBiplane, drawTailNumber } from './planeArt.js';
 import { paintPath, paintRect, hasTexture } from './textureArt.js';
-import { drawIceLocker, drawIceFlights, drawBoilerHeat, drawHoleGlow } from './goingDownArt.js';
+import { drawBoilerSteam, drawFallMarks, drawHoleGlow } from './goingDownArt.js';
 import { windFactor } from './sails.js';
 
 // Which painted texture goes under which flat palette colour (anything not listed stays flat).
@@ -843,7 +843,6 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
 
   const drawRacks = () => {
     for (const r of L.racks) {
-      if (r.kind === 'ice') continue; // (the ice locker is drawn by goingDownArt.js)
       const y = P[r.d].y - 115;
       if (sprites.box(ctx, 'ship/rack-' + r.kind, r.x - 34, y, 68, 70)) continue;
       filled(WOOD, () => ctx.roundRect(r.x - 34, y, 68, 70, 6));
@@ -1592,7 +1591,6 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     guard('escorts', liveHangar);
     guard('valves', livePipes);
     guard('boiler', liveProps, time);
-    guard('iceLocker', drawIceLocker, ctx, state, time);
     guard('bombs', liveBombBay);
     guard('wheel', liveHelm);
     guard('sails', liveSails, time);
@@ -1632,8 +1630,8 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     if (state.phase === 'lobby') guard('labels', drawLabels); // (in flight each phone says where you are)
     guard('holes', drawGasHoles, time);
     guard('status', drawModuleStatus, time);
-    guard('heat', drawBoilerHeat, ctx, state, time); // GOING DOWN!: the boiler's heat bar and the ice blocks in flight
-    guard('ice', drawIceFlights, ctx, state);
+    guard('steam', drawBoilerSteam, ctx, state, time); // GOING DOWN!: the boiler's steam gauge and the marks on the ship (joints to cut, loads to dump)
+    guard('fallMarks', drawFallMarks, ctx, state, time);
   };
 
   // ---- Team trim (B.3): a ship with a team (ships.js teamOf) wears its colour: a belt round each gasbag and a stripe along the hull. Drawn live over the baked pictures (a

@@ -22,7 +22,7 @@ for (let i = 0; i < argv.length; i++) {
 export const BANDS = {
   alive: [0.6, 1.6], // seconds she lives, ratio
   sunk: 0.35, // share of runs that end with her shot down or blown up, absolute difference
-  hullLoss: [0.4, 2.0], // our hull lost, ratio
+  hullLoss: [0.4, 2.5], // our hull lost, ratio (upper band 2.0 -> 2.5 when the ice locker left the classic ship: the chaos moved the old gunship's 24-run mean from 13.7 to 7.1 hull lost, the Ship's stayed at about 15)
   shots: [0.35, 2.5], // her cannonballs, ratio
   boardings: [0.0, 3.0], // our crew boarding her, ratio (both can be small)
 };

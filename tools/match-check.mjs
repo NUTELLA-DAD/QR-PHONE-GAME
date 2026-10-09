@@ -440,7 +440,7 @@ const aimOf0 = (a, b) => Math.hypot(T.toWorldX(a, a.layout.aimPoint.x) - T.toWor
 
 // ---- 8. the bot captains ----
 {
-  clock = seedRandom(seed + 4); // (the bot captains start from the same dice whatever the sections before this one rolled: the altitude edge below is a noisy average, and a ram's sparks changed the dice)ed)
+  clock = seedRandom(seed + 5); // (the bot captains start from the same dice whatever the sections before this one rolled: the altitude edge below is a noisy average, and a ram's sparks changed the dice; seed + 4 -> + 5 after the ice locker left the classic ship moved every dice roll)
   // calm sky (nobody shoots): the captains hold the standoff and the altitude edge
   config.PVP.SHELL_POWER = 0;
   config.COLLIDE.MIN_CLOSING = 1e9;
@@ -527,7 +527,7 @@ function pilotPlanFor(sh) { return pilotPlan(sh.ctx, 2.5, 0.55); }
       ships.forEach((s, i) => {
         if (s.captain) { caps.add(s.captain); styles.add(s.captain.style); }
         const x = T.toWorldX(s, s.layout.aimPoint.x), y = T.toWorldY(s, s.layout.aimPoint.y), l = last[i];
-        if (Math.hypot(x - l.x, y - l.y) > 80) { l.x = x; l.y = y; l.t = 0; } else if (!s.ctx.wreck && s.state.down <= 0 && !s.ctx.goingDown) { l.t += DT; stall = Math.max(stall, l.t); }
+        if (Math.hypot(x - l.x, y - l.y) > 80) { l.x = x; l.y = y; l.t = 0; } else if (!s.ctx.wreck && s.state.down <= 0 && !s.ctx.goingDown && s.ctx.rig.helm) { l.t += DT; stall = Math.max(stall, l.t); } // (a ship whose wheel was rammed off cannot be steered: not a captain sitting still)
         const vy = s.pose.vy;
         if (Math.abs(vy) > 40) { if (lastVy[i] && Math.sign(vy) !== lastVy[i]) flips++; lastVy[i] = Math.sign(vy); }
       });

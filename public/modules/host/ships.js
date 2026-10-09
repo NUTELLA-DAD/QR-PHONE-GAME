@@ -62,7 +62,7 @@ export const SHIP_KEYS = [
   'sails', 'sailPush', 'sailWarn', 'sailWarned', 'sailStats', 'links', 'linkStats', 'surgeEngine', 'surgeCoil', 'surgeBotAt',
   'coil', 'searchlights', 'litTargets', 'dimTargets', 'darkNow', 'fireStats', 'blaze', 'blazeCd',
   'crewScale', // (B.3: the multipliers for the size of THIS ship's crew: her raiders, the damage she takes; the world's enemies use ship 0's)
-  'turning', 'boardAt', 'scrapeSince', 'rockSide', 'goingDown', 'goingDownRate', 'iceLocker', 'iceFlights', 'gdBanner', 'gdGrace', 'gdJobs',
+  'turning', 'boardAt', 'scrapeSince', 'rockSide', 'goingDown', 'goingDownRate', 'gdBanner', 'gdGrace', 'gdCoalOut', 'gdJobs',
   'escorts', 'escort', 'escortCramped', 'stunts', 'stuntEnd', 'stuntLog', 'stuntPlane', 'stuntStats',
   // worked out every step
   'rig', 'steamParts', 'steamUse', 'overdrive', 'buoyancy', 'sinking', 'autopilot', 'pressureWarned', 'warnBeep', 'boilerBlew', 'helmHit', 'ballastCd', 'gasWarned', 'lastAlt', 'noPump',

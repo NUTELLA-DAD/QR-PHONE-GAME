@@ -8,7 +8,7 @@ import { shipGeom, landX, boilerX, routeStep } from './gunship.js';
 import { X0 as GUNSHIP_X0 } from './gunshipBlueprint.js';
 import { isEscortStation, escortFor } from './escort.js';
 import { lightNames, isSearchlight, darkTarget } from './searchlight.js';
-import { botJobs as goingDownJobs } from './goingDown.js';
+import { botJobs as goingDownJobs, bunkerEmpty } from './goingDown.js';
 import { autopilotOn } from './crewscale.js';
 import { flamAt } from './fireModel.js';
 import { hearts } from './health.js';
@@ -407,7 +407,7 @@ function throwSpot(ship, target) {
 function listJobs(state, bot) {
   const L = mainShip(state).layout;
   if (hostile(bot, state)) return boarderJobs(state, bot);
-  if (state.goingDown) return goingDownJobs(state, bot); // GOING DOWN!: split across coal, ice and leaks (goingDown.js)
+  if (state.goingDown) return goingDownJobs(state, bot); // GOING DOWN!: split across dumping weight, patching, pumping, stoking and venting (goingDown.js)
   const jobs = [];
   const players = Object.values(state.players);
   const mods = state.modules || [];
@@ -441,7 +441,7 @@ function listJobs(state, bot) {
   const bombStarved = bombRun && !!bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs <= 0 && !mods.some((m) => m.name === bay && m.broken) && Math.hypot(c.target.x - refX, c.target.y - refY) < config.MAPS.BOMB_RUN_MAN * 2;
   // The boiler is dying (no coal, or the pressure has collapsed): nothing else works without steam - stoke it right away.
   const ship = state.ship;
-  if (state.phase === 'flying' && L.hasKind('boiler') && L.hasKind('coal') && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
+  if (state.phase === 'flying' && L.hasKind('boiler') && L.hasKind('coal') && !bunkerEmpty(state) && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
   // The parts everything else hangs on (the helm and its steam pipe, the boiler, the lift): a broken one is fixed first,
   // otherwise the gasbag can never be pumped up again and the ship just sits there burning.
   for (const m of mods) if (canHammer && m.broken && critical(mods, m)) jobs.push({ kind: 'repair', obj: m, max: 1, cap: 3, urgent: true });
@@ -689,7 +689,7 @@ function operate(p, state, dt) {
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
     else p.jy = 0;
     // The PRESSURE lever: pump or vent the gasbag toward the altitude the plan wants.
-    p.gas = gasFor(state, beamDodge(state) ?? (dip !== null && target === dip ? dip : plan.target));
+    p.gas = state.goingDown ? 1 : gasFor(state, beamDodge(state) ?? (dip !== null && target === dip ? dip : plan.target)); // (GOING DOWN!: pump flat out)
   } else if (L.kindOf(p.lock) === 'coil') {
     // Aim at the thickest bunch of enemies and charge while lined up.
     const shot = coilShot(state);
@@ -922,12 +922,16 @@ function work(p, state) {
   } else if (job.kind === 'vent' || job.kind === 'gasvalve') {
     // Walk to the vent (or the gas valve) and flip it.
     if (steer(p, o.d, o.x, 10)) press(p);
-  } else if (job.kind === 'cool') {
-    // GOING DOWN!: a block of ice from the locker, then onto the boiler
-    const b = L.one('boiler'); // (GOING DOWN! is about the first boiler)
-    if (getTool(state, p, 'ice', b) && steer(p, b.d, b.x, 40)) press(p);
-  } else if (job.kind === 'coal' && p.carry === 'coal' && state.goingDown && state.goingDown.heat + state.goingDown.heatPer >= 0.97) {
-    // GOING DOWN!: another load now would burst the boiler - wait by it with the coal until the ice has cooled it
+  } else if (job.kind === 'cut' || job.kind === 'dumpcoal' || job.kind === 'dumpbombs') {
+    // GOING DOWN!: walk to the marked joint / the coal bunker / the bomb bay and hold Action
+    const g = state.goingDown;
+    if (!g || (job.kind === 'cut' && !g.joints.includes(o))) return;
+    if (steer(p, o.d, o.x, 12)) {
+      p.jx = 0;
+      p.fire = true;
+    }
+  } else if (job.kind === 'coal' && p.carry === 'coal' && state.goingDown && state.ship.press + config.GOING_DOWN.STOKE_PRESS >= config.BOILER.WARN_AT) {
+    // GOING DOWN!: another load now would push the boiler into the red - wait by it with the coal until the steam has come down (or somebody vents it)
     const b = L.one('boiler');
     steer(p, b.d, b.x - 50, 20);
   } else if (job.kind === 'coal') {
@@ -1447,7 +1451,7 @@ export function botFree(p, loose) {
 // bomb bay, lookout...), the hookshot and hijack stunts, or votes. Everything else is filtered out of its job list here.
 function roleJobs(state, bot, jobs) {
   const L = mainShip(state).layout;
-  if (bot.mate) return jobs.filter((j) => config.MATES.JOBS.includes(j.kind));
+  if (bot.mate) return jobs.filter((j) => config.MATES.JOBS.includes(j.kind) || (state.goingDown && config.GOING_DOWN.MATE_JOBS.includes(j.kind))); // (GOING DOWN!: the mates shovel cargo and vent steam too)
   if (bot.role) return enemyRoleJobs(state, bot, jobs, L);
   if (humanAutopilot(bot, state)) return jobs.filter((j) => !(j.kind === 'station' && isHelm(L, j.obj)));
   return jobs;
@@ -1530,7 +1534,7 @@ export function updateBot(p, state, dt) {
       const rodCall = !isHelm(L, p.lock) && state.stormJob && state.stormJob.charge && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9;
       // Nobody is at the wheel in flight and nobody is on the way: leave the station and take it.
       const helmCall = !isHelm(L, p.lock) && !humanAutopilot(p, state) && state.phase === 'flying' && !Object.values(state.players).some((q) => isHelm(L, q.lock) || (q.botJob && q.botJob.kind === 'station' && isHelm(L, q.botJob.obj))) && !(state.modules || []).some((m) => m.kind === 'helm' && m.broken) && Math.random() < B.HELM_CALL;
-      const fallCall = !!state.goingDown; // GOING DOWN!: everybody off their stations
+      const fallCall = !!state.goingDown && !isHelm(L, p.lock); // GOING DOWN!: everybody off their stations (the hand at the helm stays: he pumps)
       const soleGun = config.PVP.ENABLED && tables(L).GUN_STATIONS.includes(p.lock) && !bots.some((q) => q !== p && q.lock && tables(L).GUN_STATIONS.includes(q.lock)); // (Versus: the last gunner keeps his gun, a ship needs one that shoots)
       const HC = config.HEALTH; // crew health: a bot burning at its station, or on its last heart, leaves it (the helm stays: the ship needs steering)
       const hurtCall = HC.ENABLED && !p.enemy && !isHelm(L, p.lock) && !soleGun && ((p.inFire && (p.burnT || 0) > HC.BOT.FLEE) || (state.phase === 'flying' && L.medbay && hearts(p) <= HC.JOB_AT));

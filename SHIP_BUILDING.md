@@ -75,7 +75,7 @@ The enemy gunships already work this way (`gunshipBlueprint.js` generates a ship
 | Bomb bay (one) | belly | the existing compartment | weight |
 | Second boiler | main-deck bay | more steam | fire risk; needs coal nearby |
 | Coal bunker / ammo hold | lower-deck bay | shorter hauling walks | where to put it is the puzzle |
-| Ice locker, medbay, armour plating, ladder/pole/steam lift, escort hangar | fittings | walking time is the hidden stat | weight |
+| Medbay, armour plating, ladder/pole/steam lift, escort hangar | fittings | walking time is the hidden stat | weight |
 
 **Stat-only upgrades** (twin barrels, big shells and the rest) stay as cheap "fittings" in the shop.
 
@@ -444,8 +444,8 @@ Built in tiers. Each part plugs into existing systems.
 
 Every airship, ours, the AI gunships and the PvP rival, uses the same weight-and-forces rules. That makes silly, creative strategies possible:
 - **Gunships have balance too.** The enemy gunship gets a live centre of mass from her parts, her crew and anyone aboard her. If our boarders crowd her bow, she tips; enough weight at one end pitches her guns off target or drives her nose into the rocks. In PvP both ships already run the full sim, so this comes for free there.
-- **Throwable ballast.** Sandbags (and coal sacks, crates, ice blocks) become carryable items you can:
-  - THROW with the attack button (an arc, like a thrown ice block);
+- **Throwable ballast.** Sandbags (and coal sacks, crates) become carryable items you can:
+  - THROW with the attack button (an arc);
   - drop from the bomb bay;
   - fire from the crew cannon;
   - haul across on the hookshot.

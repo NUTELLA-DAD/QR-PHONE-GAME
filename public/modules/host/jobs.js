@@ -8,6 +8,7 @@ import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
 import { mainShip } from './ships.js';
 import { hearts } from './health.js';
+import { bunkerEmpty } from './goingDown.js';
 
 const J = config.JOBS;
 // Worked out per ship layout (rebuilt when a new ship build is applied to it).
@@ -18,8 +19,10 @@ const tables = layoutTables((L) => ({
 const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer' };
 export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', unclog: '#b6f06e', oxygen: '#bfe9ff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0', help: '#ff4d4d' };
 const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP', trim: 'TRIM', sail: 'SAIL', reef: 'REEF', shovel: 'LOAD', heal: 'MEDBAY' };
-TOOL.cool = 'ice'; // (GOING DOWN!: cooling the boiler wants a block of ice from the locker)
-JOB_COLORS.cool = '#9fdcff';
+JOB_COLORS.helm = '#4dc3ff'; // (GOING DOWN!: man the helm and pump the bags full)
+JOB_COLORS.vent = '#ffffff'; // (...vent the boiler)
+JOB_COLORS.dump = '#c9a85a'; // (...drop the bombs, dump the coal bunker)
+JOB_COLORS.cut = '#ff4d4d'; // (...cut a section away)
 JOB_COLORS.trim = '#e8c25a'; // (a lopsided ship: go to the light end, balance.js)
 JOB_COLORS.sail = '#e9dcc0'; // (S.5e: raise a sail in a fair wind...)
 JOB_COLORS.reef = '#ff8c1a'; // (...or reef it before a gust)
@@ -88,7 +91,7 @@ export function createJobFinder(state) {
       if (hold) for (const n of guns.slice(0, 2)) { const s = stationNamed(n); add('ammo', n, s.d, s.x, { fetch: hold.n }, `AMMO for ${n}`); } // (no ammo hold on the ship: nothing to fetch)
     }
     const fuelLow = state.ship.fuel < config.BOILER.FUEL_MAX * (J.COAL_LOW / 100);
-    if (carry === 'coal' || (fuelLow && carry !== 'ammo' && L.nearest('coal', p))) { // (no coal bunker: the fire just dies down, nothing to haul)
+    if (carry === 'coal' || (fuelLow && carry !== 'ammo' && L.nearest('coal', p) && !bunkerEmpty(state))) { // (no coal bunker, or one dumped overboard in GOING DOWN!: the fire just dies down, nothing to haul)
       // Coal goes to the boiler nearest to where it is picked up (or nearest to the carrier, if already carrying).
       const bunker = carry === 'coal' ? null : L.nearest('coal', p);
       const s = L.nearest('boiler', bunker || p);

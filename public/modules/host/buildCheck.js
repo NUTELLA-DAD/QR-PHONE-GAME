@@ -41,7 +41,6 @@ export const CHECKLIST = [
   ['hammer', 'a hammer rack', (L) => hasRack(L, 'hammer'), 'rec', 'No hammer rack: nobody can patch holes or mend broken parts, and a holed gasbag sinks her.'],
   ['extinguisher', 'an extinguisher', (L) => L.extinguishers.length > 0, 'rec', 'No extinguisher: fires can only burn out, and they eat the hull while they do.'],
   ['sword', 'a sword rack', (L) => hasRack(L, 'sword'), 'rec', 'No sword rack: raiders can only be shoved back with bare hands.'],
-  ['ice', 'an ice locker', (L) => hasRack(L, 'ice'), 'opt', 'No ice locker: GOING DOWN! has no ice to cool the boiler.', (L) => has(L, 'boiler')],
   ['boarding', 'two boarding points', (L) => L.boarderEntryPoints.filter((e) => !e.auto).length >= 2, 'rec', 'Fewer than two boarding points: raiders and new crew drop in over the ends of the top deck.'],
   ['nest', "a crow's nest (on the bag)", (L) => hasPlate(L, 'nest'), 'opt', "No crow's nest: no lookout post on top."],
   ['bombBay', 'a bomb bay', (L) => !!L.bombBay && has(L, 'bombBay'), 'opt', 'No bomb bay: no bombing runs (outposts must be shot instead).'],

@@ -29,7 +29,7 @@ import { fireTyped } from './weapons.js';
 import { stepFlame } from './flame.js';
 import { createPrime } from './prime.js';
 import { createLinks } from './links.js';
-import { createGoingDown } from './goingDown.js';
+import { createGoingDown, bunkerEmpty } from './goingDown.js';
 import { createComeAbout } from './comeAbout.js';
 import { createBalance } from './balance.js';
 import { createFlight } from './flight.js';
@@ -179,6 +179,8 @@ export function createShipSim(world, ship, W) {
     if (isHostile(player)) return hostileUse(player, here);
     const revive = Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && q.conn == null && here(q, 65));
     if (revive) return { type: 'revive', obj: revive, hold: true, time: T.REVIVE_TIME, label: `Revive ${revive.name}` };
+    const gdHold = goingDown.holdAction(player, here); // GOING DOWN!: hold Action to cut a section away, dump the coal bunker or drop the bombs
+    if (gdHold) return gdHold;
     // Crew health: a hurt crewmate beside you (awake, same side): hold Action to bandage him, a heart back. (A bot sent to bandage somebody does it before anything else; for people it is the last thing the button offers.)
     const HB = config.HEALTH;
     const sore = HB.ENABLED && HB.BANDAGE.ENABLED && Object.values(state.players).find((q) => q !== player && !q.enemy && heartsOf(q) < HB.MAX && !(q.ko > 0) && !q.fall && !q.fly && q.conn == null && !isHostile(q) && !foeOf(q, player) && here(q, 65));
@@ -227,12 +229,7 @@ export function createShipSim(world, ship, W) {
     // Otherwise standing at a rack or hook means take / swap / put back.
     const pickup = legacy ? PICKUPS.find((r) => here(r, T.REACH)) : null;
     // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)
-    if (pickup && pickup.kind === 'ice' && !(station && station.kind === 'boiler' && tool === 'ice')) return goingDown.lockerAction(player); // the ice locker
-    if (!legacy && !(station && (tool === 'ammo' || tool === 'coal' || tool === 'ice')) && tool !== 'ice' && PICKUPS.some((r) => r.kind === 'ice' && here(r, T.REACH))) {
-      const empty = goingDown.lockerAction(player); // (people: an empty ice locker still says so; taking ice is a GRAB action)
-      if (empty.type === 'need') return empty;
-    }
-    if (pickup && !(station && (tool === 'ammo' || tool === 'coal' || tool === 'ice'))) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : tool && tool !== 'ammo' && tool !== 'coal' ? `Swap to ${pickup.kind}` : `Take ${pickup.kind}` };
+    if (pickup && !(station && (tool === 'ammo' || tool === 'coal'))) return { type: 'rack', obj: pickup, label: tool === pickup.kind ? `Put back ${pickup.kind}` : tool && tool !== 'ammo' && tool !== 'coal' ? `Swap to ${pickup.kind}` : `Take ${pickup.kind}` };
     const vent = layout.vents.find((v) => here(v, T.REACH));
     if (vent) return { type: 'vent', obj: vent, label: state.ventOpen[layout.vents.indexOf(vent)] ? 'Close vent' : 'Open vent' };
     const valve = modules.list.find((m) => m.kind === 'pipe' && here(m, T.REACH));
@@ -242,12 +239,12 @@ export function createShipSim(world, ship, W) {
       if (gun && tool === (gun.type === 'flame' ? 'coal' : 'ammo') && gun.ammo < gun.max) return { type: 'load', obj: gun, station, label: (gun.type === 'flame' ? 'Fuel ' : 'Load ') + station.n }; // (a flamethrower's tank takes a sack of coal, not shells)
       if (station.kind === 'bombBay' && tool === 'ammo' && state.bombBay.bombs < config.BOMBS.MAX) return { type: 'loadBombs', station, label: 'Load bombs' };
       if (legacy && station.kind === 'ammo' && tool !== 'ammo') return { type: 'ammo', station, label: 'Grab ammo' };
-      if (legacy && station.kind === 'coal' && tool !== 'coal') return { type: 'coal', station, label: 'Grab coal' };
+      if (legacy && station.kind === 'coal' && tool !== 'coal') return bunkerEmpty(state) ? { type: 'need', label: 'Coal bunker is empty - restocking' } : { type: 'coal', station, label: 'Grab coal' };
+      if (!legacy && station.kind === 'coal' && tool !== 'coal' && bunkerEmpty(state)) return { type: 'need', label: 'Coal bunker is empty - restocking' };
       if (station.kind === 'boiler' && tool === 'coal') {
-        const full = state.ship.fuel > config.BOILER.FUEL_MAX - config.BOILER.COAL_FUEL && !goingDown.active(); // (while she falls, every load counts)
-        return full ? { type: 'need', label: 'Firebox is full' } : { type: 'stoke', station, label: goingDown.active() ? 'LOAD COAL - LIFT!' : 'Load coal' };
+        const full = state.ship.fuel > config.BOILER.FUEL_MAX - config.BOILER.COAL_FUEL && !goingDown.active(); // (while she falls, every load counts: it kicks the steam up)
+        return full ? { type: 'need', label: 'Firebox is full' } : { type: 'stoke', station, label: goingDown.active() ? 'STOKE - FULL STEAM!' : 'Load coal' };
       }
-      if (station.kind === 'boiler' && tool === 'ice') return goingDown.coolAction(station);
       if (station.kind === 'boiler' && tool !== 'coal' && !player.mate) {
         const surge = links.surgeAction(station); // steam is up: hold Action to push it into the engines (or the coil)
         if (surge) return surge;
@@ -296,19 +293,16 @@ export function createShipSim(world, ship, W) {
     const tool = player.carry;
     const out = [];
     const add = (act, x, key) => out.push({ act: { ...act, grab: true, swap: act.swap ?? !!tool }, x, key });
-    if (!(station && (tool === 'ammo' || tool === 'coal' || tool === 'ice'))) {
-      // (carrying ammo, coal or ice next to a station means use it there, not swap it for a tool)
+    if (!(station && (tool === 'ammo' || tool === 'coal'))) {
+      // (carrying ammo or coal next to a station means use it there, not swap it for a tool)
       for (const r of PICKUPS) {
         if (r.d !== player.d || Math.abs(r.x - player.x) >= T.REACH) continue;
-        if (r.kind === 'ice') {
-          const a = goingDown.lockerAction(player); // the ice locker
-          if (a.type !== 'need') add(a, r.x, 'locker');
-        } else add({ type: 'rack', obj: r, label: tool === r.kind ? `Put back ${r.kind}` : tool ? `Swap to ${r.kind}` : `Take ${r.kind}`, swap: !!tool }, r.x, 'rack|' + r.kind + '|' + r.x);
+        add({ type: 'rack', obj: r, label: tool === r.kind ? `Put back ${r.kind}` : tool ? `Swap to ${r.kind}` : `Take ${r.kind}`, swap: !!tool }, r.x, 'rack|' + r.kind + '|' + r.x);
       }
     }
     if (station) {
       if (station.kind === 'ammo' && tool !== 'ammo') add({ type: 'ammo', station, label: 'Grab ammo' }, station.x, 'ammo|' + station.n);
-      if (station.kind === 'coal' && tool !== 'coal') add({ type: 'coal', station, label: 'Grab coal' }, station.x, 'coal|' + station.n);
+      if (station.kind === 'coal' && tool !== 'coal' && !bunkerEmpty(state)) add({ type: 'coal', station, label: 'Grab coal' }, station.x, 'coal|' + station.n);
       if (LOCKABLE(station.n) && !taken(station.n) && !player.mate) add({ type: 'station', station, label: takeLabel(station), swap: false }, station.x, 'station|' + station.n); // (a ship's mate never takes a station)
       else {
         const botThere = !player.mate && Object.values(state.players).find((q) => q.bot && q.lock === station.n); // (people can always bump a bot off a station)
@@ -753,7 +747,7 @@ export function createShipSim(world, ship, W) {
   const balance = createBalance(state); // the seesaw: live centre of mass against the bag's lift (balance.js)
   const flight = createFlight({ state, ship }); // the forces on her drive her pose: engines, sails, drag, buoyancy, weight (flight.js)
   const fireSys = createFire({ state, shipPuff }); // fire that cares where things are: flammability, spreading, the coal blaze (fire.js, fireModel.js)
-  const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt }); // GOING DOWN! last stand + the ice locker (goingDown.js)
+  const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt, getCargo: () => cargo, breakOff: (spec, opts) => breakOff(spec, opts) }); // GOING DOWN! last stand: her lift against her weight (goingDown.js)
   state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
   const comeAbout = createComeAbout(ship, W, { goingDown, flight }); // turning her round on the helm's command (comeAbout.js)
 
@@ -936,13 +930,7 @@ export function createShipSim(world, ship, W) {
     } else if (type === 'coal') {
       player.carry = 'coal';
       grabbed(player, false);
-    } else if (type === 'icetake') {
-      if (goingDown.takeIce(player)) grabbed(player, false);
-    } else if (type === 'icegive') {
-      goingDown.giveIce(player);
-      grabbed(player, true);
-    } else if (type === 'cool') goingDown.throwIce(player);
-    else if (type === 'stoke') {
+    } else if (type === 'stoke') {
       state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + config.BOILER.COAL_FUEL);
       stat(player, 'coal');
       (state.boilerLoads ??= {})[act.station.n] = (state.boilerLoads[act.station.n] || 0) + 1; // (loads per boiler: bots spread coal between boilers, tools/buildsim.mjs checks both are used)
@@ -1083,7 +1071,7 @@ export function createShipSim(world, ship, W) {
             const want = player.jx > 0.25 ? player.jx : player.jx < -0.25 ? player.jx * SH.REVERSE : player.thr != null ? clamp(player.thr, REV, 1) : flight.order(); // (the lever stays where it was)
             driveSpeed(want);
             state.ship.trim = Math.abs(player.jy) > 0.15 ? -player.jy : 0;
-            state.gasValve.input = clamp(player.gas || 0, -1, 1);
+            state.gasValve.input = goingDown.active() ? 1 : clamp(player.gas || 0, -1, 1); // (GOING DOWN!: the hand at the helm pumps flat out)
             gasManned = true;
             helmFlown = true;
             if (player.ca || (!player.bot && player.jx < -SH.TURN.STICK)) comeAbout.ask(player); // COME ABOUT: the phone's button held, or the stick held hard astern (people only)
@@ -1269,7 +1257,7 @@ export function createShipSim(world, ship, W) {
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
-              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', bandage: 'revives', sabotage: 'sabotage', cutline: 'boarding', capture: 'captures', shovel: 'shovels' }[act.type]);
+              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', bandage: 'revives', sabotage: 'sabotage', cutline: 'boarding', capture: 'captures', shovel: 'shovels', cut: 'cuts', dumpcoal: 'dumped', dumpbombs: 'dumped' }[act.type]);
               if (act.type === 'fire') shipPop(object.x, player.y - 120, 'fireOut', '#9fd3e6', 0.8);
               if (act.type === 'hole' || act.type === 'gas') shipPop(object.x, player.y - 120, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
@@ -1285,6 +1273,7 @@ export function createShipSim(world, ship, W) {
               else if (act.type === 'capture') takeHelm(player);
               else if (act.type === 'cutline') gunship.cutLine(player);
               else if (act.type === 'shovel') cargo.shovel(object, player); // (B.6: a load goes over the rail)
+              else if (act.type === 'cut' || act.type === 'dumpcoal' || act.type === 'dumpbombs') goingDown.perform(act.type, object, player); // (GOING DOWN!: weight overboard)
               else if (act.type === 'bandage') health.bandage(object); // (crew health: a crewmate's bandage: a heart back)
               else { object.ko = 0; revived(object); } // (a revive: he comes round with a heart)
               shipPuff(object.x, player.y - 50, '#8fe388', 10);
@@ -1347,6 +1336,7 @@ export function createShipSim(world, ship, W) {
       const actModule = player.act && player.act.obj && modules.byName[player.act.obj.name] === player.act.obj ? player.act.obj.name : null;
       let status = stationName ? modules.status(state, stationName) : actModule ? modules.status(state, actModule) : '';
       if (!status && cannonStatus) status = cannonStatus;
+      if (kind === 'helm' && player.lock && !status && goingDown.active()) status = `PUMPING FLAT OUT! Gas ${Math.round(state.ship.gas)}% - ${goingDown.status()}`; // (GOING DOWN!: the hand at the helm is the pump)
       if (kind === 'helm' && player.lock && !status) status = course.helmHint();
       if (isEscortStation(stationName, layout) && !status) status = escort.status(stationName);
       if (kind === 'light' && player.lock && !status) status = searchlights.status(stationName);
@@ -1515,7 +1505,7 @@ export function createShipSim(world, ship, W) {
     const flying = state.phase === 'flying' && !state.ship.down;
     state.autopilot = false;
     // Easy/Normal: with nobody at the helm the ship flies itself, gently.
-    const assist = autopilotOn(state) && flying && !ship.ai; // (the gunship has no autopilot: with no helmsman she drifts)
+    const assist = autopilotOn(state) && flying && !ship.ai && !goingDown.active(); // (the gunship has no autopilot: with no helmsman she drifts; falling, nobody pumps for her)
     const plan = assist && rig.helm && (!getHelm() || !gasManned) ? pilotPlan(state, 4, 0.3) : null;
     if (!getHelm()) {
       if (plan && worksKind('helm')) {
@@ -1537,7 +1527,7 @@ export function createShipSim(world, ship, W) {
       const pumping = Math.max(0, valve.input) * (state.ship.press > G.PUMP_MIN_PRESS && modules.boilerUp() ? Math.min(1, state.ship.press / 60) : 0);
       state.steamParts.pump = pumping * G.PUMP_STEAM;
       // The pump and the vent act on every gasbag at once; seepage and holes are per bag (gasBags.js: with one bag this is the old single gas value).
-      stepBags(state, pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) * state.links.helmMul + Math.min(0, valve.input) * G.VENT_RATE * state.links.helmMul, dt);
+      stepBags(state, pumping * G.PUMP_RATE * goingDown.pumpMul() * (1 + config.BOILER.OD_PUMP * state.overdrive) * state.links.helmMul + Math.min(0, valve.input) * G.VENT_RATE * state.links.helmMul, dt);
       state.ship.press = Math.max(0, state.ship.press - pumping * G.PUMP_STEAM * dt);
       watchBags(state); // a bag going flat: "FORE BAG DOWN!"
       breakCd = Math.max(0, breakCd - dt);
@@ -1551,7 +1541,7 @@ export function createShipSim(world, ship, W) {
       // moment (time to patch and pump). Once in a while only; it is a lifeline, not a fix.
       const BL = G.BALLAST;
       state.ballastCd = Math.max(0, (state.ballastCd || 0) - dt);
-      if (BL && state.ship.gas < BL.BELOW && state.ballastCd <= 0) {
+      if (BL && state.ship.gas < BL.BELOW && state.ballastCd <= 0 && !goingDown.active()) { // (falling, the crew's own dumping is the ballast)
         state.ship.gas = BL.TO;
         state.ship.vy = Math.max(state.ship.vy || 0, 0);
         state.ballastCd = BL.COOLDOWN;
@@ -1569,7 +1559,7 @@ export function createShipSim(world, ship, W) {
     state.buoyancy = effGas > G.NEUTRAL + 5 ? 1 : effGas < G.NEUTRAL - 5 ? -1 : 0;
     state.sinking = state.buoyancy < 0;
     if (flying) {
-      flight.climb(dt, lift + trim + state.balance.push + state.forces.vyAcc); // (the bags' buoyancy, the trim engine, the balance push, vyAcc: lift engines pointing up / dive engines down, forces.js; less the air's drag, over her weight)
+      if (!goingDown.active()) flight.climb(dt, lift + trim + state.balance.push + state.forces.vyAcc); // (falling, goingDown.js sinks her by how far her lift is short of her weight) (the bags' buoyancy, the trim engine, the balance push, vyAcc: lift engines pointing up / dive engines down, forces.js; less the air's drag, over her weight)
       // Nearly out of gas on the ground: the hull grinds.
       if (state.course && state.course.scraping && state.ship.gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
       if (state.course && state.course.scraping && state.balance.scrape) damageHull(state.balance.scrape * dt); // a nose-heavy bow digs in
@@ -1585,7 +1575,7 @@ export function createShipSim(world, ship, W) {
       ship.pose.y -= (home - state.ship.alt) * Math.min(1, dt * 0.4);
     }
     state.ship.shake = Math.max(0, state.ship.shake - dt);
-    goingDown.update(dt); // the last stand: sinking, the meters, the ice locker (goingDown.js)
+    goingDown.update(dt); // the last stand: sinking, lift against weight, the leaks (goingDown.js)
     // Nose up while climbing, nose down while diving, a touch up when she speeds up and down when she brakes; the trim of an unbalanced ship (balance.js restPitch), the going-down tilt and what the forces
     // on her twist her by (forces.js theta) add (flight.js).
     flight.pitch(dt, goingDown.pitch());

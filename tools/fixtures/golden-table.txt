@@ -1,15 +1,15 @@
 GOLDEN behaviour baseline captured 2026-10-09 (node tools/buildsim.mjs --snapshot-golden --force to re-capture)
-voyagesim normal: 4/10 victories, median 42.4 min
-voyagesim easy: 8/10 victories, median 39 min
+voyagesim normal: 6/10 victories, median 34.4 min
+voyagesim easy: 8/10 victories, median 36.5 min
 botsim 10 min, 8 bots: run          missions  min/mission   hull  kills wrecks hauls blowouts contacts tows
-  network-1                            2       3.3      93.1       104         0        40         0       175          
-  network-2                            2       3.5      93.9       135         0        36         0       140          
-  network-3                            2       3.3      94.5        96         0        55         0        74          
-  open-1                               2       3.1      94.5        89         0        45         0        44          
-  open-2                               1       3.8        91        80         0       101         1        29          
-  open-3                               3       3.1      97.3        82         0        38         0        14          
-  route-1                              2       4.5      82.4        64         0       118         0       489          
-  route-2                              1       3.5      76.5        78         0        94         2       548          
-  route-3                              2       3.6      90.3        99         0        51         1       326          
-cave runs (network, 4 min):  contacts / tows network-11 23/, network-12 13/, network-13 37/
-capability px/s (speed climb dive): step1 123/0/0, step2 123/52/418, step3 123/502/461, step4 560/501/461, step5 628/500/462
+  network-1                            2       4.2      69.9        93         0        99         0       153         0
+  network-2                            2       3.4      95.8       124         0        26         0       133         0
+  network-3                            3       3.2      97.5       102         0        34         0        91         0
+  open-1                               1       2.8        58        75         0        45         1        86         0
+  open-2                               3       3.1      96.9        78         0        30         1        29         0
+  open-3                               2       3.3      84.1        89         0       101         0         6         0
+  route-1                              1       3.4      87.4        73         0        54         1       159         0
+  route-2                              1       3.4      76.8        81         0        61         0       384         0
+  route-3                              2       3.5      95.6       123         0        46         1       289         0
+cave runs (network, 4 min):  contacts / tows network-11 1/0, network-12 14/0, network-13 63/0
+capability px/s (speed climb dive): step1 123/0/0, step2 123/51/418, step3 123/502/460, step4 560/501/462, step5 628/501/462

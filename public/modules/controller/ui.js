@@ -13,12 +13,12 @@ export function createControllerUI({ network }) {
     ['Swap to sword', '🗡️'], ['Swap to hammer', '🔨'], ['Swap to extinguisher', '🧯'], ['Take sword', '🗡️'], ['Take hammer', '🔨'], ['Take extinguisher', '🧯'], ['Put back', '↩️'],
     ['TAKE THE HELM', '☸️'], ['Sabotage', '🧨'], ['Defenders', '🛡️'], ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['SURGE', '🔥'], ['LOAD for', '📦'], ['Close valve', '🚱'], ['Open valve', '🚰'], ['Open vent', '💨'], ['Close vent', '💨'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
-    ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'], ['Jump!', '🪂'], ['Take ice', '🧊'], ['Put the ice', '↩️'], ['Cool the boiler', '🧊'], ['THROW ICE', '🧊'], ['Ice locker', '🧊'], ['Swap to', '🔄'],
+    ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'], ['Jump!', '🪂'], ['STOKE', '🔥'], ['LAST RESORT', '✂️'], ['DROP THE BOMBS', '💣'], ['DUMP THE COAL', '⚫'], ['Coal bunker', '⚫'], ['Swap to', '🔄'],
     ['Bandage', '🩹'], ['Swivel engine', '⚙️'], ['Raise sail', '⛵'], ['Lower sail', '⛵'], ['The sail', '⛵'], ['Swivel engine', '⚙️'], ['FOCUS', '🔦'], ['Take', '🎯'],
     ['Climb into', '💥'], ['Man the cannon', '💥'], ['PARACHUTE', '🪂'], ['Shovel', '⛏️'], ['Dump', '⚖️'], ['Drop the', '📦'], ['Steal', '⚫'], ['LET GO TO FIRE', '💥'], ['HOLD TO CHARGE', '💥'], ['Brace', '💥'], ['RELOADING', '⏳'],
     ['FIRE', '💥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
   ];
-  const CARRY = { sword: ['🗡️', 'Sword'], hammer: ['🔨', 'Hammer'], extinguisher: ['🧯', 'Extinguisher'], ammo: ['📦', 'Ammo'], coal: ['⚫', 'Coal'], hookshot: ['🪝', 'Hookshot'], ice: ['🧊', 'Ice'], sandbag: ['⚖️', 'Sandbag'], crate: ['📦', 'Crate'], towline: ['🪢', 'Towline'] };
+  const CARRY = { sword: ['🗡️', 'Sword'], hammer: ['🔨', 'Hammer'], extinguisher: ['🧯', 'Extinguisher'], ammo: ['📦', 'Ammo'], coal: ['⚫', 'Coal'], hookshot: ['🪝', 'Hookshot'], sandbag: ['⚖️', 'Sandbag'], crate: ['📦', 'Crate'], towline: ['🪢', 'Towline'] };
 
   let species = 'bulldog';
   let joined = null;

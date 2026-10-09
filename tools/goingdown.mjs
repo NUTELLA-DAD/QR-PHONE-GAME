@@ -2,10 +2,13 @@
 //   node tools/goingdown.mjs [seed]
 // (a) the first time the hull hits 0 in a mission she goes DOWN (a fall, not a wreck) - and only once per mission;
 //     the next mission gets its own last stand.
-// (b) the bots can save her (several seeds, 8 bots, and 3 bots): lift full, leaks patched, heat never maxed.
+// (b) the bots can save her (several seeds, 16 / 8 / 3 / 2 bots): her LIFT beats her WEIGHT, held, with no boiler blowout.
 // (c) if nobody does anything she falls out of the sky: a real wreck (limp or run end).
 // (d) a voyage wreck uses up a spare gasbag, loses 30% of the salvage and resumes at the last stop on the route.
 // (e) no spares left: the wreck ends the voyage (summary, then back to the mast).
+// (f) the numbers: weight is balance.js's, dumping cargo takes it off at once, the pump + the leaks move the gas, steam adds lift, a lopsided ship spills lift, lift beating weight
+//     for HOLD seconds saves her (and a dip resets the count). (g) hold Action at the bomb bay / the coal bunker; the coal stays gone for a while. (h) CUT AWAY: a marked joint, a
+//     break-off with the cause 'jettison' that stays in the ledger; bots cut when nothing else can save her. (i) over-pressure: a hot boiler blows and the bots vent it. (j) no ice locker.
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
@@ -81,6 +84,9 @@ const killHull = (sim) => { sim.state.ship.hull = 0; step(sim); };
   check(!!st.goingDown && !st.wreck && st.ship.down === 0, 'hull 0 the first time: GOING DOWN (a fall, no wreck)');
   const g = st.goingDown;
   check(g && g.holes.length === g.required && g.holes.every((h) => st.gasHoles.includes(h) && h.gd), `${g && g.required} leaks are marked to patch`);
+  step(sim, 3);
+  check(g.m.lift < g.m.weight && g.need > 20, `her lift (${g.m.lift.toFixed(0)}) is short of her weight (${g.m.weight.toFixed(0)}) by ${g.need.toFixed(0)}`);
+  check((st.loads || []).length >= 2 && g.m.cargo > 10, `cargo shook loose on the decks: ${(st.loads || []).length} loads, ${g.m.cargo.toFixed(0)} points`);
   const alt0 = st.ship.alt;
   step(sim, 60 * 3);
   check(st.ship.alt < alt0 - 20 && st.ship.hull > 0 && st.ship.hull <= config.GOING_DOWN.HOLD_HULL + 0.5, `she sinks (${Math.round(alt0 - st.ship.alt)}px in 3s) and the hull is held at ${st.ship.hull.toFixed(1)}`);
@@ -123,7 +129,7 @@ const killHull = (sim) => { sim.state.ship.hull = 0; step(sim); };
       const g = st.goingDown;
       const got = until(sim, () => !st.goingDown, 60);
       if (got && !st.wreck && st.ship.hull > 10) { ok++; times.push(+(g.t - t0).toFixed(0)); }
-      else console.log(`   (fail: ${crew} bots try ${k}: lift ${g.loadsDone}/${g.loads} heat ${g.heat.toFixed(2)} leaks left ${g.holes.filter((h) => st.gasHoles.includes(h)).length} of ${g.required}, t ${g.t.toFixed(1)}/${g.time.toFixed(1)})`);
+      else console.log(`   (fail: ${crew} bots try ${k}: lift ${g.m.lift.toFixed(0)} weight ${g.m.weight.toFixed(0)} need ${g.need.toFixed(0)} gas ${st.ship.gas.toFixed(0)} press ${st.ship.press.toFixed(0)} loads left ${(st.loads || []).length} leaks left ${g.holes.filter((h) => st.gasHoles.includes(h)).length} of ${g.required}, t ${g.t.toFixed(1)}/${g.time.toFixed(1)})`);
     }
     console.log(`   ${crew} bots: saved ${ok}/${tries}  (seconds used ${times.join(',')})`);
     check(ok >= Math.ceil(tries * 0.66), `${crew} bots save her in most tries (${ok}/${tries})`);
@@ -141,8 +147,12 @@ const killHull = (sim) => { sim.state.ship.hull = 0; step(sim); };
   step(sim, 60 * 10);
   killHull(sim);
   check(!!st.goingDown && !st.wreck, '2 players: GOING DOWN starts');
-  const need = st.goingDown.loads;
-  check(need <= 3 && st.goingDown.required === 1, `scaled for 2 players: ${need} coal loads, ${st.goingDown.required} leak, ${st.goingDown.time.toFixed(0)}s`);
+  step(sim, 3);
+  const nLoads = (st.loads || []).length;
+  check(nLoads <= 3 && st.goingDown.required === 1, `scaled for 2 players: ${nLoads} loose loads, ${st.goingDown.required} leak, ${st.goingDown.time.toFixed(0)}s`);
+  step(sim, 60 * 3);
+  const labels = Object.values(st.players).map((p) => p.job && p.job.label).filter(Boolean);
+  check(labels.length >= 1 && labels.every((t) => /PATCH|HELM|DUMP|STOKE|VENT|DROP|CUT/.test(t)), `the idle phones get the emergency jobs: "${labels[0]}"`);
   const gone = until(sim, () => !st.goingDown, 60);
   check(gone && !!st.wreck && !!st.runEnd, 'timeout with nothing done: wrecked and the voyage ends (no spares)');
   check(st.ship.hull === 0, 'hull is 0 after the wreck');
@@ -168,7 +178,6 @@ const killHull = (sim) => { sim.state.ship.hull = 0; step(sim); };
   killHull(sim);
   check(!!st.goingDown, 'GOING DOWN first');
   st.goingDown.t = st.goingDown.time; // (nobody manages: time runs out)
-  st.goingDown.lift = 0;
   step(sim);
   check(!!st.wreck && !!st.limp && !st.runEnd, 'then the wreck: limping home, voyage not over');
   check(st.run.spares === spares0 - 1 && st.limp.spares === spares0 - 1, `a spare gasbag is used (${spares0} -> ${st.run.spares})`);
@@ -213,6 +222,152 @@ const killHull = (sim) => { sim.state.ship.hull = 0; step(sim); };
   check(!!st.wreck && !st.limp && !!st.runEnd && !st.runEnd.victory, 'no spares: the wreck ends the voyage (summary shown)');
   const lobby = until(sim, () => st.phase === 'lobby', 40);
   check(lobby && !st.runEnd && st.run.spares === st.run.sparesMax, 'back at the mast with a fresh voyage and fresh spares');
+}
+
+// A person standing at a spot of the ship, holding Action (or not).
+const stand = (p, d, x, hold = false) => { Object.assign(p, { d, x, fall: false, fly: false, air: false, conn: null, climb: false, lock: null, jx: 0, jy: 0, ko: 0, fire: hold }); p.y = SHIP_LAYOUT.platforms[d].y; };
+// Two people who do nothing on their own; the test plays them by hand. Returns { sim, st, ship (the ship's sim: cargo, goingDown ...), g, a, b }.
+function start2() {
+  config.MATES.ENABLED = false;
+  const sim = mk(0, 2);
+  const st = sim.state;
+  step(sim, 60 * 10);
+  killHull(sim);
+  step(sim, 3);
+  return { sim, st, ship: sim.ships[0].sim, g: st.goingDown, a: st.players.human0, b: st.players.human1 };
+}
+const MAIN = SHIP_LAYOUT.deckIndex('main');
+
+// ---------------- (f) lift against weight: the numbers ----------------
+{
+  console.log('--- (f) lift against weight ---');
+  const matesWas = config.MATES.ENABLED;
+  const { sim, st, ship, g, a } = start2();
+  const bal = st.balance;
+  check(Math.abs(g.m.weight - (bal.mass + bal.live)) < 0.6, `weight is balance.js's: build ${bal.mass.toFixed(0)} + live ${bal.live.toFixed(1)} = ${g.m.weight.toFixed(1)}`);
+  const ld = st.loads[0], w0 = g.m.weight;
+  ship.cargo.shovel(ld, null);
+  step(sim, 2);
+  check(Math.abs(w0 - g.m.weight - ld.w) < 0.6, `a ${ld.kind} shovelled overboard takes its ${ld.w} off her weight at once (${w0.toFixed(1)} -> ${g.m.weight.toFixed(1)})`);
+  // the leak drains the gas, the hand at the helm pumps it back
+  const gas0 = st.ship.gas;
+  step(sim, 60 * 2);
+  check(st.ship.gas < gas0 - 4, `the glowing leak drains the bags (${gas0.toFixed(0)} -> ${st.ship.gas.toFixed(0)} in 2 s)`);
+  st.gasHoles.splice(0, st.gasHoles.length); // (patched)
+  const helm = SHIP_LAYOUT.one('helm');
+  stand(a, helm.d, helm.x);
+  a.lock = helm.n;
+  const gas1 = st.ship.gas;
+  step(sim, 60 * 3);
+  check(st.ship.gas > gas1 + 6, `a hand at the helm pumps the bags up (${gas1.toFixed(0)} -> ${st.ship.gas.toFixed(0)} in 3 s)`);
+  a.lock = null;
+  // steam: hot gas lifts
+  const lift0 = g.m.lift;
+  st.ship.press = 96;
+  step(sim, 1);
+  check(g.m.steam > 12 && g.m.lift > lift0 + 5, `a hot boiler lifts: +${g.m.steam.toFixed(1)} at pressure ${st.ship.press.toFixed(0)}`);
+  st.ship.press = 65;
+  // a lopsided ship spills lift
+  for (let k = 0; k < 6; k++) ship.cargo.place('crate', MAIN, 90);
+  step(sim, 60 * 3);
+  check(g.m.trim > 4, `all the weight at the tail: she spills ${g.m.trim.toFixed(1)} lift (dx ${st.balance.dx.toFixed(0)} px) - dump evenly`);
+  // lift beating weight for HOLD seconds saves her; a dip resets the count
+  st.loads.length = 0;
+  st.gasHoles.length = 0;
+  st.ship.gas = 100;
+  step(sim, 60 * 1);
+  check(g.need <= 0 && g.hold > 0.5 && g.hold < config.GOING_DOWN.HOLD, `lift ${g.m.lift.toFixed(0)} beats weight ${g.m.weight.toFixed(0)}: holding (${g.hold.toFixed(1)} s of ${config.GOING_DOWN.HOLD})`);
+  st.ship.gas = 20;
+  step(sim, 60 * 1);
+  check(g.hold < 0.3 && !!st.goingDown, 'a dip in the lift runs the count down again');
+  st.ship.gas = 100;
+  const saved = until(sim, () => !st.goingDown, 6);
+  check(saved && !st.wreck && st.gdBanner && st.gdBanner.text === 'SHE HOLDS!', 'lift held over weight for long enough: SHE HOLDS!');
+  config.MATES.ENABLED = matesWas;
+}
+
+// ---------------- (g) dump the bombs and the coal bunker ----------------
+{
+  console.log('--- (g) drop the bombs, dump the coal ---');
+  const matesWas = config.MATES.ENABLED;
+  const { sim, st, g, a } = start2();
+  const bay = SHIP_LAYOUT.one('bombBay'), bunker = SHIP_LAYOUT.one('coal');
+  const bombsW = g.m.bombs;
+  stand(a, bay.d, bay.x, true);
+  step(sim, 10);
+  check((a.act && a.act.type === 'dumpbombs') || st.bombBay.bombs === 0, `Action at the bomb bay offers "${a.act ? a.act.label : '(done)'}"`);
+  until(sim, () => st.bombBay.bombs === 0, 4);
+  step(sim, 2);
+  check(st.bombBay.bombs === 0 && bombsW - g.m.bombs > 2, `the bomb load goes through the doors: ${bombsW.toFixed(1)} off her weight`);
+  const w0 = g.m.weight;
+  stand(a, bunker.d, bunker.x, true);
+  step(sim, 60 * 3);
+  check(g.coalGone && w0 - g.m.weight > config.GOING_DOWN.DUMP.COAL_WEIGHT - 1.5, `holding Action at the coal bunker dumps it: -${(w0 - g.m.weight).toFixed(1)} weight`);
+  stand(a, bunker.d, bunker.x, false);
+  step(sim, 10);
+  check(a.act && /empty/i.test(a.act.label), `...then the bunker says "${a.act ? a.act.label : 'nothing'}" (no coal to stoke with)`);
+  st.loads.length = 0;
+  st.gasHoles.length = 0;
+  st.ship.gas = 100;
+  const saved = until(sim, () => !st.goingDown, 8);
+  check(saved && st.gdCoalOut > config.GOING_DOWN.DUMP.COAL_REFILL - 12, `she holds, and the bunker stays empty for a while after (${st.gdCoalOut.toFixed(0)} s)`);
+  config.MATES.ENABLED = matesWas;
+}
+
+// ---------------- (h) cut a section away ----------------
+{
+  console.log('--- (h) cut away ---');
+  const matesWas = config.MATES.ENABLED;
+  const { sim, st, g, a } = start2();
+  check(g.joints.length >= 1 && g.joints.every((j) => j.mass >= config.GOING_DOWN.CUT.MIN_MASS), `${g.joints.length} marked joint(s): ${g.joints.map((j) => `${j.label} (-${Math.round(j.mass)})`).join('; ')}`);
+  const j = g.joints[0], mass0 = SHIP_LAYOUT.balance.mass;
+  stand(a, j.d, j.x, true);
+  step(sim, 60 * 1);
+  check(a.act && a.act.type === 'cut', `Action at the joint: "${a.act ? a.act.label : 'nothing'}"`);
+  until(sim, () => g.cuts > 0, 5);
+  step(sim, 5);
+  const lost = (st.run.lost || []).find((e) => e.cause === 'jettison');
+  check(g.cuts === 1 && SHIP_LAYOUT.balance.mass < mass0 - j.mass * 0.8 && !!lost && !st.wreck && !!st.goingDown, `the section is cut away: weight ${mass0.toFixed(0)} -> ${SHIP_LAYOUT.balance.mass.toFixed(0)}, it is in the ledger (${lost ? lost.label : 'missing'}), she is still falling, not wrecked`);
+  config.MATES.ENABLED = matesWas;
+  // bots: with her lift ruined (torn bags that no pump can fill) nothing but the last resorts can save her
+  const sim2 = mk(6);
+  const s2 = sim2.state;
+  step(sim2, 60 * 15);
+  killHull(sim2);
+  step(sim2, 2);
+  s2.liftDeficit = 90; // (a ship whose bags are torn away: far too heavy for the lift she has left)
+  s2.goingDown.time = 50; // (a long fall: the test is about what the crew does when the easy ways are not enough, not about how fast a bot walks to the bomb bay)
+  let cuts = 0;
+  until(sim2, () => { cuts = Math.max(cuts, s2.goingDown ? s2.goingDown.cuts : 0); return !s2.goingDown; }, 60);
+  check(cuts >= 1, `bots cut a section away as the last resort when nothing else could save her (${cuts} cut)`);
+}
+
+// ---------------- (i) over-pressure ----------------
+{
+  console.log('--- (i) the boiler over-pressures ---');
+  const sim = mk(6);
+  const st = sim.state;
+  step(sim, 60 * 15);
+  killHull(sim);
+  step(sim, 2);
+  let opened = false;
+  for (let i = 0; i < 60 * 10; i++) { st.ship.press = Math.max(st.ship.press, 97); step(sim); if (st.ventOpen.some(Boolean)) opened = true; }
+  check(opened, 'the bots open a vent when the pressure is far too high');
+  config.MATES.ENABLED = false;
+  const sim2 = mk(0, 2);
+  const s2 = sim2.state;
+  step(sim2, 60 * 10);
+  killHull(sim2);
+  step(sim2, 2);
+  let blew = false;
+  for (let i = 0; i < 60 * 30 && s2.goingDown; i++) { s2.ship.press = Math.max(s2.ship.press, 99.9); step(sim2); if (s2.boilerBlew) blew = true; }
+  check(blew, 'nobody venting a boiler held at the top: it blows (damage and a burst pipe, as ever)');
+}
+
+// ---------------- (j) the ice is gone ----------------
+{
+  console.log('--- (j) no ice locker ---');
+  check(SHIP_LAYOUT.racks.every((r) => r.kind !== 'ice') && !config.GOING_DOWN.LOCKER, 'the classic ship has no ice locker, and the config has no ice');
 }
 
 console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, 5).join('\n') : 'no errors');

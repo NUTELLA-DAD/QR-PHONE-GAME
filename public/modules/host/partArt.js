@@ -160,13 +160,6 @@ const DRAW = {
     g.restore();
     line([[24, 70], [24, 82]], 4, WOOD_DARK); line([[52, 70], [52, 82]], 4, WOOD_DARK);
   },
-  rack_ice(g, { filled, line }) {
-    filled('#cfe9f5', () => g.roundRect(14, 26, 72, 60, 8));
-    g.fillStyle = 'rgba(255,255,255,0.65)'; g.fillRect(20, 32, 22, 12);
-    g.strokeStyle = '#4a86a8'; g.lineWidth = 3.4; g.lineCap = 'round';
-    for (let k = 0; k < 3; k++) { const a = (k * Math.PI) / 3; g.beginPath(); g.moveTo(50 + Math.cos(a) * 20, 58 + Math.sin(a) * 20); g.lineTo(50 - Math.cos(a) * 20, 58 - Math.sin(a) * 20); g.stroke(); } // a snowflake
-    line([[38, 26], [38, 12]], 4, '#9fdcff'); line([[62, 26], [62, 16]], 4, '#9fdcff'); // icicles
-  },
   extinguisher(g, { filled, line }) {
     filled(RED, () => g.roundRect(34, 30, 32, 62, 12));
     filled(IRON, () => g.rect(42, 18, 16, 14));
