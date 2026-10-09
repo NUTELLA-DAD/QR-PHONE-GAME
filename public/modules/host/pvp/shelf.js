@@ -60,16 +60,16 @@ const brawlerParts = () => retype(retype(retype(BUILDS.classic, 'Fore Sponson', 
 const ramParts = () => withPart(retype(retype(retype(BUILDS.classic, 'Nose Gun', 'harpoon'), 'Fore Sponson', 'scatter'), 'Aft Sponson', 'scatter'), 'ramProw', (s) => s.p === 'main');
 
 // FIREBRAND (flame.js): the classic ship with a flamethrower on the bow of her top deck and another in a port at the bow of the lower deck (she gives up the ventral and aft dorsal guns for the weight), riveted
-// plate on the fore end of the main deck (armour does not burn) and a ram prow; a third in a port of the main deck when she can carry it. A short-range ship: she wants to close in, ram, burn and board.
+// plate on the fore end of the main deck (armour does not burn) and a harpoon on the fore sponson (it reels the rival into the flame's reach; the big ram prow keeps the noses 460 px apart, too far for a flame). A short-range ship: she wants to close in, burn and board.
 const firebrandParts = () => {
   const lighter = (p) => p.filter((q) => !(q.part === 'gun' && ['Ventral Gun', 'Aft Dorsal Gun'].includes(q.n)));
   const port = (p, deck) => { const s = slotsFor('gun_flame', p).filter((q) => q.p === deck).sort((a, b) => b.x - a.x)[0]; return s ? s.apply(p) : p; }; // (the bow-most port of a deck)
   const bowPort = (p) => port(p, 'lower');
   const plated = (p) => { const s = slotsFor('armour', p).filter((q) => q.p === 'main').sort((a, b) => b.x - a.x)[0]; return s ? s.apply(p) : p; };
-  const rammed = (p) => withPart(p, 'ramProw', (s) => s.p === 'main');
+  const hooked = (p) => retype(p, 'Fore Sponson', 'harpoon');
   const base = bowPort(lighter(retype(BUILDS.classic, 'Nose Gun', 'flame')));
-  // (the best she can carry: the third burner, then all but that, then no ram, then no plate - the heavier the nose, the less the bags lift)
-  const tries = [rammed(plated(port(base, 'main'))), rammed(plated(base)), plated(base), rammed(base), base];
+  // (the best she can carry: all of it, then no harpoon, then no plate - the heavier the nose, the less the bags lift)
+  const tries = [hooked(plated(base)), plated(base), hooked(base), base];
   return tries.find((p) => { try { return validate(p).ok; } catch (e) { return false; } }) || base;
 };
 
@@ -122,7 +122,7 @@ export function buildShelf(seed = config.PVP.SHELF.SEED) {
     add(entry('sniper', 'Sniper', 'Two long guns, a mortar and a mine layer', sniperParts()));
     add(entry('brawler', 'Brawler', 'Grapeshot sponsons and a flak gun', brawlerParts()));
     add(entry('ram', 'Ram', 'A ram prow, a harpoon and grapeshot', ramParts()));
-    add(entry('firebrand', 'Firebrand', 'Flamethrowers, armour plate and a ram prow', firebrandParts()));
+    add(entry('firebrand', 'Firebrand', 'Flamethrowers, armour plate and a harpoon', firebrandParts()));
   }
   if (config.PVP.SHELF.CROSS) add(entry('barge', "Boarder's Barge", 'A crew cannon, sandbags and a towline', bargeParts())); // (B.6, dev: host.html?versus=1&cross=1 - last on the shelf, so the others keep their places)
   cache.set(key, shelf);

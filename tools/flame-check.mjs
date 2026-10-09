@@ -79,7 +79,7 @@ const FLAME_SHIP = withFlame(BUILDS.classic, ['Nose Gun', 'Tail Gun', 'Fore Spon
   const shelf = buildShelf();
   const fb = shelf.find((e) => e.id === 'firebrand');
   const fbL = fb && buildLayout(fb.parts);
-  report(!!fb && fb.mass <= tonnageCap() && fbL.armour.length > 0 && Object.values(fbL.gunMounts).filter((g) => g.type === 'flame').length >= 2, `the Versus shelf has the Firebrand: ${fb ? fb.mass + ' tons (cap ' + tonnageCap() + ')' : 'MISSING'}, ${fb ? Object.values(fbL.gunMounts).filter((g) => g.type === 'flame').length : 0} flamethrowers, armour plate${fb && fbL.ram ? ' and a ram prow' : ' (no ram: she was too heavy)'}`);
+  report(!!fb && fb.mass <= tonnageCap() && fbL.armour.length > 0 && Object.values(fbL.gunMounts).filter((g) => g.type === 'flame').length >= 2, `the Versus shelf has the Firebrand: ${fb ? fb.mass + ' tons (cap ' + tonnageCap() + ')' : 'MISSING'}, ${fb ? Object.values(fbL.gunMounts).filter((g) => g.type === 'flame').length : 0} flamethrowers, armour plate${fb && Object.values(fbL.gunMounts).some((g) => g.type === 'harpoon') ? ' and a harpoon' : ' (no harpoon: she was too heavy)'}`);
   const stub = new Proxy({}, { get: (t, k) => (k === 'createLinearGradient' || k === 'createRadialGradient' ? () => ({ addColorStop() {} }) : typeof k === 'string' && /^(save|restore|beginPath|closePath|moveTo|lineTo|arc|fill|stroke|translate|rotate|scale|fillRect|strokeRect|rect|clip|quadraticCurveTo|bezierCurveTo|ellipse|setLineDash|drawImage|fillText|setTransform|transform|roundRect)$/.test(k) ? () => {} : t[k]), set: (t, k, v) => { t[k] = v; return true; } });
   let drew = true;
   try {
