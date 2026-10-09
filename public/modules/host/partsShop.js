@@ -11,11 +11,13 @@
 //   summaryOf(validateResult)                       -> the four gauges as plain numbers (the TV bars)
 //   needsOf(base, ctx) / fitOf(entry, needs)        -> what the ship lacks (weakest gauge, few guns, no bomb bay before raids) and how well a part answers it: { score, hint }
 //   choiceScore(choice, now, baseWarns)             -> how good a place is by the validator's numbers (the bots vote with it)
+//   gasTopUpCost(bags, base) / gasOffer(parts)      (gas types) the dock's gas top-up price by the bags' gases (helium = base), and its "convert a bag" card for a heavy / hydrogen ship
 //   moduleNames(layout) / newModules(before, after) -> the stations, engines, pipes and sails a build has / has gained (the limp rule shakes the newest part's loose)
 import { config } from '../../config.js';
 import { buildLayout, rowOf, COL, DECK_ROWS, bagList, bagCover } from './shipBuild.js';
 import { slotsFor, drawDeck, setBag, placePart, routePipes, ensureFrame } from './buildSlots.js';
-import { validate } from './buildCheck.js';
+import { validate, liftGauge } from './buildCheck.js';
+import { gasKey, gasInfo } from './gases.js';
 
 const PS = () => config.PARTS_SHOP;
 const clone = (parts) => parts.map((p) => ({ ...p }));
@@ -338,5 +340,29 @@ export function offerPart(parts, { owned = {}, crew = 4, rng = Math.random, avoi
     const choices = choicesFor(e, parts, base);
     if (choices.length) return { entry: e, choices, base, fit: fitOf(e, needs) };
   }
+  return null;
+}
+
+// ---- gas types at the dock (config.GASES, gases.js) -------------------------------------------------------------------------------------------------------
+// What the dock charges to top the bags up: `base` (SHOP.REPAIR_GAS, helium) times each bag's gas price (helium 1, hydrogen cheaper, hot air free), weighted by the bag's lift. All helium: exactly `base`.
+export function gasTopUpCost(bags, base) {
+  const list = (bags || []).filter((b) => b && b.lift > 0);
+  if (!list.length) return base;
+  const w = list.reduce((n, b) => n + b.lift, 0), mix = list.reduce((n, b) => n + b.lift * gasInfo(b).price, 0) / w;
+  return Math.round((base * mix) / 5) * 5;
+}
+// The dock's "convert a bag" card for this build, or null: a ship with a hydrogen bag can swap the biggest one for safe helium; a heavy ship (hover above GASES.OFFER_HOVER) can swap its biggest helium or hot-air
+// bag for hydrogen (30% more lift, but it burns). Returns { id: 'gas-<to>', to, bag (its number tail to nose), name, desc, cost, icon }.
+export function gasOffer(parts) {
+  const bags = parts.filter((p) => p.part === 'gasbag').sort((a, b) => a.cx - b.cx);
+  if (!bags.length) return null;
+  const G = config.GASES;
+  const biggest = (test) => { let best = -1; bags.forEach((b, i) => { if (test(b) && (best < 0 || b.rx > bags[best].rx)) best = i; }); return best; };
+  const noun = (i) => (bags.length > 1 ? `bag ${i + 1}` : 'the gasbag');
+  const h = biggest((b) => gasKey(b) === 'hydrogen');
+  if (h >= 0) return { id: 'gas-helium', to: 'helium', bag: h, name: 'Refill with helium', icon: '🎈', desc: `Swap ${noun(h)} from hydrogen to helium: it cannot burn.`, cost: G.CONVERT.helium };
+  const heavy = liftGauge(parts).hover > G.OFFER_HOVER;
+  const l = heavy ? biggest((b) => gasKey(b) !== 'hydrogen') : -1;
+  if (l >= 0) return { id: 'gas-hydrogen', to: 'hydrogen', bag: l, name: 'Convert to hydrogen', icon: '💥', desc: `Fill ${noun(l)} with hydrogen: +30% lift and cheap top-ups, but a fire that reaches it will blow it up.`, cost: G.CONVERT.hydrogen };
   return null;
 }

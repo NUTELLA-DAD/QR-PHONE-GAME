@@ -24,6 +24,7 @@ import { drawBiplane, drawTailNumber } from './planeArt.js';
 import { paintPath, paintRect, hasTexture } from './textureArt.js';
 import { drawIceLocker, drawIceFlights, drawBoilerHeat, drawHoleGlow } from './goingDownArt.js';
 import { windFactor } from './sails.js';
+import { gasKey, hotLift } from './gases.js';
 
 // Which painted texture goes under which flat palette colour (anything not listed stays flat).
 const TEX_OF = {
@@ -143,7 +144,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
   // The gasbags, tail to nose (S.5d: any number side by side; a ship from before that has just L.gasbag).
   const bags = () => (L.gasbags && L.gasbags.length ? L.gasbags : Array.isArray(L.gasbag) ? L.gasbag : [L.gasbag]).filter((b) => b && Number.isFinite(b.rx) && b.rx > 0 && b.ry > 0);
   // How full bag bi is (0..1): each bag has its own gas (state.bags, gasBags.js). A bag that has gone flat also sags: `sag` 0..1 is how crumpled it is.
-  const gasFill = (bi = 0) => Math.max(0, Math.min(1, ((state.bags && state.bags[bi] ? state.bags[bi].gas : state.ship.gas) ?? 50) / 100));
+  const gasFill = (bi = 0) => Math.max(0, Math.min(1, (((state.bags && state.bags[bi] ? state.bags[bi].gas : state.ship.gas) ?? 50) * (state.bags && state.bags[bi] && state.bags[bi].type === 'hot' && state.hotAir ? hotLift(state.hotAir.heat) : 1)) / 100)); // (a hot-air bag shrinks as the burner cools)
   const sagOf = (bi) => (state.bags && state.bags.length > 1 && state.bags[bi] && state.bags[bi].down ? Math.max(0, Math.min(1, 1 - state.bags[bi].gas / (config.GAS.BAG_UP - 2))) : 0);
 
   // The ship-space box a bag's picture is painted in (room on the left for the tail fins, and on the right for the nose fins of a row of bags), and the twin envelope's.
@@ -197,6 +198,9 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
         }
         ctx.restore();
       }
+      const bb = state.bags && state.bags[bi]; // (the gas's live look: a scorched / burning hydrogen bag, the hot-air burner)
+      if (bb && bb.type === 'hydrogen' && (bb.scorch > 0 || bb.burn > 0)) liveFire(G, bb, anchorY, 0.78 + 0.44 * g, sy);
+      else if (bb && bb.type === 'hot') liveBurner(G, bb);
     });
     // Rigging down to the gondola (from each bag, along its length).
     const yBot = ((roles().cat) || P[0]).y + 10;
@@ -204,6 +208,59 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
       const x = G.cx + Math.round(f * G.rx);
       line([[x - 40, yBot - 80], [x, yBot]], 3);
     }
+  };
+
+  // A hydrogen bag with a fire under it glows red-hot on its belly (scorch 0..1); one that is alight is wrapped in flame. Drawn over the swollen envelope.
+  const liveFire = (G, bb, anchorY, sx, sy) => {
+    const T = (typeof performance !== 'undefined' ? performance.now() : 0) / 1000, burning = bb.burn > 0;
+    ctx.save();
+    ctx.translate(G.cx, anchorY);
+    ctx.scale(sx, sy);
+    ctx.translate(-G.cx, -anchorY);
+    ctx.beginPath();
+    ctx.ellipse(G.cx, G.cy, G.rx, G.ry, 0, 0, 7);
+    ctx.clip();
+    ctx.fillStyle = burning ? `rgba(255,${110 + Math.round(60 * Math.sin(T * 25))},20,0.55)` : `rgba(255,70,20,${(0.12 + 0.35 * Math.min(1, bb.scorch)).toFixed(2)})`;
+    ctx.fillRect(G.cx - G.rx, burning ? G.cy - G.ry : G.cy + G.ry * 0.1, G.rx * 2, burning ? G.ry * 2 : G.ry);
+    ctx.restore();
+    const n = burning ? 9 : Math.round(2 + 4 * bb.scorch);
+    for (let k = 0; k < n; k++) { // flame tongues licking along the underside (and the top when it is alight)
+      const f = (k + 0.5) / n, x = G.cx - G.rx * 0.85 + f * G.rx * 1.7, ex = (x - G.cx) / G.rx;
+      const y = G.cy + G.ry * Math.sqrt(Math.max(0, 1 - ex * ex)) - 6;
+      const h = (burning ? 120 : 50) * (0.7 + 0.5 * Math.sin(T * 14 + k * 2.3));
+      for (const [col, sc] of [['#ff7b00', 1], ['#ffd23f', 0.55]]) {
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.moveTo(x - 26 * sc, y);
+        ctx.quadraticCurveTo(x - 10 * sc, y - h * sc * 0.6, x + 4 * sc * Math.sin(T * 9 + k), y - h * sc);
+        ctx.quadraticCurveTo(x + 14 * sc, y - h * sc * 0.5, x + 26 * sc, y);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  };
+  // The hot-air burner: a brass basket under the envelope with a flame that is as big as the heat (state.hotAir.heat).
+  const liveBurner = (G, bb) => {
+    const heat = state.hotAir ? state.hotAir.heat : 1, T = (typeof performance !== 'undefined' ? performance.now() : 0) / 1000;
+    const x = G.cx, y = G.cy + G.ry - 8;
+    if (heat > 0.04) {
+      const h = (20 + 70 * heat) * (0.85 + 0.2 * Math.sin(T * 17));
+      ctx.fillStyle = heat > 0.5 ? '#ff9c1a' : '#d9531a';
+      ctx.beginPath();
+      ctx.moveTo(x - 22, y + 4);
+      ctx.quadraticCurveTo(x - 12, y - h * 0.6, x, y - h);
+      ctx.quadraticCurveTo(x + 12, y - h * 0.5, x + 22, y + 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffe27a';
+      ctx.beginPath();
+      ctx.moveTo(x - 10, y + 2);
+      ctx.quadraticCurveTo(x - 4, y - h * 0.45, x, y - h * 0.62);
+      ctx.quadraticCurveTo(x + 6, y - h * 0.3, x + 10, y + 2);
+      ctx.closePath();
+      ctx.fill();
+    }
+    filled('#9a7b3a', () => { ctx.moveTo(x - 40, y); ctx.lineTo(x + 40, y); ctx.lineTo(x + 28, y + 30); ctx.lineTo(x - 28, y + 30); ctx.closePath(); }); // the basket
   };
 
   // The second (twin) envelope at its resting size.
@@ -221,6 +278,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
       ctx.beginPath();
       ctx.ellipse(tx, ty, rx, ry, 0, 0, 7);
       ctx.stroke();
+      dressGas(G, true);
     } else {
       filled('#d6c7a2', () => ctx.ellipse(tx, ty, rx, ry, 0, 0, 7));
       ctx.lineWidth = 3;
@@ -331,6 +389,49 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     }
     // Our crew's crest on the envelope.
     sprites.box(ctx, 'crests/crew', G.cx - 110, G.cy - 110, 220, 220);
+    dressGas(G, false);
+  };
+
+  // The bag's gas, painted on it (gases.js; helium is the plain envelope): hydrogen is tinted red with a stencilled "H2 - NO FLAMES", hot air is warm-tinted with stitched patches. The burner's flame, the scorch
+  // glow and the flames of a burning bag are live (drawGasbag).
+  const dressGas = (G, twin) => {
+    const gas = gasKey(G);
+    if (gas === 'helium') return;
+    const rx = twin ? twinGeom(G).rx : G.rx, ry = twin ? twinGeom(G).ry : G.ry, cx = twin ? twinGeom(G).tx : G.cx, cy = twin ? twinGeom(G).ty : G.cy;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx - 2, ry - 2, 0, 0, 7);
+    ctx.clip();
+    ctx.fillStyle = config.GASES[gas].tint;
+    ctx.fillRect(cx - rx, cy - ry, rx * 2, ry * 2);
+    if (gas === 'hot') {
+      ctx.lineWidth = 3;
+      ctx.setLineDash([9, 7]);
+      ctx.strokeStyle = 'rgba(60,40,26,0.55)';
+      for (const [px, py] of [[-0.62, -0.18], [-0.2, 0.3], [0.28, -0.34], [0.64, 0.14]]) { // patched canvas
+        ctx.fillStyle = 'rgba(150,105,60,0.4)';
+        ctx.fillRect(cx + px * rx - 60, cy + py * ry - 38, 120, 76);
+        ctx.strokeRect(cx + px * rx - 60, cy + py * ry - 38, 120, 76);
+      }
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+    if (gas === 'hydrogen' && !twin) {
+      ctx.save();
+      ctx.translate(cx + 120, cy + ry * 0.42);
+      ctx.rotate(-0.02);
+      const fs = Math.max(40, Math.min(120, rx / 6.5));
+      ctx.font = `${Math.round(fs)}px ${config.FONTS.DISPLAY}`;
+      ctx.textAlign = 'center';
+      const word = 'H2 - NO FLAMES', tw = ctx.measureText(word).width;
+      ctx.globalAlpha = 0.88;
+      ctx.strokeStyle = config.LOGBOOK.STAMP;
+      ctx.fillStyle = config.LOGBOOK.STAMP;
+      ctx.lineWidth = 7;
+      ctx.strokeRect(-tw / 2 - 28, -fs * 0.9, tw + 56, fs * 1.25);
+      ctx.fillText(word, 0, 0);
+      ctx.restore();
+    }
   };
 
   // ================= CROW'S NEST (static) =================

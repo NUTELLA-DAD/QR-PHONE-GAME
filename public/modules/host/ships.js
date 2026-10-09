@@ -58,7 +58,7 @@ export const SHIP_KEYS = [
   // the body and what hangs on it (made by createSimulation / shipInit)
   'ship', 'GUNS', 'bombBay', 'gasValve', 'gasValveOpen', 'ventOpen', 'shield', 'gasHoles', 'breaches', 'fires', 'boarders', 'bombs', 'wreck',
   // made by the subsystem factories
-  'modules', 'bags', 'bagsVersion', 'bagAlert', 'balance', 'forces', 'engines', 'engineStats', 'thrust',
+  'modules', 'bags', 'bagsVersion', 'bagAlert', 'hotAir', 'gasStats', 'balance', 'forces', 'engines', 'engineStats', 'thrust',
   'sails', 'sailPush', 'sailWarn', 'sailWarned', 'sailStats', 'links', 'linkStats', 'surgeEngine', 'surgeCoil', 'surgeBotAt',
   'coil', 'searchlights', 'litTargets', 'dimTargets', 'darkNow', 'fireStats', 'blaze', 'blazeCd',
   'crewScale', // (B.3: the multipliers for the size of THIS ship's crew: her raiders, the damage she takes; the world's enemies use ship 0's)

@@ -10,6 +10,7 @@
 //   erase(parts, row, x0, x1)      rub out a stretch of deck: it gets shorter, splits in two, or goes; whatever stood on the rubbed-out stretch
 //                                  (stations, guns, racks, ladders, vents, pipes ...) goes with it and is listed in `removed`
 //   setBag(parts, { grow, twin })  the biggest gasbag a column (BAG_STEP) longer or shorter, or its twin envelope on / off (a ship with no bag gets one)
+//   setGas(parts, { bag, gas, all })  a bag's gas: 'helium' (default), 'hydrogen' (+30% lift, burns) or 'hot' (-40% lift, needs boiler heat); bag = its number (null: the biggest); all: every bag
 //   drawBag(parts, x0, x1)         a span dragged along the gasbag row: a NEW bag on empty row space (any number side by side, S.5d), or the bag the
 //                                  stroke crosses resized; resizeBag(parts, i, side, x) moves one end of bag i (bags are numbered tail to nose)
 //   placePart(parts, type, x, y)   drop a part picture from the tray: the nearest legal slot of that palette type (buildSlots.js) takes it, or a hint says why not
@@ -20,6 +21,7 @@
 // The result may well FAIL validate() (erase the last boiler ...): that is the editor's job to show, not to prevent.
 import { buildLayout, BUILDS, COL, DECK_ROWS, KEEL_ROWS, rowOf, isNestRow, bagCover, normAngle, thrustVec, dirName, swivelName } from './shipBuild.js';
 import { config } from '../../config.js';
+import { GAS_KEYS, gasKey } from './gases.js';
 import { slotsFor, pickSlot, whyNot, gunMountFor } from './buildSlots.js'; // (a cycle: buildSlots.js re-exports these operations; each side only calls the other at run time)
 
 export const GRID_X0 = 20; // the column grid: lines at GRID_X0 + k x COL (the classic main and lower decks' aft ends sit on it)
@@ -569,6 +571,24 @@ export function setBag(parts, { grow = 0, twin } = {}) {
   if (twin !== undefined) bag.twin = twin === 'toggle' ? !bag.twin : !!twin;
   refit(next);
   return { ok: true, parts: next, added: [], removed: [], kind: 'bag', cols: 0, hint: `${bags.length > 1 ? 'The biggest gasbag is ' : 'Gasbag '}${bagText(bag)}${bag.twin ? ', with a twin envelope' : ''}.` };
+}
+
+// A bag's GAS (catalogue v2, gases.js): gas = 'helium' (the default: no field) | 'hydrogen' | 'hot'. bag = its number tail to nose (bags are numbered from 0), or null for the biggest; all: true sets every bag.
+// Hydrogen lifts 30% more and burns; hot air lifts 40% less and needs the boiler's heat (the validator says what each does).
+export function setGas(parts, { bag = null, gas = 'helium', all = false } = {}) {
+  if (!GAS_KEYS.includes(gas)) return no(parts, 'There is no such gas: ' + gas + ' (helium, hydrogen or hot).');
+  const bags = bagParts(parts);
+  if (!bags.length) return no(parts, 'This ship has no gasbag: draw one with the Gasbag tool first.');
+  const targets = all ? bags : [bag == null ? bagOf(parts) : bags[bag]];
+  if (!targets[0]) return no(parts, 'There is no such gasbag.');
+  if (targets.every((b) => gasKey(b) === gas)) return no(parts, `${all || bags.length === 1 ? 'The gasbag is' : 'That bag is'} already ${config.GASES[gas].name.toLowerCase()}.`);
+  const next = clone(parts);
+  const mine = bagParts(next);
+  const picks = all ? mine : [bag == null ? bagOf(next) : mine[bag]];
+  for (const b of picks) { if (gas === 'helium') delete b.gasType; else b.gasType = gas; }
+  refit(next);
+  const G = config.GASES[gas];
+  return { ok: true, parts: next, added: [], removed: [], kind: 'bag', cols: 0, hint: `${all ? 'Every bag' : bags.length > 1 ? 'Bag ' + (mine.indexOf(picks[0]) + 1) : 'The gasbag'} now holds ${G.name.toLowerCase()}: ${G.blurb}.` };
 }
 
 // ---- dropping a part from the tray (S.5d) ----------------------------------------------------------------------------------

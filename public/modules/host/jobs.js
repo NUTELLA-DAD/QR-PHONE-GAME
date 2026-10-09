@@ -59,7 +59,7 @@ export function createJobFinder(state) {
     // HELP! calls (spotter.js): the crew sent to a caller get an arrow to them, in the caller's colour.
     for (const c of state.helpCalls || []) if (c.caller !== p && c.who.includes(p.id) && c.caller.d != null) { const s = spot(c.caller); add('help', c.caller, s.d, s.x, {}, `HELP ${c.caller.name}! - ${roomName(s.d, s.x)}`); }
     for (const ld of state.loads || []) add('shovel', ld, ld.d, ld.x, {}, `SHOVEL THE ${((config.CROSS.CARGO.ITEMS[ld.kind] || {}).label || 'LOAD').toUpperCase()} OVERBOARD - ${roomName(ld.d, ld.x)}`); // (B.6: cargo thrown onto her deck tips her)
-    for (const f of state.fires) add('fire', f, f.d, f.x);
+    for (const f of state.fires) add('fire', f, f.d, f.x, {}, f.h2 ? `FIRE UNDER THE HYDROGEN BAG - ${roomName(f.d, f.x)}` : undefined); // (GAS TYPES: a fire that reaches a hydrogen bag says so)
     for (const h of state.breaches) add('hole', h, h.d, h.x);
     for (const h of state.gasHoles || []) add('gas', h, h.d, h.x);
     for (const c of state.icing || []) if (c.lvl >= config.ENVIRONMENTS.frost.ICE.JOB_AT) add('ice', c, c.d, c.x, {}, c.gun ? `ICE on ${c.gun}` : c.area === 'gasbag' ? 'ICE on the gasbag' : 'ICE on the top deck');

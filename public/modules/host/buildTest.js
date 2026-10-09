@@ -13,7 +13,8 @@ import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility for
 import { mainShip } from './ships.js';
 import { BUILDS, DECK_ROWS, rowOf, buildLayout, ENGINE_DIRS, dirName, normAngle } from './shipBuild.js';
 import { validate, makePlanner, judgeBotRuns } from './buildCheck.js';
-import { PALETTE, slotsFor, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, pickSlot, whyNot, thingAt, removeAt, setEngineDir, setEngineSwivel, emptyBuild, minimalBuild, snapX, rowAtY, summarize, addArmour } from './buildSlots.js';
+import { GAS_KEYS, gasKey } from './gases.js';
+import { PALETTE, slotsFor, drawDeck, drawBag, resizeBag, erase, setBag, setGas, placeConnector, placePart, pickSlot, whyNot, thingAt, removeAt, setEngineDir, setEngineSwivel, emptyBuild, minimalBuild, snapX, rowAtY, summarize, addArmour } from './buildSlots.js';
 import { blueprintView, drawBlueprint, engineArrow } from './blueprintArt.js';
 import { createPartPictures } from './partArt.js';
 import { createSprites } from './sprites.js';
@@ -87,6 +88,7 @@ let bpLayout = null; // the layout of the build being edited (it can differ from
 let bv = null; // the blueprint's paper-to-ship transform, set each frame
 let drag = null; // a stroke in progress: { tool, row, a (where it started), b (where it is now) }; a ladder stroke: { tool, row (start deck row), x, y (where it is now), rowB }
 let bpHover = null; // { row, cursor } while the pointer is over the paper without a stroke ({ target } for the delete tool)
+let selBag = null; // GAS: the bag (number, tail to nose) the Gas buttons act on; null = the biggest. Click inside a bag with the Gasbag tool to pick it
 const ALL_ROWS = Object.keys(DECK_ROWS);
 
 // ---- the live ship ------------------------------------------------------------------------------------------------
@@ -356,7 +358,7 @@ const label = (p) => {
     case 'vent': case 'extinguisher': case 'boarderEntry': return `${p.part} (${p.p} ${p.x})`;
     case 'escortDock': return `escort hook: ${p.n}`;
     case 'ballast': return `sandbag${p.hang ? ' (hanging)' : ''} (${p.p} ${p.x})`;
-    case 'gasbag': return `gasbag ${p.rx * 2} px${p.twin ? ' + twin' : ''}`;
+    case 'gasbag': return `gasbag ${p.rx * 2} px${p.twin ? ' + twin' : ''}${p.gasType ? ' (' + p.gasType + ')' : ''}`;
     case 'medbay': return `medbay (${p.p} ${p.x})`;
     default: return p.part;
   }
@@ -460,7 +462,8 @@ function drawGauges() {
     g.restore();
   };
   const green = '#9cc48a', amber = '#e2bf6a', red = '#d98a80';
-  card(0, 'LIFT', `gas ${b.lift.hover}`, [`hovers at gas ${b.lift.hover}`, `weight ${b.lift.mass}, lift ${b.lift.lift}`, `allowed ${BC.HOVER_MIN}-${BC.HOVER_MAX}, warn over ${BC.HOVER_WARN}`], 100,
+  const gasNote = () => { const gs = [...new Set(parts.filter((p) => p.part === 'gasbag').map(gasKey))]; return gs.length === 1 && gs[0] === 'helium' ? '' : ' (' + gs.join(' + ') + ')'; }; // (GAS: the card says which gas the lift is of)
+  card(0, 'LIFT', `gas ${b.lift.hover}`, [`hovers at gas ${b.lift.hover}`, `weight ${b.lift.mass}, lift ${b.lift.lift}${gasNote()}`, `allowed ${BC.HOVER_MIN}-${BC.HOVER_MAX}, warn over ${BC.HOVER_WARN}`], 100,
     [[0, BC.HOVER_MIN, red], [BC.HOVER_MIN, BC.HOVER_WARN, green], [BC.HOVER_WARN, BC.HOVER_MAX, amber], [BC.HOVER_MAX, 100, red]], [[b.lift.hover, String(b.lift.hover)]], b.lift.level);
   card(1, 'STEAM', `${b.steam.cruise} / ${b.steam.idle}`, [`cruise / idle pressure`, `${b.steam.boilers} boiler${b.steam.boilers === 1 ? '' : 's'}, heat ${b.steam.heat}`, `cruise ${BC.PRESS_CRUISE_MIN}+, idle under ${BC.PRESS_IDLE_MAX}`], 100,
     [[0, BC.PRESS_CRUISE_MIN, red], [BC.PRESS_CRUISE_MIN, BC.PRESS_IDLE_MAX, green], [BC.PRESS_IDLE_MAX, 100, amber]], [[b.steam.cruise, 'cruise'], [b.steam.idle, 'idle']], b.steam.level);
@@ -730,6 +733,11 @@ bp.addEventListener('pointerup', (e) => {
   }
   if (d.tool === 'bagend') { applyEdit(resizeBag(parts, d.i, d.side, d.b)); return; }
   const [x0, x1] = strokeOf(d);
+  if (x1 - x0 < 20 && d.tool === 'bag' && d.start && bpLayout) { // (a click inside a bag picks it for the Gas buttons)
+    const bi = bpLayout.gasbags.findIndex((b) => Math.hypot((d.start.x - b.cx) / b.rx, (d.start.y - b.cy) / b.ry) < 1);
+    if (bi >= 0) { selBag = bi; note(`Bag ${bi + 1} picked: choose its gas with the Gas buttons above.`, false); }
+    return;
+  }
   if (x1 - x0 < 20) { // (a click with the eraser deletes the one thing under it)
     if (d.tool === 'erase' && d.start) { const t = thingAt(parts, d.start.x, d.start.y, slop()); if (t) applyEdit(removeAt(parts, d.start.x, d.start.y, slop())); }
     return;
@@ -743,12 +751,13 @@ function drawBp() {
   if (!editing) return;
   fitCanvas(bp);
   if (!bpLayout || !bp.width) return;
+  gasLabel();
   const base = blueprintView(bpLayout, bp.width, bp.height, kPix());
   bv = view.apply(base);
   if (fitFirst && bpLayout.platforms.length) { fitFirst = false; view.fit(bpLayout); bv = view.apply(base); } // (the page opens framed on the ship, not on the whole sheet)
   const ghost = drag ? ghostOf(drag) : null;
   const status = result && !result.ok ? { ok: false, text: 'CANNOT FLY yet - needs: ' + (result.needs.length ? result.needs.slice(0, 4).join(', ') + (result.needs.length > 4 ? ' ...' : '') : result.fails[0]) } : null;
-  drawBlueprint(bctx, bv, bpLayout, { rowHover: drag ? drag.row : bpHover && bpHover.row, cursor: !drag && bpHover && bpHover.cursor, ghost, slots: tray.moved ? tray.slots : tool === 'place' && picked ? slots : [], hover: tray.moved ? tray.target : tool === 'place' ? hover : null, status, balance: result && result.budgets.balance, target: tool === 'delete' && bpHover ? bpHover.target : null, bagHandles: tool === 'bag', engine: selEngine, aim, drop: tray.moved ? { slots: tray.slots, target: tray.target, ptr: tray.ptr, img: tray.img, why: tray.why } : null });
+  drawBlueprint(bctx, bv, bpLayout, { rowHover: drag ? drag.row : bpHover && bpHover.row, cursor: !drag && bpHover && bpHover.cursor, ghost, slots: tray.moved ? tray.slots : tool === 'place' && picked ? slots : [], hover: tray.moved ? tray.target : tool === 'place' ? hover : null, status, selBag: selBag != null && selBag < bpLayout.gasbags.length ? selBag : null, balance: result && result.budgets.balance, target: tool === 'delete' && bpHover ? bpHover.target : null, bagHandles: tool === 'bag', engine: selEngine, aim, drop: tray.moved ? { slots: tray.slots, target: tray.target, ptr: tray.ptr, img: tray.img, why: tray.why } : null });
   if (!drag && bpHover && bpHover.why && tool !== 'place') $('hint').textContent = bpHover.why;
 }
 
@@ -793,6 +802,15 @@ $('engSwivel').onchange = () => { if (selEngine) applyEdit(setEngineSwivel(parts
 $('bagShort').onclick = () => applyEdit(setBag(parts, { grow: -1 }));
 $('bagLong').onclick = () => applyEdit(setBag(parts, { grow: 1 }));
 $('bagTwin').onclick = () => applyEdit(setBag(parts, { twin: 'toggle' }));
+// GAS (gases.js): the Gas buttons set the gas of the picked bag (the biggest when none is picked), or of every bag with "every bag" ticked. The label says which bag and what it holds.
+for (const key of GAS_KEYS) $('gas_' + key).onclick = () => applyEdit(setGas(parts, { bag: selBag != null && selBag < bpLayout.gasbags.length ? selBag : null, gas: key, all: $('gasAll').checked }));
+function gasLabel() {
+  const bags = bpLayout ? bpLayout.gasbags : [], el = $('gasSel');
+  if (!el) return;
+  const bi = selBag != null && selBag < bags.length ? selBag : bags.reduce((best, b, i) => (best < 0 || b.rx > bags[best].rx ? i : best), -1);
+  el.textContent = $('gasAll').checked ? `all ${bags.length} bag${bags.length === 1 ? '' : 's'}` : bi < 0 ? 'no bag yet' : `${bags.length > 1 ? 'bag ' + (bi + 1) : 'the bag'} (${config.GASES[gasKey(bags[bi])].name.toLowerCase()})`;
+  for (const key of GAS_KEYS) $('gas_' + key).classList.toggle('on', bi >= 0 && gasKey(bags[bi]) === key);
+}
 $('reset').onclick = () => { fitFirst = true; note('', false); edit(BUILDS.classic.map((p) => ({ ...p }))); };
 $('clear').onclick = () => { note('Cleared: an empty sheet. Draw your first deck with the pencil, then the gasbag; the live pane lists what she still needs. Undo brings the old ship back.', false); edit(emptyBuild()); };
 $('minimal').onclick = () => { fitFirst = true; note('A small ship built from nothing with the same tools (decks, bag, parts). Undo goes back.', false); edit(minimalBuild()); };
@@ -857,7 +875,7 @@ if (restored) note(restored, false);
 // ---- go ------------------------------------------------------------------------------------------------------------------
 refresh(); // (a ?build= that cannot fly: nothing flies until it can, the live pane says what is missing)
 window.buildTest = { view, bui, ui, get bv() { return bv; }, get parts() { return parts; }, get result() { return result; }, get sim() { return sim; }, get live() { return live; }, edit, pick, slotsFor, info: () => info, runBotTest, startLive, flag, validate: () => result,
-  tool: () => tool, setTool, setKind, kind: () => kind, addArmour, applyEdit, setEngineDir, setEngineSwivel, engDir: () => engDir, selEngine: () => selEngine, aim: () => aim, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, removeAt, thingAt, emptyBuild, minimalBuild, tray: () => tray, bpScreen: (x, y) => { const r = bp.getBoundingClientRect(); return bv ? { x: r.left + (bv.X(x) * r.width) / bp.width, y: r.top + (bv.Y(y) * r.height) / bp.height } : null; }, // (bpScreen: ship coordinates to page pixels on the blueprint, for tests)
+  tool: () => tool, setTool, setKind, kind: () => kind, addArmour, applyEdit, setEngineDir, setEngineSwivel, engDir: () => engDir, selEngine: () => selEngine, aim: () => aim, drawDeck, drawBag, resizeBag, erase, setBag, setGas, selBag: () => selBag, placeConnector, placePart, removeAt, thingAt, emptyBuild, minimalBuild, tray: () => tray, bpScreen: (x, y) => { const r = bp.getBoundingClientRect(); return bv ? { x: r.left + (bv.X(x) * r.width) / bp.width, y: r.top + (bv.Y(y) * r.height) / bp.height } : null; }, // (bpScreen: ship coordinates to page pixels on the blueprint, for tests)
   screen: (x, y) => { const p = shipMatrix.transformPoint(new DOMPoint(x, y)), r = scene.getBoundingClientRect(); return { x: r.left + (p.x * r.width) / scene.width, y: r.top + (p.y * r.height) / scene.height }; } }; // (screen: ship coordinates to page pixels, for tests)
 
 // While the build cannot fly: a stamp over the live pane saying what she still needs.

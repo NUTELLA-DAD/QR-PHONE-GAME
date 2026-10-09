@@ -2,7 +2,7 @@
 // rows you can draw on, and the ghosts of what a pen or eraser stroke will do. Pure drawing: no state, no DOM (buildTest.js owns the
 // canvas and the pointer; the in-game Shipwright's Yard (S.6b) can reuse it).
 //   const v = blueprintView(layout, width, height, k)    the paper-to-ship transform (k = pixel ratio, for line weights and text)
-//   drawBlueprint(ctx, v, layout, opts)                   opts: { rowHover, cursor, ghost, slots, hover, status, balance, target, needs }
+//   drawBlueprint(ctx, v, layout, opts)                   opts: { rowHover, cursor, ghost, slots, hover, status, balance, target, needs, selBag (the bag the Gas buttons act on: a brass outline) }
 //     balance: shipBuild.js balanceOf (the centre of mass / lift markers), target: { x, y, r, label } the thing the delete tool is over, needs: what a half-built ship still lacks
 //   v.toWorld(px, py) -> { x, y } in ship coordinates     v.X(x), v.Y(y) -> paper pixels
 // The in-game Shipwright's Yard (S.6b, yardArt.js) draws it CLEAN: blueprintView(layout, w, h, k, true) fits the ship with small margins, and opts.clean skips the grid, the row guides, the
@@ -10,6 +10,7 @@
 import { config } from '../../config.js';
 import { COL, DECK_ROWS, rowOf, hullGeom, bagList } from './shipBuild.js';
 import { EDIT_ROWS, DRAW_ROWS, GRID_X0 } from './buildEdit.js';
+import { gasKey } from './gases.js';
 
 const LB = () => config.LOGBOOK;
 const PAD = { l: 100, r: 28, t: 30, b: 46 }; // paper margins (CSS px, times k): row labels on the left, column numbers on top, the ship's size underneath
@@ -96,18 +97,41 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   // The gasbag(s) side by side, light hatching inside, with a handle at each end to drag (the Gasbag tool).
   const bags = bagList(Ly);
   if (bags.length) {
-    const env = (cx, cy, rx, ry, tag) => {
+    // gas: the bag's gas (gases.js): a tint of its own; hydrogen wears a red stencil, hot air a patched canvas and a burner under it. sel: the bag the Gas buttons act on (a brass outline)
+    const env = (cx, cy, rx, ry, tag, gas = 'helium', sel = false) => {
       g.beginPath(); g.ellipse(X(cx), Y(cy), rx * s, ry * s, 0, 0, 6.2832);
       g.fillStyle = 'rgba(107,74,50,0.07)'; g.fill();
-      g.strokeStyle = L.INK; g.lineWidth = 2 * k; g.stroke();
+      g.fillStyle = config.GASES[gas].tint; g.fill();
+      g.strokeStyle = sel ? L.PIN : L.INK; g.lineWidth = (sel ? 4 : 2) * k; g.stroke();
       g.save(); g.clip();
       for (let hx = cx - rx - ry; hx < cx + rx; hx += 46) line([[X(hx), Y(cy + ry)], [X(hx + ry), Y(cy - ry)]], 1, 'rgba(107,74,50,0.14)');
+      if (gas === 'hot') for (const [px, py] of [[-0.55, -0.1], [-0.15, 0.35], [0.3, -0.3], [0.62, 0.2]]) { // patched canvas
+        const qx = X(cx + px * rx) - 20 * s, qy = Y(cy + py * ry) - 14 * s;
+        g.fillStyle = 'rgba(150,105,60,0.35)'; g.fillRect(qx, qy, 40 * s, 28 * s);
+        g.strokeStyle = L.INK_SOFT; g.lineWidth = k; g.setLineDash([3 * k, 3 * k]); g.strokeRect(qx, qy, 40 * s, 28 * s); g.setLineDash([]);
+      }
       g.restore();
       if (tag) text(tag, X(cx), Y(cy - ry * 0.55) + 5 * k, bags.length > 2 ? 11 : 14, L.INK_SOFT, 'center', true);
+      if (gas === 'hydrogen') { // the red stencil
+        g.save(); g.translate(X(cx), Y(cy + ry * 0.12)); g.rotate(-0.03);
+        g.strokeStyle = L.STAMP; g.fillStyle = L.STAMP; g.lineWidth = 2 * k; g.globalAlpha = 0.85;
+        const fs = Math.max(12, Math.min(34, (rx * s) / k / 5.5));
+        g.font = `${Math.round(fs * k)}px ${config.FONTS.DISPLAY}`; g.textAlign = 'center';
+        const word = 'H2 - NO FLAMES', tw = g.measureText(word).width;
+        g.strokeRect(-tw / 2 - 8 * k, -fs * k * 0.95, tw + 16 * k, fs * k * 1.3);
+        g.fillText(word, 0, 0);
+        g.restore();
+      } else if (gas === 'hot') { // a burner basket under the envelope, and its little flame
+        const bx = X(cx), by = Y(cy + ry) + 10 * k;
+        line([[bx - 14 * k, by - 8 * k], [bx - 10 * k, by + 4 * k], [bx + 10 * k, by + 4 * k], [bx + 14 * k, by - 8 * k]], 2, L.INK);
+        g.beginPath(); g.moveTo(bx - 5 * k, by - 6 * k); g.quadraticCurveTo(bx, by - 22 * k, bx + 5 * k, by - 6 * k); g.fillStyle = 'rgba(230,110,30,0.85)'; g.fill();
+        text('HOT AIR', X(cx), Y(cy + ry * 0.35), 11, L.INK_SOFT, 'center', true);
+      }
     };
     bags.forEach((bag, i) => {
-      if (bag.twin) env(bag.cx - 20, bag.cy - 258, bag.rx * 0.7, bag.ry * 0.62, 'twin');
-      env(bag.cx, bag.cy, bag.rx, bag.ry, bags.length === 1 ? `GASBAG  ${Math.round(bag.rx * 2)} px` : `BAG ${i + 1}  ${Math.round(bag.rx * 2)} px`);
+      const gas = gasKey(bag), nm = gas === 'helium' ? '' : '  ' + config.GASES[gas].short;
+      if (bag.twin) env(bag.cx - 20, bag.cy - 258, bag.rx * 0.7, bag.ry * 0.62, 'twin', gas);
+      env(bag.cx, bag.cy, bag.rx, bag.ry, (bags.length === 1 ? `GASBAG  ${Math.round(bag.rx * 2)} px` : `BAG ${i + 1}  ${Math.round(bag.rx * 2)} px`) + nm, gas, o.selBag === i);
     });
     if (o.bagHandles) for (const bag of bags) for (const x of [bag.cx - bag.rx, bag.cx + bag.rx]) { // the ends: grab one to resize
       g.beginPath(); g.arc(X(x), Y(bag.cy), 6 * k, 0, 6.2832); g.fillStyle = L.PIN; g.fill(); g.strokeStyle = L.INK; g.lineWidth = 1.6 * k; g.stroke();

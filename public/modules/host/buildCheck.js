@@ -7,7 +7,8 @@
 import { config } from '../../config.js';
 import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf, isNestRow, thrustVec, engineUse } from './shipBuild.js';
 import { staticPitch } from './forces.js';
-import { fireRisk } from './fireModel.js';
+import { fireRisk, hydrogenExposure } from './fireModel.js';
+import { gasKey } from './gases.js';
 import { planBreak } from './breakOff.js';
 
 const BC = config.BUILD_CHECK;
@@ -365,6 +366,17 @@ export function validate(parts, opts = {}) {
     else {
       const left = lift.lift - big.lift, hover = +(config.GAS.NEUTRAL + lift.mass - left).toFixed(1);
       info('Redundancy', `${bags.length} gasbags. Lose one bag: hover ${hover}, ${hover <= BC.HOVER_MAX ? 'still flies' : hover <= 100 ? 'she limps (the pump at its limit)' : 'she falls'} (lift ${left} of ${lift.lift}; with all bags, hover ${lift.hover})`);
+    }
+    // Gas types (gases.js): a bag that is not helium says what it holds. Hydrogen beside a boiler, a coal bunker or a flamethrower is an explosion waiting for a spark (WARN); hot air with no boiler never lifts.
+    if (bags.some((b) => gasKey(b) !== 'helium')) {
+      const G = config.GASES;
+      bags.forEach((b, i) => {
+        const k = gasKey(b), name = bags.length > 1 ? `bag ${i + 1}` : 'the gasbag';
+        if (k === 'hydrogen') info('Gas', `${name} holds hydrogen: lift ${b.lift} (x${G.hydrogen.lift} of helium) and cheap to top up, but a fire that reaches it, a flamethrower or a lucky hit sets it alight and it explodes (the bag is lost, fires, hearts)`);
+        else if (k === 'hot') info('Gas', `${name} holds hot air: lift ${b.lift} (x${G.hot.lift} of helium), free to top up and it cannot burn, but it only lifts while the boiler is hot (the crew must keep stoking)`);
+      });
+      for (const e of hydrogenExposure(L)) warn('Gas', `hydrogen ${bags.length > 1 ? 'bag ' + (e.bag + 1) : 'bag'} is close to the ${e.name} (${e.kind}${e.dist ? ', ' + e.dist + ' px of fire path' : ', in the bag\'s reach'}): explosion risk`);
+      if (bags.some((b) => gasKey(b) === 'hot') && !L.stations.some((s) => s.kind === 'boiler')) warn('Gas', 'a hot-air bag but no boiler: the air never heats and the bag lifts only a third');
     }
   }
 

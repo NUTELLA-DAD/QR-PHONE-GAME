@@ -193,6 +193,7 @@ function burn({ ship, state, world, gun, name, who, cone, dt, puff, W }) {
         if (Math.random() < Math.min(1, ig) && t.sim.fireSys.ignite(d, x + (Math.random() - 0.5) * 60, 'flame')) countFor(world, who, 'flameFires');
       }
       for (const [bag, p] of bags) {
+        if (t.sim.hydrogen) t.sim.hydrogen.scorch(bag, config.GASES.HYDROGEN.FLAME_RATE * dt); // (a hydrogen bag in the cone catches: hydrogen.js)
         if (Math.random() >= F.HOLE_RATE * dt || t.ctx.gasHoles.length >= config.GAS.MAX_HOLES) continue;
         t.ctx.gasHoles.push(t.sim.gasHoleAt(p.sx, p.sy, bag));
         if (ft) ft.flameHoles = (ft.flameHoles || 0) + 1;
