@@ -21,7 +21,7 @@ import { toWorldX, toWorldY, toShipX, toShipY, pivotOf } from '../pose.js';
 import { transfer } from '../ships.js';
 import { inRock } from '../course.js';
 import { BUILDS, onRamProw } from '../shipBuild.js';
-import { buildShelf, tonnageCap } from './shelf.js';
+import { buildShelf, tonnageCap, surpriseShip } from './shelf.js';
 import { bandOf } from './range.js';
 
 const TEAMS = ['red', 'blue'];
@@ -187,7 +187,7 @@ export function createMatch(D) {
       kind: 'shelf',
       title: 'PICK YOUR SHIP',
       t: V().SHELF_TIME,
-      options: M.shelf.map((e) => ({ name: e.name, icon: '⚓', desc: `${e.blurb} - weight ${e.mass}, lift ${e.lift}, ${e.hands} hands`, cost: null })),
+      options: M.shelf.map((e) => ({ name: e.name, icon: '⚓', desc: e.random ? `${e.blurb} (under the weight cap, a surprise until cast off)` : `${e.blurb} - weight ${e.mass}, lift ${e.lift}, ${e.hands} hands`, cost: null })),
       onDone: (picks) => { applyPicks(picks); startRound(); },
     });
     return true;
@@ -197,7 +197,8 @@ export function createMatch(D) {
     for (const t of TEAMS) {
       const i = picks && picks[t] != null && M.shelf[picks[t]] ? picks[t] : 0;
       M.picks[t] = i;
-      const e = M.shelf[i];
+      let e = M.shelf[i];
+      if (e.random) e = surpriseShip(Math.floor(Math.random() * 1e9) + (t === 'red' ? 0 : 1)) || M.shelf[0]; // (Surprise me!: a brand-new random ship for THIS team, the generator's, under the same weight cap; the other team's is another)
       const sh = shipOfTeam(t);
       if (sh.buildId === e.id) continue;
       if (sh.main) {

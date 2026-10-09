@@ -97,8 +97,9 @@ export function createDeepEnv({ state, puff, phoneFx }) {
     } else if (worst < 0.25) warned.clog = false;
     // Crew inside a cloud (on a deck of the ship) are slowed and cough.
     for (const p of Object.values(state.players)) {
+      if (p.ship != null && p.ship !== ship.id) continue; // (Versus: the clouds drift through ship 0; the other ship's crew stand on decks of ANOTHER layout, P[p.d] is not theirs)
       const was = (p.sporeT || 0) > 0;
-      const inside = flying && p.d != null && !p.fly && !p.onGunship && !p.fall && inCloud(p.x, P[p.d].y - 50);
+      const inside = flying && p.d != null && !p.fly && !p.onGunship && !p.fall && P[p.d] && inCloud(p.x, P[p.d].y - 50);
       p.sporeT = inside ? 0.6 : Math.max(0, (p.sporeT || 0) - dt);
       if (inside) {
         if (!was && !p.bot && (p.sporeFx || 0) <= 0) {

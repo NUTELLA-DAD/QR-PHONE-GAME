@@ -447,14 +447,14 @@ function listJobs(state, bot) {
   for (const m of mods) if (canHammer && m.broken && critical(mods, m)) jobs.push({ kind: 'repair', obj: m, max: 1, cap: 3, urgent: true });
   // Storm Front: a bolt is charging - one crew member holds a lightning rod (grounds it, the coil may drink it).
   const sj = state.stormJob;
-  if (sj && sj.charge && !players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'rod' && !q.lock)) for (const r of sj.rods) jobs.push({ kind: 'rod', obj: r, max: 1 });
+  if (shipH.main && sj && sj.charge && !players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'rod' && !q.lock)) for (const r of sj.rods) jobs.push({ kind: 'rod', obj: r, max: 1 });
   // Raiders: fight them, but never with more than about half the crew (the rest keep the ship going).
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2, cap: Math.max(2, Math.ceil(players.filter((q) => q.bot).length / 2)) });
   for (const q of players) if (foeOf(q, bot) && !q.fall && !(q.ko > 0)) jobs.push({ kind: 'fight', obj: q, max: 2, cap: Math.max(2, Math.ceil(players.filter((r) => r.bot).length / 2)) }); // (Versus: boarders from the other ship; the gunship's crew against ours)
   // Sunken Sea: pump out a flooded hull (an emergency), winch up a survivor on the rope (a salvage bonus).
   const sea = state.sea;
-  if (sea && sea.pump && sea.flood > config.ENVIRONMENTS.sea.FLOOD.JOB_AT) jobs.push({ kind: 'pump', obj: sea.pump, max: 1 });
-  if (sea && sea.winch) jobs.push({ kind: 'winch', obj: sea.winch, max: 1 });
+  if (shipH.main && sea && sea.pump && sea.flood > config.ENVIRONMENTS.sea.FLOOD.JOB_AT) jobs.push({ kind: 'pump', obj: sea.pump, max: 1 }); // (the environments' stations -- rods, the bilge pump, the winch, engine clogs, the oxygen tank -- belong to ship 0: a Versus crew on another ship has none to work)
+  if (shipH.main && sea && sea.winch) jobs.push({ kind: 'winch', obj: sea.winch, max: 1 });
   // A gasbag shot full of holes sinks the ship: patching it comes before swatting and repairs.
   // (Only when the gas is actually running out or the bag is in ruins, and never more than a few hands at once.)
   const gasHoles = state.gasHoles || [];
@@ -484,8 +484,8 @@ function listJobs(state, bot) {
   const hullHoles = !canHammer ? [] : state.breaches.map((h) => ({ kind: "patch", obj: h, max: 1 })); // (each open hull hole costs hull every second: patch them before repairing guns)
   const icy = !canHammer ? [] : (state.icing || []).filter((q) => q.lvl >= B.ICE_AT).map((q) => ({ kind: 'ice', obj: q, max: 1 })); // frost: crusts to chip with the hammer
   // Fungal Depths: spores clogging an engine; The Aether: the oxygen tank running low (bare hands, hold Action at the spot).
-  const deep = (state.clogs || []).filter((c) => c.lvl >= config.ENVIRONMENTS.fungal.CLOG.BOT_AT).map((c) => ({ kind: 'unclog', obj: c, max: 1 }));
-  if (state.env && state.env.id === 'aether' && state.env.o2 < config.ENVIRONMENTS.aether.OXYGEN.BOT_AT) deep.push({ kind: 'oxygen', obj: state.o2tank, max: 1 });
+  const deep = (!shipH.main ? [] : state.clogs || []).filter((c) => c.lvl >= config.ENVIRONMENTS.fungal.CLOG.BOT_AT).map((c) => ({ kind: 'unclog', obj: c, max: 1 }));
+  if (shipH.main && state.env && state.env.id === 'aether' && state.env.o2 < config.ENVIRONMENTS.aether.OXYGEN.BOT_AT) deep.push({ kind: 'oxygen', obj: state.o2tank, max: 1 });
   // Burst pipes with their valve open leak steam: shut the valve, then fix what's broken.
   const leaks = mods.filter((m) => m.kind === 'pipe' && m.broken && m.open).map((m) => ({ kind: 'valve', obj: m, max: 1 }));
   // Steam is short and a damaged module is leaking it? Shut that module's valve - unless it is

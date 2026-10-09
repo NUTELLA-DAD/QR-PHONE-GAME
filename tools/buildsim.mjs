@@ -3,7 +3,8 @@
 //        node tools/buildsim.mjs --random 50 --seed 1 --minutes 4 --envs skyisles,fungal,storm,aether --bots 6   random legal builds, botsim each, table + which parts dominate
 //        node tools/buildsim.mjs --check-crossship  B.6: the crew cannon, thrown ballast and shovel jobs, dumping for lift, towing, stolen coal, bots using all of it (tools/crossship-check.mjs)
 //        node tools/buildsim.mjs --check-breakoff   S.5i: parts break off for real (tools/breakoff-check.mjs): a bomb bay explosion and a heavy hit / crash / ram / ripped bag take the right parts, she keeps flying with the new shape, crew on them fall, debris tumbles, armour lowers the chance, REBUILD cards at the dock, the gunship and a second ship lose parts too, 0 errors over a 3-minute botsim with high break-off settings
-//        node tools/buildsim.mjs --check-health     crew health (tools/health-check.mjs): fire hurts a crewman a heart per tick (hopping over and spraying are safe), three burns knock him out, BIG blasts (the bomb bay, a sapper's bomb, a heavy shell, a great fall) knock out at once, i-frames, a raider's blow takes one heart, a revive or waking gives 1 heart, the medbay heals a heart every few seconds, a bandage, the phone payload carries hearts and the job arrow points at the medbay, bots leave fires and go and heal, the old rules with hearts off, the TV pips
+//        node tools/buildsim.mjs --check-gen        the ship generator (tools/gen-check.mjs): 200 seeded random ships all validate with no FAIL and fit the Versus weight cap, are varied and repeatable, crossover / mutation children repair into valid ships, 10 fly a 1-minute botsim and 2 fight Versus rounds with 0 errors, the shelf's Hall of Fame cards and Surprise me! (tools/shipforge.mjs is the combo finder)
+//        node tools/buildsim.mjs --check-health    crew health (tools/health-check.mjs): fire hurts a crewman a heart per tick (hopping over and spraying are safe), three burns knock him out, BIG blasts (the bomb bay, a sapper's bomb, a heavy shell, a great fall) knock out at once, i-frames, a raider's blow takes one heart, a revive or waking gives 1 heart, the medbay heals a heart every few seconds, a bandage, the phone payload carries hearts and the job arrow points at the medbay, bots leave fires and go and heal, the old rules with hearts off, the TV pips
 //        node tools/buildsim.mjs --check-classic    the classic ship must still equal the frozen snapshot
 //        node tools/buildsim.mjs --lint             no module-level captures of derived layout values (they go stale), no hard-coded ship reference points
 //        node tools/buildsim.mjs --lint-pose        (also part of --lint) B0: no NEW single-ship spellings (+course.dist, +-state.ship.alt, scrollSpeed, SHIP_LAYOUT imports, module-level per-ship captures) against tools/fixtures/pose-lint-allow.json
@@ -2279,6 +2280,8 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'yard-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-health') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'health-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-gen') {
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gen-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-flame') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'flame-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-breakoff') {
@@ -2322,6 +2325,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-breakoff | --check-health | --check-flame | --check-turn | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-breakoff | --check-health | --check-flame | --check-gen | --check-turn | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

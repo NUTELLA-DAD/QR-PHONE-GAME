@@ -6,12 +6,16 @@
 //   * Twin Boiler   the classic ship with a second boiler and a second lookout (tools/fixtures/multi-build.mjs, S.3);
 //   * Four Bags     her one long gasbag rubbed out and four drawn in a row, each with its own gas valve (tools/fixtures/bags-build.mjs, S.5d);
 //   * Variant A..   random valid builds: one to three legal mutations of the classic ship (buildSlots.js randomMutation, seeded: both teams see the same shelf).
+//   * Hall of Fame  the best ships the ship forge found (tools/shipforge.mjs, pvp/champions.js): generated and evolved from nothing, rated over hundreds of bot matches (config.PVP.SHELF.CHAMPIONS).
+//   * Surprise me!  the last card: each team that votes for it is handed a brand-new random ship from the generator (shipGen.js, surpriseShip below), one for each team.
 // The shelf is made once per match (it takes a moment: every build is validated) and kept; a team's pick is an index into it.
 import { config } from '../../../config.js';
 import { BUILDS, budgets } from '../shipBuild.js';
 import { validate, liftGauge } from '../buildCheck.js';
 import { randomMutation, slotsFor } from '../buildSlots.js';
 import { erase, drawBag, drawDeck } from '../buildEdit.js';
+import { generateShip, weightCap } from '../shipGen.js';
+import { CHAMPIONS } from './champions.js';
 
 function mulberry(seed) {
   let a = seed >>> 0;
@@ -85,10 +89,17 @@ function entry(id, name, blurb, parts) {
 // The weight cap for this shelf: the classic ship's mass times config.PVP.TONNAGE.
 export const tonnageCap = () => Math.round(budgets(BUILDS.classic).mass * config.PVP.TONNAGE);
 
+// A brand-new random ship for a seed, as a shelf entry (null if the generator gives up): the Surprise me! card hands one to each team that picks it.
+export function surpriseShip(seed) {
+  const g = generateShip(seed, { cap: weightCap() });
+  const e = g && entry('surprise-' + seed, g.name, g.summary, g.parts);
+  return e && e.mass <= tonnageCap() ? e : null;
+}
+
 const cache = new Map();
 // The shelf for a seed (cached). Always starts with the classic ship, so index 0 is a safe default.
 export function buildShelf(seed = config.PVP.SHELF.SEED) {
-  const key = seed + '|' + config.PVP.TONNAGE + '|' + config.PVP.SHELF.RANDOM + '|' + !!config.PVP.SHELF.CROSS + '|' + !!config.PVP.SHELF.RANGE;
+  const key = seed + '|' + config.PVP.TONNAGE + '|' + config.PVP.SHELF.RANDOM + '|' + !!config.PVP.SHELF.CROSS + '|' + !!config.PVP.SHELF.RANGE + '|' + config.PVP.SHELF.CHAMPIONS + '|' + !!config.PVP.SHELF.SURPRISE;
   if (cache.has(key)) return cache.get(key);
   const cap = tonnageCap();
   const shelf = [];
@@ -125,6 +136,11 @@ export function buildShelf(seed = config.PVP.SHELF.SEED) {
     add(entry('firebrand', 'Firebrand', 'Flamethrowers, armour plate and a harpoon', firebrandParts()));
   }
   if (config.PVP.SHELF.CROSS) add(entry('barge', "Boarder's Barge", 'A crew cannon, sandbags and a towline', bargeParts())); // (B.6, dev: host.html?versus=1&cross=1 - last on the shelf, so the others keep their places)
+  for (const c of CHAMPIONS.slice(0, config.PVP.SHELF.CHAMPIONS || 0)) add(entry(c.id, c.name, 'Hall of Fame: ' + c.summary, c.parts)); // (the forge's champions: after the others, so they keep their places)
+  if (config.PVP.SHELF.SURPRISE) { // (the placeholder carries the classic ship's numbers: match.js turns it into a fresh random ship for each team that votes for it)
+    const e = entry('surprise', 'Surprise me!', 'A brand-new random ship, made for your team', BUILDS.classic);
+    if (e) shelf.push({ ...e, random: true });
+  }
   cache.set(key, shelf);
   return shelf;
 }
