@@ -7,7 +7,7 @@
 //   pics.refresh()                                     forget the cache (call when sprites or textures finish loading)
 import { config } from '../../config.js';
 import { paintPath } from './textureArt.js';
-import { drawBarrel } from './weaponsArt.js';
+import { drawBarrel, drawRam } from './weaponsArt.js';
 import { drawCone } from './flameArt.js';
 
 const INK = () => config.INK;
@@ -73,11 +73,12 @@ const DRAW = {
     g.restore();
     line([[50, 30], [50, 36]], 3);
   },
-  ramProw(g, { filled, line }) { // the reinforced beak on the end of a deck
-    filled(WOOD, () => g.rect(6, 40, 40, 22));
-    filled('#6d7378', () => { g.moveTo(34, 30); g.lineTo(76, 44); g.lineTo(96, 52); g.lineTo(76, 66); g.lineTo(34, 74); g.closePath(); });
-    filled(BRASS, () => { g.moveTo(70, 42); g.lineTo(96, 52); g.lineTo(70, 64); g.closePath(); });
-    for (const [x, y] of [[42, 40], [56, 44], [42, 66], [56, 62]]) { g.fillStyle = '#d9d3c4'; g.beginPath(); g.arc(x, y, 2.6, 0, 7); g.fill(); }
+  ramProw(g) { // the big iron beak on the end of a deck: the same drawing as on the ship (weaponsArt.js drawRam), shrunk into the box and cocked up so the long point fills it
+    g.save(); g.translate(50, 55); g.rotate(-0.33); g.scale(0.15, 0.15); g.translate(-130, 0);
+    g.fillStyle = WOOD; g.strokeStyle = INK(); g.lineWidth = 15; g.lineJoin = 'round';
+    g.fillRect(-200, -24, 90, 44); g.strokeRect(-200, -24, 90, 44); // the end of the deck
+    drawRam(g, { x: 0 }, 0, { lw: 16, trim: RED });
+    g.restore();
   },
   searchlight(g, { filled, line }) {
     g.fillStyle = 'rgba(255,238,160,0.55)'; g.beginPath(); g.moveTo(52, 46); g.lineTo(98, 14); g.lineTo(98, 78); g.closePath(); g.fill(); // the beam

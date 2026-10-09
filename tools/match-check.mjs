@@ -440,6 +440,7 @@ const aimOf0 = (a, b) => Math.hypot(T.toWorldX(a, a.layout.aimPoint.x) - T.toWor
 
 // ---- 8. the bot captains ----
 {
+  clock = seedRandom(seed + 4); // (the bot captains start from the same dice whatever the sections before this one rolled: the altitude edge below is a noisy average, and a ram's sparks changed the dice)ed)
   // calm sky (nobody shoots): the captains hold the standoff and the altitude edge
   config.PVP.SHELL_POWER = 0;
   config.COLLIDE.MIN_CLOSING = 1e9;

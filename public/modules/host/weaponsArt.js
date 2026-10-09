@@ -180,36 +180,101 @@ export function drawChute(ctx, gun, time) {
 }
 
 // ---- the ram prow ----
-// The reinforced nose, in ship coordinates: `r` = layout.ram { x, d }, `deckY` = the deck's y. A sharp iron beak with rivets and a brass cap, drawn over the end of the deck.
-export function drawRam(ctx, r, deckY) {
-  const T = config.RAM.TIP;
+// The big iron beak (config.RAM) in ship coordinates: `r` = layout.ram { x, d }, `deckY` = the deck's y; it sticks config.RAM.TIP px out past the fore end of the deck. A collar and two straps bolted over the
+// hull's nose, a riveted iron wedge in plates with a painted stripe in the team's colour, three spikes on each side and a brass cap on the point. o = { trim: the team's stripe colour, hits: landed rams (0..SCUFF_MAX:
+// each one adds a dent, a scratch and soot), lw: the ink width }. The same drawing is the little picture in the build tray (partArt.js) at a smaller scale.
+const SCUFFS = [[318, -22, 0.6], [180, 24, -0.4], [352, 9, 0.2], [246, -30, -0.7], [128, 12, 0.5], [290, 30, -0.2]]; // (x, y, slant of each landed ram's dent and scratch)
+export function drawRam(ctx, r, deckY, o = {}) {
+  const R = config.RAM, T = R.TIP, H = R.HALF, lw = o.lw || 5.5, trim = o.trim || RED, hits = Math.min(R.SCUFF_MAX, o.hits || 0);
+  const TOP = []; // the upper edge of the beak, collar to point: a sleek swoop (the lower edge is its mirror)
+  for (let i = 0; i <= 28; i++) { const t = i / 28, u = 1 - t; TOP.push([u * u * 50 + 2 * t * u * (50 + (T - 50) * 0.5) + t * t * T, -(u * u * H + 2 * t * u * H * 0.42)]); }
+  const edge = (x) => { // half the height of the beak at x
+    for (let i = 1; i < TOP.length; i++) if (TOP[i][0] >= x) return -(TOP[i - 1][1] + ((TOP[i][1] - TOP[i - 1][1]) * (x - TOP[i - 1][0])) / (TOP[i][0] - TOP[i - 1][0] || 1));
+    return 0;
+  };
+  const body = () => { ctx.beginPath(); TOP.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); for (let i = TOP.length - 1; i >= 0; i--) ctx.lineTo(TOP[i][0], -TOP[i][1]); ctx.closePath(); };
+  const rivet = (x, y, rad = 4.2) => { ctx.beginPath(); ctx.arc(x, y, rad, 0, 7); ctx.fillStyle = '#e0d9c6'; ctx.fill(); ctx.lineWidth = lw * 0.35; ctx.stroke(); };
   ctx.save();
   ctx.translate(r.x, deckY);
   ctx.strokeStyle = config.INK;
-  ctx.lineWidth = 4;
+  ctx.lineWidth = lw;
   ctx.lineJoin = 'round';
-  ctx.fillStyle = STEEL;
-  ctx.beginPath(); // the beak
-  ctx.moveTo(-70, -48);
-  ctx.lineTo(T - 6, -20);
-  ctx.lineTo(T + 40, 4);
-  ctx.lineTo(T - 6, 30);
-  ctx.lineTo(-70, 52);
-  ctx.closePath();
+  ctx.lineCap = 'round';
+  // the straps over the hull's nose, behind the collar
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = '#5a6065';
+    ctx.beginPath(); ctx.rect(-150, s < 0 ? -H + 2 : H - 18, 130, 16); ctx.fill(); ctx.stroke();
+    for (let x = -136; x < -30; x += 30) rivet(x, s < 0 ? -H + 10 : H - 10, 3.4);
+  }
+  // the spikes, three on each side leaning forward
+  for (const s of [-1, 1]) for (const x of [136, 226, 316]) {
+    ctx.fillStyle = '#3f4348';
+    ctx.beginPath();
+    ctx.moveTo(x - 15, s * edge(x - 15));
+    ctx.lineTo(x + 38, s * (edge(x) + 40));
+    ctx.lineTo(x + 14, s * edge(x + 14));
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  // the beak: iron plate with the lower half in shade
+  body();
+  ctx.fillStyle = '#76808a';
   ctx.fill();
+  ctx.save();
+  body();
+  ctx.clip();
+  ctx.fillStyle = '#58606a'; // shade under
+  ctx.fillRect(0, 6, T + 10, H);
+  ctx.fillStyle = 'rgba(255,255,255,0.26)'; // light along the top
+  ctx.beginPath(); TOP.forEach(([x, y]) => ctx.lineTo(x, y + 13)); for (let i = TOP.length - 1; i >= 0; i--) ctx.lineTo(TOP[i][0], TOP[i][1] + 5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = trim; // the painted stripe in the team colour, with a pale line each side
+  ctx.fillRect(84, -H, 46, 2 * H);
+  ctx.fillStyle = 'rgba(243,234,214,0.85)';
+  ctx.fillRect(80, -H, 4, 2 * H);
+  ctx.fillRect(130, -H, 4, 2 * H);
+  ctx.strokeStyle = 'rgba(43,38,34,0.55)'; // plate seams
+  ctx.lineWidth = lw * 0.55;
+  for (const x of [200, 290]) { ctx.beginPath(); ctx.moveTo(x, -H); ctx.lineTo(x, H); ctx.stroke(); }
+  ctx.strokeStyle = config.INK;
+  for (const x of [80, 134, 178, 222, 270, 310]) for (const f of [-0.62, 0, 0.62]) if (Math.abs(f * edge(x)) < edge(x) - 7) rivet(x, f * edge(x), 3.8);
+  ctx.fillStyle = BRASS; // the cap on the point, with a seam
+  ctx.fillRect(T - 90, -H, 92, 2 * H);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.fillRect(T - 90, -H, 92, 10);
+  ctx.strokeStyle = config.INK;
+  ctx.lineWidth = lw * 0.7;
+  ctx.beginPath(); ctx.moveTo(T - 90, -H); ctx.lineTo(T - 90, H); ctx.stroke();
+  if (hits) { // scuffs: one dent and one scratch for each landed ram, the soot on the point, a chip out of the stripe
+    ctx.lineCap = 'round';
+    for (let i = 0; i < hits; i++) {
+      const [x, y, a] = SCUFFS[i];
+      ctx.fillStyle = 'rgba(30,28,32,0.72)';
+      ctx.beginPath(); ctx.ellipse(x, y, 19, 12, a, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(235,228,210,0.85)';
+      ctx.lineWidth = lw * 0.5;
+      ctx.beginPath(); ctx.arc(x, y, 14, a + 3.3, a + 5.2); ctx.stroke(); // (the glint on the dent)
+      ctx.strokeStyle = 'rgba(235,228,210,0.7)';
+      ctx.lineWidth = lw * 0.75;
+      ctx.beginPath(); ctx.moveTo(x - 38, y - 18 * Math.sign(a || 1)); ctx.lineTo(x + 34, y + 14 * Math.sign(a || 1)); ctx.stroke(); // (the scratch across it)
+    }
+    ctx.fillStyle = `rgba(30,24,20,${Math.min(0.62, 0.14 * hits)})`;
+    ctx.beginPath(); ctx.ellipse(T - 24, 0, 56, 30, 0, 0, 7); ctx.fill();
+    if (hits >= 3) { ctx.fillStyle = '#76808a'; ctx.fillRect(106, -H, 14, 22); ctx.fillRect(118, 12, 12, 18); }
+  }
+  ctx.restore();
+  ctx.strokeStyle = config.INK;
+  ctx.lineWidth = lw;
+  body();
   ctx.stroke();
-  ctx.fillStyle = BRASS; // the cap
-  ctx.beginPath();
-  ctx.moveTo(T - 24, -16);
-  ctx.lineTo(T + 40, 4);
-  ctx.lineTo(T - 24, 26);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,0.2)';
-  ctx.fillRect(-60, -42, T + 30, 10);
-  ctx.fillStyle = '#d9d3c4';
-  ctx.lineWidth = 1.6;
-  for (const [x, y] of [[-50, -30], [-10, -26], [30, -22], [-50, 36], [-10, 32], [30, 26]]) { ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill(); ctx.stroke(); }
+  // the collar, bolted over the nose
+  ctx.fillStyle = '#464b52';
+  ctx.beginPath(); ctx.roundRect(-34, -H - 10, 96, 2 * H + 20, 12); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = BRASS;
+  ctx.beginPath(); ctx.rect(46, -H - 10, 16, 2 * H + 20); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.fillRect(-28, -H - 4, 70, 9);
+  for (const x of [-16, 10, 32]) for (const y of [-H - 1, H + 1]) rivet(x, y, 5.2);
+  for (const y of [-26, 0, 26]) rivet(-20, y, 4.4);
   ctx.restore();
 }
