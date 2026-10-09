@@ -307,8 +307,8 @@ export function buildArenaMap(rand, layout, A, gap = 9000) {
   // Clear the launch points (a generous box of open sky round each).
   for (const si of spawnI) for (let j = sj - 8; j <= sj + 8; j++) for (let i = si - 14; i <= si + 14; i++) if (i >= 0 && j >= 0 && i < W && j < H) solid[idx(i, j)] = 0;
   const outposts = [{ x: half * C, y: sj * C, done: true, guns: [] }]; // (a dummy: course.js divides by the outpost count)
-  const map = { kind: 'open', level: 1, CELL: C, W, H, solid, turrets: [], outposts, open: true, arena: { x0: 0, x1: W * C, y0: 0, y1: H * C, cx: (W * C) / 2, cy: (sj + 0.5) * C } };
-  finishMap(map, { i: spawnI[0], j: sj }, { i: half, j: sj }, layout);
+  const map = { kind: 'open', level: 1, CELL: C, W, H, solid, turrets: [], outposts, open: true, arena: { x0: 0, x1: W * C, y0: 0, y1: H * C, cx: (W * C) / 2, cy: (sj + 0.5) * C, fitTop: Math.ceil((A.CEILING + 600) / C) } };
+  finishMap(map, { i: spawnI[0], j: sj }, { i: half, j: sj }, layout, A.PAD || 0);
   map.start = { x: (W * C) / 2 - gap / 2, y: (sj + 0.5) * C }; // (the left ship's launch point; the right one is START_GAP further on)
   return map;
 }
@@ -327,7 +327,7 @@ export function stationCell(map, o) {
 }
 
 // Work out where the ship fits, then the route to the goal from everywhere.
-function finishMap(map, startCell, goalCell, layout) {
+function finishMap(map, startCell, goalCell, layout, pad = 0) {
   const { W, H, CELL: C, solid } = map;
   const idx = (i, j) => j * W + i;
   const pre = new Int32Array((W + 1) * (H + 1));
@@ -343,12 +343,14 @@ function finishMap(map, startCell, goalCell, layout) {
     return pre[(j1 + 1) * (W + 1) + i1 + 1] - pre[j0 * (W + 1) + i1 + 1] - pre[(j1 + 1) * (W + 1) + i0] + pre[j0 * (W + 1) + i0];
   };
   const box = shipBox(layout);
-  const bl = Math.ceil(-box.left / C);
-  const br = Math.ceil(box.right / C);
-  const bu = Math.ceil(-box.up / C);
-  const bd = Math.ceil(box.down / C);
+  const wide = pad ? Math.max(Math.ceil(-box.left / C), Math.ceil(box.right / C)) + pad : 0; // (the arena: room both ways along her, she may face either way, and extra round her)
+  const bl = pad ? wide : Math.ceil(-box.left / C);
+  const br = pad ? wide : Math.ceil(box.right / C);
+  const bu = Math.ceil(-box.up / C) + pad;
+  const bd = Math.ceil(box.down / C) + pad;
   map.fit = new Uint8Array(W * H);
   for (let jj = 0; jj < H; jj++) for (let ii = 0; ii < W; ii++) map.fit[idx(ii, jj)] = rockIn(ii - bl, jj - bu, ii + br, jj + bd) === 0 ? 1 : 0;
+  if (map.arena && map.arena.fitTop) for (let jj = 0; jj < map.arena.fitTop; jj++) for (let ii = 0; ii < W; ii++) map.fit[idx(ii, jj)] = 0; // (the arena: the route never climbs into the wind wall at the top)
   const s = nearestFit(map, startCell.i, startCell.j);
   map.start = { x: (s.i + 0.5) * C, y: (s.j + 0.5) * C };
   setGoal(map, goalCell);

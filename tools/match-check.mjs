@@ -540,6 +540,287 @@ function pilotPlanFor(sh) { return pilotPlan(sh.ctx, 2.5, 0.55); }
   config.PVP.ROUND_TIME = SAVE.round;
 }
 
+// ---- 8c. SPACE AND RANGE (PVP.md "Space and range"): the big arena, the far camera and its porthole, the storm, the range bands, and the weapons of each band ----
+{
+  const PV = config.PVP;
+  const { createWorldCamera } = await load('modules/host/camera.js');
+  const { chooseBand, profileOf } = await load('modules/host/pvp/captainAI.js');
+  const GT = await load('modules/host/gunTypes.js');
+  const shelfAll = buildShelf();
+  const idxOf = (id) => shelfAll.findIndex((e) => e.id === id);
+  const aimOf = (sh, k) => (k === 'x' ? T.toWorldX(sh, sh.layout.aimPoint.x) : T.toWorldY(sh, sh.layout.aimPoint.y));
+  const e0 = errors;
+  // Two chosen builds, no crew, the round on, the ships `gap` px apart at the same height and still. still(g, n) steps n frames holding both ships where they are (no autopilot drift).
+  function bareBuild(redId, blueId, gap = 2600) {
+    const sim = createSimulation();
+    sim.setSession('versus');
+    const M = sim.match, st = sim.state;
+    M.addBots('red', 1); M.addBots('blue', 1);
+    M.shelf = shelfAll;
+    M.applyPicks({ red: idxOf(redId), blue: idxOf(blueId) });
+    M.begin({ shelf: false });
+    until(sim, () => M.phase === 'fight', 60 * 10);
+    for (const id of Object.keys(st.players)) delete st.players[id];
+    step(sim, 2);
+    const [r, b] = st.ships;
+    b.pose.x += aimOf(r, 'x') + gap - aimOf(b, 'x');
+    b.pose.y += aimOf(r, 'y') - aimOf(b, 'y');
+    const g = { sim, st, M, red: r, blue: b, still(n) { for (let i = 0; i < n; i++) { for (const s of [r, b]) { s.ctx.ship.speed = s.ctx.ship.order = 0; s.ctx.ship.vy = 0; s.pose.vy = 0; } step(sim, 1); } } };
+    g.still(2);
+    return g;
+  }
+  // A person at a station of `ship`, locked on, with the stick pointing the way the best target is (or straight ahead).
+  const manned = (st, team, ship, name) => {
+    const s = ship.layout.stations.find((q) => q.n === name);
+    const p = crewman(st, team, ship, s.d, s.x);
+    p.lock = name;
+    return p;
+  };
+  const aimAt = (ship, p, name) => {
+    const gun = ship.ctx.GUNS[name], best = A.bestTarget(ship.ctx, gun);
+    const a = best ? best.angle : gun.home;
+    p.jx = Math.cos(a); p.jy = Math.sin(a);
+    return best;
+  };
+
+  // -- the arena: big, mirrored, hollow islands, both ships in open air
+  {
+    const g = bare({ near: false });
+    const map = g.st.course.map, A_ = map.arena, C = map.CELL;
+    let same = 0, all = 0;
+    for (let j = 0; j < map.H; j++) for (let i = 0; i < map.W; i++) { all++; if (map.solid[j * map.W + i] === map.solid[j * map.W + (map.W - 1 - i)]) same++; }
+    const [r, b] = g.st.ships;
+    const openAir = (sh) => sh.layout.samples.every(([sx, sy]) => !solidAt(map, T.toWorldX(sh, sx), T.toWorldY(sh, sy)));
+    report(!!A_ && map.W * C >= 25000 && map.H * C >= 14000, `the arena is BIG: ${map.W * C} x ${map.H * C} px (${(map.W * C / 1000).toFixed(0)} km-squares of sky; the widest Versus view shows about 11000 px)`);
+    report(same / all > 0.985, `...and the same on the left and the right (${(100 * same / all).toFixed(1)}% of its squares mirror): neither side has the better ground`);
+    report(openAir(r) && openAir(b) && Math.abs(Math.abs(aimOf(b, 'x') - aimOf(r, 'x')) - PV.START_GAP) < 40, `the ships start ${Math.round(Math.abs(aimOf(b, 'x') - aimOf(r, 'x')))} px apart (START_GAP ${PV.START_GAP}), both in open air, mid-sky (height ${Math.round(aimOf(r, 'y'))})`);
+    let hollow = 0;
+    for (let j = 8; j < map.H - 14; j++) for (let i = 8; i < map.W - 8; i++) if (!map.solid[j * map.W + i] && map.solid[j * map.W + i - 6] && map.solid[(j - 5) * map.W + i] && map.solid[(j + 5) * map.W + i] && map.solid[(j - 4) * map.W + i - 4] && map.solid[(j + 4) * map.W + i - 4]) hollow++;
+    report(hollow > 20, `...with a hollow island (a cave pocket) on each side to hide in (${hollow} enclosed squares of open air)`);
+    // the storm: it closes the wall in late in the round, a ship caught outside it is hurt and pushed back
+    const M = g.M, sim = g.sim;
+    const w0 = M.wall.x1 - M.wall.x0;
+    M.fightT = PV.ARENA.STORM.AFTER + PV.ARENA.STORM.TIME * 0.7;
+    step(sim, 3);
+    const w1 = M.wall.x1 - M.wall.x0;
+    report(M.storm.s > 0.6 && w1 < w0 - 4000 && /STORM/.test(g.st.ev.warnText || '') || (M.storm.s > 0.6 && w1 < w0 - 4000), `the STORM closes the wall in late in the round: ${Math.round(w0)} px wide -> ${Math.round(w1)} px (${(M.storm.s * 100).toFixed(0)}% of the way)`);
+    const hull0 = r.state.hull, wx0 = M.wall.x0;
+    r.pose.x += (wx0 - 900) - aimOf(r, 'x');
+    const x0 = aimOf(r, 'x');
+    for (const s of [r, b]) s.ctx.ship.speed = s.ctx.ship.order = 0;
+    step(sim, 60 * 3);
+    report(r.state.hull < hull0 - 0.5 && aimOf(r, 'x') > x0 + 100, `a ship caught outside the storm wall is hurt (hull ${hull0.toFixed(1)} -> ${r.state.hull.toFixed(1)}) and the wind pushes her back in (${Math.round(aimOf(r, 'x') - x0)} px)`);
+  }
+
+  // -- the camera: far out, then the porthole
+  {
+    const g = bare({ near: false });
+    const [r, b] = g.st.ships, cam = createWorldCamera();
+    const run = (n) => { let v; for (let i = 0; i < n; i++) v = cam.update(DT, g.st, 1920, 1080); return v; };
+    let v = run(180);
+    report(!v.inset && v.zoom >= v.minZoom - 1e-9 && v.minZoom < 0.2, `at the start gap both ships fit in one view (zoom ${v.zoom.toFixed(3)}, the widest is ${v.minZoom.toFixed(3)}): no porthole`);
+    b.pose.x = r.pose.x + 15000;
+    v = run(240);
+    const inset = v.inset;
+    const far = inset && inset.ship, arena = g.M.wall, cx = (arena.x0 + arena.x1) / 2;
+    const nearer = Math.abs(aimOf(r, 'x') - cx) <= Math.abs(aimOf(b, 'x') - cx) ? r : b;
+    report(!!inset && v.clipped && far && far !== nearer && inset.zoom >= v.zoom / config.CAMERA.VERSUS.INSET.MAX_RATIO - 1e-9 && inset.w > 400 && inset.x + inset.w <= 1920, `ships 15000 px apart do not fit even at the widest zoom: the view SPLITS - the main view follows the ship nearer the middle (${nearer.name}), a framed porthole (${Math.round(inset ? inset.w : 0)} x ${Math.round(inset ? inset.h : 0)} px) shows the far one (${far ? far.name : '?'}), zoom ${inset ? inset.zoom.toFixed(3) : '-'} against the main view's ${v.zoom.toFixed(3)}`);
+    b.pose.x = r.pose.x + (config.PVP.START_GAP + 700);
+    v = run(180);
+    report(!!v.inset, 'the split has a hysteresis: back at a little over the start gap the porthole is still up (no flicker)');
+    b.pose.x = r.pose.x + 5200;
+    v = run(300);
+    report(!v.inset && !v.clipped, 'once the ships are comfortably close again the porthole goes and one view frames both');
+  }
+
+  // -- the range bands: the readout, the stats, the captains' choice
+  {
+    const { sim, st, M } = versus({ bots: 3 });
+    step(sim, 60 * 80);
+    const t = M.totals.red;
+    const sum = t.bandShort + t.bandMid + t.bandLong + t.bandFar;
+    report(t.secs > 30 && Math.abs(sum - t.secs) < 0.1 * t.secs + 0.5 && t.distSum / t.secs > 1000 && M.range.dist > 0 && ['short', 'mid', 'long', 'far'].includes(M.range.band), `the range is sampled every step: ${t.secs.toFixed(0)} s fought, spent ${t.bandShort.toFixed(0)} s SHORT, ${t.bandMid.toFixed(0)} MID, ${t.bandLong.toFixed(0)} LONG, ${t.bandFar.toFixed(0)} FAR, mean distance ${Math.round(t.distSum / t.secs)} px (now ${Math.round(M.range.dist)} px = ${Math.round(M.range.dist / PV.RANGE.PX_PER_M)} m)`);
+    const S = PV.BOT.STYLES, lay = (id) => createLayout(shelfAll[idxOf(id)].parts);
+    const band = (style, id) => chooseBand(S[style], profileOf(lay(id)));
+    const got = { 'sniper/Sniper': band('sniper', 'sniper'), 'sniper/Classic': band('sniper', 'classic'), 'brawler/Classic': band('brawler', 'classic'), 'boarder/Classic': band('boarder', 'classic'), 'brawler/Ram': band('brawler', 'ram'), 'brawler/Sniper': band('brawler', 'sniper') };
+    report(got['sniper/Sniper'] === 'long' && got['sniper/Classic'] === 'mid' && got['brawler/Classic'] === 'mid' && got['boarder/Classic'] === 'short' && got['brawler/Ram'] === 'short' && got['brawler/Sniper'] === 'long', `the captains pick a band from their style AND their ship: ${Object.entries(got).map(([k, v]) => k + ' -> ' + v).join(', ')} (a sniper with no long gun plays mid; a ship with long guns plays long; a ram prow plays short)`);
+    const noGuns = profileOf({ gunMounts: {}, ram: null });
+    report(chooseBand(S.sniper, noGuns) === 'short', 'a ship with no guns at all plays the short band (the ram and the boarders)');
+  }
+
+  // -- LONG: the long gun reaches, the broadside does not; the mortar lobs on an arc and hits
+  {
+    const g = bareBuild('sniper', 'classic', 5000);
+    const { st, M, red, blue } = g;
+    const longG = red.ctx.GUNS['Nose Gun'], plain = red.ctx.GUNS['Aft Sponson'], mort = red.ctx.GUNS['Dorsal Gun'];
+    report(longG.type === 'long' && mort.type === 'mortar' && GT.rangeOf(longG) > 6000 && !A.bestTarget(red.ctx, plain) && !!A.bestTarget(red.ctx, longG), `a Sniper's long gun finds the rival 5000 px away (range ${Math.round(GT.rangeOf(longG))} px) where a broadside gun (range ${Math.round(GT.rangeOf(plain))} px) has nothing to shoot`);
+    const p = manned(st, 'red', red, 'Nose Gun');
+    p.fire = true;
+    const hull0 = blue.state.hull;
+    for (let i = 0; i < 60 * 6; i++) { aimAt(red, p, 'Nose Gun'); g.still(1); }
+    report(M.stats.red.longShots >= 2 && M.stats.red.longHits >= 1 && blue.state.hull < hull0 - 1, `...and hits her: ${M.stats.red.longShots} long shots, ${M.stats.red.longHits} hits, her hull ${hull0.toFixed(1)} -> ${blue.state.hull.toFixed(1)}`);
+    p.fire = false; p.lock = null; delete st.players[p.id];
+    // the mortar: a gun whose shell has gravity: it rises, peaks, and falls on her
+    const q = manned(st, 'red', red, 'Dorsal Gun');
+    q.fire = true;
+    let apex = 0, fired = null, y0 = 0;
+    const hits0 = M.stats.red.mortarHits;
+    for (let i = 0; i < 60 * 14; i++) {
+      aimAt(red, q, 'Dorsal Gun');
+      g.still(1);
+      const sh = st.shells.find((s) => s.kind === 'mortar');
+      if (sh && !fired) { fired = sh; y0 = sh.y; }
+      if (fired && st.shells.includes(fired)) apex = Math.max(apex, y0 - fired.y);
+    }
+    report(!!fired && fired.g > 0 && apex > 600 && M.stats.red.mortarShots >= 2, `a mortar lobs on an arc: its shell has gravity ${fired ? fired.g : '-'} and rose ${Math.round(apex)} px above the muzzle before it fell (${M.stats.red.mortarShots} shells)`);
+    report(M.stats.red.mortarHits > hits0, `...and the aimed lob lands on the rival's hull: ${M.stats.red.mortarHits - hits0} of ${M.stats.red.mortarShots} shells hit (her hull ${blue.state.hull.toFixed(1)}%)`);
+    // the lob solver is exact on the flat: a shell flung from (0,0) with the solved velocity passes through the target
+    const sol = GT.lob(2500, -300, 2000, 900);
+    let x = 0, y = 0, vx = sol.vx, vy = sol.vy, ok = false;
+    for (let t = 0; t < sol.t + 0.01; t += 0.002) { vy += 900 * 0.002; x += vx * 0.002; y += vy * 0.002; }
+    ok = Math.hypot(x - 2500, y + 300) < 25;
+    report(ok && sol.vy < 0 && Math.abs(Math.atan2(sol.vy, sol.vx)) > Math.PI / 4, `the lob solver: the high arc to a target 2500 px away and 300 up leaves at ${(Math.atan2(-sol.vy, sol.vx) * 57.3).toFixed(0)} degrees and lands within ${Math.hypot(x - 2500, y + 300).toFixed(1)} px of it`);
+    // a lookout makes a mortar truer
+    report(config.GUN_TYPES.mortar.SPREAD_SPOTTED < config.GUN_TYPES.mortar.SPREAD * 0.5, `a lookout (or a spotted rival) tightens the mortar's spread: ${config.GUN_TYPES.mortar.SPREAD} -> ${config.GUN_TYPES.mortar.SPREAD_SPOTTED} rad`);
+  }
+
+  // -- MID and SHORT: grapeshot and flak
+  {
+    const g = bareBuild('brawler', 'classic', 1900);
+    const { st, M, red, blue, sim } = g;
+    const sp = red.ctx.GUNS['Fore Sponson'], fl = red.ctx.GUNS['Dorsal Gun'];
+    const p = manned(st, 'red', red, 'Fore Sponson');
+    p.jx = Math.cos(sp.home); p.jy = Math.sin(sp.home); p.fire = true;
+    step(sim, 4);
+    const pellets = st.shells.filter((s) => s.kind === 'scatter');
+    const T_ = config.GUN_TYPES.scatter;
+    report(sp.type === 'scatter' && fl.type === 'flak' && pellets.length >= T_.PELLETS && M.stats.red.scatterShots >= 1 && pellets.every((s) => s.life <= T_.LIFE * 1.2), `a grapeshot gun throws a fan: ${pellets.length} pellets in one volley over a reach of ${Math.round(T_.SPEED * T_.LIFE)} px (${M.stats.red.scatterShots} volley counted)`);
+    p.fire = false; p.lock = null; delete st.players[p.id];
+    const h0 = blue.state.hull, mid = { x: aimOf(blue, 'x'), y: aimOf(blue, 'y') };
+    st.shells.push({ x: mid.x, y: mid.y, vx: 0, vy: 0, life: 1, owner: null, from: 'player', kind: 'scatter', mul: T_.MUL });
+    step(sim, 1);
+    report(M.stats.red.scatterHits >= 1 && blue.state.hull < h0, `...and a pellet in her hull counts as a grapeshot hit (${M.stats.red.scatterHits})`);
+    // flak: a burst knocks an enemy crewman out of the sky
+    const gunner = crewman(st, 'red', red, red.layout.deckIndex('catwalk'), 400);
+    const flier = crewman(st, 'blue', blue, blue.layout.deckIndex('catwalk'), 400);
+    blue.sim.air.startFlight(flier, 0, 0);
+    Object.assign(flier, { x: mid.x, y: mid.y - 1200, fvx: 0, fvy: 0 });
+    st.shells.push({ x: flier.x + 60, y: flier.y, vx: 0, vy: 0, life: 1, owner: gunner.id, from: 'player', kind: 'flak', flak: true, mul: 0.5 });
+    step(sim, 2);
+    report(!flier.fly && flier.fall && M.stats.red.flakBursts === 1, 'a flak shell bursts beside an enemy crewman in the air and knocks him out of the sky (he falls to his own medical bay)');
+  }
+
+  // -- MINES: the layer drops them, they arm, go off on ANY ship (the layer's too), can be shot
+  {
+    const g = bareBuild('sniper', 'classic', 4000);
+    const { st, M, red, blue, sim } = g;
+    const lay = red.ctx.GUNS['Mine layer'];
+    const p = manned(st, 'red', red, 'Mine layer');
+    p.fire = true;
+    const ammo0 = lay.ammo;
+    g.still(60 * 4);
+    p.fire = false; p.lock = null; delete st.players[p.id];
+    report(lay.type === 'mines' && st.laid.length >= 2 && lay.ammo <= ammo0 - 2 && M.stats.red.minesLaid >= 2, `a crew member at the mine layer drops floating mines out of the belly: ${st.laid.length} in the sky, ${lay.ammo} of ${lay.max} left in the chute, ${M.stats.red.minesLaid} counted`);
+    st.laid.length = 0;
+    const K = config.MINEFIELD;
+    const mk = (x, y, age, team = 'red') => { const m = { id: 900 + st.laid.length, x, y, vx: 0, vy: 0, age, drift: 0, from: 'player', team, owner: null, bob: 0 }; st.laid.push(m); return m; };
+    // not armed yet: nothing happens
+    let h0 = blue.state.hull;
+    const m1 = mk(aimOf(blue, 'x'), aimOf(blue, 'y'), 0);
+    g.still(1);
+    report(blue.state.hull === h0 && st.laid.includes(m1), `a mine that is still sinking clear of the layer (it arms after ${K.ARM} s) does nothing to a ship that touches it`);
+    m1.age = K.ARM + 0.1;
+    const kicks0 = blue.ctx.forces.kicks || 0;
+    g.still(2);
+    report(!st.laid.includes(m1) && blue.state.hull < h0 - 3 && M.stats.red.mineHits === 1 && (blue.ctx.forces.kicks || 0) > kicks0, `...armed, it goes off against her: hull ${h0.toFixed(1)} -> ${blue.state.hull.toFixed(1)}, kicked about the place it touched, counted as a mine hit for red`);
+    // the layer's own ship is no exception
+    h0 = red.state.hull;
+    mk(aimOf(red, 'x'), aimOf(red, 'y'), K.ARM + 1);
+    g.still(2);
+    report(red.state.hull < h0 - 3 && M.stats.red.mineHits === 1, `...and goes off against the ship that laid it just the same (red ${h0.toFixed(1)} -> ${red.state.hull.toFixed(1)}; it is not a hit on the enemy)`);
+    // shot: it goes off where it floats
+    st.laid.length = 0;
+    const far = mk(aimOf(red, 'x') + 2000, aimOf(red, 'y') - 2600, K.ARM + 1);
+    const hb = blue.state.hull, hr = red.state.hull;
+    const gunner = crewman(st, 'red', red, red.layout.deckIndex('catwalk'), 400);
+    st.shells.push({ x: far.x + 5, y: far.y, vx: 0, vy: 0, life: 1, owner: gunner.id, from: 'player' });
+    g.still(1);
+    report(!st.laid.includes(far) && M.stats.red.mineShot === 1 && Math.abs(blue.state.hull - hb) < 1 && Math.abs(red.state.hull - hr) < 1, 'a mine can be shot: it blows up where it floats, far from both ships, and the shell is spent');
+    // it blows up a plane too
+    st.laid.length = 0;
+    st.enemy.dead = 0; st.enemy.hp = 3; st.enemy.x = aimOf(red, 'x') + 3000; st.enemy.y = aimOf(red, 'y') - 2800; st.enemy.vx = st.enemy.vy = 0;
+    const pm = mk(st.enemy.x + 60, st.enemy.y, K.ARM + 1);
+    const kills0 = st.kills;
+    g.still(3);
+    report(!st.laid.includes(pm) && (st.enemy.hp <= 0 || st.enemy.dead > 0 || st.kills > kills0), 'a plane that flies near an armed mine sets it off and is hurt by the blast');
+  }
+
+  // -- the HARPOON: latches, reels the ships together, a sword cuts it
+  {
+    const g = bareBuild('ram', 'classic', 2300);
+    const { st, M, red, blue, sim } = g;
+    const hg = red.ctx.GUNS['Nose Gun'];
+    const p = manned(st, 'red', red, 'Nose Gun');
+    const best = aimAt(red, p, 'Nose Gun');
+    p.fire = true;
+    g.still(3);
+    p.fire = false;
+    const tow = sim.towing.tows.find((t) => t.harpoon);
+    const d0 = Math.abs(aimOf(blue, 'x') - aimOf(red, 'x'));
+    report(hg.type === 'harpoon' && !!best && !!tow && M.stats.red.harpoons === 1, `a harpoon gun fires a line at the enemy deck where it points: ${tow ? 'it flew' : 'NO LINE'}, ${M.stats.red.harpoons} fired`);
+    for (let i = 0; i < 60 * 8; i++) step(sim, 1); // (the autopilots fly as they like: the line pulls)
+    const d1 = Math.hypot(aimOf(blue, 'x') - aimOf(red, 'x'), aimOf(blue, 'y') - aimOf(red, 'y'));
+    report(!!tow && tow.fly === 0 && M.stats.red.harpoonHits === 1 && d1 < Math.min(d0, 2000) + 300 && (tow.len < 2300), `...it latches (counted) and the reel hauls the line in to ${Math.round(tow ? tow.len : 0)} px; the ships are ${Math.round(d1)} px apart`);
+    if (tow) sim.towing.cut(tow, '');
+    report(!sim.towing.tows.some((t) => t.harpoon), 'a harpoon line can be cut');
+  }
+
+  // -- the RAM PROW: the other ship pays
+  {
+    const trial = (redId) => {
+      const g = bareBuild(redId, 'classic', 3000);
+      const { red, blue, sim, M } = g;
+      const h = [red.state.hull, blue.state.hull];
+      for (let i = 0; i < 60 * 12; i++) { const go = M.stats.red.bumps < 1 && i < 60 * 8; red.ctx.ship.speed = red.ctx.ship.order = go ? 0.95 : 0; blue.ctx.ship.speed = blue.ctx.ship.order = 0; blue.pose.vy = red.pose.vy = 0; step(sim, 1); } // (one charge: full ahead until the first touch, then she lets go)
+      return { lostRed: h[0] - red.state.hull, lostBlue: h[1] - blue.state.hull, rams: M.stats.red.rams, bumps: M.stats.red.bumps };
+    };
+    const a = trial('ram'), c = trial('classic');
+    report(a.rams >= 1 && a.lostBlue > 2.5 * Math.max(1, a.lostRed) && a.lostBlue > 1.8 * c.lostBlue, `a ram prow hurts the other ship far more than yours: ramming, blue lost ${a.lostBlue.toFixed(1)} hull and red ${a.lostRed.toFixed(1)} (${a.rams} ram${a.rams === 1 ? '' : 's'}); the same charge with no prow cost blue ${c.lostBlue.toFixed(1)} and red ${c.lostRed.toFixed(1)}`);
+  }
+
+  // -- the bots use all of it: long match of the new ships, with the captains' counters
+  {
+    config.PVP.ROUND_TIME = 200;
+    let longShots = 0, mortar = 0, mines = 0, rams = 0, harp = 0, kites = 0, bands = { long: 0, mid: 0, short: 0 }, rounds_ = 0;
+    const ee = errors;
+    for (const [rid, bid, seed, style] of [['sniper', 'ram', 11, 'sniper'], ['sniper', 'brawler', 12, 'sniper'], ['ram', 'classic', 13, 'daredevil'], ['brawler', 'ram', 14, 'boarder']]) {
+      seedRandom(seed);
+      config.PVP.BOT.STYLE = style;
+      const sim = createSimulation();
+      sim.setSession('versus');
+      const M = sim.match;
+      M.addBots('red', 5); M.addBots('blue', 5);
+      M.shelf = shelfAll;
+      M.applyPicks({ red: idxOf(rid), blue: idxOf(bid) });
+      M.begin({ shelf: false });
+      let n = 0, cap = null;
+      while (M.phase !== 'finale' && n++ < 60 * 230) { step(sim, 1); for (const s of sim.state.ships) if (s.captain) cap = cap || []; if (cap) for (const s of sim.state.ships) if (s.captain && !cap.includes(s.captain)) cap.push(s.captain); }
+      const t = M.totals;
+      for (const k of ['red', 'blue']) { longShots += t[k].longShots; mortar += t[k].mortarShots; mines += t[k].minesLaid; rams += t[k].rams; harp += t[k].harpoons; bands.long += t[k].bandLong; bands.mid += t[k].bandMid; bands.short += t[k].bandShort; }
+      for (const c of cap || []) kites += c.stats.kites;
+      rounds_++;
+    }
+    config.PVP.BOT.STYLE = null;
+    config.PVP.ROUND_TIME = SAVE.round;
+    report(longShots > 10 && mortar > 3, `bot gunners man the long guns and mortars: ${longShots} long shots, ${mortar} mortar shells in ${rounds_} fights`);
+    report(bands.long > 20 && bands.mid > 20 && bands.short > 20, `...and the fights are fought in all three range bands: ${bands.long.toFixed(0)} s long, ${bands.mid.toFixed(0)} s mid, ${bands.short.toFixed(0)} s short`);
+    report(mines >= 1 && rams + harp >= 1, `...the captains lay mines (${mines}), ram (${rams}) and harpoon (${harp}); long-band captains kited ${kites} time(s)`);
+    report(errors === ee, `the range-band ships fly four 200 s fights with 0 errors (${errors - ee})`);
+  }
+  report(errors === e0, `0 errors in the space-and-range section (${errors - e0})`);
+}
+
+
 // ---- 9. no co-op saves; leaving Versus puts the voyage back ----
 {
   const sim = createSimulation();

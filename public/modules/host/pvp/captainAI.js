@@ -64,7 +64,7 @@ export function captainOf(state) {
     dodge: null, dodgeCd: 0, scanT: 0, threat: null, grappleUntil: 0, passCd: rnd([6, 14]), ramCd: 8, grappleCd: rnd([10, 24]), backoffUntil: 0, calloutAt: -99,
     stats: { jinks: 0, dodges: 0, passes: 0, bombRuns: 0, rams: 0, grapples: 0, noRoom: 0, chases: 0, retreats: 0, turns: 0, kites: 0, mineRuns: 0, harpoons: 0 },
     losT: 0, openT: 0, losShift: 0, losPickT: 0,
-    mines: false, mineGap: 0, mineUntil: 0, kiteCd: ship.ai ? 0 : rnd([4, 12]), kiteUntil: 0, harpoonCd: ship.ai ? 0 : rnd([6, 14]), harpoonT: 0, mineSaid: false,
+    mines: false, minesWant: false, mineGap: 0, mineUntil: 0, kiteCd: ship.ai ? 0 : rnd([4, 12]), kiteUntil: 0, harpoonCd: ship.ai ? 0 : rnd([6, 14]), harpoonT: 0, mineSaid: false,
   };
   c.prof = profileOf(ship.layout);
   c.band = chooseBand(S[style], c.prof);
@@ -95,10 +95,11 @@ function scanShells(state, ship, D) {
   const pose = ship.pose;
   for (const sh of state.shells) {
     if (sh.life <= 0 || sh.from === ship.id) continue;
-    if (Math.abs(sh.x - pose.x) > 4200 || Math.abs(sh.y - pose.y) > 2600) continue;
-    const span = Math.min(sh.life, D.LOOK);
+    const lob = sh.kind === 'long' || sh.kind === 'mortar'; // (a long gun's shell takes seconds to cross the arena: she sees it coming from further off, and a mortar shell falls on an arc)
+    if (Math.abs(sh.x - pose.x) > (lob ? 7600 : 4200) || Math.abs(sh.y - pose.y) > (lob ? 5200 : 2600)) continue;
+    const span = Math.min(sh.life, lob ? D.LOOK_LONG : D.LOOK);
     for (let t = 0.04; t <= span; t += 0.05) {
-      const wx = sh.x + (sh.vx - pose.vx) * t, wy = sh.y + (sh.vy - pose.vy) * t;
+      const wx = sh.x + (sh.vx - pose.vx) * t, wy = sh.y + (sh.vy - pose.vy) * t + (sh.g ? 0.5 * sh.g * t * t : 0);
       const sx = toShipX(ship, wx), sy = toShipY(ship, wy);
       if (ship.sim.hitsShip(sx, sy)) {
         n++;
@@ -187,7 +188,7 @@ export function captainFly(state, p, plan, dt) {
     const mid = (hullS.y0 + hullS.y1) / 2;
     let up = c.threat.sy > mid; // hit low on the hull: climb away from it; high: dive
     if (Math.random() < 0.12) up = !up;
-    c.dodge = { up, alt: (up ? 1 : -1) * B.DODGE.ALT * S.dodge * (0.8 + Math.random() * 0.4), thr: (Math.random() < 0.5 ? -1 : 1) * B.DODGE.THR, until: c.t + rnd(B.DODGE.HOLD) };
+    c.dodge = { up, alt: (up ? 1 : -1) * B.DODGE.ALT * S.dodge * (0.8 + Math.random() * 0.4) * (c.threat.t > 1.1 ? B.DODGE.LONG_MUL : 1), thr: (Math.random() < 0.5 ? -1 : 1) * B.DODGE.THR, until: c.t + rnd(B.DODGE.HOLD) };
     c.stats.dodges++;
     if (c.stats.dodges % 6 === 1) callout(state, 'EVASIVE!');
   }
@@ -339,6 +340,7 @@ export function captainFly(state, p, plan, dt) {
     c.mineGap -= dt;
     if (wish && c.mineGap <= 0) { c.mineGap = MN.EVERY; c.mineUntil = c.t + MN.WINDOW; }
     c.mines = wish && c.t < c.mineUntil;
+    c.minesWant = wish; // (a hand goes to the layer while she runs; the mines are dropped in the windows)
     if (c.mines && !c.mineSaid) { c.mineSaid = true; c.stats.mineRuns++; callout(state, 'LAYS A MINEFIELD!', 2); } else if (!c.mines) c.mineSaid = false;
     if (c.play !== 'ram' && c.play !== 'pass' && state.laid && state.laid.length) {
       const av = mineAvoid(state, ship, L, clamp(win.min, -1e9, 1e9), clampAlt, target);

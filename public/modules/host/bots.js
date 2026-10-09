@@ -181,7 +181,7 @@ const paraGun = (L) => {
 function gunReach(state, n) {
   const L = mainShip(state).layout;
   const g = state.GUNS[n];
-  if (g && g.type === 'mines') return g.ammo > 0 && mineWanted(state) ? 0.7 : 4; // (the mine layer: manned when the captain wants a field laid, else left alone)
+  if (g && g.type === 'mines') return g.ammo > 0 && (state.rival || mineWanted(state)) ? 0.3 : 4; // (the mine layer: manned when the captain wants a field laid, else left alone)
   if (g && g.type === 'harpoon') return harpoonWanted(state, g) ? 0.45 : 4;
   const best = bestTarget(state, state.GUNS[n]);
   if (best && best.target.kind === 'flier') return 0.5; // (an enemy in the air: a flak gun's whole job)
@@ -197,9 +197,9 @@ function gunReach(state, n) {
 // ---------- The weapons of the range bands (weapons.js, config.GUN_TYPES): the mine layer and the harpoon gun are not aimed at a target, they are used when the captain wants them ----------
 // Does the captain want a field of mines laid now? Versus: pvp/captainAI.js sets ship.captain.mines (retreating, or a choke ahead of the chaser). Co-op: something hunts her from astern (a plane,
 // the gunship), within a mine's reach.
-function mineWanted(state) {
+function mineWanted(state, fire = false) { // (fire: the captain wants a mine dropped this moment; otherwise only that a hand should be at the layer)
   const ship = mainShip(state);
-  if (state.rival) return !!(ship.captain && ship.captain.mines);
+  if (state.rival) return !!(ship.captain && (fire ? ship.captain.mines : ship.captain.minesWant));
   if (state.phase !== 'flying' || state.ship.down) return false;
   const L = ship.layout, mx = toWorldX(ship, L.refPoint.x), my = toWorldY(ship, L.refPoint.y), f = ship.pose.f;
   const behind = (o) => (o.x - mx) * f < -250 && Math.abs(o.x - mx) < 3400 && Math.abs(o.y - my) < 1600;
@@ -725,8 +725,8 @@ function operate(p, state, dt) {
     const gun = state.GUNS[p.lock];
     if (!gun) return;
     if (gun.type === 'mines') { // the mine layer: stay while a field is wanted, FIRE (hold) drops one mine a cooldown
-      const want = mineWanted(state);
-      p.gunIdle = want && gun.ammo > 0 ? 0 : (p.gunIdle || 0) + dt;
+      const want = mineWanted(state, true), stay = !!state.rival || mineWanted(state); // (Versus: a hand stays at the layer all round; the mines drop when the captain says so)
+      p.gunIdle = stay && gun.ammo > 0 ? 0 : (p.gunIdle || 0) + dt;
       p.fire = want && gun.ammo > 0;
       return;
     }

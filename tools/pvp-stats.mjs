@@ -1,5 +1,6 @@
 // Versus bot-captain report: how lively and how fair the bot captains are, round by round (the "before and after" numbers of the PvP bot work).
-//   node tools/pvp-stats.mjs [--matches 6] [--bots 5] [--seed 2000] [--cap 300] [--quiet 1]
+//   node tools/pvp-stats.mjs [--matches 6] [--bots 5] [--seed 2000] [--cap 300] [--quiet 1] [--red classic] [--blue classic] [--style sniper]
+//   (--red / --blue = a shelf ship id: classic, twin, bags, var0.., sniper, brawler, ram; --style forces every captain's style. The SPACE AND RANGE lines at the end: distance, time in each band, the weapons.)
 // The classic ship against herself, bot crews, best of three N times (seeded). Per round it reports: seconds, winner and cause, boardings tried / made, rams (hull-on-hull bumps),
 // COME ABOUTs, the share of shells that were flying at a hull and missed (dodged), the altitude range each ship flew over, and the captains' own counters if there are any.
 // Printed at the end as means; the red / blue split is the fairness number (the gate is `--check-match --mirror N`, 35-65%).
@@ -9,6 +10,7 @@ import { installShims, seedRandom, publicDir } from './shims.mjs';
 
 const argv = process.argv.slice(2);
 const flag = (n, d) => { const i = argv.indexOf('--' + n); return i < 0 ? d : Number(argv[i + 1]); };
+const sflag = (n, d) => { const i = argv.indexOf('--' + n); return i < 0 ? d : argv[i + 1]; };
 const matches = flag('matches', 6), nBots = flag('bots', 5), seed0 = flag('seed', 2000), cap = flag('cap', 300), quiet = flag('quiet', 0);
 
 installShims();
@@ -17,6 +19,17 @@ const load = (p) => import(pathToFileURL(path.join(publicDir, p)).href);
 const { config } = await load('config.js');
 const { createSimulation } = await load('modules/host/simulation.js');
 const T = await load('modules/host/pose.js');
+const { buildShelf } = await load('modules/host/pvp/shelf.js');
+const redId = sflag('red', 'classic'), blueId = sflag('blue', 'classic'), styleArg = sflag('style', '');
+for (let i = 0; i < argv.length; i++) { // --set GUN_TYPES.long.MUL=3  (any number in config.js, for tuning runs; repeat the flag)
+  if (argv[i] !== '--set') continue;
+  const [path_, val] = argv[i + 1].split('=');
+  const keys = path_.split('.');
+  let o = config;
+  for (const k of keys.slice(0, -1)) o = o[k];
+  o[keys[keys.length - 1]] = Number(val);
+}
+if (styleArg) config.PVP.BOT.STYLE = styleArg; // (every captain flies this style: sniper, brawler, boarder, daredevil)
 
 const DT = 1 / 60;
 let errors = 0;
@@ -35,6 +48,14 @@ if (flag('pass', 1) === 0) config.PVP.BOT.PASS.RATE = 0;
 if (flag('dodge', 1) === 0) config.PVP.BOT.DODGE.ALT = 0;
 if (flag('shell', 0)) config.PVP.SHELL_POWER = flag('shell', 0);
 
+// The space-and-range numbers of one round (both sides added): the fight's mean distance, seconds in each band, the weapons by kind.
+const KEYS = ['secs', 'distSum', 'bandShort', 'bandMid', 'bandLong', 'bandFar', 'longShots', 'longHits', 'mortarShots', 'mortarHits', 'scatterShots', 'scatterHits', 'flakBursts', 'minesLaid', 'mineHits', 'mineShot', 'rams', 'ramRuns', 'ramDmg', 'harpoons', 'harpoonHits', 'stormSecs'];
+function rangeRow(res) {
+  const o = {};
+  for (const k of KEYS) o[k] = (res.stats.red[k] || 0) + (res.stats.blue[k] || 0);
+  o.secs = res.stats.red.secs || 0; o.distSum = res.stats.red.distSum || 0; o.bandShort = res.stats.red.bandShort || 0; o.bandMid = res.stats.red.bandMid || 0; o.bandLong = res.stats.red.bandLong || 0; o.bandFar = res.stats.red.bandFar || 0; // (these are the same for both sides)
+  return o;
+}
 const rows = [];
 const won = { red: 0, blue: 0 }, left = { won: 0, of: 0 };
 for (let m = 0; m < matches; m++) {
@@ -44,6 +65,7 @@ for (let m = 0; m < matches; m++) {
   const M = sim.match, st = sim.state;
   M.addBots('red', nBots);
   M.addBots('blue', nBots);
+  if (redId !== 'classic' || blueId !== 'classic') { M.shelf = buildShelf(); const ix = (id) => M.shelf.findIndex((e) => e.id === id); M.applyPicks({ red: Math.max(0, ix(redId)), blue: Math.max(0, ix(blueId)) }); }
   M.begin({ shelf: false });
   const [red, blue] = st.ships;
   const ships = { red, blue };
@@ -111,7 +133,7 @@ for (let m = 0; m < matches; m++) {
         altRange: (r.alt.red[1] - r.alt.red[0] + r.alt.blue[1] - r.alt.blue[0]) / 2, altSd: (sd(r.ys.red) + sd(r.ys.blue)) / 2, vyFlips: r.vyFlips,
         dmgPerHit: (res.stats.red.dmg + res.stats.blue.dmg) / Math.max(1, res.stats.red.hits + res.stats.blue.hits), shots: res.stats.red.shots + res.stats.blue.shots, hitsPerShot: (res.stats.red.hits + res.stats.blue.hits) / Math.max(1, res.stats.red.shots + res.stats.blue.shots),
         sab: res.stats.red.sabotage + res.stats.blue.sabotage, caps: res.stats.red.captures + res.stats.blue.captures,
-        cap: capStats,
+        cap: capStats, rng: rangeRow(res),
       };
       rows.push(row);
       if (row.winner) { won[row.winner]++; left.of++; if (row.winner === res.left) left.won++; }
@@ -128,4 +150,11 @@ console.log(`  mean fight ${mean('time').toFixed(0)} s (min ${Math.min(...rows.m
 console.log(`  per round: boardings made ${mean('made').toFixed(2)} / tried ${mean('tried').toFixed(2)}, bumps ${mean('bumps').toFixed(2)}, come abouts ${mean('turns').toFixed(2)}, shells dodged ${(dodgedRows.reduce((a, r) => a + r.dodged, 0) / Math.max(1, dodgedRows.length)).toFixed(0)}% of ${mean('aimed').toFixed(0)} aimed, altitude range ${mean('altRange').toFixed(0)} px (sd ${mean('altSd').toFixed(0)}), climb/dive reversals ${mean('vyFlips').toFixed(1)}, hits per shot ${(100 * mean('hitsPerShot')).toFixed(0)}% (${mean('shots').toFixed(0)} shots, ${mean('dmgPerHit').toFixed(3)} hull per hit), sabotage ${mean('sab').toFixed(2)}, helms taken ${mean('caps').toFixed(2)}`);
 if (capKeys.length) console.log('  captain counters per round: ' + capKeys.map((k) => `${k} ${mean2(k).toFixed(2)}`).join(', '));
 function mean2(k) { return rows.reduce((a, r) => a + (r.cap[k] || 0), 0) / Math.max(1, rows.length); }
+{
+  const sum = (k) => rows.reduce((a, r) => a + (r.rng[k] || 0), 0);
+  const pct = (a, b) => (b ? (100 * a / b).toFixed(0) + '%' : '-');
+  const secs = Math.max(1, sum('secs'));
+  console.log(`  SPACE AND RANGE (${redId} red against ${blueId} blue${styleArg ? ', every captain a ' + styleArg : ''}): mean distance ${(sum('distSum') / secs).toFixed(0)} px (${(sum('distSum') / secs / config.PVP.RANGE.PX_PER_M).toFixed(0)} m); time in the bands: short ${pct(sum('bandShort'), secs)}, mid ${pct(sum('bandMid'), secs)}, long ${pct(sum('bandLong'), secs)}, far ${pct(sum('bandFar'), secs)}`);
+  console.log(`  weapons per round: long gun ${(sum('longShots') / rows.length).toFixed(1)} shells, ${pct(sum('longHits'), sum('longShots'))} hit; mortar ${(sum('mortarShots') / rows.length).toFixed(1)} shells, ${pct(sum('mortarHits'), sum('mortarShots'))} hit; grapeshot ${(sum('scatterShots') / rows.length).toFixed(1)} volleys, ${(sum('scatterHits') / Math.max(1, sum('scatterShots'))).toFixed(1)} pellets each; flak bursts ${(sum('flakBursts') / rows.length).toFixed(2)}; mines laid ${(sum('minesLaid') / rows.length).toFixed(1)}, hit ${(sum('mineHits') / rows.length).toFixed(2)}, shot ${(sum('mineShot') / rows.length).toFixed(2)}; rams ${(sum('rams') / rows.length).toFixed(2)} (ram runs ${(sum('ramRuns') / rows.length).toFixed(2)}); harpoons ${(sum('harpoons') / rows.length).toFixed(2)} fired, ${(sum('harpoonHits') / rows.length).toFixed(2)} latched; storm seconds ${(sum('stormSecs') / rows.length).toFixed(1)}`);
+}
 process.exit(errors ? 1 : 0);

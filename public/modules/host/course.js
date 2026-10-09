@@ -216,7 +216,8 @@ function rivalPlan(state) {
       rt.last = R.stamp;
       let shut = 0;
       for (let k = 1; k <= 12; k++) if (solidAt(map, mx + ((R.mid.x - mx) * k) / 13, my + ((R.mid.y - my) * k) / 13)) shut++;
-      if (shut < 2) { rt.shut = 0; rt.open++; } else { rt.open = 0; rt.shut++; }
+      rt.idle = Math.abs(gap) > stand * 1.4 && Math.abs(ship.pose.vx) < 60 ? (rt.idle || 0) + 1 : 0; // (far from her and going nowhere: something the line of sight does not show - a spire beside the line - is in the way)
+      if (shut < 2 && rt.idle < B.ROUTE.IDLE) { rt.shut = 0; rt.open++; } else { rt.open = 0; rt.shut++; }
       if (!rt.on && rt.shut > B.ROUTE.SHUT) rt.on = true;
       else if (rt.on && rt.open > B.ROUTE.OPEN) { rt.on = false; rt.wp = null; }
       if (rt.on && R.stamp - rt.stamp >= B.ROUTE.EVERY) {
