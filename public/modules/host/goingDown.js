@@ -1,16 +1,20 @@
-// "GOING DOWN!" - the ship's last stand (once per mission), and the ice locker.
+// "GOING DOWN!" - the ship's last stand (once per mission): her LIFT has to beat her WEIGHT again.
 //
-// When the hull first reaches 0 in a mission she does not break up. She FALLS for GOING_DOWN.TIME seconds and the
-// crew has three jobs at once, each a meter on the TV (and a job arrow for idle phones, see jobsFor):
-//   LIFT   - emergency overdrive: carry coal to the boiler (each load fills the lift meter);
-//   HEAT   - every coal load heats the boiler; ice blocks from the ICE LOCKER thrown on it cool it (burst = lost);
-//   LEAKS  - 1-3 glowing gasbag holes must be patched (the normal hammer job).
-// Lift full + leaks patched before the time runs out = "SHE HOLDS!" (hull SURVIVE_HULL, levelled out). Otherwise the
-// normal wreck happens (so voyages may limp home on a spare gasbag, see simulation.js).
-// The ice locker also works outside the emergency: a block thrown on the boiler takes a little pressure off.
+// When the hull first reaches 0 in a mission she does not break up. She FALLS for GOING_DOWN.TIME seconds, nothing can hurt her meanwhile, and the TV shows a big LIFT vs WEIGHT balance bar
+// made of the real numbers of the flight (measure()):
+//   WEIGHT  the build's weight plus what moves (balance.js: crew, coal in the firebox, shells, bombs, loads on the decks, what is carried), the cargo still in the racks - less the coal
+//           bunker's stock if the crew has dumped it. Falls the moment something goes overboard.
+//   LIFT    the gasbags' lift (by size, and by how much gas they hold: the torn bags start nearly flat), the hot gas of a boiler at overdrive, engines pointing up (engines.js) - less the lift
+//           a lopsided ship spills (dump evenly!).
+// The ways to bring the two together, each a job for the crew (job arrows on the phones, jobsFor; bots, botJobs):
+//   DUMP WEIGHT  cargo that shook loose on the decks is shovelled overboard (the SHOVEL job, cargo.js); hold Action at the bomb bay to let the bomb load go; hold Action at the coal
+//                bunker to dump its stock (then there is nothing to stoke with, and the bunker stays empty a while after);
+//   PATCH + PUMP the glowing gasbag leaks must be patched (they lose gas fast), and a hand at the helm pumps the bags full again;
+//   FULL STEAM   coal into the boiler: more pressure = hotter gas = more lift - but past BOILER.WARN_AT the boiler can blow, so somebody VENTS the steam;
+//   CUT AWAY     the last resort: hold Action at a marked joint to cut a heavy section away (breakOff.js, cause 'jettison'; lost until the sky-dock rebuilds it).
+// Lift beating weight by MARGIN for HOLD seconds = "SHE HOLDS!" (hull SURVIVE_HULL, levelled out). Otherwise the normal wreck happens (so voyages may limp home on a spare gasbag).
 //
-// This file owns the rules; simulation.js calls the small hooks (tryStart, active/protect, onStoke, takeIce,
-// throwIce, update, newMission). Bots use botJobs(), idle phones jobsFor().
+// This file owns the rules; shipSim.js / simulation.js call the small hooks (tryStart, active/protect, onStoke, update, holdAction/perform, pumpMul, newMission).
 import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
 import { altBounds } from './course.js';
@@ -18,28 +22,34 @@ import { pop } from './popups.js';
 import { refillBags } from './gasBags.js';
 import { mainShip } from './ships.js';
 import { toWorldX, toWorldY } from './pose.js';
+import { planBreak, makeRng } from './breakOff.js';
 
 const GD = config.GOING_DOWN;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // Worked out per ship layout (rebuilt when a new ship build is applied to it).
 const tables = layoutTables((L) => ({
   MAIN_D: L.deckIndex('main'),
-  CAT_D: L.deckIndex('catwalk'),
-  BOILER: L.one('boiler'), // (GOING DOWN! is about the first boiler; a ship with several still only has the one heat meter)
-  LOCKER: L.racks.find((r) => r.kind === 'ice'),
+  LOWER_D: L.deckIndex('lower'),
+  BOILER: L.one('boiler'), // (GOING DOWN! is about the first boiler; a ship with several still has the one steam pool)
+  COAL: L.one('coal'),
+  HELM: L.one('helm'),
+  BAY: L.one('bombBay'),
 }));
 
-export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHoleAt }) {
-  const ship = mainShip(state); // (B1: the ship that falls; B2 makes this one per ship)
+// Is the coal bunker empty because the crew dumped it (bots do not walk to it then)?
+export const bunkerEmpty = (state) => (state.gdCoalOut || 0) > 0 || !!(state.goingDown && state.goingDown.coalGone);
+
+export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHoleAt, getCargo, breakOff }) {
+  const cargo = { place: (...a) => getCargo().place(...a), spawn: (...a) => getCargo().spawn(...a), worldAt: (...a) => getCargo().worldAt(...a) }; // (cargo.js is made after this, shipSim.js)
+  const ship = mainShip(state); // (the ship that falls: one of these per ship)
   const L = ship.layout;
   const tb = () => tables(L);
   const shipPop = (x, y, kind, color, size) => pop(state, toWorldX(ship, x), toWorldY(ship, y), kind, color, size); // (a point on the ship)
   let used = false; // the last stand has been used in this mission
-  state.goingDown = null; // { t, time, lift, heat, loads, loadsDone, heatPer, required, holes, crew }
-  state.iceLocker = { n: GD.LOCKER.MAX, max: GD.LOCKER.MAX, every: GD.LOCKER.EVERY, t: 0, env: null };
-  state.iceFlights = []; // blocks in the air towards the boiler
+  state.goingDown = null; // { t, time, lift, weight, need, hold, m, holes, joints, ... } (see tryStart)
   state.gdBanner = null; // { text, sub, color, t, max } big words in the middle of the TV
   state.gdGrace = 0; // seconds she cannot be hurt after holding
+  state.gdCoalOut = 0; // seconds the coal bunker stays empty (it was dumped)
 
   const crewCount = () => Math.max(1, Object.values(state.players).filter((p) => p.connected !== false && !p.mate).length);
   const say = (text, secs = 3) => {
@@ -47,75 +57,38 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     state.ev.warnText = text;
   };
   const humans = () => Object.values(state.players).filter((p) => !p.bot && p.connected !== false);
+  const openHoles = (g) => g.holes.filter((h) => state.gasHoles.includes(h));
+  const helmManned = (except) => Object.values(state.players).some((q) => q !== except && q.connected !== false && L.kindOf(q.lock) === 'helm');
 
-  // ---- the ice locker ----
-  const lockerCfg = () => ({ ...GD.LOCKER, ...((state.env && GD.LOCKER.ENV[state.env.id]) || {}) });
-  const refillLocker = (dt) => {
-    const lk = state.iceLocker;
-    const c = lockerCfg();
-    const envId = state.env ? state.env.id : null;
-    if (lk.env !== envId) {
-      // A new environment (a new mission): the locker is stocked up for it.
-      lk.env = envId;
-      lk.n = c.MAX;
-    }
-    lk.max = c.MAX;
-    lk.every = c.EVERY;
-    if (lk.n < lk.max) {
-      if ((lk.t += dt) >= lk.every) {
-        lk.t = 0;
-        lk.n = Math.min(lk.max, lk.n + 1);
-      }
-    } else lk.t = 0;
-    lk.n = Math.min(lk.n, lk.max);
-  };
-
-  // What Action does at the locker for this player (an "interaction" for simulation.js), never null.
-  const lockerAction = (player) => {
-    const lk = state.iceLocker;
-    if (player.carry === 'ice') return { type: 'icegive', label: 'Put the ice back' };
-    if (lk.n >= 1) return { type: 'icetake', label: `Take ice (${Math.floor(lk.n)} left)` };
-    return { type: 'need', label: 'Ice locker is empty - it refills' };
-  };
-  const takeIce = (player) => {
-    const lk = state.iceLocker;
-    if (lk.n < 1) return false;
-    lk.n -= 1;
-    player.carry = 'ice';
-    shipPuff(player.x, player.y - 60, '#dff4fa', 6);
-    return true;
-  };
-  const giveIce = (player) => {
-    const lk = state.iceLocker;
-    lk.n = Math.min(lk.max, lk.n + 1);
-    player.carry = null;
-  };
-  // What Action does at the boiler while holding ice.
-  const coolAction = (station) => ({ type: 'cool', station, label: state.goingDown ? 'THROW ICE ON THE BOILER!' : 'Cool the boiler' });
-  // Throw the block: it flies to the boiler and cools it when it lands.
-  const throwIce = (player) => {
-    player.carry = null;
-    const by = L.platforms[tb().BOILER.d].y;
-    state.iceFlights.push({ x0: player.x, y0: L.platforms[player.d == null ? tb().MAIN_D : player.d].y - 80, x1: tb().BOILER.x - 25, y1: by - 60, t: 0, max: GD.THROW_TIME });
-  };
-  const land = () => {
-    const by = L.platforms[tb().BOILER.d].y;
-    shipPuff(tb().BOILER.x - 25, by - 60, '#eaf8fb', 12);
-    shipPuff(tb().BOILER.x - 25, by - 90, '#ffffff', 8);
-    state.sfxQ.push(['fire']);
-    const g = state.goingDown;
-    if (g) {
-      g.heat = Math.max(0, g.heat - GD.ICE_COOL);
-      shipPop(tb().BOILER.x - 25, by - 150, 'PSSSHHH!', '#9fdcff', 1);
-    } else {
-      state.ship.press = Math.max(0, state.ship.press - GD.ICE_PRESS_COOL);
-      shipPop(tb().BOILER.x - 25, by - 150, 'PSSSHHH!', '#9fdcff', 0.8);
-    }
+  // ---- the numbers ----
+  // Her lift and her weight now, in gas points (the scale a gasbag's size is quoted in: she hovers at GAS.NEUTRAL + weight - lift). `coalShed`: the bunker's stock already dumped.
+  const measure = (coalShed = 0) => {
+    const G = config.GAS, E = config.ENGINES, B = config.BALANCE, W = B.LIVE_MASS, CG = config.CROSS.CARGO;
+    const bal = state.balance || {}, env = state.env || {}, od = state.overdrive || 0;
+    const pf = clamp(state.ship.press / 50, 0.05, 1);
+    let engines = 0;
+    for (const e of state.engines || []) if (e.works && e.up) engines += e.up * E.LIFT_GAS * pf * (env.engine || 1) * (1 + config.BOILER.OD_ENGINE * od); // (an engine pointing up lifts, one pointing down drags)
+    const gasPts = state.ship.gas - (env.sink || 0) - (state.liftDeficit || 0) + (env.lift || 0) / G.LIFT - G.NEUTRAL; // (what the pump has put in, above the neutral fill)
+    const bags = L.balance.bagLift + gasPts;
+    const steam = GD.STEAM_LIFT * od;
+    const trim = (GD.TRIM_LOSS * Math.max(0, Math.abs(bal.dx || 0) - B.LEVEL_PX)) / 100;
+    // weight, and what it is made of
+    const loads = (state.loads || []).reduce((n, ld) => n + ld.w, 0);
+    const carried = Object.values(state.players).reduce((n, p) => n + (p.d == null || p.fall || p.air || p.fly || p.connected === false ? 0 : (CG.ITEMS[p.carry] || { w: 0 }).w), 0);
+    let racks = 0;
+    for (const r of L.racks) if (CG.ITEMS[r.kind] && (r.kind === 'sandbag' || r.kind === 'crate')) racks += CG.ITEMS[r.kind].w * (state.rackStock && state.rackStock[`${r.p}@${r.x}`] != null ? state.rackStock[`${r.p}@${r.x}`] : CG.STOCK);
+    const bombs = (state.bombBay ? state.bombBay.bombs : 0) * W.bomb;
+    const coalBin = coalShed ? 0 : tb().COAL ? GD.DUMP.COAL_WEIGHT : 0;
+    const coal = state.ship.fuel * W.fuel + coalBin;
+    const cargoW = loads + carried + racks;
+    const weight = (bal.mass || L.balance.mass) + (bal.live || 0) + racks - coalShed;
+    return { lift: bags + steam + engines - trim, weight, bags, gas: state.ship.gas, steam, engines, trim, cargo: cargoW, bombs, coal, hull: weight - cargoW - bombs - coal };
   };
 
   // ---- the emergency ----
   const protect = () => !!state.goingDown || state.gdGrace > 0; // nothing can hurt her
   const active = () => !!state.goingDown;
+  const pumpMul = () => (state.goingDown ? GD.PUMP_MUL : 1); // (the torn bags take only part of what the pump sends)
 
   const spawnHoles = (g) => {
     const want = g.required;
@@ -135,34 +108,94 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     for (const h of g.holes) h.gd = true;
   };
 
+  // The cargo that shakes loose on her decks (spread along the main and lower decks, crates and sandbags in turn, so the loads are even): returns the weight added.
+  const spawnCargo = (n) => {
+    const C = GD.CARGO, decks = [tb().MAIN_D, tb().LOWER_D].filter((d, i, a) => d >= 0 && a.indexOf(d) === i);
+    const count = clamp(Math.round(C.BASE + n * C.PER_CREW), C.MIN, C.MAX);
+    let w = 0;
+    if (!decks.length) return w;
+    for (let k = 0; k < count; k++) {
+      const d = decks[k % decks.length], pl = L.platforms[d];
+      const x = pl.x0 + 80 + ((pl.x1 - pl.x0 - 160) * ((k * 0.618 + 0.17) % 1)); // (a golden-ratio spread: the loads fall on both ends and the middle)
+      const ld = cargo.place(k % 2 ? 'sandbag' : 'crate', d, x);
+      w += ld.w;
+    }
+    return w;
+  };
+
+  // The marked joints where a heavy section can be cut away: the ends of the decks, tried with the break-off planner; the heaviest ones that do not take the helm, a boiler, a coal
+  // bunker or a gasbag with them. { d, x (a spot on the part that stays), label, mass, spec, prog }.
+  const findJoints = () => {
+    if (!L.parts) return [];
+    const C = GD.CUT, BO = config.BREAKOFF, found = [];
+    const keep = new Set(['helm', 'boiler', 'coal']);
+    L.platforms.forEach((q, d) => {
+      for (const side of [-1, 1]) {
+        const spec = { kind: 'limb', x: side < 0 ? q.x0 : q.x1, y: q.y, reach: 40, len: BO.HIT.LIMB, cause: 'jettison' };
+        let plan;
+        try { plan = planBreak(L.parts, spec, makeRng(7)); } catch { continue; }
+        if (!plan || !plan.ok || plan.mass < C.MIN_MASS || plan.bags.length) continue;
+        if (plan.names.some((nm) => keep.has(L.kindOf(nm)))) continue;
+        const cut = plan.cuts[0];
+        if (!cut) continue;
+        let jd = d, jx, edge;
+        if (cut.whole) { // a small deck goes whole: stand where its ladder meets the deck above
+          const c = L.connectors.find((o) => o.bottom === d || o.top === d);
+          if (!c) continue;
+          jd = c.top === d ? c.bottom : c.top;
+          jx = edge = jd === c.top ? c.xTop : c.xBottom;
+        } else {
+          edge = cut.a <= cut.x0 + 0.5 ? cut.b : cut.a; // (where the deck is cut; he stands 60 px inside what stays)
+          jx = cut.a <= cut.x0 + 0.5 ? cut.b + 60 : cut.a - 60;
+        }
+        if (jd == null || jd < 0 || !L.platforms[jd]) continue;
+        const names = plan.names.length ? plan.names.slice(0, 2).join(' & ') + (plan.names.length > 2 ? ` +${plan.names.length - 2}` : '') : cut.name || 'a section'; // (what goes with it)
+        found.push({ d: jd, x: jx, edge, label: names.toLowerCase(), mass: plan.mass, spec, prog: 0, worked: false, cutId: cut.id });
+      }
+    });
+    found.sort((a, b) => b.mass - a.mass);
+    const out = [];
+    for (const j of found) if (out.length < C.MAX_JOINTS && out.every((o) => o.cutId !== j.cutId && !(o.d === j.d && Math.abs(o.x - j.x) < 250))) out.push(j);
+    return out;
+  };
+
   const tryStart = () => {
     if (!GD.ENABLED || used || state.goingDown || state.ship.down || state.phase !== 'flying') return false;
     used = true;
     const n = crewCount();
-    const loads = clamp(Math.round(GD.LOADS_BASE + n * GD.LOADS_PER_CREW), GD.LOADS_MIN, GD.LOADS_MAX);
-    const heatTotal = GD.HEAT_SMALL + (GD.HEAT_BIG - GD.HEAT_SMALL) * clamp((n - GD.HEAT_SMALL_CREW) / (GD.HEAT_BIG_CREW - GD.HEAT_SMALL_CREW), 0, 1);
     const g = (state.goingDown = {
       t: 0,
       time: GD.TIME + GD.TIME_PER_MISSING * clamp(8 - n, 0, 6),
-      lift: 0,
-      loads,
-      loadsDone: 0,
-      heat: 0,
-      heatPer: heatTotal / loads,
+      crew: n,
       required: clamp(GD.LEAKS_MIN + Math.floor((n - 1) / 3), GD.LEAKS_MIN, GD.LEAKS_MAX),
       holes: [],
-      crew: n,
+      joints: [],
+      hold: 0, // seconds her lift has beaten her weight in a row
+      need: 0, need0: 1, // how many points short she is (weight + margin - lift)
+      coalShed: 0, // the coal bunker's stock dumped (weight points)
+      coalGone: false,
+      cuts: 0,
+      dumped: 0,
+      m: null,
+      bombJob: null,
+      coalJob: null,
       beep: 0,
     });
-    // A ship with no boiler (or no coal bunker to feed one) cannot be lifted by shovelling: only the leaks decide it (S.5e). The lift meter starts full.
-    if (!tb().BOILER || !L.hasKind('coal')) Object.assign(g, { lift: 1, loads: 0, heatPer: 0 });
+    if (tb().COAL) g.coalJob = { d: tb().COAL.d, x: tb().COAL.x, prog: 0, worked: false };
+    if (tb().BAY) g.bombJob = { d: tb().BAY.d, x: tb().BAY.x, prog: 0, worked: false };
     spawnHoles(g);
+    spawnCargo(n);
+    // The torn bags have lost most of their gas.
+    for (const b of state.bags) b.gas = Math.min(b.gas, GD.START_GAS);
+    g.joints = findJoints();
+    g.m = measure();
+    g.need = g.m.weight + GD.MARGIN - g.m.lift;
+    g.need0 = Math.max(10, g.need);
     state.ship.hull = GD.HOLD_HULL;
     state.ship.shake = 1.4;
-    state.iceLocker.n = state.iceLocker.max; // a full locker for the emergency
-    say('GOING DOWN! COAL - ICE - PATCH THE LEAKS!', 5);
+    say('GOING DOWN! DUMP THE WEIGHT - PATCH AND PUMP - FULL STEAM!', 5);
     state.sfxQ.push(['alarm']);
-    for (const p of humans()) phoneFx(p, 'GOING DOWN! Coal to the boiler, ice on the boiler, patch the glowing leaks!', [200, 80, 200, 80, 400]);
+    for (const p of humans()) phoneFx(p, 'GOING DOWN! Lift must beat weight: dump cargo overboard, patch the glowing leaks, pump, stoke the boiler (and vent it)!', [200, 80, 200, 80, 400]);
     return true;
   };
 
@@ -173,13 +206,16 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
   };
 
   const succeed = (why) => {
+    const g = state.goingDown;
+    if (g && g.coalGone) state.gdCoalOut = GD.DUMP.COAL_REFILL; // (the bunker was dumped: it stays empty a while)
     finish();
     state.ship.hull = GD.SURVIVE_HULL;
     state.ship.vy = 0;
     state.ship.shake = 1.2;
+    for (const b of state.bags) b.gas = Math.min(b.gas, config.GAS.NEUTRAL + GD.LEVEL_GAS); // (pumped full to save her: she levels out gently instead of shooting up)
     refillBags(state, config.GAS.NEUTRAL + 6);
     state.gdGrace = GD.GRACE;
-    state.gdBanner = { text: 'SHE HOLDS!', sub: why || 'Levelling out with a sliver of hull...', color: '#7bdc8a', t: 3.5, max: 3.5 };
+    state.gdBanner = { text: 'SHE HOLDS!', sub: why || 'Her lift beats her weight - levelling out with a sliver of hull...', color: '#7bdc8a', t: 3.5, max: 3.5 };
     say('SHE HOLDS! PATCH HER UP!', 4);
     state.sfxQ.push(['kill']);
     shipPuff(800, 600, '#ffffff', 22);
@@ -193,15 +229,8 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
 
   // Called every frame while flying (after the flight maths, before the pitch is worked out).
   const update = (dt) => {
-    refillLocker(dt);
-    for (let i = state.iceFlights.length - 1; i >= 0; i--) {
-      const f = state.iceFlights[i];
-      if ((f.t += dt) >= f.max) {
-        state.iceFlights.splice(i, 1);
-        land();
-      }
-    }
     if (state.gdBanner && (state.gdBanner.t -= dt) <= 0) state.gdBanner = null;
+    if (state.gdCoalOut > 0) state.gdCoalOut = Math.max(0, state.gdCoalOut - dt);
     if (state.gdGrace > 0) {
       state.gdGrace -= dt;
       state.ship.hull = Math.max(state.ship.hull, GD.SURVIVE_HULL * 0.9);
@@ -209,15 +238,31 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     const g = state.goingDown;
     if (!g || state.ship.down) return;
     g.t += dt;
-    g.heat = Math.max(0, g.heat - GD.HEAT_COOL * dt);
     state.ship.hull = GD.HOLD_HULL;
     state.ship.shake = Math.max(state.ship.shake, 0.35);
-    // The boiler gauge follows the heat (kept just under the point where it would rattle and blow on its own).
-    if (tb().BOILER) state.ship.press += (66 + 22 * clamp(g.heat, 0, 1) - state.ship.press) * Math.min(1, dt * 3);
-    // The sinking: faster the longer it goes, slower the more lift there is. Never into the rock (the course pushes her
-    // out and she scrapes harmlessly), and never below the lowest height a plain course allows.
+    // The glowing leaks lose gas fast until they are patched.
+    const extra = config.GAS.LEAK_PER_HOLE * (GD.LEAK_MUL - 1);
+    for (const h of openHoles(g)) {
+      const b = state.bags[h.bag < state.bags.length ? h.bag | 0 : 0];
+      if (b) b.gas = Math.max(0, b.gas - extra * dt);
+    }
+    // Holding Action wears off like any other job.
+    for (const o of [...g.joints, g.coalJob, g.bombJob]) {
+      if (!o) continue;
+      if (!o.worked) o.prog = Math.max(0, (o.prog || 0) - dt * 0.4);
+      o.worked = false;
+    }
+    // The numbers, and how far short she is.
+    const m = (g.m = measure(g.coalShed));
+    g.need = m.weight + GD.MARGIN - m.lift;
+    g.lift = m.lift;
+    g.weight = m.weight;
+    if (g.t <= dt * 1.5) g.need0 = Math.max(10, g.need); // (the first look with the cargo on the decks: how far short she starts)
+    // The sinking: faster the longer it goes, slower the nearer her lift is to her weight. Never into the rock (the course pushes her out and she scrapes harmlessly), and never
+    // below the lowest height a plain course allows.
     const u = clamp(g.t / g.time, 0, 1);
-    let rate = GD.FALL_RATE * (GD.FALL_START + (1 - GD.FALL_START) * u) * (1 - GD.FALL_BRAKE * g.lift);
+    const short = clamp(g.need / g.need0, 0, 1);
+    let rate = GD.FALL_RATE * (GD.FALL_START + (1 - GD.FALL_START) * u) * (1 - GD.FALL_BRAKE * (1 - short));
     if (state.course && state.course.scraping) rate = 0;
     const lo = state.course ? altBounds(state).lo : -Infinity;
     let alt = state.ship.alt - rate * dt;
@@ -230,29 +275,84 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
       g.beep = 1.1;
       state.sfxQ.push(['alarm']);
     }
-    // Jobs done?
-    const open = g.holes.filter((h) => state.gasHoles.includes(h)).length;
-    if (g.lift >= 1 && open === 0) return succeed();
-    if (g.heat >= 1) {
-      shipPuff(tb().BOILER.x - 25, L.platforms[tb().BOILER.d].y - 60, '#ff8c42', 24);
-      return fail('THE BOILER BURST! SHE FELL!');
-    }
+    // Saved? Her lift must beat her weight by the margin, and stay there.
+    if (g.need <= 0) g.hold += dt;
+    else g.hold = Math.max(0, g.hold - dt * 1.5);
+    if (g.hold >= GD.HOLD) return succeed();
     if (g.t >= g.time) return fail("SHE FELL FROM THE SKY!");
   };
 
-  // A load of coal went into the boiler (simulation.js 'stoke').
+  // A load of coal went into the boiler (shipSim.js 'stoke'): the steam jumps - full steam is more lift, but the boiler blows at the top.
   const onStoke = (player) => {
     const g = state.goingDown;
     if (!g) return false;
-    if (g.lift < 1) {
-      g.loadsDone += 1;
-      g.lift = Math.min(1, g.loadsDone / g.loads);
-      g.heat += g.heatPer;
-      shipPop(tb().BOILER.x, L.platforms[tb().BOILER.d].y - 160, g.lift >= 1 ? 'FULL LIFT!' : 'LIFT!', '#ffb347', 1);
-      phoneFx(player, g.lift >= 1 ? 'Full lift! Keep the boiler cool!' : '+LIFT!', [40, 30, 40]);
-    }
-    state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel);
+    state.ship.press = Math.min(100, state.ship.press + GD.STOKE_PRESS);
+    const b = tb().BOILER;
+    if (b) shipPop(b.x, L.platforms[b.d].y - 160, state.ship.press >= config.BOILER.WARN_AT ? 'TOO HOT! VENT!' : 'FULL STEAM!', state.ship.press >= config.BOILER.WARN_AT ? '#ff6b4a' : '#ffb347', 1);
+    phoneFx(player, state.ship.press >= config.BOILER.WARN_AT ? 'Boiler too hot - VENT the steam!' : '+STEAM!', [40, 30, 40]);
     return true;
+  };
+
+  // ---- hold actions: cut a section away, dump the coal bunker, drop the bombs ----
+  // What Action does for this player here (an "interaction" for shipSim.js useFor), or null. `here(o, reach)`: is o on his deck within reach. A bot only does one when its job says so
+  // (otherwise the bunker's Action would never grab coal for it).
+  const holdAction = (player, here) => {
+    const g = state.goingDown;
+    if (!g) return null;
+    const job = player.botJob, ok = (kind, obj) => !player.bot || (job && job.kind === kind && (obj === undefined || job.obj === obj));
+    if (player.bot && job && job.kind === 'vent') { // (a bot's one button would take the rack or the extinguisher beside the vent instead)
+      const i = L.vents.indexOf(job.obj);
+      if (i >= 0 && here(job.obj, 40)) return { type: 'vent', obj: job.obj, label: state.ventOpen[i] ? 'Close vent' : 'Open vent' };
+    }
+    for (const j of g.joints) if (here(j, GD.CUT.REACH) && ok('cut', j)) return { type: 'cut', obj: j, hold: true, time: GD.CUT.TIME, label: `LAST RESORT: CUT AWAY ${j.label.toUpperCase()}!` };
+    const bay = tb().BAY;
+    if (bay && g.bombJob && state.bombBay.bombs > 0 && player.carry !== 'ammo' && here(bay, 70) && ok('dumpbombs')) return { type: 'dumpbombs', obj: g.bombJob, hold: true, time: GD.DUMP.BOMB_TIME, label: 'DROP THE BOMBS!' };
+    const co = tb().COAL;
+    if (co && g.coalJob && !g.coalGone && player.carry !== 'coal' && here(co, 70) && ok('dumpcoal')) return { type: 'dumpcoal', obj: g.coalJob, hold: true, time: GD.DUMP.COAL_TIME, label: 'DUMP THE COAL OVERBOARD!' };
+    return null;
+  };
+
+  // A hold action ran to the end.
+  const perform = (type, obj, player) => {
+    const g = state.goingDown;
+    if (!g) return;
+    if (type === 'cut') {
+      const j = obj;
+      const r = breakOff({ ...j.spec, cause: 'jettison' }, { force: true });
+      if (r) {
+        g.cuts++;
+        g.joints = findJoints(); // (the deck numbers changed)
+        say(`CUT AWAY! -${Math.round(r.plan.mass)} WEIGHT`, 3);
+        phoneFx(player, 'Cut away! She is lighter...', [60, 40, 120]);
+      } else {
+        phoneFx(player, "It won't come away!", [40]);
+        g.joints = g.joints.filter((q) => q !== j);
+      }
+      return;
+    }
+    if (type === 'dumpbombs') {
+      const bay = state.bombBay, n = bay.bombs;
+      if (n <= 0) return;
+      bay.bombs = 0;
+      bay.open = Math.max(bay.open || 0, 2);
+      const o = tb().BAY ? cargo.worldAt(tb().BAY.x, L.bombBay ? L.bombBay.y + 20 : L.platforms[tb().BAY.d].y) : { x: 0, y: 0 };
+      for (let k = 0; k < Math.min(n, 4); k++) cargo.spawn('crate', o.x + (k - 1.5) * 26, o.y, ship.pose.vx, ship.pose.vy + 160, { ghost: true });
+      g.dumped += n * config.BALANCE.LIVE_MASS.bomb;
+      shipPop(tb().BAY.x, L.platforms[tb().BAY.d].y - 140, 'BOMBS AWAY!', '#ffd23f', 1);
+      phoneFx(player, 'Bombs away - she is lighter!', [40, 30, 40]);
+      return;
+    }
+    if (type === 'dumpcoal') {
+      if (g.coalGone) return;
+      g.coalGone = true;
+      g.coalShed = GD.DUMP.COAL_WEIGHT;
+      g.dumped += GD.DUMP.COAL_WEIGHT;
+      const co = tb().COAL, pl = L.platforms[co.d], mid = L.refPoint ? L.refPoint.x : (pl.x0 + pl.x1) / 2, dir = co.x < mid ? -1 : 1;
+      const o = cargo.worldAt(co.x, pl.y - 30);
+      for (let k = 0; k < 3; k++) cargo.spawn('coal', o.x + k * 18, o.y, dir * ship.pose.f * (200 + k * 40) + ship.pose.vx, -240 + ship.pose.vy, { ghost: true });
+      shipPop(co.x, pl.y - 140, 'COAL OVERBOARD!', '#c9c9c9', 1);
+      phoneFx(player, 'Coal bunker dumped - no coal to stoke with now!', [40, 30, 40]);
+    }
   };
 
   // The mission ended (beacon / home) while she was falling: she limps in.
@@ -260,84 +360,97 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     if (state.goingDown) succeed('Home at last!');
   };
 
-  // A new mission: the last stand is back, the locker is stocked.
+  // A new mission: the last stand is back, the coal bunker is stocked.
   const newMission = () => {
     used = false;
     if (state.goingDown) finish();
     state.gdGrace = 0;
-    state.iceFlights.length = 0;
-    state.iceLocker.n = lockerCfg().MAX;
-    state.iceLocker.t = 0;
+    state.gdCoalOut = 0;
   };
   const reset = () => {
     newMission();
     state.gdBanner = null;
   };
 
-  // Extra nose-down tip while falling (added to the pitch in simulation.js).
+  // Extra nose-down tip while falling (added to the pitch in shipSim.js).
   const pitch = () => (state.goingDown ? GD.NOSE * (0.4 + 0.6 * clamp(state.goingDown.t / state.goingDown.time, 0, 1)) : 0);
 
   // Phone status line.
   const status = () => {
     const g = state.goingDown;
-    if (!g) return '';
-    const open = g.holes.filter((h) => state.gasHoles.includes(h)).length;
-    if (!g.loads) return `GOING DOWN! ${Math.ceil(Math.max(0, g.time - g.t))}s - ${open} leak${open === 1 ? '' : 's'} to patch`;
-    return `GOING DOWN! ${Math.ceil(Math.max(0, g.time - g.t))}s - lift ${g.loadsDone}/${g.loads}, heat ${Math.round(g.heat * 100)}%, ${open} leak${open === 1 ? '' : 's'} to patch`;
+    if (!g || !g.m) return '';
+    const left = Math.ceil(Math.max(0, g.time - g.t));
+    return `GOING DOWN! ${left}s - lift ${Math.round(g.lift)} / weight ${Math.round(g.weight)}${g.need > 0 ? ` (short ${Math.ceil(g.need)})` : ' - HOLD IT!'}`;
   };
 
   // ---- jobs for idle phones (jobs.js adds these instead of the usual list while she falls) ----
   // [{ kind, obj, d, x, urgency, label, max, fetch? }]
-  const taskOrder = () => {
-    const g = state.goingDown;
-    const open = g.holes.filter((h) => state.gasHoles.includes(h));
-    const coalLeft = g.loads - g.loadsDone;
-    return { g, open, coalLeft };
-  };
   const jobsFor = (p) => {
-    if (!state.goingDown) return null;
-    const { g, open, coalLeft } = taskOrder();
+    const g = state.goingDown;
+    if (!g || !g.m) return null;
     const out = [];
-    const U = 3;
+    const U = 3, press = state.ship.press;
     const bunker = L.nearest('coal', p);
-    if (g.loads && (coalLeft > 0 || p.carry === 'coal')) {
-      for (let k = 0; k < Math.min(3, Math.max(1, coalLeft)); k++) out.push({ kind: 'coal', obj: 'gdcoal' + k, d: tb().BOILER.d, x: tb().BOILER.x, urgency: U, max: 1, label: 'EMERGENCY COAL for the boiler!', ...(p.carry === 'coal' || !bunker ? {} : { fetch: bunker.n }) });
+    for (const h of openHoles(g)) out.push({ kind: 'gas', obj: h, d: h.d, x: h.x, urgency: U * 1.1, max: 1, label: 'PATCH THE GLOWING LEAK!' });
+    const helm = tb().HELM;
+    if (helm && !helmManned(p) && state.ship.gas < 97) out.push({ kind: 'helm', obj: 'gdhelm', d: helm.d, x: helm.x, urgency: U * 1.2, max: 1, label: 'TAKE THE HELM - PUMP THE BAGS FULL!' });
+    for (const ld of state.loads || []) out.push({ kind: 'shovel', obj: ld, d: ld.d, x: ld.x, urgency: U, max: 1, label: `DUMP IT OVERBOARD! (${((config.CROSS.CARGO.ITEMS[ld.kind] || {}).label || 'load').toLowerCase()})` });
+    if (press >= GD.VENT_AT - 4) L.vents.forEach((v, i) => { if (!state.ventOpen[i]) out.push({ kind: 'vent', obj: v, d: v.d, x: v.x, urgency: U * 1.6, max: 1, label: 'VENT THE BOILER!' }); });
+    if (!g.coalGone && tb().BOILER && L.hasKind('coal') && (press < GD.STOKE_BELOW || p.carry === 'coal')) {
+      for (let k = 0; k < 2; k++) out.push({ kind: 'coal', obj: 'gdcoal' + k, d: tb().BOILER.d, x: tb().BOILER.x, urgency: U * 0.9, max: 1, label: 'STOKE THE BOILER - FULL STEAM!', ...(p.carry === 'coal' || !bunker ? {} : { fetch: bunker.n }) });
     }
-    if (g.loads) out.push({ kind: 'cool', obj: 'gdcool0', d: tb().BOILER.d, x: tb().BOILER.x, urgency: g.heat > 0.55 ? U * 1.4 : U * 0.8, max: 1, label: 'ICE for the boiler!' });
-    if (g.loads && (g.heat > 0.4 || crewCount() >= 6)) out.push({ kind: 'cool', obj: 'gdcool1', d: tb().BOILER.d, x: tb().BOILER.x, urgency: U * 0.7, max: 1, label: 'ICE for the boiler!' });
-    for (const h of open) out.push({ kind: 'gas', obj: h, d: h.d, x: h.x, urgency: U, max: 1, label: 'PATCH THE GLOWING LEAK!' });
+    const late = g.t / g.time;
+    if (g.bombJob && state.bombBay.bombs > 0 && g.need > 0) out.push({ kind: 'dump', obj: g.bombJob, d: g.bombJob.d, x: g.bombJob.x, urgency: U * 0.6, max: 1, label: 'DROP THE BOMBS! (hold)' });
+    if (g.coalJob && !g.coalGone && g.need > 0 && late > 0.4) out.push({ kind: 'dump', obj: g.coalJob, d: g.coalJob.d, x: g.coalJob.x, urgency: U * 0.5, max: 1, label: 'DUMP THE COAL BUNKER! (hold)' });
+    if (g.need > 0 && late > GD.CUT_AT) for (const j of g.joints) out.push({ kind: 'cut', obj: j, d: j.d, x: j.x, urgency: U * 0.5, max: 1, label: `LAST RESORT: CUT AWAY ${j.label.toUpperCase()} (hold)` });
+    for (const q of Object.values(state.players)) if (q !== p && q.ko > 0 && !q.fall && q.conn == null && q.d != null) out.push({ kind: 'revive', obj: q, d: q.d, x: q.x, urgency: U * 0.7, max: 1, label: `REVIVE ${q.name}` });
     return out;
   };
 
-  return { tryStart, update, protect, active, onStoke, missionDone, newMission, reset, pitch, status, jobsFor, lockerAction, coolAction, takeIce, giveIce, throwIce };
+  return { tryStart, update, protect, active, pumpMul, onStoke, holdAction, perform, missionDone, newMission, reset, pitch, status, jobsFor, measure };
 }
 
-// ---- bots: while she falls they split across the three tasks (bots.js asks for this instead of its usual list) ----
+// ---- bots: while she falls they split across the jobs (bots.js asks for this instead of its usual list) ----
 // Returns jobs in the order bots should claim them (the first free one of the first kind wins), each `urgent`.
 export function botJobs(state, bot) {
   const g = state.goingDown;
-  if (!g) return [];
+  if (!g || !g.m) return [];
+  const L = mainShip(state).layout;
   const players = Object.values(state.players).filter((q) => q.connected !== false);
   const n = Math.max(1, players.length);
+  const press = state.ship.press;
   const open = g.holes.filter((h) => state.gasHoles.includes(h));
-  const coalLeft = g.loads - g.loadsDone;
-  const coalSlots = coalLeft > 0 ? Math.min(coalLeft, clamp(Math.round(n * 0.4), 1, 3)) : 0;
-  const iceSlots = !g.loads ? 0 : n >= 6 ? 2 : 1; // (no boiler to cool when the last stand is only about the leaks)
-  const coal = [];
-  for (let k = 0; k < coalSlots; k++) coal.push({ kind: 'coal', obj: 'gdcoal' + k, max: 1, urgent: true });
-  const ice = [];
-  for (let k = 0; k < iceSlots; k++) ice.push({ kind: 'cool', obj: 'gdcool' + k, max: 1, urgent: true });
-  const leaks = open.map((h) => ({ kind: 'patch', obj: h, max: 1, urgent: true }));
-  // Someone carrying coal/ice finishes that delivery first.
   const jobs = [];
-  if (g.loads && bot.carry === 'coal' && coalLeft > 0) jobs.push({ kind: 'coal', obj: 'gdcoal0', max: 1, urgent: true });
-  if (g.loads && bot.carry === 'ice') jobs.push({ kind: 'cool', obj: 'gdcool0', max: 1, urgent: true });
-  // The boiler is close to bursting: ice before anything else. Otherwise coal, a leak, ice - one of each in turn.
-  const hot = g.heat > 0.6;
-  const order = hot ? [ice, coal, leaks] : [coal, leaks, ice];
-  for (let i = 0; i < 3; i++) for (const list of order) if (list[i]) jobs.push(list[i]);
-  for (const list of order) for (let i = 3; i < list.length; i++) jobs.push(list[i]);
-  // Nothing left to do (all three done is the end of it) - help the fallen up.
+  const add = (j) => jobs.push({ max: 1, urgent: true, ...j });
+  const t = tables(L);
+  const late = g.t / g.time;
+  const stokeOk = !g.coalGone && t.BOILER && L.hasKind('coal') && !bunkerEmpty(state);
+  // Someone carrying coal finishes that delivery first.
+  if (bot.carry === 'coal' && stokeOk) add({ kind: 'coal', obj: 'gdcoal0' });
+  // The boiler is about to blow: vent it before anything else.
+  const hot = press >= GD.VENT_AT;
+  if (hot) L.vents.forEach((v, i) => { if (!state.ventOpen[i]) add({ kind: 'vent', obj: v }); });
+  // A hand at the helm pumps the bags full (it stays there: updateBot keeps the helm bot on his post).
+  const helmSt = t.HELM;
+  const helmTaken = players.some((q) => q !== bot && (L.kindOf(q.lock) === 'helm' || (q.botJob && q.botJob.kind === 'station' && helmSt && q.botJob.obj === helmSt.n)));
+  if (helmSt && !helmTaken && state.ship.gas < 97) add({ kind: 'station', obj: helmSt.n, tier: 0 });
+  for (const h of open) add({ kind: 'patch', obj: h });
+  const coalSlots = stokeOk && press < GD.STOKE_BELOW ? (n >= 5 ? 2 : 1) : 0;
+  for (let k = 0; k < coalSlots; k++) add({ kind: 'coal', obj: 'gdcoal' + k });
+  if (!hot && press < GD.VENT_CLOSE) L.vents.forEach((v, i) => { if (state.ventOpen[i]) add({ kind: 'vent', obj: v }); }); // (the steam is wanted now: shut the vents again)
+  // Cargo overboard, from the heavy end first (the lopsided ship spills lift).
+  const dx = (state.balance && state.balance.dx) || 0, com = (state.balance && state.balance.comX) || 0;
+  const loads = state.loads || [];
+  const heavySide = Math.abs(dx) > config.BALANCE.LEVEL_PX ? Math.sign(dx) : 0; // (she is lopsided: only the loads on the heavy side, until she is level again)
+  const heavy = heavySide ? loads.filter((ld) => Math.sign(ld.x - com) === heavySide) : loads;
+  for (const ld of heavy.length ? heavy : loads) add({ kind: 'shovel', obj: ld });
+  // What cannot be reached by the easy ways: the last resorts.
+  const reach = (100 - state.ship.gas) * 0.8 + (GD.STEAM_LIFT - g.m.steam) + g.m.cargo + g.m.bombs;
+  const short = g.need > 0;
+  if (short && state.bombBay.bombs > 0 && t.BAY && (loads.length === 0 || late > 0.3)) add({ kind: 'dumpbombs', obj: g.bombJob });
+  if (short && !g.coalGone && g.coalJob && late > GD.CUT_AT * 0.7 && g.need > reach * 0.75) add({ kind: 'dumpcoal', obj: g.coalJob });
+  if (short && late > GD.CUT_AT && (g.need > reach * 0.9 || late > 0.8)) for (const j of g.joints) add({ kind: 'cut', obj: j });
+  // Nothing left to do - help the fallen up.
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
   return jobs;
 }

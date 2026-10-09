@@ -40,7 +40,7 @@ import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
 import { windSpeed } from './sails.js';
-import { drawIceBlock, drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
+import { drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
 // ONE renderer draws the whole sky (B.3): the background and the terrain once, then EVERY ship (renderFrame's loop over the ships: each under her own pose, with her own art bake,
 // crew, guns, hazards, fires, holes, lamps and ropes), then the world's effects, the darkness (every ship's glow and beams) and the HUD. `state` is the WORLD state.
@@ -1575,11 +1575,6 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.restore();
       return;
     }
-    if (item === 'ice') {
-      drawIceBlock(ctx, 4, 0, 0.8); // a block of ice from the locker (GOING DOWN!)
-      ctx.restore();
-      return;
-    }
     if (sprites.pivot(ctx, 'items/' + item, 0, 0, 0.5, item === 'coal' || item === 'ammo' ? 0.5 : 0.85, swingAge < 250 ? -0.9 + (swingAge / 250) * 1.6 : 0)) {
       ctx.restore();
       return;
@@ -1677,6 +1672,11 @@ export function createRenderer({ ctx, state: world, canvas }) {
         return { x: o.x, y: o.y, r: 40 };
       case 'shovel':
         return { x: o.x, y: P[o.d].y - 24, r: 46 };
+      case 'cut':
+        return { x: o.x, y: P[o.d].y - 40, r: 60 };
+      case 'dumpcoal':
+      case 'dumpbombs':
+        return { x: o.x, y: P[o.d].y - 50, r: 52 };
       case 'unclog':
         return { x: o.x, y: P[o.d].y - 36, r: 54 };
       case 'oxygen':

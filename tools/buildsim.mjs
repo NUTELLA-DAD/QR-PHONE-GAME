@@ -98,7 +98,7 @@ async function checkClassic() {
 }
 
 // S.3: the scratch multi-instance build (classic + a second boiler + a second lookout, tools/fixtures/multi-build.mjs) must
-// validate, and a 2-minute botsim of it must run with 0 errors with the bots using BOTH boilers (coal loaded) and BOTH lookouts.
+// validate, and a 3-minute botsim of it must run with 0 errors with the bots using BOTH boilers (coal loaded) and BOTH lookouts.
 async function checkMulti() {
   const { BUILDS, buildLayout } = await load('modules/host/shipBuild.js');
   const { validate } = await load('modules/host/buildCheck.js');
@@ -114,10 +114,10 @@ async function checkMulti() {
   report(!bad([{ part: 'station', n: 'Fore Boiler', kind: 'boiler', p: 'main', x: 300 }]).ok, 'validate rejects a duplicate station name');
   report(!bad([{ part: 'station', n: 'Mystery', p: 'main', x: 300 }]).ok, 'validate rejects a station with no kind');
   report(!bad([{ part: 'station', n: 'Second Helm', kind: 'helm', p: 'main', x: 300 }]).ok, 'validate rejects a second helm');
-  const out = spawnSync(process.execPath, ['tools/botsim.mjs', '--build', 'multi', '--minutes', '2', '--seed', '2', '--map', 'network'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 });
+  const out = spawnSync(process.execPath, ['tools/botsim.mjs', '--build', 'multi', '--minutes', '3', '--seed', '2', '--map', 'network'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 });
   const text = (out.stdout || '') + (out.stderr || '');
   const stats = (text.match(/^BUILD_STATS (.*)$/m) || [])[1];
-  report(out.status === 0 && /^errors: 0$/m.test(text) && !!stats, 'botsim --build multi --minutes 2: 0 errors' + (out.status === 0 ? '' : '\n' + text.split('\n').slice(-12).join('\n')));
+  report(out.status === 0 && /^errors: 0$/m.test(text) && !!stats, 'botsim --build multi --minutes 3: 0 errors' + (out.status === 0 ? '' : '\n' + text.split('\n').slice(-12).join('\n')));
   if (stats) {
     const { manned, boilerLoads } = JSON.parse(stats);
     report((boilerLoads['Boiler'] || 0) > 0 && (boilerLoads['Fore Boiler'] || 0) > 0, `bots shovelled coal into both boilers (${JSON.stringify(boilerLoads)})`);

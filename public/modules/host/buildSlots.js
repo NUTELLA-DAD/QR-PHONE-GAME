@@ -87,7 +87,7 @@ export function gunMountFor(q, x, fore) {
 // The full decks (and nests) that are open air: where a mast, a lamp or a boarding point may stand (a covered deck has a roof).
 const BODY_ROWS = ['catwalk', 'main', 'lower', 'keel', 'deep'];
 const openDecks = (L, rows = BODY_ROWS) => L.platforms.filter((q) => q.outside && rows.includes(rowOf(q)));
-const RACK_LABEL = { hammer: 'Hammer rack', sword: 'Sword rack', hookshot: 'Hookshot rack', ice: 'Ice locker', sandbag: 'Sandbag rack', crate: 'Crate stack', towline: 'Towline reel' };
+const RACK_LABEL = { hammer: 'Hammer rack', sword: 'Sword rack', hookshot: 'Hookshot rack', sandbag: 'Sandbag rack', crate: 'Crate stack', towline: 'Towline reel' };
 const BAY_W = 290; // a bomb bay compartment (the classic one is this wide)
 
 // The palette, in the order a ship is usually built: each type lists its candidate slots for a build (L = its layout).
@@ -162,7 +162,7 @@ export const PALETTE = [
     }
     return out;
   } },
-  ...['hammer', 'sword', 'hookshot', 'ice'].map((kind) => ({ id: 'rack_' + kind, label: RACK_LABEL[kind], hint: 'click a deck spot', slots: (L) => rackSlots(L, 'rack', RACK_LABEL[kind].toLowerCase(), kind) })),
+  ...['hammer', 'sword', 'hookshot'].map((kind) => ({ id: 'rack_' + kind, label: RACK_LABEL[kind], hint: 'click a deck spot', slots: (L) => rackSlots(L, 'rack', RACK_LABEL[kind].toLowerCase(), kind) })),
   // Cross-ship play (B.6, config.CROSS): cargo racks (ATTACK throws what you take: a sandbag or crate lands as a live load on whatever deck it hits), and a towline reel (hook another ship and tow her).
   ...['sandbag', 'crate', 'towline'].map((kind) => ({ id: 'rack_' + kind, label: RACK_LABEL[kind], hint: kind === 'towline' ? 'click a deck spot: take the line, ATTACK throws its grapple at another ship in reach and tows her' : 'click a deck spot: take one and throw it (ATTACK on an open deck); it lands as dead weight and tips whatever ship it hits', slots: (L) => rackSlots(L, 'rack', RACK_LABEL[kind].toLowerCase(), kind) })),
   { id: 'crewCannon', label: 'Crew cannon', hint: 'click a spot on an open-air deck: a brass cannon that fires a crew member across the sky. One climbs into the barrel, a second aims and fires from the post behind it (or the one inside fires himself, weaker). Heavy; needs room for the post', slots: (L) => cannonSlots(L) },
@@ -375,7 +375,7 @@ const RULES = {
   medbay: { rows: ['main', 'lower', 'keel', 'deep'], once: (parts) => count(parts, (p) => p.part === 'medbay') > 0, onceText: 'A ship has one medbay.' },
   bombBay: { rows: ['lower'], once: (parts) => count(parts, (p) => p.part === 'bombBay' || (p.part === 'deck' && p.id === 'bay')) > 0, onceText: 'A ship has one bomb bay.' },
   lift: { rows: ['main'], once: (parts) => count(parts, (p) => p.part === 'lift') > 0, onceText: 'A ship has one lift.' },
-  boarding: { rows: ['catwalk', 'main', 'lower', 'keel', 'deep'], open: true }, armour: { rows: BODY_ROWS }, rack_hammer: { rows: RACK_ROWS }, rack_sword: { rows: RACK_ROWS }, rack_hookshot: { rows: RACK_ROWS }, rack_ice: { rows: RACK_ROWS }, rack_sandbag: { rows: RACK_ROWS }, rack_crate: { rows: RACK_ROWS }, rack_towline: { rows: RACK_ROWS }, crewCannon: { rows: BODY_ROWS, open: true },
+  boarding: { rows: ['catwalk', 'main', 'lower', 'keel', 'deep'], open: true }, armour: { rows: BODY_ROWS }, rack_hammer: { rows: RACK_ROWS }, rack_sword: { rows: RACK_ROWS }, rack_hookshot: { rows: RACK_ROWS }, rack_sandbag: { rows: RACK_ROWS }, rack_crate: { rows: RACK_ROWS }, rack_towline: { rows: RACK_ROWS }, crewCannon: { rows: BODY_ROWS, open: true },
   extinguisher: { rows: RACK_ROWS }, vent: { rows: ['catwalk', 'main', 'lower', 'keel', 'deep'] }, gasValve: { rows: ['nest', 'catwalk', 'main'], needsBag: true }, ballast: { rows: ['main', 'lower', 'keel', 'deep'] }, ballast_hang: { rows: ['lower', 'keel', 'deep'] },
   ladder: { link: true }, pole: { link: true },
 };
@@ -507,7 +507,7 @@ export const MINIMAL = {
   parts: [
     ['boiler', 'main', 300], ['coal', 'lower', 400], ['ammo', 'lower', 640], ['helm', 'catwalk', 800], ['engine', 'lower', 50], ['engine', 'lower', 950],
     ['gun', 'catwalk', 300], ['gun', 'catwalk', 820], ['lookout', 'nest', 500], ['medbay', 'lower', 520], ['bombBay', 'lower', 760], ['lift', 'main', 700],
-    ['boarding', 'catwalk', 300], ['boarding', 'catwalk', 820], ['rack_hammer', 'main', 520], ['rack_sword', 'main', 200], ['rack_hookshot', 'catwalk', 560], ['rack_ice', 'main', 780], ['extinguisher', 'lower', 300],
+    ['boarding', 'catwalk', 300], ['boarding', 'catwalk', 820], ['rack_hammer', 'main', 520], ['rack_sword', 'main', 200], ['rack_hookshot', 'catwalk', 560], ['extinguisher', 'lower', 300],
   ],
 };
 export function minimalBuild(plan = MINIMAL) {

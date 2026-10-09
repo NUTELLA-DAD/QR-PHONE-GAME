@@ -1173,7 +1173,7 @@ export const config = {
     MAX_CREW: 3, // this many human crew or fewer get mates (a 4th human sends them home)
     COUNT: { 1: 2, 2: 2, 3: 1 }, // mates per number of humans aboard
     SPAWN_GAP: 1.5, // seconds between one mate dropping aboard and the next
-    JOBS: ['coal', 'ammo', 'patch', 'fire', 'revive', 'cool', 'heal'], // the only job kinds a mate takes (hauling and mending; GOING DOWN ice 'cool'; going to the medbay when hurt)
+    JOBS: ['coal', 'ammo', 'patch', 'fire', 'revive', 'heal'], // the only job kinds a mate takes (hauling and mending; going to the medbay when hurt; GOING_DOWN.MATE_JOBS adds a few while she falls)
     COLOR: '#8a6f4e', // jacket colour (khaki)
     SCARF: '#b4b8bd', // the grey scarf that marks a mate
   },
@@ -1590,38 +1590,53 @@ export const config = {
   WRECK: {
     TIME: 8, // seconds of breaking apart before the restart
   },
-  // "GOING DOWN!": the first time the hull hits 0 in a mission the ship does not break up at once. She FALLS for a
-  // while (goingDown.js) and the crew has three jobs at the same time: stoke the boiler (a LIFT meter), cool it with
-  // ice blocks from the ICE LOCKER (a HEAT meter - burst = lost) and patch the glowing gasbag leaks. All three in
-  // time and she levels out with a sliver of hull ("SHE HOLDS!"); otherwise she is wrecked as usual.
+  // "GOING DOWN!": the first time the hull hits 0 in a mission the ship does not break up at once. She FALLS for a while (goingDown.js) and the crew has to make her LIFT beat her
+  // WEIGHT again - the real numbers of the flight (balance.js weight with the crew, coal, cargo and bombs aboard; the gasbags' lift by how much gas each holds; steam; engines pointing up).
+  // The TV shows the two as a big balance bar. The ways: DUMP WEIGHT (shovel the loose cargo over the rail, drop the bombs, dump the coal bunker), PATCH the glowing gasbag leaks and PUMP
+  // (a hand at the helm), FULL STEAM (stoke the boiler: hot gas lifts more, up-pointing engines push harder - but over-pressure blows the boiler, so VENT), or as a last resort CUT AWAY
+  // a heavy section (hold Action at the marked joint: a break-off that stays lost until the sky-dock rebuilds it). Lift beating weight by MARGIN for HOLD seconds = "SHE HOLDS!";
+  // otherwise she is wrecked as usual.
   GOING_DOWN: {
     ENABLED: true,
-    TIME: 22, // seconds of falling (with 8 crew)
+    TIME: 24, // seconds of falling (with 8 crew)
     TIME_PER_MISSING: 1.6, // extra seconds for each crew member under 8 (so 2 players get 6 x this more)
     SURVIVE_HULL: 15, // hull left when she holds
     HOLD_HULL: 2, // hull shown while she falls (nothing can hurt her meanwhile)
     GRACE: 5, // seconds nothing can hurt her after she holds
+    LEVEL_GAS: 8, // gas above the neutral fill the bags are left with when she holds (a gentle climb, not a rocket)
     FALL_RATE: 62, // sinking speed (px/s) at the end of the fall with nothing done; it starts at FALL_START of this
     FALL_START: 0.45,
-    FALL_BRAKE: 0.8, // a full lift meter takes this share off the sinking
+    FALL_BRAKE: 0.8, // her lift matching her weight takes this share off the sinking
     NOSE: 0.045, // extra nose-down tip while falling (radians)
-    LOADS_BASE: 1.5, // coal loads needed = BASE + crew * PER_CREW, within MIN..MAX
-    LOADS_PER_CREW: 0.33,
-    LOADS_MIN: 2,
-    LOADS_MAX: 7,
-    HEAT_SMALL: 1.2, // heat the needed coal puts in the boiler (1 = bursts): with 2 crew...
-    HEAT_BIG: 1.6, // ...up to 8+ crew. Ice blocks and time make up the difference
-    HEAT_SMALL_CREW: 2,
-    HEAT_BIG_CREW: 8,
-    HEAT_COOL: 0.02, // heat the boiler sheds by itself per second
-    ICE_COOL: 0.25, // heat one ice block takes off
+    ENEMY_RATE: 0.12, // enemy spawn speed while she falls (1 = normal)
+    START_GAS: 18, // the gas the torn bags are left with when she starts to fall (0..100; a bag fuller than this loses the difference)
+    PUMP_MUL: 0.5, // the pump only gets this share of its gas into the torn bags
+    MARGIN: 3, // her lift must beat her weight by this many points...
+    HOLD: 2, // ...for this many seconds in a row to save her
+    TRIM_LOSS: 14, // a lopsided ship spills lift: this many points lost per 100 px her centre of mass sits beyond BALANCE.LEVEL_PX from her centre of lift (dump evenly!)
     LEAKS_MIN: 1, // gasbag leaks that must be patched: 1 + crew / 4, within MIN..MAX
     LEAKS_MAX: 3,
-    ENEMY_RATE: 0.12, // enemy spawn speed while she falls (1 = normal)
-    ICE_PRESS_COOL: 7, // outside the emergency an ice block also takes this much pressure off the boiler (steam, not heat)
-    // The ice locker: blocks it holds, seconds for one new block, and the same per environment (frost: plenty; ember: few and slow).
-    LOCKER: { MAX: 4, EVERY: 6, ENV: { frost: { MAX: 6, EVERY: 2 }, ember: { MAX: 3, EVERY: 10 } } },
-    THROW_TIME: 0.35, // seconds an ice block flies to the boiler
+    LEAK_MUL: 4, // each glowing leak loses this many times the normal gas per second (GAS.LEAK_PER_HOLE) until it is patched
+    STEAM_LIFT: 28, // hot gas: lift points a boiler at full overdrive adds (0 at BOILER.OVERDRIVE_AT pressure, full at 100)
+    STOKE_PRESS: 14, // a load of coal shovelled in while she falls kicks the pressure up this much at once (BOILER.WARN_AT starts the blowout chance - vent!)
+    CARGO: { BASE: 1, PER_CREW: 0.6, MIN: 2, MAX: 8 }, // loose cargo (crates and sandbags) that shakes loose on her decks when she starts to fall: BASE + crew x PER_CREW loads, shovelled overboard (the SHOVEL job)
+    DUMP: {
+      COAL_WEIGHT: 10, // gas points the coal bunker's stock weighs: dumping it overboard takes this off her weight ...
+      COAL_TIME: 1.6, // ... seconds of holding Action at the bunker; but then there is no coal to stoke with, and ...
+      COAL_REFILL: 90, // ... the bunker stays empty for this many seconds after she holds (less fuel later: the boiler runs down)
+      BOMB_TIME: 1.2, // seconds of holding Action at the bomb bay to let the whole bomb load go through the doors
+    },
+    CUT: {
+      TIME: 3, // seconds of holding Action at a marked joint to cut the section away (the LAST resort: it stays lost until the sky-dock rebuilds it)
+      MAX_JOINTS: 2, // marked joints (the heaviest sections that can go without taking the helm, boiler or a gasbag with them)
+      MIN_MASS: 8, // a section lighter than this (gas points) is not worth cutting
+      REACH: 80, // px within which Action reaches the joint
+    },
+    MATE_JOBS: ['shovel', 'vent'], // the job kinds a ship's mate takes besides MATES.JOBS while she falls (the mates dump cargo and vent steam too)
+    STOKE_BELOW: 76, // bots (and the job arrows) stoke while the pressure is below this (so a load, STOKE_PRESS more, stays under BOILER.WARN_AT) ...
+    VENT_AT: 86, // ... open a vent when it is this high (BOILER.WARN_AT blows the boiler) ...
+    VENT_CLOSE: 74, // ... and close it again below this
+    CUT_AT: 0.5, // bots cut a section away only when this share of the fall is gone and she is still short (the last resort)
   },
   // Spare gasbags: in a voyage a wreck is not final. Each wreck costs one spare, loses the stop's progress and a share
   // of the salvage, and the ship limps back to the previous stop. No spares left = the voyage ends.
@@ -2282,7 +2297,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, cool: 1, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

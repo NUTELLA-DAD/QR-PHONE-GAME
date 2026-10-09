@@ -186,10 +186,10 @@ stand('lower', 340);
 step(3);
 check(ui().grab === 'Take extinguisher', `lower deck x=340: "${ui().grab}"`);
 
-// Overlaps that used to hide an action: Load coal beats the ice locker, the bomb bay's Jump! only on the hatch.
+// Overlaps that used to hide an action: Load coal at the boiler, the bomb bay's Jump! only on the hatch.
 stand('main', 335, 'coal');
 step(3);
-check(ui().label === 'Load coal' && ui().grab === null, `carrying coal by the boiler and the ice locker: Action "${ui().label}", Grab ${ui().grab}`);
+check(ui().label === 'Load coal' && ui().grab === null, `carrying coal by the boiler: Action "${ui().label}", Grab ${ui().grab}`);
 stand('bay', 545);
 step(3);
 check(ui().label === 'Take Bomb Bay', `bomb bay seat area (x=545): Action "${ui().label}" (empty hands: the first pickup is on the big button)`);

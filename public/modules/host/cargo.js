@@ -86,6 +86,15 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
     return ld;
   };
 
+  // A load simply lying on a deck (GOING DOWN!: the cargo that shakes loose as she falls, goingDown.js): no landing, no thud.
+  const place = (kind, d, x) => {
+    const pl = L.platforms[d], list = loads();
+    const ld = { id: ++seq, kind, w: cargoItem(kind) ? cargoItem(kind).w : 5, d, x: clamp(x, pl.x0 + 12, pl.x1 - 12), t: 0, from: ship.id, owner: null, prog: 0 };
+    list.push(ld);
+    while (list.length > C().MAX_LOADS) shed(list.shift(), null);
+    return ld;
+  };
+
   // A load leaves the deck: over the rail, falling away.
   const shed = (ld, by) => {
     const pl = L.platforms[ld.d], mid = L.refPoint ? L.refPoint.x : (pl.x0 + pl.x1) / 2, dir = ld.x < mid ? -1 : 1;
@@ -114,7 +123,7 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
     const o = worldAt(p.x + rail.side * 30, p.y - 50);
     spawn(p.carry, o.x, o.y, rail.side * ship.pose.f * 200 + ship.pose.vx, -140 + ship.pose.vy, { ghost: true });
     p.carry = null;
-    state.ship.gas = Math.min(100, state.ship.gas + k.DUMP_GAS);
+    if (!state.goingDown) state.ship.gas = Math.min(100, state.ship.gas + k.DUMP_GAS); // (GOING DOWN!: the weight itself is the lift, goingDown.js)
     applyForce(state, { x: p.x, y: rail.pl.y - 40, fx: 0, fy: -(k.DUMP_KICK * config.FORCES.REF_MASS) / Math.max(60, (state.balance && state.balance.mass) || config.FORCES.REF_MASS), impulse: true, linear: true, source: 'dump' });
     puff(o.x, o.y, '#d9cbb0', 6);
     pop(state, o.x, o.y - 50, 'WHOOSH!', '#9fe8ff', 0.9);
@@ -146,7 +155,7 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
     for (const key of Object.keys(state.rackStock)) state.rackStock[key] = Math.min(k.STOCK, state.rackStock[key] + dt / k.REFILL);
   };
 
-  return { rack, rackReady, wantsThrow, throwItem, land, shed, shovel, shovelAction, dumpAction, dump, dropAction, drop, update, loads, spawn };
+  return { rack, rackReady, wantsThrow, throwItem, land, place, shed, shovel, shovelAction, dumpAction, dump, dropAction, drop, update, loads, spawn, worldAt };
 }
 
 // The stick (in world terms: dx toward the target's side, dy down is positive) that throws a load from world point `o` of `ship` onto a deck of `target`, or null. Pure: the same arc as throwItem.

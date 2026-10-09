@@ -359,7 +359,6 @@ BUILDS.classic = [
   rack('hammer', 'lower', 690),
   rack('hookshot', 'catwalk', 1150), // grappling hookshots: top deck and main deck
   rack('hookshot', 'main', 960),
-  rack('ice', 'main', 285), // the ICE LOCKER, aft of the boiler
   extinguisher('lower', 1510),
   extinguisher('main', 520),
   extinguisher('main', 1185),

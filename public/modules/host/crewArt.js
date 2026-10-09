@@ -129,7 +129,7 @@ export function createCrewArt({ ctx }) {
     } else if (p.lock) o.fa = o.ba = -1.3;
     else if (p.windup > 0) o.fa = -2.9;
     else if (swingAge < 250) o.fa = -2.7 + (swingAge / 250) * 2.2;
-    else if (p.carry === 'ammo' || p.carry === 'coal' || p.carry === 'ice' || p.carry === 'sandbag' || p.carry === 'crate') o.fa = o.ba = -1.1;
+    else if (p.carry === 'ammo' || p.carry === 'coal' || p.carry === 'sandbag' || p.carry === 'crate') o.fa = o.ba = -1.1;
     else if (p.carry || p.weapon) o.fa = -0.6;
     else if (p.fire && p.act && p.act.hold) o.fa = -1.2 + Math.sin(time * 18) * 0.3;
     return o;

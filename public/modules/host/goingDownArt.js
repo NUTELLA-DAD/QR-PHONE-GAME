@@ -1,16 +1,11 @@
-// Drawing for "GOING DOWN!" (goingDown.js) and for limping home: the ice locker and ice blocks, the boiler's heat
-// bar, the glowing gasbag leaks, the TV alarm (red edge, banner, three meters), "SHE HOLDS!", spare gasbags and the
-// "LIMPING HOME" card. Same hand-inked look as shipArt.js: thin warm-brown ink, flat fills, no gradients.
-// Everything takes ctx (+ state) so render.js / shipArt.js only need one small call each.
+// Drawing for "GOING DOWN!" (goingDown.js) and for limping home: the LIFT vs WEIGHT balance bar on the TV, the boiler's steam gauge, the marked joints where a section can be cut away,
+// the glowing gasbag leaks, the TV alarm (red edge, banner, fall timer), "SHE HOLDS!", spare gasbags and the "LIMPING HOME" card. Same hand-inked look as shipArt.js: thin warm-brown
+// ink, flat fills, no gradients. Everything takes ctx (+ state) so render.js / shipArt.js only need one small call each.
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
 
 const INK = config.INK;
-const ICE = '#cdeaf2';
-const ICE_LIGHT = '#eaf8fb';
-const ICE_SHADE = '#9fcfdd';
 const WOOD = '#b98a55';
-const WOOD_DARK = '#8a6038';
 const GOLD = '#ffd23f';
 
 const rr = (ctx, x, y, w, h, r) => {
@@ -19,153 +14,22 @@ const rr = (ctx, x, y, w, h, r) => {
   else ctx.rect(x, y, w, h);
 };
 
-// One ice block, centred on (x, y), s = size scale (1 = 36 px wide). Pale blue, a bright top facet, two cracks.
-export function drawIceBlock(ctx, x, y, s = 1, tilt = 0) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(tilt);
-  ctx.scale(s, s);
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 2.4;
-  ctx.fillStyle = ICE;
-  rr(ctx, -18, -15, 36, 30, 6);
-  ctx.fill();
-  ctx.stroke();
-  // lit top facet and a shaded side
-  ctx.lineWidth = 1.6;
-  ctx.fillStyle = ICE_LIGHT;
-  ctx.beginPath();
-  ctx.moveTo(-14, -11);
-  ctx.lineTo(8, -11);
-  ctx.lineTo(3, -3);
-  ctx.lineTo(-14, -3);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = ICE_SHADE;
-  ctx.beginPath();
-  ctx.moveTo(18, -9);
-  ctx.lineTo(18, 9);
-  ctx.quadraticCurveTo(18, 15, 12, 15);
-  ctx.lineTo(8, 15);
-  ctx.lineTo(8, -3);
-  ctx.closePath();
-  ctx.fill();
-  // cracks
-  ctx.strokeStyle = 'rgba(70,110,125,.7)';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.moveTo(-8, 4);
-  ctx.lineTo(-2, 8);
-  ctx.lineTo(-4, 12);
-  ctx.moveTo(2, 2);
-  ctx.lineTo(5, 6);
-  ctx.stroke();
-  ctx.restore();
-}
-
-// The ice locker standing on the deck (x = the layout rack's x, deck = floor y). Door ajar, blocks stacked inside
-// (one drawn per block held), frost wisps curling off the top.
-export function drawIceLocker(ctx, state, time) {
-  const lay = mainShip(state).layout; // (this ship's own layout)
-  const r = lay.racks.find((q) => q.kind === 'ice');
-  if (!r) return;
-  const deck = lay.platforms[r.d].y;
-  const L = state.iceLocker || { n: 0, max: 4 };
-  const x = r.x;
-  const w = 62;
-  const h = 92;
-  const y0 = deck - h;
-  ctx.save();
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 2.6;
-  // feet
-  ctx.fillStyle = WOOD_DARK;
-  ctx.fillRect(x - w / 2 + 4, deck - 6, 10, 6);
-  ctx.fillRect(x + w / 2 - 14, deck - 6, 10, 6);
-  ctx.strokeRect(x - w / 2 + 4, deck - 6, 10, 6);
-  ctx.strokeRect(x + w / 2 - 14, deck - 6, 10, 6);
-  // cabinet body
-  ctx.fillStyle = WOOD;
-  rr(ctx, x - w / 2, y0, w, h - 6, 5);
-  ctx.fill();
-  ctx.stroke();
-  // dark inside
-  ctx.fillStyle = '#4b5d66';
-  rr(ctx, x - w / 2 + 7, y0 + 16, w - 14, h - 34, 3);
-  ctx.fill();
-  ctx.lineWidth = 1.8;
-  ctx.stroke();
-  // blocks stacked in the opening (up to 6 shown; 2 columns)
-  const shown = Math.min(6, Math.max(0, Math.round(L.n)));
-  for (let k = 0; k < shown; k++) {
-    const col = k % 2;
-    const row = Math.floor(k / 2);
-    drawIceBlock(ctx, x - w / 2 + 21 + col * 21, y0 + h - 34 - 3 - row * 17 - 4, 0.52, 0);
-  }
-  // door swung open on the left
-  ctx.lineWidth = 2.4;
-  ctx.fillStyle = '#c99a62';
-  ctx.beginPath();
-  ctx.moveTo(x - w / 2, y0 + 12);
-  ctx.lineTo(x - w / 2 - 17, y0 + 20);
-  ctx.lineTo(x - w / 2 - 17, y0 + h - 18);
-  ctx.lineTo(x - w / 2, y0 + h - 14);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  // frosty top with a little sign
-  ctx.fillStyle = ICE_LIGHT;
-  rr(ctx, x - w / 2 - 3, y0 - 5, w + 6, 11, 4);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = INK;
-  ctx.font = '11px ' + config.FONTS.DISPLAY;
-  ctx.textAlign = 'center';
-  ctx.fillText('ICE', x, y0 + 14);
-  // frost wisps
-  for (let k = 0; k < 3; k++) {
-    const t = (time * 0.5 + k / 3) % 1;
-    ctx.fillStyle = `rgba(225,245,250,${0.55 - t * 0.55})`;
-    ctx.beginPath();
-    ctx.arc(x - 14 + k * 14 + Math.sin(time * 2 + k * 2) * 5, y0 - 8 - t * 34, 5 + t * 8, 0, 7);
-    ctx.fill();
-  }
-  // how many are left (small pips under the sign when the locker is nearly empty)
-  if (L.n < 1) {
-    ctx.fillStyle = '#a8443f';
-    ctx.font = '10px ' + config.FONTS.DISPLAY;
-    ctx.fillText('EMPTY', x, y0 - 12);
-  }
-  ctx.restore();
-}
-
-// Ice blocks in flight to the boiler (ship coordinates). state.iceFlights = [{ x0, y0, x1, y1, t, max }].
-export function drawIceFlights(ctx, state) {
-  for (const f of state.iceFlights || []) {
-    const u = Math.min(1, f.t / f.max);
-    const x = f.x0 + (f.x1 - f.x0) * u;
-    const y = f.y0 + (f.y1 - f.y0) * u - Math.sin(u * Math.PI) * 70;
-    drawIceBlock(ctx, x, y, 0.8, u * 7 * (f.x1 < f.x0 ? -1 : 1));
-  }
-}
-
-// The boiler's heat bar, above the boiler while she is falling (and a glow when it runs hot).
-export function drawBoilerHeat(ctx, state, time) {
+// The boiler's steam gauge, above the boiler while she is falling: full steam is more lift, but the red zone blows the boiler (and a glow when it runs hot).
+export function drawBoilerSteam(ctx, state, time) {
   const g = state.goingDown;
   if (!g) return;
   const lay = mainShip(state).layout;
   const boiler = lay.one('boiler');
+  if (!boiler) return;
   const by = lay.platforms[boiler.d].y;
-  const heat = Math.min(1, g.heat);
+  const BO = config.BOILER;
+  const press = Math.max(0, Math.min(100, state.ship.press));
+  const hot = press >= BO.WARN_AT;
   ctx.save();
-  if (heat > 0.5) {
-    // a flat orange disc that pulses in steps (4 frames at 8 fps), no blend mode
+  if (press > BO.OVERDRIVE_AT) {
+    // a flat disc that pulses in steps (4 frames at 8 fps), no blend mode
     const step = Math.floor(time * 8) & 3;
-    ctx.fillStyle = `rgba(240,120,50,${(heat - 0.5) * (0.28 + 0.07 * step)})`;
+    ctx.fillStyle = hot ? `rgba(230,70,50,${0.2 + 0.07 * step})` : `rgba(240,160,60,${0.1 + 0.05 * step})`;
     ctx.beginPath();
     ctx.arc(boiler.x - 25, by - 56, 90, 0, 7);
     ctx.fill();
@@ -175,17 +39,78 @@ export function drawBoilerHeat(ctx, state, time) {
   ctx.fillStyle = 'rgba(27,20,16,.8)';
   rr(ctx, x - 6, y - 24, 142, 38, 8);
   ctx.fill();
-  ctx.fillStyle = '#f3ead6';
+  ctx.fillStyle = hot ? '#ff8a6c' : '#f3ead6';
   ctx.font = '13px ' + config.FONTS.DISPLAY;
   ctx.textAlign = 'left';
-  ctx.fillText('BOILER HEAT', x, y - 8);
+  ctx.fillText(hot ? 'TOO HOT! VENT IT!' : 'STEAM - HOT GAS LIFTS', x, y - 8);
   ctx.fillStyle = '#3b2a1d';
   ctx.fillRect(x, y, 130, 9);
-  ctx.fillStyle = heat > 0.8 ? '#e63946' : heat > 0.55 ? '#ff9f1c' : '#ffd23f';
-  ctx.fillRect(x, y, 130 * heat, 9);
+  ctx.fillStyle = hot ? '#e63946' : press > BO.OVERDRIVE_AT ? '#ff9f1c' : '#ffd23f';
+  ctx.fillRect(x, y, 130 * (press / 100), 9);
+  ctx.fillStyle = 'rgba(230,57,70,.55)'; // the red zone
+  ctx.fillRect(x + 130 * (BO.WARN_AT / 100), y, 130 * (1 - BO.WARN_AT / 100), 9);
   ctx.strokeStyle = INK;
   ctx.lineWidth = 1.6;
   ctx.strokeRect(x, y, 130, 9);
+  ctx.restore();
+}
+
+// Marks on the ship while she falls (ship coordinates): the joints where a section can be cut away (a dashed red line at the cut, a sign, the hold ring) and a ring round every
+// loose load that must go overboard.
+export function drawFallMarks(ctx, state, time) {
+  const g = state.goingDown;
+  if (!g) return;
+  const lay = mainShip(state).layout;
+  const pulse = 0.5 + 0.5 * Math.sin(time * 6);
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const ld of state.loads || []) {
+    const y = lay.platforms[ld.d].y - 24;
+    ctx.strokeStyle = `rgba(255,210,63,${0.55 + 0.3 * pulse})`;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 6]);
+    ctx.lineDashOffset = -time * 20;
+    ctx.beginPath();
+    ctx.arc(ld.x, y, 36 + pulse * 3, 0, 7);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  for (const j of g.joints) {
+    const pl = lay.platforms[j.d];
+    if (!pl) continue;
+    const y = pl.y;
+    ctx.strokeStyle = `rgba(230,57,70,${0.7 + 0.3 * pulse})`;
+    ctx.lineWidth = 5;
+    ctx.setLineDash([14, 9]);
+    ctx.lineDashOffset = -time * 30;
+    ctx.beginPath();
+    ctx.moveTo(j.edge, y - 150);
+    ctx.lineTo(j.edge, y + 70);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (g.t / g.time < config.GOING_DOWN.CUT_AT * 0.7 && j.prog < 0.02) continue; // (the sign only shows once the easy ways are running out; the dashed line is always there)
+    // the sign where you stand
+    ctx.fillStyle = 'rgba(27,20,16,.88)';
+    rr(ctx, j.x - 62, y - 128, 124, 40, 8);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#ff8a6c';
+    ctx.font = '13px ' + config.FONTS.DISPLAY;
+    ctx.textAlign = 'center';
+    ctx.fillText('CUT AWAY HERE', j.x, y - 112);
+    ctx.fillStyle = '#f3ead6';
+    ctx.font = '700 11px ' + config.FONTS.TEXT;
+    ctx.fillText(`-${Math.round(j.mass)} weight, hold Action`, j.x, y - 96);
+    if (j.prog > 0.02) {
+      ctx.strokeStyle = '#ff4d4d';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(j.x, y - 40, 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, j.prog));
+      ctx.stroke();
+    }
+  }
   ctx.restore();
 }
 
@@ -259,32 +184,100 @@ export function drawSpares(ctx, state, x, y, right = false, s = 1) {
   for (let k = 0; k < max; k++) drawGasbagIcon(ctx, x0 + step / 2 + k * step, y, s, k < run.spares);
 }
 
-// A meter box: title, bar 0..1 (fill colour), extra text on the right of the title, optional marker (0..1).
-const meter = (ctx, x, y, w, title, value, color, text, done, bad) => {
-  ctx.fillStyle = 'rgba(27,20,16,.86)';
-  rr(ctx, x, y, w, 68, 12);
+// One small gauge chip of the LIFT vs WEIGHT panel: a title, a value and a hint of what to do about it. tone: 'ok' | 'warn' | 'bad' | '' (plain).
+const chip = (ctx, x, y, w, title, value, hint, tone) => {
+  ctx.fillStyle = 'rgba(60,44,32,.9)';
+  rr(ctx, x, y, w, 50, 8);
   ctx.fill();
-  ctx.strokeStyle = done ? '#7bdc8a' : bad ? '#ff4d4d' : INK;
-  ctx.lineWidth = done || bad ? 4 : 2.5;
+  ctx.strokeStyle = tone === 'bad' ? '#ff4d4d' : tone === 'warn' ? '#ffb347' : tone === 'ok' ? '#7bdc8a' : INK;
+  ctx.lineWidth = tone ? 3 : 2;
   ctx.stroke();
-  ctx.fillStyle = '#f3ead6';
-  ctx.font = '15px ' + config.FONTS.DISPLAY;
-  ctx.textAlign = 'left';
-  ctx.fillText(title, x + 14, y + 27);
-  ctx.textAlign = 'right';
-  ctx.fillStyle = done ? '#7bdc8a' : '#f3ead6';
-  ctx.fillText(text, x + w - 14, y + 27);
-  ctx.fillStyle = '#3b2a1d';
-  ctx.fillRect(x + 14, y + 40, w - 28, 16);
-  ctx.fillStyle = color;
-  ctx.fillRect(x + 14, y + 40, (w - 28) * Math.max(0, Math.min(1, value)), 16);
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x + 14, y + 40, w - 28, 16);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#d9c9a8';
+  ctx.font = '11px ' + config.FONTS.DISPLAY;
+  ctx.fillText(title, x + w / 2, y + 14);
+  ctx.fillStyle = tone === 'bad' ? '#ff8a6c' : '#f3ead6';
+  ctx.font = '17px ' + config.FONTS.DISPLAY;
+  ctx.fillText(value, x + w / 2, y + 33);
+  ctx.fillStyle = '#b8a88a';
+  ctx.font = '700 10px ' + config.FONTS.TEXT;
+  ctx.fillText(hint, x + w / 2, y + 45);
 };
 
-// The TV alarm on the fixed 1600x900 stage: red pulsing edge, the GOING DOWN! banner, the fall timer and the three
-// meters. Also the "SHE HOLDS!" / "SHE'S GONE!" banner afterwards and the limp-home card.
+// The big LIFT vs WEIGHT balance bar: the two as one tug of war (the divider passes the middle when lift beats weight), the verdict, and the gauges that move it.
+function drawBalance(ctx, state, g, time) {
+  const m = g.m;
+  if (!m) return;
+  const x = 470, y = 172, w = 780;
+  const need = g.need, saved = need <= 0;
+  ctx.fillStyle = 'rgba(27,20,16,.9)';
+  rr(ctx, x, y, w, 158, 14);
+  ctx.fill();
+  ctx.strokeStyle = saved ? '#7bdc8a' : INK;
+  ctx.lineWidth = saved ? 4 : 2.5;
+  ctx.stroke();
+  // the bar
+  const bx = x + 20, bw = w - 40, by = y + 14, bh = 40;
+  const share = Math.max(0.04, Math.min(0.96, m.lift / Math.max(1, m.lift + m.weight)));
+  ctx.fillStyle = '#a9774a';
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = saved ? '#58c878' : '#58b6ff';
+  ctx.fillRect(bx, by, bw * share, bh);
+  ctx.fillStyle = 'rgba(255,255,255,.14)';
+  ctx.fillRect(bx, by, bw * share, bh / 3);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(bx, by, bw, bh);
+  // where the divider has to get to: half way (the margin moves it a little)
+  const goal = bx + bw * ((m.weight + config.GOING_DOWN.MARGIN) / (2 * m.weight + config.GOING_DOWN.MARGIN));
+  ctx.strokeStyle = '#fff6d6';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([6, 5]);
+  ctx.beginPath();
+  ctx.moveTo(goal, by - 5);
+  ctx.lineTo(goal, by + bh + 5);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // the divider itself
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(bx + bw * share - 3, by - 4, 6, bh + 8);
+  ctx.strokeRect(bx + bw * share - 3, by - 4, 6, bh + 8);
+  ctx.font = '22px ' + config.FONTS.DISPLAY;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(`LIFT ${Math.round(m.lift)}`, bx + 12, by + 28);
+  ctx.textAlign = 'right';
+  ctx.fillText(`WEIGHT ${Math.round(m.weight)}`, bx + bw - 12, by + 28);
+  // the verdict
+  ctx.textAlign = 'center';
+  if (saved) {
+    ctx.fillStyle = '#7bdc8a';
+    ctx.font = '22px ' + config.FONTS.DISPLAY;
+    ctx.fillText(`HOLD IT! ${Math.min(config.GOING_DOWN.HOLD, g.hold).toFixed(1)} / ${config.GOING_DOWN.HOLD}s`, x + w / 2, y + 80);
+  } else {
+    ctx.fillStyle = need > 25 ? '#ff8a6c' : '#ffd23f';
+    ctx.font = '22px ' + config.FONTS.DISPLAY;
+    ctx.fillText(`SHORT BY ${Math.ceil(need)} - DUMP WEIGHT, PATCH AND PUMP, FULL STEAM!`, x + w / 2, y + 80);
+  }
+  // the gauges
+  const BO = config.BOILER;
+  const open = g.holes.filter((h) => state.gasHoles.includes(h)).length;
+  const press = Math.round(state.ship.press);
+  const cy = y + 94, cw = 104, gap = 8.7;
+  let cx = x + 20;
+  const next = (...a) => { chip(ctx, cx, cy, cw, ...a); cx += cw + gap; };
+  next('GAS BAGS', `${Math.round(m.gas)}%`, open ? 'patch, then pump' : 'pump (the helm)', m.gas > 70 ? 'ok' : m.gas < 30 ? 'warn' : '');
+  next('STEAM', `${press}`, press >= BO.WARN_AT ? 'VENT IT!' : `+${Math.round(m.steam)} lift, stoke`, press >= BO.WARN_AT ? 'bad' : press > BO.OVERDRIVE_AT ? 'ok' : '');
+  next('LEAKS', `${g.required - open}/${g.required}`, open ? 'patch the glow' : 'all patched', open ? 'warn' : 'ok');
+  next('CARGO', `${Math.round(m.cargo)}`, m.cargo > 0.5 ? 'shovel overboard' : 'all gone', m.cargo > 0.5 ? 'warn' : 'ok');
+  next('BOMBS', `${m.bombs.toFixed(1)}`, m.bombs > 0.1 ? 'drop (hold)' : 'dropped', m.bombs > 0.1 ? '' : 'ok');
+  next('COAL', `${Math.round(m.coal)}`, g.coalGone ? 'bunker dumped' : 'dump bunker (hold)', g.coalGone ? 'ok' : '');
+  next('TRIM', m.trim > 0.4 ? `-${m.trim.toFixed(1)}` : 'level', m.trim > 0.4 ? 'dump evenly!' : 'no lift spilt', m.trim > 2 ? 'bad' : m.trim > 0.4 ? 'warn' : 'ok');
+  void time;
+}
+
+// The TV alarm on the fixed 1600x900 stage: red pulsing edge, the GOING DOWN! banner, the fall timer and the LIFT vs WEIGHT panel. Also the "SHE HOLDS!" / "SHE'S GONE!" banner
+// afterwards and the limp-home card.
 export function drawScreen(ctx, state, time, W = 1600, H = 900) {
   const g = state.goingDown;
   if (g) {
@@ -326,14 +319,7 @@ export function drawScreen(ctx, state, time, W = 1600, H = 900) {
     ctx.font = '700 16px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
     ctx.fillText(`FALLING - ${Math.ceil(left)}s to the ground!`, 860, 130);
-    // the three jobs
-    const y = 176;
-    const liftDone = g.lift >= 1;
-    const nLoads = Math.min(g.loads, Math.floor(g.lift * g.loads + 1e-6));
-    meter(ctx, 480, y, 250, 'LIFT: STOKE COAL', g.lift, '#ff8c1a', `${nLoads}/${g.loads}`, liftDone, false);
-    meter(ctx, 745, y, 250, `COOL: ICE x${Math.floor((state.iceLocker || { n: 0 }).n)}`, g.heat, g.heat > 0.8 ? '#e63946' : g.heat > 0.55 ? '#ff9f1c' : '#9fdcff', g.heat > 0.8 ? 'HOT!' : 'heat', false, g.heat > 0.8);
-    const patched = g.required - g.holes.filter((h) => state.gasHoles.includes(h)).length;
-    meter(ctx, 1010, y, 230, 'PATCH LEAKS', patched / g.required, '#4dc3ff', `${patched}/${g.required}`, patched >= g.required, false);
+    drawBalance(ctx, state, g, time);
   }
   const b = state.gdBanner;
   if (b) {
