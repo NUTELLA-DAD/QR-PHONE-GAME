@@ -306,3 +306,19 @@ Success: no accidental swaps in a playtest, and the cold-player test passes.
   - spyglass inset camera for far ships;
   - long guns, mortars, mine layers, ram prow, harpoon;
   - captain AI by range band.
+
+### Queued next (owner requests)
+1. **Cargo drop hatch:** a trapdoor part, 1-3 columns, on any deck. A lever opens it and leaves a real hole in the deck.
+   - Cargo, ballast and crew fall through, so you can drop crates onto ships below, parachute down, or tip boarders out.
+   - It ties into the Going Down weight-dumping.
+   - Bots use it.
+2. **Gas types per gasbag (catalogue v2 Tier 1):** the gas changes lift and danger, and heavy ships pick lighter gas.
+   - Hydrogen: cheap, strongest lift, explodes when on fire.
+   - Helium: safe, less lift.
+   - Hot air: needs boiler heat, so the crew keep it up.
+   - Pick it on the build page and in the Yard shop; it shows on the LIFT gauge.
+
+**In progress:**
+- shipGen + shipforge (random ships, combo finder);
+- the Going Down physics redesign;
+- the build page (playtest button, bigger zoomable view, saved designs).
