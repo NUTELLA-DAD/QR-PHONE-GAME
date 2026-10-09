@@ -70,6 +70,8 @@ export const SHIP_KEYS = [
   'cannons', 'loads', 'rackStock',
   // parts breaking off (S.5i): the counters of what broke, and how much lift she lost with a gasbag (flight.js uses it as extra weight)
   'breakStats', 'liftDeficit',
+  // crew health (health.js): hearts lost by cause, hearts healed
+  'healthStats',
   // the environment's hazards that ride on her (B.3: every ship runs her own copy of the rules, shipSim.js: ice, thermals, spores, oxygen, storm rods, the sea) and what they put on her
   'env', 'icing', 'ice', 'clogs', 'spores', 'o2tank', 'stormJob', 'sea',
 ];

@@ -1088,7 +1088,7 @@ export const config = {
     MAX_CREW: 3, // this many human crew or fewer get mates (a 4th human sends them home)
     COUNT: { 1: 2, 2: 2, 3: 1 }, // mates per number of humans aboard
     SPAWN_GAP: 1.5, // seconds between one mate dropping aboard and the next
-    JOBS: ['coal', 'ammo', 'patch', 'fire', 'revive', 'cool'], // the only job kinds a mate takes (hauling and mending; GOING DOWN ice 'cool')
+    JOBS: ['coal', 'ammo', 'patch', 'fire', 'revive', 'cool', 'heal'], // the only job kinds a mate takes (hauling and mending; GOING DOWN ice 'cool'; going to the medbay when hurt)
     COLOR: '#8a6f4e', // jacket colour (khaki)
     SCARF: '#b4b8bd', // the grey scarf that marks a mate
   },
@@ -1972,6 +1972,46 @@ export const config = {
     WARN_TIME: 1.6, // seconds the red flash and HELMSMAN HIT! stay on screen
     HIT_CY: 55, // px above the helm floor where the helmsman is hit (body height)
   },
+  // Crew health (health.js): every crewman has hearts. Fires, shell bursts, raider blows, swords and hard landings take some; a BIG hit (a bomb, the bomb bay going up, a heavy shell
+  // right beside you, a fall from a great height) takes them all. At zero you are knocked out as before (a crewmate revives you, or you wake after the KO time) and come round with WAKE_HP.
+  // The medical bay heals a heart every HEAL.EVERY seconds; a crewmate can bandage you. Between missions everyone is whole again.
+  HEALTH: {
+    ENABLED: true, // false = the old rules: a raider blow, a bomb, a helm hit or a hard landing knocks a crewman out in one go, and fires and shells do not hurt crew
+    MAX: 3, // hearts
+    BIG: 99, // a hit of this many hearts or more is a BIG hit: it ignores the i-frames and takes every heart
+    IFRAMES: 0.8, // seconds after a hit when nothing else (but a big hit) can hurt you; the TV blinks and staggers him for that long
+    WAKE_HP: 1, // hearts you come round (or are revived) with
+    FIRE: {
+      HEARTS: 1, // a burn takes this many hearts
+      REACH: 50, // px: standing this close to a fire (same deck, not hopping over it) burns
+      FIRST: 0.7, // seconds in the fire before the first heart goes (walking straight through costs nothing)
+      TICK: 1.4, // ...then one heart per this many seconds while you stay
+      BIG_MUL: 1.5, // a blaze (a big fire) burns this much faster
+      SPRAY_MUL: 0, // spraying a fire out with the extinguisher: this share of the burn (0 = you cannot be burnt while you spray)
+      COOL: 2, // out of the flames the burn clock runs down this many times faster than it filled
+      RESET: 1.5, // seconds out of the flames before the next burn is a first one again (FIRST, not TICK)
+    },
+    BLOW: { default: 1, brute: 3 }, // hearts a raider's blow takes (by raider type)
+    GUNSHIP_BLOW: 1, // hearts a blow from the enemy gunship's crew takes (our boarders)
+    SWORD: 1.5, SHOVE: 0.75, // crew against crew (Versus; the gunship's crew against our boarders): hearts a sword blow and a shove take - the old PVP.FIGHT.HP 4 / SWORD 2 / SHOVE 1 in hearts (two sword blows or four shoves = out)
+    MELEE_IFRAMES: 0.35, // ...he blinks for this long after such a blow (a fight's blows are never blocked by i-frames, only by KO)
+    SHELL: { MIN_POWER: 0.9, RADIUS: 120, BIG_POWER: 2, BIG_RADIUS: 70 }, // a shell bursting inside the ship (power at least MIN_POWER) hurts crew within RADIUS px (a little more for a hard hit); a hit of BIG_POWER or more within BIG_RADIUS is a BIG one
+    SHELL_HEARTS: 1, // hearts such a burst takes
+    HELM_HEARTS: 1, // hearts a hit on the exposed helmsman takes (the HELM_EXPOSED.KO_CHANCE roll still decides whether he is struck)
+    BLOWOUT: { RADIUS: 110, HEARTS: 1 }, // the boiler blowing: crew this close to it lose a heart
+    BAY_RADIUS: 280, // px: crew this close to the bomb bay when it goes up are knocked out at once (BIG)
+    BOMB_RADIUS: 90, // px: crew this close to a sapper's bomb when it goes off are knocked out at once (BIG; it was 90 px before hearts too)
+    FALL: { HEARTS: 1, BIG_HEIGHT: 700, TOSS_HEIGHT: 120, KO_TIME: 8 }, // a landing from higher than AIR.STUN_HEIGHT costs HEARTS (and the short stun); from BIG_HEIGHT, or from over TOSS_HEIGHT after being thrown off a deck that broke away with no parachute open, it is a BIG hit, out for KO_TIME
+    OVERBOARD: 1, // falling off the ship: you come round in the medical bay this many hearts down (never below 1)
+    HEAL: {
+      REACH: 130, // px: within this of the medical bay's cot (same deck) you heal
+      EVERY: 5, // seconds per heart in the medical bay
+      NO_MEDBAY_EVERY: 45, // a ship with no medical bay: seconds per heart of slow natural recovery (0 = never)
+    },
+    BANDAGE: { ENABLED: true, TIME: 2.5, HEARTS: 1 }, // a crewmate holds Action on a hurt (awake) crewman for TIME seconds: he gets HEARTS back
+    JOB_AT: 1, // at this many hearts or fewer the phone says GET TO THE MEDBAY! and the arrow points there; the bots go and heal
+    BOT: { FLEE: 0.4 }, // a bot that has been burning this long (s) steps out of the fire (unless it is on its way to put it out)
+  },
   // Test bot behaviour (times in seconds).
   BOTS: {
     THINK_EVERY: 0.3, // how often a bot rethinks what to do
@@ -2041,7 +2081,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, cool: 1, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, cool: 1, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

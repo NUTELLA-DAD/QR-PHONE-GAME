@@ -7,6 +7,7 @@
 import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
 import { mainShip } from './ships.js';
+import { hearts } from './health.js';
 
 const J = config.JOBS;
 // Worked out per ship layout (rebuilt when a new ship build is applied to it).
@@ -16,13 +17,14 @@ const tables = layoutTables((L) => ({
 }));
 const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer' };
 export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', unclog: '#b6f06e', oxygen: '#bfe9ff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0', help: '#ff4d4d' };
-const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP', trim: 'TRIM', sail: 'SAIL', reef: 'REEF', shovel: 'LOAD' };
+const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP', trim: 'TRIM', sail: 'SAIL', reef: 'REEF', shovel: 'LOAD', heal: 'MEDBAY' };
 TOOL.cool = 'ice'; // (GOING DOWN!: cooling the boiler wants a block of ice from the locker)
 JOB_COLORS.cool = '#9fdcff';
 JOB_COLORS.trim = '#e8c25a'; // (a lopsided ship: go to the light end, balance.js)
 JOB_COLORS.sail = '#e9dcc0'; // (S.5e: raise a sail in a fair wind...)
 JOB_COLORS.reef = '#ff8c1a'; // (...or reef it before a gust)
 JOB_COLORS.shovel = '#c9a85a'; // (B.6: a sandbag or crate thrown onto the deck: shovel it overboard)
+JOB_COLORS.heal = '#ff7b9c'; // (crew health: down to the last heart - go to the medbay)
 
 export function createJobFinder(state) {
   const L = mainShip(state).layout; // (the ship these jobs are on: the finder is made per ship, on that ship's context)
@@ -48,6 +50,12 @@ export function createJobFinder(state) {
     const add = (kind, obj, d, x, extra, label) => out.push({ kind, obj, d, x, urgency: J.URGENCY[kind], label: label || `${WORD[kind]} - ${roomName(d, x)}`, max: kind === 'fight' ? 2 : 1, ...extra });
     for (const b of state.boarders) if (!b.fall && b.hp > 0) { const s = spot(b); add('fight', b, s.d, b.x); }
     for (const q of Object.values(state.players)) if (q !== p && q.ko > 0 && !q.fall && q.conn == null && q.d != null) add('revive', q, q.d, q.x, {}, `REVIVE ${q.name} - ${roomName(q.d, q.x)}`);
+    // Crew health: down to your last heart (and the ship has a medical bay): the arrow points there, ahead of nearly everything (the cot heals a heart every few seconds).
+    const HC = config.HEALTH, mb = L.medbay;
+    if (HC.ENABLED && mb && hearts(p) <= HC.JOB_AT) {
+      const d = L.platforms.findIndex((q) => q.id === mb.p);
+      if (d >= 0) { const spot = (p.healSpot ||= {}); spot.d = d; spot.x = mb.x; add('heal', spot, d, mb.x, {}, 'GET TO THE MEDBAY! - ' + roomName(d, mb.x)); } // (one record per player, so the suggestion is kept and nobody counts as "taking" another's)
+    }
     // HELP! calls (spotter.js): the crew sent to a caller get an arrow to them, in the caller's colour.
     for (const c of state.helpCalls || []) if (c.caller !== p && c.who.includes(p.id) && c.caller.d != null) { const s = spot(c.caller); add('help', c.caller, s.d, s.x, {}, `HELP ${c.caller.name}! - ${roomName(s.d, s.x)}`); }
     for (const ld of state.loads || []) add('shovel', ld, ld.d, ld.x, {}, `SHOVEL THE ${((config.CROSS.CARGO.ITEMS[ld.kind] || {}).label || 'LOAD').toUpperCase()} OVERBOARD - ${roomName(ld.d, ld.x)}`); // (B.6: cargo thrown onto her deck tips her)

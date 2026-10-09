@@ -22,6 +22,7 @@
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
+import { hurt, knockOut } from './health.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const val = (v) => (typeof v === 'function' ? v() : v);
@@ -304,6 +305,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const land = (p, s, y) => {
     const speed = p.fvy - ship.pose.vy; // (how fast she meets the deck)
     const height = p.chuteOpen || p.cannon ? 0 : y - p.apex; // a parachute landing is a soft one (and a cannon flyer rolls out of it: his fall is an arc, not a drop)
+    const lost = p.tossed && !p.chuteOpen; // (thrown off a deck that broke away, and no canopy open)
     cutChute(p);
     p.cannon = false;
     p.tossed = false;
@@ -323,8 +325,13 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       p.x = clamp(p.x, P[s.d].x0, P[s.d].x1);
     }
     if (s.onLand) s.onLand(p, { surface: s, speed, height, y });
-    if (height > A.STUN_HEIGHT) {
-      p.ko = Math.max(p.ko || 0, A.STUN_TIME);
+    // Crew health: a hard landing costs a heart; a very hard one, or one off a deck that broke away with no parachute, is a BIG hit (out for FALL.KO_TIME).
+    const HF = config.HEALTH.FALL;
+    const crashed = lost && height > HF.TOSS_HEIGHT;
+    if (height > A.STUN_HEIGHT || crashed) {
+      const big = height > HF.BIG_HEIGHT || crashed;
+      if (hurt(p, big ? config.HEALTH.BIG : HF.HEARTS, { cause: 'fall', big }) === 'ko') knockOut(p, HF.KO_TIME);
+      if (height > A.STUN_HEIGHT) p.ko = Math.max(p.ko || 0, A.STUN_TIME); // (the short stun of a hard landing, as before)
       p.prog = 0;
       puff(toWorldX(ship, p.x), toWorldY(ship, y - 30), '#ffe9a8', 5);
       phoneFx(p, 'Hard landing!', null);

@@ -14,7 +14,7 @@ export function createControllerUI({ network }) {
     ['TAKE THE HELM', '☸️'], ['Sabotage', '🧨'], ['Defenders', '🛡️'], ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['SURGE', '🔥'], ['LOAD for', '📦'], ['Close valve', '🚱'], ['Open valve', '🚰'], ['Open vent', '💨'], ['Close vent', '💨'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
     ['Patch gasbag', '🎈'], ['Load', '📦'], ['Grab ammo', '📦'], ['Jump!', '🪂'], ['Take ice', '🧊'], ['Put the ice', '↩️'], ['Cool the boiler', '🧊'], ['THROW ICE', '🧊'], ['Ice locker', '🧊'], ['Swap to', '🔄'],
-    ['Swivel engine', '⚙️'], ['Raise sail', '⛵'], ['Lower sail', '⛵'], ['The sail', '⛵'], ['Swivel engine', '⚙️'], ['FOCUS', '🔦'], ['Take', '🎯'],
+    ['Bandage', '🩹'], ['Swivel engine', '⚙️'], ['Raise sail', '⛵'], ['Lower sail', '⛵'], ['The sail', '⛵'], ['Swivel engine', '⚙️'], ['FOCUS', '🔦'], ['Take', '🎯'],
     ['Climb into', '💥'], ['Man the cannon', '💥'], ['PARACHUTE', '🪂'], ['Shovel', '⛏️'], ['Dump', '⚖️'], ['Drop the', '📦'], ['Steal', '⚫'], ['LET GO TO FIRE', '💥'], ['HOLD TO CHARGE', '💥'], ['Brace', '💥'], ['RELOADING', '⏳'],
     ['FIRE', '💥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
   ];
@@ -116,7 +116,33 @@ export function createControllerUI({ network }) {
       // ignore
     }
   };
+  // Crew health: a row of hearts (full / half / empty) in the top strip; the last one pulses; hurtFlash() is the red flash when one is lost.
+  const HEART = 'M13 22 C3 14 1 9 1 6.5 A5.5 5.5 0 0 1 13 4.5 A5.5 5.5 0 0 1 25 6.5 C25 9 23 14 13 22Z';
+  const hearts = $('hearts');
+  let heartsSig = '';
+  const showHearts = (next) => {
+    const max = next.hpMax || 3;
+    const on = next.hp != null;
+    hearts.style.display = on ? 'flex' : 'none';
+    if (!on) return;
+    if (heartsSig !== 'm' + max) { // (build the row once: an outline and a red fill clipped to the share that is full)
+      heartsSig = 'm' + max;
+      hearts.innerHTML = '';
+      for (let i = 0; i < max; i++) hearts.insertAdjacentHTML('beforeend', `<svg viewBox="0 0 26 24"><defs><clipPath id="hc${i}"><rect x="0" y="0" width="26" height="24"/></clipPath></defs><path d="${HEART}" fill="#4a3d38" stroke="#2b2622" stroke-width="2.4" stroke-linejoin="round"/><path d="${HEART}" fill="#e63946" clip-path="url(#hc${i})"/></svg>`);
+    }
+    [...hearts.children].forEach((svg, i) => svg.querySelector('rect').setAttribute('width', 26 * Math.max(0, Math.min(1, next.hp - i))));
+    hearts.classList.toggle('low', next.hp > 0 && next.hp <= (next.jat ?? 1) && !next.ko);
+  };
+  const hurtFlash = () => {
+    for (const el of [$('hurtflash'), hearts]) { // (restart the animations)
+      const cls = el === hearts ? 'hit' : 'go';
+      el.classList.remove(cls);
+      void el.offsetWidth;
+      el.classList.add(cls);
+    }
+  };
   const showFx = (fx) => {
+    if (fx.hit) hurtFlash();
     vibrate(fx.buzz);
     if (!fx.toast) return;
     const t = $('toast');
@@ -160,6 +186,7 @@ export function createControllerUI({ network }) {
     showVote(next.vote);
     if (next.vote) return;
     uiState = next;
+    showHearts(next);
     showJob(next.ko || next.locked ? null : next.job);
     if (next.ko) {
       $('info').innerHTML = '<b>Knocked out!</b> Hang tight - a crewmate can revive you';
@@ -245,7 +272,8 @@ export function createControllerUI({ network }) {
                   : next.carry
                     ? 'Big button uses what you hold'
                     : 'Walk to a station, rack, fire or hole';
-    const warn = next.status ? `<span class="warn">${next.status}</span>` : '';
+    const sore = next.hp != null && next.hp > 0 && next.hp <= (next.jat ?? 1); // (crew health: on the last heart)
+    const warn = next.status ? `<span class="warn">${next.status}</span>` : sore ? `<span class="warn">${next.med ? 'GET TO THE MEDBAY!' : 'Hurt! A crewmate can bandage you'}</span>` : '';
     $('info').innerHTML = `<b>${where}${ammo}</b> - ${warn || hint}`;
     $('leave').style.display = next.locked ? 'block' : 'none';
     const helm = next.locked && next.kind === 'helm';

@@ -26,6 +26,7 @@ import { perfLowFx } from './perf.js';
 import { drawPuffs, drawRings, drawFlashes, drawFlame, drawFlakBurst } from './vfxArt.js'; // gouache explosions, smoke, ink ticks, flat flames
 import { createLogbook } from './logbookArt.js'; // cream paper panels + red stamps (the captain's logbook HUD)
 import { createLinkArt } from './linkArt.js'; // linked-station wires, gust warnings, surge rings
+import { createHealthArt } from './healthArt.js'; // heart pips over a hurt crewman's head
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
 import { createFleetArt } from './fleetArt.js'; // B.3: the panels, pennants and edge arrows of a sky with several ships
 import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, HUD, scoreboard (pvp/match.js)
@@ -85,6 +86,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const drawSpecials = createSpecialsArt({ ctx, state, ink });
   const spotterArt = createSpotterArt({ ctx, state }); // spotted-target brackets (HELP! call-outs and primed-gun glows are the ships': artsOf)
   const linkArt = createLinkArt({ ctx, state }); // gust / updraft arrows (the loader and lookout wires are the ships': artsOf)
+  const healthArt = createHealthArt({ ctx }); // crew health: heart pips over a hurt crewman
   const drawGunship = createGunshipArt({ ctx, state, ink, sprites });
   const fleetN = () => world.ships.reduce((n, s) => n + (s.ai ? 0 : 1), 0); // (the crew's ships: the enemy gunship has no panel, arrow or team flag of the fleet's kind)
   // The gunship (B.5) as her own art wants her: in her home frame, unshifted, facing the way her layer mirrors her, her rope drawn separately, her crew drawn by the ship layer.
@@ -1686,8 +1688,15 @@ export function createRenderer({ ctx, state: world, canvas }) {
       }
       ctx.restore();
     }
+    const hurting = player.hurtT > 0 && !player.type; // (crew health: just hit - he blinks and shudders for his i-frames)
+    if (hurting) {
+      ctx.save();
+      ctx.globalAlpha = Math.sin(time * 50) > 0 ? 0.4 : 1;
+      ctx.translate(Math.sin(time * 70) * Math.min(1, player.hurtT * 3) * 5, 0);
+    }
     const art = characterArt.draw(player, time, bob + hop);
     if (!art) crewArt.draw(player, time, bob, hop, drawCarry);
+    if (hurting) ctx.restore();
 
     ctx.font = '700 18px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
@@ -1697,6 +1706,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.strokeText(player.name, player.x, nameY);
     ctx.fillStyle = player.connected === false ? '#888' : config.INK;
     ctx.fillText(player.name, player.x, nameY);
+    if (player.hearts != null && player.hearts < config.HEALTH.MAX && !(player.ko > 0) && !player.type && player.connected !== false) healthArt.pips(player.x, nameY - 26, player.hearts, config.HEALTH.MAX, time); // (crew health: hearts over a hurt crewman's head, not over a whole one)
     if (player.windup > 0) {
       // Raider winding up to strike: big pulsing "!".
       const pulse = 1 + Math.sin(time * 30) * 0.15;
