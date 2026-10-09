@@ -22,6 +22,9 @@ import { createLogbook } from './logbookArt.js';
 import { createSimulation } from './simulation.js';
 import { createRenderer } from './render.js';
 import { createCamera } from './camera.js';
+import { createBpView, attachPanZoom } from './buildView.js'; // (zoom and pan of the blueprint)
+import { initBuildUi, ui } from './buildPlay.js'; // (the big-screen shell: UI size, folding panels, views, PLAYTEST, My Ships)
+import { loadWorking, loadPlaytestJob } from './playtest.js';
 
 const $ = (id) => document.getElementById(id);
 const L = config.LOGBOOK;
@@ -38,7 +41,8 @@ const logbook = createLogbook({ ctx: gctx });
 const camera = createCamera();
 const fitCanvas = (c) => {
   const dpr = Math.min(2, devicePixelRatio || 1);
-  const w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr);
+  const r = c.getBoundingClientRect(); // (the size on screen: the page may be zoomed, buildPlay.js ui.scale)
+  const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
   if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
 };
 fitCanvas(scene);
@@ -47,11 +51,14 @@ addEventListener('resize', () => { fitCanvas(scene); fitCanvas(bp); drawGauges()
 
 // ---- the build being edited -------------------------------------------------------------------------------------
 const multi = () => [...BUILDS.classic, { part: 'station', n: 'Fore Boiler', kind: 'boiler', p: 'main', x: 1090 }, { part: 'station', n: 'Aft Lookout', kind: 'lookout', p: 'nest', x: 700 }];
+let restored = ''; // where the build came from when it is not the classic ship (the note says)
 const initial = () => {
-  const q = new URLSearchParams(location.search).get('build');
+  const params = new URLSearchParams(location.search), q = params.get('build');
   try {
     if (q && q.trim().startsWith('[')) return JSON.parse(q);
     if (q === 'multi') return multi();
+    if (params.get('from') === 'playtest') { const j = loadPlaytestJob(); if (j) { restored = 'Back from the playtest: the same ship.'; return j.parts; } } // (host.html's "Back to the builder")
+    if (!q) { const w = loadWorking(); if (w) { restored = 'Your last working build is back (Reset to classic gives the stock ship).'; return w; } } // (autosaved by every edit)
   } catch (e) { console.warn('bad ?build=', e); }
   return BUILDS.classic;
 };
@@ -68,6 +75,10 @@ let info = {}; // palette id -> { legal, all }
 let envId = config.ENVIRONMENTS.DEFAULT;
 let sim = null, renderer = null, shipMatrix = null;
 let live = null; // the last bot-test report
+let bui = null; // the big-screen shell (buildPlay.js initBuildUi), set up at the end
+const view = createBpView(); // the blueprint's zoom and pan (buildView.js)
+let fitFirst = true; // frame the ship on the first draw
+const kPix = () => Math.min(2, devicePixelRatio || 1) * ui.scale; // canvas pixels per page pixel (the page itself may be zoomed on a big screen)
 const flag = { nav: false, samples: false, slots: true, blue: false };
 // the blueprint editor
 let tool = 'draw'; // 'draw' (pencil) | 'bag' | 'ladder' | 'erase' | 'delete' | 'place' (part pins)
@@ -173,6 +184,7 @@ function refresh() {
   drawEnginePanel();
   drawReport();
   drawGauges();
+  if (bui) bui.edited(); // (autosave the working build, update the playtest buttons' line)
   if (!result.ok) $('hint').textContent = 'This build cannot fly yet (see the report): ' + (flown ? 'the ship shown is the last one that could. ' : 'nothing is flying until it can. ') + 'Keep building, or Undo.';
 }
 
@@ -257,7 +269,7 @@ const dropReach = () => (bv ? (config.BUILD_EDIT.DROP_SNAP * bv.k) / bv.s : 200)
 function drawTray() {
   const el = $('tray');
   el.textContent = '';
-  const dpr = Math.min(2, devicePixelRatio || 1);
+  const dpr = kPix();
   for (const [id, name] of TRAY) {
     const n = info[id] ? info[id].legal.length : 0;
     const tile = document.createElement('div');
@@ -397,7 +409,10 @@ function drawReport() {
     el.appendChild(d);
   }
 }
+const GAUGE_H = 160; // one row of gauge cards (page px); in the narrow side panel the four cards stack two by two
 function drawGauges() {
+  const stacked = gauges.clientWidth < 640;
+  gauges.style.height = (stacked ? GAUGE_H * 2 + 8 : GAUGE_H) + 'px';
   fitCanvas(gauges);
   const g = gctx;
   const W = gauges.width, H = gauges.height;
@@ -405,15 +420,18 @@ function drawGauges() {
   g.clearRect(0, 0, W, H);
   const b = result && result.budgets;
   if (!b || !b.lift) return;
-  const s = Math.min(2, devicePixelRatio || 1);
+  const s = kPix();
   g.scale(s, s);
-  const w = W / s, h = H / s;
+  const w = W / s, h = GAUGE_H;
   const BC = config.BUILD_CHECK, BALANCE = config.BALANCE;
-  const gap = 8, cw = (w - gap * 3) / 4;
+  const gap = 8, cw = stacked ? (w - gap) / 2 : (w - gap * 3) / 4;
+  const pos = (i) => (stacked ? { x: (i % 2) * (cw + gap), y: Math.floor(i / 2) * (h + gap) } : { x: i * (cw + gap), y: 0 });
   const colour = (lv) => (lv === 'FAIL' ? L.STAMP : lv === 'WARN' ? '#c9892a' : '#4f7f3f');
   // zones: [from, to, colour] over a 0..max scale; marks: [value, text]
   const card = (i, title, big, sub, max, zones, marks, lv) => {
-    const x = i * (cw + gap);
+    const { x, y } = pos(i);
+    g.save();
+    g.translate(0, y);
     logbook.paper(x, 2, cw, h - 8, { r: 8, pins: false });
     g.fillStyle = L.INK;
     g.font = `15px ${config.FONTS.DISPLAY}`;
@@ -439,6 +457,7 @@ function drawGauges() {
       g.fillText(t, mx, by + 24);
     }
     g.textAlign = 'left';
+    g.restore();
   };
   const green = '#9cc48a', amber = '#e2bf6a', red = '#d98a80';
   card(0, 'LIFT', `gas ${b.lift.hover}`, [`hovers at gas ${b.lift.hover}`, `weight ${b.lift.mass}, lift ${b.lift.lift}`, `allowed ${BC.HOVER_MIN}-${BC.HOVER_MAX}, warn over ${BC.HOVER_WARN}`], 100,
@@ -448,7 +467,9 @@ function drawGauges() {
   const bal = b.balance, live = sim && sim.state.balance;
   if (bal) {
     // BALANCE: a beam on a fulcrum. Her centre of mass against the middle of her lift: the nose end goes down when she is nose-heavy. A faint second beam is the live balance (crew, coal, ammo ...).
-    const x = 3 * (cw + gap), col = colour(bal.level), by = h - 34, bw = cw - 24, cx = x + cw / 2;
+    const { x, y: yo } = pos(3), col = colour(bal.level), by = h - 34, bw = cw - 24, cx = x + cw / 2;
+    g.save();
+    g.translate(0, yo);
     logbook.paper(x, 2, cw, h - 8, { r: 8, pins: false });
     g.fillStyle = L.INK; g.font = `15px ${config.FONTS.DISPLAY}`; g.textAlign = 'left'; g.fillText('BALANCE', x + 12, 24);
     g.fillStyle = col; g.font = `17px ${config.FONTS.DISPLAY}`; g.fillText(bal.com && bal.col ? (bal.deg === 0 ? 'level' : `${bal.deg > 0 ? 'nose' : 'tail'}-heavy ${Math.abs(bal.deg)}\u00b0`) : 'no bag yet', x + 12, 50);
@@ -466,6 +487,7 @@ function drawGauges() {
     const [nx, ny, tx, ty] = beam(bal.deg, col, 4);
     g.fillStyle = col; for (const [px, py] of [[nx, ny], [tx, ty]]) { g.beginPath(); g.arc(px, py, 5, 0, 6.2832); g.fill(); }
     g.fillStyle = L.INK_SOFT; g.font = `10px ${config.FONTS.TEXT}`; g.textAlign = 'center'; g.fillText('TAIL', x + 24, h - 10); g.fillText('NOSE', x + cw - 24, h - 10); g.textAlign = 'left';
+    g.restore();
   }
   card(2, 'HANDS', `${b.hands.perPlayer} each`, [`${b.hands.stations} manned stations`, `at ${b.hands.crew} crew; ${b.hands.at4} at 4, ${b.hands.at6} at 6`, `warn over ${BC.HANDS_PER_PLAYER}`], 5,
     [[0, 1.5, amber], [1.5, BC.HANDS_PER_PLAYER, green], [BC.HANDS_PER_PLAYER, 5, red]], [[b.hands.perPlayer, String(b.hands.perPlayer)]], b.hands.level);
@@ -721,7 +743,9 @@ function drawBp() {
   if (!editing) return;
   fitCanvas(bp);
   if (!bpLayout || !bp.width) return;
-  bv = blueprintView(bpLayout, bp.width, bp.height, Math.min(2, devicePixelRatio || 1));
+  const base = blueprintView(bpLayout, bp.width, bp.height, kPix());
+  bv = view.apply(base);
+  if (fitFirst && bpLayout.platforms.length) { fitFirst = false; view.fit(bpLayout); bv = view.apply(base); } // (the page opens framed on the ship, not on the whole sheet)
   const ghost = drag ? ghostOf(drag) : null;
   const status = result && !result.ok ? { ok: false, text: 'CANNOT FLY yet - needs: ' + (result.needs.length ? result.needs.slice(0, 4).join(', ') + (result.needs.length > 4 ? ' ...' : '') : result.fails[0]) } : null;
   drawBlueprint(bctx, bv, bpLayout, { rowHover: drag ? drag.row : bpHover && bpHover.row, cursor: !drag && bpHover && bpHover.cursor, ghost, slots: tray.moved ? tray.slots : tool === 'place' && picked ? slots : [], hover: tray.moved ? tray.target : tool === 'place' ? hover : null, status, balance: result && result.budgets.balance, target: tool === 'delete' && bpHover ? bpHover.target : null, bagHandles: tool === 'bag', engine: selEngine, aim, drop: tray.moved ? { slots: tray.slots, target: tray.target, ptr: tray.ptr, img: tray.img, why: tray.why } : null });
@@ -769,9 +793,9 @@ $('engSwivel').onchange = () => { if (selEngine) applyEdit(setEngineSwivel(parts
 $('bagShort').onclick = () => applyEdit(setBag(parts, { grow: -1 }));
 $('bagLong').onclick = () => applyEdit(setBag(parts, { grow: 1 }));
 $('bagTwin').onclick = () => applyEdit(setBag(parts, { twin: 'toggle' }));
-$('reset').onclick = () => { note('', false); edit(BUILDS.classic.map((p) => ({ ...p }))); };
+$('reset').onclick = () => { fitFirst = true; note('', false); edit(BUILDS.classic.map((p) => ({ ...p }))); };
 $('clear').onclick = () => { note('Cleared: an empty sheet. Draw your first deck with the pencil, then the gasbag; the live pane lists what she still needs. Undo brings the old ship back.', false); edit(emptyBuild()); };
-$('minimal').onclick = () => { note('A small ship built from nothing with the same tools (decks, bag, parts). Undo goes back.', false); edit(minimalBuild()); };
+$('minimal').onclick = () => { fitFirst = true; note('A small ship built from nothing with the same tools (decks, bag, parts). Undo goes back.', false); edit(minimalBuild()); };
 $('copy').onclick = async () => {
   const text = JSON.stringify(parts);
   try { await navigator.clipboard.writeText(text); } catch {
@@ -823,9 +847,16 @@ function runBotTest() {
 }
 $('run').onclick = () => { $('bot').textContent = 'Running...'; setTimeout(runBotTest, 30); };
 
+// ---- the big view and playtest (buildPlay.js, buildView.js): their own block ----------------------------------------------
+attachPanZoom(bp, view, { paperPoint, cancelStroke: () => { drag = null; aim = null; }, blockWheel: () => !!(tray.id && tray.moved && isEngineTile(tray.id)) });
+bui = initBuildUi({ view, bp, scene, parts: () => parts, result: () => result, layout: () => bpLayout, note, onUi: () => { fitCanvas(scene); fitCanvas(bp); drawTray(); drawGauges(); },
+  load: (next, text) => { edit(next); note(text, false); fitFirst = true; }, // (a loaded ship is framed)
+  setEditing: (on) => { editing = on; $('oEdit').checked = on; $('centre').classList.toggle('editing', on); } });
+if (restored) note(restored, false);
+
 // ---- go ------------------------------------------------------------------------------------------------------------------
 refresh(); // (a ?build= that cannot fly: nothing flies until it can, the live pane says what is missing)
-window.buildTest = { get parts() { return parts; }, get result() { return result; }, get sim() { return sim; }, get live() { return live; }, edit, pick, slotsFor, info: () => info, runBotTest, startLive, flag, validate: () => result,
+window.buildTest = { view, bui, ui, get bv() { return bv; }, get parts() { return parts; }, get result() { return result; }, get sim() { return sim; }, get live() { return live; }, edit, pick, slotsFor, info: () => info, runBotTest, startLive, flag, validate: () => result,
   tool: () => tool, setTool, setKind, kind: () => kind, addArmour, applyEdit, setEngineDir, setEngineSwivel, engDir: () => engDir, selEngine: () => selEngine, aim: () => aim, drawDeck, drawBag, resizeBag, erase, setBag, placeConnector, placePart, removeAt, thingAt, emptyBuild, minimalBuild, tray: () => tray, bpScreen: (x, y) => { const r = bp.getBoundingClientRect(); return bv ? { x: r.left + (bv.X(x) * r.width) / bp.width, y: r.top + (bv.Y(y) * r.height) / bp.height } : null; }, // (bpScreen: ship coordinates to page pixels on the blueprint, for tests)
   screen: (x, y) => { const p = shipMatrix.transformPoint(new DOMPoint(x, y)), r = scene.getBoundingClientRect(); return { x: r.left + (p.x * r.width) / scene.width, y: r.top + (p.y * r.height) / scene.height }; } }; // (screen: ship coordinates to page pixels, for tests)
 
@@ -864,6 +895,7 @@ const frame = (now) => {
   try {
     fitCanvas(scene);
     drawBp();
+    if (bui) bui.update();
     if (sim) {
       acc += dt;
       let n = 0;
@@ -872,10 +904,10 @@ const frame = (now) => {
         acc -= config.LOOP.STEP;
       }
       if (acc >= config.LOOP.STEP) acc = 0;
-      const view = camera.update(dt, sim.state, scene.width, scene.height);
-      if (view) {
-        view.shipOverlay = overlay;
-        renderer.renderFrame(now, view);
+      const cam = scene.width > 8 ? camera.update(dt, sim.state, scene.width, scene.height) : null; // (the live pane may be hidden: the ship flies on, nothing is drawn)
+      if (cam) {
+        cam.shipOverlay = overlay;
+        renderer.renderFrame(now, cam);
       }
     } else {
       ctx.setTransform(1, 0, 0, 1, 0, 0);

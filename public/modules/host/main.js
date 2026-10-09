@@ -10,11 +10,14 @@ import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility for
 import { BUILDS } from './shipBuild.js';
 import { loadStartBuild } from './voyage.js';
 import { buildShelf } from './pvp/shelf.js';
+import { readPlaytestJob, armVersus } from './playtest.js';
 
-// Dev: host.html?build=[parts JSON] flies another ship than the classic one (copy a build from the build page, buildtest.html, "Copy build JSON").
+// Dev: host.html?build=[parts JSON] flies another ship than the classic one (copy a build from the build page, buildtest.html, "Copy build JSON"). The build page's PLAYTEST buttons open
+// host.html?playtest=coop (or =versus&foe=<shelf id>), &bots=N, with the ship in storage instead (playtest.js): co-op flies it as the voyage's start build, Versus puts it on the shelf for red.
+const playtest = readPlaytestJob(location.search);
+window.playtestJob = playtest; // (the pause menu's "Back to the builder" shows when this is set)
 try {
-  const asked = new URLSearchParams(location.search).get('build');
-  if (asked && asked !== 'classic') applyBuild(JSON.parse(asked));
+  if (playtest) applyBuild(playtest.parts);
 } catch (e) { console.warn('bad ?build=', e); }
 
 const canvas = document.getElementById('c');
@@ -46,7 +49,8 @@ fitCanvas();
   if (g === 'ship' || g === 'old') config.GUNSHIP.AS_SHIP = g === 'ship';
 }
 const simulation = createSimulation();
-simulation.setStartBuild(loadStartBuild()); // (the browser host starts a Voyage with the Sparrow, or the classic ship: the pause menu's Ship button; headless tools keep whatever ship they apply)
+if (playtest && playtest.mode === 'coop') BUILDS.playtest = playtest.parts; // (the build page's ship: the voyage starts with it, and so does every new voyage)
+simulation.setStartBuild(playtest && playtest.mode === 'coop' ? 'playtest' : loadStartBuild()); // (the browser host starts a Voyage with the Sparrow, or the classic ship: the pause menu's Ship button; headless tools keep whatever ship they apply)
 // Dev (B.2): host.html?ships=2 puts a SECOND airship in the sky (a copy of the classic one, or host.html?ships=2&build2=[parts JSON]), kept a little behind ours and
 // below her, each with four bot crew. They are one simulation: each ship has her own hull, gas, guns, fires, crew and art. (?ships=3 adds a third.)
 {
@@ -96,11 +100,22 @@ simulation.setStartBuild(loadStartBuild()); // (the browser host starts a Voyage
     }
   }
 }
+// Playtest in Versus (playtest.js): the build page's ship on red against the shelf ship ?foe=, bots on both sides at once (&bots=N) or the lobby for phones.
+if (playtest && playtest.mode === 'versus') armVersus(simulation, playtest, buildShelf);
 const camera = createCamera();
 // ONE renderer draws the whole sky: the background once, then every ship (her own art, crew and effects), the darkness and the HUD (render.js).
 const renderer = createRenderer({ ctx, state: simulation.state, canvas });
 const drawFrame = (now, view) => renderer.renderFrame(now, view);
 const network = initHostNetwork({ simulation });
+// Playtest in co-op with bots (&bots=N): they climb aboard and the ship casts off at once (without &bots the lobby opens with its QR code for phones).
+if (playtest && playtest.mode === 'coop' && playtest.bots > 0) {
+  for (let i = 0; i < playtest.bots; i++) {
+    const bot = newBot(simulation.state, simulation.state.ships[0], 'Bot' + (i + 1));
+    simulation.state.players[bot.id] = bot;
+  }
+  network.count();
+  simulation.castOff();
+}
 window.game = simulation; // handy for debugging in the browser console
 const sfx = createSfx(simulation.state);
 const soundButton = document.getElementById('sound');

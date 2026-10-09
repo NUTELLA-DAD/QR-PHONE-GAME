@@ -36,6 +36,8 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
   $('menuBtn').onclick = toggle;
   $('mArt').onclick = () => window.open('/styletest.html', '_blank'); // art style test page (new tab, the game stays paused)
   $('mBuild').onclick = () => window.open('/buildtest.html', '_blank'); // ship building test page: parts, validator, gauges (new tab)
+  $('mBack').style.display = window.playtestJob ? '' : 'none'; // (a playtest from the build page: back to the same build, buildtest.html?from=playtest)
+  $('mBack').onclick = () => { location.href = '/buildtest.html?from=playtest'; };
   $('mResume').onclick = () => show(false);
   $('mQrToggle').onclick = () => $('mJoin').classList.toggle('on');
   $('mBots').onclick = () => {
