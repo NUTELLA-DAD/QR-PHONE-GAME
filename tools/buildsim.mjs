@@ -626,7 +626,7 @@ async function checkEdit() {
         const p = { id: 'h', name: 'Human', species: config.CREW_SPECIES[0], color: '#fff', x: 700, y, d: lowIdx, jx: 0, jy: 0, t: 0, connected: true, fall: false, ko: 0 };
         sm.state.players.h = p;
         let n = 0;
-        for (let i = 0; i < 250; i++) { Object.assign(p, { x: 700, y, d: lowIdx, fly: false, air: false, vx: 0, stag: 0, lock: null, conn: null }); sm.impact(700, y - 30, 3); if (p.fly) n++; }
+        for (let i = 0; i < 250; i++) { Object.assign(p, { x: 700, y, d: lowIdx, fly: false, air: false, vx: 0, stag: 0, lock: null, conn: null, ko: 0, hearts: 3, hurtT: 0, koGrace: 0 }); sm.impact(700, y - 30, 3); if (p.fly) n++; }
         return n;
       };
       const realRandom = Math.random;
