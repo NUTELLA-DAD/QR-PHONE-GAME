@@ -250,7 +250,7 @@ function buildOpenMap(level, rand, lengthMul = 1, layout) {
 // ground). Rolling hills and a few tall spires on the ground, floating islands of every size, and one hollow island on each side (a pocket with its mouth toward the middle: somewhere to
 // hide and shoot from). The two launch points are START_GAP apart in the middle of the sky, clear of rock. No outposts and no flak: the one dummy outpost is already "done".
 // A = config.PVP.ARENA (SIZE [cells wide, cells high], ISLANDS, SPIRES, POCKETS, START_Y share of the height); gap = the distance between the two launch points (px).
-export function buildArenaMap(rand, layout, A, gap = 9000) {
+function buildArenaOnce(rand, layout, A, gap) {
   const C = config.MAPS.CELL;
   const [W, H] = A.SIZE;
   const r = (a, b) => a + rand() * (b - a);
@@ -310,6 +310,18 @@ export function buildArenaMap(rand, layout, A, gap = 9000) {
   const map = { kind: 'open', level: 1, CELL: C, W, H, solid, turrets: [], outposts, open: true, arena: { x0: 0, x1: W * C, y0: 0, y1: H * C, cx: (W * C) / 2, cy: (sj + 0.5) * C, fitTop: Math.ceil((A.CEILING + 600) / C) } };
   finishMap(map, { i: spawnI[0], j: sj }, { i: half, j: sj }, layout, A.PAD || 0);
   map.start = { x: (W * C) / 2 - gap / 2, y: (sj + 0.5) * C }; // (the left ship's launch point; the right one is START_GAP further on)
+  return map;
+}
+
+// The arena, checked: each ship's launch point must have a way to the middle of the sky (and so, the sky being the same on both sides, to the other ship) for a hull with room to spare. A sky that
+// walls the two ships off from each other is built again with fewer islands.
+export function buildArenaMap(rand, layout, A, gap = 9000) {
+  let map = null;
+  for (let tries = 0; tries < 16; tries++) {
+    map = buildArenaOnce(rand, layout, { ...A, ISLANDS: Math.max(2, A.ISLANDS - Math.floor(tries / 2)), SPIRES: Math.max(1, A.SPIRES - Math.floor(tries / 4)) }, gap);
+    const C = map.CELL, sj = Math.floor(map.start.y / C);
+    if (map.dist[sj * map.W + Math.floor(map.start.x / C)] < 1e9 && map.dist[sj * map.W + Math.floor((map.start.x + gap) / C)] < 1e9) return map;
+  }
   return map;
 }
 

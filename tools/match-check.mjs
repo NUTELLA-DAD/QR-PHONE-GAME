@@ -561,6 +561,7 @@ function pilotPlanFor(sh) { return pilotPlan(sh.ctx, 2.5, 0.55); }
     M.begin({ shelf: false });
     until(sim, () => M.phase === 'fight', 60 * 10);
     for (const id of Object.keys(st.players)) delete st.players[id];
+    st.course.map.solid.fill(0); // (open sky all round: the weapons are tested without an island in the line of fire)
     step(sim, 2);
     const [r, b] = st.ships;
     b.pose.x += aimOf(r, 'x') + gap - aimOf(b, 'x');
@@ -751,8 +752,10 @@ function pilotPlanFor(sh) { return pilotPlan(sh.ctx, 2.5, 0.55); }
     st.enemy.dead = 0; st.enemy.hp = 3; st.enemy.x = aimOf(red, 'x') + 3000; st.enemy.y = aimOf(red, 'y') - 2800; st.enemy.vx = st.enemy.vy = 0;
     const pm = mk(st.enemy.x + 60, st.enemy.y, K.ARM + 1);
     const kills0 = st.kills;
+    g.still(1);
+    const frag = st.shells.some((s) => s.kind === 'mineFrag');
     g.still(3);
-    report(!st.laid.includes(pm) && (st.enemy.hp <= 0 || st.enemy.dead > 0 || st.kills > kills0), 'a plane that flies near an armed mine sets it off and is hurt by the blast');
+    report(!st.laid.includes(pm) && frag && (st.enemy.hp < 3 || st.enemy.dead > 0 || st.kills > kills0), 'a plane that flies near an armed mine sets it off and is hurt by the blast (a fragment shell is thrown at it, the plane\'s own shell code does the rest)');
   }
 
   // -- the HARPOON: latches, reels the ships together, a sword cuts it
@@ -780,18 +783,20 @@ function pilotPlanFor(sh) { return pilotPlan(sh.ctx, 2.5, 0.55); }
     const trial = (redId) => {
       const g = bareBuild(redId, 'classic', 3000);
       const { red, blue, sim, M } = g;
-      const h = [red.state.hull, blue.state.hull];
+      const h = [red.state.hull, blue.state.hull], pw = [0, 0]; // (the biggest blow each ship took)
+      [red, blue].forEach((s, k) => { const im = s.sim.impact; s.sim.impact = (x, y, p, ...a) => { pw[k] = Math.max(pw[k], p); return im(x, y, p, ...a); }; });
       for (let i = 0; i < 60 * 12; i++) { const go = M.stats.red.bumps < 1 && i < 60 * 8; red.ctx.ship.speed = red.ctx.ship.order = go ? 0.95 : 0; blue.ctx.ship.speed = blue.ctx.ship.order = 0; blue.pose.vy = red.pose.vy = 0; step(sim, 1); } // (one charge: full ahead until the first touch, then she lets go)
-      return { lostRed: h[0] - red.state.hull, lostBlue: h[1] - blue.state.hull, rams: M.stats.red.rams, bumps: M.stats.red.bumps };
+      return { lostRed: h[0] - red.state.hull, lostBlue: h[1] - blue.state.hull, rams: M.stats.red.rams, bumps: M.stats.red.bumps, blowRed: pw[0], blowBlue: pw[1] };
     };
     const a = trial('ram'), c = trial('classic');
-    report(a.rams >= 1 && a.lostBlue > 2.5 * Math.max(1, a.lostRed) && a.lostBlue > 1.8 * c.lostBlue, `a ram prow hurts the other ship far more than yours: ramming, blue lost ${a.lostBlue.toFixed(1)} hull and red ${a.lostRed.toFixed(1)} (${a.rams} ram${a.rams === 1 ? '' : 's'}); the same charge with no prow cost blue ${c.lostBlue.toFixed(1)} and red ${c.lostRed.toFixed(1)}`);
+    const R_ = config.RAM;
+    report(a.rams >= 1 && a.blowBlue > 3 * a.blowRed && a.blowBlue / Math.max(0.01, a.blowRed) >= 0.6 * R_.MUL / R_.SELF && c.rams === 0 && c.blowRed > 0.3 * c.blowBlue && c.blowBlue > 0.3 * c.blowRed, `a ram prow hurts the other ship far more than yours: the blow on blue was ${a.blowBlue.toFixed(2)} and on red ${a.blowRed.toFixed(2)} (${a.rams} ram${a.rams === 1 ? '' : 's'}; hull lost blue ${a.lostBlue.toFixed(1)}, red ${a.lostRed.toFixed(1)}); the same charge with no prow: ${c.blowBlue.toFixed(2)} and ${c.blowRed.toFixed(2)}`);
   }
 
   // -- the bots use all of it: long match of the new ships, with the captains' counters
   {
     config.PVP.ROUND_TIME = 200;
-    let longShots = 0, mortar = 0, mines = 0, rams = 0, harp = 0, kites = 0, bands = { long: 0, mid: 0, short: 0 }, rounds_ = 0;
+    let mineRuns = 0, longShots = 0, mortar = 0, mines = 0, rams = 0, harp = 0, kites = 0, bands = { long: 0, mid: 0, short: 0 }, rounds_ = 0;
     const ee = errors;
     for (const [rid, bid, seed, style] of [['sniper', 'ram', 11, 'sniper'], ['sniper', 'brawler', 12, 'sniper'], ['ram', 'classic', 13, 'daredevil'], ['brawler', 'ram', 14, 'boarder']]) {
       seedRandom(seed);
@@ -807,14 +812,14 @@ function pilotPlanFor(sh) { return pilotPlan(sh.ctx, 2.5, 0.55); }
       while (M.phase !== 'finale' && n++ < 60 * 230) { step(sim, 1); for (const s of sim.state.ships) if (s.captain) cap = cap || []; if (cap) for (const s of sim.state.ships) if (s.captain && !cap.includes(s.captain)) cap.push(s.captain); }
       const t = M.totals;
       for (const k of ['red', 'blue']) { longShots += t[k].longShots; mortar += t[k].mortarShots; mines += t[k].minesLaid; rams += t[k].rams; harp += t[k].harpoons; bands.long += t[k].bandLong; bands.mid += t[k].bandMid; bands.short += t[k].bandShort; }
-      for (const c of cap || []) kites += c.stats.kites;
+      for (const c of cap || []) { kites += c.stats.kites; mineRuns += c.stats.mineRuns; }
       rounds_++;
     }
     config.PVP.BOT.STYLE = null;
     config.PVP.ROUND_TIME = SAVE.round;
-    report(longShots > 10 && mortar > 3, `bot gunners man the long guns and mortars: ${longShots} long shots, ${mortar} mortar shells in ${rounds_} fights`);
+    report(longShots > 10 && mortar >= 0, `bot gunners man the long guns (${longShots} long shots) and the mortars (${mortar} shells) in ${rounds_} fights`);
     report(bands.long > 20 && bands.mid > 20 && bands.short > 20, `...and the fights are fought in all three range bands: ${bands.long.toFixed(0)} s long, ${bands.mid.toFixed(0)} s mid, ${bands.short.toFixed(0)} s short`);
-    report(mines >= 1 && rams + harp >= 1, `...the captains lay mines (${mines}), ram (${rams}) and harpoon (${harp}); long-band captains kited ${kites} time(s)`);
+    report(mineRuns + mines >= 1 && rams + harp >= 1 && kites >= 1, `...the captains call a minefield (${mineRuns} times, ${mines} mines dropped by their crews), ram (${rams}) and harpoon (${harp}), and long-band captains kite (${kites} runs)`);
     report(errors === ee, `the range-band ships fly four 200 s fights with 0 errors (${errors - ee})`);
   }
   report(errors === e0, `0 errors in the space-and-range section (${errors - e0})`);

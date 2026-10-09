@@ -137,6 +137,7 @@ export function createMatch(D) {
     M.on = true;
     world.match = M;
     const red = world.ships[0];
+    if (red.layout.parts !== BUILDS.classic) { red.layout.applyBuild(BUILDS.classic); red.sim.refit(); } // (the main ship's layout is one shared object: a build left on it by an earlier match or voyage is not the classic ship the lobby says she is)
     if (world.ships.length < 2) D.addShip(BUILDS.classic, { id: 'ship1', team: 'blue', name: 'BLUE SHIP', formation: { dx: V().LOBBY_GAP, dalt: 0 } });
     red.team = 'red';
     red.name = 'RED SHIP';
