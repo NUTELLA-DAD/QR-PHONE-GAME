@@ -26,6 +26,7 @@ import { pop } from './popups.js';
 import { assistAim } from './aim.js';
 import { gunStock, loadOf, autoloadOf, specOf } from './gunTypes.js';
 import { fireTyped } from './weapons.js';
+import { stepFlame } from './flame.js';
 import { createPrime } from './prime.js';
 import { createLinks } from './links.js';
 import { createGoingDown } from './goingDown.js';
@@ -238,7 +239,7 @@ export function createShipSim(world, ship, W) {
     if (valve) return { type: 'valve', obj: valve, label: valve.open ? 'Close valve' : 'Open valve' };
     if (station) {
       const gun = state.GUNS[station.n];
-      if (gun && tool === 'ammo' && gun.ammo < gun.max) return { type: 'load', obj: gun, station, label: 'Load ' + station.n };
+      if (gun && tool === (gun.type === 'flame' ? 'coal' : 'ammo') && gun.ammo < gun.max) return { type: 'load', obj: gun, station, label: (gun.type === 'flame' ? 'Fuel ' : 'Load ') + station.n }; // (a flamethrower's tank takes a sack of coal, not shells)
       if (station.kind === 'bombBay' && tool === 'ammo' && state.bombBay.bombs < config.BOMBS.MAX) return { type: 'loadBombs', station, label: 'Load bombs' };
       if (legacy && station.kind === 'ammo' && tool !== 'ammo') return { type: 'ammo', station, label: 'Grab ammo' };
       if (legacy && station.kind === 'coal' && tool !== 'coal') return { type: 'coal', station, label: 'Grab coal' };
@@ -1127,7 +1128,18 @@ export function createShipSim(world, ship, W) {
             const wanted = assistAim(state, gun, Math.atan2(player.jy, player.jx), A.ANGLE * (gun.type === 'mortar' ? config.GUN_TYPES.mortar.ASSIST : 1), A.STRENGTH); // (a mortar's angle is its range: the assist reaches wider)
             gun.aim = gun.home + clamp(angleDiff(wanted, gun.home), -gun.arc, gun.arc);
           }
-          if ((player.actQ || player.fire) && gun.cd <= 0 && !state.ship.down) {
+          if (gun.type === 'flame') {
+            // The flamethrower burns while the button is held (a tap gives a short burst); the tank, the steam, the heat and the cone are flame.js, once a frame in the gun upkeep below.
+            if ((player.actQ || player.fire) && !state.ship.down) {
+              if (ship.pose.turn > 0 || !working) {
+                gun.empty = 0.8;
+                gun.emptyText = ship.pose.turn > 0 ? 'TURNING!' : 'BROKEN!';
+              } else {
+                gun.flameHold = Math.max(gun.flameHold || 0, player.actQ ? config.FLAME.TAP : 0.12);
+                gun.flameWho = player;
+              }
+            }
+          } else if ((player.actQ || player.fire) && gun.cd <= 0 && !state.ship.down) {
             if (ship.pose.turn > 0) {
               gun.cd = 0.3; // (the guns cannot fire while she comes about)
               gun.empty = 0.6;
@@ -1347,6 +1359,7 @@ export function createShipSim(world, ship, W) {
       if (kind === 'boiler' && !status) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
       if (kind === 'helm' && player.lock && !status && (state.ship.press < config.GAS.PUMP_MIN_PRESS || state.gasHoles.length)) status = `Gas ${Math.round(state.ship.gas)}% - ${feel}${state.ship.press < config.GAS.PUMP_MIN_PRESS ? ' - NO STEAM TO PUMP!' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' holes leaking' : ''}`;
       if (kind === 'helm' && player.lock && !status && state.buoyancy) status = state.buoyancy > 0 ? 'Gasbag full - she is rising' : 'Gasbag low - she is dropping';
+      if (gun && gun.type === 'flame' && player.lock && !status) status = gun.overheat ? 'OVERHEATED - let it cool' : state.ship.press < config.FLAME.MIN_PRESS ? 'No steam - stoke the boiler' : gun.ammo <= 0 ? 'Tank empty - bring COAL' : `Burner heat ${Math.round((gun.heat || 0) * 5) * 20}% - fuel ${gun.ammo}`;
       if (gun && !status && env.gunIce(stationName) > 0.35) status = env.gunJammed(stationName) ? 'ICED - CHIP IT! (hammer)' : 'Gun is icing up - chip it (hammer)';
       if (!status && !player.lock && goingDown.active()) status = goingDown.status();
       if (!status && state.ship.press >= config.BOILER.WARN_AT) status = 'PRESSURE HIGH - open a vent!';
@@ -1485,6 +1498,10 @@ export function createShipSim(world, ship, W) {
       gun.empty = Math.max(0, gun.empty - dt);
       if (!taken(gunName)) prime.idle(gun, dt); // (a half-charge fades when nobody is holding it; the glow timer always runs)
       else gun.primedFlash = Math.max(0, (gun.primedFlash || 0) - dt);
+      if (gun.type === 'flame') { // a flamethrower: the button, the tank, the steam, the heat, the cone and what it burns (flame.js)
+        const [fx, fy] = tilt(state, gun.bx, gun.by);
+        stepFlame({ ship, state, gun, name: gunName, wx: toWorldX(ship, fx), wy: toWorldY(ship, fy), angle: aimToWorld(ship, gun.aim + (state.ship.pitch || 0)), dt, puff, W });
+      }
       // Auto-Loader upgrade: a free shell every so often.
       if (config.GUNS.AUTOLOAD_EVERY && gun.ammo < gun.max && (gun.auto = (gun.auto || 0) + dt) >= autoloadOf(gun)) {
         gun.auto = 0;
@@ -1662,7 +1679,7 @@ export function createShipSim(world, ship, W) {
     state.helmHit = 0;
     Object.assign(state.shield, { ang: -Math.PI / 2, on: false, flash: 0 });
     for (const list of [state.gasHoles, state.breaches, state.fires, state.bombs]) list.length = 0;
-    for (const [name, m] of Object.entries(layout.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ...gunStock(m), empty: 0, auto: 0, prime: 0, primed: false });
+    for (const [name, m] of Object.entries(layout.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ...gunStock(m), empty: 0, auto: 0, prime: 0, primed: false, flame: 0, heat: 0, overheat: false, flameHold: 0 });
     raiders.reset();
     escort.reset();
     coil.reset();

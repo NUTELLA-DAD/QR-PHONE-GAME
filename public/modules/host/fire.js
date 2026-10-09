@@ -19,7 +19,7 @@ export function createFire({ state, shipPuff }) {
   const ship = mainShip(state); // (the ship the fires burn on: its layout is read through the handle, never imported)
   const SL = ship.layout, P = SL.platforms;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  state.fireStats = { lit: 0, hit: 0, spread: 0, boiler: 0, env: 0, blazes: 0, plated: 0 }; // (what lit each fire, blazes, hits that struck armour plate: read by tools/botsim.mjs and the --check-fire gate)
+  state.fireStats = { lit: 0, hit: 0, spread: 0, boiler: 0, env: 0, flame: 0, blazes: 0, plated: 0 }; // (what lit each fire - flame: a flamethrower's cone, flame.js - blazes, hits that struck armour plate: read by tools/botsim.mjs and the --check-fire gate)
   state.blaze = null;
   state.blazeCd = 0;
 

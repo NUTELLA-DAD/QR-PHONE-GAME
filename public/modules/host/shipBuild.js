@@ -172,8 +172,8 @@ export const PARTS = {
   // A place a player can stand to do a job.
   station: piece('stations', { mass: kindStat('mass'), hands: kindStat('hands') }),
   // A station plus the gun on it: where the barrel pivots (bx, by), the middle of its arc (aim) and how far it turns (arc).
-  // (`gtype` makes it one of the gun types of the range bands, config.GUN_TYPES: long, mortar, scatter, flak, harpoon, or the mine layer 'mines'; weapons.js. None: the plain broadside gun.)
-  gun: { mass: (p) => M().kind[p.gtype === 'mines' ? 'mineLayer' : p.gtype ? 'gun_' + p.gtype : 'gun'] ?? M().kind.gun, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
+  // (`gtype` makes it one of the gun types of the range bands, config.GUN_TYPES: long, mortar, scatter, flak, harpoon, flame, or the mine layer 'mines'; weapons.js, flame.js. None: the plain broadside gun.)
+  gun: { mass: (p) => M().kind[p.gtype === 'mines' ? 'mineLayer' : p.gtype ? 'gun_' + p.gtype : 'gun'] ?? (p.gtype && config.GUN_TYPES[p.gtype] && config.GUN_TYPES[p.gtype].MASS) ?? M().kind.gun, lift: 0, steam: (p) => (p.gtype === 'flame' ? config.GUN_TYPES.flame.STEAM_USE : 0), hands: 1, emit: (p, A) => { // (the flamethrower burns steam: STEAM_USE points in the budget)
     const { bx, by, aim, arc, n, ord, gtype } = p;
     A.add('stations', { n, kind: 'gun', p: p.p, x: p.x });
     A.add('gunMounts', { bx, by, aim, arc, ...(gtype ? { type: gtype } : {}) }, n, ord && ord.gunMounts);

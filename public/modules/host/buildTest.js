@@ -203,6 +203,7 @@ sprites.load().then(() => { pics.refresh(); drawTray(); }).catch(() => {});
 const TRAY = [['gasbag', 'Gasbag'], ['gasValve', 'Gas valve'], ['helm', 'Helm'], ['boiler', 'Boiler'], ['coal', 'Coal bunker'], ['ammo', 'Ammo hold'], ['engine', 'Engine pod'], ['engineSwivel', 'Swivel engine'], ['gun', 'Gun'], ['searchlight', 'Searchlight'], ['lookout', 'Lookout'],
   ['medbay', 'Medbay'], ['bombBay', 'Bomb bay'], ['lift', 'Lift'], ['boarding', 'Boarding point'], ['rack_hammer', 'Hammer rack'], ['rack_sword', 'Sword rack'], ['rack_hookshot', 'Hookshot rack'],
   ['rack_ice', 'Ice locker'], ['extinguisher', 'Extinguisher'], ['armour', 'Armour plate'], ['vent', 'Steam vent'], ['sail', 'Mast and sail'], ['ladder', 'Ladder'], ['pole', 'Slide pole'], ['ballast', 'Sandbag'], ['ballast_hang', 'Hanging sandbag'], ['crewCannon', 'Crew cannon'], ['rack_sandbag', 'Sandbag rack'], ['rack_crate', 'Crate stack'], ['rack_towline', 'Towline reel'],
+  ['gun_flame', 'Flamethrower'],
   ['gun_long', 'Long gun'], ['gun_mortar', 'Mortar'], ['gun_scatter', 'Grapeshot gun'], ['gun_flak', 'Flak gun'], ['gun_harpoon', 'Harpoon gun'], ['mineLayer', 'Mine layer'], ['ramProw', 'Ram prow']];
 const tray = { id: null, moved: false, slots: [], target: null, ptr: null, why: '', img: null, x0: 0, y0: 0 }; // the tile being dragged (moved = it has left the tile)
 // ---- pointed engines (S.5h) -------------------------------------------------------------------------------------------

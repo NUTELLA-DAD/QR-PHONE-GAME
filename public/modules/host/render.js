@@ -32,6 +32,7 @@ import { createFleetArt } from './fleetArt.js'; // B.3: the panels, pennants and
 import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, HUD, scoreboard (pvp/match.js)
 import { bandOf, metres, BAND_WORDS } from './pvp/range.js'; // the range bands: the TV's readout
 import { BARRELS, drawBarrel, drawChute, drawMines, drawRam, SHELL_LOOK } from './weaponsArt.js'; // the barrels of the gun types, laid mines, the ram prow
+import { drawFlameGun } from './flameArt.js'; // the flamethrower's pilot light, cone of fire and heat gauge
 import { createYardArt } from './yardArt.js'; // S.6b: the Shipwright's Yard (the sky-dock blueprint, the A / B / C vote, BUILT, "NEW: ...")
 import { createPartPictures } from './partArt.js'; // the little part pictures of the build tray, on the Yard's cards
 import { createDebrisArt } from './debrisArt.js'; // S.5i: the pieces of ship that broke off, tumbling through the sky
@@ -163,6 +164,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ink();
         drawBarrel(ctx, gun.type, (color, path) => { ctx.fillStyle = color; ctx.beginPath(); path(); ctx.fill(); ctx.stroke(); });
         ctx.restore();
+        if (gun.type === 'flame') drawFlameGun(ctx, gun, performance.now() / 1000); // (the flamethrower: its pilot light, the cone of fire while it burns, the heat gauge)
       } else if (!sprites.pivot(ctx, 'ship/gun-barrel', gun.bx, gun.by, 0.12, 0.5, gun.aim)) {
         // Upgrades show: Twin Barrels adds barrels, Big Shells makes them fatter.
         const up = state.upgrades || {};

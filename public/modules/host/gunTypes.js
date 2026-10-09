@@ -18,7 +18,7 @@ export function rangeOf(gun) {
   const T = typeOf(gun), reach = gun.reach || 1;
   if (!T) return config.GUNS.SHELL_SPEED * config.GUNS.SHELL_LIFE * reach;
   if (gun.type === 'mortar') return ((T.SPEED * T.SPEED) / T.GRAVITY) * reach;
-  if (gun.type === 'harpoon') return T.RANGE;
+  if (gun.type === 'harpoon' || gun.type === 'flame') return T.RANGE;
   if (gun.type === 'mines') return 0;
   return T.SPEED * T.LIFE * reach;
 }
@@ -57,6 +57,10 @@ export function typedSolution(state, ship, gun, target, gx, gy) {
     }
     r = lob(p.x - gx, p.y - gy, T.SPEED, T.GRAVITY);
     return r ? inArc(aimToShip(ship, Math.atan2(r.vy, r.vx)) - pitch) : null;
+  }
+  if (gun.type === 'flame') { // a cone of fire has no flight time: the target where it is now, within the cone's reach (less part of its own size)
+    const p = target.at(0);
+    return Math.hypot(p.x - gx, p.y - gy) - (target.r || 0) * 0.6 > rangeOf(gun) ? null : inArc(aimToShip(ship, Math.atan2(p.y - gy, p.x - gx)) - pitch);
   }
   const speed = T.SPEED;
   let p = target.at(0);

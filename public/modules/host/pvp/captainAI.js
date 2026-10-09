@@ -24,7 +24,7 @@ const smooth = (x) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
 
 // What a ship has to fight with, gun by gun (the layout's gun mounts and her ram prow).
 export function profileOf(L) {
-  const p = { long: 0, mortar: 0, scatter: 0, flak: 0, harpoon: 0, mines: 0, plain: 0, ram: L.ram ? 1 : 0 };
+  const p = { long: 0, mortar: 0, scatter: 0, flak: 0, harpoon: 0, flame: 0, mines: 0, plain: 0, ram: L.ram ? 1 : 0 };
   for (const m of Object.values(L.gunMounts)) { if (m.type) p[m.type] = (p[m.type] || 0) + 1; else p.plain++; }
   return p;
 }
@@ -36,7 +36,7 @@ export function chooseBand(S, prof) {
   sc[S.band || 'mid'] += R.STYLE;
   sc.long += R.LONG_GUN * prof.long + R.MORTAR * prof.mortar;
   sc.mid += R.PLAIN * prof.plain + R.FLAK * prof.flak;
-  sc.short += R.SCATTER * prof.scatter + R.HARPOON * prof.harpoon + R.RAM * prof.ram;
+  sc.short += R.SCATTER * prof.scatter + R.HARPOON * prof.harpoon + R.RAM * prof.ram + config.FLAME.BOT.BAND * prof.flame;
   const can = { short: true, mid: prof.plain + prof.flak > 0, long: prof.long + prof.mortar > 0 };
   let best = 'short';
   for (const b of ['short', 'mid', 'long']) if (can[b] && sc[b] > sc[best]) best = b;
@@ -66,6 +66,7 @@ export function captainOf(state) {
     losT: 0, openT: 0, losShift: 0, losPickT: 0,
     mines: false, minesWant: false, mineGap: 0, mineUntil: 0, kiteCd: ship.ai ? 0 : rnd([4, 12]), kiteUntil: 0, harpoonCd: ship.ai ? 0 : rnd([6, 14]), harpoonT: 0, mineSaid: false,
   };
+  c.burnCd = 8; c.burnUntil = 0; c.stats.burns = 0; // (the BURN play of a ship with flamethrowers: closing in so the cone reaches her decks; no random draw, so a ship without them flies as before)
   c.prof = profileOf(ship.layout);
   c.band = chooseBand(S[style], c.prof);
   c.hold = holdFor(c.band) + S[style].stand * config.PVP.STANDOFF * 0.4; // (px between the aim points of two classic hulls that she likes: the band's hold, nudged by her style)
@@ -194,7 +195,7 @@ export function captainFly(state, p, plan, dt) {
   }
 
   // ---- the weave: altitude jumps, throttle surges, a wandering standoff ----
-  const gentle = c.play === 'grapple' ? 0.4 : 1; // (a boarding party needs the decks to hold still)
+  const gentle = c.play === 'grapple' || c.play === 'burn' ? 0.4 : 1; // (a boarding party needs the decks to hold still)
   if (c.t >= c.jAltT) {
     const sign = Math.random() < 0.75 ? -c.lastSign : c.lastSign;
     c.lastSign = sign;
@@ -217,9 +218,10 @@ export function captainFly(state, p, plan, dt) {
   const facing = f * dir > 0; // her bow points at the rival
   const my_h = state.ship.hull, their_h = R.hull;
   const enough = state.ship.hull >= B.PASS.MIN_HULL && !hurt && !wedged;
+  if (c.burnWish && !enough) c.burnWish = false;
   if (c.think <= 0) {
     c.think = 0.4;
-    c.passCd -= 0.4; c.ramCd -= 0.4; c.grappleCd -= 0.4;
+    c.passCd -= 0.4; c.ramCd -= 0.4; c.grappleCd -= 0.4; c.burnCd -= 0.4;
     if (!gun && c.play === 'duel' && !turning && state.turning && state.turning.t === 0) {
       const dtk = 0.4;
       const R_ = B.RAM, RP = c.prof.ram ? B.RAMPROW : null; // (a ram prow: the ram run is flown against any rival, much more keenly)
@@ -233,6 +235,15 @@ export function captainFly(state, p, plan, dt) {
         callout(state, 'KEEPS HER DISTANCE!');
       } else if (facing && c.passCd <= 0 && enough && dist < B.PASS.MAX_DIST && dist > stand * 0.5 && Math.random() < B.PASS.RATE * S.pass * dtk) {
         startPass(state, c, ship, R, L, B);
+      } else if (c.prof.flame > 0 && c.burnCd <= 0 && enough && S.raid >= 1 && dist < stand * 1.8 && (c.burnWish || Math.random() < config.FLAME.BOT.BURN_RATE * S.raid * dtk)) {
+        // (a flamethrower's cone is a few hundred px long: first she WISHES it - the crew man the burners - then, with a hand on one (or after a few seconds), close in, level with her, and burn)
+        if (!c.burnWish) { c.burnWish = true; c.burnWishT = c.t; }
+        if (c.t - c.burnWishT > config.FLAME.BOT.WISH_WAIT || Object.values(state.players).some((q) => q.lock && state.GUNS[q.lock] && state.GUNS[q.lock].type === 'flame')) {
+          c.burnWish = false;
+          c.play = 'burn'; c.legT = 0; c.burnUntil = c.t + rnd(config.FLAME.BOT.BURN_TIME);
+          c.stats.burns++;
+          callout(state, 'CLOSES IN TO BURN HER!', 2);
+        }
       } else if (c.grappleCd <= 0 && enough && S.raid >= 1 && dist < stand * 1.8 && Math.random() < config.PVP.BOT.RAID.GRAPPLE * S.raid * dtk) {
         c.play = 'grapple'; c.legT = 0; c.grappleUntil = c.t + rnd(config.PVP.BOT.RAID.GRAPPLE_TIME);
         c.stats.grapples++;
@@ -297,6 +308,12 @@ export function captainFly(state, p, plan, dt) {
       thr += clamp((R.vx - ship.pose.vx) / TOP, -0.5, 0.5) * 0.8;
       if (c.t > c.grappleUntil || hurt || state.ship.hull < B.RAID.MIN_HULL) { c.play = 'duel'; c.grappleCd = rnd([22, 40]); }
     }
+    if (c.play === 'burn') { // the flamethrowers: press in as far as the hulls allow, at her height, matching her way over the ground so the decks stay in the cone
+      rangeAdj = -config.FLAME.BOT.BURN_CLOSE;
+      if (state.ship.gas >= B.JINK.LOW_GAS) target = clampAlt(AIMY - (R.mid.y + c.jAlt * 0.2));
+      thr = c.jThr * 0.4 + clamp((R.vx - ship.pose.vx) / TOP, -0.5, 0.5) * 0.8;
+      if (c.t > c.burnUntil || hurt || state.ship.hull < B.RAID.MIN_HULL) { c.play = 'duel'; c.burnCd = config.FLAME.BOT.BURN_CD; }
+    }
     if (c.play === 'kite') { // running from a chaser at long range (rivalPlan flies the retreat): until there is room, or the time is up
       thr = 0;
       if (c.t > c.kiteUntil || dist > holdNow * 1.3 || wedged || hurt) { c.play = 'duel'; c.kiteCd = B.RANGE.KITE_CD; }
@@ -331,7 +348,7 @@ export function captainFly(state, p, plan, dt) {
     ca = c.behindT >= B.TURN_BEHIND;
     if (ca || turning) speed = clamp(speed, -0.25, 0.25);
   }
-  c.rangeAdj = c.play === 'duel' || c.play === 'grapple' || c.play === 'chase' ? Math.max(rangeAdj, B.MIN_GAP - P.STANDOFF) : 0; // (never press the hulls together unless she means to: the noses touch about MIN_GAP apart)
+  c.rangeAdj = c.play === 'duel' || c.play === 'grapple' || c.play === 'chase' || c.play === 'burn' ? Math.max(rangeAdj, B.MIN_GAP - P.STANDOFF - (c.play === 'burn' ? config.FLAME.BOT.PRESS : 0)) : 0; // (never press the hulls together unless she means to: the noses touch about MIN_GAP apart)
   speed = clamp(speed, -config.SHIP.REVERSE, 1);
   if (!gun) {
     // ---- mines: a field across the chaser's path, and a wide berth round the ones already laid ----

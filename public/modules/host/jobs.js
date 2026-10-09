@@ -79,9 +79,10 @@ export function createJobFinder(state) {
     // Hauling: shells to a low gun, coal to a hungry boiler.
     const carry = p.carry;
     const GUN_NAMES = tables(L).GUN_NAMES;
-    const guns = GUN_NAMES.filter((n) => state.GUNS[n].ammo <= J.AMMO_LOW && !mods.some((m) => m.name === n && m.broken)).sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
+    const guns = GUN_NAMES.filter((n) => state.GUNS[n].type !== 'flame' && state.GUNS[n].ammo <= J.AMMO_LOW && !mods.some((m) => m.name === n && m.broken)).sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
+    for (const n of GUN_NAMES) if (carry === 'coal' && state.GUNS[n].type === 'flame' && state.GUNS[n].ammo < state.GUNS[n].max) { const s = stationNamed(n); add('coal', n, s.d, s.x, {}, `COAL for the flamethrower ${n}`); } // (a flamethrower's tank takes coal)
     if (carry === 'ammo') {
-      for (const n of GUN_NAMES) if (state.GUNS[n].ammo < state.GUNS[n].max) { const s = stationNamed(n); add('ammo', n, s.d, s.x, {}, `AMMO to ${n}`); }
+      for (const n of GUN_NAMES) if (state.GUNS[n].type !== 'flame' && state.GUNS[n].ammo < state.GUNS[n].max) { const s = stationNamed(n); add('ammo', n, s.d, s.x, {}, `AMMO to ${n}`); }
     } else if (carry !== 'coal') {
       const hold = L.nearest('ammo', p); // (the ammo hold nearest to this player)
       if (hold) for (const n of guns.slice(0, 2)) { const s = stationNamed(n); add('ammo', n, s.d, s.x, { fetch: hold.n }, `AMMO for ${n}`); } // (no ammo hold on the ship: nothing to fetch)

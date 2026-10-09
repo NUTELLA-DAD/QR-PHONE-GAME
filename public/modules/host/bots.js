@@ -184,6 +184,12 @@ function gunReach(state, n) {
   const g = state.GUNS[n];
   if (g && g.type === 'mines') return g.ammo > 0 && (state.rival || mineWanted(state)) ? 0.3 : 4; // (the mine layer: manned when the captain wants a field laid, else left alone)
   if (g && g.type === 'harpoon') return harpoonWanted(state, g) ? 0.45 : 4;
+  if (g && g.type === 'flame') { // the flamethrower: manned when something burnable is within a few hundred px (a boarder on a deck first), left alone otherwise
+    const fb = g.ammo > 0 ? bestTarget(state, g) : null;
+    const cap = state.rival ? mainShip(state).captain : null;
+    if (g.ammo > 0 && cap && (cap.play === 'burn' || cap.burnWish)) return 0.2; // (Versus: the captain is closing in to burn her - the burners are manned before the rival is in reach)
+    return fb ? (fb.target.kind === 'boarder' ? 0.2 : 0.3) : 3.8;
+  }
   const best = bestTarget(state, state.GUNS[n]);
   if (best && best.target.kind === 'flier') return 0.5; // (an enemy in the air: a flak gun's whole job)
   if (best && best.target.kind === 'laid') return 0.6; // (a mine in the way: shoot it before it is a hole in the hull)
@@ -208,6 +214,13 @@ function mineWanted(state, fire = false) { // (fire: the captain wants a mine dr
   if ((state.strafers || []).some((p) => p.hp > 0 && behind(p))) return true;
   if ((state.bombers || []).some((p) => p.hp > 0 && behind(p))) return true;
   return (state.ships || []).some((s) => s.ai && !s.ctx.wreck && behind({ x: toWorldX(s, s.layout.aimPoint.x), y: toWorldY(s, s.layout.aimPoint.y) }));
+}
+// The flamethrower (flame.js): burn while the steam is up and the burner is not overheating; a bot lets go at 90% heat and waits for it to cool to 45% (feathering the button, not cooking it).
+function flameReady(p, gun, state) {
+  if (gun.overheat || state.ship.press < config.FLAME.MIN_PRESS) return false;
+  if ((gun.heat || 0) >= 0.9) p.flameRest = true;
+  else if ((gun.heat || 0) <= 0.45) p.flameRest = false;
+  return !p.flameRest;
 }
 // Does the captain want the harpoon fired? A target ship in the line of the barrel, not already on a harpoon line of ours, and (Versus) a captain who likes it close.
 function harpoonWanted(state, g) {
@@ -516,11 +529,15 @@ function listJobs(state, bot) {
       if (bot.carry === 'sword') for (const c of gs.crew) jobs.unshift({ kind: 'fight', obj: c, max: 2 });
     }
   }
+  // A sack of coal in hand for a flamethrower's tank goes there, not to the boiler.
+  if (bot.carry === 'coal') for (const n of tables(L).GUN_STATIONS) if (state.GUNS[n].type === 'flame' && state.GUNS[n].ammo < state.GUNS[n].max) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   // Now and then the crew shovels extra coal to push into overdrive.
   const pushing = Math.floor(performance.now() / 1000 / B.OVERDRIVE_PUSH_EVERY) % 3 === 0;
   if (L.hasKind('boiler') && L.hasKind('coal') && (state.ship.fuel < (pushing ? 60 : 25) && state.ship.press < config.BOILER.WARN_AT - (pushing ? 10 : 25)) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
   if (canHammer) for (const m of mods) if (!m.broken && m.hp < (['engine', 'helm', 'lift', 'shield', 'coil'].includes(m.kind) ? m.max * config.MODULES.LEAK_BELOW - 1 : 60)) jobs.push({ kind: 'repair', obj: m, max: 1 });
-  const guns = !L.hasKind('ammo') ? [] : tables(L).GUN_STATIONS.filter((n) => state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
+  const guns = !L.hasKind('ammo') ? [] : tables(L).GUN_STATIONS.filter((n) => state.GUNS[n].type !== 'flame' && state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
+  const fuelRuns = !L.hasKind('coal') ? [] : tables(L).GUN_STATIONS.filter((n) => state.GUNS[n].type === 'flame' && state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'coal' || state.GUNS[n].ammo <= config.FLAME.BOT.FUEL_LOW)); // (a flamethrower's tank takes coal, not shells)
+  for (const n of fuelRuns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
   // Bombing run coming up (an outpost to destroy is near): bombs are the weapon that matters,
   // so loading the bay comes before topping up the guns.
@@ -532,6 +549,9 @@ function listJobs(state, bot) {
   for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // Hovering over an outpost with bombs aboard: one bot drops everything and mans the bomb bay.
   if (bay && bombRun && c.target && Math.hypot(c.target.x - toWorldX(mainShip(state), L.refPoint.x), c.target.y - toWorldY(mainShip(state), L.refPoint.y)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken(bay) && !players.some((q) => L.kindOf(q.lock) === 'bombBay')) jobs.unshift({ kind: 'station', obj: bay, max: 1 });
+  // Versus: the captain is closing in to burn her (pvp/captainAI.js): the burners are manned first, ahead of the chores.
+  const burnCap = state.rival ? mainShip(state).captain : null;
+  if (burnCap && (burnCap.play === 'burn' || burnCap.burnWish)) for (const n of tables(L).GUN_STATIONS) { const g = state.GUNS[n]; if (g.type === 'flame' && g.ammo > 0 && !isBroken(n) && !players.some((q) => q.lock === n)) jobs.unshift({ kind: 'station', obj: n, max: 1, tier: 0.2 }); }
   return jobs;
 }
 
@@ -746,14 +766,14 @@ function operate(p, state, dt) {
     // Count how long the enemy has been out of this gun's reach.
     p.gunIdle = angle === null ? (p.gunIdle || 0) + dt : 0;
     if (angle === null) {
-      p.prime = gun.ammo > 0 && !gun.primed; // nothing to shoot: charge the loaded shell (hold PRIME)
+      p.prime = gun.type !== 'flame' && gun.ammo > 0 && !gun.primed; // nothing to shoot: charge the loaded shell (hold PRIME)
       return;
     }
     p.jx = Math.cos(angle);
     p.jy = Math.sin(angle);
     const off = Math.abs(Math.atan2(Math.sin(angle - gun.aim), Math.cos(angle - gun.aim)));
     const tol = specOf(gun).tol ?? B.AIM_TOLERANCE; // (a long gun is aimed more truly than a broadside gun; a grapeshot gun less)
-    p.fire = gun.ammo > 0 && off < tol && (!mainShip(state).ai || mainShip(state).ai.mayFire(p.lock)) && (gun.type !== 'harpoon' || harpoonWanted(state, gun)); // (the gunship fires broadsides from firing spots, with a glow first, not whenever a gun bears)
+    p.fire = gun.ammo > 0 && off < tol && (!mainShip(state).ai || mainShip(state).ai.mayFire(p.lock)) && (gun.type !== 'harpoon' || harpoonWanted(state, gun)) && (gun.type !== 'flame' || flameReady(p, gun, state)); // (the gunship fires broadsides from firing spots, with a glow first, not whenever a gun bears)
   }
 }
 
@@ -933,7 +953,8 @@ function work(p, state) {
   } else if (job.kind === 'valve') {
     if (steer(p, o.d, o.x, 10)) press(p);
   } else if (job.kind === 'ammo') {
-    const s = p.carry === 'ammo' ? stationNamed(L, o) : L.nearest('ammo', p);
+    const want = state.GUNS[o] && state.GUNS[o].type === 'flame' ? 'coal' : 'ammo'; // (a flamethrower is fuelled with coal)
+    const s = p.carry === want ? stationNamed(L, o) : L.nearest(want, p);
     if (!s) { p.carry = null; return wander(state, p); }
     if (steer(p, s.d, s.x)) press(p);
   } else if (job.kind === 'station') {

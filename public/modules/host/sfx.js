@@ -129,6 +129,7 @@ export function createSfx(state) {
       tone('square', 180, 50, 0.22, 0.2);
       noise('bandpass', 700, 0.22, 0.35, 0, 2);
     },
+    whoosh: () => noise('lowpass', 520, 0.5, 0.22, 0, 1), // the flamethrower: a rush of gas catching (flame.js repeats it while it burns)
     ping: () => {
       tone('sine', 1180, 1180, 0.1, 0.22);
       tone('sine', 1570, 1570, 0.16, 0.18, 0.09);

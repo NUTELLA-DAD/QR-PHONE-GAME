@@ -196,6 +196,10 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     if (!q) continue;
     const m = (Ly.gunMounts || {})[st.n] || (Ly.searchlights || {})[st.n];
     if (m) line([[X(m.bx), Y(m.by)], [X(m.bx + Math.cos(m.aim) * 34), Y(m.by + Math.sin(m.aim) * 34)]], 2.4, L.INK_SOFT);
+    if (m && m.type === 'flame') { // a flamethrower's mark: a little red cone of fire at the end of its barrel (the flame's reach is far longer; the key shows the range)
+      const tx = m.bx + Math.cos(m.aim) * 34, ty = m.by + Math.sin(m.aim) * 34;
+      for (const da of [-0.3, 0, 0.3]) line([[X(tx), Y(ty)], [X(tx + Math.cos(m.aim + da) * 40), Y(ty + Math.sin(m.aim + da) * 40)]], 2, L.STAMP);
+    }
     const cn = st.kind === 'cannonSeat' ? (Ly.cannons || []).find((c) => c.n + ' Seat' === st.n) : null; // (B.6: the crew cannon's barrel, drawn from its seat)
     if (cn) line([[X(cn.x), Y(q.y) - 14 * k], [X(cn.x + Math.cos(cn.aim) * 70), Y(q.y - 14 + Math.sin(cn.aim) * 70)]], 4.2, L.INK_SOFT);
     disc(X(st.x), Y(q.y) - 11 * k, GLYPH[st.kind] || '?', 7.5);

@@ -216,6 +216,7 @@ export function drawFlashes(ctx, flashes) {
     ctx.globalAlpha = 1;
     ctx.lineJoin = 'round';
     for (const f of flashes) {
+      if (f.glow) continue; // (a flame's light in the dark: searchlightArt.js cuts it out of the darkness, there is nothing to draw)
       const k = Math.min(1, Math.max(0, num(f.t) / 0.06)); // full size, then a quick shrink at the very end (no fading)
       const s = 26 * num(f.size, 1) * (0.65 + 0.35 * k);
       starPath(ctx, f.x, f.y, s, num(f.ang));

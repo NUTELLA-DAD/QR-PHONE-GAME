@@ -42,6 +42,17 @@ export const BARRELS = {
     { color: '#d6bf8a', circle: [-8, 0, 15] },
     { color: WOOD_DARK, circle: [-8, 0, 6] },
   ],
+  flame: [ // a brass fuel tank on the mount with a gauge and a valve wheel, iron pipes forward to a flared brass nozzle (flameArt.js draws the cone from its lip)
+    { color: IRON, pts: rect(-6, -4, 52, 8) }, // the main pipe
+    { color: IRON, pts: [[-4, 8], [8, 8], [26, 3], [26, 7], [10, 13], [-4, 13]] }, // the feed pipe from the tank, in a bend
+    { color: BRASS, pts: rect(-58, -19, 48, 38) }, // the tank
+    { color: DARK, pts: rect(-48, -21, 5, 42) },
+    { color: DARK, pts: rect(-30, -21, 5, 42) },
+    { color: '#d9d3c4', circle: [-37, -4, 6] }, // the pressure gauge
+    { color: RED, circle: [18, -11, 5] }, // the valve wheel
+    { color: BRASS, pts: [[40, -8], [60, -6], [66, -12], [66, 12], [60, 6], [40, 8]] }, // the flared nozzle
+    { color: DARK, pts: rect(64, -13, 5, 26) },
+  ],
 };
 // Draw the barrel of a gun type. `fill(color, pathFn)` is the caller's filled-and-inked shape (partArt.js `filled`, or render.js's ink fill).
 export function drawBarrel(g, type, fill) {

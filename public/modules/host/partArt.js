@@ -8,6 +8,7 @@
 import { config } from '../../config.js';
 import { paintPath } from './textureArt.js';
 import { drawBarrel } from './weaponsArt.js';
+import { drawCone } from './flameArt.js';
 
 const INK = () => config.INK;
 const WOOD = '#b98a5a', WOOD_DARK = '#6b4a32', IRON = '#6a6568', BRASS = '#c9a85a', RED = '#a8443f', CANVAS = '#ebdfc0';
@@ -57,6 +58,10 @@ const DRAW = {
   gun_scatter(g, p) { typedGun(g, p, 'scatter', 0.95, -0.25, 16, 58); },
   gun_flak(g, p) { typedGun(g, p, 'flak', 1.0, -0.6, 18, 60); },
   gun_harpoon(g, p) { typedGun(g, p, 'harpoon', 0.8, -0.3, 22, 58); },
+  gun_flame(g, p) { // the brass nozzle on its tank, and the cone of fire (flameArt.js) standing out of it
+    typedGun(g, p, 'flame', 0.5, -0.2, 42, 62);
+    g.save(); g.translate(42 + Math.cos(-0.2) * 33, 62 + Math.sin(-0.2) * 33); g.rotate(-0.2); drawCone(g, 27, 0.4, 0, 0); g.restore();
+  },
   mineLayer(g, { filled, line }) { // a trap door in the floor with a floating mine falling out of it
     filled(WOOD_DARK, () => g.rect(8, 16, 84, 14));
     filled('#2a2a2a', () => g.rect(26, 16, 48, 14));

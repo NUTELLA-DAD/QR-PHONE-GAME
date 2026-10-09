@@ -596,6 +596,44 @@ export const config = {
     flak: { LABEL: 'Flak gun', POWER: 0.2, SPEED: 1500, LIFE: 1.5, COOLDOWN: 0.75, MUL: 0.5, FUSE: 150, BURST: 230, MAX_AMMO: 24, START_AMMO: 20, LOAD: 12, ARC: 1, TOL: 0.1, PLANE_MUL: 3, AUTOLOAD: 3 }, // the shell bursts when it is FUSE px from a plane, a bat or an enemy crewman in the air; the burst (BURST px) knocks every enemy flier in it out of the sky (he falls to his own medical bay) and hurts a plane PLANE_MUL x a shell
     mines: { LABEL: 'Mine layer', POWER: 0.6, COOLDOWN: 1.3, MAX_AMMO: 6, START_AMMO: 6, LOAD: 3, ARC: 0, TOL: 3, AUTOLOAD: 14 }, // a chute in the belly: FIRE drops a mine (config.MINEFIELD); the ammo is the mines it holds, an ammo crate adds LOAD
     harpoon: { LABEL: 'Harpoon gun', POWER: 0.8, SPEED: 2600, RANGE: 2600, COOLDOWN: 9, MAX_AMMO: 4, START_AMMO: 3, LOAD: 2, ARC: 1, TOL: 0.09, LEN: 760, REEL: 300, SNAP: 4300, MAX_ACC: 520, K: 3.2, HP: 3, AUTOLOAD: 12 }, // fires a line at the nearest enemy deck in the way it points; it latches, then REEL px/s shortens the line to LEN px (a spring between the two poses: towing.js); the line snaps past SNAP px, a sword cuts it (HP blows)
+    flame: { LABEL: 'Flamethrower', POWER: 0.9, RANGE: 560, COOLDOWN: 0, MAX_AMMO: 12, START_AMMO: 12, LOAD: 6, ARC: 1, TOL: 0.2, AUTOLOAD: 5, MASS: 5, PRICE: 130, STEAM_USE: 1 }, // the short-range burner (flame.js, the FLAME block below): no shell, a cone of fire RANGE px long while FIRE is held; ammo is its FUEL TANK (MAX_AMMO units, a coal sack from the bunker adds LOAD, a trickle of one per AUTOLOAD s refills it); MASS = its weight, PRICE = the sky-dock's base price, STEAM_USE = steam points in the build budget
+  },
+  // THE FLAMETHROWER (flame.js; GUN_TYPES.flame above). Hold FIRE and a cone of fire leaves the nozzle: it eats steam from the boiler and fuel from its tank, and heats up (let go to cool; at full heat it cuts out
+  // until it has cooled to RESUME_AT). The cone burns what it touches: the decks of a hostile ship by their flammability (wood catches, armour plate does not, the coal blazes: fire.js), the crew standing in
+  // it (hearts: health.js, cause 'fire'), her gasbag (holes), bats and imps, boarders on your own deck, planes (as small shells), and the ice crusts on your own ship. Firing with a hostile hull right at
+  // the nozzle can set YOUR OWN deck alight (BACKDRAFT). Everything is per second unless it says otherwise.
+  FLAME: {
+    HALF: 0.26, // half the angle of the cone (radians)
+    NOZZLE: 66, // px from the pivot to the nozzle, along the barrel (where the cone starts)
+    RAMP: 0.22, // seconds for the flame to reach its full length once FIRE is held (and to die away when let go: FADE)
+    FADE: 0.18,
+    TAP: 0.35, // seconds of flame a single tap of the button gives (a held button just keeps it going)
+    MIN_PRESS: 28, // boiler pressure needed to fire at all ("NO STEAM!")
+    STEAM_RATE: 4.5, // boiler pressure the flame eats (percentage points a second)
+    FUEL_RATE: 1.5, // fuel units a second (a full tank of 12 is 8 s of fire)
+    HEAT_RATE: 0.16, // heat gained a second while burning (full at 1: about 6 s)
+    COOL_RATE: 0.24, // heat lost a second while not burning
+    RESUME_AT: 0.35, // an overheated burner fires again once it has cooled to this
+    TICK: 0.1, // seconds between the cone's effects (the numbers below are per second and are scaled by this)
+    // what it does to a hostile ship
+    IGNITE_RATE: 2.2, // chance a second that a deck spot in the cone catches, times the spot's flammability (a plain deck 1, coal 4.5, armour plate 0: ignite chance, fire.js)
+    HULL_RATE: 0.5, // hull points a second a hull in the cone loses (less on armour plate: ARMOUR.POWER_MUL)
+    HOLE_RATE: 0.5, // chance a second that a gasbag in the cone gets a hole (hydrogen bags, when they come, burn much harder)
+    CREW_HEARTS: 1, CREW_EVERY: 0.8, // a foe standing in the cone loses CREW_HEARTS hearts every CREW_EVERY seconds
+    CREW_REACH: 34, // px around a crewman that counts as in the cone
+    PENETRATE: 240, // the cone stops at the first hull it meets, but goes on this far through a port into the room behind
+    // what it does to the sky and your own deck
+    BAT_DPS: 4, IMP_DPS: 4, // hit points a second a bat / an imp loses in the cone (a bat has 1)
+    RAIDER_DPS: 1.6, // ...a boarder on your own ship (a grunt has 3 hit points; a sword blow is 1)
+    RAIDER_IGNITE: 0.3, // chance a second that a burning boarder sets the deck under him alight (flammability decides: coal under him is a blaze)
+    PLANE_EVERY: 0.3, PLANE_MUL: 1.3, // a plane in the cone takes a small shell (x PLANE_MUL of the plain shell's blow) this often
+    MELT_RATE: 1.4, // ice-crust level (0-1) melted a second on your own ship
+    // the risk
+    BACKDRAFT_RANGE: 230, // a hostile hull this close to the nozzle (inside the cone)...
+    BACKDRAFT_RATE: 0.07, // ...lights a fire on the deck at your gun with this chance a second
+    // the look (flameArt.js)
+    GLOW: 2.2, // size of the glow a flame lights in the dark (x the muzzle flash's)
+    BOT: { BAND: 2.4, BURN_RATE: 0.12, BURN_TIME: [10, 18], BURN_CD: 14, BURN_CLOSE: 900, SELF_RISK: 1.7, FUEL_LOW: 6, PRESS: 160, WISH_WAIT: 7 }, // bots (captainAI.js / bots.js): a gunner fetches coal when a tank holds FUEL_LOW units or fewer; points for the SHORT band per flamethrower; the captain's BURN play (chance a second, how long, the pause after, how much closer than the standoff she presses, PRESS: how much nearer than the noses touching she may press - the hulls bump and lean on each other - and WISH_WAIT: she first wishes it, the crew man the burners, and she goes in once one is manned or after this many seconds); a gunner will not burn a boarder who stands on ground at least SELF_RISK flammable (ammo 1.8, powder 3, coal 4.5: a plain deck is 1)
   },
   // Primed shells (prime.js): hold PRIME on a gun to charge the loaded shell for a harder hit. Never required.
   PRIME: {

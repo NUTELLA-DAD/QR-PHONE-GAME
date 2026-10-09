@@ -392,11 +392,12 @@ Built in tiers. Each part plugs into existing systems.
 - **Inner gas cells:** inside one big bag.
 
 ### Tier 3: weapons and defence
-- **Turret types (DONE as gun types, PVP.md 3b: long gun, mortar, grapeshot, flak, harpoon, mine layer; the dorsal and tail perches are plain guns):**
+- **Turret types (DONE as gun types, PVP.md 3b: long gun, mortar, grapeshot, flak, harpoon, flamethrower, mine layer; the dorsal and tail perches are plain guns):**
   - Broadside cannon.
   - Rotating dorsal turret.
   - Flak.
   - Harpoon gun.
+  - Flamethrower (DONE, `flame.js`: a cone of fire for the short band; steam and coal fed, overheats; lights hostile decks by flammability - not armour -, burns crew, gasbags, bats and boarders).
   - Mortar.
   - Rear-gunner tail perch.
 - **Belly gondola:** a gun pod on a winch cable.

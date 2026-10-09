@@ -827,6 +827,31 @@ function pilotPlanFor(sh) { return pilotPlan(sh.ctx, 2.5, 0.55); }
     report(mineRuns + mines >= 1 && rams + harp >= 1 && kites >= 1, `...the captains call a minefield (${mineRuns} times, ${mines} mines dropped by their crews), ram (${rams}) and harpoon (${harp}), and long-band captains kite (${kites} runs)`);
     report(errors === ee, `the range-band ships fly four 200 s fights with 0 errors (${errors - ee})`);
   }
+  // -- the FIREBRAND (flame.js) against the classic ship: reported for the balance log (a short-range ship: flamethrowers, plate, a ram), and the fights run clean
+  {
+    config.PVP.ROUND_TIME = 200;
+    const ee = errors, rows = [];
+    for (const [seed, style] of [[31, 'boarder'], [32, 'daredevil'], [33, 'brawler'], [34, 'boarder']]) {
+      clock = seedRandom(seed);
+      config.PVP.BOT.STYLE = style;
+      const sim = createSimulation();
+      sim.setSession('versus');
+      const M = sim.match;
+      M.addBots('red', 5); M.addBots('blue', 5);
+      M.shelf = shelfAll;
+      M.applyPicks({ red: idxOf('firebrand'), blue: idxOf('classic') });
+      M.begin({ shelf: false });
+      let n = 0;
+      while (M.phase !== 'finale' && n++ < 60 * 230) step(sim, 1);
+      const t = M.totals.red, r = M.results[0];
+      rows.push({ style, winner: r ? r.winner : M.score.red > M.score.blue ? 'red' : M.score.blue > M.score.red ? 'blue' : 'none', flame: t.flameSecs || 0, fires: t.flameFires || 0, hearts: t.flameHearts || 0, holes: t.flameHoles || 0, shortSecs: t.bandShort, redHull: M.stats.red ? 0 : 0 });
+    }
+    config.PVP.BOT.STYLE = null;
+    config.PVP.ROUND_TIME = SAVE.round;
+    const won = rows.filter((r) => r.winner === 'red').length;
+    console.log('  firebrand (red) against classic (blue), 4 fights of 200 s: ' + rows.map((r) => `${r.style}: ${r.winner} (flame ${r.flame.toFixed(1)} s, ${r.fires} fires, ${r.hearts} hearts, ${r.holes} holes)`).join('; '));
+    report(errors === ee, `the Firebrand flies four 200 s fights against the classic ship with 0 errors; she won ${won} of ${rows.length}, burned ${rows.reduce((a, r) => a + r.flame, 0).toFixed(1)} s in all`);
+  }
   report(errors === e0, `0 errors in the space-and-range section (${errors - e0})`);
 }
 

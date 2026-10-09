@@ -8,6 +8,7 @@ import { mainShip } from './ships.js';
 import { toWorldX, toWorldY, aimToShip, aimToWorld } from './pose.js';
 import { solidAt } from './maps.js';
 import { typedSolution } from './gunTypes.js';
+import { flameTargets, AIR_KINDS } from './flame.js';
 
 export const SHELL_SPEED = config.GUNS.SHELL_SPEED;
 export const SHELL_LIFE = config.GUNS.SHELL_LIFE;
@@ -126,9 +127,10 @@ export function solution(state, gun, target) {
 
 // The most useful target this gun can hit right now (mines, turrets, cargo, then fighter).
 export function bestTarget(state, gun) {
-  const order = { flier: -2, cable: -1, bomb: 0, rocket: 1, saw: 1.5, laid: 1.8, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rivalGun: 8, rivalBag: 8.4, rivalCore: 8.8, rival: 9.2 };
+  const order = { flier: -2, cable: -1, bomb: 0, rocket: 1, saw: 1.5, laid: 1.8, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rivalGun: 8, rivalBag: 8.4, rivalCore: 8.8, rival: 9.2, boarder: 0.4, rivalCrew: 7.8, rivalDeck: 9.3 };
   let best = null;
-  for (const t of targets(state)) {
+  // (a flamethrower burns what is within a few hundred px: the sky's small fry, boarders on the decks, and the nearest bits of a hostile ship - flame.js - not her middle)
+  for (const t of gun.type === 'flame' ? [...targets(state).filter((u) => AIR_KINDS.has(u.kind)), ...flameTargets(state, mainShip(state), gun)] : targets(state)) {
     if (t.kind === 'flier' && gun.type !== 'flak') continue; // (only flak shells burst on a man in the air)
     if (t.kind === 'laid' && (gun.type === 'mortar' || gun.type === 'harpoon')) continue; // (a lob is no way to hit a mine, and a harpoon is for ships)
     if (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship') continue;

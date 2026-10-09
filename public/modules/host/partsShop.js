@@ -198,6 +198,7 @@ export const CATALOGUE = [
   ...[['gun_long', 'Long gun', '\u{1F3AF}', 'A rifled long gun: slow, accurate, 6900 px. Heavy. Wants a ship that keeps her distance.'], ['gun_mortar', 'Mortar', '\u{1F4A3}', 'Lobs shells onto decks and gasbags (to 4400 px). Better with a lookout up.'], ['gun_scatter', 'Grapeshot gun', '\u{1F4A5}', 'A fan of pellets at short range: for a ship alongside and for boarders.'], ['gun_flak', 'Flak gun', '☁️', 'Bursts near planes, bats and enemy crew in the air.'], ['gun_harpoon', 'Harpoon gun', '⚓', 'Fires a line at an enemy deck and reels the ships together. A sword cuts it.']].map(([id, name, icon, blurb]) => ({
     id, name, icon, group: 'station', pic: id, blurb, allowed: (p) => !!config.GUN_TYPES.SHOP && count(p, (q) => q.part === 'gun' && q.gtype === id.slice(4)) < 2 && count(p, (q) => q.part === 'gun') < PS().GUNS_MAX, cands: fromPalette(id), w: () => 0.55,
   })),
+  { id: 'gun_flame', name: 'Flamethrower', icon: '\u{1F525}', group: 'station', pic: 'gun_flame', get price() { return config.GUN_TYPES.flame.PRICE; }, blurb: 'A cone of fire a few hundred px long: lights wooden decks, burns crew, gasbags, bats and boarders. Eats steam and coal and overheats. Mind your own coal.', allowed: (p) => !!config.GUN_TYPES.SHOP && count(p, (q) => q.part === 'gun' && q.gtype === 'flame') < 2 && count(p, (q) => q.part === 'gun') < PS().GUNS_MAX, cands: fromPalette('gun_flame'), w: () => 0.55 },
   { id: 'mineLayer', name: 'Mine layer', icon: '\u{1F4A3}', group: 'station', pic: 'mineLayer', blurb: 'A chute in the belly: drop floating mines behind you. They go off against ANY ship that touches them - yours too.', allowed: (p) => !!config.MINEFIELD.SHOP && count(p, (q) => q.part === 'gun' && q.gtype === 'mines') < 1, cands: fromPalette('mineLayer'), w: () => 0.55 },
   { id: 'ramProw', name: 'Ram prow', icon: '\u{1F528}', group: 'frame', pic: 'ramProw', blurb: 'A reinforced iron nose: a ram hurts the other ship far more than yours.', allowed: (p) => !!config.RAM.SHOP && !p.some((q) => q.part === 'ramProw'), cands: fromPalette('ramProw', { ghost: (s) => ({ x0: s.x - 60, x1: s.x + 90, y0: s.y - 60, y1: s.y + 60 }) }), w: () => 0.5 },
   { id: 'ballast', name: 'Ballast', icon: '⚖️', group: 'frame', pic: 'ballast', blurb: 'Sandbags to trim her level. Cheap, dense, and heavy.', allowed: (p) => count(p, (q) => q.part === 'ballast') < 6, cands: (p, L) => [...fromPalette('ballast')(p, L), ...fromPalette('ballast_hang')(p, L)], w: (c) => (Math.abs(c.sum.deg) >= config.BALANCE.WARN_PX * config.BALANCE.DEG_PER_PX ? 4 : 0.5) },
@@ -212,7 +213,7 @@ export const entryById = (id) => CATALOGUE.find((e) => e.id === id);
 // CREW_SMALL or fewer, station parts for a crew of CREW_BIG or more. Rounded to 5.
 export function partPrice(entry, bought = 0, crew = 4) {
   const P = PS();
-  let c = (P.PRICES[entry.id] || 100) * (1 + P.REPEAT_PRICE * bought);
+  let c = (P.PRICES[entry.id] || entry.price || 100) * (1 + P.REPEAT_PRICE * bought);
   if (crew <= P.CREW_SMALL && (entry.group === 'engine' || entry.group === 'armour' || entry.group === 'bag')) c *= P.SMALL_MUL;
   if (crew >= P.CREW_BIG && entry.group === 'station') c *= P.BIG_MUL;
   return Math.round(c / 5) * 5;

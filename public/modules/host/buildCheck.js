@@ -464,6 +464,16 @@ export function validate(parts, opts = {}) {
     if (count.scatter) info('Grapeshot', `${word(count.scatter, 'grapeshot gun', 'grapeshot guns')}: a fan of ${GTs.scatter.PELLETS} pellets over ${px(GTs.scatter.SPEED * GTs.scatter.LIFE)} px, once a second - a ship alongside, and boarders; weighs ${BALANCE.MASS.kind.gun_scatter} each`);
     if (count.flak) info('Flak', `${word(count.flak, 'flak gun', 'flak guns')}: shells that burst when a plane, a bat or an enemy crewman in the air comes within ${GTs.flak.FUSE} px - a boarder's leap is knocked out of the sky; weighs ${BALANCE.MASS.kind.gun_flak} each`);
     if (count.harpoon) info('Harpoon', `${word(count.harpoon, 'harpoon gun', 'harpoon guns')}: fires a line up to ${GTs.harpoon.RANGE} px at the nearest enemy deck where it points; it latches and reels the two ships together to ${GTs.harpoon.LEN} px (a sword cuts it, it snaps at ${GTs.harpoon.SNAP} px); ${GTs.harpoon.MAX_AMMO} harpoons, one every ${GTs.harpoon.COOLDOWN} s; weighs ${BALANCE.MASS.kind.gun_harpoon} each`);
+    if (count.flame) {
+      const F = config.FLAME;
+      info('Flamethrower', `${word(count.flame, 'flamethrower', 'flamethrowers')}: a cone of fire ${GTs.flame.RANGE} px long while FIRE is held - a hostile ship alongside, boarders, bats; it lights wooden decks (not armour plate), burns crew, makes gas holes. A tank of ${GTs.flame.MAX_AMMO} units of coal lasts ${Math.round(GTs.flame.MAX_AMMO / F.FUEL_RATE)} s of fire (a sack adds ${GTs.flame.LOAD}); it eats ${F.STEAM_RATE} steam pressure a second (needs ${F.MIN_PRESS}) and overheats after ${Math.round(1 / F.HEAT_RATE)} s; weighs ${GTs.flame.MASS} each. Short range: it wants a ship that closes in`);
+      for (const [name, m] of Object.entries(L.gunMounts)) {
+        if (m.type !== 'flame') continue;
+        const st = L.stations.find((s) => s.n === name);
+        const hot = st && L.stations.filter((s) => s.d === st.d && ['coal', 'ammo', 'bombBay'].includes(s.kind) && Math.abs(s.x - st.x) < 260).map((s) => `${s.kind === 'bombBay' ? 'bomb bay' : s.kind === 'ammo' ? 'ammo hold' : 'coal bunker'} (${Math.round(Math.abs(s.x - st.x))} px)`);
+        if (hot && hot.length) warn('Flamethrower', `${name} stands close to the ${hot.join(' and the ')}: a backdraft or a burning boarder beside it would light them`);
+      }
+    }
     if (count.mines) {
       info('Mine layer', `${word(count.mines, 'mine layer', 'mine layers')}: a crew member drops floating mines out of the belly (${GTs.mines.MAX_AMMO} in the chute, ${GTs.mines.LOAD} more per ammo crate). A mine arms after ${config.MINEFIELD.ARM} s and goes off against ANY ship that touches it - yours too - and against planes; a shell sets it off; weighs ${BALANCE.MASS.kind.mineLayer} each`);
       if (!L.stations.some((s) => s.kind === 'ammo')) warn('Mine layer', 'no ammo hold: the mine layer cannot be refilled once it is empty');
