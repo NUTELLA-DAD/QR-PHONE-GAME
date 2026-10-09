@@ -89,7 +89,7 @@ export function initBuildUi(api) {
   $('ptCrew').onchange = () => put('airshipPlaytestCrew', $('ptCrew').value);
   const foe = $('ptFoe');
   setTimeout(() => { // (the shelf validates a dozen ships: after the first frame)
-    try { for (const e of buildShelf()) if (e.id !== config.PLAYTEST.SHIP_ID) { const o = document.createElement('option'); o.value = e.id; o.textContent = `${e.name} (weight ${e.mass})`; foe.appendChild(o); } } catch (e) { console.warn('shelf', e); }
+    try { for (const e of buildShelf()) if (e.id !== config.PLAYTEST.SHIP_ID) { const o = document.createElement('option'); o.value = e.id; o.textContent = e.random ? `${e.name} (a random ship)` : `${e.name} (weight ${e.mass})`; foe.appendChild(o); } } catch (e) { console.warn('shelf', e); }
     foe.value = get('airshipPlaytestFoe', config.PLAYTEST.FOE_DEFAULT);
     if (!foe.value && foe.options.length) foe.selectedIndex = 0;
   }, 60);

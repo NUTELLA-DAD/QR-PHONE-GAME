@@ -1,0 +1,4075 @@
+[
+ {
+  "id": "anchor-classic",
+  "name": "Classic",
+  "summary": "The all-round airship",
+  "theme": "anchor",
+  "gen": -1,
+  "anchor": true,
+  "elo": 1500,
+  "games": 196,
+  "winPct": 73,
+  "weight": 150,
+  "tags": [
+   "2 or fewer engines",
+   "bomb bay",
+   "steam lift",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "anchor-twin",
+  "name": "Twin Boiler",
+  "summary": "A second boiler and lookout",
+  "theme": "anchor",
+  "gen": -1,
+  "anchor": true,
+  "elo": 1333,
+  "games": 14,
+  "winPct": 64,
+  "weight": 167,
+  "tags": [
+   "2 or fewer engines",
+   "bomb bay",
+   "2+ boilers",
+   "steam lift",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "anchor-bags",
+  "name": "Four Bags",
+  "summary": "Four gasbags in a row",
+  "theme": "anchor",
+  "gen": -1,
+  "anchor": true,
+  "elo": 1159,
+  "games": 14,
+  "winPct": 57,
+  "weight": 170,
+  "tags": [
+   "2 or fewer engines",
+   "2+ bags",
+   "3+ bags",
+   "bomb bay",
+   "steam lift",
+   "6+ guns",
+   "gas valves",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "anchor-var0",
+  "name": "Variant A",
+  "summary": "The classic ship with a longer deck and a coal bunker",
+  "theme": "anchor",
+  "gen": -1,
+  "anchor": true,
+  "elo": 1293,
+  "games": 14,
+  "winPct": 50,
+  "weight": 161,
+  "tags": [
+   "2 or fewer engines",
+   "bomb bay",
+   "steam lift",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "anchor-var1",
+  "name": "Variant B",
+  "summary": "The classic ship with a second boiler and a searchlight and a steam vent",
+  "theme": "anchor",
+  "gen": -1,
+  "anchor": true,
+  "elo": 1349,
+  "games": 14,
+  "winPct": 64,
+  "weight": 169,
+  "tags": [
+   "2 or fewer engines",
+   "bomb bay",
+   "2+ boilers",
+   "steam lift",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "anchor-var2",
+  "name": "Variant C",
+  "summary": "The classic ship with a searchlight",
+  "theme": "anchor",
+  "gen": -1,
+  "anchor": true,
+  "elo": 1703,
+  "games": 36,
+  "winPct": 75,
+  "weight": 152,
+  "tags": [
+   "2 or fewer engines",
+   "bomb bay",
+   "steam lift",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "anchor-sniper",
+  "name": "Sniper",
+  "summary": "Two long guns, a mortar and a mine layer",
+  "theme": "anchor",
+  "gen": -1,
+  "anchor": true,
+  "elo": 1604,
+  "games": 36,
+  "winPct": 67,
+  "weight": 164,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "mine layer",
+   "2 or fewer engines",
+   "bomb bay",
+   "steam lift",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "anchor-brawler",
+  "name": "Brawler",
+  "summary": "Grapeshot sponsons and a flak gun",
+  "theme": "anchor",
+  "gen": -1,
+  "anchor": true,
+  "elo": 1356,
+  "games": 14,
+  "winPct": 64,
+  "weight": 153,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "2 or fewer engines",
+   "bomb bay",
+   "steam lift",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "anchor-ram",
+  "name": "Ram",
+  "summary": "A ram prow, a harpoon and grapeshot",
+  "theme": "anchor",
+  "gen": -1,
+  "anchor": true,
+  "elo": 1706,
+  "games": 36,
+  "winPct": 78,
+  "weight": 162,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "2 or fewer engines",
+   "bomb bay",
+   "steam lift",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "anchor-firebrand",
+  "name": "Firebrand",
+  "summary": "Flamethrowers, armour plate and a harpoon",
+  "theme": "anchor",
+  "gen": -1,
+  "anchor": true,
+  "elo": 1587,
+  "games": 36,
+  "winPct": 67,
+  "weight": 159,
+  "tags": [
+   "harpoon",
+   "flamethrower",
+   "2 or fewer engines",
+   "bomb bay",
+   "steam lift",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1000",
+  "name": "Longshot Lantern",
+  "summary": "long-range kiter with long guns, a mortar and armour plate",
+  "theme": "kiter",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1073,
+  "games": 14,
+  "winPct": 43,
+  "weight": 160,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "armour 2+ cols",
+   "sail",
+   "swivel engine",
+   "4+ engines",
+   "2+ boilers",
+   "ballast"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1001",
+  "name": "Rough Bulldog",
+  "summary": "close-quarters brawler with grapeshot, a flak gun and heavy armour",
+  "theme": "brawler",
+  "gen": 0,
+  "anchor": false,
+  "elo": 679,
+  "games": 14,
+  "winPct": 29,
+  "weight": 166,
+  "tags": [
+   "grapeshot",
+   "3+ grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ boilers",
+   "keel deck",
+   "6+ guns",
+   "searchlight",
+   "open main deck",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1002",
+  "name": "Anvil Bullock",
+  "summary": "ram-prow bruiser with grapeshot, a harpoon and a ram prow",
+  "theme": "rammer",
+  "gen": 0,
+  "anchor": false,
+  "elo": 988,
+  "games": 14,
+  "winPct": 43,
+  "weight": 163,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "4+ engines",
+   "twin envelope bag",
+   "2+ boilers"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1003",
+  "name": "Scarlet Brand",
+  "summary": "fireship with a harpoon, flamethrowers and heavy armour",
+  "theme": "firebrand",
+  "gen": 0,
+  "anchor": false,
+  "elo": 989,
+  "games": 14,
+  "winPct": 43,
+  "weight": 159,
+  "tags": [
+   "harpoon",
+   "flamethrower",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2 or fewer engines",
+   "2+ bags",
+   "2+ boilers",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1004",
+  "name": "Midnight Buccaneer",
+  "summary": "boarding raider with grapeshot, a crew cannon and swivel engines",
+  "theme": "raider",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1189,
+  "games": 16,
+  "winPct": 63,
+  "weight": 107,
+  "tags": [
+   "grapeshot",
+   "crew cannon",
+   "swivel engine",
+   "searchlight"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1005",
+  "name": "Falling Hornet",
+  "summary": "bomber with a flak gun, a bomb bay and a sail",
+  "theme": "bomber",
+  "gen": 0,
+  "anchor": false,
+  "elo": 967,
+  "games": 14,
+  "winPct": 43,
+  "weight": 146,
+  "tags": [
+   "flak",
+   "sail",
+   "2+ bags",
+   "bomb bay",
+   "2+ boilers",
+   "keel deck",
+   "open main deck"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1006",
+  "name": "Great Keep",
+  "summary": "floating fortress with a long gun, a mortar and heavy armour",
+  "theme": "fortress",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1115,
+  "games": 14,
+  "winPct": 50,
+  "weight": 171,
+  "tags": [
+   "long gun",
+   "mortar",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2 or fewer engines",
+   "2+ bags",
+   "3+ bags",
+   "2+ boilers",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1007",
+  "name": "Darting Dart the Younger",
+  "summary": "speedy skiff with a long gun and a sail",
+  "theme": "skiff",
+  "gen": 0,
+  "anchor": false,
+  "elo": 896,
+  "games": 14,
+  "winPct": 29,
+  "weight": 85,
+  "tags": [
+   "long gun",
+   "sail",
+   "2 or fewer engines",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1008",
+  "name": "Salvo Thunder",
+  "summary": "broadside gunboat with 7 broadside guns",
+  "theme": "gunboat",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1122,
+  "games": 20,
+  "winPct": 45,
+  "weight": 134,
+  "tags": [
+   "2 or fewer engines",
+   "2+ boilers",
+   "6+ guns"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1009",
+  "name": "Quiet Trapper",
+  "summary": "mine-laying sapper with a long gun, mines and a sail",
+  "theme": "sapper",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1179,
+  "games": 28,
+  "winPct": 43,
+  "weight": 161,
+  "tags": [
+   "long gun",
+   "mine layer",
+   "sail",
+   "lift engine",
+   "4+ engines",
+   "2+ bags",
+   "2+ boilers",
+   "upper nest",
+   "keel deck",
+   "searchlight"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1010",
+  "name": "Anvil Bullock II",
+  "summary": "ram-prow bruiser with a long gun, a harpoon and a ram prow",
+  "theme": "wildcard",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1317,
+  "games": 32,
+  "winPct": 63,
+  "weight": 153,
+  "tags": [
+   "long gun",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "2+ bags",
+   "3+ bags",
+   "steam lift",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1011",
+  "name": "Quiet Marksman",
+  "summary": "long-range kiter with long guns, a mortar and a mine layer",
+  "theme": "kiter",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1114,
+  "games": 14,
+  "winPct": 50,
+  "weight": 164,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "mine layer",
+   "sail",
+   "4+ engines",
+   "2+ boilers",
+   "open main deck",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1012",
+  "name": "Stout Battery",
+  "summary": "broadside gunboat with grapeshot, a flak gun and heavy armour",
+  "theme": "brawler",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1008,
+  "games": 14,
+  "winPct": 43,
+  "weight": 172,
+  "tags": [
+   "grapeshot",
+   "3+ grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ boilers",
+   "upper nest",
+   "6+ guns",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1013",
+  "name": "Horned Ox",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "rammer",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1128,
+  "games": 14,
+  "winPct": 57,
+  "weight": 166,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "4+ engines",
+   "2+ boilers",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1014",
+  "name": "Scarlet Torch",
+  "summary": "fireship with a harpoon, flamethrowers and armour plate",
+  "theme": "firebrand",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1068,
+  "games": 14,
+  "winPct": 43,
+  "weight": 158,
+  "tags": [
+   "harpoon",
+   "flamethrower",
+   "armour 2+ cols",
+   "2 or fewer engines",
+   "2+ bags",
+   "2+ boilers",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1015",
+  "name": "Sly Jackdaw",
+  "summary": "boarding raider with grapeshot, a flak gun and a crew cannon",
+  "theme": "raider",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1185,
+  "games": 28,
+  "winPct": 54,
+  "weight": 111,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "upper nest",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1016",
+  "name": "Loud Broadside",
+  "summary": "broadside gunboat with a mine layer, a flak gun and a bomb bay",
+  "theme": "bomber",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1087,
+  "games": 14,
+  "winPct": 50,
+  "weight": 155,
+  "tags": [
+   "flak",
+   "mine layer",
+   "bomb bay",
+   "2+ boilers",
+   "upper nest",
+   "searchlight"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1017",
+  "name": "Bastion Tortoise",
+  "summary": "floating fortress with a long gun, armour plate and 4 gasbags",
+  "theme": "fortress",
+  "gen": 0,
+  "anchor": false,
+  "elo": 820,
+  "games": 14,
+  "winPct": 43,
+  "weight": 171,
+  "tags": [
+   "long gun",
+   "armour 2+ cols",
+   "2+ bags",
+   "3+ bags",
+   "2+ boilers",
+   "keel deck",
+   "gas valves"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1018",
+  "name": "Little Swift of the Gale",
+  "summary": "speedy skiff with a sail",
+  "theme": "skiff",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1044,
+  "games": 14,
+  "winPct": 57,
+  "weight": 81,
+  "tags": [
+   "sail",
+   "2 or fewer engines",
+   "keel deck",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1019",
+  "name": "Cannonade Broadside",
+  "summary": "broadside gunboat with 6 broadside guns",
+  "theme": "gunboat",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1160,
+  "games": 28,
+  "winPct": 46,
+  "weight": 120,
+  "tags": [
+   "2 or fewer engines",
+   "2+ bags",
+   "upper nest",
+   "steam lift",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1020",
+  "name": "Longshot Marksman",
+  "summary": "long-range kiter with a long gun, a mine layer and a flak gun",
+  "theme": "sapper",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1011,
+  "games": 14,
+  "winPct": 43,
+  "weight": 115,
+  "tags": [
+   "long gun",
+   "flak",
+   "mine layer",
+   "lift engine",
+   "swivel engine",
+   "2+ bags",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1021",
+  "name": "Distant Marksman",
+  "summary": "long-range kiter with long guns, a flak gun and a crew cannon",
+  "theme": "wildcard",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1061,
+  "games": 14,
+  "winPct": 43,
+  "weight": 173,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "flak",
+   "crew cannon",
+   "sail",
+   "4+ engines",
+   "2+ bags",
+   "2+ boilers",
+   "keel deck",
+   "6+ guns",
+   "ballast"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1022",
+  "name": "Silver Lantern",
+  "summary": "long-range kiter with long guns, mortars and a mine layer",
+  "theme": "kiter",
+  "gen": 0,
+  "anchor": false,
+  "elo": 494,
+  "games": 14,
+  "winPct": 14,
+  "weight": 169,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "mine layer",
+   "armour 2+ cols",
+   "4+ engines",
+   "twin envelope bag",
+   "2+ boilers",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1023",
+  "name": "Loud Broadside II",
+  "summary": "broadside gunboat with grapeshot, a flak gun and armour plate",
+  "theme": "brawler",
+  "gen": 0,
+  "anchor": false,
+  "elo": 675,
+  "games": 14,
+  "winPct": 29,
+  "weight": 142,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "2 or fewer engines",
+   "2+ boilers",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1024",
+  "name": "Stout Ram",
+  "summary": "ram-prow bruiser with grapeshot, a harpoon and a ram prow",
+  "theme": "rammer",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1102,
+  "games": 14,
+  "winPct": 57,
+  "weight": 160,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "2+ boilers",
+   "keel deck",
+   "searchlight"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1025",
+  "name": "Ember Torch",
+  "summary": "fireship with a harpoon, flamethrowers and armour plate",
+  "theme": "firebrand",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1074,
+  "games": 26,
+  "winPct": 35,
+  "weight": 153,
+  "tags": [
+   "harpoon",
+   "flamethrower",
+   "armour 2+ cols",
+   "2 or fewer engines",
+   "2+ boilers",
+   "upper nest",
+   "6+ guns",
+   "searchlight"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1026",
+  "name": "Sly Fox of the Reef",
+  "summary": "boarding raider with grapeshot, a flak gun and crew cannons",
+  "theme": "raider",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1149,
+  "games": 24,
+  "winPct": 50,
+  "weight": 129,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "2+ bags",
+   "ballast"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1027",
+  "name": "Falling Whale",
+  "summary": "bomber with a flak gun, a bomb bay and a sail",
+  "theme": "bomber",
+  "gen": 0,
+  "anchor": false,
+  "elo": 747,
+  "games": 14,
+  "winPct": 29,
+  "weight": 162,
+  "tags": [
+   "flak",
+   "sail",
+   "2+ bags",
+   "3+ bags",
+   "bomb bay",
+   "2+ boilers",
+   "upper nest",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1028",
+  "name": "Mighty Bastion",
+  "summary": "floating fortress with a long gun, a mortar and heavy armour",
+  "theme": "fortress",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1399,
+  "games": 48,
+  "winPct": 69,
+  "weight": 161,
+  "tags": [
+   "long gun",
+   "mortar",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "gas valves"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1029",
+  "name": "Darting Dart",
+  "summary": "speedy skiff with a long gun and a sail",
+  "theme": "skiff",
+  "gen": 0,
+  "anchor": false,
+  "elo": 688,
+  "games": 14,
+  "winPct": 36,
+  "weight": 75,
+  "tags": [
+   "long gun",
+   "sail",
+   "2 or fewer engines",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1030",
+  "name": "Loud Broadside III",
+  "summary": "broadside gunboat with 6 broadside guns",
+  "theme": "gunboat",
+  "gen": 0,
+  "anchor": false,
+  "elo": 933,
+  "games": 14,
+  "winPct": 36,
+  "weight": 140,
+  "tags": [
+   "2+ boilers",
+   "6+ guns",
+   "searchlight"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1031",
+  "name": "Distant Marksman II",
+  "summary": "long-range kiter with a long gun, a mine layer and a flak gun",
+  "theme": "sapper",
+  "gen": 0,
+  "anchor": false,
+  "elo": 943,
+  "games": 14,
+  "winPct": 43,
+  "weight": 115,
+  "tags": [
+   "long gun",
+   "flak",
+   "mine layer",
+   "sail",
+   "lift engine",
+   "2+ bags",
+   "keel deck"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1032",
+  "name": "Heavy Stork",
+  "summary": "bomber with grapeshot, a harpoon and a bomb bay",
+  "theme": "wildcard",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1143,
+  "games": 14,
+  "winPct": 54,
+  "weight": 126,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "swivel engine",
+   "2+ bags",
+   "3+ bags",
+   "bomb bay",
+   "gas valves",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1033",
+  "name": "Longshot Lantern II",
+  "summary": "long-range kiter with long guns, a mortar and a mine layer",
+  "theme": "kiter",
+  "gen": 0,
+  "anchor": false,
+  "elo": 911,
+  "games": 14,
+  "winPct": 43,
+  "weight": 170,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "mine layer",
+   "armour 2+ cols",
+   "4+ engines",
+   "twin envelope bag",
+   "2+ boilers",
+   "upper nest",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1034",
+  "name": "Stubborn Bulldog II",
+  "summary": "close-quarters brawler with grapeshot, a flak gun and armour plate",
+  "theme": "brawler",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1204,
+  "games": 20,
+  "winPct": 55,
+  "weight": 146,
+  "tags": [
+   "grapeshot",
+   "3+ grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "2 or fewer engines",
+   "2+ boilers",
+   "keel deck",
+   "searchlight"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1035",
+  "name": "Stout Prow",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "rammer",
+  "gen": 0,
+  "anchor": false,
+  "elo": 858,
+  "games": 14,
+  "winPct": 36,
+  "weight": 165,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "2+ bags",
+   "2+ boilers",
+   "keel deck",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1036",
+  "name": "Smouldering Brand",
+  "summary": "fireship with a harpoon, flamethrowers and armour plate",
+  "theme": "firebrand",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1171,
+  "games": 22,
+  "winPct": 45,
+  "weight": 165,
+  "tags": [
+   "harpoon",
+   "flamethrower",
+   "armour 2+ cols",
+   "2+ bags",
+   "2+ boilers"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1037",
+  "name": "Salvo Volley",
+  "summary": "broadside gunboat with grapeshot, a flak gun and swivel engines",
+  "theme": "raider",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1047,
+  "games": 14,
+  "winPct": 50,
+  "weight": 106,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "swivel engine",
+   "upper nest",
+   "cargo racks",
+   "searchlight"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1038",
+  "name": "Lumbering Whale",
+  "summary": "bomber with a flak gun, a bomb bay and a sail",
+  "theme": "bomber",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1086,
+  "games": 14,
+  "winPct": 46,
+  "weight": 114,
+  "tags": [
+   "flak",
+   "sail",
+   "2 or fewer engines",
+   "bomb bay",
+   "upper nest",
+   "keel deck",
+   "steam lift"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1039",
+  "name": "Great Keep II",
+  "summary": "floating fortress with a long gun, a mortar and heavy armour",
+  "theme": "fortress",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1348,
+  "games": 34,
+  "winPct": 65,
+  "weight": 162,
+  "tags": [
+   "long gun",
+   "mortar",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "gas valves",
+   "open main deck",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1040",
+  "name": "Distant Lantern",
+  "summary": "long-range kiter with a long gun and a sail",
+  "theme": "skiff",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1089,
+  "games": 14,
+  "winPct": 57,
+  "weight": 96,
+  "tags": [
+   "long gun",
+   "sail",
+   "searchlight",
+   "open main deck",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1041",
+  "name": "Broad Gunboat",
+  "summary": "broadside gunboat with 7 broadside guns",
+  "theme": "gunboat",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1293,
+  "games": 28,
+  "winPct": 57,
+  "weight": 126,
+  "tags": [
+   "2+ bags",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1042",
+  "name": "Longshot Lantern III",
+  "summary": "long-range kiter with a long gun, a mine layer and a flak gun",
+  "theme": "sapper",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1097,
+  "games": 14,
+  "winPct": 43,
+  "weight": 115,
+  "tags": [
+   "long gun",
+   "flak",
+   "mine layer",
+   "sail",
+   "lift engine",
+   "2+ bags"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1043",
+  "name": "Silver Kestrel",
+  "summary": "long-range kiter with long guns, mortars and a mine layer",
+  "theme": "wildcard",
+  "gen": 0,
+  "anchor": false,
+  "elo": 705,
+  "games": 14,
+  "winPct": 29,
+  "weight": 141,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "mine layer",
+   "sail",
+   "2+ bags",
+   "3+ bags",
+   "6+ guns",
+   "gas valves"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1044",
+  "name": "Silver Kestrel II",
+  "summary": "long-range kiter with long guns, mortars and a mine layer",
+  "theme": "kiter",
+  "gen": 0,
+  "anchor": false,
+  "elo": 612,
+  "games": 14,
+  "winPct": 21,
+  "weight": 171,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "mine layer",
+   "sail",
+   "4+ engines",
+   "2+ boilers",
+   "keel deck",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1045",
+  "name": "Rough Badger",
+  "summary": "close-quarters brawler with grapeshot, a flak gun and heavy armour",
+  "theme": "brawler",
+  "gen": 0,
+  "anchor": false,
+  "elo": 617,
+  "games": 14,
+  "winPct": 29,
+  "weight": 173,
+  "tags": [
+   "grapeshot",
+   "3+ grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "2+ boilers",
+   "6+ guns",
+   "ballast"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1046",
+  "name": "Horned Bullock",
+  "summary": "ram-prow bruiser with grapeshot, a harpoon and a ram prow",
+  "theme": "rammer",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1204,
+  "games": 28,
+  "winPct": 46,
+  "weight": 148,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "ballast",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1047",
+  "name": "Ember Torch II",
+  "summary": "fireship with a harpoon, flamethrowers and armour plate",
+  "theme": "firebrand",
+  "gen": 0,
+  "anchor": false,
+  "elo": 633,
+  "games": 14,
+  "winPct": 29,
+  "weight": 151,
+  "tags": [
+   "harpoon",
+   "flamethrower",
+   "armour 2+ cols",
+   "2+ bags",
+   "2+ boilers",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1048",
+  "name": "Midnight Corsair",
+  "summary": "boarding raider with grapeshot, a flak gun and a crew cannon",
+  "theme": "raider",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1079,
+  "games": 14,
+  "winPct": 43,
+  "weight": 103,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1049",
+  "name": "Lumbering Hornet",
+  "summary": "bomber with a flak gun and a bomb bay",
+  "theme": "bomber",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1085,
+  "games": 14,
+  "winPct": 50,
+  "weight": 158,
+  "tags": [
+   "flak",
+   "4+ engines",
+   "2+ bags",
+   "bomb bay",
+   "2+ boilers",
+   "searchlight"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1050",
+  "name": "Steadfast Citadel",
+  "summary": "floating fortress with a long gun, a mortar and armour plate",
+  "theme": "fortress",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1235,
+  "games": 36,
+  "winPct": 53,
+  "weight": 165,
+  "tags": [
+   "long gun",
+   "mortar",
+   "armour 2+ cols",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1051",
+  "name": "Nimble Sparrow",
+  "summary": "speedy skiff with a sail",
+  "theme": "skiff",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1302,
+  "games": 38,
+  "winPct": 58,
+  "weight": 94,
+  "tags": [
+   "sail",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1052",
+  "name": "Salvo Broadside",
+  "summary": "broadside gunboat with 6 broadside guns",
+  "theme": "gunboat",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1013,
+  "games": 14,
+  "winPct": 43,
+  "weight": 122,
+  "tags": [
+   "2 or fewer engines",
+   "2+ bags",
+   "upper nest",
+   "steam lift",
+   "6+ guns",
+   "ballast",
+   "searchlight",
+   "open main deck",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1053",
+  "name": "Distant Marksman III",
+  "summary": "long-range kiter with a long gun, a mine layer and lift engines",
+  "theme": "sapper",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1085,
+  "games": 14,
+  "winPct": 50,
+  "weight": 107,
+  "tags": [
+   "long gun",
+   "mine layer",
+   "lift engine",
+   "2+ bags",
+   "searchlight"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1054",
+  "name": "Blazing Torch of Dawn",
+  "summary": "fireship with mortars, flamethrowers and a bomb bay",
+  "theme": "wildcard",
+  "gen": 0,
+  "anchor": false,
+  "elo": 997,
+  "games": 14,
+  "winPct": 43,
+  "weight": 165,
+  "tags": [
+   "mortar",
+   "flamethrower",
+   "armour 2+ cols",
+   "2+ bags",
+   "3+ bags",
+   "bomb bay",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1055",
+  "name": "Longshot Lantern IV",
+  "summary": "long-range kiter with long guns, mortars and a mine layer",
+  "theme": "kiter",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1122,
+  "games": 14,
+  "winPct": 43,
+  "weight": 147,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "mine layer",
+   "sail",
+   "upper nest",
+   "6+ guns",
+   "ballast",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1056",
+  "name": "Bristling Hammer",
+  "summary": "close-quarters brawler with grapeshot, a flak gun and heavy armour",
+  "theme": "brawler",
+  "gen": 0,
+  "anchor": false,
+  "elo": 529,
+  "games": 14,
+  "winPct": 21,
+  "weight": 159,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "twin envelope bag",
+   "2+ boilers",
+   "keel deck",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1057",
+  "name": "Anvil Ram",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "rammer",
+  "gen": 0,
+  "anchor": false,
+  "elo": 988,
+  "games": 14,
+  "winPct": 50,
+  "weight": 173,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "2+ bags",
+   "2+ boilers",
+   "searchlight"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1058",
+  "name": "Smouldering Torch",
+  "summary": "fireship with a harpoon, flamethrowers and armour plate",
+  "theme": "firebrand",
+  "gen": 0,
+  "anchor": false,
+  "elo": 942,
+  "games": 14,
+  "winPct": 43,
+  "weight": 160,
+  "tags": [
+   "harpoon",
+   "flamethrower",
+   "armour 2+ cols",
+   "2+ boilers",
+   "ballast"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g0-1059",
+  "name": "Grinning Buccaneer",
+  "summary": "boarding raider with grapeshot, a flak gun and a crew cannon",
+  "theme": "raider",
+  "gen": 0,
+  "anchor": false,
+  "elo": 1108,
+  "games": 14,
+  "winPct": 57,
+  "weight": 108,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "ballast",
+   "short hull"
+  ],
+  "parents": [],
+  "mutations": []
+ },
+ {
+  "id": "g1-778000",
+  "name": "Great Tortoise",
+  "summary": "floating fortress with a long gun, a mortar and armour plate",
+  "theme": "fortress",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1297,
+  "games": 20,
+  "winPct": 50,
+  "weight": 164,
+  "tags": [
+   "long gun",
+   "mortar",
+   "armour 2+ cols",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Steadfast Citadel"
+  ],
+  "mutations": [
+   "move ladder",
+   "hull"
+  ]
+ },
+ {
+  "id": "g1-778001",
+  "name": "Bold Ram",
+  "summary": "ram-prow bruiser with a long gun, a flak gun and a harpoon",
+  "theme": "raiderxwildcard",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1039,
+  "games": 8,
+  "winPct": 25,
+  "weight": 141,
+  "tags": [
+   "long gun",
+   "flak",
+   "harpoon",
+   "ram prow",
+   "crew cannon",
+   "sail",
+   "2+ bags",
+   "towline",
+   "ballast"
+  ],
+  "parents": [
+   "Sly Fox of the Reef",
+   "Anvil Bullock II"
+  ],
+  "mutations": [
+   "cross sections"
+  ]
+ },
+ {
+  "id": "g1-778002",
+  "name": "Horned Ram",
+  "summary": "ram-prow bruiser with grapeshot, a harpoon and a ram prow",
+  "theme": "brawlerxrammer",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1148,
+  "games": 8,
+  "winPct": 38,
+  "weight": 165,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ boilers",
+   "keel deck",
+   "searchlight"
+  ],
+  "parents": [
+   "Stubborn Bulldog II",
+   "Horned Bullock"
+  ],
+  "mutations": [
+   "cross weapons",
+   "aim engine",
+   "flip deck",
+   "+gun"
+  ]
+ },
+ {
+  "id": "g1-778003",
+  "name": "Quiet Marksman II",
+  "summary": "long-range kiter with a long gun, a mortar and heavy armour",
+  "theme": "skiffxfortress",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1237,
+  "games": 8,
+  "winPct": 50,
+  "weight": 135,
+  "tags": [
+   "long gun",
+   "mortar",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "sail",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [
+   "Nimble Sparrow",
+   "Great Keep II"
+  ],
+  "mutations": [
+   "cross sections",
+   "+gun_mortar",
+   "+armour"
+  ]
+ },
+ {
+  "id": "g1-778004",
+  "name": "Great Keep III",
+  "summary": "floating fortress with a long gun, a mortar and heavy armour",
+  "theme": "fortress",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1037,
+  "games": 8,
+  "winPct": 25,
+  "weight": 160,
+  "tags": [
+   "long gun",
+   "mortar",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "gas valves"
+  ],
+  "parents": [
+   "Mighty Bastion"
+  ],
+  "mutations": [
+   "move armour",
+   "+armour",
+   "-extinguisher"
+  ]
+ },
+ {
+  "id": "g1-778005",
+  "name": "Mighty Keep",
+  "summary": "floating fortress with a long gun, a mortar and grapeshot",
+  "theme": "fortress",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1326,
+  "games": 12,
+  "winPct": 67,
+  "weight": 165,
+  "tags": [
+   "long gun",
+   "mortar",
+   "grapeshot",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "gas valves"
+  ],
+  "parents": [
+   "Mighty Bastion"
+  ],
+  "mutations": [
+   "bags",
+   "+gun_scatter",
+   "hull"
+  ]
+ },
+ {
+  "id": "g1-778006",
+  "name": "Bold Magpie",
+  "summary": "boarding raider with grapeshot, a flak gun and a crew cannon",
+  "theme": "raiderxbrawler",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1243,
+  "games": 16,
+  "winPct": 44,
+  "weight": 132,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "armour 2+ cols",
+   "2+ bags",
+   "towline",
+   "ballast"
+  ],
+  "parents": [
+   "Sly Fox of the Reef",
+   "Stubborn Bulldog II"
+  ],
+  "mutations": [
+   "cross sections",
+   "+engine"
+  ]
+ },
+ {
+  "id": "g1-778007",
+  "name": "Stout Anvil",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "rammer",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1321,
+  "games": 42,
+  "winPct": 57,
+  "weight": 129,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "searchlight"
+  ],
+  "parents": [
+   "(new blood)"
+  ],
+  "mutations": [
+   "fresh random ship"
+  ]
+ },
+ {
+  "id": "g1-778008",
+  "name": "Grinning Jackdaw",
+  "summary": "boarding raider with grapeshot, a flak gun and crew cannons",
+  "theme": "fortressxraider",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1205,
+  "games": 16,
+  "winPct": 44,
+  "weight": 149,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "towline",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Steadfast Citadel",
+   "Sly Jackdaw"
+  ],
+  "mutations": [
+   "cross weapons"
+  ]
+ },
+ {
+  "id": "g1-778009",
+  "name": "Loud Gunboat",
+  "summary": "broadside gunboat with armour plate and a sail",
+  "theme": "skiff",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1263,
+  "games": 14,
+  "winPct": 43,
+  "weight": 120,
+  "tags": [
+   "armour 2+ cols",
+   "sail",
+   "2+ boilers",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [
+   "Nimble Sparrow"
+  ],
+  "mutations": [
+   "+boiler",
+   "move rack_hookshot",
+   "+armour"
+  ]
+ },
+ {
+  "id": "g1-778010",
+  "name": "Salvo Volley II",
+  "summary": "broadside gunboat with a long gun, armour plate and 4 gasbags",
+  "theme": "fortressxgunboat",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1293,
+  "games": 10,
+  "winPct": 50,
+  "weight": 154,
+  "tags": [
+   "long gun",
+   "armour 2+ cols",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [
+   "Steadfast Citadel",
+   "Broad Gunboat"
+  ],
+  "mutations": [
+   "cross sections",
+   "move gun",
+   "+gun_long"
+  ]
+ },
+ {
+  "id": "g1-778011",
+  "name": "Reckless Buccaneer",
+  "summary": "boarding raider with grapeshot, a flak gun and crew cannons",
+  "theme": "raider",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1226,
+  "games": 8,
+  "winPct": 50,
+  "weight": 128,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "lift engine",
+   "2+ bags",
+   "ballast",
+   "open main deck"
+  ],
+  "parents": [
+   "Sly Fox of the Reef"
+  ],
+  "mutations": [
+   "flip deck",
+   "aim engine"
+  ]
+ },
+ {
+  "id": "g1-778012",
+  "name": "Bastion Tortoise II",
+  "summary": "floating fortress with long guns, a mortar and heavy armour",
+  "theme": "fortress",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1312,
+  "games": 20,
+  "winPct": 55,
+  "weight": 166,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "gas valves"
+  ],
+  "parents": [
+   "Mighty Bastion"
+  ],
+  "mutations": [
+   "-extinguisher",
+   "+gun_long",
+   "+armour"
+  ]
+ },
+ {
+  "id": "g1-778013",
+  "name": "Salvo Battery",
+  "summary": "broadside gunboat with a sail",
+  "theme": "skiff",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1029,
+  "games": 8,
+  "winPct": 13,
+  "weight": 100,
+  "tags": [
+   "sail",
+   "2+ bags",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [
+   "Nimble Sparrow"
+  ],
+  "mutations": [
+   "bags",
+   "-ladder"
+  ]
+ },
+ {
+  "id": "g1-778014",
+  "name": "Longshot Lantern of Dawn",
+  "summary": "long-range kiter with a long gun, a mine layer and a sail",
+  "theme": "sapper",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1115,
+  "games": 8,
+  "winPct": 25,
+  "weight": 155,
+  "tags": [
+   "long gun",
+   "mine layer",
+   "sail",
+   "lift engine",
+   "4+ engines",
+   "2+ bags",
+   "2+ boilers",
+   "upper nest",
+   "keel deck",
+   "searchlight"
+  ],
+  "parents": [
+   "Quiet Trapper"
+  ],
+  "mutations": [
+   "bags",
+   "-mineLayer"
+  ]
+ },
+ {
+  "id": "g1-778015",
+  "name": "Granite Tortoise II",
+  "summary": "floating fortress with a long gun, armour plate and a sail",
+  "theme": "wildcardxfortress",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1214,
+  "games": 8,
+  "winPct": 50,
+  "weight": 134,
+  "tags": [
+   "long gun",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "2+ bags",
+   "3+ bags",
+   "steam lift",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Anvil Bullock II",
+   "Steadfast Citadel"
+  ],
+  "mutations": [
+   "cross sections"
+  ]
+ },
+ {
+  "id": "g1-778016",
+  "name": "Grim Hammer",
+  "summary": "close-quarters brawler with grapeshot, a flak gun and armour plate",
+  "theme": "fortressxbrawler",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1172,
+  "games": 8,
+  "winPct": 38,
+  "weight": 125,
+  "tags": [
+   "grapeshot",
+   "3+ grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "keel deck",
+   "gas valves"
+  ],
+  "parents": [
+   "Mighty Bastion",
+   "Stubborn Bulldog II"
+  ],
+  "mutations": [
+   "cross weapons",
+   "+sail",
+   "-rack_hammer"
+  ]
+ },
+ {
+  "id": "g1-778017",
+  "name": "Steadfast Barge",
+  "summary": "floating fortress with a long gun, a mortar and armour plate",
+  "theme": "fortress",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1252,
+  "games": 8,
+  "winPct": 50,
+  "weight": 165,
+  "tags": [
+   "long gun",
+   "mortar",
+   "armour 2+ cols",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Steadfast Citadel"
+  ],
+  "mutations": [
+   "bags",
+   "move extinguisher"
+  ]
+ },
+ {
+  "id": "g1-778018",
+  "name": "Salvo Volley III",
+  "summary": "broadside gunboat with 4 gasbags and 7 broadside guns",
+  "theme": "fortressxgunboat",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1272,
+  "games": 16,
+  "winPct": 50,
+  "weight": 138,
+  "tags": [
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Steadfast Citadel",
+   "Broad Gunboat"
+  ],
+  "mutations": [
+   "cross weapons"
+  ]
+ },
+ {
+  "id": "g1-778019",
+  "name": "Bold Fox",
+  "summary": "boarding raider with grapeshot, a flak gun and a crew cannon",
+  "theme": "skiffxraider",
+  "gen": 1,
+  "anchor": false,
+  "elo": 1132,
+  "games": 8,
+  "winPct": 25,
+  "weight": 106,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [
+   "Nimble Sparrow",
+   "Sly Jackdaw"
+  ],
+  "mutations": [
+   "cross weapons"
+  ]
+ },
+ {
+  "id": "g2-779000",
+  "name": "Cannonade Broadside II",
+  "summary": "broadside gunboat with 4 gasbags and 7 broadside guns",
+  "theme": "fortressxgunboat",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1235,
+  "games": 8,
+  "winPct": 38,
+  "weight": 137,
+  "tags": [
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "open main deck",
+   "long hull"
+  ],
+  "parents": [
+   "Great Keep II",
+   "Broad Gunboat"
+  ],
+  "mutations": [
+   "cross weapons"
+  ]
+ },
+ {
+  "id": "g2-779002",
+  "name": "Silver Longbow",
+  "summary": "long-range kiter with a long gun, a mortar and grapeshot",
+  "theme": "gunboatxfortress",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1334,
+  "games": 18,
+  "winPct": 56,
+  "weight": 172,
+  "tags": [
+   "long gun",
+   "mortar",
+   "grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "sail",
+   "2+ bags",
+   "6+ guns",
+   "long hull"
+  ],
+  "parents": [
+   "Broad Gunboat",
+   "Mighty Keep"
+  ],
+  "mutations": [
+   "cross weapons",
+   "+sail"
+  ]
+ },
+ {
+  "id": "g2-779003",
+  "name": "Horned Bullock II",
+  "summary": "ram-prow bruiser with a long gun, a harpoon and a ram prow",
+  "theme": "gunboatxwildcard",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1059,
+  "games": 8,
+  "winPct": 13,
+  "weight": 143,
+  "tags": [
+   "long gun",
+   "harpoon",
+   "ram prow",
+   "sail",
+   "2+ bags",
+   "6+ guns",
+   "ballast",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [
+   "Broad Gunboat",
+   "Anvil Bullock II"
+  ],
+  "mutations": [
+   "cross sections",
+   "+ballast",
+   "hull",
+   "move medbay"
+  ]
+ },
+ {
+  "id": "g2-779004",
+  "name": "Stout Prow II",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "fortressxgunboatxrammer",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1319,
+  "games": 14,
+  "winPct": 50,
+  "weight": 142,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "upper nest",
+   "keel deck",
+   "gas valves",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [
+   "Salvo Volley II",
+   "Stout Anvil"
+  ],
+  "mutations": [
+   "cross weapons"
+  ]
+ },
+ {
+  "id": "g2-779005",
+  "name": "Stout Thunder",
+  "summary": "broadside gunboat with 7 broadside guns",
+  "theme": "gunboat",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1185,
+  "games": 8,
+  "winPct": 25,
+  "weight": 126,
+  "tags": [
+   "2+ bags",
+   "6+ guns",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [
+   "Broad Gunboat"
+  ],
+  "mutations": [
+   "+extinguisher",
+   "move gun",
+   "bags"
+  ]
+ },
+ {
+  "id": "g2-779006",
+  "name": "Sly Buccaneer of Dawn",
+  "summary": "boarding raider with a flak gun, a crew cannon and lift engines",
+  "theme": "fortressxraiderxgunboat",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1220,
+  "games": 8,
+  "winPct": 38,
+  "weight": 143,
+  "tags": [
+   "flak",
+   "crew cannon",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "towline",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Grinning Jackdaw",
+   "Broad Gunboat"
+  ],
+  "mutations": [
+   "cross sections",
+   "aim engine",
+   "move gun",
+   "move ladder"
+  ]
+ },
+ {
+  "id": "g2-779007",
+  "name": "Steadfast Tortoise",
+  "summary": "floating fortress with long guns, a mortar and a mine layer",
+  "theme": "fortress",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1067,
+  "games": 8,
+  "winPct": 13,
+  "weight": 172,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "mine layer",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "gas valves"
+  ],
+  "parents": [
+   "Bastion Tortoise II"
+  ],
+  "mutations": [
+   "+mineLayer"
+  ]
+ },
+ {
+  "id": "g2-779008",
+  "name": "Anvil Anvil of Dawn",
+  "summary": "ram-prow bruiser with a long gun, a harpoon and a ram prow",
+  "theme": "wildcard",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1546,
+  "games": 36,
+  "winPct": 63,
+  "weight": 153,
+  "tags": [
+   "long gun",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "2+ bags",
+   "3+ bags",
+   "steam lift",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Anvil Bullock II"
+  ],
+  "mutations": [
+   "move extinguisher"
+  ]
+ },
+ {
+  "id": "g2-779009",
+  "name": "Great Bastion",
+  "summary": "floating fortress with long guns, a mortar and heavy armour",
+  "theme": "fortressxgunboat",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1217,
+  "games": 8,
+  "winPct": 38,
+  "weight": 173,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "ballast",
+   "gas valves"
+  ],
+  "parents": [
+   "Bastion Tortoise II",
+   "Broad Gunboat"
+  ],
+  "mutations": [
+   "cross sections",
+   "+ballast"
+  ]
+ },
+ {
+  "id": "g2-779010",
+  "name": "Broad Volley",
+  "summary": "broadside gunboat with a long gun, armour plate and lift engines",
+  "theme": "fortressxgunboat",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1533,
+  "games": 50,
+  "winPct": 66,
+  "weight": 154,
+  "tags": [
+   "long gun",
+   "armour 2+ cols",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [
+   "Salvo Volley II"
+  ],
+  "mutations": [
+   "aim engine",
+   "move searchlight",
+   "-rack_hammer"
+  ]
+ },
+ {
+  "id": "g2-779011",
+  "name": "Granite Bastion",
+  "summary": "floating fortress with a long gun, a mortar and a harpoon",
+  "theme": "fortress",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1425,
+  "games": 24,
+  "winPct": 63,
+  "weight": 166,
+  "tags": [
+   "long gun",
+   "mortar",
+   "harpoon",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "gas valves"
+  ],
+  "parents": [
+   "Mighty Bastion"
+  ],
+  "mutations": [
+   "+gun_harpoon",
+   "bags"
+  ]
+ },
+ {
+  "id": "g2-779012",
+  "name": "Horned Ram II",
+  "summary": "ram-prow bruiser with a long gun, a mortar and grapeshot",
+  "theme": "fortressxrammer",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1157,
+  "games": 8,
+  "winPct": 25,
+  "weight": 172,
+  "tags": [
+   "long gun",
+   "mortar",
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "gas valves"
+  ],
+  "parents": [
+   "Mighty Keep",
+   "Stout Anvil"
+  ],
+  "mutations": [
+   "cross sections"
+  ]
+ },
+ {
+  "id": "g2-779013",
+  "name": "Swift Sparrow",
+  "summary": "speedy skiff with a long gun and a sail",
+  "theme": "skiff",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1306,
+  "games": 8,
+  "winPct": 50,
+  "weight": 86,
+  "tags": [
+   "long gun",
+   "sail",
+   "2 or fewer engines",
+   "keel deck",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [
+   "(new blood)"
+  ],
+  "mutations": [
+   "fresh random ship"
+  ]
+ },
+ {
+  "id": "g2-779014",
+  "name": "Great Tortoise II",
+  "summary": "floating fortress with a long gun, a mortar and heavy armour",
+  "theme": "skiffxfortress",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1324,
+  "games": 22,
+  "winPct": 55,
+  "weight": 153,
+  "tags": [
+   "long gun",
+   "mortar",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [
+   "Nimble Sparrow",
+   "Mighty Keep"
+  ],
+  "mutations": [
+   "cross weapons",
+   "move gun_mortar",
+   "bags",
+   "-gun"
+  ]
+ },
+ {
+  "id": "g2-779015",
+  "name": "Mighty Tortoise",
+  "summary": "floating fortress with a long gun, a mortar and grapeshot",
+  "theme": "fortressxfortressxraider",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1300,
+  "games": 8,
+  "winPct": 50,
+  "weight": 167,
+  "tags": [
+   "long gun",
+   "mortar",
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "gas valves"
+  ],
+  "parents": [
+   "Mighty Keep",
+   "Grinning Jackdaw"
+  ],
+  "mutations": [
+   "cross sections",
+   "hull",
+   "+engine"
+  ]
+ },
+ {
+  "id": "g2-779016",
+  "name": "Midnight Corsair II",
+  "summary": "boarding raider with grapeshot, a flak gun and a crew cannon",
+  "theme": "raiderxbrawler",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1445,
+  "games": 18,
+  "winPct": 67,
+  "weight": 132,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "armour 2+ cols",
+   "2+ bags",
+   "towline",
+   "ballast"
+  ],
+  "parents": [
+   "Bold Magpie"
+  ],
+  "mutations": [
+   "move extinguisher"
+  ]
+ },
+ {
+  "id": "g2-779017",
+  "name": "Salvo Volley IV",
+  "summary": "broadside gunboat with a long gun, armour plate and 4 gasbags",
+  "theme": "fortressxgunboat",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1242,
+  "games": 8,
+  "winPct": 38,
+  "weight": 143,
+  "tags": [
+   "long gun",
+   "armour 2+ cols",
+   "2 or fewer engines",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "searchlight",
+   "open main deck",
+   "long hull"
+  ],
+  "parents": [
+   "Salvo Volley II"
+  ],
+  "mutations": [
+   "-engine",
+   "flip deck"
+  ]
+ },
+ {
+  "id": "g2-779018",
+  "name": "Patient Marksman",
+  "summary": "long-range kiter with long guns, a mortar and heavy armour",
+  "theme": "fortressxskiff",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1105,
+  "games": 8,
+  "winPct": 25,
+  "weight": 154,
+  "tags": [
+   "long gun",
+   "2+ long guns",
+   "mortar",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "sail",
+   "keel deck",
+   "gas valves"
+  ],
+  "parents": [
+   "Bastion Tortoise II",
+   "Loud Gunboat"
+  ],
+  "mutations": [
+   "cross sections"
+  ]
+ },
+ {
+  "id": "g2-779019",
+  "name": "Broad Gunboat II",
+  "summary": "broadside gunboat with sails",
+  "theme": "rammerxskiff",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1156,
+  "games": 8,
+  "winPct": 25,
+  "weight": 107,
+  "tags": [
+   "sail",
+   "ballast",
+   "searchlight"
+  ],
+  "parents": [
+   "Stout Anvil",
+   "Nimble Sparrow"
+  ],
+  "mutations": [
+   "cross weapons",
+   "move ladder",
+   "+ballast",
+   "aim engine"
+  ]
+ },
+ {
+  "id": "g2-779020",
+  "name": "Thundering Bullock",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "rammer",
+  "gen": 2,
+  "anchor": false,
+  "elo": 1445,
+  "games": 18,
+  "winPct": 67,
+  "weight": 123,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "searchlight"
+  ],
+  "parents": [
+   "Stout Anvil"
+  ],
+  "mutations": [
+   "bags",
+   "-engine",
+   "+sail"
+  ]
+ },
+ {
+  "id": "g3-780000",
+  "name": "Great Citadel II",
+  "summary": "floating fortress with a long gun, a mortar and a flak gun",
+  "theme": "wildcardxfortress",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1318,
+  "games": 8,
+  "winPct": 38,
+  "weight": 155,
+  "tags": [
+   "long gun",
+   "mortar",
+   "flak",
+   "harpoon",
+   "armour 2+ cols",
+   "2 or fewer engines",
+   "2+ bags",
+   "3+ bags",
+   "steam lift",
+   "6+ guns",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Anvil Anvil of Dawn",
+   "Granite Bastion"
+  ],
+  "mutations": [
+   "cross weapons"
+  ]
+ },
+ {
+  "id": "g3-780001",
+  "name": "Great Keep IV",
+  "summary": "floating fortress with a long gun, a mortar and a harpoon",
+  "theme": "fortress",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1422,
+  "games": 16,
+  "winPct": 63,
+  "weight": 165,
+  "tags": [
+   "long gun",
+   "mortar",
+   "harpoon",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "gas valves"
+  ],
+  "parents": [
+   "Granite Bastion"
+  ],
+  "mutations": [
+   "+gun",
+   "bags",
+   "-vent"
+  ]
+ },
+ {
+  "id": "g3-780002",
+  "name": "Granite Citadel",
+  "summary": "floating fortress with a long gun, a mortar and heavy armour",
+  "theme": "fortress",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1192,
+  "games": 8,
+  "winPct": 25,
+  "weight": 160,
+  "tags": [
+   "long gun",
+   "mortar",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "gas valves"
+  ],
+  "parents": [
+   "Mighty Bastion"
+  ],
+  "mutations": [
+   "-extinguisher",
+   "aim engine"
+  ]
+ },
+ {
+  "id": "g3-780003",
+  "name": "Anvil Ram II",
+  "summary": "ram-prow bruiser with a long gun, a harpoon and a ram prow",
+  "theme": "wildcardxwildcard",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1338,
+  "games": 8,
+  "winPct": 50,
+  "weight": 154,
+  "tags": [
+   "long gun",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "2+ bags",
+   "3+ bags",
+   "steam lift",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Anvil Anvil of Dawn",
+   "Anvil Bullock II"
+  ],
+  "mutations": [
+   "cross sections",
+   "bags"
+  ]
+ },
+ {
+  "id": "g3-780004",
+  "name": "Salvo Volley V",
+  "summary": "broadside gunboat with a long gun, armour plate and lift engines",
+  "theme": "fortressxfortressxgunboat",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1160,
+  "games": 8,
+  "winPct": 25,
+  "weight": 153,
+  "tags": [
+   "long gun",
+   "armour 2+ cols",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "open main deck",
+   "long hull"
+  ],
+  "parents": [
+   "Great Keep II",
+   "Broad Volley"
+  ],
+  "mutations": [
+   "cross weapons",
+   "+gun",
+   "move rack_hammer"
+  ]
+ },
+ {
+  "id": "g3-780005",
+  "name": "Bastion Keep",
+  "summary": "floating fortress with a long gun, a mortar and heavy armour",
+  "theme": "skiffxfortress",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1312,
+  "games": 8,
+  "winPct": 38,
+  "weight": 148,
+  "tags": [
+   "long gun",
+   "mortar",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "searchlight",
+   "short hull"
+  ],
+  "parents": [
+   "Great Tortoise II"
+  ],
+  "mutations": [
+   "move extinguisher",
+   "-armour"
+  ]
+ },
+ {
+  "id": "g3-780006",
+  "name": "Thundering Ox",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "raiderxbrawlerxrammer",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1161,
+  "games": 8,
+  "winPct": 25,
+  "weight": 147,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "2+ bags",
+   "ballast"
+  ],
+  "parents": [
+   "Midnight Corsair II",
+   "Stout Anvil"
+  ],
+  "mutations": [
+   "cross weapons",
+   "+gun",
+   "move ladder"
+  ]
+ },
+ {
+  "id": "g3-780007",
+  "name": "Bastion Barge",
+  "summary": "floating fortress with a long gun, a mortar and grapeshot",
+  "theme": "fortressxgunboatxgunboatxfortress",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1299,
+  "games": 16,
+  "winPct": 44,
+  "weight": 171,
+  "tags": [
+   "long gun",
+   "mortar",
+   "grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "sail",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Broad Volley",
+   "Silver Longbow"
+  ],
+  "mutations": [
+   "cross weapons"
+  ]
+ },
+ {
+  "id": "g3-780008",
+  "name": "Broad Thunder",
+  "summary": "broadside gunboat with a mortar, a flak gun and armour plate",
+  "theme": "fortressxfortress",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1434,
+  "games": 14,
+  "winPct": 71,
+  "weight": 144,
+  "tags": [
+   "mortar",
+   "flak",
+   "armour 2+ cols",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "gas valves",
+   "open main deck",
+   "long hull"
+  ],
+  "parents": [
+   "Great Keep II",
+   "Granite Bastion"
+  ],
+  "mutations": [
+   "cross sections"
+  ]
+ },
+ {
+  "id": "g3-780009",
+  "name": "Reckless Magpie",
+  "summary": "boarding raider with grapeshot, a flak gun and a crew cannon",
+  "theme": "raiderxbrawler",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1051,
+  "games": 8,
+  "winPct": 13,
+  "weight": 122,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "armour 2+ cols",
+   "lift engine",
+   "2 or fewer engines",
+   "2+ bags",
+   "towline",
+   "ballast"
+  ],
+  "parents": [
+   "Midnight Corsair II"
+  ],
+  "mutations": [
+   "+engine",
+   "-engine"
+  ]
+ },
+ {
+  "id": "g3-780010",
+  "name": "Salvo Thunder II",
+  "summary": "broadside gunboat with a long gun, a mortar and lift engines",
+  "theme": "fortress",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1333,
+  "games": 8,
+  "winPct": 50,
+  "weight": 166,
+  "tags": [
+   "long gun",
+   "mortar",
+   "lift engine",
+   "4+ engines",
+   "2+ bags",
+   "3+ bags",
+   "2+ boilers",
+   "keel deck",
+   "6+ guns",
+   "gas valves"
+  ],
+  "parents": [
+   "Mighty Bastion"
+  ],
+  "mutations": [
+   "+engine",
+   "+gun_mortar",
+   "+gun"
+  ]
+ },
+ {
+  "id": "g3-780011",
+  "name": "Stout Anvil II",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a flamethrower",
+  "theme": "wildcardxrammer",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1435,
+  "games": 14,
+  "winPct": 64,
+  "weight": 138,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "flamethrower",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "steam lift",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Anvil Anvil of Dawn",
+   "Thundering Bullock"
+  ],
+  "mutations": [
+   "cross weapons",
+   "aim engine",
+   "+gun_flame"
+  ]
+ },
+ {
+  "id": "g3-780013",
+  "name": "Horned Bullock III",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "fortressxgunboatxrammer",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1370,
+  "games": 20,
+  "winPct": 50,
+  "weight": 142,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "upper nest",
+   "keel deck",
+   "gas valves",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [
+   "Stout Prow II"
+  ],
+  "mutations": [
+   "hull",
+   "-ladder"
+  ]
+ },
+ {
+  "id": "g3-780014",
+  "name": "Thundering Bullock II",
+  "summary": "ram-prow bruiser with a long gun, a harpoon and a ram prow",
+  "theme": "fortressxgunboatxrammerxwildcard",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1070,
+  "games": 8,
+  "winPct": 13,
+  "weight": 160,
+  "tags": [
+   "long gun",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "2+ boilers",
+   "upper nest",
+   "keel deck",
+   "gas valves",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [
+   "Stout Prow II",
+   "Anvil Bullock II"
+  ],
+  "mutations": [
+   "cross weapons",
+   "+gun",
+   "+gun",
+   "+boiler"
+  ]
+ },
+ {
+  "id": "g3-780015",
+  "name": "Reckless Fox of Brass",
+  "summary": "boarding raider with grapeshot, flak and a crew cannon",
+  "theme": "raiderxbrawler",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1315,
+  "games": 14,
+  "winPct": 43,
+  "weight": 136,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "armour 2+ cols",
+   "2+ bags",
+   "towline",
+   "ballast"
+  ],
+  "parents": [
+   "Midnight Corsair II"
+  ],
+  "mutations": [
+   "+gun_flak"
+  ]
+ },
+ {
+  "id": "g3-780016",
+  "name": "Horned Anvil",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "fortressxgunboatxrammer",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1419,
+  "games": 16,
+  "winPct": 56,
+  "weight": 153,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "upper nest",
+   "keel deck",
+   "gas valves",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [
+   "Stout Prow II"
+  ],
+  "mutations": [
+   "bags",
+   "move rack_hammer",
+   "+armour"
+  ]
+ },
+ {
+  "id": "g3-780017",
+  "name": "Distant Lantern II",
+  "summary": "long-range kiter with a long gun, a mortar and grapeshot",
+  "theme": "gunboatxfortress",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1195,
+  "games": 8,
+  "winPct": 25,
+  "weight": 172,
+  "tags": [
+   "long gun",
+   "mortar",
+   "grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "sail",
+   "2+ bags",
+   "6+ guns",
+   "long hull"
+  ],
+  "parents": [
+   "Silver Longbow"
+  ],
+  "mutations": [
+   "+extinguisher"
+  ]
+ },
+ {
+  "id": "g3-780018",
+  "name": "Great Tortoise III",
+  "summary": "floating fortress with a long gun, a mortar and a harpoon",
+  "theme": "fortress",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1399,
+  "games": 38,
+  "winPct": 45,
+  "weight": 166,
+  "tags": [
+   "long gun",
+   "mortar",
+   "harpoon",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "gas valves"
+  ],
+  "parents": [
+   "Granite Bastion"
+  ],
+  "mutations": [
+   "bags",
+   "-extinguisher",
+   "aim engine"
+  ]
+ },
+ {
+  "id": "g3-780019",
+  "name": "Longshot Kestrel",
+  "summary": "long-range kiter with a long gun, a mortar and grapeshot",
+  "theme": "gunboatxfortress",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1260,
+  "games": 8,
+  "winPct": 38,
+  "weight": 158,
+  "tags": [
+   "long gun",
+   "mortar",
+   "grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "sail",
+   "swivel engine",
+   "2+ bags",
+   "6+ guns",
+   "long hull"
+  ],
+  "parents": [
+   "Silver Longbow"
+  ],
+  "mutations": [
+   "+engineSwivel"
+  ]
+ },
+ {
+  "id": "g3-780020",
+  "name": "Horned Ram III",
+  "summary": "ram-prow bruiser with a long gun, a flamethrower and a ram prow",
+  "theme": "wildcard",
+  "gen": 3,
+  "anchor": false,
+  "elo": 1284,
+  "games": 8,
+  "winPct": 38,
+  "weight": 153,
+  "tags": [
+   "long gun",
+   "flamethrower",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "2+ bags",
+   "3+ bags",
+   "steam lift",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Anvil Bullock II"
+  ],
+  "mutations": [
+   "-gun_harpoon",
+   "aim engine",
+   "+gun_flame"
+  ]
+ },
+ {
+  "id": "g4-781000",
+  "name": "Rough Bulldog II",
+  "summary": "close-quarters brawler with grapeshot, a flak gun and armour plate",
+  "theme": "wildcardxrammerxraiderxbrawler",
+  "gen": 4,
+  "anchor": false,
+  "elo": 908,
+  "games": 8,
+  "winPct": 0,
+  "weight": 103,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "2 or fewer engines",
+   "steam lift",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Stout Anvil II",
+   "Reckless Fox of Brass"
+  ],
+  "mutations": [
+   "cross sections",
+   "+armour"
+  ]
+ },
+ {
+  "id": "g4-781001",
+  "name": "Far Kestrel",
+  "summary": "long-range kiter with a long gun, a mortar and a flak gun",
+  "theme": "rammerxfortress",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1235,
+  "games": 8,
+  "winPct": 25,
+  "weight": 156,
+  "tags": [
+   "long gun",
+   "mortar",
+   "flak",
+   "harpoon",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "6+ guns"
+  ],
+  "parents": [
+   "Thundering Bullock",
+   "Granite Bastion"
+  ],
+  "mutations": [
+   "cross weapons"
+  ]
+ },
+ {
+  "id": "g4-781002",
+  "name": "Grinning Magpie",
+  "summary": "boarding raider with grapeshot, flak and a crew cannon",
+  "theme": "raiderxbrawler",
+  "gen": 4,
+  "anchor": false,
+  "elo": 889,
+  "games": 8,
+  "winPct": 0,
+  "weight": 138,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "armour 2+ cols",
+   "swivel engine",
+   "2+ bags",
+   "towline",
+   "ballast"
+  ],
+  "parents": [
+   "Reckless Fox of Brass"
+  ],
+  "mutations": [
+   "+engineSwivel",
+   "move boiler"
+  ]
+ },
+ {
+  "id": "g4-781003",
+  "name": "Thundering Prow",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "wildcardxrammer",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1330,
+  "games": 8,
+  "winPct": 38,
+  "weight": 133,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "steam lift",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Anvil Anvil of Dawn",
+   "Thundering Bullock"
+  ],
+  "mutations": [
+   "cross weapons"
+  ]
+ },
+ {
+  "id": "g4-781004",
+  "name": "Cannonade Thunder",
+  "summary": "broadside gunboat with a long gun, armour plate and lift engines",
+  "theme": "fortressxgunboat",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1500,
+  "games": 30,
+  "winPct": 52,
+  "weight": 154,
+  "tags": [
+   "long gun",
+   "armour 2+ cols",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "searchlight",
+   "long hull"
+  ],
+  "parents": [
+   "Broad Volley"
+  ],
+  "mutations": [
+   "hull",
+   "aim engine"
+  ]
+ },
+ {
+  "id": "g4-781005",
+  "name": "Reckless Magpie II",
+  "summary": "boarding raider with grapeshot, flak and a crew cannon",
+  "theme": "raiderxbrawler",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1302,
+  "games": 8,
+  "winPct": 38,
+  "weight": 139,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "armour 2+ cols",
+   "2+ bags",
+   "towline",
+   "ballast"
+  ],
+  "parents": [
+   "Reckless Fox of Brass"
+  ],
+  "mutations": [
+   "aim engine",
+   "+gun"
+  ]
+ },
+ {
+  "id": "g4-781006",
+  "name": "Horned Bullock IV",
+  "summary": "ram-prow bruiser with a long gun, a harpoon and a ram prow",
+  "theme": "raiderxbrawlerxwildcard",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1471,
+  "games": 30,
+  "winPct": 47,
+  "weight": 137,
+  "tags": [
+   "long gun",
+   "harpoon",
+   "ram prow",
+   "crew cannon",
+   "sail",
+   "2+ bags",
+   "towline",
+   "ballast"
+  ],
+  "parents": [
+   "Midnight Corsair II",
+   "Anvil Anvil of Dawn"
+  ],
+  "mutations": [
+   "cross sections"
+  ]
+ },
+ {
+  "id": "g4-781007",
+  "name": "Anvil Ox",
+  "summary": "ram-prow bruiser with a long gun, a flak gun and a harpoon",
+  "theme": "raiderxbrawlerxwildcard",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1187,
+  "games": 8,
+  "winPct": 25,
+  "weight": 141,
+  "tags": [
+   "long gun",
+   "flak",
+   "harpoon",
+   "ram prow",
+   "crew cannon",
+   "sail",
+   "2+ bags",
+   "ballast",
+   "searchlight",
+   "open main deck"
+  ],
+  "parents": [
+   "Midnight Corsair II",
+   "Anvil Anvil of Dawn"
+  ],
+  "mutations": [
+   "cross sections",
+   "+searchlight",
+   "flip deck",
+   "-extinguisher"
+  ]
+ },
+ {
+  "id": "g4-781008",
+  "name": "Bold Bullock",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "rammer",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1422,
+  "games": 8,
+  "winPct": 50,
+  "weight": 134,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "sail",
+   "2 or fewer engines",
+   "searchlight"
+  ],
+  "parents": [
+   "Thundering Bullock"
+  ],
+  "mutations": [
+   "move extinguisher",
+   "+armour"
+  ]
+ },
+ {
+  "id": "g4-781009",
+  "name": "Grim Hammer II",
+  "summary": "close-quarters brawler with grapeshot, a flak gun and armour plate",
+  "theme": "brawler",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1237,
+  "games": 8,
+  "winPct": 25,
+  "weight": 147,
+  "tags": [
+   "grapeshot",
+   "3+ grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "2 or fewer engines",
+   "2+ bags",
+   "2+ boilers",
+   "6+ guns",
+   "short hull"
+  ],
+  "parents": [
+   "(new blood)"
+  ],
+  "mutations": [
+   "fresh random ship"
+  ]
+ },
+ {
+  "id": "g4-781011",
+  "name": "Reckless Jackdaw",
+  "summary": "boarding raider with grapeshot, a flak gun and a crew cannon",
+  "theme": "raiderxbrawler",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1310,
+  "games": 8,
+  "winPct": 38,
+  "weight": 132,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "armour 2+ cols",
+   "2+ bags",
+   "towline",
+   "ballast"
+  ],
+  "parents": [
+   "Reckless Fox of Brass"
+  ],
+  "mutations": [
+   "bags",
+   "-gun_flak",
+   "+extinguisher"
+  ]
+ },
+ {
+  "id": "g4-781012",
+  "name": "Reckless Magpie III",
+  "summary": "boarding raider with grapeshot, a flak gun and a crew cannon",
+  "theme": "fortressxraiderxbrawler",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1332,
+  "games": 8,
+  "winPct": 38,
+  "weight": 140,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "armour 2+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "gas valves"
+  ],
+  "parents": [
+   "Great Tortoise III",
+   "Reckless Fox of Brass"
+  ],
+  "mutations": [
+   "cross weapons"
+  ]
+ },
+ {
+  "id": "g4-781013",
+  "name": "Broad Battery",
+  "summary": "broadside gunboat with a long gun, a mortar and a flak gun",
+  "theme": "raiderxbrawlerxfortress",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1278,
+  "games": 8,
+  "winPct": 38,
+  "weight": 169,
+  "tags": [
+   "long gun",
+   "mortar",
+   "flak",
+   "harpoon",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "6+ guns",
+   "ballast"
+  ],
+  "parents": [
+   "Reckless Fox of Brass",
+   "Great Keep IV"
+  ],
+  "mutations": [
+   "cross weapons",
+   "move boarding",
+   "+gun_scatter"
+  ]
+ },
+ {
+  "id": "g4-781014",
+  "name": "Stout Prow III",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "fortressxgunboatxrammer",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1343,
+  "games": 8,
+  "winPct": 38,
+  "weight": 151,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "upper nest",
+   "keel deck",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Horned Anvil"
+  ],
+  "mutations": [
+   "-searchlight",
+   "+ramProw",
+   "+extinguisher"
+  ]
+ },
+ {
+  "id": "g4-781015",
+  "name": "Bold Prow of Brass",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "rammer",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1387,
+  "games": 8,
+  "winPct": 50,
+  "weight": 123,
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "searchlight"
+  ],
+  "parents": [
+   "Thundering Bullock"
+  ],
+  "mutations": [
+   "move gun_harpoon",
+   "-boarding",
+   "aim engine"
+  ]
+ },
+ {
+  "id": "g4-781016",
+  "name": "Grim Badger",
+  "summary": "close-quarters brawler with grapeshot, a flak gun and armour plate",
+  "theme": "rammerxraiderxbrawler",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1400,
+  "games": 30,
+  "winPct": 37,
+  "weight": 103,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "2 or fewer engines"
+  ],
+  "parents": [
+   "Thundering Bullock",
+   "Midnight Corsair II"
+  ],
+  "mutations": [
+   "cross sections"
+  ]
+ },
+ {
+  "id": "g4-781017",
+  "name": "Granite Barge",
+  "summary": "floating fortress with grapeshot, a flak gun and heavy armour",
+  "theme": "wildcardxraiderxbrawler",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1410,
+  "games": 8,
+  "winPct": 50,
+  "weight": 148,
+  "tags": [
+   "grapeshot",
+   "flak",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "sail",
+   "2 or fewer engines",
+   "2+ bags",
+   "3+ bags",
+   "steam lift",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Anvil Anvil of Dawn",
+   "Midnight Corsair II"
+  ],
+  "mutations": [
+   "cross sections"
+  ]
+ },
+ {
+  "id": "g4-781018",
+  "name": "Quick Moth",
+  "summary": "speedy skiff with a flak gun, a harpoon and armour plate",
+  "theme": "wildcardxrammerxfortress",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1083,
+  "games": 8,
+  "winPct": 13,
+  "weight": 92,
+  "tags": [
+   "flak",
+   "harpoon",
+   "armour 2+ cols",
+   "2 or fewer engines",
+   "gas valves",
+   "long hull"
+  ],
+  "parents": [
+   "Stout Anvil II",
+   "Great Tortoise III"
+  ],
+  "mutations": [
+   "cross sections"
+  ]
+ },
+ {
+  "id": "g4-781019",
+  "name": "Bastion Citadel",
+  "summary": "floating fortress with a long gun, a mortar and a harpoon",
+  "theme": "fortress",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1446,
+  "games": 8,
+  "winPct": 50,
+  "weight": 164,
+  "tags": [
+   "long gun",
+   "mortar",
+   "harpoon",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "open main deck"
+  ],
+  "parents": [
+   "Great Keep IV"
+  ],
+  "mutations": [
+   "+gun_long",
+   "flip deck",
+   "bags"
+  ]
+ },
+ {
+  "id": "g4-781020",
+  "name": "Granite Keep",
+  "summary": "floating fortress with a long gun, a mortar and a mine layer",
+  "theme": "fortress",
+  "gen": 4,
+  "anchor": false,
+  "elo": 1421,
+  "games": 30,
+  "winPct": 40,
+  "weight": 171,
+  "tags": [
+   "long gun",
+   "mortar",
+   "harpoon",
+   "mine layer",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "gas valves"
+  ],
+  "parents": [
+   "Great Tortoise III"
+  ],
+  "mutations": [
+   "+mineLayer",
+   "move armour"
+  ]
+ }
+]

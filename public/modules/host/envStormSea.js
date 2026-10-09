@@ -111,7 +111,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
   const E = state.env;
   let LOWER = IDX('lower'), CAT = IDX('catwalk'), BAY = IDX('bay');
   const fitDecks = () => { LOWER = IDX('lower'); CAT = IDX('catwalk'); BAY = IDX('bay'); }; // (a build fitted at the sky-dock, S.6: the decks are somewhere else)
-  layout.onChange(() => { fitDecks(); pumpSpot.d = LOWER; winchSpot.d = BAY; });
+  layout.onChange(() => { fitDecks(); pumpSpot.d = LOWER; winchSpot.d = BAY; state.stormJob.rods = []; }); // (the lightning rods are put on the decks again, lazily: a part that breaks off mid-flight can take a deck with it, and a rod on deck 2 of a two-deck ship crashed the bots' job picker)
 
   state.stormJob = { rods: [], charge: null, caught: 0, struck: 0, drank: 0, nextT: 0 };
   state.sea = { y: null, flood: 0, spouts: [], survivors: [], hook: null, winch: null, pump: null, rescued: 0, scrapes: 0, t: 0, spray: 0, scrapeT: 0, floodMax: 0, hitT: 0 };

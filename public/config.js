@@ -1633,6 +1633,17 @@ export const config = {
   },
   // PvP "Versus" (PVP.md, Phase V; B.4: two Ships in ONE World, pvp/match.js). OFF in the co-op game.
   // ENABLED is switched on by the lobby's Mode button (VERSUS) or the dev flag host.html?versus=1, and off again when the lobby goes back to a co-op mode.
+  // THE SHIP GENERATOR (modules/host/shipGen.js; the combo finder is tools/shipforge.mjs; the build page's Random ship button and the Versus shelf's Surprise me use it): a valid
+  // ship from nothing, seeded. A "theme" picks the hull and the loadout (long-range kiter, brawler, rammer ...); the numbers here are the generator's dials.
+  SHIPGEN: {
+    HOVER: [34, 52], // the gas level a generated ship hovers at: the bags are sized to her weight for a value in this range (the build gauge allows 25-70)
+    TRIES: 8, // fresh genomes tried before a seed gives up (a ship that cannot be made valid is simply not returned)
+    REPAIRS: 14, // repair passes per try (add a ladder, a boiler, drop the heaviest extra ...)
+    HULL: { LOWER: [7, 14], MAIN_TRIM: [1, 3], CAT_TRIM: [0, 3], KEEL: [2, 4], NEST: [3, 4] }, // deck lengths in 120 px columns: the lower deck, how many columns shorter the main deck and the top deck are, the keel deck and the crow's nest
+    KEEL_CHANCE: 0.22, OPEN_MAIN_CHANCE: 0.12, TALL_NEST_CHANCE: 0.15, NO_MAIN_CHANCE: 0.1, // a keel deck, an open-air main deck, an upper nest, a ship with no main deck at all
+    TWIN_CHANCE: 0.1, BALLAST_CHANCE: 0.2, // a one-bag ship has a twin envelope, a sandbag aft
+    NAME_MAX: 24, // longest ship name (characters)
+  },
   PVP: {
     ENABLED: false, // on = no pacing director, no AI enemies, no gunship, no limp-home spares, no co-op saves, the crew-size scaling is HANDICAP's (simulation.js, crewscale.js, voyage.js, shipSim.js read this)
     MODE: 'broadside', // how a round is won: 'broadside' (sink or wreck the other ship) or 'capture' (an enemy crewman holds Action at the helm CAPTURE_TIME s with no defender in reach: HELM TAKEN). A wreck ends a round in both
@@ -1672,7 +1683,7 @@ export const config = {
     HAND_REACH: 80, // px: how close a boarder stands to the helm / the boiler to work it
     BOARD_RANGE: 1700, // bots look for a way across when the rival's middle is this close (px) and their own ship is calm
     TONNAGE: 1.15, // the shelf's weight cap: the classic ship's mass x this (shipBuild.js budgets mass: 150 x 1.15 = 172), the same for both teams
-    SHELF: { RANDOM: 3, SEED: 11, CROSS: false, RANGE: true }, // (RANGE: the Sniper, Brawler and Ram ships of the range bands are on the shelf after the variants; CROSS: also the Boarder's Barge, the cross-ship dev ship: host.html?versus=1&cross=1) random valid builds on the shelf (seeded mutations of the classic ship that validate and fit the cap) and their seed
+    SHELF: { RANDOM: 3, SEED: 11, CROSS: false, RANGE: true, CHAMPIONS: 4, SURPRISE: true }, // (CHAMPIONS: how many Hall-of-Fame ships of the ship forge (pvp/champions.js) stand on the shelf after the others; SURPRISE: a last card, Surprise me!, that gives each team a brand-new random ship from the generator (shipGen.js); RANGE: the Sniper, Brawler and Ram ships of the range bands are on the shelf after the variants; CROSS: also the Boarder's Barge, the cross-ship dev ship: host.html?versus=1&cross=1) random valid builds on the shelf (seeded mutations of the classic ship that validate and fit the cap) and their seed
     HANDICAP: { // crew-size scaling in Versus (replaces CREW_SCALE.TABLE): only the damage and collateral columns matter, and gently: a small crew takes a little less, a big one a little more
       1: { spawn: 1, count: 1, fire: 1, damage: 0.7, raiders: 1, hp: 1, spread: 0.8, collateral: 0.7 },
       2: { spawn: 1, count: 1, fire: 1, damage: 0.78, raiders: 1, hp: 1, spread: 0.85, collateral: 0.78 },

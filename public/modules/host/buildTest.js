@@ -14,6 +14,8 @@ import { mainShip } from './ships.js';
 import { BUILDS, DECK_ROWS, rowOf, buildLayout, ENGINE_DIRS, dirName, normAngle } from './shipBuild.js';
 import { validate, makePlanner, judgeBotRuns } from './buildCheck.js';
 import { GAS_KEYS, gasKey } from './gases.js';
+import { generateShip, THEMES, THEME_LABEL } from './shipGen.js';
+import { CHAMPIONS } from './pvp/champions.js';
 import { PALETTE, slotsFor, drawDeck, drawBag, resizeBag, erase, setBag, setGas, placeConnector, placePart, pickSlot, whyNot, thingAt, removeAt, setEngineDir, setEngineSwivel, emptyBuild, minimalBuild, snapX, rowAtY, summarize, addArmour } from './buildSlots.js';
 import { blueprintView, drawBlueprint, engineArrow } from './blueprintArt.js';
 import { createPartPictures } from './partArt.js';
@@ -814,6 +816,22 @@ function gasLabel() {
 $('reset').onclick = () => { fitFirst = true; note('', false); edit(BUILDS.classic.map((p) => ({ ...p }))); };
 $('clear').onclick = () => { note('Cleared: an empty sheet. Draw your first deck with the pencil, then the gasbag; the live pane lists what she still needs. Undo brings the old ship back.', false); edit(emptyBuild()); };
 $('minimal').onclick = () => { fitFirst = true; note('A small ship built from nothing with the same tools (decks, bag, parts). Undo goes back.', false); edit(minimalBuild()); };
+// The ship generator (shipGen.js): a valid random ship, any theme or the one picked, drawn onto the blueprint (the editing tools work on it; Undo brings the old ship back).
+{
+  const sel = $('rtheme');
+  for (const [id, label] of [['', 'any kind of ship'], ...THEMES.map((t) => [t, THEME_LABEL[t]])]) { const o = document.createElement('option'); o.value = id; o.textContent = label; sel.appendChild(o); }
+  for (const c of CHAMPIONS) { const o = document.createElement('option'); o.value = 'hof:' + c.id; o.textContent = `Hall of Fame: ${c.name}`; sel.appendChild(o); } // (the forge's champions, to look at and change)
+  let randomSeed = Math.floor(Math.random() * 1e6);
+  $('random').onclick = () => {
+    const champ = CHAMPIONS.find((c) => 'hof:' + c.id === sel.value);
+    if (champ) { note(`${champ.name} (Hall of Fame, Elo ${champ.elo}): ${champ.summary}. Undo goes back; the tools change her.`, false); fitFirst = true; edit(champ.parts.map((p) => ({ ...p }))); return; }
+    const ship = generateShip(++randomSeed, { theme: sel.value || undefined });
+    if (!ship) { note('The generator could not make that kind of ship this time: press the button again.', false); return; }
+    note(`${ship.name}: ${ship.summary}. Weight ${ship.mass}, lift ${ship.lift}, hover at gas ${ship.hover}, ${ship.warns} warning${ship.warns === 1 ? '' : 's'}. Undo goes back; the tools change her.`, false);
+    fitFirst = true;
+    edit(ship.parts);
+  };
+}
 $('copy').onclick = async () => {
   const text = JSON.stringify(parts);
   try { await navigator.clipboard.writeText(text); } catch {

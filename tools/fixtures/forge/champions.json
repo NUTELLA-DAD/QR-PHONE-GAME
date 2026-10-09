@@ -1,0 +1,7487 @@
+[
+ {
+  "id": "g2-779008",
+  "name": "Anvil Anvil of Dawn",
+  "summary": "ram-prow bruiser with a long gun, a harpoon and a ram prow",
+  "theme": "wildcard",
+  "seed": 779008,
+  "gen": 2,
+  "parents": [
+   "Anvil Bullock II"
+  ],
+  "mutations": [
+   "move extinguisher"
+  ],
+  "elo": 1546,
+  "games": 36,
+  "winPct": 63,
+  "record": [
+   22,
+   1,
+   13
+  ],
+  "weight": 153,
+  "lift": 164,
+  "hover": 39.4,
+  "hands": 7,
+  "warns": 0,
+  "parts": "1 long, 1 harpoon, 1 ram, 2 sails, armour 4.8, 2 engines, 4 bags",
+  "tags": [
+   "long gun",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "2+ bags",
+   "3+ bags",
+   "steam lift",
+   "gas valves",
+   "long hull"
+  ],
+  "bandShare": {
+   "short": 0.69,
+   "mid": 0.2,
+   "long": 0.09,
+   "far": 0.02
+  },
+  "byEnvironment": {
+   "sea": {
+    "games": 6,
+    "winPct": 50
+   },
+   "frost": {
+    "games": 10,
+    "winPct": 65
+   },
+   "ember": {
+    "games": 4,
+    "winPct": 75
+   },
+   "fungal": {
+    "games": 4,
+    "winPct": 75
+   },
+   "skyisles": {
+    "games": 4,
+    "winPct": 100
+   },
+   "aether": {
+    "games": 4,
+    "winPct": 50
+   },
+   "storm": {
+    "games": 4,
+    "winPct": 25
+   }
+  },
+  "coop": {
+   "runs": 3,
+   "victories": 0,
+   "stops": 7,
+   "total": 6,
+   "minutes": 71.17305555555555,
+   "errors": 0
+  },
+  "genome": {
+   "v": 1,
+   "theme": "wildcard",
+   "seed": 102010,
+   "decks": {
+    "lower": {
+     "x0": 20,
+     "x1": 1580
+    },
+    "main": {
+     "x0": 20,
+     "x1": 1220
+    },
+    "catwalk": {
+     "x0": 260,
+     "x1": 1220
+    }
+   },
+   "nest": {
+    "w": 3,
+    "u": 0.41931217927485703,
+    "tall": false
+   },
+   "bags": {
+    "n": 4,
+    "twin": false,
+    "hover": 39
+   },
+   "items": [
+    {
+     "t": "helm",
+     "row": "catwalk",
+     "u": 0.866
+    },
+    {
+     "t": "boiler",
+     "row": "main",
+     "u": 0.385,
+     "alt": "lower"
+    },
+    {
+     "t": "coal",
+     "row": "lower",
+     "u": 0.655
+    },
+    {
+     "t": "ammo",
+     "row": "lower",
+     "u": 0.374
+    },
+    {
+     "t": "lookout",
+     "row": "nest",
+     "u": 0.503
+    },
+    {
+     "t": "medbay",
+     "row": "lower",
+     "u": 0.196
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.943
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.181
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.383
+    },
+    {
+     "t": "rack_sword",
+     "row": "main",
+     "u": 0.378
+    },
+    {
+     "t": "rack_hookshot",
+     "row": "catwalk",
+     "u": 0.837
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.385
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.573
+    },
+    {
+     "t": "extinguisher",
+     "row": "catwalk",
+     "u": 0.1
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.093
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.903
+    },
+    {
+     "t": "vent",
+     "row": "main",
+     "u": 0.804
+    },
+    {
+     "t": "vent",
+     "row": "lower",
+     "u": 0.562
+    },
+    {
+     "t": "ladder",
+     "row": "catwalk",
+     "u": 0.335
+    },
+    {
+     "t": "ladder",
+     "row": "main",
+     "u": 0.445
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.075
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.939
+    },
+    {
+     "t": "sail",
+     "row": "catwalk",
+     "u": 0.551
+    },
+    {
+     "t": "sail",
+     "row": "catwalk",
+     "u": 0.934
+    },
+    {
+     "t": "gun_long",
+     "row": "catwalk",
+     "u": 0.865
+    },
+    {
+     "t": "armour",
+     "row": "lower",
+     "u": 0.134
+    },
+    {
+     "t": "armour",
+     "row": "lower",
+     "u": 0.085
+    },
+    {
+     "t": "armour",
+     "row": "catwalk",
+     "u": 0.954
+    },
+    {
+     "t": "gun_harpoon",
+     "row": "catwalk",
+     "u": 0.956
+    },
+    {
+     "t": "ramProw",
+     "row": "main",
+     "u": 0.936
+    },
+    {
+     "t": "lift",
+     "row": "main",
+     "u": 0.486
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 0
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 1
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 2
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 3
+    }
+   ],
+   "mut": [
+    "move extinguisher"
+   ]
+  },
+  "shipParts": [
+   {
+    "part": "frame",
+    "nestRise": 94,
+    "shield": {
+     "cx": 739,
+     "cy": 414,
+     "rx": 1120,
+     "ry": 604
+    }
+   },
+   {
+    "part": "deck",
+    "id": "lower",
+    "row": "lower",
+    "name": "Lower Deck",
+    "x0": 20,
+    "x1": 1580
+   },
+   {
+    "part": "room",
+    "name": "Lower Deck",
+    "p": "lower",
+    "x0": 20,
+    "x1": 1580,
+    "color": "#a8814f"
+   },
+   {
+    "part": "deck",
+    "id": "main",
+    "row": "main",
+    "name": "Main Deck",
+    "x0": 20,
+    "x1": 1220
+   },
+   {
+    "part": "room",
+    "name": "Main Deck",
+    "p": "main",
+    "x0": 20,
+    "x1": 1220,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 620,
+    "xBottom": 620
+   },
+   {
+    "part": "deck",
+    "id": "catwalk",
+    "row": "catwalk",
+    "name": "Top Deck",
+    "x0": 260,
+    "x1": 1220,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 740,
+    "xBottom": 740
+   },
+   {
+    "part": "station",
+    "n": "Helm",
+    "kind": "helm",
+    "p": "catwalk",
+    "x": 1080
+   },
+   {
+    "part": "station",
+    "n": "Boiler",
+    "kind": "boiler",
+    "p": "main",
+    "x": 480
+   },
+   {
+    "part": "pipe",
+    "to": "Helm",
+    "p": "main",
+    "points": [
+     [
+      510,
+      560
+     ],
+     [
+      510,
+      335
+     ],
+     [
+      1080,
+      335
+     ],
+     [
+      1080,
+      445
+     ]
+    ],
+    "valve": [
+     795,
+     335
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Pod Engine",
+    "p": "lower",
+    "x": 110
+   },
+   {
+    "part": "pipe",
+    "to": "Pod Engine",
+    "p": "lower",
+    "points": [
+     [
+      450,
+      610
+     ],
+     [
+      450,
+      690
+     ],
+     [
+      110,
+      690
+     ],
+     [
+      110,
+      765
+     ]
+    ],
+    "valve": [
+     280,
+     690
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 1",
+    "p": "lower",
+    "x": 1490
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 1",
+    "p": "lower",
+    "points": [
+     [
+      510,
+      610
+     ],
+     [
+      510,
+      700
+     ],
+     [
+      1490,
+      700
+     ],
+     [
+      1490,
+      765
+     ]
+    ],
+    "valve": [
+     1000,
+     700
+    ]
+   },
+   {
+    "part": "station",
+    "n": "Coal Bunker",
+    "kind": "coal",
+    "p": "lower",
+    "x": 1080
+   },
+   {
+    "part": "station",
+    "n": "Ammo Hold",
+    "kind": "ammo",
+    "p": "lower",
+    "x": 520
+   },
+   {
+    "part": "medbay",
+    "p": "lower",
+    "x": 320
+   },
+   {
+    "part": "lift",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 880,
+    "xBottom": 880,
+    "repair": {
+     "p": "lower",
+     "x": 845
+    }
+   },
+   {
+    "part": "pipe",
+    "to": "Lift",
+    "p": "main",
+    "points": [
+     [
+      510,
+      560
+     ],
+     [
+      510,
+      535
+     ],
+     [
+      880,
+      535
+     ],
+     [
+      880,
+      615
+     ]
+    ],
+    "valve": [
+     695,
+     535
+    ]
+   },
+   {
+    "part": "ramProw",
+    "p": "main",
+    "x": 1220
+   },
+   {
+    "part": "gun",
+    "n": "Long gun",
+    "p": "catwalk",
+    "x": 1160,
+    "bx": 1192,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 0.77,
+    "gtype": "long"
+   },
+   {
+    "part": "gun",
+    "n": "Harpoon gun",
+    "p": "catwalk",
+    "x": 1000,
+    "bx": 1032,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1,
+    "gtype": "harpoon"
+   },
+   {
+    "part": "sail",
+    "n": "Mainsail",
+    "p": "catwalk",
+    "x": 840
+   },
+   {
+    "part": "sail",
+    "n": "Extra Mainsail 1",
+    "p": "catwalk",
+    "x": 600
+   },
+   {
+    "part": "armour",
+    "p": "lower",
+    "x0": 20,
+    "x1": 380
+   },
+   {
+    "part": "armour",
+    "p": "catwalk",
+    "x0": 1100,
+    "x1": 1220
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 1480
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 320
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "catwalk",
+    "x": 680
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "main",
+    "x": 400
+   },
+   {
+    "part": "rack",
+    "kind": "hookshot",
+    "p": "catwalk",
+    "x": 920
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 640
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 720
+   },
+   {
+    "part": "extinguisher",
+    "p": "catwalk",
+    "x": 360
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 480
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 1120
+   },
+   {
+    "part": "vent",
+    "p": "main",
+    "x": 1000
+   },
+   {
+    "part": "vent",
+    "p": "lower",
+    "x": 880
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 400,
+    "xBottom": 400
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 400,
+    "xBottom": 400
+   },
+   {
+    "part": "deck",
+    "id": "nest",
+    "row": "nest",
+    "name": "Crow's Nest",
+    "x0": 418,
+    "x1": 778,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "nest",
+    "bottom": "catwalk",
+    "xTop": 540,
+    "xBottom": 540
+   },
+   {
+    "part": "station",
+    "n": "Lookout",
+    "kind": "lookout",
+    "p": "nest",
+    "x": 600
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 200,
+    "bx": -67
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 560,
+    "bx": 473
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 1080,
+    "bx": 1013
+   },
+   {
+    "part": "gasValve",
+    "p": "nest",
+    "x": 720,
+    "bx": 1553
+   },
+   {
+    "part": "gasbag",
+    "cx": -86,
+    "cy": 198,
+    "rx": 275,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 464,
+    "cy": 198,
+    "rx": 275,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 1014,
+    "cy": 198,
+    "rx": 275,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 1564,
+    "cy": 198,
+    "rx": 275,
+    "ry": 232
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 80,
+    "bx": -86
+   },
+   {
+    "part": "gasValve",
+    "p": "nest",
+    "x": 480,
+    "bx": 464
+   }
+  ]
+ },
+ {
+  "id": "g2-779010",
+  "name": "Broad Volley",
+  "summary": "broadside gunboat with a long gun, armour plate and lift engines",
+  "theme": "fortressxgunboat",
+  "seed": 779010,
+  "gen": 2,
+  "parents": [
+   "Salvo Volley II"
+  ],
+  "mutations": [
+   "aim engine",
+   "move searchlight",
+   "-rack_hammer"
+  ],
+  "elo": 1533,
+  "games": 50,
+  "winPct": 66,
+  "record": [
+   33,
+   0,
+   17
+  ],
+  "weight": 154,
+  "lift": 155,
+  "hover": 48.6,
+  "hands": 11,
+  "warns": 1,
+  "parts": "1 long, 6 plain guns, armour 2.4, 3 engines (1 up), 4 bags",
+  "tags": [
+   "long gun",
+   "armour 2+ cols",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "searchlight",
+   "long hull"
+  ],
+  "bandShare": {
+   "short": 0.47,
+   "mid": 0.31,
+   "long": 0.19,
+   "far": 0.02
+  },
+  "byEnvironment": {
+   "frost": {
+    "games": 8,
+    "winPct": 25
+   },
+   "ember": {
+    "games": 2,
+    "winPct": 100
+   },
+   "fungal": {
+    "games": 14,
+    "winPct": 79
+   },
+   "aether": {
+    "games": 6,
+    "winPct": 67
+   },
+   "sea": {
+    "games": 10,
+    "winPct": 60
+   },
+   "skyisles": {
+    "games": 4,
+    "winPct": 75
+   },
+   "storm": {
+    "games": 6,
+    "winPct": 83
+   }
+  },
+  "coop": {
+   "runs": 3,
+   "victories": 0,
+   "stops": 8,
+   "total": 8,
+   "minutes": 93.78888888888889,
+   "errors": 0
+  },
+  "genome": {
+   "v": 1,
+   "theme": "fortressxgunboat",
+   "seed": 106050,
+   "decks": {
+    "lower": {
+     "x0": 20,
+     "x1": 1460
+    },
+    "main": {
+     "x0": 140,
+     "x1": 1460
+    },
+    "catwalk": {
+     "x0": 260,
+     "x1": 1460
+    },
+    "keel": {
+     "x0": 500,
+     "x1": 740
+    }
+   },
+   "nest": {
+    "w": 4,
+    "u": 0.6513829121366143,
+    "tall": true
+   },
+   "bags": {
+    "n": 4,
+    "twin": false,
+    "hover": 48
+   },
+   "items": [
+    {
+     "t": "helm",
+     "row": "catwalk",
+     "u": 0.132
+    },
+    {
+     "t": "coal",
+     "row": "lower",
+     "u": 0.253
+    },
+    {
+     "t": "lookout",
+     "row": "nest",
+     "u": 0.411
+    },
+    {
+     "t": "medbay",
+     "row": "main",
+     "u": 0.139
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.192
+    },
+    {
+     "t": "extinguisher",
+     "row": "catwalk",
+     "u": 0.041
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.079
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.176
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.059,
+     "dir": -2.356194490192345
+    },
+    {
+     "t": "armour",
+     "row": "catwalk",
+     "u": 0.215
+    },
+    {
+     "t": "gun",
+     "row": "lower",
+     "u": 0.12
+    },
+    {
+     "t": "gun",
+     "row": "nest",
+     "u": 0.615
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 0
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 1
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 2
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 3
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.499
+    },
+    {
+     "t": "rack_sword",
+     "row": "main",
+     "u": 0.482
+    },
+    {
+     "t": "rack_hookshot",
+     "row": "catwalk",
+     "u": 0.948
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.579
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.579
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.922
+    },
+    {
+     "t": "vent",
+     "row": "main",
+     "u": 0.811
+    },
+    {
+     "t": "vent",
+     "row": "lower",
+     "u": 0.442
+    },
+    {
+     "t": "searchlight",
+     "row": "catwalk",
+     "u": 0.584
+    },
+    {
+     "t": "ladder",
+     "row": "catwalk",
+     "u": 0.529
+    },
+    {
+     "t": "ladder",
+     "row": "main",
+     "u": 0.639
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.82
+    },
+    {
+     "t": "gun",
+     "row": "lower",
+     "u": 0.797
+    },
+    {
+     "t": "gun",
+     "row": "catwalk",
+     "u": 0.845
+    },
+    {
+     "t": "gun",
+     "row": "lower",
+     "u": 0.632
+    },
+    {
+     "t": "gun",
+     "row": "catwalk",
+     "u": 0.428
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.439
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.549
+    },
+    {
+     "t": "gun_long",
+     "row": "catwalk",
+     "u": 0.812
+    },
+    {
+     "t": "boiler",
+     "row": "lower",
+     "u": 0.147
+    },
+    {
+     "t": "ammo",
+     "row": "lower",
+     "u": 0.303
+    }
+   ],
+   "mut": [
+    "aim engine",
+    "move searchlight",
+    "-rack_hammer"
+   ]
+  },
+  "shipParts": [
+   {
+    "part": "frame",
+    "nestRise": 94,
+    "shield": {
+     "cx": 600,
+     "cy": 387,
+     "rx": 980,
+     "ry": 745
+    }
+   },
+   {
+    "part": "deck",
+    "id": "lower",
+    "row": "lower",
+    "name": "Lower Deck",
+    "x0": 20,
+    "x1": 1460
+   },
+   {
+    "part": "room",
+    "name": "Lower Deck",
+    "p": "lower",
+    "x0": 20,
+    "x1": 1460,
+    "color": "#a8814f"
+   },
+   {
+    "part": "deck",
+    "id": "main",
+    "row": "main",
+    "name": "Main Deck",
+    "x0": 140,
+    "x1": 1460
+   },
+   {
+    "part": "room",
+    "name": "Main Deck",
+    "p": "main",
+    "x0": 140,
+    "x1": 1460,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 800,
+    "xBottom": 800
+   },
+   {
+    "part": "deck",
+    "id": "catwalk",
+    "row": "catwalk",
+    "name": "Top Deck",
+    "x0": 260,
+    "x1": 1460,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 870,
+    "xBottom": 870
+   },
+   {
+    "part": "deck",
+    "id": "keel",
+    "row": "keel",
+    "name": "Keel Deck",
+    "x0": 500,
+    "x1": 740
+   },
+   {
+    "part": "room",
+    "name": "Keel Deck",
+    "p": "keel",
+    "x0": 500,
+    "x1": 740,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "lower",
+    "bottom": "keel",
+    "xTop": 620,
+    "xBottom": 620
+   },
+   {
+    "part": "station",
+    "n": "Helm",
+    "kind": "helm",
+    "p": "catwalk",
+    "x": 400
+   },
+   {
+    "part": "station",
+    "n": "Boiler",
+    "kind": "boiler",
+    "p": "lower",
+    "x": 240
+   },
+   {
+    "part": "pipe",
+    "to": "Helm",
+    "p": "lower",
+    "points": [
+     [
+      270,
+      710
+     ],
+     [
+      270,
+      335
+     ],
+     [
+      400,
+      335
+     ],
+     [
+      400,
+      445
+     ]
+    ],
+    "valve": [
+     335,
+     335
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Pod Engine",
+    "p": "lower",
+    "x": 110
+   },
+   {
+    "part": "pipe",
+    "to": "Pod Engine",
+    "p": "lower",
+    "points": [
+     [
+      210,
+      710
+     ],
+     [
+      210,
+      665
+     ],
+     [
+      110,
+      665
+     ],
+     [
+      110,
+      765
+     ]
+    ],
+    "valve": [
+     160,
+     665
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 1",
+    "p": "lower",
+    "x": 50,
+    "dir": -2.3562
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 1",
+    "p": "lower",
+    "points": [
+     [
+      210,
+      710
+     ],
+     [
+      210,
+      675
+     ],
+     [
+      50,
+      675
+     ],
+     [
+      50,
+      765
+     ]
+    ],
+    "valve": [
+     130,
+     675
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 2",
+    "p": "lower",
+    "x": 1310
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 2",
+    "p": "lower",
+    "points": [
+     [
+      270,
+      710
+     ],
+     [
+      270,
+      685
+     ],
+     [
+      1310,
+      685
+     ],
+     [
+      1310,
+      765
+     ]
+    ],
+    "valve": [
+     790,
+     685
+    ]
+   },
+   {
+    "part": "station",
+    "n": "Coal Bunker",
+    "kind": "coal",
+    "p": "lower",
+    "x": 440
+   },
+   {
+    "part": "station",
+    "n": "Ammo Hold",
+    "kind": "ammo",
+    "p": "lower",
+    "x": 520
+   },
+   {
+    "part": "medbay",
+    "p": "main",
+    "x": 320
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 1",
+    "p": "lower",
+    "x": 600,
+    "bx": 510,
+    "by": 812,
+    "aim": 2.15,
+    "arc": 0.7
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 2",
+    "p": "lower",
+    "x": 1160,
+    "bx": 1250,
+    "by": 812,
+    "aim": 1,
+    "arc": 0.7
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 3",
+    "p": "catwalk",
+    "x": 1280,
+    "bx": 1312,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 4",
+    "p": "lower",
+    "x": 920,
+    "bx": 1010,
+    "by": 812,
+    "aim": 1,
+    "arc": 0.7
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 5",
+    "p": "catwalk",
+    "x": 760,
+    "bx": 792,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1
+   },
+   {
+    "part": "gun",
+    "n": "Long gun",
+    "p": "catwalk",
+    "x": 1200,
+    "bx": 1232,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 0.77,
+    "gtype": "long"
+   },
+   {
+    "part": "armour",
+    "p": "catwalk",
+    "x0": 380,
+    "x1": 620
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 320
+   },
+   {
+    "part": "extinguisher",
+    "p": "catwalk",
+    "x": 320
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 480
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "catwalk",
+    "x": 840
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "main",
+    "x": 760
+   },
+   {
+    "part": "rack",
+    "kind": "hookshot",
+    "p": "catwalk",
+    "x": 1400
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 840
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 920
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 1360
+   },
+   {
+    "part": "vent",
+    "p": "main",
+    "x": 1200
+   },
+   {
+    "part": "vent",
+    "p": "lower",
+    "x": 680
+   },
+   {
+    "part": "searchlight",
+    "n": "Extra Searchlight 1",
+    "p": "catwalk",
+    "x": 960,
+    "bx": 960,
+    "by": 370,
+    "aim": -1.5707963267948966,
+    "arc": 1.5,
+    "len": 44
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 680
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "catwalk",
+    "x": 1040
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 1040,
+    "xBottom": 1040
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 1000,
+    "xBottom": 1000
+   },
+   {
+    "part": "deck",
+    "id": "nest",
+    "row": "nest",
+    "name": "Crow's Nest",
+    "x0": 542,
+    "x1": 1022,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "nest",
+    "bottom": "catwalk",
+    "xTop": 700,
+    "xBottom": 700
+   },
+   {
+    "part": "deck",
+    "id": "crow2",
+    "row": "crow2",
+    "name": "Upper Nest",
+    "x0": 662,
+    "x1": 902,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "crow2",
+    "bottom": "nest",
+    "xTop": 780,
+    "xBottom": 780
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 6",
+    "p": "nest",
+    "x": 840,
+    "bx": 850,
+    "by": -76,
+    "aim": -1.2,
+    "arc": 1.2
+   },
+   {
+    "part": "station",
+    "n": "Lookout",
+    "kind": "lookout",
+    "p": "nest",
+    "x": 720
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 240,
+    "bx": -82
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 560,
+    "bx": 363
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 680,
+    "bx": 808
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 1120,
+    "bx": 1253
+   },
+   {
+    "part": "gasbag",
+    "cx": -120,
+    "cy": 198,
+    "rx": 240,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 360,
+    "cy": 198,
+    "rx": 240,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 840,
+    "cy": 198,
+    "rx": 240,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 1320,
+    "cy": 198,
+    "rx": 240,
+    "ry": 232
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 400,
+    "bx": -120
+   },
+   {
+    "part": "gasValve",
+    "p": "catwalk",
+    "x": 600,
+    "bx": 360
+   },
+   {
+    "part": "gasValve",
+    "p": "nest",
+    "x": 920,
+    "bx": 840
+   },
+   {
+    "part": "gasValve",
+    "p": "catwalk",
+    "x": 1120,
+    "bx": 1320
+   }
+  ]
+ },
+ {
+  "id": "g4-781004",
+  "name": "Cannonade Thunder",
+  "summary": "broadside gunboat with a long gun, armour plate and lift engines",
+  "theme": "fortressxgunboat",
+  "seed": 781004,
+  "gen": 4,
+  "parents": [
+   "Broad Volley"
+  ],
+  "mutations": [
+   "hull",
+   "aim engine"
+  ],
+  "elo": 1500,
+  "games": 30,
+  "winPct": 52,
+  "record": [
+   15,
+   1,
+   14
+  ],
+  "weight": 154,
+  "lift": 155,
+  "hover": 48.2,
+  "hands": 11,
+  "warns": 1,
+  "parts": "1 long, 6 plain guns, armour 2.4, 3 engines (1 up), 4 bags",
+  "tags": [
+   "long gun",
+   "armour 2+ cols",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "searchlight",
+   "long hull"
+  ],
+  "bandShare": {
+   "short": 0.48,
+   "mid": 0.28,
+   "long": 0.21,
+   "far": 0.02
+  },
+  "byEnvironment": {
+   "aether": {
+    "games": 4,
+    "winPct": 25
+   },
+   "skyisles": {
+    "games": 6,
+    "winPct": 100
+   },
+   "storm": {
+    "games": 4,
+    "winPct": 50
+   },
+   "sea": {
+    "games": 4,
+    "winPct": 75
+   },
+   "frost": {
+    "games": 4,
+    "winPct": 38
+   },
+   "fungal": {
+    "games": 4,
+    "winPct": 25
+   },
+   "ember": {
+    "games": 4,
+    "winPct": 25
+   }
+  },
+  "coop": {
+   "runs": 3,
+   "victories": 0,
+   "stops": 7,
+   "total": 6,
+   "minutes": 71.18,
+   "errors": 0
+  },
+  "genome": {
+   "v": 1,
+   "theme": "fortressxgunboat",
+   "seed": 106050,
+   "decks": {
+    "lower": {
+     "x0": 20,
+     "x1": 1460
+    },
+    "main": {
+     "x0": 140,
+     "x1": 1340
+    },
+    "catwalk": {
+     "x0": 260,
+     "x1": 1460
+    },
+    "keel": {
+     "x0": 500,
+     "x1": 740
+    }
+   },
+   "nest": {
+    "w": 4,
+    "u": 0.6513829121366143,
+    "tall": true
+   },
+   "bags": {
+    "n": 4,
+    "twin": false,
+    "hover": 48
+   },
+   "items": [
+    {
+     "t": "helm",
+     "row": "catwalk",
+     "u": 0.132
+    },
+    {
+     "t": "coal",
+     "row": "lower",
+     "u": 0.253
+    },
+    {
+     "t": "lookout",
+     "row": "nest",
+     "u": 0.411
+    },
+    {
+     "t": "medbay",
+     "row": "main",
+     "u": 0.139
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.192
+    },
+    {
+     "t": "extinguisher",
+     "row": "catwalk",
+     "u": 0.041
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.079
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.176
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.059,
+     "dir": -0.7853981633974483
+    },
+    {
+     "t": "armour",
+     "row": "catwalk",
+     "u": 0.215
+    },
+    {
+     "t": "gun",
+     "row": "lower",
+     "u": 0.12
+    },
+    {
+     "t": "gun",
+     "row": "nest",
+     "u": 0.615
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 0
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 1
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 2
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 3
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.499
+    },
+    {
+     "t": "rack_sword",
+     "row": "main",
+     "u": 0.482
+    },
+    {
+     "t": "rack_hookshot",
+     "row": "catwalk",
+     "u": 0.948
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.579
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.579
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.922
+    },
+    {
+     "t": "vent",
+     "row": "main",
+     "u": 0.811
+    },
+    {
+     "t": "vent",
+     "row": "lower",
+     "u": 0.442
+    },
+    {
+     "t": "searchlight",
+     "row": "catwalk",
+     "u": 0.584
+    },
+    {
+     "t": "ladder",
+     "row": "catwalk",
+     "u": 0.529
+    },
+    {
+     "t": "ladder",
+     "row": "main",
+     "u": 0.639
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.82
+    },
+    {
+     "t": "gun",
+     "row": "lower",
+     "u": 0.797
+    },
+    {
+     "t": "gun",
+     "row": "catwalk",
+     "u": 0.845
+    },
+    {
+     "t": "gun",
+     "row": "lower",
+     "u": 0.632
+    },
+    {
+     "t": "gun",
+     "row": "catwalk",
+     "u": 0.428
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.439
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.549
+    },
+    {
+     "t": "gun_long",
+     "row": "catwalk",
+     "u": 0.812
+    },
+    {
+     "t": "boiler",
+     "row": "lower",
+     "u": 0.147
+    },
+    {
+     "t": "ammo",
+     "row": "lower",
+     "u": 0.303
+    }
+   ],
+   "mut": [
+    "hull",
+    "aim engine"
+   ]
+  },
+  "shipParts": [
+   {
+    "part": "frame",
+    "nestRise": 94,
+    "shield": {
+     "cx": 596,
+     "cy": 387,
+     "rx": 980,
+     "ry": 745
+    }
+   },
+   {
+    "part": "deck",
+    "id": "lower",
+    "row": "lower",
+    "name": "Lower Deck",
+    "x0": 20,
+    "x1": 1460
+   },
+   {
+    "part": "room",
+    "name": "Lower Deck",
+    "p": "lower",
+    "x0": 20,
+    "x1": 1460,
+    "color": "#a8814f"
+   },
+   {
+    "part": "deck",
+    "id": "main",
+    "row": "main",
+    "name": "Main Deck",
+    "x0": 140,
+    "x1": 1340
+   },
+   {
+    "part": "room",
+    "name": "Main Deck",
+    "p": "main",
+    "x0": 140,
+    "x1": 1340,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 740,
+    "xBottom": 740
+   },
+   {
+    "part": "deck",
+    "id": "catwalk",
+    "row": "catwalk",
+    "name": "Top Deck",
+    "x0": 260,
+    "x1": 1460,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 810,
+    "xBottom": 810
+   },
+   {
+    "part": "deck",
+    "id": "keel",
+    "row": "keel",
+    "name": "Keel Deck",
+    "x0": 500,
+    "x1": 740
+   },
+   {
+    "part": "room",
+    "name": "Keel Deck",
+    "p": "keel",
+    "x0": 500,
+    "x1": 740,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "lower",
+    "bottom": "keel",
+    "xTop": 620,
+    "xBottom": 620
+   },
+   {
+    "part": "station",
+    "n": "Helm",
+    "kind": "helm",
+    "p": "catwalk",
+    "x": 400
+   },
+   {
+    "part": "station",
+    "n": "Boiler",
+    "kind": "boiler",
+    "p": "lower",
+    "x": 240
+   },
+   {
+    "part": "pipe",
+    "to": "Helm",
+    "p": "lower",
+    "points": [
+     [
+      270,
+      710
+     ],
+     [
+      270,
+      335
+     ],
+     [
+      400,
+      335
+     ],
+     [
+      400,
+      445
+     ]
+    ],
+    "valve": [
+     335,
+     335
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Pod Engine",
+    "p": "lower",
+    "x": 110
+   },
+   {
+    "part": "pipe",
+    "to": "Pod Engine",
+    "p": "lower",
+    "points": [
+     [
+      210,
+      710
+     ],
+     [
+      210,
+      665
+     ],
+     [
+      110,
+      665
+     ],
+     [
+      110,
+      765
+     ]
+    ],
+    "valve": [
+     160,
+     665
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 1",
+    "p": "lower",
+    "x": 50,
+    "dir": -0.7854
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 1",
+    "p": "lower",
+    "points": [
+     [
+      210,
+      710
+     ],
+     [
+      210,
+      675
+     ],
+     [
+      50,
+      675
+     ],
+     [
+      50,
+      765
+     ]
+    ],
+    "valve": [
+     130,
+     675
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 2",
+    "p": "lower",
+    "x": 1310
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 2",
+    "p": "lower",
+    "points": [
+     [
+      270,
+      710
+     ],
+     [
+      270,
+      685
+     ],
+     [
+      1310,
+      685
+     ],
+     [
+      1310,
+      765
+     ]
+    ],
+    "valve": [
+     790,
+     685
+    ]
+   },
+   {
+    "part": "station",
+    "n": "Coal Bunker",
+    "kind": "coal",
+    "p": "lower",
+    "x": 440
+   },
+   {
+    "part": "station",
+    "n": "Ammo Hold",
+    "kind": "ammo",
+    "p": "lower",
+    "x": 520
+   },
+   {
+    "part": "medbay",
+    "p": "main",
+    "x": 320
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 1",
+    "p": "lower",
+    "x": 600,
+    "bx": 510,
+    "by": 812,
+    "aim": 2.15,
+    "arc": 0.7
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 2",
+    "p": "lower",
+    "x": 1160,
+    "bx": 1250,
+    "by": 812,
+    "aim": 1,
+    "arc": 0.7
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 3",
+    "p": "catwalk",
+    "x": 1280,
+    "bx": 1312,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 4",
+    "p": "lower",
+    "x": 920,
+    "bx": 1010,
+    "by": 812,
+    "aim": 1,
+    "arc": 0.7
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 5",
+    "p": "catwalk",
+    "x": 760,
+    "bx": 792,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1
+   },
+   {
+    "part": "gun",
+    "n": "Long gun",
+    "p": "catwalk",
+    "x": 1200,
+    "bx": 1232,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 0.77,
+    "gtype": "long"
+   },
+   {
+    "part": "armour",
+    "p": "catwalk",
+    "x0": 380,
+    "x1": 620
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 320
+   },
+   {
+    "part": "extinguisher",
+    "p": "catwalk",
+    "x": 320
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 480
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "catwalk",
+    "x": 840
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "main",
+    "x": 720
+   },
+   {
+    "part": "rack",
+    "kind": "hookshot",
+    "p": "catwalk",
+    "x": 1400
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 840
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 840
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 1360
+   },
+   {
+    "part": "vent",
+    "p": "main",
+    "x": 1120
+   },
+   {
+    "part": "vent",
+    "p": "lower",
+    "x": 680
+   },
+   {
+    "part": "searchlight",
+    "n": "Extra Searchlight 1",
+    "p": "catwalk",
+    "x": 960,
+    "bx": 960,
+    "by": 370,
+    "aim": -1.5707963267948966,
+    "arc": 1.5,
+    "len": 44
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 680
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "catwalk",
+    "x": 1040
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 1040,
+    "xBottom": 1040
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 840,
+    "xBottom": 840
+   },
+   {
+    "part": "deck",
+    "id": "nest",
+    "row": "nest",
+    "name": "Crow's Nest",
+    "x0": 538,
+    "x1": 1018,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "nest",
+    "bottom": "catwalk",
+    "xTop": 700,
+    "xBottom": 700
+   },
+   {
+    "part": "deck",
+    "id": "crow2",
+    "row": "crow2",
+    "name": "Upper Nest",
+    "x0": 658,
+    "x1": 898,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "crow2",
+    "bottom": "nest",
+    "xTop": 780,
+    "xBottom": 780
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 6",
+    "p": "nest",
+    "x": 840,
+    "bx": 850,
+    "by": -76,
+    "aim": -1.2,
+    "arc": 1.2
+   },
+   {
+    "part": "station",
+    "n": "Lookout",
+    "kind": "lookout",
+    "p": "nest",
+    "x": 720
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 240,
+    "bx": -86
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 560,
+    "bx": 359
+   },
+   {
+    "part": "gasValve",
+    "p": "catwalk",
+    "x": 640,
+    "bx": 804
+   },
+   {
+    "part": "gasValve",
+    "p": "catwalk",
+    "x": 1120,
+    "bx": 1249
+   },
+   {
+    "part": "gasbag",
+    "cx": -124,
+    "cy": 198,
+    "rx": 240,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 356,
+    "cy": 198,
+    "rx": 240,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 836,
+    "cy": 198,
+    "rx": 240,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 1316,
+    "cy": 198,
+    "rx": 240,
+    "ry": 232
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 400,
+    "bx": -124
+   },
+   {
+    "part": "gasValve",
+    "p": "catwalk",
+    "x": 520,
+    "bx": 356
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 920,
+    "bx": 836
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 1200,
+    "bx": 1316
+   }
+  ]
+ },
+ {
+  "id": "g4-781006",
+  "name": "Horned Bullock IV",
+  "summary": "ram-prow bruiser with a long gun, a harpoon and a ram prow",
+  "theme": "raiderxbrawlerxwildcard",
+  "seed": 781006,
+  "gen": 4,
+  "parents": [
+   "Midnight Corsair II",
+   "Anvil Anvil of Dawn"
+  ],
+  "mutations": [
+   "cross sections"
+  ],
+  "elo": 1471,
+  "games": 30,
+  "winPct": 47,
+  "record": [
+   14,
+   0,
+   16
+  ],
+  "weight": 137,
+  "lift": 147,
+  "hover": 40.6,
+  "hands": 7,
+  "warns": 0,
+  "parts": "1 long, 1 harpoon, 1 ram, 1 crew cannon, 1 sails, armour 1.2, 3 engines, 2 bags",
+  "tags": [
+   "long gun",
+   "harpoon",
+   "ram prow",
+   "crew cannon",
+   "sail",
+   "2+ bags",
+   "towline",
+   "ballast"
+  ],
+  "bandShare": {
+   "short": 0.67,
+   "mid": 0.22,
+   "long": 0.08,
+   "far": 0.03
+  },
+  "byEnvironment": {
+   "skyisles": {
+    "games": 8,
+    "winPct": 25
+   },
+   "storm": {
+    "games": 6,
+    "winPct": 50
+   },
+   "sea": {
+    "games": 6,
+    "winPct": 67
+   },
+   "frost": {
+    "games": 4,
+    "winPct": 75
+   },
+   "aether": {
+    "games": 2,
+    "winPct": 50
+   },
+   "fungal": {
+    "games": 2,
+    "winPct": 0
+   },
+   "ember": {
+    "games": 2,
+    "winPct": 50
+   }
+  },
+  "coop": {
+   "runs": 3,
+   "victories": 0,
+   "stops": 4,
+   "total": 8,
+   "minutes": 90.8125,
+   "errors": 0
+  },
+  "genome": {
+   "v": 1,
+   "theme": "raiderxbrawlerxwildcard",
+   "seed": 103626,
+   "decks": {
+    "lower": {
+     "x0": 20,
+     "x1": 1340
+    },
+    "main": {
+     "x0": 140,
+     "x1": 1220
+    },
+    "catwalk": {
+     "x0": 260,
+     "x1": 980
+    }
+   },
+   "nest": {
+    "w": 3,
+    "u": 0.5854677607305347,
+    "tall": false
+   },
+   "bags": {
+    "n": 2,
+    "twin": false,
+    "hover": 41
+   },
+   "items": [
+    {
+     "t": "ballast",
+     "row": "main",
+     "u": 0.217
+    },
+    {
+     "t": "coal",
+     "row": "lower",
+     "u": 0.263
+    },
+    {
+     "t": "lookout",
+     "row": "nest",
+     "u": 0.393
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.04
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.254
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.041
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.045
+    },
+    {
+     "t": "crewCannon",
+     "row": "catwalk",
+     "u": 0.205
+    },
+    {
+     "t": "rack_sword",
+     "row": "lower",
+     "u": 0.238
+    },
+    {
+     "t": "rack_towline",
+     "row": "catwalk",
+     "u": 0.072,
+     "alt": "main"
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.457
+    },
+    {
+     "t": "rack_sword",
+     "row": "main",
+     "u": 0.388
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.447
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.447
+    },
+    {
+     "t": "vent",
+     "row": "lower",
+     "u": 0.517
+    },
+    {
+     "t": "ladder",
+     "row": "catwalk",
+     "u": 0.397
+    },
+    {
+     "t": "ladder",
+     "row": "main",
+     "u": 0.507
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.382,
+     "dir": 0.7853981633974483
+    },
+    {
+     "t": "helm",
+     "row": "catwalk",
+     "u": 0.518
+    },
+    {
+     "t": "boiler",
+     "row": "main",
+     "u": 0.585
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.943
+    },
+    {
+     "t": "rack_hookshot",
+     "row": "catwalk",
+     "u": 0.837
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.903
+    },
+    {
+     "t": "vent",
+     "row": "main",
+     "u": 0.804
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.939
+    },
+    {
+     "t": "sail",
+     "row": "catwalk",
+     "u": 0.934
+    },
+    {
+     "t": "gun_long",
+     "row": "catwalk",
+     "u": 0.865
+    },
+    {
+     "t": "armour",
+     "row": "catwalk",
+     "u": 0.954
+    },
+    {
+     "t": "gun_harpoon",
+     "row": "catwalk",
+     "u": 0.956
+    },
+    {
+     "t": "ramProw",
+     "row": "main",
+     "u": 0.936
+    },
+    {
+     "t": "ammo",
+     "row": "main",
+     "u": 0.554
+    },
+    {
+     "t": "medbay",
+     "row": "lower",
+     "u": 0.84
+    }
+   ],
+   "mut": [
+    "cross sections"
+   ]
+  },
+  "shipParts": [
+   {
+    "part": "frame",
+    "nestRise": 94,
+    "shield": {
+     "cx": 671,
+     "cy": 414,
+     "rx": 1080,
+     "ry": 604
+    }
+   },
+   {
+    "part": "deck",
+    "id": "lower",
+    "row": "lower",
+    "name": "Lower Deck",
+    "x0": 20,
+    "x1": 1340
+   },
+   {
+    "part": "room",
+    "name": "Lower Deck",
+    "p": "lower",
+    "x0": 20,
+    "x1": 1340,
+    "color": "#a8814f"
+   },
+   {
+    "part": "deck",
+    "id": "main",
+    "row": "main",
+    "name": "Main Deck",
+    "x0": 140,
+    "x1": 1220
+   },
+   {
+    "part": "room",
+    "name": "Main Deck",
+    "p": "main",
+    "x0": 140,
+    "x1": 1220,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 680,
+    "xBottom": 680
+   },
+   {
+    "part": "deck",
+    "id": "catwalk",
+    "row": "catwalk",
+    "name": "Top Deck",
+    "x0": 260,
+    "x1": 980,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 610,
+    "xBottom": 610
+   },
+   {
+    "part": "station",
+    "n": "Helm",
+    "kind": "helm",
+    "p": "catwalk",
+    "x": 640
+   },
+   {
+    "part": "station",
+    "n": "Boiler",
+    "kind": "boiler",
+    "p": "main",
+    "x": 800
+   },
+   {
+    "part": "pipe",
+    "to": "Helm",
+    "p": "main",
+    "points": [
+     [
+      770,
+      560
+     ],
+     [
+      770,
+      335
+     ],
+     [
+      640,
+      335
+     ],
+     [
+      640,
+      445
+     ]
+    ],
+    "valve": [
+     705,
+     335
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Pod Engine",
+    "p": "lower",
+    "x": 50
+   },
+   {
+    "part": "pipe",
+    "to": "Pod Engine",
+    "p": "lower",
+    "points": [
+     [
+      770,
+      610
+     ],
+     [
+      770,
+      690
+     ],
+     [
+      50,
+      690
+     ],
+     [
+      50,
+      765
+     ]
+    ],
+    "valve": [
+     410,
+     690
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 1",
+    "p": "lower",
+    "x": 170,
+    "dir": 0.7854
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 1",
+    "p": "lower",
+    "points": [
+     [
+      770,
+      610
+     ],
+     [
+      770,
+      700
+     ],
+     [
+      170,
+      700
+     ],
+     [
+      170,
+      765
+     ]
+    ],
+    "valve": [
+     470,
+     700
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 2",
+    "p": "lower",
+    "x": 1250
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 2",
+    "p": "lower",
+    "points": [
+     [
+      830,
+      610
+     ],
+     [
+      830,
+      710
+     ],
+     [
+      1250,
+      710
+     ],
+     [
+      1250,
+      765
+     ]
+    ],
+    "valve": [
+     1040,
+     710
+    ]
+   },
+   {
+    "part": "station",
+    "n": "Coal Bunker",
+    "kind": "coal",
+    "p": "lower",
+    "x": 320
+   },
+   {
+    "part": "station",
+    "n": "Ammo Hold",
+    "kind": "ammo",
+    "p": "main",
+    "x": 880
+   },
+   {
+    "part": "medbay",
+    "p": "lower",
+    "x": 1120
+   },
+   {
+    "part": "ramProw",
+    "p": "main",
+    "x": 1220
+   },
+   {
+    "part": "crewCannon",
+    "n": "Crew Cannon",
+    "p": "catwalk",
+    "x": 400,
+    "aim": 3.941592653589793,
+    "arc": 0.75
+   },
+   {
+    "part": "gun",
+    "n": "Long gun",
+    "p": "catwalk",
+    "x": 880,
+    "bx": 912,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 0.77,
+    "gtype": "long"
+   },
+   {
+    "part": "gun",
+    "n": "Harpoon gun",
+    "p": "catwalk",
+    "x": 800,
+    "bx": 832,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1,
+    "gtype": "harpoon"
+   },
+   {
+    "part": "sail",
+    "n": "Mainsail",
+    "p": "catwalk",
+    "x": 720
+   },
+   {
+    "part": "armour",
+    "p": "catwalk",
+    "x0": 860,
+    "x1": 980
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 80
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 400
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 480
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "lower",
+    "x": 400
+   },
+   {
+    "part": "rack",
+    "kind": "towline",
+    "p": "catwalk",
+    "x": 320
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "main",
+    "x": 560
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 600
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 640
+   },
+   {
+    "part": "vent",
+    "p": "lower",
+    "x": 720
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 1280
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 920
+   },
+   {
+    "part": "vent",
+    "p": "main",
+    "x": 1000
+   },
+   {
+    "part": "ballast",
+    "p": "main",
+    "x": 360
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 520,
+    "xBottom": 520
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 560,
+    "xBottom": 560
+   },
+   {
+    "part": "deck",
+    "id": "nest",
+    "row": "nest",
+    "name": "Crow's Nest",
+    "x0": 638,
+    "x1": 998,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "nest",
+    "bottom": "catwalk",
+    "xTop": 940,
+    "xBottom": 940
+   },
+   {
+    "part": "station",
+    "n": "Lookout",
+    "kind": "lookout",
+    "p": "nest",
+    "x": 760
+   },
+   {
+    "part": "gasbag",
+    "cx": 141,
+    "cy": 198,
+    "rx": 530,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 1201,
+    "cy": 198,
+    "rx": 530,
+    "ry": 232
+   }
+  ]
+ },
+ {
+  "id": "g4-781019",
+  "name": "Bastion Citadel",
+  "summary": "floating fortress with a long gun, a mortar and a harpoon",
+  "theme": "fortress",
+  "seed": 781019,
+  "gen": 4,
+  "parents": [
+   "Great Keep IV"
+  ],
+  "mutations": [
+   "+gun_long",
+   "flip deck",
+   "bags"
+  ],
+  "elo": 1446,
+  "games": 8,
+  "winPct": 50,
+  "record": [
+   4,
+   0,
+   4
+  ],
+  "weight": 164,
+  "lift": 168,
+  "hover": 45.8,
+  "hands": 9,
+  "warns": 0,
+  "parts": "1 long, 1 mortar, 1 harpoon, 3 plain guns, armour 7.2, 3 engines, 4 bags",
+  "tags": [
+   "long gun",
+   "mortar",
+   "harpoon",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "gas valves",
+   "open main deck"
+  ],
+  "bandShare": {
+   "short": 0.32,
+   "mid": 0.49,
+   "long": 0.16,
+   "far": 0.03
+  },
+  "byEnvironment": {
+   "aether": {
+    "games": 2,
+    "winPct": 100
+   },
+   "skyisles": {
+    "games": 2,
+    "winPct": 50
+   },
+   "storm": {
+    "games": 2,
+    "winPct": 50
+   },
+   "sea": {
+    "games": 2,
+    "winPct": 0
+   }
+  },
+  "coop": {
+   "runs": 3,
+   "victories": 0,
+   "stops": 2,
+   "total": 8,
+   "minutes": 43.26222222222222,
+   "errors": 0
+  },
+  "genome": {
+   "v": 1,
+   "theme": "fortress",
+   "seed": 103828,
+   "decks": {
+    "lower": {
+     "x0": 20,
+     "x1": 1220
+    },
+    "main": {
+     "x0": 140,
+     "x1": 1100,
+     "out": true
+    },
+    "catwalk": {
+     "x0": 500,
+     "x1": 980
+    },
+    "keel": {
+     "x0": 260,
+     "x1": 620
+    }
+   },
+   "nest": {
+    "w": 3,
+    "u": 0.39068411476910114,
+    "tall": false
+   },
+   "bags": {
+    "n": 4,
+    "twin": false,
+    "hover": 45
+   },
+   "items": [
+    {
+     "t": "helm",
+     "row": "catwalk",
+     "u": 0.765
+    },
+    {
+     "t": "boiler",
+     "row": "main",
+     "u": 0.441,
+     "alt": "lower"
+    },
+    {
+     "t": "coal",
+     "row": "lower",
+     "u": 0.711
+    },
+    {
+     "t": "ammo",
+     "row": "lower",
+     "u": 0.525
+    },
+    {
+     "t": "lookout",
+     "row": "nest",
+     "u": 0.393
+    },
+    {
+     "t": "medbay",
+     "row": "main",
+     "u": 0.164
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.799
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.121
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.504
+    },
+    {
+     "t": "rack_sword",
+     "row": "main",
+     "u": 0.438
+    },
+    {
+     "t": "rack_hookshot",
+     "row": "catwalk",
+     "u": 0.957
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.441
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.441
+    },
+    {
+     "t": "extinguisher",
+     "row": "catwalk",
+     "u": 0.095
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.053
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.967
+    },
+    {
+     "t": "vent",
+     "row": "lower",
+     "u": 0.521
+    },
+    {
+     "t": "ladder",
+     "row": "catwalk",
+     "u": 0.391
+    },
+    {
+     "t": "ladder",
+     "row": "main",
+     "u": 0.501
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.116
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.81
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.14
+    },
+    {
+     "t": "armour",
+     "row": "main",
+     "u": 0.183
+    },
+    {
+     "t": "armour",
+     "row": "catwalk",
+     "u": 0.108
+    },
+    {
+     "t": "armour",
+     "row": "catwalk",
+     "u": 0.829
+    },
+    {
+     "t": "armour",
+     "row": "main",
+     "u": 0.041
+    },
+    {
+     "t": "gun",
+     "row": "catwalk",
+     "u": 0.795
+    },
+    {
+     "t": "gun",
+     "row": "lower",
+     "u": 0.137
+    },
+    {
+     "t": "gun",
+     "row": "catwalk",
+     "u": 0.463
+    },
+    {
+     "t": "gun_mortar",
+     "row": "catwalk",
+     "u": 0.369
+    },
+    {
+     "t": "gun_long",
+     "row": "catwalk",
+     "u": 0.146
+    },
+    {
+     "t": "gun_flak",
+     "row": "catwalk",
+     "u": 0.617
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.363
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 0
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 1
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 2
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 3
+    },
+    {
+     "t": "gun_harpoon",
+     "row": "lower",
+     "u": 0.568
+    },
+    {
+     "t": "gun",
+     "row": "catwalk",
+     "u": 0.473
+    },
+    {
+     "t": "gun_long",
+     "row": "catwalk",
+     "u": 0.454
+    }
+   ],
+   "mut": [
+    "+gun_long",
+    "flip deck",
+    "bags"
+   ]
+  },
+  "shipParts": [
+   {
+    "part": "frame",
+    "nestRise": 94,
+    "shield": {
+     "cx": 576,
+     "cy": 471,
+     "rx": 1148,
+     "ry": 661
+    }
+   },
+   {
+    "part": "deck",
+    "id": "lower",
+    "row": "lower",
+    "name": "Lower Deck",
+    "x0": 20,
+    "x1": 1220
+   },
+   {
+    "part": "room",
+    "name": "Lower Deck",
+    "p": "lower",
+    "x0": 20,
+    "x1": 1220,
+    "color": "#a8814f"
+   },
+   {
+    "part": "deck",
+    "id": "main",
+    "row": "main",
+    "name": "Main Deck",
+    "x0": 140,
+    "x1": 1100,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 620,
+    "xBottom": 620
+   },
+   {
+    "part": "deck",
+    "id": "catwalk",
+    "row": "catwalk",
+    "name": "Top Deck",
+    "x0": 500,
+    "x1": 980,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 740,
+    "xBottom": 740
+   },
+   {
+    "part": "deck",
+    "id": "keel",
+    "row": "keel",
+    "name": "Keel Deck",
+    "x0": 260,
+    "x1": 620
+   },
+   {
+    "part": "room",
+    "name": "Keel Deck",
+    "p": "keel",
+    "x0": 260,
+    "x1": 620,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "lower",
+    "bottom": "keel",
+    "xTop": 440,
+    "xBottom": 440
+   },
+   {
+    "part": "station",
+    "n": "Helm",
+    "kind": "helm",
+    "p": "catwalk",
+    "x": 880
+   },
+   {
+    "part": "station",
+    "n": "Boiler",
+    "kind": "boiler",
+    "p": "main",
+    "x": 520
+   },
+   {
+    "part": "pipe",
+    "to": "Helm",
+    "p": "main",
+    "points": [
+     [
+      550,
+      560
+     ],
+     [
+      550,
+      335
+     ],
+     [
+      880,
+      335
+     ],
+     [
+      880,
+      445
+     ]
+    ],
+    "valve": [
+     715,
+     335
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Pod Engine",
+    "p": "lower",
+    "x": 170
+   },
+   {
+    "part": "pipe",
+    "to": "Pod Engine",
+    "p": "lower",
+    "points": [
+     [
+      490,
+      610
+     ],
+     [
+      490,
+      690
+     ],
+     [
+      170,
+      690
+     ],
+     [
+      170,
+      765
+     ]
+    ],
+    "valve": [
+     330,
+     690
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 1",
+    "p": "lower",
+    "x": 1070
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 1",
+    "p": "lower",
+    "points": [
+     [
+      550,
+      610
+     ],
+     [
+      550,
+      700
+     ],
+     [
+      1070,
+      700
+     ],
+     [
+      1070,
+      765
+     ]
+    ],
+    "valve": [
+     810,
+     700
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 2",
+    "p": "lower",
+    "x": 110
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 2",
+    "p": "lower",
+    "points": [
+     [
+      490,
+      610
+     ],
+     [
+      490,
+      710
+     ],
+     [
+      110,
+      710
+     ],
+     [
+      110,
+      765
+     ]
+    ],
+    "valve": [
+     300,
+     710
+    ]
+   },
+   {
+    "part": "station",
+    "n": "Coal Bunker",
+    "kind": "coal",
+    "p": "lower",
+    "x": 920
+   },
+   {
+    "part": "station",
+    "n": "Ammo Hold",
+    "kind": "ammo",
+    "p": "lower",
+    "x": 720
+   },
+   {
+    "part": "medbay",
+    "p": "main",
+    "x": 280
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 1",
+    "p": "catwalk",
+    "x": 800,
+    "bx": 832,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 2",
+    "p": "lower",
+    "x": 440,
+    "bx": 350,
+    "by": 812,
+    "aim": 2.15,
+    "arc": 0.7
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 3",
+    "p": "catwalk",
+    "x": 720,
+    "bx": 752,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1
+   },
+   {
+    "part": "gun",
+    "n": "Mortar",
+    "p": "catwalk",
+    "x": 640,
+    "bx": 650,
+    "by": 430,
+    "aim": -1.15,
+    "arc": 0.5,
+    "gtype": "mortar"
+   },
+   {
+    "part": "gun",
+    "n": "Long gun",
+    "p": "catwalk",
+    "x": 560,
+    "bx": 533,
+    "by": 418,
+    "aim": 3.491592653589793,
+    "arc": 0.77,
+    "gtype": "long"
+   },
+   {
+    "part": "gun",
+    "n": "Harpoon gun",
+    "p": "lower",
+    "x": 640,
+    "bx": 730,
+    "by": 812,
+    "aim": 1,
+    "arc": 0.7,
+    "gtype": "harpoon"
+   },
+   {
+    "part": "armour",
+    "p": "catwalk",
+    "x0": 500,
+    "x1": 740
+   },
+   {
+    "part": "armour",
+    "p": "catwalk",
+    "x0": 860,
+    "x1": 980
+   },
+   {
+    "part": "armour",
+    "p": "main",
+    "x0": 140,
+    "x1": 500
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 1000
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 160
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "main",
+    "x": 600
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 560
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 600
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 720
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 920
+   },
+   {
+    "part": "vent",
+    "p": "lower",
+    "x": 560
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 440
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 800,
+    "xBottom": 800
+   },
+   {
+    "part": "deck",
+    "id": "nest",
+    "row": "nest",
+    "name": "Crow's Nest",
+    "x0": 195,
+    "x1": 555,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "nest",
+    "bottom": "main",
+    "xTop": 370,
+    "xBottom": 370
+   },
+   {
+    "part": "station",
+    "n": "Lookout",
+    "kind": "lookout",
+    "p": "nest",
+    "x": 320
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 240,
+    "bx": -254
+   },
+   {
+    "part": "gasValve",
+    "p": "nest",
+    "x": 480,
+    "bx": 301
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 960,
+    "bx": 856
+   },
+   {
+    "part": "gasbag",
+    "cx": -272,
+    "cy": 198,
+    "rx": 280,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 293,
+    "cy": 198,
+    "rx": 280,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 858,
+    "cy": 198,
+    "rx": 280,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 1423,
+    "cy": 198,
+    "rx": 280,
+    "ry": 232
+   },
+   {
+    "part": "gasValve",
+    "p": "nest",
+    "x": 240,
+    "bx": 293
+   }
+  ]
+ },
+ {
+  "id": "g2-779020",
+  "name": "Thundering Bullock",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a ram prow",
+  "theme": "rammer",
+  "seed": 779020,
+  "gen": 2,
+  "parents": [
+   "Stout Anvil"
+  ],
+  "mutations": [
+   "bags",
+   "-engine",
+   "+sail"
+  ],
+  "elo": 1445,
+  "games": 18,
+  "winPct": 67,
+  "record": [
+   12,
+   0,
+   6
+  ],
+  "weight": 123,
+  "lift": 128,
+  "hover": 45.4,
+  "hands": 8,
+  "warns": 2,
+  "parts": "1 grapeshot, 2 harpoon, 1 ram, 1 sails, armour 3.6, 2 engines, 1 bag",
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "searchlight"
+  ],
+  "bandShare": {
+   "short": 0.72,
+   "mid": 0.18,
+   "long": 0.08,
+   "far": 0.02
+  },
+  "byEnvironment": {
+   "storm": {
+    "games": 6,
+    "winPct": 50
+   },
+   "sea": {
+    "games": 2,
+    "winPct": 100
+   },
+   "frost": {
+    "games": 2,
+    "winPct": 100
+   },
+   "ember": {
+    "games": 6,
+    "winPct": 50
+   },
+   "fungal": {
+    "games": 2,
+    "winPct": 100
+   }
+  },
+  "coop": {
+   "runs": 3,
+   "victories": 0,
+   "stops": 9,
+   "total": 8,
+   "minutes": 131.46222222222224,
+   "errors": 0
+  },
+  "genome": {
+   "v": 1,
+   "theme": "rammer",
+   "seed": 78578707,
+   "decks": {
+    "lower": {
+     "x0": 20,
+     "x1": 1220
+    },
+    "main": {
+     "x0": 20,
+     "x1": 1100
+    },
+    "catwalk": {
+     "x0": 140,
+     "x1": 980
+    }
+   },
+   "nest": {
+    "w": 3,
+    "u": 0.5551235314458609,
+    "tall": false
+   },
+   "bags": {
+    "n": 1,
+    "twin": false,
+    "hover": 46
+   },
+   "items": [
+    {
+     "t": "helm",
+     "row": "catwalk",
+     "u": 0.231
+    },
+    {
+     "t": "boiler",
+     "row": "main",
+     "u": 0.391,
+     "alt": "lower"
+    },
+    {
+     "t": "coal",
+     "row": "lower",
+     "u": 0.661
+    },
+    {
+     "t": "ammo",
+     "row": "lower",
+     "u": 0.508
+    },
+    {
+     "t": "lookout",
+     "row": "nest",
+     "u": 0.367
+    },
+    {
+     "t": "medbay",
+     "row": "main",
+     "u": 0.1
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.889
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.076
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.385
+    },
+    {
+     "t": "rack_sword",
+     "row": "main",
+     "u": 0.449
+    },
+    {
+     "t": "rack_hookshot",
+     "row": "catwalk",
+     "u": 0.778
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.391
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.391
+    },
+    {
+     "t": "extinguisher",
+     "row": "catwalk",
+     "u": 0.239
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.093
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.965
+    },
+    {
+     "t": "vent",
+     "row": "main",
+     "u": 0.804
+    },
+    {
+     "t": "vent",
+     "row": "lower",
+     "u": 0.452
+    },
+    {
+     "t": "searchlight",
+     "row": "catwalk",
+     "u": 0.514
+    },
+    {
+     "t": "ladder",
+     "row": "catwalk",
+     "u": 0.341
+    },
+    {
+     "t": "ladder",
+     "row": "main",
+     "u": 0.451
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.767
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.227
+    },
+    {
+     "t": "ramProw",
+     "row": "main",
+     "u": 0.911
+    },
+    {
+     "t": "gun_harpoon",
+     "row": "catwalk",
+     "u": 0.894
+    },
+    {
+     "t": "gun_harpoon",
+     "row": "lower",
+     "u": 0.826
+    },
+    {
+     "t": "gun_scatter",
+     "row": "lower",
+     "u": 0.891
+    },
+    {
+     "t": "armour",
+     "row": "lower",
+     "u": 0.933
+    },
+    {
+     "t": "armour",
+     "row": "lower",
+     "u": 0.863
+    },
+    {
+     "t": "armour",
+     "row": "lower",
+     "u": 0.922
+    },
+    {
+     "t": "sail",
+     "row": "catwalk",
+     "u": 0.924
+    }
+   ],
+   "mut": [
+    "bags",
+    "-engine",
+    "+sail"
+   ]
+  },
+  "shipParts": [
+   {
+    "part": "frame",
+    "nestRise": 94,
+    "shield": {
+     "cx": 749,
+     "cy": 414,
+     "rx": 880,
+     "ry": 604
+    }
+   },
+   {
+    "part": "deck",
+    "id": "lower",
+    "row": "lower",
+    "name": "Lower Deck",
+    "x0": 20,
+    "x1": 1220
+   },
+   {
+    "part": "room",
+    "name": "Lower Deck",
+    "p": "lower",
+    "x0": 20,
+    "x1": 1220,
+    "color": "#a8814f"
+   },
+   {
+    "part": "deck",
+    "id": "main",
+    "row": "main",
+    "name": "Main Deck",
+    "x0": 20,
+    "x1": 1100
+   },
+   {
+    "part": "room",
+    "name": "Main Deck",
+    "p": "main",
+    "x0": 20,
+    "x1": 1100,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 560,
+    "xBottom": 560
+   },
+   {
+    "part": "deck",
+    "id": "catwalk",
+    "row": "catwalk",
+    "name": "Top Deck",
+    "x0": 140,
+    "x1": 980,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 490,
+    "xBottom": 490
+   },
+   {
+    "part": "station",
+    "n": "Helm",
+    "kind": "helm",
+    "p": "catwalk",
+    "x": 320
+   },
+   {
+    "part": "station",
+    "n": "Boiler",
+    "kind": "boiler",
+    "p": "main",
+    "x": 640
+   },
+   {
+    "part": "pipe",
+    "to": "Helm",
+    "p": "main",
+    "points": [
+     [
+      610,
+      560
+     ],
+     [
+      610,
+      335
+     ],
+     [
+      320,
+      335
+     ],
+     [
+      320,
+      445
+     ]
+    ],
+    "valve": [
+     465,
+     335
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Pod Engine",
+    "p": "lower",
+    "x": 1070
+   },
+   {
+    "part": "pipe",
+    "to": "Pod Engine",
+    "p": "lower",
+    "points": [
+     [
+      670,
+      610
+     ],
+     [
+      670,
+      690
+     ],
+     [
+      1070,
+      690
+     ],
+     [
+      1070,
+      765
+     ]
+    ],
+    "valve": [
+     870,
+     690
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 1",
+    "p": "lower",
+    "x": 170
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 1",
+    "p": "lower",
+    "points": [
+     [
+      610,
+      610
+     ],
+     [
+      610,
+      700
+     ],
+     [
+      170,
+      700
+     ],
+     [
+      170,
+      765
+     ]
+    ],
+    "valve": [
+     390,
+     700
+    ]
+   },
+   {
+    "part": "station",
+    "n": "Coal Bunker",
+    "kind": "coal",
+    "p": "lower",
+    "x": 760
+   },
+   {
+    "part": "station",
+    "n": "Ammo Hold",
+    "kind": "ammo",
+    "p": "lower",
+    "x": 640
+   },
+   {
+    "part": "medbay",
+    "p": "main",
+    "x": 120
+   },
+   {
+    "part": "ramProw",
+    "p": "main",
+    "x": 1100
+   },
+   {
+    "part": "gun",
+    "n": "Harpoon gun",
+    "p": "catwalk",
+    "x": 880,
+    "bx": 912,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1,
+    "gtype": "harpoon"
+   },
+   {
+    "part": "gun",
+    "n": "Extra Harpoon gun 1",
+    "p": "lower",
+    "x": 1000,
+    "bx": 1090,
+    "by": 812,
+    "aim": 1,
+    "arc": 0.7,
+    "gtype": "harpoon"
+   },
+   {
+    "part": "gun",
+    "n": "Grapeshot gun",
+    "p": "lower",
+    "x": 1160,
+    "bx": 1250,
+    "by": 812,
+    "aim": 1,
+    "arc": 0.88,
+    "gtype": "scatter"
+   },
+   {
+    "part": "armour",
+    "p": "lower",
+    "x0": 860,
+    "x1": 1220
+   },
+   {
+    "part": "sail",
+    "n": "Mainsail",
+    "p": "catwalk",
+    "x": 800
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 1080
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 120
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "catwalk",
+    "x": 480
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "main",
+    "x": 520
+   },
+   {
+    "part": "rack",
+    "kind": "hookshot",
+    "p": "catwalk",
+    "x": 720
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 480
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 440
+   },
+   {
+    "part": "extinguisher",
+    "p": "catwalk",
+    "x": 400
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 360
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 920
+   },
+   {
+    "part": "vent",
+    "p": "main",
+    "x": 880
+   },
+   {
+    "part": "vent",
+    "p": "lower",
+    "x": 560
+   },
+   {
+    "part": "searchlight",
+    "n": "Extra Searchlight 1",
+    "p": "catwalk",
+    "x": 560,
+    "bx": 560,
+    "by": 370,
+    "aim": -1.5707963267948966,
+    "arc": 1.5,
+    "len": 44
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 400,
+    "xBottom": 400
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 440,
+    "xBottom": 440
+   },
+   {
+    "part": "deck",
+    "id": "nest",
+    "row": "nest",
+    "name": "Crow's Nest",
+    "x0": 641,
+    "x1": 1001,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "nest",
+    "bottom": "catwalk",
+    "xTop": 940,
+    "xBottom": 940
+   },
+   {
+    "part": "station",
+    "n": "Lookout",
+    "kind": "lookout",
+    "p": "nest",
+    "x": 760
+   },
+   {
+    "part": "gasbag",
+    "cx": 749,
+    "cy": 198,
+    "rx": 860,
+    "ry": 232
+   }
+  ]
+ },
+ {
+  "id": "g2-779016",
+  "name": "Midnight Corsair II",
+  "summary": "boarding raider with grapeshot, a flak gun and a crew cannon",
+  "theme": "raiderxbrawler",
+  "seed": 779016,
+  "gen": 2,
+  "parents": [
+   "Bold Magpie"
+  ],
+  "mutations": [
+   "move extinguisher"
+  ],
+  "elo": 1445,
+  "games": 18,
+  "winPct": 67,
+  "record": [
+   12,
+   0,
+   6
+  ],
+  "weight": 132,
+  "lift": 141,
+  "hover": 41.2,
+  "hands": 7,
+  "warns": 0,
+  "parts": "2 grapeshot, 1 flak, 1 crew cannon, armour 2.4, 3 engines, 2 bags",
+  "tags": [
+   "grapeshot",
+   "flak",
+   "crew cannon",
+   "armour 2+ cols",
+   "2+ bags",
+   "towline",
+   "ballast"
+  ],
+  "bandShare": {
+   "short": 0.55,
+   "mid": 0.34,
+   "long": 0.1,
+   "far": 0.02
+  },
+  "byEnvironment": {
+   "aether": {
+    "games": 4,
+    "winPct": 50
+   },
+   "skyisles": {
+    "games": 4,
+    "winPct": 75
+   },
+   "storm": {
+    "games": 4,
+    "winPct": 75
+   },
+   "sea": {
+    "games": 4,
+    "winPct": 75
+   },
+   "frost": {
+    "games": 2,
+    "winPct": 50
+   }
+  },
+  "coop": {
+   "runs": 3,
+   "victories": 0,
+   "stops": 8,
+   "total": 6,
+   "minutes": 85.80833333333334,
+   "errors": 0
+  },
+  "genome": {
+   "v": 1,
+   "theme": "raiderxbrawler",
+   "seed": 103626,
+   "decks": {
+    "lower": {
+     "x0": 20,
+     "x1": 1340
+    },
+    "main": {
+     "x0": 140,
+     "x1": 1220
+    },
+    "catwalk": {
+     "x0": 260,
+     "x1": 980
+    }
+   },
+   "nest": {
+    "w": 3,
+    "u": 0.5854677607305347,
+    "tall": false
+   },
+   "bags": {
+    "n": 2,
+    "twin": false,
+    "hover": 41
+   },
+   "items": [
+    {
+     "t": "ballast",
+     "row": "main",
+     "u": 0.217
+    },
+    {
+     "t": "coal",
+     "row": "lower",
+     "u": 0.263
+    },
+    {
+     "t": "lookout",
+     "row": "nest",
+     "u": 0.393
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.04
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.254
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.041
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.045
+    },
+    {
+     "t": "crewCannon",
+     "row": "catwalk",
+     "u": 0.205
+    },
+    {
+     "t": "rack_sword",
+     "row": "lower",
+     "u": 0.238
+    },
+    {
+     "t": "rack_towline",
+     "row": "catwalk",
+     "u": 0.072,
+     "alt": "main"
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.945
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.457
+    },
+    {
+     "t": "rack_sword",
+     "row": "main",
+     "u": 0.388
+    },
+    {
+     "t": "rack_hookshot",
+     "row": "catwalk",
+     "u": 0.793
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.447
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.447
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.967
+    },
+    {
+     "t": "vent",
+     "row": "main",
+     "u": 0.793
+    },
+    {
+     "t": "vent",
+     "row": "lower",
+     "u": 0.517
+    },
+    {
+     "t": "ladder",
+     "row": "catwalk",
+     "u": 0.397
+    },
+    {
+     "t": "ladder",
+     "row": "main",
+     "u": 0.507
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.898
+    },
+    {
+     "t": "gun_scatter",
+     "row": "lower",
+     "u": 0.809
+    },
+    {
+     "t": "gun_scatter",
+     "row": "catwalk",
+     "u": 0.881
+    },
+    {
+     "t": "gun_flak",
+     "row": "catwalk",
+     "u": 0.624
+    },
+    {
+     "t": "armour",
+     "row": "main",
+     "u": 0.772
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.382,
+     "dir": 0.7853981633974483
+    },
+    {
+     "t": "helm",
+     "row": "catwalk",
+     "u": 0.518
+    },
+    {
+     "t": "boiler",
+     "row": "main",
+     "u": 0.585
+    },
+    {
+     "t": "ammo",
+     "row": "lower",
+     "u": 0.69
+    },
+    {
+     "t": "medbay",
+     "row": "lower",
+     "u": 0.85
+    }
+   ],
+   "mut": [
+    "move extinguisher"
+   ]
+  },
+  "shipParts": [
+   {
+    "part": "frame",
+    "nestRise": 94,
+    "shield": {
+     "cx": 654,
+     "cy": 414,
+     "rx": 1040,
+     "ry": 604
+    }
+   },
+   {
+    "part": "deck",
+    "id": "lower",
+    "row": "lower",
+    "name": "Lower Deck",
+    "x0": 20,
+    "x1": 1340
+   },
+   {
+    "part": "room",
+    "name": "Lower Deck",
+    "p": "lower",
+    "x0": 20,
+    "x1": 1340,
+    "color": "#a8814f"
+   },
+   {
+    "part": "deck",
+    "id": "main",
+    "row": "main",
+    "name": "Main Deck",
+    "x0": 140,
+    "x1": 1220
+   },
+   {
+    "part": "room",
+    "name": "Main Deck",
+    "p": "main",
+    "x0": 140,
+    "x1": 1220,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 680,
+    "xBottom": 680
+   },
+   {
+    "part": "deck",
+    "id": "catwalk",
+    "row": "catwalk",
+    "name": "Top Deck",
+    "x0": 260,
+    "x1": 980,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 610,
+    "xBottom": 610
+   },
+   {
+    "part": "station",
+    "n": "Helm",
+    "kind": "helm",
+    "p": "catwalk",
+    "x": 640
+   },
+   {
+    "part": "station",
+    "n": "Boiler",
+    "kind": "boiler",
+    "p": "main",
+    "x": 800
+   },
+   {
+    "part": "pipe",
+    "to": "Helm",
+    "p": "main",
+    "points": [
+     [
+      770,
+      560
+     ],
+     [
+      770,
+      335
+     ],
+     [
+      640,
+      335
+     ],
+     [
+      640,
+      445
+     ]
+    ],
+    "valve": [
+     705,
+     335
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Pod Engine",
+    "p": "lower",
+    "x": 50
+   },
+   {
+    "part": "pipe",
+    "to": "Pod Engine",
+    "p": "lower",
+    "points": [
+     [
+      770,
+      610
+     ],
+     [
+      770,
+      690
+     ],
+     [
+      50,
+      690
+     ],
+     [
+      50,
+      765
+     ]
+    ],
+    "valve": [
+     410,
+     690
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 1",
+    "p": "lower",
+    "x": 1190
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 1",
+    "p": "lower",
+    "points": [
+     [
+      830,
+      610
+     ],
+     [
+      830,
+      700
+     ],
+     [
+      1190,
+      700
+     ],
+     [
+      1190,
+      765
+     ]
+    ],
+    "valve": [
+     1010,
+     700
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 2",
+    "p": "lower",
+    "x": 170,
+    "dir": 0.7854
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 2",
+    "p": "lower",
+    "points": [
+     [
+      770,
+      610
+     ],
+     [
+      770,
+      710
+     ],
+     [
+      170,
+      710
+     ],
+     [
+      170,
+      765
+     ]
+    ],
+    "valve": [
+     470,
+     710
+    ]
+   },
+   {
+    "part": "station",
+    "n": "Coal Bunker",
+    "kind": "coal",
+    "p": "lower",
+    "x": 320
+   },
+   {
+    "part": "station",
+    "n": "Ammo Hold",
+    "kind": "ammo",
+    "p": "lower",
+    "x": 920
+   },
+   {
+    "part": "medbay",
+    "p": "lower",
+    "x": 1120
+   },
+   {
+    "part": "crewCannon",
+    "n": "Crew Cannon",
+    "p": "catwalk",
+    "x": 400,
+    "aim": 3.941592653589793,
+    "arc": 0.75
+   },
+   {
+    "part": "gun",
+    "n": "Grapeshot gun",
+    "p": "lower",
+    "x": 1120,
+    "bx": 1210,
+    "by": 812,
+    "aim": 1,
+    "arc": 0.88,
+    "gtype": "scatter"
+   },
+   {
+    "part": "gun",
+    "n": "Extra Grapeshot gun 1",
+    "p": "catwalk",
+    "x": 880,
+    "bx": 912,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.38,
+    "gtype": "scatter"
+   },
+   {
+    "part": "gun",
+    "n": "Flak gun",
+    "p": "catwalk",
+    "x": 720,
+    "bx": 752,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1,
+    "gtype": "flak"
+   },
+   {
+    "part": "armour",
+    "p": "main",
+    "x0": 860,
+    "x1": 1100
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 80
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 400
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 480
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "lower",
+    "x": 400
+   },
+   {
+    "part": "rack",
+    "kind": "towline",
+    "p": "catwalk",
+    "x": 320
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 1280
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "catwalk",
+    "x": 800
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "main",
+    "x": 560
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 600
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 640
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 920
+   },
+   {
+    "part": "vent",
+    "p": "main",
+    "x": 1000
+   },
+   {
+    "part": "vent",
+    "p": "lower",
+    "x": 720
+   },
+   {
+    "part": "ballast",
+    "p": "main",
+    "x": 360
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 520,
+    "xBottom": 520
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 560,
+    "xBottom": 560
+   },
+   {
+    "part": "deck",
+    "id": "nest",
+    "row": "nest",
+    "name": "Crow's Nest",
+    "x0": 614,
+    "x1": 974,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "nest",
+    "bottom": "catwalk",
+    "xTop": 790,
+    "xBottom": 790
+   },
+   {
+    "part": "station",
+    "n": "Lookout",
+    "kind": "lookout",
+    "p": "nest",
+    "x": 760
+   },
+   {
+    "part": "gasbag",
+    "cx": 144,
+    "cy": 198,
+    "rx": 510,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 1164,
+    "cy": 198,
+    "rx": 510,
+    "ry": 232
+   }
+  ]
+ },
+ {
+  "id": "g3-780011",
+  "name": "Stout Anvil II",
+  "summary": "ram-prow bruiser with grapeshot, harpoons and a flamethrower",
+  "theme": "wildcardxrammer",
+  "seed": 780011,
+  "gen": 3,
+  "parents": [
+   "Anvil Anvil of Dawn",
+   "Thundering Bullock"
+  ],
+  "mutations": [
+   "cross weapons",
+   "aim engine",
+   "+gun_flame"
+  ],
+  "elo": 1435,
+  "games": 14,
+  "winPct": 64,
+  "record": [
+   9,
+   0,
+   5
+  ],
+  "weight": 138,
+  "lift": 141,
+  "hover": 46.8,
+  "hands": 8,
+  "warns": 1,
+  "parts": "1 grapeshot, 2 harpoon, 1 flame, 1 ram, 1 sails, armour 4.8, 2 engines, 1 bag",
+  "tags": [
+   "grapeshot",
+   "harpoon",
+   "flamethrower",
+   "ram prow",
+   "armour 2+ cols",
+   "sail",
+   "2 or fewer engines",
+   "steam lift",
+   "gas valves",
+   "long hull"
+  ],
+  "bandShare": {
+   "short": 0.75,
+   "mid": 0.1,
+   "long": 0.12,
+   "far": 0.02
+  },
+  "byEnvironment": {
+   "fungal": {
+    "games": 4,
+    "winPct": 100
+   },
+   "aether": {
+    "games": 4,
+    "winPct": 75
+   },
+   "skyisles": {
+    "games": 4,
+    "winPct": 25
+   },
+   "storm": {
+    "games": 2,
+    "winPct": 50
+   }
+  },
+  "coop": {
+   "runs": 3,
+   "victories": 0,
+   "stops": 8,
+   "total": 6,
+   "minutes": 126.61222222222221,
+   "errors": 0
+  },
+  "genome": {
+   "v": 1,
+   "theme": "wildcardxrammer",
+   "seed": 102010,
+   "decks": {
+    "lower": {
+     "x0": 20,
+     "x1": 1580
+    },
+    "main": {
+     "x0": 20,
+     "x1": 1220
+    },
+    "catwalk": {
+     "x0": 260,
+     "x1": 1220
+    }
+   },
+   "nest": {
+    "w": 3,
+    "u": 0.41931217927485703,
+    "tall": false
+   },
+   "bags": {
+    "n": 1,
+    "twin": false,
+    "hover": 46
+   },
+   "items": [
+    {
+     "t": "helm",
+     "row": "catwalk",
+     "u": 0.866
+    },
+    {
+     "t": "boiler",
+     "row": "main",
+     "u": 0.385,
+     "alt": "lower"
+    },
+    {
+     "t": "coal",
+     "row": "lower",
+     "u": 0.655
+    },
+    {
+     "t": "ammo",
+     "row": "lower",
+     "u": 0.374
+    },
+    {
+     "t": "lookout",
+     "row": "nest",
+     "u": 0.503
+    },
+    {
+     "t": "medbay",
+     "row": "lower",
+     "u": 0.196
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.943
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.181
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.383
+    },
+    {
+     "t": "rack_sword",
+     "row": "main",
+     "u": 0.378
+    },
+    {
+     "t": "rack_hookshot",
+     "row": "catwalk",
+     "u": 0.837
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.385
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.573
+    },
+    {
+     "t": "extinguisher",
+     "row": "catwalk",
+     "u": 0.1
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.093
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.903
+    },
+    {
+     "t": "vent",
+     "row": "main",
+     "u": 0.804
+    },
+    {
+     "t": "vent",
+     "row": "lower",
+     "u": 0.562
+    },
+    {
+     "t": "ladder",
+     "row": "catwalk",
+     "u": 0.335
+    },
+    {
+     "t": "ladder",
+     "row": "main",
+     "u": 0.445
+    },
+    {
+     "t": "lift",
+     "row": "main",
+     "u": 0.486
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 0
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 1
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 2
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 3
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.767
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.227,
+     "dir": 0
+    },
+    {
+     "t": "ramProw",
+     "row": "main",
+     "u": 0.911
+    },
+    {
+     "t": "gun_harpoon",
+     "row": "catwalk",
+     "u": 0.894
+    },
+    {
+     "t": "gun_harpoon",
+     "row": "lower",
+     "u": 0.826
+    },
+    {
+     "t": "gun_scatter",
+     "row": "lower",
+     "u": 0.891
+    },
+    {
+     "t": "armour",
+     "row": "lower",
+     "u": 0.933
+    },
+    {
+     "t": "armour",
+     "row": "lower",
+     "u": 0.863
+    },
+    {
+     "t": "armour",
+     "row": "lower",
+     "u": 0.922
+    },
+    {
+     "t": "sail",
+     "row": "catwalk",
+     "u": 0.924
+    },
+    {
+     "t": "gun_flame",
+     "row": "main",
+     "u": 0.773
+    }
+   ],
+   "mut": [
+    "cross weapons",
+    "aim engine",
+    "+gun_flame"
+   ]
+  },
+  "shipParts": [
+   {
+    "part": "frame",
+    "nestRise": 94,
+    "shield": {
+     "cx": 943,
+     "cy": 414,
+     "rx": 970,
+     "ry": 604
+    }
+   },
+   {
+    "part": "deck",
+    "id": "lower",
+    "row": "lower",
+    "name": "Lower Deck",
+    "x0": 20,
+    "x1": 1580
+   },
+   {
+    "part": "room",
+    "name": "Lower Deck",
+    "p": "lower",
+    "x0": 20,
+    "x1": 1580,
+    "color": "#a8814f"
+   },
+   {
+    "part": "deck",
+    "id": "main",
+    "row": "main",
+    "name": "Main Deck",
+    "x0": 20,
+    "x1": 1220
+   },
+   {
+    "part": "room",
+    "name": "Main Deck",
+    "p": "main",
+    "x0": 20,
+    "x1": 1220,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 620,
+    "xBottom": 620
+   },
+   {
+    "part": "deck",
+    "id": "catwalk",
+    "row": "catwalk",
+    "name": "Top Deck",
+    "x0": 260,
+    "x1": 1220,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 740,
+    "xBottom": 740
+   },
+   {
+    "part": "station",
+    "n": "Helm",
+    "kind": "helm",
+    "p": "catwalk",
+    "x": 1080
+   },
+   {
+    "part": "station",
+    "n": "Boiler",
+    "kind": "boiler",
+    "p": "main",
+    "x": 480
+   },
+   {
+    "part": "pipe",
+    "to": "Helm",
+    "p": "main",
+    "points": [
+     [
+      510,
+      560
+     ],
+     [
+      510,
+      335
+     ],
+     [
+      1080,
+      335
+     ],
+     [
+      1080,
+      445
+     ]
+    ],
+    "valve": [
+     795,
+     335
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Pod Engine",
+    "p": "lower",
+    "x": 1430
+   },
+   {
+    "part": "pipe",
+    "to": "Pod Engine",
+    "p": "lower",
+    "points": [
+     [
+      510,
+      610
+     ],
+     [
+      510,
+      690
+     ],
+     [
+      1430,
+      690
+     ],
+     [
+      1430,
+      765
+     ]
+    ],
+    "valve": [
+     970,
+     690
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 1",
+    "p": "lower",
+    "x": 170,
+    "dir": 0
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 1",
+    "p": "lower",
+    "points": [
+     [
+      450,
+      610
+     ],
+     [
+      450,
+      700
+     ],
+     [
+      170,
+      700
+     ],
+     [
+      170,
+      765
+     ]
+    ],
+    "valve": [
+     310,
+     700
+    ]
+   },
+   {
+    "part": "station",
+    "n": "Coal Bunker",
+    "kind": "coal",
+    "p": "lower",
+    "x": 1080
+   },
+   {
+    "part": "station",
+    "n": "Ammo Hold",
+    "kind": "ammo",
+    "p": "lower",
+    "x": 520
+   },
+   {
+    "part": "medbay",
+    "p": "lower",
+    "x": 320
+   },
+   {
+    "part": "lift",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 880,
+    "xBottom": 880,
+    "repair": {
+     "p": "lower",
+     "x": 845
+    }
+   },
+   {
+    "part": "pipe",
+    "to": "Lift",
+    "p": "main",
+    "points": [
+     [
+      510,
+      560
+     ],
+     [
+      510,
+      535
+     ],
+     [
+      880,
+      535
+     ],
+     [
+      880,
+      615
+     ]
+    ],
+    "valve": [
+     695,
+     535
+    ]
+   },
+   {
+    "part": "ramProw",
+    "p": "main",
+    "x": 1220
+   },
+   {
+    "part": "gun",
+    "n": "Harpoon gun",
+    "p": "catwalk",
+    "x": 1160,
+    "bx": 1192,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1,
+    "gtype": "harpoon"
+   },
+   {
+    "part": "gun",
+    "n": "Extra Harpoon gun 1",
+    "p": "lower",
+    "x": 1320,
+    "bx": 1410,
+    "by": 812,
+    "aim": 1,
+    "arc": 0.7,
+    "gtype": "harpoon"
+   },
+   {
+    "part": "gun",
+    "n": "Grapeshot gun",
+    "p": "lower",
+    "x": 1520,
+    "bx": 1610,
+    "by": 812,
+    "aim": 1,
+    "arc": 0.88,
+    "gtype": "scatter"
+   },
+   {
+    "part": "gun",
+    "n": "Flamethrower",
+    "p": "main",
+    "x": 960,
+    "bx": 1030,
+    "by": 595,
+    "aim": 0.2,
+    "arc": 0.75,
+    "gtype": "flame"
+   },
+   {
+    "part": "armour",
+    "p": "lower",
+    "x0": 1100,
+    "x1": 1580
+   },
+   {
+    "part": "sail",
+    "n": "Mainsail",
+    "p": "catwalk",
+    "x": 1000
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 1440
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 320
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "catwalk",
+    "x": 640
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "main",
+    "x": 400
+   },
+   {
+    "part": "rack",
+    "kind": "hookshot",
+    "p": "catwalk",
+    "x": 920
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 640
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 720
+   },
+   {
+    "part": "extinguisher",
+    "p": "catwalk",
+    "x": 360
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 480
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 1120
+   },
+   {
+    "part": "vent",
+    "p": "main",
+    "x": 1040
+   },
+   {
+    "part": "vent",
+    "p": "lower",
+    "x": 880
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 600,
+    "xBottom": 600
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 400,
+    "xBottom": 400
+   },
+   {
+    "part": "deck",
+    "id": "nest",
+    "row": "nest",
+    "name": "Crow's Nest",
+    "x0": 642,
+    "x1": 1002,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "nest",
+    "bottom": "catwalk",
+    "xTop": 820,
+    "xBottom": 820
+   },
+   {
+    "part": "station",
+    "n": "Lookout",
+    "kind": "lookout",
+    "p": "nest",
+    "x": 840
+   },
+   {
+    "part": "gasValve",
+    "p": "nest",
+    "x": 760,
+    "bx": 945
+   },
+   {
+    "part": "gasbag",
+    "cx": 943,
+    "cy": 198,
+    "rx": 950,
+    "ry": 232
+   },
+   {
+    "part": "gasValve",
+    "p": "nest",
+    "x": 920,
+    "bx": 943
+   }
+  ]
+ },
+ {
+  "id": "g3-780008",
+  "name": "Broad Thunder",
+  "summary": "broadside gunboat with a mortar, a flak gun and armour plate",
+  "theme": "fortressxfortress",
+  "seed": 780008,
+  "gen": 3,
+  "parents": [
+   "Great Keep II",
+   "Granite Bastion"
+  ],
+  "mutations": [
+   "cross sections"
+  ],
+  "elo": 1434,
+  "games": 14,
+  "winPct": 71,
+  "record": [
+   10,
+   0,
+   4
+  ],
+  "weight": 144,
+  "lift": 144,
+  "hover": 50.1,
+  "hands": 8,
+  "warns": 0,
+  "parts": "1 mortar, 1 flak, 3 plain guns, armour 2.4, 3 engines (1 up), 4 bags",
+  "tags": [
+   "mortar",
+   "flak",
+   "armour 2+ cols",
+   "lift engine",
+   "2+ bags",
+   "3+ bags",
+   "upper nest",
+   "keel deck",
+   "gas valves",
+   "open main deck",
+   "long hull"
+  ],
+  "bandShare": {
+   "short": 0.47,
+   "mid": 0.2,
+   "long": 0.3,
+   "far": 0.03
+  },
+  "byEnvironment": {
+   "skyisles": {
+    "games": 2,
+    "winPct": 50
+   },
+   "storm": {
+    "games": 2,
+    "winPct": 50
+   },
+   "sea": {
+    "games": 2,
+    "winPct": 50
+   },
+   "frost": {
+    "games": 4,
+    "winPct": 100
+   },
+   "aether": {
+    "games": 2,
+    "winPct": 100
+   },
+   "fungal": {
+    "games": 2,
+    "winPct": 50
+   }
+  },
+  "coop": {
+   "runs": 3,
+   "victories": 0,
+   "stops": 8,
+   "total": 6,
+   "minutes": 88.0838888888889,
+   "errors": 0
+  },
+  "genome": {
+   "v": 1,
+   "theme": "fortressxfortress",
+   "seed": 104939,
+   "decks": {
+    "lower": {
+     "x0": 20,
+     "x1": 1580
+    },
+    "main": {
+     "x0": 140,
+     "x1": 1580,
+     "out": true
+    },
+    "catwalk": {
+     "x0": 620,
+     "x1": 1580
+    },
+    "keel": {
+     "x0": 500,
+     "x1": 980
+    }
+   },
+   "nest": {
+    "w": 3,
+    "u": 0.5538773041218519,
+    "tall": true
+   },
+   "bags": {
+    "n": 4,
+    "twin": false,
+    "hover": 49
+   },
+   "items": [
+    {
+     "t": "boiler",
+     "row": "main",
+     "u": 0.447,
+     "alt": "lower"
+    },
+    {
+     "t": "ammo",
+     "row": "lower",
+     "u": 0.363
+    },
+    {
+     "t": "lookout",
+     "row": "nest",
+     "u": 0.417
+    },
+    {
+     "t": "medbay",
+     "row": "main",
+     "u": 0.146
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.225
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.442
+    },
+    {
+     "t": "rack_sword",
+     "row": "main",
+     "u": 0.504
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.447
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.447
+    },
+    {
+     "t": "extinguisher",
+     "row": "catwalk",
+     "u": 0.201
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.041
+    },
+    {
+     "t": "ladder",
+     "row": "catwalk",
+     "u": 0.397
+    },
+    {
+     "t": "ladder",
+     "row": "main",
+     "u": 0.507
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.115
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.14,
+     "dir": -1.5707963267948966
+    },
+    {
+     "t": "gun",
+     "row": "lower",
+     "u": 0.052
+    },
+    {
+     "t": "gun_mortar",
+     "row": "catwalk",
+     "u": 0.593
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.381
+    },
+    {
+     "t": "gun",
+     "row": "crow2",
+     "u": 0.447
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 0
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 1
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 2
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 3
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.799
+    },
+    {
+     "t": "rack_hookshot",
+     "row": "catwalk",
+     "u": 0.957
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.967
+    },
+    {
+     "t": "vent",
+     "row": "main",
+     "u": 0.942
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.81
+    },
+    {
+     "t": "armour",
+     "row": "catwalk",
+     "u": 0.829
+    },
+    {
+     "t": "gun",
+     "row": "catwalk",
+     "u": 0.795
+    },
+    {
+     "t": "gun_flak",
+     "row": "catwalk",
+     "u": 0.617
+    },
+    {
+     "t": "helm",
+     "row": "main",
+     "u": 0.315
+    },
+    {
+     "t": "coal",
+     "row": "lower",
+     "u": 0.749
+    }
+   ],
+   "mut": [
+    "cross sections"
+   ]
+  },
+  "shipParts": [
+   {
+    "part": "frame",
+    "nestRise": 94,
+    "shield": {
+     "cx": 855,
+     "cy": 387,
+     "rx": 880,
+     "ry": 745
+    }
+   },
+   {
+    "part": "deck",
+    "id": "lower",
+    "row": "lower",
+    "name": "Lower Deck",
+    "x0": 20,
+    "x1": 1580
+   },
+   {
+    "part": "room",
+    "name": "Lower Deck",
+    "p": "lower",
+    "x0": 20,
+    "x1": 1580,
+    "color": "#a8814f"
+   },
+   {
+    "part": "deck",
+    "id": "main",
+    "row": "main",
+    "name": "Main Deck",
+    "x0": 140,
+    "x1": 1580,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 860,
+    "xBottom": 860
+   },
+   {
+    "part": "deck",
+    "id": "catwalk",
+    "row": "catwalk",
+    "name": "Top Deck",
+    "x0": 620,
+    "x1": 1580,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 1100,
+    "xBottom": 1100
+   },
+   {
+    "part": "deck",
+    "id": "keel",
+    "row": "keel",
+    "name": "Keel Deck",
+    "x0": 500,
+    "x1": 980
+   },
+   {
+    "part": "room",
+    "name": "Keel Deck",
+    "p": "keel",
+    "x0": 500,
+    "x1": 980,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "lower",
+    "bottom": "keel",
+    "xTop": 740,
+    "xBottom": 740
+   },
+   {
+    "part": "station",
+    "n": "Boiler",
+    "kind": "boiler",
+    "p": "main",
+    "x": 760
+   },
+   {
+    "part": "station",
+    "n": "Helm",
+    "kind": "helm",
+    "p": "main",
+    "x": 560
+   },
+   {
+    "part": "pipe",
+    "to": "Helm",
+    "p": "main",
+    "points": [
+     [
+      730,
+      560
+     ],
+     [
+      730,
+      505
+     ],
+     [
+      560,
+      505
+     ],
+     [
+      560,
+      615
+     ]
+    ],
+    "valve": [
+     645,
+     505
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Pod Engine",
+    "p": "lower",
+    "x": 170
+   },
+   {
+    "part": "pipe",
+    "to": "Pod Engine",
+    "p": "lower",
+    "points": [
+     [
+      730,
+      610
+     ],
+     [
+      730,
+      690
+     ],
+     [
+      170,
+      690
+     ],
+     [
+      170,
+      765
+     ]
+    ],
+    "valve": [
+     450,
+     690
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 1",
+    "p": "lower",
+    "x": 110,
+    "dir": -1.5708
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 1",
+    "p": "lower",
+    "points": [
+     [
+      730,
+      610
+     ],
+     [
+      730,
+      700
+     ],
+     [
+      110,
+      700
+     ],
+     [
+      110,
+      765
+     ]
+    ],
+    "valve": [
+     420,
+     700
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 2",
+    "p": "lower",
+    "x": 1430
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 2",
+    "p": "lower",
+    "points": [
+     [
+      790,
+      610
+     ],
+     [
+      790,
+      710
+     ],
+     [
+      1430,
+      710
+     ],
+     [
+      1430,
+      765
+     ]
+    ],
+    "valve": [
+     1110,
+     710
+    ]
+   },
+   {
+    "part": "station",
+    "n": "Ammo Hold",
+    "kind": "ammo",
+    "p": "lower",
+    "x": 600
+   },
+   {
+    "part": "station",
+    "n": "Coal Bunker",
+    "kind": "coal",
+    "p": "lower",
+    "x": 1200
+   },
+   {
+    "part": "medbay",
+    "p": "main",
+    "x": 360
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 1",
+    "p": "lower",
+    "x": 240,
+    "bx": 150,
+    "by": 812,
+    "aim": 2.15,
+    "arc": 0.7
+   },
+   {
+    "part": "gun",
+    "n": "Mortar",
+    "p": "catwalk",
+    "x": 1200,
+    "bx": 1210,
+    "by": 430,
+    "aim": -1.15,
+    "arc": 0.5,
+    "gtype": "mortar"
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 2",
+    "p": "catwalk",
+    "x": 1400,
+    "bx": 1432,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1
+   },
+   {
+    "part": "gun",
+    "n": "Flak gun",
+    "p": "catwalk",
+    "x": 1280,
+    "bx": 1312,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1,
+    "gtype": "flak"
+   },
+   {
+    "part": "armour",
+    "p": "catwalk",
+    "x0": 1340,
+    "x1": 1580
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 360
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "catwalk",
+    "x": 1040
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "main",
+    "x": 880
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 720
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 840
+   },
+   {
+    "part": "extinguisher",
+    "p": "catwalk",
+    "x": 800
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 840
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 680
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 1280
+   },
+   {
+    "part": "rack",
+    "kind": "hookshot",
+    "p": "catwalk",
+    "x": 1520
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 1520
+   },
+   {
+    "part": "vent",
+    "p": "main",
+    "x": 1480
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 1000,
+    "xBottom": 1000
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 960,
+    "xBottom": 960
+   },
+   {
+    "part": "deck",
+    "id": "nest",
+    "row": "nest",
+    "name": "Crow's Nest",
+    "x0": 736,
+    "x1": 1096,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "nest",
+    "bottom": "catwalk",
+    "xTop": 920,
+    "xBottom": 920
+   },
+   {
+    "part": "deck",
+    "id": "crow2",
+    "row": "crow2",
+    "name": "Upper Nest",
+    "x0": 856,
+    "x1": 976,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "crow2",
+    "bottom": "nest",
+    "xTop": 920,
+    "xBottom": 920
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 3",
+    "p": "crow2",
+    "x": 920,
+    "bx": 930,
+    "by": -244,
+    "aim": -1.2,
+    "arc": 1.2
+   },
+   {
+    "part": "station",
+    "n": "Lookout",
+    "kind": "lookout",
+    "p": "nest",
+    "x": 880
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 440,
+    "bx": 258
+   },
+   {
+    "part": "gasValve",
+    "p": "nest",
+    "x": 800,
+    "bx": 653
+   },
+   {
+    "part": "gasValve",
+    "p": "nest",
+    "x": 1000,
+    "bx": 1048
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 1280,
+    "bx": 1443
+   },
+   {
+    "part": "gasbag",
+    "cx": 210,
+    "cy": 198,
+    "rx": 215,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 640,
+    "cy": 198,
+    "rx": 215,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 1070,
+    "cy": 198,
+    "rx": 215,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 1500,
+    "cy": 198,
+    "rx": 215,
+    "ry": 232
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 320,
+    "bx": 210
+   },
+   {
+    "part": "gasValve",
+    "p": "catwalk",
+    "x": 720,
+    "bx": 640
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 1160,
+    "bx": 1070
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 1400,
+    "bx": 1500
+   }
+  ]
+ },
+ {
+  "id": "g2-779011",
+  "name": "Granite Bastion",
+  "summary": "floating fortress with a long gun, a mortar and a harpoon",
+  "theme": "fortress",
+  "seed": 779011,
+  "gen": 2,
+  "parents": [
+   "Mighty Bastion"
+  ],
+  "mutations": [
+   "+gun_harpoon",
+   "bags"
+  ],
+  "elo": 1425,
+  "games": 24,
+  "winPct": 63,
+  "record": [
+   15,
+   0,
+   9
+  ],
+  "weight": 166,
+  "lift": 172,
+  "hover": 43.5,
+  "hands": 9,
+  "warns": 0,
+  "parts": "1 long, 1 mortar, 1 harpoon, 3 plain guns, armour 7.2, 3 engines, 4 bags",
+  "tags": [
+   "long gun",
+   "mortar",
+   "harpoon",
+   "armour 2+ cols",
+   "armour 5+ cols",
+   "2+ bags",
+   "3+ bags",
+   "keel deck",
+   "6+ guns",
+   "gas valves"
+  ],
+  "bandShare": {
+   "short": 0.4,
+   "mid": 0.39,
+   "long": 0.18,
+   "far": 0.02
+  },
+  "byEnvironment": {
+   "skyisles": {
+    "games": 6,
+    "winPct": 83
+   },
+   "storm": {
+    "games": 2,
+    "winPct": 50
+   },
+   "sea": {
+    "games": 4,
+    "winPct": 50
+   },
+   "frost": {
+    "games": 4,
+    "winPct": 50
+   },
+   "fungal": {
+    "games": 2,
+    "winPct": 50
+   },
+   "ember": {
+    "games": 4,
+    "winPct": 100
+   },
+   "aether": {
+    "games": 2,
+    "winPct": 0
+   }
+  },
+  "coop": {
+   "runs": 3,
+   "victories": 0,
+   "stops": 1,
+   "total": 6,
+   "minutes": 42.025,
+   "errors": 0
+  },
+  "genome": {
+   "v": 1,
+   "theme": "fortress",
+   "seed": 103828,
+   "decks": {
+    "lower": {
+     "x0": 20,
+     "x1": 1220
+    },
+    "main": {
+     "x0": 140,
+     "x1": 1100
+    },
+    "catwalk": {
+     "x0": 500,
+     "x1": 980
+    },
+    "keel": {
+     "x0": 260,
+     "x1": 620
+    }
+   },
+   "nest": {
+    "w": 3,
+    "u": 0.39068411476910114,
+    "tall": false
+   },
+   "bags": {
+    "n": 4,
+    "twin": false,
+    "hover": 43
+   },
+   "items": [
+    {
+     "t": "helm",
+     "row": "catwalk",
+     "u": 0.765
+    },
+    {
+     "t": "boiler",
+     "row": "main",
+     "u": 0.441,
+     "alt": "lower"
+    },
+    {
+     "t": "coal",
+     "row": "lower",
+     "u": 0.711
+    },
+    {
+     "t": "ammo",
+     "row": "lower",
+     "u": 0.525
+    },
+    {
+     "t": "lookout",
+     "row": "nest",
+     "u": 0.393
+    },
+    {
+     "t": "medbay",
+     "row": "main",
+     "u": 0.164
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.799
+    },
+    {
+     "t": "rack_hammer",
+     "row": "lower",
+     "u": 0.121
+    },
+    {
+     "t": "rack_hammer",
+     "row": "catwalk",
+     "u": 0.504
+    },
+    {
+     "t": "rack_sword",
+     "row": "main",
+     "u": 0.438
+    },
+    {
+     "t": "rack_hookshot",
+     "row": "catwalk",
+     "u": 0.957
+    },
+    {
+     "t": "extinguisher",
+     "row": "lower",
+     "u": 0.441
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.441
+    },
+    {
+     "t": "extinguisher",
+     "row": "catwalk",
+     "u": 0.095
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.053
+    },
+    {
+     "t": "boarding",
+     "row": "catwalk",
+     "u": 0.967
+    },
+    {
+     "t": "vent",
+     "row": "main",
+     "u": 0.942
+    },
+    {
+     "t": "vent",
+     "row": "lower",
+     "u": 0.521
+    },
+    {
+     "t": "ladder",
+     "row": "catwalk",
+     "u": 0.391
+    },
+    {
+     "t": "ladder",
+     "row": "main",
+     "u": 0.501
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.116
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.81
+    },
+    {
+     "t": "engine",
+     "row": "lower",
+     "u": 0.14
+    },
+    {
+     "t": "armour",
+     "row": "main",
+     "u": 0.183
+    },
+    {
+     "t": "armour",
+     "row": "catwalk",
+     "u": 0.108
+    },
+    {
+     "t": "armour",
+     "row": "catwalk",
+     "u": 0.829
+    },
+    {
+     "t": "armour",
+     "row": "main",
+     "u": 0.041
+    },
+    {
+     "t": "gun",
+     "row": "catwalk",
+     "u": 0.795
+    },
+    {
+     "t": "gun",
+     "row": "lower",
+     "u": 0.137
+    },
+    {
+     "t": "gun",
+     "row": "catwalk",
+     "u": 0.463
+    },
+    {
+     "t": "gun_mortar",
+     "row": "catwalk",
+     "u": 0.369
+    },
+    {
+     "t": "gun_long",
+     "row": "catwalk",
+     "u": 0.146
+    },
+    {
+     "t": "gun_flak",
+     "row": "catwalk",
+     "u": 0.617
+    },
+    {
+     "t": "extinguisher",
+     "row": "main",
+     "u": 0.363
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 0
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 1
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 2
+    },
+    {
+     "t": "gasValve",
+     "row": "nest",
+     "u": 0.5,
+     "bag": 3
+    },
+    {
+     "t": "gun_harpoon",
+     "row": "lower",
+     "u": 0.568
+    }
+   ],
+   "mut": [
+    "+gun_harpoon",
+    "bags"
+   ]
+  },
+  "shipParts": [
+   {
+    "part": "frame",
+    "nestRise": 94,
+    "shield": {
+     "cx": 576,
+     "cy": 471,
+     "rx": 1180,
+     "ry": 661
+    }
+   },
+   {
+    "part": "deck",
+    "id": "lower",
+    "row": "lower",
+    "name": "Lower Deck",
+    "x0": 20,
+    "x1": 1220
+   },
+   {
+    "part": "room",
+    "name": "Lower Deck",
+    "p": "lower",
+    "x0": 20,
+    "x1": 1220,
+    "color": "#a8814f"
+   },
+   {
+    "part": "deck",
+    "id": "main",
+    "row": "main",
+    "name": "Main Deck",
+    "x0": 140,
+    "x1": 1100
+   },
+   {
+    "part": "room",
+    "name": "Main Deck",
+    "p": "main",
+    "x0": 140,
+    "x1": 1100,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 620,
+    "xBottom": 620
+   },
+   {
+    "part": "deck",
+    "id": "catwalk",
+    "row": "catwalk",
+    "name": "Top Deck",
+    "x0": 500,
+    "x1": 980,
+    "outside": true
+   },
+   {
+    "part": "ladder",
+    "top": "catwalk",
+    "bottom": "main",
+    "xTop": 740,
+    "xBottom": 740
+   },
+   {
+    "part": "deck",
+    "id": "keel",
+    "row": "keel",
+    "name": "Keel Deck",
+    "x0": 260,
+    "x1": 620
+   },
+   {
+    "part": "room",
+    "name": "Keel Deck",
+    "p": "keel",
+    "x0": 260,
+    "x1": 620,
+    "color": "#a8814f"
+   },
+   {
+    "part": "ladder",
+    "top": "lower",
+    "bottom": "keel",
+    "xTop": 440,
+    "xBottom": 440
+   },
+   {
+    "part": "station",
+    "n": "Helm",
+    "kind": "helm",
+    "p": "catwalk",
+    "x": 880
+   },
+   {
+    "part": "station",
+    "n": "Boiler",
+    "kind": "boiler",
+    "p": "main",
+    "x": 520
+   },
+   {
+    "part": "pipe",
+    "to": "Helm",
+    "p": "main",
+    "points": [
+     [
+      550,
+      560
+     ],
+     [
+      550,
+      335
+     ],
+     [
+      880,
+      335
+     ],
+     [
+      880,
+      445
+     ]
+    ],
+    "valve": [
+     715,
+     335
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Pod Engine",
+    "p": "lower",
+    "x": 170
+   },
+   {
+    "part": "pipe",
+    "to": "Pod Engine",
+    "p": "lower",
+    "points": [
+     [
+      490,
+      610
+     ],
+     [
+      490,
+      690
+     ],
+     [
+      170,
+      690
+     ],
+     [
+      170,
+      765
+     ]
+    ],
+    "valve": [
+     330,
+     690
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 1",
+    "p": "lower",
+    "x": 1070
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 1",
+    "p": "lower",
+    "points": [
+     [
+      550,
+      610
+     ],
+     [
+      550,
+      700
+     ],
+     [
+      1070,
+      700
+     ],
+     [
+      1070,
+      765
+     ]
+    ],
+    "valve": [
+     810,
+     700
+    ]
+   },
+   {
+    "part": "engine",
+    "name": "Extra Pod Engine 2",
+    "p": "lower",
+    "x": 110
+   },
+   {
+    "part": "pipe",
+    "to": "Extra Pod Engine 2",
+    "p": "lower",
+    "points": [
+     [
+      490,
+      610
+     ],
+     [
+      490,
+      710
+     ],
+     [
+      110,
+      710
+     ],
+     [
+      110,
+      765
+     ]
+    ],
+    "valve": [
+     300,
+     710
+    ]
+   },
+   {
+    "part": "station",
+    "n": "Coal Bunker",
+    "kind": "coal",
+    "p": "lower",
+    "x": 920
+   },
+   {
+    "part": "station",
+    "n": "Ammo Hold",
+    "kind": "ammo",
+    "p": "lower",
+    "x": 720
+   },
+   {
+    "part": "medbay",
+    "p": "main",
+    "x": 280
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 1",
+    "p": "catwalk",
+    "x": 800,
+    "bx": 832,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 2",
+    "p": "lower",
+    "x": 440,
+    "bx": 350,
+    "by": 812,
+    "aim": 2.15,
+    "arc": 0.7
+   },
+   {
+    "part": "gun",
+    "n": "Extra Gun 3",
+    "p": "catwalk",
+    "x": 720,
+    "bx": 752,
+    "by": 418,
+    "aim": -0.35,
+    "arc": 1.1
+   },
+   {
+    "part": "gun",
+    "n": "Mortar",
+    "p": "catwalk",
+    "x": 640,
+    "bx": 650,
+    "by": 430,
+    "aim": -1.15,
+    "arc": 0.5,
+    "gtype": "mortar"
+   },
+   {
+    "part": "gun",
+    "n": "Long gun",
+    "p": "catwalk",
+    "x": 560,
+    "bx": 533,
+    "by": 418,
+    "aim": 3.491592653589793,
+    "arc": 0.77,
+    "gtype": "long"
+   },
+   {
+    "part": "gun",
+    "n": "Harpoon gun",
+    "p": "lower",
+    "x": 640,
+    "bx": 730,
+    "by": 812,
+    "aim": 1,
+    "arc": 0.7,
+    "gtype": "harpoon"
+   },
+   {
+    "part": "armour",
+    "p": "catwalk",
+    "x0": 500,
+    "x1": 740
+   },
+   {
+    "part": "armour",
+    "p": "catwalk",
+    "x0": 860,
+    "x1": 980
+   },
+   {
+    "part": "armour",
+    "p": "main",
+    "x0": 140,
+    "x1": 500
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 1000
+   },
+   {
+    "part": "rack",
+    "kind": "hammer",
+    "p": "lower",
+    "x": 160
+   },
+   {
+    "part": "rack",
+    "kind": "sword",
+    "p": "main",
+    "x": 600
+   },
+   {
+    "part": "extinguisher",
+    "p": "lower",
+    "x": 560
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 600
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 720
+   },
+   {
+    "part": "boarderEntry",
+    "p": "catwalk",
+    "x": 920
+   },
+   {
+    "part": "vent",
+    "p": "main",
+    "x": 1040
+   },
+   {
+    "part": "vent",
+    "p": "lower",
+    "x": 560
+   },
+   {
+    "part": "extinguisher",
+    "p": "main",
+    "x": 440
+   },
+   {
+    "part": "ladder",
+    "top": "main",
+    "bottom": "lower",
+    "xTop": 800,
+    "xBottom": 800
+   },
+   {
+    "part": "deck",
+    "id": "nest",
+    "row": "nest",
+    "name": "Crow's Nest",
+    "x0": 189,
+    "x1": 549,
+    "outside": true
+   },
+   {
+    "part": "rope",
+    "top": "nest",
+    "bottom": "main",
+    "xTop": 370,
+    "xBottom": 370
+   },
+   {
+    "part": "station",
+    "n": "Lookout",
+    "kind": "lookout",
+    "p": "nest",
+    "x": 320
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 240,
+    "bx": -276
+   },
+   {
+    "part": "gasValve",
+    "p": "nest",
+    "x": 480,
+    "bx": 294
+   },
+   {
+    "part": "gasValve",
+    "p": "main",
+    "x": 960,
+    "bx": 864
+   },
+   {
+    "part": "gasbag",
+    "cx": -294,
+    "cy": 198,
+    "rx": 290,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 286,
+    "cy": 198,
+    "rx": 290,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 866,
+    "cy": 198,
+    "rx": 290,
+    "ry": 232
+   },
+   {
+    "part": "gasbag",
+    "cx": 1446,
+    "cy": 198,
+    "rx": 290,
+    "ry": 232
+   },
+   {
+    "part": "gasValve",
+    "p": "nest",
+    "x": 240,
+    "bx": 286
+   }
+  ]
+ }
+]

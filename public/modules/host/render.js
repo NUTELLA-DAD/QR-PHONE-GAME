@@ -1261,31 +1261,32 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.fillText(v.kind === 'shelf' ? `Each crew votes on its phones - the same weight cap for both (${shelfCap()} at most) - ${Math.max(0, Math.ceil(v.t))}s` : `Vote on your phone - ${Math.max(0, Math.ceil(v.t))}s`, 800, 124, 1300);
     const voters = Object.values(state.players).filter((p) => !p.mate);
     const n = v.options.length;
-    const perRow = n > 4 ? 3 : n;
-    const cw = n > 4 ? 440 : 360, ch = n > 4 ? 300 : 360, gap = 24;
+    const small = n > 6; // (the shelf has a dozen ships and more: small cards, five to a row, so every card fits on the TV)
+    const perRow = small ? 5 : n > 4 ? 3 : n;
+    const cw = small ? 290 : n > 4 ? 440 : 360, ch = small ? 172 : n > 4 ? 300 : 360, gap = small ? 16 : 24;
     v.options.forEach((o, i) => {
       const row = Math.floor(i / perRow);
       const inRow = Math.min(perRow, n - row * perRow);
       const col = i - row * perRow;
       const x = 800 - (inRow * cw + (inRow - 1) * gap) / 2 + col * (cw + gap);
-      const y = 170 + row * (ch + 24);
+      const y = 170 + row * (ch + (small ? 16 : 24));
       book.paper(x, y, cw, ch, { r: 16 });
       ctx.fillStyle = LB.INK;
       ctx.textAlign = 'center';
-      ctx.font = '60px "Segoe UI Emoji", sans-serif';
-      ctx.fillText(o.icon, x + cw / 2, y + 78);
-      ctx.font = '27px ' + config.FONTS.DISPLAY;
-      ctx.fillText(o.name, x + cw / 2, y + 122, cw - 30);
-      ctx.font = '400 19px ' + config.FONTS.TEXT;
-      wrapLines(o.desc, cw - 40).slice(0, 4).forEach((l, k) => ctx.fillText(l, x + cw / 2, y + 156 + k * 24));
+      ctx.font = small ? '32px "Segoe UI Emoji", sans-serif' : '60px "Segoe UI Emoji", sans-serif';
+      ctx.fillText(o.icon, x + cw / 2, y + (small ? 36 : 78));
+      ctx.font = (small ? '21px ' : '27px ') + config.FONTS.DISPLAY;
+      ctx.fillText(o.name, x + cw / 2, y + (small ? 66 : 122), cw - 30);
+      ctx.font = (small ? '400 14px ' : '400 19px ') + config.FONTS.TEXT;
+      wrapLines(o.desc, cw - (small ? 24 : 40)).slice(0, small ? 3 : 4).forEach((l, k) => ctx.fillText(l, x + cw / 2, y + (small ? 86 : 156) + k * (small ? 16 : 24)));
       for (const id of ['red', 'blue']) { // the votes of each side, a row each
         const list = voters.filter((p) => p.vote === i && p.team === id);
-        const ry = y + ch - (id === 'red' ? 42 : 16);
+        const ry = y + ch - (small ? (id === 'red' ? 28 : 10) : id === 'red' ? 42 : 16);
         list.forEach((p, k) => {
-          const dx = x + cw / 2 - (list.length - 1) * 13 + k * 26;
+          const dx = x + cw / 2 - (list.length - 1) * (small ? 9 : 13) + k * (small ? 18 : 26);
           ctx.fillStyle = p.color;
           ctx.beginPath();
-          ctx.arc(dx, ry, 9, 0, 7);
+          ctx.arc(dx, ry, small ? 6 : 9, 0, 7);
           ctx.fill();
           ctx.strokeStyle = teamOf(id).color;
           ctx.lineWidth = 4;
