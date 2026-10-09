@@ -56,7 +56,7 @@ export function createRunStats(state) {
         missions: R.missions, wrecks: R.wrecks, avgHull: R.flightSteps ? +(R.hullSum / R.flightSteps).toFixed(1) : 0,
         walkPct: R.crewSteps ? +((100 * R.walkSteps) / R.crewSteps).toFixed(1) : 0, hauled: { ...hauled },
         tilt: R.flightSteps ? +(tiltSum / R.flightSteps).toFixed(2) : 0, tiltMax: +tiltMax.toFixed(2),
-        mannedKinds, mannedNames, tows: state.tows || 0, boilerLoads: { ...(state.boilerLoads || {}) },
+        mannedKinds, mannedNames, tows: state.tugHauls || 0, boilerLoads: { ...(state.boilerLoads || {}) },
       };
     },
   };

@@ -245,7 +245,7 @@ export function captainFly(state, p, plan, dt) {
   if (!gun && map) {
     const LOS = B.LOS;
     if (lineOpen(map, mx, my, R.mid.x, R.mid.y)) { c.losT = 0; c.openT += dt; if (c.openT > LOS.RESET) c.losShift = 0; }
-    else if (!hurt && my_h + 10 >= their_h) {
+    else if (!hurt && !plan.routing && my_h + 10 >= their_h) {
       c.openT = 0;
       c.losT += dt;
       if (c.losT > LOS.AFTER && c.t >= c.losPickT) {
@@ -321,6 +321,7 @@ export function captainFly(state, p, plan, dt) {
       c.blockL = !aheadFree(state, ship, my, mx, -1, reachX);
       c.blockR = !aheadFree(state, ship, my, mx, 1, reachX);
     }
+    if (plan.routing) { c.blockL = c.blockR = false; } // (following the route round an island: the route knows the rock)
     if ((c.blockL && speed * f < 0) || (c.blockR && speed * f > 0)) speed = 0; // (speed * f = her way along the world)
     if (wedged) { speed = plan.speed; target = plan.target; }
     // come about when she stays behind the bow

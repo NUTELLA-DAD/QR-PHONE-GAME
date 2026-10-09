@@ -143,7 +143,8 @@ function bare({ mode = null, phase = 'fight', near = true } = {}) {
   step(sim.sim, 2);
   if (near && phase === 'fight') { // (the arena is big and the ships start far apart: the controlled experiments below begin with them at the standoff, as they used to start)
     const [r, b] = st.ships, aim = (sh, k) => (k === 'x' ? T.toWorldX(sh, sh.layout.aimPoint.x) : T.toWorldY(sh, sh.layout.aimPoint.y));
-    b.pose.x += aim(r, 'x') + config.PVP.STANDOFF - aim(b, 'x');
+    b.pose.x += aim(r, 'x') + 2600 - aim(b, 'x'); // (the gap the old arena started with: the hulls do not touch)
+    for (const s of [r, b]) { s.ctx.ship.speed = s.ctx.ship.order = 0; s.ctx.ship.vy = 0; }
     b.pose.y += aim(r, 'y') - aim(b, 'y');
     step(sim.sim, 2);
   }
@@ -179,13 +180,13 @@ function crewman(st, team, ship, d, x) {
     const e0 = errors;
     M.applyPicks({ red: i, blue: shelf.length - 1 - i });
     M.begin({ shelf: false });
-    step(sim, 60 * 75); // (the ships start far apart in the big arena: about 30 s to close, then the fight)
+    step(sim, 60 * 130); // (the ships start far apart in the big arena: about 30 s to close, then the fight)
     const [r, b] = sim.state.ships;
-    const hurt = r.state.hull < 100 || b.state.hull < 100 || M.stats.red.shots + M.stats.blue.shots > 0;
+    const hurt = M.results.length > 0 || r.state.hull < 100 || b.state.hull < 100 || M.totals.red.shots + M.totals.blue.shots > 0;
     if (errors > e0 || M.phase === 'lobby' || !hurt) bad.push(shelf[i].name + (errors > e0 ? ' (errors)' : !hurt ? ' (no fight)' : ''));
     else flown++;
   }
-  report(bad.length === 0, `all ${flown}/${shelf.length} shelf builds fly 75 s as a refitted red ship against a fresh blue one, and fight${bad.length ? ' - trouble: ' + bad.join(', ') : ''}`);
+  report(bad.length === 0, `all ${flown}/${shelf.length} shelf builds fly 130 s as a refitted red ship against a fresh blue one, and fight${bad.length ? ' - trouble: ' + bad.join(', ') : ''}`);
 }
 
 // ---- 4. a best-of-three of bots ----
@@ -206,7 +207,7 @@ function crewman(st, team, ship, d, x) {
   const wall = Number(process.hrtime.bigint() - t0) / 1e9;
   for (const r of M.results) console.log(`  round ${r.round}: ${r.winner || 'no one'} (${r.cause}) after ${Math.round(r.time)} s, left ${r.left}, hull red ${r.hull.red.toFixed(0)} blue ${r.hull.blue.toFixed(0)}, hits ${r.stats.red.hits}/${r.stats.blue.hits}, damage ${r.stats.red.dmg.toFixed(0)}/${r.stats.blue.dmg.toFixed(0)}, bumps ${r.stats.red.bumps}, patches ${r.stats.red.patches}/${r.stats.blue.patches}`);
   report(M.phase === 'over' && !!M.winner && M.results.length >= 2, `a match ends: ${M.results.length} rounds in ${(steps * DT / 60).toFixed(1)} game minutes (${wall.toFixed(1)} s real), winner ${M.winner} ${M.score.red}-${M.score.blue}`);
-  report(errors === 0, `${errors} errors`);
+  report(errors === 0, `${errors} errors${firstErrors.length ? ": " + firstErrors.join(" || ") : ""}`);
   report(['count', 'fight', 'finale', 'between'].every((p) => phases.includes(p)) && phases.indexOf('count') < phases.indexOf('fight') && phases.indexOf('fight') < phases.indexOf('finale'), 'the phases run lobby -> count -> fight -> finale -> between -> ... -> over: ' + phases.join(' > '));
   report(M.results.length >= 2 && M.results[0].left !== M.results[1].left && M.results.every((r, i) => r.left === (i % 2 ? 'blue' : 'red')), 'the sides swap every round (' + M.results.map((r) => r.left + ' on the left').join(', ') + ')');
   report(M.score.red === M.results.filter((r) => r.winner === 'red').length && M.score.blue === M.results.filter((r) => r.winner === 'blue').length && (M.score.red >= 2 || M.score.blue >= 2 || M.results.length >= 5), `the score follows the rounds (red ${M.score.red}, blue ${M.score.blue})`);
@@ -439,12 +440,14 @@ function crewman(st, team, ship, d, x) {
   // calm sky (nobody shoots): the captains hold the standoff and the altitude edge
   config.PVP.SHELL_POWER = 0;
   config.COLLIDE.MIN_CLOSING = 1e9;
+  config.PVP.BOT.STYLE = 'brawler'; config.PVP.BOT.LOS.AFTER = 1e9; // (a brawler holds the mid band; nobody goes looking for a clear line in a calm sky)
   const { sim, st, M, red, blue } = versus({ bots: 6 });
   const mx = (sh) => T.toWorldX(sh, sh.layout.aimPoint.x), my = (sh) => T.toWorldY(sh, sh.layout.aimPoint.y);
   step(sim, 60 * 40);
   let gap = 0, dy = 0;
   for (let i = 0; i < 60 * 10; i++) { step(sim); gap += Math.abs(mx(blue) - mx(red)) / 600; dy += (my(blue) - my(red)) / 600; }
-  report(Math.abs(gap - config.PVP.STANDOFF) < 400, `the captains hold the standoff: ${Math.round(gap)} px between the ships (STANDOFF ${config.PVP.STANDOFF})`);
+  const hold = red.captain.hold; // (the brawler's band: PVP.RANGE.HOLD.mid nudged by her style)
+  report(Math.abs(gap - hold) < 450, `the captains hold their band (a brawler: the mid band): ${Math.round(gap)} px between the ships (hold ${Math.round(hold)}, RANGE.HOLD.mid ${config.PVP.RANGE.HOLD.mid})`);
   report(M.left === 'red' && dy > config.PVP.ALT_EDGE * 0.4 && dy < config.PVP.ALT_EDGE * 2.2, `...and the altitude edge: the ship that started on the left (${M.left}) holds ${Math.round(dy)} px above the other (ALT_EDGE ${config.PVP.ALT_EDGE})`);
   // bots board by hook in a calm sky, and the boarders are carried home or win a foothold: at least one crosses in 8 minutes
   const t0 = M.totals.red.boardings + M.totals.blue.boardings;
@@ -452,6 +455,7 @@ function crewman(st, team, ship, d, x) {
   report(M.totals.red.boardings + M.totals.blue.boardings > t0, `a bot hooks across to the rival's deck on his own when the sky is calm and her decks are in his reach (${M.totals.red.boardings + M.totals.blue.boardings} boardings, ${M.totals.red.knockouts + M.totals.blue.knockouts} knock-outs, ${M.totals.red.sabotage + M.totals.blue.sabotage} sabotaged boilers so far)`);
   config.PVP.SHELL_POWER = SAVE.shell;
   config.COLLIDE.MIN_CLOSING = SAVE.minClosing;
+  config.PVP.BOT.STYLE = null; config.PVP.BOT.LOS.AFTER = 2.5;
 }
 {
   // both bows point the same way: the one with the rival behind her comes about

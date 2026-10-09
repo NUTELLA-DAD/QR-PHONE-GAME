@@ -335,7 +335,7 @@ const sink = (st) => { st.ev.warn = 0; };
   const arrived = reached >= 0;
   report(dStart > 1500 && turns.length >= 1, `with the goal ${Math.round(dStart)} px behind her a bot helm held COME ABOUT after ${T.BOT_BEHIND} s of it being behind her and she turned (${turns.length} flip${turns.length === 1 ? '' : 's'}, at ${turns.join(', ')} s)`);
   report(arrived, `...and flew back to the goal (${arrived ? 'reached it after ' + reached.toFixed(0) + ' s' : 'did not get there in 150 s'}), facing ${A.pose.f < 0 ? 'left' : 'right'}`);
-  report(A.state.hull > 0 && !st.wreck, `without wrecking (hull ${A.state.hull.toFixed(0)}, tows ${st.tows || 0})`);
+  report(A.state.hull > 0 && !st.wreck, `without wrecking (hull ${A.state.hull.toFixed(0)}, tows ${st.tugHauls || 0})`);
   T.BOT_TURNS = saveBots;
 }
 

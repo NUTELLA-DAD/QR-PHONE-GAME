@@ -182,7 +182,7 @@ function gunReach(state, n) {
   const L = mainShip(state).layout;
   const g = state.GUNS[n];
   if (g && g.type === 'mines') return g.ammo > 0 && mineWanted(state) ? 0.7 : 4; // (the mine layer: manned when the captain wants a field laid, else left alone)
-  if (g && g.type === 'harpoon') return harpoonWanted(state, g) ? 0.6 : 4;
+  if (g && g.type === 'harpoon') return harpoonWanted(state, g) ? 0.45 : 4;
   const best = bestTarget(state, state.GUNS[n]);
   if (best && best.target.kind === 'flier') return 0.5; // (an enemy in the air: a flak gun's whole job)
   if (best && best.target.kind === 'laid') return 0.6; // (a mine in the way: shoot it before it is a hole in the hull)

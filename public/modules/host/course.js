@@ -207,10 +207,34 @@ function rivalPlan(state) {
     }
     y = c.y;
   }
+  // A rock island between the two ships that does not go away (the big arena has islands and spires in the middle of the sky): fly the ROUTE round it. The map's own distance field is pointed at her
+  // (setGoal; it is only read at once, so the other ship's plan is not disturbed) every half second, and the plan follows the next waypoint on it until the line between us has been clear for a while.
+  let routeDx = null;
+  if (map && map.arena && !hurt && !kite && state.ship.hull + 10 >= R.hull) {
+    const rt = R.route || (R.route = { on: false, wp: null, stamp: -1e9, last: -1, shut: 0, open: 0 });
+    if (rt.last !== R.stamp) { // (once a step, whoever asks)
+      rt.last = R.stamp;
+      let shut = 0;
+      for (let k = 1; k <= 12; k++) if (solidAt(map, mx + ((R.mid.x - mx) * k) / 13, my + ((R.mid.y - my) * k) / 13)) shut++;
+      if (shut < 2) { rt.shut = 0; rt.open++; } else { rt.open = 0; rt.shut++; }
+      if (!rt.on && rt.shut > B.ROUTE.SHUT) rt.on = true;
+      else if (rt.on && rt.open > B.ROUTE.OPEN) { rt.on = false; rt.wp = null; }
+      if (rt.on && R.stamp - rt.stamp >= B.ROUTE.EVERY) {
+        rt.stamp = R.stamp;
+        setGoal(map, { i: Math.floor(R.mid.x / map.CELL), j: Math.floor(R.mid.y / map.CELL) });
+        rt.wp = routeAhead(map, mx, my, B.ROUTE.STEPS);
+      }
+    }
+    if (rt.on && rt.wp) {
+      w = Math.max(-1, Math.min(1, (rt.wp.x - mx) / B.ROUTE.SLOW));
+      y = keepClear(state, mx, rt.wp.y, P.ROCK_MARGIN, 2.5);
+      routeDx = rt.wp.x - mx;
+    }
+  } else if (R.route) R.route.on = false;
   let target = AIM.y - y;
   const win = altWindow(state, 2); // (the altitudes where the whole hull clears the rock under and over the next two seconds of flight: the plan never asks for one outside it)
   target = win.min <= win.max ? Math.max(win.min + 20, Math.min(win.max - 20, target)) : (win.min + win.max) / 2;
-  return { target, speed: Math.max(-config.SHIP.REVERSE, Math.min(0.6, w * f)), dx: (hurt || kite ? -1 : 1) * gap * f, dy: R.mid.y - my };
+  return { target, speed: Math.max(-config.SHIP.REVERSE, Math.min(0.6, w * f)), dx: (hurt || kite ? -1 : 1) * (routeDx != null ? routeDx : gap) * f, dy: R.mid.y - my, routing: routeDx != null };
 }
 
 // Manners in a fleet (co-op ?ships=N): shipCollide.js is the wall, this is what a pilot does before it. A ship does not carry on while another ship is AHEAD of her (in the way she is going) inside the
@@ -945,7 +969,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         state.ship.vy = 0;
         state.ship.speed = Math.max(0, state.ship.speed);
         course.stuckBest = null;
-        state.tows = (state.tows || 0) + 1; // (counted for tools/buildsim.mjs: a build that wedges in caves)
+        state.tugHauls = (state.tugHauls || 0) + 1; // (counted for tools/buildsim.mjs: a build that wedges in caves)
         state.ev.warn = 3.5;
         state.ev.warnText = 'STUCK FAST! A TUG HAULS YOU CLEAR';
       }
