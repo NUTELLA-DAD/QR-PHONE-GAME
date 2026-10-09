@@ -9,17 +9,17 @@
   :root{--paper:#f3ead6;--shade:#e4d7b8;--ink:#3a2c20;--soft:#6b4a32;--pin:#c9a85a;--stamp:#a8443f;--display:'Limelight',Georgia,serif;--text:'Libre Baskerville',Georgia,serif}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden;background:#2b1d14;color:var(--ink);font:13px var(--text)}
-  #app{display:grid;grid-template-columns:310px 1fr;grid-template-rows:auto 1fr auto;height:100%;gap:8px;padding:8px}
+  #app{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto auto minmax(0,1fr);height:100%;gap:8px;padding:8px}
   .panel{background:var(--paper);border:3px solid var(--ink);border-radius:10px;box-shadow:4px 5px 0 rgba(43,34,22,.35),inset 0 0 0 4px var(--paper),inset 0 0 0 5px rgba(107,74,50,.45);padding:12px 14px;min-height:0}
   h1,h2{font-family:var(--display);font-weight:400;margin:0 0 6px}
   h1{font-size:22px} h2{font-size:15px;margin-top:10px}
-  #top{grid-column:1/3;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:8px 14px}
+  #top{grid-column:1/4;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:8px 14px}
   #top .grp{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
   button,select{font:700 12px var(--text);padding:5px 9px;border:2px solid var(--ink);border-radius:6px;background:var(--shade);color:var(--ink);cursor:pointer}
   button:hover:not(:disabled){background:#fff6dc} button:disabled{opacity:.4;cursor:default}
   button.on{background:var(--pin)} button.go{background:var(--stamp);color:#fff6dc}
   label.chk{display:flex;gap:4px;align-items:center;cursor:pointer;font-weight:700}
-  #left{grid-row:2/4;overflow:auto}
+  #left{grid-area:3/1;overflow:auto;width:310px} #centre{grid-area:3/2}
   #palette{display:grid;grid-template-columns:1fr 1fr;gap:5px}
   #palette button{text-align:left;font-weight:400;padding:4px 7px;line-height:1.25} #palette button b{font-weight:700}
   /* the parts tray (S.5d): little pictures of parts, dragged onto the blueprint (buildTest.js; the pictures are drawn by partArt.js) */
@@ -44,8 +44,6 @@
   .editing #bp{display:block}
   #bpNote{padding:2px 4px 4px;font-size:12px;color:var(--soft);min-height:18px} #bpNote.bad{color:var(--stamp);font-weight:700}
   #hint{padding:3px 4px 0;font-size:12px;color:var(--soft);min-height:18px}
-  #bottom{display:grid;grid-template-columns:minmax(560px,1.25fr) 1fr;gap:8px;height:270px}
-  #bottom .panel{overflow:auto}
   #gauges{width:100%;height:160px;display:block}
   #live{font-size:12px;color:var(--soft);margin-top:4px}
   .chk-line{display:grid;grid-template-columns:44px 104px 1fr;gap:4px;padding:1px 0;font-size:12px}
@@ -54,6 +52,30 @@
   #checklist{display:flex;flex-wrap:wrap;gap:3px 5px;margin:2px 0 6px}
   .chip{font-size:11px;padding:1px 6px;border-radius:9px;border:1px solid rgba(107,74,50,.4)} .chip.done{background:rgba(79,127,63,.2);color:#3b6b34} .chip.todo{background:rgba(168,68,63,.1);color:var(--stamp)} .chip.rec{background:rgba(214,160,58,.18);color:#8a5a00;border-color:rgba(138,90,0,.5)} .chip.opt{color:var(--soft);border-style:dashed}
   #verdict{font-family:var(--display);font-size:16px} #bot{margin-top:6px;border-top:1px dashed var(--soft);padding-top:5px}
+  /* ---- the big view (buildPlay.js, buildView.js): the whole page scales on big screens (CSS zoom set from the screen size), the blueprint zooms and pans, the side panels fold ---- */
+  #right{grid-area:3/3;overflow:auto;width:430px}
+  #right .chk-line{grid-template-columns:40px 92px 1fr}
+  .fold{position:sticky;top:0;float:right;z-index:2;padding:1px 8px;font-size:15px;line-height:1.2;margin:-4px -6px 0 0}
+  .collapsed{width:38px !important;padding:8px 4px !important;overflow:hidden !important} .collapsed > :not(.fold){display:none !important} .collapsed .fold{float:none;display:block;margin:0 auto}
+  .collapsed::after{content:attr(data-name);display:block;writing-mode:vertical-rl;margin:10px auto 0;font:15px var(--display);color:var(--soft)}
+  #playBar{grid-column:1/4;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;padding:8px 14px}
+  #playBar .grp{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  #playBar button.big{font:400 20px var(--display);padding:9px 20px;border-width:3px;border-radius:10px;box-shadow:3px 4px 0 rgba(43,34,22,.35)}
+  #playBar button.big.go{background:var(--stamp);color:#fff6dc} #playBar button.big.vs{background:#3a5a8c;color:#fff6dc}
+  #playBar button.big:disabled{opacity:.45} #playBar button.big.blocked{opacity:.55;background:var(--shade);color:var(--stamp)}
+  #playBar label{font-weight:700;display:flex;gap:5px;align-items:center}
+  #ptMsg{flex:1 1 320px;font-size:13px;color:var(--soft);min-height:18px} #ptMsg.bad{color:var(--stamp);font-weight:700} #ptMsg.warn{color:#a5701a;font-weight:700}
+  #viewBar{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;padding:0 2px 5px}
+  #viewBar .grp{display:flex;gap:4px;align-items:center} #viewBar .lbl{font-weight:700;color:var(--soft);font-size:12px} #zLbl{min-width:48px;text-align:center;font-weight:700}
+  #viewBar .keys{margin-left:auto;font-size:11px;color:var(--soft)}
+  #split{flex:0 0 9px;margin:1px 0;border-radius:4px;background:repeating-linear-gradient(90deg,var(--soft) 0 14px,transparent 14px 22px) center/100% 3px no-repeat;cursor:ns-resize;touch-action:none;display:none}
+  .editing #split{display:block} .vm-bp #scene,.vm-bp #split{display:none} .vm-live #bp,.vm-live #bpNote,.vm-live #split{display:none !important}
+  .vm-bp #bp{flex:1 1 0 !important} .vm-live #scene{flex:1 1 0 !important}
+  #myShips summary{margin-top:0} #msRow{display:flex;gap:5px;margin:4px 0} #msName{flex:1;min-width:0;font:700 12px var(--text);padding:4px 6px;border:2px solid var(--ink);border-radius:6px;background:#fbf3df;color:var(--ink)}
+  #msList{list-style:none;margin:4px 0 0;padding:0;max-height:15rem;overflow:auto} #msList li{display:flex;gap:4px;align-items:center;padding:3px 2px;border-bottom:1px solid rgba(107,74,50,.18)}
+  #msList li.cur{background:rgba(201,168,90,.3)} #msList input{flex:1;min-width:0;font:700 12px var(--text);border:1px solid transparent;background:transparent;color:var(--ink);padding:2px 3px;border-radius:4px} #msList input:focus{border-color:var(--ink);background:#fbf3df}
+  #msList small{color:var(--soft);font-size:10px;white-space:nowrap} #msList button{padding:2px 6px;font-size:11px} #msNote{font-size:12px;color:var(--soft);min-height:16px} #msNote.bad{color:var(--stamp);font-weight:700}
+  label.chk:has(#oEdit){display:none} /* (the Blueprint / Split / Live buttons above the paper replace this tick box; the script still drives it) */
 </style></head><body>
 <div id="app">
   <header id="top" class="panel">
@@ -64,8 +86,18 @@
     <div class="grp"><select id="env"></select><button id="undo">Undo</button><button id="clear" title="Erase the whole ship and start from nothing">Clear (start from nothing)</button><button id="minimal" title="A small flyable ship built with the same tools">Start from a minimal ship</button><button id="reset">Reset to classic</button><button id="copy">Copy build JSON</button><button id="run" class="go">Run 60 s bot test</button></div>
     <div class="grp"><a href="/host.html" style="color:var(--soft)">Back to the game</a></div>
   </header>
-  <aside id="left" class="panel">
-    <h2 style="margin-top:0">Parts tray</h2>
+  <section id="playBar" class="panel">
+    <div class="grp"><button id="ptCoop" class="big go" title="Fly THIS ship in the real game (host.html): the lobby with its QR code opens so phones can join, or pick bots on the right">PLAYTEST (co-op)</button><button id="ptVs" class="big vs" title="Fly THIS ship on the red team in a Versus match against the shelf ship chosen on the right">PLAYTEST (Versus)</button></div>
+    <div class="grp"><label title="Who crews the playtest: phones (the lobby with the QR code) or bots (the ship casts off at once; in Versus that many bots on each side)">Crew <select id="ptCrew"></select></label><label title="The shelf ship the Versus playtest fights (your ship is on red)">vs <select id="ptFoe"></select></label></div>
+    <div id="ptMsg"></div>
+    <div class="grp"><label title="How big the whole page is (Auto follows the screen: 1080p is 100%, 4K is 200%)">UI size <select id="uiSize"></select></label></div>
+  </section>
+  <aside id="left" class="panel" data-name="Parts tray">
+    <button class="fold" id="foldLeft" title="Fold this panel away (more room for the blueprint)">&laquo;</button>
+    <details open id="myShips"><summary>My Ships (kept on this computer)</summary>
+      <div id="msRow"><input id="msName" maxlength="32" placeholder="Name this ship" title="The name to save under (an existing name is replaced)"><button id="msSave" title="Save the ship on the blueprint under this name">Save</button></div>
+      <div id="msNote"></div><ul id="msList"></ul></details>
+    <h2>Parts tray</h2>
     <div id="tray"></div>
     <div id="palHint" style="margin:6px 0;color:var(--soft);font-size:12px">Drag a picture onto the blueprint: it snaps to the nearest legal spot (dimmed areas are no good; hover one to see why). Or click a picture, then a brass pin.</div>
     <h2>Engine direction</h2>
@@ -75,11 +107,16 @@
     <h2>Placed parts <span id="partCount"></span></h2>
     <ul id="parts"></ul>
   </aside>
-  <section id="centre" class="panel editing"><canvas id="bp"></canvas><div id="bpNote"></div><canvas id="scene"></canvas><div id="hint"></div></section>
-  <section id="bottom">
-    <div class="panel"><canvas id="gauges"></canvas><div id="live"></div></div>
-    <div class="panel"><div id="verdict"></div><div id="needs"></div><div id="checklist"></div><div id="report"></div><div id="bot"></div></div>
-  </section>
+  <section id="centre" class="panel editing">
+    <div id="viewBar"><div class="grp"><span class="lbl">View</span><button id="vmBp" title="The blueprint fills the pane">Blueprint</button><button id="vmSplit" title="Blueprint above, the live ship below (drag the bar between them)">Split</button><button id="vmLive" title="The live ship fills the pane">Live</button></div>
+      <div class="grp"><span class="lbl">Zoom</span><button id="zOut" title="Zoom out (-)">&minus;</button><span id="zLbl">100%</span><button id="zIn" title="Zoom in (+)">+</button><button id="zFit" title="Zoom to the ship">Fit ship</button><button id="zReset" title="The whole sheet (0)">Whole sheet</button></div>
+      <div class="keys">wheel: zoom &middot; right / middle drag or SPACE + drag: pan &middot; two fingers: pinch and pan</div></div>
+    <canvas id="bp"></canvas><div id="bpNote"></div><div id="split" title="Drag to resize"></div><canvas id="scene"></canvas><div id="hint"></div></section>
+  <aside id="right" class="panel" data-name="Report">
+    <button class="fold" id="foldRight" title="Fold this panel away (more room for the blueprint)">&raquo;</button>
+    <canvas id="gauges"></canvas><div id="live"></div>
+    <div id="verdict"></div><div id="needs"></div><div id="checklist"></div><div id="report"></div><div id="bot"></div>
+  </aside>
 </div>
 <canvas id="ghost" width="136" height="136"></canvas>
 <script type="module" src="/modules/host/buildTest.js"></script>
