@@ -308,7 +308,7 @@ Success: no accidental swaps in a playtest, and the cold-player test passes.
   - captain AI by range band.
 
 ### Queued next (owner requests)
-1. **Cargo drop hatch:** a trapdoor part, 1-3 columns, on any deck. A lever opens it and leaves a real hole in the deck.
+1. **Cargo drop hatch - DONE (see SHIP_BUILDING.md b11, `--check-hatch`):** a trapdoor part, 1-3 columns, on any deck. A lever opens it and leaves a real hole in the deck.
    - Cargo, ballast and crew fall through, so you can drop crates onto ships below, parachute down, or tip boarders out.
    - It ties into the Going Down weight-dumping.
    - Bots use it.

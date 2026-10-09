@@ -25,6 +25,7 @@ import { paintPath, paintRect, hasTexture } from './textureArt.js';
 import { drawBoilerSteam, drawFallMarks, drawHoleGlow } from './goingDownArt.js';
 import { windFactor } from './sails.js';
 import { gasKey, hotLift } from './gases.js';
+import { drawHatch } from './hatchArt.js';
 
 // Which painted texture goes under which flat palette colour (anything not listed stays flat).
 const TEX_OF = {
@@ -1553,6 +1554,16 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     }
   };
 
+  // ================= CARGO DROP HATCHES (hatch.js, hatchArt.js) =================
+  // Live: the trapdoors lie across the deck when shut and swing down to leave a hole when the doors are open; the klaxon lamps flash while they are about to give way, and the lever stands beside them.
+  const liveHatches = (time) => {
+    (L.hatches || []).forEach((s, i) => {
+      const st = (state.hatches || [])[i], q = P[s.d];
+      if (!q) return;
+      drawHatch(ctx, { x0: s.x0, x1: s.x1, y: q.y, lx: s.lx, door: st ? st.door : 0, warn: st && st.warn > 0 ? st.warn / config.HATCH.WARN_TIME : 0, handle: st ? st.handle : 0, crewOn: !!(st && st.crewOn), time });
+    });
+  };
+
   // ================= MASTS AND SAILS (S.5e) =================
   // Static: the mast, the boom it carries aft, the stays and the brass masthead. Live (liveSails): the canvas itself, furled in a roll on the boom or hauled up the mast,
   // fluttering downwind (toward the bow, the right) the harder the wind blows; a torn sail hangs in tatters.
@@ -1697,6 +1708,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     guard('sails', liveSails, time);
     guard('cannons', liveCannons, time);
     guard('loads', liveLoads);
+    if ((L.hatches || []).length) guard('hatches', liveHatches, time);
     guard('steam', liveVents, time);
     guard('lift', liveConnectors);
   };

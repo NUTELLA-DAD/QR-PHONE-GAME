@@ -9,6 +9,7 @@ import { config } from '../../config.js';
 import { paintPath } from './textureArt.js';
 import { drawBarrel, drawRam } from './weaponsArt.js';
 import { drawCone } from './flameArt.js';
+import { drawHatch } from './hatchArt.js';
 
 const INK = () => config.INK;
 const WOOD = '#b98a5a', WOOD_DARK = '#6b4a32', IRON = '#6a6568', BRASS = '#c9a85a', RED = '#a8443f', CANVAS = '#ebdfc0';
@@ -39,7 +40,21 @@ function typedGun(g, { filled }, type, sc, rot, mx, my) {
   filled(WOOD_DARK, () => g.rect(mx - 16, my + 16, 34, 10));
 }
 
+// A cargo drop hatch (hatchArt.js): a stretch of deck with its trapdoors hanging open, the red-handled lever beside it and a crate dropping out of the hole.
+function hatchTray(g, { filled, line }, x0, x1, lx) {
+  filled(WOOD, () => g.rect(2, 44, 96, 14)); // the deck
+  line([[2, 51], [98, 51]], 1.6, WOOD_DARK);
+  drawHatch(g, { x0, x1, y: 44, door: 0.9, handle: 1, lx });
+  const cx = (x0 + x1) / 2;
+  line([[cx - 5, 66], [cx - 5, 74]], 2.4); line([[cx + 5, 64], [cx + 5, 72]], 2.4);
+  filled('#c9a05f', () => g.rect(cx - 10, 76, 20, 20));
+  line([[cx - 10, 76], [cx + 10, 96]], 2, WOOD_DARK); line([[cx + 10, 76], [cx - 10, 96]], 2, WOOD_DARK);
+}
+
 const DRAW = {
+  dropHatch(g, p) { hatchTray(g, p, 22, 52, 76); },
+  dropHatch_2(g, p) { hatchTray(g, p, 14, 58, 82); },
+  dropHatch_3(g, p) { hatchTray(g, p, 8, 66, 87); },
   gun(g, { filled, ink }, sprites) {
     g.save(); g.translate(30, 58); g.rotate(-0.42); // the barrel, tipped up on its mount
     if (!sprites || !sprites.pivot(g, 'ship/gun-barrel', 0, 0, 0.12, 0.5, 0)) {

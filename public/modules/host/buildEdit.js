@@ -80,6 +80,7 @@ export function refs(o) {
     r.push({ id: o.top, x: o.xTop, to: (id) => { o.top = id; } }, { id: o.bottom, x: o.xBottom, to: (id) => { o.bottom = id; } });
     if (o.repair) r.push({ id: o.repair.p, x: o.repair.x, to: (id) => { o.repair = { ...o.repair, p: id }; } });
   } else if (o.part === 'pipe') r.push({ id: o.p, x: o.valve[0], to: (id) => { o.p = id; } });
+  else if (o.part === 'dropHatch') for (const x of [o.x0, (o.x0 + o.x1) / 2, o.x1, o.lx]) r.push({ id: o.p, x, to: (id) => { o.p = id; } }); // (a cargo drop hatch: a stretch of floor and its lever; a rub-out that touches any of it takes the whole thing)
   return r;
 }
 const nameOf = (o) => o.n || o.name;
@@ -101,6 +102,7 @@ export function labelOf(o) {
     case 'medbay': return 'medbay';
     case 'ballast': return o.hang ? 'hanging sandbag' : 'sandbag';
     case 'armour': return 'armour plate';
+    case 'dropHatch': return o.n || 'cargo drop hatch';
     case 'deck': return `${o.name} (deck)`;
     default: return o.part;
   }
@@ -655,6 +657,8 @@ export function placeConnector(parts, x, rowA, rowB, type = 'ladder') {
   if (twin) return no(parts, `There is already a ${twin.part} there (keep them ${gap} px apart).`);
   const mate = parts.find((p) => (p.part === 'station' || p.part === 'gun' || p.part === 'searchlight' || p.part === 'sail' || p.part === 'engine') && ((p.p === t.id || p.p === b.id)) && Math.abs(p.x - px) < 26);
   if (mate) return no(parts, `${nameOf(mate)} is in the way: slide the ladder along a little.`);
+  const hatch = parts.find((p) => p.part === 'dropHatch' && (p.p === t.id || p.p === b.id) && ((px > p.x0 - 16 && px < p.x1 + 16) || Math.abs(px - p.lx) < 26));
+  if (hatch) return no(parts, `The ${hatch.n} (a hole in the ${hatch.p === t.id ? t.name : b.name} when it is open) is in the way: slide the ladder along a little.`);
   const next = clone(parts);
   ensureFrame(next);
   next.push({ part: type, top: t.id, bottom: b.id, xTop: px, xBottom: px });
@@ -688,6 +692,13 @@ export function thingAt(parts, x, y, slop = 0) {
     if (o.part === 'armour') { // a long thing: the pointer anywhere along the plate (on the wall or rail band) picks it, but anything standing on it wins
       const base = dy(o.p);
       if (base != null && x >= o.x0 - slop && x <= o.x1 + slop && y >= base - 52 && y <= base + 72 && (!best || best.d > 1)) best = { index, label: labelOf(o), x: Math.max(o.x0, Math.min(o.x1, x)), y: base + 20, r: 24, d: 1 };
+      return;
+    }
+    if (o.part === 'dropHatch') { // a stretch of floor with its lever: the pointer anywhere along the trapdoors, or on the lever, picks it
+      const b = dy(o.p);
+      if (b == null) return;
+      if (x >= o.x0 - slop && x <= o.x1 + slop && y >= b - 40 && y <= b + 30) { if (!best || best.d > 0.9) best = { index, label: labelOf(o), x: Math.max(o.x0, Math.min(o.x1, x)), y: b - 4, r: 24, d: 0.9 }; }
+      else consider(index, o, labelOf(o), o.lx, b - 24, 18);
       return;
     }
     const base = dy(o.p);

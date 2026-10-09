@@ -68,7 +68,7 @@ export const SHIP_KEYS = [
   'rig', 'steamParts', 'steamUse', 'overdrive', 'buoyancy', 'sinking', 'autopilot', 'pressureWarned', 'warnBeep', 'boilerBlew', 'helmHit', 'ballastCd', 'gasWarned', 'lastAlt', 'noPump',
   'lookout', 'lookoutBonus', 'valveLog', 'valveShuts', 'boilerLoads',
   // cross-ship play (B.6): the crew cannons' records, the loads lying on her decks (cargo.js), the stock of her sandbag racks
-  'cannons', 'loads', 'rackStock',
+  'cannons', 'loads', 'rackStock', 'hatches', 'hatchStats',
   // parts breaking off (S.5i): the counters of what broke, and how much lift she lost with a gasbag (flight.js uses it as extra weight)
   'breakStats', 'liftDeficit',
   // crew health (health.js): hearts lost by cause, hearts healed

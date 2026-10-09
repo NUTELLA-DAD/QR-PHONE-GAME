@@ -23,6 +23,7 @@ import { config } from '../../config.js';
 import { mainShip } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { hurt, knockOut } from './health.js';
+import { deckPieces } from './shipBuild.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const val = (v) => (typeof v === 'function' ? v() : v);
@@ -38,7 +39,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   // Is this spot open air (an outside deck, or an outrigger room)?
   const outsideAt = (d, x) => !!P[d] && (!!P[d].outside || L.rooms.some((r) => r.outside && r.d === d && x >= r.x0 && x <= r.x1));
 
-  const shipSurfaces = () => P.map((p, d) => ({ id: 'ship:' + p.id, d, y: p.y, x0: p.x0, x1: p.x1 })); // (read each time: a new build applied to the ship, Versus' shelf, changes her decks in place)
+  const shipSurfaces = () => P.flatMap((p, d) => deckPieces(p, d, ship.nav ? ship.nav.holes : []).map(([x0, x1]) => ({ id: 'ship:' + p.id, d, y: p.y, x0, x1 }))); // (read each time: a new build applied to the ship, Versus' shelf, changes her decks in place; an open cargo drop hatch is a hole in its deck, nav.js)
 
   const surfaces = () => {
     const list = [...shipSurfaces(), ...extra];
@@ -101,6 +102,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const cutChute = (p) => {
     p.chute = 0;
     p.chuteOpen = false;
+    p.chuteOk = false; // (a fall through a cargo drop hatch lets Action open the canopy, hatch.js; over once he lands)
   };
 
   // GRAB A LADDER/ROPE mid-air (flying or mid-hop). Auto-grab when within reach sideways and between
@@ -280,7 +282,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     const wide = p.cannon ? cn.OVERBOARD_X : 0; // (B.6: a cannon flyer crosses the sky: he is only overboard well beyond the ends)
     const farX = Math.max(1600, ...extra.map((s) => (val(s.y) == null ? 0 : val(s.x1))), ...rs.map((s) => val(s.x1))) + A.OVERBOARD_X + wide;
     const nearX = Math.min(0, ...rs.map((s) => val(s.x0))) - A.OVERBOARD_X - wide;
-    const lowY = Math.max(p.chute > 0 ? A.CHUTE_OVERBOARD_Y : A.OVERBOARD_Y, ...rs.map((s) => val(s.y) + 320));
+    const lowY = Math.max(p.chute > 0 ? A.CHUTE_OVERBOARD_Y : A.OVERBOARD_Y + (p.chuteOk ? config.HATCH.CHUTE_WINDOW : 0), ...rs.map((s) => val(s.y) + 320)); // (a faller through a cargo drop hatch gets a little longer to find the parachute button)
     if (sy > lowY || sx < nearX || sx > farX) {
       p.fly = false;
       p.air = false;

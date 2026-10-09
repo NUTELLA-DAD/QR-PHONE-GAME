@@ -31,6 +31,7 @@ import { validate } from './buildCheck.js';
 import { createShipSim, flushPresses } from './shipSim.js';
 import { createDebris } from './debris.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
+import { deckPieces } from './shipBuild.js';
 import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 // Best run, remembered by this browser (the TV). Never let storage problems break the game.
@@ -151,10 +152,10 @@ export function createSimulation() {
   // (shipOf / transfer: from then on he lives by HER rules as a boarder, shipSim.js isHostile). The surfaces are in `me`'s ship coordinates, like all of airborne.js's.
   const rivalDecks = (me, rv) => () => {
     if (!state.ships.includes(rv) || !areHostile(me, rv) || rv.state.down > 0) return []; // (Versus: the other team's ship; B.5: the enemy gunship, and she can board us the same way)
-    return rv.layout.platforms.map((pl, d) => {
-      const a = toShipX(me, toWorldX(rv, pl.x0)), b = toShipX(me, toWorldX(rv, pl.x1));
+    return rv.layout.platforms.flatMap((pl, d) => deckPieces(pl, d, rv.nav ? rv.nav.holes : []).map(([p0, p1]) => { // (her open cargo drop hatches are holes in her decks)
+      const a = toShipX(me, toWorldX(rv, p0)), b = toShipX(me, toWorldX(rv, p1));
       return { id: 'rival:' + rv.id + ':' + d, y: toShipY(me, toWorldY(rv, pl.y)), x0: Math.min(a, b), x1: Math.max(a, b), onLand: (player) => boardShip(player, me, rv, d) };
-    });
+    }));
   };
   // B.6: a ship that is NOT an enemy of `me` (a Versus teammate, a co-op fleet ship): her decks catch only a crewman fired from a crew cannon (`only`), who walks off as her crew.
   const fleetDecks = (me, rv) => () => {
@@ -318,6 +319,7 @@ export function createSimulation() {
     if (state.loads) state.loads.length = 0;
     if (state.cannons) state.cannons = {};
     if (state.rackStock) state.rackStock = {};
+    for (const sh of state.ships) if (sh.sim && sh.sim.hatches) sh.sim.hatches.reset(); // (cargo drop hatches shut)
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
     for (const [name, m] of Object.entries(layout.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ...gunStock(m), empty: 0, auto: 0, prime: 0, primed: false });
     spotter.reset();

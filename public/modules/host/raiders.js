@@ -101,7 +101,7 @@ export function createRaiders({ state, modules, puff, impact }) {
     const live = Object.values(state.players).filter((q) => !q.fall && !q.fly && !(q.ko > 0) && q.d != null);
     for (const b of state.boarders) {
       if (b.fall) {
-        fall(b, dt, 300);
+        if (!b.tipped) fall(b, dt, 300); // (a raider tipped out of a cargo drop hatch falls by hatch.js's rules)
         continue;
       }
       const t = R[b.type];

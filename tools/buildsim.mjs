@@ -2,6 +2,7 @@
 // Usage: node tools/buildsim.mjs --build <classic|multi|file.json|file.mjs> [--bots-check]   the build validator (S.5): PASS/WARN/FAIL report + the LIFT / STEAM / HANDS gauges
 //        node tools/buildsim.mjs --random 50 --seed 1 --minutes 4 --envs skyisles,fungal,storm,aether --bots 6   random legal builds, botsim each, table + which parts dominate
 //        node tools/buildsim.mjs --check-crossship  B.6: the crew cannon, thrown ballast and shovel jobs, dumping for lift, towing, stolen coal, bots using all of it (tools/crossship-check.mjs)
+//        node tools/buildsim.mjs --check-hatch      CARGO DROP HATCH (tools/hatch-check.mjs): the part (palette, slots, validator, weight, edit ops), the lever and its klaxon, a real hole in the deck (a crewman over it falls and a parachute works, a crate drops onto a ship below, a boarder is tipped out, routes go round it and back when it shuts), the weight GOING DOWN counts, bots using it, the TV on a stub canvas, 0 errors
 //        node tools/buildsim.mjs --check-breakoff   S.5i: parts break off for real (tools/breakoff-check.mjs): a bomb bay explosion and a heavy hit / crash / ram / ripped bag take the right parts, she keeps flying with the new shape, crew on them fall, debris tumbles, armour lowers the chance, REBUILD cards at the dock, the gunship and a second ship lose parts too, 0 errors over a 3-minute botsim with high break-off settings
 //        node tools/buildsim.mjs --check-gen        the ship generator (tools/gen-check.mjs): 200 seeded random ships all validate with no FAIL and fit the Versus weight cap, are varied and repeatable, crossover / mutation children repair into valid ships, 10 fly a 1-minute botsim and 2 fight Versus rounds with 0 errors, the shelf's Hall of Fame cards and Surprise me! (tools/shipforge.mjs is the combo finder)
 //        node tools/buildsim.mjs --check-gas        GAS TYPES (tools/gas-check.mjs): a bag holds helium (default, unchanged), hydrogen (+30% lift, a fire that reaches it lights it and it explodes: the bag tears away, fires, hearts, a touching hydrogen bag catches) or hot air (-40% lift, lifts only while the boiler is hot); the LIFT gauge, the validator (INFO, hydrogen beside boiler / coal / flamethrower WARN), the edit, the dock prices and the convert card, bots putting out the fire and stoking the burner, the TV, 2-minute botsims of each gas with 0 errors
@@ -2291,6 +2292,8 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'breakoff-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-crossship') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'crossship-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-hatch') {
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'hatch-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-gunship-ship') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gunship-ship-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-turn') {
@@ -2328,6 +2331,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-breakoff | --check-health | --check-flame | --check-gen | --check-turn | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-hatch | --check-breakoff | --check-health | --check-flame | --check-gen | --check-turn | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

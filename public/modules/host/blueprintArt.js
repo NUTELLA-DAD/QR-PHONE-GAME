@@ -181,6 +181,21 @@ export function drawBlueprint(g, v, Ly, o = {}) {
 
   // Decks (thick ink), room dividers, ways between decks.
   const P = Ly.platforms;
+  // A CARGO DROP HATCH (config.HATCH): hazard-striped trapdoors set into the deck between screen x a and b at height y, and the red-handled lever beside them (lever = its screen x). ghost: a place it could go.
+  const hatchMark = (a, b, y, lever, ghost) => {
+    g.save();
+    g.beginPath(); g.rect(a, y - 6 * k, b - a, 11 * k); g.clip();
+    g.fillStyle = ghost ? 'rgba(232,184,48,0.4)' : 'rgba(232,184,48,0.88)'; g.fillRect(a, y - 6 * k, b - a, 11 * k);
+    g.strokeStyle = 'rgba(43,38,34,0.85)'; g.lineWidth = 3 * k;
+    for (let x = a - 12 * k; x < b + 12 * k; x += 9 * k) { g.beginPath(); g.moveTo(x, y + 5 * k); g.lineTo(x + 11 * k, y - 6 * k); g.stroke(); }
+    g.restore();
+    g.strokeStyle = ghost ? '#4f7f3f' : L.INK; g.lineWidth = 1.8 * k; g.strokeRect(a, y - 6 * k, b - a, 11 * k);
+    line([[(a + b) / 2, y - 6 * k], [(a + b) / 2, y + 5 * k]], 1.2);
+    if (lever != null) {
+      line([[lever, y], [lever, y - 14 * k]], 2);
+      g.beginPath(); g.arc(lever + 3 * k, y - 17 * k, 3.4 * k, 0, 6.2832); g.fillStyle = L.STAMP; g.fill(); g.strokeStyle = L.INK; g.lineWidth = 1.2 * k; g.stroke();
+    }
+  };
   for (const r of Ly.rooms) { const q = P[r.d]; if (q) for (const x of [r.x0, r.x1]) line([[X(x), Y(q.y) - 26 * k], [X(x), Y(q.y)]], 1, 'rgba(58,44,32,0.35)'); }
   const BODY = ['catwalk', 'main', 'lower', 'keel', 'deep'];
   for (const q of P) {
@@ -207,6 +222,12 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     g.fillStyle = 'rgba(243,234,214,0.9)';
     for (let x = a.x0 + 14; x < a.x1 - 6; x += 28) { g.beginPath(); g.arc(X(x), y0 + h / 2, 1.8 * k, 0, 6.2832); g.fill(); }
     if (a.x1 - a.x0 > 160) text('ARMOUR', X((a.x0 + a.x1) / 2), y0 + h + 11 * k, 9, L.INK_SOFT, 'center');
+  }
+  for (const h of Ly.hatches || []) { // the cargo drop hatches
+    const q = P[h.d];
+    if (!q) continue;
+    hatchMark(X(h.x0), X(h.x1), Y(q.y), X(h.lx));
+    if (!clean && h.x1 - h.x0 >= 110) text(`HATCH ${Math.round((h.x1 - h.x0) / 120)}`, X((h.x0 + h.x1) / 2), Y(q.y) + 17 * k, 9, L.INK_SOFT, 'center');
   }
   for (const c of Ly.connectors) {
     const t = P[c.top], b = P[c.bottom];
@@ -319,6 +340,7 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     for (const sl of dr.slots) { // the windows: bright strips where the part can go
       if (sl.bag) vg.fillRect(X(sl.span[0]), Y(BE.BAG_CY) - BE.BAG_RY * s - 8 * k, (sl.span[1] - sl.span[0]) * s, 2 * BE.BAG_RY * s + 16 * k);
       else if (sl.hr != null) vg.fillRect(X(sl.x) - 14 * k, Y(sl.hy) - sl.hr * s - 4 * k, 28 * k, 2 * sl.hr * s + 8 * k);
+      else if (sl.hatch) vg.fillRect(X(sl.hatch[0]) - 14 * k, Y(sl.y) - 58 * k, (sl.hatch[1] - sl.hatch[0]) * s + 28 * k, 74 * k);
       else vg.fillRect(X(sl.x) - 24 * k, Y(sl.y) - 58 * k, 48 * k, 74 * k);
     }
     vg.globalCompositeOperation = 'source-over';
@@ -329,6 +351,7 @@ export function drawBlueprint(g, v, Ly, o = {}) {
   for (const sl of o.slots || []) {
     if (sl.bag) continue; // (a bag's slot is a stretch of the bag row, drawn as the bag it would make)
     const on = o.hover === sl, y = Y(sl.y) - 30 * k * 0.6;
+    if (sl.hatch && on) hatchMark(X(sl.hatch[0]), X(sl.hatch[1]), Y(sl.y), X(sl.lever), true); // (a hatch pin shows the stretch of floor it would open, and its lever)
     g.beginPath(); g.arc(X(sl.x), y, (on ? 9 : 6) * k, 0, 6.2832);
     g.fillStyle = on ? '#ffe9a0' : L.PIN; g.fill();
     g.strokeStyle = L.INK; g.lineWidth = 1.8 * k; g.stroke();
@@ -357,6 +380,7 @@ export function drawBlueprint(g, v, Ly, o = {}) {
         if (dr.img) g.drawImage(dr.img, X(t.x) - size / 2, Y(BE.BAG_CY) - size / 2, size, size);
         note(t.label, X(t.x), Y(BE.BAG_CY) - BE.BAG_RY * s - 10 * k, '#3b6b34');
       } else {
+        if (t.hatch) hatchMark(X(t.hatch[0]), X(t.hatch[1]), Y(t.y), X(t.lever), true);
         const px = X(t.x), py = Y(t.hy != null ? t.hy : t.y) - (t.hy != null ? 0 : size * 0.5 + 4 * k);
         g.beginPath(); g.arc(px, py, size * 0.62, 0, 6.2832); g.fillStyle = 'rgba(255,233,160,0.45)'; g.fill(); g.strokeStyle = '#4f7f3f'; g.lineWidth = 2.4 * k; g.stroke();
         if (dr.img) g.drawImage(dr.img, px - size / 2, py - size / 2, size, size);

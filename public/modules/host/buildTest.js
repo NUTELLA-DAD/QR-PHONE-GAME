@@ -220,7 +220,7 @@ const TRAY = [['gasbag', 'Gasbag'], ['gasValve', 'Gas valve'], ['helm', 'Helm'],
   ['medbay', 'Medbay'], ['bombBay', 'Bomb bay'], ['lift', 'Lift'], ['boarding', 'Boarding point'], ['rack_hammer', 'Hammer rack'], ['rack_sword', 'Sword rack'], ['rack_hookshot', 'Hookshot rack'],
   ['extinguisher', 'Extinguisher'], ['armour', 'Armour plate'], ['vent', 'Steam vent'], ['sail', 'Mast and sail'], ['ladder', 'Ladder'], ['pole', 'Slide pole'], ['ballast', 'Sandbag'], ['ballast_hang', 'Hanging sandbag'], ['crewCannon', 'Crew cannon'], ['rack_sandbag', 'Sandbag rack'], ['rack_crate', 'Crate stack'], ['rack_towline', 'Towline reel'],
   ['gun_flame', 'Flamethrower'],
-  ['gun_long', 'Long gun'], ['gun_mortar', 'Mortar'], ['gun_scatter', 'Grapeshot gun'], ['gun_flak', 'Flak gun'], ['gun_harpoon', 'Harpoon gun'], ['mineLayer', 'Mine layer'], ['ramProw', 'Ram prow']];
+  ['gun_long', 'Long gun'], ['gun_mortar', 'Mortar'], ['gun_scatter', 'Grapeshot gun'], ['gun_flak', 'Flak gun'], ['gun_harpoon', 'Harpoon gun'], ['mineLayer', 'Mine layer'], ['ramProw', 'Ram prow'], ['dropHatch', 'Drop hatch 1'], ['dropHatch_2', 'Drop hatch 2'], ['dropHatch_3', 'Drop hatch 3']];
 const tray = { id: null, moved: false, slots: [], target: null, ptr: null, why: '', img: null, x0: 0, y0: 0 }; // the tile being dragged (moved = it has left the tile)
 // ---- pointed engines (S.5h) -------------------------------------------------------------------------------------------
 // engDir is the way the NEXT engine will point (rotate it with the wheel or R while dragging an engine, or the arrows on the left); selEngine is the engine whose arrow the page is editing.

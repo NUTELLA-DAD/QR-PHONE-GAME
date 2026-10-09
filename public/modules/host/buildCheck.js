@@ -5,7 +5,7 @@
 // (tools/buildsim.mjs), the batch runner and the dev page (public/buildtest.html) all use it.
 // A check is { group, level: 'PASS' | 'WARN' | 'FAIL', text }; ok means no FAIL.
 import { config } from '../../config.js';
-import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf, isNestRow, thrustVec, engineUse } from './shipBuild.js';
+import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf, isNestRow, thrustVec, engineUse, crossesGap, COL } from './shipBuild.js';
 import { staticPitch } from './forces.js';
 import { fireRisk, hydrogenExposure } from './fireModel.js';
 import { gasKey } from './gases.js';
@@ -56,16 +56,18 @@ export function checklist(L, routesOk = true) {
 // ---- walking: the same route-finding as nav.js, on any layout -----------------------------------------------
 // Returns { plan(d1, x1, d2, x2) -> { cost (seconds), node }, reach(d1, d2) } for the layout's platforms and connectors.
 // Poles are one-way (top to bottom). Used here for the walk budgets and the connectivity check, and by the dev page's heat map.
-export function makePlanner(L, walk = config.MOVE.WALK_SPEED) {
+// gaps: holes in decks [{ d, x0, x1 }] (cargo drop hatches standing open, hatch.js): nobody walks across one, the way goes round by a ladder.
+export function makePlanner(L, walk = config.MOVE.WALK_SPEED, gaps = []) {
   const P = L.platforms, C = L.connectors;
   const NN = C.length * 2;
   const nodes = Array.from({ length: NN }, (_, n) => ({ d: n % 2 ? C[n >> 1].bottom : C[n >> 1].top, x: n % 2 ? C[n >> 1].xBottom : C[n >> 1].xTop }));
   const nodesOn = P.map((_, d) => nodes.map((nd, n) => (nd.d === d ? n : -1)).filter((n) => n >= 0));
   const climb = (c) => (P[c.bottom].y - P[c.top].y) / c.speed + GRAB_COST;
   const tt = Array.from({ length: NN }, () => Array(NN).fill(Infinity));
+  const secs = (d, a, b) => (crossesGap(gaps, d, a, b) ? Infinity : Math.abs(a - b) / walk);
   for (let a = 0; a < NN; a++) {
     tt[a][a] = 0;
-    for (const b of nodesOn[nodes[a].d]) tt[a][b] = Math.min(tt[a][b], Math.abs(nodes[a].x - nodes[b].x) / walk);
+    for (const b of nodesOn[nodes[a].d]) tt[a][b] = Math.min(tt[a][b], secs(nodes[a].d, nodes[a].x, nodes[b].x));
   }
   C.forEach((c, i) => {
     tt[2 * i][2 * i + 1] = Math.min(tt[2 * i][2 * i + 1], climb(c));
@@ -73,15 +75,18 @@ export function makePlanner(L, walk = config.MOVE.WALK_SPEED) {
   });
   for (let k = 0; k < NN; k++) for (let a = 0; a < NN; a++) for (let b = 0; b < NN; b++) if (tt[a][k] + tt[k][b] < tt[a][b]) tt[a][b] = tt[a][k] + tt[k][b];
   const plan = (d1, x1, d2, x2) => {
-    if (d1 === d2) return { cost: Math.abs(x1 - x2) / walk, node: -1 };
+    if (d1 === d2) {
+      const direct = secs(d1, x1, x2);
+      if (direct < Infinity) return { cost: direct, node: -1 };
+    }
     let best = { cost: Infinity, node: -1 };
     for (const a of nodesOn[d1] || []) {
       const c = C[a >> 1];
       if (a % 2 && c.type === 'pole') continue;
       const there = a % 2 ? 2 * (a >> 1) : 2 * (a >> 1) + 1;
-      const first = Math.abs(x1 - nodes[a].x) / walk + climb(c);
+      const first = secs(d1, x1, nodes[a].x) + climb(c);
       for (const b of nodesOn[d2] || []) {
-        const cost = first + tt[there][b] + Math.abs(nodes[b].x - x2) / walk;
+        const cost = first + tt[there][b] + secs(d2, nodes[b].x, x2);
         if (cost < best.cost) best = { cost, node: a };
       }
     }
@@ -208,6 +213,11 @@ export function validate(parts, opts = {}) {
   placed(L.gasValves || [], (o) => `a gas valve (${o.p} ${o.x})`);
   placed(L.escortDocks, (o) => `escort hook ${o.n}`);
   if (L.medbay) placed([L.medbay], () => 'the medbay');
+  for (const h of L.hatches || []) { // (a cargo drop hatch: its trapdoors and its lever on a real deck, inside its ends)
+    const q = byId[h.p];
+    if (!q) bad.push(`the ${h.n} is on a deck that does not exist (${h.p})`);
+    else if (h.x0 < q.x0 - 1 || h.x1 > q.x1 + 1 || h.lx < q.x0 - 1 || h.lx > q.x1 + 1) bad.push(`the ${h.n} runs off the end of the ${q.name}`);
+  }
   if (L.liftRepair) placed([L.liftRepair], () => 'the lift repair spot');
   for (const r of L.rooms) {
     const q = byId[r.p];
@@ -490,6 +500,39 @@ export function validate(parts, opts = {}) {
       if (!L.stations.some((s) => s.kind === 'ammo')) warn('Mine layer', 'no ammo hold: the mine layer cannot be refilled once it is empty');
     }
     if (L.ram) info('Ram prow', `a reinforced prow: when the ships meet nose first a ram hurts the other ship ${config.RAM.MUL}x as much, and her own only ${config.RAM.SELF}x; weighs ${BALANCE.MASS.kind.ram}. It wants speed and a bold captain`);
+  }
+
+  // --- The cargo drop hatch (hatch.js, config.HATCH): a real hole in a deck when it is open. What falls through it, what is in the way, and whether the crew can still get about with it open.
+  if ((L.hatches || []).length) {
+    const HC = config.HATCH, hs = L.hatches, cols = (h) => Math.round(((h.x1 - h.x0) / COL) * 10) / 10;
+    info('Cargo drop hatch', `${hs.length} hatch${hs.length === 1 ? '' : 'es'} (${hs.map((h) => `${h.n}: ${cols(h)} column${cols(h) === 1 ? '' : 's'} of the ${(byId[h.p] || {}).name || h.p}`).join(', ')}), weighing ${hs.reduce((n, h) => n + ((h.x1 - h.x0) / 100) * HC.MASS, 0).toFixed(1)} in all. The lever beside it sounds a klaxon for ${HC.WARN_TIME} s, then the trapdoors swing open and anyone standing over them falls through (Action opens a parachute); sacks and crates lying on it drop onto whatever is below; boarders on it are tipped out; routes go round the hole. Dump weight when she is going down, drop crates on a ship below, tip raiders out`);
+    const below = (h) => L.platforms.filter((q) => q.y > byId[h.p].y + 2 && q.x1 > h.x0 + 4 && q.x0 < h.x1 - 4);
+    for (const h of hs) {
+      const q = byId[h.p];
+      if (!q) continue;
+      const under = below(h);
+      info('Cargo drop hatch', under.length ? `the ${h.n} drops onto the ${under[0].name}${under.length > 1 ? ' (and the decks under that)' : ''}: a crate lands on her own deck as a load, a faller lands hurt only from a great height` : `the ${h.n} has none of her own decks under it: what falls goes straight out of the hull (onto a ship below, or away) - a crate dropped on an enemy, weight dumped for good`);
+      const inSpan = (x) => x > h.x0 - 1 && x < h.x1 + 1;
+      const stuff = [...L.stations, ...L.engines].filter((s) => s.p === h.p && inSpan(s.x)).map((s) => s.n || s.name);
+      for (const c of L.connectors) if ((L.platforms[c.top] || {}).id === h.p && inSpan(c.xTop)) stuff.push(`a ${c.type}`); else if ((L.platforms[c.bottom] || {}).id === h.p && inSpan(c.xBottom)) stuff.push(`a ${c.type}`);
+      for (const o of [...L.racks, ...L.vents, ...L.extinguishers, ...(L.gasValves || []), ...(L.ballast || [])]) if (o.p === h.p && !o.hang && inSpan(o.x)) stuff.push(o.kind ? `a ${o.kind} rack` : 'a rack, vent or valve');
+      if (stuff.length) warn('Cargo drop hatch', `the ${h.n} has ${stuff.slice(0, 4).join(', ')} on its trapdoors: open, the floor there is gone (move it, or the hatch)`);
+      const near = L.stations.find((s) => s.kind === 'coal' && s.p === h.p && s.x > h.x0 - HC.COAL_REACH && s.x < h.x1 + HC.COAL_REACH);
+      if (near) info('Cargo drop hatch', `the ${near.n} stands beside the ${h.n}: when she is going down, opening it spills the coal bunker down the chute (the weight goes at once, and so does the fuel)`);
+    }
+    if (routesOk && !cbad.length && L.platforms.length > 1) { // the way about with every hatch open: the lever, and every station, must still be reachable from each other
+      const open = makePlanner(L, config.MOVE.WALK_SPEED, hs.map((h) => ({ d: L.platforms.indexOf(byId[h.p]), x0: h.x0, x1: h.x1 })));
+      const cut = [];
+      for (const h of hs) {
+        const d = L.platforms.indexOf(byId[h.p]);
+        for (const s of [...L.stations, ...L.engines]) {
+          const sd = s.d, sx = s.x;
+          if (!Number.isFinite(open.plan(d, h.lx, sd, sx).cost) || !Number.isFinite(open.plan(sd, sx, d, h.lx).cost)) cut.push(`${s.n || s.name} and the ${h.n}'s lever`);
+        }
+      }
+      if (cut.length) warn('Cargo drop hatch', `with every hatch open there is no way between ${[...new Set(cut)].slice(0, 3).join('; ')} (the hole cuts the deck in two: give the cut-off part a ladder of its own)`);
+      else pass('Cargo drop hatch', 'with every hatch open the crew can still walk from the levers to every station');
+    }
   }
 
   // --- Advice: the parts she would be better for (a missing one is a strong WARN, never a FAIL).

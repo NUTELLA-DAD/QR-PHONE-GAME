@@ -403,6 +403,78 @@ function throwSpot(ship, target) {
   return { x, side, sol: solveThrow(ship, { x: toWorldX(ship, x), y: toWorldY(ship, deck.y - 70) }, target, side) };
 }
 
+// CARGO DROP HATCHES (hatch.js, config.HATCH.BOT): shut one that has done its work; pull the lever on raiders and boarders standing on it (never with one of the crew on it, unless boarders are being
+// tipped out); in a duel or against the gunship, take a crate to the hatch and drop it on a ship directly below. (GOING DOWN! dumps weight through the hatch: goingDown.js botJobs.)
+// A hatch the lever of which is on this deck: where a bot stands to pull it is `lx`, and to drop a load the edge of the span nearest the lever.
+const ourCrewOn = (state, h, bot) => Object.values(state.players).some((q) => q !== bot && !hostile(q, state) && q.d === h.d && q.conn == null && !q.fly && !q.fall && q.x > h.x0 && q.x < h.x1);
+const foesOn = (state, h) => state.boarders.filter((b) => !b.fall && b.conn == null && b.d === h.d && b.x > h.x0 && b.x < h.x1).length + Object.values(state.players).filter((q) => hostile(q, state) && q.d === h.d && q.conn == null && !q.fly && !q.fall && q.x > h.x0 && q.x < h.x1).length;
+function hatchJobs(state, bot) {
+  const hs = state.hatches || [], HB = config.HATCH.BOT;
+  if (!hs.length || state.phase !== 'flying' || state.ship.down || bot.mate || bot.team === 'enemy') return [];
+  const ship = mainShip(state), L = ship.layout, out = [], players = Object.values(state.players);
+  const busy = (h) => players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'hatch' && q.botJob.obj === h && q.botJob.mode !== 'close'); // (somebody is mid-errand with it: leave it open)
+  const rack = tables(L).PICKUPS.some((r) => r.kind === 'sandbag') ? 'sandbag' : tables(L).PICKUPS.some((r) => r.kind === 'crate') ? 'crate' : null;
+  const now = performance.now();
+  for (const h of hs) {
+    const going = !!bot.botJob && bot.botJob.kind === 'hatch' && bot.botJob.mode === 'drop' && bot.botJob.obj === h; // (an errand under way is seen through, whatever the clock says)
+    if (going && (bot.carry === 'sandbag' || bot.carry === 'crate') && h.want) { out.push({ kind: 'hatch', obj: h, mode: 'drop', max: 1, throwKind: rack }); continue; } // (the doors are opening: stand by the hole and let it fall)
+    if (h.want && h.openSecs > HB.OPEN_FOR && !busy(h) && !foesOn(state, h)) { out.push({ kind: 'hatch', obj: h, mode: 'close', max: 1 }); continue; }
+    if (h.want || ship.ai) continue;
+    const foes = foesOn(state, h), mine = ourCrewOn(state, h, bot);
+    if (foes >= HB.TIP_MIN && (!mine || foes >= 2)) { out.push({ kind: 'hatch', obj: h, mode: 'tip', max: 1, urgent: true }); continue; } // (raiders on the trapdoors: out they go)
+    if (mine || !rack || state.goingDown || bot.team === 'enemy') continue;
+    // a ship directly below: the hatch's span (world x) over one of her decks, nothing of ours in the way, within BELOW_Y under us
+    const q = L.platforms[h.d];
+    if (!q || L.platforms.some((o) => o.y > q.y + 2 && o.x1 > h.x0 + 4 && o.x0 < h.x1 - 4)) continue;
+    const wa = toWorldX(ship, h.x0), wb = toWorldX(ship, h.x1), lo = Math.min(wa, wb), hi = Math.max(wa, wb), wy = toWorldY(ship, q.y);
+    const below = ship.world.ships.some((o) => o !== ship && areHostile(ship, o) && !(o.state.down > 0) && o.layout.platforms.some((pl) => {
+      const a = toWorldX(o, pl.x0), b = toWorldX(o, pl.x1), y = toWorldY(o, pl.y);
+      return Math.max(a, b) > lo - HB.BELOW_X && Math.min(a, b) < hi + HB.BELOW_X && y > wy + 80 && y < wy + HB.BELOW_Y;
+    }));
+    if (!below) { if (bot.hatchUntil) bot.hatchUntil = 0; continue; }
+    if (!(bot.hatchUntil > now) && (bot.carry === 'sandbag' || bot.carry === 'crate' || Math.random() < (HB.DROP_CHANCE * B.THINK_EVERY) / 60)) bot.hatchUntil = now + 16000;
+    if (going || bot.hatchUntil > now) out.push({ kind: 'hatch', obj: h, mode: 'drop', max: 1, throwKind: rack });
+  }
+  return out;
+}
+// Carry out a hatch job: shut it (close), pull its lever (tip / dump), or fetch a crate, open it, stand at its edge and let the crate fall (drop).
+function hatchWork(p, state, job) {
+  const L = mainShip(state).layout, h = job.obj, s = (L.hatches || [])[h.i];
+  if (!s || !(state.hatches || []).includes(h)) { p.botJob = null; return; }
+  const atLever = () => steer(p, s.d, s.lx, 12);
+  if (job.mode === 'close') {
+    if (!h.want) { p.botJob = null; return; }
+    if (atLever()) { p.jx = 0; press(p); }
+    return;
+  }
+  if (job.mode === 'tip' || job.mode === 'dump') {
+    if (h.want) { p.botJob = null; return; }
+    if (job.mode === 'tip' && ourCrewOn(state, h, p) && foesOn(state, h) < 2) { p.botJob = null; return; } // (one of ours stepped on: never)
+    if (atLever()) { p.jx = 0; press(p); }
+    return;
+  }
+  // drop: a crate in hand first (the errand's own clock lives on the bot: the job is made again at every think)
+  const run = (p.hatchRun = p.hatchRun && p.hatchRun.obj === h ? p.hatchRun : { obj: h, wait: 0 });
+  if (p.carry !== 'sandbag' && p.carry !== 'crate') {
+    if (run.wait > 12) { p.botJob = null; p.hatchUntil = 0; p.hatchRun = null; return; }
+    run.wait += 0.01;
+    getTool(state, p, job.throwKind);
+    return;
+  }
+  if (!h.want) { // open it (never with one of ours on the trapdoors)
+    if (ourCrewOn(state, h, p)) { p.botJob = null; return; }
+    if (atLever()) { p.jx = 0; press(p); }
+    return;
+  }
+  const edge = s.lx > s.x1 ? s.x1 + 26 : s.x0 - 26; // (the lever's side: stand between it and the hole)
+  if (steer(p, s.d, edge, 8)) {
+    p.jx = 0;
+    if (h.gap) press(p); // the Action button says "drop the crate down the hatch" now
+    else run.wait += 0.01;
+  }
+  if (run.wait > 6) { p.botJob = null; p.hatchUntil = 0; p.hatchRun = null; }
+}
+
 // List every job on the ship, most urgent first.
 function listJobs(state, bot) {
   const L = mainShip(state).layout;
@@ -512,6 +584,9 @@ function listJobs(state, bot) {
   const reach = (n) => (isEscortStation(n, L) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : L.kindOf(n) === 'lookout' ? lookoutReach(state) : L.kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : L.kindOf(n) === 'coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : L.kindOf(n) === 'bombBay' ? ((groundTargets(state).length || bombRunOn(state)) && state.bombBay.bombs > 0 ? 0.5 : 4) : L.kindOf(n) === 'swivel' ? (swivelOff(state, n) > 0.3 ? 0.5 : 4) : L.kindOf(n) === 'cannon' || L.kindOf(n) === 'cannonSeat' ? cannonReach(state, n) : isSearchlight(n, L) ? lightReach(state, n) : !tables(L).GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = tables(L).MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   jobs.push(...crossJobs(state, bot)); // (B.6: loads thrown onto the deck: shovel them off)
+  const hatchWorks = hatchJobs(state, bot); // (cargo drop hatches: tip raiders out - before any fighting - shut one, drop a crate on a ship below)
+  jobs.unshift(...hatchWorks.filter((j) => j.mode === 'tip'));
+  jobs.push(...hatchWorks.filter((j) => j.mode !== 'tip'));
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   jobs.push(...linkJobs(state, bot, true)); // (LINKED STATIONS block at the end of this file: loaders for guns with a target)
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
@@ -586,7 +661,7 @@ function healJobs(state, bot) {
 }
 
 function isEmergency(job) {
-  return !!job.urgent || job.kind !== 'ammo' && job.kind !== 'link' && job.kind !== 'surge' && job.kind !== 'station' && job.kind !== 'coal' && job.kind !== 'winch' && job.kind !== 'heal' && job.kind !== 'bandage' && !(job.kind === 'repair' && !job.obj.broken);
+  return !!job.urgent || job.kind !== 'ammo' && job.kind !== 'hatch' && job.kind !== 'link' && job.kind !== 'surge' && job.kind !== 'station' && job.kind !== 'coal' && job.kind !== 'winch' && job.kind !== 'heal' && job.kind !== 'bandage' && !(job.kind === 'repair' && !job.obj.broken);
 }
 
 const HELP_KINDS = { fire: 1, patch: 1, revive: 1, swat: 1, fight: 1, defuse: 1, repair: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1 };
@@ -844,6 +919,7 @@ function work(p, state) {
   }
   if (job.kind === 'link' || job.kind === 'surge') return linkWork(p, state, job); // (LINKED STATIONS block at the end of this file)
   if (job.kind === 'throw') return throwWork(p, state, job); // (B.6)
+  if (job.kind === 'hatch') return hatchWork(p, state, job); // (a cargo drop hatch: shut it, tip raiders out, drop a crate, dump weight)
   if (job.kind === 'shovel') { // (B.6: a load thrown onto the deck: hold Action beside it)
     if (!(state.loads || []).includes(o)) return;
     if (steer(p, o.d, o.x, 20)) {

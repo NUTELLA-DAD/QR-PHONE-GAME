@@ -5,7 +5,7 @@
 // It does NOT have to leave a flyable ship (S.5c: you build a ship up from nothing, so half-built ships take parts): the validator says what is
 // still missing. slotsFor(type, parts, { whole: true }) also demands that the result passes validate() (the random batch wants that).
 // Every placement ends with finish(): the frame part is there and every engine, the helm and the lift have a steam pipe from the boiler (routePipes).
-import { buildLayout, COL, rowOf, DECK_ROWS, KEEL_ROWS, isNestRow, bagNearX, bagName, ventBoiler, normAngle, ENGINE_DIRS } from './shipBuild.js';
+import { buildLayout, COL, rowOf, DECK_ROWS, KEEL_ROWS, isNestRow, bagNearX, bagName, ventBoiler, normAngle, ENGINE_DIRS, deckPieces } from './shipBuild.js';
 import { drawDeck, drawBag, placeConnector, GRID_X0, ensureFrame, emptyBuild, erase, setBag, addArmour, ARMOUR_ROWS } from './buildEdit.js';
 import { validate } from './buildCheck.js';
 import { config } from '../../config.js';
@@ -24,7 +24,10 @@ const midX = (L) => (L.refPoint ? L.refPoint.x : L.platforms.length ? (Math.min(
 const count = (parts, test) => parts.filter(test).length;
 
 // Is x on deck p free of other stations (and, for hauling stations, of anything the Action button would grab first)?
+// Is x on deck p over a cargo drop hatch (its span with pad px to spare), or at its lever? Nothing else is built there: an open hatch is a hole in the floor.
+export const onHatch = (L, p, x, pad = 24) => (L.hatches || []).some((h) => h.p === p && ((x > h.x0 - pad && x < h.x1 + pad) || Math.abs(x - h.lx) < pad + 8));
 function roomAt(L, p, x, haul, near = config.TOOLS.REACH + 5, gap = config.BUILD_CHECK.MIN_GAP + 15) {
+  if (onHatch(L, p, x)) return false;
   if ([...L.stations, ...L.engines].some((s) => s.p === p && Math.abs(s.x - x) < gap)) return false;
   if (!haul) return true;
   const q = L.platforms.find((d) => d.id === p);
@@ -199,6 +202,7 @@ export const PALETTE = [
         const ti = L.platforms.indexOf(a), bi = L.platforms.indexOf(b);
         for (const x of spots({ x0: Math.max(a.x0, b.x0), x1: Math.min(a.x1, b.x1) }, 40)) {
           if (L.connectors.some((c) => c.top === ti && c.bottom === bi && Math.abs(c.xTop - x) < 90)) continue;
+          if (onHatch(L, a.id, x, 16) || onHatch(L, b.id, x, 16)) continue; // (a ladder cannot land on a cargo drop hatch)
           out.push({ p: top, x, hy: (a.y + b.y) / 2, hr: (b.y - a.y) / 2 + 20, label: `${type === 'ladder' ? 'Ladder' : 'Pole'} ${a.name} to ${b.name}, x ${x}`, apply: (ps) => [...ps, { part: type === 'ladder' && isNestRow(rowOf(a)) ? 'rope' : type, top, bottom, xTop: x, xBottom: x }] });
         }
       }
@@ -234,8 +238,46 @@ export const PALETTE = [
   { id: 'armour', label: 'Armour plate', hint: 'click a deck: two columns of riveted iron on its hull wall or rail. Very heavy; it does not burn and hits there do far less', slots: (L) => armourSlots(L) },
   { id: 'vent', label: 'Steam vent', hint: 'click a deck spot', slots: (L) => rackSlots(L, 'vent', 'a steam vent', undefined, VENT_ROWS) },
   { id: 'gasValve', label: 'Gas valve', hint: 'drop it on the nest, top or main deck: it feeds the bag over it (the nearest). A shut valve cuts that bag off from the pump', slots: (L) => valveSlots(L) },
+  // The cargo drop hatch (hatch.js, config.HATCH): two trapdoor leaves in a deck, 1 to 3 columns wide, with a lever beside them. Open, the span is a real hole: crew, loads and boarders over it fall through.
+  ...[1, 2, 3].map((cols) => ({ id: hatchId(cols), label: `Drop hatch (${cols} column${cols > 1 ? 's' : ''})`, hint: `click a bare stretch of a deck: a pair of trapdoors ${cols * COL} px wide with a lever beside them. Open, they leave a real hole - crew, cargo and boarders over it fall through (drop crates on a ship below, dump weight when she is going down, tip raiders out). Keep ladders, stations and racks off the span`, slots: (L) => hatchSlots(L, cols) })),
   { id: 'gasbag', label: 'Gasbag', hint: 'click a stretch of the gasbag row: one more bag beside the others (a row of small ones keeps flying if you lose one)', slots: (L, parts) => bagSlots(parts) },
 ];
+
+// The cargo drop hatch (hatch.js): a stretch of bare floor cols x COL px long on any full deck, clear of stations, engines, racks, vents, valves, ladders, sandbags, the medbay and other hatches, with its lever
+// HATCH.LEVER_DX beyond one end (toward the middle of the deck if it fits there) on floor that is clear too. Names: "Drop Hatch", "Extra Drop Hatch 1" ...
+export function hatchId(cols) { return cols === 1 ? 'dropHatch' : 'dropHatch_' + cols; }
+function hatchSlots(L, cols) {
+  const out = [], len = cols * COL, H = config.HATCH, HATCH_ROWS = ['catwalk', 'main', 'lower', 'keel', 'deep'];
+  for (const q of L.platforms.filter((o) => HATCH_ROWS.includes(rowOf(o)))) {
+    const d = L.platforms.indexOf(q), mid = (q.x0 + q.x1) / 2, deckHasLink = L.connectors.some((k) => k.top === d || k.bottom === d);
+    const bare = (x0, x1) => {
+      const within = (x, pad) => x > x0 - pad && x < x1 + pad;
+      if ([...L.stations, ...L.engines].some((s) => s.p === q.id && (within(s.x, 28) || (s.sx != null && within(s.sx, 28))))) return false;
+      if ([...L.racks, ...L.vents, ...L.extinguishers, ...(L.gasValves || []), ...(L.ballast || []), ...L.boarderEntryPoints].some((o) => o.p === q.id && !o.hang && within(o.x, 14))) return false;
+      if (L.pipes.some((o) => o.p === q.id && within(o.valve[0], 22))) return false;
+      if (L.medbay && L.medbay.p === q.id && within(L.medbay.x, 24)) return false;
+      if (L.connectors.some((c) => (c.top === d && within(c.xTop, 16)) || (c.bottom === d && within(c.xBottom, 16)))) return false;
+      if (L.liftRepair && L.liftRepair.p === q.id && within(L.liftRepair.x, 16)) return false;
+      if (L.sails && L.sails.some((o) => o.p === q.id && within(o.x, 24))) return false;
+      if ((L.cannons || []).some((o) => o.p === q.id && within(o.x, 50))) return false;
+      return !(L.hatches || []).some((h) => h.p === q.id && h.x0 < x1 + 50 && h.x1 > x0 - 50);
+    };
+    // (the lever is pulled with Action, which wins over a steam vent or a valve beside it: keep those 60 px away; stations, ladders and the rest only have to leave the lever room to stand)
+    const leverOk = (c) => c > q.x0 + 25 && c < q.x1 - 25 && roomAt(L, q.id, c, false) && ![...L.vents, ...L.pipes.map((o) => ({ p: o.p, x: o.valve[0] }))].some((o) => o.p === q.id && Math.abs(o.x - c) < 60) && !L.connectors.some((k) => (k.top === d && Math.abs(k.xTop - c) < 16) || (k.bottom === d && Math.abs(k.xBottom - c) < 16));
+    for (let x0 = Math.ceil((q.x0 + 20) / STEP) * STEP; x0 + len <= q.x1 - 20; x0 += STEP) {
+      const x1 = x0 + len;
+      if (!bare(x0, x1)) continue;
+      const sides = (x0 + x1) / 2 < mid ? [x1 + H.LEVER_DX, x0 - H.LEVER_DX] : [x0 - H.LEVER_DX, x1 + H.LEVER_DX];
+      // (the lever must be on floor the crew can walk to: the stretch it stands on, between the hatch and the next hole or the deck's end, has a ladder, pole or lift end on it - unless the deck has none at all)
+      const pieces = deckPieces(q, d, [{ d, x0, x1 }, ...(L.hatches || []).filter((h) => h.p === q.id).map((h) => ({ d, x0: h.x0, x1: h.x1 }))]);
+      const reachable = (c) => { const pc = pieces.find(([a, b]) => c >= a && c <= b); return !!pc && (!deckHasLink || L.connectors.some((k) => (k.top === d && k.xTop >= pc[0] && k.xTop <= pc[1]) || (k.bottom === d && k.xBottom >= pc[0] && k.xBottom <= pc[1]))); };
+      const lx = sides.find((c) => leverOk(c) && reachable(c));
+      if (lx == null) continue;
+      out.push({ p: q.id, x: (x0 + x1) / 2, hatch: [x0, x1], lever: lx, label: `Drop hatch (${cols} column${cols > 1 ? 's' : ''}) on the ${q.name}, x ${x0} to ${x1}`, apply: (ps) => [...ps, { part: 'dropHatch', n: nameFor(ps, 'Drop Hatch'), p: q.id, x0, x1, lx }] });
+    }
+  }
+  return out;
+}
 
 // A gun of one of the config.GUN_TYPES (the plain gun's spots, the mount the type wants): the long gun and the grapeshot gun on the same decks as a plain gun, the harpoon too; the mortar and the flak gun
 // only in the open air (a lob and a burst need no roof); the mine layer in the belly (lower and keel decks), pointing down. Names: "Long Gun", "Extra Long Gun 1" ...
@@ -377,7 +419,7 @@ const RULES = {
   lift: { rows: ['main'], once: (parts) => count(parts, (p) => p.part === 'lift') > 0, onceText: 'A ship has one lift.' },
   boarding: { rows: ['catwalk', 'main', 'lower', 'keel', 'deep'], open: true }, armour: { rows: BODY_ROWS }, rack_hammer: { rows: RACK_ROWS }, rack_sword: { rows: RACK_ROWS }, rack_hookshot: { rows: RACK_ROWS }, rack_sandbag: { rows: RACK_ROWS }, rack_crate: { rows: RACK_ROWS }, rack_towline: { rows: RACK_ROWS }, crewCannon: { rows: BODY_ROWS, open: true },
   extinguisher: { rows: RACK_ROWS }, vent: { rows: ['catwalk', 'main', 'lower', 'keel', 'deep'] }, gasValve: { rows: ['nest', 'catwalk', 'main'], needsBag: true }, ballast: { rows: ['main', 'lower', 'keel', 'deep'] }, ballast_hang: { rows: ['lower', 'keel', 'deep'] },
-  ladder: { link: true }, pole: { link: true },
+  ladder: { link: true }, pole: { link: true }, dropHatch: { rows: BODY_ROWS }, dropHatch_2: { rows: BODY_ROWS }, dropHatch_3: { rows: BODY_ROWS },
 };
 export function whyNot(parts, type, x, y) {
   const def = PALETTE.find((t) => t.id === type), rule = RULES[type] || {}, what = def ? def.label.toLowerCase() : type;
@@ -402,6 +444,7 @@ export function whyNot(parts, type, x, y) {
   const gap = config.BUILD_CHECK.MIN_GAP + 15;
   const near = [...L.stations.map((s) => ({ n: s.n, p: s.p, x: s.x })), ...L.engines.map((e) => ({ n: e.name, p: e.p, x: e.x }))].filter((s) => s.p === deck.id && Math.abs(s.x - x) < gap).sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x))[0];
   if (near) return `${near.n} is in the way (keep ${gap} px clear on the ${deck.name}).`;
+  if (type.startsWith('dropHatch')) return `No room for a ${what} there on the ${deck.name}: it needs ${type === 'dropHatch' ? COL : COL * Number(type.slice(-1))} px of bare floor (no station, rack, ladder, vent or sandbag on it) and a clear spot for its lever beside it.`;
   return `No clear spot for a ${what} there on the ${deck.name}: something is standing too close (a ladder, a rack, a vent or another ${what}).`;
 }
 
@@ -431,6 +474,7 @@ function rackSlots(L, part, what, kind, rows = ['catwalk', 'main', 'lower']) {
       const list = part === 'rack' ? L.racks : part === 'vent' ? L.vents : L.extinguishers;
       if (list.some((o) => o.p === q.id && Math.abs(o.x - x) < 100)) continue;
       if ((L.gasValves || []).some((o) => o.p === q.id && Math.abs(o.x - x) < 60)) continue; // (not on top of a gas valve)
+      if (onHatch(L, q.id, x, 18)) continue; // (nor on a cargo drop hatch or its lever)
       const boiler = part === 'vent' ? ventBoiler(L, { x, d }) : null; // (a steam vent lets steam out of a boiler's line: the nearest boiler's)
       out.push({ p: q.id, x, label: `${what[0].toUpperCase()}${what.slice(1)} on the ${q.name}, x ${x}${boiler ? ` (on the ${boiler.n}'s steam line)` : ''}`, apply: (ps) => [...ps, { part, ...(part === 'rack' ? { kind } : {}), p: q.id, x }] });
     }
@@ -467,6 +511,7 @@ function ballastSlots(L, parts, hang) {
   for (const q of onRows(L, hang ? ['lower', 'keel', 'deep'] : ['main', 'lower', 'keel', 'deep'])) {
     for (const x of spots(q, 25)) {
       if ((L.ballast || []).some((o) => o.p === q.id && !!o.hang === hang && Math.abs(o.x - x) < B.BALLAST_GAP)) continue;
+      if (!hang && onHatch(L, q.id, x, 18)) continue;
       if (!hang && [...L.stations, ...L.engines].some((s) => s.p === q.id && Math.abs(s.x - x) < 30)) continue;
       if (hang && L.platforms.some((o) => !o.outside && o.y > q.y && o.x0 - 20 < x && o.x1 + 20 > x)) continue; // (the hull is not bare there)
       out.push({ p: q.id, x, y: q.y + (hang ? B.BALLAST_HANG : 0), label: `Sandbag ${hang ? 'hanging under' : 'on'} the ${q.name}, x ${x}`, apply: (ps) => [...ps, { part: 'ballast', p: q.id, x, ...(hang ? { hang: true } : {}) }] });

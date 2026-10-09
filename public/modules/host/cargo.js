@@ -11,6 +11,7 @@ import { config } from '../../config.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { applyForce } from './forces.js';
 import { pop } from './popups.js';
+import { inGap } from './shipBuild.js';
 
 const C = () => config.CROSS.CARGO;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -201,7 +202,8 @@ export function stepThrown(world, dt, puff) {
         if (sh.state.down > 0 || sh.ctx.wreck || !sh.sim.cargo) continue;
         const sx = toShipX(sh, it.x), psy = toShipY(sh, y0), sy = toShipY(sh, it.y);
         let best = -1;
-        sh.layout.platforms.forEach((pl, d) => { if (sx >= pl.x0 - 8 && sx <= pl.x1 + 8 && psy < pl.y && sy >= pl.y && (best < 0 || pl.y < sh.layout.platforms[best].y)) best = d; });
+        const holes = sh.nav ? sh.nav.holes : []; // (an open cargo drop hatch is no floor: it falls on through, hatch.js)
+        sh.layout.platforms.forEach((pl, d) => { if (sx >= pl.x0 - 8 && sx <= pl.x1 + 8 && psy < pl.y && sy >= pl.y && !(holes.length && inGap(holes, d, sx)) && (best < 0 || pl.y < sh.layout.platforms[best].y)) best = d; });
         if (best >= 0) { sh.sim.cargo.land(it, best, sx); landed = true; break; }
       }
     }

@@ -8,6 +8,7 @@
 // are COMPATIBILITY forwards to ship 0's nav (ships.js: ship0.nav === mainNav); walkers use them until they are routed per ship (MOVEMENT.md B2).
 import { SHIP_LAYOUT } from '../../shipLayout.js';
 import { config } from '../../config.js';
+import { crossesGap, inGap } from './shipBuild.js'; // (holes in decks: an open cargo drop hatch, hatch.js)
 
 const GRAB = 38; // how close (px) to a connector end you must be to grab it
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -17,6 +18,8 @@ const isPole = (c) => c.type === 'pole';
 export function createNav(layout) {
   const P = layout.platforms;
   const C = layout.connectors;
+  const gaps = []; // the holes in this ship's decks the walkers keep out of, and
+  const holes = []; // the ones really open (setGaps, below)
 
   // Per-connector speed multiplier (e.g. the lift crawls without steam). Set by the game each frame.
   const connScale = []; // (one entry per connector, filled by rebuildNav)
@@ -32,16 +35,20 @@ export function createNav(layout) {
   let nodes = [];
   let nodesOn = [];
   let tt = [];
+  const walk = (d, a, b) => (crossesGap(gaps, d, a, b) ? Infinity : Math.abs(a - b) / WALK); // (seconds to walk along deck d from a to b: never across a hole)
   function rebuildNav() {
-    const NN = C.length * 2;
     connScale.length = C.length;
     connScale.fill(1);
+    buildTables();
+  }
+  function buildTables() {
+    const NN = C.length * 2;
     nodes = Array.from({ length: NN }, (_, n) => nodeAt(n));
     nodesOn = P.map((_, d) => nodes.map((nd, n) => (nd.d === d ? n : -1)).filter((n) => n >= 0));
     tt = Array.from({ length: NN }, () => Array(NN).fill(Infinity));
     for (let a = 0; a < NN; a++) {
       tt[a][a] = 0;
-      for (const b of nodesOn[nodes[a].d]) tt[a][b] = Math.min(tt[a][b], Math.abs(nodes[a].x - nodes[b].x) / WALK);
+      for (const b of nodesOn[nodes[a].d]) tt[a][b] = Math.min(tt[a][b], walk(nodes[a].d, nodes[a].x, nodes[b].x));
     }
     C.forEach((c, i) => {
       tt[2 * i][2 * i + 1] = Math.min(tt[2 * i][2 * i + 1], climbTime(c));
@@ -52,18 +59,34 @@ export function createNav(layout) {
   rebuildNav();
   layout.onChange(rebuildNav);
 
+  // The holes in the decks now (hatch.js calls this when a hatch opens or shuts): [{ d, x0, x1 }]. The route tables follow; nothing else about the nav is reset.
+  // `gaps` is what the walkers keep out of (a hatch whose lever is pulled blocks them at once, `soft: true` while the doors are still shut); `holes` is the floor really gone (airborne.js, cargo.js).
+  function setGaps(list) {
+    const next = list.map((g) => ({ d: g.d, x0: g.x0, x1: g.x1, soft: !!g.soft }));
+    if (next.length === gaps.length && next.every((g, i) => g.d === gaps[i].d && g.x0 === gaps[i].x0 && g.x1 === gaps[i].x1 && g.soft === gaps[i].soft)) return false;
+    gaps.length = 0;
+    gaps.push(...next);
+    holes.length = 0;
+    holes.push(...next.filter((g) => !g.soft));
+    buildTables();
+    return true;
+  }
+
   // Quickest way from (d1, x1) to (d2, x2): { cost (seconds), node (the connector end to head for first) }.
-  // node is -1 when already on the same platform (or there is no way).
+  // node is -1 when already on the same platform (or there is no way). With a hole in between on the same deck the way goes round by a ladder, if there is one.
   function plan(d1, x1, d2, x2) {
-    if (d1 === d2) return { cost: Math.abs(x1 - x2) / WALK, node: -1 };
+    if (d1 === d2) {
+      const direct = walk(d1, x1, x2);
+      if (direct < Infinity) return { cost: direct, node: -1 };
+    }
     let best = { cost: Infinity, node: -1 };
     for (const a of nodesOn[d1]) {
       const c = C[a >> 1];
       if (a % 2 && isPole(c)) continue; // cannot climb a pole
       const there = a % 2 ? 2 * (a >> 1) : 2 * (a >> 1) + 1;
-      const first = Math.abs(x1 - nodes[a].x) / WALK + climbTime(c);
+      const first = walk(d1, x1, nodes[a].x) + climbTime(c);
       for (const b of nodesOn[d2]) {
-        const cost = first + tt[there][b] + Math.abs(nodes[b].x - x2) / WALK;
+        const cost = first + tt[there][b] + walk(d2, nodes[b].x, x2);
         if (cost < best.cost) best = { cost, node: a };
       }
     }
@@ -91,7 +114,7 @@ export function createNav(layout) {
   function platformBelow(x, y) {
     let best = null;
     P.forEach((p, d) => {
-      if (x >= p.x0 && x <= p.x1 && p.y >= y - 2 && (best === null || p.y < P[best].y)) best = d;
+      if (x >= p.x0 && x <= p.x1 && p.y >= y - 2 && (best === null || p.y < P[best].y) && !(holes.length && inGap(holes, d, x))) best = d; // (a hole in a deck is no floor)
     });
     return best;
   }
@@ -173,7 +196,12 @@ export function createNav(layout) {
     const speedingUp = Math.abs(want) > Math.abs(v) && Math.sign(want) === Math.sign(v || want);
     const rate = (speedingUp ? config.MOVE.ACCEL : config.MOVE.BRAKE) * dt;
     w.vx = v + clamp(want - v, -rate, rate);
-    const nx = clamp(w.x + w.vx * dt, p.x0, p.x1);
+    let nx = clamp(w.x + w.vx * dt, p.x0, p.x1);
+    if (gaps.length) for (const g of gaps) { // held at the edge of an open hatch (unless he is already in it: then he is falling)
+      if (g.d !== w.d) continue;
+      if (w.x <= g.x0 && nx > g.x0) nx = g.x0 - config.HATCH.EDGE_PUSH;
+      else if (w.x >= g.x1 && nx < g.x1) nx = g.x1 + config.HATCH.EDGE_PUSH;
+    }
     if (nx !== w.x + w.vx * dt) w.vx = 0; // bumped into the end of the deck
     w.x = nx;
     w.y = p.y;
@@ -191,7 +219,7 @@ export function createNav(layout) {
       const viaTop = (w.s * h) / c.speed + plan(c.top, c.xTop, d, x).cost;
       return { dir: viaTop < viaBottom || (viaTop === viaBottom && w.s < 0.5) ? 'up' : 'down', arrived: false };
     }
-    if (w.d === d) {
+    if (w.d === d && !crossesGap(gaps, d, w.x, x)) {
       const dx = x - w.x;
       if (Math.abs(dx) <= near) return { dir: null, arrived: true };
       return { dir: dx < 0 ? 'left' : 'right', arrived: false };
@@ -210,14 +238,14 @@ export function createNav(layout) {
     if (dir === 'up' || dir === 'down') return { jx: 0, jy: dir === 'up' ? -1 : 1, arrived };
     if (dir === null) return { jx: 0, jy: 0, arrived };
     const dx = dir === 'left' ? -1 : 1;
-    const goalX = w.d === d ? x : nodes[plan(w.d, w.x, d, x).node].x;
+    const goalX = w.d === d && !crossesGap(gaps, d, w.x, x) ? x : nodes[plan(w.d, w.x, d, x).node].x;
     return { jx: dx * clamp(Math.abs(goalX - w.x) / 60, 0.3, 1), jy: 0, arrived: false };
   }
 
   // Is a point within reach on the same platform?
   const samePlatform = (a, b) => a.conn == null && b.conn == null && !a.fall && !b.fall && a.d === b.d;
 
-  return { layout, connScale, rebuildNav, plan, travelTime, connPoint, platformBelow, detach, fall, moveWalker, direction, steerTo, samePlatform };
+  return { layout, connScale, rebuildNav, plan, travelTime, connPoint, platformBelow, detach, fall, moveWalker, direction, steerTo, samePlatform, setGaps, gaps, holes };
 }
 
 // Ship 0's navigation (ships.js attaches it as ship0.nav) and the module-level forwards the walkers still use.

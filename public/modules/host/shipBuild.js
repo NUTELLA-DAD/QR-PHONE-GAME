@@ -42,11 +42,11 @@ export const CONNECTOR_SPEED = { rope: 150, ladder: 170, stairs: 150, lift: 260,
 // (shifted by the part's column). Fields named in D_KINDS also get `d` (the platform index).
 const ARRAYS = ['platforms', 'connectors', 'rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers', 'boarderEntryPoints', 'escortDocks', 'gasbags'];
 const KEYED = ['gunMounts', 'searchlights'];
-const OPTIONAL = ['ballast', 'gasValves', 'sails', 'armour', 'cannons', 'scars']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
+const OPTIONAL = ['ballast', 'gasValves', 'sails', 'armour', 'cannons', 'scars', 'hatches']; // arrays that exist in the layout only when the build has some (so the classic layout is unchanged)
 const SINGLES = ['coil', 'shield', 'medbay', 'bombBay', 'liftRepair', 'ram'];
 const X_FIELDS = {
   platforms: ['x0', 'x1'], connectors: ['xTop', 'xBottom'], rooms: ['x0', 'x1'], stations: ['x'], engines: ['x', 'sx'], vents: ['x'], racks: ['x'],
-  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], sails: ['x'], cannons: ['x'], armour: ['x0', 'x1'], scars: ['x0', 'x1'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
+  extinguishers: ['x'], boarderEntryPoints: ['x'], ballast: ['x'], sails: ['x'], cannons: ['x'], armour: ['x0', 'x1'], scars: ['x0', 'x1'], hatches: ['x0', 'x1', 'lx'], gasValves: ['x', 'bx'], escortDocks: ['x'], gunMounts: ['bx'], searchlights: ['bx'],
   coil: ['x'], shield: ['cx'], medbay: ['x'], bombBay: ['x', 'jumpX'], gasbags: ['cx'], liftRepair: ['x'], ram: ['x'],
 };
 const D_KINDS = ['rooms', 'stations', 'engines', 'pipes', 'vents', 'racks', 'extinguishers'];
@@ -213,6 +213,8 @@ export const PARTS = {
   // A sandbag (trim weight): `p` is its deck and x where it stands; `hang: true` hangs it from the hull under the deck instead. Cheap, but a long way out
   // from the middle it moves the centre of mass (balanceOf).
   ballast: { mass: () => M().ballast, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('ballast', withoutPart(p)) },
+  // The CARGO DROP HATCH (hatch.js, config.HATCH): two trapdoor leaves in the floor of deck `p`, from x0 to x1 (1-3 columns), and the lever that works them (`lx`, beside it on the same deck). Open, the span is a real hole.
+  dropHatch: { mass: (p) => ((p.x1 - p.x0) / 100) * config.HATCH.MASS, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('hatches', withoutPart(p)) },
   // Armour plate (S.5g): riveted iron on a stretch of a deck's hull wall (covered deck) or rail (open-air deck), x0 to x1 on deck `p`. Very heavy, does not burn, and hits on it do
   // far less (config.ARMOUR, config.FIRE.FLAMMABILITY.armour). It weighs by its length.
   armour: { mass: (p) => ((p.x1 - p.x0) / 100) * M().armour, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('armour', withoutPart(p)) },
@@ -243,6 +245,24 @@ export const PARTS = {
     for (const k of OVERRIDES) if (p[k] != null) A.setScalar(k, p[k]);
   } },
 };
+
+// HOLES IN DECKS (hatch.js): an open cargo drop hatch is a gap { d (platform index), x0, x1 } in its deck. Nobody walks across one (crossesGap), the deck is no landing place over it
+// (deckPieces: what is left of a deck round its holes), and a walker only enters it if he is pushed.
+export function crossesGap(gaps, d, a, b) {
+  if (!gaps.length) return false;
+  const lo = Math.min(a, b), hi = Math.max(a, b);
+  return gaps.some((g) => g.d === d && lo < g.x1 && hi > g.x0);
+}
+export const inGap = (gaps, d, x) => gaps.some((g) => g.d === d && x > g.x0 && x < g.x1);
+// The stretches [x0, x1] of platform p (index d) that are still floor round the holes in it.
+export function deckPieces(p, d, gaps) {
+  let out = [[p.x0, p.x1]];
+  for (const g of gaps) {
+    if (g.d !== d) continue;
+    out = out.flatMap(([a, b]) => (g.x1 <= a || g.x0 >= b ? [[a, b]] : [[a, Math.min(b, g.x0)], [Math.max(a, g.x1), b]].filter(([s, e]) => e - s > 0.5)));
+  }
+  return out;
+}
 
 // ---- the classic ship ------------------------------------------------------------------------------------
 // Today's ship, as a list of parts (the order below is the order of platforms, stations, connectors ... in the game).
@@ -483,6 +503,7 @@ export function buildLayout(parts, opts = {}) {
   if (out.cannons) out.cannons = out.cannons.map((o) => ({ ...o, d: index(o.p) }));
   if (out.ram) out.ram = { ...out.ram, d: index(out.ram.p) };
   if (out.armour) out.armour = out.armour.map((o) => ({ ...o, d: index(o.p) }));
+  if (out.hatches) out.hatches = out.hatches.map((o) => ({ ...o, d: index(o.p) }));
   if (out.gasValves) out.gasValves =out.gasValves.map((o) => ({ ...o, d: index(o.p), bag: bagNearX(out.gasbags, o.bx != null ? o.bx : o.x) })); // (the bag it feeds: tail to nose, as in gasbags; -1 with no bag)
   if (out.ballast) out.ballast =out.ballast.map((o) => { const d = index(o.p); return { ...o, d, y: d < 0 ? 0 : out.platforms[d].y + (o.hang ? config.BALANCE.BALLAST_HANG : 0) }; });
   out.connectors = out.connectors.map((c) => ({ ...c, top: index(c.top), bottom: index(c.bottom) }));
@@ -746,7 +767,7 @@ export function partPos(p, ys) {
   if (p.part === 'coil' || p.part === 'bombBay') return { x: p.x, y: p.y };
   if (LINKS.includes(p.part)) return { x: (p.xTop + p.xBottom) / 2, y: (y(p.top) + y(p.bottom)) / 2 };
   if (p.part === 'pipe') return { x: p.points.reduce((n, q) => n + q[0], 0) / p.points.length, y: p.points.reduce((n, q) => n + q[1], 0) / p.points.length };
-  if (p.part === 'armour') return { x: (p.x0 + p.x1) / 2, y: y(p.p) };
+  if (p.part === 'armour' || p.part === 'dropHatch') return { x: (p.x0 + p.x1) / 2, y: y(p.p) };
   if (p.part === 'ballast') return { x: p.x, y: y(p.p) + (p.hang ? config.BALANCE.BALLAST_HANG : 0) };
   if (p.x != null && p.p != null) return { x: p.x, y: y(p.p) };
   return null;

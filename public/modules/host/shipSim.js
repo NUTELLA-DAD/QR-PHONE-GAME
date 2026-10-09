@@ -22,6 +22,7 @@ import { createAirborne } from './airborne.js';
 import { createHookshot } from './hookshot.js';
 import { createCannon } from './cannon.js';
 import { createCargo, cargoItem, isStocked } from './cargo.js';
+import { createHatches } from './hatch.js';
 import { pop } from './popups.js';
 import { assistAim } from './aim.js';
 import { gunStock, loadOf, autoloadOf, specOf } from './gunTypes.js';
@@ -173,7 +174,7 @@ export function createShipSim(world, ship, W) {
   // legacy (bots): one combined button, so racks, ammo, coal and stations are decided here too; people get those on GRAB (grabsFor).
   const takeLabel = (s) => (s.kind === 'cannonSeat' ? 'Climb into the cannon' : s.kind === 'cannon' ? 'Man the cannon' : 'Take ' + s.n);
   const useFor = (player, station, legacy) => {
-    if (player.fly && (player.cannon || player.tossed) && !player.chute && !player.hj && player.ko <= 0) return { type: 'chute', label: 'PARACHUTE!' }; // (B.6: fired from the crew cannon - Action opens the parachute; S.5i: so does a crewman thrown off a part that broke off)
+    if (player.fly && (player.cannon || player.tossed || player.chuteOk) && !player.chute && !player.hj && player.ko <= 0) return { type: 'chute', label: 'PARACHUTE!' }; // (B.6: fired from the crew cannon - Action opens the parachute; S.5i: so does a crewman thrown off a part that broke off)
     if (player.lock || player.conn != null || player.fall || player.swing || player.air) return null;
     const here = (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r;
     const tool = player.carry;
@@ -196,6 +197,9 @@ export function createShipSim(world, ship, W) {
     // B.6: at the rail with a sandbag or crate in your hands, Action dumps it overboard for a quick lift; a load lying on the deck by your feet wants shovelling off.
     const dumpC = cargo.dumpAction(player) || cargo.shovelAction(player, here);
     if (dumpC) return dumpC;
+    const hatchBot = !player.bot || (player.botJob && player.botJob.kind === 'hatch'); // (a bot works a cargo drop hatch only when its job says so)
+    const hatchC = hatchBot && hatches.dropAction(player); // beside an open cargo drop hatch with a load in your hands: let it fall through
+    if (hatchC) return hatchC;
     // Storm Front: while a bolt is charging, a lightning rod in reach comes first (hold Action = grounded).
     const rod = state.stormJob.charge && state.stormJob.rods.find((o) => here(o, 75));
     if (rod) return { type: 'rod', obj: rod, hold: true, time: 1, label: 'HOLD THE ROD!' };
@@ -227,6 +231,9 @@ export function createShipSim(world, ship, W) {
     // A mast and sail (S.5e): hold Action to haul the sail up, tap it to let it down.
     const sl = sails.actionFor(player, here);
     if (sl) return sl;
+    // A cargo drop hatch's lever: open it (a klaxon first), or shut it again.
+    const hl = hatchBot && hatches.leverAction(player, here);
+    if (hl) return hl;
     // Otherwise standing at a rack or hook means take / swap / put back.
     const pickup = legacy ? PICKUPS.find((r) => here(r, T.REACH)) : null;
     // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)
@@ -821,6 +828,7 @@ export function createShipSim(world, ship, W) {
   const air = createAirborne({ state, puff, phoneFx });
   const cannon = createCannon({ state, ship, air, modules, puff, phoneFx, stat }); // the crew cannon's two stations (cannon.js)
   const cargo = createCargo({ state, ship, air, puff, phoneFx, stat }); // thrown ballast, loads on her decks, shovelling and dumping (cargo.js)
+  const hatches = createHatches({ state, ship, air, cargo, goingDown, puff, phoneFx, stat }); // cargo drop hatches: a lever, a real hole in a deck, what falls through it (hatch.js)
 
   // After any pickup / put-back / swap / station take: a short buzz (two pulses for letting go) and the grab lockout, so a
   // second press right behind the first (a double tap) can't undo it. Bots have no phone and no lockout.
@@ -952,7 +960,9 @@ export function createShipSim(world, ship, W) {
       shipPop(act.obj.x, PLATFORMS[act.obj.d].y - 140, `${bagName(act.obj.bag, state.bags.length)} VALVE ${state.gasValveOpen[i] ? 'OPEN' : 'SHUT'}`, state.gasValveOpen[i] ? '#9cc99a' : '#e2a24a', 0.9);
       state.valveLog = (state.valveLog || 0) + 1; // (how many times a gas valve was turned: botsim reports it)
       if (!state.gasValveOpen[i]) state.valveShuts = (state.valveShuts || 0) + 1;
-    } else if (type === 'sail') {
+    } else if (type === 'hatch') hatches.toggle(act.obj, player);
+    else if (type === 'hatchdrop') hatches.drop(player, act.obj);
+    else if (type === 'sail') {
       if (!act.hold) {
         sails.lower(act.obj);
         stat(player, 'sails');
@@ -1371,7 +1381,7 @@ export function createShipSim(world, ship, W) {
         label = player.act.label;
         hold = !!player.act.hold;
       }
-      if (player.fly) label = player.chuteOpen ? 'Steer!' : player.chute ? 'Chute...' : player.cannon ? 'PARACHUTE!' : player.fvy > 0 ? 'Falling!' : 'Airborne';
+      if (player.fly) label = player.chuteOpen ? 'Steer!' : player.chute ? 'Chute...' : player.cannon || player.chuteOk ? 'PARACHUTE!' : player.fvy > 0 ? 'Falling!' : 'Airborne';
       if (player.hook && player.hook.phase === 'caught') {
         label = 'Reel in (hold)';
         hold = true;
@@ -1442,6 +1452,7 @@ export function createShipSim(world, ship, W) {
     links.update(dt);
     if (state.cannons) cannon.update(dt); // (B.6: the crew cannon reloads; a ship with none skips both)
     if (state.loads || state.rackStock) cargo.update(dt);
+    hatches.update(dt); // (cargo drop hatches: the doors, the hole, whatever stands over it)
     modules.update(state, dt);
     sails.update(dt); // (raised sails: the extra speed, gust tears)
     // What the ship has to fly with (S.5e): none of these is needed to fly, each one missing just takes some control away.
@@ -1732,6 +1743,7 @@ export function createShipSim(world, ship, W) {
     if (state.loads) state.loads.length = 0; // (B.6: a rebuilt ship carries no one else's loads, and her cannons and racks start fresh)
     if (state.cannons) state.cannons = {};
     if (state.rackStock) state.rackStock = {};
+    hatches.reset(); // (every cargo drop hatch shut)
     for (const player of crew ? Object.values(state.players) : []) {
       const [e0, e1] = layout.boarderEntryPoints;
       Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x) });
@@ -1743,6 +1755,7 @@ export function createShipSim(world, ship, W) {
   // lamps, her coil and her patrol planes - and she starts over. (Everything that watches layout.version follows by itself: the bags, valves and vents (preStep), the engines,
   // sails, modules, nav, fire and the art.)
   function refit() {
+    hatches.reset(); // (her hatches start shut)
     if (ship.lost) ship.lost.length = 0; // (a new build: nothing that broke off before is owed to anyone)
     if (ship.main && world.run && world.run.lost) world.run.lost.length = 0;
     for (const k of Object.keys(state.GUNS)) delete state.GUNS[k];
@@ -1793,7 +1806,7 @@ export function createShipSim(world, ship, W) {
   }
 
   return {
-    ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, health, goingDown, raiders, escort, coil, searchlights, air, cannon, cargo,
+    ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, health, goingDown, raiders, escort, coil, searchlights, air, cannon, cargo, hatches,
     get hookshot() { return hookshot; },
     get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
     hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop, breakOff, explodeBay, explodeBag, hydrogen, crash, seedBreak: (n) => { breakRng = makeRng(n); }, // (the gate reseeds the break-off rolls)

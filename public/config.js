@@ -729,7 +729,7 @@ export const config = {
   // The SHIPWRIGHT'S YARD (S.6a, modules/host/partsShop.js): ship PARTS as cards in the sky-dock shop, at most one per dock. A part is a pure build edit (the voyage's parts list,
   // simulation.js run.build), checked by the validator (never a FAIL) and fitted to ship 0 at the dock; its effects are weight, lift, steam and stations in the build, never config.
   PARTS_SHOP: {
-    PRICES: { hullBay: 130, keel: 150, gasbag: 160, engine: 120, liftEngine: 170, nest: 140, gun: 100, lamp: 90, bombBay: 150, boiler: 170, coal: 90, ammo: 90, armour: 120, sail: 110, ballast: 90, ladder: 90, pole: 90, lift: 130, crewCannon: 140, gun_long: 160, gun_mortar: 150, gun_scatter: 110, gun_flak: 120, gun_harpoon: 150, mineLayer: 130, ramProw: 130 }, // base salvage price of each part
+    PRICES: { hullBay: 130, keel: 150, gasbag: 160, engine: 120, liftEngine: 170, nest: 140, gun: 100, lamp: 90, bombBay: 150, boiler: 170, coal: 90, ammo: 90, armour: 120, sail: 110, ballast: 90, ladder: 90, pole: 90, lift: 130, crewCannon: 140, gun_long: 160, gun_mortar: 150, gun_scatter: 110, gun_flak: 120, gun_harpoon: 150, mineLayer: 130, ramProw: 130, dropHatch: 100 }, // base salvage price of each part
     REPEAT_PRICE: 0.3, // each part already bought this voyage adds this share of the base price (the price rises with how many you own)
     CREW_SMALL: 3, // a crew of this many players or fewer finds engines, armour and gasbags cheaper...
     SMALL_MUL: 0.85, // ...by this factor
@@ -774,7 +774,7 @@ export const config = {
     POWER_SCALE: 0.2, // how much of the danger a weak ship is spared: 0 = none (every ship meets the classic danger), 1 = danger in proportion to her power (kept low: the Sparrow wins about as often as the classic ship)
     POWER_FLOOR: 0.4, // ...but never less than this share of the full danger (a bare hull still gets shot at)
     POWER: {
-      BASE: 3, GUN: 1, BOMB_BAY: 1.5, COIL: 2, ESCORT: 1, DEFLECTOR: 1, ARMOUR: 1.2, ENGINE: 0.6, SPARE_BAG: 1, CANNON: 1, CARGO_RACK: 0.3, TOWLINE: 0.5, // (B.6: a crew cannon, a sandbag or crate rack, a towline reel) power points: the hull and deck; per gun; the bomb bay; the coil; per escort fighter; the deflector; per 100 px of armour plate; per engine pod; per gasbag beyond the first
+      BASE: 3, GUN: 1, BOMB_BAY: 1.5, COIL: 2, ESCORT: 1, DEFLECTOR: 1, ARMOUR: 1.2, ENGINE: 0.6, SPARE_BAG: 1, CANNON: 1, CARGO_RACK: 0.3, TOWLINE: 0.5, HATCH: 0.3, // (B.6: a crew cannon, a sandbag or crate rack, a towline reel) power points: the hull and deck; per gun; the bomb bay; the coil; per escort fighter; the deflector; per 100 px of armour plate; per engine pod; per gasbag beyond the first
       KEYS: { spawn: 1, count: 1, fire: 1, damage: 1, raiders: 1, hp: 1 }, // which crew-scale numbers follow it, and how fully (1 = all of the relief, 0 = none)
     },
   },
@@ -1553,6 +1553,36 @@ export const config = {
       THROW_CHANCE: 1.2, // per minute: a bot crew with a sandbag rack throws sandbags at a rival ship that is close under or beside them
       THROW_RANGE: 2400, // ...a rival whose ship is within this many px of ours (origin to origin) is looked at; the throw only goes if the arc from the end of the top deck lands on one of her decks
       TOW_RANGE: 800, // a bot with a towline hooks a ship that is this near
+    },
+  },
+  // THE CARGO DROP HATCH (hatch.js; the dropHatch part, 1-3 columns wide, with a lever beside it): a pair of trapdoors in a deck. Open, they leave a real hole: anyone standing over it falls through (a parachute
+  // can be opened with Action), loads lying on it drop as world objects that land on any ship below or fall away, raiders and boarders standing on it are tipped out, and walking routes go round it.
+  HATCH: {
+    SHOP: true, // true: the sky-dock shop sells the hatch (false keeps it to the build page and the dev flags)
+    WARN_TIME: 1.3, // seconds between pulling the lever and the doors giving way: a klaxon, hazard lamps on the TV, and "CLEAR THE HATCH!" for anyone standing on it
+    OPEN_TIME: 0.5, // seconds the two leaves take to swing open ...
+    CLOSE_TIME: 0.8, // ... and to swing shut
+    GAP_AT: 0.35, // the hole counts as open (things fall, routes avoid it) once the doors are this far open (0 shut .. 1 wide), and until they are this far shut again
+    LEVER_DX: 58, // px from the edge of the hatch to its lever (on the free side of it)
+    LEVER_REACH: 46, // px: the lever is pulled from this close (nearer than a rack's reach, so it works on a crowded deck)
+    EDGE_PUSH: 3, // px: a walker held at the edge of an open hatch stands this far off it
+    FALL_VY: 70, // px/s downward speed a faller leaves the deck with
+    FALL_VX: 0.35, // share of his sideways walking speed he keeps
+    CHUTE_WINDOW: 900, // px further a faller through the hatch can drop before he counts as overboard (about a second more to press ACTION for the parachute)
+    DROP_REACH: 70, // px from the edge of an OPEN hatch within which Action lets the sandbag or crate you carry fall through it
+    LOAD_VY: 110, // px/s downward speed of a load that drops through (it keeps the ship's own speed)
+    COAL_REACH: 120, // px: a coal bunker this near an opening hatch (same deck) spills its stock down the chute (GOING DOWN! only: it counts as dumped weight)
+    MASS: 0.8, // weight per 100 px of hatch (the leaves, the frame and the lever)
+    TIP_VY: 80, // px/s a tipped raider leaves the deck with (they fall away; a deck below catches them)
+    TIP_GRAV: 1500, // px/s^2 of a tipped raider
+    TIP_HURT: 20, // hit points a raider loses landing on a deck below
+    BAD_FALL: 1700, // a tipped raider this far below his deck is gone overboard
+    BOT: {
+      OPEN_FOR: 3.5, // a bot who opened the hatch keeps it open at least this long, then shuts it when nothing wants it open
+      BELOW_X: 80, // an enemy ship counts as "directly below" when her deck reaches within this many px of the hatch (world x)
+      BELOW_Y: 2600, // ...and she is no further below than this
+      DROP_CHANCE: 1.6, // per minute, per think: the chance a quiet bot crew drops a crate on a ship directly below (Versus and gunship)
+      TIP_MIN: 1, // raiders / boarders on the hatch needed before a bot pulls the lever (never with a crewman on it)
     },
   },
   // ---- S.5e: a ship needs only a gasbag and a deck to fly. Everything else is optional; what is missing just takes control away. ----

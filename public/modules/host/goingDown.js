@@ -39,6 +39,14 @@ const tables = layoutTables((L) => ({
 // Is the coal bunker empty because the crew dumped it (bots do not walk to it then)?
 export const bunkerEmpty = (state) => (state.gdCoalOut || 0) > 0 || !!(state.goingDown && state.goingDown.coalGone);
 
+// The cargo drop hatches (hatch.js) that are worth opening now: shut, with a load lying on the span or the coal bunker beside it (the chute spills the bunker too). Fast weight off her.
+export function hatchesWorth(state) {
+  const g = state.goingDown, L = mainShip(state).layout;
+  if (!g || !(state.hatches || []).length) return [];
+  const coals = !g.coalGone && g.coalJob ? L.all('coal') : [], R = config.HATCH.COAL_REACH;
+  return state.hatches.filter((h) => !h.want && ((state.loads || []).some((ld) => ld.d === h.d && ld.x > h.x0 && ld.x < h.x1) || coals.some((co) => co.d === h.d && co.x > h.x0 - R && co.x < h.x1 + R)));
+}
+
 export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHoleAt, getCargo, breakOff }) {
   const cargo = { place: (...a) => getCargo().place(...a), spawn: (...a) => getCargo().spawn(...a), worldAt: (...a) => getCargo().worldAt(...a) }; // (cargo.js is made after this, shipSim.js)
   const ship = mainShip(state); // (the ship that falls: one of these per ship)
@@ -394,6 +402,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     for (const h of openHoles(g)) out.push({ kind: 'gas', obj: h, d: h.d, x: h.x, urgency: U * 1.1, max: 1, label: 'PATCH THE GLOWING LEAK!' });
     const helm = tb().HELM;
     if (helm && !helmManned(p) && state.ship.gas < 97) out.push({ kind: 'helm', obj: 'gdhelm', d: helm.d, x: helm.x, urgency: U * 1.2, max: 1, label: 'TAKE THE HELM - PUMP THE BAGS FULL!' });
+    for (const h of hatchesWorth(state)) out.push({ kind: 'hatch', obj: h, d: h.d, x: h.lx, urgency: U * 1.15, max: 1, label: 'PULL THE HATCH LEVER - THE CARGO DROPS!' }); // (a cargo drop hatch with weight over it: one pull and it is gone)
     for (const ld of state.loads || []) out.push({ kind: 'shovel', obj: ld, d: ld.d, x: ld.x, urgency: U, max: 1, label: `DUMP IT OVERBOARD! (${((config.CROSS.CARGO.ITEMS[ld.kind] || {}).label || 'load').toLowerCase()})` });
     if (press >= GD.VENT_AT - 4) L.vents.forEach((v, i) => { if (!state.ventOpen[i]) out.push({ kind: 'vent', obj: v, d: v.d, x: v.x, urgency: U * 1.6, max: 1, label: 'VENT THE BOILER!' }); });
     if (!g.coalGone && tb().BOILER && L.hasKind('coal') && (press < GD.STOKE_BELOW || p.carry === 'coal')) {
@@ -407,7 +416,15 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     return out;
   };
 
-  return { tryStart, update, protect, active, pumpMul, onStoke, holdAction, perform, missionDone, newMission, reset, pitch, status, jobsFor, measure };
+  // Weight that left through a cargo drop hatch (hatch.js): the loads are already off the decks, so the numbers fall by themselves; this counts them and says so.
+  const noteDumped = (w) => {
+    const g = state.goingDown;
+    if (!g || !(w > 0)) return;
+    g.dumped += w;
+    say('CARGO THROUGH THE HATCH! -' + Math.round(w) + ' WEIGHT', 2.5);
+  };
+
+  return { tryStart, update, protect, active, pumpMul, onStoke, holdAction, perform, missionDone, newMission, reset, pitch, status, jobsFor, measure, noteDumped };
 }
 
 // ---- bots: while she falls they split across the jobs (bots.js asks for this instead of its usual list) ----
@@ -438,6 +455,8 @@ export function botJobs(state, bot) {
   const coalSlots = stokeOk && press < GD.STOKE_BELOW ? (n >= 5 ? 2 : 1) : 0;
   for (let k = 0; k < coalSlots; k++) add({ kind: 'coal', obj: 'gdcoal' + k });
   if (!hot && press < GD.VENT_CLOSE) L.vents.forEach((v, i) => { if (state.ventOpen[i]) add({ kind: 'vent', obj: v }); }); // (the steam is wanted now: shut the vents again)
+  // A cargo drop hatch with weight over it (or the coal bunker beside it): one pull of its lever and it is gone.
+  for (const h of hatchesWorth(state)) add({ kind: 'hatch', obj: h, mode: 'dump' });
   // Cargo overboard, from the heavy end first (the lopsided ship spills lift).
   const dx = (state.balance && state.balance.dx) || 0, com = (state.balance && state.balance.comX) || 0;
   const loads = state.loads || [];
@@ -450,6 +469,7 @@ export function botJobs(state, bot) {
   if (short && state.bombBay.bombs > 0 && t.BAY && (loads.length === 0 || late > 0.3)) add({ kind: 'dumpbombs', obj: g.bombJob });
   if (short && !g.coalGone && g.coalJob && late > GD.CUT_AT * 0.7 && g.need > reach * 0.75) add({ kind: 'dumpcoal', obj: g.coalJob });
   if (short && late > GD.CUT_AT && (g.need > reach * 0.9 || late > 0.8)) for (const j of g.joints) add({ kind: 'cut', obj: j });
+  for (const h of state.hatches || []) if (h.want && h.openSecs > config.HATCH.BOT.OPEN_FOR) add({ kind: 'hatch', obj: h, mode: 'close', urgent: false }); // (it has done its work: shut it again so nobody walks into the hole)
   // Nothing left to do - help the fallen up.
   for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
   return jobs;

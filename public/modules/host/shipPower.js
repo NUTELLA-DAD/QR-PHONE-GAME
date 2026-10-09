@@ -21,7 +21,7 @@ export function powerOf(L) {
   for (const m of Object.values(L.gunMounts || {})) if (m.type && config.GUN_TYPES[m.type]) range += config.GUN_TYPES[m.type].POWER || 0;
   return range + W.BASE + W.GUN * (kinds.gun || 0) + W.BOMB_BAY * (kinds.bombBay || 0) + W.COIL * (kinds.coil || 0) + W.ESCORT * (kinds.escort || 0) + W.DEFLECTOR * (kinds.deflector || 0)
     + W.ARMOUR * armour + W.ENGINE * L.engines.length + W.SPARE_BAG * Math.max(0, bags - 1)
-    + W.CANNON * (kinds.cannon || 0) + W.CARGO_RACK * L.racks.filter((r) => r.kind === 'sandbag' || r.kind === 'crate').length + W.TOWLINE * L.racks.filter((r) => r.kind === 'towline').length; // (B.6: the cross-ship parts count a little: a cannon puts boarders aboard, ballast and a towline are weapons of weight)
+    + W.CANNON * (kinds.cannon || 0) + W.CARGO_RACK * L.racks.filter((r) => r.kind === 'sandbag' || r.kind === 'crate').length + W.TOWLINE * L.racks.filter((r) => r.kind === 'towline').length + W.HATCH * (L.hatches || []).length; // (a cargo drop hatch tips boarders out and drops crates on a ship below, a little; B.6: the cross-ship parts count a little: a cannon puts boarders aboard, ballast and a towline are weapons of weight)
 }
 
 let classicPower = null; // (the baseline: the classic ship's, worked out once)
