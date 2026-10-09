@@ -1650,6 +1650,7 @@ export function createShipSim(world, ship, W) {
   function respawn({ crew = true } = {}) {
     if (!ship.main && ship.lost && ship.lost.length) { const first = ship.lost[0]; ship.lost.length = 0; fitBuild(first.before, { crew: false }); ship.buildId = first.buildId; } // (a ship that lost parts is rebuilt whole with the new game, S.5i)
     state.liftDeficit = 0; bayHeat = 0; bagTear = []; breakCd = 0;
+    if (ship.ramHits) ship.ramHits = 0; // (the ram prow is mended: weaponsArt.js drawRam)
     Object.assign(state.ship, { alt: 0, speed: 0.3, order: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 });
     if (!ship.main) W.course.place(ship); // (back at her station in open air; her pose is her own)
     forces.reset();

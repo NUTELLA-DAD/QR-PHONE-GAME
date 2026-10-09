@@ -2,7 +2,7 @@
 //
 // ONE step of it runs from the world's step (simulation.js stepWorld), after every ship has moved (her engines, her lift, the rock pushing her clear), so no two hulls END a step overlapping.
 // It works for EVERY pair of ships in the world: the co-op ?ships=N fleet, Versus (every phase while flying), later the gunship as a ship. With one ship nothing runs.
-//   * NARROW PHASE  the hull is exactly what a shell hits (shipSim.js hitsShip): the gasbag ellipses and the hit boxes (layout.hitRects), put into the world through the ship's pose, mirrored when
+//   * NARROW PHASE  the hull is what a shell hits (shipSim.js hitsShip): the gasbag ellipses and the hit boxes (layout.hitRects), plus the ram prow's wedge when she has one (layout.ram.pts: config.RAM), put into the world through the ship's pose, mirrored when
 //                   she faces left (so a ship half way through a COME ABOUT is in her mirrored place). A cheap bounds check goes first. The ellipses become 24-sided polygons that are
 //                   a hair BIGGER than the ellipse (with a flat side at the nose, so a nose-to-nose ram pushes straight back), so a pair of polygons that no longer overlap leaves two hulls
 //                   that do not overlap either. Two convex shapes are tested with the separating-axis method, which tells whether they overlap and where (the box of the overlap: the contact point).
@@ -19,6 +19,7 @@
 import { config } from '../../config.js';
 import { pivotOf as mirrorPivot, toShipX, toShipY, toWorldX, toWorldY, driveVx, driveGain } from './pose.js';
 import { pivotOf as massOf, kickForce } from './forces.js';
+import { pop } from './popups.js';
 
 const SIDES = 24; // the ellipses become 24-sided polygons...
 const TANGENT = 1 / Math.cos(Math.PI / SIDES); // ...with their edges lying ON the ellipse (the corners stick out by under 1 per cent)
@@ -26,13 +27,13 @@ const RECT_AXES = [[1, 0], [0, 1]];
 
 // ---- the hull as convex shapes in the world ----
 // A convex shape: pts [[x, y] ...] (a polygon), ax = its edge normals worth testing, and its box and middle. rect: true for a box (two axes).
-function shape(pts, rect) {
+function shape(pts, rect, any) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
   let ax = RECT_AXES;
-  if (!rect) { // (the polygon has parallel opposite edges: half of them are enough)
+  if (!rect) { // (the polygon has parallel opposite edges: half of them are enough. any: it has not, as the ram prow's wedge: every edge)
     ax = [];
-    for (let i = 0; i < pts.length / 2; i++) {
+    for (let i = 0; i < (any ? pts.length : pts.length / 2); i++) {
       const a = pts[i], b = pts[(i + 1) % pts.length];
       const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
       ax.push([dy / l, -dx / l]);
@@ -55,6 +56,11 @@ export function hullShapes(ship, f = ship.pose.f) {
   for (const r of L.hitRects) {
     const a = wx(r.x0), b = wx(r.x1), x0 = Math.min(a, b), x1 = Math.max(a, b), y0 = r.y0 + p.y, y1 = r.y1 + p.y;
     out.push(shape([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], true));
+  }
+  if (L.ram && L.ram.pts) { // the ram prow is part of the hull, and the first thing to touch (config.RAM): its own wedge, marked so a contact knows it was the prow
+    const s = shape(L.ram.pts.map(([x, y]) => [wx(x), y + p.y]), false, true);
+    s.ram = true;
+    out.push(s);
   }
   return out;
 }
@@ -156,12 +162,14 @@ function addVelocity(sh, dx, dy) {
   sh.pose.vy += dy;
 }
 
-// Is the contact c at this ship's ram prow (layout.ram: PVP.md "Space and range", config.RAM)? Her ram tip is the nose of the deck it stands at, in the world.
-function ramOf(S, c) {
+// A ship level with another meets her gasbag-first (the bag's nose is 320 px out, the gondola's 120 behind that), and the prow below it would never get to touch. So a NOSE-ON meeting also counts as the prow's
+// when the contact is within RAM.REACH of her point and the way out is along her bow (no more than RAM.SIDE across it): she was driving the prow at the other ship. sign: +1 for the pair's A, -1 for B.
+function noseOn(S, c, sign) {
   const r = S.layout.ram;
-  if (!r || r.d == null || !S.layout.platforms[r.d]) return false;
-  const tx = toWorldX(S, r.x + config.RAM.TIP), ty = toWorldY(S, S.layout.platforms[r.d].y);
-  return Math.hypot(c.x - tx, c.y - ty) < config.RAM.REACH;
+  if (!r || r.tipX == null) return false;
+  const R = config.RAM, ahead = -sign * c.nx * S.pose.f; // (n points from B to A: the other ship lies the way A is NOT pushed, and the way B IS)
+  if (ahead <= 0 || Math.abs(c.ny) > R.SIDE) return false;
+  return Math.hypot(c.x - toWorldX(S, r.tipX), c.y - toWorldY(S, r.y)) < R.REACH;
 }
 
 // D = { world, puff(x, y, colour, n) }
@@ -191,7 +199,7 @@ export function createShipCollide(D) {
         addVelocity(A, c.nx * j * ia, c.ny * j * ia);
         addVelocity(B, -c.nx * j * ib, -c.ny * j * ib);
       }
-      if (!first) first = { ...c, closing: Math.max(0, closing) };
+      if (!first) first = { ...c, closing: Math.max(0, closing), prowA: hit.pairs.some(([P]) => P.ram) || noseOn(A, c, 1), prowB: hit.pairs.some(([, Q]) => Q.ram) || noseOn(B, c, -1) }; // (prowA / prowB: A's / B's ram prow is one of the shapes that touched, or it was a nose-on meeting at its point: PVP.md "Space and range", config.RAM)
       // the shapes moved: bring them along (the ships' own shapes are rebuilt from the poses)
       shapesA = hullShapes(A); shapesB = hullShapes(B);
     }
@@ -216,20 +224,32 @@ export function createShipCollide(D) {
     k.hurt = C.COOLDOWN;
     stats.hits++;
     const base = (C.DAMAGE * c.closing) / 100;
-    const rammer = ramOf(A, c) ? A : ramOf(B, c) ? B : null; // (a reinforced prow at the contact: the other ship takes the brunt, PVP.md "Space and range")
-    if (rammer) {
-      const R = config.RAM, M = world.match;
-      if (M && M.on && rammer.team) { M.count(rammer.team.id, 'rams'); M.count(rammer.team.id, 'ramDmg', Math.min(R.MAX_POWER, base * R.MUL) * 3); }
-      world.ev.warn = 2;
-      world.ev.warnText = (rammer.team ? rammer.team.id.toUpperCase() + ' ' : '') + 'RAMS!';
+    // A RAM is a contact where a ram prow touched (c.prowA / c.prowB: the wedge is one of the shapes in contact, not just anywhere near it): the ship without a prow takes the brunt, PVP.md "Space and range".
+    const R = config.RAM, M = world.match, prow =(S) => (S === A ? c.prowA : c.prowB), ram = c.prowA || c.prowB;
+    if (ram) {
+      for (const S of [A, B]) {
+        if (!prow(S)) continue;
+        S.ramHits = Math.min(R.SCUFF_MAX, (S.ramHits || 0) + 1); // (the prow shows a new dent: weaponsArt.js drawRam)
+        if (M && M.on && S.team) { M.count(S.team.id, 'rams'); if (!prow(S === A ? B : A)) M.count(S.team.id, 'ramDmg', Math.min(R.MAX_POWER, base * R.MUL) * 3); }
+      }
+      world.sfxQ.push(['clang', true], ['ramHit']); // a heavy iron boom on top of the clang, a ring and sparks, the word, the shake
+      const cols = ['#ffe9a8', '#ffffff', '#ff9a3c'];
+      for (let i = 0; i < R.SPARKS; i++) D.puff(c.x, c.y, cols[i % 3], 5);
+      world.rings.push({ x: c.x, y: c.y, t: 0.55, max: 0.55, color: '#ffd23f', size: 300 });
+      pop(world, c.x, c.y - 210, 'ram', '#ff4a2a', 2.1); // (above the usual CRUNCH! of the blow)
+      for (const sh of new Set([A.ctx.ship, B.ctx.ship, world.ship])) if (sh) sh.shake = Math.max(sh.shake || 0, R.SHAKE);
     }
     for (const [S, sign] of [[A, 1], [B, -1]]) {
       const sx = toShipX(S, c.x), sy = toShipY(S, c.y);
-      S.sim.impact(sx, sy, rammer ? (S === rammer ? base * config.RAM.SELF : Math.min(config.RAM.MAX_POWER, base * config.RAM.MUL)) : Math.min(C.MAX_POWER, base));
+      S.sim.impact(sx, sy, ram ? (prow(S) ? base * R.SELF : Math.min(R.MAX_POWER, base * R.MUL)) : Math.min(C.MAX_POWER, base));
       kickForce(S.ctx, { x: sx, y: sy }, sign * c.nx * S.pose.f, sign * c.ny, C.KICK * Math.min(3, c.closing / 150)); // (her bow's x: the world's times her facing)
     }
-    for (const S of [A, B]) S.sim.crash(toShipX(S, c.x), toShipY(S, c.y), c.closing, 'ram', rammer ? (S === rammer ? config.RAM.BREAK_SELF : config.RAM.BREAK_OTHER) : 1); // (a hard ram can break off the part at the contact point, S.5i; shipSim.js crash. A ram prow keeps the rammer's own parts on and breaks the other ship's more)
-    if (!rammer) { world.ev.warn = 1.5; world.ev.warnText = 'THE SHIPS COLLIDE!'; }
+    for (const S of [A, B]) S.sim.crash(toShipX(S, c.x), toShipY(S, c.y), c.closing, 'ram', ram ? (prow(S) ? R.BREAK_SELF : R.BREAK_OTHER) : 1); // (a hard ram can break off the part at the contact point, S.5i; shipSim.js crash. A ram prow keeps the rammer's own parts on and breaks the other ship's more)
+    if (ram) { // the red-ink stamp (a "parts broke off" banner from the crash above rides along behind it)
+      const broke = world.ev.warn > 0 && /BROKE OFF/.test(world.ev.warnText || '') ? ' ' + world.ev.warnText : '';
+      world.ev.warn = Math.max(world.ev.warn, 2.2);
+      world.ev.warnText = 'RAMMED!' + broke;
+    } else { world.ev.warn = 1.5; world.ev.warnText = 'THE SHIPS COLLIDE!'; }
   }
 
   // The world's once-a-step call, after the ships have moved.

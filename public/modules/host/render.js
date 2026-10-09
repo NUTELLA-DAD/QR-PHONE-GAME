@@ -2225,7 +2225,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
           art.light.drawBellyPod(); // (under the hull: the ladder and outrigger draw over it)
           art.hull(time / 1000);
           art.light.drawLamps(time / 1000); // the two brass searchlights (also records where the beams start)
-          if (layout.ram && layout.platforms[layout.ram.d]) drawRam(ctx, layout.ram, layout.platforms[layout.ram.d].y); // (a ram prow: the reinforced nose, weaponsArt.js)
+          if (layout.ram && layout.platforms[layout.ram.d]) drawRam(ctx, layout.ram, layout.platforms[layout.ram.d].y, { trim: sh.team && config.FLEET.TEAMS[sh.team.id] ? config.FLEET.TEAMS[sh.team.id].trim : null, hits: sh.ramHits }); // (a ram prow: the big iron beak with the team's stripe and a scuff for each landed ram, weaponsArt.js)
         }
         lap('ship');
         // Close-call warnings: red chevrons on the hull pointing at nearby rock.

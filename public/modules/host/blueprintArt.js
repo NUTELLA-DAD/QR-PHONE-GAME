@@ -137,6 +137,24 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     }
   }
 
+  // The RAM PROW (config.RAM): the long iron beak off the fore end of its deck, inked in the same pen with a ruled outline, plate seams, rivets and a stripe.
+  if (Ly.ram && Ly.ram.pts) {
+    const { x, y, tipX } = Ly.ram, hh = config.RAM.HALF, pts = Ly.ram.pts;
+    for (const sx of [136, 226, 316]) for (const f of [-1, 1]) { // the spikes, leaning forward
+      const e = (u) => hh - (hh - config.RAM.TIP_HALF) * ((u - 50) / (config.RAM.TIP - 50));
+      g.beginPath(); g.moveTo(X(x + sx - 15), Y(y + f * e(sx - 15))); g.lineTo(X(x + sx + 38), Y(y + f * (e(sx) + 40))); g.lineTo(X(x + sx + 14), Y(y + f * e(sx + 14))); g.closePath();
+      g.fillStyle = 'rgba(58,44,32,0.55)'; g.fill(); g.strokeStyle = L.INK; g.lineWidth = 1.8 * k; g.stroke();
+    }
+    g.beginPath(); pts.forEach(([px, py], i) => (i ? g.lineTo(X(px), Y(py)) : g.moveTo(X(px), Y(py)))); g.closePath();
+    g.fillStyle = 'rgba(58,44,32,0.28)'; g.fill();
+    g.strokeStyle = L.INK; g.lineWidth = 2.6 * k; g.stroke();
+    g.fillStyle = 'rgba(168,68,63,0.5)'; g.fillRect(X(x + 84), Y(y - hh * 0.72), 40 * s, hh * 1.44 * s); // (the team stripe)
+    for (const sx of [200, 290]) line([[X(x + sx), Y(y - hh * 0.36)], [X(x + sx), Y(y + hh * 0.36)]], 1.2, L.INK_SOFT);
+    for (const sx of [110, 160, 240, 330]) for (const f of [-0.3, 0.3]) { g.beginPath(); g.arc(X(x + sx), Y(y + f * hh), 1.7 * k, 0, 6.2832); g.fillStyle = 'rgba(243,234,214,0.9)'; g.fill(); }
+    line([[X(x - 30), Y(y)], [X(tipX), Y(y)]], 1, L.INK_SOFT, [6, 4]);
+    if (!clean) text('RAM PROW', X(x + 240), Y(y - hh) - 8 * k, 10, L.INK_SOFT, 'center', true);
+  }
+
   // Decks (thick ink), room dividers, ways between decks.
   const P = Ly.platforms;
   for (const r of Ly.rooms) { const q = P[r.d]; if (q) for (const x of [r.x0, r.x1]) line([[X(x), Y(q.y) - 26 * k], [X(x), Y(q.y)]], 1, 'rgba(58,44,32,0.35)'); }

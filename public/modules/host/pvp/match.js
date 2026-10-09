@@ -20,7 +20,7 @@ import { config } from '../../../config.js';
 import { toWorldX, toWorldY, toShipX, toShipY, pivotOf } from '../pose.js';
 import { transfer } from '../ships.js';
 import { inRock } from '../course.js';
-import { BUILDS } from '../shipBuild.js';
+import { BUILDS, onRamProw } from '../shipBuild.js';
 import { buildShelf, tonnageCap } from './shelf.js';
 import { bandOf } from './range.js';
 
@@ -378,6 +378,13 @@ export function createMatch(D) {
         if (t === from || wrecked(t) || t.state.down > 0) continue;
         if (t.sim.shieldBlocks(sh.x, sh.y)) { sh.life = 0; break; }
         const tx = toShipX(t, sh.x), ty = toShipY(t, sh.y);
+        if (onRamProw(t.layout, tx, ty)) { // (the ram prow is iron: the shell rings off it and does little)
+          t.sim.impact(tx, ty, P.SHELL_POWER * (sh.mul || 1) * config.RAM.SHELL_MUL);
+          D.puff(sh.x, sh.y, '#ffe9a8', 6);
+          world.sfxQ.push(['ping']);
+          sh.life = 0;
+          break;
+        }
         if (!t.sim.hitsShip(tx, ty)) continue;
         const before = t.state.hull;
         t.sim.impact(tx, ty, P.SHELL_POWER * (sh.mul || 1));

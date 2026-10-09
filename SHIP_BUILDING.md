@@ -401,7 +401,7 @@ Built in tiers. Each part plugs into existing systems.
   - Rear-gunner tail perch.
 - **Belly gondola:** a gun pod on a winch cable.
 - **Torpedo tubes.**
-- **Ram prow: DONE (PVP.md 3b): `ramProw`, the other ship takes 2.5x and the rammer 0.3x; smashing rock is not built.**
+- **Ram prow: DONE (PVP.md 3b): `ramProw`, a big iron beak 460 px out past the fore end of its deck (drawn by `weaponsArt.js drawRam`, in the tray by `partArt.js`, on the blueprint by `blueprintArt.js`); it is part of the hull (collision shape, samples, bounds, cave box). The other ship takes 2.5x and the rammer 0.3x when the prow is the contact; smashing rock is not built.**
 - **Spiked hull:** hurts boarders.
 - **Smoke launchers:** hide from fighters briefly.
 - **Spark arrestors and sprinklers:** tie into S.5f fire.

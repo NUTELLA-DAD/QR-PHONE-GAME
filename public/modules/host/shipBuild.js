@@ -497,7 +497,38 @@ export function buildLayout(parts, opts = {}) {
     if (out.boarderEntryPoints.length < 2) out.boarderEntryPoints.push({ x: Math.round(span.x1 - 20), p: top.id, auto: true });
   }
   deriveGeometry(out, opts.cell || CAVE_CELL);
+  if (out.ram) addRamGeometry(out, opts.cell || CAVE_CELL);
   return out;
+}
+
+// The RAM PROW's outline (config.RAM): ship coordinates, the beak that sticks out past the fore end x of the deck at height y. A convex wedge: the collar bolted over the hull's nose, then the beak
+// narrowing to a blunt point. shipCollide.js uses it as one of the hull's shapes, weaponsArt.js draws inside it, and shipSim.js stops shells on it.
+export function ramOutline(x, y) {
+  const R = config.RAM;
+  return [[x - 30, y - R.HALF], [x + 50, y - R.HALF], [x + R.TIP, y - R.TIP_HALF], [x + R.TIP, y + R.TIP_HALF], [x + 50, y + R.HALF], [x - 30, y + R.HALF]];
+}
+// Is the ship point (x, y) inside the layout's prow? (A shell that lands there strikes iron, not the hull.)
+export function onRamProw(L, x, y) {
+  const r = L.ram;
+  if (!r || r.tipX == null) return false;
+  const R = config.RAM, along = (x - (r.x + 50)) / (R.TIP - 50);
+  if (x < r.x - 30 || x > r.tipX) return false;
+  const half = along <= 0 ? R.HALF : R.HALF + (R.TIP_HALF - R.HALF) * along;
+  return Math.abs(y - r.y) < half;
+}
+// The prow is part of the ship's shape: it joins the collision samples, the bounds and the box that has to fit a cave (so the validator's cave-fit check sees the longer ship).
+function addRamGeometry(out, cell) {
+  const q = out.platforms[out.ram.d];
+  if (!q) return;
+  const R = config.RAM, x = out.ram.x, y = q.y, tipX = x + R.TIP;
+  out.ram = { ...out.ram, y, tipX, pts: ramOutline(x, y) };
+  out.samples.push([x + 50, y - R.HALF], [x + 50, y + R.HALF], [x + R.TIP * 0.6, y - 30], [x + R.TIP * 0.6, y + 30], [tipX, y]);
+  if (out.bounds) out.bounds = { ...out.bounds, x1: Math.max(out.bounds.x1, tipX + 20) };
+  const F = out.fitBox, ref = out.refPoint;
+  if (F && ref) {
+    out.fitBox = { ...F, x1: Math.max(F.x1, tipX + 20) };
+    out.caveNeed = { tunnel: out.caveNeed.tunnel, shaft: Math.ceil((ref.x - out.fitBox.x0) / cell) + Math.ceil((out.fitBox.x1 - ref.x) / cell) + 1 };
+  }
 }
 
 // ---- derived geometry (S.2) ------------------------------------------------------------------------------

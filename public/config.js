@@ -1367,9 +1367,20 @@ export const config = {
     KICK: 1.6, // the forces.js kick where they touched (RAM_KICK multiples, at most x3 per 150 px/s of closing speed)
     GIVE_WAY: { TIME: 1.5, MARGIN: 150 }, // bot pilots in a fleet (course.js giveWay): a ship does not fly on while another is inside the box she sweeps over the next TIME seconds, grown by MARGIN px, and AHEAD of her
   },
-  // The RAM PROW (shipBuild.js ramProw, shipCollide.js): a reinforced iron nose. When two ships meet and the contact is within REACH px of one's ram tip, the OTHER ship takes MUL x the usual blow (at most
-  // MAX_POWER) and the rammer only SELF x; both are kicked, and a ram counts for the stats (match.js rams). A ram that touches below COLLIDE.MIN_CLOSING hurts nothing, as any bump.
-  RAM: { BREAK_SELF: 0.2, BREAK_OTHER: 1.8, POWER: 1.2, MUL: 2.5, SELF: 0.3, REACH: 900, MAX_POWER: 9, TIP: 42, SHOP: true }, // (TIP = how far past the end of her deck the nose reaches, px; SHOP: the sky-dock's part cards may offer it)
+  // The RAM PROW (shipBuild.js ramProw, shipCollide.js, weaponsArt.js drawRam): a big reinforced iron beak that sticks TIP px out past the fore end of its deck (about 350 past the gondola's nose, beyond even the gasbag's) and is part of
+  // the hull for every collision, so it can be the first thing to touch (a nose-on meeting at its point counts too: REACH, SIDE). When the PROW is where two ships meet, the OTHER ship takes MUL x the usual blow (at most MAX_POWER) and the rammer only SELF x; both are
+  // kicked, and a ram counts for the stats (match.js rams). A touch below COLLIDE.MIN_CLOSING hurts nothing, as any bump. A contact elsewhere on the hull (the prow missed) is an ordinary collision.
+  RAM: { BREAK_SELF: 0.2, BREAK_OTHER: 1.8, POWER: 1.2, MUL: 2.5, SELF: 0.3, MAX_POWER: 9, SHOP: true, // (SHOP: the sky-dock's part cards may offer it)
+    TIP: 460, // how far past the fore end of her deck the point of the beak reaches, px (the classic gasbag's nose is 320 out and the outriggers' 110: the prow sticks out past both)
+    HALF: 78, // half the height of the beak where its collar is bolted to the hull, px
+    TIP_HALF: 10, // half the height of the blunt end of the point (the collision shape; the picture ends in a point inside it), px
+    REACH: 520, // a nose-on meeting counts as the prow's when it is within this many px of the point (level ships meet gasbag-first: shipCollide.js noseOn)
+    SIDE: 0.6, // ...and the way out is within this much (sine of the angle) of straight along her bow
+    SHELL_MUL: 0.1, // a shell that lands on the prow is stopped by the iron: this share of the usual blow
+    SHAKE: 1.1, // the screen shake of a landed ram (flight shake, 1 = a heavy blow)
+    SPARKS: 26, // sparks thrown from the point of contact
+    SCUFF_MAX: 6, // the prow shows one more dent and scratch for each landed ram, up to this many
+  },
   // CROSS-SHIP PLAY (B.6): things that cross from one ship to another, or change what another ship weighs. All of it is per-part and per-ship: a classic co-op ship has none of these parts and nothing here runs.
   CROSS: {
     // The CREW CANNON (cannon.js): a brass cannon on an open deck that fires a CREW MEMBER across the sky. Two stations: the SEAT in the barrel (Action while it is empty: you climb in) and the

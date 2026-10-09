@@ -138,6 +138,14 @@ export function createSfx(state) {
       tone('square', 520, 300, 0.12, 0.08);
       noise('bandpass', 900, 0.3, big ? 0.45 : 0.3, 0, 2);
     },
+    // A ram prow landing (shipCollide.js): a deep iron boom, a ringing strike and a rattle of splinters.
+    ramHit: () => {
+      tone('sine', 120, 38, 0.7, 0.55);
+      tone('triangle', 330, 90, 0.35, 0.35);
+      tone('square', 880, 420, 0.1, 0.12);
+      noise('bandpass', 1400, 0.25, 0.4, 0, 2);
+      noise('lowpass', 300, 0.6, 0.35, 0.03, 3);
+    },
     // COME ABOUT: the airframe groans round, a rush of wind, and a deep bell as the bow swings through.
     comeabout: () => {
       tone('sawtooth', 150, 70, 1.3, 0.22);

@@ -9,6 +9,7 @@
 //   (d) three ships in the ?ships=3 formation, bots aboard, fly 2 minutes (and a tight formation 1.5 minutes) and never overlap;
 //   (e) a Versus round with bots: not one step with the hulls overlapping, and ships thrown into each other are pushed apart and counted as a bump;
 //   (f) a high-speed ram hurts BOTH ships, kicks both about the place they touched (forces.js: the pitch swings) and clangs; a slow touch does not hurt;
+//   (h) the ram prow is a big iron beak that is part of the hull (bounds, cave box, a collision shape of its own), a prow meeting is a RAM (stamp, boom, word, shake, scuff) that hurts the other ship much more;
 //   (g) one ship: nothing runs; ENABLED false: the ships pass through each other (the control).
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -278,6 +279,41 @@ for (const [label, gap, drop, minutes] of [['the ?ships=3 formation (250 px behi
     step(sim, 90, () => { if (M.phase === 'fight') w = Math.max(w, overlapDepth(red, blue)); });
     report(was > 100 && w <= 3 && M.stats.red.bumps + M.stats.blue.bumps > bumps0, `(e) two ships put ${was} px inside each other in the middle of the fight are pushed clear in one step (worst overlap afterwards ${w} px) and the bump is counted for the teams (${bumps0} -> ${M.stats.red.bumps + M.stats.blue.bumps})`);
   }
+}
+
+// ---- (h) the RAM PROW is a big iron beak, part of the hull ----
+{
+  pins.clear();
+  const { buildShelf } = await load('modules/host/pvp/shelf.js');
+  const { buildLayout, onRamProw } = await load('modules/host/shipBuild.js');
+  const { hullShapes } = await load('modules/host/shipCollide.js');
+  const R = config.RAM;
+  const ramParts = buildShelf().find((e) => e.id === 'ram').parts;
+  const L0 = buildLayout(BUILDS.classic), L1 = buildLayout(ramParts);
+  const nose = Math.max(...L1.hitRects.map((r) => r.x1)); // (the hull's farthest nose, the outriggers')
+  report(L1.ram && L1.ram.tipX - nose >= 250 && L1.ram.tipX - nose <= 450 && L1.bounds.x1 >= L1.ram.tipX && L1.fitBox.x1 >= L1.ram.tipX && L1.caveNeed.shaft >= L0.caveNeed.shaft, `(h) the prow sticks out ${Math.round(L1.ram ? L1.ram.tipX - nose : 0)} px past the hull's nose; the bounds (${L1.bounds.x1}) and the cave box (${L1.fitBox.x1}, ${L1.caveNeed.shaft} squares across against ${L0.caveNeed.shaft}) grow with it, and the classic ship is untouched (${L0.ram === undefined})`);
+  report(L0.ram === undefined && L0.bounds.x1 === 1810, `(h) ...a ship without one has no ram field and her bounds are as ever (${L0.bounds.x1})`);
+  const y = L1.ram.y;
+  report(onRamProw(L1, L1.ram.tipX - 4, y) && !onRamProw(L1, L1.ram.tipX + 6, y) && !onRamProw(L1, L1.ram.x + 200, y - 120) && onRamProw(L1, L1.ram.x + 20, y + 40), '(h) a shell that lands on the prow strikes iron (onRamProw): the point and the collar yes, the air above the beak no');
+  const { sim, st, ships: [A, B], humans: [hA, hB] } = boot({ parts: ramParts });
+  report(hullShapes(B).filter((s) => s.ram).length === 1 && hullShapes(A).filter((s) => s.ram).length === 0, '(h) the prow is one of the hull shapes of the ship that has it (and the other has none)');
+  stand(A, 3000, 3000, 1);
+  stand(B, 3000 + 5200, 3000, -1); // B (the prow) comes about to face A, level with her
+  hA.thr = hB.thr = 1;
+  A.state.speed = B.state.speed = 1;
+  const hull0 = [A.state.hull, B.state.hull];
+  let banner = false, boom = false, word = false, shake = 0;
+  step(sim, 60 * 8, () => {
+    if ((st.ev.warnText || '').startsWith('RAMMED!')) banner = true;
+    if (st.sfxQ.some((q) => q[0] === 'ramHit')) boom = true;
+    if ((st.popups || []).some((p) => p.text === 'RAMMED!')) word = true;
+    shake = Math.max(shake, A.ctx.ship.shake);
+    st.sfxQ.length = 0;
+  });
+  const lostA = hull0[0] - A.state.hull, lostB = hull0[1] - B.state.hull;
+  report(banner && boom && word && shake >= R.SHAKE * 0.9 && B.ramHits === 1 && !A.ramHits, `(h) a prow meeting lands as a RAM: the RAMMED! stamp, the iron boom, the word in the sky and a shake of ${shake.toFixed(2)}; the prow shows ${B.ramHits} scuff and the other ship none`);
+  report(lostA > 2.5 * lostB && lostB >= 0, `(h) ...and the ship without a prow takes the brunt: hull lost ${lostA.toFixed(1)} against the rammer's ${lostB.toFixed(1)}`);
+  pins.clear();
 }
 
 // ---- (g) the controls ----

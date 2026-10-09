@@ -19,6 +19,7 @@ export const WORDS = {
   hurt: ['OUCH!', 'YOWCH!', 'OW!'], // a crewman loses a heart (health.js)
   burn: ['SIZZLE!', 'HOT!', 'YEOW!'], // ...burning
   heal: ['+HEART'], // ...and gets one back
+  ram: ['RAMMED!'], // a ram prow lands (shipCollide.js)
 };
 
 export function pop(state, x, y, kind, color = '#f2d36b', size = 1) {
