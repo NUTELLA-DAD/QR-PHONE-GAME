@@ -47,6 +47,7 @@ const pages = [
   ['host.html', 'Play on this screen', 'The TV game with bot crew. Press "Add 4 bot crew", then CAST OFF! (Phones can join only when the game runs from start.bat.)'],
   ['host.html?versus=1&bots=4', 'Versus battle', 'Two airships, bot crews, best of 3.'],
   ['buildtest.html', 'Shipwright', 'Build your own airship, then PLAYTEST it.'],
+  ['three3d.html', '3D test', 'The same game drawn in 3D with Three.js: real searchlights, a real come-about turn, the Kraken in the sea.'],
   ['creaturetest.html', 'The Kraken', 'The giant boss creature test page.'],
   ['gunshiptest.html', 'Gunship art', 'Enemy gunship drawings.'],
   ['styletest.html', 'Art style', 'The storybook art style test.'],
