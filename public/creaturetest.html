@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Airship Crew - Creature test</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d1a17;color:#f3ead6;font-family:Georgia,serif}
+  header{position:absolute;left:0;right:0;top:0;padding:6px 12px;background:rgba(43,38,34,.92);font-size:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;z-index:2}
+  header button{font:inherit;padding:4px 10px;background:#4a3f36;color:#f3ead6;border:1px solid #8a7a66;border-radius:4px;cursor:pointer}
+  header button.on{background:#a8443f;border-color:#f2d36b}
+  #hud{position:absolute;right:10px;bottom:8px;font:13px monospace;background:rgba(0,0,0,.55);padding:4px 8px;border-radius:4px;z-index:2}
+  #help{position:absolute;left:10px;bottom:8px;font-size:13px;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:4px;z-index:2}
+  canvas{display:block;width:100%;height:100%}
+  a{color:#f2d36b}
+</style></head><body>
+<header>
+  <b>Creature test: the Kraken</b>
+  <button id="grab">Grab ship</button>
+  <button id="mouth">Open mouth</button>
+  <button id="sever">Sever tentacle</button>
+  <button id="lit">Toggle lit/dim</button>
+  <button id="reset">Reset</button>
+  <a href="/host.html">Back to the game</a>
+</header>
+<div id="help">Click: nearest free tentacle reaches there. Drag: pan (or drag the ship). Wheel: zoom. Shift+click or "Sever": cut a tentacle at the clicked segment.</div>
+<div id="hud">-</div>
+<canvas id="c"></canvas>
+<script type="module" src="/modules/creatureTest.js"></script>
+</body></html>
