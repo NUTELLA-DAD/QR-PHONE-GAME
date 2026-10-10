@@ -60,13 +60,14 @@ function buildUI() {
   <label>Light</label><select id="u-tod">${opts([['day', 'Day'], ['dusk', 'Dusk'], ['night', 'Night (cave)'], ['', 'Auto (from the game)']], S.tod)}</select>
   <div class="row"><button id="b-toon"></button><button id="b-shadow"></button></div>
   <label>Quality tier (look pass)</label><select id="u-tier">${opts([['', 'from Detail'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], S.tier)}</select>
-  <div class="row" id="look-row">${['bloom', 'lut', 'grain', 'fog', 'rim', 'lanterns', 'dark', 'clouds', 'water', 'post'].map((k) => `<button data-look="${k}"></button>`).join('')}</div>
+  <div class="row" id="look-row">${['bloom', 'lut', 'grain', 'fog', 'rim', 'lanterns', 'dark', 'clouds', 'water', 'vfx', 'post'].map((k) => `<button data-look="${k}"></button>`).join('')}</div>
   <div class="row"><button id="b-detail"></button><button id="b-orbit"></button></div>
   <div class="row"><button id="b-sweep"></button></div>
   <div class="row"><button id="b-2d"></button><button id="b-skip">+30 s</button></div>
   <div class="row"><button id="b-turn">COME ABOUT (C)</button></div>
   <label>Call up (demo helpers)</label>
   <div class="row"><button data-spawn="gunship">Gunship</button><button data-spawn="fighters">Fighters</button><button data-spawn="bomber">Bomber</button><button data-spawn="bats">Bats</button><button data-spawn="fire">Fire</button></div>
+  <div class="row"><button id="b-vfx">VFX test (V): fire + volley + explosion</button></div>
   <div class="row"><button id="b-pause">Pause</button><button id="b-ui">Hide (H)</button></div>
   <small id="u-info"></small>`;
   $('u-build').onchange = (e) => reload({ build: e.target.value });
@@ -77,7 +78,7 @@ function buildUI() {
   const sync = () => {
     $('b-toon').textContent = look.toon ? 'Look: Toon + ink' : 'Look: Plain lit'; $('b-toon').classList.toggle('on', look.toon);
     $('b-shadow').textContent = 'Shadows: ' + (look.shadows ? 'on' : 'off'); $('b-shadow').classList.toggle('on', look.shadows);
-    const NAMES = { bloom: 'Bloom', lut: 'Grade', grain: 'Grain+vignette', fog: 'Fog', rim: 'Rim light', lanterns: 'Lantern lights', dark: 'Dark caves', clouds: 'Clouds', water: 'Toon water', post: 'Post (all)' };
+    const NAMES = { bloom: 'Bloom', lut: 'Grade', grain: 'Grain+vignette', fog: 'Fog', rim: 'Rim light', lanterns: 'Lantern lights', dark: 'Dark caves', clouds: 'Clouds', water: 'Toon water', vfx: 'Particles (WP4)', post: 'Post (all)' };
     p.querySelectorAll('[data-look]').forEach((b) => { const k = b.dataset.look; b.textContent = NAMES[k] + ': ' + (look[k] ? 'on' : 'off'); b.classList.toggle('on', !!look[k]); });
     $('b-detail').textContent = 'Detail: ' + S.detail;
     $('b-sweep').textContent = S.sweep ? 'Idle lamps sweep (demo)' : 'Lamps: as the game has them'; $('b-sweep').classList.toggle('on', S.sweep);
@@ -95,10 +96,14 @@ function buildUI() {
   $('b-sweep').onclick = () => { S.sweep = !S.sweep; sync(); };
   p.querySelectorAll('[data-spawn]').forEach((b) => { b.onclick = () => { b.classList.toggle('on', live.spawn(b.dataset.spawn)); setTimeout(() => b.classList.remove('on'), 400); }; });
   $('b-turn').onclick = () => { const r = live.comeAbout(); $('u-info').textContent = r === 'ok' ? 'Coming about: the helm holds the command for a second, then she swings round.' : 'Refused by the game: ' + r; };
+  $('b-vfx').onclick = () => { // WP4: a test fire on the main deck, a six-shell volley and an explosion at the ship (view only; the game is not touched)
+    const ok = view.vfx && view.vfx.test('all');
+    $('u-info').textContent = ok ? 'VFX test: three deck fires, a volley and an explosion at the ship.' : 'The particles are off (?look=novfx, or they could not start).';
+  };
   let paused = false;
   $('b-pause').onclick = () => { paused = !paused; window.__paused = paused; $('b-pause').textContent = paused ? 'Resume' : 'Pause'; $('b-pause').classList.toggle('on', paused); };
   $('b-ui').onclick = () => { p.style.display = 'none'; };
-  addEventListener('keydown', (e) => { if (e.key === 'h' || e.key === 'H') p.style.display = p.style.display === 'none' ? '' : 'none'; if (e.key === '2') $('b-2d').click(); if (e.key === 'c' || e.key === 'C') $('b-turn').click(); if (e.key === 'o' || e.key === 'O') $('b-orbit').click(); });
+  addEventListener('keydown', (e) => { if (e.key === 'h' || e.key === 'H') p.style.display = p.style.display === 'none' ? '' : 'none'; if (e.key === '2') $('b-2d').click(); if (e.key === 'c' || e.key === 'C') $('b-turn').click(); if (e.key === 'o' || e.key === 'O') $('b-orbit').click(); if (e.key === 'v' || e.key === 'V') $('b-vfx').click(); });
   sync();
   $('u-info').innerHTML = 'Keys: H hides, O orbit, 2 show 2D, C come about. The simulation is the real game with ' + S.bots + ' bot crew; this page only draws it (the same 3D view as host.html?view=3d).<br><b>Not drawn in 3D yet:</b> see the console line "view3d: not drawn yet".';
 }
@@ -142,8 +147,8 @@ function frame(now) {
     const fps = (fpsN * 1000) / (now - fpsT);
     const st = view.stats();
     const gpuTxt = st.gpu && Object.keys(st.gpu).length ? '\ngpu ms ' + Object.entries(st.gpu).map(([k, v]) => k + ' ' + v.toFixed(2)).join('  ') : '';
-    $('hud').textContent = `${fps.toFixed(0)} fps  |  frame ${(1000 / Math.max(1, fps)).toFixed(1)} ms  (worst ${worst.toFixed(0)})\nupdate ${st.jsMs.toFixed(1)} ms  render-call ${st.renderMs.toFixed(1)} ms\n${st.sceneCalls}+${st.calls - st.sceneCalls} draw calls (scene + post)  ${(st.sceneTris / 1000).toFixed(0)}k tris  ${st.w}x${st.h}  ${st.tier}${gpuTxt}`;
-    window.__stats = { fps, worst, update: st.jsMs, render: st.renderMs, calls: st.calls, tris: st.tris, sceneCalls: st.sceneCalls, sceneTris: st.sceneTris, gpu: st.gpu, tier: st.tier };
+    $('hud').textContent = `${fps.toFixed(0)} fps  |  frame ${(1000 / Math.max(1, fps)).toFixed(1)} ms  (worst ${worst.toFixed(0)})\nupdate ${st.jsMs.toFixed(1)} ms  render-call ${st.renderMs.toFixed(1)} ms\n${st.sceneCalls}+${st.calls - st.sceneCalls} draw calls (scene + post)  ${(st.sceneTris / 1000).toFixed(0)}k tris  ${st.w}x${st.h}  ${st.tier}${gpuTxt}${st.vfx ? `\nparticles ${st.vfx.pool}/${st.vfx.cap} + ${st.vfx.splinters} splinters  ${st.vfx.calls} draw calls  js ${st.vfxMs.toFixed(2)} ms` : ''}`;
+    window.__stats = { fps, worst, update: st.jsMs, render: st.renderMs, calls: st.calls, tris: st.tris, sceneCalls: st.sceneCalls, sceneTris: st.sceneTris, gpu: st.gpu, tier: st.tier, vfx: st.vfx, vfxMs: st.vfxMs };
     fpsN = 0; fpsT = now; worst = 0;
   }
   if (firstFrame) { firstFrame = false; window.__ready3d = true; }
@@ -153,7 +158,7 @@ buildUI();
 if (S.view2d !== 'off') apply2d();
 // handy for the screenshot script and the console
 window.__t3d = {
-  state, live, scene, camera, renderer, world, models, S, kraken, terrain, view,
+  state, live, scene, camera, renderer, world, models, S, kraken, terrain, view, vfx: view.vfx,
   setTod: (n) => { S.tod = n; },
   warm: (s) => live.warm(s),
   comeAbout: () => live.comeAbout(), spawn: (k) => live.spawn(k),

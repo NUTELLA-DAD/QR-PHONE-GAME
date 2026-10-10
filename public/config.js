@@ -2308,6 +2308,19 @@ export const config = {
     BLOOM: { THRESHOLD: 0.92 }, // only things brighter than this glow (the lamps, fire, eyes)
   },
 
+  // The 3D particles (view3d/particles.js + vfx.js; 3D.md section 12). Caps per quality tier (the pool and the splinter boxes), RATE scales every emitter, colours are hex (fire and sparks are drawn HDR
+  // so the bloom pass makes them glow), rates are per second per emitter. Nothing here touches the simulation.
+  VFX3D: {
+    CAP: { high: 1500, medium: 800, low: 400 },
+    SPLINTERS: { high: 160, medium: 90, low: 0 },
+    RATE: { high: 1, medium: 0.85, low: 0.5 },
+    FIRE: { HDR: 1.7, SIZE: 185, BIG: 290, LICKS: 11, EMBERS: 4, SMOKE: 6, HALO: '#ff9a4a' }, // flame sprite size on a deck (world units), then per second per fire: little flames, embers, smoke puffs (big fires: x1.8)
+    WOOD: ['#d9b98a', '#b98a56', '#8f6338', '#e8d2a6', '#6e4a2a'],
+    TRACER: '#ffb838', TRACER_PRIMED: '#ff9a2e', BULLET: '#ff5a7a', FLAK: '#ff9a4a', LIGHTNING: '#9fd8ff',
+    SMOKE: { fire: '#5a5454', big: '#2f2c2e', trail: '#b9b3ad', exhaust: '#8f8f8f', steam: '#f4f7f7' },
+    HITSTOP_AT: 190, // an impact ring this big (world units) or more gets the one-frame bright flash
+  },
+
   // Walking feel.
   MOVE: {
     WALK_SPEED: 230,

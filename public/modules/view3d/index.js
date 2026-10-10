@@ -16,6 +16,7 @@ import { makeFigure } from './crew.js';
 import { createKrakenView } from './kraken.js';
 import { createFlyers } from './flyers.js';
 import { createScenery } from './scenery.js';
+import { createVfx } from './vfx.js';
 import { placeCamera, FOV } from './camera3d.js';
 import { envIdOf } from '../host/environments.js';
 import { shipOf } from '../host/ships.js';
@@ -30,7 +31,7 @@ export const NOT_DRAWN = [
   'snipers, tugs and imps (specials)',
   'gas holes and patches, hooks and hook lines, the deflector shield, the lightning coil, towlines',
   'weather (rain, snow, lightning, storm), embers and spore clouds',
-  'muzzle flashes, impact rings and popup words',
+  'popup words (muzzle flashes, impact rings, fire, smoke, sparks and splinters are WP4 particles now: vfx.js)',
   'the Versus wind wall and the far-ship porthole',
   'wreck break-up when the ship goes down',
   'progress bars over fires, breaches and crew, HELP call-outs, job chevrons, close-call chevrons',
@@ -142,6 +143,10 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const models = new Map(); // ship id -> { model, ver }
   const figures = new Map(); // player / raider -> { fig, shipId }
   V.models = models;
+  // WP4: the particles (fire, smoke, steam, sparks, splinters, muzzle flashes, rings; vfx.js reads the game's state, particles.js draws). If they cannot be made the old flame cones and puff balls stay.
+  let vfx = null;
+  try { vfx = createVfx({ state, scene: worldRoot, world, models }); } catch (e) { console.warn('view3d vfx off', e); }
+  V.vfx = vfx;
   const modelFor = (sh) => {
     const ver = sh.layout.version;
     let e = models.get(sh.id);
@@ -189,6 +194,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       root.updateMatrixWorld(true);
       const side = (camera.position.x - root.position.x) * Math.sin(yaw) + (camera.position.z - root.position.z) * Math.cos(yaw);
       model.setView(side);
+      model.flameFallback = !(vfx && look.vfx); // (the particle fires do the flames; the old cones only when the particles are off)
       capLamps(model);
       model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai, sweep: !!S.sweep, spotShadow: tier.spotShadow && world.night > 0.5 && index === 0 });
       // crew aboard
@@ -251,8 +257,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       for (const b of (sh.ctx && sh.ctx.bombs) || []) { if (nb >= 80) break; const q = L.platforms[b.d]; if (!q) continue; _P.set(e.model.X(b.x), e.model.Y(q.y - 18), 0); e.model.content.localToWorld(_P); setInst(bombMesh, nb, _P.x, _P.y, _P.z, 18); setInst(bombInk, nb, _P.x, _P.y, _P.z, 23); nb++; }
     }
     endInst(bombMesh, nb); endInst(bombInk, nb);
-    let np = 0; // puffs and smoke
-    for (const p of state.puffs) { if (np >= 200 || !Number.isFinite(p.x)) continue; const k = clamp(p.life / (p.max || 0.5), 0, 1); setInst(puffMesh, np, p.x, -p.y, 40, 8 + 22 * (1 - k), p.c || '#9a9a9a'); np++; }
+    let np = 0; // puffs and smoke (the particles do these now; the balls stay only when they are off)
+    for (const p of (vfx && look.vfx ? [] : state.puffs)) { if (np >= 200 || !Number.isFinite(p.x)) continue; const k = clamp(p.life / (p.max || 0.5), 0, 1); setInst(puffMesh, np, p.x, -p.y, 40, 8 + 22 * (1 - k), p.c || '#9a9a9a'); np++; }
     endInst(puffMesh, np);
   }
 
@@ -311,7 +317,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   }
 
   // ---- the frame -----------------------------------------------------------------------------------------------------------------------------------------------------------------
-  let lastNow = null, jsMs = 0, renderMs = 0;
+  let lastNow = null, jsMs = 0, renderMs = 0, vfxMs = 0;
   V.renderFrame = (now, view, opts = {}) => {
     if (V.lost) return;
     const dt = lastNow == null ? 0 : clamp((now - lastNow) / 1000, 0, 0.05);
@@ -319,7 +325,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     const t = Number.isFinite(opts.t) ? opts.t : now / 1000;
     const j0 = performance.now();
     const wantTier = resolveTier(S, address.tier);
-    if (wantTier.name !== tierName) { tier = wantTier; tierName = tier.name; V.tier = tier; flagKey = ''; sizeKey = ''; }
+    if (wantTier.name !== tierName) { tier = wantTier; tierName = tier.name; V.tier = tier; flagKey = ''; sizeKey = ''; if (vfx) vfx.setTier(tier); }
     if (detail !== (S.detail || 'high')) applyDetail();
     if (flagsNow() !== flagKey) { flagKey = flagsNow(); applyFlags(); }
     fit();
@@ -336,6 +342,14 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     try { flyers.update(t, main ? main.pose.vx || 0 : 0); } catch (e) { logOnce('flyers', e); }
     try { scenery.update(camTarget.x, cam.visW / 2); } catch (e) { logOnce('scenery', e); }
     kraken.update(state.creature, world.night);
+    if (vfx) { // the particles (after the ships and the Kraken are placed: the emitters read their world positions)
+      const v0 = performance.now();
+      try {
+        if (look.vfx) vfx.update(dt, t, { cam: S.orbit ? null : { x: camTarget.x, y: camTarget.y, hw: cam.visW / 2, hh: cam.visH / 2 }, night: world.night, hemi: world.hemi });
+        else vfx.clear();
+      } catch (e) { logOnce('vfx', e); }
+      vfxMs = performance.now() - v0;
+    }
     terrain.update(map, camTarget.x, -camTarget.y);
     const seaY = env === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : NaN;
     world.update(camera, camTarget, { w: cam.visW, h: cam.visH }, t, seaY, map);
@@ -363,7 +377,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // calls / tris = the whole frame (scene + post passes); sceneCalls / sceneTris = the scene pass alone (the budget's numbers); gpu = GPU ms per pass when settings.gpuTimer is on
   V.stats = () => {
     const i = renderer.info, p = post.enabled && look.post;
-    return { calls: i.render.calls, tris: i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms };
+    return { calls: i.render.calls, tris: i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs };
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.dispose = () => { try { renderer.dispose(); } catch { /* (gone) */ } };
