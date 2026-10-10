@@ -2487,7 +2487,7 @@ export const config = {
       FOAM: { COLOR: '#f4fbfa', BAND: 0.55, ALPHA: 0.92 }, // the foam ring where something crosses the sea line: the band's share of the radius
       SHADOW: { COLOR: '#0a1830', ALPHA: 0.62, DEPTH: 0.9 }, // the breach shadow on the water: colour, its darkest alpha, its depth (z) as a share of its width
     },
-    // THE CINDER DRAKE (view3d/creatureDrake.js, drakeModel.js, drakeWings.js, drakeFx.js, drakePaint.js; 3D.md section 22): the same keys as the Kraken's, in charred red-brown and ember orange, and the rest of its look.
+    // THE CINDER DRAKE (view3d/creatureDrake.js, drakeModel.js, drakeWings.js, drakeFx.js, drakePaint.js; 3D.md section 24): the same keys as the Kraken's, in charred red-brown and ember orange, and the rest of its look.
     DRAKE: {
       skin: '#5c2220', skinDark: '#2c1010', belly: '#d99a46', spot: '#2c1010', spotLight: '#8a3828', fin: '#b9482a', bone: '#efe2c0', char: '#2f2a2e', eye: '#ffd23f', iris: '#fff0a0', pupil: '#17101e',
       mouthIn: '#c0381c', lips: '#a8402c', flesh: '#b8574c', heart: '#ff4a4a', dead: '#4a3a3a', exhausted: '#a08a8a',

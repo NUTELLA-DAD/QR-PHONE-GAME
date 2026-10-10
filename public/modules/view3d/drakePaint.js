@@ -1,4 +1,4 @@
-// THE CINDER DRAKE'S SKIN (3D.md section 22): the paintings the dragon is wrapped in, made once with Canvas 2D (a seeded generator, so it is always the same dragon). No files, nothing from the internet.
+// THE CINDER DRAKE'S SKIN (3D.md section 24): the paintings the dragon is wrapped in, made once with Canvas 2D (a seeded generator, so it is always the same dragon). No files, nothing from the internet.
 //   paintDrakeAtlas(P)  the BODY atlas, the same layout as the Kraken's head atlas (creatureKit.js ATLAS): the top 640 rows are the torso (x = round the body, 0 = the belly's middle line, 0.25 = the near flank,
 //                       0.5 = the back; y = along it, rear to chest), the lower left is a sheet of armour plates (the breast scales), the lower right is the plain white swatch the flat pieces point at.
 //   paintDrakeLimb(P)   the skin of a tube (neck, tail, wing bones, legs): x = round it (0 and 1 = the belly side), y = along it (stretched 2:1: the tube kit maps one unit of v to one circumference).

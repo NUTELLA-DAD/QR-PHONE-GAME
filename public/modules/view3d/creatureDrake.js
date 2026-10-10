@@ -1,4 +1,4 @@
-// THE CINDER DRAKE IN 3D (3D.md section 22). creature.js is the generic creature view and KINDS.drake plugs this in; the models are drakeModel.js, the wing skins drakeWings.js, the paintings drakePaint.js
+// THE CINDER DRAKE IN 3D (3D.md section 24). creature.js is the generic creature view and KINDS.drake plugs this in; the models are drakeModel.js, the wing skins drakeWings.js, the paintings drakePaint.js
 // and the fire drakeFx.js. What this file does is put the model where the SIMULATION says its parts are, every frame, and never move a thing by itself (no sine of time, no wobble: the wing beats, the
 // neck, the pitch, the open jaw and the throat's glow are the simulation's stepped numbers; the flames swap between four fixed frames at 8 a second):
 //   - the TORSO is the generic head record (a sculpted lathe): placed at the sim's body position, mirrored by `cr.f`, pitched by `cr.rot`, at a depth that depends on what it is doing (flying: behind the

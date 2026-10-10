@@ -106,7 +106,7 @@ try {
     if (!r3.data || !r3.data.low || r3.data.low.tris > 60000) fail('the Low tier creature is too big');
   }
   if (!argv.includes('--no-drake')) {
-    // THE CINDER DRAKE (3D.md section 22): the Ember Forge's dragon, step by step: it arrives, breathes (the throat glows in steps, the cone is drawn and lights the ship), swoops (the strike ring), perches (the talons
+    // THE CINDER DRAKE (3D.md section 24): the Ember Forge's dragon, step by step: it arrives, breathes (the throat glows in steps, the cone is drawn and lights the ship), swoops (the strike ring), perches (the talons
     // grip the bag, the timer ring), a lava spout erupts, a wing is torn off (a Rapier body), it crashes and crawls, a harpoon line is drawn, it dies in the lava. Each moment is read from the live rig
     // (view.kraken.rig) after the frame had time to draw it; the creature costs at most 12 meshes and 60k triangles at rest.
     console.log('4. the Cinder Drake (host.html?creature=drake&lair=ember): arrive, breath, swoop, perch, spout, wing tear, crawl, harpoon, death');
@@ -133,8 +133,8 @@ try {
         window.__wp8.tear={ mode:dk.mode, simChunks:cr.chunks.length, bodies:Dd.chunks.length, viewChunks:r.chunks.size, extra:[...r.chunks.values()].some(e=>e.extra), stump:cr.parts.filter(p=>p.kind==='wing'&&p.severed).length, meas:window.__meas() }; return JSON.stringify(window.__wp8.tear) })()`, 300, 'tear'],
       [`(async()=>{ ${sl} const k=${view}.kraken, r=k.rig, cr=__cr(), dk=cr.drake; const n=__until(()=>dk.mode==='crawl',4000); window.__step(60); await sl(600);
         window.__wp8.crawl={ n, mode:dk.mode, phase:cr.phase, headPlaced:!!(r.ext.set.pieces.head.key&&r.ext.set.pieces.head.key!=='hidden'), z:r.hg.position.z }; return JSON.stringify(window.__wp8.crawl) })()`, 300, 'crawl'],
-      // a harpoon line made fast to its body (the generic rope, aimed at the Drake's own depth)
-      [`(async()=>{ ${sl} const k=${view}.kraken, r=k.rig, cr=__cr(); const tor=cr.parts.find(p=>p.kind==='mantle'), s=tor.segs[0]; cr.harpoons=[{ a:{x:s.x-1500,y:s.y-700}, b:{x:s.x+200,y:s.y}, part:tor, seg:0, fly:0.5, t:1, len:3000, tension:0.8 }]; await sl(700); window.__wp8.rope={ visible:r.ropes.group.visible }; cr.harpoons=[]; return JSON.stringify(window.__wp8.rope) })()`, 300, 'rope'],
+      // a harpoon line made fast to its body (the generic rope, ending at the Drake's own depth)
+      [`(async()=>{ ${sl} const ct=await __imp('/modules/host/creatureTow.js'); const st=window.game.state, k=${view}.kraken, r=k.rig, cr=__cr(), ship=st.ships[0]; const tor=cr.parts.find(p=>p.kind==='mantle'), s=tor.segs[0]; const ref=ship.layout.refPoint; ct.creatureLatch(st, ship, { part:tor, seg:0, x:s.x+150, y:s.y, d:1800 }, { x:ref.x, y:ref.y }, null, null); window.__step(40); await sl(700); window.__wp8.rope={ visible:r.ropes.group.visible, lines:cr.harpoons.length }; cr.harpoons=[]; return JSON.stringify(window.__wp8.rope) })()`, 300, 'rope'],
       // the death: it falls into the lava; the view hides it when it is gone
       [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, k=${view}.kraken, cr=__cr(); cr.hp=1; const m=cr.parts.find(p=>p.kind==='mantle'); const rr=cs.hurtCreature(st,{part:m,seg:0},50,{who:null,src:'shell'}); window.__step(30); await sl(500);
         window.__wp8.death={ killed:!!(rr&&rr.killed), mode:cr.mode }; window.__step(700); await sl(900); window.__wp8.gone=!window.game.state.creature; window.__wp8.hiddenAfter=!k.root.visible; window.__wp8.errors=window.gameErrors||[]; return JSON.stringify(window.__wp8.death) })()`, 300, 'death'],

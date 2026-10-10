@@ -1,4 +1,4 @@
-// THE CINDER DRAKE'S WING MEMBRANES (3D.md section 22): flat-shaded sheets stretched between the wing's bones. The simulation's wing is a chain of five segments (the arm and the hand); the bones are drawn as
+// THE CINDER DRAKE'S WING MEMBRANES (3D.md section 24): flat-shaded sheets stretched between the wing's bones. The simulation's wing is a chain of five segments (the arm and the hand); the bones are drawn as
 // tubes by the tube kit and THIS file draws the skin between them: one panel for each segment, from the leading bone (J: the joints of the chain) to a trailing edge (E: a point behind every joint, where a
 // finger bone ends), each panel a small grid of cells so that
 //   - the trailing edge scallops in between the fingers (the middle of every panel is pulled in),

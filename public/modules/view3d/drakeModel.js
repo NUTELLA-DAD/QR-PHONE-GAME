@@ -1,4 +1,4 @@
-// THE CINDER DRAKE'S BODY IN 3D (3D.md section 22): the models. Everything here is built once, in the dragon's own frame facing +x (x forward, y UP, z toward the viewer; sizes are the sim's game pixels, so the
+// THE CINDER DRAKE'S BODY IN 3D (3D.md section 24): the models. Everything here is built once, in the dragon's own frame facing +x (x forward, y UP, z toward the viewer; sizes are the sim's game pixels, so the
 // picture and the hit capsules agree) and never moves by itself:
 //   buildTorso(cr, P)   the TORSO: a deep-chested, sculpted lathe (smooth, with a painted scale skin and glowing ember cracks), a ridge of back spines, the shoulder and haunch bulges, the BREAST PLATES (a dynamic
 //                       piece the boarding hack opens) and the HEART behind them. It returns the same record as the Kraken's body (creatureKraken.js buildKraken) so the generic creature view runs it.

@@ -1,4 +1,4 @@
-// THE CINDER DRAKE'S FIRE (3D.md section 22): everything that burns, glows or splashes round the dragon, apart from its own body.
+// THE CINDER DRAKE'S FIRE (3D.md section 24): everything that burns, glows or splashes round the dragon, apart from its own body.
 //   createFireVolumes(parent, P)  ONE additive mesh that draws several FIRE VOLUMES: each is four nested cones (red, orange, yellow, a white-hot core) of lumpy tongues whose shape is one of four fixed
 //                                 frames swapped at 8 a second (no noise, no sine of time), faded along their length. The breath is one volume, each erupting lava spout another.
 //   createDrakeFx(opts)           the per-frame events: the BREATH (the cone from cr.flame, cut short where it meets a hull as the simulation's own breathBurn does; layered fire sprites, sparks and embers

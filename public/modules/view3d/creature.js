@@ -27,7 +27,7 @@ const FLASH = [2.4, 2.2, 2.2], DIM = [0.66, 0.72, 0.95], LIT = [1.28, 1.22, 1.2]
 // The kinds: what is special about each creature. A new creature adds one entry (palette, build -> the geometry, which part kinds are its limbs).
 export const KINDS = {
   kraken: { id: 'kraken', palette: () => config.CREATURE3D.KRAKEN, build: buildKraken, limbKind: 'tentacle' },
-  // The Cinder Drake (3D.md section 22): its own skins (scales + ember cracks), tube opts (spines on the neck and tail), the extension that places its head, jaw, wings, legs and fire (creatureDrake.js), and
+  // The Cinder Drake (3D.md section 24): its own skins (scales + ember cracks), tube opts (spines on the neck and tail), the extension that places its head, jaw, wings, legs and fire (creatureDrake.js), and
   // `desperate`: its phase 3 is a rage, not tiredness (no pale tired tint)
   drake: { id: 'drake', palette: () => config.CREATURE3D.DRAKE, build: buildDrake, limbKind: 'wing', limbsOf: drakeLimbs, skins: drakeSkins, tubeOpts: drakeTubeOpts, extend: extendDrake, desperate: true, sheen: 0 },
 };
