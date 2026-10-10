@@ -147,6 +147,7 @@ export function createSimulation() {
     if (hijack) sh.sim.attach({ hijack });
     if (!sh.main && W.course && opts.place !== false) W.course.place(sh); // (M.2: another ship flies from her own pose; she starts at her station, in open air. The enemy gunship is put where she appears by her own code: opts.place false)
     for (const o of state.ships) if (o !== sh) { sh.sim.air.addProvider(rivalDecks(sh, o)); o.sim.air.addProvider(rivalDecks(o, sh)); sh.sim.air.addProvider(fleetDecks(sh, o)); o.sim.air.addProvider(fleetDecks(o, sh)); } // (Versus: each ship's crew can leap onto the other's decks; B.6: a crewman fired from a crew cannon lands on any ship's)
+    sh.sim.air.addProvider(() => (W.creatures ? W.creatures.surfaces(sh) : [])); // (C.2: a surfaced giant creature's mantle is a landing place for this ship's crew in the air, creatureBoard.js)
     return sh;
   };
   // Versus (B.4): the decks of a ship of ANOTHER team are landing places (and hook anchors) for a crewman of `me` in the air - a leap, a parachute or a swing across and he is aboard her
@@ -1057,14 +1058,14 @@ export function createSimulation() {
   const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip, firstMission });
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
-  const creatures = createCreatureSystem({ state, puff, credit }); // (giant creatures, BOSSES.md: state.creature; for now only the dev flag config.CREATURES.DEV_SPAWN spawns one)
+  const creatures = createCreatureSystem({ state, puff, credit, phoneFx }); // (giant creatures, BOSSES.md: state.creature; for now only the dev flag config.CREATURES.DEV_SPAWN spawns one)
   const gunshipDeps = { state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) };
   const gunship = config.GUNSHIP.AS_SHIP ? createGunshipShip({ ...gunshipDeps, addShip: (...a) => addShip(...a), removeShip: (...a) => removeShip(...a), W }) : createGunship(gunshipDeps); // (B.5: the gunship as a Ship, gunshipShip.js, when the flag is on; else the old offset-from-our-ship one)
   const weather = createWeather({ state, impact, puff });
   const env = createEnvironment({ state, puff, phoneFx, impact, damageHull, ignite: fireSys.ignite }); // ice, thermals, blizzards (rules in environments.js)
   const airFor = { startFlight: (player, ...a) => shipOf(state, player).sim.air.startFlight(player, ...a) }; // (a stolen plane's rider bails out of it from the ship they belong to)
   hijack = createHijack({ state, puff, phoneFx, air: airFor }); // stolen dogfighters
-  Object.assign(W, { course, env, gunship, hijack });
+  Object.assign(W, { course, env, gunship, hijack, creatures });
   main.sim.attach({ hijack }); // (the personal grappling hook needs the hijack: shipSim.js)
   // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
   // Every deck of hers is a landing surface (she can have up to 4 stepped decks; the deck numbers run left to right as she is now).

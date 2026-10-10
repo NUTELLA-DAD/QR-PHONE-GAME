@@ -18,6 +18,7 @@ import { config } from '../../config.js';
 import { tilt } from './course.js';
 import { solidAt } from './maps.js';
 import { overlapsAnother } from './shipCollide.js';
+import { gripped } from './creatureGrip.js';
 import { pivotOf } from './pose.js';
 
 export function createComeAbout(ship, W, { goingDown, flight }) {
@@ -59,6 +60,7 @@ export function createComeAbout(ship, W, { goingDown, flight }) {
     if (g.cd > 0) return 'Wait - she is still settling';
     if (state.gunship) return "Can't come about with the gunship alongside";
     if (Object.values(state.players).some((p) => p.hook)) return 'Someone is on a hookshot line';
+    if (gripped(ship)) return 'A tentacle has hold of her - hack it free first!';
     if (Math.abs(state.ship.speed) > T.MAX_SPEED) return 'Slow down to come about';
     if (mirroredInRock()) return 'No room to come about here';
     if (overlapsAnother(state, ship, -pose.f)) return 'Another ship is in the way'; // (her mirrored hull would sit inside another ship: shipCollide.js)

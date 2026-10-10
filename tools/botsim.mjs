@@ -60,6 +60,7 @@ if (args.map) {
   if (!config.MAPS.KINDS.includes(args.map)) { console.error('Bad map; use ' + config.MAPS.KINDS.join('|')); process.exit(2); }
   config.MAPS.FORCE_KIND = args.map; // set before the sim is created so mission 1 uses it
 }
+if (args.creature && !args.env) args.env = 'sea'; // (the Kraken lives at the water line: --creature kraken flies the Sunken Sea unless told otherwise)
 if (args.env) {
   if (!config.ENVIRONMENTS[args.env] || !config.ENVIRONMENTS[args.env].name) { console.error('Bad env; use ' + Object.keys(config.ENVIRONMENTS).filter((k) => config.ENVIRONMENTS[k] && config.ENVIRONMENTS[k].name).join('|')); process.exit(2); }
   config.ENVIRONMENTS.FORCE = args.env; // every mission happens in this environment
@@ -167,6 +168,7 @@ for (let step = 1; step <= totalSteps; step++) {
       const r = crTrack.rec;
       if (process.env.CREATURE_LOG && step % 600 === 0) { const sh = state.ships[0]; console.log(`creature t${step / 60}s ${c.mode} body ${Math.round(c.x)},${Math.round(c.y)} ship ${Math.round(sh.pose.x + sh.layout.refPoint.x)},${Math.round(sh.pose.y + sh.layout.refPoint.y)} hp ${Math.round(c.hp)} mouth ${c.parts.find((p) => p.kind === 'mouth').open ? 'open' : 'shut'}`); }
       if (c.mode === 'idle' && r.riseAt == null) r.riseAt = step / 60;
+      crTrack.tilt = Math.max(crTrack.tilt || 0, Math.abs(state.forces.theta)); if (!Number.isFinite(state.ships[0].pose.x + state.ships[0].pose.y + state.forces.theta)) throw new Error('NaN in the ship');
       if (c.dying && r.deadAt == null) { r.deadAt = step / 60; r.how = c.diedBy; }
       if (c.parts.some((p) => !Number.isFinite(p.hp) || p.segs.some((s) => !Number.isFinite(s.x) || !Number.isFinite(s.y) || !Number.isFinite(s.ang)))) throw new Error('NaN in the creature');
     }
@@ -311,6 +313,7 @@ if (args.creature) {
     const c = r.c, st = c.stats;
     console.log(`creature ${i + 1} (${c.name}): rose at ${r.riseAt == null ? 'n/a' : r.riseAt.toFixed(0) + 's'}, ${r.deadAt == null ? 'alive when its mission ended (hp ' + Math.round(c.hp) + '/' + c.maxHp + ', ' + c.parts.filter((p) => p.kind === 'tentacle' && p.severed).length + '/6 tentacles cut)' : 'died at ' + r.deadAt.toFixed(0) + 's (' + (r.deadAt - (r.riseAt || 0)).toFixed(0) + 's after rising) by ' + r.how}; damage ${Math.round(st.dmg)} (${Object.entries(st.by).map(([k, v]) => k + ' ' + Math.round(v)).join(', ') || 'none'}), tentacles severed ${st.severed}, beak bombs ${st.chomps}`);
   });
+  { const g = crTrack.list.reduce((a, r) => { const s = r.c.stats, f = s.freed || {}; a.n += s.grips || 0; for (const k of Object.keys(f)) a[k] = (a[k] || 0) + f[k]; a.slaps += s.slaps || 0; a.slapHits += s.slapHits || 0; a.ripped += s.ripped || 0; a.hulled += s.hulled || 0; a.br += s.breaches || 0; a.brHit += s.breachHits || 0; a.brMiss += s.breachMiss || 0; a.brBroke += s.breachBroke || 0; return a; }, { n: 0, slaps: 0, slapHits: 0, ripped: 0, hulled: 0, br: 0, brHit: 0, brMiss: 0, brBroke: 0 }); console.log(`grips: ${g.n} ended (hacked free ${g.hack || 0}, shot free ${g.shot || 0}, burnt free ${g.flame || 0}, cut off ${g.severed || 0}, RIPPED a section off ${g.ripped} + hull crush ${g.hulled}, other ${(g.missed || 0) + (g.gone || 0)}); slaps ${g.slaps} (${g.slapHits} crew hit); breaches ${g.br} (smashed her ${g.brHit}, missed ${g.brMiss}, tore a section off ${g.brBroke}); worst tilt ${((crTrack.tilt || 0) * 180 / Math.PI).toFixed(2)} deg (limit ${config.FORCES.MAX_DEG})`); }
   const dead = crTrack.list.filter((r) => r.deadAt != null), dmgAll = crTrack.list.reduce((a, r) => a + r.c.stats.dmg, 0);
   console.log(`creatures: met ${crTrack.list.length}, killed ${dead.length}${dead.length ? ' (fastest ' + Math.min(...dead.map((r) => r.deadAt - (r.riseAt || 0))).toFixed(0) + 's after rising, by ' + [...new Set(dead.map((r) => r.how))].join('/') + ')' : ''}, total damage ${Math.round(dmgAll)}`);
 }

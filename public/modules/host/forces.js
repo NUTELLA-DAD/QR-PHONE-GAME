@@ -16,7 +16,7 @@
 import { config } from '../../config.js';
 import { thrustVec } from './shipBuild.js';
 
-const LIVE_ONLY = new Set(['hit', 'gust', 'scrape', 'ram', 'tether']); // sources that need FORCES.LIVE
+const LIVE_ONLY = new Set(['hit', 'gust', 'scrape', 'ram', 'tether', 'grab']); // sources that need FORCES.LIVE
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // The point the ship turns about and what she weighs: from her own live balance (balance.js).

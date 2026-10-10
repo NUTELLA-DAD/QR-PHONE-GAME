@@ -9,6 +9,7 @@ import { layoutTables } from '../../shipLayout.js';
 import { mainShip } from './ships.js';
 import { hearts } from './health.js';
 import { bunkerEmpty } from './goingDown.js';
+import { gripJobs } from './creatureGrip.js';
 
 const J = config.JOBS;
 // Worked out per ship layout (rebuilt when a new ship build is applied to it).
@@ -16,9 +17,9 @@ const tables = layoutTables((L) => ({
   GUN_NAMES: Object.keys(L.gunMounts),
   PICKUPS: [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))],
 }));
-const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer' };
+const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer', hack: 'sword' };
 export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', unclog: '#b6f06e', oxygen: '#bfe9ff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0', help: '#ff4d4d' };
-const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP', trim: 'TRIM', sail: 'SAIL', reef: 'REEF', shovel: 'LOAD', heal: 'MEDBAY' };
+const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP', trim: 'TRIM', sail: 'SAIL', reef: 'REEF', shovel: 'LOAD', heal: 'MEDBAY', hack: 'TENTACLE' };
 JOB_COLORS.helm = '#4dc3ff'; // (GOING DOWN!: man the helm and pump the bags full)
 JOB_COLORS.vent = '#ffffff'; // (...vent the boiler)
 JOB_COLORS.dump = '#c9a85a'; // (...drop the bombs, dump the coal bunker)
@@ -28,6 +29,7 @@ JOB_COLORS.sail = '#e9dcc0'; // (S.5e: raise a sail in a fair wind...)
 JOB_COLORS.reef = '#ff8c1a'; // (...or reef it before a gust)
 JOB_COLORS.shovel = '#c9a85a'; // (B.6: a sandbag or crate thrown onto the deck: shovel it overboard)
 JOB_COLORS.heal = '#ff7b9c'; // (crew health: down to the last heart - go to the medbay)
+JOB_COLORS.hack = '#f2c14e'; // (C.2: a tentacle holds the ship: gold arrow to the grip point, sword in hand)
 
 export function createJobFinder(state) {
   const L = mainShip(state).layout; // (the ship these jobs are on: the finder is made per ship, on that ship's context)
@@ -52,6 +54,7 @@ export function createJobFinder(state) {
     const out = [];
     const add = (kind, obj, d, x, extra, label) => out.push({ kind, obj, d, x, urgency: J.URGENCY[kind], label: label || `${WORD[kind]} - ${roomName(d, x)}`, max: kind === 'fight' ? 2 : 1, ...extra });
     for (const b of state.boarders) if (!b.fall && b.hp > 0) { const s = spot(b); add('fight', b, s.d, b.x); }
+    if (state.creature) for (const g of gripJobs(state, mainShip(state))) add('hack', g.obj, g.d, g.x, {}, `HACK THE TENTACLE! - ${roomName(g.d, g.x)}`); // (a giant creature holds the ship: creatureGrip.js)
     for (const q of Object.values(state.players)) if (q !== p && q.ko > 0 && !q.fall && q.conn == null && q.d != null) add('revive', q, q.d, q.x, {}, `REVIVE ${q.name} - ${roomName(q.d, q.x)}`);
     // Crew health: down to your last heart (and the ship has a medical bay): the arrow points there, ahead of nearly everything (the cot heals a heart every few seconds).
     const HC = config.HEALTH, mb = L.medbay;

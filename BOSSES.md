@@ -222,6 +222,38 @@ One monster gets built all the way first: the Kraken. It is proved with bots, th
   - `cr.hooks.rng` is the creature's own seeded stream (never `Math.random`).
 - **Shells die in rock:** off the sea a creature in a cave map is partly inside the walls (the dev flag does not choose the map); the real lair stops (C.3) should pick open maps.
 
+**C.2 is in** (`creatureGrip.js` = grabs, slap, the hack; `creatureBoard.js` = boarding and the hook; `creatureTow.js` = the harpoon; numbers in `config.CREATURES.GRIP / SLAP / BOARD / TOW`, `GRIPS_BY_CREW`, `FORCES.GAIN.grab`):
+- **GRAB:**
+  - A limb rears beside the ship (`WINDUP` 1.1 s + the 0.4 s pull-back), with the TV banner `TENTACLE! FORE MAIN DECK!`, a dashed red ring on the spot and a phone buzz/toast for whoever stands within `WARN_REACH` of it. The spot is the nearest reachable deck end (decks of at least `MIN_DECK` px).
+  - It then strikes and the tip is glued to that point of the ship (`moveGrip` with `pose.js toWorld` every step, so the picture and the physics agree). While it holds, a one-sided spring shoves her speed and climb (the `towing.js` way, `BASE_ACC`..`MAX_ACC`, toward the limb's root and down) and twists her at the grip (`applyForce` source `grab`, `GAIN.grab`, so the tilt stays under `FORCES.MAX_DEG`). Crew on the open decks stagger when it seizes (`air.shove`).
+  - After `GRIP.TIME` (x difficulty) it rips the section off (`ship.sim.breakOff({ kind: 'limb', cause: 'creature' })`); a ship with nothing to break takes a hull blow (`RIP.HULL`). The ring on the TV is the timer; the green ring inside is the hack progress.
+  - Grips at once follow the crew (`GRIPS_BY_CREW`: 1 under 6, 2 for 6-11, 3 for 12+) and come as one burst (`SPREAD` s apart), then a pause of `EVERY` s. A blinded eye halves the rate.
+- **GETTING FREE:**
+  - HACK: a sword (hammer, slower) at the grip point on its deck gives the Action `HACK THE TENTACLE!` (hold 1.5 s, hammer 2.6 s) or 3 ATTACK blows. Shells and the coil on the limb take it off once they have done `RELEASE_DMG` of its health; flame frees her at once; cutting the limb off frees her.
+  - It recoils and rests `COOLDOWN` s.
+  - The phone gets a gold job arrow to the spot (`jobs.js`, kind `hack`). Bots: a `hack` job right after fires in the coal (they fetch a sword if they need one), and a bot leaves its station for it (`hackCall`).
+  - COME ABOUT is refused while she is gripped (`comeAbout.js`).
+- **SLAP:** a limb rears over the top deck (banner and buzz), then whips along it: every crewman there loses `HEARTS` (never a one-shot), is flung off unless he sits at a station (a jump over it clears it), and the hull takes a little.
+- **BOARDING:**
+  - The mantle's top is a landing strip for people in the air (`air.addProvider`, ids `creature:*`; bots do not land on it). A boarder keeps `player.ship`, gets `player.on = { cr, id, s }`, and walks the mantle's outline (`s`: arc length) carried by its transform every step. JUMP leaps off toward the ship.
+  - Actions: `BLIND IT!` at an eye (hold 6 s: that eye is blind for 45 s, each blind eye halves the grab rate) and `STRIKE THE HEART!` with a sword when the heart is exposed (hold 8 s: `HEART_DMG` of its health and 3x that off the pool). `BOARD.HEART_EXPOSED` exposes it for tests; C.3 decides when it really is.
+  - If it dives or dies, or he is knocked out, he falls into the airborne / fall system with the parachute button.
+  - A hook anywhere on it is an anchor (`hookshot.js` -> `creatureAnchor`); reeled right in to the body you climb aboard.
+- **HARPOON:** `towing.fireHarpoon` hooks the nearer of an enemy deck and a creature part (`creatureTow.js`, lines in `cr.harpoons`, drawn on the TV). The ship takes `TOW.SHIP_SHARE` of the pull and is hauled in fast; the creature gets the rest, slowly (`cr.tvx`, `cr.stats.hauled`, at most `CREATURE_MAX` px/s) and stops swimming along beside her while a line holds (`cr.hooked`). A sword cuts the line at the ship's end.
+- **SEA ONLY:** the Kraken lives at the water line. `spawn()` does nothing where there is no sea level (`creatureBreach.js seaLevel`: the Sunken Sea's `state.env.seaY`), and `host.html?creature=kraken` / `botsim --creature kraken` fly the Sunken Sea. C.3 lair stops are Sunken Sea stops. `host.html?creature=kraken&heart=1` exposes the heart for STRIKE THE HEART.
+- **THE PULL IS DOWN:** each grip pulls mostly DOWN toward the sea (`SIDEWAYS` 0.25), the pulls add up and are capped by `GRIP.MAX_TOTAL`, so three grips drag her down hard but full steam and lift can still fight it. Keel under the sea line: the existing flood rules.
+- **THE COIL (art):** while it holds, the outer `GRIP.WRAP.SEGS` segments of the tentacle lie along a helix round the hull (over the gunwale, down the FRONT, under the keel, up the BACK), built every step from ship coordinates through `tilt` and `pose.js` (`creatureGrip.js coilPath`, `creature.js setWrap`). It tightens in stepped keys; segments stay rigid. Segments behind the hull are marked `behind`: `render.js drawCreatureBehind` draws them before the ships (`creatureArt.drawBehind`) and the normal draw after. The tip is glued to a point just over the deck (`g.ex, g.ey`).
+- **BREACH (`creatureBreach.js`, `CREATURES.BREACH`):**
+  - DIVE (it vanishes), WARN about 2 s (a shadow and ripple rings on the water, the banner "IT'S UNDER US! CLIMB!", a buzz on every phone, the camera keeps the shadow in view), then it launches, smashes the hull and falls back with a splash. It only starts with no grip or slap going; every `EVERY` s (x difficulty).
+  - It misses if her keel is at least `REACH` above the water (climb, `breachClimbAlt` tells the helm bots how high) or her middle is more than `HALF_W` from the shadow. A hit: hull damage, a kick up and sideways, one heart for crew within `HURT_R` (knocked out within `CORE_R`), the rest thrown about, a chance by difficulty to tear a section off.
+  - While it hangs in the air (`EXPOSE` s) the heart is exposed, the beak open and everything that hits it does `BONUS` x the damage (`cr.breach.exposed`; `vulnerable()` is true only then).
+  - `cr.mode` is 'breach' meanwhile; `cr.stats` counts `breaches`, `breachHits`, `breachMiss`, `breachBroke`.
+- **Only the main ship is grabbed** for now (the creature system works on `mainShip`); every new function takes a ship handle, so a fleet ship is a later change.
+- **For C.3:**
+  - `cr.stats` now also counts `grips`, `freed` (by hack / shot / flame / severed / rip / missed / gone), `hacks`, `ripped`, `hulled`, `slaps`, `slapHits`, `blinded`, `struck`, `hauled`.
+  - `thinkAttacks` is the whole attack director (grab and slap timers live in `cr.ai`); C.3 phases should scale `GRIP` through it, not around it.
+  - A phase's win conditions can read `cr.hooked`, `cr.tvx`, `cr.base.x` (tow it onto rocks) and `cr.hp` after `STRIKE`.
+
 **The gate `node tools/buildsim.mjs --check-creature`:**
 - (a) Parts build, hit capsules work, the IK reaches, and keys hold for 1/8 s.
 - (b) Every weapon damages a part. A bomb in the open mouth does MOUTH damage; in the closed mouth it does nothing.
