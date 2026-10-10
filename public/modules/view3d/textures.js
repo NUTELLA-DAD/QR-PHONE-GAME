@@ -6,7 +6,8 @@
 //   y    0.. 384  four plank strips, 2048 x 96 each: woodA woodB woodC (3 wood tones, boards of 150-330 px with streaks, knots, nails) and deck (3 sub-planks of 32 px with tar-black seams)
 //   y  384.. 640  canvas cells x6 (128x256: weave, seam lines and stitches on the four edges), 3 patch shapes (square, round, strip), brass (a highlight band across), riveted iron, rope (twisted), plain, tar
 //   y  640.. 768  strap (webbing) and lacing (eyelets and criss-cross cord), the H2 stencil
-//   y  768.. 896  (spare)
+//   y  768.. 896  A2: the sea's foam atlas (4 cells, 128 high: an arc 640 wide, a ring 384, a pair of dashes 640, a broken ring 384). White, with the ALPHA a soft ramp round each shape (0.5 on its
+//                 edge, 0 about 12 texels out, 1 about 12 in), so water.js can cut the fill, and a thin ink line just outside it, at any size, from one texture tap
 //   y  896..1280  rock strata x3 (2048 x 128): for WP3, modulators like the rest, they are tinted by vertex colour
 //   y 1280..1408  a foam band (2048 x 128, transparent between the scallops)
 //   y 1408..1664  a cloud disc atlas: 8 discs of 256 (transparent edges)
@@ -29,6 +30,7 @@ export const TRIM = {
   brass: { x: 1152, y: 384, w: 256, h: 256 }, iron: { x: 1408, y: 384, w: 256, h: 256 }, rope: { x: 1664, y: 384, w: 256, h: 256 },
   plain: { x: 1920, y: 384, w: 128, h: 128 }, tar: { x: 1920, y: 512, w: 128, h: 128 },
   strap: { x: 0, y: 640, w: 1024, h: 64 }, lacing: { x: 1024, y: 640, w: 1024, h: 64 }, stencilH2: { x: 0, y: 704, w: 512, h: 64 },
+  seaFoam0: { x: 0, y: 768, w: 640, h: 128 }, seaFoam1: { x: 640, y: 768, w: 384, h: 128 }, seaFoam2: { x: 1024, y: 768, w: 640, h: 128 }, seaFoam3: { x: 1664, y: 768, w: 384, h: 128 },
   rock0: row(896, 128), rock1: row(1024, 128), rock2: row(1152, 128), foam: row(1280, 128),
   cloud0: { x: 0, y: 1408, w: 256, h: 256 }, cloud1: { x: 256, y: 1408, w: 256, h: 256 }, cloud2: { x: 512, y: 1408, w: 256, h: 256 }, cloud3: { x: 768, y: 1408, w: 256, h: 256 },
   cloud4: { x: 1024, y: 1408, w: 256, h: 256 }, cloud5: { x: 1280, y: 1408, w: 256, h: 256 }, cloud6: { x: 1536, y: 1408, w: 256, h: 256 }, cloud7: { x: 1792, y: 1408, w: 256, h: 256 },
@@ -42,6 +44,7 @@ export const FIRE_FRAMES = ['fire0', 'fire1', 'fire2', 'fire3'];
 export const CLOUD_DISCS = ['cloud0', 'cloud1', 'cloud2', 'cloud3', 'cloud4', 'cloud5', 'cloud6', 'cloud7'];
 export const SCORCH = ['scorch0', 'scorch1', 'scorch2'];
 export const HOLES = ['hole0', 'hole1', 'hole2', 'hole3'];
+export const SEA_FOAM = ['seaFoam0', 'seaFoam1', 'seaFoam2', 'seaFoam3'];
 export const ROCK_STRATA = ['rock0', 'rock1', 'rock2'];
 
 // ---- UV helpers (flipY canvas texture: canvas y down -> v up) -------------------------------------------------------------------------------------------------------------------------
@@ -263,6 +266,49 @@ function paintFoam(g) {
   for (let i = 0; i < 60; i++) { g.fillStyle = rgba(250, 253, 253, 0.9); g.beginPath(); g.arc(r.x + R(0, r.w), r.y + R(8, r.h - 8), R(2, 6), 0, 7); g.fill(); }
 }
 
+// A2: the sea's foam stamps. Each shape is drawn as a flat mask, blurred (three box passes, radius 5) and written as white with the blurred mask in the alpha: a soft ramp that is 0.5 where the shape's edge was.
+function paintSeaFoam(g) {
+  const draw = {
+    seaFoam0(c, w) { // a long arc: a smile that tapers to both ends
+      const pts = [];
+      for (let i = 0; i <= 40; i++) { const q = i / 40, u = 2 * q - 1, cy = 46 + 34 * (1 - u * u), wd = 40 * Math.pow(Math.sin(Math.PI * q), 0.7) + 2; pts.push([44 + (w - 88) * q, cy, wd]); }
+      c.beginPath();
+      c.moveTo(pts[0][0], pts[0][1] - pts[0][2] / 2);
+      for (const [x, y, wd] of pts) c.lineTo(x, y - wd / 2);
+      for (let i = pts.length - 1; i >= 0; i--) c.lineTo(pts[i][0], pts[i][1] + pts[i][2] / 2);
+      c.closePath(); c.fill();
+    },
+    seaFoam1(c, w, h) { // a ring (round: the box is wider than the ring so the world box can be squat)
+      c.beginPath(); c.arc(w / 2, h / 2, 46, 0, Math.PI * 2); c.arc(w / 2, h / 2, 29, 0, Math.PI * 2, true); c.fill('evenodd');
+    },
+    seaFoam2(c) { // two dashes, a long one over a shorter one, each a pointed lens, and a tick
+      const lens = (x0, x1, y, wd) => { c.beginPath(); c.moveTo(x0, y); c.quadraticCurveTo((x0 + x1) / 2, y - wd, x1, y); c.quadraticCurveTo((x0 + x1) / 2, y + wd, x0, y); c.closePath(); c.fill(); };
+      lens(60, 430, 46, 17); lens(250, 570, 86, 15); lens(470, 540, 38, 8);
+    },
+    seaFoam3(c, w, h) { // a broken ring: three quarters of a circle with round ends
+      c.lineCap = 'round'; c.lineWidth = 16; c.beginPath(); c.arc(w / 2, h / 2, 37, 0.5, 0.5 + Math.PI * 1.55); c.stroke();
+    },
+  };
+  const boxBlur = (a, w, h, r) => { // one separable box pass (running sums, clamped at the border)
+    const tmp = new Float32Array(a.length), k = 1 / (2 * r + 1);
+    for (let y = 0; y < h; y++) { let sum = 0; for (let x = -r; x <= r; x++) sum += a[y * w + Math.min(w - 1, Math.max(0, x))]; for (let x = 0; x < w; x++) { tmp[y * w + x] = sum * k; sum += a[y * w + Math.min(w - 1, x + r + 1)] - a[y * w + Math.max(0, x - r)]; } }
+    for (let x = 0; x < w; x++) { let sum = 0; for (let y = -r; y <= r; y++) sum += tmp[Math.min(h - 1, Math.max(0, y)) * w + x]; for (let y = 0; y < h; y++) { a[y * w + x] = sum * k; sum += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x]; } }
+  };
+  for (const name of SEA_FOAM) {
+    const r = TRIM[name], cv = document.createElement('canvas');
+    cv.width = r.w; cv.height = r.h;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#fff'; c.strokeStyle = '#fff';
+    draw[name](c, r.w, r.h);
+    const src = c.getImageData(0, 0, r.w, r.h), m = new Float32Array(r.w * r.h);
+    for (let i = 0; i < m.length; i++) m[i] = src.data[i * 4 + 3] / 255;
+    for (let p = 0; p < 3; p++) boxBlur(m, r.w, r.h, 5);
+    const out = g.createImageData(r.w, r.h);
+    for (let i = 0; i < m.length; i++) { out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = 255; out.data[i * 4 + 3] = Math.max(0, Math.min(255, Math.round(m[i] * 255))); }
+    g.putImageData(out, r.x, r.y);
+  }
+}
+
 function paintClouds(g) {
   CLOUD_DISCS.forEach((name, i) => {
     const r = TRIM[name], rnd = mulberry(300 + i), R = (a, b) => a + (b - a) * rnd();
@@ -353,7 +399,7 @@ export function getTrimSheet() {
     paintPlanks(g, 'deck', { seed: 4, tone: [240, 226, 196], vary: 7, seam: rgba(34, 26, 22, 0.78), seamW: 2.6, buttW: 2.2, subs: 3, minLen: 130, maxLen: 300, knots: 0.12 });
     CANVAS_CELLS.forEach((n, i) => paintCanvasCell(g, n, 50 + i * 7));
     paintPatches(g); paintBrass(g); paintIron(g); paintRope(g); paintSmall(g); paintStrapAndLacing(g);
-    paintRock(g); paintFoam(g); paintClouds(g); paintFire(g); paintSmokeScorchHoles(g);
+    paintRock(g); paintFoam(g); paintSeaFoam(g); paintClouds(g); paintFire(g); paintSmokeScorchHoles(g);
     // the slight grain
     const nc = document.createElement('canvas');
     nc.width = nc.height = 128;
