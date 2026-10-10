@@ -4,6 +4,7 @@
 //   stepBody(body, dt)                  advance everything (the key clock, the limbs, the mouth, breathing, hit flashes)
 //   hitAt(body, x, y, r) / hitInfo      the part under a circle (capsule distance per segment), or null; hitInfo also says WHICH segment
 //   reachPart / gripPart / releasePart  commands for a limb: pull back for ANTICIPATION s, then snap to the point (a grip keeps the tip glued)
+//   setWrap(part, pts, k)               the outer k segments of a limb lie along a path round something (a ship's hull): front/back by z, see below
 //   severPart(body, part, i)            cut a limb at segment i: segments i.. leave (returned, for debris); the stump carries on
 //   setMouth / damagePart / nearestFreeLimb / exposeHeart / setLit   small helpers
 // A part is { id, kind ('tentacle'|'mantle'|'mouth'|'eye'|'heart'|...), hp, maxHp, dead, segs:[{x,y,ang,len,r,r1}], goal, lit, hit, ... }: a segment starts at (x,y),
@@ -50,7 +51,7 @@ function buildPart(body, pd, index) {
   const p = {
     id: pd.id, kind: pd.kind, index, hp: pd.hp, maxHp: pd.hp, dead: false, segs: [], goal: { x: 0, y: 0 }, view: { x: 0, y: 0 },
     lit: true, hit: 0, hidden: !!pd.hidden, at: pd.at, layer: pd.layer || 'front', open: false, openAmt: 0, cmdOpen: null,
-    grip: null, limb: !!pd.chain, severed: false, reach: 0, reach0: 0, bend: 0, side: 1, ctl: null,
+    grip: null, wrap: null, limb: !!pd.chain, severed: false, reach: 0, reach0: 0, bend: 0, side: 1, ctl: null,
   };
   if (pd.chain) {
     // A limb: a chain of rigid segments rooted on the body, chasing a goal point.
@@ -120,13 +121,13 @@ function layOut(p, rx, ry) { // joint positions from the segments' angles, from 
 
 // Nudge the joints (not the root or the tip) toward the limb's curved shape: an arc from the root to the target that bows to the limb's bend side.
 // It depends only on where the root and the target are, never on time.
-function guide(p, tx, ty, blend) {
-  const n = p.segs.length;
+function guide(p, tx, ty, blend, m = p.segs.length) {
+  const n = m;
   if (n < 2 || blend <= 0) return;
   const rx = p.px[0], ry = p.py[0];
   const dx = tx - rx, dy = ty - ry;
   const c = Math.hypot(dx, dy) || 1e-6;
-  const L = p.reach;
+  const L = reachOf(p, m);
   const nx = -dy / c, ny = dx / c;
   const h = c >= L ? 0 : Math.min(L * 0.45, Math.sqrt((3 * Math.max(c, L * 0.25) * (L - c)) / 8)) * p.bend; // a parabola's sag for this much slack
   let s = 0;
@@ -141,12 +142,12 @@ function guide(p, tx, ty, blend) {
   }
 }
 
-function fabrik(p, tx, ty, iters) {
-  const n = p.segs.length;
+function fabrik(p, tx, ty, iters, m = p.segs.length) {
+  const n = m;
   const rx = p.px[0], ry = p.py[0];
   const dx = tx - rx, dy = ty - ry;
   const d = Math.hypot(dx, dy);
-  if (d >= p.reach - 1e-6) { // out of reach: a straight line at the target
+  if (d >= reachOf(p, m) - 1e-6) { // out of reach: a straight line at the target
     const ux = d > 1e-9 ? dx / d : Math.cos(p.segs[0].ang), uy = d > 1e-9 ? dy / d : Math.sin(p.segs[0].ang);
     for (let i = 0; i < n; i++) {
       p.px[i + 1] = p.px[i] + ux * p.segs[i].len;
@@ -174,9 +175,10 @@ function fabrik(p, tx, ty, iters) {
   }
 }
 
-function writeBack(p) {
-  for (let i = 0; i < p.segs.length; i++) {
+function writeBack(p, m = p.segs.length) {
+  for (let i = 0; i < m; i++) {
     const s = p.segs[i];
+    s.behind = false;
     s.x = p.px[i];
     s.y = p.py[i];
     s.ang = Math.atan2(p.py[i + 1] - p.py[i], p.px[i + 1] - p.px[i]);
@@ -201,9 +203,56 @@ function solveLimb(body, p, dt, iters, instant) {
     ty = p.view.y;
   }
   layOut(p, root.x, root.y);
-  guide(p, tx, ty, C.IK.GUIDE);
-  fabrik(p, tx, ty, iters);
-  writeBack(p);
+  const m = p.wrap ? Math.max(2, p.segs.length - p.wrap.k) : p.segs.length; // (a wrapped limb: the outer k segments lie along the path, the rest reach for its start)
+  guide(p, tx, ty, C.IK.GUIDE, m);
+  fabrik(p, tx, ty, iters, m);
+  writeBack(p, m);
+  if (m < p.segs.length) layWrap(p, m);
+}
+
+// The length of the first m segments.
+function reachOf(p, m) {
+  if (m >= p.segs.length) return p.reach;
+  let r = 0;
+  for (let i = 0; i < m; i++) r += p.segs[i].len;
+  return r;
+}
+
+// ---- wrapping a limb round something (the Kraken's grip, C.2) ----
+// setWrap(p, pts, k): the outer k segments of limb p lie along the polyline pts = [{ x, y, z }] (world points; z > 0 = in front of the thing it wraps, z < 0 = behind it), starting at the path's first
+// point, where the rest of the limb ends (the caller also glues the limb's grip there). Segment lengths never change: each is laid along the path from where the last ended. setWrap(p, null) lets go.
+export function setWrap(p, pts, k = 3) {
+  if (!pts || !p.limb || !p.segs.length) { p.wrap = null; for (const s of p.segs) s.behind = false; return; }
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  p.wrap = { pts, cum, k: Math.min(k, p.segs.length - 2) };
+}
+// The point and depth at arc length s along a wrap path (past the end it carries straight on).
+function wrapAt(w, s) {
+  const { pts, cum } = w, n = pts.length, total = cum[n - 1];
+  if (s >= total) {
+    const a = pts[n - 2], b = pts[n - 1], d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    return { x: b.x + ((b.x - a.x) / d) * (s - total), y: b.y + ((b.y - a.y) / d) * (s - total), z: b.z };
+  }
+  let i = 1;
+  while (i < n - 1 && cum[i] < s) i++;
+  const u = cum[i] > cum[i - 1] ? (s - cum[i - 1]) / (cum[i] - cum[i - 1]) : 0, a = pts[i - 1], b = pts[i];
+  return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, z: a.z + (b.z - a.z) * u };
+}
+function layWrap(p, m) {
+  const w = p.wrap;
+  let x = p.px[m], y = p.py[m], at = 0;
+  for (let i = m; i < p.segs.length; i++) {
+    const sg = p.segs[i], q = wrapAt(w, at + sg.len), mid = wrapAt(w, at + sg.len * 0.5);
+    const dx = q.x - x, dy = q.y - y, d = Math.hypot(dx, dy) || 1;
+    sg.x = x;
+    sg.y = y;
+    sg.ang = Math.atan2(dy, dx);
+    sg.behind = mid.z < 0;
+    x += (dx / d) * sg.len;
+    y += (dy / d) * sg.len;
+    at += sg.len;
+  }
 }
 
 // ---- the key clock -----------------------------------------------------------------------------------------------------------------------------------------------
@@ -314,7 +363,7 @@ function tickLimb(body, p) {
 }
 
 // ---- commands ---------------------------------------------------------------------------------------------------------------------------------------------------
-export const isFree = (p) => p.limb && !p.dead && p.segs.length > 0 && p.ctl.mode === 'idle' && !p.ctl.cmd;
+export const isFree = (p) => p.limb && !p.dead && p.segs.length > 0 && p.ctl.mode === 'idle' && !p.ctl.cmd && !(p.gripCd > 0); // (gripCd: busy with an attack, or resting after one, creatureGrip.js)
 export function nearestFreeLimb(body, x, y) { // the idle limb whose root is nearest (limbs that can reach it first)
   let best = null, bd = Infinity;
   for (const p of body.parts) {
@@ -366,6 +415,8 @@ export function severPart(body, p, i) {
   p.severed = true;
   p.reach = p.segs.reduce((a, s) => a + s.len, 0);
   p.grip = null;
+  p.wrap = null;
+  for (const s of gone) s.behind = false;
   p.ctl.cmd = null;
   p.ctl.mode = 'idle';
   p.ctl.fast = false;

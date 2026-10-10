@@ -1446,7 +1446,7 @@ export const config = {
     MAX_DEG: 1.8, // most the forces tip her (degrees), on top of the rest trim and the climb tilt: kept small so crew do not slide (AIRBORNE.PITCH_STAGGER, 2 degrees)
     MAX_RATE: 0.7, // fastest she can tip (radians per second)
     REF_MASS: 150, // the weight (gas points) the hit and ram kicks are quoted for: a heavier ship is shoved less
-    GAIN: { engine: 0.7, sail: 1, gust: 1, hit: 1, scrape: 1, ram: 1, tether: 1 }, // torque gain per source
+    GAIN: { engine: 0.7, sail: 1, gust: 1, hit: 1, scrape: 1, ram: 1, tether: 1, grab: 1 }, // torque gain per source
     HIT_KICK: 20, // a power-1 hit changes the ship's velocity by this much (px/s) at REF_MASS: it twists her about the point it struck
     HIT_SIDEWAYS: 0.35, // ...mostly up or down (away from the middle of the ship's height), with this much sideways
     GUST_WIND: 110, // a storm gust's side wind pushes the gasbag with this acceleration (px/s^2), at the gasbag's height: it tips her nose down
@@ -1870,6 +1870,52 @@ export const config = {
     },
     // The placeholder behaviour until the real fight (C.3): threatening reaches at the ship, the beak opening on a timer.
     BEHAVE: { REACH_EVERY: 4, REACH_JITTER: 0.4, FIRST_REACH: 2, REACH_SHORT: 0.92, MOUTH_AFTER: 3 }, // s between reaches (+- share), s to the first, share of a limb's reach it stretches to, s after surfacing before the beak starts opening
+    // ---- the attacks (creatureGrip.js, C.2) ----
+    // GRAB: a tentacle rears beside the ship (WINDUP, with a TV banner and a phone warning), seizes the nearest reachable deck end (the tip is glued to that point of the ship, so the picture and the physics
+    // agree), and drags her down and toward it with a one-sided spring (the way towing.js pulls: a shove on her speed and climb, clamped to MAX_ACC) and a twist at the grip (forces.js 'grab'). After TIME the grip RIPS
+    // that section off (ship.sim.breakOff), unless the crew got free first: a sword or hammer HACK at the grip point, shells / flame / the coil on the gripping tentacle, or cutting the tentacle off.
+    GRIPS_BY_CREW: [[1, 1], [6, 2], [12, 3]], // [crew from, grips at once]: one under 6 crew, two for 6-11, three for 12 and more
+    GRIP: {
+      TIME: 9, TIME_BY_DIFF: { easy: 1.35, normal: 1, veteran: 0.9, hard: 0.8 }, // s the grip holds before it rips a section off (x the difficulty's number)
+      FIRST: 8, EVERY: 24, EVERY_BY_DIFF: { easy: 1.4, normal: 1, veteran: 0.85, hard: 0.7 }, JITTER: 0.25, SPREAD: 3, // s from rising to the first grab; s between grabs (x difficulty, +- JITTER); s before the next of several grips at once
+      COOLDOWN: 4, RECOIL: 1.2, // s a limb that let go keeps away from the ship; s it snaps back before it is idle again
+      WINDUP: 1.1, WARN_REACH: 450, SEIZE_MAX: 2.5, // s the limb rears before it strikes (it pulls back 0.4 s more first: about 1.6 s of warning in all); px: crew this close to the spot (same deck) get the buzz; s the strike may take before the grip counts
+      REACH_SHARE: 0.95, SEP: 180, MIN_DECK: 300, // a limb grabs only a point within this share of its reach; grip points at least this far apart; only decks at least this long are gripped (px)
+      BASE_ACC: 300, K: 0.1, MAX_ACC: 450, MAX_TOTAL: 800, SLACK: 0.75, SIDEWAYS: 0.25, RAMP: 0.8, // px/s^2 of pull each grip always has (mostly DOWN, toward the sea), per px the limb is stretched past SLACK x its reach, the most one grip may pull (like a tow's MAX_ACC), the most all the grips together may (so the pull grows with the grips but she can still fight it with lift and steam); the pull's sideways share (toward the creature); s to build up
+      TORQUE: 0.35, SHAKE: 0.18, SHOVE_POWER: 2.2, // multiplies the force that twists her (and FORCES.GAIN.grab); screen shake while it holds; the stagger power crew on outside decks get when it seizes (airborne.js shove)
+      CUT_REACH: 180, SWORD_TIME: 1.5, HAMMER_TIME: 2.6, BLOWS: 3, HAMMER_BLOW: 0.6, BLOW_HOLD: 1.6, // px from the grip point within which a sword (or hammer) hack works; s of holding Action; ATTACK blows with a sword; a hammer blow is worth this share of one; s a blow keeps the hack from wearing off
+      RELEASE_DMG: 0.3, // share of the tentacle's health that shells / the coil on it must take (since it seized) to make it let go; flame makes it let go at once
+      WRAP: { SEGS: 4, TURNS: 1, START_TURNS: 0.3, KEYS: 6, LIFT: 70, UNDER: 35, MIN_RY: 150, PITCH: 420, N: 20 }, // the coil round the hull: the outer SEGS segments follow a helix of TURNS turns (it tightens from START_TURNS in KEYS key steps, 8 a second): over the deck LIFT px above the grip point, under the keel UNDER px below the lowest deck, at least MIN_RY px from the middle of the loop, PITCH px along the ship per turn, N points to the path
+      RIP: { REACH: 230, LEN: 260, HULL: 70 }, // the rip: ship.sim.breakOff({ kind: 'limb' }) at the grip point (its reach, how much deck goes); a ship with nothing to break takes a hull blow of this power instead (damageHull: x the difficulty and crew damage scale, about 15 hull on Normal)
+    },
+    // BREACH: the Kraken dives out of sight, a dark shadow and ripples slide under the ship (WARN s: "IT'S UNDER US! CLIMB!"), then it lunges up out of the sea and SMASHES into the hull like a great white. It is open (heart and beak,
+    // shots do BONUS x) for EXPOSE s while it hangs in the air; it falls back in with a huge splash. A ship that has climbed REACH px clear of the water (keel gap), or is not in the shadow, is missed.
+    BREACH: {
+      FIRST: 25, EVERY: 30, JITTER: 0.2, GRACE: 6, // s after rising to the first breach; between breaches (x GRIP.EVERY_BY_DIFF); s of peace for grabs and slaps afterwards
+      DIVE: 1.3, WARN: 2.2, LOCK: 0.7, RISE: 0.9, HOLD: 0.3, FALL: 1.3, RETURN: 2, // s: sinking away, the shadow's telegraph, before the lunge the shadow stops following (it aims where she will be), up out of the water, hanging at the top, falling back, swimming back to its place
+      SHADOW_SPEED: 1500, SHADOW_W: 1800, // px/s the shadow slides toward her; px wide (the TV's dark ellipse and the hit zone's centre)
+      HALF_W: 650, REACH: 800, APEX_UP: 300, HIT_AT: 0.8, // the hit zone: her middle within this many px of the shadow; the keel must be less than REACH px above the water to be hit; px the body's centre ends above its usual place; share of RISE when it meets the hull
+      EXPOSE: 1.5, EXPOSE_AT: 0.55, BONUS: 2.5, // s the heart and beak are open, from this share of RISE; damage multiplier on everything while it is
+      HULL: 60, POWER: 3, KICK_UP: 260, KICK_X: 140, SHOVE: 3, // hull blow (damageHull power: about 13 hull on Normal), forces.js kick power, px/s up and sideways she is flung, airborne.js shove power
+      HURT_R: 900, CORE_R: 200, FLING: 380, // px from the impact: crew lose a heart / are knocked out (BIG hit) / thrown off their feet at this speed (px/s)
+      BREAK_CHANCE: { easy: 0, normal: 0.15, veteran: 0.4, hard: 0.6 }, // chance by difficulty that the blow also tears a section off (breakOff)
+    },
+    // SLAP: a tentacle rears high over the top deck (WINDUP), then whips along it. Crew there lose HEARTS and, unless they sit at a station, are flung off; a jump clears it.
+    SLAP: {
+      FIRST: 16, EVERY: 30, JITTER: 0.25, COOLDOWN: 4, // s after rising to the first slap; between slaps (x GRIP.EVERY_BY_DIFF); a limb's rest afterwards
+      WINDUP: 1.3, WHIP_DELAY: 0.6, RISE: 900, // s the limb rears; s from the whip command until it lands (the pull-back and the snap); px above the deck it rears
+      HEARTS: 1, VX: 520, VY: 340, DUCK_JZ: 45, // hearts a slap takes (never a one-shot); px/s the shove flings a crewman along the deck and up; a crewman hopping higher than this over the deck (px) clears it
+      HULL: 12, POWER: 2, // hull damage power (damageHull, before the difficulty scale: about 2-3 hull on Normal) and forces.js kick power of the blow
+    },
+    // BOARDING: the surfaced mantle is a landing place (air.addProvider, like a rival's decks) and every part is a hookshot anchor. A boarder keeps his ship but stands on the mantle (player.on) and is carried by it.
+    BOARD: {
+      LAND_HALF: 380, HOOK_R: 40, // px: the landing strip is this wide each side of the top of the mantle; px added to the hook's reach for the parts
+      WALK: 300, JUMP_VX: 380, JUMP_VY: 560, // px/s a boarder walks along the mantle's outline; px/s he leaps off the creature with (toward the ship, and up)
+      EYE_REACH: 520, BLIND_TIME: 6, BLIND_FOR: 45, BLIND_RATE: 0.5, // px from an eye within which BLIND IT works; s of holding Action; s the eye stays blind; each blind eye multiplies the grab rate by this
+      HEART_REACH: 700, HEART_TIME: 8, HEART_DMG: 150, HEART_EXPOSED: false, // px from the heart for STRIKE THE HEART (sword, hold); s of holding; its damage (the pool takes POOL.heart x this); dev flag: the heart starts exposed (C.3 decides when it is)
+    },
+    // HARPOON / TOW: the harpoon gun (towing.js fireHarpoon) can hook a creature part. The line reels in (GUN_TYPES.harpoon: REEL, K, MAX_ACC, SNAP), the ship takes SHIP_SHARE of the pull and the creature (it is heavy) the rest, slowly.
+    TOW: { SHIP_SHARE: 0.85, MIN_LEN: 600, CREATURE_MAX: 90, CREATURE_DRAG: 0.8, CUT_REACH: 120, HIT_R: 30 }, // share of the pull the ship takes; px the line reels in to; px/s the most the creature can be hauled; its 1/s drag; px a sword cuts the line from its end; px added to the ray test
     // What hurts it and how much. Damage is in "creature hit points": a shell does GUNS.DAMAGE x SHELL_MUL. POOL says how much of a blow to a part also comes off the health pool (HP below).
     // A tentacle at 0 hp is SEVERED where it was hit; the other parts floor at 0 (they stay as targets). Part hp and the pool scale with crewMul('hp') x the difficulty's gunHp.
     HURT: {
@@ -2402,7 +2448,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5, hack: 3.4 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

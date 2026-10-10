@@ -12,6 +12,7 @@ import { config } from '../../config.js';
 import { mainShip } from './ships.js';
 import { inRock } from './course.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
+import { creatureAnchor } from './creatureBoard.js'; // (C.2: every part of a giant creature is an anchor)
 
 const H = config.HOOKSHOT;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -32,6 +33,7 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     for (const s of air.surfaces()) {
       if (s.onLand === undefined && s.d === undefined) continue;
       if (s.only) continue; // (B.6: a friendly ship's decks are a cannon flyer's landing place, not a hook anchor)
+      if (typeof s.id === 'string' && s.id.startsWith('creature:')) continue; // (a creature's mantle is anchored through its parts, below)
       const sy = val(s.y);
       if (sy == null) continue;
       const x0 = val(s.x0);
@@ -65,8 +67,11 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     if (inRock(state, wx, wy)) {
       return { kind: 'rock', pos: () => ({ x: wx, y: wy }) };
     }
+    // A giant creature (C.2): the part under the hook; its pos() follows the part. Reeled right in to the body you climb aboard (post, below).
+    const cre = state.creature ? creatureAnchor(state, wx, wy) : null;
+    if (cre) return cre;
     // Enemy bodies (world coordinates).
-    const ent = (e, hw, hh, extra) => {
+    const ent =(e, hw, hh, extra) => {
       if (Math.abs(wx - e.x) > hw || Math.abs(wy - e.y) > hh) return null;
       const ox = wx - e.x;
       const oy = wy - e.y;
@@ -260,6 +265,11 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     if (p.fire && a && a.plane && dist < H.BOARD_AT + 10) {
       p.hook = null;
       hijack.board(p, a.plane);
+    } else if (p.fire && a && a.board && dist < H.LEDGE_AT + 40 && h.len <= H.MIN_LEN + 1) {
+      // Reeled right in to a giant creature's body: you land on it (creatureBoard.js)
+      p.hook = null;
+      p.hookCd = H.MISS_COOLDOWN;
+      a.board(p);
     } else if (p.fire && a && a.surf && dist < H.LEDGE_AT && h.len <= H.MIN_LEN + 1) {
       // Climb up onto a deck edge: hop up over it.
       p.hook = null;

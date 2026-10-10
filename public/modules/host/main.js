@@ -51,7 +51,8 @@ fitCanvas();
 // Dev (C.1): host.html?creature=kraken puts a giant Kraken in every mission (it rises ahead of the ship; creatureSystem.js). Nothing changes without the flag.
 {
   const c = new URLSearchParams(location.search).get('creature');
-  if (c === 'kraken') config.CREATURES.DEV_SPAWN = c;
+  if (c === 'kraken') { config.CREATURES.DEV_SPAWN = c; config.ENVIRONMENTS.FORCE = 'sea'; } // (the Kraken lives at the water line: the mission is flown in the Sunken Sea)
+  if (new URLSearchParams(location.search).get('heart') === '1') config.CREATURES.BOARD.HEART_EXPOSED = true; // (C.2: host.html?creature=kraken&heart=1 exposes the heart so STRIKE THE HEART can be tried; C.3 decides when it is really exposed)
 }
 const simulation = createSimulation();
 if (playtest && playtest.mode === 'coop') BUILDS.playtest = playtest.parts; // (the build page's ship: the voyage starts with it, and so does every new voyage)

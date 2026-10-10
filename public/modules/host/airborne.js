@@ -228,7 +228,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
   const step = (p, dt, controlled = true) => {
     if (!p.fly) return false;
     if (p.regrabCd > 0) p.regrabCd -= dt;
-    const cn = config.CROSS.CANNON; // (B.6: a crewman fired from a crew cannon carries on a long arc, steers a little, and trails smoke)
+    const cn =config.CROSS.CANNON; // (B.6: a crewman fired from a crew cannon carries on a long arc, steers a little, and trails smoke)
     const ctrl = controlled && (!p.bot || p.daring) ? clamp(p.jx || 0, -1, 1) * ship.pose.f * (p.cannon ? cn.FLYER_STEER : 1) : 0; /* (the stick is along the ship; in the air it steers along the world) */ // (bots only steer in the air on a daring stunt)
     const drift = ship.pose.vx - ship.pose.f * Math.max(0, state.ship.speed || 0) * A.SHIP_DRIFT; // (the air streams past the ship: she hangs back from it by this much)
     const gm = (state.env && state.env.gravity) || 1; // low gravity in The Aether (config.ENVIRONMENTS.aether.GRAVITY)
@@ -268,7 +268,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
         if (s.onLand === undefined && s.d === undefined) continue;
         if (s.only && !s.only(p)) continue; // (B.6: a friendly ship's decks are only a landing place for a crewman fired from a crew cannon)
         if (sx < val(s.x0) || sx > val(s.x1)) continue;
-        if (py < surfY && sy >= surfY && (!best || surfY < best.y)) best = { s, y: surfY };
+        if ((py < surfY || (s.prevY != null && py < s.prevY)) && sy >= surfY && (!best || surfY < best.y)) best = { s, y: surfY }; // (prevY: where a surface that MOVES on the ship - a giant creature's mantle - was last step: it can rise through a falling man)
       }
       if (best) {
         land(p, best.s, best.y);
@@ -278,7 +278,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     // Overboard: well below the ship or far past either end.
     // (Past the bow counts only beyond any other deck out there, e.g. a gunship alongside.)
     // (Versus: the rival's decks are surfaces too, wherever she hangs in the sky: past THEM is overboard, not just past our own ends and below our own keel.)
-    const rs = extraProviders.length ? surfaces().filter((s) => typeof s.id === 'string' && (s.id.startsWith('rival:') || s.id.startsWith('fleet:'))) : [];
+    const rs = extraProviders.length ? surfaces().filter((s) => typeof s.id === 'string' && (s.id.startsWith('rival:') || s.id.startsWith('fleet:') || s.id.startsWith('creature:'))) : []; // (C.2: a giant creature's mantle is a place to land too, wherever it is)
     const wide = p.cannon ? cn.OVERBOARD_X : 0; // (B.6: a cannon flyer crosses the sky: he is only overboard well beyond the ends)
     const farX = Math.max(1600, ...extra.map((s) => (val(s.y) == null ? 0 : val(s.x1))), ...rs.map((s) => val(s.x1))) + A.OVERBOARD_X + wide;
     const nearX = Math.min(0, ...rs.map((s) => val(s.x0))) - A.OVERBOARD_X - wide;

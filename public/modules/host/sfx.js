@@ -181,6 +181,17 @@ export function createSfx(state) {
       noise('bandpass', 900, 0.3, 0.5, 0.05, 2);
       tone('triangle', 330, 120, 0.2, 0.25, 0.18);
     },
+    // C.2: a tentacle seizing the ship (a wet slam and a groaning squeeze) and a slap along the top deck (a whip crack).
+    grip: () => {
+      noise('lowpass', 300, 0.5, 0.55, 0, 1.5);
+      tone('sawtooth', 120, 55, 0.7, 0.35, 0.02);
+      tone('square', 60, 40, 0.9, 0.3, 0.1);
+    },
+    slap: () => {
+      noise('highpass', 1800, 0.25, 0.45, 0, 2);
+      tone('sawtooth', 400, 90, 0.25, 0.3);
+      noise('lowpass', 400, 0.45, 0.4, 0.08);
+    },
   };
   const play = (name, arg) => {
     if (!ac || muted) return;

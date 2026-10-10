@@ -19,6 +19,8 @@ import { cannonSeatName } from './shipBuild.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/captainAI.js';
 import { specOf } from './gunTypes.js';
+import { gripJobs } from './creatureGrip.js';
+import { breachClimbAlt } from './creatureBreach.js';
 
 const B = config.BOTS;
 // Tables worked out per ship layout (rebuilt when a new ship build is applied to it): `tables(L).MAIN` ... Every function below gets its layout as
@@ -495,6 +497,8 @@ function listJobs(state, bot) {
   // (GAS TYPES: a fire that reaches a hydrogen bag, f.h2 from hydrogen.js, is just as bad: the bag will explode, so it is put out first)
   const hotFires = !canSpray ? [] : state.fires.filter((f) => f.big || f.h2 || flamAt(L, f.d, f.x) >= config.FIRE.BLAZE.FLAME_AT);
   for (const f of hotFires) jobs.push({ kind: 'fire', obj: f, max: 2, cap: B.HOT_FIRE_CAP, urgent: true });
+  // C.2: a giant creature's tentacle holds the ship (creatureGrip.js): two hands go to hack it free, ahead of everything but a blaze in the coal.
+  if (state.creature && (hasTool('sword') || hasTool('hammer'))) for (const gj of gripJobs(state, mainShip(state))) jobs.push({ kind: 'hack', obj: gj.obj, max: 2, urgent: true });
   // Versus: a boarder at the wheel or the boiler is the worst thing aboard (he is taking the ship): the defenders go for him before anything else, up to half the crew.
   if ((config.PVP.ENABLED || mainShip(state).ai) && bot.team) {
     const vsH = L.one('helm'), vsB = L.one('boiler');
@@ -762,12 +766,16 @@ function operate(p, state, dt) {
     // (Only while actually flying forward past it: hovering at rope height over a survivor the ship is not moving toward would hold the helm there for ever.)
     const dip = plan.speed > 0.05 && ship.speed > 0.05 ? rescueAltitude(state) : null;
     if (dip !== null && lo <= hi && dip > lo && dip < hi && (target === null || target === plan.target)) target = dip;
+    // C.2: the Kraken is under her (a shadow on the water, creatureBreach.js): climb out of the reach of its lunge, as high as the window allows.
+    const lunge = state.creature ? breachClimbAlt(state) : null;
+    const lungeAlt = lunge !== null && lunge - 40 > ship.alt ? Math.min(lunge, hi - 10) : null;
+    if (lungeAlt !== null) target = lungeAlt;
     // (Gentle enough not to overshoot now that she glides with momentum.)
     if (target !== null) p.jy = clamp((ship.alt - target) / 90 + (ship.vy || 0) / 260, -1, 1);
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
     else p.jy = 0;
     // The PRESSURE lever: pump or vent the gasbag toward the altitude the plan wants.
-    p.gas = state.goingDown ? 1 : gasFor(state, beamDodge(state) ?? (dip !== null && target === dip ? dip : plan.target)); // (GOING DOWN!: pump flat out)
+    p.gas = state.goingDown ? 1 : gasFor(state, lungeAlt ?? beamDodge(state) ?? (dip !== null && target === dip ? dip : plan.target)); // (GOING DOWN!: pump flat out)
   } else if (L.kindOf(p.lock) === 'coil') {
     // Aim at the thickest bunch of enemies and charge while lined up.
     const shot = coilShot(state);
@@ -943,6 +951,16 @@ function work(p, state) {
   }
   if (job.kind === 'raid') {
     if (steer(p, tables(L).MAIN, boilerX(state.gunship), 30)) p.fire = true;
+    return;
+  }
+  if (job.kind === 'hack') { // C.2: a tentacle holds the ship: a sword in hand (a hammer if she has no sword rack), then hold Action at the grip point until it lets go
+    if (!o.live) { p.botJob = null; return; }
+    const noSword = !tables(L).PICKUPS.some((r) => r.kind === 'sword');
+    if (!(p.carry === 'sword' || (noSword && p.carry === 'hammer')) && !getTool(state, p, noSword ? 'hammer' : 'sword', o)) return;
+    if (steer(p, o.d, o.x, 40)) {
+      p.jx = 0;
+      p.fire = true;
+    }
     return;
   }
   if (job.kind === 'flee') {
@@ -1610,6 +1628,7 @@ export function updateBot(p, state, dt) {
       // Never wander off the helm while there's terrain to steer through (nor the gunship's crew off their posts).
       if ((isHelm(L, p.lock) && config.COURSE.ENABLED) || p.enemy) p.lockLeft = Math.max(p.lockLeft, 1);
       // A lightning bolt is charging and nobody is on their way to a rod: leave the station (not the helm).
+      const hackCall = !!state.creature && !isHelm(L, p.lock) && gripJobs(state, mainShip(state)).length > 0 && !bots.some((q) => q.botJob && q.botJob.kind === 'hack') && Math.random() < 0.9; // (C.2: a tentacle holds the ship and nobody is on the way to hack it)
       const rodCall = !isHelm(L, p.lock) && state.stormJob && state.stormJob.charge && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9;
       // Nobody is at the wheel in flight and nobody is on the way: leave the station and take it.
       const helmCall = !isHelm(L, p.lock) && !humanAutopilot(p, state) && state.phase === 'flying' && !Object.values(state.players).some((q) => isHelm(L, q.lock) || (q.botJob && q.botJob.kind === 'station' && isHelm(L, q.botJob.obj))) && !(state.modules || []).some((m) => m.kind === 'helm' && m.broken) && Math.random() < B.HELM_CALL;
@@ -1617,7 +1636,7 @@ export function updateBot(p, state, dt) {
       const soleGun = config.PVP.ENABLED && tables(L).GUN_STATIONS.includes(p.lock) && !bots.some((q) => q !== p && q.lock && tables(L).GUN_STATIONS.includes(q.lock)); // (Versus: the last gunner keeps his gun, a ship needs one that shoots)
       const HC = config.HEALTH; // crew health: a bot burning at its station, or on its last heart, leaves it (the helm stays: the ship needs steering)
       const hurtCall = HC.ENABLED && !p.enemy && !isHelm(L, p.lock) && !soleGun && ((p.inFire && (p.burnT || 0) > HC.BOT.FLEE) || (state.phase === 'flying' && L.medbay && hearts(p) <= HC.JOB_AT));
-      if ((p.lockLeft <= 0 && !soleGun) || gunUseless || rodCall || helmCall || fallCall || hurtCall || (urgent > free && !isHelm(L, p.lock) && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
+      if ((p.lockLeft <= 0 && !soleGun) || gunUseless || rodCall || hackCall || helmCall || fallCall || hurtCall || (urgent > free && !isHelm(L, p.lock) && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
         p.leaveQ = true;
         p.lockLeft = undefined;
         p.botJob = null;

@@ -14,6 +14,7 @@ import { config } from '../../config.js';
 import { toWorldX, toWorldY, toShipX, toShipY, driveVx, driveGain } from './pose.js';
 import { applyForce, pivotOf as massOf } from './forces.js';
 import { pop } from './popups.js';
+import { creatureRay, creatureLatch, cutNear as creatureCut } from './creatureTow.js';
 
 const T = () => config.CROSS.TOW;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -91,6 +92,8 @@ export function createTowing({ world, puff, phoneFx = () => {} }) {
   const fireHarpoon = (ship, ang, wx, wy, p) => {
     const H = config.GUN_TYPES.harpoon;
     const hit = nearestDeck(ship, { x: wx, y: wy }, { x: Math.cos(ang), y: Math.sin(ang) }, H.RANGE, 0.8, true);
+    const beast = world.creature ? creatureRay(world, { x: wx, y: wy }, ang, H.RANGE) : null; // (C.2: a giant creature's part in the line of fire; the nearer of the two is hooked)
+    if (beast && (!hit || beast.d < hit.d)) return creatureLatch(world, ship, beast, { x: toShipX(ship, wx), y: toShipY(ship, wy) }, H, p);
     if (!hit) return null;
     const from = { x: toShipX(ship, wx), y: toShipY(ship, wy) };
     const tow = link(ship, hit.ship, from, { x: hit.x, y: hit.y - 10 }, hit.d / H.SPEED + 0.05, p ? p.id : null);
@@ -110,7 +113,7 @@ export function createTowing({ world, puff, phoneFx = () => {} }) {
       cut(t, 'THE TOWLINE IS CUT!');
       return true;
     }
-    return false;
+    return creatureCut(world, ship, p); // (C.2: a harpoon line made fast to a giant creature)
   };
 
   // A ship's velocity in the world as the movement model has it (px/s, y down), and a shove of (dx, dy) px/s onto it (shipCollide.js does the same).

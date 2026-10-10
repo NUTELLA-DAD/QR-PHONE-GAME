@@ -179,7 +179,9 @@ export function createShipSim(world, ship, W) {
     const here = (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r;
     const tool = player.carry;
     if (isHostile(player)) return hostileUse(player, here);
-    const revive = Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && q.conn == null && here(q, 65));
+    const grip = W.creatures && W.creatures.actionFor(ship, player); // a giant creature's tentacle holds the ship at this spot: HACK THE TENTACLE! (creatureGrip.js)
+    if (grip) return grip;
+    const revive =Object.values(state.players).find((q) => q !== player && q.ko > 0 && !q.fall && q.conn == null && here(q, 65));
     if (revive) return { type: 'revive', obj: revive, hold: true, time: T.REVIVE_TIME, label: `Revive ${revive.name}` };
     const gdHold = goingDown.holdAction(player, here); // GOING DOWN!: hold Action to cut a section away, dump the coal bunker or drop the bombs
     if (gdHold) return gdHold;
@@ -400,6 +402,7 @@ export function createShipSim(world, ship, W) {
     if (cargo.wantsThrow(player, () => shoveNear(player))) return cargo.throwItem(player); // (B.6: on an open deck, ATTACK throws the sandbag, crate or sack of coal you carry - unless there is something to shove)
     if (player.carry === 'towline' && W.towing && W.towing.throwLine(ship, player)) return; // (B.6: ATTACK throws the towline's grapple at another ship)
     if (player.carry === 'sword' && W.towing && W.towing.cutNear(ship, player)) return; // (...and a sword cuts a line where it is made fast to this ship)
+    if ((player.carry === 'sword' || player.carry === 'hammer') && W.creatures && W.creatures.blow(ship, player)) return; // (C.2: a blow at the tentacle that holds the ship, three to hack it free)
     const sword = player.carry === 'sword';
     player.atkCd = sword ? T.SWORD_COOLDOWN : T.SHOVE_COOLDOWN;
     player.swingT = performance.now();
@@ -1027,6 +1030,7 @@ export function createShipSim(world, ship, W) {
       if (player.bot) updateBot(player, state, dt);
       if (player.koGrace > 0) player.koGrace -= dt;
       health.step(player, dt); // (crew health: i-frames, burns, the medical bay, the flashes)
+      if (player.on && W.creatures) W.creatures.boardCheck(player); // (C.2: standing on a giant creature: if it dives or dies, or he is knocked out, he falls)
       if (player.hook && (player.fall || player.ko > 0 || player.lock || player.swing || player.conn != null || player.connected === false)) hookshot.clear(player);
       if (player.swing) {
         gunship.swingStep(player, dt);
@@ -1111,6 +1115,8 @@ export function createShipSim(world, ship, W) {
       if (player.hj) {
         hijack.rider(player, dt); // flying a stolen dogfighter (kick the pilot out, then steer)
         if (!player.bot) player.act = player.grabAct = null;
+      } else if (player.on) {
+        W.creatures.boarderStep(ship, player, dt, holdOk); // aboard a giant creature: walk its outline, BLIND IT, STRIKE THE HEART (creatureBoard.js)
       } else if (player.lock) {
         player.moving = false;
         player.climb = false;
@@ -1314,7 +1320,7 @@ export function createShipSim(world, ship, W) {
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
-              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', bandage: 'revives', sabotage: 'sabotage', cutline: 'boarding', capture: 'captures', shovel: 'shovels', cut: 'cuts', dumpcoal: 'dumped', dumpbombs: 'dumped' }[act.type]);
+              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', bandage: 'revives', sabotage: 'sabotage', cutline: 'boarding', hack: 'boarding', capture: 'captures', shovel: 'shovels', cut: 'cuts', dumpcoal: 'dumped', dumpbombs: 'dumped' }[act.type]);
               if (act.type === 'fire') shipPop(object.x, player.y - 120, 'fireOut', '#9fd3e6', 0.8);
               if (act.type === 'hole' || act.type === 'gas') shipPop(object.x, player.y - 120, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
@@ -1329,6 +1335,7 @@ export function createShipSim(world, ship, W) {
               else if (act.type === 'sabotage') (isHostile(player) ? sabotageBoiler(player) : gunship.plant(player));
               else if (act.type === 'capture') takeHelm(player);
               else if (act.type === 'cutline') gunship.cutLine(player);
+              else if (act.type === 'hack') W.creatures.hacked(ship, player, object); // (C.2: the tentacle lets go)
               else if (act.type === 'shovel') cargo.shovel(object, player); // (B.6: a load goes over the rail)
               else if (act.type === 'cut' || act.type === 'dumpcoal' || act.type === 'dumpbombs') goingDown.perform(act.type, object, player); // (GOING DOWN!: weight overboard)
               else if (act.type === 'bandage') health.bandage(object); // (crew health: a crewmate's bandage: a heart back)
@@ -1382,6 +1389,10 @@ export function createShipSim(world, ship, W) {
         hold = !!player.act.hold;
       }
       if (player.fly) label = player.chuteOpen ? 'Steer!' : player.chute ? 'Chute...' : player.cannon || player.chuteOk ? 'PARACHUTE!' : player.fvy > 0 ? 'Falling!' : 'Airborne';
+      if (player.on) { // aboard a giant creature
+        label = player.act ? player.act.label : 'JUMP to leap off';
+        hold = !!(player.act && player.act.hold);
+      }
       if (player.hook && player.hook.phase === 'caught') {
         label = 'Reel in (hold)';
         hold = true;
@@ -1675,7 +1686,7 @@ export function createShipSim(world, ship, W) {
   // B2: holes, fires and bombs wear off when nobody works on them; fire spreads; the hull takes what burns and leaks; raiders.
   const stepUpkeep = (dt) => {
     // Progress drains only while nobody is working on it.
-    for (const object of [...state.breaches, ...state.fires, ...state.bombs, ...state.gasHoles, ...state.icing, ...state.clogs, state.o2tank, ...hostileJobs, ...(state.loads || [])]) {
+    for (const object of [...state.breaches, ...state.fires, ...state.bombs, ...state.gasHoles, ...state.icing, ...state.clogs, state.o2tank, ...hostileJobs, ...(state.loads || []), ...(W.creatures ? W.creatures.jobsOf(ship) : [])]) {
       if (!object.worked) object.prog = Math.max(0, (object.prog || 0) - dt * 0.4);
       object.worked = false;
     }

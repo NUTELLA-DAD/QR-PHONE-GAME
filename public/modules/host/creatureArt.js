@@ -1,6 +1,6 @@
 // Drawing for the giant creatures (BOSSES.md 3.3), in the storybook gouache style: one ink colour (config.INK), flat fills, one soft highlight band, no gradients, no shadowBlur.
 // Enemy shape language, like the gunships: angular, spiky and a bit lopsided, charcoal spikes, bone-coloured triangular suckers in rows.
-//   createCreatureArt({ ctx, makeCanvas }) -> { draw(body, { zoom, dpr }), drawLimb(part, view), stats, clear }
+//   createCreatureArt({ ctx, makeCanvas }) -> { draw(body, { zoom, dpr }), drawBehind(body, view), drawLimb(part, view), stats, clear }
 // Each segment TYPE is baked ONCE per zoom bucket (half octaves) into an offscreen canvas and then blitted with translate / rotate (a Kraken is about 60 blits a frame).
 // A limb's segments are drawn root to tip, each with a rounded base cap, so every joint reads as a ball-and-socket ring. A tentacle's sucker side is the inside of its curl.
 // Three looks per picture: lit, dim (a part not lit by a searchlight in a dark sky: fills mix toward night blue) and flash (a hit: fills mix toward white).
@@ -259,10 +259,13 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
   const lookOf = (p) => (p.hit > 0 ? 'flash' : p.lit ? 'lit' : 'dim');
 
   // A limb's segments, root to tip, in whatever transform the caller has set (also used for tumbling debris: a part-like { segs, side, lit, hit, severed }).
+  // (a limb wrapped round a ship has segments that pass BEHIND her hull: setWrap marks them s.behind; draw() leaves them out and drawBehind() draws only them, before the ship)
+  let behindPass = false;
   function drawLimb(p) {
     const look = lookOf(p), n = p.segs.length;
     for (let i = 0; i < n; i++) {
       const s = p.segs[i];
+      if (!!s.behind !== behindPass) continue;
       const mode = i === n - 1 ? (p.severed ? 'cut' : 'tip') : 'mid';
       ctx.save();
       ctx.translate(s.x, s.y);
@@ -316,6 +319,18 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind !== 'mantle') drawRigid(body, p);
     for (const p of body.parts) if (p.limb && !p.dead && p.layer !== 'back') drawLimb(p);
   }
+  // The second pass of a wrapped limb: only its segments behind the ship (render.js calls this before the ships are drawn, and draw() after).
+  function drawBehind(body, view = {}) {
+    if (!body.parts.some((p) => p.wrap && !p.dead)) return;
+    const S = clamp((view.zoom || 1) * (view.dpr || 1) * A.SS, A.MIN_SCALE, A.MAX_SCALE);
+    const bucket = Math.round(Math.log2(S) * 2) / 2;
+    scale = Math.pow(2, bucket);
+    if (!buckets.has(bucket)) buckets.set(bucket, new Map());
+    cache = buckets.get(bucket);
+    behindPass = true;
+    for (const p of body.parts) if (p.limb && !p.dead && p.wrap) drawLimb(p);
+    behindPass = false;
+  }
   // Debris and other callers draw limbs on their own: make sure there is a cache for the current scale first.
   function drawLimbAt(p, view = {}) {
     const S = clamp((view.zoom || 1) * (view.dpr || 1) * A.SS, A.MIN_SCALE, A.MAX_SCALE);
@@ -326,5 +341,5 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     drawLimb(p);
   }
 
-  return { draw, drawLimb: drawLimbAt, stats, clear: () => buckets.clear() };
+  return { draw, drawBehind, drawLimb: drawLimbAt, stats, clear: () => buckets.clear() };
 }

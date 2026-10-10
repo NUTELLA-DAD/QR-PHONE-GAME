@@ -4,12 +4,17 @@
 //   hurtCreature(state, hit, dmg, opts) / creatureHit(state, x, y, r)                       the damage path every weapon ends in (a part, the segment hit, severing, the health pool, death)
 //   creatureShell / creatureBomb / creatureBurn / creatureBeam / creatureCargo / creatureBlast / creatureTouch     one per weapon: shells, our bombs, flame, the coil, thrown loads, mines
 //   creatureTargets(state, list) / creatureRadar(state) / creaturePoints(state)             aim.js targets, the phone radar, the camera's framing
-// C.1 ONLY gives it a placeholder life: it rises (SURFACE_TIME, untouchable), idles, its tentacles reach at the ship (no grip yet: that is C.2) and the beak opens on a timer; it dies (sinks) when
+// C.2 adds its attacks (creatureGrip.js: GRAB, SLAP, the HACK that frees the ship), boarding (creatureBoard.js) and the harpoon (creatureTow.js).
+// C.1 ONLY gave it a placeholder life: it rises (SURFACE_TIME, untouchable), idles, its tentacles reach at the ship (no grip yet: that is C.2) and the beak opens on a timer; it dies (sinks) when
 // the health pool is empty or all six tentacles are severed. The fight proper (phases, attacks, wins) is C.3. Spawned only by the dev flag (config.CREATURES.DEV_SPAWN) for now.
 // Its random numbers are its own seeded stream (config.CREATURES.SEED), never Math.random, so a run without a creature is untouched. Positions go through pose.js, the ship is mainShip(state).
 import { config } from '../../config.js';
 import { createKraken } from './creatures/kraken.js';
-import { stepBody, hitInfo, severPart, setMouth, nearestFreeLimb, reachPart, releasePart, makeRng, segDist } from './creature.js';
+import { stepBody, hitInfo, severPart, setMouth, nearestFreeLimb, reachPart, releasePart, exposeHeart, makeRng, segDist } from './creature.js';
+import { thinkAttacks, hurtGrips, actionFor, blow, hacked, jobsOf, gripJobs } from './creatureGrip.js';
+import { creatureSurfaces, boardCheck, boarderStep, decayJobs } from './creatureBoard.js';
+import { stepHarpoons } from './creatureTow.js';
+import { stepBreach, seaLevel } from './creatureBreach.js';
 import { crewMul } from './crewscale.js';
 import { mainShip } from './ships.js';
 import { toWorldX, toWorldY } from './pose.js';
@@ -23,7 +28,7 @@ const smooth = (u) => { u = clamp(u, 0, 1); return u * u * (3 - 2 * u); };
 const segMid = (s) => ({ x: s.x + Math.cos(s.ang) * s.len * 0.5, y: s.y + Math.sin(s.ang) * s.len * 0.5 });
 
 export const creatureAlive = (state) => !!state.creature && !state.creature.dying; // (the pacing director and the boss director ask this)
-const vulnerable = (cr) => !!cr && cr.mode === 'idle'; // (not while it rises, nor while it sinks)
+const vulnerable = (cr) => !!cr && (cr.mode === 'idle' || (cr.mode === 'breach' && !!cr.breach && cr.breach.exposed)); // (not while it rises, nor while it sinks, nor while it is under water; in a breach only while it hangs open in the air)
 // The thing the searchlight lights and the spotter spots (aim.js reads .lit and .spotT of a target's obj): one small record on each part.
 export const tgtOf = (p) => p.tgt || (p.tgt = { part: p, lit: 0, spotT: 0 });
 const tentacles = (cr) => cr.parts.filter((p) => p.kind === 'tentacle');
@@ -45,6 +50,7 @@ export function hurtCreature(state, hit, dmg, opts = {}) {
   if (!vulnerable(cr) || !hit || hit.part.dead || !(dmg > 0)) return null;
   const H = CR().HURT, p = hit.part, t = p.tgt;
   if (t && t.lit > 0) dmg *= 1 + config.SEARCHLIGHT.LIT_DAMAGE; // (anything in a searchlight beam takes more)
+  if (cr.breach && cr.breach.exposed) dmg *= CR().BREACH.BONUS; // (hanging in the air with its heart and beak open)
   p.hp = Math.max(0, p.hp - dmg);
   p.hit = CR().HIT_FLASH;
   cr.hp = Math.max(0, cr.hp - dmg * (H.POOL[p.kind] ?? 1));
@@ -53,6 +59,7 @@ export function hurtCreature(state, hit, dmg, opts = {}) {
   st.by[src] = (st.by[src] || 0) + dmg;
   st.parts[p.id] = (st.parts[p.id] || 0) + dmg;
   if (src === 'bomb' && p.kind === 'mouth') st.chomps += 1;
+  if (p.kind === 'tentacle') hurtGrips(cr, p, dmg, src); // (a limb that is gripping the ship may let go)
   const out = { part: p, dmg, sever: false, killed: false };
   if (p.kind === 'tentacle' && p.hp <= 0 && !p.severed) out.sever = sever(state, cr, p, hit.seg, opts);
   if (!cr.dying && (cr.hp <= 0 || tentaclesGone(cr))) {
@@ -84,6 +91,7 @@ function die(state, cr, why, opts) {
   const h = cr.hooks;
   cr.dying = true;
   cr.mode = 'dying';
+  cr.breach = null;
   cr.diedBy = why;
   cr.sinkT = 0;
   cr.puppet.auto = false;
@@ -248,6 +256,10 @@ export function creatureRadar(state) {
 // The camera's framing (camera.js): { x, y, r } for the living parts, once it has risen.
 export function creaturePoints(state) {
   const cr = state.creature;
+  if (cr && cr.mode === 'breach' && cr.breach && !vulnerable(cr)) { // (a breach under way: keep its shadow on the water in view)
+    const sea = seaLevel(state);
+    return sea === null ? [] : [{ x: cr.breach.x, y: sea, r: 400 }];
+  }
   if (!vulnerable(cr)) return [];
   const out = [];
   for (const p of cr.parts) {
@@ -259,13 +271,13 @@ export function creaturePoints(state) {
 }
 
 // ---- the system -------------------------------------------------------------------------------------------------------------------------------------------------
-export function createCreatureSystem({ state, puff, credit }) {
+export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }) {
   state.creature = null;
   const rng = makeRng(CR().SEED);
   let done = false; // this mission's creature has been spawned (one a mission)
 
   const hpMul = () => crewMul(state, 'hp') * (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).gunHp;
-  const seaY = () => (envIdOf(state) === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : null);
+  const seaY = () => seaLevel(state);
   // Where the body's centre sits (world y): on the sea line in the Sunken Sea; elsewhere BELOW the ship, but kept GROUND_CLEAR above the first rock under the limbs' roots (shells die in rock).
   const stationY = (ship, mid, x) => {
     const S = CR().SPAWN;
@@ -282,7 +294,7 @@ export function createCreatureSystem({ state, puff, credit }) {
   const shipMid = (ship) => ({ x: toWorldX(ship, ship.layout.refPoint.x), y: toWorldY(ship, ship.layout.refPoint.y) });
 
   const spawn = (kind = 'kraken') => {
-    if (state.creature || kind !== 'kraken') return state.creature;
+    if (state.creature || kind !== 'kraken' || seaY() === null) return state.creature || null; // (the Kraken lives at the water line: with no sea level it does not come)
     const ship = mainShip(state), S = CR().SPAWN, K = CR().KRAKEN, H = CR().HURT;
     const mid = shipMid(ship), side = ship.pose.f || 1;
     const base = { x: mid.x + side * S.STANDOFF, y: stationY(ship, mid, mid.x + side * S.STANDOFF) };
@@ -294,7 +306,15 @@ export function createCreatureSystem({ state, puff, credit }) {
     }
     cr.hp = cr.maxHp = Math.max(1, Math.round(K.HP * m * H.PART_HP_MUL.pool));
     Object.assign(cr, { name: 'THE KRAKEN', mode: 'surfacing', dying: false, age: 0, sinkT: 0, side, base, chunks: [], stats: { dmg: 0, by: {}, parts: {}, severed: 0, chomps: 0 }, ai: { reachT: CR().BEHAVE.FIRST_REACH + S.SURFACE_TIME, wasOpen: false, splashed: false } });
-    Object.defineProperty(cr, 'hooks', { value: { state, puff, credit, rng }, enumerable: false }); // (functions: not part of the data)
+    Object.defineProperty(cr, 'hooks', { value: { state, puff, credit, rng, phoneFx, hurt: (hit, dmg, opts) => hurtCreature(state, hit, dmg, opts) }, enumerable: false }); // (functions: not part of the data)
+    Object.defineProperty(cr, 'grips', { value: [], enumerable: false, writable: true }); // (the limbs holding the ship, creatureGrip.js)
+    Object.defineProperty(cr, 'harpoons', { value: [], enumerable: false }); // (harpoon lines made fast to it, creatureTow.js)
+    cr.slap = null;
+    cr.breach = null;
+    cr.breachDy = 0;
+    cr.tvx = 0;
+    cr.hooked = false;
+    if (CR().BOARD.HEART_EXPOSED) exposeHeart(cr);
     cr.puppet.auto = false; // (the beak's timer starts after it has risen)
     state.creature = cr;
     state.ev.warn = 4;
@@ -310,6 +330,7 @@ export function createCreatureSystem({ state, puff, credit }) {
     const mouth = cr.parts.find((p) => p.kind === 'mouth');
     if (mouth && mouth.open && !ai.wasOpen) state.sfxQ.push(['roar']);
     if (mouth) ai.wasOpen = mouth.open;
+    thinkAttacks(state, cr, ship, dt);
     if ((ai.reachT -= dt) > 0) return;
     ai.reachT = B.REACH_EVERY * (1 + (rng() * 2 - 1) * B.REACH_JITTER);
     const b = L.bounds;
@@ -322,7 +343,7 @@ export function createCreatureSystem({ state, puff, credit }) {
   };
 
   const update = (dt) => {
-    if (!state.creature && !done && CR().DEV_SPAWN && state.phase === 'flying' && !state.ship.down) {
+    if (!state.creature && !done && CR().DEV_SPAWN && state.phase === 'flying' && !state.ship.down && seaY() !== null) {
       done = true;
       spawn(CR().DEV_SPAWN);
     }
@@ -332,7 +353,8 @@ export function createCreatureSystem({ state, puff, credit }) {
     cr.age += dt;
     // Hold station beside the ship (it swims along with her), rising out of the deep first and sinking away when it is dead.
     const k = Math.min(1, S.FOLLOW * dt);
-    cr.base.x += (mid.x + cr.side * S.STANDOFF - cr.base.x) * k + ship.pose.vx * dt;
+    if (cr.hooked) cr.base.x += (cr.tvx || 0) * dt; // (a harpoon line holds it: it no longer swims along with her, it is hauled, creatureTow.js)
+    else if (cr.mode !== 'breach') cr.base.x += (mid.x + cr.side * S.STANDOFF - cr.base.x) * k + ship.pose.vx * dt; // (a breach moves it itself, creatureBreach.js)
     cr.base.y += (stationY(ship, mid, cr.base.x) - cr.base.y) * k;
     let dive = 0;
     if (cr.mode === 'surfacing') {
@@ -343,11 +365,16 @@ export function createCreatureSystem({ state, puff, credit }) {
       cr.sinkT += dt;
       dive = S.DEEP * smooth(cr.sinkT / S.SINK_TIME);
     }
+    if (cr.mode === 'breach') stepBreach(state, cr, ship, dt);
+    else if (cr.breachDy) cr.breachDy = Math.abs(cr.breachDy) < 1 ? 0 : cr.breachDy * Math.exp(-3 * dt); // (it died in mid-leap: it drops back to where it floats, and sinks from there)
     cr.x = cr.base.x;
-    cr.y = cr.base.y + dive;
+    cr.y = cr.base.y + dive + (cr.breachDy || 0);
     cr.vx = cr.vy = 0;
-    if (cr.mode === 'idle') creatureShell(state);
+    if (vulnerable(cr)) creatureShell(state);
     if (cr.mode === 'idle') think(cr, dt, ship);
+    else if (cr.grips.length || cr.slap) thinkAttacks(state, cr, ship, dt); // (sinking: the limbs that held her let go and the records are cleared)
+    stepHarpoons(state, cr, dt);
+    decayJobs(cr, dt);
     const dark = (state.darkNow || 0) > CR().DARK_AT; // (in the dark each part is dim unless a searchlight has it)
     for (const p of cr.parts) p.lit = !dark || (!!p.tgt && p.tgt.lit > 0);
     stepBody(cr, dt);
@@ -365,8 +392,20 @@ export function createCreatureSystem({ state, puff, credit }) {
 
   // A new mission (or a new game): the creature is gone and the dev flag may spawn a new one.
   const reset = () => {
+    for (const p of Object.values(state.players)) if (p.on) p.on = null; // (a boarder is a flyer again: the airborne system takes him from here)
     state.creature = null;
     done = false;
   };
-  return { update, reset, restart: reset, spawn };
+  // What the rest of the game asks of it (the ship sims and the bots hold W.creatures); all of them answer at once when there is no creature.
+  return {
+    update, reset, restart: reset, spawn,
+    actionFor: (ship, p) => (state.creature ? actionFor(state, ship, p) : null), // the Action button beside a grip: HACK THE TENTACLE!
+    blow: (ship, p) => (state.creature ? blow(state, ship, p) : false), // ATTACK with a sword beside a grip: one blow of three
+    hacked: (ship, p, job) => hacked(state, ship, p, job),
+    jobsOf: (ship) => (state.creature ? jobsOf(state, ship) : []), // the hold-action objects of this ship's grips (shipSim.js drains their progress)
+    gripJobs: (ship) => (state.creature ? gripJobs(state, ship) : []),
+    boardCheck: (p) => { if (p.on) boardCheck(state, p); },
+    boarderStep: (ship, p, dt, holdOk) => boarderStep(state, ship, p, dt, holdOk),
+    surfaces: (ship) => creatureSurfaces(state, ship),
+  };
 }

@@ -574,6 +574,20 @@ export function createRenderer({ ctx, state: world, canvas }) {
   // A giant creature (creatureSystem.js, creatureArt.js), in the world like the boss: its parts dim unless lit (the system sets part.lit), the pieces of a cut limb tumbling. In the Sunken Sea
   // it is clipped at the sea line, so it rises out of the water.
   let creatureArt = null; // (made when the first creature appears)
+  // The wrapped coils of a gripping tentacle that pass BEHIND the ship: drawn before the ships (the rest of the creature, and the coils in front, come after them in drawEffects).
+  const drawCreatureBehind = (view) => {
+    const cr = world.creature;
+    if (!cr || !creatureArt || !cr.parts.some((p) => p.wrap)) return;
+    const seaY = envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : null;
+    ctx.save();
+    if (seaY !== null) {
+      ctx.beginPath();
+      ctx.rect(cr.x - 20000, cr.y - 20000, 40000, seaY + config.CREATURES.SINK_CLIP - (cr.y - 20000));
+      ctx.clip();
+    }
+    creatureArt.drawBehind(cr, { zoom: view.zoom, dpr: 1 });
+    ctx.restore();
+  };
   const drawCreature = (view) => {
     const cr = world.creature;
     if (!cr) return;
@@ -592,6 +606,72 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.rotate(c.a);
       creatureArt.drawLimb(c.part, { zoom: view.zoom, dpr: 1 });
       ctx.restore();
+    }
+    ctx.restore();
+    drawCreatureAttacks(cr);
+  };
+  // C.2: where a tentacle is about to grab (a dashed red ring), the grip's timer (a ring that empties, gold then red) with the hack progress inside it (green), and the harpoon lines made fast to it.
+  const drawCreatureAttacks = (cr) => {
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const g of cr.grips || []) {
+      if (g.mode === 'recoil') continue;
+      ctx.beginPath();
+      ctx.strokeStyle = config.INK;
+      if (g.mode !== 'hold') {
+        ctx.setLineDash([40, 30]);
+        ctx.lineWidth = 14;
+        ctx.strokeStyle = '#ff4d4d';
+        ctx.arc(g.wx, g.wy, 150 + 20 * Math.sin(g.t * 14), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        continue;
+      }
+      const f = Math.max(0, Math.min(1, g.left / g.total));
+      ctx.lineWidth = 30;
+      ctx.arc(g.wx, g.wy, 130, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.lineWidth = 18;
+      ctx.strokeStyle = f > 0.4 ? '#ffd23f' : '#ff3b30';
+      ctx.arc(g.wx, g.wy, 130, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f);
+      ctx.stroke();
+      if (g.job.prog > 0.02) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#8fe388';
+        ctx.lineWidth = 14;
+        ctx.arc(g.wx, g.wy, 90, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, g.job.prog));
+        ctx.stroke();
+      }
+    }
+    const br = cr.breach, seaNow = world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : null;
+    if (br && seaNow !== null && (br.phase === 'dive' || br.phase === 'warn' || (br.phase === 'leap' && br.t < 0.6))) { // C.2 BREACH: a dark shadow and ripple rings on the water, growing darker as it nears
+      const B = config.CREATURES.BREACH, pr = br.phase === 'warn' ? Math.min(1, br.t / B.WARN) : br.phase === 'dive' ? 0 : 1, W2 = B.SHADOW_W * (0.5 + 0.5 * pr);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(14,12,40,' + (0.2 + 0.4 * pr).toFixed(2) + ')';
+      ctx.beginPath();
+      ctx.ellipse(br.x, seaNow + 40, W2 / 2, 90 + 60 * pr, 0, 0, Math.PI * 2);
+      ctx.fill();
+      for (let k = 0; k < 3; k++) { // ripples spreading out from it (they restart every 0.9 s)
+        const u = ((br.t * 1.1 + k / 3) % 1);
+        ctx.strokeStyle = 'rgba(235,248,255,' + (0.7 * (1 - u)).toFixed(2) + ')';
+        ctx.lineWidth = 16;
+        ctx.beginPath();
+        ctx.ellipse(br.x, seaNow + 10, (W2 / 2) * (0.5 + 0.7 * u), (50 + 40 * pr) * (0.5 + 0.7 * u), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    for (const t of cr.harpoons || []) {
+      const f = t.fly > 0 ? Math.min(1, t.t / t.fly) : 1, ex = t.a.x + (t.b.x - t.a.x) * f, ey = t.a.y + (t.b.y - t.a.y) * f;
+      ctx.beginPath();
+      ctx.strokeStyle = config.INK;
+      ctx.lineWidth = 8;
+      ctx.moveTo(t.a.x, t.a.y);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      ctx.strokeStyle = t.tension > 0.5 ? '#f2b04a' : '#d6bf8a';
+      ctx.lineWidth = 4.5;
+      ctx.stroke();
     }
     ctx.restore();
   };
@@ -2415,6 +2495,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     };
     const everyShip = (fn) => eachShip(world, (sh, i) => withShip(sh, () => fn(sh, i)));
     if (has('ship')) {
+      drawCreatureBehind(wv); // (C.2: the coils of a tentacle that pass behind her hull)
       everyShip(drawShipLayer);
       if (world.gunship && world.gunship.asShip) drawGunship.rope(world.gunship, ts); // (the gunship's grapple line runs between two ships: it is drawn in the world)
       if (world.debris && world.debris.length) debrisArt.draw(); // (S.5i: broken-off parts tumble in the world)
