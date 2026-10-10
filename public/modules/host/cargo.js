@@ -12,6 +12,7 @@ import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { applyForce } from './forces.js';
 import { pop } from './popups.js';
 import { inGap } from './shipBuild.js';
+import { creatureCargo } from './creatureSystem.js';
 
 const C = () => config.CROSS.CARGO;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -196,6 +197,7 @@ export function stepThrown(world, dt, puff) {
     it.x += it.vx * dt;
     it.y += it.vy * dt;
     it.rot += it.spin * dt;
+    if (world.creature && !it.ghost && creatureCargo(world, it)) { list.splice(i, 1); continue; } // (a giant creature: it hits a part, or falls into the open beak for half a bomb)
     let landed = false;
     if (!it.ghost && it.vy > 0) {
       for (const sh of world.ships) {

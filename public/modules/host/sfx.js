@@ -157,6 +157,30 @@ export function createSfx(state) {
       tone('sawtooth', 70, 65, 1.6, 0.35);
       tone('sawtooth', 104, 98, 1.6, 0.2);
     },
+    // A giant creature (creatureSystem.js): a low rolling ROAR when it surfaces and when the beak opens, the SPLASH of it rising or sinking, a limb SEVERED, a bomb CHOMPED in the beak.
+    roar: () => {
+      tone('sawtooth', 62, 38, 1.5, 0.4);
+      tone('square', 93, 52, 1.3, 0.16, 0.05);
+      noise('lowpass', 260, 1.3, 0.5, 0, 2);
+      tone('sawtooth', 44, 30, 1.7, 0.3, 0.2);
+    },
+    splash: () => {
+      noise('bandpass', 700, 0.8, 0.5, 0, 0.8);
+      noise('lowpass', 400, 1.0, 0.4, 0.1);
+      tone('sine', 110, 50, 0.6, 0.25);
+    },
+    sever: () => {
+      noise('bandpass', 1500, 0.15, 0.5, 0, 2);
+      tone('sawtooth', 180, 60, 0.35, 0.35);
+      tone('sine', 90, 40, 0.5, 0.45, 0.08);
+      noise('lowpass', 500, 0.5, 0.35, 0.1);
+    },
+    chomp: () => {
+      tone('square', 200, 80, 0.12, 0.4);
+      tone('sine', 70, 35, 0.5, 0.6, 0.06);
+      noise('bandpass', 900, 0.3, 0.5, 0.05, 2);
+      tone('triangle', 330, 120, 0.2, 0.25, 0.18);
+    },
   };
   const play = (name, arg) => {
     if (!ac || muted) return;

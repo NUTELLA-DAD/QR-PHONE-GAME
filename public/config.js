@@ -15,6 +15,7 @@ export const config = {
     SHIP_SCREEN_FRACTION: 0.53, // the ship (incl. its long gasbag) takes at most this much of the screen width; the hull reads ~20% bigger than before
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
+    CREATURE: { MAX_ZOOM_OUT: 2.4, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2), and its living parts are kept in view with this much margin (world pixels)
     SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
     ZOOM_SMOOTHING: 0.6, // how quickly it zooms (low = calm, no pumping)
     PULL_SMOOTHING: 0.22, // ...and this slowly in the pull-back after a part was built at the sky-dock (YARD.PULL_TIME): the "she grew!" moment
@@ -1854,6 +1855,38 @@ export const config = {
     SWAY: { EVERY_KEYS: 6, AMOUNT: 0.18 }, // idle sway: a new rest-pose offset every EVERY_KEYS keys, up to AMOUNT of the limb's reach (stepped, never a sine)
     BREATH: { EVERY_KEYS: 12, AMOUNT: 0.025 }, // idle breathing: the mantle holds, snaps 2.5% bigger, holds, snaps back (a 2-key hold-and-snap)
     HIT_FLASH: 0.15, // s a hit part shows its white flash
+    // ---- in the real game (creatureSystem.js, C.1) ----
+    DEV_SPAWN: null, // dev flag: 'kraken' spawns that creature at the start of every mission (host.html?creature=kraken, tools/botsim.mjs --creature kraken). null = no creature, nothing changes
+    SEED: 4242, // the creature system's own seeded random numbers (never the world's Math.random, so a run without a creature is untouched)
+    SPAWN: {
+      STANDOFF: 2300, // px ahead of the ship's middle (to the creature's centre) where it holds station: the nearest limbs reach her and her bow guns (about 1500 px of range) reach its body
+      FOLLOW: 0.8, // per second: how quickly it catches up with that spot as she flies on (it swims along with her)
+      BELOW: 1000, // px below the ship's middle that the body's centre sits (the mantle sits 650 above that, about level with her hull; the limbs' roots 650 below)
+      GROUND_CLEAR: 900, // px the body's centre keeps above the first rock below the ship at its limbs' roots (they are 650 below it): shells die in rock, so it stands clear of cliffs and the ground
+      SEA_RISE: 500, // in the Sunken Sea the body's centre sits this far above the sea line (the limbs' roots then sit just under it, as on the dev page)
+      DEEP: 3600, // px under its station that it starts (and sinks to when it dies)
+      SURFACE_TIME: 6, // s it takes to rise to its station (untouchable meanwhile)
+      SINK_TIME: 7, // s it takes to sink when it dies
+    },
+    // The placeholder behaviour until the real fight (C.3): threatening reaches at the ship, the beak opening on a timer.
+    BEHAVE: { REACH_EVERY: 4, REACH_JITTER: 0.4, FIRST_REACH: 2, REACH_SHORT: 0.92, MOUTH_AFTER: 3 }, // s between reaches (+- share), s to the first, share of a limb's reach it stretches to, s after surfacing before the beak starts opening
+    // What hurts it and how much. Damage is in "creature hit points": a shell does GUNS.DAMAGE x SHELL_MUL. POOL says how much of a blow to a part also comes off the health pool (HP below).
+    // A tentacle at 0 hp is SEVERED where it was hit; the other parts floor at 0 (they stay as targets). Part hp and the pool scale with crewMul('hp') x the difficulty's gunHp.
+    HURT: {
+      SHELL_MUL: 12, // a crew shell (x prime, x spotted) is worth this many times GUNS.DAMAGE against it
+      FLAME_DPS: 34, // hp a second off every part inside the flame's cone
+      COIL: 6, // x COIL.DAMAGE (at charge) to each part the bolt crosses
+      BOMB: 40, MOUTH_BOMB: 60, BOMB_RADIUS: 260, BOMB_SPLASH: 0.5, // our bomb: a hit on a part, the share the other parts in the radius take; in an OPEN beak MOUTH_BOMB instead (a closed beak takes nothing: the bomb falls on through)
+      CARGO: 14, CARGO_MOUTH: 0.5, // a thrown crate or sandbag: to the part it hits; in an open beak this share of MOUTH_BOMB (half a bomb)
+      MINE: 70, MINE_RADIUS: 300, // a laid mine going off within MINE_RADIUS (px) of a part (the nearer the harder: down to half at the edge)
+      TOUCH: 14, // px added to a shell's or a thrown load's radius for the hit test
+      POOL: { tentacle: 0.5, mantle: 0.6, eye: 1, mouth: 2, heart: 3 }, // share of a blow that also comes off the pool
+      PART_HP_MUL: { tentacle: 1, mantle: 1, eye: 1, mouth: 1, heart: 1, pool: 1 }, // tuning knobs on the data's hp (config.CREATURES.KRAKEN)
+    },
+    REWARD_MUL: 3, // salvage for a dead creature: SALVAGE.BOSS times this
+    DARK_AT: 0.35, // the sky counts as dark (parts dim unless a searchlight has them) above this searchlight darkNow
+    CHUNK: { LIFE: 6, GRAVITY: 2600, SPIN: 2.4, KICK: 300, MAX: 12 }, // a severed limb tumbling away: seconds it lasts, px/s^2, spin and sideways kick (rad/s, px/s), pieces kept
+    SINK_CLIP: 70, // px below the sea line at which the Kraken is hidden (it rises out of the water)
     ART: {
       INK_W: 14, // ink outline weight in WORLD px (a creature is drawn zoomed far out, so it is much thicker than OUTLINE.MAIN)
       SS: 1, MIN_SCALE: 0.03, MAX_SCALE: 0.7, // segment pictures are baked at the screen scale x SS, kept between these (bucketed in half octaves)

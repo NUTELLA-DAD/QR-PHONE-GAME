@@ -164,7 +164,7 @@ export function createMusic(state) {
     const s = state;
     if (s.phase !== 'flying' || s.vote || s.scorecard || s.runEnd) return 'dock';
     const g = s.gunship;
-    if (s.boss || s.goingDown || (g && (g.phase === 'hunt' || g.phase === 'latch')) || (s.tempo && s.tempo.phase === 'peak')) return 'combat';
+    if (s.boss || s.creature || s.goingDown || (g && (g.phase === 'hunt' || g.phase === 'latch')) || (s.tempo && s.tempo.phase === 'peak')) return 'combat';
     if (s.ship.down) return cur || 'calm';
     return 'calm';
   };

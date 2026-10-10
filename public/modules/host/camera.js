@@ -13,6 +13,7 @@
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
 import { toWorldX, toWorldY } from './pose.js';
+import { creaturePoints } from './creatureSystem.js';
 
 const C = config.CAMERA;
 const PAD_Y = 90; // sky kept above and below the ship (world pixels)
@@ -46,7 +47,7 @@ export function createWorldCamera() {
 
   const target = (state, ships, width, height, zoomMul = 1) => {
     const main = mainShip(state);
-    const maxOut = versus(state) ? C.VERSUS.MAX_ZOOM_OUT : C.MAX_ZOOM_OUT; // (Versus: the arena is big: the widest view is much wider)
+    const maxOut = versus(state) ? C.VERSUS.MAX_ZOOM_OUT : state.creature ? Math.max(C.MAX_ZOOM_OUT, C.CREATURE.MAX_ZOOM_OUT) : C.MAX_ZOOM_OUT; // (Versus: the arena is big: the widest view is much wider; a giant creature needs a wide view too)
     // The box round every ship (with the sky margin and a look-ahead the way each is moving).
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     // (and the same box without the look-ahead, for the middle and for "do the ships fit")
@@ -76,6 +77,15 @@ export function createWorldCamera() {
     if (state.gunship) { // (she stays an offset from our ship: converted through her pose; far off on her way in she is only an edge arrow)
       const L = main.layout, gd = Math.min(state.gunship.dx, 1300);
       things.push({ x: toWorldX(main, L.bounds.x1 + 790 + gd), y: toWorldY(main, L.refPoint.y + state.gunship.dy) }, { x: toWorldX(main, L.bounds.x1 + 1490 + gd), y: toWorldY(main, L.refPoint.y - 200 + state.gunship.dy) });
+    }
+    if (state.creature) { // a giant creature: its living parts are all kept in view (as far as the zoom cap allows)
+      for (const e of creaturePoints(state)) {
+        const m = e.r + C.CREATURE.MARGIN;
+        x0 = Math.min(x0, e.x - m);
+        x1 = Math.max(x1, e.x + m);
+        y0 = Math.min(y0, e.y - m);
+        y1 = Math.max(y1, e.y + m);
+      }
     }
     for (const e of things) {
       x0 = Math.min(x0, e.x - C.ENEMY_MARGIN);

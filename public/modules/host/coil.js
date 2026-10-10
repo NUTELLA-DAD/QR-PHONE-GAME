@@ -4,6 +4,7 @@
 import { config } from '../../config.js';
 import { targets } from './aim.js';
 import { pop } from './popups.js';
+import { creatureBeam } from './creatureSystem.js';
 import { mainShip } from './ships.js';
 import { toWorldX, toWorldY, aimToWorld } from './pose.js';
 
@@ -40,6 +41,7 @@ export function createCoil({ state, puff, credit }) {
     state.ship.shake = Math.max(state.ship.shake, 0.4);
     pop(state, e.x, e.y - 120, 'KA-ZAAAP!', '#9fe8ff', 1 + power);
     const shell = { owner };
+    if (state.creature) creatureBeam(state, e.x, e.y, dx, dy, C.RANGE, C.WIDTH, dmg * config.CREATURES.HURT.COIL, owner); // (a giant creature: each part the bolt crosses; its aim targets have no hp of their own, so the loop below skips them)
     for (const t of targets(state)) {
       const p = t.at(0);
       const rx = p.x - e.x;
