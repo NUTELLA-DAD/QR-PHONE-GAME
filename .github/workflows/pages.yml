@@ -2,8 +2,7 @@
 name: Showcase on GitHub Pages
 
 on:
-  push:
-    branches: [main]
+  # On hold (owner, 2026-10-09): run by hand from the Actions tab. To publish on every push again, add back:  push: branches: [main]
   workflow_dispatch:
 
 permissions:
