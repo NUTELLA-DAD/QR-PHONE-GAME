@@ -6,6 +6,7 @@ import { createCamera } from './camera.js';
 import { createSfx } from './sfx.js';
 import { createMenu } from './menu.js';
 import { createPerfGovernor, perfState } from './perf.js';
+import { autoDetect, rememberProbe } from '../view3d/detect.js'; // (WP14: no imports of its own, so Three.js is not loaded when the probe says 2D)
 import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility forward: the dev build below is applied before the simulation reads the layout)
 import { BUILDS } from './shipBuild.js';
 import { loadStartBuild } from './voyage.js';
@@ -36,9 +37,24 @@ const fitCanvas = () => {
   canvas.height = Math.round(window.innerHeight * pr);
   ctx.imageSmoothingQuality = 'high';
 };
+// WP14: 3D IS THE DEFAULT VIEW. The order: ?view=2d|3d in the address, then localStorage.airshipView (the pause menu's View button), then the GPU probe (view3d/detect.js: a discrete card -> 3D High,
+// integrated Intel / AMD or unknown -> 3D Medium, a software renderer or no WebGL 2 -> 2D). When the probe decides (nobody chose), the perf governor below also starts at the level it picked,
+// never climbs above its ceiling, and may step the view down to 2D for the session if even Low is too slow (stepDownTo2D, at a calm moment).
+const viewAsked = (() => {
+  const q = new URLSearchParams(location.search).get('view');
+  if (q === '2d' || q === '3d') return q;
+  try { const s = localStorage.getItem('airshipView'); if (s === '2d' || s === '3d') return s; } catch { /* (no storage) */ }
+  return '';
+})();
+const auto = autoDetect(location.search);
+const viewChoice = viewAsked || auto.view;
+const probeRules = !viewAsked && auto.view === '3d'; // (the probe governs the detail levels only while it chose the view itself)
+window.autoDetectInfo = auto; // (the F meter and the checks read it)
 // Automatic detail: lowers quality when frames get slow and brings it back later (see perf.js, config.PERF).
 const perf = createPerfGovernor({
-  onChange: () => fitCanvas(),
+  start: probeRules ? auto.level : null,
+  ceiling: () => (!v3.pinned && v3.active ? auto.ceiling : 3),
+  onChange: (level) => { fitCanvas(); if (!v3.pinned && v3.active && perf.getMode() === 'auto') rememberProbe({ level }); }, // (what this card settled on, for the next start)
   sharpOn: () => (Number(config.DISPLAY && config.DISPLAY.MAX_PIXEL_RATIO) || 1) > 1 && (window.devicePixelRatio || 1) > 1,
 });
 window.perfGov = perf; // handy for debugging in the browser console
@@ -119,17 +135,29 @@ if (playtest && playtest.mode === 'versus') armVersus(simulation, playtest, buil
 const camera = createCamera();
 // ONE renderer draws the whole sky: the background once, then every ship (her own art, crew and effects), the darkness and the HUD (render.js).
 const renderer = createRenderer({ ctx, state: simulation.state, canvas });
-// THE 3D VIEW (view3d/, 3D.md WP0): host.html?view=3d (or the pause menu's View button, remembered in localStorage.airshipView; the default is still 2D). The 3D canvas (#c3d) draws the
+// THE 3D VIEW (view3d/, 3D.md WP0): the default view since WP14 (see viewChoice above; host.html?view=2d or the pause menu's View button switches, remembered in localStorage.airshipView). The 3D canvas (#c3d) draws the
 // world with Three.js from the same game state; the 2D canvas turns transparent and draws only the HUD, the screen-edge arrows and the full-screen cards (render.js layers). Any WebGL failure, or the view throwing twice, drops back to the 2D renderer for the rest of the session (a note shows in the pause menu).
-const viewChoice = (() => {
-  const q = new URLSearchParams(location.search).get('view');
-  if (q === '2d' || q === '3d') return q;
-  try { const s = localStorage.getItem('airshipView'); if (s === '2d' || s === '3d') return s; } catch { /* (no storage) */ }
-  return '2d'; // (WP14 flips this default)
-})();
 const HUD_LAYERS = ['over3d', 'hud', 'arrows', 'marks']; // (WP10: 'marks' = the lit-target brackets and the eyes of the unlit; no 'background', 'ship', 'effects', 'dark' or 'film': the 3D scene and its lights draw those; 'over3d' = the name labels, call-outs and bars projected over the 3D picture)
-const v3 = { view: null, active: false, loading: false, fails: 0, broken: false, mode: viewChoice };
+const v3 = { view: null, active: false, loading: false, fails: 0, broken: false, mode: viewChoice, autoOff: false, wantOffSince: 0, pinned: !!viewAsked };
 window.view3dNote = '';
+// A small message at the bottom of the TV (WP14: "Switched to 2D for speed"). Fades out by itself; it never takes clicks.
+const toastEl = document.createElement('div');
+toastEl.style.cssText = 'position:fixed;left:24px;bottom:24px;z-index:60;font:bold 20px "Libre Baskerville",Georgia,serif;color:#fff7e0;background:rgba(40,30,22,.86);border:3px solid #f1e3bd;padding:8px 18px;border-radius:12px;opacity:0;transition:opacity .4s;pointer-events:none;white-space:nowrap';
+document.body.appendChild(toastEl);
+let toastTimer = 0;
+window.hostToast = (text, ms = 6000) => {
+  toastEl.textContent = text;
+  toastEl.style.opacity = '1';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.style.opacity = '0'; }, ms);
+};
+// Calm enough to change renderer without anyone noticing: the lobby, a shop / route vote, or no gunship, creature, boss, fire or tempo peak (Versus: anything but the fight itself).
+const calmNow = () => {
+  const S = simulation.state;
+  if (S.phase === 'lobby' || S.vote || S.paused) return true;
+  if (S.mode === 'versus' && S.match) return S.match.phase !== 'fight';
+  return !S.gunship && !S.creature && !S.boss && !(S.fires && S.fires.length) && !(S.tempo && S.tempo.phase === 'peak');
+};
 const v3settings = {
   sweep: false,
   get detail() { return perfState.level >= 2 ? 'high' : 'low'; }, // (the perf governor steps the 3D detail down too)
@@ -146,9 +174,24 @@ const drop3D = (reason) => { // back to the 2D renderer (reason = why, for the p
     if (v3.view) v3.view.dispose();
     v3.view = null;
     console.warn('view3d off:', reason);
+    if (window.hostToast) window.hostToast('3D stopped: playing in 2D'); // (a plain note; the pause menu says why)
   }
   fitCanvas();
 };
+// WP14: the governor is at its lowest level and frames are STILL slow: use the 2D renderer for the rest of the session (the player's saved View choice is left alone; the pause menu's View button
+// brings 3D back and from then on nothing switches it off again). Next start this card begins in 2D (detect.js remembers it).
+const stepDownTo2D = (why) => {
+  if (!v3.active) return false;
+  drop3D(null);
+  v3.autoOff = true;
+  v3.wantOffSince = 0;
+  window.view3dNote = 'Switched to 2D for speed (' + why + '). The View button tries 3D again.';
+  rememberProbe({ gaveUp: true });
+  if (window.hostToast) window.hostToast('Switched to 2D for speed');
+  console.info('view3d: switched to 2D for speed -', why);
+  return true;
+};
+window.autoStepDown = (why = 'asked') => stepDownTo2D(why); // (dev / checks: the same switch the governor makes)
 const use3D = async () => {
   if (v3.active || v3.loading || v3.broken) return;
   v3.loading = true;
@@ -171,9 +214,10 @@ const use3D = async () => {
 window.setView = async (mode) => {
   mode = mode === '3d' ? '3d' : '2d';
   v3.mode = mode;
+  v3.pinned = true; // (the player chose: the governor no longer steps the view down to 2D by itself)
   try { localStorage.setItem('airshipView', mode); } catch { /* (not remembered) */ }
   try { const u = new URL(location.href); u.searchParams.set('view', mode); history.replaceState(null, '', u); } catch { /* (no history) */ }
-  if (mode === '3d') { v3.broken = false; await use3D(); } else drop3D(null);
+  if (mode === '3d') { v3.broken = false; v3.autoOff = false; rememberProbe({ gaveUp: false }); await use3D(); } else drop3D(null);
   return v3.active ? '3d' : '2d';
 };
 window.viewIs3D = () => v3.active;
@@ -190,6 +234,7 @@ window.viewIs3D = () => v3.active;
 window.view3dDebug = () => ({ view: v3.view, lastView: window.__lastView }); // (dev: the HUD alignment check reads these)
 const drawFrame = (now, view) => {
   window.__lastView = view;
+  if (Number.isFinite(window.__frozenNow)) now = window.__frozenNow; // (dev / the screenshot check: the picture's clock is held by hand so a scene is the same every time)
   if (v3.active && v3.view) {
     let ok = false;
     try {
@@ -284,8 +329,9 @@ const meterTick = (now, gap, drawMs) => {
     meter.textContent = `${Math.round((meterN * 1000) / (now - meterT))} fps | slowest ${Math.round(meterWorst)} ms | draw ${(meterDraw / meterN).toFixed(1)} ms | ${canvas.width}x${canvas.height} | ${perf.label()}`;
     if (v3.active && v3.view) { // (3D: what the graphics card is asked to draw)
       const s = v3.view.stats();
-      meter.textContent += `\n3D: ${s.calls} draw calls | ${Math.round(s.tris / 1000)}k tris | js ${s.jsMs.toFixed(1)} ms | render ${s.renderMs.toFixed(1)} ms | ${s.w}x${s.h}`;
+      meter.textContent += `\n3D ${s.tier}: ${s.calls} draw calls | ${Math.round(s.tris / 1000)}k tris | js ${s.jsMs.toFixed(1)} ms | render ${s.renderMs.toFixed(1)} ms | ${s.w}x${s.h}`;
     }
+    meter.textContent += `\nview ${v3.active ? '3D' : '2D'} (${viewAsked ? 'chosen: ' + viewAsked : v3.autoOff ? 'switched to 2D for speed' : 'auto'}) | detect: ${auto.text}${auto.remembered ? ' [remembered]' : ''}`;
   }
   window.__meter = { fps: Math.round((meterN * 1000) / (now - meterT)), slowest: meterWorst, draw: meterDraw / meterN, v3: v3.active && v3.view ? v3.view.stats() : null };
   meterT = now;
@@ -319,6 +365,12 @@ function frame(now) {
   const drawMs = performance.now() - d0;
   meterTick(now, gap, drawMs);
   if (!paused) perf.update(now, gap, drawMs);
+  // WP14: still too slow at the lowest level (and nobody chose 3D by hand): leave 3D for the session, at a calm moment if there is one soon (config.PERF.TO_2D_WAIT).
+  if (v3.active && !v3.pinned && perf.struggling()) {
+    if (!v3.wantOffSince) v3.wantOffSince = now;
+    if (calmNow()) stepDownTo2D('too slow even on Low');
+    else if (now - v3.wantOffSince > (Number(config.PERF && config.PERF.TO_2D_WAIT) || 60) * 1000) stepDownTo2D('too slow even on Low, no calm moment came');
+  } else v3.wantOffSince = 0;
 }
 
 // Canvas text needs the bundled fonts to be loaded first: start drawing once they are (or after 2 s at worst).

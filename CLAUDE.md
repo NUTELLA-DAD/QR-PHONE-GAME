@@ -22,6 +22,12 @@ and use their phone browser as the controller. The roadmap is in **PLAN.md**. Wo
 - Phones: big touch targets, `touch-action: none`, no long-press menus, auto-reconnect via saved token.
 - Factions are fictional. Never use real national insignia.
 
+## 3D view (since 2026-10-10)
+- The TV draws in 3D by default (Three.js, `public/modules/view3d/`); 2D (`render.js`) is the fallback and the HUD layer on top. The plan and per-package notes are in **3D.md**.
+- The 2D simulation stays authoritative; Rapier (bundled in `public/vendor/rapier/`) only moves 3D wreckage. Never make gameplay depend on the 3D view.
+- No wobble: stepped 8 fps keys, no sine of time in `view3d/` (`node tools/buildsim.mjs --check-3d-lint`).
+- Gate for 3D work: `node tools/buildsim.mjs --check-3d` (loads, screenshots, perf, 2D fallback, offline), plus `--check-botsim` byte-identical.
+
 ## How to work
 - For each task: say what you will change, make the change, run the server and check for errors,
   then summarise what changed and how the user can test it.

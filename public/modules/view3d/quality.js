@@ -4,6 +4,8 @@
 //   Medium: bloom + colour grade + finish + FXAA, sun shadows 2048, 2 lantern lights a ship.
 //   Low:    the colour grade only (no bloom, no finish, no anti-aliasing), no shadows, no lantern lights (the lamps still glow as plain bright colour), pixel ratio 0.75.
 //
+// AUTO-DETECT (WP14, detect.js): discrete GPU -> High, integrated Intel / AMD (and anything unknown) -> Medium, software renderer / no WebGL 2 -> 2D. Then host/perf.js steps
+// High -> Medium -> Low -> 2D when frames are slow and back up when there is room (never above the probe's ceiling); host/main.js owns the 2D switch.
 // The tier comes from (in this order): ?tier=high|medium|low in the address, the settings' `tier` (a name or a function, the host maps the perf governor's level to it, tierFromLevel),
 // then the old Detail setting (high -> high, low -> low). The kill-switches live in style.js `look` (bloom, lut, grain, fog, rim, lanterns, shadows, post);
 // the address sets them with ?look=nobloom,nofog,noshadows (a comma list of "no<switch>" / "<switch>"; "nopost" = no composer at all, the old direct draw with tone mapping).

@@ -2688,7 +2688,7 @@ export const config = {
   // lowers detail one level (sharp screen, then textures/darkness resolution/background strips, then clouds and puffs);
   // after RISE_SECS of comfortable speed it climbs back (a flip-flop doubles the wait, up to RISE_MAX_SECS).
   // AUTO false = no automatic changes (the pause menu "Detail" button can still force a level).
-  PERF: { AUTO: true, BUDGET_MS: 12, MIN_FPS: 50, DROP_SECS: 2, RISE_SECS: 10, RISE_MAX_SECS: 160, DARK_RES_LOW: 6 },
+  PERF: { AUTO: true, BUDGET_MS: 12, MIN_FPS: 50, DROP_SECS: 2, RISE_SECS: 10, RISE_MAX_SECS: 160, DARK_RES_LOW: 6, GIVEUP_SECS: 8, TO_2D_WAIT: 60 }, // (WP14: GIVEUP_SECS = still slow at the lowest level for this long -> the 3D view steps down to 2D; TO_2D_WAIT = at most this many seconds waiting for a calm moment first)
   // Ship art (shipArt.js): the static parts of the ship are baked into offscreen pictures. BAKE_SS = how many times the screen's
   // pixel density they are drawn at; SMOOTH = imageSmoothingQuality when they are blitted (low is fastest); BAKE_ZOOM = re-bake
   // when the zoom has moved by this share; OFF true = always draw the ship directly (the old way).
