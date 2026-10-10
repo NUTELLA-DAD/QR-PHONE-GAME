@@ -13,6 +13,10 @@ import { config } from '../../../config.js';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const TAU = Math.PI * 2;
+// FIX (fix_ship): the envelope is a squat oval in depth and rides BEHIND the whole gondola (the camera looks from +z, so a full-depth bag hung in front of the top deck, its nest ladders and its crew). The group's z
+// (and the x that keeps it straight behind the ship while she turns) is set every frame by shipMesh.step from the `back` number below; at the gameplay camera it lands on the 2D position (the camera's lens keeps
+// the plane z = 0 exact; a body 300 units behind it only looks a few percent smaller and a little higher, which gives the top deck more room).
+export const BAG_RZ = 0.62; // depth of the lathe as a share of its height (was 0.96)
 const TINT = { hydrogen: { rgb: [0.804, 0.2, 0.14], k: 0.38 }, hot: { rgb: [0.941, 0.627, 0.235], k: 0.3 } };
 
 // the lathe: returns helpers to put things ON the surface (ribs, lacing, patches, rigging points)
@@ -119,7 +123,7 @@ export function buildBag(Gb, ctx, i, n) {
   const gas = gasKey(Gb), tintSpec = TINT[gas], seed = hashOf(key);
   let rgb = rgbOf(T.bag);
   if (tintSpec) rgb = mixRgb(rgb, tintSpec.rgb, tintSpec.k);
-  const rzK = 0.96, nowTop = Gb.ry;
+  const rzK = BAG_RZ, nowTop = Gb.ry;
   const env = envelope(bagB, { rx: Gb.rx, ry: Gb.ry, rzK, G: 20, tail: 1.75, nose: 2.0, rgb, seed });
   const nR = env.ribs(rgbOf(T.bagShade), rgbOf(T.trim), [Math.round(Math.max(5, Math.round(Gb.rx / 95)) / 2)]);
   const lace = shade(rgbOf(T.bag), 0.95);
@@ -147,7 +151,7 @@ export function buildBag(Gb, ctx, i, n) {
     geo.translate(0, 0, -4);
     for (let q = 0; q < 4; q++) {
       const ang = (q * Math.PI) / 2, zk = q % 2 ? rzK : 1;
-      const m = new THREE.Matrix4().makeRotationX(ang);
+      const m = new THREE.Matrix4().makeRotationX(ang).multiply(new THREE.Matrix4().makeScale(1, zk, 1)); // (the side fins are as long as the oval is deep)
       bagB.geo(T.fin, geo, m, 3, { tr: 'canvas2' });
       for (const t of [0.22, 0.5, 0.78]) { // ribs on both faces
         const p0 = [pts[0][0] + (pts[1][0] - pts[0][0]) * t, pts[0][1] + (pts[1][1] - pts[0][1]) * t], p1 = [pts[3][0] + (pts[2][0] - pts[3][0]) * t, pts[3][1] + (pts[2][1] - pts[3][1]) * t];
@@ -156,7 +160,6 @@ export function buildBag(Gb, ctx, i, n) {
           bagB.rod(T.rail, a, c, 1.7, 0.8, { tr: 'woodC', seg: 1e9 });
         }
       }
-      void zk;
     }
   };
   if (i === 0) finSet(1, 1);
@@ -166,7 +169,7 @@ export function buildBag(Gb, ctx, i, n) {
   // the twin envelope rides higher behind the first
   if (Gb.twin) {
     const twB = ctx.dynBatch(key + ':twin');
-    const tw = envelope(twB, { rx: Gb.rx * 0.7, ry: Gb.ry * 0.62, rzK: 0.96, G: 16, tail: 1.8, nose: 2.0, rgb, seed: seed ^ 0x1234, ow: 5 });
+    const tw = envelope(twB, { rx: Gb.rx * 0.7, ry: Gb.ry * 0.62, rzK, G: 16, tail: 1.8, nose: 2.0, rgb, seed: seed ^ 0x1234, ow: 5 });
     tw.ribs(rgbOf(T.bagShade), rgbOf(T.bagShade), []);
     tw.lacing(Math.PI / 2, tw.L * 0.06, tw.L * 0.94, lace);
     const twg = twB.buildGroup({ cast: true });
@@ -175,18 +178,8 @@ export function buildBag(Gb, ctx, i, n) {
   }
   grp.add(bagB.buildGroup({ cast: true }));
 
-  // catenary rigging: ropes sag between plates on the flank and the rail of the top deck
-  const cat = ctx.catwalk;
-  const catY = cat ? cat.y : 470;
-  for (const f of [-0.54, -0.28, 0, 0.28, 0.54]) for (const sgn of [-1, 1]) {
-    const x = Gb.cx + f * Gb.rx, aAtt = sgn > 0 ? -0.62 : Math.PI + 0.62, sA = env.arcOfX(f * Gb.rx), sp = env.surf(sA, aAtt, -4);
-    const top = V(X(Gb.cx) + sp.p[0], Y(Gb.cy) + sp.p[1], sp.p[2]), low = V(X(x - 30), Y(catY - 4), sgn * W * 0.85);
-    const len = top.distanceTo(low), sag = len * 0.1, pts = [];
-    for (let k = 0; k <= 6; k++) { const t = k / 6, p = low.clone().lerp(top, t); p.y -= sag * 4 * t * (1 - t); pts.push(p); }
-    for (let k = 0; k < 6; k++) rig.rod('#4a3a2a', pts[k], pts[k + 1], 2.1, 0, { tr: 'rope', seg: 1e9 });
-    rig.box(T.iron, top.x, top.y, top.z, 9, 9, 9, 0, 0.6, 0.6, 0, { tr: 'iron' }); // the thimble on the flank
-    rig.box(T.iron, low.x, low.y, low.z, 7, 7, 7, 0, 0.6, 0.6, 0, { tr: 'iron' });
-  }
-  void nowTop; void P; void config; void ctx.content;
-  return { key, batches: [rig], dyn: [{ role: 'bag', key, node: grp, G: Gb, i }], bounds: { x0: X(Gb.cx - Gb.rx), x1: X(Gb.cx + Gb.rx), y0: Y(Gb.cy + Gb.ry), y1: Y(Gb.cy - Gb.ry), z0: -Gb.ry, z1: Gb.ry } };
+  // (the catenary rigging of WP2 is gone: the envelope no longer hangs over the deck, so there is nothing for the ropes to run to; they would only have crossed the crew's lane)
+  const back = W + 10 + 1.14 * rzK * Gb.ry; // how far behind the gondola's far wall the group's centre rides: the whole oval (swell included) clears the top deck's far rail
+  void nowTop; void P; void config; void ctx.content; void rig;
+  return { key, batches: [rig], dyn: [{ role: 'bag', key, node: grp, G: Gb, i, back, baseX: X(Gb.cx) }], bounds: { x0: X(Gb.cx - Gb.rx), x1: X(Gb.cx + Gb.rx), y0: Y(Gb.cy + Gb.ry), y1: Y(Gb.cy - Gb.ry), z0: -back - Gb.ry * rzK, z1: -back + Gb.ry * rzK } };
 }

@@ -5,6 +5,20 @@ import { THREE } from '../style.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
+// (fix_ship) Things hung on the FAR wall (pipes, racks, extinguishers, vents, valves, the sick bay) are written with the far wall at -z; farSides builds each piece twice, as given in the 'neg' layer and mirrored
+// in z in the 'pos' layer, so the copy on the far side of the ship (whichever way she faces) is the one that shows, and nothing hangs on the near wall in front of the crew.
+function farSides(b) {
+  const flip = (v) => V(v.x, v.y, -v.z);
+  return {
+    box: (c, cx, cy, cz, ...r) => { b.neg.box(c, cx, cy, cz, ...r); b.pos.box(c, cx, cy, -cz, ...r); },
+    cyl: (c, cx, cy, cz, ...r) => { b.neg.cyl(c, cx, cy, cz, ...r); b.pos.cyl(c, cx, cy, -cz, ...r); },
+    cone: (c, cx, cy, cz, ...r) => { b.neg.cone(c, cx, cy, cz, ...r); b.pos.cone(c, cx, cy, -cz, ...r); },
+    sphere: (c, cx, cy, cz, ...r) => { b.neg.sphere(c, cx, cy, cz, ...r); b.pos.sphere(c, cx, cy, -cz, ...r); },
+    rod: (c, p, q, ...r) => { b.neg.rod(c, p, q, ...r); b.pos.rod(c, flip(p), flip(q), ...r); },
+    geo: (c, g, m, ...r) => { b.neg.geo(c, g, m, ...r); const m2 = m.clone(); m2.elements[14] = -m2.elements[14]; b.pos.geo(c, g, m2, ...r); },
+  };
+}
+
 export function buildStation(s, ctx) {
   const { T, W, X, Y, P, FZ } = ctx;
   const key = 'station:' + s.n, b = ctx.part(key), dyn = [];
@@ -85,84 +99,112 @@ export function buildStation(s, ctx) {
   return { key, batches: [b], dyn, bounds: b.bounds };
 }
 
+// ---- the ways between decks (fix_ship) -----------------------------------------------------------------------------------------------------------------------------------------------------
+// Every ladder, rope, pole and stair stands in its LANE (registry.js connLane: toward the camera, in front of the fittings and behind the crew) and is built twice, once on each side of the ship: the copy at local +z is
+// in the 'neg' layer, the copy at -z in the 'pos' layer, and the ship's shader hides the one that would be on the far side (see kit.js), so the way is always on the camera's side whichever way she faces. Where it comes up
+// through a floor the shader cuts a hatch (ctx.carves) and a low coaming runs round it. Nothing runs across the way: the rails, rungs and treads are the only things in its lane.
+const copies = (b) => [[b.neg, 1], [b.pos, -1]];
+function hatchHole(ctx, b, yDeck, xa, xb, lane, halfZ, below = 16) {
+  const { T, X } = ctx;
+  for (const [sink, s] of copies(b)) {
+    ctx.carves.push({ box: [X(xa), -(yDeck + below), X(xb), -yDeck + 3, s * lane - halfZ, s * lane + halfZ], side: s });
+    const cx = X((xa + xb) / 2), y = -yDeck + 2.6, w = xb - xa;
+    for (const dz of [-halfZ, halfZ]) sink.box(T.rail, cx, y, s * lane + dz, w + 5, 5, 4, 0.8, 0, 0, 0, { tr: 'woodC' });
+    for (const x of [xa, xb]) sink.box(T.rail, X(x), y, s * lane, 4, 5, halfZ * 2 + 4, 0.8, 0, 0, 0, { tr: 'woodC' });
+  }
+}
+
 export function buildConnector(c, ctx, i) {
-  const { T, X, Y, laneZ, platY } = ctx;
+  const { T, X, Y, platY } = ctx;
   const key = c.type + ':' + i, b = ctx.part(key), dyn = [];
-  const yt = platY(c.top), yb = platY(c.bottom);
+  const yt = platY(c.top), yb = platY(c.bottom), lane = ctx.connLane(c);
   if (c.type === 'ladder' || c.type === 'rope') {
-    const rope = c.type === 'rope', rail = rope ? T.rope : T.rail, rr = rope ? 2.4 : 3.2, tr = rope ? 'rope' : 'woodC';
-    for (const dx of [-16, 16]) b.rod(rail, V(X(c.xTop + dx), Y(yt), laneZ), V(X(c.xBottom + dx), Y(yb), laneZ), rr, rope ? 0 : 1, { tr });
-    const n = Math.max(2, Math.floor(Math.abs(yb - yt) / 30));
-    for (let k = 1; k < n; k++) { const t = k / n; b.box(rail, X(c.xTop + (c.xBottom - c.xTop) * t), Y(yt + (yb - yt) * t), laneZ, 34, rope ? 3 : 4, 4, 0, 0, 0, 0, { tr }); }
-  } else if (c.type === 'pole') {
-    b.rod(T.brass, V(X(c.xTop), Y(yt), laneZ + 24), V(X(c.xBottom), Y(yb), laneZ + 24), 4.5, 1, { tr: 'brass' });
-  } else if (c.type === 'stairs') {
-    const n = Math.max(4, Math.round(Math.abs(c.xBottom - c.xTop) / 24));
-    for (let k = 0; k <= n; k++) {
-      const t = k / n;
-      b.box(T.deckAlt, X(c.xTop + (c.xBottom - c.xTop) * t), Y(yt + (yb - yt) * t + 4), laneZ + 40, Math.abs(c.xBottom - c.xTop) / n + 2, 8, 90, 1.5, 0, 0, 0, { tr: 'deck' });
+    const rope = c.type === 'rope', rail = rope ? T.rope : T.rail, rr = rope ? 2.4 : 2.6, tr = rope ? 'rope' : 'woodC';
+    const dy = yb - yt, dxl = c.xBottom - c.xTop, ln = Math.hypot(dy, dxl) || 1, ext = rope ? 0 : 40; // (a ladder stands a hand-hold's height above the floor it comes up through)
+    const xe = c.xTop - (dxl / ln) * ext, ye = yt - (dy / ln) * ext;
+    const n = Math.max(2, Math.floor(Math.abs(dy) / (rope ? 44 : 32)));
+    for (const [sink, s] of copies(b)) {
+      const z = s * lane;
+      for (const dx of [-16, 16]) sink.rod(rail, V(X(xe + dx), Y(ye), z), V(X(c.xBottom + dx), Y(yb), z), rr, rope ? 0 : 1, { tr });
+      for (let k = 1; k < n; k++) { const t = k / n; sink.box(rail, X(c.xTop + dxl * t), Y(yt + dy * t), z, 34, rope ? 3 : 4, 4, 0, 0, 0, 0, { tr }); }
+      if (ext) sink.box(rail, X(xe), Y(ye + 3), z, 38, 5, 5, 0.6, 0, 0, 0, { tr }); // (the top rung: a hand-hold above the hatch, so the rails read as a ladder coming up)
     }
-    b.rod(T.rail, V(X(c.xTop), Y(yt - 40), laneZ - 3), V(X(c.xBottom), Y(yb - 40), laneZ - 3), 3, 1, { tr: 'woodC' });
-    b.rod(T.rail, V(X(c.xTop), Y(yt + 8), laneZ - 3), V(X(c.xBottom), Y(yb + 8), laneZ - 3), 3.4, 1, { tr: 'woodC' }); // the stringer under the treads
+    hatchHole(ctx, b, yt, c.xTop - 25, c.xTop + 25, lane, 30, 16);
+  } else if (c.type === 'pole') {
+    for (const [sink, s] of copies(b)) sink.rod(T.brass, V(X(c.xTop), Y(yt - 36), s * lane), V(X(c.xBottom), Y(yb), s * lane), 4.5, 1, { tr: 'brass' });
+    hatchHole(ctx, b, yt, c.xTop - 14, c.xTop + 14, lane, 20, 16);
+  } else if (c.type === 'stairs') {
+    const n = Math.max(4, Math.round(Math.abs(c.xBottom - c.xTop) / 24)), depth = Math.min(90, lane * 1.5);
+    for (const [sink, s] of copies(b)) {
+      for (let k = 0; k <= n; k++) {
+        const t = k / n;
+        sink.box(T.deckAlt, X(c.xTop + (c.xBottom - c.xTop) * t), Y(yt + (yb - yt) * t + 4), s * lane, Math.abs(c.xBottom - c.xTop) / n + 2, 8, depth, 1.5, 0, 0, 0, { tr: 'deck' });
+      }
+      sink.rod(T.rail, V(X(c.xTop), Y(yt - 40), s * (lane - depth / 2 + 3)), V(X(c.xBottom), Y(yb - 40), s * (lane - depth / 2 + 3)), 3, 1, { tr: 'woodC' }); // (the handrail on the far edge, so nothing stands in front of the treads)
+      sink.rod(T.rail, V(X(c.xTop), Y(yt + 8), s * (lane - depth / 2 + 3)), V(X(c.xBottom), Y(yb + 8), s * (lane - depth / 2 + 3)), 3.4, 1, { tr: 'woodC' }); // the stringer under the treads
+    }
+    const dir = Math.sign(c.xBottom - c.xTop) || 1;
+    hatchHole(ctx, b, yt, Math.min(c.xTop, c.xTop + dir * 90) - 12, Math.max(c.xTop, c.xTop + dir * 90) + 12, lane, depth / 2 + 4, 34);
   } else if (c.type === 'lift') {
-    for (const dx of [-38, 38]) b.rod(T.iron, V(X(c.xTop + dx), Y(yt - 10), laneZ + 20), V(X(c.xTop + dx), Y(yb + 5), laneZ + 20), 3.5, 1.5, { tr: 'iron' });
+    for (const [sink, s] of copies(b)) for (const dx of [-38, 38]) sink.rod(T.iron, V(X(c.xTop + dx), Y(yt - 10), s * (lane - 22)), V(X(c.xTop + dx), Y(yb + 5), s * (lane - 22)), 3.5, 1.5, { tr: 'iron' });
     const cage = ctx.dynBatch(key + ':cage');
     cage.box(T.brass, 0, 6, 0, 80, 10, 70, 2.5, 0, 0, 0, { tr: 'brass' });
     for (const dx of [-36, 36]) for (const dz of [-30, 30]) cage.box(T.brass, dx, 66, dz, 5, 120, 5, 1.5, 0, 0, 0, { tr: 'brass' });
     cage.box(T.brass, 0, 128, 0, 80, 8, 70, 2.5, 0, 0, 0, { tr: 'brass' });
     for (const yy of [40, 86]) cage.box(T.brass, 0, yy, -30, 70, 3, 3, 0.6, 0, 0, 0, { tr: 'brass' }); // a gate rail
     const cg = cage.buildGroup();
-    cg.position.set(X(c.xTop), Y(yb), laneZ + 20);
+    cg.position.set(X(c.xTop), Y(yb), lane);
     ctx.content.add(cg);
-    dyn.push({ role: 'liftCage', key, node: cg });
+    dyn.push({ role: 'liftCage', key, node: cg, lane });
+    hatchHole(ctx, b, yt, c.xTop - 46, c.xTop + 46, lane, 42, 16);
   } else ctx.note('connector ' + c.type + ' (not drawn)');
   return { key, batches: [b], dyn, bounds: b.bounds };
 }
 
 export function buildPipe(p, ctx, i) {
-  const { T, W, X, Y } = ctx, key = 'pipe:' + (p.to || i) + ':' + i, b = ctx.part(key);
+  const { T, W, X, Y } = ctx, key = 'pipe:' + (p.to || i) + ':' + i, b = ctx.part(key), fb = farSides(b);
   const pts = p.points.map(([x, y]) => V(X(x), Y(y), -W + 26));
   const pc = T.brass;
   for (let k = 0; k + 1 < pts.length; k++) {
-    b.rod(pc, pts[k], pts[k + 1], 5, 1.2, { tr: 'brass' });
+    fb.rod(pc, pts[k], pts[k + 1], 5, 1.2, { tr: 'brass' });
     const n = Math.floor(pts[k].distanceTo(pts[k + 1]) / 90);
-    for (let j = 1; j <= n; j++) { const t = j / (n + 1), q = pts[k].clone().lerp(pts[k + 1], t); b.box(T.iron, q.x, q.y, q.z, 9, 9, 6.5, 0.6, 0, 0, 0, { tr: 'iron' }); } // pipe clamps
+    for (let j = 1; j <= n; j++) { const t = j / (n + 1), q = pts[k].clone().lerp(pts[k + 1], t); fb.box(T.iron, q.x, q.y, q.z, 9, 9, 6.5, 0.6, 0, 0, 0, { tr: 'iron' }); } // pipe clamps
   }
-  for (const q of pts) b.box(T.brass, q.x, q.y, q.z, 11, 11, 11, 0.8, 0, 0, 0, { tr: 'brass' });
-  if (p.valve) { b.cyl('#c4574d', X(p.valve[0]), Y(p.valve[1]), -W + 34, 12, 4, 1.2, Math.PI / 2, 0, 0, undefined, { tr: 'plain' }); b.rod(T.brass, V(X(p.valve[0]), Y(p.valve[1]), -W + 26), V(X(p.valve[0]), Y(p.valve[1]), -W + 34), 2.4, 0, { tr: 'brass' }); }
+  for (const q of pts) fb.box(T.brass, q.x, q.y, q.z, 11, 11, 11, 0.8, 0, 0, 0, { tr: 'brass' });
+  if (p.valve) { fb.cyl('#c4574d', X(p.valve[0]), Y(p.valve[1]), -W + 34, 12, 4, 1.2, Math.PI / 2, 0, 0, undefined, { tr: 'plain' }); fb.rod(T.brass, V(X(p.valve[0]), Y(p.valve[1]), -W + 26), V(X(p.valve[0]), Y(p.valve[1]), -W + 34), 2.4, 0, { tr: 'brass' }); }
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }
 
 export function buildRack(r, ctx, i) {
-  const { T, W, X, Y, platY } = ctx, key = 'rack:' + i, b = ctx.part(key), y = platY(r.d);
-  b.box('#6b4a32', X(r.x), Y(y - 56), -W + 18, 44, 56, 6, 1.5, 0, 0, 0, { tr: 'woodC' });
-  b.box(r.kind === 'sword' ? '#9aa1a6' : r.kind === 'hookshot' ? T.brass : '#8a6444', X(r.x), Y(y - 56), -W + 23, r.kind === 'sword' ? 6 : 30, r.kind === 'sword' ? 48 : 8, 4, 0, 0, 0, 0, { tr: r.kind === 'hookshot' ? 'brass' : r.kind === 'sword' ? 'iron' : 'woodC' });
-  if (r.kind === 'hammer') b.box(T.iron, X(r.x), Y(y - 66), -W + 24, 18, 12, 6, 0.8, 0, 0, 0, { tr: 'iron' });
+  const { T, W, X, Y, platY } = ctx, key = 'rack:' + i, b = ctx.part(key), fb = farSides(b), y = platY(r.d);
+  fb.box('#6b4a32', X(r.x), Y(y - 56), -W + 18, 44, 56, 6, 1.5, 0, 0, 0, { tr: 'woodC' });
+  fb.box(r.kind === 'sword' ? '#9aa1a6' : r.kind === 'hookshot' ? T.brass : '#8a6444', X(r.x), Y(y - 56), -W + 23, r.kind === 'sword' ? 6 : 30, r.kind === 'sword' ? 48 : 8, 4, 0, 0, 0, 0, { tr: r.kind === 'hookshot' ? 'brass' : r.kind === 'sword' ? 'iron' : 'woodC' });
+  if (r.kind === 'hammer') fb.box(T.iron, X(r.x), Y(y - 66), -W + 24, 18, 12, 6, 0.8, 0, 0, 0, { tr: 'iron' });
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }
 
 export function buildExtinguisher(e, ctx, i) {
-  const { W, X, Y, platY } = ctx, key = 'extinguisher:' + i, b = ctx.part(key), y = platY(e.d);
-  b.cyl('#c4574d', X(e.x), Y(y - 30), -W + 24, 8, 36, 1.5, 0, 0, 0, undefined, { tr: 'plain' });
-  b.cyl('#2b2622', X(e.x), Y(y - 52), -W + 24, 4, 8, 0, 0, 0, 0, undefined, { tr: 'iron' });
-  b.rod('#6a6568', V(X(e.x), Y(y - 40), -W + 24), V(X(e.x + 14), Y(y - 32), -W + 24), 1.2, 0, { tr: 'iron' }); // the hose
+  const { W, X, Y, platY } = ctx, key = 'extinguisher:' + i, b = ctx.part(key), fb = farSides(b), y = platY(e.d);
+  fb.cyl('#c4574d', X(e.x), Y(y - 30), -W + 24, 8, 36, 1.5, 0, 0, 0, undefined, { tr: 'plain' });
+  fb.cyl('#2b2622', X(e.x), Y(y - 52), -W + 24, 4, 8, 0, 0, 0, 0, undefined, { tr: 'iron' });
+  fb.rod('#6a6568', V(X(e.x), Y(y - 40), -W + 24), V(X(e.x + 14), Y(y - 32), -W + 24), 1.2, 0, { tr: 'iron' }); // the hose
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }
 
 export function buildVent(v, ctx, i) {
-  const { T, W, X, Y, platY } = ctx, key = 'vent:' + i, b = ctx.part(key), y = platY(v.d);
-  b.cyl(T.iron, X(v.x), Y(y - 45), -W + 52, 13, 90, 2, 0, 0, 0, undefined, { tr: 'iron' });
-  b.cyl('#c4574d', X(v.x), Y(y - 70), -W + 66, 9, 4, 1, Math.PI / 2, 0, 0, undefined, { tr: 'plain' });
-  b.cone(T.iron, X(v.x), Y(y - 96), -W + 52, 15, 12, 1.4, 0, 0, 0, { tr: 'iron' });
+  const { T, W, X, Y, platY } = ctx, key = 'vent:' + i, b = ctx.part(key), fb = farSides(b), y = platY(v.d);
+  fb.cyl(T.iron, X(v.x), Y(y - 45), -W + 52, 13, 90, 2, 0, 0, 0, undefined, { tr: 'iron' });
+  fb.cyl('#c4574d', X(v.x), Y(y - 70), -W + 66, 9, 4, 1, Math.PI / 2, 0, 0, undefined, { tr: 'plain' });
+  fb.cone(T.iron, X(v.x), Y(y - 96), -W + 52, 15, 12, 1.4, 0, 0, 0, { tr: 'iron' });
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }
 
 export function buildMedbay(q, ctx) {
-  const { T, W, X, Y, P, platY } = ctx, key = 'medbay', b = ctx.part(key), y = platY(P.findIndex((o) => o.id === q.p));
-  b.box('#f3ead6', X(q.x), Y(y - 45), -W + 40, 70, 90, 30, 2, 0, 0, 0, { tr: 'canvas3' });
-  b.box(T.trim, X(q.x), Y(y - 60), -W + 56, 50, 14, 2, 0, 0, 0, 0, { tr: 'plain' });
-  b.box('#c4574d', X(q.x), Y(y - 60), -W + 57.4, 20, 4, 1, 0, 0, 0, 0, { tr: 'plain' }); // the cross
-  b.box('#c4574d', X(q.x), Y(y - 60), -W + 57.4, 4, 20, 1, 0, 0, 0, 0, { tr: 'plain' });
+  const { T, W, X, Y, P, platY } = ctx, key = 'medbay', b = ctx.part(key), fb = farSides(b), y = platY(P.findIndex((o) => o.id === q.p));
+  fb.box('#f3ead6', X(q.x), Y(y - 45), -W + 40, 70, 90, 30, 2, 0, 0, 0, { tr: 'canvas3' });
+  fb.box(T.trim, X(q.x), Y(y - 60), -W + 56, 50, 14, 2, 0, 0, 0, 0, { tr: 'plain' });
+  fb.box('#c4574d', X(q.x), Y(y - 60), -W + 57.4, 20, 4, 1, 0, 0, 0, 0, { tr: 'plain' }); // the cross
+  fb.box('#c4574d', X(q.x), Y(y - 60), -W + 57.4, 4, 20, 1, 0, 0, 0, 0, { tr: 'plain' });
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }
 
@@ -181,8 +223,8 @@ export function buildBallast(o, ctx, i) {
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }
 export function buildGasValve(v, ctx, i) {
-  const { T, W, X, Y } = ctx, key = 'gasValve:' + i, b = ctx.part(key), y = ctx.platY(v.d);
-  b.cyl(T.iron, X(v.x), Y(y - 30), -W + 44, 3.4, 60, 1, 0, 0, 0, undefined, { tr: 'iron' });
-  b.geo(T.brass, new THREE.TorusGeometry(12, 2.4, 5, 12), new THREE.Matrix4().makeTranslation(X(v.x), Y(y - 62), -W + 44), 1, { tr: 'brass', uv: 'fit' });
+  const { T, W, X, Y } = ctx, key = 'gasValve:' + i, b = ctx.part(key), fb = farSides(b), y = ctx.platY(v.d);
+  fb.cyl(T.iron, X(v.x), Y(y - 30), -W + 44, 3.4, 60, 1, 0, 0, 0, undefined, { tr: 'iron' });
+  fb.geo(T.brass, new THREE.TorusGeometry(12, 2.4, 5, 12), new THREE.Matrix4().makeTranslation(X(v.x), Y(y - 62), -W + 44), 1, { tr: 'brass', uv: 'fit' });
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }

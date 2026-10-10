@@ -35,9 +35,15 @@ const SHELL_VERT_BEGIN = 'vec3 transformed = vec3( position ) + onormal * aShell
 const SHELL_VERT_PROJECT = '#include <project_vertex>\n  if ( aLayer * uHide > 0.5 ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );';
 // WP5 SCARS: the holes parts left in the hull. Up to 8 rectangles (content coordinates x0 y0 x1 y1, uScar / uScarN, one set per ship's materials) are cut out of the hull's two WALLS (aLayer is not 0) with a ragged
 // edge that wanders by a hash of the position (steady: nothing moves), and the plank next to the edge is charred. Bags, rigging and everything in the 'main' layer are not touched (the 2D scar only carves the hull too).
-const SCAR_VERT_COMMON = 'varying vec2 vScarP; varying float vWall;';
-const SCAR_VERT_BEGIN = 'vScarP = position.xy; vWall = abs( aLayer );';
-const SCAR_FRAG = `uniform vec4 uScar[8]; uniform float uScarN; varying vec2 vScarP; varying float vWall; float scarRim = 0.0;
+// FIX_SHIP CARVES: doorways and ladder hatches. Up to CARVE_N boxes (content coordinates, uCarveA = x0 y0 x1 y1, uCarveB = z0 z1 walls) are cut out (discarded, picture and ink) of everything that is STRUCTURE: the hull's
+// walls (aLayer -1 / +1), and the main layer of the hull, decks and rooms (assemble() gives those aLayer 0.25: never hidden, but carvable). `walls` boxes cut a wall whatever its z (a doorway through the far wall). Ladders,
+// stations, crew and the rest are never carved. The boxes that are active depend on the camera's side (kit.js assemble: setCarves), because a ladder stands on the near side of the ship.
+export const CARVE_N = 48;
+const SCAR_VERT_COMMON = 'varying vec2 vScarP; varying float vWall; varying vec3 vCarveP; varying float vCarveOk;';
+const SCAR_VERT_BEGIN = 'vScarP = position.xy; vWall = abs( aLayer ); vCarveP = position; vCarveOk = abs( aLayer ) > 0.1 ? 1.0 : 0.0;';
+const SCAR_FRAG = `uniform vec4 uCarveA[${CARVE_N}]; uniform vec4 uCarveB[${CARVE_N}]; uniform float uCarveN; varying vec3 vCarveP; varying float vCarveOk;
+uniform vec4 uScar[8]; uniform float uScarN; varying vec2 vScarP; varying float vWall; float scarRim = 0.0;
+void carveTest() { if ( vCarveOk < 0.5 ) return; for ( int i = 0; i < ${CARVE_N}; i ++ ) { if ( float( i ) >= uCarveN ) break; vec4 a = uCarveA[ i ], b = uCarveB[ i ]; if ( vCarveP.x > a.x && vCarveP.x < a.z && vCarveP.y > a.y && vCarveP.y < a.w ) { if ( ( vWall > 0.5 && b.z > 0.5 ) || ( vCarveP.z > b.x && vCarveP.z < b.y ) ) discard; } } }
 float scarD( vec2 q, vec4 r, float salt ) { vec2 c = ( r.xy + r.zw ) * 0.5, h = ( r.zw - r.xy ) * 0.5; float n = fract( sin( dot( floor( q / 18.0 ), vec2( 12.9898, 78.233 ) ) + salt ) * 43758.5453 ); vec2 d = abs( q - c ) - h + n * 14.0; return max( d.x, d.y ); }
 void scarTest() { if ( vWall < 0.5 ) return; for ( int i = 0; i < 8; i ++ ) { if ( float( i ) >= uScarN ) break; float d = scarD( vScarP, uScar[ i ], float( i ) ); if ( d < 0.0 ) discard; scarRim = max( scarRim, 1.0 - d / 16.0 ); } }`;
 // WP6 DAMAGE STATES: every part of a ship has a number (the aPart attribute, set when the ship is assembled; 0 = none) and a small data texture (uDmg, one texel a part, one per ship) says how hurt it is:
@@ -96,13 +102,13 @@ const DMG_TINT = `{
 function patchShell(sh, uHide, ink, scar) {
   sh.uniforms.uHide = uHide;
   sh.uniforms.uScar = scar.uScar;
-  sh.uniforms.uScarN = scar.uScarN;
+  sh.uniforms.uScarN = scar.uScarN; sh.uniforms.uCarveA = scar.uCarveA; sh.uniforms.uCarveB = scar.uCarveB; sh.uniforms.uCarveN = scar.uCarveN;
   sh.uniforms.uDmg = scar.uDmg;
   sh.uniforms.uSoot = dmgFx.uSoot;
   sh.vertexShader = sh.vertexShader.replace('#include <common>', SHELL_VERT_COMMON + '\n' + SCAR_VERT_COMMON + '\n' + DMG_VERT_COMMON).replace('#include <begin_vertex>', SHELL_VERT_BEGIN + '\n' + SCAR_VERT_BEGIN + '\n' + DMG_VERT_BEGIN).replace('#include <project_vertex>', SHELL_VERT_PROJECT);
   if (ink) { sh.uniforms.uInkOn = inkOn; sh.uniforms.uInk = inkColor; }
   sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vShell;' + (ink ? ' uniform float uInkOn; uniform vec3 uInk;' : '') + '\n' + SCAR_FRAG + '\n' + DMG_FRAG)
-    .replace('void main() {', 'void main() {\n  ' + (ink ? 'if ( vShell > 0.5 ) { if ( uInkOn < 0.5 || gl_FrontFacing ) discard; } else if ( ! gl_FrontFacing ) discard;' : 'if ( vShell > 0.5 || ! gl_FrontFacing ) discard;') + '\n  scarTest();\n  dmgTest();')
+    .replace('void main() {', 'void main() {\n  ' + (ink ? 'if ( vShell > 0.5 ) { if ( uInkOn < 0.5 || gl_FrontFacing ) discard; } else if ( ! gl_FrontFacing ) discard;' : 'if ( vShell > 0.5 || ! gl_FrontFacing ) discard;') + '\n  scarTest();\n  carveTest();\n  dmgTest();')
     .replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.16, 0.10, 0.07 ), clamp( scarRim, 0.0, 1.0 ) * 0.85 );\n  ' + DMG_TINT);
   if (ink) sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  if ( vShell > 0.5 ) gl_FragColor.rgb = uInk;');
 }
@@ -114,7 +120,7 @@ export function makeTrimMaterials() {
   dmgTex.minFilter = dmgTex.magFilter = THREE.NearestFilter;
   dmgTex.generateMipmaps = false;
   dmgTex.needsUpdate = true;
-  const scar = { uScar: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uScarN: { value: 0 }, uDmg: { value: dmgTex } }; // (WP5: the holes broken-off parts left, see patchShell)
+  const scar = { uScar: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uScarN: { value: 0 }, uDmg: { value: dmgTex }, uCarveA: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveB: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveN: { value: 0 } }; // (WP5: the holes broken-off parts left, see patchShell)
   const toon = rimify(new THREE.MeshToonMaterial({ vertexColors: true, map: sheet.texture, gradientMap, side: THREE.DoubleSide }));
   const rim = toon.onBeforeCompile;
   toon.onBeforeCompile = (sh, r) => { // (the painted sheet is a little darker than white on average: a small gain keeps the hull colours where the flat ones were)
@@ -134,9 +140,9 @@ export function makeTrimMaterials() {
   depth.onBeforeCompile = (sh) => {
     sh.uniforms.uHide = uHide;
     sh.uniforms.uScar = scar.uScar;
-    sh.uniforms.uScarN = scar.uScarN;
+    sh.uniforms.uScarN = scar.uScarN; sh.uniforms.uCarveA = scar.uCarveA; sh.uniforms.uCarveB = scar.uCarveB; sh.uniforms.uCarveN = scar.uCarveN;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aShell; attribute float aLayer; uniform float uHide;\n' + SCAR_VERT_COMMON).replace('#include <begin_vertex>', '#include <begin_vertex>\n' + SCAR_VERT_BEGIN).replace('#include <project_vertex>', '#include <project_vertex>\n  if ( aShell > 0.5 || aLayer * uHide > 0.5 ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + SCAR_FRAG).replace('void main() {', 'void main() {\n  scarTest();'); // (the hole casts no shadow)
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + SCAR_FRAG).replace('void main() {', 'void main() {\n  scarTest();\n  carveTest();'); // (the hole casts no shadow)
   };
   depth.customProgramCacheKey = () => 'depth-trim';
   return { toon, plain, depth, uHide, sheet, ...scar, dmgData, dmgTex };
@@ -420,18 +426,29 @@ export function assemble(entries, mats) {
   const m = mats || sharedTrimMaterials();
   const group = new THREE.Group();
   const out = { group, ranges, geometry: null, layers: ends, tris: cursor / 3, side: 0, mats: m };
-  if (!list.length) { out.setSide = () => {}; out.extract = () => new THREE.Group(); out.extractClip = () => new THREE.Group(); return out; }
+  if (!list.length) { out.setSide = () => {}; out.setCarves = () => {}; out.extract = () => new THREE.Group(); out.extractClip = () => new THREE.Group(); return out; }
   const built = inkGeometry(list, [ends.negEnd, ends.mainEnd]);
   for (const g of list) g.dispose();
   const geometry = (out.geometry = built.geometry);
   // WP6: a number for every part (1, 2, 3 ... in the order of ranges; 0 = none): the aPart attribute, for the damage texture (see DMG_FRAG). Both copies (the picture and its ink shell) carry it.
   const partIndex = (out.partIndex = {}), aPartArr = geometry.attributes.aPart.array;
   Object.keys(ranges).forEach((key, i) => { const idx = i + 1 < DMG_W ? i + 1 : 0; partIndex[key] = idx; for (const r of ranges[key]) { aPartArr.fill(idx, r.start, r.start + r.count); aPartArr.fill(idx, cursor + r.start, cursor + r.start + r.count); } });
+  // fix_ship: the structure (the hull, decks and rooms) is carvable (see CARVE_N): its main-layer vertices get aLayer 0.25 (a wall's layer stays -1 / +1, which is carvable too; 0.25 is never hidden)
+  { const aL = geometry.attributes.aLayer.array; for (const key of Object.keys(ranges)) if (key === 'hull' || key.startsWith('deck:') || key.startsWith('room:')) for (const r of ranges[key]) if (r.layer === 'main') { aL.fill(0.25, r.start, r.start + r.count); aL.fill(0.25, cursor + r.start, cursor + r.start + r.count); } }
   const mesh = inkMesh(built, m, true, true);
   group.add(mesh);
   out.mesh = mesh;
+  // the carve boxes (registry ctx.carves): { box: [x0, y0, x1, y1, z0, z1], walls, side }; the ones with a side are active only while the camera is on that side (a ladder is on the near side of the ship)
+  out.carves = [];
+  const applyCarves = () => {
+    const A = m.uCarveA.value, B = m.uCarveB.value;
+    let n = 0;
+    for (const c of out.carves) { if (c.side && c.side !== out.side) continue; if (n >= CARVE_N) break; A[n].set(c.box[0], c.box[1], c.box[2], c.box[3]); B[n].set(c.box[4], c.box[5], c.walls ? 1 : 0, 0); n++; }
+    m.uCarveN.value = n;
+  };
+  out.setCarves = (list) => { out.carves = list || []; applyCarves(); };
   // camSide >= 0: the camera is on the ship's +Z side, so the +Z wall (the 'pos' layer) is hidden; otherwise the -Z wall is. (The shader does it: uHide = the layer to hide.)
-  out.setSide = (camSide) => { out.side = camSide >= 0 ? 1 : -1; m.uHide.value = out.side; };
+  out.setSide = (camSide) => { const sd = camSide >= 0 ? 1 : -1; const changed = sd !== out.side; out.side = sd; m.uHide.value = sd; if (changed) applyCarves(); };
   out.setSide(1);
   // WP5: one part's triangles as a Group of their own (same coordinates as the ship's content group), ready to be detached into a physics body. It never hides a wall.
   out.extract = (key) => {
