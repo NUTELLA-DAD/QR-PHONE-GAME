@@ -15,7 +15,7 @@ export const INK = config.INK;
 export { THREE };
 
 // What the toggles say right now (main.js changes these and calls applyLook).
-export const look = { toon: true, outlines: true, shadows: true };
+export const look = { toon: true, outlines: true, shadows: true, low: false }; // low = the Detail: low setting (small things lose their ink shells)
 
 // ---- materials ---------------------------------------------------------------------------------------------------------------------------------
 function makeGradient(steps) {
@@ -65,7 +65,7 @@ export function styled(mesh, toon, plain) {
 export function applyLook(root) {
   root.traverse((o) => {
     if (o.userData.toon) o.material = look.toon ? o.userData.toon : o.userData.plain;
-    if (o.userData.isOutline) o.visible = look.toon && look.outlines;
+    if (o.userData.isOutline) o.visible = look.toon && look.outlines && !(look.low && o.userData.small);
     if (o.isMesh && o.userData.shadowCaster) o.castShadow = look.shadows;
     if (o.isMesh && o.userData.shadowReceiver) o.receiveShadow = look.shadows;
   });
@@ -174,6 +174,9 @@ export class Batch {
     return group;
   }
 }
+
+// Mark every ink shell under a root as "small" (crew, planes, bats): Detail: low drops those.
+export function tagSmall(root) { root.traverse((o) => { if (o.userData.isOutline) o.userData.small = true; }); return root; }
 
 // Dispose every geometry (not the shared materials) under a root.
 export function disposeTree(root) {

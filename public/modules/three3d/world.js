@@ -19,8 +19,8 @@ const STRIPS = [
 
 export const TOD = {
   day: { bg: '#cfe3ea', sky: '#ffffff', hemi: ['#eef5f7', '#b49a78', 1.7], sun: ['#fff3d6', 2.9, [-0.55, 0.85, 0.75]], night: 0, cave: 0.75 },
-  dusk: { bg: '#c98f78', sky: '#f2b99a', hemi: ['#c4a6b8', '#6a525a', 1.2], sun: ['#ff9d62', 2.3, [-1.0, 0.32, 0.7]], night: 0.35, cave: 0.5 },
-  night: { bg: '#0a0f1e', sky: '#2a3354', hemi: ['#34457a', '#141828', 0.62], sun: ['#8fa2dc', 0.55, [-0.4, 0.9, 0.6]], night: 1, cave: 0.3 },
+  dusk: { bg: '#c98f78', sky: '#f2b99a', hemi: ['#c4a6b8', '#6a525a', 1.2], sun: ['#ffc59a', 2.5, [-1.0, 0.32, 0.7]], night: 0.35, cave: 0.5 },
+  night: { bg: '#0a0f1e', sky: '#2a3354', hemi: ['#3a4c86', '#1a1f34', 0.95], sun: ['#8fa2dc', 0.75, [-0.4, 0.9, 0.6]], night: 1, cave: 0.3 },
 };
 
 export function createWorld(scene, renderer) {
@@ -42,10 +42,10 @@ export function createWorld(scene, renderer) {
   const hemi = new THREE.HemisphereLight('#ffffff', '#888888', 1);
   const sun = new THREE.DirectionalLight('#ffffff', 2);
   sun.castShadow = true;
-  sun.shadow.camera.left = -2600; sun.shadow.camera.right = 2600; sun.shadow.camera.top = 2200; sun.shadow.camera.bottom = -2200;
+  sun.shadow.camera.left = -2150; sun.shadow.camera.right = 2150; sun.shadow.camera.top = 1500; sun.shadow.camera.bottom = -1500;
   sun.shadow.camera.near = 100; sun.shadow.camera.far = 9000;
   sun.shadow.bias = -0.0008; sun.shadow.normalBias = 14;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(4096, 4096); sun.shadow.radius = 2.5;
   sun.target = new THREE.Object3D();
   scene.add(hemi, sun, sun.target);
 
@@ -64,9 +64,11 @@ export function createWorld(scene, renderer) {
     back.add(m);
     return m;
   });
-  const caveMat = new THREE.MeshBasicMaterial({ color: '#ffffff', fog: false, toneMapped: false });
+  const caveMat = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap }); // (lit: the lamps' beams land on it)
   const cavePlane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), caveMat);
-  cavePlane.position.z = -600;
+  cavePlane.position.z = -420;
+  cavePlane.userData.shadowReceiver = true;
+  cavePlane.receiveShadow = look.shadows;
   cavePlane.renderOrder = -10;
   cavePlane.visible = false;
   cavePlane.frustumCulled = false;
@@ -93,7 +95,7 @@ export function createWorld(scene, renderer) {
   const frontDark = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#4d7a89' }));
   water.add(frontDark);
 
-  const W = { tod: 'day', todCfg: TOD.day, night: 0, cave: false, envId: null, bgDim: 1, hemi, sun, water, backOn: true };
+  const W = { sunDir: new THREE.Vector3(-0.5, 0.8, 0.7).normalize(), tod: 'day', todCfg: TOD.day, night: 0, cave: false, envId: null, bgDim: 1, hemi, sun, water, backOn: true };
 
   W.setTod = (name) => {
     const c = TOD[name] || TOD.day;
@@ -107,10 +109,11 @@ export function createWorld(scene, renderer) {
     const c = W.todCfg, k = W.cave ? c.cave : 1;
     hemi.color.set(c.hemi[0]); hemi.groundColor.set(c.hemi[1]); hemi.intensity = c.hemi[2] * (look.toon ? 1 : 1.1) * (W.cave ? Math.max(c.cave, 0.35) + 0.2 * (1 - c.night) : 1);
     sun.color.set(c.sun[0]); sun.intensity = c.sun[1] * k;
-    sun.position.set(c.sun[2][0], c.sun[2][1], c.sun[2][2]).multiplyScalar(3800);
-    sun.castShadow = look.shadows;
+    W.sunDir.set(c.sun[2][0], c.sun[2][1], c.sun[2][2]).normalize();
+    sun.position.copy(W.sunDir).multiplyScalar(3800).add(sun.target.position);
+    sun.castShadow = look.shadows && c.night < 0.8;
     const dim = W.cave ? c.cave : 1;
-    caveMat.color.set('#ffffff').multiplyScalar(0.55 * dim + 0.1);
+    caveMat.color.set('#ffffff').multiplyScalar(0.85); void dim;
   };
   W.setShadowQuality = (size) => { if (sun.shadow.mapSize.x !== size) { sun.shadow.mapSize.set(size, size); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } } };
 
@@ -122,13 +125,13 @@ export function createWorld(scene, renderer) {
     skyMat.map = skyTex; skyMat.needsUpdate = true;
     STRIPS.forEach((s, i) => {
       const m = stripMeshes[i];
-      if (!files.includes(s.kind) || cave) { m.visible = false; return; }
+      if (!files.includes(s.kind) || cave) { m.visible = false; m.userData.on = false; return; }
       const t = tex(envId, s.kind, 'x');
       m.material.map = t; m.material.needsUpdate = true;
-      m.visible = true;
+      m.visible = true; m.userData.on = true;
     });
     cavePlane.visible = cave;
-    if (cave && files.includes('cave')) { const t = tex(envId, 'cave', 'xy'); caveMat.map = t; caveMat.needsUpdate = true; }
+    if (cave && files.includes('cave')) { const t = tex(envId, 'cave', 'xy'); caveMat.map = t; caveMat.emissiveMap = t; caveMat.emissive.set('#ffffff'); caveMat.emissiveIntensity = 0.2; caveMat.needsUpdate = true; }
     W.applyLights();
   };
 
@@ -145,8 +148,10 @@ export function createWorld(scene, renderer) {
     const fovHalf = (cam.fov * Math.PI) / 360;
     const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
     const pitchDown = Math.asin(clamp(-fwd.y, -1, 1));
+    const az = Math.atan2(cam.position.x - target.x, cam.position.z - target.z), frontal = Math.abs(az) < 0.22; // (the strips are flat pictures: they only look right from the front, so an orbiting viewer sees the sky alone)
     STRIPS.forEach((s, i) => {
       const m = stripMeshes[i];
+      m.visible = !!m.userData.on && frontal;
       if (!m.visible) return;
       const tx = m.material.map;
       if (!tx || !tx.image) return;
@@ -173,8 +178,8 @@ export function createWorld(scene, renderer) {
     if (Number.isFinite(seaY)) {
       water.visible = true;
       const y = -seaY, wx = 60000, depth = 9000;
-      slabW.scale.set(wx, depth, 1700);
-      slabW.position.set(target.x, y - depth / 2, 40);
+      slabW.scale.set(wx, depth, 9000);
+      slabW.position.set(target.x, y - depth / 2, 3000);
       frontDark.scale.set(wx, 1, 1);
       frontDark.visible = false;
       const span = 15000;

@@ -93,14 +93,20 @@ export function createKrakenView(scene) {
     b.geo(FIN, fin([[0.05 * L, -0.7 * Wm], [-0.2 * Wm, -1.7 * Wm], [0.4 * L, -0.95 * Wm]], 0), mat(), OW);
     b.geo(FIN, fin([[0.55 * L, 0.85 * Wm], [0.62 * L, 1.5 * Wm], [0.9 * L, 0.8 * Wm]], 0), mat(), OW);
     for (const [x, k] of [[0.08, 0.34], [0.3, 0.3], [0.56, 0.36], [0.8, 0.26]]) b.cone(CHAR, x * L, Wm * 1.0 + k * Wm * 0.6, 0, k * Wm * 0.5, k * Wm * 1.5, OW * 0.8);
-    for (const [x, y, k] of [[0.2, 0.3, 0.16], [0.45, 0.1, 0.12], [0.62, 0.5, 0.18], [0.3, 0.62, 0.11], [0.75, 0.0, 0.14]]) b.sphere(SKIN_DARK, x * L, y * Wm, 0.9 * Wm * Math.sqrt(Math.max(0.05, 1 - (y * 0.9) ** 2)) * 0.96, k * Wm, k * Wm * 0.7, k * Wm * 0.3, 0, true);
+    const rx = L * 0.5 + 0.95 * Wm, rz = 0.9 * Wm;
+    const onSurface = (px, py) => rz * Math.sqrt(Math.max(0.03, 1 - ((px - cxm) / rx) ** 2 - (py / Wm) ** 2)); // the front of the ellipsoid at (px, py) on the body's axis plane
+    for (let n = 0; n < 22; n++) { // scale marks: darker and paler flat patches on the front, a fixed pattern
+      const u = -0.1 + 0.95 * ((n * 0.6180339) % 1), v = -0.82 + 1.64 * ((n * 0.7548776 + 0.31) % 1), k = 0.1 + 0.07 * ((n * 0.37) % 1);
+      const px = u * L, py = v * Wm, z = onSurface(px, py);
+      b.sphere(n % 3 === 0 ? BELLY : SKIN_DARK, px, py, z - k * Wm * 0.1, k * Wm * 1.2, k * Wm * 0.8, k * Wm * 0.55, 0, true);
+    }
     return b.build();
   };
   const eyeFor = (R) => {
     const b = new Batch();
     b.sphere(EYE, 0, 0, 0, R, R, R * 0.7, OW * 0.6);
     b.box(CHAR, R * 0.55, 0, R * 0.62, R * 0.3, R * 1.3, R * 0.2, 0);
-    b.box(CHAR, -R * 0.3, R * 0.85, R * 0.5, R * 1.9, R * 0.4, R * 0.5, OW * 0.4, 0, 0, -0.35);
+    b.box(CHAR, -R * 0.2, R * 0.78, R * 0.45, R * 1.5, R * 0.28, R * 0.4, OW * 0.4, 0, 0, -0.4);
     const g = b.build();
     // glow: the eye itself does not take light (it is its own light)
     const mesh = g.children[0];
@@ -176,10 +182,10 @@ export function createKrakenView(scene) {
           r.grp.visible = true;
         } else if (p.kind === 'eye' && s0) {
           let r = rigid[p.id];
-          if (!r) { r = rigid[p.id] = { grp: eyeFor(s0.r) }; root.add(r.grp); const pl = new THREE.PointLight('#ffd75a', 0, 1800, 0); r.grp.add(pl); pl.position.z = 150; eyeLights.push(pl); r.light = pl; }
+          if (!r) { r = rigid[p.id] = { grp: eyeFor(s0.r) }; root.add(r.grp); const pl = new THREE.PointLight('#ffd75a', 0, 1150, 0); r.grp.add(pl); pl.position.z = 150; eyeLights.push(pl); r.light = pl; }
           r.grp.position.set(s0.x, -s0.y, 520);
           r.grp.scale.x = p.at && p.at[0] * cr.f > 0 ? -1 : 1;
-          r.light.intensity = night * 3.2 * (p.hp > 0 ? 1 : 0.2);
+          r.light.intensity = night * 2.4 * (p.hp > 0 ? 1 : 0.2);
         } else if (p.kind === 'mouth' && s0) {
           let r = rigid.mouth;
           if (!r) { r = rigid.mouth = { grp: mouthFor(s0.r) }; root.add(r.grp); }

@@ -8,7 +8,7 @@ import { newBot } from '../host/network.js';
 import { listDesigns, getDesign } from '../host/playtest.js';
 import { generateShip } from '../host/shipGen.js';
 
-export const RANDOM_SEEDS = [3, 7, 11, 19];
+export const RANDOM_SEEDS = [10, 8, 3, 5, 14]; // (a rammer with armour, a sail skiff, a three-bag fortress, a crew-cannon raider, a four-bag fortress)
 
 // 'classic' | 'sparrow' | 'gen:SEED' | 'my:ID' -> { parts, name }
 export function resolveBuild(spec) {
@@ -18,6 +18,10 @@ export function resolveBuild(spec) {
     if (spec.startsWith('gen:')) {
       const g = generateShip(Number(spec.slice(4)) || 1);
       if (g) return { parts: g.parts, name: g.name };
+    }
+    if (spec.trim().startsWith('[')) { // a pasted build (the build page's Copy build JSON)
+      const parts = JSON.parse(spec);
+      if (Array.isArray(parts) && parts.length) return { parts, name: 'pasted build' };
     }
     if (spec.startsWith('my:')) {
       const d = getDesign(spec.slice(3));
@@ -84,6 +88,24 @@ export function startLive(opts = {}) {
       return 'ok';
     },
     askFor: 0,
+    // Demo helpers: ask the game's own systems for something to look at (they run their normal rules afterwards).
+    spawn(kind) {
+      try {
+        const main = state.ships[0], L = main.layout;
+        if (kind === 'gunship') return !!sim.gunship.spawn();
+        if (kind === 'fighters') { sim.squadrons.spawnStrafers(); return true; }
+        if (kind === 'bomber') { sim.squadrons.spawnBomber(); return true; }
+        if (kind === 'bats') { sim.squadrons.spawnBats(); return true; }
+        if (kind === 'kraken') { sim.creatures.spawn('kraken'); return true; }
+        if (kind === 'fire') {
+          const d = L.platforms.findIndex((q) => q.id === 'main') >= 0 ? L.platforms.findIndex((q) => q.id === 'main') : 0, q = L.platforms[d];
+          sim.fire.ignite(d, q.x0 + (q.x1 - q.x0) * 0.35, 'test');
+          sim.fire.ignite(d, q.x0 + (q.x1 - q.x0) * 0.62, 'test');
+          return true;
+        }
+      } catch (e) { console.warn('spawn ' + kind, e); }
+      return false;
+    },
     // Run the simulation for `real` seconds of real time (fixed 60 Hz steps, like the host).
     advance(real) {
       acc += Math.min(config.LOOP.MAX_FRAME, Math.max(0, real));

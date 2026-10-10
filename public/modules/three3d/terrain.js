@@ -4,13 +4,15 @@
 import { THREE, PAL, INK, gradientMap, look } from './style.js';
 
 const CH = 12; // squares per chunk side
-export const Z_FRONT = 330, Z_BACK = -560;
+export const Z_FRONT = 330, Z_BACK = -420; // (the cave picture stands at the back, world.js)
 
 const rockToon = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap, side: THREE.DoubleSide });
 const rockPlain = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
 const inkMat = new THREE.MeshBasicMaterial({ color: INK, side: THREE.DoubleSide });
 
 const mixHex = (a, b, t) => new THREE.Color(a).lerp(new THREE.Color(b), t);
+const cMoss = new THREE.Color('#8a8f62');
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
 function buildChunk(map, ci, cj) {
   const C = map.CELL;
@@ -47,27 +49,47 @@ function buildChunk(map, ci, cj) {
       }
       if (poly.length < 3) continue;
       any = true;
-      const P3 = poly.map(([x, y]) => [x, -y, Z_FRONT]);
-      for (let k = 1; k + 1 < P3.length; k++) {
-        let a = P3[0], b = P3[k], c = P3[k + 1];
-        const cz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-        if (cz < 0) [b, c] = [c, b];
-        push3(a, b, c, [0, 0, 1], cFront);
-      }
-      // the tunnel surfaces: a wall along each cut edge, from the front face back to the back
+      // the cut edges of this square (rock on one side, air on the other) and which way each faces
       const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length, cy = poly.reduce((s, p) => s + p[1], 0) / poly.length;
+      const segs = [];
       for (let k = 0; k + 1 < cross.length; k += 2) {
-        const a = cross[k], b = cross[k + 1];
-        let nx = -(b[1] - a[1]), ny = b[0] - a[0]; // perpendicular in map coordinates (y down)
+        const pa = cross[k], pb = cross[k + 1];
+        let nx = -(pb[1] - pa[1]), ny = pb[0] - pa[0]; // perpendicular in map coordinates (y down)
         const l = Math.hypot(nx, ny) || 1;
         nx /= l; ny /= l;
-        if (nx * ((a[0] + b[0]) / 2 - cx) + ny * ((a[1] + b[1]) / 2 - cy) < 0) { nx = -nx; ny = -ny; } // point away from the rock
+        if (nx * ((pa[0] + pb[0]) / 2 - cx) + ny * ((pa[1] + pb[1]) / 2 - cy) < 0) { nx = -nx; ny = -ny; } // point away from the rock
+        segs.push({ pa, pb, nx, ny, l });
+      }
+      // the front face: its normals lean away from the rock mass nearby (the direction to the blurred rock, reversed), so the toon steps shade the rock like a rounded slab
+      const R = 3, Rw = R * C + C;
+      const normalAt = (p) => {
+        let ax = 0, ay = 0, tw = 0;
+        const ci0 = Math.floor(p[0] / C), cj0 = Math.floor(p[1] / C);
+        for (let jj = cj0 - R; jj <= cj0 + R; jj++) for (let ii = ci0 - R; ii <= ci0 + R; ii++) {
+          const dx = (ii + 0.5) * C - p[0], dy = (jj + 0.5) * C - p[1], dd = Math.hypot(dx, dy) || 1, w = Math.max(0, 1 - dd / Rw);
+          tw += w;
+          if (S(ii, jj)) { ax += (dx / dd) * w; ay += (dy / dd) * w; }
+        }
+        tw = tw || 1;
+        const k = 1.7, nx = (-ax / tw) * k, ny = (-ay / tw) * k, L = Math.hypot(nx, ny, 1);
+        return [nx / L, -ny / L, 1 / L]; // (map y runs down, 3D y up)
+      };
+      const sm = 0.96 + 0.06 * Math.sin(i * 0.31 + 0.7) * Math.sin(j * 0.27 + 1.9) + 0.03 * Math.sin((i + j) * 0.13); // a slow tint, so the rock is not one flat colour
+      const tintFront = cFront.clone().multiplyScalar(sm);
+      const P3 = poly.map(([x, y]) => [x, -y, Z_FRONT]);
+      for (let k = 1; k + 1 < P3.length; k++) {
+        let ia = 0, ib = k, ic = k + 1;
+        const a0 = P3[ia], b0 = P3[ib], c0 = P3[ic];
+        if ((b0[0] - a0[0]) * (c0[1] - a0[1]) - (b0[1] - a0[1]) * (c0[0] - a0[0]) < 0) [ib, ic] = [ic, ib];
+        for (const q of [ia, ib, ic]) { const p = P3[q], n = normalAt(poly[q]); pos.push(p[0], p[1], p[2]); nor.push(n[0], n[1], n[2]); col.push(tintFront.r, tintFront.g, tintFront.b); }
+      }
+      // the tunnel surfaces: a wall along each cut edge, from the front face back to the back, and the ink line along the front edge
+      for (const { pa: a, pb: b, nx, ny, l } of segs) {
         const n3 = [nx, -ny, 0];
         const color = n3[1] > 0.5 ? cFloor : n3[1] < -0.5 ? cCeil : cWall;
         const A = [a[0], -a[1], Z_FRONT], B = [b[0], -b[1], Z_FRONT], A2 = [a[0], -a[1], Z_BACK], B2 = [b[0], -b[1], Z_BACK];
         push3(A, B, B2, n3, color);
         push3(A, B2, A2, n3, color);
-        // the ink line along the front edge: a thin ribbon in the front plane, centred on the cut, a little in front
         const w = 7, ux = (b[0] - a[0]) / l, uy = (b[1] - a[1]) / l;
         const ox = -uy * w, oy = ux * w;
         const q0 = [a[0] - ox, -(a[1] - oy), Z_FRONT + 1.2], q1 = [a[0] + ox, -(a[1] + oy), Z_FRONT + 1.2], q2 = [b[0] + ox, -(b[1] + oy), Z_FRONT + 1.2], q3 = [b[0] - ox, -(b[1] - oy), Z_FRONT + 1.2];

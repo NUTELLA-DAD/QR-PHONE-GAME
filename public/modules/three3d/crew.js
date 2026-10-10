@@ -1,6 +1,6 @@
 // Crew as small toon figures in their own colour: a capsule body, a round head with ears and a snout, goggles, arms and legs that swing on rigid pivots while
 // they walk or climb. Raiders (skeletons) share the model with bone and charcoal colours. A coloured marker cone floats over each crewman (readable from the sofa).
-import { THREE, Batch, mat, G, INK } from './style.js';
+import { THREE, Batch, mat, G, INK, tagSmall } from './style.js';
 
 const FUR = { bulldog: '#c9a27a', wolf: '#8d8d93', tiger: '#e0963e', shiba: '#d8a15b', fox: '#d9772f', bear: '#7a5638', cat: '#a8a8ac', rabbit: '#ece4d8', skeleton: '#e8dcc0' };
 const EARS = { bulldog: 'drop', wolf: 'point', tiger: 'round', shiba: 'point', fox: 'point', bear: 'round', cat: 'point', rabbit: 'long', skeleton: 'none' };
@@ -40,16 +40,20 @@ export function makeFigure({ color = '#ece3c8', species = 'bulldog', raider = fa
     else body.sphere(fur, -2, 100, z * 1.1, 7, 7, 5, 1.8, true);
   }
   if (raider) { body.box('#2b2622', 12, 77, 0, 3, 7, 22, 0); body.cone('#a8443f', -1, 104, 0, 9, 13, 1.8); } // grinning jaw line and a red crest
-  else body.cone(color, 0, 128, 0, 11, 17, 2.4, Math.PI); // the colour marker (a downward cone)
+  let markerG = null;
+  if (!raider) { const mk = new Batch(); mk.cone(color, 0, 128, 0, 11, 17, 2.4, Math.PI); markerG = mk.build(); } // the colour marker (a downward cone)
+  const lean = new THREE.Group(); // body + limbs (tips over when knocked out); the marker stays upright
   const bodyG = body.build();
-  g.add(bodyG);
+  g.add(lean);
+  lean.add(bodyG);
+  if (markerG) g.add(markerG);
 
   // limbs on pivots
   const limb = (x, y, z, len, r, col) => {
     const pivot = new THREE.Group();
     pivot.position.set(x, y, z);
     pivot.add(part(col, (b) => b.geo(col, capsule(r, len), mat(0, -len / 2 + 2, 0), 2.6)));
-    g.add(pivot);
+    lean.add(pivot);
     return pivot;
   };
   const armL = limb(0, 64, 17, 34, 5.5, cloth), armR = limb(0, 64, -17, 34, 5.5, cloth);
@@ -61,12 +65,14 @@ export function makeFigure({ color = '#ece3c8', species = 'bulldog', raider = fa
     pose(p, t, walk, climb, ko, face) {
       const ph = t * 9 + (p.phase || 0);
       if (ko) {
-        g.rotation.z = -Math.PI / 2 * (face >= 0 ? 1 : -1);
-        g.position.y += 14;
+        lean.rotation.z = -Math.PI / 2 * (face >= 0 ? 1 : -1);
+        lean.position.y = 14;
+        if (markerG) markerG.position.y = -50;
         armL.rotation.z = armR.rotation.z = legL.rotation.z = legR.rotation.z = 0;
         return;
       }
-      g.rotation.z = 0;
+      lean.rotation.z = 0; lean.position.y = 0;
+      if (markerG) markerG.position.y = 0;
       if (climb) {
         g.rotation.y = -Math.PI / 2; // face the wall
         const s = Math.sin(ph);
@@ -86,5 +92,6 @@ export function makeFigure({ color = '#ece3c8', species = 'bulldog', raider = fa
     },
   };
   void G; void INK;
+  tagSmall(g);
   return fig;
 }

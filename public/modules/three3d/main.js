@@ -1,6 +1,6 @@
 // The 3D test page. The REAL 2D simulation runs headlessly in this page (liveSim.js); each frame its state is mapped into a Three.js scene:
 // ships (from their parts lists), crew, shells, bombs, fires, enemy planes and gunships, the Kraken, the rock and the sea. Nothing here changes the game.
-import { THREE, look, applyLook, PAL, INK, Batch } from './style.js';
+import { THREE, look, applyLook, PAL, INK, Batch, tagSmall } from './style.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { config } from '../../config.js';
 import { startLive, buildChoices } from './liveSim.js';
@@ -21,7 +21,7 @@ const opt = (k, d) => (Q.has(k) ? Q.get(k) : d);
 // ---- settings (the ones that need a new simulation come from the address; the rest are live) --------------------------------------------------------------------------
 const S = {
   build: opt('build', 'classic'), env: opt('env', ''), map: opt('map', ''), creature: opt('creature', ''), bots: Number(opt('bots', 6)), tod: opt('tod', 'day'),
-  toon: opt('toon', '1') !== '0', shadows: opt('shadows', '1') !== '0', detail: opt('detail', 'high'), orbit: opt('orbit', '0') === '1', view2d: opt('v2d', 'off'),
+  sweep: opt('sweep', '1') !== '0', toon: opt('toon', '1') !== '0', shadows: opt('shadows', '1') !== '0', detail: opt('detail', 'high'), orbit: opt('orbit', '0') === '1', view2d: opt('v2d', 'off'),
   seed: Q.has('seed') ? Number(Q.get('seed')) : null, zoom: Number(opt('zoom', 1)) || 1, warm: Number(opt('warm', 0)), shot: opt('shot', '0') === '1', follow: opt('follow', ''),
 };
 if (!S.map) S.map = S.tod === 'night' ? 'network' : 'open';
@@ -34,7 +34,7 @@ const reload = (changes) => { const q = new URLSearchParams(location.search); fo
 const canvas = $('c3d'), canvas2d = $('c2d');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: S.shot });
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 const FOV = 30;
@@ -52,8 +52,12 @@ controls.maxDistance = 30000;
 
 const applyDetail = () => {
   const hi = S.detail === 'high';
+  look.low = !hi;
+  renderer.shadowMap.type = hi ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; });
+  applyLook(scene);
   renderer.setPixelRatio(hi ? Math.min(window.devicePixelRatio || 1, 2) : 1);
-  world.setShadowQuality(hi ? 2048 : 1024);
+  world.setShadowQuality(hi ? 4096 : 1024);
   resize();
 };
 function resize() {
@@ -136,12 +140,47 @@ const planePool = { build: null };
   };
   planePool.build = planeBuilderFn;
 }
+// bats: a charcoal body, two flat wings that beat on rigid pivots
+const batPool = [];
+const makeBat = () => {
+  const g = new THREE.Group();
+  const body = new Batch();
+  body.sphere('#4a4346', 0, 0, 0, 20, 14, 13, 3);
+  body.sphere('#4a4346', 18, 6, 0, 10, 9, 9, 2.4, true);
+  for (const z of [-5, 5]) body.cone('#4a4346', 20, 18, z, 3.5, 11, 1.6);
+  body.sphere('#f2d36b', 25, 8, 0, 2.2, 2.2, 6, 0, true);
+  g.add(body.build());
+  const wings = [];
+  for (const sgn of [1, -1]) {
+    const piv = new THREE.Group();
+    const w = new Batch();
+    w.box('#2f2a2e', -4, 0, sgn * 36, 38, 3, 72, 2.6);
+    piv.add(w.build());
+    piv.position.y = 6;
+    g.add(piv);
+    wings.push([piv, sgn]);
+  }
+  g.userData.wings = wings;
+  return g;
+};
+const syncBats = (list, t) => {
+  while (batPool.length < Math.min(list.length, 40)) { const g = tagSmall(makeBat()); applyLook(g); worldRoot.add(g); batPool.push(g); }
+  batPool.forEach((g, i) => {
+    const b = list[i];
+    g.visible = !!b && Number.isFinite(b.x);
+    if (!g.visible) return;
+    g.position.set(b.x, -b.y, 60);
+    g.rotation.y = (b.vx ?? 0) - (state.ships[0] ? state.ships[0].pose.vx : 0) >= 0 ? 0 : Math.PI;
+    const flap = 0.55 + 0.6 * Math.sin(t * 13 + (b.phase || 0));
+    for (const [piv, sgn] of g.userData.wings) piv.rotation.x = -sgn * flap;
+  });
+};
 const syncPlanes = (list, big, t) => {
   const planeBuilder = planePool.build;
   const key = big ? 'B' : 'S';
   const pool = planeGroups.get(key) || [];
   planeGroups.set(key, pool);
-  while (pool.length < list.length) { const g = new THREE.Group(); const inner = new THREE.Group(); const mesh = planeBuilder(big); inner.add(mesh); g.add(inner); g.userData.inner = inner; g.userData.mesh = mesh; worldRoot.add(g); pool.push(g); }
+  while (pool.length < list.length) { const g = new THREE.Group(); const inner = new THREE.Group(); const mesh = tagSmall(planeBuilder(big)); applyLook(mesh); inner.add(mesh); g.add(inner); g.userData.inner = inner; g.userData.mesh = mesh; worldRoot.add(g); pool.push(g); }
   pool.forEach((g, i) => {
     const p = list[i];
     g.visible = !!p && !p.dead;
@@ -179,7 +218,7 @@ function syncShips(t, dt) {
     root.updateMatrixWorld(true);
     const side = (camera.position.x - root.position.x) * Math.sin(yaw) + (camera.position.z - root.position.z) * Math.cos(yaw);
     model.setView(side);
-    model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai });
+    model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai, sweep: S.sweep, spotShadow: world.night > 0.5 && index === 0 });
     // crew aboard
     const crew = Object.values(state.players).filter((p) => !p.enemy && p.connected !== false && !p.fly && shipOf(state, p) === sh);
     const raiders = sh.ctx && sh.ctx.boarders ? sh.ctx.boarders : state.boarders || [];
@@ -241,6 +280,7 @@ function syncSky(t) {
   for (const p of state.puffs) { if (np >= 200 || !Number.isFinite(p.x)) continue; const k = clamp(p.life / (p.max || 0.5), 0, 1); setInst(puffMesh, np, p.x, -p.y, 40, 8 + 22 * (1 - k), p.c || '#9a9a9a'); np++; }
   endInst(puffMesh, np);
   syncPlanes(state.strafers || [], false, t);
+  syncBats(state.bats || [], t);
   syncPlanes(state.bombers || [], true, t);
 }
 
@@ -251,13 +291,24 @@ function syncCamera(dt) {
   const cssW = canvas.clientWidth || window.innerWidth, cssH = canvas.clientHeight || window.innerHeight;
   const view = cam2d.update(dt, state, cssW, cssH); // the 2D game's own follow camera: where it looks and how far it is zoomed
   if (view && Number.isFinite(view.cx) && Number.isFinite(view.zoom) && view.zoom > 0) lastView = view;
-  const v = lastView || { cx: 800, cy: 400, zoom: 0.5 };
+  let v = lastView || { cx: 800, cy: 400, zoom: 0.5 };
+  if (S.follow === 'mid' && state.creature && state.ships[0]) { // (screenshots: look at the middle between the ship and the creature)
+    const sh = state.ships[0], c = state.creature;
+    v = { ...v, cx: (sh.pose.x + sh.layout.refPoint.x + c.x) / 2, cy: (sh.pose.y + sh.layout.refPoint.y + c.y) / 2 };
+  }
   const visH = cssH / v.zoom, visW = cssW / v.zoom;
   const D = visH / 2 / Math.tan((FOV * Math.PI) / 360) / S.zoom;
   camTarget.set(v.cx, -v.cy + visH * 0.02, 0);
   if (S.orbit) {
     const main = state.ships[0], e = main && models.get(main.id);
-    if (e) { const piv = e.model.root.position; const d = _P.copy(piv).sub(lastPivot); if (lastPivot.lengthSq() > 0) { controls.target.add(d); camera.position.add(d); } lastPivot.copy(piv); }
+    if (e) {
+      const piv = e.model.root.position;
+      if (lastPivot.lengthSq() === 0) { // just switched on: start from a three-quarter view of the ship, then the viewer drags it
+        controls.target.set(piv.x, piv.y + 300, 0);
+        camera.position.set(piv.x + D * 0.46, piv.y + 300 + D * 0.3, D * 0.8);
+      } else { const d = _P.copy(piv).sub(lastPivot); controls.target.add(d); camera.position.add(d); } // (then she carries the camera along)
+      lastPivot.copy(piv);
+    }
     controls.update();
   } else {
     camera.position.set(camTarget.x, camTarget.y + D * Math.sin(ELEV), D * Math.cos(ELEV));
@@ -274,8 +325,7 @@ function syncLights() {
   const snap = 200;
   const x = Math.round(c.x / snap) * snap, y = Math.round(c.y / snap) * snap;
   world.sun.target.position.set(x, y, 0);
-  const dir = new THREE.Vector3().copy(world.sun.position).normalize();
-  world.sun.position.copy(dir.multiplyScalar(3800)).add(world.sun.target.position);
+  world.sun.position.copy(world.sunDir).multiplyScalar(3800).add(world.sun.target.position);
 }
 
 // ---- UI --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -291,8 +341,11 @@ function buildUI() {
   <label>Light</label><select id="u-tod">${opts([['day', 'Day'], ['dusk', 'Dusk'], ['night', 'Night (cave)']], S.tod)}</select>
   <div class="row"><button id="b-toon"></button><button id="b-shadow"></button></div>
   <div class="row"><button id="b-detail"></button><button id="b-orbit"></button></div>
+  <div class="row"><button id="b-sweep"></button></div>
   <div class="row"><button id="b-2d"></button><button id="b-skip">+30 s</button></div>
   <div class="row"><button id="b-turn">COME ABOUT (C)</button></div>
+  <label>Call up (demo helpers)</label>
+  <div class="row"><button data-spawn="gunship">Gunship</button><button data-spawn="fighters">Fighters</button><button data-spawn="bomber">Bomber</button><button data-spawn="bats">Bats</button><button data-spawn="fire">Fire</button></div>
   <div class="row"><button id="b-pause">Pause</button><button id="b-ui">Hide (H)</button></div>
   <small id="u-info"></small>`;
   $('u-build').onchange = (e) => reload({ build: e.target.value });
@@ -304,22 +357,25 @@ function buildUI() {
     $('b-toon').textContent = look.toon ? 'Look: Toon + ink' : 'Look: Plain lit'; $('b-toon').classList.toggle('on', look.toon);
     $('b-shadow').textContent = 'Shadows: ' + (look.shadows ? 'on' : 'off'); $('b-shadow').classList.toggle('on', look.shadows);
     $('b-detail').textContent = 'Detail: ' + S.detail;
+    $('b-sweep').textContent = S.sweep ? 'Idle lamps sweep (demo)' : 'Lamps: as the game has them'; $('b-sweep').classList.toggle('on', S.sweep);
     $('b-orbit').textContent = 'Orbit: ' + (S.orbit ? 'on (drag)' : 'off'); $('b-orbit').classList.toggle('on', S.orbit);
     $('b-2d').textContent = 'Show 2D: ' + S.view2d; $('b-2d').classList.toggle('on', S.view2d !== 'off');
   };
   $('b-toon').onclick = () => { look.toon = !look.toon; applyLook(scene); world.setLook(); sync(); };
   $('b-shadow').onclick = () => { look.shadows = !look.shadows; renderer.shadowMap.enabled = look.shadows; applyLook(scene); world.setLook(); scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; }); sync(); };
   $('b-detail').onclick = () => { S.detail = S.detail === 'high' ? 'low' : 'high'; applyDetail(); sync(); };
-  $('b-orbit').onclick = () => { S.orbit = !S.orbit; controls.enabled = S.orbit; lastPivot.set(0, 0, 0); if (S.orbit) { controls.target.copy(camTarget); controls.update(); } sync(); };
+  $('b-orbit').onclick = () => { S.orbit = !S.orbit; controls.enabled = S.orbit; lastPivot.set(0, 0, 0); sync(); };
   $('b-2d').onclick = async () => { S.view2d = S.view2d === 'off' ? 'split' : S.view2d === 'split' ? 'only' : 'off'; await apply2d(); sync(); };
   $('b-skip').onclick = () => live.warm(30);
+  $('b-sweep').onclick = () => { S.sweep = !S.sweep; sync(); };
+  p.querySelectorAll('[data-spawn]').forEach((b) => { b.onclick = () => { b.classList.toggle('on', live.spawn(b.dataset.spawn)); setTimeout(() => b.classList.remove('on'), 400); }; });
   $('b-turn').onclick = () => { const r = live.comeAbout(); $('u-info').textContent = r === 'ok' ? 'Coming about: the helm holds the command for a second, then she swings round.' : 'Refused by the game: ' + r; };
   let paused = false;
   $('b-pause').onclick = () => { paused = !paused; window.__paused = paused; $('b-pause').textContent = paused ? 'Resume' : 'Pause'; $('b-pause').classList.toggle('on', paused); };
   $('b-ui').onclick = () => { p.style.display = 'none'; };
   addEventListener('keydown', (e) => { if (e.key === 'h' || e.key === 'H') p.style.display = p.style.display === 'none' ? '' : 'none'; if (e.key === '2') $('b-2d').click(); if (e.key === 'c' || e.key === 'C') $('b-turn').click(); if (e.key === 'o' || e.key === 'O') $('b-orbit').click(); });
   sync();
-  $('u-info').innerHTML = 'Keys: H hides this panel, O orbit, 2 show 2D. The simulation is the real game with ' + S.bots + ' bot crew; nothing is changed in it.';
+  $('u-info').innerHTML = 'Keys: H hides, O orbit, 2 show 2D, C come about. The simulation is the real game with ' + S.bots + ' bot crew; this page only draws it.<br><b>Not drawn in 3D yet:</b> parachutes and hook lines, the deflector shield, escort fighters, wreck break-up, weather (rain, snow, lightning), gas holes and patches, the lift cage moving, HUD.';
 }
 
 async function apply2d() {
@@ -360,7 +416,7 @@ function frame(now) {
     world.update(camera, camTarget, { w: cam.visW, h: cam.visH }, t, seaY);
     syncLights();
     const t1 = performance.now();
-    renderer.render(scene, camera);
+    if (S.view2d !== 'only') renderer.render(scene, camera);
     const t2 = performance.now();
     jsMs += t1 - t0; msAcc += t2 - t1;
     if (r2d && S.view2d !== 'off') {
@@ -393,7 +449,7 @@ window.__t3d = {
   state, live, scene, camera, renderer, world, models, S, kraken, terrain,
   setTod: (n) => { S.tod = n; world.setTod(n); },
   warm: (s) => live.warm(s),
-  comeAbout: () => live.comeAbout(),
+  comeAbout: () => live.comeAbout(), spawn: (k) => live.spawn(k),
   info: () => ({ phase: state.phase, ship: state.ships.map((sh) => ({ id: sh.id, x: sh.pose.x, y: sh.pose.y, f: sh.pose.f, turn: sh.pose.turn })), creature: !!state.creature && state.creature.mode, env: envIdOf(state), tris: [...models.values()].map((e) => e.model.tris) }),
   look, applyLook: () => applyLook(scene),
 };

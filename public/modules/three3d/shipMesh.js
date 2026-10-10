@@ -55,7 +55,7 @@ function beamGeo(len, half, color, a0) {
 }
 const beamMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
 const lampMat = new THREE.MeshBasicMaterial({ color: '#ffe9b0' });
-const flameMats = { out: new THREE.MeshBasicMaterial({ color: PAL.fire }), inn: new THREE.MeshBasicMaterial({ color: '#ffd35c' }), ink: new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }) };
+const flameMats = { out: new THREE.MeshBasicMaterial({ color: '#ff5a24' }), inn: new THREE.MeshBasicMaterial({ color: '#ffe680' }), ink: new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }) };
 
 const GUN_LOOK = {
   long: { len: 118, r: 6.5 }, mortar: { len: 44, r: 15 }, scatter: { len: 70, r: 11 }, flak: { len: 78, r: 8 },
@@ -92,10 +92,21 @@ export function buildShipModel(layout, opts = {}) {
   const hx0 = H ? H.xL : P.length ? Math.min(...P.map((q) => q.x0)) : 0, hx1 = H ? H.xR : P.length ? Math.max(...P.map((q) => q.x1)) : 1000;
   const dyn = { guns: {}, lamps: [], bags: [], lanterns: [], boilerGlow: [], sails: [], engines: [], coil: null, liftCages: [], wheels: [], twins: [] };
   const lights = { points: [], boiler: [] };
+  const bags = L.gasbags && L.gasbags.length ? L.gasbags : L.gasbag ? [L.gasbag] : [];
 
   // ---- the hull ------------------------------------------------------------------------------------------------------------------------------
   safe('hull', () => {
-    if (!H) { note('hull: no main / lower deck, bare decks only'); return; }
+    if (!H) { // no main / lower deck (the enemy gunship): a simple boat tray under her lowest deck
+      const decks = P.filter((q) => !isNestRow(rowOf(q))), lo = decks.reduce((a, q) => (q.y > a.y ? q : a), decks[0] || P[0]);
+      if (!lo) return;
+      const lows = P.filter((q) => q.y >= lo.y - 170), a0 = Math.min(...lows.map((q) => q.x0)) - 16, a1 = Math.max(...lows.map((q) => q.x1)) + 30, y0 = lo.y + 12;
+      const sh = new THREE.Shape();
+      sh.moveTo(X(a0), Y(y0)); sh.lineTo(X(a1), Y(y0)); sh.lineTo(X(a1 - 90), Y(y0 + 70)); sh.lineTo(X(a0 + 100), Y(y0 + 70)); sh.closePath();
+      main.geo(T.hullDark, tube(sh, -W * 0.8, W * 0.8, 8), mat(), 5);
+      wallNeg.geo(T.hull, slab(sh, -W * 0.8, -W * 0.8 + 10), mat(), 4);
+      wallPos.geo(T.hull, slab(sh, W * 0.8 - 10, W * 0.8), mat(), 4);
+      return;
+    }
     const sh = new THREE.Shape();
     sh.moveTo(X(H.xL), Y(H.top));
     sh.lineTo(X(H.xTopR), Y(H.top));
@@ -385,23 +396,30 @@ export function buildShipModel(layout, opts = {}) {
       const pivot = new THREE.Group();
       pivot.position.set(X(s.bx), Y(s.by), 0);
       pivot.rotation.z = -s.aim;
-      pivot.add(lamp.build());
+      const tiltG = new THREE.Group(); // the lamp is also turned a little into the scene (away from the viewer), so its beam can land on the cave wall behind the ship
+      tiltG.rotation.y = 0.46;
+      pivot.add(tiltG);
+      tiltG.add(lamp.build());
       const lens = new THREE.Mesh(new THREE.CircleGeometry(19, 16), new THREE.MeshBasicMaterial({ color: '#fffbe0' }));
       lens.rotation.y = Math.PI / 2;
       lens.position.set(ll + 0.5, 0, 0);
-      pivot.add(lens);
+      tiltG.add(lens);
       const reach = 1000, half = 0.26;
       const spot = new THREE.SpotLight('#fff0c8', 0, reach * 1.5, half, 0.35, 0);
       spot.position.set(ll, 0, 0);
       const target = new THREE.Object3D();
       target.position.set(reach, 0, 0);
-      pivot.add(spot, target);
+      tiltG.add(spot, target);
       spot.target = target;
-      const outer = new THREE.Mesh(beamGeo(reach, half, '#fff0c8', 0.36), beamMat);
-      const inner = new THREE.Mesh(beamGeo(reach * 0.8, half * 0.5, '#fffbe8', 0.55), beamMat);
-      for (const m2 of [outer, inner]) { m2.position.x = ll; m2.renderOrder = 5; m2.frustumCulled = false; pivot.add(m2); }
+      const outer = new THREE.Mesh(beamGeo(reach, half, '#fff0c8', 0.3), beamMat);
+      const inner = new THREE.Mesh(beamGeo(reach * 0.8, half * 0.5, '#fffbe8', 0.42), beamMat);
+      for (const m2 of [outer, inner]) { m2.position.x = ll; m2.renderOrder = 5; m2.frustumCulled = false; tiltG.add(m2); }
       content.add(pivot);
-      dyn.lamps.push({ name, pivot, spot, target, outer, inner, lens, reach, ll });
+      spot.shadow.mapSize.set(1024, 1024);
+      spot.shadow.camera.near = 30;
+      spot.shadow.bias = -0.0005;
+      spot.shadow.normalBias = 6;
+      dyn.lamps.push({ name, pivot, spot, target, outer, inner, lens, reach, ll, home: s.aim, arc: s.arc || 1.4 });
     }
   });
 
@@ -432,12 +450,19 @@ export function buildShipModel(layout, opts = {}) {
 
   // ---- sails, armour, ram, coil ----------------------------------------------------------------------------------------------------------------
   safe('sails', () => {
+    // A sail stands on the top deck in the 2D game. In 3D a mast on the centre line would sit inside the gasbag, so each sail hangs as a pair of canvases on either side of the bag
+    // (one each side, so the viewer sees one from whichever side), held off the deck's edges by struts; they rise and furl with the hoist.
+    const ryMax = Math.max(100, ...bags.map((q) => q.ry)), zS = ryMax * 0.96 + 16;
     for (const s of L.sails || []) {
-      const y = platY(s.d);
-      main.rod(T.rail, V(X(s.x), Y(y), 0), V(X(s.x), Y(y - s.h), 0), 5, 1.5);
+      const y = platY(s.d), ph = s.h * 0.78;
+      for (const sgn of [-1, 1]) for (const dx of [-0.42, 0.42]) {
+        main.rod(T.rail, V(X(s.x + dx * s.w), Y(y), sgn * W * 0.94), V(X(s.x + dx * s.w), Y(y - s.h), sgn * zS), 3.5, 1.2);
+      }
       const sail = new Batch();
-      sail.box('#ebdfc0', 0, -s.h * 0.4, 0, s.w, s.h * 0.78, 5, 2.5);
-      sail.box(T.rail, 0, 0, 0, s.w + 10, 6, 8, 1.5);
+      for (const sgn of [-1, 1]) {
+        sail.box('#ebdfc0', 0, -ph / 2, sgn * zS, s.w, ph, 5, 2.5);
+        sail.box(T.rail, 0, 0, sgn * zS, s.w + 14, 6, 8, 1.5);
+      }
       const sg = sail.build();
       sg.position.set(X(s.x), Y(y - s.h), 0);
       content.add(sg);
@@ -476,7 +501,6 @@ export function buildShipModel(layout, opts = {}) {
   });
 
   // ---- gasbags with rib bands, fins and rigging -------------------------------------------------------------------------------------------------
-  const bags = L.gasbags && L.gasbags.length ? L.gasbags : L.gasbag ? [L.gasbag] : [];
   safe('gasbags', () => {
     // A fin: a triangle on the bag's surface, pointing up and back; four of them make the cross at the stern. sgn +1 = stern (left end), -1 = nose.
     const finGeo = (Gb, sgn, s, flip = 1) => {
@@ -566,13 +590,21 @@ export function buildShipModel(layout, opts = {}) {
 
   // ---- flames (a pool; stepped frames, no wobble) --------------------------------------------------------------------------------------------------
   const flamePool = [];
-  const makeFlame = () => {
+  const makeFlame = () => { // three tongues (a tall one between two short ones), each an ink shell, an orange cone and a yellow heart; update() steps their heights through four frames
     const g = new THREE.Group();
-    const a = new THREE.Mesh(G.cone, flameMats.out), inkM = new THREE.Mesh(G.cone, flameMats.ink), c = new THREE.Mesh(G.cone, flameMats.inn);
-    a.scale.set(26, 70, 26); a.position.y = 35;
-    inkM.scale.set(31, 78, 31); inkM.position.y = 36;
-    c.scale.set(13, 38, 13); c.position.y = 20;
-    g.add(inkM, a, c);
+    const tongues = [];
+    for (const [dx, r, h] of [[-19, 15, 46], [0, 21, 74], [19, 15, 52]]) {
+      const t = new THREE.Group();
+      const inkM = new THREE.Mesh(G.cone, flameMats.ink), a = new THREE.Mesh(G.cone, flameMats.out), c = new THREE.Mesh(G.cone, flameMats.inn);
+      inkM.scale.set(r + 7, h + 12, r + 7); inkM.position.y = h / 2 + 2;
+      a.scale.set(r, h, r); a.position.y = h / 2;
+      c.scale.set(r * 0.5, h * 0.55, r * 0.5); c.position.y = h * 0.27;
+      t.add(inkM, a, c);
+      t.position.x = dx;
+      g.add(t);
+      tongues.push(t);
+    }
+    g.userData.tongues = tongues;
     return g;
   };
 
@@ -598,8 +630,12 @@ export function buildShipModel(layout, opts = {}) {
       const sls = st.searchlights || [];
       dyn.lamps.forEach((lp, i) => {
         const live = sls.find((q) => q.n === lp.name) || sls[i];
-        if (live && Number.isFinite(live.aim)) lp.pivot.rotation.z = -live.aim;
-        const power = live && Number.isFinite(live.power) ? clamp(live.power, 0, 1) : 0.3;
+        const manned = !!(live && live.manned);
+        let aim = live && Number.isFinite(live.aim) ? live.aim : lp.home;
+        let power = live && Number.isFinite(live.power) ? clamp(live.power, 0, 1) : 0.3;
+        if (c.sweep && !manned) { aim = lp.home + lp.arc * 0.85 * Math.sin(t * 0.4 + i * 2.2); power = 0.9; } // (demo: nobody is on the lamp, so it sweeps by itself; display only)
+        lp.pivot.rotation.z = -aim;
+        lp.spot.castShadow = !!c.spotShadow && i === 0 && look.shadows;
         const on = !!c.lamps && night > 0.12;
         const reach = lp.reach * (0.65 + 0.35 * power);
         lp.spot.intensity = on ? 9 * (0.5 + 0.5 * power) * Math.min(1, night * 1.4) : 0;
@@ -623,15 +659,18 @@ export function buildShipModel(layout, opts = {}) {
         if (le && Number.isFinite(le.dir)) e.group.rotation.z = -le.dir;
       }
       for (const w of dyn.wheels) w.rotation.z = (st.ship && Number.isFinite(st.ship.order) ? st.ship.order : 0) * 3;
+      const liveSails = st.sails || [];
+      dyn.sails.forEach((sd, i) => { const ls = liveSails.find((q) => q.n === sd.s.n) || liveSails[i]; const hoist = ls && Number.isFinite(ls.hoist) ? ls.hoist : 1; sd.node.scale.y = 0.12 + 0.88 * clamp(hoist, 0, 1); });
       const fires = st.fires || [];
       while (flamePool.length < fires.length) { const f = makeFlame(); content.add(f); flamePool.push(f); }
       flamePool.forEach((f, i) => {
         const fr = fires[i], q = fr && P[fr.d];
         f.visible = !!q;
         if (!q) return;
-        const k = fr.big ? 1.7 : 1, sc = [[1, 1], [1.08, 0.88], [0.92, 1.14], [1.04, 1.0]][Math.floor(t * 8 + fr.x) % 4];
+        const k = fr.big ? 1.7 : 1, fi = Math.floor(t * 8 + fr.x * 0.013) % 4;
         f.position.set(X(fr.x), Y(q.y), FZ + 40);
-        f.scale.set(k * sc[0] * 1.15, k * sc[1] * 1.15, k * sc[0] * 1.15);
+        f.scale.setScalar(k);
+        f.userData.tongues.forEach((tg, ti) => { const hh = [[1, 0.8, 1.1], [0.85, 1.15, 0.9], [1.1, 0.9, 0.8], [0.95, 1.05, 1.0]][fi][ti]; tg.scale.set(1, hh, 1); });
       });
     },
   };
