@@ -1,11 +1,20 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Airship Crew - Host</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- 3D view (host.html?view=3d, view3d/): Three.js is bundled in vendor/three (MIT), loaded only when the 3D view is on. Relative paths: works offline. -->
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
 <style>
 /* Bundled fonts (no internet needed). Limelight = titles/numbers, Libre Baskerville = labels/body. */
 @font-face{font-family:'Limelight';src:url(fonts/Limelight-Regular.ttf) format('truetype');font-weight:400;font-display:block}
 @font-face{font-family:'Libre Baskerville';src:url(fonts/LibreBaskerville.ttf) format('truetype');font-weight:400 700;font-display:block}
 html,body{margin:0;height:100%;overflow:hidden;background:#2b1d14;font-family:'Libre Baskerville',Georgia,serif}
 canvas{display:block;width:100vw;height:100vh}
+/* 3D view: the 3D canvas sits under the 2D one; the 2D canvas turns transparent and only draws the HUD, arrows and cards (body.view3d, set by main.js). */
+#c3d{display:none;position:fixed;left:0;top:0;z-index:0}
+#c{position:relative;z-index:1}
+body.view3d #c3d{display:block}
+body.view3d #c{position:fixed;left:0;top:0;background:transparent}
 /* Captain's logbook look: cream paper, warm-brown ink. */
 #join{position:fixed;top:14px;right:14px;background:#f3ead6;border:3px solid #3a2c20;border-radius:10px;padding:12px 14px;text-align:center;color:#3a2c20;box-shadow:4px 5px 0 rgba(43,34,22,.35),inset 0 0 0 4px #f3ead6,inset 0 0 0 5px rgba(107,74,50,.45)}
 #join img{width:170px;height:170px;display:block;margin:0 auto;border-radius:4px;border:2px solid #3a2c20}
@@ -32,6 +41,7 @@ canvas{display:block;width:100vw;height:100vh}
 #join.flying #count{font-size:12px;margin-top:2px}
 button{margin-top:8px;font:inherit;font-weight:700;border:3px solid #3a2c20;background:#e63946;color:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
 </style></head><body>
+<canvas id="c3d"></canvas>
 <canvas id="c"></canvas>
 <div id="join"><img id="qr" alt="Join QR code"><div id="code">----</div><div id="url"></div><div id="count">0 / 16 aboard</div>
 <button id="castoff" style="background:#2e9e4f;font-size:19px;font-family:'Limelight',Georgia,serif;font-weight:400">CAST OFF!</button><br><button id="bots">Add 4 bot crew</button><br><button id="difficulty" style="background:#3a5a8c">Difficulty: Normal</button><br><button id="mode" style="background:#8c5a3a">Mode: VOYAGE</button><br><button id="daily" style="background:#6a4a8c">Daily voyage: off</button><br><button id="shipBtn" style="background:#7a5a2e">Ship: Sparrow</button><br><button id="sound" style="background:#555">Sound: on (M)</button><br><button id="menuBtn">Menu (Esc)</button></div>
@@ -45,7 +55,8 @@ button{margin-top:8px;font:inherit;font-weight:700;border:3px solid #3a2c20;back
 <div class="row"><button id="mNext" style="background:#8a6a2a">Skip to next map</button><button id="mRestart" style="background:#a12a2a">Restart from mission 1</button></div>
 <div class="row"><button id="mSharp" style="background:#555">Screen</button><button id="mArt" style="background:#555;font-size:12px">Art test</button><button id="mBuild" style="background:#555;font-size:12px">Build test</button></div>
 <div class="row"><button id="mBack" style="background:#7a5a2e;display:none">Back to the builder</button></div>
-<div class="row"><button id="mDetail" style="background:#555;font-size:13px">Detail: auto</button></div>
+<div class="row"><button id="mDetail" style="background:#555;font-size:13px">Detail: auto</button><button id="mView" style="background:#3a6a6a;font-size:13px">View: 2D</button></div>
+<div id="mViewNote" style="margin-top:8px;font-size:13px;color:#8a5a14;display:none"></div>
 <div id="mErr"></div></div></div>
 <script src="socket.io/socket.io.js"></script>
 <script type="module" src="modules/host/main.js"></script>

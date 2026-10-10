@@ -22,6 +22,7 @@ try {
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
+const canvas3d = document.getElementById('c3d');
 // Draw at the screen's real pixel density (sharp on scaled laptop screens and 4K TVs), capped in config.
 // "Sharp screen" (pause menu) is remembered on this computer; it costs speed on big screens.
 try {
@@ -111,7 +112,86 @@ if (playtest && playtest.mode === 'versus') armVersus(simulation, playtest, buil
 const camera = createCamera();
 // ONE renderer draws the whole sky: the background once, then every ship (her own art, crew and effects), the darkness and the HUD (render.js).
 const renderer = createRenderer({ ctx, state: simulation.state, canvas });
-const drawFrame = (now, view) => renderer.renderFrame(now, view);
+// THE 3D VIEW (view3d/, 3D.md WP0): host.html?view=3d (or the pause menu's View button, remembered in localStorage.airshipView; the default is still 2D). The 3D canvas (#c3d) draws the
+// world with Three.js from the same game state; the 2D canvas turns transparent and draws only the HUD, the screen-edge arrows and the full-screen cards (render.js layers). Any WebGL failure, or the view throwing twice, drops back to the 2D renderer for the rest of the session (a note shows in the pause menu).
+const viewChoice = (() => {
+  const q = new URLSearchParams(location.search).get('view');
+  if (q === '2d' || q === '3d') return q;
+  try { const s = localStorage.getItem('airshipView'); if (s === '2d' || s === '3d') return s; } catch { /* (no storage) */ }
+  return '2d'; // (WP14 flips this default)
+})();
+const HUD_LAYERS = ['hud', 'arrows']; // (no 'background', 'ship', 'effects', 'dark' or 'film': the 3D scene and its lights draw those)
+const v3 = { view: null, active: false, loading: false, fails: 0, broken: false, mode: viewChoice };
+window.view3dNote = '';
+const v3settings = {
+  sweep: false,
+  get detail() { return perfState.level >= 2 ? 'high' : 'low'; }, // (the perf governor steps the 3D detail down too)
+  pixelRatio: () => Math.min(window.devicePixelRatio || 1, perfState.level >= 3 ? 1.5 : 1),
+};
+const drop3D = (reason) => { // back to the 2D renderer (reason = why, for the pause menu; null = the player chose 2D)
+  v3.active = false;
+  document.body.classList.remove('view3d');
+  if (reason) {
+    v3.broken = true;
+    window.view3dNote = '3D view stopped (' + reason + '): playing in 2D for this session.';
+    if (v3.view) v3.view.dispose();
+    v3.view = null;
+    console.warn('view3d off:', reason);
+  }
+  fitCanvas();
+};
+const use3D = async () => {
+  if (v3.active || v3.loading || v3.broken) return;
+  v3.loading = true;
+  try {
+    document.body.classList.add('view3d'); // (before the canvas is measured)
+    if (!v3.view) {
+      const mod = await import('../view3d/index.js');
+      v3.view = mod.createView3D({ canvas: canvas3d, state: simulation.state, settings: v3settings });
+    }
+    v3.active = true;
+    v3.fails = 0;
+    window.view3dNote = '';
+  } catch (e) {
+    drop3D(String(e && e.message ? e.message : e).slice(0, 120));
+  }
+  v3.loading = false;
+  fitCanvas();
+};
+// (the pause menu's View button)
+window.setView = async (mode) => {
+  mode = mode === '3d' ? '3d' : '2d';
+  v3.mode = mode;
+  try { localStorage.setItem('airshipView', mode); } catch { /* (not remembered) */ }
+  try { const u = new URL(location.href); u.searchParams.set('view', mode); history.replaceState(null, '', u); } catch { /* (no history) */ }
+  if (mode === '3d') { v3.broken = false; await use3D(); } else drop3D(null);
+  return v3.active ? '3d' : '2d';
+};
+window.viewIs3D = () => v3.active;
+window.view3dDebug = () => ({ view: v3.view, lastView: window.__lastView }); // (dev: the HUD alignment check reads these)
+const drawFrame = (now, view) => {
+  window.__lastView = view;
+  if (v3.active && v3.view) {
+    let ok = false;
+    try {
+      if (v3.view.lost) throw new Error('the graphics context was lost');
+      v3.view.renderFrame(now, view, { width: canvas.width, height: canvas.height });
+      ok = true;
+    } catch (e) {
+      v3.fails++;
+      if (window.gameErrors) window.gameErrors.push('3D view: ' + (e && e.message ? e.message : e));
+      console.warn('3D view problem', e);
+      if (v3.fails >= 2 || v3.view.lost) drop3D(v3.view.lost ? 'graphics context lost' : 'it failed twice');
+    }
+    if (ok) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height); // (transparent: the 3D picture shows through)
+      renderer.renderFrame(now, view, { layers: HUD_LAYERS });
+      return;
+    }
+  }
+  renderer.renderFrame(now, view);
+};
 const network = initHostNetwork({ simulation });
 // Playtest in co-op with bots (&bots=N): they climb aboard and the ship casts off at once (without &bots the lobby opens with its QR code for phones).
 if (playtest && playtest.mode === 'coop' && playtest.bots > 0) {
@@ -165,9 +245,10 @@ const guard = (what, fn) => {
 
 // Speed check: press F to show frames per second, the slowest frame, and how long drawing takes.
 const meter = document.createElement('div');
-meter.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:50;font:bold 16px monospace;color:#fff;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:6px;display:none;pointer-events:none';
+meter.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:50;font:bold 16px monospace;color:#fff;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:6px;display:none;pointer-events:none;white-space:pre';
 document.body.appendChild(meter);
 addEventListener('keydown', (e) => (e.key === 'f' || e.key === 'F') && (meter.style.display = meter.style.display === 'none' ? 'block' : 'none'));
+let view3dKicked = false; // (the 3D view loads after the first frame, so the 2D picture is there while it does)
 let meterT = 0;
 let meterN = 0;
 let meterWorst = 0;
@@ -177,7 +258,14 @@ const meterTick = (now, gap, drawMs) => {
   meterWorst = Math.max(meterWorst, gap);
   meterDraw += drawMs;
   if (now - meterT < 1000) return;
-  if (meter.style.display !== 'none') meter.textContent = `${Math.round((meterN * 1000) / (now - meterT))} fps | slowest ${Math.round(meterWorst)} ms | draw ${(meterDraw / meterN).toFixed(1)} ms | ${canvas.width}x${canvas.height} | ${perf.label()}`;
+  if (meter.style.display !== 'none') {
+    meter.textContent = `${Math.round((meterN * 1000) / (now - meterT))} fps | slowest ${Math.round(meterWorst)} ms | draw ${(meterDraw / meterN).toFixed(1)} ms | ${canvas.width}x${canvas.height} | ${perf.label()}`;
+    if (v3.active && v3.view) { // (3D: what the graphics card is asked to draw)
+      const s = v3.view.stats();
+      meter.textContent += `\n3D: ${s.calls} draw calls | ${Math.round(s.tris / 1000)}k tris | js ${s.jsMs.toFixed(1)} ms | render ${s.renderMs.toFixed(1)} ms | ${s.w}x${s.h}`;
+    }
+  }
+  window.__meter = { fps: Math.round((meterN * 1000) / (now - meterT)), slowest: meterWorst, draw: meterDraw / meterN, v3: v3.active && v3.view ? v3.view.stats() : null };
   meterT = now;
   meterN = 0;
   meterWorst = 0;
@@ -203,6 +291,7 @@ function frame(now) {
   }
   guard('sound', () => sfx.update());
   const view = guard('camera', () => camera.update(paused ? 0 : dt, simulation.state, canvas.width, canvas.height));
+  if (!view3dKicked && viewChoice === '3d') { view3dKicked = true; use3D(); }
   const d0 = performance.now();
   if (view) guard('draw', () => drawFrame(now, view));
   const drawMs = performance.now() - d0;
