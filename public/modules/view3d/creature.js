@@ -15,7 +15,7 @@ import { config } from '../../config.js';
 import { paintHeadAtlas, paintLimbSkin, creatureToon, makeUniforms, Tinter, coilFade } from './creatureKit.js';
 import { createTubeSet } from './creatureTube.js';
 import { buildKraken } from './creatureKraken.js';
-import { buildDrake, drakeTubeParts } from './creatureDrake.js';
+import { buildDrake, drakeSkins, drakeLimbs, drakeTubeOpts, extendDrake } from './creatureDrake.js';
 import { createFoamRings, createShadowDecal, createGripMarkers, createRopeSet } from './creatureFx.js';
 import { createWaterFx } from './creatureWater.js';
 
@@ -27,7 +27,9 @@ const FLASH = [2.4, 2.2, 2.2], DIM = [0.66, 0.72, 0.95], LIT = [1.28, 1.22, 1.2]
 // The kinds: what is special about each creature. A new creature adds one entry (palette, build -> the geometry, which part kinds are its limbs).
 export const KINDS = {
   kraken: { id: 'kraken', palette: () => config.CREATURE3D.KRAKEN, build: buildKraken, limbKind: 'tentacle' },
-  drake: { id: 'drake', palette: () => config.CREATURE3D.DRAKE, build: buildDrake, limbKind: 'wing', tubesOnly: true, limbsOf: drakeTubeParts }, // (C.6a: the placeholder: tapered capsules for every part; the sculpted Drake is a later task)
+  // The Cinder Drake (3D.md section 22): its own skins (scales + ember cracks), tube opts (spines on the neck and tail), the extension that places its head, jaw, wings, legs and fire (creatureDrake.js), and
+  // `desperate`: its phase 3 is a rage, not tiredness (no pale tired tint)
+  drake: { id: 'drake', palette: () => config.CREATURE3D.DRAKE, build: buildDrake, limbKind: 'wing', limbsOf: drakeLimbs, skins: drakeSkins, tubeOpts: drakeTubeOpts, extend: extendDrake, desperate: true, sheen: 0 },
 };
 
 export function createCreatureView(parent) {
@@ -48,45 +50,53 @@ export function createCreatureView(parent) {
     const K = KINDS[cr.kind] || KINDS.kraken, P = K.palette(), low = !!(tier && tier.name === 'low');
     const head = K.build(cr, P, { low });
     const uniforms = makeUniforms(0.99), uniformsT = makeUniforms(0.958); // (a thin limb shows a thinner glint than the big smooth dome)
-    const headMap = paintHeadAtlas(P), limbMap = paintLimbSkin(P);
+    const skins = K.skins ? K.skins(P) : null; // (a creature with its own paintings: a colour map and an emissive twin each, for the body and for the limbs)
+    const headMap = skins ? skins.head : paintHeadAtlas(P), limbMap = skins ? skins.limb : paintLimbSkin(P);
     const headMat = creatureToon(headMap, uniforms);
+    if (skins) { headMat.emissive.set('#ffffff'); headMat.emissiveMap = skins.headGlow; headMat.emissiveIntensity = 0.7; }
     const hg = new THREE.Group();
     const headMesh = new THREE.Mesh(head.geometry, headMat), headInk = new THREE.Mesh(head.geometry, outlineMat);
-    const dynMesh = new THREE.Mesh(head.dynGeometry, headMat), dynInk = new THREE.Mesh(head.dynGeometry, outlineMat);
-    for (const m of [headMesh, headInk, dynMesh, dynInk]) m.frustumCulled = false;
-    headMesh.userData.toon = dynMesh.userData.toon = headMat;
-    headInk.userData.isOutline = dynInk.userData.isOutline = true;
-    hg.add(headMesh, headInk, dynMesh, dynInk);
+    const dynMesh = head.dynGeometry ? new THREE.Mesh(head.dynGeometry, headMat) : null, dynInk = head.dynGeometry ? new THREE.Mesh(head.dynGeometry, outlineMat) : null; // (a creature may keep its dynamic pieces in the body's own geometry)
+    for (const m of [headMesh, headInk, dynMesh, dynInk]) if (m) m.frustumCulled = false;
+    headMesh.userData.toon = headMat;
+    headInk.userData.isOutline = true;
+    hg.add(headMesh, headInk);
+    if (dynMesh) { dynMesh.userData.toon = headMat; dynInk.userData.isOutline = true; hg.add(dynMesh, dynInk); }
     root.add(hg);
     const limbs = K.limbsOf ? K.limbsOf(cr) : cr.parts.filter((p) => p.limb);
     const maxSegs = Math.max(2, ...cr.def.parts.filter((d) => d.chain).map((d) => d.chain.length), 2); // (the longest chain of any limb)
-    const tubeOpts = K.tubesOnly ? { rows: [], maxSuckers: 1 } : {}; // (no suckers on a dragon)
+    const tubeOpts = K.tubeOpts ? K.tubeOpts(P) : K.tubesOnly ? { rows: [], maxSuckers: 1 } : {};
     const sides = low ? 8 : P.TENTACLE_SIDES || 12;
     const tubes = createTubeSet({ nLimbs: limbs.length, maxSegs, sides, map: limbMap, uniforms: uniformsT, palette: P, ow: P.INK || 14, ...tubeOpts });
     root.add(tubes.mesh, tubes.inkMesh, tubes.suckers);
+    if (skins) { tubes.material.emissive.set('#ffffff'); tubes.material.emissiveMap = skins.limbGlow; tubes.material.emissiveIntensity = 0.6; }
     const fxU = { uFoam: { value: new THREE.Color(P.FOAM ? P.FOAM.COLOR : '#f4fbfa') }, uLevel: { value: 1 }, uBand: { value: P.FOAM ? P.FOAM.BAND : 0.55 }, uAlpha: { value: P.FOAM ? P.FOAM.ALPHA : 0.92 }, uShadow: { value: new THREE.Color(P.SHADOW ? P.SHADOW.COLOR : '#0a1830') }, uShadowAlpha: { value: P.SHADOW ? P.SHADOW.ALPHA : 0.5 } };
     const foam = createFoamRings(parent, fxU), shadow = createShadowDecal(parent, fxU), markers = createGripMarkers(parent), ropes = createRopeSet(parent);
+    const ranges = head.ranges, tint = new Tinter(head.geometry);
+    let ext = null; // (a kind's own extension: the Drake's rigid pieces, wings, legs and fire)
+    if (K.extend) ext = K.extend({ cr, P, low, root, parent, link, head, uniforms, uniformsT, headMat, headMap, limbMap, tubes, tint, plainOf });
     applyLook(root);
     root.traverse(plainOf);
     plainOf(foam.mesh);
-    const ranges = head.ranges, tint = new Tinter(head.geometry);
     rig = {
-      cr, kind: cr.kind, K, tubeOpts, P, low, head, uniforms, uniformsT, headMap, limbMap, headMat, hg, headMesh, dynMesh, tubes, tint, limbs, fxU, foam, shadow, markers, ropes, ranges, bake: null, chunks: new Map(),
+      cr, kind: cr.kind, K, tubeOpts, P, low, head, uniforms, uniformsT, headMap, limbMap, headMat, hg, headMesh, dynMesh, tubes, tint, limbs, fxU, foam, shadow, markers, ropes, ranges, bake: null, chunks: new Map(), ext, skins,
       water: createWaterFx({ world: { splashAt: (...a) => (link.world ? link.world.splashAt(...a) : 0) }, getP: () => (link.vfx && link.vfx.P) || null }),
       lastY: null, speedY: 0, zbuf: new Float32Array(32), glow: [1, 1, 1, 1], lidKey: '', jawKey: '', heartKey: '', mantleX: null,
     };
     stats.built++;
-    stats.tris = head.tris + head.dynTris + tubes.stats().tris;
+    stats.tris = head.tris + head.dynTris + tubes.stats().tris + (ext && ext.pieces ? ext.pieces.tris + (ext.wings ? ext.wings.tris() : 0) : 0);
   }
 
   function dispose() {
     if (!rig) return;
     clearChunks();
     root.remove(rig.hg, rig.tubes.mesh, rig.tubes.inkMesh, rig.tubes.suckers);
-    for (const g of [rig.head.geometry, rig.head.dynGeometry]) g.dispose();
+    if (rig.ext) { try { rig.ext.dispose(); } catch { /* (gone) */ } }
+    for (const g of [rig.head.geometry, rig.head.dynGeometry]) if (g) g.dispose();
     rig.tubes.dispose(); if (rig.bake) rig.bake.dispose();
     for (const o of [rig.foam, rig.shadow, rig.markers, rig.ropes]) { (o.mesh || o.group).removeFromParent(); o.dispose(); }
     rig.headMat.dispose(); rig.headMap.dispose(); rig.limbMap.dispose();
+    if (rig.skins) { rig.skins.headGlow.dispose(); rig.skins.limbGlow.dispose(); }
     rig = null;
   }
 
@@ -133,12 +143,12 @@ export function createCreatureView(parent) {
   function clearChunks() {
     if (!rig) return;
     const D = link.destruction;
-    for (const e of rig.chunks.values()) { if (D && D.removeExternal) D.removeExternal(e.piece); else e.holder.removeFromParent(); }
+    for (const e of rig.chunks.values()) { if (e.none) continue; if (D && D.removeExternal) D.removeExternal(e.piece); else e.holder.removeFromParent(); if (e.extra) e.extra.dispose(); }
     rig.chunks.clear();
   }
   function makeChunk(c) {
     if (!rig) return null;
-    const D = link.destruction, p = c.part, segs = p.segs, n = segs.length, P = rig.P;
+    const D = link.destruction, p = c.part, segs = p.segs, n = segs.length, P = rig.P, cr = rig.cr;
     if (!n) return null;
     if (!rig.bake) rig.bake = createTubeSet({ nLimbs: 1, maxSegs: Math.max(8, (rig.tubes.RB - 1) / rig.tubes.Q), sides: rig.low ? 8 : P.TENTACLE_SIDES || 12, map: rig.limbMap, uniforms: rig.uniformsT, palette: P, ow: P.INK || 14, ...rig.tubeOpts });
     // the boxes of the body: a row of cubes along each segment (the physics only has axis-aligned boxes in the body's frame)
@@ -153,11 +163,13 @@ export function createCreatureView(parent) {
     cx /= cnt; cy /= cnt;
     for (const q of use) boxes.push({ cx: q.x - cx, cy: q.y - cy, cz: 0, hx: q.h, hy: q.h, hz: q.h * 0.9 });
     const Z = new Float32Array(n + 1);
-    const geo = rig.bake.bakeStatic(segs, p.side, true, Z, [1, 1, 1]);
+    const geo = rig.bake.bakeStatic(rig.ext && rig.ext.chunkBones ? rig.ext.chunkBones(p) : segs, p.side, true, Z, [1, 1, 1]); // (the Drake's torn wing: its thin bones, with the skin as an extra mesh)
     const holder = new THREE.Group(), inner = new THREE.Group();
     const mesh = new THREE.Mesh(geo, rig.tubes.material), ink = new THREE.Mesh(geo, outlineMat);
     mesh.userData.toon = rig.tubes.material; mesh.userData.shadowReceiver = true; ink.userData.isOutline = true;
     inner.add(mesh, ink);
+    const extra = rig.ext && rig.ext.chunkExtra ? rig.ext.chunkExtra(p, cr.f) : null;
+    if (extra) { inner.add(extra.mesh); plainOf(extra.mesh); }
     inner.position.set(-cx, -cy, 110);
     holder.add(inner);
     holder.position.set(c.cx + cx, -c.cy + cy, 0);
@@ -167,7 +179,7 @@ export function createCreatureView(parent) {
     const K = config.CREATURES.CHUNK;
     const piece = D && D.addExternal ? D.addExternal({ holder, boxes, rel: 0.9, mat: 'canvas', size: Math.hypot(...[cx, cy]) + 200, vel: [c.vx, -c.vy], spin: -c.w, life: Math.max(0.3, K.LIFE - c.t) }) : null;
     if (!piece) { holder.removeFromParent(); return null; }
-    return { holder, piece, geo, born: c.t };
+    return { holder, piece, geo, born: c.t, extra };
   }
 
   // the mantle's outline against the sea line (head frame -> world), for the foam ring and the wake
@@ -210,7 +222,7 @@ export function createCreatureView(parent) {
       const dz = cr.mouthWin && cr.mode === 'idle' ? -(rig.head.mantle.R * rig.head.mantle.sz + hullHalf() + 120) : 0; // (the beak gapes under her bomb bay: all of it is behind her hull, as in 2D)
       // the light on it
       R.uniforms.uSheenDir.value.copy(link.world && link.world.sunDir ? link.world.sunDir : _sun).add(_front).normalize();
-      R.uniforms.uSheen.value = night > 0.6 ? 0.35 : 1;
+      R.uniforms.uSheen.value = (night > 0.6 ? 0.35 : 1) * (R.K.sheen == null ? 1 : R.K.sheen); // (a dragon's scales are dry: no wet glint)
       R.uniformsT.uSheenDir.value.copy(R.uniforms.uSheenDir.value); R.uniformsT.uSheen.value = R.uniforms.uSheen.value;
       R.fxU.uLevel.value = 1 - 0.7 * clamp(night, 0, 1);
       // ---- the head: placed by the sim's body position; breathing is the sim's own held-and-snapped scale ----
@@ -224,7 +236,7 @@ export function createCreatureView(parent) {
         if (p.hit > 0) return FLASH;
         if (eye) return [1, 1, 1];
         let a = !p.lit ? DIM : night > 0.35 ? LIT : [1, 1, 1];
-        if (phase3 || dying) a = [a[0] * TIRED[0], a[1] * TIRED[1], a[2] * TIRED[2]];
+        if ((phase3 && !R.K.desperate) || dying) a = [a[0] * TIRED[0], a[1] * TIRED[1], a[2] * TIRED[2]];
         if (dying) { const d = clamp((cr.sinkT || 0) / 4, 0, 1); a = [a[0] * (1 - 0.3 * d), a[1] * (1 - 0.25 * d), a[2] * (1 - 0.1 * d)]; }
         return a;
       };
@@ -255,11 +267,13 @@ export function createCreatureView(parent) {
       if (hd) { if (heartP && !heartP.hidden && !heartP.dead) hd.pose(0, 1 + 0.1 * (_stepKey(t, 4) & 1)); else hd.pose(0, 0); }
       R.glow[3] = P.HEART_GLOW;
       R.uniforms.uGlow.value.set(R.glow[0], R.glow[1], R.glow[2], R.glow[3]);
+      // a kind's own extension (the Drake's pieces, wings, legs, fire) places what the generic view does not: its limbs too
+      if (R.ext) { try { R.ext.update({ R, cr, night, dt, t, state, tier, tintOf, phase3, dying }); } catch (e) { logOnce('ext', e); } }
 
       // ---- the limbs ----
       const hh = hullHalf(), tubes = R.tubes;
       try { setCoilFade(); } catch { coilFade.uCoilZ.value = 1e9; }
-      R.limbs.forEach((p, li) => {
+      if (!(R.ext && R.ext.ownsLimbs)) R.limbs.forEach((p, li) => {
         const n = p.segs ? p.segs.length : 0;
         if (p.dead || p.hidden || !n) { tubes.update(li, null, 1, false, R.zbuf, [1, 1, 1]); return; }
         if (R.zbuf.length < n + 1) R.zbuf = new Float32Array(n + 8);
@@ -309,12 +323,13 @@ export function createCreatureView(parent) {
         if (!g || g.mode === 'recoil') continue;
         R.markers.add(g.wx, -g.wy, 420, g.mode === 'hold' ? 1 : 0, g.total ? g.left / g.total : 0, g.job ? g.job.prog : 0, _stepKey(g.t || 0, 8) & 1);
       }
+      if (R.ext && R.ext.markers) R.ext.markers(R.markers, _stepKey(t, 8)); // (the Drake's swoop and lunge rings, the perched drake's timer ring)
       R.markers.end();
       R.ropes.begin();
       for (const tw of cr.harpoons || []) {
         const fl = tw.fly > 0 ? clamp(tw.t / tw.fly, 0, 1) : 1, a = { x: tw.a.x, y: -tw.a.y, z: 40 };
         const li = R.limbs.indexOf(tw.part), L = li >= 0 ? tubes.limbs[li] : null;
-        const bz = L && L.nr > tubes.Q * (tw.seg || 0) + (tubes.Q >> 1) ? L.P[(tubes.Q * (tw.seg || 0) + (tubes.Q >> 1)) * 3 + 2] : dz + 40;
+        const bz = L && L.nr > tubes.Q * (tw.seg || 0) + (tubes.Q >> 1) ? L.P[(tubes.Q * (tw.seg || 0) + (tubes.Q >> 1)) * 3 + 2] : R.ext && R.ext.zBody ? R.ext.zBody() : dz + 40;
         const b = { x: a.x + (tw.b.x - tw.a.x) * fl, y: a.y + (-tw.b.y - a.y) * fl, z: a.z + (bz - a.z) * fl };
         const d = Math.hypot(b.x - a.x, b.y - a.y), slack = Math.max(0, (tw.len || d) - d);
         R.ropes.add(a, b, 7, fl < 1 ? 0 : clamp(Math.sqrt(0.375 * d * slack), 0, 0.28 * d), tw.tension || 0);
@@ -329,7 +344,7 @@ export function createCreatureView(parent) {
         if (!e) { e = makeChunk(c) || { none: true }; R.chunks.set(c, e); }
         if (!e.none && link.destruction && link.destruction.pieces && !link.destruction.pieces.includes(e.piece)) { e.none = true; } // (the wreckage world dropped it: the cap)
       }
-      for (const [c, e] of R.chunks) if (!live.has(c)) { if (!e.none && link.destruction && link.destruction.removeExternal) link.destruction.removeExternal(e.piece); R.chunks.delete(c); }
+      for (const [c, e] of R.chunks) if (!live.has(c)) { if (!e.none && link.destruction && link.destruction.removeExternal) link.destruction.removeExternal(e.piece); if (e.extra) e.extra.dispose(); R.chunks.delete(c); }
       stats.chunks = R.chunks.size;
     },
     clear() { dispose(); root.visible = false; },

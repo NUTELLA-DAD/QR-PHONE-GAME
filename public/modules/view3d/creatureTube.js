@@ -16,7 +16,9 @@ const _v = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3
 export const Q = 3; // rings per segment (joints plus Q - 1 smooth ones between)
 const bodyRings = (maxSegs) => Q * maxSegs + 1;
 
-export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, palette, ow = 14, tipK = 2.6, maxSuckers = 360, rows = [-0.62, 0.62], suckerK = 0.3 }) {
+// The Cinder Drake reuses it with its own studs: cup = the instanced geometry (a spine: base at the origin, axis +y), rsMax / gap = the biggest stud and the spacing, stationsFor(l) = which limbs get any,
+// cols = the two stud colours, rows = angles round the tube from the belly side (PI = the back).
+export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, palette, ow = 14, tipK = 2.6, maxSuckers = 360, rows = [-0.62, 0.62], suckerK = 0.3, cup: cupGeo = null, rsMax = 64, gap = 3.6, stationsFor = null, cols = null }) {
   const RB = bodyRings(maxSegs), R = RB + 2, S1 = sides + 1; // (every limb: RB body rings, two end rings: the tip, or the cut face)
   const perLimb = R * S1, total = perLimb * nLimbs;
   const pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), uv = new Float32Array(total * 2), col = new Float32Array(total * 3), glow = new Float32Array(total), ono = new Float32Array(total * 3);
@@ -44,7 +46,7 @@ export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, pale
   inkMesh.frustumCulled = false;
 
   // ---- suckers: one instanced mesh for all the limbs ------------------------------------------------------------------------------------------------------------------------------------
-  const cup = new THREE.CylinderGeometry(0.62, 1, 0.8, 10, 1); // axis +y = away from the skin
+  const cup = cupGeo || new THREE.CylinderGeometry(0.62, 1, 0.8, 10, 1); // axis +y = away from the skin
   const sMat = rimify(new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap }));
   const suckers = new THREE.InstancedMesh(cup, sMat, maxSuckers);
   suckers.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -52,7 +54,7 @@ export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, pale
   suckers.count = 0;
   suckers.setColorAt(0, new THREE.Color('#ffffff'));
   suckers.userData.toon = sMat;
-  const boneC = new THREE.Color(palette.bone), pinkC = new THREE.Color(palette.lips);
+  const boneC = new THREE.Color(cols ? cols[0] : palette.bone), pinkC = new THREE.Color(cols ? cols[1] : palette.lips);
 
   // ---- per limb state -------------------------------------------------------------------------------------------------------------------------------------------------------------------
   const limbs = [];
@@ -61,7 +63,7 @@ export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, pale
     // u runs round the tube from the sucker side (0) and back to it (1); v is set per limb layout (design lengths) the first time
     for (let r = 0; r < R; r++) for (let s = 0; s < S1; s++) uv[(base + r * S1 + s) * 2] = s / sides;
     limbs.push({
-      base, layoutKey: '', n: 0, tintKey: '', sev: null, dead: true,
+      base, index: l, layoutKey: '', n: 0, tintKey: '', sev: null, dead: true,
       P: new Float32Array(R * 3), rad: new Float32Array(R), T: new Float32Array(R * 3), N1: new Float32Array(R * 3), N2: new Float32Array(R * 3), nr: 0, // (the rings of the last frame: the water effects and the suckers read them)
       stations: [], tint: [1, 1, 1],
     });
@@ -89,8 +91,8 @@ export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, pale
     for (let r = 0; r < R; r++) for (let s = 0; s < S1; s++) uv[(L.base + r * S1 + s) * 2 + 1] = vv[r];
     geometry.getAttribute('uv').needsUpdate = true;
     L.stations = [];
-    for (let i = 0; i < n; i++) {
-      const s = segs[i], rm = (s.r + s.r1) / 2, rs = clamp(rm * suckerK, 6, 64), ns = Math.max(1, Math.floor(s.len / (rs * 3.6)));
+    for (let i = 0; i < n && (!stationsFor || stationsFor(L.index)); i++) {
+      const s = segs[i], rm = (s.r + s.r1) / 2, rs = clamp(rm * suckerK, 6, rsMax), ns = Math.max(1, Math.floor(s.len / (rs * gap)));
       for (let k = 0; k < ns; k++) L.stations.push({ ring: Q * i + Q * ((k + 0.5) / ns), rs: rs * (1 - 0.35 * (k / ns)) * (s.r1 / s.r < 1 ? 1 : 1), alt: (i + k) % 2 });
     }
   }

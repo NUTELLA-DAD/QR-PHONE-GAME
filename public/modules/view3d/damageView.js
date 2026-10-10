@@ -242,6 +242,18 @@ export function createDamageView({ state, models }) {
       for (const [id, rec] of recs) if (!seen.has(id)) { rec.wall.removeFromParent(); rec.front.removeFromParent(); rec.rips.removeFromParent(); recs.delete(id); }
       D.stats.decals = decals; D.stats.rips = rips; D.stats.patches = patches;
     },
+    // A mark the simulation did not log (the Cinder Drake's breath scorches the hull without a hit): a scorch on ship `sh` at the ship point (x, y), the same marks the hit log makes, kept until the ship is rebuilt.
+    mark(sh, x, y, power = 1.4, kind = 'scorch') {
+      const rec = sh && recs.get(sh.id);
+      if (!rec || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+      const n = -(1 + (rec.markSeq = (rec.markSeq || 0) + 1)); // (negative numbers: they never clash with the log's own, and `seen` ignores them)
+      const h = { n, x, y, power, kind, partId: null };
+      h.look = lookOf(h);
+      rec.list.push(h);
+      if (rec.list.length > K().MAX) rec.list.shift();
+      rec.dirty = true;
+      return true;
+    },
     // forget every mark (a new run)
     clear() { for (const rec of recs.values()) { rec.list.length = 0; rec.dirty = true; for (const e of rec.holes.values()) dropMeshes(e); rec.holes.clear(); for (const e of rec.patchMeshes || []) dropMeshes(e); rec.patchMeshes = []; rec.patches.length = 0; } },
   };

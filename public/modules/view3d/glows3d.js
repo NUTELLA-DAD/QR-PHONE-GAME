@@ -8,6 +8,7 @@ import { targets } from '../host/aim.js';
 const MAX = 80;
 const PULSE = [0, 0.1, 0.2, 0.1]; // (added to the 1.9 radius factor of the 2D glow, stepped)
 const SKIP = new Set(['rival', 'cable']);
+const DRAKE_BIG = new Set(['mantle', 'wing', 'neck', 'tail', 'head']); // (the parts of the Cinder Drake that get no halo)
 
 export function createThreatGlows(root, state) {
   const c = document.createElement('canvas');
@@ -40,9 +41,12 @@ export function createThreatGlows(root, state) {
         for (const tg of targets(state)) {
           if (n >= MAX) break;
           if (!tg || SKIP.has(tg.kind)) continue;
-          const p = tg.at(0), r = Number(tg.r) * (1.9 + k);
+          // (the Cinder Drake is as big as three ships: a halo round its torso and wings would hide the model, so only its small weak points glow, behind it: the mouth, the heart)
+          const drakePart = tg.kind === 'creaturePart' && state.creature && state.creature.kind === 'drake';
+          if (drakePart && DRAKE_BIG.has(tg.part && tg.part.kind)) continue;
+          const p = tg.at(0), r = Number(tg.r) * (drakePart ? 1.25 + k : 1.9 + k);
           if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !(r > 0)) continue;
-          M.compose(P.set(p.x, -p.y, -30), Q, S.set(r * 2, r * 2, 1)); // (a little behind the thing itself: the 2D game draws the glow under the threat, over the ships)
+          M.compose(P.set(p.x, -p.y, drakePart ? -160 : -30), Q, S.set(r * 2, r * 2, 1)); // (a little behind the thing itself: the 2D game draws the glow under the threat, over the ships)
           mesh.setMatrixAt(n++, M);
         }
       }
