@@ -44,7 +44,7 @@ import { installBags, syncBags, stepBags, watchBags, holesPerBag, liftGas, stepH
 import { createHydrogen } from './hydrogen.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToWorld, pivotOf } from './pose.js';
 import { planBreak, makeRng, rebuildPrice, hoverOf, brokenOf } from './breakOff.js';
-import { bagNearX, bagEdgeY, bagName, rowOf } from './shipBuild.js';
+import { bagNearX, bagEdgeY, bagName, rowOf, partAt } from './shipBuild.js';
 import { transfer, newGuns, teamOf, hostileTo, foeOf, shipOf } from './ships.js';
 
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -553,6 +553,19 @@ export function createShipSim(world, ship, W) {
   let bagTear = []; // per gasbag: seconds it has been flat and ripped
   state.breakStats = { events: 0, bay: 0, hit: 0, crash: 0, ram: 0, bag: 0, parts: 0, fell: 0, scars: 0 }; // (read by botsim and the --check-breakoff gate)
   state.liftDeficit = 0;
+  // 3D destruction data (WP5, append only: no random numbers, no change to any rule). hitLog = the last blows on this ship, for the 3D view's dents and scorch marks; breakEvents = the break-offs the view has not
+  // taken yet (it needs the OLD parts list to lift the lost parts out of the old model before the ship is rebuilt). Both are SHIP_KEYS.
+  state.hitLog = [];
+  state.breakEvents = [];
+  let simT = 0, hitSeq = 0; // this ship's own clock (seconds, advanced in stepSystems) and the running number of her blows
+  const logHit = (x, y, power, kind) => { // a blow at the ship point (x, y): which part it struck (shipBuild.js partRects) and how hard
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const log = state.hitLog, last = log[log.length - 1];
+    if (last && last.t === simT && kind !== 'hit' && Math.hypot(last.x - x, last.y - y) < 60) { last.kind = kind; last.power = Math.max(last.power, power); return; } // (a crash / ram call follows the impact call of the same contact: one mark, named for the cause)
+    const pr = partAt(layout.partRects, x, y);
+    log.push({ n: ++hitSeq, t: simT, x, y, power, partId: pr ? pr.id : null, kind });
+    if (log.length > 64) log.shift();
+  };
   const lostList = () => (ship.main && world.run ? (world.run.lost ||= []) : (ship.lost ||= [])); // (what has broken off and not been rebuilt, oldest first: { id, cause, label, before, price ... })
   // The chance multiplier of a cause: the difficulty button (co-op), and the armour plate on the spot that was struck.
   const chanceMul = (x, y) => {
@@ -588,6 +601,11 @@ export function createShipSim(world, ship, W) {
     const onCut = (p) => { const q = oldP[p.d]; return !!q && plan.cuts.some((c) => c.id === q.id && p.x >= c.a - 24 && p.x <= c.b + 24); };
     const falls = new Set(crew.filter((p) => !p.fly && !p.fall && !p.onGunship && !p.hj && p.conn == null && p.d != null && onCut(p)));
 
+    { // the 3D view's copy of the news (WP5), pushed BEFORE the layout is replaced: which parts are gone (partRects of the old layout whose sig the new one lacks), still keyed as the OLD 3D model knows them
+      const keep = new Set(plan.sigs || []), gone = (layout.partRects || []).filter((r) => r.sig != null && !keep.has(r.sig));
+      state.breakEvents.push({ plan, origin: { x: bx, y: by }, blast, cause: spec.cause || spec.kind, t: simT, ver: layout.version, lostKeys: gone.map((r) => r.id), lostRects: gone.map((r) => ({ ...r })) });
+      if (state.breakEvents.length > 8) state.breakEvents.shift(); // (a run with no 3D view never takes them)
+    }
     layout.applyBuild(plan.parts);
     const was = brokenOf.get(layout);
     brokenOf.set(layout, { broken: layout.parts, intact: was && was.broken === wearing ? was.intact : before }); // (the next simulation made in this process mends her: ships.js createMainShip)
@@ -783,13 +801,15 @@ export function createShipSim(world, ship, W) {
   // The hull met rock (kind 'crash') or another ship (kind 'ram') at (x, y) with this closing speed (px/s): the faster, the likelier the part at the contact breaks off.
   function crash(x, y, closing, kind = 'crash', mul = 1) { // (mul: a ram prow, config.RAM, lowers the rammer's chance and raises the other ship's)
     const B = BOC(), C = kind === 'ram' ? B.RAM : B.CRASH;
+    if (closing >= C.MIN_CLOSING * 0.5) logHit(x, y, Math.min(9, closing / 150), kind === 'ram' ? 'ram' : 'rock'); // (3D: the mark of the contact, whether or not something breaks)
     if (!B.ENABLED || breakCd > 0 || state.ship.down || closing < C.MIN_CLOSING || goingDown.protect()) return false;
     const chance = (C.CHANCE + (C.MAX - C.CHANCE) * Math.max(0, Math.min(1, (closing - C.MIN_CLOSING) / (C.FULL_CLOSING - C.MIN_CLOSING)))) * chanceMul(x, y) * mul;
     if (breakRng() >= chance) return false;
     return !!(breakOff({ kind: 'limb', x, y, reach: C.END_REACH ?? B.HIT.END_REACH, len: B.HIT.LIMB, cause: kind }) || breakOff({ kind: 'limb', x, y, reach: C.FAR, len: B.HIT.LIMB, cause: kind })); // (nothing near the contact - the nose of the gasbag took the rock - and the bow crumples instead)
   }
 
-  const impact = (x, y, power, hullMul = 1) => {
+  const impact = (x, y, power, hullMul = 1, kind = 'hit') => { // (kind: 'hit' a shell or bomb, 'rock' a scrape, 'ram' two hulls meeting; it only names the mark in hitLog)
+    logHit(x, y, power, kind);
     impactBody(x, y, power, hullMul);
     if (power >= 2 && BOC().ENABLED) hardHit(x, y, power); // (the blow as it was struck: plate on the spot lowers the chance inside hardHit)
   };
@@ -1462,6 +1482,7 @@ export function createShipSim(world, ship, W) {
 
   // A2: modules, steam, the engines and the gasbag, the flight, the wreck.
   const stepSystems = (dt) => {
+    simT += dt;
     links.update(dt);
     if (state.cannons) cannon.update(dt); // (B.6: the crew cannon reloads; a ship with none skips both)
     if (state.loads || state.rackStock) cargo.update(dt);
@@ -1730,6 +1751,7 @@ export function createShipSim(world, ship, W) {
   function respawn({ crew = true } = {}) {
     if (!ship.main && ship.lost && ship.lost.length) { const first = ship.lost[0]; ship.lost.length = 0; fitBuild(first.before, { crew: false }); ship.buildId = first.buildId; } // (a ship that lost parts is rebuilt whole with the new game, S.5i)
     state.liftDeficit = 0; bayHeat = 0; bagTear = []; breakCd = 0;
+    state.hitLog.length = 0; state.breakEvents.length = 0; // (3D: the rebuilt ship wears no dents)
     if (state.hotAir) state.hotAir.heat = 1; // (a new ship: the burner is lit and no hydrogen bag is scorched)
     for (const b of state.bags) { b.scorch = 0; b.burn = 0; b.cool = 0; }
     if (ship.ramHits) ship.ramHits = 0; // (the ram prow is mended: weaponsArt.js drawRam)
@@ -1805,6 +1827,7 @@ export function createShipSim(world, ship, W) {
     escort.reset();
     forces.reset();
     state.liftDeficit = 0; bayHeat = 0; bagTear = []; breakCd = 0; // (a build fitted at the dock starts clean: whatever had broken off is rebuilt or counted into it)
+    state.hitLog.length = 0; state.breakEvents.length = 0; // (3D: the new ship wears no dents)
     const newBomb = !!layout.bombBay && !hadBay;
     if (newBomb) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.START);
     if (crew) {

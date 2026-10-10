@@ -52,7 +52,14 @@ try {
   }
   await sleep(wait);
   if (arg('eval')) { const r = await send('Runtime.evaluate', { expression: arg('eval'), returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) logs.push('EVAL ERROR: ' + JSON.stringify(r.exceptionDetails).slice(0, 400)); else if (r.result.value !== undefined) logs.push('eval -> ' + JSON.stringify(r.result.value).slice(0, 600)); await sleep(thenWait); }
-  if (arg('evals')) for (const [js, ms] of JSON.parse(arg('evals'))) { const r = await send('Runtime.evaluate', { expression: js, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) logs.push('EVAL ERROR: ' + JSON.stringify(r.exceptionDetails).slice(0, 400)); else if (r.result.value !== undefined) logs.push('eval -> ' + JSON.stringify(r.result.value).slice(0, 600)); await sleep(ms || 0); }
+  // (a step may name a shot: [js, waitMs, "name"] saves <out>_<name>.png after the wait, so one run can record a short sequence)
+  const evalsSrc = arg('evals-file') ? fs.readFileSync(arg('evals-file'), 'utf8') : arg('evals'); // (--evals-file: the same JSON from a file, for long scripts)
+  if (evalsSrc) for (const [js, ms, name] of JSON.parse(evalsSrc)) {
+    const r = await send('Runtime.evaluate', { expression: js, returnByValue: true, awaitPromise: true });
+    if (r.exceptionDetails) logs.push('EVAL ERROR: ' + JSON.stringify(r.exceptionDetails).slice(0, 400)); else if (r.result.value !== undefined) logs.push('eval -> ' + JSON.stringify(r.result.value).slice(0, 600));
+    await sleep(ms || 0);
+    if (name) { const s2 = await send('Page.captureScreenshot', { format: 'png' }); const f2 = out.replace(/\.png$/, '') + '_' + name + '.png'; fs.mkdirSync(path.dirname(path.resolve(f2)), { recursive: true }); fs.writeFileSync(f2, Buffer.from(s2.data, 'base64')); console.log('saved ' + f2); }
+  }
   if (arg('stats-js')) { const r = await send('Runtime.evaluate', { expression: arg('stats-js'), returnByValue: true, awaitPromise: true }); logs.push('stats-js ' + JSON.stringify(r.result.value)); }
   if (has('stats')) { const r = await send('Runtime.evaluate', { expression: 'JSON.stringify(window.__stats||null) + " " + JSON.stringify(window.__t3d && window.__t3d.info())', returnByValue: true }); logs.push('stats ' + r.result.value); }
   const shot = await send('Page.captureScreenshot', { format: 'png' });

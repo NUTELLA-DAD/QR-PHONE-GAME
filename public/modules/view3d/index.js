@@ -17,9 +17,12 @@ import { createKrakenView } from './kraken.js';
 import { createFlyers } from './flyers.js';
 import { createScenery } from './scenery.js';
 import { createVfx } from './vfx.js';
+import { createDestruction } from './destruction.js';
+import { createDamageView } from './damageView.js';
 import { placeCamera, FOV } from './camera3d.js';
 import { envIdOf } from '../host/environments.js';
 import { shipOf } from '../host/ships.js';
+import { inRock } from '../host/course.js';
 import { darkTarget } from '../host/searchlight.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -147,6 +150,16 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   let vfx = null;
   try { vfx = createVfx({ state, scene: worldRoot, world, models }); } catch (e) { console.warn('view3d vfx off', e); }
   V.vfx = vfx;
+  // WP5: broken-off parts as rigid bodies (destruction.js, the Rapier wreckage world loads a moment after the view starts) and the marks of the blows a ship took (damageView.js)
+  const destruction = createDestruction({ parent: worldRoot, state, models, terrain, world, inRock });
+  const damage = createDamageView({ state, models });
+  V.destruction = destruction; V.damage = damage;
+  // The wreckage's smoke and sparks go through WP4's particles when they are there (both use 3D world coordinates, y up); otherwise destruction.js keeps its own puffs.
+  if (vfx && vfx.P) {
+    const P = vfx.P;
+    destruction.hooks.smoke = (x, y, z, o = {}) => P.burst('smoke', x, y, z, 1, { size: (o.r || 22) * 2, life: o.life || 1.4, color: o.color, up: o.rise == null ? 36 : o.rise });
+    destruction.hooks.spark = (x, y, z, o = {}) => P.burst('spark', x, y, z, o.n || 3, {});
+  }
   const modelFor = (sh) => {
     const ver = sh.layout.version;
     let e = models.get(sh.id);
@@ -336,7 +349,9 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     terrain.setEnv(env);
     syncTod(dt);
     const cam = syncCamera(view, w, h);
+    try { destruction.process(); } catch (e) { logOnce('destruction', e); } // (the break-off notes are read BEFORE syncShips rebuilds a ship from her new layout)
     syncShips(t, dt);
+    try { damage.update(world.night); } catch (e) { logOnce('damage', e); }
     syncSky();
     const main = state.ships[0];
     try { flyers.update(t, main ? main.pose.vx || 0 : 0); } catch (e) { logOnce('flyers', e); }
@@ -353,6 +368,9 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     terrain.update(map, camTarget.x, -camTarget.y);
     const seaY = env === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : NaN;
     world.update(camera, camTarget, { w: cam.visW, h: cam.visH }, t, seaY, map);
+    if (V.frames === 40) destruction.warm(); // (the wreckage engine loads in the background, long before anything breaks)
+    destruction.setSea(seaY);
+    try { destruction.update(dt); } catch (e) { logOnce('wreckage', e); }
     syncLights();
     const j1 = performance.now();
     const rig = world.lights.rig, usePost = !!(look.post && post.enabled);
@@ -380,7 +398,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     return { calls: i.render.calls, tris: i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs };
   };
   V.setTod = (name) => { S.tod = name || ''; };
-  V.dispose = () => { try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));

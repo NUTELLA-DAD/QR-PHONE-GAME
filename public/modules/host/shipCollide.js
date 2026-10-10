@@ -241,7 +241,7 @@ export function createShipCollide(D) {
     }
     for (const [S, sign] of [[A, 1], [B, -1]]) {
       const sx = toShipX(S, c.x), sy = toShipY(S, c.y);
-      S.sim.impact(sx, sy, ram ? (prow(S) ? base * R.SELF : Math.min(R.MAX_POWER, base * R.MUL)) : Math.min(C.MAX_POWER, base));
+      S.sim.impact(sx, sy, ram ? (prow(S) ? base * R.SELF : Math.min(R.MAX_POWER, base * R.MUL)) : Math.min(C.MAX_POWER, base), 1, 'ram');
       kickForce(S.ctx, { x: sx, y: sy }, sign * c.nx * S.pose.f, sign * c.ny, C.KICK * Math.min(3, c.closing / 150)); // (her bow's x: the world's times her facing)
     }
     for (const S of [A, B]) S.sim.crash(toShipX(S, c.x), toShipY(S, c.y), c.closing, 'ram', ram ? (prow(S) ? R.BREAK_SELF : R.BREAK_OTHER) : 1); // (a hard ram can break off the part at the contact point, S.5i; shipSim.js crash. A ram prow keeps the rammer's own parts on and breaks the other ship's more)

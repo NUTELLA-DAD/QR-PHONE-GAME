@@ -520,7 +520,69 @@ export function buildLayout(parts, opts = {}) {
   }
   deriveGeometry(out, opts.cell || CAVE_CELL);
   if (out.ram) addRamGeometry(out, opts.cell || CAVE_CELL);
+  out.partRects = partRectsOf(out);
   return out;
+}
+
+// PART RECTS (3D.md WP5): one box in ship coordinates for every part the 3D registry (view3d/parts3d/registry.js) draws, so a hit, a crash or a ram can say WHICH part it struck, and a break-off can say
+// which parts are gone. Data only: nothing in the simulation reads them. Each is { id, kind, sig, x0, y0, x1, y1 }.
+//   id    the part's key in the 3D model (model.parts / model.ranges): 'hull', 'deck:main', 'room:Tail Turret', 'station:Boiler', 'gun:Nose Gun', 'engine:Aft Engine', 'gasbag:bag1', 'armour:0', 'ramProw' ...
+//         (the index-keyed kinds - connectors, pipes, racks - count in the layout's own order, as view3d listParts does; a second part with the same key gets '#2')
+//   sig   a name for the part that survives a break-off (an index shifts when something before it goes): breakOff compares the sigs before and after to see which parts are gone entirely.
+//         null = a part a cut only shortens (the hull, a deck, a room, a plate of armour): never "gone" by sig; its cut stretch is taken from the picture by region instead.
+//   kind  the registry kind ('deck', 'room', 'station', 'gun', 'engine', 'sail', 'gasbag', 'ramProw', 'armour', 'ladder' ...)
+function partRectsOf(L) {
+  const out = [], seen = new Map(), sigSeen = new Map();
+  const P = L.platforms || [];
+  const row = (d) => (P[d] ? P[d].y : 0);
+  const add = (kind, id, sig, x0, y0, x1, y1) => {
+    const n = (seen.get(id) || 0) + 1;
+    seen.set(id, n);
+    let sg = null;
+    if (sig != null) { const m = (sigSeen.get(sig) || 0) + 1; sigSeen.set(sig, m); sg = m > 1 ? sig + '#' + m : sig; }
+    out.push({ id: n > 1 ? id + '#' + n : id, kind, sig: sg, x0: Math.round(x0), y0: Math.round(y0), x1: Math.round(x1), y1: Math.round(y1) });
+  };
+  const hr = L.hitRects || [];
+  if (hr.length) add('hull', 'hull', null, Math.min(...hr.map((r) => r.x0)), Math.min(...hr.map((r) => r.y0)), Math.max(...hr.map((r) => r.x1)), Math.max(...hr.map((r) => r.y1)));
+  for (const q of P) add('deck', 'deck:' + q.id, null, q.x0, q.y - 16, q.x1, q.y + 16);
+  (L.rooms || []).forEach((r, i) => add('room', 'room:' + (r.name || i), 'room|' + (r.name || i), r.x0, row(r.d) - 130, r.x1, row(r.d)));
+  (L.connectors || []).forEach((c, i) => {
+    const yt = row(c.top), yb = row(c.bottom);
+    add(c.type, c.type + ':' + i, 'conn|' + c.type + '|' + c.xTop + '|' + c.xBottom + '|' + yt + '|' + yb, Math.min(c.xTop, c.xBottom) - 16, Math.min(yt, yb), Math.max(c.xTop, c.xBottom) + 16, Math.max(yt, yb));
+  });
+  (L.pipes || []).forEach((p, i) => {
+    const xs = (p.points || []).map((q) => q[0]), ys = (p.points || []).map((q) => q[1]);
+    if (xs.length) add('pipe', 'pipe:' + (p.to || i) + ':' + i, 'pipe|' + (p.to || i) + '|' + xs[0] + '|' + ys[0], Math.min(...xs) - 8, Math.min(...ys) - 8, Math.max(...xs) + 8, Math.max(...ys) + 8);
+  });
+  (L.vents || []).forEach((v, i) => add('vent', 'vent:' + i, 'vent|' + v.x + '|' + row(v.d), v.x - 20, row(v.d) - 120, v.x + 20, row(v.d)));
+  (L.racks || []).forEach((r, i) => add('rack', 'rack:' + i, 'rack|' + r.kind + '|' + r.x + '|' + row(r.d), r.x - 24, row(r.d) - 90, r.x + 24, row(r.d)));
+  (L.extinguishers || []).forEach((e, i) => add('extinguisher', 'extinguisher:' + i, 'ext|' + e.x + '|' + row(e.d), e.x - 14, row(e.d) - 70, e.x + 14, row(e.d)));
+  if (L.medbay) { const my = row(P.findIndex((q) => q.id === L.medbay.p)); add('medbay', 'medbay', 'medbay', L.medbay.x - 80, my - 120, L.medbay.x + 80, my); }
+  (L.escortDocks || []).forEach((e, i) => add('escortDock', 'escortDock:' + (e.n || i), 'escort|' + (e.n || i), e.x - 40, (e.y != null ? e.y : row(e.d)) - 40, e.x + 40, (e.y != null ? e.y : row(e.d)) + 30));
+  (L.hatches || []).forEach((h) => add('dropHatch', 'dropHatch:' + (h.n || h.x0), 'hatch|' + (h.n || h.x0), h.x0, row(h.d) - 14, h.x1, row(h.d) + 20));
+  (L.ballast || []).forEach((o, i) => add('ballast', 'ballast:' + i, 'ballast|' + o.x + '|' + o.y, o.x - 30, o.y - 40, o.x + 30, o.y + 20));
+  (L.gasValves || []).forEach((v, i) => add('gasValve', 'gasValve:' + i, 'valve|' + v.x + '|' + row(v.d), v.x - 20, row(v.d) - 90, v.x + 20, row(v.d)));
+  (L.armour || []).forEach((a, i) => add('armour', 'armour:' + i, null, a.x0, row(a.d) - 120, a.x1, row(a.d) + 24));
+  for (const s of L.stations || []) add('station', 'station:' + s.n, 'station|' + s.n, s.x - 42, row(s.d) - 120, s.x + 42, row(s.d));
+  for (const [name, m] of Object.entries(L.gunMounts || {})) add('gun', 'gun:' + name, 'gun|' + name, m.bx - 46, m.by - 46, m.bx + 46, m.by + 46);
+  for (const [name, s] of Object.entries(L.searchlights || {})) add('searchlight', 'searchlight:' + name, 'light|' + name, s.bx - 30, s.by - 30, s.bx + 30, s.by + 50);
+  for (const e of L.engines || []) add('engine', 'engine:' + e.name, 'engine|' + e.name, e.x - 90, row(e.d) - 10, e.x + 90, row(e.d) + 80);
+  (L.sails || []).forEach((s, i) => add('sail', 'sail:' + (s.n || i), 'sail|' + (s.n || i), s.x - s.w / 2 - 10, row(s.d) - s.h, s.x + s.w / 2 + 10, row(s.d)));
+  (L.cannons || []).forEach((c) => add('crewCannon', 'cannon:' + c.n, 'cannon|' + c.n, c.x - 60, row(c.d) - 90, c.x + 60, row(c.d)));
+  if (L.ram) { const ry = L.ram.y != null ? L.ram.y : row(L.ram.d); add('ramProw', 'ramProw', 'ram', L.ram.x - 30, ry - config.RAM.HALF, L.ram.x + config.RAM.TIP, ry + config.RAM.HALF); }
+  if (L.coil) add('coil', 'coil', 'coil', L.coil.x - 40, L.coil.y - 60, L.coil.x + 40, L.coil.y + 40);
+  (L.gasbags || []).forEach((g) => add('gasbag', 'gasbag:' + g.id, 'gasbag|' + Math.round(g.cx), g.cx - g.rx, g.cy - g.ry, g.cx + g.rx, g.cy + g.ry));
+  return out;
+}
+
+// The part at the ship point (x, y): the smallest part box that holds it, else the nearest box (a miss that still struck the ship). Returns the part rect or null.
+export function partAt(rects, x, y) {
+  let best = null, bestD = Infinity, bestA = Infinity;
+  for (const r of rects || []) {
+    const dx = x < r.x0 ? r.x0 - x : x > r.x1 ? x - r.x1 : 0, dy = y < r.y0 ? r.y0 - y : y > r.y1 ? y - r.y1 : 0, d = Math.hypot(dx, dy), a = (r.x1 - r.x0) * (r.y1 - r.y0);
+    if (d < bestD - 0.5 || (Math.abs(d - bestD) <= 0.5 && a < bestA)) { best = r; bestD = d; bestA = a; }
+  }
+  return best;
 }
 
 // The RAM PROW's outline (config.RAM): ship coordinates, the beak that sticks out past the fore end x of the deck at height y. A convex wedge: the collar bolted over the hull's nose, then the beak

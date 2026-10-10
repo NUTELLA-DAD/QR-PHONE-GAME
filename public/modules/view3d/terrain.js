@@ -14,8 +14,9 @@
 import { THREE, PAL, INK, look, rimify, fx } from './style.js';
 import { getTrimSheet, uvRect, ROCK_STRATA } from './textures.js';
 import { config } from '../../config.js';
+import { CH, makeCell, chunkWalls } from './terrainWalls.js';
+export { chunkWalls };
 
-const CH = 12; // squares per chunk side
 const NSUB = 3; // a square near a cut edge is built from NSUB x NSUB little squares
 export const Z_FRONT_CAVE = 330, Z_BACK = -420; // caves: the rock slab stands in FRONT of the ship (tunnels are holes through it); the cave picture stands at the back (world.js)
 export const Z_FRONT_OPEN = -70; // open sky: the rock stands just behind the ships and creatures, so nothing is ever hidden behind a cliff
@@ -69,41 +70,7 @@ const tri = (v) => { v %= 2; if (v < 0) v += 2; return v > 1 ? 2 - v : v; }; // 
 const UW = 2048 * 3, UH = 128 * 3.2; // world units one pass of a strata row covers
 const strataOf = (x, ym) => ym / 640 + (vn(x / 2600 + 3, ym / 2200) - 0.5) * 0.55 + 6; // (the layers wander gently with x: no patchwork)
 
-// ---- the cells -------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// (what the rock looks like at one square: its polygon and its cut edges, the same marching squares as before)
-function makeCell(map, i, j) {
-  const C = map.CELL;
-  const S = (a, b) => (b < 0 && map.open && a >= 0 && a < map.W ? 0 : a < 0 || b < 0 || a >= map.W || b >= map.H ? 1 : map.solid[b * map.W + a]);
-  const corner = (a, b) => (S(a - 1, b - 1) + S(a, b - 1) + S(a - 1, b) + S(a, b)) / 4;
-  const v = [corner(i, j), corner(i + 1, j), corner(i + 1, j + 1), corner(i, j + 1)];
-  const Pt = [[i * C, j * C], [(i + 1) * C, j * C], [(i + 1) * C, (j + 1) * C], [i * C, (j + 1) * C]];
-  const inside = v.map((q) => q >= 0.5);
-  if (!inside.some((q) => q)) return { poly: null, segs: [], full: false };
-  const poly = [], cross = [];
-  if (inside.every((q) => q)) return { poly: Pt, segs: [], full: true };
-  for (let k = 0; k < 4; k++) {
-    const a = k, b = (k + 1) % 4;
-    if (inside[a]) poly.push(Pt[a]);
-    if (inside[a] !== inside[b]) {
-      const t = (0.5 - v[a]) / (v[b] - v[a]);
-      const p = [Pt[a][0] + (Pt[b][0] - Pt[a][0]) * t, Pt[a][1] + (Pt[b][1] - Pt[a][1]) * t];
-      poly.push(p);
-      cross.push(p);
-    }
-  }
-  if (poly.length < 3) return { poly: null, segs: [], full: false };
-  const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length, cy = poly.reduce((s, p) => s + p[1], 0) / poly.length;
-  const segs = [];
-  for (let k = 0; k + 1 < cross.length; k += 2) {
-    const pa = cross[k], pb = cross[k + 1];
-    let nx = -(pb[1] - pa[1]), ny = pb[0] - pa[0]; // perpendicular in map coordinates (y down)
-    const l = Math.hypot(nx, ny) || 1;
-    nx /= l; ny /= l;
-    if (nx * ((pa[0] + pb[0]) / 2 - cx) + ny * ((pa[1] + pb[1]) / 2 - cy) < 0) { nx = -nx; ny = -ny; } // point away from the rock
-    segs.push({ ax: pa[0], ay: pa[1], bx: pb[0], by: pb[1], nx, ny, l });
-  }
-  return { poly, segs, full: false };
-}
+// ---- the cells: makeCell (a square's polygon and cut edges, the marching squares) lives in terrainWalls.js, which the wreckage world's collision shares ----
 
 // polygon clipping against an axis-aligned window (Sutherland-Hodgman), for the convex squares of the marching squares
 function clipHalf(poly, nx, ny, c) {
@@ -363,11 +330,14 @@ export function createTerrain(parent) {
   const chunks = new Map();
   let mapRef = null;
   const drop = (c) => { if (c.grp) { group.remove(c.grp); c.grp.traverse((o) => o.geometry && o.geometry.dispose()); } };
-  const clear = () => { for (const c of chunks.values()) drop(c); chunks.clear(); };
+  const clear = () => { for (const [key, c] of chunks) { drop(c); if (T.onChunk) T.onChunk('remove', key); } chunks.clear(); };
   const T = {
     group,
     stats,
     count: () => chunks.size,
+    // WP5: the wreckage world listens to the chunks coming and going: onChunk(op, key, map, ci, cj) with op 'add' | 'remove'. chunkList() = the chunks standing now (for a listener that starts late).
+    onChunk: null,
+    chunkList: () => [...chunks].map(([key, c]) => ({ key, ci: c.ci, cj: c.cj, map: mapRef })),
     // the environment's rock colours and caps (call when the environment changes; the chunks are rebuilt)
     setEnv(envId) { if (style.env !== envId) { setStyle(envId); clear(); } },
     // map = state.course.map (or null); (fx, fy) = the world point to build around (map coordinates)
@@ -395,10 +365,11 @@ export function createTerrain(parent) {
         if (grp) stats.tris += grp.userData.tris || 0;
         chunks.set(key, { grp, ci, cj });
         if (grp) group.add(grp);
+        if (T.onChunk) T.onChunk('add', key, map, ci, cj);
         built++;
       }
       for (const [key, c] of chunks) {
-        if (Math.abs(c.ci - ci0) > 4 || Math.abs(c.cj - cj0) > 3) { drop(c); chunks.delete(key); }
+        if (Math.abs(c.ci - ci0) > 4 || Math.abs(c.cj - cj0) > 3) { drop(c); chunks.delete(key); if (T.onChunk) T.onChunk('remove', key); }
       }
     },
     clear,
