@@ -371,6 +371,7 @@ export function createVfx({ state, scene, world, models }) {
     steam(dt);
     debris(dt);
     coil();
+    if (V.hook) { try { V.hook(t, dt, night); } catch (e) { if (!V.hookErr) { V.hookErr = 1; console.warn("view3d vfx hook", e); } } } // (WP12: weather.js adds its sprites and bursts here, between P.begin and P.update)
     primed = true;
     P.update(dt, t);
   };

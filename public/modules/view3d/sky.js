@@ -61,6 +61,7 @@ export function createSky(scene, renderer) {
   cavePlane.frustumCulled = false;
   scene.add(cavePlane);
   const fwd = new THREE.Vector3();
+  let extra = null, cave3 = false;
 
   const S = { skyMat, skyPlane, caveMat, cavePlane };
 
@@ -87,6 +88,7 @@ export function createSky(scene, renderer) {
       m.visible = true; m.userData.on = true;
     });
     cavePlane.visible = cave;
+    cave3 = !!cave;
     if (cave && files.includes('cave')) { const t = tex(envId, 'cave', 'xy'); caveMat.map = t; caveMat.emissiveMap = t; caveMat.emissive.set('#ffffff'); caveMat.emissiveIntensity = 0.2; caveMat.needsUpdate = true; }
   };
 
@@ -105,11 +107,7 @@ export function createSky(scene, renderer) {
     const pitchDown = Math.asin(clamp(-fwd.y, -1, 1));
     const az = Math.atan2(cam.position.x - target.x, cam.position.z - target.z), frontal = Math.abs(az) < (cam.userData.cine ? 0.7 : 0.22); // (the strips are flat pictures: they only look right from the front, so an orbiting viewer sees the sky alone. WP11: during a cinematic yaw the strips turn to face the camera instead)
     back.rotation.y = cam.userData.cine ? az : 0;
-    STRIPS.forEach((s, i) => {
-      const m = stripMeshes[i];
-      m.visible = !!m.userData.on && frontal;
-      if (!m.visible) return;
-      const tx = m.material.map;
+    const placeStrip = (s, m, tx) => {
       if (!tx || !tx.image) return;
       const widthW = 52000, tileW = s.h * 4;
       m.scale.set(widthW, s.h, 1);
@@ -121,7 +119,16 @@ export function createSky(scene, renderer) {
       const yBottom = cam.position.y - hd * (Math.tan(pitch + a) + lensShift), yTop = cam.position.y - hd * (Math.tan(pitch - a) + lensShift);
       const yAbs = s.top ? yTop - s.h * 0.5 + (yTop - yBottom) * 0.02 : yBottom + s.h * 0.5 - (yTop - yBottom) * 0.03 + s.lift * (yTop - yBottom);
       m.position.set(0, yAbs - target.y, s.z);
+    };
+    STRIPS.forEach((s, i) => {
+      const m = stripMeshes[i];
+      m.visible = !!m.userData.on && frontal;
+      if (m.visible) placeStrip(s, m, m.material.map);
     });
+    if (extra) { // WP12: one extra painted band (the Aether's aurora): the same placing, its own picture, drifting at a constant speed
+      extra.mesh.visible = !!extra.on && frontal && !cave3;
+      if (extra.mesh.visible) placeStrip(extra.spec, extra.mesh, extra.mesh.material.map);
+    }
     // the cave picture, world-fixed behind the rock
     if (cavePlane.visible && caveMat.map) {
       const pw = vis.w * 2.4, ph = vis.h * 2.4, tile = 900;
@@ -130,6 +137,23 @@ export function createSky(scene, renderer) {
       caveMat.map.repeat.set(pw / tile, ph / tile);
       caveMat.map.offset.set((target.x - pw / 2) / tile, (target.y - ph / 2) / tile);
     }
+  };
+  // WP12: S.setExtra(spec) puts ONE more painted strip behind the world (spec = { canvas | texture, z, h, top, alpha, drift (units a second), lift, additive } or null to remove it). The caller paints the picture;
+  // it is world-fixed like the other strips and slides at a constant speed (a linear scroll of the texture, no sine).
+  S.setExtra = (spec) => {
+    if (!spec) { if (extra) extra.on = false; return; }
+    if (!extra) {
+      const mat = paintedPlane(new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthTest: false, color: '#ffffff' }));
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+      mesh.renderOrder = -17.5; mesh.frustumCulled = false; mesh.visible = false; mesh.name = 'wxExtraStrip';
+      back.add(mesh);
+      extra = { mesh, spec: null, on: false, key: '' };
+    }
+    const key = spec.key || '';
+    if (spec.texture && extra.key !== key) { extra.mesh.material.map = spec.texture; extra.mesh.material.needsUpdate = true; extra.key = key; }
+    extra.mesh.material.opacity = spec.alpha == null ? 1 : spec.alpha;
+    extra.mesh.material.blending = spec.additive ? THREE.AdditiveBlending : THREE.NormalBlending;
+    extra.spec = spec; extra.on = true;
   };
   return S;
 }

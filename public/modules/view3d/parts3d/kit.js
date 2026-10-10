@@ -51,10 +51,13 @@ void scarTest() { if ( vWall < 0.5 ) return; for ( int i = 0; i < 8; i ++ ) { if
 //   row 1  x y = a corner chopped off (local coordinates: everything right of x and below y is gone, with a ragged edge: a sail's missing flap), z = how ragged; z 0 = none
 // It is still ONE draw call: the shader reads the texel; damageStates.js rewrites a texel only when a part's state changes. Everything is steady: hashes of the position, nothing moves.
 export const DMG_W = 512; // (parts a ship can number; any beyond that share texel 0 = no damage shown)
-const dmgFx = { uSoot: { value: new THREE.Color(config.DAMAGE3D.COLORS.SOOT) } };
-const DMG_VERT_COMMON = 'attribute float aPart; varying float vPart;';
-const DMG_VERT_BEGIN = 'vPart = aPart;';
-const DMG_FRAG = `uniform sampler2D uDmg; uniform vec3 uSoot; varying float vPart; vec4 dmgV = vec4( 0.0 ); float dmgRim = 0.0;
+const dmgFx = { uSoot: { value: new THREE.Color(config.DAMAGE3D.COLORS.SOOT) }, uWet: { value: 0 } };
+// WP12 WEATHER on the ship: uWet (rain-soaked: everything a little darker, shared by every ship) and a per-part FROST amount (the data texture uWx, 512 x 1, r = frost 0..1; weather.js writes it): the upward faces of an iced part
+// (the bag's back, an outdoor deck, a gun) grow a white crust with hard toon edges (value noise fixed to the part's own coordinates) and a few static sparkles. Nothing moves.
+export const setWet = (v) => { dmgFx.uWet.value = v; };
+const DMG_VERT_COMMON = 'attribute float aPart; varying float vPart; varying float vWy;';
+const DMG_VERT_BEGIN = 'vPart = aPart; vWy = normalize( mat3( modelMatrix ) * objectNormal ).y;';
+const DMG_FRAG = `uniform sampler2D uDmg; uniform sampler2D uWx; uniform float uWet; uniform vec3 uSoot; varying float vPart; varying float vWy; vec4 dmgV = vec4( 0.0 ); float dmgRim = 0.0; float wxSp = 0.0;
 float dmgH( vec2 c ) { vec3 p3 = fract( vec3( c.xyx ) * 0.1031 ); p3 += dot( p3, p3.yzx + 33.33 ); return fract( ( p3.x + p3.y ) * p3.z ); }
 float dmgN( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f ); return mix( mix( dmgH( i ), dmgH( i + vec2( 1.0, 0.0 ) ), f.x ), mix( dmgH( i + vec2( 0.0, 1.0 ) ), dmgH( i + vec2( 1.0, 1.0 ) ), f.x ), f.y ); }
 void dmgTest() {
@@ -98,18 +101,33 @@ const DMG_TINT = `{
     }
     diffuseColor.rgb = mix( diffuseColor.rgb, vec3( dot( diffuseColor.rgb, vec3( 0.3, 0.59, 0.11 ) ) ) * 0.82, grey );
     diffuseColor.rgb *= 1.0 - 0.6 * dmgRim;
+  }
+  { // WP12: the rain's wet darkening, then the frost crust
+    diffuseColor.rgb *= 1.0 - uWet * ( 0.14 + 0.1 * smoothstep( 0.3, 0.7, vWy ) );
+    float fr = texelFetch( uWx, ivec2( int( vPart + 0.5 ), 0 ), 0 ).r;
+    if ( fr > 0.01 ) {
+      float nz = 0.62 * dmgN( vScarP / 41.0 + 11.0 ) + 0.38 * dmgN( vScarP / 14.0 );
+      float top = smoothstep( 0.28, 0.62, vWy );
+      float th = 1.0 - 0.92 * fr, v = nz + 0.62 * top - 0.14;
+      float cover = step( th, v ), inner = step( th + 0.07, v );
+      vec3 ice = mix( vec3( 0.7, 0.86, 0.95 ), vec3( 0.96, 0.98, 1.0 ), inner );
+      diffuseColor.rgb = mix( diffuseColor.rgb, ice, cover * ( 0.7 + 0.3 * top ) );
+      wxSp = cover * inner * step( 0.968, dmgH( floor( vScarP / 7.0 ) + 5.0 ) );
+    }
   }`;
 function patchShell(sh, uHide, ink, scar) {
   sh.uniforms.uHide = uHide;
   sh.uniforms.uScar = scar.uScar;
   sh.uniforms.uScarN = scar.uScarN; sh.uniforms.uCarveA = scar.uCarveA; sh.uniforms.uCarveB = scar.uCarveB; sh.uniforms.uCarveN = scar.uCarveN;
   sh.uniforms.uDmg = scar.uDmg;
+  sh.uniforms.uWx = scar.uWx; sh.uniforms.uWet = dmgFx.uWet;
   sh.uniforms.uSoot = dmgFx.uSoot;
   sh.vertexShader = sh.vertexShader.replace('#include <common>', SHELL_VERT_COMMON + '\n' + SCAR_VERT_COMMON + '\n' + DMG_VERT_COMMON).replace('#include <begin_vertex>', SHELL_VERT_BEGIN + '\n' + SCAR_VERT_BEGIN + '\n' + DMG_VERT_BEGIN).replace('#include <project_vertex>', SHELL_VERT_PROJECT);
   if (ink) { sh.uniforms.uInkOn = inkOn; sh.uniforms.uInk = inkColor; }
   sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vShell;' + (ink ? ' uniform float uInkOn; uniform vec3 uInk;' : '') + '\n' + SCAR_FRAG + '\n' + DMG_FRAG)
     .replace('void main() {', 'void main() {\n  ' + (ink ? 'if ( vShell > 0.5 ) { if ( uInkOn < 0.5 || gl_FrontFacing ) discard; } else if ( ! gl_FrontFacing ) discard;' : 'if ( vShell > 0.5 || ! gl_FrontFacing ) discard;') + '\n  scarTest();\n  carveTest();\n  dmgTest();')
     .replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.16, 0.10, 0.07 ), clamp( scarRim, 0.0, 1.0 ) * 0.85 );\n  ' + DMG_TINT);
+  sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  gl_FragColor.rgb += vec3( 1.2, 1.3, 1.5 ) * wxSp;');
   if (ink) sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  if ( vShell > 0.5 ) gl_FragColor.rgb = uInk;');
 }
 export function makeTrimMaterials() {
@@ -120,7 +138,12 @@ export function makeTrimMaterials() {
   dmgTex.minFilter = dmgTex.magFilter = THREE.NearestFilter;
   dmgTex.generateMipmaps = false;
   dmgTex.needsUpdate = true;
-  const scar = { uScar: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uScarN: { value: 0 }, uDmg: { value: dmgTex }, uCarveA: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveB: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveN: { value: 0 } }; // (WP5: the holes broken-off parts left, see patchShell)
+  const wxData = new Float32Array(DMG_W * 4); // (WP12: one texel a part, r = frost; weather.js writes it)
+  const wxTex = new THREE.DataTexture(wxData, DMG_W, 1, THREE.RGBAFormat, THREE.FloatType);
+  wxTex.minFilter = wxTex.magFilter = THREE.NearestFilter;
+  wxTex.generateMipmaps = false;
+  wxTex.needsUpdate = true;
+  const scar = { uScar: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uScarN: { value: 0 }, uDmg: { value: dmgTex }, uWx: { value: wxTex }, uCarveA: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveB: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveN: { value: 0 } }; // (WP5: the holes broken-off parts left, see patchShell)
   const toon = rimify(new THREE.MeshToonMaterial({ vertexColors: true, map: sheet.texture, gradientMap, side: THREE.DoubleSide }));
   const rim = toon.onBeforeCompile;
   toon.onBeforeCompile = (sh, r) => { // (the painted sheet is a little darker than white on average: a small gain keeps the hull colours where the flat ones were)
@@ -145,7 +168,7 @@ export function makeTrimMaterials() {
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + SCAR_FRAG).replace('void main() {', 'void main() {\n  scarTest();\n  carveTest();'); // (the hole casts no shadow)
   };
   depth.customProgramCacheKey = () => 'depth-trim';
-  return { toon, plain, depth, uHide, sheet, ...scar, dmgData, dmgTex };
+  return { toon, plain, depth, uHide, sheet, ...scar, dmgData, dmgTex, wxData, wxTex };
 }
 let sharedMats = null;
 export const sharedTrimMaterials = () => sharedMats || (sharedMats = makeTrimMaterials());

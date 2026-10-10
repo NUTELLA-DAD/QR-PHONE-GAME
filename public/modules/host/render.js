@@ -2579,6 +2579,35 @@ export function createRenderer({ ctx, state: world, canvas }) {
           ctx.stroke();
         }
       }));
+      // WP12 WEATHER WORDS on the main ship: the lightning rods, the bilge pump, the winch and the iced guns are 3D things now (view3d/weatherShip.js); the 2D 'ship' layer's words for them are drawn here
+      try {
+        const ms = mainShip(world), WP = ms.layout.platforms, at3 = (x, y) => proj(p3.shipPt(ms, x, y, 0)), DISP = config.FONTS.DISPLAY;
+        const J = world.stormJob;
+        if (J && J.charge) {
+          const ch = J.charge, held = !!ch.held, q = at3(ch.x, -330);
+          if (q) { at(q, zs); label(held ? 'GROUNDING...' : 'LIGHTNING! HOLD A ROD!', 0, -64, '27px ' + DISP, held ? '#9fe8ff' : '#fff27a', config.INK, 6); }
+          if (!held) for (const r of J.rods || []) { const q2 = WP[r.d] && at3(r.x, WP[r.d].y - 205); if (q2) { at(q2, zs); label('HOLD!', 0, 0, '31px ' + DISP, '#fff27a', config.INK, 5); } }
+        }
+        const sea = world.sea;
+        if (sea && sea.pump && WP[sea.pump.d]) {
+          const q = at3(sea.pump.x, WP[sea.pump.d].y - 82);
+          if (q) { at(q, zs); const fl = sea.flood > 0.12; label(fl ? 'BILGE PUMP - FLOODED ' + Math.round(sea.flood * 100) + '%' : 'BILGE PUMP', 0, 0, '16px ' + DISP, fl ? '#9fe8ff' : '#f1e2b8', config.INK, 4); }
+        }
+        if (sea && sea.winch && WP[sea.winch.d]) {
+          const q = at3(sea.winch.x, WP[sea.winch.d].y - 56);
+          if (q) { at(q, zs); label(sea.hook ? 'WINCH!' : 'WINCH - SURVIVORS AHEAD', 0, 0, '18px ' + DISP, sea.hook ? '#8fe388' : '#f1e2b8', config.INK, 4); }
+        }
+        if (sea && sea.hook && Number.isFinite(sea.hook.mx)) { // the haul's progress over the survivor
+          const q = proj([sea.hook.mx, -sea.hook.y + 150, 60]);
+          if (q) { at(q, zs); drawBar(0, 0, Math.max(0, Math.min(1, sea.hook.prog || 0))); }
+        }
+        for (const c of world.icing || []) { // a gun frozen solid says so
+          const g = c.area === 'gun' && world.GUNS && world.GUNS[c.gun];
+          if (!g || c.lvl < config.ENVIRONMENTS.frost.ICE.JAM_AT) continue;
+          const q = at3(g.bx, g.by - 26 - (26 + c.lvl * 34) - 14);
+          if (q) { at(q, zs); label('ICED!', 0, 0, '22px ' + config.FONTS.TEXT, '#e9f6ff', config.INK, 5); }
+        }
+      } catch (e) { /* (words are a nicety: never stop the frame) */ }
       // crew in the air (a jump, a throw, a parachute, the hookshot): names and marks
       for (const p of Object.values(world.players)) {
         if (!p.fly || p.hj || p.connected === false || p.enemy) continue;

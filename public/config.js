@@ -2355,6 +2355,31 @@ export const config = {
     FUNGAL: { HDR: 1.9, HALO: 0.26, STEP: 1.6, MAX: 220, BULB: '#7dffd8', MOTES: 70, MOTE_SPEED: 14, MOTE_COLORS: ['#96ffdc', '#be96ff'], SPORE: '#b0f06e', SPORE_ALPHA: 0.2 },
     //   LANTERN: the fake pool of a lantern on the back wall (an emissive gradient, so Medium and Low look lantern-lit without real lights): COLOR, ALPHA by tier (High has real lights, so the pool is a hint), SIZE = its radius in world units.
     LANTERN: { COLOR: '#ffb25c', ALPHA: { high: 0.22, medium: 0.5, low: 0.66 }, SIZE: 190 },
+    // WP12 WEATHER (view3d/weather.js, weatherFall.js, weatherShip.js, weatherWorld.js; 3D.md section 16). The sim decides WHAT happens (state.weather.storm / gust, state.env.wind / blizzard / heat / smoke / gale, state.icing,
+    // state.stormJob, state.sea, state.spores, state.clogs); these numbers decide how it LOOKS. An environment overrides one effect by key in its own block: LOOK3D.<env>.wx = { RAIN: { ALPHA: 0.4 } }.
+    //   DENSITY: how much of the falling layer's instances are used by tier (rain / snow / embers / motes). BOX: the falling box's size against what the screen shows. Z: depth range of the falling things (behind .. in front of the ship plane).
+    //   RAIN: COLOR, ALPHA, LEN / WIDTH (a streak, world units at 1500 high; scaled with the zoom so it reads from the sofa), SPEED (fall, units a second), CAVE (share kept inside a cave map), SPLASH = drops a second that bounce on the
+    //     outdoor decks at full storm, SEA = rings a second on the sea. SNOW: flakes (SIZE, SPEED, DRIFT = the constant sideways slide, WIND = how much a blizzard's wind adds, CALM / FULL = the share of the flakes shown in calm air / a blizzard,
+    //     STREAK = how much a blizzard stretches a flake). EMBER: COLORS (new, cooling), SIZE, HDR, SHARE (how many of the falling layer), HEAT (extra from the sim's heat). MOTE / STARS: the Aether's drifting dust and star field.
+    //   WET: the darkening of the ship in rain (MAX of the uniform, RISE / DRY = per second). GALE: the gust streaks (COUNT, LEN, SPEED, ALPHA). ROD: the lightning rods (colours, HDR of the tip). CRUST: the frost crusts (colours, lump sizes).
+    //   LAVA: the lava body and its glow wall (HDR, PLATE = the dark crust plates' share, SPEED = their constant slide, WALL = glow height as a share of the 2D GLOW, SMOKE / VENT rates). SPOUT / RAFT: the waterspouts (a stepped turn) and the survivors' rafts.
+    //   AURORA: the Aether's painted band (colours, alpha, DRIFT = its constant slide in world units a second).
+    WEATHER: {
+      DENSITY: { high: 1, medium: 0.72, low: 0.4 }, BOX: 1.6, Z: [-650, 300],
+      RAIN: { COLOR: '#e4eefb', ALPHA: 0.8, LEN: 170, WIDTH: 4.6, SPEED: 2600, CAVE: 0.35, SPLASH: 26, SEA: 7, SLANT: 90 },
+      SNOW: { COLOR: '#ffffff', ALPHA: 0.92, SIZE: 9, SPEED: 95, DRIFT: -30, WIND: 2.2, CALM: 0.34, FULL: 1, STREAK: 1 },
+      EMBER: { COLORS: ['#ffe08a', '#ff3a10'], ALPHA: 1, SIZE: 15, HDR: 2.5, SHARE: 0.6, HEAT: 0.5 },
+      MOTE: { COLORS: ['#9fe8ff', '#c4a8ff'], ALPHA: 0.7, SIZE: 15, HDR: 1.7, SHARE: 0.5, SPEED: [6, 4] },
+      STARS: { SHARE: 1, PX: 1 },
+      WET: { MAX: 1, RISE: 0.35, DRY: 0.06 },
+      GALE: { COUNT: 24, LEN: [160, 400], SPEED: [1500, 2600], ALPHA: 0.5, COLOR: '#e1ebf8' },
+      ROD: { POLE: '#4a5260', BASE: '#9aa7b6', TIP: '#ffd23a', LIVE: '#ff9a1e', HELD: '#9fe8ff', HDR: 2.6, CHARGE: '#fff5a0', ZAP: '#bfe6ff' },
+      CRUST: { ICE: '#b5e0f6', SNOW: '#ffffff', SHADE: '#8fc0de', SPARKLE: 1 },
+      LAVA: { HDR: 1.12, PLATE: 0.5, SPEED: 12, WALL: 1, SMOKE: 2.2, VENT: 1.2, PLUME: 0.5 },
+      SPOUT: { COLORS: ['#a7bccb', '#3f6178', '#e9f4fa'], STEP: 0.2, SIDES: 24, RINGS: 16 },
+      RAFT: { WOOD: ['#7a5a3a', '#9a7248'], COATS: ['#d65a4a', '#e8a23c'], SKIN: '#e8d3b0' },
+      AURORA: { COLORS: ['#3df2b4', '#7a5cff', '#ff5cc8'], ALPHA: 0.5, DRIFT: 8, HEIGHT: 2600 },
+    },
   },
 
   // The giant creatures in 3D (WP8: view3d/creature.js, creatureKit.js, creatureTube.js, creatureFx.js, creatureKraken.js; 3D.md section 14). One block per creature kind: colours (hex), the eyes' glow

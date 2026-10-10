@@ -149,9 +149,9 @@ export function buildEnemyDecor(ctx, model, o = {}) {
   parts.push(body);
   const D = {
     flag, parts,
-    update(t, intent) {
+    update(t, intent, gale = 0) {
       const K = Math.floor(t * 8);
-      if (flag) { flag.userData.segs.forEach((sg, i) => { sg.rotation.y = FLAG_KEYS[K % 3][i]; }); }
+      if (flag) { flag.userData.segs.forEach((sg, i) => { sg.rotation.y = FLAG_KEYS[K % 3][i] * (1 + 1.8 * gale) + 0.16 * gale * (i + 1); }); }  // (WP12: a gust makes it snap harder and stand out, on the same stepped keys)
       D.setIntent(intent);
     },
     setIntent(name) { const n = intents.includes(name) ? name : 'approach'; for (const k of intents) if (badges[k]) badges[k].visible = k === n; },
