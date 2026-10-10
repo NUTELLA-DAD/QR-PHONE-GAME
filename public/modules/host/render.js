@@ -902,12 +902,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.fillStyle = LB.INK;
-    ctx.font = '700 11px ' + config.FONTS.TEXT;
+    ctx.font = (turning ? '700 10px ' : '700 11px ') + config.FONTS.TEXT; // (WP15: the longer word is a size smaller, and the pennant stands 54 off the middle, so the flag never lies on the text; the widget spans x 158..286)
     ctx.textAlign = 'center';
-    ctx.fillText(turning ? 'COMING ABOUT' : 'AHEAD', 0, 4);
+    ctx.fillText(turning ? 'COMING ABOUT' : 'AHEAD', 0, 4, 76);
     // the pennant: a little pole and a flag that points the way the bow points (flipping with the ship)
     ctx.save();
-    ctx.translate(f * 44, 0);
+    ctx.translate(f * 54, 0);
     ctx.scale(f * Math.max(0.02, squash), 1);
     ink();
     ctx.lineWidth = 2;
@@ -1015,9 +1015,26 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.fillRect(46 + 408 * n - 2, 150, 4, 22);
     // Trim (balance.js): a little seesaw under the gas bar. The needle is the ship's centre of mass against the middle of her lift: ahead of it she is
     // nose-heavy (needle right), behind it tail-heavy; it moves as the crew run about and the coal burns.
+    // WP15: the panel's bottom row is laid out by MEASURING, so nothing lands on anything else, whatever the stop's name or the mode line: the stop (or salvage pop-up) name on the left,
+    // the trim seesaw after it, the mode line and salvage on the right. The name is squeezed (never below 56 px) and then the seesaw's bar shortened (never below 44 px) when they do not fit.
+    const lowRun = state.course && config.COURSE.ENABLED && state.course.map ? state.run : null;
+    const lowName = lowRun ? (state.salvagePop ? `+${state.salvagePop.n} ${state.salvagePop.label}` : state.course.stop ? String(state.course.stop.name || '') : '') : '';
+    ctx.font = '16px ' + config.FONTS.DISPLAY;
+    const lowNameW = lowName ? ctx.measureText(lowName).width : 0, salvW = lowRun ? ctx.measureText('Salvage ' + lowRun.salvage).width : 0;
+    ctx.font = '700 13px ' + config.FONTS.TEXT;
+    const modeW = lowRun ? Math.min(200, ctx.measureText(modeLine(lowRun)).width) : 0;
+    let lowNameDraw = lowNameW, trimX = Math.max(124, 46 + lowNameW + 14), trimBar = 100;
+    {
+      const rightLeft = lowRun ? 454 - Math.max(modeW, salvW) - 10 : 454, textMax = 56, endAt = () => trimX + 40 + trimBar + 10 + textMax;
+      if (endAt() > rightLeft) { // squeeze the name first, then the bar
+        const cut = Math.min(endAt() - rightLeft, Math.max(0, lowNameW - 56));
+        lowNameDraw = lowNameW - cut; trimX = Math.max(116, 46 + lowNameDraw + 14);
+        if (endAt() > rightLeft) trimBar = Math.max(44, trimBar - (endAt() - rightLeft));
+      }
+    }
     const bal = state.balance;
     if (bal) {
-      const B = config.BALANCE, bx = 164, bw = 100, by = 196, k = Math.max(-1, Math.min(1, bal.dx / B.FAIL_PX));
+      const B = config.BALANCE, bx = trimX + 40, bw = trimBar, by = 196, k = Math.max(-1, Math.min(1, bal.dx / B.FAIL_PX));
       const bad = Math.abs(bal.dx) > B.FAIL_PX ? '#c0392b' : Math.abs(bal.dx) > B.WARN_PX ? '#d89a1a' : '#5b9a4a';
       ctx.fillStyle = '#3b2a1d';
       ctx.fillRect(bx, by - 3, bw, 6);
@@ -1034,7 +1051,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.font = '700 11px ' + config.FONTS.TEXT;
       ctx.textAlign = 'left';
       ctx.fillStyle = LB.INK;
-      ctx.fillText('TRIM', 124, by + 4);
+      ctx.fillText('TRIM', trimX, by + 4);
       ctx.fillStyle = bad;
       ctx.fillText(Math.abs(bal.deg) < 0.05 ? 'level' : (bal.deg > 0 ? 'nose ' : 'tail ') + Math.abs(bal.deg).toFixed(1) + '\u00b0', bx + bw + 10, by + 4);
     }
@@ -1073,9 +1090,14 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.textAlign = 'right';
     if (steamed) ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);
     if (state.autopilot) {
+      // WP15: the bow pennant (drawFacing) owns x 158..286 of this row, so AUTOPILOT goes between the "Hull" label and it, shrunk to fit (it used to sit on top of AHEAD).
       ctx.fillStyle = '#3a5a8c';
-      ctx.textAlign = 'center';
-      ctx.fillText('AUTOPILOT', 170, 50);
+      ctx.textAlign = 'left';
+      ctx.font = '18px ' + config.FONTS.DISPLAY;
+      const apX = 46 + ctx.measureText('Hull').width + 12;
+      ctx.font = '700 13px ' + config.FONTS.TEXT;
+      ctx.fillText('AUTOPILOT', apX, 50, Math.max(40, 154 - apX));
+      ctx.font = '700 14px ' + config.FONTS.TEXT;
       ctx.fillStyle = config.INK;
       ctx.textAlign = 'right'; // (the labels below hang off the right edge: they were drifting out of the panel while the autopilot was on)
     }
@@ -1094,7 +1116,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
           drawSpares(ctx, state, 470, 236, true, 0.8); // spare gasbags (lives)
           ctx.textAlign = 'left';
           ctx.fillStyle = state.salvagePop ? '#2e7d32' : '#5a4a3a';
-          ctx.fillText(state.salvagePop ? `+${state.salvagePop.n} ${state.salvagePop.label}` : state.course.stop ? state.course.stop.name : '', 46, 204);
+          ctx.font = Math.round(Math.max(11, Math.min(16, (16 * lowNameDraw) / Math.max(1, lowNameW)))) + 'px ' + config.FONTS.DISPLAY; // (a smaller size first, then squeezed to its measured room: see lowName above)
+          if (lowName) ctx.fillText(lowName, 46, 204, Math.max(30, lowNameDraw));
           ctx.textAlign = 'right';
           ctx.fillStyle = config.INK;
           ctx.font = '700 14px ' + config.FONTS.TEXT;
@@ -2378,6 +2401,10 @@ export function createRenderer({ ctx, state: world, canvas }) {
       }
     };
     const spotterFor = (sh) => { let a = spotters3d.get(sh); if (!a) spotters3d.set(sh, (a = createSpotterArt({ ctx, state: sh.ctx }))); return a; };
+    // WP15: NAME LABELS DO NOT PILE UP. The names are queued (nameQ) while the ships are drawn and laid out together afterwards (placeNames): a label that would lie on another one steps up by one line
+    // (up to three lines), with a thin leader line down to its crewman; a fourth would be unreadable, so it joins the nearest label as "Bot4 +1". `blocks` are the rectangles of the other call-outs (KO!, "!",
+    // "Hey!") that a name must not cover. The order is fixed (people before bots, then by id), so a label keeps its line while the others walk about.
+    const nameQ = [], blocks = [];
     const crewNames = (p, key, ps) => {
       const a = p3.crew(key);
       if (!a) return;
@@ -2386,16 +2413,53 @@ export function createRenderer({ ctx, state: world, canvas }) {
       const q = proj([a.x, a.y + markY + (hurt ? 64 : 30) * sc, a.z]);
       if (!q) return;
       at(q, ps);
-      if (p.name) label(String(p.name), 0, 0, '700 18px ' + config.FONTS.TEXT, p.connected === false ? '#888' : config.INK, '#fff', 3);
+      if (p.name) nameQ.push({ text: String(p.name), x: q.x, y: q.y, ps, color: p.connected === false ? '#888' : config.INK, rank: (p.bot || p.type ? 1 : 0), key: String(key), n: 0 });
       let up = -24;
       if (p.ko > 0) { // KO! and the revive bar over the name
         label('KO!', 0, up, '20px ' + config.FONTS.DISPLAY, '#a8443f', '#fff', 3);
         drawBar(0, up + 6, p.prog);
+        blocks.push({ x0: q.x - 22 * ps, x1: q.x + 22 * ps, y0: q.y + (up - 18) * ps, y1: q.y + (up + 12) * ps });
         up -= 28;
       }
-      if (p.windup > 0) label('!', 0, up - 4, `${K8 & 1 ? 44 : 38}px ${config.FONTS.DISPLAY}`, '#a8443f', '#fff', 3.6); // a raider winding up to strike
+      if (p.windup > 0) { label('!', 0, up - 4, `${K8 & 1 ? 44 : 38}px ${config.FONTS.DISPLAY}`, '#a8443f', '#fff', 3.6); blocks.push({ x0: q.x - 12 * ps, x1: q.x + 12 * ps, y0: q.y + (up - 48) * ps, y1: q.y + (up + 2) * ps }); } // a raider winding up to strike
       const age = performance.now() - (p.actT || -1e9);
-      if (age < 900) label('Hey!', 0, up - (p.windup > 0 ? 40 : 4), '23px ' + config.FONTS.DISPLAY, '#fff', config.INK, 3.2);
+      if (age < 900) { label('Hey!', 0, up - (p.windup > 0 ? 40 : 4), '23px ' + config.FONTS.DISPLAY, '#fff', config.INK, 3.2); blocks.push({ x0: q.x - 30 * ps, x1: q.x + 30 * ps, y0: q.y + (up - (p.windup > 0 ? 40 : 4) - 22) * ps, y1: q.y + (up - (p.windup > 0 ? 40 : 4) + 6) * ps }); }
+    };
+    const placeNames = () => {
+      if (!nameQ.length) return;
+      nameQ.sort((a, b) => a.rank - b.rank || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.font = '700 18px ' + config.FONTS.TEXT;
+      const placed = [];
+      const rectOf = (e, dy) => { const w = (ctx.measureText(e.text + (e.n ? ` +${e.n}` : '')).width + 6) * e.ps; return { x0: e.x - w / 2, x1: e.x + w / 2, y0: e.y + dy - 17 * e.ps, y1: e.y + dy + 5 * e.ps }; };
+      const hit = (r, s) => r.x0 < s.x1 && r.x1 > s.x0 && r.y0 < s.y1 && r.y1 > s.y0;
+      for (const e of nameQ) {
+        const line = 20 * e.ps;
+        let dy = 0, tries = 0, host = null;
+        for (;;) {
+          const r = rectOf(e, dy);
+          host = placed.find((s) => hit(r, s.r)) || null;
+          const blocked = host || blocks.some((b) => hit(r, b));
+          if (!blocked) break;
+          if (++tries > 3) { host = host || placed.find((s) => Math.abs(s.e.x - e.x) < 90 * e.ps && Math.abs(s.e.y - e.y) < 70 * e.ps) || null; break; }
+          dy -= line;
+        }
+        if (tries > 3 && host) { host.e.n++; host.r = rectOf(host.e, host.dy); continue; } // (too many in one spot: this one joins the label it would lie on)
+        if (tries > 3) dy = -3 * line; // (nothing to join: take the top line)
+        e.dy = dy;
+        placed.push({ e, dy, r: rectOf(e, dy) });
+      }
+      for (const { e, dy } of placed) {
+        if (dy < -6 * e.ps) { // a leader line from the label down to its crewman
+          ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(e.x, e.y + dy + 6 * e.ps); ctx.lineTo(e.x, e.y + 4 * e.ps);
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 3.4; ctx.stroke();
+          ctx.strokeStyle = config.INK; ctx.lineWidth = 1.4; ctx.stroke();
+        }
+        at({ x: e.x, y: e.y + dy }, e.ps);
+        label(e.n ? `${e.text} +${e.n}` : e.text, 0, 0, '700 18px ' + config.FONTS.TEXT, e.color, '#fff', 3);
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
     };
     const crewMarks = (p, key, sh) => { // (the job chevron, the HELP call-out and the Versus "!", at the colour marker)
       if (!p.color || p.connected === false || p.enemy) return;
@@ -2614,6 +2678,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         crewNames(p, p.id, zs);
         crewMarks(p, p.id, shipOf(world, p) || mainShip(world));
       }
+      placeNames(); // (WP15: every name queued above, laid out together so none lies on another)
       // enemy bombers' health bars, a stolen plane's KICK THE PILOT bar, and the ring and "!" over a bat that has latched on
       for (const p of world.bombers || []) {
         const q = Number.isFinite(p.x) && Number.isFinite(p.y) && proj([p.x, -p.y + 95, 0]);

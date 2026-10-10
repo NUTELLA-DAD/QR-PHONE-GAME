@@ -108,9 +108,9 @@ function hatchHole(ctx, b, yDeck, xa, xb, lane, halfZ, below = 16) {
   const { T, X } = ctx;
   for (const [sink, s] of copies(b)) {
     ctx.carves.push({ box: [X(xa), -(yDeck + below), X(xb), -yDeck + 3, s * lane - halfZ, s * lane + halfZ], side: s });
-    const cx = X((xa + xb) / 2), y = -yDeck + 2.6, w = xb - xa;
-    for (const dz of [-halfZ, halfZ]) sink.box(T.rail, cx, y, s * lane + dz, w + 5, 5, 4, 0.8, 0, 0, 0, { tr: 'woodC' });
-    for (const x of [xa, xb]) sink.box(T.rail, X(x), y, s * lane, 4, 5, halfZ * 2 + 4, 0.8, 0, 0, 0, { tr: 'woodC' });
+    const cx = X((xa + xb) / 2), y = -yDeck + 2.2, w = xb - xa; // (WP15: only a thin flat lip round the hole: the raised coaming made the hatch with its ladder stub read like a small stool from afar)
+    for (const dz of [-halfZ, halfZ]) sink.box(T.rail, cx, y, s * lane + dz, w + 4, 3.2, 3.4, 0.6, 0, 0, 0, { tr: 'woodC' });
+    for (const x of [xa, xb]) sink.box(T.rail, X(x), y, s * lane, 3.4, 3.2, halfZ * 2 + 3.4, 0.6, 0, 0, 0, { tr: 'woodC' });
   }
 }
 
@@ -120,14 +120,14 @@ export function buildConnector(c, ctx, i) {
   const yt = platY(c.top), yb = platY(c.bottom), lane = ctx.connLane(c);
   if (c.type === 'ladder' || c.type === 'rope') {
     const rope = c.type === 'rope', rail = rope ? T.rope : T.rail, rr = rope ? 2.4 : 2.6, tr = rope ? 'rope' : 'woodC';
-    const dy = yb - yt, dxl = c.xBottom - c.xTop, ln = Math.hypot(dy, dxl) || 1, ext = rope ? 0 : 40; // (a ladder stands a hand-hold's height above the floor it comes up through)
+    const dy = yb - yt, dxl = c.xBottom - c.xTop, ln = Math.hypot(dy, dxl) || 1, ext = rope ? 0 : 26; // (a ladder stands a hand-hold's height above the floor it comes up through; WP15: shorter, and no top rung, so it is not a stool)
     const xe = c.xTop - (dxl / ln) * ext, ye = yt - (dy / ln) * ext;
     const n = Math.max(2, Math.floor(Math.abs(dy) / (rope ? 44 : 32)));
     for (const [sink, s] of copies(b)) {
       const z = s * lane;
       for (const dx of [-16, 16]) sink.rod(rail, V(X(xe + dx), Y(ye), z), V(X(c.xBottom + dx), Y(yb), z), rr, rope ? 0 : 1, { tr });
       for (let k = 1; k < n; k++) { const t = k / n; sink.box(rail, X(c.xTop + dxl * t), Y(yt + dy * t), z, 34, rope ? 3 : 4, 4, 0, 0, 0, 0, { tr }); }
-      if (ext) sink.box(rail, X(xe), Y(ye + 3), z, 38, 5, 5, 0.6, 0, 0, 0, { tr }); // (the top rung: a hand-hold above the hatch, so the rails read as a ladder coming up)
+
     }
     hatchHole(ctx, b, yt, c.xTop - 25, c.xTop + 25, lane, 30, 16);
   } else if (c.type === 'pole') {

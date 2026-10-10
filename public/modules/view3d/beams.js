@@ -53,13 +53,30 @@ function dustTexture() {
 
 // ---- the pool: a soft disc painted once ----------------------------------------------------------------------------------------------------------------------------------------------------
 function poolTexture() {
-  const N = 128, c = document.createElement('canvas');
+  // WP15: a WARM pool with a long soft fall-off (pale gold in the middle, amber, then a dull orange that fades out) and a little STONE GRAIN and a ragged rim, painted once from a seeded generator,
+  // so where the beam lands it reads as light on rock, not as a flat cream disc.
+  const N = 192, c = document.createElement('canvas');
   c.width = c.height = N;
   const g = c.getContext('2d'), r = N / 2;
   const grad = g.createRadialGradient(r, r, 0, r, r, r);
-  grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.32, 'rgba(255,255,255,0.78)'); grad.addColorStop(0.62, 'rgba(255,255,255,0.34)'); grad.addColorStop(0.86, 'rgba(255,255,255,0.1)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  grad.addColorStop(0, 'rgba(255,246,222,1)'); grad.addColorStop(0.22, 'rgba(255,228,164,0.86)'); grad.addColorStop(0.5, 'rgba(255,192,112,0.46)'); grad.addColorStop(0.76, 'rgba(242,152,82,0.17)'); grad.addColorStop(1, 'rgba(222,124,62,0)');
   g.fillStyle = grad;
   g.fillRect(0, 0, N, N);
+  let s = 0x51a3c7;
+  const rnd = () => { s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x7f4a7c15) | 0; return ((s >>> 8) & 0xffff) / 65535; };
+  g.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 46; i++) { // a ragged rim: soft bites out of the outer ring
+    const a = rnd() * Math.PI * 2, d = r * (0.62 + 0.34 * rnd()), br = r * (0.06 + 0.1 * rnd());
+    const bg = g.createRadialGradient(r + Math.cos(a) * d, r + Math.sin(a) * d, 0, r + Math.cos(a) * d, r + Math.sin(a) * d, br);
+    bg.addColorStop(0, 'rgba(0,0,0,0.55)'); bg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = bg; g.fillRect(0, 0, N, N);
+  }
+  for (let i = 0; i < 520; i++) { // the grain of the stone
+    const a = rnd() * Math.PI * 2, d = r * Math.sqrt(rnd()) * 0.98, px = r + Math.cos(a) * d, py = r + Math.sin(a) * d, sz = 1 + rnd() * 2.4;
+    g.fillStyle = `rgba(0,0,0,${0.06 + 0.2 * rnd()})`;
+    g.fillRect(px, py, sz, sz * (0.5 + rnd()));
+  }
+  g.globalCompositeOperation = 'source-over';
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.NoColorSpace;
   return t;

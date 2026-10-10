@@ -12,7 +12,7 @@
 // the shadow, ropes and markers only while they exist), under 60k triangles with ink.
 import { THREE, look, applyLook, outlineMat } from './style.js';
 import { config } from '../../config.js';
-import { paintHeadAtlas, paintLimbSkin, creatureToon, makeUniforms, Tinter } from './creatureKit.js';
+import { paintHeadAtlas, paintLimbSkin, creatureToon, makeUniforms, Tinter, coilFade } from './creatureKit.js';
 import { createTubeSet } from './creatureTube.js';
 import { buildKraken } from './creatureKraken.js';
 import { createFoamRings, createShadowDecal, createGripMarkers, createRopeSet } from './creatureFx.js';
@@ -97,6 +97,20 @@ export function createCreatureView(parent) {
     const u = cum[i] > cum[i - 1] ? (s - cum[i - 1]) / (cum[i] - cum[i - 1]) : 0;
     return pts[i - 1].z + (pts[i].z - pts[i - 1].z) * u;
   }
+  // WP15: where the crew's decks are in the world (a box round the main ship's platforms) and how far forward of the crew's lane the creature starts to be see-through there (creatureKit.js coilFade)
+  const _bb = new THREE.Vector3();
+  function setCoilFade() {
+    const e = link.models && link.models.values().next().value, m = e && e.model, L = m && m.layout, P = L && L.platforms;
+    if (!m || !m.content || !P || !P.length) { coilFade.uCoilZ.value = 1e9; return; }
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    const ys = P.map((q) => q.y).filter(Number.isFinite), xa = Math.min(...P.map((q) => q.x0)), xb = Math.max(...P.map((q) => q.x1));
+    if (!ys.length || !Number.isFinite(xa) || !Number.isFinite(xb)) { coilFade.uCoilZ.value = 1e9; return; }
+    const ya = Math.min(...ys) - 220, yb = Math.max(...ys) + 60; // (game y runs down: the top deck's crew stand above their floor)
+    for (const [gx, gy] of [[xa, ya], [xb, ya], [xa, yb], [xb, yb]]) { _bb.set(m.X(gx), m.Y(gy), 0); m.content.localToWorld(_bb); x0 = Math.min(x0, _bb.x); x1 = Math.max(x1, _bb.x); y0 = Math.min(y0, _bb.y); y1 = Math.max(y1, _bb.y); }
+    coilFade.uCoilBox.value.set(x0 - 30, x1 + 30, y0 - 30, y1 + 30);
+    const zc = config.CREATURE3D && config.CREATURE3D.COIL_FADE_Z;
+    coilFade.uCoilZ.value = fin(zc) ? zc : 70;
+  }
   const hullHalf = () => { let h = 0; if (link.models) for (const e of link.models.values()) h = Math.max(h, e.model && e.model.W ? e.model.W : 0); return h || 240; };
   function jointZ(p, li, n, Z, dz, hh) {
     const ZC = rig.P.Z, front = p.layer === 'front';
@@ -180,6 +194,7 @@ export function createCreatureView(parent) {
     // cr = state.creature | null, night = the world's darkness (0..1), dt / t = frame seconds / animation seconds, ctx = { state, sea (the game's y of the sea line, or null), tier }
     update(cr, night, dt = 0.016, t = 0, ctx = {}) {
       if (!cr || !cr.parts || !cr.parts.length) {
+        coilFade.uCoilZ.value = 1e9;
         root.visible = false;
         if (rig) { rig.foam.mesh.visible = false; rig.shadow.hide(); rig.markers.mesh.visible = false; rig.ropes.group.visible = false; clearChunks(); rig.water.reset(); }
         return;
@@ -241,6 +256,7 @@ export function createCreatureView(parent) {
 
       // ---- the limbs ----
       const hh = hullHalf(), tubes = R.tubes;
+      try { setCoilFade(); } catch { coilFade.uCoilZ.value = 1e9; }
       R.limbs.forEach((p, li) => {
         const n = p.segs ? p.segs.length : 0;
         if (p.dead || p.hidden || !n) { tubes.update(li, null, 1, false, R.zbuf, [1, 1, 1]); return; }

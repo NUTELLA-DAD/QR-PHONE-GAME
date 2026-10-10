@@ -8,6 +8,7 @@
 import { THREE, Batch, G, gradientMap, rimify } from './style.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { config } from '../../config.js';
+import { BAG_RZ } from './parts3d/bag.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const fin = Number.isFinite;
@@ -33,7 +34,7 @@ const hdr = (b, k) => { const g = b.parts[b.parts.length - 1], c = g.attributes.
 
 export function createWeatherShip({ state, models, parent }) {
   const mat = makeMat();
-  const S = { rods: 0, crusts: 0, pump: 0, flood: 0, rebuilds: 0, frostParts: 0, visible: false };
+  const S = { rods: 0, crusts: 0, pump: 0, flood: 0, rebuilds: 0, frostParts: 0, bagIce: 0, visible: false };
   let rec = null; // { model, mesh, key, side, cache: Map(partIdx -> frost), parts }
   const stormTip = { x: 0, y: 0, z: 0, ok: false };
 
@@ -132,6 +133,39 @@ export function createWeatherShip({ state, models, parent }) {
     return n;
   }
 
+  // WP15: a few short ICICLES hanging from the belly of an iced gasbag (the shader gives it a clean frost cap on its upper half). One small static mesh a bag, a CHILD of the bag's node, so it swells and sags with the
+  // bag; rebuilt only when the iced level steps (tenths). They sit on the front lower flank, on both sides (the camera side changes during a COME ABOUT); nothing moves.
+  function bagIcicles(model, level) {
+    const C = W3().CRUST || {}, bags = (model.dyn && model.dyn.bags) || [];
+    rec.bagIce = rec.bagIce || new Map(); S.bagIce = 0;
+    for (const bg of bags) {
+      let e = rec.bagIce.get(bg.node);
+      if (!e) {
+        if (level <= 0) continue; // (nothing iced, nothing built)
+        e = { mesh: new THREE.Mesh(new THREE.BufferGeometry(), mat), lvl: -1 };
+        e.mesh.frustumCulled = false; e.mesh.name = 'wxBagIce'; e.mesh.castShadow = false; e.mesh.receiveShadow = false;
+        bg.node.add(e.mesh);
+        rec.bagIce.set(bg.node, e);
+      }
+      if (e.lvl !== level) {
+        e.lvl = level;
+        e.mesh.geometry.dispose();
+        const G = bg.G || {}, rx = fin(G.rx) ? G.rx : 400, ry = fin(G.ry) ? G.ry : 150;
+        if (level > 0) {
+          const b = new Batch(), n = 3 + Math.round(level * 6), r = (u) => ry * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(u), u < 0 ? 1.75 : 2)), 1 / (u < 0 ? 1.75 : 2));
+          for (let k = 0; k < n; k++) {
+            const h0 = hashN(bg.i * 53 + k * 7 + 1), h1 = hashN(bg.i * 53 + k * 7 + 2), h2 = hashN(bg.i * 53 + k * 7 + 3);
+            const u = -0.7 + (1.4 * (k + 0.5)) / n + (h0 - 0.5) * 0.06, a = -1.0 - 0.25 * h1, rr = r(u), len = (16 + 34 * level) * (0.55 + 0.9 * h2), rad = 4.6 + 3 * level * (0.7 + 0.5 * h0);
+            const x = u * rx, y = rr * Math.sin(a), z = rr * BAG_RZ * Math.cos(a);
+            for (const sgn of [1, -1]) b.cone(k % 2 ? C.SNOW || '#ffffff' : C.ICE || '#b5e0f6', x, y - len * 0.5 + 4, sgn * z, rad, len, 0, Math.PI, 0, 0); // (the cone's point is down)
+          }
+          if (b.parts.length) { e.mesh.geometry = mergeGeometries(b.parts, false); for (const g of b.parts) g.dispose(); e.mesh.geometry.computeBoundingSphere(); } else e.mesh.geometry = new THREE.BufferGeometry();
+        } else e.mesh.geometry = new THREE.BufferGeometry();
+      }
+      e.mesh.visible = level > 0; if (level > 0) S.bagIce++;
+    }
+  }
+
   const keyOf = (model, st, K8, sd) => {
     const C = W3();
     let k = String(sd);
@@ -167,6 +201,10 @@ export function createWeatherShip({ state, models, parent }) {
       if (wrote) mats.wxTex.needsUpdate = true;
       S.frostParts = parts;
     }
+    try { // (the icicles of the gasbag: steps of a tenth, only in the Frost Peaks)
+      const gl = env === 'frost' && fin(state.ice && state.ice.gasbag) ? Math.round(clamp(state.ice.gasbag, 0, 1) * 10) / 10 : 0;
+      bagIcicles(model, gl >= 0.2 ? gl : 0);
+    } catch (err) { if (!S.warned) { S.warned = true; console.warn('view3d weatherShip icicles', err); } }
     // ---- the mesh
     const key = keyOf(model, st, K8, sd);
     if (key !== rec.key) {

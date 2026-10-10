@@ -42,9 +42,9 @@ export function createLightning({ scene, post, world, state }) {
   const cfg = () => (config.LOOK3D && config.LOOK3D.LIGHTNING) || {};
   const bolt = () => cfg().BOLT || {};
   const mk = (hex) => new THREE.MeshBasicMaterial({ color: new THREE.Color(hex), transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, fog: false, side: THREE.DoubleSide, toneMapped: false });
-  const glowMat = mk('#7fb4ff'), coreMat = mk('#ffffff');
-  const glowMesh = new THREE.Mesh(new THREE.BufferGeometry(), glowMat), coreMesh = new THREE.Mesh(new THREE.BufferGeometry(), coreMat);
-  for (const m of [glowMesh, coreMesh]) { m.frustumCulled = false; m.renderOrder = 20; m.visible = false; scene.add(m); }
+  const glowMat = mk('#7fb4ff'), coreMat = mk('#ffffff'), haloMat = mk('#7fb4ff'); // (WP15: a wide faint HALO under the glow, so the bolt has body next to the flash: halo, glow, white core)
+  const glowMesh = new THREE.Mesh(new THREE.BufferGeometry(), glowMat), coreMesh = new THREE.Mesh(new THREE.BufferGeometry(), coreMat), haloMesh = new THREE.Mesh(new THREE.BufferGeometry(), haloMat);
+  for (const m of [haloMesh, glowMesh, coreMesh]) { m.frustumCulled = false; m.renderOrder = 20; m.visible = false; scene.add(m); }
   const S = { flash: 0, key: 0, strikes: 0, shown: '' };
   let cur = null; // the bolt being shown: { ref, start (its t when first seen), seed, built }
   let lastRef = null;
@@ -63,7 +63,7 @@ export function createLightning({ scene, post, world, state }) {
     if (grade) { grade.uniforms.uFlash.value = key * fin(L.FLASH, 0.34); grade.uniforms.uFlashColor.value.set(L.COLOR || '#cfe0ff'); }
     // ---- the bolt
     const b = on ? w.bolt : null;
-    if (!b || !Number.isFinite(b.x) || !(b.t > 0)) { glowMesh.visible = coreMesh.visible = false; lastRef = null; cur = null; S.shown = ''; return; }
+    if (!b || !Number.isFinite(b.x) || !(b.t > 0)) { glowMesh.visible = coreMesh.visible = haloMesh.visible = false; lastRef = null; cur = null; S.shown = ''; return; }
     if (b !== lastRef) { // a new strike: its shape comes from its own numbers, so it never changes while it lives
       lastRef = b; S.strikes++;
       cur = { start: Math.max(0.05, fin(b.t, 0.25)), seed: (Math.round(b.x) * 73856093) ^ (Math.round(fin(b.y, 77)) * 19349663) ^ (S.strikes * 83492791), far: !Number.isFinite(b.y), built: false };
@@ -71,7 +71,7 @@ export function createLightning({ scene, post, world, state }) {
     if (!cur) return;
     const age = cur.start - b.t, k0 = fin((B.KEYS || [0.12, 0.1])[0], 0.12), k1 = fin((B.KEYS || [0.12, 0.1])[1], 0.1);
     const frame = age < k0 ? 0 : age < k0 + k1 ? 1 : 2; // (stepped: a full bolt, a thinner one, gone)
-    if (frame === 2) { glowMesh.visible = coreMesh.visible = false; S.shown = ''; return; }
+    if (frame === 2) { glowMesh.visible = coreMesh.visible = haloMesh.visible = false; S.shown = ''; return; }
     if (!cur.built) {
       cur.built = true;
       const vh = Math.max(600, fin(c.cam && c.cam.visH, 1500)), top = c.target.y + vh / 2 + 400;
@@ -79,25 +79,26 @@ export function createLightning({ scene, post, world, state }) {
       const n = Math.max(4, Math.round(fin(B.SEGMENTS, 9))), jit = fin(B.JITTER, 0.1) * (top - y1) * 0.55;
       const main = zigzag(r, x0, top, x1, y1, n, jit);
       const z = cur.far ? -1400 : 50, widen = cur.far ? 1.7 : 1, wg = fin(B.WIDTH, 16) * widen, wc = fin(B.CORE_WIDTH, 5) * widen;
-      const gpos = [], cpos = [];
-      ribbon(gpos, main, wg * 1.4, wg * 0.5, z); ribbon(cpos, main, wc * 1.3, wc * 0.5, z + 1);
+      const gpos = [], cpos = [], hpos = [];
+      ribbon(hpos, main, wg * 2.6, wg * 1.1, z - 1); ribbon(gpos, main, wg * 1.4, wg * 0.5, z); ribbon(cpos, main, wc * 1.3, wc * 0.5, z + 1);
       const forks = Math.round(fin(B.FORKS, 2));
       for (let q = 0; q < forks; q++) { // short forks off the upper-middle of the bolt, leaning away from it
         const i = 2 + Math.floor(r() * Math.max(1, n - 5)), p = main[i], dir = r() < 0.5 ? -1 : 1, len = (top - y1) * (0.12 + 0.12 * r());
         const fk = zigzag(r, p[0], p[1], p[0] + dir * len * 0.7, p[1] - len, 3, len * 0.18);
         ribbon(gpos, fk, wg * 0.6, wg * 0.15, z); ribbon(cpos, fk, wc * 0.6, wc * 0.15, z + 1);
       }
-      glowMesh.geometry.dispose(); coreMesh.geometry.dispose();
+      glowMesh.geometry.dispose(); coreMesh.geometry.dispose(); haloMesh.geometry.dispose();
+      haloMesh.geometry = new THREE.BufferGeometry(); haloMesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(hpos, 3));
       glowMesh.geometry = new THREE.BufferGeometry(); glowMesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(gpos, 3));
       coreMesh.geometry = new THREE.BufferGeometry(); coreMesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(cpos, 3));
       const hdr = fin(B.HDR, 2.6) * (cur.far ? 0.6 : 1);
-      glowMat.color.set(B.GLOW || '#7fb4ff').multiplyScalar(hdr * 0.55); coreMat.color.set(B.CORE || '#ffffff').multiplyScalar(hdr);
+      glowMat.color.set(B.GLOW || '#7fb4ff').multiplyScalar(hdr * 0.6); coreMat.color.set(B.CORE || '#ffffff').multiplyScalar(hdr); haloMat.color.set(B.GLOW || '#7fb4ff').multiplyScalar(hdr * fin(B.HALO, 0.2));
     }
     // frame 1 is a thinner, dimmer bolt (the same shape): a scale of the whole ribbon about its own top would shift it, so it fades its strength instead
-    glowMat.opacity = frame === 0 ? 1 : 0.55; coreMat.opacity = frame === 0 ? 1 : 0.7;
-    glowMesh.visible = coreMesh.visible = true;
+    glowMat.opacity = frame === 0 ? 1 : 0.55; coreMat.opacity = frame === 0 ? 1 : 0.7; haloMat.opacity = frame === 0 ? 1 : 0.5;
+    glowMesh.visible = coreMesh.visible = haloMesh.visible = true;
     S.shown = frame === 0 ? 'A' : 'B';
   };
-  const dispose = () => { for (const m of [glowMesh, coreMesh]) { m.geometry.dispose(); m.material.dispose(); scene.remove(m); } };
+  const dispose = () => { for (const m of [haloMesh, glowMesh, coreMesh]) { m.geometry.dispose(); m.material.dispose(); scene.remove(m); } };
   return { update, stats: S, dispose };
 }

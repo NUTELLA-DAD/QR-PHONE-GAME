@@ -66,7 +66,8 @@ const RIM_BODY = `
         vec4 ba = uBeamA[ bi ]; vec4 bb = uBeamB[ bi ];
         vec2 d = q - ba.xy;
         float along = dot( d, ba.zw ), across = abs( d.x * ba.w - d.y * ba.z ), half_ = bb.x * along + 24.0;
-        float m = ( 1.0 - smoothstep( 0.55, 1.0, across / half_ ) ) * smoothstep( 0.0, 90.0, along ) * ( 1.0 - smoothstep( 0.72, 1.0, along / bb.y ) );
+        // WP15: soft edges and a falloff with distance (a lamp's light thins out), so lit rock reads as light on rock, not as a flat cut-out wedge
+        float m = ( 1.0 - smoothstep( 0.25, 1.0, across / half_ ) ) * smoothstep( 0.0, 90.0, along ) * ( 1.0 - smoothstep( 0.55, 1.0, along / bb.y ) ) * ( 1.0 - 0.4 * saturate( along / bb.y ) );
         lit = max( lit, m * bb.z );
       }
       outgoingLight += diffuseColor.rgb * uBeamColor * lit;

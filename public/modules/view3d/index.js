@@ -16,6 +16,7 @@ import { createCrewLayer } from './crew.js';
 import { createCreatureView } from './creature.js';
 import { createFlyers } from './flyers.js';
 import { createWorldObjects } from './worldObjects.js';
+import { createTeamFlags } from './teamFlag.js'; // (WP15: the Versus team pennants on the masts)
 import { createThreatGlows } from './glows3d.js';
 import { createWreck3D } from './wreck3d.js';
 import { createScenery } from './scenery.js';
@@ -42,7 +43,6 @@ const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h
 // and the labels on the HUD canvas (render.js drawOver3D).
 export const NOT_DRAWN = [
   'the Ember Forge heat shimmer (skipped on purpose: it would have to move; WP12 drew the rest of the weather)',
-  'the Versus team pennants on the masts',
   'the sky-dock "NEW: part" call-out',
   'the darkness overlay (the lights do it in 3D)',
 ];
@@ -171,6 +171,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // WP7 (crew v2): every crewman, raider, parachute, hookshot rope and heart in ONE mesh (crew.js); the layer is fed once a frame from syncShips
   const crew = createCrewLayer(worldRoot);
   V.crew = crew;
+  const teamFlags = createTeamFlags({ state, models }); // (WP15: a pole and a stepped pennant on every teamed ship; updated after syncShips)
+  V.teamFlags = teamFlags;
   V.lineup = null; // (the dev page's crew line-up sets { x, y }: world point, y up)
   V.flyers = flyers; V.worldObjects = worldObjects; V.glows = glows; V.wreck3d = wreck3d; // (WP9: handles for the dev page and the gate)
   V.enemyLineup = null; // (WP9: the dev page's enemy line-up sets { x, y, page }: the middle of the picture in the 3D world, y up)
@@ -418,6 +420,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     if (beams) { try { beams.updateLit(camera, state, world.night); } catch (e) { logOnce('lit', e); } } // (which targets a manned beam holds: the toon shader gives them a warm rim)
     try { destruction.process(); } catch (e) { logOnce('destruction', e); } // (the break-off notes are read BEFORE syncShips rebuilds a ship from her new layout)
     syncShips(t, dt);
+    try { teamFlags.update(t, lastView ? lastView.zoom : 1); } catch (e) { logOnce('teamFlags', e); }
     try { damage.update(world.night); } catch (e) { logOnce('damage', e); }
     try { partDamage.update(dt, t, world.night); } catch (e) { logOnce('partDamage', e); }
     syncSky();
@@ -506,7 +509,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.resetOrbit = () => { lastPivot.set(0, 0, 0); }; // WP13: the next orbit frame starts from the starting view again (the build page's double-click)
-  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, weather]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, weather, teamFlags]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));
