@@ -1,6 +1,7 @@
 // Guns, searchlights, the lightning coil and the crew cannon (WP2). A gun's barrel and a lamp's drum are animated (aim comes from the sim every frame), so each is a Group of its own (batched with its ink
 // shell); the pedestals and carriages are static pieces of the part's batch. The searchlight keeps its real SpotLight, its two soft cones and its glowing lens exactly as WP1 left them.
 import { THREE, look, glow, glowMat } from '../style.js';
+import { accents } from './stations.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -37,7 +38,7 @@ export function buildGun(name, m, ctx) {
   bar.cyl(T.iron, g.len / 2 - 8, 0, 0, g.r, g.len, 2.5, 0, 0, Math.PI / 2, undefined, { tr: 'iron' });
   bar.sphere(T.hullDark, 0, 0, 0, g.r + 7, g.r + 7, g.r + 7, 2.5, true, { tr: 'iron' });
   for (const k of [0.3, 0.62]) bar.cyl('#7c7468', g.len * k - 8, 0, 0, g.r * 1.14, 6, 1, 0, 0, Math.PI / 2, undefined, { tr: 'iron' }); // reinforcing bands
-  bar.cyl(T.brass, g.len - 6, 0, 0, g.r * 1.28, 9, 1.4, 0, 0, Math.PI / 2, undefined, { tr: 'brass' }); // the muzzle ring
+  bar.cyl(accents().brass, g.len - 6, 0, 0, g.r * 1.28, 9, 1.4, 0, 0, Math.PI / 2, undefined, { tr: 'plain' }); // the muzzle ring (A5: a bright brass accent)
   bar.cyl(T.hullDark, 0, 0, 0, g.r * 0.7, g.r * 3.2 + 14, 1, Math.PI / 2, 0, 0, undefined, { tr: 'iron' }); // the trunnion pin
   if (m.type === 'flame') bar.cone('#ffb347', g.len + 6, 0, 0, g.r * 1.4, 20, 1.5, 0, 0, -Math.PI / 2, { tr: 'plain' });
   const pivot = new THREE.Group();

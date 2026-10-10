@@ -2470,10 +2470,30 @@ export function createRenderer({ ctx, state: world, canvas }) {
   // crew(key) -> { x, y(up), z, sc, ko } | null }: every spot is projected through the 3D camera (so it sits on the thing, whatever the perspective), then drawn in the 2D game's own style and size.
   // Nothing wobbles: the pulses are held for 1/8 s (stepped), like everything else in the 3D view.
   const spotters3d = new Map(); // (ship -> her HELP call-out art, made on first use)
+  // A5 LABEL NOISE: people are always named; a bot is named only while it is busy (a job, carrying, fighting, knocked out, or just joined) and a few seconds after, then the name fades out (stepped: quarters).
+  // key -> { seen (ms: first drawn), busy (ms: last time it was busy), frame }. Numbers: config.LABELS3D.
+  const botLabels = new Map();
+  let over3dFrame = 0;
   const drawOver3D = (time, view, p3) => {
     if (!p3 || !view) return;
     const W = canvas.width, H = canvas.height, ts = time / 1000, K8 = Math.floor(ts * 8), tq = K8 / 8;
+    over3dFrame++;
     const zs = Math.max(0.3, Math.min(2.4, Math.max(view.zoom || 0.5, H / 1080))); // (a label is never smaller than 18 px on a 1080p screen: readable from the sofa)
+    const L3 = config.LABELS3D || {};
+    const zl = Math.max(H / 1080, Math.min(1.6, zs * (Number.isFinite(L3.SCALE) ? L3.SCALE : 0.88))); // (A5: the names sit a little smaller when zoomed in, never under 18 px at 1080p)
+    const CREAM = L3.COLOR || '#f2e8cb'; // (A5: a soft cream halo behind the letters, not pure white)
+    const nameAlpha = (p, key) => { // 1 = shown, 0 = hidden (bots only; people are always named)
+      if (!p.bot || p.type) return 1;
+      let st = botLabels.get(key);
+      if (!st) botLabels.set(key, (st = { seen: time, busy: time, frame: 0 }));
+      st.frame = over3dFrame;
+      const job = p.botJob && p.botJob.kind !== 'station'; // (manning a post is not "busy": the post and the mat say so)
+      const fighting = (p.fire && p.lock) || (p.swingT && performance.now() - p.swingT < 1500) || (p.hookT && performance.now() - p.hookT < 1500);
+      if (job || p.carry || fighting || p.ko > 0 || time - st.seen < (L3.JOIN != null ? L3.JOIN : 5) * 1000) st.busy = time;
+      const idle = (time - st.busy) / 1000, hold = L3.HOLD != null ? L3.HOLD : 3, fade = Math.max(0.1, L3.FADE != null ? L3.FADE : 0.75);
+      return idle <= hold ? 1 : Math.ceil(Math.max(0, 1 - (idle - hold) / fade) * 4) / 4;
+    };
+    if (botLabels.size > 40) for (const [k, v] of botLabels) if (v.frame < over3dFrame - 90) botLabels.delete(k);
     const zw = Math.max(0.2, Math.min(2.4, view.zoom || 0.5)); // (rings and chevrons that sit ON a thing keep that thing's own scale)
     const proj = (a) => {
       if (!a) return null;
@@ -2511,12 +2531,13 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const crewNames = (p, key, ps) => {
       const a = p3.crew(key);
       if (!a) return;
-      const sc = a.sc || 1, markY = (a.ko ? 66 : 128) * sc;
+      const sc = a.sc || 1, markY = (a.ko ? 66 : 128) * sc + (a.up || 0); // (a.up: the bigger head and cone of a wide view, crew.js)
       const hurt = p.hearts != null && p.hearts < config.HEALTH.MAX && !(p.ko > 0) && !p.type && p.connected !== false;
       const q = proj([a.x, a.y + markY + (hurt ? 64 : 30) * sc, a.z]);
       if (!q) return;
       at(q, ps);
-      if (p.name) nameQ.push({ text: String(p.name), x: q.x, y: q.y, ps, color: p.connected === false ? '#888' : config.INK, rank: (p.bot || p.type ? 1 : 0), key: String(key), n: 0 });
+      const na = p.name ? nameAlpha(p, String(key)) : 0;
+      if (p.name && na > 0) nameQ.push({ text: String(p.name), x: q.x, y: q.y, ps, color: p.connected === false ? '#888' : config.INK, rank: (p.bot || p.type ? 1 : 0), key: String(key), n: 0, alpha: na });
       let up = -24;
       if (p.ko > 0) { // KO! and the revive bar over the name
         label('KO!', 0, up, '20px ' + config.FONTS.DISPLAY, '#a8443f', '#fff', 3);
@@ -2553,14 +2574,16 @@ export function createRenderer({ ctx, state: world, canvas }) {
         placed.push({ e, dy, r: rectOf(e, dy) });
       }
       for (const { e, dy } of placed) {
+        ctx.globalAlpha = e.alpha == null ? 1 : e.alpha; // (a bot's name fading out)
         if (dy < -6 * e.ps) { // a leader line from the label down to its crewman
           ctx.lineCap = 'round';
           ctx.beginPath(); ctx.moveTo(e.x, e.y + dy + 6 * e.ps); ctx.lineTo(e.x, e.y + 4 * e.ps);
-          ctx.strokeStyle = '#fff'; ctx.lineWidth = 3.4; ctx.stroke();
+          ctx.strokeStyle = CREAM; ctx.lineWidth = 3.4; ctx.stroke();
           ctx.strokeStyle = config.INK; ctx.lineWidth = 1.4; ctx.stroke();
         }
         at({ x: e.x, y: e.y + dy }, e.ps);
-        label(e.n ? `${e.text} +${e.n}` : e.text, 0, 0, '700 18px ' + config.FONTS.TEXT, e.color, '#fff', 3);
+        label(e.n ? `${e.text} +${e.n}` : e.text, 0, 0, '700 18px ' + config.FONTS.TEXT, e.color, CREAM, 3);
+        ctx.globalAlpha = 1;
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     };
@@ -2568,7 +2591,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       if (!p.color || p.connected === false || p.enemy) return;
       const a = p3.crew(key);
       if (!a) return;
-      const q = proj([a.x, a.y + (a.ko ? 66 : 128) * (a.sc || 1), a.z]);
+      const q = proj([a.x, a.y + (a.ko ? 66 : 128) * (a.sc || 1) + (a.up || 0), a.z]);
       if (!q) return;
       at(q);
       const jb = p.job;
@@ -2599,8 +2622,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
         const P = layout.platforms;
         // people
         const mine = (p) => !p.hj && !p.fly && shipOf(world, p) === sh && !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying));
-        for (const p of Object.values(state.players)) if (mine(p)) { crewNames(p, p.id, zs); crewMarks(p, p.id, sh); }
-        (state.boarders || []).forEach((r, i) => crewNames(r, 'r' + sh.id + (r.id || i), zs * 0.85));
+        for (const p of Object.values(state.players)) if (mine(p)) { crewNames(p, p.id, zl); crewMarks(p, p.id, sh); }
+        (state.boarders || []).forEach((r, i) => crewNames(r, 'r' + sh.id + (r.id || i), zl * 0.85));
         // progress bars over breaches and fires
         for (const b of state.breaches || []) { const q = b.prog && P[b.d] && shipPt(b.x, P[b.d].y - 106); if (q) { at(q); drawBar(0, 0, b.prog); } }
         for (const f of state.fires || []) { const q = f.prog && P[f.d] && shipPt(f.x, P[f.d].y - 70 * (f.big ? 1.7 : 1)); if (q) { at(q); drawBar(0, 0, f.prog); } }
