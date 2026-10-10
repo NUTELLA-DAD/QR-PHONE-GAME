@@ -1,5 +1,5 @@
 import { config } from '../../config.js';
-import { mainShip, eachShip, teamOf } from './ships.js';
+import { mainShip, eachShip, teamOf, shipOf } from './ships.js';
 import { toWorldX, toWorldY, aimToWorld, pivotOf } from './pose.js';
 import { installUprightText } from './uprightText.js';
 import { createShipArt } from './shipArt.js';
@@ -2334,6 +2334,312 @@ export function createRenderer({ ctx, state: world, canvas }) {
     lapT = now;
   };
 
+  // ---- WORLD LABELS FOR THE 3D VIEW (3D.md WP9) -------------------------------------------------------------------------------------------------------------------------------
+  // In 3D the 'ship' layer is not drawn (the WebGL scene does it), so what the 2D game drew on top of the ships is drawn here, crisp, on the HUD canvas: the crew's name labels, the KO! mark and
+  // its progress bar, "Hey!", a raider's "!", the job chevron, HELP call-outs, the Versus "!", progress bars over fires and breaches, the sapper bomb's countdown, a gun's ammo pips and EMPTY!,
+  // the pulsing Action rings, the close-call chevrons and the comic-book popups. p3 = view3d's hud3d { project(x, y(up), z) -> {x, y} 0..1 | null, shipPt(ship, sx, sy, z) -> [x, y(up), z],
+  // crew(key) -> { x, y(up), z, sc, ko } | null }: every spot is projected through the 3D camera (so it sits on the thing, whatever the perspective), then drawn in the 2D game's own style and size.
+  // Nothing wobbles: the pulses are held for 1/8 s (stepped), like everything else in the 3D view.
+  const spotters3d = new Map(); // (ship -> her HELP call-out art, made on first use)
+  const drawOver3D = (time, view, p3) => {
+    if (!p3 || !view) return;
+    const W = canvas.width, H = canvas.height, ts = time / 1000, K8 = Math.floor(ts * 8), tq = K8 / 8;
+    const zs = Math.max(0.3, Math.min(2.4, Math.max(view.zoom || 0.5, H / 1080))); // (a label is never smaller than 18 px on a 1080p screen: readable from the sofa)
+    const zw = Math.max(0.2, Math.min(2.4, view.zoom || 0.5)); // (rings and chevrons that sit ON a thing keep that thing's own scale)
+    const proj = (a) => {
+      if (!a) return null;
+      const q = p3.project(a[0], a[1], a[2]);
+      return q && Number.isFinite(q.x) && Number.isFinite(q.y) ? { x: q.x * W, y: q.y * H } : null;
+    };
+    const at = (q, s = zs) => ctx.setTransform(s, 0, 0, s, q.x, q.y); // (local units = the 2D game's world units, at screen size)
+    const label = (text, x, y, font, fill, stroke, w) => {
+      ctx.font = font;
+      ctx.textAlign = 'center';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = w;
+      ctx.strokeStyle = stroke;
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = fill;
+      ctx.fillText(text, x, y);
+    };
+    // (the overlay only needs a ship's state, handle and layout, not her whole 2D art set: artsOf would also hand her the 2D break-off snapshot, which the 3D view does not want)
+    const withShipLite = (sh, fn) => {
+      const keep = [state, ship, layout];
+      state = sh.ctx;
+      ship = sh;
+      layout = sh.layout;
+      try {
+        return fn();
+      } finally {
+        [state, ship, layout] = keep;
+      }
+    };
+    const spotterFor = (sh) => { let a = spotters3d.get(sh); if (!a) spotters3d.set(sh, (a = createSpotterArt({ ctx, state: sh.ctx }))); return a; };
+    const crewNames = (p, key, ps) => {
+      const a = p3.crew(key);
+      if (!a) return;
+      const sc = a.sc || 1, markY = (a.ko ? 66 : 128) * sc;
+      const hurt = p.hearts != null && p.hearts < config.HEALTH.MAX && !(p.ko > 0) && !p.type && p.connected !== false;
+      const q = proj([a.x, a.y + markY + (hurt ? 64 : 30) * sc, a.z]);
+      if (!q) return;
+      at(q, ps);
+      if (p.name) label(String(p.name), 0, 0, '700 18px ' + config.FONTS.TEXT, p.connected === false ? '#888' : config.INK, '#fff', 3);
+      let up = -24;
+      if (p.ko > 0) { // KO! and the revive bar over the name
+        label('KO!', 0, up, '20px ' + config.FONTS.DISPLAY, '#a8443f', '#fff', 3);
+        drawBar(0, up + 6, p.prog);
+        up -= 28;
+      }
+      if (p.windup > 0) label('!', 0, up - 4, `${K8 & 1 ? 44 : 38}px ${config.FONTS.DISPLAY}`, '#a8443f', '#fff', 3.6); // a raider winding up to strike
+      const age = performance.now() - (p.actT || -1e9);
+      if (age < 900) label('Hey!', 0, up - (p.windup > 0 ? 40 : 4), '23px ' + config.FONTS.DISPLAY, '#fff', config.INK, 3.2);
+    };
+    const crewMarks = (p, key, sh) => { // (the job chevron, the HELP call-out and the Versus "!", at the colour marker)
+      if (!p.color || p.connected === false || p.enemy) return;
+      const a = p3.crew(key);
+      if (!a) return;
+      const q = proj([a.x, a.y + (a.ko ? 66 : 128) * (a.sc || 1), a.z]);
+      if (!q) return;
+      at(q);
+      const jb = p.job;
+      if (jb && jb.dir && !p.bot && (p.freeT || 0) >= config.JOBS.IDLE_AFTER) {
+        const v = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[jb.dir];
+        const ux = v[0], uy = v[1];
+        ctx.save();
+        ctx.translate(ux * 4, -44 - (K8 & 1 ? 3 : 0));
+        ink();
+        ctx.lineWidth = 3.4;
+        ctx.fillStyle = jb.color;
+        ctx.beginPath();
+        ctx.moveTo(ux * 16, uy * 16);
+        ctx.lineTo(-ux * 10 - uy * 14, -uy * 10 + ux * 14);
+        ctx.lineTo(-ux * 3, -uy * 3);
+        ctx.lineTo(-ux * 10 + uy * 14, -uy * 10 - ux * 14);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (p.team && sh.team && p.team !== sh.team.id) versusArt.bang(0, -70, p.team, { zoom: zs }, tq);
+      spotterFor(sh).drawHelp(p, 0, 0, tq);
+    };
+    try {
+      eachShip(world, (sh) => withShipLite(sh, () => {
+        const shipPt = (x, y) => proj(p3.shipPt(sh, x, y, 0));
+        const P = layout.platforms;
+        // people
+        const mine = (p) => !p.hj && !p.fly && shipOf(world, p) === sh && !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying));
+        for (const p of Object.values(state.players)) if (mine(p)) { crewNames(p, p.id, zs); crewMarks(p, p.id, sh); }
+        (state.boarders || []).forEach((r, i) => crewNames(r, 'r' + sh.id + (r.id || i), zs * 0.85));
+        // progress bars over breaches and fires
+        for (const b of state.breaches || []) { const q = b.prog && P[b.d] && shipPt(b.x, P[b.d].y - 106); if (q) { at(q); drawBar(0, 0, b.prog); } }
+        for (const f of state.fires || []) { const q = f.prog && P[f.d] && shipPt(f.x, P[f.d].y - 70 * (f.big ? 1.7 : 1)); if (q) { at(q); drawBar(0, 0, f.prog); } }
+        // the sapper bomb's countdown and its defuse bar
+        for (const b of state.bombs || []) {
+          const q = P[b.d] && shipPt(b.x, P[b.d].y - 22);
+          if (!q) continue;
+          at(q);
+          const secs = Math.ceil(b.t);
+          label(String(secs), 0, -56, '27px ' + config.FONTS.DISPLAY, secs <= 3 ? '#a8443f' : config.INK, '#fff', 3.2);
+          if (b.prog > 0) { ctx.fillStyle = '#3b2a1d'; ctx.fillRect(-24, 28, 48, 8); ctx.fillStyle = '#9cc99a'; ctx.fillRect(-24, 28, 48 * Math.min(1, b.prog), 8); }
+        }
+        // guns: the shells left, and EMPTY!
+        for (const gun of Object.values(state.GUNS || {})) {
+          if (!Number.isFinite(gun.bx) || !Number.isFinite(gun.by)) continue;
+          const q = shipPt(gun.bx, gun.by);
+          if (!q) continue;
+          at(q);
+          const pip = Math.min(9, 72 / Math.max(1, gun.max));
+          for (let i = 0; i < (gun.type === 'mines' ? 0 : gun.max); i++) {
+            ctx.fillStyle = i < gun.ammo ? '#f2d36b' : 'rgba(27,20,16,.3)';
+            ctx.beginPath();
+            ctx.arc(-31 + i * pip, 30, Math.min(3.6, pip * 0.42), 0, 7);
+            ctx.fill();
+          }
+          if (gun.empty > 0) label(gun.emptyText || 'EMPTY!', 0, -32, '22px ' + config.FONTS.DISPLAY, '#a8443f', '#fff', 3);
+        }
+        // the Action rings: a ring in each human crewman's colour round what the Action button will use (dashed: what GRAB will take)
+        for (const p of Object.values(state.players)) {
+          if (p.bot || p.ko > 0 || shipOf(world, p) !== sh) continue;
+          for (const act of [p.act, p.grabAct === p.act ? null : p.grabAct]) {
+            const spot = act && actionSpot(act);
+            const q = spot && shipPt(spot.x, spot.y);
+            if (!q) continue;
+            at(q, zw);
+            const pulse = K8 & 1 ? 1.08 : 1;
+            ctx.setLineDash(act === p.act ? [] : [7, 6]);
+            ctx.lineWidth = 3.2;
+            ctx.strokeStyle = config.INK;
+            ctx.beginPath();
+            ctx.arc(0, 0, spot.r * pulse + 3, 0, 7);
+            ctx.stroke();
+            ctx.lineWidth = 2.8;
+            ctx.strokeStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(0, 0, spot.r * pulse, 0, 7);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        }
+        // the arc a manned gun can turn through (a pale pie slice), what the 2D game shows under the gunner
+        for (const [name, gun] of Object.entries(state.GUNS || {})) {
+          if (!Object.values(state.players).some((p) => p.lock === name) || !Number.isFinite(gun.bx)) continue;
+          const pts = [];
+          for (let k = 0; k <= 12; k++) { const a = gun.home - gun.arc + (2 * gun.arc * k) / 12, q = shipPt(gun.bx + Math.cos(a) * 260, gun.by + Math.sin(a) * 260); if (q) pts.push(q); }
+          const c0 = shipPt(gun.bx, gun.by);
+          if (!c0 || pts.length < 3) continue;
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.beginPath();
+          ctx.moveTo(c0.x, c0.y);
+          for (const q of pts) ctx.lineTo(q.x, q.y);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(255,240,180,.06)'; // (faint: in 3D it lies over the whole ship; the edge says where the barrel can reach)
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255,240,180,.55)';
+          ctx.lineWidth = 2.4 * zs;
+          ctx.setLineDash([10 * zs, 8 * zs]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        // linked stations: a brass wire with a spark running along it (the loader and the gunner he is priming; the lookout and the helm), and the gold SURGE ring on what the boiler feeds
+        const LK = state.links;
+        if (LK) {
+          const chest = (p) => { const a = p && p3.crew(p.id); return a ? proj([a.x, a.y + 64 * (a.sc || 1), a.z]) : null; };
+          const wire = (a, b, sag, strong) => {
+            if (!a || !b) return;
+            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 + sag * zs, u = ((K8 % 10) / 10) * 0.99, v = 1 - u; // (the spark jumps along it, ten held positions)
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.quadraticCurveTo(mx, my, b.x, b.y);
+            ctx.strokeStyle = '#1b1410';
+            ctx.lineWidth = (strong ? 8 : 6) * zs;
+            ctx.stroke();
+            ctx.strokeStyle = '#d9a441';
+            ctx.lineWidth = (strong ? 4 : 3) * zs;
+            ctx.stroke();
+            const sx = v * v * a.x + 2 * u * v * mx + u * u * b.x, sy = v * v * a.y + 2 * u * v * my + u * u * b.y;
+            ctx.fillStyle = `rgba(255,226,140,${strong ? 0.5 : 0.38})`;
+            ctx.beginPath();
+            ctx.arc(sx, sy, (strong ? 17 : 12) * zs, 0, 7);
+            ctx.fill();
+            ctx.fillStyle = '#fff6c9';
+            ctx.beginPath();
+            ctx.arc(sx, sy, (strong ? 5 : 4) * zs, 0, 7);
+            ctx.fill();
+          };
+          for (const l of LK.loaders || []) wire(chest(l.loader), chest(l.gunner), 14, false);
+          if (LK.nest) {
+            const ps = Object.values(state.players), helm = ps.find((q) => layout.kindOf(q.lock) === 'helm'), nest = ps.find((q) => layout.isNestStation(q.lock));
+            if (helm && nest) {
+              const a = chest(nest), b = chest(helm);
+              wire(a, b, 40, LK.nestSpot);
+              if (a && b) { at({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + 28 * zs }); label('LOOKOUT ↔ HELM' + (LK.nestSpot ? '  +' + Math.round(config.LINKS.HELM_SPOT * 100) + '%' : '  +' + Math.round(config.LINKS.HELM_MAN * 100) + '%'), 0, 0, '900 22px Georgia', '#ffd23f', '#1b1410', 5); }
+            }
+          }
+          const sg = LK.surge;
+          if (sg && sg.level > 0.02) {
+            const spots = sg.to === 'coil' ? (layout.coil ? [{ x: layout.coil.x, y: layout.coil.y }] : []) : layout.engines.map((e) => ({ x: e.x, y: P[e.d].y - 50 }));
+            for (const e of spots) {
+              const q = shipPt(e.x, e.y);
+              if (!q) continue;
+              const r = 52 + (K8 & 1 ? 4 : -4) + (1 - sg.level) * 18;
+              at(q, zw);
+              ctx.globalAlpha = Math.min(1, sg.level * 1.4);
+              ctx.lineWidth = 12;
+              ctx.strokeStyle = '#1b1410';
+              ctx.beginPath();
+              ctx.arc(0, 0, r, 0, 7);
+              ctx.stroke();
+              ctx.lineWidth = 6;
+              ctx.strokeStyle = '#ffd23f';
+              ctx.stroke();
+              label('SURGE', 0, -r - 12, '900 24px Georgia', '#ffd23f', '#1b1410', 5);
+              ctx.globalAlpha = 1;
+            }
+          }
+        }
+        // close-call chevrons: red arrowheads on the hull, pointing at rock that is near
+        for (const n of (state.course && state.course.near) || []) {
+          const q0 = shipPt(n.x + n.dx * 24, n.y + n.dy * 24), q1 = shipPt(n.x + n.dx * 48, n.y + n.dy * 48);
+          if (!q0 || !q1) continue;
+          at(q0, zw);
+          ctx.rotate(Math.atan2(q1.y - q0.y, q1.x - q0.x));
+          ctx.strokeStyle = `rgba(255,40,60,${n.close * (K8 & 1 ? 1 : 0.62)})`;
+          ctx.lineWidth = 10;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(-14, -22);
+          ctx.lineTo(10, 0);
+          ctx.lineTo(-14, 22);
+          ctx.stroke();
+        }
+      }));
+      // crew in the air (a jump, a throw, a parachute, the hookshot): names and marks
+      for (const p of Object.values(world.players)) {
+        if (!p.fly || p.hj || p.connected === false || p.enemy) continue;
+        crewNames(p, p.id, zs);
+        crewMarks(p, p.id, shipOf(world, p) || mainShip(world));
+      }
+      // enemy bombers' health bars, a stolen plane's KICK THE PILOT bar, and the ring and "!" over a bat that has latched on
+      for (const p of world.bombers || []) {
+        const q = Number.isFinite(p.x) && Number.isFinite(p.y) && proj([p.x, -p.y + 95, 0]);
+        if (!q) continue;
+        at(q);
+        ctx.fillStyle = '#3b2a1d';
+        ctx.fillRect(-70, 0, 140, 8);
+        ctx.fillStyle = '#a8443f';
+        ctx.fillRect(-70, 0, (140 * Math.max(0, p.hp)) / Math.max(1, p.maxHp), 8);
+        ctx.strokeStyle = config.INK;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-70, 0, 140, 8);
+      }
+      for (const s of world.hijacks || []) {
+        const q = s.phase === 'kick' && Number.isFinite(s.x) && proj([s.x, -s.y + (s.big ? 130 : 100), 0]);
+        if (!q) continue;
+        at(q);
+        ink();
+        ctx.lineWidth = 3;
+        ctx.fillStyle = '#f2e6c8';
+        ctx.fillRect(-36, -7, 72, 14);
+        ctx.fillStyle = '#e0523f';
+        ctx.fillRect(-36, -7, 72 * Math.min(1, s.kickP || 0), 14);
+        ctx.strokeRect(-36, -7, 72, 14);
+      }
+      for (const b of world.bats || []) {
+        if (!(b.latched && b.landed) || b.delay > 0 || !Number.isFinite(b.x)) continue;
+        const hang = b.kind === 'gas', q = proj([b.x, -b.y, 60]), q2 = proj([b.x, -b.y + (hang ? -100 : 100), 60]);
+        if (!q || !q2) continue;
+        const pulse = K8 & 1 ? 1 : 0.4;
+        at(q);
+        ctx.strokeStyle = `rgba(255,59,48,${0.35 + pulse * 0.5})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, 34 + pulse * 8, 0, 7);
+        ctx.stroke();
+        at(q2);
+        label('!', 0, 0, 'bold 28px sans-serif', `rgba(255,59,48,${0.6 + pulse * 0.4})`, config.INK, 4);
+      }
+      // comic-book popups (the words for a hit, a kill, a rocket ...): in the world, on the plane of the game
+      for (const p of world.popups || []) {
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+        const q = proj([p.x, -(p.y - p.t * 40), 40]);
+        if (!q) continue;
+        const grow = p.t < 0.12 ? 0.4 + (p.t / 0.12) * 0.8 : 1.2 - Math.min(0.2, (p.t - 0.12) * 0.6);
+        const zp = Math.max(0.35, view.zoom || 0.5) * (H / 1080), s = Math.max(1, 0.3 / zp) * grow * (p.size || 1) * zp; // (as small as the 2D game's own when zoomed far out, never less than about 10 px)
+        ctx.setTransform(s, 0, 0, s, q.x, q.y);
+        ctx.rotate(p.tilt || 0);
+        ctx.globalAlpha = p.t > 0.75 ? Math.max(0, 1 - (p.t - 0.75) / 0.35) : 1;
+        label(String(p.text), 0, 0, '29px ' + config.FONTS.DISPLAY, p.color || '#fff', config.INK, 5);
+        ctx.globalAlpha = 1;
+      }
+    } catch (e) { /* drawing never throws */ }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+  };
+
   // renderFrame(time, view, opts): one call draws the whole frame: the sky and the terrain once, every ship, the effects, the darkness, the HUD. opts is optional (the layers, an offset
   // and a bob phase are kept for dev pages that draw one frame in pieces; the game itself passes none).
   //   opts.layers       which parts to draw (array or Set; default = all):
@@ -2341,6 +2647,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   //                       'ship'        every ship, her guns, crew, hazards, hooks, coil, shield and crew markers (and the team pennants)
   //                       'effects'     threats, shells, flashes, puffs, rain, snow and smoke
   //                       'dark'        the darkness overlay (dark skies)
+  //                       'over3d'      (the 3D view only; needs opts.p3 = view3d's hud3d) the crew's name labels, call-outs, progress bars and popups, projected over the 3D picture
   //                       'hud'         the co-op hull / steam / route panels and full-screen cards
   //                       'arrows'      lookout, gust and spotter arrows at the screen edge
   //                       'film'        the old-film look (off by default, config.STYLE)
@@ -2558,6 +2865,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     }
     lap('dark');
 
+    if (has('over3d') && opts && opts.p3) drawOver3D(time, view, opts.p3); // (the 3D view: name labels, call-outs, bars and popups over the picture)
     if (has('hud')) {
       // Screen overlay on a fixed 1600x900 stage.
       const scale = Math.min(width / config.W, height / config.H);

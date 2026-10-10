@@ -11,6 +11,7 @@ import { THREE, G, look, applyLook, glow, glowMat, INK } from './style.js';
 import { assemble, makeTrimMaterials, inkOn } from './parts3d/kit.js';
 import { makeShipContext, buildParts, THEMES } from './parts3d/registry.js';
 import { GLOW as WGLOW } from './parts3d/weapons.js';
+import { buildEnemyDecor } from './parts3d/enemyDecor.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export { THEMES };
@@ -67,6 +68,10 @@ export function buildShipModel(layout, opts = {}) {
       default: break;
     }
   }
+
+  // WP9: the enemy gunship's menace (spikes on the bags, her emblem, her mast and pennant, a bowsprit horn, red lanterns, a stack): on top of the same parts every ship has
+  let decor = null;
+  if (opts.enemy) { try { decor = buildEnemyDecor(ctx, { dyn, content }, { bp: opts.bp || null }); } catch (e) { fallbacks.push('enemy decor failed: ' + (e && e.message)); console.warn('ship3d decor', e); } }
 
   // ---- lanterns (small lights hung in the rooms: ONE merged mesh of all the bulbs) and the boiler glow --------------------------------------------------------------------
   dyn.lanterns = ctx.lanternSpots;
@@ -142,6 +147,7 @@ export function buildShipModel(layout, opts = {}) {
         const g = clamp((Number.isFinite(gas) ? gas : 50) / 100, 0, 1);
         bg.node.scale.set(0.78 + 0.44 * g, 0.9 + 0.2 * g, 0.9 + 0.2 * g); // the swell: a SCALE from the gas level, never a vertex wobble
       });
+      if (decor) decor.update(t, opts.gunship && opts.gunship.intent);
       const guns = st.GUNS || {};
       for (const [name, pivot] of Object.entries(dyn.guns)) { const live = guns[name]; if (live && Number.isFinite(live.aim)) pivot.rotation.z = -live.aim; }
       const sls = st.searchlights || [];

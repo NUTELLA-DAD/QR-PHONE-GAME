@@ -5,6 +5,7 @@
 // per environment: config.LOOK3D.<env>.clouds { n, front, alpha, tint }. No clouds in caves. Switch: ?look=noclouds.
 import { THREE, fx, look } from './style.js';
 import { getTrimSheet, uvRect, CLOUD_DISCS } from './textures.js';
+import { config } from '../../config.js';
 
 const REF_W = 7000, REF_H = 4000, REF_D = 3500; // the biggest view the wrap window is sized for (world units at the ship plane, camera distance)
 const MAX_INSTANCES = 260;
@@ -16,7 +17,7 @@ function mulberry(seed) {
 
 const VERT = `
   attribute vec3 aBase; attribute vec2 aSize; attribute vec4 aRect; attribute vec4 aMisc; attribute vec2 aSpan;
-  uniform float uTime; uniform vec3 uCam; uniform float uAspect;
+  uniform float uTime; uniform vec3 uCam; uniform float uAspect; uniform vec4 uAvoid; uniform vec3 uLow;
   varying vec2 vUv; varying float vAlpha;
   void main() {
     // aMisc: x = drift speed (world units / s), y = alpha, z = 1 for the clouds in front (they fade toward the screen's middle), w = unused
@@ -27,8 +28,11 @@ const VERT = `
     vec3 wp = centre + right * ( position.x * aSize.x ) + up * ( position.y * aSize.y );
     vec4 cc = projectionMatrix * viewMatrix * vec4( centre, 1.0 );
     vec2 ndc = cc.xy / max( cc.w, 1.0 );
-    float mid = smoothstep( 0.38, 0.9, length( ndc * vec2( 0.85 * uAspect / 1.78, 1.15 ) ) );
-    vAlpha = aMisc.y * mix( 1.0, mid, aMisc.z );
+    // WP9: a cloud IN FRONT of the ship keeps out of the ships' screen area altogether (uAvoid = their box in screen coordinates) and fades away over the lower half of the screen (uLow = from, to)
+    vec2 outside = max( max( vec2( uAvoid.x, uAvoid.y ) - ndc, ndc - vec2( uAvoid.z, uAvoid.w ) ), vec2( 0.0 ) );
+    float clear = smoothstep( 0.0, uLow.z, length( outside * vec2( uAspect / 1.78, 1.0 ) ) );
+    float high = smoothstep( uLow.x, uLow.y, ndc.y );
+    vAlpha = aMisc.y * mix( 1.0, clear * high, aMisc.z );
     vUv = vec2( mix( aRect.x, aRect.z, position.x + 0.5 ), mix( aRect.y, aRect.w, position.y + 0.5 ) );
     gl_Position = projectionMatrix * viewMatrix * vec4( wp, 1.0 );
   }
@@ -51,7 +55,7 @@ const FRAG = `
 export function createClouds(scene) {
   const sheet = getTrimSheet();
   const uniforms = {
-    uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uAspect: { value: 1.78 }, uTex: { value: sheet.texture }, uTint: { value: new THREE.Color('#ffffff') },
+    uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uAspect: { value: 1.78 }, uAvoid: { value: new THREE.Vector4(-0.7, -0.7, 0.7, 0.7) }, uLow: { value: new THREE.Vector3(-0.1, 0.45, 0.3) }, uTex: { value: sheet.texture }, uTint: { value: new THREE.Color('#ffffff') },
     uUntone: fx.uUntone, uExposure: fx.uExposure,
   };
   const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide });
@@ -83,19 +87,21 @@ export function createClouds(scene) {
     const rnd = mulberry(1234 + (envKey.charCodeAt(0) || 0) * 17 + cfg.n), R = (a, b) => a + (b - a) * rnd();
     const list = [];
     const clusters = Math.max(0, Math.min(40, Math.round(cfg.n)));
+    const FC = config.LOOK3D.FRONT_CLOUDS || {}, fSize = FC.SIZE || [200, 380], fAlpha = Number.isFinite(FC.ALPHA) ? FC.ALPHA : 0.2, fShare = Number.isFinite(FC.SHARE) ? FC.SHARE : 0.5;
+    const nFront = Math.min(clusters, Math.ceil(Math.max(0, cfg.front) * fShare - 1e-6)); // (WP9: fewer of them)
     for (let c = 0; c < clusters; c++) {
-      const front = c < Math.min(clusters, Math.round(cfg.front));
+      const front = c < nFront;
       const z = front ? R(350, 1100) : R(-3800, -1500);
       const scale = (REF_D - z) / REF_D; // how much bigger the cluster's span is at this depth than at the ship plane
       const spanX = REF_W * scale * 2.3, spanY = REF_H * scale * 2.3;
       const bx = R(0, spanX), by = R(-spanY / 2, spanY / 2);
-      const base = front ? R(520, 900) : R(1100, 2100);
+      const base = front ? R(fSize[0], fSize[1]) : R(1100, 2100);
       const speed = (front ? R(60, 120) : R(14, 46)) * (rnd() < 0.5 ? 1 : -1) * (front ? 1 : 0.8);
-      const k = 3 + Math.floor(rnd() * 5);
+      const k = front ? 2 + Math.floor(rnd() * 3) : 3 + Math.floor(rnd() * 5);
       for (let d = 0; d < k; d++) {
         const sz = base * R(0.6, 1.15);
         list.push({ x: bx + R(-0.8, 0.8) * base * (k > 4 ? 1.15 : 0.9), y: by + R(-0.28, 0.2) * base, z: z + R(-30, 30), w: sz, h: sz * R(0.78, 0.9), rect: rects[Math.floor(rnd() * 8)], sp: speed,
-          a: front ? Math.min(0.36, cfg.alpha * 0.4) * R(0.8, 1) : cfg.alpha * R(0.82, 1), front: front ? 1 : 0, spanX, spanY });
+          a: front ? Math.min(fAlpha, cfg.alpha * 0.4) * R(0.8, 1) : cfg.alpha * R(0.82, 1), front: front ? 1 : 0, spanX, spanY });
       }
     }
     list.sort((p, q) => p.z - q.z); // far first (they are blended in this order)
@@ -123,6 +129,14 @@ export function createClouds(scene) {
   // skyColor = the world's picture tint (the darkness: day white, night dark blue), the same the sky pictures are multiplied by
   C.setSky = (skyColor) => { _w.set(skyColor); C.applyTint(); };
   C.applyTint = () => { uniforms.uTint.value.set(C.tint || '#ffffff').multiply(_w); };
+  // WP9: the ships' box on the screen (minx, miny, maxx, maxy in -1..1): the front clouds fade out near it (index.js works it out from the ships' bounds)
+  C.setAvoid = (minx, miny, maxx, maxy) => {
+    const pad = Number((config.LOOK3D.FRONT_CLOUDS || {}).PAD) || 0.3;
+    uniforms.uAvoid.value.set(minx - 0.04, miny - 0.04, maxx + 0.04, maxy + 0.04);
+
+    const low = (config.LOOK3D.FRONT_CLOUDS || {}).LOW || [-0.1, 0.45];
+    uniforms.uLow.value.set(low[0], low[1], pad);
+  };
   C.update = (cam, target, t, aspect) => {
     mesh.visible = !!(C.on && look.clouds && C.count > 0);
     if (!mesh.visible) return;
