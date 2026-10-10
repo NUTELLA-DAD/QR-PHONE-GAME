@@ -152,6 +152,7 @@ function frame(now) {
       const e0 = models.values().next().value, p0 = e0 && e0.model.root.position;
       if (p0) { view.lineup = { x: p0.x, y: p0.y + 800, page: lineupPage }; v = { cx: p0.x + LU.dx, cy: -(p0.y + 800 + 95 + LU.dy), zoom: (cssH / 800) * LU.zoom }; }
     } else view.lineup = null; // the 2D game's own follow camera: where it looks and how far it is zoomed
+    if (window.__camOverride) v = window.__camOverride; // (a dev hook for screenshots: { cx, cy (3D y, up), zoom })
     if (S.view2d !== 'only') view.renderFrame(now, v, { t: simTime, width: cssW, height: cssH });
     if (r2d && S.view2d !== 'off') {
       const view2 = cam2dB.update(dt, state, canvas2d.width, canvas2d.height);

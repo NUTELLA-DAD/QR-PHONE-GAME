@@ -31,7 +31,13 @@ export function makeCell(map, i, j) {
     let nx = -(pb[1] - pa[1]), ny = pb[0] - pa[0]; // perpendicular in map coordinates (y down)
     const l = Math.hypot(nx, ny) || 1;
     nx /= l; ny /= l;
-    if (nx * ((pa[0] + pb[0]) / 2 - cx) + ny * ((pa[1] + pb[1]) / 2 - cy) < 0) { nx = -nx; ny = -ny; } // point away from the rock
+    // point away from the rock. (A7: the old test, the middle of the cut against the average of the polygon's corners, is a coin toss for a cut that lies ON the cell's edge - every straight, axis-aligned cliff
+    // face, whose polygon has no area: such a face could come out pointing INTO the rock, so an underside got a moss cap and its ink ribbon lay outside. Now: the corner field is higher in the rock, so look a
+    // quarter of a square to each side of the middle and let the normal point to the lower value; the old test only decides a tie.)
+    const mx = (pa[0] + pb[0]) / 2, my = (pa[1] + pb[1]) / 2, q = C * 0.25;
+    const field = (x, y) => { const u = Math.max(0, Math.min(1, (x - i * C) / C)), w = Math.max(0, Math.min(1, (y - j * C) / C)); return v[0] * (1 - u) * (1 - w) + v[1] * u * (1 - w) + v[2] * u * w + v[3] * (1 - u) * w; };
+    const fp = field(mx + nx * q, my + ny * q), fm = field(mx - nx * q, my - ny * q);
+    if (Math.abs(fp - fm) > 1e-6 ? fp > fm : nx * (mx - cx) + ny * (my - cy) < 0) { nx = -nx; ny = -ny; }
     segs.push({ ax: pa[0], ay: pa[1], bx: pb[0], by: pb[1], nx, ny, l });
   }
   return { poly, segs, full: false };

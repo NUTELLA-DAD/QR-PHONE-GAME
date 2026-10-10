@@ -244,23 +244,74 @@ function paintStrapAndLacing(g) {
   g.fillText('H2 - NO FLAMES', h2.x + h2.w / 2, h2.y + h2.h / 2 + 2);
 }
 
+// A7 ROCK V2: each row is a strip of RAGGED strata, painted on a scratch canvas the size of the row (so a fault can shift one side of it): beds of very different thickness (hairline, medium, thick) with edges that
+// wander and sometimes pinch out into lenses, two or three diagonal FAULTS where the beds step up or down, hashed lighter and darker PATCHES, jagged CRACKS and pits. The terrain shader lays its own big beds over it
+// (terrain.js), so this is the fine lamination inside them. The cave wall's stone (skyArt.js caveStone) crops these rows too. Static, no animation.
 function paintRock(g) {
   ROCK_STRATA.forEach((name, i) => {
-    const r = TRIM[name], rnd = mulberry(100 + i), R = (a, b) => a + (b - a) * rnd();
+    const r = TRIM[name], rnd = mulberry(100 + i), R = (a, b) => a + (b - a) * rnd(), W = r.w, Hh = r.h;
     const tones = [[[196, 188, 176], [176, 168, 158], [150, 142, 134], [210, 200, 186]], [[190, 176, 160], [166, 150, 134], [140, 126, 112], [208, 194, 172]], [[184, 186, 190], [160, 164, 170], [136, 140, 148], [206, 208, 212]]][i];
-    g.fillStyle = rgba(...tones[1]); g.fillRect(r.x, r.y, r.w, r.h);
-    let y = 0;
-    while (y < r.h) { // strata: bands with a slowly wandering edge, each painted flat
-      const h = R(10, 26), c = tones[Math.floor(rnd() * 4)];
-      g.fillStyle = rgba(c[0] + R(-6, 6), c[1] + R(-6, 6), c[2] + R(-6, 6));
-      g.beginPath(); g.moveTo(r.x, r.y + y);
-      for (let x = 0; x <= r.w; x += 64) g.lineTo(r.x + x, r.y + y + R(-2.5, 2.5));
-      g.lineTo(r.x + r.w, r.y + y + h + 3); g.lineTo(r.x, r.y + y + h + 3); g.closePath(); g.fill();
-      g.strokeStyle = rgba(40, 34, 30, R(0.14, 0.28)); g.lineWidth = R(1, 2.2);
-      g.beginPath(); g.moveTo(r.x, r.y + y); for (let x = 0; x <= r.w; x += 64) g.lineTo(r.x + x, r.y + y + R(-2.5, 2.5)); g.stroke();
-      y += h;
+    const rc = document.createElement('canvas');
+    rc.width = W; rc.height = Hh;
+    const c = rc.getContext('2d');
+    c.fillStyle = rgba(...tones[1]); c.fillRect(0, 0, W, Hh);
+    // ---- the beds: thickness hairline 4-9, medium 10-24, thick 26-46; the top edge is a random walk (it wanders and tilts)
+    let y = -R(0, 10);
+    while (y < Hh) {
+      const q = rnd(), bh = q < 0.28 ? R(4, 9) : q < 0.8 ? R(10, 24) : R(26, 46), col = tones[Math.floor(rnd() * 4)];
+      const edge = [];
+      let x = 0, yy = R(-2, 2);
+      const tilt = R(-0.012, 0.012);
+      while (x <= W + 64) { edge.push([x, y + yy + x * tilt]); x += R(18, 60); yy = Math.max(-5, Math.min(5, yy + R(-2.6, 2.6))); }
+      c.fillStyle = rgba(col[0] + R(-6, 6), col[1] + R(-6, 6), col[2] + R(-6, 6));
+      c.beginPath(); c.moveTo(0, y + bh + 6 + W * tilt);
+      for (const p of edge) c.lineTo(p[0], p[1]);
+      c.lineTo(W + 64, y + bh + 6 + W * tilt); c.closePath(); c.fill();
+      c.strokeStyle = rgba(40, 34, 30, R(0.14, 0.3)); c.lineWidth = R(1, 2.2);
+      c.beginPath(); edge.forEach((p, k) => (k ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]))); c.stroke();
+      if (rnd() < 0.4) { c.strokeStyle = rgba(255, 250, 240, R(0.12, 0.26)); c.lineWidth = 1; c.beginPath(); edge.forEach((p, k) => (k ? c.lineTo(p[0], p[1] + 2) : c.moveTo(p[0], p[1] + 2))); c.stroke(); } // (a lit ledge under the bed's edge)
+      if (rnd() < 0.3) { // a lens: a bed that thins out to nothing at both ends, of another tone
+        const lx = R(0, W - 200), lw = R(160, 560), lt = R(3, 8), ly = y + bh * 0.5, c2 = tones[Math.floor(rnd() * 4)];
+        c.fillStyle = rgba(c2[0] + R(-8, 8), c2[1] + R(-8, 8), c2[2] + R(-8, 8));
+        c.beginPath(); c.moveTo(lx, ly); c.quadraticCurveTo(lx + lw / 2, ly - lt * 2, lx + lw, ly); c.quadraticCurveTo(lx + lw / 2, ly + lt * 2, lx, ly); c.closePath(); c.fill();
+        c.strokeStyle = rgba(40, 34, 30, 0.2); c.lineWidth = 1; c.stroke();
+      }
+      y += bh;
     }
-    for (let k = 0; k < 40; k++) { g.strokeStyle = rgba(40, 34, 30, R(0.1, 0.22)); g.lineWidth = R(0.8, 1.6); const x = r.x + R(0, r.w), yy = r.y + R(0, r.h); g.beginPath(); g.moveTo(x, yy); g.lineTo(x + R(-6, 6), yy + R(8, 24)); g.stroke(); }
+    // ---- faults: steep diagonals; the beds on the right of the line are shifted up or down, and the line is a jagged crack with a pale lip
+    const nf = 2 + Math.floor(rnd() * 2);
+    for (let k = 0; k < nf; k++) {
+      const x0 = R(120, W - 120), slope = R(0.45, 1.3) * (rnd() < 0.5 ? -1 : 1), dy = R(5, 20) * (rnd() < 0.5 ? -1 : 1);
+      const lineX = (yv) => x0 + slope * (yv - Hh / 2);
+      const jag = []; for (let yv = -4; yv <= Hh + 8; yv += R(8, 18)) jag.push([lineX(yv) + R(-3, 3), yv]);
+      const copy = document.createElement('canvas'); copy.width = W; copy.height = Hh;
+      copy.getContext('2d').drawImage(rc, 0, 0);
+      c.save();
+      c.beginPath(); c.moveTo(jag[0][0], jag[0][1]); for (const p of jag) c.lineTo(p[0], p[1]); c.lineTo(W + 10, Hh + 8); c.lineTo(W + 10, -4); c.closePath(); c.clip();
+      for (const o of [0, -Hh, Hh]) c.drawImage(copy, 0, dy + o);
+      c.restore();
+      c.strokeStyle = rgba(30, 26, 24, 0.5); c.lineWidth = 2; c.beginPath(); jag.forEach((p, n) => (n ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]))); c.stroke();
+      c.strokeStyle = rgba(255, 250, 240, 0.2); c.lineWidth = 1.2; c.beginPath(); jag.forEach((p, n) => (n ? c.lineTo(p[0] + 2.5, p[1]) : c.moveTo(p[0] + 2.5, p[1]))); c.stroke();
+    }
+    // ---- hashed patches (hard-edged, wide and flat): lighter and darker, 26 of them
+    for (let k = 0; k < 26; k++) {
+      const cx = R(0, W), cy = R(0, Hh), rx = R(18, 90), ry = R(5, 22), light = rnd() < 0.5, a = R(0.1, 0.2), n = 9;
+      c.fillStyle = light ? rgba(255, 250, 240, a) : rgba(30, 24, 20, a * 1.1);
+      c.beginPath();
+      for (let m = 0; m < n; m++) { const an = (m / n) * Math.PI * 2, f = R(0.65, 1.25); c[m ? 'lineTo' : 'moveTo'](cx + Math.cos(an) * rx * f, cy + Math.sin(an) * ry * f); }
+      c.closePath(); c.fill();
+    }
+    // ---- cracks: jagged, mostly downward, some long ones that run across two beds; and pits and flecks
+    for (let k = 0; k < 46; k++) {
+      let x = R(0, W), yv = R(0, Hh);
+      c.strokeStyle = rgba(40, 34, 30, R(0.14, 0.34)); c.lineWidth = R(0.8, 1.8);
+      c.beginPath(); c.moveTo(x, yv);
+      const segs = 3 + Math.floor(rnd() * 3);
+      for (let m = 0; m < segs; m++) { x += R(-6, 6); yv += R(5, 14); c.lineTo(x, yv); }
+      c.stroke();
+    }
+    for (let k = 0; k < 170; k++) { c.fillStyle = rnd() < 0.7 ? rgba(36, 30, 26, R(0.12, 0.3)) : rgba(255, 250, 240, R(0.1, 0.22)); c.beginPath(); c.arc(R(0, W), R(0, Hh), R(0.7, 2), 0, 7); c.fill(); }
+    g.drawImage(rc, r.x, r.y);
   });
 }
 

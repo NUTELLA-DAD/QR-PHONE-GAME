@@ -385,7 +385,9 @@ try {
     await sleep(2500);
     a = await P.json(`JSON.stringify({ is3d: window.viewIs3D(), gunship: !!game.state.gunship, toast: document.body.innerText.includes('Switched to 2D for speed') })`);
     check(a && a.is3d, 'mid-fight (the director is at a peak, the gunship' + (a && a.gunship ? ' is on us' : ' has not come') + ') it does NOT switch yet', 'mid-fight: ' + JSON.stringify(a));
-    await sleep(6500);
+    await P.json(FEED); // (A7: feed again. The first feed makes the view step down to Low, which builds every shader again; a stall of over 500 ms there (the governor reads a gap that long as a hidden tab) cleared its "still slow" timer, and the test
+    // then depended on the rebuild taking less than half a second. This second feed finds the tier already at Low, so nothing stalls, and the wait that counts starts here.)
+    await sleep(7000);
     a = await P.json(`JSON.stringify({ is3d: window.viewIs3D(), toast: document.body.innerText.includes('Switched to 2D for speed') })`);
     check(a && !a.is3d && a.toast, 'when no calm moment comes it switches after TO_2D_WAIT', 'after the wait: ' + JSON.stringify(a));
     await settle('step down (fight)', P);

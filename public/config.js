@@ -2415,6 +2415,25 @@ export const config = {
     TOON: { STEPS: 2, SHADOW: 0.4, MID: 0.8 },
     INK: { REF: 2200, MIN: 0.8, MAX: 3, MIN_PX: 1.5, TERRAIN: 9 },
     SHADOW: { RADIUS: 1, NORMAL_BIAS: 6, BIAS: -0.0008 },
+    // A7 ROCK V2 (view3d/terrain.js, fringe.js, textures.js; 3D.md section 25). The rock is painted from the world position (static, fixed to the world): RAGGED BEDS (BED = the usual bed thickness in world units; the real
+    //   thickness wanders from a third to double of it, with pinch-outs and two families of diagonal faults), a SHADOW SIDE (an edge that faces away from the key light gets a darker, cooler band SHADE_W wide at SHADE of
+    //   the lit tone, tinted SHADE_TINT), a BROKEN LIP (the top edge of the picture is bitten inward up to CHIP units by a stable hash; the sim's collision is untouched), and a FRINGE of painted plants along every upward lip
+    //   (one instanced mesh: one plant on average every SPACING / CHANCE units of upward lip, SIZE = [min, max] size, MAX = the most plants alive, WIND = the gale above which they sway, stepped at 8 a second, CAVE = the share of that in a cave;
+    //   per environment: the palette of the painted atlas, in sRGB hex). ON: 0 turns the fringe off.
+    ROCK: {
+      // (each environment names a `scale` for its plants, a multiplier on SIZE)
+      BED: 96, SHADE_W: 190, SHADE: 0.5, SHADE_TINT: '#9aa6c8', CHIP: 15,
+      FRINGE: {
+        ON: 1, SPACING: 100, CHANCE: 0.62, SIZE: [110, 200], MAX: 3000, WIND: 0.4, CAVE: 0.35,
+        skyisles: { scale: 1, base: '#6c9a4a', light: '#9cc466', dark: '#436b38', trunk: '#6a4c34', accent: '#e8909e' },
+        frost: { scale: 1.15, base: '#2f5d5a', light: '#4f8a82', dark: '#1f4044', trunk: '#4a3c34', snow: '#f4f8ff', snowShade: '#b4c8e4' },
+        ember: { scale: 1.4, base: '#3c302e', light: '#62504a', dark: '#241b1b', trunk: '#2c2220', ember: '#ff9628' },
+        fungal: { scale: 1, base: '#7a52c8', light: '#b08aff', dark: '#4a2e8a', stem: '#d4ecdc', spot: '#f2ffe8', glow: '#3cffc8' },
+        sea: { scale: 1.2, base: '#86b25a', light: '#b8d888', dark: '#58803f', stone: '#8f9aa0', stoneLight: '#bcc6ca', stoneDark: '#69757c' },
+        storm: { scale: 1.25, base: '#5f7f6a', light: '#88a78e', dark: '#3c5648', seed: '#c8b890' },
+        aether: { scale: 1.2, base: '#8a6cf0', light: '#c9b6ff', dark: '#5538b0', cyan: '#79e6ff', glow: '#ffd0ff' },
+      },
+    },
     FRONT_CLOUDS: { SHARE: 0.5, SIZE: [200, 380], ALPHA: 0.2, LOW: [-0.1, 0.45], PAD: 0.3 },
     skyisles: { dark: { cave: 0.68, hemi: 1.0, sky: '#34447a', ground: '#141a2c', key: 0.04 }, cap: { color: '#8fa65e', amount: 0.9 }, clouds: { n: 6, front: 0, alpha: 1, tint: '#fff4e0' }, strips: { color: '#dce8ec', far: { haze: 0.35, sat: 0.75 }, mid: { haze: 0.15, sat: 0.9 } }, exposure: 1.15, key: { color: '#fff0d0', strength: 1, shadows: true }, hemi: { sky: '#e8f1f6', ground: '#b49a78', strength: 1 }, haze: '#dce8ec', hazeAmt: 0.05, grade: { shadow: '#5a6c9c', shadowAmt: 0.12, high: '#ffe8c0', highAmt: 0.1, sat: 1.04, contrast: 0.1, lift: 0.01 }, bloom: 0.55, vignette: 0.16, rim: { color: '#ffd9a8', amount: 0.22 } },
     frost: { dark: { cave: 0.66, hemi: 1.0, sky: '#3a5488', ground: '#1a2438', key: 0.04 }, cap: { color: '#f2f7ff', amount: 1 }, clouds: { n: 5, front: 0, alpha: 1, tint: '#f4f8ff' }, strips: { color: '#cfdcef', far: { haze: 0.35, sat: 0.75 }, mid: { haze: 0.15, sat: 0.9 } }, exposure: 1.1, key: { color: '#fff6e6', strength: 0.95, shadows: true }, hemi: { sky: '#e6f0fa', ground: '#9fb0c4', strength: 1.05 }, hazeAmt: 0.07, grade: { shadow: '#4a64a8', shadowAmt: 0.16, high: '#fff4e0', highAmt: 0.06, sat: 0.96, contrast: 0.08, lift: 0.01 }, bloom: 0.5, vignette: 0.15, rim: { color: '#e8f2ff', amount: 0.22 } },
