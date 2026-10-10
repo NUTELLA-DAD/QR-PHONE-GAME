@@ -6,6 +6,7 @@
 // Everything here is rigid. The pieces on the bag are children of the bag's own node, so they swell with it and sag with it when she is hurt.
 //   buildEnemyDecor(ctx, model, { bp, gunship }) -> { update(t), setIntent(name), flag }
 import { THREE, Batch, tagSmall, glowMat, G } from '../style.js';
+import { BAG_RZ } from './bag.js';
 
 const PI = Math.PI;
 const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
@@ -70,11 +71,11 @@ export function buildEnemyDecor(ctx, model, o = {}) {
     const b = new Batch();
     // iron spikes along the ridge: tall at the middle, small toward the ends
     for (let k = -3; k <= 3; k++) { const u = k * 0.2, top = profile(G0, u), h = 54 - Math.abs(k) * 7; b.cone(IRON, u * rx, top - 5 + h / 2, 0, 12 - Math.abs(k) * 1.2, h, 2.2, 0, 0, 0); }
-    // her emblem on both flanks (the bag's front surface is ry * 0.96 deep)
-    const zf = profile(G0, 0.12) * 0.96;
+    // her emblem on both flanks (A4: the bag is the squat oval of bag.js, BAG_RZ deep, so the emblem lies on ITS skin, not 0.96 ry out in front of it)
+    const zf = profile(G0, 0.12) * BAG_RZ + 2;
     for (const sgn of [1, -1]) { const e = new Batch(); emblemParts(emblemKind, e, sgn * (zf + 1), Math.min(150, ry * 0.9)); const eg = e.build({ cast: false, receive: false }); eg.position.x = rx * 0.12; eg.position.y = ry * 0.02; grp.add(eg); }
     // an iron band round the bag at each end (armour straps in charcoal)
-    for (const u of [-0.55, 0.55]) { const r = profile(G0, u); b.geo(IRON, new THREE.TorusGeometry(1, 0.022, 6, 28), new THREE.Matrix4().compose(V(u * rx, 0, 0), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, PI / 2, 0)), V(r * 0.97, r * 0.97, r * 0.97 * 0.96)), 0); }
+    for (const u of [-0.55, 0.55]) { const r = profile(G0, u); b.geo(IRON, new THREE.TorusGeometry(1, 0.022, 6, 28), new THREE.Matrix4().compose(V(u * rx, 0, 0), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, PI / 2, 0)), V(r * 0.97 * BAG_RZ + 3, r * 0.97, r * 0.97 * 0.96)), 0); }
     grp.add(tagSmall(b.build({ cast: false })));
     node.add(grp);
     parts.push(grp);
