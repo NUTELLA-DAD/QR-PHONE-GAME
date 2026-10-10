@@ -48,6 +48,11 @@ fitCanvas();
   const g = new URLSearchParams(location.search).get('gunship');
   if (g === 'ship' || g === 'old') config.GUNSHIP.AS_SHIP = g === 'ship';
 }
+// Dev (C.1): host.html?creature=kraken puts a giant Kraken in every mission (it rises ahead of the ship; creatureSystem.js). Nothing changes without the flag.
+{
+  const c = new URLSearchParams(location.search).get('creature');
+  if (c === 'kraken') config.CREATURES.DEV_SPAWN = c;
+}
 const simulation = createSimulation();
 if (playtest && playtest.mode === 'coop') BUILDS.playtest = playtest.parts; // (the build page's ship: the voyage starts with it, and so does every new voyage)
 simulation.setStartBuild(playtest && playtest.mode === 'coop' ? 'playtest' : loadStartBuild()); // (the browser host starts a Voyage with the Sparrow, or the classic ship: the pause menu's Ship button; headless tools keep whatever ship they apply)

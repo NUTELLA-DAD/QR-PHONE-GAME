@@ -156,14 +156,14 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     if (state.ship.down || !Object.keys(state.players).length) return;
     const c = state.course;
     // Boss: once per lap, on the way home.
-    if (c && c.progress > W.BOSS_AT && (c.progress < 0.9 || flagshipStop()) && bossLap !== lap() && !state.boss && (!state.tempo || state.tempo.bossOk)) spawnBoss();
+    if (c && c.progress > W.BOSS_AT && (c.progress < 0.9 || flagshipStop()) && bossLap !== lap() && !state.boss && !state.creature && (!state.tempo || state.tempo.bossOk)) spawnBoss(); // (a giant creature is the boss of its mission)
     // The trickle between set pieces: small bat swarms. The pacing director (simulation.js) sets how
     // fast this clock runs (0 in a calm) and calls the bigger set pieces itself.
     if ((waveT -= dt * (state.tempo ? state.tempo.rate : 1)) > 0) return;
     const pace = Math.max(0.45, 1 - (lap() - 1) * 0.18) / spawnPace(state);
     // (Open-sky missions already have the outposts shooting: waves come less often.)
     waveT = rand(W.EVERY_MIN, W.EVERY_MAX) * pace * (c && c.map && c.map.open ? 2 : 1);
-    if (state.boss) return; // the boss fight is enough on its own
+    if (state.boss || state.creature) return; // the boss fight is enough on its own
     spawnBats();
   };
 
@@ -636,7 +636,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   // Is this mission's boss still to come, and close? (The director holds its next set piece for the boss.)
   const bossSoon = () => {
     const c = state.course;
-    return !!c && !state.boss && bossLap !== lap() && c.progress > W.BOSS_AT - config.PACING.BOSS_LEAD && (c.progress < 0.9 || flagshipStop());
+    return !!c && !state.boss && !state.creature && bossLap !== lap() && c.progress > W.BOSS_AT - config.PACING.BOSS_LEAD && (c.progress < 0.9 || flagshipStop());
   };
   return { update, reset, restart, bossSoon, withdraw, spawnBigSwarm, spawnBats, spawnBomber, spawnBoss, spawnStrafers };
 }

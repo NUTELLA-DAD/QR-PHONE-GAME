@@ -5,6 +5,7 @@ import { createThreats } from './threats.js';
 import { createCourse, inRock } from './course.js';
 import { createSquadrons } from './squadrons.js';
 import { createSpecials } from './specials.js';
+import { createCreatureSystem, creatureAlive } from './creatureSystem.js';
 import { createGunship } from './gunship.js';
 import { createGunshipShip } from './gunshipShip.js';
 import { createHijack } from './hijack.js';
@@ -260,6 +261,7 @@ export function createSimulation() {
     escort.reset();
     hijack.reset();
     specials.reset();
+    creatures.reset();
     coil.reset();
     gunship.reset();
     goingDown.reset();
@@ -329,6 +331,7 @@ export function createSimulation() {
     escort.reset();
     hijack.reset();
     specials.reset();
+    creatures.restart();
     coil.reset();
     searchlights.reset();
     gunship.reset();
@@ -405,8 +408,8 @@ export function createSimulation() {
     tp.el += dt;
     tp.bossOk = tp.phase === 'build' || (tp.phase === 'calm' && tp.el > PC.CALM * 0.5); // (the boss never arrives in the middle of a set piece or straight after one)
     if (state.gunship) tp.gunshipEnd = tp.mt; // (the gap counts from when she is gone)
-    // The mission boss is its own big moment: it holds the peak until it is gone, then the calm comes.
-    if (state.boss) {
+    // The mission boss is its own big moment: it holds the peak until it is gone, then the calm comes. (A giant creature counts as the boss.)
+    if (state.boss || creatureAlive(state)) {
       if (tp.phase !== 'peak' || tp.kind !== 'boss') {
         tp.phase = 'peak';
         tp.kind = 'boss';
@@ -614,6 +617,11 @@ export function createSimulation() {
     else if (watch.boss) {
       if (watch.boss.hp <= 0) addSalvage(SV.BOSS, 'boss', 'Boss destroyed!');
       watch.boss = null;
+    }
+    const cr = state.creature;
+    if (cr && cr.dying && !cr.paid) { // a giant creature that sank: the boss reward, times config.CREATURES.REWARD_MUL
+      cr.paid = true;
+      addSalvage(SV.BOSS * config.CREATURES.REWARD_MUL, 'boss', cr.name + ' slain!');
     }
   };
 
@@ -1049,6 +1057,7 @@ export function createSimulation() {
   const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip, firstMission });
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
+  const creatures = createCreatureSystem({ state, puff, credit }); // (giant creatures, BOSSES.md: state.creature; for now only the dev flag config.CREATURES.DEV_SPAWN spawns one)
   const gunshipDeps = { state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) };
   const gunship = config.GUNSHIP.AS_SHIP ? createGunshipShip({ ...gunshipDeps, addShip: (...a) => addShip(...a), removeShip: (...a) => removeShip(...a), W }) : createGunship(gunshipDeps); // (B.5: the gunship as a Ship, gunshipShip.js, when the flag is on; else the old offset-from-our-ship one)
   const weather = createWeather({ state, impact, puff });
@@ -1131,6 +1140,7 @@ export function createSimulation() {
         threats.reset();
         squadrons.reset();
         specials.reset();
+        creatures.reset();
         gunship.reset();
         state.tempo = newTempo();
         state.enemy.dead = Math.max(state.enemy.dead, 6);
@@ -1143,6 +1153,7 @@ export function createSimulation() {
       eachShip(state, (sh) => sh.sim.escort.update(dt));
       hijack.update(dt);
       if (!config.PVP.ENABLED) specials.update(dt);
+      if (!config.PVP.ENABLED) creatures.update(dt);
       if (!config.PVP.ENABLED) gunship.update(dt);
       course.update(dt);
       weather.update(dt);
@@ -1262,6 +1273,7 @@ export function createSimulation() {
     onMarker,
     squadrons,
     specials,
+    creatures, // (giant creatures, creatureSystem.js: spawn('kraken') for the gates)
     course,
     gunship,
     air,

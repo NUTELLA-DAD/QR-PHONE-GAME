@@ -7,6 +7,7 @@ import { config } from '../../config.js';
 import { mainShip, shipOf } from './ships.js';
 import { toWorldX, toWorldY } from './pose.js';
 import { bestTarget } from './aim.js';
+import { creatureRadar } from './creatureSystem.js';
 import { botFree } from './bots.js';
 
 const R = config.RADAR;
@@ -14,10 +15,10 @@ const SP = config.SPOT;
 const HP = config.HELP;
 
 // Radar symbols, in the order the phone knows them (controller/ui.js has the same list).
-export const RADAR_KINDS = ['mine', 'fighter', 'bomber', 'plane', 'boss', 'gunship', 'bat', 'sniper', 'tug', 'saw', 'imp', 'ship'];
-const NAMES = { mine: 'MINE', fighter: 'FIGHTER', bomber: 'BOMBER', plane: 'PLANE', boss: 'BOSS', gunship: 'GUNSHIP', bat: 'BAT', sniper: 'SNIPER', tug: 'HARPOON', saw: 'SAW', imp: 'IMP', ship: 'AIRSHIP' };
+export const RADAR_KINDS = ['mine', 'fighter', 'bomber', 'plane', 'boss', 'gunship', 'bat', 'sniper', 'tug', 'saw', 'imp', 'ship', 'creature'];
+const NAMES = { mine: 'MINE', fighter: 'FIGHTER', bomber: 'BOMBER', plane: 'PLANE', boss: 'BOSS', gunship: 'GUNSHIP', bat: 'BAT', sniper: 'SNIPER', tug: 'HARPOON', saw: 'SAW', imp: 'IMP', ship: 'AIRSHIP', creature: 'CREATURE' };
 // Rough size (px) of each thing, for the bracket drawn round a spotted one on the TV.
-export const SPOT_SIZE = { mine: 44, fighter: 54, bomber: 100, plane: 50, boss: 230, gunship: 230, bat: 34, sniper: 80, tug: 60, saw: 56, imp: 30, ship: 500 };
+export const SPOT_SIZE = { mine: 44, fighter: 54, bomber: 100, plane: 50, boss: 230, gunship: 230, bat: 34, sniper: 80, tug: 60, saw: 56, imp: 30, ship: 500, creature: 150 };
 
 // Everything out there worth a ping (the same lists the TV's lookout arrows use, but every one of them).
 // Each: { k (kind index), kind, obj (the thing itself), pos() -> {x, y} live world position }.
@@ -43,6 +44,7 @@ export function radarItems(state) {
     for (const s of S.saws) add('saw', s, at(s));
     for (const b of S.imps) if (b.delay <= 0) add('imp', b, at(b));
   }
+  if (state.creature) for (const c of creatureRadar(state)) add('creature', c.obj, c.pos); // (a giant creature: its body, beak and tentacles)
   // (B.3) Every airship in the sky is a blip too (a phone leaves out its own: spotter.js nearFor), so a crew can see where the others are.
   if (state.ships.length > 1) for (const o of state.ships) if (!o.ai) add('ship', o.state, () => ({ x: toWorldX(o, o.layout.midPoint.x), y: toWorldY(o, o.layout.midPoint.y) }));
   return out;

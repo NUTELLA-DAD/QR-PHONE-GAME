@@ -9,6 +9,7 @@ import { toWorldX, toWorldY, aimToShip, aimToWorld } from './pose.js';
 import { solidAt } from './maps.js';
 import { typedSolution } from './gunTypes.js';
 import { flameTargets, AIR_KINDS } from './flame.js';
+import { creatureTargets } from './creatureSystem.js'; // (a giant creature's living parts: C.1)
 
 export const SHELL_SPEED = config.GUNS.SHELL_SPEED;
 export const SHELL_LIFE = config.GUNS.SHELL_LIFE;
@@ -106,6 +107,7 @@ export function targets(state) {
     for (const g of z.guns) if (!g.dead) list.push({ kind: 'bossgun', obj: g, r: 30, at: () => ({ x: z.x + g.dx, y: z.y + 168 }) });
     list.push({ kind: 'boss', obj: z, r: 200, at: () => ({ x: z.x, y: z.y + 20 }) });
   }
+  if (state.creature) creatureTargets(state, list); // (each living part; weak points carry their own rank: bestTarget)
   for (const g of (state.course && state.course.turrets) || []) {
     if (!g.dead && g.x != null) list.push({ kind: 'turret', obj: g, r: 40, at: (t) => ({ x: g.x + (g.vx - vs) * t, y: g.y }) });
   }
@@ -136,7 +138,8 @@ export function bestTarget(state, gun) {
     if (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship') continue;
     const angle = solution(state, gun, t);
     if (angle === null) continue;
-    const rank = (u) => (isSpotted(u.obj) ? order[u.kind] - 20 : order[u.kind]); // (spotted targets come first)
+    const base = (u) => (u.rank != null ? u.rank : order[u.kind]); // (a creature's part ranks by what it is: an open beak, a lit eye, a limb)
+    const rank = (u) => (isSpotted(u.obj) ? base(u) - 20 : base(u)); // (spotted targets come first)
     if (!best || rank(t) < rank(best.target)) best = { target: t, angle };
   }
   return best;

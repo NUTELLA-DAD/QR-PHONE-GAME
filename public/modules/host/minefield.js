@@ -15,6 +15,7 @@ import { config } from '../../config.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { inRock } from './course.js';
 import { kickForce } from './forces.js';
+import { creatureBlast, creatureTouch } from './creatureSystem.js'; // (a giant creature sets mines off and is hurt by them: C.1)
 
 const M = () => config.MINEFIELD;
 let seq = 0;
@@ -72,6 +73,7 @@ export function stepMines(world, dt, puff) {
       if (world.match && world.match.on && m.team && sh.team && sh.team.id !== m.team) world.match.count(m.team, 'mineHits');
     }
     if (how === 'shot' && shooter && world.match && world.match.on && shooter.team) world.match.count(shooter.team, 'mineShot');
+    if (world.creature) creatureBlast(world, m.x, m.y, config.CREATURES.HURT.MINE_RADIUS, config.CREATURES.HURT.MINE, { who: m.owner, src: 'mine' });
     for (const p of planes()) if (Math.hypot(p.x - m.x, p.y - m.y) < K.BLAST) world.shells.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.08, mul: K.PLANE_MUL, owner: m.owner, from: m.from, frag: true, kind: 'mineFrag' });
   };
   for (const m of list) {
@@ -98,6 +100,7 @@ export function stepMines(world, dt, puff) {
       if (touches(sh, m.x, m.y, K.TRIGGER)) { go(m, 'touch', sh, null); break; }
     }
     if (m.dead) continue;
+    if (world.creature && creatureTouch(world, m.x, m.y, K.TRIGGER)) { go(m, 'creature', null, null); continue; }
     if (planes().some((p) => Math.hypot(p.x - m.x, p.y - m.y) < K.PLANE)) { go(m, 'plane', null, null); continue; }
     flying = flying || Object.values(world.players).filter((q) => q.fly && q.team);
     if (flying.some((q) => q.team !== m.team && Math.hypot(q.x - m.x, q.y - m.y) < K.PLANE * 0.6)) go(m, 'flier', null, null);

@@ -36,6 +36,7 @@ import { drawFlameGun } from './flameArt.js'; // the flamethrower's pilot light,
 import { createYardArt } from './yardArt.js'; // S.6b: the Shipwright's Yard (the sky-dock blueprint, the A / B / C vote, BUILT, "NEW: ...")
 import { createPartPictures } from './partArt.js'; // the little part pictures of the build tray, on the Yard's cards
 import { createDebrisArt } from './debrisArt.js'; // S.5i: the pieces of ship that broke off, tumbling through the sky
+import { createCreatureArt } from './creatureArt.js'; // C.1: the giant creatures (BOSSES.md), baked once per zoom and blitted
 import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
@@ -570,6 +571,31 @@ export function createRenderer({ ctx, state: world, canvas }) {
     drawRings(ctx, state.rings);
   };
 
+  // A giant creature (creatureSystem.js, creatureArt.js), in the world like the boss: its parts dim unless lit (the system sets part.lit), the pieces of a cut limb tumbling. In the Sunken Sea
+  // it is clipped at the sea line, so it rises out of the water.
+  let creatureArt = null; // (made when the first creature appears)
+  const drawCreature = (view) => {
+    const cr = world.creature;
+    if (!cr) return;
+    if (!creatureArt) creatureArt = createCreatureArt({ ctx });
+    const seaY = envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : null;
+    ctx.save();
+    if (seaY !== null) {
+      ctx.beginPath();
+      ctx.rect(cr.x - 20000, cr.y - 20000, 40000, seaY + config.CREATURES.SINK_CLIP - (cr.y - 20000));
+      ctx.clip();
+    }
+    creatureArt.draw(cr, { zoom: view.zoom, dpr: 1 }); // (the view's zoom is already in canvas pixels)
+    for (const c of cr.chunks) {
+      ctx.save();
+      ctx.translate(c.cx, c.cy);
+      ctx.rotate(c.a);
+      creatureArt.drawLimb(c.part, { zoom: view.zoom, dpr: 1 });
+      ctx.restore();
+    }
+    ctx.restore();
+  };
+
   const drawEffects = (time, view) => {
     drawThreatGlows(time); // (each ship's coil and shield are part of her own layer: renderFrame)
     drawFighterAim(time);
@@ -577,6 +603,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     threatArt.drawMines(time);
     drawMines(ctx, world, time, view.zoom); // (mines laid by a mine layer, minefield.js)
     threatArt.drawBoss(time);
+    drawCreature(view);
     threatArt.drawBombers(time);
     threatArt.drawBats(time);
     threatArt.drawStrafers(time);
@@ -995,13 +1022,14 @@ export function createRenderer({ ctx, state: world, canvas }) {
       // A compact message bar along the bottom (clear of the HUD and the ship), fading out.
       const text = state.ev.warnText || 'BOARDERS ON THE CATWALK!';
       ctx.globalAlpha = Math.min(1, state.ev.warn * 2);
-      book.stamp(text, 800, state.boss ? 786 : 854, { size: 22, maxW: 1100 }); // red-ink stamp
+      book.stamp(text, 800, state.boss || state.creature ? 786 : 854, { size: 22, maxW: 1100 }); // red-ink stamp
       ctx.globalAlpha = 1;
       ink();
     }
     drawUpgradeIcons();
     if (state.phase === 'lobby') drawLobby();
     drawBossBar();
+    drawCreatureBar();
     if (state.scorecard) drawScorecard();
     if (state.vote) drawVote();
   };
@@ -1136,6 +1164,45 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.font = '15px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
     ctx.fillText(z.name || 'THE DREAD ZEPPELIN', 800, 849, 640);
+  };
+
+  // A giant creature's health bar: its name, one pip for each tentacle (crossed out once it is cut off), and the health pool.
+  const drawCreatureBar = () => {
+    const cr = world.creature;
+    if (!cr || cr.mode === 'surfacing') return;
+    const limbs = cr.parts.filter((p) => p.kind === 'tentacle');
+    book.paper(450, 806, 700, 74, { r: 10 });
+    ctx.fillStyle = LB.INK;
+    ctx.font = '16px ' + config.FONTS.DISPLAY;
+    ctx.textAlign = 'center';
+    ctx.fillText(cr.name, 800, 826, 640);
+    limbs.forEach((p, i) => { // the tentacle pips, centred under the name
+      const x = 800 + (i - (limbs.length - 1) / 2) * 34, y = 840, gone = p.severed || p.dead;
+      ink();
+      ctx.lineWidth = 2.5;
+      ctx.fillStyle = gone ? '#cfc6b0' : p.hit > 0 ? '#fff4e0' : '#8a3a62';
+      ctx.beginPath();
+      ctx.arc(x, y, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      if (gone) { // crossed out
+        ctx.strokeStyle = '#a33a30';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x - 10, y - 10);
+        ctx.lineTo(x + 10, y + 10);
+        ctx.moveTo(x + 10, y - 10);
+        ctx.lineTo(x - 10, y + 10);
+        ctx.stroke();
+      }
+    });
+    ctx.fillStyle = '#3b2a1d';
+    ctx.fillRect(470, 856, 660, 14);
+    ctx.fillStyle = '#7a2d63';
+    ctx.fillRect(470, 856, (660 * Math.max(0, cr.hp)) / cr.maxHp, 14);
+    ink();
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(470, 856, 660, 14);
   };
 
   // Upgrades the ship has, as a row of icons under the status panel.

@@ -16,6 +16,7 @@ const KINDS = [
   { c: '#9fdcff', r: 5, shape: 'dot' }, // saw
   { c: '#ff9ad0', r: 3.5, shape: 'dot' }, // imp
   { c: '#9fe3ff', r: 9, shape: 'sq' }, // another airship (B.3)
+  { c: '#d870b0', r: 8, shape: 'sq' }, // a giant creature's body, beak or tentacle (BOSSES.md)
 ];
 const TAU = Math.PI * 2;
 

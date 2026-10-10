@@ -14,6 +14,7 @@ import { mainShip } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY, pivotOf, driveVx } from './pose.js';
 import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
+import { creatureBomb } from './creatureSystem.js'; // (a bomb that meets a giant creature: C.1)
 import { pickEnvironment } from './environments.js';
 import { makeMap, buildArenaMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
 import { applyForce } from './forces.js';
@@ -923,12 +924,17 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   const updateBombs = (dt) => {
     for (const b of state.shipBombs) {
       stepBomb(b, dt);
-      if (course.map ? inRock(state, b.x, b.y) : b.y >= groundAt(course, b.x)) {
+      const hitC = state.creature ? creatureBomb(state, b) : null; // (a giant creature: 'mouth' = into the open beak, 'burst' = against another part, 'closed' = through a shut beak, nothing)
+      if (hitC === 'mouth' || hitC === 'burst') {
+        b.done = true;
+        blast(b);
+      } else if (course.map ? inRock(state, b.x, b.y) : b.y >= groundAt(course, b.x)) {
         b.done = true;
         blast(b);
       } else if (inRock(state, b.x, b.y)) b.done = true; // hit an overhang
     }
-    state.shipBombs = state.shipBombs.filter((b) => !b.done && b.y < 8000);
+    const lost = state.creature ? 60000 : 8000; // (a bomb that falls past this is gone; a creature stands lower than that on a tall map)
+    state.shipBombs = state.shipBombs.filter((b) => !b.done && b.y < lost);
   };
 
   // Passing a marker: checkpoint, beacon (turn for home) or home (lap complete).

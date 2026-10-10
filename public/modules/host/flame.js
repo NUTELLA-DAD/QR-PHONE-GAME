@@ -17,6 +17,7 @@ import { areHostile, foeOf, hostileTo, shipOf } from './ships.js';
 import { flamAt, armourOn } from './fireModel.js';
 import { hurt, knockOut } from './health.js';
 import { pop } from './popups.js';
+import { creatureBurn, creatureTargets } from './creatureSystem.js'; // (a giant creature burns too: C.1)
 
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 export const isFlame = (gun) => !!gun && gun.type === 'flame';
@@ -120,6 +121,9 @@ function burn({ ship, state, world, gun, name, who, cone, dt, puff, W }) {
       puff(o.x, o.y, '#ff7b00', 3);
     }
   }
+
+  // ---- a giant creature: every part in the cone burns ----
+  if (world.creature) creatureBurn(world, (x, y, pad) => inCone(cone, x, y, pad), { x: cone.x, y: cone.y }, dt, who && who.id);
 
   // ---- your own ship: boarders burn, ice melts ----
   const P = ship.layout.platforms;
@@ -253,6 +257,7 @@ export function flameTargets(state, ship, gun) {
     if (near(x, y) && !selfRisk(ship, tg)) out.push(tg); // (a boarder standing on your own coal or powder is left to the swords)
   }
   for (const b of world.bats || []) if (b.latched && b.landed && b.hp > 0 && near(b.x, b.y)) out.push({ kind: 'bat', obj: b, r: 26, at: () => ({ x: b.x, y: b.y }) });
+  if (world.creature) for (const t of creatureTargets(world)) { const p = t.at(0); if (near(p.x, p.y)) out.push(t); } // (a giant creature's parts within the burner's reach)
   for (const q of Object.values(world.players)) {
     if (q.fall || q.fly || q.conn != null || q.d == null || q.ko > 0 || q.enemy) continue;
     const home = shipOf(world, q);

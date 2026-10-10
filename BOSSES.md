@@ -207,6 +207,21 @@ One monster gets built all the way first: the Kraken. It is proved with bots, th
 
 **Order:** C.0 → C.1 → C.2 → (C.3 alongside C.4) → C.5 → C.6a Drake → the rest in pairs → C.7 → C.8.
 
+**C.1 is in** (`creatureSystem.js`; gate `node tools/buildsim.mjs --check-creature`):
+- **Dev flag only:** `host.html?creature=kraken` or `botsim --creature kraken` puts a Kraken in every mission; with no flag nothing changes (botsim and golden are byte-identical / inside their bands).
+- **Placeholder life:**
+  - it rises untouchable for `SPAWN.SURFACE_TIME`, then idles;
+  - it holds station `SPAWN.STANDOFF` ahead of the ship (in the Sunken Sea on the sea line, elsewhere `BELOW` the ship and `GROUND_CLEAR` above the first rock);
+  - its tentacles reach at the ship (no grips yet);
+  - the beak opens on the C.0 puppet's timer;
+  - it dies (sinks) when the health pool is empty or all six tentacles are cut.
+- **Damage:** every weapon ends in `hurtCreature` (a part, the segment hit, a tentacle at 0 hp is severed there and tumbles as a chunk, the pool takes `HURT.POOL` of the blow). The numbers are `config.CREATURES.HURT`.
+- **For C.2:**
+  - the creature record is the C.0 body plus `mode` ('surfacing' | 'idle' | 'dying'), `side`, `base`, `ai`, `chunks`, `stats` and a non-enumerable `hooks` (`state`, `puff`, `credit`, `rng`);
+  - `think()` in `creatureSystem.js` is the placeholder behaviour: C.2/C.3 replace its reaches with grips;
+  - `cr.hooks.rng` is the creature's own seeded stream (never `Math.random`).
+- **Shells die in rock:** off the sea a creature in a cave map is partly inside the walls (the dev flag does not choose the map); the real lair stops (C.3) should pick open maps.
+
 **The gate `node tools/buildsim.mjs --check-creature`:**
 - (a) Parts build, hit capsules work, the IK reaches, and keys hold for 1/8 s.
 - (b) Every weapon damages a part. A bomb in the open mouth does MOUTH damage; in the closed mouth it does nothing.
