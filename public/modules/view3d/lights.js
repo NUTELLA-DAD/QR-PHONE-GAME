@@ -101,7 +101,11 @@ export function createLights(scene) {
     L.hazeAmt = rig.hazeAmt * (cave ? 1.4 : 1);
     L.exposure = rig.exposure;
     fx.uExposure.value = rig.exposure;
+    L.hemiBase = hemi.intensity; hemi.intensity += L.flashAdd; // (WP10: a lightning flash adds ambient light on top of whatever the darkness left)
   };
+  // WP10: the lightning flash (lightning.js sets it every frame, stepped): extra ambient light, 0 = none
+  L.flashAdd = 0; L.hemiBase = 1;
+  L.setFlash = (amt) => { if (amt === L.flashAdd) return; L.flashAdd = amt; hemi.intensity = L.hemiBase + amt; };
 
   // Fog strength: the same share of the picture at the ship plane at any zoom (D = camera distance), and more and more behind it.
   L.setFogDistance = (D) => {

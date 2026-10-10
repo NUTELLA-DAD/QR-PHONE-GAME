@@ -56,6 +56,12 @@ fitCanvas();
   if (new URLSearchParams(location.search).get('heart') === '1') config.CREATURES.BOARD.HEART_EXPOSED = true; // (C.2: host.html?creature=kraken&heart=1 exposes the heart so STRIKE THE HEART can be tried; C.3 decides when it is really exposed: phase 3)
   if (new URLSearchParams(location.search).get('lair') === '1') { config.CREATURES.DEV_LAIR = true; config.ENVIRONMENTS.FORCE = 'sea'; } // (C.3: host.html?lair=1 makes every stop a Kraken's lair, flown in the Sunken Sea)
 }
+// Dev (WP10): host.html?env=storm&kind=open flies the first missions in that environment / map kind (the same switches the bot sim uses: config.ENVIRONMENTS.FORCE, config.MAPS.FORCE_KIND). Nothing changes without the flags.
+{
+  const q = new URLSearchParams(location.search), e = q.get('env'), k = q.get('kind');
+  if (e && config.ENVIRONMENTS[e] && config.ENVIRONMENTS[e].name && !config.ENVIRONMENTS.FORCE) config.ENVIRONMENTS.FORCE = e;
+  if ((k === 'network' || k === 'route' || k === 'open') && !config.MAPS.FORCE_KIND) config.MAPS.FORCE_KIND = k;
+}
 const simulation = createSimulation();
 if (playtest && playtest.mode === 'coop') BUILDS.playtest = playtest.parts; // (the build page's ship: the voyage starts with it, and so does every new voyage)
 simulation.setStartBuild(playtest && playtest.mode === 'coop' ? 'playtest' : loadStartBuild()); // (the browser host starts a Voyage with the Sparrow, or the classic ship: the pause menu's Ship button; headless tools keep whatever ship they apply)
@@ -121,7 +127,7 @@ const viewChoice = (() => {
   try { const s = localStorage.getItem('airshipView'); if (s === '2d' || s === '3d') return s; } catch { /* (no storage) */ }
   return '2d'; // (WP14 flips this default)
 })();
-const HUD_LAYERS = ['hud', 'arrows']; // (no 'background', 'ship', 'effects', 'dark' or 'film': the 3D scene and its lights draw those)
+const HUD_LAYERS = ['hud', 'arrows', 'marks']; // (no 'background', 'ship', 'effects', 'dark' or 'film': the 3D scene and its lights draw those; 'marks' = the lit-target brackets and the glowing eyes of the unlit, WP10)
 const v3 = { view: null, active: false, loading: false, fails: 0, broken: false, mode: viewChoice };
 window.view3dNote = '';
 const v3settings = {
@@ -189,7 +195,7 @@ const drawFrame = (now, view) => {
     if (ok) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height); // (transparent: the 3D picture shows through)
-      renderer.renderFrame(now, view, { layers: HUD_LAYERS });
+      renderer.renderFrame(now, view, { layers: HUD_LAYERS, dark3d: v3.view.world ? v3.view.world.night : 0 });
       return;
     }
   }

@@ -59,8 +59,8 @@ export function buildSearchlight(name, s, ctx) {
   const pivot = new THREE.Group();
   pivot.position.set(X(s.bx), Y(s.by), 0);
   pivot.rotation.z = -s.aim;
-  const tiltG = new THREE.Group(); // the lamp is also turned a little into the scene (away from the viewer), so its beam can land on the cave wall behind the ship
-  tiltG.rotation.y = 0.46;
+  const tiltG = new THREE.Group(); // the lamp is also turned a little into the scene (away from the viewer: WP10 cut this from 0.46 to 0.1 rad, less than the beam's own half angle, so what the sim calls lit, in the gameplay plane, is really INSIDE the 3D cone)
+  tiltG.rotation.y = 0.1;
   pivot.add(tiltG);
   tiltG.add(lamp.buildGroup());
   const lens = new THREE.Mesh(new THREE.CircleGeometry(19, 16), glowMat('#fffbe0', 2.8));

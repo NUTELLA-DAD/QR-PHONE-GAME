@@ -2,7 +2,7 @@
 // big plane glued to the camera, and the parallax strips (clouds, far hills, mist, mid hills) are world-fixed pictures at different depths, so the perspective gives the parallax. All of
 // them are UNLIT MeshBasicMaterial with toneMapped:false and fog:false (style.js paintedPlane: they also undo the composer's tone mapping so they come out exactly as painted). In a cave
 // the cave picture stands behind the rock instead; that one is lit (the lamps' beams land on it). Everything is fixed to the world: nothing shimmers as the camera moves.
-import { THREE, gradientMap, look, paintedPlane } from './style.js';
+import { THREE, gradientMap, look, paintedPlane, rimify } from './style.js';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 const ENV_FILES = {
@@ -47,7 +47,7 @@ export function createSky(scene, renderer) {
     back.add(m);
     return m;
   });
-  const caveMat = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap }); // (lit: the lamps' beams land on it)
+  const caveMat = rimify(new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap })); // (lit: the lamps' beams land on it; WP10: rimify gives it the searchlights' cone light too)
   caveMat.color.multiplyScalar(0.85);
   const cavePlane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), caveMat);
   cavePlane.position.z = -420;
