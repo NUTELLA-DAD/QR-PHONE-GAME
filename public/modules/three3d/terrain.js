@@ -4,7 +4,8 @@
 import { THREE, PAL, INK, gradientMap, look } from './style.js';
 
 const CH = 12; // squares per chunk side
-export const Z_FRONT = 330, Z_BACK = -420; // (the cave picture stands at the back, world.js)
+export const Z_FRONT_CAVE = 330, Z_BACK = -420; // caves: the rock slab stands in FRONT of the ship (tunnels are holes through it); the cave picture stands at the back (world.js)
+export const Z_FRONT_OPEN = -70; // open sky: the rock stands just behind the ships and creatures, so nothing is ever hidden behind a cliff
 
 const rockToon = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap, side: THREE.DoubleSide });
 const rockPlain = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
@@ -16,6 +17,7 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
 function buildChunk(map, ci, cj) {
   const C = map.CELL;
+  const Z_FRONT = map.open ? Z_FRONT_OPEN : Z_FRONT_CAVE; // (this map's front face)
   const S = (i, j) => (j < 0 && map.open && i >= 0 && i < map.W ? 0 : i < 0 || j < 0 || i >= map.W || j >= map.H ? 1 : map.solid[j * map.W + i]);
   const corner = (i, j) => (S(i - 1, j - 1) + S(i, j - 1) + S(i - 1, j) + S(i, j)) / 4;
   const pos = [], nor = [], col = [], ink = [];
