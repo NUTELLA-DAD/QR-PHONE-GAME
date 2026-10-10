@@ -1839,6 +1839,43 @@ export const config = {
   },
   // Outline weights (Style 2026, see art/ART_SPEC.md).
   OUTLINE: { MAIN: 3.4, SMALL: 2.5, SHIP: 4 },
+  // GIANT CREATURES (modules/host/creature.js = the generic puppet body, creatures/kraken.js = the Kraken's data, creatureArt.js = its drawing; see BOSSES.md).
+  // Limbs are chains of rigid segments chasing a goal point (FABRIK). The goal moves on a STEPPED clock (STEP_FPS keys a second, held in between);
+  // there is no sine wobble anywhere: a pose is held, then snaps (the picture only eases toward the held pose).
+  CREATURES: {
+    STEP_FPS: 8, // pose keys per second: the goal pose changes only on these beats
+    ANTICIPATION: 0.4, // s a limb pulls back before it strikes (rounded to whole keys: 0.4 s = 3 keys)
+    PULL_BACK: 0.45, PULL_LIFT: 0.35, // the wind-up: the tip draws back from the target by this share of the limb's reach, and rears up by this share
+    HOLD: 0.9, // s a strike is held on its target before the limb recovers
+    GRIP_SNAP: 70, // px: a seizing tentacle counts as gripped when its tip is this close to the grip point (or after GRIP_KEYS keys)
+    GRIP_KEYS: 8,
+    EASE: { IDLE: 5, SNAP: 40, MOUTH: 14, BREATH: 12 }, // how fast (per second) the picture eases to the held pose: lazy for sway, quick for a strike
+    IK: { ITER: 2, GRIP_ITER: 6, GUIDE: 0.35 }, // FABRIK passes per frame (a glued grip gets more); GUIDE = how hard each joint is nudged toward the limb's curved shape first
+    SWAY: { EVERY_KEYS: 6, AMOUNT: 0.18 }, // idle sway: a new rest-pose offset every EVERY_KEYS keys, up to AMOUNT of the limb's reach (stepped, never a sine)
+    BREATH: { EVERY_KEYS: 12, AMOUNT: 0.025 }, // idle breathing: the mantle holds, snaps 2.5% bigger, holds, snaps back (a 2-key hold-and-snap)
+    HIT_FLASH: 0.15, // s a hit part shows its white flash
+    ART: {
+      INK_W: 14, // ink outline weight in WORLD px (a creature is drawn zoomed far out, so it is much thicker than OUTLINE.MAIN)
+      SS: 1, MIN_SCALE: 0.03, MAX_SCALE: 0.7, // segment pictures are baked at the screen scale x SS, kept between these (bucketed in half octaves)
+      DIM: 0.6, FLASH: 0.65, // how far fills mix toward night-blue when a part is not lit / toward white on a hit flash
+      BUCKETS_KEPT: 3, // baked zoom levels kept before the oldest is dropped
+    },
+    KRAKEN: {
+      HP: 1200, // the health pool (the slow, safe way to win)
+      TENTACLES: 6, SEGS: 8, // limbs and rigid segments per limb
+      LEN: [430, 270], // segment length root -> tip (px, linear taper): a limb is about 2800 px, a bit over the ship's length
+      R: [140, 28], // segment radius root -> tip (px, geometric taper)
+      ROOT_X: [-700, -450, -180, 180, 450, 700], ROOT_Y: 650, // where each limb starts, on the body (px; the mantle's centre is the origin)
+      FRONT: [0, 5], // limb numbers drawn in front of the head (the rest behind it)
+      REST: [0.75, 0.6, 0.8, 0.8, 0.6, 0.75], FAN: 1.3, // idle pose: how far (share of reach) each limb rests, and the widest lean from straight up (rad)
+      BEND: 0.7, // how far a limb arches (0 = straight); it always arches upward out of the sea
+      MANTLE: { AT: [0, -650], LEN: 900, R: 620, LEAN: 0.12, HP: 300 },
+      EYES: { AT: [[-380, 120], [400, 150]], R: 105, HP: 60 },
+      MOUTH: { AT: [0, 330], R: 230, HP: 150, EVERY: 9, OPEN_FOR: 3 }, // the beak opens for OPEN_FOR s every EVERY s (the demo puppet's timer)
+      HEART: { AT: [0, -300], R: 130, HP: 200 },
+      TENTACLE_HP: 120,
+    },
+  },
   // Effects in the storybook gouache style (modules/host/vfxArt.js): flat colours, ink from INK + OUTLINE, no gradients.
   VFX: {
     CHARCOAL: '#3a302c', ORANGE: '#f08a3c', CREAM: '#fff2cf', GOLD: '#f2c14e', // explosion rim / body / core, primed-shell ring
