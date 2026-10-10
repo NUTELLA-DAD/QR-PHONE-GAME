@@ -140,7 +140,8 @@ export function createWorld(scene, renderer) {
     // the sky plane is stuck in front of the camera, far away, big enough to cover the view
     if (skyPlane.parent !== cam) cam.add(skyPlane);
     const dist = cam.far * 0.9, hh = 2 * dist * Math.tan((cam.fov * Math.PI) / 360) * 1.25;
-    skyPlane.position.set(0, 0, -dist);
+    const lensShift = cam.userData.lensShift || 0; // (camera3d.js: a sheared lens, looking straight ahead from above: the picture's middle is lower than the camera's axis)
+    skyPlane.position.set(0, -dist * lensShift, -dist);
     skyPlane.scale.set(hh * cam.aspect, hh, 1);
     skyPlane.visible = !W.cave || true;
     // strips
@@ -162,7 +163,7 @@ export function createWorld(scene, renderer) {
       // where the bottom and top of the screen are at this strip's depth (the camera looks a little downward): the strip hangs from the top (clouds) or stands on the bottom,
       // the way the 2D strips do; the picture's own size never depends on the zoom
       const hd = cam.position.z - s.z, a = fovHalf, pitch = pitchDown;
-      const yBottom = cam.position.y - hd * Math.tan(pitch + a), yTop = cam.position.y - hd * Math.tan(pitch - a);
+      const yBottom = cam.position.y - hd * (Math.tan(pitch + a) + lensShift), yTop = cam.position.y - hd * (Math.tan(pitch - a) + lensShift);
       const yAbs = s.top ? yTop - s.h * 0.5 + (yTop - yBottom) * 0.02 : yBottom + s.h * 0.5 - (yTop - yBottom) * 0.03 + s.lift * (yTop - yBottom);
       m.position.set(0, yAbs - target.y, s.z);
     });

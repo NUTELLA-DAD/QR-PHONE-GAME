@@ -1,5 +1,7 @@
 // Screenshots of the 3D test page (public/three3d.html) with headless Chrome over the DevTools protocol. No packages needed (Node 22+ has WebSocket and fetch).
 // Usage: node tools/shot3d.mjs --url "http://localhost:3300/three3d.html?tod=night" --out shots/night.png [--size 1920x1080] [--wait 3000] [--eval "window.__t3d.warm(20)"] [--then-wait 1500] [--gl swiftshader|default] [--stats]
+// Also: --ready "<js>" (what to wait for; default window.__ready3d === true; host.html needs --ready "window.__meter!==undefined"), --evals '[["js",waitMs],...]' (several steps before the shot),
+//       --stats-js "<js>" (extra numbers to print).
 // Start your own server first on a free port (PORT=3300 node server.js) and stop it by PID afterwards; never kill node globally.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -17,6 +19,7 @@ const chromePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'shot3d-'));
 const flags = ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, `--window-size=${W},${H}`, '--hide-scrollbars', '--no-first-run', '--disable-extensions', '--mute-audio', '--ignore-gpu-blocklist', '--enable-webgl', '--autoplay-policy=no-user-gesture-required', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'];
 if (arg('gl', 'swiftshader') === 'swiftshader') flags.push('--use-angle=swiftshader', '--enable-unsafe-swiftshader');
+if (arg('gl') === 'none') { for (const bad of ['--ignore-gpu-blocklist', '--enable-webgl']) flags.splice(flags.indexOf(bad), 1); flags.push('--disable-gpu', '--disable-3d-apis', '--disable-webgl'); } // (no WebGL at all: the 2D fallback test)
 const chrome = spawn(chromePath, [...flags, 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let ws, id = 0;
@@ -43,12 +46,14 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url });
   for (let i = 0; i < 120; i++) { // wait for the page to draw its first frame
-    const r = await send('Runtime.evaluate', { expression: 'window.__ready3d === true', returnByValue: true });
+    const r = await send('Runtime.evaluate', { expression: arg('ready', 'window.__ready3d === true'), returnByValue: true });
     if (r.result.value) break;
     await sleep(250);
   }
   await sleep(wait);
   if (arg('eval')) { const r = await send('Runtime.evaluate', { expression: arg('eval'), returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) logs.push('EVAL ERROR: ' + JSON.stringify(r.exceptionDetails).slice(0, 400)); else if (r.result.value !== undefined) logs.push('eval -> ' + JSON.stringify(r.result.value).slice(0, 600)); await sleep(thenWait); }
+  if (arg('evals')) for (const [js, ms] of JSON.parse(arg('evals'))) { const r = await send('Runtime.evaluate', { expression: js, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) logs.push('EVAL ERROR: ' + JSON.stringify(r.exceptionDetails).slice(0, 400)); else if (r.result.value !== undefined) logs.push('eval -> ' + JSON.stringify(r.result.value).slice(0, 600)); await sleep(ms || 0); }
+  if (arg('stats-js')) { const r = await send('Runtime.evaluate', { expression: arg('stats-js'), returnByValue: true, awaitPromise: true }); logs.push('stats-js ' + JSON.stringify(r.result.value)); }
   if (has('stats')) { const r = await send('Runtime.evaluate', { expression: 'JSON.stringify(window.__stats||null) + " " + JSON.stringify(window.__t3d && window.__t3d.info())', returnByValue: true }); logs.push('stats ' + r.result.value); }
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
@@ -58,7 +63,9 @@ try {
   console.error('FAILED: ' + e.message);
   process.exitCode = 1;
 } finally {
-  for (const l of logs.slice(0, 40)) console.log('  [page] ' + l);
+  const bad = logs.filter((l) => /^(error|EXCEPTION|EVAL ERROR)/.test(l) && !/favicon/.test(l));
+  console.log('  console errors: ' + bad.length);
+  for (const l of logs.slice(0, 60)) console.log('  [page] ' + l);
   try { ws && ws.close(); } catch { /* closed */ }
   chrome.kill();
   await sleep(300);

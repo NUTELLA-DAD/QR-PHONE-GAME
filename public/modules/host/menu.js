@@ -19,8 +19,17 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
     $('mUrl').textContent = $('url').textContent;
     $('mCount').textContent = $('count').textContent;
     if (perf) $('mDetail').textContent = perf.label();
+    viewLabel();
     const errs = window.gameErrors || [];
     $('mErr').textContent = errs.length ? 'Last problem (the game kept going): ' + errs[errs.length - 1] : '';
+  };
+  // View: 2D (the painted renderer) or 3D (Three.js, view3d/). Remembered on this computer (localStorage.airshipView); switches at once, the game carries on.
+  const viewLabel = () => {
+    const is3d = !!(window.viewIs3D && window.viewIs3D());
+    $('mView').textContent = 'View: ' + (is3d ? '3D' : '2D');
+    const note = window.view3dNote || '';
+    $('mViewNote').textContent = note;
+    $('mViewNote').style.display = note ? 'block' : 'none';
   };
   const show = (on) => {
     open = on;
@@ -85,6 +94,12 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
     if (!perf) return;
     perf.cycleMode();
     detailLabel();
+  };
+  $('mView').onclick = async () => {
+    if (!window.setView) return;
+    $('mView').textContent = 'View: ...';
+    await window.setView(window.viewIs3D && window.viewIs3D() ? '2d' : '3d');
+    viewLabel();
   };
   $('mSound').onclick = () => {
     $('sound').click();
