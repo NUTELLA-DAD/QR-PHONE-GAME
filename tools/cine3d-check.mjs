@@ -114,7 +114,7 @@ try {
     clean('come', r); show('come', r.data);
     const t = r.data && r.data.turn;
     if (t) {
-      if (!(t.peakAz > 0.2 && t.peakAz <= 0.2601)) fail('come: the dolly peaked at ' + t.peakAz + ' rad (wanted 0.2 .. 0.26)');
+      if (!(t.peakAz > 0.13 && t.peakAz <= 0.1701)) fail('come: the dolly peaked at ' + t.peakAz + ' rad (wanted 0.13 .. 0.17: A1 made the come-about yaw 0.17)');
       if (!(t.minAz >= -1e-9)) fail('come: the dolly swung past zero (' + t.minAz + '): not critically damped');
       if (!(t.maxRoll < 1e-6)) fail('come: the camera rolled (' + t.maxRoll + ')');
       if (!t.settled || t.after.active || !(t.after.align < 1)) fail('come: after the turn the camera is not the plain lens again ' + JSON.stringify(t.after));

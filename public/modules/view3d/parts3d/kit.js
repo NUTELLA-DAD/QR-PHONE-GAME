@@ -9,7 +9,7 @@
 //             caller hide a side by changing the draw range, so one mesh and one ink shell draw the whole static ship. extractPart(assembled, key) copies one part's triangles out as its own
 //             Group (WP5: the wreckage of a part that broke off). Dynamic bits (guns, props, wheels, bags) are built with buildGroup() into groups of their own.
 // Nothing here wobbles: it is all rigid geometry.
-import { THREE, G, gradientMap, rimify, look, styled, setOutline, INK } from '../style.js';
+import { THREE, G, gradientMap, rimify, look, styled, setOutline, INK, INK_GLSL, inkUniforms } from '../style.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { getTrimSheet, TRIM, uvRect } from '../textures.js';
 import { config } from '../../../config.js';
@@ -30,8 +30,8 @@ const _c = new THREE.Color();
 // Each ship has its own material instances (its own uHide); the compiled programs are shared.
 export const inkOn = { value: 1 }; // (the look's "outlines" switch; shipMesh updates it every frame)
 const inkColor = { value: new THREE.Color(INK) };
-const SHELL_VERT_COMMON = '#include <common>\nattribute vec3 onormal; attribute float aShell; attribute float aLayer; uniform float uHide; varying float vShell;';
-const SHELL_VERT_BEGIN = 'vec3 transformed = vec3( position ) + onormal * aShell; vShell = aShell;';
+const SHELL_VERT_COMMON = '#include <common>\nattribute vec3 onormal; attribute float aShell; attribute float aLayer; uniform float uHide; varying float vShell;\n' + INK_GLSL; // (A1: inkPush = the screen-constant ink)
+const SHELL_VERT_BEGIN = 'vec3 transformed = vec3( position ) + inkPush( onormal ) * aShell; vShell = aShell;';
 const SHELL_VERT_PROJECT = '#include <project_vertex>\n  if ( aLayer * uHide > 0.5 ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );';
 // WP5 SCARS: the holes parts left in the hull. Up to 8 rectangles (content coordinates x0 y0 x1 y1, uScar / uScarN, one set per ship's materials) are cut out of the hull's two WALLS (aLayer is not 0) with a ragged
 // edge that wanders by a hash of the position (steady: nothing moves), and the plank next to the edge is charred. Bags, rigging and everything in the 'main' layer are not touched (the 2D scar only carves the hull too).
@@ -124,7 +124,7 @@ const DMG_TINT = `{
     }
   }`;
 function patchShell(sh, uHide, ink, scar) {
-  sh.uniforms.uHide = uHide;
+  sh.uniforms.uHide = uHide; inkUniforms(sh);
   sh.uniforms.uScar = scar.uScar;
   sh.uniforms.uScarN = scar.uScarN; sh.uniforms.uCarveA = scar.uCarveA; sh.uniforms.uCarveB = scar.uCarveB; sh.uniforms.uCarveN = scar.uCarveN;
   sh.uniforms.uDmg = scar.uDmg;
@@ -479,7 +479,8 @@ export function assemble(entries, mats) {
   };
   out.setCarves = (list) => { out.carves = list || []; applyCarves(); };
   // camSide >= 0: the camera is on the ship's +Z side, so the +Z wall (the 'pos' layer) is hidden; otherwise the -Z wall is. (The shader does it: uHide = the layer to hide.)
-  out.setSide = (camSide) => { const sd = camSide >= 0 ? 1 : -1; const changed = sd !== out.side; out.side = sd; m.uHide.value = sd; if (changed) applyCarves(); };
+  // A1: both = show BOTH walls (the middle of a COME ABOUT: end-on the hull is a closed box, no black hole); the side (ladders, carves) is still the camera's
+  out.setSide = (camSide, both) => { const sd = camSide >= 0 ? 1 : -1; const changed = sd !== out.side; out.side = sd; m.uHide.value = both ? 0 : sd; if (changed) applyCarves(); };
   out.setSide(1);
   // WP5: one part's triangles as a Group of their own (same coordinates as the ship's content group), ready to be detached into a physics body. It never hides a wall.
   out.extract = (key) => {

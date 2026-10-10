@@ -123,7 +123,7 @@ export function creatureInk() {
   m.onBeforeCompile = (sh, r) => {
     outlineMat.onBeforeCompile(sh, r);
     Object.assign(sh.uniforms, coilFade);
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCW;').replace('vec3 transformed = position + onormal;', 'vec3 transformed = position + onormal; vCW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCW;').replace('vec3 transformed = position + inkPush( onormal );', 'vec3 transformed = position + inkPush( onormal ); vCW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vCW; uniform vec4 uCoilBox; uniform float uCoilZ;').replace('void main() {', 'void main() {\n  ' + COIL_HOLE);
   };
   m.customProgramCacheKey = () => 'ink-outline-coil';

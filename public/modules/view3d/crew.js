@@ -7,7 +7,7 @@
 //
 // NO WOBBLE (3D.md section 1): limbs take their angles from crewPose.js, which is only asked again when the 8 fps key number changes (held, then snapped); the figure's position is the simulation's
 // own and interpolates smoothly; a turn is two keys (profile -> towards the camera -> profile); nothing here is a function of the time except the key number.
-import { THREE, look, gradientMap, rimify, INK } from './style.js';
+import { THREE, look, gradientMap, rimify, INK, INK_GLSL, inkUniforms } from './style.js';
 import { NB, NTINT, B, R, kindOf, BULK, rolesFor, furOf, bodyParts, headParts, tailParts, scarfParts, itemParts, heartParts, markParts, chuteParts, packParts, ropeParts, hookParts, swooshParts, CHEST_ITEMS } from './crewParts.js';
 import { computePose, newPose, stepKey, heartsOf, MELEE } from './crewPose.js';
 import { config } from '../../config.js';
@@ -34,7 +34,8 @@ function skinPatch(material, key, mode) { // mode 'color' (toon / plain lit: rol
   material.onBeforeCompile = (sh, r) => {
     if (prev) prev(sh, r);
     sh.uniforms.uBones = U.uBones;
-    let v = sh.vertexShader.replace('#include <common>', '#include <common>\n' + GLSL_HEAD + (mode === 'ink' ? 'attribute vec3 onormal;\n' : ''));
+    if (mode === 'ink') inkUniforms(sh);
+    let v = sh.vertexShader.replace('#include <common>', '#include <common>\n' + GLSL_HEAD + (mode === 'ink' ? 'attribute vec3 onormal;\n' + INK_GLSL + '\n' : ''));
     if (mode === 'color') {
       v = v.replace('#include <color_vertex>', `#include <color_vertex>
         mat4 crewM = crewBone( aBone );
@@ -43,7 +44,7 @@ function skinPatch(material, key, mode) { // mode 'color' (toon / plain lit: rol
         .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = mat3( crewM ) * normal;')
         .replace('#include <begin_vertex>', 'vec3 transformed = ( crewM * vec4( position, 1.0 ) ).xyz;');
     } else if (mode === 'ink') {
-      v = v.replace('#include <begin_vertex>', 'mat4 crewM = crewBone( aBone );\n vec3 transformed = ( crewM * vec4( position + onormal, 1.0 ) ).xyz;');
+      v = v.replace('#include <begin_vertex>', 'mat4 crewM = crewBone( aBone );\n vec3 transformed = ( crewM * vec4( position + inkPush( onormal ), 1.0 ) ).xyz;');
     } else {
       v = v.replace('#include <begin_vertex>', 'mat4 crewM = crewBone( aBone );\n vec3 transformed = ( crewM * vec4( position, 1.0 ) ).xyz;');
     }

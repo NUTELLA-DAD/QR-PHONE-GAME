@@ -23,13 +23,16 @@ export const look = { toon: true, outlines: true, shadows: true, low: false, blo
 
 // Shared shader numbers (one object, read by every patched material, so changing them needs no recompile): the toon rim light, and what the painted backdrops need to survive tone mapping.
 export const fx = {
-  uRimColor: { value: new THREE.Color('#ffd9a8') }, uRimAmt: { value: 0.16 }, uRimEdge: { value: 0.72 }, uRimDir: { value: new THREE.Vector3(-0.43, 0.66, 0.59) },
+  uRimColor: { value: new THREE.Color('#ffd9a8') }, uRimAmt: { value: 0.22 }, uRimEdge: { value: 0.72 }, uRimDir: { value: new THREE.Vector3(-0.43, 0.66, 0.59) },
   uFloor: { value: new THREE.Color(0, 0, 0) }, // (WP3: the dark-blue ambient floor of the rock in a dark place, lights.js sets it: a little light the rock keeps whatever its own colour)
   // WP10 LIT TARGETS: up to 8 hostile things in a manned searchlight beam, each a view-space point and a radius (xyz, w); a toon fragment inside one gets a warm rim (rimify below). beams.js fills them every frame.
   uLitN: { value: 0 }, uLit: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uLitColor: { value: new THREE.Color('#ffe2a0') }, uLitRim: { value: 0.9 }, uLitFill: { value: 0.16 },
   // WP10 BEAM LIGHT: what a searchlight lights is what its CONE covers on the screen, exactly as in the 2D game (a rock face, the cave picture, a plane, whatever is in the cone). Up to 4 lamps; uBeamA = (apex x, apex y,
   // direction x, direction y) and uBeamB = (tan of the half angle, length, strength, 0), all in the gameplay plane (view space, so a fragment at another depth is projected onto it first: uBeamD = the camera's distance to that plane).
   uBeamN: { value: 0 }, uBeamA: { value: Array.from({ length: 4 }, () => new THREE.Vector4(0, 0, 1, 0)) }, uBeamB: { value: Array.from({ length: 4 }, () => new THREE.Vector4(0.25, 1000, 0, 0)) }, uBeamColor: { value: new THREE.Color('#ffe9b8') }, uBeamD: { value: 3000 },
+  // A1 SCREEN-CONSTANT INK: every ink shell is pushed out by its own width times uInkScale (index.js sets it once a frame: clamp(D / REF, MIN, MAX), D = the camera's distance), and never less than uInkMin
+  // world units (MIN_PX pixels at 1080p at the plane) unless that would be more than MAX times its own width (tiny parts do not bloat). Defaults (1, 0) = the old fixed world-unit ink (the build page, the dev pages).
+  uInkScale: { value: 1 }, uInkMin: { value: 0 }, uInkMax: { value: 3 },
   uUntone: { value: 0 }, uExposure: { value: 1 }, // (post.js sets uUntone to 1 while the composer tone-maps the picture: the unlit painted planes then undo it so they stay exactly as painted)
 };
 
@@ -106,28 +109,60 @@ export const glow = (hex, k = 3) => new THREE.Color(hex).multiplyScalar(k);
 export function glowMat(hex, k = 3, extra = {}) { const m = new THREE.MeshBasicMaterial({ ...extra }); m.color.copy(glow(hex, k)); m.userData.glow = k; return m; }
 
 // ---- materials ---------------------------------------------------------------------------------------------------------------------------------
-function makeGradient(steps) {
-  const data = new Uint8Array(steps);
-  for (let i = 0; i < steps; i++) data[i] = Math.round(255 * (0.6 + (0.4 * i) / (steps - 1))); // 153 .. 255: soft, faded shadows
-  const t = new THREE.DataTexture(data, steps, 1, THREE.RedFormat);
+// A1 INK AND SHADE: the gradient is 2 REAL steps (a shadow side at about half the light, the terminator where the surface turns away from the lamp: dot(N, L) = 0). The texture is 6 texels wide so that the same
+// texture can also be 3 steps (Ember and Fungal, lit from below: toonSteps below rewrites its texels, no material changes): [s s s 1 1 1] or [s s m m 1 1]. The shadow tint comes from the colour grade's LUT.
+const GRAD_W = 6;
+function gradientData(steps, shadow, mid, out) {
+  const s = Math.max(0, Math.min(1, shadow)), m = Math.max(s, Math.min(1, mid));
+  const v = steps >= 3 ? [s, s, m, m, 1, 1] : [s, s, s, 1, 1, 1];
+  for (let i = 0; i < GRAD_W; i++) out[i] = Math.round(255 * v[i]);
+  return out;
+}
+function makeGradient() {
+  const T = (config.LOOK3D && config.LOOK3D.TOON) || {};
+  const t = new THREE.DataTexture(gradientData(T.STEPS || 2, T.SHADOW ?? 0.5, T.MID ?? 0.8, new Uint8Array(GRAD_W)), GRAD_W, 1, THREE.RedFormat);
   t.minFilter = t.magFilter = THREE.NearestFilter;
   t.generateMipmaps = false;
   t.needsUpdate = true;
   return t;
 }
-export const gradientMap = makeGradient(3);
+export const gradientMap = makeGradient();
+let _gradKey = '';
+// An environment names its own gradient (config.LOOK3D.<env>.toon = { steps, shadow, mid }); lights.js calls this when the environment changes (a tiny texture upload, only when the numbers change).
+export function toonSteps(over) {
+  const T = { ...((config.LOOK3D && config.LOOK3D.TOON) || {}), ...(over || {}) };
+  const steps = T.steps || T.STEPS || 2, shadow = T.shadow ?? T.SHADOW ?? 0.5, mid = T.mid ?? T.MID ?? 0.8, key = steps + ',' + shadow + ',' + mid;
+  if (key === _gradKey) return;
+  _gradKey = key;
+  gradientData(steps, shadow, mid, gradientMap.image.data);
+  gradientMap.needsUpdate = true;
+}
 
 export const toonVC = rimify(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap }));
 export const plainVC = new THREE.MeshLambertMaterial({ vertexColors: true }); // (the dev page's "Plain lit" comparison only: no PBR Standard material anywhere)
 toonVC.name = 'toonVC';
 plainVC.name = 'plainVC';
 
+// A1: the screen-constant ink. `inkPush( onormal )` = the outline vector (its length is the piece's width in world units) scaled by uInkScale, raised to at least uInkMin world units, and never more than uInkMax times
+// its own width. Every ink patch (this file, parts3d/kit.js, crew.js, creatureKit.js, terrain.js) uses it, so the outline keeps its thickness on the screen at any zoom.
+export const INK_GLSL = 'uniform float uInkScale; uniform float uInkMin; uniform float uInkMax;\nvec3 inkPush( vec3 on ) { float w = length( on ); if ( w < 1e-4 ) return vec3( 0.0 ); float k = min( max( uInkScale, uInkMin / w ), max( uInkMax, uInkScale ) ); return on * ( 1.0 + ( k - 1.0 ) * ( 1.0 - smoothstep( 6.0, 14.0, w ) ) ); }'; // (a line already bold in world units, the Kraken\'s 14 and up, keeps its width: it is the thin ink of ships, crew and small things that needs the help)
+// Once a frame (index.js; the porthole sets its own around its pass): D = the camera's distance to the gameplay plane, visH = the world height the plane shows (for the pixel size at 1080p).
+export function setInkFor(D, visH) {
+  const I = (config.LOOK3D && config.LOOK3D.INK) || {}, lo = Number(I.MIN) || 0.8, hi = Math.max(lo, Number(I.MAX) || 3), ref = Math.max(1, Number(I.REF) || 2700);
+  const d = Number.isFinite(D) && D > 0 ? D : ref, vh = Number.isFinite(visH) && visH > 0 ? visH : 2 * d * 0.26795;
+  fx.uInkScale.value = Math.max(lo, Math.min(hi, d / ref));
+  fx.uInkMin.value = Math.max(0, Number(I.MIN_PX == null ? 1.5 : I.MIN_PX)) * vh / 1080;
+  fx.uInkMax.value = hi;
+}
+export const inkUniforms = (sh) => { sh.uniforms.uInkScale = fx.uInkScale; sh.uniforms.uInkMin = fx.uInkMin; sh.uniforms.uInkMax = fx.uInkMax; };
+
 // The ink pass: back faces only, vertices pushed out along `onormal` (already scaled by the piece's outline width).
 export const outlineMat = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide });
 outlineMat.onBeforeCompile = (sh) => {
+  inkUniforms(sh);
   sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', '#include <common>\nattribute vec3 onormal;')
-    .replace('#include <begin_vertex>', 'vec3 transformed = position + onormal;');
+    .replace('#include <common>', '#include <common>\nattribute vec3 onormal;\n' + INK_GLSL)
+    .replace('#include <begin_vertex>', 'vec3 transformed = position + inkPush( onormal );');
 };
 outlineMat.customProgramCacheKey = () => 'ink-outline';
 
