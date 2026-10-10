@@ -13,7 +13,7 @@ import { createWorld, TOD } from './world.js';
 import { createTerrain } from './terrain.js';
 import { buildShipModel } from './shipMesh.js';
 import { createCrewLayer } from './crew.js';
-import { createKrakenView } from './kraken.js';
+import { createCreatureView } from './creature.js';
 import { createFlyers } from './flyers.js';
 import { createScenery } from './scenery.js';
 import { createVfx } from './vfx.js';
@@ -80,7 +80,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   scene.add(worldRoot);
   const world = createWorld(scene, renderer);
   const terrain = createTerrain(worldRoot);
-  const kraken = createKrakenView(worldRoot);
+  const kraken = createCreatureView(worldRoot);
   const flyers = createFlyers(worldRoot, state);
   const scenery = createScenery(worldRoot, state);
   let controls = null;
@@ -91,7 +91,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     controls.maxDistance = 30000;
   }
   const post = createPost(renderer, scene, camera);
-  const V = { renderer, scene, camera, world, terrain, kraken, controls, post, tier: TIERS.high, models: null, look, lost: false, errors: 0, lastErr: '', frames: 0, lastLog: '' };
+  const V = { S, renderer, scene, camera, world, terrain, kraken, controls, post, tier: TIERS.high, models: null, look, lost: false, errors: 0, lastErr: '', frames: 0, lastLog: '' };
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); V.lost = true; });
 
   // ---- size, detail and quality tier -------------------------------------------------------------------------------------------------------------------------------------
@@ -167,6 +167,11 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     destruction.hooks.smoke = (x, y, z, o = {}) => P.burst('smoke', x, y, z, 1, { size: (o.r || 22) * 2, life: o.life || 1.4, color: o.color, up: o.rise == null ? 36 : o.rise });
     destruction.hooks.spark = (x, y, z, o = {}) => P.burst('spark', x, y, z, o.n || 3, {});
   }
+  if (vfx && vfx.P) { // WP8: a chunk of a severed limb that hits the sea throws spray too (the splash ring is still the sea's own)
+    const P = vfx.P;
+    destruction.hooks.splash = (x, y, size) => { world.splashAt(x, -y, size, 40); P.burst('drop', x, y, 40, Math.round(4 + size * 0.05), { dir: Math.PI / 2, spread: 0.7, speed: [120, 380], size: [8, 16], up: [40, 140], area: size * 0.2 }); };
+  }
+  kraken.link({ world, vfx, destruction, models, camera }); // (WP8: the creature view draws its water effects with the particles and its severed limbs as wreckage bodies)
   crew.vfx = vfx; // (a crewman fired from the crew cannon trails smoke)
   const modelFor = (sh) => {
     const ver = sh.layout.version;
@@ -277,6 +282,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       const sh = state.ships[0], c = state.creature;
       v = { ...v, cx: (sh.pose.x + sh.layout.refPoint.x + c.x) / 2, cy: (sh.pose.y + sh.layout.refPoint.y + c.y) / 2 };
     }
+    if (S.focus && state.creature) { const c = state.creature; v = { ...v, cx: c.x + (S.focus.dx || 0), cy: c.y + (S.focus.dy || 0) }; } // (dev / screenshots: look at the creature; settings.focus = { dx, dy } in game pixels)
     const orbit = !!(controls && S.orbit);
     const info = placeCamera(camera, v, w, h, { zoom: Number(S.zoom) || 1, dy: S.lift || 0, skipPlace: orbit });
     camTarget.copy(info.target);
@@ -349,7 +355,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     const main = state.ships[0];
     try { flyers.update(t, main ? main.pose.vx || 0 : 0); } catch (e) { logOnce('flyers', e); }
     try { scenery.update(camTarget.x, cam.visW / 2); } catch (e) { logOnce('scenery', e); }
-    kraken.update(state.creature, world.night);
+    const seaNow = env === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : null;
+    try { kraken.update(state.creature, world.night, dt, t, { state, sea: seaNow, tier }); } catch (e) { logOnce('creature', e); }
     if (vfx) { // the particles (after the ships and the Kraken are placed: the emitters read their world positions)
       const v0 = performance.now();
       try {

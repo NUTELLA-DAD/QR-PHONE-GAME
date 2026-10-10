@@ -328,6 +328,22 @@ export function createDestruction({ parent, state, models, terrain, world, inRoc
       }
     },
     setSea(seaY) { sea = seaY; },
+    // WP8: a body somebody else made (the Kraken's severed limbs, view3d/creature.js). spec = { holder (a Group at the body's start pose, its mesh inside), boxes (the physics boxes in the body's
+    // frame, y up), rel (density against water: about 0.9 floats), mat, size, vel: [x, y], spin, life (s) }. It falls, bounces, splashes and floats like a chunk; returns the piece (pass it to
+    // removeExternal), or null when the cap is full. The holder's geometry is disposed when it goes.
+    addExternal(spec) {
+      if (chunks.length >= K().CHUNKS.CAP) return null;
+      const holder = spec.holder;
+      group.add(holder);
+      const piece = { kind: 'chunk', holder, entry: null, boxes: spec.boxes, rel: spec.rel || 0.9, mat: spec.mat || 'wood', size: spec.size || 100, vel: spec.vel, spin: spec.spin || 0, id: 0, age: 0, life: spec.life || 4, burn: false, shipIndex: -1, smokeT: 0, rng: mulberry(7), gone: -1, fake: { vx: spec.vel[0], vy: spec.vel[1], rz: 0 }, baseQuat: holder.quaternion.clone(), shipId: null, external: true };
+      chunks.push(piece);
+      pieces.push(piece);
+      stats.chunks++;
+      load();
+      if (physics) toBody(piece);
+      return piece;
+    },
+    removeExternal(piece) { const i = pieces.indexOf(piece); if (i >= 0) removePiece(i); },
     // dt = seconds of this frame. Steps the physics (the ships' hulls put where the models are), moves every piece's mesh, smokes, fades and removes what is done.
     update(dt) {
       if (!pieces.length && !puffs.length) { if (awake && (idleFor += dt) > 5) sleep(); return; }
