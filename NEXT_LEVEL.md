@@ -218,6 +218,9 @@ How it's built (B.4): two Ships in ONE World (the game was changed to understand
 
 V.0, V.1a and V.2 can start alongside Phase S.
 
+### Phase B - Giant boss creatures (planned with Fable)
+Monsters 3-5 times the size of the ship, one per sky: Kraken, Cinder Drake, Thunderbird, Rime Wyrm, Mycelial Mother, Void Eel, Island Titan. Each has several ways to win: sever its limbs, bomb its open mouth, tow it into rock, board it and strike its heart, or simply shoot it down. The Kraken is built first as the full vertical slice. Full plan: **[BOSSES.md](BOSSES.md)**.
+
 ### Phase 2 - Story and stickiness
 
 | # | Package | Size | Files |
