@@ -665,7 +665,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     st.ship.speed *= 1 - 0.8 * dt;
     if (cc.scrapeCd <= 0 && !st.ship.down) {
       cc.scrapeCd = K.SCRAPE_COOLDOWN;
-      sh.sim.impact(worst.sx, worst.sy, 1 + Math.min(2, worst.depth / 40));
+      sh.sim.impact(worst.sx, worst.sy, 1 + Math.min(2, worst.depth / 40), 1, 'rock'); // (the last two arguments only name the mark in the ship's hitLog, 3D)
       if (sh.main) {
         st.ev.warn = 1.5;
         st.ev.warnText = 'SCRAPING THE ROCKS!'; // (the TV's banner is about the main ship)
@@ -759,7 +759,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     }
     if (cc.scrapeCd <= 0 && !st.ship.down) {
       cc.scrapeCd = K.SCRAPE_COOLDOWN;
-      sh.sim.impact(worst.sx, worst.sy, 1 + Math.min(2, worst.depth / 40));
+      sh.sim.impact(worst.sx, worst.sy, 1 + Math.min(2, worst.depth / 40), 1, 'rock'); // (the last two arguments only name the mark in the ship's hitLog, 3D)
       if (sh.main) {
         st.ev.warn = 1.5;
         st.ev.warnText = 'SCRAPING THE ROCKS!';

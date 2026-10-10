@@ -62,7 +62,7 @@ function firstDiff(a, b, where = 'layout') {
   return null;
 }
 // Layout data as plain JSON (what the fixture holds); `version` is bookkeeping, not layout.
-const plain = (layout) => { const o = JSON.parse(JSON.stringify(layout)); delete o.version; return o; };
+const plain = (layout) => { const o = JSON.parse(JSON.stringify(layout)); delete o.version; delete o.partRects; return o; }; // (partRects: the 3D view's part boxes, WP5, derived data that tools/physics-check.mjs checks on its own)
 
 // The classic ship, two ways: generated from its parts, and as live in the game. Both must equal the frozen
 // fixture, and the keyed collections must keep their key order (the game iterates them in order).
@@ -2323,6 +2323,7 @@ async function checkLayouts() {
   report(hits.g === 2 && hits.g2 === 2 && plat0 === SHIP_LAYOUT.platforms && hits.multi === 0 && hits.mini === 0 && hits.bags === 1, 'the exported applyBuild / onLayoutChange are forwards to ship 0 (both listener styles fire, in place, nobody else notified)');
   const before0 = JSON.parse(globalBefore);
   delete before0.version;
+  delete before0.partRects; // (plain() leaves it out)
   report(firstDiff(plain(SHIP_LAYOUT), before0) === null, 'ship 0 is still the classic ship');
   for (const off of offs) off();
 
@@ -2415,6 +2416,8 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gas-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-breakoff') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'breakoff-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-physics') {
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'physics-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-crossship') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'crossship-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-hatch') {
@@ -2456,6 +2459,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-hatch | --check-breakoff | --check-health | --check-flame | --check-creature | --check-gen | --check-turn | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-hatch | --check-breakoff | --check-physics | --check-health | --check-flame | --check-creature | --check-gen | --check-turn | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

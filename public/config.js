@@ -943,6 +943,33 @@ export const config = {
       FIRE: 0.5, // share of pieces that burn (orange puffs) when they come from a blast
       MAX: 12, // pieces in the sky at once (the oldest goes first)
     },
+    // THE 3D WRECKAGE WORLD (view3d/physics.js, view3d/destruction.js; Rapier). Only the TV's 3D view uses these: the 2D game decides everything that counts, the 3D pieces just fall, bounce, float and sink for show.
+    // The world is in game pixels, so DEBRIS.GRAVITY above is its gravity. Pieces are capped at DEBRIS.MAX (the same pieces as the 2D list); the little chunks of a blast are extra, capped at CHUNKS.CAP.
+    PHYS: {
+      STEP: 1 / 60, // fixed physics step (s)
+      MAX_STEPS: 4, // most steps run for one frame (a slow frame does not spiral)
+      LENGTH_UNIT: 100, // Rapier's tolerances scale with this (a body is a few hundred px, not a metre)
+      DENSITY_SCALE: 1e-5, // body density per px^3, so a 200 x 150 x 120 px piece weighs a few dozen units
+      RESTITUTION: 0.22, // how much a piece bounces off rock and hull
+      FRICTION: 0.7,
+      LINEAR_DAMP: 0.04, // the air slows a piece a little (per second)
+      ANGULAR_DAMP: 0.25,
+      TILT_INERTIA: 1e9, // extra turning inertia about the two axes a piece should not turn about (it only turns about the camera axis, like the 2D piece)
+      TERRAIN_Z: 260, // the rock's collision walls stand this far either side of the gameplay plane (px), whatever depth the picture's rock has
+      OWN_DELAY: 0.5, // seconds before a piece can touch the ship it came off (it starts inside her outline) ...
+      OWN_WAIT: 2.5, // ... and then it waits until it is clear of her, at most this much longer (it would be shoved about inside her otherwise)
+      REL: { wood: 0.55, canvas: 0.4, iron: 2.6 }, // weight against the same volume of water: under 1 floats, over 1 sinks
+      WATER_LIN: 2.6, // extra drag per second at full submersion
+      WATER_ANG: 3.2,
+      SPLASH_SPEED: 70, // a piece entering the water faster than this (px/s) throws a splash ring
+      BUMP_SPEED: 90, // a knock of at least this much change of speed puffs dust and sparks
+      KICK: 240, // px/s the blast adds to a piece, away from the blast centre
+      FADE: 0.6, // seconds a piece shrinks away over when its 2D twin expires
+      BURY: 0.35, // a piece whose middle has been inside the rock this long (seconds) is removed (it started in it, or tunnelled): it must never fall through a mountain
+      CHUNKS: { MIN: 8, MAX: 20, SPEED: 420, SIZE_MIN: 12, SIZE_MAX: 34, CAP: 24, LIFE: 4.2 }, // a blast also throws this many plank and iron chunks (bodies of their own)
+      SCAR: { RIM: 15, COLOR: '#2a1d16' }, // the charred rim round a hole a part left: width (px) and colour
+      DECALS: { MAX: 64, LIFE: 0 }, // dents and scorch marks per ship (the oldest is overwritten); LIFE 0 = they stay until the ship is rebuilt
+    },
   },
   // Floating mines drifting toward the bow.
   MINES: {

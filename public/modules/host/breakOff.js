@@ -11,6 +11,7 @@
 //     cuts    the deck stretches that went: { id, y, a, b, x0, x1, whole } (ship coordinates; id is the deck as it was BEFORE, so crew standing there can be found)
 //     pieces  the debris: { clips: [{ x0, y0, x1, y1 }], box, ellipse? } - one per cluster of holes (and one per lost bag)
 //     names   the stations, guns and engines that went (by name)
+//     sigs    the partRects signatures (shipBuild.js) of what is LEFT: shipSim.js breakOff diffs them with the old layout's to tell the 3D view which parts are gone
 //   rebuildPrice(plan)             what mending it costs at a sky-dock
 //   makeRng(seed)                  a small seeded random source: the break-off rolls use their own, so a run with no break-off draws exactly the random numbers it always did
 // A ship is never left with no deck or no gasbag (she keeps what the S.5e minimum ship needs). Anything the cut leaves hanging with no way to it falls too.
@@ -277,7 +278,7 @@ export function planBreak(parts, spec, rng = Math.random) {
   const b0 = budgets(parts), b1 = budgets(out);
   const len = (list) => list.reduce((n, q) => n + q.x1 - q.x0, 0);
   const labels = rep.labels;
-  return { ok: true, hint: '', parts: out, labels, summary: summarize(labels), cuts: rep.cuts, pieces, scars, bags: bagsGone.map((b) => L0.gasbags.indexOf(b)), names: rep.names, mass: Math.max(0, b0.mass - b1.mass), lift: Math.max(0, b0.lift - b1.lift), deckPx: Math.max(0, len(L0.platforms) - len(L1.platforms)) };
+  return { ok: true, hint: '', parts: out, labels, summary: summarize(labels), cuts: rep.cuts, pieces, scars, bags: bagsGone.map((b) => L0.gasbags.indexOf(b)), names: rep.names, sigs: (L1.partRects || []).map((r) => r.sig).filter((s) => s != null), mass: Math.max(0, b0.mass - b1.mass), lift: Math.max(0, b0.lift - b1.lift), deckPx: Math.max(0, len(L0.platforms) - len(L1.platforms)) };
 }
 
 // Salvage a sky-dock asks to mend what broke off (config.BREAKOFF.REBUILD), from the weight, the gasbag lift and the deck she lost.

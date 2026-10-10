@@ -71,6 +71,8 @@ export const SHIP_KEYS = [
   'cannons', 'loads', 'rackStock', 'hatches', 'hatchStats',
   // parts breaking off (S.5i): the counters of what broke, and how much lift she lost with a gasbag (flight.js uses it as extra weight)
   'breakStats', 'liftDeficit',
+  // 3D destruction (WP5): data for the TV's 3D view, nothing in the simulation reads them. hitLog = the last 64 blows on her { n, t, x, y, power, partId, kind }; breakEvents = break-offs the view has not taken yet
+  'hitLog', 'breakEvents',
   // crew health (health.js): hearts lost by cause, hearts healed
   'healthStats',
   // the environment's hazards that ride on her (B.3: every ship runs her own copy of the rules, shipSim.js: ice, thermals, spores, oxygen, storm rods, the sea) and what they put on her
@@ -99,6 +101,7 @@ function shipInit(layout) {
     GUNS: newGuns(layout),
     ventOpen: layout.vents.map(() => false),
     gasHoles: [], breaches: [], fires: [], boarders: [], bombs: [],
+    hitLog: [], breakEvents: [],
     wreck: null,
     bombBay: { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null },
     gasValve: { input: 0, auto: false },

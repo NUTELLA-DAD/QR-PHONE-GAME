@@ -32,39 +32,53 @@ const inkColor = { value: new THREE.Color(INK) };
 const SHELL_VERT_COMMON = '#include <common>\nattribute vec3 onormal; attribute float aShell; attribute float aLayer; uniform float uHide; varying float vShell;';
 const SHELL_VERT_BEGIN = 'vec3 transformed = vec3( position ) + onormal * aShell; vShell = aShell;';
 const SHELL_VERT_PROJECT = '#include <project_vertex>\n  if ( aLayer * uHide > 0.5 ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );';
-function patchShell(sh, uHide, ink) {
+// WP5 SCARS: the holes parts left in the hull. Up to 8 rectangles (content coordinates x0 y0 x1 y1, uScar / uScarN, one set per ship's materials) are cut out of the hull's two WALLS (aLayer is not 0) with a ragged
+// edge that wanders by a hash of the position (steady: nothing moves), and the plank next to the edge is charred. Bags, rigging and everything in the 'main' layer are not touched (the 2D scar only carves the hull too).
+const SCAR_VERT_COMMON = 'varying vec2 vScarP; varying float vWall;';
+const SCAR_VERT_BEGIN = 'vScarP = position.xy; vWall = abs( aLayer );';
+const SCAR_FRAG = `uniform vec4 uScar[8]; uniform float uScarN; varying vec2 vScarP; varying float vWall; float scarRim = 0.0;
+float scarD( vec2 q, vec4 r, float salt ) { vec2 c = ( r.xy + r.zw ) * 0.5, h = ( r.zw - r.xy ) * 0.5; float n = fract( sin( dot( floor( q / 18.0 ), vec2( 12.9898, 78.233 ) ) + salt ) * 43758.5453 ); vec2 d = abs( q - c ) - h + n * 14.0; return max( d.x, d.y ); }
+void scarTest() { if ( vWall < 0.5 ) return; for ( int i = 0; i < 8; i ++ ) { if ( float( i ) >= uScarN ) break; float d = scarD( vScarP, uScar[ i ], float( i ) ); if ( d < 0.0 ) discard; scarRim = max( scarRim, 1.0 - d / 16.0 ); } }`;
+function patchShell(sh, uHide, ink, scar) {
   sh.uniforms.uHide = uHide;
-  sh.vertexShader = sh.vertexShader.replace('#include <common>', SHELL_VERT_COMMON).replace('#include <begin_vertex>', SHELL_VERT_BEGIN).replace('#include <project_vertex>', SHELL_VERT_PROJECT);
+  sh.uniforms.uScar = scar.uScar;
+  sh.uniforms.uScarN = scar.uScarN;
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', SHELL_VERT_COMMON + '\n' + SCAR_VERT_COMMON).replace('#include <begin_vertex>', SHELL_VERT_BEGIN + '\n' + SCAR_VERT_BEGIN).replace('#include <project_vertex>', SHELL_VERT_PROJECT);
   if (ink) { sh.uniforms.uInkOn = inkOn; sh.uniforms.uInk = inkColor; }
-  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vShell;' + (ink ? ' uniform float uInkOn; uniform vec3 uInk;' : ''))
-    .replace('void main() {', 'void main() {\n  ' + (ink ? 'if ( vShell > 0.5 ) { if ( uInkOn < 0.5 || gl_FrontFacing ) discard; } else if ( ! gl_FrontFacing ) discard;' : 'if ( vShell > 0.5 || ! gl_FrontFacing ) discard;'));
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vShell;' + (ink ? ' uniform float uInkOn; uniform vec3 uInk;' : '') + '\n' + SCAR_FRAG)
+    .replace('void main() {', 'void main() {\n  ' + (ink ? 'if ( vShell > 0.5 ) { if ( uInkOn < 0.5 || gl_FrontFacing ) discard; } else if ( ! gl_FrontFacing ) discard;' : 'if ( vShell > 0.5 || ! gl_FrontFacing ) discard;') + '\n  scarTest();')
+    .replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.16, 0.10, 0.07 ), clamp( scarRim, 0.0, 1.0 ) * 0.85 );');
   if (ink) sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  if ( vShell > 0.5 ) gl_FragColor.rgb = uInk;');
 }
 export function makeTrimMaterials() {
   const sheet = getTrimSheet();
   const uHide = { value: 0 };
+  const scar = { uScar: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uScarN: { value: 0 } }; // (WP5: the holes broken-off parts left, see patchShell)
   const toon = rimify(new THREE.MeshToonMaterial({ vertexColors: true, map: sheet.texture, gradientMap, side: THREE.DoubleSide }));
   const rim = toon.onBeforeCompile;
   toon.onBeforeCompile = (sh, r) => { // (the painted sheet is a little darker than white on average: a small gain keeps the hull colours where the flat ones were)
     rim(sh, r);
     sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb *= 1.14;');
-    patchShell(sh, uHide, true);
+    patchShell(sh, uHide, true, scar);
   };
   toon.customProgramCacheKey = () => 'toon-rim-trim-ink';
   toon.shadowSide = THREE.BackSide;
   toon.name = 'trimToon';
   const plain = new THREE.MeshLambertMaterial({ vertexColors: true, map: sheet.texture, side: THREE.DoubleSide });
-  plain.onBeforeCompile = (sh) => patchShell(sh, uHide, false);
+  plain.onBeforeCompile = (sh) => patchShell(sh, uHide, false, scar);
   plain.customProgramCacheKey = () => 'lambert-trim';
   plain.shadowSide = THREE.BackSide;
   plain.name = 'trimPlain';
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depth.onBeforeCompile = (sh) => {
     sh.uniforms.uHide = uHide;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aShell; attribute float aLayer; uniform float uHide;').replace('#include <project_vertex>', '#include <project_vertex>\n  if ( aShell > 0.5 || aLayer * uHide > 0.5 ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );');
+    sh.uniforms.uScar = scar.uScar;
+    sh.uniforms.uScarN = scar.uScarN;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aShell; attribute float aLayer; uniform float uHide;\n' + SCAR_VERT_COMMON).replace('#include <begin_vertex>', '#include <begin_vertex>\n' + SCAR_VERT_BEGIN).replace('#include <project_vertex>', '#include <project_vertex>\n  if ( aShell > 0.5 || aLayer * uHide > 0.5 ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + SCAR_FRAG).replace('void main() {', 'void main() {\n  scarTest();'); // (the hole casts no shadow)
   };
   depth.customProgramCacheKey = () => 'depth-trim';
-  return { toon, plain, depth, uHide, sheet };
+  return { toon, plain, depth, uHide, sheet, ...scar };
 }
 let sharedMats = null;
 export const sharedTrimMaterials = () => sharedMats || (sharedMats = makeTrimMaterials());
@@ -324,7 +338,7 @@ export function assemble(entries, mats) {
   const m = mats || sharedTrimMaterials();
   const group = new THREE.Group();
   const out = { group, ranges, geometry: null, layers: ends, tris: cursor / 3, side: 0, mats: m };
-  if (!list.length) { out.setSide = () => {}; out.extract = () => new THREE.Group(); return out; }
+  if (!list.length) { out.setSide = () => {}; out.extract = () => new THREE.Group(); out.extractClip = () => new THREE.Group(); return out; }
   const built = inkGeometry(list, [ends.negEnd, ends.mainEnd]);
   for (const g of list) g.dispose();
   const geometry = (out.geometry = built.geometry);
@@ -354,6 +368,60 @@ export function assemble(entries, mats) {
     const mm = inkMesh({ geometry: out2, n: total }, m, true, true);
     g.add(mm);
     g.userData.partKey = key;
+    return g;
+  };
+  // WP5: the part of the listed parts' triangles that lies inside the rectangles (content coordinates x0 y0 x1 y1), as a Group of its own, with every triangle that straddles an edge CUT at the edge. This
+  // is the piece of hull, deck and room walls a break-off takes along with the parts that stood on it. Both walls are kept (aLayer 0: nothing hidden). Returns an empty Group when nothing is inside.
+  out.extractClip = (keys, rects) => {
+    const g = new THREE.Group(), pos = geometry.attributes.position.array;
+    const NAMES = [['position', 3], ['normal', 3], ['color', 3], ['uv', 2], ['onormal', 3]], STRIDE = 14, acc = [];
+    const arrs = NAMES.map(([n]) => geometry.attributes[n].array);
+    const vert = (v) => { const o = []; NAMES.forEach(([n, s], k) => { for (let c = 0; c < s; c++) o.push(arrs[k][v * s + c]); }); return o; };
+    const lerpV = (a, b, t) => a.map((x, i) => x + (b[i] - x) * t);
+    const clipPoly = (poly, axis, lim, keepGreater) => { // Sutherland-Hodgman against one side of x = lim or y = lim
+      const res = [], n = poly.length;
+      for (let i = 0; i < n; i++) {
+        const a = poly[i], b = poly[(i + 1) % n], da = (a[axis] - lim) * (keepGreater ? 1 : -1), db = (b[axis] - lim) * (keepGreater ? 1 : -1);
+        if (da >= 0) res.push(a);
+        if ((da >= 0) !== (db >= 0)) res.push(lerpV(a, b, da / (da - db)));
+      }
+      return res;
+    };
+    for (const key of keys) {
+      for (const r of ranges[key] || []) {
+        for (let v = r.start; v < r.start + r.count; v += 3) {
+          const x0 = Math.min(pos[v * 3], pos[v * 3 + 3], pos[v * 3 + 6]), x1 = Math.max(pos[v * 3], pos[v * 3 + 3], pos[v * 3 + 6]);
+          const y0 = Math.min(pos[v * 3 + 1], pos[v * 3 + 4], pos[v * 3 + 7]), y1 = Math.max(pos[v * 3 + 1], pos[v * 3 + 4], pos[v * 3 + 7]);
+          for (const q of rects) {
+            if (x1 <= q.x0 || x0 >= q.x1 || y1 <= q.y0 || y0 >= q.y1) continue;
+            if (x0 >= q.x0 && x1 <= q.x1 && y0 >= q.y0 && y1 <= q.y1) { acc.push(vert(v), vert(v + 1), vert(v + 2)); break; }
+            let poly = [vert(v), vert(v + 1), vert(v + 2)];
+            poly = clipPoly(poly, 0, q.x0, true); if (poly.length >= 3) poly = clipPoly(poly, 0, q.x1, false);
+            if (poly.length >= 3) poly = clipPoly(poly, 1, q.y0, true); if (poly.length >= 3) poly = clipPoly(poly, 1, q.y1, false);
+            for (let k = 1; k + 1 < poly.length; k++) acc.push(poly[0], poly[k], poly[k + 1]);
+            break; // (a triangle belongs to the first rectangle it meets: the rectangles of one piece touch or overlap)
+          }
+        }
+      }
+    }
+    const total = acc.length;
+    if (!total) return g;
+    const out2 = new THREE.BufferGeometry(), fl = new Float32Array(total * 2 * STRIDE);
+    for (let c = 0; c < 2; c++) acc.forEach((vv, i) => fl.set(vv, (c * total + i) * STRIDE));
+    let off = 0;
+    for (const [name, size] of NAMES) {
+      const dst = new Float32Array(total * 2 * size);
+      for (let i = 0; i < total * 2; i++) for (let k = 0; k < size; k++) dst[i * size + k] = fl[i * STRIDE + off + k];
+      out2.setAttribute(name, new THREE.BufferAttribute(dst, size));
+      off += size;
+    }
+    const shell = new Float32Array(total * 2);
+    for (let i = total; i < total * 2; i++) shell[i] = 1;
+    out2.setAttribute('aShell', new THREE.BufferAttribute(shell, 1));
+    out2.setAttribute('aLayer', new THREE.BufferAttribute(new Float32Array(total * 2), 1));
+    out2.computeBoundingSphere();
+    g.add(inkMesh({ geometry: out2, n: total }, m, true, true));
+    g.userData.partKey = 'clip';
     return g;
   };
   return out;
