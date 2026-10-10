@@ -15,6 +15,7 @@ import { config } from '../../config.js';
 import { paintHeadAtlas, paintLimbSkin, creatureToon, makeUniforms, Tinter, coilFade } from './creatureKit.js';
 import { createTubeSet } from './creatureTube.js';
 import { buildKraken } from './creatureKraken.js';
+import { buildDrake, drakeTubeParts } from './creatureDrake.js';
 import { createFoamRings, createShadowDecal, createGripMarkers, createRopeSet } from './creatureFx.js';
 import { createWaterFx } from './creatureWater.js';
 
@@ -26,6 +27,7 @@ const FLASH = [2.4, 2.2, 2.2], DIM = [0.66, 0.72, 0.95], LIT = [1.28, 1.22, 1.2]
 // The kinds: what is special about each creature. A new creature adds one entry (palette, build -> the geometry, which part kinds are its limbs).
 export const KINDS = {
   kraken: { id: 'kraken', palette: () => config.CREATURE3D.KRAKEN, build: buildKraken, limbKind: 'tentacle' },
+  drake: { id: 'drake', palette: () => config.CREATURE3D.DRAKE, build: buildDrake, limbKind: 'wing', tubesOnly: true, limbsOf: drakeTubeParts }, // (C.6a: the placeholder: tapered capsules for every part; the sculpted Drake is a later task)
 };
 
 export function createCreatureView(parent) {
@@ -56,11 +58,11 @@ export function createCreatureView(parent) {
     headInk.userData.isOutline = dynInk.userData.isOutline = true;
     hg.add(headMesh, headInk, dynMesh, dynInk);
     root.add(hg);
-    const limbs = cr.parts.filter((p) => p.limb);
-    const defLimb = cr.def.parts.find((d) => d.chain);
-    const maxSegs = Math.max(2, defLimb ? defLimb.chain.length : 8);
+    const limbs = K.limbsOf ? K.limbsOf(cr) : cr.parts.filter((p) => p.limb);
+    const maxSegs = Math.max(2, ...cr.def.parts.filter((d) => d.chain).map((d) => d.chain.length), 2); // (the longest chain of any limb)
+    const tubeOpts = K.tubesOnly ? { rows: [], maxSuckers: 1 } : {}; // (no suckers on a dragon)
     const sides = low ? 8 : P.TENTACLE_SIDES || 12;
-    const tubes = createTubeSet({ nLimbs: limbs.length, maxSegs, sides, map: limbMap, uniforms: uniformsT, palette: P, ow: P.INK || 14 });
+    const tubes = createTubeSet({ nLimbs: limbs.length, maxSegs, sides, map: limbMap, uniforms: uniformsT, palette: P, ow: P.INK || 14, ...tubeOpts });
     root.add(tubes.mesh, tubes.inkMesh, tubes.suckers);
     const fxU = { uFoam: { value: new THREE.Color(P.FOAM ? P.FOAM.COLOR : '#f4fbfa') }, uLevel: { value: 1 }, uBand: { value: P.FOAM ? P.FOAM.BAND : 0.55 }, uAlpha: { value: P.FOAM ? P.FOAM.ALPHA : 0.92 }, uShadow: { value: new THREE.Color(P.SHADOW ? P.SHADOW.COLOR : '#0a1830') }, uShadowAlpha: { value: P.SHADOW ? P.SHADOW.ALPHA : 0.5 } };
     const foam = createFoamRings(parent, fxU), shadow = createShadowDecal(parent, fxU), markers = createGripMarkers(parent), ropes = createRopeSet(parent);
@@ -69,7 +71,7 @@ export function createCreatureView(parent) {
     plainOf(foam.mesh);
     const ranges = head.ranges, tint = new Tinter(head.geometry);
     rig = {
-      cr, kind: cr.kind, K, P, low, head, uniforms, uniformsT, headMap, limbMap, headMat, hg, headMesh, dynMesh, tubes, tint, limbs, fxU, foam, shadow, markers, ropes, ranges, bake: null, chunks: new Map(),
+      cr, kind: cr.kind, K, tubeOpts, P, low, head, uniforms, uniformsT, headMap, limbMap, headMat, hg, headMesh, dynMesh, tubes, tint, limbs, fxU, foam, shadow, markers, ropes, ranges, bake: null, chunks: new Map(),
       water: createWaterFx({ world: { splashAt: (...a) => (link.world ? link.world.splashAt(...a) : 0) }, getP: () => (link.vfx && link.vfx.P) || null }),
       lastY: null, speedY: 0, zbuf: new Float32Array(32), glow: [1, 1, 1, 1], lidKey: '', jawKey: '', heartKey: '', mantleX: null,
     };
@@ -138,7 +140,7 @@ export function createCreatureView(parent) {
     if (!rig) return null;
     const D = link.destruction, p = c.part, segs = p.segs, n = segs.length, P = rig.P;
     if (!n) return null;
-    if (!rig.bake) rig.bake = createTubeSet({ nLimbs: 1, maxSegs: Math.max(8, (rig.tubes.RB - 1) / rig.tubes.Q), sides: rig.low ? 8 : P.TENTACLE_SIDES || 12, map: rig.limbMap, uniforms: rig.uniformsT, palette: P, ow: P.INK || 14 });
+    if (!rig.bake) rig.bake = createTubeSet({ nLimbs: 1, maxSegs: Math.max(8, (rig.tubes.RB - 1) / rig.tubes.Q), sides: rig.low ? 8 : P.TENTACLE_SIDES || 12, map: rig.limbMap, uniforms: rig.uniformsT, palette: P, ow: P.INK || 14, ...rig.tubeOpts });
     // the boxes of the body: a row of cubes along each segment (the physics only has axis-aligned boxes in the body's frame)
     const boxes = [], pts = [];
     for (const s of segs) {

@@ -6,7 +6,7 @@
 //   hosts     (a) host.html loads with 0 console errors and 0 game errors: the lobby (NO ?view: 3D is the default), a flight with 8 bots, a dark cave, the Kraken's lair and Versus;
 //             (d) in those scenes at Medium: draw calls <= 150, triangles <= 450k, view JS <= 6 ms;  (e) V.alignError (the HUD against the 3D picture) is 0 px with cinematics off
 //   models    (b) model.fallbacks is empty for the classic ship, the Sparrow, the five minimum builds, the enemy gunship and 10 generated ships
-//   shots     (c) six seeded scenes against tools/fixtures/shots3d/*.png (mean abs diff < 2 %, no 64 x 64 block over 12 %); --snapshot --force writes the fixtures
+//   shots     (c) seven seeded scenes against tools/fixtures/shots3d/*.png (mean abs diff < 2 %, no 64 x 64 block over 12 %); --snapshot --force writes the fixtures
 //   tiers     the flight scene at High / Medium / Low: the numbers (printed), 0 errors
 //   fallback  (f) --gl swiftshader and no WebGL at all: the host comes up in 2D with 0 errors and never loads Three.js; the governor's step down to 2D (a toast, at a calm moment, never mid-fight)
 //   offline   (g) every page above runs with the network blocked for anything but localhost: 0 external requests, 0 failed loads; plus the phone page and the build page; a static scan for CDN links
@@ -283,7 +283,7 @@ try {
 
   // ---- shots: (c) the screenshot regression -------------------------------------------------------------------------------------------------------------------------------------
   if (want('shots')) {
-    console.log(snapshot ? 'shots: writing the fixtures' : 'shots: six seeded scenes against tools/fixtures/shots3d/');
+    console.log(snapshot ? 'shots: writing the fixtures' : 'shots: seven seeded scenes against tools/fixtures/shots3d/');
     // Everything that makes the scene is ONE synchronous call (no real-time frame can take a random number in the middle): the generator is re-seeded, the bots climb aboard, she casts off, the
     // simulation (frozen from the start, see SEED) is stepped by hand. The page's Math.random and Date.now were fixed from its first line (SEED), so the map is the same too.
     const BOOT = (steps, tail = '') => `(()=>{ window.__seed(11);
@@ -300,11 +300,13 @@ try {
       { name: 'flight', q: 'view=3d&env=skyisles&kind=open', setup: BOOT(420) },
       { name: 'cave', q: 'view=3d&env=skyisles&kind=network', setup: BOOT(420) },
       { name: 'kraken', q: 'view=3d&lair=1&creature=kraken', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(180);') },
+      { name: 'drake', q: 'view=3d&lair=ember&creature=drake', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(420);') }, // (C.6a: the Cinder Drake, the placeholder tubes, in the Ember Forge)
       { name: 'versus', q: 'view=3d&versus=1&bots=4', setup: FREEZE_ONLY(420) },
       { name: 'storm', q: 'view=3d&env=storm&kind=open', setup: BOOT(300, 'const st=game.state, w=st.weather; w.storm=1; w.gust=110; w.gusting=true; w.gustIn=0; st.env.gale=1; st.env.windDir=1; st.env.wind=300; w.flash=0;') },
     ];
     fs.mkdirSync(FIX, { recursive: true });
     for (const S of SCENES) {
+      if (arg('scene') && S.name !== arg('scene')) continue; // (--scene NAME: only that one, to write or check a single fixture)
       const P = await openPage(`${BASE}/host.html?${S.q}&tier=medium&cine=0`, { gl: GL, w: SHOT.w, h: SHOT.h, seed: true });
       await P.ev(S.setup);
       await P.ev(HOLD);

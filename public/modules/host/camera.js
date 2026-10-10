@@ -47,7 +47,7 @@ export function createWorldCamera() {
 
   const target = (state, ships, width, height, zoomMul = 1) => {
     const main = mainShip(state);
-    const maxOut = versus(state) ? C.VERSUS.MAX_ZOOM_OUT : state.creature ? Math.max(C.MAX_ZOOM_OUT, C.CREATURE.MAX_ZOOM_OUT) : C.MAX_ZOOM_OUT; // (Versus: the arena is big: the widest view is much wider; a giant creature needs a wide view too)
+    const maxOut = versus(state) ? C.VERSUS.MAX_ZOOM_OUT : state.creature ? Math.max(C.MAX_ZOOM_OUT, state.creature.kind === 'drake' ? C.CREATURE.DRAKE_MAX_ZOOM_OUT : C.CREATURE.MAX_ZOOM_OUT) : C.MAX_ZOOM_OUT; // (Versus: the arena is big: the widest view is much wider; a giant creature needs a wide view too)
     // The box round every ship (with the sky margin and a look-ahead the way each is moving).
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     // (and the same box without the look-ahead, for the middle and for "do the ships fit")

@@ -7,6 +7,9 @@
 //   setWrap(part, pts, k)               the outer k segments of a limb lie along a path round something (a ship's hull): front/back by z, see below
 //   severPart(body, part, i)            cut a limb at segment i: segments i.. leave (returned, for debris); the stump carries on
 //   setMouth / damagePart / nearestFreeLimb / exposeHeart / setLit   small helpers
+// C.6a (the Drake, creatures/drake.js) adds three generic things, all inert for the Kraken: body.rot (the whole body pitches: nose up is positive, a stepped value), DRIVEN limbs (pd.drive: the limb's goal is
+// p.rel, a vector in fractions of its reach in the body's own frame, changed only on keys and carried with the body's motion; no sway), and ATTACHED rigid parts (pd.attach: a head that rides a neck's tip).
+//   bodyVec(body, x, y)  a vector of the body's own frame (facing +x, y down) as a world vector (the mirror and the pitch applied);  snapPose(body)  every limb jumps to its goal (after the body turns round)
 // A part is { id, kind ('tentacle'|'mantle'|'mouth'|'eye'|'heart'|...), hp, maxHp, dead, segs:[{x,y,ang,len,r,r1}], goal, lit, hit, ... }: a segment starts at (x,y),
 // points along ang, is len long and tapers from radius r to r1.
 // THE KEY CLOCK: every 1/STEP_FPS s a "key" fires and ONLY then may a limb's goal point change (a command waits for the next key). Between keys the goal is held; the
@@ -29,7 +32,7 @@ export function makeRng(seed) {
 }
 
 // Which part a shot meets first when several overlap: weak points before limbs before the big body.
-const PRIO = { heart: 0, eye: 0, mouth: 0, tentacle: 1 };
+const PRIO = { heart: 0, eye: 0, mouth: 0, tentacle: 1, head: 1, wing: 1 };
 
 export function createCreatureBody(def, opts = {}) {
   const rng = opts.rng || makeRng(opts.seed ?? def.seed ?? 1);
@@ -37,6 +40,7 @@ export function createCreatureBody(def, opts = {}) {
     kind: def.kind, x: opts.x || 0, y: opts.y || 0, vx: 0, vy: 0, f: opts.f === -1 ? -1 : 1, phase: 0, t: 0,
     hp: def.hp, maxHp: def.hp, parts: [], def, rng,
     stepFps: opts.stepFps || C.STEP_FPS,
+    rot: 0, // the body's pitch (rad, nose up positive); the Drake sets it on keys
     key: 0, acc: 0, // the key clock: how many keys have fired, and the time since the last one
     breath: 0, puff: 0, // idle breathing: the held value (0 or 1) and the eased value the picture uses
     puppet: null, // the demo puppet's own state (creatures/kraken.js)
@@ -59,24 +63,42 @@ function buildPart(body, pd, index) {
     p.reach = p.reach0 = p.segs.reduce((a, s) => a + s.len, 0);
     p.bend = (pd.bend || 0) * (0.8 + rng() * 0.4); // which way it arches (the sign) and how much; fixed for the limb
     p.side = p.bend >= 0 ? -1 : 1; // the sucker side: the inside of the arch
-    p.ctl = { mode: 'idle', keys: Math.floor(rng() * C.SWAY.EVERY_KEYS), cmd: null, rest: pd.rest, sway: [0, 0], pull: null, target: null, grab: false, fast: false, hold: 0 };
+    p.ctl = { mode: pd.drive ? 'drive' : 'idle', keys: Math.floor(rng() * C.SWAY.EVERY_KEYS), cmd: null, rest: pd.rest, sway: [0, 0], pull: null, target: null, grab: false, fast: false, hold: 0 };
+    if (pd.drive) p.rel = { x: pd.rest[0], y: pd.rest[1] }; // a driven limb: its goal is this vector (fractions of its reach, the body's own frame), set on keys by the creature's own code
     p.px = new Float64Array(p.segs.length + 1);
     p.py = new Float64Array(p.segs.length + 1);
   } else {
     // A rigid part (mantle, eye, mouth, heart): one capsule that rides the body.
     p.shape = pd.shape;
+    p.attach = pd.attach || null; // { to: part id, fwd, side }: rides the END of that part's last segment (the Drake's head on the neck, its snout on the head); p.rotOff turns it
+    p.rotOff = 0;
     p.segs.push({ x: 0, y: 0, ang: 0, len: pd.shape.len || 0, r: pd.shape.r, r1: pd.shape.r });
   }
   return p;
 }
 
-const rootOf = (body, p) => ({ x: body.x + p.at[0] * body.f, y: body.y + p.at[1] });
+export function bodyVec(body, x, y) {
+  const ax = x * body.f;
+  if (!body.rot) return { x: ax, y };
+  const th = -body.rot * body.f, c = Math.cos(th), s = Math.sin(th);
+  return { x: ax * c - y * s, y: ax * s + y * c };
+}
+const rootOf = (body, p) => {
+  const v = bodyVec(body, p.at[0], p.at[1]);
+  return { x: body.x + v.x, y: body.y + v.y };
+};
+// A driven limb's goal: the root plus its vector (fractions of its CURRENT reach, so a torn wing's stump keeps the same shape, smaller).
+function relGoal(body, p) {
+  const root = rootOf(body, p), v = bodyVec(body, p.rel.x * p.reach, p.rel.y * p.reach);
+  return { x: root.x + v.x, y: root.y + v.y };
+}
 export const tipOf = (p) => {
   const s = p.segs[p.segs.length - 1];
   return s ? { x: s.x + Math.cos(s.ang) * s.len, y: s.y + Math.sin(s.ang) * s.len } : null;
 };
 // A limb's idle goal: its rest vector (scaled down on a stump) plus the current sway.
 function restGoal(body, p) {
+  if (p.rel) return relGoal(body, p);
   const c = p.ctl;
   const root = rootOf(body, p);
   const k = p.reach0 > 0 ? p.reach / p.reach0 : 0;
@@ -100,11 +122,22 @@ function settle(body) {
 }
 
 function placeRigid(body, p) {
-  const r = rootOf(body, p);
   const s = p.segs[0];
+  if (p.attach) { // rides the end of its host's last segment
+    const h = p.host || (p.host = body.parts.find((q) => q.id === p.attach.to));
+    const g = h && h.segs[h.segs.length - 1];
+    if (g) {
+      const a = g.ang + (p.rotOff || 0), c = Math.cos(a), sn = Math.sin(a), fw = p.attach.fwd || 0, sd = p.attach.side || 0;
+      s.x = g.x + Math.cos(g.ang) * g.len + c * fw - sn * sd * body.f;
+      s.y = g.y + Math.sin(g.ang) * g.len + sn * fw + c * sd * body.f;
+      s.ang = a + (body.f > 0 ? p.shape.ang || 0 : -(p.shape.ang || 0));
+      return;
+    }
+  }
+  const r = rootOf(body, p);
   s.x = r.x;
   s.y = r.y;
-  s.ang = body.f > 0 ? p.shape.ang || 0 : Math.PI - (p.shape.ang || 0);
+  s.ang = (body.f > 0 ? p.shape.ang || 0 : Math.PI - (p.shape.ang || 0)) + (body.rot ? -body.rot * body.f : 0);
 }
 
 // ---- the chain solver (FABRIK) ----------------------------------------------------------------------------------------------------------------------------------
@@ -261,6 +294,12 @@ export function stepBody(body, dt) {
   body.t += dt;
   body.x += body.vx * dt;
   body.y += body.vy * dt;
+  if (body.lx !== undefined && (body.x !== body.lx || body.y !== body.ly)) { // a driven limb is carried along with the body (the picture only eases the pose CHANGES, not the flight)
+    const dx = body.x - body.lx, dy = body.y - body.ly;
+    for (const p of body.parts) if (p.rel) { p.view.x += dx; p.view.y += dy; }
+  }
+  body.lx = body.x;
+  body.ly = body.y;
   body.acc += dt;
   const KEY = 1 / body.stepFps;
   for (let n = 0; body.acc >= KEY - 1e-9 && n < 8; n++) {
@@ -272,6 +311,7 @@ export function stepBody(body, dt) {
   for (const p of body.parts) {
     if (p.hit > 0) p.hit = Math.max(0, p.hit - dt);
     if (p.dead) continue;
+    if (p.rel) { const g = relGoal(body, p); p.goal.x = g.x; p.goal.y = g.y; }
     if (p.limb) solveLimb(body, p, dt, C.IK.ITER, false);
     else {
       placeRigid(body, p);
@@ -300,6 +340,7 @@ const holdKeys = (body) => Math.max(1, Math.round(C.HOLD * body.stepFps));
 
 function tickLimb(body, p) {
   const c = p.ctl;
+  if (c.mode === 'drive') return; // (a driven limb: the creature's own code sets p.rel on the key, creatures/drake.js)
   const root = rootOf(body, p);
   if (c.cmd) { // a command waits for the next key, then starts
     const cmd = c.cmd;
@@ -401,6 +442,21 @@ export function setLit(body, lit) {
 export function exposeHeart(body) {
   for (const p of body.parts) if (p.kind === 'heart') p.hidden = false;
 }
+// Every limb jumps to its goal and every rigid part to its place (the body has turned round: nothing sweeps across).
+export function snapPose(body) {
+  for (const p of body.parts) {
+    if (p.dead) continue;
+    if (!p.limb) { placeRigid(body, p); continue; }
+    if (p.rel) { const g = relGoal(body, p); p.goal.x = g.x; p.goal.y = g.y; }
+    p.view.x = p.goal.x;
+    p.view.y = p.goal.y;
+    const root = rootOf(body, p);
+    const a = Math.atan2(p.goal.y - root.y, p.goal.x - root.x);
+    p.segs.forEach((sg) => { sg.ang = a; });
+    layOut(p, root.x, root.y);
+    for (let i = 0; i < 20; i++) solveLimb(body, p, 1 / 60, 12, true);
+  }
+}
 export function damagePart(body, p, dmg) {
   if (p.dead) return;
   p.hp = Math.max(0, p.hp - dmg);
@@ -418,7 +474,7 @@ export function severPart(body, p, i) {
   p.wrap = null;
   for (const s of gone) s.behind = false;
   p.ctl.cmd = null;
-  p.ctl.mode = 'idle';
+  if (p.ctl.mode !== 'drive') p.ctl.mode = 'idle';
   p.ctl.fast = false;
   p.ctl.keys = 0;
   p.hit = C.HIT_FLASH;

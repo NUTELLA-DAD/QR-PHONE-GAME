@@ -33,7 +33,7 @@ import { createShipSim, flushPresses } from './shipSim.js';
 import { createDebris } from './debris.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { deckPieces } from './shipBuild.js';
-import { generateVoyage, stopById, stopName, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
+import { generateVoyage, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 // Best run, remembered by this browser (the TV). Never let storage problems break the game.
 function loadRecord() {
@@ -63,6 +63,7 @@ export function createSimulation() {
     gasHoles: [],
     ventOpen: [], // which vent stacks are open (one flag per vent of the ship's layout, filled in below)
     wreck: null, // { t } while the ship is breaking apart
+    perch: null, // the Cinder Drake sitting on her gasbag: { w, x } (creatureDrake.js; balance.js counts it as a live load)
     bombBay: { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null },
     sfxQ: [], // sounds asked for by name: [name, arg]
     flashes: [], // muzzle flashes { x, y, ang, t, color }
@@ -566,9 +567,9 @@ export function createSimulation() {
     environment: stop.play,
     kind: stop.kind,
     danger: stop.danger,
-    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship) }, // (lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one)
+    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined) }, // (lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
     lengthMul: modeInfo(state.run.mode).lengthMul,
-    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE KRAKEN' : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
+    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
   });
   const firstMission = () => missionOpts(curStop());
 
@@ -623,7 +624,7 @@ export function createSimulation() {
     if (cr && cr.dying && !cr.paid) { // a giant creature that sank: the boss reward, times config.CREATURES.REWARD_MUL
       cr.paid = true;
       addSalvage(SV.BOSS * config.CREATURES.REWARD_MUL, 'boss', cr.name + ' slain!');
-      const RW = config.CREATURES.REWARD; // (the spoils: the hull and every gasbag patched, and the trophy part card at the next dock)
+      const RW = cr.kind === 'drake' ? config.CREATURES.DRAKE.REWARD : config.CREATURES.REWARD; // (the spoils: the hull and every gasbag patched, and the trophy part card at the next dock)
       state.ship.hull = Math.min(100, state.ship.hull + RW.HULL);
       for (const b of state.bags) b.gas = Math.min(100, b.gas + RW.GAS);
       if (state.run) state.run.trophy = RW.TROPHY;
@@ -747,7 +748,7 @@ export function createSimulation() {
     if (!offer) return null;
     const e = offer.entry;
     state.yard.sum = offer.base.sum;
-    return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: 0, trophy: true, badge: 'TROPHY: from the Kraken',
+    return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: 0, trophy: true, badge: 'TROPHY: from the ' + (run.trophy === config.CREATURES.DRAKE.REWARD.TROPHY ? 'Drake' : 'Kraken'),
       choices: offer.choices, now: offer.base.sum, baseWarns: offer.base.res.warns, spots: offer.choices.length };
   };
   const persistBuild = () => { // the run's ship, kept in the voyage save (versioned, tolerant: voyage.js)
@@ -866,7 +867,7 @@ export function createSimulation() {
     const options = stop.next.map((id) => {
       const s = stopById(state.run.voyage, id);
       const env = envInfo(s.env);
-      return { id, kind: 'stop', name: stopName(s), icon: s.flagship ? '🚩' : s.lair ? config.CREATURES.LAIR.ICON : env.icon, desc: `${s.lair ? config.CREATURES.LAIR.LABEL + ': ' : ''}${VY.KIND_NAMES[s.kind] || s.kind} - ${'💀'.repeat(s.danger)} - reward ${s.reward}`, danger: s.danger, reward: s.reward, envName: env.name, color: env.color, kindName: VY.KIND_NAMES[s.kind], lair: !!s.lair };
+      return { id, kind: 'stop', name: stopName(s), icon: s.flagship ? '🚩' : s.lair ? lairOf(s.creature).ICON : env.icon, desc: `${s.lair ? lairOf(s.creature).LABEL + ': ' : ''}${s.lair ? lairOf(s.creature).KIND : VY.KIND_NAMES[s.kind] || s.kind} - ${'💀'.repeat(s.danger)} - reward ${s.reward}`, danger: s.danger, reward: s.reward, envName: env.name, color: env.color, kindName: s.lair ? lairOf(s.creature).KIND : VY.KIND_NAMES[s.kind], lair: !!s.lair };
     });
     openVote({ kind: 'route', title: 'WHERE TO NEXT?', options, t: VY.ROUTE_TIME });
   };

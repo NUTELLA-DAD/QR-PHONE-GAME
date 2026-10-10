@@ -8,6 +8,7 @@
 // The mantle is the body's rigid capsule (creature.js): the OUTLINE a boarder walks is the round top of that capsule and then down its sides, parameterised by arc length s (negative = the -x side).
 import { config } from '../../config.js';
 import { hitInfo } from './creature.js';
+import { drakeBoardable, scalesAction, scalesOpened } from './creatureDrake.js'; // (C.6a: the Drake is a landing place only while it is perched on her bag)
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { shipOf } from './ships.js';
 import { pop } from './popups.js';
@@ -56,7 +57,7 @@ function nearestS(F, wx, wy) {
 // ---- the landing strip ---- (people only: a bot would stand on it for ever, so it falls past as it always did and is carried back to the medical bay; C.5 teaches bots to board)
 export function creatureSurfaces(state, ship) {
   const cr = state.creature;
-  if (!cr || cr.mode !== 'idle' || !state.ships.includes(ship) || ship.ctx.wreck) return [];
+  if (!cr || cr.mode !== 'idle' || !state.ships.includes(ship) || ship.ctx.wreck || (cr.kind === 'drake' && !drakeBoardable(cr))) return [];
   const m = mantleOf(cr);
   if (!m) return [];
   const F = frame(m), B = BR();
@@ -72,7 +73,7 @@ export function creatureSurfaces(state, ship) {
 // ---- the hook ----
 export function creatureAnchor(state, wx, wy) {
   const cr = state.creature;
-  if (!cr || cr.mode !== 'idle') return null;
+  if (!cr || cr.mode !== 'idle' || (cr.kind === 'drake' && !drakeBoardable(cr) && cr.drake.mode !== 'crawl')) return null;
   const hit = hitInfo(cr, wx, wy, BR().HOOK_R);
   if (!hit) return null;
   const p = hit.part, i = hit.seg, s0 = p.segs[i];
@@ -85,7 +86,7 @@ export function creatureAnchor(state, wx, wy) {
     const cc = Math.cos(s.ang), ss = Math.sin(s.ang);
     return { x: s.x + cc * lu - ss * lv, y: s.y + ss * lu + cc * lv };
   };
-  const body = p.kind !== 'tentacle'; // (reel right in to the body and you climb aboard)
+  const body = p.kind !== 'tentacle' && p.kind !== 'wing' && p.kind !== 'neck' && p.kind !== 'tail' && (cr.kind !== 'drake' || drakeBoardable(cr)); // (reel right in to the body and you climb aboard; a limb is only an anchor)
   return { kind: 'enemy', creature: cr, part: p, pos, surf: body, board: body ? (pl) => { const q = pos() || { x: wx, y: wy }; return boardAt(state, shipOf(state, pl), pl, q.x, q.y); } : null };
 }
 
@@ -108,7 +109,7 @@ export function boardAt(state, ship, p, wx, wy) {
   p.tossed = false;
   p.hook = null;
   p.noLand = 0;
-  if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, 'YOU ARE ON THE KRAKEN! BLIND IT at an eye, STRIKE THE HEART with a sword. JUMP to leap off.', [60, 40, 60]);
+  if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, cr.kind === 'drake' ? 'YOU ARE ON THE DRAKE! HACK THE SCALES by its heart (sword), then STRIKE THE HEART. JUMP to leap off.' : 'YOU ARE ON THE KRAKEN! BLIND IT at an eye, STRIKE THE HEART with a sword. JUMP to leap off.', [60, 40, 60]);
   pop(state, q.x, q.y - 160, 'BOARDED!', '#ffd23f', 1.2);
   return true;
 }
@@ -147,7 +148,7 @@ export function boardCheck(state, p) {
   const o = p.on;
   if (!o) return;
   const cr = state.creature;
-  if (!cr || cr !== o.cr || cr.mode !== 'idle' || !mantleOf(cr)) return dismount(state, p, 'gone');
+  if (!cr || cr !== o.cr || cr.mode !== 'idle' || !mantleOf(cr) || (cr.kind === 'drake' && !drakeBoardable(cr))) return dismount(state, p, 'gone');
   if (p.ko > 0 || p.fall) return dismount(state, p, 'ko');
 }
 
@@ -158,9 +159,10 @@ function actFor(state, p) {
   const heart = cr.parts.find((q) => q.kind === 'heart' && !q.dead && !q.hidden);
   const near = (part) => { const m = segMid(part.segs[0]); return Math.hypot(m.x - p.x, m.y - p.y) <= (part.kind === 'heart' ? B.HEART_REACH : B.EYE_REACH) + part.segs[0].r; };
   if (heart && near(heart)) {
-    if (p.carry === 'sword') return { type: 'strike', obj: job(heart, 'strike'), hold: true, time: B.HEART_TIME, label: 'STRIKE THE HEART!', part: heart };
+    if (p.carry === 'sword') return { type: 'strike', obj: job(heart, 'strike'), hold: true, time: cr.kind === 'drake' ? config.CREATURES.DRAKE.BOARD.HEART_TIME : B.HEART_TIME, label: 'STRIKE THE HEART!', part: heart };
     return { type: 'need', label: 'Need a sword to strike the heart!' };
   }
+  if (!heart && cr.kind === 'drake') { const a = scalesAction(state, p); if (a) return a; } // (the Drake's heart is behind its breast scales: hack them off first)
   const eyes = cr.parts.filter((q) => q.kind === 'eye' && !q.dead && !(q.blindT > 0) && near(q));
   if (eyes.length) {
     eyes.sort((a, b) => { const ma = segMid(a.segs[0]), mb = segMid(b.segs[0]); return Math.hypot(ma.x - p.x, ma.y - p.y) - Math.hypot(mb.x - p.x, mb.y - p.y); });
@@ -206,7 +208,8 @@ export function boarderStep(state, ship, p, dt, holdOk) {
     if (act.obj.prog >= 1) {
       act.obj.prog = 0;
       const part = act.part, at = segMid(part.segs[0]);
-      if (act.type === 'blind') {
+      if (act.type === 'scales') scalesOpened(state, cr, p);
+      else if (act.type === 'blind') {
         part.blindT = B.BLIND_FOR;
         pop(state, at.x, at.y - 140, 'BLINDED!', '#ffd23f', 1.6);
         state.sfxQ.push(['roar']);

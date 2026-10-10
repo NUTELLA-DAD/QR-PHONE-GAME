@@ -13,7 +13,7 @@ import { createCourseArt } from './courseArt.js';
 import { createSkyArt } from './skyArt.js';
 import { createEnvArt } from './envArt.js';
 import { UPGRADES } from './upgrades.js';
-import { stopById, stopNo, stopTotal, modeInfo, dailyVoyage, dailyBest } from './voyage.js';
+import { stopById, stopNo, stopTotal, modeInfo, dailyVoyage, dailyBest, lairOf } from './voyage.js';
 import { targets } from './aim.js';
 import { createSpecialsArt } from './specialsArt.js';
 import { createGunshipArt } from './gunshipArt.js';
@@ -38,6 +38,7 @@ import { createPartPictures } from './partArt.js'; // the little part pictures o
 import { createDebrisArt } from './debrisArt.js'; // S.5i: the pieces of ship that broke off, tumbling through the sky
 import { createCreatureArt } from './creatureArt.js'; // C.1: the giant creatures (BOSSES.md), baked once per zoom and blitted
 import { krakenPhaseName } from './creatures/kraken.js'; // C.3: the name of its phase on the health bar
+import { drakePhaseName } from './creatures/drake.js'; // C.6a: the Cinder Drake's
 import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
@@ -577,12 +578,14 @@ export function createRenderer({ ctx, state: world, canvas }) {
   let creatureArt = null; // (made when the first creature appears)
   // The wrapped coils of a gripping tentacle that pass BEHIND the ship: drawn before the ships (the rest of the creature, and the coils in front, come after them in drawEffects).
   // C.3: while the beak gapes under her bomb bay (cr.mouthWin) the whole body is under her, so all of it is drawn behind her hull and she flies over its head.
-  const wholeBehind = (cr) => !!cr.mouthWin && cr.mode === 'idle';
+  const wholeBehind = (cr) => !!cr.mouthWin && cr.mode === 'idle' && cr.kind !== 'drake';
+  // The line a creature is clipped at: the sea for the Kraken (it rises out of the water), the lava for a Drake (it falls into it when it dies).
+  const creatureClipY = () => (envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : world.creature && world.creature.kind === 'drake' && envIdOf(world) === 'ember' && world.env && Number.isFinite(world.env.lavaY) ? world.env.lavaY : null);
   const drawCreatureBehind = (view) => {
     const cr = world.creature;
     if (cr && wholeBehind(cr)) return drawCreatureBody(view, cr);
     if (!cr || !creatureArt || !cr.parts.some((p) => p.wrap)) return;
-    const seaY = envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : null;
+    const seaY = creatureClipY();
     ctx.save();
     if (seaY !== null) {
       ctx.beginPath();
@@ -600,7 +603,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   };
   const drawCreatureBody = (view, cr) => {
     if (!creatureArt) creatureArt = createCreatureArt({ ctx });
-    const seaY = envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : null;
+    const seaY = creatureClipY();
     ctx.save();
     if (seaY !== null) {
       ctx.beginPath();
@@ -618,9 +621,93 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.restore();
   };
   // C.2: where a tentacle is about to grab (a dashed red ring), the grip's timer (a ring that empties, gold then red) with the hack progress inside it (green), and the harpoon lines made fast to it.
+  // C.6a: the Cinder Drake's effects: the lava spouts (a bubbling patch, then a column of fire), the breath (a flame cone from its mouth, three layers, the tongues flickering in stepped keys), the ring where a swoop will strike
+  // or a lunge will snap, and the ring on the perched drake that fills as the swords drive it off. The picture of the drake itself is creatureArt.js.
+  const drawDrakeFx = (cr) => {
+    const D = config.CREATURES.DRAKE, dk = cr.drake, step = Math.floor(cr.age * 8);
+    ctx.lineJoin = 'round';
+    for (const sp of dk.spouts || []) {
+      if (sp.st === 'sleep') continue;
+      if (sp.st === 'warn') { // it bubbles
+        ctx.fillStyle = '#ff8a1c';
+        ink();
+        ctx.lineWidth = 8;
+        for (let k = 0; k < 4; k++) { const bx = sp.x + (((k * 37 + step * 53) % 100) / 100 - 0.5) * sp.w * 0.8, by = sp.y - 20 - (((k * 61 + step * 29) % 100) / 100) * 90; ctx.beginPath(); ctx.arc(bx, by, 26 + (k % 2) * 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+        continue;
+      }
+      const w = sp.w / 2, h = D.SPOUT.H * (0.9 + 0.1 * (step % 2)); // it erupts: a jagged column, orange with a yellow heart
+      for (const [k, col] of [[1, '#ff8a1c'], [0.55, '#ffe27a']]) {
+        ctx.beginPath();
+        ctx.moveTo(sp.x - w * k, sp.y);
+        ctx.lineTo(sp.x - w * k * 0.8, sp.y - h * 0.5 * k);
+        ctx.lineTo(sp.x - w * k * 0.4, sp.y - h * (0.8 + 0.1 * (step % 3)) * k);
+        ctx.lineTo(sp.x, sp.y - h * k);
+        ctx.lineTo(sp.x + w * k * 0.4, sp.y - h * (0.85 + 0.1 * ((step + 1) % 3)) * k);
+        ctx.lineTo(sp.x + w * k * 0.8, sp.y - h * 0.5 * k);
+        ctx.lineTo(sp.x + w * k, sp.y);
+        ctx.closePath();
+        ctx.fillStyle = col;
+        ctx.fill();
+        if (k === 1) { ink(); ctx.lineWidth = 12; ctx.stroke(); }
+      }
+    }
+    const b = cr.flame;
+    if (b) { // the flame cone: three layers, the tongues swapping in stepped keys
+      for (const [k, col] of [[1, '#ff6a14'], [0.8, '#ffb02e'], [0.52, '#fff0a0']]) {
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y);
+        const n = 6;
+        for (let i = 0; i <= n; i++) {
+          const a = b.ang - b.half * k + (2 * b.half * k * i) / n, r = b.len * k * ((i + step) % 2 ? 0.84 : 1);
+          ctx.lineTo(b.x + Math.cos(a) * r, b.y + Math.sin(a) * r);
+        }
+        ctx.closePath();
+        ctx.fillStyle = col;
+        ctx.fill();
+        if (k === 1) { ink(); ctx.lineWidth = 12; ctx.stroke(); }
+      }
+    }
+    ctx.lineWidth = 14;
+    const sw = cr.swoop;
+    if (sw) { // where the swoop will strike: a dashed red ring (solid once it has locked on)
+      ctx.strokeStyle = '#ff4d4d';
+      ctx.setLineDash(sw.locked ? [] : [40, 30]);
+      ctx.beginPath();
+      ctx.arc(sw.x, sw.y, 260, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const lg = cr.lunge;
+    if (lg) {
+      ctx.strokeStyle = '#ff4d4d';
+      ctx.setLineDash([40, 30]);
+      ctx.beginPath();
+      ctx.arc(lg.x, lg.y, 220, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const pc = dk.perch;
+    if (pc && pc.landed && pc.wx !== undefined && pc.job.live) { // it sits on her bag: a gold ring, a green arc as the swords work
+      ink();
+      ctx.lineWidth = 26;
+      ctx.beginPath();
+      ctx.arc(pc.wx, pc.wy, 140, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 14;
+      ctx.stroke();
+      if (pc.job.prog > 0.02) {
+        ctx.strokeStyle = '#8fe388';
+        ctx.beginPath();
+        ctx.arc(pc.wx, pc.wy, 100, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, pc.job.prog));
+        ctx.stroke();
+      }
+    }
+  };
   const drawCreatureAttacks = (cr) => {
     ctx.save();
     ctx.lineCap = 'round';
+    if (cr.kind === 'drake') drawDrakeFx(cr);
     for (const g of cr.grips || []) {
       if (g.mode === 'recoil') continue;
       ctx.beginPath();
@@ -812,7 +899,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     // Beacon (cave missions).
     const gx = px(map.goal.x);
     const gy = py(map.goal.y);
-    ctx.fillStyle = map.lair ? '#7a3a5a' : map.open ? 'rgba(0,0,0,0)' : '#ffd23f'; // (a lair: the Kraken's mark, in its purple)
+    ctx.fillStyle = map.lair ? (map.creature === 'drake' ? '#c2452a' : '#7a3a5a') : map.open ? 'rgba(0,0,0,0)' : '#ffd23f'; // (a lair: the Kraken's mark, in its purple)
     ctx.beginPath();
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
@@ -833,8 +920,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const dCells = distToGoal(map, toWorldX(ship, layout.refPoint.x), toWorldY(ship, layout.refPoint.y));
     const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
     let goalText;
-    if (c.done) goalText = map.lair ? 'THE KRAKEN IS SLAIN!' : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
-    else if (map.lair) goalText = state.creature ? 'SLAY THE KRAKEN!' : "KRAKEN'S LAIR" + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
+    if (c.done) goalText = map.lair ? (map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
+    else if (map.lair) goalText = state.creature ? (map.creature === 'drake' ? 'SLAY THE DRAKE!' : 'SLAY THE KRAKEN!') : (map.creature === 'drake' ? "DRAKE'S LAIR" : "KRAKEN'S LAIR") + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
     else if (map.open) {
       const total = map.outposts.length;
       const left = map.outposts.filter((o) => !o.done).length;
@@ -1281,14 +1368,14 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const drawCreatureBar = () => {
     const cr = world.creature;
     if (!cr || cr.mode === 'surfacing') return;
-    const limbs = cr.parts.filter((p) => p.kind === 'tentacle');
+    const drake = cr.kind === 'drake', limbs = cr.parts.filter((p) => p.kind === (drake ? 'wing' : 'tentacle'));
     book.paper(450, 806, 700, 74, { r: 10 });
     ctx.fillStyle = LB.INK;
     ctx.font = '16px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
-    ctx.fillText(cr.name + ' - ' + krakenPhaseName(cr.phase || 1) + (cr.dying ? ' - SINKING' : ''), 800, 826, 640); // (C.3: its phase, and what it said)
+    ctx.fillText(cr.name + ' - ' + (drake ? drakePhaseName : krakenPhaseName)(cr.phase || 1) + (cr.dying ? (drake ? ' - FALLING' : ' - SINKING') : ''), 800, 826, 640); // (C.3: its phase, and what it said)
     if (cr.mouthWin && !cr.dying) { // the beak is open: a gold tag over the bar with the bombs it has been fed
-      const M = config.CREATURES.MOUTH;
+      const M = drake ? { FED: config.CREATURES.DRAKE.FED } : config.CREATURES.MOUTH;
       ink();
       ctx.lineWidth = 3;
       ctx.fillStyle = '#ffd23f';
@@ -1319,14 +1406,30 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.stroke();
       }
     });
+    if (drake && !cr.dying) { // the chokes it has taken: four little flames, filled as they are won
+      const W = config.CREATURES.DRAKE.CHOKE.WIN;
+      for (let k = 0; k < W; k++) {
+        const x = 1010 + k * 26, y = 840;
+        ink();
+        ctx.lineWidth = 2.5;
+        ctx.fillStyle = k < cr.choked ? '#ff8a1c' : '#cfc6b0';
+        ctx.beginPath();
+        ctx.moveTo(x, y - 11);
+        ctx.lineTo(x + 8, y + 7);
+        ctx.lineTo(x - 8, y + 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
     ctx.fillStyle = '#3b2a1d';
     ctx.fillRect(470, 856, 660, 14);
-    ctx.fillStyle = '#7a2d63';
+    ctx.fillStyle = drake ? '#c2452a' : '#7a2d63';
     ctx.fillRect(470, 856, (660 * Math.max(0, cr.hp)) / cr.maxHp, 14);
     ink();
     ctx.lineWidth = 2.5;
     ctx.strokeRect(470, 856, 660, 14);
-    for (const share of [config.CREATURES.PHASE.TWO.HP, config.CREATURES.PHASE.THREE.HP]) { // the notches where phase 2 and 3 begin
+    for (const share of drake ? [config.CREATURES.DRAKE.PHASE.TWO_HP, config.CREATURES.DRAKE.PHASE.THREE_HP] : [config.CREATURES.PHASE.TWO.HP, config.CREATURES.PHASE.THREE.HP]) { // the notches where phase 2 and 3 begin
       ctx.beginPath();
       ctx.moveTo(470 + 660 * share, 852);
       ctx.lineTo(470 + 660 * share, 874);
@@ -1611,9 +1714,9 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.fillStyle = config.INK;
         ctx.textAlign = 'center';
         ctx.font = (choice ? 44 : 30) + 'px "Segoe UI Emoji", sans-serif';
-        ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : s.lair ? config.CREATURES.LAIR.ICON : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
+        ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : s.lair ? lairOf(s.creature).ICON : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
         if (s.lair) { // a lair: a ring of its purple round the stop and a LAIR tag (config.CREATURES.LAIR)
-          ctx.strokeStyle = '#7a3a5a';
+          ctx.strokeStyle = s.creature === 'drake' ? '#c2452a' : '#7a3a5a';
           ctx.lineWidth = 6;
           ctx.setLineDash([8, 6]);
           ctx.beginPath();
@@ -1623,9 +1726,9 @@ export function createRenderer({ ctx, state: world, canvas }) {
           ctx.font = '18px ' + config.FONTS.DISPLAY;
           ctx.lineWidth = 5;
           ctx.strokeStyle = '#2b1622';
-          ctx.strokeText(config.CREATURES.LAIR.LABEL, px(s.col), py(s) - r - (s.id === cur.id ? 34 : choice ? 40 : 18));
+          ctx.strokeText(lairOf(s.creature).LABEL, px(s.col), py(s) - r - (s.id === cur.id ? 34 : choice ? 40 : 18));
           ctx.fillStyle = '#ffd6ee';
-          ctx.fillText(config.CREATURES.LAIR.LABEL, px(s.col), py(s) - r - (s.id === cur.id ? 34 : choice ? 40 : 18));
+          ctx.fillText(lairOf(s.creature).LABEL, px(s.col), py(s) - r - (s.id === cur.id ? 34 : choice ? 40 : 18));
         }
         ctx.globalAlpha = 1;
         if (s.id === cur.id) {
@@ -1641,7 +1744,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         if (choice) {
           ctx.fillStyle = '#fff';
           ctx.font = '20px ' + config.FONTS.DISPLAY;
-          ctx.fillText(s.flagship ? 'THE FLAGSHIP' : s.lair ? 'KRAKEN LAIR' : env.name, px(s.col), py(s) + r + 28);
+          ctx.fillText(s.flagship ? 'THE FLAGSHIP' : s.lair ? lairOf(s.creature).KIND.toUpperCase() : env.name, px(s.col), py(s) + r + 28);
           dots(voters.filter((p) => p.vote === idx), px(s.col), py(s) - r - 24);
         }
       }

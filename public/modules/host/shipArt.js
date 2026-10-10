@@ -616,6 +616,16 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
       const n = Math.max(1, Math.round(w / 80)), pw = w / n;
       for (let i = 0; i < n; i++) {
         const x = a.x0 + i * pw;
+        if (a.art === 'drake') { // the Cinder Drake's trophy (partsShop.js): red-brown panels with a row of orange scales, no rivets
+          filled('#7a2e24', () => ctx.rect(x, y0, pw, h));
+          ctx.fillStyle = '#c25a2a';
+          ctx.strokeStyle = INK;
+          ctx.lineWidth = 1.3;
+          for (let r = 0; r < 2; r++) for (let k = 0; k < 3; k++) { const sx = x + (k + 0.5 + (r % 2) * 0.3) * (pw / 3), sy = y0 + (r + 0.6) * (h / 2.4); ctx.beginPath(); ctx.moveTo(sx - 9, sy - 6); ctx.lineTo(sx + 9, sy - 6); ctx.lineTo(sx, sy + 8); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+          ctx.fillStyle = 'rgba(255,255,255,0.16)';
+          ctx.fillRect(x + 3, y0 + 3, pw - 6, h * 0.14);
+          continue;
+        }
         filled('#6d7378', () => ctx.rect(x, y0, pw, h));
         ctx.fillStyle = 'rgba(255,255,255,0.2)';
         ctx.fillRect(x + 3, y0 + 3, pw - 6, h * 0.2);

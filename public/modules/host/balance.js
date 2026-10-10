@@ -30,6 +30,7 @@ export function createBalance(state) {
     }
     if (config.FORCES.LIVE) for (const b of state.boarders || []) if (b.d != null && !b.fall && b.conn == null && b.hp > 0) { add(config.FORCES.BOARDER_MASS, b.x); cm += config.FORCES.BOARDER_MASS * (b.x - SB.comX); } // raiders on deck weigh too
     for (const ld of state.loads || []) { add(ld.w, ld.x); cm += ld.w * (ld.x - SB.comX); } // (B.6: sandbags, crates and sacks lying on her decks - thrown there by anyone - tip her like a crowd)
+    if (state.perch) { add(state.perch.w, state.perch.x); cm += state.perch.w * (state.perch.x - SB.comX); } // (C.6a: the Cinder Drake sitting on her gasbag is a live load, creatureDrake.js)
     const boilers = L.stations.filter((s) => s.kind === 'boiler');
     if (boilers.length) for (const s of boilers) add((state.ship.fuel * W.fuel) / boilers.length, s.x);
     for (const [name, g] of Object.entries(state.GUNS || {})) add(g.ammo * W.ammo, g.bx != null ? g.bx : (L.gunMounts[name] || {}).bx || 0);

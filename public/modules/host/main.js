@@ -69,7 +69,9 @@ fitCanvas();
 {
   const c = new URLSearchParams(location.search).get('creature');
   if (c === 'kraken') { config.CREATURES.DEV_SPAWN = c; config.ENVIRONMENTS.FORCE = 'sea'; } // (the Kraken lives at the water line: the mission is flown in the Sunken Sea)
+  if (c === 'drake') { config.CREATURES.DEV_SPAWN = c; config.ENVIRONMENTS.FORCE = 'ember'; } // (C.6a: the Cinder Drake lives in the Ember Forge: host.html?creature=drake flies it there; ?lair=ember makes every stop the Drake's lair)
   if (new URLSearchParams(location.search).get('heart') === '1') config.CREATURES.BOARD.HEART_EXPOSED = true; // (C.2: host.html?creature=kraken&heart=1 exposes the heart so STRIKE THE HEART can be tried; C.3 decides when it is really exposed: phase 3)
+  if (new URLSearchParams(location.search).get('lair') === 'ember') { config.CREATURES.DEV_LAIR = true; config.ENVIRONMENTS.FORCE = 'ember'; }
   if (new URLSearchParams(location.search).get('lair') === '1') { config.CREATURES.DEV_LAIR = true; config.ENVIRONMENTS.FORCE = 'sea'; } // (C.3: host.html?lair=1 makes every stop a Kraken's lair, flown in the Sunken Sea)
 }
 // Dev (WP10): host.html?env=storm&kind=open flies the first missions in that environment / map kind (the same switches the bot sim uses: config.ENVIRONMENTS.FORCE, config.MAPS.FORCE_KIND). Nothing changes without the flags.

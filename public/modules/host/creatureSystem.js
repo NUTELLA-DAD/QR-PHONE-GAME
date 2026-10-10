@@ -10,8 +10,10 @@
 // Its random numbers are its own seeded stream (config.CREATURES.SEED), never Math.random, so a run without a creature is untouched. Positions go through pose.js, the ship is mainShip(state).
 import { config } from '../../config.js';
 import { createKraken } from './creatures/kraken.js';
+import { createDrake } from './creatures/drake.js';
 import { stepBody, hitInfo, severPart, setMouth, nearestFreeLimb, reachPart, releasePart, exposeHeart, makeRng, segDist } from './creature.js';
 import { thinkAttacks, hurtGrips, actionFor, blow, hacked, jobsOf, gripJobs } from './creatureGrip.js';
+import { setupDrake, stepDrake, drakeHit, drakeMul, drakeWays, drakeDied, poolWhy, perchAction, perchBlow, perchHacked, perchJobs, perchObjects } from './creatureDrake.js';
 import { creatureSurfaces, boardCheck, boarderStep, decayJobs } from './creatureBoard.js';
 import { stepHarpoons } from './creatureTow.js';
 import { stepBreach, seaLevel } from './creatureBreach.js';
@@ -50,18 +52,19 @@ export const creatureTouch = (state, x, y, r = 0) => !!creatureHit(state, x, y, 
 export function hurtCreature(state, hit, dmg, opts = {}) {
   const cr = state.creature;
   if (!vulnerable(cr) || !hit || hit.part.dead || !(dmg > 0)) return null;
-  const H = CR().HURT, p = hit.part, t = p.tgt;
+  const H = CR().HURT, p = hit.part, t = p.tgt, drake = cr.kind === 'drake';
   if (t && t.lit > 0) dmg *= 1 + config.SEARCHLIGHT.LIT_DAMAGE; // (anything in a searchlight beam takes more)
   if (cr.breach && cr.breach.exposed) dmg *= CR().BREACH.BONUS; // (hanging in the air with its heart and beak open)
+  if (drake) dmg *= drakeMul(cr, p, opts.src || 'shell'); // (dazed after a swoop, coughing after a choke, flak on a wing)
   p.hp = Math.max(0, p.hp - dmg);
   p.hit = CR().HIT_FLASH;
-  cr.hp = Math.max(0, cr.hp - dmg * (H.POOL[p.kind] ?? 1));
+  cr.hp = Math.max(0, cr.hp - dmg * ((drake ? CR().DRAKE.POOL : H.POOL)[p.kind] ?? 1));
   const st = cr.stats, src = opts.src || 'shell';
   st.dmg += dmg;
   st.by[src] = (st.by[src] || 0) + dmg;
   st.parts[p.id] = (st.parts[p.id] || 0) + dmg;
   if (src === 'bomb' && p.kind === 'mouth') st.chomps += 1;
-  if (p.kind === 'mouth' && p.open && (src === 'bomb' || src === 'cargo')) { // fed: a bomb in the open beak is one, a crate or sandbag half of one (HURT.CARGO_MOUTH)
+  if (p.kind === 'mouth' && p.open && (src === 'bomb' || src === 'cargo') && (!drake || cr.mouthWin)) { // fed: a bomb in the open beak is one, a crate or sandbag half of one (HURT.CARGO_MOUTH); the Drake's mouth only counts in its gaping windows
     cr.fed += src === 'bomb' ? 1 : H.CARGO_MOUTH;
     st.fed = cr.fed;
     if (cr.mouthWin && src === 'bomb') { // it gulps and the beak snaps shut a moment (creatureFight.js reopens it if the window has time left)
@@ -71,13 +74,16 @@ export function hurtCreature(state, hit, dmg, opts = {}) {
   }
   if (p.kind === 'tentacle') hurtGrips(cr, p, dmg, src); // (a limb that is gripping the ship may let go)
   const out = { part: p, dmg, sever: false, killed: false };
-  if (p.kind === 'tentacle' && p.hp <= 0 && !p.severed) out.sever = sever(state, cr, p, hit.seg, opts);
+  if ((p.kind === 'tentacle' || p.kind === 'wing') && p.hp <= 0 && !p.severed) out.sever = sever(state, cr, p, p.kind === 'wing' ? Math.max(1, hit.seg) : hit.seg, opts); // (a torn wing leaves a stump of at least one segment)
+  if (drake) drakeHit(state, cr, p, dmg, src, opts); // (chokes, driving it off the perch, a torn wing sends it crashing)
   if (!cr.dying) { // how it ends (cr.stats.win): every tentacle cut off, fed enough bombs, the heart struck, or the pool empty
-    const ways = [];
-    if (tentaclesGone(cr)) ways.push('sever');
-    if (cr.fed >= CR().MOUTH.FED) ways.push('mouth');
-    if (p.kind === 'heart' && src === 'sword' && (p.hp <= 0 || cr.hp <= 0)) ways.push('board');
-    if (cr.hp <= 0) ways.push(src === 'rock' ? 'tow' : 'hp');
+    const ways = drake ? drakeWays(cr, p, src) : [];
+    if (!drake) {
+      if (tentaclesGone(cr)) ways.push('sever');
+      if (cr.fed >= CR().MOUTH.FED) ways.push('mouth');
+      if (p.kind === 'heart' && src === 'sword' && (p.hp <= 0 || cr.hp <= 0)) ways.push('board');
+      if (cr.hp <= 0) ways.push(src === 'rock' ? 'tow' : 'hp');
+    }
     const why = ways.find((w) => !CR().FORCE_WIN || CR().FORCE_WIN === w); // (the gate's dev flag FORCE_WIN lets only that one way end it, so a stray shell cannot decide a test of another)
     if (why) {
       die(state, cr, why, opts);
@@ -93,7 +99,7 @@ function hurtPool(state, dmg, src, opts = {}) {
   cr.hp = Math.max(0, cr.hp - dmg);
   cr.stats.dmg += dmg;
   cr.stats.by[src] = (cr.stats.by[src] || 0) + dmg;
-  const why = src === 'rock' ? 'tow' : 'hp';
+  const why = cr.kind === 'drake' ? poolWhy(cr, src) : src === 'rock' ? 'tow' : 'hp';
   if (cr.hp <= 0 && (!CR().FORCE_WIN || CR().FORCE_WIN === why)) die(state, cr, why, opts);
 }
 
@@ -103,7 +109,7 @@ function sever(state, cr, p, i, opts) {
   if (!gone.length) return false;
   const K = CR().CHUNK, h = cr.hooks, o = gone[0];
   cr.stats.severed += 1;
-  cr.chunks.push({ cx: o.x, cy: o.y, a: 0, vx: (h.rng() - 0.5) * K.KICK * 2, vy: -K.KICK * 0.8, w: (h.rng() - 0.5) * K.SPIN * 2, t: 0, part: { segs: gone.map((s) => ({ ...s, x: s.x - o.x, y: s.y - o.y })), side: p.side, lit: p.lit, hit: 0, severed: false } });
+  cr.chunks.push({ cx: o.x, cy: o.y, a: 0, vx: (h.rng() - 0.5) * K.KICK * 2, vy: -K.KICK * 0.8, w: (h.rng() - 0.5) * K.SPIN * 2, t: 0, part: { kind: p.kind, segs: gone.map((s) => ({ ...s, x: s.x - o.x, y: s.y - o.y })), side: p.side, lit: p.lit, hit: 0, severed: false } });
   while (cr.chunks.length > K.MAX) cr.chunks.shift();
   h.puff(o.x, o.y, '#7a3a5a', 14);
   h.puff(o.x, o.y, '#e8dcc0', 6);
@@ -135,11 +141,13 @@ function die(state, cr, why, opts) {
   if (h.credit) h.credit({ owner: opts.who });
   pop(state, cr.x, cr.y - 700, 'boss', '#ff5a1f', 2.2);
   for (let k = 0; k < 6; k++) h.puff(cr.x + (h.rng() - 0.5) * 1800, cr.y - 300 + (h.rng() - 0.5) * 900, '#7a3a5a', 18);
+  const drake = cr.kind === 'drake', WT = drake ? CR().DRAKE.WIN_TEXT : CR().WIN_TEXT;
   state.ev.warn = CR().FINALE.BANNER;
-  state.ev.warnText = (CR().WIN_TEXT[why] || 'SLAIN!') + ' ' + cr.name + ' SINKS BENEATH THE WAVES!'; // the final banner: how it ended, then what happens to it
+  state.ev.warnText = (WT[why] || 'SLAIN!') + ' ' + cr.name + (drake ? CR().DRAKE.DEATH_TEXT : ' SINKS BENEATH THE WAVES!'); // the final banner: how it ended, then what happens to it
   state.sfxQ.push(['roar']);
   state.ship.shake = Math.max(state.ship.shake || 0, 1.5);
-  for (const p of Object.values(state.players)) if (!p.bot && h.phoneFx) h.phoneFx(p, CR().WIN_TEXT[why] || 'SLAIN!', [60, 40, 60, 40, 300]);
+  for (const p of Object.values(state.players)) if (!p.bot && h.phoneFx) h.phoneFx(p, WT[why] || 'SLAIN!', [60, 40, 60, 40, 300]);
+  if (drake) drakeDied(state, cr); // (no more fire, no more weight on her bag)
 }
 
 // ---- one function per weapon ---------------------------------------------------------------------------------------------------------------------------------
@@ -149,7 +157,7 @@ export function creatureShell(state) {
   if (!vulnerable(state.creature)) return;
   const H = CR().HURT;
   for (const s of state.shells) {
-    if (s.life <= 0 || s.frag) continue; // (the fake shells of flame, mines and flak bursts only mean something to planes)
+    if (s.life <= 0 || s.frag || (s.flak && state.creature.kind === 'drake')) continue; // (the fake shells of flame, mines and flak bursts only mean something to planes; a flak shell bursts near the Drake's wings instead, creatureDrake.js drakeFlak)
     const hit = creatureHit(state, s.x, s.y, H.TOUCH) || creatureHit(state, s.x - (s.vx || 0) / 120, s.y - (s.vy || 0) / 120, H.TOUCH); // (and halfway back along the step it flew)
     if (!hit) continue;
     s.life = 0;
@@ -268,38 +276,42 @@ export function creatureCargo(state, it) {
 const alivePart = (p) => !p.dead && !p.hidden && p.segs.length > 0;
 // aim.js targets: one per living part (a tentacle: the segment nearest the ship's aim point). Weak points rank higher (lower number) when the beak is open or an eye is lit.
 // (the dev flag FORCE_WIN hides the parts the bots, the escort and the coil must leave alone from this list: creatureFight.js forcedSkip; the harpoon gets the exhausted body from creatureTowTargets)
-export function creatureTargets(state, list = [], only = null) {
+export function creatureTargets(state, list = [], only = null, gunType = 'any') {
   const cr = state.creature;
   if (!vulnerable(cr)) return list;
   const ship = mainShip(state), L = ship.layout;
   const ax = toWorldX(ship, L.aimPoint.x), ay = toWorldY(ship, L.aimPoint.y);
   const dark = (state.darkNow || 0) > CR().DARK_AT;
+  const drake = cr.kind === 'drake', vs = ship.pose.vx || 0;
+  // (the Drake flies fast: a shot leads it by where it will be, relative to the ship that fires)
+  const led = (pt, tt) => ({ x: pt.x + ((cr.mvx || 0) - vs) * (tt || 0), y: pt.y + (cr.mvy || 0) * (tt || 0) });
   for (const p of cr.parts) {
-    if (!alivePart(p) || (only ? p.kind !== only : forcedSkip(cr, p, 'any'))) continue;
+    if (!alivePart(p) || (only ? p.kind !== only : forcedSkip(cr, p, gunType))) continue;
     const t = tgtOf(p);
-    if (p.kind === 'tentacle') {
+    if (p.kind === 'tentacle' || (drake && p.limb)) {
       if (p.severed) continue; // (a stump is not worth a shell)
       let bi = 0, bd = Infinity;
       p.segs.forEach((s, i) => { const m = segMid(s), d = Math.hypot(m.x - ax, m.y - ay); if (d < bd) { bd = d; bi = i; } });
-      const at = () => segMid(p.segs[Math.min(bi, p.segs.length - 1)]);
-      list.push({ kind: 'creaturePart', obj: t, part: p, seg: bi, r: Math.max(30, p.segs[bi].r), rank: 8.8, at });
+      const rank = !drake ? 8.8 : p.kind === 'wing' ? (cr.drake.mode === 'crawl' ? 9 : 6.4) : p.kind === 'neck' ? 8.4 : 9.1; // (wings first while it flies: tear one and it crashes)
+      const at = drake ? (tt) => led(segMid(p.segs[Math.min(bi, p.segs.length - 1)]), tt) : () => segMid(p.segs[Math.min(bi, p.segs.length - 1)]);
+      list.push({ kind: 'creaturePart', obj: t, part: p, seg: bi, r: Math.max(30, p.segs[bi].r), rank, at });
     } else {
       const open = p.kind === 'mouth' && p.open, lit = p.kind === 'eye' && (!dark || t.lit > 0);
-      const rank = p.kind === 'mouth' ? (open ? 4.6 : 9.6) : p.kind === 'eye' ? (lit ? 5.6 : 9.3) : p.kind === 'heart' ? 5 : 9.4;
-      list.push({ kind: 'creaturePart', obj: t, part: p, seg: 0, r: p.segs[0].r, rank, at: () => segMid(p.segs[0]) });
+      const rank = p.kind === 'mouth' ? (open ? (drake ? 3.6 : 4.6) : drake ? 9.7 : 9.6) : p.kind === 'eye' ? (lit ? 5.6 : 9.3) : p.kind === 'heart' ? 5 : p.kind === 'head' ? 7.2 : 9.4;
+      list.push({ kind: 'creaturePart', obj: t, part: p, seg: 0, r: p.segs[0].r, rank, at: drake ? (tt) => led(segMid(p.segs[0]), tt) : () => segMid(p.segs[0]) });
     }
   }
   return list;
 }
 // What a harpoon gun may aim at: the exhausted creature's body (phase 3), whatever FORCE_WIN hides from the other guns.
-export const creatureTowTargets = (state) => (state.creature && state.creature.phase >= 3 ? creatureTargets(state, [], 'mantle') : []);
+export const creatureTowTargets = (state) => (state.creature && (state.creature.kind === 'drake' ? state.creature.drake.mode === 'crawl' : state.creature.phase >= 3) ? creatureTargets(state, [], 'mantle') : []); // (the Drake: once it crawls)
 // The phone radar's blips (spotter.js): the body, the beak and every tentacle.
 export function creatureRadar(state) {
   const cr = state.creature;
   if (!vulnerable(cr)) return [];
   const out = [];
   for (const p of cr.parts) {
-    if (!alivePart(p) || (p.kind !== 'tentacle' && p.kind !== 'mantle' && p.kind !== 'mouth')) continue;
+    if (!alivePart(p) || (p.kind !== 'tentacle' && p.kind !== 'mantle' && p.kind !== 'mouth' && p.kind !== 'wing')) continue;
     out.push({ obj: tgtOf(p), pos: () => segMid(p.segs[p.kind === 'tentacle' ? p.segs.length >> 1 : 0] || p.segs[0]) });
   }
   return out;
@@ -348,7 +360,41 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
   };
   const shipMid = (ship) => ({ x: toWorldX(ship, ship.layout.refPoint.x), y: toWorldY(ship, ship.layout.refPoint.y) });
 
+  // The Ember Forge has lava low in the map (state.env.lavaY): that is the Drake's sky.
+  const lavaY = () => (state.env && Number.isFinite(state.env.lavaY) ? state.env.lavaY : null);
+  const homeOk = (kind) => (kind === 'drake' ? lavaY() !== null && envIdOf(state) === CR().DRAKE.ENV : seaY() !== null);
+  // THE CINDER DRAKE (C.6a): it flies in from off screen, untouchable for SPAWN.ARRIVE s, then circles; creatureDrake.js is its brain.
+  const spawnDrake = () => {
+    if (state.creature || !homeOk('drake')) return state.creature || null;
+    const ship = mainShip(state), D = CR().DRAKE;
+    const mid = shipMid(ship), side = ship.pose.f || 1;
+    const cr = createDrake(mid.x + side * D.SPAWN.FROM, mid.y - D.FLY.UP - 1200, CR().SEED, { f: -side });
+    const m = hpMul();
+    for (const p of cr.parts) {
+      p.hp = p.maxHp = Math.max(1, Math.round(p.maxHp * m * (D.HP_MUL[p.kind] ?? 1)));
+      p.lit = true;
+    }
+    cr.hp = cr.maxHp = Math.max(1, Math.round(D.HP * m * D.HP_MUL.pool));
+    Object.assign(cr, { name: D.NAME, mode: 'surfacing', dying: false, age: 0, sinkT: 0, side, base: { x: cr.x, y: cr.y }, chunks: [], stats: { dmg: 0, by: {}, parts: {}, severed: 0, chomps: 0, fed: 0, win: null }, ai: { breather: 0 } });
+    Object.assign(cr, { phase: 1, fed: 0, mouthWin: null, phaseDy: 0 });
+    Object.defineProperty(cr, 'hooks', { value: { state, puff, credit, rng, phoneFx, hurt: (hit, dmg, opts) => hurtCreature(state, hit, dmg, opts), hurtPool: (dmg, src, who) => hurtPool(state, dmg, src, { who }), sever: (p, seg, opts = {}) => sever(state, cr, p, seg, opts), moreJobs: (ship) => perchJobs(state, ship) }, enumerable: false });
+    Object.defineProperty(cr, 'grips', { value: [], enumerable: false, writable: true });
+    Object.defineProperty(cr, 'harpoons', { value: [], enumerable: false });
+    cr.slap = null;
+    cr.breach = null;
+    cr.breachDy = 0;
+    cr.tvx = 0;
+    cr.hooked = false;
+    setupDrake(state, cr, ship);
+    state.creature = cr;
+    state.ev.warn = 4;
+    state.ev.warnText = cr.name + ' SWOOPS IN FROM THE SMOKE!';
+    state.sfxQ.push(['roar']);
+    return cr;
+  };
+
   const spawn = (kind = 'kraken') => {
+    if (kind === 'drake') return spawnDrake();
     if (state.creature || kind !== 'kraken' || seaY() === null) return state.creature || null; // (the Kraken lives at the water line: with no sea level it does not come)
     const ship = mainShip(state), S = CR().SPAWN, K = CR().KRAKEN, H = CR().HURT;
     const mid = shipMid(ship), side = ship.pose.f || 1;
@@ -395,27 +441,36 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
   };
 
   const update = (dt) => {
-    if (!state.creature && !done && CR().DEV_SPAWN && state.phase === 'flying' && !state.ship.down && seaY() !== null) {
+    if (!state.creature && !done && CR().DEV_SPAWN && state.phase === 'flying' && !state.ship.down && homeOk(CR().DEV_SPAWN)) {
       done = true;
       spawn(CR().DEV_SPAWN);
     }
-    // A LAIR (voyage.js, course.js startMission: course.stop.lair): the Kraken rises where the zeppelin boss would, at BOSS_AT of the way to the lair's middle when the pacing allows, and anyway at LAIR.RUNUP.
+    // A LAIR (voyage.js, course.js startMission: course.stop.lair): the creature of that sky (config.CREATURES.LAIR.BY_ENV: a Kraken in the Sunken Sea, the Drake in the Ember Forge) rises where the zeppelin boss would,
+    // at BOSS_AT of the way to the lair's middle when the pacing allows, and anyway at LAIR.RUNUP.
     const c = state.course;
-    if (!state.creature && !done && c && c.stop && c.stop.lair && !c.done && state.phase === 'flying' && !state.ship.down && seaY() !== null && c.progress > config.WAVES.BOSS_AT && ((!state.tempo || state.tempo.bossOk) || c.progress > CR().LAIR.RUNUP)) {
+    const lairKind = c && c.stop && c.stop.lair ? c.stop.creature || 'kraken' : null;
+    if (!state.creature && !done && lairKind && !c.done && state.phase === 'flying' && !state.ship.down && homeOk(lairKind) && c.progress > config.WAVES.BOSS_AT && ((!state.tempo || state.tempo.bossOk) || c.progress > CR().LAIR.RUNUP)) {
       done = true;
-      spawn('kraken');
+      spawn(lairKind);
     }
     const cr = state.creature;
     if (!cr) return;
-    const ship = mainShip(state), S = CR().SPAWN, mid = shipMid(ship);
+    const ship = mainShip(state), S = CR().SPAWN, mid = shipMid(ship), drake = cr.kind === 'drake';
     cr.age += dt;
+    let dive = 0;
+    if (drake) { // the Drake flies (creatureDrake.js); dead, it falls into the lava
+      stepDrake(state, cr, ship, dt);
+      if (cr.mode === 'dying') {
+        cr.sinkT += dt;
+        dive = CR().DRAKE.SPAWN.SINK_DEEP * smooth(cr.sinkT / CR().DRAKE.SPAWN.SINK);
+      }
+    } else {
     // Hold station beside the ship (it swims along with her), rising out of the deep first and sinking away when it is dead.
     const k = Math.min(1, S.FOLLOW * dt);
     if (cr.hooked) cr.base.x += (cr.tvx || 0) * dt; // (a harpoon line holds it: it no longer swims along with her, it is hauled, creatureTow.js)
     else if (cr.mouthWin && cr.mode === 'idle') cr.base.x += ship.pose.vx * dt; // (a window is open: creatureFight.js swims it under her bomb bay)
     else if (cr.mode !== 'breach') cr.base.x += (mid.x + cr.side * S.STANDOFF - cr.base.x) * k + ship.pose.vx * dt; // (a breach moves it itself, creatureBreach.js)
     cr.base.y += (stationY(ship, mid, cr.base.x) - cr.base.y) * k;
-    let dive = 0;
     if (cr.mode === 'surfacing') {
       dive = S.DEEP * (1 - smooth(cr.age / S.SURFACE_TIME));
       if (!cr.ai.splashed && cr.age >= S.SURFACE_TIME * 0.35) { cr.ai.splashed = true; state.sfxQ.push(['splash']); puff(cr.base.x, cr.base.y + 650, '#ffffff', 16); }
@@ -427,12 +482,13 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
     if (cr.mode === 'breach') stepBreach(state, cr, ship, dt);
     else if (cr.breachDy) cr.breachDy = Math.abs(cr.breachDy) < 1 ? 0 : cr.breachDy * Math.exp(-3 * dt); // (it died in mid-leap: it drops back to where it floats, and sinks from there)
     stepFight(state, cr, ship, dt); // (C.3: the phases, the beak's windows, the tow onto rock)
+    }
     cr.x = cr.base.x;
     cr.y = cr.base.y + dive + (cr.breachDy || 0) + cr.phaseDy;
     cr.vx = cr.vy = 0;
     if (cr.mode === 'dying') state.slow = cr.sinkT < CR().FINALE.SLOW_FOR ? CR().FINALE.SLOW : 1; // (the last blow plays in slow motion: main.js runs the sim at this speed)
     if (vulnerable(cr)) creatureShell(state);
-    if (cr.mode === 'idle') think(cr, dt, ship);
+    if (drake) { /* (its attacks are in stepDrake) */ } else if (cr.mode === 'idle') think(cr, dt, ship);
     else if (cr.grips.length || cr.slap) thinkAttacks(state, cr, ship, dt); // (sinking: the limbs that held her let go and the records are cleared)
     stepHarpoons(state, cr, dt);
     decayJobs(cr, dt);
@@ -448,7 +504,7 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
       c.part.lit = cr.parts[0].lit;
     }
     cr.chunks = cr.chunks.filter((c) => c.t < CR().CHUNK.LIFE);
-    if (cr.mode === 'dying' && cr.sinkT >= S.SINK_TIME && !cr.chunks.length) {
+    if (cr.mode === 'dying' && cr.sinkT >= (drake ? CR().DRAKE.SPAWN.SINK : S.SINK_TIME) && !cr.chunks.length) {
       state.creature = null;
       state.slow = 1;
     }
@@ -458,16 +514,17 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
   const reset = () => {
     for (const p of Object.values(state.players)) if (p.on) p.on = null; // (a boarder is a flyer again: the airborne system takes him from here)
     state.creature = null;
+    for (const sh of state.ships || []) if (sh.ctx && sh.ctx.perch) sh.ctx.perch = null; // (the Drake's weight is gone with it)
     if (state.slow !== undefined) state.slow = 1;
     done = false;
   };
   // What the rest of the game asks of it (the ship sims and the bots hold W.creatures); all of them answer at once when there is no creature.
   return {
     update, reset, restart: reset, spawn,
-    actionFor: (ship, p) => (state.creature ? actionFor(state, ship, p) : null), // the Action button beside a grip: HACK THE TENTACLE!
-    blow: (ship, p) => (state.creature ? blow(state, ship, p) : false), // ATTACK with a sword beside a grip: one blow of three
-    hacked: (ship, p, job) => hacked(state, ship, p, job),
-    jobsOf: (ship) => (state.creature ? jobsOf(state, ship) : []), // the hold-action objects of this ship's grips (shipSim.js drains their progress)
+    actionFor: (ship, p) => (state.creature ? actionFor(state, ship, p) || (state.creature.kind === 'drake' ? perchAction(state, ship, p) : null) : null), // the Action button beside a grip: HACK THE TENTACLE! (the Drake on her bag: DRIVE IT OFF!)
+    blow: (ship, p) => (state.creature ? blow(state, ship, p) || (state.creature.kind === 'drake' && perchBlow(state, ship, p)) : false), // ATTACK with a sword beside a grip: one blow of three
+    hacked: (ship, p, job) => (state.creature && state.creature.kind === 'drake' && perchHacked(state, ship, p, job)) || hacked(state, ship, p, job),
+    jobsOf: (ship) => (state.creature ? [...jobsOf(state, ship), ...(state.creature.kind === 'drake' ? perchObjects(state, ship) : [])] : []), // the hold-action objects of this ship's grips (shipSim.js drains their progress)
     gripJobs: (ship) => (state.creature ? gripJobs(state, ship) : []),
     boardCheck: (p) => { if (p.on) boardCheck(state, p); },
     boarderStep: (ship, p, dt, holdOk) => boarderStep(state, ship, p, dt, holdOk),
