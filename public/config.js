@@ -1448,6 +1448,18 @@ export const config = {
     FOE_DEFAULT: 'classic', // the shelf ship the Versus playtest fights by default
     SHIP_ID: 'mine', // the shelf id of the playtest ship in a Versus match
   },
+  // ---- WP13 (view3d/buildPane.js, buildStage.js, 3D.md section 17): the build page's Live pane in 3D. Colours are hex; sizes are ship pixels (3D world units).
+  BUILD3D: {
+    GHOST_OK: '#9bd68a', GHOST_BAD: '#e0705f', // the translucent ghost of the part being dragged: green = it can go there and the ship still validates, red = it cannot
+    GHOST_ALPHA: 0.55, GHOST_EDGE: 4.5, // how see-through the ghost is, and the thickness of the box drawn round it
+    GHOST_DEBOUNCE: 70, // ms the dragged part must stay on one spot before its ghost is rebuilt (the build is a few ms; this keeps a fast drag smooth)
+    LEVEL: { PASS: '#5c9a4a', WARN: '#d9962f', FAIL: '#b84a43' }, // the weight marker and the beam between the markers, by the balance level (the same words as the BALANCE gauge)
+    LIFT: '#f1e6c8', THRUST: '#b84a43', INK: '#2b2622', // the lift diamond, the engines' thrust arrows, the thin dark outlines
+    WEIGHT_R: 26, LIFT_R: 32, ARROW_LEN: 110, ARROW_W: 7, // marker sizes at the page's usual camera distance (they grow and shrink with the orbit distance so they keep their size on the screen)
+    LABEL_H: 60, // the text labels' height
+    MIN_DIST: 150, MAX_DIST: 9000, // how near and far the mouse wheel takes the orbit camera
+    TIMES: ['day', 'dusk', 'night'], TOD_DEFAULT: 'day', // the light choices
+  },
   // ---- S.5h: POINTED ENGINES. Every engine has a direction (an angle, 0 = forward, -PI/2 = up, PI/2 = down, PI = back). Forward / back thrust is speed, up thrust is lift (climb without gas,
   // costs steam), down thrust is a dive. Thrust acts where the engine sits, so a vertical push also pitches the ship (forces.js). A swivel mount is a crew station that turns the engine in flight.
   ENGINES: {

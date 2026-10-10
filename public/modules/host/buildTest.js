@@ -12,7 +12,7 @@ import { config } from '../../config.js';
 import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility forward: builds are applied here before a fresh simulation reads the layout)
 import { mainShip } from './ships.js';
 import { BUILDS, DECK_ROWS, rowOf, buildLayout, ENGINE_DIRS, dirName, normAngle } from './shipBuild.js';
-import { validate, makePlanner, judgeBotRuns } from './buildCheck.js';
+import { validate, makePlanner, judgeBotRuns, balanceGauge } from './buildCheck.js';
 import { generateShip, THEMES, THEME_LABEL } from './shipGen.js';
 import { CHAMPIONS } from './pvp/champions.js';
 import { GAS_KEYS, gasKey } from './gases.js';
@@ -107,12 +107,17 @@ function startLive(p = flown) {
   if (!p) return; // (nothing has flown yet: the live pane says what she needs)
   applyBuild(p);
   flown = p;
-  sim = createSimulation();
-  addBots(sim, 4);
-  sim.castOff();
-  sim.course.startMission(1, { environment: envId });
+  const keepKind = config.MAPS.FORCE_KIND;
+  if (want3d) config.MAPS.FORCE_KIND = 'open'; // (the 3D pane orbits the ship: open sky, so there is no rock to fly through the picture)
+  try {
+    sim = createSimulation();
+    addBots(sim, 4);
+    sim.castOff();
+    sim.course.startMission(1, { environment: envId });
+  } finally { config.MAPS.FORCE_KIND = keepKind; }
   renderer = createRenderer({ ctx, state: sim.state, canvas: scene });
   planner = makePlanner(mainShip(sim.state).layout);
+  sync3d();
 }
 
 // ---- editing ---------------------------------------------------------------------------------------------------------
@@ -612,7 +617,7 @@ function ghostOf(d) {
     const r = placeConnector(parts, d.x, d.row, d.rowB, g.type);
     g.ok = r.ok;
     g.label = r.ok ? r.hint : r.hint;
-    if (r.ok) g.x0 = g.x1 = r.x;
+    if (r.ok) { g.x0 = g.x1 = r.x; g.parts = r.parts; }
     return g;
   }
   if (d.tool === 'bagend') { // dragging one end of a bag
@@ -626,7 +631,8 @@ function ghostOf(d) {
   if (x1 - x0 < 20) { g.label = d.tool === 'draw' ? 'drag along the row' : d.tool === 'bag' ? 'drag along the bag row' : 'drag along the deck'; return g; }
   const r = d.tool === 'draw' ? drawDeck(parts, d.row, x0, x1, { covered: coveredOpt() }) : d.tool === 'bag' ? drawBag(parts, x0, x1) : d.tool === 'armour' ? addArmour(parts, d.row, x0, x1) : erase(parts, d.row, x0, x1);
   g.ok = r.ok;
-  if (d.tool === 'draw') g.cover = kind || (r.ok && r.outdoor !== undefined ? (r.outdoor ? 'outdoor' : 'covered') : '');
+  if (r.ok && d.tool !== 'erase') g.parts = r.parts; // (the 3D pane builds a ghost of what the stroke adds)
+  if (d.tool === 'draw') g.cover =kind || (r.ok && r.outdoor !== undefined ? (r.outdoor ? 'outdoor' : 'covered') : '');
   if (!r.ok) g.label = r.hint;
   else if (d.tool === 'armour') g.label = 'armour plate ' + r.cols + ' column' + (r.cols === 1 ? '' : 's') + ' (heavy, does not burn)';
   else if (d.tool === 'draw' && r.kind === 'convert') g.label = r.hint;
@@ -758,6 +764,7 @@ function drawBp() {
   bv = view.apply(base);
   if (fitFirst && bpLayout.platforms.length) { fitFirst = false; view.fit(bpLayout); bv = view.apply(base); } // (the page opens framed on the ship, not on the whole sheet)
   const ghost = drag ? ghostOf(drag) : null;
+  bpGhost = ghost;
   const status = result && !result.ok ? { ok: false, text: 'CANNOT FLY yet - needs: ' + (result.needs.length ? result.needs.slice(0, 4).join(', ') + (result.needs.length > 4 ? ' ...' : '') : result.fails[0]) } : null;
   drawBlueprint(bctx, bv, bpLayout, { rowHover: drag ? drag.row : bpHover && bpHover.row, cursor: !drag && bpHover && bpHover.cursor, ghost, slots: tray.moved ? tray.slots : tool === 'place' && picked ? slots : [], hover: tray.moved ? tray.target : tool === 'place' ? hover : null, status, selBag: selBag != null && selBag < bpLayout.gasbags.length ? selBag : null, balance: result && result.budgets.balance, target: tool === 'delete' && bpHover ? bpHover.target : null, bagHandles: tool === 'bag', engine: selEngine, aim, drop: tray.moved ? { slots: tray.slots, target: tray.target, ptr: tray.ptr, img: tray.img, why: tray.why } : null });
   if (!drag && bpHover && bpHover.why && tool !== 'place') $('hint').textContent = bpHover.why;
@@ -883,16 +890,112 @@ function runBotTest() {
 }
 $('run').onclick = () => { $('bot').textContent = 'Running...'; setTimeout(runBotTest, 30); };
 
+// ---- the Live pane in 3D (WP13: view3d/buildPane.js, buildStage.js) ------------------------------------------------------
+// The "3D" button (remembered in localStorage) mounts the real 3D view on a canvas of its own over the live pane: it draws the ship the page is flying, with orbit (drag, wheel, double-click for the side
+// view), a day / dusk / night choice, the balance markers and a ghost of the part being dragged. It is loaded only when switched on and thrown away (WebGL context released) when switched off.
+// The simulation, the gauges and the blueprint are untouched; only what draws the live pane changes. Any failure (no WebGL, a throw) puts the page back on the 2D pane.
+const params3d = new URLSearchParams(location.search);
+const pref3d = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
+const setPref3d = (k, v) => { try { localStorage.setItem(k, String(v)); } catch { /* (not remembered) */ } };
+let want3d = (params3d.get('b3d') != null ? params3d.get('b3d') : pref3d('airshipBuild3d', '0')) === '1';
+let pane = null, paneLoading = false, bpGhost = null, paneNoteFor = null;
+const paneBox = $('pane3d');
+$('v3dTod').value = config.BUILD3D.TIMES.includes(params3d.get('tod')) ? params3d.get('tod') : config.BUILD3D.TIMES.includes(pref3d('airshipBuild3dTod', '')) ? pref3d('airshipBuild3dTod', '') : config.BUILD3D.TOD_DEFAULT;
+$('v3dMarks').checked = pref3d('airshipBuild3dMarks', '1') === '1';
+$('v3dGhost').checked = pref3d('airshipBuild3dGhost', '1') === '1';
+function sync3d() { // the balance markers of the ship that is flying (the same numbers as the blueprint's markers and the BALANCE gauge)
+  if (!pane || !flown || !sim) return;
+  try {
+    const Ly = mainShip(sim.state).layout;
+    pane.setMarkers({ balance: balanceGauge(flown), engines: Ly.engines.map((e) => ({ x: e.x, y: (Ly.platforms[e.d] ? Ly.platforms[e.d].y : 0) + 14, dir: e.dir || 0 })) });
+  } catch (e) { console.warn('3D markers', e); }
+}
+function unmount3d() {
+  if (pane) { try { pane.dispose(); } catch (e) { console.warn('3D dispose', e); } pane = null; }
+  document.body.classList.remove('b3d');
+  paneBox.style.display = 'none';
+  paneRect = '';
+  paneNoteFor = null;
+}
+function set3d(on) {
+  want3d = !!on;
+  setPref3d('airshipBuild3d', want3d ? '1' : '0');
+  $('v3d').className = want3d ? 'on' : '';
+  document.body.classList.toggle('want3d', want3d);
+  if (!want3d) unmount3d();
+  else if (flown) startLive(); // (restart under an open sky: the 3D pane orbits her, see startLive)
+}
+async function mount3d() { // (called by the frame loop once there is a flying ship)
+  if (pane || paneLoading || !sim || !want3d) return;
+  paneLoading = true;
+  paneBox.style.display = 'block';
+  place3d();
+  try {
+    const mod = await import('../view3d/buildPane.js');
+    if (!want3d || !sim) return;
+    pane = mod.createBuildPane({ container: paneBox, state: sim.state, pixelScale: () => ui.scale, tod: $('v3dTod').value });
+    pane.showMarkers($('v3dMarks').checked);
+    pane.showGhost($('v3dGhost').checked);
+    document.body.classList.add('b3d');
+    sync3d();
+  } catch (e) {
+    console.warn('3D pane off:', e);
+    note('3D is not available here (' + String(e && e.message ? e.message : e).slice(0, 90) + '): the live pane stays 2D.', true);
+    $('hint').textContent = '3D is not available on this computer or browser: the live pane stays 2D.';
+    unmount3d();
+    want3d = false;
+    $('v3d').className = '';
+    document.body.classList.remove('want3d');
+    setPref3d('airshipBuild3d', '0');
+  } finally { paneLoading = false; }
+}
+let paneRect = '';
+function place3d() { // the 3D canvas lies exactly over the live canvas (which keeps its place in the page layout and is hidden while the 3D is up)
+  const w = scene.offsetWidth, h = scene.offsetHeight;
+  if (w < 8 || h < 8) { if (paneRect !== 'off') { paneRect = 'off'; paneBox.style.display = 'none'; } return false; }
+  const key = `${scene.offsetLeft},${scene.offsetTop},${w},${h}`;
+  if (key !== paneRect) { paneRect = key; Object.assign(paneBox.style, { display: 'block', left: scene.offsetLeft + 'px', top: scene.offsetTop + 'px', width: w + 'px', height: h + 'px' }); }
+  return true;
+}
+// What the dragged part would do, for the pane's ghost (null = nothing to show). `make` runs once, when the spot has been held a moment (the stage debounces).
+function ghostSpec3d() {
+  if (!editing) return null;
+  if (tray.id && tray.moved) {
+    const id = tray.id, dir = isEngineTile(id) ? engDir : undefined;
+    const slot = tray.target;
+    if (slot) return { key: `t|${id}|${slot.label}|${dir == null ? '' : dir.toFixed(2)}`, make: () => ({ parts: slot.apply(parts, { dir }), ok: slot.valid !== undefined ? slot.valid : slot.check().ok }) };
+    if (tray.ptr && tray.slots.length) { // a drop that snaps nowhere: a red ghost of the part at the pointer (made at the nearest legal spot, then slid across)
+      let best = null, bd = Infinity;
+      for (const s of tray.slots) { const d = Math.abs(s.x - tray.ptr.x); if (d < bd) { bd = d; best = s; } }
+      return { key: `x|${id}|${best.label}|${dir == null ? '' : dir.toFixed(2)}`, bad: true, offset: { x: tray.ptr.x - best.x, y: tray.ptr.y - (best.hy != null ? best.hy : best.y - 14) }, make: () => ({ parts: best.apply(parts, { dir }), ok: false }) };
+    }
+    return null;
+  }
+  const g = bpGhost;
+  if (drag && g && g.ok && g.parts && ['draw', 'bag', 'armour', 'ladder'].includes(g.tool)) {
+    const parts2 = g.parts;
+    return { key: `s|${g.tool}|${g.row}|${g.row1 || ''}|${Math.round(g.x0)}|${Math.round(g.x1)}`, make: () => ({ parts: parts2, ok: true }) };
+  }
+  return null;
+}
+$('v3d').className = want3d ? 'on' : '';
+document.body.classList.toggle('want3d', want3d);
+$('v3d').onclick = () => set3d(!want3d);
+$('v3dTod').onchange = () => { setPref3d('airshipBuild3dTod', $('v3dTod').value); if (pane) pane.setTod($('v3dTod').value); };
+$('v3dReset').onclick = () => { if (pane) pane.resetView(); };
+$('v3dMarks').onchange = () => { setPref3d('airshipBuild3dMarks', $('v3dMarks').checked ? '1' : '0'); if (pane) pane.showMarkers($('v3dMarks').checked); };
+$('v3dGhost').onchange = () => { setPref3d('airshipBuild3dGhost', $('v3dGhost').checked ? '1' : '0'); if (pane) pane.showGhost($('v3dGhost').checked); };
+
 // ---- the big view and playtest (buildPlay.js, buildView.js): their own block ----------------------------------------------
 attachPanZoom(bp, view, { paperPoint, cancelStroke: () => { drag = null; aim = null; }, blockWheel: () => !!(tray.id && tray.moved && isEngineTile(tray.id)) });
-bui = initBuildUi({ view, bp, scene, parts: () => parts, result: () => result, layout: () => bpLayout, note, onUi: () => { fitCanvas(scene); fitCanvas(bp); drawTray(); drawGauges(); },
+bui = initBuildUi({ view, bp, scene, parts: () => parts, result: () => result, layout: () => bpLayout, want3d: () => want3d, note, onUi: () => { fitCanvas(scene); fitCanvas(bp); drawTray(); drawGauges(); },
   load: (next, text) => { edit(next); note(text, false); fitFirst = true; }, // (a loaded ship is framed)
   setEditing: (on) => { editing = on; $('oEdit').checked = on; $('centre').classList.toggle('editing', on); } });
 if (restored) note(restored, false);
 
 // ---- go ------------------------------------------------------------------------------------------------------------------
 refresh(); // (a ?build= that cannot fly: nothing flies until it can, the live pane says what is missing)
-window.buildTest = { view, bui, ui, get bv() { return bv; }, get parts() { return parts; }, get result() { return result; }, get sim() { return sim; }, get live() { return live; }, edit, pick, slotsFor, info: () => info, runBotTest, startLive, flag, validate: () => result,
+window.buildTest = { view, bui, ui, get bv() { return bv; }, get pane() { return pane; }, set3d, ghostSpec3d, want3d: () => want3d, get bpLayout() { return bpLayout; }, get parts() { return parts; }, get result() { return result; }, get sim() { return sim; }, get live() { return live; }, edit, pick, slotsFor, info: () => info, runBotTest, startLive, flag, validate: () => result,
   tool: () => tool, setTool, setKind, kind: () => kind, addArmour, applyEdit, setEngineDir, setEngineSwivel, engDir: () => engDir, selEngine: () => selEngine, aim: () => aim, drawDeck, drawBag, resizeBag, erase, setBag, setGas, selBag: () => selBag, placeConnector, placePart, removeAt, thingAt, emptyBuild, minimalBuild, tray: () => tray, bpScreen: (x, y) => { const r = bp.getBoundingClientRect(); return bv ? { x: r.left + (bv.X(x) * r.width) / bp.width, y: r.top + (bv.Y(y) * r.height) / bp.height } : null; }, // (bpScreen: ship coordinates to page pixels on the blueprint, for tests)
   screen: (x, y) => { const p = shipMatrix.transformPoint(new DOMPoint(x, y)), r = scene.getBoundingClientRect(); return { x: r.left + (p.x * r.width) / scene.width, y: r.top + (p.y * r.height) / scene.height }; } }; // (screen: ship coordinates to page pixels, for tests)
 
@@ -940,10 +1043,19 @@ const frame = (now) => {
         acc -= config.LOOP.STEP;
       }
       if (acc >= config.LOOP.STEP) acc = 0;
-      const cam = scene.width > 8 ? camera.update(dt, sim.state, scene.width, scene.height) : null; // (the live pane may be hidden: the ship flies on, nothing is drawn)
-      if (cam) {
-        cam.shipOverlay = overlay;
-        renderer.renderFrame(now, cam);
+      if (want3d && !pane && scene.offsetWidth > 8) mount3d(); // (async: the 2D pane keeps drawing until the 3D one is up; nothing is loaded while the Blueprint view hides the live pane)
+      if (pane) { // WP13: the live pane in 3D (the 2D canvas is hidden; the camera is the same follow camera)
+        if (place3d()) {
+          if (result !== paneNoteFor) { paneNoteFor = result; pane.setNote(result && !result.ok ? 'CANNOT FLY yet - needs: ' + (result.needs.length ? result.needs.slice(0, 4).join(', ') : result.fails[0]) + '   (flying the last ship that could)' : ''); }
+          pane.request(config.BUILD3D && $('v3dGhost').checked ? ghostSpec3d() : null);
+          pane.frame(now, dt, sim.state);
+        }
+      } else {
+        const cam = scene.width > 8 ? camera.update(dt, sim.state, scene.width, scene.height) : null; // (the live pane may be hidden: the ship flies on, nothing is drawn)
+        if (cam) {
+          cam.shipOverlay = overlay;
+          renderer.renderFrame(now, cam);
+        }
       }
     } else {
       ctx.setTransform(1, 0, 0, 1, 0, 0);

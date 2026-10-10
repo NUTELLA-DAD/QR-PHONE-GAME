@@ -68,6 +68,13 @@
   #viewBar{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;padding:0 2px 5px}
   #viewBar .grp{display:flex;gap:4px;align-items:center} #viewBar .lbl{font-weight:700;color:var(--soft);font-size:12px} #zLbl{min-width:48px;text-align:center;font-weight:700}
   #viewBar .keys{margin-left:auto;font-size:11px;color:var(--soft)}
+  /* WP13: the Live pane in 3D (view3d/buildPane.js). #pane3d lies over #scene (placed by buildTest.js from the live canvas's box); the 2D canvas hides while it is up */
+  #centre{position:relative}
+  #pane3d{position:absolute;display:none;overflow:hidden;border-radius:6px;background:#8fb4d0;z-index:3;cursor:grab}
+  #pane3d:active{cursor:grabbing}
+  .b3d #scene{visibility:hidden}
+  #v3dOpts{display:none;gap:5px;align-items:center;flex-wrap:wrap} .want3d #v3dOpts{display:flex} #v3d.on{background:var(--pin)}
+  #v3dOpts select{padding:3px 5px} #v3dOpts .chk{font-size:12px}
   #split{flex:0 0 9px;margin:1px 0;border-radius:4px;background:repeating-linear-gradient(90deg,var(--soft) 0 14px,transparent 14px 22px) center/100% 3px no-repeat;cursor:ns-resize;touch-action:none;display:none}
   .editing #split{display:block} .vm-bp #scene,.vm-bp #split{display:none} .vm-live #bp,.vm-live #bpNote,.vm-live #split{display:none !important}
   .vm-bp #bp{flex:1 1 0 !important} .vm-live #scene{flex:1 1 0 !important}
@@ -111,8 +118,10 @@
   <section id="centre" class="panel editing">
     <div id="viewBar"><div class="grp"><span class="lbl">View</span><button id="vmBp" title="The blueprint fills the pane">Blueprint</button><button id="vmSplit" title="Blueprint above, the live ship below (drag the bar between them)">Split</button><button id="vmLive" title="The live ship fills the pane">Live</button></div>
       <div class="grp"><span class="lbl">Zoom</span><button id="zOut" title="Zoom out (-)">&minus;</button><span id="zLbl">100%</span><button id="zIn" title="Zoom in (+)">+</button><button id="zFit" title="Zoom to the ship">Fit ship</button><button id="zReset" title="The whole sheet (0)">Whole sheet</button></div>
+      <div class="grp"><span class="lbl">Live</span><button id="v3d" title="Draw the live ship in 3D (remembered): drag to turn her round, the wheel zooms, double-click goes back to the side view. The blueprint stays 2D ink.">3D</button>
+        <span id="v3dOpts"><select id="v3dTod" title="The light: day, dusk or night (lanterns and searchlights show at night)"><option value="day">Day</option><option value="dusk">Dusk</option><option value="night">Night</option></select><button id="v3dReset" title="Back to the side view (or double-click the ship)">Side view</button><label class="chk" title="The centre of weight (ball) and of lift (diamond), and each engine's thrust arrow, as on the blueprint"><input type="checkbox" id="v3dMarks" checked> Balance</label><label class="chk" title="While you drag a part, a see-through copy of it shows where it would go: green if it can, red if not"><input type="checkbox" id="v3dGhost" checked> Ghost</label></span></div>
       <div class="keys">wheel: zoom &middot; right / middle drag or SPACE + drag: pan &middot; two fingers: pinch and pan</div></div>
-    <canvas id="bp"></canvas><div id="bpNote"></div><div id="split" title="Drag to resize"></div><canvas id="scene"></canvas><div id="hint"></div></section>
+    <canvas id="bp"></canvas><div id="bpNote"></div><div id="split" title="Drag to resize"></div><canvas id="scene"></canvas><div id="pane3d"></div><div id="hint"></div></section>
   <aside id="right" class="panel" data-name="Report">
     <button class="fold" id="foldRight" title="Fold this panel away (more room for the blueprint)">&raquo;</button>
     <canvas id="gauges"></canvas><div id="live"></div>
@@ -120,5 +129,9 @@
   </aside>
 </div>
 <canvas id="ghost" width="136" height="136"></canvas>
+<!-- the 3D live pane (view3d/, loaded only when "3D" is switched on) imports Three.js by name: bundled in vendor/three, nothing from the internet -->
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
 <script type="module" src="modules/host/buildTest.js"></script>
 </body></html>

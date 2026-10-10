@@ -27,7 +27,7 @@ import { createBeams } from './beams.js';
 import { createLightning } from './lightning.js';
 import { createFungal } from './fungal.js';
 import { createWeather } from './weather.js';
-import { placeCamera, worldToScreen, FOV } from './camera3d.js';
+import { placeCamera, worldToScreen, FOV, ELEV } from './camera3d.js';
 import { createCinema } from './cinema.js'; // WP11: the camera's cinematic moments
 import { createPorthole } from './porthole.js'; // WP11: the Versus far-ship porthole
 import { envIdOf } from '../host/environments.js';
@@ -338,8 +338,13 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       if (e) {
         const piv = e.model.root.position;
         if (lastPivot.lengthSq() === 0) { // just switched on: start from a three-quarter view of the ship, then the viewer drags it
-          controls.target.set(piv.x, piv.y + 300, 0);
-          camera.position.set(piv.x + info.D * 0.46, piv.y + 300 + info.D * 0.3, info.D * 0.8);
+          if (S.orbitSide) { // WP13 (the build page): start from the plain side view the gameplay lens gives, so the first drag turns the ship from there; resetOrbit() comes back to it
+            controls.target.copy(info.target);
+            camera.position.set(info.target.x, info.target.y + info.D * Math.tan(ELEV), info.D);
+          } else {
+            controls.target.set(piv.x, piv.y + 300, 0);
+            camera.position.set(piv.x + info.D * 0.46, piv.y + 300 + info.D * 0.3, info.D * 0.8);
+          }
         } else { const d = _P.copy(piv).sub(lastPivot); controls.target.add(d); camera.position.add(d); } // (then she carries the camera along)
         lastPivot.copy(piv);
       }
@@ -500,6 +505,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     return { porthole: ph, cine: cineOn, calls: mainInfo.calls || i.render.calls, tris: mainInfo.tris || i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs, crew: crew.stats() };
   };
   V.setTod = (name) => { S.tod = name || ''; };
+  V.resetOrbit = () => { lastPivot.set(0, 0, 0); }; // WP13: the next orbit frame starts from the starting view again (the build page's double-click)
   V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, weather]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
