@@ -10,7 +10,7 @@
 //                 edge, 0 about 12 texels out, 1 about 12 in), so water.js can cut the fill, and a thin ink line just outside it, at any size, from one texture tap
 //   y  896..1280  rock strata x3 (2048 x 128): for WP3, modulators like the rest, they are tinted by vertex colour
 //   y 1280..1408  a foam band (2048 x 128, transparent between the scallops)
-//   y 1408..1664  a cloud disc atlas: 8 discs of 256 (transparent edges)
+//   y 1408..1664  A3: six painted CUMULUS silhouettes (340 x 256 each, transparent outside): a flat bottom on a base line at 80% of the height, a thin warm ink edge, two flat tones (light top, shaded underside)
 //   y 1664..1920  a 4-frame fire flipbook (4 x 256), a smoke disc (256), 3 scorch decals (256 each)
 //   y 1920..2048  4 hole decals (128 each), spare
 // The optional art/textures/*.png (wood, darkwood, canvas, brass, charcoal...) are blended in as a faint grain when they arrive (the game works without them).
@@ -32,8 +32,8 @@ export const TRIM = {
   strap: { x: 0, y: 640, w: 1024, h: 64 }, lacing: { x: 1024, y: 640, w: 1024, h: 64 }, stencilH2: { x: 0, y: 704, w: 512, h: 64 },
   seaFoam0: { x: 0, y: 768, w: 640, h: 128 }, seaFoam1: { x: 640, y: 768, w: 384, h: 128 }, seaFoam2: { x: 1024, y: 768, w: 640, h: 128 }, seaFoam3: { x: 1664, y: 768, w: 384, h: 128 },
   rock0: row(896, 128), rock1: row(1024, 128), rock2: row(1152, 128), foam: row(1280, 128),
-  cloud0: { x: 0, y: 1408, w: 256, h: 256 }, cloud1: { x: 256, y: 1408, w: 256, h: 256 }, cloud2: { x: 512, y: 1408, w: 256, h: 256 }, cloud3: { x: 768, y: 1408, w: 256, h: 256 },
-  cloud4: { x: 1024, y: 1408, w: 256, h: 256 }, cloud5: { x: 1280, y: 1408, w: 256, h: 256 }, cloud6: { x: 1536, y: 1408, w: 256, h: 256 }, cloud7: { x: 1792, y: 1408, w: 256, h: 256 },
+  cloud0: { x: 0, y: 1408, w: 340, h: 256 }, cloud1: { x: 340, y: 1408, w: 340, h: 256 }, cloud2: { x: 680, y: 1408, w: 340, h: 256 }, cloud3: { x: 1020, y: 1408, w: 340, h: 256 },
+  cloud4: { x: 1360, y: 1408, w: 340, h: 256 }, cloud5: { x: 1700, y: 1408, w: 340, h: 256 },
   fire0: { x: 0, y: 1664, w: 256, h: 256 }, fire1: { x: 256, y: 1664, w: 256, h: 256 }, fire2: { x: 512, y: 1664, w: 256, h: 256 }, fire3: { x: 768, y: 1664, w: 256, h: 256 },
   smoke: { x: 1024, y: 1664, w: 256, h: 256 }, scorch0: { x: 1280, y: 1664, w: 256, h: 256 }, scorch1: { x: 1536, y: 1664, w: 256, h: 256 }, scorch2: { x: 1792, y: 1664, w: 256, h: 256 },
   hole0: { x: 0, y: 1920, w: 128, h: 128 }, hole1: { x: 128, y: 1920, w: 128, h: 128 }, hole2: { x: 256, y: 1920, w: 128, h: 128 }, hole3: { x: 384, y: 1920, w: 128, h: 128 },
@@ -41,7 +41,7 @@ export const TRIM = {
 export const CANVAS_CELLS = ['canvas0', 'canvas1', 'canvas2', 'canvas3', 'canvas4', 'canvas5'];
 export const WOODS = ['woodA', 'woodB', 'woodC'];
 export const FIRE_FRAMES = ['fire0', 'fire1', 'fire2', 'fire3'];
-export const CLOUD_DISCS = ['cloud0', 'cloud1', 'cloud2', 'cloud3', 'cloud4', 'cloud5', 'cloud6', 'cloud7'];
+export const CLOUD_DISCS = ['cloud0', 'cloud1', 'cloud2', 'cloud3', 'cloud4', 'cloud5']; // (A3: six painted cumulus, not discs any more; the name is kept for clouds.js)
 export const SCORCH = ['scorch0', 'scorch1', 'scorch2'];
 export const HOLES = ['hole0', 'hole1', 'hole2', 'hole3'];
 export const SEA_FOAM = ['seaFoam0', 'seaFoam1', 'seaFoam2', 'seaFoam3'];
@@ -309,20 +309,41 @@ function paintSeaFoam(g) {
   }
 }
 
+// A3: the 3D clouds are PAINTED cumulus, not soft discs: a hard-edged gouache silhouette (a union of round lobes cut flat along a base line), a thin warm ink edge round it, two flat tones (the light
+// top, and the shaded flat underside / lower-right crescent made by shifting the light shape up and to the left), opaque. Each cell is painted on its own small canvas and stamped onto the sheet.
+export const CLOUD_BASE = 0.8; // (the base line, as a share of the cell's height, from the top: clouds.js stands the sprite on it)
+const CLOUD_LOBES = [ // per cumulus: [x as a share of the usable width, radius in texels]
+  [[0.50, 92], [0.30, 66], [0.70, 70], [0.14, 40], [0.86, 44]],
+  [[0.38, 80], [0.62, 96], [0.18, 52], [0.84, 56]],
+  [[0.20, 56], [0.38, 72], [0.55, 64], [0.72, 70], [0.88, 48], [0.50, 46]],
+  [[0.50, 104], [0.28, 60], [0.74, 66], [0.12, 34], [0.90, 38]],
+  [[0.30, 88], [0.68, 84], [0.50, 60], [0.12, 44], [0.88, 46]],
+  [[0.32, 64], [0.56, 76], [0.80, 52], [0.14, 38]],
+];
+const CLOUD_COL = { ink: '#a07c78', shade: '#c4cce6', light: '#fffaf0' };
 function paintClouds(g) {
   CLOUD_DISCS.forEach((name, i) => {
     const r = TRIM[name], rnd = mulberry(300 + i), R = (a, b) => a + (b - a) * rnd();
-    const cx = r.x + r.w / 2, cy = r.y + r.h / 2, n = 5 + (i % 3);
-    const blobs = [];
-    for (let k = 0; k < n; k++) { const a = (k / n) * 6.283 + R(-0.4, 0.4), d = R(0.12, 0.3) * r.w; blobs.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.7, R(0.18, 0.3) * r.w]); }
-    blobs.push([cx, cy, 0.3 * r.w]);
-    g.save(); g.beginPath(); g.rect(r.x, r.y, r.w, r.h); g.clip();
-    g.fillStyle = rgba(248, 250, 252); for (const [x, y, rr] of blobs) { g.beginPath(); g.arc(x, y, rr, 0, 7); g.fill(); }
-    g.globalCompositeOperation = 'source-atop'; // the flat blue-grey underside, painted over the white only
-    g.fillStyle = rgba(176, 196, 224, 0.75);
-    g.beginPath(); g.ellipse(cx, cy + r.h * 0.34, r.w * 0.52, r.h * 0.2, 0, 0, 7); g.fill();
-    g.fillStyle = rgba(255, 255, 255, 0.6); g.beginPath(); g.arc(cx - r.w * 0.1, cy - r.h * 0.15, r.w * 0.16, 0, 7); g.fill();
-    g.restore();
+    const cv = document.createElement('canvas');
+    cv.width = r.w; cv.height = r.h;
+    const c = cv.getContext('2d');
+    const base = Math.round(r.h * CLOUD_BASE), INK = 3, pad = 8;
+    const lobes = CLOUD_LOBES[i % CLOUD_LOBES.length].map(([fx, rad]) => {
+      const rr = Math.min(rad * R(0.95, 1.05), (r.h * 0.78 - INK) / 1.3);
+      return [Math.max(rr * 0.9 + INK + 1, Math.min(r.w - rr * 0.9 - INK - 1, pad + fx * (r.w - 2 * pad))), base - rr * 0.4, rr];
+    });
+    const xs = lobes.map((l) => l[0]), x0 = Math.min(...xs), x1 = Math.max(...xs);
+    const body = (grow, dx, dy) => { c.beginPath(); for (const [x, y, rr] of lobes) { c.moveTo(x + dx + rr + grow, y + dy); c.arc(x + dx, y + dy, Math.max(1, rr + grow), 0, 7); } c.rect(x0 + dx, base - 14 + dy, x1 - x0, 14 + grow); };
+    c.save(); c.beginPath(); c.rect(0, 0, r.w, base + INK); c.clip();
+    c.fillStyle = CLOUD_COL.ink; body(INK, 0, 0); c.fill(); // the ink edge (the union, grown)
+    c.restore();
+    c.save(); c.beginPath(); c.rect(0, 0, r.w, base); c.clip();
+    c.fillStyle = CLOUD_COL.shade; body(0, 0, 0); c.fill(); // the whole body in the shade tone
+    body(0, 0, 0); c.clip(); // the light tone: the same lobes, shifted up and to the left and a little smaller, cut to the body and to a wide ellipse (so the underside is one flat shaded band, curved a little)
+    c.beginPath(); c.ellipse((x0 + x1) / 2, base - 0.58 * r.h, Math.max(40, (x1 - x0) / 2 + 110), 0.58 * r.h - 0.14 * r.h, 0, 0, 7); c.clip();
+    c.fillStyle = CLOUD_COL.light; body(-2, -5, -15); c.fill();
+    c.restore();
+    g.drawImage(cv, r.x, r.y);
   });
 }
 

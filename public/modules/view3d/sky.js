@@ -3,16 +3,19 @@
 // them are UNLIT MeshBasicMaterial with toneMapped:false and fog:false (style.js paintedPlane: they also undo the composer's tone mapping so they come out exactly as painted). In a cave
 // the cave picture stands behind the rock instead; that one is lit (the lamps' beams land on it). Everything is fixed to the world: nothing shimmers as the camera moves.
 import { THREE, gradientMap, look, paintedPlane, rimify } from './style.js';
+import { config } from '../../config.js';
+import { caveStone, STONE_TILE, emberSky, emberFoundry, emberMist } from './skyArt.js';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 const ENV_FILES = {
-  aether: ['sky', 'clouds', 'far', 'mist', 'cave'], ember: ['sky', 'clouds', 'far', 'mid', 'mist', 'cave'], frost: ['sky', 'clouds', 'far', 'mid', 'mist', 'cave'],
+  aether: ['sky', 'clouds', 'far', 'mist', 'cave'], ember: ['sky', 'clouds', 'foundry', 'far', 'mid', 'mist', 'cave'], frost: ['sky', 'clouds', 'far', 'mid', 'mist', 'cave'],
   fungal: ['sky', 'far', 'mid', 'mist', 'cave'], sea: ['sky', 'clouds', 'far', 'mid', 'mist', 'cave'], skyisles: ['sky', 'clouds', 'far', 'mid', 'mist', 'cave'],
   storm: ['sky', 'clouds', 'far', 'mid', 'mist', 'cave'],
 };
 // Strips: depth behind the ship plane, world height of the picture, anchored to the bottom (or the top for clouds), alpha, and own drift (world units/s).
 const STRIPS = [
   { kind: 'clouds', z: -9500, h: 4200, top: true, alpha: 1, drift: 12 },
+  { kind: 'foundry', z: -8800, h: 3600, alpha: 1, drift: 0, lift: 0.12, art: true, rec: 'far' }, // (A3: the Ember Forge's painted-in-code strips, skyArt.js; the other environments have no such strip)
   { kind: 'far', z: -8000, h: 4000, alpha: 0.9, drift: 0, lift: 0.02 },
   { kind: 'mist', z: -6200, h: 2900, alpha: 0.8, drift: -20, lift: 0.04 },
   { kind: 'mid', z: -4400, h: 2100, alpha: 1, drift: 0, lift: 0 },
@@ -39,8 +42,25 @@ export function createSky(scene, renderer) {
   const skyPlane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), skyMat);
   skyPlane.renderOrder = -20;
   skyPlane.frustumCulled = false;
+  // A3 STRIP RECESSION: the far and mid strips are painted at full saturation and contrast and compete with the ship; each is pulled toward the environment's haze colour and desaturated a little,
+  // in the fragment shader (config.LOOK3D.<env>.strips = { far: { haze, sat }, mid: { haze, sat } }: haze = the share lerped toward the haze colour, sat = the colour left; 'color' names another haze colour).
+  // The near / cloud / mist strips are as painted.
+  const recede = (material) => {
+    const U = { col: { value: new THREE.Color('#ffffff') }, amt: { value: 0 }, sat: { value: 1 } };
+    const prev = material.onBeforeCompile;
+    material.userData.rec = U;
+    material.onBeforeCompile = (sh, r) => {
+      if (prev) prev(sh, r);
+      sh.uniforms.uHazeCol = U.col; sh.uniforms.uHazeAmt = U.amt; sh.uniforms.uStripSat = U.sat;
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uHazeCol; uniform float uHazeAmt; uniform float uStripSat;')
+        .replace('#include <map_fragment>', '#include <map_fragment>\n{ float lum = dot( diffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) ); diffuseColor.rgb = mix( vec3( lum ), diffuseColor.rgb, uStripSat ); diffuseColor.rgb = mix( diffuseColor.rgb, uHazeCol, uHazeAmt ); }');
+    };
+    material.customProgramCacheKey = () => 'painted-strip';
+    return material;
+  };
   const stripMeshes = STRIPS.map((s) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), paintedPlane(new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, opacity: s.alpha, color: '#ffffff' })));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), recede(paintedPlane(new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, opacity: s.alpha, color: '#ffffff' }))));
     m.renderOrder = -19 + STRIPS.indexOf(s);
     m.frustumCulled = false;
     m.visible = false;
@@ -61,7 +81,7 @@ export function createSky(scene, renderer) {
   cavePlane.frustumCulled = false;
   scene.add(cavePlane);
   const fwd = new THREE.Vector3();
-  let extra = null, cave3 = false;
+  let extra = null, cave3 = false, caveTile = 900, caveOld = true, gloomNow = 0;
 
   const S = { skyMat, skyPlane, caveMat, cavePlane };
 
@@ -70,26 +90,51 @@ export function createSky(scene, renderer) {
     scene.background = new THREE.Color(c.bg);
     skyMat.color.set(c.sky);
     stripMeshes.forEach((m) => m.material.color.set(c.sky).lerp(_white, name === 'night' ? 0.0 : 0.35));
+    applyRecession();
   };
-  const _white = new THREE.Color('#ffffff');
+  const _white = new THREE.Color('#ffffff'), _hz = new THREE.Color();
+  let stripCfg = null;
+  // A3: the haze each strip is pulled toward = the environment's haze colour (LOOK3D.<env>.strips.color, else the fog colour) in the same picture tint as the strip itself
+  const applyRecession = () => {
+    STRIPS.forEach((s, i) => {
+      const m = stripMeshes[i], U = m.material.userData.rec, c = stripCfg && (stripCfg[s.kind] || (s.rec && stripCfg[s.rec]));
+      if (!U) return;
+      if (!c || !look.strips) { U.amt.value = 0; U.sat.value = 1; return; }
+      U.amt.value = clamp(Number(c.haze) || 0, 0, 1); U.sat.value = clamp(c.sat == null ? 1 : Number(c.sat), 0, 1.5);
+      U.col.value.copy(_hz.set(c.color || stripCfg.color || '#e6ecea')).multiply(m.material.color);
+    });
+  };
+  // the environment's rig (lights.js rigFor: rig.strips and rig.haze); world.js calls it after the lights were applied
+  S.setRig = (rig) => { stripCfg = rig && rig.strips ? { ...rig.strips, color: (rig.strips && rig.strips.color) || rig.haze } : null; applyRecession(); };
   // The darkness (lights.js gloom 0..1): the cave picture's own glow drops with it, so the lamps and beams are what shows it.
-  S.setGloom = (g) => { caveMat.emissiveIntensity = 0.2 * (1 - 0.75 * g); };
+  S.setGloom = (g) => { gloomNow = g; caveMat.emissiveIntensity = (caveOld ? 0.2 : 0.08) * (1 - 0.75 * g); }; // (A3: the painted stone glows only 8% of its own; the old cave picture glowed 20%)
 
   // The sky for this environment; cave = the map is a cave (no sky strips, the cave picture behind the rock instead).
   S.setEnv = (envId, cave) => {
     const files = ENV_FILES[envId] || [];
-    const skyTex = files.includes('sky') ? tex(envId, 'sky') : null;
+    // A3: the Ember Forge's sky and strips are painted in code (skyArt.js); ?look=noskyart puts the plain picture back
+    const art = look.skyart && envId === 'ember';
+    const paintedSky = art ? emberSky() : null;
+    const skyTex = paintedSky || (files.includes('sky') ? tex(envId, 'sky') : null);
     skyMat.map = skyTex; skyMat.needsUpdate = true;
     STRIPS.forEach((s, i) => {
       const m = stripMeshes[i];
-      if (!files.includes(s.kind) || cave) { m.visible = false; m.userData.on = false; return; }
-      const t = tex(envId, s.kind, 'x');
+      if (!files.includes(s.kind) || cave || (s.art && !art)) { m.visible = false; m.userData.on = false; return; }
+      const t = s.art ? emberFoundry() : (art && s.kind === 'mist' ? emberMist() || tex(envId, s.kind, 'x') : tex(envId, s.kind, 'x'));
+      if (s.art && !t) { m.visible = false; m.userData.on = false; return; }
       m.material.map = t; m.material.needsUpdate = true;
       m.visible = true; m.userData.on = true;
     });
     cavePlane.visible = cave;
     cave3 = !!cave;
-    if (cave && files.includes('cave')) { const t = tex(envId, 'cave', 'xy'); caveMat.map = t; caveMat.emissiveMap = t; caveMat.emissive.set('#ffffff'); caveMat.emissiveIntensity = 0.2; caveMat.needsUpdate = true; }
+    // A3 THE CAVE WALL: dark painted stone (skyArt.js caveStone: the terrain's rock strata, 4x, in the environment's cave colours, the old picture kept as a 10% grain), lit only by the lamps and beams
+    // (a faint 8% glow of its own); ?look=noskyart puts the old cave picture back.
+    if (cave && files.includes('cave')) {
+      const stone = look.skyart ? caveStone(envId) : null;
+      const t = stone || tex(envId, 'cave', 'xy');
+      caveTile = stone ? STONE_TILE : 900; caveOld = !stone;
+      caveMat.map = t; caveMat.emissiveMap = t; caveMat.emissive.set('#ffffff'); caveMat.emissiveIntensity = (caveOld ? 0.2 : 0.08) * (1 - 0.75 * gloomNow); caveMat.needsUpdate = true;
+    }
   };
 
   // Every frame. cam = the THREE camera; target = where it looks (3D), vis = world units visible at the ship plane { w, h }, t = seconds.
@@ -131,7 +176,7 @@ export function createSky(scene, renderer) {
     }
     // the cave picture, world-fixed behind the rock
     if (cavePlane.visible && caveMat.map) {
-      const pw = vis.w * 2.4, ph = vis.h * 2.4, tile = 900;
+      const pw = vis.w * 2.4, ph = vis.h * 2.4, tile = caveTile;
       cavePlane.scale.set(pw, ph, 1);
       cavePlane.position.x = target.x; cavePlane.position.y = target.y;
       caveMat.map.repeat.set(pw / tile, ph / tile);

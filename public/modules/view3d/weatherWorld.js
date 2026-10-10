@@ -30,8 +30,8 @@ const LAVA_VERT = `
   }
 `;
 const LAVA_FRAG = `
-  uniform float uTime, uSpeed, uHdr, uAlpha, uScale, uCrack, uNear, uNearZ, uVentStep, uVentShare;
-  uniform vec3 uHot, uMid, uDeep, uGlowCol, uCrust;
+  uniform float uTime, uSpeed, uHdr, uAlpha, uScale, uCrack, uNear, uNearZ, uVentStep, uVentShare, uFarDim, uSmoke;
+  uniform vec3 uHot, uMid, uDeep, uGlowCol, uCrust, uSmokeCol;
   varying vec3 vW; varying float vWall; varying float vV;
   float h21( vec2 p ) { vec3 p3 = fract( vec3( p.xyx ) * 0.1031 ); p3 += dot( p3, p3.yzx + 33.33 ); return fract( ( p3.x + p3.y ) * p3.z ); }
   float vn( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f ); return mix( mix( h21( i ), h21( i + vec2( 1.0, 0.0 ) ), f.x ), mix( h21( i + vec2( 0.0, 1.0 ) ), h21( i + 1.0 ), f.x ), f.y ); }
@@ -75,6 +75,10 @@ const LAVA_FRAG = `
       col = mix( col, mix( uMid * 1.05, uHot * 1.2, step( 0.9, heat ) ), pool );
       col *= mix( 1.0, uNear, smoothstep( 0.0, uNearZ, vW.z ) ); // (the foreground sinks into the dark: it is not where the game is played)
       float fa = smoothstep( 0.0, 0.08, vV ); // (it melts into the haze at the far edge)
+      // A3: the far lava is a painting that RECEDES: its glow drops by uFarDim past the middle distance, and a dark smoke haze (a static, broken band) lies over the far end of it
+      float farK = 1.0 - smoothstep( 0.25, 0.65, vV );
+      float smoke = uSmoke * ( 1.0 - smoothstep( 0.02, 0.34, vV ) ) * ( 0.65 + 0.35 * vn( vW.xz / 900.0 + 5.0 ) );
+      col = mix( col * ( 1.0 - uFarDim * farK ), uSmokeCol, clamp( smoke, 0.0, 1.0 ) );
       gl_FragColor = vec4( col * uHdr * fa, fa );
     }
     #include <tonemapping_fragment>
@@ -85,7 +89,7 @@ const LAVA_FRAG = `
 export function createLava(parent) {
   const U = {
     uY: { value: 0 }, uZ0: { value: Z_FAR }, uZ1: { value: 400 }, uGlow: { value: 700 }, uWallZ: { value: -380 },
-    uTime: { value: 0 }, uSpeed: { value: 9 }, uHdr: { value: 1.12 }, uAlpha: { value: 0.4 }, uScale: { value: 230 }, uCrack: { value: 0.075 }, uNear: { value: 0.4 }, uNearZ: { value: 900 }, uVentStep: { value: 1700 }, uVentShare: { value: 0.5 },
+    uTime: { value: 0 }, uSpeed: { value: 9 }, uHdr: { value: 1.12 }, uAlpha: { value: 0.4 }, uScale: { value: 230 }, uCrack: { value: 0.075 }, uNear: { value: 0.4 }, uNearZ: { value: 900 }, uVentStep: { value: 1700 }, uVentShare: { value: 0.5 }, uFarDim: { value: 0.25 }, uSmoke: { value: 0.55 }, uSmokeCol: { value: new THREE.Color('#3a1a1c') },
     uHot: { value: new THREE.Color('#ffcf4a') }, uMid: { value: new THREE.Color('#ff7a1c') }, uDeep: { value: new THREE.Color('#c8320f') }, uGlowCol: { value: new THREE.Color('#ff6e1e') }, uCrust: { value: new THREE.Color('#33150f') },
   };
   const mat = new THREE.ShaderMaterial({
@@ -136,6 +140,7 @@ export function createLava(parent) {
     U.uY.value = -lavaY - (fin(drop) ? drop : 0); U.uZ0.value = Z_FAR; U.uZ1.value = map.open ? Math.max(600, Math.min(cam.position.z + 600, 5000)) : Z_FRONT_CAVE - 6;
     const num = (v, d) => (fin(v) ? v : d);
     U.uTime.value = t; U.uSpeed.value = num(C.SPEED, 9); U.uHdr.value = num(C.HDR, 1.12);
+    U.uFarDim.value = clamp(num(C.FAR_DIM, 0.25), 0, 0.9); U.uSmoke.value = clamp(num(C.HAZE, 0.55), 0, 1); U.uSmokeCol.value.set(C.HAZE_COLOR || '#3a1a1c'); // (A3)
     U.uScale.value = num(C.SCALE, 230); U.uCrack.value = num(C.CRACK, 0.075); U.uNear.value = num(C.NEAR, 0.4); U.uNearZ.value = Math.max(100, num(C.NEAR_Z, 900));
     U.uVentStep.value = Math.max(300, num(C.VENT_STEP, 1700)); U.uVentShare.value = num(C.VENT_SHARE, 0.5); U.uCrust.value.set(C.CRUST || '#33150f');
     U.uGlow.value = (E.GLOW || 700) * (fin(C.WALL) ? C.WALL : 1); U.uAlpha.value = num(C.WALL_ALPHA, 0.4);
