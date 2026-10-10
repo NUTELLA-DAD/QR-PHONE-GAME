@@ -14,6 +14,7 @@
 import { config } from '../../config.js';
 import { typeOf } from './gunTypes.js';
 import { lay } from './minefield.js';
+import { drakeFlak } from './creatureDrake.js'; // (C.6a: a flak shell bursts near the Cinder Drake's wings)
 
 // ---- firing ----
 const rnd = () => Math.random() * 2 - 1;
@@ -79,6 +80,7 @@ export function stepFlak(world, dt, puff) {
   if (!T) return;
   for (const sh of world.shells) {
     if (!sh.flak || sh.life <= 0) continue;
+    if (world.creature && world.creature.kind === 'drake' && drakeFlak(world, sh)) continue; // (a burst near a wing of the Drake: creatureDrake.js)
     const team = (sh.owner && world.players[sh.owner] && world.players[sh.owner].team) || null;
     const planes = [];
     const e = world.enemy;

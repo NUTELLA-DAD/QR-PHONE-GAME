@@ -56,7 +56,7 @@ import { brokenOf } from './breakOff.js';
 // shipInit below, makes them). A key a ship's subsystems write must be listed, or it is written to the context only (see the check in --check-two-ships).
 export const SHIP_KEYS = [
   // the body and what hangs on it (made by createSimulation / shipInit)
-  'ship', 'GUNS', 'bombBay', 'gasValve', 'gasValveOpen', 'ventOpen', 'shield', 'gasHoles', 'breaches', 'fires', 'boarders', 'bombs', 'wreck',
+  'ship', 'GUNS', 'bombBay', 'gasValve', 'gasValveOpen', 'ventOpen', 'shield', 'gasHoles', 'breaches', 'fires', 'boarders', 'bombs', 'wreck', 'perch',
   // made by the subsystem factories
   'modules', 'bags', 'bagsVersion', 'bagAlert', 'hotAir', 'gasStats', 'balance', 'forces', 'engines', 'engineStats', 'thrust',
   'sails', 'sailPush', 'sailWarn', 'sailWarned', 'sailStats', 'links', 'linkStats', 'surgeEngine', 'surgeCoil', 'surgeBotAt',
@@ -103,6 +103,7 @@ function shipInit(layout) {
     gasHoles: [], breaches: [], fires: [], boarders: [], bombs: [],
     hitLog: [], breakEvents: [],
     wreck: null,
+    perch: null, // (the Cinder Drake sitting on her gasbag: { w, x }, creatureDrake.js; balance.js counts it as a live load)
     bombBay: { bombs: config.BOMBS.START, cd: 0, empty: 0, aim: null },
     gasValve: { input: 0, auto: false },
     shield: { ang: -Math.PI / 2, on: false, flash: 0 },

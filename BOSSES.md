@@ -2,7 +2,7 @@
 
 Planned by Fable (a read-only study of the code). Lead's notes are marked **Lead:**.
 
-**Lead:** status: waiting for the owner's OK. The first build is the Kraken vertical slice, tasks C.0 to C.5 below.
+**Lead:** status: C.6a (the Cinder Drake) is built; waiting for the owner's OK on the rest. The first build is the Kraken vertical slice, tasks C.0 to C.5 below.
 Note that the "C." numbers here are creature tasks. They are not the same as Phase C (controller ergonomics) in NEXT_LEVEL.md.
 
 ## 1. The vision
@@ -201,7 +201,7 @@ One monster gets built all the way first: the Kraken. It is proved with bots, th
 | C.3 | The Kraken: phases, attacks, telegraphs, five wins, death, reward, trophy, lair stops on the route map. **IN: see "C.3 is in" below** | M | `creatures/kraken.js`, `creatureFight.js`, `voyage.js`, `maps.js`, `simulation.js`, `partsShop.js`, `envStormSea.js` | `--check-creature` |
 | C.4 | Kraken art: baked segments, telegraph shapes, grip squash, severed debris, boss-cam, slow-mo finale | M | `creatureArt.js`, `debrisArt.js`, `render.js` | 300-frame draw timed, TV check |
 | C.5 | Bots and the gate: creature jobs, helm plan, bombardier mouth drop; `tools/creature-check.mjs`, `--check-creature`, `botsim --creature kraken` | M | `bots.js`, `course.js`, `tools/*` | see below |
-| C.6a-f | The other six, one each, Drake first | S-M each | `creatures/*.js`, `creatureArt.js`, env hooks | each win proven headless |
+| C.6a-f | The other six, one each, Drake first. **C.6a (Drake) IN: see "C.6a is in" below** | S-M each | `creatures/*.js`, `creatureArt.js`, env hooks | each win proven headless |
 | C.7 | PvP Beast wildcard + King of the Hill guardian | M | `pvp/match.js`, `creature.js` | mirror match still 35-65% |
 | C.8 | Polish: Log lines, Hangar unlocks, play-of-the-mission card, phone buzz, first-time lair hint | S | `render.js`, `voyage.js`, `controller/ui.js` | TV review |
 
@@ -267,6 +267,22 @@ One monster gets built all the way first: the Kraken. It is proved with bots, th
 - **BOTS**: the bomb bay is manned from 5 s before a window (a job and a station reach) and stocked to `MOUTH.FED + 1`; `bombInMouth(state)` (the bomb's own flight path through the funnel) says when to hold Action. In phase 3 a gun-station bot with a HARPOON gun fires it at the body (`aim.js towTarget`). `CREATURE_FORCE_WIN=sever|mouth|tow|board|hp` (= `config.CREATURES.FORCE_WIN`): the bots fire only at what that win needs (the escort and the coil too), only that win can end the fight, and for `board` one bot with a sword is put on the mantle in phase 3 and holds Action at the heart (people use the hookshot or the crew cannon).
 - **botsim and golden**: `botsim.mjs` zeroes the lair count unless `--lair` / `WITH_LAIRS=1` is given, so its seeded baselines (`--check-botsim`, the golden's botsim rows, the frames) stay byte-identical; `voyagesim.mjs` flies the lairs (`NO_LAIRS=1` switches them off to compare). Only the golden's two voyagesim rows were re-snapshotted (normal 8/10 -> 9/10 victories, median 37.7 -> 33.6 min; easy 7/10 -> 8/10, 33.3 -> 30.9 min). `voyagesim` now prints how many lairs were met and won. Voyage mode, Normal, seeds 1-40: classic 9/40 -> 13/40 victories, Sparrow 10/40 -> 11/40; 61 lairs on each set of routes: the classic crews met 15 and won 15 (all by the beak), the Sparrow crews met 16 and won 15 (14 by the pool, 1 by the beak: she has no bomb bay).
 - **For C.5/C.4**: art: the funnel is invisible (the beak should gape upward through the mantle while `cr.mouthWin` runs; `mouth.open` shows the jaw), phase 3 raises the body by `cr.phaseDy` (negative), dive grips carry `g.dive`, the death is `cr.mode === 'dying'` (`state.slow`), the banner is `state.ev.warnText`. Bots: the helm does not steer the creature onto a spire (a human crew has to); the harpoon bot fires once and the helm bot stays near the lair's middle, which is where the spire is.
+
+**C.6a is in** (THE CINDER DRAKE, the Ember Forge dragon, about 3x ship size; `creatures/drake.js` = body data, poses and phase names; `creatureDrake.js` = the whole fight (arrive, orbit, breath, swoop, perch, crash, crawl); `creatureBreath.js` = the flame cone on the fire model; numbers in `config.CREATURES.DRAKE`, `LAIR.BY_ENV`, `FORCES.GAIN.perch`):
+- **BODY:** 2 wings (`wingN`/`wingF`, 5 membrane segments each, hp each), a 6-segment neck, head, mouth, tail, torso, and a hidden heart behind scales. The Kraken's `creature.js` got generic, Kraken-inert additions: `body.rot` (pitch), driven limbs (`pd.drive`, `p.rel`, set only on key frames), `pd.attach` (head rides the neck, mouth rides the head), `bodyVec`, `snapPose`.
+- **MOVES:** 'arrive' then 'fly' (orbit loop with acts) and 'perch'; torn wing or below 60% -> 'crash' onto the rock shelf -> 'crawl'; 'dying'. Phases: 1 flying, 2 crawling, 3 desperate below 30% with the heart exposed while it rears (`drakePhaseName`).
+- **ATTACKS** (each: banner, phone buzz for crew in the zone, sound):
+  - BREATH: throat glows 1.6 s, then a cone of flame (patterns level / high / up) that ignites decks, hurts crew, burns hull (armour resists), scorches gas bags (hydrogen explodes); a budget caps fires per breath.
+  - SWOOP: wind, lock, dive, escape; a hull bump if she is still under it.
+  - PERCH: the drake lands on the gasbag as a live load (`ship.ctx.perch` -> `balance.js` loads, `applyForce` source 'perch', tilt within `FORCES.MAX_DEG`), claws holes (capped by `PERCH.CLAWS`), lashes with its tail; driven off by swords, shots, flame, a hard helm shake, or time.
+  - CRAWL: lunge at the hull, GAPE (mouth open, bombs), REAR (heart exposed in phase 3), cough.
+- **WINS** (`cr.stats.win`): 'choke' (feed it enough in the open mouth when the throat glows), 'bombs' (crawling mouth lured over the bomb bay), 'tow' (harpoon into a lava spout), 'board' (board the neck while perched, hack the scales, strike the heart), 'flak' (flak on the wings, pool kill with at least half from flak), 'hp'.
+- **LAIR:** `voyage.js markLairs` picks the creature by stop environment (`LAIR.BY_ENV`: sea -> Kraken, ember -> Drake); `maps.js buildDrakeLairMap` = lava below `LAIR.LAVA_BELOW`, a rock shelf and lava spouts. Dev flags: `host.html?creature=drake`, `botsim --creature drake`.
+- **REWARD:** triple salvage and the trophy "Drake-scale plating" (an armour part with `art:'drake'`, mass x `TROPHY.MASS_MUL`).
+- **BOTS** (`bots.js`): gunners with led aim, fire crew, a drive-off-perch job (helm shake), the bomb bay over a crawling mouth, flak priority on wings, helm steering over a lava spout when hooked.
+- **ART:** 2D in `creatureArt.js` (`drawDrake`); `view3d/creature.js` has a `drake` kind (tubes only) with `view3d/creatureDrake.js`. A proper 3D Drake model (wing membranes, scales, glowing throat) is still to do.
+- **GATE:** `tools/creature-check.mjs` section D0-D11. Forced wins with 8 bots on Normal (seconds, seeds 1-3): choke 78/74/99, bombs 188/190/256, tow 184/163/165, board 29, flak 245/224/210, hp 123/175/241; Easy: 4 bots win (hp) in about 200 s, 16 bots in about 115 s. Voyagesim (24 seeds, Normal) classic 14/24 (was 16/24), Sparrow 7/24 (was 6/24); the golden bands still hold.
+
 
 **The gate `node tools/buildsim.mjs --check-creature`:**
 - (a) Parts build, hit capsules work, the IK reaches, and keys hold for 1/8 s.

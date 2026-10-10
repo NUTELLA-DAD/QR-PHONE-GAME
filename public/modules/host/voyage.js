@@ -87,7 +87,7 @@ function markLairs(columns, seed, n, h) {
   const rand = mulberry((seed ^ 0x6c616972) >>> 0);
   const count = n - h >= LR.LONG_STOPS ? LR.COUNT.long : LR.COUNT.short;
   const cols = [];
-  for (let c = h + 1; c <= n - 2; c++) if (columns[c].some((s) => s.env === 'sea')) cols.push(c);
+  for (let c = h + 1; c <= n - 2; c++) if (columns[c].some((s) => LR.BY_ENV[s.env])) cols.push(c); // (a Sunken Sea stop holds the Kraken, an Ember Forge stop the Cinder Drake: C.6a)
   for (let i = cols.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [cols[i], cols[j]] = [cols[j], cols[i]]; } // (shuffled)
   const chosen = [];
   for (const c of cols) {
@@ -95,9 +95,10 @@ function markLairs(columns, seed, n, h) {
     if (chosen.every((x) => Math.abs(x - c) > 1)) chosen.push(c);
   }
   for (const c of chosen) {
-    const seas = columns[c].filter((s) => s.env === 'sea');
+    const seas = columns[c].filter((s) => LR.BY_ENV[s.env]);
     const s = seas[Math.floor(rand() * seas.length)];
     s.lair = true;
+    s.creature = LR.BY_ENV[s.env]; // 'kraken' | 'drake'
     s.kind = 'lair';
     s.danger += LR.DANGER;
     s.reward = Math.round(s.reward * LR.REWARD_MUL);
@@ -109,7 +110,9 @@ export const stopById = (voyage, id) => {
   return null;
 };
 
-export const stopName = (s) => (s.flagship ? 'The Flagship' : s.harbour ? 'The Harbour' : s.lair ? config.CREATURES.LAIR.NAME : envInfo(s.env).name);
+// The look and words of a lair by its creature ('kraken' | 'drake'): { ICON, LABEL, NAME, KIND }.
+export const lairOf = (creature) => (creature === 'drake' ? config.CREATURES.DRAKE.LAIR : config.CREATURES.LAIR);
+export const stopName = (s) => (s.flagship ? 'The Flagship' : s.harbour ? 'The Harbour' : s.lair ? lairOf(s.creature).NAME : envInfo(s.env).name);
 
 // Stop numbers run on across the voyages of a campaign: run.base = stops finished before this voyage's harbour.
 export const stopNo = (run, s) => run.base + s.col + 1;

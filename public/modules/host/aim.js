@@ -133,14 +133,14 @@ export function bestTarget(state, gun) {
   const order = { flier: -2, cable: -1, bomb: 0, rocket: 1, saw: 1.5, laid: 1.8, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rivalGun: 8, rivalBag: 8.4, rivalCore: 8.8, rival: 9.2, boarder: 0.4, rivalCrew: 7.8, rivalDeck: 9.3 };
   let best = null;
   // (a flamethrower burns what is within a few hundred px: the sky's small fry, boarders on the decks, and the nearest bits of a hostile ship - flame.js - not her middle)
-  for (const t of gun.type === 'flame' ? [...targets(state).filter((u) => AIR_KINDS.has(u.kind)), ...flameTargets(state, mainShip(state), gun)] : gun.type === 'harpoon' ? [...targets(state), ...creatureTowTargets(state)] : targets(state)) {
+  for (const t of gun.type === 'flame' ? [...targets(state).filter((u) => AIR_KINDS.has(u.kind)), ...flameTargets(state, mainShip(state), gun)] : gun.type === 'harpoon' ? [...targets(state), ...creatureTowTargets(state)] : gun.type === 'flak' && state.creature && config.CREATURES.FORCE_WIN === 'flak' ? [...targets(state), ...creatureTargets(state, [], null, 'flak')] : targets(state)) {
     if (t.kind === 'flier' && gun.type !== 'flak') continue; // (only flak shells burst on a man in the air)
     if (t.kind === 'laid' && (gun.type === 'mortar' || gun.type === 'harpoon')) continue; // (a lob is no way to hit a mine, and a harpoon is for ships)
     if (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship' && !towTarget(state.creature, t)) continue; // (...and for the exhausted creature)
     if (t.kind === 'creaturePart' && forcedSkip(state.creature, t.part, gun.type)) continue; // (dev flag: the bots hold their fire so that the fight can only end one way)
     const angle = solution(state, gun, t);
     if (angle === null) continue;
-    const base = (u) => (u.rank != null ? u.rank : order[u.kind]); // (a creature's part ranks by what it is: an open beak, a lit eye, a limb)
+    const base = (u) => (u.rank != null ? u.rank : order[u.kind]) - (gun.type === 'flak' && u.kind === 'creaturePart' && u.part.kind === 'wing' ? 3 : 0); // (a creature's part ranks by what it is: an open beak, a lit eye, a limb; the flak gun's job is the Drake's wings)
     const rank = (u) => (isSpotted(u.obj) ? base(u) - 20 : base(u)); // (spotted targets come first)
     if (!best || rank(t) < rank(best.target)) best = { target: t, angle };
   }

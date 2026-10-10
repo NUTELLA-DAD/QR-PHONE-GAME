@@ -255,6 +255,250 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     });
   }
 
+  // ================================================================ THE CINDER DRAKE (C.6a) ================================================================
+  // The same recipe as the Kraken (rigid pictures baked once per zoom, blitted and rotated; stepped poses from the sim, nothing wobbles): charred red-brown scales, an ember-orange belly, charcoal horns and back
+  // spikes, bat wings of five membrane panels on a bone, a head with a hinged lower jaw and a throat that glows before the breath. Facing +x in its own picture; the mirror (body.f) flips y.
+  const D_SCALE = '#7a2e24', D_SCALE_DK = '#4e1c18', D_BELLY = '#e0a04a', D_WING = '#c9582e', D_WING_DK = '#7f2d20', D_BONE = '#4a2a2a', D_HORN = '#2f2a2e', D_TOOTH = '#efe2c0';
+  const D_EYE = '#ffd23f', D_MOUTH = '#6e1a14', D_GLOW = '#ff8a1c', D_GLOW_IN = '#ffe27a', D_PLATE = '#5a2418', D_FLESH = '#d98a95';
+  let curF = 1; // which way the body being drawn faces (the picture of a segment picks its sides by it)
+  // Does a segment's local +y point backward (toward the tail) or forward in the world? flip = the picture must be mirrored so that its +y side faces the wanted way.
+  const sideFlip = (s, wantBackward) => { const xc = -Math.sin(s.ang) * curF; return wantBackward ? xc > 0.05 : xc < -0.05; };
+
+  // A wing panel: the leading bone along the top, the membrane hanging below it (the trailing edge scalloped), a darker fold.
+  function wingPic(s, mode, look) {
+    const L = s.len, r0 = s.r, r1 = s.r1;
+    return get(`dwing|${Math.round(L)}|${Math.round(r0)}|${Math.round(r1)}|${mode}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 1.5;
+      return bake(-r0 * 0.5 - pad, -r0 * 1.0 - pad, L + r1 * 2.6 + pad, r0 * 1.5 + pad, (g) => {
+        const mid = (r0 + r1) / 2;
+        poly(g, [[0, -0.8 * r0], [L, -0.8 * r1], [L + 0.25 * r1, 0.5 * r1], [L * 0.8, 1.1 * mid], [L * 0.55, 0.7 * mid], [L * 0.3, 1.2 * mid], [0, 1.0 * r0]], col(D_WING));
+        g.save();
+        g.beginPath();
+        g.rect(-r0, -r0 * 1.2, L + r1 * 2, r0 * 3);
+        g.clip();
+        poly(g, [[0, 0.35 * r0], [L * 0.5, 0.3 * mid], [L, 0.2 * r1], [L, 0.5 * r1], [L * 0.5, 0.7 * mid], [0, 1.0 * r0]], col(D_WING_DK), false); // the shaded fold
+        poly(g, [[0, -0.7 * r0], [L, -0.7 * r1], [L, -0.45 * r1], [0, -0.45 * r0]], hiColor(look), false); // the highlight along the bone
+        g.restore();
+        g.strokeStyle = col(D_BONE); // the finger strut inside the membrane
+        g.lineWidth = Math.max(8, r1 * 0.14);
+        g.beginPath();
+        g.moveTo(L * 0.1, -0.3 * r0);
+        g.lineTo(L * 0.75, 0.9 * mid);
+        g.stroke();
+        g.strokeStyle = INK;
+        g.beginPath(); // the leading bone: a thick inked rod, a knuckle at the joint
+        g.lineWidth = Math.max(16, r1 * 0.5);
+        g.moveTo(0, -0.8 * r0);
+        g.lineTo(L, -0.8 * r1);
+        g.stroke();
+        g.strokeStyle = col(D_BONE);
+        g.lineWidth = Math.max(9, r1 * 0.3);
+        g.stroke();
+        g.beginPath();
+        g.arc(0, -0.8 * r0, Math.max(14, r0 * 0.3), 0, Math.PI * 2);
+        g.fillStyle = col(D_BONE);
+        g.fill();
+        g.strokeStyle = INK;
+        g.lineWidth = A.INK_W * 0.7;
+        g.stroke();
+        if (mode === 'tip') tri(g, L, -0.8 * r1 - 8, L + r1 * 2.2, -0.8 * r1 + 4, L, -0.8 * r1 + 22, col(D_HORN), A.INK_W * 0.7); // a claw at the wing tip
+        if (mode === 'cut') { // the torn end: raw flesh
+          g.beginPath();
+          g.ellipse(L, 0.1 * r1, Math.max(8, r1 * 0.3), r1 * 0.9, 0, 0, Math.PI * 2);
+          g.fillStyle = col(D_FLESH);
+          g.fill();
+          g.lineWidth = A.INK_W * 0.8;
+          g.stroke();
+        }
+      });
+    });
+  }
+
+  // A neck or tail segment: a tapering scaly tube with the belly (ember orange) on the +y side and charcoal spikes on the other.
+  function bodySegPic(s, kind, mode, look) {
+    const L = s.len, r0 = s.r, r1 = s.r1;
+    return get(`dseg|${kind}|${Math.round(L)}|${Math.round(r0)}|${Math.round(r1)}|${mode}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 1.5, spike = Math.max(20, r0 * 0.5);
+      return bake(-r0 - pad, -r0 - spike - pad, L + (mode === 'tip' ? r1 * 2.6 : r1) + pad, r0 + pad, (g) => {
+        const path = () => {
+          g.beginPath();
+          g.moveTo(0, -r0);
+          g.lineTo(L * 0.5, -((r0 + r1) / 2) * 1.06);
+          g.lineTo(L, -r1);
+          if (mode === 'tip') g.lineTo(L + r1 * 2.6, 0);
+          g.lineTo(L, r1);
+          g.lineTo(L * 0.5, ((r0 + r1) / 2) * 1.04);
+          g.lineTo(0, r0);
+          g.arc(0, 0, r0, Math.PI / 2, (Math.PI * 3) / 2);
+          g.closePath();
+        };
+        const ns = clamp(Math.round(L / (r0 * 1.5)), 1, 3); // charcoal back spikes first (behind the body)
+        for (let k = 0; k < ns; k++) { const x = (L * (k + 0.55)) / ns; tri(g, x - r0 * 0.28, -((r0 + r1) / 2) + 3, x + r0 * 0.34, -((r0 + r1) / 2) + 3, x - r0 * 0.05, -((r0 + r1) / 2) - spike, col(D_HORN), A.INK_W * 0.7); }
+        path();
+        g.fillStyle = col(D_SCALE);
+        g.fill();
+        g.save();
+        g.clip();
+        poly(g, [[-r0 * 1.2, r0 * 0.25], [L * 0.5, ((r0 + r1) / 2) * 0.3], [L, r1 * 0.3], [L + r1 * 3, r1 * 0.3], [L + r1 * 3, r0 * 2], [-r0 * 1.2, r0 * 2]], col(D_BELLY), false); // the belly
+        for (let k = 1; k < 4; k++) { const x = (L * k) / 4; poly(g, [[x - 6, ((r0 + r1) / 2) * 0.2], [x + 6, ((r0 + r1) / 2) * 0.2], [x + 6, r0 * 1.2], [x - 6, r0 * 1.2]], col(D_SCALE_DK), false); } // belly ribs
+        poly(g, [[r0 * 0.1, -0.85 * r0], [L * 0.9, -0.85 * r1], [L * 0.9, -0.55 * r1], [r0 * 0.1, -0.55 * r0]], hiColor(look), false); // the highlight band along the back
+        g.restore();
+        path();
+        g.lineWidth = A.INK_W;
+        g.stroke();
+        if (mode === 'cut') { g.beginPath(); g.ellipse(L, 0, Math.max(6, r1 * 0.35), r1, 0, 0, Math.PI * 2); g.fillStyle = col(D_FLESH); g.fill(); g.lineWidth = A.INK_W * 0.8; g.stroke(); }
+      });
+    });
+  }
+
+  // The torso: a capsule from its rear end (the local origin) along +x, LEN long, radius R.
+  function drakeTorsoPic(s, look) {
+    const L = s.len, R = s.r;
+    return get(`dtorso|${Math.round(L)}|${Math.round(R)}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 1.5;
+      return bake(-R - pad, -1.5 * R - pad, L + R + pad, R + pad, (g) => {
+        for (const x of [0.12, 0.3, 0.5, 0.7, 0.88]) { const k = 0.34 - Math.abs(x - 0.5) * 0.3; tri(g, x * L - k * R * 0.5, -R + 8, x * L + k * R * 0.6, -R + 8, x * L - k * R * 0.6, -R - k * R * 1.5, col(D_HORN), A.INK_W * 0.8); } // back spikes
+        const path = () => { g.beginPath(); g.arc(0, 0, R, Math.PI / 2, (Math.PI * 3) / 2); g.lineTo(L, -R); g.arc(L, 0, R, -Math.PI / 2, Math.PI / 2); g.closePath(); };
+        path();
+        g.fillStyle = col(D_SCALE);
+        g.fill();
+        g.save();
+        g.clip();
+        poly(g, [[-R, 0.28 * R], [0.3 * L, 0.34 * R], [0.7 * L, 0.3 * R], [L + R, 0.28 * R], [L + R, 2 * R], [-R, 2 * R]], col(D_BELLY), false); // the belly plates
+        for (let k = 1; k < 9; k++) { const x = (L * k) / 9; poly(g, [[x - 8, 0.3 * R], [x + 8, 0.3 * R], [x + 8, 1.2 * R], [x - 8, 1.2 * R]], col(D_SCALE_DK), false); }
+        for (const [x, y, k] of [[0.15, -0.35, 0.2], [0.32, -0.6, 0.17], [0.5, -0.25, 0.2], [0.68, -0.55, 0.17], [0.85, -0.3, 0.19], [0.4, 0.0, 0.14], [0.6, 0.02, 0.14]]) tri(g, x * L - k * R, y * R + k * R * 0.6, x * L + k * R * 0.9, y * R - k * R * 0.2, x * L + k * R * 0.1, y * R - k * R * 0.9, col(D_SCALE_DK), A.INK_W * 0.5); // scale marks
+        poly(g, [[0.05 * L, -0.8 * R], [0.95 * L, -0.8 * R], [0.95 * L, -0.6 * R], [0.05 * L, -0.6 * R]], hiColor(look), false);
+        g.restore();
+        path();
+        g.lineWidth = A.INK_W;
+        g.stroke();
+      });
+    });
+  }
+
+  // The head: local origin at the neck's tip (the back of the skull), pointing +x, LEN long, radius R. The lower jaw hangs open by state 0 / 1 / 2.
+  function drakeHeadPic(s, state, look) {
+    const L = s.len, R = s.r;
+    return get(`dhead|${Math.round(L)}|${Math.round(R)}|${state}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 1.5, drop = [0, 0.35, 0.8][state] * R;
+      return bake(-R * 1.3 - pad, -R * 2.2 - pad, L + R * 1.4 + pad, R * 2.1 + drop + pad, (g) => {
+        tri(g, 0.1 * L, -0.8 * R, -0.5 * R, -2.0 * R, 0.4 * L, -1.0 * R, col(D_HORN), A.INK_W); // two horns swept back
+        tri(g, 0.28 * L, -0.95 * R, -0.1 * R, -1.8 * R, 0.55 * L, -1.1 * R, col(D_HORN), A.INK_W * 0.8);
+        poly(g, [[0.35 * L, 0.3 * R + drop], [L * 0.95, 0.45 * R + drop], [L * 1.02, 0.7 * R + drop], [0.5 * L, 1.0 * R + drop], [0.1 * L, 0.7 * R + drop]], col(D_SCALE_DK)); // the lower jaw
+        if (state > 0) poly(g, [[0.35 * L, 0.25 * R], [L * 0.98, 0.4 * R], [L * 0.95, 0.5 * R + drop], [0.4 * L, 0.35 * R + drop]], col(D_MOUTH)); // the throat inside
+        for (let k = 0; k < 5; k++) { const x = (0.45 + k * 0.1) * L; tri(g, x - 12, 0.42 * R + drop * 0.85, x + 12, 0.42 * R + drop * 0.85, x, 0.42 * R + drop * 0.85 - 40, col(D_TOOTH), A.INK_W * 0.4); } // lower teeth
+        poly(g, [[-0.1 * L, -0.4 * R], [0.2 * L, -1.15 * R], [0.55 * L, -0.95 * R], [L * 0.98, -0.5 * R], [L * 1.06, -0.1 * R], [L * 0.98, 0.3 * R], [0.5 * L, 0.35 * R], [0.1 * L, 0.5 * R]], col(D_SCALE)); // the skull and upper jaw
+        for (let k = 0; k < 5; k++) { const x = (0.5 + k * 0.1) * L; tri(g, x - 12, 0.3 * R, x + 12, 0.3 * R, x + 2, 0.3 * R + 42, col(D_TOOTH), A.INK_W * 0.4); } // upper fangs
+        poly(g, [[0.3 * L, -0.95 * R], [0.8 * L, -0.55 * R], [0.8 * L, -0.4 * R], [0.3 * L, -0.8 * R]], hiColor(look), false);
+        g.beginPath();
+        g.ellipse(0.4 * L, -0.45 * R, 0.17 * R, 0.13 * R, 0.3, 0, Math.PI * 2); // the eye, with an angry brow
+        g.fillStyle = col(D_EYE);
+        g.fill();
+        g.lineWidth = A.INK_W * 0.6;
+        g.stroke();
+        poly(g, [[0.28 * L, -0.62 * R], [0.5 * L, -0.45 * R], [0.5 * L, -0.7 * R]], col(D_HORN), true, A.INK_W * 0.6);
+        g.beginPath();
+        g.arc(0.93 * L, -0.28 * R, 0.07 * R, 0, Math.PI * 2); // a nostril
+        g.fillStyle = col(D_SCALE_DK);
+        g.fill();
+      });
+    });
+  }
+
+  // The breast scales: overlapping charcoal-red plates over the heart (shown while it is hidden).
+  function scalesPic(R, look) {
+    return get(`dscales|${Math.round(R)}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 1.5;
+      return bake(-1.4 * R - pad, -1.3 * R - pad, 1.4 * R + pad, 1.3 * R + pad, (g) => {
+        for (const [dx, dy] of [[-0.5, -0.5], [0.5, -0.5], [0, -0.1], [-0.55, 0.45], [0.55, 0.45], [0, 0.8]]) poly(g, [[dx * R - 0.55 * R, dy * R - 0.35 * R], [dx * R + 0.55 * R, dy * R - 0.35 * R], [dx * R + 0.45 * R, dy * R + 0.35 * R], [dx * R, dy * R + 0.6 * R], [dx * R - 0.45 * R, dy * R + 0.35 * R]], col(D_PLATE), true, A.INK_W * 0.7);
+        poly(g, [[-0.9 * R, -0.75 * R], [0.9 * R, -0.75 * R], [0.9 * R, -0.62 * R], [-0.9 * R, -0.62 * R]], hiColor(look), false);
+      });
+    });
+  }
+
+  // The throat's glow: two discs, an orange and a hot yellow core; `stage` 1..3 (1/4 to full).
+  function glowPic(R, stage) {
+    return get(`dglow|${Math.round(R)}|${stage}`, () => {
+      const pad = A.INK_W * 1.5, k = [0, 0.45, 0.75, 1][stage];
+      return bake(-1.5 * R - pad, -1.5 * R - pad, 1.5 * R + pad, 1.5 * R + pad, (g) => {
+        g.beginPath();
+        g.arc(0, 0, R * (0.55 + 0.7 * k), 0, Math.PI * 2);
+        g.fillStyle = D_GLOW;
+        g.globalAlpha = 0.85;
+        g.fill();
+        g.globalAlpha = 1;
+        g.beginPath();
+        g.arc(0, 0, R * (0.25 + 0.5 * k), 0, Math.PI * 2);
+        g.fillStyle = D_GLOW_IN;
+        g.fill();
+      });
+    });
+  }
+
+  function drawDrakeLimb(p) {
+    const look = lookOf(p), n = p.segs.length, kind = p.kind;
+    for (let i = 0; i < n; i++) {
+      const s = p.segs[i];
+      if (!!s.behind !== behindPass) continue;
+      const mode = i === n - 1 ? (p.severed ? 'cut' : kind === 'wing' || kind === 'tail' ? 'tip' : 'mid') : 'mid';
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (sideFlip(s, kind === 'wing')) ctx.scale(1, -1); // (wing membranes trail backward; a neck's or tail's belly faces forward)
+      blit(kind === 'wing' ? wingPic(s, mode, look) : bodySegPic(s, kind, mode, look));
+      ctx.restore();
+    }
+  }
+  function drawDrake(body) {
+    curF = body.f < 0 ? -1 : 1;
+    const by = (id) => body.parts.find((q) => q.id === id);
+    const wingF = by('wingF'), tail = by('tail'), torso = by('torso'), neck = by('neck'), head = by('head'), mouth = by('mouth'), heart = by('heart'), wingN = by('wingN');
+    for (const p of [wingF, tail]) if (p && !p.dead) drawDrakeLimb(p);
+    if (torso && !torso.dead) {
+      const s = torso.segs[0], look = lookOf(torso), k = 1 + config.CREATURES.BREATH.AMOUNT * body.puff;
+      ctx.save();
+      const cx = s.x + Math.cos(s.ang) * s.len * 0.5, cy = s.y + Math.sin(s.ang) * s.len * 0.5;
+      ctx.translate(cx, cy);
+      ctx.scale(k, k);
+      ctx.translate(-cx, -cy);
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (body.f < 0) ctx.scale(1, -1);
+      blit(drakeTorsoPic(s, look));
+      ctx.restore();
+    }
+    if (neck && !neck.dead) drawDrakeLimb(neck);
+    if (head && !head.dead) {
+      const s = head.segs[0], look = lookOf(head), open = mouth ? mouth.openAmt : 0;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (body.f < 0) ctx.scale(1, -1);
+      blit(drakeHeadPic(s, open < 0.25 ? 0 : open < 0.75 ? 1 : 2, look));
+      ctx.restore();
+    }
+    const dk = body.drake;
+    if (mouth && !mouth.dead && dk && dk.glow > 0.05 && mouth.openAmt > 0.2) { // the throat glows before the breath
+      const s = mouth.segs[0], stage = dk.glow < 0.34 ? 1 : dk.glow < 0.7 ? 2 : 3;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      blit(glowPic(s.r, stage));
+      ctx.restore();
+    }
+    if (heart && !heart.dead && heart.segs[0]) {
+      const s = heart.segs[0], look = lookOf(heart);
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      if (heart.hidden) {
+        ctx.rotate(torso ? torso.segs[0].ang : 0);
+        if (body.f < 0) ctx.scale(1, -1);
+        blit(scalesPic(s.r, look));
+      } else blit(heartPic(s.r, look));
+      ctx.restore();
+    }
+    if (wingN && !wingN.dead) drawDrakeLimb(wingN);
+  }
+
   // ---- drawing ------------------------------------------------------------------------------------------------------------------------------------------------
   const lookOf = (p) => (p.hit > 0 ? 'flash' : p.lit ? 'lit' : 'dim');
 
@@ -262,6 +506,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
   // (a limb wrapped round a ship has segments that pass BEHIND her hull: setWrap marks them s.behind; draw() leaves them out and drawBehind() draws only them, before the ship)
   let behindPass = false;
   function drawLimb(p) {
+    if (p.kind === 'wing' || p.kind === 'neck' || p.kind === 'tail') return drawDrakeLimb(p); // (the Cinder Drake's limbs, also its torn-off wing tumbling)
     const look = lookOf(p), n = p.segs.length;
     for (let i = 0; i < n; i++) {
       const s = p.segs[i];
@@ -314,6 +559,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     cache = buckets.get(bucket);
     stats.blits = 0;
     stats.bakes = 0;
+    if (body.kind === 'drake') return drawDrake(body); // (C.6a)
     for (const p of body.parts) if (p.limb && !p.dead && p.layer === 'back') drawLimb(p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind === 'mantle') drawRigid(body, p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind !== 'mantle') drawRigid(body, p);

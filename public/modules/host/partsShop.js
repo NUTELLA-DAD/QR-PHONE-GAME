@@ -187,6 +187,13 @@ function krakenBeakCands(parts, L) {
   }
   return fromPalette('ramProw', { ghost: (s) => ({ x0: s.x - 60, x1: s.x + 90, y0: s.y - 60, y1: s.y + 60 }) })(parts, L).map((c) => ({ ...c, apply: (ps) => mark(c.apply(ps)) }));
 }
+// DRAKE-SCALE PLATING (C.6a): the trophy for slaying the Cinder Drake is an armour plate, with the new stretch marked art: 'drake'. The same rules as iron plate (it does not burn, hits on it hurt far less) and the
+// same places, but it weighs config.CREATURES.DRAKE.TROPHY.MASS_MUL of iron (shipBuild.js).
+function drakeScaleCands(parts, L) {
+  const same = (a, b) => a.p === b.p && a.x0 === b.x0 && a.x1 === b.x1;
+  const mark = (ps) => ps.map((q) => (q.part === 'armour' && !parts.some((o) => o.part === 'armour' && same(o, q)) ? { ...q, art: 'drake' } : q));
+  return fromPalette('armour', { ghost: (s) => ({ x0: s.x - COL, x1: s.x + COL, y0: s.y - 28, y1: s.y + 26 }) })(parts, L).map((c) => ({ ...c, apply: (ps) => mark(c.apply(ps)) }));
+}
 const engines = (p) => count(p, (q) => q.part === 'engine');
 const stationsOf = (p, kind) => count(p, (q) => q.part === 'station' && q.kind === kind);
 export const CATALOGUE = [
@@ -215,6 +222,8 @@ export const CATALOGUE = [
   // The KRAKEN BEAK (C.3): the trophy for slaying a giant Kraken, offered free at the next dock (simulation.js trophyCard, never in the random pool: allowed is false). It IS a ram prow (the same part, the same rules
   // and weight) with another look: the part carries art: 'kraken', and weaponsArt.js drawRam draws the beak instead of the iron wedge. A ship that has an iron prow gets the beak in its place.
   { id: 'krakenBeak', name: 'Kraken Beak', icon: '\u{1F419}', group: 'frame', pic: 'krakenBeak', trophy: true, blurb: "The Kraken's own beak, bolted on as a ram prow: a trophy. It rams like the iron one.", allowed: () => false, cands: krakenBeakCands, w: () => 0 },
+  // The DRAKE SCALES (C.6a): the trophy for slaying the Cinder Drake, free at the next dock. It IS armour plate (does not burn, hits on it hurt a third as much) of lighter weight, in red-brown scales.
+  { id: 'drakeScale', name: 'Drake-scale plating', icon: '\u{1F409}', group: 'armour', pic: 'drakeScale', trophy: true, blurb: "Scales of the Cinder Drake riveted on the hull: a trophy. Plate that does not burn, at half the weight of iron.", allowed: () => false, cands: drakeScaleCands, w: () => 0 },
   { id: 'dropHatch', name: 'Cargo drop hatch', icon: '\u{1F573}️', group: 'frame', pic: 'dropHatch_2', blurb: 'Trapdoors in a deck with a lever: open them to drop crates on a ship below, dump weight when she is going down, tip raiders out. Anyone standing on it falls.', allowed: (p) => !!config.HATCH.SHOP && count(p, (q) => q.part === 'dropHatch') < 2, cands: (p, L) => [2, 1, 3].flatMap((n) => fromPalette(n === 1 ? 'dropHatch' : 'dropHatch_' + n, { ghost: (s) => ({ x0: s.hatch[0], x1: s.hatch[1], y0: s.y - 50, y1: s.y + 30 }) })(p, L)), w: () => 0.45 },
   { id: 'ballast', name: 'Ballast', icon: '⚖️', group: 'frame', pic: 'ballast', blurb: 'Sandbags to trim her level. Cheap, dense, and heavy.', allowed: (p) => count(p, (q) => q.part === 'ballast') < 6, cands: (p, L) => [...fromPalette('ballast')(p, L), ...fromPalette('ballast_hang')(p, L)], w: (c) => (Math.abs(c.sum.deg) >= config.BALANCE.WARN_PX * config.BALANCE.DEG_PER_PX ? 4 : 0.5) },
   { id: 'ladder', name: 'Ladder', icon: '\u{1FA9C}', group: 'frame', pic: 'ladder', blurb: 'Another way between two decks: shorter walks.', allowed: () => true, cands: fromPalette('ladder'), w: () => 0.6 },

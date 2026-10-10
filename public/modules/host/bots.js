@@ -21,8 +21,9 @@ import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/c
 import { specOf } from './gunTypes.js';
 import { gripJobs } from './creatureGrip.js';
 import { breachClimbAlt } from './creatureBreach.js';
-import { bombInMouth, mouthWindowSoon, forcedSkip } from './creatureFight.js';
+import { bombInMouth, mouthWindowSoon, forcedSkip, mouthKey } from './creatureFight.js';
 import { boardAt, mantleOf } from './creatureBoard.js';
+import { drakeBoardable } from './creatureDrake.js';
 
 const B = config.BOTS;
 // Tables worked out per ship layout (rebuilt when a new ship build is applied to it): `tables(L).MAIN` ... Every function below gets its layout as
@@ -257,8 +258,16 @@ function harpoonWanted(state, g) {
   return !!bestTarget(state, g);
 }
 
+// C.6a: a harpoon line holds the crawling Cinder Drake: the helm flies her over the lava vent nearest to it, and the line hauls the drake onto it (creatureDrake.js stepSpouts: roasted while a spout erupts under it).
+const drakeTowX = (state) => {
+  const cr = state.creature;
+  if (!cr || cr.kind !== 'drake' || cr.dying || cr.drake.mode !== 'crawl' || !(cr.hooked || (cr.harpoons || []).length) || !cr.drake.spouts.length) return null;
+  const f = config.CREATURES.FORCE_WIN;
+  if (f && f !== 'tow') return null;
+  return cr.drake.spouts.reduce((b, v) => (Math.abs(v.x - cr.base.x) < Math.abs(b.x - cr.base.x) ? v : b)).x;
+};
 // C.3: the Kraken's beak opens on a roar (creatureFight.js) and bombs into it are a win: wanted from a few seconds before it opens, unless the dev flag asks for another way to win.
-const beakBombing = (state) => { const f = config.CREATURES.FORCE_WIN; return !!state.creature && (!f || f === 'mouth') && mouthWindowSoon(state, 5); };
+const beakBombing = (state) => { const f = config.CREATURES.FORCE_WIN; return !!state.creature && (!f || f === mouthKey(state.creature)) && mouthWindowSoon(state, 5); }; // (the Cinder Drake's gaping mouth, once it crawls, is the same: its win is 'bombs')
 
 // Things below and ahead worth bombing, as x ranges in SHIP coordinates (where the bomb bay is): live turrets and buildings.
 function groundTargets(state) {
@@ -651,7 +660,7 @@ function listJobs(state, bot) {
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   if (!bombRun && bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   // C.3: a Kraken about with its beak to feed: the bay is kept stocked with the bombs a win takes (the stock is loaded, the bombs are in the hold)
-  const feeding = !!state.creature && !state.creature.dying && (!config.CREATURES.FORCE_WIN || config.CREATURES.FORCE_WIN === 'mouth');
+  const feeding = !!state.creature && !state.creature.dying && (!config.CREATURES.FORCE_WIN || config.CREATURES.FORCE_WIN === mouthKey(state.creature));
   if (feeding && bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs < config.CREATURES.MOUTH.FED + 1) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   jobs.push(...sailJobs(state, bot, false)); // (a sail to raise in a fair wind: after the chores, ahead of an idle gun post)
   jobs.push(...linkJobs(state, bot, false)); // (...and the quieter links: loaders for idle guns, the boiler surge)
@@ -775,6 +784,8 @@ function operate(p, state, dt) {
       plan.target = base.target + (plan.target - base.target) * wv;
       plan.speed = base.speed + (plan.speed - base.speed) * wv;
     }
+    const towX = drakeTowX(state);
+    if (towX !== null) plan.speed = clamp(((towX - toWorldX(mainShip(state), L.refPoint.x)) * mainShip(state).pose.f) / 700, -0.4, 0.4); // (over the vent, with the drake on her line)
     p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1); // (pace: her speed on the lever's scale, without the sails and overdrive, flight.js)
     // COME ABOUT (config.SHIP.TURN.BOT_TURNS): the way to the goal has been behind her for a while, so hold the turn command like a phone's button (plan.dx is how far the route point is ahead of her bow).
     const TN = config.SHIP.TURN;
@@ -799,6 +810,8 @@ function operate(p, state, dt) {
     const lunge = state.creature ? breachClimbAlt(state) : null;
     const lungeAlt = lunge !== null && lunge - 40 > ship.alt ? Math.min(lunge, hi - 10) : null;
     if (lungeAlt !== null) target = lungeAlt;
+    // C.6a: the Cinder Drake sits on her gasbag: the helm shakes it off with a hard climb, then back down to her course altitude, over and over (swords on the top deck do the same job; the dev flag for boarding leaves it sitting).
+    if (state.creature && state.creature.kind === 'drake' && drakeBoardable(state.creature) && config.CREATURES.FORCE_WIN !== 'board' && lo <= hi) target = clamp(plan.target + (Math.floor(performance.now() / 1800) % 2 ? 450 : 0), lo, hi);
     // (Gentle enough not to overshoot now that she glides with momentum.)
     if (target !== null) p.jy = clamp((ship.alt - target) / 90 + (ship.vy || 0) / 260, -1, 1);
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
@@ -872,7 +885,7 @@ function operate(p, state, dt) {
     if (beakBombing(state) && state.bombBay.bombs > 0) { // (C.3: the Kraken's beak is open: drop when a bomb let go now falls into it; wait at the bay while a window is near)
       p.gunIdle = 0;
       p.fire = bombInMouth(state);
-    } else if (state.creature && config.CREATURES.FORCE_WIN && config.CREATURES.FORCE_WIN !== 'mouth') p.fire = false; // (dev flag: no bombs on the way to another win)
+    } else if (state.creature && config.CREATURES.FORCE_WIN && config.CREATURES.FORCE_WIN !== mouthKey(state.creature)) p.fire = false; // (dev flag: no bombs on the way to another win)
   } else {
     const gun = state.GUNS[p.lock];
     if (!gun) return;
@@ -884,7 +897,7 @@ function operate(p, state, dt) {
     }
     const angle = firingSolution(state, gun);
     // Count how long the enemy has been out of this gun's reach.
-    p.gunIdle = angle === null ? (p.gunIdle || 0) + dt : 0;
+    p.gunIdle = angle === null && !(state.creature && state.creature.kind === 'drake' && !state.creature.dying && config.CREATURES.FORCE_WIN === 'choke') ? (p.gunIdle || 0) + dt : 0; // (the gate's dev flag CHOKE against the Drake: the gunners wait at their posts for the one thing they may shoot at, the glowing mouth)
     if (angle === null) {
       p.prime = gun.type !== 'flame' && gun.ammo > 0 && !gun.primed; // nothing to shoot: charge the loaded shell (hold PRIME)
       return;
@@ -1613,14 +1626,15 @@ const humanAutopilot = (p, state) => !!p.human && autopilotOn(state);
 function forceBoard(p, state) {
   const cr = state.creature;
   if (!cr) p.forceBoard = false;
+  if (cr && !p.on && p.forceBoard && cr.kind === 'drake' && !drakeBoardable(cr)) p.forceBoard = false; // (it flew off the bag: he is a faller again, and the next perch needs a boarder)
   if (p.on) {
     p.jx = p.jy = 0;
     p.fire = !!cr && !cr.dying;
     return true;
   }
-  if (!cr || cr.dying || cr.mode !== 'idle' || !(cr.phase >= 3) || !mantleOf(cr) || p.mate || p.ko > 0 || p.fall) return false;
+  if (!cr || cr.dying || cr.mode !== 'idle' || !(cr.kind === 'drake' ? drakeBoardable(cr) : cr.phase >= 3) || !mantleOf(cr) || p.mate || p.ko > 0 || p.fall) return false; // (the Drake: while it sits on her bag)
   if (Object.values(state.players).some((q) => q.on || q.forceBoard)) return false; // (one boarder is enough)
-  const L = mainShip(state).layout, heart = cr.parts.find((q) => q.kind === 'heart' && !q.dead && !q.hidden);
+  const L = mainShip(state).layout, heart = cr.parts.find((q) => q.kind === 'heart' && !q.dead && (cr.kind === 'drake' || !q.hidden)); // (the Drake's heart is hidden behind its scales: the boarder hacks them off first)
   if (!heart || isHelm(L, p.lock)) return false;
   p.forceBoard = true;
   p.lock = null;

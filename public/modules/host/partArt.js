@@ -95,6 +95,12 @@ const DRAW = {
     drawRam(g, { x: 0 }, 0, { lw: 16, trim: RED });
     g.restore();
   },
+  drakeScale(g, { filled }) { // the trophy: armour plate in red-brown dragon scales (shipArt.js drawArmour, art: 'drake')
+    filled('#7a2e24', () => g.roundRect(8, 24, 84, 52, 5));
+    g.fillStyle = '#c25a2a'; g.strokeStyle = INK(); g.lineWidth = 1.8;
+    for (let row = 0; row < 3; row++) for (let k = 0; k < 4; k++) { const x = 18 + k * 20 + (row % 2) * 10, y = 36 + row * 15; g.beginPath(); g.moveTo(x - 9, y - 6); g.lineTo(x + 9, y - 6); g.lineTo(x, y + 8); g.closePath(); g.fill(); g.stroke(); } // the scales
+    g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(12, 28, 76, 6);
+  },
   krakenBeak(g) { // the trophy: the ram prow in bone and purple (weaponsArt.js drawRam, art: 'kraken')
     g.save(); g.translate(50, 55); g.rotate(-0.33); g.scale(0.15, 0.15); g.translate(-130, 0);
     g.fillStyle = WOOD; g.strokeStyle = INK(); g.lineWidth = 15; g.lineJoin = 'round';

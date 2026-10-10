@@ -217,7 +217,7 @@ export const PARTS = {
   dropHatch: { mass: (p) => ((p.x1 - p.x0) / 100) * config.HATCH.MASS, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('hatches', withoutPart(p)) },
   // Armour plate (S.5g): riveted iron on a stretch of a deck's hull wall (covered deck) or rail (open-air deck), x0 to x1 on deck `p`. Very heavy, does not burn, and hits on it do
   // far less (config.ARMOUR, config.FIRE.FLAMMABILITY.armour). It weighs by its length.
-  armour: { mass: (p) => ((p.x1 - p.x0) / 100) * M().armour, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('armour', withoutPart(p)) },
+  armour: { mass: (p) => ((p.x1 - p.x0) / 100) * M().armour * (p.art === 'drake' ? config.CREATURES.DRAKE.TROPHY.MASS_MUL : 1), lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('armour', withoutPart(p)) },
   // A SCAR (S.5i): the hole a part that broke off left in the hull, x0..x1 by y0..y1 in ship coordinates. It weighs nothing and does nothing but take the hull away there: the art carves it out of the
   // baked picture, shells and rock pass through it (hit boxes and collision points inside it are dropped). The ship's parts list carries it until the crew pays for the section at a sky-dock.
   scar: piece('scars'),

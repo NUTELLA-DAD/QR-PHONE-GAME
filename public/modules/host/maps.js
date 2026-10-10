@@ -16,12 +16,12 @@ export function shipBox(layout) {
 }
 
 // Build a map, checking the ship really can get from the start to the beacon (try again if not).
-export function makeMap(kind, level, rand, lengthMul = 1, layout) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES)
+export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = null) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES; creature: which lair a 'lair' map is, 'kraken' or 'drake')
   let map = null;
   for (let tries = 0; tries < 40; tries++) {
     // (Late-voyage open maps are so crowded with peaks and islands that no layout may pass the checks below; rather than
     // settle for the last, unplayable try, ease off one level every few failures so a playable map always comes out.)
-    map = kind === 'lair' ? buildLairMap(level, rand, lengthMul, layout) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout);
+    map = kind === 'lair' ? (creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout);
     if (map.startDist >= 1e9) continue;
     if (map.lair) return map; // (no outposts to reach: the lair's middle is the goal)
     if (map.open) {
@@ -273,6 +273,37 @@ function buildLairMap(level, rand, lengthMul = 1, layout) {
     spires.push({ x: (ci + 0.5) * C, w: LR.SPIRE_W, top: topRow * C });
   }
   const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, seaY: seaRow * C, spires };
+  finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
+  return map;
+}
+
+// THE CINDER DRAKE'S LAIR (config.CREATURES.DRAKE.LAIR, C.6a): open sky over a lake of lava (map.lavaY, so the Ember Forge's own rules apply: LAVA_BELOW px under the launch height, far out of the thermals), a wide ROCK
+// SHELF under the lair's middle standing SHELF_UP px above the lava (where the torn drake crashes and crawls, and where the bomb bay can reach it), two small ledges, and LAVA SPOUTS: vents on the shelf that erupt in
+// turn (map.spouts: { x, y (the shelf top) }; the harpoon tow into an erupting one is a win). Nothing else: no outposts, no guns. map.shelf = { x0, x1, top } in map pixels.
+function buildDrakeLairMap(level, rand, lengthMul = 1, layout) {
+  const M = config.MAPS, LR = config.CREATURES.LAIR, DL = config.CREATURES.DRAKE.LAIR, C = M.CELL;
+  const startI = 12, goalI = startI + Math.round((LR.RUN * lengthMul) / C);
+  const W = goalI + Math.round(LR.BEYOND / C) + 20, H = M.OPEN_HEIGHT;
+  const sj = 28, lavaRow = Math.min(H - 6, sj + Math.round(DL.LAVA_BELOW / C)), floorRow = H - 3;
+  const solid = new Uint8Array(W * H);
+  const idx = (i, j) => j * W + i;
+  for (let i = 0; i < W; i++) for (let j = floorRow; j < H; j++) solid[idx(i, j)] = 1;
+  const topRow = lavaRow - Math.max(1, Math.round(DL.SHELF_UP / C)), half = Math.round(DL.SHELF_HALF / C), slope = 2; // (the shelf's flat top, and its sides falling a row for every `slope` columns... steeper than a hill)
+  for (let i = goalI - half - 6; i <= goalI + half + 6; i++) {
+    if (i < 0 || i >= W) continue;
+    const out = Math.max(0, Math.abs(i - goalI) - half);
+    for (let j = topRow + Math.floor(out * slope); j < floorRow; j++) solid[idx(i, j)] = 1;
+  }
+  for (const [dc, width, up] of DL.LEDGES) { // small ledges to the sides of the shelf: rock for it to be shot against
+    const ci = goalI + dc, hw = Math.max(1, Math.round(width / 2 / C)), top = lavaRow - Math.max(1, Math.round(up / C));
+    for (let i = ci - hw - 1; i <= ci + hw + 1; i++) {
+      if (i < 0 || i >= W) continue;
+      for (let j = top + (Math.abs(i - ci) > hw ? 1 : 0); j < floorRow; j++) solid[idx(i, j)] = 1;
+    }
+  }
+  const spouts = DL.SPOUTS.map((dx) => ({ x: (goalI + 0.5) * C + dx, y: topRow * C }));
+  const shelf = { x0: (goalI - half) * C, x1: (goalI + half + 1) * C, top: topRow * C };
+  const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'drake', lavaY: lavaRow * C, shelf, spouts };
   finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
   return map;
 }

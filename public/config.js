@@ -15,7 +15,7 @@ export const config = {
     SHIP_SCREEN_FRACTION: 0.53, // the ship (incl. its long gasbag) takes at most this much of the screen width; the hull reads ~20% bigger than before
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
-    CREATURE: { MAX_ZOOM_OUT: 2.4, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2), and its living parts are kept in view with this much margin (world pixels)
+    CREATURE: { MAX_ZOOM_OUT: 2.4, DRAKE_MAX_ZOOM_OUT: 3.4, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2; the Cinder Drake flies about the ship in loops 8000 px across: DRAKE_MAX_ZOOM_OUT), and its living parts are kept in view with this much margin (world pixels)
     SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
     ZOOM_SMOOTHING: 0.6, // how quickly it zooms (low = calm, no pumping)
     PULL_SMOOTHING: 0.22, // ...and this slowly in the pull-back after a part was built at the sky-dock (YARD.PULL_TIME): the "she grew!" moment
@@ -1493,7 +1493,7 @@ export const config = {
     MAX_DEG: 1.8, // most the forces tip her (degrees), on top of the rest trim and the climb tilt: kept small so crew do not slide (AIRBORNE.PITCH_STAGGER, 2 degrees)
     MAX_RATE: 0.7, // fastest she can tip (radians per second)
     REF_MASS: 150, // the weight (gas points) the hit and ram kicks are quoted for: a heavier ship is shoved less
-    GAIN: { engine: 0.7, sail: 1, gust: 1, hit: 1, scrape: 1, ram: 1, tether: 1, grab: 1 }, // torque gain per source
+    GAIN: { engine: 0.7, sail: 1, gust: 1, hit: 1, scrape: 1, ram: 1, tether: 1, grab: 1, perch: 1 }, // torque gain per source
     HIT_KICK: 20, // a power-1 hit changes the ship's velocity by this much (px/s) at REF_MASS: it twists her about the point it struck
     HIT_SIDEWAYS: 0.35, // ...mostly up or down (away from the middle of the ship's height), with this much sideways
     GUST_WIND: 110, // a storm gust's side wind pushes the gasbag with this acceleration (px/s^2), at the gasbag's height: it tips her nose down
@@ -2011,6 +2011,7 @@ export const config = {
     // voyage (the long ones, LONG_STOPS columns or more, get the bigger number); never the first stop, never two in a row; +DANGER skulls and x REWARD_MUL reward.
     LAIR: {
       COUNT: { short: 1, long: 2 }, LONG_STOPS: 7, DANGER: 1, REWARD_MUL: 2,
+      BY_ENV: { sea: 'kraken', ember: 'drake' }, // which creature lives in which sky (a lair stop is a Sunken Sea stop with a Kraken or an Ember Forge stop with a Drake: voyage.js markLairs)
       RUN: 16000, BEYOND: 9000, SEA_BELOW: 2000, // px from the launch to the lair's middle (where the route ends and she hovers); more map beyond it; the sea lies this far under the launch height
       SPIRES: [[-35, 3], [0, 2], [35, 4]], SPIRE_W: 2600, SPIRE_UP: [450, 900], // rock spires standing in the sea: [cells from the lair's middle (the one at 0 stands right under her when she hovers there), +- jitter in cells], their width at the sea line and how far they stand above it (px)
       ICON: '\u{1F419}', LABEL: 'LAIR', NAME: "The Kraken's Lair", KIND: 'Kraken lair', // the route map's creature icon (octopus) and label
@@ -2039,6 +2040,72 @@ export const config = {
       MOUTH: { AT: [0, 330], R: 230, HP: 150, EVERY: 9, OPEN_FOR: 3 }, // the beak opens for OPEN_FOR s every EVERY s (the demo puppet's timer)
       HEART: { AT: [0, -300], R: 130, HP: 200 },
       TENTACLE_HP: 120,
+    },
+    // ---- THE CINDER DRAKE (C.6a, BOSSES.md 2.2): the Ember Forge's dragon. creatures/drake.js = the body, creatureDrake.js = flight, attacks, perch, crawl and the wins, creatureBreath.js = the flame cone. ----
+    // It flies in huge swooping passes (FLY), and every so often does one of three things: BREATH (the throat glows GLOW s, then a flame cone sweeps the decks), SWOOP (a diving pass that bumps the hull) or PERCH (it lands on the
+    // gasbag as a live load and claws holes in it). Phase 1 flies; phase 2 (a wing torn off, or below PHASE.TWO_HP of the pool) it CRASHES onto the rock or lava shelf below and crawls (breath upward, lunges, a gaping mouth
+    // that takes bombs); phase 3 (below PHASE.THREE_HP) it is desperate: faster breath, and the heart is open while it rears. Ways to win (cr.stats.win): 'choke' (shells into the glowing mouth cancel the breath, CHOKE.WIN of
+    // them), 'bombs' (FED bombs into the gaping mouth of the crawling drake), 'tow' (harpoon it and haul it into an erupting lava spout), 'board' (hack the breast scales on its perched neck, strike the heart), 'flak' (the pool
+    // emptied mostly by flak bursts: they do WING_MUL x on the wings) and 'hp' (the pool). Every number of it is here.
+    DRAKE: {
+      NAME: 'THE CINDER DRAKE', ENV: 'ember',
+      HP: 1500, // the health pool (the slow, safe way to win)
+      HP_MUL: { wing: 1.4, neck: 1.3, head: 1.3, tail: 1.3, mantle: 1, mouth: 1.2, heart: 1, pool: 2.1 }, // tuning knobs on the data's hp (like HURT.PART_HP_MUL for the Kraken)
+      POOL: { wing: 0.3, neck: 0.5, head: 0.8, tail: 0.15, mantle: 0.6, mouth: 1.5, heart: 3 }, // share of a blow that also comes off the pool
+      // The body (px, in the drake's own frame: facing +x, y down; the torso's centre is the origin). It spans about 8000 px with its wings spread, three times the classic ship.
+      TORSO: { AT: [-520, 0], LEN: 1040, R: 380, HP: 420 }, // the body: a capsule from AT, LEN long
+      NECK: { SEGS: 6, LEN: [350, 300], R: [210, 120], HP: 240, AT: [500, -90] }, // six rigid segments, root to head
+      HEAD: { LEN: 560, R: 190, HP: 260 }, // rigid, riding the neck's tip
+      MOUTH: { R: 190, HP: 160 }, // at the head's snout; the throat glows here
+      WING: { SEGS: 5, LEN: [740, 580], R: [200, 60], HP: 450, AT: [[120, -300], [-40, -330]] }, // [near wing, far wing] roots; both are chains of five membrane segments; the far wing is drawn behind
+      TAIL: { SEGS: 6, LEN: [440, 300], R: [170, 36], HP: 200, AT: [-500, 40] },
+      HEART: { AT: [330, 110], R: 150, HP: 220 }, // behind the breast scales
+      // How it arrives and flies. It orbits a point UP px above the ship's middle in an ellipse RX x RY, at SPEED px/s; an attack leaves the orbit and rejoins it.
+      SPAWN: { FROM: 7500, ARRIVE: 5, SINK: 8, SINK_DEEP: 4200, FIRST: 6 }, // px it flies in from, s it takes (untouchable), s it takes to fall away when dead, px it falls, s before its first attack
+      FLY: { RX: 3300, RY: 1150, UP: 750, SPEED: 950, FOLLOW: 4, CLEAR: 800, MAX_PITCH: 0.35, FLIP_VX: 160 }, // orbit radii, centre above the ship; px/s; per second how closely it follows its path; px it keeps above rock; the most it noses up/down (rad); px/s of sideways speed that turns it round
+      ATTACK: { EVERY: [13, 20], WEIGHTS: { breath: 3, swoop: 2, perch: 1 }, FIRST_PERCH: 28, PERCH_EVERY: 42, BREATHER: 3.5, BANNER: 4.5 }, // s between attacks (min, max; x the difficulty); their odds; the first perch comes after; s between perches; s of quiet after a phase change; the phase banner
+      // BREATH: it flies to a spot beside the ship, the throat glows for GLOW s (the telegraph: a banner, a buzz on the phones of whoever stands in the path, a roar), then the cone SWEEPS across the ship for SWEEP s.
+      // The cone is LEN px long and HALF wide (rad); each TICK it lights what it crosses with the fire model (wood catches by flammability, armour plate does not, a hydrogen bag is scorched until it blows), scorches the hull
+      // and burns the crew in it (HEARTS each, every CREW_EVERY s). A hull stops it PENETRATE px in.
+      BREATH: {
+        GLOW: 1.6, SWEEP: 2.6, RECOVER: 1.2, TICK: 0.1, STAND: [3500, 250], HIGH: [2800, 1700], HIGH_SHARE: 0.3, LEN: 3300, HALF: 0.17, PENETRATE: 160, // s of glow, of sweep, of rest; s between ticks; where it hovers [px beside the ship, px above her middle], or (HIGH_SHARE of the time, to light the gasbag) there; the cone's length and half width (rad); px a hull stops it in
+        HULL_RATE: 1.2, IGNITE_RATE: 0.9, MAX_FIRES: 3, UP_PEN: 70, UP_SPAN: 0.5, HOLE_RATE: 0.9, HYDRO_MUL: 1.6, CREW_HEARTS: 1, CREW_EVERY: 3, CREW_REACH: 60, WARN_REACH: 700, SHAKE: 0.5, // hull points a second a hull in the cone loses; chance a second a deck spot in it is lit (x its flammability), and the most fires one breath may start (it is a boss, not a death sentence: the coal still blazes if it is hit); a gasbag's hole chance a second; x GASES.HYDROGEN.FLAME_RATE; hearts and pause; crew within this of the cone count as hit; the phone buzz reaches this far from the path; screen shake
+        STAND_SPEED: 2400, // px/s it flies to its breathing spot at
+        UPWARD: 0.8, // the crawling drake breathes up at the ship: this share of the length (it must be near enough); the cone of its upward breath goes UP_PEN px into the hull (the belly only: not the coal bunker above it) and sweeps UP_SPAN of her length from the near end
+      },
+      // CHOKE: while the throat glows (and for the first GRACE s of the flame) the mouth is a weak point. HITS shells (a bomb or a thrown load is worth BOMB hits) into it cancel the breath: it coughs for COUGH s (hurt more: COUGH_MUL), loses POOL_FRAC of its
+      // pool, and WIN chokes in all win the fight.
+      CHOKE: { HITS: 1, GRACE: 0.9, BOMB: 2, WIN: 4, COUGH: 2.2, COUGH_MUL: 1.5, POOL_FRAC: 0.09 },
+      // SWOOP: a diving pass at the hull. It climbs to a start point (WIND s, the banner "SWOOP!" and a ring where it will strike), locks on LOCK s before the strike, dives at DIVE px/s and, on touching the ship, hurts
+      // her (HULL, kick POWER, a heart for crew within HURT_R) and is DAZED for DAZED s (everything hurts it DAZED_MUL x), then climbs away.
+      SWOOP: { WIND: 1.6, LOCK: 0.5, DIVE: 2500, START: [2600, 1800], HIT_R: 520, HULL: 55, POWER: 3.2, SHAKE: 1.1, HURT_R: 500, FLING: 340, DAZED: 2.2, DAZED_MUL: 1.4, ESCAPE: 2600, SHOVE: 3, MISS_AFTER: 1.6, LEAD: 0.3 },
+      // PERCH: it glides down onto the top of the gasbag (WIND s warning), its weight (MASS gas points, in balance.js) tips the ship and pushes her down (ACC px/s^2 while she sinks slower than MAX_SINK px/s, forces.js 'perch'), it CLAWs a hole in the
+      // bag every CLAW s (at most CLAWS a perch) and LASHes its tail along the top deck every LASH s (WARN s warning: hearts, flung). It leaves after TIME s (x difficulty), or sooner if driven off: a sword (hold SWORD_TIME s, or BLOWS blows)
+      // from a crew member on a deck within REACH sideways and REACH_V down from its perch, damage worth DRIVE_DMG of its pool (flame counts FLAME_DRIVE x), or the helm's hard turn (COME ABOUT, or her climb rate swinging SHAKE_VY px/s away from where its weight has been sinking her, for SHAKE_TIME s).
+      PERCH: {
+        WIND: 2.2, TIME: 15, TIME_BY_DIFF: { easy: 0.75, normal: 1, veteran: 1.1, hard: 1.2 }, MASS: 10, ACC: 70, MAX_SINK: 70, TORQUE: 0.5, SHAKE: 0.25, CLAW: 6.5, CLAWS: 2, LASH: 9, LASH_WARN: 1.3, LASH_HEARTS: 1, LASH_HULL: 8,
+        REACH: 760, REACH_V: 520, SWORD_TIME: 2.4, HAMMER_TIME: 4, BLOWS: 3, HAMMER_BLOW: 0.6, BLOW_HOLD: 1.6, DRIVE_DMG: 0.04, FLAME_DRIVE: 3, SHAKE_VY: 170, SHAKE_TIME: 1.2, LIFTOFF: 1.4,
+        ABOVE: 40, FIRST_IF_FORCED: 9, EVERY_IF_FORCED: 24, // px its feet sink into the top of the bag; the dev flag board: it perches this soon and this often
+      },
+      // CRASH and CRAWL (phase 2): the torn drake falls (GRAVITY) onto the ground below, lands with a quake, then crawls along it toward the ship at CRAWL px/s. Breath goes UP at the ship (it must be within BREATH.LEN x
+      // BREATH.UPWARD); a LUNGE snaps its neck at the nearest deck end (WARN s warning, reach REACH from the shoulders, HULL, hearts); the mouth GAPES for GAPE s every GAPE_EVERY s for bombs.
+      CRASH: { GRAVITY: 2600, SPIN: 1.6, QUAKE: 1.6, DAMAGE: 0.04 }, // px/s^2; rad/s of tumble; screen shake on landing; share of the pool the fall costs
+      CRAWL: { SPEED: 240, FIRST: 5, EVERY: [6, 9], LUNGE_WARN: 1.2, LUNGE_HOLD: 0.5, LUNGE_REACH: 2100, LUNGE_HULL: 10, LUNGE_POWER: 1.6, LUNGE_HURT_R: 420, LUNGE_HEARTS: 1, GAPE_EVERY: 18, GAPE_FOR: 3.2, GAPE_FIRST: 0.5, LURE_SPEED: 800 },
+      FED: 4, GULP: 2.4, // bombs into the gaping mouth that win; s the mouth is shut after swallowing one
+      // Phases: 2 below TWO_HP of the pool (or a wing torn), 3 below THREE_HP. Phase 3: the breath comes faster (BREATH_MUL x the pause) and it REARS for REAR s every REAR_EVERY s, the heart open.
+      PHASE: { TWO_HP: 0.6, THREE_HP: 0.3, BREATH_MUL: 0.65, SWOOP_MUL: 0.8, REAR_EVERY: 15, REAR: 5, REAR_FIRST: 6 },
+      // TOW into a lava spout (the harpoon, creatureTow.js): a crawling drake is hauled up to MAX px/s, SHARE of the pull; in the air only TOW.CREATURE_MAX. While a line holds it and any part of its body (not a wing) is in an ERUPTING spout's column the
+      // pool loses RATE hp for every px/s of the haul plus GRIND; the lair has vents (maps.js), each one WARN s of bubbling, then ERUPT s of fire, every CYCLE s (staggered).
+      SPOUT: { RATE: 2.4, GRIND: 60, MIN_SPEED: 8, SHARE: 0.55, MAX: 230, W: 560, H: 1700, WARN: 2.2, ERUPT: 3.4, CYCLE: 13, SHAKE: 0.5, HULL: 30, TEXT: 'ROASTED IN THE LAVA SPOUT!', POP_EVERY: 1 },
+      // BOARDING (creatureBoard.js): while it is perched its torso is a landing strip. The breast scales hide the heart: HACK THE SCALES (a sword, SCALES_TIME s) opens it for OPEN_FOR s; then STRIKE THE HEART as on the Kraken.
+      BOARD: { SCALES_TIME: 4, OPEN_FOR: 18, HEART_TIME: 6, KEEP_PERCH: 0.35 }, // s of holding; s the heart stays open; s of holding; the perch timer runs this fast while somebody is aboard (it is busy with him)
+      // FLAK: a flak shell bursts when it comes within FUSE px of a wing (of any part, once it crawls), hurting every part within BURST px by DMG (x WING_MUL on wings in the air).
+      FLAK: { FUSE: 260, BURST: 420, DMG: 36, WING_MUL: 2.5 },
+      WIN_TEXT: { choke: 'CHOKED ON ITS OWN FIRE!', bombs: 'BOMBED IN THE MOUTH!', tow: 'ROASTED IN THE LAVA!', board: 'HEART STRUCK!', flak: 'SHOT FROM THE SKY!', hp: 'BROUGHT DOWN!' },
+      DEATH_TEXT: ' FALLS INTO THE LAVA!',
+      REWARD: { HULL: 35, GAS: 30, TROPHY: 'drakeScale' }, // salvage x3, the hull patched and every bag topped up; the trophy part card: Drake-scale plating
+      LAIR: { ICON: '\u{1F409}', LABEL: 'LAIR', NAME: "The Drake's Lair", KIND: 'Drake lair', LAVA_BELOW: 3200, SHELF_HALF: 3300, SHELF_UP: 420, SPOUTS: [-1700, 1700], LEDGES: [[-52, 1100, 520], [58, 900, 640]] }, // the lair map (maps.js buildLairMap): the lava lies this far under the launch; the rock shelf (half its width, how far its top stands above the lava); where the lava spouts stand (px from the lair's middle, on the shelf); rock ledges [cells from the middle, width, height above the lava]
+      TROPHY: { MASS_MUL: 0.5 }, // Drake-scale plating: armour that weighs this share of iron plate (and is as fireproof)
     },
   },
   // Effects in the storybook gouache style (modules/host/vfxArt.js): flat colours, ink from INK + OUTLINE, no gradients.
@@ -2419,6 +2486,16 @@ export const config = {
       Z: { FRONT: 330, BACK: -250, ROOT_FRONT: 140, ROOT_BACK: -120, WRAP_MARGIN: 130 }, // the depth the limbs lie at (the ship's plane is 0): front limbs, back limbs, where their roots start, a coil's clearance round the hull
       FOAM: { COLOR: '#f4fbfa', BAND: 0.55, ALPHA: 0.92 }, // the foam ring where something crosses the sea line: the band's share of the radius
       SHADOW: { COLOR: '#0a1830', ALPHA: 0.62, DEPTH: 0.9 }, // the breach shadow on the water: colour, its darkest alpha, its depth (z) as a share of its width
+    },
+    // THE CINDER DRAKE (C.6a, view3d/creatureDrake.js: a placeholder of tapered capsules until its sculpted look): the same keys as the Kraken's, in charred red-brown and ember orange.
+    DRAKE: {
+      skin: '#7a2e24', skinDark: '#4e1c18', belly: '#e0a04a', spot: '#4e1c18', spotLight: '#a8402c', fin: '#b9482a', bone: '#efe2c0', char: '#2f2a2e', eye: '#ffd23f', iris: '#fff0a0', pupil: '#17101e',
+      mouthIn: '#6e1a14', lips: '#a8402c', flesh: '#d98a95', heart: '#e0485a', dead: '#4a3a3a', exhausted: '#a08a8a',
+      EYE_GLOW: { base: 1.3, lit: 2.2, blind: 0.25, tired: 0.7 },
+      THROAT_GLOW: { shut: 0.25, open: 2.1 }, HEART_GLOW: 1.8,
+      INK: 14,
+      TENTACLE_SIDES: 12, // sides of a limb's tube (Low tier: 8)
+      Z: { FRONT: 330, BACK: -250, ROOT_FRONT: 140, ROOT_BACK: -120, WRAP_MARGIN: 130 },
     },
   },
 

@@ -280,13 +280,14 @@ export function hacked(state, ship, p, job) {
 export function gripJobs(state, ship) {
   const cr = state.creature;
   if (!cr || !cr.grips) return [];
-  return cr.grips.filter((g) => g.ship === ship && live(g) && g.job.live).map((g) => ({ kind: 'hack', obj: g.job, d: g.job.d, x: g.x }));
+  const more = cr.hooks && cr.hooks.moreJobs ? cr.hooks.moreJobs(ship) : []; // (the Cinder Drake on her bag: DRIVE IT OFF, a hold-action job at the deck under it, creatureDrake.js)
+  return [...cr.grips.filter((g) => g.ship === ship && live(g) && g.job.live).map((g) => ({ kind: 'hack', obj: g.job, d: g.job.d, x: g.x })), ...more];
 }
 export const jobsOf = (state, ship) => (state.creature && state.creature.grips ? state.creature.grips.filter((g) => g.ship === ship).map((g) => g.job) : []);
 
 // ---- SLAP ----
 // The top deck: the highest open deck that is long enough (the crow's nests are too small to count).
-function topDeck(ship) {
+export function topDeck(ship) {
   let best = -1;
   ship.layout.platforms.forEach((pl, d) => {
     if (pl.x1 - pl.x0 < CR().GRIP.MIN_DECK) return;
