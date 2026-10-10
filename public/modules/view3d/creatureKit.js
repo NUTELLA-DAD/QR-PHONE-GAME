@@ -218,6 +218,43 @@ export class Tinter {
   }
 }
 
+// A set of rigid pieces that move about freely (the Drake's head and jaw, claws, tail blade): one merged geometry (a Mesher's), and each NAMED range is placed by a whole Matrix4 (any rotation, a mirror, a
+// scale) from its rest vertices, rewritten only when the matrix changes. A mirror (a negative determinant) swaps the winding of the piece so it is not drawn inside out. place(name, null) hides it.
+//   const rs = new RigidSet(mesher.build(), mesher.ranges);  rs.place('head', M)
+const _rv = new THREE.Vector3(), _rm3 = new THREE.Matrix3();
+export class RigidSet {
+  constructor(geometry, ranges) {
+    this.g = geometry; this.ranges = ranges; this.pieces = {};
+    const take = (name, r) => { const a = geometry.getAttribute(name).array, s = r.start * 3, e = (r.start + r.count) * 3; return new Float32Array(a.subarray(s, e)); };
+    for (const [name, r] of Object.entries(ranges)) this.pieces[name] = { r, p0: take('position', r), n0: take('normal', r), o0: take('onormal', r), key: null };
+  }
+  has(name) { return !!this.pieces[name]; }
+  place(name, M) {
+    const pc = this.pieces[name];
+    if (!pc) return false;
+    const e = M ? M.elements : null;
+    if (pc.key === null && !M) return false;
+    if (e && pc.key && pc.key.length === 16) { let same = true; for (let i = 0; i < 16; i++) if (Math.abs(pc.key[i] - e[i]) > 1e-4) { same = false; break; } if (same) return false; }
+    if (!e && pc.key === 'hidden') return false;
+    pc.key = e ? Array.from(e) : 'hidden';
+    const g = this.g, P = g.getAttribute('position'), N = g.getAttribute('normal'), O = g.getAttribute('onormal'), n = pc.r.count, s = pc.r.start * 3;
+    const flip = e ? M.determinant() < 0 : false;
+    if (e) _rm3.getNormalMatrix(M);
+    for (let i = 0; i < n; i++) {
+      const j = flip ? i - (i % 3) + [0, 2, 1][i % 3] : i, o = s + j * 3;
+      if (!e) { P.array[o] = P.array[o + 1] = P.array[o + 2] = 0; O.array[o] = O.array[o + 1] = O.array[o + 2] = 0; continue; }
+      _rv.set(pc.p0[i * 3], pc.p0[i * 3 + 1], pc.p0[i * 3 + 2]).applyMatrix4(M);
+      P.array[o] = _rv.x; P.array[o + 1] = _rv.y; P.array[o + 2] = _rv.z;
+      _rv.set(pc.n0[i * 3], pc.n0[i * 3 + 1], pc.n0[i * 3 + 2]).applyMatrix3(_rm3).normalize();
+      N.array[o] = _rv.x; N.array[o + 1] = _rv.y; N.array[o + 2] = _rv.z;
+      _rv.set(pc.o0[i * 3], pc.o0[i * 3 + 1], pc.o0[i * 3 + 2]).applyMatrix3(_rm3);
+      O.array[o] = _rv.x; O.array[o + 1] = _rv.y; O.array[o + 2] = _rv.z;
+    }
+    P.needsUpdate = N.needsUpdate = O.needsUpdate = true;
+    return true;
+  }
+}
+
 // A rigid piece whose pose changes (a jaw, a lid, the heart): its vertices (position, normal, ink vector) are rewritten from the rest pose when the view changes it.
 //   piece.pose(angle, scale): rotate about the pivot's axis by angle, scale about the pivot; nothing is written if (angle, scale) did not change.
 export class DynPiece {

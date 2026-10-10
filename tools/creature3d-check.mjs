@@ -5,7 +5,9 @@
 //      a breach (shadow, burst, crash), the death; the creature view costs at most 12 draw calls and 60k triangles at rest, and its own JS stays small
 //   2. the same in a dark cave (host.html?creature=kraken): parts dim unless lit, eyes glow
 //   3. the Low tier (?tier=low)
-//   4. (--long) host.html?creature=kraken for 3 minutes with 8 bot crew, in real time
+//   4. THE CINDER DRAKE (host.html?creature=drake&lair=ember; skip with --no-drake): it arrives, breathes (the throat glow rises in steps, the jaw opens, the flame cone is drawn), swoops (the strike ring), perches
+//      (talons on the bag, the timer ring), a lava spout erupts, a wing tears off (a Rapier body with its skin), it crashes and crawls, a harpoon line is drawn, it dies in the lava; at most 12 meshes / 60k triangles
+//   5. (--long) host.html?creature=kraken for 3 minutes with 8 bot crew, in real time
 // Screenshots go to a temp folder (printed), not into the repo.
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -103,8 +105,76 @@ try {
     if (r3.errs !== 0 || r3.evalErrors) fail('console / eval errors on the Low tier');
     if (!r3.data || !r3.data.low || r3.data.low.tris > 60000) fail('the Low tier creature is too big');
   }
+  if (!argv.includes('--no-drake')) {
+    // THE CINDER DRAKE (3D.md section 24): the Ember Forge's dragon, step by step: it arrives, breathes (the throat glows in steps, the cone is drawn and lights the ship), swoops (the strike ring), perches (the talons
+    // grip the bag, the timer ring), a lava spout erupts, a wing is torn off (a Rapier body), it crashes and crawls, a harpoon line is drawn, it dies in the lava. Each moment is read from the live rig
+    // (view.kraken.rig) after the frame had time to draw it; the creature costs at most 12 meshes and 60k triangles at rest.
+    console.log('4. the Cinder Drake (host.html?creature=drake&lair=ember): arrive, breath, swoop, perch, spout, wing tear, crawl, harpoon, death');
+    const cfgW = (w) => `(await __imp('/config.js')).config.CREATURES.DRAKE.ATTACK.WEIGHTS=${w};`;
+    const meas = `window.__meas=()=>{ const k=${view}.kraken, r=k.rig; let meshes=0, tris=0; const walk=(o)=>{ let v=true, p=o; while(p){ if(!p.visible) v=false; p=p.parent; } if(o.isMesh && v){ meshes++; const g=o.geometry; let t=(g.index?g.index.count:g.attributes.position.count)/3; if(o.isInstancedMesh) t*=o.count; tris+=t; } o.children.forEach(walk); }; walk(k.root); if(r.ext&&r.ext.fx) walk(r.ext.fx.vol.mesh); for (const m of [r.foam.mesh, r.shadow.mesh, r.markers.mesh, r.ropes.group]) walk(m); return { meshes, tris:Math.round(tris) }; };`;
+    const dsteps = [
+      setup,
+      [`(async()=>{ ${sl} ${meas} window.__step(500); ${view}.S.focus={dx:0,dy:0}; ${view}.S.zoom=0.5; await sl(700); const k=${view}.kraken, r=k.rig, cr=__cr(); const m=window.__meas(); window.__wp8.arrive={ ext:!!(r&&r.ext), mode:cr.drake.mode, visible:k.root.visible, meshes:m.meshes, tris:m.tris, js:${view}.stats().jsMs, glowEyes:r.glow[0] }; return JSON.stringify(window.__wp8.arrive) })()`, 400, 'arrive'],
+      // the breath: only breath attacks; the wind-up (throat glow in steps, the jaw open), then the sweep (the cone, the light)
+      [`(async()=>{ ${sl} ${cfgW('{breath:1,swoop:0,perch:0}')} const k=${view}.kraken, r=k.rig, cr=__cr(), dk=cr.drake; dk.nextT=0; cr.ai.breather=0; __until(()=>dk.act&&dk.act.kind==='breath'&&dk.act.sub==='glow',4000); window.__step(30); await sl(500);
+        const mo=cr.parts.find(p=>p.kind==='mouth'), g1=r.glow[2]; window.__step(40); await sl(500); const g2=r.glow[2]; const P=r.P;
+        window.__wp8.breath={ glow1:g1, glow2:g2, shut:P.THROAT_GLOW.shut, open:mo.openAmt, jawPlaced:!!(r.ext.set.pieces.jaw.key&&r.ext.set.pieces.jaw.key!=='hidden') };
+        __until(()=>cr.flame,600); window.__step(20); await sl(600); const f=r.ext.fx; window.__wp8.sweep={ flame:!!cr.flame, vol:f.vol.mesh.visible, light:f.light.intensity, scorch:${view}.damage ? 1 : 0, meas:window.__meas() }; return JSON.stringify(window.__wp8.sweep) })()`, 400, 'breath'],
+      [`(async()=>{ ${sl} ${cfgW('{breath:0,swoop:1,perch:0}')} const k=${view}.kraken, r=k.rig, cr=__cr(), dk=cr.drake; window.__step(120); dk.act=null; dk.nextT=0; cr.ai.breather=0; __until(()=>dk.act&&dk.act.kind==='swoop'&&dk.act.sub==='dive',4000); window.__step(6); await sl(500); window.__wp8.swoop={ act:dk.act&&dk.act.sub, ring:r.markers.mesh.visible, rot:cr.rot }; return JSON.stringify(window.__wp8.swoop) })()`, 300, 'swoop'],
+      // the perch: the talons on the bag (feet placed), the bag sagging under it, the timer ring, the body at the bag's depth
+      [`(async()=>{ ${sl} const D=(await __imp('/config.js')).config.CREATURES.DRAKE; D.ATTACK.WEIGHTS={breath:0,swoop:0,perch:1}; D.ATTACK.FIRST_PERCH=0; D.ATTACK.PERCH_EVERY=0; const k=${view}.kraken, r=k.rig, cr=__cr(), dk=cr.drake; window.__step(200); dk.act=null; dk.nextT=0; cr.ai.breather=0; dk.lastPerch=-999;
+        __until(()=>dk.mode==='perch'&&dk.perch&&dk.perch.landed,5000); window.__step(40); await sl(600); const S=r.ext.set.pieces; const placed=(n)=>!!(S[n].key&&S[n].key!=='hidden');
+        window.__wp8.perch={ landed:!!(dk.perch&&dk.perch.landed), feet:placed('footA')&&placed('footB'), sag:!![...${view}.models.values()].some(e=>e.model.dyn.bags.some(b=>b.node.userData.drakeSag)), ring:r.markers.mesh.visible, z:r.hg.position.z, rot:cr.rot, meas:window.__meas() }; return JSON.stringify(window.__wp8.perch) })()`, 300, 'perch'],
+      // a lava spout: step until one erupts; its column is a fire volume
+      [`(async()=>{ ${sl} const D=(await __imp('/config.js')).config.CREATURES.DRAKE; D.ATTACK.WEIGHTS={breath:0,swoop:0,perch:0}; const k=${view}.kraken, r=k.rig, cr=__cr(), dk=cr.drake; if(dk.perch){ dk.perch.left=0; } window.__step(300); const n=__until(()=>(dk.spouts||[]).some(s=>s.st==='erupt'),4000); window.__step(10); await sl(600);
+        window.__wp8.spout={ n, spouts:(dk.spouts||[]).map(s=>s.st), vol:r.ext.fx.vol.mesh.visible }; return JSON.stringify(window.__wp8.spout) })()`, 300, 'spout'],
+      // the wing tears off: a Rapier body with its skin; then it crashes and crawls
+      [`(async()=>{ ${sl} const D=(await __imp('/config.js')).config.CREATURES.DRAKE; D.ATTACK.WEIGHTS={breath:0,swoop:0,perch:0}; const k=${view}.kraken, r=k.rig, cr=__cr(), dk=cr.drake; if(dk.act) dk.act=null; cr.hp=cr.maxHp*0.5; window.__step(8); await sl(1500); const Dd=${view}.destruction;
+        window.__wp8.tear={ mode:dk.mode, simChunks:cr.chunks.length, bodies:Dd.chunks.length, viewChunks:r.chunks.size, extra:[...r.chunks.values()].some(e=>e.extra), stump:cr.parts.filter(p=>p.kind==='wing'&&p.severed).length, meas:window.__meas() }; return JSON.stringify(window.__wp8.tear) })()`, 300, 'tear'],
+      [`(async()=>{ ${sl} const k=${view}.kraken, r=k.rig, cr=__cr(), dk=cr.drake; const n=__until(()=>dk.mode==='crawl',4000); window.__step(60); await sl(600);
+        window.__wp8.crawl={ n, mode:dk.mode, phase:cr.phase, headPlaced:!!(r.ext.set.pieces.head.key&&r.ext.set.pieces.head.key!=='hidden'), z:r.hg.position.z }; return JSON.stringify(window.__wp8.crawl) })()`, 300, 'crawl'],
+      // a harpoon line made fast to its body (the generic rope, ending at the Drake's own depth)
+      [`(async()=>{ ${sl} const ct=await __imp('/modules/host/creatureTow.js'); const st=window.game.state, k=${view}.kraken, r=k.rig, cr=__cr(), ship=st.ships[0]; const tor=cr.parts.find(p=>p.kind==='mantle'), s=tor.segs[0]; const ref=ship.layout.refPoint; ct.creatureLatch(st, ship, { part:tor, seg:0, x:s.x+150, y:s.y, d:1800 }, { x:ref.x, y:ref.y }, null, null); window.__step(40); await sl(700); window.__wp8.rope={ visible:r.ropes.group.visible, lines:cr.harpoons.length }; cr.harpoons=[]; return JSON.stringify(window.__wp8.rope) })()`, 300, 'rope'],
+      // the death: it falls into the lava; the view hides it when it is gone
+      [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, k=${view}.kraken, cr=__cr(); cr.hp=1; const m=cr.parts.find(p=>p.kind==='mantle'); const rr=cs.hurtCreature(st,{part:m,seg:0},50,{who:null,src:'shell'}); window.__step(30); await sl(500);
+        window.__wp8.death={ killed:!!(rr&&rr.killed), mode:cr.mode }; window.__step(700); await sl(900); window.__wp8.gone=!window.game.state.creature; window.__wp8.hiddenAfter=!k.root.visible; window.__wp8.errors=window.gameErrors||[]; return JSON.stringify(window.__wp8.death) })()`, 300, 'death'],
+    ];
+    const rd = run('drake', 'creature=drake&lair=ember', dsteps);
+    const dd = rd.data || {};
+    console.log('  errors ' + rd.errs + ' evalErrors ' + rd.evalErrors + '  ' + JSON.stringify(dd).slice(0, 900));
+    if (rd.errs !== 0 || rd.evalErrors) fail('console / eval errors in the Drake run');
+    if (!dd.arrive || !dd.arrive.ext || !dd.arrive.visible) fail('the Drake view (rig.ext) was not built');
+    else {
+      if (dd.arrive.meshes > 12) fail('the Drake draws ' + dd.arrive.meshes + ' meshes (budget 12)');
+      if (dd.arrive.tris > 60000) fail('the Drake is ' + dd.arrive.tris + ' triangles with ink (budget 60000)');
+      if (dd.arrive.js > 2.5) fail('the frame JS is ' + dd.arrive.js + ' ms');
+    }
+    if (!dd.breath || !(dd.breath.glow2 > dd.breath.glow1 && dd.breath.glow1 > dd.breath.shut) || !(dd.breath.open > 0.9) || !dd.breath.jawPlaced) fail('the breath: the throat glow did not rise in steps / the jaw did not open ' + JSON.stringify(dd.breath));
+    if (!dd.sweep || !dd.sweep.flame || !dd.sweep.vol) fail('the breath cone was not drawn');
+    if (dd.sweep && dd.sweep.meas && dd.sweep.meas.meshes > 12) fail('the Drake draws ' + dd.sweep.meas.meshes + ' meshes while it breathes');
+    if (!dd.swoop || dd.swoop.act !== 'dive' || !dd.swoop.ring) fail('the swoop ring was not drawn');
+    if (!dd.perch || !dd.perch.landed || !dd.perch.feet || !dd.perch.ring || !dd.perch.sag) fail('the perch: talons / bag sag / timer ring ' + JSON.stringify(dd.perch));
+    if (!dd.spout || !dd.spout.vol) fail('a lava spout column was not drawn');
+    if (!dd.tear || dd.tear.stump < 1 || dd.tear.bodies < 1 || dd.tear.viewChunks < 1 || !dd.tear.extra) fail('the torn wing did not become a Rapier body with its skin ' + JSON.stringify(dd.tear));
+    if (!dd.crawl || dd.crawl.mode !== 'crawl' || dd.crawl.phase < 2 || !dd.crawl.headPlaced) fail('the crawl');
+    if (!dd.rope || !dd.rope.visible) fail('the harpoon line was not drawn on the Drake');
+    if (!dd.death || !dd.death.killed || !dd.gone || !dd.hiddenAfter) fail('the death: it dies, goes, and the view hides');
+    if (dd.errors && dd.errors.length) fail('game errors in the Drake run: ' + JSON.stringify(dd.errors).slice(0, 200));
+    // the Low tier (fewer sides, fewer particles, no warm light) breathes and perches with 0 errors and a smaller model
+    const lowSteps = [
+      setup,
+      [`(async()=>{ ${sl} ${meas} window.__step(500); await sl(600); const k=${view}.kraken, r=k.rig; window.__wp8.low={ ext:!!(r&&r.ext), meas:window.__meas() }; return 1 })()`, 300],
+      [`(async()=>{ ${sl} ${cfgW('{breath:1,swoop:0,perch:0}')} const k=${view}.kraken, r=k.rig, cr=__cr(), dk=cr.drake; dk.nextT=0; cr.ai.breather=0; __until(()=>cr.flame,4000); window.__step(20); await sl(700); window.__wp8.lowBreath={ flame:!!cr.flame, vol:r.ext.fx.vol.mesh.visible, light:r.ext.fx.light.intensity, meas:window.__meas() }; window.__wp8.errors=window.gameErrors||[]; return 1 })()`, 300, 'drakelow'],
+    ];
+    const rl = run('drakelow', 'creature=drake&lair=ember&tier=low', lowSteps);
+    console.log('  low tier: errors ' + rl.errs + '  ' + JSON.stringify(rl.data).slice(0, 400));
+    if (rl.errs !== 0 || rl.evalErrors) fail('console / eval errors on the Drake at the Low tier');
+    if (!rl.data || !rl.data.low || !rl.data.low.ext || rl.data.low.meas.tris > 45000) fail('the Low tier Drake is missing or too big');
+    if (!rl.data || !rl.data.lowBreath || !rl.data.lowBreath.flame || !rl.data.lowBreath.vol || rl.data.lowBreath.light !== 0) fail('the Low tier breath: the cone is drawn and the warm light stays off ' + JSON.stringify(rl.data && rl.data.lowBreath));
+    if (rl.data && rl.data.errors && rl.data.errors.length) fail('game errors in the Drake Low tier run');
+  }
   if (long) {
-    console.log('4. host.html?creature=kraken, 8 bots, 3 minutes in real time');
+    console.log('5. host.html?creature=kraken, 8 bots, 3 minutes in real time');
     const lg = [[`(async()=>{ window.__wp8={}; const b=document.getElementById('bots'); b.click(); b.click(); await new Promise(r=>setTimeout(r,500)); document.getElementById('castoff').click(); return 1; })()`, 90000], [`(()=>{ window.__wp8.mid={ has:!!window.game.state.creature, errs:window.gameErrors||[] }; return 1 })()`, 90000], [`(()=>{ window.__wp8.end={ has:!!window.game.state.creature, errs:window.gameErrors||[], calls:${view}.stats().sceneCalls, fps:window.__meter&&window.__meter.fps }; return 1 })()`, 100]];
     const r4 = run('long', 'creature=kraken', lg);
     console.log('  errors ' + r4.errs + '  ' + JSON.stringify(r4.data).slice(0, 300));

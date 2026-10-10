@@ -213,7 +213,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     const P = vfx.P;
     destruction.hooks.splash = (x, y, size) => { world.splashAt(x, -y, size, 40); P.burst('drop', x, y, 40, Math.round(4 + size * 0.05), { dir: Math.PI / 2, spread: 0.7, speed: [120, 380], size: [8, 16], up: [40, 140], area: size * 0.2 }); };
   }
-  kraken.link({ world, vfx, destruction, models, camera }); // (WP8: the creature view draws its water effects with the particles and its severed limbs as wreckage bodies)
+  kraken.link({ world, vfx, destruction, models, camera, damage }); // (WP8: the creature view draws its water effects with the particles and its severed limbs as wreckage bodies; the Drake's breath leaves scorch marks through the damage view)
   crew.vfx = vfx; // (a crewman fired from the crew cannon trails smoke)
   const modelFor = (sh) => {
     const ver = sh.layout.version;

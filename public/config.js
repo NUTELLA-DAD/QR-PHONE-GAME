@@ -2487,12 +2487,17 @@ export const config = {
       FOAM: { COLOR: '#f4fbfa', BAND: 0.55, ALPHA: 0.92 }, // the foam ring where something crosses the sea line: the band's share of the radius
       SHADOW: { COLOR: '#0a1830', ALPHA: 0.62, DEPTH: 0.9 }, // the breach shadow on the water: colour, its darkest alpha, its depth (z) as a share of its width
     },
-    // THE CINDER DRAKE (C.6a, view3d/creatureDrake.js: a placeholder of tapered capsules until its sculpted look): the same keys as the Kraken's, in charred red-brown and ember orange.
+    // THE CINDER DRAKE (view3d/creatureDrake.js, drakeModel.js, drakeWings.js, drakeFx.js, drakePaint.js; 3D.md section 24): the same keys as the Kraken's, in charred red-brown and ember orange, and the rest of its look.
     DRAKE: {
-      skin: '#7a2e24', skinDark: '#4e1c18', belly: '#e0a04a', spot: '#4e1c18', spotLight: '#a8402c', fin: '#b9482a', bone: '#efe2c0', char: '#2f2a2e', eye: '#ffd23f', iris: '#fff0a0', pupil: '#17101e',
-      mouthIn: '#6e1a14', lips: '#a8402c', flesh: '#d98a95', heart: '#e0485a', dead: '#4a3a3a', exhausted: '#a08a8a',
+      skin: '#5c2220', skinDark: '#2c1010', belly: '#d99a46', spot: '#2c1010', spotLight: '#8a3828', fin: '#b9482a', bone: '#efe2c0', char: '#2f2a2e', eye: '#ffd23f', iris: '#fff0a0', pupil: '#17101e',
+      mouthIn: '#c0381c', lips: '#a8402c', flesh: '#b8574c', heart: '#ff4a4a', dead: '#4a3a3a', exhausted: '#a08a8a',
+      horn: '#2a2326', bone2: '#4a2a2a', club: '#3a2c2e', plate: '#4a1c16', plateEdge: '#c27a44', throat: '#ff9a2a', core: '#ffe27a', dent: '#4a3a28', // (horns and spines, a wing's wrist ball, the tail club's body, the breast plates and their rims, the glow of the throat and its hot core, the dents the talons leave in the bag)
+      wing: '#d9703a', wingDk: '#8a3220', wingLt: '#f0a458', wingEdge: '#ffc884', wingInk: '#2a1212', // (the wing membrane: at the bone, the middle, the pale part, the rim, the ink line along the edge)
       EYE_GLOW: { base: 1.3, lit: 2.2, blind: 0.25, tired: 0.7 },
-      THROAT_GLOW: { shut: 0.25, open: 2.1 }, HEART_GLOW: 1.8,
+      THROAT_GLOW: { shut: 0.25, open: 2.1 }, HEART_GLOW: 1.8, // (the throat's glow rises in five steps through the breath's wind-up; HDR above 1 blooms)
+      HEAT: { base: 0.7, breath: 0.45 }, // the ember cracks' glow (an emissive map): at rest, and the most the breath adds
+      FLAME: { outer: '#ff3a0c', mid: '#ff7a14', inner: '#ffc23a', core: '#fff3c2', hdr: [1.1, 1.5, 1.9, 2.4], alpha: [0.55, 0.7, 0.85, 1] }, // the breath cone's four layers: colour, HDR strength, opacity
+      LIGHT: { color: '#ff9a3a', intensity: 2.2, range: 3400 }, // the warm point light the breath throws on the ship (x 1 on High, 0.6 on Medium, none on Low)
       INK: 14,
       TENTACLE_SIDES: 12, // sides of a limb's tube (Low tier: 8)
       Z: { FRONT: 330, BACK: -250, ROOT_FRONT: 140, ROOT_BACK: -120, WRAP_MARGIN: 130 },

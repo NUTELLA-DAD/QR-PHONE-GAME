@@ -280,7 +280,7 @@ One monster gets built all the way first: the Kraken. It is proved with bots, th
 - **LAIR:** `voyage.js markLairs` picks the creature by stop environment (`LAIR.BY_ENV`: sea -> Kraken, ember -> Drake); `maps.js buildDrakeLairMap` = lava below `LAIR.LAVA_BELOW`, a rock shelf and lava spouts. Dev flags: `host.html?creature=drake`, `botsim --creature drake`.
 - **REWARD:** triple salvage and the trophy "Drake-scale plating" (an armour part with `art:'drake'`, mass x `TROPHY.MASS_MUL`).
 - **BOTS** (`bots.js`): gunners with led aim, fire crew, a drive-off-perch job (helm shake), the bomb bay over a crawling mouth, flak priority on wings, helm steering over a lava spout when hooked.
-- **ART:** 2D in `creatureArt.js` (`drawDrake`); `view3d/creature.js` has a `drake` kind (tubes only) with `view3d/creatureDrake.js`. A proper 3D Drake model (wing membranes, scales, glowing throat) is still to do.
+- **ART:** 2D in `creatureArt.js` (`drawDrake`); 3D: the full model (scales and ember cracks, horned head with a hinged jaw and a stepped throat glow, wing membranes with rips, breath cone, perch talons, lava spouts, crash and death effects) is `view3d/creatureDrake.js` and friends: see 3D.md section 24.
 - **GATE:** `tools/creature-check.mjs` section D0-D11. Forced wins with 8 bots on Normal (seconds, seeds 1-3): choke 78/74/99, bombs 188/190/256, tow 184/163/165, board 29, flak 245/224/210, hp 123/175/241; Easy: 4 bots win (hp) in about 200 s, 16 bots in about 115 s. Voyagesim (24 seeds, Normal) classic 14/24 (was 16/24), Sparrow 7/24 (was 6/24); the golden bands still hold.
 
 
