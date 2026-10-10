@@ -20,7 +20,7 @@ export const TIER_NAMES = ['high', 'medium', 'low'];
 export const tierFromLevel = (level) => (level >= 3 ? 'high' : level >= 1 ? 'medium' : 'low');
 
 // The address: ?look=nobloom,nofog  and  ?tier=medium. Returns { tier, flags } and applies the flags to `look`.
-const SWITCHES = ['bloom', 'lut', 'grain', 'fog', 'rim', 'lanterns', 'shadows', 'post', 'outlines', 'dark', 'clouds', 'water', 'vfx', 'glows', 'beam', 'lightning', 'fungal'];
+const SWITCHES = ['bloom', 'lut', 'grain', 'fog', 'rim', 'lanterns', 'shadows', 'post', 'outlines', 'dark', 'clouds', 'water', 'vfx', 'glows', 'beam', 'lightning', 'fungal', 'weather'];
 export function readAddress(search) {
   const out = { tier: '', flags: {} };
   try {

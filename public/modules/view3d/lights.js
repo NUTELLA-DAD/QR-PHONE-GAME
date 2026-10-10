@@ -63,6 +63,7 @@ export function createLights(scene) {
 
   // Everything that depends on the environment, the darkness (tod = a world.js preset blend) and the cave flag.
   L.apply = (tod, envId, cave) => {
+    L.last = [tod, envId, cave];
     if (!L.rig || L.rig.id !== envId) L.rig = rigFor(envId);
     const rig = L.rig, dk = rig.dark;
     // THE DARKNESS: how dark the sky is (the game's darkTarget, via tod.night), and a cave is never lighter than rig.dark.cave. The gloom (0..1) then drops the ambient to a dark-blue floor, so
@@ -84,6 +85,10 @@ export function createLights(scene) {
     L.haveKey = rig.key.on;
     mixC(sun.color, tod.sun[0], rig.key.color, w);
     sun.intensity = rig.key.on ? tod.sun[1] * rig.key.strength * k * (1 - g * (1 - dk.key)) : 0;
+    if (L.heat > 0) { // WP12: the lava's heat under the ship: the key (which comes from below in the Ember Forge) strengthens and the ground colour glows
+      if (rig.key.on) sun.intensity *= 1 + 0.55 * L.heat;
+      hemi.groundColor.lerp(_c.set('#ff7a2c'), 0.45 * L.heat);
+    }
     const d = rig.key.dir || tod.sun[2];
     L.sunDir.set(d[0], d[1], d[2]).normalize();
     sun.position.copy(L.sunDir).multiplyScalar(3800).add(sun.target.position);
@@ -104,7 +109,9 @@ export function createLights(scene) {
     L.hemiBase = hemi.intensity; hemi.intensity += L.flashAdd; // (WP10: a lightning flash adds ambient light on top of whatever the darkness left)
   };
   // WP10: the lightning flash (lightning.js sets it every frame, stepped): extra ambient light, 0 = none
-  L.flashAdd = 0; L.hemiBase = 1;
+  L.flashAdd = 0; L.hemiBase = 1; L.heat = 0; L.last = null;
+  // WP12: the heat over lava (state.env.heat 0..1, weather.js sets it in steps of 0.1: the rig is worked out again only when the step changes)
+  L.setHeat = (h) => { const q = Math.round(Math.max(0, Math.min(1, h || 0)) * 10) / 10; if (q === L.heat) return; L.heat = q; if (L.last) L.apply(L.last[0], L.last[1], L.last[2]); };
   L.setFlash = (amt) => { if (amt === L.flashAdd) return; L.flashAdd = amt; hemi.intensity = L.hemiBase + amt; };
 
   // Fog strength: the same share of the picture at the ship plane at any zoom (D = camera distance), and more and more behind it.

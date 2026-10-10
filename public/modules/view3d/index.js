@@ -26,6 +26,7 @@ import { createPartDamage } from './damageStates.js';
 import { createBeams } from './beams.js';
 import { createLightning } from './lightning.js';
 import { createFungal } from './fungal.js';
+import { createWeather } from './weather.js';
 import { placeCamera, FOV } from './camera3d.js';
 import { envIdOf } from '../host/environments.js';
 import { shipOf, teamOf } from '../host/ships.js';
@@ -38,7 +39,7 @@ const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h
 // What the host shows in 2D that this view does not draw yet (logged once per session; gameplay never depends on drawing). WP9 drew the rest: the enemies and world objects (flyers.js, enemyArt.js, scenery.js, worldObjects.js, glows3d.js, wreck3d.js, parts3d/enemyDecor.js)
 // and the labels on the HUD canvas (render.js drawOver3D).
 export const NOT_DRAWN = [
-  'weather (rain, snow, storm clouds), embers, frost crusts, storm rods and the sea pump (WP12)',
+  'the Ember Forge heat shimmer (skipped on purpose: it would have to move; WP12 drew the rest of the weather)',
   'the Versus team pennants on the masts and the far-ship porthole (WP11)',
   'the sky-dock "NEW: part" call-out',
   'the darkness overlay (the lights do it in 3D)',
@@ -188,6 +189,10 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   let fungal = null;
   try { fungal = createFungal({ parent: worldRoot, state, world, terrain }); } catch (e) { console.warn('view3d fungal off', e); }
   V.fungal = fungal;
+  // WP12: weather and the seven environments (weather.js: rain, snow, embers, lava, frost crusts, rods, waterspouts, rafts, the pump, stars, aurora ...). If it cannot be made the picture is simply without it.
+  let weather = null;
+  try { weather = createWeather({ parent: worldRoot, state, world, models, vfx, renderer }); } catch (e) { console.warn('view3d weather off', e); }
+  V.weather = weather;
   // The wreckage's smoke and sparks go through WP4's particles when they are there (both use 3D world coordinates, y up); otherwise destruction.js keeps its own puffs.
   if (vfx && vfx.P) {
     const P = vfx.P;
@@ -406,6 +411,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     try { scenery.update(camTarget.x, cam.visW / 2, { t, dt }); } catch (e) { logOnce('scenery', e); }
     const seaNow = env === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : null;
     try { kraken.update(state.creature, world.night, dt, t, { state, sea: seaNow, tier }); } catch (e) { logOnce('creature', e); }
+    if (weather) { try { weather.update({ t, dt, env, cave: world.cave, night: world.night, tier, cam: { visW: cam.visW, visH: cam.visH }, target: camTarget, camera, sea: seaNow, map }); } catch (e) { logOnce('weather', e); } } // (WP12: before the particles: its sprites and bursts ride vfx.update's hook)
     if (vfx) { // the particles (after the ships and the Kraken are placed: the emitters read their world positions)
       const v0 = performance.now();
       try {
@@ -450,7 +456,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     return { calls: i.render.calls, tris: i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs, crew: crew.stats() };
   };
   V.setTod = (name) => { S.tod = name || ''; };
-  V.dispose = () => { for (const part of [beams, lightning, fungal]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, weather]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));

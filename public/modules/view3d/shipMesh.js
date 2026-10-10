@@ -184,7 +184,7 @@ export function buildShipModel(layout, opts = {}) {
         bg.node.position.x = (bg.baseX || 0) + bg.back * Math.sin(yw);
         bg.node.position.z = -bg.back * Math.cos(yw);
       });
-      if (decor) decor.update(t, opts.gunship && opts.gunship.intent);
+      if (decor) decor.update(t, opts.gunship && opts.gunship.intent, model.gale || 0);
       const guns = st.GUNS || {};
       for (const [name, pivot] of Object.entries(dyn.guns)) { const live = guns[name]; if (live && Number.isFinite(live.aim)) pivot.rotation.z = -live.aim; }
       const sls = st.searchlights || [];
