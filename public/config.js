@@ -2335,6 +2335,22 @@ export const config = {
     BLOOM: { THRESHOLD: 0.92 }, // only things brighter than this glow (the lamps, fire, eyes)
   },
 
+  // The giant creatures in 3D (WP8: view3d/creature.js, creatureKit.js, creatureTube.js, creatureFx.js, creatureKraken.js; 3D.md section 14). One block per creature kind: colours (hex), the eyes' glow
+  // (HDR multipliers: the bloom pass makes more than about 1 glow), sizes of the water effects. Nothing here touches the simulation.
+  CREATURE3D: {
+    KRAKEN: {
+      skin: '#6a3f86', skinDark: '#35234f', belly: '#dd9fb4', spot: '#2c1e4c', spotLight: '#a674bd', fin: '#9a62b0', bone: '#eadcc0', char: '#2f2a2e', eye: '#ffb81e', iris: '#ffe46a', pupil: '#17101e',
+      mouthIn: '#8c1c34', lips: '#b4566e', flesh: '#e48e9c', heart: '#e0485a', dead: '#5a5470', exhausted: '#a79ab8', // (exhausted / dead: what the skin is tinted toward)
+      EYE_GLOW: { base: 1.3, lit: 2.2, blind: 0.25, tired: 0.7 }, // HDR multiplier of the iris: always a little (base), more in a searchlight (lit), a blind eye, the exhausted creature
+      THROAT_GLOW: { shut: 0.25, open: 2.1 }, HEART_GLOW: 1.8,
+      INK: 14, // ink outline width on the big shapes (world units)
+      TENTACLE_SIDES: 12, // sides of a tentacle's tube (Low tier: 8)
+      Z: { FRONT: 330, BACK: -250, ROOT_FRONT: 140, ROOT_BACK: -120, WRAP_MARGIN: 130 }, // the depth the limbs lie at (the ship's plane is 0): front limbs, back limbs, where their roots start, a coil's clearance round the hull
+      FOAM: { COLOR: '#f4fbfa', BAND: 0.55, ALPHA: 0.92 }, // the foam ring where something crosses the sea line: the band's share of the radius
+      SHADOW: { COLOR: '#0a1830', ALPHA: 0.62, DEPTH: 0.9 }, // the breach shadow on the water: colour, its darkest alpha, its depth (z) as a share of its width
+    },
+  },
+
   // The 3D particles (view3d/particles.js + vfx.js; 3D.md section 12). Caps per quality tier (the pool and the splinter boxes), RATE scales every emitter, colours are hex (fire and sparks are drawn HDR
   // so the bloom pass makes them glow), rates are per second per emitter. Nothing here touches the simulation.
   VFX3D: {

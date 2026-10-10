@@ -46,7 +46,6 @@ export function createVfx({ state, scene, world, models }) {
   let primed = false, lastT = -1e9;
   const groups = new Map();
   const demo = { fires: [], shells: [], queue: [] };
-  const crossSide = new Map(), crossAt = new Map(); // the Kraken's parts against the sea line
   const muzzles = []; // [x, y] muzzle stars made this frame (a flash and a new shell are the same shot)
   const _v = { x: 0, y: 0, z: 0 };
   const V = { P, particles: P, demo, counts: { splash: 0, puffGroups: 0, rings: 0, muzzles: 0 } }; // (counts: for the tools)
@@ -298,39 +297,7 @@ export function createVfx({ state, scene, world, models }) {
     }
   }
 
-  // ---- the Kraken: splashes where it crosses the sea line, a breach burst, spray at grips ------------------------------------------------------------------------------------------
-  function kraken(dt) {
-    const cr = state.creature, sea = seaOf();
-    if (!cr || sea === null || !cr.parts) { crossSide.clear(); crossAt.clear(); return; }
-    let made = 0;
-    for (const p of cr.parts) {
-      if (!p.segs || p.dead || p.hidden) continue;
-      const mantle = p.kind === 'mantle', z = mantle ? 0 : p.layer === 'front' ? 360 : -360;
-      p.segs.forEach((s, i) => {
-        if (!fin(s.x) || !fin(s.y) || !fin(s.ang) || !fin(s.len)) return;
-        const mx = s.x + Math.cos(s.ang) * s.len * 0.5, my = s.y + Math.sin(s.ang) * s.len * 0.5, key = (p.id || p.kind) + '#' + i;
-        const side = my > sea + 6 ? 1 : my < sea - 6 ? 0 : -1;
-        if (side < 0) return;
-        const was = crossSide.get(key), wasY = crossAt.get(key + 'y'), ck = 'c' + (p.id || p.kind), cd = crossAt.get(ck) || 0;
-        crossSide.set(key, side); crossAt.set(key + 'y', my);
-        if (i === 0 && cd > 0) crossAt.set(ck, cd - dt); // (one cooldown for the whole limb: its first segment counts it down)
-        if (was === undefined || was === side || cd > 0 || made >= 2) return;
-        crossAt.set(ck, mantle ? 1.2 : 0.5);
-        made++; V.counts.splash++;
-        const spd = wasY === undefined ? 300 : Math.abs(my - wasY) / Math.max(dt, 0.008), k = clamp(spd / 450, 0.35, 1.8) * (mantle ? 1.6 : 1), w = Math.min(420, Math.max(60, (s.r || 20) * 2.4)) * (mantle ? 1.2 : 1);
-        const sx = mx, sy = -sea, kk = Math.min(k, 2);
-        P.burst('drop', sx, sy, z, Math.round(14 * k), { dir: Math.PI / 2, spread: 0.6, speed: [260 * kk, 560 * kk], size: mantle ? [28, 52] : [14, 26], area: w * 0.25, up: [60, 200] });
-        P.burst('steam', sx, sy + 10, z, Math.round(2 + 1.5 * k), { size: [w * 0.22, w * 0.36], size1: 2.0, life: [0.8, 1.3], alpha: 0.55, speed: [10, 70], up: [20, 80], area: w * 0.3 });
-        if (k > 1) P.flash(sx, sy + 30, z + 30, w * 1.4, '#e8fbff', { hdr: 1.6, alpha: 0.5 });
-        world.splashAt(sx, sea, clamp(w * 1.2, 90, 520), z + 40);
-      });
-      if (p.grip && fin(p.grip.x) && fin(p.grip.y) && P.inView(p.grip.x, -p.grip.y)) { // a tentacle gripping the ship: spray and chips
-        const a = acc.get(p) || 0;
-        const q = a + dt;
-        if (q >= 0.14) { acc.set(p, 0); P.burst('drop', p.grip.x, -p.grip.y, z + 20, 2, { spread: 1.2, speed: [60, 190], size: [8, 13] }); if (rnd() < 0.35) P.splinters(p.grip.x, -p.grip.y, z + 20, 2, { kind: 'wood', speed: [60, 200], up: [30, 100] }); } else acc.set(p, q);
-      }
-    }
-  }
+  // (the Kraken's splashes, wake, breach spray and grip chips moved to creatureWater.js in WP8: it watches state.creature itself and calls these particles)
 
   // ---- debris on fire, the coil's bolt ---------------------------------------------------------------------------------------------------------------------------------------------------
   function debris(dt) {
@@ -402,7 +369,6 @@ export function createVfx({ state, scene, world, models }) {
     shells(dt);
     bombs(dt);
     steam(dt);
-    kraken(dt);
     debris(dt);
     coil();
     primed = true;
