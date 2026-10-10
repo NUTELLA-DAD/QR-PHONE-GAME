@@ -139,7 +139,7 @@ export const G = {
 };
 
 // Replace the normals of a non-indexed geometry's outline vectors by the average normal of every vertex at the same place, scaled to `width`.
-function setOutline(g, width) {
+export function setOutline(g, width) {
   const pos = g.attributes.position, nor = g.attributes.normal, n = pos.count;
   const out = new Float32Array(n * 3);
   if (width > 0) {
