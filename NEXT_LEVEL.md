@@ -221,6 +221,9 @@ V.0, V.1a and V.2 can start alongside Phase S.
 ### Phase B - Giant boss creatures (planned with Fable)
 Monsters 3-5 times the size of the ship, one per sky: Kraken, Cinder Drake, Thunderbird, Rime Wyrm, Mycelial Mother, Void Eel, Island Titan. Each has several ways to win: sever its limbs, bomb its open mouth, tow it into rock, board it and strike its heart, or simply shoot it down. The Kraken is built first as the full vertical slice. Full plan: **[BOSSES.md](BOSSES.md)**.
 
+### Phase 3D - The switch to 3D (planned with Fable)
+The TV game moves to a painted-storybook 3D look (Three.js), with real lamps, water, particles, 3D wreckage physics (Rapier) and ship parts that visibly break off. Full plan: **[3D.md](3D.md)**.
+
 ### Phase 2 - Story and stickiness
 
 | # | Package | Size | Files |
