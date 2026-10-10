@@ -141,7 +141,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     const ver = sh.layout.version;
     let e = models.get(sh.id);
     if (!e || e.ver !== ver) {
-      if (e) { worldRoot.remove(e.model.root); e.model.root.traverse((o) => o.geometry && o.geometry.dispose()); for (const [k, f] of figures) if (f.shipId === sh.id) { f.fig.group.removeFromParent(); figures.delete(k); } }
+      if (e) { worldRoot.remove(e.model.root); e.model.root.traverse((o) => o.geometry && o.geometry.dispose()); if (e.model.dispose) e.model.dispose(); for (const [k, f] of figures) if (f.shipId === sh.id) { f.fig.group.removeFromParent(); figures.delete(k); } }
       const model = buildShipModel(sh.layout, { enemy: !!sh.ai });
       worldRoot.add(model.root);
       e = { model, ver };
@@ -214,7 +214,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       raiders.forEach((r, i) => place('r' + sh.id + (r.id || i), { ...r, id: 'r' + (r.id || i) }, true));
       for (const [key, f] of figures) if (f.shipId === sh.id && !used.has(key)) { f.fig.group.removeFromParent(); figures.delete(key); }
     });
-    for (const [id, e] of models) if (!seen.has(id)) { worldRoot.remove(e.model.root); models.delete(id); if (onModels) onModels(models); }
+    for (const [id, e] of models) if (!seen.has(id)) { worldRoot.remove(e.model.root); e.model.root.traverse((o) => o.geometry && o.geometry.dispose()); if (e.model.dispose) e.model.dispose(); models.delete(id); if (onModels) onModels(models); }
   }
 
   function syncSky() {
