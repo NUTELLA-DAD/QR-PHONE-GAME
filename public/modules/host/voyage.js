@@ -59,6 +59,7 @@ export function generateVoyage(seed, opts = {}) {
     }
     columns.push(col);
   }
+  markLairs(columns, seed, n, h);
   // Connect each column to the next: every stop leads somewhere and every stop is reachable.
   for (let c = 0; c < n - 1; c++) {
     const a = columns[c];
@@ -78,12 +79,37 @@ export function generateVoyage(seed, opts = {}) {
   return { seed, columns, mode: opts.mode, voyageNo: opts.voyageNo || 1 };
 }
 
+// GIANT CREATURE LAIRS (config.CREATURES.LAIR, BOSSES.md 3.1 "Voyage"): 1 middle stop (2 when the voyage has config.CREATURES.LAIR.LONG_STOPS columns or more) holds a Kraken. ONLY a Sunken Sea stop can (the
+// creature needs water), never the first stop flown (column h) nor the Flagship, never two columns in a row. A lair is +DANGER skulls and pays x REWARD_MUL; its kind is 'lair' (an open sky over the sea,
+// maps.js buildLairMap). It has a random stream of its own, so the rest of a seeded route is exactly what it was before lairs existed.
+function markLairs(columns, seed, n, h) {
+  const LR = config.CREATURES.LAIR;
+  const rand = mulberry((seed ^ 0x6c616972) >>> 0);
+  const count = n - h >= LR.LONG_STOPS ? LR.COUNT.long : LR.COUNT.short;
+  const cols = [];
+  for (let c = h + 1; c <= n - 2; c++) if (columns[c].some((s) => s.env === 'sea')) cols.push(c);
+  for (let i = cols.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [cols[i], cols[j]] = [cols[j], cols[i]]; } // (shuffled)
+  const chosen = [];
+  for (const c of cols) {
+    if (chosen.length >= count) break;
+    if (chosen.every((x) => Math.abs(x - c) > 1)) chosen.push(c);
+  }
+  for (const c of chosen) {
+    const seas = columns[c].filter((s) => s.env === 'sea');
+    const s = seas[Math.floor(rand() * seas.length)];
+    s.lair = true;
+    s.kind = 'lair';
+    s.danger += LR.DANGER;
+    s.reward = Math.round(s.reward * LR.REWARD_MUL);
+  }
+}
+
 export const stopById = (voyage, id) => {
   for (const col of voyage.columns) for (const s of col) if (s.id === id) return s;
   return null;
 };
 
-export const stopName = (s) => (s.flagship ? 'The Flagship' : s.harbour ? 'The Harbour' : envInfo(s.env).name);
+export const stopName = (s) => (s.flagship ? 'The Flagship' : s.harbour ? 'The Harbour' : s.lair ? config.CREATURES.LAIR.NAME : envInfo(s.env).name);
 
 // Stop numbers run on across the voyages of a campaign: run.base = stops finished before this voyage's harbour.
 export const stopNo = (run, s) => run.base + s.col + 1;

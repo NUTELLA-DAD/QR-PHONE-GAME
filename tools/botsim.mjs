@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0, blowout: 0, trace: null, traceEvery: 30, ships: 1, build2: 'classic', botTurns: 0, teams: 0, breakoff: 0, creature: null };
+const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0, blowout: 0, trace: null, traceEvery: 30, ships: 1, build2: 'classic', botTurns: 0, teams: 0, breakoff: 0, creature: null, lair: 0 };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -52,6 +52,7 @@ if (process.env.NO_DARING) config.BOTS.DARING.ENABLED = false; // (compare runs 
 if (process.env.NO_LIVE) config.BALANCE.LIVE = false; // (compare runs without the live balance: crew, coal and ammo shifting the ship's trim, balance.js)
 if (process.env.NO_FORCES) config.FORCES.LIVE = false; // (compare runs without hits, gusts, scrapes, rams and the tether twisting the ship: forces.js; engines and sails still do)
 if (process.env.NO_BREAKOFF) config.BREAKOFF.ENABLED = false; // (compare runs with parts never breaking off: S.5i)
+if (!args.lair && !process.env.WITH_LAIRS) config.CREATURES.LAIR.COUNT = { short: 0, long: 0 }; // (C.3: botsim flies single missions, to compare numbers from one change to the next - the baseline, the golden, the frames. Whatever route it rolls has no Kraken lair in it, so those stay as they were; lairs are flown by tools/voyagesim.mjs, by --lair 1 here, and by WITH_LAIRS=1)
 if (process.env.NO_LINKS) config.LINKS.ENABLED = false; // (compare runs without the linked stations: gun+loader, helm+lookout, boiler surge)
 if (process.env.NO_HEALTH) config.HEALTH.ENABLED = false; // (compare runs with the old crew rules: no hearts, a raider blow or a bomb knocks a crewman out in one go)
 if (process.env.HEALTH_CFG) { const merge = (a, b) => { for (const [k, v] of Object.entries(b)) { if (v && typeof v === 'object') merge(a[k], v); else a[k] = v; } }; merge(config.HEALTH, JSON.parse(process.env.HEALTH_CFG)); } // (tuning: HEALTH_CFG='{"SHELL":{"RADIUS":140}}' overrides config.HEALTH numbers)
@@ -60,7 +61,7 @@ if (args.map) {
   if (!config.MAPS.KINDS.includes(args.map)) { console.error('Bad map; use ' + config.MAPS.KINDS.join('|')); process.exit(2); }
   config.MAPS.FORCE_KIND = args.map; // set before the sim is created so mission 1 uses it
 }
-if (args.creature && !args.env) args.env = 'sea'; // (the Kraken lives at the water line: --creature kraken flies the Sunken Sea unless told otherwise)
+if ((args.creature || args.lair) && !args.env) args.env = 'sea'; // (the Kraken lives at the water line: --creature kraken flies the Sunken Sea unless told otherwise)
 if (args.env) {
   if (!config.ENVIRONMENTS[args.env] || !config.ENVIRONMENTS[args.env].name) { console.error('Bad env; use ' + Object.keys(config.ENVIRONMENTS).filter((k) => config.ENVIRONMENTS[k] && config.ENVIRONMENTS[k].name).join('|')); process.exit(2); }
   config.ENVIRONMENTS.FORCE = args.env; // every mission happens in this environment
@@ -69,6 +70,9 @@ if (args.creature) {
   if (args.creature !== 'kraken') { console.error('Bad creature; use kraken'); process.exit(2); }
   config.CREATURES.DEV_SPAWN = args.creature; // (C.1: a giant creature in every mission, creatureSystem.js)
 }
+if (args.lair) config.CREATURES.DEV_LAIR = true; // (C.3: every stop but the Flagship is a Kraken's LAIR - the sea map of buildLairMap, the creature rising at the zeppelin's slot, the stop done when it is dead - instead of the dev flag's creature in the usual map)
+if (process.env.CREATURE_FORCE_WIN) config.CREATURES.FORCE_WIN = process.env.CREATURE_FORCE_WIN; // (C.3: sever | mouth | tow | board | hp: the bots steer so that the fight can only end that way)
+const crOn = !!(args.creature || args.lair);
 const { createSimulation } = await load('modules/host/simulation.js');
 
 // (--build NAME: fly another build instead of the classic ship: a scratch fixture tools/fixtures/NAME-build.mjs, e.g. --build multi,
@@ -138,6 +142,7 @@ let contacts = 0, wasScrape = false;
 let segSteps = 0, altRef = null, vySum = 0, scrapeSteps = 0;
 let distPrev = null, distTravel = 0, flightSteps = 0, altMin = Infinity, altMax = -Infinity, progMax = 0, speedSum = 0, distBack = 0; // S.5e: how far and how fast she got, and how much altitude she covered
 const actTally = {};
+if (process.env.FIRE_TRACE && sim.fire) { const ig = sim.fire.ignite; let n = 0; sim.fire.ignite = (d, x, why, opts) => { if (n++ < 3) console.log(`ignite ${why} d${d} x${Math.round(x)} @${(simClock / 1000).toFixed(1)}s ${new Error().stack.split('\n').slice(2, 6).map((s) => s.trim().replace(/\(.*[\\/]/, '(')).join(' < ')}`); return ig(d, x, why, opts); }; } // (FIRE_TRACE: who lights the first fires; only reaches callers that look the function up through sim.fire)
 const crTrack = { rec: null, list: [] }; // --creature: every creature the bots met, one a mission
 const traceRows = args.trace ? ['step\tphase\tlap\tx\ty\talt\tdist\tspeed\tpitch\tvy\thull\tgas\tkills\twrecks'] : null; // (--trace)
 const t0 = realNow();
@@ -162,10 +167,14 @@ for (let step = 1; step <= totalSteps; step++) {
     sim.update(dt);
     if (ruptured && healedAt === null && state.gasHoles.length === 0 && state.bags[state.bags.length - 1].gas > config.GAS.BAG_UP) healedAt = step / 60 - args.rupture;
     if (runStats) runStats.step(dt);
-    if (args.creature && state.creature) { // (--creature: when it rose, when it died and how, and a check that nothing in it went NaN)
+    if (process.env.FIRE_TRACE && state.fires.length > 0 && !globalThis.__fireSeen) { globalThis.__fireSeen = true; console.log(`first fire at ${(step / 60).toFixed(1)}s: ${JSON.stringify(state.fires.map((f) => ({ d: f.d, x: Math.round(f.x), why: f.why })))} hull ${state.ship.hull.toFixed(0)} ev ${state.ev.warnText}`); }
+    if (process.env.BOT_TICK && (step % 300 === 0 || (process.env.BOT_TICK === 'fast' && step < 1800 && step % 60 === 0))) console.log(`tick ${step / 60}s: gas ${state.ship.gas.toFixed(0)} vy ${state.ship.vy.toFixed(0)} press ${state.ship.press.toFixed(0)} fuel ${state.ship.fuel.toFixed(0)} speed ${state.ship.speed.toFixed(2)} alt ${state.ship.alt.toFixed(0)} hull ${state.ship.hull.toFixed(0)} progress ${(state.course.progress || 0).toFixed(2)} bats ${state.bats.length} bombers ${(state.bombers || []).length} strafers ${(state.strafers || []).length} gunship ${state.gunship ? state.gunship.phase : '-'} boss ${state.boss ? 'yes' : '-'} creature ${state.creature ? state.creature.mode + ' p' + state.creature.phase : '-'} fires ${state.fires.length} holes ${state.breaches.length} tempo ${state.tempo ? state.tempo.phase + '/' + state.tempo.kind : '-'}`); // (a look at what is going on)
+    if (crOn && state.creature) { // (--creature / --lair: when it rose, when it died and how, and a check that nothing in it went NaN)
       const c = state.creature;
       if (!crTrack.rec || crTrack.rec.c !== c) crTrack.list.push((crTrack.rec = { c, riseAt: null, deadAt: null, how: null }));
       const r = crTrack.rec;
+      if (process.env.CREATURE_TOW && c.phase >= 3 && step % 120 === 0) { const sh = state.ships[0], sp = state.course.map.spires || []; console.log(`tow t${(step / 60).toFixed(0)}s lines ${c.harpoons.length} hooked ${c.hooked} tvx ${(c.tvx || 0).toFixed(0)} tension ${(c.towTension || 0).toFixed(2)} body ${Math.round(c.x)} ship ${Math.round(sh.pose.x + sh.layout.refPoint.x)} spires ${sp.map((s) => Math.round(s.x)).join('/')} rockT ${(c.stats.rockT || 0).toFixed(1)} hp ${Math.round(c.hp)} harpoon ammo ${Object.values(state.GUNS).filter((g) => g.type === 'harpoon').map((g) => g.ammo + '/cd' + (g.cd || 0).toFixed(0)).join(',')}`); }
+      if (process.env.CREATURE_BEAK && c.mouthWin && step % 20 === 0) { const sh = state.ships[0], m = c.parts.find((p) => p.kind === 'mouth').segs[0], bay = sh.layout.bombBay; console.log(`beak t${(step / 60).toFixed(1)} window ${c.mouthWin.t.toFixed(1)}/${(c.mouthWin.t + c.mouthWin.left).toFixed(1)} open ${c.parts.find((p) => p.kind === 'mouth').open} bombs ${state.bombBay.bombs} at bay: ${Object.values(state.players).filter((q) => sh.layout.kindOf(q.lock) === 'bombBay').map((q) => q.name).join(',') || 'nobody'} bayX ${bay ? Math.round(sh.pose.x + bay.x) : '-'} mouthX ${Math.round(m.x)} dx ${bay ? Math.round(m.x - (sh.pose.x + bay.x)) : '-'} dy ${bay ? Math.round(m.y - (sh.pose.y + bay.y)) : '-'} fed ${c.fed}`); }
       if (process.env.CREATURE_LOG && step % 600 === 0) { const sh = state.ships[0]; console.log(`creature t${step / 60}s ${c.mode} body ${Math.round(c.x)},${Math.round(c.y)} ship ${Math.round(sh.pose.x + sh.layout.refPoint.x)},${Math.round(sh.pose.y + sh.layout.refPoint.y)} hp ${Math.round(c.hp)} mouth ${c.parts.find((p) => p.kind === 'mouth').open ? 'open' : 'shut'}`); }
       if (c.mode === 'idle' && r.riseAt == null) r.riseAt = step / 60;
       crTrack.tilt = Math.max(crTrack.tilt || 0, Math.abs(state.forces.theta)); if (!Number.isFinite(state.ships[0].pose.x + state.ships[0].pose.y + state.forces.theta)) throw new Error('NaN in the ship');
@@ -307,10 +316,12 @@ if (state.bags.length > 1) console.log(`gasbags: ${state.bags.length} bags side 
 if (args.build || process.env.FLIGHT) console.log(`flight: net speed ${flightSteps ? (distTravel / (flightSteps / 60)).toFixed(0) : 'n/a'} px/s (speed share incl. sails ${flightSteps ? (speedSum / flightSteps).toFixed(2) : 'n/a'}), altitude moved ${altMin === Infinity ? 'n/a' : Math.round(altMin) + ' to +' + Math.round(altMax)} from where she settled (span ${altMin === Infinity ? 0 : Math.round(altMax - altMin)}), avg climb rate ${flightSteps ? (vySum / flightSteps).toFixed(0) : 'n/a'} px/s, on the rocks ${flightSteps ? ((100 * scrapeSteps) / flightSteps).toFixed(0) : 'n/a'}%, furthest progress ${(progMax * 100).toFixed(0)}%, sails raised ${(state.sailStats && state.sailStats.raised) || 0}x (up ${state.sailStats ? state.sailStats.upSecs.toFixed(0) : 0}s), torn ${(state.sailStats && state.sailStats.torn) || 0}`);
 if (state.engines && state.engines.some((q) => q.swivel || q.home)) console.log(`engines: ${state.engines.map((q) => q.name + ' ' + (q.swivel ? 'swivel' : 'fixed') + ' now ' + (Math.round((q.dir * 180) / Math.PI)) + ' deg').join(', ')}; swivel cranks manned ${state.engineStats.mannedSecs.toFixed(0)}s, engines turned ${state.engineStats.turnSecs.toFixed(0)}s; pitch from forces peaked ${((state.forces.peak * 180) / Math.PI).toFixed(2)} deg`);
 if (runStats) console.log('BUILD_STATS ' + JSON.stringify({ build: args.build, ...runStats.result(), flight: { speed: flightSteps ? distTravel / (flightSteps / 60) : 0, throttle: flightSteps ? speedSum / flightSteps : 0, altMin: altMin === Infinity ? 0 : altMin, altMax: altMax === -Infinity ? 0 : altMax, climb: flightSteps ? vySum / flightSteps : 0, rocks: flightSteps ? scrapeSteps / flightSteps : 0, progress: progMax, sailsRaised: (state.sailStats && state.sailStats.raised) || 0, sailsUpSecs: state.sailStats ? state.sailStats.upSecs : 0, sailsTorn: (state.sailStats && state.sailStats.torn) || 0, tows: state.tows || 0, engineTurnSecs: state.engineStats.turnSecs, engineMannedSecs: state.engineStats.mannedSecs, engineSplitSecs: state.engineStats.splitSecs, pitchPeak: state.forces.peak, contacts }, manned: runStats.result().mannedNames, bags: state.bags.length, bagDowns, valveLog: state.valveLog || 0, valveShuts: state.valveShuts || 0, shutAtEnd: (state.gasValveOpen || []).filter((o) => !o).length, ruptured, healedAt, errors: errorCount })); // (read by tools/buildsim.mjs)
-if (args.creature) {
+if (crOn) {
   // One line for each creature the bots met (one a mission), then the total.
   crTrack.list.forEach((r, i) => {
     const c = r.c, st = c.stats;
+    console.log(`fight ${i + 1}: phase ${c.phase}${st.phaseAt ? ' (' + Object.entries(st.phaseAt).map(([k, v]) => k + ' at ' + v.toFixed(0) + 's').join(', ') + ' after it spawned)' : ''}, beak windows ${st.windows || 0}, fed ${st.fed || 0}, dives ${st.dives || 0}, rock ${(st.rockT || 0).toFixed(0)}s; ended: ${st.win || 'no'}${st.winAt != null ? ' at ' + st.winAt.toFixed(0) + 's' : ''}`);
+    { const kinds = {}; for (const [id, v] of Object.entries(st.parts)) { const k = id.replace(/\d+$/, ''); kinds[k] = (kinds[k] || 0) + v; } console.log(`  damage by part: ${Object.entries(kinds).map(([k, v]) => k + ' ' + Math.round(v)).join(', ')}`); }
     console.log(`creature ${i + 1} (${c.name}): rose at ${r.riseAt == null ? 'n/a' : r.riseAt.toFixed(0) + 's'}, ${r.deadAt == null ? 'alive when its mission ended (hp ' + Math.round(c.hp) + '/' + c.maxHp + ', ' + c.parts.filter((p) => p.kind === 'tentacle' && p.severed).length + '/6 tentacles cut)' : 'died at ' + r.deadAt.toFixed(0) + 's (' + (r.deadAt - (r.riseAt || 0)).toFixed(0) + 's after rising) by ' + r.how}; damage ${Math.round(st.dmg)} (${Object.entries(st.by).map(([k, v]) => k + ' ' + Math.round(v)).join(', ') || 'none'}), tentacles severed ${st.severed}, beak bombs ${st.chomps}`);
   });
   { const g = crTrack.list.reduce((a, r) => { const s = r.c.stats, f = s.freed || {}; a.n += s.grips || 0; for (const k of Object.keys(f)) a[k] = (a[k] || 0) + f[k]; a.slaps += s.slaps || 0; a.slapHits += s.slapHits || 0; a.ripped += s.ripped || 0; a.hulled += s.hulled || 0; a.br += s.breaches || 0; a.brHit += s.breachHits || 0; a.brMiss += s.breachMiss || 0; a.brBroke += s.breachBroke || 0; return a; }, { n: 0, slaps: 0, slapHits: 0, ripped: 0, hulled: 0, br: 0, brHit: 0, brMiss: 0, brBroke: 0 }); console.log(`grips: ${g.n} ended (hacked free ${g.hack || 0}, shot free ${g.shot || 0}, burnt free ${g.flame || 0}, cut off ${g.severed || 0}, RIPPED a section off ${g.ripped} + hull crush ${g.hulled}, other ${(g.missed || 0) + (g.gone || 0)}); slaps ${g.slaps} (${g.slapHits} crew hit); breaches ${g.br} (smashed her ${g.brHit}, missed ${g.brMiss}, tore a section off ${g.brBroke}); worst tilt ${((crTrack.tilt || 0) * 180 / Math.PI).toFixed(2)} deg (limit ${config.FORCES.MAX_DEG})`); }

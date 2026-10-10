@@ -53,6 +53,7 @@ if (args.runs > 1 && !args.child) {
   console.log(`MODE ${args.mode}: median ${medMin.toFixed(1)} min (victories only: ${medVic.toFixed(1)}; range ${(mins[0] || 0).toFixed(1)}-${(mins[mins.length - 1] || 0).toFixed(1)}), victory rate ${ok.filter((r) => r.victory).length}/${ok.length}`);
   console.log(`median stops ${med}, mean ${(ds.reduce((a, b) => a + b, 0) / (ds.length || 1)).toFixed(1)}, victories ${ok.filter((r) => r.victory).length}/${ok.length}, timeouts ${ok.filter((r) => r.timeout).length}${args.topup ? `, runs with stalls ${ok.filter((r) => r.stalls).length}` : ''}, errors ${ok.reduce((a, r) => a + (r.errors || 0), 0)}`);
   { const m = ok.map((r) => r.mates || {}); const jobs = {}; for (const x of m) for (const [k, v] of Object.entries(x.jobs || {})) jobs[k] = (jobs[k] || 0) + v; const tot = Object.values(jobs).reduce((a, b) => a + b, 0) || 1; console.log(`ship's mates: max aboard ${Math.max(0, ...m.map((x) => x.max || 0))}, station snapshots ${m.reduce((a, x) => a + (x.locks || 0), 0)}, in awards ${m.filter((x) => x.inAwards).length} runs; mate time: ${Object.entries(jobs).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + Math.round((100 * v) / tot) + '%').join(', ') || 'n/a'}`); }
+  { const L = ok.map((r) => r.lairs || { planned: 0, met: 0, won: 0, how: {} }), how = {}; for (const l of L) for (const [k, v] of Object.entries(l.how || {})) how[k] = (how[k] || 0) + v; console.log(`kraken lairs: ${L.reduce((a, l) => a + l.planned, 0)} on the routes of ${ok.length} voyages, ${L.reduce((a, l) => a + l.met, 0)} met, ${L.reduce((a, l) => a + l.won, 0)} won (${Object.entries(how).map(([k, v]) => k + ' ' + v).join(', ') || 'none'})`); }
   { const n = ok.reduce((a, r) => a + (r.breaks || 0), 0); if (n) console.log(`parts broke off ${n} time(s) in ${ok.filter((r) => r.breaks).length} of ${ok.length} voyages: ${[...new Set(ok.flatMap((r) => r.breakCauses || []))].join(', ')}`); }
   const causes = {};
   for (const r of ok) for (const k of r.flags || []) causes[k] = (causes[k] || 0) + 1;
@@ -78,6 +79,7 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace
 const load = (p) => import(pathToFileURL(path.join(root, p)).href);
 const { config } = await load('config.js');
 if (process.env.NO_BREAKOFF) config.BREAKOFF.ENABLED = false; // (compare voyages with parts never breaking off: S.5i)
+if (process.env.NO_LAIRS) config.CREATURES.LAIR.COUNT = { short: 0, long: 0 }; // (compare voyages with no Kraken lair on the route: C.3)
 // --set "A.B.C=value;...": tweak config numbers for tuning runs
 for (const kv of args.set.split(';').filter(Boolean)) { const [k, v] = kv.split('='); const ks = k.split('.'); let o = config; for (const x of ks.slice(0, -1)) o = o[x] ??= {}; o[ks[ks.length - 1]] = Number(v); }
 const { SHIP_LAYOUT, kindOf } = await load('shipLayout.js');
@@ -134,6 +136,7 @@ const mateStat = { snaps: 0, jobs: {}, locks: 0, max: 0 }; // ship's mates seen 
 const mateInfo = () => ({ max: mateStat.max, locks: mateStat.locks, jobs: mateStat.jobs, inAwards: Object.values(state.run.crew).some((c) => c.name === "Mate") || ((state.runEnd && state.runEnd.rows) || []).some((r) => r.name === "Mate") });
 const dmg = { fire: 0, breach: 0, direct: 0 }; // hull points lost to fires, hull holes and everything else
 let result = null;
+const lairs = { seen: new Set(), won: new Set(), met: 0, how: {} };
 for (let step = 1; step <= maxSteps && !result; step++) {
   try {
     simClock += dt * 1000;
@@ -143,6 +146,7 @@ for (let step = 1; step <= maxSteps && !result; step++) {
     const h0 = state.ship.hull, nf = state.fires.length, nb = state.breaches.length, fl = state.phase === 'flying' && !state.ship.down;
     sim.update(dt);
     mateStat.max = Math.max(mateStat.max, Object.values(state.players).filter((q) => q.mate).length);
+    { const cr = state.creature; if (cr && !lairs.seen.has(cr)) { lairs.seen.add(cr); lairs.met++; } if (cr && cr.dying && cr.stats.win && !lairs.won.has(cr)) { lairs.won.add(cr); lairs.how[cr.stats.win] = (lairs.how[cr.stats.win] || 0) + 1; } } // (C.3: the Kraken lairs the crew met and how they won)
     if (fl && state.ship.hull < h0) { const dd = damageMul(state); const pf = nf * 0.35 * dd * 2 * dt, pb = nb * 0.5 * dd * 2 * dt, drop = h0 - state.ship.hull; dmg.fire += pf; dmg.breach += pb; dmg.direct += Math.max(0, drop - pf - pb); }
   } catch (err) { errorCount++; if (errorCount < 4) console.error('ERR', err && err.stack); }
   if (state.phase === 'lobby' && !state.runEnd && !state.wreck) sim.castOff();
@@ -183,6 +187,7 @@ if (!result) {
   const stopId = state.run.stopId;
   result = { earned: state.run.earned, parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
 }
+result.lairs = { planned: state.run.voyage.columns.flat().filter((s) => s.lair).length, met: lairs.met, won: lairs.won.size, how: lairs.how }; // (C.3)
 result.breaks = state.breakStats ? state.breakStats.events : 0; // (S.5i: how often parts broke off in this voyage, and what did it)
 result.breakCauses = state.breakStats && state.breakStats.causes ? state.breakStats.causes.map((c) => c.split('@')[0]) : [];
 console.log('RESULT ' + JSON.stringify(result));

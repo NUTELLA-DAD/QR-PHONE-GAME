@@ -2,13 +2,13 @@
  "captured": "2026-10-10",
  "voyage": {
   "normal": {
-   "medianMin": 37.7,
-   "wins": 8,
+   "medianMin": 33.6,
+   "wins": 9,
    "runs": 10
   },
   "easy": {
-   "medianMin": 33.3,
-   "wins": 7,
+   "medianMin": 30.9,
+   "wins": 8,
    "runs": 10
   }
  },

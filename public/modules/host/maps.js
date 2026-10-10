@@ -21,8 +21,9 @@ export function makeMap(kind, level, rand, lengthMul = 1, layout) { // (lengthMu
   for (let tries = 0; tries < 40; tries++) {
     // (Late-voyage open maps are so crowded with peaks and islands that no layout may pass the checks below; rather than
     // settle for the last, unplayable try, ease off one level every few failures so a playable map always comes out.)
-    map = kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout);
+    map = kind === 'lair' ? buildLairMap(level, rand, lengthMul, layout) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout);
     if (map.startDist >= 1e9) continue;
+    if (map.lair) return map; // (no outposts to reach: the lair's middle is the goal)
     if (map.open) {
       // Every outpost must be reachable too.
       const C = map.CELL;
@@ -243,6 +244,36 @@ function buildOpenMap(level, rand, lengthMul = 1, layout) {
   const map = { kind: 'open', level, CELL: C, W, H, solid, turrets, outposts, open: true };
   // Aim first for the station above the first outpost.
   finishMap(map, { i: 12, j: H - 14 }, stationCell(map, outposts[0]), layout);
+  return map;
+}
+
+// THE KRAKEN'S LAIR (config.CREATURES.LAIR, voyage.js markLairs, course.js startMission): open sky over a sea, no outposts and no guns. A flat sea floor deep under the waves, and a few ROCK SPIRES standing out of the water
+// (the one at the lair's middle is right under her when she hovers there: the TOW win drags the exhausted creature onto it). The route runs level from the launch to the lair's middle, RUN px on; the sea lies SEA_BELOW px
+// under the launch height (map.seaY is set here, so the Sunken Sea does not work it out from the route). map.spires lists them: { x, w (width at the sea line), top } in map pixels.
+function buildLairMap(level, rand, lengthMul = 1, layout) {
+  const M = config.MAPS, LR = config.CREATURES.LAIR, C = M.CELL;
+  const r = (a, b) => a + rand() * (b - a);
+  const startI = 12, goalI = startI + Math.round((LR.RUN * lengthMul) / C);
+  const W = goalI + Math.round(LR.BEYOND / C) + 20, H = M.OPEN_HEIGHT;
+  const sj = 28, seaRow = sj + Math.round(LR.SEA_BELOW / C), floorRow = H - 3;
+  const solid = new Uint8Array(W * H);
+  const idx = (i, j) => j * W + i;
+  for (let i = 0; i < W; i++) for (let j = floorRow; j < H; j++) solid[idx(i, j)] = 1;
+  const spires = [];
+  for (const [dc, jit] of LR.SPIRES) {
+    const ci = Math.max(startI + 25, Math.min(W - 14, goalI + dc + Math.round(r(-jit, jit))));
+    const topRow = seaRow - Math.max(2, Math.round(r(LR.SPIRE_UP[0], LR.SPIRE_UP[1]) / C));
+    const seaHalf = LR.SPIRE_W / 2 / C; // half the width at the sea line, in cells
+    const baseHalf = Math.ceil((seaHalf * (floorRow - topRow)) / (seaRow - topRow));
+    for (let i = ci - baseHalf; i <= ci + baseHalf; i++) {
+      if (i < 0 || i >= W) continue;
+      const top = Math.round(topRow + (Math.abs(i - ci) / baseHalf) * (floorRow - topRow));
+      for (let j = top; j < floorRow; j++) solid[idx(i, j)] = 1;
+    }
+    spires.push({ x: (ci + 0.5) * C, w: LR.SPIRE_W, top: topRow * C });
+  }
+  const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, seaY: seaRow * C, spires };
+  finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
   return map;
 }
 

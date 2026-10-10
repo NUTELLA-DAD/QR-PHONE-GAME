@@ -19,11 +19,17 @@
 //   (g0) THE KRAKEN IS SEA-ONLY: spawn() and the dev flag do nothing where there is no sea level;  (g1c) THE COIL: segments in front of and behind the hull, rigid, driven from ship coordinates
 //   (g1d) every grip pulls (the sum grows, capped by MAX_TOTAL);  (g11) THE BREACH: telegraph, hit, exposed heart with the damage bonus, climbing clear, getting out of the shadow
 //   (g9) grips at once by crew size;  (g10) the TV draws a grip ring, a harpoon line and a boarder;  (h) the bots on Normal hack grips free and she is not always torn apart
+//   C.3 (creatureFight.js, creatures/kraken.js, voyage.js markLairs, maps.js buildLairMap; config.CREATURES.PHASE / MOUTH / DIVE / TOW_ROCK / LAIR / REWARD) - the last big block of this file:
+//   (p) the phases at their thresholds (pool or tentacles cut) with banner, roar, breather; single grabs in phase 1; phase 3 surfaces, exposes the heart, DIVES (3 grips, pulling harder)
+//   (m) the beak's windows, the lure under her bomb bay, the funnel, the gulp, crates are half, three win;  (w) each win scripted (SEVER, POOL, BOARD, TOW onto the spire): stats.win, banner, bossDownLap, slow motion
+//   (l) the lair: map, no outposts or spouts, no zeppelin, the creature at the boss's slot, the stop done when it has sunk;  (v) lairs only on Sunken Sea stops, never first / Flagship / adjacent, +1 skull x2 reward,
+//   the rest of a seeded route untouched; the route map draws them;  (r) salvage x3, hull patch, the free trophy card at the next dock, the Kraken Beak on the ship (ram prow, art kraken)
+//   (b) the bots (CREATURE_FORCE_WIN=sever|mouth|tow|board|hp): each win within 6 minutes of its spawn with 8 bots on Normal (tow on a harpoon ship), 4 and 16 bots on Easy within 10, 0 errors, no NaN
 // Exit code 1 on any failure.
 import path from 'node:path';
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { installShims, seedRandom, publicDir } from './shims.mjs';
 
 const argv = process.argv.slice(2);
@@ -91,6 +97,12 @@ const { segDist } = await load('modules/host/creature.js');
 const { inRock } = await load('modules/host/course.js');
 
 const C = config.CREATURES, H = C.HURT;
+// C.3 made the real fight last (HURT.PART_HP_MUL: tougher tentacles and pool). The C.1 / C.2 sections below test one blow at a time against the BASE numbers of the data, so they run with every multiplier at 1;
+// the C.3 sections (and the bots, which run as child processes) use the real ones.
+const REAL_HP = { ...H.PART_HP_MUL };
+const unitHp = () => Object.assign(H.PART_HP_MUL, { tentacle: 1, mantle: 1, eye: 1, mouth: 1, heart: 1, pool: 1 });
+const realHp = () => Object.assign(H.PART_HP_MUL, REAL_HP);
+unitHp();
 const SAVED = JSON.stringify({ B: C.BEHAVE, ENV: config.ENVIRONMENTS.FORCE, DEV: C.DEV_SPAWN, MAP: config.MAPS.FORCE_KIND, AP: config.ESCORT.AUTO_PATROL });
 const DT = 1 / 60;
 let errors = 0;
@@ -106,35 +118,39 @@ const hr = () => Number(process.hrtime.bigint()) / 1e6; // (real milliseconds: t
 const near = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
 
 // A sim with one human on deck (so there is a crew to credit), cast off in this environment.
-function boot({ env = 'sea', difficulty = 'normal', dev = null } = {}) {
+function boot({ env = 'sea', difficulty = 'normal', dev = null, lair = false, bots = 0, start = null } = {}) { // (lair: every stop is a Kraken's lair, C.3; bots: that many bot crew besides p1; start: the voyage's start build, which gives the sky-dock its part cards)
   clock = seedRandom(seed);
   config.ENVIRONMENTS.FORCE = env;
   config.MAPS.FORCE_KIND = 'open'; // (open sky: a creature in a cliff would eat every shell)
   config.ESCORT.AUTO_PATROL = false; // (the escort planes would launch and shoot the creature by themselves: a fine thing in the game, noise in a unit test)
   C.DEV_SPAWN = dev;
+  C.DEV_LAIR = lair;
   const sim = createSimulation();
   const st = sim.state;
   curSt = st;
   st.difficulty = difficulty;
+  if (start) sim.setStartBuild(start);
   const e = st.ships[0].layout.boarderEntryPoints;
   st.players.p1 = { id: 'p1', bot: false, name: 'P1', species: config.CREW_SPECIES[0], color: '#e63946', x: e[0].x + 100, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
+  for (let i = 0; i < bots; i++) { const id = 'bot' + i; st.players[id] = { id, bot: true, human: false, name: 'Bot' + (i + 1), species: config.CREW_SPECIES[i % config.CREW_SPECIES.length], color: '#3a86ff', x: e[0].x + 25 * i, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true }; }
   sim.castOff();
   step(sim, 5); // (the first step of a mission clears the last one's enemies, a creature spawned before it would go too)
   return { sim, st, ship: st.ships[0] };
 }
 // Spawn the Kraken by hand and wait until it has risen; no reaches and no timed beak, so the tests choose when things happen.
-function risen(ctx) {
+function risen(ctx, phase = 2) { // (phase 2 by default: the C.1 / C.2 sections want grabs by crew size and the lunge; the C.3 sections ask for the phase they test)
   const { sim, st } = ctx;
   C.BEHAVE.MOUTH_AFTER = 1e9;
   const cr = sim.creatures.spawn('kraken');
+  cr.phase = phase;
   cr.ai.reachT = 1e9;
-  cr.ai.gripT = cr.ai.slapT = cr.ai.breachT = 1e9; // (C.2: the attacks have their own tests below; the weapon tests want a still creature)
+  cr.ai.gripT = cr.ai.slapT = cr.ai.breachT = cr.ai.diveT = 1e9; // (C.2: the attacks have their own tests below; the weapon tests want a still creature)
   for (let i = 0; i < secs(C.SPAWN.SURFACE_TIME + 1) && cr.mode !== 'idle'; i++) step(sim);
   step(sim, 30);
   cr.ai.reachT = 1e9;
   return cr;
 }
-const restoreCfg = () => { const o = JSON.parse(SAVED); Object.assign(C.BEHAVE, o.B); config.ENVIRONMENTS.FORCE = o.ENV; C.DEV_SPAWN = o.DEV; config.MAPS.FORCE_KIND = o.MAP; config.ESCORT.AUTO_PATROL = o.AP; };
+const restoreCfg = () => { const o = JSON.parse(SAVED); Object.assign(C.BEHAVE, o.B); config.ENVIRONMENTS.FORCE = o.ENV; C.DEV_SPAWN = o.DEV; config.MAPS.FORCE_KIND = o.MAP; config.ESCORT.AUTO_PATROL = o.AP; C.DEV_LAIR = false; C.FORCE_WIN = null; unitHp(); };
 const midOf = (s, u = 0.5) => ({ x: s.x + Math.cos(s.ang) * s.len * u, y: s.y + Math.sin(s.ang) * s.len * u });
 const partOf = (cr, kind) => cr.parts.find((p) => p.kind === kind);
 // A point on part p that every weapon radius attributes to p (hitInfo ranks the beak and eyes over limbs over the mantle, and limbs overlap near their roots).
@@ -387,7 +403,7 @@ const delta = (cr, p, fn, frames = 2) => { const h0 = p.hp, c0 = cr.hp; fn(); re
     report(cr.dying && cr.diedBy === 'hp' && cr.hp === 0 && cr.parts.filter((p) => p.kind === 'tentacle' && p.severed).length < 6, `the health pool ends it: ${n} steps of shells at the body (${(cr.maxHp).toFixed(0)} hp pool), it is dying (by ${cr.diedBy}) with ${cr.parts.filter((p) => p.kind === 'tentacle' && !p.severed).length} tentacles whole`);
     const warn = st.ev.warnText;
     step(sim, 5);
-    report(st.run.salvage - run0 >= config.SALVAGE.BOSS * C.REWARD_MUL && /SINKING/.test(warn) && cr.mode === 'dying', `it sinks and the reward lands in salvage (+${st.run.salvage - run0}, the boss reward x ${C.REWARD_MUL} is ${config.SALVAGE.BOSS * C.REWARD_MUL})`);
+    report(st.run.salvage - run0 >= config.SALVAGE.BOSS * C.REWARD_MUL && /SUNK IT/.test(warn) && cr.mode === 'dying', `it sinks and the reward lands in salvage (+${st.run.salvage - run0}, the boss reward x ${C.REWARD_MUL} is ${config.SALVAGE.BOSS * C.REWARD_MUL})`);
     const gone = A.targets(st).filter((t) => t.kind === 'creaturePart').length + SP.radarItems(st).filter((i) => i.kind === 'creature').length;
     const dive0 = cr.y;
     step(sim, secs(C.SPAWN.SINK_TIME + C.CHUNK.LIFE + 2));
@@ -1147,7 +1163,7 @@ function CreatureExpose(cr) { for (const p of cr.parts) if (p.kind === 'heart') 
       const t0 = hr();
       try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; if (exc < 3) console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
       ms += hr() - t0;
-      if (rec.texts.some((x) => x.s === 'THE KRAKEN')) hudText = true;
+      if (rec.texts.some((x) => x.s.startsWith('THE KRAKEN - '))) hudText = true; // (the bar: its name and its phase)
     }
     C.DARK_AT = darkAt;
     const dim = cr.parts.filter((q) => !q.dead && !q.lit).length;
@@ -1173,6 +1189,490 @@ function CreatureExpose(cr) { for (const p of cr.parts) if (p.kind === 'heart') 
     }
     report(t / 300 < config.PERF.BUDGET_MS && blits > 40, `creatureArt alone: ${(t / 300).toFixed(3)} ms a frame over 300 frames (${blits} blits; budget ${config.PERF.BUDGET_MS} ms)`);
   }
+}
+
+// =================================================================== C.3: THE FIGHT AS A PART OF A VOYAGE ===================================================================
+//   (p) PHASES at their thresholds (the pool, or tentacles cut), a banner + roar + buzz + breather each, single grabs in phase 1, phase 3 surfaces, exposes the heart and DIVES (3 grips, pulling harder)
+//   (m) THE BEAK: a window on a roar, the lure under her bomb bay, the funnel, a bomb is swallowed (gulp), crates are half, three win
+//   (w) THE WINS, each scripted: SEVER, MOUTH, TOW (a harpoon line onto the spire), BOARD (STRIKE THE HEART), the pool: stats.win, the banner, bossDownLap, the slow motion
+//   (l) THE LAIR: the map (sea, spires, no outposts, no spouts), no zeppelin, the creature at the boss's slot, the stop is not done until it is dead
+//   (v) THE VOYAGE: lairs only on Sunken Sea stops, never the first stop or the Flagship, never two columns in a row, +1 skull and x2 reward, the rest of the route untouched; the route map shows them
+//   (r) THE REWARD: salvage x3, a hull patch, the trophy card at the next dock (the Kraken Beak ram prow, free), bought it is on the ship
+//   (b) THE BOTS: each win forced (CREATURE_FORCE_WIN), 8 bots on Normal, within 6 minutes of the spawn; 4 and 16 bots on Easy within 10; 0 errors, no NaN
+const FT = await load('modules/host/creatureFight.js');
+const VY = await load('modules/host/voyage.js');
+const PSH = await load('modules/host/partsShop.js');
+const SBD = await load('modules/host/shipBuild.js');
+const KR = await load('modules/host/creatures/kraken.js');
+const MPS = await load('modules/host/maps.js');
+const PH = C.PHASE, MO = C.MOUTH, DV = C.DIVE, LR = C.LAIR, FN = C.FINALE;
+const crewOf = (ctx, n) => { for (let i = 1; i < n; i++) { const id = 'x' + i; ctx.st.players[id] = { ...ctx.st.players.p1, id, name: id }; } step(ctx.sim, 5); };
+const cutN = (st, cr, n) => { let k = 0; for (const p of cr.parts.filter((q) => q.kind === 'tentacle' && !q.severed)) { if (k++ >= n) break; CS.hurtCreature(st, { part: p, seg: 3 }, p.hp, { src: 'shell', who: 'p1' }); } };
+const roared = (st) => st.sfxQ.some((x) => x[0] === 'roar');
+const toPhase = (ctx, cr, ph, maxS = 3) => { for (let i = 0; i < secs(maxS) && cr.phase < ph; i++) step(ctx.sim); };
+const openWindow = (ctx, cr, maxS = 2) => { cr.ai.breather = 0; cr.ai.mouthT = 0; for (let i = 0; i < secs(maxS) && !(cr.mouthWin && partOf(cr, 'mouth').open); i++) step(ctx.sim); return !!cr.mouthWin && partOf(cr, 'mouth').open; };
+const mouthPos = (cr) => partOf(cr, 'mouth').segs[0];
+
+// (p) phases
+{
+  restoreCfg();
+  realHp();
+  const ctx = boot();
+  const { sim, st } = ctx;
+  C.BEHAVE.MOUTH_AFTER = 0;
+  const cr = risen(ctx, 1);
+  cr.ai.mouthT = 1e9;
+  report(cr.phase === 1 && partOf(cr, 'heart').hidden === true && cr.stats.phaseAt === undefined, `it starts in phase 1 "${KR.krakenPhaseName(1)}" with the heart hidden`);
+  cr.hp = cr.maxHp * (PH.TWO.HP + 0.03);
+  step(sim, 40);
+  report(cr.phase === 1, `just above ${PH.TWO.HP * 100}% of the pool (${(cr.hp / cr.maxHp * 100).toFixed(0)}%) it is still phase 1`);
+  cr.hp = cr.maxHp * (PH.TWO.HP - 0.03);
+  st.sfxQ.length = 0;
+  let n = 0;
+  for (; n < 5 && cr.phase < 2; n++) step(sim);
+  const warned = st.ev.warnText;
+  report(cr.phase === 2 && warned === KR.KRAKEN_PHASES[2].banner && warned === 'IT GRABS!' && st.ev.warn >= PH.BANNER - 0.1 && roared(st) && cr.stats.phaseAt[2] > 0, `below ${PH.TWO.HP * 100}% it is phase 2 "${KR.krakenPhaseName(2)}": banner "${warned}" for ${PH.BANNER} s, a roar, stats.phaseAt ${cr.stats.phaseAt[2].toFixed(1)} s`);
+  report(Math.abs(cr.ai.breather - PH.BREATHER) < 0.1, `and a breather of ${PH.BREATHER} s begins (${cr.ai.breather.toFixed(2)} s left)`);
+  // the breather: no new attack until it is over
+  cr.ai.gripT = 0;
+  cr.ai.slapT = 0;
+  step(sim, secs(PH.BREATHER - 0.6));
+  const quiet = cr.grips.length === 0 && !cr.slap;
+  step(sim, secs(2));
+  report(quiet && (cr.grips.length > 0 || !!cr.slap), 'the breather holds the attack director still, then the waiting grab or slap begins at once');
+  // the second threshold
+  cr.hp = cr.maxHp * (PH.THREE.HP + 0.03);
+  step(sim, 40);
+  const still2 = cr.phase === 2;
+  cr.hp = cr.maxHp * (PH.THREE.HP - 0.03);
+  st.sfxQ.length = 0;
+  for (n = 0; n < 5 && cr.phase < 3; n++) step(sim);
+  report(still2 && cr.phase === 3 && st.ev.warnText === "IT'S EXHAUSTED - STRIKE THE HEART!" && roared(st), `${PH.THREE.HP * 100}%: phase 3 "${KR.krakenPhaseName(3)}", banner "${st.ev.warnText}"`);
+  report(partOf(cr, 'heart').hidden === false, 'phase 3 exposes the heart');
+  step(sim, secs(6));
+  report(cr.phaseDy < -PH.P[3].up * 0.9, `and surfaces half out of the water (${(-cr.phaseDy).toFixed(0)} of ${PH.P[3].up} px up)`);
+  report(Object.values(cr.stats.phaseAt).length === 2 && cr.stats.phaseAt[3] > cr.stats.phaseAt[2], 'the phases happen in order and each only once');
+}
+{
+  // tentacles lost count too: 2 -> phase 2, 4 -> phase 3, whatever the pool says
+  restoreCfg();
+  realHp();
+  const ctx = boot();
+  const { sim, st } = ctx;
+  C.BEHAVE.MOUTH_AFTER = 1e9;
+  const cr = risen(ctx, 1);
+  cutN(st, cr, 1);
+  step(sim, 30);
+  const one = cr.phase;
+  cutN(st, cr, 1);
+  step(sim, 30);
+  const two = cr.phase, frac = cr.hp / cr.maxHp;
+  cutN(st, cr, 2);
+  step(sim, 30);
+  report(one === 1 && two === 2 && cr.phase === 3 && frac > 0.9, `after 1 tentacle it is phase ${one}, after 2 phase ${two} (pool ${(frac * 100).toFixed(0)}%), after 4 phase ${cr.phase}: the tentacles move the phases too`);
+}
+{
+  // single grabs in phase 1, by crew size afterwards
+  restoreCfg();
+  const ctx = boot();
+  crewOf(ctx, 12);
+  const cr = risen(ctx, 1);
+  const c1 = GR.gripCap(ctx.st, cr);
+  cr.phase = 2;
+  const c2 = GR.gripCap(ctx.st, cr);
+  report(c1 === 1 && c2 === 3, `with 12 aboard phase 1 grabs one at a time (${c1}); phase 2 follows the crew (${c2})`);
+}
+// the DIVE
+{
+  restoreCfg();
+  realHp();
+  const ctx = boot();
+  const { sim, st, ship } = ctx;
+  crewOf(ctx, 8);
+  const cr = risen(ctx, 3);
+  cr.ai.breather = 0;
+  cr.ai.diveT = 0;
+  const n = Math.min(DV.GRIPS, GR.gripCap(st, cr) + DV.EXTRA);
+  let most = 0, banner = null, tilt = 0, pull = 0, dived = 0, holdTime = null;
+  for (let i = 0; i < secs(20); i++) {
+    step(sim);
+    if (cr.ai.diving > 0 && banner === null) banner = st.ev.warnText;
+    const hold = cr.grips.filter((g) => g.mode === 'hold');
+    most = Math.max(most, cr.grips.filter((g) => g.mode !== 'recoil').length);
+    if (hold.length === n) { pull = Math.max(pull, hold.reduce((a, g) => a + (g.acc || 0), 0)); if (holdTime === null) holdTime = hold[0].total; }
+    dived += cr.grips.filter((g) => g.dive).length ? 1 : 0;
+    tilt = Math.max(tilt, Math.abs(st.forces.theta));
+  }
+  report(banner === DV.TEXT && most === n && n === 3 && cr.stats.dives === 1, `phase 3 DIVES: banner "${banner}", ${most} grips at once with 8 aboard (cap ${GR.gripCap(st, cr)} + ${DV.EXTRA}, at most ${DV.GRIPS})`);
+  report(pull > config.CREATURES.GRIP.MAX_TOTAL && pull <= config.CREATURES.GRIP.MAX_TOTAL * DV.TOTAL_MUL + 1, `and they drag her down HARD: ${pull.toFixed(0)} px/s^2 together against ${config.CREATURES.GRIP.MAX_TOTAL} for an ordinary grab (up to ${(config.CREATURES.GRIP.MAX_TOTAL * DV.TOTAL_MUL).toFixed(0)})`);
+  report(tilt <= config.FORCES.MAX_DEG * DEG + 1e-6, `the dive's tilt ${(tilt / DEG).toFixed(2)} deg stays inside FORCES.MAX_DEG ${config.FORCES.MAX_DEG}`);
+  report(Math.abs(holdTime - GP.TIME * (GP.TIME_BY_DIFF.normal ?? 1) * DV.TIME_MUL) < 1e-6, `each dive grip holds ${holdTime.toFixed(2)} s (GRIP.TIME x ${DV.TIME_MUL})`);
+}
+
+// (m) the beak (in the lair: she flies 1900 px above the sea, so the bomb bay is well over the beak)
+{
+  restoreCfg();
+  realHp();
+  const ctx = boot({ lair: true });
+  const { sim, st, ship } = ctx;
+  const cr = risen(ctx, 1);
+  C.BEHAVE.MOUTH_AFTER = 0; // (risen() switches the beak off; the windows are what is tested here)
+  cr.ai.mouthT = 1e9;
+  const mouth = partOf(cr, 'mouth');
+  report(mouth.open === false, 'the beak is shut until a roar');
+  st.sfxQ.length = 0;
+  const opened = openWindow(ctx, cr);
+  report(opened && /MOUTH OPEN/.test(st.ev.warnText) && roared(st) && cr.stats.windows === 1, `on a roar a window opens: banner "${st.ev.warnText}", the beak opens (a window lasts ${PH.P[1].mouthFor} s in phase 1)`);
+  step(sim, secs(1.6));
+  report(FT.bombInMouth(st) === true, 'after it has swum under her bomb bay a bomb let go from the bay falls into the beak (the bots drop on this)');
+  const mp = mouthPos(cr), g = { x: T.toWorldX(ship, ship.layout.bombBay.x), y: T.toWorldY(ship, ship.layout.bombBay.y) + 20 };
+  report(Math.abs(mp.x - g.x) < MO.FUNNEL_W + Math.abs(ship.pose.vx) * 1.5 && mp.y > g.y, `the beak is under the bay (${Math.abs(mp.x - g.x).toFixed(0)} px across, ${(mp.y - g.y).toFixed(0)} px below; the funnel is ${MO.FUNNEL_W} px each side)`);
+  const ring = sim.course.predictBomb(g.x, g.y);
+  report(ring && Math.abs(ring.x - mp.x) <= MO.FUNNEL_W + 5 && ring.y < mp.y + 300, 'the bomb-bay aiming ring lands in the open beak');
+  // the real thing: a bomb from the bay
+  const f0 = cr.fed, chomps0 = cr.stats.chomps;
+  st.sfxQ.length = 0;
+  st.shipBombs.push({ x: g.x, y: g.y, vx: ship.pose.vx, vy: 60, owner: 'p1' });
+  for (let i = 0; i < secs(3) && cr.fed === f0; i++) step(sim, 1);
+  step(sim, 30);
+  report(cr.fed === f0 + 1 && cr.stats.chomps === chomps0 + 1 && st.sfxQ.some((x) => x[0] === 'chomp') && st.shipBombs.length === 0, `the bomb comes down the funnel: CHOMP, fed ${cr.fed}/${MO.FED}, the bomb is gone`);
+  report(mouth.open === false, `it gulps and the beak snaps shut for ${MO.GULP} s`);
+  step(sim, secs(MO.GULP + 1));
+  report(!cr.mouthWin || cr.mouthWin.gulp <= 0, 'the window then ends or the beak opens again');
+  // three windows, three bombs: the third wins; each window is a fresh banner
+  for (let w = 0; w < 2 && !cr.dying; w++) {
+    cr.mouthWin = null;
+    mouth.open = false;
+    const ok2 = openWindow(ctx, cr, 3);
+    step(sim, secs(1.6));
+    const p = mouthPos(cr), b = { x: T.toWorldX(ship, ship.layout.bombBay.x), y: T.toWorldY(ship, ship.layout.bombBay.y) + 20 };
+    st.shipBombs.push({ x: b.x, y: b.y, vx: ship.pose.vx, vy: 60, owner: 'p1' });
+    step(sim, 3);
+    void ok2; void p;
+  }
+  report(cr.dying && cr.stats.win === 'mouth' && cr.fed >= MO.FED, `the third bomb ends it: stats.win "${cr.stats.win}" after ${cr.stats.chomps} bombs`);
+  report(st.ev.warnText.startsWith(C.WIN_TEXT.mouth), `final banner "${st.ev.warnText}"`);
+}
+{
+  // crates are half a bomb
+  restoreCfg();
+  realHp();
+  const ctx = boot({ lair: true });
+  const { sim, st } = ctx;
+  const cr = risen(ctx, 1);
+  C.BEHAVE.MOUTH_AFTER = 0;
+  cr.ai.mouthT = 1e9;
+  openWindow(ctx, cr);
+  step(sim, secs(1.6));
+  const m = mouthPos(cr);
+  const crate = () => CS.creatureCargo(st, { x: m.x, y: m.y - 600, owner: 'p1' });
+  for (let i = 0; i < 5; i++) crate();
+  const half = cr.fed;
+  report(half === 2.5 && !cr.dying, `five crates into the open beak are ${half} bombs: not yet`);
+  crate();
+  report(cr.dying && cr.stats.win === 'mouth' && cr.fed === 3, 'the sixth is the third bomb: it is fed, and it ends');
+}
+
+// (w) the other wins
+const winCheck = (name, st, cr, why) => {
+  report(cr.dying && cr.stats.win === why && cr.diedBy === why, `${name}: stats.win "${cr.stats.win}"`);
+  report(st.ev.warnText.startsWith(C.WIN_TEXT[why]) && st.ev.warn >= FN.BANNER - 0.1, `${name}: the final banner "${st.ev.warnText}"`);
+  report(st.bossDownLap === st.course.lap && st.slow === FN.SLOW, `${name}: the boss counts as down (bossDownLap ${st.bossDownLap}) and the last blow runs in slow motion (state.slow ${st.slow})`);
+};
+{
+  restoreCfg();
+  realHp();
+  const ctx = boot();
+  const { sim, st } = ctx;
+  const cr = risen(ctx, 1);
+  cutN(st, cr, 6);
+  step(sim, 1);
+  winCheck('SEVER all six', st, cr, 'sever');
+  step(sim, secs(FN.SLOW_FOR + 1));
+  report(st.slow === 1, 'and normal speed returns after the slow-motion beat');
+  step(sim, secs(C.SPAWN.SINK_TIME + C.CHUNK.LIFE + 2));
+  report(st.creature === null && st.slow === 1, 'it sinks out of the world and the slow motion is off');
+}
+{
+  restoreCfg();
+  realHp();
+  const ctx = boot();
+  const { sim, st } = ctx;
+  const cr = risen(ctx, 1);
+  CS.hurtCreature(st, { part: partOf(cr, 'mantle'), seg: 0 }, cr.hp / H.POOL.mantle + 1, { src: 'shell', who: 'p1' });
+  step(sim, 1);
+  winCheck('the POOL', st, cr, 'hp');
+}
+{
+  // BOARD: phase 3 by the pool, a boarder with a sword holds Action at the exposed heart
+  restoreCfg();
+  realHp();
+  const ctx = boot();
+  const { sim, st, ship } = ctx;
+  const cr = risen(ctx, 2);
+  const p1 = st.players.p1;
+  cr.hp = cr.maxHp * 0.2;
+  toPhase(ctx, cr, 3);
+  const heart = partOf(cr, 'heart');
+  Object.assign(p1, { fall: false, fly: true, air: false, lock: null, conn: null, ko: 0, jx: 0, jy: 0, jz: 0, hearts: config.HEALTH.MAX, carry: 'sword' });
+  const hs = heart.segs[0];
+  BD.boardAt(st, ship, p1, hs.x, hs.y);
+  let n = 0;
+  for (; n < secs(40) && !cr.dying; n++) { p1.fire = true; step(sim, 1); }
+  p1.fire = false;
+  report(cr.dying && Number.isFinite(n), `a boarder holding Action at the heart for ${(n / 60).toFixed(0)} s (${C.BOARD.HEART_TIME} s a strike, ${C.BOARD.HEART_DMG} damage)`);
+  winCheck('BOARD and STRIKE THE HEART', st, cr, 'board');
+  report(cr.stats.struck >= 1, `the blow counted: ${cr.stats.struck} strike(s)`);
+}
+{
+  // TOW onto rock: the exhausted creature on a harpoon line, hauled onto the spire under her
+  const tow = (phase) => {
+    restoreCfg();
+    realHp();
+    const ctx = boot({ lair: true });
+    const { sim, st, ship } = ctx;
+    const map = st.course.map, REFx = ship.layout.refPoint.x, REFy = ship.layout.refPoint.y;
+    ship.pose.x = map.goal.x - REFx;
+    ship.pose.y = map.goal.y - REFy;
+    st.ship.speed = 0;
+    const cr = risen(ctx, phase);
+    const mt = BD.mantleOf(cr).segs[0];
+    const dk = PLS(ship)[ship.layout.deckIndex('main')];
+    const from = { x: dk.x1 - 80, y: dk.y - 60 };
+    const hx = T.toWorldX(ship, from.x), hy = T.toWorldY(ship, from.y);
+    const tw = TW.creatureLatch(st, ship, { part: BD.mantleOf(cr), seg: 0, d: Math.hypot(mt.x - hx, mt.y - hy), x: mt.x - 60, y: mt.y - mt.r + 30 }, from, config.GUN_TYPES.harpoon, st.players.p1);
+    let rockT0 = null, n = 0;
+    for (; n < secs(60) && !cr.dying; n++) { step(sim, 1); if (rockT0 === null && cr.stats.rockT > 0) rockT0 = n / 60; }
+    return { cr, st, tow: tw, n, rockT0, map };
+  };
+  const a = tow(3);
+  report(!!a.map.spires && a.map.spires.length === 3 && a.cr.hooked !== undefined && a.tow.fly !== undefined, 'the lair has rock spires and the line holds the creature');
+  console.log(`     tow: in phase 3 it was ground onto the spire after ${a.rockT0 === null ? '-' : a.rockT0.toFixed(1)} s and sank at ${(a.n / 60).toFixed(0)} s (rock ${(a.cr.stats.rockT || 0).toFixed(1)} s, hauled ${(a.cr.stats.hauled || 0).toFixed(0)} px)`);
+  report(a.cr.stats.rockT > 0 && a.cr.stats.by.rock > 0, `a line holding it onto the rock hurts the pool (${(a.cr.stats.by.rock || 0).toFixed(0)} hp, closing speed x ${C.TOW_ROCK.RATE})`);
+  winCheck('TOW it onto the rocks', a.st, a.cr, 'tow');
+  const b = tow(2);
+  report(!b.cr.dying && !(b.cr.stats.rockT > 0) && !(b.cr.stats.by.rock > 0), 'the same tow in phase 2 does nothing to it: only the exhausted creature can be dragged onto rock');
+}
+
+// (l) the lair
+{
+  restoreCfg();
+  realHp();
+  const ctx = boot({ lair: true, bots: 0 });
+  const { sim, st, ship } = ctx;
+  const map = st.course.map, c = st.course;
+  report(c.stop && c.stop.lair === true && map.lair === true && map.kind === 'lair' && map.open === true && map.outposts.length === 0 && map.turrets.length === 0 && c.turrets.length === 0 && c.target === null, 'a lair stop flies the lair map: open sky, no outposts, no guns, no target');
+  const ok = Number.isFinite(map.startDist) && map.startDist < 1e8 && Math.abs(map.goal.x - map.start.x) > LR.RUN * 0.9 && map.seaY === st.env.seaY && map.spires.length === LR.SPIRES.length;
+  report(ok && map.seaY - map.start.y >= LR.SEA_BELOW - 250,`the route runs ${Math.round(map.goal.x - map.start.x)} px level to the lair's middle, the sea ${Math.round(map.seaY - map.start.y)} px under the launch (${map.spires.length} spires: ${map.spires.map((s) => Math.round(s.x)).join(', ')})`);
+  report(st.sea && st.sea.spouts.length === 0 && st.sea.survivors.length === 0, 'no waterspouts and no survivors in a lair');
+  // no creature yet; none before the boss's slot
+  step(sim, secs(2));
+  report(st.creature === null && !st.boss, 'at the start there is no creature and no zeppelin');
+  // fly to 70% of the way: the creature rises at the boss's slot, and no zeppelin comes
+  const f = 0.7;
+  ship.pose.x = map.start.x + (map.goal.x - map.start.x) * f - ship.layout.refPoint.x;
+  st.tempo.phase = 'build';
+  st.tempo.bossOk = true;
+  for (let i = 0; i < secs(4) && !st.creature; i++) step(sim, 1);
+  report(!!st.creature && st.creature.mode === 'surfacing' && !st.boss && c.progress > config.WAVES.BOSS_AT, `at ${(c.progress * 100).toFixed(0)}% of the way (the zeppelin's BOSS_AT is ${config.WAVES.BOSS_AT * 100}%) the Kraken rises: ${st.creature && st.creature.name}; no zeppelin`);
+  report(sim.creatures.spawn('kraken') === st.creature, 'one creature a mission (a second spawn gives the same one)');
+  const cr = st.creature;
+  for (let i = 0; i < secs(C.SPAWN.SURFACE_TIME + 1) && cr.mode !== 'idle'; i++) step(sim, 1);
+  step(sim, secs(5));
+  report(st.tempo.phase === 'peak' && st.tempo.kind === 'boss', 'the pacing director treats it as the mission boss');
+  // she hovers at the lair's middle with it alive: the stop is not done
+  ship.pose.x = map.goal.x - ship.layout.refPoint.x;
+  ship.pose.y = map.goal.y - ship.layout.refPoint.y;
+  st.ev.warn = 0;
+  step(sim, secs(3));
+  report(!c.done && !c.pendingNext, `at the lair's middle with the Kraken alive the stop is not done (the reminder "SLAY THE KRAKEN FIRST!" shows when no attack banner does: "${st.ev.warnText}")`);
+  // kill it: the stop is done once it has sunk
+  cr.hooks.hurtPool(1e9, 'shell', 'p1');
+  step(sim, secs(2));
+  report(cr.dying && !c.done && st.bossDownLap === c.lap, 'killed, it is dying and the boss is down, the stop waits for it to sink');
+  for (let i = 0; i < secs(C.SPAWN.SINK_TIME + C.CHUNK.LIFE + 3) && !c.done; i++) step(sim, 1);
+  report(c.done === true && c.pendingNext === true && st.creature === null, `once it has sunk the stop is done: "${st.ev.warnText}"`);
+  report(errors === 0, 'and the lair flew without an error');
+}
+{
+  // the Flagship's beacon rule treats a creature kill like the zeppelin being down
+  restoreCfg();
+  realHp();
+  const ctx = boot();
+  const { sim, st } = ctx;
+  const cr = risen(ctx, 1);
+  st.bossDownLap = 0;
+  cr.hooks.hurtPool(1e9, 'shell', 'p1');
+  report(st.bossDownLap === st.course.lap && st.bossDownLap > 0, `a creature kill sets bossDownLap (${st.bossDownLap}) the way a zeppelin kill does: the Flagship's beacon (course.js) counts after it`);
+}
+
+// (v) the voyage generator
+{
+  restoreCfg();
+  const modes = ['quick', 'voyage', 'campaign'];
+  const seeds = Array.from({ length: quick ? 80 : 300 }, (_, i) => 1000 + i * 7919);
+  let withLair = 0, two = 0, total = 0, bad = [];
+  const saved = JSON.stringify(LR.COUNT);
+  for (const mode of modes) for (const voyageNo of [1, 2]) for (const sd of seeds) {
+    LR.COUNT = JSON.parse(saved);
+    const v = VY.generateVoyage(sd, { mode, voyageNo, gentle: sd % 2 === 0 });
+    LR.COUNT = { short: 0, long: 0 };
+    const plain = VY.generateVoyage(sd, { mode, voyageNo, gentle: sd % 2 === 0 });
+    LR.COUNT = JSON.parse(saved);
+    total++;
+    const h = voyageNo > 1 ? 1 : 0, n = v.columns.length;
+    const lairs = v.columns.flat().filter((s) => s.lair);
+    if (lairs.length) withLair++;
+    if (lairs.length > 1) two++;
+    const want = n - h >= LR.LONG_STOPS ? LR.COUNT.long : LR.COUNT.short;
+    if (lairs.length > want) bad.push(`${mode}/${sd}: ${lairs.length} lairs, at most ${want}`);
+    for (const s of lairs) {
+      if (s.env !== 'sea') bad.push(`${mode}/${sd}: lair on ${s.env}`);
+      if (s.col <= h || s.col >= n - 1) bad.push(`${mode}/${sd}: lair in column ${s.col} of ${n}`);
+      if (s.kind !== 'lair' || s.flagship || s.harbour) bad.push(`${mode}/${sd}: lair kind ${s.kind}`);
+      if (lairs.some((o) => o !== s && Math.abs(o.col - s.col) <= 1)) bad.push(`${mode}/${sd}: two lairs in neighbouring columns`);
+    }
+    // the rest of the route is untouched: same stops, same links, same envs; a lair is +1 skull and x2 reward
+    v.columns.flat().forEach((s, i) => {
+      const o = plain.columns.flat()[i];
+      if (s.id !== o.id || s.env !== o.env || s.next.join() !== o.next.join() || s.play !== o.play) bad.push(`${mode}/${sd}: stop ${s.id} differs from the lair-free route`);
+      else if (s.lair) { if (s.danger !== o.danger + LR.DANGER || s.reward !== Math.round(o.reward * LR.REWARD_MUL)) bad.push(`${mode}/${sd}: ${s.id} danger ${o.danger}->${s.danger} reward ${o.reward}->${s.reward}`); }
+      else if (s.danger !== o.danger || s.reward !== o.reward || s.kind !== o.kind) bad.push(`${mode}/${sd}: ${s.id} (not a lair) changed`);
+    });
+  }
+  report(!bad.length, `${total} generated voyages (quick, voyage, campaign x both voyages): lairs only on Sunken Sea stops, never the first stop, the harbour or the Flagship, never in neighbouring columns, at most ${LR.COUNT.short} (${LR.COUNT.long} from ${LR.LONG_STOPS} stops), +${LR.DANGER} skull and x${LR.REWARD_MUL} reward, everything else exactly as before${bad.length ? ' - ' + bad.slice(0, 3).join('; ') : ''}`);
+  console.log(`     lairs: ${withLair} of ${total} voyages have one (${two} have two)`);
+  report(withLair / total > 0.5, `most voyages have a lair (${((withLair / total) * 100).toFixed(0)}%)`);
+  // the same seed makes the same route
+  const a = JSON.stringify(VY.generateVoyage(4242, { mode: 'voyage' })), b = JSON.stringify(VY.generateVoyage(4242, { mode: 'voyage' }));
+  report(a === b, 'a seed always makes the same voyage');
+}
+{
+  // the route map: the creature icon and LAIR label; the vote options carry the lair
+  restoreCfg();
+  const ctx = boot({ start: 'classic', bots: 3 });
+  const { sim, st } = ctx;
+  const v = st.run.voyage, here = v.columns[0][0], lair = v.columns[1][0];
+  Object.assign(lair, { env: 'sea', play: 'sea', kind: 'lair', lair: true, danger: 3, reward: 80 });
+  here.next = v.columns[1].map((s) => s.id);
+  st.run.salvage = 0;
+  sim.startDock(); // (nothing affordable: straight on to the route vote)
+  if (st.vote && st.vote.kind === 'dock') {
+    const cast = st.vote.options.findIndex((o) => o.kind === 'cast');
+    for (const p of Object.values(st.players)) { p.voteAt = 1e9; p.vote = cast; }
+    step(sim, secs(3));
+  }
+  const route = st.vote && st.vote.kind === 'route' ? st.vote : null;
+  const opt = route && route.options.find((o) => o.id === lair.id);
+  report(!!opt && opt.lair === true && opt.icon === LR.ICON && /LAIR/.test(opt.desc) && opt.kindName === config.VOYAGE.KIND_NAMES.lair && opt.danger === 3 && opt.reward === 80, `the route vote lists it: ${opt && opt.icon} "${opt && opt.name}" - ${opt && opt.desc}`);
+  const canvas = { width: 1920, height: 1080, clientWidth: 1920 };
+  const cam = createWorldCamera();
+  const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+  rec.texts.length = 0;
+  let exc = 0;
+  try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
+  const texts = rec.texts.map((q) => q.s);
+  report(exc === 0 && texts.includes(LR.LABEL) && texts.includes('KRAKEN LAIR') && texts.includes(LR.ICON), `the TV's route map draws the creature icon, the "${LR.LABEL}" label and "KRAKEN LAIR" (0 draw errors)`);
+}
+
+// (r) the reward and the trophy
+{
+  restoreCfg();
+  realHp();
+  const ctx = boot({ lair: true, start: 'classic', bots: 3 });
+  const { sim, st, ship } = ctx;
+  const players = () => Object.values(st.players);
+  const cr = risen(ctx, 1);
+  st.ship.hull = 40;
+  for (const b of st.bags) b.gas = 30;
+  const salv0 = st.run.salvage, hull0 = st.ship.hull;
+  cr.hooks.hurtPool(1e9, 'shell', 'p1');
+  step(sim, secs(3));
+  const SV = config.SALVAGE.BOSS * C.REWARD_MUL;
+  report(st.run.salvage - salv0 >= SV && st.run.salvage - salv0 <= SV + 40, `triple boss salvage: +${st.run.salvage - salv0} (SALVAGE.BOSS ${config.SALVAGE.BOSS} x ${C.REWARD_MUL})`);
+  report(st.ship.hull >= hull0 + C.REWARD.HULL - 1 && st.bags.every((b) => b.gas >= 30 + C.REWARD.GAS - 10), `a hull patch (+${C.REWARD.HULL}: ${hull0} -> ${st.ship.hull.toFixed(0)}) and every gasbag (+${C.REWARD.GAS})`);
+  report(st.run.trophy === C.REWARD.TROPHY, `the trophy is waiting (run.trophy "${st.run.trophy}")`);
+  // the next dock
+  st.run.salvage = 0;
+  sim.startDock();
+  const idx = st.vote.options.findIndex((o) => o.kind === 'part' && o.trophy);
+  const card = st.vote.options[idx];
+  report(!!card && card.entry === 'krakenBeak' && card.name === 'Kraken Beak' && card.cost === 0 && /TROPHY/.test(card.badge) && card.choices.length >= 1, `the next dock offers the TROPHY card "${card && card.name}" - ${card && card.badge}, cost ${card && card.cost}, ${card && card.choices.length} place(s)`);
+  report(!ship.layout.ram, 'the classic ship has no ram prow yet');
+  for (const p of players()) { p.voteAt = 1e9; p.vote = idx; }
+  for (let i = 0; i < 60 * 8 && st.vote && st.vote.kind === 'dock' && !st.vote.options[idx].sold; i++) step(sim, 1);
+  if (st.vote && st.vote.kind === 'slot') { for (const p of players()) { p.voteAt = 1e9; p.vote = 0; } for (let i = 0; i < 60 * 5 && st.vote && st.vote.kind === 'slot'; i++) step(sim, 1); }
+  step(sim, 5);
+  const L = ship.layout;
+  report(!!L.ram && L.ram.art === 'kraken' && L.ram.pts && st.run.trophy === null && st.run.parts.some((q) => q.id === 'krakenBeak'), `bought, it is on the ship: layout.ram art "${L.ram && L.ram.art}", ${L.ram ? L.ram.pts.length : 0} outline points, the trophy is used up`);
+  report(!fs.readFileSync(path.join(publicDir, 'modules/host/shipBuild.js'), 'utf8').includes('krakenBeak'), 'the Kraken Beak is the same ramProw part (no new rules in shipBuild.js, only an art key)');
+  // it draws (the bone beak) without a hitch
+  {
+    const canvas = { width: 1920, height: 1080, clientWidth: 1920 };
+    const cam = createWorldCamera();
+    const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+    let exc = 0;
+    for (let f = 0; f < 20; f++) { step(sim, 1); try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; if (exc < 3) console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); } }
+    report(exc === 0, 'the ship with the Kraken Beak draws on the stub canvas (0 errors)');
+  }
+}
+{
+  // a ship with an iron prow gets the beak in its place
+  restoreCfg();
+  const parts = [...SBD.BUILDS.classic, { part: 'ramProw', p: 'main', x: 0 }];
+  const L0 = SBD.buildLayout(SBD.BUILDS.classic);
+  const main = L0.platforms.find((q) => q.id === 'main');
+  parts[parts.length - 1].x = main.x1;
+  const offer = PSH.offerPart(parts, { only: 'krakenBeak', rng: Math.random });
+  const ch = offer && offer.choices[0];
+  const next = ch && ch.apply(parts);
+  const rams = next ? next.filter((q) => q.part === 'ramProw') : [];
+  report(!!offer && offer.choices.length === 1 && /in place of the iron prow/.test(ch.where) && rams.length === 1 && rams[0].art === 'kraken' && !parts.find((q) => q.part === 'ramProw').art, 'with an iron prow already on her the trophy card replaces it (one ram prow, art kraken; the old parts list is not touched)');
+  report(!PSH.CATALOGUE.find((e) => e.id === 'krakenBeak').allowed([], {}), 'and the trophy never turns up in the random shop (allowed is false)');
+}
+
+// (b) the bots
+{
+  restoreCfg();
+  const botsimPath = path.join(publicDir, '..', 'tools', 'botsim.mjs');
+  const run = (args, env = {}) => new Promise((resolve) => {
+    const c = spawn(process.execPath, [botsimPath, ...args], { env: { ...process.env, ...env } });
+    let out = '';
+    c.stdout.on('data', (d) => (out += d));
+    c.stderr.on('data', (d) => (out += d));
+    c.on('close', (code) => resolve({ code, out }));
+  });
+  const fight = (out) => {
+    const m = /fight 1: phase (\d)[^\n]*?beak windows (\d+), fed ([\d.]+), dives (\d+), rock (\d+)s; ended: (\w+)(?: at (\d+)s)?/.exec(out);
+    return m ? { phase: +m[1], windows: +m[2], fed: +m[3], dives: +m[4], rock: +m[5], ended: m[6], at: m[7] === undefined ? null : +m[7] } : null;
+  };
+  const pool = async (jobs, n) => { const res = []; let k = 0; await Promise.all(Array.from({ length: n }, async () => { while (k < jobs.length) { const i = k++; res[i] = await jobs[i](); } })); return res; };
+  const seedsB = quick ? [1, 2] : [1, 2, 3];
+  const forced = ['sever', 'mouth', 'tow', 'board', 'hp'];
+  const jobs = [];
+  for (const w of forced) for (const sd of seedsB) jobs.push(() => run(['--lair', '1', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd), ...(w === 'tow' ? ['--build', 'harpoon'] : [])], { CREATURE_FORCE_WIN: w }).then((r) => ({ w, sd, r })));
+  for (const bots of [4, 16]) for (const sd of seedsB) jobs.push(() => run(['--lair', '1', '--bots', String(bots), '--difficulty', 'easy', '--minutes', '16', '--seed', String(sd)]).then((r) => ({ w: 'easy' + bots, sd, r })));
+  for (const sd of seedsB) jobs.push(() => run(['--lair', '1', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd)]).then((r) => ({ w: 'free', sd, r })));
+  const results = await pool(jobs, 5);
+  const clean = (r) => r.code === 0 && /errors: 0/.test(r.out) && !/NaN/.test(r.out);
+  const byWin = {};
+  for (const { w, sd, r } of results) { const f = fight(r.out); (byWin[w] ||= []).push({ sd, f, ok: clean(r) }); }
+  for (const w of forced) {
+    const rows = byWin[w];
+    const times = rows.map((x) => (x.f && x.f.ended === w ? x.f.at : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t !== null && t <= 360), `forced ${w.toUpperCase()}: 8 bots on Normal end it that way within 6 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] === null ? 'NOT (' + (x.f ? x.f.ended + ', phase ' + x.f.phase : 'no fight') + ')' : times[i] + ' s')).join(', ')})`);
+  }
+  for (const bots of [4, 16]) {
+    const rows = byWin['easy' + bots];
+    const times = rows.map((x) => (x.f && x.f.ended !== 'no' ? { at: x.f.at, how: x.f.ended } : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t && t.at <= 600), `${bots} bots on Easy win within 10 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] ? times[i].how + ' ' + times[i].at + ' s' : 'NOT')).join(', ')})`);
+  }
+  {
+    const rows = byWin.free;
+    const how = rows.map((x) => (x.f && x.f.ended !== 'no' ? x.f.ended + ' ' + x.f.at + ' s' : 'NOT'));
+    report(rows.every((x) => x.ok) && how.every((h) => h !== 'NOT'), `unforced, 8 bots on Normal win (${how.join(', ')})`);
+  }
+  report(results.every(({ r }) => clean(r)), `0 errors and no NaN in any of the ${results.length} bot fights`);
 }
 
 restoreCfg();

@@ -14,6 +14,7 @@ import { config } from '../../config.js';
 import { isFree, gripPart, moveGrip, releasePart, reachPart, setWrap } from './creature.js';
 import { tilt } from './course.js';
 import { startBreach, breachReady } from './creatureBreach.js';
+import { phaseP } from './creatureFight.js';
 import { crewAboard } from './crewscale.js';
 import { toWorldX, toWorldY, driveGain } from './pose.js';
 import { applyForce, hitForce } from './forces.js';
@@ -33,6 +34,8 @@ export function gripCap(state, cr) {
   const n = crewAboard(state);
   let cap = 1;
   for (const [from, c] of CR().GRIPS_BY_CREW) if (n >= from) cap = c;
+  const ph = phaseP(cr).grips; // (phase 1: single grabs, whatever the crew; later phases follow the crew)
+  if (ph > 0) cap = Math.min(cap, ph);
   return Math.max(1, Math.round(cap * blindMul(cr)));
 }
 
@@ -68,7 +71,7 @@ function coilPath(ship, g, prog) {
 }
 
 // ---- starting a grab ----
-function startGrip(state, cr, ship) {
+function startGrip(state, cr, ship, dive = false) { // dive: one of the several grips of a phase-3 DIVE (holds a little shorter, pulls harder)
   const G = CR().GRIP, h = cr.hooks, L = ship.layout;
   const cands = [];
   L.platforms.forEach((pl, d) => {
@@ -91,15 +94,15 @@ function startGrip(state, cr, ship) {
   if (!cands.length) return null;
   cands.sort((a, b) => a.score - b.score);
   const c = cands[0], limb = c.limb;
-  const total = G.TIME * (G.TIME_BY_DIFF[diffOf(state)] ?? 1);
-  const g = { limb, ship, mode: 'wind', t: 0, x: c.x, y: c.y, wx: c.wx, wy: c.wy, left: total, total, dmg: 0, end: c.fore ? 'FORE' : 'AFT', deck: String(c.name).toUpperCase(), job: { name: 'hack', prog: 0, worked: false, live: true, d: c.d, x: c.x }, stat: { tilt: 0, secs: 0 } };
+  const total = G.TIME * (G.TIME_BY_DIFF[diffOf(state)] ?? 1) * (dive ? CR().DIVE.TIME_MUL : 1);
+  const g = { dive, limb, ship, mode: 'wind', t: 0, x: c.x, y: c.y, wx: c.wx, wy: c.wy, left: total, total, dmg: 0, end: c.fore ? 'FORE' : 'AFT', deck: String(c.name).toUpperCase(), job: { name: 'hack', prog: 0, worked: false, live: true, d: c.d, x: c.x }, stat: { tilt: 0, secs: 0 } };
   cr.grips.push(g);
   limb.gripCd = 999; // (busy: nothing else uses this limb until the grip lets go)
   // the limb rears up beside the ship's end (a reach that holds), then the strike follows after WINDUP
   const root = rootOf(cr, limb), rx = c.wx + cr.side * 350, ry = c.wy - 500, d = Math.hypot(rx - root.x, ry - root.y), k = d > limb.reach * 0.97 ? (limb.reach * 0.97) / d : 1;
   reachPart(cr, limb, root.x + (rx - root.x) * k, root.y + (ry - root.y) * k);
   state.ev.warn = 2.6;
-  state.ev.warnText = 'TENTACLE! ' + g.end + ' ' + g.deck + '!';
+  state.ev.warnText = dive ? CR().DIVE.TEXT : 'TENTACLE! ' + g.end + ' ' + g.deck + '!';
   state.sfxQ.push(['roar']);
   warnCrew(state, cr, ship, g, 'GET OFF THE ' + g.end + ' ' + g.deck + '!');
   return g;
@@ -180,8 +183,9 @@ function stepGrip(state, cr, g, dt) {
   const dx = root.x - g.wx, dy = root.y - g.wy, d = Math.hypot(dx, dy) || 1;
   const sx = (dx / d) * G.SIDEWAYS, sy = 1, sm = Math.hypot(sx, sy), px = sx / sm, py = sy / sm;
   const stretch = Math.max(0, d - limb.reach * G.SLACK);
-  const holding = cr.grips.filter((q) => q.ship === ship && q.mode === 'hold').length || 1;
-  const a = Math.min(G.MAX_ACC, G.BASE_ACC + G.K * stretch, G.MAX_TOTAL / holding) * clamp(g.t / G.RAMP, 0.15, 1); // (every grip pulls: the pull grows with their number, up to MAX_TOTAL)
+  const holders = cr.grips.filter((q) => q.ship === ship && q.mode === 'hold');
+  const holding = holders.length || 1, D = CR().DIVE, diving = holders.some((q) => q.dive); // (a DIVE: the grips pull harder, and all together up to MAX_TOTAL x TOTAL_MUL)
+  const a = Math.min(G.MAX_ACC * (g.dive ? D.PULL_MUL : 1), (G.BASE_ACC + G.K * stretch) * (g.dive ? D.PULL_MUL : 1), (G.MAX_TOTAL * (diving ? D.TOTAL_MUL : 1)) / holding) * clamp(g.t / G.RAMP, 0.15, 1); // (every grip pulls: the pull grows with their number, up to MAX_TOTAL)
   g.acc = a; // (px/s^2 this grip pulls with right now: the gate adds them up)
   shove(ship, px * a * dt, py * a * dt);
   applyForce(ship.ctx, { x: g.x, y: g.y, fx: px * ship.pose.f * a * G.TORQUE, fy: py * a * G.TORQUE, source: 'grab' });
@@ -378,29 +382,45 @@ export function thinkAttacks(state, cr, ship, dt) {
   cr.grips = cr.grips.filter((g) => !stepGrip(state, cr, g, dt));
   if (cr.slap && stepSlap(state, cr, cr.slap, dt)) cr.slap = null;
   if (cr.mode !== 'idle') return; // (rising or sinking: no new attacks)
+  // C.3: the phase says how it attacks (creatureFight.js, config.CREATURES.PHASE.P): single grabs or as many as the crew can bear, whether it lunges, how fast, and (phase 3) the DIVE. A phase change
+  // is followed by a BREATHER (ai.breather s) in which the timers stand still and nothing new starts.
+  const P = phaseP(cr), calm = ai.breather > 0, run = dt;
   const liveN = cr.grips.filter((g) => g.mode !== 'recoil').length;
   const dm = G.EVERY_BY_DIFF[diffOf(state)] ?? 1;
   const jitter = () => 1 + (h.rng() * 2 - 1) * G.JITTER;
-  if ((ai.gripT -= dt) <= 0 && state.phase === 'flying') {
-    if (liveN < gripCap(state, cr) && !state.goingDown) {
+  const D = CR().DIVE;
+  if (!calm && P.dive && ai.diveT !== undefined && (ai.diveT -= run) <= 0) { // DIVE: it dives and grips her with several limbs at once, pulling her down hard
+    if (state.phase === 'flying' && !state.goingDown && !cr.slap && liveN === 0 && !(ai.diving > 0)) {
+      ai.diving = Math.min(D.GRIPS, gripCap(state, cr) + D.EXTRA);
+      ai.gripT = 0;
+      ai.diveT = D.EVERY * dm * jitter();
+      cr.stats.dives = (cr.stats.dives || 0) + 1;
+    } else ai.diveT = 1.5;
+  }
+  if (!calm && (ai.gripT -= run) <= 0 && state.phase === 'flying') {
+    if (ai.diving > 0) {
+      const g = !state.goingDown ? startGrip(state, cr, ship, true) : null;
+      if (g) { ai.diving -= 1; ai.gripT = ai.diving > 0 ? D.SPREAD : G.EVERY * dm * jitter() * P.gripMul; } // (the dive's grips seize close together)
+      else { ai.diving = 0; ai.gripT = 1.5; }
+    } else if (liveN < gripCap(state, cr) && !state.goingDown) {
       const g = startGrip(state, cr, ship);
       if (!g) ai.gripT = 1.5;
       else { // one attack is a burst of as many grips as the crew size allows (SPREAD s apart), then a pause of EVERY
         if (!(ai.burst >= 0)) ai.burst = gripCap(state, cr) - 1;
         else ai.burst -= 1;
         if (ai.burst > 0) ai.gripT = G.SPREAD;
-        else { ai.burst = -1; ai.gripT = (G.EVERY * dm * jitter()) / blindMul(cr); }
+        else { ai.burst = -1; ai.gripT = (G.EVERY * dm * jitter() * P.gripMul) / blindMul(cr); }
       }
     } else ai.gripT = 1.5;
   }
   if (ai.breachT === undefined) ai.breachT = CR().BREACH.FIRST;
-  if ((ai.breachT -= dt) <= 0 && !cr.slap && liveN === 0 && cr.grips.length === 0) {
+  if (!calm && P.breach && (ai.breachT -= run) <= 0 && !cr.slap && liveN === 0 && cr.grips.length === 0 && !(ai.diving > 0)) {
     const B = CR().BREACH;
     if (breachReady(state, cr) && startBreach(state, cr, ship)) ai.breachT = B.EVERY * (G.EVERY_BY_DIFF[diffOf(state)] ?? 1) * (1 + (h.rng() * 2 - 1) * B.JITTER);
     else ai.breachT = 2;
   }
-  if ((ai.slapT -= dt) <= 0 && !cr.slap && liveN === 0 && cr.mode === 'idle') {
+  if (!calm && (ai.slapT -= run) <= 0 && !cr.slap && liveN === 0 && cr.mode === 'idle' && !(ai.diving > 0)) {
     const s = startSlap(state, cr, ship);
-    ai.slapT = s ? (S.EVERY * (G.EVERY_BY_DIFF[diffOf(state)] ?? 1) * (1 + (h.rng() * 2 - 1) * S.JITTER)) : 2;
+    ai.slapT = s ? (S.EVERY * (G.EVERY_BY_DIFF[diffOf(state)] ?? 1) * P.slapMul * (1 + (h.rng() * 2 - 1) * S.JITTER)) : 2;
   }
 }

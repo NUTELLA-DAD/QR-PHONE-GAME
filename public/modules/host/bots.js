@@ -21,6 +21,8 @@ import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/c
 import { specOf } from './gunTypes.js';
 import { gripJobs } from './creatureGrip.js';
 import { breachClimbAlt } from './creatureBreach.js';
+import { bombInMouth, mouthWindowSoon, forcedSkip } from './creatureFight.js';
+import { boardAt, mantleOf } from './creatureBoard.js';
 
 const B = config.BOTS;
 // Tables worked out per ship layout (rebuilt when a new ship build is applied to it): `tables(L).MAIN` ... Every function below gets its layout as
@@ -118,6 +120,7 @@ function coilShot(state) {
   const ey = toWorldY(ship, M.y - 60);
   const angles = [];
   for (const t of targets(state)) {
+    if (t.kind === 'creaturePart' && forcedSkip(state.creature, t.part, 'coil')) continue; // (dev flag: config.CREATURES.FORCE_WIN)
     const p = t.at(0);
     if (Math.hypot(p.x - ex, p.y - ey) > config.COIL.RANGE) continue;
     const a = aimToShip(ship, Math.atan2(p.y - ey, p.x - ex)); // (the angle as the ship sees it: coil.aim and the arc are in ship space)
@@ -246,12 +249,16 @@ function harpoonWanted(state, g) {
   if (g.ammo <= 0 || g.cd > 0) return false;
   const ship = mainShip(state);
   if ((state.tows || []).some((t) => t.harpoon && t.a === ship)) return false;
+  if (state.creature && (state.creature.hooked || (state.creature.harpoons || []).length)) return false; // (C.3: a line already holds the creature - phase 3 only, aim.js towTarget)
   if (state.rival) {
     const c = ship.captain;
     if (!c || !c.S || !(c.S.harpoon > 0) || state.ship.hull < config.PVP.BOT.HARPOON.MIN_HULL || c.harpoonCd > 0) return false;
   }
   return !!bestTarget(state, g);
 }
+
+// C.3: the Kraken's beak opens on a roar (creatureFight.js) and bombs into it are a win: wanted from a few seconds before it opens, unless the dev flag asks for another way to win.
+const beakBombing = (state) => { const f = config.CREATURES.FORCE_WIN; return !!state.creature && (!f || f === 'mouth') && mouthWindowSoon(state, 5); };
 
 // Things below and ahead worth bombing, as x ranges in SHIP coordinates (where the bomb bay is): live turrets and buildings.
 function groundTargets(state) {
@@ -602,7 +609,7 @@ function listJobs(state, bot) {
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
   const botPlanes = players.filter((q) => q.bot && isEscortStation(q.lock, L)).length; // the crew can only spare so many for the patrol planes
-  const reach = (n) => (isEscortStation(n, L) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : L.kindOf(n) === 'lookout' ? lookoutReach(state) : L.kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : L.kindOf(n) === 'coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : L.kindOf(n) === 'bombBay' ? ((groundTargets(state).length || bombRunOn(state)) && state.bombBay.bombs > 0 ? 0.5 : 4) : L.kindOf(n) === 'swivel' ? (swivelOff(state, n) > 0.3 ? 0.5 : 4) : L.kindOf(n) === 'cannon' || L.kindOf(n) === 'cannonSeat' ? cannonReach(state, n) : isSearchlight(n, L) ? lightReach(state, n) : !tables(L).GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
+  const reach = (n) => (isEscortStation(n, L) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : L.kindOf(n) === 'lookout' ? lookoutReach(state) : L.kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : L.kindOf(n) === 'coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : L.kindOf(n) === 'bombBay' ? ((groundTargets(state).length || bombRunOn(state) || beakBombing(state)) && state.bombBay.bombs > 0 ? 0.5 : 4) : L.kindOf(n) === 'swivel' ? (swivelOff(state, n) > 0.3 ? 0.5 : 4) : L.kindOf(n) === 'cannon' || L.kindOf(n) === 'cannonSeat' ? cannonReach(state, n) : isSearchlight(n, L) ? lightReach(state, n) : !tables(L).GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = tables(L).MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   jobs.push(...crossJobs(state, bot)); // (B.6: loads thrown onto the deck: shovel them off)
   const hatchWorks = hatchJobs(state, bot); // (cargo drop hatches: tip raiders out - before any fighting - shut one, drop a crate on a ship below)
@@ -643,11 +650,16 @@ function listJobs(state, bot) {
   if (bombRun && bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs < config.MAPS.BOMB_RUN_STOCK) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   if (!bombRun && bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
+  // C.3: a Kraken about with its beak to feed: the bay is kept stocked with the bombs a win takes (the stock is loaded, the bombs are in the hold)
+  const feeding = !!state.creature && !state.creature.dying && (!config.CREATURES.FORCE_WIN || config.CREATURES.FORCE_WIN === 'mouth');
+  if (feeding && bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs < config.CREATURES.MOUTH.FED + 1) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   jobs.push(...sailJobs(state, bot, false)); // (a sail to raise in a fair wind: after the chores, ahead of an idle gun post)
   jobs.push(...linkJobs(state, bot, false)); // (...and the quieter links: loaders for idle guns, the boiler surge)
   for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // Hovering over an outpost with bombs aboard: one bot drops everything and mans the bomb bay.
   if (bay && bombRun && c.target && Math.hypot(c.target.x - toWorldX(mainShip(state), L.refPoint.x), c.target.y - toWorldY(mainShip(state), L.refPoint.y)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken(bay) && !players.some((q) => L.kindOf(q.lock) === 'bombBay')) jobs.unshift({ kind: 'station', obj: bay, max: 1 });
+  // C.3: the beak is open (or about to be) and there are bombs: one bot takes the bomb bay (the drop itself is the bomb-bay branch of the station code below).
+  if (bay && beakBombing(state) && state.bombBay.bombs > 0 && !isBroken(bay) && !players.some((q) => L.kindOf(q.lock) === 'bombBay')) jobs.unshift({ kind: 'station', obj: bay, max: 1 });
   // Versus: the captain is closing in to burn her (pvp/captainAI.js): the burners are manned first, ahead of the chores.
   const burnCap = state.rival ? mainShip(state).captain : null;
   if (burnCap && (burnCap.play === 'burn' || burnCap.burnWish)) for (const n of tables(L).GUN_STATIONS) { const g = state.GUNS[n]; if (g.type === 'flame' && g.ammo > 0 && !isBroken(n) && !players.some((q) => q.lock === n)) jobs.unshift({ kind: 'station', obj: n, max: 1, tier: 0.2 }); }
@@ -857,6 +869,10 @@ function operate(p, state, dt) {
       p.gunIdle = 0;
       p.fire = bombFalls(state);
     }
+    if (beakBombing(state) && state.bombBay.bombs > 0) { // (C.3: the Kraken's beak is open: drop when a bomb let go now falls into it; wait at the bay while a window is near)
+      p.gunIdle = 0;
+      p.fire = bombInMouth(state);
+    } else if (state.creature && config.CREATURES.FORCE_WIN && config.CREATURES.FORCE_WIN !== 'mouth') p.fire = false; // (dev flag: no bombs on the way to another win)
   } else {
     const gun = state.GUNS[p.lock];
     if (!gun) return;
@@ -1592,6 +1608,29 @@ function enemyRoleJobs(state, bot, jobs, L) {
 // not the wheel, so the stand-in leaves the helm alone too.)
 const humanAutopilot = (p, state) => !!p.human && autopilotOn(state);
 
+// C.3, the gate only (config.CREATURES.FORCE_WIN = 'board'; people board with the hookshot or the crew cannon, bots do not): once the Kraken is exhausted and its heart is open, ONE bot with a sword is put aboard its
+// mantle (creatureBoard.js boardAt) and holds Action at the heart (boarderStep does the rest: STRIKE THE HEART). True = this bot is the boarder.
+function forceBoard(p, state) {
+  const cr = state.creature;
+  if (!cr) p.forceBoard = false;
+  if (p.on) {
+    p.jx = p.jy = 0;
+    p.fire = !!cr && !cr.dying;
+    return true;
+  }
+  if (!cr || cr.dying || cr.mode !== 'idle' || !(cr.phase >= 3) || !mantleOf(cr) || p.mate || p.ko > 0 || p.fall) return false;
+  if (Object.values(state.players).some((q) => q.on || q.forceBoard)) return false; // (one boarder is enough)
+  const L = mainShip(state).layout, heart = cr.parts.find((q) => q.kind === 'heart' && !q.dead && !q.hidden);
+  if (!heart || isHelm(L, p.lock)) return false;
+  p.forceBoard = true;
+  p.lock = null;
+  p.conn = null;
+  p.carry = 'sword';
+  p.botJob = null;
+  const m = heart.segs[0];
+  return boardAt(state, mainShip(state), p, m.x, m.y);
+}
+
 // Called once per frame for each bot, before the game applies its input.
 export function updateBot(p, state, dt) {
   const L = mainShip(state).layout;
@@ -1607,6 +1646,7 @@ export function updateBot(p, state, dt) {
     p.fire = false;
     return;
   }
+  if (config.CREATURES.FORCE_WIN === 'board' && forceBoard(p, state)) return; // (C.3 dev flag)
   // A daring stunt takes over the bot until it is safely back on a deck.
   if (p.dare) {
     if (dareStep(p, state, dt)) return;

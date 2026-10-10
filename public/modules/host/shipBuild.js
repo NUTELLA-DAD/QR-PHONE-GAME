@@ -181,7 +181,7 @@ export const PARTS = {
     A.add('gunMounts', { bx, by, aim, arc, ...(gtype ? { type: gtype } : {}) }, n, ord && ord.gunMounts);
   } },
   // The RAM PROW (PVP.md "Space and range", config.RAM): a reinforced iron nose on the end of a deck (x = the deck's fore end). A ship that rams with it hurts the other ship far more than herself (shipCollide.js).
-  ramProw: { mass: () => M().kind.ram, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('ram', { p: p.p, x: p.x }) },
+  ramProw: { mass: () => M().kind.ram, lift: 0, steam: 0, hands: 0, emit: (p, A) => A.add('ram', { p: p.p, x: p.x, ...(p.art ? { art: p.art } : {}) }) }, // (art: 'kraken' = the Kraken Beak trophy, partsShop.js: the same ram with another look)
   // A station plus its lamp. len = how long the drum is (the beam starts at the lens).
   searchlight: { mass: () => M().kind.searchlight, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
     const { bx, by, aim, arc, len, n } = p;

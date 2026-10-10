@@ -93,6 +93,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     iron: { name: 'THE IRON DREADNOUGHT', body: '#4a5056', fin: '#2a2e33' },
   };
   const flagshipStop = () => !!(state.course && state.course.stop && state.course.stop.flagship);
+  const lairStop = () => !!(state.course && state.course.stop && state.course.stop.lair); // (a lair has its own boss, the giant creature: no zeppelin there)
   const spawnBoss = () => {
     // The last stop of a voyage is the Flagship: the Iron Dreadnought at her toughest.
     const flagship = !!(state.course && state.course.stop && state.course.stop.flagship);
@@ -156,7 +157,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     if (state.ship.down || !Object.keys(state.players).length) return;
     const c = state.course;
     // Boss: once per lap, on the way home.
-    if (c && c.progress > W.BOSS_AT && (c.progress < 0.9 || flagshipStop()) && bossLap !== lap() && !state.boss && !state.creature && (!state.tempo || state.tempo.bossOk)) spawnBoss(); // (a giant creature is the boss of its mission)
+    if (c && c.progress > W.BOSS_AT && (c.progress < 0.9 || flagshipStop()) && bossLap !== lap() && !state.boss && !state.creature && !lairStop() && (!state.tempo || state.tempo.bossOk)) spawnBoss(); // (a giant creature is the boss of its mission)
     // The trickle between set pieces: small bat swarms. The pacing director (simulation.js) sets how
     // fast this clock runs (0 in a calm) and calls the bigger set pieces itself.
     if ((waveT -= dt * (state.tempo ? state.tempo.rate : 1)) > 0) return;
@@ -636,7 +637,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   // Is this mission's boss still to come, and close? (The director holds its next set piece for the boss.)
   const bossSoon = () => {
     const c = state.course;
-    return !!c && !state.boss && !state.creature && bossLap !== lap() && c.progress > W.BOSS_AT - config.PACING.BOSS_LEAD && (c.progress < 0.9 || flagshipStop());
+    return !!c && !state.boss && !state.creature && !lairStop() && bossLap !== lap() && c.progress > W.BOSS_AT - config.PACING.BOSS_LEAD && (c.progress < 0.9 || flagshipStop());
   };
   return { update, reset, restart, bossSoon, withdraw, spawnBigSwarm, spawnBats, spawnBomber, spawnBoss, spawnStrafers };
 }
