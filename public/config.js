@@ -822,7 +822,7 @@ export const config = {
       fungal: { name: 'Fungal Depths', icon: '🍄', color: '#8a6fb0', ready: true },
       aether: { name: 'The Aether', icon: '🌌', color: '#4b3f7a', ready: true },
     },
-    KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid' },
+    KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid', lair: 'Kraken lair' }, // (lair: a Sunken Sea stop with a giant creature, config.CREATURES.LAIR)
   },
   // Fires.
   // S.5f: fire cares where things are (modules/host/fireModel.js reads this; fire.js runs it). Every spot of the ship has a flammability: a covered wooden deck is 1 (medium),
@@ -1933,10 +1933,49 @@ export const config = {
       CARGO: 14, CARGO_MOUTH: 0.5, // a thrown crate or sandbag: to the part it hits; in an open beak this share of MOUTH_BOMB (half a bomb)
       MINE: 70, MINE_RADIUS: 300, // a laid mine going off within MINE_RADIUS (px) of a part (the nearer the harder: down to half at the edge)
       TOUCH: 14, // px added to a shell's or a thrown load's radius for the hit test
-      POOL: { tentacle: 0.5, mantle: 0.6, eye: 1, mouth: 2, heart: 3 }, // share of a blow that also comes off the pool
-      PART_HP_MUL: { tentacle: 1, mantle: 1, eye: 1, mouth: 1, heart: 1, pool: 1 }, // tuning knobs on the data's hp (config.CREATURES.KRAKEN)
+      POOL: { tentacle: 0.25, mantle: 0.6, eye: 1, mouth: 2, heart: 3 }, // share of a blow that also comes off the pool
+      PART_HP_MUL: { tentacle: 1.8, mantle: 1, eye: 1, mouth: 1, heart: 1, pool: 2.2 }, // tuning knobs on the data's hp (config.CREATURES.KRAKEN): C.3 made the fight last (a crew of 8 bots on Normal takes about 3 minutes to cut it up or shoot it down)
     },
     REWARD_MUL: 3, // salvage for a dead creature: SALVAGE.BOSS times this
+    // ---- THE FIGHT (creatureFight.js, creatures/kraken.js, C.3) ----
+    // Three PHASES. 2 starts when the pool is under TWO.HP of its start or TWO.LOST tentacles are cut; 3 likewise (whichever comes first). Each change: a TV banner (BANNER s), a roar and a BREATHER of
+    // s without new attacks. Per phase (P): grips = most grabs at once (0 = by crew, GRIPS_BY_CREW; 1 = single grabs), gripMul / slapMul = x the pause between grabs / slaps, breach = the lunge is on,
+    // mouthEvery / mouthFor = the beak opens on a roar every so many s and stays open that long; phase 3 also surfaces half out of the water (up px) and dives (dive: every s, 3 grips at once).
+    DEV_LAIR: false, // dev flag: every stop but the Flagship is a lair (host.html?lair=1, tools/botsim.mjs --lair 1)
+    FORCE_WIN: null, // dev / test flag: "sever" | "mouth" | "tow" | "board" | "hp" steers the bots AND lets only that one way end the fight, so a gate can prove each win on its own (botsim: CREATURE_FORCE_WIN=tow)
+    PHASE: {
+      TWO: { HP: 0.66, LOST: 2 }, THREE: { HP: 0.33, LOST: 4 }, BREATHER: 3.5, BANNER: 4.5, SHAKE: 1.1,
+      P: {
+        1: { grips: 1, gripMul: 1, slapMul: 1, breach: false, mouthEvery: 22, mouthFor: 3.4, up: 0 },
+        2: { grips: 0, gripMul: 0.9, slapMul: 1, breach: true, mouthEvery: 18, mouthFor: 3.4, up: 0 },
+        3: { grips: 0, gripMul: 1.8, slapMul: 2, breach: false, mouthEvery: 12, mouthFor: 4.2, up: 420, dive: true },
+      },
+      BREACH_FIRST: 9, // s after phase 2 begins before the first lunge
+      RISE: 1.2, // 1/s: how quickly the body surfaces when phase 3 begins
+    },
+    // THE BEAK: a window opens on a roar (banner "MOUTH OPEN - DROP BOMBS!"), the body lunges to put the beak under the bomb bay (LURE_SPEED px/s, the beak gaping up through the mantle: a bomb or crate
+    // inside the FUNNEL - W px each side of the beak, UP px above it - falls in), and each bomb counts one, a crate CARGO_MOUTH of one. FED bombs while it is open is a win.
+    MOUTH: { FED: 3, GULP: 2.4, FIRST: 0.7, P3_FIRST: 0.5, JITTER: 0.2, REOPEN: 0.4, SLACK: 1.5, FUNNEL_W: 330, FUNNEL_UP: 1900, LURE_SPEED: 1800, LURE_LEAD: 1.1, LURE_AFTER: 0 }, // bombs to win; s the beak is shut after swallowing a bomb (about one a window); the first window comes after this share of the phase's interval (phase 3: P3_FIRST of it, from the phase change), the interval varies by +-JITTER; s a window needs left to open the beak again after a gulp, s it may overrun; the funnel; px/s the body swims to get under her; s of her speed the aim leads; s the window has been open before it swims
+    // DIVE (phase 3): several grips at once that drag her down HARD. Grips = the crew's cap + EXTRA, at most GRIPS; they seize SPREAD s apart (GRIP.SPREAD), pull PULL_MUL x harder (up to MAX_TOTAL x TOTAL_MUL), hold TIME_MUL x as long.
+    DIVE: { GRIPS: 3, EXTRA: 1, PULL_MUL: 1.4, TOTAL_MUL: 1.8, TIME_MUL: 0.9, SPREAD: 0.9, EVERY: 40, FIRST: 20, TEXT: "IT DIVES - IT'S DRAGGING US DOWN!" },
+    // TOW ONTO ROCK (phase 3, the harpoon): while a line holds it and the body touches rock at the water line (a sample point every SAMPLES px across it, ABOVE px over the water), the pool loses RATE hp for every px/s of the
+    // haul speed plus GRIND (a body the line holds against the rock keeps grinding even when it has stopped): a good tow ends it in seconds, a held one in half a minute. In phase 3 the exhausted body is hauled SHARE of
+    // the pull (the rest of the time TOW.SHIP_SHARE) up to MAX px/s.
+    TOW_ROCK: { RATE: 1.4, GRIND: 50, SHAKE: 0.5, POP_EVERY: 1, MIN_SPEED: 6, SHARE: 0.55, MAX: 230, SAMPLES: [-900, -450, 0, 450, 900], ABOVE: 160, TEXT: 'CRUNCH! IT GRINDS ONTO THE ROCKS!' },
+    // The way it ends: the final banners, the slow motion of the death (state.slow, sim seconds at SLOW x), the trophy.
+    WIN_TEXT: { sever: 'SEVERED!', mouth: 'FED IT BOMBS!', tow: 'DRAGGED ONTO THE ROCKS!', board: 'HEART STRUCK!', hp: 'SUNK IT!' },
+    FINALE: { SLOW: 0.4, SLOW_FOR: 1.2, BANNER: 6 },
+    POWER: { SCALE: 0.9, FLOOR: 0.4 }, // part health and the pool follow the ship's fight (shipPower.js powerRatio, 1 for the classic ship, 0.46 for the Sparrow): x (1 - SCALE x (1 - ratio)), at least FLOOR
+    REWARD: { HULL: 35, GAS: 30, TROPHY: 'krakenBeak' }, // a dead creature patches the hull (hull points) and every gasbag (gas), and a trophy part card is offered at the next dock
+    // THE LAIR (a Sunken Sea stop of the voyage with a creature in it; voyage.js generateVoyage, maps.js buildLairMap, course.js): an open sky over a sea, no outposts, rock spires poking out of the water. COUNT lairs per
+    // voyage (the long ones, LONG_STOPS columns or more, get the bigger number); never the first stop, never two in a row; +DANGER skulls and x REWARD_MUL reward.
+    LAIR: {
+      COUNT: { short: 1, long: 2 }, LONG_STOPS: 7, DANGER: 1, REWARD_MUL: 2,
+      RUN: 16000, BEYOND: 9000, SEA_BELOW: 2000, // px from the launch to the lair's middle (where the route ends and she hovers); more map beyond it; the sea lies this far under the launch height
+      SPIRES: [[-35, 3], [0, 2], [35, 4]], SPIRE_W: 2600, SPIRE_UP: [450, 900], // rock spires standing in the sea: [cells from the lair's middle (the one at 0 stands right under her when she hovers there), +- jitter in cells], their width at the sea line and how far they stand above it (px)
+      ICON: '\u{1F419}', LABEL: 'LAIR', NAME: "The Kraken's Lair", KIND: 'Kraken lair', // the route map's creature icon (octopus) and label
+      RUNUP: 0.9, // the creature comes anyway once she has flown this far, whatever the pacing says
+    },
     DARK_AT: 0.35, // the sky counts as dark (parts dim unless a searchlight has them) above this searchlight darkNow
     CHUNK: { LIFE: 6, GRAVITY: 2600, SPIN: 2.4, KICK: 300, MAX: 12 }, // a severed limb tumbling away: seconds it lasts, px/s^2, spin and sideways kick (rad/s, px/s), pieces kept
     SINK_CLIP: 70, // px below the sea line at which the Kraken is hidden (it rises out of the water)

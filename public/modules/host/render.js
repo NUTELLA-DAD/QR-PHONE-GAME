@@ -37,6 +37,7 @@ import { createYardArt } from './yardArt.js'; // S.6b: the Shipwright's Yard (th
 import { createPartPictures } from './partArt.js'; // the little part pictures of the build tray, on the Yard's cards
 import { createDebrisArt } from './debrisArt.js'; // S.5i: the pieces of ship that broke off, tumbling through the sky
 import { createCreatureArt } from './creatureArt.js'; // C.1: the giant creatures (BOSSES.md), baked once per zoom and blitted
+import { krakenPhaseName } from './creatures/kraken.js'; // C.3: the name of its phase on the health bar
 import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
@@ -575,8 +576,11 @@ export function createRenderer({ ctx, state: world, canvas }) {
   // it is clipped at the sea line, so it rises out of the water.
   let creatureArt = null; // (made when the first creature appears)
   // The wrapped coils of a gripping tentacle that pass BEHIND the ship: drawn before the ships (the rest of the creature, and the coils in front, come after them in drawEffects).
+  // C.3: while the beak gapes under her bomb bay (cr.mouthWin) the whole body is under her, so all of it is drawn behind her hull and she flies over its head.
+  const wholeBehind = (cr) => !!cr.mouthWin && cr.mode === 'idle';
   const drawCreatureBehind = (view) => {
     const cr = world.creature;
+    if (cr && wholeBehind(cr)) return drawCreatureBody(view, cr);
     if (!cr || !creatureArt || !cr.parts.some((p) => p.wrap)) return;
     const seaY = envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : null;
     ctx.save();
@@ -591,6 +595,10 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const drawCreature = (view) => {
     const cr = world.creature;
     if (!cr) return;
+    if (!wholeBehind(cr)) drawCreatureBody(view, cr);
+    drawCreatureAttacks(cr);
+  };
+  const drawCreatureBody = (view, cr) => {
     if (!creatureArt) creatureArt = createCreatureArt({ ctx });
     const seaY = envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : null;
     ctx.save();
@@ -608,7 +616,6 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.restore();
     }
     ctx.restore();
-    drawCreatureAttacks(cr);
   };
   // C.2: where a tentacle is about to grab (a dashed red ring), the grip's timer (a ring that empties, gold then red) with the hack progress inside it (green), and the harpoon lines made fast to it.
   const drawCreatureAttacks = (cr) => {
@@ -805,7 +812,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     // Beacon (cave missions).
     const gx = px(map.goal.x);
     const gy = py(map.goal.y);
-    ctx.fillStyle = map.open ? 'rgba(0,0,0,0)' : '#ffd23f';
+    ctx.fillStyle = map.lair ? '#7a3a5a' : map.open ? 'rgba(0,0,0,0)' : '#ffd23f'; // (a lair: the Kraken's mark, in its purple)
     ctx.beginPath();
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
@@ -826,7 +833,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const dCells = distToGoal(map, toWorldX(ship, layout.refPoint.x), toWorldY(ship, layout.refPoint.y));
     const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
     let goalText;
-    if (c.done) goalText = map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
+    if (c.done) goalText = map.lair ? 'THE KRAKEN IS SLAIN!' : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
+    else if (map.lair) goalText = state.creature ? 'SLAY THE KRAKEN!' : "KRAKEN'S LAIR" + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
     else if (map.open) {
       const total = map.outposts.length;
       const left = map.outposts.filter((o) => !o.done).length;
@@ -1255,7 +1263,19 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.fillStyle = LB.INK;
     ctx.font = '16px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
-    ctx.fillText(cr.name, 800, 826, 640);
+    ctx.fillText(cr.name + ' - ' + krakenPhaseName(cr.phase || 1) + (cr.dying ? ' - SINKING' : ''), 800, 826, 640); // (C.3: its phase, and what it said)
+    if (cr.mouthWin && !cr.dying) { // the beak is open: a gold tag over the bar with the bombs it has been fed
+      const M = config.CREATURES.MOUTH;
+      ink();
+      ctx.lineWidth = 3;
+      ctx.fillStyle = '#ffd23f';
+      ctx.fillRect(560, 770, 480, 28);
+      ctx.strokeRect(560, 770, 480, 28);
+      ctx.fillStyle = LB.INK;
+      ctx.font = '15px ' + config.FONTS.DISPLAY;
+      ctx.fillText('MOUTH OPEN - BOMBS IN! ' + Math.floor(cr.fed) + '/' + M.FED + ' FED', 800, 790, 460);
+      ctx.font = '16px ' + config.FONTS.DISPLAY;
+    }
     limbs.forEach((p, i) => { // the tentacle pips, centred under the name
       const x = 800 + (i - (limbs.length - 1) / 2) * 34, y = 840, gone = p.severed || p.dead;
       ink();
@@ -1283,6 +1303,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ink();
     ctx.lineWidth = 2.5;
     ctx.strokeRect(470, 856, 660, 14);
+    for (const share of [config.CREATURES.PHASE.TWO.HP, config.CREATURES.PHASE.THREE.HP]) { // the notches where phase 2 and 3 begin
+      ctx.beginPath();
+      ctx.moveTo(470 + 660 * share, 852);
+      ctx.lineTo(470 + 660 * share, 874);
+      ctx.stroke();
+    }
   };
 
   // Upgrades the ship has, as a row of icons under the status panel.
@@ -1559,7 +1585,22 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.fillStyle = config.INK;
         ctx.textAlign = 'center';
         ctx.font = (choice ? 44 : 30) + 'px "Segoe UI Emoji", sans-serif';
-        ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
+        ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : s.lair ? config.CREATURES.LAIR.ICON : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
+        if (s.lair) { // a lair: a ring of its purple round the stop and a LAIR tag (config.CREATURES.LAIR)
+          ctx.strokeStyle = '#7a3a5a';
+          ctx.lineWidth = 6;
+          ctx.setLineDash([8, 6]);
+          ctx.beginPath();
+          ctx.arc(px(s.col), py(s), r + 9, 0, 7);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font = '18px ' + config.FONTS.DISPLAY;
+          ctx.lineWidth = 5;
+          ctx.strokeStyle = '#2b1622';
+          ctx.strokeText(config.CREATURES.LAIR.LABEL, px(s.col), py(s) - r - (s.id === cur.id ? 34 : choice ? 40 : 18));
+          ctx.fillStyle = '#ffd6ee';
+          ctx.fillText(config.CREATURES.LAIR.LABEL, px(s.col), py(s) - r - (s.id === cur.id ? 34 : choice ? 40 : 18));
+        }
         ctx.globalAlpha = 1;
         if (s.id === cur.id) {
           ctx.fillStyle = '#ffd23f';
@@ -1574,7 +1615,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         if (choice) {
           ctx.fillStyle = '#fff';
           ctx.font = '20px ' + config.FONTS.DISPLAY;
-          ctx.fillText(s.flagship ? 'THE FLAGSHIP' : env.name, px(s.col), py(s) + r + 28);
+          ctx.fillText(s.flagship ? 'THE FLAGSHIP' : s.lair ? 'KRAKEN LAIR' : env.name, px(s.col), py(s) + r + 28);
           dots(voters.filter((p) => p.vote === idx), px(s.col), py(s) - r - 24);
         }
       }
@@ -2375,7 +2416,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
           art.light.drawBellyPod(); // (under the hull: the ladder and outrigger draw over it)
           art.hull(time / 1000);
           art.light.drawLamps(time / 1000); // the two brass searchlights (also records where the beams start)
-          if (layout.ram && layout.platforms[layout.ram.d]) drawRam(ctx, layout.ram, layout.platforms[layout.ram.d].y, { trim: sh.team && config.FLEET.TEAMS[sh.team.id] ? config.FLEET.TEAMS[sh.team.id].trim : null, hits: sh.ramHits }); // (a ram prow: the big iron beak with the team's stripe and a scuff for each landed ram, weaponsArt.js)
+          if (layout.ram && layout.platforms[layout.ram.d]) drawRam(ctx, layout.ram, layout.platforms[layout.ram.d].y, { trim: sh.team && config.FLEET.TEAMS[sh.team.id] ? config.FLEET.TEAMS[sh.team.id].trim : null, hits: sh.ramHits, art: layout.ram.art }); // (art: 'kraken' = the trophy beak, partsShop.js; a ram prow: the big iron beak with the team's stripe and a scuff for each landed ram, weaponsArt.js)
         }
         lap('ship');
         // Close-call warnings: red chevrons on the hull pointing at nearby rock.

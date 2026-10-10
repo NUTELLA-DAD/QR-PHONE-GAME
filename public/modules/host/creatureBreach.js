@@ -144,7 +144,7 @@ function startExposure(cr, b) {
 function endExposure(cr, b) {
   if (!b.exposed) return;
   b.exposed = false;
-  if (!CR().BOARD.HEART_EXPOSED) for (const p of cr.parts) if (p.kind === 'heart') p.hidden = true;
+  if (!CR().BOARD.HEART_EXPOSED && !(cr.phase >= 3)) for (const p of cr.parts) if (p.kind === 'heart') p.hidden = true; // (phase 3: the exhausted creature keeps its heart open, creatureFight.js)
   for (const p of cr.parts) if (p.kind === 'mouth') setMouth(cr, p, false);
 }
 

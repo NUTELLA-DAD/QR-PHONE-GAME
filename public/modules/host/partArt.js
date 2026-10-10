@@ -95,6 +95,13 @@ const DRAW = {
     drawRam(g, { x: 0 }, 0, { lw: 16, trim: RED });
     g.restore();
   },
+  krakenBeak(g) { // the trophy: the ram prow in bone and purple (weaponsArt.js drawRam, art: 'kraken')
+    g.save(); g.translate(50, 55); g.rotate(-0.33); g.scale(0.15, 0.15); g.translate(-130, 0);
+    g.fillStyle = WOOD; g.strokeStyle = INK(); g.lineWidth = 15; g.lineJoin = 'round';
+    g.fillRect(-200, -24, 90, 44); g.strokeRect(-200, -24, 90, 44);
+    drawRam(g, { x: 0 }, 0, { lw: 16, art: 'kraken' });
+    g.restore();
+  },
   searchlight(g, { filled, line }) {
     g.fillStyle = 'rgba(255,238,160,0.55)'; g.beginPath(); g.moveTo(52, 46); g.lineTo(98, 14); g.lineTo(98, 78); g.closePath(); g.fill(); // the beam
     filled(WOOD_DARK, () => g.rect(24, 62, 12, 24)); line([[16, 88], [44, 88]], 5);

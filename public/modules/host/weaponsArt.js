@@ -185,7 +185,9 @@ export function drawChute(ctx, gun, time) {
 // each one adds a dent, a scratch and soot), lw: the ink width }. The same drawing is the little picture in the build tray (partArt.js) at a smaller scale.
 const SCUFFS = [[318, -22, 0.6], [180, 24, -0.4], [352, 9, 0.2], [246, -30, -0.7], [128, 12, 0.5], [290, 30, -0.2]]; // (x, y, slant of each landed ram's dent and scratch)
 export function drawRam(ctx, r, deckY, o = {}) {
-  const R = config.RAM, T = R.TIP, H = R.HALF, lw = o.lw || 5.5, trim = o.trim || RED, hits = Math.min(R.SCUFF_MAX, o.hits || 0);
+  const K = o.art === 'kraken'; // the KRAKEN BEAK trophy (partsShop.js): the same ram prow in bone and purple, with a dark horn on the point
+  const PAL = K ? { strap: '#5c3a4c', spike: '#e8dcc0', plate: '#e3d6b6', shade: '#b9a77f', cap: '#3a2430', collar: '#6a4a5a', band: '#a98fa0', trim: '#7a3a5a' } : { strap: '#5a6065', spike: '#3f4348', plate: '#76808a', shade: '#58606a', cap: BRASS, collar: '#464b52', band: BRASS, trim: RED };
+  const R = config.RAM, T = R.TIP, H = R.HALF, lw = o.lw || 5.5, trim = K ? PAL.trim : o.trim || RED, hits = Math.min(R.SCUFF_MAX, o.hits || 0);
   const TOP = []; // the upper edge of the beak, collar to point: a sleek swoop (the lower edge is its mirror)
   for (let i = 0; i <= 28; i++) { const t = i / 28, u = 1 - t; TOP.push([u * u * 50 + 2 * t * u * (50 + (T - 50) * 0.5) + t * t * T, -(u * u * H + 2 * t * u * H * 0.42)]); }
   const edge = (x) => { // half the height of the beak at x
@@ -202,13 +204,13 @@ export function drawRam(ctx, r, deckY, o = {}) {
   ctx.lineCap = 'round';
   // the straps over the hull's nose, behind the collar
   for (const s of [-1, 1]) {
-    ctx.fillStyle = '#5a6065';
+    ctx.fillStyle = PAL.strap;
     ctx.beginPath(); ctx.rect(-150, s < 0 ? -H + 2 : H - 18, 130, 16); ctx.fill(); ctx.stroke();
     for (let x = -136; x < -30; x += 30) rivet(x, s < 0 ? -H + 10 : H - 10, 3.4);
   }
   // the spikes, three on each side leaning forward
   for (const s of [-1, 1]) for (const x of [136, 226, 316]) {
-    ctx.fillStyle = '#3f4348';
+    ctx.fillStyle = PAL.spike;
     ctx.beginPath();
     ctx.moveTo(x - 15, s * edge(x - 15));
     ctx.lineTo(x + 38, s * (edge(x) + 40));
@@ -219,12 +221,12 @@ export function drawRam(ctx, r, deckY, o = {}) {
   }
   // the beak: iron plate with the lower half in shade
   body();
-  ctx.fillStyle = '#76808a';
+  ctx.fillStyle = PAL.plate;
   ctx.fill();
   ctx.save();
   body();
   ctx.clip();
-  ctx.fillStyle = '#58606a'; // shade under
+  ctx.fillStyle = PAL.shade; // shade under
   ctx.fillRect(0, 6, T + 10, H);
   ctx.fillStyle = 'rgba(255,255,255,0.26)'; // light along the top
   ctx.beginPath(); TOP.forEach(([x, y]) => ctx.lineTo(x, y + 13)); for (let i = TOP.length - 1; i >= 0; i--) ctx.lineTo(TOP[i][0], TOP[i][1] + 5); ctx.closePath(); ctx.fill();
@@ -238,7 +240,7 @@ export function drawRam(ctx, r, deckY, o = {}) {
   for (const x of [200, 290]) { ctx.beginPath(); ctx.moveTo(x, -H); ctx.lineTo(x, H); ctx.stroke(); }
   ctx.strokeStyle = config.INK;
   for (const x of [80, 134, 178, 222, 270, 310]) for (const f of [-0.62, 0, 0.62]) if (Math.abs(f * edge(x)) < edge(x) - 7) rivet(x, f * edge(x), 3.8);
-  ctx.fillStyle = BRASS; // the cap on the point, with a seam
+  ctx.fillStyle = PAL.cap; // the cap on the point, with a seam
   ctx.fillRect(T - 90, -H, 92, 2 * H);
   ctx.fillStyle = 'rgba(255,255,255,0.35)';
   ctx.fillRect(T - 90, -H, 92, 10);
@@ -268,9 +270,9 @@ export function drawRam(ctx, r, deckY, o = {}) {
   body();
   ctx.stroke();
   // the collar, bolted over the nose
-  ctx.fillStyle = '#464b52';
+  ctx.fillStyle = PAL.collar;
   ctx.beginPath(); ctx.roundRect(-34, -H - 10, 96, 2 * H + 20, 12); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = BRASS;
+  ctx.fillStyle = PAL.band;
   ctx.beginPath(); ctx.rect(46, -H - 10, 16, 2 * H + 20); ctx.fill(); ctx.stroke();
   ctx.fillStyle = 'rgba(255,255,255,0.18)';
   ctx.fillRect(-28, -H - 4, 70, 9);

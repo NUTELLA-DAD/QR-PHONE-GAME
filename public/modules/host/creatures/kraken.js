@@ -72,3 +72,12 @@ export function krakenMouth(body, secs = config.CREATURES.KRAKEN.MOUTH.OPEN_FOR)
   if (body.puppet) body.puppet.closeAt = body.key + 1 + Math.max(1, Math.round(secs * body.stepFps));
 }
 export const stepKraken = stepBody;
+
+// ---- THE FIGHT (BOSSES.md 2.1, C.3): what the Kraken says in each phase. The runner is creatureFight.js; the numbers (thresholds, paces, windows) are config.CREATURES.PHASE / MOUTH / DIVE / TOW_ROCK. ----
+export const KRAKEN_PHASES = {
+  1: { name: 'IT RISES', banner: null, hint: 'Slaps and single grabs. The beak gapes on a roar: bombs in!' },
+  2: { name: 'IT GRABS', banner: 'IT GRABS!', hint: 'Grabs as many as the crew can bear, and lunges up from below: climb!' },
+  3: { name: 'EXHAUSTED', banner: "IT'S EXHAUSTED - STRIKE THE HEART!", hint: 'Half out of the water: board it, harpoon it onto the rocks, or hold on when it dives.' },
+};
+export const krakenPhaseName = (n) => (KRAKEN_PHASES[n] || KRAKEN_PHASES[1]).name;
+export const KRAKEN_MOUTH_TEXT = 'MOUTH OPEN - DROP BOMBS!';

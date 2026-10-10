@@ -9,7 +9,8 @@ import { toWorldX, toWorldY, aimToShip, aimToWorld } from './pose.js';
 import { solidAt } from './maps.js';
 import { typedSolution } from './gunTypes.js';
 import { flameTargets, AIR_KINDS } from './flame.js';
-import { creatureTargets } from './creatureSystem.js'; // (a giant creature's living parts: C.1)
+import { creatureTargets, creatureTowTargets } from './creatureSystem.js'; // (a giant creature's living parts: C.1)
+import { towTarget, forcedSkip } from './creatureFight.js'; // (C.3: the harpoon may aim at the exhausted creature; the bots' dev flag FORCE_WIN)
 
 export const SHELL_SPEED = config.GUNS.SHELL_SPEED;
 export const SHELL_LIFE = config.GUNS.SHELL_LIFE;
@@ -132,10 +133,11 @@ export function bestTarget(state, gun) {
   const order = { flier: -2, cable: -1, bomb: 0, rocket: 1, saw: 1.5, laid: 1.8, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rivalGun: 8, rivalBag: 8.4, rivalCore: 8.8, rival: 9.2, boarder: 0.4, rivalCrew: 7.8, rivalDeck: 9.3 };
   let best = null;
   // (a flamethrower burns what is within a few hundred px: the sky's small fry, boarders on the decks, and the nearest bits of a hostile ship - flame.js - not her middle)
-  for (const t of gun.type === 'flame' ? [...targets(state).filter((u) => AIR_KINDS.has(u.kind)), ...flameTargets(state, mainShip(state), gun)] : targets(state)) {
+  for (const t of gun.type === 'flame' ? [...targets(state).filter((u) => AIR_KINDS.has(u.kind)), ...flameTargets(state, mainShip(state), gun)] : gun.type === 'harpoon' ? [...targets(state), ...creatureTowTargets(state)] : targets(state)) {
     if (t.kind === 'flier' && gun.type !== 'flak') continue; // (only flak shells burst on a man in the air)
     if (t.kind === 'laid' && (gun.type === 'mortar' || gun.type === 'harpoon')) continue; // (a lob is no way to hit a mine, and a harpoon is for ships)
-    if (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship') continue;
+    if (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship' && !towTarget(state.creature, t)) continue; // (...and for the exhausted creature)
+    if (t.kind === 'creaturePart' && forcedSkip(state.creature, t.part, gun.type)) continue; // (dev flag: the bots hold their fire so that the fight can only end one way)
     const angle = solution(state, gun, t);
     if (angle === null) continue;
     const base = (u) => (u.rank != null ? u.rank : order[u.kind]); // (a creature's part ranks by what it is: an open beak, a lit eye, a limb)
@@ -153,7 +155,7 @@ export function assistAim(state, gun, wanted, maxAngle, strength) {
   let best = null;
   const SL = config.SEARCHLIGHT;
   for (const t of targets(state)) {
-    if ((t.kind === 'flier' && gun.type !== 'flak') || (t.kind === 'laid' && gun.type === 'mortar') || (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship')) continue;
+    if ((t.kind === 'flier' && gun.type !== 'flak') || (t.kind === 'laid' && gun.type === 'mortar') || (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship' && !towTarget(state.creature, t))) continue;
     const angle = solution(state, gun, t);
     if (angle === null) continue;
     const spotted = isSpotted(t.obj); // (a spotted target is easier to lock onto: wider reach, counts as closer)

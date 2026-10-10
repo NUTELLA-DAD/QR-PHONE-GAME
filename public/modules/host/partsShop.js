@@ -178,6 +178,15 @@ function nestCandidates(parts, L) {
 // ---- the catalogue -----------------------------------------------------------------------------------------------------------------------
 // id            the key of config.PARTS_SHOP.PRICES    group  who finds it cheaper (crew size) - 'engine' small crews, 'station' big ones
 // blurb         the one phone line: what it does, and the catch    allowed(parts, owned)  the v1 limits    cands(parts, L)  the places    w(ctx)  how often it is offered
+function krakenBeakCands(parts, L) {
+  const mark = (ps) => ps.map((q) => (q.part === 'ramProw' ? { ...q, art: 'kraken' } : q));
+  const iron = parts.find((q) => q.part === 'ramProw');
+  if (iron) {
+    const d = L.platforms.find((q) => q.id === iron.p);
+    return [{ x: iron.x, y: d ? d.y : 0, where: `${whereOn(L, iron.p, iron.x)}, in place of the iron prow`, ghost: { x0: iron.x - 60, x1: iron.x + 90, y0: (d ? d.y : 0) - 60, y1: (d ? d.y : 0) + 60 }, apply: mark }];
+  }
+  return fromPalette('ramProw', { ghost: (s) => ({ x0: s.x - 60, x1: s.x + 90, y0: s.y - 60, y1: s.y + 60 }) })(parts, L).map((c) => ({ ...c, apply: (ps) => mark(c.apply(ps)) }));
+}
 const engines = (p) => count(p, (q) => q.part === 'engine');
 const stationsOf = (p, kind) => count(p, (q) => q.part === 'station' && q.kind === kind);
 export const CATALOGUE = [
@@ -203,6 +212,9 @@ export const CATALOGUE = [
   { id: 'gun_flame', name: 'Flamethrower', icon: '\u{1F525}', group: 'station', pic: 'gun_flame', get price() { return config.GUN_TYPES.flame.PRICE; }, blurb: 'A cone of fire a few hundred px long: lights wooden decks, burns crew, gasbags, bats and boarders. Eats steam and coal and overheats. Mind your own coal.', allowed: (p) => !!config.GUN_TYPES.SHOP && count(p, (q) => q.part === 'gun' && q.gtype === 'flame') < 2 && count(p, (q) => q.part === 'gun') < PS().GUNS_MAX, cands: fromPalette('gun_flame'), w: () => 0.55 },
   { id: 'mineLayer', name: 'Mine layer', icon: '\u{1F4A3}', group: 'station', pic: 'mineLayer', blurb: 'A chute in the belly: drop floating mines behind you. They go off against ANY ship that touches them - yours too.', allowed: (p) => !!config.MINEFIELD.SHOP && count(p, (q) => q.part === 'gun' && q.gtype === 'mines') < 1, cands: fromPalette('mineLayer'), w: () => 0.55 },
   { id: 'ramProw', name: 'Ram prow', icon: '\u{1F528}', group: 'frame', pic: 'ramProw', blurb: 'A reinforced iron nose: a ram hurts the other ship far more than yours.', allowed: (p) => !!config.RAM.SHOP && !p.some((q) => q.part === 'ramProw'), cands: fromPalette('ramProw', { ghost: (s) => ({ x0: s.x - 60, x1: s.x + 90, y0: s.y - 60, y1: s.y + 60 }) }), w: () => 0.5 },
+  // The KRAKEN BEAK (C.3): the trophy for slaying a giant Kraken, offered free at the next dock (simulation.js trophyCard, never in the random pool: allowed is false). It IS a ram prow (the same part, the same rules
+  // and weight) with another look: the part carries art: 'kraken', and weaponsArt.js drawRam draws the beak instead of the iron wedge. A ship that has an iron prow gets the beak in its place.
+  { id: 'krakenBeak', name: 'Kraken Beak', icon: '\u{1F419}', group: 'frame', pic: 'krakenBeak', trophy: true, blurb: "The Kraken's own beak, bolted on as a ram prow: a trophy. It rams like the iron one.", allowed: () => false, cands: krakenBeakCands, w: () => 0 },
   { id: 'dropHatch', name: 'Cargo drop hatch', icon: '\u{1F573}️', group: 'frame', pic: 'dropHatch_2', blurb: 'Trapdoors in a deck with a lever: open them to drop crates on a ship below, dump weight when she is going down, tip raiders out. Anyone standing on it falls.', allowed: (p) => !!config.HATCH.SHOP && count(p, (q) => q.part === 'dropHatch') < 2, cands: (p, L) => [2, 1, 3].flatMap((n) => fromPalette(n === 1 ? 'dropHatch' : 'dropHatch_' + n, { ghost: (s) => ({ x0: s.hatch[0], x1: s.hatch[1], y0: s.y - 50, y1: s.y + 30 }) })(p, L)), w: () => 0.45 },
   { id: 'ballast', name: 'Ballast', icon: '⚖️', group: 'frame', pic: 'ballast', blurb: 'Sandbags to trim her level. Cheap, dense, and heavy.', allowed: (p) => count(p, (q) => q.part === 'ballast') < 6, cands: (p, L) => [...fromPalette('ballast')(p, L), ...fromPalette('ballast_hang')(p, L)], w: (c) => (Math.abs(c.sum.deg) >= config.BALANCE.WARN_PX * config.BALANCE.DEG_PER_PX ? 4 : 0.5) },
   { id: 'ladder', name: 'Ladder', icon: '\u{1FA9C}', group: 'frame', pic: 'ladder', blurb: 'Another way between two decks: shorter walks.', allowed: () => true, cands: fromPalette('ladder'), w: () => 0.6 },

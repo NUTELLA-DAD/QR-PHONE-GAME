@@ -5,7 +5,7 @@ import { createThreats } from './threats.js';
 import { createCourse, inRock } from './course.js';
 import { createSquadrons } from './squadrons.js';
 import { createSpecials } from './specials.js';
-import { createCreatureSystem, creatureAlive } from './creatureSystem.js';
+import { createCreatureSystem } from './creatureSystem.js';
 import { createGunship } from './gunship.js';
 import { createGunshipShip } from './gunshipShip.js';
 import { createHijack } from './hijack.js';
@@ -410,7 +410,7 @@ export function createSimulation() {
     tp.bossOk = tp.phase === 'build' || (tp.phase === 'calm' && tp.el > PC.CALM * 0.5); // (the boss never arrives in the middle of a set piece or straight after one)
     if (state.gunship) tp.gunshipEnd = tp.mt; // (the gap counts from when she is gone)
     // The mission boss is its own big moment: it holds the peak until it is gone, then the calm comes. (A giant creature counts as the boss.)
-    if (state.boss || creatureAlive(state)) {
+    if (state.boss || state.creature) { // (a creature that is dying still counts: the calm, the supply drop and its banner wait until it has sunk, so the final banner can be read)
       if (tp.phase !== 'peak' || tp.kind !== 'boss') {
         tp.phase = 'peak';
         tp.kind = 'boss';
@@ -517,7 +517,7 @@ export function createSimulation() {
     const M = modeInfo(state.mode);
     state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0,
       mode: state.mode, key: sessionKey(), daily: daily && { key: daily.key, name: daily.name }, voyageNo: 1, voyages: M.voyages, base: 0, rival: M.rival,
-      build: null, parts: [], lastPart: null, lost: [] }; // (build: this voyage's ship as a parts list; parts: what the crew has bought, newest last: { id, name, names, bag }; lastPart: the card of the last dock; lost: parts that broke off in flight and are not rebuilt yet, oldest first, S.5i)
+      build: null, parts: [], lastPart: null, lost: [], trophy: null }; // (trophy: a slain creature's part card still to be offered at a dock, config.CREATURES.REWARD; build: this voyage's ship as a parts list; parts: what the crew has bought, newest last: { id, name, names, bag }; lastPart: the card of the last dock; lost: parts that broke off in flight and are not rebuilt yet, oldest first, S.5i)
     const start = state.startBuild && BUILDS[state.startBuild];
     state.run.build = copyData(start || (prevLost ? prevLost.before : layout.parts) || BUILDS.classic);
     if (start && main.buildId !== state.startBuild) fitShip(state.run.build, state.startBuild); // (a new voyage starts with the start build, whatever the last one grew into)
@@ -566,9 +566,9 @@ export function createSimulation() {
     environment: stop.play,
     kind: stop.kind,
     danger: stop.danger,
-    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship },
+    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship) }, // (lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one)
     lengthMul: modeInfo(state.run.mode).lengthMul,
-    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
+    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE KRAKEN' : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
   });
   const firstMission = () => missionOpts(curStop());
 
@@ -623,6 +623,10 @@ export function createSimulation() {
     if (cr && cr.dying && !cr.paid) { // a giant creature that sank: the boss reward, times config.CREATURES.REWARD_MUL
       cr.paid = true;
       addSalvage(SV.BOSS * config.CREATURES.REWARD_MUL, 'boss', cr.name + ' slain!');
+      const RW = config.CREATURES.REWARD; // (the spoils: the hull and every gasbag patched, and the trophy part card at the next dock)
+      state.ship.hull = Math.min(100, state.ship.hull + RW.HULL);
+      for (const b of state.bags) b.gas = Math.min(100, b.gas + RW.GAS);
+      if (state.run) state.run.trophy = RW.TROPHY;
     }
   };
 
@@ -735,6 +739,17 @@ export function createSimulation() {
     return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: found ? 0 : partPrice(e, run.parts.length, crewHeads(state)),
       derelict: found, badge: found ? 'FREE: found in a wreck' : 'NEW PART' + (offer.fit.hint ? ': ' + offer.fit.hint : ''), rec: offer.fit.score >= YD.REC.MIN, choices: offer.choices, now: offer.base.sum, baseWarns: offer.base.res.warns, spots: offer.choices.length }; // (rec: it answers what she lacks, partsShop.js fitOf: the tag says what, the bots vote for it more often)
   };
+  // The TROPHY of a slain creature (partsShop.js CATALOGUE 'krakenBeak'): a free part card at the next dock, until the crew takes it (a ship with a ram prow gets the beak in its place).
+  const trophyCard = () => {
+    const run = state.run;
+    if (!state.startBuild || !run.trophy || (run.lost && run.lost.length)) return null;
+    const offer = offerPart(run.build, { only: run.trophy });
+    if (!offer) return null;
+    const e = offer.entry;
+    state.yard.sum = offer.base.sum;
+    return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: 0, trophy: true, badge: 'TROPHY: from the Kraken',
+      choices: offer.choices, now: offer.base.sum, baseWarns: offer.base.res.warns, spots: offer.choices.length };
+  };
   const persistBuild = () => { // the run's ship, kept in the voyage save (versioned, tolerant: voyage.js)
     const run = state.run;
     if (!run || !state.startBuild) return;
@@ -748,6 +763,7 @@ export function createSimulation() {
     run.build = c.parts;
     fitShip(run.build, 'yard');
     run.parts.push({ id: o.entry, name: o.baseName, names: newModules(before, moduleNames(layout)), bag: o.entry === 'gasbag' });
+    if (o.trophy) run.trophy = null; // (the trophy is taken)
     Object.assign(state.yard, { built: { t: YD.BUILT_STAMP, name: o.baseName, letter: c.letter, where: c.where }, newPart: { name: o.baseName.toUpperCase(), x: c.x, y: c.y, t: 0 }, hold: true });
     state.yard.sum = summaryOf(validate(run.build));
     persistBuild();
@@ -795,6 +811,8 @@ export function createSimulation() {
     if (gasCard) offers.push({ id: gasCard.id, kind: 'repair', name: gasCard.name, icon: gasCard.icon, desc: gasCard.desc, cost: gasCard.cost, gas: gasCard.to, bag: gasCard.bag });
     if (needsCoal()) offers.push({ id: 'repair-coal', kind: 'repair', name: 'Coal and Shells', icon: '⛏️', desc: 'Stoke the boiler, fill every gun and the bomb bay.', cost: SH.REPAIR_COAL });
     (state.run.lost || []).forEach((e, k) => offers.push(rebuildCard(e, k))); // (S.5i: a card for each time parts broke off - mending an older one mends the newer ones too)
+    const trophy = trophyCard();
+    if (trophy) offers.push(trophy);
     const part = partCard();
     if (part) offers.push(part);
     const open = UPGRADES.filter((u) => u.id !== 'spare-parts' && (state.upgrades[u.id] || 0) < u.max);
@@ -848,7 +866,7 @@ export function createSimulation() {
     const options = stop.next.map((id) => {
       const s = stopById(state.run.voyage, id);
       const env = envInfo(s.env);
-      return { id, kind: 'stop', name: stopName(s), icon: s.flagship ? '🚩' : env.icon, desc: `${VY.KIND_NAMES[s.kind] || s.kind} - ${'💀'.repeat(s.danger)} - reward ${s.reward}`, danger: s.danger, reward: s.reward, envName: env.name, color: env.color, kindName: VY.KIND_NAMES[s.kind] };
+      return { id, kind: 'stop', name: stopName(s), icon: s.flagship ? '🚩' : s.lair ? config.CREATURES.LAIR.ICON : env.icon, desc: `${s.lair ? config.CREATURES.LAIR.LABEL + ': ' : ''}${VY.KIND_NAMES[s.kind] || s.kind} - ${'💀'.repeat(s.danger)} - reward ${s.reward}`, danger: s.danger, reward: s.reward, envName: env.name, color: env.color, kindName: VY.KIND_NAMES[s.kind], lair: !!s.lair };
     });
     openVote({ kind: 'route', title: 'WHERE TO NEXT?', options, t: VY.ROUTE_TIME });
   };

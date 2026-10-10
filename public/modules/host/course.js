@@ -15,6 +15,7 @@ import { toWorldX, toWorldY, toShipX, toShipY, pivotOf, driveVx } from './pose.j
 import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
 import { creatureBomb } from './creatureSystem.js'; // (a bomb that meets a giant creature: C.1)
+import { inFunnel } from './creatureFight.js'; // (C.3: the open beak gapes up through the mantle: the aiming ring lands in it)
 import { pickEnvironment } from './environments.js';
 import { makeMap, buildArenaMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
 import { applyForce } from './forces.js';
@@ -883,6 +884,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     const b = { x, y, vx: ship.pose.vx, vy: 60 };
     for (let i = 0; i < 300; i++) {
       stepBomb(b, 1 / 30);
+      if (state.creature && inFunnel(state.creature, b.x, b.y)) return { x: b.x, y: b.y }; // (the open beak: the ring shows where it comes down)
       if (course.map ? inRock(state, b.x, b.y) : b.y >= groundAt(course, b.x)) return { x: b.x, y: course.map ? b.y : groundAt(course, b.x) };
     }
     return null;
@@ -981,7 +983,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         state.ev.warnText = 'STUCK FAST! A TUG HAULS YOU CLEAR';
       }
     }
-    if (map.open) {
+    if (map.open && !map.lair) {
       // Open sky: knock out every outpost (all its guns), nearest first.
       for (const o of map.outposts) if (!o.done && course.turrets.filter((t) => t.outpost === map.outposts.indexOf(o)).every((t) => t.dead)) {
         o.done = true;
@@ -1017,13 +1019,24 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     }
     const d = distToGoal(map, sx, sy);
     if (Number.isFinite(d)) course.progress = Math.max(0, Math.min(0.99, 1 - d / Math.max(1, map.startDist)));
-    // At the Flagship the beacon only counts once she has been sunk.
+    // At the Flagship the beacon only counts once she has been sunk. A lair is the same: its goal is where she hovers to fight, and the stop is done when the giant creature is dead (it sets bossDownLap too).
     const flagshipAlive = course.stop && course.stop.flagship && state.bossDownLap !== course.lap;
-    if (flagshipAlive && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS && !(state.ev.warn > 0)) {
+    const lair = !!map.lair && Number.isFinite(state.env && state.env.seaY); // (a lair flown with no sea - a tool forcing another environment - is an ordinary mission: the creature cannot come)
+    const lairAlive = lair && state.bossDownLap !== course.lap;
+    if ((flagshipAlive || lairAlive) && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS && !(state.ev.warn > 0)) {
       state.ev.warn = 2;
-      state.ev.warnText = 'SINK THE FLAGSHIP FIRST!';
+      state.ev.warnText = lairAlive ? 'SLAY THE KRAKEN FIRST!' : 'SINK THE FLAGSHIP FIRST!';
     }
-    if (!course.done && !flagshipAlive && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS) {
+    if (lair && !course.done && !lairAlive && !state.creature) { // (it is dead and has sunk out of sight)
+      course.done = true;
+      state.ship.hull = Math.min(100, state.ship.hull + K.CHECKPOINT_REPAIR);
+      state.ev.warn = 4;
+      state.ev.warnText = 'THE KRAKEN IS SLAIN! MISSION ' + course.lap + ' COMPLETE';
+      course.pendingNext = true;
+      if (onMarker) onMarker({ kind: 'home', lap: course.lap + 1 });
+      return;
+    }
+    if (!course.done && !flagshipAlive && !lair && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS) { // (a lair is done only when its creature has sunk, above)
       course.done = true;
       state.ship.hull = Math.min(100, state.ship.hull + K.CHECKPOINT_REPAIR);
       state.ev.warn = 4;
@@ -1068,6 +1081,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       const p = mapPlan(state, 0.5);
       const h = p.dx > 300 ? 'AHEAD' : p.dx < -300 ? 'BEHIND - COME ABOUT!' : ''; // (p.dx: how far ahead of her bow the way goes; behind her, turning round is quicker than backing up)
       const v = p.dy < -250 ? 'UP (pump the gas!)' : p.dy > 250 ? 'DOWN (vent the gas!)' : '';
+      if (course.map.lair) return h || v ? "Way to the Kraken's lair: " + [v, h].filter(Boolean).join(' and ') : 'The lair! Keep her over the water, clear of the sea.';
       return h || v ? (course.map.open ? 'Next outpost: ' : 'Way to the beacon: ') + [v, h].filter(Boolean).join(' and ') : course.map.open ? 'Outpost below - guns and bombs!' : '';
     }
     const w = altWindow(state, 2.5);
@@ -1200,7 +1214,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   // the look/hazards to use ('skyisles' for now); the map is also tagged with it (map.environment).
   function startMission(n, opts = {}) {
     const MP = config.MAPS;
-    const kind = MP.FORCE_KIND || opts.kind || MP.KINDS[(n - 1) % MP.KINDS.length];
+    const kind = opts.stop && opts.stop.lair ? 'lair' : MP.FORCE_KIND || opts.kind || MP.KINDS[(n - 1) % MP.KINDS.length]; // (a lair stop: the Kraken's sea, maps.js buildLairMap, whatever the tools force)
     const map = opts.arena ? buildArenaMap(course.rand, layout, opts.arena, opts.arenaGap) : makeMap(kind, n, course.rand, opts.lengthMul || 1, layout); // (Versus: the big arena sky, maps.js buildArenaMap)
     map.environment = pickEnvironment(opts.environment); // 'skyisles' (the original look and rules), 'frost', 'ember'...
     const d = Math.min(1, (n - 1) / 4);
@@ -1230,7 +1244,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         rocket: course.rand() < K.ROCKET_SHARE * d + 0.1,
         outpost: t.outpost,
       })),
-      target: map.open ? map.outposts[0] : null,
+      target: map.open && !map.lair ? map.outposts[0] : null,
       stationGun: null,
       stuckBest: null,
       stuckT: 0,

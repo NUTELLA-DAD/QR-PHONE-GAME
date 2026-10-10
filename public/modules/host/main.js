@@ -53,7 +53,8 @@ fitCanvas();
 {
   const c = new URLSearchParams(location.search).get('creature');
   if (c === 'kraken') { config.CREATURES.DEV_SPAWN = c; config.ENVIRONMENTS.FORCE = 'sea'; } // (the Kraken lives at the water line: the mission is flown in the Sunken Sea)
-  if (new URLSearchParams(location.search).get('heart') === '1') config.CREATURES.BOARD.HEART_EXPOSED = true; // (C.2: host.html?creature=kraken&heart=1 exposes the heart so STRIKE THE HEART can be tried; C.3 decides when it is really exposed)
+  if (new URLSearchParams(location.search).get('heart') === '1') config.CREATURES.BOARD.HEART_EXPOSED = true; // (C.2: host.html?creature=kraken&heart=1 exposes the heart so STRIKE THE HEART can be tried; C.3 decides when it is really exposed: phase 3)
+  if (new URLSearchParams(location.search).get('lair') === '1') { config.CREATURES.DEV_LAIR = true; config.ENVIRONMENTS.FORCE = 'sea'; } // (C.3: host.html?lair=1 makes every stop a Kraken's lair, flown in the Sunken Sea)
 }
 const simulation = createSimulation();
 if (playtest && playtest.mode === 'coop') BUILDS.playtest = playtest.parts; // (the build page's ship: the voyage starts with it, and so does every new voyage)
@@ -280,7 +281,7 @@ function frame(now) {
   lastTime = now;
   if (!paused) {
     // Fixed timestep: run the simulation in exact STEP slices, however fast or slow frames arrive.
-    acc += real * ((simulation.state.match && simulation.state.match.slow) || 1); // (Versus: the finale of a round runs in slow motion)
+    acc += real * ((simulation.state.match && simulation.state.match.slow) || simulation.state.slow || 1); // (Versus: the finale of a round runs in slow motion; co-op: so does the last blow on a giant creature, creatureSystem.js)
     let steps = 0;
     while (acc >= STEP && steps < config.LOOP.MAX_STEPS) {
       guard('update', () => simulation.update(STEP));

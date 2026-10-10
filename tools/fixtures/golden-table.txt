@@ -1,6 +1,6 @@
 GOLDEN behaviour baseline captured 2026-10-10 (node tools/buildsim.mjs --snapshot-golden --force to re-capture)
-voyagesim normal: 8/10 victories, median 37.7 min
-voyagesim easy: 7/10 victories, median 33.3 min
+voyagesim normal: 9/10 victories, median 33.6 min
+voyagesim easy: 8/10 victories, median 30.9 min
 botsim 10 min, 8 bots: run          missions  min/mission   hull  kills wrecks hauls blowouts contacts tows
   network-1                            2       3.2      87.4       109         0        56         0       301         1
   network-2                            2       3.4      95.8       149         0        45         0       124         0

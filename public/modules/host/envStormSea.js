@@ -84,6 +84,7 @@ export function seaLevel(map, L = config.ENVIRONMENTS.sea.SEA) {
 function layoutSea(map, F) {
   const y = seaLevel(map, F.SEA);
   const out = { spouts: [], survivors: [] };
+  if (map.lair) return out; // (a Kraken's lair: no waterspouts, no survivors - the creature is the hazard, and nobody dips the ship to the water for a rope)
   const open = (mx) => floorBelow(map, mx, y - 1) > y + 1; // water (no rock) under this x
   const W = map.W * map.CELL;
   const S = F.SPOUT;
