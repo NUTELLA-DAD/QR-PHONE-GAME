@@ -1363,19 +1363,22 @@ export function createRenderer({ ctx, state: world, canvas }) {
 
   // VERSUS, ships too far apart for even the widest view (camera.js splits it): the far ship in a framed PORTHOLE ("spyglass") over the bottom right - her own piece of sky, drawn again from her
   // position at about the main zoom - with her name and the distance on a plate under it. `I` = view.inset { cx, cy, zoom, x, y, w, h, ship } in canvas pixels.
-  const drawInset = (time, I) => {
+  // frameOnly (WP11, the 3D view): the picture inside is the 3D scene drawn by view3d/porthole.js into this rectangle, so only the frame and the plate are drawn here
+  const drawInset = (time, I, frameOnly = false) => {
     try {
       const T = I.ship && I.ship.team ? versusArt.team(I.ship.team.id) : { color: '#c9a85a', dark: '#6b4a32', name: 'SHIP' };
       const u = Math.max(0.7, canvas.height / 900); // the frame's furniture grows with the screen
       const r = 16 * u;
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.beginPath();
-      ctx.roundRect(I.x, I.y, I.w, I.h, r);
-      ctx.clip();
-      const sx = I.x + I.w / 2 - canvas.width / 2, sy = I.y + I.h / 2 - canvas.height / 2; // (the renderer centres its view on the canvas: shift it so the far ship sits in the middle of the porthole)
-      renderFrame(time, { cx: I.cx - sx / I.zoom, cy: I.cy - sy / I.zoom, zoom: I.zoom }, { layers: ['background', 'ship', 'effects'], inset: true }); // (clipped to the porthole; no HUD, no arrows)
-      ctx.restore();
+      if (!frameOnly) {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.beginPath();
+        ctx.roundRect(I.x, I.y, I.w, I.h, r);
+        ctx.clip();
+        const sx = I.x + I.w / 2 - canvas.width / 2, sy = I.y + I.h / 2 - canvas.height / 2; // (the renderer centres its view on the canvas: shift it so the far ship sits in the middle of the porthole)
+        renderFrame(time, { cx: I.cx - sx / I.zoom, cy: I.cy - sy / I.zoom, zoom: I.zoom }, { layers: ['background', 'ship', 'effects'], inset: true }); // (clipped to the porthole; no HUD, no arrows)
+        ctx.restore();
+      }
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.lineJoin = 'round';
@@ -2649,6 +2652,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   //                       'dark'        the darkness overlay (dark skies)
   //                       'over3d'      (the 3D view only; needs opts.p3 = view3d's hud3d) the crew's name labels, call-outs, progress bars and popups, projected over the 3D picture
   //                       'marks'       (3D view) only the lit-target brackets and the glowing eyes of the unlit, over the 3D picture; opts.dark3d = how dark the 3D scene is (0..1)
+  //                       'inset' / 'insetframe'  (3D view, Versus split) the far-ship porthole: 'inset' = the whole 2D one (Low tier), 'insetframe' = only its frame and plate over the 3D porthole (WP11)
   //                       'hud'         the co-op hull / steam / route panels and full-screen cards
   //                       'arrows'      lookout, gust and spotter arrows at the screen edge
   //                       'film'        the old-film look (off by default, config.STYLE)
@@ -2900,7 +2904,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       if (fleetN() > 1) fleet.drawEdgeArrows(world, { ...wv, zoom: view.zoom / pr }, width / pr, height / pr, view.clipped, time / 1000); // an arrow to every ship that is off screen
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
-    if (view.inset && has('ship') && fleetN() > 1 && !(opts && opts.inset)) drawInset(time, view.inset); // (Versus, ships too far apart: the porthole on the far one, over everything but the film)
+    if (view.inset && (has('ship') || has('inset') || has('insetframe')) && fleetN() > 1 && !(opts && opts.inset)) drawInset(time, view.inset, !(has('ship') || has('inset'))); // (Versus, ships too far apart: the porthole on the far one, over everything but the film. The 3D view asks for 'insetframe' (the frame only: the 3D porthole is the picture) or 'inset' (the whole 2D porthole, on the Low tier))
     lap('inset');
     if (has('film')) filmLook(time, width, height);
     lap('film');

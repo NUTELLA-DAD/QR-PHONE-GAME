@@ -103,7 +103,8 @@ export function createSky(scene, renderer) {
     const fovHalf = (cam.fov * Math.PI) / 360;
     cam.getWorldDirection(fwd);
     const pitchDown = Math.asin(clamp(-fwd.y, -1, 1));
-    const az = Math.atan2(cam.position.x - target.x, cam.position.z - target.z), frontal = Math.abs(az) < 0.22; // (the strips are flat pictures: they only look right from the front, so an orbiting viewer sees the sky alone)
+    const az = Math.atan2(cam.position.x - target.x, cam.position.z - target.z), frontal = Math.abs(az) < (cam.userData.cine ? 0.7 : 0.22); // (the strips are flat pictures: they only look right from the front, so an orbiting viewer sees the sky alone. WP11: during a cinematic yaw the strips turn to face the camera instead)
+    back.rotation.y = cam.userData.cine ? az : 0;
     STRIPS.forEach((s, i) => {
       const m = stripMeshes[i];
       m.visible = !!m.userData.on && frontal;

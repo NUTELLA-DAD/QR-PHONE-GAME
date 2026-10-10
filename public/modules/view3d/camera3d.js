@@ -13,26 +13,45 @@ export const ELEV = 0.12; // radians the camera looks down from
 const TAN_HALF = Math.tan((FOV * Math.PI) / 360);
 const TAN_ELEV = Math.tan(ELEV);
 const _t = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
 
 // view = the 2D camera's { cx, cy, zoom }; w, h = the pixel size that view was made for (the 2D canvas); returns { visW, visH, D, target } (target is a shared vector: copy it).
 // opts.zoom multiplies the distance (dev pages), opts.dy lifts the look-at point (world units), opts.skipPlace leaves the camera alone (orbit mode).
+// opts.cine (WP11, cinema.js; null = the plain gameplay lens, byte for byte the old path) = { active, az, elev, mul, dx, dy }: a cinematic offset. The camera swings round the look-at point by az (a YAW
+// about the vertical axis: the horizon stays level, there is never any roll), looks down elev radians more, stands mul times as far away, and the look-at point slides by (dx, dy) map pixels. The lens
+// stays sheared in height only (the look-at point stays in the middle of the picture), so with az = 0 the plane still maps 1:1 (just smaller by mul); with az != 0 the plane is seen at an angle: the 3D
+// picture really turns. Everything that reads the camera (hud3d, the sky, the beams) follows; the returned D, visW and visH already include mul.
 export function placeCamera(camera, view, w, h, opts = {}) {
   const zoom = Number.isFinite(view && view.zoom) && view.zoom > 0 ? view.zoom : 0.5;
   const cx = Number.isFinite(view && view.cx) ? view.cx : 800;
   const cy = Number.isFinite(view && view.cy) ? view.cy : 400;
   const px = Math.max(16, w || 1920), py = Math.max(16, h || 1080);
-  const visH = py / zoom, visW = px / zoom;
-  const D = Math.min(60000, visH / 2 / TAN_HALF / (opts.zoom || 1));
-  _t.set(cx, -cy + (opts.dy || 0), 0);
+  let visH = py / zoom, visW = px / zoom;
+  let D = Math.min(60000, visH / 2 / TAN_HALF / (opts.zoom || 1));
+  const cine = opts.cine && opts.cine.active && !opts.skipPlace ? opts.cine : null;
+  _t.set(cx + (cine ? cine.dx || 0 : 0), -(cy + (cine ? cine.dy || 0 : 0)) + (opts.dy || 0), 0);
   camera.updateProjectionMatrix(); // (resets any shear)
   camera.userData.lensShift = 0;
   if (!opts.skipPlace) {
-    camera.position.set(_t.x, _t.y + D * TAN_ELEV, D);
-    camera.quaternion.set(0, 0, 0, 1);
-    const e = camera.projectionMatrix.elements;
-    e[9] = -e[5] * TAN_ELEV; // shear: the look-at point (D below the camera's height * tan, D ahead) stays at the centre of the picture
-    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
-    camera.userData.lensShift = TAN_ELEV; // (world.js places its sky pictures by it)
+    if (cine) {
+      const mul = Math.max(0.5, Math.min(3, cine.mul || 1)), az = Math.max(-0.9, Math.min(0.9, cine.az || 0)), el = Math.max(0.02, Math.min(0.9, ELEV + (cine.elev || 0)));
+      const D2 = Math.min(60000, D * mul), tanE = Math.tan(el);
+      camera.position.set(_t.x + D2 * Math.sin(az), _t.y + D2 * tanE, D2 * Math.cos(az));
+      camera.quaternion.setFromAxisAngle(_up, az); // (a yaw only)
+      const e = camera.projectionMatrix.elements;
+      e[9] = -e[5] * tanE; // (the look-at point is straight ahead in the camera's vertical plane, D2 * tan(el) below its axis: the gameplay lens' shear, with this elevation)
+      camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+      camera.userData.lensShift = tanE;
+      const spread = mul * (1 + 0.5 * Math.abs(Math.sin(az))); // (more of the plane is seen when it is seen at an angle: the culling asks for a little more)
+      visH *= spread; visW *= spread; D = D2;
+    } else {
+      camera.position.set(_t.x, _t.y + D * TAN_ELEV, D);
+      camera.quaternion.set(0, 0, 0, 1);
+      const e = camera.projectionMatrix.elements;
+      e[9] = -e[5] * TAN_ELEV; // shear: the look-at point (D below the camera's height * tan, D ahead) stays at the centre of the picture
+      camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+      camera.userData.lensShift = TAN_ELEV; // (world.js places its sky pictures by it)
+    }
   }
   camera.updateMatrixWorld(true);
   return { visW, visH, D, target: _t };

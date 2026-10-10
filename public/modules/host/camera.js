@@ -171,7 +171,9 @@ export function createWorldCamera() {
         view.cy += (t.cy - view.cy) * k;
         // Zoom changes slowly (no pumping in and out), panning a little quicker.
         const yd = state.yard; // (the Shipwright's Yard: while the crew builds at the dock the zoom holds, then she grows into the picture slowly after cast off)
-        if (!ships.some((s) => s.pose.turn > 0) && !(yd && yd.hold)) view.zoom += (t.zoom - view.zoom) * (1 - Math.exp(-(yd && yd.pull > 0 ? C.PULL_SMOOTHING : C.ZOOM_SMOOTHING) * dt)); // (the zoom holds still while a ship comes about: no pumping while the picture is squashing)
+        // (WP11: no pumping while the 3D ship tips either: held in a tentacle's grip, or tipped past TIP_LOCK radians, the zoom only creeps (ZOOM_CREEP x as fast); the cap below still holds)
+        const tipping = ships.some((s) => Math.abs(finite(s.pose.pitch)) > (C.TIP_LOCK ?? 0.14) || (s.ship && s.ship.ctx && s.ship.ctx.creature && (s.ship.ctx.creature.grips || []).some((g) => g.ship === s.ship && (g.mode === 'wind' || g.mode === 'seize' || g.mode === 'hold'))));
+        if (!ships.some((s) => s.pose.turn > 0) && !(yd && yd.hold)) view.zoom += (t.zoom - view.zoom) * (1 - Math.exp(-(yd && yd.pull > 0 ? C.PULL_SMOOTHING : C.ZOOM_SMOOTHING) * (tipping ? C.ZOOM_CREEP ?? 0.2 : 1) * dt)); // (the zoom holds still while a ship comes about: no pumping while the picture is squashing)
         view.zoom = Math.max(t.minZoom, view.zoom); // (the cap holds even mid-glide)
         view.minZoom = t.minZoom;
         view.clipped = t.clipped;
