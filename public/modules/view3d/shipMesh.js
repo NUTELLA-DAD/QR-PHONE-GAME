@@ -194,7 +194,7 @@ export function buildShipModel(layout, opts = {}) {
         const fr = fires[i], q = fr && P[fr.d];
         f.visible = !!q;
         if (!q) return;
-        const k = fr.big ? 1.7 : 1, fi = Math.floor(t * 8 + fr.x * 0.013) % 4;
+        const k = fr.big ? 1.7 : 1, fi = ((Math.floor(t * 8 + fr.x * 0.013) % 4) + 4) % 4; // (fires left of x 0 gave a negative frame)
         f.position.set(X(fr.x), Y(q.y), FZ + 40);
         f.scale.setScalar(k);
         f.userData.tongues.forEach((tg, ti) => { const hh = [[1, 0.8, 1.1], [0.85, 1.15, 0.9], [1.1, 0.9, 0.8], [0.95, 1.05, 1.0]][fi][ti]; tg.scale.set(1, hh, 1); });
