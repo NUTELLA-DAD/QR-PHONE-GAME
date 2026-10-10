@@ -49,17 +49,18 @@ export function buildShipModel(layout, opts = {}) {
   try { asm = assemble(built.entries, ctx.mats); } catch (e) { // (never throw from drawing code: a ship with no static mesh is better than a frozen TV)
     fallbacks.push('assemble failed: ' + (e && e.message));
     console.warn('ship3d assemble', e);
-    asm = { group: new THREE.Group(), ranges: {}, layers: {}, tris: 0, geometry: null, mesh: null, mats: ctx.mats, setSide() {}, extract: () => new THREE.Group() };
+    asm = { group: new THREE.Group(), ranges: {}, layers: {}, tris: 0, geometry: null, mesh: null, mats: ctx.mats, setSide() {}, setCarves() {}, extract: () => new THREE.Group() };
   }
   content.add(asm.group);
+  try { asm.setCarves(ctx.carves); } catch (e) { console.warn('ship3d carves', e); }
   for (const d of built.dyn) {
     switch (d.role) {
       case 'gun': dyn.guns[d.name] = d.node; break;
       case 'lamp': dyn.lamps.push({ name: d.name, pivot: d.pivot, spot: d.spot, target: d.target, outer: d.outer, inner: d.inner, lens: d.lens, reach: d.reach, ll: d.ll, home: d.home, arc: d.arc }); break;
-      case 'bag': content.add(d.node); dyn.bags.push({ node: d.node, G: d.G, i: d.i }); break;
+      case 'bag': content.add(d.node); dyn.bags.push({ node: d.node, G: d.G, i: d.i, back: d.back || 0, baseX: d.baseX }); break;
       case 'engine': dyn.engines.push({ name: d.name, group: d.group, prop: d.prop, out: d.out, angle: d.angle }); break;
       case 'wheel': dyn.wheels.push(d.node); break;
-      case 'liftCage': dyn.liftCages.push(d.node); break;
+      case 'liftCage': dyn.liftCages.push({ node: d.node, lane: d.lane || 0 }); break;
       case 'sail': dyn.sails.push({ node: d.node, s: d.s }); break;
       case 'hatch': dyn.hatches.push({ n: d.n, left: d.left, right: d.right }); break;
       case 'cannon': dyn.cannons.push({ name: d.name, pivot: d.node, inner: d.inner, home: d.home }); break;
@@ -127,7 +128,7 @@ export function buildShipModel(layout, opts = {}) {
   let lastT = null;
   // ---- the per-frame update ---------------------------------------------------------------------------------------------------------------------------
   const model = {
-    root, pitchG, content, W, pv, X, Y, tris, fallbacks, layout: L, lights, dyn, enemy: !!opts.enemy, theme: T, ctx,
+    root, pitchG, content, W, pv, X, Y, tris, fallbacks, layout: L, lights, dyn, enemy: !!opts.enemy, theme: T, ctx, crewLane: ctx.crewLane,
     // WP5: the parts, by id. parts.get(key) = { key, kind, name, deck, x, x0, x1, dyn: [...], bounds }; ranges[key] = [{ layer, start, count }] into the one merged geometry.
     parts: built.parts, ranges: asm.ranges, assembled: asm,
     extractPart: (key) => asm.extract(key),
@@ -141,11 +142,16 @@ export function buildShipModel(layout, opts = {}) {
       const dt = lastT == null ? 0 : clamp(t - lastT, 0, 0.1);
       lastT = t;
       inkOn.value = look.toon && look.outlines ? 1 : 0; // (the ink is part of each mesh now: the look's outline switch is a uniform)
+      for (const lc of dyn.liftCages) lc.node.position.z = (asm.side || 1) * lc.lane; // (the lift stands on the camera's side, like the ladders)
       dyn.bags.forEach((bg) => {
         const bs = st.bags && st.bags[bg.i];
         const gas = bs ? bs.gas : st.ship ? st.ship.gas : 50;
         const g = clamp((Number.isFinite(gas) ? gas : 50) / 100, 0, 1);
         bg.node.scale.set(0.78 + 0.44 * g, 0.9 + 0.2 * g, 0.9 + 0.2 * g); // the swell: a SCALE from the gas level, never a vertex wobble
+        // fix_ship: the envelope rides `back` units behind the gondola in WORLD depth whichever way she faces (and through COME ABOUT): the offset (0, -back) in the world, turned back into the ship's own frame
+        const yw = root.rotation.y;
+        bg.node.position.x = (bg.baseX || 0) + bg.back * Math.sin(yw);
+        bg.node.position.z = -bg.back * Math.cos(yw);
       });
       if (decor) decor.update(t, opts.gunship && opts.gunship.intent);
       const guns = st.GUNS || {};

@@ -87,8 +87,8 @@ export function buildDeck(q, ctx) {
   const z0 = Math.max(...segs.map((s) => s[2]), 10);
   if (isNestRow(row)) { // the basket under the nest, with a rim
     const mid = (q.x0 + q.x1) / 2;
-    b.sphere(T.hullDark, X(mid), Y(q.y + 36), 0, (q.x1 - q.x0) / 2 + 6, 34, 100, 4, false, { tr: 'woodC' });
-    b.geo(T.rail, new THREE.TorusGeometry(1, 0.05, 6, 24), new THREE.Matrix4().compose(V(X(mid), Y(q.y + 6), 0), new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)), V((q.x1 - q.x0) / 2 + 4, 100, 1)), 1, { tr: 'woodC', uv: 'fit' });
+    b.sphere(T.hullDark, X(mid), Y(q.y + 36), 0, (q.x1 - q.x0) / 2 + 6, 34, 50, 4, false, { tr: 'woodC' }); // (a bowl under the nest, narrow in depth so the ropes down from it stand clear of it, fix_ship)
+    b.geo(T.rail, new THREE.TorusGeometry(1, 0.05, 6, 24), new THREE.Matrix4().compose(V(X(mid), Y(q.y + 6), 0), new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)), V((q.x1 - q.x0) / 2 + 4, 52, 1)), 1, { tr: 'woodC', uv: 'fit' });
   }
   if (row === 'helm') { // the wheelhouse: end walls, a back wall, a roof; glass facing the viewer's side
     const zh = z0, hh = 120, x0 = q.x0, x1 = q.x1, mx = (x0 + x1) / 2;

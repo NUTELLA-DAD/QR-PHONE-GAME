@@ -113,8 +113,8 @@ export function makeShipContext(layout, opts = {}) {
   const fallbacks = [];
   const ctx = {
     L, T, P, W, pv, X, Y, H, hx0, hx1, bags, opts, fallbacks, rowOf, isNestRow, KEEL_ROWS,
-    FZ: -W * 0.3, // the depth where fittings stand (crew walk in front of them, ladders behind)
-    laneZ: -W * 0.62, // ladders, ropes and poles
+    FZ: 0, // the depth where fittings stand: the MIDDLE of the gondola, so they look the same whichever way she faces (crew walk in front of them, on their lane, see crewLane)
+    carves: [], // fix_ship: the holes the shader cuts through floors, hull walls and the roof (ladder hatches, doorways): { box: [x0, y0, x1, y1, z0, z1] (content coordinates), walls (cut the hull walls whatever their z), side (0 always, +1 / -1: only while the camera is on that side) }
     mix: mixHex,
     platY: (d) => (P[d] ? P[d].y : 0),
     catwalk: P.find((q) => q.id === 'catwalk') || P.reduce((a, q) => (q.y < a.y ? q : a), P[0] || { y: 470 }),
@@ -140,6 +140,19 @@ export function makeShipContext(layout, opts = {}) {
     if (q.x1 > hx0 && q.x0 < hx1) out.push([Math.max(q.x0, hx0), Math.min(q.x1, hx1), q.outside ? W * 0.9 : z, !!q.outside]);
     if (q.x1 > hx1) out.push([Math.max(q.x0, hx1), q.x1, W * 0.5, true]);
     return out.filter((s) => s[1] - s[0] > 1);
+  };
+  // ---- depth lanes (fix_ship). z counts toward the camera: +z is the viewer's side when the ship faces right, -z when she faces left, so everything that must be seen is placed in CAMERA terms (a lane's number is
+  // positive; the builder puts one copy on each side of the ship in the 'neg' / 'pos' layers and the shader shows the one that is on the near side, see kit.js). The order from the camera: the near rail, the crew's
+  // lane, the ladders' lane, the fittings (the middle), the far wall with what hangs on it, and behind it all the gas envelope.
+  ctx.zHalfAt = (di, x) => { const q = P[di]; if (!q) return W * 0.5; const segs = ctx.deckSegs(q); const sg = segs.find((s2) => x >= s2[0] - 1 && x <= s2[1] + 1) || segs[0]; return sg ? sg[2] : W * 0.5; };
+  ctx.connLane = (c) => clamp(0.62 * Math.min(ctx.zHalfAt(c.top, c.xTop), ctx.zHalfAt(c.bottom, c.xBottom)), 28, W * 0.5); // where a ladder, rope, pole or stair stands (toward the camera, in front of the fittings)
+  // where a crewman stands on his deck (camera terms): in front of the ladders, inside the deck's width; a climber is on his ladder's lane
+  ctx.crewLane = (rec, h) => {
+    const C = L.connectors || [];
+    if (rec && rec.climb && rec.conn != null && C[rec.conn]) { const c = C[rec.conn]; return ctx.connLane(c) + (c.type === 'stairs' ? 0 : 16); }
+    const di = rec && rec.d != null ? rec.d : 0, zh = ctx.zHalfAt(di, rec && Number.isFinite(rec.x) ? rec.x : 0);
+    const lo = 0.62 * zh + 18, hi = Math.max(lo, zh - 12);
+    return lo + (hi - lo) * h;
   };
   // the rooms that hang a lantern: every other hull room, up to 4 (2 for the enemy)
   const hullRooms = (L.rooms || []).filter((r) => !r.outside && P[r.d] && !P[r.d].outside && ['main', 'lower'].includes(rowOf(P[r.d])));

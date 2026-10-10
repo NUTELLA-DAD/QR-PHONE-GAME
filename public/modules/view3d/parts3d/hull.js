@@ -204,6 +204,39 @@ function makeRudder(ctx, x, yTop, yBot) {
   return { role: 'rudder', key: 'hull', node: pivot };
 }
 
+// ---- the DOORWAYS (fix_ship). A hull deck (main / lower) that runs on past the end of the gondola (the stern and the bow) is the way out to the outriggers: the nav graph walks the crew straight through the end of the hull
+// there. The end of the hull is closed by the end plates, the slanted belly board and the far wall's lining, so the shader CARVES an opening through all of them (ctx.carves, kit.js), as high as a crewman with his
+// cap on, and an open frame stands round it: a post at each end and a lintel, on the far wall's plane (a copy on each side, only the far one shows, as the ladders do).
+function addDoors(b, ctx, H, th) {
+  const { P, W, X, T, rowOf, hx0, hx1 } = ctx, DOORH = 136;
+  const clampN = (v, a, c) => Math.max(a, Math.min(c, v));
+  const doors = [];
+  for (const q of P) {
+    if (q.outside || !['main', 'lower'].includes(rowOf(q))) continue;
+    const yF = q.y, fl = clampN((yF - H.yTuck2) / Math.max(1, H.yKeel - H.yTuck2), 0, 1);
+    if (q.x0 < hx0 - 6) { // the stern: where the slanted belly meets this floor (or the plate's inner face), plus a little
+      const xf = H.xKeelL > H.xL2 && yF > H.yTuck2 && yF < H.yKeel ? H.xL2 + fl * (H.xKeelL - H.xL2) : hx0 + th;
+      doors.push({ q, xa: hx0 - 0.3, xb: clampN(Math.max(hx0 + th + 10, xf + 16, hx0 + 76), hx0 + 10, hx0 + 260), dir: -1 }); // (the deck's own end posts stand just outside the hull: the carve stops short of them)
+    }
+    if (q.x1 > hx1 + 6) { // the bow
+      const xf = H.xKeelR < H.xNose && yF > H.yTuck2 && yF < H.yKeel ? H.xNose - fl * (H.xNose - H.xKeelR) : H.xNose - 4 - th;
+      doors.push({ q, xa: clampN(Math.min(H.xNose - 4 - th - 8, xf - 16, hx1 - 76), hx1 - 260, hx1 - 10), xb: hx1 - 0.5, dir: 1 });
+    }
+  }
+  for (const d of doors) {
+    const yF = d.q.y, ytop = yF - DOORH, zf = W - 18, w = d.xb - d.xa;
+    ctx.carves.push({ box: [X(d.xa + 10), -(yF - 1.5), X(d.xb - 10), -ytop, -W * 1.15, W * 1.15], side: 0 }); // (the end plates, the belly board and the far lining, within the doorway's height)
+    for (const [sink, s] of [[b.neg, -1], [b.pos, 1]]) {
+      const z = s * zf;
+      for (const x of [d.xa + 5, d.xb - 5]) sink.box(T.rail, X(x), -(yF - DOORH / 2), z, 10, DOORH, 16, 1.2, 0, 0, 0, { tr: 'woodC' }); // the door posts
+      sink.box(T.rail, X(d.xa + w / 2), -(ytop - 6), z, w, 12, 18, 1.2, 0, 0, 0, { tr: 'woodC' }); // the lintel
+      sink.box(T.brass, X(d.xa + 5), -(ytop - 13), z, 14, 4, 20, 0.6, 0, 0, 0, { tr: 'brass' }); // a brass cap on each post's head
+      sink.box(T.brass, X(d.xb - 5), -(ytop - 13), z, 14, 4, 20, 0.6, 0, 0, 0, { tr: 'brass' });
+    }
+  }
+  ctx.doors = doors;
+}
+
 export function buildHull(ctx) {
   const { L, T, W, X, Y, P, H, rowOf, isNestRow } = ctx;
   const b = ctx.part('hull'), dyn = [];
@@ -219,6 +252,7 @@ export function buildHull(ctx) {
   }
   const poly = hullPolygon(H), xmin = H.xL, xmax = H.xR - 0.5;
   const lf = loft(b, ctx, poly, { W, x0: xmin, x1: xmax, bowX: H.xNose, inEnd: H.xNose - 4, tag: 'gondola', stations: 14 });
+  try { addDoors(b, ctx, H, 11); } catch (e) { ctx.note('doors failed: ' + (e && e.message)); }
   // full decks added under the lower deck: a box hull round each (chamfered underneath)
   (H.boxes || []).forEach((bx, i) => {
     const p2 = [[bx.x0, bx.y0], [bx.x1, bx.y0], [bx.x1, bx.y1 - 26], [bx.x1 - 26, bx.y1], [bx.x0 + 26, bx.y1], [bx.x0, bx.y1 - 26]];

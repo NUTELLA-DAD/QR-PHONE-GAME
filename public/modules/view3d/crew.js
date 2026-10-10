@@ -269,11 +269,13 @@ export function createCrewLayer(parent) {
     try {
       let f = figs.get(key);
       const W = model.W;
-      const zt = rec.climb ? -W * 0.62 + 20 : (0.07 + 0.34 * hash(String(rec.id || key))) * W;
+      // (fix_ship) the lane is in CAMERA terms (toward the viewer, model.crewLane: in front of the ladders and the fittings, inside his deck's width); the local z is that lane times the side the camera is on
+      const hh = hash(String(rec.id || key));
+      const zt = model.crewLane ? model.crewLane(rec, hh) : (rec.climb ? W * 0.5 : (0.07 + 0.34 * hh) * W);
       const z = f && f.z != null ? f.z + (zt - f.z) * Math.min(1, L.dt * 7) : zt;
       const mw = model.content.matrixWorld, e = mw.elements;
       const cz = Math.abs(e[10]) < 0.02 && f ? f.cz || 1 : e[10] >= 0 ? 1 : -1;
-      f = drive(key, rec, { W: mw, lx: model.X(fin(rec.x)), ly: model.Y(fin(rec.y)), lz: z, cz, teamColor: extra.teamColor || null });
+      f = drive(key, rec, { W: mw, lx: model.X(fin(rec.x)), ly: model.Y(fin(rec.y)), lz: z * cz, cz, teamColor: extra.teamColor || null });
       f.z = z; f.cz = cz;
     } catch (e) { logOnce('crew aboard', e); }
     L.ms += performance.now() - t0;

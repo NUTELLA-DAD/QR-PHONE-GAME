@@ -8,6 +8,7 @@
 import { THREE } from './style.js';
 import { getTrimSheet, uvRect, SCORCH, HOLES } from './textures.js';
 import { config } from '../../config.js';
+import { BAG_RZ } from './parts3d/bag.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hashN = (n) => { let h = Math.imul((n | 0) ^ 0x9e3779b1, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
@@ -132,7 +133,7 @@ export function createDamageView({ state, models }) {
     const u = clamp((x - G.cx) / G.rx, -0.98, 0.98), pw = u < 0 ? 1.75 : 2.0, r = G.ry * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(u), pw)), 1 / pw);
     // (the 2D game draws a hole on the bag's rim: the top near the nest, or the belly above the catwalk. From the side camera a belly faces away, so the mark is set on the skin a little way round toward the
     // viewer: 0.8 radians up or down from the side that faces the camera)
-    const ang = (y > G.cy ? -1 : 1) * 0.8, ly = r * Math.sin(ang), z = 0.96 * r * Math.cos(ang);
+    const ang = (y > G.cy ? -1 : 1) * 0.8, ly = r * Math.sin(ang), z = BAG_RZ * r * Math.cos(ang);
     const nrm = new THREE.Vector3(u * 0.4, Math.sin(ang), Math.cos(ang)).normalize();
     return { node: bn.node, lx: x - G.cx, ly, z, nrm };
   }
