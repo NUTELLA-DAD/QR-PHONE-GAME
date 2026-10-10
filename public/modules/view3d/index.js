@@ -5,7 +5,9 @@
 // view = the 2D camera's { cx, cy, zoom } (camera.js): it stays the authority; camera3d.js derives the perspective camera from it so the gameplay plane lines up with the HUD.
 // opts = { width, height } the pixel size that view was made for (the 2D canvas), { t } animation seconds (default: now / 1000).
 // No wobble: nothing here moves on a sine except the ship's own slow bob (the same one the 2D game has); see 3D.md section 1.
-import { THREE, look, applyLook, INK } from './style.js';
+import { THREE, look, applyLook, INK, fx } from './style.js';
+import { createPost } from './post.js';
+import { TIERS, readAddress, resolveTier } from './quality.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createWorld, TOD } from './world.js';
 import { createTerrain } from './terrain.js';
@@ -45,11 +47,14 @@ const todFor = (d) => (d <= 0.5 ? blendTod(TOD.day, TOD.dusk, d / 0.5) : blendTo
 
 // settings (all optional, shared and live: the dev page changes them while it runs):
 //   sweep (idle lamps sweep, a demo; default off), toon, shadows, detail ('high' | 'low'), tod ('day' | 'dusk' | 'night' | '' = from the game's darkness), zoom (camera distance divisor),
-//   orbit + allowOrbit (dev page), follow ('mid': look between the ship and the creature), shot (keep the drawing buffer), pixelRatio (function -> number)
+//   orbit + allowOrbit (dev page), follow ('mid': look between the ship and the creature), shot (keep the drawing buffer), pixelRatio (function -> number),
+//   tier ('high' | 'medium' | 'low', or a function returning one; ?tier= in the address wins; see quality.js), gpuTimer (measure GPU milliseconds per pass; the F meter and tools read V.stats().gpu)
+// The look kill-switches (style.js `look`: bloom, lut, grain, fog, rim, lanterns, shadows, post) come from the address too: host.html?view=3d&look=nobloom,nofog.
 export function createView3D({ canvas, state, settings = {}, onModels = null }) {
   const S = settings;
   if (S.toon != null) look.toon = !!S.toon;
   if (S.shadows != null) look.shadows = !!S.shadows;
+  const address = readAddress(typeof location !== 'undefined' ? location.search : '');
   { // (ask first with a throwaway canvas: Three.js logs a console error when it cannot make a context, and the 2D fallback should be quiet)
     let probe = null;
     try { const c = document.createElement('canvas'); probe = c.getContext('webgl2'); const x = probe && probe.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); } catch { probe = null; }
@@ -61,6 +66,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   renderer.shadowMap.enabled = look.shadows;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.NeutralToneMapping; // (the composer's OutputPass does it for the whole picture; the direct draw, ?look=nopost, lets the materials do it. The painted planes are exempt, see style.js paintedPlane)
+  renderer.info.autoReset = false; // (post.js resets it once a frame, so the numbers cover the scene pass and are not wiped by the later passes)
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(FOV, 16 / 9, 60, 70000);
   scene.add(camera);
@@ -78,29 +85,49 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     controls.enableDamping = false;
     controls.maxDistance = 30000;
   }
-  const V = { renderer, scene, camera, world, terrain, kraken, controls, models: null, look, lost: false, errors: 0, lastErr: '', frames: 0, lastLog: '' };
+  const post = createPost(renderer, scene, camera);
+  const V = { renderer, scene, camera, world, terrain, kraken, controls, post, tier: TIERS.high, models: null, look, lost: false, errors: 0, lastErr: '', frames: 0, lastLog: '' };
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); V.lost = true; });
 
-  // ---- size and detail -----------------------------------------------------------------------------------------------------------------------------------------------
-  let sizeKey = '', detail = null;
+  // ---- size, detail and quality tier -------------------------------------------------------------------------------------------------------------------------------------
+  let sizeKey = '', detail = null, tierName = '', flagKey = '';
+  let tier = TIERS.high;
   const applyDetail = () => {
     const hi = (S.detail || 'high') === 'high';
     look.low = !hi;
     renderer.shadowMap.type = hi ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; });
     applyLook(scene);
-    world.setShadowQuality(hi ? 4096 : 1024);
     detail = S.detail || 'high';
     sizeKey = ''; // (the pixel ratio follows the detail)
   };
+  // The look kill-switches and the tier decide what is on. Run when either changes (not every frame).
+  const applyFlags = () => {
+    const wasShadows = renderer.shadowMap.enabled;
+    renderer.shadowMap.enabled = look.shadows && tier.shadows;
+    world.lights.setTier(tier);
+    world.applyLights();
+    if (wasShadows !== renderer.shadowMap.enabled) { scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; }); applyLook(scene); }
+    for (const e of models.values()) capLamps(e.model);
+  };
+  const flagsNow = () => tier.name + [look.shadows, look.rim, look.lanterns, look.toon].map((b) => (b ? 1 : 0)).join('');
+  // Real lantern lights: the boiler's glow light first, then the lanterns (3D.md: 6 a ship on High, 2 on Medium, none on Low, where the lamps stay as glowing colour only).
+  // The COUNT of lights in the scene only changes with the tier, so no shader is rebuilt when it gets dark.
+  const capLamps = (model) => {
+    const cap = look.lanterns ? tier.lanterns : 0;
+    if (model.lampCap === cap) return;
+    model.lampCap = cap;
+    [...model.lights.boiler, ...model.lights.points].forEach((pl, i) => { pl.visible = i < cap; });
+  };
   const fit = () => {
     const w = Math.max(2, canvas.clientWidth || window.innerWidth), h = Math.max(2, canvas.clientHeight || window.innerHeight);
-    const pr = clamp(typeof S.pixelRatio === 'function' ? S.pixelRatio() : Math.min(window.devicePixelRatio || 1, (S.detail || 'high') === 'high' ? 2 : 1), 0.5, 2);
+    const pr = clamp(Math.min(typeof S.pixelRatio === 'function' ? S.pixelRatio() : Math.min(window.devicePixelRatio || 1, (S.detail || 'high') === 'high' ? 2 : 1), tier.pixelRatioMax), 0.5, 2);
     const key = w + 'x' + h + '@' + pr;
     if (key === sizeKey) return;
     sizeKey = key;
     renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
+    post.setSize(w, h, pr);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
@@ -157,7 +184,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       root.updateMatrixWorld(true);
       const side = (camera.position.x - root.position.x) * Math.sin(yaw) + (camera.position.z - root.position.z) * Math.cos(yaw);
       model.setView(side);
-      model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai, sweep: !!S.sweep, spotShadow: world.night > 0.5 && index === 0 });
+      capLamps(model);
+      model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai, sweep: !!S.sweep, spotShadow: tier.spotShadow && world.night > 0.5 && index === 0 });
       // crew aboard
       const crew = Object.values(state.players).filter((p) => !p.enemy && p.connected !== false && !p.fly && shipOf(state, p) === sh);
       const raiders = sh.ctx && sh.ctx.boarders ? sh.ctx.boarders : state.boarders || [];
@@ -253,11 +281,15 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     return info;
   }
 
+  // The key light's shadow camera follows the framed ships (snapped to 200 units, lights.js fit) and the fog keeps its strength at the ship plane whatever the zoom.
+  const shipPts = [];
   function syncLights() {
-    const snap = 200;
-    const x = Math.round(camTarget.x / snap) * snap, y = Math.round(camTarget.y / snap) * snap;
-    world.sun.target.position.set(x, y, 0);
-    world.sun.position.copy(world.sunDir).multiplyScalar(3800).add(world.sun.target.position);
+    shipPts.length = 0;
+    for (const e of models.values()) { const p = e.model.root.position; shipPts.push({ x: p.x, y: p.y }); }
+    const cr = state.creature;
+    if (cr && Number.isFinite(cr.x) && Number.isFinite(cr.y)) shipPts.push({ x: cr.x, y: -cr.y }); // (the Kraken's shadow too)
+    world.lights.fit(shipPts, camTarget);
+    world.lights.setFogDistance(camera.position.distanceTo(camTarget));
   }
 
   // ---- light: the dev page can pin day / dusk / night; the game lets the darkness decide -----------------------------------------------------------------------------
@@ -281,7 +313,10 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     lastNow = now;
     const t = Number.isFinite(opts.t) ? opts.t : now / 1000;
     const j0 = performance.now();
+    const wantTier = resolveTier(S, address.tier);
+    if (wantTier.name !== tierName) { tier = wantTier; tierName = tier.name; V.tier = tier; flagKey = ''; sizeKey = ''; }
     if (detail !== (S.detail || 'high')) applyDetail();
+    if (flagsNow() !== flagKey) { flagKey = flagsNow(); applyFlags(); }
     fit();
     const w = opts.width || canvas.width, h = opts.height || canvas.height;
     const env = envIdOf(state);
@@ -300,7 +335,18 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     world.update(camera, camTarget, { w: cam.visW, h: cam.visH }, t, seaY);
     syncLights();
     const j1 = performance.now();
-    renderer.render(scene, camera);
+    const rig = world.lights.rig, usePost = !!(look.post && post.enabled);
+    renderer.toneMappingExposure = world.lights.exposure;
+    fx.uUntone.value = usePost ? 1 : 0;
+    if (usePost) {
+      post.configure(tier, rig, rig.id, world.lights.exposure);
+      if (post.timing) post.timing.on = !!S.gpuTimer;
+      post.render(dt);
+      if (S.gpuTimer && post.pollTiming) post.pollTiming();
+    } else {
+      renderer.info.reset();
+      renderer.render(scene, camera);
+    }
     const j2 = performance.now();
     jsMs = j1 - j0; renderMs = j2 - j1;
     V.frames++;
@@ -308,7 +354,11 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const logOnce = (what, e) => { const m = what + ': ' + String(e && e.message ? e.message : e); if (m !== V.lastLog) { V.lastLog = m; console.warn('view3d', m); } };
 
   // numbers for the F meter and the perf gate
-  V.stats = () => { const i = renderer.info; return { calls: i.render.calls, tris: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height }; };
+  // calls / tris = the whole frame (scene + post passes); sceneCalls / sceneTris = the scene pass alone (the budget's numbers); gpu = GPU ms per pass when settings.gpuTimer is on
+  V.stats = () => {
+    const i = renderer.info, p = post.enabled && look.post;
+    return { calls: i.render.calls, tris: i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms };
+  };
   V.setTod = (name) => { S.tod = name || ''; };
   V.dispose = () => { try { renderer.dispose(); } catch { /* (gone) */ } };
 

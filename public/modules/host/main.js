@@ -126,6 +126,8 @@ window.view3dNote = '';
 const v3settings = {
   sweep: false,
   get detail() { return perfState.level >= 2 ? 'high' : 'low'; }, // (the perf governor steps the 3D detail down too)
+  get tier() { return perfState.level >= 3 ? 'high' : perfState.level >= 1 ? 'medium' : 'low'; }, // (the 3D quality tier: view3d/quality.js; ?tier=low in the address wins)
+  gpuTimer: new URLSearchParams(location.search).get('gputimer') === '1', // (dev: GPU milliseconds per pass in view.stats().gpu)
   pixelRatio: () => Math.min(window.devicePixelRatio || 1, perfState.level >= 3 ? 1.5 : 1),
 };
 const drop3D = (reason) => { // back to the 2D renderer (reason = why, for the pause menu; null = the player chose 2D)

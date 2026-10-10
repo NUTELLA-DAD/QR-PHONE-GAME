@@ -2241,6 +2241,23 @@ export const config = {
     SCRATCHES: false, // the odd film scratch
   },
 
+  // The 3D look (view3d/lights.js, post.js, quality.js; 3D.md section 1): one lighting + grading rig per environment. Colours not given here come from ENVIRONMENTS (sun, fog, rock, cave).
+  //   key: the warm key light (colour, strength, direction TOWARD the light: x right, y up, z toward the viewer; shadows; null/0 strength = no key light, the lamps do it)
+  //   hemi: the sky/ground fill. haze: fog colour, hazeAmt: how much of the picture is fog at the ship plane (0..1; more behind). exposure: tone-mapping exposure.
+  //   grade: the colour grade made into a 16x16x16 table (shadow/high = the tints and how much of them, sat, contrast, lift). bloom: strength of the glow on emissives. rim: the thin warm edge light.
+  LOOK3D: {
+    skyisles: { exposure: 1.15, key: { color: '#fff0d0', strength: 1, shadows: true }, hemi: { sky: '#e8f1f6', ground: '#b49a78', strength: 1 }, haze: '#dce8ec', hazeAmt: 0.05, grade: { shadow: '#5a6c9c', shadowAmt: 0.12, high: '#ffe8c0', highAmt: 0.1, sat: 1.04, contrast: 0.1, lift: 0.01 }, bloom: 0.55, vignette: 0.16, rim: { color: '#ffd9a8', amount: 0.12 } },
+    frost: { exposure: 1.1, key: { color: '#fff6e6', strength: 0.95, shadows: true }, hemi: { sky: '#e6f0fa', ground: '#9fb0c4', strength: 1.05 }, hazeAmt: 0.07, grade: { shadow: '#4a64a8', shadowAmt: 0.16, high: '#fff4e0', highAmt: 0.06, sat: 0.96, contrast: 0.08, lift: 0.01 }, bloom: 0.5, vignette: 0.15, rim: { color: '#e8f2ff', amount: 0.14 } },
+    ember: { exposure: 1.15, key: { color: '#ff9a50', strength: 0.9, dir: [-0.35, -0.8, 0.6], shadows: false }, hemi: { sky: '#8a5c58', ground: '#c4642c', strength: 1.1 }, hazeAmt: 0.09, grade: { shadow: '#3a1c3c', shadowAmt: 0.2, high: '#ffb070', highAmt: 0.14, sat: 0.98, contrast: 0.14, lift: 0.0 }, bloom: 0.7, vignette: 0.22, rim: { color: '#ff9a50', amount: 0.24 } },
+    storm: { exposure: 1.1, key: { strength: 0 }, hemi: { sky: '#7f8db2', ground: '#3a4668', strength: 2.1 }, hazeAmt: 0.1, grade: { shadow: '#242c5a', shadowAmt: 0.2, high: '#c4d4ff', highAmt: 0.08, sat: 0.9, contrast: 0.14, lift: 0.0 }, bloom: 0.65, vignette: 0.24, rim: { color: '#b8cdf5', amount: 0.2 } },
+    sea: { exposure: 1.15, key: { color: '#fff3d4', strength: 1, shadows: true }, hemi: { sky: '#e3f3f2', ground: '#7fa6a6', strength: 1 }, hazeAmt: 0.06, grade: { shadow: '#2c6a86', shadowAmt: 0.16, high: '#fff0c8', highAmt: 0.1, sat: 1.06, contrast: 0.1, lift: 0.01 }, bloom: 0.55, vignette: 0.16, rim: { color: '#fff0c8', amount: 0.16 } },
+    fungal: { exposure: 1.1, key: { strength: 0 }, hemi: { sky: '#6f58b0', ground: '#1b6a62', strength: 2.8 }, hazeAmt: 0.12, grade: { shadow: '#2a1856', shadowAmt: 0.24, high: '#8affd8', highAmt: 0.1, sat: 1.1, contrast: 0.14, lift: 0.0 }, bloom: 0.8, vignette: 0.26, rim: { color: '#7affd0', amount: 0.26 } },
+    aether: { exposure: 1.1, key: { color: '#c8b4ff', strength: 0.8, shadows: true }, hemi: { sky: '#6a58b8', ground: '#2a2058', strength: 1.6 }, hazeAmt: 0.1, grade: { shadow: '#2a1c68', shadowAmt: 0.22, high: '#d8c8ff', highAmt: 0.1, sat: 1.04, contrast: 0.14, lift: 0.0 }, bloom: 0.75, vignette: 0.24, rim: { color: '#d2c4ff', amount: 0.22 } },
+    GRAIN: 0.022, // the paper grain (a fixed picture: never animated), 0 = off
+    SHADOW_DESAT: 0.18, // shadows lose this much colour
+    BLOOM: { THRESHOLD: 0.92 }, // only things brighter than this glow (the lamps, fire, eyes)
+  },
+
   // Walking feel.
   MOVE: {
     WALK_SPEED: 230,

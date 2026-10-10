@@ -111,6 +111,7 @@ export function createKrakenView(scene) {
     // glow: the eye itself does not take light (it is its own light)
     const mesh = g.children[0];
     mesh.material = new THREE.MeshBasicMaterial({ vertexColors: true });
+    mesh.material.color.setScalar(3.2); // (HDR: the eyes cross the bloom threshold and glow; the dark pupils stay dark)
     mesh.userData.toon = mesh.material; mesh.userData.plain = mesh.material;
     return g;
   };
