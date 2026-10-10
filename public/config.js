@@ -1126,7 +1126,7 @@ export const config = {
     VOLUME: 0.45, // overall music loudness (0-1)
     CROSSFADE: 2.5, // seconds to fade from one track to the next
     MIN_HOLD: 8, // a calm/combat track stays on at least this many seconds before the other can take over
-    FILES: { dock: '/audio/dock-adventurers-rag.mp3', calm: '/audio/calm-treasure-hunter.mp3', combat: '/audio/combat-determined-pursuit.mp3' },
+    FILES: { dock: 'audio/dock-adventurers-rag.mp3', calm: 'audio/calm-treasure-hunter.mp3', combat: 'audio/combat-determined-pursuit.mp3' },
     TRACK_GAIN: { dock: 1, calm: 1, combat: 1 }, // per-track level trim (the files are mastered at different loudness)
     SILENCE: 0.01, // sample level below which the start/end of a file counts as silence (trimmed off the loop)
     EDGE_RATIO: 0.3, // if the loop's first/last 0.25 s is quieter than this share of the track's average, it fades in/out

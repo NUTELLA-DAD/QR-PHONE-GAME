@@ -2,8 +2,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <style>
 /* Bundled fonts (no internet needed). Limelight = titles/shouts, Libre Baskerville = labels/body. */
-@font-face{font-family:'Limelight';src:url(/fonts/Limelight-Regular.ttf) format('truetype');font-weight:400;font-display:swap}
-@font-face{font-family:'Libre Baskerville';src:url(/fonts/LibreBaskerville.ttf) format('truetype');font-weight:400 700;font-display:swap}
+@font-face{font-family:'Limelight';src:url(fonts/Limelight-Regular.ttf) format('truetype');font-weight:400;font-display:swap}
+@font-face{font-family:'Libre Baskerville';src:url(fonts/LibreBaskerville.ttf) format('truetype');font-weight:400 700;font-display:swap}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;font-family:'Libre Baskerville',Georgia,serif;color:#2b2622;background:#f3ead6}
 body.play{background:var(--c,#f3ead6)}
@@ -225,6 +225,6 @@ h1{font-size:28px}
 <div id="hurtflash"></div>
 <div id="toast"></div>
 <div id="rotate"><div class="ic">📱↻</div>Turn your phone sideways</div>
-<script src="/socket.io/socket.io.js"></script>
-<script type="module" src="/modules/controller/main.js"></script>
+<script src="socket.io/socket.io.js"></script>
+<script type="module" src="modules/controller/main.js"></script>
 </body></html>

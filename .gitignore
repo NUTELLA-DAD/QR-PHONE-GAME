@@ -4,3 +4,4 @@ node_modules/
 .claude/worktrees/
 art/styleboard/
 art/bgraw/
+_site/

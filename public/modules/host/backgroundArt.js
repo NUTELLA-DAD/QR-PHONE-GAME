@@ -19,7 +19,7 @@ export function createBackgroundArt({ ctx, state }) {
   const load = async () => {
     let list = [];
     try {
-      list = await (await fetch('/api/backgrounds')).json();
+      list = await (await fetch('api/backgrounds')).json();
     } catch {
       return;
     }
@@ -44,7 +44,7 @@ export function createBackgroundArt({ ctx, state }) {
               console.warn('Could not load background', file);
               resolve();
             };
-            img.src = `/art/backgrounds/${file}`;
+            img.src = `art/backgrounds/${file}`;
           }),
       ),
     );

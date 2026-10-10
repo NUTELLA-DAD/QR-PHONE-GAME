@@ -48,7 +48,7 @@ export function loadTextures(ctx) {
   started = true;
   (async () => {
     let list = [];
-    try { list = await (await fetch('/api/textures')).json(); } catch { return; }
+    try { list = await (await fetch('api/textures')).json(); } catch { return; }
     const scale = Math.max(0.05, Number(config.TEXTURES && config.TEXTURES.SCALE) || 1);
     await Promise.all(list.map((file) => new Promise((resolve) => {
       const name = file.replace(/\.png$/i, '').toLowerCase();
@@ -67,7 +67,7 @@ export function loadTextures(ctx) {
         resolve();
       };
       img.onerror = () => resolve();
-      img.src = '/art/textures/' + file;
+      img.src = 'art/textures/' + file;
     })));
   })();
 }

@@ -85,7 +85,7 @@ if (only !== null) {
 let sky = null;
 const img = new Image();
 img.onload = () => (sky = img);
-img.src = '/art/backgrounds/skyisles/sky.png';
+img.src = 'art/backgrounds/skyisles/sky.png';
 sprites.load();
 
 const mk = (c, i) => {

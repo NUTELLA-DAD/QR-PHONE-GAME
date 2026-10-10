@@ -45,7 +45,7 @@ export function playtestUrl(job) {
   if (job.bots > 0) q.set('bots', String(job.bots));
   const back = loadPlaytestJob();
   if (!back || JSON.stringify(back.parts) !== JSON.stringify(job.parts)) q.set('build', JSON.stringify(job.parts));
-  return '/host.html?' + q.toString();
+  return 'host.html?' + q.toString();
 }
 // What the host was asked to play: { parts, name, mode, foe, bots } or null. ?build=[JSON] (not 'classic') or ?playtest=coop|versus|1 (parts from storage).
 export function readPlaytestJob(search) {

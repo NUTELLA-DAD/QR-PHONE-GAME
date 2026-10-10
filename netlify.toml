@@ -1,0 +1,7 @@
+# The online showcase on Netlify (same as the GitHub Pages copy): bot crew only, phones join only when the game runs from start.bat.
+[build]
+  command = "node tools/build-pages.mjs"
+  publish = "_site"
+
+[build.environment]
+  NODE_VERSION = "20"

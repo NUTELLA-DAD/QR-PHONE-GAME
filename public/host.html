@@ -2,8 +2,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 /* Bundled fonts (no internet needed). Limelight = titles/numbers, Libre Baskerville = labels/body. */
-@font-face{font-family:'Limelight';src:url(/fonts/Limelight-Regular.ttf) format('truetype');font-weight:400;font-display:block}
-@font-face{font-family:'Libre Baskerville';src:url(/fonts/LibreBaskerville.ttf) format('truetype');font-weight:400 700;font-display:block}
+@font-face{font-family:'Limelight';src:url(fonts/Limelight-Regular.ttf) format('truetype');font-weight:400;font-display:block}
+@font-face{font-family:'Libre Baskerville';src:url(fonts/LibreBaskerville.ttf) format('truetype');font-weight:400 700;font-display:block}
 html,body{margin:0;height:100%;overflow:hidden;background:#2b1d14;font-family:'Libre Baskerville',Georgia,serif}
 canvas{display:block;width:100vw;height:100vh}
 /* Captain's logbook look: cream paper, warm-brown ink. */
@@ -47,6 +47,6 @@ button{margin-top:8px;font:inherit;font-weight:700;border:3px solid #3a2c20;back
 <div class="row"><button id="mBack" style="background:#7a5a2e;display:none">Back to the builder</button></div>
 <div class="row"><button id="mDetail" style="background:#555;font-size:13px">Detail: auto</button></div>
 <div id="mErr"></div></div></div>
-<script src="/socket.io/socket.io.js"></script>
-<script type="module" src="/modules/host/main.js"></script>
+<script src="socket.io/socket.io.js"></script>
+<script type="module" src="modules/host/main.js"></script>
 </body></html>

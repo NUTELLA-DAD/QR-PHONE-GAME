@@ -46,13 +46,13 @@ export function createSprites() {
   const load = async () => {
     let list = [];
     try {
-      list = await (await fetch('/api/sprites')).json();
+      list = await (await fetch('api/sprites')).json();
     } catch {
       return;
     }
     if (list.includes('rig.json')) {
       try {
-        rig = await (await fetch('/art/sprites/rig.json')).json();
+        rig = await (await fetch('art/sprites/rig.json')).json();
       } catch (err) {
         console.warn('art/sprites/rig.json could not be read:', err);
       }
@@ -76,7 +76,7 @@ export function createSprites() {
               console.warn('Could not load sprite', file);
               resolve();
             };
-            img.src = `/art/sprites/${file}`;
+            img.src = `art/sprites/${file}`;
           }),
       ),
     );

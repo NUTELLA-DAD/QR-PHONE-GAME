@@ -60,10 +60,16 @@ export function newBot(state, ship, name) {
 }
 
 export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoinBot }) {
-  const socket = io({ transports: ['websocket'] });
+  // Showcase mode (the GitHub Pages copy, no relay server): there is no socket.io, so phones cannot join - a stand-in socket that does nothing, and bot crew only.
+  const showcase = typeof io === 'undefined';
+  const socket = showcase ? { on() {}, emit() {} } : io({ transports: ['websocket'] });
   const countNode = document.getElementById('count');
 
-  simulation.setSocket?.(socket);
+  if (showcase) {
+    document.getElementById('qr').style.display = 'none';
+    document.getElementById('code').textContent = 'DEMO';
+    document.getElementById('url').innerHTML = 'Online showcase: phones join only when the game runs from start.bat.<br>Press <b>Add 4 bot crew</b>, then <b>CAST OFF!</b>';
+  } else simulation.setSocket?.(socket);
 
   // The ship a new arrival joins: the main ship, or (with several in the sky) the one with the fewest aboard. They drop in along its boarding span.
   const joinShip = () => (simulation.match.on ? simulation.match.shipOfTeam(simulation.match.teamForJoiner()) : simulation.state.ships.filter((s) => !s.ai).reduce((best, s) => (crewOf(simulation.state, s).length < crewOf(simulation.state, best).length ? s : best), mainShip(simulation.state)));
@@ -76,11 +82,11 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   socket.on('connect', () => socket.emit('host:create'));
 
   socket.on('host:created', async (code) => {
-    const { base } = await (await fetch('/api/info')).json();
+    const { base } = await (await fetch('api/info')).json();
     const url = `${base}/join/${code}`;
     document.getElementById('code').textContent = code;
     document.getElementById('url').textContent = base;
-    document.getElementById('qr').src = '/qr?t=' + encodeURIComponent(url);
+    document.getElementById('qr').src = 'qr?t=' + encodeURIComponent(url);
   });
 
   socket.on('player:joined', (m) => {
