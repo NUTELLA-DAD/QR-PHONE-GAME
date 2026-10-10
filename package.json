@@ -10,6 +10,7 @@
     "socket.io": "^4.7.5"
   },
   "devDependencies": {
+    "@dimforge/rapier3d-deterministic-compat": "^0.20.0",
     "three": "^0.169.0"
   }
 }
