@@ -1,0 +1,254 @@
+# Airship Crew - Giant boss creatures
+
+Planned by Fable (a read-only study of the code). Lead's notes are marked **Lead:**.
+
+**Lead:** status: waiting for the owner's OK. The first build is the Kraken vertical slice, tasks C.0 to C.5 below.
+Note that the "C." numbers here are creature tasks. They are not the same as Phase C (controller ergonomics) in NEXT_LEVEL.md.
+
+## 1. The vision
+
+Today's bosses are zeppelins: a big oval that parks ahead, shoots, and has a health bar. A giant creature is a *puzzle with limbs*, not a health bar. It reaches onto the ship, so the fight happens where the crew already are:
+- the deck tips;
+- a tentacle is wrapped round the aft gun;
+- someone hacks it with a sword while someone else bombs the open mouth.
+
+Every phone on the sofa gets a clear thing to shout: "LIGHT IT UP", "IT'S GOT THE TAIL", "MOUTH'S OPEN - DROP!". At 3-5 times the ship's size, the ship is the small one for once, and the camera pulls back to show it.
+
+**What makes it memorable on one TV with 2-16 phones**
+- **Readable telegraphs in three beats:**
+  - WIND-UP, 1.2-2.0 s: a shape on the TV points at the coming hit, a roar sounds, and crew standing there feel their phones buzz "GET OFF THE AFT DECK!".
+  - The ACT: fast and loud, with one frame of hit-stop.
+  - A RECOVERY window: a weak point opens and the TV stamps it ("MOUTH OPEN - 3 s").
+
+  The delivery system already exists: the banner (`state.ev.warn`), `pop()`, `phoneFx`, and the gold job arrows on phones (`jobs.js`).
+- **Every role matters, because the creature attacks the SHIP:**
+  - gunners cut limbs;
+  - the helm steers out of grabs and under the mouth;
+  - searchlights reveal weak points in the dark;
+  - the bomb bay and drop hatch feed the mouth;
+  - hammers chip ice and scales;
+  - swords hack a gripping limb;
+  - the boiler feeds flamethrowers;
+  - the medbay heals;
+  - the stoker keeps steam up for the harpoon reel;
+  - the hookshot and crew cannon let the daring board its back.
+- **Three phases.** For the Kraken: it rises; it grabs; it is hauled half out of the water, exhausted.
+- **Several ways to win, at least three per creature:**
+  - sever its limbs;
+  - overwhelm it;
+  - feed the mouth;
+  - board it and strike the heart;
+  - tow it into rock.
+
+  The health pool is the slow, safe fallback, so beginners always have a way to win.
+- **Comeback moments:**
+  - a grabbed ship is a GOING DOWN!-style crisis on a timer: the grip rips a section off unless the tentacle is cut;
+  - the last blow plays in slow motion.
+- **Loot:**
+  - salvage and a hull patch;
+  - a TROPHY part card at the next dock (Kraken-beak ram prow, Drake-scale plating, Thunderbird feather sail);
+  - a Captain's Log line;
+  - a Hangar unlock.
+
+## 2. Bestiary: seven creatures, one per sky
+
+Every creature uses the same kit: a body with separately damageable parts, a mouth that opens, and a heart to board for. Each one also leans on its own sky's crew job. The classic ship is about 2700 px long, so a creature spans 5000-8000 px.
+
+### 2.1 Sunken Sea - THE KRAKEN (built first)
+- **Body:**
+  - a mantle under the waves;
+  - a beak/mouth that opens on a roar;
+  - two eyes, which only count when lit at dusk;
+  - 6 tentacles of 8 rigid segments, each with its own health and severed where hit;
+  - a heart, reachable in phase 3.
+- **Attacks:**
+  - GRAB: a tentacle rises and sways for 1.5 s, then wraps the nearest deck end. That side gets a downward force and torque, the crew slide, and if the keel goes under, the sea flood rules start. After 9 s the grip rips that section off unless it is cut.
+  - SLAP: a tentacle whips along the top deck.
+  - SPOUT: a drifting waterspout.
+  - DIVE: in phase 3, three grips at once drag the ship down.
+- **Wins:**
+  - (a) SEVER all tentacles with shells, mortar, coil or flame, or with a sword/hammer HACK on the gripping segment.
+  - (b) MOUTH: three bombs while the beak is open. Thrown crates and sandbags count as half a bomb.
+  - (c) TOW: harpoon it in phase 3 and drag it onto the rock spires, or ram it.
+  - (d) BOARD: hookshot onto the surfaced mantle. "BLIND IT" at an eye halves its grabs; "STRIKE THE HEART" wins.
+  - (e) The health pool.
+- **Systems it uses:**
+  - searchlights, mortars, mines in the water;
+  - the bilge pump;
+  - sandbags thrown off the gripped side, which changes the ship's balance;
+  - towing, the ram prow and flame (a burning tentacle lets go);
+  - hydrogen bags (a squeezed hydrogen bag is dangerous).
+- **Reward:** triple boss salvage, hull repair, and the Kraken Beak ram prow.
+
+### 2.2 Ember Forge - THE CINDER DRAKE (dragon)
+- **Body and movement:** it flies in huge swooping passes. Two wings, a neck, a head and a tail, with the heart behind its breast scales.
+- **Attacks:**
+  - BREATH: the throat glows for 1.6 s, then a flame cone sweeps the decks. Armour doesn't catch fire and hydrogen explodes.
+  - SWOOP: a hull bump.
+  - PERCH: it lands on the gasbag and claws holes in it.
+- **Wins:**
+  - shells into the glowing mouth choke the breath;
+  - tear a wing and it crashes and crawls, so the bomb bay can reach it;
+  - harpoon it into a lava spout;
+  - board its neck when it perches;
+  - flak on the wings, which finally gives the flak gun a job.
+
+### 2.3 Storm Front - THE THUNDERBIRD
+- **Attacks:**
+  - LIGHTNING DIVE: the lightning rod grounds it. A manned coil absorbs the bolt and fires it back at triple strength.
+  - GUST: twists the ship.
+  - PERCH: it sits on the bag, tips the ship and tears at it.
+- **Wins:** pluck both wings, coil-bolt its glowing gizzard, mortar it while it is perched, or board it.
+
+### 2.4 Frost Peaks - THE RIME WYRM
+- **How it fights:** a burrower that erupts from ice cliffs, with cracks spreading for 2 s first. It coils around the hull and stops the ship.
+- **Ice armour:** shells bounce off its segments until hammers chip the ice or flame/steam melts it. Its frost breath ices the guns.
+- **Wins:** break the ice and then shell it, bomb its open maw, tow it into the sun, or board its underbelly.
+
+### 2.5 Fungal Depths - THE MYCELIAL MOTHER
+- **How it fights:** a giant spore-moth on the cave roof, with tendrils that grow toward the ship. In the pitch dark nothing can be aimed at until a searchlight lights it.
+- **Attacks:** tendril grabs from above, spore bursts, and a wing beat that pushes the ship into rock.
+- **Wins:** burn the tendrils (flame does triple damage and the fire spreads along them), shell the lit eyes, mortar the cap, cut the grips, or board the cap.
+
+### 2.6 The Aether - THE VOID EEL (joins the Flagship)
+- **Body:** a 24-segment body circling the ship. Its lantern lure looks like a gold pickup, a deliberate trick that the lookout warns about.
+- **Attacks:** coils with three grips, and SWALLOW: a wide mouth opens ahead.
+- **Wins:** sever it at the joints, bomb the mouth, or board it in low gravity.
+- **At the Flagship stop:** sink the Flagship, OR kill the eel and the Flagship flees.
+
+### 2.7 Sky Isles - THE ISLAND TITAN (gentle tutorial boss)
+- **Body:** a slow stone colossus, only 2 times the ship's size, carrying an island on its back.
+- **Attacks:** it throws boulders and grabs the gasbag.
+- **Wins:** shell its arms off, bomb its roaring mouth, or land on its island and hack the crystal in its chest.
+- **Why it's first in a voyage:** it teaches every creature rule in daylight.
+
+## 3. Architecture
+
+The ship is built from decks and gasbags, and the whole engine knows that shape. So a kraken should not pretend to be a Ship. Instead there is a new **Creature**: rigid segments like a puppet, plugged into the slots the game already has for a big enemy:
+- gun targets, radar and camera;
+- hookshot anchors and landing surfaces;
+- forces and break-off.
+
+### 3.1 The Creature system
+- **Where it runs:** a new `public/modules/host/creature.js`, a world-level system next to `squadrons`/`specials`. It is stepped in `stepWorld`, and `state.creature` is listed in `WORLD_SHARED`.
+- **Body record:** `{ kind, x, y, vx, vy, f, phase, t, hp, maxHp, parts }`. Each part has a kind (tentacle, wing, neck, head, mouth, eye, heart, mantle), hp, segments `{x,y,ang,len,r}`, a goal, a grip, `lit` and a hit flash.
+- **Hit test:** one function, `creature.hitAt(x, y, r)`, uses capsules and returns the part hit. Every weapon asks it.
+- **Animation without wobble:** segments are rigid, and each limb is a cheap 2-iteration IK chain chasing a goal point. The goal moves on a **stepped clock**: a new pose every 1/8 s, held, with no sine wobble. A limb pulls back 0.4 s before striking and snaps on contact. Idle breathing is a hold-and-snap.
+- **Grips:**
+  - Like a one-sided tow (`towing.js`): a spring pulls the ship, clamped to `GRIP.MAX_ACC`, plus torque through `forces.js` (`GAIN.grab`, kept under `FORCES.MAX_DEG`).
+  - The tentacle tip is glued to the grip point, so the picture and the physics agree.
+  - After `GRIP.TIME` the grip rips that section off via `ship.sim.breakOff({ kind: 'limb' })`.
+  - A sword within reach gives "HACK THE TENTACLE!". Shells and flame on the gripping segment also free the ship.
+  - COME ABOUT is refused while gripped.
+- **Boarding:** the body is a landing surface (`air.addProvider`, as for the rival's decks) and a hookshot anchor. Boarders get creature actions: blind it, hack it, strike the heart.
+- **Damage in:** each weapon calls `hitAt`:
+  - shells;
+  - bombs, which do MOUTH damage in an open mouth;
+  - flame, coil and mines;
+  - thrown cargo, which counts as half a bomb;
+  - rams, through its own bump test;
+  - harpoon/tow, through a small creature tow handle (decided in C.2).
+- **Aim and radar:** every living part goes into the `aim.js` targets, with open or lit weak points ranked higher. Aim assist, searchlights, radar, the coil and the bots then all see it for free.
+- **Data per creature:** `creatures/kraken.js` holds the parts, phases, attacks (each with windup/act/recover and its telegraph), wins and reward. `creature.js` is the generic runner.
+- **Pacing:** the creature counts as a boss for tempo and music. No zeppelin boss appears on a creature stop. New code-made sounds: roar, splash, grip, sever, chomp.
+- **Voyage:** 1-2 middle stops become **lairs**. They show a creature icon on the route map, are +1 danger, pay double rewards, and never come two in a row. Trophy cards are offered at the shop.
+- **Scaling:** part health and attack pace follow crew size and difficulty. Grips at once are 1 under 6 crew, 2 for 6-11 and 3 for 12+.
+
+### 3.2 Camera
+- The creature's parts are added to the framing, with a creature zoom-out cap of 2.4 (today 1.8; Versus uses 2.9).
+- Zoom is locked while a grip starts.
+- If the mouth is off screen, the Versus spyglass porthole becomes a **boss-cam** on the weak point, and edge arrows label the parts off screen.
+
+### 3.3 Art
+- **Style:** a new `creatureArt.js` in the storybook gouache style: one ink colour, flat fills, one highlight band, and angular, spiky enemy shapes.
+- **Baking:** each segment type is drawn ONCE per zoom level into an offscreen canvas and then blitted, about 54 blits a frame for the Kraken. There are no gradients and no live blend modes.
+- **Painted textures:** optional ones for the big static shapes are baked under the ink, like the gunship's textures, and never blurred.
+- **Dark skies:** parts stay dim until lit.
+- **Severed parts:** they tumble away as debris, and a dead creature sinks or falls in slow motion.
+
+### 3.4 Performance
+- **Budget:** under `PERF.BUDGET_MS` 12 at 1080p.
+- **Rules:**
+  - no `shadowBlur`;
+  - no gradients each frame;
+  - pose keys at 8 Hz;
+  - capsule hit tests;
+  - `perfLowFx()` drops the painted textures and the drips.
+- **Check:** the gate draws 300 frames on a stub canvas and reports the time.
+
+### 3.5 Bots
+- **Gunners:** they get the creature parts automatically and prefer the open mouth.
+- **New bot jobs:**
+  - hack a grip on their deck;
+  - drop a bomb when it will land in the open mouth;
+  - man the searchlight in the dark;
+  - harpoon it in phase 3;
+  - open the drop hatch over the mouth.
+- **Helm bot:** it keeps the ship's belly over the mouth during a mouth window, and otherwise stays at range and climbs away from rising tentacles.
+
+### 3.6 PvP twist (later)
+**The Beast wildcard:** when the storm wall closes, a creature surfaces in the middle and grabs the nearest ship. Crews can push each other into its reach. Later it guards the King of the Hill ring.
+
+## 4. Roadmap
+
+One monster gets built all the way first: the Kraken. It is proved with bots, then its kit is cloned for the other six.
+
+| # | Task | Size | Main files | Gate |
+|---|---|---|---|---|
+| C.0 | Skeleton: `creature.js` body, IK and stepped keys; a dev page `creaturetest.html` with a kraken puppet reaching for a point; `config.CREATURES` | S | new files, `config.js` | page loads, 60 fps, no wobble |
+| C.1 | Core hooks: world step, `hitAt`, every weapon, aim/radar, camera cap, HP bar with part pips, dark/lit, pacing, music/sfx | M | `simulation.js`, `ships.js`, `aim.js`, `spotter.js`, `camera.js`, `squadrons.js`, `course.js`, `flame.js`, `coil.js`, `minefield.js`, `cargo.js`, `music.js`, `sfx.js`, `render.js` | botsim byte-identical, golden unchanged |
+| C.2 | Grips: force/torque/shove, rip via break-off, HACK action and phone arrow, slap, COME ABOUT refusal, boarding surface and hook anchor, harpoon target | M | `creature.js`, `shipSim.js`, `comeAbout.js`, `hookshot.js`, `towing.js`, `jobs.js`, `forces.js` | `--check-forces`; new grip checks |
+| C.3 | The Kraken: phases, attacks, telegraphs, five wins, death, reward, trophy, lair stops on the route map | M | `creatures/kraken.js`, `voyage.js`, `simulation.js`, `partsShop.js`, `envStormSea.js` | `--check-creature` |
+| C.4 | Kraken art: baked segments, telegraph shapes, grip squash, severed debris, boss-cam, slow-mo finale | M | `creatureArt.js`, `debrisArt.js`, `render.js` | 300-frame draw timed, TV check |
+| C.5 | Bots and the gate: creature jobs, helm plan, bombardier mouth drop; `tools/creature-check.mjs`, `--check-creature`, `botsim --creature kraken` | M | `bots.js`, `course.js`, `tools/*` | see below |
+| C.6a-f | The other six, one each, Drake first | S-M each | `creatures/*.js`, `creatureArt.js`, env hooks | each win proven headless |
+| C.7 | PvP Beast wildcard + King of the Hill guardian | M | `pvp/match.js`, `creature.js` | mirror match still 35-65% |
+| C.8 | Polish: Log lines, Hangar unlocks, play-of-the-mission card, phone buzz, first-time lair hint | S | `render.js`, `voyage.js`, `controller/ui.js` | TV review |
+
+**Order:** C.0 → C.1 → C.2 → (C.3 alongside C.4) → C.5 → C.6a Drake → the rest in pairs → C.7 → C.8.
+
+**The gate `node tools/buildsim.mjs --check-creature`:**
+- (a) Parts build, hit capsules work, the IK reaches, and keys hold for 1/8 s.
+- (b) Every weapon damages a part. A bomb in the open mouth does MOUTH damage; in the closed mouth it does nothing.
+- (c) Grips:
+  - the tilt stays within `FORCES.MAX_DEG`;
+  - flooding starts when the ship is pulled under;
+  - the rip happens on time;
+  - a sword frees the ship;
+  - COME ABOUT is refused.
+- (d) **Each win is proven by bots**, forced one at a time (`CREATURE_FORCE_WIN=sever|mouth|tow|board|hp`), within 6 minutes with 8 bots on Normal, then once unforced.
+- (e) A 4-bot and a 16-bot crew both win on Easy within 10 minutes.
+- (f) Stability and baselines:
+  - 0 errors and no NaN in a 3-minute fight;
+  - botsim and golden unchanged, since no lair is in the fixtures;
+  - the stub-canvas draw is timed;
+  - the phone payload carries the job arrow.
+
+Only the voyagesim goldens get re-snapshotted, after C.5.
+
+## 5. Beyond bosses: the top five next-level priorities
+
+1. **Tutorial and the first voyage.** A 90-second guided first mission, plus a "what do I do?" button on the phone. Nobody should sit lost.
+2. **Rival captain, Hangar and Captain's Log unlocks.** Named captains who come back, and cosmetic unlocks: the cheapest "come back next week" pull.
+3. **Mission variety:**
+   - stop events: derelicts, merchants, distress calls, a heist;
+   - a modifier deck;
+   - a mid-mission twist.
+4. **Real-hardware performance pass** on the owner's actual TV and laptop, with 2-3 ships and a creature, plus a per-machine Detail default.
+5. **Audio and juice:**
+   - distinct telegraph sounds;
+   - hit-stop and a slow-motion finale in co-op;
+   - a play-of-the-mission card.
+
+   The creatures also give the mine layer and flak gun, today's trap parts, a real job.
+
+## 6. Risks and how they're handled
+- **Performance:** baked segments, 8 Hz keys, capsule hits, the low-detail mode, and timed draws in the gate.
+- **TV readability when zoomed out:** big telegraph shapes, part pips, banners, the boss-cam, zoom locked during grips, and a sofa review per creature.
+- **Physics fighting itself:** grips are clamped like tows, small crews get one grip, the gate checks the tilt, and Going Down protection is honoured.
+- **Baselines changing:** creatures spawn only on lair stops and use their own random seed, and botsim/golden stay byte-identical.
+- **Unwinnable fights:** the health pool always works, every win is proven by bots, and every grip has three escapes plus a timer.
+- **Scope:** one generic runner and one data file per creature, with the Kraken shipped alone first.
+- **Wobble/art:** rigid segments, stepped keys, and a dev-page review before anything goes in the game.
+- **Party complexity:** every rule fits one phone line, with an arrow pointing at it.
+- **Voyage balance:** voyagesim bands re-recorded after C.5. Lair rewards are tuned so skipping lairs is never strictly better.
