@@ -153,6 +153,23 @@ const swivelOff = (state, name) => {
   return Math.abs(angleDiff(lim, e.dir));
 };
 
+// Per-engine throttles (engines.js): a bot at the helm of a ship with lift engines levels her nose with SPLIT throttles, as a person would with the phone's levers - the engine at the low end of the
+// tilt runs faster, the one at the high end slower - while the nose is more than ENGINES.BOT_LEVEL_DEG off level (a lot sooner while she climbs out of a Kraken's breach, `climbing`: her lift engines
+// tip her most then), and LINK again once she is level. A ship with no lift engine stays linked: the auto-trim already does what it can. Only throttles the bot split itself (state.thrust.botSplit) are the bot's to join again.
+function levelWithEngines(p, state, climbing) {
+  const eng = mainShip(state).sim && mainShip(state).sim.engines, E = config.ENGINES;
+  if (!eng || state.phase !== 'flying' || !(state.engines || []).some((q) => Math.abs(q.up) > 0.5) || (state.thrust.split && !state.thrust.botSplit)) return;
+  const theta = state.forces.theta, off = (Math.abs(theta) * 180) / Math.PI, start = climbing ? E.BOT_LEVEL_DEG * 0.4 : E.BOT_LEVEL_DEG;
+  if (!state.thrust.botSplit && off > start) {
+    state.thrust.botSplit = true;
+    eng.command({ split: true });
+  } else if (state.thrust.botSplit && off < start / 3) {
+    state.thrust.botSplit = false;
+    eng.command({ split: false });
+  }
+  if (state.thrust.botSplit) eng.command({ thrs: eng.levelThrottles(clamp(theta / 0.0175, -1, 1)) }); // (theta is nose-down positive: ask for nose UP when it is down)
+}
+
 // The nearest bullet, bat, rocket or bomb coming at the ship (for the Deflector), or null.
 function incoming(state) {
   const ship = mainShip(state);
@@ -776,6 +793,7 @@ function operate(p, state, dt) {
     else p.jy = 0;
     // The PRESSURE lever: pump or vent the gasbag toward the altitude the plan wants.
     p.gas = state.goingDown ? 1 : gasFor(state, lungeAlt ?? beamDodge(state) ?? (dip !== null && target === dip ? dip : plan.target)); // (GOING DOWN!: pump flat out)
+    levelWithEngines(p, state, lungeAlt !== null);
   } else if (L.kindOf(p.lock) === 'coil') {
     // Aim at the thickest bunch of enemies and charge while lined up.
     const shot = coilShot(state);

@@ -834,9 +834,17 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     for (const e of L.engines) {
       const y = P[e.d].y + 38;
       const out = e.x < mid ? -1 : 1;
-      const spin = Math.cos(time * 30) * 46;
+      const live = (state.engines || []).find((q) => q.name === e.name);
+      const pw = live && live.pow != null ? Math.min(1, Math.abs(live.pow)) : 1; // (this engine's own throttle: the propeller spins and the exhaust puffs by it, so a split throttle shows)
+      let ph = time * 30;
+      if (live) { // (the blades' phase builds up at the engine's own speed, so a lever pulled back slows them smoothly)
+        live.spinA = (live.spinA || 0) + Math.min(0.1, Math.max(0, time - (live.spinT ?? time))) * 30 * (0.12 + 0.88 * pw) * (live.pow < 0 ? -1 : 1);
+        live.spinT = time;
+        ph = live.spinA;
+      }
+      const spin = Math.cos(ph) * 46;
       if (e.swivel || e.dir) { // a pointed engine (S.5h): the pod turned to the way it pushes (a swivel engine as it is now), its propeller at the end, a steam jet out of the back while it pushes
-        const live = (state.engines || []).find((q) => q.name === e.name), dir = live ? live.dir : e.dir || 0;
+        const dir = live ? live.dir : e.dir || 0;
         const works = !live || live.works !== false;
         ctx.save();
         ctx.translate(e.x, y);
@@ -847,12 +855,12 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
         }
         filled('#6b4a32', () => ctx.ellipse(out * 70, 0, 6, Math.abs(spin) + 4, 0, 0, 7));
         ctx.restore();
-        if (works && state.phase === 'flying') { // exhaust puffs trail opposite the push
+        if (works && state.phase === 'flying' && pw > 0.04) { // exhaust puffs trail opposite the push; a throttled-back engine puffs short and faint
           for (let k = 0; k < 3; k++) {
-            const t = (time * 3 + k / 3) % 1, d = 70 + t * 70;
-            ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - t)})`;
+            const t = (time * 3 + k / 3) % 1, d = 70 + t * 70 * (0.3 + 0.7 * pw);
+            ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - t) * (0.25 + 0.75 * pw)})`;
             ctx.beginPath();
-            ctx.arc(e.x - Math.cos(dir) * d, y - Math.sin(dir) * d, 7 + t * 9, 0, 7);
+            ctx.arc(e.x - Math.cos(dir) * d, y - Math.sin(dir) * d, (7 + t * 9) * (0.5 + 0.5 * pw), 0, 7);
             ctx.fill();
           }
         }

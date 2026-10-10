@@ -120,6 +120,25 @@ body.lefty #plever{right:auto;left:calc(var(--a) + min(20vh,84px) + 20px)}
 #plever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
 #plever .rev{position:absolute;left:0;right:0;bottom:4px;text-align:center;color:#8ab8ff;font-size:11px;font-weight:900}
 #lever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
+/* Helm ENGINE PANEL (modules/controller/enginePanel.js): a small lever per engine, left to right as the ship sits on the screen, an arrow under each for the way it points; SPLIT / LINK above.
+   Linked, the levers follow the main lever by themselves (and the auto-trim); split, each one is dragged on its own. In the middle column; hidden unless the ship has two engines or more. */
+#eng{display:none;flex:1 1 55%;min-height:0;width:100%;max-width:230px;flex-direction:column;gap:4px;touch-action:none}
+body.helm #mid.eng #eng{display:flex}
+#engmode{flex:none;font:inherit;font-weight:900;font-size:14px;border:4px solid #2b2622;border-radius:12px;background:#6b4a8c;color:#fff;min-height:40px;box-shadow:0 3px 0 #2b2622;touch-action:none;padding:0 8px}
+#engmode.down{transform:translateY(3px);box-shadow:0 0 0 #2b2622}
+#engmode.split{background:#e8a33d;color:#2b2622}
+#engrow{flex:1;min-height:0;display:flex;gap:6px;justify-content:center}
+.el{position:relative;flex:1 1 0;max-width:54px;min-width:34px;display:flex;flex-direction:column;align-items:center;gap:2px;touch-action:none}
+.el .bar{position:relative;flex:1;width:100%;min-height:0;border:4px solid #2b2622;border-radius:12px;background:#3b2a1d;touch-action:none}
+.el .fill{position:absolute;left:0;right:0;bottom:0;background:#4caf50}
+.el .stop{position:absolute;left:-3px;right:-3px;height:3px;margin-bottom:-1px;background:#ffd23f}
+.el .handle{position:absolute;left:-6px;right:-6px;height:20px;margin-top:-10px;background:#f3ead6;border:4px solid #2b2622;border-radius:8px}
+.el .arrow{flex:none;font-size:22px;line-height:1;color:#2b2622;background:#f3ead6;border:3px solid #2b2622;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center}
+.el .arrow i{display:block;font-style:normal;font-weight:900}
+.el.off .bar{opacity:.35}
+#eng:not(.split) .el .bar{opacity:.8}
+#eng:not(.split) .el .handle{background:#cdbf9a}
+body.engsplit #lever{opacity:.4}
 /* Versus (pvp/match.js): the side this phone is on. In the lobby a bar says "You're RED - tap to swap"; afterwards the strip wears the team's colour. */
 #teambar{display:none;font:inherit;font-weight:900;font-size:17px;border:4px solid #2b2622;border-radius:14px;color:#fff;padding:4px 12px;min-height:40px;touch-action:none;background:var(--tc,#c4574d);box-shadow:0 3px 0 #2b2622;text-align:center}
 #teambar.down{transform:translateY(3px);box-shadow:0 0 0 #2b2622}
@@ -207,6 +226,7 @@ h1{font-size:28px}
   <div id="controls">
     <div id="pad"><div id="knob"></div></div>
     <div id="mid">
+      <div id="eng"><button id="engmode">SPLIT</button><div id="engrow"></div></div>
       <div id="radarbox"><canvas id="radar"></canvas></div>
       <div id="job"><div id="jarrow"></div><div id="jtext"></div></div>
     </div>

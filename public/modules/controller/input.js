@@ -1,4 +1,5 @@
 import { config } from '../../config.js';
+import { createEnginePanel } from './enginePanel.js';
 export function createControllerInput({ network, ui }) {
   const pad = document.getElementById('pad');
   const knob = document.getElementById('knob');
@@ -118,6 +119,8 @@ export function createControllerInput({ network, ui }) {
   lever.addEventListener('pointerup', leverUp);
   lever.addEventListener('pointercancel', leverUp);
   showLever();
+  // The engine panel (enginePanel.js): one small lever per engine, SPLIT / LINK. The host's ui message feeds it (ui.hooks.eng); LINK sends the main lever's setting along.
+  if (ui.hooks) ui.hooks.eng = createEnginePanel({ network, stick: () => ({ jx, jy }), getMain: () => throttle, setMain: (v) => { throttle = v; showLever(); } }).show;
 
   // Helm PRESSURE lever (the gasbag): up = pump hot steam in (she rises), the middle line = hold,
   // down = vent (she drops). Stays where you leave it. gas runs from -1 to 1.
