@@ -106,11 +106,12 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     const wasShadows = renderer.shadowMap.enabled;
     renderer.shadowMap.enabled = look.shadows && tier.shadows;
     world.lights.setTier(tier);
+    world.setTier(tier);
     world.applyLights();
     if (wasShadows !== renderer.shadowMap.enabled) { scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; }); applyLook(scene); }
     for (const e of models.values()) capLamps(e.model);
   };
-  const flagsNow = () => tier.name + [look.shadows, look.rim, look.lanterns, look.toon].map((b) => (b ? 1 : 0)).join('');
+  const flagsNow = () => tier.name + [look.shadows, look.rim, look.lanterns, look.toon, look.dark, look.clouds, look.water].map((b) => (b ? 1 : 0)).join('');
   // Real lantern lights: the boiler's glow light first, then the lanterns (3D.md: 6 a ship on High, 2 on Medium, none on Low, where the lamps stay as glowing colour only).
   // The COUNT of lights in the scene only changes with the tier, so no shader is rebuilt when it gets dark.
   const capLamps = (model) => {
@@ -118,6 +119,10 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     if (model.lampCap === cap) return;
     model.lampCap = cap;
     [...model.lights.boiler, ...model.lights.points].forEach((pl, i) => { pl.visible = i < cap; });
+    // WP3 (dark caves): with fewer real lights a tier lets each reach further (the boiler's and the lanterns' window, in world units), so the crew's decks stay readable when it is dark
+    const wide = cap >= 6 ? 1 : cap >= 1 ? 2.4 : 1;
+    model.lights.points.forEach((pl) => { pl.distance = 420 * wide; });
+    model.lights.boiler.forEach((pl) => { pl.distance = 380 * wide; });
   };
   const fit = () => {
     const w = Math.max(2, canvas.clientWidth || window.innerWidth), h = Math.max(2, canvas.clientHeight || window.innerHeight);
@@ -322,6 +327,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     const env = envIdOf(state);
     const map = state.course && state.course.map;
     if (world.envId !== env || world.cave !== !!(map && !map.open)) world.setEnv(env, !!(map && !map.open));
+    terrain.setEnv(env);
     syncTod(dt);
     const cam = syncCamera(view, w, h);
     syncShips(t, dt);
@@ -332,7 +338,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     kraken.update(state.creature, world.night);
     terrain.update(map, camTarget.x, -camTarget.y);
     const seaY = env === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : NaN;
-    world.update(camera, camTarget, { w: cam.visW, h: cam.visH }, t, seaY);
+    world.update(camera, camTarget, { w: cam.visW, h: cam.visH }, t, seaY, map);
     syncLights();
     const j1 = performance.now();
     const rig = world.lights.rig, usePost = !!(look.post && post.enabled);

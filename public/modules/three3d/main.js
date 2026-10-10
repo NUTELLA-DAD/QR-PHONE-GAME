@@ -60,7 +60,7 @@ function buildUI() {
   <label>Light</label><select id="u-tod">${opts([['day', 'Day'], ['dusk', 'Dusk'], ['night', 'Night (cave)'], ['', 'Auto (from the game)']], S.tod)}</select>
   <div class="row"><button id="b-toon"></button><button id="b-shadow"></button></div>
   <label>Quality tier (look pass)</label><select id="u-tier">${opts([['', 'from Detail'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], S.tier)}</select>
-  <div class="row" id="look-row">${['bloom', 'lut', 'grain', 'fog', 'rim', 'lanterns', 'post'].map((k) => `<button data-look="${k}"></button>`).join('')}</div>
+  <div class="row" id="look-row">${['bloom', 'lut', 'grain', 'fog', 'rim', 'lanterns', 'dark', 'clouds', 'water', 'post'].map((k) => `<button data-look="${k}"></button>`).join('')}</div>
   <div class="row"><button id="b-detail"></button><button id="b-orbit"></button></div>
   <div class="row"><button id="b-sweep"></button></div>
   <div class="row"><button id="b-2d"></button><button id="b-skip">+30 s</button></div>
@@ -77,7 +77,7 @@ function buildUI() {
   const sync = () => {
     $('b-toon').textContent = look.toon ? 'Look: Toon + ink' : 'Look: Plain lit'; $('b-toon').classList.toggle('on', look.toon);
     $('b-shadow').textContent = 'Shadows: ' + (look.shadows ? 'on' : 'off'); $('b-shadow').classList.toggle('on', look.shadows);
-    const NAMES = { bloom: 'Bloom', lut: 'Grade', grain: 'Grain+vignette', fog: 'Fog', rim: 'Rim light', lanterns: 'Lantern lights', post: 'Post (all)' };
+    const NAMES = { bloom: 'Bloom', lut: 'Grade', grain: 'Grain+vignette', fog: 'Fog', rim: 'Rim light', lanterns: 'Lantern lights', dark: 'Dark caves', clouds: 'Clouds', water: 'Toon water', post: 'Post (all)' };
     p.querySelectorAll('[data-look]').forEach((b) => { const k = b.dataset.look; b.textContent = NAMES[k] + ': ' + (look[k] ? 'on' : 'off'); b.classList.toggle('on', !!look[k]); });
     $('b-detail').textContent = 'Detail: ' + S.detail;
     $('b-sweep').textContent = S.sweep ? 'Idle lamps sweep (demo)' : 'Lamps: as the game has them'; $('b-sweep').classList.toggle('on', S.sweep);

@@ -51,8 +51,11 @@ export function createSky(scene, renderer) {
   caveMat.color.multiplyScalar(0.85);
   const cavePlane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), caveMat);
   cavePlane.position.z = -420;
-  cavePlane.userData.shadowReceiver = true;
-  cavePlane.receiveShadow = look.shadows;
+  // WP3 SEAM FIX: this plane used to RECEIVE the key light's shadows. The key's shadow camera is a box (fitted to the ships, snapped to 200 units): outside it there is no shadow, inside it the rock
+  // slab and the ship shade the picture, so the backdrop jumped in brightness along the frustum's top / bottom edge - a horizontal line across the whole cave at about 40% of the screen height
+  // (measured: a step of 20 -> 29 grey levels in one row). The backdrop is a painted picture: the lamps' light still lands on it (toon), shadows do not.
+  cavePlane.userData.shadowReceiver = false;
+  cavePlane.receiveShadow = false;
   cavePlane.renderOrder = -10;
   cavePlane.visible = false;
   cavePlane.frustumCulled = false;
@@ -68,6 +71,8 @@ export function createSky(scene, renderer) {
     stripMeshes.forEach((m) => m.material.color.set(c.sky).lerp(_white, name === 'night' ? 0.0 : 0.35));
   };
   const _white = new THREE.Color('#ffffff');
+  // The darkness (lights.js gloom 0..1): the cave picture's own glow drops with it, so the lamps and beams are what shows it.
+  S.setGloom = (g) => { caveMat.emissiveIntensity = 0.2 * (1 - 0.75 * g); };
 
   // The sky for this environment; cave = the map is a cave (no sky strips, the cave picture behind the rock instead).
   S.setEnv = (envId, cave) => {

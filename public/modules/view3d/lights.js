@@ -37,6 +37,12 @@ export function rigFor(envId) {
     bloom: L3.bloom == null ? 0.55 : L3.bloom,
     vignette: L3.vignette == null ? 0.16 : L3.vignette,
     rim: { color: (L3.rim && L3.rim.color) || '#ffd9a8', amount: L3.rim && L3.rim.amount != null ? L3.rim.amount : 0.16 },
+    // WP3 DARKNESS. floor = how much of the dark-blue sky colour the rock keeps even in the dark (0.12 default). cave = how dark a cave is in 3D (0..1; the 2D game's SEARCHLIGHT.DARK.CAVE is 0, the owner wants the 3D caves darker), hemi = the ambient strength at full gloom,
+    // sky / ground = its dark-blue floor colours, key = the key light's share left at full gloom. from / to = the darkness (0..1) where the gloom starts and is complete.
+    dark: { cave: 0.66, hemi: 0.34, sky: '#34447a', ground: '#141a2c', key: 0.1, from: 0.12, to: 0.72, ...(L3.dark || {}) },
+    cap: { color: '#8fa65e', amount: 0.9, ...(L3.cap || {}) }, // (terrain.js: the moss / snow on top of the rock)
+    clouds: { n: 14, front: 3, alpha: 0.95, tint: '#ffffff', ...(L3.clouds || {}) }, // (clouds.js)
+    water: { deep: '#5b93a6', shallow: '#80bcc4', foam: '#f4fbfa', speed: 26, ...(L3.water || {}) }, // (water.js)
   };
 }
 
@@ -53,20 +59,31 @@ export function createLights(scene) {
   const fog = new THREE.FogExp2('#e6ecea', 0.00002); // (always present, so toggling it never recompiles a material: the density goes to 0 instead)
   scene.fog = fog;
 
-  const L = { hemi, sun, fog, sunDir: new THREE.Vector3(-0.5, 0.8, 0.7).normalize(), rig: rigFor('skyisles'), tier: null, haveKey: true, shadowsOn: true, exposure: 1, night: 0, cave: false, hazeAmt: 0.05, half: { x: 2150, y: 1500 }, mid: { x: 0, y: 0 } };
+  const L = { hemi, sun, fog, sunDir: new THREE.Vector3(-0.5, 0.8, 0.7).normalize(), rig: rigFor('skyisles'), tier: null, haveKey: true, shadowsOn: true, exposure: 1, night: 0, gloom: 0, cave: false, hazeAmt: 0.05, half: { x: 2150, y: 1500 }, mid: { x: 0, y: 0 } };
 
   // Everything that depends on the environment, the darkness (tod = a world.js preset blend) and the cave flag.
   L.apply = (tod, envId, cave) => {
     if (!L.rig || L.rig.id !== envId) L.rig = rigFor(envId);
-    const rig = L.rig, n = tod.night, k = cave ? tod.cave : 1;
-    L.night = n; L.cave = !!cave;
+    const rig = L.rig, dk = rig.dark;
+    // THE DARKNESS: how dark the sky is (the game's darkTarget, via tod.night), and a cave is never lighter than rig.dark.cave. The gloom (0..1) then drops the ambient to a dark-blue floor, so
+    // what the lamps, the boiler and the beams do not touch reads as a near-black silhouette. ?look=nodark puts the old day-lit caves back.
+    const n = look.dark ? Math.max(tod.night, cave ? dk.cave : 0) : tod.night, k = cave ? tod.cave : 1;
+    let g = look.dark ? Math.max(0, Math.min(1, (n - dk.from) / Math.max(0.01, dk.to - dk.from))) : 0;
+    if (g > 0 && (!look.lanterns || (L.tier && L.tier.lanterns === 0))) g *= 0.5; // (no real lamps on this tier: the lamps do not light the decks, so the dark must not be total)
+    L.night = n; L.cave = !!cave; L.gloom = g;
     const w = 0.7 * (1 - 0.5 * n); // how much of the world's own colour replaces the day / night preset
     mixC(hemi.color, tod.hemi[0], rig.hemi.sky, w);
     mixC(hemi.groundColor, tod.hemi[1], rig.hemi.ground, w);
     hemi.intensity = tod.hemi[2] * rig.hemi.strength * (look.toon ? 1 : 1.1) * (cave ? Math.max(tod.cave, 0.35) + 0.2 * (1 - n) : 1);
+    if (g > 0) { // the dark-blue floor
+      hemi.color.lerp(_c.set(dk.sky), g);
+      hemi.groundColor.lerp(_c.set(dk.ground), g);
+      hemi.intensity += (dk.hemi - hemi.intensity) * g;
+    }
+    fx.uFloor.value.set(dk.sky).multiplyScalar(g * (dk.floor == null ? 0.12 : dk.floor));
     L.haveKey = rig.key.on;
     mixC(sun.color, tod.sun[0], rig.key.color, w);
-    sun.intensity = rig.key.on ? tod.sun[1] * rig.key.strength * k : 0;
+    sun.intensity = rig.key.on ? tod.sun[1] * rig.key.strength * k * (1 - g * (1 - dk.key)) : 0;
     const d = rig.key.dir || tod.sun[2];
     L.sunDir.set(d[0], d[1], d[2]).normalize();
     sun.position.copy(L.sunDir).multiplyScalar(3800).add(sun.target.position);
@@ -74,7 +91,7 @@ export function createLights(scene) {
     sun.castShadow = L.shadowsOn;
     // the toon rim: warm, on the side the key comes from; weaker in the dark
     fx.uRimColor.value.set(rig.rim.color);
-    fx.uRimAmt.value = look.rim ? rig.rim.amount * (1 - 0.5 * n) * (cave ? 0.7 : 1) : 0;
+    fx.uRimAmt.value = look.rim ? rig.rim.amount * (1 - 0.5 * n) * (cave ? 0.7 : 1) * (1 - 0.8 * g) : 0; // (in the dark the thin rim fades too: a flat additive tone would out-shine the faint silhouettes)
     fx.uRimDir.value.copy(rig.key.on ? L.sunDir : _v.set(-0.4, 0.6, 0.6).normalize());
     // fog: the haze colour darkens with the night; a cave fades into its own dark rock colour
     const bright = 1 - 0.72 * n;
