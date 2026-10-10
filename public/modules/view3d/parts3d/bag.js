@@ -184,8 +184,8 @@ export function buildBag(Gb, ctx, i, n) {
     const len = top.distanceTo(low), sag = len * 0.1, pts = [];
     for (let k = 0; k <= 6; k++) { const t = k / 6, p = low.clone().lerp(top, t); p.y -= sag * 4 * t * (1 - t); pts.push(p); }
     for (let k = 0; k < 6; k++) rig.rod('#4a3a2a', pts[k], pts[k + 1], 2.1, 0, { tr: 'rope', seg: 1e9 });
-    rig.sphere(T.iron, top.x, top.y, top.z, 6, 6, 6, 0, true, { tr: 'iron' }); // the thimble on the flank
-    rig.sphere(T.iron, low.x, low.y, low.z, 4.5, 4.5, 4.5, 0, true, { tr: 'iron' });
+    rig.box(T.iron, top.x, top.y, top.z, 9, 9, 9, 0, 0.6, 0.6, 0, { tr: 'iron' }); // the thimble on the flank
+    rig.box(T.iron, low.x, low.y, low.z, 7, 7, 7, 0, 0.6, 0.6, 0, { tr: 'iron' });
   }
   void nowTop; void P; void config; void ctx.content;
   return { key, batches: [rig], dyn: [{ role: 'bag', key, node: grp, G: Gb, i }], bounds: { x0: X(Gb.cx - Gb.rx), x1: X(Gb.cx + Gb.rx), y0: Y(Gb.cy + Gb.ry), y1: Y(Gb.cy - Gb.ry), z0: -Gb.ry, z1: Gb.ry } };

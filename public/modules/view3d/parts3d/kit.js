@@ -16,7 +16,7 @@ import { getTrimSheet, TRIM, uvRect } from '../textures.js';
 const S = 2048;
 // unit shapes for ship parts, lighter than style.js G (a ship is drawn three times: the mesh, its ink shell and the shadow pass)
 const GX = {
-  box: G.box, cyl: new THREE.CylinderGeometry(1, 1, 1, 12), cone: new THREE.ConeGeometry(1, 1, 10), sphere: new THREE.SphereGeometry(1, 14, 9), sphereXs: new THREE.SphereGeometry(1, 8, 5),
+  box: G.box, cyl: new THREE.CylinderGeometry(1, 1, 1, 12), cyl8: new THREE.CylinderGeometry(1, 1, 1, 8), cone: new THREE.ConeGeometry(1, 1, 10), sphere: new THREE.SphereGeometry(1, 14, 9), sphereXs: new THREE.SphereGeometry(1, 8, 5),
   rod8: new THREE.CylinderGeometry(1, 1, 1, 8), rod6: new THREE.CylinderGeometry(1, 1, 1, 6, 1, true),
 };
 const TS = 0.9; // world units per texel for 'win' mode (a 96 px plank strip is about 86 units tall)
@@ -184,7 +184,7 @@ export class Sink {
   // A cylinder about y (radius r, height h), then rotated; rz2 = a different radius along z (an ellipse section).
   cyl(color, cx, cy, cz, r, h, ow = 0, rx = 0, ry = 0, rz = 0, rz2, o = {}) {
     const m = new THREE.Matrix4().compose(new THREE.Vector3(cx, cy, cz), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(r, h, rz2 == null ? r : rz2));
-    return this._prim(GX.cyl, color, m, ow, o, () => [Math.PI * 2 * r, h]);
+    return this._prim(Math.max(r, rz2 == null ? 0 : rz2) < 9 ? GX.cyl8 : GX.cyl, color, m, ow, o, () => [Math.PI * 2 * r, h]);
   }
   cone(color, cx, cy, cz, r, h, ow = 0, rx = 0, ry = 0, rz = 0, o = {}) {
     const m = new THREE.Matrix4().compose(new THREE.Vector3(cx, cy, cz), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(r, h, r));

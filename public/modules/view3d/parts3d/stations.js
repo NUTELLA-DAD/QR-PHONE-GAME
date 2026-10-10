@@ -31,7 +31,7 @@ export function buildStation(s, ctx) {
     const w = ctx.dynBatch(key + ':wheel');
     w.geo(T.brass, new THREE.TorusGeometry(32, 4, 6, 14), null, 1.5, { tr: 'brass', uv: 'fit' });
     for (let i = 0; i < 4; i++) w.box(T.brass, 0, 0, 0, 66, 5, 5, 0, 0, 0, (i * Math.PI) / 4, { tr: 'brass' });
-    for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; w.sphere(T.rail, Math.cos(a) * 38, Math.sin(a) * 38, 0, 3.6, 3.6, 3.6, 0.6, true, { tr: 'woodC' }); } // the handles
+    for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; w.box(T.rail, Math.cos(a) * 38, Math.sin(a) * 38, 0, 7, 7, 7, 0.6, 0, 0, a, { tr: 'woodC' }); } // the handles
     const wg = w.buildGroup();
     wg.position.set(X(x), Y(y - 74), FZ);
     ctx.content.add(wg);
@@ -128,7 +128,7 @@ export function buildPipe(p, ctx, i) {
     const n = Math.floor(pts[k].distanceTo(pts[k + 1]) / 90);
     for (let j = 1; j <= n; j++) { const t = j / (n + 1), q = pts[k].clone().lerp(pts[k + 1], t); b.box(T.iron, q.x, q.y, q.z, 9, 9, 6.5, 0.6, 0, 0, 0, { tr: 'iron' }); } // pipe clamps
   }
-  for (const q of pts) b.sphere(T.brass, q.x, q.y, q.z, 7, 7, 7, 1.2, true, { tr: 'brass' });
+  for (const q of pts) b.box(T.brass, q.x, q.y, q.z, 11, 11, 11, 0.8, 0, 0, 0, { tr: 'brass' });
   if (p.valve) { b.cyl('#c4574d', X(p.valve[0]), Y(p.valve[1]), -W + 34, 12, 4, 1.2, Math.PI / 2, 0, 0, undefined, { tr: 'plain' }); b.rod(T.brass, V(X(p.valve[0]), Y(p.valve[1]), -W + 26), V(X(p.valve[0]), Y(p.valve[1]), -W + 34), 2.4, 0, { tr: 'brass' }); }
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }

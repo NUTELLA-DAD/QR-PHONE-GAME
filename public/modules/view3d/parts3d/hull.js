@@ -63,7 +63,7 @@ function loft(b, ctx, poly, o) {
     return n;
   };
   // the stations along the hull: dense at the ends, plus every x the outline bends at
-  const NS = o.stations || 38, xs = [];
+  const NS = o.stations || 14, xs = [];
   for (let k = 0; k <= NS; k++) xs.push(xmin + (xmax - xmin) * (0.5 - 0.5 * Math.cos((Math.PI * k) / NS)));
   for (const p of poly) if (p[0] > xmin + 3 && p[0] < xmax - 3) xs.push(p[0]);
   if (o.bowX) xs.push(o.bowX);
@@ -115,7 +115,7 @@ function loft(b, ctx, poly, o) {
 
     // the inner lining: the far wall's face, darker toward the ceiling (baked occlusion)
     const lin = new Soup(), inEnd = o.inEnd == null ? xmax : o.inEnd;
-    const LF = hMid < 120 ? [0, 0.5, 0.9] : [0, 0.22, 0.5, 0.9];
+    const LF = hMid < 120 ? [0, 0.5, 0.9] : [0, 0.3, 0.9];
     for (let i = 0; i + 1 < LF.length; i++) {
       const f0 = LF[i], f1 = LF[i + 1];
       const ao = (f) => 0.72 + 0.28 * smooth(0, 0.3, f);
@@ -218,7 +218,7 @@ export function buildHull(ctx) {
     return { key: 'hull', batches: [b], dyn, bounds: b.bounds };
   }
   const poly = hullPolygon(H), xmin = H.xL, xmax = H.xR - 0.5;
-  const lf = loft(b, ctx, poly, { W, x0: xmin, x1: xmax, bowX: H.xNose, inEnd: H.xNose - 4, tag: 'gondola', stations: 40 });
+  const lf = loft(b, ctx, poly, { W, x0: xmin, x1: xmax, bowX: H.xNose, inEnd: H.xNose - 4, tag: 'gondola', stations: 14 });
   // full decks added under the lower deck: a box hull round each (chamfered underneath)
   (H.boxes || []).forEach((bx, i) => {
     const p2 = [[bx.x0, bx.y0], [bx.x1, bx.y0], [bx.x1, bx.y1 - 26], [bx.x1 - 26, bx.y1], [bx.x0 + 26, bx.y1], [bx.x0, bx.y1 - 26]];
@@ -238,7 +238,7 @@ export function buildHull(ctx) {
       if (x >= md.x1 - 40) continue;
       const f = clamp((md.y + 50 - H.top) / Math.max(40, H.yKeel - H.top), 0.1, 0.9), z = lf.pos(x, f, s, 0, 1.2)[2];
       sink.cyl(T.glass, X(x), Y(md.y + 50), z, 16, 3, 2, Math.PI / 2);
-      sink.geo(T.brass, new THREE.TorusGeometry(17, 2.6, 6, 14), new THREE.Matrix4().makeTranslation(X(x), Y(md.y + 50), z + s * 1.4), 1, { tr: 'brass' });
+      sink.geo(T.brass, new THREE.TorusGeometry(17, 2.6, 4, 10), new THREE.Matrix4().makeTranslation(X(x), Y(md.y + 50), z + s * 1.4), 1, { tr: 'brass' });
     }
   }
   // the bow: a bowsprit with a brass ball, an iron stem band down the nose, two hawse pipes

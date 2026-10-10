@@ -10,7 +10,7 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // A turned rail post of height `hi`: foot, bulb, neck, cap. 6 sides.
 function post(b, color, x, yBase, z, hi, r = 3.4) {
-  const pts = [[r, 0], [r, 2], [r * 0.62, 3.6], [r * 0.62, hi * 0.42], [r * 1.0, hi * 0.5], [r * 0.62, hi * 0.58], [r * 0.62, hi - 3], [r * 0.95, hi]];
+  const pts = [[r, 0], [r * 0.62, 3.6], [r * 0.62, hi * 0.4], [r * 1.0, hi * 0.5], [r * 0.62, hi * 0.6], [r * 0.7, hi], [0.05, hi + 0.3]];
   b.lathe(color, pts, x, yBase, z, 1.2, { tr: 'woodC', segs: 5 });
 }
 
@@ -67,7 +67,7 @@ export function buildDeck(q, ctx) {
     if (rail) {
       const hi = isNestRow(row) ? 56 : 46;
       for (const sgn of [-1, 1]) {
-        for (let x = a + 10; x <= c - 5; x += 110) post(b, T.rail, X(x), Y(q.y), sgn * (z - 6), hi);
+        for (let x = a + 10; x <= c - 5; x += 130) post(b, T.rail, X(x), Y(q.y), sgn * (z - 6), hi);
         const ends = [a + 4, c - 4];
         for (const x of ends) post(b, T.rail, X(x), Y(q.y), sgn * (z - 6), hi + 6, 4.4); // the heavier stanchions at the ends
         b.rod(T.rail, V(X(a + 4), Y(q.y - hi - 3), sgn * (z - 6)), V(X(c - 4), Y(q.y - hi - 3), sgn * (z - 6)), 3, 1.3, { tr: 'woodC' }); // the top rail

@@ -121,6 +121,7 @@ export function buildShipModel(layout, opts = {}) {
     // WP5: the parts, by id. parts.get(key) = { key, kind, name, deck, x, x0, x1, dyn: [...], bounds }; ranges[key] = [{ layer, start, count }] into the one merged geometry.
     parts: built.parts, ranges: asm.ranges, assembled: asm,
     extractPart: (key) => asm.extract(key),
+    dispose() { try { for (const k of ['toon', 'plain', 'depth']) ctx.mats[k].dispose(); } catch { /* (gone already) */ } }, // (this ship's own materials; index.js calls it when the ship is rebuilt or gone)
     // Hide the hull wall that faces the viewer: camSide > 0 when the camera is on the ship's local +Z side.
     setView(camSide) { asm.setSide(camSide); },
     // c: { t, ship (handle), world, night (0..1), lamps (the beams shine) }
