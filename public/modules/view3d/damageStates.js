@@ -121,7 +121,7 @@ export function createPartDamage({ state, models, vfx }) {
       const cls = CLASS[meta.kind];
       if (!cls) continue;
       const idx = pIdx[key] || 0;
-      const p = { key, meta, idx, cls, name: nameOf(key, meta.kind), state: 0, shown: 0, last: 0, snapUntil: 0, mid: 0, row: [0, 0, 0, 0, 0, 0, 0], dyn: null, anchor: null, tick: 0 };
+      const p = { key, meta, idx, cls, name: nameOf(key, meta.kind), state: 0, shown: 0, last: 0, snapUntil: 0, mid: 0, row: [0, 0, 0, 0, 0, 0, 0, 0], dyn: null, anchor: null, tick: 0 };
       p.st = (meta.kind === 'station' ? L.stations.find((s) => s.n === p.name) : null) || null;
       p.dyn = (meta.dyn || [])[0] || null;
       for (const d of meta.dyn || []) if (d.node && idx) fillPart(d.node, idx);
@@ -483,6 +483,41 @@ export function createPartDamage({ state, models, vfx }) {
     rec.np = np; rec.nc = nc;
   }
 
+  // WP15: SOFT SOOT POOLS. The walls' shader (kit.js DMG_TINT, uSootPts) darkens the hull, decks and rooms only near real damage: the scars, breaches, fires (and the scorch a long fire left) and the blows in the hit log, each a soft
+  // round pool (x y radius strength in content coordinates), a blow within MERGE units of a pool joins it. The strength grows as the hull share drops (POOL.FROM -> FULL); fires, breaches and scars keep POOL.BASE of it even on a
+  // healthy hull. Rewritten only when the picture of damage changes (a signature), never per frame.
+  const smooth01 = (v) => { const t = clamp(v, 0, 1); return t * t * (3 - 2 * t); };
+  function writeSoot(rec, pm, st, share) {
+    const mats = rec.mats;
+    if (!mats || !mats.uSootPts) return;
+    const KK = K().POOL, model = rec.model, L = model.layout, pv = model.pv || 0;
+    const k = smooth01((share - KK.FROM) / Math.max(0.01, KK.FULL - KK.FROM)), kb = Math.max(k, KK.BASE);
+    const log = st.hitLog || [], fires = st.fires || [], scars = L.scars || [];
+    const sig = [Math.round(k * 40), log.length ? log[log.length - 1].n : 0, log.length, fires.length, fires.length ? fires[0].x : 0, pm.breaches.size, scars.length, pm.scorches.length, L.version].join(',');
+    if (rec.sootSig === sig) return;
+    rec.sootSig = sig;
+    const src = [];
+    const add = (x, y, r, s) => {
+      if (!fin(x) || !fin(y) || !(s > 0.01)) return;
+      for (const q of src) if (Math.hypot(q[0] - x, q[1] - y) < KK.MERGE) { q[3] = Math.min(1.3, q[3] + s * 0.55); q[2] = Math.max(q[2], r); return; }
+      if (src.length < Math.min(24, KK.MAX)) src.push([x, y, r, s]);
+    };
+    for (const q of scars) add(((q.x0 + q.x1) / 2) - pv, -((q.y0 + q.y1) / 2), Math.max(q.x1 - q.x0, q.y1 - q.y0) / 2 + KK.SCAR[1], KK.SCAR[0] * kb);
+    for (const b of pm.breaches.values()) { const q = L.platforms[deckIndex(L, b.deck)]; if (q) add(b.x - pv, -(q.y - 56), KK.BREACH[1], KK.BREACH[0] * kb); }
+    for (const f of fires) { const q = L.platforms[f.d]; if (q) add(f.x - pv, -(q.y - 40), KK.FIRE[1], KK.FIRE[0] * kb); }
+    for (const sc of pm.scorches) { const q = L.platforms[deckIndex(L, sc.deck)]; if (q) add(sc.x - pv, -(q.y - 40), KK.FIRE[1] * 0.9, KK.FIRE[0] * 0.8 * kb); }
+    if (k > 0.01) {
+      for (let i = log.length - 1; i >= 0; i--) { // newest first: the ring keeps the last 64 blows, the pools keep the most recent ones
+        const h = log[i], pw = clamp(h.power || 1, 0.5, 9);
+        if (h.partId) { const meta = model.parts.get(h.partId); if (meta && meta.kind === 'gasbag') continue; } // (a bag takes rips, not soot on the hull)
+        add(h.x - pv, -h.y, Math.min(KK.RADIUS[2], KK.RADIUS[0] + KK.RADIUS[1] * pw), (KK.HIT[0] + KK.HIT[1] * pw) * k);
+      }
+    }
+    const arr = mats.uSootPts.value;
+    for (let i = 0; i < arr.length; i++) { const q = src[i]; if (q) arr[i].set(q[0], q[1], q[2], q[3]); else arr[i].set(0, 0, 1, 0); }
+    mats.uSootN.value = src.length;
+  }
+
   // ---- the frame, one ship ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
   function stepShip(sh, model, dt, t, night) {
     const KK = K(), st = sh.ctx || state;
@@ -508,6 +543,7 @@ export function createPartDamage({ state, models, vfx }) {
     const vx = (sh.pose && sh.pose.vx) || 0, vy = -((sh.pose && sh.pose.vy) || 0);
     watchFires(rec, pm, st, dt);
     watchBreaches(rec, pm, st);
+    writeSoot(rec, pm, st, share);
     let best = 3, nDamaged = 0, nBroken = 0;
     const data = rec.mats.dmgData, W = rec.mats.dmgData.length / 8;
     let wrote = false;
@@ -529,6 +565,7 @@ export function createPartDamage({ state, models, vfx }) {
       const amt = KK.AMT[p.shown] || 0;
       // 2. the shader row
       let r = KK.SOOT[p.shown], g = KK.DENT[p.shown], b = 0, a = 0, cx = 0, cy = 0, cz = 0;
+      const wallF = p.cls === 'wall' ? 1 : 0; // (row 1 w: the shader treats it as a wall: light grime + the soft pools of writeSoot)
       if (p.cls === 'wall') { r = sootHull; g = dentHull; }
       else if (p.cls === 'sail') {
         b = KK.TEAR[p.shown];
@@ -540,12 +577,12 @@ export function createPartDamage({ state, models, vfx }) {
         r = 0; g = 0; a = KK.BAG.GREY * c; // (a flat bag is only washed out: soot would speckle the canvas)
       }
       const row = p.row;
-      if (p.idx && (row[0] !== r || row[1] !== g || row[2] !== b || row[3] !== a || row[4] !== cx || row[5] !== cy || row[6] !== cz)) {
-        row[0] = r; row[1] = g; row[2] = b; row[3] = a; row[4] = cx; row[5] = cy; row[6] = cz;
+      if (p.idx && (row[0] !== r || row[1] !== g || row[2] !== b || row[3] !== a || row[4] !== cx || row[5] !== cy || row[6] !== cz || row[7] !== wallF)) {
+        row[0] = r; row[1] = g; row[2] = b; row[3] = a; row[4] = cx; row[5] = cy; row[6] = cz; row[7] = wallF;
         let o = p.idx * 4;
         data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = a;
         o = (W + p.idx) * 4;
-        data[o] = cx; data[o + 1] = cy; data[o + 2] = cz; data[o + 3] = 0;
+        data[o] = cx; data[o + 1] = cy; data[o + 2] = cz; data[o + 3] = wallF;
         wrote = true;
       }
       // 3. the pose

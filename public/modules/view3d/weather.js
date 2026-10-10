@@ -127,7 +127,8 @@ export function createWeather({ parent, state, world, models, vfx, renderer }) {
     U.uStars.value += (starsOn - U.uStars.value) * Math.min(1, dt * 1.5);
     // the lava (the embers' birth line) and the sea (nothing falls under water)
     const lavaY = env === 'ember' && fin(E.lavaY) ? E.lavaY : NaN;
-    U.uLavaY.value = fin(lavaY) ? -lavaY : c.target.y - vis.visH * 0.42;
+    const lavaDrop = fin(lavaY) && fin(cfg("LAVA").DROP) ? cfg("LAVA").DROP : 0; // (WP15: the sheet lies this far under the sim's lava line)
+    U.uLavaY.value = fin(lavaY) ? -lavaY - lavaDrop : c.target.y - vis.visH * 0.42;
     U.uCut.value = env === 'sea' && c.sea != null && fin(c.sea) ? -c.sea : fin(lavaY) && cur.mode === 'rain' ? -lavaY : -1e9;
     // the light of the place on rain and snow: the hemisphere's colour, darker at night, whiter in a lightning flash
     const hm = world.hemi, flash = world.lights ? world.lights.flashAdd || 0 : 0;
@@ -148,7 +149,7 @@ export function createWeather({ parent, state, world, models, vfx, renderer }) {
     ship.update({ t: c.t, env });
     S.rods = ship.rods || 0; S.crusts = ship.crusts || 0; S.pump = ship.pump || 0; S.frostParts = ship.frostParts || 0;
     // ---- the lava, the heat
-    lava.update(c.t, lavaY, c.map, c.camera);
+    lava.update(c.t, lavaY, c.map, c.camera, lavaDrop);
     S.lava = lava.mesh.visible ? lava.spans : 0;
     cur.heat += ((env === 'ember' && fin(E.heat) ? E.heat : 0) - cur.heat) * Math.min(1, dt * 3);
     world.lights.setHeat(cur.heat);
@@ -173,7 +174,7 @@ export function createWeather({ parent, state, world, models, vfx, renderer }) {
     S.gale = +gale.toFixed(2);
     for (const e of models.values()) e.model.gale = gale;
     // ---- calls
-    S.calls = (fall.mesh.visible ? 1 : 0) + (ship.visible ? 1 : 0) + (lava.mesh.visible ? 1 : 0) + (sea.mesh.visible ? 1 : 0) + (S.aurora ? 1 : 0);
+    S.calls = (fall.mesh.visible ? 1 : 0) + (ship.visible ? 1 : 0) + (ship.bagIce || 0) + (lava.mesh.visible ? 1 : 0) + (sea.mesh.visible ? 1 : 0) + (S.aurora ? 1 : 0);
     const ms = performance.now() - t0;
     S.ms = +(S.ms * 0.9 + ms * 0.1).toFixed(3);
   };
@@ -231,14 +232,14 @@ export function createWeather({ parent, state, world, models, vfx, renderer }) {
         if (tip && Math.abs(tip.x - b.x) < 340) { // the rod takes it: a burst of sparks, a flash and a ring at its tip (cyan when somebody holds it)
           const R = cfg('ROD'), zap = tip.held ? R.ZAP : '#ffe9a8';
           Pp.burst('spark', tip.x, tip.y, tip.z + 20, 26, { speed: [220, 680], life: [0.3, 0.8], color: zap, noRate: true, force: true });
-          Pp.flash(tip.x, tip.y, tip.z + 30, 420, zap, { hdr: 3.2, force: true });
+          Pp.flash(tip.x, tip.y, tip.z + 30, 300, zap, { hdr: 2.0, force: true }); // (WP15: a smaller, lighter strike glow)
           Pp.ring(tip.x, tip.y, tip.z + 30, 300, zap, 0.4, { force: true });
         }
       }
     }
     // ============ the Ember Forge: smoke banks and plumes, vents ============
     if (env === 'ember' && c.map && fin(E.lavaY)) {
-      const LV = cfg('LAVA'), map = c.map, C = map.CELL, lavaTop = -E.lavaY, EL = (config.ENVIRONMENTS.ember || {}).LAVA || {};
+      const LV = cfg('LAVA'), map = c.map, C = map.CELL, lavaTop = -E.lavaY - (fin(LV.DROP) ? LV.DROP : 0), EL = (config.ENVIRONMENTS.ember || {}).LAVA || {};
       if ((E.smoke || 0) > 0.01) for (let i = acc('bank', LV.SMOKE * E.smoke); i > 0; i--) {
         const dir = rnd() < 0.5 ? -1 : 1;
         Pp.spawn('smoke', cx - dir * (vis.visW / 2 + 300), cy + rr(-0.45, 0.45) * vis.visH, rr(-300, 100), { size: [260, 420], size1: 1.5, life: [6, 9], vx: dir * rr(60, 110), speed: [0, 0], up: 0, drag: 0, alpha: 0.2 * E.smoke + 0.06, color: '#2a1614', warm: 0, force: true });

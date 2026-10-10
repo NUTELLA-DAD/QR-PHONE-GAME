@@ -2356,13 +2356,13 @@ export const config = {
     //   how much the static dust texture and its bright motes show, SCROLL = the dust's constant speed along the beam (world units a second), RES = the beam picture's size against the screen by tier (High full, Medium half).
     //   POOL: the lit spot where the beam lands (rock, sea, a ship): COLOR, ALPHA, HDR (1 = no glow, more = the bloom catches it), MIN size, SCALE = pool radius against the beam's own width there.
     //   LIGHT / LIGHT_COLOR: how strongly the beam's CONE lights whatever it covers on the screen (rock, the cave picture, planes, the Kraken: the surface's own colour times this; the same region the 2D game lights).
-    BEAM: { LIGHT: 0.8, LIGHT_COLOR: '#ffe9b8', COLOR: '#ffe2a0', ALPHA: 0.5, DAY: 0.3, UNMANNED: 0.5, WIDTH: 1.12, FADE: 0.5, SOFT: 150, DUST: 0.45, MOTES: 0.8, SCROLL: 46, LEN_MAX: 3600, RES: { high: 1, medium: 0.5, low: 0.5 },
-      POOL: { COLOR: '#ffe2a0', ALPHA: 0.5, HDR: 1.1, MIN: 80, SCALE: 0.42 } },
+    BEAM: { LIGHT: 0.72, LIGHT_COLOR: '#ffd8a0', COLOR: '#ffc878', ALPHA: 0.44, DAY: 0.3, UNMANNED: 0.5, WIDTH: 1.12, FADE: 0.5, SOFT: 150, DUST: 0.45, MOTES: 0.8, SCROLL: 46, LEN_MAX: 3600, RES: { high: 1, medium: 0.5, low: 0.5 },
+      POOL: { COLOR: '#fff2da', ALPHA: 0.62, HDR: 1.1, MIN: 80, SCALE: 0.42 } },
     //   LIT: what a target the sim calls `lit` (a manned beam holds it) looks like: COLOR of the rim, RIM = its strength, FILL = how much the whole figure lifts, SCALE = the circle's size against the sim's target radius, MAX = how many at once (8).
     LIT: { COLOR: '#ffe2a0', RIM: 0.95, FILL: 0.18, SCALE: 1.3 },
     //   LIGHTNING: the strike. FLASH = how much the picture whitens (added light), HEMI = the extra ambient light, STEPS = the flash falls in this many equal steps (the sim's `weather.flash` falls 1 -> 0 in a third of a second),
     //   BOLT = colours, widths and the zigzag of the bolt (a fixed shape per strike from a seeded generator), KEYS = how long each of the two bolt frames lasts (seconds).
-    LIGHTNING: { FLASH: 0.28, HEMI: 2.2, STEPS: 3, COLOR: '#cfe0ff', BOLT: { GLOW: '#8fc0ff', CORE: '#ffffff', WIDTH: 56, CORE_WIDTH: 19, SEGMENTS: 9, JITTER: 0.1, FORKS: 2, HDR: 3, KEYS: [0.12, 0.1] } },
+    LIGHTNING: { FLASH: 0.22, HEMI: 1.5, STEPS: 3, COLOR: '#cfe0ff', BOLT: { GLOW: '#8fc0ff', CORE: '#ffffff', WIDTH: 66, CORE_WIDTH: 24, HALO: 0.16, SEGMENTS: 9, JITTER: 0.1, FORKS: 2, HDR: 3, KEYS: [0.12, 0.1] } },
     //   FUNGAL: glowing mushrooms on the rock edges (static glow; a stepped two-key halo at most), hanging bulbs and drifting motes. CAPS / GLOW / HALO as the 2D art; MAX = the most mushrooms a map shows.
     FUNGAL: { HDR: 1.9, HALO: 0.26, STEP: 1.6, MAX: 220, BULB: '#7dffd8', MOTES: 70, MOTE_SPEED: 14, MOTE_COLORS: ['#96ffdc', '#be96ff'], SPORE: '#b0f06e', SPORE_ALPHA: 0.2 },
     //   LANTERN: the fake pool of a lantern on the back wall (an emissive gradient, so Medium and Low look lantern-lit without real lights): COLOR, ALPHA by tier (High has real lights, so the pool is a hint), SIZE = its radius in world units.
@@ -2387,7 +2387,9 @@ export const config = {
       GALE: { COUNT: 24, LEN: [160, 400], SPEED: [1500, 2600], ALPHA: 0.5, COLOR: '#e1ebf8' },
       ROD: { POLE: '#4a5260', BASE: '#9aa7b6', TIP: '#ffd23a', LIVE: '#ff9a1e', HELD: '#9fe8ff', HDR: 2.6, CHARGE: '#fff5a0', ZAP: '#bfe6ff' },
       CRUST: { ICE: '#b5e0f6', SNOW: '#ffffff', SHADE: '#8fc0de', SPARKLE: 1 },
-      LAVA: { HDR: 1.12, PLATE: 0.5, SPEED: 12, WALL: 1, SMOKE: 2.2, VENT: 1.2, PLUME: 0.5 },
+      // WP15 LAVA: a crust of dark cooled plates (cellular, SCALE world units across, CRUST colour) with glowing cracks between (CRACK = their width as a share of a plate), sliding at SPEED (constant, slow). VENT_STEP / VENT_SHARE: a sparse fixed
+      // grid of hot spots that widen the cracks and open molten pools. DROP: the sheet lies this far under the sim's lava line (less lava on screen); NEAR: the brightness of the foreground (the sheet sinks into the dark from NEAR_Z toward the viewer).
+      LAVA: { HDR: 1.12, SPEED: 9, WALL: 1, WALL_ALPHA: 0.4, SMOKE: 2.2, VENT: 1.2, PLUME: 0.5, SCALE: 240, CRACK: 0.06, CRUST: '#2b110c', VENT_STEP: 1700, VENT_SHARE: 0.5, DROP: 150, NEAR: 0.45, NEAR_Z: 650 },
       SPOUT: { COLORS: ['#a7bccb', '#3f6178', '#e9f4fa'], STEP: 0.2, SIDES: 24, RINGS: 16 },
       RAFT: { WOOD: ['#7a5a3a', '#9a7248'], COATS: ['#d65a4a', '#e8a23c'], SKIN: '#e8d3b0' },
       AURORA: { COLORS: ['#3df2b4', '#7a5cff', '#ff5cc8'], ALPHA: 0.5, DRIFT: 8, HEIGHT: 2600 },
@@ -2397,6 +2399,7 @@ export const config = {
   // The giant creatures in 3D (WP8: view3d/creature.js, creatureKit.js, creatureTube.js, creatureFx.js, creatureKraken.js; 3D.md section 14). One block per creature kind: colours (hex), the eyes' glow
   // (HDR multipliers: the bloom pass makes more than about 1 glow), sizes of the water effects. Nothing here touches the simulation.
   CREATURE3D: {
+    COIL_FADE_Z: 70, // WP15: a creature passing in front of the ship's decks is see-through (a screen-door pattern) where it is nearer the camera than this world depth (the crew's lane is behind it)
     KRAKEN: {
       skin: '#6a3f86', skinDark: '#35234f', belly: '#dd9fb4', spot: '#2c1e4c', spotLight: '#a674bd', fin: '#9a62b0', bone: '#eadcc0', char: '#2f2a2e', eye: '#ffb81e', iris: '#ffe46a', pupil: '#17101e',
       mouthIn: '#8c1c34', lips: '#b4566e', flesh: '#e48e9c', heart: '#e0485a', dead: '#5a5470', exhausted: '#a79ab8', // (exhausted / dead: what the skin is tinted toward)
@@ -2430,7 +2433,10 @@ export const config = {
     LAMP_HITS: [1, 2, 3], // blows on a searchlight for scuffed, cracked, dead
     AMT: [0, 0.15, 0.55, 1], // how far the poses go in each state (0 = as built, 1 = fully drooped, bent, open)
     SOOT: [0, 0.18, 0.45, 0.72], DENT: [0, 0, 0.45, 0.8], TEAR: [0, 0, 0.35, 0.9], // shader looks of a part by state: blotches of soot, round dents, ragged holes
-    HULL: { SOOT_FROM: 0.12, SOOT_MAX: 0.66, DENT_BELOW: 55 }, // soot on the hull, decks and rooms grows as the hull share drops: from this share of damage up to SOOT_MAX; dents under this hull %
+    HULL: { SOOT_FROM: 0.12, SOOT_MAX: 0.5, DENT_BELOW: 55 }, // WP15: only a LIGHT all-over grime on the hull, decks and rooms as the hull share drops: from this share of damage up to SOOT_MAX (a shader strength, 0.5 = about 17% darker); dents under this hull %
+    // WP15: the real soot gathers in SOFT pools round actual damage (blows in the hit log, fires and the scorch they leave, breaches, scars), not blotches over the whole hull. A pool's strength grows as the hull share drops (FROM -> FULL),
+    // with BASE kept for fires, breaches and scars even on a healthy hull. Blows within MERGE units of each other share one pool. RADIUS = [base, per point of blow power, max] in world units.
+    POOL: { FROM: 0.04, FULL: 0.55, BASE: 0.3, MERGE: 70, MAX: 24, HIT: [0.5, 0.1], RADIUS: [90, 14, 190], FIRE: [0.8, 150], BREACH: [0.9, 140], SCAR: [0.8, 60] },
     SNAP: 0.125, // seconds the half-way key is held when a state changes (a 2-key snap, then the new look)
     SCORCH_AFTER: 3, SCORCH_MAX: 20, SCORCH_SIZE: [150, 230], // a fire that burned this many seconds leaves a scorch mark (kept until the part is repaired); at most this many a ship; size in world units
     SMOKE_RATE: { damaged: 3, broken: 9 }, // smoke puffs a second from a damaged / broken part

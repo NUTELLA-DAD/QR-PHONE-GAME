@@ -81,7 +81,7 @@ export function createLights(scene) {
       hemi.groundColor.lerp(_c.set(dk.ground), g);
       hemi.intensity += (dk.hemi - hemi.intensity) * g;
     }
-    fx.uFloor.value.set(dk.sky).multiplyScalar(g * (dk.floor == null ? 0.12 : dk.floor));
+    fx.uFloor.value.set(dk.sky).multiplyScalar(g * (dk.floor == null ? 0.26 : dk.floor)); // (WP15: a little more, so the unlit rock of a cave is a readable cool silhouette)
     L.haveKey = rig.key.on;
     mixC(sun.color, tod.sun[0], rig.key.color, w);
     sun.intensity = rig.key.on ? tod.sun[1] * rig.key.strength * k * (1 - g * (1 - dk.key)) : 0;

@@ -57,7 +57,7 @@ const dmgFx = { uSoot: { value: new THREE.Color(config.DAMAGE3D.COLORS.SOOT) }, 
 export const setWet = (v) => { dmgFx.uWet.value = v; };
 const DMG_VERT_COMMON = 'attribute float aPart; varying float vPart; varying float vWy;';
 const DMG_VERT_BEGIN = 'vPart = aPart; vWy = normalize( mat3( modelMatrix ) * objectNormal ).y;';
-const DMG_FRAG = `uniform sampler2D uDmg; uniform sampler2D uWx; uniform float uWet; uniform vec3 uSoot; varying float vPart; varying float vWy; vec4 dmgV = vec4( 0.0 ); float dmgRim = 0.0; float wxSp = 0.0;
+const DMG_FRAG = `uniform sampler2D uDmg; uniform sampler2D uWx; uniform float uWet; uniform vec3 uSoot; uniform vec4 uSootPts[24]; uniform float uSootN; varying float vPart; varying float vWy; vec4 dmgV = vec4( 0.0 ); float dmgRim = 0.0; float wxSp = 0.0; float dmgWall = 0.0;
 float dmgH( vec2 c ) { vec3 p3 = fract( vec3( c.xyx ) * 0.1031 ); p3 += dot( p3, p3.yzx + 33.33 ); return fract( ( p3.x + p3.y ) * p3.z ); }
 float dmgN( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f ); return mix( mix( dmgH( i ), dmgH( i + vec2( 1.0, 0.0 ) ), f.x ), mix( dmgH( i + vec2( 0.0, 1.0 ) ), dmgH( i + vec2( 1.0, 1.0 ) ), f.x ), f.y ); }
 void dmgTest() {
@@ -75,6 +75,7 @@ void dmgTest() {
     }
   }
   vec4 cr = texelFetch( uDmg, ivec2( pi, 1 ), 0 );
+  dmgWall = cr.w;
   if ( cr.z > 0.0 ) {
     float rg = ( dmgH( floor( vScarP / 7.0 ) ) - 0.5 ) * cr.z;
     float cx = vScarP.x - ( cr.x + rg ), cy = ( cr.y + rg * 0.8 ) - vScarP.y;
@@ -84,11 +85,17 @@ void dmgTest() {
 }`;
 const DMG_TINT = `{
     float soot = dmgV.r, dent = dmgV.g, grey = dmgV.a;
-    if ( soot > 0.005 ) { // blotches of soot with hard toon edges (value noise at two sizes, fixed to the part), and a light all-over grime
+    if ( dmgWall > 0.5 ) { // WP15: a wall (hull, deck, room) is only lightly grimed all over (soot = that grime); the dark gathers in soft pools round real damage (uSootPts: x y radius strength, content coordinates)
+      float nz = 0.6 * dmgN( vScarP / 58.0 ) + 0.4 * dmgN( vScarP / 21.0 + 7.0 );
+      float loc = 0.0;
+      for ( int i = 0; i < 24; i ++ ) { if ( float( i ) >= uSootN ) break; vec4 sp = uSootPts[ i ]; float dd = length( vScarP - sp.xy ) / max( sp.z, 1.0 ); loc += sp.w * ( 1.0 - smoothstep( 0.1, 1.0, dd ) ); }
+      diffuseColor.rgb *= 1.0 - 0.34 * soot * ( 0.55 + 0.9 * nz );
+      diffuseColor.rgb = mix( diffuseColor.rgb, uSoot * 0.5, 0.9 * smoothstep( 0.04, 0.8, clamp( loc, 0.0, 1.0 ) * ( 0.5 + 1.0 * nz ) ) );
+    } else if ( soot > 0.005 ) { // a small part (gun, engine, station): soft blotches of soot (value noise at two sizes, fixed to the part), and a light all-over grime
       float nz = 0.65 * dmgN( vScarP / 46.0 ) + 0.35 * dmgN( vScarP / 17.0 + 7.0 );
-      float th = 0.72 - soot * 0.4;
+      float th = 0.74 - soot * 0.4;
       diffuseColor.rgb *= 1.0 - 0.2 * soot;
-      diffuseColor.rgb = mix( diffuseColor.rgb, uSoot, 0.85 * smoothstep( th, th + 0.07, nz ) );
+      diffuseColor.rgb = mix( diffuseColor.rgb, uSoot, 0.7 * smoothstep( th - 0.05, th + 0.22, nz ) );
     }
     if ( dent > 0.01 ) {
       vec2 c = floor( vScarP / 22.0 ), f = fract( vScarP / 22.0 ) - 0.5;
@@ -106,13 +113,14 @@ const DMG_TINT = `{
     diffuseColor.rgb *= 1.0 - uWet * ( 0.14 + 0.1 * smoothstep( 0.3, 0.7, vWy ) );
     float fr = texelFetch( uWx, ivec2( int( vPart + 0.5 ), 0 ), 0 ).r;
     if ( fr > 0.01 ) {
-      float nz = 0.62 * dmgN( vScarP / 41.0 + 11.0 ) + 0.38 * dmgN( vScarP / 14.0 );
-      float top = smoothstep( 0.28, 0.62, vWy );
-      float th = 1.0 - 0.92 * fr, v = nz + 0.62 * top - 0.14;
-      float cover = step( th, v ), inner = step( th + 0.07, v );
-      vec3 ice = mix( vec3( 0.7, 0.86, 0.95 ), vec3( 0.96, 0.98, 1.0 ), inner );
-      diffuseColor.rgb = mix( diffuseColor.rgb, ice, cover * ( 0.7 + 0.3 * top ) );
-      wxSp = cover * inner * step( 0.968, dmgH( floor( vScarP / 7.0 ) + 5.0 ) );
+      // WP15: a clean FROST RIM on the upward faces, not a patchy crust: how far down the curve it reaches is the normal's height (vWy), so the cap on the gasbag has a smooth line that creeps down as the frost grows;
+      // only a little slow noise ragged the edge, and a flat deck is covered in patches while the frost is light and wholly once it is heavy. A thin ice-blue band edges the white.
+      float nz = 0.7 * dmgN( vScarP / 63.0 + 11.0 ) + 0.3 * dmgN( vScarP / 23.0 );
+      float v = 0.82 * vWy + 0.18 * nz, th = 1.05 - 0.8 * fr;
+      float cover = step( th, v ), inner = step( th + 0.075, v );
+      vec3 ice = mix( vec3( 0.5, 0.72, 0.9 ), vec3( 0.88, 0.95, 1.0 ), inner ); // (cool blue-white: it must read against warm cream canvas and timber)
+      diffuseColor.rgb = mix( diffuseColor.rgb, ice, cover * 0.94 );
+      wxSp = cover * inner * step( 0.972, dmgH( floor( vScarP / 7.0 ) + 5.0 ) );
     }
   }`;
 function patchShell(sh, uHide, ink, scar) {
@@ -121,7 +129,7 @@ function patchShell(sh, uHide, ink, scar) {
   sh.uniforms.uScarN = scar.uScarN; sh.uniforms.uCarveA = scar.uCarveA; sh.uniforms.uCarveB = scar.uCarveB; sh.uniforms.uCarveN = scar.uCarveN;
   sh.uniforms.uDmg = scar.uDmg;
   sh.uniforms.uWx = scar.uWx; sh.uniforms.uWet = dmgFx.uWet;
-  sh.uniforms.uSoot = dmgFx.uSoot;
+  sh.uniforms.uSoot = dmgFx.uSoot; sh.uniforms.uSootPts = scar.uSootPts; sh.uniforms.uSootN = scar.uSootN;
   sh.vertexShader = sh.vertexShader.replace('#include <common>', SHELL_VERT_COMMON + '\n' + SCAR_VERT_COMMON + '\n' + DMG_VERT_COMMON).replace('#include <begin_vertex>', SHELL_VERT_BEGIN + '\n' + SCAR_VERT_BEGIN + '\n' + DMG_VERT_BEGIN).replace('#include <project_vertex>', SHELL_VERT_PROJECT);
   if (ink) { sh.uniforms.uInkOn = inkOn; sh.uniforms.uInk = inkColor; }
   sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vShell;' + (ink ? ' uniform float uInkOn; uniform vec3 uInk;' : '') + '\n' + SCAR_FRAG + '\n' + DMG_FRAG)
@@ -143,7 +151,7 @@ export function makeTrimMaterials() {
   wxTex.minFilter = wxTex.magFilter = THREE.NearestFilter;
   wxTex.generateMipmaps = false;
   wxTex.needsUpdate = true;
-  const scar = { uScar: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uScarN: { value: 0 }, uDmg: { value: dmgTex }, uWx: { value: wxTex }, uCarveA: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveB: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveN: { value: 0 } }; // (WP5: the holes broken-off parts left, see patchShell)
+  const scar = { uScar: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uScarN: { value: 0 }, uDmg: { value: dmgTex }, uWx: { value: wxTex }, uSootPts: { value: Array.from({ length: 24 }, () => new THREE.Vector4(0, 0, 1, 0)) }, uSootN: { value: 0 }, uCarveA: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveB: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveN: { value: 0 } }; // (WP5: the holes broken-off parts left, see patchShell)
   const toon = rimify(new THREE.MeshToonMaterial({ vertexColors: true, map: sheet.texture, gradientMap, side: THREE.DoubleSide }));
   const rim = toon.onBeforeCompile;
   toon.onBeforeCompile = (sh, r) => { // (the painted sheet is a little darker than white on average: a small gain keeps the hull colours where the flat ones were)

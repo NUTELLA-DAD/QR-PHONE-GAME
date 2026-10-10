@@ -30,30 +30,50 @@ const LAVA_VERT = `
   }
 `;
 const LAVA_FRAG = `
-  uniform float uTime, uSpeed, uHdr, uPlate, uAlpha;
-  uniform vec3 uHot, uMid, uDeep, uGlowCol;
+  uniform float uTime, uSpeed, uHdr, uAlpha, uScale, uCrack, uNear, uNearZ, uVentStep, uVentShare;
+  uniform vec3 uHot, uMid, uDeep, uGlowCol, uCrust;
   varying vec3 vW; varying float vWall; varying float vV;
   float h21( vec2 p ) { vec3 p3 = fract( vec3( p.xyx ) * 0.1031 ); p3 += dot( p3, p3.yzx + 33.33 ); return fract( ( p3.x + p3.y ) * p3.z ); }
+  float vn( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f ); return mix( mix( h21( i ), h21( i + vec2( 1.0, 0.0 ) ), f.x ), mix( h21( i + vec2( 0.0, 1.0 ) ), h21( i + 1.0 ), f.x ), f.y ); }
+  vec2 h22( vec2 p ) { vec3 p3 = fract( vec3( p.xyx ) * vec3( 0.1031, 0.1030, 0.0973 ) ); p3 += dot( p3, p3.yzx + 33.33 ); return fract( ( p3.xx + p3.yz ) * p3.zy ); }
+  // cellular pattern: x = distance to the nearest point, y = to the second nearest (their difference is 0 on the line between two plates), z = a hash of the nearest cell
+  vec3 vor( vec2 q ) {
+    vec2 i = floor( q ), f = fract( q ); float d1 = 8.0, d2 = 8.0, id = 0.0;
+    for ( int y = -1; y <= 1; y ++ ) for ( int x = -1; x <= 1; x ++ ) {
+      vec2 g = vec2( float( x ), float( y ) ); vec2 r = g + h22( i + g ) - f; float d = dot( r, r );
+      if ( d < d1 ) { d2 = d1; d1 = d; id = h21( i + g + 17.0 ); } else if ( d < d2 ) d2 = d;
+    }
+    return vec3( sqrt( d1 ), sqrt( d2 ), id );
+  }
   void main() {
     if ( vWall > 0.5 ) { // the glow wall: a soft warm veil, strongest at the lava, gone at the top
       float a = ( 1.0 - vV ); a = a * a * uAlpha;
       gl_FragColor = vec4( uGlowCol * a, a * 0.08 );
     } else {
-      // crust plates: a fixed grid of cells in the world, sliding along x at a constant speed; each cell holds (maybe) one dark ellipse with a bright crack round it
-      vec2 q = vec2( vW.x - uTime * uSpeed, vW.z * 0.5 ) / 240.0;
-      vec2 id = floor( q ), f = fract( q ) - 0.5;
-      float h = h21( id + 7.0 );
-      vec2 c = ( vec2( h21( id + 3.0 ), h21( id + 11.0 ) ) - 0.5 ) * 0.22;
-      vec2 rad = vec2( 0.2 + 0.12 * h21( id + 5.0 ), 0.16 + 0.1 * h21( id + 9.0 ) );
-      float d = length( ( f - c ) / rad );
-      float on = step( h, uPlate * 0.75 );
-      float plate = on * step( d, 1.0 ), crack = on * step( 1.0, d ) * step( d, 1.16 );
-      vec2 nq = q * 0.7, ni = floor( nq ), nf = fract( nq ); nf = nf * nf * ( 3.0 - 2.0 * nf );
-      float n = mix( mix( h21( ni ), h21( ni + vec2( 1.0, 0.0 ) ), nf.x ), mix( h21( ni + vec2( 0.0, 1.0 ) ), h21( ni + 1.0 ), nf.x ), nf.y );
-      vec3 col = mix( uMid, uHot, 0.32 * step( 0.55, n ) + 0.28 * step( 0.74, n ) );
-      col = mix( col, uDeep * 1.15, 0.6 * smoothstep( 0.3, 1.0, vV ) ); // (the near water is deeper red, the far is bright)
-      col = mix( col, uDeep * 0.38, plate );
-      col = mix( col, uHot * 1.3, crack );
+      // WP15: a CRUST of dark, irregular cooled plates (a cellular pattern fixed to the world, sliding along x at a constant slow speed) with GLOWING CRACKS between them: a hot yellow core, an orange
+      // seam and a dull red rim cooling into the crust, in flat toon bands. The VENTS (a sparse fixed grid) widen the cracks and open a molten pool, so the glow gathers toward them. Darker toward the viewer.
+      vec2 pq = vec2( vW.x - uTime * uSpeed, vW.z ) / uScale;
+      pq += 0.45 * ( vec2( vn( pq * 0.8 ), vn( pq * 0.8 + 9.0 ) ) - 0.5 ); // (warped, so the plates are irregular, not tiles)
+      vec3 v = vor( pq );
+      float flow = vn( vW.xz / 1100.0 + 3.0 ); // (broad hot and cool regions fixed to the world: the crust is thin where the magma is near)
+      float e = v.y - v.x, aa = max( fwidth( e ) * 1.3, 0.012 );
+      float heat = 0.0; vec2 vq = vW.xz / uVentStep, vi = floor( vq );
+      for ( int y = -1; y <= 1; y ++ ) for ( int x = -1; x <= 1; x ++ ) {
+        vec2 g = vi + vec2( float( x ), float( y ) );
+        if ( h21( g + 31.0 ) < uVentShare ) heat = max( heat, 1.0 - smoothstep( 0.07, 0.36, length( vq - ( g + 0.2 + 0.6 * h22( g + 5.0 ) ) ) ) );
+      }
+      float w = uCrack * ( 0.5 + 1.0 * flow ) + 0.2 * heat;
+      float live = step( 0.32 - 0.4 * heat, v.z ); // (a seam that has cooled stays a dull red line: only some of them glow)
+      float core = live * ( 1.0 - smoothstep( w * 0.45, w * 0.45 + aa, e ) );
+      float seam = live * ( 1.0 - smoothstep( w, w + aa, e ) );
+      float rim = 1.0 - smoothstep( w * 2.0, w * 2.0 + aa, e );
+      vec3 col = uCrust * ( 0.7 + 0.6 * v.z ); // (each plate a slightly different dark)
+      col = mix( col, uDeep * 0.7, rim * 0.85 );
+      col = mix( col, uMid, seam );
+      col = mix( col, uHot * 1.25, core );
+      float pool = step( 0.72, heat ); // (a vent: a molten pool, hottest in the middle)
+      col = mix( col, mix( uMid * 1.05, uHot * 1.2, step( 0.9, heat ) ), pool );
+      col *= mix( 1.0, uNear, smoothstep( 0.0, uNearZ, vW.z ) ); // (the foreground sinks into the dark: it is not where the game is played)
       float fa = smoothstep( 0.0, 0.08, vV ); // (it melts into the haze at the far edge)
       gl_FragColor = vec4( col * uHdr * fa, fa );
     }
@@ -65,8 +85,8 @@ const LAVA_FRAG = `
 export function createLava(parent) {
   const U = {
     uY: { value: 0 }, uZ0: { value: Z_FAR }, uZ1: { value: 400 }, uGlow: { value: 700 }, uWallZ: { value: -380 },
-    uTime: { value: 0 }, uSpeed: { value: 12 }, uHdr: { value: 1.4 }, uPlate: { value: 0.5 }, uAlpha: { value: 0.5 },
-    uHot: { value: new THREE.Color('#ffcf4a') }, uMid: { value: new THREE.Color('#ff7a1c') }, uDeep: { value: new THREE.Color('#c8320f') }, uGlowCol: { value: new THREE.Color('#ff6e1e') },
+    uTime: { value: 0 }, uSpeed: { value: 9 }, uHdr: { value: 1.12 }, uAlpha: { value: 0.4 }, uScale: { value: 230 }, uCrack: { value: 0.075 }, uNear: { value: 0.4 }, uNearZ: { value: 900 }, uVentStep: { value: 1700 }, uVentShare: { value: 0.5 },
+    uHot: { value: new THREE.Color('#ffcf4a') }, uMid: { value: new THREE.Color('#ff7a1c') }, uDeep: { value: new THREE.Color('#c8320f') }, uGlowCol: { value: new THREE.Color('#ff6e1e') }, uCrust: { value: new THREE.Color('#33150f') },
   };
   const mat = new THREE.ShaderMaterial({
     vertexShader: LAVA_VERT, fragmentShader: LAVA_FRAG, uniforms: U, transparent: true, depthWrite: false, depthTest: true, side: THREE.DoubleSide,
@@ -108,14 +128,17 @@ export function createLava(parent) {
     mesh.geometry = g;
   };
   // lavaY = the game's y (down) of the lava surface, NaN = no lava; map = the course's map; cam = THREE camera
-  L.update = (t, lavaY, map, cam) => {
+  L.update = (t, lavaY, map, cam, drop = 0) => { // (drop: how far the SHEET lies below the sim's lava line, so less of the picture is lava and the ship is cut off less)
     if (!fin(lavaY) || !map) { mesh.visible = false; return; }
     const C = W3().LAVA || {}, E = (config.ENVIRONMENTS.ember || {}).LAVA || {};
     build(map, lavaY);
     mesh.visible = L.spans > 0;
-    U.uY.value = -lavaY; U.uZ0.value = Z_FAR; U.uZ1.value = map.open ? Math.max(600, Math.min(cam.position.z + 600, 5000)) : Z_FRONT_CAVE - 6;
-    U.uTime.value = t; U.uSpeed.value = fin(C.SPEED) ? C.SPEED : 12; U.uHdr.value = fin(C.HDR) ? C.HDR : 1.4; U.uPlate.value = fin(C.PLATE) ? C.PLATE : 0.5;
-    U.uGlow.value = (E.GLOW || 700) * (fin(C.WALL) ? C.WALL : 1); U.uAlpha.value = 0.5;
+    U.uY.value = -lavaY - (fin(drop) ? drop : 0); U.uZ0.value = Z_FAR; U.uZ1.value = map.open ? Math.max(600, Math.min(cam.position.z + 600, 5000)) : Z_FRONT_CAVE - 6;
+    const num = (v, d) => (fin(v) ? v : d);
+    U.uTime.value = t; U.uSpeed.value = num(C.SPEED, 9); U.uHdr.value = num(C.HDR, 1.12);
+    U.uScale.value = num(C.SCALE, 230); U.uCrack.value = num(C.CRACK, 0.075); U.uNear.value = num(C.NEAR, 0.4); U.uNearZ.value = Math.max(100, num(C.NEAR_Z, 900));
+    U.uVentStep.value = Math.max(300, num(C.VENT_STEP, 1700)); U.uVentShare.value = num(C.VENT_SHARE, 0.5); U.uCrust.value.set(C.CRUST || '#33150f');
+    U.uGlow.value = (E.GLOW || 700) * (fin(C.WALL) ? C.WALL : 1); U.uAlpha.value = num(C.WALL_ALPHA, 0.4);
     U.uWallZ.value = (map.open ? Z_FRONT_OPEN : Z_FRONT_CAVE) - 380;
     const col = E.COLOR || ['#ffcf4a', '#ff7a1c', '#c8320f'];
     U.uHot.value.set(col[0]); U.uMid.value.set(col[1]); U.uDeep.value.set(col[2]);

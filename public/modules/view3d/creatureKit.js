@@ -6,7 +6,7 @@
 //   - Mesher: merges pieces (any Three geometry, or a parametric grid) into ONE geometry with the ink outline vectors, colours, uvs and glow ids baked; `ranges` remember where a named piece is
 //     so the view can tint it or move it. DynPiece: a rigid piece (a jaw, an eyelid, the heart) whose vertices are rewritten when its pose changes (stepped by the view: never every frame).
 // All of it is rigid and static between keys: nothing here wobbles.
-import { THREE, gradientMap, rimify } from './style.js';
+import { THREE, gradientMap, rimify, outlineMat } from './style.js';
 
 export const ATLAS = { W: 1024, H: 1024, mantle: { y1: 640 }, fin: { x1: 512, y0: 640 } };
 export const SWATCH = [0.75, 1 - 832 / 1024]; // (uv of the plain white square of the head atlas: flat-coloured pieces point here and take their colour from the vertex colours)
@@ -99,17 +99,34 @@ const GLOW_BODY = `
 export function makeUniforms(cut = 0.99) {
   return { uGlow: { value: new THREE.Vector4(1, 1, 1, 1) }, uSheen: { value: 1 }, uSheenCut: { value: cut }, uSheenDir: { value: new THREE.Vector3(0.3, 0.6, 0.74).normalize() } };
 }
+// WP15: SEE-THROUGH WHERE THE CREATURE PASSES IN FRONT OF THE SHIP. A tentacle's coil (or a front limb) crossing the open decks is nearer the camera than the crew and used to hide them. Inside the ship's box
+// (uCoilBox = world x0, x1, y0, y1; creature.js sets it every frame) and in front of the crew's lane (z above uCoilZ) the creature's picture AND its ink are drawn in a fixed screen-door pattern (every other pixel,
+// the same pattern every frame: nothing flickers or moves), so the crew show through it. Off (an empty box) everywhere else.
+export const coilFade = { uCoilBox: { value: new THREE.Vector4(1, -1, 1, -1) }, uCoilZ: { value: 1e9 } };
+const COIL_HOLE = 'if ( vCW.z > uCoilZ && vCW.x > uCoilBox.x && vCW.x < uCoilBox.y && vCW.y > uCoilBox.z && vCW.y < uCoilBox.w && mod( floor( gl_FragCoord.x ) + floor( gl_FragCoord.y ), 2.0 ) < 1.0 ) discard;';
 export function creatureToon(map, uniforms) {
   const m = new THREE.MeshToonMaterial({ map, vertexColors: true, gradientMap });
   rimify(m);
   const rim = m.onBeforeCompile;
   m.onBeforeCompile = (sh, r) => {
     rim(sh, r);
-    Object.assign(sh.uniforms, uniforms);
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlowId;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlowId = aGlow;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vGlowId;\nuniform vec4 uGlow; uniform float uSheen, uSheenCut; uniform vec3 uSheenDir;').replace('#include <opaque_fragment>', GLOW_BODY + '\n#include <opaque_fragment>');
+    Object.assign(sh.uniforms, uniforms, coilFade);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlowId; varying vec3 vCW;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlowId = aGlow; vCW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vGlowId; varying vec3 vCW;\nuniform vec4 uGlow; uniform float uSheen, uSheenCut; uniform vec3 uSheenDir; uniform vec4 uCoilBox; uniform float uCoilZ;').replace('void main() {', 'void main() {\n  ' + COIL_HOLE).replace('#include <opaque_fragment>', GLOW_BODY + '\n#include <opaque_fragment>');
   };
-  m.customProgramCacheKey = () => 'creature-toon';
+  m.customProgramCacheKey = () => 'creature-toon-coil';
+  return m;
+}
+// the ink pass of the creature's limbs: style.js's outline, with the same screen-door hole (or the dark back faces would show through the holes of the skin)
+export function creatureInk() {
+  const m = outlineMat.clone();
+  m.onBeforeCompile = (sh, r) => {
+    outlineMat.onBeforeCompile(sh, r);
+    Object.assign(sh.uniforms, coilFade);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCW;').replace('vec3 transformed = position + onormal;', 'vec3 transformed = position + onormal; vCW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vCW; uniform vec4 uCoilBox; uniform float uCoilZ;').replace('void main() {', 'void main() {\n  ' + COIL_HOLE);
+  };
+  m.customProgramCacheKey = () => 'ink-outline-coil';
   return m;
 }
 

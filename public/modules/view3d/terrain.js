@@ -51,7 +51,7 @@ const rockToon = rimify(new THREE.MeshToonMaterial({ vertexColors: true, gradien
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + STRATA_VERT).replace('#include <begin_vertex>', '#include <begin_vertex>\nvRockUv = aRockUv; vStrata = aStrata;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + STRATA_FRAG)
       .replace('#include <map_fragment>', '#include <map_fragment>\n{ float f = fract( vStrata ); vec3 tone = mix( rockTone( floor( vStrata ) ), rockTone( floor( vStrata ) + 1.0 ), smoothstep( 0.36, 0.64, f ) ); diffuseColor.rgb *= mix( vec3( 1.0 ), tone * 2.0, 0.72 ); }')
-      .replace('#include <opaque_fragment>', 'outgoingLight += uFloor * ( 0.4 + 0.6 * diffuseColor.rgb );\n#include <opaque_fragment>'); // (the dark-blue floor: in the dark the rock keeps a faint silhouette)
+      .replace('#include <opaque_fragment>', 'outgoingLight += uFloor * ( 0.4 + 0.6 * diffuseColor.rgb );\n{ vec3 fN = normalize( normal ); float fE = 1.0 - saturate( dot( fN, normalize( vViewPosition ) ) ); outgoingLight += uFloor * 1.8 * smoothstep( 0.4, 0.85, fE ); } // (WP15: and a cool rim where the rock turns edge-on, so an unlit cave still has a readable outline)\n#include <opaque_fragment>'); // (the dark-blue floor: in the dark the rock keeps a faint silhouette)
   };
   rockToon.customProgramCacheKey = () => 'toon-rim-rock';
 }

@@ -6,7 +6,7 @@
 // way; instanced suckers (one InstancedMesh for all limbs) sit on that side. A limb in a coil round a ship gets its depth (z) from the caller: that is what lets it pass behind and in front.
 // Coordinates: the 3D world's (x = the game's x, y = UP = the game's y negated, z toward the viewer).
 import { THREE, gradientMap, rimify, outlineMat } from './style.js';
-import { creatureToon } from './creatureKit.js';
+import { creatureToon, creatureInk } from './creatureKit.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const TAU = Math.PI * 2;
@@ -39,7 +39,7 @@ export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, pale
   mesh.frustumCulled = false;
   mesh.userData.toon = material;
   mesh.userData.shadowReceiver = true;
-  const inkMesh = new THREE.Mesh(geometry, outlineMat);
+  const inkMesh = new THREE.Mesh(geometry, creatureInk());
   inkMesh.userData.isOutline = true;
   inkMesh.frustumCulled = false;
 

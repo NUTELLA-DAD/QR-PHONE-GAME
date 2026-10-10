@@ -120,7 +120,7 @@ try {
     if (noChecks) continue;
     const w = d && d.weather;
     if (!w) { fail(name + ': no weather module (view.weather)'); continue; }
-    if (w.calls > 2) fail(name + ': the weather draws ' + w.calls + ' meshes (budget 2)');
+    if (w.calls > (name === 'frost' ? 3 : 2)) fail(name + ': the weather draws ' + w.calls + ' meshes (budget ' + (name === 'frost' ? 3 : 2) + ')'); // (WP15: frost has the icicles of the gasbag, one more small mesh a bag)
     const need = { storm: ['rain', 'rods'], frost: ['snow', 'crusts'], ember: ['embers', 'lava'], aether: ['stars', 'motes'], fungal: ['spores'], sea: ['spouts', 'rafts', 'pump'] }[name] || [];
     for (const k of need) if (!(w[k] > 0)) fail(name + ': nothing drawn for ' + k + ' (' + JSON.stringify(w) + ')');
     if (name === 'skyisles' && w.calls > 0) fail('skyisles: the weather draws something (' + w.calls + ' calls)');
