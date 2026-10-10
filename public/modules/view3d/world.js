@@ -1,5 +1,5 @@
 // The stage: the sky and backdrop (sky.js: painted, unlit), the clouds (clouds.js: instanced billboards), the lights and fog (lights.js: one rig per environment), and the Sunken Sea's flat toon
-// water (water.js: two colour steps, a fake mirror, constant-speed foam lanes, a shore ring, splash rings). All fixed to the world (nothing shimmers with the camera). This file ties them
+// water (water.js: two colour steps, a fake mirror, stamped foam, a two-tone crest, glitter and a horizon haze, a shore ring, splash rings). All fixed to the world (nothing shimmers with the camera). This file ties them
 // together behind one small API for index.js.
 import { THREE } from './style.js';
 import { createLights, TOD } from './lights.js';
@@ -25,6 +25,7 @@ export function createWorld(scene, renderer) {
     W.tod = name; W.todCfg = c; W.night = c.night;
     sky.setColors(c, name);
     clouds.setSky(c.sky);
+    water.setSkyTint(c.sky);
     W.applyLights();
   };
   // The effective darkness (the game's darkness, or a cave's own floor; lights.js) drives the lamps (night) and the picture glows (gloom).
