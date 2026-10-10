@@ -26,7 +26,9 @@ import { createPartDamage } from './damageStates.js';
 import { createBeams } from './beams.js';
 import { createLightning } from './lightning.js';
 import { createFungal } from './fungal.js';
-import { placeCamera, FOV } from './camera3d.js';
+import { placeCamera, worldToScreen, FOV } from './camera3d.js';
+import { createCinema } from './cinema.js'; // WP11: the camera's cinematic moments
+import { createPorthole } from './porthole.js'; // WP11: the Versus far-ship porthole
 import { envIdOf } from '../host/environments.js';
 import { shipOf, teamOf } from '../host/ships.js';
 import { inRock } from '../host/course.js';
@@ -39,7 +41,7 @@ const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h
 // and the labels on the HUD canvas (render.js drawOver3D).
 export const NOT_DRAWN = [
   'weather (rain, snow, storm clouds), embers, frost crusts, storm rods and the sea pump (WP12)',
-  'the Versus team pennants on the masts and the far-ship porthole (WP11)',
+  'the Versus team pennants on the masts',
   'the sky-dock "NEW: part" call-out',
   'the darkness overlay (the lights do it in 3D)',
 ];
@@ -99,6 +101,11 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const post = createPost(renderer, scene, camera);
   const V = { S, renderer, scene, camera, world, terrain, kraken, controls, post, tier: TIERS.high, models: null, look, lost: false, errors: 0, lastErr: '', frames: 0, lastLog: '' };
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); V.lost = true; });
+  // WP11: ?cine=0 turns the cinematic camera moves off (for people who get motion-sick); the pause menu's Cinema button changes S.cine live (host/main.js)
+  { const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('cine') : null; if (q === '0' || q === 'off') S.cine = false; }
+  const cinema = createCinema({ state, settings: S });
+  V.cinema = cinema;
+  let porthole = null; // (made on the first Versus split, Medium tier and up)
 
   // ---- size, detail and quality tier -------------------------------------------------------------------------------------------------------------------------------------
   let sizeKey = '', detail = null, tierName = '', flagKey = '';
@@ -304,7 +311,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // ---- camera and lights ---------------------------------------------------------------------------------------------------------------------------------------------------
   const camTarget = new THREE.Vector3();
   let lastView = null, lastPivot = new THREE.Vector3();
-  function syncCamera(view, w, h) {
+  let cineOn = false; // a cinematic is offsetting the camera this frame (the HUD asks hudView for the matching 2D view)
+  function syncCamera(view, w, h, dt = 0) {
     if (view && Number.isFinite(view.cx) && Number.isFinite(view.cy) && Number.isFinite(view.zoom) && view.zoom > 0) lastView = view;
     let v = lastView || { cx: 800, cy: 400, zoom: 0.5 };
     if (S.follow === 'mid' && state.creature && state.ships[0]) { // (screenshots: look at the middle between the ship and the creature)
@@ -313,7 +321,11 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     }
     if (S.focus && state.creature) { const c = state.creature; v = { ...v, cx: c.x + (S.focus.dx || 0), cy: c.y + (S.focus.dy || 0) }; } // (dev / screenshots: look at the creature; settings.focus = { dx, dy } in game pixels)
     const orbit = !!(controls && S.orbit);
-    const info = placeCamera(camera, v, w, h, { zoom: Number(S.zoom) || 1, dy: S.lift || 0, skipPlace: orbit });
+    let cine = null;
+    if (!orbit) { try { cine = cinema.update(dt, v, w, h); } catch (e) { logOnce('cinema', e); cine = null; } }
+    const info = placeCamera(camera, v, w, h, { zoom: Number(S.zoom) || 1, dy: S.lift || 0, skipPlace: orbit, cine });
+    cineOn = !!(cine && cine.active);
+    camera.userData.cine = cineOn;
     camTarget.copy(info.target);
     if (orbit) {
       controls.enabled = true;
@@ -392,7 +404,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     if (world.envId !== env || world.cave !== !!(map && !map.open)) world.setEnv(env, !!(map && !map.open));
     terrain.setEnv(env);
     syncTod(dt);
-    const cam = syncCamera(view, w, h);
+    const cam = syncCamera(view, w, h, dt);
     if (beams) { try { beams.updateLit(camera, state, world.night); } catch (e) { logOnce('lit', e); } } // (which targets a manned beam holds: the toon shader gives them a warm rim)
     try { destruction.process(); } catch (e) { logOnce('destruction', e); } // (the break-off notes are read BEFORE syncShips rebuilds a ship from her new layout)
     syncShips(t, dt);
@@ -437,9 +449,40 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       renderer.info.reset();
       renderer.render(scene, camera);
     }
+    mainInfo.calls = renderer.info.render.calls; mainInfo.tris = renderer.info.render.triangles; // (the porthole's own passes would overwrite these)
+    // WP11: the Versus porthole on the far ship: a second, small draw of the same scene over the big picture (porthole.js). The HUD draws its frame (hudLayers below). Low keeps the 2D inset.
+    V.portholeLive = false;
+    if (view && view.inset && !S.orbit && tier.name !== 'low' && look.post && post.enabled && !(porthole && porthole.error)) {
+      try {
+        if (!porthole) { porthole = createPorthole({ renderer, scene, world }); V.porthole = porthole; }
+        const cssW = Math.max(2, canvas.clientWidth || window.innerWidth), cssH = Math.max(2, canvas.clientHeight || window.innerHeight), u = Math.max(0.7, h / 900);
+        V.portholeLive = porthole.render(view.inset, cssW / Math.max(1, w), cssW, cssH, { dt, t, seaY: seaNow == null ? NaN : seaNow, map, tier, margin: 4 * u });
+      } catch (e) { logOnce('porthole', e); }
+    }
     const j2 = performance.now();
     jsMs = j1 - j0; renderMs = j2 - j1;
     V.frames++;
+  };
+  const mainInfo = { calls: 0, tris: 0 };
+  // WP11: the 2D view that matches the camera NOW (the HUD's arrows and marks are laid out from a 2D { cx, cy, zoom }): the same view while the camera is the plain gameplay lens, otherwise the
+  // plane's mapping fitted at the look-at point (exact for a kick or a pull-back, close for a yaw). The labels over the crew do not need it: they project through hud3d.
+  V.hudView = (view, w, h) => {
+    if (!cineOn || !view) return view;
+    const T = camTarget, s0 = worldToScreen(camera, T.x, -T.y, w, h), s1 = worldToScreen(camera, T.x + 400, -T.y, w, h);
+    const z = (s1.x - s0.x) / 400;
+    if (!(z > 0.01) || !Number.isFinite(s0.x) || !Number.isFinite(s0.y)) return view;
+    return { ...view, cx: T.x - (s0.x - w / 2) / z, cy: -T.y - (s0.y - h / 2) / z, zoom: z };
+  };
+  // WP11 alignment check: how far (screen pixels, worst of a 7 x 5 grid of plane points) the 3D projection is from the 2D camera's own mapping of the same points. Zero-ish (< 1 px) whenever no cinematic is running.
+  V.alignError = (view, w, h) => {
+    if (!view || !(view.zoom > 0)) return NaN;
+    let worst = 0;
+    for (let i = -3; i <= 3; i++) for (let j = -2; j <= 2; j++) {
+      const mx = view.cx + (i / 3) * (w / 2 / view.zoom) * 0.9, my = view.cy + (j / 2) * (h / 2 / view.zoom) * 0.9;
+      const p = worldToScreen(camera, mx, my, w, h), ex = w / 2 + (mx - view.cx) * view.zoom, ey = h / 2 + (my - view.cy) * view.zoom;
+      worst = Math.max(worst, Math.hypot(p.x - ex, p.y - ey));
+    }
+    return worst;
   };
   const logOnce = (what, e) => { const m = what + ': ' + String(e && e.message ? e.message : e) + (e && e.stack ? ' @ ' + String(e.stack).split('\n').slice(1, 3).map((s) => s.trim().replace(/https?:\/\/[^/]+\//, '')).join(' | ') : ''); if (m !== V.lastLog) { V.lastLog = m; console.warn('view3d', m); } };
 
@@ -447,10 +490,11 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // calls / tris = the whole frame (scene + post passes); sceneCalls / sceneTris = the scene pass alone (the budget's numbers); gpu = GPU ms per pass when settings.gpuTimer is on
   V.stats = () => {
     const i = renderer.info, p = post.enabled && look.post;
-    return { calls: i.render.calls, tris: i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs, crew: crew.stats() };
+    const ph = porthole && V.portholeLive ? { ms: porthole.ms, calls: porthole.calls, tris: porthole.tris, w: porthole.w, h: porthole.h } : null; // (WP11: the Versus porthole's own numbers; calls / tris / sceneCalls below are the MAIN picture's)
+    return { porthole: ph, cine: cineOn, calls: mainInfo.calls || i.render.calls, tris: mainInfo.tris || i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs, crew: crew.stats() };
   };
   V.setTod = (name) => { S.tod = name || ''; };
-  V.dispose = () => { for (const part of [beams, lightning, fungal]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));

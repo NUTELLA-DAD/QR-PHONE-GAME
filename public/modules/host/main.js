@@ -177,6 +177,16 @@ window.setView = async (mode) => {
   return v3.active ? '3d' : '2d';
 };
 window.viewIs3D = () => v3.active;
+// WP11: the 3D camera's cinematic moves (come about, breach, finale, cast off, the hit kick). ?cine=0 turns them off (people who get motion-sick); the pause menu's Cinema button toggles them and remembers it.
+{
+  const q = new URLSearchParams(location.search).get('cine');
+  let on = true;
+  try { if (localStorage.getItem('airshipCine') === '0') on = false; } catch { /* (no storage) */ }
+  if (q === '0' || q === 'off') on = false; else if (q === '1' || q === 'on') on = true;
+  v3settings.cine = on;
+  window.setCine = (v) => { v3settings.cine = !!v; try { localStorage.setItem('airshipCine', v ? '1' : '0'); } catch { /* (not remembered) */ } return v3settings.cine; };
+  window.cineIs = () => v3settings.cine !== false;
+}
 window.view3dDebug = () => ({ view: v3.view, lastView: window.__lastView }); // (dev: the HUD alignment check reads these)
 const drawFrame = (now, view) => {
   window.__lastView = view;
@@ -195,7 +205,10 @@ const drawFrame = (now, view) => {
     if (ok) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height); // (transparent: the 3D picture shows through)
-      renderer.renderFrame(now, view, { layers: HUD_LAYERS, p3: v3.view.hud3d, dark3d: v3.view.world ? v3.view.world.night : 0 });
+      let hv = view;
+      try { hv = v3.view.hudView ? v3.view.hudView(view, canvas.width, canvas.height) : view; } catch { hv = view; } // (WP11: while a cinematic moves the camera the arrows and marks follow it)
+      const layers = view.inset ? [...HUD_LAYERS, v3.view.portholeLive ? 'insetframe' : 'inset'] : HUD_LAYERS; // (Versus split: the 3D porthole needs only its frame, the Low tier keeps the whole 2D one)
+      renderer.renderFrame(now, hv, { layers, p3: v3.view.hud3d, dark3d: v3.view.world ? v3.view.world.night : 0 });
       return;
     }
   }

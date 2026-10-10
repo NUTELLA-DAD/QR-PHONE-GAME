@@ -21,6 +21,7 @@ export const config = {
     PULL_SMOOTHING: 0.22, // ...and this slowly in the pull-back after a part was built at the sky-dock (YARD.PULL_TIME): the "she grew!" moment
     LEAD_TIME: 0.6, // look this many seconds ahead of where she's heading
     LEAD_SMOOTHING: 1.2,
+    TIP_LOCK: 0.14, ZOOM_CREEP: 0.2, // WP11: held in a tentacle's grip, or tipped past TIP_LOCK radians (about 8 degrees), the zoom changes only ZOOM_CREEP x as fast (no pumping while the 3D ship tips)
     SHAKE_SCALE: 14, // screen shake per unit of 'shake'...
     SHAKE_MAX: 9, // ...but never more than this many pixels
     SHIP_KEEP_IN: 0.5, // the ship's middle stays within this share of the screen from the centre
@@ -2627,6 +2628,18 @@ export const config = {
   // Animals players (and test bots) can be.
   CREW_SPRITES: false, // true = use crew sprite art from art/sprites/crew (only the bulldog has any); false = the drawn style for everyone
   // Painted background images (art/backgrounds/<env>/sky|far|mid|near|cave .png) - see art/ART_PIPELINE.md.
+  // WP11 (view3d/cinema.js, 3D.md section 16). The 3D camera's cinematic moments. NO roll, NO breathing, NO hand-shake: each is a short, telegraphed, critically damped move that returns EXACTLY to the
+  // gameplay mapping (camera3d.js). ENABLED false (or host.html?cine=0, or the pause menu's Cinema button) turns them all off. az = radians the camera swings round the look-at point (a yaw: the horizon stays level),
+  // elev = radians added to the camera's look-down angle (camera3d ELEV 0.12), mul = distance multiplier (a pull-back), lean = share of the screen height the look-at point slides down (BREACH) or the share of the
+  // way to the dying creature (FINALE). IN / OUT = seconds the move takes to settle (smooth-damp time).
+  CINE3D: {
+    ENABLED: true,
+    COME_ABOUT: { AZ: 0.26, ELEV: 0.02, SMOOTH: 0.2 }, // a gentle dolly (15 degrees) that peaks at the middle of the 2.6 s turn (the ship's pose.turn), then back
+    BREACH: { MUL: 1.16, ELEV: 0.2, LEAN: 0.04, IN: 0.6, OUT: 1.1 }, // the Kraken's breach warning (dive, shadow, lunge, until the splash): pull back and look further down so the sea and the shadow under her read
+    FINALE: { AZ: 0.44, ELEV: 0.03, MUL: 1.05, LEAN: 0.3, IN: 1.0, OUT: 1.1 }, // the slow-motion finale (state.slow / the match's slow): a 25 degree orbit round the dying target, then back
+    CAST: { AZ: 0.1, ELEV: 0.16, MUL: 1.14, OUT: 0.9, FOR: 0.7 }, // cast off: a rise and pull-back that settles into the gameplay framing (starts the moment the lobby launches)
+    KICK: { MIN_POWER: 2.4, PX: 12, MAX_PX: 15, STEP: 0.07, STEPS: [1, 0.5, 0.2], COOLDOWN: 0.18, SHAKE_EDGE: 1.0 }, // a hard hit: a translational jolt held for three steps of STEP seconds (full, half, a fifth), then gone. PX = size at power 6, capped at MAX_PX (config.CAMERA.SHAKE_MAX applies too)
+  },
   // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.
   // SCALE = size of one texture pixel in world units (the 512px tile covers 512*SCALE units; the airship is ~1500 wide).
   // Painted textures on the ship and gunships. STRENGTH: how strongly they show (1 = subtle, 2 = clear, 3 = bold).

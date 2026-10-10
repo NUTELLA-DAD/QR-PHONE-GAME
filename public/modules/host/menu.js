@@ -27,6 +27,8 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
   const viewLabel = () => {
     const is3d = !!(window.viewIs3D && window.viewIs3D());
     $('mView').textContent = 'View: ' + (is3d ? '3D' : '2D');
+    const cine = $('mCine');
+    if (cine) { cine.style.display = is3d ? '' : 'none'; cine.textContent = 'Cinema: ' + (window.cineIs && window.cineIs() ? 'on' : 'off'); }
     const note = window.view3dNote || '';
     $('mViewNote').textContent = note;
     $('mViewNote').style.display = note ? 'block' : 'none';
@@ -99,6 +101,11 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
     if (!window.setView) return;
     $('mView').textContent = 'View: ...';
     await window.setView(window.viewIs3D && window.viewIs3D() ? '2d' : '3d');
+    viewLabel();
+  };
+  // Cinema (WP11): the 3D camera's come-about / breach / finale / cast-off moves and the hit kick; off for people who get motion-sick (also host.html?cine=0). Remembered on this computer.
+  $('mCine').onclick = () => {
+    if (window.setCine && window.cineIs) window.setCine(!window.cineIs());
     viewLabel();
   };
   $('mSound').onclick = () => {
