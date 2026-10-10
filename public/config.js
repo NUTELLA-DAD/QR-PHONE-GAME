@@ -2348,6 +2348,22 @@ export const config = {
     HITSTOP_AT: 190, // an impact ring this big (world units) or more gets the one-frame bright flash
   },
 
+  // WP6: what damage looks like in 3D (view3d/damageStates.js; every number is view only, the game's own hp rules are in MODULES). A part's STATE comes from its hp share: 0 intact, 1 scuffed, 2 damaged, 3 broken
+  // (the searchlights have no hp: their state is the number of blows the hit log shows on them).
+  DAMAGE3D: {
+    SCUFF_AT: 0.97, DAMAGED_AT: 0.6, // hp share below which a part is scuffed / damaged (broken = the module's own broken flag)
+    LAMP_HITS: [1, 2, 3], // blows on a searchlight for scuffed, cracked, dead
+    AMT: [0, 0.15, 0.55, 1], // how far the poses go in each state (0 = as built, 1 = fully drooped, bent, open)
+    SOOT: [0, 0.18, 0.45, 0.72], DENT: [0, 0, 0.45, 0.8], TEAR: [0, 0, 0.35, 0.9], // shader looks of a part by state: blotches of soot, round dents, ragged holes
+    HULL: { SOOT_FROM: 0.12, SOOT_MAX: 0.66, DENT_BELOW: 55 }, // soot on the hull, decks and rooms grows as the hull share drops: from this share of damage up to SOOT_MAX; dents under this hull %
+    SNAP: 0.125, // seconds the half-way key is held when a state changes (a 2-key snap, then the new look)
+    SCORCH_AFTER: 3, SCORCH_MAX: 20, SCORCH_SIZE: [150, 230], // a fire that burned this many seconds leaves a scorch mark (kept until the part is repaired); at most this many a ship; size in world units
+    SMOKE_RATE: { damaged: 3, broken: 9 }, // smoke puffs a second from a damaged / broken part
+    BAG: { SCALE: [0.84, 0.5, 0.88], SAG: 0.9, STEPS: 3, GREY: 0.55 }, // a deflated bag: scale x y z, how far it sags (share of its radius), steps to get there (8 fps), washed-out amount
+    RAM_DENTS: 3, // dents on the prow for each landed ram (up to the sim's own scuff count)
+    COLORS: { SOOT: '#2a1f19', SMOKE: '#7b7573', BLACK: '#060607', STEAM: '#f4f7f7', LENS_DEAD: '#272b31', CRACK: '#0e0e12', PLANK: '#9a7448', PLANK_PATCH: '#b08a58', CRATE: '#8a6444' },
+  },
+
   // Walking feel.
   MOVE: {
     WALK_SPEED: 230,

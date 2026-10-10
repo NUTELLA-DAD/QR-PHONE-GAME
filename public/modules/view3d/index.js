@@ -19,6 +19,7 @@ import { createScenery } from './scenery.js';
 import { createVfx } from './vfx.js';
 import { createDestruction } from './destruction.js';
 import { createDamageView } from './damageView.js';
+import { createPartDamage } from './damageStates.js';
 import { placeCamera, FOV } from './camera3d.js';
 import { envIdOf } from '../host/environments.js';
 import { shipOf } from '../host/ships.js';
@@ -153,7 +154,9 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // WP5: broken-off parts as rigid bodies (destruction.js, the Rapier wreckage world loads a moment after the view starts) and the marks of the blows a ship took (damageView.js)
   const destruction = createDestruction({ parent: worldRoot, state, models, terrain, world, inRock });
   const damage = createDamageView({ state, models });
-  V.destruction = destruction; V.damage = damage;
+  // WP6: the damage state of every part (soot, dents, poses, smoke, scorch memory, breaches, the flat bag), on top of the poses shipMesh sets each frame
+  const partDamage = createPartDamage({ state, models, vfx });
+  V.destruction = destruction; V.damage = damage; V.partDamage = partDamage;
   // The wreckage's smoke and sparks go through WP4's particles when they are there (both use 3D world coordinates, y up); otherwise destruction.js keeps its own puffs.
   if (vfx && vfx.P) {
     const P = vfx.P;
@@ -352,6 +355,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     try { destruction.process(); } catch (e) { logOnce('destruction', e); } // (the break-off notes are read BEFORE syncShips rebuilds a ship from her new layout)
     syncShips(t, dt);
     try { damage.update(world.night); } catch (e) { logOnce('damage', e); }
+    try { partDamage.update(dt, t, world.night); } catch (e) { logOnce('partDamage', e); }
     syncSky();
     const main = state.ships[0];
     try { flyers.update(t, main ? main.pose.vx || 0 : 0); } catch (e) { logOnce('flyers', e); }
