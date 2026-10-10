@@ -7,6 +7,8 @@
 // Slow = frame rate under MIN_FPS or draw time over BUDGET_MS for DROP_SECS -> one level down.
 // Comfortably fast for RISE_SECS -> one level up. If we climb and have to drop again soon, the next climb waits
 // twice as long (up to RISE_MAX_SECS), so it never flip-flops. Tuning numbers live in config.PERF.
+// WP14 (3D by default): the host starts at the level the GPU probe chose (opts.start) and never climbs above opts.ceiling() (a Medium-class card stays on the Medium 3D tier); and
+// when it is still too slow at level 0 for GIVEUP_SECS, struggling() turns true - the host then switches the 3D view to the 2D renderer (main.js, at a calm moment).
 import { config } from '../../config.js';
 
 export const perfState = { level: 3 };
@@ -21,7 +23,7 @@ export const perfDarkRes = (res) => (perfState.level <= 1 ? Math.max(res, Number
 export const perfSkipLayer = (kind) => (perfState.level <= 1 && (kind === 'mist' || kind === 'near')) || (perfState.level <= 0 && kind === 'clouds');
 export const perfLowFx = () => perfState.level <= 0;
 
-export function createPerfGovernor({ onChange = () => {}, sharpOn = () => false } = {}) {
+export function createPerfGovernor({ onChange = () => {}, sharpOn = () => false, start = null, ceiling = () => 3 } = {}) {
   const P = () => config.PERF || {};
   let mode = 'auto';
   try {
@@ -30,6 +32,7 @@ export function createPerfGovernor({ onChange = () => {}, sharpOn = () => false 
   } catch { /* (no storage: stay on auto) */ }
   if (P().AUTO === false && mode === 'auto') mode = 'high';
   if (mode !== 'auto') perfState.level = MODE_LEVEL[mode];
+  else if (Number.isFinite(start)) perfState.level = Math.max(0, Math.min(3, Math.round(start)));
 
   let emaGap = 16.7;
   let emaDraw = 5;
@@ -94,9 +97,10 @@ export function createPerfGovernor({ onChange = () => {}, sharpOn = () => false 
         lastDrop = now;
         if (now - lastRise < 45000) riseWait = Math.min(cfg.RISE_MAX_SECS || 160, (riseWait || cfg.RISE_SECS || 10) * 2);
         apply(next, now);
-      } else if (goodT >= (riseWait || cfg.RISE_SECS || 10) && L < 3) {
+      } else if (goodT >= (riseWait || cfg.RISE_SECS || 10) && L < Math.min(3, Number(ceiling()))) {
         let next = L + 1;
         if (next === 2 && !sharpOn()) next = 3;
+        if (next > ceiling()) return;
         if (now - lastDrop > 120000) riseWait = null; // (fine for a long while: forget the penalty)
         lastRise = now;
         apply(next, now);
@@ -104,5 +108,8 @@ export function createPerfGovernor({ onChange = () => {}, sharpOn = () => false 
     } catch { /* (never break the frame) */ }
   };
 
-  return { update, setMode, cycleMode, label, getMode: () => mode, level: () => perfState.level, state: () => ({ emaGap, emaDraw, badT, goodT, riseWait }) };
+  // True when auto detail is on, we are already at the lowest level and frames are still slow (for config.PERF.GIVEUP_SECS): nothing more the governor can lower.
+  const struggling = () => mode === 'auto' && P().AUTO !== false && perfState.level === 0 && badT >= (P().GIVEUP_SECS || 8);
+
+  return { update, struggling, setMode, cycleMode, label, getMode: () => mode, level: () => perfState.level, state: () => ({ emaGap, emaDraw, badT, goodT, riseWait }) };
 }
