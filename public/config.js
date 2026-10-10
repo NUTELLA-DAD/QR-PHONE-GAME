@@ -2415,6 +2415,10 @@ export const config = {
     TOON: { STEPS: 2, SHADOW: 0.4, MID: 0.8 },
     INK: { REF: 2200, MIN: 0.8, MAX: 3, MIN_PX: 1.5, TERRAIN: 9 },
     SHADOW: { RADIUS: 1, NORMAL_BIAS: 6, BIAS: -0.0008 },
+    // A6 CONTACT: the soft shadow under every ship on the rock top or the sea straight below her (view3d/contactShadow.js): ALPHA on rock, SEA_ALPHA over water (the sun's shadow is there already), COLOR, SOFT = where the
+    //   soft edge starts (share of the radius), LEN = its length as a share of the ship's, DEPTH = how deep it lies (world units), GROW = how much wider it gets at FADE height, FADE = the height above the surface at which
+    //   it is gone, COLS = slices across (a slice with nothing under it is not drawn, so it never spills off a cliff), LIFT = above the surface, SHIPS = most ships.
+    CONTACT: { ALPHA: 0.6, SEA_ALPHA: 0.34, COLOR: '#1c1a2c', SOFT: 0.3, LEN: 0.82, DEPTH: 340, GROW: 0.35, FADE: 1400, COLS: 16, LIFT: 5, SHIPS: 6 },
     FRONT_CLOUDS: { SHARE: 0.5, SIZE: [200, 380], ALPHA: 0.2, LOW: [-0.1, 0.45], PAD: 0.3 },
     skyisles: { dark: { cave: 0.68, hemi: 1.0, sky: '#34447a', ground: '#141a2c', key: 0.04 }, cap: { color: '#8fa65e', amount: 0.9 }, clouds: { n: 6, front: 0, alpha: 1, tint: '#fff4e0' }, strips: { color: '#dce8ec', far: { haze: 0.35, sat: 0.75 }, mid: { haze: 0.15, sat: 0.9 } }, exposure: 1.15, key: { color: '#fff0d0', strength: 1, shadows: true }, hemi: { sky: '#e8f1f6', ground: '#b49a78', strength: 1 }, haze: '#dce8ec', hazeAmt: 0.05, grade: { shadow: '#5a6c9c', shadowAmt: 0.12, high: '#ffe8c0', highAmt: 0.1, sat: 1.04, contrast: 0.1, lift: 0.01 }, bloom: 0.55, vignette: 0.16, rim: { color: '#ffd9a8', amount: 0.22 } },
     frost: { dark: { cave: 0.66, hemi: 1.0, sky: '#3a5488', ground: '#1a2438', key: 0.04 }, cap: { color: '#f2f7ff', amount: 1 }, clouds: { n: 5, front: 0, alpha: 1, tint: '#f4f8ff' }, strips: { color: '#cfdcef', far: { haze: 0.35, sat: 0.75 }, mid: { haze: 0.15, sat: 0.9 } }, exposure: 1.1, key: { color: '#fff6e6', strength: 0.95, shadows: true }, hemi: { sky: '#e6f0fa', ground: '#9fb0c4', strength: 1.05 }, hazeAmt: 0.07, grade: { shadow: '#4a64a8', shadowAmt: 0.16, high: '#fff4e0', highAmt: 0.06, sat: 0.96, contrast: 0.08, lift: 0.01 }, bloom: 0.5, vignette: 0.15, rim: { color: '#e8f2ff', amount: 0.22 } },
@@ -2465,7 +2469,7 @@ export const config = {
       CRUST: { ICE: '#b5e0f6', SNOW: '#ffffff', SHADE: '#8fc0de', SPARKLE: 1 },
       // WP15 LAVA: a crust of dark cooled plates (cellular, SCALE world units across, CRUST colour) with glowing cracks between (CRACK = their width as a share of a plate), sliding at SPEED (constant, slow). VENT_STEP / VENT_SHARE: a sparse fixed
       // grid of hot spots that widen the cracks and open molten pools. DROP: the sheet lies this far under the sim's lava line (less lava on screen); NEAR: the brightness of the foreground (the sheet sinks into the dark from NEAR_Z toward the viewer).
-      LAVA: { HDR: 1.12, SPEED: 9, WALL: 1, WALL_ALPHA: 0.4, SMOKE: 2.2, VENT: 1.2, PLUME: 0.5, SCALE: 240, CRACK: 0.06, CRUST: '#2b110c', VENT_STEP: 1700, VENT_SHARE: 0.5, DROP: 150, NEAR: 0.45, NEAR_Z: 650, FAR_DIM: 0.25, HAZE: 0.55, HAZE_COLOR: '#3a1a1c' },
+      LAVA: { HDR: 1.0, SPEED: 9, WALL: 1, WALL_ALPHA: 0.4, SMOKE: 2.2, VENT: 1.2, PLUME: 0.5, SCALE: 240, CRACK: 0.06, CRUST: '#2b110c', VENT_STEP: 1700, VENT_SHARE: 0.5, DROP: 150, NEAR: 0.45, NEAR_Z: 650, FAR_DIM: 0.42, HAZE: 0.55, HAZE_COLOR: '#3a1a1c' },
       SPOUT: { COLORS: ['#a7bccb', '#3f6178', '#e9f4fa'], STEP: 0.2, SIDES: 24, RINGS: 16 },
       RAFT: { WOOD: ['#7a5a3a', '#9a7248'], COATS: ['#d65a4a', '#e8a23c'], SKIN: '#e8d3b0' },
       AURORA: { COLORS: ['#3df2b4', '#7a5cff', '#ff5cc8'], ALPHA: 0.5, DRIFT: 8, HEIGHT: 2600 },
@@ -2514,6 +2518,9 @@ export const config = {
     WOOD: ['#d9b98a', '#b98a56', '#8f6338', '#e8d2a6', '#6e4a2a'],
     TRACER: '#ffb838', TRACER_PRIMED: '#ff9a2e', BULLET: '#ff5a7a', FLAK: '#ff9a4a', LIGHTNING: '#9fd8ff',
     SMOKE: { fire: '#5a5454', big: '#2f2c2e', trail: '#b9b3ad', exhaust: '#8f8f8f', steam: '#f4f7f7' },
+    // A6 GOUACHE SMOKE (particles.js): smoke, steam and dust are flat painted puffs with an opaque core, one light crescent on top and a thin dark rim, opaque until the last (1 - FADE_AT) of their life. An emitter's own alpha
+    //   is lifted by OPAQUE (x1.5, so 0.7 = fully opaque, 0.5 = a lighter puff). WARM = how much of the fire light an opaque puff keeps; MAX / MAX_END = the biggest start / end size (world units); puffs smaller than SMALL (trails, exhaust, hisses) are all kept and only SMALL_SIZE times bigger. KINDS: per kind, RATE = the share of puffs kept (an even every-other-one) and SIZE = the multiplier on their size (fewer and bigger). ?look=nogouache = the old soft discs.
+    GOUACHE: { OPAQUE: 1.5, FADE_AT: 0.85, WARM: 0.3, MAX: 200, MAX_END: 340, SMALL: 26, SMALL_SIZE: 1.3, KINDS: { smoke: { rate: 0.5, size: 1.6 }, steam: { rate: 0.5, size: 1.6 }, dust: { rate: 0.75, size: 1.25 } } },
     HITSTOP_AT: 190, // an impact ring this big (world units) or more gets the one-frame bright flash
   },
 

@@ -19,6 +19,7 @@ import { createWorldObjects } from './worldObjects.js';
 import { createTeamFlags } from './teamFlag.js'; // (WP15: the Versus team pennants on the masts)
 import { createThreatGlows } from './glows3d.js';
 import { createWreck3D } from './wreck3d.js';
+import { createContactShadow } from './contactShadow.js'; // A6: the soft shadow under each ship on the rock or the sea below
 import { createScenery } from './scenery.js';
 import { createVfx } from './vfx.js';
 import { createDestruction } from './destruction.js';
@@ -161,6 +162,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // ---- ship models and the crew aboard ---------------------------------------------------------------------------------------------------------------------------------
   const models = new Map(); // ship id -> { model, ver }
   V.models = models;
+  const contact = createContactShadow(worldRoot, state, models); V.contact = contact; // (A6)
   // WP10: the searchlight beams (a pass of their own that reads the scene's depth), the light pools where they land and the lit-target rim (beams.js). If it cannot be made the old cones stay.
   let beams = null;
   try { beams = createBeams({ scene, post, world, state, models }); } catch (e) { console.warn('view3d beams off', e); look.beam = false; }
@@ -424,6 +426,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     if (beams) { try { beams.updateLit(camera, state, world.night); } catch (e) { logOnce('lit', e); } } // (which targets a manned beam holds: the toon shader gives them a warm rim)
     try { destruction.process(); } catch (e) { logOnce('destruction', e); } // (the break-off notes are read BEFORE syncShips rebuilds a ship from her new layout)
     syncShips(t, dt);
+    try { contact.update(); } catch (e) { logOnce('contact', e); } // (A6: after the ships are placed; reads the map and the poses)
     try { teamFlags.update(t, lastView ? lastView.zoom : 1); } catch (e) { logOnce('teamFlags', e); }
     try { damage.update(world.night); } catch (e) { logOnce('damage', e); }
     try { partDamage.update(dt, t, world.night); } catch (e) { logOnce('partDamage', e); }

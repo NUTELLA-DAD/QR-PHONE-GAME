@@ -18,7 +18,7 @@
 //   particles.flash(x, y, z, size, color) / ring(x, y, z, size, color, life) / muzzle(x, y, z, angle, size, color)
 //   particles.sprite(kind, ...)                   an immediate quad for ONE frame (flames that sit on a deck, shell tracers): see below.
 //   particles.setTier(tier) / setView(cx, cy, halfW, halfH) / setAmbient(color, night) / begin() / update(dt, t) / stats() / clear()
-import { THREE, gradientMap, rimify } from './style.js';
+import { THREE, gradientMap, rimify, look } from './style.js';
 import { getTrimSheet, TRIM } from './textures.js';
 import { config } from '../../config.js';
 
@@ -69,9 +69,35 @@ const VERT = /* glsl */`
     gl_Position = projectionMatrix * viewMatrix * vec4( wp, 1.0 );
   }
 `;
+// A6 GOUACHE SMOKE: a puff is a union of five circles (the seed mirrors it and nudges the bumps), drawn FLAT: an opaque core, ONE lighter crescent along the top edge (the shape shifted down and cut away
+// from itself), and a thin dark rim (never thinner than about a pixel and a half). Nothing is soft but the one-pixel edge. The CPU keeps the alpha at 1 until the last 15% of the puff's life.
+const GOUACHE_GLSL = /* glsl */`
+  float puffD( vec2 p, float s ) { // signed distance to the puff (negative inside); p in -1..1, the puff fills about 0.75 of that
+    float m = s < 0.5 ? 1.0 : -1.0, k = fract( s * 7.0 );
+    float d = length( p - vec2( 0.0, -0.04 ) ) - 0.52;
+    d = min( d, length( p - vec2( 0.30 * m, 0.16 + 0.08 * k ) ) - ( 0.34 + 0.06 * k ) );
+    d = min( d, length( p - vec2( -0.30 * m, 0.14 - 0.06 * k ) ) - 0.30 );
+    d = min( d, length( p - vec2( 0.04 * m, 0.34 ) ) - ( 0.28 + 0.05 * k ) );
+    d = min( d, length( p - vec2( -0.12 * m, -0.30 ) ) - 0.34 );
+    return d;
+  }
+  vec4 gouache( vec2 p, vec3 rgb, float steam, float seed ) { // rgb = the core colour (already lit by the place); returns colour + coverage
+    float d = puffD( p, seed ), aa = fwidth( d ) * 0.75 + 0.002;
+    float cover = 1.0 - smoothstep( -aa, aa, d );
+    float rimW = max( 0.055, fwidth( d ) * 1.6 );
+    float inside = 1.0 - smoothstep( -rimW - aa, -rimW + aa, d ); // 1 on the rim band, 0 inside it
+    float cres = ( 1.0 - smoothstep( -aa, aa, puffD( p + vec2( 0.05, 0.17 ), seed ) ) ); // 1 where the shifted puff covers, 0 where it does not: the top crescent is the 0 side
+    vec3 core = mix( rgb + vec3( 0.015 ), rgb * 1.04 + vec3( 0.05 ), steam );
+    vec3 lit = rgb * ( 1.3 + 0.1 * steam ) + vec3( 0.075 );
+    vec3 col = mix( lit, core, cres );
+    col = mix( col, rgb * mix( 0.3, 0.58, steam ), inside );
+    return vec4( col, cover );
+  }
+`;
 const FRAG = /* glsl */`
-  uniform sampler2D tSheet; uniform vec4 uFire; uniform vec4 uSmoke;
+  uniform sampler2D tSheet; uniform vec4 uFire; uniform vec4 uSmoke; uniform float uGou;
   varying vec2 vUv; varying vec4 vCol; varying float vKind; varying float vFrame; varying float vStreak; varying float vSeed;
+  ${GOUACHE_GLSL}
   void main() {
     vec3 rgb = vCol.rgb; float a = 0.0, addk = 0.0;
     vec2 p = ( vUv - 0.5 ) * 2.0; float r = length( p );
@@ -79,7 +105,10 @@ const FRAG = /* glsl */`
       vec2 uv = vec2( uFire.x + vFrame * uFire.w + vUv.x * uFire.z, uFire.y - ( 1.0 - vUv.y ) * uFire.z );
       vec4 tx = texture2D( tSheet, uv );
       rgb *= tx.rgb; a = tx.a * vCol.a; addk = 0.5;
-    } else if ( vKind < 1.5 || ( vKind > 5.5 && vKind < 6.5 ) ) { // smoke and steam: the painted soft disc
+    } else if ( uGou > 0.5 && ( vKind < 1.5 || ( vKind > 5.5 && vKind < 6.5 ) ) ) { // A6: smoke and steam as flat gouache puffs (an opaque core, a light crescent, a thin dark rim)
+      vec4 gq = gouache( p, rgb, vKind > 5.5 ? 1.0 : 0.0, vSeed );
+      rgb = gq.rgb; a = gq.a * vCol.a;
+    } else if ( vKind < 1.5 || ( vKind > 5.5 && vKind < 6.5 ) ) { // smoke and steam: the painted soft disc (?look=nogouache keeps this)
       vec2 uv = vec2( uSmoke.x + vUv.x * uSmoke.z, uSmoke.y - ( 1.0 - vUv.y ) * uSmoke.z );
       vec4 tx = texture2D( tSheet, uv );
       rgb *= tx.rgb; a = tx.a * vCol.a * ( 1.0 - smoothstep( 0.42, 0.84, r ) ); // (the painted disc's hard rim is softened)
@@ -113,12 +142,13 @@ const FRAG = /* glsl */`
     #include <colorspace_fragment>
   }
 `;
+const uGouache = { value: 1 }; // A6: 1 = flat gouache smoke (look.gouache), 0 = the old soft translucent discs
 const makeMaterial = (sheet, order, depthTest) => {
   const S = 2048, f = TRIM.fire0, sm = TRIM.smoke;
   const m = new THREE.ShaderMaterial({
     vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest, side: THREE.DoubleSide,
     blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
-    uniforms: { tSheet: { value: sheet }, uFire: { value: new THREE.Vector4((f.x + 1) / S, 1 - (f.y + 1) / S, 254 / S, 256 / S) }, uSmoke: { value: new THREE.Vector4((sm.x + 1) / S, 1 - (sm.y + 1) / S, 254 / S, 0) } },
+    uniforms: { uGou: uGouache, tSheet: { value: sheet }, uFire: { value: new THREE.Vector4((f.x + 1) / S, 1 - (f.y + 1) / S, 254 / S, 256 / S) }, uSmoke: { value: new THREE.Vector4((sm.x + 1) / S, 1 - (sm.y + 1) / S, 254 / S, 0) } },
   });
   m.fog = false;
   m.userData.order = order;
@@ -149,6 +179,7 @@ export function createParticles(scene) {
   const pool = new Float32Array(MAXN * ST);
   let n = 0, cap = (V3().CAP || {}).medium || 800, capS = (V3().SPLINTERS || {}).medium || 90, rate = 1, trails = true;
   let dropped = 0, spawned = 0;
+  const thin = {}; // A6: the running share of each smoke kind (see spawn)
   const view = { on: false, cx: 0, cy: 0, hw: 0, hh: 0 };
   const amb = [0.8, 0.8, 0.8];
   let night = 0, tNow = 0;
@@ -231,9 +262,18 @@ export function createParticles(scene) {
     if (n >= cap) { dropped++; return false; }
     if ((kd === KIND.smoke || kd === KIND.steam) && n >= cap * 0.82) { dropped++; return false; }
     if (kd === KIND.spark && n >= cap * 0.94) { dropped++; return false; }
+    // A6: gouache smoke is FEWER and BIGGER: a share of the puffs is dropped (an even every-other-one, so a steady column stays steady) and the rest are drawn bigger (config.VFX3D.GOUACHE.KINDS)
+    let size = o.size != null ? pick(o.size) : pick(K.size);
+    let gk = null;
+    if ((kd === KIND.smoke || kd === KIND.steam) && look.gouache !== false && !o.plain) {
+      const G = V3().GOUACHE || {};
+      gk = (G.KINDS || {})[kindName] || null;
+      if (gk && size < (G.SMALL || 26)) gk = { rate: 1, size: G.SMALL_SIZE || 1.3 }; // (a shell's trail, an exhaust puff, a vent's hiss: all of them, only a little bigger, or they turn into a row of beads)
+      if (gk && gk.rate < 1) { const a = (thin[kindName] || 0) + gk.rate; if (a < 1) { thin[kindName] = a; return false; } thin[kindName] = a - 1; }
+    }
     const i = n * ST;
     const life = o.life != null ? pick(o.life) : pick(K.life);
-    const size = o.size != null ? pick(o.size) : pick(K.size);
+    if (gk && gk.size) size = Math.min(size * (gk.size > 1 ? 1 + (gk.size - 1) * clamp(1.5 - size / 140, 0.3, 1) : gk.size), (V3().GOUACHE || {}).MAX || 200); // (bigger, but the already big ones (an explosion's, a wreck's) only a little: x1.6 up to 70 units, x1.34 at 130, x1.18 from 210; and never more than MAX across)
     const grow = o.size1 != null ? o.size1 : K.grow;
     const speed = o.speed != null ? pick(o.speed) : pick(K.speed);
     const dir = o.dir != null ? o.dir : Math.PI / 2, spread = o.spread != null ? o.spread : Math.PI;
@@ -248,6 +288,7 @@ export function createParticles(scene) {
     pool[i + VZ] = (o.vz || 0) + (o.zv ? (rnd() * 2 - 1) * o.zv : 0);
     pool[i + AGE] = 0; pool[i + LIFE] = Math.max(0.02, life);
     pool[i + S0] = size; pool[i + S1] = size * (kd === KIND.smoke || kd === KIND.steam ? grow : kd === KIND.fire ? grow : kd === KIND.flash || kd === KIND.ring || kd === KIND.muzzle ? grow : grow);
+    if (gk) pool[i + S1] = Math.max(size, Math.min(pool[i + S1], (V3().GOUACHE || {}).MAX_END || 340)); // (A6: an opaque puff must not swell into a continent)
     pool[i + AY] = o.ay != null ? o.ay : K.ay;
     pool[i + DRAG] = o.drag != null ? o.drag : K.drag;
     pool[i + KD] = kd; pool[i + SEED] = rnd();
@@ -282,7 +323,7 @@ export function createParticles(scene) {
     P.burst('ball', x, y, z, Math.round(3 + 2.5 * s), { size: [70 * s, 120 * s], size1: 1.9, life: [0.3, 0.52], speed: [0, 90 * s], up: [0, 40], area: 34 * s, drag: 2 }); // (round toon fireballs)
     P.burst('fire', x, y, z, Math.round(2 + 2 * s), { size: [60 * s, 100 * s], life: [0.4, 0.7], speed: [10, 80], up: [60, 160], area: 28 * s, drag: 1.2 }); // (a few tongues rising out of it)
     P.burst('spark', x, y, z + 10, Math.round(10 + 10 * s), { speed: [200, 560 * Math.sqrt(s)], life: [0.35, 0.85], size: [5, 9] });
-    P.burst('smoke', x, y, z - 10, Math.round(3 + 3 * s), { size: [70 * s, 120 * s], life: [1.4, 2.6], color: o.smoke || '#3e3a3c', warm: 0.9, speed: [10, 70 * s], up: [30, 80] });
+    P.burst('smoke', x, y, z - 10, Math.round(3 + 3 * s), { size: [70 * s, 120 * s], life: [1.4, 2.6], color: typeof o.smoke === 'string' ? o.smoke : '#3e3a3c', warm: 0.9, speed: [10, 70 * s], up: [30, 80] });
     P.ring(x, y, z + 20, 180 * s, '#ffd23f');
     if (o.wood) P.splinters(x, y, z, Math.round(6 + 6 * s), { kind: 'wood', speed: [180, 480], up: 160 });
     if (s >= 1.6) P.hitFlash(x, y, z, 260 * s);
@@ -339,6 +380,8 @@ export function createParticles(scene) {
     let na = 0, nb = 0;
     const wa = A.arr, wb = B.arr;
     const step8 = Math.floor(t * 8);
+    const gou = look.gouache !== false; // (A6: flat gouache smoke; the shader's switch follows)
+    uGouache.value = gou ? 1 : 0;
     for (let k = 0; k < n; k++) {
       const i = k * ST;
       const age = (pool[i + AGE] += dt), life = pool[i + LIFE];
@@ -367,11 +410,15 @@ export function createParticles(scene) {
         const h = hdr * (1 - 0.25 * u);
         r *= h; g *= h * (1 - 0.3 * u); b *= h * (1 - 0.6 * u);
       } else if (kd === KIND.smoke || kd === KIND.steam) {
-        a = a0 * Math.min(1, u / 0.1) * (u < 0.5 ? 1 : (1 - u) / 0.5);
-        const w = pool[i + WARM] * (1 - u) * (1 - u);
+        if (gou) { // A6: gouache: opaque (an emitter's alpha below ~0.65 is a lighter puff) until the last 15% of its life; growth in 8 fps steps; never turned (the light crescent stays on top)
+          const G = V3().GOUACHE || {}, fadeAt = G.FADE_AT != null ? G.FADE_AT : 0.85;
+          a = clamp(a0 * (G.OPAQUE != null ? G.OPAQUE : 1.5), 0, 1) * Math.min(1, u / 0.04) * (u < fadeAt ? 1 : (1 - u) / (1 - fadeAt));
+          size = s0 + (s1 - s0) * clamp(Math.floor(age * 8) / 8 / life, 0, 1);
+        } else a = a0 * Math.min(1, u / 0.1) * (u < 0.5 ? 1 : (1 - u) / 0.5);
+        const w = pool[i + WARM] * (1 - u) * (1 - u) * (gou ? ((V3().GOUACHE || {}).WARM ?? 0.3) * (1 - u) : 1); // (an opaque puff would turn solid orange: the fire's light is a third as strong on it and is gone sooner)
         r = r * amb[0] * (1 - w) + 1.5 * w; g = g * amb[1] * (1 - w) + 0.6 * w; b = b * amb[2] * (1 - w) + 0.18 * w; // (fresh smoke is lit orange by the fire it came from)
         if (kd === KIND.steam) { r *= 1.1; g *= 1.1; b *= 1.1; }
-        const ro = pool[i + ROT] + seed * 0; dx = Math.cos(ro); dy = Math.sin(ro);
+        if (!gou) { const ro = pool[i + ROT] + seed * 0; dx = Math.cos(ro); dy = Math.sin(ro); }
       } else if (kd === KIND.spark) {
         const sp2 = Math.hypot(vx, vy), st = pool[i + STRETCH];
         a = a0 * (1 - u * u);
