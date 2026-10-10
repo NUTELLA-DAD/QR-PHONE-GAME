@@ -40,6 +40,9 @@ const { renderer, scene, camera, world, models, kraken, terrain } = view;
 look.toon = S.toon; look.shadows = S.shadows && look.shadows; // (?look=noshadows in the address already turned it off)
 renderer.shadowMap.enabled = look.shadows;
 let simTime = 0;
+let lineupPage = Number(opt('lineup', '0')) || 0; // 0 = off, 1 = the line-up, 2 = the key strip
+let lineupOn = lineupPage > 0; void lineupOn; // (WP7: ?lineup=1 opens the crew line-up straight away; ?luz= zooms it, ?lux= / ?luy= pan it, for close shots)
+const LU = { zoom: Number(opt('luz', 1)) || 1, dx: Number(opt('lux', 0)) || 0, dy: Number(opt('luy', 0)) || 0 };
 
 function resize() {
   view.resize();
@@ -68,6 +71,7 @@ function buildUI() {
   <label>Call up (demo helpers)</label>
   <div class="row"><button data-spawn="gunship">Gunship</button><button data-spawn="fighters">Fighters</button><button data-spawn="bomber">Bomber</button><button data-spawn="bats">Bats</button><button data-spawn="fire">Fire</button></div>
   <div class="row"><button id="b-vfx">VFX test (V): fire + volley + explosion</button></div>
+  <div class="row"><button id="b-crew">Crew line-up (K): every species, the raiders, the poses</button></div>
   <div class="row"><button id="b-pause">Pause</button><button id="b-ui">Hide (H)</button></div>
   <small id="u-info"></small>`;
   $('u-build').onchange = (e) => reload({ build: e.target.value });
@@ -100,10 +104,16 @@ function buildUI() {
     const ok = view.vfx && view.vfx.test('all');
     $('u-info').textContent = ok ? 'VFX test: three deck fires, a volley and an explosion at the ship.' : 'The particles are off (?look=novfx, or they could not start).';
   };
+  $('b-crew').onclick = () => { // WP7: a line-up of the crew in the sky above the ship (the camera goes there; the game keeps running). Click again to go back.
+    lineupPage = (lineupPage + 1) % 3;
+    $('b-crew').classList.toggle('on', lineupPage > 0);
+    $('b-crew').textContent = lineupPage === 0 ? 'Crew line-up (K): every species, the raiders, the poses' : lineupPage === 1 ? 'Crew line-up page 1 (K: the key strip, then back)' : 'Crew line-up page 2: the animation keys (K: back to the ship)';
+    $('u-info').textContent = lineupPage === 2 ? 'The animation KEYS, each frozen on one key: top row = the 4-key walk (fox) and the 4-key ladder climb (wolf, seen from behind); middle = jump crouch / stretch / air, the landing squash, a swing raised and struck, the two keys of working a station; third row = idle (faces the camera a little, both ways), walking with a tool, hauling a crate, knocked out, just hit (the flash), a hurt crewman; bottom row = the Action hop (two crouch keys, up, top, down) and an overhead chop by a raider (raised, struck).' : lineupPage === 1 ? 'Crew line-up. Row 1: the eight species with their items (two are hurt: hearts). Row 2: walking with a sword, climbing (from behind), working a gun, knocked out, hauling coal, mid-jump, swinging a hammer, a rabbit facing left. Row 3: in the air: a parachute, swinging on the hookshot (the rope), thrown, fired from the crew cannon (smoke), the overboard tumble, aiming the hookshot, a towline, a crate. Row 4: the four raiders (grunt, brute, sapper, cutter) and hurt crew (1, 1.5, 2 hearts, one knocked out). K again: the key strip.' : 'Back to the ship.';
+  };
   let paused = false;
   $('b-pause').onclick = () => { paused = !paused; window.__paused = paused; $('b-pause').textContent = paused ? 'Resume' : 'Pause'; $('b-pause').classList.toggle('on', paused); };
   $('b-ui').onclick = () => { p.style.display = 'none'; };
-  addEventListener('keydown', (e) => { if (e.key === 'h' || e.key === 'H') p.style.display = p.style.display === 'none' ? '' : 'none'; if (e.key === '2') $('b-2d').click(); if (e.key === 'c' || e.key === 'C') $('b-turn').click(); if (e.key === 'o' || e.key === 'O') $('b-orbit').click(); if (e.key === 'v' || e.key === 'V') $('b-vfx').click(); });
+  addEventListener('keydown', (e) => { if (e.key === 'h' || e.key === 'H') p.style.display = p.style.display === 'none' ? '' : 'none'; if (e.key === '2') $('b-2d').click(); if (e.key === 'c' || e.key === 'C') $('b-turn').click(); if (e.key === 'o' || e.key === 'O') $('b-orbit').click(); if (e.key === 'v' || e.key === 'V') $('b-vfx').click(); if (e.key === 'k' || e.key === 'K') $('b-crew').click(); });
   sync();
   $('u-info').innerHTML = 'Keys: H hides, O orbit, 2 show 2D, C come about. The simulation is the real game with ' + S.bots + ' bot crew; this page only draws it (the same 3D view as host.html?view=3d).<br><b>Not drawn in 3D yet:</b> see the console line "view3d: not drawn yet".';
 }
@@ -132,7 +142,11 @@ function frame(now) {
   try {
     if (!window.__paused) { live.advance(real); simTime += real; }
     const cssW = canvas.clientWidth || window.innerWidth, cssH = canvas.clientHeight || window.innerHeight;
-    const v = cam2d.update(window.__paused ? 0 : dt, state, cssW, cssH); // the 2D game's own follow camera: where it looks and how far it is zoomed
+    let v = cam2d.update(window.__paused ? 0 : dt, state, cssW, cssH);
+    if (lineupPage) { // the camera goes to the crew line-up in the sky above the ship (view.lineup tells the view where to stand the figures)
+      const e0 = models.values().next().value, p0 = e0 && e0.model.root.position;
+      if (p0) { view.lineup = { x: p0.x, y: p0.y + 800, page: lineupPage }; v = { cx: p0.x + LU.dx, cy: -(p0.y + 800 + 95 + LU.dy), zoom: (cssH / 800) * LU.zoom }; }
+    } else view.lineup = null; // the 2D game's own follow camera: where it looks and how far it is zoomed
     if (S.view2d !== 'only') view.renderFrame(now, v, { t: simTime, width: cssW, height: cssH });
     if (r2d && S.view2d !== 'off') {
       const view2 = cam2dB.update(dt, state, canvas2d.width, canvas2d.height);

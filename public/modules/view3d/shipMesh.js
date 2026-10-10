@@ -150,7 +150,7 @@ export function buildShipModel(layout, opts = {}) {
         const manned = !!(live && live.manned);
         let aim = live && Number.isFinite(live.aim) ? live.aim : lp.home;
         let power = live && Number.isFinite(live.power) ? clamp(live.power, 0, 1) : 0.3;
-        if (c.sweep && !manned) { aim = lp.home + lp.arc * 0.85 * Math.sin(t * 0.4 + i * 2.2); power = 0.9; } // (demo: nobody is on the lamp, so it sweeps by itself; display only)
+        if (c.sweep && !manned) { aim = lp.home + lp.arc * 0.85 * Math.sin(t * 0.4 + i * 2.2); power = 0.9; } // wobble-ok: the dev page's idle-lamp sweep demo (off in the game) (demo: nobody is on the lamp, so it sweeps by itself; display only)
         lp.pivot.rotation.z = -aim;
         lp.spot.castShadow = !!c.spotShadow && i === 0 && look.shadows;
         const on = !!c.lamps && night > 0.12;
