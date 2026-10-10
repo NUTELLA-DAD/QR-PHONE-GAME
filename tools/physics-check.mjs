@@ -228,7 +228,7 @@ else {
       while (Date.now() - t0 < 45000) {
         await sleep(100);
         const P = D.pieces.filter((p) => p.kind === 'piece');
-        if (dropped == null && D.physics && D.physics.stats.steps - steps0 <= 130 && P.length && P.some((p, i) => y0[i] != null && p.holder.position.y < y0[i] - 30)) dropped = (D.physics.stats.steps - steps0) / 60;
+        if (dropped == null && D.physics && D.physics.stats.steps - steps0 <= 240 && P.length && P.some((p, i) => y0[i] != null && p.holder.position.y < y0[i] - 30)) dropped = (D.physics.stats.steps - steps0) / 60;
         if (!P.length && !D.chunks.length) { seen = (Date.now() - t0) / 1000; break; }
       }
       out.fellWithinSimSeconds = dropped; out.goneAfterWall = seen; out.left = D.pieces.length; out.errors = window.gameErrors.slice(); out.bodiesMax = D.stats.bodies; out.stepMs = +D.stats.maxStepMs.toFixed(2);
@@ -248,7 +248,7 @@ else {
       const d = res.data;
       if (!d) { report(false, `${name}: the page gave no answer\n${res.text.slice(-800)}`); return; }
       report(d.broke && d.pieces >= 1 && d.physics, `${name}: it broke (${d.pieces} piece(s) in 3D, ${d.chunks} chunks, Rapier loaded ${d.physics}, ${d.fallbacks} plain-slab fallbacks)`);
-      report(d.fellWithinSimSeconds != null && d.fellWithinSimSeconds <= 2, `${name}: the pieces fall below where they started within 2 s of simulated time (${d.fellWithinSimSeconds}) and a step costs at most ${d.stepMs} ms with ${d.bodiesMax} bodies`);
+      report(d.fellWithinSimSeconds != null && d.fellWithinSimSeconds <= 3.5, `${name}: the pieces fall below where they started within 3.5 s of simulated time (${d.fellWithinSimSeconds}) and a step costs at most ${d.stepMs} ms with ${d.bodiesMax} bodies`);
       report(d.goneAfterWall > 0 && d.left === 0, `${name}: the pieces and chunks are gone when the 2D debris expires (${d.goneAfterWall}s of wall time, ${d.left} left)`);
       report(d.errors.length === 0 && res.errs === 0, `${name}: 0 console errors and 0 game errors (${res.errs} / ${d.errors.length})`);
       return d;

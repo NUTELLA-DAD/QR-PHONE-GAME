@@ -12,6 +12,7 @@
 import { THREE, G, gradientMap, rimify, look, styled, setOutline, INK } from '../style.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { getTrimSheet, TRIM, uvRect } from '../textures.js';
+import { config } from '../../../config.js';
 
 const S = 2048;
 // unit shapes for ship parts, lighter than style.js G (a ship is drawn three times: the mesh, its ink shell and the shadow pass)
@@ -39,21 +40,81 @@ const SCAR_VERT_BEGIN = 'vScarP = position.xy; vWall = abs( aLayer );';
 const SCAR_FRAG = `uniform vec4 uScar[8]; uniform float uScarN; varying vec2 vScarP; varying float vWall; float scarRim = 0.0;
 float scarD( vec2 q, vec4 r, float salt ) { vec2 c = ( r.xy + r.zw ) * 0.5, h = ( r.zw - r.xy ) * 0.5; float n = fract( sin( dot( floor( q / 18.0 ), vec2( 12.9898, 78.233 ) ) + salt ) * 43758.5453 ); vec2 d = abs( q - c ) - h + n * 14.0; return max( d.x, d.y ); }
 void scarTest() { if ( vWall < 0.5 ) return; for ( int i = 0; i < 8; i ++ ) { if ( float( i ) >= uScarN ) break; float d = scarD( vScarP, uScar[ i ], float( i ) ); if ( d < 0.0 ) discard; scarRim = max( scarRim, 1.0 - d / 16.0 ); } }`;
+// WP6 DAMAGE STATES: every part of a ship has a number (the aPart attribute, set when the ship is assembled; 0 = none) and a small data texture (uDmg, one texel a part, one per ship) says how hurt it is:
+//   row 0  r soot (dark blotches fixed to the part's own coordinates), g dents (round shaded dimples), b tears (ragged holes cut through the part), a grey (washed out: a flat bag)
+//   row 1  x y = a corner chopped off (local coordinates: everything right of x and below y is gone, with a ragged edge: a sail's missing flap), z = how ragged; z 0 = none
+// It is still ONE draw call: the shader reads the texel; damageStates.js rewrites a texel only when a part's state changes. Everything is steady: hashes of the position, nothing moves.
+export const DMG_W = 512; // (parts a ship can number; any beyond that share texel 0 = no damage shown)
+const dmgFx = { uSoot: { value: new THREE.Color(config.DAMAGE3D.COLORS.SOOT) } };
+const DMG_VERT_COMMON = 'attribute float aPart; varying float vPart;';
+const DMG_VERT_BEGIN = 'vPart = aPart;';
+const DMG_FRAG = `uniform sampler2D uDmg; uniform vec3 uSoot; varying float vPart; vec4 dmgV = vec4( 0.0 ); float dmgRim = 0.0;
+float dmgH( vec2 c ) { vec3 p3 = fract( vec3( c.xyx ) * 0.1031 ); p3 += dot( p3, p3.yzx + 33.33 ); return fract( ( p3.x + p3.y ) * p3.z ); }
+float dmgN( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f ); return mix( mix( dmgH( i ), dmgH( i + vec2( 1.0, 0.0 ) ), f.x ), mix( dmgH( i + vec2( 0.0, 1.0 ) ), dmgH( i + vec2( 1.0, 1.0 ) ), f.x ), f.y ); }
+void dmgTest() {
+  int pi = int( vPart + 0.5 );
+  dmgV = texelFetch( uDmg, ivec2( pi, 0 ), 0 );
+  if ( dmgV.b > 0.01 ) {
+    vec2 c = floor( vScarP / 34.0 ), f = fract( vScarP / 34.0 ) - 0.5;
+    float h = dmgH( c + 3.0 ), lim = dmgV.b * 0.62;
+    if ( h < lim ) {
+      vec2 off = ( vec2( dmgH( c + 7.0 ), dmgH( c + 11.0 ) ) - 0.5 ) * 0.34;
+      float rag = 0.8 + 0.4 * dmgH( floor( vScarP / 5.0 ) );
+      float d = length( f - off ) - ( 0.12 + 0.3 * ( h / max( lim, 0.01 ) ) ) * rag;
+      if ( d < 0.0 ) discard;
+      dmgRim = 1.0 - smoothstep( 0.0, 0.07, d );
+    }
+  }
+  vec4 cr = texelFetch( uDmg, ivec2( pi, 1 ), 0 );
+  if ( cr.z > 0.0 ) {
+    float rg = ( dmgH( floor( vScarP / 7.0 ) ) - 0.5 ) * cr.z;
+    float cx = vScarP.x - ( cr.x + rg ), cy = ( cr.y + rg * 0.8 ) - vScarP.y;
+    if ( cx > 0.0 && cy > 0.0 ) discard;
+    dmgRim = max( dmgRim, 1.0 - smoothstep( 0.0, 5.0, length( max( vec2( -cx, -cy ), 0.0 ) ) ) );
+  }
+}`;
+const DMG_TINT = `{
+    float soot = dmgV.r, dent = dmgV.g, grey = dmgV.a;
+    if ( soot > 0.005 ) { // blotches of soot with hard toon edges (value noise at two sizes, fixed to the part), and a light all-over grime
+      float nz = 0.65 * dmgN( vScarP / 46.0 ) + 0.35 * dmgN( vScarP / 17.0 + 7.0 );
+      float th = 0.72 - soot * 0.4;
+      diffuseColor.rgb *= 1.0 - 0.2 * soot;
+      diffuseColor.rgb = mix( diffuseColor.rgb, uSoot, 0.85 * smoothstep( th, th + 0.07, nz ) );
+    }
+    if ( dent > 0.01 ) {
+      vec2 c = floor( vScarP / 22.0 ), f = fract( vScarP / 22.0 ) - 0.5;
+      if ( dmgH( c + 21.0 ) < dent ) {
+        vec2 q = f - ( vec2( dmgH( c + 5.0 ), dmgH( c + 9.0 ) ) - 0.5 ) * 0.3;
+        float d = length( q );
+        diffuseColor.rgb *= 1.0 - 0.3 * step( d, 0.22 );
+        diffuseColor.rgb += step( 0.22, d ) * step( d, 0.3 ) * 0.1 * ( q.x + q.y < 0.0 ? -1.0 : 1.0 );
+      }
+    }
+    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( dot( diffuseColor.rgb, vec3( 0.3, 0.59, 0.11 ) ) ) * 0.82, grey );
+    diffuseColor.rgb *= 1.0 - 0.6 * dmgRim;
+  }`;
 function patchShell(sh, uHide, ink, scar) {
   sh.uniforms.uHide = uHide;
   sh.uniforms.uScar = scar.uScar;
   sh.uniforms.uScarN = scar.uScarN;
-  sh.vertexShader = sh.vertexShader.replace('#include <common>', SHELL_VERT_COMMON + '\n' + SCAR_VERT_COMMON).replace('#include <begin_vertex>', SHELL_VERT_BEGIN + '\n' + SCAR_VERT_BEGIN).replace('#include <project_vertex>', SHELL_VERT_PROJECT);
+  sh.uniforms.uDmg = scar.uDmg;
+  sh.uniforms.uSoot = dmgFx.uSoot;
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', SHELL_VERT_COMMON + '\n' + SCAR_VERT_COMMON + '\n' + DMG_VERT_COMMON).replace('#include <begin_vertex>', SHELL_VERT_BEGIN + '\n' + SCAR_VERT_BEGIN + '\n' + DMG_VERT_BEGIN).replace('#include <project_vertex>', SHELL_VERT_PROJECT);
   if (ink) { sh.uniforms.uInkOn = inkOn; sh.uniforms.uInk = inkColor; }
-  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vShell;' + (ink ? ' uniform float uInkOn; uniform vec3 uInk;' : '') + '\n' + SCAR_FRAG)
-    .replace('void main() {', 'void main() {\n  ' + (ink ? 'if ( vShell > 0.5 ) { if ( uInkOn < 0.5 || gl_FrontFacing ) discard; } else if ( ! gl_FrontFacing ) discard;' : 'if ( vShell > 0.5 || ! gl_FrontFacing ) discard;') + '\n  scarTest();')
-    .replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.16, 0.10, 0.07 ), clamp( scarRim, 0.0, 1.0 ) * 0.85 );');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vShell;' + (ink ? ' uniform float uInkOn; uniform vec3 uInk;' : '') + '\n' + SCAR_FRAG + '\n' + DMG_FRAG)
+    .replace('void main() {', 'void main() {\n  ' + (ink ? 'if ( vShell > 0.5 ) { if ( uInkOn < 0.5 || gl_FrontFacing ) discard; } else if ( ! gl_FrontFacing ) discard;' : 'if ( vShell > 0.5 || ! gl_FrontFacing ) discard;') + '\n  scarTest();\n  dmgTest();')
+    .replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.16, 0.10, 0.07 ), clamp( scarRim, 0.0, 1.0 ) * 0.85 );\n  ' + DMG_TINT);
   if (ink) sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  if ( vShell > 0.5 ) gl_FragColor.rgb = uInk;');
 }
 export function makeTrimMaterials() {
   const sheet = getTrimSheet();
   const uHide = { value: 0 };
-  const scar = { uScar: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uScarN: { value: 0 } }; // (WP5: the holes broken-off parts left, see patchShell)
+  const dmgData = new Float32Array(DMG_W * 2 * 4); // (WP6: one texel a part, two rows, see DMG_FRAG; damageStates.js rewrites it and sets dmgTex.needsUpdate only when a part's state changes)
+  const dmgTex = new THREE.DataTexture(dmgData, DMG_W, 2, THREE.RGBAFormat, THREE.FloatType);
+  dmgTex.minFilter = dmgTex.magFilter = THREE.NearestFilter;
+  dmgTex.generateMipmaps = false;
+  dmgTex.needsUpdate = true;
+  const scar = { uScar: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uScarN: { value: 0 }, uDmg: { value: dmgTex } }; // (WP5: the holes broken-off parts left, see patchShell)
   const toon = rimify(new THREE.MeshToonMaterial({ vertexColors: true, map: sheet.texture, gradientMap, side: THREE.DoubleSide }));
   const rim = toon.onBeforeCompile;
   toon.onBeforeCompile = (sh, r) => { // (the painted sheet is a little darker than white on average: a small gain keeps the hull colours where the flat ones were)
@@ -78,7 +139,7 @@ export function makeTrimMaterials() {
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + SCAR_FRAG).replace('void main() {', 'void main() {\n  scarTest();'); // (the hole casts no shadow)
   };
   depth.customProgramCacheKey = () => 'depth-trim';
-  return { toon, plain, depth, uHide, sheet, ...scar };
+  return { toon, plain, depth, uHide, sheet, ...scar, dmgData, dmgTex };
 }
 let sharedMats = null;
 export const sharedTrimMaterials = () => sharedMats || (sharedMats = makeTrimMaterials());
@@ -288,6 +349,8 @@ export class PartBatch extends Sink {
     this.tris = built.n / 3;
     return group;
   }
+  // WP6: the part as ONE geometry (the picture and its ink shell, aShell / aLayer / aPart), to be instanced many times by inkInstanced() (loose planks and crates knocked about by damage).
+  buildGeometry() { return inkGeometry([...this.layers.neg, ...this.layers.main, ...this.layers.pos], null); }
 }
 
 // ---- assembling a whole ship's static pieces --------------------------------------------------------------------------------------------------------------------------------------
@@ -300,6 +363,7 @@ function inkGeometry(list, layerEnds) {
   if (layerEnds) for (let i = 0; i < n; i++) { const l = i < layerEnds[0] ? -1 : i < layerEnds[1] ? 0 : 1; layer[i] = l; layer[n + i] = l; }
   merged.setAttribute('aShell', new THREE.BufferAttribute(shell, 1));
   merged.setAttribute('aLayer', new THREE.BufferAttribute(layer, 1));
+  merged.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(n * 2), 1)); // (WP6: which part a vertex belongs to; assemble() and damageStates.js fill it in. Every ship mesh has one, so the shader never reads a stray default)
   merged.computeBoundingSphere();
   return { geometry: merged, n };
 }
@@ -314,6 +378,24 @@ function inkMesh(built, m, cast, receive) {
   mesh.customDepthMaterial = m.depth;
   mesh.onBeforeShadow = () => geometry.setDrawRange(0, n);
   mesh.onAfterShadow = () => geometry.setDrawRange(0, Infinity);
+  return mesh;
+}
+
+// WP6: an instanced mesh of a built geometry (PartBatch.buildGeometry) with the ship's own toon material: ONE draw call for every plank or crate (set .count, setMatrixAt, instanceMatrix.needsUpdate). Hidden while empty.
+export function inkInstanced(built, mats, max) {
+  const mesh = new THREE.InstancedMesh(built.geometry, mats.toon, max);
+  styled(mesh, mats.toon, mats.plain);
+  mesh.userData.shadowCaster = true;
+  mesh.userData.shadowReceiver = true;
+  mesh.castShadow = look.shadows;
+  mesh.receiveShadow = look.shadows;
+  mesh.customDepthMaterial = mats.depth;
+  mesh.onBeforeShadow = () => built.geometry.setDrawRange(0, built.n);
+  mesh.onAfterShadow = () => built.geometry.setDrawRange(0, Infinity);
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mesh.frustumCulled = false;
+  mesh.count = 0;
+  mesh.visible = false;
   return mesh;
 }
 
@@ -342,6 +424,9 @@ export function assemble(entries, mats) {
   const built = inkGeometry(list, [ends.negEnd, ends.mainEnd]);
   for (const g of list) g.dispose();
   const geometry = (out.geometry = built.geometry);
+  // WP6: a number for every part (1, 2, 3 ... in the order of ranges; 0 = none): the aPart attribute, for the damage texture (see DMG_FRAG). Both copies (the picture and its ink shell) carry it.
+  const partIndex = (out.partIndex = {}), aPartArr = geometry.attributes.aPart.array;
+  Object.keys(ranges).forEach((key, i) => { const idx = i + 1 < DMG_W ? i + 1 : 0; partIndex[key] = idx; for (const r of ranges[key]) { aPartArr.fill(idx, r.start, r.start + r.count); aPartArr.fill(idx, cursor + r.start, cursor + r.start + r.count); } });
   const mesh = inkMesh(built, m, true, true);
   group.add(mesh);
   out.mesh = mesh;
@@ -354,7 +439,7 @@ export function assemble(entries, mats) {
     const total = rs.reduce((k, r) => k + r.count, 0);
     if (!total) return g;
     const out2 = new THREE.BufferGeometry();
-    for (const [name, size] of [['position', 3], ['normal', 3], ['color', 3], ['uv', 2], ['onormal', 3]]) {
+    for (const [name, size] of [['position', 3], ['normal', 3], ['color', 3], ['uv', 2], ['onormal', 3], ['aPart', 1]]) {
       const src = geometry.attributes[name].array, dst = new Float32Array(total * 2 * size);
       let at = 0;
       for (let copy = 0; copy < 2; copy++) for (const r of rs) { dst.set(src.subarray(r.start * size, (r.start + r.count) * size), at); at += r.count * size; }
@@ -374,7 +459,7 @@ export function assemble(entries, mats) {
   // is the piece of hull, deck and room walls a break-off takes along with the parts that stood on it. Both walls are kept (aLayer 0: nothing hidden). Returns an empty Group when nothing is inside.
   out.extractClip = (keys, rects) => {
     const g = new THREE.Group(), pos = geometry.attributes.position.array;
-    const NAMES = [['position', 3], ['normal', 3], ['color', 3], ['uv', 2], ['onormal', 3]], STRIDE = 14, acc = [];
+    const NAMES = [['position', 3], ['normal', 3], ['color', 3], ['uv', 2], ['onormal', 3], ['aPart', 1]], STRIDE = 15, acc = [];
     const arrs = NAMES.map(([n]) => geometry.attributes[n].array);
     const vert = (v) => { const o = []; NAMES.forEach(([n, s], k) => { for (let c = 0; c < s; c++) o.push(arrs[k][v * s + c]); }); return o; };
     const lerpV = (a, b, t) => a.map((x, i) => x + (b[i] - x) * t);
