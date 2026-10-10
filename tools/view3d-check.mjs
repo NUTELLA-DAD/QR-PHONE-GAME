@@ -202,10 +202,11 @@ try {
       await P.ev(`game.course.startMission(2,{kind:'open',environment:'skyisles',danger:2}); game.state.ev.warn=0; 1`);
       await sleep(2500);
       await P.ev(`game.gunship.spawn(); game.squadrons.spawnStrafers(); game.squadrons.spawnBomber(); 1`);
-      await sleep(quick ? 6000 : 9000);
-      gateMeasure('fight (gunship, fighters, bomber)', await P.json(MEASURE));
+      await sleep(2500); // (the models are read while the gunship is surely still up: with 8 real-time bots she was sometimes shot down before the measure)
       const fb = (await P.json(`JSON.stringify({ list: window.view3dDebug().view.fallbacks(), models: window.view3dDebug().view.models ? window.view3dDebug().view.models.size : 0, gunship: !!game.state.gunship })`)) || { list: ['?'] };
       check(fb.list.length === 0 && fb.gunship, `models: the live ships and the gunship have no fallbacks (${fb.models} model(s))`, 'models: the live ships / gunship have fallbacks ' + JSON.stringify(fb));
+      await sleep(quick ? 3500 : 6500);
+      gateMeasure('fight (gunship, fighters, bomber)', await P.json(MEASURE));
       const { minimumBuild } = await import(pathToFileURL(path.join(here, 'tools/fixtures/minimum-lib.mjs')).href);
       const { generateShip } = await import(pathToFileURL(path.join(here, 'public/modules/host/shipGen.js')).href);
       const lists = {};
@@ -385,8 +386,12 @@ try {
     await sleep(2500);
     a = await P.json(`JSON.stringify({ is3d: window.viewIs3D(), gunship: !!game.state.gunship, toast: document.body.innerText.includes('Switched to 2D for speed') })`);
     check(a && a.is3d, 'mid-fight (the director is at a peak, the gunship' + (a && a.gunship ? ' is on us' : ' has not come') + ') it does NOT switch yet', 'mid-fight: ' + JSON.stringify(a));
-    await sleep(6500);
-    a = await P.json(`JSON.stringify({ is3d: window.viewIs3D(), toast: document.body.innerText.includes('Switched to 2D for speed') })`);
+    for (let k = 0; k < 25; k++) { // (TO_2D_WAIT counts game time, and the headless page runs the game slowly: look for up to 25 s of wall time)
+      await P.json(FEED); // (keep the governor struggling: real headless frames are fast and would clear it)
+      await sleep(1000);
+      a = await P.json(`JSON.stringify({ is3d: window.viewIs3D(), toast: document.body.innerText.includes('Switched to 2D for speed') })`);
+      if (a && !a.is3d) break;
+    }
     check(a && !a.is3d && a.toast, 'when no calm moment comes it switches after TO_2D_WAIT', 'after the wait: ' + JSON.stringify(a));
     await settle('step down (fight)', P);
     await P.close();

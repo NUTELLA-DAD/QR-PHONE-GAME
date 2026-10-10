@@ -70,13 +70,13 @@ const LAVA_FRAG = `
       vec3 col = uCrust * ( 0.7 + 0.6 * v.z ); // (each plate a slightly different dark)
       col = mix( col, uDeep * 0.7, rim * 0.85 );
       col = mix( col, uMid, seam );
-      col = mix( col, uHot * 1.25, core );
+      col = mix( col, uHot * 1.15, core );
       float pool = step( 0.72, heat ); // (a vent: a molten pool, hottest in the middle)
-      col = mix( col, mix( uMid * 1.05, uHot * 1.2, step( 0.9, heat ) ), pool );
+      col = mix( col, mix( uMid * 1.0, uHot * 1.04, step( 0.9, heat ) ), pool );
       col *= mix( 1.0, uNear, smoothstep( 0.0, uNearZ, vW.z ) ); // (the foreground sinks into the dark: it is not where the game is played)
       float fa = smoothstep( 0.0, 0.08, vV ); // (it melts into the haze at the far edge)
       // A3: the far lava is a painting that RECEDES: its glow drops by uFarDim past the middle distance, and a dark smoke haze (a static, broken band) lies over the far end of it
-      float farK = 1.0 - smoothstep( 0.25, 0.65, vV );
+      float farK = 1.0 - smoothstep( 0.25, 0.85, vV ); // (A6: the dimming reaches further toward the viewer)
       float smoke = uSmoke * ( 1.0 - smoothstep( 0.02, 0.34, vV ) ) * ( 0.65 + 0.35 * vn( vW.xz / 900.0 + 5.0 ) );
       col = mix( col * ( 1.0 - uFarDim * farK ), uSmokeCol, clamp( smoke, 0.0, 1.0 ) );
       gl_FragColor = vec4( col * uHdr * fa, fa );
