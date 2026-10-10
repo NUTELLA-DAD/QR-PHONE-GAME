@@ -7,7 +7,7 @@
 // Drawn AFTER the main picture (so it lies over it) and with the sky, clouds, sea and the key light's shadow box moved to the far ship for this one pass; the next frame's main pass moves them back
 // (index.js calls world.update first thing). Not in the porthole: the searchlight beams, the particles (the big view culls them to its own screen), the rock (the Versus sky is open) and the
 // HUD labels. The camera is the plain gameplay lens (camera3d.js placeCamera, no cinema): nothing rolls, nothing moves but the ship.
-import { THREE } from './style.js';
+import { THREE, setInkFor } from './style.js';
 import { createPost } from './post.js';
 import { placeCamera, FOV } from './camera3d.js';
 
@@ -39,6 +39,7 @@ export function createPorthole({ renderer, scene, world }) {
       const t0 = performance.now();
       const info = placeCamera(camera, { cx: inset.cx, cy: inset.cy, zoom: inset.zoom }, Math.max(16, inset.w - 2 * m), Math.max(16, inset.h - 2 * m), {});
       camera.userData.cine = false;
+      setInkFor(info.D, info.visH); // (A1: the far ship's outlines keep their thickness in the little window; the next main frame sets its own)
       const tg = info.target;
       world.lights.fit([{ x: tg.x, y: tg.y }], tg);
       world.lights.setFogDistance(camera.position.distanceTo(tg));

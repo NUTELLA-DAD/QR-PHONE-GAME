@@ -11,7 +11,7 @@
 //   - an ink line along every cut edge (a ribbon that follows the displaced lip);
 //   - the tunnel walls are lumpy faceted rock (rows in depth, offset by the hash), lit by the lamps (toon: the rock gradient has a real dark step, so a lamp behind the slab does not shine through it).
 // Chunk build time is measured (terrain.stats): the budget is 4 ms.
-import { THREE, PAL, INK, look, rimify, fx } from './style.js';
+import { THREE, PAL, INK, look, rimify, fx, INK_GLSL, inkUniforms } from './style.js';
 import { getTrimSheet, uvRect, ROCK_STRATA } from './textures.js';
 import { config } from '../../config.js';
 import { CH, makeCell, chunkWalls } from './terrainWalls.js';
@@ -56,7 +56,14 @@ const rockToon = rimify(new THREE.MeshToonMaterial({ vertexColors: true, gradien
   rockToon.customProgramCacheKey = () => 'toon-rim-rock';
 }
 const rockPlain = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+// A1: the ink ribbon along a lip is screen-constant like every other outline: its inner vertices carry the inward offset in `onormal` (config.LOOK3D.INK.TERRAIN world units at the reference zoom), style.js inkPush widens it.
 const inkMat = new THREE.MeshBasicMaterial({ color: INK, side: THREE.DoubleSide });
+inkMat.onBeforeCompile = (sh) => {
+  inkUniforms(sh);
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 onormal;\n' + INK_GLSL).replace('#include <begin_vertex>', 'vec3 transformed = position + inkPush( onormal );');
+};
+inkMat.customProgramCacheKey = () => 'ink-lip';
+const LIP_W = () => Math.max(2, Number(config.LOOK3D && config.LOOK3D.INK && config.LOOK3D.INK.TERRAIN) || 9);
 
 // ---- the stable hash ------------------------------------------------------------------------------------------------------------------------------------------------------------
 const h2 = (ix, iy) => { let h = Math.imul(ix | 0, 374761393) ^ Math.imul(iy | 0, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
@@ -199,7 +206,7 @@ function buildChunk(map, ci, cj) {
     return v;
   };
 
-  const pos = [], nor = [], col = [], uvs = [], strata = [], ink = [];
+  const pos = [], nor = [], col = [], uvs = [], strata = [], ink = [], inkN = [];
   const pushVert = (x, ym, v) => { pos.push(x, -ym, Z0 + v.z); nor.push(v.nx, v.ny, v.nz); col.push(v.r, v.g, v.b); uvs.push(v.u, v.v); strata.push(v.s); };
   const front = (poly) => { // a convex polygon of the front face, as a fan
     const k = poly.length;
@@ -285,12 +292,13 @@ function buildChunk(map, ci, cj) {
             flat(A, B, B2, n3, wallCol.r, wallCol.g, wallCol.b, uvf, sf);
             flat(A, B2, A2, n3, wallCol.r, wallCol.g, wallCol.b, uvf, sf);
           }
-          // the ink: a ribbon on the lip, 12 units wide, going inward (into the rock)
-          const w = 12, pa = [ax + dx * t0, ay + dy * t0], pb = [ax + dx * t1, ay + dy * t1];
+          // the ink: a ribbon on the lip, LIP_W units wide at the reference zoom (A1: screen-constant, see inkMat), going inward (into the rock). The inner vertices sit on the lip in x / y and carry the inward offset in `onormal`.
+          const w = LIP_W(), pa = [ax + dx * t0, ay + dy * t0], pb = [ax + dx * t1, ay + dy * t1];
           const qa = [pa[0] - nx * w, pa[1] - ny * w], qb = [pb[0] - nx * w, pb[1] - ny * w];
           const za = z0 + 1.1, zb = z1 + 1.1, zqa = Z0 + vtx(qa[0], qa[1]).z + 1.1, zqb = Z0 + vtx(qb[0], qb[1]).z + 1.1;
-          const P = [[pa[0], -pa[1], za], [pb[0], -pb[1], zb], [qb[0], -qb[1], zqb], [qa[0], -qa[1], zqa]];
-          for (const q of [P[0], P[1], P[2], P[0], P[2], P[3]]) ink.push(q[0], q[1], q[2]);
+          const ox = -nx * w, oy = ny * w; // (the inward offset in 3D: map y runs down)
+          const P = [[pa[0], -pa[1], za, 0, 0], [pb[0], -pb[1], zb, 0, 0], [pb[0], -pb[1], zqb, ox, oy], [pa[0], -pa[1], zqa, ox, oy]];
+          for (const q of [P[0], P[1], P[2], P[0], P[2], P[3]]) { ink.push(q[0], q[1], q[2]); inkN.push(q[3], q[4], 0); }
         }
       }
     }
@@ -315,6 +323,8 @@ function buildChunk(map, ci, cj) {
   if (ink.length) {
     const ig = new THREE.BufferGeometry();
     ig.setAttribute('position', new THREE.Float32BufferAttribute(ink, 3));
+    ig.setAttribute('onormal', new THREE.Float32BufferAttribute(inkN, 3));
+    ig.computeBoundingSphere();
     const im = new THREE.Mesh(ig, inkMat);
     im.userData.isOutline = true;
     im.visible = look.toon && look.outlines;

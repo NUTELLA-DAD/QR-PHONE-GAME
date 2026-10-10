@@ -2,7 +2,7 @@
 // lamps, searchlights and lightning do it), one HEMISPHERE fill with the world's sky / ground colours, and fog. Only the key casts shadows, and its shadow camera is fitted to the framed ships
 // and snapped to 200 world units, so the shadows never swim. The day / dusk / night darkness (darkTarget, via world.setTod) still decides how bright it all is, so caves and dark skies go dark.
 // The numbers live in config.LOOK3D (per environment) and config.ENVIRONMENTS (sun, fog, rock, cave colours).
-import { THREE, look, fx } from './style.js';
+import { THREE, look, fx, toonSteps } from './style.js';
 import { config } from '../../config.js';
 
 // day -> dusk -> night presets (bg = the clear colour, sky = what the painted sky picture is multiplied by, hemi = [sky, ground, strength], sun = [colour, strength, direction toward the sun]).
@@ -36,7 +36,7 @@ export function rigFor(envId) {
     grade: { shadow: '#5a6c9c', shadowAmt: 0.1, high: '#ffe8c0', highAmt: 0.08, sat: 1, contrast: 0.08, lift: 0, ...(L3.grade || {}) },
     bloom: L3.bloom == null ? 0.55 : L3.bloom,
     vignette: L3.vignette == null ? 0.16 : L3.vignette,
-    rim: { color: (L3.rim && L3.rim.color) || '#ffd9a8', amount: L3.rim && L3.rim.amount != null ? L3.rim.amount : 0.16 },
+    rim: { color: (L3.rim && L3.rim.color) || '#ffd9a8', amount: L3.rim && L3.rim.amount != null ? L3.rim.amount : 0.22 },
     // WP3 DARKNESS. floor = how much of the dark-blue sky colour the rock keeps even in the dark (0.12 default). cave = how dark a cave is in 3D (0..1; the 2D game's SEARCHLIGHT.DARK.CAVE is 0, the owner wants the 3D caves darker), hemi = the ambient strength at full gloom,
     // sky / ground = its dark-blue floor colours, key = the key light's share left at full gloom. from / to = the darkness (0..1) where the gloom starts and is complete.
     dark: { cave: 0.66, hemi: 0.34, sky: '#34447a', ground: '#141a2c', key: 0.1, from: 0.12, to: 0.72, ...(L3.dark || {}) },
@@ -52,8 +52,9 @@ export function createLights(scene) {
   sun.castShadow = true;
   sun.shadow.camera.left = -2150; sun.shadow.camera.right = 2150; sun.shadow.camera.top = 1500; sun.shadow.camera.bottom = -1500;
   sun.shadow.camera.near = 100; sun.shadow.camera.far = 9000;
-  sun.shadow.bias = -0.0008; sun.shadow.normalBias = 14;
-  sun.shadow.mapSize.set(4096, 4096); sun.shadow.radius = 2.5;
+  const SH = (config.LOOK3D && config.LOOK3D.SHADOW) || {}; // (A1: crisp cel shadows: a 1 texel PCF radius and a smaller normal bias, config.LOOK3D.SHADOW)
+  sun.shadow.bias = SH.BIAS ?? -0.0008; sun.shadow.normalBias = SH.NORMAL_BIAS ?? 6;
+  sun.shadow.mapSize.set(4096, 4096); sun.shadow.radius = SH.RADIUS ?? 1;
   sun.target = new THREE.Object3D();
   scene.add(hemi, sun, sun.target);
   const fog = new THREE.FogExp2('#e6ecea', 0.00002); // (always present, so toggling it never recompiles a material: the density goes to 0 instead)
@@ -65,6 +66,7 @@ export function createLights(scene) {
   L.apply = (tod, envId, cave) => {
     L.last = [tod, envId, cave];
     if (!L.rig || L.rig.id !== envId) L.rig = rigFor(envId);
+    toonSteps((config.LOOK3D && config.LOOK3D[envId] && config.LOOK3D[envId].toon) || null); // (A1: the shadow step of the toon gradient; an environment may name its own)
     const rig = L.rig, dk = rig.dark;
     // THE DARKNESS: how dark the sky is (the game's darkTarget, via tod.night), and a cave is never lighter than rig.dark.cave. The gloom (0..1) then drops the ambient to a dark-blue floor, so
     // what the lamps, the boiler and the beams do not touch reads as a near-black silhouette. ?look=nodark puts the old day-lit caves back.

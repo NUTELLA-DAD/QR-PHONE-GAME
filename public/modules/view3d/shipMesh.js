@@ -165,7 +165,7 @@ export function buildShipModel(layout, opts = {}) {
     extractPart: (key) => asm.extract(key),
     dispose() { try { for (const k of ['toon', 'plain', 'depth']) ctx.mats[k].dispose(); } catch { /* (gone already) */ } }, // (this ship's own materials; index.js calls it when the ship is rebuilt or gone)
     // Hide the hull wall that faces the viewer: camSide > 0 when the camera is on the ship's local +Z side.
-    setView(camSide) { asm.setSide(camSide); model.viewSide = camSide; },
+    setView(camSide, both) { asm.setSide(camSide, both); model.viewSide = camSide; model.bothWalls = !!both; }, // (A1: both = the middle of a COME ABOUT shows both walls)
     // c: { t, ship (handle), world, night (0..1), lamps (the beams shine) }
     update(c) { try { this.step(c); } catch (e) { const m = String((e && e.message) || e); if (m !== model.lastErr) { model.lastErr = m; console.warn('ship3d update', e); } } }, // (never throw from drawing code)
     step(c) {

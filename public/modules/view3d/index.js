@@ -5,7 +5,7 @@
 // view = the 2D camera's { cx, cy, zoom } (camera.js): it stays the authority; camera3d.js derives the perspective camera from it so the gameplay plane lines up with the HUD.
 // opts = { width, height } the pixel size that view was made for (the 2D canvas), { t } animation seconds (default: now / 1000).
 // No wobble: nothing here moves on a sine except the ship's own slow bob (the same one the 2D game has); see 3D.md section 1.
-import { THREE, look, applyLook, INK, fx } from './style.js';
+import { THREE, look, applyLook, INK, fx, setInkFor } from './style.js';
 import { createPost } from './post.js';
 import { TIERS, readAddress, resolveTier } from './quality.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -30,6 +30,7 @@ import { createFungal } from './fungal.js';
 import { createWeather } from './weather.js';
 import { placeCamera, worldToScreen, FOV, ELEV } from './camera3d.js';
 import { createCinema } from './cinema.js'; // WP11: the camera's cinematic moments
+import { config } from '../../config.js';
 import { createPorthole } from './porthole.js'; // WP11: the Versus far-ship porthole
 import { envIdOf } from '../host/environments.js';
 import { shipOf, teamOf } from '../host/ships.js';
@@ -74,7 +75,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const gl = renderer.getContext();
   if (!gl || (gl.isContextLost && gl.isContextLost())) throw new Error('WebGL is not available');
   renderer.shadowMap.enabled = look.shadows;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap; // (A1: crisp cel shadows, not the soft blur)
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping; // (the composer's OutputPass does it for the whole picture; the direct draw, ?look=nopost, lets the materials do it. The painted planes are exempt, see style.js paintedPlane)
   renderer.info.autoReset = false; // (post.js resets it once a frame, so the numbers cover the scene pass and are not wiped by the later passes)
@@ -114,7 +115,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const applyDetail = () => {
     const hi = (S.detail || 'high') === 'high';
     look.low = !hi;
-    renderer.shadowMap.type = hi ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap; // (A1: crisp cel shadows at every detail level; the radius is 1)
     scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; });
     applyLook(scene);
     detail = S.detail || 'high';
@@ -237,6 +238,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const bombMesh = mkInst(SPH, 80, new THREE.MeshBasicMaterial({ color: '#3a3032' })), bombInk = mkInst(SPH, 80, new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }));
   const puffMesh = mkInst(SPH_LO, 200, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9 }));
   const _M = new THREE.Matrix4(), _C = new THREE.Color(), _P = new THREE.Vector3(), _Q = new THREE.Quaternion(), _S = new THREE.Vector3();
+  const INKK = () => fx.uInkScale.value; // (A1: the little ball shells grow their ink with the screen-constant ink scale)
   const setInst = (im, i, x, y, z, r, color) => {
     _M.compose(_P.set(x, y, z), _Q.identity(), _S.set(r, r, r));
     im.setMatrixAt(i, _M);
@@ -263,7 +265,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       try { wreck3d.apply(sh, model, dt); } catch (e) { logOnce('wreck', e); } // (WP9: a ship breaking up tips and falls away, her bags peel off: wreck3d.js)
       root.updateMatrixWorld(true);
       const side = (camera.position.x - root.position.x) * Math.sin(yaw) + (camera.position.z - root.position.z) * Math.cos(yaw);
-      model.setView(side);
+      const CB = (config.CINE3D && config.CINE3D.COME_ABOUT && config.CINE3D.COME_ABOUT.BOTH) || [0.3, 0.7];
+      model.setView(side, pose.turn > CB[0] && pose.turn < CB[1]); // (A1: in the middle of a COME ABOUT the ship is end-on: show both hull walls, so she is a closed box and no black hole opens)
       model.flameFallback = !(vfx && look.vfx); // (the particle fires do the flames; the old cones only when the particles are off)
       capLamps(model);
       model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai, sweep: !!S.sweep, spotShadow: tier.spotShadow && world.night > 0.5 && index === 0, tier: tier.name });
@@ -289,25 +292,25 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       const owner = state.players[s.owner];
       const r = s.primed ? 20 : s.kind === 'mortar' ? 12 : 9;
       setInst(shellMesh, n, s.x, -s.y, 0, r, s.primed ? '#ff9a2e' : (owner && owner.color) || '#f2d36b');
-      setInst(shellInk, n, s.x, -s.y, 0, r * 1.28);
+      setInst(shellInk, n, s.x, -s.y, 0, r * (1 + 0.28 * INKK()));
       n++;
     }
     for (const b of state.bullets) {
       if (n >= 400) break;
       if (!Number.isFinite(b.x)) continue;
       setInst(shellMesh, n, b.x, -b.y, 0, b.flak ? 14 : 11, b.flak ? '#e8884a' : '#ff2e55');
-      setInst(shellInk, n, b.x, -b.y, 0, b.flak ? 18 : 14);
+      setInst(shellInk, n, b.x, -b.y, 0, (b.flak ? 14 : 11) * (1 + 0.28 * INKK()));
       n++;
     }
     endInst(shellMesh, n); endInst(shellInk, n);
     // bombs: ours falling (world), enemy bombs (world), planted bombs on decks (ship frame)
     let nb = 0;
-    for (const list of [state.shipBombs, state.enemyBombs]) for (const b of list || []) { if (nb >= 80 || !Number.isFinite(b.x)) continue; setInst(bombMesh, nb, b.x, -b.y, 0, 17); setInst(bombInk, nb, b.x, -b.y, 0, 22); nb++; }
+    for (const list of [state.shipBombs, state.enemyBombs]) for (const b of list || []) { if (nb >= 80 || !Number.isFinite(b.x)) continue; setInst(bombMesh, nb, b.x, -b.y, 0, 17); setInst(bombInk, nb, b.x, -b.y, 0, 17 * (1 + 0.3 * INKK())); nb++; }
     for (const sh of state.ships) {
       const e = models.get(sh.id);
       if (!e) continue;
       const L = sh.layout;
-      for (const b of (sh.ctx && sh.ctx.bombs) || []) { if (nb >= 80) break; const q = L.platforms[b.d]; if (!q) continue; _P.set(e.model.X(b.x), e.model.Y(q.y - 18), 0); e.model.content.localToWorld(_P); setInst(bombMesh, nb, _P.x, _P.y, _P.z, 18); setInst(bombInk, nb, _P.x, _P.y, _P.z, 23); nb++; }
+      for (const b of (sh.ctx && sh.ctx.bombs) || []) { if (nb >= 80) break; const q = L.platforms[b.d]; if (!q) continue; _P.set(e.model.X(b.x), e.model.Y(q.y - 18), 0); e.model.content.localToWorld(_P); setInst(bombMesh, nb, _P.x, _P.y, _P.z, 18); setInst(bombInk, nb, _P.x, _P.y, _P.z, 18 * (1 + 0.3 * INKK())); nb++; }
     }
     endInst(bombMesh, nb); endInst(bombInk, nb);
     let np = 0; // puffs and smoke (the particles do these now; the balls stay only when they are off)
@@ -417,6 +420,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     terrain.setEnv(env);
     syncTod(dt);
     const cam = syncCamera(view, w, h, dt);
+    setInkFor(cam.D, cam.visH); // (A1: ONE number a frame makes every outline screen-constant: style.js)
     if (beams) { try { beams.updateLit(camera, state, world.night); } catch (e) { logOnce('lit', e); } } // (which targets a manned beam holds: the toon shader gives them a warm rim)
     try { destruction.process(); } catch (e) { logOnce('destruction', e); } // (the break-off notes are read BEFORE syncShips rebuilds a ship from her new layout)
     syncShips(t, dt);
