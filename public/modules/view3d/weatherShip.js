@@ -157,7 +157,7 @@ export function createWeatherShip({ state, models, parent }) {
             const h0 = hashN(bg.i * 53 + k * 7 + 1), h1 = hashN(bg.i * 53 + k * 7 + 2), h2 = hashN(bg.i * 53 + k * 7 + 3);
             const u = -0.7 + (1.4 * (k + 0.5)) / n + (h0 - 0.5) * 0.06, a = -1.0 - 0.25 * h1, rr = r(u), len = (16 + 34 * level) * (0.55 + 0.9 * h2), rad = 4.6 + 3 * level * (0.7 + 0.5 * h0);
             const x = u * rx, y = rr * Math.sin(a), z = rr * BAG_RZ * Math.cos(a);
-            for (const sgn of [1, -1]) b.cone(k % 2 ? C.SNOW || '#ffffff' : C.ICE || '#b5e0f6', x, y - len * 0.5 + 4, sgn * z, rad, len, 0, Math.PI, 0, 0); // (the cone's point is down)
+            for (const sgn of [1, -1]) b.cone(k % 2 ? C.SNOW || '#ffffff' : C.ICE || '#b5e0f6', x, y - len * 0.5 + 8, sgn * z, rad, len, 0, Math.PI, 0, 0); // (the cone's point is down)
           }
           if (b.parts.length) { e.mesh.geometry = mergeGeometries(b.parts, false); for (const g of b.parts) g.dispose(); e.mesh.geometry.computeBoundingSphere(); } else e.mesh.geometry = new THREE.BufferGeometry();
         } else e.mesh.geometry = new THREE.BufferGeometry();

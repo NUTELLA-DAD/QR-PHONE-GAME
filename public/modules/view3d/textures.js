@@ -110,31 +110,38 @@ function paintPlanks(g, name, o) {
 
 function paintCanvasCell(g, name, seed) {
   const r = TRIM[name], rnd = mulberry(seed), R = (a, b) => a + (b - a) * rnd();
-  const base = 244 + R(-5, 3);
+  // A4: twice the stain / weave / seam contrast of WP2 (the cells were near-white and invisible at TV distance), and a slightly lower base so the 1.14 gain and the bag colour do not clip it to white
+  const base = 238 + R(-6, 3);
   g.fillStyle = rgba(base, base - 5, base - 17);
   g.fillRect(r.x, r.y, r.w, r.h);
-  // painted stains: two flat washes (a big pale one and a smaller darker one)
-  for (const [s, a] of [[0.55, 0.045], [0.28, 0.05]]) {
-    g.fillStyle = rgba(120, 96, 60, a);
-    g.beginPath(); g.ellipse(r.x + R(30, 100), r.y + R(50, 210), r.w * s * R(0.7, 1.1), r.h * s * R(0.4, 0.7), R(-0.6, 0.6), 0, 7); g.fill();
+  // painted stains: flat washes (a big pale one, a smaller darker one and a damp-looking third)
+  g.save(); g.beginPath(); g.rect(r.x, r.y, r.w, r.h); g.clip(); // (the stains stay inside their own tile)
+  for (const [s, a] of [[0.55, 0.13], [0.3, 0.16], [0.42, 0.09]]) { // (soft: a radial fade, not a hard ellipse, so it reads as mottling and not as spots)
+    const cx = r.x + R(30, 100), cy = r.y + R(50, 210), rr = r.w * s * R(0.8, 1.2), sq = R(1.4, 2.2);
+    g.save(); g.translate(cx, cy); g.rotate(R(-0.6, 0.6)); g.scale(1, sq);
+    const gr = g.createRadialGradient(0, 0, 0, 0, 0, rr);
+    gr.addColorStop(0, rgba(120, 96, 60, a)); gr.addColorStop(0.55, rgba(120, 96, 60, a * 0.55)); gr.addColorStop(1, rgba(120, 96, 60, 0));
+    g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rr, 0, 7); g.fill();
+    g.restore();
   }
+  g.restore();
   // the weave: fine crossed lines
   g.lineWidth = 1;
-  for (let yy = 2; yy < r.h; yy += 3) { g.strokeStyle = rgba(110, 90, 60, 0.07); g.beginPath(); g.moveTo(r.x, r.y + yy + 0.5); g.lineTo(r.x + r.w, r.y + yy + 0.5); g.stroke(); }
-  for (let xx = 3; xx < r.w; xx += 3) { g.strokeStyle = rgba(110, 90, 60, 0.06); g.beginPath(); g.moveTo(r.x + xx + 0.5, r.y); g.lineTo(r.x + xx + 0.5, r.y + r.h); g.stroke(); }
-  for (let i = 0; i < 26; i++) { g.strokeStyle = rgba(90, 70, 40, R(0.06, 0.14)); const sx = r.x + R(4, r.w - 12), sy = r.y + R(4, r.h - 4); g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx + R(4, 11), sy + R(-0.6, 0.6)); g.stroke(); }
+  for (let yy = 2; yy < r.h; yy += 3) { g.strokeStyle = rgba(110, 90, 60, 0.14); g.beginPath(); g.moveTo(r.x, r.y + yy + 0.5); g.lineTo(r.x + r.w, r.y + yy + 0.5); g.stroke(); }
+  for (let xx = 3; xx < r.w; xx += 3) { g.strokeStyle = rgba(110, 90, 60, 0.12); g.beginPath(); g.moveTo(r.x + xx + 0.5, r.y); g.lineTo(r.x + xx + 0.5, r.y + r.h); g.stroke(); }
+  for (let i = 0; i < 26; i++) { g.strokeStyle = rgba(90, 70, 40, R(0.12, 0.28)); const sx = r.x + R(4, r.w - 12), sy = r.y + R(4, r.h - 4); g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx + R(4, 11), sy + R(-0.6, 0.6)); g.stroke(); }
   // the seams: a darker lap along both long edges (the gore seams), a lighter fold along the short edges (the band seams), and a dashed stitch line on each
-  g.fillStyle = rgba(90, 66, 36, 0.13);
+  g.fillStyle = rgba(90, 66, 36, 0.26);
   g.fillRect(r.x, r.y, 5, r.h); g.fillRect(r.x + r.w - 5, r.y, 5, r.h);
-  g.fillStyle = rgba(255, 252, 238, 0.35);
+  g.fillStyle = rgba(255, 252, 238, 0.5);
   g.fillRect(r.x, r.y, r.w, 4); g.fillRect(r.x, r.y + r.h - 4, r.w, 4);
-  g.fillStyle = rgba(70, 50, 28, 0.3);
+  g.fillStyle = rgba(70, 50, 28, 0.55);
   g.fillRect(r.x, r.y, 1.5, r.h); g.fillRect(r.x + r.w - 1.5, r.y, 1.5, r.h);
-  g.fillStyle = rgba(70, 50, 28, 0.14);
+  g.fillStyle = rgba(70, 50, 28, 0.28);
   g.fillRect(r.x, r.y, r.w, 1.5); g.fillRect(r.x, r.y + r.h - 1.5, r.w, 1.5);
-  g.strokeStyle = rgba(70, 50, 28, 0.36); g.lineWidth = 1.4; g.setLineDash([5, 4]);
+  g.strokeStyle = rgba(70, 50, 28, 0.6); g.lineWidth = 1.6; g.setLineDash([5, 4]);
   for (const xx of [8, r.w - 8]) { g.beginPath(); g.moveTo(r.x + xx, r.y + 6); g.lineTo(r.x + xx, r.y + r.h - 6); g.stroke(); }
-  g.strokeStyle = rgba(70, 50, 28, 0.2);
+  g.strokeStyle = rgba(70, 50, 28, 0.38);
   for (const yy of [8, r.h - 8]) { g.beginPath(); g.moveTo(r.x + 8, r.y + yy); g.lineTo(r.x + r.w - 8, r.y + yy); g.stroke(); }
   g.setLineDash([]);
 }
@@ -142,9 +149,12 @@ function paintCanvasCell(g, name, seed) {
 function paintPatches(g) {
   const sq = TRIM.patchSq, rd = TRIM.patchRound, st = TRIM.patchStrip;
   for (const r of [sq, rd, st]) { g.fillStyle = rgba(222, 205, 168); g.fillRect(r.x, r.y, r.w, r.h); g.fillStyle = rgba(120, 96, 60, 0.07); for (let yy = 2; yy < r.h; yy += 3) g.fillRect(r.x, r.y + yy, r.w, 1); }
-  g.strokeStyle = rgba(70, 50, 28, 0.6); g.lineWidth = 1.8; g.setLineDash([6, 4]);
+  g.strokeStyle = rgba(60, 42, 22, 0.55); g.lineWidth = 5; // A4: a dark frayed edge on the cloth, bolder stitching, so a repair reads from across the room
+  for (const r of [sq, st]) g.strokeRect(r.x + 2.5, r.y + 2.5, r.w - 5, r.h - 5);
+  g.beginPath(); g.arc(rd.x + rd.w / 2, rd.y + rd.h / 2, 53, 0, 7); g.stroke();
+  g.strokeStyle = rgba(60, 40, 20, 0.85); g.lineWidth = 2.4; g.setLineDash([6, 4]);
   g.strokeRect(sq.x + 8, sq.y + 8, sq.w - 16, sq.h - 16);
-  g.beginPath(); g.arc(rd.x + rd.w / 2, rd.y + rd.h / 2, 54, 0, 7); g.stroke();
+  g.beginPath(); g.arc(rd.x + rd.w / 2, rd.y + rd.h / 2, 47, 0, 7); g.stroke();
   g.strokeRect(st.x + 6, st.y + 30, st.w - 12, st.h - 60);
   g.setLineDash([]);
   g.lineWidth = 1.6; // cross stitches on the strip
