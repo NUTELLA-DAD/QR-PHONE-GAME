@@ -41,7 +41,8 @@ export function rigFor(envId) {
     // sky / ground = its dark-blue floor colours, key = the key light's share left at full gloom. from / to = the darkness (0..1) where the gloom starts and is complete.
     dark: { cave: 0.66, hemi: 0.34, sky: '#34447a', ground: '#141a2c', key: 0.1, from: 0.12, to: 0.72, ...(L3.dark || {}) },
     cap: { color: '#8fa65e', amount: 0.9, ...(L3.cap || {}) }, // (terrain.js: the moss / snow on top of the rock)
-    clouds: { n: 14, front: 3, alpha: 0.95, tint: '#ffffff', ...(L3.clouds || {}) }, // (clouds.js)
+    clouds: { n: 7, front: 0, alpha: 1, tint: '#ffffff', ...(L3.clouds || {}) }, // (clouds.js)
+    strips: { far: { haze: 0.35, sat: 0.75, ...((L3.strips && L3.strips.far) || {}) }, mid: { haze: 0.15, sat: 0.9, ...((L3.strips && L3.strips.mid) || {}) }, color: (L3.strips && L3.strips.color) || null }, // (A3: sky.js: the far / mid painted strips are pulled toward the haze colour and desaturated)
     water: { deep: '#5b93a6', shallow: '#80bcc4', foam: '#f4fbfa', speed: 26, density: 0.7, crest: '#a4d3d4', crestAmt: 0.34, darkAmt: 0.14, glitter: 0.4, glitterCol: '#fff4cc', ink: '#1d4756', haze: 1, hazeCol: '#73b3e9', inkPx: 1.8, ...(L3.water || {}) }, // (water.js A2: density = share of foam cells that hold a stamp, crest = the lighter patch tone and its strength, darkAmt = the darker near-band patches, glitter = the sun-glitter strength, ink = the foam's edge line, haze = the horizon haze strength, inkPx = its screen width)
   };
 }

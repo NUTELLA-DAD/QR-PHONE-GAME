@@ -18,8 +18,9 @@ export { THREE };
 // low = the Detail: low setting (small things lose their ink shells). The rest are the WP1 look kill-switches (quality.js reads ?look=nobloom,nofog... into them; the dev page has buttons):
 // bloom, lut (the colour grade), grain (paper grain + vignette), fog, rim (the thin warm edge light), lanterns (the lamps' real point lights), post (false = no composer at all),
 // WP3: dark (caves and dark stages go near-black: the lamps and beams light them; false = the old day-lit caves), clouds (the 3D cloud billboards), water (the new toon water: false = the old flat slab), WP4: vfx (the GPU particles: fire, smoke, sparks, splinters; false = the old flame cones and puff balls).
+// A3: strips (the far / mid strips recede into the haze), skyart (the painted Ember sky and the painted cave stone: false = the old gradient and the old cave picture).
 // WP10: beam (the volumetric searchlight beams, light pools and the lit-target rim: false = the old flat cones), lightning (the strike flash + bolt), fungal (the glowing mushrooms and spores).
-export const look = { toon: true, outlines: true, shadows: true, low: false, bloom: true, lut: true, grain: true, fog: true, rim: true, lanterns: true, post: true, dark: true, clouds: true, water: true, vfx: true, glows: true, beam: true, lightning: true, fungal: true, weather: true };
+export const look = { toon: true, outlines: true, shadows: true, low: false, bloom: true, lut: true, grain: true, fog: true, rim: true, lanterns: true, post: true, dark: true, clouds: true, water: true, vfx: true, glows: true, beam: true, lightning: true, fungal: true, weather: true, strips: true, skyart: true };
 
 // Shared shader numbers (one object, read by every patched material, so changing them needs no recompile): the toon rim light, and what the painted backdrops need to survive tone mapping.
 export const fx = {

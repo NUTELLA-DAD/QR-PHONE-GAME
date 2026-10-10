@@ -41,6 +41,7 @@ export function createWorld(scene, renderer) {
     W.envId = envId; W.cave = cave;
     sky.setEnv(envId, cave);
     W.applyLights();
+    sky.setRig(lights.rig);
     clouds.setRig(lights.rig, envId, cave);
     water.setRig(lights.rig, envId);
   };
@@ -48,7 +49,7 @@ export function createWorld(scene, renderer) {
   // Every frame. cam = the THREE camera; target = where it looks (3D), vis = world units visible at the ship plane { w, h }, t = seconds, seaY = the sea level (game y; NaN = no sea), map = the course's map.
   W.update = (cam, target, vis, t, seaY, map) => {
     sky.update(cam, target, vis, t);
-    clouds.update(cam, target, t, cam.aspect);
+    clouds.update(cam, target, t, cam.aspect, vis);
     water.update(cam, target, t, seaY, map);
   };
   W.setTier = (tier) => { water.setTier(tier); };

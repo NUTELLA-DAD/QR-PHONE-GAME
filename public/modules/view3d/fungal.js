@@ -29,6 +29,21 @@ function discTexture() {
   return t;
 }
 
+// A3: a spore PUFF: a hard-edged round puff, a thin dark-green ink rim, a flat mid-green body and a paler crescent top-left (painted once; the clouds are clusters of these, not a soft green blob)
+function puffTexture() {
+  const N = 128, c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d'), r = N / 2 - 3;
+  g.fillStyle = '#1f4a2c'; g.beginPath(); g.arc(N / 2, N / 2, r, 0, 7); g.fill();
+  g.fillStyle = '#7ccf56'; g.beginPath(); g.arc(N / 2, N / 2, r - 5, 0, 7); g.fill();
+  g.save(); g.beginPath(); g.arc(N / 2, N / 2, r - 5, 0, 7); g.clip();
+  g.fillStyle = '#c4f58a'; g.beginPath(); g.arc(N / 2 - 9, N / 2 - 11, r - 14, 0, 7); g.fill();
+  g.restore();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 export function createFungal({ parent, state, world, terrain }) {
   const FC = () => (config.LOOK3D && config.LOOK3D.FUNGAL) || {};
   const ME = () => (config.ENVIRONMENTS && config.ENVIRONMENTS.fungal && config.ENVIRONMENTS.fungal.MUSHROOMS) || { CHANCE: 0.34, GIANT: 0.14, GLOW: 0.2, CAPS: ['#8b5cf6', '#19c3b0', '#e657b6', '#52c8ff'] };
@@ -55,6 +70,8 @@ export function createFungal({ parent, state, world, terrain }) {
   const mkInst = (geo, mat, max, order = 0) => { const m = new THREE.InstancedMesh(geo, mat, max); m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.count = 0; m.renderOrder = order; group.add(m); return m; };
   const caps = mkInst(shroomGeo, capMat, MAX);
   const glow = mkInst(new THREE.PlaneGeometry(1, 1), glowMat, MAXG, 3);
+  const MAXP = 260; // (A3: the spore puffs: normal blending, a painted ink-rimmed disc; one more draw call, only while spores are about)
+  const puff = mkInst(new THREE.PlaneGeometry(1, 1), unlit({ color: 0xffffff, map: puffTexture(), transparent: true, opacity: 0.66, depthWrite: false }), MAXP, 4);
   for (const m of [caps, glow]) m.setColorAt(0, new THREE.Color()); // (allocates the colour buffers)
   const chunks = new Map(); // chunk key -> { shrooms: [...], bulbs: [...] }
   let dirty = true, lastKey = -1, active = false;
@@ -74,8 +91,11 @@ export function createFungal({ parent, state, world, terrain }) {
             const cnt = 1 + Math.floor(H(i + j, 301) * 2.6);
             for (let n = 0; n < cnt; n++) {
               const t = H(i * 7 + j + n * 13, 302 + n), giant = H(i * 5 + j * 3 + n, 305) < M.GIANT;
-              const s = giant ? 2.2 + H(i + n, 306) * 1.4 : 0.6 + H(j + n, 307) * 0.9, p = lerpAt(t);
-              out.shrooms.push({ x: p[0], y: -p[1], z: -280 + H(i * 3 + j + n, 311) * 400, s, dir: 1, cap: Math.floor(H(i * 3 + j + n, 308) * caps_.length) % caps_.length, ph: H(i + j * 5 + n, 312) < 0.5 ? 0 : 1 });
+              // A3: about a fifth of the floor mushrooms stand at MID-DEPTH (open sky: well behind the rock, 650 .. 1150 back; a cave: deep in the tunnel, just before the back wall), bigger so they still read and
+              // a little dimmer: the Fungal Depths were too empty beyond the ship's own plane. They keep the rock's x and y (the perspective slides them a little, like a distant bank).
+              const mid = H(i * 11 + j * 3 + n, 320) < (M.MID == null ? 0.2 : M.MID), p = lerpAt(t);
+              const s = (giant ? 2.2 + H(i + n, 306) * 1.4 : 0.6 + H(j + n, 307) * 0.9) * (mid ? 1.8 : 1);
+              out.shrooms.push({ x: p[0], y: -p[1], z: mid ? (map.open ? -650 - H(i * 3 + j + n, 321) * 500 : -300 - H(i * 3 + j + n, 321) * 90) : -280 + H(i * 3 + j + n, 311) * 400, s, dir: 1, mid: mid ? 1 : 0, cap: Math.floor(H(i * 3 + j + n, 308) * caps_.length) % caps_.length, ph: H(i + j * 5 + n, 312) < 0.5 ? 0 : 1 });
             }
           } else {
             const h = H(i * 17 + j, 55), p = lerpAt(0.5);
@@ -122,7 +142,7 @@ export function createFungal({ parent, state, world, terrain }) {
           _q.identity(); if (d < 0) _q.copy(_qf);
           _p.set(m.x, m.y, m.z); _s.set(m.s, m.s, m.s);
           caps.setMatrixAt(ns, _M.compose(_p, _q, _s));
-          caps.setColorAt(ns, _c.copy(capColors[m.cap]).multiplyScalar(hdr));
+          caps.setColorAt(ns, _c.copy(capColors[m.cap]).multiplyScalar(hdr * (m.mid ? 0.72 : 1)));
           ns++;
           if (ng < MAXG - 160) { // the halo: bright on its own key, dim on the other (a stepped two-key pulse, no sine)
             const k = m.ph === key ? 1 : 0.6;
@@ -159,24 +179,27 @@ export function createFungal({ parent, state, world, terrain }) {
       glow.setColorAt(ng, _c.copy(cols[H(i, 6) < 0.6 ? 0 : 1]).multiplyScalar(1.5));
       ng++;
     }
+    // A3: a spore cloud is a CLUSTER of ink-rimmed puffs (big ones first, small ones over them: each puff's rim shows on the one below), not a soft green blob; a faint soft halo stays under it
     const sp = state.spores || [];
+    let np = 0;
     if (sp.length) {
-      const ship = mainShip(state), sc = new THREE.Color(F.SPORE || '#b0f06e'), al = fin(F.SPORE_ALPHA, 0.2);
+      const ship = mainShip(state), sc = new THREE.Color(F.SPORE || '#b0f06e'), al = fin(F.SPORE_ALPHA, 0.2) * 0.5;
       for (const cl of sp) {
-        for (let k = 0; k < 11 && ng < MAXG; k++) {
-          const a = H(cl.seed * 13 + k, 500) * 6.283, r = Math.sqrt(H(cl.seed * 17 + k, 501));
-          const px = toWorldX(ship, cl.x + Math.cos(a) * r * cl.rx * 0.62), py = toWorldY(ship, cl.y + Math.sin(a) * r * cl.ry * 0.62);
-          const pr = Math.min(cl.rx, cl.ry * 1.4) * (0.42 + H(cl.seed * 19 + k, 502) * 0.3);
-          _p.set(px, -py, 70); _s.set(pr * 2.6, pr * 2.6, 1);
-          glow.setMatrixAt(ng, _M.compose(_p, _q.identity(), _s));
-          glow.setColorAt(ng, _c.copy(sc).multiplyScalar(al));
-          ng++;
+        const pr0 = Math.min(cl.rx, cl.ry * 1.4);
+        if (ng < MAXG) { _p.set(toWorldX(ship, cl.x), -toWorldY(ship, cl.y), 60); _s.set(pr0 * 3.4, pr0 * 3.4, 1); glow.setMatrixAt(ng, _M.compose(_p, _q.identity(), _s)); glow.setColorAt(ng, _c.copy(sc).multiplyScalar(al)); ng++; }
+        for (let k = 0; k < 9 && np < MAXP; k++) { // k = 0 the big middle puff, then a ring of smaller ones that get smaller; every position is a fixed hash of the cloud's seed (nothing wobbles)
+          const a = H(cl.seed * 13 + k, 500) * 6.283, r = k ? 0.35 + 0.65 * Math.sqrt(H(cl.seed * 17 + k, 501)) : 0;
+          const px = toWorldX(ship, cl.x + Math.cos(a) * r * cl.rx * 0.7), py = toWorldY(ship, cl.y + Math.sin(a) * r * cl.ry * 0.62);
+          const pr = pr0 * (k ? 0.3 + H(cl.seed * 19 + k, 502) * 0.22 : 0.62);
+          _p.set(px, -py, 70 + k); _s.set(pr * 2, pr * 2, 1);
+          puff.setMatrixAt(np++, _M.compose(_p, _q.identity(), _s));
         }
       }
     }
+    puff.count = np; puff.visible = np > 0; puff.instanceMatrix.needsUpdate = true;
     glow.count = ng; S.glows = ng;
     glow.instanceMatrix.needsUpdate = true; if (glow.instanceColor) glow.instanceColor.needsUpdate = true;
   };
-  const dispose = () => { terrain.onChunk = prev; for (const m of [caps, glow]) { m.geometry.dispose(); m.material.dispose(); } parent.remove(group); };
+  const dispose = () => { terrain.onChunk = prev; for (const m of [caps, glow, puff]) { m.geometry.dispose(); m.material.dispose(); } parent.remove(group); };
   return { update, stats: S, group, dispose };
 }
