@@ -12,14 +12,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createWorld, TOD } from './world.js';
 import { createTerrain } from './terrain.js';
 import { buildShipModel } from './shipMesh.js';
-import { makeFigure } from './crew.js';
+import { createCrewLayer } from './crew.js';
 import { createKrakenView } from './kraken.js';
 import { createFlyers } from './flyers.js';
 import { createScenery } from './scenery.js';
 import { createVfx } from './vfx.js';
 import { placeCamera, FOV } from './camera3d.js';
 import { envIdOf } from '../host/environments.js';
-import { shipOf } from '../host/ships.js';
+import { shipOf, teamOf } from '../host/ships.js';
 import { darkTarget } from '../host/searchlight.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -29,7 +29,7 @@ const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h
 export const NOT_DRAWN = [
   'turret warning lines, beacon sweep light, waving flags and chimney smoke',
   'snipers, tugs and imps (specials)',
-  'gas holes and patches, hooks and hook lines, the deflector shield, the lightning coil, towlines',
+  'gas holes and patches, the deflector shield, the lightning coil, towlines, crew name labels',
   'weather (rain, snow, lightning, storm), embers and spore clouds',
   'popup words (muzzle flashes, impact rings, fire, smoke, sparks and splinters are WP4 particles now: vfx.js)',
   'the Versus wind wall and the far-ship porthole',
@@ -141,17 +141,22 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
 
   // ---- ship models and the crew aboard ---------------------------------------------------------------------------------------------------------------------------------
   const models = new Map(); // ship id -> { model, ver }
-  const figures = new Map(); // player / raider -> { fig, shipId }
   V.models = models;
+  // WP7 (crew v2): every crewman, raider, parachute, hookshot rope and heart in ONE mesh (crew.js); the layer is fed once a frame from syncShips
+  const crew = createCrewLayer(worldRoot);
+  V.crew = crew;
+  V.lineup = null; // (the dev page's crew line-up sets { x, y }: world point, y up)
+  const teamColorOf = (p, sh) => { try { const side = p.team ? teamOf(p.team) : sh ? sh.team : state.ships[0] && state.ships[0].team; return side && side.color ? side.color : null; } catch { return null; } };
   // WP4: the particles (fire, smoke, steam, sparks, splinters, muzzle flashes, rings; vfx.js reads the game's state, particles.js draws). If they cannot be made the old flame cones and puff balls stay.
   let vfx = null;
   try { vfx = createVfx({ state, scene: worldRoot, world, models }); } catch (e) { console.warn('view3d vfx off', e); }
   V.vfx = vfx;
+  crew.vfx = vfx; // (a crewman fired from the crew cannon trails smoke)
   const modelFor = (sh) => {
     const ver = sh.layout.version;
     let e = models.get(sh.id);
     if (!e || e.ver !== ver) {
-      if (e) { worldRoot.remove(e.model.root); e.model.root.traverse((o) => o.geometry && o.geometry.dispose()); if (e.model.dispose) e.model.dispose(); for (const [k, f] of figures) if (f.shipId === sh.id) { f.fig.group.removeFromParent(); figures.delete(k); } }
+      if (e) { worldRoot.remove(e.model.root); e.model.root.traverse((o) => o.geometry && o.geometry.dispose()); if (e.model.dispose) e.model.dispose(); }
       const model = buildShipModel(sh.layout, { enemy: !!sh.ai });
       worldRoot.add(model.root);
       e = { model, ver };
@@ -179,12 +184,13 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // ---- the per-frame mapping of the game state -> 3D ------------------------------------------------------------------------------------------------------------------------
   function syncShips(t, dt) {
     const seen = new Set();
+    crew.begin(t, dt, tier, performance.now());
     state.ships.forEach((sh, index) => {
       const model = modelFor(sh);
       seen.add(sh.id);
       const pose = sh.pose, root = model.root;
       const bt = t + 2.7 * index;
-      const bob = Math.sin(bt * 1.1) * 5 + Math.sin(bt * 0.37 + 1) * 3; // the 2D game's own slow bob
+      const bob = Math.sin(bt * 1.1) * 5 + Math.sin(bt * 0.37 + 1) * 3; // wobble-ok: the ship's own slow bob (the 2D game's, +-3 px), the one idle sine 3D.md allows
       root.position.set(pose.x + model.pv, -(pose.y + bob), 0);
       let yaw;
       if (pose.turn > 0) { const startF = pose.turn < 0.5 ? pose.f : -pose.f; yaw = Math.PI * pose.turn + (startF === -1 ? Math.PI : 0); } // COME ABOUT: a real half-turn about the vertical axis
@@ -197,34 +203,17 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       model.flameFallback = !(vfx && look.vfx); // (the particle fires do the flames; the old cones only when the particles are off)
       capLamps(model);
       model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai, sweep: !!S.sweep, spotShadow: tier.spotShadow && world.night > 0.5 && index === 0 });
-      // crew aboard
-      const crew = Object.values(state.players).filter((p) => !p.enemy && p.connected !== false && !p.fly && shipOf(state, p) === sh);
+      // crew aboard, raiders aboard (WP7: crew.js draws all of them in ONE mesh; the layer is begun / ended once a frame, below)
+      const crewList = Object.values(state.players).filter((p) => !p.enemy && !p.hj && p.connected !== false && !p.fly && shipOf(state, p) === sh && !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying)));
       const raiders = sh.ctx && sh.ctx.boarders ? sh.ctx.boarders : state.boarders || [];
-      const used = new Set();
-      const place = (key, p, raider) => {
-        let f = figures.get(key);
-        if (!f || f.shipId !== sh.id) {
-          if (f) f.fig.group.removeFromParent();
-          const fig = makeFigure({ color: p.color || '#ece3c8', species: p.species || 'bulldog', raider });
-          fig.z = 0;
-          model.content.add(fig.group);
-          f = { fig, shipId: sh.id, raider };
-          figures.set(key, f);
-          applyLook(fig.group);
-        }
-        used.add(key);
-        const fig = f.fig;
-        const lane = (0.07 + 0.34 * hash(String(p.id || key))) * model.W;
-        const target = p.climb ? -model.W * 0.62 + 20 : lane;
-        fig.z += (target - fig.z) * Math.min(1, dt * 7);
-        fig.group.visible = true;
-        fig.group.position.set(model.X(p.x), model.Y(p.y), fig.z);
-        fig.pose(p, t, !!p.moving, !!p.climb, p.ko > 0, p.face >= 0 ? 1 : -1);
-      };
-      for (const p of crew) place(p.id, p, false);
-      raiders.forEach((r, i) => place('r' + sh.id + (r.id || i), { ...r, id: 'r' + (r.id || i) }, true));
-      for (const [key, f] of figures) if (f.shipId === sh.id && !used.has(key)) { f.fig.group.removeFromParent(); figures.delete(key); }
+      for (const p of crewList) crew.placeAboard(p.id, p, model, { teamColor: teamColorOf(p, sh) });
+      raiders.forEach((r, i) => crew.placeAboard('r' + sh.id + (r.id || i), { ...r, id: 'r' + (r.id || i) }, model));
+      if (sh.crewReg) for (const c of Object.values(sh.crewReg)) crew.placeAboard('g' + sh.id + c.id, c, model); // (the enemy gunship's own crew: skeleton raiders who live on her, ships.js crewReg)
     });
+    // crew in free flight (jumped, thrown, swinging, fired from a crew cannon, under a parachute) are world objects
+    for (const p of Object.values(state.players)) if (p.fly && !p.hj && !p.enemy && p.connected !== false) crew.placeFly(p.id, p, { teamColor: teamColorOf(p, null) });
+    if (V.lineup) crew.lineup(V.lineup.x, V.lineup.y, V.lineup.page); // (the dev page's crew line-up)
+    crew.end();
     for (const [id, e] of models) if (!seen.has(id)) { worldRoot.remove(e.model.root); e.model.root.traverse((o) => o.geometry && o.geometry.dispose()); if (e.model.dispose) e.model.dispose(); models.delete(id); if (onModels) onModels(models); }
   }
 
@@ -377,7 +366,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // calls / tris = the whole frame (scene + post passes); sceneCalls / sceneTris = the scene pass alone (the budget's numbers); gpu = GPU ms per pass when settings.gpuTimer is on
   V.stats = () => {
     const i = renderer.info, p = post.enabled && look.post;
-    return { calls: i.render.calls, tris: i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs };
+    return { calls: i.render.calls, tris: i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs, crew: crew.stats() };
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.dispose = () => { try { renderer.dispose(); } catch { /* (gone) */ } };

@@ -9,7 +9,8 @@
 //        node tools/buildsim.mjs --check-health    crew health (tools/health-check.mjs): fire hurts a crewman a heart per tick (hopping over and spraying are safe), three burns knock him out, BIG blasts (the bomb bay, a sapper's bomb, a heavy shell, a great fall) knock out at once, i-frames, a raider's blow takes one heart, a revive or waking gives 1 heart, the medbay heals a heart every few seconds, a bandage, the phone payload carries hearts and the job arrow points at the medbay, bots leave fires and go and heal, the old rules with hearts off, the TV pips
 //        node tools/buildsim.mjs --check-classic    the classic ship must still equal the frozen snapshot
 //        node tools/buildsim.mjs --lint             no module-level captures of derived layout values (they go stale), no hard-coded ship reference points
-//        node tools/buildsim.mjs --lint-pose        (also part of --lint) B0: no NEW single-ship spellings (+course.dist, +-state.ship.alt, scrollSpeed, SHIP_LAYOUT imports, module-level per-ship captures) against tools/fixtures/pose-lint-allow.json
+//        node tools/buildsim.mjs --check-3d-lint    WP7: the no-wobble lint for the 3D view (tools/lint3d.mjs): no new Math.sin / Math.cos of the time under public/modules/view3d/ (allowed: parts3d/ and lines marked "// wobble-ok:")
+//        node tools/buildsim.mjs --lint-pose       (also part of --lint) B0: no NEW single-ship spellings (+course.dist, +-state.ship.alt, scrollSpeed, SHIP_LAYOUT imports, module-level per-ship captures) against tools/fixtures/pose-lint-allow.json
 //        node tools/buildsim.mjs --check-golden     B0: re-run the golden behaviour baseline (voyagesim, botsim 3x3, cave contacts, capability) against tools/fixtures/golden.json; --snapshot-golden --force re-captures it
 //        node tools/buildsim.mjs --check-frames     B0: frame-by-frame old vs new (world x/y, hull, kills; tolerance 1e-6 -> 2% over 3 min) + noise bands; --snapshot-frames --force re-captures
 //        node tools/buildsim.mjs --check-pose       B0: pose.js / ships.js / layout-parameter helper unit checks (and B1's --check-layouts)
@@ -2398,6 +2399,8 @@ if (mode === '--snapshot-classic') {
   process.exit(bags && small && fleet ? 0 : 1);
 } else if (mode === '--check-collide') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'collide-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-3d-lint') { // WP7: the no-wobble lint for public/modules/view3d/ (tools/lint3d.mjs): no new Math.sin / Math.cos of the time (allow: parts3d/, "// wobble-ok:")
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'lint3d.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-yard') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'yard-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-health') {

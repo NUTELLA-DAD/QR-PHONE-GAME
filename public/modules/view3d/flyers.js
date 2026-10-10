@@ -150,7 +150,7 @@ export function createFlyers(root, state) {
       g.visible = true;
       g.position.set(b.x, -b.y, 60);
       g.rotation.y = fin(b.vx) - refVx >= 0 ? 0 : Math.PI;
-      const flap = 0.55 + 0.6 * Math.sin(t * 13 + (b.phase || 0));
+      const flap = 0.55 + 0.6 * Math.sin(t * 13 + (b.phase || 0)); // wobble-ok: the bats' wing flap, from the first 3D pass; WP9 (enemies v2) replaces it with stepped keys
       for (const [piv, sgn] of g.userData.wings) piv.rotation.x = -sgn * flap;
     }
     hideFrom(pools.bat, n);
@@ -165,7 +165,7 @@ export function createFlyers(root, state) {
       const g = poolAt(pools.mine, n, () => buildMine(r, true));
       n++;
       g.visible = true;
-      g.position.set(m.x, -(m.y + Math.sin(fin(m.bob) * 2) * 6), 0);
+      g.position.set(m.x, -(m.y + Math.sin(fin(m.bob) * 2) * 6), 0); // wobble-ok: a mine's slow bob, the 2D game's own (WP9 may step it)
       g.userData.light.material = blink ? g.userData.on : g.userData.off;
     }
     hideFrom(pools.mine, n);
@@ -208,7 +208,7 @@ export function createFlyers(root, state) {
     if (sp && state.course && Number.isFinite(sp.mx) && Number.isFinite(sp.my)) {
       if (!supply) { supply = buildSupply(); applyLook(supply); root.add(supply); }
       supply.visible = true;
-      supply.position.set(sp.mx, -(sp.my + Math.sin(fin(sp.bob) * 1.3) * 30), 0);
+      supply.position.set(sp.mx, -(sp.my + Math.sin(fin(sp.bob) * 1.3) * 30), 0); // wobble-ok: a floating supply crate's slow bob, the 2D game's own (WP9 may step it)
     } else if (supply) supply.visible = false;
   };
 
