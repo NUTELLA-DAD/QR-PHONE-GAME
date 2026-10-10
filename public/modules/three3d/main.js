@@ -43,6 +43,7 @@ let simTime = 0;
 let lineupPage = Number(opt('lineup', '0')) || 0; // 0 = off, 1 = the line-up, 2 = the key strip
 let lineupOn = lineupPage > 0; void lineupOn; // (WP7: ?lineup=1 opens the crew line-up straight away; ?luz= zooms it, ?lux= / ?luy= pan it, for close shots)
 const LU = { zoom: Number(opt('luz', 1)) || 1, dx: Number(opt('lux', 0)) || 0, dy: Number(opt('luy', 0)) || 0 };
+let enemyPage = Number(opt('enemies', '0')) || 0; // WP9: ?enemies=1 (planes, bats, mines), 2 (the specials, wrecks, rockets), 3 (the four bosses): a line-up of the enemy models in the sky above the ship; ?luz= ?lux= ?luy= zoom and pan it too
 
 function resize() {
   view.resize();
@@ -143,6 +144,10 @@ function frame(now) {
     if (!window.__paused) { live.advance(real); simTime += real; }
     const cssW = canvas.clientWidth || window.innerWidth, cssH = canvas.clientHeight || window.innerHeight;
     let v = cam2d.update(window.__paused ? 0 : dt, state, cssW, cssH);
+    if (enemyPage) { // WP9: the enemy line-up (view.enemyLineup tells the flyers where to stand the models)
+      const e0 = models.values().next().value, p0 = e0 && e0.model.root.position, span = enemyPage === 3 ? 3500 : 1900;
+      if (p0) { view.enemyLineup = { x: p0.x, y: p0.y + 1100, page: enemyPage }; v = { cx: p0.x + LU.dx, cy: -(p0.y + 1100 + LU.dy), zoom: (cssW / span) * LU.zoom }; }
+    } else view.enemyLineup = null;
     if (lineupPage) { // the camera goes to the crew line-up in the sky above the ship (view.lineup tells the view where to stand the figures)
       const e0 = models.values().next().value, p0 = e0 && e0.model.root.position;
       if (p0) { view.lineup = { x: p0.x, y: p0.y + 800, page: lineupPage }; v = { cx: p0.x + LU.dx, cy: -(p0.y + 800 + 95 + LU.dy), zoom: (cssH / 800) * LU.zoom }; }

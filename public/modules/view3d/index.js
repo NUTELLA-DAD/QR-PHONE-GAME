@@ -15,6 +15,9 @@ import { buildShipModel } from './shipMesh.js';
 import { createCrewLayer } from './crew.js';
 import { createKrakenView } from './kraken.js';
 import { createFlyers } from './flyers.js';
+import { createWorldObjects } from './worldObjects.js';
+import { createThreatGlows } from './glows3d.js';
+import { createWreck3D } from './wreck3d.js';
 import { createScenery } from './scenery.js';
 import { createVfx } from './vfx.js';
 import { createDestruction } from './destruction.js';
@@ -29,16 +32,12 @@ import { darkTarget } from '../host/searchlight.js';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; };
 
-// What the host shows in 2D that this view does not draw yet (logged once per session; gameplay never depends on drawing).
+// What the host shows in 2D that this view does not draw yet (logged once per session; gameplay never depends on drawing). WP9 drew the rest: the enemies and world objects (flyers.js, enemyArt.js, scenery.js, worldObjects.js, glows3d.js, wreck3d.js, parts3d/enemyDecor.js)
+// and the labels on the HUD canvas (render.js drawOver3D).
 export const NOT_DRAWN = [
-  'turret warning lines, beacon sweep light, waving flags and chimney smoke',
-  'snipers, tugs and imps (specials)',
-  'gas holes and patches, the deflector shield, the lightning coil, towlines, crew name labels',
-  'weather (rain, snow, lightning, storm), embers and spore clouds',
-  'popup words (muzzle flashes, impact rings, fire, smoke, sparks and splinters are WP4 particles now: vfx.js)',
-  'the Versus wind wall and the far-ship porthole',
-  'wreck break-up when the ship goes down',
-  'progress bars over fires, breaches and crew, HELP call-outs, job chevrons, close-call chevrons',
+  'weather (rain, snow, lightning, storm), embers, spore clouds, frost crusts, storm rods and the sea pump (WP12)',
+  'the Versus team pennants on the masts and the far-ship porthole (WP11)',
+  'the sky-dock "NEW: part" call-out',
   'the darkness overlay (the lights do it in 3D)',
 ];
 
@@ -81,8 +80,12 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const world = createWorld(scene, renderer);
   const terrain = createTerrain(worldRoot);
   const kraken = createKrakenView(worldRoot);
-  const flyers = createFlyers(worldRoot, state);
-  const scenery = createScenery(worldRoot, state);
+  let vfx = null; // (WP4: the particles; made below, after the ship models exist)
+  const flyers = createFlyers(worldRoot, state, { P: () => (vfx && vfx.P && look.vfx ? vfx.P : null), shipPoint: (sh, x, y, z) => (V && V.hud3d ? V.hud3d.shipPt(sh, x, y, z) : null), mainShip: () => state.ships[0] });
+  const worldObjects = createWorldObjects(worldRoot, state, { shipPoint: (sh, x, y, z) => (V && V.hud3d ? V.hud3d.shipPt(sh, x, y, z) : null), modelOf: (sh) => { const e = V && V.models && V.models.get(sh.id); return e ? e.model : null; }, crew: (key) => (V && V.crew ? V.crew.anchor(key) : null), mainShip: () => state.ships[0] });
+  const scenery = createScenery(worldRoot, state, { P: () => (vfx && vfx.P && look.vfx ? vfx.P : null) });
+  const glows = createThreatGlows(worldRoot, state);
+  const wreck3d = createWreck3D({ P: () => (vfx && vfx.P && look.vfx ? vfx.P : null) });
   let controls = null;
   if (S.allowOrbit) {
     controls = new OrbitControls(camera, canvas);
@@ -150,9 +153,18 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const crew = createCrewLayer(worldRoot);
   V.crew = crew;
   V.lineup = null; // (the dev page's crew line-up sets { x, y }: world point, y up)
+  V.flyers = flyers; V.worldObjects = worldObjects; V.glows = glows; V.wreck3d = wreck3d; // (WP9: handles for the dev page and the gate)
+  V.enemyLineup = null; // (WP9: the dev page's enemy line-up sets { x, y, page }: the middle of the picture in the 3D world, y up)
+  // WP9: the 2D HUD canvas draws the crew's name labels, call-outs, progress bars and popups over this picture (render.js drawOver3D). It asks where things are on the screen through these:
+  // project(x, y(up), z) -> { x, y } as 0..1 of the screen (null behind the camera); shipPt(ship, sx, sy, z) -> the 3D world point of a spot in a ship's own layout coordinates; crew(key) -> where a figure stands.
+  const _hp = new THREE.Vector3();
+  V.hud3d = {
+    project: (x, y, z = 0) => { _hp.set(x, y, z).project(camera); return _hp.z > -1 && _hp.z < 1 ? { x: _hp.x * 0.5 + 0.5, y: -_hp.y * 0.5 + 0.5 } : null; },
+    shipPt: (sh, x, y, z = 0) => { const e = models.get(sh.id); if (!e) return null; _hp.set(e.model.X(x), e.model.Y(y), z); e.model.content.localToWorld(_hp); return [_hp.x, _hp.y, _hp.z]; },
+    crew: (key) => crew.anchor(key),
+  };
   const teamColorOf = (p, sh) => { try { const side = p.team ? teamOf(p.team) : sh ? sh.team : state.ships[0] && state.ships[0].team; return side && side.color ? side.color : null; } catch { return null; } };
   // WP4: the particles (fire, smoke, steam, sparks, splinters, muzzle flashes, rings; vfx.js reads the game's state, particles.js draws). If they cannot be made the old flame cones and puff balls stay.
-  let vfx = null;
   try { vfx = createVfx({ state, scene: worldRoot, world, models }); } catch (e) { console.warn('view3d vfx off', e); }
   V.vfx = vfx;
   // WP5: broken-off parts as rigid bodies (destruction.js, the Rapier wreckage world loads a moment after the view starts) and the marks of the blows a ship took (damageView.js)
@@ -173,7 +185,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     let e = models.get(sh.id);
     if (!e || e.ver !== ver) {
       if (e) { worldRoot.remove(e.model.root); e.model.root.traverse((o) => o.geometry && o.geometry.dispose()); if (e.model.dispose) e.model.dispose(); }
-      const model = buildShipModel(sh.layout, { enemy: !!sh.ai });
+      const gs = sh.ai && state.gunship && state.gunship.ship === sh ? state.gunship : null; // (the enemy gunship's blueprint: her flag, her emblem, her mast; and what her captain intends)
+      const model = buildShipModel(sh.layout, { enemy: !!sh.ai, bp: gs ? gs.bp : null, gunship: gs });
       worldRoot.add(model.root);
       e = { model, ver };
       models.set(sh.id, e);
@@ -213,6 +226,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       else yaw = pose.f === 1 ? 0 : Math.PI;
       root.rotation.y = yaw;
       model.pitchG.rotation.z = -(pose.pitch || 0);
+      try { wreck3d.apply(sh, model, dt); } catch (e) { logOnce('wreck', e); } // (WP9: a ship breaking up tips and falls away, her bags peel off: wreck3d.js)
       root.updateMatrixWorld(true);
       const side = (camera.position.x - root.position.x) * Math.sin(yaw) + (camera.position.z - root.position.z) * Math.cos(yaw);
       model.setView(side);
@@ -306,6 +320,23 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     if (cr && Number.isFinite(cr.x) && Number.isFinite(cr.y)) shipPts.push({ x: cr.x, y: -cr.y }); // (the Kraken's shadow too)
     world.lights.fit(shipPts, camTarget);
     world.lights.setFogDistance(camera.position.distanceTo(camTarget));
+    syncCloudAvoid();
+  }
+  // WP9: the ships' box on the screen (their bounds projected), so the few clouds in FRONT of the ships keep out of it (clouds.js setAvoid)
+  const _av = new THREE.Vector3();
+  function syncCloudAvoid() {
+    let x0 = 9, y0 = 9, x1 = -9, y1 = -9;
+    for (const e of models.values()) {
+      const m = e.model, b = m.layout && m.layout.bounds;
+      if (!b) continue;
+      const p = m.root.position, hx = Math.max(Math.abs(b.x0 - m.pv), Math.abs(b.x1 - m.pv));
+      for (const [cx, cy] of [[-hx, b.y0], [hx, b.y0], [-hx, b.y1], [hx, b.y1]]) {
+        _av.set(p.x + cx, p.y - cy, 0).project(camera);
+        if (!Number.isFinite(_av.x) || !Number.isFinite(_av.y)) continue;
+        x0 = Math.min(x0, _av.x); x1 = Math.max(x1, _av.x); y0 = Math.min(y0, _av.y); y1 = Math.max(y1, _av.y);
+      }
+    }
+    if (x0 <= x1) world.clouds.setAvoid(x0, y0, x1, y1);
   }
 
   // ---- light: the dev page can pin day / dusk / night; the game lets the darkness decide -----------------------------------------------------------------------------
@@ -347,8 +378,10 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     try { partDamage.update(dt, t, world.night); } catch (e) { logOnce('partDamage', e); }
     syncSky();
     const main = state.ships[0];
-    try { flyers.update(t, main ? main.pose.vx || 0 : 0); } catch (e) { logOnce('flyers', e); }
-    try { scenery.update(camTarget.x, cam.visW / 2); } catch (e) { logOnce('scenery', e); }
+    try { flyers.update(t, main ? main.pose.vx || 0 : 0, { dt, zoomEq: h / Math.max(1, cam.visH), lineup: V.enemyLineup }); } catch (e) { logOnce("flyers", e); }
+    try { glows.update(t, look.glows && state.phase !== 'lobby'); } catch (e) { logOnce('glows', e); }
+    try { worldObjects.update(t, dt, { x: camTarget.x, y: camTarget.y, D: cam.D, hw: cam.visW / 2, hh: cam.visH / 2 }); } catch (e) { logOnce('worldObjects', e); }
+    try { scenery.update(camTarget.x, cam.visW / 2, { t, dt }); } catch (e) { logOnce('scenery', e); }
     kraken.update(state.creature, world.night);
     if (vfx) { // the particles (after the ships and the Kraken are placed: the emitters read their world positions)
       const v0 = performance.now();
@@ -382,7 +415,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     jsMs = j1 - j0; renderMs = j2 - j1;
     V.frames++;
   };
-  const logOnce = (what, e) => { const m = what + ': ' + String(e && e.message ? e.message : e); if (m !== V.lastLog) { V.lastLog = m; console.warn('view3d', m); } };
+  const logOnce = (what, e) => { const m = what + ': ' + String(e && e.message ? e.message : e) + (e && e.stack ? ' @ ' + String(e.stack).split('\n').slice(1, 3).map((s) => s.trim().replace(/https?:\/\/[^/]+\//, '')).join(' | ') : ''); if (m !== V.lastLog) { V.lastLog = m; console.warn('view3d', m); } };
 
   // numbers for the F meter and the perf gate
   // calls / tris = the whole frame (scene + post passes); sceneCalls / sceneTris = the scene pass alone (the budget's numbers); gpu = GPU ms per pass when settings.gpuTimer is on

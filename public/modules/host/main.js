@@ -121,7 +121,7 @@ const viewChoice = (() => {
   try { const s = localStorage.getItem('airshipView'); if (s === '2d' || s === '3d') return s; } catch { /* (no storage) */ }
   return '2d'; // (WP14 flips this default)
 })();
-const HUD_LAYERS = ['hud', 'arrows']; // (no 'background', 'ship', 'effects', 'dark' or 'film': the 3D scene and its lights draw those)
+const HUD_LAYERS = ['over3d', 'hud', 'arrows']; // (no 'background', 'ship', 'effects', 'dark' or 'film': the 3D scene and its lights draw those; 'over3d' = the name labels, call-outs and bars projected over the 3D picture)
 const v3 = { view: null, active: false, loading: false, fails: 0, broken: false, mode: viewChoice };
 window.view3dNote = '';
 const v3settings = {
@@ -189,7 +189,7 @@ const drawFrame = (now, view) => {
     if (ok) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height); // (transparent: the 3D picture shows through)
-      renderer.renderFrame(now, view, { layers: HUD_LAYERS });
+      renderer.renderFrame(now, view, { layers: HUD_LAYERS, p3: v3.view.hud3d });
       return;
     }
   }

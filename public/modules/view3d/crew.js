@@ -201,6 +201,8 @@ export function createCrewLayer(parent) {
     }
     const E = f.env || (f.env = { W: null, lx: 0, ly: 0, lz: 0, cz: 1, teamColor: null }); // (kept: a figure that only just got a slot in the buffer is assembled again after the rebuild)
     E.W = env.W; E.lx = env.lx; E.ly = env.ly; E.lz = env.lz; E.cz = env.cz; E.teamColor = env.teamColor;
+    _v.set(env.lx, env.ly, env.lz); if (env.W) _v.applyMatrix4(env.W); // (WP9: where he stands in the world, for the name labels on the HUD canvas: even before he has a slot in the buffer)
+    f.wx = _v.x; f.wy = _v.y + fin(rec.jz); f.wz = _v.z;
     assemble(f, rec, E);
     return f;
   }
@@ -340,6 +342,12 @@ export function createCrewLayer(parent) {
     const rms = performance.now() - rt0; L.rebuildMs = rms; L.rebuildMax = Math.max(L.rebuildMax || 0, rms); L.rebuildSum = (L.rebuildSum || 0) + rms;
   }
 
+  // WP9: where a figure stands this frame (3D world, y up), for the HUD canvas's name labels, call-outs and bars (render.js drawOver3D); null when he was not placed this frame
+  L.anchor = (key) => {
+    const f = figs.get(key);
+    if (!f || f.seen !== L.frame || !Number.isFinite(f.wx) || !Number.isFinite(f.wy) || !Number.isFinite(f.wz)) return null;
+    return { x: f.wx, y: f.wy, z: f.wz, sc: fin(f.rec && f.rec.scale, 1) || 1, ko: f.pose.mode === 'ko' };
+  };
   L.setTier = (tier) => { const acc = !tier || tier.name !== 'low'; if (acc !== L.acc) { L.acc = acc; L.dirty = true; } };
   L.stats = () => ({ figs: figs.size, verts: L.verts, tris: Math.round(L.tris), rebuilds: L.rebuilds, overflow: L.overflow, calls: 4, ms: Math.round((L.msLast || 0) * 100) / 100, rebuildMs: Math.round((L.rebuildSum || 0) / Math.max(1, L.rebuilds) * 100) / 100, rebuildMax: Math.round((L.rebuildMax || 0) * 100) / 100 });
   L.clear = () => { figs.clear(); L.dirty = true; };
