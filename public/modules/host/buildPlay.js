@@ -3,7 +3,7 @@
 //   * Folding side panels (the parts tray, the report), the View buttons (Blueprint / Split / Live) with a draggable divider, the zoom buttons (the wheel, pan and pinch are buildView.js).
 //   * PLAYTEST (co-op) / PLAYTEST (Versus): the build goes to the real host game (playtest.js). A build the validator FAILs cannot fly, so the button says why instead; warnings are shown and allowed.
 //   * My Ships: named designs (save, load, rename, delete) and the autosaved working build.
-// buildTest.js calls initBuildUi(api) once; api = { view, bp, scene, parts(), result(), layout(), load(parts, text), note(text, bad), setEditing(bool), onUi() }.
+// buildTest.js calls initBuildUi(api) once; api = { view, bp, scene, parts(), result(), layout(), load(parts, text), note(text, bad), setEditing(bool), onUi(), want3d() }. want3d() (WP13): the Live pane's 3D switch is on, so PLAYTEST adds &view=3d.
 import { config } from '../../config.js';
 import { buildShelf } from './pvp/shelf.js';
 import { saveWorking, playtestUrl, listDesigns, saveDesign, renameDesign, deleteDesign, getDesign } from './playtest.js';
@@ -117,7 +117,8 @@ export function initBuildUi(api) {
     const parts = api.parts(), name = $('msName').value.trim() || 'My Ship';
     saveWorking(parts);
     const job = { parts, name, mode: modeName, foe: foe.value || config.PLAYTEST.FOE_DEFAULT, bots: Number($('ptCrew').value) || 0 };
-    const url = playtestUrl(job);
+    let url = playtestUrl(job);
+    if (api.want3d && api.want3d()) url += '&view=3d'; // (WP13: the 3D toggle is on: the playtest opens in 3D)
     msg('Opening the game' + (modeName === 'versus' ? ' (Versus vs ' + job.foe + ')' : '') + '...', '');
     if (!api.noNavigate) location.href = url;
     return url;
