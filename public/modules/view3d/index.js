@@ -452,6 +452,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       vfxMs = performance.now() - v0;
     }
     terrain.update(map, camTarget.x, -camTarget.y);
+    { const E = state.env || {}, W = state.weather || {}; terrain.setWind(Math.max(Number.isFinite(E.gale) ? E.gale : 0, W.gusting ? clamp(W.storm || 0, 0, 1) : 0), t, (E.windDir || 1)); } // (A7: the rock's plants sway only in a strong wind, stepped)
     const seaY = env === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : NaN;
     world.update(camera, camTarget, { w: cam.visW, h: cam.visH }, t, seaY, map);
     if (fungal) { try { fungal.update({ t, camTarget, vis: { w: cam.visW, h: cam.visH } }); } catch (e) { logOnce('fungal', e); } }
