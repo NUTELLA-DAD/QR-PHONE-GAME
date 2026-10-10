@@ -2648,6 +2648,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   //                       'effects'     threats, shells, flashes, puffs, rain, snow and smoke
   //                       'dark'        the darkness overlay (dark skies)
   //                       'over3d'      (the 3D view only; needs opts.p3 = view3d's hud3d) the crew's name labels, call-outs, progress bars and popups, projected over the 3D picture
+  //                       'marks'       (3D view) only the lit-target brackets and the glowing eyes of the unlit, over the 3D picture; opts.dark3d = how dark the 3D scene is (0..1)
   //                       'hud'         the co-op hull / steam / route panels and full-screen cards
   //                       'arrows'      lookout, gust and spotter arrows at the screen edge
   //                       'film'        the old-film look (off by default, config.STYLE)
@@ -2862,6 +2863,9 @@ export function createRenderer({ ctx, state: world, canvas }) {
     if (has('dark')) { // ONE darkness with light cut out for every ship's glow and every ship's beams, the lit-target brackets (any ship's lamp), the glowing eyes
       const lamps = world.ships.filter((sh) => !sh.ai).map((sh) => artsOf(sh).light);
       lamps[0].draw(wv, width, height, ts, lamps.slice(1));
+    } else if (has('marks')) { // WP10 (the 3D view): the 3D lights do the darkness and the beams; this layer draws only what is still 2D: the lit-target brackets and the glowing eyes of the unlit
+      const lamps = world.ships.filter((sh) => !sh.ai).map((sh) => artsOf(sh).light);
+      if (lamps.length) lamps[0].draw(wv, width, height, ts, lamps.slice(1), { marksOnly: true, dark3d: opts && opts.dark3d });
     }
     lap('dark');
 

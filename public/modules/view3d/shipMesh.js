@@ -13,6 +13,7 @@ import { makeShipContext, buildParts, THEMES } from './parts3d/registry.js';
 import { GLOW as WGLOW } from './parts3d/weapons.js';
 import { buildEnemyDecor } from './parts3d/enemyDecor.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { config } from '../../config.js';
 
 export { THEMES };
 
@@ -22,6 +23,21 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 // Emissive things are HDR colours (style.js glow: brighter than 1) so they cross the bloom threshold and the post pass makes them glow; nothing else does.
 const GLOW = { lamp: glow('#ffe9b0', 3.4), lampOff: new THREE.Color('#b9a67a'), boiler: glow('#ff9a4a', 3.4), boilerLow: glow('#d9531a', 3.2), lens: WGLOW.lens, lensOff: WGLOW.lensOff };
 const lampMat = glowMat('#ffe9b0', 3.4);
+// WP10 LANTERN POOLS: a soft warm gradient on the far wall behind every lantern, so a room still reads lantern-lit where there are few or no real lights (Medium: 2 a ship, Low: none). One additive material
+// for every ship (its strength follows the night and the tier, set in step()); one merged quad mesh a ship.
+let _poolMat = null;
+function lanternPoolMat() {
+  if (_poolMat) return _poolMat;
+  const N = 64, cv = document.createElement('canvas');
+  cv.width = cv.height = N;
+  const g = cv.getContext('2d'), r = N / 2, gr = g.createRadialGradient(r, r, 0, r, r, r);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.62)'); gr.addColorStop(0.7, 'rgba(255,255,255,0.18)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, N, N);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.NoColorSpace;
+  _poolMat = new THREE.MeshBasicMaterial({ map: t, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false, opacity: 0 });
+  return _poolMat;
+}
 const flameMats = { out: glowMat('#ff5a24', 4.4), inn: glowMat('#ffe680', 2.4), ink: new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }) };
 
 export function buildShipModel(layout, opts = {}) {
@@ -82,6 +98,21 @@ export function buildShipModel(layout, opts = {}) {
     content.add(m);
     for (const g of gs) g.dispose();
   }
+  let lanternPool = null; // (WP10) the faked pool of each lantern on the far wall: ONE merged mesh, moved to whichever wall is the far one each frame (step())
+  if (ctx.lanternSpots.length) {
+    try {
+      const R = ((config.LOOK3D && config.LOOK3D.LANTERN && config.LOOK3D.LANTERN.SIZE) || 190);
+      const qs = ctx.lanternSpots.map((p) => { // (the pool stays inside its room: its half width and height are the room's)
+        const rw = Math.min(R, (p[3] || R) * 0.95), rh = Math.min(1.55 * R, (p[4] || 260) * 0.62), g = new THREE.PlaneGeometry(1, 1);
+        g.applyMatrix4(new THREE.Matrix4().compose(V(p[0], p[1] - 30, 0), new THREE.Quaternion(), V(2 * rw, 2 * rh, 1)));
+        return g;
+      });
+      lanternPool = new THREE.Mesh(mergeGeometries(qs, false), lanternPoolMat());
+      for (const g of qs) g.dispose();
+      lanternPool.renderOrder = 2; lanternPool.frustumCulled = false; lanternPool.visible = false;
+      content.add(lanternPool);
+    } catch (e) { console.warn('ship3d lantern pools', e); lanternPool = null; }
+  }
   for (const p of ctx.lanternSpots) {
     const pl = new THREE.PointLight('#ffd9a0', 0, 420, 0);
     pl.position.set(p[0], p[1] - 6, p[2] + 50);
@@ -134,7 +165,7 @@ export function buildShipModel(layout, opts = {}) {
     extractPart: (key) => asm.extract(key),
     dispose() { try { for (const k of ['toon', 'plain', 'depth']) ctx.mats[k].dispose(); } catch { /* (gone already) */ } }, // (this ship's own materials; index.js calls it when the ship is rebuilt or gone)
     // Hide the hull wall that faces the viewer: camSide > 0 when the camera is on the ship's local +Z side.
-    setView(camSide) { asm.setSide(camSide); },
+    setView(camSide) { asm.setSide(camSide); model.viewSide = camSide; },
     // c: { t, ship (handle), world, night (0..1), lamps (the beams shine) }
     update(c) { try { this.step(c); } catch (e) { const m = String((e && e.message) || e); if (m !== model.lastErr) { model.lastErr = m; console.warn('ship3d update', e); } } }, // (never throw from drawing code)
     step(c) {
@@ -170,7 +201,7 @@ export function buildShipModel(layout, opts = {}) {
         lp.spot.intensity = on ? 9 * (0.5 + 0.5 * power) * Math.min(1, night * 1.4) : 0;
         lp.spot.distance = reach * 1.5;
         lp.spot.angle = Math.max(0.2, (live && Number.isFinite(live.half) ? live.half : 0.24) * 1.15);
-        lp.outer.visible = lp.inner.visible = on;
+        lp.outer.visible = lp.inner.visible = on && !look.beam; // (WP10: the soft volumetric beam of beams.js replaces the two cones; ?look=nobeam brings them back)
         lp.outer.scale.x = lp.inner.scale.x = reach / lp.reach;
         lp.target.position.x = reach;
         lp.lens.material.color.copy(on ? GLOW.lens : GLOW.lensOff);
@@ -181,6 +212,15 @@ export function buildShipModel(layout, opts = {}) {
       for (const pl of lights.boiler) pl.intensity = (0.8 + 5 * night) * press;
       for (const m of dyn.boilerGlow) m.material.color.copy(press > 0.5 ? GLOW.boiler : GLOW.boilerLow);
       lampMat.color.copy(lampOn ? GLOW.lamp : GLOW.lampOff); // (the lanterns are lit when it is dark)
+      if (lanternPool) { // WP10: the pool of each lantern on the far wall (the near wall is cut away): strong where there are few real lights
+        const LC = (config.LOOK3D && config.LOOK3D.LANTERN) || {}, tierName = c.tier || 'medium';
+        const amt = lampOn ? ((LC.ALPHA && LC.ALPHA[tierName]) != null ? LC.ALPHA[tierName] : 0.4) * clamp(night * 1.4, 0, 1) * (c.lamps === false ? 0.6 : 1) : 0;
+        const pm = lanternPool.material;
+        pm.color.set(LC.COLOR || '#ffb25c');
+        pm.opacity = amt;
+        lanternPool.visible = amt > 0.01 && look.beam !== false;
+        lanternPool.position.z = -(model.viewSide >= 0 ? 1 : -1) * (W - 15.5); // (the far wall: the side the camera is NOT on)
+      }
       // each prop spins at ITS engine's own throttle (state.engines[i].pow, what the engine is running at; the sim keeps it, the view only reads it); a stopped or broken engine stands still
       const live = st.engines || [];
       for (const e of dyn.engines) {

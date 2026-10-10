@@ -171,13 +171,13 @@ export function createSearchlightArt({ ctx, state, ink }) {
 
   // The darkness for the whole sky. `others`: the searchlightArt of every OTHER ship in it. Every ship's glow and beams cut light out of the one overlay, and a target lit by ANY
   // ship's lamp is lit (brackets) and not dim (no eyes). With no others this is exactly the single-ship darkness.
-  const draw = (view, width, height, time, others = []) => {
+  const draw = (view, width, height, time, others = [], opts = {}) => {
     const dt = Math.min(0.1, Math.max(0, time - lastTime));
     lastTime = time;
     const lights = state.searchlights;
     const sources = [source(), ...others.map((o) => o.source())];
-    if (!lights || !sources.some((s) => s.anchors.length)) return;
-    const allAnchors = sources.length === 1 ? anchors : sources.flatMap((s) => s.anchors);
+    if (!lights || (!opts.marksOnly && !sources.some((s) => s.anchors.length))) return;
+    const allAnchors = opts.marksOnly ? [] : sources.length === 1 ? anchors : sources.flatMap((s) => s.anchors);
     let litAll = sources[0].lit;
     let dimAll = sources[0].dim;
     if (sources.length > 1) {
@@ -189,7 +189,8 @@ export function createSearchlightArt({ ctx, state, ink }) {
     const target = darkTarget(state);
     dark += (target - dark) * Math.min(1, dt * D.SMOOTH);
     if (Math.abs(target - dark) < 0.002) dark = target;
-    const alphaDark = dark * (1 - flash);
+    const alphaDark = opts.marksOnly ? 0 : dark * (1 - flash);
+    const eyeDark = Math.max(dark * (1 - flash), opts.dark3d ? Math.min(1, opts.dark3d) * (1 - flash) : 0); // (the 3D view passes its own darkness: its caves are dark although the 2D game calls them lit)
     const k = view.zoom;
     const sx = (x) => width / 2 + (x - view.cx) * k;
     const sy = (y) => height / 2 + (y - view.cy) * k;
@@ -349,8 +350,8 @@ export function createSearchlightArt({ ctx, state, ink }) {
     }
 
     // 4. In the dark, enemies outside the light show glowing eyes (or a lamp): you know something is there.
-    if (D.EYES && alphaDark > 0.12) {
-      const a = Math.min(1, alphaDark * 1.4) * D.EYE_ALPHA;
+    if (D.EYES && eyeDark > 0.12) {
+      const a = Math.min(1, eyeDark * 1.4) * D.EYE_ALPHA;
       for (const t of dimAll) {
         const px = sx(t.x);
         const py = sy(t.y);

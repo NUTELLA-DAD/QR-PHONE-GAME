@@ -18,18 +18,26 @@ export { THREE };
 // low = the Detail: low setting (small things lose their ink shells). The rest are the WP1 look kill-switches (quality.js reads ?look=nobloom,nofog... into them; the dev page has buttons):
 // bloom, lut (the colour grade), grain (paper grain + vignette), fog, rim (the thin warm edge light), lanterns (the lamps' real point lights), post (false = no composer at all),
 // WP3: dark (caves and dark stages go near-black: the lamps and beams light them; false = the old day-lit caves), clouds (the 3D cloud billboards), water (the new toon water: false = the old flat slab), WP4: vfx (the GPU particles: fire, smoke, sparks, splinters; false = the old flame cones and puff balls).
-export const look = { toon: true, outlines: true, shadows: true, low: false, bloom: true, lut: true, grain: true, fog: true, rim: true, lanterns: true, post: true, dark: true, clouds: true, water: true, vfx: true, glows: true };
+// WP10: beam (the volumetric searchlight beams, light pools and the lit-target rim: false = the old flat cones), lightning (the strike flash + bolt), fungal (the glowing mushrooms and spores).
+export const look = { toon: true, outlines: true, shadows: true, low: false, bloom: true, lut: true, grain: true, fog: true, rim: true, lanterns: true, post: true, dark: true, clouds: true, water: true, vfx: true, glows: true, beam: true, lightning: true, fungal: true };
 
 // Shared shader numbers (one object, read by every patched material, so changing them needs no recompile): the toon rim light, and what the painted backdrops need to survive tone mapping.
 export const fx = {
   uRimColor: { value: new THREE.Color('#ffd9a8') }, uRimAmt: { value: 0.16 }, uRimEdge: { value: 0.72 }, uRimDir: { value: new THREE.Vector3(-0.43, 0.66, 0.59) },
   uFloor: { value: new THREE.Color(0, 0, 0) }, // (WP3: the dark-blue ambient floor of the rock in a dark place, lights.js sets it: a little light the rock keeps whatever its own colour)
+  // WP10 LIT TARGETS: up to 8 hostile things in a manned searchlight beam, each a view-space point and a radius (xyz, w); a toon fragment inside one gets a warm rim (rimify below). beams.js fills them every frame.
+  uLitN: { value: 0 }, uLit: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uLitColor: { value: new THREE.Color('#ffe2a0') }, uLitRim: { value: 0.9 }, uLitFill: { value: 0.16 },
+  // WP10 BEAM LIGHT: what a searchlight lights is what its CONE covers on the screen, exactly as in the 2D game (a rock face, the cave picture, a plane, whatever is in the cone). Up to 4 lamps; uBeamA = (apex x, apex y,
+  // direction x, direction y) and uBeamB = (tan of the half angle, length, strength, 0), all in the gameplay plane (view space, so a fragment at another depth is projected onto it first: uBeamD = the camera's distance to that plane).
+  uBeamN: { value: 0 }, uBeamA: { value: Array.from({ length: 4 }, () => new THREE.Vector4(0, 0, 1, 0)) }, uBeamB: { value: Array.from({ length: 4 }, () => new THREE.Vector4(0.25, 1000, 0, 0)) }, uBeamColor: { value: new THREE.Color('#ffe9b8') }, uBeamD: { value: 3000 },
   uUntone: { value: 0 }, uExposure: { value: 1 }, // (post.js sets uUntone to 1 while the composer tone-maps the picture: the unlit painted planes then undo it so they stay exactly as painted)
 };
 
 // The THIN WARM RIM: one hard step where the surface turns edge-on to the viewer (dot(N, V) small), on the side the key light comes from. Added to a MeshToonMaterial by a small compile patch.
 const RIM_FRAG = `
   uniform vec3 uRimColor; uniform float uRimAmt; uniform float uRimEdge; uniform vec3 uRimDir;
+  uniform float uLitN; uniform vec4 uLit[ 8 ]; uniform vec3 uLitColor; uniform float uLitRim; uniform float uLitFill;
+  uniform float uBeamN; uniform vec4 uBeamA[ 4 ]; uniform vec4 uBeamB[ 4 ]; uniform vec3 uBeamColor; uniform float uBeamD;
 `;
 const RIM_BODY = `
   {
@@ -37,12 +45,40 @@ const RIM_BODY = `
     float rimFacing = 1.0 - saturate( dot( rimN, normalize( vViewPosition ) ) );
     float rimSide = smoothstep( 0.05, 0.6, dot( rimN, uRimDir ) );
     outgoingLight += uRimColor * ( uRimAmt * step( uRimEdge, rimFacing ) * rimSide );
+    // WP10: inside a lit target's circle (a manned searchlight holds it) the whole figure is lifted a little and its edge catches a warm rim, on every side
+    if ( uLitN > 0.5 ) {
+      vec3 fragV = - vViewPosition;
+      float zone = 0.0;
+      for ( int li = 0; li < 8; li ++ ) {
+        if ( float( li ) >= uLitN ) break;
+        vec4 lt = uLit[ li ];
+        zone = max( zone, 1.0 - smoothstep( lt.w * 0.8, lt.w * 1.2, length( ( fragV - lt.xyz ) * vec3( 1.0, 1.0, 0.5 ) ) ) );
+      }
+      outgoingLight += uLitColor * ( zone * ( uLitFill * ( 0.4 + 0.6 * outgoingLight.r ) + uLitRim * smoothstep( 0.5, 0.78, rimFacing ) ) );
+    }
+    // WP10: the searchlights' cones light whatever is inside them on the screen (the surface's own colour, warmed), the same region the 2D game cuts out of the dark
+    if ( uBeamN > 0.5 ) {
+      vec3 fv = - vViewPosition;
+      vec2 q = fv.xy * ( uBeamD / max( - fv.z, 1.0 ) );
+      float lit = 0.0;
+      for ( int bi = 0; bi < 4; bi ++ ) {
+        if ( float( bi ) >= uBeamN ) break;
+        vec4 ba = uBeamA[ bi ]; vec4 bb = uBeamB[ bi ];
+        vec2 d = q - ba.xy;
+        float along = dot( d, ba.zw ), across = abs( d.x * ba.w - d.y * ba.z ), half_ = bb.x * along + 24.0;
+        float m = ( 1.0 - smoothstep( 0.55, 1.0, across / half_ ) ) * smoothstep( 0.0, 90.0, along ) * ( 1.0 - smoothstep( 0.72, 1.0, along / bb.y ) );
+        lit = max( lit, m * bb.z );
+      }
+      outgoingLight += diffuseColor.rgb * uBeamColor * lit;
+    }
   }
   #include <opaque_fragment>
 `;
 export function rimify(material) {
   material.onBeforeCompile = (sh) => {
     sh.uniforms.uRimColor = fx.uRimColor; sh.uniforms.uRimAmt = fx.uRimAmt; sh.uniforms.uRimEdge = fx.uRimEdge; sh.uniforms.uRimDir = fx.uRimDir;
+    sh.uniforms.uBeamN = fx.uBeamN; sh.uniforms.uBeamA = fx.uBeamA; sh.uniforms.uBeamB = fx.uBeamB; sh.uniforms.uBeamColor = fx.uBeamColor; sh.uniforms.uBeamD = fx.uBeamD;
+    sh.uniforms.uLitN = fx.uLitN; sh.uniforms.uLit = fx.uLit; sh.uniforms.uLitColor = fx.uLitColor; sh.uniforms.uLitRim = fx.uLitRim; sh.uniforms.uLitFill = fx.uLitFill;
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + RIM_FRAG).replace('#include <opaque_fragment>', RIM_BODY);
   };
   material.customProgramCacheKey = () => 'toon-rim';

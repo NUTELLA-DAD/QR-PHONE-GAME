@@ -37,7 +37,7 @@ export function buildRoom(r, ctx, i) {
     b.cone(T.brass, X(x), Y(y - 11), z, 8.5, 8, 0.8, 0, 0, 0, { tr: 'brass' }); // the cap
     b.cyl(T.brass, X(x), Y(y + 10), z, 7, 3, 0.8, 0, 0, 0, undefined, { tr: 'brass' }); // the cup
     for (const [dx, dz] of [[-7, 0], [7, 0], [0, -7], [0, 7]]) b.rod(T.brass, V(X(x) + dx, Y(y - 8), z + dz), V(X(x) + dx, Y(y + 9), z + dz), 0.9, 0, { tr: 'brass' }); // the cage bars
-    ctx.lanternSpots.push([X(x), Y(y), z]);
+    ctx.lanternSpots.push([X(x), Y(y), z, (r.x1 - r.x0) / 2, h]); // (WP10: the room's half width and height too, so the lantern's faked pool on the wall stays inside the room)
   }
   return { key, batches: [b], dyn, bounds: b.bounds };
 }

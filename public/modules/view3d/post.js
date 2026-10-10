@@ -1,6 +1,8 @@
 // Post-processing: ONE EffectComposer in a fixed order (3D.md section 1, the "painted storybook" finish).
 //
-//   RenderPass   the scene, in floating point (lights, shadows, fog)
+//   RenderPass   the scene, in floating point (lights, shadows, fog); its target keeps a DEPTH TEXTURE (WP10)
+//   Beams        WP10: the searchlight beams, drawn on their own smaller picture that READS that depth (so a beam dissolves where it meets the hull or the rock instead of cutting through it) and added
+//                to the scene before the bloom. Off (and free) when no lamp is lit. See beams.js.
 //   Bloom        a small blur chain at quarter and eighth size (MiniBloom below; UnrealBloomPass cost 3x as much), threshold ~0.92: only emissive things glow (lanterns, fire, the boiler's firebox, the lamps, the Kraken's eyes). It is added back inside the grade pass.
 //   Grade        ONE fused pass: NeutralToneMapping (exposure per environment) + the sRGB conversion + the procedural 16x16x16 colour-grade table of the environment (built here in code from
 //                config.LOOK3D) + the finish: a little shadow desaturation, the vignette and STATIC paper grain (a fixed picture, never animated)
@@ -127,6 +129,7 @@ const GradeShader = {
   uniforms: {
     tDiffuse: { value: null }, tGrain: { value: null }, tLut: { value: null }, tGlow1: { value: null }, tGlow2: { value: null }, uGlow: { value: 0 },
     uExposure: { value: 1 }, uLut: { value: 1 }, uVig: { value: 0.16 }, uGrain: { value: 0.022 }, uDesat: { value: 0.18 }, uAspect: { value: 16 / 9 },
+    uFlash: { value: 0 }, uFlashColor: { value: new THREE.Color('#cfe0ff') }, // (WP10: the lightning flash, light added before the tone mapping)
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -134,6 +137,7 @@ const GradeShader = {
   `,
   fragmentShader: /* glsl */`
     uniform sampler2D tDiffuse; uniform sampler2D tGrain; uniform sampler3D tLut; uniform sampler2D tGlow1; uniform sampler2D tGlow2; uniform float uGlow;
+    uniform float uFlash; uniform vec3 uFlashColor;
     uniform float uExposure; uniform float uLut; uniform float uVig; uniform float uGrain; uniform float uDesat; uniform float uAspect;
     varying vec2 vUv;
     vec3 neutralTone( vec3 color ) {
@@ -155,6 +159,7 @@ const GradeShader = {
     void main() {
       vec3 hdr = max( texture2D( tDiffuse, vUv ).rgb, 0.0 );
       if ( uGlow > 0.0 ) hdr += ( texture2D( tGlow1, vUv ).rgb * 0.7 + texture2D( tGlow2, vUv ).rgb ) * uGlow;      // the bloom, added in light values before the tone mapping
+      hdr += uFlashColor * uFlash;                                                                                   // the lightning flash (WP10)
       vec3 c = toSRGB( clamp( neutralTone( hdr ), 0.0, 1.0 ) );
       if ( uLut > 0.0 ) { c = mix( c, texture( tLut, vec3( 0.5 / 16.0 ) + c * ( 1.0 - 1.0 / 16.0 ) ).rgb, uLut ); } // the environment's colour grade (16 x 16 x 16)
       float l = dot( c, vec3( 0.299, 0.587, 0.114 ) );
@@ -170,26 +175,82 @@ const GradeShader = {
   `,
 };
 
+// ---- the beam pass (WP10) -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// The searchlight beams live in a scene of their own (beams.js builds it). They are drawn at BEAM RES x the screen onto a small picture, with a shader that reads the scene's depth texture (the composer's
+// target keeps one) to fade a beam out where it meets the hull, the rock or a plane, and hide it behind things in front of it; then that picture is ADDED to the scene picture before the bloom.
+// (The depth cannot be read from the target being drawn into, which is why the beams go to a picture of their own first.) needsSwap is false: it only adds light to the scene picture.
+const ADD_FRAG = /* glsl */`uniform sampler2D tDiffuse; uniform float uGain; varying vec2 vUv; void main() { gl_FragColor = vec4( max( texture2D( tDiffuse, vUv ).rgb, 0.0 ) * uGain, 1.0 ); }`;
+const _clearC = new THREE.Color();
+class BeamPass extends Pass {
+  constructor(camera) {
+    super();
+    this.needsSwap = false;
+    this.enabled = false;
+    this.camera = camera;
+    this.scene = null;
+    this.scale = 1;
+    this.shared = { uDepth: { value: null }, uRes: { value: new THREE.Vector2(2, 2) }, uNear: { value: 60 }, uFar: { value: 70000 } }; // (the beam materials read these)
+    this.rt = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    this.add = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: null }, uGain: { value: 1 } }, vertexShader: BLOOM_VERT, fragmentShader: ADD_FRAG, depthTest: false, depthWrite: false,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
+    });
+    this.quad = new FullScreenQuad(this.add);
+    this.size = { w: 2, h: 2 };
+    this.drawn = false;
+  }
+  setSize(w, h) { this.size.w = w; this.size.h = h; this.fit(); }
+  fit() {
+    const w = Math.max(2, Math.round(this.size.w * this.scale)), h = Math.max(2, Math.round(this.size.h * this.scale));
+    if (this.rt.width !== w || this.rt.height !== h) this.rt.setSize(w, h);
+    this.shared.uRes.value.set(w, h);
+  }
+  render(renderer, writeBuffer, readBuffer) {
+    this.drawn = false;
+    if (!this.scene || !this.camera) return;
+    this.fit();
+    const sh = this.shared;
+    sh.uDepth.value = readBuffer.depthTexture || null;
+    sh.uNear.value = this.camera.near; sh.uFar.value = this.camera.far;
+    const ac = renderer.autoClear, ca = renderer.getClearAlpha(), cc = renderer.getClearColor(_clearC).getHex();
+    renderer.setRenderTarget(this.rt);
+    renderer.setClearColor(0x000000, 0);
+    renderer.autoClear = true;
+    renderer.render(this.scene, this.camera);
+    renderer.autoClear = false; // (the add must not clear the scene picture)
+    this.add.uniforms.tDiffuse.value = this.rt.texture;
+    renderer.setRenderTarget(readBuffer);
+    this.quad.render(renderer);
+    renderer.autoClear = ac;
+    renderer.setClearColor(cc, ca);
+    this.drawn = true;
+  }
+  dispose() { this.rt.dispose(); this.add.dispose(); this.quad.dispose(); }
+}
+
 // ---- the composer -------------------------------------------------------------------------------------------------------------------------------------------------------
 export function createPost(renderer, scene, camera) {
   const P = { enabled: false, composer: null, passes: {}, lutKey: '', sceneCalls: 0, sceneTris: 0, error: '', timing: null };
   try {
     if (!(renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float'))) throw new Error('this graphics card cannot draw to floating-point pictures'); // (then the view draws directly, tone mapped by the materials)
-    const rt = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType });
+    const depthTexture = new THREE.DepthTexture(2, 2, THREE.UnsignedIntType); // (WP10: the beams read the scene's depth; the composer clones this target, so both of its pictures keep one)
+    depthTexture.minFilter = depthTexture.magFilter = THREE.NearestFilter;
+    const rt = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, depthTexture });
     const composer = new EffectComposer(renderer, rt);
     const renderPass = new RenderPass(scene, camera);
     const B = (config.LOOK3D && config.LOOK3D.BLOOM) || {};
+    const beamPass = new BeamPass(camera);
     const bloom = new MiniBloom(B.THRESHOLD == null ? 0.9 : B.THRESHOLD);
     const grade = new ShaderPass(GradeShader);
     grade.uniforms.tGrain.value = grainTexture();
     grade.uniforms.tGlow1.value = bloom.a.texture; grade.uniforms.tGlow2.value = bloom.d.texture;
     const fxaa = new ShaderPass(FXAAShader);
     const smaa = new SMAAPass(2, 2);
-    for (const p of [renderPass, bloom, grade, fxaa, smaa]) composer.addPass(p);
+    for (const p of [renderPass, beamPass, bloom, grade, fxaa, smaa]) composer.addPass(p);
     // Numbers for the perf gate: the scene's own draw calls and triangles (the later passes would add to the counters) and, with the GPU timer, the milliseconds each pass takes on the GPU.
     const gl = renderer.getContext(), ext = gl.getExtension && gl.getExtension('EXT_disjoint_timer_query_webgl2');
     const T = (P.timing = { on: false, ms: {}, pend: [], ok: !!ext });
-    for (const [name, pass] of Object.entries({ renderPass, bloom, grade, fxaa, smaa })) {
+    for (const [name, pass] of Object.entries({ renderPass, beamPass, bloom, grade, fxaa, smaa })) {
       const orig = pass.render.bind(pass);
       pass.render = (...a) => {
         if (name === 'renderPass') renderer.info.reset();
@@ -209,7 +270,7 @@ export function createPost(renderer, scene, camera) {
         gl.deleteQuery(e.q);
       }
     };
-    P.composer = composer; P.passes = { renderPass, bloom, grade, fxaa, smaa };
+    P.composer = composer; P.passes = { renderPass, beamPass, bloom, grade, fxaa, smaa }; P.beamPass = beamPass;
     P.enabled = true;
   } catch (e) { P.error = String(e && e.message ? e.message : e); P.enabled = false; console.warn('view3d: post-processing is off (' + P.error + ')'); }
 
@@ -218,6 +279,7 @@ export function createPost(renderer, scene, camera) {
     if (!P.composer) return;
     P.composer.setPixelRatio(pr);
     P.composer.setSize(w, h);
+    P.beamPass.setSize(w * pr, h * pr);
     const { fxaa, grade } = P.passes;
     fxaa.material.uniforms.resolution.value.set(1 / (w * pr), 1 / (h * pr));
     grade.uniforms.uAspect.value = w / h;

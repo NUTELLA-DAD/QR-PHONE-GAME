@@ -23,6 +23,9 @@ import { createVfx } from './vfx.js';
 import { createDestruction } from './destruction.js';
 import { createDamageView } from './damageView.js';
 import { createPartDamage } from './damageStates.js';
+import { createBeams } from './beams.js';
+import { createLightning } from './lightning.js';
+import { createFungal } from './fungal.js';
 import { placeCamera, FOV } from './camera3d.js';
 import { envIdOf } from '../host/environments.js';
 import { shipOf, teamOf } from '../host/ships.js';
@@ -35,7 +38,7 @@ const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h
 // What the host shows in 2D that this view does not draw yet (logged once per session; gameplay never depends on drawing). WP9 drew the rest: the enemies and world objects (flyers.js, enemyArt.js, scenery.js, worldObjects.js, glows3d.js, wreck3d.js, parts3d/enemyDecor.js)
 // and the labels on the HUD canvas (render.js drawOver3D).
 export const NOT_DRAWN = [
-  'weather (rain, snow, lightning, storm), embers, spore clouds, frost crusts, storm rods and the sea pump (WP12)',
+  'weather (rain, snow, storm clouds), embers, frost crusts, storm rods and the sea pump (WP12)',
   'the Versus team pennants on the masts and the far-ship porthole (WP11)',
   'the sky-dock "NEW: part" call-out',
   'the darkness overlay (the lights do it in 3D)',
@@ -149,6 +152,14 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // ---- ship models and the crew aboard ---------------------------------------------------------------------------------------------------------------------------------
   const models = new Map(); // ship id -> { model, ver }
   V.models = models;
+  // WP10: the searchlight beams (a pass of their own that reads the scene's depth), the light pools where they land and the lit-target rim (beams.js). If it cannot be made the old cones stay.
+  let beams = null;
+  try { beams = createBeams({ scene, post, world, state, models }); } catch (e) { console.warn('view3d beams off', e); look.beam = false; }
+  V.beams = beams;
+  // WP10: the lightning (the stepped flash and the jagged bolt: lightning.js reads the weather the game keeps)
+  let lightning = null;
+  try { lightning = createLightning({ scene, post, world, state }); } catch (e) { console.warn('view3d lightning off', e); }
+  V.lightning = lightning;
   // WP7 (crew v2): every crewman, raider, parachute, hookshot rope and heart in ONE mesh (crew.js); the layer is fed once a frame from syncShips
   const crew = createCrewLayer(worldRoot);
   V.crew = crew;
@@ -173,6 +184,10 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // WP6: the damage state of every part (soot, dents, poses, smoke, scorch memory, breaches, the flat bag), on top of the poses shipMesh sets each frame
   const partDamage = createPartDamage({ state, models, vfx });
   V.destruction = destruction; V.damage = damage; V.partDamage = partDamage;
+  // WP10: the Fungal Depths' glowing mushrooms, vine bulbs, motes and spore clouds (fungal.js; it listens to the rock's chunks, so it is made after the wreckage world took that slot)
+  let fungal = null;
+  try { fungal = createFungal({ parent: worldRoot, state, world, terrain }); } catch (e) { console.warn('view3d fungal off', e); }
+  V.fungal = fungal;
   // The wreckage's smoke and sparks go through WP4's particles when they are there (both use 3D world coordinates, y up); otherwise destruction.js keeps its own puffs.
   if (vfx && vfx.P) {
     const P = vfx.P;
@@ -237,7 +252,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       model.setView(side);
       model.flameFallback = !(vfx && look.vfx); // (the particle fires do the flames; the old cones only when the particles are off)
       capLamps(model);
-      model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai, sweep: !!S.sweep, spotShadow: tier.spotShadow && world.night > 0.5 && index === 0 });
+      model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai, sweep: !!S.sweep, spotShadow: tier.spotShadow && world.night > 0.5 && index === 0, tier: tier.name });
       // crew aboard, raiders aboard (WP7: crew.js draws all of them in ONE mesh; the layer is begun / ended once a frame, below)
       const crewList = Object.values(state.players).filter((p) => !p.enemy && !p.hj && p.connected !== false && !p.fly && shipOf(state, p) === sh && !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying)));
       const raiders = sh.ctx && sh.ctx.boarders ? sh.ctx.boarders : state.boarders || [];
@@ -378,6 +393,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     terrain.setEnv(env);
     syncTod(dt);
     const cam = syncCamera(view, w, h);
+    if (beams) { try { beams.updateLit(camera, state, world.night); } catch (e) { logOnce('lit', e); } } // (which targets a manned beam holds: the toon shader gives them a warm rim)
     try { destruction.process(); } catch (e) { logOnce('destruction', e); } // (the break-off notes are read BEFORE syncShips rebuilds a ship from her new layout)
     syncShips(t, dt);
     try { damage.update(world.night); } catch (e) { logOnce('damage', e); }
@@ -401,10 +417,13 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     terrain.update(map, camTarget.x, -camTarget.y);
     const seaY = env === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : NaN;
     world.update(camera, camTarget, { w: cam.visW, h: cam.visH }, t, seaY, map);
+    if (fungal) { try { fungal.update({ t, camTarget, vis: { w: cam.visW, h: cam.visH } }); } catch (e) { logOnce('fungal', e); } }
     if (V.frames === 40) destruction.warm(); // (the wreckage engine loads in the background, long before anything breaks)
     destruction.setSea(seaY);
     try { destruction.update(dt); } catch (e) { logOnce('wreckage', e); }
     syncLights();
+    if (beams) { try { beams.update({ t, dt, night: world.night, tier, env, cave: world.cave, sea: seaNow, camera }); } catch (e) { logOnce('beams', e); } } // (after the ships are placed: the lamps' world positions)
+    if (lightning) { try { lightning.update({ cam, target: camTarget }); } catch (e) { logOnce('lightning', e); } }
     const j1 = performance.now();
     const rig = world.lights.rig, usePost = !!(look.post && post.enabled);
     renderer.toneMappingExposure = world.lights.exposure;
@@ -431,7 +450,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     return { calls: i.render.calls, tris: i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs, crew: crew.stats() };
   };
   V.setTod = (name) => { S.tod = name || ''; };
-  V.dispose = () => { try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));
