@@ -1,14 +1,14 @@
 // The map's rock in 3D: the same marching-squares outline the 2D game draws (courseArt.js, without its wobble), extruded into a slab. The camera sees the slab's
 // front face with the tunnels as holes through it, and the tunnel floors and walls running back in perspective. Chunks of 12x12 squares are built as the ship
 // comes near and dropped when she has gone by. Fixed to the world: nothing moves except by being built or removed.
-import { THREE, PAL, INK, gradientMap, look } from './style.js';
+import { THREE, PAL, INK, gradientMap, look, rimify } from './style.js';
 
 const CH = 12; // squares per chunk side
 export const Z_FRONT_CAVE = 330, Z_BACK = -420; // caves: the rock slab stands in FRONT of the ship (tunnels are holes through it); the cave picture stands at the back (world.js)
 export const Z_FRONT_OPEN = -70; // open sky: the rock stands just behind the ships and creatures, so nothing is ever hidden behind a cliff
 
-const rockToon = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap, side: THREE.DoubleSide });
-const rockPlain = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+const rockToon = rimify(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap, side: THREE.DoubleSide }));
+const rockPlain = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
 const inkMat = new THREE.MeshBasicMaterial({ color: INK, side: THREE.DoubleSide });
 
 const mixHex = (a, b, t) => new THREE.Color(a).lerp(new THREE.Color(b), t);
@@ -108,9 +108,9 @@ function buildChunk(map, ci, cj) {
   const mesh = new THREE.Mesh(g, look.toon ? rockToon : rockPlain);
   mesh.userData.toon = rockToon;
   mesh.userData.plain = rockPlain;
-  mesh.userData.shadowCaster = true;
+  mesh.userData.shadowCaster = !map.open; // (open sky: the rock stands behind the ships and its shadow pass cost most of the frame's triangles; only a cave's rock, which stands in front, shades the ship)
   mesh.userData.shadowReceiver = true;
-  mesh.castShadow = look.shadows;
+  mesh.castShadow = look.shadows && !map.open;
   mesh.receiveShadow = look.shadows;
   grp.add(mesh);
   if (ink.length) {
@@ -130,7 +130,7 @@ export function createTerrain(parent) {
   const chunks = new Map();
   let mapRef = null;
   const clear = () => {
-    for (const c of chunks.values()) { group.remove(c.grp); c.grp.traverse((o) => o.geometry && o.geometry.dispose()); }
+    for (const c of chunks.values()) if (c.grp) { group.remove(c.grp); c.grp.traverse((o) => o.geometry && o.geometry.dispose()); } // (an empty chunk has no group)
     chunks.clear();
   };
   return {

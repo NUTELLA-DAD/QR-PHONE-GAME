@@ -1,3 +1,4 @@
+// LOCAL EDIT (Airship): the texture2D(..., -100.0) mip bias in FxaaTexTop / FxaaTexOff is removed (the render targets have no mipmaps, and Windows/D3D logs a warning for the out-of-range bias).
 import {
 	Vector2
 } from 'three';
@@ -90,8 +91,8 @@ const FXAAShader = {
 		#endif
 
 		/*--------------------------------------------------------------------------*/
-		#define FxaaTexTop(t, p) texture2D(t, p, -100.0)
-		#define FxaaTexOff(t, p, o, r) texture2D(t, p + (o * r), -100.0)
+		#define FxaaTexTop(t, p) texture2D(t, p)
+		#define FxaaTexOff(t, p, o, r) texture2D(t, p + (o * r))
 		/*--------------------------------------------------------------------------*/
 
 		#define NUM_SAMPLES 5

@@ -15,7 +15,56 @@ export const INK = config.INK;
 export { THREE };
 
 // What the toggles say right now (main.js changes these and calls applyLook).
-export const look = { toon: true, outlines: true, shadows: true, low: false }; // low = the Detail: low setting (small things lose their ink shells)
+// low = the Detail: low setting (small things lose their ink shells). The rest are the WP1 look kill-switches (quality.js reads ?look=nobloom,nofog... into them; the dev page has buttons):
+// bloom, lut (the colour grade), grain (paper grain + vignette), fog, rim (the thin warm edge light), lanterns (the lamps' real point lights), post (false = no composer at all).
+export const look = { toon: true, outlines: true, shadows: true, low: false, bloom: true, lut: true, grain: true, fog: true, rim: true, lanterns: true, post: true };
+
+// Shared shader numbers (one object, read by every patched material, so changing them needs no recompile): the toon rim light, and what the painted backdrops need to survive tone mapping.
+export const fx = {
+  uRimColor: { value: new THREE.Color('#ffd9a8') }, uRimAmt: { value: 0.16 }, uRimEdge: { value: 0.72 }, uRimDir: { value: new THREE.Vector3(-0.43, 0.66, 0.59) },
+  uUntone: { value: 0 }, uExposure: { value: 1 }, // (post.js sets uUntone to 1 while the composer tone-maps the picture: the unlit painted planes then undo it so they stay exactly as painted)
+};
+
+// The THIN WARM RIM: one hard step where the surface turns edge-on to the viewer (dot(N, V) small), on the side the key light comes from. Added to a MeshToonMaterial by a small compile patch.
+const RIM_FRAG = `
+  uniform vec3 uRimColor; uniform float uRimAmt; uniform float uRimEdge; uniform vec3 uRimDir;
+`;
+const RIM_BODY = `
+  {
+    vec3 rimN = normalize( normal );
+    float rimFacing = 1.0 - saturate( dot( rimN, normalize( vViewPosition ) ) );
+    float rimSide = smoothstep( 0.05, 0.6, dot( rimN, uRimDir ) );
+    outgoingLight += uRimColor * ( uRimAmt * step( uRimEdge, rimFacing ) * rimSide );
+  }
+  #include <opaque_fragment>
+`;
+export function rimify(material) {
+  material.onBeforeCompile = (sh) => {
+    sh.uniforms.uRimColor = fx.uRimColor; sh.uniforms.uRimAmt = fx.uRimAmt; sh.uniforms.uRimEdge = fx.uRimEdge; sh.uniforms.uRimDir = fx.uRimDir;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + RIM_FRAG).replace('#include <opaque_fragment>', RIM_BODY);
+  };
+  material.customProgramCacheKey = () => 'toon-rim';
+  return material;
+}
+
+// Unlit painted planes (sky, backdrop strips): the composer tone-maps everything, so these pre-compensate for the exposure and for Neutral tone mapping's small black offset
+// (the highlights above 0.76 roll off a little; the painted pictures keep their own colours). Used while fx.uUntone = 1.
+export function paintedPlane(material) {
+  material.toneMapped = false;
+  material.fog = false;
+  material.onBeforeCompile = (sh) => {
+    sh.uniforms.uUntone = fx.uUntone; sh.uniforms.uExposure = fx.uExposure;
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uUntone; uniform float uExposure;\nvec3 untoneNeutral( vec3 c ) { float x = min( c.r, min( c.g, c.b ) ); float xp = x >= 0.04 ? x + 0.04 : ( 1.0 - sqrt( max( 0.0, 1.0 - 25.0 * x ) ) ) / 12.5; return ( c + ( xp - x ) ) / max( uExposure, 0.0001 ); }')
+      .replace('#include <opaque_fragment>', 'outgoingLight = mix( outgoingLight, untoneNeutral( outgoingLight ), uUntone );\n#include <opaque_fragment>');
+  };
+  material.customProgramCacheKey = () => 'painted-plane';
+  return material;
+}
+
+// A bright unlit colour that crosses the bloom threshold (HDR: more than 1 is fine, the picture is floating point until the tone mapping). k ~ 3 for lamps, 2.5 for fire.
+export const glow = (hex, k = 3) => new THREE.Color(hex).multiplyScalar(k);
+export function glowMat(hex, k = 3, extra = {}) { const m = new THREE.MeshBasicMaterial({ ...extra }); m.color.copy(glow(hex, k)); m.userData.glow = k; return m; }
 
 // ---- materials ---------------------------------------------------------------------------------------------------------------------------------
 function makeGradient(steps) {
@@ -29,8 +78,8 @@ function makeGradient(steps) {
 }
 export const gradientMap = makeGradient(3);
 
-export const toonVC = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap });
-export const plainVC = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
+export const toonVC = rimify(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap }));
+export const plainVC = new THREE.MeshLambertMaterial({ vertexColors: true }); // (the dev page's "Plain lit" comparison only: no PBR Standard material anywhere)
 toonVC.name = 'toonVC';
 plainVC.name = 'plainVC';
 
@@ -46,8 +95,8 @@ outlineMat.customProgramCacheKey = () => 'ink-outline';
 // A toon / plain pair for a single flat colour (used by animated bits that are not vertex coloured).
 export function pairFor(color, extra = {}) {
   return {
-    toon: new THREE.MeshToonMaterial({ color, gradientMap, ...extra }),
-    plain: new THREE.MeshStandardMaterial({ color, roughness: 0.92, metalness: 0, ...extra }),
+    toon: rimify(new THREE.MeshToonMaterial({ color, gradientMap, ...extra })),
+    plain: new THREE.MeshLambertMaterial({ color, ...extra }),
   };
 }
 

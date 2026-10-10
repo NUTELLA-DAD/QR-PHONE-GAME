@@ -16,7 +16,7 @@ const S = {
   build: opt('build', 'classic'), env: opt('env', ''), map: opt('map', ''), creature: opt('creature', ''), bots: Number(opt('bots', 6)), tod: opt('tod', 'day'),
   sweep: opt('sweep', '1') !== '0', toon: opt('toon', '1') !== '0', shadows: opt('shadows', '1') !== '0', detail: opt('detail', 'high'), orbit: opt('orbit', '0') === '1', view2d: opt('v2d', 'off'),
   seed: Q.has('seed') ? Number(Q.get('seed')) : null, zoom: Number(opt('zoom', 1)) || 1, warm: Number(opt('warm', 0)), shot: opt('shot', '0') === '1', follow: opt('follow', ''),
-  allowOrbit: true, lift: 0,
+  allowOrbit: true, lift: 0, tier: opt('tier', ''), gpuTimer: opt('gputimer', '0') === '1', // (tier '' = from Detail; ?look=nobloom,nofog is read by the view itself)
 };
 if (!S.map) S.map = S.tod === 'night' ? 'network' : 'open';
 if (S.creature && !S.env) S.env = 'sea';
@@ -37,7 +37,7 @@ const updateFallbackList = () => {
 };
 const view = createView3D({ canvas, state, settings: S, onModels: () => updateFallbackList() });
 const { renderer, scene, camera, world, models, kraken, terrain } = view;
-look.toon = S.toon; look.shadows = S.shadows;
+look.toon = S.toon; look.shadows = S.shadows && look.shadows; // (?look=noshadows in the address already turned it off)
 renderer.shadowMap.enabled = look.shadows;
 let simTime = 0;
 
@@ -59,6 +59,8 @@ function buildUI() {
   <label>Creature (restarts)</label><select id="u-cr">${opts([['', 'none'], ['kraken', 'Kraken']], S.creature)}</select>
   <label>Light</label><select id="u-tod">${opts([['day', 'Day'], ['dusk', 'Dusk'], ['night', 'Night (cave)'], ['', 'Auto (from the game)']], S.tod)}</select>
   <div class="row"><button id="b-toon"></button><button id="b-shadow"></button></div>
+  <label>Quality tier (look pass)</label><select id="u-tier">${opts([['', 'from Detail'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], S.tier)}</select>
+  <div class="row" id="look-row">${['bloom', 'lut', 'grain', 'fog', 'rim', 'lanterns', 'post'].map((k) => `<button data-look="${k}"></button>`).join('')}</div>
   <div class="row"><button id="b-detail"></button><button id="b-orbit"></button></div>
   <div class="row"><button id="b-sweep"></button></div>
   <div class="row"><button id="b-2d"></button><button id="b-skip">+30 s</button></div>
@@ -75,6 +77,8 @@ function buildUI() {
   const sync = () => {
     $('b-toon').textContent = look.toon ? 'Look: Toon + ink' : 'Look: Plain lit'; $('b-toon').classList.toggle('on', look.toon);
     $('b-shadow').textContent = 'Shadows: ' + (look.shadows ? 'on' : 'off'); $('b-shadow').classList.toggle('on', look.shadows);
+    const NAMES = { bloom: 'Bloom', lut: 'Grade', grain: 'Grain+vignette', fog: 'Fog', rim: 'Rim light', lanterns: 'Lantern lights', post: 'Post (all)' };
+    p.querySelectorAll('[data-look]').forEach((b) => { const k = b.dataset.look; b.textContent = NAMES[k] + ': ' + (look[k] ? 'on' : 'off'); b.classList.toggle('on', !!look[k]); });
     $('b-detail').textContent = 'Detail: ' + S.detail;
     $('b-sweep').textContent = S.sweep ? 'Idle lamps sweep (demo)' : 'Lamps: as the game has them'; $('b-sweep').classList.toggle('on', S.sweep);
     $('b-orbit').textContent = 'Orbit: ' + (S.orbit ? 'on (drag)' : 'off'); $('b-orbit').classList.toggle('on', S.orbit);
@@ -82,6 +86,8 @@ function buildUI() {
   };
   $('b-toon').onclick = () => { look.toon = !look.toon; applyLook(scene); world.setLook(); sync(); };
   $('b-shadow').onclick = () => { look.shadows = !look.shadows; renderer.shadowMap.enabled = look.shadows; applyLook(scene); world.setLook(); scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; }); sync(); };
+  $('u-tier').onchange = (e) => { S.tier = e.target.value; sync(); };
+  p.querySelectorAll('[data-look]').forEach((b) => { b.onclick = () => { look[b.dataset.look] = !look[b.dataset.look]; sync(); }; });
   $('b-detail').onclick = () => { S.detail = S.detail === 'high' ? 'low' : 'high'; sync(); };
   $('b-orbit').onclick = () => { S.orbit = !S.orbit; sync(); };
   $('b-2d').onclick = async () => { S.view2d = S.view2d === 'off' ? 'split' : S.view2d === 'split' ? 'only' : 'off'; await apply2d(); sync(); };
@@ -135,8 +141,9 @@ function frame(now) {
   if (now - fpsT > 1000) {
     const fps = (fpsN * 1000) / (now - fpsT);
     const st = view.stats();
-    $('hud').textContent = `${fps.toFixed(0)} fps  |  frame ${(1000 / Math.max(1, fps)).toFixed(1)} ms  (worst ${worst.toFixed(0)})\nupdate ${st.jsMs.toFixed(1)} ms  render-call ${st.renderMs.toFixed(1)} ms\n${st.calls} draw calls  ${(st.tris / 1000).toFixed(0)}k tris  ${st.w}x${st.h}`;
-    window.__stats = { fps, worst, update: st.jsMs, render: st.renderMs, calls: st.calls, tris: st.tris };
+    const gpuTxt = st.gpu && Object.keys(st.gpu).length ? '\ngpu ms ' + Object.entries(st.gpu).map(([k, v]) => k + ' ' + v.toFixed(2)).join('  ') : '';
+    $('hud').textContent = `${fps.toFixed(0)} fps  |  frame ${(1000 / Math.max(1, fps)).toFixed(1)} ms  (worst ${worst.toFixed(0)})\nupdate ${st.jsMs.toFixed(1)} ms  render-call ${st.renderMs.toFixed(1)} ms\n${st.sceneCalls}+${st.calls - st.sceneCalls} draw calls (scene + post)  ${(st.sceneTris / 1000).toFixed(0)}k tris  ${st.w}x${st.h}  ${st.tier}${gpuTxt}`;
+    window.__stats = { fps, worst, update: st.jsMs, render: st.renderMs, calls: st.calls, tris: st.tris, sceneCalls: st.sceneCalls, sceneTris: st.sceneTris, gpu: st.gpu, tier: st.tier };
     fpsN = 0; fpsT = now; worst = 0;
   }
   if (firstFrame) { firstFrame = false; window.__ready3d = true; }

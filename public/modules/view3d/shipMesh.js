@@ -4,7 +4,7 @@
 // (about 18% of the ship's length), the rooms are a cut-away: the hull's wall that faces the viewer is hidden each frame (model.setView) so you can see the
 // crew and fittings, and the far wall carries the room colours. Pitch is a rotation of `pitchG` about the ship's tilt pivot; the facing (and COME ABOUT) is a
 // yaw of `root`. Anything the generator has no 3D version of yet is drawn as a plain box and listed in model.fallbacks.
-import { THREE, Batch, G, mat, PAL, INK, look, applyLook } from './style.js';
+import { THREE, Batch, G, mat, PAL, INK, look, applyLook, glow, glowMat } from './style.js';
 import { hullGeom, rowOf, isNestRow, KEEL_ROWS } from '../host/shipBuild.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -54,8 +54,10 @@ function beamGeo(len, half, color, a0) {
   return g;
 }
 const beamMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
-const lampMat = new THREE.MeshBasicMaterial({ color: '#ffe9b0' });
-const flameMats = { out: new THREE.MeshBasicMaterial({ color: '#ff5a24' }), inn: new THREE.MeshBasicMaterial({ color: '#ffe680' }), ink: new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }) };
+// Emissive things are HDR colours (style.js glow: brighter than 1) so they cross the bloom threshold and the post pass makes them glow; nothing else does.
+const GLOW = { lamp: glow('#ffe9b0', 3.4), lampOff: new THREE.Color('#b9a67a'), lens: glow('#fffbe0', 2.8), lensOff: new THREE.Color('#b9b09a'), boiler: glow('#ff9a4a', 3.4), boilerLow: glow('#d9531a', 3.2) };
+const lampMat = glowMat('#ffe9b0', 3.4);
+const flameMats = { out: glowMat('#ff5a24', 4.4), inn: glowMat('#ffe680', 2.4), ink: new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }) };
 
 const GUN_LOOK = {
   long: { len: 118, r: 6.5 }, mortar: { len: 44, r: 15 }, scatter: { len: 70, r: 11 }, flak: { len: 78, r: 8 },
@@ -400,7 +402,7 @@ export function buildShipModel(layout, opts = {}) {
       tiltG.rotation.y = 0.46;
       pivot.add(tiltG);
       tiltG.add(lamp.build());
-      const lens = new THREE.Mesh(new THREE.CircleGeometry(19, 16), new THREE.MeshBasicMaterial({ color: '#fffbe0' }));
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(19, 16), glowMat('#fffbe0', 2.8));
       lens.rotation.y = Math.PI / 2;
       lens.position.set(ll + 0.5, 0, 0);
       tiltG.add(lens);
@@ -559,7 +561,7 @@ export function buildShipModel(layout, opts = {}) {
       dyn.lanterns.push([X(x), Y(y), -W + 40]);
     }
     for (const g of glowSpots) {
-      const m = new THREE.Mesh(new THREE.CircleGeometry(20, 14), new THREE.MeshBasicMaterial({ color: '#ff8a3a', side: THREE.DoubleSide }));
+      const m = new THREE.Mesh(new THREE.CircleGeometry(20, 14), glowMat('#ff8a3a', 3.4, { side: THREE.DoubleSide }));
       m.position.set(g[0], g[1], g[2]);
       if (g[3] < 0) m.rotation.y = Math.PI;
       content.add(m);
@@ -644,13 +646,14 @@ export function buildShipModel(layout, opts = {}) {
         lp.outer.visible = lp.inner.visible = on;
         lp.outer.scale.x = lp.inner.scale.x = reach / lp.reach;
         lp.target.position.x = reach;
-        lp.lens.material.color.set(on ? '#fffbe0' : '#b9b09a');
+        lp.lens.material.color.copy(on ? GLOW.lens : GLOW.lensOff);
       });
       const lampOn = night > 0.12 ? 1 : 0;
       for (const pl of lights.points) pl.intensity = lampOn * 5 * night;
       const press = st.ship ? clamp((Number.isFinite(st.ship.press) ? st.ship.press : 60) / 100, 0.2, 1) : 0.6;
       for (const pl of lights.boiler) pl.intensity = (0.8 + 5 * night) * press;
-      for (const m of dyn.boilerGlow) m.material.color.set(press > 0.5 ? '#ff9a4a' : '#d9531a');
+      for (const m of dyn.boilerGlow) m.material.color.copy(press > 0.5 ? GLOW.boiler : GLOW.boilerLow);
+      lampMat.color.copy(lampOn ? GLOW.lamp : GLOW.lampOff); // (the lanterns are lit when it is dark)
       const speed = st.ship && Number.isFinite(st.ship.speed) ? clamp(st.ship.speed, 0, 1.2) : 0.3;
       const live = st.engines || [];
       for (const e of dyn.engines) {
