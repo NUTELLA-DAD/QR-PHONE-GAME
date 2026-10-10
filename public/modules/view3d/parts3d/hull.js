@@ -114,14 +114,14 @@ function loft(b, ctx, poly, o) {
     if (F.length > 6) band(0.88, 0.935, 2.4, shade(rgbOf(T.iron), 1.1), 'iron', 1.15, 1.2); // chine rivet band
 
     // the inner lining: the far wall's face, darker toward the ceiling (baked occlusion)
-    const lin = new Soup(), inEnd = o.inEnd == null ? xmax : o.inEnd;
+    const lin = new Soup();
     const LF = hMid < 120 ? [0, 0.5, 0.9] : [0, 0.3, 0.9];
     for (let i = 0; i + 1 < LF.length; i++) {
       const f0 = LF[i], f1 = LF[i + 1];
       const ao = (f) => 0.72 + 0.28 * smooth(0, 0.3, f);
       for (let k = 0; k + 1 < stations.length; k++) {
         const xp = stations[k], xq = stations[k + 1];
-        if (xq > inEnd || xp < xmin + 1) continue;
+        if (xp < xmin + 1) continue;
         const P = [pos(xp, f0, s, th), pos(xq, f0, s, th), pos(xq, f1, s, th), pos(xp, f1, s, th)];
         const n = [0, 0, -s], c0 = shade(inRgb, ao(f0)), c1 = shade(inRgb, ao(f1));
         const ua = 40 + (xp - xmin) / 0.9, ub = 40 + (xq - xmin) / 0.9;
@@ -133,7 +133,7 @@ function loft(b, ctx, poly, o) {
     const capS = new Soup();
     for (let k = 0; k + 1 < stations.length; k++) {
       const xp = stations[k], xq = stations[k + 1];
-      if (xq > inEnd || xp < xmin + 1) continue;
+      if (xp < xmin + 1) continue;
       const P = [pos(xp, 0, s), pos(xq, 0, s), pos(xq, 0, s, th), pos(xp, 0, s, th)], n = [0, 1, 0], c = shade(hullRgb, 0.86);
       capS.quad(P, [n, n, n, n], [c, c, c, c], [uvAt('woodC', 10, 4), uvAt('woodC', 60, 4), uvAt('woodC', 60, 20), uvAt('woodC', 10, 20)], n);
     }
@@ -177,7 +177,7 @@ function loft(b, ctx, poly, o) {
     sp.flush(b, caps ? 3 : 0);
   };
   const e0 = ext(xmin + 0.5), e1 = ext(xmax - 0.5);
-  if (o.caps !== false && e0[1] - e0[0] > 8) plate(xmin, -1, 0, shade(hullRgb, 0.9), 'woodB', true);
+  if (o.caps !== false && e0[1] - e0[0] > 8) { plate(xmin, -1, 0, shade(hullRgb, 0.9), 'woodB', true); plate(xmin + 0.6, 1, 0, inRgb, 'woodC', false); } // (the stern transom, and its inside: a single-sided plate seen from within would show only its ink)
   if (o.inPlates !== false) {
     if (e0[1] - e0[0] > 8) plate(xmin + th, 1, th, inRgb, 'woodC', false);
     if (o.inEnd != null && e1[1] - e1[0] > 8) plate(o.inEnd, -1, th, inRgb, 'woodC', false);

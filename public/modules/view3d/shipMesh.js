@@ -44,7 +44,12 @@ export function buildShipModel(layout, opts = {}) {
   // ---- every part, from the registry ---------------------------------------------------------------------------------------------------------------------------------
   let built = { entries: [], parts: new Map(), dyn: [] };
   try { built = buildParts(L, ctx); } catch (e) { fallbacks.push('parts failed: ' + (e && e.message)); console.warn('ship3d parts', e); }
-  const asm = assemble(built.entries, ctx.mats);
+  let asm;
+  try { asm = assemble(built.entries, ctx.mats); } catch (e) { // (never throw from drawing code: a ship with no static mesh is better than a frozen TV)
+    fallbacks.push('assemble failed: ' + (e && e.message));
+    console.warn('ship3d assemble', e);
+    asm = { group: new THREE.Group(), ranges: {}, layers: {}, tris: 0, geometry: null, mesh: null, mats: ctx.mats, setSide() {}, extract: () => new THREE.Group() };
+  }
   content.add(asm.group);
   for (const d of built.dyn) {
     switch (d.role) {
@@ -125,7 +130,8 @@ export function buildShipModel(layout, opts = {}) {
     // Hide the hull wall that faces the viewer: camSide > 0 when the camera is on the ship's local +Z side.
     setView(camSide) { asm.setSide(camSide); },
     // c: { t, ship (handle), world, night (0..1), lamps (the beams shine) }
-    update(c) {
+    update(c) { try { this.step(c); } catch (e) { const m = String((e && e.message) || e); if (m !== model.lastErr) { model.lastErr = m; console.warn('ship3d update', e); } } }, // (never throw from drawing code)
+    step(c) {
       const sh = c.ship, st = (sh && sh.ctx) || c.world, t = c.t, night = c.night || 0;
       const dt = lastT == null ? 0 : clamp(t - lastT, 0, 0.1);
       lastT = t;
