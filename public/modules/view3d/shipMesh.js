@@ -188,7 +188,7 @@ export function buildShipModel(layout, opts = {}) {
       const liveCannon = st.cannons || {};
       for (const cn of dyn.cannons) { const r = liveCannon[cn.name]; cn.pivot.rotation.z = -(r && Number.isFinite(r.aim) ? r.aim : cn.home); cn.inner.position.x = -(r && Number.isFinite(r.recoil) ? r.recoil : 0) * 22; }
       if (dyn.rudder) { const turn = sh && sh.pose && sh.pose.turn > 0 && sh.pose.turn < 1; dyn.rudder.rotation.y = turn ? 0.5 : 0; } // (hard over while she comes about)
-      const fires = st.fires || [];
+      const fires = model.flameFallback ? st.fires || [] : []; // (WP4: vfx.js draws the flames as particles; these three-tongue cones are only the fallback when the particles are off)
       while (flamePool.length < fires.length) { const f = makeFlame(); content.add(f); flamePool.push(f); }
       flamePool.forEach((f, i) => {
         const fr = fires[i], q = fr && P[fr.d];
