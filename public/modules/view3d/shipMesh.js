@@ -12,6 +12,7 @@ import { assemble, makeTrimMaterials, inkOn } from './parts3d/kit.js';
 import { makeShipContext, buildParts, THEMES } from './parts3d/registry.js';
 import { GLOW as WGLOW } from './parts3d/weapons.js';
 import { buildEnemyDecor } from './parts3d/enemyDecor.js';
+import { createStationMats } from './stationMats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { config } from '../../config.js';
 
@@ -121,7 +122,7 @@ export function buildShipModel(layout, opts = {}) {
   }
   if (ctx.glowSpots.length) {
     const gm = glowMat('#ff8a3a', 3.4, { side: THREE.DoubleSide });
-    const gs = ctx.glowSpots.map((g) => { const c = new THREE.CircleGeometry(20, 14); c.applyMatrix4(new THREE.Matrix4().compose(V(g[0], g[1], g[2]), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, g[3] < 0 ? Math.PI : 0, 0)), V(1, 1, 1))); return c; });
+    const gs = ctx.glowSpots.map((g) => { const c = new THREE.CircleGeometry(20, 14); c.applyMatrix4(new THREE.Matrix4().compose(V(g[0], g[1], g[2]), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, g[3] < 0 ? Math.PI : 0, 0)), V(g[4] || 1, g[4] || 1, 1))); return c; }); // (g[4]: a size factor: A5's coal-bunker embers are a smaller glow than the boiler's door)
     const m = new THREE.Mesh(mergeGeometries(gs, false), gm);
     content.add(m);
     for (const g of gs) g.dispose();
@@ -131,6 +132,10 @@ export function buildShipModel(layout, opts = {}) {
     content.add(bl);
     lights.boiler.push(bl);
   }
+
+  // A5: the painted mats under the stations (one instanced mesh; the enemy gunship has none)
+  let stationMats = null;
+  if (!opts.enemy) { try { stationMats = createStationMats(ctx, content); } catch (e) { fallbacks.push('station mats failed: ' + (e && e.message)); console.warn('ship3d station mats', e); } }
 
   // count what we made (the unique geometry: the ink shells share it)
   let tris = 0;
@@ -159,7 +164,7 @@ export function buildShipModel(layout, opts = {}) {
   let lastT = null;
   // ---- the per-frame update ---------------------------------------------------------------------------------------------------------------------------
   const model = {
-    root, pitchG, content, W, pv, X, Y, tris, fallbacks, layout: L, lights, dyn, enemy: !!opts.enemy, theme: T, ctx, crewLane: ctx.crewLane,
+    root, pitchG, content, W, pv, X, Y, tris, fallbacks, layout: L, lights, dyn, enemy: !!opts.enemy, theme: T, ctx, crewLane: ctx.crewLane, stationMats,
     // WP5: the parts, by id. parts.get(key) = { key, kind, name, deck, x, x0, x1, dyn: [...], bounds }; ranges[key] = [{ layer, start, count }] into the one merged geometry.
     parts: built.parts, ranges: asm.ranges, assembled: asm,
     extractPart: (key) => asm.extract(key),
@@ -174,6 +179,7 @@ export function buildShipModel(layout, opts = {}) {
       lastT = t;
       inkOn.value = look.toon && look.outlines ? 1 : 0; // (the ink is part of each mesh now: the look's outline switch is a uniform)
       for (const lc of dyn.liftCages) lc.node.position.z = (asm.side || 1) * lc.lane; // (the lift stands on the camera's side, like the ladders)
+      if (stationMats) stationMats.update({ side: asm.side || 1, jobs: c.jobs, night }); // (A5: the mats under the stations: brighter where a human's arrow points)
       dyn.bags.forEach((bg) => {
         const bs = st.bags && st.bags[bg.i];
         const gas = bs ? bs.gas : st.ship ? st.ship.gas : 50;

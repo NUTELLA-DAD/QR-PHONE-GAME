@@ -269,9 +269,12 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       model.setView(side, pose.turn > CB[0] && pose.turn < CB[1]); // (A1: in the middle of a COME ABOUT the ship is end-on: show both hull walls, so she is a closed box and no black hole opens)
       model.flameFallback = !(vfx && look.vfx); // (the particle fires do the flames; the old cones only when the particles are off)
       capLamps(model);
-      model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai, sweep: !!S.sweep, spotShadow: tier.spotShadow && world.night > 0.5 && index === 0, tier: tier.name });
       // crew aboard, raiders aboard (WP7: crew.js draws all of them in ONE mesh; the layer is begun / ended once a frame, below)
       const crewList = Object.values(state.players).filter((p) => !p.enemy && !p.hj && p.connected !== false && !p.fly && shipOf(state, p) === sh && !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying)));
+      // A5: where the humans' phone arrows point (the idle ones with a job: the same test as the 2D chevron), so the station mat there is brighter (view only)
+      const IDLE = (config.JOBS && config.JOBS.IDLE_AFTER) || 0, jobs = [];
+      for (const p of crewList) { const jb = p.job; if (jb && jb.dir && !p.bot && (p.freeT || 0) >= IDLE && jb.job && Number.isFinite(jb.job.x) && jb.job.d != null) jobs.push({ d: jb.job.d, x: jb.job.x }); }
+      model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai, sweep: !!S.sweep, spotShadow: tier.spotShadow && world.night > 0.5 && index === 0, tier: tier.name, jobs });
       const raiders = sh.ctx && sh.ctx.boarders ? sh.ctx.boarders : state.boarders || [];
       for (const p of crewList) crew.placeAboard(p.id, p, model, { teamColor: teamColorOf(p, sh) });
       raiders.forEach((r, i) => crew.placeAboard('r' + sh.id + (r.id || i), { ...r, id: 'r' + (r.id || i) }, model));
@@ -421,6 +424,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     syncTod(dt);
     const cam = syncCamera(view, w, h, dt);
     setInkFor(cam.D, cam.visH); // (A1: ONE number a frame makes every outline screen-constant: style.js)
+    crew.setView(cam.D); // (A5: the crew's heads and markers grow with the camera's distance)
     if (beams) { try { beams.updateLit(camera, state, world.night); } catch (e) { logOnce('lit', e); } } // (which targets a manned beam holds: the toon shader gives them a warm rim)
     try { destruction.process(); } catch (e) { logOnce('destruction', e); } // (the break-off notes are read BEFORE syncShips rebuilds a ship from her new layout)
     syncShips(t, dt);

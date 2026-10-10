@@ -2,8 +2,14 @@
 // (ladders, ropes, stairs, the lift cage, slide poles), steam pipes with their valves, racks, extinguishers, vents, the medical bay and the escort hooks. Moved from the old shipMesh.js with textures,
 // brass and iron trims and a few more details; every function returns { key, batches, dyn, bounds } (registry.js).
 import { THREE } from '../style.js';
+import { config } from '../../../config.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
+// A5: every station kind carries ONE saturated accent (LOOK3D.STATIONS.ACCENT, the 2D game's own colours: brass, cream dials, green valve wheels, blue-grey pipes, red crosses and needles, an ember glow). Accents are
+// flat ('plain' trim: no texture darkening) so they stay saturated against the brown timber.
+const ACC_DEFAULT = { brass: '#deaa32', cream: '#f4e9c6', red: '#d44a3a', green: '#4fb06a', pipe: '#8eaabd', ember: '#ff8a2c', dark: '#3a3438', paper: '#f1e5bd', sea: '#7eb3d2', land: '#8cba76', steel: '#9fb2c0' };
+export const accents = () => ({ ...ACC_DEFAULT, ...(((config.LOOK3D || {}).STATIONS || {}).ACCENT || {}) });
+const PL = { tr: 'plain' };
 
 // (fix_ship) Things hung on the FAR wall (pipes, racks, extinguishers, vents, valves, the sick bay) are written with the far wall at -z; farSides builds each piece twice, as given in the 'neg' layer and mirrored
 // in z in the 'pos' layer, so the copy on the far side of the ship (whichever way she faces) is the one that shows, and nothing hangs on the near wall in front of the crew.
@@ -20,7 +26,7 @@ function farSides(b) {
 }
 
 export function buildStation(s, ctx) {
-  const { T, W, X, Y, P, FZ } = ctx;
+  const { T, W, X, Y, P, FZ } = ctx, A = accents();
   const key = 'station:' + s.n, b = ctx.part(key), dyn = [];
   const q = P[s.d];
   if (!q) return { key, batches: [b], dyn, bounds: null };
@@ -35,47 +41,64 @@ export function buildStation(s, ctx) {
     b.box('#3a3032', X(x + 62), Y(y - 18), FZ, 36, 36, 40, 2.5, 0, 0, 0, { tr: 'iron' }); // the firebox
     for (const sg of [-1, 1]) {
       ctx.glowSpots.push([X(x), Y(y - 36), FZ + sg * 53, sg]);
-      b.cyl(T.brass, X(x + 22), Y(y - 82), FZ + sg * 52, 9.5, 4, 1, Math.PI / 2, 0, 0, undefined, { tr: 'brass' }); // the pressure gauge
-      b.cyl('#f2e9d2', X(x + 22), Y(y - 82), FZ + sg * 54.2, 7, 1, 0, Math.PI / 2, 0, 0, undefined, { tr: 'plain' });
+      const gx = X(x + 22), gy = Y(y - 82);
+      b.cyl(A.brass, gx, gy, FZ + sg * 52, 16, 5, 1.2, Math.PI / 2, 0, 0, undefined, PL); // the pressure gauge: a brass bezel,
+      b.cyl(A.cream, gx, gy, FZ + sg * 54.8, 12.5, 1.2, 0, Math.PI / 2, 0, 0, undefined, PL); // a cream dial
+      b.box(A.red, gx + 3.4, gy + 5, FZ + sg * 55.9, 2.8, 13, 1.2, 0, 0, 0, -0.55, PL); // and a red needle
     }
   } else if (k === 'helm') {
     b.box(T.hullDark, X(x), Y(y - 30), FZ, 18, 60, 18, 2.5, 0, 0, 0, { tr: 'woodC' });
     b.cyl(T.brass, X(x - 22), Y(y - 62), FZ, 8, 6, 1.2, 0, 0, 0, undefined, { tr: 'brass' }); // a binnacle with its compass
     b.sphere('#bcd9e3', X(x - 22), Y(y - 67), FZ, 6.4, 6.4, 6.4, 0.8, true);
     const w = ctx.dynBatch(key + ':wheel');
-    w.geo(T.brass, new THREE.TorusGeometry(32, 4, 6, 14), null, 1.5, { tr: 'brass', uv: 'fit' });
-    for (let i = 0; i < 4; i++) w.box(T.brass, 0, 0, 0, 66, 5, 5, 0, 0, 0, (i * Math.PI) / 4, { tr: 'brass' });
-    for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; w.box(T.rail, Math.cos(a) * 38, Math.sin(a) * 38, 0, 7, 7, 7, 0.6, 0, 0, a, { tr: 'woodC' }); } // the handles
+    w.geo(A.cream, new THREE.TorusGeometry(32, 4.8, 6, 14), null, 1.6, { tr: 'plain', uv: 'fit' }); // a cream rim,
+    for (let i = 0; i < 4; i++) w.box(A.brass, 0, 0, 0, 66, 6, 6, 0, 0, 0, (i * Math.PI) / 4, PL); // brass spokes
+    for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; if (i === 2) continue; w.box(A.brass, Math.cos(a) * 38, Math.sin(a) * 38, 0, 8, 8, 8, 0.6, 0, 0, a, PL); } // and handles
+    w.cyl(A.brass, 0, 0, 0, 9, 14, 1.2, Math.PI / 2, 0, 0, undefined, PL); // the hub
+    w.box(A.red, 0, 38, 0, 11, 14, 11, 0.8, 0, 0, 0, PL); // the red pin: the top handle, so a turn of the wheel shows
     const wg = w.buildGroup();
     wg.position.set(X(x), Y(y - 74), FZ);
     ctx.content.add(wg);
     dyn.push({ role: 'wheel', key, node: wg });
   } else if (k === 'coal') {
-    b.box('#6b4a32', X(x), Y(y - 24), FZ, 130, 48, 80, 3, 0, 0, 0, { tr: 'woodC' });
-    b.box('#4e3524', X(x), Y(y - 48), FZ - 38, 134, 6, 6, 1, 0, 0, 0, { tr: 'woodC' });
-    for (let i = 0; i < 6; i++) b.sphere('#2f2a2e', X(x - 45 + i * 18), Y(y - 54 + (i % 2) * 8), FZ + (i % 3) * 14 - 14, 15, 11, 15, 1.5, true, { tr: 'iron' });
+    b.box('#322a2e', X(x), Y(y - 24), FZ, 130, 48, 80, 3, 0, 0, 0, { tr: 'iron' }); // a black bunker
+    b.box('#1d181c', X(x), Y(y - 48), FZ - 38, 134, 6, 6, 1, 0, 0, 0, { tr: 'iron' });
+    for (let i = 0; i < 7; i++) b.box('#15111a', X(x - 54 + i * 18), Y(y - 54 + (i % 2) * 7), FZ + (i % 3) * 14 - 14, 19 + (i % 3) * 3, 15, 19, 1.2, 0.3 * i, 0.5 * i, 0.2 * i, { tr: 'plain' }); // coal lumps
+    for (const [dx, dz, s] of [[-30, 8, 1], [4, -10, 1.2], [38, 6, 0.9]]) b.box(A.ember, X(x + dx), Y(y - 56), FZ + dz, 11 * s, 8 * s, 11 * s, 0.8, 0.4, 0.7, 0.3, PL); // embers among them
+    for (const sg of [-1, 1]) ctx.glowSpots.push([X(x - 8), Y(y - 26), FZ + sg * 41.5, sg, 0.62]); // and a glow in the bunker's belly
   } else if (k === 'ammo') {
-    for (const [dx, dy, dz] of [[-40, 0, -22], [10, 0, -12], [-12, 38, -17]]) {
-      b.box('#8a6444', X(x + dx), Y(y - 20 - dy), FZ + dz, 52, 38, 48, 2.5, 0, 0, 0, { tr: 'woodC' });
-      for (const sx of [-16, 16]) b.box(T.iron, X(x + dx + sx), Y(y - 20 - dy), FZ + dz, 5, 39.5, 49.5, 0.6, 0, 0, 0, { tr: 'iron' }); // iron straps round the crate
+    b.box(A.dark, X(x), Y(y - 40), FZ - 22, 150, 80, 8, 2, 0, 0, 0, PL); // the rack: a back board,
+    b.box(A.dark, X(x), Y(y - 4), FZ - 6, 150, 8, 40, 1.5, 0, 0, 0, PL); // a foot
+    b.box(A.dark, X(x), Y(y - 44), FZ - 6, 150, 7, 40, 1.5, 0, 0, 0, PL); // and a shelf
+    for (let i = 0; i < 4; i++) for (const [yy, kk] of [[8, 0], [48, 1]]) { // brass shells standing in two rows
+      const sx = X(x - 51 + i * 34), sy = Y(y - yy);
+      b.cyl(A.brass, sx, sy + 17, FZ - 6 + kk * 2, 8.5, 34, 1.2, 0, 0, 0, undefined, PL);
+      b.cone('#cf9a2a', sx, sy + 40, FZ - 6 + kk * 2, 8.5, 14, 1.2, 0, 0, 0, PL);
     }
-    b.box(T.brass, X(x - 12), Y(y - 60), FZ - 17, 54, 4, 50, 0, 0, 0, 0, { tr: 'brass' });
   } else if (k === 'navigator') {
     b.box(T.hullDark, X(x), Y(y - 35), FZ, 120, 8, 70, 2, 0, 0, 0, { tr: 'woodC' });
     for (const dx of [-50, 50]) b.box(T.hullDark, X(x + dx), Y(y - 17), FZ, 8, 34, 8, 1, 0, 0, 0, { tr: 'woodC' });
-    b.box('#ebdfc0', X(x), Y(y - 41), FZ, 100, 3, 56, 0, 0, 0, 0, { tr: 'canvas1' }); // the chart
+    b.box(A.paper, X(x), Y(y - 41), FZ, 100, 3, 56, 0, 0, 0, 0, PL); // the chart
+    b.box(A.paper, X(x), Y(y - 66), FZ - 8, 96, 54, 3, 1.4, 0, 0, 0, PL); // a map sheet standing at the back of the table, painted on both faces: land, sea and a red course
+    for (const sg of [-1, 1]) {
+      const zz = FZ - 8 + sg * 1.9;
+      b.box(A.sea, X(x + 24), Y(y - 58), zz, 40, 20, 0.8, 0, 0, 0, 0, PL);
+      b.box(A.land, X(x - 22), Y(y - 72), zz, 38, 22, 0.8, 0, 0, 0, 0, PL);
+      b.box(A.red, X(x), Y(y - 64), zz + sg * 0.5, 62, 3.4, 0.8, 0, 0, 0, -0.35, PL);
+    }
     b.cyl('#d9ccaa', X(x + 40), Y(y - 45), FZ + 18, 4, 40, 0.8, 0, 0, Math.PI / 2, undefined, { tr: 'canvas2' }); // a rolled chart
     b.cyl(T.brass, X(x - 34), Y(y - 42), FZ - 10, 9, 3.4, 0.8, 0, 0, 0, undefined, { tr: 'brass' }); // dividers' compass
   } else if (k === 'lookout') {
     b.cyl(T.iron, X(x), Y(y - 35), 0, 5, 70, 1.5, 0, 0, 0, undefined, { tr: 'iron' });
-    b.cyl(T.brass, X(x), Y(y - 72), 0, 11, 26, 2, 0, 0, Math.PI / 2, undefined, { tr: 'brass' });
-    b.cyl(T.brass, X(x + 17), Y(y - 72), 0, 13, 5, 1, 0, 0, Math.PI / 2, undefined, { tr: 'brass' }); // the lens ring
+    b.cyl(A.brass, X(x + 4), Y(y - 74), 0, 10, 46, 2, 0, 0, Math.PI / 2, undefined, PL); // the telescope: a bright brass tube,
+    b.cone('#d29a2a', X(x + 36), Y(y - 74), 0, 15, 20, 1.6, 0, 0, Math.PI / 2, PL); // a flared objective,
+    b.cyl(A.cream, X(x - 22), Y(y - 74), 0, 7, 8, 1, 0, 0, Math.PI / 2, undefined, PL); // and a cream eyepiece cup
   } else if (k === 'deflector') {
     b.cyl(T.iron, X(x), Y(y - 28), FZ, 5, 56, 1.5, 0, 0, 0, undefined, { tr: 'iron' });
     b.cone(T.brass, X(x), Y(y - 66), FZ, 36, 22, 2.5, Math.PI, 0, 0, { tr: 'brass' });
     b.sphere('#9dd6e3', X(x), Y(y - 60), FZ, 8, 8, 8, 0, true);
   } else if (k === 'bombBay') {
-    for (const dx of [-60, 0, 60]) { b.sphere('#3a3032', X(x + dx), Y(y - 50), FZ, 20, 28, 20, 2.5, false, { tr: 'iron' }); b.box('#3a3032', X(x + dx), Y(y - 82), FZ, 4, 16, 4, 0, 0, 0, 0, { tr: 'iron' }); b.cone(T.iron, X(x + dx), Y(y - 24), FZ, 11, 10, 0.8, Math.PI, 0, 0, { tr: 'iron' }); }
+    for (const dx of [-60, 0, 60]) { b.sphere('#3a3032', X(x + dx), Y(y - 50), FZ, 20, 28, 20, 2.5, false, { tr: 'iron' }); b.box('#3a3032', X(x + dx), Y(y - 82), FZ, 4, 16, 4, 0, 0, 0, 0, { tr: 'iron' }); b.cone(A.red, X(x + dx), Y(y - 24), FZ, 11, 10, 0.8, Math.PI, 0, 0, PL); }
     b.rod(T.iron, V(X(x - 90), Y(y - 108), FZ), V(X(x + 90), Y(y - 108), FZ), 3, 1, { tr: 'iron' });
   } else if (k === 'escort') {
     b.box(T.iron, X(x), Y(y - 20), FZ, 30, 40, 30, 2, 0, 0, 0, { tr: 'iron' });
@@ -164,22 +187,33 @@ export function buildConnector(c, ctx, i) {
 export function buildPipe(p, ctx, i) {
   const { T, W, X, Y } = ctx, key = 'pipe:' + (p.to || i) + ':' + i, b = ctx.part(key), fb = farSides(b);
   const pts = p.points.map(([x, y]) => V(X(x), Y(y), -W + 26));
-  const pc = T.brass;
+  const A = accents();
   for (let k = 0; k + 1 < pts.length; k++) {
-    fb.rod(pc, pts[k], pts[k + 1], 5, 1.2, { tr: 'brass' });
-    const n = Math.floor(pts[k].distanceTo(pts[k + 1]) / 90);
-    for (let j = 1; j <= n; j++) { const t = j / (n + 1), q = pts[k].clone().lerp(pts[k + 1], t); fb.box(T.iron, q.x, q.y, q.z, 9, 9, 6.5, 0.6, 0, 0, 0, { tr: 'iron' }); } // pipe clamps
+    fb.rod(A.pipe, pts[k], pts[k + 1], 5.6, 1.2, PL); // (A5: a blue-grey pipe with brass joints and a brass collar now and then)
+    const n = Math.floor(pts[k].distanceTo(pts[k + 1]) / 190);
+    for (let j = 1; j <= n; j++) { const t = j / (n + 1), q = pts[k].clone().lerp(pts[k + 1], t); fb.box(A.brass, q.x, q.y, q.z, 9, 9, 8.5, 0.6, 0, 0, 0, PL); }
   }
-  for (const q of pts) fb.box(T.brass, q.x, q.y, q.z, 11, 11, 11, 0.8, 0, 0, 0, { tr: 'brass' });
-  if (p.valve) { fb.cyl('#c4574d', X(p.valve[0]), Y(p.valve[1]), -W + 34, 12, 4, 1.2, Math.PI / 2, 0, 0, undefined, { tr: 'plain' }); fb.rod(T.brass, V(X(p.valve[0]), Y(p.valve[1]), -W + 26), V(X(p.valve[0]), Y(p.valve[1]), -W + 34), 2.4, 0, { tr: 'brass' }); }
+  for (const q of pts) fb.box(A.brass, q.x, q.y, q.z, 12, 12, 12, 0.8, 0, 0, 0, PL);
+  if (p.valve) { fb.cyl(A.green, X(p.valve[0]), Y(p.valve[1]), -W + 34, 14, 4.5, 1.2, Math.PI / 2, 0, 0, undefined, PL); fb.rod(A.brass, V(X(p.valve[0]), Y(p.valve[1]), -W + 26), V(X(p.valve[0]), Y(p.valve[1]), -W + 34), 2.6, 0, PL); }
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }
 
 export function buildRack(r, ctx, i) {
   const { T, W, X, Y, platY } = ctx, key = 'rack:' + i, b = ctx.part(key), fb = farSides(b), y = platY(r.d);
-  fb.box('#6b4a32', X(r.x), Y(y - 56), -W + 18, 44, 56, 6, 1.5, 0, 0, 0, { tr: 'woodC' });
-  fb.box(r.kind === 'sword' ? '#9aa1a6' : r.kind === 'hookshot' ? T.brass : '#8a6444', X(r.x), Y(y - 56), -W + 23, r.kind === 'sword' ? 6 : 30, r.kind === 'sword' ? 48 : 8, 4, 0, 0, 0, 0, { tr: r.kind === 'hookshot' ? 'brass' : r.kind === 'sword' ? 'iron' : 'woodC' });
-  if (r.kind === 'hammer') fb.box(T.iron, X(r.x), Y(y - 66), -W + 24, 18, 12, 6, 0.8, 0, 0, 0, { tr: 'iron' });
+  const A = accents(), cx = X(r.x), cy = Y(y - 56), zb = -W + 22.5;
+  fb.box(A.cream, cx, cy, -W + 18, 52, 62, 5, 1.5, 0, 0, 0, PL); // (A5: the board is cream and the tool is a dark silhouette on it, with one colour hint)
+  if (r.kind === 'sword') {
+    fb.box(A.steel, cx, cy + 4, zb, 7, 44, 3, 0.6, 0, 0, 0, PL); // the blade
+    fb.box(A.dark, cx, cy - 20, zb, 24, 5, 3, 0.6, 0, 0, 0, PL); // the guard
+    fb.box(A.dark, cx, cy - 28, zb, 6, 12, 3, 0.6, 0, 0, 0, PL); // the grip
+  } else if (r.kind === 'hookshot') {
+    fb.box(A.brass, cx + 2, cy + 6, zb, 34, 9, 3, 0.6, 0, 0, 0, PL); // the barrel
+    fb.box(A.dark, cx - 14, cy - 6, zb, 9, 22, 3, 0.6, 0, 0, -0.3, PL); // the stock
+    fb.box(A.dark, cx + 20, cy + 14, zb, 7, 10, 3, 0.6, 0, 0, 0.5, PL); // the hook
+  } else {
+    fb.box(A.dark, cx, cy - 4, zb, 7, 46, 3, 0.6, 0, 0, 0.18, PL); // the handle
+    fb.box(A.red, cx + 3, cy + 18, zb, 26, 14, 3, 0.6, 0, 0, 0.18, PL); // the head
+  }
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }
 
@@ -194,17 +228,18 @@ export function buildExtinguisher(e, ctx, i) {
 export function buildVent(v, ctx, i) {
   const { T, W, X, Y, platY } = ctx, key = 'vent:' + i, b = ctx.part(key), fb = farSides(b), y = platY(v.d);
   fb.cyl(T.iron, X(v.x), Y(y - 45), -W + 52, 13, 90, 2, 0, 0, 0, undefined, { tr: 'iron' });
-  fb.cyl('#c4574d', X(v.x), Y(y - 70), -W + 66, 9, 4, 1, Math.PI / 2, 0, 0, undefined, { tr: 'plain' });
+  fb.cyl(accents().green, X(v.x), Y(y - 70), -W + 66, 11, 4.5, 1, Math.PI / 2, 0, 0, undefined, PL);
   fb.cone(T.iron, X(v.x), Y(y - 96), -W + 52, 15, 12, 1.4, 0, 0, 0, { tr: 'iron' });
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }
 
 export function buildMedbay(q, ctx) {
   const { T, W, X, Y, P, platY } = ctx, key = 'medbay', b = ctx.part(key), fb = farSides(b), y = platY(P.findIndex((o) => o.id === q.p));
-  fb.box('#f3ead6', X(q.x), Y(y - 45), -W + 40, 70, 90, 30, 2, 0, 0, 0, { tr: 'canvas3' });
-  fb.box(T.trim, X(q.x), Y(y - 60), -W + 56, 50, 14, 2, 0, 0, 0, 0, { tr: 'plain' });
-  fb.box('#c4574d', X(q.x), Y(y - 60), -W + 57.4, 20, 4, 1, 0, 0, 0, 0, { tr: 'plain' }); // the cross
-  fb.box('#c4574d', X(q.x), Y(y - 60), -W + 57.4, 4, 20, 1, 0, 0, 0, 0, { tr: 'plain' });
+  const A = accents();
+  fb.box(A.cream, X(q.x), Y(y - 45), -W + 40, 70, 90, 30, 2, 0, 0, 0, PL);
+  fb.box(A.red, X(q.x), Y(y - 62), -W + 56.4, 46, 13, 1.4, 0, 0, 0, 0, PL); // the cross (A5: twice the size)
+  fb.box(A.red, X(q.x), Y(y - 62), -W + 56.4, 13, 46, 1.4, 0, 0, 0, 0, PL);
+  fb.box(A.pipe, X(q.x), Y(y - 18), -W + 56.4, 54, 5, 1.2, 0, 0, 0, 0, PL); // a drawer front
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }
 
@@ -225,6 +260,6 @@ export function buildBallast(o, ctx, i) {
 export function buildGasValve(v, ctx, i) {
   const { T, W, X, Y } = ctx, key = 'gasValve:' + i, b = ctx.part(key), fb = farSides(b), y = ctx.platY(v.d);
   fb.cyl(T.iron, X(v.x), Y(y - 30), -W + 44, 3.4, 60, 1, 0, 0, 0, undefined, { tr: 'iron' });
-  fb.geo(T.brass, new THREE.TorusGeometry(12, 2.4, 5, 12), new THREE.Matrix4().makeTranslation(X(v.x), Y(y - 62), -W + 44), 1, { tr: 'brass', uv: 'fit' });
+  fb.geo(accents().green, new THREE.TorusGeometry(13, 3.6, 5, 12), new THREE.Matrix4().makeTranslation(X(v.x), Y(y - 62), -W + 44), 1.2, { tr: 'plain', uv: 'fit' });
   return { key, batches: [b], dyn: [], bounds: b.bounds };
 }

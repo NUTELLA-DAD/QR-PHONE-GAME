@@ -2443,6 +2443,22 @@ export const config = {
     FUNGAL: { HDR: 1.9, HALO: 0.26, STEP: 1.6, MAX: 220, BULB: '#7dffd8', MOTES: 70, MOTE_SPEED: 14, MOTE_COLORS: ['#96ffdc', '#be96ff'], SPORE: '#b0f06e', SPORE_ALPHA: 0.2 },
     //   LANTERN: the fake pool of a lantern on the back wall (an emissive gradient, so Medium and Low look lantern-lit without real lights): COLOR, ALPHA by tier (High has real lights, so the pool is a hint), SIZE = its radius in world units.
     LANTERN: { COLOR: '#ffb25c', ALPHA: { high: 0.22, medium: 0.5, low: 0.66 }, SIZE: 190 },
+    // A5 READABLE STATIONS AND CREW (view3d/parts3d/stations.js, weapons.js, rooms.js, view3d/stationMats.js, crew.js; host/render.js placeNames; 3D.md section 23).
+    //   STATIONS.ACCENT: the one saturated colour each station kind carries (about a tenth of its area; the 2D game's own: brass, cream dials, green valve wheels, blue-grey pipes, red crosses and needles, an ember glow).
+    //   STATIONS.WALL: the far wall of a room is LIGHT x lighter than its painted colour and keeps SAT of its colour; vertex-colour occlusion darkens the TOP (under the ceiling), the CORNERS and the FLOOR line by up to
+    //     AO_TOP / AO_CORNER / AO_FLOOR; SKIRT = how dark the skirting board is (1 = the hull's dark brown, lower = darker).
+    //   STATIONS.MAT: the flat painted disc on the deck under each station (one instanced mesh a ship): ALPHA, and ALPHA_ON when a human's phone arrow points to that station (its colour goes MIX_ON toward white); RX / RZ =
+    //     its radii, RIM = how much more solid the painted rim is; COLORS by role (weapon, engine, nav, supply, other).
+    //   CREW3D: the head and the colour marker grow with the camera's distance D (view3d, no sim change): none at D0, full at D1; HEAD = the head's size multiplier at D1 (1.25 = 40% -> 50% of the body's height), CONE = the marker's.
+    //   LABELS3D: bots are named only while busy (a job, carrying, fighting, knocked out, or just joined: JOIN seconds) and for HOLD seconds after, then FADE out over that many seconds; people always. COLOR = the soft cream
+    //     round the letters (was white), SCALE = the size against the old label (never under 18 px at 1080p).
+    STATIONS: {
+      ACCENT: { brass: '#deaa32', cream: '#f4e9c6', red: '#d44a3a', green: '#4fb06a', pipe: '#8eaabd', ember: '#ff8a2c', dark: '#3a3438', paper: '#f1e5bd', sea: '#7eb3d2', land: '#8cba76', steel: '#9fb2c0' },
+      WALL: { LIGHT: 1.4, SAT: 0.72, AO_TOP: 0.3, AO_CORNER: 0.3, AO_FLOOR: 0.2, SKIRT: 0.55 },
+      MAT: { ALPHA: 0.34, ALPHA_ON: 0.78, MIX_ON: 0.42, RX: 74, RZ: 56, RIM: 2.1, COLORS: { weapon: '#e0584a', engine: '#f08c30', nav: '#5aa6de', supply: '#e8bc3e', other: '#b58cd8' } },
+    },
+    CREW3D: { D0: 1700, D1: 3300, HEAD: 1.25, CONE: 1.6 },
+    LABELS3D: { HOLD: 3, FADE: 0.75, JOIN: 5, COLOR: '#f2e8cb', SCALE: 0.88 },
     // WP12 WEATHER (view3d/weather.js, weatherFall.js, weatherShip.js, weatherWorld.js; 3D.md section 16). The sim decides WHAT happens (state.weather.storm / gust, state.env.wind / blizzard / heat / smoke / gale, state.icing,
     // state.stormJob, state.sea, state.spores, state.clogs); these numbers decide how it LOOKS. An environment overrides one effect by key in its own block: LOOK3D.<env>.wx = { RAIN: { ALPHA: 0.4 } }.
     //   DENSITY: how much of the falling layer's instances are used by tier (rain / snow / embers / motes). BOX: the falling box's size against what the screen shows. Z: depth range of the falling things (behind .. in front of the ship plane).

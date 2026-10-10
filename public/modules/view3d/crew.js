@@ -105,7 +105,16 @@ export function createCrewLayer(parent) {
   parent.add(mesh, shell, shellO, meshO);
 
   const figs = new Map();
-  const L = { mesh, shell, figs, K: 0, t: 0, dt: 0, now: 0, frame: 0, acc: true, dirty: false, lastBuild: -1e9, verts: 0, tris: 0, rebuilds: 0, overflow: 0, lineupOn: false, vfx: null, ms: 0, msLast: 0 };
+  const L = { mesh, shell, figs, K: 0, t: 0, dt: 0, now: 0, frame: 0, acc: true, dirty: false, lastBuild: -1e9, verts: 0, tris: 0, rebuilds: 0, overflow: 0, lineupOn: false, vfx: null, ms: 0, msLast: 0, headK: 1, coneK: 1 };
+
+  // A5 CREW READABILITY: as the camera pulls back the head grows (40% -> 50% of the body's height at the wide zoom) and the colour marker's cone grows (1.6x), so a crewman is still a person and still found at
+  // TV distance. Read from the camera's distance D (view3d/index.js calls setView once a frame, before the crew is placed); a smooth function of D only, no sim, no time. LOOK3D... CREW3D.
+  L.setView = (D) => {
+    const C = config.CREW3D || {}, d0 = Number.isFinite(C.D0) ? C.D0 : 1700, d1 = Number.isFinite(C.D1) ? C.D1 : 3300;
+    const t = Number.isFinite(D) ? clamp((D - d0) / Math.max(1, d1 - d0), 0, 1) : 0, k = t * t * (3 - 2 * t);
+    L.headK = 1 + ((Number.isFinite(C.HEAD) ? C.HEAD : 1.25) - 1) * k;
+    L.coneK = 1 + ((Number.isFinite(C.CONE) ? C.CONE : 1.6) - 1) * k;
+  };
 
   // ---- the layer's frame ----------------------------------------------------------------------------------------------------------------------------------------------------------------
   L.begin = (t, dt, tier, now) => {
@@ -223,7 +232,8 @@ export function createCrewLayer(parent) {
     // torso (leans about the hips) and what hangs on it
     Mt.copy(Mr); trans(Mt, 0, 22 + o.bob, 0); rotZ(Mt, -o.lean); trans(Mt, 0, -22, 0);
     Ma.copy(Mt); Ma.multiply(tmp.makeScale(bulk, 1, bulk)); setBone(f, B.TORSO, Ma);
-    Ma.copy(Mt); trans(Ma, 0, 48, 0); rotZ(Ma, -o.headTilt); setBone(f, B.HEAD, Ma);
+    const hk = f.cfg.kind === 'crew' ? L.headK : 1 + (L.headK - 1) * 0.5; // (a raider's head grows too, half as much: it is the crew that must read)
+    Ma.copy(Mt); trans(Ma, 0, 48, 0); rotZ(Ma, -o.headTilt); if (hk !== 1) Ma.multiply(tmp.makeScale(hk, hk, hk)); setBone(f, B.HEAD, Ma);
     const holderArm = f.holder === 'B' ? B.ARM_B : B.ARM_A;
     for (const [bone, z, ang] of [[B.ARM_A, 14.5 * bulk * o.spread, o.aA], [B.ARM_B, -14.5 * bulk * o.spread, o.aB]]) {
       Ma.copy(Mt); trans(Ma, 0, 46, z); rotZ(Ma, ang); setBone(f, bone, Ma);
@@ -239,11 +249,12 @@ export function createCrewLayer(parent) {
     // the marker, hearts and the rope are WORLD things: they do not lean with the ship or the body
     _v.set(env.lx, env.ly, env.lz); if (env.W) _v.applyMatrix4(env.W);
     f.wx = _v.x; f.wy = _v.y + fin(rec.jz); f.wz = _v.z;
-    const markY = (o.mode === 'ko' ? 66 : 128) * sc;
-    Ma.makeTranslation(f.wx, f.wy + markY, f.wz); setBone(f, B.MARK, Ma);
+    const bigHead = o.mode === 'ko' ? 0 : (hk - 1) * 40 * sc; // (a bigger head lifts the marker with it; a knocked-out figure's marker sits low)
+    const markY = (o.mode === 'ko' ? 66 : 128) * sc + bigHead, ck = L.coneK, hh = 1 + (ck - 1) * 0.5;
+    Ma.makeTranslation(f.wx, f.wy + markY, f.wz); if (ck !== 1) Ma.multiply(tmp.makeScale(ck, ck, ck)); setBone(f, B.MARK, Ma);
     for (let i = 0; i < 3; i++) {
-      const pulse = i === 0 && rec.hearts > 0 && rec.hearts <= (config.HEALTH.JOB_AT || 1) && (L.K & 1) ? 1.22 : 1; // (the last heart pulses: two keys)
-      Ma.makeTranslation(f.wx + (i - 1) * 24, f.wy + markY + 40, f.wz + 6); Ma.multiply(tmp.makeScale(pulse, pulse, pulse)); setBone(f, B.H0 + i, Ma);
+      const pulse = (i === 0 && rec.hearts > 0 && rec.hearts <= (config.HEALTH.JOB_AT || 1) && (L.K & 1) ? 1.22 : 1) * hh; // (the last heart pulses: two keys; hearts grow half as much as the cone)
+      Ma.makeTranslation(f.wx + (i - 1) * 24 * hh, f.wy + markY + 17 * ck + 22 * hh, f.wz + 6); Ma.multiply(tmp.makeScale(pulse, pulse, pulse)); setBone(f, B.H0 + i, Ma);
     }
     // the hookshot rope and hook, in the world: from his hand to the hook
     if (f.cfg.hook && rec.hook) {
@@ -349,7 +360,7 @@ export function createCrewLayer(parent) {
   L.anchor = (key) => {
     const f = figs.get(key);
     if (!f || f.seen !== L.frame || !Number.isFinite(f.wx) || !Number.isFinite(f.wy) || !Number.isFinite(f.wz)) return null;
-    return { x: f.wx, y: f.wy, z: f.wz, sc: fin(f.rec && f.rec.scale, 1) || 1, ko: f.pose.mode === 'ko' };
+    return { x: f.wx, y: f.wy, z: f.wz, sc: fin(f.rec && f.rec.scale, 1) || 1, ko: f.pose.mode === 'ko', up: f.pose.mode === 'ko' ? 0 : (L.headK - 1) * 40 * (fin(f.rec && f.rec.scale, 1) || 1) + (L.coneK - 1) * 17 }; // (up: how far the bigger head and cone push the marker's top up: the name labels sit above it)
   };
   L.setTier = (tier) => { const acc = !tier || tier.name !== 'low'; if (acc !== L.acc) { L.acc = acc; L.dirty = true; } };
   L.stats = () => ({ figs: figs.size, verts: L.verts, tris: Math.round(L.tris), rebuilds: L.rebuilds, overflow: L.overflow, calls: 4, ms: Math.round((L.msLast || 0) * 100) / 100, rebuildMs: Math.round((L.rebuildSum || 0) / Math.max(1, L.rebuilds) * 100) / 100, rebuildMax: Math.round((L.rebuildMax || 0) * 100) / 100 });
