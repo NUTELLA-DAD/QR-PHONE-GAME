@@ -1435,6 +1435,13 @@ export const config = {
     PITCH_WARN_DEG: 1.2, // validator: engines (and sails) that tip her more than this many degrees at rest (WARN, unless a swivel mount can counter them)
     BOT_CLIMB_GAS: 34, // bots point a swivel engine UP when the gasbag is under this (she is sinking) ...
     BOT_DIVE_DY: 140, // ...and DOWN when the helm wants to be this many px lower than she is, or on a bombing run
+    // ---- PER-ENGINE THROTTLES. Every engine has its own throttle; linked (default) the helm's lever sets them all, split each lever sets its own engine (engines.js).
+    THRUST_MOMENT: 100, // an engine pushing ahead at full throttle twists the ship as a push of this many px/s^2 at the engine's place (an engine hung below the centre of mass tips the nose up); it adds no speed. 0 = the old ship
+    THR_RATE: 2.5, // an engine's throttle chases what the helm set at this share of full per second (the levers on the phone glide)
+    LEVER_UP: 0.5, // linked, the helm's lever is the throttle of an engine pointing ahead (DRIVE_COS) and no more than this share up or down; one that lifts more than that runs flat out, as it always did
+    TRIM_MIX: 0.35, // AUTO-TRIM: with the helm stick fully up (down) and the levers linked, the engines whose push tips the nose up (down) get this much more throttle and the others this much less (0..1)
+    LEVEL_MIX: 0.8, // a bot levelling the ship with split throttles shifts them this far (same rule as TRIM_MIX, stronger)
+    BOT_LEVEL_DEG: 0.6, // a bot at the helm splits the throttles when the nose is more than this many degrees off level while it climbs out of a Kraken breach or after a hit (a ship with lift engines only)
   },
   // FORCES (S.5h): one model for everything that shoves the ship at a point: engine thrust, sails' wind, gusts, hits and explosions, rock scrapes, rams, the gunship's tether. A force is applied at
   // a place (forces.js applyForce) and twists the ship about her live centre of mass: torque / (her radius of gyration squared), a longer or more spread-out ship turns slower. The tilt then

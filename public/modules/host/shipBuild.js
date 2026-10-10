@@ -145,8 +145,8 @@ export const swivelName = (engineName) => 'Swivel ' + engineName;
 export const cannonSeatName = (cannonName) => cannonName + ' Seat'; // (B.6: the seat in the barrel of the crew cannon named so)
 // Gas points of lift an engine pod makes pointing as placed (up positive, down negative): what the hover budget counts.
 const engineLift = (p) => thrustVec(p.dir).up * config.ENGINES.LIFT_GAS;
-// Steam an engine burns at throttle `speed` (0..1): its forward share runs with the throttle, its vertical share all the time (config.ENGINES.VERT_USE).
-export const engineUse = (dir, speed) => { const v = thrustVec(dir); return config.BOILER.USE_ENGINE * (speed * Math.abs(v.fwd) + config.ENGINES.VERT_USE * Math.abs(v.up)); };
+// Steam an engine burns at throttle `speed` (0..1): its forward share runs with the throttle, its vertical share with its own throttle `pow` (config.ENGINES.VERT_USE).
+export const engineUse = (dir, speed, pow = 1) => { const v = thrustVec(dir); return config.BOILER.USE_ENGINE * (speed * Math.abs(v.fwd) + config.ENGINES.VERT_USE * Math.abs(v.up) * Math.min(1, Math.abs(pow))); }; // (pow: the engine's own throttle: the lift engine at half throttle burns half)
 
 export const PARTS = {
   // A walkable floor. `row` is a DECK_ROWS name (y comes from it), x0/x1 are its span.

@@ -155,8 +155,11 @@ export function createControllerUI({ network }) {
   // Idle: a big arrow to the most useful job (the host picks it).
   const ARROWS = { left: '◀', right: '▶', up: '▲', down: '▼' };
   let jobOn = false;
+  let engOn = false; // (the helm's engine panel is showing in the middle column, enginePanel.js)
+  const hooks = {}; // (input.js hangs the engine panel here: hooks.eng(ui.eng))
   const showMid = () => {
-    $('mid').classList.toggle('on', jobOn || radar.isOn());
+    $('mid').classList.toggle('on', jobOn || radar.isOn() || engOn);
+    $('mid').classList.toggle('eng', engOn);
     $('mid').classList.toggle('rd', radar.isOn());
     if (radar.isOn()) radar.fit();
   };
@@ -197,6 +200,9 @@ export function createControllerUI({ network }) {
       $('act').classList.remove('hold');
       $('leave').style.display = 'none';
       $('lever').style.display = 'none';
+      engOn = false;
+      if (hooks.eng) hooks.eng(null);
+      showMid();
       $('plever').style.display = 'none';
       $('atk').style.display = '';
       $('jump').style.display = 'none';
@@ -284,6 +290,9 @@ export function createControllerUI({ network }) {
     // The helm: the ship may be facing left (she comes about on command), so say which way ahead is on the screen, and grey COME ABOUT while she turns.
     $('lever').querySelector('.tag').textContent = next.fc < 0 ? '◀ AHEAD' : 'AHEAD ▶';
     $('turn').classList.toggle('busy', !!next.tn);
+    engOn = !!(helm && next.eng);
+    if (hooks.eng) hooks.eng(engOn ? next.eng : null); // (one lever per engine, SPLIT / LINK)
+    showMid();
     $('jump').style.display = next.locked ? 'none' : ''; // no hopping while at a station
   };
 
@@ -340,5 +349,5 @@ export function createControllerUI({ network }) {
     });
   };
 
-  return { species, setup, join, selectSpecies, setJoinError, updateUI, getState: () => uiState, nudgeHold, vibrate, radarPick: (x, y) => radar.pick(x, y) };
+  return { hooks, species, setup, join, selectSpecies, setJoinError, updateUI, getState: () => uiState, nudgeHold, vibrate, radarPick: (x, y) => radar.pick(x, y) };
 }

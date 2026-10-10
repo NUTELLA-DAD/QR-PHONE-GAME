@@ -22,6 +22,10 @@ export function applyPlayerInput(state, player, data) {
   if (taking && data.atk) player.atkQ = true;
   if (taking && data.jump) player.jumpQ = true;
   if ('thr' in data) player.thr = data.thr;
+  if (taking && ('split' in data || 'thrs' in data)) { // the helm's engine levers: SPLIT / LINK and one throttle per engine (they live on the SHIP, engines.js command)
+    const ship = shipOf(state, player);
+    if (player.lock && ship.layout.kindOf(player.lock) === 'helm' && ship.sim && ship.sim.engines) ship.sim.engines.command({ split: 'split' in data ? !!data.split : undefined, thrs: data.thrs, lever: data.thr });
+  }
   if ('gas' in data) player.gas = data.gas;
   if (data.perfect) player.perfect = true;
   if ('vote' in data) player.vote = data.vote;

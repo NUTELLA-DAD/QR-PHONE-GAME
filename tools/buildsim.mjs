@@ -1395,9 +1395,11 @@ async function forceLab() {
   const { scrollSpeed } = await load('modules/host/course.js');
   const { applyForce, forcesOf } = await load('modules/host/forces.js');
   const keep = JSON.stringify([config.PACING, config.SPECIALS.FIRST_AFTER, config.MAPS.FORCE_KIND, config.ENVIRONMENTS.FORCE, config.FORCES.LIVE]);
+  const MOMENT = config.ENGINES.THRUST_MOMENT; // (the forward thrust's twist is its own check below: the older checks run the ship without it, so a ship at rest sits at exactly 0)
   const lab = { config, ...shipBuild, ...slots, ...edit, validate, applyBuild, SHIP_LAYOUT, SHIP_BALANCE, createSimulation, scrollSpeed, applyForce, forcesOf };
   lab.calm = (env = 'skyisles') => { config.PACING.RATE_START = config.PACING.RATE_END = config.PACING.PEAK_RATE = 0; config.PACING.BUILD = 1e6; config.SPECIALS.FIRST_AFTER = 1e9; config.MAPS.FORCE_KIND = 'open'; config.ENVIRONMENTS.FORCE = env; };
-  lab.restore = () => { const [p, f, m, e, l] = JSON.parse(keep); Object.assign(config.PACING, p); config.SPECIALS.FIRST_AFTER = f; config.MAPS.FORCE_KIND = m; config.ENVIRONMENTS.FORCE = e; config.FORCES.LIVE = l; applyBuild(shipBuild.BUILDS.classic); lab.unseed(); };
+  lab.moment = false;
+  lab.restore = () => { config.ENGINES.THRUST_MOMENT = MOMENT; lab.moment = false; const [p, f, m, e, l] = JSON.parse(keep); Object.assign(config.PACING, p); config.SPECIALS.FIRST_AFTER = f; config.MAPS.FORCE_KIND = m; config.ENVIRONMENTS.FORCE = e; config.FORCES.LIVE = l; applyBuild(shipBuild.BUILDS.classic); lab.unseed(); };
   lab.human = (sim, o) => { const q = { id: o.id, name: o.id, species: config.CREW_SPECIES[0], color: '#fff', jx: 0, jy: 0, t: 0, connected: true, fall: false, ko: 0, ...o }; sim.state.players[o.id] = q; return q; };
   // (every ship is booted on the same seeded sky, so a comparison between two builds is between the builds, not between two random maps)
   const realRandom = Math.random, realNow = Date.now;
@@ -1405,6 +1407,7 @@ async function forceLab() {
     let s = seed >>> 0;
     Math.random = () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
     Date.now = () => 1700000000000 + seed;
+    config.ENGINES.THRUST_MOMENT = lab.moment ? MOMENT : 0;
     applyBuild(parts); lab.calm(env);
     const sim = createSimulation(); sim.castOff(); sim.update(1 / 60);
     return sim;
@@ -1537,6 +1540,9 @@ async function checkEngines() {
     report(manned > 0 && turned > 0, `the bots use the swivel: crank manned ${manned.toFixed(0)} s, engine turned ${turned.toFixed(0)} s in all`);
   }
 
+  // ---- per-engine throttles: linked = the old speed, SPLIT / LINK, the auto-trim, the thrust moment, the bots (checkThrottles below)
+  await checkThrottles(lab, report);
+
   // ---- (h) M.4: forces drive the pose (flight.js). The same ship made heavier or lighter: the helm's order is the same speed, but the engines get her there slower or quicker, the air's drag
   // sets where she stops, and the weight slows her climb and her turn too. Her velocity is the integral of the forces: pose.vx is f * speed and a shove changes it.
   {
@@ -1595,6 +1601,119 @@ async function checkEngines() {
   }
   lab.restore();
   return ok;
+}
+
+// PER-ENGINE THROTTLES (engines.js): every engine has its own throttle and pushes from where it sits. Linked (the default) the helm's lever sets them all and the speed is the old one; SPLIT / LINK and the
+// levers come through applyPlayerInput like any phone message and live on the ship; the auto-trim shifts the linked throttles toward the nose the stick asks for; forward thrust from an engine below the
+// centre of mass tips the nose up (ENGINES.THRUST_MOMENT); the tilt stays inside FORCES.MAX_DEG; the bots fly classic and Sparrow clean and level a lift ship with split throttles.
+async function checkThrottles(lab, report) {
+  const { config, BUILDS } = lab;
+  const { applyPlayerInput } = await load('modules/host/network.js');
+  const E = config.ENGINES, F = config.FORCES, TOP = config.SHIP.TOP_SPEED;
+  const C = BUILDS.classic, near = (a, b, e) => Math.abs(a - b) <= e, deg = (r) => (r * 180 / Math.PI).toFixed(2);
+  const up = lab.withEngines(C, { 'Aft Engine': -PI / 2, 'Fore Engine': -PI / 2 }); // (a lift engine at each end)
+  let peak = 0; // (the biggest tilt the forces made in any of these runs)
+  const fly = (parts, secs, setup, each, moment = false) => {
+    lab.moment = moment;
+    const sim = lab.boot(parts), p = lab.at(sim, 'helm'), send = (d) => applyPlayerInput(sim.state, p, { jx: 0, jy: 0, ...d });
+    if (setup) setup(sim, p, send);
+    lab.run(sim, secs, (i, t) => { peak = Math.max(peak, Math.abs(sim.state.forces.theta)); p.jx = 0; p.jy = p.jyWant || 0; if (each) each(i, t, sim, p, send); });
+    return { sim, p, send, theta: sim.state.forces.theta, eng: (n) => sim.engines.byName(n) };
+  };
+
+  // ---- (a) linked throttles are the old speed
+  {
+    const lever = fly(C, 7, (sim, p, send) => send({ thr: 0.6 }));
+    const full = fly(C, 7, (sim, p, send) => send({ thr: 1 }));
+    const split = fly(C, 7, (sim, p, send) => { send({ split: true }); send({ thrs: [0.6, 0.6] }); });
+    const vL = lever.sim.state.ship.speed, vS = split.sim.state.ship.speed, vF = full.sim.state.ship.speed;
+    report(near(vL, 0.6, 0.6 * 0.02) && near(vF, 1, 0.02), `linked: the lever is the speed (0.6 -> ${vL.toFixed(3)}, 1 -> ${vF.toFixed(3)} of full: the old ship, within 2%)`);
+    report(split.sim.state.thrust.split && near(vS, vL, vL * 0.02), `split with both throttles at 0.6 gives the same speed as the lever at 0.6 (${vS.toFixed(3)} against ${vL.toFixed(3)})`);
+    const mixed = fly(C, 7, (sim, p, send) => { send({ split: true }); send({ thrs: [0.2, 0.9] }); });
+    report(near(mixed.sim.state.ship.speed, 0.55, 0.03), `split 0.2 / 0.9: the speed follows the sum of the forward parts (${mixed.sim.state.ship.speed.toFixed(3)}, 0.55 expected)`);
+  }
+
+  // ---- (b) a lift engine at the bow at full and the stern one off pitches the nose up; the reverse, down
+  {
+    const aft = (sim) => sim.engines.byName('Aft Engine').i, fore = (sim) => sim.engines.byName('Fore Engine').i;
+    const pair = (a, f) => fly(up, 5, (sim, p, send) => send({ split: true }), (i, t, sim, p, send) => { const thrs = []; thrs[aft(sim)] = a; thrs[fore(sim)] = f; send({ thrs }); });
+    const noseUp = pair(0, 1), noseDown = pair(1, 0), even = pair(1, 1);
+    report(noseUp.theta < -0.004&& noseUp.sim.state.ship.pitch < even.sim.state.ship.pitch, `bow lift engine full, stern off: the nose goes UP (tilt ${deg(noseUp.theta)} degrees; pitch ${deg(noseUp.sim.state.ship.pitch)} against ${deg(even.sim.state.ship.pitch)} with both on)`);
+    report(noseDown.theta > 0.004, `...the reverse: the nose goes DOWN (tilt ${deg(noseDown.theta)} degrees)`);
+    report(Math.abs(even.theta) < Math.abs(noseUp.theta) * 0.3, `both at full: level again (${deg(even.theta)} degrees)`);
+    report(noseUp.sim.state.forces.vyAcc < even.sim.state.forces.vyAcc - 20, `...and a lift engine at half its power lifts less: ${noseUp.sim.state.forces.vyAcc.toFixed(0)} against ${even.sim.state.forces.vyAcc.toFixed(0)} px/s^2 (vertical engines follow their own throttle)`);
+  }
+
+  // ---- (c) forward thrust from a low engine tips the nose up (the sign), by THRUST_MOMENT
+  {
+    const low = fly(C, 8, (sim, p, send) => send({ thr: 1 }), null, true), still = fly(C, 8, (sim, p, send) => send({ thr: 0 }), null, true);
+    const st = low.sim.state;
+    const below = lab.forcesOf(st, [{ x: 1530, y: st.balance.comY + 100, fx: 100, fy: 0, balanced: false, source: 'engine' }]).torque;
+    const above = lab.forcesOf(st, [{ x: 1530, y: st.balance.comY - 100, fx: 100, fy: 0, balanced: false, source: 'engine' }]).torque;
+    report(below < 0 && above > 0, `a forward push below the centre of mass makes a nose-UP torque (${below.toFixed(3)} rad/s^2), one above it nose-DOWN (${above.toFixed(3)})`);
+    report(low.theta < -0.003 && Math.abs(still.theta) < 0.0006, `the classic ship at full ahead tips her nose up ${deg(-low.theta)} degrees (her engines hang under the centre of mass); with the lever at 0 she sits level (${deg(still.theta)})`);
+    report((-low.theta * 180) / Math.PI < F.MAX_DEG * 0.6, `...a gentle ${deg(-low.theta)} degrees, well inside the cap (${F.MAX_DEG})`);
+  }
+
+  // ---- (d) SPLIT / LINK and the levers through applyPlayerInput; the throttles live on the ship
+  {
+    const r = fly(C, 1, null);
+    const { sim, p, send } = r, T = sim.state.thrust;
+    const stranger = lab.human(sim, { id: 'x', x: p.x, y: p.y, d: p.d }); // (not at the helm: his lever messages change nothing)
+    applyPlayerInput(sim.state, stranger, { jx: 0, jy: 0, split: true });
+    report(!T.split, 'a message from someone who is not at the helm cannot split the throttles');
+    send({ split: true });
+    report(T.split === true, 'SPLIT through applyPlayerInput unlinks the engines');
+    send({ thrs: [0.25, 0.8] });
+    lab.run(sim, 3, () => { p.jx = 0; });
+    const a = r.eng('Aft Engine'), f = r.eng('Fore Engine');
+    report(near(a.thr, 0.25, 1e-9) && near(f.thr, 0.8, 1e-9) && near(a.pow, 0.25, 0.02) && near(f.pow, 0.8, 0.02), `the levers set their own engines (aft ${a.thr}, fore ${f.thr}; running at ${a.pow.toFixed(2)} / ${f.pow.toFixed(2)})`);
+    send({ thr: 0.2 }); // (the main lever does nothing while split)
+    lab.run(sim, 1, () => { p.jx = 0; });
+    report(near(f.thr, 0.8, 1e-9) && near(sim.state.ship.order, 0.525, 0.02), `the main lever is inert while split; the order is the sum of the engines (${sim.state.ship.order.toFixed(3)})`);
+    p.lock = null; // the helmsman leaves; another takes the wheel
+    const q = lab.at(sim, 'helm', 'q');
+    lab.run(sim, 1, () => { q.jx = q.jy = 0; });
+    report(T.split && near(r.eng('Fore Engine').thr, 0.8, 1e-9) && q.ui && q.ui.eng && q.ui.eng.s === true, 'the throttles live on the ship: the new helmsman finds them split as they were, and his phone is told (ui.eng)');
+    const pan = q.ui && q.ui.eng;
+    report(pan && pan.l.length === 2 && (pan.l[0][0] === f.i) === (sim.ships[0].pose.f < 0) && pan.l.every((e) => e[2] === 0), `the panel lists the engines left to right as she sits on the screen, each arrow pointing ahead: ${JSON.stringify(pan && pan.l)}`);
+    applyPlayerInput(sim.state, q, { jx: 0, jy: 0, split: false, thr: 0.4 });
+    lab.run(sim, 3, () => { q.jx = 0; });
+    report(!T.split && near(r.eng('Fore Engine').thr, 0.4, 1e-6) && near(r.eng('Aft Engine').thr, 0.4, 1e-6) && near(sim.state.ship.speed, 0.4, 0.03), `LINK sets every engine to the main lever (0.4) and the speed follows (${sim.state.ship.speed.toFixed(3)})`);
+    const one = lab.boot(lab.withEngines(C, {}).filter((x) => !(x.part === 'engine' && x.name === 'Fore Engine') && !(x.part === 'pipe' && x.to === 'Fore Engine')));
+    report(one.engines.panel(1) === null, 'a ship with one engine has no panel (ui.eng is null)');
+  }
+
+  // ---- (e) auto-trim: the stick up (down) shifts the linked throttles toward the nose it asks for, inside 0..1
+  {
+    const trimmed = (jy, parts = up) => fly(parts, 4, (sim, p) => { p.jyWant = jy; });
+    const base = trimmed(0), climb = trimmed(-1), dive = trimmed(1);
+    const pows = (r) => [r.eng('Aft Engine').pow, r.eng('Fore Engine').pow];
+    const [ab, fb] = pows(base), [ac, fc] = pows(climb), [ad, fd] = pows(dive);
+    report(near(ab, 1, 1e-9) && near(fb, 1, 1e-9), `no stick: the linked lift engines both run flat out (${ab.toFixed(2)} / ${fb.toFixed(2)})`);
+    report(fc > ac + 0.2 && near(ac, 1 - E.TRIM_MIX, 0.02) && climb.theta < base.theta - 0.002, `stick UP: the bow lift engine keeps full and the stern one backs off (aft ${ac.toFixed(2)}, fore ${fc.toFixed(2)}); the nose comes up (tilt ${deg(climb.theta)} against ${deg(base.theta)})`);
+    report(ad > fd + 0.2 && dive.theta > base.theta + 0.002, `stick DOWN: the other way round (aft ${ad.toFixed(2)}, fore ${fd.toFixed(2)}); the nose goes down (tilt ${deg(dive.theta)})`);
+    const all = [...pows(climb), ...pows(dive)];
+    report(all.every((v) => v >= 0 && v <= 1), 'the trimmed throttles never leave 0..1');
+    const plain = fly(C, 4, (sim, p, send) => { send({ thr: 0.6 }); p.jyWant = -1; }, null, true), calm = fly(C, 4, (sim, p, send) => send({ thr: 0.6 }), null, true);
+    report(near(plain.eng('Aft Engine').pow, calm.eng('Aft Engine').pow, 1e-9) && near(plain.sim.state.ship.speed, calm.sim.state.ship.speed, 0.01), 'the classic pair (two alike engines) are left alone by the trim: same throttles, same speed');
+    const split = fly(up, 3, (sim, p, send) => { send({ split: true }); p.jyWant = -1; });
+    report(near(split.eng('Aft Engine').pow, split.eng('Aft Engine').thr, 1e-9) && split.sim.state.thrust.trim === 0, 'split throttles are not trimmed (only linked ones are)');
+  }
+
+  // ---- (f) the tilt stays inside the cap whatever the throttles do
+  report(peak <= (F.MAX_DEG * Math.PI) / 180 + 1e-6, `in all these runs the forces never tipped her more than ${deg(peak)} degrees (FORCES.MAX_DEG ${F.MAX_DEG})`);
+  lab.restore();
+
+  // ---- (g) the bots fly classic and the Sparrow for 3 minutes (the helm bot uses the trim; a ship with several lift engines is levelled with split throttles)
+  {
+    const lift3 = [...up, ...lab.setEngineDir(lab.slotsFor('engine', C)[0].apply(C), 'Pod Engine 1', -PI / 2).parts.filter((p) => p.name === 'Pod Engine 1' || (p.part === 'pipe' && p.to === 'Pod Engine 1'))];
+    const runs = await Promise.all([[C, 'route', 1], [BUILDS.sparrow, 'open', 2], [lift3, 'network', 3]].map(([parts, map, seed]) => runBotsim(parts, { map, minutes: 3, bots: 6, seed })));
+    const errors = runs.reduce((n, r) => n + (r.stats ? r.stats.errors : 1), 0);
+    report(errors === 0 && runs.every((r) => r.stats), `classic, the Sparrow and a three-lift-engine ship flown by 6 bots for 3 minutes: ${errors} errors`);
+    const splitSecs = runs[2].stats ? runs[2].stats.flight.engineSplitSecs : 0;
+    report(splitSecs > 0, `the bots level the lift ship with split throttles (${splitSecs.toFixed(0)} s split), and classic stays linked (${runs[0].stats ? runs[0].stats.flight.engineSplitSecs : '?'} s)`);
+  }
 }
 
 async function checkForces() {

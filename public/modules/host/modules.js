@@ -154,7 +154,7 @@ export function createModules(ship) {
       else if (!byName[m.to] || byName[m.to].broken) continue;
       else if (byName[m.to].kind === 'engine') {
         const live = (state.engines || []).find((q) => q.name === m.to), built = L.engines.find((q) => q.name === m.to);
-        parts.engines += engineUse(live ? live.dir : built && built.dir, Math.abs(state.ship.speed)); // (a forward engine: USE_ENGINE x speed; a lift engine burns steam whatever the throttle)
+        parts.engines += engineUse(live ? live.dir : built && built.dir, Math.abs(state.ship.speed), live && live.pow != null ? live.pow : 1); // (a forward engine: USE_ENGINE x speed; a lift engine burns steam with its own throttle)
       }
       else parts.other += B.USE_POWERED;
     }

@@ -24,22 +24,23 @@
 # RE-SNAPSHOTTED in the difficulty re-tune (config.DIFFICULTY, CREW_SCALE rows 4 and 16, YARD.POWER_SCALE re-tuned with tools/voyagesim.mjs; Normal now takes less damage and fewer shots, so every seeded run plays out differently: chaos, not a regression).
 # RE-SNAPSHOTTED for crew health (health.js, config.HEALTH): crew now have 3 hearts - fires, shell bursts, raider blows and hard landings take hearts, big blasts knock out at once, the medbay heals - and the bots step out of fires and go to the medbay on their last heart, so every seeded run plays out differently (chaos, not a regression), and a new 'crew:' line was added to the summary (knock-outs, hearts lost by cause, healed, average hearts). Compared over 6 seeds x 3 maps x 4 min with NO_HEALTH=1 (the old rules, which reproduce the previous baseline byte for byte): kills 32.3 -> 31.9, average hull 93.9 -> 95.0, missions 0.94 -> 1.00; 12 s knock-outs per run 3.3 -> 1.0 (a raider blow is a heart now, not a KO); voyagesim Normal 40 runs: 27 -> 24 victories (within noise). (tools/fixtures/golden.json and frames were re-captured with it.)
 # RE-SNAPSHOTTED for the GOING DOWN! redesign (goingDown.js, lift against weight): the ice locker is gone from the classic ship (its rack changed which tool racks a bot standing beside it meets, so every seeded run draws different random numbers: chaos, not a regression; no run reaches hull 0). See SHIP_BUILDING.md (b10).
+# RE-SNAPSHOTTED for per-engine throttles (engines.js, config.ENGINES.THRUST_MOMENT): every engine pushes from where it sits, so forward thrust from the classic pair (hung under the centre of mass) now tips her nose up about 0.5 degrees at full ahead, and the auto-trim moves the levers. The forward speed model is unchanged (linked throttles = the old speed, within 2%), but the tilt changes how the seeded runs play out (chaos, not a regression). Compared over 20 seeds x 3 maps x 3 min before / after: average hull 94.3 -> 95.3, kills 24.0 -> 25.6, wrecks 0 -> 0, missions 0.28 -> 0.28; voyagesim Normal, 96 seeds classic: 31 -> 27 victories (32% -> 28%), 48 seeds Sparrow: 9 -> 11 (19% -> 23%), both inside the noise (+-5 points).
 
 $ node tools/botsim.mjs --minutes 3 --seed 1 --map network
 --- botsim summary ---
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map network, seed 1
 missions completed: 0
 wrecks: 0
-average hull: 97.9
-kills: 26
-fires: burning avg 0.00, on fire 0.0% of flight, lit 0, hull eaten ~0.0; by hit 0, spread 0, boiler 0, other 0; blazes 0, hits on plate 0
-hauled: 10 ammo loads, 2 coal loads; fires out 0, holes patched 1
-steam: mean 70.8, <35 0.0%, >70 51.9%, >90 0.0%, blowouts 0, leaking 0.0%
-gas (hover needs ~50): avg 49.18, peak 100
+average hull: 97.2
+kills: 21
+fires: burning avg 0.07, on fire 4.5% of flight, lit 3, hull eaten ~8.5; by hit 1, spread 2, boiler 0, other 0; blazes 0, hits on plate 0
+hauled: 5 ammo loads, 2 coal loads; fires out 3, holes patched 4
+steam: mean 71.8, <35 0.0%, >70 54.7%, >90 0.0%, blowouts 0, leaking 0.0%
+gas (hover needs ~50): avg 48.50, peak 100
 daring stunts: started 1 (plane 0, gun 0, show 1); fighters stolen 0; ended 1: landed x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 152 of 496 station seconds = 30.6% (gun+loader 3.8%, helm+lookout 48.6%, lookout+helm 100.0%); gunner idle 56.7% of 280s; surge held 12s
-crew: knocked out 6x; hearts lost 0.0 (none); by hearts to zero: none; healed 0 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 3.00, on the last heart 0.0% of crew-time
+links: paired seconds 151 of 447 station seconds = 33.9% (gun+loader 2.2%, helm+lookout 51.3%, lookout+helm 100.0%); gunner idle 62.5% of 231s; surge held 11s
+crew: knocked out 6x; hearts lost 7.0 (shell 1.0, fire 1.0, raider 5.0); by hearts to zero: raider 1; healed 3 in the medbay, 0 bandaged, 0 rested; burning 2s (1 burns); avg hearts 2.86, on the last heart 5.1% of crew-time
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 2 --map network
@@ -47,16 +48,16 @@ $ node tools/botsim.mjs --minutes 3 --seed 2 --map network
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map network, seed 2
 missions completed: 0
 wrecks: 0
-average hull: 96.7
-kills: 23
+average hull: 95.4
+kills: 31
 fires: burning avg 0.00, on fire 0.0% of flight, lit 0, hull eaten ~0.0; by hit 0, spread 0, boiler 0, other 0; blazes 0, hits on plate 0
-hauled: 5 ammo loads, 2 coal loads; fires out 0, holes patched 1
-steam: mean 68.8, <35 0.0%, >70 49.6%, >90 0.0%, blowouts 0, leaking 6.5%
-gas (hover needs ~50): avg 49.20, peak 100
-daring stunts: started 1 (plane 1, gun 0, show 0); fighters stolen 0; ended 1: nothing to aim at x1
+hauled: 5 ammo loads, 3 coal loads; fires out 0, holes patched 1
+steam: mean 64.4, <35 0.0%, >70 22.3%, >90 0.0%, blowouts 0, leaking 11.1%
+gas (hover needs ~50): avg 48.93, peak 100
+daring stunts: started 1 (plane 0, gun 0, show 1); fighters stolen 0; ended 1: landed x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 182 of 484 station seconds = 37.6% (gun+loader 1.8%, helm+lookout 60.6%, lookout+helm 100.0%); gunner idle 62.6% of 249s; surge held 15s
-crew: knocked out 4x; hearts lost 5.0 (raider 5.0); by hearts to zero: raider 1; healed 2 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.92, on the last heart 2.4% of crew-time
+links: paired seconds 223 of 506 station seconds = 44.1% (gun+loader 2.6%, helm+lookout 70.8%, lookout+helm 96.7%); gunner idle 58.1% of 240s; surge held 5s
+crew: knocked out 6x; hearts lost 7.0 (raider 6.0, shell 1.0); by hearts to zero: raider 1; healed 4 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.91, on the last heart 1.8% of crew-time
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 3 --map network
@@ -64,16 +65,16 @@ $ node tools/botsim.mjs --minutes 3 --seed 3 --map network
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map network, seed 3
 missions completed: 1, minutes each: 2.9, average 2.9
 wrecks: 0
-average hull: 97.9
-kills: 22
+average hull: 98.3
+kills: 23
 fires: burning avg 0.00, on fire 0.0% of flight, lit 0, hull eaten ~0.0; by hit 0, spread 0, boiler 0, other 0; blazes 0, hits on plate 0
-hauled: 3 ammo loads, 3 coal loads; fires out 0, holes patched 6
-steam: mean 68.2, <35 0.0%, >70 53.5%, >90 0.0%, blowouts 0, leaking 0.0%
-gas (hover needs ~50): avg 51.60, peak 100
-daring stunts: started 0 (plane 0, gun 0, show 0); fighters stolen 0; ended 0: 
+hauled: 1 ammo loads, 3 coal loads; fires out 0, holes patched 6
+steam: mean 67.0, <35 0.0%, >70 43.0%, >90 0.0%, blowouts 0, leaking 2.0%
+gas (hover needs ~50): avg 50.25, peak 100
+daring stunts: started 1 (plane 0, gun 0, show 1); fighters stolen 0; ended 1: landed x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 196 of 466 station seconds = 42.2% (gun+loader 1.8%, helm+lookout 68.8%, lookout+helm 92.3%); gunner idle 72.6% of 222s; surge held 6s
-crew: knocked out 5x; hearts lost 10.0 (shell 4.0, raider 6.0); by hearts to zero: raider 1; healed 0 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.49, on the last heart 7.1% of crew-time
+links: paired seconds 119 of 425 station seconds = 28.0% (gun+loader 3.4%, helm+lookout 38.5%, lookout+helm 100.0%); gunner idle 67.9% of 225s; surge held 7s
+crew: knocked out 4x; hearts lost 9.0 (shell 3.0, raider 6.0); by hearts to zero: raider 1; healed 0 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.59, on the last heart 7.3% of crew-time
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 1 --map route
@@ -81,16 +82,16 @@ $ node tools/botsim.mjs --minutes 3 --seed 1 --map route
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map route, seed 1
 missions completed: 0
 wrecks: 0
-average hull: 93.8
-kills: 23
-fires: burning avg 0.00, on fire 0.0% of flight, lit 0, hull eaten ~0.0; by hit 0, spread 0, boiler 0, other 0; blazes 0, hits on plate 0
-hauled: 5 ammo loads, 2 coal loads; fires out 0, holes patched 6
-steam: mean 68.9, <35 0.0%, >70 51.4%, >90 2.1%, blowouts 0, leaking 13.3%
-gas (hover needs ~50): avg 47.83, peak 100
-daring stunts: started 0 (plane 0, gun 0, show 0); fighters stolen 0; ended 0: 
+average hull: 96.3
+kills: 17
+fires: burning avg 0.08, on fire 5.9% of flight, lit 2, hull eaten ~10.5; by hit 2, spread 0, boiler 0, other 0; blazes 0, hits on plate 0
+hauled: 5 ammo loads, 2 coal loads; fires out 2, holes patched 6
+steam: mean 72.9, <35 0.0%, >70 65.4%, >90 5.2%, blowouts 0, leaking 8.5%
+gas (hover needs ~50): avg 46.86, peak 100
+daring stunts: started 2 (plane 0, gun 0, show 2); fighters stolen 0; ended 2: landed x2
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 223 of 582 station seconds = 38.2% (gun+loader 3.7%, helm+lookout 65.5%, lookout+helm 100.0%); gunner idle 73.7% of 315s; surge held 8s
-crew: knocked out 7x; hearts lost 7.0 (shell 2.0, raider 5.0); by hearts to zero: raider 1; healed 3 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.72, on the last heart 2.3% of crew-time
+links: paired seconds 252 of 619 station seconds = 40.7% (gun+loader 2.4%, helm+lookout 73.6%, lookout+helm 100.0%); gunner idle 73.2% of 331s; surge held 10s
+crew: knocked out 5x; hearts lost 1.0 (shell 1.0); by hearts to zero: none; healed 0 in the medbay, 0 bandaged, 0 rested; burning 1s (0 burns); avg hearts 2.99, on the last heart 0.0% of crew-time
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 2 --map route
@@ -98,16 +99,16 @@ $ node tools/botsim.mjs --minutes 3 --seed 2 --map route
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map route, seed 2
 missions completed: 0
 wrecks: 0
-average hull: 92.9
-kills: 22
+average hull: 93.3
+kills: 28
 fires: burning avg 0.00, on fire 0.0% of flight, lit 0, hull eaten ~0.0; by hit 0, spread 0, boiler 0, other 0; blazes 0, hits on plate 0
-hauled: 4 ammo loads, 3 coal loads; fires out 0, holes patched 1
-steam: mean 69.5, <35 0.0%, >70 48.3%, >90 0.0%, blowouts 0, leaking 5.6%
-gas (hover needs ~50): avg 55.87, peak 100
-daring stunts: started 1 (plane 1, gun 0, show 0); fighters stolen 0; ended 1: nothing to aim at x1
+hauled: 5 ammo loads, 3 coal loads; fires out 0, holes patched 0
+steam: mean 71.7, <35 0.0%, >70 59.0%, >90 0.0%, blowouts 0, leaking 8.6%
+gas (hover needs ~50): avg 55.84, peak 100
+daring stunts: started 0 (plane 0, gun 0, show 0); fighters stolen 0; ended 0: 
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 234 of 596 station seconds = 39.3% (gun+loader 2.2%, helm+lookout 70.2%, lookout+helm 94.4%); gunner idle 74.9% of 314s; surge held 5s
-crew: knocked out 7x; hearts lost 8.0 (shell 1.0, raider 7.0); by hearts to zero: raider 1; healed 4 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.88, on the last heart 3.4% of crew-time
+links: paired seconds 257 of 641 station seconds = 40.2% (gun+loader 2.6%, helm+lookout 77.7%, lookout+helm 96.8%); gunner idle 76.4% of 353s; surge held 10s
+crew: knocked out 5x; hearts lost 5.0 (raider 5.0); by hearts to zero: raider 1; healed 3 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.94, on the last heart 1.9% of crew-time
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 3 --map route
@@ -115,16 +116,16 @@ $ node tools/botsim.mjs --minutes 3 --seed 3 --map route
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map route, seed 3
 missions completed: 0
 wrecks: 0
-average hull: 94.1
-kills: 29
+average hull: 94.9
+kills: 25
 fires: burning avg 0.00, on fire 0.0% of flight, lit 0, hull eaten ~0.0; by hit 0, spread 0, boiler 0, other 0; blazes 0, hits on plate 0
-hauled: 7 ammo loads, 2 coal loads; fires out 0, holes patched 2
-steam: mean 67.3, <35 0.2%, >70 54.1%, >90 0.0%, blowouts 0, leaking 22.8%
-gas (hover needs ~50): avg 55.91, peak 100
-daring stunts: started 1 (plane 0, gun 0, show 1); fighters stolen 0; ended 1: landed x1
+hauled: 5 ammo loads, 2 coal loads; fires out 0, holes patched 8
+steam: mean 71.6, <35 0.0%, >70 62.4%, >90 0.0%, blowouts 0, leaking 0.0%
+gas (hover needs ~50): avg 56.61, peak 100
+daring stunts: started 1 (plane 1, gun 0, show 0); fighters stolen 0; ended 1: nothing to aim at x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 199 of 618 station seconds = 32.2% (gun+loader 2.0%, helm+lookout 58.5%, lookout+helm 100.0%); gunner idle 59.6% of 358s; surge held 6s
-crew: knocked out 6x; hearts lost 7.0 (shell 3.0, raider 4.0); by hearts to zero: raider 1; healed 3 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.82, on the last heart 3.1% of crew-time
+links: paired seconds 181 of 527 station seconds = 34.4% (gun+loader 3.2%, helm+lookout 53.6%, lookout+helm 99.9%); gunner idle 60.9% of 280s; surge held 9s
+crew: knocked out 6x; hearts lost 10.0 (shell 6.0, raider 4.0); by hearts to zero: raider 1; healed 2 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.72, on the last heart 5.9% of crew-time
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 1 --map open
@@ -132,16 +133,16 @@ $ node tools/botsim.mjs --minutes 3 --seed 1 --map open
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map open, seed 1
 missions completed: 1, minutes each: 2.8, average 2.8
 wrecks: 0
-average hull: 98.9
-kills: 27
-fires: burning avg 0.37, on fire 4.8% of flight, lit 17, hull eaten ~46.3; by hit 1, spread 18, boiler 0, other 0; blazes 1, hits on plate 0
-hauled: 4 ammo loads, 2 coal loads; fires out 12, holes patched 3
-steam: mean 70.3, <35 0.0%, >70 51.3%, >90 0.0%, blowouts 0, leaking 1.8%
-gas (hover needs ~50): avg 53.42, peak 94
-daring stunts: started 1 (plane 0, gun 0, show 1); fighters stolen 0; ended 1: landed x1
+average hull: 99.8
+kills: 31
+fires: burning avg 0.00, on fire 0.0% of flight, lit 0, hull eaten ~0.0; by hit 0, spread 0, boiler 0, other 0; blazes 0, hits on plate 0
+hauled: 7 ammo loads, 2 coal loads; fires out 0, holes patched 3
+steam: mean 72.0, <35 0.0%, >70 72.0%, >90 0.0%, blowouts 0, leaking 0.0%
+gas (hover needs ~50): avg 52.92, peak 100
+daring stunts: started 2 (plane 0, gun 0, show 2); fighters stolen 0; ended 2: landed x2
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 177 of 435 station seconds = 40.8% (gun+loader 7.3%, helm+lookout 59.3%, lookout+helm 100.0%); gunner idle 57.0% of 218s; surge held 12s
-crew: knocked out 3x; hearts lost 10.0 (shell 6.0, raider 4.0); by hearts to zero: raider 1; healed 0 in the medbay, 0 bandaged, 0 rested; burning 5s (0 burns); avg hearts 2.73, on the last heart 6.0% of crew-time
+links: paired seconds 172 of 460 station seconds = 37.3% (gun+loader 2.4%, helm+lookout 60.0%, lookout+helm 100.0%); gunner idle 60.4% of 239s; surge held 12s
+crew: knocked out 4x; hearts lost 3.0 (shell 3.0); by hearts to zero: none; healed 2 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.94, on the last heart 0.6% of crew-time
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 2 --map open
@@ -149,16 +150,16 @@ $ node tools/botsim.mjs --minutes 3 --seed 2 --map open
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map open, seed 2
 missions completed: 0
 wrecks: 0
-average hull: 99.7
-kills: 28
-fires: burning avg 0.02, on fire 2.1% of flight, lit 1, hull eaten ~2.6; by hit 0, spread 0, boiler 1, other 0; blazes 0, hits on plate 0
-hauled: 6 ammo loads, 2 coal loads; fires out 1, holes patched 2
-steam: mean 74.1, <35 0.0%, >70 68.3%, >90 0.5%, blowouts 1, leaking 3.5%
-gas (hover needs ~50): avg 51.78, peak 97
-daring stunts: started 1 (plane 0, gun 0, show 1); fighters stolen 0; ended 1: landed x1
+average hull: 99.3
+kills: 31
+fires: burning avg 0.05, on fire 5.2% of flight, lit 1, hull eaten ~6.5; by hit 1, spread 0, boiler 0, other 0; blazes 0, hits on plate 0
+hauled: 0 ammo loads, 2 coal loads; fires out 0, holes patched 5
+steam: mean 70.1, <35 0.0%, >70 56.2%, >90 0.0%, blowouts 0, leaking 4.5%
+gas (hover needs ~50): avg 51.39, peak 97
+daring stunts: started 1 (plane 1, gun 0, show 0); fighters stolen 0; ended 1: nothing to aim at x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 233 of 662 station seconds = 35.2% (gun+loader 2.4%, helm+lookout 64.8%, lookout+helm 100.0%); gunner idle 75.8% of 377s; surge held 14s
-crew: knocked out 3x; hearts lost 2.0 (shell 2.0); by hearts to zero: none; healed 0 in the medbay, 0 bandaged, 0 rested; burning 1s (0 burns); avg hearts 2.96, on the last heart 0.0% of crew-time
+links: paired seconds 275 of 541 station seconds = 50.8% (gun+loader 2.2%, helm+lookout 82.2%, lookout+helm 100.0%); gunner idle 69.3% of 242s; surge held 15s
+crew: knocked out 3x; hearts lost 6.0 (shell 2.0, raider 4.0); by hearts to zero: none; healed 2 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.79, on the last heart 1.5% of crew-time
 errors: 0
 
 $ node tools/botsim.mjs --minutes 3 --seed 3 --map open
@@ -166,14 +167,14 @@ $ node tools/botsim.mjs --minutes 3 --seed 3 --map open
 bots 8 (0 as humans; ship's mates seen: 0), 3 min, normal, map open, seed 3
 missions completed: 0
 wrecks: 0
-average hull: 97.6
-kills: 24
-fires: burning avg 0.13, on fire 7.9% of flight, lit 6, hull eaten ~16.1; by hit 2, spread 4, boiler 0, other 0; blazes 0, hits on plate 0
-hauled: 2 ammo loads, 2 coal loads; fires out 6, holes patched 5
-steam: mean 67.5, <35 2.8%, >70 38.8%, >90 3.2%, blowouts 0, leaking 0.0%
-gas (hover needs ~50): avg 49.30, peak 97
-daring stunts: started 1 (plane 1, gun 0, show 0); fighters stolen 0; ended 1: nothing to aim at x1
+average hull: 99.5
+kills: 30
+fires: burning avg 0.00, on fire 0.0% of flight, lit 0, hull eaten ~0.0; by hit 0, spread 0, boiler 0, other 0; blazes 0, hits on plate 0
+hauled: 4 ammo loads, 2 coal loads; fires out 0, holes patched 0
+steam: mean 64.7, <35 0.9%, >70 25.3%, >90 4.1%, blowouts 0, leaking 26.4%
+gas (hover needs ~50): avg 49.37, peak 97
+daring stunts: started 1 (plane 0, gun 0, show 1); fighters stolen 0; ended 1: landed x1
 searchlights: Nest Searchlight manned 0%, Belly Searchlight manned 0%; something lit 0% of flight
-links: paired seconds 220 of 521 station seconds = 42.2% (gun+loader 1.7%, helm+lookout 70.3%, lookout+helm 100.0%); gunner idle 61.9% of 260s; surge held 9s
-crew: knocked out 5x; hearts lost 9.0 (shell 1.0, raider 8.0); by hearts to zero: raider 3; healed 0 in the medbay, 0 bandaged, 0 rested; burning 2s (0 burns); avg hearts 2.86, on the last heart 4.5% of crew-time
+links: paired seconds 264 of 591 station seconds = 44.7% (gun+loader 3.1%, helm+lookout 81.1%, lookout+helm 98.5%); gunner idle 65.8% of 304s; surge held 8s
+crew: knocked out 4x; hearts lost 7.0 (shell 4.0, raider 3.0); by hearts to zero: raider 2; healed 2 in the medbay, 0 bandaged, 0 rested; burning 0s (0 burns); avg hearts 2.83, on the last heart 3.9% of crew-time
 errors: 0
