@@ -57,7 +57,9 @@ export function createFireVolumes(parent, FL, { max = 4, sides = 9, rings = 8 } 
     // o = { x, y, z, ang (the 3D direction, radians, y up), len, r0, r1 (the radius at the far end), zk (depth squash), frame, power (0..1) }
     add(o) {
       if (n >= max || !fin(o.x) || !fin(o.y) || !(o.len > 1)) return false;
-      const dx = Math.cos(o.ang), dy = Math.sin(o.ang), px = -dy, py = dx, f = ((o.frame | 0) % FR + FR) % FR, pw = clamp(o.power == null ? 1 : o.power, 0, 1.2), base = n * per;
+      const f = ((o.frame | 0) % FR + FR) % FR, flicker = f;
+      const dx = Math.cos(o.ang), dy = Math.sin(o.ang), px = -dy, py = dx;
+      const pw = clamp(o.power == null ? 1 : o.power, 0, 1.2), base = n * per;
       for (let l = 0; l < LAY; l++) {
         const L = o.len * LL[l] * (0.55 + 0.45 * pw), [cr, cg, cb] = COLS[l];
         for (let r = 0; r <= rings; r++) {
@@ -66,7 +68,7 @@ export function createFireVolumes(parent, FL, { max = 4, sides = 9, rings = 8 } 
           const fade = (t < 0.08 ? 0.35 + 0.65 * (t / 0.08) : 1) * Math.pow(1 - t, 0.85);
           const a = FL.alpha[l] * fade * clamp(pw, 0, 1);
           for (let sd = 0; sd < sides; sd++) {
-            const phi = (sd / sides) * Math.PI * 2, j = jit[f][l][r][sd] * (r === 0 ? 0.4 : 1), cs = Math.cos(phi) * rad * j, sn = Math.sin(phi) * rad * j * (o.zk == null ? 0.5 : o.zk);
+            const phi = (sd / sides) * Math.PI * 2, j = jit[flicker][l][r][sd] * (r === 0 ? 0.4 : 1), cs = Math.cos(phi) * rad * j, sn = Math.sin(phi) * rad * j * (o.zk == null ? 0.5 : o.zk);
             const i = base + (l * (rings + 1) + r) * sides + sd;
             pos[i * 3] = o.x + dx * s + px * cs; pos[i * 3 + 1] = o.y + dy * s + py * cs; pos[i * 3 + 2] = o.z + sn;
             col[i * 4] = cr; col[i * 4 + 1] = cg; col[i * 4 + 2] = cb; col[i * 4 + 3] = a;
@@ -250,6 +252,15 @@ export function createDrakeFx({ parent, P, getP, getDamage }) {
             Pt.ring(x, ly0 + 30, f.zBody + 100, 2800, '#ffb060', 0.8); Pt.ring(x, ly0 + 30, f.zBody + 100, 1700, '#ffe08a', 0.6);
           }
           if (S.lavaDone && into > 0 && (S.sinkT = (S.sinkT || 0) - dt) <= 0) { S.sinkT = 0.12 / slow; Pt.burst('ember', cr.x + (rnd() - 0.5) * 1200, -f.lavaY + 60, f.zBody + 60, 5, { dir: Math.PI / 2, spread: 0.6, speed: [200, 800], up: [100, 500], size: [10, 16], life: [1.0 / slow, 2.0 / slow], noRate: true }); }
+        }
+      }
+      // ---- crawling: it smoulders (embers off its back) and the stump of the torn wing drags a trail of dust and sparks along the shelf ----
+      if (Pt && dk.mode === 'crawl' && !cr.dying) {
+        const ne = acc('crawlE', 7 * (Pt.rate || 1), dt);
+        if (ne) Pt.burst('ember', cr.x, -cr.y + 260, f.zBody + 60, ne, { dir: Math.PI / 2, spread: 0.9, speed: [20, 160], up: [60, 200], size: [9, 15], life: [0.9, 1.7], area: 700, noRate: true });
+        if (f.drag && Math.abs(cr.mvx || 0) > 30) {
+          const nd = acc('drag', 14 * (Pt.rate || 1), dt);
+          if (nd) { Pt.burst('dust', f.drag.x, f.drag.y + 30, f.zBody + 80, nd, { dir: Math.PI / 2, spread: 1.2, speed: [30, 160], up: [20, 90], size: [70, 130], size1: 2.2, life: [0.8, 1.4], color: '#8a7466', alpha: 0.6, area: 120 }); Pt.burst('spark', f.drag.x, f.drag.y + 20, f.zBody + 80, 1, { speed: [100, 420], size: [5, 8], life: [0.3, 0.6] }); }
         }
       }
       // ---- the nostrils: a thin curl of ember smoke now and then while it flies ----

@@ -6,7 +6,7 @@
 //   - the NECK, the TAIL, the WING ARMS, the WING FINGERS and the two HIND LEGS are tubes (creatureTube.js, 14 limbs in one mesh), the neck and tail with a ridge of spines along the back; the wing arm is the
 //     sim's chain drawn thin (the sim's radius is the membrane's width), each finger a bone from a joint to the trailing edge, and the MEMBRANES (drakeWings.js) are stretched between them with holes as the wing is hurt
 //   - the HEAD, the hinged JAW, the tail CLUB, the TALONS and the wing thumbs are rigid pieces (a RigidSet, creatureKit.js) moved by matrices; the jaw turns by the sim's mouth openness in eighths; the throat,
-//     the cheek vents and the mouth glow by the stepped breath glow; the talons are placed by a two bone leg IK on the gasbag's own skin when it perches, with creases dented round them
+//     the cheek vents and the mouth glow by the stepped breath glow; the talons are placed by a two bone leg IK on the gasbag's own skin when it perches, and the bag sags under its weight
 //   - the FIRE (drakeFx.js): the breath cone, the lava spouts, the crash, the perch's thud and the fall into the lava
 // The same record is what the dev page and the gate (tools/creature3d-check.mjs) read: rig.ext.
 import { THREE, outlineMat } from './style.js';
@@ -96,6 +96,17 @@ export function extendDrake(ctx) {
     return out.set(x - G.cx, ly, dz).applyMatrix4(b.node.matrixWorld);
   }
 
+  // THE DENT: its weight sits the bag down a little (a small separate hook: the envelope's node is scaled after the ship model set it this frame, and put back by the model next frame; bag.js is untouched). k = 0..1 in
+  // three steps after it lands. A node whose scale is still the one this left (the model did not run in between) is first put back, so it never compounds.
+  function sagBag(node, k) {
+    const u = node.userData.drakeSag;
+    if (u && node.scale.x === u.x && node.scale.y === u.y) node.scale.set(u.bx, u.by, node.scale.z);
+    if (k <= 0) { node.userData.drakeSag = null; return; }
+    const bx = node.scale.x, by = node.scale.y;
+    node.scale.set(bx * (1 + 0.015 * k), by * (1 - 0.06 * k), node.scale.z);
+    node.userData.drakeSag = { x: node.scale.x, y: node.scale.y, bx, by };
+  }
+
   // two bone leg: hip -> knee -> foot in the plane of the screen (knee toward `fwd`), positions in 3D; fills the two segments (game coordinates)
   function leg(li, hip, foot, fwd, zHip, zFoot, segsOut, tl) {
     const a = 430, b = 410;
@@ -123,8 +134,8 @@ export function extendDrake(ctx) {
     for (let k = 1; k <= n; k++) {
       if (k === n && !torn) { (out[k] || (out[k] = { x: 0, y: 0, dx: 0, dy: 0, len: 0 })); out[k].x = J[n].x; out[k].y = J[n].y; out[k].len = 0; out[k].dx = 0; out[k].dy = 0; continue; }
       const a = J[k - 1], b = J[Math.min(n, k + 1)], Tx0 = b.x - a.x, Ty0 = b.y - a.y, l0 = Math.hypot(Tx0, Ty0) || 1, Tx = Tx0 / l0, Ty = Ty0 / l0;
-      const bt = 0.34 - 0.045 * k, px = -Ty * st, py = Tx * st; // (the perpendicular on the membrane's side, swept toward the tip a little)
-      let dx = px * Math.cos(bt) + Tx * Math.sin(bt), dy = py * Math.cos(bt) + Ty * Math.sin(bt);
+      const fan = 0.34 - 0.045 * k, px = -Ty * st, py = Tx * st; // (the perpendicular on the membrane's side, swept toward the tip a little)
+      let dx = px * Math.cos(fan) + Tx * Math.sin(fan), dy = py * Math.cos(fan) + Ty * Math.sin(fan);
       const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
       const r = k < n ? p.segs[k].r : p.segs[n - 1].r1, len = 2.5 * r; // (the skin hangs wider than the hit capsule: a dragon's wing is broad)
       const o = out[k] || (out[k] = { x: 0, y: 0, dx: 0, dy: 0, len: 0 });
@@ -199,7 +210,7 @@ export function extendDrake(ctx) {
       // ---- the depth the body lies at ----
       let zT = -480, bag = null;
       const pc = dk.perch;
-      if (dk.mode === 'perch' && pc) { bag = bagOf(pc.bag); if (bag) { bag.node.updateWorldMatrix(true, false); S.perchZ = tmp.setFromMatrixPosition(bag.node.matrixWorld).z; zT = pc.landed ? S.perchZ + 70 : -300; } }
+      if (dk.mode === 'perch' && pc) { bag = bagOf(pc.bag); if (bag) { sagBag(bag.node, pc.landed && pc.sub !== 'lift' ? clamp(Math.floor((pc.t || 0) * 8) / 3, 0, 1) : 0); bag.node.updateWorldMatrix(true, false); S.perchZ = tmp.setFromMatrixPosition(bag.node.matrixWorld).z; zT = pc.landed ? S.perchZ + 70 : -300; } }
       else if (dk.mode === 'crash' || dk.mode === 'crawl') zT = -230;
       else if (cr.mode === 'dying') zT = 240; // (it falls in front of the shelf, into the lava)
       S.zBody = S.zBody == null ? zT : S.zBody + (zT - S.zBody) * (1 - Math.exp(-3.2 * clamp(dt, 0, 0.1)));
@@ -222,6 +233,7 @@ export function extendDrake(ctx) {
       uniforms.uGlow.value.set(R.glow[0], R.glow[1], R.glow[2], R.glow[3]);
       // the ember cracks' heat: stepped quarters of the breath's glow; they dim as it dies and when it is tired
       let heat = P.HEAT.base + P.HEAT.breath * (lvl > 0 ? lvl : 0) + (cr.flame ? 0.15 : 0);
+      if ((cr.phase || 1) >= 3 && !dying) heat += 0.25; // (phase 3, desperate: the cracks burn brighter)
       if (dying) heat *= 1 - 0.8 * clamp((cr.sinkT || 0) / 4, 0, 1);
       heat = Math.round(heat * 8) / 8;
       if (heat !== S.heat) { S.heat = heat; headMat.emissiveIntensity = heat; tubes.material.emissiveIntensity = heat * 0.85; }
@@ -284,7 +296,8 @@ export function extendDrake(ctx) {
       if (fx) {
         const hsd = headP && headP.segs[0], mo = mouthP && mouthP.segs[0];
         const m3 = mo ? { x: mo.x, y: -mo.y } : hsd ? { x: hsd.x, y: -hsd.y } : null;
-        try { fx.update({ cr, state, dt, t, zMouth: zHead, zBody, mouth3: m3, tier: F.tier, night, lavaY: state && state.env && fin(state.env.lavaY) ? state.env.lavaY : null, chunks: [...R.chunks.values()], tierK: F.tier && F.tier.name === 'low' ? 0 : F.tier && F.tier.name === 'medium' ? 0.6 : 1 }); } catch (e) { if (!S.fxWarned) { S.fxWarned = true; console.warn('drake fx', e); } }
+        const sw = cr.parts.find((q) => q.kind === 'wing' && q.severed && q.segs.length), sj = sw ? jointsOf(sw.segs, []) : null, drag = sj ? { x: sj[sj.length - 1].x, y: -sj[sj.length - 1].y } : null; // (the stump of a torn wing drags on the shelf)
+        try { fx.update({ cr, state, dt, t, zMouth: zHead, zBody, mouth3: m3, drag, tier: F.tier, night, lavaY: state && state.env && fin(state.env.lavaY) ? state.env.lavaY : null, chunks: [...R.chunks.values()], tierK: F.tier && F.tier.name === 'low' ? 0 : F.tier && F.tier.name === 'medium' ? 0.6 : 1 }); } catch (e) { if (!S.fxWarned) { S.fxWarned = true; console.warn('drake fx', e); } }
       }
       S.prevMode = dk.mode;
     },
@@ -318,11 +331,10 @@ export function extendDrake(ctx) {
   function stepLegs(F, f, zBody, bag) {
     const dk = cr.drake || {}, pc = dk.perch, torso = partOf('mantle');
     const M = S.bodyM, tl = [1, 1, 1];
-    if (!torso || torso.dead) { tubes.update(LI.legN, null, 1, false, null, tl); tubes.update(LI.legF, null, 1, false, null, tl); set.place('footA', null); set.place('footB', null); set.place('dentA', null); set.place('dentB', null); return; }
+    if (!torso || torso.dead) { tubes.update(LI.legN, null, 1, false, null, tl); tubes.update(LI.legF, null, 1, false, null, tl); set.place('footA', null); set.place('footB', null); return; }
     const tt = F.tintOf(torso);
     const perched = dk.mode === 'perch' && pc && pc.landed && bag;
     const hipsL = [V(-350, -120, 205), V(-350, -120, -205)];
-    const dents = [null, null];
     for (let i = 0; i < 2; i++) {
       const hip = hipsL[i].clone().applyMatrix4(M), zH = hip.z;
       let target = tmp3.set(0, 0, 0), zF = zH;
@@ -330,7 +342,6 @@ export function extendDrake(ctx) {
         const near = i === 0, x = pc.px + (near ? 130 : -100) * f, dz = near ? 110 : 30; // (both feet on the half of the bag that faces the viewer)
         const w = bagSkin(bag, x, dz, target);
         target.copy(w); zF = w.z; target.y += 38;
-        dents[i] = w.clone();
       } else if (dk.mode === 'crawl' || dk.mode === 'crash') {
         target.set(hip.x + f * (i ? -170 : 120), -(cr.y + 380) + 62, zH * 0.9);
         zF = target.z;
@@ -346,9 +357,6 @@ export function extendDrake(ctx) {
       set.place(foot, Mt);
     }
     S.feetSet = true;
-    for (let i = 0; i < 2; i++) {
-      if (dents[i]) { Mt.copy(T(dents[i].x, dents[i].y, dents[i].z)).multiply(Sx(f, 1, 1)); set.place(i === 0 ? 'dentA' : 'dentB', Mt); } else set.place(i === 0 ? 'dentA' : 'dentB', null);
-    }
     const tn = tt;
     ptint.set(rs.footA, tn[0], tn[1], tn[2]); ptint.set(rs.footB, tn[0], tn[1], tn[2]);
   }

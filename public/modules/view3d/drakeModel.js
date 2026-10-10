@@ -52,9 +52,9 @@ export function horn(base, dir, len, r0, { bend = V(0, 1, 0), curve = 0, sides =
   const d = dir.clone().normalize(), b = bend.clone().normalize(), out = [];
   let end = null, tan = d.clone();
   for (let i = 0; i <= rings; i++) {
-    const t = i / rings, c = base.clone().addScaledVector(d, len * t).addScaledVector(b, len * curve * t * t);
-    tan = d.clone().addScaledVector(b, 2 * curve * t).normalize();
-    const [ex, ey] = frameOf(tan), r = r0 * (1 - (1 - endR) * Math.pow(t, 0.9)) * (1 + bulge * Math.sin(t * Math.PI));
+    const u = i / rings, c = base.clone().addScaledVector(d, len * u).addScaledVector(b, len * curve * u * u);
+    tan = d.clone().addScaledVector(b, 2 * curve * u).normalize();
+    const [ex, ey] = frameOf(tan), r = r0 * (1 - (1 - endR) * Math.pow(u, 0.9)) * (1 + bulge * Math.sin(u * Math.PI));
     const ring = [];
     for (let k = 0; k < sides; k++) { const a = (k / sides) * TAU + 0.3; ring.push(c.clone().addScaledVector(ex, Math.cos(a) * r).addScaledVector(ey, Math.sin(a) * r * flat)); }
     out.push(ring);
@@ -249,20 +249,6 @@ export function buildPieces(cr, P, opts = {}) {
   for (const nm of ['thumbN', 'thumbF']) {
     cone(V(0, 0, 0), V(1, 0.12, 0), 190, 30, { bend: V(0, 1, 0), curve: 0.55, sides: 5, rings: 6 }, P.horn, OW * 0.6, nm);
     add(sphere, M4(V(0, 0, 0), null, V(46, 46, 46)), { ow: OW * 0.6, color: P.bone2, name: nm });
-  }
-  // ---- the dents the perched talons leave in the gasbag: three creases fanning from each foot, dark canvas, laid flat (local +x = the foot's direction, the ground plane is x-z) ----
-  for (const nm of ['dentA', 'dentB']) {
-    for (let k = 0; k < 5; k++) {
-      const a = (k - 2) * 0.46, len = 190 - Math.abs(k - 2) * 28;
-      const c = V(Math.cos(a) * len * 0.5, 2, Math.sin(a) * len * 0.5), d = V(Math.cos(a), 0, Math.sin(a)), n = V(-Math.sin(a), 0, Math.cos(a));
-      const w = 11 - Math.abs(k - 2) * 1.8;
-      const ring = (t, ww) => [c.clone().addScaledVector(d, len * t * 0.5).addScaledVector(n, ww), c.clone().addScaledVector(d, len * t * 0.5).addScaledVector(n, -ww)];
-      void ring;
-      const pts = [[0, 0], [0.3, 1], [1, 0.15], [0.3, -1]];
-      const r0 = pts.map(([t, s]) => c.clone().addScaledVector(d, (t - 0.5) * len).addScaledVector(n, s * w).setY(2));
-      const r1 = r0.map((p) => p.clone().setY(9));
-      add(loft([r0, r1], true), null, { ow: 0, color: P.dent, name: nm });
-    }
   }
   void hasNear; void K; void opts;
   const geometry = mesh.build();
