@@ -229,6 +229,68 @@ export const config = {
     SHOT_EVERY: 0.2,
     BULLET_SPEED: 700,
   },
+  // Enemy SQUADRONS (squads.js, formations.js): the dogfighters arrive as a squadron with a LEADER, flying in FORMATION; in range they BREAK into attack pairs from different angles, REGROUP
+  // out past the ship and come round again; a leader shot down scatters the wingmen before a new one takes over; a squadron that loses most of its planes withdraws. FORMATIONS false =
+  // the old loose circling dogfighters, byte for byte (tools/botsim.mjs NO_SQUADRONS=1).
+  SQUADRONS: {
+    FORMATIONS: true,
+    MIN: 3, MAX: 6, // planes in a squadron
+    EXTRA: 1, // planes added to the old DOGFIGHT count (difficulty, crew size and mission already scale that one)...
+    DANGER_EXTRA_AT: 3, // ...and one more on a stop with this many skulls or more
+    SMALL_COUNT: 0.8, // a small crew (the crew-size count multiplier is under this) meets a squadron as small as...
+    MIN_SMALL: 2, // ...this many planes
+    SPACING: 130, // px between ranks of a formation (along the leader's heading)
+    WIDTH: 105, // px between planes side to side
+    FORM_SPEED: 0.9, // the leader cruises at this share of DOGFIGHT.SPEED in formation (the wingmen have the rest to catch up with)
+    FORM_TURN: 0.62, // ...and turns at this share of DOGFIGHT.TURN (a gentle turn keeps the wingmen on their slots)
+    PURSUE: 0.5, // ...and by this much more per px of distance beyond 300 px from the slot, in any direction (a straggler comes back flat out)
+    CATCHUP: 1.1, // the wingmen speed up or slow down by this much per px of slot error along the track (px/s per px)
+    WAIT: 0.2, WAIT_ERR: 500, // the leader slows by up to WAIT (a share of his speed) while a wingman is WAIT_ERR px or more behind his slot, so the squadron stays together
+    SNAP: 1.6, // a wingman within SNAP_RANGE of his slot is eased onto it at this rate (per second): the formation looks rigid, the planes still fly
+    SNAP_RANGE: 240,
+    SPAWN_DIST: 3100, // the leader appears this far from the ship, flying at her
+    BREAK_RANGE: 2700, // the squadron breaks when its leader is this close to the ship
+    PAIR_GAP: 1.0, // seconds between one pair peeling off and the next
+    IP_DIST: 2300, // each pair swings out to a point this far from the ship, then dives in (an attack run from its own angle)
+    IP_ANGLES: [-14, 12, -24, -150], // the angles of the pairs' run-in points (degrees from the side the squadron came from; negative = above the ship).
+    FIRE_RANGE: 2400, // a squadron plane opens fire at this distance from the middle of the ship (DOGFIGHT.FIRE_RANGE, 1300, is measured the same way, but the old planes turn away from the ship 700 px outside her hull, so they hardly ever fired)
+    STANDOFF: 1500, // on a run a plane steers for a point this far from its target (on its own side), so its run curves away outside the hull instead of into her...
+    PULL_OFF: 600, // ...and the run ends (the pair extends away) when it is within STANDOFF + this of the target (the turn away takes a few hundred px)
+    AVOID_HOLD: 0.6, // a squadron plane that pulled away from rock or the ship holds that heading this long (seconds) before steering for its goal again
+    SHIP_PAD: 450, // a plane going somewhere (forming up, the gathering point) that would cross the ship's bounds plus this margin goes round over (or under) her instead
+    PEEL_MAX: 4.5, // seconds to reach the run-in point at most
+    EXTEND: 1.5, // seconds a pair flies on away from the ship after its pass
+    PAIR_SLOT_BACK: 85, PAIR_SLOT_SIDE: 90, // a wingman's place on his pair leader during the break
+    BURST: 4, // bullets a plane fires on one pass (DOGFIGHT.BURST is the old one)
+    REGROUP_DIST: 2900, // after a pass the squadron forms up this far from the ship, then turns for the next
+    TURN_MARGIN: 600, // the leader turns for the next pass at the latest this far beyond REGROUP_DIST, formed up or not (the stragglers catch up in the turn; the ship moves, and a squadron that runs on is lost to the range limit)
+    REGROUP_MAX: 16, // seconds to form up and turn round at most
+    REGROUP_ERR: 150, // formed up when the planes are this close to their slots on average (px)
+    BREAK_MAX: 13, // a break lasts at most this long (seconds)
+    SCATTER: 2.2, // seconds the wingmen scatter when their leader goes down
+    WITHDRAW_FRAC: 0.4, // a squadron down to this share of its planes (or fewer) withdraws
+    LEAVE_DIST: 5200, // a withdrawing plane is gone at this distance from the ship
+    LEAVE_SPEED: 1.12, // withdrawing planes fly at this share of DOGFIGHT.SPEED
+    WEIGHTS: { vee: 3, echelonL: 1.5, echelonR: 1.5, abreast: 1.5, fingerFour: 2, trail: 1.5 }, // how often each formation is flown (fingerFour needs 4 planes or more)
+    ENV_WEIGHTS: { // an environment's flavour (the id is config.ENVIRONMENTS')
+      storm: { abreast: 2, vee: 1.5 }, // the storm riders fly wide
+      aether: { trail: 2.5, echelonL: 1.2 }, // the void corsairs fly in file
+      frost: { vee: 1.6 },
+    },
+    DANGER_WEIGHTS: { 3: { fingerFour: 2.5, vee: 1.3 } }, // harder stops (skulls) favour the tighter formations
+    ACE_DANGER: 3, // a stop with this many skulls or more has an ACE leading the squadron (a flying circus pilot: garish paint, tougher)
+    ACE_HP: 1.5, // ...with this many times the hp
+    ACE_PAINTS: [ // fictional circus colours, no insignia
+      { id: 'crimson', body: '#b3342e', trim: '#f2d36b' },
+      { id: 'cobalt', body: '#33689c', trim: '#f0e6c0' },
+      { id: 'harlequin', body: '#3a3140', trim: '#e3a640' },
+    ],
+    BOMBER_LEAVE: 5200, // with squadrons on, a bomber is sent home this far from the ship (the old 3500 was less than the 3610 px it starts at on the classic ship, so bombers vanished on their first frame)
+    BOMBER_ESCORT: 0.4, // chance a bomber comes with a pair of fighters (they hold their station over its wings; if it is shot down they go for the ship in revenge, if it leaves they go with it)...
+    BOMBER_ESCORT_DANGER: 2, // ...on stops with this many skulls or more
+    ESCORT_SLOTS: [{ fx: 120, fy: -215 }, { fx: -140, fy: -255 }], // where the pair flies over the bomber (up is negative, forward positive)
+    BUZZ: [50, 40, 50], // the gunners' phones buzz when a squadron breaks to attack
+  },
   // The ship's own escort fighter (hangs under the hull; the "Escort Fighter" station flies it).
   ESCORT: {
     HP: 6, // enemy bullets she can take
@@ -677,6 +739,7 @@ export const config = {
     GUN_IDLE_AFTER: 1, // seconds with nothing in reach before a gunner's radar appears
     GUN_BUSY_AFTER: 0.8, // seconds with a target in reach before it goes away again
     MAX_ITEMS: 30, // most pings sent (the nearest ones win)
+    CLUSTER: 650, // a squadron flying within this many px of its middle is ONE ping with its plane count (SQUADRONS); when it breaks and spreads out, each plane is a ping
   },
   // Spotting (tap a radar ping): a marker on the TV, extra damage, and aim assist that prefers it.
   SPOT: {

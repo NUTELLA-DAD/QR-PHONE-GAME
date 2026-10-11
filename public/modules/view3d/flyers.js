@@ -424,7 +424,10 @@ export function createFlyers(root, stateArg, api = {}) {
       lines.begin();
       const vc = state.course ? envOf(state).strafer : null; // (the Aether's void corsairs are a different colour)
       const strafers = (state.strafers || []);
-      syncPlanes('S' + (vc ? vc.body : ''), strafers, () => A.buildBiplane(vc ? { body: vc.body, wing: vc.body, trim: vc.trim, dark: '#2f2a3a' } : PAL_STRAFER, { enemy: true, pilot: 'skull' }));
+      const strafePal = vc ? { body: vc.body, wing: vc.body, trim: vc.trim, dark: '#2f2a3a' } : PAL_STRAFER;
+      syncPlanes('S' + (vc ? vc.body : ''), strafers.filter((p) => !p.ace && !p.leader), () => A.buildBiplane(strafePal, { enemy: true, pilot: 'skull' }));
+      syncPlanes('SL' + (vc ? vc.body : ''), strafers.filter((p) => p.leader && !p.ace), () => A.buildBiplane(strafePal, { enemy: true, pilot: 'skull', pennant: '#efe6cf' }), 8); // (a squadron's leader flies a pennant: squads.js)
+      for (const ap of config.SQUADRONS.ACE_PAINTS) syncPlanes('A' + ap.id, strafers.filter((p) => p.ace && p.paint === ap.id), () => A.buildBiplane({ body: ap.body, wing: ap.body, trim: ap.trim, dark: '#2f2a3a' }, { enemy: true, pilot: 'skull', pennant: ap.trim }), 4); // (the ace's flying circus paint)
       const dev = state.enemy && !lobby && !(state.enemy.dead > 0) ? [state.enemy] : [];
       syncPlanes('D', dev, () => A.buildDevil(), 1);
       syncPlanes('B', state.bombers || [], () => A.buildBomber(), 6, (g, p) => { g.rotation.z = 0; g.userData.inner.rotation.x = 0; g.rotation.y = fin(p.vx) < 0 ? PI : 0; }); // (a bomber turns about her tail: the emblem is on both sides)

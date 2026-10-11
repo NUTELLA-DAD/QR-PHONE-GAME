@@ -396,7 +396,7 @@ export function createSimulation() {
   const setPieces = {
     gunship: { text: 'GUNSHIP ON THE HORIZON!', go: () => gunship.spawn(), alive: () => !!state.gunship, max: () => config.PACING.GUNSHIP_PEAK_MAX },
     bombers: { text: 'BOMBER RAID INCOMING!', go: () => { const n = Math.max(1, Math.round((1 + (lapNo() > 1 ? 1 : 0) + (crewHeads(state) >= 10 ? 1 : 0)) * crewMul(state, 'count'))); for (let i = 0; i < n; i++) squadrons.spawnBomber(); return true; }, alive: () => state.bombers.length > 0 },
-    strafers: { text: 'ENEMY SQUADRON - DOGFIGHTERS!', go: () => { squadrons.spawnStrafers(); return true; }, alive: () => state.strafers.length > 0 },
+    strafers: { text: () => (config.SQUADRONS.FORMATIONS && squadrons.squadBanner()) || 'ENEMY SQUADRON - DOGFIGHTERS!', go: () => { squadrons.spawnStrafers(); return true; }, alive: () => state.strafers.length > 0 },
     swarm: { text: 'HUGE BAT SWARM!', go: () => { squadrons.spawnBigSwarm(); return true; }, alive: () => state.bats.some((b) => !b.dead && b.hp > 0 && !b.leaving) },
     imps: { text: 'IMP SWARM - GUNS AND SHIELD!', go: () => { specials.spawn.imps(); return true; }, alive: () => state.specials.imps.length > 0 },
   };
@@ -470,7 +470,7 @@ export function createSimulation() {
           tp.spawned = true;
           tp.last = tp.kind;
           tp.el = 0;
-          sayBanner(SP.text, 4.5);
+          sayBanner(typeof SP.text === 'function' ? SP.text() : SP.text, 4.5);
         }
         tp.t = PC.PEAK_MAX;
       } else {
@@ -1105,7 +1105,7 @@ export function createSimulation() {
 
   newRun();
   const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip, firstMission });
-  const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull });
+  const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull, phoneFx });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
   const creatures = createCreatureSystem({ state, puff, credit, phoneFx }); // (giant creatures, BOSSES.md: state.creature; for now only the dev flag config.CREATURES.DEV_SPAWN spawns one)
   const gunshipDeps = { state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) };

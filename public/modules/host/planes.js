@@ -59,6 +59,19 @@ export function flyPlane(state, e, tx, ty, dt, o) {
       break;
     }
   }
+  // (o.avoidHold, the squadrons: once a plane has pulled away from the ground, a ceiling or the ship it keeps that heading for that many seconds, instead of turning back for its goal the next frame
+  // and flipping in and out of the avoidance, which holds a plane against an overhang for ever.)
+  if (o.avoidHold) {
+    if (avoiding) {
+      e.avoidT = o.avoidHold;
+      e.avoidWant = want;
+    } else if ((e.avoidT || 0) > 0) {
+      e.avoidT -= dt;
+      want = e.avoidWant;
+      turn = o.turnAvoid * agility;
+      avoiding = true;
+    }
+  }
   // Stall: too slow to fly, the nose drops (only with room below; hysteresis so it's a readable dip).
   const room = course ? groundAt(course, e.x, true, e.y) - e.y : Infinity;
   if (e.stalled ? air > stall * 1.2 : air < stall) e.stalled = !e.stalled;
