@@ -965,7 +965,7 @@ export const config = {
       fungal: { name: 'Fungal Depths', icon: '🍄', color: '#8a6fb0', ready: true },
       aether: { name: 'The Aether', icon: '🌌', color: '#4b3f7a', ready: true },
     },
-    KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid', lair: 'Kraken lair', salvage: 'Salvage run' }, // (lair: a Sunken Sea stop with a giant creature, config.CREATURES.LAIR)
+    KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid', ring: 'Ring assault', lair: 'Kraken lair', salvage: 'Salvage run' }, // (lair: a Sunken Sea stop with a giant creature, config.CREATURES.LAIR)
   },
   // Fires.
   // S.5f: fire cares where things are (modules/host/fireModel.js reads this; fire.js runs it). Every spot of the ship has a flammability: a covered wooden deck is 1 (medium),
@@ -1224,6 +1224,48 @@ export const config = {
     DETOUR: 1.6, // an open map is rebuilt if the way from the start to an outpost (or between outposts) is more than this many times the straight trip (mountains in the way)
     EASE_EVERY: 3, // an open map that keeps failing the checks is rebuilt one level easier every this many tries (so it always ends up playable)
     STATION_SLACK: 3, // an outpost's hover spot may be at most this many squares lower than planned (else the map is rebuilt)
+  },
+  // THE RING (LOOP.md "The 3D add-on", package R0; maps.js buildRingMap, ring.js, ringArt.js): the orbit finale. A ring map is an ordinary 2D map with an APPROACH and then a strip C = 2 pi R px long that the 3D view
+  // (R1) will bend into a circle round a castle; here it is flat. Along the strip stand FACES of the castle (an outpost each) at ring angles: turrets, a CORE behind a SHUTTER that opens for a short window once
+  // the face's turrets have fallen (the Kraken's beak window, again and again), and one SPECIAL (a bat hangar, a flak battery, a mortar or a BOARDING GALLERY). Revolving turrets travel along the ring.
+  // Won by every core down (the main way) or by the keep's pool (slow and safe: shells and bombs on a shut shutter chip it); then the crown falls. The citadel moors the Flagship at its faces.
+  RING: {
+    ENABLED: true, // false = a curriculum stop flagged 'ring' flies the old outpost raid (voyage.js curriculumRings)
+    FORCE_VARIANT: null, // tools: 'tower' | 'fortress' | 'citadel' for every ring map (tools/botsim.mjs --variant); the stop's own flag wins otherwise
+    FORCE_BOARD: false, // tools (env RING_FORCE_BOARD=1 in botsim): ONE bot with a sword is put on a gallery and plants the charge, so the gate can see it (people hook on or use the cannon; bots do not by themselves)
+    APPROACH: 0.5, // the approach is this share of the ring's length C (so about a third of the whole map)
+    MARGIN: 14, // cells of sky after the end of the ring
+    HEIGHT: 56, // map height (cells)
+    SURFACE_UP: 14, // the faces' platforms: their top is this many cells above the map bottom
+    HILL: [5, 9], // the approach's rolling hills: [lowest, highest] ground height (cells), flat under the start
+    PLATFORM_HALF: 1700, // half the width of a face's platform (px)
+    GROUND_TURRETS: [1, 3], // flak guns on the approach hills: [on the first stop, at most]
+    // Per variant: R = ring radius (px); FACES = ring angles (radians; 0 is where the ring starts, pi halfway round); TURRETS = guns on each face; CORE_HP; KEEP_HP = the keep's pool;
+    // REV = how many revolving turrets, OMEGA = how fast they travel (radians per second: OMEGA x R px/s); SPECIALS = each face's special in turn; SPIRES / CORNICES / ISLANDS = rock counts on the ring stretch.
+    VARIANTS: {
+      tower: { R: 2500, FACES: [Math.PI], TURRETS: 3, CORE_HP: 14, KEEP_HP: 40, REV: 0, OMEGA: 0, SPECIALS: ['flak'], SPIRES: 4, CORNICES: 4, ISLANDS: 3, NAME: 'THE TOWER' },
+      fortress: { R: 4500, FACES: [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75], TURRETS: 3, CORE_HP: 16, KEEP_HP: 80, REV: 2, OMEGA: 0.0155, SPECIALS: ['hangar', 'gallery', 'flak', 'mortar'], SPIRES: 9, CORNICES: 7, ISLANDS: 6, NAME: 'THE FORTRESS' },
+      citadel: { R: 4500, FACES: [Math.PI - 0.5, Math.PI + 0.5], TURRETS: 3, CORE_HP: 18, KEEP_HP: 70, REV: 2, OMEGA: 0.0155, SPECIALS: ['gallery', 'mortar'], SPIRES: 7, CORNICES: 5, ISLANDS: 5, NAME: 'THE CITADEL' },
+    },
+    TURRET_X: [-520, 520, -1300, 1300], // where a face's guns stand, from the face's middle (px; the first TURRETS of them)
+    TURRET_HP: 2, // hit points of a face gun (the plain shell does 0.5)
+    SPECIAL_X: 950, // a special stands this far from the face's middle (to the right on even faces, to the left on odd ones)
+    // The core: a box in the keep wall, invulnerable behind its shutter. OPEN_FOR s once the face's turrets are down, then again every EVERY s. SHELL / BOMB = core points one plain shell / one bomb takes off while it is
+    // open (a primed shell and a spotted target count as usual); CHIP_SHELL / CHIP_BOMB = what the same on a SHUT shutter takes off the keep's pool.
+    // RESTOCK: every time a shutter opens the bomb bay is filled to BOMBS.MAX (so there is something to drop in the window).
+    CORE: { W: 300, H: 340, OPEN_FOR: 6, EVERY: 30, SHELL: 1, BOMB: 6, CHIP_SHELL: 0.25, CHIP_BOMB: 3, RESTOCK: true },
+    REVOLVE: { RAIL_UP: 2800, HP: 2 }, // revolving turrets ride a rail this far above the faces' platforms; hit points
+    // The specials. HP = shell points to wreck it; EVERY = seconds between uses; RANGE = it only acts with the ship this close (px).
+    HANGAR: { HP: 6, EVERY: 14, BATS: 4, RANGE: 3800 }, // a bat hangar: launches BATS bats at the ship
+    FLAK: { HP: 6, EVERY: 2.8, RANGE: 2400, SPEED: 560, MISS: 0.3 }, // a flak battery: a flak shell, like a turret's, more often
+    MORTAR: { HP: 6, EVERY: 5.5, RANGE: 3400, FLIGHT: 2.1, GRAVITY: 700, DAMAGE: 1.6, MISS: 0.35 }, // a mortar: lobs a shell in an arc (FLIGHT s in the air)
+    // The boarding gallery: a ledge on the keep wall UP px above the platform, LEN long, ending at the keep door. A crewman who lands on it (hookshot up, crew cannon, parachute) walks it (WALK px/s) and holds Action
+    // at the door for PLANT_TIME s: the charge goes off FUSE s later and breaches the face (anyone still within BLAST_R is thrown off). JUMP leaves it (JUMP_VX / JUMP_VY toward the ship). Its raiders zip-line to the
+    // ship every ZIP_EVERY s while the ship is within ZIP_RANGE (the line takes ZIP_TIME s; at most ZIP_MAX raiders aboard).
+    GALLERY: { LEN: 800, UP: 560, PLANT_TIME: 4, FUSE: 6, ZIP_EVERY: 24, ZIP_TIME: 2.4, ZIP_RANGE: 2300, ZIP_MAX: 3, WALK: 260, JUMP_VX: 330, JUMP_VY: 380, BLAST_R: 500 },
+    CROWN: { SLOW: 0.35, SLOW_FOR: 2.2, DONE_AFTER: 3.2, HULL: 30 }, // the crown falls: slow motion for SLOW_FOR s (sim time), the stop completes DONE_AFTER s after, the spoils patch the hull
+    MOOR: { UP: 2500, FIRE_RANGE: 2800, FALL_TIME: 3.2, FALL_ACC: 700 }, // the citadel's Flagship hangs UP px above its faces' platforms, fires at a ship this close, and when both moorings are cut falls for FALL_TIME s
+    PROGRESS_APPROACH: 0.4, // the stop's progress (0-1): the approach takes the first share of it, the faces the rest
   },
   // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
   WAVES: {
@@ -2071,7 +2113,7 @@ export const config = {
     RING: 500, // moments kept in state.moments (the oldest are dropped; each stop's best are written into run.log at its end, so the postcard never needs the old ones)
     // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
     WEIGHT: {
-      'creature-win': 10, 'flagship-down': 10, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
+      'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
       'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra

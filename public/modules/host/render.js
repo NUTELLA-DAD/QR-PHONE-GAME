@@ -10,6 +10,7 @@ import { createSprites } from './sprites.js';
 import { createCharacterArt } from './characterArt.js';
 import { createCrewArt } from './crewArt.js';
 import { createCourseArt } from './courseArt.js';
+import { createRingArt } from './ringArt.js'; // (the orbit finale drawn flat: castle faces, shutters, the ring dial; R0)
 import { createSkyArt } from './skyArt.js';
 import { createEnvArt } from './envArt.js';
 import { UPGRADES } from './upgrades.js';
@@ -93,6 +94,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const envArt = createEnvArt({ ctx, state, ink }); // Frost Peaks / Ember Forge look (sky, weather, lava, ice)
   const courseArt = createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgArt });
   const drawSpecials = createSpecialsArt({ ctx, state, ink });
+  const ringArt = createRingArt({ ctx, state, ink });
   const spotterArt = createSpotterArt({ ctx, state }); // spotted-target brackets (HELP! call-outs and primed-gun glows are the ships': artsOf)
   const linkArt = createLinkArt({ ctx, state }); // gust / updraft arrows (the loader and lookout wires are the ships': artsOf)
   const healthArt = createHealthArt({ ctx }); // crew health: heart pips over a hurt crewman
@@ -1007,7 +1009,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const dCells = distToGoal(map, toWorldX(ship, layout.refPoint.x), toWorldY(ship, layout.refPoint.y));
     const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
     let goalText;
-    if (c.done) goalText = map.lair ? (map.creature === 'thunderbird' ? 'THE THUNDERBIRD IS SLAIN!' : map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
+    if (map.ring && c.ring) goalText = c.done ? map.ring.name + ' HAS FALLEN!' : c.ring.crown ? map.ring.name + ' FALLS!' : (c.ring.moor && state.boss ? 'MOORINGS ' + c.ring.moor.cut.filter(Boolean).length + '/' + c.ring.moor.cut.length + ' - ' : '') + 'GATES ' + c.ring.faces.filter((f) => f.down).length + '/' + c.ring.faces.length + (km === null ? '' : km < 0.5 ? ' - FIRE!' : ' - next ' + km.toFixed(1) + ' km');
+    else if (c.done) goalText = map.lair ? (map.creature === 'thunderbird' ? 'THE THUNDERBIRD IS SLAIN!' : map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
     else if (map.lair) goalText = state.creature ? (map.creature === 'thunderbird' ? 'SLAY THE THUNDERBIRD!' : map.creature === 'drake' ? 'SLAY THE DRAKE!' : 'SLAY THE KRAKEN!') : (map.creature === 'thunderbird' ? "THUNDERBIRD'S LAIR" : map.creature === 'drake' ? "DRAKE'S LAIR" : "KRAKEN'S LAIR") + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
     else if (map.open) {
       const total = map.outposts.length;
@@ -1021,6 +1024,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.textAlign = 'center';
     ctx.fillText(goalText, x0 + w / 2, gy0 + 24, w);
     ctx.textAlign = 'left';
+    if (c.ring) ringArt.drawDial(x0 + w / 2, gy0 + 36 + 78, 56, performance.now() / 1000); // (a ring map: the RING DIAL under the goal text)
   };
 
   const drawRouteBar = () => {
@@ -3084,6 +3088,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       courseArt.drawTerrain(wv, width, height);
       courseArt.drawBuildings(wv, width, time / 1000);
       courseArt.drawMarkers(wv, width, time / 1000);
+      ringArt.draw(time / 1000); // (a ring map: the castle's faces under their guns)
       courseArt.drawTurrets(time / 1000);
       drawBombs(time / 1000);
       skyArt.fogFront(wv, width, height); // thin fog over the rock, under the ship

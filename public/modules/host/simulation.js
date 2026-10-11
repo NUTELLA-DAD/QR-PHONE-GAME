@@ -154,6 +154,7 @@ export function createSimulation() {
     if (!sh.main && W.course && opts.place !== false) W.course.place(sh); // (M.2: another ship flies from her own pose; she starts at her station, in open air. The enemy gunship is put where she appears by her own code: opts.place false)
     for (const o of state.ships) if (o !== sh) { sh.sim.air.addProvider(rivalDecks(sh, o)); o.sim.air.addProvider(rivalDecks(o, sh)); sh.sim.air.addProvider(fleetDecks(sh, o)); o.sim.air.addProvider(fleetDecks(o, sh)); } // (Versus: each ship's crew can leap onto the other's decks; B.6: a crewman fired from a crew cannon lands on any ship's)
     if (sh.piece) for (const o of state.ships) if (o !== sh && !o.piece) sh.sim.air.addProvider(pieceDecks(sh, o)); // (STRUCTURE.md: whoever jumps from a half that split off lands on the decks of the others)
+    sh.sim.air.addProvider(() => (W.ring ? W.ring.surfaces(sh) : [])); // (R0: the ring map's boarding galleries are landing places and hook anchors, ring.js)
     sh.sim.air.addProvider(() => (W.creatures ? W.creatures.surfaces(sh) : [])); // (C.2: a surfaced giant creature's mantle is a landing place for this ship's crew in the air, creatureBoard.js)
     return sh;
   };
@@ -635,7 +636,7 @@ export function createSimulation() {
     danger: stop.danger,
     stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined), gates: stop.gates, ring: stop.ring, nemesis: stop.nemesis, multi: stop.multi, salvage: stop.salvage, rateMul: stop.salvage ? VY.CURRICULUM.SALVAGE.RATE_MUL : undefined }, // (gates... rateMul: the teaching curriculum's set-piece gates, ring / Nemesis / multi-part flags and the salvage run's lighter enemies, config.VOYAGE.CURRICULUM; lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
     lengthMul: modeInfo(state.run.mode).lengthMul,
-    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
+    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'ring' ? 'BREACH THE ' + ({ tower: 'TOWER', fortress: 'FORTRESS', citadel: 'CITADEL' }[stop.ring] || 'CASTLE') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
   });
   const firstMission = () => missionOpts(curStop());
 
@@ -1198,7 +1199,9 @@ export function createSimulation() {
   const env = createEnvironment({ state, puff, phoneFx, impact, damageHull, ignite: fireSys.ignite }); // ice, thermals, blizzards (rules in environments.js)
   const airFor = { startFlight: (player, ...a) => shipOf(state, player).sim.air.startFlight(player, ...a) }; // (a stolen plane's rider bails out of it from the ship they belong to)
   hijack = createHijack({ state, puff, phoneFx, air: airFor }); // stolen dogfighters
-  Object.assign(W, { course, env, gunship, hijack, creatures });
+  Object.assign(W, { course, env, gunship, hijack, creatures, ring: course.ringSys });
+  state.ringSys = course.ringSys; // (the bots' RING_FORCE_BOARD test reads it, bots.js)
+  course.ringSys.bind({ spawnBats: (from, n) => squadrons.spawnBats(from, n), spawnBoss: () => squadrons.spawnBoss(), dropSquad: raiders.dropSquad }); // (R0: the ring's hangars, the moored Flagship and the gallery's zip-line raiders, ring.js)
   main.sim.attach({ hijack }); // (the personal grappling hook needs the hijack: shipSim.js)
   // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
   // Every deck of hers is a landing surface (she can have up to 4 stepped decks; the deck numbers run left to right as she is now).

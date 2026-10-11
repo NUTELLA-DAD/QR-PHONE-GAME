@@ -1224,7 +1224,8 @@ export function createShipSim(world, ship, W) {
       if (player.bot) updateBot(player, state, dt);
       if (player.koGrace > 0) player.koGrace -= dt;
       health.step(player, dt); // (crew health: i-frames, burns, the medical bay, the flashes)
-      if (player.on && W.creatures) W.creatures.boardCheck(player); // (C.2: standing on a giant creature: if it dives or dies, or he is knocked out, he falls)
+      if (player.on && player.on.ring != null) W.ring.boardCheck(player); // (R0: standing on a ring map's boarding gallery, ring.js)
+      else if (player.on && W.creatures) W.creatures.boardCheck(player); // (C.2: standing on a giant creature: if it dives or dies, or he is knocked out, he falls)
       if (player.hook && (player.fall || player.ko > 0 || player.lock || player.swing || player.conn != null || player.connected === false)) hookshot.clear(player);
       if (player.swing) {
         gunship.swingStep(player, dt);
@@ -1311,7 +1312,8 @@ export function createShipSim(world, ship, W) {
         hijack.rider(player, dt); // flying a stolen dogfighter (kick the pilot out, then steer)
         if (!player.bot) player.act = player.grabAct = null;
       } else if (player.on) {
-        W.creatures.boarderStep(ship, player, dt, holdOk); // aboard a giant creature: walk its outline, BLIND IT, STRIKE THE HEART (creatureBoard.js)
+        if (player.on.ring != null) W.ring.boarderStep(ship, player, dt, holdOk); // (the ring map's gallery: walk it, plant the charge at the keep door)
+        else W.creatures.boarderStep(ship, player, dt, holdOk); // aboard a giant creature: walk its outline, BLIND IT, STRIKE THE HEART (creatureBoard.js)
       } else if (player.lock) {
         player.moving = false;
         player.climb = false;

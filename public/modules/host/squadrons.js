@@ -99,11 +99,11 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     carrier: { name: 'THE BAT CARRIER', body: '#3b2c4c', fin: '#6a3a8c' },
     iron: { name: 'THE IRON DREADNOUGHT', body: '#4a5056', fin: '#2a2e33' },
   };
-  const flagshipStop = () => !!(state.course && state.course.stop && state.course.stop.flagship);
-  const lairStop = () => !!(state.course && state.course.stop && state.course.stop.lair); // (a lair has its own boss, the giant creature: no zeppelin there)
+  const flagshipStop = () => !!(state.course && ((state.course.stop && state.course.stop.flagship) || (state.course.ring && state.course.ring.moor))); // (a citadel is the Flagship's stop, however it was started)
+  const lairStop = () => !!(state.course && state.course.stop && state.course.stop.lair) || !!(state.course && state.course.ring && !state.course.ring.moor); // (a lair has its own boss, the giant creature: no zeppelin there; nor on a ring map, whose castle is the fight - only the citadel's Flagship comes, moored to it)
   const spawnBoss = () => {
     // The last stop of a voyage is the Flagship: the Iron Dreadnought at her toughest.
-    const flagship = !!(state.course && state.course.stop && state.course.stop.flagship);
+    const flagship = flagshipStop();
     const kind = flagship ? 'iron' : lap() === 1 ? 'dread' : lap() === 2 ? 'carrier' : 'iron';
     const hp = Math.round((flagship ? W.BOSS_FLAGSHIP_HP : W.BOSS_HP + Math.min(lap() - 1, W.BOSS_HP_LAPS) * W.BOSS_HP_PER_LAP) * crewMul(state, 'hp'));
     state.boss = {
@@ -122,6 +122,12 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       boardCd: W.BOSS_BOARD_EVERY * 0.6,
       leaving: false,
     };
+    const moor = flagship && state.course && state.course.ring && state.course.ring.moor; // (THE CITADEL, ring.js: the Flagship hangs from the citadel's faces instead of keeping station off the ship's bow)
+    if (moor) {
+      state.boss.moor = moor;
+      state.boss.x = moor.x;
+      state.boss.y = moor.y;
+    }
     bossLap = lap();
     warn(BOSSES[kind].name + ' APPROACHES!', 4);
   };
@@ -471,6 +477,28 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     const xs = Object.values(layout.gunMounts).map((m) => m.bx);
     return xs.length ? Math.min(W.BOSS_STATION_X, Math.max(...xs) + W.BOSS_STATION_GAP) : W.BOSS_STATION_X;
   };
+  // THE CITADEL (ring.js): a moored Flagship hangs at her mooring point (a gentle bob) while a mooring holds; with both cut (a breached face cuts one) she falls for MOOR.FALL_TIME seconds and goes down like a boss shot to
+  // pieces. True = she is on station and the ship is within her gun range (the turrets, bats and boarding lines below then run).
+  const moorStep = (z, dt) => {
+    const mo = z.moor, M = config.RING.MOOR;
+    if (mo.falling) {
+      z.fallV = (z.fallV || 0) + M.FALL_ACC * dt;
+      z.y += z.fallV * dt;
+      z.x += Math.sin(z.bob * 5) * 30 * dt;
+      if (Math.random() < 0.3) puff(z.x + rand(-250, 250), z.y + rand(-100, 120), '#ff5a1f', 6);
+      mo.fallT += dt;
+      if (mo.fallT >= M.FALL_TIME) {
+        z.hp = 0;
+        bossDown(z, null);
+      }
+      return false;
+    }
+    z.x = mo.x + Math.sin(z.bob * 0.4) * 40;
+    z.y = mo.y + Math.sin(z.bob * 0.6) * 50;
+    bumpShip(state, z, { hitsShip, impact, puff, hw: 330, hh: 150, size: config.BUMP.BOSS_SIZE, hp: 'hp' });
+    const m = shipMid();
+    return !state.ship.down && Math.hypot(m.x - z.x, m.y - z.y) < M.FIRE_RANGE;
+  };
   const updateBoss = (dt) => {
     const z = state.boss;
     if (!z) return;
@@ -479,18 +507,22 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     // Leave when the ship gets home, or after a crash.
     const c = state.course;
     if (c && (c.progress < 0.5 || c.progress > 0.97) && !z.flagship) z.leaving = true; // (the Flagship never leaves)
-    const homeX = z.leaving ? toWorldX(ship, B.x1 + 4000) : toWorldX(ship, stationX());
-    z.x += Math.sign(homeX - z.x) * Math.min(Math.abs(homeX - z.x), 220 * dt) + ship.pose.vx * dt; // (her 220 px/s is against the ship, carried along with her)
-    const wantY = keepClear(state, z.x, toWorldY(ship, 250) + Math.sin(z.bob * 0.6) * 60, 260, 0, 500);
-    z.y += (wantY - z.y) * Math.min(1, dt * 1.2);
-    bounceStep(z, dt);
-    bumpShip(state, z, { hitsShip, impact, puff, hw: 330, hh: 150, size: config.BUMP.BOSS_SIZE, hp: 'hp' });
-    const fb = ship.pose.f; // (she parks off her bow: "beyond" is along the world by f)
-    if (z.leaving && fb * (z.x - toWorldX(ship, B.x1 + 3800)) > 0) {
-      state.boss = null;
-      return;
+    if (z.moor) {
+      if (!moorStep(z, dt)) return; // (falling, or the ship is out of her range)
+    } else {
+      const homeX = z.leaving ? toWorldX(ship, B.x1 + 4000) : toWorldX(ship, stationX());
+      z.x += Math.sign(homeX - z.x) * Math.min(Math.abs(homeX - z.x), 220 * dt) + ship.pose.vx * dt; // (her 220 px/s is against the ship, carried along with her)
+      const wantY = keepClear(state, z.x, toWorldY(ship, 250) + Math.sin(z.bob * 0.6) * 60, 260, 0, 500);
+      z.y += (wantY - z.y) * Math.min(1, dt * 1.2);
+      bounceStep(z, dt);
+      bumpShip(state, z, { hitsShip, impact, puff, hw: 330, hh: 150, size: config.BUMP.BOSS_SIZE, hp: 'hp' });
+      const fb = ship.pose.f; // (she parks off her bow: "beyond" is along the world by f)
+      if (z.leaving && fb * (z.x - toWorldX(ship, B.x1 + 3800)) > 0) {
+        state.boss = null;
+        return;
+      }
+      if (fb * (z.x - toWorldX(ship, stationX() + 400)) > 0 || state.ship.down) return; // not in range yet
     }
-    if (fb * (z.x - toWorldX(ship, stationX() + 400)) > 0 || state.ship.down) return; // not in range yet
     // Turrets.
     for (const g of z.guns) {
       if (g.dead || (g.cd -= dt) > 0) continue;
@@ -520,6 +552,21 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       dropSquad(layout.boarderEntryPoints[layout.boarderEntryPoints.length - 1].x, -200 - state.ship.alt); // (ship coordinates, as raiders.js has always taken it)
       warn('BOARDING LINES! RAIDERS INCOMING!');
     }
+  };
+
+  // The boss is sunk (by shell `s`, or null when she fell from her moorings).
+  const bossDown = (z, s) => {
+    state.kills += 5;
+    credit(s, 'boss');
+    for (let k = 0; k < 6; k++) puff(z.x + rand(-250, 250), z.y + rand(-120, 150), '#ff5a1f', 20);
+    pop(state, z.x, z.y - 160, 'boss', '#ff5a1f', 2.2);
+    state.wrecks.push({ x: z.x, y: z.y, vx: -60 * ship.pose.f + ship.pose.vx, vy: -20, spin: 0, kind: 'cargo' });
+    state.boss = null;
+    state.bossDownLap = lap(); // (the Flagship stop needs her sunk before the beacon counts)
+    // Spoils of war: patch the ship up.
+    mendHull(state, W.BOSS_REWARD_HULL);
+    for (const b of state.bags) b.gas = Math.min(100, b.gas + 30); // (every gasbag)
+    warn(z.name.replace('THE ', '') + ' DOWN! SALVAGE PATCHES THE HULL!', 4);
   };
 
   // ---- Crew shells ----
@@ -600,19 +647,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         z.hp -= shellDmg(s, z);
         z.hit = 0.12;
         puff(s.x, s.y, '#ffcf40', 8);
-        if (z.hp <= 0) {
-          state.kills += 5;
-          credit(s, 'boss');
-          for (let k = 0; k < 6; k++) puff(z.x + rand(-250, 250), z.y + rand(-120, 150), '#ff5a1f', 20);
-          pop(state, z.x, z.y - 160, 'boss', '#ff5a1f', 2.2);
-          state.wrecks.push({ x: z.x, y: z.y, vx: -60 * ship.pose.f + ship.pose.vx, vy: -20, spin: 0, kind: 'cargo' });
-          state.boss = null;
-          state.bossDownLap = lap(); // (the Flagship stop needs her sunk before the beacon counts)
-          // Spoils of war: patch the ship up.
-          mendHull(state, W.BOSS_REWARD_HULL);
-          for (const b of state.bags) b.gas = Math.min(100, b.gas + 30); // (every gasbag)
-          warn(z.name.replace('THE ', '') + ' DOWN! SALVAGE PATCHES THE HULL!', 4);
-        }
+        if (z.hp <= 0) bossDown(z, s);
       }
     }
   };

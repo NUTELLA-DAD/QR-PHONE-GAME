@@ -81,7 +81,8 @@ fitCanvas();
 {
   const q = new URLSearchParams(location.search), e = q.get('env'), k = q.get('kind');
   if (e && config.ENVIRONMENTS[e] && config.ENVIRONMENTS[e].name && !config.ENVIRONMENTS.FORCE) config.ENVIRONMENTS.FORCE = e;
-  if ((k === 'network' || k === 'route' || k === 'open') && !config.MAPS.FORCE_KIND) config.MAPS.FORCE_KIND = k;
+  if ((k === 'network' || k === 'route' || k === 'open' || k === 'ring') && !config.MAPS.FORCE_KIND) config.MAPS.FORCE_KIND = k;
+  if (config.RING.VARIANTS[q.get('variant')]) { config.RING.FORCE_VARIANT = q.get('variant'); if (!config.MAPS.FORCE_KIND) config.MAPS.FORCE_KIND = 'ring'; } // (R0: host.html?kind=ring&variant=fortress flies that ring)
 }
 const simulation = createSimulation();
 if (playtest && playtest.mode === 'coop') BUILDS.playtest = playtest.parts; // (the build page's ship: the voyage starts with it, and so does every new voyage)
