@@ -14,7 +14,7 @@ export function buildThunderbird(cr, P, opts = {}) {
   const torso = cr.parts.find((p) => p.kind === 'mantle'), gz = cr.parts.find((p) => p.kind === 'heart');
   const R = torso ? torso.shape.r : 360, L = torso ? torso.shape.len : 900, ax = torso ? torso.at[0] : -480, ay = torso ? -torso.at[1] : 0;
   // the torso: a lathe along x from the tail end to the breast; a plump egg (radius from the sim's capsule), a little flatter front to back so the wings sit proud of it
-  const prof = (u) => { const t = Math.sin(Math.PI * Math.min(1, Math.max(0, u))) ** 0.6; return R * (0.15 + 0.85 * t); };
+  const prof = (u) => { const k = Math.sin(Math.PI * Math.min(1, Math.max(0, u))) ** 0.6; return R * (0.15 + 0.85 * k); };
   const pos = (u, v, out) => { const th = v * Math.PI * 2, r = prof(u); return out.set(ax - R * 0.9 + u * (L + R * 1.8), ay + r * Math.cos(th), r * 0.8 * Math.sin(th)); };
   mesh.grid(low ? 22 : 34, low ? 14 : 22, pos, null, { ow: OW, color: '#ffffff', name: 'mantle' }, (u, v) => mantleUV(v, u));
   // the gizzard: a glowing lump on the breast, the generic view's heart window (shown only while the sim has it open)
