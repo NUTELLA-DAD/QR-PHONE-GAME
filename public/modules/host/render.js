@@ -33,6 +33,7 @@ import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, 
 import { bandOf, metres, BAND_WORDS } from './pvp/range.js'; // the range bands: the TV's readout
 import { BARRELS, drawBarrel, drawChute, drawMines, drawRam, SHELL_LOOK } from './weaponsArt.js'; // the barrels of the gun types, laid mines, the ram prow
 import { drawFlameGun } from './flameArt.js'; // the flamethrower's pilot light, cone of fire and heat gauge
+import { createLogArt } from './logArt.js'; // L1: the Ship's Book on the TV (the sky-dock's Log line, PLAY OF THE MISSION, the run-end postcard)
 import { createYardArt } from './yardArt.js'; // S.6b: the Shipwright's Yard (the sky-dock blueprint, the A / B / C vote, BUILT, "NEW: ...")
 import { createPartPictures } from './partArt.js'; // the little part pictures of the build tray, on the Yard's cards
 import { createDebrisArt } from './debrisArt.js'; // S.5i: the pieces of ship that broke off, tumbling through the sky
@@ -111,6 +112,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
   };
   const versusArt = createVersusArt({ ctx, fleet, drawCrewAt }); // (the TV for a Versus match: pvp/versusArt.js)
   let yardArt = null; // (made at its first use: it needs wrapLines and dots, defined further down)
+  let logArtMade = null;
+  const logArt = () => (logArtMade = logArtMade || createLogArt({ ctx, book, crewAt: drawCrewAt })); // (the Ship's Book's drawing, logArt.js)
   // Each SHIP's art, made the first time she is drawn on HER context: her baked picture (one bake per ship, keyed on her layout), her lamps, her bombs, ropes, wires, call-outs and the
   // hazards that ride on her (ice, spores, storm rods, the sea). Nothing is shared between ships.
   const arts = new Map();
@@ -1391,7 +1394,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.font = '49px ' + config.FONTS.DISPLAY;
     ctx.fillText(sc.flagship ? 'THE FLAGSHIP IS DOWN!' : `${sc.stopName} cleared!`, 800, 185);
     ctx.font = '700 26px ' + config.FONTS.TEXT;
-    ctx.fillText(sc.rows.length ? 'Crew awards' : 'Nobody did much this mission... next time!', 800, 228);
+    ctx.fillText(sc.rows.length ? 'Crew awards' : sc.gentle || 'Crew awards', 800, 228, 1120); // (no award earned: a kind line naming whoever did the most - never "nobody did much")
+    if (sc.play) logArt().playRibbon(sc.play, 800, 248, 1040); // (the Ship's Book: PLAY OF THE MISSION)
     const G = sc.gain || {};
     const names = { kills: 'enemies', outposts: 'outposts', gunships: 'gunships', boss: 'boss', rescue: 'survivors', mission: 'mission bonus' };
     ctx.fillStyle = '#8a5a00';
@@ -1404,11 +1408,11 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.fillText('NEW RECORD FOR THIS CREW!', 800, 775);
       ctx.fillStyle = config.INK;
     }
-    sc.rows.forEach((r, i) => {
+    sc.rows.slice(0, 8).forEach((r, i) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
       const x = 260 + col * 560;
-      const y = 300 + row * 92;
+      const y = (sc.play ? 392 : 300) + row * (sc.play ? 78 : 92);
       ctx.textAlign = 'left';
       ctx.font = '44px "Segoe UI Emoji", sans-serif';
       ctx.fillText(r.icon, x, y + 14);
@@ -1723,15 +1727,21 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.fillStyle = 'rgba(43,34,22,.72)';
     ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
     yardArt = yardArt || createYardArt({ ctx, book, dots, wrapLines, ink, pics: createPartPictures({ sprites }), spares: drawSpares, world });
-    if (yardArt.isYard(v)) return yardArt.draw(v, Object.values(state.players).filter((p) => !p.mate)); // (a dock with a PART card, or where the part goes: the blueprint screen)
+    const logE = v.kind === 'dock' && config.LOG.ENABLED && state.run ? state.run.lastLog : null; // (the Ship's Book: the Log line of the stop just flown, at the top of the dock)
+    if (yardArt.isYard(v)) { // (a dock with a PART card, or where the part goes: the blueprint screen)
+      yardArt.draw(v, Object.values(state.players).filter((p) => !p.mate));
+      if (logE) logArt().dockStrip(logE, 90, { maxLines: 1, px: config.LOG.ART.MIN_PX });
+      return;
+    }
     ctx.textAlign = 'center';
     ctx.fillStyle = '#f3ead6';
     ctx.font = '40px ' + config.FONTS.DISPLAY;
-    ctx.fillText(v.kind === 'dock' ? 'SKY-DOCK' : 'ROUTE MAP - WHERE TO NEXT?', 800, 82, 880);
+    const top0 = logE ? 56 : 82;
+    ctx.fillText(v.kind === 'dock' ? 'SKY-DOCK' : 'ROUTE MAP - WHERE TO NEXT?', 800, top0, 880);
     ctx.font = '700 20px ' + config.FONTS.TEXT;
     const run = state.run;
     ctx.fillStyle = '#ffd23f';
-    if (v.kind === 'dock') ctx.fillText(`Salvage: ${run.salvage}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`, 800, 124, 1000);
+    if (v.kind === 'dock') ctx.fillText(`Salvage: ${run.salvage}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`, 800, top0 + 42, 1000);
     else ctx.fillText(`Vote on your phone - ${Math.max(0, Math.ceil(v.t))}s`, 800, 125);
     // Spare gasbags (lives) in the corner.
     ctx.fillStyle = '#f3ead6';
@@ -1747,13 +1757,15 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const perRow = n > 6 ? 4 : 3;
     const cw = perRow === 4 ? 360 : 470;
     const gap = 20;
-    const ch = 330;
+    const stripBottom = logE ? logArt().dockStrip(logE, 108) : 0; // (the Log line sits above the cards; they move down for it and shrink a little when there are two rows)
+    const cardTop = logE ? stripBottom + 14 : 160;
+    const ch = logE && n > perRow ? 300 : 330;
     v.options.forEach((o, i) => {
       const row = Math.floor(i / perRow);
       const inRow = Math.min(perRow, n - row * perRow);
       const col = i - row * perRow;
       const x = 800 - (inRow * cw + (inRow - 1) * gap) / 2 + col * (cw + gap);
-      const y = 160 + row * (ch + 26);
+      const y = cardTop + row * (ch + 26);
       const off = o.kind !== 'cast' && (o.sold || o.cost > run.salvage);
       ctx.globalAlpha = off ? 0.5 : 1;
       book.paper(x, y, cw, ch, { r: 16, fill: o.kind === 'cast' ? '#d6e3bc' : o.kind === 'repair' ? '#ecdcae' : null });
@@ -1888,6 +1900,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   // End of the run: victory, or the summary after the ship is lost.
   const drawRunEnd = () => {
     const e = state.runEnd;
+    if (config.LOG.ENABLED && e.lines) return logArt().postcard(e, e.victory ? e.t : state.ship.down); // (L1: the Ship's Book's postcard; the old summary below is the fallback when the Log is switched off)
     ctx.fillStyle = 'rgba(43,34,22,.82)';
     ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
     book.paper(250, 90, 1100, 720, { r: 22 });

@@ -143,6 +143,7 @@ function die(state, cr, why, opts) {
   }
   state.kills += 5;
   if (h.credit) h.credit({ owner: opts.who });
+  if (state.moment) state.moment('creature-win', { who: opts.who ? [opts.who] : [], where: null, data: { creature: cr.name, kind: cr.kind, way: why } }); // (the Ship's Book: which creature, how it ended, and the final blow's owner)
   pop(state, cr.x, cr.y - 700, 'boss', '#ff5a1f', 2.2);
   for (let k = 0; k < 6; k++) h.puff(cr.x + (h.rng() - 0.5) * 1800, cr.y - 300 + (h.rng() - 0.5) * 900, '#7a3a5a', 18);
   const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', WT = drake ? CR().DRAKE.WIN_TEXT : bird ? CR().THUNDERBIRD.WIN_TEXT : CR().WIN_TEXT;

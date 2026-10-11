@@ -1870,6 +1870,28 @@ export const config = {
     STAMP: '#a8443f', STAMP_BG: 'rgba(243,234,214,0.92)', // red ink for warnings and alarm banners
     SHADOW: 'rgba(43,34,22,0.28)',
   },
+  // THE SHIP'S BOOK (SHIPS_BOOK.md L0 + L1). moments.js remembers what happened, with names (state.moments, data only: it draws no random numbers and changes nothing in the sim); logWriter.js tells it back as
+  // short sentences in the banner voice; logArt.js draws the Log line at the sky-dock, the PLAY OF THE MISSION ribbon on the scorecard and the run-end postcard.
+  LOG: {
+    ENABLED: true,
+    RING: 500, // moments kept in state.moments (the oldest are dropped; each stop's best are written into run.log at its end, so the postcard never needs the old ones)
+    // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
+    WEIGHT: {
+      'creature-win': 10, 'flagship-down': 10, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
+      'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'fire-first': 2, overboard: 2,
+    },
+    OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra
+    // Jobs done a lot in one stop earn a moment at the stop's end: the stat, and how many make it worth a line. Weight = LEADER_W.BASE + (count / that number - 1) x LEADER_W.PER, at most LEADER_W.MAX.
+    LEADER: { kills: 5, raiders: 2, holes: 2, fires: 2, repairs: 2, ammo: 3, coal: 3, revives: 1, defused: 1, vent: 3, demolished: 2, sabotage: 1, boarding: 1, sails: 1, thrown: 2, spots: 3, cannon: 1, shovels: 2, cuts: 1, dumped: 1, hatch: 1, captures: 1, bats: 2 },
+    LEADER_W: { BASE: 2, PER: 1, MAX: 4.5 },
+    SANDBAG_SECS: 90, // carrying one sandbag (or crate) this long without putting it down is a funny moment
+    HELM: { HULL: 45, MIN_SECS: 12, STAY: 0.9 }, // a crisis = hull under HULL% (or GOING DOWN!); the person who held the helm for STAY of at least MIN_SECS of it earns "held the helm"
+    FIRES_UNDER: 1, // a revive with at least this many fires burning is "under fire"
+    // The writer (logWriter.js). DOCK_SENTENCES = how many sentences the sky-dock line tells; POSTCARD_LINES / POSTCARD_MIN = most / fewest lines on the run-end page; PER_STOP = most lines one stop may add to the postcard.
+    DOCK_SENTENCES: 2, POSTCARD_LINES: 10, POSTCARD_MIN: 6, PER_STOP: 3, POSTCARD_AWARDS: 4, // (POSTCARD_AWARDS: award rows kept on the postcard)
+    // Drawing (logArt.js, logical 1600 x 900: 22 px here is 26 px on a 1080p screen, the smallest the postcard uses).
+    ART: { LINE_PX: 23, DOCK_PX: 24, PLAY_PX: 30, MIN_PX: 22 },
+  },
   // PvP look (modules/host/pvp/pvpArt.js: the flag, the two-sided hull bars, the "!" over an enemy). Soft faded team colours, logbook style.
   PVP_ART: {
     RED: '#c4574d', RED_DARK: '#8f3a34', RED_PALE: '#e8b7ae', // team red: flag / bar / outline / light tint

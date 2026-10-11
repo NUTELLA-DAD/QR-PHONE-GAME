@@ -33,6 +33,8 @@ import { createShipSim, flushPresses } from './shipSim.js';
 import { createDebris } from './debris.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { deckPieces } from './shipBuild.js';
+import { createMoments } from './moments.js';
+import { writeStop, postcard, gentleLine } from './logWriter.js';
 import { generateVoyage, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 // Best run, remembered by this browser (the TV). Never let storage problems break the game.
@@ -112,6 +114,8 @@ export function createSimulation() {
     if (!player || player.mate) return; // (ship's mates win no awards)
     player.stats = player.stats || {};
     player.stats[key] = (player.stats[key] || 0) + n;
+    moments.noteStat(player, key, n); // (the Ship's Book, moments.js: data only)
+    if ((key === 'holes' || key === 'coal') && state.goingDown) moments.note('gd', player); // (who patched and stoked while she fell: goingDown.js tells them when she holds)
   };
   // A quick message and buzz on one player's phone (doesn't change their buttons).
   const phoneFx = (player, toast, buzz) => {
@@ -157,7 +161,7 @@ export function createSimulation() {
     if (!state.ships.includes(rv) || !areHostile(me, rv) || rv.state.down > 0) return []; // (Versus: the other team's ship; B.5: the enemy gunship, and she can board us the same way)
     return rv.layout.platforms.flatMap((pl, d) => deckPieces(pl, d, rv.nav ? rv.nav.holes : []).map(([p0, p1]) => { // (her open cargo drop hatches are holes in her decks)
       const a = toShipX(me, toWorldX(rv, p0)), b = toShipX(me, toWorldX(rv, p1));
-      return { id: 'rival:' + rv.id + ':' + d, y: toShipY(me, toWorldY(rv, pl.y)), x0: Math.min(a, b), x1: Math.max(a, b), onLand: (player) => boardShip(player, me, rv, d) };
+      return { id: 'rival:' + rv.id + ':' + d, y: toShipY(me, toWorldY(rv, pl.y)), x0: Math.min(a, b), x1: Math.max(a, b), onLand: (player, info) => boardShip(player, me, rv, d, info) };
     }));
   };
   // B.6: a ship that is NOT an enemy of `me` (a Versus teammate, a co-op fleet ship): her decks catch only a crewman fired from a crew cannon (`only`), who walks off as her crew.
@@ -173,8 +177,9 @@ export function createSimulation() {
       } };
     });
   };
-  const boardShip = (player, me, rv, d) => {
+  const boardShip = (player, me, rv, d, info) => {
     transfer(state, player, rv, d, toShipX(rv, toWorldX(me, player.x)));
+    if (rv.ai && info && info.cannon) moments.moment('cannon-board', { who: [player], where: null, data: { name: state.gunship && state.gunship.bp ? state.gunship.bp.name : null } }); // (the Ship's Book: fired from the crew cannon onto the enemy gunship)
     player.hook = null;
     if (!cargoItem(player.carry)) player.carry = null; // (the hookshot stays on the ship he left: aboard her he fights with his hands; a sack of coal he lifted from her does not)
     player.chute = 0;
@@ -204,6 +209,15 @@ export function createSimulation() {
   main.buildId = 'classic'; // (which build she wears: 'classic' | 'sparrow' | 'yard' = a start build that parts have been added to; Versus' shelf sets its own)
   // (the world's rules below that reach into the main ship: the wreck and restart, the supply balloon, the sky-dock shop, what the world's enemies shoot at)
   const { modules, engines, forces, raiders, escort, coil, searchlights, goingDown, fireSys, air, hitsShip, gasHoleAt, impact, damageHull, shieldBlocks, gnaw, interaction, taken, getHelm, prime } = main.sim;
+
+  // THE SHIP'S BOOK (SHIPS_BOOK.md): moments.js remembers what happened with names (data only); logWriter.js tells the stop back at its end (closeStop below).
+  const stopInfo = () => {
+    const run = state.run, s = run && run.voyage ? curStop() : null;
+    return s ? { no: stopNo(run, s), name: stopName(s), env: s.env } : null;
+  };
+  const moments = createMoments({ world: state, stopInfo, helm: getHelm });
+  W.moment = moments.moment;
+  W.overboard = moments.overboard;
 
   // The hull gave out: the ship breaks apart, then the whole game starts over.
   function wreck(text = "SHE'S BREAKING UP!") {
@@ -239,6 +253,8 @@ export function createSimulation() {
     run.salvage -= lost;
     const prev = run.visited.length > 1 ? stopById(run.voyage, run.visited[run.visited.length - 2]) : null;
     state.limp = { spares: run.spares, max: run.sparesMax, lost, back: prev ? stopName(prev) : null };
+    moments.moment('limp', { data: { spares: run.spares } });
+    closeStop('limp'); // (the stop she broke up over is written into the Log before its stats are banked)
     bankStats(true); // (what the crew did still counts for the awards)
   }
   // The break-up is over: patch her up and put her back at the last stop on the route (the first stop restarts itself).
@@ -518,7 +534,7 @@ export function createSimulation() {
     const M = modeInfo(state.mode);
     state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0,
       mode: state.mode, key: sessionKey(), daily: daily && { key: daily.key, name: daily.name }, voyageNo: 1, voyages: M.voyages, base: 0, rival: M.rival,
-      build: null, parts: [], lastPart: null, lost: [], trophy: null }; // (trophy: a slain creature's part card still to be offered at a dock, config.CREATURES.REWARD; build: this voyage's ship as a parts list; parts: what the crew has bought, newest last: { id, name, names, bag }; lastPart: the card of the last dock; lost: parts that broke off in flight and are not rebuilt yet, oldest first, S.5i)
+      build: null, parts: [], lastPart: null, lost: [], trophy: null, log: [], lastLog: null }; // (log: the Ship's Book - one writeStop() result for each stop flown, oldest first; lastLog: the newest, which the sky-dock shows. trophy: a slain creature's part card still to be offered at a dock, config.CREATURES.REWARD; build: this voyage's ship as a parts list; parts: what the crew has bought, newest last: { id, name, names, bag }; lastPart: the card of the last dock; lost: parts that broke off in flight and are not rebuilt yet, oldest first, S.5i)
     const start = state.startBuild && BUILDS[state.startBuild];
     state.run.build = copyData(start || (prevLost ? prevLost.before : layout.parts) || BUILDS.classic);
     if (start && main.buildId !== state.startBuild) fitShip(state.run.build, state.startBuild); // (a new voyage starts with the start build, whatever the last one grew into)
@@ -527,6 +543,24 @@ export function createSimulation() {
     Object.assign(state.yard, { built: null, newPart: null, hold: false, pull: 0 });
     state.runEnd = null;
     state.salvagePop = null;
+    moments.restart(); // (a new voyage: the Ship's Book starts a fresh page)
+    logUsed.clear();
+    logUsed.counts = {};
+  };
+  const logUsed = new Set(); // the sentences the Log has told this run (logWriter.js never tells one twice)
+  // A stop is over (done, limped home from, or lost): its moments are written into the Log (run.log) and the dock / scorecard / postcard read them from there. Call it BEFORE the stop's stats are banked.
+  const closeStop = (end) => {
+    const run = state.run, info = stopInfo();
+    if (!run || !info || !config.LOG.ENABLED) return null;
+    const players = Object.values(state.players).filter((p) => !p.mate);
+    moments.stopEnd(players);
+    const list = moments.open();
+    moments.close();
+    const s = curStop();
+    const entry = { ...writeStop(list, info, { used: logUsed, players }), end, env: s.env, icon: envInfo(s.env).icon, lair: !!s.lair, creature: s.creature || null, flagship: !!s.flagship, count: list.length, colors: Object.fromEntries(players.filter((p) => p.name).map((p) => [p.name, p.color])) }; // (colors: each crewman's colour, so the TV can pick his name out in it)
+    run.log.push(entry);
+    run.lastLog = entry;
+    return entry;
   };
   const curStop = () => stopById(state.run.voyage, state.run.stopId);
   // Fit a parts list to ship 0 AT THE DOCK (or in the lobby): her layout is replaced in place, what is made from it is made again (shipSim.js fitBuild). id = which build she wears.
@@ -617,7 +651,10 @@ export function createSimulation() {
     }
     if (state.boss) watch.boss = state.boss;
     else if (watch.boss) {
-      if (watch.boss.hp <= 0) addSalvage(SV.BOSS, 'boss', 'Boss destroyed!');
+      if (watch.boss.hp <= 0) {
+        addSalvage(SV.BOSS, 'boss', 'Boss destroyed!');
+        moments.moment(curStop().flagship ? 'flagship-down' : 'boss-down', { where: null });
+      }
       watch.boss = null;
     }
     const cr = state.creature;
@@ -655,11 +692,22 @@ export function createSimulation() {
     return rows;
   };
 
+  // The stops a run flew, for the postcard's inked route: one per stop number (a stop flown twice after a limp is one), with how it ended ('done' | 'limp' | 'lost').
+  const routeOf = (log) => {
+    const out = [];
+    for (const e of log) {
+      const at = out.findIndex((r) => r.no === e.no);
+      const r = { no: e.no, name: e.name, icon: e.icon, env: e.env, lair: e.lair, creature: e.creature, flagship: e.flagship, end: e.end };
+      if (at < 0) out.push(r); else out[at] = r;
+    }
+    return out;
+  };
   // The run is over (ship lost, or the Flagship beaten): a summary for the TV, and the saved progress.
   const endRun = (victory) => {
     if (state.runEnd) return;
     const run = state.run;
     const stop = curStop();
+    if (!victory) { moments.moment('ship-lost', { data: {} }); closeStop('lost'); } // (the Ship's Book: the last page, written before the stats are banked; a victory was written at its scorecard)
     bankStats(false);
     const done = run.base + (victory ? stop.col + 1 : stop.col); // stops finished
     state.runEnd = {
@@ -675,8 +723,12 @@ export function createSimulation() {
       salvage: run.earned,
       kills: run.kills,
       gunships: run.gunships,
-      rows: awardRows(Object.values(run.crew), false).slice(0, 6),
+      rows: awardRows(Object.values(run.crew), false).slice(0, config.LOG.POSTCARD_AWARDS),
       t: VY.VICTORY_TIME,
+      // The Ship's Book's postcard (logArt.js): the route inked through the stops flown, and the 6 to 10 lines of the Log.
+      route: routeOf(run.log),
+      lines: postcard(run.log),
+      colors: Object.assign({}, ...run.log.map((q) => q.colors), ...Object.values(run.crew).map((c) => ({ [c.name]: c.color }))),
     };
     const s = state.save;
     s.totalRuns++;
@@ -793,9 +845,10 @@ export function createSimulation() {
     return { id: 'rebuild-' + e.id, kind: 'repair', rebuild: k, name: 'Rebuild: ' + what, icon: '🛠️', desc: 'Mend what broke off: ' + (names.length ? names.join(', ') : upto.map((q) => q.label).join('; ')).slice(0, 96), cost: upto.reduce((n, q) => n + q.price, 0) };
   };
   // Put the lost parts back: the ship is fitted as she was before the k-th break-off (the Yard's fit path: she keeps her hull, coal, shells and the damage not yet mended).
-  const rebuildLost = (k) => {
+  const rebuildLost = (k, who) => {
     const run = state.run, lost = run.lost, e = lost[k];
     if (!e) return;
+    moments.moment('rebuild', { who, where: null, data: { names: e.names.length ? e.names : [e.label] } });
     state.breakStats.rebuilt = (state.breakStats.rebuilt || 0) + lost.length - k; // (how many break-offs were mended: botsim and the gate print it)
     lost.length = k;
     fitShip(copyData(e.before), lost.length ? 'broken' : e.buildId);
@@ -829,7 +882,7 @@ export function createSimulation() {
       UPGRADES.find((u) => u.id === o.id).apply({ state, modules });
       state.upgrades[o.id] = (state.upgrades[o.id] || 0) + 1;
     } else if (o.rebuild != null) {
-      rebuildLost(o.rebuild);
+      rebuildLost(o.rebuild, state.vote ? Object.values(state.players).filter((p) => p.vote != null && state.vote.options[p.vote] === o) : []); // (the Log names whoever voted for it)
       if (state.vote) for (const x of state.vote.options) if (x.rebuild != null && x.rebuild >= o.rebuild) x.sold = true; // (...and every newer break-off came back with it)
     } else if (o.id === 'repair-hull') UPGRADES.find((u) => u.id === 'spare-parts').apply({ state, modules });
     else if (o.id === 'repair-gas') {
@@ -1058,12 +1111,17 @@ export function createSimulation() {
     const stop = curStop();
     addSalvage(SV.MISSION + stop.reward, 'mission');
     const rows = awardRows(Object.values(state.players).filter((p) => !p.mate), true);
+    const entry = closeStop('done'); // (the Ship's Book: the stop's moments become its Log line and its play of the mission, before the stats are banked)
+    const gentle = rows.length || !entry ? null : gentleLine(Object.values(state.players), entry.no); // (no award earned: a kind line naming whoever did the most, never "nobody did much")
     bankStats(true);
     state.scorecard = {
       lap: m.lap - 1,
       stopName: stopName(stop),
       flagship: stop.flagship,
       rows,
+      play: entry && entry.play ? { text: entry.play, kind: entry.playKind, crew: entry.playCrew } : null, // (PLAY OF THE MISSION: "Mia planted the charge")
+      gentle,
+      log: entry ? entry.text : null,
       t: config.VOTE.SCORECARD_TIME,
       gain: { ...run.gain },
       gained: Object.values(run.gain).reduce((a, b) => a + b, 0),
@@ -1181,6 +1239,7 @@ export function createSimulation() {
       eachShip(state, (sh, i) => { if (i > 0 && !sh.ai) sh.sim.env.update(dt); }); // (every other ship has the sky's hazards of her own: ice, thermals, spores, oxygen, storm rods, the sea; the enemy gunship flies in none of them)
       gunship.settle(dt);
       salvageWatch();
+      moments.tick(dt); // (the Ship's Book's clock; data only)
     }
 
     shipCollide.step(dt); // (every ship has moved: two hulls that overlap are pushed apart, bounce and hurt - shipCollide.js)
@@ -1298,6 +1357,9 @@ export function createSimulation() {
     gunship,
     air,
     restart: () => restartGame(),
+    moments, // (the Ship's Book, moments.js: the tools read the ring and call stopEnd)
+    closeStop, // (...write the open moments into run.log now: tools/log-check.mjs)
+    endRun, // (...end the run now, victory or not: the postcard)
     flushPresses: flushAll, // (the pause menu: presses made while paused must not fire on resume)
     // Pick the session mode / daily voyage (lobby and pause menu); remembered on this TV. Flying runs finish as they are.
     setSession: (mode, daily) => {

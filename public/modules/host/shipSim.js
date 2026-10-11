@@ -710,6 +710,10 @@ export function createShipSim(world, ship, W) {
       const nm = plan.names.length ? plan.names.slice(0, 3).join(', ') + (plan.names.length > 3 ? ' +' + (plan.names.length - 3) + ' MORE' : '') : plan.summary.split(',')[0];
       state.ev.warnText = (blast ? 'THE BOMB BAY EXPLODED! ' : spec.cause === 'hydrogen' ? 'THE HYDROGEN BAG EXPLODED! ' : spec.cause === 'bag' ? 'A GASBAG TORE AWAY! ' : 'PARTS BROKE OFF! ') + (nm ? 'LOST: ' + nm.toUpperCase() : '');
     }
+    if (ship.main && W.moment) { // (the Ship's Book: what was lost, and whoever stood nearest - or fell with it)
+      const near = crew.filter((p) => !p.mate && !p.enemy && p.d != null && !p.onGunship).sort((a, b) => Math.abs(a.x - bx) - Math.abs(b.x - bx))[0];
+      W.moment(blast ? 'breakoff-bay' : 'breakoff', { who: near ? [near] : [], data: { names: plan.names, cause: spec.cause || spec.kind } });
+    }
     if (W.debris) W.debris.spawn(ship, plan, pics, { origin: { x: bx, y: by }, blast });
     if (W.afterBreak) W.afterBreak(ship); // (the world: the danger of the voyage follows her strength, shipPower.js)
     return { plan, entry };
@@ -1068,6 +1072,7 @@ export function createShipSim(world, ship, W) {
         player.fly = false;
         fall(player, dt, player.tumble ? air.tumble(player, dt) : 260, (w) => {
           const overboard = !!w.tumble; // (blown or thrown off the ship; a crewman dropping in from the sky to join does not tumble)
+          if (overboard && !w.enemy && W.overboard) W.overboard(w); // (the Ship's Book: who went over the side, and how often)
           air.clear(w);
           // Fell off the ship (or off a gunship): back aboard in the medical bay, dazed (no medbay: on the spawn deck at a boarding point).
           // (A boarder who falls off the RIVAL's deck wakes in his own ship's medical bay.)
