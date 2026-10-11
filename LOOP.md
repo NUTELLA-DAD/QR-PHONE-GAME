@@ -173,3 +173,70 @@ WEEK     the Book remembers the ship, titles and the Nemesis; unlocks; a harder 
 | Balance swings | `SCRAP.ENABLED` off keeps the game byte-identical; one combined re-tune |
 | Hoarding | hold cap, weight, a poor sell rate |
 | Two currencies | the one sentence plus icons on every card |
+
+## The 3D add-on: the orbit finale and other 3D mechanics (Fable's second answer)
+**The orbit finale is a real "ring" map in the 2D simulation, bent into a circle by the 3D view.**
+- **Why in the sim:** the castle's faces must be shootable, boardable and bombable; view-only faces would mean "I'm shooting it and nothing happens".
+- **How it works:** a ring is a straight strip whose end is glued into a circle only in the picture. One lap is about 28000 px, a normal map's width.
+- **v1 has no endless wrap:** one full circle is the finale, and COME ABOUT still works.
+
+**The map (`maps.js` kind `ring`):**
+- an approach (the castle grows on the horizon), then the ring;
+- floor islands, ceiling cornices, and spires from the castle;
+- FACES are outposts at angles, each with turrets, a core behind a SHUTTER (it opens for 6 s after its turrets fall), and one special: a bat hangar, flak, a mortar, or a BOARDING GALLERY (hookshot on and plant a charge; raiders zip-line to you);
+- revolving turrets;
+- victory: all cores down, or the keep's pool; the crown falls in slow motion.
+
+**The view:**
+- every drawn thing passes through a `bend(x, y, z)`; terrain is bent once at build time;
+- the camera stays tangent to the ring (no roll), so the HUD stays exact at the ship, and the castle is always behind the ship in the middle of the picture;
+- the stick and phones are unchanged; guns aim as today (shells look like they curve inward);
+- a small ring dial on the HUD;
+- the 2D fallback plays the same level flat.
+
+**Where it appears:**
+
+| Ring | Where | Size |
+|---|---|---|
+| TOWER | stop 3 | one face, three turrets |
+| FORTRESS | stop 6, when there's no lair | four faces, a gallery, revolving guns |
+| CITADEL | the Flagship's mooring at the end of every mode | - |
+
+Later, the Island Titan can circle a ring, and DEFEND can be a ring round your own outpost.
+
+**Other 3D mechanics, ranked by fun per effort:**
+1. **The ring and orbit finale:** build (M + M + M).
+2. **Parallax destination:** a castle or beacon grows on the horizon for the whole level. Build (S).
+3. **3D ghosts of parts on the real ship:** for Yard places and in-flight frames. Build (S/M).
+4. **Arrivals from depth:** squadrons, creatures and gunships swoop in along the depth axis during their untouchable moment. Build (S).
+5. **Bent routes:** a level that turns corners. Later (M).
+6. **Weather fronts sweeping in from depth:** a telegraph. Build (S).
+7. **More look-down in shafts and canyons:** S.
+8. **A porthole onto the fortress's open face:** S.
+9. **Creatures circling in 3D:** only while untouchable. S.
+10. **Depth lanes and near/far broadsides: DO NOT BUILD.** Hits are 2D, so a plane you can see but can't hit breaks the game for the party and for the bots. Depth is for staging only.
+
+**Rule:** the 2D sim is authoritative. Things move in depth only while they can't be hit, and the HUD stays within a pixel at the ship.
+
+**Ring packages:**
+
+| # | Package | Size |
+|---|---|---|
+| R0 | the ring map in the sim (faces, shutters, revolving turrets, gallery, the keep), `botsim --map ring`, a flat 2D fallback with the dial | M |
+| R1 | the bend and the ring camera; HUD within 1 px through a whole circle | M |
+| R2 | the castle kit and art, the ring dial, the slow-motion crown fall | M |
+| R3 | parallax landmarks and arrivals from depth | S |
+| R4 | 3D ghosts of Yard places and frames (with G4) | S/M |
+| R5 | weather fronts from depth, the fortress porthole, creature depth | S |
+| R6 | bent routes | M (later) |
+
+**Updated combined order:**
+1. G0, L0 and WP0.
+2. WP1, G1, L1 and **R0**. **Playtest here.**
+3. G2, G3, L2, WP2, WP3, the raiders and **R1**.
+4. G4 with **R4**, L3, L4, WP4, WP5 and **R2** (the first orbit finale reaches players).
+5. G5, G6, L5, L6, WP6 and **R3**.
+6. G7 with WP6: one balance pass.
+7. G8, L7, L8, WP7 and **R5**.
+
+R6 comes later.
