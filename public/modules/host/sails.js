@@ -43,7 +43,7 @@ export function createSails({ state, modules }) {
     if (version === layout.version && state.sails.length === (layout.sails || []).length) return;
     version = layout.version;
     const old = new Map(state.sails.map((q) => [q.n, q])); // (a sail that is still there after a build change - a part broke off, S.5i - keeps how far up it is)
-    state.sails = (layout.sails || []).map((s, i) => ({ n: s.n, name: s.n, d: s.d, x: s.x, i, hoist: old.has(s.n) ? old.get(s.n).hoist : 0, lowering: old.has(s.n) ? old.get(s.n).lowering : false, prog: 0, pull: 0, torn: false, worked: false, color: S.COLORS[i % S.COLORS.length] }));
+    state.sails = (layout.sails || []).map((s, i) => ({ n: s.n, name: s.n, d: s.d, x: s.x, i, hoist: old.has(s.n) ? old.get(s.n).hoist : 0, lowering: old.has(s.n) ? old.get(s.n).lowering : false, prog: 0, pull: 0, torn: false, worked: false, color: s.art === 'thunderbird' ? S.FEATHER_COLOR : S.COLORS[i % S.COLORS.length], ...(s.art === 'thunderbird' ? { feather: true } : {}) })); // (feather: the Thunderbird's trophy sail, config.CREATURES.THUNDERBIRD.TROPHY)
   };
   const modOf = (sail) => modules.byName[sail.n];
   const isTorn = (sail) => { const m = modOf(sail); return !!m && m.broken; };
@@ -91,7 +91,7 @@ export function createSails({ state, modules }) {
       sail.prog = sail.hoist;
       if (sail.hoist > 0.3 && !sail.lowering) up++;
       // A gust on a raised sail can tear it.
-      if (flying && gust === 2 && sail.hoist > 0.25 && !torn && Math.random() < S.TEAR_CHANCE * sail.hoist * dt) {
+      if (flying && gust === 2 && sail.hoist > 0.25 && !torn && !sail.feather && Math.random() < S.TEAR_CHANCE * sail.hoist * dt) { // (a feather sail is gust-proof)
         const m = modOf(sail), lay = layout.sails[sail.i];
         if (m) {
           modules.damage(m, 999);
@@ -117,7 +117,7 @@ export function createSails({ state, modules }) {
     let push = 0, k = 1;
     const wind = windFactor(state);
     for (const sail of [...state.sails].sort((a, b) => b.hoist - a.hoist)) {
-      sail.pull = slack || sail.torn ? 0 : sail.hoist * S.BONUS * wind * k;
+      sail.pull = slack || sail.torn ? 0 : sail.hoist * S.BONUS * wind * k * (sail.feather ? config.CREATURES.THUNDERBIRD.TROPHY.PULL_MUL : 1);
       if (sail.hoist > 0.05 && !sail.torn) k *= S.BONUS_DIM;
       push += sail.pull;
       // The wind pushes the canvas high up the mast, well above the ship's centre of mass: it tips her nose down (forces.js), a gust much harder, a tall mast more.

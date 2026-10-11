@@ -194,6 +194,29 @@ function drakeScaleCands(parts, L) {
   const mark = (ps) => ps.map((q) => (q.part === 'armour' && !parts.some((o) => o.part === 'armour' && same(o, q)) ? { ...q, art: 'drake' } : q));
   return fromPalette('armour', { ghost: (s) => ({ x0: s.x - COL, x1: s.x + COL, y0: s.y - 28, y1: s.y + 26 }) })(parts, L).map((c) => ({ ...c, apply: (ps) => mark(c.apply(ps)) }));
 }
+// THUNDERBIRD FEATHER SAIL (C.6b): the trophy for slaying the Thunderbird is a mast and sail marked art: 'thunderbird' (sails.js: it pulls config.CREATURES.THUNDERBIRD.TROPHY.PULL_MUL x harder and a gust cannot tear it).
+// A new mast wherever a sail may stand, or, if she has a plain sail, that sail's canvas swapped for feathers.
+function featherSailCands(parts, L) {
+  const mark = (ps) => ps.map((q) => (q.part === 'sail' && !parts.some((o) => o.part === 'sail' && o.n === q.n) ? { ...q, art: 'thunderbird' } : q));
+  const swap = parts.filter((q) => q.part === 'sail' && q.art !== 'thunderbird').map((s) => {
+    const d = L.platforms.find((q) => q.id === s.p);
+    return { x: s.x, y: d ? d.y : 0, where: `${whereOn(L, s.p, s.x)}, in place of the canvas sail`, ghost: { x0: s.x - 120, x1: s.x + 40, y0: (d ? d.y : 0) - 260, y1: d ? d.y : 0 }, apply: (ps) => ps.map((q) => (q.part === 'sail' && q.n === s.n ? { ...q, art: 'thunderbird' } : q)) };
+  });
+  const fresh = fromPalette('sail')(parts, L).map((c) => ({ ...c, apply: (ps) => mark(c.apply(ps)) }));
+  if (swap.length || fresh.length) return [...swap, ...fresh];
+  // no palette spot (a crowded ship: the classic one has none): a mast on any open deck, clear of the stations (the shop checks that the ship stays valid)
+  const taken = new Set(parts.map((q) => q.n));
+  let k = 1;
+  while (taken.has(k === 1 ? 'Feather Sail' : 'Feather Sail ' + k)) k++;
+  const n = k === 1 ? 'Feather Sail' : 'Feather Sail ' + k, out = [];
+  for (const q of L.platforms.filter((o) => o.outside && ['crow2', 'nest', 'catwalk'].includes(rowOf(o)))) {
+    for (let x = Math.ceil((q.x0 + 90) / 60) * 60; x <= q.x1 - 160; x += 60) {
+      if ([...L.stations, ...L.engines].some((s) => s.p === q.id && Math.abs(s.x - x) < 70) || (L.sails || []).some((s) => s.p === q.id && Math.abs(s.x - x) < config.SAIL.WIDTH + 30)) continue;
+      out.push({ x, y: q.y, where: whereOn(L, q.id, x), ghost: { x0: x - 120, x1: x + 40, y0: q.y - 260, y1: q.y }, apply: (ps) => [...ps, { part: 'sail', n, p: q.id, x, art: 'thunderbird' }] });
+    }
+  }
+  return out;
+}
 const engines = (p) => count(p, (q) => q.part === 'engine');
 const stationsOf = (p, kind) => count(p, (q) => q.part === 'station' && q.kind === kind);
 export const CATALOGUE = [
@@ -224,6 +247,8 @@ export const CATALOGUE = [
   { id: 'krakenBeak', name: 'Kraken Beak', icon: '\u{1F419}', group: 'frame', pic: 'krakenBeak', trophy: true, blurb: "The Kraken's own beak, bolted on as a ram prow: a trophy. It rams like the iron one.", allowed: () => false, cands: krakenBeakCands, w: () => 0 },
   // The DRAKE SCALES (C.6a): the trophy for slaying the Cinder Drake, free at the next dock. It IS armour plate (does not burn, hits on it hurt a third as much) of lighter weight, in red-brown scales.
   { id: 'drakeScale', name: 'Drake-scale plating', icon: '\u{1F409}', group: 'armour', pic: 'drakeScale', trophy: true, blurb: "Scales of the Cinder Drake riveted on the hull: a trophy. Plate that does not burn, at half the weight of iron.", allowed: () => false, cands: drakeScaleCands, w: () => 0 },
+  // The THUNDERBIRD FEATHER SAIL (C.6b): the trophy for slaying the Thunderbird, free at the next dock. It IS a mast and sail (the same part and rules) in storm-bird feathers: it pulls harder and a gust cannot tear it.
+  { id: 'featherSail', name: 'Thunderbird feather sail', icon: '\u{1FAB6}', group: 'station', pic: 'featherSail', trophy: true, blurb: "Feathers of the Thunderbird sewn into a sail: a trophy. It pulls half as hard again, and a gust cannot tear it.", allowed: () => false, cands: featherSailCands, w: () => 0 },
   { id: 'dropHatch', name: 'Cargo drop hatch', icon: '\u{1F573}️', group: 'frame', pic: 'dropHatch_2', blurb: 'Trapdoors in a deck with a lever: open them to drop crates on a ship below, dump weight when she is going down, tip raiders out. Anyone standing on it falls.', allowed: (p) => !!config.HATCH.SHOP && count(p, (q) => q.part === 'dropHatch') < 2, cands: (p, L) => [2, 1, 3].flatMap((n) => fromPalette(n === 1 ? 'dropHatch' : 'dropHatch_' + n, { ghost: (s) => ({ x0: s.hatch[0], x1: s.hatch[1], y0: s.y - 50, y1: s.y + 30 }) })(p, L)), w: () => 0.45 },
   { id: 'ballast', name: 'Ballast', icon: '⚖️', group: 'frame', pic: 'ballast', blurb: 'Sandbags to trim her level. Cheap, dense, and heavy.', allowed: (p) => count(p, (q) => q.part === 'ballast') < 6, cands: (p, L) => [...fromPalette('ballast')(p, L), ...fromPalette('ballast_hang')(p, L)], w: (c) => (Math.abs(c.sum.deg) >= config.BALANCE.WARN_PX * config.BALANCE.DEG_PER_PX ? 4 : 0.5) },
   { id: 'ladder', name: 'Ladder', icon: '\u{1FA9C}', group: 'frame', pic: 'ladder', blurb: 'Another way between two decks: shorter walks.', allowed: () => true, cands: fromPalette('ladder'), w: () => 0.6 },

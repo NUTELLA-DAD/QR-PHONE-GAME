@@ -1654,6 +1654,7 @@ export const config = {
     SPEED_RATE: 1.2, // how quickly the ship's speed follows the sails' pull (per second, as a share of the difference): the canvas fills, she gathers way
     REACH: 70, // how close to the mast a crew member must stand to work the sail (px)
     COLORS: ['#d9a86a', '#c97a5a', '#e0c070', '#b8a07a'], // canvas colours (the TV picks one per sail): warm, so a sail shows against the cream gasbag
+    FEATHER_COLOR: '#8da2c4', // the Thunderbird feather sail (C.6b trophy, part art 'thunderbird'): storm-bird blue-grey canvas; pulls CREATURES.THUNDERBIRD.TROPHY.PULL_MUL x harder and is never torn by a gust
     FORCE_ACC: 900, // S.5h: the wind's push on a raised sail, as a ship acceleration (px/s^2) per share of top speed its pull gives. It acts high up on the mast, so it tips her nose down (forces.js)
     GUST_FORCE: 2.5, // ...and a gust blows the push up this many times
   },
@@ -2011,7 +2012,7 @@ export const config = {
     // voyage (the long ones, LONG_STOPS columns or more, get the bigger number); never the first stop, never two in a row; +DANGER skulls and x REWARD_MUL reward.
     LAIR: {
       COUNT: { short: 1, long: 2 }, LONG_STOPS: 7, DANGER: 1, REWARD_MUL: 2,
-      BY_ENV: { sea: 'kraken', ember: 'drake' }, // which creature lives in which sky (a lair stop is a Sunken Sea stop with a Kraken or an Ember Forge stop with a Drake: voyage.js markLairs)
+      BY_ENV: { sea: 'kraken', ember: 'drake', storm: 'thunderbird' }, // which creature lives in which sky (a lair stop is a Sunken Sea stop with a Kraken, an Ember Forge stop with a Drake or a Storm Front stop with a Thunderbird: voyage.js markLairs)
       RUN: 16000, BEYOND: 9000, SEA_BELOW: 2000, // px from the launch to the lair's middle (where the route ends and she hovers); more map beyond it; the sea lies this far under the launch height
       SPIRES: [[-35, 3], [0, 2], [35, 4]], SPIRE_W: 2600, SPIRE_UP: [450, 900], // rock spires standing in the sea: [cells from the lair's middle (the one at 0 stands right under her when she hovers there), +- jitter in cells], their width at the sea line and how far they stand above it (px)
       ICON: '\u{1F419}', LABEL: 'LAIR', NAME: "The Kraken's Lair", KIND: 'Kraken lair', // the route map's creature icon (octopus) and label
@@ -2106,6 +2107,71 @@ export const config = {
       REWARD: { HULL: 35, GAS: 30, TROPHY: 'drakeScale' }, // salvage x3, the hull patched and every bag topped up; the trophy part card: Drake-scale plating
       LAIR: { ICON: '\u{1F409}', LABEL: 'LAIR', NAME: "The Drake's Lair", KIND: 'Drake lair', LAVA_BELOW: 3200, SHELF_HALF: 3300, SHELF_UP: 420, SPOUTS: [-1700, 1700], LEDGES: [[-52, 1100, 520], [58, 900, 640]] }, // the lair map (maps.js buildLairMap): the lava lies this far under the launch; the rock shelf (half its width, how far its top stands above the lava); where the lava spouts stand (px from the lair's middle, on the shelf); rock ledges [cells from the middle, width, height above the lava]
       TROPHY: { MASS_MUL: 0.5 }, // Drake-scale plating: armour that weighs this share of iron plate (and is as fireproof)
+    },
+    // ---- THE THUNDERBIRD (C.6b, BOSSES.md 2.3): the Storm Front's bird. creatures/thunderbird.js = the body and its poses, creatureBird.js = flight, attacks, perch, roost and the wins. ----
+    // It circles the ship in the dark and every so often does one of five things: GUST (the wings rear back, then beat: a strong shove with torque), PASS (a diving pass that bumps the hull), PERCH (it lands on the gasbag as a live
+    // load and claws it), LIGHTNING DIVE (it calls bolts down on the ship with the storm's own strike system: a held lightning rod grounds one, a manned coil DRINKS a grounded bolt and fires it back at the bird for DRINK.MUL x),
+    // SWALLOW (it swallows a bolt from the storm: the GIZZARD glows for a window and is the weak point). Between attacks it rests on a rock SPIRE of the lair (ROOST). Phases: 1 passes and gusts; 2 (one wing plucked, or below
+    // PHASE.TWO_HP) lightning dives and swallows; 3 (below PHASE.THREE_HP) a frenzy: faster strikes, the gizzard glowing longer. Ways to win (cr.stats.win): 'pluck' (both wings plucked: it falls into the clouds), 'gizzard' (ZAP.HITS
+    // coil bolts into the glowing gizzard), 'mortar' (ROOST.MORTAR_HITS mortar shells while it rests on a spire), 'board' (board it perched on the ship or a spire and cut the gizzard) and 'hp' (the pool).
+    THUNDERBIRD: {
+      NAME: 'THE THUNDERBIRD', ENV: 'storm',
+      HP: 1500, // the health pool (the slow, safe way to win)
+      HP_MUL: { wing: 1.7, neck: 1.2, head: 1.3, beak: 1.2, tail: 1.2, talon: 1, mantle: 1, heart: 1, pool: 2.1 }, // tuning knobs on the data's hp
+      POOL: { wing: 0.3, neck: 0.5, head: 0.8, beak: 0.9, tail: 0.15, talon: 0.2, mantle: 0.6, heart: 3 }, // share of a blow that also comes off the pool
+      // The body (px, in the bird's own frame: facing +x, y down; the torso's centre is the origin). About 8000 px with its wings spread, three times the classic ship.
+      TORSO: { AT: [-480, 0], LEN: 900, R: 360, HP: 400 }, // the body: a capsule from AT, LEN long
+      NECK: { SEGS: 3, LEN: [320, 270], R: [180, 120], HP: 220, AT: [430, -120] }, // three rigid feathered segments, root to head
+      HEAD: { LEN: 480, R: 170, HP: 240 }, // rigid, riding the neck's tip
+      BEAK: { R: 120, HP: 160 }, // at the head's tip
+      WING: { SEGS: 5, LEN: [780, 600], R: [210, 60], HP: 430, AT: [[110, -300], [-50, -330]] }, // [near wing, far wing] roots; five feather segments each; the far wing is drawn behind
+      TAIL: { SEGS: 3, LEN: [400, 340], R: [210, 150], HP: 200, AT: [-460, 40] }, // the tail fan
+      TALON: { SEGS: 2, LEN: [300, 260], R: [95, 55], HP: 130, AT: [[-120, 300], [-320, 310]] }, // [near leg, far leg]
+      GIZZARD: { AT: [200, 130], R: 150, HP: 220 }, // behind the breast feathers: hidden except while it glows
+      // How it arrives and flies: it orbits a point UP px above the ship in an ellipse RX x RY at SPEED px/s; an attack leaves the orbit and rejoins it. With ONE wing plucked it flies lower and slower.
+      SPAWN: { FROM: 7500, ARRIVE: 5, SINK: 8, SINK_DEEP: 5200, FIRST: 6 }, // px it flies in from, s it takes (untouchable), s it takes to fall away when dead, px it falls, s before its first attack
+      FLY: { RX: 3300, RY: 1000, UP: 1000, SPEED: 1000, FOLLOW: 4, CLEAR: 700, MAX_PITCH: 0.35, FLIP_VX: 160 }, // orbit radii, centre above the ship; px/s; per second how closely it follows its path; px it keeps above rock; the most it noses up/down (rad); px/s of sideways speed that turns it round
+      ONE_WING: { UP_MUL: 0.8, SPEED_MUL: 0.85, ROT: -0.2 }, // a bird with one wing plucked: orbit height and speed x these, and its lopsided pitch (rad)
+      ATTACK: {
+        EVERY: [11, 17], BREATHER: 3.5, BANNER: 4.5, // s between attacks (min, max; x the difficulty's pause); s of quiet after a phase change; the phase banner
+        WEIGHTS: { 1: { gust: 3, pass: 2, perch: 1 }, 2: { gust: 2, pass: 1, perch: 1, dive: 3, swallow: 2 }, 3: { gust: 2, pass: 1, perch: 1, dive: 3, swallow: 3 } }, // their odds by phase
+        FIRST_PERCH: 26, PERCH_EVERY: 40, // the first perch comes after this many s; s between perches
+      },
+      // GUST: the wings rear back (WIND s: a banner, a buzz on every phone, a screech), then BEAT s of beating. The ship is shoved along (PUSH px/s) and down, and pushed at the top of the gasbag (FX px/s^2, forces.js
+      // 'gust': a twist, kept under FORCES.MAX_DEG); crew on open decks stagger (SHOVE).
+      GUST: { WIND: 1.7, BEAT: 1.5, RECOVER: 1.2, STAND: [3300, 450], STAND_SPEED: 2400, FX: 240, DOWN: 0.8, PUSH: 330, VY: 120, SHOVE: 4, SHAKE: 0.9 },
+      // PASS: a diving pass at the hull. It climbs to a start point (WIND s, a ring where it will strike), locks on LOCK s before the strike, dives at DIVE px/s and, on touching the ship, hurts her (HULL, kick POWER,
+      // a heart for crew within HURT_R) and is DAZED for DAZED s (everything hurts it DAZED_MUL x), then climbs away.
+      PASS: { WIND: 1.6, LOCK: 0.5, DIVE: 2500, START: [2600, 1700], HIT_R: 520, HULL: 45, POWER: 3, SHAKE: 1, HURT_R: 500, FLING: 340, DAZED: 2, DAZED_MUL: 1.4, SHOVE: 3, MISS_AFTER: 1.6, LEAD: 0.3 },
+      // LIGHTNING DIVE: it flies to a spot UP px over the ship (MOVE_SPEED), rears and CALLs (CALL s: a banner, a buzz for everyone on an open deck, thunder), then calls BOLTS[phase] bolts down one after another, GAP s apart.
+      // Each is the storm's own strike (envStormSea.js callBolt) charging WARN[phase] s: someone holding a lightning rod GROUNDS it, a manned coil DRINKS a grounded bolt (and fires it back), otherwise it hits her
+      // (module damage, a fire) at POWER_MUL x the usual strike.
+      DIVE: { UP: 1150, MOVE_SPEED: 2400, CALL: 1.6, BOLTS: { 1: 2, 2: 3, 3: 4 }, WARN: { 1: 3, 2: 2.8, 3: 2 }, GAP: { 1: 1.4, 2: 1.2, 3: 0.6 }, RECOVER: 1.6, POWER_MUL: 1.25 },
+      DRINK: { MUL: 3, WINDOW: 12, HITS: 2 }, // the coil's bolt, fired within WINDOW s of drinking a lightning bolt, does MUL x to the bird, and counts HITS zaps at a glowing gizzard
+      // SWALLOW: it hovers UP px over the ship, throws its head back (CALL s of warning: a banner, a buzz, a flash), and swallows a bolt of the storm: the GIZZARD glows for GLOW[phase] s (the weak point is open; anything hurts
+      // it GLOW_MUL x). ZAP.HITS coil bolts into the glowing gizzard (DRINK.HITS for a drunk one) win the fight.
+      SWALLOW: { UP: 1050, MOVE_SPEED: 2400, CALL: 1.5, GLOW: { 1: 7, 2: 8, 3: 12 }, GLOW_MUL: 1.5, RECOVER: 1.2 },
+      ZAP: { HITS: 3 },
+      // ROOST: between passes it rests on a rock spire of the lair (the one nearest the ship that is within REACH px sideways of her), EVERY s apart (the first after FIRST s), for TIME s (x the difficulty): the chance for a
+      // mortar. MORTAR_HITS mortar shells that hit it there win the fight; it is a landing place for a boarder, and a hook anchors to it.
+      ROOST: { FIRST: 20, EVERY: 36, TIME: 18, TIME_BY_DIFF: { easy: 1.35, normal: 1, veteran: 0.9, hard: 0.8 }, REACH: 3600, LAND_SPEED: 2200, LIFTOFF: 1.4, MORTAR_HITS: 4, FIRST_IF_FORCED: 9, EVERY_IF_FORCED: 24 },
+      // PERCH: it glides down onto the top of the gasbag (WIND s warning), its weight (MASS gas points, in balance.js) tips the ship and pushes her down (ACC px/s^2 while she sinks slower than MAX_SINK px/s, forces.js 'perch'),
+      // and it CLAWs a hole in the bag every CLAW s (at most CLAWS a perch). It leaves after TIME s (x difficulty), or sooner if driven off: a sword (hold SWORD_TIME s, or BLOWS blows) from a crew member on a deck within
+      // REACH sideways and REACH_V down from its perch, damage worth DRIVE_DMG of its pool (flame counts FLAME_DRIVE x), or the helm's hard turn (COME ABOUT, or her climb rate swinging SHAKE_VY px/s for SHAKE_TIME s).
+      PERCH: {
+        WIND: 2.2, TIME: 15, TIME_BY_DIFF: { easy: 0.75, normal: 1, veteran: 1.1, hard: 1.2 }, MASS: 10, ACC: 70, MAX_SINK: 70, TORQUE: 3, SHAKE: 0.25, CLAW: 6, CLAWS: 3,
+        REACH: 760, REACH_V: 520, SWORD_TIME: 2.4, HAMMER_TIME: 4, BLOWS: 3, HAMMER_BLOW: 0.6, BLOW_HOLD: 1.6, DRIVE_DMG: 0.04, FLAME_DRIVE: 3, SHAKE_VY: 170, SHAKE_TIME: 1.2, LIFTOFF: 1.4,
+        ABOVE: 40, FIRST_IF_FORCED: 9, EVERY_IF_FORCED: 24, // px its feet sink into the top of the bag; the dev flag board: it perches this soon and this often
+      },
+      // Phases: 2 below TWO_HP of the pool (or a wing plucked), 3 below THREE_HP: the attacks come faster (PAUSE_MUL x the pause).
+      PHASE: { TWO_HP: 0.6, THREE_HP: 0.3, PAUSE_MUL: 0.65 },
+      // BOARDING (creatureBoard.js): while it sits on her bag or a spire its torso is a landing strip. A boarder with a sword holds Action (CUT_TIME s) at the gizzard to CUT it (the sword's damage, config.CREATURES.BOARD.HEART_DMG).
+      BOARD: { CUT_TIME: 6, KEEP_PERCH: 0.35 }, // s of holding; the perch / roost timer runs this fast while somebody is aboard (it is busy with him)
+      WIN_TEXT: { pluck: 'PLUCKED BARE!', gizzard: 'BOLT IN THE GIZZARD!', mortar: 'BLASTED OFF ITS ROCK!', board: 'GIZZARD CUT!', hp: 'BROUGHT DOWN!' },
+      DEATH_TEXT: ' FALLS INTO THE CLOUDS!',
+      REWARD: { HULL: 35, GAS: 30, TROPHY: 'featherSail' }, // salvage x3, the hull patched and every bag topped up; the trophy part card: the Thunderbird feather sail
+      LAIR: { ICON: '\u{1F985}', LABEL: 'LAIR', NAME: "The Thunderbird's Lair", KIND: 'Thunderbird lair', FLOOR_BELOW: 3800, SPIRES: [[-30, 3], [0, 1], [30, 3]], SPIRE_W: 2400, SPIRE_DEPTH: [2100, 2500] }, // the lair map (maps.js buildStormLairMap): the sky's floor lies this far under the launch; rock spires [cells from the lair's middle (the one at 0 stands right under her when she hovers there), +- jitter], their width at the floor line and how far their tops lie under the launch height (px)
+      TROPHY: { PULL_MUL: 1.5 }, // the Thunderbird feather sail: a mast and sail that pulls this much harder and that a gust cannot tear (sails.js)
     },
   },
   // Effects in the storybook gouache style (modules/host/vfxArt.js): flat colours, ink from INK + OUTLINE, no gradients.
@@ -2539,6 +2605,16 @@ export const config = {
       LIGHT: { color: '#ff9a3a', intensity: 2.2, range: 3400 }, // the warm point light the breath throws on the ship (x 1 on High, 0.6 on Medium, none on Low)
       INK: 14,
       TENTACLE_SIDES: 12, // sides of a limb's tube (Low tier: 8)
+      Z: { FRONT: 330, BACK: -250, ROOT_FRONT: 140, ROOT_BACK: -120, WRAP_MARGIN: 130 },
+    },
+    // THE THUNDERBIRD (view3d/creatureThunderbird.js, C.6b): the first fallback only (tapered tubes and a plain torso, the Kraken's keys in storm slate and gold); the proper model is a later task.
+    THUNDERBIRD: {
+      skin: '#3d4b6e', skinDark: '#262f4a', belly: '#c9d4e8', spot: '#262f4a', spotLight: '#6f86b0', fin: '#4f6290', bone: '#e8e2c8', char: '#2f2a2e', eye: '#fff27a', iris: '#ffffff', pupil: '#17101e',
+      mouthIn: '#8f5f24', lips: '#e8b84a', flesh: '#d98a95', heart: '#9fe8ff', dead: '#4a5470', exhausted: '#8f9ab8',
+      EYE_GLOW: { base: 1.3, lit: 2.2, blind: 0.25, tired: 0.7 },
+      THROAT_GLOW: { shut: 0.25, open: 2.1 }, HEART_GLOW: 2.4,
+      INK: 14,
+      TENTACLE_SIDES: 12,
       Z: { FRONT: 330, BACK: -250, ROOT_FRONT: 140, ROOT_BACK: -120, WRAP_MARGIN: 130 },
     },
   },

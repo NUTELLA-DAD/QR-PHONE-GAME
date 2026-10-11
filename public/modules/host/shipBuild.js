@@ -193,7 +193,7 @@ export const PARTS = {
   sail: { mass: () => M().kind.sail, lift: 0, steam: 0, hands: 1, emit: (p, A) => {
     const { n, h, w } = p;
     A.add('stations', { n, kind: 'sail', p: p.p, x: p.x });
-    A.add('sails', { n, p: p.p, x: p.x, h: h || config.SAIL.MAST_H, w: w || config.SAIL.WIDTH });
+    A.add('sails', { n, p: p.p, x: p.x, h: h || config.SAIL.MAST_H, w: w || config.SAIL.WIDTH, ...(p.art ? { art: p.art } : {}) }); // (art: 'thunderbird' = the feather sail, the trophy of C.6b: sails.js)
   } },
   // The CREW CANNON (B.6, cannon.js): a brass cannon on an open deck that fires a crewman across the sky. It is two stations: the gunner's post (kind 'cannon', behind the barrel: aims and fires) and
   // the seat in the barrel (kind 'cannonSeat': climb in), plus the cannon itself (n = the gunner's post's name, x = the barrel's pivot, aim = its middle angle, arc = how far it swings).

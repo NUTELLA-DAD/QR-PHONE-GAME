@@ -162,18 +162,31 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
       if (mannedCoil() && state.coil) {
         state.coil.charge = 1; // the coil drinks the bolt: fully charged at once
         state.coil.cd = 0;
+        state.coil.drunk = config.CREATURES.THUNDERBIRD.DRINK.WINDOW; // (C.6b: the Thunderbird takes this coil blow at DRINK.MUL x, if it is fired in time)
         J.drank++;
         pop(state, toWorldX(ship, 875), toWorldY(ship, -150), 'THE COIL DRINKS THE BOLT!', '#ffe97a', 1.4);
         warn(2.5, 'GROUNDED - THE COIL DRINKS THE BOLT!');
       } else warn(2, 'GROUNDED!');
     } else {
       J.struck++;
-      impact(c.x, P[CAT].y, F.ROD.POWER); // module damage, dents (and maybe a fire) where it lands
+      impact(c.x, P[CAT].y, F.ROD.POWER * (c.power || 1)); // module damage, dents (and maybe a fire) where it lands (the Thunderbird's bolts: c.power x)
       if (state.fires.length < F.ROD.MAX_FIRES) ignite(CAT, clamp(c.x + rand(-60, 60), P[CAT].x0 + 20, P[CAT].x1 - 20), 'env');
       warn(2.5, 'LIGHTNING STRIKE! NOBODY HELD A ROD!');
     }
+    J.last = { n: (J.n = (J.n || 0) + 1), grounded: !!grounded, drank: !!(grounded && mannedCoil() && state.coil), bird: !!c.bird }; // (what the last bolt did: the Thunderbird reads it, creatureBird.js)
     J.charge = null;
     J.nextT = rand(F.ROD.EVERY_MIN, F.ROD.EVERY_MAX);
+  };
+
+  // C.6b: the Thunderbird CALLS a bolt down: the same charge as the storm's own (a place beside one of the rods, `warn` s to hold a rod and ground it), marked c.bird. False if a bolt is already charging.
+  // pick: a number 0..1 (the creature's own seeded roll), power: how hard it hits if nobody grounds it (x ROD.POWER).
+  const callBolt = ({ warn, pick = Math.random(), power = 1 }) => {
+    const J = state.stormJob;
+    if (J.charge || !J.rods.length || state.ship.down) return false;
+    const r = J.rods[Math.min(J.rods.length - 1, Math.floor(pick * J.rods.length))];
+    J.charge = { t: warn, max: warn, x: r.x + (((pick * 7) % 1) - 0.5) * 80, bird: true, power };
+    if (state.weather) state.weather.flash = Math.max(state.weather.flash, 0.5);
+    return true;
   };
 
   const storm = (dt, F, flying) => {
@@ -202,6 +215,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
       return;
     }
     if (!J.charge) {
+      if (state.creature && state.creature.kind === 'thunderbird' && !state.creature.dying) return; // (the Thunderbird calls the bolts itself)
       if (J.nextT <= 0) J.nextT = R.FIRST;
       if ((J.nextT -= dt) <= 0) {
         const r = J.rods[(Math.random() * J.rods.length) | 0];
@@ -390,5 +404,6 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
     sv.worked = true;
   };
 
-  return { clear, storm, sea, pumpWork, rodHold, winchWork };
+  state.stormJob.call = callBolt;
+  return { clear, storm, sea, pumpWork, rodHold, winchWork, callBolt };
 }

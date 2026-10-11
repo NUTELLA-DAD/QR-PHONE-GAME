@@ -499,6 +499,253 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     if (wingN && !wingN.dead) drawDrakeLimb(wingN);
   }
 
+  // ================================================================ THE THUNDERBIRD (C.6b) ================================================================
+  // The Drake's recipe again (rigid pictures baked once per zoom, blitted and rotated, stepped poses from the sim): a storm bird in slate-blue feathers with a pale breast, wings of feather segments (flight
+  // feathers hang from each, gold-tipped like lightning), a broad tail fan, a crested head with a hooked golden beak, yellow talons, and the GIZZARD: hidden under the breast feathers until it swallows a bolt,
+  // then a cyan-white glow (two stepped flicker frames). Facing +x in its own picture; the mirror (body.f) flips y.
+  const T_BODY = '#3d4b6e', T_BODY_DK = '#262f4a', T_BREAST = '#c9d4e8', T_WING = '#4f6290', T_WING_LT = '#9bb2d6', T_QUILL = '#e8e2c8', T_GOLD = '#f0d24a', T_BEAK = '#e8b84a', T_BEAK_DK = '#8f5f24';
+  const T_EYE = '#fff27a', T_LEG = '#d9b24a', T_CLAW = '#2f2a2e', T_GLOW = '#9fe8ff', T_GLOW_IN = '#ffffff', T_FLESH = '#d98a95';
+
+  // A wing segment: the covert band along the leading edge (+y is the trailing side: sideFlip) and the flight feathers hanging from it, each a long blade swept a little back, a gold tip on every other one.
+  function birdWingPic(s, mode, look) {
+    const L = s.len, r0 = s.r, r1 = s.r1;
+    return get(`twing|${Math.round(L)}|${Math.round(r0)}|${Math.round(r1)}|${mode}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 1.5, f0 = r0 * 2.1, f1 = r1 * 2.1;
+      return bake(-r0 * 0.5 - pad, -r0 * 0.9 - pad, L + r1 * 3 + pad, Math.max(f0, f1) + r0 * 0.4 + pad, (g) => {
+        const n = 4, w = L / n;
+        for (let k = 0; k < n; k++) {
+          const u = (k + 0.5) / n, rr = r0 + (r1 - r0) * u, fl = f0 + (f1 - f0) * u, x0 = k * w;
+          poly(g, [[x0, 0.1 * rr], [x0 + w * 1.15, 0.1 * rr], [x0 + w * 1.45, fl * 0.96], [x0 + w * 0.45, fl]], col(k % 2 ? T_WING : T_WING_LT));
+          g.strokeStyle = col(T_QUILL);
+          g.lineWidth = Math.max(7, w * 0.05);
+          g.beginPath();
+          g.moveTo(x0 + w * 0.6, 0.15 * rr);
+          g.lineTo(x0 + w * 0.95, fl * 0.9);
+          g.stroke();
+          g.strokeStyle = INK;
+          if (k % 2 === 0) tri(g, x0 + w * 0.45, fl, x0 + w * 1.45, fl * 0.96, x0 + w * 0.95, fl + w * 0.5, col(T_GOLD), A.INK_W * 0.7);
+        }
+        poly(g, [[0, -0.85 * r0], [L, -0.85 * r1], [L + 0.08 * r1, 0.3 * r1], [L * 0.5, 0.5 * ((r0 + r1) / 2) * 0.55], [0, 0.45 * r0]], col(T_BODY)); // the coverts along the arm
+        poly(g, [[r0 * 0.1, -0.7 * r0], [L * 0.95, -0.7 * r1], [L * 0.95, -0.45 * r1], [r0 * 0.1, -0.45 * r0]], hiColor(look), false);
+        for (let k = 0; k < 3; k++) { const x = L * (0.2 + 0.3 * k), rr = r0 + (r1 - r0) * (0.2 + 0.3 * k); tri(g, x - rr * 0.22, 0.05 * rr, x + rr * 0.22, 0.05 * rr, x, 0.4 * rr, col(T_BODY_DK), A.INK_W * 0.5); } // covert scallops
+        g.beginPath();
+        g.arc(0, -0.2 * r0, Math.max(14, r0 * 0.28), 0, Math.PI * 2);
+        g.fillStyle = col(T_BODY_DK);
+        g.fill();
+        g.lineWidth = A.INK_W * 0.7;
+        g.stroke();
+        if (mode === 'tip') poly(g, [[L, -0.6 * r1], [L + r1 * 3, 0.15 * r1], [L, 0.5 * r1]], col(T_WING)); // the outermost primary
+        if (mode === 'cut') { // plucked: bare quills
+          for (let k = 0; k < 4; k++) { const y = -0.5 * r1 + k * 0.38 * r1; g.strokeStyle = col(T_QUILL); g.lineWidth = Math.max(9, r1 * 0.12); g.beginPath(); g.moveTo(L, y); g.lineTo(L + r1 * 0.9, y + r1 * 0.1); g.stroke(); }
+          g.strokeStyle = INK;
+        }
+      });
+    });
+  }
+
+  // A neck, tail or leg segment. NECK: a feathered tube, pale on the belly side. TAIL: a broad fan paddle (a spread of feathers ending in scallops, gold on the last). TALON: a scaly yellow leg; the last has three claws.
+  function birdSegPic(s, kind, mode, look) {
+    const L = s.len, r0 = s.r, r1 = s.r1;
+    return get(`tseg|${kind}|${Math.round(L)}|${Math.round(r0)}|${Math.round(r1)}|${mode}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 1.5, mid = (r0 + r1) / 2;
+      return bake(-r0 - pad, -r0 - pad, L + (mode === 'tip' ? r1 * 2.4 : r1 * 1.4) + pad, r0 + pad, (g) => {
+        if (kind === 'tail') {
+          const n = 5;
+          for (let k = 0; k < n; k++) { // a fan of feathers: each a blade from the base, spread across the segment's width
+            const v = -1 + (2 * (k + 0.5)) / n, y = v * r0 * 0.9, y1 = v * r1 * 1.15;
+            poly(g, [[0, y - r0 * 0.2], [L, y1 - r1 * 0.22], [L + r1 * 0.75, y1], [L, y1 + r1 * 0.22], [0, y + r0 * 0.2]], col(k % 2 ? T_BODY : T_WING));
+          }
+          poly(g, [[0, -0.2 * r0], [L, -0.25 * r1], [L, -0.05 * r1], [0, 0]], hiColor(look), false);
+          if (mode === 'tip') for (let k = 0; k < n; k++) { const v = -1 + (2 * (k + 0.5)) / n; tri(g, L + r1 * 0.6, v * r1 * 1.15 - r1 * 0.2, L + r1 * 0.6, v * r1 * 1.15 + r1 * 0.2, L + r1 * 1.5, v * r1 * 1.15, col(T_GOLD), A.INK_W * 0.7); }
+          if (mode === 'cut') { g.beginPath(); g.ellipse(L, 0, Math.max(6, r1 * 0.3), r1, 0, 0, Math.PI * 2); g.fillStyle = col(T_FLESH); g.fill(); g.lineWidth = A.INK_W * 0.8; g.stroke(); }
+          return;
+        }
+        const path = () => {
+          g.beginPath();
+          g.moveTo(0, -r0);
+          g.lineTo(L * 0.5, -mid * 1.05);
+          g.lineTo(L, -r1);
+          g.lineTo(L, r1);
+          g.lineTo(L * 0.5, mid * 1.03);
+          g.lineTo(0, r0);
+          g.arc(0, 0, r0, Math.PI / 2, (Math.PI * 3) / 2);
+          g.closePath();
+        };
+        path();
+        g.fillStyle = col(kind === 'talon' ? T_LEG : T_BODY);
+        g.fill();
+        g.save();
+        g.clip();
+        if (kind === 'neck') {
+          poly(g, [[-r0 * 1.2, r0 * 0.2], [L * 0.5, mid * 0.25], [L, r1 * 0.25], [L + r1 * 3, r1 * 0.25], [L + r1 * 3, r0 * 2], [-r0 * 1.2, r0 * 2]], col(T_BREAST), false); // the pale throat and breast
+          for (let k = 0; k < 3; k++) { const x = (L * (k + 0.6)) / 3; tri(g, x - mid * 0.3, -mid * 0.5, x + mid * 0.3, -mid * 0.5, x, -mid * 0.05, col(T_BODY_DK), A.INK_W * 0.5); }
+        } else for (let k = 1; k < 4; k++) { const x = (L * k) / 4; poly(g, [[x - 5, -r0], [x + 5, -r0], [x + 5, r0], [x - 5, r0]], col('#a6823a'), false); } // scales across the leg
+        poly(g, [[r0 * 0.1, -0.85 * r0], [L * 0.9, -0.85 * r1], [L * 0.9, -0.55 * r1], [r0 * 0.1, -0.55 * r0]], hiColor(look), false);
+        g.restore();
+        path();
+        g.lineWidth = A.INK_W;
+        g.stroke();
+        if (kind === 'talon' && mode === 'tip') for (const dy of [-0.55, 0, 0.55]) tri(g, L, dy * r1 - r1 * 0.22, L, dy * r1 + r1 * 0.22, L + r1 * 2.3, dy * r1 * 1.4 + r1 * 0.5, col(T_CLAW), A.INK_W * 0.6); // three claws
+        if (mode === 'cut') { g.beginPath(); g.ellipse(L, 0, Math.max(6, r1 * 0.35), r1, 0, 0, Math.PI * 2); g.fillStyle = col(T_FLESH); g.fill(); g.lineWidth = A.INK_W * 0.8; g.stroke(); }
+      });
+    });
+  }
+
+  // The torso: a capsule from its rear end (the local origin) along +x: slate back, a pale breast of feather scallops below, a row of small crest feathers along the back.
+  function birdTorsoPic(s, look) {
+    const L = s.len, R = s.r;
+    return get(`ttorso|${Math.round(L)}|${Math.round(R)}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 1.5;
+      return bake(-R - pad, -1.4 * R - pad, L + R + pad, R + pad, (g) => {
+        for (const x of [0.15, 0.32, 0.5, 0.68, 0.85]) tri(g, x * L - 0.12 * R, -R + 8, x * L + 0.16 * R, -R + 8, x * L - 0.1 * R, -R - 0.34 * R, col(T_BODY_DK), A.INK_W * 0.7);
+        const path = () => { g.beginPath(); g.arc(0, 0, R, Math.PI / 2, (Math.PI * 3) / 2); g.lineTo(L, -R); g.arc(L, 0, R, -Math.PI / 2, Math.PI / 2); g.closePath(); };
+        path();
+        g.fillStyle = col(T_BODY);
+        g.fill();
+        g.save();
+        g.clip();
+        poly(g, [[-R, 0.2 * R], [0.3 * L, 0.3 * R], [0.75 * L, 0.2 * R], [L + R, 0.1 * R], [L + R, 2 * R], [-R, 2 * R]], col(T_BREAST), false); // the pale breast
+        for (let k = 0; k < 8; k++) { const x = L * (0.04 + 0.12 * k); for (let j = 0; j < 2; j++) tri(g, x - 0.2 * R, (0.4 + 0.4 * j) * R, x + 0.2 * R, (0.4 + 0.4 * j) * R, x, (0.7 + 0.4 * j) * R, col('#9fb1d0'), A.INK_W * 0.45); } // feather scallops
+        for (const [x, y, k] of [[0.2, -0.45, 0.17], [0.4, -0.6, 0.15], [0.6, -0.35, 0.17], [0.8, -0.55, 0.15], [0.5, -0.1, 0.13]]) tri(g, x * L - k * R, y * R + k * R * 0.6, x * L + k * R * 0.9, y * R - k * R * 0.2, x * L + k * R * 0.1, y * R - k * R * 0.9, col(T_BODY_DK), A.INK_W * 0.45);
+        poly(g, [[0.05 * L, -0.82 * R], [0.95 * L, -0.82 * R], [0.95 * L, -0.62 * R], [0.05 * L, -0.62 * R]], hiColor(look), false);
+        g.restore();
+        path();
+        g.lineWidth = A.INK_W;
+        g.stroke();
+      });
+    });
+  }
+
+  // The head: local origin at the neck's tip (the back of the skull), pointing +x, LEN long, radius R: a crest of three swept-back feathers with gold tips, the cheek, a fierce yellow eye.
+  function birdHeadPic(s, look) {
+    const L = s.len, R = s.r;
+    return get(`thead|${Math.round(L)}|${Math.round(R)}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 1.5;
+      return bake(-R * 1.6 - pad, -R * 2.2 - pad, L + R * 0.4 + pad, R * 1.3 + pad, (g) => {
+        tri(g, 0.2 * L, -0.8 * R, -0.9 * R, -1.9 * R, 0.45 * L, -1.0 * R, col(T_BODY_DK), A.INK_W); // the crest, swept back
+        tri(g, 0.3 * L, -0.9 * R, -0.5 * R, -2.0 * R, 0.55 * L, -1.05 * R, col(T_WING), A.INK_W * 0.8);
+        tri(g, -0.9 * R, -1.9 * R, -0.45 * R, -1.62 * R, -1.45 * R, -2.05 * R, col(T_GOLD), A.INK_W * 0.6);
+        poly(g, [[-0.1 * L, -0.5 * R], [0.2 * L, -1.1 * R], [0.6 * L, -0.95 * R], [L * 0.95, -0.5 * R], [L, 0.0], [L * 0.95, 0.5 * R], [0.5 * L, 0.9 * R], [0.1 * L, 0.8 * R]], col(T_BODY)); // the skull
+        poly(g, [[0.1 * L, 0.2 * R], [0.5 * L, 0.35 * R], [L * 0.95, 0.35 * R], [0.5 * L, 0.9 * R], [0.1 * L, 0.78 * R]], col(T_BREAST)); // the pale cheek and throat
+        poly(g, [[0.3 * L, -0.95 * R], [0.8 * L, -0.55 * R], [0.8 * L, -0.4 * R], [0.3 * L, -0.8 * R]], hiColor(look), false);
+        g.beginPath();
+        g.ellipse(0.5 * L, -0.28 * R, 0.2 * R, 0.17 * R, 0, 0, Math.PI * 2);
+        g.fillStyle = col(T_EYE);
+        g.fill();
+        g.lineWidth = A.INK_W * 0.6;
+        g.stroke();
+        poly(g, [[0.5 * L - 0.1 * R, -0.28 * R - 0.12 * R], [0.5 * L + 0.04 * R, -0.28 * R - 0.12 * R], [0.5 * L + 0.04 * R, -0.28 * R + 0.12 * R], [0.5 * L - 0.1 * R, -0.28 * R + 0.12 * R]], col(T_CLAW), false); // the pupil
+        poly(g, [[0.38 * L, -0.62 * R], [0.7 * L, -0.4 * R], [0.7 * L, -0.55 * R], [0.4 * L, -0.78 * R]], col(T_CLAW), true, A.INK_W * 0.5); // the angry brow
+      });
+    });
+  }
+
+  // The beak: local origin at the head's tip, pointing +x: a hooked upper beak and a short lower one, in gold.
+  function birdBeakPic(R, look) {
+    return get(`tbeak|${Math.round(R)}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 1.5;
+      return bake(-0.4 * R - pad, -1.0 * R - pad, 2.3 * R + pad, 1.7 * R + pad, (g) => {
+        poly(g, [[0.1 * R, 0.1 * R], [1.5 * R, 0.25 * R], [0.5 * R, 0.8 * R]], col(T_BEAK_DK)); // the lower beak
+        poly(g, [[0, -0.7 * R], [1.2 * R, -0.5 * R], [1.9 * R, 0.1 * R], [2.0 * R, 0.95 * R], [1.5 * R, 0.5 * R], [0.9 * R, 0.25 * R], [0, 0.3 * R]], col(T_BEAK)); // the upper, hooked
+        poly(g, [[0.1 * R, -0.55 * R], [1.1 * R, -0.4 * R], [1.1 * R, -0.28 * R], [0.1 * R, -0.4 * R]], hiColor(look), false);
+      });
+    });
+  }
+
+  // The breast feathers over the gizzard (while it is hidden).
+  function breastPic(R, look) {
+    return get(`tbreast|${Math.round(R)}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 1.5;
+      return bake(-1.4 * R - pad, -1.3 * R - pad, 1.4 * R + pad, 1.3 * R + pad, (g) => {
+        for (const [dx, dy] of [[-0.5, -0.5], [0.5, -0.5], [0, -0.1], [-0.55, 0.45], [0.55, 0.45], [0, 0.8]]) poly(g, [[dx * R - 0.5 * R, dy * R - 0.35 * R], [dx * R + 0.5 * R, dy * R - 0.35 * R], [dx * R, dy * R + 0.6 * R]], col(T_BREAST), true, A.INK_W * 0.6);
+        poly(g, [[-0.8 * R, -0.75 * R], [0.8 * R, -0.75 * R], [0.8 * R, -0.62 * R], [-0.8 * R, -0.62 * R]], hiColor(look), false);
+      });
+    });
+  }
+
+  // The glowing gizzard: a bright stone-like lump with a lightning zigzag through it; stage 1 and 2 flicker (swapped on the key clock).
+  function gizzardPic(R, stage, look) {
+    return get(`tgz|${Math.round(R)}|${stage}|${look}`, () => {
+      const pad = A.INK_W * 1.5, k = stage === 1 ? 0.9 : 1.15;
+      return bake(-1.9 * R - pad, -1.9 * R - pad, 1.9 * R + pad, 1.9 * R + pad, (g) => {
+        g.beginPath();
+        g.arc(0, 0, R * 1.5 * k, 0, Math.PI * 2);
+        g.fillStyle = T_GLOW;
+        g.globalAlpha = 0.5;
+        g.fill();
+        g.globalAlpha = 1;
+        poly(g, [[0, -1.1 * R * k], [0.95 * R * k, -0.45 * R * k], [0.8 * R * k, 0.7 * R * k], [0, 1.1 * R * k], [-0.85 * R * k, 0.6 * R * k], [-0.95 * R * k, -0.5 * R * k]], T_GLOW);
+        poly(g, [[0.15 * R, -0.95 * R * k], [-0.4 * R, -0.05 * R], [0.1 * R, 0.0], [-0.25 * R, 0.95 * R * k], [0.5 * R, -0.2 * R], [0.0, -0.2 * R]], T_GLOW_IN, false);
+      });
+    });
+  }
+
+  function drawBirdLimb(p) {
+    const look = lookOf(p), n = p.segs.length, kind = p.kind;
+    for (let i = 0; i < n; i++) {
+      const s = p.segs[i];
+      if (!!s.behind !== behindPass) continue;
+      const mode = i === n - 1 ? (p.severed ? 'cut' : kind === 'wing' || kind === 'tail' || kind === 'talon' ? 'tip' : 'mid') : 'mid';
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (sideFlip(s, kind === 'wing' || kind === 'tail')) ctx.scale(1, -1); // (feathers trail backward; a neck's or leg's belly faces forward)
+      blit(kind === 'wing' ? birdWingPic(s, mode, look) : birdSegPic(s, kind, mode, look));
+      ctx.restore();
+    }
+  }
+  function drawBird(body) {
+    curF = body.f < 0 ? -1 : 1;
+    const by = (id) => body.parts.find((q) => q.id === id);
+    const wingF = by('wingF'), tail = by('tail'), torso = by('torso'), neck = by('neck'), head = by('head'), beak = by('beak'), gz = by('gizzard'), wingN = by('wingN'), talonF = by('talonF'), talonN = by('talonN');
+    for (const p of [wingF, talonF, tail]) if (p && !p.dead) drawBirdLimb(p);
+    if (torso && !torso.dead) {
+      const s = torso.segs[0], look = lookOf(torso), k = 1 + config.CREATURES.BREATH.AMOUNT * body.puff;
+      ctx.save();
+      const cx = s.x + Math.cos(s.ang) * s.len * 0.5, cy = s.y + Math.sin(s.ang) * s.len * 0.5;
+      ctx.translate(cx, cy);
+      ctx.scale(k, k);
+      ctx.translate(-cx, -cy);
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (body.f < 0) ctx.scale(1, -1);
+      blit(birdTorsoPic(s, look));
+      ctx.restore();
+    }
+    if (neck && !neck.dead) drawBirdLimb(neck);
+    if (head && !head.dead) {
+      const s = head.segs[0], look = lookOf(head);
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (body.f < 0) ctx.scale(1, -1);
+      blit(birdHeadPic(s, look));
+      ctx.restore();
+    }
+    if (beak && !beak.dead && beak.segs[0]) {
+      const s = beak.segs[0], look = lookOf(beak);
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (body.f < 0) ctx.scale(1, -1);
+      blit(birdBeakPic(s.r, look));
+      ctx.restore();
+    }
+    if (gz && !gz.dead && gz.segs[0]) {
+      const s = gz.segs[0], look = lookOf(gz);
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      if (gz.hidden) {
+        ctx.rotate(torso ? torso.segs[0].ang : 0);
+        if (body.f < 0) ctx.scale(1, -1);
+        blit(breastPic(s.r, look));
+      } else blit(gizzardPic(s.r, body.key % 2 ? 1 : 2, look === 'flash' ? 'flash' : 'lit'));
+      ctx.restore();
+    }
+    if (talonN && !talonN.dead) drawBirdLimb(talonN);
+    if (wingN && !wingN.dead) drawBirdLimb(wingN);
+  }
+
   // ---- drawing ------------------------------------------------------------------------------------------------------------------------------------------------
   const lookOf = (p) => (p.hit > 0 ? 'flash' : p.lit ? 'lit' : 'dim');
 
@@ -506,6 +753,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
   // (a limb wrapped round a ship has segments that pass BEHIND her hull: setWrap marks them s.behind; draw() leaves them out and drawBehind() draws only them, before the ship)
   let behindPass = false;
   function drawLimb(p) {
+    if (p.art === 'thunderbird') return drawBirdLimb(p); // (C.6b: the Thunderbird's feathers, also a plucked wing tumbling)
     if (p.kind === 'wing' || p.kind === 'neck' || p.kind === 'tail') return drawDrakeLimb(p); // (the Cinder Drake's limbs, also its torn-off wing tumbling)
     const look = lookOf(p), n = p.segs.length;
     for (let i = 0; i < n; i++) {
@@ -560,6 +808,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     stats.blits = 0;
     stats.bakes = 0;
     if (body.kind === 'drake') return drawDrake(body); // (C.6a)
+    if (body.kind === 'thunderbird') return drawBird(body); // (C.6b)
     for (const p of body.parts) if (p.limb && !p.dead && p.layer === 'back') drawLimb(p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind === 'mantle') drawRigid(body, p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind !== 'mantle') drawRigid(body, p);

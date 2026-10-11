@@ -16,6 +16,7 @@ import { paintHeadAtlas, paintLimbSkin, creatureToon, makeUniforms, Tinter, coil
 import { createTubeSet } from './creatureTube.js';
 import { buildKraken } from './creatureKraken.js';
 import { buildDrake, drakeSkins, drakeLimbs, drakeTubeOpts, extendDrake } from './creatureDrake.js';
+import { buildThunderbird } from './creatureThunderbird.js';
 import { createFoamRings, createShadowDecal, createGripMarkers, createRopeSet } from './creatureFx.js';
 import { createWaterFx } from './creatureWater.js';
 
@@ -30,6 +31,8 @@ export const KINDS = {
   // The Cinder Drake (3D.md section 24): its own skins (scales + ember cracks), tube opts (spines on the neck and tail), the extension that places its head, jaw, wings, legs and fire (creatureDrake.js), and
   // `desperate`: its phase 3 is a rage, not tiredness (no pale tired tint)
   drake: { id: 'drake', palette: () => config.CREATURE3D.DRAKE, build: buildDrake, limbKind: 'wing', limbsOf: drakeLimbs, skins: drakeSkins, tubeOpts: drakeTubeOpts, extend: extendDrake, desperate: true, sheen: 0 },
+  // The Thunderbird (C.6b): a first fallback only (creatureThunderbird.js): a lathe torso and the generic tapered tubes for every limb (`tubesOnly`: no suckers), the gizzard as the generic heart window; the model is a later task
+  thunderbird: { id: 'thunderbird', palette: () => config.CREATURE3D.THUNDERBIRD, build: buildThunderbird, limbKind: 'wing', tubesOnly: true, desperate: true, sheen: 0 },
 };
 
 export function createCreatureView(parent) {

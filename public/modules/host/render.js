@@ -39,6 +39,7 @@ import { createDebrisArt } from './debrisArt.js'; // S.5i: the pieces of ship th
 import { createCreatureArt } from './creatureArt.js'; // C.1: the giant creatures (BOSSES.md), baked once per zoom and blitted
 import { krakenPhaseName } from './creatures/kraken.js'; // C.3: the name of its phase on the health bar
 import { drakePhaseName } from './creatures/drake.js'; // C.6a: the Cinder Drake's
+import { birdPhaseName } from './creatures/thunderbird.js'; // C.6b: the Thunderbird's
 import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
@@ -704,10 +705,91 @@ export function createRenderer({ ctx, state: world, canvas }) {
       }
     }
   };
+  // C.6b: the Thunderbird's effects: the ring where a pass will strike, the gust (white streaks blown from the bird across the ship, in stepped keys), a crackle round the bird while it calls the lightning down and a dashed line
+  // to the bolt that is charging, the ring on the bird perched on her bag (the swords fill it) and the ring on its spire.
+  const drawBirdFx = (cr) => {
+    const bd = cr.bird, step = Math.floor(cr.age * 8);
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 14;
+    const sw = cr.swoop;
+    if (sw) {
+      ctx.strokeStyle = '#ff4d4d';
+      ctx.setLineDash(sw.locked ? [] : [40, 30]);
+      ctx.beginPath();
+      ctx.arc(sw.x, sw.y, 260, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const gu = cr.gust;
+    if (gu) { // streaks of wind: a short row while the wings rear, a long one with the downstroke
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 16;
+      for (let k = 0; k < 8; k++) {
+        const y0 = gu.y + (k - 3.5) * 280 + ((k * 37 + step * 41) % 5) * 30, x0 = gu.x + gu.dir * (700 + ((k * 53 + step * 97) % 7) * 260), len = gu.beat ? 1700 : 600;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x0 + gu.dir * len, y0 + 60);
+        ctx.stroke();
+      }
+    }
+    if (bd.act && bd.act.kind === 'dive') { // it is calling bolts: a crackle round its body
+      ctx.strokeStyle = '#9fe8ff';
+      ctx.lineWidth = 12;
+      for (let k = 0; k < 6; k++) {
+        const a = k * 1.05 + (step % 3) * 0.35, r0 = 520, r1 = 900;
+        ctx.beginPath();
+        ctx.moveTo(cr.x + Math.cos(a) * r0, cr.y + Math.sin(a) * r0);
+        ctx.lineTo(cr.x + Math.cos(a + 0.12) * (r0 + r1) / 2, cr.y + Math.sin(a + 0.12) * (r0 + r1) / 2);
+        ctx.lineTo(cr.x + Math.cos(a - 0.05) * r1, cr.y + Math.sin(a - 0.05) * r1);
+        ctx.stroke();
+      }
+    }
+    const J = world.stormJob, ms = mainShip(world);
+    if (J && J.charge && J.charge.bird && !cr.dying) { // the bolt it has called: from the bird to the top deck, dashed and filling in
+      const f = 1 - Math.max(0, J.charge.t) / J.charge.max, tx = toWorldX(ms, J.charge.x), ty = toWorldY(ms, ms.layout.platforms[ms.layout.deckIndex('catwalk')].y - 60);
+      ctx.strokeStyle = '#9fe8ff';
+      ctx.lineWidth = 8 + 10 * f;
+      ctx.setLineDash([60, 40]);
+      ctx.beginPath();
+      ctx.moveTo(cr.x, cr.y);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const pc = bd.perch;
+    if (pc && pc.landed && pc.wx !== undefined && pc.job.live) { // it sits on her bag: a gold ring, a green arc as the swords work
+      ink();
+      ctx.lineWidth = 26;
+      ctx.beginPath();
+      ctx.arc(pc.wx, pc.wy, 140, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 14;
+      ctx.stroke();
+      if (pc.job.prog > 0.02) {
+        ctx.strokeStyle = '#8fe388';
+        ctx.beginPath();
+        ctx.arc(pc.wx, pc.wy, 100, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, pc.job.prog));
+        ctx.stroke();
+      }
+    }
+    const rs = bd.roost;
+    if (rs && rs.landed && rs.wx !== undefined) { // it rests on a spire: a gold ring on the rock (the mortars' mark)
+      ink();
+      ctx.lineWidth = 26;
+      ctx.beginPath();
+      ctx.arc(rs.wx, rs.wy, 190, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 14;
+      ctx.stroke();
+    }
+  };
   const drawCreatureAttacks = (cr) => {
     ctx.save();
     ctx.lineCap = 'round';
     if (cr.kind === 'drake') drawDrakeFx(cr);
+    else if (cr.kind === 'thunderbird') drawBirdFx(cr);
     for (const g of cr.grips || []) {
       if (g.mode === 'recoil') continue;
       ctx.beginPath();
@@ -899,7 +981,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     // Beacon (cave missions).
     const gx = px(map.goal.x);
     const gy = py(map.goal.y);
-    ctx.fillStyle = map.lair ? (map.creature === 'drake' ? '#c2452a' : '#7a3a5a') : map.open ? 'rgba(0,0,0,0)' : '#ffd23f'; // (a lair: the Kraken's mark, in its purple)
+    ctx.fillStyle = map.lair ? (map.creature === 'thunderbird' ? '#4f6290' : map.creature === 'drake' ? '#c2452a' : '#7a3a5a') : map.open ? 'rgba(0,0,0,0)' : '#ffd23f'; // (a lair: the Kraken's mark, in its purple)
     ctx.beginPath();
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
@@ -920,8 +1002,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const dCells = distToGoal(map, toWorldX(ship, layout.refPoint.x), toWorldY(ship, layout.refPoint.y));
     const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
     let goalText;
-    if (c.done) goalText = map.lair ? (map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
-    else if (map.lair) goalText = state.creature ? (map.creature === 'drake' ? 'SLAY THE DRAKE!' : 'SLAY THE KRAKEN!') : (map.creature === 'drake' ? "DRAKE'S LAIR" : "KRAKEN'S LAIR") + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
+    if (c.done) goalText = map.lair ? (map.creature === 'thunderbird' ? 'THE THUNDERBIRD IS SLAIN!' : map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
+    else if (map.lair) goalText = state.creature ? (map.creature === 'thunderbird' ? 'SLAY THE THUNDERBIRD!' : map.creature === 'drake' ? 'SLAY THE DRAKE!' : 'SLAY THE KRAKEN!') : (map.creature === 'thunderbird' ? "THUNDERBIRD'S LAIR" : map.creature === 'drake' ? "DRAKE'S LAIR" : "KRAKEN'S LAIR") + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
     else if (map.open) {
       const total = map.outposts.length;
       const left = map.outposts.filter((o) => !o.done).length;
@@ -1368,12 +1450,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const drawCreatureBar = () => {
     const cr = world.creature;
     if (!cr || cr.mode === 'surfacing') return;
-    const drake = cr.kind === 'drake', limbs = cr.parts.filter((p) => p.kind === (drake ? 'wing' : 'tentacle'));
+    const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', limbs = cr.parts.filter((p) => p.kind === (drake || bird ? 'wing' : 'tentacle'));
     book.paper(450, 806, 700, 74, { r: 10 });
     ctx.fillStyle = LB.INK;
     ctx.font = '16px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
-    ctx.fillText(cr.name + ' - ' + (drake ? drakePhaseName : krakenPhaseName)(cr.phase || 1) + (cr.dying ? (drake ? ' - FALLING' : ' - SINKING') : ''), 800, 826, 640); // (C.3: its phase, and what it said)
+    ctx.fillText(cr.name + ' - ' + (bird ? birdPhaseName : drake ? drakePhaseName : krakenPhaseName)(cr.phase || 1) + (cr.dying ? (drake || bird ? ' - FALLING' : ' - SINKING') : ''), 800, 826, 640); // (C.3: its phase, and what it said)
     if (cr.mouthWin && !cr.dying) { // the beak is open: a gold tag over the bar with the bombs it has been fed
       const M = drake ? { FED: config.CREATURES.DRAKE.FED } : config.CREATURES.MOUTH;
       ink();
@@ -1422,14 +1504,44 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.stroke();
       }
     }
+    if (bird && !cr.dying) { // the bolts in its gizzard (coil hits won), as little lightning marks, and a gold tag while it rests on a spire with the mortar hits so far
+      const B = config.CREATURES.THUNDERBIRD;
+      for (let k = 0; k < B.ZAP.HITS; k++) {
+        const x = 1010 + k * 26, y = 840;
+        ink();
+        ctx.lineWidth = 2.5;
+        ctx.fillStyle = k < cr.zapped ? '#9fe8ff' : '#cfc6b0';
+        ctx.beginPath();
+        ctx.moveTo(x + 3, y - 12);
+        ctx.lineTo(x - 7, y + 1);
+        ctx.lineTo(x - 1, y + 1);
+        ctx.lineTo(x - 5, y + 12);
+        ctx.lineTo(x + 7, y - 2);
+        ctx.lineTo(x + 1, y - 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      if (cr.roost && cr.roost.landed) {
+        ink();
+        ctx.lineWidth = 3;
+        ctx.fillStyle = '#ffd23f';
+        ctx.fillRect(560, 770, 480, 28);
+        ctx.strokeRect(560, 770, 480, 28);
+        ctx.fillStyle = LB.INK;
+        ctx.font = '15px ' + config.FONTS.DISPLAY;
+        ctx.fillText('ON A SPIRE - MORTAR IT! ' + Math.min(B.ROOST.MORTAR_HITS, cr.mortared) + '/' + B.ROOST.MORTAR_HITS + ' HITS', 800, 790, 460);
+        ctx.font = '16px ' + config.FONTS.DISPLAY;
+      }
+    }
     ctx.fillStyle = '#3b2a1d';
     ctx.fillRect(470, 856, 660, 14);
-    ctx.fillStyle = drake ? '#c2452a' : '#7a2d63';
+    ctx.fillStyle = bird ? '#4f6290' : drake ? '#c2452a' : '#7a2d63';
     ctx.fillRect(470, 856, (660 * Math.max(0, cr.hp)) / cr.maxHp, 14);
     ink();
     ctx.lineWidth = 2.5;
     ctx.strokeRect(470, 856, 660, 14);
-    for (const share of drake ? [config.CREATURES.DRAKE.PHASE.TWO_HP, config.CREATURES.DRAKE.PHASE.THREE_HP] : [config.CREATURES.PHASE.TWO.HP, config.CREATURES.PHASE.THREE.HP]) { // the notches where phase 2 and 3 begin
+    for (const share of bird ? [config.CREATURES.THUNDERBIRD.PHASE.TWO_HP, config.CREATURES.THUNDERBIRD.PHASE.THREE_HP] : drake ? [config.CREATURES.DRAKE.PHASE.TWO_HP, config.CREATURES.DRAKE.PHASE.THREE_HP] : [config.CREATURES.PHASE.TWO.HP, config.CREATURES.PHASE.THREE.HP]) { // the notches where phase 2 and 3 begin
       ctx.beginPath();
       ctx.moveTo(470 + 660 * share, 852);
       ctx.lineTo(470 + 660 * share, 874);
@@ -1716,7 +1828,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.font = (choice ? 44 : 30) + 'px "Segoe UI Emoji", sans-serif';
         ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : s.lair ? lairOf(s.creature).ICON : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
         if (s.lair) { // a lair: a ring of its purple round the stop and a LAIR tag (config.CREATURES.LAIR)
-          ctx.strokeStyle = s.creature === 'drake' ? '#c2452a' : '#7a3a5a';
+          ctx.strokeStyle = s.creature === 'thunderbird' ? '#4f6290' : s.creature === 'drake' ? '#c2452a' : '#7a3a5a';
           ctx.lineWidth = 6;
           ctx.setLineDash([8, 6]);
           ctx.beginPath();

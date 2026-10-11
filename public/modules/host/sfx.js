@@ -192,6 +192,17 @@ export function createSfx(state) {
       tone('sawtooth', 400, 90, 0.25, 0.3);
       noise('lowpass', 400, 0.45, 0.4, 0.08);
     },
+    // C.6b: the Thunderbird. A THUNDERCLAP (a crack and a long low rumble: it calls a bolt, swallows one, changes phase) and its SCREECH (a high rising cry: it arrives, rears, lands, is plucked).
+    thunder: () => {
+      noise('highpass', 2400, 0.12, 0.5, 0, 2);
+      noise('lowpass', 220, 1.6, 0.55, 0.06, 1.5);
+      tone('sawtooth', 52, 30, 1.5, 0.3, 0.1);
+    },
+    screech: () => {
+      tone('sawtooth', 900, 1500, 0.5, 0.2);
+      tone('square', 1350, 1900, 0.4, 0.1, 0.05);
+      noise('bandpass', 2600, 0.4, 0.25, 0.02, 3);
+    },
   };
   const play = (name, arg) => {
     if (!ac || muted) return;
