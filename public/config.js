@@ -687,6 +687,40 @@ export const config = {
     COOLDOWN: 0.4, // seconds between one player's taps
     MAX_PER_PLAYER: 2, // most targets one player can have spotted at once (a new spot drops their oldest)
   },
+  // OFF-SCREEN PORTHOLES for FRIENDLY PLANES (our escorts, a stolen fighter flown by the crew; the owner asked for friends only: enemies keep the edge arrows and the radar) (host/portholes.js plans them, host/portholeArt.js draws the brass rims, view3d/portholes.js draws the live picture in 3D) and the LOOKOUT'S SPYGLASS (host/spyglass.js: the stick pans it, a target in it
+  // for SEEN_T seconds is spotted). A porthole is a round window pinned to the screen edge in the direction of a friendly plane that is off screen, showing a live close-up of it. Sizes are shares of the screen height.
+  PORTHOLES: {
+    ENABLED: true,
+    BUDGET: { high: 3, medium: 2, low: 0 }, // most edge portholes by quality tier (Low keeps the plain edge arrows); the same numbers in the 2D view, by its detail level
+    R: 0.078, // an edge porthole's radius (share of the screen height)
+    RIM: 0.2, // the brass rim's width, as a share of the radius
+    SAFE: { TOP: 0.3, BOTTOM: 0.1, SIDE: 0.012 }, // the porthole stays inside the screen less these shares: the top band holds the HUD panels (Versus has a second row of them), the bottom the message bar
+    GAP: 10, // px kept between two portholes
+    ENTER_PX: 36, // a target must be this far off screen (its own size taken off) before it gets a porthole...
+    EXIT_PX: -24, // ...and this far back inside before the porthole goes (so nothing flickers at the edge)
+    CLUSTER: 650, // friendly planes closer together than this (world px) share one porthole: "x3"
+    RANGE: 9000, RANGE_LOOKOUT: 13000, // nothing farther than this (px from the ship) gets one; a manned lookout sees further
+    PAD: 300, // world px of sky kept round a target (or a group) in its porthole
+    ZOOM: { MIN: 0.9, MIN_GROUP: 0.2, MAX: 2.4 }, // its zoom as a multiple of the main view's (a group may zoom out further so that all of it fits)
+    FADE: 0.36, FADE_STEPS: 4, // seconds to fade in or out, in this many stepped shades (no smooth ramp)
+    KEEP: 0.6, // seconds a porthole stays after its target is gone (it fades out meanwhile)
+    COLORS: { friend: '#6aa86a', friendDark: '#3f7a45', spy: '#d9b25c', brass: '#c49a4c', brassDark: '#7a5528', glass: '#f4ecd2' }, // (a green rim: only FRIENDLY planes get an edge porthole; enemies keep the edge arrows and the radar)
+  },
+  SPYGLASS: {
+    ENABLED: true, // false = no spyglass at all (the lookout just watches)
+    BOTS: true, // bot lookouts pan toward the nearest unspotted threat ahead and spot it too (tools/botsim.mjs and voyagesim.mjs turn it off, so their baselines stay what they were; WITH_SPYGLASS=1 turns it on there)
+    R: 0.118, // the lens' radius (share of the screen height); it hangs at the top of the TV, right of the middle (clear of the logbook panel on the left, the minimap on the right and the crow's nest in the middle)
+    X: 0.62, // its centre, as a share of the screen width
+    TOP: 0.012, // its top edge, as a share of the screen height
+    VIEW_W: 2100, // world px across the lens
+    AHEAD: 7000, AHEAD_MAX: 14000, BEHIND: 3500, UP: 3600, DOWN: 3600, // where it starts, and how far it can be panned (px from the ship's middle: ahead, astern, above, below)
+    PAN_SPEED: 3800, // px a second at full stick (the stick moves where it points; the picture eases after it, critically damped)
+    SMOOTH: 0.32, // seconds the smoothing takes (a critically damped follow: it never overshoots)
+    SEEN_T: 0.5, // a target inside the lens this long is spotted (the radar pings it; the helm answers faster: LINKS.SPOT_RECENT)
+    EDGE: 0.9, // only the middle of the lens (this share of its radius) counts as seen
+    RECENTRE_AFTER: 4, // seconds with nobody in the nest before the spyglass forgets where it was and starts ahead again
+    DARK: 0.45, // in a sky darker than this a target is only seen while a searchlight holds it
+  },
   // HELP! button on every phone (spotter.js): call-out on the TV, and the nearest idle crew are sent over.
   HELP: {
     COOLDOWN: 8, // seconds before the same player can call again

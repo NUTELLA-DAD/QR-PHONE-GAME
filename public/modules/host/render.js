@@ -28,6 +28,7 @@ import { createLogbook } from './logbookArt.js'; // cream paper panels + red sta
 import { createLinkArt } from './linkArt.js'; // linked-station wires, gust warnings, surge rings
 import { createHealthArt } from './healthArt.js'; // heart pips over a hurt crewman's head
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
+import { createPortholeArt } from './portholeArt.js'; // the round brass portholes: friends off screen, the lookout's spyglass (portholes.js)
 import { createFleetArt } from './fleetArt.js'; // B.3: the panels, pennants and edge arrows of a sky with several ships
 import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, HUD, scoreboard (pvp/match.js)
 import { bandOf, metres, BAND_WORDS } from './pvp/range.js'; // the range bands: the TV's readout
@@ -98,6 +99,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const fleetN = () => world.ships.reduce((n, s) => n + (s.ai ? 0 : 1), 0); // (the crew's ships: the enemy gunship has no panel, arrow or team flag of the fleet's kind)
   // The gunship (B.5) as her own art wants her: in her home frame, unshifted, facing the way her layer mirrors her, her rope drawn separately, her crew drawn by the ship layer.
   const gunStub = () => Object.assign(Object.create(world.gunship), { dx: 0, dy: 0, m: 1, turn: null, crew: [], rope: false, pitch: 0 });
+  const portholeArt = createPortholeArt({ ctx });
   const fleet = createFleetArt({ ctx }); // what the TV adds with more than one ship: a panel for each, team pennants, edge arrows (fleetArt.js)
   const debrisArt = createDebrisArt({ ctx, state: world });
   // One crewman drawn standing at (x, y) at a scale, outside any ship (the Versus lobby's heads under each flag, the winners' faces): the same sprites as on the ship.
@@ -1648,6 +1650,20 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.restore();
     } catch (e) { try { ctx.restore(); } catch (e2) { /* ignore */ } }
   };
+  // The round portholes (portholes.js): the picture is drawn here (2D, and 3D when its own draw did not: `live` = the ids the 3D view drew) as the same scene from a camera that looks at the porthole's own
+  // point, clipped to the circle; then the rim, the notch and the plate (portholeArt.js). Our own ship is left out of the picture unless she is near that point.
+  const drawPortholes = (time, items, live) => {
+    try {
+      portholeArt.draw(items, {
+        live, time, w: canvas.width, h: canvas.height,
+        drawPicture: (it) => {
+          const sx = it.x - canvas.width / 2, sy = it.y - canvas.height / 2;
+          const near = world.ships.some((sh) => !sh.ai && Math.hypot(sh.pose.x - it.cx, sh.pose.y - it.cy) < 2600 + it.r / it.zoom);
+          renderFrame(time, { cx: it.cx - sx / it.zoom, cy: it.cy - sy / it.zoom, zoom: it.zoom }, { layers: near ? ['background', 'ship', 'effects', 'dark'] : ['background', 'effects', 'dark'], inset: true });
+        },
+      });
+    } catch (e) { try { ctx.restore(); } catch (e2) { /* ignore */ } }
+  };
   const rangeText = (d) => metres(d) + ' m - ' + BAND_WORDS[bandOf(d)];
 
   // Versus (pvp/match.js): everything the TV adds on top of the sky, on the 1600x900 stage.
@@ -2987,6 +3003,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   //                       'inset' / 'insetframe'  (3D view, Versus split) the far-ship porthole: 'inset' = the whole 2D one (Low tier), 'insetframe' = only its frame and plate over the 3D porthole (WP11)
   //                       'hud'         the co-op hull / steam / route panels and full-screen cards
   //                       'arrows'      lookout, gust and spotter arrows at the screen edge
+  //                       'portholes'   (needs opts.portholes = portholes.plan().items) the round windows: a friend off screen, the lookout's spyglass; opts.portholesLive = the ids the 3D view already drew
   //                       'film'        the old-film look (off by default, config.STYLE)
   //   opts.worldOffset  { dx, dy }: where THIS ship's world sits in the shared camera's world (world pixels); everything
   //                       world-space (ship, crew, effects, arrows) is drawn shifted by it.
@@ -3236,6 +3253,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       if (fleetN() > 1) fleet.drawEdgeArrows(world, { ...wv, zoom: view.zoom / pr }, width / pr, height / pr, view.clipped, time / 1000); // an arrow to every ship that is off screen
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
+    if (has('portholes') && opts && opts.portholes && !opts.inset) drawPortholes(time, opts.portholes, opts.portholesLive); // (round windows: a friend off screen, the lookout's spyglass; over the arrows)
     if (view.inset && (has('ship') || has('inset') || has('insetframe')) && fleetN() > 1 && !(opts && opts.inset)) drawInset(time, view.inset, !(has('ship') || has('inset'))); // (Versus, ships too far apart: the porthole on the far one, over everything but the film. The 3D view asks for 'insetframe' (the frame only: the 3D porthole is the picture) or 'inset' (the whole 2D porthole, on the Low tier))
     lap('inset');
     if (has('film')) filmLook(time, width, height);

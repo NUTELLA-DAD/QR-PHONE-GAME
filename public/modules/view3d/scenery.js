@@ -256,9 +256,10 @@ export function createScenery(root, state, api = {}) {
       const dt = Math.min(0.1, Math.max(0, fin(o.dt, 0.016)));
       if (!course) { if (courseRef) { clear(); courseRef = null; } return; }
       if (course.map !== courseRef) { clear(); courseRef = course.map || {}; }
-      const reach = halfW + RANGE, p = P();
+      const reach = halfW + RANGE, p = P(), ex = o.extra || []; // (ex: the portholes' places, { x, hw }: what stands there is built and shown too)
+      const nearAny = (x0, x1, pad = 0) => (x1 > camX - reach - pad && x0 < camX + reach + pad) || ex.some((e) => x1 > e.x - e.hw - pad && x0 < e.x + e.hw + pad);
       for (const f of course.features || []) for (const bk of f.blocks || []) {
-        const near = bk.x1 > camX - reach && bk.x0 < camX + reach;
+        const near = nearAny(bk.x0, bk.x1);
         const ob = blocks.get(bk) || (near ? get(blocks, bk, () => buildBlock(course, bk)) : null);
         if (!ob) continue;
         ob.visible = near;
@@ -266,7 +267,7 @@ export function createScenery(root, state, api = {}) {
       }
       for (const t of course.turrets || []) {
         if (t.x == null) continue;
-        const near = Math.abs(t.x - camX) < reach;
+        const near = nearAny(t.x, t.x);
         const ot = turrets.get(t) || (near ? get(turrets, t, () => buildTurret(t)) : null);
         if (!ot) continue;
         ot.visible = near;
@@ -287,7 +288,7 @@ export function createScenery(root, state, api = {}) {
       for (const m of course.markers || []) {
         const x = fin(m.mx ?? m.cx, NaN);
         if (!Number.isFinite(x)) continue;
-        const near = Math.abs(x - camX) < reach + 1500;
+        const near = nearAny(x, x, 1500);
         const om = markers.get(m) || (near ? get(markers, m, () => buildMarker(m, course)) : null);
         if (!om) continue;
         om.visible = near;

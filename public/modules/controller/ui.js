@@ -252,7 +252,7 @@ export function createControllerUI({ network }) {
       ? {
           helm: 'Stick: engines + trim (right = right on the TV). HOLD the turn button to come about.',
           gun: 'Drag to aim, hold FIRE. Hold PRIME for a big shell.',
-          lookout: 'Keep watch! TV arrows show what is coming.',
+          lookout: 'PAN THE SPYGLASS: the stick looks far ahead (top of the TV). Spot what comes!',
           hijack: 'Kick the pilot: tap any button 3 times, or hold Action.',
           escort: 'Stick points where to fly. Guns fire by themselves.',
           light: 'Stick sweeps the beam. HOLD to focus it.',

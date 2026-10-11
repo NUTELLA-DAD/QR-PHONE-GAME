@@ -484,7 +484,7 @@ export function createTerrain(parent) {
     // the environment's rock colours and caps (call when the environment changes; the chunks are rebuilt)
     setEnv(envId) { if (style.env !== envId) { setStyle(envId); clear(); fringe.setEnv(envId); } },
     // map = state.course.map (or null); (fx, fy) = the world point to build around (map coordinates)
-    update(map, fx, fy, budget = 2) {
+    update(map, fx, fy, budget = 2, extra = null) { // extra = [{ x, y }] more places to build round (the portholes: the spyglass looking far ahead)
       if (map !== mapRef) { clear(); mapRef = map; }
       if (!map) { fringe.show(false); return; }
       const size = CH * map.CELL, ci0 = Math.floor(fx / size), cj0 = Math.floor(fy / size);
@@ -495,6 +495,16 @@ export function createTerrain(parent) {
         wanted.push([ci, cj, Math.abs(di) + Math.abs(dj)]);
       }
       wanted.sort((a, b) => a[2] - b[2]);
+      const foci = [];
+      if (extra) for (const e of extra) {
+        const ei = Math.floor(e.x / size), ej = Math.floor(e.y / size);
+        foci.push([ei, ej]);
+        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+          const ci = ei + di, cj = ej + dj;
+          if (ci < 0 || cj < 0 || ci * CH >= map.W || cj * CH >= map.H || wanted.some((q) => q[0] === ci && q[1] === cj)) continue;
+          wanted.push([ci, cj, 50 + Math.abs(di) + Math.abs(dj)]); // (after everything round the main camera)
+        }
+      }
       let built = 0;
       for (const [ci, cj] of wanted) {
         const key = ci + ',' + cj;
@@ -512,7 +522,7 @@ export function createTerrain(parent) {
         built++;
       }
       for (const [key, c] of chunks) {
-        if (Math.abs(c.ci - ci0) > 4 || Math.abs(c.cj - cj0) > 3) { drop(c, key); chunks.delete(key); if (T.onChunk) T.onChunk('remove', key); }
+        if ((Math.abs(c.ci - ci0) > 4 || Math.abs(c.cj - cj0) > 3) && !foci.some((q) => Math.abs(c.ci - q[0]) <= 2 && Math.abs(c.cj - q[1]) <= 2)) { drop(c, key); chunks.delete(key); if (T.onChunk) T.onChunk('remove', key); }
       }
       fringe.commit();
       fringe.show(look.fringe !== false && !!(rock3d().FRINGE && rock3d().FRINGE.ON));

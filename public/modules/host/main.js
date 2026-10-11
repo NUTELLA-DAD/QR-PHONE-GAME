@@ -3,6 +3,7 @@ import { initHostNetwork, newBot } from './network.js';
 import { createSimulation } from './simulation.js';
 import { createRenderer } from './render.js';
 import { createCamera } from './camera.js';
+import { createPortholes } from './portholes.js'; // round windows: friends off screen, the lookout's spyglass
 import { createSfx } from './sfx.js';
 import { createMenu } from './menu.js';
 import { createPerfGovernor, perfState } from './perf.js';
@@ -141,7 +142,7 @@ const camera = createCamera();
 const renderer = createRenderer({ ctx, state: simulation.state, canvas });
 // THE 3D VIEW (view3d/, 3D.md WP0): the default view since WP14 (see viewChoice above; host.html?view=2d or the pause menu's View button switches, remembered in localStorage.airshipView). The 3D canvas (#c3d) draws the
 // world with Three.js from the same game state; the 2D canvas turns transparent and draws only the HUD, the screen-edge arrows and the full-screen cards (render.js layers). Any WebGL failure, or the view throwing twice, drops back to the 2D renderer for the rest of the session (a note shows in the pause menu).
-const HUD_LAYERS = ['over3d', 'hud', 'arrows', 'marks']; // (WP10: 'marks' = the lit-target brackets and the eyes of the unlit; no 'background', 'ship', 'effects', 'dark' or 'film': the 3D scene and its lights draw those; 'over3d' = the name labels, call-outs and bars projected over the 3D picture)
+const HUD_LAYERS = ['over3d', 'hud', 'arrows', 'portholes', 'marks']; // (WP10: 'marks' = the lit-target brackets and the eyes of the unlit; no 'background', 'ship', 'effects', 'dark' or 'film': the 3D scene and its lights draw those; 'over3d' = the name labels, call-outs and bars projected over the 3D picture)
 const v3 = { view: null, active: false, loading: false, fails: 0, broken: false, mode: viewChoice, autoOff: false, wantOffSince: 0, pinned: !!viewAsked };
 window.view3dNote = '';
 // A small message at the bottom of the TV (WP14: "Switched to 2D for speed"). Fades out by itself; it never takes clicks.
@@ -236,14 +237,27 @@ window.viewIs3D = () => v3.active;
   window.cineIs = () => v3settings.cine !== false;
 }
 window.view3dDebug = () => ({ view: v3.view, lastView: window.__lastView }); // (dev: the HUD alignment check reads these)
+const portholes = createPortholes({ state: simulation.state });
+let portholeT = null;
+window.portholesDebug = { plan: null }; // (dev / the checks: the last plan)
+// The round portholes of this frame (portholes.js): planned from the 2D camera's view; the 3D view draws the pictures of the '3d' ones, the 2D renderer the rest and every rim.
+const planPortholes = (now, view) => {
+  const dt = portholeT == null ? 0.016 : Math.min(0.1, Math.max(0, (now - portholeT) / 1000));
+  portholeT = now;
+  const tier = v3.active && v3.view && v3.view.tier ? v3.view.tier.name : v3settings.tier;
+  const plan = portholes.plan({ view, w: canvas.width, h: canvas.height, dt, tier, mode3d: !!(v3.active && v3.view && !v3.view.lost) });
+  window.portholesDebug.plan = plan;
+  return plan;
+};
 const drawFrame = (now, view) => {
   window.__lastView = view;
   if (Number.isFinite(window.__frozenNow)) now = window.__frozenNow; // (dev / the screenshot check: the picture's clock is held by hand so a scene is the same every time)
   if (v3.active && v3.view) {
-    let ok = false;
+    let ok = false, ph = { items: [] };
     try {
       if (v3.view.lost) throw new Error('the graphics context was lost');
-      v3.view.renderFrame(now, view, { width: canvas.width, height: canvas.height });
+      ph = planPortholes(now, view); // (planned before the picture: the 3D view draws the porthole pictures)
+      v3.view.renderFrame(now, view, { width: canvas.width, height: canvas.height, portholes: ph.items });
       ok = true;
     } catch (e) {
       v3.fails++;
@@ -257,11 +271,11 @@ const drawFrame = (now, view) => {
       let hv = view;
       try { hv = v3.view.hudView ? v3.view.hudView(view, canvas.width, canvas.height) : view; } catch { hv = view; } // (WP11: while a cinematic moves the camera the arrows and marks follow it)
       const layers = view.inset ? [...HUD_LAYERS, v3.view.portholeLive ? 'insetframe' : 'inset'] : HUD_LAYERS; // (Versus split: the 3D porthole needs only its frame, the Low tier keeps the whole 2D one)
-      renderer.renderFrame(now, hv, { layers, p3: v3.view.hud3d, dark3d: v3.view.world ? v3.view.world.night : 0 });
+      renderer.renderFrame(now, hv, { layers, p3: v3.view.hud3d, dark3d: v3.view.world ? v3.view.world.night : 0, portholes: ph.items, portholesLive: v3.view.portholesLive });
       return;
     }
   }
-  renderer.renderFrame(now, view);
+  renderer.renderFrame(now, view, { portholes: planPortholes(now, view).items });
 };
 const network = initHostNetwork({ simulation });
 // Playtest in co-op with bots (&bots=N): they climb aboard and the ship casts off at once (without &bots the lobby opens with its QR code for phones).

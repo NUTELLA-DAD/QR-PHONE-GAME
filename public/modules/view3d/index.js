@@ -33,6 +33,7 @@ import { placeCamera, worldToScreen, FOV, ELEV } from './camera3d.js';
 import { createCinema } from './cinema.js'; // WP11: the camera's cinematic moments
 import { config } from '../../config.js';
 import { createPorthole } from './porthole.js'; // WP11: the Versus far-ship porthole
+import { createPortholes3D } from './portholes.js'; // the round portholes: a friendly plane off screen, the lookout's spyglass
 import { envIdOf } from '../host/environments.js';
 import { shipOf, teamOf } from '../host/ships.js';
 import { inRock } from '../host/course.js';
@@ -109,6 +110,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const cinema = createCinema({ state, settings: S });
   V.cinema = cinema;
   let porthole = null; // (made on the first Versus split, Medium tier and up)
+  let portholes3d = null; // (the round portholes: made when the first one is planned)
+  V.portholesLive = new Set(); // (the ids of the round portholes drawn in 3D this frame: the 2D renderer draws only their rims)
 
   // ---- size, detail and quality tier -------------------------------------------------------------------------------------------------------------------------------------
   let sizeKey = '', detail = null, tierName = '', flagKey = '';
@@ -272,7 +275,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       model.flameFallback = !(vfx && look.vfx); // (the particle fires do the flames; the old cones only when the particles are off)
       capLamps(model);
       // crew aboard, raiders aboard (WP7: crew.js draws all of them in ONE mesh; the layer is begun / ended once a frame, below)
-      const crewList = Object.values(state.players).filter((p) => !p.enemy && !p.hj && p.connected !== false && !p.fly && shipOf(state, p) === sh && !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying)));
+      const crewList = Object.values(state.players).filter((p) => !p.enemy && !p.hj && p.connected !== false && !p.fly && shipOf(state, p) === sh && !(p.lock && ((sh.ctx && sh.ctx.escorts) || state.escorts || []).some((e) => e.name === p.lock && e.flying))); // (a plane's pilot is in her cockpit: each ship's OWN planes)
       // A5: where the humans' phone arrows point (the idle ones with a job: the same test as the 2D chevron), so the station mat there is brighter (view only)
       const IDLE = (config.JOBS && config.JOBS.IDLE_AFTER) || 0, jobs = [];
       for (const p of crewList) { const jb = p.job; if (jb && jb.dir && !p.bot && (p.freeT || 0) >= IDLE && jb.job && Number.isFinite(jb.job.x) && jb.job.d != null) jobs.push({ d: jb.job.d, x: jb.job.x }); }
@@ -439,7 +442,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     try { flyers.update(t, main ? main.pose.vx || 0 : 0, { dt, zoomEq: h / Math.max(1, cam.visH), lineup: V.enemyLineup }); } catch (e) { logOnce("flyers", e); }
     try { glows.update(t, look.glows && state.phase !== 'lobby'); } catch (e) { logOnce('glows', e); }
     try { worldObjects.update(t, dt, { x: camTarget.x, y: camTarget.y, D: cam.D, hw: cam.visW / 2, hh: cam.visH / 2 }); } catch (e) { logOnce('worldObjects', e); }
-    try { scenery.update(camTarget.x, cam.visW / 2, { t, dt }); } catch (e) { logOnce('scenery', e); }
+    const phItems = (opts.portholes || []).filter((it) => it.pic === '3d' && it.a > 0 && Number.isFinite(it.cx) && Number.isFinite(it.cy));
+    try { scenery.update(camTarget.x, cam.visW / 2, { t, dt, extra: phItems.map((it) => ({ x: it.cx, hw: it.r / it.zoom + 300 })) }); } catch (e) { logOnce('scenery', e); }
     const seaNow = env === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : null;
     try { kraken.update(state.creature, world.night, dt, t, { state, sea: seaNow, tier }); } catch (e) { logOnce('creature', e); }
     if (weather) { try { weather.update({ t, dt, env, cave: world.cave, night: world.night, tier, cam: { visW: cam.visW, visH: cam.visH }, target: camTarget, camera, sea: seaNow, map }); } catch (e) { logOnce('weather', e); } } // (WP12: before the particles: its sprites and bursts ride vfx.update's hook)
@@ -451,7 +455,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       } catch (e) { logOnce('vfx', e); }
       vfxMs = performance.now() - v0;
     }
-    terrain.update(map, camTarget.x, -camTarget.y);
+    terrain.update(map, camTarget.x, -camTarget.y, 2, phItems.length ? phItems.map((it) => ({ x: it.cx, y: it.cy })) : null); // (the round portholes' places are built too)
     { const E = state.env || {}, W = state.weather || {}; terrain.setWind(Math.max(Number.isFinite(E.gale) ? E.gale : 0, W.gusting ? clamp(W.storm || 0, 0, 1) : 0), t, (E.windDir || 1)); } // (A7: the rock's plants sway only in a strong wind, stepped)
     const seaY = env === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : NaN;
     world.update(camera, camTarget, { w: cam.visW, h: cam.visH }, t, seaY, map);
@@ -485,6 +489,15 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
         V.portholeLive = porthole.render(view.inset, cssW / Math.max(1, w), cssW, cssH, { dt, t, seaY: seaNow == null ? NaN : seaNow, map, tier, margin: 4 * u });
       } catch (e) { logOnce('porthole', e); }
     }
+    // The round portholes (portholes3d: a friendly plane off screen, the lookout's spyglass): small extra draws of the same scene over the big picture; the HUD draws the rims.
+    V.portholesLive = new Set();
+    if (opts.portholes && opts.portholes.length && !S.orbit && tier.name !== 'low' && look.post && post.enabled && !(portholes3d && portholes3d.error)) {
+      try {
+        if (!portholes3d) { portholes3d = createPortholes3D({ renderer, scene, world }); V.portholes3d = portholes3d; }
+        const cssW = Math.max(2, canvas.clientWidth || window.innerWidth), cssH = Math.max(2, canvas.clientHeight || window.innerHeight);
+        V.portholesLive = portholes3d.render(opts.portholes, cssW / Math.max(1, w), cssW, cssH, { dt, t, seaY: seaNow == null ? NaN : seaNow, map, tier });
+      } catch (e) { logOnce('portholes3d', e); }
+    }
     const j2 = performance.now();
     jsMs = j1 - j0; renderMs = j2 - j1;
     V.frames++;
@@ -517,11 +530,11 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   V.stats = () => {
     const i = renderer.info, p = post.enabled && look.post;
     const ph = porthole && V.portholeLive ? { ms: porthole.ms, calls: porthole.calls, tris: porthole.tris, w: porthole.w, h: porthole.h } : null; // (WP11: the Versus porthole's own numbers; calls / tris / sceneCalls below are the MAIN picture's)
-    return { porthole: ph, cine: cineOn, calls: mainInfo.calls || i.render.calls, tris: mainInfo.tris || i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs, crew: crew.stats() };
+    return { porthole: ph, portholes: portholes3d ? { n: portholes3d.n, ms: portholes3d.ms, calls: portholes3d.calls, tris: portholes3d.tris, error: portholes3d.error } : null, cine: cineOn, calls: mainInfo.calls || i.render.calls, tris: mainInfo.tris || i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs, crew: crew.stats() };
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.resetOrbit = () => { lastPivot.set(0, 0, 0); }; // WP13: the next orbit frame starts from the starting view again (the build page's double-click)
-  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, weather, teamFlags]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));
