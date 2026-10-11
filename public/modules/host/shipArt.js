@@ -26,6 +26,7 @@ import { drawBoilerSteam, drawFallMarks, drawHoleGlow } from './goingDownArt.js'
 import { windFactor } from './sails.js';
 import { gasKey, hotLift } from './gases.js';
 import { drawHatch } from './hatchArt.js';
+import { artOf, steamPuff, drawEngineBody, drawEngineProp } from './engineArt.js';
 
 // Which painted texture goes under which flat palette colour (anything not listed stays flat).
 const TEX_OF = {
@@ -830,7 +831,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
         line([[sx - 9, dy - 40], [sx + 9, dy - 40]], 3);
         line([[sx, dy - 49], [sx, dy - 31]], 3);
       }
-      if (e.swivel || e.dir) continue; // (a pointed engine is drawn turned, in the live layer: liveEngines)
+      if (e.swivel || e.dir || e.size) continue; // (a pointed engine, or a bigger one, is drawn in the live layer: liveEngines)
       if (!sprites.box(ctx, 'ship/engine', e.x - 62, y - 24, 124, 48, out < 0)) {
         filled('#6d7378', () => ctx.ellipse(e.x, y, 62, 24, 0, 0, 7));
         filled(IRON, () => ctx.arc(e.x + out * 62, y, 9, 0, 7));
@@ -853,24 +854,31 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
         ph = live.spinA;
       }
       const spin = Math.cos(ph) * 46;
-      if (e.swivel || e.dir) { // a pointed engine (S.5h): the pod turned to the way it pushes (a swivel engine as it is now), its propeller at the end, a steam jet out of the back while it pushes
+      if (e.swivel || e.dir || e.size) { // a pointed engine (S.5h): the pod turned to the way it pushes (a swivel engine as it is now), its propeller at the end, a steam jet out of the back while it pushes
         const dir = live ? live.dir : e.dir || 0;
         const works = !live || live.works !== false;
+        const AR = artOf(e.size), ps = steamPuff(e.size); // (a heavy or great engine: a bigger nacelle, bigger puffs; ENGINE SIZES)
+        const starved = e.size && state.ship.press < config.ENGINES.STARVED_PRESS && Math.floor(time * 7) % 3 === 0; // (a big engine on a short boiler coughs: a puff in three is missing)
         ctx.save();
         ctx.translate(e.x, y);
         ctx.rotate(dir);
-        if (!sprites.box(ctx, 'ship/engine', -62, -24, 124, 48, out < 0)) {
-          filled('#6d7378', () => ctx.ellipse(0, 0, 62, 24, 0, 0, 7));
-          filled(IRON, () => ctx.arc(out * 62, 0, 9, 0, 7));
+        if (e.size) {
+          drawEngineBody(ctx, e.size, out, sprites, filled, line);
+          drawEngineProp(ctx, e.size, out, ph, filled);
+        } else {
+          if (!sprites.box(ctx, 'ship/engine', -62, -24, 124, 48, out < 0)) {
+            filled('#6d7378', () => ctx.ellipse(0, 0, 62, 24, 0, 0, 7));
+            filled(IRON, () => ctx.arc(out * 62, 0, 9, 0, 7));
+          }
+          filled('#6b4a32', () => ctx.ellipse(out * 70, 0, 6, Math.abs(spin) + 4, 0, 0, 7));
         }
-        filled('#6b4a32', () => ctx.ellipse(out * 70, 0, 6, Math.abs(spin) + 4, 0, 0, 7));
         ctx.restore();
-        if (works && state.phase === 'flying' && pw > 0.04) { // exhaust puffs trail opposite the push; a throttled-back engine puffs short and faint
+        if (works && state.phase === 'flying' && pw > 0.04 && !starved) { // exhaust puffs trail opposite the push; a throttled-back engine puffs short and faint
           for (let k = 0; k < 3; k++) {
-            const t = (time * 3 + k / 3) % 1, d = 70 + t * 70 * (0.3 + 0.7 * pw);
+            const t = (time * 3 + k / 3) % 1, d = 70 * AR.k + t * 70 * (0.3 + 0.7 * pw);
             ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - t) * (0.25 + 0.75 * pw)})`;
             ctx.beginPath();
-            ctx.arc(e.x - Math.cos(dir) * d, y - Math.sin(dir) * d, (7 + t * 9) * (0.5 + 0.5 * pw), 0, 7);
+            ctx.arc(e.x - Math.cos(dir) * d, y - Math.sin(dir) * d, (7 + t * 9) * (0.5 + 0.5 * pw) * ps, 0, 7);
             ctx.fill();
           }
         }
@@ -1838,7 +1846,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
       y0 = Math.min(y0, p.y - 260);
       y1 = Math.max(y1, p.y + 130);
     }
-    for (const e of L.engines) { x0 = Math.min(x0, e.x - 160); x1 = Math.max(x1, e.x + 160); }
+    for (const e of L.engines) { const r = 160 * artOf(e.size).k; x0 = Math.min(x0, e.x - r); x1 = Math.max(x1, e.x + r); } // (a bigger engine reaches further)
     return { x: Math.floor(x0 - 30), y: Math.floor(y0 - 30), w: Math.ceil(x1 - x0 + 60), h: Math.ceil(y1 - y0 + 60) };
   };
 

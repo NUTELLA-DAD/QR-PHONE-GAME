@@ -1342,6 +1342,7 @@ export const config = {
     HOVER_WARN: 62, // WARN above this (more pumping, more steam, more holes to lose)
     PRESS_CRUISE_MIN: 55, // STEAM: settled pressure at cruise must be at least this (FAIL below)...
     PRESS_IDLE_MAX: 95, // ...and at idle at most this (WARN above: she needs venting)
+    PRESS_BIG_WARN: 62, // a ship with heavy or great engines WARNs when her settled cruise pressure is under this (or has two big engines on one boiler): a big engine starves when the line sags
     FUEL_SETTLED: 50, // coal in the firebox the settled pressure is worked out at (the crew keeps it around here)
     CRUISE_SPEED: 0.5, // engine speed (0..1) counted as cruising...
     IDLE_SPEED: 0.3, // ...and as idling
@@ -1482,6 +1483,19 @@ export const config = {
     TRIM_MIX: 0.35, // AUTO-TRIM: with the helm stick fully up (down) and the levers linked, the engines whose push tips the nose up (down) get this much more throttle and the others this much less (0..1)
     LEVEL_MIX: 0.8, // a bot levelling the ship with split throttles shifts them this far (same rule as TRIM_MIX, stronger)
     BOT_LEVEL_DEG: 0.6, // a bot at the helm splits the throttles when the nose is more than this many degrees off level while it climbs out of a Kraken breach or after a hit (a ship with lift engines only)
+    // ---- ENGINE SIZES (SHIP_BUILDING.md b6c). An engine part may carry size: 'heavy' | 'great' (none = 'standard', today's pod, exactly). Every figure is a multiple of the standard pod's:
+    //   thrust  forward / back / down push (the speed model's drivers, the twist of THRUST_MOMENT)     lift   push when pointed UP (LIFT_GAS x this, gas points; the hover budget counts it)
+    //   steam   steam burnt (BOILER.USE_ENGINE x this)     mass  weight (BALANCE.MASS.engine x this)     hp  module health (MODULES.HP x this)
+    //   art     length of the drawn nacelle (2D and 3D; the height grows by ART_HEIGHT of the extra)     price  the Yard's base price (the standard pod is PARTS_SHOP.PRICES.engine)
+    // A starved big engine needs no figure of its own: every engine runs at the line's pressure share (press / 50), so a great engine on a short boiler sputters and the ship sinks.
+    SIZES: {
+      standard: { name: 'Engine pod', short: '', thrust: 1, lift: 1, steam: 1, mass: 1, hp: 1, art: 1 },
+      heavy: { name: 'Heavy engine', short: 'H', thrust: 2, lift: 2, steam: 2.5, mass: 2, hp: 1.5, art: 1.35, price: 260 }, // twice the push, 2.5x the steam: two of them want a second boiler
+      great: { name: 'Great lift engine', short: 'G', thrust: 2.5, lift: 3.5, steam: 4, mass: 3, hp: 2, art: 1.9, price: 340 }, // the sky-lifter: a steam turbine built to lift (3.5x pointed up, 2.5x forward)
+    },
+    ART_HEIGHT: 0.55, // a bigger nacelle grows this share of its extra length in height too (so it hangs a little lower instead of into the deck)
+    STARVED_PRESS: 40, // a big engine running while the boiler pressure is below this is STARVED: the phone tints its lever and the art coughs (power is press / 50 up to 50, whatever the size)
+    GEN_HEAVY: 0.22, GEN_GREAT: 0.1, // the ship generator, when asked for engine sizes (shipGen.js generateShip { sizes: true }): the chance an engine it places is heavy / great
   },
   // FORCES (S.5h): one model for everything that shoves the ship at a point: engine thrust, sails' wind, gusts, hits and explosions, rock scrapes, rams, the gunship's tether. A force is applied at
   // a place (forces.js applyForce) and twists the ship about her live centre of mass: torque / (her radius of gyration squared), a longer or more spread-out ship turns slower. The tilt then
@@ -2736,6 +2750,8 @@ export const config = {
     HOT_FIRE_PX: 900, // ...and among fires a coal fire counts as this many px of walking nearer than it is
     COAL_EMERGENCY: 15, // boiler fuel below this (with pressure not high): stoke it before anything else
     PRESS_EMERGENCY: 22, // steam below this (with coal not plentiful): same
+    BIG_ENGINE_COAL: 70, // a ship with a heavy or great engine: the stoker also hurries (two sacks, urgent) while the firebox holds less than this...
+    BIG_ENGINE_MARGIN: 15, // ...and the pressure is under ENGINES.STARVED_PRESS plus this (the big engines sputter below 50)
     CRITICAL: ['helm', 'boiler', 'lift'], // module kinds (and the steam pipes feeding them) the bots rebuild before anything else once they break
     BOILER_SPREAD: 400, // a ship with several boilers: walking px a bot will add per coal load already shovelled into a boiler, to spread coal between them
     CHORE_SHARE: 0.6, // at most this share of the crew works on chores (patching, fires, repairs) at once; the rest man stations

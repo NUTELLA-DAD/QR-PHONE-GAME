@@ -75,7 +75,7 @@ export function buildShipModel(layout, opts = {}) {
       case 'gun': dyn.guns[d.name] = d.node; break;
       case 'lamp': dyn.lamps.push({ name: d.name, pivot: d.pivot, spot: d.spot, target: d.target, outer: d.outer, inner: d.inner, lens: d.lens, reach: d.reach, ll: d.ll, home: d.home, arc: d.arc }); break;
       case 'bag': content.add(d.node); dyn.bags.push({ node: d.node, G: d.G, i: d.i, back: d.back || 0, baseX: d.baseX }); break;
-      case 'engine': dyn.engines.push({ name: d.name, group: d.group, prop: d.prop, out: d.out, angle: d.angle }); break;
+      case 'engine': dyn.engines.push({ name: d.name, group: d.group, prop: d.prop, out: d.out, angle: d.angle, ex: d.ex, puff: d.puff }); break;
       case 'wheel': dyn.wheels.push(d.node); break;
       case 'liftCage': dyn.liftCages.push({ node: d.node, lane: d.lane || 0 }); break;
       case 'sail': dyn.sails.push({ node: d.node, s: d.s }); break;

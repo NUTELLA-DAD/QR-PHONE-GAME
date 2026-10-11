@@ -35,6 +35,7 @@
 //        node tools/buildsim.mjs --check-fire       S.5f/S.5g: fire cares where things are (coal is tinder, a fire that reaches it flares into a blaze, the boiler lights fires, the validator warns "coal bunker beside the boiler"), armour plate stops fire and cuts damage; coal beside the boiler burns more over seeded runs
 //        node tools/buildsim.mjs --check-match      B.4: VERSUS on one World (tools/match-check.mjs): two Ships in one sky with bot crews - the lobby's teams and swap, the shelf and its vote, rounds (count-in, a wreck ends one, the sides swap, the score and the scoreboard numbers, the cap by hull %, the match winner, the rematch vote), cross-fire / bumps / the rival accessor / targetShip / the handicap, boarding (a leap, fight, sabotage, take the helm, Capture, carried home), the bot captains (standoff, altitude edge, come about, gunnery order, retreat, boarding by hook), no co-op saves, leaving Versus - AND co-op botsim still identical. --check-arena is the same check (its old name); add --mirror N to play N mirror matches too
 //        node tools/buildsim.mjs --check-engines    S.5h: pointed engines: forward = classic speed, back reduces / reverses, up climbs with no gas, down dives, a nose engine up lifts the nose, a person turns a swivel engine with the stick and the thrust follows, the bots use the swivel (2 min, 0 errors)
+//        node tools/buildsim.mjs --check-engine-sizes   b6c: heavy and great lift engines: standard pods unchanged, 2x push / 2.5x steam, the sky-lifter holds a too-heavy ship up and she sinks when the steam is cut or short, the nose moment, the build check, the Yard, the phone, bots 3 min
 //        node tools/buildsim.mjs --check-forces     S.5h: forces at places (forces.js): a nose hit kicks the nose, a tail hit the tail, a tall sail tips her nose down, an engine at the nose pointing up cancels it, gusts rock her and she settles, crew walking to the bow tip her
 //        node tools/buildsim.mjs --check-yard       S.6: the Shipwright's Yard (tools/yard-check.mjs): the Sparrow, part cards in the sky-dock shop (prices, the validator on every place, the 25% crew deal), the A / B / C slot vote, the refit at the dock that keeps hull / coal / shells, the whole catalogue, derelict stops (free), limp home shaking the newest part loose, the build in the voyage save and kept by a campaign's second voyage, the phones' cards, the TV (blueprint, gauges, pins, BUILT, NEW call-out) on a stub canvas, the camera's hold and pull-back, bots buying parts, Versus fitting the classic ship
 //        node tools/buildsim.mjs --check-creature   C.1 to C.6a: giant creatures (the Kraken and the Cinder Drake) in the real world, their grips, boarding and the harpoon (tools/creature-check.mjs, then the C.0 skeleton check tools/creature-spike-check.mjs): every weapon hurts a part, the beak, severing, both kill paths, 8 bots on the Kraken in three skies, the TV draws it
@@ -1612,6 +1613,176 @@ async function checkEngines() {
 // PER-ENGINE THROTTLES (engines.js): every engine has its own throttle and pushes from where it sits. Linked (the default) the helm's lever sets them all and the speed is the old one; SPLIT / LINK and the
 // levers come through applyPlayerInput like any phone message and live on the ship; the auto-trim shifts the linked throttles toward the nose the stick asks for; forward thrust from an engine below the
 // centre of mass tips the nose up (ENGINES.THRUST_MOMENT); the tilt stays inside FORCES.MAX_DEG; the bots fly classic and Sparrow clean and level a lift ship with split throttles.
+// ENGINE SIZES (SHIP_BUILDING.md b6c): the heavy engine and the great lift engine (config.ENGINES.SIZES). `node tools/buildsim.mjs --check-engine-sizes`.
+//   (a) a standard pod is byte-for-byte the old pod (no size key, x1 everywhere, the classic ship's budgets and live state); setEngineSize back to standard removes the key
+//   (b) a heavy engine pushes twice and burns two and a half times the steam: the numbers, the start-up acceleration, the live steam use, the thrust moment, the weight and the health
+//   (c) a great lift engine pointing up lifts a ship too heavy for her bags (the validator FAILs her without it, the last-stand weighing is short of her weight), the helm holds her hovering with steam
+//       up, and she SINKS when the steam is cut or short (power falls with the pressure)
+//   (d) the pitch moment: a great engine at the nose lifts the nose 3.5 times as hard (the same centre of mass), in the sim as well
+//   (e) the build check counts it (steam gauge, the big-engine WARN, the lift budget), a starved boiler slows a big-engine ship, and the Yard offers only what validates (FIXES LIFT for the heavy ship)
+//   (f) the phone panel carries the size badge and the starved flag; bots fly a heavy-engine build and a great-lift build for 3 minutes on 2 maps: 0 errors
+//   (g) the 3D fallbacks of these builds are empty: tools/view3d-check.mjs (--check-3d, "models") builds them in the browser
+async function checkEngineSizes() {
+  const lab = await forceLab();
+  const { config, BUILDS } = lab;
+  const E = config.ENGINES, S = E.SIZES;
+  const { offerPart, entryById, fitOf, needsOf, summaryOf, partPrice } = await load('modules/host/partsShop.js');
+  const { staticPitch } = await load('modules/host/forces.js');
+  const heavyFix = (await import(pathToFileURL(path.join(root, 'tools', 'fixtures', 'heavyengine-build.mjs')).href)).default;
+  const great = await import(pathToFileURL(path.join(root, 'tools', 'fixtures', 'greatlift-build.mjs')).href);
+  let ok = true;
+  const report = (good, what) => { console.log((good ? 'PASS ' : 'FAIL ') + what); if (!good) ok = false; };
+  const near = (a, b, e) => Math.abs(a - b) <= e;
+  const C = BUILDS.classic, TOP = config.SHIP.TOP_SPEED, G = config.GAS;
+  const sized = (parts, size, names, dir) => parts.map((p) => (p.part === 'engine' && names.includes(p.name) ? { ...p, size, ...(dir != null ? { dir } : {}) } : { ...p }));
+  const BOTH = ['Aft Engine', 'Fore Engine'];
+
+  // ---- (a) the standard pod is the old pod
+  {
+    const L = lab.buildLayout(C);
+    report(L.engines.every((e) => e.size === undefined) && !JSON.stringify(C).includes('"size"'), 'the classic ship\'s engines carry no size key');
+    report(S.standard.thrust === 1 && S.standard.lift === 1 && S.standard.steam === 1 && S.standard.mass === 1 && S.standard.hp === 1 && S.standard.art === 1, 'config.ENGINES.SIZES.standard is x1 on everything');
+    const e0 = { part: 'engine', name: 'x', p: 'lower', x: 70 };
+    report(lab.partStat(e0, 'mass') === config.BALANCE.MASS.engine && lab.partStat(e0, 'steam') === 3 && lab.partStat({ ...e0, dir: -PI / 2 }, 'lift') === E.LIFT_GAS && lab.engineUse(0, 0.5) === config.BOILER.USE_ENGINE * 0.5, `a pod weighs ${config.BALANCE.MASS.engine}, burns 3 of budget steam, lifts ${E.LIFT_GAS} pointing up and uses ${config.BOILER.USE_ENGINE * 0.5} steam at half speed, as before`);
+    const t = lab.thrustOf(e0, -PI / 4), v = lab.thrustVec(-PI / 4);
+    report(t.fwd === v.fwd && t.up === v.up, 'thrustOf of a pod is thrustVec exactly (45 degrees too)');
+    const back = lab.setEngineSize(sized(C, 'heavy', ['Fore Engine']), 'Fore Engine', 'standard');
+    report(back.ok && JSON.stringify(back.parts) === JSON.stringify(C), 'setEngineSize(.., "standard") takes the size back: the parts are the classic ones again');
+    report(!lab.setEngineSize(C, 'Fore Engine', 'huge').ok && !lab.setEngineSize(C, 'Nope', 'heavy').ok, 'setEngineSize refuses an unknown size and an engine that does not exist');
+    const sim = lab.boot(C);
+    report(sim.state.thrust.drivers === 2 && sim.state.engineWeight === 0 && sim.state.engines.every((q) => q.size === undefined), 'the live classic ship: 2 drivers, no engine weight, no sizes (' + sim.state.thrust.drivers + ', ' + sim.state.engineWeight + ')');
+    lab.restore();
+  }
+
+  // ---- (b) the heavy engine: twice the push, two and a half times the steam
+  {
+    const heavy2 = sized(C, 'heavy', BOTH);
+    report(near(lab.thrustOf({ size: 'heavy', dir: 0 }).fwd, 2, 1e-9) && near(lab.thrustOf({ size: 'heavy', dir: -PI / 2 }).up, 2, 1e-9) && near(lab.thrustOf({ size: 'great', dir: -PI / 2 }).up, 3.5, 1e-9) && near(lab.thrustOf({ size: 'great', dir: 0 }).fwd, 2.5, 1e-9), 'thrustOf: a heavy engine is 2 pods ahead and 2 lifting, a great one 2.5 ahead and 3.5 lifting');
+    report(near(lab.engineUse(0, 0.5, 1, 'heavy') / lab.engineUse(0, 0.5), 2.5, 1e-9) && near(lab.engineUse(-PI / 2, 0.5, 1, 'great') / lab.engineUse(-PI / 2, 0.5), 4, 1e-9), `steam: a heavy engine burns ${lab.engineUse(0, 1, 1, 'heavy')} at full ahead (a pod ${lab.engineUse(0, 1)}), 2.5 times; a great engine lifting burns ${lab.engineUse(-PI / 2, 1, 1, 'great')} (a pod ${lab.engineUse(-PI / 2, 1)}), 4 times`);
+    const m0 = lab.budgets(C).mass, m1 = lab.budgets(heavy2).mass, mg = lab.budgets(sized(C, 'great', ['Fore Engine'])).mass;
+    report(near(m1 - m0, 2 * config.BALANCE.MASS.engine, 1e-6) && near(mg - m0, 2 * config.BALANCE.MASS.engine, 1e-6), `weight: two heavy engines add ${(m1 - m0).toFixed(0)} (a pod is ${config.BALANCE.MASS.engine}, a heavy one twice that); one great engine adds ${(mg - m0).toFixed(0)} (three times)`);
+    const st0 = lab.budgets(C).steam, st1 = lab.budgets(heavy2).steam;
+    report(near(st1 - st0, 2 * 3 * 1.5, 1e-9), `the steam budget of the parts goes ${st0} -> ${st1}`);
+    // in flight
+    const accel = (parts) => { const sim = lab.boot(parts), p = lab.at(sim, 'helm'), v0 = sim.state.ship.speed; lab.run(sim, 0.6, () => { p.jx = 1; p.jy = 0; p.gas = 0; }); return { dv: (sim.state.ship.speed - v0) * TOP, drivers: sim.state.thrust.drivers, hp: sim.modules.byName['Fore Engine'].max, sim }; };
+    const a0 = accel(C), a1 = accel(heavy2), a2 = accel(sized(C, 'heavy', ['Fore Engine']));
+    report(a1.drivers === 4 && a2.drivers === 3 && near(a1.dv / a0.dv, 2, 0.35) && a2.dv > a0.dv * 1.2 && a2.dv < a1.dv, `two heavy engines accelerate ${(a1.dv / a0.dv).toFixed(2)}x as hard as two pods (${a1.dv.toFixed(0)} against ${a0.dv.toFixed(0)} px/s in 0.6 s; drivers ${a1.drivers}), one heavy ${(a2.dv / a0.dv).toFixed(2)}x`);
+    report(a0.hp === config.MODULES.HP && a1.hp === config.MODULES.HP * S.heavy.hp, `a heavy engine takes ${a1.hp} hits to break (a pod ${a0.hp})`);
+    const use = (parts) => { const sim = lab.boot(parts), p = lab.at(sim, 'helm'); lab.run(sim, 1, () => { p.jx = 0; p.jy = 0; p.gas = 0; sim.state.ship.speed = 0.6; }); return sim.modules.drainParts(sim.state).engines; }; // (the same speed forced on both: the steam her engines burn at 0.6 of full)
+    const u0 = use(C), u1 = use(heavy2);
+    report(near(u1 / u0, 2.5, 0.01), `live steam at the same speed (0.6 of full): ${u0.toFixed(2)} -> ${u1.toFixed(2)} per second, ${(u1 / u0).toFixed(2)}x`);
+    lab.moment = true;
+    const tq = (parts) => { const sim = lab.boot(parts), p = lab.at(sim, 'helm'); lab.run(sim, 1, () => { p.jx = 1; p.jy = 0; p.gas = 0; }); return Math.abs(sim.state.forces.torque); };
+    const t0 = tq(C), t1 = tq(heavy2);
+    lab.restore();
+    report(t0 > 0 && t1 / t0 > 1.4 && t1 / t0 < 2.4, `the thrust moment (the twist of pushing from a place) is ${(t1 / t0).toFixed(2)}x for two heavy engines (2x the push, a little less as the heavier engines move her centre of mass and slow her turning)`);
+    // one heavy engine out: the top speed falls by its share (2 of 3 drivers... a heavy engine is 2 pods)
+    const lost = lab.boot(sized(C, 'heavy', ['Fore Engine']));
+    lost.modules.byName['Fore Engine'].broken = true;
+    lab.run(lost, 0.5, () => {});
+    const left = lost.state.thrust.factor;
+    const lost2 = lab.boot(sized(C, 'heavy', ['Fore Engine']));
+    lost2.modules.byName['Aft Engine'].broken = true;
+    lab.run(lost2, 0.5, () => {});
+    report(near(left, 1 / 3, 0.02) && near(lost2.state.thrust.factor, 2 / 3, 0.02), `losing the heavy engine loses ${(100 - left * 100).toFixed(0)}% of the speed (it was two of the three pods' push); losing the pod only ${(100 - lost2.state.thrust.factor * 100).toFixed(0)}%`);
+    lab.restore();
+  }
+
+  // ---- (c) the great lift engine lifts a ship the bags cannot, and starves
+  const heavyShip = great.heavyShip(BUILDS), greatShip = great.default(BUILDS);
+  {
+    const v0 = lab.validate(heavyShip), v1 = lab.validate(greatShip);
+    report(!v0.ok && v0.fails.some((f) => /too heavy for her bags/.test(f)) && v1.ok && v1.budgets.lift.hover < v0.budgets.lift.hover - 30, `the heavy ship FAILs "too heavy for her bags" (hover ${v0.budgets.lift.hover}); with the great engine pointing up she validates (hover ${v1.budgets.lift.hover}, lift ${v1.budgets.lift.lift} against ${v0.budgets.lift.lift})`);
+    const hullW = (m) => m.weight - m.cargo - m.bombs - m.coal; // (her own weight: the crew's coal and cargo aside)
+    const meas = (parts, press) => { const sim = lab.boot(parts); sim.state.ship.press = press; sim.update(1 / 60); sim.state.ship.press = press; sim.update(1 / 60); return sim.ships[0].sim.goingDown.measure(); };
+    const m0 = meas(heavyShip, 60), m1 = meas(greatShip, 60), m2 = meas(greatShip, 25);
+    report(m0.lift < hullW(m0) && m1.lift > hullW(m1) && m2.lift < hullW(m2), `weighed (the last-stand sum, her hull's weight): the heavy ship has lift ${m0.lift.toFixed(0)} for ${hullW(m0).toFixed(0)}: she cannot hover; with the great engine and steam up ${m1.lift.toFixed(0)} against ${hullW(m1).toFixed(0)}: she can; with the line at 25, ${m2.lift.toFixed(0)}: she cannot`);
+    // free flight: hold the gas she needs and watch the climb with the steam up, short and cut
+    const fly = (sim, secs, each) => { for (let i = 0; i < Math.round(secs * 60); i++) { each(i); sim.update(1 / 60); } };
+    const scene = (parts, { press, gas, secs = 4 }) => {
+      const sim = lab.boot(parts), p = lab.at(sim, 'helm'), st = sim.state, a0 = st.ship.alt;
+      let vyMin = 0;
+      fly(sim, secs, () => { p.jx = p.jy = 0; p.gas = 0; st.ship.press = press; st.ship.fuel = Math.max(st.ship.fuel, 60); st.ship.gas = gas; for (const b of st.bags) b.gas = gas; vyMin = Math.min(vyMin, st.ship.vy || 0); });
+      return { alt: st.ship.alt - a0, vy: st.ship.vy || 0, vyMin, acc: st.forces.vyAcc, w: st.engineWeight, sim };
+    };
+    const probe = scene(greatShip, { press: 60, gas: G.NEUTRAL, secs: 0.5 });
+    const hoverGas = G.NEUTRAL + probe.w - E.LIFT_GAS * S.great.lift;
+    const up = scene(greatShip, { press: 60, gas: hoverGas }), low = scene(greatShip, { press: 25, gas: hoverGas }), cut = scene(greatShip, { press: 0, gas: hoverGas });
+    report(near(up.acc, E.LIFT_GAS * S.great.lift * G.LIFT, 2) && Math.abs(up.vy) < 10 && Math.abs(up.alt) < 40, `steam up: the great engine pushes ${up.acc.toFixed(0)} px/s^2 (3.5 x ${E.LIFT_GAS} gas points x ${G.LIFT}) and holds her hovering at gas ${hoverGas.toFixed(0)} (${up.alt.toFixed(0)} px in 4 s, climb ${up.vy.toFixed(1)} px/s)`);
+    report(low.acc < up.acc * 0.6 && low.vyMin < -60 && low.alt < -60, `steam short (the line at 25): the engine sputters at ${low.acc.toFixed(0)} px/s^2 and she sinks (${low.alt.toFixed(0)} px, down to ${low.vyMin.toFixed(0)} px/s)`);
+    report(cut.acc === 0 && cut.vyMin < low.vyMin - 50 && cut.alt < low.alt - 100, `steam cut: the engine stops (${cut.acc} px/s^2) and she falls faster still (${cut.alt.toFixed(0)} px, down to ${cut.vyMin.toFixed(0)} px/s)`);
+    // the helm's pump does the work when the engine is not there: the same ship, the engine pointing forward, needs the gas
+    const noEng = scene(sized(heavyShip, 'great', ['Fore Engine'], 0), { press: 60, gas: G.NEUTRAL });
+    report(noEng.w === 0 && Math.abs(noEng.vy) < 10, 'a great engine pointing forward carries no weight (hover stays at the neutral fill) and the classic hover is unchanged');
+  }
+
+  // ---- (d) the pitch moment of a great engine at the nose
+  {
+    const foreUp = (size) => sized(C, size, ['Fore Engine'], -PI / 2);
+    const bal = lab.balanceOf(C), c = { x: bal.com.x, y: bal.com.y, k2: bal.k2 };
+    const sp0 = staticPitch(lab.buildLayout(foreUp(undefined)), c), sp1 = staticPitch(lab.buildLayout(foreUp('heavy')), c), sp2 = staticPitch(lab.buildLayout(foreUp('great')), c);
+    report(near(sp1.raw / sp0.raw, 2, 0.01) && near(sp2.raw / sp0.raw, 3.5, 0.01) && sp2.raw < 0, `the static pitch of a nose engine pointing up: pod ${sp0.raw} degrees, heavy ${sp1.raw}, great ${sp2.raw} (nose UP, 2x and 3.5x, about the same centre of mass)`);
+    const run = (parts) => { const sim = lab.boot(parts), p = lab.at(sim, 'helm'); lab.run(sim, 5, () => { p.jx = 0; p.jy = 0; p.gas = 0; }); return { theta: sim.state.forces.theta, torque: sim.state.forces.torque, pitch: sim.state.ship.pitch }; };
+    const r0 = run(foreUp(undefined)), r2 = run(foreUp('great'));
+    report(r2.theta < r0.theta - 0.002 && Math.abs(r2.torque) > Math.abs(r0.torque) * 2.5 && r2.pitch < r0.pitch, `in flight the great nose engine lifts the nose: raw torque ${r0.torque.toFixed(4)} -> ${r2.torque.toFixed(4)}, tilt ${(r0.theta * 57.3).toFixed(2)} -> ${(r2.theta * 57.3).toFixed(2)} degrees (capped at ${config.FORCES.MAX_DEG}), pitch ${(r0.pitch * 57.3).toFixed(2)} -> ${(r2.pitch * 57.3).toFixed(2)}`);
+    lab.restore();
+    // auto-trim and split throttles weigh the engines by their push: the shifts add up to nothing
+    const sim = lab.boot(sized(C, 'heavy', ['Fore Engine'], -PI / 2).concat([]));
+    const w = sim.engines.noseWeights();
+    report(w.every(Number.isFinite), `noseWeights with a heavy lift engine and a pod: ${w.map((x) => x.toFixed(2)).join(' / ')} (finite)`);
+  }
+
+  // ---- (e) the build check counts it; a starved boiler slows the ship; the Yard offers only what validates
+  {
+    const one = lab.validate(sized(C, 'heavy', ['Fore Engine']));
+    report(!one.ok && one.fails.some((f) => /big engine burns 4 of/.test(f) && /second boiler/.test(f)), `one heavy engine on the classic boiler FAILs the steam gauge and says why ("${(one.fails.find((f) => /Steam|settled/.test(f)) || '').slice(0, 120)}")`);
+    const two = lab.validate(heavyFix(BUILDS));
+    const sw = two.warns.find((w) => /big engines/.test(w));
+    report(two.ok && two.budgets.steam.boilers === 2 && !!sw, `two heavy engines on two boilers validate; the gauge still WARNs: "${(sw || '').slice(0, 150)}"`);
+    const gq = lab.validate(greatShip), gw = gq.warns.find((w) => /big engine/.test(w));
+    report(gq.ok && gq.checks.some((x) => x.group === 'Thrust' && /1 great lift engine/.test(x.text) && /up 56 gas points/.test(x.text)) && !!gw, `the Thrust line lists the great engine and 56 gas points of lift; the Steam WARN: "${(gw || '').slice(0, 110)}"`);
+    // a starved boiler: two heavy engines on ONE boiler, no pressure help, the real steam model (no clamp on the line)
+    const starve = (parts) => { const sim = lab.boot(parts), p = lab.at(sim, 'helm'), st = sim.state; for (let i = 0; i < 60 * 40; i++) { p.jx = 0; p.jy = 0; p.gas = 0; st.ship.fuel = 100; st.ship.speed = 0.5; st.ship.order = 0.5; sim.update(1 / 60); } return { press: st.ship.press, fed: st.engines[0].fed, panel: sim.engines.panel(1) }; }; // (cruising at half speed with the firebox kept full: the line settles where the heat and the engines' steam balance)
+    const s0 = starve(C), s1 = starve(sized(C, 'heavy', BOTH));
+    report(s0.fed > s1.fed + 0.15 && s1.press < E.STARVED_PRESS && near(s1.fed, s1.press / 50, 0.02), `the real boiler (cruising, firebox kept full): the classic line settles at ${s0.press.toFixed(0)}, her engines run at ${(s0.fed * 100).toFixed(0)}%; two heavy engines on one boiler starve the line to ${s1.press.toFixed(0)} and every engine runs at ${(s1.fed * 100).toFixed(0)}% (press / 50)`);
+    report(s1.panel && s1.panel.l.every((q) => q[4] === 'H' && q[5] === 1) && s0.panel.l.every((q) => q[4] === '' && q[5] === 0), `the helm's phone is told: the heavy levers carry the badge "H" and the starved flag (${JSON.stringify(s1.panel.l[0])}); the pods carry neither (${JSON.stringify(s0.panel.l[0])})`);
+    // the Yard
+    const rng = () => 0.5;
+    const noHeavy = offerPart(C, { only: 'heavyEngine', rng });
+    report(noHeavy === null, 'the Yard offers no heavy engine to a classic ship on one boiler (every place FAILs the steam gauge)');
+    const offer = offerPart(heavyShip, { only: 'greatEngine', rng, crew: 4 });
+    const need = offer ? needsOf(offer.base, { crew: 4 }) : null;
+    const fit = offer ? fitOf(offer.entry, need) : null;
+    report(!!offer && offer.choices.length > 0 && offer.choices.every((ch) => lab.validate(ch.parts).ok && ch.parts.some((q) => q.part === 'engine' && q.size === 'great' && q.dir === -PI / 2)), `the Yard offers the great lift engine to the heavy ship in ${offer ? offer.choices.length : 0} place(s), each one validated (hover ${offer && offer.base.sum.hover.toFixed(0)} -> ${offer && offer.choices.map((ch) => ch.summary.hover.toFixed(0)).join(' / ')})`);
+    report(!!fit && fit.hint === 'FIXES LIFT' && fit.score >= config.YARD.REC.MIN, `...and tags it ${fit && fit.hint} (score ${fit && fit.score})`);
+    const calm = offerPart(C, { only: 'greatEngine', rng, crew: 4 }), nc = calm ? fitOf(calm.entry, needsOf(calm.base, { crew: 4 })) : null;
+    report(!calm || (nc && nc.hint === '' && nc.score < config.YARD.REC.MIN), 'a light classic ship is not told to buy one (no recommendation)');
+    report(partPrice(entryById('heavyEngine'), 0, 4) === Math.round(S.heavy.price / 5) * 5 && partPrice(entryById('greatEngine'), 0, 4) === Math.round(S.great.price / 5) * 5 && S.heavy.price > config.PARTS_SHOP.PRICES.engine && S.great.price > S.heavy.price, `prices: pod ${config.PARTS_SHOP.PRICES.engine}, heavy ${partPrice(entryById('heavyEngine'), 0, 4)}, great ${partPrice(entryById('greatEngine'), 0, 4)}`);
+    // the palette: tray tiles with direction and swivel
+    const slots = ['engineHeavy', 'engineHeavySwivel', 'engineGreat', 'engineGreatSwivel'].map((t) => lab.slotsFor(t, heavyShip));
+    const pl = lab.placePart(heavyShip, 'engineGreat', 200, 780, { dir: -PI / 2 });
+    report(slots.every((s) => s.length > 0) && pl.ok && pl.parts.some((q) => q.part === 'engine' && q.size === 'great' && q.dir === -1.5708) && lab.slotsFor('engineGreatSwivel', heavyShip)[0].apply(heavyShip).some((q) => q.part === 'engine' && q.size === 'great' && q.swivel), `the palette has the four tiles with spots (${slots.map((s) => s.length).join('/')}); a dropped great engine keeps its direction and size, and the swivel one gets its crank`);
+    // the generator
+    const { generateShip } = await load('modules/host/shipGen.js');
+    let big = 0, valid = 0, n = 0;
+    for (let seed = 1; seed <= 24; seed++) { const g = generateShip(seed, { sizes: true }); if (!g) continue; n++; if (lab.validate(g.parts).ok) valid++; if (g.parts.some((q) => q.part === 'engine' && q.size)) big++; }
+    const plain = generateShip(5), plain2 = generateShip(5, { sizes: false });
+    report(valid === n && big >= 3 && JSON.stringify(plain.parts) === JSON.stringify(plain2.parts) && !plain.parts.some((q) => q.size), `the generator with sizes on: ${n} ships, all valid, ${big} with a heavy or great engine; with sizes off a ship is the one it always was`);
+  }
+
+  // ---- (f) the bots fly them for 3 minutes
+  {
+    const jobs = [];
+    for (const [name, parts] of [['heavy-engine build', heavyFix(BUILDS)], ['great-lift build', greatShip]]) for (const [map, seed] of [['open', 1], ['route', 2]]) jobs.push(runBotsim(parts, { map, minutes: 3, bots: 6, seed }).then((r) => ({ name, map, r })));
+    const out = await Promise.all(jobs);
+    const errs = out.reduce((n, o) => n + (o.r.stats ? o.r.stats.errors : 1), 0);
+    report(errs === 0 && out.every((o) => o.r.stats), `bots fly the heavy-engine build and the great-lift build for 3 minutes on 2 maps: ${errs} errors (${out.map((o) => `${o.name}/${o.map} hull ${o.r.stats ? o.r.stats.avgHull : '?'}`).join(', ')})`);
+    report(out.every((o) => o.r.stats && o.r.stats.wrecks === 0 && o.r.stats.avgHull > 60), 'none of the four runs is wrecked, the average hull stays above 60');
+  }
+  console.log('(g) the 3D fallbacks of these builds are checked in the browser: node tools/buildsim.mjs --check-3d (models)');
+  return ok;
+}
+
 async function checkThrottles(lab, report) {
   const { config, BUILDS } = lab;
   const { applyPlayerInput } = await load('modules/host/network.js');
@@ -2446,6 +2617,8 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'turn-check.mjs')], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-engines') {
   process.exit((await checkEngines()) ? 0 : 1);
+} else if (mode === '--check-engine-sizes') {
+  process.exit((await checkEngineSizes()) ? 0 : 1);
 } else if (mode === '--check-forces') {
   process.exit((await checkForces()) ? 0 : 1);
 } else if (mode === '--check-bags') {

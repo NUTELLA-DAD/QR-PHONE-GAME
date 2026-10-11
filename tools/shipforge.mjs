@@ -3,7 +3,7 @@
 // situational) and the champions as JSON.
 //
 //   node tools/shipforge.mjs [--pop 60] [--swiss 7] [--gens 4] [--children 20] [--opp 4] [--final 12] [--workers 6] [--bots 5] [--seed 1] [--cap 300]
-//                            [--coop 0] [--coop-runs 2] [--coop-minutes 30] [--out tools/fixtures/forge] [--cache FILE] [--no-anchors] [--no-publish] [--quick]
+//                            [--engine-sizes] [--coop 0] [--coop-runs 2] [--coop-minutes 30] [--out tools/fixtures/forge] [--cache FILE] [--no-anchors] [--no-publish] [--quick]
 //   --quick   a small run for checking the machinery (pop 12, 3 rounds, 1 generation of 6 children, final 4)
 //   Default size (about 1500 games of ~5 s on 6 workers): 20-40 minutes.
 //
@@ -122,7 +122,7 @@ function addAnchors() {
   }
 }
 function addGenerated(seed, theme, gen, parents = [], mut = []) {
-  const s = Gen.generateShip(seed, { theme, cap: CAP });
+  const s = Gen.generateShip(seed, { theme, cap: CAP, sizes: has('engine-sizes') }); // (--engine-sizes: some engines heavy or great, config.ENGINES GEN_HEAVY / GEN_GREAT)
   if (!s) return null;
   const rec = addShip({ id: `g${gen}-${seed}`, name: uniqueName(s.name), summary: s.summary, theme: s.theme, parts: s.parts, genome: s.genome, tags: s.tags, seed, gen, anchor: false, stats: statSlim(s), parents, mut });
   return rec;

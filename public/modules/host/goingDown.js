@@ -21,6 +21,7 @@ import { altBounds } from './course.js';
 import { pop } from './popups.js';
 import { refillBags } from './gasBags.js';
 import { mainShip } from './ships.js';
+import { thrustOf } from './shipBuild.js';
 import { toWorldX, toWorldY } from './pose.js';
 import { planBreak, makeRng } from './breakOff.js';
 
@@ -75,7 +76,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     const bal = state.balance || {}, env = state.env || {}, od = state.overdrive || 0;
     const pf = clamp(state.ship.press / 50, 0.05, 1);
     let engines = 0;
-    for (const e of state.engines || []) if (e.works && e.up) engines += e.up * E.LIFT_GAS * pf * (env.engine || 1) * (1 + config.BOILER.OD_ENGINE * od); // (an engine pointing up lifts, one pointing down drags)
+    for (const e of state.engines || []) if (e.works && e.up) engines += thrustOf(e, e.dir).up * E.LIFT_GAS * pf * (env.engine || 1) * (1 + config.BOILER.OD_ENGINE * od); // (an engine pointing up lifts, one pointing down drags)
     const gasPts = state.ship.gas - (env.sink || 0) - (state.liftDeficit || 0) + (env.lift || 0) / G.LIFT - G.NEUTRAL; // (what the pump has put in, above the neutral fill)
     const bags = L.balance.bagLift + gasPts;
     const steam = GD.STEAM_LIFT * od;

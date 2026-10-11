@@ -1646,10 +1646,11 @@ export function createShipSim(world, ship, W) {
     // Lift: above the neutral fill she accelerates up, below it she drops (fast at the extremes).
     // The helm's little trim engine adds a nudge.
     // (ice weight shifts the level she needs to hover; lava thermals push her up - state.env, environments.js)
-    const effGas = liftGas(state) - state.env.sink - state.liftDeficit + state.env.lift / G.LIFT; // (liftDeficit: gasbags torn away leave her heavy for the lift she has left, S.5i)
+    const effGas = liftGas(state) - state.env.sink - state.liftDeficit + state.env.lift / G.LIFT - (state.engineWeight || 0); // (liftDeficit: gasbags torn away leave her heavy for the lift she has left, S.5i; engineWeight: the weight her heavy / great lift engines carry, engines.js)
     const lift = (effGas - G.NEUTRAL) * G.LIFT;
     const trim = state.ship.trim * SHM.TRIM_ACCEL * (worksKind('helm') ? (modules.handWheel() ? config.WIND.HAND_TRIM : 1) : 0) * env.deep.helmMul() * state.links.helmMul; // (a lookout in the nest sharpens the helm: links.js)
-    state.buoyancy = effGas > G.NEUTRAL + 5 ? 1 : effGas < G.NEUTRAL - 5 ? -1 : 0;
+    const held = state.engineWeight ? state.forces.vyAcc / G.LIFT : 0; // (the gas points her lift engines are holding up right now: she is not "sinking" while they carry her)
+    state.buoyancy = effGas + held > G.NEUTRAL + 5 ? 1 : effGas + held < G.NEUTRAL - 5 ? -1 : 0;
     state.sinking = state.buoyancy < 0;
     if (flying) {
       if (!goingDown.active()) flight.climb(dt, lift + trim + state.balance.push + state.forces.vyAcc); // (falling, goingDown.js sinks her by how far her lift is short of her weight) (the bags' buoyancy, the trim engine, the balance push, vyAcc: lift engines pointing up / dive engines down, forces.js; less the air's drag, over her weight)

@@ -8,7 +8,7 @@
 // The in-game Shipwright's Yard (S.6b, yardArt.js) draws it CLEAN: blueprintView(layout, w, h, k, true) fits the ship with small margins, and opts.clean skips the grid, the row guides, the
 // key and the size line. opts.pins = [{ x, y, letter, ghost }]: the places a part could go (a dashed ghost box, a brass pin with its letter); opts.stamp = { text, sub }: a red stamp (BUILT).
 import { config } from '../../config.js';
-import { COL, DECK_ROWS, rowOf, hullGeom, bagList } from './shipBuild.js';
+import { COL, DECK_ROWS, rowOf, hullGeom, bagList, sizeNamed } from './shipBuild.js';
 import { EDIT_ROWS, DRAW_ROWS, GRID_X0 } from './buildEdit.js';
 import { gasKey } from './gases.js';
 
@@ -273,7 +273,7 @@ export function drawBlueprint(g, v, Ly, o = {}) {
     const { x, y } = engineArrow(v, o.aim && o.aim.name === e.name ? { ...e, dir: o.aim.dir } : e, q), cx = X(e.x), cy = Y(q.y) + 14 * k, sel = o.engine === e.name;
     if (e.swivel) { g.beginPath(); g.arc(cx, cy, 15 * k, 0, 6.2832); g.strokeStyle = L.INK_SOFT; g.lineWidth = 1.2 * k; g.setLineDash([3 * k, 3 * k]); g.stroke(); g.setLineDash([]); }
     if (sel) { g.beginPath(); g.arc(cx, cy, 17 * k, 0, 6.2832); g.fillStyle = 'rgba(201,168,90,0.35)'; g.fill(); }
-    disc(cx, cy, 'E', 7.5, 'rgba(201,168,90,0.5)');
+    disc(cx, cy, e.size ? sizeNamed(e.size).short : 'E', 7.5 * (1 + (sizeNamed(e.size).art - 1) * 0.7), e.size ? 'rgba(201,120,70,0.6)' : 'rgba(201,168,90,0.5)'); // (H heavy, G great: a bigger disc, redder)
     arrow(cx, cy, x, y, L.STAMP);
     g.beginPath(); g.arc(x, y, (sel ? 5.5 : 4) * k, 0, 6.2832); g.fillStyle = L.PIN; g.fill(); g.strokeStyle = L.INK; g.lineWidth = 1.2 * k; g.stroke();
   }

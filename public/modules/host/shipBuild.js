@@ -143,10 +143,15 @@ export const thrustVec = (dir) => ({ fwd: clean(Math.cos(dir || 0)), up: clean(-
 export const dirName = (dir) => { const a = normAngle(dir || 0), i = ENGINE_DIRS.findIndex((d) => Math.abs(normAngle(d) - a) < 0.02); return i >= 0 ? ENGINE_DIR_NAMES[i] : Math.round((a * 180) / Math.PI) + ' degrees'; };
 export const swivelName = (engineName) => 'Swivel ' + engineName;
 export const cannonSeatName = (cannonName) => cannonName + ' Seat'; // (B.6: the seat in the barrel of the crew cannon named so)
-// Gas points of lift an engine pod makes pointing as placed (up positive, down negative): what the hover budget counts.
-const engineLift = (p) => thrustVec(p.dir).up * config.ENGINES.LIFT_GAS;
-// Steam an engine burns at throttle `speed` (0..1): its forward share runs with the throttle, its vertical share with its own throttle `pow` (config.ENGINES.VERT_USE).
-export const engineUse = (dir, speed, pow = 1) => { const v = thrustVec(dir); return config.BOILER.USE_ENGINE * (speed * Math.abs(v.fwd) + config.ENGINES.VERT_USE * Math.abs(v.up) * Math.min(1, Math.abs(pow))); }; // (pow: the engine's own throttle: the lift engine at half throttle burns half)
+// ENGINE SIZES (config.ENGINES.SIZES): an engine part may carry size 'heavy' | 'great'; none is the standard pod, exactly (every figure x 1). sizeNamed takes the key, engineSize the part or live engine.
+export const sizeNamed = (key) => config.ENGINES.SIZES[key || 'standard'] || config.ENGINES.SIZES.standard;
+export const engineSize = (e) => sizeNamed(e && e.size);
+// The push of an engine in pods, pointing `dir` (default: as built): the forward share x the size's thrust, the up share x its lift (up) or thrust (down).
+export const thrustOf = (e, dir = e && e.dir) => { const v = thrustVec(dir), S = engineSize(e); return { fwd: v.fwd * S.thrust, up: v.up * (v.up > 0 ? S.lift : S.thrust) }; };
+// Gas points of lift an engine makes pointing as placed (up positive, down negative): what the hover budget counts.
+const engineLift = (p) => thrustOf(p).up * config.ENGINES.LIFT_GAS;
+// Steam an engine burns at throttle `speed` (0..1): its forward share runs with the throttle, its vertical share with its own throttle `pow` (config.ENGINES.VERT_USE), times its size's steam.
+export const engineUse = (dir, speed, pow = 1, size) => { const v = thrustVec(dir); return config.BOILER.USE_ENGINE * sizeNamed(size).steam * (speed * Math.abs(v.fwd) + config.ENGINES.VERT_USE * Math.abs(v.up) * Math.min(1, Math.abs(pow))); }; // (pow: the engine's own throttle: the lift engine at half throttle burns half)
 
 export const PARTS = {
   // A walkable floor. `row` is a DECK_ROWS name (y comes from it), x0/x1 are its span.
@@ -205,8 +210,8 @@ export const PARTS = {
   } },
   coil: piece('coil'), // (the Lightning Coil's weight is on its station)
   // An engine pod (S.5h): `dir` is the way it pushes (thrustVec; none = forward, as the classic pods). Up thrust counts as lift and down thrust as negative lift (the hover budget);
-  // `swivel: true` adds a crew station at `sx` (the crank, toward the middle of the ship) that turns it in flight.
-  engine: { ...piece('engines', { mass: (p) => M().engine + (p.swivel ? M().swivel : 0), steam: 3, hands: (p) => (p.swivel ? 1 : 0), lift: (p) => engineLift(p) }), emit: (p, A) => {
+  // `swivel: true` adds a crew station at `sx` (the crank, toward the middle of the ship) that turns it in flight. `size: 'heavy' | 'great'` makes it a bigger engine (ENGINE SIZES above; none = the standard pod).
+  engine: { ...piece('engines', { mass: (p) => M().engine * engineSize(p).mass + (p.swivel ? M().swivel : 0), steam: (p) => 3 * engineSize(p).steam, hands: (p) => (p.swivel ? 1 : 0), lift: (p) => engineLift(p) }), emit: (p, A) => {
     A.add('engines', { kind: 'engine', ...withoutPart(p) });
     if (p.swivel) A.add('stations', { n: swivelName(p.name), kind: 'swivel', p: p.p, x: p.sx != null ? p.sx : p.x + config.ENGINES.SWIVEL_OFFSET, eng: p.name });
   } },

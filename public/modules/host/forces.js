@@ -14,7 +14,7 @@
 //   staticPitch(layout, c)  what the engines and the sails would tip her at rest (the validator's INFO line, the dev page).
 // Gains per source are in config.FORCES.GAIN; with FORCES.LIVE off only the engines and the sails count. A ship with none of them sits at exactly 0 (nothing runs).
 import { config } from '../../config.js';
-import { thrustVec } from './shipBuild.js';
+import { thrustOf } from './shipBuild.js';
 
 const LIVE_ONLY = new Set(['hit', 'gust', 'scrape', 'ram', 'tether', 'grab', 'perch']); // sources that need FORCES.LIVE
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -97,7 +97,7 @@ export function staticPitch(L, c, { gust = false } = {}) {
   const pv = { x: c.x, y: c.y, k2: Math.max(2000, c.k2 || 0) };
   const deckY = (id) => { const q = L.platforms.find((o) => o.id === id); return q ? q.y : 0; };
   const piece = (list, mk) => list.reduce((n, o) => n + twist(mk(o), pv), 0);
-  const eng = piece(L.engines, (e) => ({ x: e.x, y: deckY(e.p) + E.BODY_DY, fx: 0, fy: -thrustVec(e.dir).up * E.LIFT_GAS * config.GAS.LIFT, balanced: true, source: 'engine' }));
+  const eng = piece(L.engines, (e) => ({ x: e.x, y: deckY(e.p) + E.BODY_DY, fx: 0, fy: -thrustOf(e).up * E.LIFT_GAS * config.GAS.LIFT, balanced: true, source: 'engine' })); // (a great engine lifts 3.5 times as hard)
   let k = 1;
   const sail = piece(L.sails || [], (s) => { const a = sailPush(config.SAIL.BONUS * k, gust); k *= config.SAIL.BONUS_DIM; const pt = sailPoint(s, deckY(s.p)); return { ...pt, fx: a, fy: 0, source: 'sail' }; });
   const deg = (t) => ((t / C.K) * 180) / Math.PI;

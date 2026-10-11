@@ -11,7 +11,7 @@ import { validate } from './buildCheck.js';
 import { config } from '../../config.js';
 
 // The blueprint editing operations (draw a deck, erase, lengthen the gasbag, place a ladder, delete a thing) are pure functions of a parts list: re-exported here with the slots.
-export { drawDeck, drawBag, resizeBag, erase, setBag, setGas, setEngineDir, setEngineSwivel, placeConnector, placePart, thingAt, removeAt, emptyBuild, ensureFrame, snapX, rowAtY, summarize, EDIT_ROWS, DRAW_ROWS, GRID_X0, addArmour, ARMOUR_ROWS, isOutdoorRow } from './buildEdit.js';
+export { drawDeck, drawBag, resizeBag, erase, setBag, setGas, setEngineDir, setEngineSize, setEngineSwivel, placeConnector, placePart, thingAt, removeAt, emptyBuild, ensureFrame, snapX, rowAtY, summarize, EDIT_ROWS, DRAW_ROWS, GRID_X0, addArmour, ARMOUR_ROWS, isOutdoorRow } from './buildEdit.js';
 const STEP = 40; // slots sit on a grid this far apart along a deck (px)
 const clone = (parts) => parts.map((p) => ({ ...p }));
 const names = (parts) => new Set(parts.map((p) => p.n || p.name).filter(Boolean));
@@ -101,6 +101,11 @@ export const PALETTE = [
   { id: 'ammo', label: 'Ammo hold', hint: 'click a spot on a lower deck', slots: (L) => stationSlots(L, 'ammo') },
   { id: 'engine', label: 'Engine pod', hint: 'click an outrigger spot on the lower or main deck (it gets a steam pipe from the boiler). Rotate it (wheel / R / the arrows) before you drop it: forward is speed, up lifts her, down dives', slots: (L) => engineSlots(L, false) },
   { id: 'engineSwivel', label: 'Swivel engine', hint: 'an engine pod with a swivel crank beside it: a crew member turns the engine in flight (forward in cruise, up to climb, down to dive). Needs room for the crank', slots: (L) => engineSlots(L, true) },
+  // ENGINE SIZES (config.ENGINES.SIZES): the same spots, a bigger engine. A HEAVY engine pushes and lifts twice as hard on 2.5 pods' steam; a GREAT LIFT engine (the sky-lifter) lifts 3.5 times as hard on 4 pods' steam.
+  { id: 'engineHeavy', label: 'Heavy engine', hint: 'a big engine pod: twice the push (and twice the lift pointing up) for 2.5 times the steam and twice the weight. Two want a second boiler. Rotate it before you drop it', slots: (L) => engineSlots(L, false, 'heavy') },
+  { id: 'engineHeavySwivel', label: 'Swivel heavy engine', hint: 'a heavy engine with a swivel crank beside it', slots: (L) => engineSlots(L, true, 'heavy') },
+  { id: 'engineGreat', label: 'Great lift engine', hint: 'a sky-lifter, a big steam turbine: lifts 3.5 times as hard pointing up (2.5 times as hard forward) for 4 times the steam and three times the weight. It can hold up a ship the bags cannot, while the boilers keep up; starved, it sputters and she sinks', slots: (L) => engineSlots(L, false, 'great') },
+  { id: 'engineGreatSwivel', label: 'Swivel great engine', hint: 'a great lift engine with a swivel crank beside it', slots: (L) => engineSlots(L, true, 'great') },
   { id: 'gun', label: 'Gun mount', hint: 'click a deck spot', slots: (L) => {
     const out = [];
     // (S.5g: any open-air deck takes a gun on a rail post with a wide arc; a covered deck takes it as a port or sponson with a narrow one: the lower deck's sponsons, or a top deck turned covered)
@@ -346,7 +351,7 @@ function armourSlots(L) {
 
 // Engine pods (S.5h): a spot on an outrigger of the lower or main deck. apply(ps, { dir }) points the new engine (radians; none = forward). A swivel engine also needs a free spot beside it for the crank
 // (toward the middle of the ship, else the other side), which the layout makes a station of kind 'swivel'.
-function engineSlots(L, swivel) {
+function engineSlots(L, swivel, size) {
   const out = [], E = config.ENGINES, mid = midX(L);
   for (const q of onRows(L, ['lower', 'main'])) {
     const xs = [q.x0 + 30, q.x0 + 90, q.x0 + 150, q.x1 - 150, q.x1 - 90, q.x1 - 30].filter((x) => x > q.x0 + 10 && x < q.x1 - 10);
@@ -358,7 +363,7 @@ function engineSlots(L, swivel) {
         sx = [x + towards * E.SWIVEL_OFFSET, x - towards * E.SWIVEL_OFFSET].find((c) => c > q.x0 + 25 && c < q.x1 - 25 && roomAt(L, q.id, c, true)); // (the crank is worked with Action: clear of racks, vents and ladders that would take the button first)
         if (sx == null) continue;
       }
-      out.push({ p: q.id, x, label: `${swivel ? 'Swivel engine' : 'Engine pod'} on the ${q.name}, x ${x}`, apply: (ps, o = {}) => [...ps, { part: 'engine', name: nameFor(ps, swivel ? 'Swivel Pod' : 'Pod Engine'), p: q.id, x, ...(o.dir != null ? { dir: normAngle(o.dir) } : {}), ...(swivel ? { swivel: true, sx } : {}) }] });
+      out.push({ p: q.id, x, label: `${swivel ? 'Swivel ' + (size ? config.ENGINES.SIZES[size].name.toLowerCase() : 'engine') : size ? config.ENGINES.SIZES[size].name : 'Engine pod'} on the ${q.name}, x ${x}`, apply: (ps, o = {}) => [...ps, { part: 'engine', name: nameFor(ps, size ? (swivel ? 'Swivel ' : '') + (size === 'heavy' ? 'Heavy Engine' : 'Great Engine') : swivel ? 'Swivel Pod' : 'Pod Engine'), p: q.id, x, ...(size || o.size ? { size: size || o.size } : {}), ...(o.dir != null ? { dir: normAngle(o.dir) } : {}), ...(swivel ? { swivel: true, sx } : {}) }] });
     }
   }
   return out;
@@ -410,7 +415,7 @@ const RACK_ROWS = ['catwalk', 'main', 'lower'];
 const RULES = {
   helm: { rows: ['catwalk', 'main'], once: (parts) => count(parts, (p) => p.part === 'station' && p.kind === 'helm') > 0, onceText: 'A ship has one helm.' },
   boiler: { rows: ['main', 'lower'] }, coal: { rows: ['lower', 'main', 'keel', 'deep'] }, ammo: { rows: ['lower', 'main', 'keel', 'deep'] },
-  engine: { rows: ['lower', 'main'] }, engineSwivel: { rows: ['lower', 'main'] }, gun: { rows: ['crow2', 'nest', 'catwalk', 'lower'] },
+  engine: { rows: ['lower', 'main'] }, engineSwivel: { rows: ['lower', 'main'] }, engineHeavy: { rows: ['lower', 'main'] }, engineHeavySwivel: { rows: ['lower', 'main'] }, engineGreat: { rows: ['lower', 'main'] }, engineGreatSwivel: { rows: ['lower', 'main'] }, gun: { rows: ['crow2', 'nest', 'catwalk', 'lower'] },
   gun_flame: { rows: ['crow2', 'nest', 'catwalk', 'main', 'lower'] },
   gun_long: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, gun_scatter: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, gun_harpoon: { rows: ['crow2', 'nest', 'catwalk', 'lower'] }, gun_mortar: { rows: ['crow2', 'nest', 'catwalk'], open: true }, gun_flak: { rows: ['crow2', 'nest', 'catwalk'], open: true },
   mineLayer: { rows: ['lower', 'keel', 'deep'] }, ramProw: { rows: ['catwalk', 'main', 'lower'], once: (parts) => count(parts, (p) => p.part === 'ramProw') > 0, onceText: 'A ship has one ram prow.' }, lookout: { rows: ['nest', 'crow2'] }, searchlight: { rows: ['crow2', 'nest', 'catwalk'], open: true }, sail: { rows: ['crow2', 'nest', 'catwalk'], open: true },

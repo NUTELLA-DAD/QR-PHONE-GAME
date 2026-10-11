@@ -7,7 +7,7 @@
 //   powerRatio(layout)   -> 0..1, her power against the classic ship's
 //   powerMul(ratio, key) -> the multiplier for one crewscale key (spawn, fire, damage ...)
 import { config } from '../../config.js';
-import { BUILDS, buildLayout } from './shipBuild.js';
+import { BUILDS, buildLayout, sizeNamed } from './shipBuild.js';
 
 const P = () => config.YARD.POWER;
 
@@ -20,7 +20,7 @@ export function powerOf(L) {
   let range = L.ram ? config.RAM.POWER : 0; // (the weapons of the range bands: a typed gun adds its POWER over a plain gun's, a ram prow its own)
   for (const m of Object.values(L.gunMounts || {})) if (m.type && config.GUN_TYPES[m.type]) range += config.GUN_TYPES[m.type].POWER || 0;
   return range + W.BASE + W.GUN * (kinds.gun || 0) + W.BOMB_BAY * (kinds.bombBay || 0) + W.COIL * (kinds.coil || 0) + W.ESCORT * (kinds.escort || 0) + W.DEFLECTOR * (kinds.deflector || 0)
-    + W.ARMOUR * armour + W.ENGINE * L.engines.length + W.SPARE_BAG * Math.max(0, bags - 1)
+    + W.ARMOUR * armour + W.ENGINE * L.engines.reduce((n, e) => n + sizeNamed(e.size).thrust, 0) + W.SPARE_BAG * Math.max(0, bags - 1)
     + W.CANNON * (kinds.cannon || 0) + W.CARGO_RACK * L.racks.filter((r) => r.kind === 'sandbag' || r.kind === 'crate').length + W.TOWLINE * L.racks.filter((r) => r.kind === 'towline').length + W.HATCH * (L.hatches || []).length; // (a cargo drop hatch tips boarders out and drops crates on a ship below, a little; B.6: the cross-ship parts count a little: a cannon puts boarders aboard, ballast and a towline are weapons of weight)
 }
 
