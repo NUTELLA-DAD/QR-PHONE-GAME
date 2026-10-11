@@ -12,7 +12,7 @@ export const config = {
   },
   // Camera framing.
   CAMERA: {
-    SHIP_SCREEN_FRACTION: 0.53, // the ship (incl. its long gasbag) takes at most this much of the screen width; the hull reads ~20% bigger than before
+    SHIP_SCREEN_FRACTION: 0.4, SHIP_SCREEN_HEIGHT_FRACTION: 0.62, // the ship (incl. its long gasbag) takes at most this much of the screen width, and this much of its height (owner, 2026-10-11: zoomed out from 0.53 / full height - it felt tight on the airship)
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
     CREATURE: { MAX_ZOOM_OUT: 2.4, DRAKE_MAX_ZOOM_OUT: 3.4, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2; the Cinder Drake flies about the ship in loops 8000 px across: DRAKE_MAX_ZOOM_OUT), and its living parts are kept in view with this much margin (world pixels)

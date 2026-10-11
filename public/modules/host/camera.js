@@ -94,7 +94,7 @@ export function createWorldCamera() {
       y1 = Math.max(y1, e.y + C.ENEMY_MARGIN);
     }
     // Normal zoom: the biggest ship fills the allowed fraction of the width (and fits vertically).
-    const baseZoom0 = Math.min(width / (bigW / C.SHIP_SCREEN_FRACTION), height / bigH);
+    const baseZoom0 = Math.min(width / (bigW / C.SHIP_SCREEN_FRACTION), height / (bigH / (C.SHIP_SCREEN_HEIGHT_FRACTION || 1)));
     const baseZoom = baseZoom0 * zoomMul; // (the split's main view looks a little wider than the one ship's normal framing)
     const fitZoom = Math.min(width / (x1 - x0), height / (y1 - y0));
     const minZoom = baseZoom0 / maxOut;
