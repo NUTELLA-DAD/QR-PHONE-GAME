@@ -271,6 +271,7 @@ export function hacked(state, ship, p, job) {
   if (!g || !live(g)) return;
   releaseGrip(cr, g, 'hack');
   cr.stats.hacks = (cr.stats.hacks || 0) + 1;
+  if (state.moment && p) state.moment('creature-freed', { who: [p], data: { creature: cr.name, how: 'hack' } }); // (the Ship's Book)
   pop(state, g.wx, g.wy - 140, 'FREE!', '#8fe388', 1.6);
   cr.hooks.puff(g.wx, g.wy, '#8fe388', 8);
   state.sfxQ.push(['clang']);

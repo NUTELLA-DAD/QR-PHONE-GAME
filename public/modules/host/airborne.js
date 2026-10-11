@@ -284,6 +284,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     const nearX = Math.min(0, ...rs.map((s) => val(s.x0))) - A.OVERBOARD_X - wide;
     const lowY = Math.max(p.chute > 0 ? A.CHUTE_OVERBOARD_Y : A.OVERBOARD_Y + (p.chuteOk ? config.HATCH.CHUTE_WINDOW : 0), ...rs.map((s) => val(s.y) + 320)); // (a faller through a cargo drop hatch gets a little longer to find the parachute button)
     if (sy > lowY || sx < nearX || sx > farX) {
+      if (p.cannon && state.moment) state.moment('cannon-miss', { who: [p], where: null }); // (the Ship's Book: shot out of the crew cannon and missed everything)
       p.fly = false;
       p.air = false;
       p.cannon = false;
@@ -308,6 +309,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     const speed = p.fvy - ship.pose.vy; // (how fast she meets the deck)
     const height = p.chuteOpen || p.cannon ? 0 : y - p.apex; // a parachute landing is a soft one (and a cannon flyer rolls out of it: his fall is an arc, not a drop)
     const lost = p.tossed && !p.chuteOpen; // (thrown off a deck that broke away, and no canopy open)
+    const fromCannon = !!p.cannon; // (the Ship's Book: a crew cannon shot that found a deck)
     cutChute(p);
     p.cannon = false;
     p.tossed = false;
@@ -326,7 +328,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
       p.d = s.d;
       p.x = clamp(p.x, P[s.d].x0, P[s.d].x1);
     }
-    if (s.onLand) s.onLand(p, { surface: s, speed, height, y });
+    if (s.onLand) s.onLand(p, { surface: s, speed, height, y, cannon: fromCannon });
     // Crew health: a hard landing costs a heart; a very hard one, or one off a deck that broke away with no parachute, is a BIG hit (out for FALL.KO_TIME).
     const HF = config.HEALTH.FALL;
     const crashed = lost && height > HF.TOSS_HEIGHT;

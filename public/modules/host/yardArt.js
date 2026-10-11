@@ -164,13 +164,14 @@ export function createYardArt({ ctx, book, dots, wrapLines, ink, pics, spares, w
   // ---- the screen ----
   const draw = (v, voters) => {
     const part = partOf(v), layout = world.ships[0].layout, Y = world.yard;
+    const up = v.kind === 'dock' && world.run && world.run.lastLog && config.LOG.ENABLED ? -34 : 0; // (the Ship's Book's Log line takes a strip under the title: render.js drawVote)
     ctx.textAlign = 'center';
     ctx.fillStyle = '#f3ead6';
     ctx.font = '40px ' + config.FONTS.DISPLAY;
-    ctx.fillText(v.kind === 'slot' ? `WHERE DOES THE ${part.baseName.toUpperCase()} GO?` : "SKY-DOCK - THE SHIPWRIGHT'S YARD", 800, 78, 1100);
+    ctx.fillText(v.kind === 'slot' ? `WHERE DOES THE ${part.baseName.toUpperCase()} GO?` : "SKY-DOCK - THE SHIPWRIGHT'S YARD", 800, 78 + up, 1100);
     ctx.font = '700 20px ' + config.FONTS.TEXT;
     ctx.fillStyle = '#ffd23f';
-    ctx.fillText(v.kind === 'slot' ? `Vote A, B or C on your phone  -  ${Math.max(0, Math.ceil(v.t))}s` : `Salvage: ${world.run.salvage}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`, 800, 116, 1100);
+    ctx.fillText(v.kind === 'slot' ? `Vote A, B or C on your phone  -  ${Math.max(0, Math.ceil(v.t))}s` : `Salvage: ${world.run.salvage}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`, 800, 116 + up, 1100);
     ctx.fillStyle = '#f3ead6';
     ctx.font = '700 16px ' + config.FONTS.TEXT;
     ctx.textAlign = 'right';

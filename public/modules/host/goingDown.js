@@ -243,6 +243,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
       if (short <= 0) g.hold += dt; else g.hold = Math.max(0, g.hold - dt * 1.5);
       if (g.hold >= config.STRUCTURE.LIFT.END) {
         const S = getStructure(); if (S) S.stats.saved++;
+        if (state.moment && state.momentTake) state.moment('going-down-saved', { who: state.momentTake('gd').slice(0, 3).map((r) => r.ref), where: null, data: { cuts: g.cuts || 0 } }); // (the Ship's Book: whoever patched, pumped and dumped while she fell)
         finish();
         cdT = config.STRUCTURE.LIFT.COOLDOWN;
         state.gdGrace = config.STRUCTURE.LIFT.GRACE;
@@ -314,6 +315,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
   const succeed = (why) => {
     const g = state.goingDown;
     if (g && g.coalGone) state.gdCoalOut = GD.DUMP.COAL_REFILL; // (the bunker was dumped: it stays empty a while)
+    if (g && state.moment && state.momentTake) state.moment('going-down-saved', { who: state.momentTake('gd').slice(0, 3).map((r) => r.ref), where: null, data: { cuts: g.cuts } }); // (the Ship's Book: whoever patched, stoked, cut and dumped while she fell)
     finish();
     state.ship.hull = GD.SURVIVE_HULL;
     state.ship.vy = 0;
@@ -423,6 +425,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
   const perform = (type, obj, player) => {
     const g = state.goingDown;
     if (!g) return;
+    if (state.momentNote) state.momentNote('gd', player); // (the Ship's Book)
     if (type === 'cut') {
       const j = obj;
       const r = breakOff({ ...j.spec, cause: 'jettison' }, { force: true });

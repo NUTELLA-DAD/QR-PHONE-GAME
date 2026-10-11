@@ -754,6 +754,7 @@ export function birdPerchHacked(state, ship, p, job) {
   const cr = state.creature;
   if (!cr || cr.kind !== 'thunderbird' || !cr.bird.perch || cr.bird.perch.job !== job) return false;
   job.prog = 0;
+  if (state.moment && p) state.moment('creature-freed', { who: [p], data: { creature: cr.name, how: 'perch' } }); // (the Ship's Book)
   driveOff(state, cr, 'sword');
   if (cr.hooks.phoneFx && p) cr.hooks.phoneFx(p, 'You drove it off!', [30, 40, 30]);
   return true;

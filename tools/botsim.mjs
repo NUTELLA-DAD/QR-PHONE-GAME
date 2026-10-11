@@ -278,6 +278,18 @@ for (let step = 1; step <= totalSteps; step++) {
 }
 
 if (traceRows) fs.writeFileSync(args.trace, traceRows.join('\n') + '\n');
+{ // THE SHIP'S BOOK (moments.js, logWriter.js): printed BEFORE the summary marker, so --check-botsim (which compares from the marker down) is not about it. LOG_PAGE=1 prints the whole Log.
+  const ms = state.moments || [], T = sim.moments.totals;
+  const pick = ms.slice().sort((a, b) => b.weight - a.weight)[0];
+  console.log(`moments: ${T.all} (${T.named} named, ${((T.named * 10) / Math.max(0.1, args.minutes)).toFixed(1)} per 10 min), kinds: ${Object.entries(T.kinds).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' x' + v).join(', ') || 'none'}${pick ? `; best of the page: [stop ${pick.stop}, ${pick.t}s, weight ${pick.weight}] ${pick.kind} - ${pick.who.join(' & ')}${pick.where ? ' in the ' + pick.where : ''}` : ''}`);
+  if (process.env.LOG_PAGE) {
+    const { postcard } = await load('modules/host/logWriter.js');
+    const run = state.run;
+    console.log(`log: ${run.log.length} stop${run.log.length === 1 ? '' : 's'} written`);
+    for (const e of run.log) console.log('  ' + e.text);
+    for (const l of postcard(run.log)) console.log('  postcard> ' + (l.first ? `[${l.no} ${l.name}] ` : '') + l.text);
+  }
+}
 console.log('--- botsim summary ---');
 console.log(`bots ${args.bots} (${args.humans} as humans; ship's mates seen: ${matesMax}), ${args.minutes} min, ${args.difficulty}, map ${args.map || 'mixed'}, seed ${args.seed ?? 'random'}`);
 console.log(`missions completed: ${missions}` + (missionMins.length ? `, minutes each: ${missionMins.map((m) => m.toFixed(1)).join(" ")}, average ${(missionMins.reduce((a, b) => a + b, 0) / missionMins.length).toFixed(1)}` : ""));
