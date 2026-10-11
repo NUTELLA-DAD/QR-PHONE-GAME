@@ -1842,7 +1842,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.fillStyle = config.INK;
         ctx.textAlign = 'center';
         ctx.font = (choice ? 44 : 30) + 'px "Segoe UI Emoji", sans-serif';
-        ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : s.lair ? lairOf(s.creature).ICON : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
+        ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : s.lair ? lairOf(s.creature).ICON : s.salvage ? config.VOYAGE.CURRICULUM.SALVAGE.ICON : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
         if (s.lair) { // a lair: a ring of its purple round the stop and a LAIR tag (config.CREATURES.LAIR)
           ctx.strokeStyle = s.creature === 'thunderbird' ? '#4f6290' : s.creature === 'drake' ? '#c2452a' : '#7a3a5a';
           ctx.lineWidth = 6;
@@ -1869,6 +1869,11 @@ export function createRenderer({ ctx, state: world, canvas }) {
           ctx.font = '700 16px ' + config.FONTS.TEXT;
           ctx.fillText(skulls(s.danger), px(s.col), py(s) + r + 22);
         }
+        if ((s.tag || s.salvage) && !visited && s.id !== cur.id) { // what this column teaches that is new ("NEW: GUNSHIPS", "NEW: DARK"; config.VOYAGE.CURRICULUM): a tiny tag under the stop; a salvage run (the catch-up stop) says SALVAGE there, in a gentle green
+          ctx.fillStyle = s.salvage ? '#c8f0c0' : '#ffe08a';
+          ctx.font = '700 ' + (choice ? 15 : 13) + 'px ' + config.FONTS.TEXT;
+          ctx.fillText(s.salvage ? config.VOYAGE.CURRICULUM.SALVAGE.TAG : s.tag, px(s.col), py(s) + r + (choice ? 52 : 40), 150);
+        }
         if (choice) {
           ctx.fillStyle = '#fff';
           ctx.font = '20px ' + config.FONTS.DISPLAY;
@@ -1889,7 +1894,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.font = '25px ' + config.FONTS.DISPLAY;
       ctx.fillText(`${i + 1}. ${o.name}`, x + w / 2, y + 46, w - 50);
       ctx.font = '700 22px ' + config.FONTS.TEXT;
-      ctx.fillText(o.kindName || '', x + w / 2, y + 82);
+      ctx.fillText((o.kindName || '') + (o.tag ? '  -  ' + o.tag : ''), x + w / 2, y + 82, w - 40);
       ctx.font = '28px "Segoe UI Emoji", sans-serif';
       ctx.fillText(skulls(o.danger), x + w / 2, y + 122);
       ctx.font = '700 22px ' + config.FONTS.TEXT;

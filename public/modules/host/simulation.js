@@ -34,7 +34,7 @@ import { createShipSim, flushPresses } from './shipSim.js';
 import { createDebris } from './debris.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { deckPieces } from './shipBuild.js';
-import { generateVoyage, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
+import { generateVoyage, expectedPower, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 // Best run, remembered by this browser (the TV). Never let storage problems break the game.
 function loadRecord() {
@@ -374,7 +374,8 @@ export function createSimulation() {
   };
   const pickSetPiece = (tp) => {
     const pool = [];
-    const add = (k, w) => { if (k !== tp.last) for (let i = 0; i < Math.round(w * favour(state, k)); i++) pool.push(k); }; // (the environment's enemy flavour scales each weight)
+    const gates = state.course && state.course.stop && state.course.stop.gates; // (the voyage's teaching curriculum: the set pieces this stop allows, config.VOYAGE.CURRICULUM; none given = all)
+    const add = (k, w) => { if (k !== tp.last && (!gates || gates.includes(k))) for (let i = 0; i < Math.round(w * favour(state, k)); i++) pool.push(k); }; // (the environment's enemy flavour scales each weight)
     add('swarm', 2);
     add('imps', 1);
     if (tp.peaks >= 1 || lapNo() > 1) {
@@ -465,6 +466,7 @@ export function createSimulation() {
       }
       if (tp.t <= 0) enterPhase(tp, 'build');
     }
+    if (state.course && state.course.stop && state.course.stop.rateMul) tp.rate *= state.course.stop.rateMul; // (a salvage run: lighter enemies, config.VOYAGE.CURRICULUM.SALVAGE.RATE_MUL)
     const sp = state.supply;
     if (sp) {
       sp.t -= dt;
@@ -569,9 +571,9 @@ export function createSimulation() {
     environment: stop.play,
     kind: stop.kind,
     danger: stop.danger,
-    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined) }, // (lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
+    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined), gates: stop.gates, ring: stop.ring, nemesis: stop.nemesis, multi: stop.multi, salvage: stop.salvage, rateMul: stop.salvage ? VY.CURRICULUM.SALVAGE.RATE_MUL : undefined }, // (gates... rateMul: the teaching curriculum's set-piece gates, ring / Nemesis / multi-part flags and the salvage run's lighter enemies, config.VOYAGE.CURRICULUM; lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
     lengthMul: modeInfo(state.run.mode).lengthMul,
-    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
+    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
   });
   const firstMission = () => missionOpts(curStop());
 
@@ -864,12 +866,35 @@ export function createSimulation() {
     openVote({ kind: 'dock', title: 'SKY-DOCK', options, t: SH.TIME });
   };
 
+  // CATCH-UP (G0, config.VOYAGE.CURRICULUM): a crew whose ship is under the expected power for the next column is offered a SALVAGE RUN there: its lowest-danger stop (never a lair, a ring or the Flagship)
+  // becomes an easier stop on the salvage map with lighter enemies and set pieces. Done once per route vote; a voyage with the curriculum off, or a run with no ship power (the headless classic), is never touched.
+  const markSalvage = (stop) => {
+    const CU = VY.CURRICULUM;
+    const run = state.run;
+    if (!CU.ENABLED || !run.voyage.curriculum || run.power == null) return;
+    const next = stop.next.map((id) => stopById(run.voyage, id));
+    if (!next.length || next.some((s) => s.salvage) || run.power >= expectedPower(next[0]) - CU.SALVAGE.SLACK) return;
+    const pick = next.filter((s) => !s.lair && !s.ring && !s.flagship && !s.harbour).sort((a, b) => a.danger - b.danger)[0];
+    if (!pick) return;
+    pick.salvage = true;
+    pick.kind = 'salvage';
+    pick.danger = Math.max(1, pick.danger - CU.SALVAGE.DANGER_DROP);
+    pick.reward = Math.round(pick.reward * CU.SALVAGE.REWARD_MUL);
+    pick.gates = CU.SALVAGE.GATES.slice();
+    delete pick.tag;
+    delete pick.nemesis;
+    delete pick.multi;
+  };
+
   const startRoute = () => {
     const stop = curStop();
+    markSalvage(stop);
+    const offers = (state.run.offers ??= { lair: [], salvage: [], taken: [] }); // (what the route vote offered and what the crew took: tools/voyagesim.mjs)
     const options = stop.next.map((id) => {
       const s = stopById(state.run.voyage, id);
       const env = envInfo(s.env);
-      return { id, kind: 'stop', name: stopName(s), icon: s.flagship ? '🚩' : s.lair ? lairOf(s.creature).ICON : env.icon, desc: `${s.lair ? lairOf(s.creature).LABEL + ': ' : ''}${s.lair ? lairOf(s.creature).KIND : VY.KIND_NAMES[s.kind] || s.kind} - ${'💀'.repeat(s.danger)} - reward ${s.reward}`, danger: s.danger, reward: s.reward, envName: env.name, color: env.color, kindName: s.lair ? lairOf(s.creature).KIND : VY.KIND_NAMES[s.kind], lair: !!s.lair };
+      for (const k of ['lair', 'salvage']) if (s[k] && !offers[k].includes(id)) offers[k].push(id);
+      return { id, kind: 'stop', name: stopName(s), icon: s.flagship ? '🚩' : s.lair ? lairOf(s.creature).ICON : env.icon, desc: `${s.lair ? lairOf(s.creature).LABEL + ': ' : ''}${s.lair ? lairOf(s.creature).KIND : VY.KIND_NAMES[s.kind] || s.kind} - ${'💀'.repeat(s.danger)} - reward ${s.reward}`, danger: s.danger, reward: s.reward, envName: env.name, color: env.color, kindName: s.lair ? lairOf(s.creature).KIND : VY.KIND_NAMES[s.kind], lair: !!s.lair, salvage: !!s.salvage, tag: s.tag || '' };
     });
     openVote({ kind: 'route', title: 'WHERE TO NEXT?', options, t: VY.ROUTE_TIME });
   };
@@ -878,6 +903,7 @@ export function createSimulation() {
     const run = state.run;
     run.stopId = id;
     run.visited.push(id);
+    { const st = curStop(), o = (run.offers ??= { lair: [], salvage: [], taken: [] }); if ((st.lair || st.salvage) && !o.taken.includes(id)) o.taken.push(id); } // (a stop flown again after a limp home counts once)
     state.yard.hold = false; // (the camera lets go: if the ship grew, the pull-back starts now, and the new part gets its call-out)
     if (state.yard.newPart) { state.yard.newPart.t = YD.NEW_CALLOUT; state.yard.pull = YD.PULL_TIME; }
     course.startMission(missionNo(curStop()), missionOpts(curStop()));
