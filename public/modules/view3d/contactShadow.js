@@ -10,11 +10,13 @@ import { THREE, look } from './style.js';
 import { floorBelow } from '../host/maps.js';
 import { Z_FRONT_OPEN } from './terrain.js';
 import { config } from '../../config.js';
+import { RB, RING_GLSL } from './ringBend.js'; // LOOP R1: the slices go through the ring bend on a ring map
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const fin = Number.isFinite;
 
 const VERT = /* glsl */`
+  ${RING_GLSL}
   attribute vec4 aPos; attribute vec4 aShape; attribute vec4 aRight; // aRight.x = the surface height at the slice's right edge (aPos.y is the left one); aPos = slice centre x, surface y, z, slice width;  aShape = ellipse half-length, half-depth, alpha, the ellipse's centre x
   varying vec2 vE; varying float vA;
   void main() {
@@ -23,7 +25,9 @@ const VERT = /* glsl */`
     vE = vec2( ( wx - aShape.w ) / max( aShape.x, 1.0 ), position.z * 2.0 );
     vA = aShape.z;
     float wy = mix( aPos.y, aRight.x, position.x + 0.5 );
-    gl_Position = projectionMatrix * viewMatrix * vec4( wx, wy, wz, 1.0 );
+    vec3 cp = vec3( wx, wy, wz );
+    if ( uRingA.x > 0.5 ) cp = ringBend( cp );
+    gl_Position = projectionMatrix * viewMatrix * vec4( cp, 1.0 );
   }
 `;
 const FRAG = /* glsl */`
@@ -58,7 +62,7 @@ export function createContactShadow(parent, state, models) {
   const mat = new THREE.ShaderMaterial({
     vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest: true, side: THREE.DoubleSide,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-    uniforms: { uColor: { value: new THREE.Color(K0.COLOR || '#1c1a2c') }, uSoft: { value: new THREE.Vector2(K0.SOFT != null ? K0.SOFT : 0.4, 0) } },
+    uniforms: RB.addUniforms({ uColor: { value: new THREE.Color(K0.COLOR || '#1c1a2c') }, uSoft: { value: new THREE.Vector2(K0.SOFT != null ? K0.SOFT : 0.4, 0) } }),
   });
   mat.fog = false; mat.toneMapped = false;
   const mesh = new THREE.Mesh(g, mat);

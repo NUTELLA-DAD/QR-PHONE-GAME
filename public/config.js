@@ -3166,6 +3166,17 @@ export const config = {
     CAST: { AZ: 0.1, ELEV: 0.16, MUL: 1.14, OUT: 0.9, FOR: 0.7 }, // cast off: a rise and pull-back that settles into the gameplay framing (starts the moment the lobby launches)
     KICK: { MIN_POWER: 2.4, PX: 12, MAX_PX: 15, STEP: 0.07, STEPS: [1, 0.5, 0.2], COOLDOWN: 0.18, SHAKE_EDGE: 1.0 }, // a hard hit: a translational jolt held for three steps of STEP seconds (full, half, a fifth), then gone. PX = size at power 6, capped at MAX_PX (config.CAMERA.SHAKE_MAX applies too)
   },
+  // THE RING IN 3D (LOOP.md R1, view3d/ringBend.js): on a ring map the flat strip is wrapped round the castle by the vertex shaders, relative to where the camera looks, so the plane at the ship stays 1:1 with the
+  // 2D HUD (the camera never rolls). LEAD = the approach's last stretch eases into the circle as an arc of half the ring's curvature, this many R long (no corner where the approach meets the ring).
+  // FLAT = the strip stays perfectly flat this far from the camera's look-at point (px, at least the ship's half length + FLAT_PAD, at most FLAT_MAX), then BLEND px of easing into the true circle (so the ship is
+  // not bent like a banana and the HUD is exact at her; beyond that the ring is the true circle of radius R). KEEP / FACE = the placeholder castle (R2 replaces it): the keep's radius (share of R) and height,
+  // a face's block, and the colours.
+  RING3D: {
+    ENABLED: true,
+    LEAD: 0.8, FLAT: 700, FLAT_PAD: 200, FLAT_MAX: 1500, BLEND: 900, FOG: 0.5, // FOG = the fog is measured this many ring radii further than the camera's distance (so the far side of the ring is not washed out)
+    KEEP: { RADIUS: 0.2, MIN_RADIUS: 480, UP: 2600, DOWN: 1500, COLOR: '#a29c98', ROOF: '#6f7d93', SHADE: '#7d7774', GLOW: '#ffb347' },
+    FACE: { REACH: 5500, W: 880, H: 760, DEPTH: 620, COLOR: '#b9a287', TRIM: '#7a6a58', SHUTTER: '#403b3a', LEDGE: '#8c7358', ROPE: '#2e2a2a' },
+  },
   // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.
   // SCALE = size of one texture pixel in world units (the 512px tile covers 512*SCALE units; the airship is ~1500 wide).
   // Painted textures on the ship and gunships. STRENGTH: how strongly they show (1 = subtle, 2 = clear, 3 = bold).

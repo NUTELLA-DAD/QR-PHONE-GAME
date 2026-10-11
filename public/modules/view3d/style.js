@@ -94,6 +94,7 @@ export function rimify(material) {
 // Unlit painted planes (sky, backdrop strips): the composer tone-maps everything, so these pre-compensate for the exposure and for Neutral tone mapping's small black offset
 // (the highlights above 0.76 roll off a little; the painted pictures keep their own colours). Used while fx.uUntone = 1.
 export function paintedPlane(material) {
+  material.defines = { ...(material.defines || {}), RING_SKIP: '' }; // (LOOP R1: a painted backdrop is a picture glued to the camera's frame, not part of the strip: the ring bend (ringBend.js) leaves it alone)
   material.toneMapped = false;
   material.fog = false;
   material.onBeforeCompile = (sh) => {

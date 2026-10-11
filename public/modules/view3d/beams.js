@@ -16,6 +16,7 @@
 import { THREE, look, fx } from './style.js';
 import { config } from '../../config.js';
 import { inRock } from '../host/course.js';
+import { RB, RING_GLSL } from './ringBend.js'; // LOOP R1: the ribbon's corners go through the ring bend on a ring map
 import { Z_BACK, Z_FRONT_CAVE, Z_FRONT_OPEN } from './terrain.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -83,6 +84,7 @@ function poolTexture() {
 }
 
 const BEAM_VERT = /* glsl */`
+  ${RING_GLSL}
   uniform vec3 uO; uniform vec3 uA; uniform float uLen; uniform float uTan; uniform float uW0;
   varying vec2 vUv; varying float vViewZ;
   void main() {
@@ -91,6 +93,7 @@ const BEAM_VERT = /* glsl */`
     vec3 side = cross( uA, cameraPosition - c );
     side = side / max( length( side ), 1e-3 );
     vec3 wp = c + side * ( s * ( uW0 + uTan * u * uLen ) );
+    if ( uRingA.x > 0.5 ) wp = ringBend( wp );
     vec4 mv = viewMatrix * vec4( wp, 1.0 );
     vUv = vec2( u, s );
     vViewZ = - mv.z;
@@ -151,10 +154,10 @@ export function createBeams({ scene, post, world, state, models }) {
   const mkLamp = (key) => {
     const mat = new THREE.ShaderMaterial({
       vertexShader: BEAM_VERT, fragmentShader: BEAM_FRAG,
-      uniforms: {
+      uniforms: RB.addUniforms({
         ...shared, uO: { value: new THREE.Vector3() }, uA: { value: new THREE.Vector3(1, 0, 0) }, uLen: { value: 1000 }, uTan: { value: 0.25 }, uW0: { value: 12 },
         uColor: { value: new THREE.Color('#fff0cc') }, uAlpha: { value: 0 }, uScroll: { value: 0 }, uFade: { value: 0.5 }, uSoft: { value: 150 }, uSeed: { value: hashStr(key) }, uDust: { value: 0.45 }, uMotes: { value: 0.8 },
-      },
+      }),
       transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide, fog: false,
       blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
     });

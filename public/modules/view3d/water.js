@@ -13,6 +13,7 @@ import { THREE, gradientMap, look, fx } from './style.js';
 import { getTrimSheet, uvRect, TRIM, SEA_FOAM } from './textures.js';
 import { config } from '../../config.js';
 import { Z_FRONT_OPEN, Z_FRONT_CAVE } from './terrain.js';
+import { RB } from './ringBend.js'; // LOOP R1: a sea on a ring map reaches back to the castle
 
 const Z_FAR = -1500; // where the water ends in the distance (the horizon: the same place the old slab ended)
 const SPLIT = 520; // the colour step: farther than this behind the ship plane = shallow
@@ -172,6 +173,7 @@ export function createWater(scene) {
   wMat.customProgramCacheKey = () => 'toon-water';
   const wPlain = new THREE.MeshLambertMaterial({ color: '#6f9fae' });
   const wFlat = new THREE.MeshToonMaterial({ color: '#6f9fae', gradientMap });
+  for (const m of [wMat, wPlain, wFlat]) m.defines = { ...(m.defines || {}), RING_SKIP: '' }; // (LOOP R1: the sea is one flat plane, which turning round the castle does not change: the ring bend leaves it alone)
   const planeGeo = new THREE.PlaneGeometry(1, 1);
   planeGeo.rotateX(-Math.PI / 2); // lying flat, facing up; x -1/2..1/2, z -1/2..1/2
   const surface = new THREE.Mesh(planeGeo, wMat);
@@ -331,8 +333,10 @@ export function createWater(scene) {
     shore.visible = splashes.visible = look.water;
     T.seaY = seaY;
     const y = -seaY, zNear = Math.max(1500, cam.position.z + 900);
-    surface.scale.set(80000, 1, zNear - Z_FAR);
-    surface.position.set(target.x, y, (zNear + Z_FAR) / 2);
+    const zFar = RB.on && map && map.ring ? -(map.ring.R + 3000) : Z_FAR; // (a ring: the sea runs back past the castle, so the keep and the far rock stand IN it)
+    U.uZFar.value = -zFar;
+    surface.scale.set(80000, 1, zNear - zFar);
+    surface.position.set(target.x, y, (zNear + zFar) / 2);
     sMat.uniforms.uY.value = y + 1.2;
     buildShore(map, seaY);
   };

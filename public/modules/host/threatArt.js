@@ -182,8 +182,9 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     const shipY = toWorldY(ship, layout.midPoint.y);
     for (const it of items) {
       if (!it.always && Math.hypot(it.x - shipX, it.y - shipY) > range) continue;
-      const sx = width / 2 + (it.x - view.cx) * view.zoom;
-      const sy = height / 2 + (it.y - view.cy) * view.zoom;
+      const sp = view.scr ? view.scr(it.x, it.y, width, height) : null; // (LOOP R1: on a ring map the far arrows point through the bend: view.scr)
+      const sx = sp ? sp.x : width / 2 + (it.x - view.cx) * view.zoom;
+      const sy = sp ? sp.y : height / 2 + (it.y - view.cy) * view.zoom;
       if (sx > 0 && sx < width && sy > 0 && sy < height) continue;
       const ax = Math.max(margin, Math.min(width - margin, sx));
       const ay = Math.max(height * 0.2, Math.min(height - margin * 2, sy)); // (clear of the HUD at the top and the message bar)

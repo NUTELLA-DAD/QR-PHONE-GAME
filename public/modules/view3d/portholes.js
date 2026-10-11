@@ -8,6 +8,7 @@
 import { THREE, setInkFor } from './style.js';
 import { createPost } from './post.js';
 import { placeCamera, FOV } from './camera3d.js';
+import { RB } from './ringBend.js'; // (LOOP R1: on a ring map each window bends the strip round ITS OWN look-at point)
 
 export function createPortholes3D({ renderer, scene, world }) {
   const P = { error: '', frames: 0, ms: 0, calls: 0, tris: 0, n: 0, live: new Set(), enabled: true };
@@ -54,6 +55,7 @@ export function createPortholes3D({ renderer, scene, world }) {
         const tg = info.target;
         world.lights.setFogDistance(s.camera.position.distanceTo(tg));
         world.update(s.camera, tg, { w: info.visW, h: info.visH }, c.t, c.seaY, c.map);
+        const back = RB.pass(tg.x); // (restored below, after this window's pass)
         const rig = world.lights.rig;
         const tier = it.kind === 'spy' ? c.tier : { ...c.tier, bloom: false, aa: c.tier.aa === 'smaa' ? 'fxaa' : c.tier.aa };
         s.post.configure(tier, rig, rig.id, world.lights.exposure);
@@ -61,7 +63,7 @@ export function createPortholes3D({ renderer, scene, world }) {
         renderer.setViewport(x, y, side, side);
         renderer.setScissor(x, y, side, side);
         renderer.setScissorTest(true);
-        s.post.render(c.dt || 0.016);
+        try { s.post.render(c.dt || 0.016); } finally { back(); }
         P.calls += s.post.sceneCalls; P.tris += s.post.sceneTris;
         P.live.add(it.id);
         P.n++;

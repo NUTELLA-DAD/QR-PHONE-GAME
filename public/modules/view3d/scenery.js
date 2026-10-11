@@ -7,6 +7,7 @@ import { THREE, Batch, applyLook, tagSmall, INK, G, glowMat, glow } from './styl
 import { config } from '../../config.js';
 import { groundAt } from '../host/course.js';
 import { buildRocket } from './enemyArt.js';
+import { RB } from './ringBend.js'; // (LOOP R1: revolving guns are drawn at the ring image nearest the camera)
 
 const fin = (n, d = 0) => (Number.isFinite(n) ? n : d);
 const V3 = (x, y, z = 0) => new THREE.Vector3(x, y, z);
@@ -267,12 +268,13 @@ export function createScenery(root, state, api = {}) {
       }
       for (const t of course.turrets || []) {
         if (t.x == null) continue;
-        const near = nearAny(t.x, t.x);
+        const tx = RB.on && t.rev ? t.x - RB.C * Math.round((t.x - camX) / RB.C) : t.x; // (LOOP R1: a revolving gun wraps at the ring's end by jumping C back; the bend makes x and x + C the same place, so it is drawn at the image nearest the camera: no pop at the wrap)
+        const near = nearAny(tx, tx);
         const ot = turrets.get(t) || (near ? get(turrets, t, () => buildTurret(t)) : null);
         if (!ot) continue;
         ot.visible = near;
         if (!near) continue;
-        ot.position.set(t.x, -(t.y + 20), Z);
+        ot.position.set(tx, -(t.y + 20), Z);
         const u = ot.userData;
         u.live.visible = !t.dead;
         u.dead.visible = !!t.dead;
@@ -283,7 +285,7 @@ export function createScenery(root, state, api = {}) {
         u.glow.visible = !!t.charging && !t.dead;
         u.glow.scale.setScalar(30 + 40 * k);
         u.lamp.material = t.charging && !t.dead ? (K & 1 ? u.lampOn : u.lampOff) : u.lampOff; // (the lamp blinks: held keys)
-        if (t.dead && p && due(t, 2.5, dt)) p.burst('smoke', t.x, -(t.y + 20) + 30, Z + 10, 1, { size: [30, 52], size1: 2, life: [1.6, 2.6], color: '#403c3c', alpha: 0.75, speed: [3, 12], up: [24, 50] }); // a wrecked turret smoulders
+        if (t.dead && p && due(t, 2.5, dt)) p.burst('smoke', tx, -(t.y + 20) + 30, Z + 10, 1, { size: [30, 52], size1: 2, life: [1.6, 2.6], color: '#403c3c', alpha: 0.75, speed: [3, 12], up: [24, 50] }); // a wrecked turret smoulders
       }
       for (const m of course.markers || []) {
         const x = fin(m.mx ?? m.cx, NaN);

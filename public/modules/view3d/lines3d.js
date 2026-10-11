@@ -4,13 +4,17 @@
 //   lines.begin();  lines.seg(x1, y1, x2, y2, width, color, alpha = 1, z = 60);  lines.dashed(x1, y1, x2, y2, width, color, dash, gap, alpha, z, phase);  lines.poly(points, width, color, alpha, z);  lines.end();
 // Coordinates are the 3D world's (x, y up, z toward the viewer).
 import { THREE } from './style.js';
+import { RB, RING_GLSL } from './ringBend.js'; // LOOP R1: the segments' corners go through the ring bend on a ring map
 
 const VERT = `
+  ${RING_GLSL}
   attribute float aAlpha;
   varying vec3 vC; varying float vA;
   void main() {
     vC = instanceColor; vA = aAlpha;
-    gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4( position, 1.0 );
+    vec4 wp = modelMatrix * instanceMatrix * vec4( position, 1.0 );
+    if ( uRingA.x > 0.5 ) wp.xyz = ringBend( wp.xyz );
+    gl_Position = projectionMatrix * viewMatrix * wp;
   }
 `;
 const FRAG = `
@@ -26,7 +30,7 @@ export function createLines(parent, max = 900, opts = {}) { // opts.depth = dept
   const alpha = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
   alpha.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('aAlpha', alpha);
-  const mat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest: !!opts.depth });
+  const mat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: RB.addUniforms({}), transparent: true, depthWrite: false, depthTest: !!opts.depth });
   mat.toneMapped = false;
   const mesh = new THREE.InstancedMesh(geo, mat, max);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

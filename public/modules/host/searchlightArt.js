@@ -194,6 +194,7 @@ export function createSearchlightArt({ ctx, state, ink }) {
     const k = view.zoom;
     const sx = (x) => width / 2 + (x - view.cx) * k;
     const sy = (y) => height / 2 + (y - view.cy) * k;
+    const scr = (x, y) => { const q = view.scr ? view.scr(x, y, width, height) : null; return q ? [q.x, q.y] : [sx(x), sy(y)]; }; // (LOOP R1: the lit-target brackets and the eyes of the unlit sit where the bent picture puts them)
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
@@ -320,8 +321,7 @@ export function createSearchlightArt({ ctx, state, ink }) {
 
     // 3. Lit targets: warm brackets (and a faint halo) round everything in a manned beam.
     for (const t of litAll) {
-      const px = sx(t.x);
-      const py = sy(t.y);
+      const [px, py] = scr(t.x, t.y);
       const r = Math.max(t.r, 24) * k * (1.15 + 0.06 * Math.sin(time * 9 + t.x));
       if (px < -r || px > width + r || py < -r || py > height + r) continue;
       const hg = ctx.createRadialGradient(px, py, r * 0.3, px, py, r * 1.5);
@@ -353,8 +353,7 @@ export function createSearchlightArt({ ctx, state, ink }) {
     if (D.EYES && eyeDark > 0.12) {
       const a = Math.min(1, eyeDark * 1.4) * D.EYE_ALPHA;
       for (const t of dimAll) {
-        const px = sx(t.x);
-        const py = sy(t.y);
+        const [px, py] = scr(t.x, t.y);
         if (px < -40 || px > width + 40 || py < -40 || py > height + 40) continue;
         if (sources.some((s) => s.onShip(px, py))) continue; // (right on a ship it is plainly visible)
         const r = Math.max(2.4, Math.min(9, t.r * 0.13 * k));

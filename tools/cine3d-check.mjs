@@ -1,5 +1,5 @@
 // CAMERA AND CINEMATICS (WP11) gate: the 3D view in a real headless Chrome (tools/shot3d.mjs). Starts its OWN server on a free port and stops it by its PID at the end (never kills node globally).
-//   node tools/cine3d-check.mjs [--port N] [--quick] [--shots DIR] [--prefix wp11_] [--only off,come,breach,kick,versus,long]
+//   node tools/cine3d-check.mjs [--port N] [--quick] [--shots DIR] [--prefix wp11_] [--only off,come,breach,kick,ring,versus,long]
 // The simulation is frozen between steps (window.game.update is a no-op) and advanced by hand, so every moment is the same. Every run must print 0 console errors. Checks:
 //   off     ?cine=0 and a COME ABOUT: no cinematic ever starts, and the HUD alignment holds (the 3D projection of 35 plane points is within 1 px of the 2D camera's own mapping) every frame
 //   come    a COME ABOUT with cinematics on: the dolly peaks near config.CINE3D.COME_ABOUT.AZ, never overshoots or goes negative (critically damped), never rolls, and AFTER it ends the camera is the
@@ -7,6 +7,7 @@
 //   breach  ?creature=kraken in the Sunken Sea: the breach warning pulls the camera back (mul > 1, elevation up), the zoom cap is not broken, then the Kraken's death plays the finale orbit (az near
 //           FINALE.AZ), then everything is back and aligned
 //   kick    a hard hit (a hitLog entry of power 5) gives a translational kick held in at most 3 steps, then nothing; a weak hit gives none. A cast off gives the rise and pull-back, then settles
+//   ring    (LOOP R1) a COME ABOUT on the fortress ring with the strip bent: the HUD within 1 px all through, no roll (the full circle is tools/ring3d-check.mjs)
 //   versus  Versus with the ships far apart: the split view's porthole is drawn in 3D (Medium) with the frame on the 2D canvas, the Low tier keeps the 2D inset; the numbers of the porthole are printed
 //   long    (not --quick) 8 bots in real time for 14 s with a COME ABOUT, on and off
 import { spawn, spawnSync } from 'node:child_process';
@@ -176,6 +177,25 @@ try {
       if (d.kick.last !== 0) fail('kick: still kicking after 0.7 s');
     }
     if (d.kickAfter && (d.kickAfter.active || !(d.kickAfter.align < 1))) fail('kick: not aligned afterwards ' + JSON.stringify(d.kickAfter));
+  }
+
+  if (want('ring')) {
+    console.log('4b. the ring (LOOP R1): a COME ABOUT on the fortress, the strip bent round its castle: the HUD must still be exact at the ship');
+    const place = `(async()=>{ ${sl} const c=window.__c, st=window.game.state, sh=st.ships[0], r=st.course.ring, m=st.course.map, F=sh.layout.fitBox, Q=sh.layout.refPoint, C=m.CELL;
+      const clear=(a)=>{ const x=r.xRing+a*Math.PI/180*r.R, y=r.axisY; const x0=Math.floor((x+F.x0-Q.x)/C)-2, x1=Math.floor((x+F.x1-Q.x)/C)+2, y0=Math.floor((y+F.y0-Q.y)/C)-2, y1=Math.floor((y+F.y1-Q.y)/C)+2; for(let j=y0;j<=y1;j++) for(let i=x0;i<=x1;i++) if(i>=0&&j>=0&&i<m.W&&j<m.H&&m.solid[j*m.W+i]) return false; return true; };
+      for(let d=0;d<=40;d++){ let hit=false; for(const s of [1,-1]){ const a=135+s*d; if(clear(a)){ sh.pose.x=r.xRing+a*Math.PI/180*r.R-Q.x; sh.pose.y=r.axisY-Q.y; sh.pose.vy=0; hit=true; break; } } if(hit) break; }
+      for(let i=0;i<120;i++) await c.frame(); window.__r.ringOn=!!c.V().stats().ring; window.__r.flat=c.V().stats().ring&&c.V().stats().ring.flat; return 1 })()`;
+    const r = run('ring', 'cine=0&tier=medium&kind=ring&variant=fortress', [[boot(120), 300], [`window.__r={}; 1`, 10], [place, 100], [turnPass(), 100, shotName('ring_end')], [holdTurn(0.5), 200, shotName('ring_midturn')], [endTurn, 100]]);
+    clean('ring', r); show('ring', r.data);
+    const t = r.data && r.data.turn;
+    if (r.data && !r.data.ringOn) fail('ring: the ring bend was not on (the fortress map did not load?)');
+    if (t) {
+      if (t.frames < 30) fail('ring: the turn did not run (' + t.frames + ' frames)');
+      if (!(t.maxAlignDuring < 1)) fail('ring: the HUD is ' + t.maxAlignDuring + ' px off during the turn on the ring (limit 1)');
+      if (!(t.maxRoll < 1e-6)) fail('ring: the camera rolled on the ring (' + t.maxRoll + ')');
+      if (t.fired.come || t.peakAz > 0) fail('ring: a cinematic started with ?cine=0');
+    }
+    if (r.data && r.data.hold_after && (!r.data.hold_after.settled || !(r.data.hold_after.align < 1))) fail('ring: not aligned after the held turn ' + JSON.stringify(r.data.hold_after));
   }
 
   if (want('versus')) {
