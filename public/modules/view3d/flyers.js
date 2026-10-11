@@ -8,6 +8,7 @@ import { THREE, INK, applyLook, glow } from './style.js';
 import { config } from '../../config.js';
 import { envOf } from '../host/environments.js';
 import { teamOf } from '../host/ships.js'; // (the escorts wear their ship's team colours in Versus)
+import { scrapOn, holdSpot, holdCount } from '../host/scrap.js'; // (SCRAP, LOOP.md G1: the bundles lying on a deck and the hold bin are drawn here too)
 import * as A from './enemyArt.js';
 import { createLines } from './lines3d.js';
 import { createInstanced, createLampInstances } from './swarm3d.js';
@@ -182,6 +183,39 @@ export function createFlyers(root, stateArg, api = {}) {
     hideFrom('chute', n);
   };
 
+  // ---- SCRAP (LOOP.md G1): a little canopy over each falling bundle, a gold ring round it (and round a gunship's hulk). The bundles themselves are instanced boxes: syncBits below. ----------------------------------------
+  const RING_GEO = new THREE.RingGeometry(0.86, 1, 40), RING_MAT = new THREE.MeshBasicMaterial({ color: '#ffd23f', transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
+  const RING_GEO2 = new THREE.RingGeometry(0.978, 1, 48); // (the hulk's ring is big: the same thin line, not a fat band)
+  const makeRing = () => { const m = new THREE.Mesh(RING_GEO, RING_MAT); m.renderOrder = 9; return m; };
+  const makeBigRing = () => { const m = new THREE.Mesh(RING_GEO2, RING_MAT); m.renderOrder = 9; return m; };
+  const syncScrap = () => {
+    let nc = 0, nr = 0;
+    for (const it of state.thrown || []) {
+      if (!it || it.kind !== 'scrap' || !Number.isFinite(it.x) || !Number.isFinite(it.y) || nr >= 40) continue;
+      if (it.chute && !it.haul) { const g = use('schute', nc++, A.buildScrapChute); g.visible = true; g.position.set(it.x, -(it.y + 4), 14); g.rotation.z = SWAY[(K + nc) & 3]; }
+      const r = use('sring', nr++, makeRing);
+      r.visible = true;
+      r.position.set(it.x, -(it.y - 4), 40);
+      r.scale.setScalar(44 + (K & 1) * 3);
+    }
+    let nh = 0;
+    for (const h of state.hulks || []) {
+      if (!h || !Number.isFinite(h.x) || !Number.isFinite(h.y) || nh >= 3) continue;
+      const g = use('shulk', nh++, A.buildScrapHulk);
+      g.visible = true;
+      g.position.set(h.x, -h.y, 0);
+      g.rotation.z = -fin(h.rot) * 0.3;
+      const r = use('hring', nh - 1, makeBigRing);
+      r.visible = true;
+      r.position.set(h.x, -(h.y - 20), 40);
+      r.scale.setScalar(230);
+    }
+    hideFrom('schute', nc);
+    hideFrom('sring', nr);
+    hideFrom('shulk', nh);
+    hideFrom('hring', nh);
+  };
+
   // ---- the supply balloon, with a soft yellow glow behind it (three flat discs, each fainter: toon steps) -----------------------------------------------------------------------------------
   let supply = null;
   const GLOW_MAT = new THREE.MeshBasicMaterial({ color: '#ffdc5a', transparent: true, opacity: 0.1, depthWrite: false });
@@ -345,14 +379,16 @@ export function createFlyers(root, stateArg, api = {}) {
   const BOX = new THREE.BoxGeometry(1, 1, 1);
   const mkInst = (mat, max) => { const m = new THREE.InstancedMesh(BOX, mat, max); m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.count = 0; root.add(m); return m; };
   const bitMat = new THREE.MeshBasicMaterial();
-  const bits = mkInst(bitMat, 120), bitsInk = mkInst(new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }), 120);
+  const bits = mkInst(bitMat, 240), bitsInk = mkInst(new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }), 240);
+  let zNow = 0; // (the depth the next box is put at: 0 in the sky, a ship's own depth for what lies on her decks)
   const syncBits = () => {
+    zNow = 0;
     let n = 0;
     const put = (x, y, rot, lx, ly, w, h, d, color) => {
-      if (n >= 120) return;
+      if (n >= 240) return;
       _E.set(0, 0, -rot);
       _Q.setFromEuler(_E);
-      _P.set(lx, -ly, 0).applyQuaternion(_Q);
+      _P.set(lx, -ly, zNow).applyQuaternion(_Q);
       _P.x += x; _P.y += -y;
       _M.compose(_P, _Q, _S.set(w, h, d));
       bits.setMatrixAt(n, _M);
@@ -364,9 +400,32 @@ export function createFlyers(root, stateArg, api = {}) {
     for (const it of state.thrown || []) {
       if (!it || !Number.isFinite(it.x)) continue;
       if (it.kind === 'crate') { put(it.x, it.y, fin(it.rot), 0, 0, 30, 30, 30, '#c9a05f'); put(it.x, it.y, fin(it.rot), 0, 0, 33, 5, 33, '#8a6444'); }
+      else if (it.kind === 'scrap') { put(it.x, it.y, fin(it.rot), 0, -8, 30, 8, 22, '#8d96a0'); put(it.x, it.y, fin(it.rot), 0, 1, 32, 8, 22, '#b3bcc6'); put(it.x, it.y, fin(it.rot), 0, 9, 28, 7, 22, '#76808a'); put(it.x, it.y, fin(it.rot), -1, 0, 7, 28, 26, '#d9a24a'); } // (SCRAP: iron plates and a strap)
       else put(it.x, it.y, fin(it.rot), 0, 0, 34, 24, 24, it.kind === 'coal' ? '#2b2b2b' : '#b79a63');
     }
+    if (scrapOn()) { // (SCRAP: bundles lying on a ship's decks, and her hold bin with what is stowed in it: boxes at the spots the layout gives, on her own pose)
+      const bundle = (x, y, s = 1) => { put(x, y, 0, 0, -8 * s, 30 * s, 8 * s, 22 * s, '#8d96a0'); put(x, y, 0, 0, 1 * s, 32 * s, 8 * s, 22 * s, '#b3bcc6'); put(x, y, 0, -1 * s, 0, 7 * s, 28 * s, 26 * s, '#d9a24a'); };
+      for (const sh of state.ships || []) {
+        if (!sh.ctx || sh.ai || sh.piece || !api.shipPoint) continue;
+        for (const ld of sh.ctx.loads || []) {
+          if (ld.kind !== 'scrap' || !sh.layout.platforms[ld.d]) continue;
+          const a = api.shipPoint(sh, ld.x, sh.layout.platforms[ld.d].y - 14, 0);
+          if (a) { zNow = a[2] + 80; bundle(a[0], -a[1]); zNow = 0; }
+        }
+        const sp = holdSpot(sh.layout), pl = sp && sh.layout.platforms[sp.d], c = holdCount(sh.ctx);
+        if (!pl) continue;
+        const a = api.shipPoint(sh, sp.x, pl.y - 22, 0);
+        if (!a) continue;
+        zNow = a[2] + 80;
+        put(a[0], -a[1], 0, 0, 0, 78, 44, 36, '#7c5a3a');
+        for (let i = 0; i < Math.min(c, config.SCRAP.HOLD_CAP); i++) bundle(a[0] - 26 + (i % 4) * 17, -a[1] - 14 + Math.floor(i / 4) * -16 - 4, 0.5);
+        put(a[0], -a[1], 0, 0, 14, 78, 14, 38, '#a07848');
+        zNow = 0;
+      }
+    }
+    for (const h of state.hulks || []) for (let k = 0; k < (h.left | 0); k++) { put(h.x, h.y, 0, -70 + k * 44, -58 - (k % 2) * 14, 30, 8, 22, '#8d96a0'); put(h.x, h.y, 0, -71 + k * 44, -58 - (k % 2) * 14, 7, 28, 26, '#d9a24a'); } // (...and the bundles still on a hulk)
     bits.count = bitsInk.count = n;
+    stats.bits = n; // (boxes drawn this frame: the thrown cargo, scrap on the decks, the hold bin)
     bits.instanceMatrix.needsUpdate = bitsInk.instanceMatrix.needsUpdate = true;
     if (bits.instanceColor) bits.instanceColor.needsUpdate = true;
   };
@@ -473,6 +532,7 @@ export function createFlyers(root, stateArg, api = {}) {
       syncBats(state.bats || []);
       syncMines();
       syncChutes();
+      syncScrap();
       syncSingles();
       syncWrecks();
       syncRockets();

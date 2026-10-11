@@ -54,6 +54,15 @@ if (args.runs > 1 && !args.child) {
   console.log(`median stops ${med}, mean ${(ds.reduce((a, b) => a + b, 0) / (ds.length || 1)).toFixed(1)}, victories ${ok.filter((r) => r.victory).length}/${ok.length}, timeouts ${ok.filter((r) => r.timeout).length}${args.topup ? `, runs with stalls ${ok.filter((r) => r.stalls).length}` : ''}, errors ${ok.reduce((a, r) => a + (r.errors || 0), 0)}`);
   { const m = ok.map((r) => r.mates || {}); const jobs = {}; for (const x of m) for (const [k, v] of Object.entries(x.jobs || {})) jobs[k] = (jobs[k] || 0) + v; const tot = Object.values(jobs).reduce((a, b) => a + b, 0) || 1; console.log(`ship's mates: max aboard ${Math.max(0, ...m.map((x) => x.max || 0))}, station snapshots ${m.reduce((a, x) => a + (x.locks || 0), 0)}, in awards ${m.filter((x) => x.inAwards).length} runs; mate time: ${Object.entries(jobs).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + Math.round((100 * v) / tot) + '%').join(', ') || 'n/a'}`); }
   { const L = ok.map((r) => r.lairs || { planned: 0, met: 0, won: 0, how: {} }), how = {}; for (const l of L) for (const [k, v] of Object.entries(l.how || {})) how[k] = (how[k] || 0) + v; console.log(`creature lairs (Kraken, Drake and Thunderbird): ${L.reduce((a, l) => a + l.planned, 0)} on the routes of ${ok.length} voyages, ${L.reduce((a, l) => a + l.met, 0)} met, ${L.reduce((a, l) => a + l.won, 0)} won (${Object.entries(how).map(([k, v]) => k + ' ' + v).join(', ') || 'none'})`); }
+  { // SCRAP (LOOP.md G1): bundles caught (landed on a deck or taken off a hulk) and stowed per stop FLOWN (done = stops finished, the one she ended on included), against config.SCRAP.INCOME_TARGET
+    const sc = ok.filter((r) => r.scrap), { config: cfg } = await import(new URL("../public/config.js", import.meta.url).href);
+    if (sc.length) {
+      const stops = sc.reduce((a, r) => a + Math.max(1, r.done), 0), sum = (k) => sc.reduce((a, r) => a + (r.scrap[k] || 0), 0), caught = sum('landed') + sum('taken');
+      const per = sc.map((r) => (r.scrap.landed + r.scrap.taken) / Math.max(1, r.done)).sort((a, b) => a - b);
+      const by = {}; for (const r of sc) for (const [k, v] of Object.entries(r.scrap.by || {})) by[k] = (by[k] || 0) + v;
+      console.log(`scrap: per stop ${(caught / stops).toFixed(1)} caught (target ${cfg.SCRAP.INCOME_TARGET.join('-')}; runs ${per[0].toFixed(1)}-${per[per.length - 1].toFixed(1)}, median ${per[(per.length - 1) >> 1].toFixed(1)}), ${(sum('stowed') / stops).toFixed(1)} stowed, ${(sum('spawned') / stops).toFixed(1)} fell (${Object.entries(by).map(([k, v]) => k + ' ' + (v / stops).toFixed(1)).join(', ') || 'none'}), ${(sum('lost') / stops).toFixed(1)} lost; hooked ${sum('hooked')}, hulks ${sum('hulks')} (${sum('taken')} bundles off them), dumped ${sum('dumped')}; hold avg ${(sum('holdSum') / Math.max(1, sum('holdN'))).toFixed(1)}/${cfg.SCRAP.HOLD_CAP}, carrying ${(100 * sum('carrySecs') / Math.max(1, sum('crewSecs'))).toFixed(1)}% of crew time`);
+    }
+  }
   { const n = ok.reduce((a, r) => a + (r.breaks || 0), 0); if (n) console.log(`parts broke off ${n} time(s) in ${ok.filter((r) => r.breaks).length} of ${ok.length} voyages: ${[...new Set(ok.flatMap((r) => r.breakCauses || []))].join(', ')}`); }
   const causes = {};
   for (const r of ok) for (const k of r.flags || []) causes[k] = (causes[k] || 0) + 1;
@@ -188,6 +197,7 @@ if (!result) {
   const stopId = state.run.stopId;
   result = { earned: state.run.earned, parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
 }
+{ const S = state.scrapStats; if (S && config.SCRAP.ENABLED && !config.PVP.ENABLED) result.scrap = { spawned: S.spawned, landed: S.landed, hooked: S.hooked, stowed: S.stowed, lost: S.lost, taken: S.taken, hulks: S.hulks, dumped: S.dumped, by: S.by, holdSum: S.holdSum, holdN: S.holdN, carrySecs: S.carrySecs, crewSecs: S.crewSecs }; } // (SCRAP, LOOP.md G1: what fell, what was caught and stowed over the voyage)
 result.lairs = { planned: state.run.voyage.columns.flat().filter((s) => s.lair).length, met: lairs.met, won: lairs.won.size, how: lairs.how }; // (C.3)
 result.breaks = state.breakStats ? state.breakStats.events : 0; // (S.5i: how often parts broke off in this voyage, and what did it)
 result.breakCauses = state.breakStats && state.breakStats.causes ? state.breakStats.causes.map((c) => c.split('@')[0]) : [];

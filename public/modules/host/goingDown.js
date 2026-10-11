@@ -11,6 +11,7 @@
 //                bunker to dump its stock (then there is nothing to stoke with, and the bunker stays empty a while after);
 //   PATCH + PUMP the glowing gasbag leaks must be patched (they lose gas fast), and a hand at the helm pumps the bags full again;
 //   FULL STEAM   coal into the boiler: more pressure = hotter gas = more lift - but past BOILER.WARN_AT the boiler can blow, so somebody VENTS the steam;
+//   DUMP THE SCRAP  (LOOP.md G1) hold Action at the hold bin to throw the whole hold overboard: scrap is weight too, and the first thing the crew gives up before cutting a section away;
 //   CUT AWAY     the last resort: hold Action at a marked joint to cut a heavy section away (breakOff.js, cause 'jettison'; lost until the sky-dock rebuilds it).
 // Lift beating weight by MARGIN for HOLD seconds = "SHE HOLDS!" (hull SURVIVE_HULL, levelled out). Otherwise the normal wreck happens (so voyages may limp home on a spare gasbag).
 //
@@ -30,6 +31,7 @@ import { mainShip } from './ships.js';
 import { thrustOf } from './shipBuild.js';
 import { toWorldX, toWorldY } from './pose.js';
 import { planBreak, makeRng } from './breakOff.js';
+import { holdWeight, holdSpot, holdCount, scrapOn } from './scrap.js';
 
 const GD = config.GOING_DOWN;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -90,7 +92,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     const steam = GD.STEAM_LIFT * od;
     const trim = (GD.TRIM_LOSS * Math.max(0, Math.abs(bal.dx || 0) - B.LEVEL_PX)) / 100;
     // weight, and what it is made of
-    const loads = (state.loads || []).reduce((n, ld) => n + ld.w, 0);
+    const loads = (state.loads || []).reduce((n, ld) => n + ld.w, 0) + holdWeight(state);
     const carried = Object.values(state.players).reduce((n, p) => n + (p.d == null || p.fall || p.air || p.fly || p.connected === false ? 0 : (CG.ITEMS[p.carry] || { w: 0 }).w), 0);
     let racks = 0;
     for (const r of L.racks) if (CG.ITEMS[r.kind] && (r.kind === 'sandbag' || r.kind === 'crate')) racks += CG.ITEMS[r.kind].w * (state.rackStock && state.rackStock[`${r.p}@${r.x}`] != null ? state.rackStock[`${r.p}@${r.x}`] : CG.STOCK);
@@ -186,7 +188,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     const lift = liftGas(state) + (env.lift || 0) / G.LIFT + held;
     const base = G.NEUTRAL + (env.sink || 0) + (state.liftDeficit || 0) + (state.engineWeight || 0);
     const weight = base + (state.structDeficit || 0); // (= the neutral fill plus state.weightDeficit, shipSim.js)
-    const loads = (state.loads || []).reduce((n, ld) => n + ld.w, 0) * config.STRUCTURE.LOAD_WEIGHT;
+    const loads = ((state.loads || []).reduce((n, ld) => n + ld.w, 0) + holdWeight(state)) * config.STRUCTURE.LOAD_WEIGHT;
     const bombs = (state.bombBay ? state.bombBay.bombs : 0) * W.bomb, coal = state.ship.fuel * W.fuel + (state.gdCoalOut > 0 || (state.goingDown && state.goingDown.coalGone) || !tb().COAL ? 0 : GD.DUMP.COAL_WEIGHT);
     return { lift, weight, bags: lift, gas: state.ship.gas, steam: 0, engines: held, trim: 0, cargo: loads, bombs, coal, hull: base };
   };
@@ -237,7 +239,8 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
         g.coalJob = tb().COAL ? { d: tb().COAL.d, x: tb().COAL.x, prog: 0, worked: false } : null;
         g.bombJob = tb().BAY ? { d: tb().BAY.d, x: tb().BAY.x, prog: 0, worked: false } : null;
       }
-      for (const o of [...g.joints, g.coalJob, g.bombJob]) { if (!o) continue; if (!o.worked) o.prog = Math.max(0, (o.prog || 0) - dt * 0.4); o.worked = false; }
+      for (const o of [...g.joints, g.coalJob, g.bombJob, g.scrapJob]) { if (!o) continue; if (!o.worked) o.prog = Math.max(0, (o.prog || 0) - dt * 0.4); o.worked = false; }
+      g.age = (g.age || 0) + dt;
       state.ship.shake = Math.max(state.ship.shake, 0.2);
       if ((g.beep -= dt) <= 0) { g.beep = 1.1; state.sfxQ.push(['alarm']); }
       if (short <= 0) g.hold += dt; else g.hold = Math.max(0, g.hold - dt * 1.5);
@@ -355,7 +358,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
       if (b) b.gas = Math.max(0, b.gas - extra * dt);
     }
     // Holding Action wears off like any other job.
-    for (const o of [...g.joints, g.coalJob, g.bombJob]) {
+    for (const o of [...g.joints, g.coalJob, g.bombJob, g.scrapJob]) {
       if (!o) continue;
       if (!o.worked) o.prog = Math.max(0, (o.prog || 0) - dt * 0.4);
       o.worked = false;
@@ -401,7 +404,9 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     return true;
   };
 
-  // ---- hold actions: cut a section away, dump the coal bunker, drop the bombs ----
+  // The hold's dump job (made when it is first wanted: the bin is wherever holdSpot says).
+  const scrapJobOf = (g) => syncScrapJob(g, holdSpot(L));
+  // ---- hold actions: cut a section away, dump the coal bunker, drop the bombs, dump the scrap ----
   // What Action does for this player here (an "interaction" for shipSim.js useFor), or null. `here(o, reach)`: is o on his deck within reach. A bot only does one when its job says so
   // (otherwise the bunker's Action would never grab coal for it).
   const holdAction = (player, here) => {
@@ -415,6 +420,8 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     for (const j of g.joints) if (here(j, GD.CUT.REACH) && ok('cut', j)) return { type: 'cut', obj: j, hold: true, time: GD.CUT.TIME, label: `LAST RESORT: CUT AWAY ${j.label.toUpperCase()}!` };
     const bay = tb().BAY;
     if (bay && g.bombJob && state.bombBay.bombs > 0 && player.carry !== 'ammo' && here(bay, 70) && ok('dumpbombs')) return { type: 'dumpbombs', obj: g.bombJob, hold: true, time: GD.DUMP.BOMB_TIME, label: 'DROP THE BOMBS!' };
+    const sp = scrapOn() && holdCount(state) > 0 ? holdSpot(L) : null; // (SCRAP: the hold bin)
+    if (sp && here(sp, 70) && player.carry !== 'scrap' && ok('dumpscrap')) return { type: 'dumpscrap', obj: scrapJobOf(g), hold: true, time: GD.DUMP.COAL_TIME, label: 'DUMP THE SCRAP OVERBOARD!' };
     const co = tb().COAL;
     if (co && g.coalJob && !g.coalGone && player.carry !== 'coal' && here(co, 70) && ok('dumpcoal')) return { type: 'dumpcoal', obj: g.coalJob, hold: true, time: GD.DUMP.COAL_TIME, label: 'DUMP THE COAL OVERBOARD!' };
     return null;
@@ -450,6 +457,15 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
       if (live()) state.gdRelief = (state.gdRelief || 0) + n * config.BALANCE.LIVE_MASS.bomb;
       shipPop(tb().BAY.x, L.platforms[tb().BAY.d].y - 140, 'BOMBS AWAY!', '#ffd23f', 1);
       phoneFx(player, 'Bombs away - she is lighter!', [40, 30, 40]);
+      return;
+    }
+    if (type === 'dumpscrap') {
+      const n = getCargo().dumpHold(player);
+      if (!n) return;
+      g.dumped += n * config.SCRAP.BUNDLE_W;
+      const sp = holdSpot(L);
+      if (sp) shipPop(sp.x, L.platforms[sp.d].y - 140, 'SCRAP OVERBOARD!', '#ffd23f', 1);
+      phoneFx(player, 'Scrap overboard - she is lighter!', [40, 30, 40]);
       return;
     }
     if (type === 'dumpcoal') {
@@ -514,6 +530,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     }
     const late = g.t / g.time;
     if (g.bombJob && state.bombBay.bombs > 0 && g.need > 0) out.push({ kind: 'dump', obj: g.bombJob, d: g.bombJob.d, x: g.bombJob.x, urgency: U * 0.6, max: 1, label: 'DROP THE BOMBS! (hold)' });
+    { const sp = scrapOn() && holdCount(state) > 0 ? holdSpot(L) : null; if (sp && g.need > 0) out.push({ kind: 'dump', obj: scrapJobOf(g), d: sp.d, x: sp.x, urgency: U * 0.75, max: 1, label: 'DUMP THE SCRAP! (hold)' }); }
     if (g.coalJob && !g.coalGone && g.need > 0 && late > 0.4) out.push({ kind: 'dump', obj: g.coalJob, d: g.coalJob.d, x: g.coalJob.x, urgency: U * 0.5, max: 1, label: 'DUMP THE COAL BUNKER! (hold)' });
     if (g.need > 0 && late > GD.CUT_AT) for (const j of g.joints) out.push({ kind: 'cut', obj: j, d: j.d, x: j.x, urgency: U * 0.5, max: 1, label: `LAST RESORT: CUT AWAY ${j.label.toUpperCase()} (hold)` });
     for (const q of Object.values(state.players)) if (q !== p && q.ko > 0 && !q.fall && q.conn == null && q.d != null) out.push({ kind: 'revive', obj: q, d: q.d, x: q.x, urgency: U * 0.7, max: 1, label: `REVIVE ${q.name}` });
@@ -531,6 +548,9 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
   return { live, physical, crashTime, tryStart, update, protect, active, pumpMul, onStoke, holdAction, perform, missionDone, newMission, reset, pitch, status, jobsFor, measure, noteDumped };
 }
 
+// The hold's dump job always stands where the bin is NOW (a part that broke off or a split changes the decks under it): the progress of a hold in hand is kept.
+const syncScrapJob = (g, sp) => { const j = (g.scrapJob ||= { d: 0, x: 0, prog: 0, worked: false }); if (sp) { j.d = sp.d; j.x = sp.x; } return j; };
+const botScrapJob = (state, g) => syncScrapJob(g, holdSpot(mainShip(state).layout));
 // ---- bots: while she falls they split across the jobs (bots.js asks for this instead of its usual list) ----
 // Returns jobs in the order bots should claim them (the first free one of the first kind wins), each `urgent`.
 export function botJobs(state, bot) {
@@ -570,6 +590,7 @@ export function botJobs(state, bot) {
   // What cannot be reached by the easy ways: the last resorts.
   const reach = (100 - state.ship.gas) * 0.8 + (GD.STEAM_LIFT - g.m.steam) + g.m.cargo + g.m.bombs;
   const short = g.need > 0;
+  if (short && scrapOn() && holdCount(state) > 0 && holdSpot(L) && (late > config.SCRAP.BOTS.DUMP_LATE || (g.age || 0) > config.SCRAP.BOTS.DUMP_AFTER)) add({ kind: 'dumpscrap', obj: botScrapJob(state, g) }); // (SCRAP: the hold goes over the side before the bombs, the coal or a section)
   if (short && state.bombBay.bombs > 0 && t.BAY && (loads.length === 0 || late > 0.3)) add({ kind: 'dumpbombs', obj: g.bombJob });
   if (short && !g.coalGone && g.coalJob && late > GD.CUT_AT * 0.7 && g.need > reach * 0.75) add({ kind: 'dumpcoal', obj: g.coalJob });
   if (short && late > GD.CUT_AT && (g.need > reach * 0.9 || late > 0.8)) for (const j of g.joints) add({ kind: 'cut', obj: j });

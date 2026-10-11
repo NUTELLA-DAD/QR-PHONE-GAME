@@ -46,6 +46,8 @@ import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
 import { windSpeed } from './sails.js';
+import { drawScrapBundle, drawScrapChute, drawScrapRing, drawScrapHulk } from './scrapArt.js';
+import { scrapOn, holdCount } from './scrap.js';
 import { drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
 // ONE renderer draws the whole sky (B.3): the background and the terrain once, then EVERY ship (renderFrame's loop over the ships: each under her own pose, with her own art bake,
@@ -1320,6 +1322,11 @@ export function createRenderer({ ctx, state: world, canvas }) {
           ctx.fillStyle = '#8a5a00';
           ctx.fillText('Salvage ' + run.salvage, 454, 208);
           drawSpares(ctx, state, 470, 236, true, 0.8); // spare gasbags (lives)
+          if (scrapOn()) { // (SCRAP: the hold - a bundle and its count, beside the spare gasbags)
+            const n = holdCount(world.ships[0].ctx), cap = config.SCRAP.HOLD_CAP;
+            drawScrapBundle(ctx, 532, 236, 0.7);
+            ctx.save(); ctx.textAlign = 'left'; ctx.font = '700 18px ' + config.FONTS.DISPLAY; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.strokeStyle = config.INK; ctx.strokeText(`${n}/${cap}`, 552, 243); ctx.fillStyle = n >= cap ? '#ff9a3c' : '#ffd23f'; ctx.fillText(`${n}/${cap}`, 552, 243); ctx.restore();
+          }
           ctx.textAlign = 'left';
           ctx.fillStyle = state.salvagePop ? '#2e7d32' : '#5a4a3a';
           ctx.font = Math.round(Math.max(11, Math.min(16, (16 * lowNameDraw) / Math.max(1, lowNameW)))) + 'px ' + config.FONTS.DISPLAY; // (a smaller size first, then squeezed to its measured room: see lowName above)
@@ -1789,7 +1796,11 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.font = '700 20px ' + config.FONTS.TEXT;
     const run = state.run;
     ctx.fillStyle = '#ffd23f';
-    if (v.kind === 'dock') ctx.fillText(`Salvage: ${run.salvage}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`, 800, top0 + 42, 1000);
+    if (v.kind === 'dock') {
+      const line = `Salvage: ${run.salvage}${scrapOn() ? `   -   in the hold: ${holdCount(world.ships[0].ctx)}/${config.SCRAP.HOLD_CAP}` : ''}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`;
+      ctx.fillText(line, 800, top0 + 42, 1000);
+      if (scrapOn()) { const w = Math.min(1000, ctx.measureText(line).width); drawScrapBundle(ctx, 800 - w / 2 - 28, top0 + 34, 0.8); } // (SCRAP: a bundle beside the hold's count, which the Yard will spend from G2 on)
+    }
     else ctx.fillText(`Vote on your phone - ${Math.max(0, Math.ceil(v.t))}s`, 800, 125);
     // Spare gasbags (lives) in the corner.
     ctx.fillStyle = '#f3ead6';
@@ -2160,10 +2171,13 @@ export function createRenderer({ ctx, state: world, canvas }) {
         return o.area === 'gasbag' ? { x: o.x, y: bagEdgeY(layout.gasbags[Math.max(0, bagNearX(layout.gasbags, o.x))], o.x, false) + 20, r: 60 } : o.gun ? { x: o.x, y: P[o.d].y - 50, r: 56 } : { x: o.x, y: P[o.d].y - 24, r: 52 };
       case 'gas':
         return { x: o.x, y: o.y, r: 40 };
+      case 'pickup':
       case 'shovel':
         return { x: o.x, y: P[o.d].y - 24, r: 46 };
       case 'cut':
         return { x: o.x, y: P[o.d].y - 40, r: 60 };
+      case 'dumpscrap':
+      case 'stow':
       case 'dumpcoal':
       case 'dumpbombs':
         return { x: o.x, y: P[o.d].y - 50, r: 52 };
@@ -2319,6 +2333,39 @@ export function createRenderer({ ctx, state: world, canvas }) {
     }
   };
 
+  // SCRAP (LOOP.md G1): bundles falling on little parachutes and a gunship's hulk floating free, each in a gold ring (gold = a pickup), with "SCRAP x N" over each bunch. A bundle on a hookshot's line
+  // has no chute: the line itself is drawn with the other ropes.
+  const drawFlotsam = (ts) => {
+    const time = ts / 1000, list = (state.thrown || []).filter((q) => q.kind === 'scrap' && !q.ghost), hulks = state.hulks || [];
+    if (!list.length && !hulks.length) return;
+    const groups = [];
+    for (const it of list) {
+      if (it.chute && !it.haul) drawScrapChute(ctx, it.x, it.y - 6, 58);
+      drawScrapBundle(ctx, it.x, it.y, 1.15, it.rot || 0);
+      drawScrapRing(ctx, it.x, it.y - 4, 44 + 3 * Math.sin(time * 4 + it.id), time);
+      const g = groups.find((q) => Math.hypot(q.x - it.x, q.y - it.y) < 420);
+      if (g) { g.n++; g.top = Math.min(g.top, it.y); } else groups.push({ x: it.x, y: it.y, top: it.y, n: 1 });
+    }
+    for (const h of hulks) {
+      drawScrapHulk(ctx, h, time);
+      drawScrapRing(ctx, h.x, h.y - 20, 230, time);
+      groups.push({ x: h.x, y: h.y - 70, top: h.y - 70, n: h.left, hulk: true });
+    }
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 6;
+    ctx.lineJoin = 'round';
+    for (const g of groups) {
+      const text = (g.hulk ? 'HULK x ' : 'SCRAP x ') + g.n, y = g.top - (g.hulk ? 270 : 118);
+      ctx.font = '700 30px ' + config.FONTS.DISPLAY;
+      ctx.strokeStyle = config.INK;
+      ctx.strokeText(text, g.x, y);
+      ctx.fillStyle = '#ffd23f';
+      ctx.fillText(text, g.x, y);
+    }
+    ctx.restore();
+  };
+
   // B.6: what crosses between ships, in the world: the smoke trail behind a crewman fired from a crew cannon, sandbags / crates / sacks thrown or dumped, and the towlines.
   const drawCross = (time) => {
     for (const p of Object.values(state.players)) {
@@ -2334,7 +2381,9 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.stroke();
       }
     }
+    drawFlotsam(time);
     for (const it of state.thrown || []) {
+      if (it.kind === 'scrap') continue; // (SCRAP: drawn above, with its chute and its gold ring)
       ctx.save();
       ctx.translate(it.x, it.y);
       ctx.rotate(it.rot || 0);

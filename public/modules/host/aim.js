@@ -115,6 +115,9 @@ export function targets(state) {
   return list;
 }
 
+// SCRAP (LOOP.md G1): a gunship's hulk floating free is a target for the harpoon gun alone (it hauls it alongside; the other guns never see it).
+export const hulkTargets = (state) => (state.hulks || []).filter((h) => h.left > 0 && !h.tow).map((h) => ({ kind: 'hulk', obj: h, r: config.SCRAP.HULK.HIT_R, at: () => ({ x: h.x, y: h.y }) }));
+
 // Angle a gun must point to hit this target (in SHIP space, like gun.aim), or null if it's out of the gun's arc or range.
 export function solution(state, gun, target) {
   const ship = mainShip(state);
@@ -130,13 +133,13 @@ export function solution(state, gun, target) {
 
 // The most useful target this gun can hit right now (mines, turrets, cargo, then fighter).
 export function bestTarget(state, gun) {
-  const order = { flier: -2, cable: -1, bomb: 0, rocket: 1, saw: 1.5, laid: 1.8, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rivalGun: 8, rivalBag: 8.4, rivalCore: 8.8, rival: 9.2, boarder: 0.4, rivalCrew: 7.8, rivalDeck: 9.3 };
+  const order = { hulk: 3.5, flier: -2, cable: -1, bomb: 0, rocket: 1, saw: 1.5, laid: 1.8, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rivalGun: 8, rivalBag: 8.4, rivalCore: 8.8, rival: 9.2, boarder: 0.4, rivalCrew: 7.8, rivalDeck: 9.3 };
   let best = null;
   // (a flamethrower burns what is within a few hundred px: the sky's small fry, boarders on the decks, and the nearest bits of a hostile ship - flame.js - not her middle)
-  for (const t of gun.type === 'flame' ? [...targets(state).filter((u) => AIR_KINDS.has(u.kind)), ...flameTargets(state, mainShip(state), gun)] : gun.type === 'harpoon' ? [...targets(state), ...creatureTowTargets(state)] : gun.type === 'flak' && state.creature && config.CREATURES.FORCE_WIN === 'flak' ? [...targets(state), ...creatureTargets(state, [], null, 'flak')] : targets(state)) {
+  for (const t of gun.type === 'flame' ? [...targets(state).filter((u) => AIR_KINDS.has(u.kind)), ...flameTargets(state, mainShip(state), gun)] : gun.type === 'harpoon' ? [...targets(state), ...creatureTowTargets(state), ...hulkTargets(state)] : gun.type === 'flak' && state.creature && config.CREATURES.FORCE_WIN === 'flak' ? [...targets(state), ...creatureTargets(state, [], null, 'flak')] : targets(state)) {
     if (t.kind === 'flier' && gun.type !== 'flak') continue; // (only flak shells burst on a man in the air)
     if (t.kind === 'laid' && (gun.type === 'mortar' || gun.type === 'harpoon')) continue; // (a lob is no way to hit a mine, and a harpoon is for ships)
-    if (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship' && !towTarget(state.creature, t)) continue; // (...and for the exhausted creature)
+    if (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship' && t.kind !== 'hulk' && !towTarget(state.creature, t)) continue; // (...and for the exhausted creature, and for a gunship's hulk: SCRAP)
     if (t.kind === 'creaturePart' && forcedSkip(state.creature, t.part, gun.type)) continue; // (dev flag: the bots hold their fire so that the fight can only end one way)
     const angle = solution(state, gun, t);
     if (angle === null) continue;
@@ -155,7 +158,7 @@ export function assistAim(state, gun, wanted, maxAngle, strength) {
   let best = null;
   const SL = config.SEARCHLIGHT;
   for (const t of targets(state)) {
-    if ((t.kind === 'flier' && gun.type !== 'flak') || (t.kind === 'laid' && gun.type === 'mortar') || (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship' && !towTarget(state.creature, t))) continue;
+    if ((t.kind === 'flier' && gun.type !== 'flak') || (t.kind === 'laid' && gun.type === 'mortar') || (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship' && t.kind !== 'hulk' && !towTarget(state.creature, t))) continue;
     const angle = solution(state, gun, t);
     if (angle === null) continue;
     const spotted = isSpotted(t.obj); // (a spotted target is easier to lock onto: wider reach, counts as closer)

@@ -367,6 +367,10 @@ if (state.ships.length > 1) for (const sh of state.ships) console.log(`ship ${sh
   const S = state.structStats; // STRUCTURE.md: how sound the frame was, what gave way, how often lift failed and who saved her (not printed with NO_STRUCTURE=1: the old baselines stand)
   if (S && config.STRUCTURE.ENABLED && !config.PVP.ENABLED) console.log(`structure: meter mean ${S.meterN ? (S.meterSum / S.meterN).toFixed(1) : 'n/a'}% (lowest ${S.meterMin.toFixed(0)}%); gave way ${S.failures}x (break-offs ${S.breakoffs}, splits ${S.splits}, folds ${S.folds}); held at the last moment ${S.saves}x; shored up ${S.shored.toFixed(1)} segment-hp by hammer; lift failed ${S.falls}x (saved ${S.saved}), crashed ${S.crashes}x; halves in the sky now ${state.ships.filter((q) => q.piece).length}`);
 }
+{
+  const S = state.scrapStats; // SCRAP (LOOP.md G1): what fell, what was caught (landed on a deck, hooked), what reached the hold, what was lost; the hold's average and the share of crew time spent carrying it (not printed with NO_SCRAP=1: the old baselines stand)
+  if (S && config.SCRAP.ENABLED && !config.PVP.ENABLED) console.log(`scrap: spawned ${S.spawned} (${Object.entries(S.by).map(([k, v]) => k + ' ' + v).join(', ') || 'none'}), landed ${S.landed} (hooked ${S.hooked}), stowed ${S.stowed}, lost ${S.lost} (dumped ${S.dumped}); hulks ${S.hulks} (${S.taken} bundles taken); hold avg ${S.holdN ? (S.holdSum / S.holdN).toFixed(1) : 'n/a'}/${config.SCRAP.HOLD_CAP}, carrying ${S.crewSecs ? ((100 * S.carrySecs) / S.crewSecs).toFixed(1) : 'n/a'}% of crew time`);
+}
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);

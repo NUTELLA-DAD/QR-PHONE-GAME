@@ -11,6 +11,7 @@ import { toWorldX, toShipX } from './pose.js';
 import { hearts } from './health.js';
 import { bunkerEmpty } from './goingDown.js';
 import { gripJobs } from './creatureGrip.js';
+import { scrapOn, holdSpot, holdFull } from './scrap.js';
 
 const J = config.JOBS;
 // Worked out per ship layout (rebuilt when a new ship build is applied to it).
@@ -32,6 +33,7 @@ JOB_COLORS.shovel = '#c9a85a'; // (B.6: a sandbag or crate thrown onto the deck:
 JOB_COLORS.heal = '#ff7b9c'; // (crew health: down to the last heart - go to the medbay)
 JOB_COLORS.frame = '#d9a24a'; // (STRUCTURE.md: a hammer on a weak segment of the frame)
 JOB_COLORS.abandon = '#ff4d4d'; // (...and the half of the ship that split off is going down: jump)
+JOB_COLORS.stow = '#ffd23f'; // (SCRAP, LOOP.md G1: pick a bundle up off the deck and carry it to the hold - gold, like every pickup)
 JOB_COLORS.hack = '#f2c14e'; // (C.2: a tentacle holds the ship: gold arrow to the grip point, sword in hand)
 
 export function createJobFinder(state) {
@@ -74,7 +76,14 @@ export function createJobFinder(state) {
     }
     // HELP! calls (spotter.js): the crew sent to a caller get an arrow to them, in the caller's colour.
     for (const c of state.helpCalls || []) if (c.caller !== p && c.who.includes(p.id) && c.caller.d != null) { const s = spot(c.caller); add('help', c.caller, s.d, s.x, {}, `HELP ${c.caller.name}! - ${roomName(s.d, s.x)}`); }
-    for (const ld of state.loads || []) add('shovel', ld, ld.d, ld.x, {}, `SHOVEL THE ${((config.CROSS.CARGO.ITEMS[ld.kind] || {}).label || 'LOAD').toUpperCase()} OVERBOARD - ${roomName(ld.d, ld.x)}`); // (B.6: cargo thrown onto her deck tips her)
+    for (const ld of state.loads || []) if (ld.kind !== 'scrap') add('shovel', ld, ld.d, ld.x, {}, `SHOVEL THE ${((config.CROSS.CARGO.ITEMS[ld.kind] || {}).label || 'LOAD').toUpperCase()} OVERBOARD - ${roomName(ld.d, ld.x)}`); // (B.6: cargo thrown onto her deck tips her)
+    { // SCRAP: a bundle on the deck is picked up (hands empty), one in your hands goes to the hold (the hold bin is in the Hold room: holdSpot)
+      const sp = scrapOn() && !me.ai ? holdSpot(L) : null;
+      if (sp && !holdFull(state)) {
+        if (p.carry === 'scrap') add('stow', 'hold', sp.d, sp.x, {}, `STOW THE SCRAP - ${roomName(sp.d, sp.x)}`);
+        else if (!p.carry) for (const ld of state.loads || []) if (ld.kind === 'scrap') add('stow', ld, ld.d, ld.x, {}, `PICK UP THE SCRAP - ${roomName(ld.d, ld.x)}`);
+      }
+    }
     for (const f of state.fires) add('fire', f, f.d, f.x, {}, f.h2 ? `FIRE UNDER THE HYDROGEN BAG - ${roomName(f.d, f.x)}` : undefined); // (GAS TYPES: a fire that reaches a hydrogen bag says so)
     for (const h of state.breaches) add('hole', h, h.d, h.x);
     const S = me.sim && me.sim.structure; // STRUCTURE.md: a segment of the frame below JOB_AT wants shoring up with a hammer (a critical one is worth far more)
@@ -183,8 +192,8 @@ export function createJobFinder(state) {
     p.jobT = J.EVERY;
     let jobs = list(p).filter((j) => j.d != null);
     // Hauling something? Delivering it comes first (if there is anywhere to deliver it).
-    const delivery = jobs.filter((j) => j.kind === p.carry);
-    if (delivery.length && (p.carry === 'ammo' || p.carry === 'coal')) jobs = delivery;
+    const delivery = jobs.filter((j) => j.kind === p.carry || (p.carry === 'scrap' && j.kind === 'stow'));
+    if (delivery.length && (p.carry === 'ammo' || p.carry === 'coal' || p.carry === 'scrap')) jobs = delivery;
     const scored = jobs.map((j) => ({ j, ...score(p, j) })).filter((s) => isFinite(s.r.time)).sort((a, b) => a.score - b.score);
     const cur = p.job && jobs.find((j) => same(j, p.job.job));
     let pick = null;

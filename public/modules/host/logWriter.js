@@ -65,6 +65,10 @@ const SENT = {
   'flagship-down': ['{who} fired the shot that sank the Flagship, and the Broken Skies were ours.', 'The Flagship broke in half, and it was {who1}\'s shell that did it.', '{who} put the Flagship in the clouds where she belongs.'],
   'boss-down': ['{who} shot the great zeppelin out of the sky.', 'The big zeppelin fell, and {who1}\'s guns were the last to speak.', '{who} brought the zeppelin down to the delight of everyone below.'],
   sandbag: ['{who} carried one {item} through a whole stop and never once put it down.', '{who} and a {item} were not parted for a whole stop.', '{who} still has not put that {item} down.'],
+  'scrap-first': ['{who} stowed the first scrap of the voyage, and the hold stopped being empty.', 'The first bundle of scrap went into the hold in {who1}\'s arms.', '{who} found the hold bin and put the first scrap in it.'],
+  'scrap-hook': ['{who} hooked a bundle of scrap out of thin air and reeled it in.', 'A falling bundle met {who1}\'s hookshot and came aboard.', '{who} fished scrap out of the sky with a hook and a steady arm.'],
+  'hulk-hauled': ['{who} hauled a wrecked hulk alongside and stripped it of scrap.', 'The hulk came alongside on {who1}\'s harpoon line, and the crew took it apart.', '{who} reeled in the hulk and the scrap came off it in armfuls.'],
+  'scrap-dumped': ['{who} dumped the scrap to climb, and she rose.', 'The whole hold went over the side at {who1}\'s hand, and the ship was glad of it.', '{who} threw the scrap away to save the ship, which is exactly what scrap is for.'],
   quiet: ['{who} kept the kettle on while the sky stayed quiet.', 'It was a calm one, and {who} polished the brass.', '{who} had time to admire the view.'],
 };
 // What the busiest crewman of a job gets (moments of kind 'leader'): stat -> 3 variants. No numbers: the stat is only a hint.
@@ -91,6 +95,7 @@ const LEADER = {
   dumped: ['{who} dumped the heavy stuff and she rose like a bird.', '{who} threw the weight overboard, for lift.', 'The lift came from {who1}\'s quick dump.'],
   hatch: ['{who} worked the cargo hatch like a man with a plan.', 'The hatch opened and closed on {who1}\'s whim.', '{who} dropped cargo through the floor and called it strategy.'],
   captures: ['{who} took a helm that was not ours, and nobody minded.', '{who} stood at an enemy wheel and looked well there.', '{who} walked in and captured the bridge.'],
+  stowed: ['{who} carried scrap to the hold all stop.', 'The hold filled up in {who1}\'s arms.', '{who} was the hold\'s best friend, bundle after bundle.'],
   bats: ['{who} swatted bats off the ship all stop.', 'Every bat on board got to know {who1}\'s boot.', '{who} fought the bats and the bats lost.'],
 };
 // The short phrase after "PLAY OF THE MISSION:" (the name comes first): kind -> variants.
@@ -101,8 +106,9 @@ const PLAY = {
   'creature-win': ['brought down {C}'], 'creature-freed': ['hacked {C} loose'], breakoff: ['was beside it when {things} came off'], 'breakoff-bay': ['was next to the bomb bay when it went'], rebuild: ['bought {things} back'],
   'going-down-saved': ['pulled her out of the dive'], 'helm-held': ['held the helm through the worst of it'], limp: ['got her home on the spare gasbag'], 'ship-lost': ['stayed to the last'],
   'flagship-down': ['sank the Flagship'], 'boss-down': ['shot down the zeppelin'], sandbag: ['carried the {item} the whole stop'],
+  'scrap-first': ['stowed the first scrap'], 'scrap-hook': ['hooked scrap out of the sky'], 'hulk-hauled': ['hauled a hulk alongside'], 'scrap-dumped': ['dumped the scrap to climb'],
 };
-const PLAY_LEADER = { kills: 'ruled the guns', raiders: 'beat back the raiders', holes: 'patched the hull', fires: 'fought the fires', repairs: 'kept her running', ammo: 'kept the guns fed', coal: 'fed the boiler', revives: 'picked everyone up', defused: 'defused the bomb', vent: 'saved the boiler', demolished: 'bombed the outposts', sabotage: 'sabotaged the gunship', boarding: 'led the boarding', sails: 'worked the sails', thrown: 'threw ballast', spots: 'spotted for the guns', cannon: 'flew the crew cannon', shovels: 'cleared the decks', cuts: 'cut her free', dumped: 'dumped the weight', hatch: 'worked the hatch', captures: 'took the bridge', bats: 'swatted the bats' };
+const PLAY_LEADER = { kills: 'ruled the guns', raiders: 'beat back the raiders', holes: 'patched the hull', fires: 'fought the fires', repairs: 'kept her running', ammo: 'kept the guns fed', coal: 'fed the boiler', revives: 'picked everyone up', defused: 'defused the bomb', vent: 'saved the boiler', demolished: 'bombed the outposts', sabotage: 'sabotaged the gunship', boarding: 'led the boarding', sails: 'worked the sails', thrown: 'threw ballast', spots: 'spotted for the guns', cannon: 'flew the crew cannon', shovels: 'cleared the decks', cuts: 'cut her free', dumped: 'dumped the weight', hatch: 'worked the hatch', captures: 'took the bridge', bats: 'swatted the bats', stowed: 'filled the hold' };
 const AGAIN = ['Once more, ', 'Yet again, ', 'As ever, ', 'Still, ', 'And then, ', 'Later, '];
 export const TEMPLATES = { SENT, LEADER, PLAY, PLAY_LEADER }; // (for tools/log-check.mjs: every template is filled with odd data and must come out clean)
 const GENTLE = ['A quiet stop. {who} did the most, mostly by being there.', 'Not much to report, but {who} was the busiest of the lot.', 'A gentle one. {who} kept the ship\'s spirits up.'];

@@ -9,16 +9,17 @@ import { toWorldX, toWorldY } from './pose.js';
 import { bestTarget } from './aim.js';
 import { creatureRadar } from './creatureSystem.js';
 import { botFree } from './bots.js';
+import { scrapOn } from './scrap.js';
 
 const R = config.RADAR;
 const SP = config.SPOT;
 const HP = config.HELP;
 
 // Radar symbols, in the order the phone knows them (controller/ui.js has the same list).
-export const RADAR_KINDS = ['mine', 'fighter', 'bomber', 'plane', 'boss', 'gunship', 'bat', 'sniper', 'tug', 'saw', 'imp', 'ship', 'creature'];
-const NAMES = { mine: 'MINE', fighter: 'FIGHTER', bomber: 'BOMBER', plane: 'PLANE', boss: 'BOSS', gunship: 'GUNSHIP', bat: 'BAT', sniper: 'SNIPER', tug: 'HARPOON', saw: 'SAW', imp: 'IMP', ship: 'AIRSHIP', creature: 'CREATURE' };
+export const RADAR_KINDS = ['mine', 'fighter', 'bomber', 'plane', 'boss', 'gunship', 'bat', 'sniper', 'tug', 'saw', 'imp', 'ship', 'creature', 'flotsam'];
+const NAMES = { mine: 'MINE', fighter: 'FIGHTER', bomber: 'BOMBER', plane: 'PLANE', boss: 'BOSS', gunship: 'GUNSHIP', bat: 'BAT', sniper: 'SNIPER', tug: 'HARPOON', saw: 'SAW', imp: 'IMP', ship: 'AIRSHIP', creature: 'CREATURE', flotsam: 'SCRAP' };
 // Rough size (px) of each thing, for the bracket drawn round a spotted one on the TV.
-export const SPOT_SIZE = { mine: 44, fighter: 54, bomber: 100, plane: 50, boss: 230, gunship: 230, bat: 34, sniper: 80, tug: 60, saw: 56, imp: 30, ship: 500, creature: 150 };
+export const SPOT_SIZE = { mine: 44, fighter: 54, bomber: 100, plane: 50, boss: 230, gunship: 230, bat: 34, sniper: 80, tug: 60, saw: 56, imp: 30, ship: 500, creature: 150, flotsam: 60 };
 
 // Everything out there worth a ping (the same lists the TV's lookout arrows use, but every one of them).
 // Each: { k (kind index), kind, obj (the thing itself), pos() -> {x, y} live world position }.
@@ -59,6 +60,15 @@ export function radarItems(state) {
   if (state.creature) for (const c of creatureRadar(state)) add('creature', c.obj, c.pos); // (a giant creature: its body, beak and tentacles)
   // (B.3) Every airship in the sky is a blip too (a phone leaves out its own: spotter.js nearFor), so a crew can see where the others are.
   if (state.ships.length > 1) for (const o of state.ships) if (!o.ai) add('ship', o.state, () => ({ x: toWorldX(o, o.layout.midPoint.x), y: toWorldY(o, o.layout.midPoint.y) }));
+  return out;
+}
+
+// SCRAP (LOOP.md G1): the bundles falling on chutes and the hulks, as gold blips on the PHONE radar only (the lookout's spyglass and the portholes use radarItems: they look for enemies).
+export function flotsamItems(state) {
+  if (!scrapOn()) return [];
+  const out = [], k = RADAR_KINDS.indexOf('flotsam');
+  for (const it of state.thrown || []) if (it.chute && it.kind === 'scrap' && !it.haul) out.push({ k, kind: 'flotsam', obj: it, pos: () => ({ x: it.x, y: it.y }) });
+  for (const h of state.hulks || []) if (h.left > 0) out.push({ k, kind: 'flotsam', obj: h, pos: () => ({ x: h.x, y: h.y }) });
   return out;
 }
 
@@ -107,7 +117,7 @@ export function createSpotter({ state, emit, phoneFx }) {
   };
 
   const radarTick = (dt) => {
-    last = radarItems(state);
+    last = radarItems(state).concat(flotsamItems(state));
     // Spots on things that are gone are dropped.
     for (let i = state.spots.length - 1; i >= 0; i--) {
       const s = state.spots[i];
@@ -170,7 +180,7 @@ export function createSpotter({ state, emit, phoneFx }) {
   const spot = (p, idx, seq) => {
     const list = p.rdLists && p.rdLists[seq]; // (the list that phone was looking at when it tapped)
     const it = list && list[idx];
-    if (!it || !p.rdOn || (p.spotCd || 0) > 0) return;
+    if (!it || !p.rdOn || (p.spotCd || 0) > 0 || it.kind === 'flotsam') return; // (scrap is not a target: nothing to mark)
     p.spotCd = SP.COOLDOWN;
     markSpot(p, it);
   };

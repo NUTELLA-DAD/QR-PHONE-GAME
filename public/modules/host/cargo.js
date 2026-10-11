@@ -7,12 +7,17 @@
 //   DROP       over the open bomb bay doors, Action lets a carried sandbag or crate fall through the belly onto whatever is below (it falls as a thrown load does).
 //   const cargo = createCargo({ state, ship, air, puff, phoneFx, stat })      per ship (state = her context)
 //   stepThrown(world, dt, puff)                                               once per world step: flies the thrown loads and lands them on a deck
+// SCRAP (LOOP.md G1, scrap.js): a bundle is one more cargo kind. It falls from the sky on a chute (item.chute: low gravity, drifts with the wind, a 25 s life, lands on any ship's deck as a LOAD), is picked up from the deck
+// with Action, stowed in the hold bin with Action (stowAction), taken off a gunship's hulk (hulkAction) and dumped at the rail like a sandbag. A bundle on a hookshot's line is item.haul (hookshot.js moves it).
 import { config } from '../../config.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { applyForce } from './forces.js';
 import { pop } from './popups.js';
 import { inGap } from './shipBuild.js';
 import { creatureCargo } from './creatureSystem.js';
+import { scrapOn, scrapNote, holdSpot, holdCount, holdWeight } from './scrap.js';
+import { windSpeed } from './sails.js';
+import { inRock } from './course.js';
 
 const C = () => config.CROSS.CARGO;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -80,6 +85,14 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
     list.push(ld);
     while (list.length > C().MAX_LOADS) shed(list.shift(), null);
     const o = worldAt(ld.x, pl.y - 10);
+    if (item.kind === 'scrap') { // (SCRAP: a bundle lands softly, and it is welcome)
+      puff(o.x, o.y, '#e8c25a', 6);
+      pop(state, o.x, o.y - 70, item.hooked ? 'HOOKED!' : 'SCRAP!', '#ffd23f', 1);
+      state.sfxQ.push(['bell']);
+      ld.scrap = true;
+      scrapNote(world, item.hooked ? 'hooked' : 'landed', item.owner != null ? world.players[item.owner] : null, { ship });
+      return ld;
+    }
     puff(o.x, o.y, '#d9cbb0', 8);
     pop(state, o.x, o.y - 60, 'THUD!', '#e8c25a', 1);
     state.sfxQ.push(['hit']);
@@ -103,6 +116,7 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
     const o = worldAt(ld.x, pl.y - 30);
     spawn(ld.kind, o.x, o.y, dir * ship.pose.f * 240 + ship.pose.vx, -260 + ship.pose.vy, { ghost: true });
     if (by) puff(o.x, o.y, '#d9cbb0', 6);
+    if (ld.kind === 'scrap') scrapNote(world, 'lost', by, { ship });
   };
   const shovel = (ld, by) => {
     const list = loads(), i = list.indexOf(ld);
@@ -118,12 +132,14 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
     const near = Math.min(p.x - pl.x0, pl.x1 - p.x);
     return near <= C().DUMP_REACH ? { pl, side: p.x - pl.x0 < pl.x1 - p.x ? -1 : 1 } : null;
   };
-  const dumpAction = (p) => (p.carry === 'sandbag' || p.carry === 'crate') && railOf(p) ? { type: 'dump', label: `Dump the ${label(p.carry)} (lift!)` } : null;
+  const ballastOf = (p) => p.carry === 'sandbag' || p.carry === 'crate' || (p.carry === 'scrap' && !p.bot); // (what Action dumps at the rail or lets fall through the bay)
+  const dumpAction = (p) => ballastOf(p) && railOf(p) ? { type: 'dump', label: `Dump the ${label(p.carry)} (lift!)` } : null;
   const dump = (p) => {
     const k = C(), rail = railOf(p);
     if (!rail || !cargoItem(p.carry)) return;
     const o = worldAt(p.x + rail.side * 30, p.y - 50);
     spawn(p.carry, o.x, o.y, rail.side * ship.pose.f * 200 + ship.pose.vx, -140 + ship.pose.vy, { ghost: true });
+    if (p.carry === 'scrap') scrapNote(world, 'lost', p, { ship, dumped: true });
     p.carry = null;
     if (!state.goingDown) state.ship.gas = Math.min(100, state.ship.gas + k.DUMP_GAS); // (GOING DOWN!: the weight itself is the lift, goingDown.js)
     applyForce(state, { x: p.x, y: rail.pl.y - 40, fx: 0, fy: -(k.DUMP_KICK * config.FORCES.REF_MASS) / Math.max(60, (state.balance && state.balance.mass) || config.FORCES.REF_MASS), impulse: true, linear: true, source: 'dump' });
@@ -132,7 +148,7 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
     stat(p, 'dumped');
     phoneFx(p, 'Ballast away - she lifts!', [30]);
   };
-  const dropAction = (p) => ((p.carry === 'sandbag' || p.carry === 'crate') && L.bombBay ? { type: 'dropcargo', label: `Drop the ${label(p.carry)}!` } : null);
+  const dropAction = (p) => (ballastOf(p) && L.bombBay ? { type: 'dropcargo', label: `Drop the ${label(p.carry)}!` } : null);
   const drop = (p) => {
     const kind = p.carry;
     if (!cargoItem(kind) || !L.bombBay) return;
@@ -146,8 +162,89 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
 
   // ---- shovelling ----
   const shovelAction = (p, here) => {
-    const ld = loads().find((o) => here(o, 70));
+    const ld = loads().find((o) => here(o, 70) && (o.kind !== 'scrap' || (state.goingDown && (!p.bot || (p.botJob && p.botJob.kind === 'shovel')))));
     return ld ? { type: 'shovel', obj: ld, hold: true, time: C().SHOVEL_TIME, label: `Shovel the ${label(ld.kind)} overboard` } : null;
+  };
+
+  // ---- scrap: the hold, picking a bundle up, taking one off a hulk (LOOP.md G1) ----
+  // A bot only does these when its job says so (its one button would otherwise pick up and stow things it is merely walking past).
+  const botOk = (p, kind) => !p.bot || (p.botJob && p.botJob.kind === kind);
+  const stowAction = (p, here) => {
+    const sp = scrapOn() ? holdSpot(L) : null;
+    if (!sp || p.carry !== 'scrap' || !here(sp, config.TOOLS.REACH) || !botOk(p, 'stow')) return null;
+    const cap = config.SCRAP.HOLD_CAP, n = holdCount(state);
+    return n >= cap ? { type: 'need', label: `The hold is full (${n}/${cap}) - dump it or build bigger` } : { type: 'stow', obj: sp, label: `STOW THE SCRAP (${n + 1}/${cap})` };
+  };
+  const stow = (p) => {
+    if (p.carry !== 'scrap' || holdCount(state) >= config.SCRAP.HOLD_CAP) return false;
+    (state.scrapHold ||= { count: 0 }).count++;
+    p.carry = null;
+    stat(p, 'stowed');
+    scrapNote(world, 'stowed', p, { ship });
+    const sp = holdSpot(L), o = sp ? worldAt(sp.x, L.platforms[sp.d].y - 60) : null;
+    if (o) { puff(o.x, o.y, '#e8c25a', 5); pop(state, o.x, o.y - 40, 'STOWED', '#ffd23f', 0.8); }
+    phoneFx(p, `Scrap stowed (${holdCount(state)}/${config.SCRAP.HOLD_CAP})`, [30]);
+    return true;
+  };
+  // GRAB at the bin with empty hands: take one bundle out of the hold again (to feed a frame, throw it, or put it on a hulk's tow).
+  const unstowAction = (p, here) => {
+    const sp = scrapOn() ? holdSpot(L) : null;
+    return sp && !p.carry && !p.bot && holdCount(state) > 0 && here(sp, config.TOOLS.REACH) ? { type: 'unstow', obj: sp, label: `Take scrap out (${holdCount(state)} in the hold)` } : null;
+  };
+  const unstow = (p) => {
+    if (p.carry || holdCount(state) <= 0) return false;
+    state.scrapHold.count--;
+    p.carry = 'scrap';
+    return true;
+  };
+  // A bundle lying on the deck by your feet, hands empty: pick it up.
+  const pickAction = (p, here) => {
+    if (!scrapOn() || p.carry || state.goingDown || !botOk(p, 'stow')) return null;
+    const ld = loads().find((o) => o.kind === 'scrap' && here(o, config.TOOLS.REACH) && (!p.bot || p.botJob.obj === o));
+    return ld ? { type: 'pickup', obj: ld, label: 'Pick up the scrap' } : null;
+  };
+  const pickup = (p, ld) => {
+    const list = loads(), i = list.indexOf(ld);
+    if (i < 0 || p.carry) return false;
+    list.splice(i, 1);
+    p.carry = 'scrap';
+    return true;
+  };
+  // A hulk (a sunk gunship's wreck) floating within reach of your hand: Action takes one bundle off it into your hands.
+  const hulkNear = (p) => {
+    const hulks = world.hulks;
+    if (!scrapOn() || !hulks || !hulks.length || p.carry || p.d == null || p.fly || p.lock || !outsideNow(p)) return null;
+    const o = worldAt(p.x, p.y - 70), R = config.SCRAP.HULK.REACH;
+    let best = null;
+    for (const h of hulks) { const d = Math.hypot(h.x - o.x, h.y - o.y); if (h.left > 0 && d < R && (!best || d < best.d)) best = { h, d }; }
+    return best && best.h;
+  };
+  const hulkAction = (p) => {
+    const h = hulkNear(p);
+    return h && botOk(p, 'hulk') ? { type: 'takehulk', obj: h, label: `Take scrap off the hulk (${h.left} left)` } : null;
+  };
+  const takeHulk = (p, h) => {
+    if (p.carry || h.left <= 0 || world.hulks.indexOf(h) < 0) return false;
+    h.left--;
+    p.carry = 'scrap';
+    if (!h.took.includes(p.id)) h.took.push(p.id);
+    puff(h.x, h.y, '#e8c25a', 8);
+    pop(state, h.x, h.y - 100, h.left > 0 ? `${h.left} LEFT` : 'STRIPPED!', '#ffd23f', 1);
+    state.sfxQ.push(['clang', true]);
+    scrapNote(world, 'taken', p, { ship, hulk: h });
+    if (h.left <= 0) scrapNote(world, 'hulk', p, { ship, hulk: h });
+    return true;
+  };
+  // GOING DOWN!: the whole hold goes over the side (goingDown.js dumpscrap). The count is the weight that leaves her.
+  const dumpHold = (p) => {
+    const n = holdCount(state), sp = holdSpot(L);
+    if (n <= 0) return 0;
+    state.scrapHold.count = 0;
+    const pl = sp ? L.platforms[sp.d] : null, mid = L.refPoint ? L.refPoint.x : 0, x = sp ? sp.x : mid, dir = x < mid ? -1 : 1;
+    const o = worldAt(x, (pl ? pl.y : 600) - 40);
+    for (let k = 0; k < Math.min(n, 6); k++) spawn('scrap', o.x + k * 14, o.y, dir * ship.pose.f * (190 + k * 30) + ship.pose.vx, -230 + ship.pose.vy, { ghost: true });
+    scrapNote(world, 'dumped', p, { ship, n });
+    return n;
   };
 
   const update = (dt) => {
@@ -157,7 +254,7 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
     for (const key of Object.keys(state.rackStock)) state.rackStock[key] = Math.min(k.STOCK, state.rackStock[key] + dt / k.REFILL);
   };
 
-  return { rack, rackReady, wantsThrow, throwItem, land, place, shed, shovel, shovelAction, dumpAction, dump, dropAction, drop, update, loads, spawn, worldAt };
+  return { rack, rackReady, wantsThrow, throwItem, land, place, shed, shovel, shovelAction, dumpAction, dump, dropAction, drop, update, loads, spawn, worldAt, stowAction, stow, unstowAction, unstow, pickAction, pickup, hulkAction, hulkNear, takeHulk, dumpHold, holdWeight: () => holdWeight(state) };
 }
 
 // The stick (in world terms: dx toward the target's side, dy down is positive) that throws a load from world point `o` of `ship` onto a deck of `target`, or null. Pure: the same arc as throwItem.
@@ -188,29 +285,44 @@ export function solveThrow(ship, o, target, side) {
 export function stepThrown(world, dt, puff) {
   const list = world.thrown;
   if (!list || !list.length) return;
-  const k = config.CROSS.CARGO;
+  const k = config.CROSS.CARGO, F = config.SCRAP.FLOTSAM;
+  const wind = list.some((q) => q.chute) ? windSpeed(world) * config.SHIP.TOP_SPEED : 0;
   for (let i = list.length - 1; i >= 0; i--) {
     const it = list[i];
+    if (it.haul) { // (on a hookshot's line: hookshot.js moves it; if the line is gone it falls on)
+      const hp = world.players[it.haul];
+      if (hp && hp.hook && hp.hook.item === it) { it.t += dt; continue; }
+      it.haul = null;
+    }
     it.t += dt;
     const x0 = it.x, y0 = it.y;
-    it.vy += k.GRAVITY * dt;
+    if (it.chute) { // (SCRAP: a bundle on its little parachute settles to a steady fall and drifts with the wind)
+      it.vy += (F.FALL - it.vy) * Math.min(1, (dt * F.GRAVITY) / F.FALL);
+      it.vx += (wind - it.vx) * Math.min(1, dt * F.DRIFT);
+      it.rot = Math.sin(it.t * 2.1 + it.id) * 0.22;
+    } else {
+      it.vy += k.GRAVITY * dt;
+      it.rot += it.spin * dt;
+    }
     it.x += it.vx * dt;
     it.y += it.vy * dt;
-    it.rot += it.spin * dt;
-    if (world.creature && !it.ghost && creatureCargo(world, it)) { list.splice(i, 1); continue; } // (a giant creature: it hits a part, or falls into the open beak for half a bomb)
+    if (it.chute && inRock(world, it.x, it.y)) { puff(it.x, it.y, '#8b6b4a', 4); scrapNote(world, 'lost', null, {}); list.splice(i, 1); continue; }
+    if (world.creature && !it.ghost && !it.chute && creatureCargo(world, it)) { list.splice(i, 1); continue; } // (a giant creature: it hits a part, or falls into the open beak for half a bomb)
     let landed = false;
     if (!it.ghost && it.vy > 0) {
+      const mg = it.chute ? F.MARGIN : 8;
       for (const sh of world.ships) {
-        if (sh.state.down > 0 || sh.ctx.wreck || !sh.sim.cargo) continue;
+        if (sh.state.down > 0 || sh.ctx.wreck || !sh.sim.cargo || (it.chute && (sh.ai || sh.piece))) continue;
         const sx = toShipX(sh, it.x), psy = toShipY(sh, y0), sy = toShipY(sh, it.y);
         let best = -1;
         const holes = sh.nav ? sh.nav.holes : []; // (an open cargo drop hatch is no floor: it falls on through, hatch.js)
-        sh.layout.platforms.forEach((pl, d) => { if (sx >= pl.x0 - 8 && sx <= pl.x1 + 8 && psy < pl.y && sy >= pl.y && !(holes.length && inGap(holes, d, sx)) && (best < 0 || pl.y < sh.layout.platforms[best].y)) best = d; });
+        sh.layout.platforms.forEach((pl, d) => { if (sx >= pl.x0 - mg && sx <= pl.x1 + mg && psy < pl.y && sy >= pl.y && !(holes.length && inGap(holes, d, sx)) && (best < 0 || pl.y < sh.layout.platforms[best].y)) best = d; });
         if (best >= 0) { sh.sim.cargo.land(it, best, sx); landed = true; break; }
       }
     }
-    if (landed || it.t > k.FLIGHT) {
+    if (landed || it.t > (it.chute ? F.LIFE : k.FLIGHT)) {
       if (!landed && !it.ghost) puff(it.x, it.y, '#ffffff', 5); // (lost in the sky: a splash of cloud)
+      if (!landed && it.kind === 'scrap' && !it.ghost) scrapNote(world, 'lost', null, {});
       list.splice(i, 1);
     }
     void x0;

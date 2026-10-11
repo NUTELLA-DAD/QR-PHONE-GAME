@@ -90,6 +90,7 @@ function boot(n = 8, opts = {}) {
   config.MAPS.FORCE_KIND = opts.map || 'open';
   config.ENVIRONMENTS.FORCE = opts.env || null;
   config.ESCORT.AUTO_PATROL = false;
+  config.SCRAP.ENABLED = false; // (the Ship's Book's scenes are seeded for the sky without flotsam: the helm's detours move her, and a gunship scene leaves before the hunt; tools/scrap-check.mjs covers scrap and its moments)
   const sim = createSimulation();
   const st = sim.state;
   const e = st.ships[0].layout.boarderEntryPoints;

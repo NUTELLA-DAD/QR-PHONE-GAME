@@ -20,6 +20,7 @@ import { createMainShip, createShip, shipOf, eachShip, newGuns, transfer, areHos
 import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
 import { createTowing } from './towing.js';
+import { createFlotsam, scrapOn, topDeck } from './scrap.js';
 import { stepThrown, cargoItem } from './cargo.js';
 import { stepMines } from './minefield.js';
 import { stepFlak } from './weapons.js';
@@ -73,6 +74,7 @@ export function createSimulation() {
     rings: [], // impact rings { x, y, t, max, color, size }
     tempo: newTempo(), // build-up -> peak -> calm (breather)
     supply: null, // a supply balloon to catch during a calm { mx, my, t }
+    supplySeq: 0, // (SCRAP: numbers the bundles of a supply crate)
     gasValve: { input: 0, auto: false }, // +1 = pumping hot steam into the gasbag, -1 = venting
     shield: { ang: -Math.PI / 2, on: false, flash: 0 }, // the Deflector's arc (angle around the ship)
     upgrades: {}, // id -> times taken
@@ -134,6 +136,7 @@ export function createSimulation() {
   // What a ship's systems may ask of the world: the helpers above, and (filled in as they are made) the world's systems and the run-level rules.
   const W = { puff, phoneFx, stat, credit, emitPlayerUi, wreck: (text) => wreck(text), finishLimp: () => finishLimp(), restartGame: () => restartGame() };
   W.towing = createTowing({ world: state, puff, phoneFx }); // (B.6: towlines between ships - every ship's ATTACK asks it)
+  state.flotsam = W.flotsam = createFlotsam({ world: state, puff, phoneFx }); // (SCRAP, LOOP.md G1: what falls out of the sky when something dies, hulks; scrap.js)
   W.afterBreak = (sh) => { if (sh.main) refreshPower(); }; // (a ship that lost her guns is a weaker ship: the voyage's danger follows her, like a part bought)
   W.debris = createDebris({ world: state, puff }); // (S.5i: the parts that broke off a ship tumble through the sky - shipSim.js breakOff)
 
@@ -364,6 +367,8 @@ export function createSimulation() {
     W.debris.clear(); // (S.5i: pieces of broken-off parts are gone with the voyage)
     state.thrown.length = 0; state.tows.length = 0; state.laid.length = 0; // (B.6: loads in the air and towlines are gone with the voyage, and so are the ship's own loads, cannon records and rack stocks; laid mines too)
     if (state.loads) state.loads.length = 0;
+    for (const sh of state.ships) if (sh.ctx.scrapHold) sh.ctx.scrapHold.count = 0; // (SCRAP: the hold is empty again; the flotsam in the air goes with the thrown loads above)
+    W.flotsam.reset();
     if (state.cannons) state.cannons = {};
     if (state.rackStock) state.rackStock = {};
     for (const sh of state.ships) if (sh.sim && sh.sim.hatches) sh.sim.hatches.reset(); // (cargo drop hatches shut)
@@ -524,6 +529,14 @@ export function createSimulation() {
         pop(state, wx, wy - 120, 'SUPPLIES!', '#ffd23f', 1.4);
         state.ev.warn = 2.5;
         state.ev.warnText = 'SUPPLIES ABOARD: HULL, COAL AND AMMO!';
+        if (scrapOn()) { // (SCRAP: the crate has scrap in it: bundles land on her top deck)
+          const td = topDeck(layout), d = td ? layout.platforms.indexOf(td) : -1;
+          if (d >= 0) {
+            for (let k = 0; k < config.SCRAP.FLOTSAM.SUPPLY; k++) main.sim.cargo.land({ id: 2000000 + state.supplySeq++, kind: 'scrap', from: null }, d, (td.x0 + td.x1) / 2 + (k - 0.5) * 60);
+            state.ev.warnText = 'SUPPLIES ABOARD: HULL, COAL, AMMO AND SCRAP!';
+            W.flotsam.note('supply', config.SCRAP.FLOTSAM.SUPPLY);
+          }
+        }
         state.sfxQ.push(['bell']);
         state.supply = null;
       } else if (sp.t <= 0) state.supply = null;
@@ -1252,6 +1265,7 @@ export function createSimulation() {
         specials.reset();
         creatures.reset();
         gunship.reset();
+        W.flotsam.reset(); // (SCRAP: the last stop's flotsam is gone)
         state.tempo = newTempo();
         state.enemy.dead = Math.max(state.enemy.dead, 6);
         eachShip(state, (sh) => sh.sim.goingDown.newMission()); // (the last stand is back for the new mission)
@@ -1272,6 +1286,7 @@ export function createSimulation() {
       gunship.settle(dt);
       salvageWatch();
       moments.tick(dt); // (the Ship's Book's clock; data only)
+      W.flotsam.step(dt); // (SCRAP: the deaths of this step become bundles on little parachutes; hulks float)
     }
 
     shipCollide.step(dt); // (every ship has moved: two hulls that overlap are pushed apart, bounce and hurt - shipCollide.js)
@@ -1368,6 +1383,7 @@ export function createSimulation() {
     removeShip,
     shipCollide, // (ship-ship collision, shipCollide.js: stats = { contacts, hits } for the gates)
     towing: W.towing, // (B.6: towlines, towing.js)
+    flotsam: W.flotsam, // (SCRAP: scrap.js)
     match, // (Versus, pvp/match.js: the lobby's two teams, the shelf, the rounds; match.on while Versus is selected)
     forces, // (forces at places: forces.js)
     interaction,

@@ -295,7 +295,7 @@ export function scarfParts() {
 
 // ---- items ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // hand items are authored in the hand's frame (origin = the fist, +y = the item's long axis); chest items in the torso frame (the load hugged in front: ITEMC).
-export const CHEST_ITEMS = new Set(['coal', 'ammo', 'sandbag', 'crate']);
+export const CHEST_ITEMS = new Set(['coal', 'ammo', 'sandbag', 'crate', 'scrap']);
 export function itemParts(kind, opt = '') {
   if (!kind) return [];
   return memo('item|' + kind + '|' + opt, () => {
@@ -352,6 +352,11 @@ export function itemParts(kind, opt = '') {
       P.sph(C, '#b79a63', 17, 31, 0, 14, 10, 10, OW, 0, SP_L);
       P.box(C, '#8a7448', 17, 31, 0, 2.6, 21, 10.4, 0, 0, 0, 0, 0.35);
       P.cone(C, '#b79a63', 17, 41, 0, 3.4, 5, OWS);
+    } else if (kind === 'scrap') { // LOOP.md G1: a bundle of iron plates with a strap
+      P.box(C, '#8d96a0', 17, 35, 0, 26, 7, 17, OW);
+      P.box(C, '#b3bcc6', 17, 28, 0, 28, 7, 17, OW);
+      P.box(C, '#76808a', 17, 21.5, 0, 24, 6, 17, OW);
+      P.box(C, '#d9a24a', 17, 28, 0, 6, 26, 19, 1.4);
     } else if (kind === 'crate') {
       P.box(C, '#c9a05f', 18, 31, 0, 25, 25, 25, OW);
       for (const s of [1, -1]) P.box(C, '#8a6644', 18, 31, s * 12.9, 31, 3, 1.4, 0, 0, 0, 0, 0.78);
