@@ -150,7 +150,7 @@ export function overlapsAnother(world, ship, f = ship.pose.f) {
   return false;
 }
 
-const solid = (sh) => !(sh.state.down > 0) && !sh.ctx.wreck;
+const solid = (sh) => !(sh.state.down > 0) && !sh.ctx.wreck && !sh.piece; // (a half that has split off is falling wreckage, STRUCTURE.md: nothing bumps her and she bumps nothing)
 const massOfShip = (sh) => Math.max(1, massOf(sh.ctx).mass);
 
 // A ship's velocity in the world as the movement model has it (px/s, y down): along her bow by her speed and facing, and her climb.

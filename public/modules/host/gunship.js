@@ -44,7 +44,7 @@ import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
 import { inRock, scrollSpeed } from './course.js';
 import { platformBelow } from './nav.js';
-import { targetShip } from './ships.js';
+import { targetShip, mendHull } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { pop } from './popups.js';
 import { applyForce } from './forces.js';
@@ -959,7 +959,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     state.kills += 1 + g.crew.length;
     if (byCrew) {
       // Spoils: patch the hull, fill the firebox, top up guns and bombs.
-      state.ship.hull = Math.min(100, state.ship.hull + G.REWARD_HULL);
+      mendHull(state, G.REWARD_HULL);
       state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + G.REWARD_COAL);
       for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
       state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + 2);

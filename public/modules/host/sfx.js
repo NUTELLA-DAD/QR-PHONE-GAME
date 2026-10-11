@@ -192,6 +192,13 @@ export function createSfx(state) {
       tone('sawtooth', 400, 90, 0.25, 0.3);
       noise('lowpass', 400, 0.45, 0.4, 0.08);
     },
+    // STRUCTURE.md: the frame creaks while a load-bearing section is failing (every couple of seconds): a long low groan of wood, a rivet popping.
+    creak: () => {
+      tone('sawtooth', 95, 58, 0.9, 0.16);
+      tone('triangle', 142, 70, 0.7, 0.1, 0.1);
+      noise('bandpass', 380, 0.5, 0.12, 0.05, 4);
+      tone('square', 640, 420, 0.06, 0.07, 0.45);
+    },
     // C.6b: the Thunderbird. A THUNDERCLAP (a crack and a long low rumble: it calls a bolt, swallows one, changes phase) and its SCREECH (a high rising cry: it arrives, rears, lands, is plucked).
     thunder: () => {
       noise('highpass', 2400, 0.12, 0.5, 0, 2);

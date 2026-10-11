@@ -2,6 +2,7 @@
 // Each upgrade changes the ship's modules (via config / state) and can be taken up to `max` times.
 import { config } from '../../config.js';
 import { refillBags } from './gasBags.js';
+import { mendHull } from './ships.js';
 
 export const UPGRADES = [
   {
@@ -110,7 +111,7 @@ export const UPGRADES = [
     id: 'spare-parts', name: 'Spare Parts', icon: '🧰', max: 99,
     desc: 'Patch everything up right now: hull, gasbag and every module.',
     apply: ({ state, modules }) => {
-      state.ship.hull = 100;
+      mendHull(state, 100); // (STRUCTURE.md: every segment of the frame and the canvas of every bag with it)
       refillBags(state, config.GAS.START);
       state.breaches.length = 0;
       state.gasHoles.length = 0;

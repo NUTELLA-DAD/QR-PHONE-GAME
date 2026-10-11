@@ -69,6 +69,7 @@ const { createSimulation } = await load('modules/host/simulation.js');
 const { BUILDS, buildLayout, bagLift } = await load('modules/host/shipBuild.js');
 const { validate, liftGauge } = await load('modules/host/buildCheck.js');
 const { applyBuild } = await load('shipLayout.js');
+const { hullLost } = await load('modules/host/structure.js'); // (STRUCTURE.md: what a blast costs her is the soundness of her frame it takes)
 const BE = await load('modules/host/buildEdit.js');
 const GA = await load('modules/host/gases.js');
 const GB = await load('modules/host/gasBags.js');
@@ -199,7 +200,7 @@ const mixParts = BE.setGas(BE.setGas(bagsParts, { bag: 1, gas: 'hydrogen' }).par
   const { sim, st, L } = b;
   const cat = deckIndex(L, 'catwalk');
   step(sim, secs(2)); // (no crew aboard: nobody puts the fire out, and her autopilot pumps by itself)
-  const hull0 = st.ship.hull;
+  const hull0 = st.ship.hull, lost0 = hullLost(b.ours);
   const f = light(b);
   step(sim, 5);
   report(f && f.h2 === true && st.bags[0].scorch > 0 && st.bags[0].burn === 0, `a fire under the hydrogen bag is marked for the bots (h2) and starts scorching it (scorch ${st.bags[0].scorch.toFixed(2)})`);
@@ -210,7 +211,7 @@ const mixParts = BE.setGas(BE.setGas(bagsParts, { bag: 1, gas: 'hydrogen' }).par
   report(st.gasStats.exploded === 1 && Math.abs(tBoom - H.FUSE) < 1.2 && st.bags[0].gas < gas0 - 5, `it burns for its ${H.FUSE} s fuse (${tBoom.toFixed(1)} s, venting gas ${gas0.toFixed(0)} -> ${st.bags[0].gas.toFixed(0)}) and EXPLODES`);
   step(sim, 2);
   report(st.gasHoles.length >= config.GAS.MAX_HOLES - 1 && (st.bags[0].gas < 3 || st.ballastCd > 0) && st.fires.some((q) => q.big) && L.gasbags.length === 1, 'her only bag cannot tear away: she is ripped open (holes, no gas: the emergency ballast drops) and big fires burn under it');
-  report(st.ship.hull < hull0 - 1, `the blast cost hull (${(hull0 - st.ship.hull).toFixed(0)})`);
+  report(config.STRUCTURE.ENABLED ? hullLost(b.ours) > lost0 + 0.02 : st.ship.hull < hull0 - 1, `the blast cost hull (${config.STRUCTURE.ENABLED ? hullLost(b.ours).toFixed(2) + '% of her frame' : (hull0 - st.ship.hull).toFixed(0)})`);
   step(sim, secs(2));
   report(st.gasStats.exploded === 1 && st.gasStats.lit === 1 && finite(st) && st.bags[0].burn === 0, 'a burnt-out bag does not light again at once; nothing went NaN');
 

@@ -1,5 +1,5 @@
 // The gasbags in flight (Phase S.5d): any number of bags side by side, each with its own gas and its own holes.
-//   state.bags = [{ gas (0..100), w (its lift share), down (deflated) }], in the same order as the layout's gasbags (tail to nose)
+//   state.bags = [{ gas (0..100), w (its lift share), down (deflated), hp (the canvas, 0..1: STRUCTURE.md - shells wear it, a patch mends it, a ragged bag lifts less) }], in the same order as the layout's gasbags (tail to nose)
 //   state.ship.gas stays the one number the rest of the game reads (the HUD, the helm, the bots, the shop): the lift-weighted MEAN of the bags' gas.
 //   Writing it sets every bag, so "refill to 50" and the like keep working; refillBags() tops each bag up without lowering a fuller one.
 // The helm's pump and vent act on all the bags at once; seepage is per bag and each hole leaks from its own bag (hole.bag). A bag at BAG_DOWN or less is
@@ -17,7 +17,7 @@ const bagsOf = (state) => layoutOf(state).gasbags; // (updated in place when a b
 const valves = (state) => layoutOf(state).gasValves || []; // (only a build that has some carries the list)
 const clamp100 =(v) => Math.max(0, Math.min(100, v));
 
-const makeBags = (state, level) => { const BAGS = bagsOf(state); return Array.from({ length: Math.max(1, BAGS.length) }, (_, i) => ({ gas: level, w: BAGS[i] ? Math.max(1, BAGS[i].lift) : 1, down: false, closed: false, type: gasKey(BAGS[i]), scorch: 0, burn: 0 })); };
+const makeBags = (state, level) => { const BAGS = bagsOf(state); return Array.from({ length: Math.max(1, BAGS.length) }, (_, i) => ({ gas: level, w: BAGS[i] ? Math.max(1, BAGS[i].lift) : 1, down: false, closed: false, type: gasKey(BAGS[i]), scorch: 0, burn: 0, hp: 1 })); };
 // Count the hot-air bags (the burner's heat is kept across a refit).
 const hotCount = (state) => { state.hotAir ||= { n: 0, heat: 1, warned: false, min: 1 }; state.hotAir.n = state.bags.filter((b) => b.type === 'hot').length; };
 

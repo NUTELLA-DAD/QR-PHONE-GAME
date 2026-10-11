@@ -14,7 +14,7 @@ import { shellDmg, dazzled } from './aim.js';
 import { pop } from './popups.js';
 import { bagNearX } from './shipBuild.js';
 import { flyPlane, smoke, shootDown, angDiff, shoveShip, bumpShip, bounceStep } from './planes.js';
-import { targetShip } from './ships.js';
+import { targetShip, mendHull } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const W = config.WAVES;
@@ -242,13 +242,13 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   // the gasbag's underside (above the catwalk) or the nearest deck floor.
   const latchOn = (b) => {
     const P = layout.platforms;
-    const cat = layout.deckIndex('catwalk');
+    const cat = Math.max(0, layout.deckIndex('catwalk')); // (STRUCTURE.md: a ship that has split or broken may have no catwalk)
     const sx = toShipX(ship, b.x);
     const sy = toShipY(ship, b.y);
     const BG = layout.gasbags; // (the bag it grazed: the nearest of the gasbags side by side)
     const GB = BG[Math.max(0, bagNearX(BG, sx))];
     // (a little generous: a bat grazing the envelope's skin counts as hitting the gasbag)
-    const hitGas = ((sx - GB.cx) / (GB.rx * 1.15)) ** 2 + ((sy - GB.cy) / (GB.ry * 1.2)) ** 2 < 1 && sy < 455;
+    const hitGas = !!GB && ((sx - GB.cx) / (GB.rx * 1.15)) ** 2 + ((sy - GB.cy) / (GB.ry * 1.2)) ** 2 < 1 && sy < 455;
     b.latched = true;
     b.age = 0;
     b.gnawT = 0;
@@ -266,6 +266,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         if (layout.isNestDeck(p.id) || p.id === 'pod' || p.id === 'hangar' || p.id === 'lamp') return;
         if (best < 0 || Math.abs(p.y - sy) < Math.abs(P[best].y - sy)) best = i;
       });
+      if (best < 0) best = 0;
       b.kind = 'deck';
       b.d = best;
       b.lx = Math.max(P[best].x0 + 40, Math.min(P[best].x1 - 40, sx));
@@ -579,7 +580,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
           state.boss = null;
           state.bossDownLap = lap(); // (the Flagship stop needs her sunk before the beacon counts)
           // Spoils of war: patch the ship up.
-          state.ship.hull = Math.min(100, state.ship.hull + W.BOSS_REWARD_HULL);
+          mendHull(state, W.BOSS_REWARD_HULL);
           for (const b of state.bags) b.gas = Math.min(100, b.gas + 30); // (every gasbag)
           warn(z.name.replace('THE ', '') + ' DOWN! SALVAGE PATCHES THE HULL!', 4);
         }

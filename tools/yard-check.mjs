@@ -293,8 +293,9 @@ let payments = 0, start = 2000;
   const spares = st.run.spares;
   st.run.visited.push(st.run.stopId); // (she has somewhere to limp back to)
   st.run.salvage = 3000;
-  st.ship.hull = -1;
-  for (let k = 0; k < 60 * 240 && !st.limp; k++) { if (k % 60 === 0 && !st.ship.down) st.ship.hull = -1; step(sim, 1); } // (the first wreck of a mission is GOING DOWN!, a last stand: it ends in the limp)
+  const wreckIt = () => { st.ship.hull = -1; st.ships[0].sim.wreck('test'); }; // (STRUCTURE.md: with structure on there is no hull to drain to 0: she is wrecked outright)
+  wreckIt();
+  for (let k = 0; k < 60 * 240 && !st.limp; k++) { if (k % 60 === 0 && !st.ship.down) wreckIt(); step(sim, 1); } // (the first wreck of a mission is GOING DOWN!, a last stand: it ends in the limp)
   const limping = !!st.limp;
   for (let k = 0; k < 60 * (config.LIMP.TIME + 10) && st.limp; k++) step(sim, 1); // (and look the moment she is patched up: the bots at the dock soon buy the Full Repair)
   const mods = newest ? newest.names.map((nm) => st.modules.find((m) => m.name === nm)).filter(Boolean) : [];

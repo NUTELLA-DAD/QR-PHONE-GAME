@@ -25,7 +25,8 @@
 //        node tools/buildsim.mjs --check-collide    ship-ship collision (tools/collide-check.mjs): two ships flown at each other never overlap and bounce, a heavier ship is moved less, COME ABOUT next to another ship, 3 ships in formation and a Versus round never overlap, a ram hurts both and kicks the pitch, one ship runs nothing
 //        node tools/buildsim.mjs --check-gunship-ship  B.5: the enemy gunship as a SHIP (tools/gunship-ship-check.mjs): she spawns with a real layout and a bot crew who live on her, flies and comes about on her own pose and flight, fights (her cannonballs, our shells, the ports), LATCHES with a rope that is a spring between two poses and sends her guards across, our crew board her (swing, fight, plant the charge, swing back, take her helm), she can be sunk, a fire on her spreads, a natural pacing-director run; then the parity bands against the old gunship (tools/gunship-parity.mjs)
 //        node tools/buildsim.mjs --check-turn       M.3: COME ABOUT: the helm's command (the phone's button or the stick astern, held), the manoeuvre (squash through zero, f flips at the middle, her speed along the bow flips so the ground speed does not jump, speed held down, no guns, the camera's zoom held), the refusals (too fast, already turning, cooling down, falling, a gunship alongside, a hookshot line, the mirrored hull in rock), rock on the right side, the Nose Gun's shells, a person's screen-relative stick (also one held across the flip), a headless bot helm turning on a route map and flying back to a goal behind her, a second ship turning on her own, the bots' jobs through a turn (tools/turn-check.mjs)
-//        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt
+//        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt (run with NO_STRUCTURE=1, the old hull bar, until STRUCTURE.md WP6 re-snapshots it for the structure game)
+//        node tools/buildsim.mjs --check-structure  STRUCTURE.md WP0 + WP1 (tools/structure-check.mjs): the segments and the load graph, what a hit / a breach / a fire / rock hurts, the hammer, the warning and the creak, the grace, the failure rules, a SPLIT into two ships (the piece falls and crashes, her crew wake in the medbay, a REBUILD card brings her back), folding, lift failing (FALLING, bots save her, the CRASH), the NO_STRUCTURE switch, determinism, botsim --split / --sink, a ship with no gasbag
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
 //        node tools/buildsim.mjs --check-validator   S.5: broken builds must FAIL/WARN with the right message (the classic passes clean)
 //        node tools/buildsim.mjs --check-edit        S.5b/S.5c: the blueprint editor (draw a keel deck, extend main, lengthen the bag, cut the top deck, erase; ladders and delete; erase everything and build a ship up from nothing) validates and flies 2 min with 0 errors
@@ -141,7 +142,7 @@ function checkBotsim() {
   const blocks = text.split(/^\$ /m).slice(1).map((b) => { const [cmd, ...rest] = b.split('\n'); return { cmd: cmd.trim(), want: rest.join('\n').trim() }; });
   let ok = true;
   for (const { cmd, want } of blocks) {
-    const out = spawnSync(process.execPath, cmd.replace(/^node /, '').split(' '), { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 });
+    const out = spawnSync(process.execPath, cmd.replace(/^node /, '').split(' '), { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NO_STRUCTURE: '1' } }); // (the baseline is the hull-bar game: STRUCTURE.md WP6 re-snapshots it for the structure game)
     const got = (out.stdout || '').replace(/\r/g, '').split('\n').filter((l) => !l.startsWith('real time')).join('\n');
     const gotSummary = got.slice(got.indexOf('--- botsim summary ---')).trim();
     const same = gotSummary === want;
@@ -717,6 +718,9 @@ async function checkFire() {
   globalThis.localStorage ??= { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
   globalThis.requestAnimationFrame ??= (f) => setTimeout(f, 16);
   const { config } = await load('config.js');
+  const { hullLost } = await load('modules/host/structure.js'); // (STRUCTURE.md: the hull a fire or a hit costs is the soundness of her frame it takes: mendAll puts it back, lostOf reads it)
+  const mendAll = (sm) => { sm.state.ship.hull = 100; const q = sm.ships[0].sim.structure; if (q.on()) q.restoreAll(); };
+  const lostOf = (sm) => hullLost(sm.ships[0]);
   const { BUILDS, buildLayout } = await load('modules/host/shipBuild.js');
   const { validate } = await load('modules/host/buildCheck.js');
   const FM = await load('modules/host/fireModel.js');
@@ -768,9 +772,9 @@ async function checkFire() {
     report(S.fires.length <= FM.fireCap(SHIP_LAYOUT) + F.BLAZE.EXTRA_CAP, 'the fire count never passes the cap (+ the blaze allowance)');
     // hull loss is faster in a blaze than from the same number of ordinary fires
     clearFires(sim);
-    S.ship.hull = 100; S.fires.push(...Array.from({ length: 4 }, (_, i) => ({ x: 300 + i * 40, d: mainD, t: -999, prog: 0 }))); run(sim, 10); const plain = 100 - S.ship.hull;
+    mendAll(sim); S.fires.push(...Array.from({ length: 4 }, (_, i) => ({ x: 300 + i * 40, d: mainD, t: -999, prog: 0 }))); run(sim, 10); const plain = lostOf(sim);
     clearFires(sim);
-    S.ship.hull = 100; S.fires.push(...Array.from({ length: 4 }, (_, i) => ({ x: 300 + i * 40, d: mainD, t: -999, prog: 0, big: true }))); S.blaze = { d: mainD, x: 300 }; run(sim, 10); const big = 100 - S.ship.hull;
+    mendAll(sim); S.fires.push(...Array.from({ length: 4 }, (_, i) => ({ x: 300 + i * 40, d: mainD, t: -999, prog: 0, big: true }))); S.blaze = { d: mainD, x: 300 }; run(sim, 10); const big = lostOf(sim);
     report(big > plain * 1.2, `four big fires eat the hull faster than four plain ones (${big.toFixed(1)} against ${plain.toFixed(1)} in 10 s)`);
     clearFires(sim);
     // a fire beside the coal finds it by itself
@@ -818,9 +822,9 @@ async function checkFire() {
       const S = sm.state;
       let lost = 0, holes = 0, fires = 0;
       for (let i = 0; i < 300; i++) {
-        S.ship.hull = 100; S.breaches.length = 0; S.fires.length = 0; S.ship.down = 0;
+        mendAll(sm); S.breaches.length = 0; S.fires.length = 0; S.ship.down = 0;
         sm.impact(x, 620, 1);
-        lost += 100 - S.ship.hull; holes += S.breaches.length; fires += S.fires.length;
+        lost += lostOf(sm); holes += S.breaches.length; fires += S.fires.length;
       }
       return { lost, holes, fires, plated: S.fireStats.plated };
     };
@@ -2551,6 +2555,8 @@ if (mode === '--snapshot-classic') {
   console.log('wrote ' + FIXTURE);
 } else if (mode === '--check-classic') {
   process.exit((await checkClassic()) ? 0 : 1);
+} else if (mode === '--check-structure') {
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'structure-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-botsim') {
   process.exit(checkBotsim() ? 0 : 1);
 } else if (mode === '--check-multi') {
@@ -2587,7 +2593,7 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-flame') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'flame-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-creature') {
-  const run = (script, args) => spawnSync(process.execPath, [path.join(root, 'tools', script), ...args], { cwd: root, stdio: 'inherit' }).status === 0;
+  const run = (script, args) => spawnSync(process.execPath, [path.join(root, 'tools', script), ...args], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STRUCTURE: '1' } }).status === 0; // (STRUCTURE.md: the creature fights are balanced for the hull-bar game - the Kraken's grip drags her into the sea, where a crash is now a loss: WP2 moves the creatures onto segments and WP6 re-balances them; until then this gate runs the old game)
   const world = run('creature-check.mjs', argv.slice(1)); // (C.1: the creature in the real game)
   const body = run('creature-spike-check.mjs', []); // (C.0: the body itself)
   process.exit(world && body ? 0 : 1);
@@ -2632,14 +2638,18 @@ if (mode === '--snapshot-classic') {
   fs.writeFileSync(POSE_ALLOW, JSON.stringify(poseCounts(path.join(root, 'public')), null, 1) + '\n');
   console.log('wrote ' + POSE_ALLOW);
 } else if (mode === '--snapshot-golden') {
+  process.env.NO_STRUCTURE = '1';
   if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/golden.json from the current code (do it when a PLANNED change legitimately moves the numbers).'); process.exit(2); }
   await snapshotGolden();
 } else if (mode === '--check-golden') {
+  process.env.NO_STRUCTURE = '1'; // (the golden numbers are the hull-bar game's: STRUCTURE.md WP6 re-captures them for the structure game)
   process.exit((await checkGolden()) ? 0 : 1);
 } else if (mode === '--snapshot-frames') {
+  process.env.NO_STRUCTURE = '1';
   if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/frames/ from the current code.'); process.exit(2); }
   await snapshotFrames();
 } else if (mode === '--check-frames') {
+  process.env.NO_STRUCTURE = '1'; // (...and so are the frames)
   process.exit((await checkFrames()) ? 0 : 1);
 } else if (mode === '--check-pose') {
   process.exit((await checkPose()) ? 0 : 1);
@@ -2650,6 +2660,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-hatch | --check-breakoff | --check-physics | --check-enemy3d | --check-3d | --snapshot-3d --force | --check-health | --check-flame | --check-creature | --check-gen | --check-turn | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-hatch | --check-breakoff | --check-structure | --check-physics | --check-enemy3d | --check-3d | --snapshot-3d --force | --check-health | --check-flame | --check-creature | --check-gen | --check-turn | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

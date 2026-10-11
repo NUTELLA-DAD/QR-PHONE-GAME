@@ -88,6 +88,7 @@ const { config } = await load('config.js');
 const { createSimulation } = await load('modules/host/simulation.js');
 const S = await load('modules/host/ships.js');
 const T = await load('modules/host/pose.js');
+const { hullLost } = await load('modules/host/structure.js'); // (STRUCTURE.md: what the Kraken's blow costs her is the soundness of her frame it takes, until WP2 puts it on a segment)
 const A = await load('modules/host/aim.js');
 const CS = await load('modules/host/creatureSystem.js');
 const FL = await load('modules/host/flame.js');
@@ -1024,11 +1025,11 @@ function CreatureExpose(cr) { for (const p of cr.parts) if (p.kind === 'heart') 
   const p2 = (st.players.p2 = { ...p1, id: 'p2', name: 'P2' });
   const hold = () => { standOn(p1, ship, deck, Math.max(pl.x0 + 20, Math.min(pl.x1 - 20, ix + 500))); standOn(p2, ship, deck, ix); };
   hold();
-  const hull0 = st.ship.hull, vy0 = ship.pose.vy, ev0 = st.breakStats.events;
+  const hull0 = st.ship.hull, lost0 = hullLost(ship), vy0 = ship.pose.vy, ev0 = st.breakStats.events;
   for (let i = 0; i < secs(2) && !cr.breach.impacted; i++) { hold(); step(sim); }
   const b = cr.breach;
   report(b.impacted && b.hit === true && cr.stats.breachHits === 1, `she stayed in the shadow, low over the water (keel ${b.gap.toFixed(0)} px above it, reach ${BR.REACH}): it smashes into the hull`);
-  report(st.ship.hull < hull0 - 1 && ship.pose.vy < vy0 - 100, `big hull damage (${hull0.toFixed(1)} -> ${st.ship.hull.toFixed(1)}) and a kick up (${vy0.toFixed(0)} -> ${ship.pose.vy.toFixed(0)} px/s)`);
+  report((config.STRUCTURE.ENABLED ? hullLost(ship) > lost0 + 0.5 : st.ship.hull < hull0 - 1) && ship.pose.vy < vy0 - 100, `big hull damage (${hull0.toFixed(1)} -> ${st.ship.hull.toFixed(1)}; ${(hullLost(ship) - lost0).toFixed(2)}% of her frame) and a kick up (${vy0.toFixed(0)} -> ${ship.pose.vy.toFixed(0)} px/s)`);
   report(p1.hearts === config.HEALTH.MAX - 1 && p2.ko > 0, `crew near the impact lose a heart (${p1.hearts} of ${config.HEALTH.MAX}) and the one at it is knocked out (${p2.ko.toFixed(0)} s)`);
   void ev0;
   // exposed in the air: heart and beak open, shots do more

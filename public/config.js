@@ -933,6 +933,7 @@ export const config = {
       DECK_PRICE: 5, // ... and per 100 px of deck lost
       MIN: 40, // dearer than nothing, ...
       MAX: 280, // ... never more than this
+      MAX_HALF: 420, // a half of the ship that split off (STRUCTURE.md, the cause 'split') costs up to this
     },
     BOT_REBUILD: 0.85, // the bots' crews vote for a REBUILD card (the oldest they can afford) with this chance
     DEBRIS: {
@@ -1202,7 +1203,7 @@ export const config = {
     MAX_CREW: 3, // this many human crew or fewer get mates (a 4th human sends them home)
     COUNT: { 1: 2, 2: 2, 3: 1 }, // mates per number of humans aboard
     SPAWN_GAP: 1.5, // seconds between one mate dropping aboard and the next
-    JOBS: ['coal', 'ammo', 'patch', 'fire', 'revive', 'heal'], // the only job kinds a mate takes (hauling and mending; going to the medbay when hurt; GOING_DOWN.MATE_JOBS adds a few while she falls)
+    JOBS: ['coal', 'ammo', 'patch', 'fire', 'revive', 'heal', 'frame'], // the only job kinds a mate takes (hauling and mending; going to the medbay when hurt; GOING_DOWN.MATE_JOBS adds a few while she falls)
     COLOR: '#8a6f4e', // jacket colour (khaki)
     SCARF: '#b4b8bd', // the grey scarf that marks a mate
   },
@@ -1730,6 +1731,57 @@ export const config = {
     VENT_AT: 86, // ... open a vent when it is this high (BOILER.WARN_AT blows the boiler) ...
     VENT_CLOSE: 74, // ... and close it again below this
     CUT_AT: 0.5, // bots cut a section away only when this share of the fall is gone and she is still short (the last resort)
+  },
+  // STRUCTURAL DAMAGE (STRUCTURE.md; structure.js): there is no hull bar. The ship is a frame of SEGMENTS (a stretch of each deck with the hull under it, SEG_PX long) and her gasbags have canvas.
+  // A hit hurts the segment it lands on, a breach or a fire wears its segment down until it is planked or out, the crew SHORE UP a segment with a hammer. A segment that reaches 0 gives way:
+  // the end of the ship breaks off, a middle one splits her in half (the half with the most lift flies on; a half with no gasbag falls). Lift below weight = she falls (goingDown.js), and
+  // sitting on the ground like that for CRASH.TIME seconds is the loss. ENABLED false (or NO_STRUCTURE=1 in a tool) is the old hull bar, byte for byte.
+  STRUCTURE: {
+    ENABLED: typeof process === 'undefined' || !(process.env && process.env.NO_STRUCTURE), // the switch (a browser has no process: on)
+    SEG_PX: 240, // length of a segment along a deck (the grid the decks are cut on: a deck's end cell shorter than END_MIN of it joins its neighbour)
+    END_MIN: 0.45,
+    FRAME_GAP: 220, // decks whose rows are this close (px) are joined by frames where they overlap in x ...
+    FRAME_OVERLAP: 40, // ... by at least this much
+    GONDOLA: ['main', 'lower', 'keel', 'deep'], // the deck rows that carry the ship (the rest hang on them): the ones that can split her
+    SMALL_SHARE: 0.15, // a stretch cut off that is shorter than this share of the ship's deck length is an ordinary break-off; two stretches longer than it make a SPLIT
+    MIN_SHARE: 0.35, // when the length-weighted mean soundness of the frame is under this she FOLDS (a split at the weakest main-deck segment)
+    STATES: { SCUFFED: 0.97, DAMAGED: 0.6, CRITICAL: 0.25 }, // soundness below each is that state (gone is 0)
+    HP_PER_HULL: 0.015, // soundness a segment loses per old hull point (a shell is HIT_DAMAGE 3 x power: 0.045; damageHull(amount) uses this too) ...
+    BIG_POWER: 4, // a blow this powerful (a mine, a ram, the Kraken) skips the grace
+    MODULE_SHARE: 0.5, // a hit on a station, gun or engine hurts the segment under it by this share of a plain hit
+    CANVAS_PER_HULL: 0.05, // canvas a gasbag loses per old hull point a hit on it would have cost (a shell is 2 x power x the damage scale: about 0.02 on Normal) ...
+    CANVAS_LOSS: 16, // ... and the gas points of lift a bag with no canvas left has lost (weight: she hovers that much higher on the pump)
+    PATCH_CANVAS: 0.25, // canvas a patched gasbag hole gives back
+    BREACH_RATE: 0.012, // soundness a second an open breach takes off its segment (x the damage scale), until it is planked
+    FIRE_RATE: 0.01, // ... and a fire (a big one counts BLAZE.HULL_MUL times)
+    SCRAPE_MUL: 1, // rock scraping the keel: a plain hit of this power
+    REPAIR_RATE: 0.12, // soundness a second a hammer held on a segment gives back (SHORE UP)
+    LOAD_WEIGHT: 1, // gas points of weight (lift she needs on top of the neutral fill) per point a load lying on her decks weighs
+    SHORE_PAD: 25, // a hammer reaches a segment this many px beyond its ends
+    JOB_AT: 0.6, // a segment below this is a FRAME job for idle phones and the bots (critical ones first)
+    GRACE_SPLIT: { easy: 14, normal: 8, veteran: 6, hard: 5 }, // seconds a critical segment at 0 holds (at HOLD_HP) before it gives, by difficulty: a hammer saves it
+    GRACE_END: 2, // ... and one that is not critical (an end, a pod, a nest)
+    HOLD_HP: 0.02,
+    HELD_HP: 0.3, // a segment that fails but cannot give way (nothing can come away there, or Easy before stop 2) is left at this
+    CANVAS_RESTORE: 0.01, // canvas every gasbag gets back per old hull point of a repair
+    GROUND_HOLD: 0.35, // seconds a touch of rock or sea counts as sitting on the ground (a ship that sits there bounces on it)
+    SAVED_HP: 0.15, // a held segment mended above this is safe
+    FAIL_GAP: 20, // seconds between two failures (the second waits, held at 0.02)
+    EASY_SPLIT_STOP: 2, // on Easy she cannot split before this stop of the voyage
+    RESTORE_PER_POINT: 0.03, // soundness a hull point of the old repairs (a reward, a supply drop, a checkpoint flag, a kill) gives back, into the weakest load-bearing segments first
+    LIMP_HP: 0.6, // a wreck that limps home on a spare is patched up to this
+    SHIM_SPREAD: 4, // damageHull(amount) from the creatures, flame and the like spreads over this many load-bearing segments at a time (WP2 moves them onto segments)
+    PIECE: {
+      LIFE: 45, // seconds a half with a gasbag can drift after the split before it breaks up
+      BOT_ABANDON: 2, // seconds before a bot on a half that is going down jumps (a parachute) or swings across
+      FALL_ACCEL: 520, // a half with no gasbag: px/s^2 down ...
+      FALL_TERMINAL: 700, // ... at most this fast (px/s)
+    },
+    // FALLING (goingDown.js): whenever her lift is short of her weight by MARGIN for START seconds and she is sinking; it ends after lift beats weight for END seconds ("SHE HOLDS!")
+    LIFT: { START: 1.5, END: 2, COOLDOWN: 10, GRACE: 3, PUMP_AT: 0.5, RISE_MIN: 4, EMPTY_GAS: 6, SINK_VY: 3, RELIEF_DECAY: 0.2 }, // SINK_VY: she counts as sinking below this climb rate (px/s); RELIEF_DECAY: weight dumped overboard (gdRelief) buys this many gas points less of relief a second; short of lift is only TROUBLE when the helm pumps this hard (0..1) and the gas rises slower than RISE_MIN points a second (no steam, a bag torn open), the bag is down to EMPTY_GAS, or nobody flies her (a helm that vents and holds the bag low is diving on purpose)
+    // The loss: sitting on the ground (or the sea) with lift still short of weight this long. Seconds on Normal, plus PER_CREW for each crewman under 8; by difficulty for the rest.
+    CRASH: { TIME: { easy: 14, normal: 8, veteran: 6, hard: 5 }, PER_CREW: 1 },
+    CREAK_EVERY: 2, // seconds between the creaks while a segment is critical
   },
   // Spare gasbags: in a voyage a wreck is not final. Each wreck costs one spare, loses the stop's progress and a share
   // of the salvage, and the ship limps back to the previous stop. No spares left = the voyage ends.
@@ -2877,7 +2929,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5, hack: 3.4 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5, hack: 3.4, frame: 1.9 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

@@ -7,6 +7,9 @@
 //                                                                                    nest - whole; the end of a big deck, `len` px of it)
 //                                          { kind: 'part', name }                    the limb a named station or engine stands on
 //                                          { kind: 'bag', index }                    gasbag number `index` (tail to nose) tears away
+//                                          { kind: 'cuts', cuts: [{ id, a, b }] }    these deck stretches go (structure.js: a segment that gave way, and the little pieces it leaves)
+//   planSplit(parts, spec)         STRUCTURE.md: a ship that has come in two. The half with the most lift stays; the rest becomes a ship of its own. spec = { comps: [{ stretches, bags, lift, helm, length }], gone, small }
+//                                  returns { ok, keep, away, cuts, scars, names } with keep / away = { parts, labels, names, mass, lift, bags (their cx), decks }
 //   returns { ok, hint, parts, labels, summary, cuts, pieces, scars, bags, mass, lift, deckPx, names }
 //     cuts    the deck stretches that went: { id, y, a, b, x0, x1, whole } (ship coordinates; id is the deck as it was BEFORE, so crew standing there can be found)
 //     pieces  the debris: { clips: [{ x0, y0, x1, y1 }], box, ellipse? } - one per cluster of holes (and one per lost bag)
@@ -244,7 +247,8 @@ export function planBreak(parts, spec, rng = Math.random) {
     const cut = partCut(L0, spec.name, spec.len);
     if (!cut) return no('no such part: ' + spec.name);
     cuts = [cut];
-  } else if (spec.kind === 'bag') {
+  } else if (spec.kind === 'cuts') cuts = mergeCuts(spec.cuts).map((c) => ({ ...c, dist: 0 }));
+  else if (spec.kind === 'bag') {
     const b = L0.gasbags[spec.index];
     if (!b) return no('no such bag');
     bagsGone.push(b);
@@ -279,6 +283,72 @@ export function planBreak(parts, spec, rng = Math.random) {
   const len = (list) => list.reduce((n, q) => n + q.x1 - q.x0, 0);
   const labels = rep.labels;
   return { ok: true, hint: '', parts: out, labels, summary: summarize(labels), cuts: rep.cuts, pieces, scars, bags: bagsGone.map((b) => L0.gasbags.indexOf(b)), names: rep.names, sigs: (L1.partRects || []).map((r) => r.sig).filter((s) => s != null), mass: Math.max(0, b0.mass - b1.mass), lift: Math.max(0, b0.lift - b1.lift), deckPx: Math.max(0, len(L0.platforms) - len(L1.platforms)) };
+}
+
+// Deck stretches { id, a, b } merged where they touch, each deck's rightmost first: cutting from the right leaves the part that stays on the left with the deck's own id, so the next cut
+// (further left) still finds it by that id and its x. (cutDeck gives the far piece of a deck cut in two a new id.)
+export function mergeCuts(cuts) {
+  const by = new Map();
+  for (const c of cuts) (by.get(c.id) || by.set(c.id, []).get(c.id)).push({ id: c.id, a: c.a, b: c.b });
+  const out = [];
+  for (const list of by.values()) {
+    list.sort((p, q) => p.a - q.a);
+    const m = [];
+    for (const c of list) { const last = m[m.length - 1]; if (last && c.a <= last.b + 1) last.b = Math.max(last.b, c.b); else m.push({ ...c }); }
+    out.push(...m.reverse());
+  }
+  return out;
+}
+
+// One half of a split ship: `parts` with the other half cut away (cuts) and the gasbags that are not hers gone (bagsGone: the layout's own gasbag objects). Mirrors planBreak.
+function carveHalf(parts, L0, cuts, bagsGone) {
+  const rep = { cuts: [], labels: [], names: [] };
+  let out = parts.map((p) => ({ ...p }));
+  const all = mergeCuts(cuts);
+  if (bagsGone.length) {
+    out = out.filter((p) => !(p.part === 'gasbag' && bagsGone.some((b) => Math.abs(b.cx - p.cx) < 1 && Math.abs(b.rx - p.rx) < 1)));
+    rep.labels.push(...bagsGone.map(() => 'gasbag'));
+  }
+  const left = out.filter((p) => p.part === 'gasbag');
+  const cover = left.length ? bagCover(left.map((b) => ({ ...b, x0: b.cx - b.rx, x1: b.cx + b.rx }))) : [];
+  for (const q of L0.platforms) if (['nest', 'crow2'].includes(rowOf(q)) && !cover.some((c) => q.x0 >= c.lo - 1 && q.x1 <= c.hi + 1) && !all.some((c) => c.id === q.id && c.a <= q.x0 + 1 && c.b >= q.x1 - 1)) all.push({ id: q.id, a: q.x0, b: q.x1 }); // (a crow's nest hangs on a bag: no bag over it, it goes)
+  out = applyCuts(out, all, rep);
+  out = sweepOrphans(out, rep, true);
+  const frame = out.find((p) => p.part === 'frame');
+  if (frame) delete frame.samples;
+  return { out, rep };
+}
+
+// A ship that has come in two. spec = { comps: [{ stretches: [{ id, a, b }], bags: [indices into the layout's gasbags], lift, helm, length }], gone: [stretches that failed], small: [stretches of the little pieces
+// that fall away with nothing]}. The half with the most lift stays (ties: the one with the helm, then the longer); every other half is cut from her and made into the other one.
+export function planSplit(parts, spec) {
+  const no = (hint) => ({ ok: false, hint });
+  let L0;
+  try { L0 = buildLayout(parts); } catch { return no('the parts do not build'); }
+  const comps = spec.comps || [];
+  if (comps.length < 2) return no('nothing to split');
+  const rank = comps.map((c, i) => i).sort((a, b) => (comps[b].lift - comps[a].lift) || ((comps[b].helm ? 1 : 0) - (comps[a].helm ? 1 : 0)) || (comps[b].length - comps[a].length) || (a - b));
+  const keepC = comps[rank[0]], awayCs = rank.slice(1).map((i) => comps[i]);
+  const common = [...(spec.gone || []), ...(spec.small || [])];
+  const half = (mine, others) => {
+    const mineBags = new Set(mine.flatMap((c) => c.bags));
+    const bagsGone = L0.gasbags.filter((b, i) => !mineBags.has(i));
+    const { out, rep } = carveHalf(parts, L0, [...others.flatMap((c) => c.stretches), ...common], bagsGone);
+    const scars = (spec.gone || []).map((g) => {
+      const q = L0.platforms.find((o) => o.id === g.id) || { y: 0, x0: g.a, x1: g.b };
+      return scarFor({ id: g.id, y: q.y, a: g.a, b: g.b, x0: q.x0, x1: q.x1 }, L0.platforms);
+    });
+    out.push(...scars);
+    let L1;
+    try { L1 = buildLayout(out); } catch { return null; }
+    if (!L1.platforms.length) return null;
+    const b = budgets(out);
+    return { parts: out, labels: rep.labels, summary: summarize(rep.labels), names: rep.names, mass: b.mass, lift: b.lift, bags: L1.gasbags.map((g) => g.cx), decks: L1.platforms.length, scars, sigs: (L1.partRects || []).map((r) => r.sig).filter((s) => s != null) };
+  };
+  const keep = half([keepC], awayCs), away = half([awayCs[0]], [keepC, ...awayCs.slice(1)]);
+  if (!keep) return no('what is left does not build');
+  const b0 = budgets(parts);
+  return { ok: true, hint: '', keep, away, keepIndex: rank[0], cuts: spec.gone || [], scars: keep.scars, names: keep.names, mass: away ? away.mass : 0, lift: away ? away.lift : 0, whole: { mass: b0.mass, lift: b0.lift } };
 }
 
 // Salvage a sky-dock asks to mend what broke off (config.BREAKOFF.REBUILD), from the weight, the gasbag lift and the deck she lost.

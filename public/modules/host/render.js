@@ -1103,15 +1103,47 @@ export function createRenderer({ ctx, state: world, canvas }) {
     book.paper(30, 28, 440, 184, { r: 12 });
     ink();
     ctx.lineWidth = 2.5;
+    // STRUCTURE.md: no hull bar - the soundness of the weakest load-bearing section of the frame (red under 30%, the number in the bar) and, in the thin strip under it, the LIFT / WEIGHT tug of war: the
+    // needle left of the middle means she is heavy and sinking (the panel's rows below do not move, so the bar is a little thinner and the strip takes the rest of its height)
+    const sm = config.STRUCTURE.ENABLED && !config.PVP.ENABLED && state.ship.structure != null;
+    const hv = sm ? state.ship.structure : state.ship.hull, bh = sm ? 13 : 22;
     ctx.fillStyle = '#3b2a1d';
-    ctx.fillRect(46, 58, 408, 22);
-    ctx.fillStyle = state.ship.hull > 35 ? '#4caf50' : '#e63946';
-    ctx.fillRect(46, 58, 408 * state.ship.hull / 100, 22);
-    ctx.strokeRect(46, 58, 408, 22);
+    ctx.fillRect(46, 58, 408, bh);
+    ctx.fillStyle = (sm ? hv > 30 : hv > 35) ? '#4caf50' : '#e63946';
+    ctx.fillRect(46, 58, 408 * hv / 100, bh);
+    ctx.strokeRect(46, 58, 408, bh);
     ctx.fillStyle = LB.INK;
-    ctx.font = '18px ' + config.FONTS.DISPLAY;
+    ctx.font = (sm ? '14px ' : '18px ') + config.FONTS.DISPLAY;
     ctx.textAlign = 'left';
-    ctx.fillText('Hull', 46, 51);
+    ctx.fillText(sm ? 'STRUCTURE' : 'Hull', 46, 51);
+    if (sm) {
+      ctx.font = '700 11px ' + config.FONTS.TEXT;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff6d6';
+      ctx.fillText(Math.round(hv) + '%', 250, 68.5);
+      ctx.textAlign = 'left';
+    }
+    if (sm && state.liftWeight) {
+      const lw = state.liftWeight, tug = Math.max(-1, Math.min(1, (lw.lift - lw.weight) / 30)), mid = 46 + 204, ty = 73, th = 8;
+      ctx.fillStyle = tug < 0 ? '#e0703a' : '#c9a85a';
+      ctx.fillRect(46, ty, 204, th);
+      ctx.fillStyle = tug < 0 ? '#5a6f88' : '#58b6ff';
+      ctx.fillRect(mid, ty, 204, th);
+      ink();
+      ctx.lineWidth = 2;
+      ctx.strokeRect(46, ty, 408, th);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(mid - 1, ty - 2, 2, th + 4);
+      ctx.fillStyle = LB.INK;
+      ctx.fillRect(mid + 204 * tug - 2, ty - 3, 4, th + 6);
+      ctx.font = '700 7px ' + config.FONTS.TEXT;
+      ctx.fillStyle = '#fff6d6';
+      ctx.fillText('WEIGHT', 49, ty + 6.5);
+      ctx.textAlign = 'right';
+      ctx.fillText('LIFT', 451, ty + 6.5);
+      ctx.textAlign = 'left';
+      ctx.lineWidth = 2.5;
+    }
     ctx.font = '700 15px ' + config.FONTS.TEXT;
     ctx.textAlign = 'right';
     ctx.fillText('Raiders downed: ' + state.kills, 454, 50);
@@ -1262,10 +1294,10 @@ export function createRenderer({ ctx, state: world, canvas }) {
       // WP15: the bow pennant (drawFacing) owns x 158..286 of this row, so AUTOPILOT goes between the "Hull" label and it, shrunk to fit (it used to sit on top of AHEAD).
       ctx.fillStyle = '#3a5a8c';
       ctx.textAlign = 'left';
-      ctx.font = '18px ' + config.FONTS.DISPLAY;
-      const apX = 46 + ctx.measureText('Hull').width + 12;
+      ctx.font = (sm ? '14px ' : '18px ') + config.FONTS.DISPLAY;
+      const apX = 46 + ctx.measureText(sm ? 'STRUCTURE' : 'Hull').width + 12;
       ctx.font = '700 13px ' + config.FONTS.TEXT;
-      ctx.fillText('AUTOPILOT', apX, 50, Math.max(40, 154 - apX));
+      ctx.fillText(sm ? 'AUTO' : 'AUTOPILOT', apX, 50, Math.max(40, 154 - apX));
       ctx.font = '700 14px ' + config.FONTS.TEXT;
       ctx.fillStyle = config.INK;
       ctx.textAlign = 'right'; // (the labels below hang off the right edge: they were drifting out of the panel while the autopilot was on)

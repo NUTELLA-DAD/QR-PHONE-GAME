@@ -30,6 +30,7 @@ const { createWorldCamera } = await load('modules/host/camera.js');
 const { solidAt } = await load('modules/host/maps.js');
 const { scrollSpeed } = await load('modules/host/course.js');
 const T = await load('modules/host/pose.js');
+const { hullLost } = await load('modules/host/structure.js'); // (STRUCTURE.md: how much a ship has lost - the soundness of her frame with structure on, else 100 - hull)
 const parts = await loadBuild(buildName, BUILDS);
 const DT = 1 / 60;
 const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
@@ -109,10 +110,10 @@ const snap = (sh) => JSON.stringify({
     B.sim.impact(bagAt.cx, bagAt.cy, 2);
   }
   report(snap(A) === before, 'hits on ship1 leave ship 0 exactly as she was (body, fires, holes, bags, guns, modules, balance, steam)');
-  report(B.state.hull < 100 && (B.ctx.breaches.length > 0 || B.ctx.gasHoles.length > 0) && A.ctx.breaches.length === 0 && A.ctx.gasHoles.length === 0 && A.ctx.fires.length === 0, `... and ship1 took them (hull ${B.state.hull.toFixed(0)}, ${B.ctx.breaches.length} holes in the hull, ${B.ctx.gasHoles.length} in the bags)`);
+  report(hullLost(B) > 0 && (B.ctx.breaches.length > 0 || B.ctx.gasHoles.length > 0) && A.ctx.breaches.length === 0 && A.ctx.gasHoles.length === 0 && A.ctx.fires.length === 0, `... and ship1 took them (hull ${B.state.hull.toFixed(0)}, ${B.ctx.breaches.length} holes in the hull, ${B.ctx.gasHoles.length} in the bags)`);
   before = snap(B);
   for (let i = 0; i < 12; i++) A.sim.impact(700 + i * 40, 520, 2);
-  report(snap(B) === before && A.state.hull < 100, 'and hits on ship 0 leave ship1 exactly as she was');
+  report(snap(B) === before && hullLost(A) > 0, 'and hits on ship 0 leave ship1 exactly as she was');
   // a fire on one is not on the other
   const { sim: sim2, st: st2, A: A2, B: B2 } = boot({ bots: 0 });
   step(sim2, 5);
@@ -120,11 +121,11 @@ const snap = (sh) => JSON.stringify({
   B2.sim.fireSys.ignite(d2, B2.layout.platforms[d2].x0 + 400, 'hit');
   report(B2.ctx.fires.length >= 1 && A2.ctx.fires.length === 0, 'a fire lit on ship1 burns on ship1 only');
   step(sim2, 600);
-  report(A2.ctx.fires.length === 0 && A2.state.hull === 100 && B2.state.hull < 100 && A2.ctx.breaches.length === 0, `after 10 s ship 0 has no fire and her hull is untouched (100), ship1\'s hull is ${B2.state.hull.toFixed(1)} and burning (${B2.ctx.fires.length} fires)`);
+  report(A2.ctx.fires.length === 0 && hullLost(A2) === 0 && hullLost(B2) > 0 && A2.ctx.breaches.length === 0, `after 10 s ship 0 has no fire and her hull is untouched (100), ship1\'s hull is ${B2.state.hull.toFixed(1)} and burning (${B2.ctx.fires.length} fires)`);
   const { sim: sim3, A: A3, B: B3 } = boot({ bots: 0 });
   A3.sim.fireSys.ignite(A3.layout.deckIndex('main'), 700, 'hit');
   step(sim3, 600);
-  report(B3.ctx.fires.length === 0 && B3.state.hull === 100 && A3.ctx.fires.length >= 1, 'and a fire on ship 0 never reaches ship1');
+  report(B3.ctx.fires.length === 0 && hullLost(B3) === 0 && A3.ctx.fires.length >= 1, 'and a fire on ship 0 never reaches ship1');
   // a flat bag, a hole in the bag, steam
   const { sim: sim4, A: A4, B: B4 } = boot({ bots: 0 });
   step(sim4, 5);
@@ -141,7 +142,7 @@ const snap = (sh) => JSON.stringify({
   B5.sim.goingDown.tryStart(); // (the last stand is used up, so the next wreck is a real one)
   B5.ctx.goingDown = null;
   B5.ctx.gdGrace = 0;
-  B5.sim.damageHull(1000);
+  B5.sim.wreck('test'); // (STRUCTURE.md: no hull to drain to 0 - she is wrecked outright)
   report(!!B5.ctx.wreck && B5.state.down > 0 && !A5.ctx.wreck && A5.state.down === 0 && A5.state.hull === 100 && st5.runEnd == null && st5.limp == null, 'ship1 breaks up while ship 0 flies on and the run does not end');
   step(sim5, Math.ceil((config.WRECK.TIME + 1) * 60));
   report(B5.ctx.wreck == null && B5.state.down === 0 && B5.state.hull === 100 && st5.runEnd == null, 'and she is rebuilt afterwards (hull 100, crew dropped back aboard)');
@@ -156,7 +157,7 @@ const snap = (sh) => JSON.stringify({
   A.sim.goingDown.tryStart(); // (the last stand is used up, so the next wreck is a real one: the voyage's spare gasbag takes it, she limps home)
   A.ctx.goingDown = null;
   A.ctx.gdGrace = 0;
-  A.sim.damageHull(1000);
+  A.sim.wreck('test');
   report(A.state.down > 0 && !B.ctx.wreck && B.state.down === 0, 'ship 0 breaks up (limping home on a spare gasbag) while ship1 flies on');
   run(sim, Math.ceil((config.LIMP.TIME + 2) * 60));
   report(A.state.down === 0 && !A.ctx.wreck && st.limp == null && A.state.hull > 0, `ship 0 is patched up and flying again (hull ${A.state.hull.toFixed(0)}), the voyage went on`);
@@ -195,9 +196,12 @@ const snap = (sh) => JSON.stringify({
   const hullA = A.state.hull, hullB = B.state.hull;
   const aScrape = A.ctx.course.scraping;
   const nBuried = buried(B);
+  const breakWas = config.BREAKOFF.ENABLED;
+  config.BREAKOFF.ENABLED = false; // (the first touch of rock could break a part off her, and the part would take its soundness with it)
   sim.course.update(1 / 60);
+  config.BREAKOFF.ENABLED = breakWas;
   report(found && nBuried > 0 && B.ctx.course.scraping === true && B.ctx.course.lastContact && B.ctx.course.lastContact !== A.ctx.course.lastContact && A.ctx.course.scraping === aScrape && Object.getPrototypeOf(B.ctx.course) === st.course && B.ctx.course.hasOwnProperty('scraping'), `ship1 pressed into the floor (${nBuried} of her points in rock) is in contact on HER OWN fields (scraping, lastContact), ship 0's are not hers`);
-  report(B.state.hull < hullB && A.state.hull === hullA, `... the scrape hurt ship1 (${hullB.toFixed(1)} -> ${B.state.hull.toFixed(1)}) and not ship 0`);
+  report(hullLost(B) > 100 - hullB && hullLost(A) === 100 - hullA, `... the scrape hurt ship1 (${hullB.toFixed(1)} -> ${B.state.hull.toFixed(1)}) and not ship 0`);
   const yb = B.pose.y;
   let freed = -1;
   for (let i = 0; i < 180; i++) { step(sim, 1); if (freed < 0 && buried(B) === 0) freed = i; }
