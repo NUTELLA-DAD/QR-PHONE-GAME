@@ -13,6 +13,7 @@ import { pop, updatePopups } from './popups.js';
 import { createWeather } from './weather.js';
 import { createEnvironment, favour } from './environments.js';
 import { createSpotter } from './spotter.js';
+import { createSpyglass } from './spyglass.js'; // the lookout's panning spyglass (it spots what it sees)
 import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { refillBags } from './gasBags.js';
 import { createMainShip, createShip, shipOf, eachShip, newGuns, transfer, areHostile } from './ships.js';
@@ -327,6 +328,7 @@ export function createSimulation() {
     for (const list of [state.gasHoles, state.breaches, state.fires, state.shells, state.bullets, state.bombs || [], state.rockets || []]) list.length = 0;
     for (const [name, m] of Object.entries(layout.gunMounts)) Object.assign(state.GUNS[name], { aim: m.aim, cd: 0, ...gunStock(m), empty: 0, auto: 0, prime: 0, primed: false });
     spotter.reset();
+    spyglass.reset();
     raiders.reset();
     threats.reset();
     squadrons.restart();
@@ -1099,6 +1101,7 @@ export function createSimulation() {
   }
 
   const spotter = createSpotter({ state, emit: emitPlayerUi, phoneFx }); // phone radar, spotting and HELP! (spotter.js)
+  const spyglass = createSpyglass({ state, spotter }); // the lookout's spyglass: the stick pans it, what stays in it is spotted (spyglass.js)
 
   const setSocket = (nextSocket) => {
     socket = nextSocket;
@@ -1148,6 +1151,7 @@ export function createSimulation() {
 
     updatePopups(state, dt);
     spotter.update(dt);
+    spyglass.update(dt);
     eachShip(state, (sh) => sh.sim.stepSystems(dt));
 
     if (state.phase === 'lobby') {

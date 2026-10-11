@@ -79,6 +79,7 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace
 const load = (p) => import(pathToFileURL(path.join(root, p)).href);
 const { config } = await load('config.js');
 if (process.env.NO_BREAKOFF) config.BREAKOFF.ENABLED = false; // (compare voyages with parts never breaking off: S.5i)
+if (!process.env.WITH_SPYGLASS) config.SPYGLASS.BOTS = false; // (bot lookouts pan and spot the spyglass in the game; the voyage baselines keep their numbers)
 if (process.env.NO_LAIRS) config.CREATURES.LAIR.COUNT = { short: 0, long: 0 }; // (compare voyages with no Kraken lair on the route: C.3)
 // --set "A.B.C=value;...": tweak config numbers for tuning runs
 for (const kv of args.set.split(';').filter(Boolean)) { const [k, v] = kv.split('='); const ks = k.split('.'); let o = config; for (const x of ks.slice(0, -1)) o = o[x] ??= {}; o[ks[ks.length - 1]] = Number(v); }

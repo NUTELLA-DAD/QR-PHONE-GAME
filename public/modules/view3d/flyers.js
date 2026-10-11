@@ -7,6 +7,7 @@
 import { THREE, INK, applyLook, glow } from './style.js';
 import { config } from '../../config.js';
 import { envOf } from '../host/environments.js';
+import { teamOf } from '../host/ships.js'; // (the escorts wear their ship's team colours in Versus)
 import * as A from './enemyArt.js';
 import { createLines } from './lines3d.js';
 import { createInstanced, createLampInstances } from './swarm3d.js';
@@ -36,7 +37,7 @@ export function createFlyers(root, stateArg, api = {}) {
   // a steady rate of particles: how many whole particles are due this frame for this object
   const due = (obj, perSec, slot = 0) => { const m = slots[slot] || (slots[slot] = new WeakMap()); const a = (m.get(obj) || 0) + perSec * DT, n = Math.floor(a); m.set(obj, a - n); return Math.min(n, 3); };
 
-  const stats = { planes: 0, bats: 0, mines: 0, specials: 0, wrecks: 0, boss: 0 };
+  const stats = { planes: 0, bats: 0, mines: 0, specials: 0, wrecks: 0, boss: 0, docked: 0, ghosts: 0, friends: 0 }; // (docked = our escorts sitting on their hooks, ghosts = those being rebuilt, friends = all our planes drawn: flying, docked and stolen)
   const poolOf = (key) => { let p = pools.get(key); if (!p) pools.set(key, (p = [])); return p; };
   const use = (key, i, make) => {
     const arr = poolOf(key);
@@ -72,6 +73,11 @@ export function createFlyers(root, stateArg, api = {}) {
     hideFrom(key, n);
     stats.planes += n;
   };
+  // one plane placed by hand (a docked escort): slot i of pool `key`
+  const syncOne = (key, i, p, make) => { const g = use(key, i, make); placePlane(g, p); g.scale.setScalar(p.hijackScale || 1); };
+  const palFor = (tm) => (tm && tm.color ? { body: tm.color, wing: tm.pale || tm.color, trim: '#e8d8a8', dark: '#4a4440' } : PAL_FRIEND);
+  const ghostify = (g) => { g.traverse((o) => { if (o.material) { const one = (q) => { const k = q.clone(); k.transparent = true; k.opacity = 0.35; k.depthWrite = false; return k; }; o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); } }); return g; }; // (a plane still being built: see-through)
+  const dockN = new Map(), dockSeen = new Set(), flySeen = new Set();
   const contrail = (t) => { // thin white lines behind the planes, brightest where they turned hard (the sim keeps the points: planes.js trail)
     if (!t || t.length < 2) return;
     for (let i = 1; i < t.length; i++) {
@@ -413,7 +419,7 @@ export function createFlyers(root, stateArg, api = {}) {
     update(t, refVx = 0, o = {}) {
       state = o.lineup ? fakeFor(o.lineup) : stateArg;
       T = t; K = Math.floor(t * 8); DT = clamp(fin(o.dt, 0.016), 0, 0.1); zoomEq = clamp(fin(o.zoomEq, 0.5), 0.05, 3); refVxNow = refVx; frame++;
-      stats.planes = stats.bats = stats.mines = stats.specials = stats.wrecks = stats.boss = 0;
+      stats.planes = stats.bats = stats.mines = stats.specials = stats.wrecks = stats.boss = stats.docked = stats.ghosts = stats.friends = 0;
       const lobby = state.phase === 'lobby';
       lines.begin();
       const vc = state.course ? envOf(state).strafer : null; // (the Aether's void corsairs are a different colour)
@@ -422,8 +428,43 @@ export function createFlyers(root, stateArg, api = {}) {
       const dev = state.enemy && !lobby && !(state.enemy.dead > 0) ? [state.enemy] : [];
       syncPlanes('D', dev, () => A.buildDevil(), 1);
       syncPlanes('B', state.bombers || [], () => A.buildBomber(), 6, (g, p) => { g.rotation.z = 0; g.userData.inner.rotation.x = 0; g.rotation.y = fin(p.vx) < 0 ? PI : 0; }); // (a bomber turns about her tail: the emblem is on both sides)
-      const friends = [...(state.escorts || [state.escort]).filter((e) => e && e.flying), ...(state.hijacks || [])];
-      syncPlanes('F', friends.map((p) => ({ ...p, hijackScale: p.big ? 1.6 : 1 })), (p) => A.buildBiplane(PAL_FRIEND, { enemy: false, pilot: (p && state.players[p.rider] && state.players[p.rider].color) || '#a8443f' }), 12);
+      // our planes: the escorts of EVERY ship (each ship has her own, state.ships[i].ctx.escorts; Versus tints them by team), flying or docked (sitting on their hook under the hull, moving with the ship and her pitch, a ghost while a new one is built), and the stolen fighters
+      const ships = (state.ships || []).filter((s) => !s.ai);
+      const sets = ships.length ? ships.map((sh) => ({ sh, list: (sh.ctx && sh.ctx.escorts) || (sh === state.ships[0] ? state.escorts : null) || [] })) : [{ sh: null, list: state.escorts || [state.escort] }];
+      const friends = [], teams = new Map();
+      let nDock = 0, nGhost = 0;
+      const dockKey = (tid) => 'FD' + tid;
+      for (const { sh, list } of sets) {
+        const tm = sh && sh.team ? teamOf(sh.team) : null, tid = tm ? tm.id : '';
+        for (const e of list) {
+          if (!e) continue;
+          if (e.flying) { (teams.get(tid) || teams.set(tid, { tm, list: [] }).get(tid)).list.push(e); friends.push(e); continue; }
+          if (!sh || !e.dock || !Number.isFinite(fin(e.dock.x, NaN)) || e.dead) continue;
+          const a = api.shipPoint ? api.shipPoint(sh, e.dock.x, e.dock.y, 0) : null, b = api.shipPoint ? api.shipPoint(sh, e.dock.x + 100, e.dock.y, 0) : null;
+          if (!a || !b) continue; // (her model is not built yet)
+          const dk = { x: a[0], y: -a[1], heading: Math.atan2(-(b[1] - a[1]), b[0] - a[0]), bank: 0, hijackScale: 1.2 }; // (the nose points where her ship's bow points, tipped with her pitch)
+          if (e.rebuild > 0) { syncOne('FG', nGhost++, dk, () => ghostify(planeShell(A.buildBiplane(palFor(tm), { enemy: false, pilot: '#a8443f' })))); } else { syncOne(dockKey(tid), dockN.get(tid) || 0, dk, () => planeShell(A.buildBiplane(palFor(tm), { enemy: false, pilot: '#a8443f' }))); dockN.set(tid, (dockN.get(tid) || 0) + 1); }
+          nDock++;
+        }
+      }
+      for (const [tid, n] of dockN) hideFrom(dockKey(tid), n);
+      for (const k of dockSeen) if (!dockN.has(k)) hideFrom(dockKey(k), 0);
+      for (const k of dockN.keys()) dockSeen.add(k);
+      dockN.clear();
+      hideFrom('FG', nGhost);
+      stats.planes += nDock;
+      stats.docked = nDock - nGhost; stats.ghosts = nGhost;
+      const flyingKeys = new Set();
+      for (const [tid, { tm, list }] of teams) {
+        flyingKeys.add(tid);
+        syncPlanes('F' + tid, list.map((p) => ({ ...p, hijackScale: 1 })), (p) => A.buildBiplane(palFor(tm), { enemy: false, pilot: (p && state.players[p.rider] && state.players[p.rider].color) || '#a8443f' }), 12);
+      }
+      for (const k of flySeen) if (!flyingKeys.has(k)) hideFrom('F' + k, 0);
+      for (const k of flyingKeys) flySeen.add(k);
+      const stolen = state.hijacks || [];
+      syncPlanes('FH', stolen.map((p) => ({ ...p, hijackScale: p.big ? 1.6 : 1 })), (p) => A.buildBiplane(PAL_FRIEND, { enemy: false, pilot: (p && state.players[p.rider] && state.players[p.rider].color) || '#a8443f' }), 12);
+      friends.push(...stolen);
+      stats.friends = friends.length + nDock;
       for (const p of [...strafers, ...dev, ...friends]) contrail(p.trail);
       lines.end();
       syncBats(state.bats || []);

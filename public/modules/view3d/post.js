@@ -228,8 +228,18 @@ class BeamPass extends Pass {
   dispose() { this.rt.dispose(); this.add.dispose(); this.quad.dispose(); }
 }
 
+// ---- the round window (the portholes: portholes.js) ---------------------------------------------------------------------------------------------------------------
+// The last pass of a porthole's own composer: it writes the finished square picture to the screen only inside the circle (the corners are discarded, so the main picture stays), with a stepped alpha for
+// the fade in and out. A porthole's viewport is square, so the circle is round.
+const CIRCLE = {
+  name: 'CircleMask',
+  uniforms: { tDiffuse: { value: null }, uAlpha: { value: 1 }, uR: { value: 0.5 } },
+  vertexShader: BLOOM_VERT,
+  fragmentShader: /* glsl */`uniform sampler2D tDiffuse; uniform float uAlpha; uniform float uR; varying vec2 vUv; void main() { if ( length( vUv - 0.5 ) > uR ) discard; gl_FragColor = vec4( texture2D( tDiffuse, vUv ).rgb, uAlpha ); }`,
+};
+
 // ---- the composer -------------------------------------------------------------------------------------------------------------------------------------------------------
-export function createPost(renderer, scene, camera) {
+export function createPost(renderer, scene, camera, opts = {}) {
   const P = { enabled: false, composer: null, passes: {}, lutKey: '', sceneCalls: 0, sceneTris: 0, error: '', timing: null };
   try {
     if (!(renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float'))) throw new Error('this graphics card cannot draw to floating-point pictures'); // (then the view draws directly, tone mapped by the materials)
@@ -246,7 +256,9 @@ export function createPost(renderer, scene, camera) {
     grade.uniforms.tGlow1.value = bloom.a.texture; grade.uniforms.tGlow2.value = bloom.d.texture;
     const fxaa = new ShaderPass(FXAAShader);
     const smaa = new SMAAPass(2, 2);
-    for (const p of [renderPass, beamPass, bloom, grade, fxaa, smaa]) composer.addPass(p);
+    const circle = opts.circle ? new ShaderPass(CIRCLE) : null; // (a porthole: the picture is cut to a circle)
+    if (circle) { circle.material.transparent = true; circle.material.blending = THREE.NormalBlending; circle.material.depthTest = false; circle.material.depthWrite = false; }
+    for (const p of [renderPass, beamPass, bloom, grade, fxaa, smaa, ...(circle ? [circle] : [])]) composer.addPass(p);
     // Numbers for the perf gate: the scene's own draw calls and triangles (the later passes would add to the counters) and, with the GPU timer, the milliseconds each pass takes on the GPU.
     const gl = renderer.getContext(), ext = gl.getExtension && gl.getExtension('EXT_disjoint_timer_query_webgl2');
     const T = (P.timing = { on: false, ms: {}, pend: [], ok: !!ext });
@@ -270,7 +282,7 @@ export function createPost(renderer, scene, camera) {
         gl.deleteQuery(e.q);
       }
     };
-    P.composer = composer; P.passes = { renderPass, beamPass, bloom, grade, fxaa, smaa }; P.beamPass = beamPass;
+    P.composer = composer; P.passes = { renderPass, beamPass, bloom, grade, fxaa, smaa, circle }; P.beamPass = beamPass;
     P.enabled = true;
   } catch (e) { P.error = String(e && e.message ? e.message : e); P.enabled = false; console.warn('view3d: post-processing is off (' + P.error + ')'); }
 

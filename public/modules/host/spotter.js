@@ -160,6 +160,11 @@ export function createSpotter({ state, emit, phoneFx }) {
     const it = list && list[idx];
     if (!it || !p.rdOn || (p.spotCd || 0) > 0) return;
     p.spotCd = SP.COOLDOWN;
+    markSpot(p, it);
+  };
+
+  // Mark one radar item as spotted in this player's name (a radar tap, or the lookout's spyglass: spyglass.js). quiet = a refresh: no ping and no call-out on the phone.
+  const markSpot = (p, it, quiet = false) => {
     const obj = it.obj;
     const old = state.spots.findIndex((s) => s.obj === obj);
     if (old >= 0) unspot(old); // (spotting it again just refreshes it, now in this player's name)
@@ -169,7 +174,8 @@ export function createSpotter({ state, emit, phoneFx }) {
     p.spotRecent = config.LINKS.SPOT_RECENT; // (a lookout who spots something sharpens the helm: links.js)
     state.spots.push({ obj, item: it, by: p.id, kind: it.kind });
     p.stats = p.stats || {};
-    p.stats.spots = (p.stats.spots || 0) + 1;
+    if (!quiet) p.stats.spots = (p.stats.spots || 0) + 1;
+    if (quiet) return;
     state.sfxQ.push(['ping']);
     phoneFx?.(p, 'SPOTTED ' + NAMES[it.kind] + '!', 0);
   };
@@ -276,5 +282,5 @@ export function createSpotter({ state, emit, phoneFx }) {
     state.helpCalls.length = 0;
   };
 
-  return { update, reset, callHelp, spot };
+  return { update, reset, callHelp, spot, markSpot };
 }
