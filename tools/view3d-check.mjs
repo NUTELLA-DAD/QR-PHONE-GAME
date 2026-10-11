@@ -300,6 +300,8 @@ try {
     const HOLD = `(async()=>{ ${sl} for(let i=0;i<40&&document.getElementById('code').textContent==='----';i++) await sl(250); await sl(1500); ${NORM} await sl(500);
       window.__seed(4242); window.__frozenNow=100000; for(let i=0;i<400;i++){ window.__frozenNow+=50; window.renderNow(0.05); if(i===200){ ${NORM} } }
       for(let i=0;i<60;i++){ window.__frozenNow+=1000/60; await new Promise(r=>requestAnimationFrame(()=>r())); } return 1 })()`;
+    const RING_SPOT = (deg) => `{ const st=game.state, sh=st.ships[0], r=st.course.ring, m=st.course.map, F=sh.layout.fitBox, Q=sh.layout.refPoint, C=m.CELL; const clear=(a)=>{ const x=r.xRing+a*Math.PI/180*r.R, y=r.axisY; const x0=Math.floor((x+F.x0-Q.x)/C)-1, x1=Math.floor((x+F.x1-Q.x)/C)+1, y0=Math.floor((y+F.y0-Q.y)/C)-1, y1=Math.floor((y+F.y1-Q.y)/C)+1; for(let j=y0;j<=y1;j++) for(let i=x0;i<=x1;i++) if(i>=0&&j>=0&&i<m.W&&j<m.H&&m.solid[j*m.W+i]) return false; return true; };
+      for(let d=0;d<=40;d++){ let hit=false; for(const s of [1,-1]){ const a=${deg}+s*d; if(clear(a)){ sh.pose.x=r.xRing+a*Math.PI/180*r.R-Q.x; sh.pose.y=r.axisY-Q.y; sh.pose.vy=0; hit=true; break; } } if(hit) break; } }`;
     const SCENES = [
       { name: 'lobby', q: 'view=3d', setup: FREEZE_ONLY() },
       { name: 'flight', q: 'view=3d&env=skyisles&kind=open', setup: BOOT(420) },
@@ -307,6 +309,8 @@ try {
       { name: 'kraken', q: 'view=3d&lair=1&creature=kraken', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(180);') },
       { name: 'drake', q: 'view=3d&lair=ember&creature=drake', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(420);') }, // (C.6a: the Cinder Drake, the placeholder tubes, in the Ember Forge)
       { name: 'versus', q: 'view=3d&versus=1&bots=4', setup: FREEZE_ONLY(420) },
+      // (LOOP R1: the fortress ring: the ship is put in clear air at the face at 135 degrees, so the picture shows the bent rock, a castle face with its shutter and the keep behind her)
+      { name: 'ring', q: 'view=3d&kind=ring&variant=fortress', setup: BOOT(120, RING_SPOT(135)) },
       { name: 'storm', q: 'view=3d&env=storm&kind=open', setup: BOOT(300, 'const st=game.state, w=st.weather; w.storm=1; w.gust=110; w.gusting=true; w.gustIn=0; st.env.gale=1; st.env.windDir=1; st.env.wind=300; w.flash=0;') },
     ];
     fs.mkdirSync(FIX, { recursive: true });
@@ -434,7 +438,7 @@ try {
   if (want('sub') && (all || only.includes('sub'))) {
     console.log('sub: the other 3D gates');
     const SUBS = [['lint3d', ['tools/lint3d.mjs']], ['physics', ['tools/physics-check.mjs']], ['enemy3d', ['tools/enemy3d-check.mjs']], ['light3d', ['tools/light3d-check.mjs']], ['weather3d', ['tools/weather3d-check.mjs']],
-      ['cine3d', ['tools/cine3d-check.mjs']], ['creature3d', ['tools/creature3d-check.mjs', '--quick']], ['crew3d', ['tools/crew3d-check.mjs', '--quick']]];
+      ['cine3d', ['tools/cine3d-check.mjs']], ['ring3d', ['tools/ring3d-check.mjs', '--quick']], ['creature3d', ['tools/creature3d-check.mjs', '--quick']], ['crew3d', ['tools/crew3d-check.mjs', '--quick']]];
     for (const [name, args] of SUBS) {
       const t0 = Date.now();
       const go = () => spawnSync(process.execPath, [...args.slice(0, 1).map((f) => path.join(here, f)), ...args.slice(1)], { cwd: here, encoding: 'utf8', timeout: 1500000, maxBuffer: 1 << 28 });

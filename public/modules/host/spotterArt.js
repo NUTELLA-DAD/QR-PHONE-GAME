@@ -28,8 +28,9 @@ export function createSpotterArt({ ctx, state }) {
       const color = (who && who.color) || '#ffd23f';
       const name = who ? who.name : '';
       const at = s.item.pos();
-      const sx = width / 2 + (at.x - view.cx) * view.zoom;
-      const sy = height / 2 + (at.y - view.cy) * view.zoom;
+      const sp = view.scr ? view.scr(at.x, at.y, width, height) : null; // (LOOP R1: through the ring bend on a ring map)
+      const sx = sp ? sp.x : width / 2 + (at.x - view.cx) * view.zoom;
+      const sy = sp ? sp.y : height / 2 + (at.y - view.cy) * view.zoom;
       const left = Math.max(0, Math.min(1, s.obj.spotT / config.SPOT.TIME));
       const fade = Math.min(1, s.obj.spotT / 0.8); // fades out over the last moment
       ctx.save();

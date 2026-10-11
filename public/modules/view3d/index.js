@@ -31,6 +31,8 @@ import { createFungal } from './fungal.js';
 import { createWeather } from './weather.js';
 import { placeCamera, worldToScreen, FOV, ELEV } from './camera3d.js';
 import { createCinema } from './cinema.js'; // WP11: the camera's cinematic moments
+import { RB } from './ringBend.js'; // LOOP R1: the ring map's bend (a camera-relative wrap done by the vertex shaders)
+import { createRingCastle } from './ringCastle.js'; // LOOP R1: the placeholder castle (R2 replaces it)
 import { config } from '../../config.js';
 import { createPorthole } from './porthole.js'; // WP11: the Versus far-ship porthole
 import { createPortholes3D } from './portholes.js'; // the round portholes: a friendly plane off screen, the lookout's spyglass
@@ -184,9 +186,13 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   V.enemyLineup = null; // (WP9: the dev page's enemy line-up sets { x, y, page }: the middle of the picture in the 3D world, y up)
   // WP9: the 2D HUD canvas draws the crew's name labels, call-outs, progress bars and popups over this picture (render.js drawOver3D). It asks where things are on the screen through these:
   // project(x, y(up), z) -> { x, y } as 0..1 of the screen (null behind the camera); shipPt(ship, sx, sy, z) -> the 3D world point of a spot in a ship's own layout coordinates; crew(key) -> where a figure stands.
-  const _hp = new THREE.Vector3();
+  const _hp = new THREE.Vector3(), _hb = { x: 0, y: 0, z: 0, phi: 0 };
+  // (R1: on a ring map the flat points are bent by the same maths the vertex shaders use, so a label sits on the thing it names all the way round)
+  const projectPt = (x, y, z = 0) => { if (RB.on) { RB.pt(x, y, z, _hb); _hp.set(_hb.x, _hb.y, _hb.z); } else _hp.set(x, y, z); _hp.project(camera); return _hp.z > -1 && _hp.z < 1 ? { x: _hp.x * 0.5 + 0.5, y: -_hp.y * 0.5 + 0.5 } : null; };
   V.hud3d = {
-    project: (x, y, z = 0) => { _hp.set(x, y, z).project(camera); return _hp.z > -1 && _hp.z < 1 ? { x: _hp.x * 0.5 + 0.5, y: -_hp.y * 0.5 + 0.5 } : null; },
+    project: projectPt,
+    // a map point (x, y DOWN, as the sim has it) -> 0..1 of the screen, through the bend: the far markers of the 2D HUD use it on a ring map (hudView below hands it out as view.scr)
+    mapPt: (x, y) => projectPt(x, -y, 0),
     shipPt: (sh, x, y, z = 0) => { const e = models.get(sh.id); if (!e) return null; _hp.set(e.model.X(x), e.model.Y(y), z); e.model.content.localToWorld(_hp); return [_hp.x, _hp.y, _hp.z]; },
     crew: (key) => crew.anchor(key),
   };
@@ -197,6 +203,9 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // WP5: broken-off parts as rigid bodies (destruction.js, the Rapier wreckage world loads a moment after the view starts) and the marks of the blows a ship took (damageView.js)
   const destruction = createDestruction({ parent: worldRoot, state, models, terrain, world, inRock });
   const damage = createDamageView({ state, models });
+  let castle = null; // LOOP R1: the ring map's placeholder castle (ringCastle.js; if it cannot be made the ring is just the bent rock)
+  try { castle = createRingCastle({ parent: worldRoot, state }); } catch (e) { console.warn('view3d castle off', e); }
+  V.castle = castle;
   // WP6: the damage state of every part (soot, dents, poses, smoke, scorch memory, breaches, the flat bag), on top of the poses shipMesh sets each frame
   const partDamage = createPartDamage({ state, models, vfx });
   V.destruction = destruction; V.damage = damage; V.partDamage = partDamage;
@@ -375,7 +384,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     const cr = state.creature;
     if (cr && Number.isFinite(cr.x) && Number.isFinite(cr.y)) shipPts.push({ x: cr.x, y: -cr.y }); // (the Kraken's shadow too)
     world.lights.fit(shipPts, camTarget);
-    world.lights.setFogDistance(camera.position.distanceTo(camTarget));
+    world.lights.setFogDistance(camera.position.distanceTo(camTarget) + (RB.on ? RB.R * Math.max(0, Number((config.RING3D || {}).FOG) || 0) : 0)); // (a ring map: the castle and the far rock stand a ring's radius behind the ship; the fog is measured a little further so they are not washed out)
     syncCloudAvoid();
   }
   // WP9: the ships' box on the screen (their bounds projected), so the few clouds in FRONT of the ships keep out of it (clouds.js setAvoid)
@@ -408,6 +417,19 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     if (Math.abs(dark - darkApplied) > 0.01 || world.tod !== 'auto') { TOD.auto = todFor(dark); world.setTod('auto'); darkApplied = dark; }
   }
 
+  // ---- the ring (LOOP R1): on a ring map the vertex shaders wrap the flat strip round the castle, relative to where the camera looks (ringBend.js) ----------------------------------------------------
+  let ringMap = null, ringMs = 0;
+  const shipHalfLen = () => { const m = state.ships[0] && models.get(state.ships[0].id), b = m && m.model.layout && m.model.layout.bounds; return b && Number.isFinite(b.x0) ? Math.max(Math.abs(b.x0 - m.model.pv), Math.abs(b.x1 - m.model.pv)) : 0; };
+  function ringFrame(map, env, t, dt) {
+    const r0 = performance.now();
+    const was = RB.on;
+    const on = RB.setMap(map);
+    if (on) RB.setFrame(camTarget.x, shipHalfLen());
+    if (on !== was || (map && map !== ringMap)) ringMap = map;
+    if (castle) { try { castle.update({ on, map, env, camTarget, night: world.night, t, dt }); } catch (e) { logOnce('castle', e); } }
+    ringMs = performance.now() - r0;
+  }
+
   // ---- the frame -----------------------------------------------------------------------------------------------------------------------------------------------------------------
   let lastNow = null, jsMs = 0, renderMs = 0, vfxMs = 0;
   V.renderFrame = (now, view, opts = {}) => {
@@ -428,6 +450,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     terrain.setEnv(env);
     syncTod(dt);
     const cam = syncCamera(view, w, h, dt);
+    try { ringFrame(map, env, t, dt); } catch (e) { logOnce('ring', e); }
     setInkFor(cam.D, cam.visH); // (A1: ONE number a frame makes every outline screen-constant: style.js)
     crew.setView(cam.D); // (A5: the crew's heads and markers grow with the camera's distance)
     if (beams) { try { beams.updateLit(camera, state, world.night); } catch (e) { logOnce('lit', e); } } // (which targets a manned beam holds: the toon shader gives them a warm rim)
@@ -505,20 +528,32 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const mainInfo = { calls: 0, tris: 0 };
   // WP11: the 2D view that matches the camera NOW (the HUD's arrows and marks are laid out from a 2D { cx, cy, zoom }): the same view while the camera is the plain gameplay lens, otherwise the
   // plane's mapping fitted at the look-at point (exact for a kick or a pull-back, close for a yaw). The labels over the crew do not need it: they project through hud3d.
+  // LOOP R1: on a ring map the view also carries scr(x, y, w, h) = where a map point (y down) is drawn, in a w x h canvas, THROUGH THE BEND (null when it is behind the camera): the 2D HUD's far markers
+  // (the lookout and spotter arrows, the lit-target marks, the portholes' pointers) use it instead of the flat (x - cx) * zoom, which is only right near the ship.
+  const ringScr = (x, y, w, h) => { const q = V.hud3d.mapPt(x, y); return q ? { x: q.x * w, y: q.y * h } : null; };
   V.hudView = (view, w, h) => {
-    if (!cineOn || !view) return view;
-    const T = camTarget, s0 = worldToScreen(camera, T.x, -T.y, w, h), s1 = worldToScreen(camera, T.x + 400, -T.y, w, h);
-    const z = (s1.x - s0.x) / 400;
-    if (!(z > 0.01) || !Number.isFinite(s0.x) || !Number.isFinite(s0.y)) return view;
-    return { ...view, cx: T.x - (s0.x - w / 2) / z, cy: -T.y - (s0.y - h / 2) / z, zoom: z };
+    if (!view) return view;
+    let out = view;
+    if (cineOn) {
+      const T = camTarget, s0 = worldToScreen(camera, T.x, -T.y, w, h), s1 = worldToScreen(camera, T.x + 400, -T.y, w, h);
+      const z = (s1.x - s0.x) / 400;
+      if (z > 0.01 && Number.isFinite(s0.x) && Number.isFinite(s0.y)) out = { ...view, cx: T.x - (s0.x - w / 2) / z, cy: -T.y - (s0.y - h / 2) / z, zoom: z };
+    }
+    if (RB.on) out = { ...out, scr: ringScr, ring: true };
+    return out;
   };
   // WP11 alignment check: how far (screen pixels, worst of a 7 x 5 grid of plane points) the 3D projection is from the 2D camera's own mapping of the same points. Zero-ish (< 1 px) whenever no cinematic is running.
-  V.alignError = (view, w, h) => {
+  // LOOP R1: on a ring map the strip is bent, so only the part of the plane that stays FLAT (RB.flat px either side of the look-at point: the ship and her anchors) is expected to match the 2D mapping; the
+  // grid is narrowed to it (span = a share of RB.flat, default 0.95). alignError(view, w, h, 1) on a ring map measures the whole screen (it grows toward the edges: that is the ring curving away).
+  V.alignError = (view, w, h, whole = 0) => {
     if (!view || !(view.zoom > 0)) return NaN;
     let worst = 0;
+    const ring = RB.on, spanX = ring && !whole ? Math.min(w / 2 / view.zoom * 0.9, RB.flat * 0.95) : w / 2 / view.zoom * 0.9;
     for (let i = -3; i <= 3; i++) for (let j = -2; j <= 2; j++) {
-      const mx = view.cx + (i / 3) * (w / 2 / view.zoom) * 0.9, my = view.cy + (j / 2) * (h / 2 / view.zoom) * 0.9;
-      const p = worldToScreen(camera, mx, my, w, h), ex = w / 2 + (mx - view.cx) * view.zoom, ey = h / 2 + (my - view.cy) * view.zoom;
+      const mx = view.cx + (i / 3) * spanX, my = view.cy + (j / 2) * (h / 2 / view.zoom) * 0.9;
+      let p;
+      if (ring) { RB.pt(mx, -my, 0, _hb); p = worldToScreen(camera, _hb.x, -_hb.y, w, h, _hb.z); } else p = worldToScreen(camera, mx, my, w, h);
+      const ex = w / 2 + (mx - view.cx) * view.zoom, ey = h / 2 + (my - view.cy) * view.zoom;
       worst = Math.max(worst, Math.hypot(p.x - ex, p.y - ey));
     }
     return worst;
@@ -530,11 +565,11 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   V.stats = () => {
     const i = renderer.info, p = post.enabled && look.post;
     const ph = porthole && V.portholeLive ? { ms: porthole.ms, calls: porthole.calls, tris: porthole.tris, w: porthole.w, h: porthole.h } : null; // (WP11: the Versus porthole's own numbers; calls / tris / sceneCalls below are the MAIN picture's)
-    return { porthole: ph, portholes: portholes3d ? { n: portholes3d.n, ms: portholes3d.ms, calls: portholes3d.calls, tris: portholes3d.tris, error: portholes3d.error } : null, cine: cineOn, calls: mainInfo.calls || i.render.calls, tris: mainInfo.tris || i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs, crew: crew.stats() };
+    return { porthole: ph, portholes: portholes3d ? { n: portholes3d.n, ms: portholes3d.ms, calls: portholes3d.calls, tris: portholes3d.tris, error: portholes3d.error } : null, cine: cineOn, calls: mainInfo.calls || i.render.calls, tris: mainInfo.tris || i.render.triangles, sceneCalls: p ? post.sceneCalls : i.render.calls, sceneTris: p ? post.sceneTris : i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, jsMs, renderMs, w: canvas.width, h: canvas.height, tier: tier.name, post: p, gpu: post.timing && post.timing.ms, vfx: vfx ? vfx.stats() : null, vfxMs, crew: crew.stats(), ring: RB.on ? { ms: ringMs, flat: RB.flat, xc: RB.xc, R: RB.R } : null };
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.resetOrbit = () => { lastPivot.set(0, 0, 0); }; // WP13: the next orbit frame starts from the starting view again (the build page's double-click)
-  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));

@@ -21,6 +21,7 @@
 import { THREE, gradientMap, rimify, look } from './style.js';
 import { getTrimSheet, TRIM } from './textures.js';
 import { config } from '../../config.js';
+import { RB, RING_GLSL } from './ringBend.js'; // LOOP R1: a particle's centre goes through the ring bend on a ring map (the quad itself faces the camera)
 
 export const KIND = { fire: 0, smoke: 1, spark: 2, muzzle: 3, ring: 4, flash: 5, steam: 6, drop: 7, ball: 8 };
 const ADDITIVE = [true, false, true, true, true, true, false, false, true]; // by kind: which of the two meshes draws it
@@ -47,6 +48,7 @@ export function rgbOf(hex) { // a colour as linear [r, g, b] (cached)
 
 // ---- the shader (both meshes) ----------------------------------------------------------------------------------------------------------------------------------------------------
 const VERT = /* glsl */`
+  ${RING_GLSL}
   attribute vec4 aPos; attribute vec4 aDir; attribute vec4 aCol; attribute vec4 aTime;
   varying vec2 vUv; varying vec4 vCol; varying float vKind; varying float vFrame; varying float vStreak; varying float vSeed;
   void main() {
@@ -65,7 +67,9 @@ const VERT = /* glsl */`
       if ( kind < 0.5 ) cc.y += 0.42; // a flame stands on its position (the painted base is 8% above the bottom edge)
       q = vec2( cc.x * aDir.x - cc.y * aDir.y, cc.x * aDir.y + cc.y * aDir.x ) * size;
     }
-    vec3 wp = aPos.xyz + right * q.x + up * q.y;
+    vec3 ctr = aPos.xyz;
+    if ( uRingA.x > 0.5 ) ctr = ringBend( ctr );
+    vec3 wp = ctr + right * q.x + up * q.y;
     gl_Position = projectionMatrix * viewMatrix * vec4( wp, 1.0 );
   }
 `;
@@ -148,7 +152,7 @@ const makeMaterial = (sheet, order, depthTest) => {
   const m = new THREE.ShaderMaterial({
     vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest, side: THREE.DoubleSide,
     blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
-    uniforms: { uGou: uGouache, tSheet: { value: sheet }, uFire: { value: new THREE.Vector4((f.x + 1) / S, 1 - (f.y + 1) / S, 254 / S, 256 / S) }, uSmoke: { value: new THREE.Vector4((sm.x + 1) / S, 1 - (sm.y + 1) / S, 254 / S, 0) } },
+    uniforms: RB.addUniforms({ uGou: uGouache, tSheet: { value: sheet }, uFire: { value: new THREE.Vector4((f.x + 1) / S, 1 - (f.y + 1) / S, 254 / S, 256 / S) }, uSmoke: { value: new THREE.Vector4((sm.x + 1) / S, 1 - (sm.y + 1) / S, 254 / S, 0) } }),
   });
   m.fog = false;
   m.userData.order = order;
