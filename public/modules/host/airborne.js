@@ -278,7 +278,7 @@ export function createAirborne({ state, puff, phoneFx, providers = [] }) {
     // Overboard: well below the ship or far past either end.
     // (Past the bow counts only beyond any other deck out there, e.g. a gunship alongside.)
     // (Versus: the rival's decks are surfaces too, wherever she hangs in the sky: past THEM is overboard, not just past our own ends and below our own keel.)
-    const rs = extraProviders.length ? surfaces().filter((s) => typeof s.id === 'string' && (s.id.startsWith('rival:') || s.id.startsWith('fleet:') || s.id.startsWith('creature:'))) : []; // (C.2: a giant creature's mantle is a place to land too, wherever it is)
+    const rs = extraProviders.length ? surfaces().filter((s) => typeof s.id === 'string' && (s.id.startsWith('rival:') || s.id.startsWith('fleet:') || s.id.startsWith('creature:') || s.id.startsWith('ring:'))) : []; // (C.2: a giant creature's mantle is a place to land too, wherever it is; R0: so is a ring map's boarding gallery)
     const wide = p.cannon ? cn.OVERBOARD_X : 0; // (B.6: a cannon flyer crosses the sky: he is only overboard well beyond the ends)
     const farX = Math.max(1600, ...extra.map((s) => (val(s.y) == null ? 0 : val(s.x1))), ...rs.map((s) => val(s.x1))) + A.OVERBOARD_X + wide;
     const nearX = Math.min(0, ...rs.map((s) => val(s.x0))) - A.OVERBOARD_X - wide;

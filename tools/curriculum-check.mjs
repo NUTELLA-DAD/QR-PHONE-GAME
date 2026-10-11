@@ -58,7 +58,7 @@ for (const [mode, o] of variants) {
     if (n < M.stopsMin + h || n > M.stopsMax + h) fail(sd, `${n} columns, want ${M.stopsMin + h}-${M.stopsMax + h}`);
     if (cols[0].length !== 1 || cols[0][0].harbour !== second) fail(sd, 'first column');
     const last = cols[n - 1];
-    if (last.length !== 1 || !last[0].flagship || last[0].env !== 'aether' || last[0].kind !== 'network' || last[0].danger !== maxD) fail(sd, 'the Flagship stop');
+    if (last.length !== 1 || !last[0].flagship || last[0].env !== 'aether' || last[0].kind !== (config.RING.ENABLED ? 'ring' : 'network') || last[0].danger !== maxD) fail(sd, 'the Flagship stop');
     if (last[0].ring !== 'citadel') fail(sd, 'the Flagship has no citadel flag');
     if (!second && (cols[0][0].env !== 'skyisles' || cols[0][0].kind !== 'network' || cols[0][0].danger !== 1 || cols[0][0].slot !== 0)) fail(sd, 'first stop is not the Sky Isles cave run');
     if (second && (cols[h].length < V.CHOICES_MIN || cols[h][0].slot !== CU.SECOND_START || cols[h][0].base !== table[CU.SECOND_START].danger + bonus)) fail(sd, 'the second voyage does not start at slot ' + CU.SECOND_START);
@@ -92,7 +92,7 @@ for (const [mode, o] of variants) {
       for (const s of col) {
         if (!s.lair && !allowed.includes(s.env)) fail(sd, `${s.id} sky ${s.env} is not in slot ${slot}'s ${allowed}`);
         if (s.lair && !LR.BY_ENV[s.env]) fail(sd, `${s.id} lair in ${s.env}`);
-        const kinds = s.lair ? ['lair'] : s.ring && !s.flagship ? ['open'] : row.kinds;
+        const kinds = s.lair ? ['lair'] : s.ring && config.RING.ENABLED ? ['ring'] : s.ring && !s.flagship ? ['open'] : row.kinds; // (a ring stop flies the ring map, config.RING.ENABLED; R0)
         if (!kinds.includes(s.kind)) fail(sd, `${s.id} kind ${s.kind} not in ${kinds}`);
         sawKind.add(s.kind);
         if (s.play !== s.env) fail(sd, `${s.id} plays ${s.play}`);
@@ -122,7 +122,7 @@ for (const [mode, o] of variants) {
       const rings = col.filter((s) => s.ring);
       if (row.ring && !col[0].harbour && rings.length !== 1) fail(sd, `column ${c} has ${rings.length} ring stops, want 1`);
       if (!row.ring && rings.length) fail(sd, `column ${c} has ring stops but its slot has none`);
-      if (rings.some((s) => !s.flagship && s.kind !== 'open')) fail(sd, 'a ring stop that is not a raid');
+      if (rings.some((s) => (config.RING.ENABLED ? s.kind !== 'ring' : !s.flagship && s.kind !== 'open'))) fail(sd, 'a ring stop that is not on the ring map (or a raid, with the ring switched off)');
       if (col.filter((s) => s.lair).length > 1) fail(sd, `two lairs in column ${c}`);
     }
     const maxLairs = m >= LR.LONG_STOPS ? LR.COUNT.long : LR.COUNT.short;

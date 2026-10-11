@@ -63,6 +63,9 @@ const SENT = {
   'helm-held': ['{who} held the helm steady while everything went wrong.', 'The hull was in ribbons, and {who} never left the wheel.', '{who} kept her head into the wind through the worst of it.'],
   limp: ['She broke up, but a spare gasbag and {who} got her home.', '{who} stitched the spare gasbag on, and she limped away.', 'She went down in pieces, and {who} put her back together in the air.'],
   'ship-lost': ['{who} was the last one aboard when she broke up over {stop}.', 'She went down over {stop}, and {who} saluted as she fell.', '{stop} was the end of her, with {who1} still at the post.'],
+  'ring-breach': ['{who} blew open a gate of {G}.', '{who1} found the weak point in {G}, and a gate came down.', 'A gate of {G} fell, and {who} had a hand in it.'],
+  'ring-charge': ['{who} crept along the gallery, set a charge at the keep door of {G} and ran.', '{who} lit the fuse at the keep door of {G}, and the wall went up.', 'The keep door of {G} blew, and {who1} was the one who planted it.'],
+  'ring-fall': ['{who} was there when {G} came down.', '{G} fell, and {who1} fired the last of it.', 'The crown of {G} came off, and {who} saw it go.'],
   'flagship-down': ['{who} fired the shot that sank the Flagship, and the Broken Skies were ours.', 'The Flagship broke in half, and it was {who1}\'s shell that did it.', '{who} put the Flagship in the clouds where she belongs.'],
   'boss-down': ['{who} shot the great zeppelin out of the sky.', 'The big zeppelin fell, and {who1}\'s guns were the last to speak.', '{who} brought the zeppelin down to the delight of everyone below.'],
   sandbag: ['{who} carried one {item} through a whole stop and never once put it down.', '{who} and a {item} were not parted for a whole stop.', '{who} still has not put that {item} down.'],
@@ -98,7 +101,7 @@ const LEADER = {
 const PLAY = {
   'fire-first': ['put out the first fire'], 'revive-fire': ['carried on reviving with the fires still burning'], overboard: ['went for a swim'], 'overboard-twice': ['went overboard again'], 'overboard-lunatic': ['went over the side yet again'],
   'boarding-kill': ['took the fight to the gunship'], 'cannon-board': ['flew from the crew cannon onto the gunship'], 'cannon-miss': ['missed the whole sky with the crew cannon'],
-  'gunship-shot': ['fired the shot that sank {G}'], 'gunship-charge': ['planted the charge'], 'gunship-captured': ['took the helm of {G}'], 'gunship-fled': ['drove {G} off'],
+  'gunship-shot': ['fired the shot that sank {G}'], 'gunship-charge': ['planted the charge'], 'ring-charge': ['planted the charge at {G}'], 'ring-breach': ['broke a gate of {G}'], 'ring-fall': ['brought down {G}'], 'gunship-captured': ['took the helm of {G}'], 'gunship-fled': ['drove {G} off'],
   'creature-win': ['brought down {C}'], 'creature-freed': ['hacked {C} loose'], breakoff: ['was beside it when {things} came off'], split: ['rode the half that fell'], 'breakoff-bay': ['was next to the bomb bay when it went'], rebuild: ['bought {things} back'],
   'going-down-saved': ['pulled her out of the dive'], 'helm-held': ['held the helm through the worst of it'], limp: ['got her home on the spare gasbag'], 'ship-lost': ['stayed to the last'],
   'flagship-down': ['sank the Flagship'], 'boss-down': ['shot down the zeppelin'], sandbag: ['carried the {item} the whole stop'],

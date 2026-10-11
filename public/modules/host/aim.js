@@ -112,6 +112,15 @@ export function targets(state) {
   for (const g of (state.course && state.course.turrets) || []) {
     if (!g.dead && g.x != null) list.push({ kind: 'turret', obj: g, r: 40, at: (t) => ({ x: g.x + (g.vx - vs) * t, y: g.y }) });
   }
+  const rg = state.course && state.course.ring; // (a ring map, ring.js: a face's core while its shutter is open - the shot that counts - and the shut one once its guns have fallen, which only chips the keep; its special)
+  if (rg) {
+    for (const f of rg.faces) {
+      if (f.down) continue;
+      if (f.open > 0) list.push({ kind: 'core', obj: f, r: 90, at: () => ({ x: f.core.x, y: f.core.y }) });
+      else if (f.windows > 0) list.push({ kind: 'shutter', obj: f, r: 90, at: () => ({ x: f.core.x, y: f.core.y }) });
+      if (!f.special.dead && f.special.kind !== 'gallery') list.push({ kind: 'rspecial', obj: f.special, r: 60, at: () => ({ x: f.special.x, y: f.special.y - 55 }) });
+    }
+  }
   return list;
 }
 
@@ -130,7 +139,7 @@ export function solution(state, gun, target) {
 
 // The most useful target this gun can hit right now (mines, turrets, cargo, then fighter).
 export function bestTarget(state, gun) {
-  const order = { flier: -2, cable: -1, bomb: 0, rocket: 1, saw: 1.5, laid: 1.8, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rivalGun: 8, rivalBag: 8.4, rivalCore: 8.8, rival: 9.2, boarder: 0.4, rivalCrew: 7.8, rivalDeck: 9.3 };
+  const order = { flier: -2, cable: -1, bomb: 0, rocket: 1, saw: 1.5, laid: 1.8, mine: 2, bat: 3, imp: 3, strafer: 4, tug: 4.5, turret: 5, core: 4.9, rspecial: 5.3, shutter: 11, gport: 5.5, bomber: 6, sniper: 6.5, bossgun: 7, para: 4.2, boss: 9, gunship: 9.5, fighter: 10, rivalGun: 8, rivalBag: 8.4, rivalCore: 8.8, rival: 9.2, boarder: 0.4, rivalCrew: 7.8, rivalDeck: 9.3 };
   let best = null;
   // (a flamethrower burns what is within a few hundred px: the sky's small fry, boarders on the decks, and the nearest bits of a hostile ship - flame.js - not her middle)
   for (const t of gun.type === 'flame' ? [...targets(state).filter((u) => AIR_KINDS.has(u.kind)), ...flameTargets(state, mainShip(state), gun)] : gun.type === 'harpoon' ? [...targets(state), ...creatureTowTargets(state)] : gun.type === 'flak' && state.creature && config.CREATURES.FORCE_WIN === 'flak' ? [...targets(state), ...creatureTargets(state, [], null, 'flak')] : targets(state)) {

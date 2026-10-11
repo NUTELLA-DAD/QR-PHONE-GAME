@@ -19,6 +19,7 @@ import { inFunnel } from './creatureFight.js'; // (C.3: the open beak gapes up t
 import { pickEnvironment } from './environments.js';
 import { makeMap, buildArenaMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
 import { applyForce } from './forces.js';
+import { createRing } from './ring.js'; // (the orbit finale: faces, shutters, the gallery, the crown; course.ring is its state on a ring map)
 
 const K = config.COURSE;
 const TOP = -1400; // where ceilings start (far above the view)
@@ -389,6 +390,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   };
   Object.defineProperty(course, 'dist', { enumerable: true, get: () => ship.pose.x, set: (v) => { ship.pose.x = v; } }); // (where ship 0 is along the sky: the POSE owns it since M.2; this is the old name for it)
   state.course = course;
+  const ringSys = createRing({ state, puff, credit, onMarker }); // (R0: the ring map's rules, ring.js; it plays only while course.ring is set)
 
   const r = (a, b) => a + course.rand() * (b - a);
   // Harder along each lap and with every lap.
@@ -777,7 +779,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       const wy = t.my ?? groundAt(course, wx);
       t.x = wx;
       t.y = wy - 20;
-      t.vx = 0;
+      t.vx = t.rev || 0; // (a revolving gun on a ring map moves: the gunners lead it)
       if (t.dead) continue;
       // Aim at the middle of the ship.
       const ty = aimY;
@@ -904,6 +906,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       credit?.(b);
       puff(t.x, t.y, '#ff5a1f', 22);
     }
+    if (course.ring) ringSys.blast(b); // (a ring map: the cores and the specials)
     // Buildings: a hit knocks a chunk off; enough hits bring it down (and its gun with it).
     for (const f of course.features) {
       if (!f.blocks) continue;
@@ -936,7 +939,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         blast(b);
       } else if (inRock(state, b.x, b.y)) b.done = true; // hit an overhang
     }
-    const lost = state.creature ? 60000 : 8000; // (a bomb that falls past this is gone; a creature stands lower than that on a tall map)
+    const lost = state.creature || course.ring ? 60000 : 8000; // (a bomb that falls past this is gone; a creature, or a ring map's platforms, stand lower than that on a tall map)
     state.shipBombs = state.shipBombs.filter((b) => !b.done && b.y < lost);
   };
 
@@ -984,6 +987,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         state.ev.warnText = 'STUCK FAST! A TUG HAULS YOU CLEAR';
       }
     }
+    if (map.ring) return ringSys.progress(sx, sy); // (a ring map: its faces are fought like outposts, ring.js)
     if (map.open && !map.lair) {
       // Open sky: knock out every outpost (all its guns), nearest first.
       for (const o of map.outposts) if (!o.done && course.turrets.filter((t) => t.outpost === map.outposts.indexOf(o)).every((t) => t.dead)) {
@@ -1158,6 +1162,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     proximity(ship);
     updateBombs(dt);
     updateTurrets(dt);
+    if (course.ring) ringSys.update(dt); // (a ring map: revolving guns, shutters, specials, the gallery, the crown)
   };
 
   // Put a second ship at her station from ship 0 (formation.dx along the sky, dalt above), then into the nearest open air where all of her fits: the formation
@@ -1217,8 +1222,9 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   // the look/hazards to use ('skyisles' for now); the map is also tagged with it (map.environment).
   function startMission(n, opts = {}) {
     const MP = config.MAPS;
-    const kind = opts.stop && opts.stop.lair ? 'lair' : MP.FORCE_KIND || opts.kind || MP.KINDS[(n - 1) % MP.KINDS.length]; // (a lair stop: the Kraken's sea, maps.js buildLairMap, whatever the tools force)
-    const map = opts.arena ? buildArenaMap(course.rand, layout, opts.arena, opts.arenaGap) : makeMap(kind, n, course.rand, opts.lengthMul || 1, layout, opts.stop && opts.stop.creature); // (a lair map: the Kraken's sea or the Drake's lava, by opts.stop.creature; Versus: the big arena sky, maps.js buildArenaMap)
+    let kind = opts.stop && opts.stop.lair ? 'lair' : MP.FORCE_KIND || opts.kind || MP.KINDS[(n - 1) % MP.KINDS.length]; // (a lair stop: the Kraken's sea, maps.js buildLairMap, whatever the tools force)
+    if (kind === 'ring' && !config.RING.ENABLED) kind = 'open'; // (the switch, R0: with the ring off a ring stop flies the old outpost raid)
+    const map = opts.arena ? buildArenaMap(course.rand, layout, opts.arena, opts.arenaGap) : makeMap(kind, n, course.rand, opts.lengthMul || 1, layout, opts.stop && opts.stop.creature, config.RING.FORCE_VARIANT || (opts.stop && opts.stop.ring) || null); // (a lair map: the Kraken's sea or the Drake's lava, by opts.stop.creature; Versus: the big arena sky, maps.js buildArenaMap)
     map.environment = pickEnvironment(opts.environment); // 'skyisles' (the original look and rules), 'frost', 'ember'...
     const d = Math.min(1, (n - 1) / 4);
     Object.assign(course, {
@@ -1240,12 +1246,13 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         cx: t.mx,
         mx: t.mx,
         my: t.my,
-        hp: map.open ? 2 : K.TURRET_HP,
+        hp: t.hp ?? (map.open ? 2 : K.TURRET_HP),
         cd: r(2, K.TURRET_FIRE_MAX),
         aim: -Math.PI / 2,
         dead: false,
         rocket: course.rand() < K.ROCKET_SHARE * d + 0.1,
         outpost: t.outpost,
+        ...(t.rev ? { rev: t.rev } : {}), // (a ring map's revolving guns, px/s round the ring)
       })),
       target: map.open && !map.lair ? map.outposts[0] : null,
       stationGun: null,
@@ -1259,6 +1266,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       ].filter(Boolean),
     });
     course.lastMarker = course.markers[0];
+    ringSys.begin(map); // (a ring map: the faces' state, course.ring; null on any other map)
     ship.pose.x = map.start.x - REF.x;
     course.homeAlt = REF.y - map.start.y;
     ship.pose.y = -course.homeAlt;
@@ -1270,7 +1278,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     state.rockets.length = 0;
     if (state.shipBombs) state.shipBombs.length = 0;
     state.ev.warn = 4;
-    state.ev.warnText = opts.title ? opts.title : map.open ? 'MISSION ' + n + ': DESTROY ' + map.outposts.length + ' OUTPOSTS!' : 'MISSION ' + n + ': REACH THE BEACON!';
+    state.ev.warnText = opts.title ? opts.title : map.ring ? 'MISSION ' + n + ': BREACH ' + map.ring.name + '!' : map.open ? 'MISSION ' + n + ': DESTROY ' + map.outposts.length + ' OUTPOSTS!' : 'MISSION ' + n + ': REACH THE BEACON!';
   }
 
   // A brand-new game: fresh terrain from the home mast, lap 1.
@@ -1303,5 +1311,5 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
 
   if (config.MAPS.ENABLED) startMission(1, firstMission && firstMission());
 
-  return { advance, update, reset, restart, helmHint, dropBomb, predictBomb, startMission, place };
+  return { advance, update, reset, restart, helmHint, dropBomb, predictBomb, startMission, place, ringSys };
 }

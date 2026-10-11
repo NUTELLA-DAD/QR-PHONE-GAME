@@ -205,8 +205,8 @@ function curriculumLairs(columns, seed, n, h, table) {
   }
 }
 
-// The ring flags (LOOP.md 3D add-on): a slot with ring: 'tower' / 'fortress' flags one stop of its column (a lair never takes it), 'citadel' the Flagship. Only a flag for now: the ring map is package R0, so
-// the stop keeps its normal map (a raid: kind 'open') until it exists. Marked before the lairs, so a lair-free route has the same ring.
+// The ring flags (LOOP.md 3D add-on): a slot with ring: 'tower' / 'fortress' flags one stop of its column (a lair never takes it), 'citadel' the Flagship. The stop is flown on the ring map (kind 'ring', maps.js
+// buildRingMap; the Flagship's too); with config.RING.ENABLED false it keeps the old outpost raid ('open', the Flagship her cave run). Marked before the lairs, so a lair-free route has the same ring.
 function curriculumRings(columns, seed, table) {
   const rand = mulberry((seed ^ 0x72696e67) >>> 0);
   for (const col of columns) {
@@ -214,7 +214,8 @@ function curriculumRings(columns, seed, table) {
     if (!e.ring || col[0].harbour) continue;
     const s = col[Math.floor(rand() * col.length)];
     s.ring = e.ring;
-    if (!s.flagship) s.kind = 'open';
+    if (config.RING.ENABLED) s.kind = 'ring';
+    else if (!s.flagship) s.kind = 'open';
   }
 }
 

@@ -6,6 +6,7 @@
 // Two kinds of map:
 //   'network' - a branching cave network: find your way through to the goal.
 //   'route'   - one winding passage that climbs, drops and doubles back (no wrong turns).
+//   'ring'    - the orbit finale (config.RING, buildRingMap below): an approach, then a strip C = 2 pi R long that the 3D view will bend into a circle; castle FACES stand along it.
 import { config } from '../../config.js';
 
 // The ship's box around its centre point (the layout's refPoint: 800, 500 on the classic ship), in pixels. (B1: the maps are fitted to the ship whose `layout` is passed.)
@@ -17,8 +18,8 @@ export function shipBox(layout) {
 
 // A SALVAGE RUN (voyage.js, simulation.js markSalvage; config.VOYAGE.CURRICULUM.SALVAGE): the catch-up stop of a crew that is behind. For now it is flown on the map kind SALVAGE.MAP (a pass: no outposts, a beacon
 // at the end, so even a ship with no bomb bay can finish it) a level lower, and the map is flagged map.salvage; package G6 gives it a real objective.
-export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = null) {
-  if (kind !== 'salvage') return makeMapOf(kind, level, rand, lengthMul, layout, creature);
+export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = null, variant = null) { // (variant: which ring a 'ring' map is, 'tower' | 'fortress' | 'citadel')
+  if (kind !== 'salvage') return makeMapOf(kind, level, rand, lengthMul, layout, creature, variant);
   const S = config.VOYAGE.CURRICULUM.SALVAGE;
   const map = makeMapOf(S.MAP, Math.max(1, level - S.LEVEL_DROP), rand, lengthMul, layout, creature);
   map.salvage = true;
@@ -26,11 +27,16 @@ export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = nul
 }
 
 // Build a map, checking the ship really can get from the start to the beacon (try again if not).
-function makeMapOf(kind, level, rand, lengthMul = 1, layout, creature = null) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES; creature: which lair a 'lair' map is, 'kraken' or 'drake')
+function makeMapOf(kind, level, rand, lengthMul = 1, layout, creature = null, variant = null) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES; creature: which lair a 'lair' map is, 'kraken' or 'drake')
   let map = null;
   for (let tries = 0; tries < 40; tries++) {
     // (Late-voyage open maps are so crowded with peaks and islands that no layout may pass the checks below; rather than
     // settle for the last, unplayable try, ease off one level every few failures so a playable map always comes out.)
+    if (kind === 'ring') { // (a ring: its faces are its outposts and are placed to be reachable; built again, a little barer, if the rock shut the way)
+      map = buildRingMap(level, rand, lengthMul, layout, variant || 'tower', tries);
+      if (map.startDist < 1e9) return map;
+      continue;
+    }
     map = kind === 'lair' ? (creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout);
     if (map.startDist >= 1e9) continue;
     if (map.lair) return map; // (no outposts to reach: the lair's middle is the goal)
@@ -344,6 +350,111 @@ function buildStormLairMap(level, rand, lengthMul = 1, layout) {
   }
   const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'thunderbird', spires };
   finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
+  return map;
+}
+
+// THE RING MAP (config.RING, LOOP.md "The 3D add-on", ring.js): open sky, an APPROACH of rolling hills (a normal stretch with a gun or two), then the RING stretch, C = 2 pi R px long, starting at xRing.
+// The ring has no floor but islands: one PLATFORM under every castle FACE, a few floating floor islands, tall SPIRES standing from the bottom (rock the hull can scrape) and CORNICES hanging from the top.
+// Each face is an outpost (map.outposts[i], so the minimap, the salvage and the route code treat it as one) with its guns in map.turrets (outpost: i); revolving turrets (rev: px/s) have no outpost.
+// map.ring = { variant, xRing, R, C, axisY (the height the ship's lane through the ring is measured at), faces: [ { i, angle, x, y (platform top), plat: { x0, x1 }, turrets: [dx...], core: { x, y, w, h },
+// special: { kind, x, y }, gallery: { x0, x1, y, door } | null } ], spires: [ { x, top } ], rev: [ { mx, my, speed } ] } (all px). `tries` > 0 = built again a little barer.
+function buildRingMap(level, rand, lengthMul = 1, layout, variant = 'tower', tries = 0) {
+  const M = config.MAPS, RG = config.RING, V = RG.VARIANTS[variant] || RG.VARIANTS.tower, C = M.CELL;
+  const r = (a, b) => a + rand() * (b - a);
+  const ri = (a, b) => Math.floor(r(a, b + 1));
+  const circ = 2 * Math.PI * V.R;
+  const startI = 12, ringI0 = startI + Math.round((circ * RG.APPROACH * lengthMul) / C), ringCells = Math.round(circ / C);
+  const W = ringI0 + ringCells + RG.MARGIN, H = RG.HEIGHT;
+  const solid = new Uint8Array(W * H);
+  const idx = (i, j) => j * W + i;
+  const xRing = ringI0 * C, surfRow = H - RG.SURFACE_UP, surfY = surfRow * C;
+  const fill = (i, j0, j1) => { if (i >= 0 && i < W) for (let j = Math.max(0, j0); j <= Math.min(H - 1, j1); j++) solid[idx(i, j)] = 1; };
+  // The faces (and the cells their platforms cover, so nothing else is put there).
+  const faceCols = V.FACES.map((a) => Math.round((xRing + a * V.R) / C));
+  const platHalf = Math.round(RG.PLATFORM_HALF / C);
+  const nearFace = (i, pad) => faceCols.some((c) => Math.abs(i - c) < platHalf + pad);
+  // The approach's ground: rolling hills, flat under the start, dying away at the ring's start.
+  const s1 = r(0, 6), s2 = r(0, 6), tops = [];
+  for (let i = 0; i < ringI0 + 4; i++) {
+    let h = i < 26 ? RG.HILL[0] : RG.HILL[0] + (RG.HILL[1] - RG.HILL[0]) * (0.5 + 0.3 * Math.sin(i * 0.07 + s1) + 0.2 * Math.sin(i * 0.19 + s2));
+    h *= Math.max(0, Math.min(1, (ringI0 + 4 - i) / 12)); // (the hills fall away into the ring)
+    const top = H - Math.round(h);
+    tops.push(top);
+    if (h >= 1) fill(i, top, H - 1);
+  }
+  // Floating islands in the approach.
+  const ease = 1 - Math.min(0.6, tries * 0.06); // (a retry builds fewer pieces of rock)
+  for (let k = 0, n = Math.round((2 + Math.min(3, level)) * ease); k < n; k++) {
+    const ci = ri(36, ringI0 - 10), cj = ri(12, Math.max(13, tops[ci] - 18)), rx = r(4, 8), ry = r(2.5, 4);
+    for (let j = Math.floor(cj - ry); j <= Math.ceil(cj + ry * 1.8); j++) for (let i = Math.floor(ci - rx); i <= Math.ceil(ci + rx); i++) {
+      const u = (i - ci) / rx, v = j < cj ? (j - cj) / ry : (j - cj) / (ry * 1.8);
+      if (u * u + v * v <= 1) fill(i, j, j);
+    }
+  }
+  // The faces' platforms: flat on top at surfRow, thick in the middle, rounded below.
+  for (const c of faceCols) for (let i = c - platHalf; i <= c + platHalf; i++) {
+    const u = Math.abs(i - c) / platHalf;
+    fill(i, surfRow, surfRow + 3 + Math.round(8 * (1 - u * u)));
+  }
+  // The ring's other rock: floor islands, spires from the bottom, cornices from the top.
+  const spot = (pad) => { for (let t = 0; t < 30; t++) { const i = ri(ringI0 + 6, ringI0 + ringCells - 6); if (!nearFace(i, pad)) return i; } return -1; };
+  const spires = [];
+  for (let k = 0, n = Math.round(V.SPIRES * ease); k < n; k++) {
+    const ci = spot(7); // (clear of the faces' hover spots: the ship works over a face, a spire stands well off)
+    if (ci < 0) continue;
+    const bh = ri(2, 3), top = ri(Math.round(H * 0.54), Math.round(H * 0.68));
+    for (let i = ci - bh; i <= ci + bh; i++) fill(i, top + (Math.abs(i - ci) / bh) * 3 | 0, H - 1);
+    spires.push({ x: (ci + 0.5) * C, top: top * C });
+  }
+  for (let k = 0, n = Math.round(V.ISLANDS * ease); k < n; k++) {
+    const ci = spot(8);
+    if (ci < 0) continue;
+    const cj = ri(Math.round(H * 0.76), Math.round(H * 0.88)), rx = r(4, 8), ry = r(2, 3); // (low: well under the ship's hover height over a face)
+    for (let j = Math.floor(cj - ry); j <= Math.ceil(cj + ry * 1.8); j++) for (let i = Math.floor(ci - rx); i <= Math.ceil(ci + rx); i++) {
+      const u = (i - ci) / rx, v = j < cj ? (j - cj) / ry : (j - cj) / (ry * 1.8);
+      if (u * u + v * v <= 1) fill(i, j, j);
+    }
+  }
+  for (let k = 0, n = Math.round(V.CORNICES * ease); k < n; k++) {
+    const ci = spot(2);
+    if (ci < 0) continue;
+    const hw = ri(3, 6), depth = ri(5, 8);
+    for (let i = ci - hw; i <= ci + hw; i++) fill(i, 0, Math.round(depth * (1 - (Math.abs(i - ci) / (hw + 1)) ** 2)));
+  }
+  // The faces: guns on the platform, the core in the keep wall, one special, the gallery if that is the special.
+  const outposts = [], turrets = [], faces = [];
+  V.FACES.forEach((a, k) => {
+    const x = faceCols[k] * C + C / 2, kind = V.SPECIALS[k % V.SPECIALS.length], side = k % 2 ? -1 : 1;
+    const gl = kind === 'gallery' ? { x0: x - RG.GALLERY.LEN - 280, x1: x - 280, y: surfY - RG.GALLERY.UP, door: x - 300 } : null; // (the ledge runs from out on the left in to the keep door)
+    const dx = RG.TURRET_X.slice(0, V.TURRETS);
+    const guns = dx.map((d) => ({ mx: x + d, my: surfY, outpost: k, hp: RG.TURRET_HP }));
+    turrets.push(...guns);
+    outposts.push({ x, y: surfY, done: false, guns });
+    faces.push({ i: k, angle: a, x, y: surfY, plat: { x0: x - RG.PLATFORM_HALF, x1: x + RG.PLATFORM_HALF }, turrets: dx, core: { x, y: surfY - RG.CORE.H / 2, w: RG.CORE.W, h: RG.CORE.H }, special: { kind, x: x + side * RG.SPECIAL_X, y: surfY }, gallery: gl });
+  });
+  // Flak guns on the approach hills (a normal stretch to fly), not part of any face.
+  for (let k = 0, n = Math.min(RG.GROUND_TURRETS[1], RG.GROUND_TURRETS[0] + Math.floor((level - 1) / 3)); k < n; k++) {
+    const i = Math.round(40 + ((ringI0 - 60) * (k + 0.5)) / n);
+    turrets.push({ mx: (i + 0.5) * C, my: tops[i] * C, hp: 2 });
+  }
+  // Revolving turrets: on a rail high above the platforms, they travel round the ring at OMEGA (px/s = OMEGA x R) and wrap at its end.
+  const rev = [];
+  for (let k = 0; k < V.REV; k++) {
+    const g = { mx: xRing + (circ * (k + 0.35)) / V.REV, my: surfY - RG.REVOLVE.RAIL_UP, outpost: undefined, hp: RG.REVOLVE.HP, rev: V.OMEGA * V.R };
+    turrets.push(g);
+    rev.push({ mx: g.mx, my: g.my, speed: g.rev });
+  }
+  const ring = { variant, xRing, R: V.R, C: circ, axisY: surfY - 1400, faces, spires, rev, name: V.NAME };
+  const map = { kind: 'ring', level, CELL: C, W, H, solid, turrets, outposts, open: true, ring };
+  finishMap(map, { i: startI, j: H - 16 }, stationCell(map, outposts[0]), layout);
+  // Every face must have a station the ship can reach (above its platform), or the rock is built again.
+  const si = Math.floor(map.start.x / C), sj = Math.floor(map.start.y / C);
+  for (const o of outposts) {
+    setGoal(map, stationCell(map, o));
+    if (map.dist[sj * W + si] >= 1e9) map.startDist = 1e9;
+  }
+  setGoal(map, stationCell(map, outposts[0]));
+  if (map.startDist < 1e9) map.startDist = map.dist[sj * W + si];
   return map;
 }
 

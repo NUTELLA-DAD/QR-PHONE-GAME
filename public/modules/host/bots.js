@@ -233,7 +233,8 @@ function gunReach(state, n) {
   if (!best) return 2;
   if (best.target.kind === 'para' || best.target.kind === 'gport') return 0.6; // paratroopers and gunship gun ports are worth manning a gun for
   if (best.target.kind.startsWith('rival')) return 0.6; // Versus: the other airship in range is what the guns are for (aim.js targets(): her guns, her bags, her boiler and helm, her hull)
-  return best.target.kind === 'turret' ? 0.8 : 1;
+  if (best.target.kind === 'core') return 0.55; // (a ring map: a core with its shutter open - the window is short: be at the gun)
+  return best.target.kind === 'turret' || best.target.kind === 'shutter' || best.target.kind === 'rspecial' ? 0.8 : 1;
 }
 
 // ---------- The weapons of the range bands (weapons.js, config.GUN_TYPES): the mine layer and the harpoon gun are not aimed at a target, they are used when the captain wants them ----------
@@ -287,8 +288,9 @@ function groundTargets(state) {
   if (!c) return [];
   const ship = mainShip(state);
   const out = [];
-  for (const t of c.turrets) if (!t.dead && t.x != null && toShipX(ship, t.x) > -600 && toShipX(ship, t.x) < 3200) out.push([toShipX(ship, t.x) - 30, toShipX(ship, t.x) + 30]);
+  for (const t of c.turrets) if (!t.dead && t.x != null && !t.rev && toShipX(ship, t.x) > -600 && toShipX(ship, t.x) < 3200) out.push([toShipX(ship, t.x) - 30, toShipX(ship, t.x) + 30]);
   for (const f of c.features) for (const b of f.blocks || []) if (toShipX(ship, b.x1) > -600 && toShipX(ship, b.x0) < 3200) out.push([toShipX(ship, b.x0), toShipX(ship, b.x1)]);
+  if (c.ring) for (const f of c.ring.faces) if (!f.down && f.open > 0) out.push([toShipX(ship, f.core.x) - 60, toShipX(ship, f.core.x) + 60]); // (a ring map: a core with its shutter open is the bombs' best target, ring.js)
   return out;
 }
 
@@ -1672,6 +1674,24 @@ function forceBoard(p, state) {
   return boardAt(state, mainShip(state), p, m.x, m.y);
 }
 
+// R0, the gate only (config.RING.FORCE_BOARD, botsim RING_FORCE_BOARD=1; people hook onto the gallery or fly there from the crew cannon, bots do not): once the ship is near a boarding gallery ONE bot is put on it
+// (ring.js forceBoard); from then on ring.js boarderStep walks him to the keep door and holds Action there. True = this bot is the boarder.
+function ringForceBoard(p, state) {
+  const rs = state.ringSys, r = state.course && state.course.ring;
+  if (!rs || !r || r.crown) return false;
+  if (p.on && p.on.ring != null) return true;
+  if (p.ringDone === r || p.mate || p.ko > 0 || p.fall || p.fly || p.hj || p.dare || isHelm(mainShip(state).layout, p.lock)) return false;
+  if (Object.values(state.players).some((q) => q.on && q.on.ring != null)) return false; // (one boarder is enough)
+  const f = r.faces.find((q) => q.gal && !q.down && !q.charge);
+  const ship = mainShip(state);
+  if (!f || Math.hypot(f.gal.door - toWorldX(ship, ship.layout.refPoint.x), f.gal.y - toWorldY(ship, ship.layout.refPoint.y)) > config.RING.GALLERY.ZIP_RANGE) return false;
+  p.ringDone = r;
+  p.lock = null;
+  p.conn = null;
+  p.botJob = null;
+  return rs.forceBoard(ship, p);
+}
+
 // Called once per frame for each bot, before the game applies its input.
 export function updateBot(p, state, dt) {
   const L = mainShip(state).layout;
@@ -1689,6 +1709,7 @@ export function updateBot(p, state, dt) {
     return;
   }
   if (config.CREATURES.FORCE_WIN === 'board' && forceBoard(p, state)) return; // (C.3 dev flag)
+  if (config.RING.FORCE_BOARD && ringForceBoard(p, state)) return; // (R0 dev flag)
   // A daring stunt takes over the bot until it is safely back on a deck.
   if (p.dare) {
     if (dareStep(p, state, dt)) return;
