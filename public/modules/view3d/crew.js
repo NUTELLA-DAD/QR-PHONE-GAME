@@ -152,7 +152,7 @@ export function createCrewLayer(parent) {
     }
     return ch;
   }
-  const ITEMS_OK = new Set(['coal', 'ammo', 'sword', 'hammer', 'hookshot', 'towline', 'sandbag', 'crate', 'extinguisher', 'cutlass', 'club', 'bomb', 'cleaver']);
+  const ITEMS_OK = new Set(['coal', 'ammo', 'sword', 'hammer', 'hookshot', 'towline', 'sandbag', 'crate', 'scrap', 'extinguisher', 'cutlass', 'club', 'bomb', 'cleaver']);
 
   function partsOf(c) {
     const out = [];

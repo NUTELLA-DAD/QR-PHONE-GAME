@@ -9,7 +9,7 @@ export function createControllerUI({ network }) {
 
   // Icon for the Action button, picked from the start of its label.
   const ACTION_ICONS = [
-    ['Swap to hookshot', '🪝'], ['Take hookshot', '🪝'], ['Reel in', '🪝'], ['KICK', '🦶'], ['Auto guns', '🔫'],
+    ['STOW THE SCRAP', '🔩'], ['Take scrap out', '🔩'], ['Pick up the scrap', '🔩'], ['Take scrap off', '🔩'], ['DUMP THE SCRAP', '🔩'], ['Swap to hookshot', '🪝'], ['Take hookshot', '🪝'], ['Reel in', '🪝'], ['KICK', '🦶'], ['Auto guns', '🔫'],
     ['Swap to sword', '🗡️'], ['Swap to hammer', '🔨'], ['Swap to extinguisher', '🧯'], ['Take sword', '🗡️'], ['Take hammer', '🔨'], ['Take extinguisher', '🧯'], ['Put back', '↩️'],
     ['TAKE THE HELM', '☸️'], ['Sabotage', '🧨'], ['Defenders', '🛡️'], ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],
     ['SURGE', '🔥'], ['LOAD for', '📦'], ['Close valve', '🚱'], ['Open valve', '🚰'], ['Open vent', '💨'], ['Close vent', '💨'], ['Load coal', '🔥'], ['Grab coal', '⚫'], ['Vent steam', '💨'],
@@ -18,7 +18,7 @@ export function createControllerUI({ network }) {
     ['Climb into', '💥'], ['Man the cannon', '💥'], ['PARACHUTE', '🪂'], ['Shovel', '⛏️'], ['Dump', '⚖️'], ['Drop the', '📦'], ['Steal', '⚫'], ['LET GO TO FIRE', '💥'], ['HOLD TO CHARGE', '💥'], ['Brace', '💥'], ['RELOADING', '⏳'],
     ['FIRE', '💥'], ['Ahoy', '🔭'], ['Defuse', '💣'], ['Honk', '📯'], ['Need', '❓'], ['BROKEN', '⚠️'], ['Zzz', '💤'],
   ];
-  const CARRY = { sword: ['🗡️', 'Sword'], hammer: ['🔨', 'Hammer'], extinguisher: ['🧯', 'Extinguisher'], ammo: ['📦', 'Ammo'], coal: ['⚫', 'Coal'], hookshot: ['🪝', 'Hookshot'], sandbag: ['⚖️', 'Sandbag'], crate: ['📦', 'Crate'], towline: ['🪢', 'Towline'] };
+  const CARRY = { sword: ['🗡️', 'Sword'], hammer: ['🔨', 'Hammer'], extinguisher: ['🧯', 'Extinguisher'], ammo: ['📦', 'Ammo'], coal: ['⚫', 'Coal'], hookshot: ['🪝', 'Hookshot'], sandbag: ['⚖️', 'Sandbag'], crate: ['📦', 'Crate'], towline: ['🪢', 'Towline'], scrap: ['🔩', 'Scrap'] };
 
   let species = 'bulldog';
   let joined = null;
@@ -284,7 +284,9 @@ export function createControllerUI({ network }) {
                 ? 'Bring the ammo to a gun or the bomb bay'
                 : next.carry === 'coal'
                   ? 'Bring the coal to a boiler'
-                  : next.carry
+                  : next.carry === 'scrap'
+                    ? 'Bring the scrap to the hold'
+                    : next.carry
                     ? 'Big button uses what you hold'
                     : 'Walk to a station, rack, fire or hole';
     const sore = next.hp != null && next.hp > 0 && next.hp <= (next.jat ?? 1); // (crew health: on the last heart)

@@ -6,6 +6,8 @@
 //   yard.drawNew(time)           in a SHIP's frame: the call-out over the part that was just built (draws nothing when there is none)
 import { config } from '../../config.js';
 import { blueprintView, drawBlueprint } from './blueprintArt.js';
+import { drawScrapBundle } from './scrapArt.js';
+import { scrapOn, holdCount } from './scrap.js';
 
 const GOOD = '#4f7f3f', WARNC = '#c9892a', BAD = '#a8443f';
 const levelColor = (lv) => (lv === 'FAIL' ? BAD : lv === 'WARN' ? WARNC : GOOD);
@@ -171,7 +173,9 @@ export function createYardArt({ ctx, book, dots, wrapLines, ink, pics, spares, w
     ctx.fillText(v.kind === 'slot' ? `WHERE DOES THE ${part.baseName.toUpperCase()} GO?` : "SKY-DOCK - THE SHIPWRIGHT'S YARD", 800, 78 + up, 1100);
     ctx.font = '700 20px ' + config.FONTS.TEXT;
     ctx.fillStyle = '#ffd23f';
-    ctx.fillText(v.kind === 'slot' ? `Vote A, B or C on your phone  -  ${Math.max(0, Math.ceil(v.t))}s` : `Salvage: ${world.run.salvage}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`, 800, 116 + up, 1100);
+    const line = v.kind === 'slot' ? `Vote A, B or C on your phone  -  ${Math.max(0, Math.ceil(v.t))}s` : `Salvage: ${world.run.salvage}${scrapOn() ? `   -   in the hold: ${holdCount(world.ships[0].ctx)}/${config.SCRAP.HOLD_CAP}` : ''}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`;
+    ctx.fillText(line, 800, 116 + up, 1100);
+    if (v.kind !== 'slot' && scrapOn()) drawScrapBundle(ctx, 800 - Math.min(1100, ctx.measureText(line).width) / 2 - 28, 108 + up, 0.8); // (SCRAP: a bundle beside the hold's count: the Yard prices parts in it from G2)
     ctx.fillStyle = '#f3ead6';
     ctx.font = '700 16px ' + config.FONTS.TEXT;
     ctx.textAlign = 'right';

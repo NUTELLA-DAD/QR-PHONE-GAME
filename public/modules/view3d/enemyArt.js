@@ -270,6 +270,28 @@ export function buildChute() {
   return g;
 }
 
+// ---- SCRAP (LOOP.md G1): the canopy over a falling bundle of flotsam, and a gunship's HULK (a broken keel and a torn plank, the bundles on it are drawn by flyers.js) -------------------------------------------------
+export function buildScrapChute() {
+  const g = new THREE.Group();
+  const canopy = new Batch();
+  canopy.geo('#eee6d2', new THREE.SphereGeometry(1, 16, 8, 0, PI * 2, 0, PI / 2), mat(0, 40, 0, 40, 30, 30), 2.2);
+  canopy.geo('#c4574d', new THREE.SphereGeometry(1, 6, 8, PI / 2 - 0.5, 1, 0, PI / 2), mat(0, 40.5, 0, 40.5, 30.5, 30.5), 0);
+  g.add(tagSmall(canopy.build()));
+  const cords = new Batch();
+  for (const k of [-1, -0.4, 0.4, 1]) cords.rod('#2b2622', V(k * 39, 40, 0), V(0, 4, 0), 0.9, 0);
+  g.add(tagSmall(cords.build()));
+  return g;
+}
+export function buildScrapHulk() {
+  const b = new Batch();
+  b.box('#5d5558', 0, 0, 0, 330, 44, 90, 3);
+  b.box('#4a4440', 0, -32, 0, 250, 18, 60, 2.4);
+  b.box('#76808a', -70, 26, 0, 120, 12, 80, 2.4, 0, 0, 0.08);
+  b.box('#5d5558', 110, 30, 10, 90, 14, 60, 2.4, 0, 0, -0.18);
+  b.box('#8d96a0', 20, 6, 46, 260, 5, 2, 0);
+  return tagSmall(b.build());
+}
+
 // ---- a ROCKET (the batteries' homing rocket): red body, nose cone, grey fins; the flame is a particle ------------------------------------------------------------------------------------
 export function buildRocket() {
   const b = new Batch();

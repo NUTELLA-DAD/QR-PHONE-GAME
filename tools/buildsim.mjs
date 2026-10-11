@@ -29,6 +29,7 @@
 //        node tools/buildsim.mjs --check-turn       M.3: COME ABOUT: the helm's command (the phone's button or the stick astern, held), the manoeuvre (squash through zero, f flips at the middle, her speed along the bow flips so the ground speed does not jump, speed held down, no guns, the camera's zoom held), the refusals (too fast, already turning, cooling down, falling, a gunship alongside, a hookshot line, the mirrored hull in rock), rock on the right side, the Nose Gun's shells, a person's screen-relative stick (also one held across the flip), a headless bot helm turning on a route map and flying back to a goal behind her, a second ship turning on her own, the bots' jobs through a turn (tools/turn-check.mjs)
 //        node tools/buildsim.mjs --check-curriculum   G0: the voyage curriculum (tools/curriculum-check.mjs): 200 seeded routes per mode (QUICK / VOYAGE / CAMPAIGN, gentle and the second voyage) hold their shape, slot tables, set-piece gates (no gunship in column 1, no strafers before column 2), sky tiers in order, lairs from 60% of the route, an easy branch in every middle column and the flag rules; ENABLED = false is byte-identical to the old routes; in the game the first stop allows bats and imps only and a crew under the expected power is offered a salvage run
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt (run with NO_STRUCTURE=1, the old hull bar, until STRUCTURE.md WP6 re-snapshots it for the structure game)
+//        node tools/buildsim.mjs --check-scrap      SCRAP, FLOTSAM AND THE HOLD (LOOP.md G1; tools/scrap-check.mjs): the item and the hold bin, what falls from each kind of kill, the chute / drift / landing, the hookshot catch, a harpoon hauling a hulk and the bundles taken from it, stow and the hold's weight on the LIFT / WEIGHT gauge, dumping it while she falls, limp home keeping it, Versus and NO_SCRAP off, the helm's plan, botsim 3 minutes with 8 bots. (--check-botsim, --check-golden, --check-frames and --check-creature run with NO_SCRAP=1 beside NO_STRUCTURE=1 until G7 re-snapshots them for the scrap game.)
 //        node tools/buildsim.mjs --check-structure  STRUCTURE.md WP0 + WP1 (tools/structure-check.mjs): the segments and the load graph, what a hit / a breach / a fire / rock hurts, the hammer, the warning and the creak, the grace, the failure rules, a SPLIT into two ships (the piece falls and crashes, her crew wake in the medbay, a REBUILD card brings her back), folding, lift failing (FALLING, bots save her, the CRASH), the NO_STRUCTURE switch, determinism, botsim --split / --sink, a ship with no gasbag
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
 //        node tools/buildsim.mjs --check-validator   S.5: broken builds must FAIL/WARN with the right message (the classic passes clean)
@@ -147,7 +148,7 @@ function checkBotsim() {
   const blocks = text.split(/^\$ /m).slice(1).map((b) => { const [cmd, ...rest] = b.split('\n'); return { cmd: cmd.trim(), want: rest.join('\n').trim() }; });
   let ok = true;
   for (const { cmd, want } of blocks) {
-    const out = spawnSync(process.execPath, cmd.replace(/^node /, '').split(' '), { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NO_STRUCTURE: '1' } }); // (the baseline is the hull-bar game: STRUCTURE.md WP6 re-snapshots it for the structure game)
+    const out = spawnSync(process.execPath, cmd.replace(/^node /, '').split(' '), { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NO_STRUCTURE: '1', NO_SCRAP: '1' } }); // (SCRAP: the baseline plays without it until G7 - LOOP.md G1) (the baseline is the hull-bar game: STRUCTURE.md WP6 re-snapshots it for the structure game)
     const got = (out.stdout || '').replace(/\r/g, '').split('\n').filter((l) => !l.startsWith('real time')).join('\n');
     const gotSummary = got.slice(got.indexOf('--- botsim summary ---')).trim();
     const same = gotSummary === want;
@@ -2560,6 +2561,8 @@ if (mode === '--snapshot-classic') {
   console.log('wrote ' + FIXTURE);
 } else if (mode === '--check-classic') {
   process.exit((await checkClassic()) ? 0 : 1);
+} else if (mode === '--check-scrap') { // LOOP.md G1: scrap, flotsam and the hold
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'scrap-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-structure') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'structure-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-botsim') {
@@ -2604,7 +2607,7 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-ring') { // R0: the ring map (tools/ring-check.mjs)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'ring-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-creature') {
-  const run = (script, args) => spawnSync(process.execPath, [path.join(root, 'tools', script), ...args], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STRUCTURE: '1' } }).status === 0; // (STRUCTURE.md: the creature fights are balanced for the hull-bar game - the Kraken's grip drags her into the sea, where a crash is now a loss: WP2 moves the creatures onto segments and WP6 re-balances them; until then this gate runs the old game)
+  const run = (script, args) => spawnSync(process.execPath, [path.join(root, 'tools', script), ...args], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STRUCTURE: '1', NO_SCRAP: '1' } }).status === 0; // (SCRAP: no flotsam in the fights until G7) (STRUCTURE.md: the creature fights are balanced for the hull-bar game - the Kraken's grip drags her into the sea, where a crash is now a loss: WP2 moves the creatures onto segments and WP6 re-balances them; until then this gate runs the old game)
   const world = run('creature-check.mjs', argv.slice(1)); // (C.1: the creature in the real game)
   const body = run('creature-spike-check.mjs', []); // (C.0: the body itself)
   process.exit(world && body ? 0 : 1);
@@ -2653,18 +2656,18 @@ if (mode === '--snapshot-classic') {
   fs.writeFileSync(POSE_ALLOW, JSON.stringify(poseCounts(path.join(root, 'public')), null, 1) + '\n');
   console.log('wrote ' + POSE_ALLOW);
 } else if (mode === '--snapshot-golden') {
-  process.env.NO_STRUCTURE = '1';
+  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1';
   if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/golden.json from the current code (do it when a PLANNED change legitimately moves the numbers).'); process.exit(2); }
   await snapshotGolden();
 } else if (mode === '--check-golden') {
-  process.env.NO_STRUCTURE = '1'; // (the golden numbers are the hull-bar game's: STRUCTURE.md WP6 re-captures them for the structure game)
+  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; // (the golden numbers are the hull-bar game's, without scrap: STRUCTURE.md WP6 re-captures them for the structure game)
   process.exit((await checkGolden()) ? 0 : 1);
 } else if (mode === '--snapshot-frames') {
-  process.env.NO_STRUCTURE = '1';
+  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1';
   if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/frames/ from the current code.'); process.exit(2); }
   await snapshotFrames();
 } else if (mode === '--check-frames') {
-  process.env.NO_STRUCTURE = '1'; // (...and so are the frames)
+  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; // (...and so are the frames)
   process.exit((await checkFrames()) ? 0 : 1);
 } else if (mode === '--check-pose') {
   process.exit((await checkPose()) ? 0 : 1);
@@ -2675,6 +2678,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-curriculum | --check-squadrons | --check-ring | --check-ring3d | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-hatch | --check-breakoff | --check-structure | --check-physics | --check-enemy3d | --check-3d | --snapshot-3d --force | --check-health | --check-flame | --check-creature | --check-gen | --check-turn | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-curriculum | --check-squadrons | --check-scrap | --check-ring | --check-ring3d | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-hatch | --check-breakoff | --check-structure | --check-physics | --check-enemy3d | --check-3d | --snapshot-3d --force | --check-health | --check-flame | --check-creature | --check-gen | --check-turn | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

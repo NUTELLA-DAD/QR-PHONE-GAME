@@ -8,11 +8,13 @@
 //
 // player.hook = { phase: 'out'|'back'|'caught', dx, dy (aim), len, anchor, t, ... }
 // An anchor = { kind, pos() -> {x, y} in the WORLD (or null when it is gone), plane? }   (M.1: the hook, the rope and the swinging player are all world objects)
+// SCRAP (LOOP.md G1): a bundle of flotsam on a chute is a LIGHT anchor (kind 'scrap', light: true, item): it does not pull you to it - the bundle is reeled to your hand (phase 'haul') and lands at your feet.
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
 import { inRock } from './course.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { creatureAnchor } from './creatureBoard.js'; // (C.2: every part of a giant creature is an anchor)
+import { scrapOn } from './scrap.js';
 
 const H = config.HOOKSHOT;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -27,6 +29,10 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
 
   // What does a point (world coordinates) catch on? Returns an anchor or null. prev = gasbag value one step back.
   const probe = (wx, wy, prev) => {
+    if (scrapOn()) { // (SCRAP: a bundle on a chute within the hook's width)
+      const R = config.SCRAP.HOOK.R;
+      for (const it of state.thrown || []) if (it.chute && !it.haul && Math.abs(wx - it.x) < R && Math.abs(wy - it.y) < R && Math.hypot(wx - it.x, wy - it.y) < R) return { kind: 'scrap', light: true, item: it, pos: () => ((state.thrown || []).includes(it) ? { x: it.x, y: it.y } : null) };
+    }
     const x = toShipX(ship, wx); // (our own decks, the gunship's and the gasbag are in ship coordinates)
     const y = toShipY(ship, wy);
     // The enemy gunship's decks and hull (and our own decks): horizontal edges.
@@ -179,6 +185,19 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
     return false;
   };
 
+  // SCRAP: the hook has caught a bundle in the air: it is reeled in (only by someone standing on a deck: a swinging flyer lets it go).
+  const haul = (p, h) => {
+    const it = h.anchor.item;
+    if (!it || p.fly || p.d == null || it.haul) { h.phase = 'back'; return; }
+    h.phase = 'haul';
+    h.item = it;
+    it.haul = p.id;
+    it.hooked = true;
+    it.owner = p.id;
+    state.sfxQ.push(['clang', true]);
+    puff(it.x, it.y, '#ffe9a8', 5);
+  };
+
   // Hook caught: the player leaves the deck (if there) and swings.
   const attach = (p, h, a) => {
     const o = origin(p);
@@ -298,9 +317,26 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
         dist = Math.hypot(a.x - o.x, a.y - o.y);
         h.dx = (a.x - o.x) / Math.max(1, dist);
         h.dy = (a.y - o.y) / Math.max(1, dist);
-        if (h.len >= dist) return attach(p, h, a);
+        if (h.len >= dist) return h.anchor.light ? haul(p, h) : attach(p, h, a);
       } else if (h.len >= dist) {
         h.phase = 'back';
+      }
+    } else if (h.phase === 'haul') { // (SCRAP: the bundle comes in to the hand on the line, and lands at the thrower's feet)
+      const it = h.item;
+      if (!it || !(state.thrown || []).includes(it) || it.haul !== p.id || p.fly || p.d == null) { if (it && it.haul === p.id) it.haul = null; p.hook = null; p.hookCd = H.MISS_COOLDOWN; return; }
+      const dx = o.x - it.x, dy = o.y - it.y, d = Math.hypot(dx, dy) || 1, step = Math.min(d, config.SCRAP.HOOK.HAUL_SPEED * dt);
+      it.x += (dx / d) * step; it.y += (dy / d) * step; it.vx = it.vy = 0;
+      h.len = Math.max(0, d - step);
+      h.dx = -dx / d; h.dy = -dy / d;
+      if (h.len <= config.SCRAP.HOOK.LAND_AT) {
+        state.thrown.splice(state.thrown.indexOf(it), 1);
+        it.haul = null;
+        ship.sim.cargo.land(it, p.d, p.x);
+        p.hook = null;
+        p.hookCd = H.MISS_COOLDOWN;
+        p.swingT = performance.now();
+        puff(o.x, o.y, '#ffe9a8', 5);
+        phoneFx(p, 'Hooked a bundle of scrap!', [30, 30, 30]);
       }
     } else {
       h.len -= H.BACK_SPEED * dt;

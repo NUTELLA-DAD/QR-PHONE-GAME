@@ -22,6 +22,7 @@ import { createAirborne } from './airborne.js';
 import { createHookshot } from './hookshot.js';
 import { createCannon } from './cannon.js';
 import { createCargo, cargoItem, isStocked } from './cargo.js';
+import { scrapOn } from './scrap.js';
 import { createHatches } from './hatch.js';
 import { pop } from './popups.js';
 import { assistAim } from './aim.js';
@@ -199,7 +200,7 @@ export function createShipSim(world, ship, W) {
     if (dropC && player.d === BAY_D && Math.abs(player.x - layout.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return dropC;
     if ((!player.bot || (player.dare && player.dare.kind === 'drop')) && player.d === BAY_D && tool !== 'ammo' && Math.abs(player.x - layout.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return { type: 'jump', label: 'Jump!' };
     // B.6: at the rail with a sandbag or crate in your hands, Action dumps it overboard for a quick lift; a load lying on the deck by your feet wants shovelling off.
-    const dumpC = cargo.dumpAction(player) || cargo.shovelAction(player, here);
+    const dumpC = cargo.stowAction(player, here) || cargo.dumpAction(player) || cargo.hulkAction(player) || cargo.shovelAction(player, here); // (SCRAP: the hold bin with a bundle in your hands, a hulk within reach of empty ones)
     if (dumpC) return dumpC;
     const hatchBot = !player.bot || (player.botJob && player.botJob.kind === 'hatch'); // (a bot works a cargo drop hatch only when its job says so)
     const hatchC = hatchBot && hatches.dropAction(player); // beside an open cargo drop hatch with a load in your hands: let it fall through
@@ -241,6 +242,8 @@ export function createShipSim(world, ship, W) {
     const hl = hatchBot && hatches.leverAction(player, here);
     if (hl) return hl;
     if (player.bot && player.wantStation && station && station.n === player.wantStation && LOCKABLE(station.n) && !taken(station.n)) return { type: 'station', station, label: takeLabel(station) }; // (C.6b: a bot sent to a station that a rack, a pipe valve or a vent stands next to - the classic ship's coil - takes THAT station, not the nearer chore; bots.js sets wantStation)
+    const scrapC = cargo.pickAction(player, here); // (SCRAP: a bundle lying at your feet, hands empty)
+    if (scrapC) return scrapC;
     // Otherwise standing at a rack or hook means take / swap / put back.
     const pickup = legacy ? PICKUPS.find((r) => here(r, T.REACH)) : null;
     // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)
@@ -324,6 +327,8 @@ export function createShipSim(world, ship, W) {
         if (botThere) add({ type: 'station', station, bump: botThere, label: takeLabel(station), swap: false }, station.x, 'station|' + station.n);
       }
     }
+    { const un = !tool && scrapOn() ? cargo.unstowAction(player, (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r) : null; if (un) add({ ...un, swap: false }, un.obj.x, 'unstow'); } // (SCRAP: GRAB at the bin takes one out)
+    if (!tool && scrapOn()) for (const ld of cargo.loads()) if (ld.kind === 'scrap' && ld.d === player.d && Math.abs(ld.x - player.x) < T.REACH) add({ type: 'pickup', obj: ld, label: 'Pick up the scrap', swap: false }, ld.x, 'scrap|' + ld.id); // (SCRAP)
     const best = sticky(player, 'grabKey', out, (o) => Math.abs(o.x - player.x), (o) => o.key);
     return best ? best.act : null;
   };
@@ -1132,6 +1137,10 @@ export function createShipSim(world, ship, W) {
         grabbed(player, put);
       }
     } else if (type === 'dump') cargo.dump(player);
+    else if (type === 'stow') { if (cargo.stow(player)) grabbed(player, true); } // (SCRAP: into the hold)
+    else if (type === 'pickup') { if (cargo.pickup(player, act.obj)) grabbed(player, false); }
+    else if (type === 'unstow') { if (cargo.unstow(player)) grabbed(player, false); }
+    else if (type === 'takehulk') { if (cargo.takeHulk(player, act.obj)) grabbed(player, false); }
     else if (type === 'dropcargo') cargo.drop(player);
     else if (type === 'chute') {
       if (air.popChute(player)) phoneFx(player, 'Parachute coming out - steer with the stick!', [40]);
@@ -1523,7 +1532,7 @@ export function createShipSim(world, ship, W) {
             object.prog = (object.prog || 0) + dt / act.time;
             if (object.prog >= 1) {
               object.prog = 0;
-              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', bandage: 'revives', sabotage: 'sabotage', cutline: 'boarding', hack: 'boarding', capture: 'captures', shovel: 'shovels', cut: 'cuts', dumpcoal: 'dumped', dumpbombs: 'dumped' }[act.type]);
+              stat(player, { fire: 'fires', hole: 'holes', gas: 'holes', ice: 'ice', unclog: 'clears', oxygen: 'oxygen', defuse: 'defused', revive: 'revives', bandage: 'revives', sabotage: 'sabotage', cutline: 'boarding', hack: 'boarding', capture: 'captures', shovel: 'shovels', cut: 'cuts', dumpcoal: 'dumped', dumpbombs: 'dumped', dumpscrap: 'dumped' }[act.type]);
               if (act.type === 'fire') shipPop(object.x, player.y - 120, 'fireOut', '#9fd3e6', 0.8);
               if (act.type === 'hole' || act.type === 'gas') shipPop(object.x, player.y - 120, 'patch', '#8fe388', 0.8);
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
@@ -1540,7 +1549,7 @@ export function createShipSim(world, ship, W) {
               else if (act.type === 'cutline') gunship.cutLine(player);
               else if (act.type === 'hack') W.creatures.hacked(ship, player, object); // (C.2: the tentacle lets go)
               else if (act.type === 'shovel') cargo.shovel(object, player); // (B.6: a load goes over the rail)
-              else if (act.type === 'cut' || act.type === 'dumpcoal' || act.type === 'dumpbombs') goingDown.perform(act.type, object, player); // (GOING DOWN!: weight overboard)
+              else if (act.type === 'cut' || act.type === 'dumpcoal' || act.type === 'dumpbombs' || act.type === 'dumpscrap') goingDown.perform(act.type, object, player); // (GOING DOWN!: weight overboard)
               else if (act.type === 'bandage') health.bandage(object); // (crew health: a crewmate's bandage: a heart back)
               else { object.ko = 0; revived(object); } // (a revive: he comes round with a heart)
               shipPuff(object.x, player.y - 50, '#8fe388', 10);

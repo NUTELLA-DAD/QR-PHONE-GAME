@@ -15,6 +15,7 @@ import { hearts } from './health.js';
 import { mainShip, hostileTo, foeOf, areHostile } from './ships.js';
 import { cannonPlan } from './cannon.js';
 import { solveThrow } from './cargo.js';
+import { scrapOn, holdSpot, holdFull, helmPlan } from './scrap.js';
 import { cannonSeatName, sizeNamed } from './shipBuild.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/captainAI.js';
@@ -417,7 +418,7 @@ function cannonOperate(p, state, dt) {
 // Shovel jobs for the loads lying on the ship; and now and then a throw at a hostile ship that is close (from the nearest sandbag or crate rack, off the end of an open deck).
 function crossJobs(state, bot) {
   const ship = mainShip(state), L = ship.layout, out = [];
-  for (const ld of state.loads || []) out.push({ kind: 'shovel', obj: ld, max: 1 });
+  for (const ld of state.loads || []) if (ld.kind !== 'scrap') out.push({ kind: 'shovel', obj: ld, max: 1 }); // (SCRAP is picked up and stowed, not shovelled: scrapJobs)
   const kind = tables(L).PICKUPS.some((r) => r.kind === 'sandbag') ? 'sandbag' : tables(L).PICKUPS.some((r) => r.kind === 'crate') ? 'crate' : null;
   if (!kind || state.phase !== 'flying' || state.ship.down || state.goingDown || bot.mate || bot.team === 'enemy' || ship.ai) return out;
   const now = performance.now();
@@ -426,6 +427,33 @@ function crossJobs(state, bot) {
   if (!(bot.throwUntil > now) && (bot.carry === 'sandbag' || bot.carry === 'crate' || Math.random() < (XB.THROW_CHANCE * B.THINK_EVERY) / 60) && throwSpot(ship, foe.o).sol) bot.throwUntil = now + 18000;
   if (bot.throwUntil > now) out.push({ kind: 'throw', obj: foe.o, max: 2, throwKind: kind });
   return out;
+}
+// SCRAP (config.SCRAP): the bundles lying on the deck go to the hold (stow: pick one up, carry it to the bin, Action), and a hulk alongside is stripped from an open deck (hulk: Action beside it takes one bundle).
+function scrapJobs(state, bot) {
+  if (!scrapOn() || state.phase !== 'flying' || state.ship.down || bot.mate || bot.team === 'enemy') return [];
+  const ship = mainShip(state), L = ship.layout, sp = holdSpot(L);
+  if (!sp || ship.ai) return [];
+  const out = [], full = holdFull(state);
+  if (bot.carry === 'scrap') {
+    if (!full) out.push({ kind: 'stow', obj: 'hold', max: 99 });
+    else if (bot.d != null && !bot.fly) { ship.sim.cargo.place('scrap', bot.d, bot.x); bot.carry = null; } // (the hold is full: put it down where he stands, to be picked up when there is room)
+    return out;
+  }
+  if (bot.carry || full) return out;
+  for (const ld of state.loads || []) if (ld.kind === 'scrap') out.push({ kind: 'stow', obj: ld, max: 1 });
+  for (const h of state.hulks || []) if (h.left > 0 && hulkSpot(ship, h)) out.push({ kind: 'hulk', obj: h, max: 2 });
+  return out;
+}
+// Where a bot stands to strip a hulk: the open deck whose point nearest the hulk is within hand's reach of it ({ d, x }), or null.
+function hulkSpot(ship, h) {
+  const L = ship.layout, R = config.SCRAP.HULK.REACH * 0.8;
+  let best = null;
+  L.platforms.forEach((pl, d) => {
+    if (!pl.outside || pl.x1 - pl.x0 < 120) return;
+    const sx = clamp(toShipX(ship, h.x), pl.x0 + 30, pl.x1 - 30), dist = Math.hypot(toWorldX(ship, sx) - h.x, toWorldY(ship, pl.y - 70) - h.y);
+    if (dist < R && (!best || dist < best.dist)) best = { d, x: sx, dist };
+  });
+  return best;
 }
 // Carry out a throw job: fetch a sandbag, walk to the end of the top deck that faces the target, and throw when the arc lands on her deck.
 function throwWork(p, state, job) {
@@ -647,6 +675,8 @@ function listJobs(state, bot) {
   jobs.push(...hatchWorks.filter((j) => j.mode !== 'tip'));
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   jobs.push(...linkJobs(state, bot, true)); // (LINKED STATIONS block at the end of this file: loaders for guns with a target)
+  const scrapWork = scrapJobs(state, bot); // (SCRAP, LOOP.md G1: bundles on the deck to stow, a hulk alongside to strip)
+  if (bot.carry === 'scrap') jobs.unshift(...scrapWork); else jobs.push(...scrapWork);
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
   const gs = state.gunship;
   if (gs && gs.charge && bot.onGunship) jobs.unshift({ kind: 'flee', obj: 'flee', max: 8 });
@@ -818,6 +848,12 @@ function operate(p, state, dt) {
     const bounds = altBounds(state);
     const lo = Math.max(w.min, bounds.lo);
     const hi = Math.min(w.max, bounds.hi);
+    const flot = !cap && !gunshipAi ? helmPlan(state) : null; // (SCRAP: a bundle on a chute within reach and nothing hunting her: slow or speed her to meet it and put her top deck just under it)
+    if (flot) {
+      plan.speed = flot.speed;
+      if (flot.alt != null && hi - lo > 160) plan.target = clamp(flot.alt, lo + 40, hi - 40); // (only where the terrain leaves room)
+      p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1);
+    }
     let target = null;
     const dodge = beamDodge(state) ?? dodgeAltitude(state);
     if (lo > hi || Math.abs(plan.target - ship.alt) > 120) target = plan.target;
@@ -997,6 +1033,23 @@ function work(p, state) {
   }
   if (job.kind === 'link' || job.kind === 'surge') return linkWork(p, state, job); // (LINKED STATIONS block at the end of this file)
   if (job.kind === 'throw') return throwWork(p, state, job); // (B.6)
+  if (job.kind === 'stow') { // (SCRAP: pick the bundle up, carry it to the hold bin, Action there)
+    const sp = holdSpot(L);
+    if (!sp) { p.botJob = null; return; }
+    if (p.carry === 'scrap') {
+      if (steer(p, sp.d, sp.x, 18)) { p.jx = 0; press(p); }
+      return;
+    }
+    if (!(state.loads || []).includes(o)) { p.botJob = null; return; }
+    if (steer(p, o.d, o.x, 18)) { p.jx = 0; press(p); }
+    return;
+  }
+  if (job.kind === 'hulk') { // (SCRAP: a hulk within reach of an open deck: Action takes a bundle off it)
+    const at = o.left > 0 && !p.carry ? hulkSpot(mainShip(state), o) : null;
+    if (!at) { p.botJob = null; return; }
+    if (steer(p, at.d, at.x, 18)) { p.jx = 0; press(p); }
+    return;
+  }
   if (job.kind === 'hatch') return hatchWork(p, state, job); // (a cargo drop hatch: shut it, tip raiders out, drop a crate, dump weight)
   if (job.kind === 'shovel') { // (B.6: a load thrown onto the deck: hold Action beside it)
     if (!(state.loads || []).includes(o)) return;
@@ -1089,7 +1142,7 @@ function work(p, state) {
   } else if (job.kind === 'vent' || job.kind === 'gasvalve') {
     // Walk to the vent (or the gas valve) and flip it.
     if (steer(p, o.d, o.x, 10)) press(p);
-  } else if (job.kind === 'cut' || job.kind === 'dumpcoal' || job.kind === 'dumpbombs') {
+  } else if (job.kind === 'cut' || job.kind === 'dumpcoal' || job.kind === 'dumpbombs' || job.kind === 'dumpscrap') {
     // GOING DOWN!: walk to the marked joint / the coal bunker / the bomb bay and hold Action
     const g = state.goingDown;
     if (!g || (job.kind === 'cut' && !g.joints.includes(o))) return;
@@ -1147,7 +1200,7 @@ function work(p, state) {
 
 function wander(state, p) {
   const L = mainShip(state).layout;
-  if (!p.wanderTo || (p.wanderWait !== undefined && p.wanderWait <= 0)) {
+  if (!p.wanderTo || !L.platforms[p.wanderTo.d] || (p.wanderWait !== undefined && p.wanderWait <= 0)) { // (a deck that is gone - the ship split or a part broke off - is not a place to wander to)
     // Mostly amble about the deck they are on (less pointless walking), now and then go somewhere else.
     const d = p.d != null && Math.random() < 0.75 ? p.d : (Math.random() * L.platforms.length) | 0;
     const plat = L.platforms[d];
@@ -1285,6 +1338,25 @@ function aimPlane(state, p) {
   return null;
 }
 
+// SCRAP: is there flotsam in hook reach of the ship, and a hookshot to throw (a rack of them aboard, or one in a hand)?
+function scrapHookable(state) {
+  if (!scrapOn() || !(state.thrown || []).length) return false;
+  const ship = mainShip(state), L = ship.layout;
+  if (!tables(L).PICKUPS.some((r) => r.kind === 'hookshot')) return false;
+  const o = { x: toWorldX(ship, L.aimPoint.x), y: toWorldY(ship, L.aimPoint.y) };
+  return state.thrown.some((q) => q.chute && !q.haul && Math.hypot(q.x - o.x, q.y - o.y) < config.SCRAP.BOTS.HOOK_REACH + 500);
+}
+// A ray that hooks the nearest bundle in the air within the hook's reach (the cast must really end on it, not on our gasbag on the way): { dx, dy, item } or null.
+function aimScrap(state, p) {
+  const S = state.stunts, o = S.origin(p);
+  const list = (state.thrown || []).filter((q) => q.chute && !q.haul).map((q) => ({ q, d: Math.hypot(q.x - o.x, q.y - o.y) })).filter((e) => e.d > 90 && e.d < config.SCRAP.BOTS.HOOK_REACH).sort((a, b) => a.d - b.d);
+  for (const e of list) {
+    const dx = (e.q.x - o.x) / e.d, dy = (e.q.y - o.y) / e.d, c = S.cast(o, dx, dy);
+    if (c.anchor && c.anchor.item === e.q) return { dx, dy, item: e.q };
+  }
+  return null;
+}
+
 // Which stunts are possible right now?
 function dareKinds(state) {
   const ship = mainShip(state);
@@ -1296,6 +1368,7 @@ function dareKinds(state) {
   const gs = state.gunship;
   if (gs && gs.rope && !gs.charge && (gs.phase === 'hunt' || gs.phase === 'latch')) kinds.push('gun');
   if (config.PVP.ENABLED && state.ship.hull >= config.PVP.BOT.BOARD_CALM_HULL && rivalWithinHook(state)) kinds.push('board'); // Versus: a way across to the rival's decks
+  if (scrapHookable(state)) kinds.push('scrap'); // SCRAP: a bundle in the air within the hook's reach
   kinds.push('show');
   return kinds;
 }
@@ -1306,15 +1379,16 @@ function maybeDare(p, state, bots, job) {
   const RD = config.PVP.ENABLED ? config.PVP.BOT.RAID : null; // (Versus: raids are bolder and more often than co-op stunts)
   if (!DR.ENABLED || p.mate || p.enemy || (mainShip(state).ai && hostile(p, state)) || p.dare || !state.stunts || state.phase !== 'flying' || state.ship.down || state.ship.hull < (RD ? RD.MIN_HULL : DR.MIN_HULL)) return; // (the gunship's crew are not daring; our boarders on her deck are busy)
   if (bots.length < DR.MIN_CREW || bots.filter((q) => q.dare).length >= (RD ? RD.MAX : DR.MAX_AT_ONCE)) return;
-  if (state.stuntEnd !== undefined && performance.now() - state.stuntEnd < (RD ? RD.COOLDOWN : DR.COOLDOWN) * 1000) return;
-  if (p.lock || p.carry === 'coal' || p.carry === 'ammo' || p.onGunship || p.fly || p.air || p.conn != null || p.swing || p.hj || p.d == null) return;
+  const flot = !RD && scrapHookable(state); // (SCRAP: bundles to hook are only there for a few seconds: a shorter cooldown and a better chance)
+  if (state.stuntEnd !== undefined && performance.now() - state.stuntEnd < (RD ? RD.COOLDOWN : flot ? config.SCRAP.BOTS.HOOK_COOLDOWN : DR.COOLDOWN) * 1000) return;
+  if (p.lock || p.carry === 'coal' || p.carry === 'ammo' || p.carry === 'scrap' || p.onGunship || p.fly || p.air || p.conn != null || p.swing || p.hj || p.d == null) return;
   if (RD) return pvpRaid(p, state, bots, job);
   if (job && !(job.kind === 'station' && !isHelm(L, job.obj) && (job.tier ?? 1) >= 1)) return; // (anything but a spare station is work)
   if (state.fires.length || state.breaches.length || (state.gasHoles || []).length || state.boarders.length || state.bats.some((b) => b.latched)) return;
   if (listJobs(state, p).some((j) => j.urgent || j.kind === 'revive' || j.kind === 'defuse' || j.kind === 'flee' || j.kind === 'cutline')) return;
   const kinds = dareKinds(state);
   // (a plane to steal or a gunship alongside is a better excuse than a quiet moment)
-  if (Math.random() >= (DR.CHANCE_PER_MIN * (kinds.length > 1 ? DR.TARGET_BOOST : 1) * B.THINK_EVERY) / 60) return;
+  if (Math.random() >= ((flot ? config.SCRAP.BOTS.HOOK_PER_MIN : DR.CHANCE_PER_MIN * (kinds.length > 1 ? DR.TARGET_BOOST : 1)) * B.THINK_EVERY) / 60) return;
   let pick = Math.random() * kinds.reduce((a, k) => a + DR.KINDS[k], 0);
   let kind = kinds[0];
   for (const k of kinds) {
@@ -1324,6 +1398,7 @@ function maybeDare(p, state, bots, job) {
       break;
     }
   }
+  if (flot && kinds.includes('scrap')) kind = 'scrap';
   p.dare = { kind, phase: 'get', t: 0, pt: 0, tries: 0, aimCd: 0 };
   p.daring = true;
   p.botJob = null;
@@ -1462,6 +1537,15 @@ function dareStep(p, state, dt) {
           d.aimCd = 0.25;
           aim = aimPlane(state, p);
         }
+      } else if (d.kind === 'scrap') { // SCRAP: out on the end of the top deck nearest the bundle, then a ray that really ends on it
+        const near = (state.thrown || []).filter((q) => q.chute && !q.haul).sort((a, b) => Math.hypot(a.x - toWorldX(mainShip(state), L.aimPoint.x), a.y - toWorldY(mainShip(state), L.aimPoint.y)) - Math.hypot(b.x - toWorldX(mainShip(state), L.aimPoint.x), b.y - toWorldY(mainShip(state), L.aimPoint.y)))[0];
+        if (!near) return endDare(p, state, 'flotsam gone'), false;
+        const deck = L.platforms[tables(L).CATWALK], right = toShipX(mainShip(state), near.x) > L.aimPoint.x;
+        if (!steer(p, tables(L).CATWALK, right ? deck.x1 - 35 : deck.x0 + 35, 25)) return true;
+        if (d.aimCd <= 0) {
+          d.aimCd = 0.2;
+          aim = aimScrap(state, p);
+        }
       } else if (d.kind === 'board') {
         const R = state.rival;
         if (!R || R.down) return endDare(p, state, 'rival gone'), false;
@@ -1503,6 +1587,7 @@ function dareStep(p, state, dt) {
       if (p.hj) return setPhase(p, state, 'kick'), true;
       if (!h) {
         if (d.pt < 0.1) return true; // (the shot is being fired this frame)
+        if (d.kind === 'scrap' && !p.fly && d.aim && d.aim.item && !state.thrown.includes(d.aim.item)) return endDare(p, state, 'hooked scrap'), false; // (SCRAP: it landed at his feet: the stow job takes it from here)
         if (p.fly) return setPhase(p, state, 'land'), true; // (ledge climb / released: in the air now)
         // A miss (or it never left): try again, a few times.
         if (d.tries >= DR.HOOK_TRIES) return endDare(p, state, 'missed'), false;

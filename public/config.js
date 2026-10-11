@@ -1387,7 +1387,7 @@ export const config = {
     MAX_CREW: 3, // this many human crew or fewer get mates (a 4th human sends them home)
     COUNT: { 1: 2, 2: 2, 3: 1 }, // mates per number of humans aboard
     SPAWN_GAP: 1.5, // seconds between one mate dropping aboard and the next
-    JOBS: ['coal', 'ammo', 'patch', 'fire', 'revive', 'heal', 'frame'], // the only job kinds a mate takes (hauling and mending; going to the medbay when hurt; GOING_DOWN.MATE_JOBS adds a few while she falls)
+    JOBS: ['coal', 'ammo', 'patch', 'fire', 'revive', 'heal', 'frame', 'stow'], // the only job kinds a mate takes (SCRAP: he stows bundles too) (hauling and mending; going to the medbay when hurt; GOING_DOWN.MATE_JOBS adds a few while she falls)
     COLOR: '#8a6f4e', // jacket colour (khaki)
     SCARF: '#b4b8bd', // the grey scarf that marks a mate
   },
@@ -1762,7 +1762,7 @@ export const config = {
     },
     // THROWABLE BALLAST and cargo (cargo.js): sandbags and crates come from racks, coal from the bunker. ATTACK on an open deck throws what you hold; it lands as a LIVE LOAD on the deck it falls on.
     CARGO: {
-      ITEMS: { sandbag: { w: 6, label: 'Sandbag' }, crate: { w: 9, label: 'Crate' }, coal: { w: 3, label: 'Coal sack' } }, // what each weighs on a ship (gas points; a crew member is 1.2), whether carried or lying on a deck
+      ITEMS: { sandbag: { w: 6, label: 'Sandbag' }, crate: { w: 9, label: 'Crate' }, coal: { w: 3, label: 'Coal sack' }, scrap: { get w() { return config.SCRAP.BUNDLE_W; }, label: 'Scrap' } }, // what each weighs on a ship (gas points; a crew member is 1.2), whether carried or lying on a deck (scrap: LOOP.md G1, SCRAP.BUNDLE_W)
       THROW_SPEED: 1000, // px/s of a throw
       THROW_UP: 0.45, // ...with this much upward tilt added to the stick's way
       GRAVITY: 1300, // px/s^2 on a thrown load (a sack falls slower than a person)
@@ -2106,6 +2106,64 @@ export const config = {
     STAMP: '#a8443f', STAMP_BG: 'rgba(243,234,214,0.92)', // red ink for warnings and alarm banners
     SHADOW: 'rgba(43,34,22,0.28)',
   },
+  // SCRAP, FLOTSAM AND THE HOLD (LOOP.md G1; scrap.js, cargo.js). Scrap is a thing you carry: a BUNDLE (cargo kind 'scrap': carried, thrown, dumped at the rail, dropped through a hatch, or lying on a deck as a LOAD that
+  // weighs) that falls out of the sky on a little parachute when something is shot down, is caught (the helm flies under it, a hookshot reels it in, a harpoon hauls a gunship's HULK alongside) and is carried to the
+  // HOLD (a bin in the hold room that starts empty and never refills; what is in it weighs and shows on the LIFT / WEIGHT gauge; GOING DOWN! can dump it). ENABLED false (or NO_SCRAP=1 in a tool) is the game without
+  // any of it, byte for byte; Versus (PVP.ENABLED) never has it. Money mends, scrap builds (the Yard prices parts in scrap from G2 on).
+  SCRAP: {
+    ENABLED: typeof process === 'undefined' || !(process.env && process.env.NO_SCRAP), // the switch (a browser has no process: on)
+    BUNDLE_W: 2, // (lead, 2026-10-11: halved until G2/G4 let the crew spend scrap; a full hold of weight-4 bundles halved the bots' win rate; G7 re-tunes) what one bundle weighs (gas points; CROSS.CARGO.ITEMS.scrap.w reads this): in a hand, on a deck, or in the hold
+    HOLD_CAP: 8, // bundles one hold bin takes (a full one is 32 points of weight: build for it, or dump it)
+    INCOME_TARGET: [5, 8], // bundles a stop should bring a crew that catches most of them (the voyagesim read-out checks it; the game does not use it)
+    // What falls when something dies: how many bundles (a fraction is the chance of one), and how they fall.
+    FLOTSAM: {
+      FIGHTER: 0.35, // a dogfighter or the big fighter shot down: the chance of one bundle
+      BOMBER: 1, // a bomber shot down
+      SQUADRON: 2, // the last plane of a squadron falls (the whole flight is wiped out): this many more
+      GUNSHIP: 2, // a gunship sinks: this many loose bundles ...
+      HULK: 4, // ... and a HULK worth this many (one big floating piece: harpoon it and take its bundles from the rail)
+      BOSS: 6, // the zeppelin / the Flagship
+      CREATURE: 8, // a giant creature dies: a field of bundles over its body
+      SEVER: 1, // ... and one for each tentacle cut off it
+      SUPPLY: 2, // the supply balloon is caught: a scrap-and-coal crate, this many bundles drop on the ship on top of what it gave
+      GRAVITY: 120, // px/s^2 pulling a bundle on its chute down (CROSS.CARGO.GRAVITY is a sandbag's) ...
+      FALL: 85, // ... until it settles at this falling speed (px/s): a chute takes its time
+      DRIFT: 1.2, // how fast (1/s) its sideways speed relaxes to the wind's (sails.js windSpeed x SHIP.TOP_SPEED): it drifts with the wind
+      LIFE: 25, // seconds before a bundle in the air is given up (it falls out of the sky for good)
+      SPREAD: 70, // px/s of sideways speed the bundles of one kill are spread over (and px of height they start staggered by)
+      KEEP: 0.3, // the share of the dying plane's own speed (relative to the wind) a bundle keeps
+      MARGIN: 40, // px: a bundle lands on a deck whose end it falls this far past (the helm needs to be near, not exact)
+      MAX: 30, // bundles in the air at once (the oldest is given up)
+    },
+    // The HULK of a sunk gunship: a big floating piece worth bundles.
+    HULK: {
+      LIFE: 60, // seconds before it sinks out of reach
+      SINK: 24, // px/s it sinks (the wind carries it along)
+      HIT_R: 150, // a harpoon line that passes within this of its middle hooks it
+      REEL: 340, // px/s it is hauled toward the ship once hooked ...
+      HOLD_DIST: 240, // ... until it floats this far (world px) from the gun, beside the ship
+      REACH: 330, // px (world, from the hand): crew on an open deck take a bundle from it with Action
+      TAKE_CD: 0.5, // seconds between two hands taking a bundle
+    },
+    // The hookshot: a thrown bundle is a LIGHT anchor: the hook catches within R of its path, the bundle is reeled to the hand at HAUL_SPEED and lands at the thrower's feet.
+    HOOK: { R: 130, HAUL_SPEED: 1500, LAND_AT: 70 },
+    // Bots: the helm steers under flotsam in a calm, a bot with a hookshot catches what is in reach, the rest stow.
+    BOTS: {
+      STEER_RANGE: 3200, // px: flotsam this near (sideways) is worth a detour of the helm (a hulk: 1.4 x this)
+      STEER_DOWN: 1300, // px: ... and no more than this far above / below her top deck
+      DECK_GAP: 130, // px: the helm puts her top deck this far under the bundle
+      LEAD_MIN: 1.2, // seconds: the shortest time the helm allows itself to get under a bundle
+      CALM_RANGE: 1700, // px: no bomber nearer than this (and no gunship, creature, boarders or fall) ...
+      CALM_FIRE: 800, // ... no enemy shot in the air this close ...
+      CALM_CLOSE: 450, // ... and no dogfighter, big fighter or bat this close = a calm: the helm may leave her course for flotsam
+      HULK_GAP: 110, // px: the helm puts her top deck this far under a hulk's middle (the crew reach it from the rail)
+      HOOK_REACH: 800, // px a bot hooks flotsam from
+      HOOK_PER_MIN: 30, // chance per minute (per think) that an idle bot with a hookshot rack aboard goes for flotsam within reach (the 'scrap' stunt, DARING.KINDS)
+      HOOK_COOLDOWN: 6, // seconds after any stunt before the next flotsam hook (DARING.COOLDOWN is the long wait for the others)
+      DUMP_LATE: 0.1, // GOING DOWN!: bots dump the hold once the crash clock is this far gone ...
+      DUMP_AFTER: 6, // ... or after she has been falling this many seconds, whichever comes first
+    },
+  },
   // THE SHIP'S BOOK (SHIPS_BOOK.md L0 + L1). moments.js remembers what happened, with names (state.moments, data only: it draws no random numbers and changes nothing in the sim); logWriter.js tells it back as
   // short sentences in the banner voice; logArt.js draws the Log line at the sky-dock, the PLAY OF THE MISSION ribbon on the scorecard and the run-end postcard.
   LOG: {
@@ -2114,11 +2172,11 @@ export const config = {
     // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
     WEIGHT: {
       'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
-      'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'fire-first': 2, overboard: 2,
+      'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'hulk-hauled': 5, 'scrap-dumped': 4, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra
     // Jobs done a lot in one stop earn a moment at the stop's end: the stat, and how many make it worth a line. Weight = LEADER_W.BASE + (count / that number - 1) x LEADER_W.PER, at most LEADER_W.MAX.
-    LEADER: { kills: 5, raiders: 2, holes: 2, fires: 2, repairs: 2, ammo: 3, coal: 3, revives: 1, defused: 1, vent: 3, demolished: 2, sabotage: 1, boarding: 1, sails: 1, thrown: 2, spots: 3, cannon: 1, shovels: 2, cuts: 1, dumped: 1, hatch: 1, captures: 1, bats: 2 },
+    LEADER: { kills: 5, raiders: 2, holes: 2, fires: 2, repairs: 2, ammo: 3, coal: 3, revives: 1, defused: 1, vent: 3, demolished: 2, sabotage: 1, boarding: 1, sails: 1, thrown: 2, spots: 3, cannon: 1, shovels: 2, cuts: 1, dumped: 1, hatch: 1, captures: 1, bats: 2, stowed: 4 },
     LEADER_W: { BASE: 2, PER: 1, MAX: 4.5 },
     SANDBAG_SECS: 90, // carrying one sandbag (or crate) this long without putting it down is a funny moment
     HELM: { HULL: 45, MIN_SECS: 12, STAY: 0.9 }, // a crisis = hull under HULL% (or GOING DOWN!); the person who held the helm for STAY of at least MIN_SECS of it earns "held the helm"
@@ -3121,7 +3179,7 @@ export const config = {
       GUN_REACH: 800, // only hooks the gunship when her deck is this close (and only while her rope to our bow is tied, so the crew can swing back as usual)
       SHOW_REACH: 750, // show-off swings aim at our own decks this far
       BOARD_REACH: 940, // Versus: a bot boards the rival by hook only when one of her decks is this close to the end of our top deck (the hook flies 950)
-      KINDS: { plane: 3, gun: 2, show: 1, board: 5, drop: 4 }, // how often each stunt is picked when it is possible (drop = Versus: a parachute jump from the bomb bay onto the rival's deck below)
+      KINDS: { plane: 3, gun: 2, show: 1, board: 5, drop: 4, scrap: 6 }, // how often each stunt is picked when it is possible (drop = Versus: a parachute jump from the bomb bay onto the rival's deck below)
     },
   },
   // Job arrows on idle phones (the job finder, modules/host/jobs.js).
@@ -3135,7 +3193,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5, hack: 3.4, frame: 1.9 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5, hack: 3.4, frame: 1.9, stow: 1.4, hulk: 1.5 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

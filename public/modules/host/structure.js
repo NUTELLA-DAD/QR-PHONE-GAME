@@ -17,6 +17,7 @@
 import { config } from '../../config.js';
 import { rowOf, isNestRow, partAt } from './shipBuild.js';
 import { slabOf } from './breakOff.js';
+import { holdWeight } from './scrap.js';
 
 const C = () => config.STRUCTURE;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -385,7 +386,7 @@ export function createStructure({ state, ship, hooks }) {
       }
       if ((creakCd -= dt) <= 0) { creakCd = K.CREAK_EVERY; state.sfxQ.push(['creak']); }
     } else { creakCd = 0; warnCd = 0; }
-    state.structDeficit = canvasLoss() + K.LOAD_WEIGHT * (state.loads || []).reduce((n, ld) => n + (ld.w || 0), 0) - (state.gdRelief || 0);
+    state.structDeficit = canvasLoss() + K.LOAD_WEIGHT * ((state.loads || []).reduce((n, ld) => n + (ld.w || 0), 0) + holdWeight(state)) - (state.gdRelief || 0); // (...and what is stowed in her hold: scrap.js)
   };
 
   // The split waits for the end of the frame (the world applies it with every ship at rest): see simulation.js stepWorld.

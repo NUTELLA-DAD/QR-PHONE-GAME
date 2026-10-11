@@ -15,6 +15,7 @@ import { toWorldX, toWorldY, toShipX, toShipY, driveVx, driveGain } from './pose
 import { applyForce, pivotOf as massOf } from './forces.js';
 import { pop } from './popups.js';
 import { creatureRay, creatureLatch, cutNear as creatureCut } from './creatureTow.js';
+import { scrapOn } from './scrap.js';
 
 const T = () => config.CROSS.TOW;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -93,6 +94,11 @@ export function createTowing({ world, puff, phoneFx = () => {} }) {
     const H = config.GUN_TYPES.harpoon;
     const hit = nearestDeck(ship, { x: wx, y: wy }, { x: Math.cos(ang), y: Math.sin(ang) }, H.RANGE, 0.8, true);
     const beast = world.creature ? creatureRay(world, { x: wx, y: wy }, ang, H.RANGE) : null; // (C.2: a giant creature's part in the line of fire; the nearer of the two is hooked)
+    const hulk = scrapOn() && world.flotsam ? world.flotsam.hulkRay({ x: wx, y: wy }, ang, H.RANGE) : null; // (SCRAP: a gunship's hulk in the line of fire is hooked and hauled alongside - not a tow, no spring: scrap.js)
+    if (hulk && (!hit || hulk.d < hit.d) && (!beast || hulk.d < beast.d)) {
+      world.flotsam.latch(hulk.hulk, ship, { x: toShipX(ship, wx), y: toShipY(ship, wy) });
+      return { hulk: hulk.hulk, harpoon: true };
+    }
     if (beast && (!hit || beast.d < hit.d)) return creatureLatch(world, ship, beast, { x: toShipX(ship, wx), y: toShipY(ship, wy) }, H, p);
     if (!hit) return null;
     const from = { x: toShipX(ship, wx), y: toShipY(ship, wy) };

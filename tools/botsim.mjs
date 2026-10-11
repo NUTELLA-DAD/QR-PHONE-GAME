@@ -380,6 +380,10 @@ ringTrack.forEach((r, i) => { // (R0: one line for each ring the bots met: how i
   const S = r.stats, down = r.faces.filter((f) => f.down).length;
   console.log(`ring ${i + 1} (${r.variant}, R ${r.R}, C ${Math.round(r.C)} px, ${r.faces.length} faces): ${r.crown ? 'FELL (' + r.crown.how + ')' : 'standing'}, faces breached ${down}/${r.faces.length} [${S.breaches.map((b) => 'gate ' + (b.face + 1) + ' by ' + b.how + (b.by ? ' ' + b.by : '')).join(', ')}], keep ${r.keep.hp.toFixed(0)}/${r.keep.max}, shutter windows ${S.windows}, core hits ${S.coreShells} shells + ${S.coreBombs} bombs, keep chips ${S.chips}, specials wrecked ${S.specialsDown}, bats ${S.bats}, flak ${S.flaks}, mortars ${S.mortars}, zips ${S.zips} (${S.raiders} raider squads), boarded ${S.boards}, charges ${S.planted} set / ${S.charges} blown, revolving wraps ${S.wraps}`);
 });
+{
+  const S = state.scrapStats; // SCRAP (LOOP.md G1): what fell, what was caught (landed on a deck, hooked), what reached the hold, what was lost; the hold's average and the share of crew time spent carrying it (not printed with NO_SCRAP=1: the old baselines stand)
+  if (S && config.SCRAP.ENABLED && !config.PVP.ENABLED) console.log(`scrap: spawned ${S.spawned} (${Object.entries(S.by).map(([k, v]) => k + ' ' + v).join(', ') || 'none'}), landed ${S.landed} (hooked ${S.hooked}), stowed ${S.stowed}, lost ${S.lost} (dumped ${S.dumped}); hulks ${S.hulks} (${S.taken} bundles taken); hold avg ${S.holdN ? (S.holdSum / S.holdN).toFixed(1) : 'n/a'}/${config.SCRAP.HOLD_CAP}, carrying ${S.crewSecs ? ((100 * S.carrySecs) / S.crewSecs).toFixed(1) : 'n/a'}% of crew time`);
+}
 console.log(`errors: ${errorCount}`);
 for (const [m, s] of errors) console.log(`  - ${m}${s ? '  @ ' + s : ''}`);
 console.log(`real time: ${((realNow() - t0) / 1000).toFixed(1)}s`);

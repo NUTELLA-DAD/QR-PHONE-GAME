@@ -26,6 +26,8 @@ import { drawBoilerSteam, drawFallMarks, drawHoleGlow } from './goingDownArt.js'
 import { windFactor } from './sails.js';
 import { gasKey, hotLift } from './gases.js';
 import { drawHatch } from './hatchArt.js';
+import { drawScrapBundle, drawScrapRing, drawScrapBin } from './scrapArt.js';
+import { scrapOn, holdSpot, holdCount } from './scrap.js';
 import { artOf, steamPuff, drawEngineBody, drawEngineProp } from './engineArt.js';
 
 // Which painted texture goes under which flat palette colour (anything not listed stays flat).
@@ -1574,10 +1576,17 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
       const key = ld.d + ':' + Math.round(ld.x / 30), n = (seen[key] = (seen[key] || 0) + 1) - 1;
       const x = ld.x + (n % 2) * 14 - 7, y = q.y - n * 17;
       const drop = Math.max(0, 1 - ld.t * 5) * 24; // (it lands with a bounce)
-      if (ld.kind === 'crate') { filled('#c9a05f', () => ctx.rect(x - 15, y - 30 - drop, 30, 30)); line([[x - 15, y - 30 - drop], [x + 15, y - drop]], 2, WOOD_DARK); line([[x + 15, y - 30 - drop], [x - 15, y - drop]], 2, WOOD_DARK); }
+      if (ld.kind === 'scrap') { drawScrapBundle(ctx, x, y - 14 - drop, 0.95); drawScrapRing(ctx, x, y - 16 - drop, 27, performance.now() / 1000); } // (SCRAP: a bundle lying on the deck, in its gold ring)
+      else if (ld.kind === 'crate') { filled('#c9a05f', () => ctx.rect(x - 15, y - 30 - drop, 30, 30)); line([[x - 15, y - 30 - drop], [x + 15, y - drop]], 2, WOOD_DARK); line([[x + 15, y - 30 - drop], [x - 15, y - drop]], 2, WOOD_DARK); }
       else if (ld.kind === 'coal') { filled('#2b2b2b', () => ctx.roundRect(x - 16, y - 22 - drop, 32, 22, 8)); line([[x - 7, y - 20 - drop], [x + 7, y - 20 - drop]], 2.4, '#777'); }
       else { filled('#b79a63', () => ctx.roundRect(x - 17, y - 24 - drop, 34, 24, 9)); line([[x - 8, y - 20 - drop], [x + 8, y - 20 - drop]], 2.4); }
     }
+  };
+
+  // The hold bin (scrap.js holdSpot): a slatted crate on the deck of the Hold that shows how many bundles are stowed.
+  const liveHold = (time) => {
+    const sp = scrapOn() ? holdSpot(L) : null, q = sp && P[sp.d];
+    if (q) drawScrapBin(ctx, sp.x, q.y, holdCount(state), config.SCRAP.HOLD_CAP, time);
   };
 
   // ================= CARGO DROP HATCHES (hatch.js, hatchArt.js) =================
@@ -1734,6 +1743,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     guard('sails', liveSails, time);
     guard('cannons', liveCannons, time);
     guard('loads', liveLoads);
+    guard('hold', liveHold, time);
     if ((L.hatches || []).length) guard('hatches', liveHatches, time);
     guard('steam', liveVents, time);
     guard('lift', liveConnectors);

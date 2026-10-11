@@ -9,6 +9,7 @@ import { config } from '../../config.js';
 import { mainShip } from './ships.js';
 import { trimOf } from './shipBuild.js';
 import { liveLiftX } from './gasBags.js';
+import { holdWeight, holdX } from './scrap.js';
 
 export function createBalance(state) {
   const layout = mainShip(state).layout; // (this ship's own layout and its static balance)
@@ -30,6 +31,7 @@ export function createBalance(state) {
     }
     if (config.FORCES.LIVE) for (const b of state.boarders || []) if (b.d != null && !b.fall && b.conn == null && b.hp > 0) { add(config.FORCES.BOARDER_MASS, b.x); cm += config.FORCES.BOARDER_MASS * (b.x - SB.comX); } // raiders on deck weigh too
     for (const ld of state.loads || []) { add(ld.w, ld.x); cm += ld.w * (ld.x - SB.comX); } // (B.6: sandbags, crates and sacks lying on her decks - thrown there by anyone - tip her like a crowd)
+    { const hw = holdWeight(state); if (hw > 0) { const hx = holdX(state, layout); add(hw, hx); cm += hw * (hx - SB.comX); } } // (SCRAP, LOOP.md G1: what is stowed in her hold weighs at the bin)
     if (state.perch) { add(state.perch.w, state.perch.x); cm += state.perch.w * (state.perch.x - SB.comX); } // (C.6a: the Cinder Drake sitting on her gasbag is a live load, creatureDrake.js)
     const boilers = L.stations.filter((s) => s.kind === 'boiler');
     if (boilers.length) for (const s of boilers) add((state.ship.fuel * W.fuel) / boilers.length, s.x);

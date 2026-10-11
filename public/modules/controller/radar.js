@@ -17,6 +17,7 @@ const KINDS = [
   { c: '#ff9ad0', r: 3.5, shape: 'dot' }, // imp
   { c: '#9fe3ff', r: 9, shape: 'sq' }, // another airship (B.3)
   { c: '#d870b0', r: 8, shape: 'sq' }, // a giant creature's body, beak or tentacle (BOSSES.md)
+  { c: '#ffd23f', r: 5, shape: 'dot' }, // flotsam: a bundle of scrap on a chute, or a hulk (LOOP.md G1) - gold, like every pickup
 ];
 const TAU = Math.PI * 2;
 
