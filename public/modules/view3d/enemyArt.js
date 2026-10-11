@@ -96,6 +96,7 @@ export function buildBiplane(pal, o = {}) {
     b.box(COL.cream, -4, 14.8, 0, 12, 3, 9, 0, 0, 0, 0.3);
   }
   if (o.enemy) { emblem(b, -34, 0, 16, 9, 1); emblem(b, -34, 0, -16, 9, -1); }
+  if (o.pennant) { b.rod(dark, V(-80, 18, 0), V(-98, 34, 0), 1.4, 0); b.box(o.pennant, -122, 33, 0, 46, 9, 2.6, 0.8, 0, 0, 0.06); } // a squadron leader's pennant on a whip aerial (the ace's in his paint)
   const g = b.build();
   const pg = prop(COL.coal, 62, 7, 0, 7);
   pg.position.x = 76;

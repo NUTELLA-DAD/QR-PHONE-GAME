@@ -1,13 +1,13 @@
 {
- "captured": "2026-10-10",
+ "captured": "2026-10-11",
  "voyage": {
   "normal": {
-   "medianMin": 40.4,
-   "wins": 6,
+   "medianMin": 34.5,
+   "wins": 7,
    "runs": 10
   },
   "easy": {
-   "medianMin": 41.1,
+   "medianMin": 32.4,
    "wins": 8,
    "runs": 10
   }
@@ -16,24 +16,24 @@
   "network-1": {
    "missions": 2,
    "minPerMission": 3.2,
-   "hull": 87.4,
-   "kills": 109,
+   "hull": 88.3,
+   "kills": 102,
    "wrecks": 0,
-   "hauls": 56,
+   "hauls": 60,
    "blowouts": 0,
-   "contacts": 301,
-   "tows": 1,
+   "contacts": 167,
+   "tows": 0,
    "errors": 0
   },
   "network-2": {
    "missions": 2,
    "minPerMission": 3.4,
-   "hull": 95.8,
-   "kills": 149,
+   "hull": 96.6,
+   "kills": 117,
    "wrecks": 0,
-   "hauls": 45,
+   "hauls": 42,
    "blowouts": 0,
-   "contacts": 124,
+   "contacts": 118,
    "tows": 0,
    "errors": 0
   },
@@ -53,9 +53,9 @@
    "missions": 2,
    "minPerMission": 3.7,
    "hull": 95.7,
-   "kills": 119,
+   "kills": 117,
    "wrecks": 0,
-   "hauls": 40,
+   "hauls": 44,
    "blowouts": 0,
    "contacts": 37,
    "tows": 0,
@@ -64,8 +64,8 @@
   "open-2": {
    "missions": 2,
    "minPerMission": 3.8,
-   "hull": 98.6,
-   "kills": 103,
+   "hull": 98.7,
+   "kills": 111,
    "wrecks": 0,
    "hauls": 27,
    "blowouts": 0,
@@ -74,50 +74,50 @@
    "errors": 0
   },
   "open-3": {
-   "missions": 2,
-   "minPerMission": 3.5,
-   "hull": 95.4,
-   "kills": 76,
+   "missions": 3,
+   "minPerMission": 3.2,
+   "hull": 98.3,
+   "kills": 87,
    "wrecks": 0,
    "hauls": 33,
-   "blowouts": 0,
-   "contacts": 23,
+   "blowouts": 1,
+   "contacts": 6,
    "tows": 0,
    "errors": 0
   },
   "route-1": {
    "missions": 2,
-   "minPerMission": 3.8,
-   "hull": 82.3,
-   "kills": 82,
+   "minPerMission": 3.7,
+   "hull": 84.2,
+   "kills": 111,
    "wrecks": 0,
-   "hauls": 52,
+   "hauls": 49,
    "blowouts": 1,
-   "contacts": 253,
+   "contacts": 264,
    "tows": 0,
    "errors": 0
   },
   "route-2": {
    "missions": 2,
-   "minPerMission": 3.7,
-   "hull": 88.5,
-   "kills": 115,
+   "minPerMission": 3.8,
+   "hull": 90.5,
+   "kills": 102,
    "wrecks": 0,
-   "hauls": 34,
-   "blowouts": 1,
-   "contacts": 429,
-   "tows": 1,
+   "hauls": 36,
+   "blowouts": 2,
+   "contacts": 294,
+   "tows": 0,
    "errors": 0
   },
   "route-3": {
    "missions": 2,
    "minPerMission": 3.3,
-   "hull": 84.9,
+   "hull": 84.4,
    "kills": 104,
    "wrecks": 0,
-   "hauls": 40,
+   "hauls": 41,
    "blowouts": 0,
-   "contacts": 316,
+   "contacts": 364,
    "tows": 0,
    "errors": 0
   }
@@ -150,8 +150,8 @@
   "network-13": {
    "missions": 1,
    "minPerMission": 2.9,
-   "hull": 99.2,
-   "kills": 42,
+   "hull": 99.3,
+   "kills": 44,
    "wrecks": 0,
    "hauls": 17,
    "blowouts": 0,
@@ -168,23 +168,23 @@
   },
   {
    "speed": 122.92137387678369,
-   "climb": 51.96713560198976,
-   "dive": 416.0363663964441
+   "climb": 52.30858417126574,
+   "dive": 417.5792166786031
   },
   {
    "speed": 122.92137387678369,
-   "climb": 501.74024766080817,
-   "dive": 460.6624610400754
+   "climb": 501.6929428608281,
+   "dive": 460.5797858526067
   },
   {
-   "speed": 560.5213280990341,
-   "climb": 501.229968852968,
-   "dive": 461.14373938627864
+   "speed": 559.9948622324579,
+   "climb": 501.0386648763616,
+   "dive": 461.30484260482825
   },
   {
-   "speed": 628.132771083473,
-   "climb": 500.22154363593205,
-   "dive": 461.42365314202186
+   "speed": 628.132771244133,
+   "climb": 500.5238685599232,
+   "dive": 462.1714566012607
   }
  ]
 }

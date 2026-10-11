@@ -16,11 +16,12 @@ import { bagNearX } from './shipBuild.js';
 import { flyPlane, smoke, shootDown, angDiff, shoveShip, bumpShip, bounceStep } from './planes.js';
 import { targetShip } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
+import { createSquads } from './squads.js';
 
 const W = config.WAVES;
 const rand = (a, b) => a + Math.random() * (b - a);
 
-export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, credit, gnaw, damageHull }) {
+export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, credit, gnaw, damageHull, phoneFx }) {
   const ship = targetShip(state, null); // (B.3: the ship this system hunts and flies round: ships.js targetShip, ships[0] today; B.4 chooses per enemy)
   const layout = ship.layout;
   const B = layout.bounds;
@@ -84,6 +85,12 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       hit: 0,
     });
     warn('BOMBER OVERHEAD SOON - DORSAL GUN!');
+    // On harder stops a bomber may come with a pair of fighters over its wings (squads.js).
+    const SQ = config.SQUADRONS;
+    if (SQ.FORMATIONS && ((state.course && state.course.danger) || 2) >= SQ.BOMBER_ESCORT_DANGER && Math.random() < SQ.BOMBER_ESCORT) {
+      squads.escortBomber(state.bombers[state.bombers.length - 1]);
+      warn('BOMBER OVERHEAD - WITH FIGHTER ESCORT!');
+    }
   };
 
   // A different boss each lap: Dread Zeppelin, Bat Carrier, then the Iron Dreadnought.
@@ -126,8 +133,13 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     const sy = toShipY(ship, y);
     return sx > B.x0 - pad && sx < B.x1 + pad && sy > B.y0 - pad && sy < B.y1 + pad;
   };
+  const squads = createSquads({ state, ship, shipMid, nearShip, phoneFx, warn }); // (formations, break / regroup / scatter / withdraw: squads.js)
   const spawnStrafers = () => {
-    const n = Math.max(1, Math.round(Math.min(D.MAX, D.COUNT + (lap() - 1) * D.PER_LAP) * crewMul(state, 'count')));
+    if (config.SQUADRONS.FORMATIONS) { // (a squadron with a leader, in formation: squads.js; off = the loose circling dogfighters below)
+      squads.spawn();
+      return;
+    }
+    const n =Math.max(1, Math.round(Math.min(D.MAX, D.COUNT + (lap() - 1) * D.PER_LAP) * crewMul(state, 'count')));
     const side = Math.random() < 0.5 ? -1 : 1;
     const mid = shipMid();
     const dir = Math.random() < 0.5 ? -1 : 1; // which way round they circle
@@ -329,7 +341,9 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         state.enemyBombs.push({ x: p.x, y: p.y + 30, vx: (p.vx - ship.pose.vx) * 0.4 + ship.pose.vx, vy: 40, hp: 1 }); // (a bomb keeps 40% of the bomber's speed relative to the ship)
       }
     }
-    state.bombers = state.bombers.filter((p) => p.hp > 0 && Math.abs(p.x - toWorldRefX()) < 3500);
+    // (A bomber starts B.x1 + 2600 from the ship's bounds, which on the classic ship is 3610 px from her middle: the old 3500 px limit sent it home on its first frame, so no bomber ever flew. With squadrons on the limit is BOMBER_LEAVE.)
+    const leave = config.SQUADRONS.FORMATIONS ? config.SQUADRONS.BOMBER_LEAVE : 3500;
+    state.bombers = state.bombers.filter((p) => p.hp > 0 && Math.abs(p.x - toWorldRefX()) < leave);
     for (const b of state.enemyBombs) {
       b.vy += 420 * dt;
       b.x += b.vx * dt;
@@ -346,14 +360,39 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     state.enemyBombs = state.enemyBombs.filter((b) => !b.dead && b.hp > 0 && toShipY(ship, b.y) < 2500); // (from the ship: maps can be deep)
   };
 
+  // One burst of a plane's guns along its nose at (tx, ty), dist away, if it is lined up (the old attack run and the squadrons' both fire through this).
+  const fireAt = (p, tx, ty, dist, dt, range = D.FIRE_RANGE) => {
+    p.gunCd -= dt;
+    const off = angDiff(Math.atan2(ty - p.y, tx - p.x), p.heading);
+    if (p.shots > 0 && p.gunCd <= 0 && Math.abs(off) < 0.35 && dist < range && !state.ship.down) {
+      p.shots -= 1;
+      if (state.squadStats) state.squadStats[p.squadronId != null ? 'shots' : 'looseShots']++; // (for the gates and the botsim line: how many bullets the squadrons / the loose dogfighters fired)
+      p.gunCd = D.SHOT_EVERY / crewMul(state, 'fire');
+      const helm = Object.values(state.players).find((q) => layout.kindOf(q.lock) === 'helm');
+      const evading = helm && (Math.abs(helm.jy) > 0.2 || Math.abs(state.ship.speed) > 0.3);
+      const miss = Math.random() < 0.25 || (evading && Math.random() < 0.4) || dazzled(p);
+      const dir = p.heading + Math.max(-0.15, Math.min(0.15, off)) + (miss ? (Math.random() < 0.5 ? -1 : 1) * 0.3 : rand(-0.05, 0.05));
+      const nx = p.x + Math.cos(p.heading) * 30;
+      const ny = p.y + Math.sin(p.heading) * 30;
+      state.bullets.push({ x: nx, y: ny, vx: Math.cos(dir) * D.BULLET_SPEED + ship.pose.vx, vy: Math.sin(dir) * D.BULLET_SPEED, miss, life: 3 });
+      if (state.flashes) state.flashes.push({ x: nx, y: ny, ang: dir, t: 0.06, color: '#ffb3b3', size: 0.6 });
+    }
+  };
+
   const updateStrafers = (dt) => {
     const mid = shipMid();
+    squads.update(dt);
     for (const p of state.strafers) {
       p.modeT -= dt;
       let tx;
       let ty;
       let forceTurn = 0;
-      if (p.mode === 'circle') {
+      const cmd = p.squadronId != null ? squads.steer(p, dt) : null; // (a plane of a squadron takes its orders from squads.js; any other flies the old way)
+      if (cmd) {
+        tx = cmd.tx;
+        ty = cmd.ty;
+        if (cmd.fire) fireAt(p, cmd.fire.tx, cmd.fire.ty, cmd.fire.dist, dt, config.SQUADRONS.FIRE_RANGE);
+      } else if (p.mode === 'circle') {
         // Swing round the ship in a wide circle, chasing a point that runs ahead round it.
         p.orbit += p.dir * D.ORBIT_SPEED * dt;
         tx = mid.x + Math.cos(p.orbit) * D.ORBIT * 1.4;
@@ -380,20 +419,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
           p.loopDir = Math.cos(p.heading) >= 0 ? -1 : 1; // pull up and over
         }
         // Guns along the nose, in a short burst.
-        p.gunCd -= dt;
-        const off = angDiff(Math.atan2(ty - p.y, tx - p.x), p.heading);
-        if (p.shots > 0 && p.gunCd <= 0 && Math.abs(off) < 0.35 && dist < D.FIRE_RANGE && !state.ship.down) {
-          p.shots -= 1;
-          p.gunCd = D.SHOT_EVERY / crewMul(state, 'fire');
-          const helm = Object.values(state.players).find((q) => layout.kindOf(q.lock) === 'helm');
-          const evading = helm && (Math.abs(helm.jy) > 0.2 || Math.abs(state.ship.speed) > 0.3);
-          const miss = Math.random() < 0.25 || (evading && Math.random() < 0.4) || dazzled(p);
-          const dir = p.heading + Math.max(-0.15, Math.min(0.15, off)) + (miss ? (Math.random() < 0.5 ? -1 : 1) * 0.3 : rand(-0.05, 0.05));
-          const nx = p.x + Math.cos(p.heading) * 30;
-          const ny = p.y + Math.sin(p.heading) * 30;
-          state.bullets.push({ x: nx, y: ny, vx: Math.cos(dir) * D.BULLET_SPEED + ship.pose.vx, vy: Math.sin(dir) * D.BULLET_SPEED, miss, life: 3 });
-          if (state.flashes) state.flashes.push({ x: nx, y: ny, ang: dir, t: 0.06, color: '#ffb3b3', size: 0.6 });
-        }
+        fireAt(p, tx, ty, dist, dt);
       } else if (p.mode === 'loop') {
         // A loop-the-loop away from the ship.
         forceTurn = p.loopDir * D.TURN;
@@ -412,11 +438,13 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
       }
       const px0 = p.x;
       const py0 = p.y;
-      flyPlane(state, p, tx, ty, dt, { speed: D.SPEED, turn: D.TURN, turnAvoid: D.TURN_AVOID, nearShip: p.ram ? null : nearShip, midY: mid.y, forceTurn, fm: D, max: p.max });
+      flyPlane(state, p, tx, ty, dt, { speed: cmd ? cmd.speed : D.SPEED, turn: cmd ? cmd.turn : D.TURN, turnAvoid: D.TURN_AVOID, nearShip: p.ram ? null : nearShip, midY: mid.y, forceTurn, fm: D, max: p.max, noScroll: !!(cmd && cmd.noScroll), avoidHold: cmd ? config.SQUADRONS.AVOID_HOLD : 0 });
+      if (cmd && cmd.snap) squads.snap(p, cmd, dt);
       smoke(p, p.max, puff);
       if (inRock(state, p.x, p.y)) {
         p.hp = 0;
         state.kills += 1;
+        if (state.squadStats) state.squadStats[p.squadronId != null ? 'rocks' : 'looseRocks']++; // (a plane that flew into the rock)
         puff(p.x, p.y, '#ff5a1f', 22);
         puff(p.x, p.y, '#555', 10);
         pop(state, p.x, p.y - 50, 'kill');
@@ -430,9 +458,10 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
         impact(toShipX(ship, p.x), toShipY(ship, p.y), config.IMPACT.WRECK_SMALL);
         shoveShip(state, p, p.ram ? 1.5 : 1);
         warn('A DOGFIGHTER RAMMED US!', 2);
+        if (state.squadStats) state.squadStats[p.squadronId != null ? 'rams' : 'looseRams']++;
       }
     }
-    state.strafers = state.strafers.filter((p) => p.hp > 0 && Math.abs(p.x - toWorldRefX()) < 7000);
+    state.strafers = state.strafers.filter((p) => p.hp > 0 && !p.gone && Math.abs(p.x - toWorldRefX()) < 7000);
   };
 
   // Where the boss parks (ship space, x): BOSS_STATION_X ahead on the classic ship, but never farther than BOSS_STATION_GAP beyond her foremost gun. A short ship (the Sparrow) would
@@ -601,6 +630,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     state.bombers.length = 0;
     state.enemyBombs.length = 0;
     state.strafers.length = 0;
+    squads.reset();
     if (state.boss) state.boss.leaving = true;
     bossLap = 0; // (a limp home flies the stop again with the same lap number: the boss must be able to come back, or the Flagship stop could never be won - the Aether stall)
     waveT = Math.max(waveT, 12);
@@ -639,5 +669,5 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     const c = state.course;
     return !!c && !state.boss && !state.creature && !lairStop() && bossLap !== lap() && c.progress > W.BOSS_AT - config.PACING.BOSS_LEAD && (c.progress < 0.9 || flagshipStop());
   };
-  return { update, reset, restart, bossSoon, withdraw, spawnBigSwarm, spawnBats, spawnBomber, spawnBoss, spawnStrafers };
+  return { update, reset, restart, bossSoon, withdraw, spawnBigSwarm, spawnBats, spawnBomber, spawnBoss, spawnStrafers, squads, squadBanner: () => squads.banner() };
 }

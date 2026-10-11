@@ -161,7 +161,9 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     for (const m of state.mines || []) items.push({ x: m.x, y: m.y, icon: '✹', color: '#4a4346', label: 'MINE' });
     if (state.enemy.dead <= 0) items.push({ x: state.enemy.x, y: state.enemy.y, icon: '✈', color: '#8c2f2f', label: 'FIGHTER' });
     for (const p of state.bombers || []) items.push({ x: p.x, y: p.y, color: '#3d3a40', label: 'BOMBER' });
-    if ((state.strafers || []).length) items.push({ x: state.strafers[0].x, y: state.strafers[0].y, color: '#26221f', label: 'SQUADRON' });
+    for (const sq of state.squadrons || []) if (sq.size > 0) items.push({ x: sq.cx, y: sq.cy, color: '#26221f', label: (sq.formation === 'escort' ? 'ESCORT x' : 'SQUADRON x') + sq.size }); // (a whole squadron is one arrow, with its plane count: squads.js)
+    const loose = (state.strafers || []).filter((p) => p.squadronId == null || !(state.squadrons || []).some((s) => s.id === p.squadronId));
+    if (loose.length) items.push({ x: loose[0].x, y: loose[0].y, color: '#26221f', label: 'SQUADRON' });
     if (state.boss) items.push({ x: state.boss.x, y: state.boss.y, color: '#5c1e1e', label: 'BOSS' });
     if (state.gunship && state.gunship.phase !== 'sinking') items.push({ x: toWorldX(ship, layout.bounds.x1 + 790 + state.gunship.dx), y: toWorldY(ship, layout.refPoint.y + state.gunship.dy), color: '#a8443f', label: 'GUNSHIP', always: true }); // (coming in from the horizon)
     const bat = (state.bats || []).find((b) => b.delay <= 0 && !b.latched);
@@ -564,7 +566,20 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
       if (Math.cos(p.heading || 0) < 0) ctx.scale(1, -1); // keep the wheels down
       ctx.scale(1.3, 1.3 * (1 - 0.45 * Math.min(1, Math.abs(p.bank) || 0))); // banking squashes her
       const vc = state.course && envOf(state).strafer; // 'void corsairs' in The Aether
-      biplane(time, vc ? vc.body : '#b9b1a0', vc ? vc.trim : '#b0413e');
+      biplane(time, p.ace ? p.body : vc ? vc.body : '#b9b1a0', p.ace ? p.trim : vc ? vc.trim : '#b0413e'); // (a squadron's ACE wears flying circus paint)
+      if (p.leader || p.ace) { // the leader trails a pennant (the ace's in his paint, the others' cream) so a squadron's leader reads at a glance
+        ink();
+        ctx.lineWidth = 2;
+        ctx.fillStyle = p.ace ? p.trim : '#efe6cf';
+        ctx.beginPath();
+        ctx.moveTo(-48, -22);
+        ctx.lineTo(-92, -31);
+        ctx.lineTo(-84, -22);
+        ctx.lineTo(-92, -14);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
       ctx.restore();
     }
   };

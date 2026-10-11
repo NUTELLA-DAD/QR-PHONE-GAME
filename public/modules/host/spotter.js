@@ -32,7 +32,19 @@ export function radarItems(state) {
   const e = state.enemy;
   if (e && e.dead <= 0 && e !== state.stuntPlane) add('fighter', e, at(e));
   for (const p of state.bombers || []) if (p.hp > 0) add('bomber', p, at(p));
-  for (const p of state.strafers || []) if (p.hp > 0 && p !== state.stuntPlane) add('plane', p, at(p));
+  // A squadron flying together is ONE ping at its middle (marked with its plane count); one that has broken up and spread out gives a ping to each plane (squads.js).
+  const flock = new Map();
+  for (const p of state.strafers || []) {
+    if (!(p.hp > 0) || p === state.stuntPlane) continue;
+    const sq = p.squadronId != null ? (state.squadrons || []).find((s) => s.id === p.squadronId) : null;
+    if (sq && sq.spread < R.CLUSTER) (flock.get(sq) || flock.set(sq, []).get(sq)).push(p);
+    else add('plane', p, at(p));
+  }
+  for (const [sq, list] of flock) {
+    if (list.length < 2) { add('plane', list[0], at(list[0])); continue; }
+    add('plane', sq.leader && list.includes(sq.leader) ? sq.leader : list[0], () => ({ x: list.reduce((a, q) => a + q.x, 0) / list.length, y: list.reduce((a, q) => a + q.y, 0) / list.length }));
+    out[out.length - 1].cluster = list.length;
+  }
   if (state.boss) add('boss', state.boss, at(state.boss));
   const gs = state.gunship;
   if (gs && gs.phase !== 'sinking') add('gunship', gs, () => (gs.bp ? { x: toWorldX(ship, gs.bp.cx + gs.dx), y: toWorldY(ship, (gs.bp.hullTop + gs.bp.hullBot) / 2 + gs.dy) } : { x: toWorldX(ship, L.bounds.x1 + 790 + gs.dx), y: toWorldY(ship, L.refPoint.y + gs.dy) }));
@@ -142,7 +154,7 @@ export function createSpotter({ state, emit, phoneFx }) {
       for (const n of near) {
         const far = n.d > R.RANGE;
         const k = far ? R.RANGE / n.d : 1;
-        a.push(n.it.k, Math.round(((n.dx * k) / R.RANGE) * 100), Math.round(((n.dy * k) / R.RANGE) * 100), (n.it.obj.spotT > 0 ? 1 : 0) | (far ? 2 : 0));
+        a.push(n.it.k, Math.round(((n.dx * k) / R.RANGE) * 100), Math.round(((n.dy * k) / R.RANGE) * 100), (n.it.obj.spotT > 0 ? 1 : 0) | (far ? 2 : 0) | (n.it.cluster > 1 ? 4 | (Math.min(15, n.it.cluster) << 3) : 0)); // (4 = a squadron cluster, the plane count above bit 3)
       }
       emit(p.id, { rd: { on: 1, s: p.rdSeq, a } });
     }

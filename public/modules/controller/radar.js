@@ -1,7 +1,7 @@
 // The phone radar: a round map with the ship in the middle, a turning sweep line and a blip for
 // everything the TV knows about, even far past the edge of the TV picture. Tap a blip to SPOT it.
 // The host sends { on: 1, s: seq, a: [kind, x, y, flags, ...] } a few times a second (x, y: -100..100 of the
-// radar's radius; flags: 1 = already spotted, 2 = beyond the rim, shown pinned to the edge).
+// radar's radius; flags: 1 = already spotted, 2 = beyond the rim, shown pinned to the edge, 4 = a squadron flying together (one blip; the plane count is flags >> 3)).
 // The kinds are in the same order as RADAR_KINDS in host/spotter.js.
 const KINDS = [
   { c: '#ffb347', r: 4.5, shape: 'dia' }, // mine
@@ -133,9 +133,15 @@ export function createRadar({ canvas, box }) {
         ctx.globalAlpha = (it.far ? 0.45 : 0.6) + 0.4 * glow;
       }
       ctx.fillStyle = kind.c;
-      shape(kind, x, y, kind.r);
+      shape(kind, x, y, it.cluster ? kind.r * 1.5 : kind.r);
       ctx.fill();
       ctx.globalAlpha = 1;
+      if (it.cluster) { // a squadron flying together: one bigger blip with its plane count
+        ctx.fillStyle = '#fff';
+        ctx.font = "700 11px 'Libre Baskerville', Georgia, serif";
+        ctx.textAlign = 'center';
+        ctx.fillText(it.cluster, x, y - kind.r * 1.5 - 3);
+      }
       if (it.far) {
         // beyond the rim: hollow ring says "farther than this"
         ctx.strokeStyle = kind.c;
@@ -190,7 +196,7 @@ export function createRadar({ canvas, box }) {
     seq = rd.s || 0;
     const a = rd.a || [];
     items = [];
-    for (let i = 0; i + 3 < a.length; i += 4) items.push({ k: a[i], x: a[i + 1] / 100, y: a[i + 2] / 100, spotted: !!(a[i + 3] & 1), far: !!(a[i + 3] & 2) });
+    for (let i = 0; i + 3 < a.length; i += 4) items.push({ k: a[i], x: a[i + 1] / 100, y: a[i + 2] / 100, spotted: !!(a[i + 3] & 1), far: !!(a[i + 3] & 2), cluster: a[i + 3] & 4 ? a[i + 3] >> 3 : 0 });
     if (!on) {
       on = true;
       lastDraw = 0;
