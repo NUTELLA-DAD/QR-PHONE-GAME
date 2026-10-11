@@ -16,11 +16,30 @@ export const envInfo = (id) => config.VOYAGE.ENVIRONMENTS[id] || config.VOYAGE.E
 
 export const modeInfo = (id) => config.VOYAGE.MODES[id] || config.VOYAGE.MODES[config.VOYAGE.START_MODE];
 
+// Connect each column to the next: every stop leads somewhere and every stop is reachable.
+function connectColumns(columns, rand, n) {
+  for (let c = 0; c < n - 1; c++) {
+    const a = columns[c];
+    const b = columns[c + 1];
+    const pos = (list, i) => (list.length === 1 ? 0.5 : i / (list.length - 1));
+    a.forEach((s, i) => {
+      const order = b.map((t, j) => ({ t, d: Math.abs(pos(b, j) - pos(a, i)) + rand() * 0.25 })).sort((x, y) => x.d - y.d);
+      const links = Math.min(b.length, 1 + (rand() < 0.45 ? 1 : 0));
+      for (let k = 0; k < links; k++) s.next.push(order[k].t.id);
+    });
+    b.forEach((t, j) => {
+      if (a.some((s) => s.next.includes(t.id))) return;
+      const s = a.reduce((best, x, i) => (Math.abs(pos(a, i) - pos(b, j)) < Math.abs(pos(a, best) - pos(b, j)) ? i : best), 0);
+      a[s].next.push(t.id);
+    });
+  }
+}
+
 // columns[c] = list of stops { id, col, row, env, play, kind, danger, reward, flagship, next: [ids] }.
 // env = the planned environment (shown); play = what actually flies (Sky Isles until others exist).
 // opts: { gentle: true = the first stop is never an outpost raid (the Sparrow's start, S.6), mode: a key of config.VOYAGE.MODES, voyageNo: 2 for the harder second voyage of a campaign, which
 // starts at a harbour (a stop that is not flown: the crew is docked there, then votes where to go) }.
-export function generateVoyage(seed, opts = {}) {
+function generateLegacy(seed, opts = {}) {
   const V = config.VOYAGE;
   const mode = modeInfo(opts.mode);
   const second = (opts.voyageNo || 1) > 1;
@@ -60,23 +79,161 @@ export function generateVoyage(seed, opts = {}) {
     columns.push(col);
   }
   markLairs(columns, seed, n, h);
-  // Connect each column to the next: every stop leads somewhere and every stop is reachable.
-  for (let c = 0; c < n - 1; c++) {
-    const a = columns[c];
-    const b = columns[c + 1];
-    const pos = (list, i) => (list.length === 1 ? 0.5 : i / (list.length - 1));
-    a.forEach((s, i) => {
-      const order = b.map((t, j) => ({ t, d: Math.abs(pos(b, j) - pos(a, i)) + rand() * 0.25 })).sort((x, y) => x.d - y.d);
-      const links = Math.min(b.length, 1 + (rand() < 0.45 ? 1 : 0));
-      for (let k = 0; k < links; k++) s.next.push(order[k].t.id);
-    });
-    b.forEach((t, j) => {
-      if (a.some((s) => s.next.includes(t.id))) return;
-      const s = a.reduce((best, x, i) => (Math.abs(pos(a, i) - pos(b, j)) < Math.abs(pos(a, best) - pos(b, j)) ? i : best), 0);
-      a[s].next.push(t.id);
-    });
-  }
+  connectColumns(columns, rand, n);
   return { seed, columns, mode: opts.mode, voyageNo: opts.voyageNo || 1 };
+}
+
+// With config.VOYAGE.CURRICULUM.ENABLED the stops follow the teaching table (generateCurriculum); without it the old dice (generateLegacy, exactly as it was).
+// A curriculum route adds to each stop: slot (its row in the table), share (0..1 along the route), base (the column's base skulls), gates (the set pieces the pacing director may call there), and the optional
+// flags tag (the route map's "NEW: ..." text), ring ('tower' | 'fortress' | 'citadel'), nemesis (the Nemesis may appear) and multi (a multi-part objective, G6).
+export function generateVoyage(seed, opts = {}) {
+  return config.VOYAGE.CURRICULUM && config.VOYAGE.CURRICULUM.ENABLED ? generateCurriculum(seed, opts) : generateLegacy(seed, opts);
+}
+
+// ---- The teaching curriculum (config.VOYAGE.CURRICULUM, LOOP.md "The ramp") ----
+const CU = () => config.VOYAGE.CURRICULUM;
+// The table rows for a session mode (a mode may name another's table).
+export const curriculumTable = (modeId) => {
+  const T = CU().TABLES;
+  let t = T[modeId] || T[config.VOYAGE.START_MODE];
+  if (typeof t === 'string') t = T[t];
+  return t;
+};
+// A row's env list as sky ids ('A' / 'B' name a tier).
+export const envsOf = (list) => [...new Set(list.flatMap((e) => CU().TIERS[e] || [e]))];
+// How deep into the skies an env is: 0 Sky Isles, 1 tier A, 2 tier B, 3 the Aether.
+export const envTier = (env) => (env === 'skyisles' ? 0 : env === 'aether' ? 3 : CU().TIERS.A.includes(env) ? 1 : CU().TIERS.B.includes(env) ? 2 : 1);
+// The ship power a crew should have arriving at a stop (CURRICULUM.POWER_CURVE, stretched over the route by the stop's share of it).
+export const expectedPower = (stop) => { const c = CU().POWER_CURVE; return c[Math.round((stop.share || 0) * (c.length - 1))]; };
+
+function generateCurriculum(seed, opts = {}) {
+  const V = config.VOYAGE;
+  const C = V.CURRICULUM;
+  const mode = modeInfo(opts.mode);
+  const table = curriculumTable(opts.mode);
+  const second = (opts.voyageNo || 1) > 1;
+  const bonus = second ? V.SECOND.DANGER_BONUS : 0;
+  const h = second ? 1 : 0; // (the harbour column)
+  const rand = mulberry(seed);
+  const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
+  const n = ri(mode.stopsMin, mode.stopsMax) + h;
+  const m = n - h; // (columns flown)
+  const maxD = 3 + bonus;
+  const s0 = second ? C.SECOND_START / (C.POWER_CURVE.length - 1) : 0; // (the second voyage starts partway along the table)
+  const columns = [];
+  for (let c = 0; c < n; c++) {
+    const last = c === n - 1;
+    const share = c < h ? 0 : s0 + ((c - h) / Math.max(1, m - 1)) * (1 - s0);
+    const slot = Math.round(share * (table.length - 1));
+    const e = table[slot];
+    const base = last ? maxD : c < h ? 1 : Math.min(maxD, e.danger + bonus);
+    const count = c === 0 || last ? 1 : ri(V.CHOICES_MIN, V.CHOICES_MAX);
+    const easyRow = ri(0, count - 1); // (this branch is always at the column's base skulls)
+    const envIds = envsOf(e.env);
+    const col = [];
+    const usedEnv = new Set();
+    const usedKind = new Set();
+    for (let r = 0; r < count; r++) {
+      let env = c < h ? 'skyisles' : envIds[ri(0, envIds.length - 1)];
+      for (let tries = 0; tries < 6 && usedEnv.has(env) && envIds.length > 1 && c >= h; tries++) env = envIds[ri(0, envIds.length - 1)]; // (different choices in a column)
+      usedEnv.add(env);
+      const danger = last || r === easyRow ? base : Math.min(maxD, base + (rand() < C.BRANCH_UP ? 1 : 0));
+      let kinds = e.kinds;
+      if (opts.gentle && slot <= 1 && r === easyRow && kinds.includes('open')) kinds = kinds.filter((k) => k !== 'open'); // (gentle: a small ship with no bomb bay always has a way round an outpost raid in the first columns)
+      let kind = kinds[ri(0, kinds.length - 1)];
+      for (let tries = 0; tries < 4 && usedKind.has(kind) && kinds.length > 1; tries++) kind = kinds[ri(0, kinds.length - 1)];
+      usedKind.add(kind);
+      const stop = {
+        id: c + '.' + r,
+        col: c,
+        row: r,
+        env,
+        play: V.ENVIRONMENTS[env] && V.ENVIRONMENTS[env].ready ? env : 'skyisles',
+        kind: last ? 'network' : kind,
+        danger,
+        reward: V.REWARD_BASE + danger * V.REWARD_PER_DANGER + ri(0, V.REWARD_RANDOM),
+        flagship: last,
+        harbour: second && c === 0,
+        next: [],
+        slot,
+        share: +share.toFixed(4),
+        base,
+        gates: e.gates.slice(),
+      };
+      if (e.nemesis && !last) stop.nemesis = true;
+      if (e.multi && !last) stop.multi = true;
+      col.push(stop);
+    }
+    columns.push(col);
+  }
+  curriculumRings(columns, seed, table);
+  curriculumLairs(columns, seed, n, h, table);
+  curriculumTags(columns, h);
+  connectColumns(columns, rand, n);
+  return { seed, columns, mode: opts.mode, voyageNo: opts.voyageNo || 1, curriculum: true };
+}
+
+// Lairs under the curriculum: only in a slot with lair: true, at LAIR_FROM of the route or later, as many as markLairs would (config.CREATURES.LAIR.COUNT), never two columns in a row, never the Flagship.
+// Only a stop already in its creature's sky can hold one (Kraken in the sea, Drake in the Ember Forge, Thunderbird in the storm), never a ring stop, and a column always keeps a branch at or under its base skulls
+// (the lair is never its only easy way). Like markLairs this has a random stream of its own and changes nothing but the lair stop, so a route without lairs is the same route (tools/creature-check.mjs holds it to that).
+const lairHomes = (col) => col.filter((s) => config.CREATURES.LAIR.BY_ENV[s.env] && !s.ring && col.some((o) => o !== s && o.danger <= o.base));
+function curriculumLairs(columns, seed, n, h, table) {
+  const LR = config.CREATURES.LAIR;
+  const rand = mulberry((seed ^ 0x6c616972) >>> 0);
+  const count = n - h >= LR.LONG_STOPS ? LR.COUNT.long : LR.COUNT.short;
+  const cols = [];
+  for (let c = h; c <= n - 2; c++) {
+    const s = columns[c][0];
+    if (table[s.slot].lair && s.share >= CU().LAIR_FROM && lairHomes(columns[c]).length) cols.push(c);
+  }
+  for (let i = cols.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [cols[i], cols[j]] = [cols[j], cols[i]]; } // (shuffled)
+  const chosen = [];
+  for (const c of cols) {
+    if (chosen.length >= count) break;
+    if (chosen.every((x) => Math.abs(x - c) > 1)) chosen.push(c);
+  }
+  for (const c of chosen) {
+    const homes = lairHomes(columns[c]);
+    const s = homes[Math.floor(rand() * homes.length)];
+    s.lair = true;
+    s.creature = LR.BY_ENV[s.env];
+    s.kind = 'lair';
+    s.danger += LR.DANGER;
+    s.reward = Math.round(s.reward * LR.REWARD_MUL);
+    delete s.nemesis;
+    delete s.multi;
+  }
+}
+
+// The ring flags (LOOP.md 3D add-on): a slot with ring: 'tower' / 'fortress' flags one stop of its column (a lair never takes it), 'citadel' the Flagship. Only a flag for now: the ring map is package R0, so
+// the stop keeps its normal map (a raid: kind 'open') until it exists. Marked before the lairs, so a lair-free route has the same ring.
+function curriculumRings(columns, seed, table) {
+  const rand = mulberry((seed ^ 0x72696e67) >>> 0);
+  for (const col of columns) {
+    const e = table[col[0].slot];
+    if (!e.ring || col[0].harbour) continue;
+    const s = col[Math.floor(rand() * col.length)];
+    s.ring = e.ring;
+    if (!s.flagship) s.kind = 'open';
+  }
+}
+
+// The route map's tiny tag per stop: a set piece first allowed in its column ("NEW: GUNSHIPS"), else a sky the route has not shown yet ("NEW: DARK"). Lairs and salvage runs have their own labels.
+function curriculumTags(columns, h) {
+  const C = CU();
+  const seenEnv = new Set(['skyisles']);
+  let prev = null;
+  for (let c = h; c < columns.length; c++) {
+    const col = columns[c];
+    const newGate = prev && ['gunship', 'strafers', 'bombers'].find((g) => col[0].gates.includes(g) && !prev.includes(g));
+    for (const s of col) {
+      if (s.flagship || s.lair) continue;
+      const tag = newGate ? C.GATE_TAGS[newGate] : seenEnv.has(s.env) ? '' : C.ENV_TAGS[s.env] || '';
+      if (tag) s.tag = tag;
+    }
+    for (const s of col) seenEnv.add(s.env);
+    prev = col[0].gates;
+  }
 }
 
 // GIANT CREATURE LAIRS (config.CREATURES.LAIR, BOSSES.md 3.1 "Voyage"): 1 middle stop (2 when the voyage has config.CREATURES.LAIR.LONG_STOPS columns or more) holds a Kraken. ONLY a Sunken Sea stop can (the

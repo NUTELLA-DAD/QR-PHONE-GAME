@@ -23,6 +23,7 @@ installShims();
 const clock = seedRandom(seed);
 const load = (p) => import(pathToFileURL(path.join(publicDir, p)).href);
 const { config } = await load('config.js');
+config.VOYAGE.CURRICULUM.ENABLED = false; // (G0: the teaching curriculum's first stop is always a cave run, where the second ship cannot start in open air; this gate is about two ships, so it keeps the old random route it was written against)
 const { createSimulation } = await load('modules/host/simulation.js');
 const { BUILDS } = await load('modules/host/shipBuild.js');
 const S = await load('modules/host/ships.js');

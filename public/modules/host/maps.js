@@ -15,8 +15,18 @@ export function shipBox(layout) {
   return { left: F.x0 - R.x, right: F.x1 - R.x, up: F.y0 - R.y, down: F.y1 - R.y };
 }
 
+// A SALVAGE RUN (voyage.js, simulation.js markSalvage; config.VOYAGE.CURRICULUM.SALVAGE): the catch-up stop of a crew that is behind. For now it is flown on the map kind SALVAGE.MAP (a pass: no outposts, a beacon
+// at the end, so even a ship with no bomb bay can finish it) a level lower, and the map is flagged map.salvage; package G6 gives it a real objective.
+export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = null) {
+  if (kind !== 'salvage') return makeMapOf(kind, level, rand, lengthMul, layout, creature);
+  const S = config.VOYAGE.CURRICULUM.SALVAGE;
+  const map = makeMapOf(S.MAP, Math.max(1, level - S.LEVEL_DROP), rand, lengthMul, layout, creature);
+  map.salvage = true;
+  return map;
+}
+
 // Build a map, checking the ship really can get from the start to the beacon (try again if not).
-export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = null) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES; creature: which lair a 'lair' map is, 'kraken' or 'drake')
+function makeMapOf(kind, level, rand, lengthMul = 1, layout, creature = null) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES; creature: which lair a 'lair' map is, 'kraken' or 'drake')
   let map = null;
   for (let tries = 0; tries < 40; tries++) {
     // (Late-voyage open maps are so crowded with peaks and islands that no layout may pass the checks below; rather than

@@ -149,6 +149,18 @@ WEEK     the Book remembers the ship, titles and the Nemesis; unlocks; a harder 
 | G7 | Bosun bot, `--no-build`, one combined re-tune and re-snapshot with STRUCTURE WP6 | M |
 | G8 | Campaign across evenings (veteran start, unlocks) | S/M |
 
+**G0 status: DONE (2026-10-11, branch worktree-agent-a9ecba2a5b5b13d24).**
+- **What exists:** `config.VOYAGE.CURRICULUM` (tier A/B skies, a table per mode, the power curve, the salvage run, tags) and a `generateCurriculum` in `voyage.js`; `ENABLED: false` is byte-identical to the old routes.
+- **Director gates and catch-up:** the pacing director takes its set pieces from the stop's `gates` (no gunship, bombers or strafers in column 1); `startRoute` offers a SALVAGE RUN when `run.power` is under the curve.
+- **Route map:** shows "NEW: ..." tags and SALVAGE.
+- **Gate and tools:** `buildsim --check-curriculum` (`tools/curriculum-check.mjs`); `voyagesim` prints the power-vs-skulls curve and lairs/salvage offered and taken.
+- **For later packages:**
+  - The salvage run is flown on a pass map for now (an outpost raid needs a bomb bay, which the Sparrow lacks); G6 gives it a real objective.
+  - `ring` and `multi` are flags only (R0, G6).
+  - Drake lairs now only appear in QUICK (Ember Forge is tier A, lairs start at 60% of the route).
+  - Today's Sparrow is under the power curve at every column, so it is offered a salvage run almost every time.
+  - `botsim` forces the curriculum off (its baselines are single missions).
+
 **Order:**
 1. G0, L0 and WP0 (all small, in parallel).
 2. WP1, G1 and L1. Merge WP1 first. **Playtest with real people here.**

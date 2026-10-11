@@ -54,6 +54,16 @@ if (args.runs > 1 && !args.child) {
   console.log(`median stops ${med}, mean ${(ds.reduce((a, b) => a + b, 0) / (ds.length || 1)).toFixed(1)}, victories ${ok.filter((r) => r.victory).length}/${ok.length}, timeouts ${ok.filter((r) => r.timeout).length}${args.topup ? `, runs with stalls ${ok.filter((r) => r.stalls).length}` : ''}, errors ${ok.reduce((a, r) => a + (r.errors || 0), 0)}`);
   { const m = ok.map((r) => r.mates || {}); const jobs = {}; for (const x of m) for (const [k, v] of Object.entries(x.jobs || {})) jobs[k] = (jobs[k] || 0) + v; const tot = Object.values(jobs).reduce((a, b) => a + b, 0) || 1; console.log(`ship's mates: max aboard ${Math.max(0, ...m.map((x) => x.max || 0))}, station snapshots ${m.reduce((a, x) => a + (x.locks || 0), 0)}, in awards ${m.filter((x) => x.inAwards).length} runs; mate time: ${Object.entries(jobs).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + Math.round((100 * v) / tot) + '%').join(', ') || 'n/a'}`); }
   { const L = ok.map((r) => r.lairs || { planned: 0, met: 0, won: 0, how: {} }), how = {}; for (const l of L) for (const [k, v] of Object.entries(l.how || {})) how[k] = (how[k] || 0) + v; console.log(`creature lairs (Kraken, Drake and Thunderbird): ${L.reduce((a, l) => a + l.planned, 0)} on the routes of ${ok.length} voyages, ${L.reduce((a, l) => a + l.met, 0)} met, ${L.reduce((a, l) => a + l.won, 0)} won (${Object.entries(how).map(([k, v]) => k + ' ' + v).join(', ') || 'none'})`); }
+  { // the teaching curriculum (G0): the ship's power against the expected curve and the skulls, per column reached; and the lairs and salvage runs offered and taken
+    const by = {};
+    for (const r of ok) for (const c of r.curve || []) { const b = (by[c.col] ??= { n: 0, pw: [], exp: [], dg: 0, base: 0, kinds: {}, salvage: 0, lair: 0 }); b.n++; if (c.power != null) b.pw.push(c.power); if (c.exp != null) b.exp.push(c.exp); b.dg += c.danger; b.base += c.base || 0; b.kinds[c.kind] = (b.kinds[c.kind] || 0) + 1; if (c.salvage) b.salvage++; if (c.lair) b.lair++; }
+    const avg = (a) => (a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(2) : ' n/a');
+    console.log('curriculum, per column reached: col  reached  power  expected  skulls  (base)  kinds');
+    for (const c of Object.keys(by).map(Number).sort((a, b) => a - b)) { const b = by[c]; console.log(`  ${String(c + 1).padStart(2)}  ${String(b.n).padStart(3)}/${ok.length}  power ${avg(b.pw)}  expected ${avg(b.exp)}  skulls ${(b.dg / b.n).toFixed(2)}  (base ${(b.base / b.n).toFixed(2)})  ${Object.entries(b.kinds).map(([k, v]) => k + ' ' + v).join(', ')}${b.salvage ? ', SALVAGE ' + b.salvage : ''}${b.lair ? ', LAIR ' + b.lair : ''}`); }
+    const O = ok.map((r) => r.offers || { lair: [], salvage: [], taken: [] });
+    const sum = (f) => O.reduce((a, o) => a + f(o), 0);
+    console.log(`offered and taken: lairs offered ${sum((o) => o.lair.length)}, taken ${sum((o) => o.taken.filter((id) => o.lair.includes(id)).length)}; salvage runs offered ${sum((o) => o.salvage.length)}, taken ${sum((o) => o.taken.filter((id) => o.salvage.includes(id)).length)} (over ${ok.length} voyages)`);
+  }
   { const n = ok.reduce((a, r) => a + (r.breaks || 0), 0); if (n) console.log(`parts broke off ${n} time(s) in ${ok.filter((r) => r.breaks).length} of ${ok.length} voyages: ${[...new Set(ok.flatMap((r) => r.breakCauses || []))].join(', ')}`); }
   const causes = {};
   for (const r of ok) for (const k of r.flags || []) causes[k] = (causes[k] || 0) + 1;
@@ -80,12 +90,14 @@ const load = (p) => import(pathToFileURL(path.join(root, p)).href);
 const { config } = await load('config.js');
 if (process.env.NO_BREAKOFF) config.BREAKOFF.ENABLED = false; // (compare voyages with parts never breaking off: S.5i)
 if (!process.env.WITH_SPYGLASS) config.SPYGLASS.BOTS = false; // (bot lookouts pan and spot the spyglass in the game; the voyage baselines keep their numbers)
+if (process.env.NO_CURRICULUM) config.VOYAGE.CURRICULUM.ENABLED = false; // (compare voyages with the old random skies and kinds instead of the teaching curriculum: G0)
 if (process.env.NO_LAIRS) config.CREATURES.LAIR.COUNT = { short: 0, long: 0 }; // (compare voyages with no Kraken lair on the route: C.3)
 // --set "A.B.C=value;...": tweak config numbers for tuning runs
 for (const kv of args.set.split(';').filter(Boolean)) { const [k, v] = kv.split('='); const ks = k.split('.'); let o = config; for (const x of ks.slice(0, -1)) o = o[x] ??= {}; o[ks[ks.length - 1]] = Number(v); }
 const { SHIP_LAYOUT, kindOf } = await load('shipLayout.js');
 const { damageMul } = await load('modules/host/crewscale.js');
 const { createSimulation } = await load('modules/host/simulation.js');
+const { expectedPower: exp } = await load('modules/host/voyage.js');
 const maps = await load("modules/host/maps.js");
 const course = await load("modules/host/course.js");
 const sim = createSimulation();
@@ -137,6 +149,8 @@ const mateStat = { snaps: 0, jobs: {}, locks: 0, max: 0 }; // ship's mates seen 
 const mateInfo = () => ({ max: mateStat.max, locks: mateStat.locks, jobs: mateStat.jobs, inAwards: Object.values(state.run.crew).some((c) => c.name === "Mate") || ((state.runEnd && state.runEnd.rows) || []).some((r) => r.name === "Mate") });
 const dmg = { fire: 0, breach: 0, direct: 0 }; // hull points lost to fires, hull holes and everything else
 let result = null;
+const curve = []; // (G0: per stop reached, the ship's power against the curriculum's expected power and the stop's skulls)
+let curveStop = null;
 const lairs = { seen: new Set(), won: new Set(), met: 0, how: {} };
 for (let step = 1; step <= maxSteps && !result; step++) {
   try {
@@ -152,6 +166,11 @@ for (let step = 1; step <= maxSteps && !result; step++) {
   } catch (err) { errorCount++; if (errorCount < 4) console.error('ERR', err && err.stack); }
   if (state.phase === 'lobby' && !state.runEnd && !state.wreck) sim.castOff();
   const stopId = state.run && state.run.stopId;
+  if (stopId && stopId !== curveStop) {
+    curveStop = stopId;
+    const st = state.run.voyage.columns.flat().find((x) => x.id === stopId);
+    if (st && !st.harbour && !curve.some((c) => c.id === stopId)) curve.push({ id: stopId, col: st.col, power: state.run.power, exp: st.share != null ? exp(st) : null, danger: st.danger, base: st.base, kind: st.kind, env: st.env, salvage: !!st.salvage, lair: !!st.lair });
+  }
   const col = stopId ? Number(stopId.split('.')[0]) : 0;
   if (col !== lastCol && (args.verbose || args.trace)) console.error(`=== stop ${stopId} (${state.env && state.env.id}, ${state.course && state.course.kind}) at ${(step / 3600).toFixed(1)} min, hull ${Math.round(state.ship.hull)} salvage ${state.run.salvage} bought [${state.run.bought.join(",")}]`);
   if (col !== lastCol) { lastCol = col; lastProgress = step; stalled = false; }
@@ -188,6 +207,8 @@ if (!result) {
   const stopId = state.run.stopId;
   result = { earned: state.run.earned, parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
 }
+result.curve = curve;
+result.offers = state.run.offers || { lair: [], salvage: [], taken: [] }; // (G0: the lairs and salvage runs the route votes offered, and the stops the crew took)
 result.lairs = { planned: state.run.voyage.columns.flat().filter((s) => s.lair).length, met: lairs.met, won: lairs.won.size, how: lairs.how }; // (C.3)
 result.breaks = state.breakStats ? state.breakStats.events : 0; // (S.5i: how often parts broke off in this voyage, and what did it)
 result.breakCauses = state.breakStats && state.breakStats.causes ? state.breakStats.causes.map((c) => c.split('@')[0]) : [];

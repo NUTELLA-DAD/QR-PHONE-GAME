@@ -899,6 +899,51 @@ export const config = {
       HARBOUR_REPAIR: 45, // hull repaired free at the harbour between the voyages (the sky-dock shop opens too)
       SALVAGE_BONUS: 30, // free salvage handed over at the harbour
     },
+    // THE TEACHING CURRICULUM (G0, LOOP.md "The ramp"; voyage.js generateCurriculum): instead of dice, each column of the route teaches one new thing and is harder than the last.
+    // A table row is a SLOT: { env: skies or tiers to choose from, kinds: map kinds offered, gates: the pacing director's set pieces allowed (swarm imps bombers strafers gunship), danger: the column's base skulls,
+    // lair: a creature lair may stand here, ring: null | 'tower' | 'fortress' | 'citadel' (a flag for the ring map of package R0: until it exists the stop keeps its normal 'open' raid map), nemesis: the Nemesis may appear,
+    // multi: a multi-part objective (a flag for G6) }. A column of a route picks its slot by its SHARE of the route (0 = first stop, 1 = the Flagship), so 4, 6, 7 and 8 stops all take the same shape.
+    CURRICULUM: {
+      ENABLED: true, // false = the old dice: every middle stop's sky, kind and skulls are random (generateVoyage is then exactly what it was)
+      TIERS: { A: ['frost', 'ember'], B: ['storm', 'sea', 'fungal'] }, // the skies a slot can name by tier: A = ice and heat (the first new skies), B = dark, water and spores (the hard ones)
+      BRANCH_UP: 0.55, // each branch of a column but its easy one is a skull harder than the column's base with this chance (the easy one is always at the base)
+      LAIR_FROM: 0.6, // a creature lair only stands at this share of the route or later (and only in a slot with lair: true); the number of lairs is config.CREATURES.LAIR.COUNT as before
+      SECOND_START: 2, // the second voyage of an Evening Campaign starts at this slot (3rd column) of the table, with its difficulty
+      // The ship power a crew is expected to have on arriving at a stop, by the stop's share of the route (the curve is stretched over the route: 8 values, first = the first stop, last = the Flagship).
+      // A crew below it on the way to the next column is offered a SALVAGE RUN branch there (simulation.js startRoute): the lowest-danger stop of that column, made easier.
+      POWER_CURVE: [0.45, 0.6, 0.7, 0.78, 0.86, 0.92, 0.97, 1.0],
+      SALVAGE: {
+        SLACK: 0, // a crew is offered one when its power is more than this under the curve (0 = anywhere under it)
+        MAP: 'route', // the map a salvage run is flown on, for now (a winding pass to a beacon: no outposts, so a ship with no bomb bay can finish it; G6 gives it a real objective)
+        LEVEL_DROP: 1, // ...flown at this many levels lower (a smaller, calmer map)
+        DANGER_DROP: 1, // the stop is this many skulls easier (never under 1)
+        GATES: ['swarm'], // set pieces allowed there: bats only
+        RATE_MUL: 0.7, // the pacing director spawns at this share of its usual speed
+        REWARD_MUL: 1, // reward salvage x this
+        TAG: 'SALVAGE', ICON: '🎈', // the route map's label and gentle icon (a balloon)
+      },
+      GATE_TAGS: { gunship: 'NEW: GUNSHIPS', strafers: 'NEW: DOGFIGHTERS', bombers: 'NEW: BOMBERS' }, // the route map's tiny tag on a column where this set piece is first allowed
+      ENV_TAGS: { frost: 'NEW: ICE', ember: 'NEW: HEAT', storm: 'NEW: STORMS', sea: 'NEW: WATER', fungal: 'NEW: DARK' }, // ...and on a stop whose sky the route has not shown before
+      TABLES: {
+        quick: [ // 4 stops: teach, a gunship, a new sky with a tower or a lair, the Flagship
+          { env: ['skyisles'], kinds: ['network'], gates: ['swarm', 'imps'], danger: 1 },
+          { env: ['skyisles'], kinds: ['open', 'route'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2 },
+          { env: ['A', 'B'], kinds: ['open'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, lair: true, ring: 'tower' },
+          { env: ['aether'], kinds: ['network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, ring: 'citadel' },
+        ],
+        voyage: [ // 8 stops (a 6 or 7 stop route takes the slots its columns' shares round to; the Evening Campaign uses this table too)
+          { env: ['skyisles'], kinds: ['network'], gates: ['swarm', 'imps'], danger: 1 }, // 1: a cave run, bats and imps only
+          { env: ['skyisles'], kinds: ['open', 'route'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 1 }, // 2: a raid or a pass; planes and the first gunship
+          { env: ['A'], kinds: ['open'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2, ring: 'tower' }, // 3: a Frost or Ember raid, the tower
+          { env: ['A', 'sea'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2 }, // 4: the heist / salvage / defend slot (G6; until then any kind)
+          { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, nemesis: true }, // 5: the dark skies; the Nemesis may appear
+          { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, lair: true, ring: 'fortress' }, // 6: a lair or the fortress
+          { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, lair: true, multi: true }, // 7: the multi-part slot (a lair may stand here too, for a short route that skipped slot 6)
+          { env: ['aether'], kinds: ['network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, ring: 'citadel' }, // 8: the Flagship
+        ],
+        campaign: 'voyage', // (a name: use that table)
+      },
+    },
     CHOICES_MIN: 2, // stops to choose between in each middle column
     CHOICES_MAX: 3,
     ROUTE_TIME: 20, // seconds to vote on the next stop
@@ -920,7 +965,7 @@ export const config = {
       fungal: { name: 'Fungal Depths', icon: '🍄', color: '#8a6fb0', ready: true },
       aether: { name: 'The Aether', icon: '🌌', color: '#4b3f7a', ready: true },
     },
-    KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid', lair: 'Kraken lair' }, // (lair: a Sunken Sea stop with a giant creature, config.CREATURES.LAIR)
+    KIND_NAMES: { network: 'Cave run', route: 'Narrow pass', open: 'Outpost raid', lair: 'Kraken lair', salvage: 'Salvage run' }, // (lair: a Sunken Sea stop with a giant creature, config.CREATURES.LAIR)
   },
   // Fires.
   // S.5f: fire cares where things are (modules/host/fireModel.js reads this; fire.js runs it). Every spot of the ship has a flammability: a covered wooden deck is 1 (medium),
