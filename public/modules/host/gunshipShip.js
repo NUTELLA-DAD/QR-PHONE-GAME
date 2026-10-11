@@ -846,13 +846,14 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
     stomp(p);
   };
   // A crew member of hers is hurt (a sword, a shove, a stomp); at zero he is dead.
-  const hurt = (c, dmg) => {
+  const hurt = (c, dmg, by) => {
     const g = state.gunship;
     if (!g || !g.ship.crewReg[c.id]) return;
     const h = g.ship;
     c.eHp -= dmg;
     h.sim.shipPuff(c.x, c.y - 50, '#ffffff', 6);
     if (c.eHp > 0) return;
+    if (state.moment && by && by.name) state.moment('boarding-kill', { who: [by], where: null, data: { name: g.bp.name } }); // (the Ship's Book: one of her crew went down to a boarder)
     delete h.crewReg[c.id];
     c.lock = null;
     c.fall = true;
@@ -878,6 +879,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
     const g = state.gunship;
     if (!g || g.captured || g.phase === 'sinking' || g.phase === 'leaving') return;
     g.captured = true; // (she goes down at the end of the step: this is called from inside her crew's loop, and everyone aboard is carried home)
+    g.capturedBy = player && player.id;
     S.captured++;
     warn('THE GUNSHIP SURRENDERS! HER HELM IS YOURS - SUPPLIES ABOARD', 4);
   };
@@ -887,6 +889,10 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
     const g = state.gunship;
     if (!g || g.phase === 'sinking') return;
     const h = g.ship;
+    if (state.moment) { // (the Ship's Book: who finished her - the charge's planter, the one who took her helm, or the last shell's owner)
+      const how = quiet ? 'captured' : byCrew ? 'charge' : 'shot', by = quiet ? g.capturedBy : byCrew ? g.charge && g.charge.by : g.shotBy;
+      state.moment('gunship-' + how, { who: by ? [by] : [], where: null, data: { name: g.bp.name } });
+    }
     g.phase = 'sinking';
     g.sink = 0;
     g.intent = 'sinking';
@@ -979,7 +985,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
       // The size of the blow is a small one (holes, fires and gas leaks come in proportion); the hull it costs is what a shell cost the old gunship: shellDmg of her max, as a share of her hull.
       const dmg = shellDmg(sh, g), power = (GS().HIT_POWER * dmg) / config.GUNS.DAMAGE;
       h.sim.impact(sx, sy, power, (GS().SHELL_HULL * ((100 * dmg) / g.max)) / (config.SHIP.HIT_DAMAGE * power));
-      if (before > 0 && h.state.hull <= 0 && !g.credited) { g.credited = true; credit?.(sh); }
+      if (before > 0 && h.state.hull <= 0 && !g.credited) { g.credited = true; g.shotBy = sh.owner; credit?.(sh); }
     }
   };
 
@@ -1054,6 +1060,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
     // Badly hurt with her one retreat used up: she runs for it.
     if (g.phase === 'hunt' && !contact && hullF(g) < g.cap.fleeAt && g.retreats >= g.cap.retreats) {
       S.flees++;
+      if (state.moment) state.moment('gunship-fled', { where: null, data: { name: g.bp.name } }); // (the Ship's Book: her name goes in the Log)
       leave('THE GUNSHIP IS BADLY HIT AND FLEES!', 2.5);
       return;
     }
