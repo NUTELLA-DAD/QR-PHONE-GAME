@@ -569,7 +569,7 @@ export function createSimulation() {
     danger: stop.danger,
     stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined) }, // (lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
     lengthMul: modeInfo(state.run.mode).lengthMul,
-    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
+    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
   });
   const firstMission = () => missionOpts(curStop());
 
@@ -624,7 +624,7 @@ export function createSimulation() {
     if (cr && cr.dying && !cr.paid) { // a giant creature that sank: the boss reward, times config.CREATURES.REWARD_MUL
       cr.paid = true;
       addSalvage(SV.BOSS * config.CREATURES.REWARD_MUL, 'boss', cr.name + ' slain!');
-      const RW = cr.kind === 'drake' ? config.CREATURES.DRAKE.REWARD : config.CREATURES.REWARD; // (the spoils: the hull and every gasbag patched, and the trophy part card at the next dock)
+      const RW = cr.kind === 'thunderbird' ? config.CREATURES.THUNDERBIRD.REWARD : cr.kind === 'drake' ? config.CREATURES.DRAKE.REWARD : config.CREATURES.REWARD; // (the spoils: the hull and every gasbag patched, and the trophy part card at the next dock)
       state.ship.hull = Math.min(100, state.ship.hull + RW.HULL);
       for (const b of state.bags) b.gas = Math.min(100, b.gas + RW.GAS);
       if (state.run) state.run.trophy = RW.TROPHY;
@@ -748,7 +748,7 @@ export function createSimulation() {
     if (!offer) return null;
     const e = offer.entry;
     state.yard.sum = offer.base.sum;
-    return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: 0, trophy: true, badge: 'TROPHY: from the ' + (run.trophy === config.CREATURES.DRAKE.REWARD.TROPHY ? 'Drake' : 'Kraken'),
+    return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: 0, trophy: true, badge: 'TROPHY: from the ' + (run.trophy === config.CREATURES.THUNDERBIRD.REWARD.TROPHY ? 'Thunderbird' : run.trophy === config.CREATURES.DRAKE.REWARD.TROPHY ? 'Drake' : 'Kraken'),
       choices: offer.choices, now: offer.base.sum, baseWarns: offer.base.res.warns, spots: offer.choices.length };
   };
   const persistBuild = () => { // the run's ship, kept in the voyage save (versioned, tolerant: voyage.js)

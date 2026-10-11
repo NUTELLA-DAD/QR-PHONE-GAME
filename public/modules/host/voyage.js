@@ -98,7 +98,7 @@ function markLairs(columns, seed, n, h) {
     const seas = columns[c].filter((s) => LR.BY_ENV[s.env]);
     const s = seas[Math.floor(rand() * seas.length)];
     s.lair = true;
-    s.creature = LR.BY_ENV[s.env]; // 'kraken' | 'drake'
+    s.creature = LR.BY_ENV[s.env]; // 'kraken' | 'drake' | 'thunderbird'
     s.kind = 'lair';
     s.danger += LR.DANGER;
     s.reward = Math.round(s.reward * LR.REWARD_MUL);
@@ -110,8 +110,8 @@ export const stopById = (voyage, id) => {
   return null;
 };
 
-// The look and words of a lair by its creature ('kraken' | 'drake'): { ICON, LABEL, NAME, KIND }.
-export const lairOf = (creature) => (creature === 'drake' ? config.CREATURES.DRAKE.LAIR : config.CREATURES.LAIR);
+// The look and words of a lair by its creature ('kraken' | 'drake' | 'thunderbird'): { ICON, LABEL, NAME, KIND }.
+export const lairOf = (creature) => (creature === 'thunderbird' ? config.CREATURES.THUNDERBIRD.LAIR : creature === 'drake' ? config.CREATURES.DRAKE.LAIR : config.CREATURES.LAIR);
 export const stopName = (s) => (s.flagship ? 'The Flagship' : s.harbour ? 'The Harbour' : s.lair ? lairOf(s.creature).NAME : envInfo(s.env).name);
 
 // Stop numbers run on across the voyages of a campaign: run.base = stops finished before this voyage's harbour.

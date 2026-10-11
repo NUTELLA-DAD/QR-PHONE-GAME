@@ -7,6 +7,7 @@
 //   3. the Low tier (?tier=low)
 //   4. THE CINDER DRAKE (host.html?creature=drake&lair=ember; skip with --no-drake): it arrives, breathes (the throat glow rises in steps, the jaw opens, the flame cone is drawn), swoops (the strike ring), perches
 //      (talons on the bag, the timer ring), a lava spout erupts, a wing tears off (a Rapier body with its skin), it crashes and crawls, a harpoon line is drawn, it dies in the lava; at most 12 meshes / 60k triangles
+//   4b. THE THUNDERBIRD (host.html?lair=storm; skip with --no-bird; C.6b, 3D.md section 26): the first fallback (tubes and a plain torso): it arrives within the budget, swallows a bolt (the gizzard shows), a wing is plucked (a Rapier body), it dies
 //   5. (--long) host.html?creature=kraken for 3 minutes with 8 bot crew, in real time
 // Screenshots go to a temp folder (printed), not into the repo.
 import { spawn, spawnSync } from 'node:child_process';
@@ -172,6 +173,32 @@ try {
     if (!rl.data || !rl.data.low || !rl.data.low.ext || rl.data.low.meas.tris > 45000) fail('the Low tier Drake is missing or too big');
     if (!rl.data || !rl.data.lowBreath || !rl.data.lowBreath.flame || !rl.data.lowBreath.vol || rl.data.lowBreath.light !== 0) fail('the Low tier breath: the cone is drawn and the warm light stays off ' + JSON.stringify(rl.data && rl.data.lowBreath));
     if (rl.data && rl.data.errors && rl.data.errors.length) fail('game errors in the Drake Low tier run');
+  }
+  if (!argv.includes('--no-bird')) {
+    // THE THUNDERBIRD (3D.md section 26, C.6b): the first fallback (tapered tubes, a plain torso, the gizzard as the generic heart window): it arrives, swallows a bolt (the gizzard shows), a wing is plucked (a Rapier body),
+    // it dies. The proper model is a later task; this only proves the generic view draws it, cheaply and without errors.
+    console.log('4b. the Thunderbird (host.html?lair=storm), the first fallback: arrive, swallow (the gizzard shows), pluck a wing, death');
+    const bsteps = [
+      setup,
+      [`(()=>{ window.__step(500); ${view}.S.focus={dx:0,dy:-300}; ${view}.S.zoom=0.4; return 1 })()`, 700, 'arrive'],
+      measure('bird'),
+      [`(async()=>{ ${sl} const D=(await __imp('/config.js')).config.CREATURES.THUNDERBIRD; for(const ph of [1,2,3]) D.ATTACK.WEIGHTS[ph]={swallow:1}; const k=${view}.kraken, r=k.rig, cr=__cr(); cr.phase=2; cr.bird.act=null; cr.bird.nextT=0; cr.ai.breather=0; __until(()=>cr.bird.glow>0,6000); window.__step(30); await sl(600); const h=r.head.dyn.heart; window.__wp8.swallow={ kind:r&&r.kind, glow:cr.bird.glow, shown:!!(h&&h.key&&h.key!=='0.000|0.000'), limbs:r.limbs.length }; return JSON.stringify(window.__wp8.swallow) })()`, 300, 'swallow'],
+      [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, cr=st.creature; const w=cr.parts.find(p=>p.id==='wingN'); cs.hurtCreature(st,{part:w,seg:2},w.hp+1,{who:null,src:'shell'}); window.__step(14); await sl(1200); const D=${view}.destruction; window.__wp8.pluck={ stump:w.segs.length, bodies:D.chunks.length, viewChunks:${view}.kraken.rig.chunks.size }; return JSON.stringify(window.__wp8.pluck) })()`, 300, 'pluck'],
+      [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, cr=st.creature; cr.hp=1; const m=cr.parts.find(p=>p.kind==='mantle'); const rr=cs.hurtCreature(st,{part:m,seg:0},50,{who:null,src:'shell'}); window.__step(30); await sl(400); window.__wp8.death={ killed:!!(rr&&rr.killed), mode:cr.mode }; window.__step(700); await sl(900); window.__wp8.gone=!window.game.state.creature; window.__wp8.hiddenAfter=!${view}.kraken.root.visible; window.__wp8.errors=window.gameErrors||[]; return JSON.stringify(window.__wp8.death) })()`, 300, 'death'],
+    ];
+    const rb = run('bird', 'lair=storm', bsteps);
+    const bd = rb.data || {};
+    console.log('  errors ' + rb.errs + ' evalErrors ' + rb.evalErrors + '  ' + JSON.stringify(bd).slice(0, 700));
+    if (rb.errs !== 0 || rb.evalErrors) fail('console / eval errors in the Thunderbird run');
+    if (!bd.bird) fail('no measurement of the Thunderbird');
+    else {
+      if (bd.bird.meshes > 12) fail('the Thunderbird draws ' + bd.bird.meshes + ' meshes (budget 12)');
+      if (bd.bird.tris > 60000) fail('the Thunderbird is ' + bd.bird.tris + ' triangles with ink (budget 60000)');
+    }
+    if (!bd.swallow || bd.swallow.kind !== 'thunderbird' || !(bd.swallow.glow > 0) || !bd.swallow.shown || bd.swallow.limbs < 6) fail('the swallow: the view did not build the Thunderbird / show the glowing gizzard ' + JSON.stringify(bd.swallow));
+    if (!bd.pluck || bd.pluck.stump < 1 || bd.pluck.bodies < 1 || bd.pluck.viewChunks < 1) fail('the plucked wing did not become a Rapier body ' + JSON.stringify(bd.pluck));
+    if (!bd.death || !bd.death.killed || !bd.gone || !bd.hiddenAfter) fail('the death: it dies, goes, and the view hides');
+    if (bd.errors && bd.errors.length) fail('game errors in the Thunderbird run: ' + JSON.stringify(bd.errors).slice(0, 200));
   }
   if (long) {
     console.log('5. host.html?creature=kraken, 8 bots, 3 minutes in real time');

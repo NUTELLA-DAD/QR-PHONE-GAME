@@ -24,6 +24,7 @@ import { breachClimbAlt } from './creatureBreach.js';
 import { bombInMouth, mouthWindowSoon, forcedSkip, mouthKey } from './creatureFight.js';
 import { boardAt, mantleOf } from './creatureBoard.js';
 import { drakeBoardable } from './creatureDrake.js';
+import { birdBoardable, birdOnBag, birdDiving, birdSwallowing, gizzardGlowing } from './creatureBird.js'; // (C.6b: the Thunderbird's rod calls, the coil's gizzard shot, the helm's shake-off)
 
 const B = config.BOTS;
 // Tables worked out per ship layout (rebuilt when a new ship build is applied to it): `tables(L).MAIN` ... Every function below gets its layout as
@@ -111,6 +112,8 @@ function firingSolution(state, gun) {
   return best ? best.angle : null;
 }
 
+// C.6b: is the Thunderbird out, in a way the coil is worth manning for? It calls lightning bolts the coil can drink, and its gizzard glows (the gate's dev flag FORCE_WIN keeps the coil for the 'gizzard' win).
+const birdCoil = (state) => { const cr = state.creature, f = config.CREATURES.FORCE_WIN; return !!cr && cr.kind === 'thunderbird' && !cr.dying && (!f || f === 'gizzard') && (cr.phase >= 2 || f === 'gizzard' || birdSwallowing(cr) || birdDiving(cr)); };
 // Helm: altitude that dodges the next mine skimming the top or bottom of the ship (or null).
 // Best direction for the Lightning Coil: the angle (within its arc) that lines up the most targets.
 function coilShot(state) {
@@ -131,6 +134,15 @@ function coilShot(state) {
   for (const a of angles) {
     const count = angles.filter((b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) < 0.09).length;
     if (count > best.count) best = { angle: a, count };
+  }
+  const cr = state.creature;
+  if (cr && cr.kind === 'thunderbird' && !cr.dying && (gizzardGlowing(cr) || birdSwallowing(cr))) { // C.6b: the Thunderbird's gizzard glows (or is about to): the coil's bolt goes there, ahead of everything (a hidden gizzard is not a target yet: its place is known)
+    const gz = cr.parts.find((q) => q.kind === 'heart' && !q.dead), s = gz && gz.segs[0];
+    if (s) {
+      const px = s.x + Math.cos(s.ang) * s.len * 0.5, py = s.y + Math.sin(s.ang) * s.len * 0.5;
+      const a = aimToShip(ship, Math.atan2(py - ey, px - ex));
+      if (Math.hypot(px - ex, py - ey) <= config.COIL.RANGE && Math.abs(Math.atan2(Math.sin(a - M.aim), Math.cos(a - M.aim))) <= M.arc) return { angle: a, count: 9, bird: true };
+    }
   }
   return best;
 }
@@ -559,7 +571,7 @@ function listJobs(state, bot) {
   for (const m of mods) if (canHammer && m.broken && critical(mods, m)) jobs.push({ kind: 'repair', obj: m, max: 1, cap: 3, urgent: true });
   // Storm Front: a bolt is charging - one crew member holds a lightning rod (grounds it, the coil may drink it).
   const sj = state.stormJob;
-  if (shipH.main && sj && sj.charge && !players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'rod' && !q.lock)) for (const r of sj.rods) jobs.push({ kind: 'rod', obj: r, max: 1 });
+  if (shipH.main && sj && (sj.charge || birdDiving(state.creature)) && !players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'rod' && !q.lock)) for (const r of sj.rods) jobs.push({ kind: 'rod', obj: r, max: 1 }); // (the Thunderbird's lightning dive: the rod is manned before the first bolt is called, C.6b)
   // Raiders: fight them, but never with more than about half the crew (the rest keep the ship going).
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2, cap: Math.max(2, Math.ceil(players.filter((q) => q.bot).length / 2)) });
   for (const q of players) if (foeOf(q, bot) && !q.fall && !(q.ko > 0)) jobs.push({ kind: 'fight', obj: q, max: 2, cap: Math.max(2, Math.ceil(players.filter((r) => r.bot).length / 2)) }); // (Versus: boarders from the other ship; the gunship's crew against ours)
@@ -618,7 +630,7 @@ function listJobs(state, bot) {
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
   const botPlanes = players.filter((q) => q.bot && isEscortStation(q.lock, L)).length; // the crew can only spare so many for the patrol planes
-  const reach = (n) => (isEscortStation(n, L) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : L.kindOf(n) === 'lookout' ? lookoutReach(state) : L.kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : L.kindOf(n) === 'coil' ? (coilShot(state).count >= 3 ? 0.7 : 4) : L.kindOf(n) === 'bombBay' ? ((groundTargets(state).length || bombRunOn(state) || beakBombing(state)) && state.bombBay.bombs > 0 ? 0.5 : 4) : L.kindOf(n) === 'swivel' ? (swivelOff(state, n) > 0.3 ? 0.5 : 4) : L.kindOf(n) === 'cannon' || L.kindOf(n) === 'cannonSeat' ? cannonReach(state, n) : isSearchlight(n, L) ? lightReach(state, n) : !tables(L).GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
+  const reach = (n) => (isEscortStation(n, L) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : L.kindOf(n) === 'lookout' ? lookoutReach(state) : L.kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : L.kindOf(n) === 'coil' ? (coilShot(state).count >= 3 || birdCoil(state) ? 0.7 : 4) : L.kindOf(n) === 'bombBay' ? ((groundTargets(state).length || bombRunOn(state) || beakBombing(state)) && state.bombBay.bombs > 0 ? 0.5 : 4) : L.kindOf(n) === 'swivel' ? (swivelOff(state, n) > 0.3 ? 0.5 : 4) : L.kindOf(n) === 'cannon' || L.kindOf(n) === 'cannonSeat' ? cannonReach(state, n) : isSearchlight(n, L) ? lightReach(state, n) : !tables(L).GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = tables(L).MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   jobs.push(...crossJobs(state, bot)); // (B.6: loads thrown onto the deck: shovel them off)
   const hatchWorks = hatchJobs(state, bot); // (cargo drop hatches: tip raiders out - before any fighting - shut one, drop a crate on a ship below)
@@ -660,7 +672,7 @@ function listJobs(state, bot) {
   for (const n of guns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   if (!bombRun && bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   // C.3: a Kraken about with its beak to feed: the bay is kept stocked with the bombs a win takes (the stock is loaded, the bombs are in the hold)
-  const feeding = !!state.creature && !state.creature.dying && (!config.CREATURES.FORCE_WIN || config.CREATURES.FORCE_WIN === mouthKey(state.creature));
+  const feeding = !!state.creature && !state.creature.dying && state.creature.kind !== 'thunderbird' && (!config.CREATURES.FORCE_WIN || config.CREATURES.FORCE_WIN === mouthKey(state.creature));
   if (feeding && bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs < config.CREATURES.MOUTH.FED + 1) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   jobs.push(...sailJobs(state, bot, false)); // (a sail to raise in a fair wind: after the chores, ahead of an idle gun post)
   jobs.push(...linkJobs(state, bot, false)); // (...and the quieter links: loaders for idle guns, the boiler surge)
@@ -812,6 +824,7 @@ function operate(p, state, dt) {
     if (lungeAlt !== null) target = lungeAlt;
     // C.6a: the Cinder Drake sits on her gasbag: the helm shakes it off with a hard climb, then back down to her course altitude, over and over (swords on the top deck do the same job; the dev flag for boarding leaves it sitting).
     if (state.creature && state.creature.kind === 'drake' && drakeBoardable(state.creature) && config.CREATURES.FORCE_WIN !== 'board' && lo <= hi) target = clamp(plan.target + (Math.floor(performance.now() / 1800) % 2 ? 450 : 0), lo, hi);
+    if (state.creature && state.creature.kind === 'thunderbird' && birdOnBag(state.creature) && config.CREATURES.FORCE_WIN !== 'board' && lo <= hi) target = clamp(plan.target + (Math.floor(performance.now() / 1800) % 2 ? 450 : 0), lo, hi); // C.6b: the same shake-off for the Thunderbird on her bag (not for one resting on a spire)
     // (Gentle enough not to overshoot now that she glides with momentum.)
     if (target !== null) p.jy = clamp((ship.alt - target) / 90 + (ship.vy || 0) / 260, -1, 1);
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
@@ -822,13 +835,14 @@ function operate(p, state, dt) {
   } else if (L.kindOf(p.lock) === 'coil') {
     // Aim at the thickest bunch of enemies and charge while lined up.
     const shot = coilShot(state);
-    p.gunIdle = shot.count >= 2 ? 0 : (p.gunIdle || 0) + dt;
+    p.gunIdle = shot.count >= 2 || birdCoil(state) ? 0 : (p.gunIdle || 0) + dt;
     if (shot.count) {
       p.jx = Math.cos(shot.angle);
       p.jy = Math.sin(shot.angle);
       const off = Math.abs(Math.atan2(Math.sin(shot.angle - state.coil.aim), Math.cos(shot.angle - state.coil.aim)));
       p.fire = off < 0.1 && state.coil.cd <= 0;
-    }
+      if (birdCoil(state) && !shot.bird) p.fire = false; // C.6b: against the Thunderbird the coil waits: for the glowing gizzard, or for a lightning bolt to drink (it fires itself the moment it drinks, at whatever it is aimed at)
+    } else if (birdCoil(state)) p.fire = false;
   } else if (L.kindOf(p.lock) === 'swivel') {
     // Turn the engine to where it is wanted (swivelWant) and stay until it is there and the wish has held a while.
     const want = swivelWant(state, p.lock), off = swivelOff(state, p.lock);
@@ -1107,6 +1121,7 @@ function work(p, state) {
     if (steer(p, s.d, s.x)) press(p);
   } else if (job.kind === 'station') {
     const s = stationNamed(L, o);
+    if (birdCoil(state) && L.kindOf(o) === 'coil') p.wantStation = o; // (C.6b: the classic coil has a sword rack and a pipe valve beside it, and Action there would take the sword or turn the valve: shipSim.js useFor lets this bot take the station)
     if (steer(p, s.d, s.x)) {
       // Fix it up on the way in if we happen to have a hammer.
       const m = (state.modules || []).find((q) => q.name === o);
@@ -1626,15 +1641,15 @@ const humanAutopilot = (p, state) => !!p.human && autopilotOn(state);
 function forceBoard(p, state) {
   const cr = state.creature;
   if (!cr) p.forceBoard = false;
-  if (cr && !p.on && p.forceBoard && cr.kind === 'drake' && !drakeBoardable(cr)) p.forceBoard = false; // (it flew off the bag: he is a faller again, and the next perch needs a boarder)
+  if (cr && !p.on && p.forceBoard && ((cr.kind === 'drake' && !drakeBoardable(cr)) || (cr.kind === 'thunderbird' && !birdBoardable(cr)))) p.forceBoard = false; // (it flew off the bag: he is a faller again, and the next perch needs a boarder)
   if (p.on) {
     p.jx = p.jy = 0;
     p.fire = !!cr && !cr.dying;
     return true;
   }
-  if (!cr || cr.dying || cr.mode !== 'idle' || !(cr.kind === 'drake' ? drakeBoardable(cr) : cr.phase >= 3) || !mantleOf(cr) || p.mate || p.ko > 0 || p.fall) return false; // (the Drake: while it sits on her bag)
+  if (!cr || cr.dying || cr.mode !== 'idle' || !(cr.kind === 'thunderbird' ? birdBoardable(cr) : cr.kind === 'drake' ? drakeBoardable(cr) : cr.phase >= 3) || !mantleOf(cr) || p.mate || p.ko > 0 || p.fall) return false; // (the Drake: while it sits on her bag; the Thunderbird: on her bag or on a spire)
   if (Object.values(state.players).some((q) => q.on || q.forceBoard)) return false; // (one boarder is enough)
-  const L = mainShip(state).layout, heart = cr.parts.find((q) => q.kind === 'heart' && !q.dead && (cr.kind === 'drake' || !q.hidden)); // (the Drake's heart is hidden behind its scales: the boarder hacks them off first)
+  const L = mainShip(state).layout, heart = cr.parts.find((q) => q.kind === 'heart' && !q.dead && (cr.kind === 'drake' || cr.kind === 'thunderbird' || !q.hidden)); // (the Drake's heart is hidden behind its scales: the boarder hacks them off first)
   if (!heart || isHelm(L, p.lock)) return false;
   p.forceBoard = true;
   p.lock = null;
@@ -1649,6 +1664,7 @@ function forceBoard(p, state) {
 export function updateBot(p, state, dt) {
   const L = mainShip(state).layout;
   world = state;
+  if (p.wantStation) p.wantStation = null; // (set again below by a station job that needs it, C.6b)
   p.pressCd = (p.pressCd || 0) - dt;
   p.whackCd = (p.whackCd || 0) - dt;
   if (p.wanderWait !== undefined) p.wanderWait -= dt;
@@ -1701,7 +1717,7 @@ export function updateBot(p, state, dt) {
       if ((isHelm(L, p.lock) && config.COURSE.ENABLED) || p.enemy) p.lockLeft = Math.max(p.lockLeft, 1);
       // A lightning bolt is charging and nobody is on their way to a rod: leave the station (not the helm).
       const hackCall = !!state.creature && !isHelm(L, p.lock) && gripJobs(state, mainShip(state)).length > 0 && !bots.some((q) => q.botJob && q.botJob.kind === 'hack') && Math.random() < 0.9; // (C.2: a tentacle holds the ship and nobody is on the way to hack it)
-      const rodCall = !isHelm(L, p.lock) && state.stormJob && state.stormJob.charge && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9;
+      const rodCall = !isHelm(L, p.lock) && !(birdCoil(state) && L.kindOf(p.lock) === 'coil') && state.stormJob && (state.stormJob.charge || birdDiving(state.creature)) && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9; // (the Thunderbird's coil man stays at the coil: it drinks the bolt the rod grounds)
       // Nobody is at the wheel in flight and nobody is on the way: leave the station and take it.
       const helmCall = !isHelm(L, p.lock) && !humanAutopilot(p, state) && state.phase === 'flying' && !Object.values(state.players).some((q) => isHelm(L, q.lock) || (q.botJob && q.botJob.kind === 'station' && isHelm(L, q.botJob.obj))) && !(state.modules || []).some((m) => m.kind === 'helm' && m.broken) && Math.random() < B.HELM_CALL;
       const fallCall = !!state.goingDown && !isHelm(L, p.lock); // GOING DOWN!: everybody off their stations (the hand at the helm stays: he pumps)

@@ -223,6 +223,16 @@ const DRAW = {
     g.beginPath(); g.arc(46, 48, 44, -2.5, -0.7); g.stroke(); g.beginPath(); g.arc(46, 48, 44, 0.7, 2.5); g.stroke();
     filled(BRASS, () => g.arc(14, 88, 7, 0, 7)); line([[14, 88], [14, 76]], 3.4); // the crank
   },
+  featherSail(g, { filled, line }) { // the trophy: the mast and sail with the canvas in storm-bird feathers (sails.js, art: 'thunderbird')
+    line([[22, 12], [60, 90]], 3, IRON); line([[22, 12], [10, 90]], 3, IRON); // the stays
+    filled('#8da2c4', () => { g.moveTo(26, 14); g.lineTo(26, 78); g.lineTo(88, 78); g.quadraticCurveTo(66, 52, 26, 14); g.closePath(); }); // the canvas
+    for (const [x, y] of [[44, 70], [58, 70], [72, 70], [50, 56], [64, 62], [38, 44]]) filled('#dfe9f6', () => { g.moveTo(x - 6, y + 6); g.lineTo(x + 2, y - 10); g.lineTo(x + 8, y + 6); g.closePath(); }); // pale feather tips
+    filled(WOOD_DARK, () => g.rect(19, 6, 9, 84)); // the mast
+    filled(WOOD_DARK, () => g.rect(19, 76, 70, 7)); // the boom
+    filled(BRASS, () => g.arc(24, 7, 5, 0, 7));
+    filled('#e8d86a', () => { g.moveTo(24, 3); g.lineTo(34, -2); g.lineTo(46, 6); g.lineTo(36, 8); g.closePath(); }); // a gold lightning pennant
+    filled(WOOD, () => g.rect(6, 88, 88, 8));
+  },
   sail(g, { filled, line }) {
     line([[22, 12], [60, 90]], 3, IRON); line([[22, 12], [10, 90]], 3, IRON); // the stays
     filled('#d9a86a', () => { g.moveTo(26, 14); g.lineTo(26, 78); g.lineTo(88, 78); g.quadraticCurveTo(66, 52, 26, 14); g.closePath(); }); // the canvas, belling toward the bow

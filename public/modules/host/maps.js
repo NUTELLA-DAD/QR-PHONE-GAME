@@ -21,7 +21,7 @@ export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = nul
   for (let tries = 0; tries < 40; tries++) {
     // (Late-voyage open maps are so crowded with peaks and islands that no layout may pass the checks below; rather than
     // settle for the last, unplayable try, ease off one level every few failures so a playable map always comes out.)
-    map = kind === 'lair' ? (creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout);
+    map = kind === 'lair' ? (creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout);
     if (map.startDist >= 1e9) continue;
     if (map.lair) return map; // (no outposts to reach: the lair's middle is the goal)
     if (map.open) {
@@ -304,6 +304,35 @@ function buildDrakeLairMap(level, rand, lengthMul = 1, layout) {
   const spouts = DL.SPOUTS.map((dx) => ({ x: (goalI + 0.5) * C + dx, y: topRow * C }));
   const shelf = { x0: (goalI - half) * C, x1: (goalI + half + 1) * C, top: topRow * C };
   const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'drake', lavaY: lavaRow * C, shelf, spouts };
+  finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
+  return map;
+}
+
+// THE THUNDERBIRD'S LAIR (config.CREATURES.THUNDERBIRD.LAIR, C.6b): open sky in a Storm Front (constant storm weather: the storm environment's own), a floor of rock FLOOR_BELOW px under the launch height and a few ROCK SPIRES
+// standing on it, their needle tops SPIRE_DEPTH px under the launch height (the one at 0 stands right under her when she hovers at the lair's middle; the bird rests on them between passes, and a mortar can reach it
+// there). Nothing else: no outposts, no guns. map.spires lists them: { x, w (width at the floor), top } in map pixels.
+function buildStormLairMap(level, rand, lengthMul = 1, layout) {
+  const M = config.MAPS, LR = config.CREATURES.LAIR, TL = config.CREATURES.THUNDERBIRD.LAIR, C = M.CELL;
+  const r = (a, b) => a + rand() * (b - a);
+  const startI = 12, goalI = startI + Math.round((LR.RUN * lengthMul) / C);
+  const W = goalI + Math.round(LR.BEYOND / C) + 20, H = M.OPEN_HEIGHT;
+  const sj = 28, floorRow = Math.min(H - 3, sj + Math.round(TL.FLOOR_BELOW / C));
+  const solid = new Uint8Array(W * H);
+  const idx = (i, j) => j * W + i;
+  for (let i = 0; i < W; i++) for (let j = floorRow; j < H; j++) solid[idx(i, j)] = 1;
+  const spires = [];
+  for (const [dc, jit] of TL.SPIRES) {
+    const ci = Math.max(startI + 25, Math.min(W - 14, goalI + dc + Math.round(r(-jit, jit))));
+    const topRow = Math.min(floorRow - 3, sj + Math.round(r(TL.SPIRE_DEPTH[0], TL.SPIRE_DEPTH[1]) / C));
+    const baseHalf = Math.max(2, Math.ceil(TL.SPIRE_W / 2 / C));
+    for (let i = ci - baseHalf; i <= ci + baseHalf; i++) {
+      if (i < 0 || i >= W) continue;
+      const top = Math.round(topRow + (Math.abs(i - ci) / baseHalf) * (floorRow - topRow));
+      for (let j = top; j < floorRow; j++) solid[idx(i, j)] = 1;
+    }
+    spires.push({ x: (ci + 0.5) * C, w: TL.SPIRE_W, top: topRow * C });
+  }
+  const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'thunderbird', spires };
   finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
   return map;
 }

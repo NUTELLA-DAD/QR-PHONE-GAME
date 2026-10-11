@@ -236,6 +236,7 @@ export function createShipSim(world, ship, W) {
     // A cargo drop hatch's lever: open it (a klaxon first), or shut it again.
     const hl = hatchBot && hatches.leverAction(player, here);
     if (hl) return hl;
+    if (player.bot && player.wantStation && station && station.n === player.wantStation && LOCKABLE(station.n) && !taken(station.n)) return { type: 'station', station, label: takeLabel(station) }; // (C.6b: a bot sent to a station that a rack, a pipe valve or a vent stands next to - the classic ship's coil - takes THAT station, not the nearer chore; bots.js sets wantStation)
     // Otherwise standing at a rack or hook means take / swap / put back.
     const pickup = legacy ? PICKUPS.find((r) => here(r, T.REACH)) : null;
     // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)

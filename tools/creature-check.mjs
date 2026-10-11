@@ -26,6 +26,8 @@
 //   (l) the lair: map, no outposts or spouts, no zeppelin, the creature at the boss's slot, the stop done when it has sunk;  (v) lairs only on Sunken Sea stops, never first / Flagship / adjacent, +1 skull x2 reward,
 //   the rest of a seeded route untouched; the route map draws them;  (r) salvage x3, hull patch, the free trophy card at the next dock, the Kraken Beak on the ship (ram prow, art kraken)
 //   (b) the bots (CREATURE_FORCE_WIN=sever|mouth|tow|board|hp): each win within 6 minutes of its spawn with 8 bots on Normal (tow on a harpoon ship), 4 and 16 bots on Easy within 10, 0 errors, no NaN
+//   C.6b: the last section (T0-T12) is THE THUNDERBIRD: its body, the gust (a shove and a twist within FORCES.MAX_DEG), the lightning dive (a held rod grounds a bolt, a manned coil drinks one and fires it back for 3x), the swallow and the glowing gizzard (coil zaps win), the perch,
+//   the roost on a rock spire (mortar hits win), boarding it (cut the gizzard), the plucked wings (both: it falls), the lair, the voyage, the reward and the feather sail, the TV, and the bots: each forced win by 8 bots on Normal, 4 and 16 bots on Easy
 // Exit code 1 on any failure.
 import path from 'node:path';
 import fs from 'node:fs';
@@ -1528,7 +1530,7 @@ const winCheck = (name, st, cr, why) => {
     const want = n - h >= LR.LONG_STOPS ? LR.COUNT.long : LR.COUNT.short;
     if (lairs.length > want) bad.push(`${mode}/${sd}: ${lairs.length} lairs, at most ${want}`);
     for (const s of lairs) {
-      if (s.env !== 'sea' && s.env !== 'ember') bad.push(`${mode}/${sd}: lair on ${s.env}`); // (C.6a: a Sunken Sea stop holds the Kraken, an Ember Forge stop the Drake)
+      if (s.env !== 'sea' && s.env !== 'ember' && s.env !== 'storm') bad.push(`${mode}/${sd}: lair on ${s.env}`); // (C.6a: a Sunken Sea stop holds the Kraken, an Ember Forge stop the Drake; C.6b: a Storm Front stop the Thunderbird)
       if (s.creature !== LR.BY_ENV[s.env]) bad.push(`${mode}/${sd}: lair on ${s.env} holds ${s.creature}`);
       if (s.col <= h || s.col >= n - 1) bad.push(`${mode}/${sd}: lair in column ${s.col} of ${n}`);
       if (s.kind !== 'lair' || s.flagship || s.harbour) bad.push(`${mode}/${sd}: lair kind ${s.kind}`);
@@ -1542,7 +1544,7 @@ const winCheck = (name, st, cr, why) => {
       else if (s.danger !== o.danger || s.reward !== o.reward || s.kind !== o.kind) bad.push(`${mode}/${sd}: ${s.id} (not a lair) changed`);
     });
   }
-  report(!bad.length, `${total} generated voyages (quick, voyage, campaign x both voyages): lairs only on Sunken Sea / Ember Forge stops (the creature of that sky), never the first stop, the harbour or the Flagship, never in neighbouring columns, at most ${LR.COUNT.short} (${LR.COUNT.long} from ${LR.LONG_STOPS} stops), +${LR.DANGER} skull and x${LR.REWARD_MUL} reward, everything else exactly as before${bad.length ? ' - ' + bad.slice(0, 3).join('; ') : ''}`);
+  report(!bad.length, `${total} generated voyages (quick, voyage, campaign x both voyages): lairs only on Sunken Sea / Ember Forge / Storm Front stops (the creature of that sky), never the first stop, the harbour or the Flagship, never in neighbouring columns, at most ${LR.COUNT.short} (${LR.COUNT.long} from ${LR.LONG_STOPS} stops), +${LR.DANGER} skull and x${LR.REWARD_MUL} reward, everything else exactly as before${bad.length ? ' - ' + bad.slice(0, 3).join('; ') : ''}`);
   console.log(`     lairs: ${withLair} of ${total} voyages have one (${two} have two)`);
   report(withLair / total > 0.5, `most voyages have a lair (${((withLair / total) * 100).toFixed(0)}%)`);
   // the same seed makes the same route
@@ -2468,6 +2470,831 @@ const spawnCr = (ctx, kind = 'drake') => ctx.sim.creatures.spawn(kind);
     report(rows.every((x) => x.ok) && how.every((h) => h !== 'NOT'), `unforced, 8 bots on Normal win (${how.join(', ')})`);
   }
   report(results.every(({ r }) => clean(r)), `0 errors and no NaN in any of the ${results.length} Drake bot fights`);
+}
+
+// =================================================================== C.6b: THE THUNDERBIRD ===================================================================
+//   (T0) the body: wings (2 parts of 5 feather segments, each with hp), a 3-segment neck, head, beak, a tail fan, two talons, the gizzard hidden; about 3x the ship; it lives in the Storm Front only; stepped keys; the sky is dark
+//   (T1) every weapon hurts a part; lit parts rank before unlit ones in the dark
+//   (T2) GUST: the three beats (banner, a buzz on every phone, a screech), then the shove: she moves, the twist stays within FORCES.MAX_DEG
+//   (T3) PASS bumps the hull;  (T4) LIGHTNING DIVE: bolts through the storm's own strike system: nobody on a rod = she is struck, a held rod grounds one, a manned coil DRINKS it and fires it back at the bird for DRINK.MUL x
+//   (T5) SWALLOW: the gizzard glows, only coil bolts into it count (ZAP.HITS win);  (T6) PERCH on her bag: a live load that tips her within FORCES.MAX_DEG, claws holes, driven off by swords, shots, flame, a hard turn, time
+//   (T7) ROOST on a rock spire: feet on the rock, a landing place; ROOST.MORTAR_HITS mortar shells win;  (T8) boarding it (bag or spire): CUT THE GIZZARD (a win)
+//   (T9) a plucked wing: phase 2, a lopsided flight; both: it falls into the clouds (a win); phases by the pool;  (T10) the lair, the voyage, the reward and the feather sail;  (T11) the TV;  (T12) the bots
+const TB = C.THUNDERBIRD;
+const CBI = await load('modules/host/creatureBird.js');
+const TBM = await load('modules/host/creatures/thunderbird.js');
+const BW0 = JSON.stringify(TB.ATTACK.WEIGHTS), BR0 = JSON.stringify(TB.ROOST), BA0 = JSON.stringify({ F: TB.ATTACK.FIRST_PERCH, E: TB.ATTACK.PERCH_EVERY });
+const birdCfgBack = () => { TB.ATTACK.WEIGHTS = JSON.parse(BW0); Object.assign(TB.ROOST, JSON.parse(BR0)); const a = JSON.parse(BA0); TB.ATTACK.FIRST_PERCH = a.F; TB.ATTACK.PERCH_EVERY = a.E; };
+const onlyBird = (kind) => { for (const ph of [1, 2, 3]) TB.ATTACK.WEIGHTS[ph] = { [kind]: 1 }; };
+const noRoost = () => { TB.ROOST.FIRST = 1e9; };
+const bActIs = (cr, kind, sub) => !!cr.bird.act && cr.bird.act.kind === kind && (sub === undefined || cr.bird.act.sub === sub);
+const quietB = (cr) => { cr.ai.breather = 1e9; cr.bird.nextT = 1e9; };
+const wakeB = (cr) => { cr.ai.breather = 0; cr.bird.nextT = 0; cr.bird.lastPerch = -1e9; cr.bird.lastRoost = -1e9; };
+// A sim in the Storm Front's lair with the Thunderbird arrived, circling, its attacks held until a test asks.
+function birdUp({ lair = true, difficulty = 'normal', bots = 0, start = null } = {}) {
+  restoreCfg();
+  birdCfgBack();
+  const ctx = boot({ env: 'storm', lair, difficulty, bots, start });
+  const map = ctx.st.course.map;
+  if (map.lair) { ctx.ship.pose.x = map.goal.x - ctx.ship.layout.refPoint.x; ctx.ship.pose.y = map.goal.y - ctx.ship.layout.refPoint.y; step(ctx.sim, 5); }
+  const cr = ctx.sim.creatures.spawn('thunderbird');
+  for (let i = 0; i < secs(TB.SPAWN.ARRIVE + 1) && cr.mode !== 'idle'; i++) step(ctx.sim);
+  quietB(cr);
+  step(ctx.sim, 30);
+  return { ...ctx, cr, p1: ctx.st.players.p1 };
+}
+const perchedBird = () => {
+  const A = birdUp();
+  onlyBird('perch');
+  noRoost();
+  TB.ATTACK.FIRST_PERCH = 0;
+  wakeB(A.cr);
+  until(A.sim, () => A.cr.bird.perch && A.cr.bird.perch.landed, 25);
+  quietB(A.cr);
+  A.cr.bird.perch.claw = 1e9;
+  return A;
+};
+const roostedBird = () => {
+  const A = birdUp();
+  onlyBird('gust');
+  TB.ROOST.FIRST = 0;
+  wakeB(A.cr);
+  until(A.sim, () => A.cr.bird.roost && A.cr.bird.roost.landed, 25);
+  quietB(A.cr);
+  return A;
+};
+
+// (T0) the world and the body
+{
+  restoreCfg();
+  birdCfgBack();
+  const ctx = boot({ env: 'storm', lair: true });
+  const { sim, st, ship } = ctx;
+  report(spawnCr(ctx, 'kraken') === null && spawnCr(ctx, 'drake') === null && st.creature === null, 'neither the Kraken nor the Drake comes to the Storm Front (no sea line, no lava)');
+  const cr = spawnCr(ctx, 'thunderbird');
+  const cnt = (k) => cr.parts.filter((p) => p.kind === k);
+  report(!!cr && cr.kind === 'thunderbird' && cr.name === TB.NAME && cr.mode === 'surfacing' && cnt('wing').length === 2 && cnt('wing').every((w) => w.segs.length === TB.WING.SEGS && w.hp > 0) && cnt('neck')[0].segs.length === TB.NECK.SEGS && cnt('tail').length === 1 && cnt('head').length === 1 && cnt('beak').length === 1 && cnt('talon').length === 2 && cnt('heart').length === 1 && cnt('heart')[0].id === 'gizzard' && cnt('heart')[0].hidden,
+    `spawn puts the Thunderbird in state.creature: 2 wings of ${TB.WING.SEGS} feather segments each with hp, a neck, head, beak, tail fan, 2 talons and a hidden gizzard`);
+  const before = cr.parts.reduce((a, p) => a + p.hp, 0);
+  const w0 = cnt('wing')[0], m = w0.segs[2];
+  st.shells.push({ x: m.x + Math.cos(m.ang) * m.len / 2, y: m.y + Math.sin(m.ang) * m.len / 2, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 5);
+  report(cr.parts.reduce((a, p) => a + p.hp, 0) === before && AIM.targets(st).filter((t) => t.kind === 'creaturePart').length === 0 && SP.radarItems(st).filter((i) => i.kind === 'creature').length === 0, 'while it flies in it cannot be hurt, shot at or spotted');
+  for (let i = 0; i < secs(TB.SPAWN.ARRIVE + 1) && cr.mode !== 'idle'; i++) step(sim);
+  quietB(cr);
+  step(sim, 60);
+  const tg = AIM.targets(st).filter((t) => t.kind === 'creaturePart');
+  const kinds = new Set(tg.map((t) => t.part.kind));
+  report(cr.mode === 'idle' && ['wing', 'neck', 'head', 'beak', 'mantle', 'tail', 'talon'].every((k) => kinds.has(k)) && !kinds.has('heart') && tg.every((t) => t.obj && typeof t.obj.lit === 'number' && Number.isFinite(t.at(0.5).x)), `arrived: ${tg.length} aim targets (${[...kinds].join(', ')}; the gizzard is hidden)`);
+  const radar = SP.radarItems(st).filter((i) => i.kind === 'creature');
+  report(radar.length >= 3 && radar.every((i) => Number.isFinite(i.pos().x)), `${radar.length} blips on the phone radar`);
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const p of cr.parts) for (const s of p.segs) for (const u of [0, 1]) { const x = s.x + Math.cos(s.ang) * s.len * u, y = s.y + Math.sin(s.ang) * s.len * u; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const shipLen = ship.layout.bounds.x1 - ship.layout.bounds.x0, ext = Math.hypot(x1 - x0, y1 - y0);
+  const span = 2 * cnt('wing')[0].reach + TB.TORSO.LEN;
+  report(span >= 2.8 * shipLen && ext >= 1.8 * shipLen && cnt('wing')[0].reach >= shipLen, `it is huge: ${Math.round(span)} px with its wings spread against her ${shipLen} (${(span / shipLen).toFixed(1)}x), ${Math.round(ext)} px across as it flaps, each wing ${Math.round(cnt('wing')[0].reach)} px`);
+  const nk = cnt('neck')[0];
+  let changed = 0, keyChanges = 0, lastKey = cr.key, lastRel = nk.rel.x + ',' + nk.rel.y;
+  for (let i = 0; i < 120; i++) { step(sim); const r = nk.rel.x + ',' + nk.rel.y; if (r !== lastRel) { if (cr.key === lastKey) changed++; else keyChanges++; lastRel = r; } lastKey = cr.key; }
+  report(changed === 0, `no wobble: the neck's goal changed only on the key clock (${keyChanges} changes on keys, ${changed} between)`);
+  // the sky is dark: a part is dim unless a searchlight has it (or a flash of lightning shows it for a moment)
+  let dim = 0, lit = 0, tried = 0;
+  for (let i = 0; i < 240; i++) {
+    const flash = st.weather.flash;
+    step(sim);
+    if (flash < 0.3 && (st.darkNow || 0) > C.DARK_AT) { tried++; if (cr.parts.every((p) => !p.lit)) dim++; }
+  }
+  const w1 = cnt('wing')[0];
+  w1.tgt.lit = 1;
+  step(sim);
+  report(tried > 20 && dim === tried && w1.lit === true, `in the dark every part is dim (${dim} of ${tried} calm steps) and a part in a searchlight beam (lit) is not`);
+  const B0 = boot({ env: 'sea' });
+  report(spawnCr(B0, 'thunderbird') === null && B0.st.creature === null, 'and the Thunderbird does not come to the Sunken Sea');
+  const B1 = boot({ env: 'ember' });
+  report(spawnCr(B1, 'thunderbird') === null && B1.st.creature === null, '...nor to the Ember Forge');
+}
+
+// (T1) every weapon hurts a part; only lit parts take aim assist
+{
+  const A0 = birdUp();
+  const { sim, st, cr } = A0;
+  const wing = cr.parts.find((p) => p.id === 'wingN'), neck = cr.parts.find((p) => p.kind === 'neck'), torso = partOf(cr, 'mantle');
+  const w = on(wing), h0 = wing.hp;
+  st.shells.push({ x: w.x, y: w.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 3);
+  report(h0 - wing.hp > 0 && cr.stats.by.shell > 0, `a shell on a wing takes ${(h0 - wing.hp).toFixed(1)} off it (credited: ${cr.stats.by.shell.toFixed(1)} by shell)`);
+  const n0 = neck.hp, np = midOf(neck.segs[1]);
+  CS.creatureBurn(st, (x, y) => Math.hypot(x - np.x, y - np.y) < 300, { x: np.x - 200, y: np.y }, 0.5, 'p1');
+  report(neck.hp < n0 && cr.stats.by.flame > 0, `flame on the neck: -${(n0 - neck.hp).toFixed(1)}`);
+  const tp = midOf(torso.segs[0], 0.5), t0 = torso.hp;
+  const rb = CS.creatureBomb(st, { x: tp.x, y: tp.y, owner: 'p1' });
+  report(rb === 'burst' && torso.hp < t0, `a bomb on the body bursts on it (${rb}, -${(t0 - torso.hp).toFixed(1)})`);
+  const e = A0.ship.layout.coil, ex = T.toWorldX(A0.ship, e.x), ey = T.toWorldY(A0.ship, e.y - 60), dx = tp.x - ex, dy = tp.y - ey, dl = Math.hypot(dx, dy), t1 = torso.hp;
+  CS.creatureBeam(st, ex, ey, dx / dl, dy / dl, dl + 400, 80, 60, 'p1');
+  report(torso.hp < t1 && cr.stats.by.coil > 0, `the coil's bolt hurts the body (-${(t1 - torso.hp).toFixed(1)})`);
+  // lit parts first in the dark
+  st.darkNow = 0.8;
+  const wing2 = cr.parts.find((p) => p.id === 'wingF');
+  wing.tgt.lit = 0;
+  wing2.tgt.lit = 1;
+  const lst = AIM.targets(st).filter((t) => t.kind === 'creaturePart');
+  const rU = lst.find((t) => t.part === wing).rank, rL = lst.find((t) => t.part === wing2).rank;
+  report(rL < rU && Math.abs(rU - rL - 2) < 1e-9, `in the dark the part a searchlight has ranks first (lit ${rL}, unlit ${rU})`);
+  st.darkNow = 0;
+  const lst0 = AIM.targets(st).filter((t) => t.kind === 'creaturePart');
+  report(lst0.find((t) => t.part === wing).rank === lst0.find((t) => t.part === wing2).rank, 'in daylight there is no difference');
+  report(TB.POOL.heart >= TB.POOL.mantle && TB.POOL.heart > TB.POOL.wing, 'the weak point (the gizzard) counts more against the pool than a wing');
+}
+
+// (T2) GUST
+{
+  const A = birdUp();
+  const { sim, st, ship, cr, p1 } = A;
+  onlyBird('gust');
+  noRoost();
+  const G = TB.GUST;
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  const p2 = (st.players.p2 = { ...p1, id: 'p2', name: 'P2' });
+  standOn(p1, ship, topD(ship), 600, null);
+  standOn(p2, ship, deckOf(ship, 'main'), 900, null);
+  wakeB(cr);
+  st.sfxQ.length = 0;
+  until(sim, () => bActIs(cr, 'gust', 'rear'), 15);
+  const rearAt = cr.age;
+  step(sim, 2);
+  const sqs = st.sfxQ.map((x) => x[0]);
+  report(bActIs(cr, 'gust', 'rear') && /REARS ITS WINGS/.test(st.ev.warnText) && sqs.includes('screech') && msgs.some((m) => m.id === 'p1' && /GUST/.test(m.t) && Array.isArray(m.buzz)) && msgs.some((m) => m.id === 'p2') && cr.bird.pose === 'rear', `the wings rear back: banner "${st.ev.warnText}", a screech, a buzz on every phone, the pose "rear"`);
+  const sd = cr.bird.act.sd, x0 = ship.pose.x;
+  let base = 0;
+  { const xa = ship.pose.x; step(sim, 30); base = (ship.pose.x - xa) / 0.5; } // (her own drift while it rears)
+  until(sim, () => bActIs(cr, 'gust', 'beat'), 5);
+  const tWind = cr.age - rearAt;
+  const xb = ship.pose.x;
+  let peak = 0;
+  const n = until(sim, () => { peak = Math.max(peak, Math.abs(st.forces.theta)); return !bActIs(cr, 'gust', 'beat'); }, 5);
+  const moved = ((ship.pose.x - xb) - base * n) * -sd;
+  const lim = (config.FORCES.MAX_DEG * Math.PI) / 180 + 1e-6;
+  report(moved > 0.5 * G.PUSH * G.BEAT && peak > 0.2 * (Math.PI / 180) && peak <= lim, `the downstroke shoves her ${moved.toFixed(0)} px away from the bird in ${n.toFixed(1)} s (PUSH ${G.PUSH} px/s x ${G.BEAT} s) and twists her: the tilt peaks at ${((peak * 180) / Math.PI).toFixed(2)} degrees (the limit ${config.FORCES.MAX_DEG})`);
+  report(Math.abs(tWind - G.WIND) < 0.4, `the rear lasts ${tWind.toFixed(1)} s (GUST.WIND ${G.WIND})`);
+  until(sim, () => !cr.bird.act, 5);
+  report(!cr.bird.act && cr.stats.gusts === 1 && cr.gust === null && Number.isFinite(ship.pose.x), 'then it recovers and rejoins its loop');
+  void x0;
+}
+
+// (T3) PASS
+{
+  const A = birdUp();
+  const { sim, st, ship, cr } = A;
+  onlyBird('pass');
+  noRoost();
+  let hull0 = st.ship.hull, hits = 0, seen = {};
+  for (let tries = 0; tries < 4 && !hits; tries++) {
+    hull0 = st.ship.hull;
+    wakeB(cr);
+    until(sim, () => bActIs(cr, 'pass'), 15);
+    seen.banner = seen.banner || /DIVES/.test(st.ev.warnText);
+    seen.ring = seen.ring || !!cr.swoop;
+    until(sim, () => cr.stats.passHits > hits || !bActIs(cr, 'pass'), 12);
+    hits = cr.stats.passHits;
+  }
+  report(seen.banner && seen.ring && hits >= 1 && st.ship.hull < hull0 && cr.bird.dazed > 0, `a diving PASS: the banner, the ring on the spot, then it bumps the hull (${hull0.toFixed(1)} -> ${st.ship.hull.toFixed(1)}) and is DAZED ${cr.bird.dazed.toFixed(1)} s (everything hurts it ${TB.PASS.DAZED_MUL}x)`);
+  const wing = cr.parts.find((p) => p.id === 'wingN'), wp = on(wing), h0 = wing.hp;
+  st.shells.push({ x: wp.x, y: wp.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 3);
+  report(h0 - wing.hp > H.SHELL_MUL * config.GUNS.DAMAGE * 1.2, `a dazed bird takes more: ${(h0 - wing.hp).toFixed(1)} against ${H.SHELL_MUL * config.GUNS.DAMAGE}`);
+  void ship;
+}
+
+// (T4) LIGHTNING DIVE: the rod, the coil
+{
+  const MATES0 = config.MATES.ENABLED;
+  config.MATES.ENABLED = false; // (the ship's mates would stand at a rod now and then: this block counts who held one)
+  const runDive = (setup, ph = 2) => {
+    const A = birdUp();
+    const { sim, st, ship, cr, p1 } = A;
+    onlyBird('dive');
+    noRoost();
+    cr.phase = ph;
+    const msgs = [];
+    cr.hooks.phoneFx = (p, t) => msgs.push({ id: p.id, t });
+    const J = ship.ctx.stormJob;
+    wakeB(cr);
+    const ctl = setup(A, J);
+    st.sfxQ.length = 0;
+    const log = { calls: 0, banner: false, thunder: false, struck0: J.struck, caught0: J.caught, drank0: J.drank, birdBolt: false, msgs, ctl };
+    const total = TB.DIVE.BOLTS[ph];
+    for (let i = 0; i < secs(40) && !cr.dying && !(cr.stats.dives >= 1 && !bActIs(cr, 'dive') && cr.stats.bolts >= total); i++) {
+      step(sim);
+      if (J.charge && J.charge.bird) log.birdBolt = true;
+      if (/LIGHTNING DIVE/.test(st.ev.warnText)) log.banner = true;
+      if (st.sfxQ.some((x) => x[0] === 'thunder')) log.thunder = true;
+      if (ctl && ctl.each) ctl.each(A, J);
+    }
+    log.bolts = cr.stats.bolts;
+    log.struck = J.struck - log.struck0;
+    log.caught = J.caught - log.caught0;
+    log.drank = J.drank - log.drank0;
+    return { A, J, log, total };
+  };
+  // nobody on a rod: every bolt strikes her
+  {
+    const { A, log, total } = runDive((A2) => { standOn(A2.p1, A2.ship, deckOf(A2.ship, 'lower'), 300, null); return null; });
+    const buzz = log.msgs.filter((m) => m.id === 'p1' && /LIGHTNING DIVE|BOLT COMING/.test(m.t)).length;
+    report(log.banner && log.thunder && log.birdBolt && log.bolts === total && buzz >= 1, `LIGHTNING DIVE: the banner, thunder, a buzz on the phones (${buzz}), then ${log.bolts} of ${total} bolts called through the storm's strike system`);
+    report(log.struck === total && log.caught === 0, `nobody on a rod: all ${log.struck} bolts strike the ship (hull ${A.st.ship.hull.toFixed(1)}; ${A.st.fires.length} fires)`);
+  }
+  // a held rod grounds the bolt
+  {
+    const { A, log, total } = runDive((A2) => { standOn(A2.p1, A2.ship, deckOf(A2.ship, 'lower'), 300, null); return { each: (A3, J) => { for (const r of J.rods) r.held = 0.3; } }; });
+    report(log.caught === total && log.struck === 0 && log.drank === 0 && A.st.ship.hull > 99.5, `a lightning rod held by a crewman GROUNDS every bolt (${log.caught} of ${total} grounded, ${log.struck} struck her, hull ${A.st.ship.hull.toFixed(1)})`);
+  }
+  // a manned coil drinks the grounded bolt and fires it back: 3x
+  {
+    const { A, log, total } = runDive((A2) => {
+      const L = A2.ship.layout, coilSt = L.one('coil');
+      standOn(A2.p1, A2.ship, deckOf(A2.ship, 'main'), coilSt.x, null);
+      A2.p1.lock = coilSt.n;
+      A2.p1.fire = false;
+      return { each: (A3, J) => {
+        for (const r of J.rods) r.held = 0.3;
+        const cr = A3.cr, t = midOf(partOf(cr, 'mantle').segs[0], 0.5), e = A3.ship.layout.coil, ex = T.toWorldX(A3.ship, e.x), ey = T.toWorldY(A3.ship, e.y - 60);
+        const a = T.aimToShip(A3.ship, Math.atan2(t.y - ey, t.x - ex));
+        A3.p1.jx = Math.cos(a);
+        A3.p1.jy = Math.sin(a);
+        A3.p1.fire = false; // (it is a drunk bolt that fires the coil: it goes off the moment it drinks, at where it points)
+        A3.st.coil.cd = Math.min(A3.st.coil.cd, 0);
+      } };
+    });
+    const by = A.cr.stats.by.coil || 0;
+    report(log.drank >= 1 && by > 0, `a manned coil DRINKS the grounded bolt (drank ${log.drank}) and fires it back at the bird (${by.toFixed(0)} damage by coil)`);
+    // the same shot, drunk and not drunk, at a hovering bird
+    const B = birdUp();
+    const { sim, st, ship, cr, p1 } = B;
+    onlyBird('dive');
+    noRoost();
+    cr.phase = 2;
+    wakeB(cr);
+    const coilSt = ship.layout.one('coil');
+    standOn(p1, ship, deckOf(ship, 'main'), coilSt.x, null);
+    p1.lock = coilSt.n;
+    until(sim, () => bActIs(cr, 'dive', 'bolts'), 15);
+    const aimNow = () => { const t = midOf(partOf(cr, 'mantle').segs[0], 0.5), e = ship.layout.coil, ex = T.toWorldX(ship, e.x), ey = T.toWorldY(ship, e.y - 60); const a = T.aimToShip(ship, Math.atan2(t.y - ey, t.x - ex)); st.coil.aim = a; };
+    partOf(cr, 'mantle').hp = partOf(cr, 'mantle').maxHp = 1e6; // (a small crew meets a small bird: keep the body out of the way of the arithmetic)
+    const fireOnce = (drunk) => {
+      const c = st.coil;
+      aimNow();
+      c.charge = 1;
+      c.cd = 0;
+      c.drunk = drunk ? TB.DRINK.WINDOW : 0;
+      const pool0 = cr.hp, tor = partOf(cr, 'mantle'), wing0 = tor.hp;
+      p1.fire = true;
+      p1.jx = p1.jy = 0;
+      aimNow();
+      step(sim, 1);
+      p1.fire = false;
+      return { pool: pool0 - cr.hp, parts: wing0 - tor.hp, spent: c.drunk === 0 };
+    };
+    const norm = fireOnce(false);
+    st.coil.cd = 0;
+    const drunk = fireOnce(true);
+    report(norm.parts > 0 && drunk.parts > 0 && Math.abs(drunk.parts / norm.parts - TB.DRINK.MUL) < 0.45 && drunk.spent, `the coil's blow fired back after drinking does ${(drunk.parts / norm.parts).toFixed(2)}x (DRINK.MUL ${TB.DRINK.MUL}): ${drunk.parts.toFixed(0)} against ${norm.parts.toFixed(0)}; the drink is spent after one shot`);
+    void total;
+  }
+  config.MATES.ENABLED = MATES0;
+  // phase 3: faster strikes (a shorter warning) and more bolts
+  report(TB.DIVE.WARN[3] < TB.DIVE.WARN[2] && TB.DIVE.BOLTS[3] > TB.DIVE.BOLTS[2] && TB.DIVE.GAP[3] < TB.DIVE.GAP[2] && TB.SWALLOW.GLOW[3] > TB.SWALLOW.GLOW[2], 'phase 3 (the frenzy): the bolts come faster and more of them, and the gizzard glows longer');
+}
+
+// (T5) SWALLOW and the gizzard
+{
+  const A = birdUp();
+  const { sim, st, ship, cr } = A;
+  onlyBird('swallow');
+  noRoost();
+  const gz = partOf(cr, 'heart');
+  cr.phase = 2;
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t) => msgs.push({ id: p.id, t });
+  standOn(A.p1, ship, topD(ship), 600, null);
+  report(gz.hidden && !AIM.targets(st).some((t) => t.part === gz), 'before it swallows, the gizzard is hidden (not a target)');
+  // a coil bolt through the hidden gizzard does nothing
+  const gp0 = midOf(gz.segs[0], 0.5), e = ship.layout.coil, ex = T.toWorldX(ship, e.x), ey = T.toWorldY(ship, e.y - 60);
+  { const dx = gp0.x - ex, dy = gp0.y - ey, dl = Math.hypot(dx, dy); CS.creatureBeam(st, ex, ey, dx / dl, dy / dl, dl + 300, 60, 40, 'p1'); }
+  report(cr.zapped === 0 && gz.hp === gz.maxHp, 'a coil bolt through the hidden gizzard does nothing');
+  wakeB(cr);
+  st.sfxQ.length = 0;
+  until(sim, () => bActIs(cr, 'swallow', 'call'), 15);
+  step(sim, 2);
+  report(bActIs(cr, 'swallow', 'call') && /SWALLOWING A BOLT/.test(st.ev.warnText) && st.sfxQ.some((x) => x[0] === 'thunder') && msgs.some((m) => m.id === 'p1' && /SWALLOWING/.test(m.t)) && cr.bird.pose === 'swallow', `the head goes back: banner "${st.ev.warnText}", thunder, a buzz, the pose "swallow"`);
+  until(sim, () => cr.bird.glow > 0, 6);
+  step(sim, 3);
+  const tg = AIM.targets(st).filter((t) => t.part === gz)[0];
+  report(!gz.hidden && cr.bird.glow > TB.SWALLOW.GLOW[2] - 1 && !!tg && tg.rank < 4 && gz.lit === true && /GIZZARD GLOWS/.test(st.ev.warnText) && st.flashes.some((f) => f.color === '#9fe8ff'), `the gizzard GLOWS for ${TB.SWALLOW.GLOW[2]} s: it is a target (rank ${tg && tg.rank}), lit in the dark sky, and lights it ("${st.ev.warnText}")`);
+  // a shell: only damage; a coil bolt: a zap
+  const sp = midOf(gz.segs[0], 0.5), h0 = gz.hp;
+  CS.hurtCreature(st, { part: gz, seg: 0 }, 10, { src: 'shell', who: 'p1' });
+  const shellD = h0 - gz.hp;
+  report(cr.zapped === 0 && shellD > 10 * 1.4, `a shell into the glowing gizzard only hurts it (-${shellD.toFixed(1)}, ${TB.SWALLOW.GLOW_MUL}x): no zap`);
+  const z1 = CS.hurtCreature(st, { part: gz, seg: 0 }, 5, { src: 'coil', who: 'p1' });
+  report(cr.zapped === 1 && z1 && !z1.killed && /BOLT IN THE GIZZARD! 1[/]3/.test(st.ev.warnText), `a coil bolt into it ZAPS it: ${cr.zapped}/${TB.ZAP.HITS} ("${st.ev.warnText}")`);
+  // a drunk bolt counts for more
+  st.coil.drunk = TB.DRINK.WINDOW;
+  const before = cr.zapped;
+  CS.hurtCreature(st, { part: gz, seg: 0 }, 5, { src: 'coil', who: 'p1' });
+  st.coil.drunk = 0;
+  report(cr.zapped === before + TB.DRINK.HITS && cr.dying && cr.stats.win === 'gizzard' && /BOLT IN THE GIZZARD/.test(st.ev.warnText) && st.bossDownLap === st.course.lap, `${TB.ZAP.HITS} zaps (a drunk bolt counts ${TB.DRINK.HITS}) win: stats.win "${cr.stats.win}", the banner "${st.ev.warnText}"`);
+  void sp;
+  void ship;
+  // the glow ends
+  const B = birdUp();
+  onlyBird('swallow');
+  noRoost();
+  B.cr.phase = 2;
+  wakeB(B.cr);
+  until(B.sim, () => B.cr.bird.glow > 0, 15);
+  const gz2 = partOf(B.cr, 'heart');
+  until(B.sim, () => B.cr.bird.glow <= 0, TB.SWALLOW.GLOW[2] + 2);
+  report(gz2.hidden && B.cr.bird.glow === 0 && B.cr.stats.swallows === 1, 'when the window is over the gizzard hides again');
+  // only coil bolts count while it is open: a flame or a bomb does not
+  const C2 = birdUp();
+  onlyBird('swallow');
+  noRoost();
+  C2.cr.phase = 2;
+  wakeB(C2.cr);
+  until(C2.sim, () => C2.cr.bird.glow > 0, 15);
+  const gz3 = partOf(C2.cr, 'heart');
+  CS.hurtCreature(C2.st, { part: gz3, seg: 0 }, 5, { src: 'bomb', who: 'p1' });
+  CS.hurtCreature(C2.st, { part: gz3, seg: 0 }, 5, { src: 'flame', who: 'p1' });
+  report(C2.cr.zapped === 0, 'a bomb or flame on the open gizzard is not a zap (only the coil)');
+}
+
+// (T6) PERCH on her gasbag
+{
+  const A = birdUp();
+  const { sim, st, ship, cr, p1 } = A;
+  onlyBird('perch');
+  noRoost();
+  TB.ATTACK.FIRST_PERCH = 0;
+  const P = TB.PERCH;
+  const live0 = st.balance.live, y0 = ship.pose.y;
+  let peak = 0;
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t) => msgs.push({ id: p.id, t });
+  wakeB(cr);
+  const dTop = topD(ship);
+  until(sim, () => cr.bird.mode === 'perch', 15);
+  report(cr.bird.mode === 'perch' && /LANDING/.test(st.ev.warnText) && msgs.some((m) => m.id === 'p1' && /LANDING/.test(m.t)), `PERCH: the warning "${st.ev.warnText}" and a buzz on every phone`);
+  until(sim, () => cr.bird.perch && cr.bird.perch.landed, 8);
+  const pc = cr.bird.perch;
+  standOn(p1, ship, dTop, pc.job.x, null);
+  for (let i = 0; i < secs(8); i++) { step(sim); peak = Math.max(peak, Math.abs(st.forces.theta)); p1.x = pc.job.x; }
+  const lim = (config.FORCES.MAX_DEG * Math.PI) / 180 + 1e-6;
+  report(ship.ctx.perch && ship.ctx.perch.w === P.MASS && st.balance.live >= live0 + P.MASS - 1, `on her gasbag it is a live load: balance.live ${live0.toFixed(1)} -> ${st.balance.live.toFixed(1)} (it weighs ${P.MASS})`);
+  report(peak > 0.02 * (Math.PI / 180) && peak <= lim && ship.pose.y > y0 + 8, `it tips and pushes her: the tilt peaks at ${((peak * 180) / Math.PI).toFixed(2)} degrees (the limit ${config.FORCES.MAX_DEG}), she sank ${(ship.pose.y - y0).toFixed(0)} px`);
+  until(sim, () => cr.stats.claws >= 1, 8);
+  report(cr.stats.claws >= 1 && st.gasHoles.length >= 1, `it claws holes in the bag (${cr.stats.claws} claws, ${st.gasHoles.length} holes)`);
+  until(sim, () => cr.stats.claws >= P.CLAWS, P.CLAW * P.CLAWS + 5);
+  step(sim, secs(P.CLAW + 1));
+  report(cr.stats.claws <= P.CLAWS, `at most ${P.CLAWS} claws a perch (${cr.stats.claws})`);
+}
+{
+  const why = (A) => (A.cr.bird.perch ? A.cr.bird.perch.driven : A.cr.bird.lastWhy);
+  {
+    const A = perchedBird();
+    const { sim, st, ship, cr, p1 } = A;
+    const dTop = topD(ship), jb = cr.bird.perch.job;
+    standOn(p1, ship, dTop, jb.x, 'sword');
+    let n = 0, label = null;
+    for (; n < secs(8) && !(cr.bird.perch && cr.bird.perch.sub === 'lift'); n++) { p1.fire = true; p1.x = jb.x; step(sim); if (p1.act && p1.act.type === 'hack') label = p1.act.label; }
+    report(why(A) === 'sword' && Math.abs(n / 60 - TB.PERCH.SWORD_TIME) < 0.6 && /DRIVE IT OFF/.test(label || ''), `a sword held ${(n / 60).toFixed(1)} s on the deck under it drives it off (SWORD_TIME ${TB.PERCH.SWORD_TIME}); the Action button said "${label}"`);
+    until(sim, () => cr.bird.mode === 'fly', 5);
+    report(cr.bird.mode === 'fly' && !ship.ctx.perch && st.balance.live < 20, 'it flies off: the weight is gone from her bag, it circles again');
+    const gj = (await load('modules/host/creatureGrip.js')).gripJobs(A.st, A.ship);
+    report(gj.length === 0, 'and the perch job is gone from the phones');
+  }
+  {
+    const A = perchedBird();
+    const gj = (await load('modules/host/creatureGrip.js')).gripJobs(A.st, A.ship);
+    report(gj.length === 1 && gj[0].kind === 'hack' && gj[0].obj === A.cr.bird.perch.job && Number.isFinite(gj[0].x), 'the perch is a "hack" job (a gold arrow on the phones, and the bots take it): DRIVE THE THUNDERBIRD OFF');
+  }
+  {
+    const A = perchedBird();
+    const { sim, ship, cr, p1 } = A;
+    const dTop = topD(ship), jb = cr.bird.perch.job;
+    standOn(p1, ship, dTop, jb.x, 'sword');
+    for (let k = 0; k < 6 && why(A) !== 'sword'; k++) { p1.atkQ = true; p1.atkCd = 0; step(sim, 30); p1.x = jb.x; }
+    report(why(A) === 'sword', `${TB.PERCH.BLOWS} sword blows drive it off too`);
+  }
+  for (const src of ['flame', 'shot']) {
+    const A = perchedBird();
+    const { sim, st, cr } = A;
+    const torso = partOf(cr, 'mantle'), tp = midOf(torso.segs[0], 0.5);
+    for (let i = 0; i < 400 && why(A) === null; i++) {
+      if (src === 'flame') CS.creatureBurn(st, (x, y) => Math.hypot(x - tp.x, y - tp.y) < 600, { x: tp.x - 100, y: tp.y }, 0.1, 'p1');
+      else CS.hurtCreature(st, { part: torso, seg: 0 }, 6, { src: 'shell', who: 'p1' });
+      step(sim, 1);
+    }
+    report(why(A) === src, `${src === 'flame' ? 'flame on it' : 'enough damage'} drives it off (${why(A)})`);
+  }
+  {
+    const A = perchedBird();
+    A.st.turning.t = 0.5;
+    step(A.sim, 3);
+    report(why(A) === 'shake', 'a hard turn (COME ABOUT) shakes it off');
+  }
+  {
+    const A = perchedBird();
+    A.cr.bird.perch.left = 0.2;
+    step(A.sim, 30);
+    report(why(A) === 'time', 'and left alone it flies off by itself after its time');
+  }
+}
+
+// (T7) ROOST on a rock spire and the MORTAR win
+{
+  const A = birdUp();
+  const { sim, st, ship, cr } = A;
+  onlyBird('gust');
+  TB.ROOST.FIRST = 0;
+  const R = TB.ROOST, map = st.course.map;
+  report(BD.creatureSurfaces(st, ship).length === 0, 'in the air its torso is no landing place');
+  wakeB(cr);
+  until(sim, () => cr.bird.mode === 'roost', 25);
+  report(cr.bird.mode === 'roost' && /SPIRE/.test(st.ev.warnText) && map.spires.length === 3, `ROOST: "${st.ev.warnText}" (the lair has ${map.spires.length} rock spires)`);
+  until(sim, () => cr.bird.roost && cr.bird.roost.landed, 12);
+  quietB(cr);
+  const sp = cr.bird.roost.sp;
+  let tipY = -1e9;
+  for (const t of cr.parts.filter((p) => p.kind === 'talon')) { const s = t.segs[t.segs.length - 1]; tipY = Math.max(tipY, s.y + Math.sin(s.ang) * s.len); }
+  step(sim, 30);
+  for (const t of cr.parts.filter((p) => p.kind === 'talon')) { const s = t.segs[t.segs.length - 1]; tipY = Math.max(tipY, s.y + Math.sin(s.ang) * s.len); }
+  report(Math.abs(Math.abs(sp.x - cr.base.x) - 0) < 700 && Math.abs(tipY - sp.top) < 260 && CBI.birdOnSpire(cr), `it stands on the spire: the talons reach ${Math.round(tipY)} against the rock's top at ${Math.round(sp.top)}, ${Math.round(Math.abs(sp.x - cr.base.x))} px off its middle`);
+  report(BD.creatureSurfaces(st, ship).length === 1 && CBI.birdBoardable(cr), 'on the spire its torso is a landing strip for the crew in the air');
+  // mortar shells count, plain shells do not
+  const torso = partOf(cr, 'mantle'), tp = midOf(torso.segs[0], 0.5);
+  st.shells.push({ x: tp.x, y: tp.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 3);
+  report(cr.mortared === 0 && cr.stats.by.shell > 0, 'a plain shell on the resting bird only hurts it');
+  const need = R.MORTAR_HITS;
+  for (let k = 1; k <= need && !cr.dying; k++) {
+    const q = midOf(partOf(cr, 'mantle').segs[0], 0.5);
+    st.shells.push({ x: q.x, y: q.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1, kind: 'mortar', g: 900 });
+    step(sim, 3);
+    if (k < need) report(cr.mortared === k && /MORTAR HIT/.test(st.ev.warnText), `mortar hit ${k}/${need}: "${st.ev.warnText}"`);
+  }
+  report(cr.dying && cr.stats.win === 'mortar' && /BLASTED OFF ITS ROCK/.test(st.ev.warnText), `${need} mortar shells on the resting bird win: stats.win "${cr.stats.win}", "${st.ev.warnText}"`);
+  // a mortar shell on the bird in the air is only a shell
+  const B = birdUp();
+  const t2 = midOf(partOf(B.cr, 'mantle').segs[0], 0.5);
+  B.st.shells.push({ x: t2.x, y: t2.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1, kind: 'mortar', g: 900 });
+  step(B.sim, 3);
+  report(B.cr.mortared === 0 && !B.cr.dying, 'a mortar shell on a bird in the air is not a mortar hit');
+  // it takes off by itself after its time
+  const C2 = roostedBird();
+  C2.cr.bird.roost.left = 0.2;
+  step(C2.sim, 20);
+  until(C2.sim, () => C2.cr.bird.mode === 'fly', 6);
+  report(C2.cr.bird.mode === 'fly' && C2.cr.bird.roost === null, 'left alone it leaves the spire after its time');
+}
+
+// (T8) boarding it: CUT THE GIZZARD
+{
+  for (const where of ['bag', 'spire']) {
+    const A = where === 'bag' ? perchedBird() : roostedBird();
+    const { sim, st, ship, cr, p1 } = A;
+    const gz = partOf(cr, 'heart'), gs = gz.segs[0];
+    p1.carry = 'sword';
+    report(gz.hidden && BD.boardAt(st, ship, p1, gs.x, gs.y) && !!p1.on, `a flier lands on it (${where}): he is aboard`);
+    let label = null, type = null;
+    const n1 = until(sim, () => { p1.fire = true; if (p1.act) { label = p1.act.label; type = p1.act.type; } return cr.dying; }, 40);
+    report(type === 'strike' && /CUT THE GIZZARD/.test(label) && cr.stats.win === 'board' && /GIZZARD CUT/.test(st.ev.warnText), `on the ${where}: "${label}" (a sword, ${TB.BOARD.CUT_TIME} s a stroke) wins after ${n1.toFixed(1)} s: "${st.ev.warnText}"`);
+  }
+  {
+    const A = perchedBird();
+    const { sim, st, ship, cr, p1 } = A;
+    const gs = partOf(cr, 'heart').segs[0];
+    p1.carry = null;
+    BD.boardAt(st, ship, p1, gs.x, gs.y);
+    p1.fire = true;
+    step(sim, 20);
+    report(!!p1.act && p1.act.type === 'need' && /sword/i.test(p1.act.label), `without a sword: "${p1.act && p1.act.label}"`);
+  }
+  {
+    const A = perchedBird();
+    const { sim, st, ship, cr } = A;
+    const gs = partOf(cr, 'heart').segs[0], q = A.st.players.p1;
+    q.carry = 'sword';
+    BD.boardAt(st, ship, q, gs.x, gs.y);
+    cr.bird.perch.left = 0.1;
+    step(sim, 30);
+    report(!q.on && q.fly === true, 'when it takes off the boarder falls off it (a flier again, with his parachute button)');
+  }
+  {
+    const A = birdUp();
+    const { st, cr } = A;
+    const w = cr.parts.find((p) => p.id === 'wingN').segs[2];
+    const an = BD.creatureAnchor(st, w.x + Math.cos(w.ang) * w.len * 0.5, w.y + Math.sin(w.ang) * w.len * 0.5);
+    report(an === null, 'a flying Thunderbird is no hook anchor and no landing place');
+    const B = perchedBird();
+    const ww = B.cr.parts.find((p) => p.id === 'wingN').segs[2];
+    const an2 = BD.creatureAnchor(B.st, ww.x + Math.cos(ww.ang) * ww.len * 0.5, ww.y + Math.sin(ww.ang) * ww.len * 0.5);
+    report(!an2 || an2.surf === false, 'perched, a hook in a wing is only an anchor (you climb aboard by its body)');
+  }
+}
+
+// (T9) a plucked wing, the phases, the fall
+{
+  const A = birdUp();
+  const { sim, st, cr } = A;
+  noRoost();
+  const wingN = cr.parts.find((p) => p.id === 'wingN'), wingF = cr.parts.find((p) => p.id === 'wingF');
+  const topY = (secsN) => { let top = 1e9; for (let i = 0; i < secsN * 60; i++) { step(sim); if (cr.bird.mode === 'fly' && !cr.bird.act) top = Math.min(top, cr.base.y - T.toWorldY(A.ship, A.ship.layout.refPoint.y)); } return top; }; // (the highest point of its loop over her)
+  const y0 = topY(30);
+  CS.hurtCreature(st, { part: wingN, seg: 3 }, wingN.hp + 1, { src: 'shell', who: 'p1' });
+  report(wingN.severed && wingN.segs.length < TB.WING.SEGS && cr.chunks.length === 1 && cr.chunks[0].part.kind === 'wing' && cr.chunks[0].part.art === 'thunderbird' && cr.stats.plucked === 1 && /WING IS PLUCKED/.test(st.ev.warnText), `a wing with no hp is PLUCKED (a stump of ${wingN.segs.length} segments stays, the rest tumbles away as a chunk): "${st.ev.warnText}"`);
+  cr.ai.breather = 0;
+  step(sim, 10);
+  report(cr.phase === 2 && !cr.dying && cr.bird.mode !== 'dying' && cr.bird.rotAdd < 0, `one wing plucked: phase 2, it flies on lopsided (pitch ${cr.bird.rotAdd})`);
+  const y1 = topY(30);
+  report(y1 - y0 > 0.6 * TB.FLY.UP * (1 - TB.ONE_WING.UP_MUL), `with one wing it flies lower: the top of its loop is ${Math.round(y1 - y0)} px lower over her (ONE_WING.UP_MUL ${TB.ONE_WING.UP_MUL})`);
+  CS.hurtCreature(st, { part: wingF, seg: 3 }, wingF.hp + 1, { src: 'shell', who: 'p1' });
+  step(sim, 5);
+  report(cr.dying && cr.stats.win === 'pluck' && /PLUCKED BARE/.test(st.ev.warnText) && /CLOUDS/.test(st.ev.warnText) && st.bossDownLap === st.course.lap, `both wings plucked: it falls into the clouds, stats.win "${cr.stats.win}", "${st.ev.warnText}"`);
+  step(sim, secs(1));
+  const yf = cr.y;
+  step(sim, secs(4));
+  report(cr.y > yf + 500 && cr.mode === 'dying', `it falls (${Math.round(cr.y - yf)} px in 4 s)`);
+}
+{
+  // the pool: below 60% the second phase, below 30% the frenzy
+  const A = birdUp();
+  const { sim, st, cr } = A;
+  cr.hp = cr.maxHp * (TB.PHASE.TWO_HP - 0.02);
+  step(sim, 30);
+  report(cr.phase === 2 && /CALLS DOWN LIGHTNING/.test(st.ev.warnText), `below 60% of the pool: phase 2, "${st.ev.warnText}"`);
+  cr.ai.breather = 0;
+  cr.hp = cr.maxHp * (TB.PHASE.THREE_HP - 0.02);
+  step(sim, 5);
+  report(cr.phase === 3 && /FRENZY/.test(st.ev.warnText) && TBM.birdPhaseName(1) === 'IT CIRCLES' && TBM.birdPhaseName(2) === 'IT CALLS LIGHTNING' && TBM.birdPhaseName(3) === 'FRENZY', `below 30%: phase 3, "${st.ev.warnText}"; the phases have names for the health bar`);
+  // phase 1 does not dive or swallow, phase 2 does
+  const B = birdUp();
+  const seen = new Set();
+  noRoost();
+  for (let i = 0; i < secs(160); i++) { B.cr.ai.breather = 0; if (B.cr.bird.nextT > 6) B.cr.bird.nextT = 0.5; step(B.sim); if (B.cr.bird.act) seen.add(B.cr.bird.act.kind); if (B.cr.phase > 1) break; if (B.cr.bird.mode === 'perch' || B.cr.bird.mode === 'roost') seen.add(B.cr.bird.mode); }
+  report(!seen.has('dive') && !seen.has('swallow') && (seen.has('gust') || seen.has('pass')), `phase 1 is gusts, passes and perches only (seen: ${[...seen].join(', ')})`);
+}
+
+// (T10) the lair, the voyage, the reward and the feather sail
+{
+  restoreCfg();
+  birdCfgBack();
+  realHp();
+  const ctx = boot({ env: 'storm', lair: true, bots: 0 });
+  const { sim, st, ship } = ctx;
+  const map = st.course.map, c = st.course;
+  const TL = TB.LAIR;
+  report(c.stop && c.stop.lair === true && c.stop.creature === 'thunderbird' && map.lair === true && map.creature === 'thunderbird' && map.outposts.length === 0 && map.turrets.length === 0 && Number.isFinite(map.startDist) && map.startDist < 1e8, 'a Thunderbird lair stop flies the lair map for the Thunderbird: open sky, no outposts, no guns');
+  report(map.spires.length === TL.SPIRES.length && map.spires.every((s) => Number.isFinite(s.x) && s.top > map.start.y + 1500 && s.top < map.H * map.CELL), `${map.spires.length} rock spires stand in it (tops ${map.spires.map((s) => Math.round(s.top - map.start.y)).join(', ')} px under the launch height)`);
+  report(MPS.floorBelow(map, map.spires[1].x, map.start.y) <= map.spires[1].top + 2 && MPS.floorBelow(map, map.start.x, map.start.y) > map.spires[1].top, 'a spire is solid rock under its top; the way in is open air');
+  step(sim, secs(2));
+  report(st.creature === null && !st.boss, 'at the start there is no creature and no zeppelin');
+  ship.pose.x = map.start.x + (map.goal.x - map.start.x) * 0.7 - ship.layout.refPoint.x;
+  st.tempo.phase = 'build';
+  st.tempo.bossOk = true;
+  for (let i = 0; i < secs(4) && !st.creature; i++) step(sim, 1);
+  report(!!st.creature && st.creature.kind === 'thunderbird' && !st.boss, `at ${(c.progress * 100).toFixed(0)}% of the way the Thunderbird comes in where the zeppelin would: ${st.creature && st.creature.name}; no zeppelin`);
+  const cr = st.creature;
+  for (let i = 0; i < secs(TB.SPAWN.ARRIVE + 1) && cr.mode !== 'idle'; i++) step(sim, 1);
+  quietB(cr);
+  step(sim, secs(5));
+  report(st.tempo.phase === 'peak' && st.tempo.kind === 'boss', 'the pacing director treats it as the mission boss');
+  step(sim, secs(8));
+  report(ship.ctx.stormJob.charge === null, 'while it lives the storm sends no strikes of its own (the Thunderbird calls the bolts)');
+  ship.pose.x = map.goal.x - ship.layout.refPoint.x;
+  ship.pose.y = map.goal.y - ship.layout.refPoint.y;
+  st.ev.warn = 0;
+  step(sim, secs(3));
+  report(!c.done && !c.pendingNext, 'at the lair\'s middle with the Thunderbird alive the stop is not done');
+  cr.hooks.hurtPool(1e9, 'shell', 'p1');
+  step(sim, secs(2));
+  report(cr.dying && !c.done && st.bossDownLap === c.lap, 'killed, it is dying and the boss is down');
+  for (let i = 0; i < secs(TB.SPAWN.SINK + C.CHUNK.LIFE + 3) && !c.done; i++) step(sim, 1);
+  report(c.done === true && c.pendingNext === true && st.creature === null && /THUNDERBIRD IS SLAIN/.test(st.ev.warnText), `once it has fallen the stop is done: "${st.ev.warnText}"`);
+}
+{
+  // the voyage: lairs by sky
+  restoreCfg();
+  const seeds = Array.from({ length: quick ? 80 : 300 }, (_, i) => 1000 + i * 7919);
+  let kr = 0, dr = 0, tbn = 0, bad = [];
+  for (const mode of ['quick', 'voyage', 'campaign']) for (const voyageNo of [1, 2]) for (const sd of seeds) {
+    const v = VY.generateVoyage(sd, { mode, voyageNo, gentle: sd % 2 === 0 });
+    for (const s of v.columns.flat().filter((q) => q.lair)) {
+      if (s.creature !== LR.BY_ENV[s.env] || !s.creature) bad.push(`${mode}/${sd}: ${s.id} on ${s.env} holds ${s.creature}`);
+      if (s.creature === 'kraken') kr++;
+      if (s.creature === 'drake') dr++;
+      if (s.creature === 'thunderbird') tbn++;
+    }
+  }
+  report(!bad.length && kr > 0 && dr > 0 && tbn > 0 && LR.BY_ENV.storm === 'thunderbird', `lairs are by sky: ${kr} Kraken, ${dr} Drake and ${tbn} Thunderbird lairs (Storm Front stops) over ${seeds.length * 6} voyages${bad.length ? ': ' + bad.slice(0, 3).join('; ') : ''}`);
+  const tl = VY.lairOf('thunderbird');
+  report(tl.NAME === TB.LAIR.NAME && VY.stopName({ lair: true, creature: 'thunderbird', env: 'storm' }) === TB.LAIR.NAME, 'the stop has the right name');
+  const ctx = boot({ start: 'classic', bots: 3 });
+  const { sim, st } = ctx;
+  const v = st.run.voyage, here = v.columns[0][0], lair = v.columns[1][0];
+  Object.assign(lair, { env: 'storm', play: 'storm', kind: 'lair', lair: true, creature: 'thunderbird', danger: 3, reward: 80 });
+  here.next = v.columns[1].map((s) => s.id);
+  st.run.salvage = 0;
+  sim.startDock();
+  if (st.vote && st.vote.kind === 'dock') {
+    const cast = st.vote.options.findIndex((o) => o.kind === 'cast');
+    for (const p of Object.values(st.players)) { p.voteAt = 1e9; p.vote = cast; }
+    step(sim, secs(3));
+  }
+  const route = st.vote && st.vote.kind === 'route' ? st.vote : null;
+  const opt = route && route.options.find((o) => o.id === lair.id);
+  report(!!opt && opt.lair === true && opt.icon === TB.LAIR.ICON && /LAIR/.test(opt.desc) && opt.kindName === TB.LAIR.KIND, `the route vote lists it: ${opt && opt.icon} "${opt && opt.name}" - ${opt && opt.desc}`);
+  const canvas = { width: 1920, height: 1080, clientWidth: 1920 };
+  const cam = createWorldCamera();
+  const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+  rec.texts.length = 0;
+  let exc = 0;
+  try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
+  const texts = rec.texts.map((q) => q.s);
+  report(exc === 0 && texts.includes(TB.LAIR.ICON) && texts.includes(TB.LAIR.LABEL), 'the TV\'s route map draws the eagle icon and LAIR (0 draw errors)');
+}
+{
+  // the reward and the trophy: the Thunderbird feather sail
+  restoreCfg();
+  birdCfgBack();
+  const ctx = boot({ env: 'storm', lair: true, start: 'classic', bots: 3 });
+  const { sim, st, ship } = ctx;
+  const cr = spawnCr(ctx, 'thunderbird');
+  for (let i = 0; i < secs(TB.SPAWN.ARRIVE + 1) && cr.mode !== 'idle'; i++) step(sim);
+  quietB(cr);
+  st.ship.hull = 40;
+  for (const b of st.bags) b.gas = 30;
+  const salv0 = st.run.salvage, hull0 = st.ship.hull;
+  cr.hooks.hurtPool(1e9, 'shell', 'p1');
+  step(sim, secs(3));
+  const SV = config.SALVAGE.BOSS * C.REWARD_MUL;
+  report(st.run.salvage - salv0 >= SV && st.run.salvage - salv0 <= SV + 40, `triple boss salvage: +${st.run.salvage - salv0} (SALVAGE.BOSS ${config.SALVAGE.BOSS} x ${C.REWARD_MUL})`);
+  report(st.ship.hull >= hull0 + TB.REWARD.HULL - 1 && st.bags.every((b) => b.gas >= 30 + TB.REWARD.GAS - 10) && st.run.trophy === 'featherSail', `a hull patch (+${TB.REWARD.HULL}) and every gasbag (+${TB.REWARD.GAS}); the trophy "${st.run.trophy}" is waiting`);
+  st.run.salvage = 0;
+  sim.startDock();
+  const idx = st.vote.options.findIndex((o) => o.kind === 'part' && o.trophy);
+  const card = st.vote.options[idx];
+  report(!!card && card.entry === 'featherSail' && card.name === 'Thunderbird feather sail' && card.cost === 0 && /TROPHY: from the Thunderbird/.test(card.badge) && card.choices.length >= 1, `the next dock offers the TROPHY card "${card && card.name}" - ${card && card.badge}, cost ${card && card.cost}, ${card && card.choices.length} place(s)`);
+  for (const p of Object.values(st.players)) { p.voteAt = 1e9; p.vote = idx; }
+  for (let i = 0; i < 60 * 8 && st.vote && st.vote.kind === 'dock' && !st.vote.options[idx].sold; i++) step(sim, 1);
+  if (st.vote && st.vote.kind === 'slot') { for (const p of Object.values(st.players)) { p.voteAt = 1e9; p.vote = 0; } for (let i = 0; i < 60 * 5 && st.vote && st.vote.kind === 'slot'; i++) step(sim, 1); }
+  step(sim, 5);
+  const L = ship.layout, sail = (L.sails || []).find((q) => q.art === 'thunderbird');
+  report(!!sail && st.run.trophy === null && st.run.parts.some((q) => q.id === 'featherSail'), `bought, it is on the ship: a mast and sail with art "${sail && sail.art}"`);
+  report(!PSH.CATALOGUE.find((e) => e.id === 'featherSail').allowed([], {}), 'and the trophy never turns up in the random shop (allowed is false)');
+  const canvas = { width: 1920, height: 1080, clientWidth: 1920 };
+  const cam = createWorldCamera();
+  const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+  let exc = 0;
+  for (let f = 0; f < 20; f++) { step(sim, 1); try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; if (exc < 3) console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); } }
+  report(exc === 0, 'the ship with the feather sail draws on the stub canvas (0 errors)');
+}
+{
+  // the feather sail's rules: it pulls TROPHY.PULL_MUL x as hard, and a gust cannot tear it (a plain sail tears)
+  const build = SBD.BUILDS.classic;
+  const withSail = PSH.offerPart(build, { only: 'featherSail' }).choices[0].parts; // (the trophy card's first place on the classic ship: a mast on her top deck)
+  const mk = (art) => withSail.map((q) => (q.part === 'sail' ? (({ art: _a, ...r }) => ({ ...r, ...(art ? { art } : {}) }))(q) : q));
+  const fly = (parts) => {
+    applyBuild(parts);
+    restoreCfg();
+    birdCfgBack();
+    const ctx = boot({ env: 'storm', lair: false });
+    const { sim, st } = ctx;
+    st.sails[0].hoist = 1;
+    st.weather.storm = 1;
+    let torn = 0;
+    for (let i = 0; i < secs(60); i++) { st.weather.gusting = true; st.weather.storm = 1; st.sails[0].hoist = Math.max(st.sails[0].hoist, 1); step(sim); }
+    torn = st.sailStats.torn;
+    return { torn, pull: st.sails[0].pull, feather: !!st.sails[0].feather, color: st.sails[0].color };
+  };
+  const plain = fly(mk(null));
+  const feather = fly(mk('thunderbird'));
+  applyBuild(SBD.BUILDS.classic);
+  report(plain.torn > 0 && !plain.feather && feather.torn === 0 && feather.feather && feather.color === config.SAIL.FEATHER_COLOR, `in a gale a plain sail tears (${plain.torn} times in a minute) and the feather sail never does (${feather.torn})`);
+  // pull: same wind, same hoist
+  const pullOf = (parts) => {
+    applyBuild(parts);
+    restoreCfg();
+    birdCfgBack();
+    const ctx = boot({ env: 'storm', lair: false });
+    const { sim, st } = ctx;
+    st.weather.gusting = false;
+    st.sails[0].hoist = 1;
+    for (let i = 0; i < 30; i++) { st.sails[0].hoist = 1; step(sim); }
+    return st.sails[0].pull;
+  };
+  const p1v = pullOf(mk(null)), p2v = pullOf(mk('thunderbird'));
+  applyBuild(SBD.BUILDS.classic);
+  report(p1v > 0 && Math.abs(p2v / p1v - TB.TROPHY.PULL_MUL) < 0.01, `the feather sail pulls ${(p2v / p1v).toFixed(2)}x as hard (TROPHY.PULL_MUL ${TB.TROPHY.PULL_MUL}): ${p2v.toFixed(3)} against ${p1v.toFixed(3)}`);
+}
+
+// (T11) the TV
+{
+  restoreCfg();
+  birdCfgBack();
+  const ctx = boot({ env: 'storm', lair: true });
+  const { sim, st } = ctx;
+  const cr = spawnCr(ctx, 'thunderbird');
+  for (let i = 0; i < secs(TB.SPAWN.ARRIVE + 1) && cr.mode !== 'idle'; i++) step(sim);
+  cr.ai.breather = 0;
+  const canvas = { width: 1920, height: 1080, clientWidth: 1920 };
+  const cam = createWorldCamera();
+  const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+  const seen = new Set();
+  let exc = 0, hudText = false, ms = 0, frames = 0;
+  const frame = () => {
+    step(sim, 1);
+    rec.texts.length = 0;
+    const t0 = hr();
+    try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; if (exc < 3) console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
+    ms += hr() - t0;
+    frames++;
+    if (rec.texts.some((x) => x.s.startsWith('THE THUNDERBIRD - '))) hudText = true;
+    if (cr.bird.act) seen.add(cr.bird.act.kind + '.' + cr.bird.act.sub); else seen.add(cr.bird.mode);
+  };
+  noRoost();
+  cr.phase = 2;
+  for (const k of ['gust', 'pass', 'dive', 'swallow', 'perch']) {
+    onlyBird(k);
+    TB.ATTACK.FIRST_PERCH = 0;
+    cr.bird.nextT = 0;
+    cr.bird.lastPerch = -1e9;
+    let started = false;
+    for (let f = 0; f < 60 * 45; f++) { cr.ai.breather = 0; frame(); const on = (cr.bird.act && cr.bird.act.kind === k) || (k === 'perch' && cr.bird.mode === 'perch'); if (on) started = true; if (started && !on && cr.bird.mode === 'fly') break; }
+    for (let f = 0; f < 60 * 4; f++) frame();
+  }
+  TB.ROOST.FIRST = 0;
+  cr.bird.lastRoost = -1e9;
+  cr.bird.nextT = 0;
+  onlyBird('gust');
+  for (let f = 0; f < 60 * 30 && cr.bird.mode !== 'roost'; f++) { cr.ai.breather = 0; frame(); }
+  for (let f = 0; f < 60 * 6; f++) frame();
+  const wing = cr.parts.find((p) => p.id === 'wingN');
+  CS.hurtCreature(st, { part: wing, seg: 3 }, wing.hp + 1, { src: 'shell', who: 'p1' });
+  for (let f = 0; f < 60 * 4; f++) frame();
+  report(exc === 0 && hudText && ['swallow.glow', 'dive.bolts', 'gust.beat', 'perch', 'roost'].every((k) => seen.has(k)), `the fight draws on a stub canvas for ${frames} frames with 0 errors (seen: ${[...seen].join(', ')}); the bar says THE THUNDERBIRD with its phase`);
+  console.log(`     whole-TV frame with the Thunderbird: ${(ms / frames).toFixed(2)} ms (JS on a stub canvas)`);
+  const stub = stubCtx();
+  const art = createCreatureArt({ ctx: stub });
+  let t = 0, blits = 0;
+  for (let f = 0; f < 300; f++) { step(sim, 1); const t0 = hr(); art.draw(cr, { zoom: 0.12, dpr: 1 }); for (const c of cr.chunks) art.drawLimb(c.part, { zoom: 0.12, dpr: 1 }); t += hr() - t0; blits = Math.max(blits, art.stats.blits); }
+  report(t / 300 < config.PERF.BUDGET_MS && blits > 12, `creatureArt alone: ${(t / 300).toFixed(3)} ms a frame over 300 frames (${blits} blits; budget ${config.PERF.BUDGET_MS} ms)`);
+}
+
+// (T12) the bots
+{
+  restoreCfg();
+  birdCfgBack();
+  const botsimPath = path.join(publicDir, '..', 'tools', 'botsim.mjs');
+  const run = (args, env = {}) => new Promise((resolve) => {
+    const c = spawn(process.execPath, [botsimPath, ...args], { env: { ...process.env, ...env } });
+    let out = '';
+    c.stdout.on('data', (d) => (out += d));
+    c.stderr.on('data', (d) => (out += d));
+    c.on('close', (code) => resolve({ code, out }));
+  });
+  const fight = (out) => {
+    const m = /fight 1: phase (\d)[^\n]*?; ended: (\w+)(?: at (\d+)s)?/.exec(out);
+    return m ? { phase: +m[1], ended: m[2], at: m[3] === undefined ? null : +m[3] } : null;
+  };
+  const pool = async (jobs, n) => { const res = []; let k = 0; await Promise.all(Array.from({ length: n }, async () => { while (k < jobs.length) { const i = k++; res[i] = await jobs[i](); } })); return res; };
+  const seedsB = quick ? [1, 2] : [1, 2, 3];
+  const forced = ['pluck', 'gizzard', 'mortar', 'board', 'hp'];
+  const buildOf = { mortar: ['--build', 'birdmortar'] };
+  const jobs = [];
+  for (const w of forced) for (const sd of seedsB) jobs.push(() => run(['--lair', '1', '--env', 'storm', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd), ...(buildOf[w] || [])], { CREATURE_FORCE_WIN: w }).then((r) => ({ w, sd, r })));
+  for (const bots of [4, 16]) for (const sd of seedsB) jobs.push(() => run(['--lair', '1', '--env', 'storm', '--bots', String(bots), '--difficulty', 'easy', '--minutes', '16', '--seed', String(sd)]).then((r) => ({ w: 'easy' + bots, sd, r })));
+  for (const sd of seedsB) jobs.push(() => run(['--lair', '1', '--env', 'storm', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd)]).then((r) => ({ w: 'free', sd, r })));
+  const results = await pool(jobs, 5);
+  const clean = (r) => r.code === 0 && /errors: 0/.test(r.out) && !/NaN/.test(r.out);
+  const byWin = {};
+  for (const { w, sd, r } of results) { const f = fight(r.out); (byWin[w] ||= []).push({ sd, f, ok: clean(r) }); }
+  for (const w of forced) {
+    const rows = byWin[w];
+    const times = rows.map((x) => (x.f && x.f.ended === w ? x.f.at : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t !== null && t <= 360), `forced ${w.toUpperCase()}: 8 bots on Normal end it that way within 6 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] === null ? 'NOT (' + (x.f ? x.f.ended + ', phase ' + x.f.phase : 'no fight') + ')' : times[i] + ' s')).join(', ')})`);
+  }
+  for (const bots of [4, 16]) {
+    const rows = byWin['easy' + bots];
+    const times = rows.map((x) => (x.f && x.f.ended !== 'no' ? { at: x.f.at, how: x.f.ended } : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t && t.at <= 600), `${bots} bots on Easy win within 10 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] ? times[i].how + ' ' + times[i].at + ' s' : 'NOT')).join(', ')})`);
+  }
+  {
+    const rows = byWin.free;
+    const how = rows.map((x) => (x.f && x.f.ended !== 'no' ? x.f.ended + ' ' + x.f.at + ' s' : 'NOT'));
+    report(rows.every((x) => x.ok) && how.every((h) => h !== 'NOT'), `unforced, 8 bots on Normal win (${how.join(', ')})`);
+  }
+  report(results.every(({ r }) => clean(r)), `0 errors and no NaN in any of the ${results.length} Thunderbird bot fights`);
 }
 
 restoreCfg();

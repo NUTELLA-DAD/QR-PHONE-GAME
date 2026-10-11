@@ -16,7 +16,7 @@ export function createCoil({ state, puff, credit }) {
   const layout = ship.layout;
   const NONE = { x: 0, y: 0, aim: -Math.PI / 2, arc: 0 };
   let M = layout.coil || NONE; // (a ship with no coil emitter: nobody can man it, so these are never used; refit() looks again after a new build)
-  const coil = (state.coil = { aim: M.aim, charge: 0, cd: 0, bolt: null, charging: false });
+  const coil = (state.coil = { aim: M.aim, charge: 0, cd: 0, bolt: null, charging: false, drunk: 0 }); // (drunk: s left that the charge is a drunk lightning bolt, envStormSea.js: the Thunderbird takes it at DRINK.MUL x)
 
   // World position of the emitter.
   const emitter = () => ({ x: toWorldX(ship, M.x), y: toWorldY(ship, M.y - 60) }); // the glowing ball on top
@@ -42,6 +42,7 @@ export function createCoil({ state, puff, credit }) {
     pop(state, e.x, e.y - 120, 'KA-ZAAAP!', '#9fe8ff', 1 + power);
     const shell = { owner };
     if (state.creature) creatureBeam(state, e.x, e.y, dx, dy, C.RANGE, C.WIDTH, dmg * config.CREATURES.HURT.COIL, owner); // (a giant creature: each part the bolt crosses; its aim targets have no hp of their own, so the loop below skips them)
+    coil.drunk = 0; // (a drunk lightning bolt is spent: creatureSystem.js birdMul read it above)
     for (const t of targets(state)) {
       const p = t.at(0);
       const rx = p.x - e.x;
@@ -83,6 +84,7 @@ export function createCoil({ state, puff, credit }) {
   // Called every frame with the player on the coil (or null).
   const update = (dt, player, working) => {
     coil.cd = Math.max(0, coil.cd - dt);
+    if (coil.drunk > 0) coil.drunk = Math.max(0, coil.drunk - dt);
     if (coil.bolt && (coil.bolt.t -= dt) <= 0) coil.bolt = null;
     coil.charging = false;
     if (!player || !working || state.phase !== 'flying') {
@@ -106,7 +108,7 @@ export function createCoil({ state, puff, credit }) {
     else coil.charge = Math.max(0, coil.charge - dt);
   };
 
-  const reset = () => Object.assign(coil, { aim: M.aim, charge: 0, cd: 0, bolt: null, charging: false });
+  const reset = () => Object.assign(coil, { aim: M.aim, charge: 0, cd: 0, bolt: null, charging: false, drunk: 0 });
   const refit = () => { M = layout.coil || NONE; reset(); }; // (a new build was applied to the ship: Versus' shelf)
 
   return { update, reset, refit, emitter };

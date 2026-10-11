@@ -71,13 +71,20 @@ export function mouthWindowSoon(state, secs = 4) {
 }
 
 // Is this aim target (creatureTargets) worth a harpoon? The exhausted creature's body: the harpoon gun may aim at it in phase 3 (aim.js), the bots man it then.
-export const towTarget = (cr, t) => !!cr && !cr.dying && (cr.kind === 'drake' ? cr.drake.mode === 'crawl' : cr.phase >= 3) && t.kind === 'creaturePart' && t.part.kind === 'mantle'; // (the Drake: once it crawls)
+export const towTarget = (cr, t) => !!cr && !cr.dying && cr.kind !== 'thunderbird' && (cr.kind === 'drake' ? cr.drake.mode === 'crawl' : cr.phase >= 3) && t.kind === 'creaturePart' && t.part.kind === 'mantle'; // (the Drake: once it crawls)
 
 // The dev / test flag (config.CREATURES.FORCE_WIN): does a bot gun of this type hold its fire at this part? (sever: only tentacles; hp: never tentacles; mouth: nothing, only bombs; tow and board: tentacles
 // until phase 3, then nothing - except the harpoon, which hooks the mantle - so the fight can only end the way it was asked to.)
 export function forcedSkip(cr, part, gunType) {
   const f = CR().FORCE_WIN;
   if (!f || !cr) return false;
+  if (cr.kind === 'thunderbird') { // the Thunderbird (C.6b): pluck = only the wings; gizzard = only the glowing gizzard (the coil's bolt wins it); mortar = nothing until it rests on a spire; board = nothing (one bot boards it); hp = anything
+    if (f === 'pluck') return part.kind !== 'wing';
+    if (f === 'gizzard') return part.kind !== 'heart';
+    if (f === 'mortar') return !(cr.bird.mode === 'roost' && !!cr.bird.roost && cr.bird.roost.landed);
+    if (f === 'board') return true;
+    return false;
+  }
   if (cr.kind === 'drake') { // the Cinder Drake (C.6a): choke = only the glowing mouth; bombs / tow = wings until it crashes, then only bombs / the harpoon; board = nothing (people and one bot board it); flak = only flak guns; hp = anything
     if (f === 'choke') return !(part.kind === 'mouth' && part.open);
     if (f === 'bombs') return cr.phase >= 2 || part.kind !== 'wing';
