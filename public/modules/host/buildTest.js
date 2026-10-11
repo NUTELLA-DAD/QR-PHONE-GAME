@@ -16,7 +16,7 @@ import { validate, makePlanner, judgeBotRuns, balanceGauge } from './buildCheck.
 import { generateShip, THEMES, THEME_LABEL } from './shipGen.js';
 import { CHAMPIONS } from './pvp/champions.js';
 import { GAS_KEYS, gasKey } from './gases.js';
-import { PALETTE, slotsFor, drawDeck, drawBag, resizeBag, erase, setBag, setGas, placeConnector, placePart, pickSlot, whyNot, thingAt, removeAt, setEngineDir, setEngineSwivel, emptyBuild, minimalBuild, snapX, rowAtY, summarize, addArmour } from './buildSlots.js';
+import { PALETTE, slotsFor, drawDeck, drawBag, resizeBag, erase, setBag, setGas, placeConnector, placePart, pickSlot, whyNot, thingAt, removeAt, setEngineDir, setEngineSize, setEngineSwivel, emptyBuild, minimalBuild, snapX, rowAtY, summarize, addArmour } from './buildSlots.js';
 import { blueprintView, drawBlueprint, engineArrow } from './blueprintArt.js';
 import { createPartPictures } from './partArt.js';
 import { createSprites } from './sprites.js';
@@ -221,7 +221,7 @@ function drawPalette() {
 const sprites = createSprites();
 const pics = createPartPictures({ sprites });
 sprites.load().then(() => { pics.refresh(); drawTray(); }).catch(() => {});
-const TRAY = [['gasbag', 'Gasbag'], ['gasValve', 'Gas valve'], ['helm', 'Helm'], ['boiler', 'Boiler'], ['coal', 'Coal bunker'], ['ammo', 'Ammo hold'], ['engine', 'Engine pod'], ['engineSwivel', 'Swivel engine'], ['gun', 'Gun'], ['searchlight', 'Searchlight'], ['lookout', 'Lookout'],
+const TRAY = [['gasbag', 'Gasbag'], ['gasValve', 'Gas valve'], ['helm', 'Helm'], ['boiler', 'Boiler'], ['coal', 'Coal bunker'], ['ammo', 'Ammo hold'], ['engine', 'Engine pod'], ['engineSwivel', 'Swivel engine'], ['engineHeavy', 'Heavy engine'], ['engineHeavySwivel', 'Swivel heavy engine'], ['engineGreat', 'Great lift engine'], ['engineGreatSwivel', 'Swivel great engine'], ['gun', 'Gun'], ['searchlight', 'Searchlight'], ['lookout', 'Lookout'],
   ['medbay', 'Medbay'], ['bombBay', 'Bomb bay'], ['lift', 'Lift'], ['boarding', 'Boarding point'], ['rack_hammer', 'Hammer rack'], ['rack_sword', 'Sword rack'], ['rack_hookshot', 'Hookshot rack'],
   ['extinguisher', 'Extinguisher'], ['armour', 'Armour plate'], ['vent', 'Steam vent'], ['sail', 'Mast and sail'], ['ladder', 'Ladder'], ['pole', 'Slide pole'], ['ballast', 'Sandbag'], ['ballast_hang', 'Hanging sandbag'], ['crewCannon', 'Crew cannon'], ['rack_sandbag', 'Sandbag rack'], ['rack_crate', 'Crate stack'], ['rack_towline', 'Towline reel'],
   ['gun_flame', 'Flamethrower'],
@@ -231,7 +231,7 @@ const tray = { id: null, moved: false, slots: [], target: null, ptr: null, why: 
 // engDir is the way the NEXT engine will point (rotate it with the wheel or R while dragging an engine, or the arrows on the left); selEngine is the engine whose arrow the page is editing.
 // Every engine on the blueprint has a red thrust arrow and a brass dot at its tip: drag the dot to turn that engine (snaps to 15 degrees); Aim engine + click an engine, then pick an arrow.
 const ARROWS = ['→', '↗', '↑', '↖', '←', '↙', '↓', '↘']; // (ENGINE_DIRS in order: forward, up-forward, up, up-back, back, down-back, down, down-forward)
-const isEngineTile = (id) => id === 'engine' || id === 'engineSwivel';
+const isEngineTile = (id) => /^engine(Swivel|Heavy|Great)/.test(id) || id === 'engine'; // (the pods, and the bigger engines: ENGINE SIZES)
 let engDir = 0;
 let selEngine = null; // the name of the selected engine
 let aim = null; // a drag of an engine's handle: { name, dir }
@@ -258,6 +258,7 @@ function drawEnginePanel() {
   $('engSay').textContent = 'points ' + dirName(e.dir || 0);
   mk($('engSelArrows'), e.dir || 0, (d) => applyEdit(setEngineDir(parts, e.name, d)));
   $('engSwivel').checked = !!e.swivel;
+  $('engSize').value = e.size || 'standard';
 }
 function rotateEngine(n) { // wheel / R / the rotate buttons: the dragged engine, else the selected one, else the next one
   if (tray.id && isEngineTile(tray.id)) { engDir = stepDir(engDir, n); regrabGhost(); drawEnginePanel(); return; }
@@ -354,7 +355,7 @@ const label = (p) => {
   switch (p.part) {
     case 'station': return `${p.n} (${p.kind})`;
     case 'gun': case 'searchlight': return `${p.part}: ${p.n}`;
-    case 'engine': return `engine: ${p.name} (${dirName(p.dir || 0)}${p.swivel ? ', swivel' : ''})`;
+    case 'engine': return `engine: ${p.name} (${dirName(p.dir || 0)}${p.swivel ? ', swivel' : ''}${p.size ? ', ' + p.size : ''})`;
     case 'deck': return `deck: ${p.name} ${p.x0}-${p.x1} (${p.outside ? 'outdoor' : 'covered'})`;
     case 'armour': return `armour plate (${p.p} ${p.x0}-${p.x1})`;
     case 'room': return `room: ${p.name}`;
@@ -807,6 +808,7 @@ $('kIn').onclick = () => { setKind('covered'); setTool('draw'); };
 addEventListener('wheel', (e) => { if (tray.id && tray.moved && isEngineTile(tray.id)) { e.preventDefault(); rotateEngine(e.deltaY > 0 ? 1 : -1); } }, { passive: false }); // (the wheel turns the engine you are dragging)
 $('engL').onclick = () => rotateEngine(-1);
 $('engR').onclick = () => rotateEngine(1);
+$('engSize').onchange = () => { if (selEngine) applyEdit(setEngineSize(parts, selEngine, $('engSize').value)); };
 $('engSwivel').onchange = () => { if (selEngine) applyEdit(setEngineSwivel(parts, selEngine, $('engSwivel').checked)); };
 $('bagShort').onclick = () => applyEdit(setBag(parts, { grow: -1 }));
 $('bagLong').onclick = () => applyEdit(setBag(parts, { grow: 1 }));
@@ -996,7 +998,7 @@ if (restored) note(restored, false);
 // ---- go ------------------------------------------------------------------------------------------------------------------
 refresh(); // (a ?build= that cannot fly: nothing flies until it can, the live pane says what is missing)
 window.buildTest = { view, bui, ui, get bv() { return bv; }, get pane() { return pane; }, set3d, ghostSpec3d, want3d: () => want3d, get bpLayout() { return bpLayout; }, get parts() { return parts; }, get result() { return result; }, get sim() { return sim; }, get live() { return live; }, edit, pick, slotsFor, info: () => info, runBotTest, startLive, flag, validate: () => result,
-  tool: () => tool, setTool, setKind, kind: () => kind, addArmour, applyEdit, setEngineDir, setEngineSwivel, engDir: () => engDir, selEngine: () => selEngine, aim: () => aim, drawDeck, drawBag, resizeBag, erase, setBag, setGas, selBag: () => selBag, placeConnector, placePart, removeAt, thingAt, emptyBuild, minimalBuild, tray: () => tray, bpScreen: (x, y) => { const r = bp.getBoundingClientRect(); return bv ? { x: r.left + (bv.X(x) * r.width) / bp.width, y: r.top + (bv.Y(y) * r.height) / bp.height } : null; }, // (bpScreen: ship coordinates to page pixels on the blueprint, for tests)
+  tool: () => tool, setTool, setKind, kind: () => kind, addArmour, applyEdit, setEngineDir, setEngineSize, setEngineSwivel, engDir: () => engDir, selEngine: () => selEngine, aim: () => aim, drawDeck, drawBag, resizeBag, erase, setBag, setGas, selBag: () => selBag, placeConnector, placePart, removeAt, thingAt, emptyBuild, minimalBuild, tray: () => tray, bpScreen: (x, y) => { const r = bp.getBoundingClientRect(); return bv ? { x: r.left + (bv.X(x) * r.width) / bp.width, y: r.top + (bv.Y(y) * r.height) / bp.height } : null; }, // (bpScreen: ship coordinates to page pixels on the blueprint, for tests)
   screen: (x, y) => { const p = shipMatrix.transformPoint(new DOMPoint(x, y)), r = scene.getBoundingClientRect(); return { x: r.left + (p.x * r.width) / scene.width, y: r.top + (p.y * r.height) / scene.height }; } }; // (screen: ship coordinates to page pixels, for tests)
 
 // While the build cannot fly: a stamp over the live pane saying what she still needs.

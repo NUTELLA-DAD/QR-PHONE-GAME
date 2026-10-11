@@ -290,7 +290,8 @@ export function gasFor(state, target) {
   const wantVy = Math.max(-320, Math.min(320, (target - state.ship.alt) * 1.3));
   const needAccel = (wantVy - vy) * 2.5 + vy * G.DRAG;
   const env = state.env; // ice weight and lava thermals shift the gas level she needs to hover (environments.js)
-  const wantGas = G.NEUTRAL + needAccel / G.LIFT + (env ? env.sink - env.lift / G.LIFT : 0);
+  const lifting = state.forces ? state.forces.vyAcc || 0 : 0; // (engines pointing up already push her, a great lift engine by 56 gas points: the bag makes up the rest)
+  const wantGas = G.NEUTRAL + (state.engineWeight || 0) + (needAccel - lifting) / G.LIFT + (env ? env.sink - env.lift / G.LIFT : 0);
   return Math.max(-1, Math.min(1, (wantGas - state.ship.gas) / 8));
 }
 

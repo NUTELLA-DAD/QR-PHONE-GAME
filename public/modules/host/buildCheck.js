@@ -5,7 +5,7 @@
 // (tools/buildsim.mjs), the batch runner and the dev page (public/buildtest.html) all use it.
 // A check is { group, level: 'PASS' | 'WARN' | 'FAIL', text }; ok means no FAIL.
 import { config } from '../../config.js';
-import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf, isNestRow, thrustVec, engineUse, crossesGap, COL } from './shipBuild.js';
+import { buildLayout, budgets as partBudgets, balanceOf, bagCover, ventBoiler, STATION_KINDS, ONE_PER_SHIP, KIND_STATS, rowOf, isNestRow, thrustVec, thrustOf, sizeNamed, engineUse, crossesGap, COL } from './shipBuild.js';
 import { staticPitch } from './forces.js';
 import { fireRisk, hydrogenExposure } from './fireModel.js';
 import { gasKey } from './gases.js';
@@ -122,10 +122,10 @@ export function steamGauge(L) {
   const boilers = L.stations.filter((s) => s.kind === 'boiler').length;
   const fuel = BC.FUEL_SETTLED;
   const heat = boilers ? ((B.HEAT_MAX * fuel) / (fuel + B.HEAT_HALF)) * (1 + (boilers - 1) * B.EXTRA_BOILER) : 0;
-  const engineDir = new Map(L.engines.map((e) => [e.name, e.dir]));
+  const engineOf = new Map(L.engines.map((e) => [e.name, e]));
   const use = (speed, busy) => {
     let u = B.USE_BASE;
-    for (const pipe of L.pipes) u += engineDir.has(pipe.to) ? engineUse(engineDir.get(pipe.to), speed) : B.USE_POWERED;
+    for (const pipe of L.pipes) u += engineOf.has(pipe.to) ? engineUse(engineOf.get(pipe.to).dir, speed, 1, engineOf.get(pipe.to).size) : B.USE_POWERED; // (a heavy engine burns 2.5 pods' steam, a great one 4)
     if (busy) {
       u += BC.PUMP_DUTY * config.GAS.PUMP_STEAM;
       if (L.stations.some((s) => s.kind === 'deflector')) u += BC.POWER_DUTY * config.SHIELD.STEAM_USE;
@@ -296,10 +296,16 @@ export function validate(parts, opts = {}) {
   else if (lift.level === 'WARN') warn('Lift', hoverText + `: above ${BC.HOVER_WARN}, lots of pumping`);
   else pass('Lift', hoverText);
   const steam = steamGauge(L);
+  const bigEngines = L.engines.filter((e) => sizeNamed(e.size).steam > 1); // (heavy and great engines: ENGINE SIZES, config.ENGINES.SIZES)
+  const bigSteam = bigEngines.reduce((n, e) => n + engineUse(e.dir, BC.CRUISE_SPEED, 1, e.size), 0);
   if (!steam.boilers) info('Steam', 'no boiler: no steam for engines, the pump or the helm (see the advice below)');
-  else if (steam.cruise < BC.PRESS_CRUISE_MIN) fail('Steam', `settled pressure at cruise ${steam.cruise} (needs ${BC.PRESS_CRUISE_MIN}): the boiler cannot keep up`);
+  else if (steam.cruise < BC.PRESS_CRUISE_MIN) fail('Steam', `settled pressure at cruise ${steam.cruise} (needs ${BC.PRESS_CRUISE_MIN}): the boiler cannot keep up${bigEngines.length ? ` (the ${bigEngines.length === 1 ? 'big engine burns' : 'big engines burn'} ${bigSteam.toFixed(0)} of ${steam.useCruise}: a second boiler, or a smaller engine)` : ''}`);
   else if (steam.idle > BC.PRESS_IDLE_MAX) warn('Steam', `settled pressure at idle ${steam.idle} (over ${BC.PRESS_IDLE_MAX}): the crew will be venting`);
   else pass('Steam', `settled pressure ${steam.cruise} at cruise, ${steam.idle} at idle (${steam.boilers} boiler${steam.boilers === 1 ? '' : 's'})`);
+  if (steam.boilers && bigEngines.length && steam.cruise >= BC.PRESS_CRUISE_MIN && ((bigEngines.length >= 2 && steam.boilers < 2) || steam.cruise < BC.PRESS_BIG_WARN)) { // (a big engine starves when the line sags: the whole ship sinks and slows with it)
+    const names = [...new Set(bigEngines.map((e) => e.size))].join(' and ');
+    warn('Steam', `${bigEngines.length} big engine${bigEngines.length === 1 ? '' : 's'} (${names}) ${bigEngines.length === 1 ? 'burns' : 'burn'} ${bigSteam.toFixed(0)} of the ${steam.useCruise} steam used at cruise (settled pressure at cruise ${steam.cruise}, under ${BC.PRESS_BIG_WARN} wanted with big engines): ${steam.boilers < 2 ? (bigEngines.length >= 2 ? 'two big engines need a second boiler' : 'a second boiler keeps them fed') : 'another boiler, or a smaller engine, keeps them fed'}, or the engines sputter and she sinks when the coal runs low`);
+  }
   const hands = handsGauge(L);
   if (hands.level === 'WARN') warn('Hands', `${hands.stations} manned stations is ${hands.perPlayer} per player at ${hands.crew} crew (over ${BC.HANDS_PER_PLAYER})`);
   else pass('Hands', `${hands.stations} manned stations: ${hands.perPlayer} per player at ${hands.crew} crew (${hands.at4} at 4, ${hands.at6} at 6)`);
@@ -316,13 +322,14 @@ export function validate(parts, opts = {}) {
 
   // --- Thrust (S.5h): which way the engines push, and how the engines and sails tip her. INFO lines, with WARNs for engines fighting each other and for a tilt nobody can trim away.
   if (L.engines.length) {
-    const E = config.ENGINES, vs = L.engines.map((e) => ({ e, v: thrustVec(e.dir) }));
-    const drive = Math.max(1, vs.filter((q) => q.v.fwd >= E.DRIVE_COS).length);
+    const E = config.ENGINES, vs = L.engines.map((e) => ({ e, v: thrustOf(e), u: thrustVec(e.dir) })); // (v: the push in pods - a heavy engine is two, a great one 2.5 ahead and 3.5 lifting; u: the direction alone)
+    const drive = Math.max(1, vs.filter((q) => q.u.fwd >= E.DRIVE_COS).reduce((n, q) => n + sizeNamed(q.e.size).thrust, 0));
     const ahead = vs.reduce((n, q) => n + Math.max(0, q.v.fwd), 0) / drive, astern = vs.reduce((n, q) => n + Math.max(0, -q.v.fwd), 0) / drive;
     const up = vs.reduce((n, q) => n + Math.max(0, q.v.up), 0), down = vs.reduce((n, q) => n + Math.max(0, -q.v.up), 0);
     const net = Math.min(1, ahead) - Math.min(1, astern), swivels = L.engines.filter((e) => e.swivel).length;
     const sp = bal.com ? staticPitch(L, { x: bal.com.x, y: bal.com.y, k2: bal.k2 }) : null;
-    info('Thrust', `${L.engines.length} engine${L.engines.length === 1 ? '' : 's'}: forward ${Math.round(Math.min(1, ahead) * 100)}% of full speed, back ${Math.round(Math.min(1, astern) * 100)}%, up ${(up * E.LIFT_GAS).toFixed(0)} gas points of lift, down ${(down * E.LIFT_GAS).toFixed(0)}${swivels ? `; ${swivels} swivel mount${swivels === 1 ? '' : 's'} (crew turn the engine in flight)` : ''}${sp && sp.engines ? `; pitch torque: ${sp.engines > 0 ? 'nose down' : 'nose up'} ${Math.abs(sp.engines)} degrees with steam up` : ''}`);
+    const kinds = ['heavy', 'great'].map((k) => [k, L.engines.filter((e) => e.size === k).length]).filter(([, n]) => n).map(([k, n]) => `${n} ${sizeNamed(k).name.toLowerCase()}${n === 1 ? '' : 's'}`).join(', ');
+    info('Thrust', `${L.engines.length} engine${L.engines.length === 1 ? '' : 's'}${kinds ? ` (${kinds})` : ''}: forward ${Math.round(Math.min(1, ahead) * 100)}% of full speed, back ${Math.round(Math.min(1, astern) * 100)}%, up ${(up * E.LIFT_GAS).toFixed(0)} gas points of lift, down ${(down * E.LIFT_GAS).toFixed(0)}${swivels ? `; ${swivels} swivel mount${swivels === 1 ? '' : 's'} (crew turn the engine in flight)` : ''}${sp && sp.engines ? `; pitch torque: ${sp.engines > 0 ? 'nose down' : 'nose up'} ${Math.abs(sp.engines)} degrees with steam up` : ''}`);
     if (ahead > 0 && astern > 0 && Math.abs(net) < E.OPPOSE_NET) warn('Thrust', `the engines push against each other: ${Math.round(ahead * 100)}% ahead and ${Math.round(astern * 100)}% astern cancel out (net ${Math.round(net * 100)}%): she barely moves`);
     if (!drive || (ahead === 0 && up + down > 0)) info('Thrust', 'no engine pushes her ahead: only the wind (and sails) drive her forward');
     if (sp && Math.abs(sp.engines) >= E.PITCH_WARN_DEG && !swivels) warn('Thrust', `the engines tip her ${sp.engines > 0 ? 'nose down' : 'nose up'} ${Math.abs(sp.engines)} degrees (the lift sits ${sp.engines > 0 ? 'behind' : 'ahead of'} the middle of her weight) and nothing can turn them back: put a lift engine at the other end, or give one a swivel mount`);

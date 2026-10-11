@@ -2,7 +2,7 @@
 // Broken modules stop working until repaired with a hammer. The boiler's steam reaches the helm,
 // engines and lift through pipes; each pipe has a valve and can burst and leak.
 import { config } from '../../config.js';
-import { engineUse } from './shipBuild.js';
+import { engineUse, engineSize } from './shipBuild.js';
 
 const M = config.MODULES;
 
@@ -48,7 +48,7 @@ export function createModules(ship) {
     for (const s of [...all('boiler'), ...all('helm').slice(0, 1)]) {
       add({ name: s.n, kind: s.kind, d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });
     }
-    for (const e of L.engines) add({ name: e.name, kind: 'engine', d: e.d, x: e.x, pos: { x: e.x, y: P[e.d].y + 38 } });
+    for (const e of L.engines) { const hp = M.HP * engineSize(e).hp; add({ name: e.name, kind: 'engine', d: e.d, x: e.x, pos: { x: e.x, y: P[e.d].y + 38 }, hp, max: hp, baseMax: hp }); } // (a heavy engine takes more hits: config.ENGINES.SIZES hp)
     const lr = L.liftRepair;
     const liftD = lr ? P.findIndex((p) => p.id === lr.p) : -1;
     if (lr && liftD >= 0 && LIFT >= 0) add({ name: 'Lift', kind: 'lift', d: liftD, x: lr.x, pos: { x: L.connectors[LIFT].xTop, y: P[liftD].y - 80 } }); // (no lift, no module)
@@ -154,7 +154,7 @@ export function createModules(ship) {
       else if (!byName[m.to] || byName[m.to].broken) continue;
       else if (byName[m.to].kind === 'engine') {
         const live = (state.engines || []).find((q) => q.name === m.to), built = L.engines.find((q) => q.name === m.to);
-        parts.engines += engineUse(live ? live.dir : built && built.dir, Math.abs(state.ship.speed), live && live.pow != null ? live.pow : 1); // (a forward engine: USE_ENGINE x speed; a lift engine burns steam with its own throttle)
+        parts.engines += engineUse(live ? live.dir : built && built.dir, Math.abs(state.ship.speed), live && live.pow != null ? live.pow : 1, built && built.size); // (a forward engine: USE_ENGINE x speed; a lift engine burns steam with its own throttle)
       }
       else parts.other += B.USE_POWERED;
     }
@@ -187,7 +187,7 @@ export function createModules(ship) {
     if (m.kind === 'sail' && m.hp < m.max) return `${name} is torn - mend it with a hammer`;
     if ((m.kind === 'helm' || m.kind === 'engine' || m.kind === 'lift' || m.kind === 'shield' || m.kind === 'coil') && !(m.kind === 'helm' && handWheel()) && !hasSteam(state, name)) return `${name} has no steam!`;
     if (leakRate(m) > 0) return `${name} is leaking steam - repair it${pipeTo(name) ? ' or close its valve' : ''}`;
-    if (m.hp < m.max * 0.5) return `${name} is damaged (${Math.round(m.hp)}%)`;
+    if (m.hp < m.max * 0.5) return `${name} is damaged (${Math.round((m.hp / m.max) * 100)}%)`;
     return '';
   };
 

@@ -15,11 +15,14 @@
 //                   command() is the phone's SPLIT / LINK / lever messages (network.js). The throttles live on the SHIP, so a new helmsman inherits them.
 //   thrust moment   every working engine also pushes forward (e.fwd x e.pow x THRUST_MOMENT px/s^2) AT ITS PLACE, with the sideways torque left in (forces.js, unbalanced): an engine hung below the
 //                   centre of mass tips the nose UP when it pushes ahead, one above it tips the nose down. It adds no speed (the speed model above does that).
+//   engine sizes    an engine part may be 'heavy' or 'great' (config.ENGINES.SIZES): its push, lift, steam, weight and health are that many pods' (shipBuild.js thrustOf / sizeNamed). state.engineWeight: the hover
+//                   level is GAS.NEUTRAL for every build, EXCEPT that a ship with heavy / great LIFT engines is weighed: the weight her bags cannot carry (mass - bag lift), up to what those engines lift as built, is
+//                   added to the gas she needs. So a sky-lifter really holds a heavy ship up (she hovers at gas 50 + weight - lift, as the validator says) and, starved or broken, the ship sinks.
 //   swivel          a station of kind 'swivel' beside an engine: the stick turns the engine (ENGINES.SWIVEL_RATE) within SWIVEL_ARC of the way it was built.
 // A ship whose engines all point forward is exactly the old ship (factor = working / engines, no vertical thrust).
 import { config } from '../../config.js';
 import { mainShip } from './ships.js';
-import { thrustVec, dirName } from './shipBuild.js';
+import { thrustVec, thrustOf, sizeNamed, dirName } from './shipBuild.js';
 import { applyForce, forcesOf } from './forces.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -38,8 +41,10 @@ export function createEngines({ state, modules }) {
     if (version === L.version && state.engines.length === L.engines.length) return;
     version = L.version;
     const old = new Map(state.engines.map((q) => [q.name, q])); // (an engine that is still there after a build change - a part broke off, S.5i - stays pointed where the crew turned it, and keeps its throttle)
-    state.engines = L.engines.map((e, i) => { const o = old.get(e.name); return { name: e.name, i, d: e.d, x: e.x, dir: o && o.home === (e.dir || 0) ? o.dir : e.dir || 0, home: e.dir || 0, swivel: !!e.swivel, fwd: 1, up: 0, thr: o ? o.thr : 1, pow: o ? o.pow : null }; });
-    drivers = Math.max(1, state.engines.filter((e) => thrustVec(e.home).fwd >= E.DRIVE_COS).length); // (counted as built: turning one up does not make the others "all there is")
+    state.engines = L.engines.map((e, i) => { const o = old.get(e.name); return { name: e.name, i, d: e.d, x: e.x, size: e.size, dir: o && o.home === (e.dir || 0) ? o.dir : e.dir || 0, home: e.dir || 0, swivel: !!e.swivel, fwd: 1, up: 0, thr: o ? o.thr : 1, pow: o ? o.pow : null }; });
+    const sky = L.engines.reduce((n, e) => n + (e.size ? Math.max(0, thrustOf(e).up) * E.LIFT_GAS : 0), 0); // (the gas points of lift her heavy / great engines make pointing as built)
+    state.engineWeight = sky > 0 ? Math.min(sky, Math.max(0, L.balance.mass - L.balance.bagLift)) : 0; // (0 for every ship without one: the hover level is GAS.NEUTRAL)
+    drivers = Math.max(1, state.engines.reduce((n, e) => n + (thrustVec(e.home).fwd >= E.DRIVE_COS ? sizeNamed(e.size).thrust : 0), 0)); // (counted as built, in pods: a heavy engine is two, turning one up does not make the others "all there is")
   };
   const byName = (name) => state.engines.find((e) => e.name === name);
   const clampThr = (v) => clamp(v, -config.SHIP.REVERSE, 1);
@@ -48,7 +53,7 @@ export function createEngines({ state, modules }) {
 
   // The forces one engine puts on the ship at throttle `pow` (`k`: steam and the sky's share of its lift): the lift of its vertical part and the forward push, both where the engine sits.
   const pushes = (e, pow, k) => {
-    const v = thrustVec(e.dir), y = layout.platforms[e.d].y + E.BODY_DY, out = [];
+    const v = thrustOf(e, e.dir), y = layout.platforms[e.d].y + E.BODY_DY, out = []; // (in pods: a heavy engine pushes and lifts twice as hard, a great one lifts 3.5 times)
     if (v.up) out.push({ x: e.x, y, fx: 0, fy: -v.up * pow * E.LIFT_GAS * config.GAS.LIFT * k, linear: true, balanced: true, source: 'engine' }); // (up positive: an acceleration)
     if (v.fwd) out.push({ x: e.x, y, fx: v.fwd * pow * E.THRUST_MOMENT, fy: 0, balanced: false, source: 'engine' }); // (speed is the flight model's; this one is the twist of pushing from a place off the centre of mass)
     return out;
@@ -56,12 +61,14 @@ export function createEngines({ state, modules }) {
 
   // How much a unit of each engine's throttle tips the nose UP, -1..1 (from the same forces the ship feels, about her live centre of mass), centred inside each kind of engine (lift or drive) so that
   // shifting throttle by these weights moves the nose without adding or taking away push. All zero when the engines are alike (the classic pair).
+  // (A big engine moves more push per unit of throttle: the weights are per unit of PUSH, and centred on the push of each kind, so the shifts still add up to nothing: sizeK is the push of a unit of throttle.)
+  const sizeK = (e) => { const S = sizeNamed(e.size); return Math.abs(e.up) > Math.abs(e.fwd) && e.up > 0 ? S.lift : S.thrust; };
   const noseWeights = () => {
     const raw = state.engines.map((e) => (e.works === false ? 0 : -forcesOf(state, pushes(e, 1, 1)).torque));
     const kind = state.engines.map((e) => (Math.abs(e.up) > Math.abs(e.fwd) ? 1 : 0));
     const w = raw.map((r, i) => {
-      const mates = raw.filter((q, j) => kind[j] === kind[i] && state.engines[j].works !== false);
-      return state.engines[i].works === false ? 0 : r - mates.reduce((n, q) => n + q, 0) / (mates.length || 1);
+      const mates = state.engines.map((q, j) => j).filter((j) => kind[j] === kind[i] && state.engines[j].works !== false);
+      return state.engines[i].works === false ? 0 : r / sizeK(state.engines[i]) - mates.reduce((n, j) => n + raw[j], 0) / (mates.reduce((n, j) => n + sizeK(state.engines[j]), 0) || 1);
     });
     const top = Math.max(...w.map(Math.abs));
     return top < 1e-6 ? w.map(() => 0) : w.map((x) => x / top);
@@ -74,7 +81,7 @@ export function createEngines({ state, modules }) {
   // Where the levers stand with nobody fiddling: split = what the helm set; linked = the lever for the drive engines and flat out for the rest.
   const baseThr = () => state.engines.map((e) => (state.thrust.split ? e.thr : isDrive(e) ? leverNow() : 1));
   // The speed ordered by the engines' own throttles (SPLIT): the sum of their forward parts over the drive engines, the same scale as the helm's lever.
-  const splitOrder = () => clampThr(state.engines.reduce((n, e) => n + (e.works === false ? 0 : e.thr * e.fwd), 0) / drivers);
+  const splitOrder = () => clampThr(state.engines.reduce((n, e) => n + (e.works === false ? 0 : e.thr * e.fwd * sizeNamed(e.size).thrust), 0) / drivers);
 
   // Every frame: the thrust of the working engines. Called just before the balance / forces update, so the speed cap and the climb are ready for this frame.
   const update = (dt) => {
@@ -88,11 +95,13 @@ export function createEngines({ state, modules }) {
       const v = thrustVec(e.dir);
       e.fwd = v.fwd;
       e.up = v.up;
+      e.fed = pf; // (the share of full power the line's steam allows: a big engine on a short boiler runs at this, art and phone show it starved)
       if (Math.abs(v.fwd) > 0.05) drive = true; // (an engine pointing back still gives her a throttle: astern)
       const works = modules.works(state, e.name);
       e.works = works;
       if (!works) continue;
-      if (v.fwd > 0) fwd += v.fwd; else back -= v.fwd;
+      const push = v.fwd * sizeNamed(e.size).thrust; // (a heavy engine is two pods' push, a great one two and a half)
+      if (v.fwd > 0) fwd += push; else back -= push;
     }
     T.factor = Math.max(config.MODULES.NO_ENGINE_SPEED, Math.min(1, (fwd - back) / drivers)); // (engines pointing back take thrust away)
     T.back = Math.min(1, back / drivers);
@@ -124,7 +133,8 @@ export function createEngines({ state, modules }) {
     if (state.engines.length < 2) return null;
     const round = (v) => Math.round(v * 20) / 20;
     const list = state.engines.slice().sort((a, b) => (a.x - b.x) * f || a.i - b.i);
-    return { s: state.thrust.split, lv: round(leverNow()), l: list.map((e) => [e.i, round(state.thrust.split || e.pow == null ? e.thr : e.pow), Math.round((Math.atan2(Math.sin(e.dir), Math.cos(e.dir) * f) * 180) / Math.PI), e.works === false ? 0 : 1]) };
+    const starved = state.ship.press < E.STARVED_PRESS; // (a big engine on a short boiler: its lever is tinted)
+    return { s: state.thrust.split, lv: round(leverNow()), l: list.map((e) => [e.i, round(state.thrust.split || e.pow == null ? e.thr : e.pow), Math.round((Math.atan2(Math.sin(e.dir), Math.cos(e.dir) * f) * 180) / Math.PI), e.works === false ? 0 : 1, sizeNamed(e.size).short, sizeNamed(e.size).steam > 1 && starved ? 1 : 0]) }; // (then the size badge: '' | 'H' | 'G', and 1 while it is starved)
   };
 
   // The throttles that tip the nose `nose` (-1..1, + = up) by `mix` from where the levers stand now (a bot levelling the ship): the nose-up engines more, the others less.
@@ -149,6 +159,7 @@ export function createEngines({ state, modules }) {
     const e = st && byName(st.eng);
     if (!e) return '';
     if (!e.works) return `${e.name} is out (no steam or broken): it does not push`;
+    if (sizeNamed(e.size).steam > 1 && state.ship.press < E.STARVED_PRESS) return `${e.name} is STARVED of steam (${Math.round(state.ship.press)}): stoke the boiler!`;
     return `${e.name} points ${dirName(e.dir).toUpperCase()}${e.fwd > 0.05 ? ` - ahead ${Math.round(e.fwd * 100)}%` : ''}${e.up > 0.05 ? ` - lifting ${Math.round(e.up * 100)}%` : e.up < -0.05 ? ` - diving ${Math.round(-e.up * 100)}%` : ''}. Stick: point it`;
   };
 

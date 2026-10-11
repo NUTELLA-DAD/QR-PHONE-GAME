@@ -284,13 +284,14 @@ export function createVfx({ state, scene, world, models }) {
         let pow = le && fin(le.pow) ? le.pow : le && fin(le.thr) ? le.thr : 0.5;
         if (le && le.works === false) pow = 0;
         const k = 'e' + en.name;
-        a[k] = (a[k] || 0) + dt * Math.abs(pow) * 7 * P.rate;
+        const big = en.puff || 1, starved = big > 1 && press < ((config.ENGINES && config.ENGINES.STARVED_PRESS) || 40); // (ENGINE SIZES: a bigger engine puffs bigger puffs; on a short boiler it coughs, half the puffs)
+        a[k] = (a[k] || 0) + dt * Math.abs(pow) * 7 * P.rate * (starved ? 0.5 : 1);
         while (a[k] >= 1) {
           a[k] -= 1;
-          const m = en.group.matrixWorld.elements, lx = -en.out * 24, ly = 24; // (the exhaust stubs, behind the nacelle's centre)
+          const m = en.group.matrixWorld.elements, lx = en.ex ? en.ex[0] : -en.out * 24, ly = en.ex ? en.ex[1] : 24; // (the exhaust stubs, behind the nacelle's centre)
           const wx = m[0] * lx + m[4] * ly + m[12], wy = m[1] * lx + m[5] * ly + m[13], wz = m[2] * lx + m[6] * ly + m[14];
           if (!P.inView(wx, wy)) continue;
-          P.spawn('smoke', wx, wy, wz, { size: [14, 24], size1: 2.6, life: [0.7, 1.15], color: (C().SMOKE || {}).exhaust || '#8f8f8f', alpha: 0.5, up: [10, 30], vx: vx * 0.88 - pf * 50, vy: vy * 0.5, speed: [0, 14], warm: 0.1 });
+          P.spawn('smoke', wx, wy, wz, { size: [14 * big, 24 * big], size1: 2.6, life: [0.7, 1.15], color: (C().SMOKE || {}).exhaust || '#8f8f8f', alpha: 0.5, up: [10, 30], vx: vx * 0.88 - pf * 50, vy: vy * 0.5, speed: [0, 14], warm: 0.1 });
         }
         if (a[k] > 3) a[k] = 3;
       }

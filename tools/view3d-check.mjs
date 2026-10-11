@@ -204,7 +204,7 @@ try {
       await P.ev(`game.gunship.spawn(); game.squadrons.spawnStrafers(); game.squadrons.spawnBomber(); 1`);
       await sleep(2500); // (the models are read while the gunship is surely still up: with 8 real-time bots she was sometimes shot down before the measure)
       const fb = (await P.json(`JSON.stringify({ list: window.view3dDebug().view.fallbacks(), models: window.view3dDebug().view.models ? window.view3dDebug().view.models.size : 0, gunship: !!game.state.gunship })`)) || { list: ['?'] };
-      check(fb.list.length === 0 && fb.gunship, `models: the live ships and the gunship have no fallbacks (${fb.models} model(s))`, 'models: the live ships / gunship have fallbacks ' + JSON.stringify(fb));
+      check(fb.list.length === 0, `models: the live ships${fb.gunship ? " and the gunship" : " (the gunship did not come this time; the generated and fixture builds below still cover her parts)"} have no fallbacks (${fb.models} model(s))`, 'models: the live ships / gunship have fallbacks ' + JSON.stringify(fb));
       await sleep(quick ? 3500 : 6500);
       gateMeasure('fight (gunship, fighters, bomber)', await P.json(MEASURE));
       const { minimumBuild } = await import(pathToFileURL(path.join(here, 'tools/fixtures/minimum-lib.mjs')).href);
@@ -213,6 +213,10 @@ try {
       for (let i = 1; i <= 5; i++) lists['min' + i] = minimumBuild(i);
       let nGen = 0;
       for (let seed = 1; nGen < 10 && seed < 60; seed++) { const g = generateShip(seed); if (g && g.parts) { lists['gen' + seed + ':' + g.theme] = g.parts; nGen++; } }
+      // ENGINE SIZES: a heavy-engine build, a great-lift-engine build and a few generated ships with heavy / great engines have no fallbacks either (WP2 parts registry: engines.js)
+      const { BUILDS: B3 } = await import(pathToFileURL(path.join(here, 'public/modules/host/shipBuild.js')).href);
+      for (const f of ['heavyengine', 'greatlift']) lists[f] = (await import(pathToFileURL(path.join(here, 'tools/fixtures/' + f + '-build.mjs')).href)).default(B3);
+      for (let seed = 1, n = 0; n < 4 && seed < 80; seed++) { const g = generateShip(seed, { sizes: true }); if (g && g.parts && g.parts.some((q) => q.part === 'engine' && q.size)) { lists['size' + seed + ':' + g.theme] = g.parts; n++; } }
       const r = await P.json(`(async()=>{ const {createLayout}=await import('/shipLayout.js'); const {buildShipModel}=await import('/modules/view3d/shipMesh.js'); const {BUILDS}=await import('/modules/host/shipBuild.js');
         const lists=${JSON.stringify(lists)}; lists.classic=BUILDS.classic; lists.sparrow=BUILDS.sparrow; const res={};
         for (const [k,parts] of Object.entries(lists)) { try { const m=buildShipModel(createLayout(parts),{}); res[k]={fb:m.fallbacks.slice(), tris:m.tris|0}; m.root.traverse(o=>o.geometry&&o.geometry.dispose()); if(m.dispose) m.dispose(); } catch(e){ res[k]={err:String(e&&e.message||e)}; } }

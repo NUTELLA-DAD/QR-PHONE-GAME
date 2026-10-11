@@ -15,7 +15,7 @@ import { hearts } from './health.js';
 import { mainShip, hostileTo, foeOf, areHostile } from './ships.js';
 import { cannonPlan } from './cannon.js';
 import { solveThrow } from './cargo.js';
-import { cannonSeatName } from './shipBuild.js';
+import { cannonSeatName, sizeNamed } from './shipBuild.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/captainAI.js';
 import { specOf } from './gunTypes.js';
@@ -564,6 +564,8 @@ function listJobs(state, bot) {
   // The boiler is dying (no coal, or the pressure has collapsed): nothing else works without steam - stoke it right away.
   const ship = state.ship;
   if (state.phase === 'flying' && L.hasKind('boiler') && L.hasKind('coal') && !bunkerEmpty(state) && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
+  // ENGINE SIZES: a ship with a heavy or great engine burns steam fast and her big engine sputters when the line sags (she sinks): the stoker goes earlier, and for two sacks, while the pressure is low.
+  if (state.phase === 'flying' && L.hasKind('boiler') && L.hasKind('coal') && !bunkerEmpty(state) && (state.engines || []).some((q) => sizeNamed(q.size).steam > 1) && ship.fuel < B.BIG_ENGINE_COAL && ship.press < config.ENGINES.STARVED_PRESS + B.BIG_ENGINE_MARGIN) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
   // Hot-air bags lift only while the boiler is hot (GAS TYPES, gasBags.js): when the burner is cooling, somebody stokes it.
   if (state.phase === 'flying' && state.hotAir && state.hotAir.n && state.hotAir.heat < config.GASES.HOT.WARN_BELOW + 0.1 && L.hasKind('boiler') && L.hasKind('coal') && !bunkerEmpty(state) && ship.fuel < 85) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
   // The parts everything else hangs on (the helm and its steam pipe, the boiler, the lift): a broken one is fixed first,

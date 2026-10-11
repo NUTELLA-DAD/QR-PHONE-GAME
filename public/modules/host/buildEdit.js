@@ -617,6 +617,15 @@ export function setEngineDir(parts, id, angle) {
   const v = thrustVec(dir);
   return { ok: true, parts: next, added: [], removed: [], kind: 'engineDir', engine: id, dir, hint: `${id} now points ${dirName(dir)}${v.up > 0.05 ? ' - it lifts her (and tips the end it sits at upward)' : v.up < -0.05 ? ' - it pushes her down' : ''}${v.fwd < -0.05 ? ' - it pushes her back' : ''}.` };
 }
+// setEngineSize(parts, id, size): make the engine named `id` 'standard' | 'heavy' | 'great' (config.ENGINES.SIZES: a heavy engine pushes twice as hard on 2.5 times the steam, a great lift engine lifts 3.5 times).
+export function setEngineSize(parts, id, size) {
+  const i = engineIndex(parts, id);
+  if (i < 0) return no(parts, `There is no engine called ${id}.`);
+  if (!config.ENGINES.SIZES[size]) return no(parts, 'An engine is standard, heavy or great.');
+  const next = clone(parts), e = next[i], S = config.ENGINES.SIZES[size];
+  if (size === 'standard') delete e.size; else e.size = size;
+  return { ok: true, parts: next, added: [], removed: [], kind: 'engineSize', engine: id, size, hint: `${id} is now a ${S.name.toLowerCase()}${size === 'standard' ? '' : `: ${S.thrust}x the push, ${S.lift}x the lift pointing up, ${S.steam}x the steam, ${S.mass}x the weight`}.` };
+}
 export function setEngineSwivel(parts, id, on) {
   const i = engineIndex(parts, id);
   if (i < 0) return no(parts, `There is no engine called ${id}.`);

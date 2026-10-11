@@ -10,6 +10,7 @@ import { paintPath } from './textureArt.js';
 import { drawBarrel, drawRam } from './weaponsArt.js';
 import { drawCone } from './flameArt.js';
 import { drawHatch } from './hatchArt.js';
+import { artOf, drawEngineBody, drawEngineProp } from './engineArt.js';
 
 const INK = () => config.INK;
 const WOOD = '#b98a5a', WOOD_DARK = '#6b4a32', IRON = '#6a6568', BRASS = '#c9a85a', RED = '#a8443f', CANVAS = '#ebdfc0';
@@ -21,6 +22,25 @@ function thrustArrow(g, cx, cy, dir, len, filled) {
   g.save(); g.translate(cx, cy); g.rotate(dir);
   filled(RED, () => { g.moveTo(-4, -5); g.lineTo(len - 14, -5); g.lineTo(len - 14, -13); g.lineTo(len + 8, 0); g.lineTo(len - 14, 13); g.lineTo(len - 14, 5); g.lineTo(-4, 5); g.closePath(); });
   g.restore();
+}
+
+// The swivel ring round an engine picture and the crank beside it.
+function swivelMark(g, { filled, line }) {
+  g.strokeStyle = INK(); g.lineWidth = 3; g.lineCap = 'round'; // the swivel ring round the pod
+  g.beginPath(); g.arc(46, 48, 44, -2.5, -0.7); g.stroke(); g.beginPath(); g.arc(46, 48, 44, 0.7, 2.5); g.stroke();
+  filled(BRASS, () => g.arc(14, 88, 7, 0, 7)); line([[14, 88], [14, 76]], 3.4); // the crank
+}
+// A bigger engine's picture: drawn the way the ship wears it (engineArt.js), scaled to fill the box, a round badge saying which size, the thrust arrow over it.
+function sizedEngine(g, { filled, line }, sprites, o, size) {
+  const { k } = artOf(size), s = 94 / (124 * k + 30);
+  g.save(); g.translate(44, 50); g.scale(s, s);
+  drawEngineBody(g, size, 1, sprites, filled, line);
+  drawEngineProp(g, size, 1, 0.55, filled);
+  g.restore();
+  line([[22, 70], [22, 92], [4, 92]], 4); // the steam pipe in
+  thrustArrow(g, 44, 50, o.dir || 0, 34, filled);
+  filled(size === 'great' ? '#6fa07a' : BRASS, () => g.arc(14, 16, 11, 0, 7)); // the badge
+  g.fillStyle = INK(); g.font = 'bold 15px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(size === 'great' ? 'G' : 'H', 14, 17);
 }
 
 function pen(g) {
@@ -218,10 +238,7 @@ const DRAW = {
   },
   engineSwivel(g, p, sprites, o = {}) {
     DRAW.engine(g, p, sprites, o);
-    const { filled, line } = p;
-    g.strokeStyle = INK(); g.lineWidth = 3; g.lineCap = 'round'; // the swivel ring round the pod
-    g.beginPath(); g.arc(46, 48, 44, -2.5, -0.7); g.stroke(); g.beginPath(); g.arc(46, 48, 44, 0.7, 2.5); g.stroke();
-    filled(BRASS, () => g.arc(14, 88, 7, 0, 7)); line([[14, 88], [14, 76]], 3.4); // the crank
+    swivelMark(g, p);
   },
   featherSail(g, { filled, line }) { // the trophy: the mast and sail with the canvas in storm-bird feathers (sails.js, art: 'thunderbird')
     line([[22, 12], [60, 90]], 3, IRON); line([[22, 12], [10, 90]], 3, IRON); // the stays
@@ -233,6 +250,11 @@ const DRAW = {
     filled('#e8d86a', () => { g.moveTo(24, 3); g.lineTo(34, -2); g.lineTo(46, 6); g.lineTo(36, 8); g.closePath(); }); // a gold lightning pennant
     filled(WOOD, () => g.rect(6, 88, 88, 8));
   },
+  // The sized engines (config.ENGINES.SIZES, engineArt.js): the nacelle and propeller of the ship art squeezed into the box, with a badge (H heavy, G great) and the thrust arrow.
+  engineHeavy(g, p, sprites, o = {}) { sizedEngine(g, p, sprites, o, 'heavy'); },
+  engineHeavySwivel(g, p, sprites, o = {}) { sizedEngine(g, p, sprites, o, 'heavy'); swivelMark(g, p); },
+  engineGreat(g, p, sprites, o = {}) { sizedEngine(g, p, sprites, o, 'great'); },
+  engineGreatSwivel(g, p, sprites, o = {}) { sizedEngine(g, p, sprites, o, 'great'); swivelMark(g, p); },
   sail(g, { filled, line }) {
     line([[22, 12], [60, 90]], 3, IRON); line([[22, 12], [10, 90]], 3, IRON); // the stays
     filled('#d9a86a', () => { g.moveTo(26, 14); g.lineTo(26, 78); g.lineTo(88, 78); g.quadraticCurveTo(66, 52, 26, 14); g.closePath(); }); // the canvas, belling toward the bow

@@ -80,6 +80,19 @@ const fromPalette = (type, opts = {}) => (parts, L) => slotsFor(type, parts).map
   apply: opts.dir != null ? (ps) => s.apply(ps, { dir: opts.dir }) : s.apply,
 }));
 
+// ENGINE SIZES: the places a bigger engine can go. UPGRADES first - one of her pods is swapped for it in place (a great lift engine turns to point up), which adds no engine and takes the steam
+// of the pod it replaces off the bill - then a NEW engine on an outrigger like any pod.
+function engineCands(type, size, dir) {
+  const fresh = fromPalette(type, dir != null ? { dir } : {});
+  return (parts, L) => [
+    ...L.engines.filter((e) => !e.size).map((e) => {
+      const d = L.platforms.find((q) => q.id === e.p), y = d ? d.y : 0;
+      return { x: e.x, y, where: `${e.name}, ${whereOn(L, e.p, e.x)}: swapped for it`, ghost: boxAt(e.x, y + 38, 70, 34, 40), apply: (ps) => ps.map((q) => (q.part === 'engine' && q.name === e.name ? { ...q, size, ...(dir != null ? { dir } : {}) } : { ...q })) };
+    }),
+    ...fresh(parts, L),
+  ];
+}
+
 // The ship's two ends along the hull: the decks a hull bay lengthens, and what the new bay gets.
 function bayCandidates(parts, L) {
   const rows = ['main', 'lower', 'catwalk'].map((r) => L.platforms.find((q) => rowOf(q) === r)).filter(Boolean);
@@ -218,6 +231,7 @@ function featherSailCands(parts, L) {
   return out;
 }
 const engines = (p) => count(p, (q) => q.part === 'engine');
+const bigEngines = (p, size) => count(p, (q) => q.part === 'engine' && q.size === size);
 const stationsOf = (p, kind) => count(p, (q) => q.part === 'station' && q.kind === kind);
 export const CATALOGUE = [
   { id: 'hullBay', name: 'Hull bay', icon: '\u{1FAB5}', group: 'frame', blurb: 'A room longer on every deck (the gasbag is stretched to cover it). Heavier, a bigger target.', allowed: (p, o) => (o.hullBay || 0) < PS().HULL_BAYS_MAX, cands: bayCandidates, w: () => 2 },
@@ -225,6 +239,10 @@ export const CATALOGUE = [
   { id: 'gasbag', name: 'Gasbag', icon: '\u{1F388}', group: 'bag', pic: 'gasbag', blurb: 'More lift. A bigger target with more holes to patch.', allowed: () => true, cands: bagCandidates, w: (c) => (c.sum.hover > 60 ? 4 : 2) },
   { id: 'engine', name: 'Engine pod', icon: '⚙️', group: 'engine', pic: 'engine', blurb: 'More push. Burns coal and steam, and weighs.', allowed: (p) => engines(p) < PS().ENGINES_MAX, cands: fromPalette('engine'), w: (c) => (c.engines < 3 ? 3 : 1.2) },
   { id: 'liftEngine', name: 'Lift engine', icon: '⬆️', group: 'engine', pic: 'engine', picDir: UP, blurb: 'An engine pointing up: lifts her without gas. Uses steam all the time.', allowed: (p) => engines(p) < PS().ENGINES_MAX && count(p, (q) => q.part === 'engine' && q.dir === UP) < 2, cands: fromPalette('engine', { dir: UP }), w: (c) => (c.sum.hover > 58 ? 3 : 1) },
+  // ENGINE SIZES (config.ENGINES.SIZES, SHIP_BUILDING.md b6c): dearer cards, offered only where the validator keeps them (no steam FAIL); on a short boiler the card still shows, with the validator's note
+  // ("a second boiler keeps them fed") and the fit score falls. The great lift engine is the answer to a heavy ship (FIXES LIFT): the bags cannot hover her, 3.5 pods of lift can.
+  { id: 'heavyEngine', name: 'Heavy engine', icon: '⚙️', group: 'engine', pic: 'engineHeavy', get price() { return config.ENGINES.SIZES.heavy.price; }, blurb: 'Twice the push of a pod for two and a half times the steam (swaps one of your pods, or bolts on another). Two of them want a second boiler.', allowed: (p) => (engines(p) < PS().ENGINES_MAX || engines(p) > bigEngines(p, 'heavy') + bigEngines(p, 'great')) && bigEngines(p, 'heavy') < 2, cands: engineCands('engineHeavy', 'heavy'), w: (c) => (c.sum.cruise > 62 ? 1 : 0.3) },
+  { id: 'greatEngine', name: 'Great lift engine', icon: '\u{1F4A8}', group: 'engine', pic: 'engineGreat', picDir: UP, get price() { return config.ENGINES.SIZES.great.price; }, blurb: 'The sky-lifter: a steam turbine that holds up a ship the bags cannot (swaps one of your pods, or bolts on another). Four times the steam and three times the weight: it sputters and she sinks if the boiler cannot keep up.', allowed: (p) => (engines(p) < PS().ENGINES_MAX || engines(p) > bigEngines(p, 'heavy') + bigEngines(p, 'great')) && bigEngines(p, 'great') < 1, cands: engineCands('engineGreat', 'great', UP), w: (c) => (c.sum.hover > 58 ? 3 : 0.4) },
   { id: 'nest', name: 'Gun nest', icon: '\u{1F52D}', group: 'station', pic: 'lookout', blurb: "A crow's nest on the bag with a dorsal gun. Only pays if somebody climbs up.", allowed: (p, o) => (o.nest || 0) < PS().NEST_MAX, cands: nestCandidates, w: () => 1.2 },
   { id: 'gun', name: 'Gun mount', icon: '\u{1F52B}', group: 'station', pic: 'gun', blurb: 'One more gun. More ammo to haul.', allowed: (p) => count(p, (q) => q.part === 'gun') < PS().GUNS_MAX, cands: fromPalette('gun'), w: () => 3 },
   { id: 'lamp', name: 'Searchlight', icon: '\u{1F4A1}', group: 'station', pic: 'searchlight', blurb: 'A lamp to see and spot with. Somebody has to man it.', allowed: (p) => count(p, (q) => q.part === 'searchlight') < 3, cands: fromPalette('searchlight'), w: () => 1 },
@@ -274,6 +292,7 @@ function shortWarn(w) {
   let m;
   if (/gasbag covers/.test(w)) return 'the gasbag is too short for the decks';
   if ((m = /^hover at gas ([\d.]+)/.exec(w))) return +m[1] < config.BUILD_CHECK.HOVER_MIN + 10 ? `rides high (hover ${Math.round(m[1])}): wasted lift` : `getting heavy (hover ${Math.round(m[1])}): more pumping`;
+  if (/big engine/.test(w)) return /second boiler/.test(w) && /two big/.test(w) ? 'two big engines need a second boiler' : 'burns a lot of steam: a second boiler keeps it fed';
   if (/idle/.test(w) && /venting/.test(w)) return 'idle steam runs hot: more engines to use it';
   if (/coal bunker beside the boiler/.test(w)) return 'coal beside the boiler: fire risk';
   if (/sails tip her/.test(w)) return 'the sail tips her nose down';
@@ -330,6 +349,7 @@ export function needsOf(base, ctx = {}) {
     guns, bomb: !!L.bombBay, raids: ctx.raids || 0, aether: !!ctx.aether, engines: L.engines.length, liftEngines: L.engines.filter((e) => e.dir === UP).length,
     heavy: sum.hover > R.HEAVY_HOVER || sum.hoverLevel !== 'PASS', // (LIFT: getting heavy)
     steamShort: sum.cruise < R.STEAM_SHORT || sum.steamLevel !== 'PASS', // (STEAM)
+    steamLow: sum.cruise < R.STEAM_SHORT, // (the line really sags at cruise: no steam to spare for a big engine; a WARN for a line that runs too hot at idle is the opposite)
     crowded: sum.stations / crew > R.HANDS_MAX, // (HANDS: more stations than hands)
     tilted: Math.abs(sum.deg) >= R.TILT_DEG, // (BALANCE)
   };
@@ -344,6 +364,8 @@ export function fitOf(entry, n) {
     case 'liftEngine': score = (n.heavy ? 3.5 : 0.5) + (n.aether && !n.liftEngines ? R.AETHER_LIFT : 0); hint = n.heavy ? 'FIXES LIFT' : 'FOR THE AETHER'; break;
     case 'boiler': score = n.steamShort ? 4 : 0.4; hint = 'FIXES STEAM'; break;
     case 'engine': score = n.steamShort ? 0.3 : n.engines < 3 ? 2 : 0.6; hint = 'MORE SPEED'; break;
+    case 'heavyEngine': score = n.steamLow ? 0.2 : n.engines < 3 ? 1.6 : 0.8; hint = 'MORE SPEED'; break;
+    case 'greatEngine': score = n.steamLow ? (n.heavy ? 1.2 : 0.2) : (n.heavy ? 4.2 : 0.4) + (n.aether && !n.liftEngines ? R.AETHER_LIFT : 0); hint = n.heavy ? 'FIXES LIFT' : 'FOR THE AETHER'; break;
     case 'gun': score = want ? 1.5 + want : 0.5; hint = 'MORE GUNS'; break;
     case 'nest': score = want ? 1.2 + want * 0.8 : 0.5; hint = 'MORE GUNS'; break;
     case 'bombBay': score = !n.bomb && n.raids >= R.RAID_STOPS ? 3.5 : 0.8; hint = 'FOR RAIDS'; break;

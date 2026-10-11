@@ -197,7 +197,19 @@ function pickGas(theme, seed) {
 }
 
 // ---- making a genome -----------------------------------------------------------------------------------------------------
-export function newGenome(seed, theme) {
+// ENGINE SIZES (config.ENGINES.SIZES, GEN_HEAVY / GEN_GREAT): with `sizes` on, some of the engines the recipe placed become heavy (twice the push) or one a great lift engine pointing up (the sky-lifter). Its own random
+// source, so a genome made without `sizes` is exactly the one it always was. The repair loop adds the boiler they need, or takes the size back.
+function rollSizes(g, seed) {
+  const rng = makeRng(seed * 6151 + 29), E = config.ENGINES;
+  let great = 0, heavy = 0;
+  for (const it of g.items) {
+    if (it.t !== 'engine' && it.t !== 'engineSwivel') continue;
+    const r = rng();
+    if (r < E.GEN_GREAT && !great) { great++; it.size = 'great'; if (it.dir == null && rng() < 0.7) it.dir = ENGINE_DIRS[2]; }
+    else if (r < E.GEN_GREAT + E.GEN_HEAVY && heavy < 2) { heavy++; it.size = 'heavy'; }
+  }
+}
+export function newGenome(seed, theme, sizes = false) {
   const rng = makeRng(seed * 7919 + 17);
   const th = theme && THEMES.includes(theme) ? theme : rng.pick(THEMES);
   const g = { v: 1, theme: th, seed, decks: {}, nest: { w: 3, u: 0.5, tall: false }, bags: { n: 1, twin: false, hover: 42 }, items: [] };
@@ -228,6 +240,7 @@ export function newGenome(seed, theme) {
     },
   };
   recipe(th, R);
+  if (sizes) rollSizes(g, seed);
   const gas = pickGas(th, seed); // (its own random source: the rest of the genome is the same as before gas types)
   if (gas) g.bags.gas = gas;
   const engs = g.items.filter((it) => it.t === 'engine' || it.t === 'engineSwivel').length;
@@ -296,7 +309,7 @@ function placeItem(p, it) {
   const sp = spanOf(p, row) || [0, 0];
   const tx = sp[0] + it.u * (sp[1] - sp[0]);
   slots.sort((a, b) => Math.abs(a.x - tx) - Math.abs(b.x - tx));
-  const dir = it.dir != null ? { dir: it.dir } : undefined;
+  const dir = it.dir != null || it.size ? { ...(it.dir != null ? { dir: it.dir } : {}), ...(it.size ? { size: it.size } : {}) } : undefined; // (an engine's way, and its size)
   if (it.t === 'ladder' || it.t === 'pole') {
     const mine = standing(p); // a ladder never lands on a station (the button would climb instead of work)
     for (const s of slots.slice(0, 12)) {
@@ -408,8 +421,9 @@ function repairOnce(g, j, rng, parts) {
     }
     return false;
   };
+  const shrink = () => { const it = g.items.find((q) => q.size); if (!it) return false; delete it.size; return true; }; // (an engine too big for her weight or her boiler: back to a pod)
   if (!j.v) return letGo();
-  if (j.over > 0) return letGo();
+  if (j.over > 0) return shrink() || letGo();
   const text = j.v.checks.filter((c) => c.level === 'FAIL' || c.level === 'WARN').map((c) => c.group + ': ' + c.text).join(' | ');
   if (failGroups.has('Fit')) {
     const k = ['lower', 'main', 'catwalk', 'keel'].find((r) => g.decks[r] && g.decks[r].x1 - g.decks[r].x0 > 4 * COL);
@@ -419,6 +433,7 @@ function repairOnce(g, j, rng, parts) {
   }
   if (groups.has('Steam') && /cannot keep up|settled pressure at cruise/.test(text)) {
     if (count('boiler') < 3 && !j.over) { add({ t: 'boiler', row: 'main', alt: 'lower', u: rng.range(0.2, 0.8) }); add({ t: 'coal', row: 'lower', u: rng.range(0.2, 0.8) }); return true; }
+    if (shrink()) return true;
     const e = g.items.findIndex((it) => it.t === 'engine'); if (e >= 0) { g.items.splice(e, 1); return true; }
   }
   if (groups.has('Walking')) {
@@ -523,7 +538,7 @@ export function inventory(parts) {
     else if (p.part === 'crewCannon') c.cannon++;
     else if (p.part === 'armour') c.armour += (p.x1 - p.x0) / 100;
     else if (p.part === 'sail') c.sails++;
-    else if (p.part === 'engine') { c.engines++; if (p.dir != null && Math.sin(p.dir) < -0.5) c.upEngines++; if (p.swivel) c.swivel++; }
+    else if (p.part === 'engine') { c.engines++; if (p.dir != null && Math.sin(p.dir) < -0.5) c.upEngines++; if (p.swivel) c.swivel++; if (p.size === 'heavy') c.heavyEngines = (c.heavyEngines || 0) + 1; if (p.size === 'great') c.greatEngines = (c.greatEngines || 0) + 1; }
     else if (p.part === 'gasbag') { c.bags++; if (p.twin) c.twin++; if (p.gasType === 'hydrogen') c.hydrogen++; else if (p.gasType === 'hot') c.hotAir++; }
     else if (p.part === 'station' && p.kind === 'bombBay') c.bombBay++;
     else if (p.part === 'station' && p.kind === 'boiler') c.boilers++;
@@ -544,7 +559,7 @@ export function tagsOf(parts) {
   if (has('long')) t.push('long gun'); if (has('long', 2)) t.push('2+ long guns');
   if (has('mortar')) t.push('mortar'); if (has('scatter')) t.push('grapeshot'); if (has('scatter', 3)) t.push('3+ grapeshot'); if (has('flak')) t.push('flak'); if (has('harpoon')) t.push('harpoon'); if (has('flame')) t.push('flamethrower');
   if (has('mines')) t.push('mine layer'); if (has('ram')) t.push('ram prow'); if (has('cannon')) t.push('crew cannon'); if (has('armour', 2)) t.push('armour 2+ cols'); if (has('armour', 5)) t.push('armour 5+ cols');
-  if (has('sails')) t.push('sail'); if (has('upEngines')) t.push('lift engine'); if (has('swivel')) t.push('swivel engine'); if (has('engines', 4)) t.push('4+ engines'); if (c.engines <= 2) t.push('2 or fewer engines');
+  if (has('sails')) t.push('sail'); if (has('upEngines')) t.push('lift engine'); if (has('swivel')) t.push('swivel engine'); if (c.heavyEngines) t.push('heavy engine'); if (c.greatEngines) t.push('great lift engine'); if (has('engines', 4)) t.push('4+ engines'); if (c.engines <= 2) t.push('2 or fewer engines');
   if (has('bags', 2)) t.push('2+ bags'); if (has('bags', 3)) t.push('3+ bags'); if (has('twin')) t.push('twin envelope bag'); if (has('hydrogen')) t.push('hydrogen bag'); if (has('hotAir')) t.push('hot-air bag'); if (has('bombBay')) t.push('bomb bay'); if (has('boilers', 2)) t.push('2+ boilers');
   if (has('nests', 2)) t.push('upper nest'); if (has('keel')) t.push('keel deck'); if (has('towline')) t.push('towline'); if (has('cargo')) t.push('cargo racks'); if (has('lift')) t.push('steam lift');
   if (c.gun + c.long + c.mortar + c.scatter + c.flak + c.harpoon + c.flame >= 6) t.push('6+ guns');
@@ -622,10 +637,10 @@ export function packShip(seed, g, parts, theme) {
   return { seed, theme: theme || g.theme, genome: g, parts: parts.map((p) => ({ ...p })), name: nameShip(seed, g.theme, parts), summary: describeShip(parts), tags: tagsOf(parts), ...st };
 }
 // A valid random ship for a seed (and a theme, or any). Retries with fresh genomes; null only if every try failed.
-export function generateShip(seed, { theme, cap = weightCap() } = {}) {
+export function generateShip(seed, { theme, cap = weightCap(), sizes = false } = {}) { // (sizes: some engines come out heavy or great, config.ENGINES GEN_HEAVY / GEN_GREAT)
   const rng = makeRng(seed * 104729 + 3);
   for (let t = 0; t < G().TRIES; t++) {
-    const g = newGenome(seed * 101 + t, theme);
+    const g = newGenome(seed * 101 + t, theme, sizes);
     const r = makeValid(g, rng, cap);
     if (r) return { ...packShip(seed, r.g, r.parts, g.theme), attempts: t + 1 };
   }

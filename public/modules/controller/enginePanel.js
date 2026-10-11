@@ -3,7 +3,8 @@ import { config } from '../../config.js';
 // The helm's ENGINE PANEL: a small vertical lever per engine, left to right as the ship sits on the screen (the host sends them in that order, ui.eng), each with an arrow under it for the way
 // the engine points. LINKED (the default) the main lever moves them all and they glide by themselves (the host shows the auto-trim too); SPLIT unlinks them so each lever sets its own engine.
 // LINK joins them again at the main lever. The throttles live on the ship: the host sends the current ones, a new helmsman inherits them.
-//   ui.eng = { s: split, lv: the main lever as the host holds it, l: [[engine index, throttle, arrow angle in degrees on the screen, works], ...] } (null: fewer than two engines)
+//   ui.eng = { s: split, lv: the main lever as the host holds it, l: [[engine index, throttle, arrow angle in degrees on the screen, works, size badge, starved], ...] } (null: fewer than two engines)
+//   The size badge is '' (a pod), 'H' (a heavy engine: a wider lever) or 'G' (a great lift engine: the widest); starved is 1 while a big engine runs on too little steam (its lever turns amber and pulses).
 export function createEnginePanel({ network, stick, getMain, setMain }) {
   const box = document.getElementById('eng');
   const modeButton = document.getElementById('engmode');
@@ -43,10 +44,10 @@ export function createEnginePanel({ network, stick, getMain, setMain }) {
   const build = (list) => {
     row.innerHTML = '';
     els.clear();
-    for (const [i, , angle] of list) {
+    for (const [i, , angle, , size] of list) {
       const el = document.createElement('div');
-      el.className = 'el';
-      el.innerHTML = '<div class="bar"><div class="fill"></div><div class="stop"></div><div class="handle"></div></div><div class="arrow"><i>&#9654;</i></div>';
+      el.className = 'el' + (size === 'H' ? ' heavy' : size === 'G' ? ' great' : '');
+      el.innerHTML = '<div class="bar"><div class="fill"></div><div class="stop"></div><div class="handle"></div></div><div class="arrow"><i>&#9654;</i></div>' + (size ? '<b class="badge">' + size + '</b>' : '');
       const bar = el.querySelector('.bar');
       el.querySelector('.arrow i').style.transform = `rotate(${angle}deg)`; // (the arrow glyph points right: turned to where the engine pushes, on the screen)
       row.appendChild(el);
@@ -114,16 +115,17 @@ export function createEnginePanel({ network, stick, getMain, setMain }) {
       paint();
       return;
     }
-    const next = eng.l.map((q) => q[0] + ':' + q[2]).join('|');
+    const next = eng.l.map((q) => q[0] + ':' + q[2] + ':' + (q[4] || '')).join('|');
     if (next !== sig) {
       sig = next;
       build(eng.l);
     }
     split = !!eng.s;
     if (!was && !split) setMain(eng.lv); // (a helmsman taking the wheel finds the main lever where the ship's order is)
-    eng.l.forEach(([i, v, , works]) => {
+    eng.l.forEach(([i, v, , works, , starved]) => {
       if (!drag.has(i)) vals[i] = v;
       els.get(i)?.el.classList.toggle('off', !works);
+      els.get(i)?.el.classList.toggle('starved', !!starved);
       draw(i);
     });
     paint();
