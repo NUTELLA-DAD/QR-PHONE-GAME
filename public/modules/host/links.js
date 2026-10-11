@@ -114,7 +114,7 @@ export function createLinks({ state, modules, shipPuff }) {
       S.surgeT += dt;
       state.ship.press = Math.min(100, state.ship.press + SG.PRESS_RATE * s.level * dt); // (the pressure line in simulation.js does the blowout at 100)
       const boiler = (s.by != null && state.players[s.by] && layout.nearest('boiler', state.players[s.by])) || layout.one('boiler'); // (the boiler being worked)
-      if (Math.random() < dt * 14) shipPuff(boiler.x + (Math.random() - 0.5) * 70, layout.platforms[boiler.d].y - 60, '#ffd23f', 2); // (gold sparks from the boiler)
+      if (boiler && Math.random() < dt * 14) shipPuff(boiler.x + (Math.random() - 0.5) * 70, layout.platforms[boiler.d].y - 60, '#ffd23f', 2); // (gold sparks from the boiler)
     } else {
       s.level = Math.max(0, s.level - dt / SG.FALL);
       if (s.level <= 0) s.active = false;

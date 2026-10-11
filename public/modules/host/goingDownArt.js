@@ -314,11 +314,11 @@ export function drawScreen(ctx, state, time, W = 1600, H = 900) {
     rr(ctx, 480, 134, 760, 30, 10);
     ctx.fill();
     ctx.fillStyle = left < 6 ? '#ff4d4d' : '#ffb347';
-    ctx.fillRect(488, 142, 744 * (left / g.time), 14);
+    ctx.fillRect(488, 142, 744 * (g.live ? (state.grounded ? left / g.time : 1) : left / g.time), 14);
     ctx.fillStyle = '#f3ead6';
     ctx.font = '700 16px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
-    ctx.fillText(`FALLING - ${Math.ceil(left)}s to the ground!`, 860, 130);
+    ctx.fillText(g.live ? (state.grounded ? `DOWN! GET HER OFF THE GROUND - ${Math.ceil(left)}s!` : `FALLING! she crashes if she sits down ${Math.ceil(g.time)}s`) : `FALLING - ${Math.ceil(left)}s to the ground!`, 860, 130);
     drawBalance(ctx, state, g, time);
   }
   const b = state.gdBanner;

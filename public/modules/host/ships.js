@@ -71,6 +71,8 @@ export const SHIP_KEYS = [
   'cannons', 'loads', 'rackStock', 'hatches', 'hatchStats',
   // parts breaking off (S.5i): the counters of what broke, and how much lift she lost with a gasbag (flight.js uses it as extra weight)
   'breakStats', 'liftDeficit',
+  // STRUCTURE (structure.js): the segments of her frame, what her torn canvas and loads weigh, the weight dumped, whether she sits on the ground, the failing section, the counters, lift against weight, how long she has been down
+  'frames', 'structDeficit', 'weightDeficit', 'gdRelief', 'grounded', 'structWorst', 'structStats', 'liftWeight', 'crashT',
   // 3D destruction (WP5): data for the TV's 3D view, nothing in the simulation reads them. hitLog = the last 64 blows on her { n, t, x, y, power, partId, kind }; breakEvents = break-offs the view has not taken yet
   'hitLog', 'breakEvents',
   // crew health (health.js): hearts lost by cause, hearts healed
@@ -183,7 +185,7 @@ export function teamOf(team) {
 
 // Make a ship. `main`: ships[0], wrapping the world's own body, layout and course position by reference. Another ship takes `formation` ({ dx, dalt }: how far along
 // the sky from ship 0 she keeps station, and how far above her altitude she is held; dalt < 0 = below) and a `parts` list (or a layout) of her own.
-export function createShip(world, { id, main = false, layout = null, parts = null, nav = null, body = null, formation = null, team = null, name = null, ai = null } = {}) {
+export function createShip(world, { id, main = false, layout = null, parts = null, nav = null, body = null, formation = null, team = null, name = null, ai = null, piece = false } = {}) {
   const lay = layout || (parts ? createLayout(parts) : SHIP_LAYOUT);
   let side = teamOf(team);
   const ship = {
@@ -201,6 +203,7 @@ export function createShip(world, { id, main = false, layout = null, parts = nul
     sim: null,
     rival: null, // (Versus, pvp/match.js: the other team's nearest ship as this one sees her, in world coordinates; ctx.rival reads it)
     formation,
+    piece, // (STRUCTURE.md: a half of a ship that split in two - the enemies skip her, nobody pilots her, she breaks up when she meets the ground or the sea)
     ai, // (B.5: the enemy gunship's brain, gunshipShip.js: a ship with an `ai` is flown and fought by her own bot crew, hunts the main ship and is nobody's target; null for every other ship)
   };
   // (her pose owns her position, M.2: a second ship starts at her formation station from ship 0, course.js place() then moves her to open air; her body's alt / vy / pitch are views of the pose)
@@ -221,6 +224,13 @@ export const createMainShip = (state) => {
 };
 
 export const mainShip = (state) => state.self || state.ships[0];
+// Hull repaired (a reward, a supply drop, a checkpoint flag, the harbour, spare parts). STRUCTURE.md: with structure on the points go into her weakest load-bearing segments (structure.js restore;
+// 100 or more mends everything); off, the old hull bar fills.
+export function mendHull(state, points, ship = mainShip(state)) {
+  const S = ship.sim && ship.sim.structure;
+  if (S && S.on()) { if (points >= 100) S.restoreAll(); else S.restore(points); return; }
+  ship.state.hull = Math.min(100, ship.state.hull + points);
+}
 // The ship an enemy hunts: the one place that decides (B.3). The enemy systems ask here for the ship they aim at, fire at and fly round; it is ships[0] today. B.4 / B.7 make it a
 // choice per enemy (the nearest ship, the weakest, the one that shot it: `enemy.target` already wins when it names a ship in the sky). `enemy` may be null when a system asks
 // for its ship before it has an enemy in mind (a factory).
@@ -231,7 +241,7 @@ export const targetShip = (state, enemy) => {
   if (!enemy || list.length < 2 || !Number.isFinite(enemy.x) || !Number.isFinite(enemy.y)) return list[0];
   let best = null, bd = Infinity;
   for (const sh of list) {
-    if (sh.state.down > 0 || sh.ctx.wreck || sh.ai) continue; // (the enemy gunship is on the enemies' side: nobody hunts her)
+    if (sh.state.down > 0 || sh.ctx.wreck || sh.ai || sh.piece) continue; // (the enemy gunship is on the enemies' side: nobody hunts her; nor a half that has split off and is falling, STRUCTURE.md)
     const b = sh.layout.bounds;
     const d = Math.hypot(enemy.x - (sh.pose.x + pivotOf(sh)), enemy.y - (sh.pose.y + (b.y0 + b.y1) / 2));
     if (d < bd) { bd = d; best = sh; }

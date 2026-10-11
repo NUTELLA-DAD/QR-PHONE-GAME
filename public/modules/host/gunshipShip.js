@@ -23,7 +23,7 @@
 import { crewMul, crewHeads } from './crewscale.js';
 import { config } from '../../config.js';
 import { inRock, altWindow, tilt } from './course.js';
-import { shipOf, transfer, hostileTo } from './ships.js';
+import { shipOf, transfer, hostileTo, mendHull } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { pop } from './popups.js';
 import { applyForce } from './forces.js';
@@ -900,7 +900,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
     state.kills += 1 + crewOf(g).length;
     if (byCrew) {
       // Spoils: patch the hull, fill the firebox, top up guns and bombs.
-      ours.state.hull = Math.min(100, ours.state.hull + G.REWARD_HULL);
+      mendHull(ours.ctx, G.REWARD_HULL, ours);
       ours.state.fuel = Math.min(config.BOILER.FUEL_MAX, ours.state.fuel + G.REWARD_COAL);
       for (const gun of Object.values(ours.ctx.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
       ours.ctx.bombBay.bombs = Math.min(config.BOMBS.MAX, ours.ctx.bombBay.bombs + 2);

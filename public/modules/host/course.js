@@ -10,7 +10,7 @@
 // World y grows downward; the ship's pose.y = -alt (she is drawn under translate(pose.x, pose.y)).
 import { firePace } from './crewscale.js';
 import { config } from '../../config.js';
-import { mainShip } from './ships.js';
+import { mainShip, mendHull } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY, pivotOf, driveVx } from './pose.js';
 import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
@@ -1010,7 +1010,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       }
       if (!left.length && !course.done) {
         course.done = true;
-        state.ship.hull = Math.min(100, state.ship.hull + K.CHECKPOINT_REPAIR);
+        mendHull(state, K.CHECKPOINT_REPAIR);
         state.ev.warn = 4;
         state.ev.warnText = 'ALL OUTPOSTS DOWN! MISSION ' + course.lap + ' COMPLETE';
         course.pendingNext = true;
@@ -1032,7 +1032,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     }
     if (lair && !course.done && !lairAlive && !state.creature) { // (it is dead and has sunk out of sight)
       course.done = true;
-      state.ship.hull = Math.min(100, state.ship.hull + K.CHECKPOINT_REPAIR);
+      mendHull(state, K.CHECKPOINT_REPAIR);
       state.ev.warn = 4;
       state.ev.warnText = 'THE ' + lairWho + ' IS SLAIN! MISSION ' + course.lap + ' COMPLETE';
       course.pendingNext = true;
@@ -1041,7 +1041,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     }
     if (!course.done && !flagshipAlive && !lair && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS) { // (a lair is done only when its creature has sunk, above)
       course.done = true;
-      state.ship.hull = Math.min(100, state.ship.hull + K.CHECKPOINT_REPAIR);
+      mendHull(state, K.CHECKPOINT_REPAIR);
       state.ev.warn = 4;
       state.ev.warnText = 'BEACON REACHED! MISSION ' + course.lap + ' COMPLETE';
       course.pendingNext = true;
@@ -1066,7 +1066,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         course.leg = 'home';
       } else {
         // Supplies at every flag patch the hull up a little.
-        state.ship.hull = Math.min(100, state.ship.hull + K.CHECKPOINT_REPAIR);
+        mendHull(state, K.CHECKPOINT_REPAIR);
         state.ev.warnText = 'CHECKPOINT! SUPPLIES ABOARD: +' + K.CHECKPOINT_REPAIR + ' HULL';
       }
       if (m.kind !== 'checkpoint' && onMarker) onMarker(m);

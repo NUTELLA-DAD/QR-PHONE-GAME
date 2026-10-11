@@ -43,7 +43,8 @@ import { createForces, hitForce } from './forces.js';
 import { installBags, syncBags, stepBags, watchBags, holesPerBag, liftGas, stepHotAir } from './gasBags.js';
 import { createHydrogen } from './hydrogen.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToWorld, pivotOf } from './pose.js';
-import { planBreak, makeRng, rebuildPrice, hoverOf, brokenOf } from './breakOff.js';
+import { planBreak, planSplit, makeRng, rebuildPrice, hoverOf, brokenOf } from './breakOff.js';
+import { createStructure } from './structure.js';
 import { bagNearX, bagEdgeY, bagName, rowOf, partAt } from './shipBuild.js';
 import { transfer, newGuns, teamOf, hostileTo, foeOf, shipOf } from './ships.js';
 
@@ -176,6 +177,7 @@ export function createShipSim(world, ship, W) {
   const useFor = (player, station, legacy) => {
     if (player.fly && (player.cannon || player.tossed || player.chuteOk) && !player.chute && !player.hj && player.ko <= 0) return { type: 'chute', label: 'PARACHUTE!' }; // (B.6: fired from the crew cannon - Action opens the parachute; S.5i: so does a crewman thrown off a part that broke off)
     if (player.lock || player.conn != null || player.fall || player.swing || player.air) return null;
+    if (ship.piece && !isHostile(player) && (!player.bot || (player.botJob && player.botJob.kind === 'abandon'))) return { type: 'jump', label: 'ABANDON SHIP - JUMP!' }; // (STRUCTURE.md: this half has split off and is going down: a parachute)
     const here = (o, r) => o.d === player.d && Math.abs(o.x - player.x) < r;
     const tool = player.carry;
     if (isHostile(player)) return hostileUse(player, here);
@@ -227,6 +229,8 @@ export function createShipSim(world, ship, W) {
     if (tank) return { type: 'oxygen', obj: tank, hold: true, time: config.ENVIRONMENTS.aether.OXYGEN.REFILL_TIME, label: 'Refill oxygen' };
     const hurt = modules.list.find((m) => m.hp < m.max && here(m, T.REACH + 15));
     if (hurt && tool === 'hammer') return { type: 'repair', obj: hurt, hold: true, label: `Repair ${hurt.name}` };
+    const frame = structure.on() ? structure.frameNear(player.d, player.x) : null; // SHORE UP (STRUCTURE.md): a hammer held on the segment of the frame under your feet
+    if (frame && tool === 'hammer') return { type: 'frame', obj: frame, hold: true, label: `SHORE UP ${structure.nameOf(frame)}` };
     // A gas valve (S.5d): shut or open the feed to its gasbag. Turned from VALVE_REACH, closer than a rack's reach, so it still works on a crowded deck.
     const gv = (layout.gasValves || []).find((v) => here(v, T.VALVE_REACH));
     if (gv) { const i = layout.gasValves.indexOf(gv); return { type: 'gasvalve', obj: gv, label: `${state.gasValveOpen[i] === false ? 'Open' : 'Close'} ${bagName(gv.bag, layout.gasbags.length).toLowerCase()} valve` }; }
@@ -267,7 +271,7 @@ export function createShipSim(world, ship, W) {
     }
     if (sore) return bandageAct;
     if (fire) return { type: 'need', label: 'Need an extinguisher' };
-    if (hole || hurt || gasHole) return { type: 'need', label: 'Need a hammer' };
+    if (hole || hurt || gasHole || (frame && frame.hp < config.STRUCTURE.JOB_AT)) return { type: 'need', label: 'Need a hammer' };
     return null;
   };
 
@@ -447,8 +451,11 @@ export function createShipSim(world, ship, W) {
   const shipPuff = (x, y, color, count) => puff(toWorldX(ship, x), toWorldY(ship, y), color, count);
   const shipPop = (x, y, kind, color, size) => pop(state, toWorldX(ship, x), toWorldY(ship, y), kind, color, size);
 
+  const dangerMul = () => 1 + (((state.course && state.course.danger) || 2) - 2) * config.VOYAGE.DANGER_DAMAGE; // skulls on the stop
   const damageHull = (amount) => {
-    const danger = 1 + (((state.course && state.course.danger) || 2) - 2) * config.VOYAGE.DANGER_DAMAGE; // skulls on the stop
+    if (ship.piece) return; // (a half that split off is falling: nothing more to lose, STRUCTURE.md)
+    if (structure.on()) return structure.shim(amount); // (STRUCTURE.md: no hull bar. The creatures, flame, a flood and the like still call this: the blow is spread over her load-bearing segments until WP2 gives each its place)
+    const danger = dangerMul();
     if (goingDown.protect()) return; // falling (the last stand) or just saved: nothing can hurt her
     if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * dmgMul() * danger) <= 0) wreck();
   };
@@ -501,7 +508,7 @@ export function createShipSim(world, ship, W) {
   };
 
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
-  const impactBody = (x, y, power, hullMul = 1) => { // (hullMul: the hull a blow costs, apart from the size of the blow: our shells on the enemy gunship, gunshipShip.js)
+  const impactBody = (x, y, power, hullMul = 1, kind = 'hit') => { // (hullMul: the hull a blow costs, apart from the size of the blow: our shells on the enemy gunship, gunshipShip.js)
     // Riveted plate (S.5g) on this stretch of hull wall or rail: the hit counts for much less, and rarely punches through.
     const d = onGasbag(x, y) < 0 ? roomPlatformAt(x, y) : null;
     const plate = d !== null && !!armourOn(layout, d, x);
@@ -532,7 +539,8 @@ export function createShipSim(world, ship, W) {
     if (hitBag >= 0) {
       if (state.bags[hitBag] && state.bags[hitBag].type === 'hydrogen') hydrogen.hit(hitBag, power * pm); // (a shell into a hydrogen bag: a spark can light it)
       if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll * pm) state.gasHoles.push(gasHoleAt(x, y, hitBag));
-      damageHull(2 * power * hullMul);
+      if (structure.on()) structure.hit(x, y, 2 * power * hullMul, { power, bag: hitBag, kind }); // (STRUCTURE.md: the canvas of that bag wears, not the frame)
+      else damageHull(2 * power * hullMul);
       return;
     }
     if (d !== null) {
@@ -543,7 +551,8 @@ export function createShipSim(world, ship, W) {
       const ig = fireSys.igniteChance(d, x);
       if ((power >= 2 && Math.random() < coll * Math.min(1, ig)) || Math.random() < 0.35 * coll * ig * pm) fireSys.ignite(d, x + (Math.random() - 0.5) * 80, 'hit');
     }
-    damageHull(config.SHIP.HIT_DAMAGE * power * hullMul);
+    if (structure.on()) structure.hit(x, y, config.SHIP.HIT_DAMAGE * power * hullMul, { power, kind }); // (STRUCTURE.md: the segment under the blow, half of it when a station, gun or engine took the hit)
+    else damageHull(config.SHIP.HIT_DAMAGE * power * hullMul);
   };
 
   // ---- PARTS BREAK OFF FOR REAL (S.5i; breakOff.js plans it, debris.js tumbles the pieces, config.BREAKOFF) ----
@@ -552,6 +561,8 @@ export function createShipSim(world, ship, W) {
   let breakCd = 0; // seconds before a hit, crash or ram may break another part off
   let bayHeat = 0; // seconds of fire that has burned in the bomb bay's compartment with bombs aboard
   let bagTear = []; // per gasbag: seconds it has been flat and ripped
+  let groundHold = 0;
+  const pieceState = { t: 0 }; // (a half that split off: how long she has been drifting)
   state.breakStats = { events: 0, bay: 0, hit: 0, crash: 0, ram: 0, bag: 0, parts: 0, fell: 0, scars: 0 }; // (read by botsim and the --check-breakoff gate)
   state.liftDeficit = 0;
   // 3D destruction data (WP5, append only: no random numbers, no change to any rule). hitLog = the last blows on this ship, for the 3D view's dents and scorch marks; breakEvents = the break-offs the view has not
@@ -575,6 +586,109 @@ export function createShipSim(world, ship, W) {
     return diff * (d !== null && !!armourOn(layout, d, x) ? BOC().ARMOUR_MUL : 1);
   };
 
+  const nearestDeck = (y, x) => PLATFORMS.reduce((best, q, d) => { const c = Math.abs(q.y - y) + (x == null ? 0 : 0.3 * Math.max(0, q.x0 - x, x - q.x1)); return c < best.c ? { c, d } : best; }, { c: Infinity, d: 0 }).d;
+  // A crewman whose deck has gone (a break-off, a split) is thrown off it: he falls with a parachute to open or a ladder to grab. `from` = the x the blow came from (he is thrown away from it), `oldP` = the decks as they were.
+  const tossOff = (p, from, blast, oldP) => {
+    const B = BOC();
+    const away = Math.sign(p.x - from) || (breakRng() < 0.5 ? -1 : 1);
+    p.lock = null;
+    p.fire = false;
+    p.prog = 0;
+    p.tossed = true; // (Action opens his parachute while he falls)
+    const keep = oldP[p.d] ? nearestDeck(oldP[p.d].y, p.x) : 0; // (p.d stays a real deck of what is left: the bots' routing reads it while they fall)
+    air.startFlight(p, away * (blast ? B.BAY.THROW : 140) * (0.5 + breakRng() * 0.6), blast ? -240 : 60);
+    p.d = keep;
+    p.face = away * ship.pose.f;
+    state.breakStats.fell++;
+    phoneFx(p, 'The deck is gone! You are falling - open the parachute or grab a ladder!', [120, 60, 120]);
+  };
+  // What the ship is before her layout is replaced (the decks and ladders by where they were, the bags, valves, vents, guns): reshape() maps everything made from the layout onto the new one.
+  function snapshotOld() {
+    const P = PLATFORMS;
+    return {
+      oldP: P.map((q) => ({ id: q.id, y: q.y, x0: q.x0, x1: q.x1 })),
+      oldC: layout.connectors.map((c) => ({ type: c.type, xTop: c.xTop, xBottom: c.xBottom, yTop: P[c.top].y, yBottom: P[c.bottom].y })),
+      oldBags: layout.gasbags.map((b, i) => ({ cx: b.cx, gas: state.bags[i] ? state.bags[i].gas : state.ship.gas, down: state.bags[i] ? state.bags[i].down : false, scorch: state.bags[i] ? state.bags[i].scorch : 0, burn: state.bags[i] ? state.bags[i].burn : 0, fireT: state.bags[i] ? state.bags[i].fireT : 0, hp: state.bags[i] ? state.bags[i].hp ?? 1 : 1 })),
+      oldValves: (layout.gasValves || []).map((v, i) => ({ x: v.x, p: v.p, open: state.gasValveOpen[i] !== false })),
+      oldVents: layout.vents.map((v, i) => ({ x: v.x, p: v.p, open: !!state.ventOpen[i] })),
+      keptGuns: Object.fromEntries(Object.entries(state.GUNS).map(([k, g]) => [k, { aim: g.aim, cd: g.cd, ammo: g.ammo, max: g.max, empty: g.empty, auto: g.auto, prime: g.prime, primed: g.primed }])),
+      docks: layout.escortDocks.map((e) => e.n).join('|'),
+      pivot0: pivotOf(ship),
+    };
+  }
+  // The layout has just been replaced (applyBuild): put everything of this ship on the new one. `crew`: the people; lost(p): did his place go; lose(p): what happens to him then. A break-off
+  // throws him off (toss); a split hands him to the other half or throws him. Walkers keep their deck and climbers their ladder if it is still there; holes, fires, breaches, ice and loads on a
+  // lost stretch go with it; the guns, lamps, coil and escorts are made again keeping what the survivors hold; every gasbag keeps its own gas by where it hangs.
+  function reshape(old, { crew, lost, lose }) {
+    const { oldP, oldC, oldBags, oldValves, oldVents, keptGuns, docks, pivot0 } = old;
+    const P = PLATFORMS;
+    if (ship.pose.f !== 1) ship.pose.x += 2 * (pivot0 - pivotOf(ship)); // (a ship facing left is mirrored about the middle of her bounds: keep her hull where it was)
+    const newDeck = (y, x) => P.findIndex((q) => q.y === y && x >= q.x0 - 2 && x <= q.x1 + 2);
+    const newConn = (i) => layout.connectors.findIndex((c) => c.type === oldC[i].type && c.xTop === oldC[i].xTop && c.xBottom === oldC[i].xBottom && P[c.top].y === oldC[i].yTop && P[c.bottom].y === oldC[i].yBottom);
+    // lists of things standing on a deck ({ d, x }): follow their deck, or go with it
+    const remap = (list) => {
+      if (!list) return;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const o = list[i];
+        if (o == null || o.d == null || !oldP[o.d]) continue;
+        const d = newDeck(oldP[o.d].y, o.x);
+        if (d < 0) list.splice(i, 1); else o.d = d;
+      }
+    };
+    for (const p of crew) {
+      p.botJob = null; p.job = null; p.wanderTo = null; p.uk = null; // (walkers re-plan their routes against the new nav tables, the phones get their new buttons)
+      if (p.fly || p.fall || p.d == null || p.onGunship || p.hj) { // (somebody already in the air or falling keeps a valid deck number: the bots' routing reads it)
+        if (p.d != null && oldP[p.d] && !p.onGunship) p.d = nearestDeck(oldP[p.d].y, null); // (x is a world x in the air)
+        continue;
+      }
+      if (p.conn != null) {
+        const k = oldC[p.conn] ? newConn(p.conn) : -1;
+        if (k >= 0) { p.conn = k; const nd = oldP[p.d] ? newDeck(oldP[p.d].y, p.x) : -1; p.d = nd >= 0 ? nd : layout.connectors[k].top; } else { p.climb = false; lose(p); } // (a climber keeps his ladder if it is still there; his deck index follows too)
+        continue;
+      }
+      if (lost(p)) { lose(p); continue; }
+      const nd = oldP[p.d] ? newDeck(oldP[p.d].y, p.x) : -1;
+      if (nd < 0) lose(p); else p.d = nd;
+    }
+    for (const list of [state.breaches, state.fires, state.bombs, state.boarders, state.icing, state.loads]) remap(list);
+    for (let i = state.boarders.length - 1; i >= 0; i--) { // a raider on a ladder keeps it if it is still there, else he is gone with it (the walkers' nav reads his connector number)
+      const b = state.boarders[i];
+      if (b.conn == null) continue;
+      const k = oldC[b.conn] ? newConn(b.conn) : -1;
+      if (k >= 0) b.conn = k; else state.boarders.splice(i, 1);
+    }
+    for (const b of state.bats || []) if (b.latched && b.d != null && oldP[b.d]) { const d = newDeck(oldP[b.d].y, b.lx); if (d < 0) { b.latched = false; b.landed = false; } else b.d = d; }
+    if (state.cannons) for (const k of Object.keys(state.cannons)) if (!(layout.cannons || []).some((c) => c.n === k)) delete state.cannons[k];
+    // the guns, lamps, coil and escorts are made again from the layout, keeping what the survivors hold
+    for (const k of Object.keys(state.GUNS)) delete state.GUNS[k];
+    Object.assign(state.GUNS, newGuns(layout));
+    for (const [k, g] of Object.entries(state.GUNS)) if (keptGuns[k]) Object.assign(g, keptGuns[k]);
+    searchlights.refit();
+    coil.refit();
+    if (layout.escortDocks.map((e) => e.n).join('|') !== docks) escort.reset();
+    // whoever was on a station that is gone steps off it
+    for (const p of crew) if (p.lock && !LOCKABLE(p.lock)) { p.lock = null; p.fire = false; }
+    // the gasbags: each keeps its own gas (by where it hangs), valves and vents keep their setting, holes stay in their bag
+    syncBags(state);
+    layout.gasbags.forEach((b, i) => {
+      const o = oldBags.find((q) => Math.abs(q.cx - b.cx) < 1.5);
+      if (o && state.bags[i]) { state.bags[i].gas = o.gas; state.bags[i].down = o.down; state.bags[i].scorch = o.scorch; state.bags[i].burn = o.burn; state.bags[i].fireT = o.fireT; state.bags[i].hp = o.hp; } // (a neighbour that is scorched or alight stays so)
+    });
+    state.gasValveOpen = (layout.gasValves || []).map((v) => { const o = oldValves.find((q) => q.x === v.x && q.p === v.p); return o ? o.open : true; });
+    state.ventOpen = layout.vents.map((v) => { const o = oldVents.find((q) => q.x === v.x && q.p === v.p); return o ? o.open : false; });
+    syncBags(state);
+    for (let i = state.gasHoles.length - 1; i >= 0; i--) {
+      const h = state.gasHoles[i];
+      const o = oldBags[h.bag | 0];
+      const nb = o ? layout.gasbags.findIndex((b) => Math.abs(b.cx - o.cx) < 1.5) : -1;
+      if (nb < 0) { state.gasHoles.splice(i, 1); continue; }
+      const nh = gasHoleAt(h.x, h.y, nb);
+      Object.assign(h, { bag: nb, d: nh.d, x: nh.x, y: nh.y });
+    }
+    bagTear = [];
+
+  }
+
   // Take parts off this ship NOW (spec: see breakOff.js planBreak; opts.force works with BREAKOFF.ENABLED off, for tests). The layout is replaced in place, so everything made from it follows: the
   // modules keep their hit points by name, the guns / lamps / coil / bags / valves / vents are made again keeping what they hold, the nav tables, balance, forces, flight mass and the art follow the
   // layout version. Crew standing on what went FALL (into the air, to land on a deck below or to parachute), walkers keep their deck and climbers their ladder if it is still there; holes, fires, breaches,
@@ -584,17 +698,9 @@ export function createShipSim(world, ship, W) {
     if ((!B.ENABLED && !opts.force) || state.ship.down || state.wreck || !layout.parts) return null;
     const plan = planBreak(layout.parts, spec, breakRng);
     if (!plan.ok) return null;
-    const P = PLATFORMS;
     const wearing = layout.parts;
     const before = JSON.parse(JSON.stringify(wearing)); // (kept for the REBUILD card: the parts as they were)
-    const oldP = P.map((q) => ({ id: q.id, y: q.y, x0: q.x0, x1: q.x1 }));
-    const oldC = layout.connectors.map((c) => ({ type: c.type, xTop: c.xTop, xBottom: c.xBottom, yTop: P[c.top].y, yBottom: P[c.bottom].y }));
-    const oldBags = layout.gasbags.map((b, i) => ({ cx: b.cx, gas: state.bags[i] ? state.bags[i].gas : state.ship.gas, down: state.bags[i] ? state.bags[i].down : false, scorch: state.bags[i] ? state.bags[i].scorch : 0, burn: state.bags[i] ? state.bags[i].burn : 0, fireT: state.bags[i] ? state.bags[i].fireT : 0 }));
-    const oldValves = (layout.gasValves || []).map((v, i) => ({ x: v.x, p: v.p, open: state.gasValveOpen[i] !== false }));
-    const oldVents = layout.vents.map((v, i) => ({ x: v.x, p: v.p, open: !!state.ventOpen[i] }));
-    const keptGuns = Object.fromEntries(Object.entries(state.GUNS).map(([k, g]) => [k, { aim: g.aim, cd: g.cd, ammo: g.ammo, max: g.max, empty: g.empty, auto: g.auto, prime: g.prime, primed: g.primed }]));
-    const docks = layout.escortDocks.map((e) => e.n).join('|');
-    const pivot0 = pivotOf(ship);
+    const old = snapshotOld(), { oldP } = old;
     const blast = spec.kind === 'blast';
     const bx = spec.x ?? plan.pieces[0].box.x0, by = spec.y ?? plan.pieces[0].box.y0;
     const pics = ship.snapshotArt ? plan.pieces.map((pc) => { try { return ship.snapshotArt(pc); } catch { return null; } }) : []; // (the picture of each piece, taken while the old ship is still what is drawn)
@@ -611,79 +717,9 @@ export function createShipSim(world, ship, W) {
     const was = brokenOf.get(layout);
     brokenOf.set(layout, { broken: layout.parts, intact: was && was.broken === wearing ? was.intact : before }); // (the next simulation made in this process mends her: ships.js createMainShip)
 
-    if (ship.pose.f !== 1) ship.pose.x += 2 * (pivot0 - pivotOf(ship)); // (a ship facing left is mirrored about the middle of her bounds: keep her hull where it was)
-    const newDeck = (y, x) => P.findIndex((q) => q.y === y && x >= q.x0 - 2 && x <= q.x1 + 2);
-    const newConn = (i) => layout.connectors.findIndex((c) => c.type === oldC[i].type && c.xTop === oldC[i].xTop && c.xBottom === oldC[i].xBottom && P[c.top].y === oldC[i].yTop && P[c.bottom].y === oldC[i].yBottom);
-    // lists of things standing on a deck ({ d, x }): follow their deck, or go with it
-    const remap = (list) => {
-      if (!list) return;
-      for (let i = list.length - 1; i >= 0; i--) {
-        const o = list[i];
-        if (o == null || o.d == null || !oldP[o.d]) continue;
-        const d = newDeck(oldP[o.d].y, o.x);
-        if (d < 0) list.splice(i, 1); else o.d = d;
-      }
-    };
-    // the crew
-    const toss = (p) => {
-      const away = Math.sign(p.x - bx) || (breakRng() < 0.5 ? -1 : 1);
-      p.lock = null;
-      p.fire = false;
-      p.prog = 0;
-      p.tossed = true; // (Action opens his parachute while he falls)
-      const keep = oldP[p.d] ? nearestDeck(oldP[p.d].y, p.x) : 0; // (p.d stays a real deck of what is left: the bots' routing reads it while they fall)
-      air.startFlight(p, away * (blast ? B.BAY.THROW : 140) * (0.5 + breakRng() * 0.6), blast ? -240 : 60);
-      p.d = keep;
-      p.face = away * ship.pose.f;
-      state.breakStats.fell++;
-      phoneFx(p, 'The deck is gone! You are falling - open the parachute or grab a ladder!', [120, 60, 120]);
-    };
-    const nearestDeck = (y, x) => P.reduce((best, q, d) => { const c = Math.abs(q.y - y) + (x == null ? 0 : 0.3 * Math.max(0, q.x0 - x, x - q.x1)); return c < best.c ? { c, d } : best; }, { c: Infinity, d: 0 }).d;
-    for (const p of crew) {
-      p.botJob = null; p.job = null; p.wanderTo = null; p.uk = null; // (walkers re-plan their routes against the new nav tables, the phones get their new buttons)
-      if (p.fly || p.fall || p.d == null || p.onGunship || p.hj) { // (somebody already in the air or falling keeps a valid deck number: the bots' routing reads it)
-        if (p.d != null && oldP[p.d] && !p.onGunship) p.d = nearestDeck(oldP[p.d].y, null); // (x is a world x in the air)
-        continue;
-      }
-      if (p.conn != null) {
-        const k = oldC[p.conn] ? newConn(p.conn) : -1;
-        if (k >= 0) { p.conn = k; const nd = oldP[p.d] ? newDeck(oldP[p.d].y, p.x) : -1; p.d = nd >= 0 ? nd : layout.connectors[k].top; } else { p.climb = false; toss(p); } // (a climber keeps his ladder if it is still there; his deck index follows too)
-        continue;
-      }
-      if (falls.has(p)) { toss(p); continue; }
-      const nd = oldP[p.d] ? newDeck(oldP[p.d].y, p.x) : -1;
-      if (nd < 0) toss(p); else p.d = nd;
-    }
-    for (const list of [state.breaches, state.fires, state.bombs, state.boarders, state.icing, state.loads]) remap(list);
-    for (const b of state.bats || []) if (b.latched && b.d != null && oldP[b.d]) { const d = newDeck(oldP[b.d].y, b.lx); if (d < 0) { b.latched = false; b.landed = false; } else b.d = d; }
-    if (state.cannons) for (const k of Object.keys(state.cannons)) if (!(layout.cannons || []).some((c) => c.n === k)) delete state.cannons[k];
-    // the guns, lamps, coil and escorts are made again from the layout, keeping what the survivors hold
-    for (const k of Object.keys(state.GUNS)) delete state.GUNS[k];
-    Object.assign(state.GUNS, newGuns(layout));
-    for (const [k, g] of Object.entries(state.GUNS)) if (keptGuns[k]) Object.assign(g, keptGuns[k]);
-    searchlights.refit();
-    coil.refit();
-    if (layout.escortDocks.map((e) => e.n).join('|') !== docks) escort.reset();
-    // whoever was on a station that is gone steps off it
-    for (const p of crew) if (p.lock && !LOCKABLE(p.lock)) { p.lock = null; p.fire = false; }
-    // the gasbags: each keeps its own gas (by where it hangs), valves and vents keep their setting, holes stay in their bag
-    syncBags(state);
-    layout.gasbags.forEach((b, i) => {
-      const o = oldBags.find((q) => Math.abs(q.cx - b.cx) < 1.5);
-      if (o && state.bags[i]) { state.bags[i].gas = o.gas; state.bags[i].down = o.down; state.bags[i].scorch = o.scorch; state.bags[i].burn = o.burn; state.bags[i].fireT = o.fireT; } // (a neighbour that is scorched or alight stays so)
-    });
-    state.gasValveOpen = (layout.gasValves || []).map((v) => { const o = oldValves.find((q) => q.x === v.x && q.p === v.p); return o ? o.open : true; });
-    state.ventOpen = layout.vents.map((v) => { const o = oldVents.find((q) => q.x === v.x && q.p === v.p); return o ? o.open : false; });
-    syncBags(state);
-    for (let i = state.gasHoles.length - 1; i >= 0; i--) {
-      const h = state.gasHoles[i];
-      const o = oldBags[h.bag | 0];
-      const nb = o ? layout.gasbags.findIndex((b) => Math.abs(b.cx - o.cx) < 1.5) : -1;
-      if (nb < 0) { state.gasHoles.splice(i, 1); continue; }
-      const nh = gasHoleAt(h.x, h.y, nb);
-      Object.assign(h, { bag: nb, d: nh.d, x: nh.x, y: nh.y });
-    }
-    bagTear = [];
+    const toss = (p) => tossOff(p, bx, blast, oldP); // (whoever stood on what went is thrown off it)
+    reshape(old, { crew, lost: (p) => falls.has(p), lose: toss });
+    structure.sync(); // (STRUCTURE.md: the frame is cut again from what is left, keeping the soundness of the segments that stay)
     // she is as heavy as she was but has less to lift her: the hover level rises, and past what the pump can hold she sinks (flight uses liftDeficit)
     const intact = lostList().length ? lostList()[0].before : before;
     state.liftDeficit = Math.max(0, hoverOf(plan.parts) - Math.max(config.BUILD_CHECK.HOVER_MAX, hoverOf(intact)));
@@ -708,11 +744,125 @@ export function createShipSim(world, ship, W) {
     if (ship.main) {
       state.ev.warn = 5;
       const nm = plan.names.length ? plan.names.slice(0, 3).join(', ') + (plan.names.length > 3 ? ' +' + (plan.names.length - 3) + ' MORE' : '') : plan.summary.split(',')[0];
-      state.ev.warnText = (blast ? 'THE BOMB BAY EXPLODED! ' : spec.cause === 'hydrogen' ? 'THE HYDROGEN BAG EXPLODED! ' : spec.cause === 'bag' ? 'A GASBAG TORE AWAY! ' : 'PARTS BROKE OFF! ') + (nm ? 'LOST: ' + nm.toUpperCase() : '');
+      state.ev.warnText = (blast ? 'THE BOMB BAY EXPLODED! ' : spec.cause === 'hydrogen' ? 'THE HYDROGEN BAG EXPLODED! ' : spec.cause === 'bag' ? 'A GASBAG TORE AWAY! ' : spec.cause === 'structure' ? 'SHE GAVE WAY! ' : 'PARTS BROKE OFF! ') + (nm ? 'LOST: ' + nm.toUpperCase() : '');
     }
     if (W.debris) W.debris.spawn(ship, plan, pics, { origin: { x: bx, y: by }, blast });
     if (W.afterBreak) W.afterBreak(ship); // (the world: the danger of the voyage follows her strength, shipPower.js)
     return { plan, entry };
+  }
+
+  // ---- A SPLIT (STRUCTURE.md): the frame has come in two. planSplit (breakOff.js) cuts the parts list in halves; the half with the most lift stays THIS ship (her layout is replaced in place, like a
+  // break-off), the other becomes a ship of its own - a PIECE (ships.js, simulation.js addShip) - at the same place in the sky with her crew, her fires and breaches, her bags and the modules that
+  // hung on her. spec: structure.js resolve(). Returns { plan, entry, piece } or null. ----
+  function splitShip(spec) {
+    if (state.ship.down || state.wreck || !layout.parts) return null;
+    const plan = planSplit(layout.parts, spec);
+    if (!plan.ok || !plan.keep) { // (it does not come apart cleanly: the stretches that failed just go, as in any break-off)
+      return breakOff({ kind: 'cuts', cuts: [...(spec.gone || []), ...(spec.small || [])], cause: 'structure' }, { force: true });
+    }
+    const wearing = layout.parts;
+    const before = JSON.parse(JSON.stringify(wearing));
+    const old = snapshotOld(), { oldP, oldC, oldBags } = old;
+    const x0 = ship.pose.x;
+    const crew = Object.values(state.players);
+    const awayZones = spec.comps.filter((c, i) => i !== plan.keepIndex).flatMap((c) => c.stretches);
+    const seam = [...(spec.gone || []), ...(spec.small || [])];
+    const zoneOf = (id, x) => (awayZones.some((z) => z.id === id && x >= z.a - 1 && x <= z.b + 1) ? 'away' : seam.some((z) => z.id === id && x >= z.a - 24 && x <= z.b + 24) ? 'seam' : 'keep');
+    const zoneOfP = (p) => {
+      if (p.fly || p.fall || p.onGunship || p.hj || p.d == null) return 'keep';
+      if (p.conn != null) { const c = oldC[p.conn], q = c && oldP.find((o) => o.y === c.yTop && c.xTop >= o.x0 - 2 && c.xTop <= o.x1 + 2); return q ? zoneOf(q.id, c.xTop) : 'keep'; }
+      const q = oldP[p.d];
+      return q ? zoneOf(q.id, p.x) : 'keep';
+    };
+    const zones = new Map(crew.map((p) => [p, zoneOfP(p)]));
+    const awayCrew = crew.filter((p) => zones.get(p) === 'away').map((p) => { const c = p.conn != null ? oldC[p.conn] : null; return { p, y: c ? c.yTop : oldP[p.d].y, x: c ? c.xTop : p.x }; });
+    // what hangs on the half that goes: fires, breaches, bombs, raiders, ice and loads on her decks, the holes in her bags
+    const moved = {};
+    for (const k of ['breaches', 'fires', 'bombs', 'boarders', 'icing', 'loads']) {
+      const list = state[k];
+      if (!list) continue;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const o = list[i];
+        if (o == null || o.d == null || !oldP[o.d] || zoneOf(oldP[o.d].id, o.x) !== 'away') continue;
+        if (o.conn != null) { list.splice(i, 1); continue; } // (a raider on a ladder goes down with her)
+        (moved[k] ||= []).push({ o, y: oldP[o.d].y });
+        list.splice(i, 1);
+      }
+    }
+    const awayBags = plan.away ? plan.away.bags : [];
+    const holesAway = [];
+    for (let i = state.gasHoles.length - 1; i >= 0; i--) {
+      const h = state.gasHoles[i], o = oldBags[h.bag | 0];
+      if (o && awayBags.some((cx) => Math.abs(cx - o.cx) < 1.5)) { holesAway.push({ h, cx: o.cx }); state.gasHoles.splice(i, 1); }
+    }
+    const mods = modules.list.map((m) => ({ name: m.name, hp: m.hp, broken: m.broken }));
+    const bombs = state.bombBay.bombs;
+    { // the 3D view's copy of the news (WP5), pushed BEFORE the layout is replaced
+      state.breakEvents.push({ kind: 'split', plan: { ok: true, split: plan, pieces: [], cuts: [], scars: plan.scars, names: plan.names, labels: plan.keep.labels, sigs: plan.keep.sigs }, origin: { x: spec.at, y: layout.midPoint.y }, blast: false, cause: 'split', t: simT, ver: layout.version, lostKeys: [], lostRects: [] }); // (no lost parts to lift out of the old model: the half that went is a ship of her own, with a model of her own, until WP5 carves the seam)
+      if (state.breakEvents.length > 8) state.breakEvents.shift();
+    }
+    layout.applyBuild(plan.keep.parts);
+    const was = brokenOf.get(layout);
+    brokenOf.set(layout, { broken: layout.parts, intact: was && was.broken === wearing ? was.intact : before });
+    reshape(old, { crew, lost: (p) => zones.get(p) !== 'keep', lose: (p) => { if (zones.get(p) === 'away') p.d = oldP[p.d] ? nearestDeck(oldP[p.d].y, p.x) : 0; else tossOff(p, spec.at, false, oldP); } });
+    structure.sync();
+    // the half that goes becomes a ship of her own, right where she was
+    let n = 1;
+    while (world.ships.some((q) => q.id === ship.id + '-piece' + (n > 1 ? n : ''))) n++;
+    const midOf = (c) => c.stretches.reduce((m, z) => m + ((z.a + z.b) / 2) * (z.b - z.a), 0) / Math.max(1, c.stretches.reduce((m, z) => m + z.b - z.a, 0));
+    const awayC = spec.comps.filter((c, i) => i !== plan.keepIndex)[0];
+    const label = awayC && midOf(awayC) < midOf(spec.comps[plan.keepIndex]) ? 'the aft half' : 'the fore half'; // (the lower x is the tail)
+    let piece = null;
+    if (plan.away) {
+      piece = W.addShip(plan.away.parts, { id: ship.id + '-piece' + (n > 1 ? n : ''), team: ship.team ? ship.team.id : null, name: (ship.name || 'AIRSHIP') + ' (' + label.replace('the ', '') + ')', piece: true, place: false });
+      piece.splitT = 0;
+      const p0 = ship.pose;
+      piece.pose.f = p0.f;
+      piece.pose.y = p0.y;
+      piece.pose.vy = p0.vy;
+      piece.pose.pitch = p0.pitch;
+      piece.pose.x = x0 + (p0.f !== 1 ? 2 * (old.pivot0 - pivotOf(piece)) : 0);
+      piece.state.speed = state.ship.speed;
+      piece.state.order = state.ship.order;
+      const PS = piece.ctx, PL = piece.layout.platforms;
+      const dOf = (y, x) => PL.findIndex((q) => q.y === y && x >= q.x0 - 2 && x <= q.x1 + 2);
+      piece.layout.gasbags.forEach((b, i) => { const o = oldBags.find((q) => Math.abs(q.cx - b.cx) < 1.5); const nb = PS.bags[i]; if (o && nb) { nb.gas = o.gas; nb.down = o.down; nb.scorch = o.scorch; nb.burn = o.burn; nb.fireT = o.fireT; nb.hp = o.hp; } });
+      for (const { h, cx } of holesAway) { const nb = piece.layout.gasbags.findIndex((b) => Math.abs(b.cx - cx) < 1.5); if (nb < 0) continue; const nh = piece.sim.gasHoleAt(h.x, h.y, nb); PS.gasHoles.push(Object.assign(h, { bag: nb, d: nh.d, x: nh.x, y: nh.y })); }
+      for (const [k, list] of Object.entries(moved)) for (const { o, y } of list) { const d = dOf(y, o.x); if (d >= 0 && PS[k]) { o.d = d; PS[k].push(o); } }
+      for (const m of piece.sim.modules.list) { const o = mods.find((q) => q.name === m.name); if (o) { m.hp = o.hp; m.broken = o.broken; } }
+      for (const [k, g] of Object.entries(PS.GUNS)) if (old.keptGuns[k]) Object.assign(g, old.keptGuns[k]);
+      if (piece.layout.bombBay && !layout.bombBay) { PS.bombBay.bombs = bombs; state.bombBay.bombs = 0; }
+      for (const { p, y, x } of awayCrew) {
+        const d = dOf(y, x);
+        if (d >= 0) { transfer(world, p, piece, d, x); p.uk = null; phoneFx(p, 'ABANDON THIS HALF - JUMP OR SWING ACROSS!', [200, 60, 200, 60, 300]); } else tossOff(p, spec.at, false, oldP);
+      }
+    } else for (const { p } of awayCrew) tossOff(p, spec.at, false, oldP);
+    // the ledger: one entry for the half that went, and the parts as they were (a REBUILD card at a sky-dock brings her back)
+    const B = BOC(), lost = lostList();
+    const entry = { id: 'lost' + (lost.length ? Math.max(...lost.map((e) => +e.id.slice(4) || 0)) + 1 : 1), cause: 'split', label, names: plan.names, before, price: B.REBUILD.MAX_HALF, mass: plan.mass, lift: plan.lift, buildId: lost.length ? lost[0].buildId : ship.buildId };
+    lost.push(entry);
+    ship.buildId = 'broken';
+    const S = state.breakStats;
+    S.events++; S.parts += (plan.keep.labels || []).length;
+    (S.causes ||= []).push('split@' + Math.round(world.ev ? world.ev.t || 0 : 0));
+    breakCd = B.GRACE;
+    structure.stats.splits++;
+    bagTear = [];
+    // tell it: the snap, the shake, the alarm, every phone
+    shipPop(spec.at, layout.midPoint.y - 60, 'snap', '#e8d8b0', 1.8);
+    for (let k = 0; k < 18; k++) shipPuff(spec.at + (breakRng() - 0.5) * 300, layout.midPoint.y + (breakRng() - 0.5) * 400, k % 3 ? '#555' : '#ff8c42', 1);
+    state.ship.shake = Math.max(state.ship.shake, 1.3);
+    hitForce(state, spec.at, layout.midPoint.y, 4);
+    state.sfxQ.push(['alarm']);
+    for (const p of Object.values(world.players)) phoneFx(p, null, [250, 70, 250, 70, 400]);
+    if (ship.main) {
+      state.ev.warn = 6;
+      const nm = plan.names.length ? plan.names.slice(0, 3).join(', ') + (plan.names.length > 3 ? ' +' + (plan.names.length - 3) + ' MORE' : '') : label.toUpperCase();
+      state.ev.warnText = "SHE'S BROKEN IN HALF! LOST: " + nm.toUpperCase();
+    }
+    if (W.afterBreak) W.afterBreak(ship);
+    if (!layout.gasbags.length) wreck('SHE BROKE UP IN THE AIR'); // (the half that is left has no gasbag: nothing holds her up)
+    return { plan, entry, piece };
   }
 
   // The loaded bomb bay goes up: the bombs are gone, the blast takes the parts round it (BREAKOFF.BAY), hurts the hull, and sets fire to the coal, ammunition and boiler within reach.
@@ -724,7 +874,8 @@ export function createShipSim(world, ship, W) {
     const bx = bay.x, by = bay.y - 30;
     health.blast(bx, by, config.HEALTH.BAY_RADIUS, { big: true, cause: 'blast' }); // (crew health: whoever is close to the bay when it goes up is knocked out at once)
     const r = breakOff({ kind: 'blast', x: bx, y: by, r: B.RADIUS, cause: 'bombbay-' + cause });
-    damageHull(B.HULL);
+    if (structure.on()) structure.hit(bx, by, B.HULL, { power: config.STRUCTURE.BIG_POWER }); // (STRUCTURE.md: a big blow on the segment the bay hangs in)
+    else damageHull(B.HULL);
     modules.hitAt(bx, by, shipPuff, 3, 1);
     let lit = 0;
     const near = [...all('coal'), ...all('ammo'), ...all('boiler')].map((s) => ({ s, d: Math.hypot(s.x - bx, PLATFORMS[s.d].y - by) })).filter((o) => o.d < B.CHAIN_RADIUS).sort((a, b) => a.d - b.d);
@@ -811,7 +962,7 @@ export function createShipSim(world, ship, W) {
 
   const impact = (x, y, power, hullMul = 1, kind = 'hit') => { // (kind: 'hit' a shell or bomb, 'rock' a scrape, 'ram' two hulls meeting; it only names the mark in hitLog)
     logHit(x, y, power, kind);
-    impactBody(x, y, power, hullMul);
+    impactBody(x, y, power, hullMul, kind);
     if (power >= 2 && BOC().ENABLED) hardHit(x, y, power); // (the blow as it was struck: plate on the spot lowers the chance inside hardHit)
   };
 
@@ -824,8 +975,21 @@ export function createShipSim(world, ship, W) {
   const balance = createBalance(state); // the seesaw: live centre of mass against the bag's lift (balance.js)
   const flight = createFlight({ state, ship }); // the forces on her drive her pose: engines, sails, drag, buoyancy, weight (flight.js)
   const fireSys = createFire({ state, shipPuff }); // fire that cares where things are: flammability, spreading, the coal blaze (fire.js, fireModel.js)
-  const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt, getCargo: () => cargo, breakOff: (spec, opts) => breakOff(spec, opts) }); // GOING DOWN! last stand: her lift against her weight (goingDown.js)
+  const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt, getCargo: () => cargo, breakOff: (spec, opts) => breakOff(spec, opts), getStructure: () => structure }); // GOING DOWN! last stand: her lift against her weight (goingDown.js)
   state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
+  // STRUCTURE (STRUCTURE.md, structure.js): the frame of segments that replaced the hull bar. Off (config.STRUCTURE.ENABLED), nothing in it runs and the old hull bar plays.
+  const structure = createStructure({ state, ship, hooks: {
+    scale: () => config.SHIP.HULL_DAMAGE * dmgMul() * dangerMul(), // (what a hull point costs: the upgrades' armour, the difficulty and the size of the crew, the skulls on the stop)
+    drainScale: () => dmgMul(),
+    protect: () => goingDown.protect(),
+    difficulty: () => world.difficulty,
+    stopNo: () => (state.course && state.course.stop ? state.course.stop.col + 1 + ((world.run && world.run.base) || 0) : 99), // (the number of the stop she is flying; a headless run with no route can split at once)
+    say: (text, secs) => { if (ship.main) { state.ev.warn = secs; state.ev.warnText = text; } },
+    buzz: (pattern) => { for (const p of Object.values(state.players)) phoneFx(p, null, pattern); },
+    pop: (x, y, kind, color, size) => shipPop(x, y, kind, color, size),
+    breakCuts: (cuts, cause) => breakOff({ kind: 'cuts', cuts, cause }, { force: true }),
+    doSplit: (spec) => splitShip(spec),
+  } });
   const comeAbout = createComeAbout(ship, W, { goingDown, flight }); // turning her round on the helm's command (comeAbout.js)
 
   const health = createHealth({ state, ship, phoneFx, emitPlayerUi, shipPuff, shipPop }); // crew health: hearts, burns, the medical bay (health.js)
@@ -1038,7 +1202,7 @@ export function createShipSim(world, ship, W) {
   let helmFlown = false; // did someone steer this frame
 
   // Before the step: fit the gasbags to a new build, and the trim engine is off until the helmsman asks.
-  const preStep = () => syncBags(state); // (a new build was applied at the dock: fit the gasbags to it)
+  const preStep = () => { syncBags(state); if (structure.on()) structure.sync(); }; // (a new build was applied at the dock: fit the gasbags to it - and the segments of her frame)
   const trimOff = () => { state.ship.trim = 0; };
 
   // A1: the crew: bots think, everyone walks, climbs, mans stations and presses buttons; the phones are told what their buttons do now.
@@ -1071,7 +1235,7 @@ export function createShipSim(world, ship, W) {
           air.clear(w);
           // Fell off the ship (or off a gunship): back aboard in the medical bay, dazed (no medbay: on the spawn deck at a boarding point).
           // (A boarder who falls off the RIVAL's deck wakes in his own ship's medical bay.)
-          const dest = isHostile(w) ? homeOf(w) : ship;
+          const dest = isHostile(w) || ship.piece ? homeOf(w) : ship;
           const rv = dest === ship ? reviveSpot() : dest.layout.reviveSpot();
           if (dest !== ship) transfer(world, w, dest, rv.d, rv.medbay ? rv.x + (Math.random() - 0.5) * 60 : rv.x);
           w.d = rv.d;
@@ -1328,6 +1492,11 @@ export function createShipSim(world, ship, W) {
               stat(player, 'repairs');
               shipPop(object.pos.x, object.pos.y - 50, 'repair', '#8fe388', 0.8);
             }
+          } else if (act.type === 'frame') { // SHORE UP: a hammer held on a damaged segment of the frame (structure.js)
+            if (structure.repair(object, dt)) {
+              if (Math.random() < dt * 4) shipPuff(object.x + (Math.random() - 0.5) * object.w * 0.6, object.y - 30, '#d9cbb0', 2);
+              stat(player, 'frames', dt * config.STRUCTURE.REPAIR_RATE);
+            }
           } else if (act.type === 'rod') env.stormSea.rodHold(object);
           else if (act.type === 'pump') env.stormSea.pumpWork(dt);
           else if (act.type === 'winch') env.stormSea.winchWork(object, dt);
@@ -1348,9 +1517,9 @@ export function createShipSim(world, ship, W) {
               if (act.type === 'fire') state.fires.splice(state.fires.indexOf(object), 1);
               else if (act.type === 'hole') {
                 state.breaches.splice(state.breaches.indexOf(object), 1);
-                state.ship.hull = Math.min(100, state.ship.hull + 3);
+                if (!structure.on()) state.ship.hull = Math.min(100, state.ship.hull + 3); // (STRUCTURE.md: planking stops the drain on its segment, it gives nothing back)
               } else if (act.type === 'defuse') state.bombs.splice(state.bombs.indexOf(object), 1);
-              else if (act.type === 'gas') state.gasHoles.splice(state.gasHoles.indexOf(object), 1);
+              else if (act.type === 'gas') { state.gasHoles.splice(state.gasHoles.indexOf(object), 1); structure.patchBag(object.bag | 0); } // (STRUCTURE.md: a patch mends the canvas a little)
               else if (act.type === 'ice') env.chip(object);
               else if (act.type === 'unclog') env.deep.unclog(object);
               else if (act.type === 'oxygen') env.deep.refill();
@@ -1458,6 +1627,8 @@ export function createShipSim(world, ship, W) {
         else status = 'Fuel ' + Math.max(0, Math.round(player.hj.fuel / 5) * 5) + 's - hull ' + Math.max(0, player.hj.hp) + '/' + player.hj.max;
       }
       const hull = Math.round(state.ship.hull / 5) * 5;
+      const lw = structure.on() ? state.liftWeight : null; // (STRUCTURE.md: the phone's two thin bars - the frame and lift against weight - and the name of the section that is failing)
+      const st = lw ? { s: Math.round(state.ship.structure / 5) * 5, l: Math.round(lw.lift / 5) * 5, w: Math.round(lw.weight / 5) * 5, f: state.structWorst ? state.structWorst.name : null } : null;
       const hp = config.HEALTH.ENABLED && !player.enemy ? Math.round(heartsOf(player) * 2) / 2 : null; // (crew health: hearts, in halves; the phone draws them)
       // (the two buttons: Action = label / id, Grab = the small amber button; ids go back with each press, see aidOf)
       const grabNow = player.bot || player.lock || player.hj || player.fly ? null : player.grabAct;
@@ -1466,11 +1637,11 @@ export function createShipSim(world, ship, W) {
       const glock = !!(grabNow && player.grabLock > 0);
       const progNow = !player.lock && player.act && player.act.hold && player.act.obj && typeof player.act.obj.prog === 'number' ? Math.round(player.act.obj.prog * 10) : -1; // (how far a hold action has got)
       const eng = player.lock && kind === 'helm' && !player.hj && !player.bot ? engines.panel(ship.pose.f) : null; // (the helm's engine levers: one per engine, left to right as the TV shows her)
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : ''].join('|');
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, st ? st.s + '/' + st.l + '/' + st.w + '/' + st.f : '', primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : ''].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, hp, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT, med: !!health.medbay(), fc: ship.pose.f, tn: state.turning.t > 0, eng, tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, st, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, hp, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT, med: !!health.medbay(), fc: ship.pose.f, tn: state.turning.t > 0, eng, tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
           emitPlayerUi(player.id, player.ui);
         }
       }
@@ -1598,7 +1769,7 @@ export function createShipSim(world, ship, W) {
     const flying = state.phase === 'flying' && !state.ship.down;
     state.autopilot = false;
     // Easy/Normal: with nobody at the helm the ship flies itself, gently.
-    const assist = autopilotOn(state) && flying && !ship.ai && !goingDown.active(); // (the gunship has no autopilot: with no helmsman she drifts; falling, nobody pumps for her)
+    const assist = autopilotOn(state) && flying && !ship.ai && !ship.piece && (!goingDown.active() || structure.on()); // (the gunship has no autopilot: with no helmsman she drifts; falling, nobody pumps for her)
     const plan = assist && rig.helm && (!getHelm() || !gasManned) ? pilotPlan(state, 4, 0.3) : null;
     if (!getHelm()) {
       if (plan && worksKind('helm')) {
@@ -1647,14 +1818,19 @@ export function createShipSim(world, ship, W) {
     // Lift: above the neutral fill she accelerates up, below it she drops (fast at the extremes).
     // The helm's little trim engine adds a nudge.
     // (ice weight shifts the level she needs to hover; lava thermals push her up - state.env, environments.js)
-    const effGas = liftGas(state) - state.env.sink - state.liftDeficit + state.env.lift / G.LIFT - (state.engineWeight || 0); // (liftDeficit: gasbags torn away leave her heavy for the lift she has left, S.5i; engineWeight: the weight her heavy / great lift engines carry, engines.js)
+    state.weightDeficit = state.liftDeficit + (state.structDeficit || 0); // (STRUCTURE.md: the lift she has lost, in gas points - torn-away bags (liftDeficit) and, with structure on, ragged canvas and loads on her decks (structDeficit) - exactly 0 for the classic ship at rest)
+    const effGas = liftGas(state) - state.env.sink - state.weightDeficit + state.env.lift / G.LIFT - (state.engineWeight || 0); // (liftDeficit: gasbags torn away leave her heavy for the lift she has left, S.5i; engineWeight: the weight her heavy / great lift engines carry, engines.js)
     const lift = (effGas - G.NEUTRAL) * G.LIFT;
     const trim = state.ship.trim * SHM.TRIM_ACCEL * (worksKind('helm') ? (modules.handWheel() ? config.WIND.HAND_TRIM : 1) : 0) * env.deep.helmMul() * state.links.helmMul; // (a lookout in the nest sharpens the helm: links.js)
     const held = state.engineWeight ? state.forces.vyAcc / G.LIFT : 0; // (the gas points her lift engines are holding up right now: she is not "sinking" while they carry her)
     state.buoyancy = effGas + held > G.NEUTRAL + 5 ? 1 : effGas + held < G.NEUTRAL - 5 ? -1 : 0;
     state.sinking = state.buoyancy < 0;
     if (flying) {
-      if (!goingDown.active()) flight.climb(dt, lift + trim + state.balance.push + state.forces.vyAcc); // (falling, goingDown.js sinks her by how far her lift is short of her weight) (the bags' buoyancy, the trim engine, the balance push, vyAcc: lift engines pointing up / dive engines down, forces.js; less the air's drag, over her weight)
+      if (ship.piece && !layout.gasbags.length) { // (STRUCTURE.md: a half with no gasbag falls like a stone, as fast as FALL.TERMINAL and no faster)
+        const F = config.STRUCTURE.PIECE;
+        flight.climb(dt, -F.FALL_ACCEL);
+        state.ship.vy = Math.max(state.ship.vy || 0, -F.FALL_TERMINAL);
+      } else if (!goingDown.active() || structure.on()) flight.climb(dt, lift + trim + state.balance.push + state.forces.vyAcc); // (falling, goingDown.js sinks her by how far her lift is short of her weight) (the bags' buoyancy, the trim engine, the balance push, vyAcc: lift engines pointing up / dive engines down, forces.js; less the air's drag, over her weight)
       // Nearly out of gas on the ground: the hull grinds.
       if (state.course && state.course.scraping && state.ship.gas < G.SCRAPE_BELOW) damageHull(G.SCRAPE_DAMAGE * dt);
       if (state.course && state.course.scraping && state.balance.scrape) damageHull(state.balance.scrape * dt); // a nose-heavy bow digs in
@@ -1670,6 +1846,12 @@ export function createShipSim(world, ship, W) {
       ship.pose.y -= (home - state.ship.alt) * Math.min(1, dt * 0.4);
     }
     state.ship.shake = Math.max(0, state.ship.shake - dt);
+    { const cc = state.course, touch = !!(cc && cc.scraping && cc.lastContact && cc.lastContact.dy < 0) || !!(state.sea && state.sea.spray > 0.5 && state.sea.flood > 0); groundHold = touch ? config.STRUCTURE.GROUND_HOLD : Math.max(0, groundHold - dt); state.grounded = groundHold > 0; } // (STRUCTURE.md: rock under her keel, or the waves; a ship that sits on the ground bounces on it, so the touch is held a moment)
+    if (ship.piece && flying) { // a half that split off: she breaks up on the first ground or sea she meets, or when she has drifted long enough
+      pieceState.t += dt;
+      ship.splitT = pieceState.t;
+      if (state.grounded || pieceState.t > config.STRUCTURE.PIECE.LIFE) wreckAside('CRASH');
+    }
     goingDown.update(dt); // the last stand: sinking, lift against weight, the leaks (goingDown.js)
     // Nose up while climbing, nose down while diving, a touch up when she speeds up and down when she brakes; the trim of an unbalanced ship (balance.js restPitch), the going-down tilt and what the forces
     // on her twist her by (forces.js theta) add (flight.js).
@@ -1686,6 +1868,7 @@ export function createShipSim(world, ship, W) {
       }
       if (state.ship.down <= 0) {
         if (config.PVP.ENABLED) state.ship.down = 1e-3; // (Versus: a wreck stays a wreck until the match builds the next round)
+        else if (ship.piece) ship.gone = true; // (the world takes her out of the sky at the end of the step, simulation.js)
         else !ship.main ? respawn() : state.limp ? W.finishLimp() : W.restartGame();
       }
     }
@@ -1724,10 +1907,13 @@ export function createShipSim(world, ship, W) {
       if (bayHeat >= BOC().BAY.COOKOFF / (ship.ai || config.PVP.ENABLED ? 1 : BOC().DIFFICULTY[world.difficulty] ?? 1)) explodeBay('fire');
     } else bayHeat = 0;
 
-    if (!state.ship.down && !goingDown.protect()) {
+    if (structure.on()) { // (STRUCTURE.md: a breach or a fire wears down the segment it is in, until it is planked or out)
+      if (!state.ship.down) structure.drain(dt);
+    } else if (!state.ship.down && !goingDown.protect()) {
       state.ship.hull -= (state.breaches.length * 0.5 + fireSys.load() * 0.35) * (ship.ai ? ship.ai.drainMul() : damageMul(state)) * 2 * dt;
       if (state.ship.hull <= 0) wreck();
     }
+    if (!state.ship.down) structure.step(dt);
 
     raiders.update(dt);
   };
@@ -1740,19 +1926,46 @@ export function createShipSim(world, ship, W) {
 
   // A ship that is not the main one gives out: she breaks apart (the first time in a mission GOING DOWN! instead) and is rebuilt after WRECK.TIME. The run, the
   // record and the limp rules belong to the main ship.
-  function wreckAside() {
+  function wreckAside(why) {
     if (state.ship.down) return;
+    if (ship.piece) return breakPiece();
     if (goingDown.active()) return;
-    if (!ship.ai && goingDown.tryStart()) return; // (the enemy gunship has no last stand)
+    if (!ship.ai && !structure.on() && goingDown.tryStart()) return; // (the enemy gunship has no last stand; with structure the last stand is the continuous falling, goingDown.js)
+    void why;
     state.ship.hull = 0;
     state.ship.down = config.WRECK.TIME;
     state.wreck = { t: 0, lap: state.course ? state.course.lap : 1, kills: state.kills };
     state.ship.shake = 1.5;
   }
+  // A half that split off meets the ground, the sea, or the end of her drifting: she breaks up into wreckage, and whoever is still aboard goes overboard - he comes round in the medical bay of the
+  // main ship, as anyone who falls off does. The ship is taken out of the sky when the break-up is over (removePiece).
+  function breakPiece() {
+    const main = world.ships[0];
+    for (const p of Object.values(world.players)) {
+      if (shipOf(world, p) !== ship) continue;
+      if (p.fly || p.fall) { transfer(world, p, main); p.d = 0; continue; } // (already in the air: he lands wherever he lands)
+      const rv = main.layout.reviveSpot(), x = rv.medbay ? rv.x + (Math.random() - 0.5) * 60 : rv.x;
+      detach(p);
+      transfer(world, p, main, rv.d, x);
+      p.ko = config.GUNSHIP.RESPAWN_TIME;
+      if (config.HEALTH.ENABLED && !p.enemy) p.hearts = Math.max(Math.min(1, heartsOf(p)), heartsOf(p) - config.HEALTH.OVERBOARD);
+      p.carry = null;
+      p.hook = null;
+      phoneFx(p, 'Your half of the ship crashed! You come round in the medical bay...', [80, 40, 80]);
+    }
+    state.ship.down = config.WRECK.TIME;
+    state.wreck = { t: 0, lap: 1, kills: 0 };
+    state.ship.shake = 1.5;
+    state.sfxQ.push(['crash']);
+    const b = layout.bounds, pcs = [0, 1, 2].map((k) => { const w = (b.x1 - b.x0) / 3, x0 = b.x0 + k * w, box = { x0, y0: b.y0, x1: x0 + w, y1: b.y1 }; return { clips: [box], box }; });
+    if (W.debris) W.debris.spawn(ship, { pieces: pcs }, ship.snapshotArt ? pcs.map((pc) => { try { return ship.snapshotArt(pc); } catch { return null; } }) : [], { origin: { x: layout.midPoint.x, y: layout.midPoint.y }, blast: true });
+    shipPuff(layout.midPoint.x, layout.midPoint.y, '#555', 16);
+  }
   // ... and rebuilt: a fresh ship with her crew dropped back aboard from above, as restartGame does for the main one.
   function respawn({ crew = true } = {}) {
     if (!ship.main && ship.lost && ship.lost.length) { const first = ship.lost[0]; ship.lost.length = 0; fitBuild(first.before, { crew: false }); ship.buildId = first.buildId; } // (a ship that lost parts is rebuilt whole with the new game, S.5i)
     state.liftDeficit = 0; bayHeat = 0; bagTear = []; breakCd = 0;
+    structure.reset(); state.crashT = 0;
     state.hitLog.length = 0; state.breakEvents.length = 0; // (3D: the rebuilt ship wears no dents)
     if (state.hotAir) state.hotAir.heat = 1; // (a new ship: the burner is lit and no hydrogen bag is scorched)
     for (const b of state.bags) { b.scorch = 0; b.burn = 0; b.cool = 0; }
@@ -1829,6 +2042,7 @@ export function createShipSim(world, ship, W) {
     escort.reset();
     forces.reset();
     state.liftDeficit = 0; bayHeat = 0; bagTear = []; breakCd = 0; // (a build fitted at the dock starts clean: whatever had broken off is rebuilt or counted into it)
+    structure.sync();
     state.hitLog.length = 0; state.breakEvents.length = 0; // (3D: the new ship wears no dents)
     const newBomb = !!layout.bombBay && !hadBay;
     if (newBomb) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.START);
@@ -1847,7 +2061,7 @@ export function createShipSim(world, ship, W) {
     ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, health, goingDown, raiders, escort, coil, searchlights, air, cannon, cargo, hatches,
     get hookshot() { return hookshot; },
     get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
-    hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, shieldBlocks, gnaw, shipPuff, shipPop, breakOff, explodeBay, explodeBag, hydrogen, crash, seedBreak: (n) => { breakRng = makeRng(n); }, // (the gate reseeds the break-off rolls)
+    hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, wreck: (text) => wreck(text), shieldBlocks, gnaw, shipPuff, shipPop, breakOff, splitShip, structure, explodeBay, explodeBag, hydrogen, crash, seedBreak: (n) => { breakRng = makeRng(n); }, // (the gate reseeds the break-off rolls)
     interaction, taken, holder, getHelm, worksKind, isHostile, homeOf, sendHome,
     preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn, refit, fitBuild, comeAbout,
   };

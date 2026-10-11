@@ -254,7 +254,7 @@ config.COLLIDE.ENABLED = true;
     }
     return exc;
   };
-  const count = (s) => rec.texts.filter((t) => t.s === s).length;
+  const count = (s) => rec.texts.filter((t) => t.s === s).length + (s === 'Hull' ? rec.texts.filter((t) => t.s === 'STRUCTURE').length : 0); // (STRUCTURE.md: the big HUD's hull bar is the STRUCTURE bar)
   const gameErrors0 = (globalThis.gameErrors || []).length;
 
   // (a) one ship: the HUD is the old one
@@ -312,6 +312,21 @@ config.COLLIDE.ENABLED = true;
     config.ENVIRONMENTS.FORCE = keep;
     // (each lamp anchor is a beam gradient, a lamp glow and a visible beam at least: three; two lamps on each ship)
     report(g1 > 0 && g2 >= g1 + 6, `darkness: with a second ship the overlay cuts light for her glow and her two beams as well (${g1} gradients a frame with one ship, ${g2} with two)`);
+  }
+  // (e) STRUCTURE.md: a ship that splits in the sky - both halves are drawn (the one with no gasbag too), through the fall, the crash and after, with the structure bar and the lift / weight tug on the HUD
+  if (config.STRUCTURE.ENABLED) {
+    const { sim, st, A } = boot({ extra: 0, bots: 5 });
+    const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+    let exc = frames(sim, st, renderer, 90);
+    const bar = rec.texts.filter((t) => t.s === 'STRUCTURE').length, tug = rec.texts.some((t) => t.s === 'WEIGHT') && rec.texts.some((t) => t.s === 'LIFT');
+    const mid = A.layout.midPoint.x;
+    for (const g of A.sim.structure.segs().filter((q) => !q.nest && Math.min(q.x1, mid + 130) - Math.max(q.x0, mid - 130) > 1)) { g.hp = 0; g.hold = { t: 0, max: 0 }; }
+    exc += frames(sim, st, renderer, 12);
+    const split = st.ships.length === 2 && st.ships.some((q) => q.piece);
+    exc += frames(sim, st, renderer, 60 * 16);
+    const gone = st.ships.length === 1;
+    exc += frames(sim, st, renderer, 120);
+    report(exc === 0 && bar === 1 && tug && split && gone, `a split in the sky is drawn without errors: both halves (the bagless one too), the fall, the crash and after (STRUCTURE bar ${bar}, LIFT / WEIGHT tug ${tug}, split ${split}, the wreck gone ${gone}, ${exc} draw errors)`);
   }
   report((globalThis.gameErrors || []).length === gameErrors0, 'none of the pictures logged a game error');
 }

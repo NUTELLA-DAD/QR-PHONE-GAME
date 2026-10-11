@@ -33,6 +33,7 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace
 const load = (p) => import(pathToFileURL(path.join(root, p)).href);
 const { config } = await load('config.js');
 const { SHIP_LAYOUT } = await load('shipLayout.js');
+config.STRUCTURE.ENABLED = false; // (STRUCTURE.md: this scratch test is about the old once-a-mission last stand, which the hull bar triggers; with structure on lift failing is the continuous rule, tools/structure-check.mjs)
 config.MAPS.FORCE_KIND = 'open';
 const { createSimulation } = await load('modules/host/simulation.js');
 

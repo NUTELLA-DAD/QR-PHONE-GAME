@@ -7,6 +7,7 @@
 import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
 import { mainShip } from './ships.js';
+import { toWorldX, toShipX } from './pose.js';
 import { hearts } from './health.js';
 import { bunkerEmpty } from './goingDown.js';
 import { gripJobs } from './creatureGrip.js';
@@ -17,9 +18,9 @@ const tables = layoutTables((L) => ({
   GUN_NAMES: Object.keys(L.gunMounts),
   PICKUPS: [...L.racks, ...L.extinguishers.map((e) => ({ ...e, kind: 'extinguisher' }))],
 }));
-const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer', hack: 'sword' };
+const TOOL = { fire: 'extinguisher', hole: 'hammer', gas: 'hammer', repair: 'hammer', ice: 'hammer', hack: 'sword', frame: 'hammer' };
 export const JOB_COLORS = { fight: '#ff4d4d', fire: '#ff8c1a', revive: '#ff7bd0', hole: '#4dc3ff', gas: '#4dc3ff', swat: '#c58bff', leak: '#7fe3b0', ice: '#9fdcff', unclog: '#b6f06e', oxygen: '#bfe9ff', rod: '#fff27a', pump: '#4dc3ff', winch: '#8fe388', repair: '#ffd23f', ammo: '#ffe27a', coal: '#b0b0b0', help: '#ff4d4d' };
-const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP', trim: 'TRIM', sail: 'SAIL', reef: 'REEF', shovel: 'LOAD', heal: 'MEDBAY', hack: 'TENTACLE' };
+const WORD = { fight: 'RAIDER', fire: 'FIRE', revive: 'REVIVE', hole: 'HULL HOLE', gas: 'GAS LEAK', swat: 'BAT', leak: 'LEAK', ice: 'ICE', unclog: 'SPORES', oxygen: 'OXYGEN', rod: 'LIGHTNING ROD', pump: 'FLOODING', winch: 'SURVIVOR', repair: 'REPAIR', ammo: 'AMMO', coal: 'COAL', help: 'HELP', trim: 'TRIM', sail: 'SAIL', reef: 'REEF', shovel: 'LOAD', heal: 'MEDBAY', hack: 'TENTACLE', frame: 'FRAME', abandon: 'ABANDON' };
 JOB_COLORS.helm = '#4dc3ff'; // (GOING DOWN!: man the helm and pump the bags full)
 JOB_COLORS.vent = '#ffffff'; // (...vent the boiler)
 JOB_COLORS.dump = '#c9a85a'; // (...drop the bombs, dump the coal bunker)
@@ -29,6 +30,8 @@ JOB_COLORS.sail = '#e9dcc0'; // (S.5e: raise a sail in a fair wind...)
 JOB_COLORS.reef = '#ff8c1a'; // (...or reef it before a gust)
 JOB_COLORS.shovel = '#c9a85a'; // (B.6: a sandbag or crate thrown onto the deck: shovel it overboard)
 JOB_COLORS.heal = '#ff7b9c'; // (crew health: down to the last heart - go to the medbay)
+JOB_COLORS.frame = '#d9a24a'; // (STRUCTURE.md: a hammer on a weak segment of the frame)
+JOB_COLORS.abandon = '#ff4d4d'; // (...and the half of the ship that split off is going down: jump)
 JOB_COLORS.hack = '#f2c14e'; // (C.2: a tentacle holds the ship: gold arrow to the grip point, sword in hand)
 
 export function createJobFinder(state) {
@@ -49,6 +52,13 @@ export function createJobFinder(state) {
 
   // Everything worth doing right now: { id (the thing), kind, d, x, label, urgency, max }.
   const list = (p) => {
+    const me = mainShip(state);
+    if (me.piece) { // STRUCTURE.md: this half of the ship has split off and is going down: everybody off, towards the half that flies on
+      const P = L.platforms, top = P.reduce((b, q) => (!b || q.y < b.y ? q : b), null), main = state.ships[0];
+      if (!top) return [];
+      const mx = toShipX(me, toWorldX(main, main.layout.refPoint.x)), d = P.indexOf(top);
+      return [{ kind: 'abandon', obj: 'abandon', d, x: mx < (top.x0 + top.x1) / 2 ? top.x0 + 25 : top.x1 - 25, urgency: 9, label: 'ABANDON THIS HALF - JUMP OR SWING ACROSS!', max: 99 }];
+    }
     const gdJobs = state.gdJobs && state.gdJobs(p); // GOING DOWN! (goingDown.js): while she falls, only the three emergency jobs matter
     if (gdJobs) return gdJobs;
     const out = [];
@@ -67,6 +77,8 @@ export function createJobFinder(state) {
     for (const ld of state.loads || []) add('shovel', ld, ld.d, ld.x, {}, `SHOVEL THE ${((config.CROSS.CARGO.ITEMS[ld.kind] || {}).label || 'LOAD').toUpperCase()} OVERBOARD - ${roomName(ld.d, ld.x)}`); // (B.6: cargo thrown onto her deck tips her)
     for (const f of state.fires) add('fire', f, f.d, f.x, {}, f.h2 ? `FIRE UNDER THE HYDROGEN BAG - ${roomName(f.d, f.x)}` : undefined); // (GAS TYPES: a fire that reaches a hydrogen bag says so)
     for (const h of state.breaches) add('hole', h, h.d, h.x);
+    const S = me.sim && me.sim.structure; // STRUCTURE.md: a segment of the frame below JOB_AT wants shoring up with a hammer (a critical one is worth far more)
+    if (S) for (const g of S.jobsOf()) add('frame', g, g.d, g.x, g.st === 'critical' ? { urgency: J.URGENCY.frame * 1.8 } : {}, `SHORE UP ${S.nameOf(g)}`);
     for (const h of state.gasHoles || []) add('gas', h, h.d, h.x);
     for (const c of state.icing || []) if (c.lvl >= config.ENVIRONMENTS.frost.ICE.JOB_AT) add('ice', c, c.d, c.x, {}, c.gun ? `ICE on ${c.gun}` : c.area === 'gasbag' ? 'ICE on the gasbag' : 'ICE on the top deck');
     for (const c of state.clogs || []) if (c.lvl >= config.ENVIRONMENTS.fungal.CLOG.JOB_AT) add('unclog', c, c.d, c.x, {}, `SPORES on the ${c.name}`); // Fungal Depths

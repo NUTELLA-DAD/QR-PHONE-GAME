@@ -27,6 +27,10 @@ label.opt input{width:28px;height:28px}
 #carry{display:flex;align-items:center;gap:6px;font-size:18px;font-weight:700;white-space:nowrap;border:3px solid #2b2622;border-radius:12px;padding:0 10px 0 6px;min-height:34px;background:#e6dcc3;color:#6b5a48}
 #carry .cico{font-size:26px;line-height:1}
 #carry.has{background:#ffd23f;color:#2b2622}
+#hullbox{flex:1;display:flex;flex-direction:column;gap:2px;min-width:60px}
+#lift{display:none;height:9px;border:2px solid #2b2622;border-radius:5px;background:#3b2a1d;position:relative;overflow:hidden}
+#lfill{position:absolute;left:0;top:0;bottom:0;width:50%;background:#58b6ff}
+#lift:after{content:'';position:absolute;left:50%;top:0;bottom:0;width:2px;background:#fff}
 #hull{flex:1;height:18px;border:3px solid #2b2622;border-radius:8px;background:#3b2a1d;position:relative;overflow:hidden;min-width:60px}
 #hfill{position:absolute;left:0;top:0;bottom:0;width:100%;background:#4caf50}
 #hull span{position:absolute;inset:0;text-align:center;color:#fff;font-size:12px;font-weight:700;line-height:12px}
@@ -222,7 +226,7 @@ h1{font-size:28px}
     <div id="me"><div id="swatch"></div><span id="myname">Crew</span></div>
     <div id="hearts" style="display:none"></div>
     <div id="carry"><span class="cico">✋</span><span id="carrytx">Hands empty</span></div>
-    <div id="hull"><div id="hfill"></div><span>HULL</span></div>
+    <div id="hullbox"><div id="hull"><div id="hfill"></div><span>HULL</span></div><div id="lift"><div id="lfill"></div></div></div>
     <button id="help">🆘 Help!</button>
     <button id="leave">⬅ LEAVE</button>
   </div>

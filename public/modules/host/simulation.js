@@ -16,7 +16,7 @@ import { createSpotter } from './spotter.js';
 import { createSpyglass } from './spyglass.js'; // the lookout's panning spyglass (it spots what it sees)
 import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { refillBags } from './gasBags.js';
-import { createMainShip, createShip, shipOf, eachShip, newGuns, transfer, areHostile } from './ships.js';
+import { createMainShip, createShip, shipOf, eachShip, newGuns, transfer, areHostile, mendHull } from './ships.js';
 import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
 import { createTowing } from './towing.js';
@@ -139,7 +139,7 @@ export function createSimulation() {
   // players with player.ship = her id (ships.js transfer()). She gets the same systems as ship 0 (the sky's hazards run for her too, B.3) except the gunship, which hunts ship 0 only. opts.team ('red' ...) and opts.name dress her for the TV.
   let hijack = null; // (made below, once the world's systems exist; every ship's hookshot needs it)
   const addShip = (parts, opts = {}) => {
-    const sh = state.ships.length === 0 ? createMainShip(state) : createShip(state, { id: opts.id || 'ship' + state.ships.length, parts, layout: opts.layout, formation: opts.formation || { dx: -250, dalt: -1150 }, team: opts.team, name: opts.name, ai: opts.ai });
+    const sh = state.ships.length === 0 ? createMainShip(state) : createShip(state, { id: opts.id || 'ship' + state.ships.length, parts, layout: opts.layout, formation: opts.formation || { dx: -250, dalt: -1150 }, team: opts.team, name: opts.name, ai: opts.ai, piece: !!opts.piece });
     state.ships.push(sh);
     if (sh.main) {
       state.ventOpen = sh.layout.vents.map(() => false);
@@ -149,6 +149,7 @@ export function createSimulation() {
     if (hijack) sh.sim.attach({ hijack });
     if (!sh.main && W.course && opts.place !== false) W.course.place(sh); // (M.2: another ship flies from her own pose; she starts at her station, in open air. The enemy gunship is put where she appears by her own code: opts.place false)
     for (const o of state.ships) if (o !== sh) { sh.sim.air.addProvider(rivalDecks(sh, o)); o.sim.air.addProvider(rivalDecks(o, sh)); sh.sim.air.addProvider(fleetDecks(sh, o)); o.sim.air.addProvider(fleetDecks(o, sh)); } // (Versus: each ship's crew can leap onto the other's decks; B.6: a crewman fired from a crew cannon lands on any ship's)
+    if (sh.piece) for (const o of state.ships) if (o !== sh && !o.piece) sh.sim.air.addProvider(pieceDecks(sh, o)); // (STRUCTURE.md: whoever jumps from a half that split off lands on the decks of the others)
     sh.sim.air.addProvider(() => (W.creatures ? W.creatures.surfaces(sh) : [])); // (C.2: a surfaced giant creature's mantle is a landing place for this ship's crew in the air, creatureBoard.js)
     return sh;
   };
@@ -171,6 +172,18 @@ export function createSimulation() {
         transfer(state, player, rv, d, rx);
         player.chute = 0; player.chuteOpen = false; player.tumble = false;
         phoneFx(player, "You're aboard " + (rv.name || 'the other ship') + '!', [60, 40, 60]);
+      } };
+    });
+  };
+  // STRUCTURE.md: a half that split off is falling; her crew jump (a parachute, a hookshot swing) and land on the decks of the ship that flies on - any crewman, not only one fired from a cannon.
+  const pieceDecks = (me, rv) => () => {
+    if (!state.ships.includes(rv) || rv.state.down > 0 || rv.piece || rv.ai) return [];
+    return rv.layout.platforms.map((pl, d) => {
+      const a = toShipX(me, toWorldX(rv, pl.x0)), b = toShipX(me, toWorldX(rv, pl.x1));
+      return { id: 'fleet:' + rv.id + ':' + d, y: toShipY(me, toWorldY(rv, pl.y)), x0: Math.min(a, b), x1: Math.max(a, b), onLand: (player) => {
+        transfer(state, player, rv, d, toShipX(rv, toWorldX(me, player.x)));
+        player.chute = 0; player.chuteOpen = false; player.tumble = false; player.chuteOk = false;
+        phoneFx(player, 'You made it across!', [60, 40, 60]);
       } };
     });
   };
@@ -199,6 +212,8 @@ export function createSimulation() {
     for (const player of Object.values(state.players)) if (shipOf(state, player) === sh) transfer(state, player, state.ships[0]);
     state.ships.splice(i, 1);
   };
+  W.addShip = (...a) => addShip(...a); // (a split: shipSim.js splitShip makes the half that goes a ship of her own)
+  W.removeShip = (...a) => removeShip(...a);
   Object.defineProperty(state, 'rival', { get: () => (state.ships[0] && state.ships[0].rival) || null, enumerable: false, configurable: true }); // (Versus: ship 0's rival, ships.js; every ship's context answers its own)
   const main = addShip(null); // (B.2: this file is the WORLD. What belongs to one ship is shipSim.js; the voyage, the pacing director, the wreck and restart rules below work on the main ship, ships[0])
   const layout = main.layout;
@@ -209,8 +224,10 @@ export function createSimulation() {
   // The hull gave out: the ship breaks apart, then the whole game starts over.
   function wreck(text = "SHE'S BREAKING UP!") {
     if (state.ship.down) return;
-    if (goingDown.active()) return; // (she is already falling: the fall decides)
-    if (goingDown.tryStart()) return; // the first time in a mission: GOING DOWN! - a last stand instead
+    if (!main.sim.structure.on()) {
+      if (goingDown.active()) return; // (she is already falling: the fall decides)
+      if (goingDown.tryStart()) return; // the first time in a mission: GOING DOWN! - a last stand instead
+    }
     state.ship.hull = 0;
     const limp = canLimp(); // a spare gasbag takes the blow: the voyage goes on
     state.ship.down = limp ? config.LIMP.TIME : Math.max(config.WRECK.TIME, config.VOYAGE.WRECK_SUMMARY_TIME);
@@ -248,7 +265,16 @@ export function createSimulation() {
     state.limp = null;
     state.wreck = null;
     state.ship.down = 0;
+    for (const sh of [...state.ships]) if (sh.piece) removeShip(sh); // (STRUCTURE.md: a half that split off is wreckage by now)
     UPGRADES.find((u) => u.id === 'spare-parts').apply({ state, modules });
+    if (main.sim.structure.on()) {
+      const lostE = run.lost && run.lost[0], bags = lostE ? lostE.before.filter((p) => p.part === 'gasbag') : [];
+      if (!layout.gasbags.length && bags.length) { // (she split and the half that stayed has no gasbag: the spare goes up over what is left of her)
+        const big = bags.reduce((a, b) => (b.rx > a.rx ? b : a)), x0 = Math.min(...layout.platforms.map((q) => q.x0)), x1 = Math.max(...layout.platforms.map((q) => q.x1));
+        fitShip([...copyData(layout.parts), { ...big, cx: (x0 + x1) / 2, rx: Math.min(big.rx, (x1 - x0) * 0.6) }], main.buildId);
+      }
+      main.sim.structure.setAll(config.STRUCTURE.LIMP_HP);
+    }
     Object.assign(state.ship, { hull: config.LIMP.HULL, speed: 0.3, order: 0.3, shake: 0, press: 65, fuel: Math.max(state.ship.fuel, config.BOILER.START_FUEL), gas: config.GAS.START, pitch: 0, vy: 0, trim: 0 }); forces.reset();
     Object.assign(state.gasValve, { input: 0, auto: false });
     state.ventOpen.fill(false);
@@ -342,6 +368,8 @@ export function createSimulation() {
     course.restart();
     modules.reset();
     goingDown.reset();
+    for (const sh of [...state.ships]) if (sh.piece) removeShip(sh); // (a half that split off is gone with the voyage)
+    main.sim.structure.reset();
     eachShip(state, (sh) => { if (!sh.main) sh.sim.respawn({ crew: false }); }); // (another ship is rebuilt with the new game)
     if (state.weather) Object.assign(state.weather, { storm: 0, gust: 0, flash: 0, bolt: null });
     for (const player of Object.values(state.players)) {
@@ -472,7 +500,7 @@ export function createSimulation() {
       const wx = sp.mx; // (the balloon hangs in the world)
       const wy = sp.my + Math.sin(sp.bob * 1.3) * 30;
       if (Math.hypot(wx - toWorldX(main, layout.midPoint.x), wy - toWorldY(main, layout.midPoint.y)) < PC.SUPPLY_REACH) {
-        state.ship.hull = Math.min(100, state.ship.hull + PC.SUPPLY_HULL);
+        mendHull(state, PC.SUPPLY_HULL);
         state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + PC.SUPPLY_COAL);
         for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
         state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + 1);
@@ -559,7 +587,7 @@ export function createSimulation() {
     if (main.buildId === 'yard' && layout.parts !== run.build) fitShip(run.build, 'yard'); // (the second voyage flies the ship the first one built)
     persistBuild();
     addSalvage(VY.SECOND.SALVAGE_BONUS, 'mission');
-    state.ship.hull = Math.min(100, state.ship.hull + VY.SECOND.HARBOUR_REPAIR);
+    mendHull(state, VY.SECOND.HARBOUR_REPAIR);
     state.ev.warn = 5;
     state.ev.warnText = 'FIRST VOYAGE COMPLETE - THE CREW DOCKS!';
   };
@@ -627,7 +655,7 @@ export function createSimulation() {
       cr.paid = true;
       addSalvage(SV.BOSS * config.CREATURES.REWARD_MUL, 'boss', cr.name + ' slain!');
       const RW = cr.kind === 'thunderbird' ? config.CREATURES.THUNDERBIRD.REWARD : cr.kind === 'drake' ? config.CREATURES.DRAKE.REWARD : config.CREATURES.REWARD; // (the spoils: the hull and every gasbag patched, and the trophy part card at the next dock)
-      state.ship.hull = Math.min(100, state.ship.hull + RW.HULL);
+      mendHull(state, RW.HULL);
       for (const b of state.bags) b.gas = Math.min(100, b.gas + RW.GAS);
       if (state.run) state.run.trophy = RW.TROPHY;
     }
@@ -716,7 +744,7 @@ export function createSimulation() {
   };
 
   // Sky-dock offers: repairs that are actually needed, then random upgrades, then 'Cast off!'.
-  const needsHull = () => state.ship.hull < 99 || state.breaches.length || state.fires.length || modules.list.some((m) => m.broken || m.hp < m.max - 0.5);
+  const needsHull = () => state.ship.hull < 99 || (main.sim.structure.on() && main.sim.structure.segs().some((g) => g.hp < 0.95)) || state.breaches.length || state.fires.length || modules.list.some((m) => m.broken || m.hp < m.max - 0.5);
   const needsGas = () => state.bags.some((b) => b.gas < config.GAS.START * 0.95) || state.gasHoles.length;
   const mixedGas = () => layout.gasbags.some((b) => b.gasType);
   const needsCoal = () => state.ship.fuel < config.BOILER.FUEL_MAX * 0.85 || Object.values(state.GUNS).some((g) => g.ammo < g.max * 0.7) || state.bombBay.bombs < config.BOMBS.MAX;
@@ -1205,7 +1233,7 @@ export function createSimulation() {
         continue;
       }
       for (const sh of state.ships) {
-        if (sh.ai) continue; // (the enemy gunship is on the enemies' side: their fire passes through her)
+        if (sh.ai || sh.piece) continue; // (the enemy gunship is on the enemies' side: their fire passes through her; so does it through a half that split off and is falling, STRUCTURE.md)
         if (sh.sim.shieldBlocks(bullet.x, bullet.y)) {
           bullet.life = 0;
           break;
@@ -1246,6 +1274,8 @@ export function createSimulation() {
     }
 
     eachShip(state, (sh) => sh.sim.stepUpkeep(dt));
+    for (const sh of [...state.ships]) if (sh.sim && sh.sim.structure) sh.sim.structure.flush(); // (STRUCTURE.md: a frame that has come in two splits now, with every ship at rest)
+    for (const sh of [...state.ships]) if (sh.gone) removeShip(sh); // (...and a half that has finished breaking up leaves the sky)
   };
   // One step. (Since M.4 pose.vx is the ship's integrated velocity, flight.js: nothing is measured here any more.)
   const update = (dt) => {

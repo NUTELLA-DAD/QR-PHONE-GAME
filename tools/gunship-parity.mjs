@@ -5,6 +5,9 @@
 // carries on until she is gone or the time is up. Per run it prints how she ended (shot down, blown up or captured by boarders, fled, left, still there), how long she was alive, what she did
 // to us (hull lost, cannonballs, raiders sent, paratroopers), what we did to her (gun ports shot out) and how many of our crew boarded her. `both` prints the two side by side and checks
 // the means of the Ship against the old gunship's within the bands in BANDS (the parity gate; tools/buildsim.mjs --check-gunship-ship runs it).
+// STRUCTURE.md: the parity is between two gunship implementations, judged by the hull they take off the main ship. With structure on that hull is a few hundredths of one segment a run (noise: one raid or
+// one fire moves it thirteenfold), so the comparison runs the hull-bar game until WP3 gives the gunship fight a structure rule of its own.
+process.env.NO_STRUCTURE = '1';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -36,6 +39,7 @@ async function runOne(mode, run) {
   config.MAPS.FORCE_KIND = args.map;
   config.PACING.GUNSHIP_FIRST = 1e9; // (the director would send one of its own: this run sends exactly one)
   const { createSimulation } = await load('modules/host/simulation.js');
+  const { hullLost } = await load('modules/host/structure.js'); // (STRUCTURE.md: 'our hull lost' is the soundness her frame lost, summed over every segment - the old gunship's blows have no place on the ship, the Ship's land on one segment each, so the weakest segment's meter would not compare)
   const sim = createSimulation();
   const state = sim.state;
   state.difficulty = args.difficulty;
@@ -54,7 +58,7 @@ async function runOne(mode, run) {
     try {
       if (spawnAt === null && step >= 1200 && step % 30 === 0 && state.phase === 'flying') {
         tries++;
-        if (sim.gunship.spawn({ seed: 100 + run, mission: args.mission })) { spawnAt = step; out.spawned = true; lastHull = state.ship.hull; out.kills = -state.kills; }
+        if (sim.gunship.spawn({ seed: 100 + run, mission: args.mission })) { spawnAt = step; out.spawned = true; lastHull = hullLost(state.ships[0]); out.kills = -state.kills; }
       }
       sim.update(dt);
     } catch (e) {
@@ -84,8 +88,7 @@ async function runOne(mode, run) {
         if (!on) aboard.delete(p.id);
       }
     }
-    if (state.ship.hull < lastHull) out.hullLoss += lastHull - state.ship.hull;
-    lastHull = state.ship.hull;
+    { const lostNow = hullLost(state.ships[0]); if (lostNow > lastHull) out.hullLoss += lostNow - lastHull; lastHull = lostNow; }
     out.minHull = Math.min(out.minHull, state.ship.hull);
     if (!g && last) {
       out.endedBy = last.phase === 'sinking' ? (last.charge || last.captured ? 'boarded' : 'shot') : last.phase === 'leaving' ? 'fled' : 'left';

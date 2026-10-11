@@ -240,7 +240,16 @@ export function createControllerUI({ network }) {
     $('carry').classList.toggle('has', !!held);
     $('carry').querySelector('.cico').textContent = held ? held[0] : '✋';
     $('carrytx').textContent = held ? held[1] : 'Hands empty';
-    if (next.hull != null) {
+    if (next.st) { // STRUCTURE.md: two thin bars - how sound the frame is (with the name of the section that is failing) and her lift against her weight
+      $('hfill').style.width = next.st.s + '%';
+      $('hfill').style.background = next.st.s > 30 ? '#4caf50' : '#e63946';
+      $('hull').querySelector('span').textContent = next.st.f ? next.st.f : 'STRUCTURE';
+      $('lift').style.display = 'block';
+      $('lfill').style.width = Math.max(2, Math.min(100, (next.st.l / Math.max(1, 2 * next.st.w)) * 100)) + '%';
+      $('lfill').style.background = next.st.l >= next.st.w ? '#58b6ff' : '#e0703a';
+    } else if (next.hull != null) {
+      $('hull').querySelector('span').textContent = 'HULL';
+      $('lift').style.display = 'none';
       $('hfill').style.width = next.hull + '%';
       $('hfill').style.background = next.hull > 35 ? '#4caf50' : '#e63946';
     }

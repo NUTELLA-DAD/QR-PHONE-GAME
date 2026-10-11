@@ -525,6 +525,7 @@ function hatchWork(p, state, job) {
 // List every job on the ship, most urgent first.
 function listJobs(state, bot) {
   const L = mainShip(state).layout;
+  if (mainShip(state).piece) return (mainShip(state).splitT || 0) >= config.STRUCTURE.PIECE.BOT_ABANDON ? [{ kind: 'abandon', obj: 'abandon', max: 99, urgent: true }] : []; // (STRUCTURE.md: this half has split off and is going down - after a moment everybody jumps, a parachute, and lands on the half that flies on)
   if (hostile(bot, state)) return boarderJobs(state, bot);
   if (state.goingDown) return goingDownJobs(state, bot); // GOING DOWN!: split across dumping weight, patching, pumping, stoking and venting (goingDown.js)
   const jobs = [];
@@ -597,6 +598,10 @@ function listJobs(state, bot) {
     else if (!open && holes === 0) jobs.push({ kind: 'gasvalve', obj: v, max: 1 });
   });
   if (gasCrisis && canHammer) for (const h of gasHoles) jobs.push({ kind: 'patch', obj: h, max: 1, cap: B.GAS_CAP });
+  // STRUCTURE.md: a load-bearing segment of the frame about to give (critical): two hands with hammers, ahead of breaches and modules. The merely damaged ones come after the breaches.
+  const framesS = shipH.sim && shipH.sim.structure, framesAll = framesS && framesS.on() ? framesS.jobsOf() : [];
+  if (canHammer) for (const g of framesAll) if (g.st === 'critical') jobs.push({ kind: 'frame', obj: g, max: 1, cap: 2, urgent: true });
+  const frames = !canHammer ? [] : framesAll.filter((g) => g.st !== 'critical').map((g) => ({ kind: 'frame', obj: g, max: 1 }));
   // Bats latched on the ship: swat them before they chew holes (bare hands are enough).
   if (!mainShip(state).ai) for (const b of state.bats || []) if (b.latched && b.landed && b.hp > 0) jobs.push({ kind: 'swat', obj: b, max: 1 }); // (the bats are on our ship, not on the gunship)
   // Vents: open one when the pressure is near the top; close them when it's calm again.
@@ -624,8 +629,8 @@ function listJobs(state, bot) {
   }
   const broken = !canHammer ? [] : mods.filter((m) => m.broken).map((m) => ({ kind: 'repair', obj: m, max: 1 }));
   // Use the tool already in hand first.
-  if (bot.carry === "hammer") jobs.push(...hullHoles, ...leaks, ...broken, ...holes, ...icy, ...deep, ...fires);
-  else jobs.push(...fires, ...hullHoles, ...leaks, ...broken, ...holes, ...icy, ...deep);
+  if (bot.carry === "hammer") jobs.push(...hullHoles, ...frames, ...leaks, ...broken, ...holes, ...icy, ...deep, ...fires);
+  else jobs.push(...fires, ...hullHoles, ...frames, ...leaks, ...broken, ...holes, ...icy, ...deep);
   for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open && (!leaky(m) || state.ship.press >= B.ENGINEER_PRESS + 25)) jobs.push({ kind: 'valve', obj: m, max: 1 });
   jobs.push(...healJobs(state, bot)); // (crew health: the medbay for a bot on its last heart, a bandage for a hurt person)
   // Stations, most useful first. The vital ones (helm, gas valve, a gun or weapon with a target
@@ -730,7 +735,7 @@ function chooseJob(state, bot, bots) {
   const onKind = (job) => bots.filter((o) => o !== bot && o.botJob && o.botJob.kind === job.kind && o.botJob.cap != null).length;
   // Chores (patching, fires, repairs, swatting...) can take only so many hands: the rest keep the guns manned and the
   // ship running. Without this a ship full of holes sends the WHOLE crew to patch and nobody shoots back (a death spiral).
-  const CHORE = { fire: 1, patch: 1, repair: 1, swat: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1 };
+  const CHORE = { fire: 1, patch: 1, repair: 1, swat: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1, frame: 1 };
   const onChores = bots.filter((o) => o !== bot && !o.lock && !(o.ko > 0) && o.botJob && CHORE[o.botJob.kind] && !o.botJob.urgent).length;
   const choresFull = state.phase === 'flying' && onChores >= Math.max(3, Math.ceil(bots.length * B.CHORE_SHARE));
   const cur = bot.botJob;
@@ -1106,6 +1111,11 @@ function work(p, state) {
     if (steer(p, goalOf(L, o), o.x, 30)) p.fire = true;
   } else if (job.kind === 'fire') {
     if (getTool(state, p, 'extinguisher', o) && steer(p, o.d, o.x, 30)) p.fire = true;
+  } else if (job.kind === 'abandon') {
+    press(p); // (STRUCTURE.md: jump! shipSim.js useFor offers a bot the parachute jump once its job says so)
+  } else if (job.kind === 'frame') {
+    if (!(state.frames || []).includes(o) || o.hp >= 0.97) { p.botJob = null; return; } // (shored up, or the frame was cut again)
+    if (getTool(state, p, 'hammer', o) && steer(p, o.d, o.x, 30)) { p.jx = 0; p.fire = true; }
   } else if (job.kind === 'patch') {
     if (getTool(state, p, 'hammer', o) && steer(p, o.d, o.x, 30)) p.fire = true;
   } else if (job.kind === 'ice') {
@@ -1722,7 +1732,7 @@ export function updateBot(p, state, dt) {
       const rodCall = !isHelm(L, p.lock) && !(birdCoil(state) && L.kindOf(p.lock) === 'coil') && state.stormJob && (state.stormJob.charge || birdDiving(state.creature)) && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9; // (the Thunderbird's coil man stays at the coil: it drinks the bolt the rod grounds)
       // Nobody is at the wheel in flight and nobody is on the way: leave the station and take it.
       const helmCall = !isHelm(L, p.lock) && !humanAutopilot(p, state) && state.phase === 'flying' && !Object.values(state.players).some((q) => isHelm(L, q.lock) || (q.botJob && q.botJob.kind === 'station' && isHelm(L, q.botJob.obj))) && !(state.modules || []).some((m) => m.kind === 'helm' && m.broken) && Math.random() < B.HELM_CALL;
-      const fallCall = !!state.goingDown && !isHelm(L, p.lock); // GOING DOWN!: everybody off their stations (the hand at the helm stays: he pumps)
+      const fallCall = (!!state.goingDown || (mainShip(state).piece && (mainShip(state).splitT || 0) >= config.STRUCTURE.PIECE.BOT_ABANDON)) && !isHelm(L, p.lock); // GOING DOWN!: everybody off their stations (the hand at the helm stays: he pumps); a half that split off: everybody jumps
       const soleGun = config.PVP.ENABLED && tables(L).GUN_STATIONS.includes(p.lock) && !bots.some((q) => q !== p && q.lock && tables(L).GUN_STATIONS.includes(q.lock)); // (Versus: the last gunner keeps his gun, a ship needs one that shoots)
       const HC = config.HEALTH; // crew health: a bot burning at its station, or on its last heart, leaves it (the helm stays: the ship needs steering)
       const hurtCall = HC.ENABLED && !p.enemy && !isHelm(L, p.lock) && !soleGun && ((p.inFire && (p.burnT || 0) > HC.BOT.FLEE) || (state.phase === 'flying' && L.medbay && hearts(p) <= HC.JOB_AT));
