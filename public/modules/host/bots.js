@@ -589,6 +589,8 @@ function listJobs(state, bot) {
   // (GAS TYPES: a fire that reaches a hydrogen bag, f.h2 from hydrogen.js, is just as bad: the bag will explode, so it is put out first)
   const hotFires = !canSpray ? [] : state.fires.filter((f) => f.big || f.h2 || flamAt(L, f.d, f.x) >= config.FIRE.BLAZE.FLAME_AT);
   for (const f of hotFires) jobs.push({ kind: 'fire', obj: f, max: 2, cap: B.HOT_FIRE_CAP, urgent: true });
+  // (F3: a fire burning where a critical part is being mended - the boiler that has just blown, say - burns the hand at the hammer, who steps out of it, walks back, burns again and never finishes: put that fire out first, ahead of stoking a broken boiler)
+  if (config.BOTS.FIRE_AT_REPAIR && canSpray) for (const m of mods) if (m.broken && critical(mods, m)) for (const f of state.fires) if (f.d === m.d && Math.abs(f.x - m.x) < config.MODULES.FIRE_RADIUS && !hotFires.includes(f)) jobs.push({ kind: 'fire', obj: f, max: 1, cap: 2, urgent: true });
   // C.2: a giant creature's tentacle holds the ship (creatureGrip.js): two hands go to hack it free, ahead of everything but a blaze in the coal.
   if (state.creature && (hasTool('sword') || hasTool('hammer'))) for (const gj of gripJobs(state, mainShip(state))) jobs.push({ kind: 'hack', obj: gj.obj, max: 2, urgent: true });
   // Versus: a boarder at the wheel or the boiler is the worst thing aboard (he is taking the ship): the defenders go for him before anything else, up to half the crew.
