@@ -150,6 +150,7 @@ export function createControllerInput({ network, ui }) {
   };
   let pPointer = null;
   plever.addEventListener('pointerdown', (event) => {
+    if (plever.classList.contains('gauge')) return; // (F3: with the stick pumping and venting this is only a gauge)
     pPointer = event.pointerId;
     try {
       plever.setPointerCapture(event.pointerId);

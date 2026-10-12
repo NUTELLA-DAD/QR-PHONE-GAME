@@ -12,6 +12,7 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
     $('mMode').innerHTML = $('mode').innerHTML;
     $('mDaily').innerHTML = $('daily').innerHTML;
     $('mShip').innerHTML = $('shipBtn').innerHTML;
+    $('mExpert').innerHTML = $('expert').innerHTML;
     $('mSound').textContent = $('sound').textContent;
     $('mMusic').textContent = music && music.isOn() ? 'Music: on' : 'Music: off';
     $('mQr').src = $('qr').src;
@@ -71,6 +72,10 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
   };
   $('mDaily').onclick = () => {
     $('daily').click();
+    sync();
+  };
+  $('mExpert').onclick = () => { // (F3: EXPERT HELM - the SPLIT engine panel on the helm phone)
+    $('expert').click();
     sync();
   };
   $('mShip').onclick = () => { // (the Sparrow or the classic ship: fitted at once in the lobby, otherwise for the next voyage)

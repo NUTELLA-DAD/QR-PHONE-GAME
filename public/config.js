@@ -7,6 +7,8 @@ const GUNS_ON = typeof process === 'undefined' || !(process.env && process.env.N
 const ALARMS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_ALARMS);
 // F10 (FUN.md): role cards - the join card and the ? button on the phone, the verb over an idle crewman's head on the TV. ON in the game; NO_ROLE_CARDS=1 in a tool is the old game (the seeded baselines and the frames pin it).
 const ROLE_CARDS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_ROLE_CARDS);
+// F3 (FUN.md): a helm for one thumb - the stick's up/down is the pump and the vent, the speed lever is the cruise, the pressure lever a readout, the trim part of the autopilot, the SPLIT engine panel only with CONTROLS.EXPERT. ON in the game (a browser has no process); NO_HELM_V2=1 in a tool is the old helm (the seeded baselines pin it).
+const HELM_V2_ON = typeof process === 'undefined' || !(process.env && process.env.NO_HELM_V2);
 export const config = {
   W: 1600,
   H: 900,
@@ -3223,6 +3225,9 @@ export const config = {
     // F10 (FUN.md): role cards. JOIN_TEXT is the card a new phone gets after joining (tap or CARD_TIME seconds to close); the ? button in the top strip shows the hint for the seat or the job
     // for HELP_TIME seconds; the TV draws the job's verb (GRAB / PATCH / SPRAY / LOAD / STOKE / TAKE THE HELM ...) over a crewman who has been free VERB_AFTER seconds with a job on offer.
     ROLE_CARDS: { ENABLED: ROLE_CARDS_ON, VERB_AFTER: 5, CARD_TIME: 8, HELP_TIME: 7, JOIN_TITLE: "You're crew!", JOIN_TEXT: 'Walk with the stick. Press the big button to grab or use things. Follow the GOLD ARROW.' },
+    HELM_V2: HELM_V2_ON, // F3: the stick's up/down pumps and vents the gasbag (up = climb), left/right is ahead/astern; the speed lever stays the cruise; the PRESSURE lever is a gauge with the hover mark; let go of the stick and the autopilot trim holds her height
+    EXPERT: false, // F3: the lobby toggle (the TV's EXPERT HELM button): the helm phone also shows the SPLIT engine panel (a lever per engine) - off by default; remembered on the TV (localStorage.airshipExpertHelm)
+    HELM_HOLD: { DEAD: 0.15, GAIN: 1.15, LEAD: 0.9, TRIM: 0.6, SPAN: 150 }, // F3: DEAD = the stick's deadzone; GAIN = full pump/vent a little before the stick's edge; with the stick let go the autopilot holds the height she would coast to in LEAD seconds (the pump follows gasFor; the trim engine pushes at TRIM x full over SPAN px)
   },
   // Ship modules (guns, boiler, helm, engines, lift, steam pipes).
   MODULES: {

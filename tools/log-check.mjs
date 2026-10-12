@@ -334,7 +334,7 @@ console.log('--- (d) the TV draws the Book ---');
     const texts = page.map((t) => t.s);
     const flat = texts.filter((s, i) => s !== texts[i - 1]).join(' ').replace(/\s/g, ''); // (a name is drawn twice, its ink outline and its colour: count it once)
     const word = victory ? 'VICTORY' : 'SHIP LOST';
-    const small = page.filter((t) => pxOf(t) < config.LOG.ART.MIN_PX - 0.01 && t.s.trim() && !/^SPOTTED by /.test(t.s)); // (F4: a lookout's SPOTTED mark is the world's overlay behind the page, not page text; the longer fights of F4 leave one up when the page is drawn)
+    const small = page.filter((t) => pxOf(t) < config.LOG.ART.MIN_PX - 0.01 && t.s.trim() && !/^SPOTTED by /.test(t.s) && !/^(SQUADRON|ESCORT|FIGHTER)( x\d+)?$/.test(t.s.trim())); // (also the off-screen threat arrows' labels, threatArt.js: the world's overlay, not page text) // (F4: a lookout's SPOTTED mark is the world's overlay behind the page, not page text; the longer fights of F4 leave one up when the page is drawn)
     const lineHits = (e.lines || []).filter((l) => flat.includes(l.text.slice(0, 24).replace(/\s/g, ''))).length;
     report(exc === 0 && errors === 0, `${victory ? 'victory' : 'ship lost'}: the run-end page draws with 0 errors (${exc} draw errors, ${errors} sim errors${firstErrors[0] ? ': ' + firstErrors[0] : ''})`);
     report(texts.some((s) => s.includes(word)) && texts.some((s) => s.includes("THE SHIP'S LOG")), `...with ${word} stamped on it and the heading`);

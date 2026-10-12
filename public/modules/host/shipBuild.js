@@ -336,7 +336,7 @@ BUILDS.classic = [
   { part: 'gun', n: 'Tail Gun', p: 'catwalk', x: 275, bx: 248, by: 418, aim: Math.PI + 0.35, arc: 1.1 }, // top deck, aft: back and up
   station('Lightning Coil', 'main', 710, 'coil'),
   station('Boiler', 'main', 400, 'boiler'),
-  station('Navigator', 'main', 1215, 'navigator'),
+  ...(config.CONTROLS.HELM_V2 ? [] : [station('Navigator', 'main', 1215, 'navigator')]), // (F3, FUN.md: the Navigator had no behaviour - a chart table nobody could use - and is gone with the one-thumb helm; NO_HELM_V2=1 keeps her, so the seeded baselines stay byte for byte)
   station('Helm', 'helm', 1275, 'helm'),
   { part: 'gun', n: 'Nose Gun', p: 'catwalk', x: 1340, bx: 1372, by: 418, aim: -0.35, arc: 1.1 }, // top deck, fore: forward and up
   { part: 'gun', n: 'Aft Sponson', p: 'lower', x: 420, bx: 330, by: 812, aim: 2.15, arc: 0.7 },

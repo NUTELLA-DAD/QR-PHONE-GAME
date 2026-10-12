@@ -906,6 +906,10 @@ function operate(p, state, dt) {
       p.jx = clamp((config.GOING_DOWN.COAST - (ship.pace ?? ship.speed)) * 4, -1, 1);
       p.jy = -1;
     }
+    if (config.CONTROLS.HELM_V2) { // (F3: the stick's up/down IS the pump and the vent now - the PRESSURE lever is gone - so the bot's stick pushes up (-1) to pump; a bot's stick has no deadzone and no hold, shipSim helmStickV2. The small trim engine it used to work with the stick is the autopilot's now: p.trimIn, the same number)
+      p.trimIn = p.jy;
+      p.jy = -p.gas;
+    }
     if (prof().HELM_NOISE > 0 && !gunshipAi && !cap) { // (a human hand on the wheel is never steady: a small push, held a moment, then a new one - from the sim RNG, so a seed repeats)
       if ((p.noiseT = (p.noiseT || 0) - dt) <= 0) { p.noiseT = 0.3 + Math.random() * 0.4; p.noiseX = (Math.random() * 2 - 1) * prof().HELM_NOISE; p.noiseY = (Math.random() * 2 - 1) * prof().HELM_NOISE; }
       p.jx = clamp(p.jx + (p.noiseX || 0), -1, 1);

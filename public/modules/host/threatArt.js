@@ -161,7 +161,7 @@ export function createThreatArt({ ctx, state, ink, sprites }) {
     for (const m of state.mines || []) items.push({ x: m.x, y: m.y, icon: '✹', color: '#4a4346', label: 'MINE' });
     if (state.enemy.dead <= 0) items.push({ x: state.enemy.x, y: state.enemy.y, icon: '✈', color: '#8c2f2f', label: 'FIGHTER' });
     for (const p of state.bombers || []) items.push({ x: p.x, y: p.y, color: '#3d3a40', label: 'BOMBER' });
-    for (const sq of state.squadrons || []) if (sq.size > 0) items.push({ x: sq.cx, y: sq.cy, color: '#26221f', label: (sq.formation === 'escort' ? 'ESCORT x' : 'SQUADRON x') + sq.size }); // (a whole squadron is one arrow, with its plane count: squads.js)
+    for (const sq of state.squadrons || []) if (sq.size > 0) items.push({ x: sq.cx, y: sq.cy, color: '#26221f', label: sq.lone ? 'FIGHTER' : (sq.formation === 'escort' ? 'ESCORT x' : 'SQUADRON x') + sq.size }); // (a whole squadron is one arrow, with its plane count: squads.js)
     const loose = (state.strafers || []).filter((p) => p.squadronId == null || !(state.squadrons || []).some((s) => s.id === p.squadronId));
     if (loose.length) items.push({ x: loose[0].x, y: loose[0].y, color: '#26221f', label: 'SQUADRON' });
     if (state.boss) items.push({ x: state.boss.x, y: state.boss.y, color: '#5c1e1e', label: 'BOSS' });

@@ -14,7 +14,7 @@ import { gasKey } from './gases.js';
 
 const LB = () => config.LOGBOOK;
 const PAD = { l: 100, r: 28, t: 30, b: 46 }; // paper margins (CSS px, times k): row labels on the left, column numbers on top, the ship's size underneath
-const GLYPH = { helm: 'H', boiler: 'B', lookout: 'L', coal: 'C', ammo: 'A', gun: 'G', searchlight: 'S', coil: 'Z', deflector: 'D', bombBay: 'M', navigator: 'N', escort: 'F', engine: 'E', sail: 'W', swivel: 'X', cannon: 'K', cannonSeat: 'k' };
+const GLYPH = { helm: 'H', boiler: 'B', lookout: 'L', coal: 'C', ammo: 'A', gun: 'G', searchlight: 'S', coil: 'Z', deflector: 'D', bombBay: 'M', escort: 'F', engine: 'E', sail: 'W', swivel: 'X', cannon: 'K', cannonSeat: 'k' };
 
 export function blueprintView(Ly, w, h, k = 1, clean = false) {
   const b = Ly.bounds || { x0: -240, x1: 1860, y0: -200, y1: 1000 };

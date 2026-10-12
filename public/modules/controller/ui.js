@@ -13,6 +13,7 @@ export function createControllerUI({ network }) {
   // being hurt, then the hint for what he can do now. The first rule that answers wins. One short line: the info bar never wraps.
   const SEAT_HINTS = {
     helm: 'Stick: engines + trim (right = right on the TV). HOLD the turn button to come about.',
+    helmV2: 'Stick: steer & climb. Lever: cruise speed.', // (F3: the host sends the gas gauge, ui.hv, when the stick pumps and vents)
     gun: 'Drag to aim, hold FIRE. Hold PRIME for a big shell.',
     lookout: 'PAN THE SPYGLASS: the stick looks far ahead (top of the TV). Spot what comes!',
     hijack: 'Kick the pilot: tap any button 3 times, or hold Action.',
@@ -27,7 +28,7 @@ export function createControllerUI({ network }) {
     cannonseat: 'You are in the barrel: hold on. Alone, the stick aims and the big button fires you.',
   };
   const HINT_RULES = [ // [does it apply, the words]
-    [(n) => n.locked && SEAT_HINTS[n.kind], (n) => SEAT_HINTS[n.kind]],
+    [(n) => n.locked && SEAT_HINTS[n.kind], (n) => (n.kind === 'helm' && n.hv ? SEAT_HINTS.helmV2 : SEAT_HINTS[n.kind])],
     [(n) => !n.locked && n.load >= 0, () => 'Hold Action to load the shell for the gunner'],
     [(n) => !n.locked && n.taken, () => 'Someone is already here'],
     [(n) => !n.locked && n.label && n.label !== 'Hey!', (n) => (n.hold ? 'HOLD the big button' : 'Tap the big button')],
@@ -38,8 +39,13 @@ export function createControllerUI({ network }) {
     [(n) => !n.locked && n.carry, () => 'Big button uses what you hold'],
     [() => true, () => 'Walk to a station, rack, fire or hole'],
   ];
+  let helmSeatAt = 0; // (when this phone sat down at the helm, for the first-seconds hint)
   const infoLine = (n) => {
     if (n.alarm) return `<span class="alarm">${n.alarm}</span>`;
+    if (n.locked && n.kind === 'helm' && n.hv) { // F3: a new helmsman reads how the helm works for the first seconds (after that the course's "way to the beacon" hint takes over)
+      helmSeatAt ||= performance.now();
+      if (performance.now() - helmSeatAt < 12000) return `<b>${n.station || 'Helm'}</b> - ${SEAT_HINTS.helmV2}`;
+    } else helmSeatAt = 0;
     const where = n.station || 'Walking';
     const ammo = n.ammo != null ? ` - ${n.ammo} ${n.kind === 'bombbay' ? 'bombs' : 'shells'}` : '';
     const sore = n.hp != null && n.hp > 0 && n.hp <= (n.jat ?? 1); // (crew health: on the last heart)
@@ -250,6 +256,24 @@ export function createControllerUI({ network }) {
     showMid();
   };
 
+  // F3: the helm's gas gauge (the old PRESSURE lever, now a readout): the bar is the gas, the yellow line the level she hovers at, the tag says which way she is going. hv = [gas, hover] from the host.
+  const showGauge = (hv) => {
+    const g = $('plever');
+    g.classList.toggle('gauge', !!hv);
+    document.body.classList.toggle('gaugeon', !!hv);
+    if (!hv) return;
+    const pct = (v) => Math.max(0, Math.min(100, v));
+    const diff = hv[0] - hv[1];
+    const fill = g.querySelector('.fill');
+    fill.style.bottom = '0';
+    fill.style.height = pct(hv[0]) + '%';
+    fill.style.background = diff > 5 ? '#ff8c42' : diff < -5 ? '#3a86ff' : '#7bc47f';
+    g.querySelector('.mid').style.top = 100 - pct(hv[1]) + '%';
+    g.querySelector('.handle').style.top = 100 - pct(hv[0]) + '%';
+    g.querySelector('.tag').textContent = diff > 5 ? 'RISE ▲' : diff < -5 ? 'SINK ▼' : 'LEVEL';
+    g.querySelector('.rev').textContent = 'GAS';
+  };
+
   const updateUI = (next) => {
     if (next.fx) return showFx(next.fx);
     if (next.rd) return showRadar(next.rd);
@@ -276,7 +300,7 @@ export function createControllerUI({ network }) {
       $('atk').style.display = '';
       $('jump').style.display = 'none';
       $('atk').classList.remove('prime', 'ready');
-      document.body.classList.remove('helm');
+      document.body.classList.remove('helm', 'gaugeon');
       return;
     }
     const label = next.label || 'Hey!';
@@ -329,6 +353,7 @@ export function createControllerUI({ network }) {
     document.body.classList.toggle('helm', helm);
     $('lever').style.display = helm ? 'block' : 'none';
     $('plever').style.display = helm ? 'block' : 'none';
+    showGauge(helm ? next.hv : null);
     $('atk').style.display = helm ? 'none' : '';
     // The helm: the ship may be facing left (she comes about on command), so say which way ahead is on the screen, and grey COME ABOUT while she turns.
     $('lever').querySelector('.tag').textContent = next.fc < 0 ? '◀ AHEAD' : 'AHEAD ▶';

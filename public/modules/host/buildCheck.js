@@ -16,7 +16,7 @@ const BALANCE = config.BALANCE;
 const GRAB_COST = 0.25; // seconds to get onto a ladder (the same number as nav.js)
 
 // Kinds the bots man within any 3 minutes of flying: a build where one of these is never manned has a station nobody can reach or use.
-// (Searchlights, the coil and the navigator are manned only when it is dark, when there are targets, or by humans.)
+// (Searchlights and the coil are manned only when it is dark, when there are targets, or by humans.)
 export const BOT_MANNED_KINDS = ['helm', 'lookout', 'gun', 'deflector', 'bombBay', 'escort'];
 
 // A ship needs only TWO things to fly (S.5e): a gasbag, and a deck to stand on. Everything else is optional; what she lacks just takes some control away, and the
