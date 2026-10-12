@@ -7,6 +7,7 @@ import { pop } from './popups.js';
 import { shellDmg, dazzled } from './aim.js';
 import { flyPlane, smoke, shootDown, updateChutes, shoveShip, bumpShip, bounceStep } from './planes.js';
 import { targetShip } from './ships.js';
+import { stopColumn } from './gunsMatter.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -91,6 +92,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
 
   const rate = () => (state.tempo ? state.tempo.rate : 1) * spawnPace(state); // the pacing director's spawn speed (0 in a calm)
   const updateFighter = (dt) => {
+    if (config.SQUADRONS.FOLD_LONE && config.SQUADRONS.FORMATIONS) return; // (F4: the lone fighter is a squadron of one now: squadrons.js updateLone)
     const e = state.enemy;
     if (rate() <= 0 && (e.dead > 0 || e.heading == null)) return; // calm: no new fighter
     if (e.dead > 0) {
@@ -161,7 +163,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     const M = config.MINES;
     if ((mineT -= dt * rate()) <= 0) {
       mineT = rand(M.EVERY_MIN, M.EVERY_MAX);
-      if (crew() && !state.ship.down) {
+      if (crew() && !state.ship.down && stopColumn(state) >= M.FIRST_COLUMN) { // (F4: none before stop FIRST_COLUMN)
         // Skim the top (gasbag) or bottom (keel/turret) so the helm can dodge, or come dead centre.
         let shipY;
         if (Math.random() < M.EDGE_CHANCE) shipY = Math.random() < 0.5 ? rand(70, 150) : rand(800, 900);

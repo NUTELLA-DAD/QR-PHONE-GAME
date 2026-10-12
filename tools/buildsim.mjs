@@ -48,6 +48,7 @@
 //        node tools/buildsim.mjs --check-yard       S.6: the Shipwright's Yard (tools/yard-check.mjs): the Sparrow, part cards in the sky-dock shop (prices, the validator on every place, the 25% crew deal), the A / B / C slot vote, the refit at the dock that keeps hull / coal / shells, the whole catalogue, derelict stops (free), limp home shaking the newest part loose, the build in the voyage save and kept by a campaign's second voyage, the phones' cards, the TV (blueprint, gauges, pins, BUILT, NEW call-out) on a stub canvas, the camera's hold and pull-back, bots buying parts, Versus fitting the classic ship
 //        node tools/buildsim.mjs --check-squadrons  ENEMY SQUADRONS (tools/squadrons-check.mjs): a spawn makes a squadron of 3 to 6 with a leader, slots and a bearing banner; formation keeping on the approach in all six formations; the break into attack pairs from different angles with a phone buzz; regroup and a second pass; the leader shot down (scatter, a new leader); withdrawal at heavy losses; determinism; the radar cluster; the bomber escort; two ships and Versus; a 3-minute 8-bot run with 0 errors
 //        node tools/buildsim.mjs --check-escort-crash  PATROL PLANES AND AIRSHIPS (tools/escort-crash-check.mjs; config.ESCORT.CRASH_ON_SHIPS): a flying patrol plane that touches any ship's hull or gasbag (her own after the launch grace, another ship, the enemy gunship, the Versus rival; a stolen plane too) crashes like one shot down - the pilot bails out, the rebuild timer starts, CRASHED! pops, a Ship's Book moment - and the ship takes a small knock where she struck; the auto pilot (and a bot) steer clear of hulls, a person at the stick can still fly into one; the switch off = the old game; a bot run with 0 errors. (The seeded baselines run with NO_ESCORT_CRASH=1.)
+//        node tools/buildsim.mjs --check-guns       FUN.md F4, GUNS THAT MATTER (tools/guns-check.mjs): the director aims swarms, bombers, squadrons and imps at the side where the guns are manned (state.links.aim), the harder tempo from stop 3 and two set pieces from stop 5, no mines before stop 3, the job arrow for a gunner with no target for 6 s (still seated), CREW_SEATS mothballs the Aft Dorsal Gun and the Deflector under 8 crew, the lone fighter as a squadron of one, the bots man no gun with nothing to shoot; NO_GUNS=1 = the old game
 //        node tools/buildsim.mjs --check-party      FUN.md F5, RAIDERS AND FIRE AS A PARTY (tools/party-check.mjs): announced boarding (ropes in sight, BOARDERS AFT / FORE), at most 1 + crew/3 aboard, none while FALLING or just after SHE HOLDS, cutters hack stations before crew, the fire cap follows the crew and nothing ignites while FALLING, slower early spread, end segments with the boiler or helm hold 8 s and cannot break off before stop 3, the grounded 40 s soft lock raises FALLING; NO_PARTY=1 = the old numbers
 //        node tools/buildsim.mjs --check-ring       R0: THE RING MAP, the orbit finale's sim half (tools/ring-check.mjs): the tower / fortress / citadel maps build (C = 2 pi R, faces, spires), a face's shutter opens when its guns fall (for 6 s, then every 30 s) and its core takes damage only while open, revolving turrets move and wrap, the gallery is a landing surface and a planted charge breaches a face, victory by cores or by the keep's pool (the crown falls, the stop completes, the Ship's Book has it), the citadel moors the Flagship and two cut moorings drop her, 3 seeds x 3 min with 8 bots per variant, the tower won by 4 bots on Easy, the curriculum's ring stops fly the ring map (QUICK and VOYAGE); and D1 THE GARRISON (j)-(o): archers, the ballista, manned guns and squads, grapples, the catapult's stones and the boom chain, the fairness rule (garrison damage at most 60% of the guns')
 //        node tools/buildsim.mjs --check-creature   C.1 to C.6b: giant creatures (the Kraken, the Cinder Drake and the Thunderbird) in the real world, their grips, boarding and the harpoon (tools/creature-check.mjs, then the C.0 skeleton check tools/creature-spike-check.mjs): every weapon hurts a part, the beak, severing, both kill paths, 8 bots on the Kraken in three skies, the TV draws it
@@ -153,7 +154,7 @@ function checkBotsim() {
   const blocks = text.split(/^\$ /m).slice(1).map((b) => { const [cmd, ...rest] = b.split('\n'); return { cmd: cmd.trim(), want: rest.join('\n').trim() }; });
   let ok = true;
   for (const { cmd, want } of blocks) {
-    const out = spawnSync(process.execPath, cmd.replace(/^node /, '').split(' '), { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NO_STRUCTURE: '1', NO_SCRAP: '1', NO_ESCORT_CRASH: '1', NO_PARTY: '1', NO_STOP_SHAPE: '1' } }); // (SCRAP: the baseline plays without it until G7 - LOOP.md G1) (the baseline is the hull-bar game: STRUCTURE.md WP6 re-snapshots it for the structure game)
+    const out = spawnSync(process.execPath, cmd.replace(/^node /, '').split(' '), { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NO_STRUCTURE: '1', NO_SCRAP: '1', NO_ESCORT_CRASH: '1', NO_PARTY: '1', NO_STOP_SHAPE: '1', NO_GUNS: '1' } }); // (SCRAP: the baseline plays without it until G7 - LOOP.md G1) (the baseline is the hull-bar game: STRUCTURE.md WP6 re-snapshots it for the structure game)
     const got = (out.stdout || '').replace(/\r/g, '').split('\n').filter((l) => !l.startsWith('real time')).join('\n');
     const gotSummary = got.slice(got.indexOf('--- botsim summary ---')).trim();
     const same = gotSummary === want;
@@ -2610,7 +2611,7 @@ if (mode === '--snapshot-classic') {
   const match = spawnSync(process.execPath, [path.join(root, 'tools', 'match-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' });
   process.exit(match.status === 0 && checkBotsim() ? 0 : 1);
 } else if (mode === '--check-two-ships') {
-  const run = (args) => spawnSync(process.execPath, [path.join(root, 'tools', 'two-ships-check.mjs'), ...args], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1' } }).status === 0;
+  const run = (args) => spawnSync(process.execPath, [path.join(root, 'tools', 'two-ships-check.mjs'), ...args], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1', NO_GUNS: '1' } }).status === 0;
   const bags = run(['--build', 'bags', '--minutes', '2']); // (the classic ship + the four-bag ship: the same decks, another gasbag layout)
   const small = run(['--build', 'min4', '--minutes', '1', '--seed', '5']); // (M.4: seed 5 - on seed 1 both ships drop into the same pit of the route and sit on its wall, a chaos event of the new flight, most seeds are clean; the classic ship + the one-deck helm, boiler and two engines: a different Nav, no guns)
   const fleet = spawnSync(process.execPath, [path.join(root, 'tools', 'fleet-check.mjs')], { cwd: root, stdio: 'inherit' }).status === 0; // (B.3: the systems that were ship 0's alone, run for every ship; and the TV drawing every ship, on a stub canvas)
@@ -2620,7 +2621,7 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-3d-lint') { // WP7: the no-wobble lint for public/modules/view3d/ (tools/lint3d.mjs): no new Math.sin / Math.cos of the time (allow: parts3d/, "// wobble-ok:")
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'lint3d.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-yard') {
-  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'yard-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1' } }).status === 0 ? 0 : 1);
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'yard-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1', NO_GUNS: '1' } }).status === 0 ? 0 : 1);
 } else if (mode === '--check-log') { // L0 + L1: the Ship's Book (tools/log-check.mjs): moments, the Log writer, the postcard, the dock line, play of the mission (its scripted scenes are the hull-bar game until STRUCTURE.md WP6, like the creature gate; NO_STRUCTURE=0 runs them with structure on)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'log-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STRUCTURE: process.env.NO_STRUCTURE ?? '1' } }).status === 0 ? 0 : 1);
 } else if (mode === '--check-health') {
@@ -2631,6 +2632,8 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'flame-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-party') { // FUN.md F5: raiders and fire as a party (tools/party-check.mjs)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'party-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-guns') { // FUN.md F4: guns that matter (tools/guns-check.mjs)
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'guns-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-escort-crash') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'escort-crash-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-squadrons') {
@@ -2638,18 +2641,18 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-ring') { // R0: the ring map (tools/ring-check.mjs)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'ring-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-creature') {
-  const run = (script, args) => spawnSync(process.execPath, [path.join(root, 'tools', script), ...args], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STRUCTURE: '1', NO_SCRAP: '1', NO_ESCORT_CRASH: '1', NO_PARTY: '1', NO_STOP_SHAPE: '1' } }).status === 0; // (SCRAP: no flotsam in the fights until G7) (STRUCTURE.md: the creature fights are balanced for the hull-bar game - the Kraken's grip drags her into the sea, where a crash is now a loss: WP2 moves the creatures onto segments and WP6 re-balances them; until then this gate runs the old game)
+  const run = (script, args) => spawnSync(process.execPath, [path.join(root, 'tools', script), ...args], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STRUCTURE: '1', NO_SCRAP: '1', NO_ESCORT_CRASH: '1', NO_PARTY: '1', NO_STOP_SHAPE: '1', NO_GUNS: '1' } }).status === 0; // (SCRAP: no flotsam in the fights until G7) (STRUCTURE.md: the creature fights are balanced for the hull-bar game - the Kraken's grip drags her into the sea, where a crash is now a loss: WP2 moves the creatures onto segments and WP6 re-balances them; until then this gate runs the old game)
   const world = run('creature-check.mjs', argv.slice(1)); // (C.1: the creature in the real game)
   const body = run('creature-spike-check.mjs', []); // (C.0: the body itself)
   process.exit(world && body ? 0 : 1);
 } else if (mode === '--check-curriculum') { // G0: the teaching curriculum (tools/curriculum-check.mjs): the generated routes, the switch, the director's gates, the salvage run
-  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'curriculum-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_PARTY: '1', NO_STOP_SHAPE: '1' } }).status === 0 ? 0 : 1);
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'curriculum-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_PARTY: '1', NO_STOP_SHAPE: '1', NO_GUNS: '1' } }).status === 0 ? 0 : 1);
 } else if (mode === '--check-stop-shape') { // F6: the briefing, the gunship as the one big thing, the escape, no mid-voyage zeppelin, the 3-card dock (tools/stopshape-check.mjs)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'stopshape-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-gas') {
-  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gas-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1' } }).status === 0 ? 0 : 1);
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gas-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1', NO_GUNS: '1' } }).status === 0 ? 0 : 1);
 } else if (mode === '--check-breakoff') {
-  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'breakoff-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1' } }).status === 0 ? 0 : 1);
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'breakoff-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1', NO_GUNS: '1' } }).status === 0 ? 0 : 1);
 } else if (mode === '--check-physics') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'physics-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-enemy3d') { // WP9: the enemies and world objects in 3D (tools/enemy3d-check.mjs): the line-ups and the host runs, 0 console errors, the draw-call and triangle budget
@@ -2689,18 +2692,18 @@ if (mode === '--snapshot-classic') {
   fs.writeFileSync(POSE_ALLOW, JSON.stringify(poseCounts(path.join(root, 'public')), null, 1) + '\n');
   console.log('wrote ' + POSE_ALLOW);
 } else if (mode === '--snapshot-golden') {
-  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1';
+  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1';
   if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/golden.json from the current code (do it when a PLANNED change legitimately moves the numbers).'); process.exit(2); }
   await snapshotGolden();
 } else if (mode === '--check-golden') {
-  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; // (the golden numbers are the hull-bar game's, without scrap: STRUCTURE.md WP6 re-captures them for the structure game)
+  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1'; // (the golden numbers are the hull-bar game's, without scrap: STRUCTURE.md WP6 re-captures them for the structure game)
   process.exit((await checkGolden()) ? 0 : 1);
 } else if (mode === '--snapshot-frames') {
-  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1';
+  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1';
   if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/frames/ from the current code.'); process.exit(2); }
   await snapshotFrames();
 } else if (mode === '--check-frames') {
-  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; // (...and so are the frames)
+  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1'; // (...and so are the frames)
   process.exit((await checkFrames()) ? 0 : 1);
 } else if (mode === '--check-pose') {
   process.exit((await checkPose()) ? 0 : 1);

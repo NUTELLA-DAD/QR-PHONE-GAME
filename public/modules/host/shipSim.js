@@ -46,6 +46,7 @@ import { createHydrogen } from './hydrogen.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToWorld, pivotOf } from './pose.js';
 import { planBreak, planSplit, makeRng, rebuildPrice, hoverOf, brokenOf } from './breakOff.js';
 import { createStructure } from './structure.js';
+import { isMothballed } from './gunsMatter.js';
 import { bagNearX, bagEdgeY, bagName, rowOf, partAt } from './shipBuild.js';
 import { transfer, newGuns, teamOf, hostileTo, foeOf, shipOf } from './ships.js';
 
@@ -164,7 +165,7 @@ export function createShipSim(world, ship, W) {
   rebuildPickups();
   layout.onChange(rebuildPickups);
   const LOCKABLE_KINDS = ['helm', 'lookout', 'bombBay', 'deflector', 'coil', 'searchlight', 'escort', 'gun', 'swivel', 'cannon', 'cannonSeat'];
-  const LOCKABLE = (name) => LOCKABLE_KINDS.includes(kindOf(name)) || isSearchlight(name, layout) || isEscortStation(name, layout) || !!state.GUNS[name];
+  const LOCKABLE = (name) => (LOCKABLE_KINDS.includes(kindOf(name)) || isSearchlight(name, layout) || isEscortStation(name, layout) || !!state.GUNS[name]) && !isMothballed(state, name); // (F4: a mothballed station is nobody's)
   // What the phone calls each kind of station (its button set and label).
   const PHONE_KIND = { helm: 'helm', gun: 'gun', boiler: 'boiler', lookout: 'lookout', bombBay: 'bombbay', deflector: 'shield', coil: 'coil', searchlight: 'light', escort: 'escort', swivel: 'swivel', cannon: 'cannon', cannonSeat: 'cannonseat' };
 

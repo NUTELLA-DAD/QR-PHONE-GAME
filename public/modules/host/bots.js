@@ -26,6 +26,7 @@ import { breachClimbAlt } from './creatureBreach.js';
 import { bombInMouth, mouthWindowSoon, forcedSkip, mouthKey } from './creatureFight.js';
 import { boardAt, mantleOf } from './creatureBoard.js';
 import { drakeBoardable } from './creatureDrake.js';
+import { isMothballed } from './gunsMatter.js';
 import { birdBoardable, birdOnBag, birdDiving, birdSwallowing, gizzardGlowing } from './creatureBird.js'; // (C.6b: the Thunderbird's rod calls, the coil's gizzard shot, the helm's shake-off)
 
 const B = config.BOTS;
@@ -572,7 +573,7 @@ function listJobs(state, bot) {
   if (state.goingDown) return goingDownJobs(state, bot); // GOING DOWN!: split across dumping weight, patching, pumping, stoking and venting (goingDown.js)
   const jobs = [];
   const players = Object.values(state.players);
-  const mods = state.modules || [];
+  const mods = (state.modules || []).filter((m) => !isMothballed(state, m.name)); // (F4: a mothballed station is not repaired, fed or manned)
   // (no hammer rack, no extinguisher on the ship: nobody can be sent to patch or spray, S.5e; a bot that already carries the tool still can)
   const hasTool = (kind) => bot.carry === kind || tables(L).PICKUPS.some((r) => r.kind === kind);
   const canHammer = hasTool('hammer'), canSpray = hasTool('extinguisher');
@@ -684,7 +685,7 @@ function listJobs(state, bot) {
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
   const botPlanes = players.filter((q) => q.bot && isEscortStation(q.lock, L)).length; // the crew can only spare so many for the patrol planes
   const reach = (n) => (isEscortStation(n, L) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : L.kindOf(n) === 'lookout' ? lookoutReach(state) : L.kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : L.kindOf(n) === 'coil' ? (coilShot(state).count >= 3 || birdCoil(state) ? 0.7 : 4) : L.kindOf(n) === 'bombBay' ? ((groundTargets(state).length || bombRunOn(state) || beakBombing(state)) && state.bombBay.bombs > 0 ? 0.5 : 4) : L.kindOf(n) === 'swivel' ? (swivelOff(state, n) > 0.3 ? 0.5 : 4) : L.kindOf(n) === 'cannon' || L.kindOf(n) === 'cannonSeat' ? cannonReach(state, n) : isSearchlight(n, L) ? lightReach(state, n) : !tables(L).GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
-  const open = tables(L).MANNED_STATIONS.filter((n) => !isBroken(n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
+  const open = tables(L).MANNED_STATIONS.filter((n) => !isBroken(n) && !isMothballed(state, n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   jobs.push(...crossJobs(state, bot)); // (B.6: loads thrown onto the deck: shovel them off)
   const hatchWorks = hatchJobs(state, bot); // (cargo drop hatches: tip raiders out - before any fighting - shut one, drop a crate on a ship below)
   jobs.unshift(...hatchWorks.filter((j) => j.mode === 'tip'));
@@ -717,7 +718,7 @@ function listJobs(state, bot) {
   const pushing = Math.floor(performance.now() / 1000 / B.OVERDRIVE_PUSH_EVERY) % 3 === 0;
   if (L.hasKind('boiler') && L.hasKind('coal') && (state.ship.fuel < (pushing ? 60 : mainShip(state).sim.structure.on() ? B.FUEL_LOW_LIVE : 25) && state.ship.press < config.BOILER.WARN_AT - (pushing ? 10 : 25)) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
   if (canHammer) for (const m of mods) if (!m.broken && m.hp < (['engine', 'helm', 'lift', 'shield', 'coil'].includes(m.kind) ? m.max * config.MODULES.LEAK_BELOW - 1 : 60)) jobs.push({ kind: 'repair', obj: m, max: 1 });
-  const guns = !L.hasKind('ammo') ? [] : tables(L).GUN_STATIONS.filter((n) => state.GUNS[n].type !== 'flame' && state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
+  const guns = !L.hasKind('ammo') ? [] : tables(L).GUN_STATIONS.filter((n) => !isMothballed(state, n) && state.GUNS[n].type !== 'flame' && state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
   const fuelRuns = !L.hasKind('coal') ? [] : tables(L).GUN_STATIONS.filter((n) => state.GUNS[n].type === 'flame' && state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'coal' || state.GUNS[n].ammo <= config.FLAME.BOT.FUEL_LOW)); // (a flamethrower's tank takes coal, not shells)
   for (const n of fuelRuns) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   guns.sort((a, b) => state.GUNS[a].ammo - state.GUNS[b].ammo);
@@ -731,7 +732,9 @@ function listJobs(state, bot) {
   if (feeding && bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs < config.CREATURES.MOUTH.FED + 1) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   jobs.push(...sailJobs(state, bot, false)); // (a sail to raise in a fair wind: after the chores, ahead of an idle gun post)
   jobs.push(...linkJobs(state, bot, false)); // (...and the quieter links: loaders for idle guns, the boiler surge)
-  for (const n of open) if (reach(n) > 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
+  const fillers = players.filter((q) => q.bot && q.lock && tables(L).GUN_STATIONS.includes(q.lock) && (q.gunIdle || 0) > 0).length; // (F4: bots already sitting at a gun with nothing to shoot)
+  const calmNow = !!state.tempo && (state.tempo.phase === 'calm' || state.tempo.phase === 'escape');
+  for (const n of open) if (reach(n) > 0.8 && !(reach(n) >= 2 && tables(L).GUN_STATIONS.includes(n) && (calmNow && B.FILL_GUNS < 99 || fillers >= B.FILL_GUNS))) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   // Hovering over an outpost with bombs aboard: one bot drops everything and mans the bomb bay.
   if (bay && bombRun && c.target && Math.hypot(c.target.x - toWorldX(mainShip(state), L.refPoint.x), c.target.y - toWorldY(mainShip(state), L.refPoint.y)) < config.MAPS.BOMB_RUN_MAN && state.bombBay.bombs > 0 && !isBroken(bay) && !players.some((q) => L.kindOf(q.lock) === 'bombBay')) jobs.unshift({ kind: 'station', obj: bay, max: 1 });
   // C.3: the beak is open (or about to be) and there are bombs: one bot takes the bomb bay (the drop itself is the bomb-bay branch of the station code below).
@@ -1879,7 +1882,7 @@ export function updateBot(p, state, dt) {
       const urgent = (p.enemy ? enemyRoleJobs(state, p, listJobs(state, p), L) : listJobs(state, p)).filter(isEmergency).length; // (the gunship's crew only count the emergencies of their own role)
       if (p.lockLeft === undefined) p.lockLeft = B.STATION_MIN + Math.random() * (B.STATION_MAX - B.STATION_MIN);
       const mod = (state.modules || []).find((m) => m.name === p.lock);
-      const gunUseless = (!p.enemy && (p.gunIdle || 0) > 6) || (mod && mod.broken);
+      const gunUseless = (!p.enemy && (p.gunIdle || 0) > B.GUN_IDLE_LEAVE) || (mod && mod.broken);
       if (gunUseless) p.gunIdle = 0;
       // Never wander off the helm while there's terrain to steer through (nor the gunship's crew off their posts).
       if ((isHelm(L, p.lock) && config.COURSE.ENABLED) || p.enemy) p.lockLeft = Math.max(p.lockLeft, 1);

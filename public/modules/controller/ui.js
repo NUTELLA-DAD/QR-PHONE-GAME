@@ -191,7 +191,7 @@ export function createControllerUI({ network }) {
     if (next.vote) return;
     uiState = next;
     showHearts(next);
-    showJob(next.ko || next.locked ? null : next.job);
+    showJob(next.ko || (next.locked && !(next.job && next.job.seated)) ? null : next.job); // (F4: a gunner with no target for a while sees the job arrow while still seated)
     if (next.ko) {
       $('info').innerHTML = '<b>Knocked out!</b> Hang tight - a crewmate can revive you';
       setButton('act', '💤', 'Zzz');
