@@ -358,6 +358,8 @@ function buildStormLairMap(level, rand, lengthMul = 1, layout) {
 // Each face is an outpost (map.outposts[i], so the minimap, the salvage and the route code treat it as one) with its guns in map.turrets (outpost: i); revolving turrets (rev: px/s) have no outpost.
 // map.ring = { variant, xRing, R, C, axisY (the height the ship's lane through the ring is measured at), faces: [ { i, angle, x, y (platform top), plat: { x0, x1 }, turrets: [dx...], core: { x, y, w, h },
 // special: { kind, x, y }, gallery: { x0, x1, y, door } | null } ], spires: [ { x, top } ], rev: [ { mx, my, speed } ] } (all px). `tries` > 0 = built again a little barer.
+// With config.GARRISON.ENABLED (CASTLE.md D1) a face also has: walk: { x0, x1, y } (the wall walk), posts: [ { x, y } ] (the archers' posts on it), plazas: [ { x0, x1, y } ] (where the squads stand), and map.ring.chains: [ { x, yTop, yLow } ]
+// (the boom chains across the lane, the sky round each cleared of spire tops); its special may be a 'ballista' (config.GARRISON.SPECIALS). No random numbers are drawn for any of it.
 function buildRingMap(level, rand, lengthMul = 1, layout, variant = 'tower', tries = 0) {
   const M = config.MAPS, RG = config.RING, V = RG.VARIANTS[variant] || RG.VARIANTS.tower, C = M.CELL;
   const r = (a, b) => a + rand() * (b - a);
@@ -423,14 +425,22 @@ function buildRingMap(level, rand, lengthMul = 1, layout, variant = 'tower', tri
   }
   // The faces: guns on the platform, the core in the keep wall, one special, the gallery if that is the special.
   const outposts = [], turrets = [], faces = [];
+  const GG = config.GARRISON, gar = !!(GG && GG.ENABLED), specials = (gar && GG.SPECIALS[variant]) || V.SPECIALS; // (CASTLE.md D1: the garrison's posts, plazas and chains, and its ballista in a face's special)
   V.FACES.forEach((a, k) => {
-    const x = faceCols[k] * C + C / 2, kind = V.SPECIALS[k % V.SPECIALS.length], side = k % 2 ? -1 : 1;
+    const x = faceCols[k] * C + C / 2, kind = specials[k % specials.length], side = k % 2 ? -1 : 1;
     const gl = kind === 'gallery' ? { x0: x - RG.GALLERY.LEN - 280, x1: x - 280, y: surfY - RG.GALLERY.UP, door: x - 300 } : null; // (the ledge runs from out on the left in to the keep door)
     const dx = RG.TURRET_X.slice(0, V.TURRETS);
     const guns = dx.map((d) => ({ mx: x + d, my: surfY, outpost: k, hp: RG.TURRET_HP }));
     turrets.push(...guns);
     outposts.push({ x, y: surfY, done: false, guns });
-    faces.push({ i: k, angle: a, x, y: surfY, plat: { x0: x - RG.PLATFORM_HALF, x1: x + RG.PLATFORM_HALF }, turrets: dx, core: { x, y: surfY - RG.CORE.H / 2, w: RG.CORE.W, h: RG.CORE.H }, special: { kind, x: x + side * RG.SPECIAL_X, y: surfY }, gallery: gl });
+    const face = { i: k, angle: a, x, y: surfY, plat: { x0: x - RG.PLATFORM_HALF, x1: x + RG.PLATFORM_HALF }, turrets: dx, core: { x, y: surfY - RG.CORE.H / 2, w: RG.CORE.W, h: RG.CORE.H }, special: { kind, x: x + side * RG.SPECIAL_X, y: surfY }, gallery: gl };
+    if (gar) { // (the garrison's ground: archer posts on the wall walk and the plazas the squads stand on - pure geometry, no random numbers)
+      const AR = GG.ARCHER, SQ = GG.SQUAD, px = AR.X.slice(0, AR.POSTS);
+      face.walk = { x0: x - Math.abs(AR.X[0]) - 240, x1: x + Math.abs(AR.X[1]) + 240, y: surfY - AR.UP };
+      face.posts = px.map((d) => ({ x: x + d, y: surfY - AR.UP }));
+      face.plazas = (variant === 'tower' ? [-1] : [-1, 1]).map((s) => ({ x0: x + (s < 0 ? -SQ.PLAZA_X[1] : SQ.PLAZA_X[0]), x1: x + (s < 0 ? -SQ.PLAZA_X[0] : SQ.PLAZA_X[1]), y: surfY }));
+    }
+    faces.push(face);
   });
   // Flak guns on the approach hills (a normal stretch to fly), not part of any face.
   for (let k = 0, n = Math.min(RG.GROUND_TURRETS[1], RG.GROUND_TURRETS[0] + Math.floor((level - 1) / 3)); k < n; k++) {
@@ -444,7 +454,16 @@ function buildRingMap(level, rand, lengthMul = 1, layout, variant = 'tower', tri
     turrets.push(g);
     rev.push({ mx: g.mx, my: g.my, speed: g.rev });
   }
-  const ring = { variant, xRing, R: V.R, C: circ, axisY: surfY - 1400, faces, spires, rev, name: V.NAME };
+  const chains = []; // (CASTLE.md D1, the boom chain: a span across the lane between two faces, hanging from the top to LOW px over the platforms. The sky round it is cleared of the spires' tops (rows from just above its low end down to the platforms), so a ship that dives under it has room, and any spire there is lower)
+  if (gar) for (const at of GG.CHAIN.AT[variant] || []) {
+    const yLow = surfY - GG.CHAIN.LOW, j0 = Math.floor(yLow / C) - 1, halfW = Math.ceil(GG.CHAIN.CLEAR / C);
+    let cx = xRing + at * Math.PI * V.R;
+    for (const d of [0, 150, -150, 300, -300, 450, -450]) if (!faces.some((q) => Math.abs(q.x - (cx + d)) < GG.CHAIN.FACE_GAP)) { cx += d; break; } // (not too near a face)
+    for (let i = Math.floor(cx / C) - halfW; i <= Math.floor(cx / C) + halfW; i++) for (let j = j0; j < surfRow; j++) if (i >= 0 && i < W) solid[idx(i, j)] = 0;
+    for (const s of spires) if (Math.abs(s.x - cx) < GG.CHAIN.CLEAR + 3 * C) s.top = Math.max(s.top, surfRow * C);
+    chains.push({ x: cx, yTop: Math.max(0, surfY - GG.CHAIN.TOP), yLow });
+  }
+  const ring = { variant, xRing, R: V.R, C: circ, axisY: surfY - 1400, faces, spires, rev, name: V.NAME, ...(gar ? { chains } : {}) };
   const map = { kind: 'ring', level, CELL: C, W, H, solid, turrets, outposts, open: true, ring };
   finishMap(map, { i: startI, j: H - 16 }, stationCell(map, outposts[0]), layout);
   // Every face must have a station the ship can reach (above its platform), or the rock is built again.

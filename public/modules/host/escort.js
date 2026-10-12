@@ -247,7 +247,7 @@ export function createEscort({ state, puff, phoneFx, moment }) {
     for (const b of state.bullets) {
       if (b.life > 0 && Math.hypot(b.x - s.x, b.y - s.y) < 34) {
         b.life = 0;
-        s.hp -= 1;
+        s.hp -= b.arrow ? b.dmg : 1; // (an arrow is a small hit: the castle's archers do not shoot the patrol down by accident)
         puff(s.x, s.y, '#ffcf40', 6);
       }
     }

@@ -1214,7 +1214,7 @@ export function createSimulation() {
   hijack = createHijack({ state, puff, phoneFx, air: airFor }); // stolen dogfighters
   Object.assign(W, { course, env, gunship, hijack, creatures, ring: course.ringSys });
   state.ringSys = course.ringSys; // (the bots' RING_FORCE_BOARD test reads it, bots.js)
-  course.ringSys.bind({ spawnBats: (from, n) => squadrons.spawnBats(from, n), spawnBoss: () => squadrons.spawnBoss(), dropSquad: raiders.dropSquad }); // (R0: the ring's hangars, the moored Flagship and the gallery's zip-line raiders, ring.js)
+  course.ringSys.bind({ spawnBats: (from, n) => squadrons.spawnBats(from, n), spawnBoss: () => squadrons.spawnBoss(), dropSquad: raiders.dropSquad, blast: (b) => course.blast(b) }); // (R0: the ring's hangars, the moored Flagship and the gallery's zip-line raiders, ring.js)
   main.sim.attach({ hijack }); // (the personal grappling hook needs the hijack: shipSim.js)
   // Her deck is somewhere to land too: leap (or get thrown) across and you're aboard.
   // Every deck of hers is a landing surface (she can have up to 4 stepped decks; the deck numbers run left to right as she is now).
@@ -1345,8 +1345,9 @@ export function createSimulation() {
         const sy = toShipY(sh, bullet.y);
         if (!bullet.miss && sh.sim.hitsShip(sx, sy)) {
           bullet.life = 0;
-          puff(bullet.x, bullet.y, '#ff7b00', 8);
-          sh.sim.impact(sx, sy, bullet.dmg || 1);
+          puff(bullet.x, bullet.y, '#ff7b00', bullet.arrow ? 2 : 8); // (an arrow is a small hit)
+          sh.sim.impact(sx, sy, bullet.dmg || 1, 1, bullet.kind, bullet.fire); // (the garrison's arrows, bolts and stones name their kind: they are not shells)
+          if (state.onBulletHit) state.onBulletHit(bullet, sh); // (a tool's tally: tools/botsim.mjs and the ring gate count the power the castle's guns and its garrison land)
           break;
         }
       }
@@ -1359,7 +1360,7 @@ export function createSimulation() {
     // Shots that hit something (life set to exactly 0) leave an impact ring; expired ones just go.
     for (const sh of state.shells) if (sh.life === 0) state.rings.push({ x: sh.x, y: sh.y, t: 0.3, max: 0.3, color: '#ffd23f', size: 90 });
     for (const sh of [...state.shells]) if (sh.life === 0 && sh.primed) prime.burst(sh); // (a primed shell bursts into splinters)
-    for (const b of state.bullets) if (b.life === 0) state.rings.push({ x: b.x, y: b.y, t: 0.25, max: 0.25, color: '#ff7b4a', size: 70 });
+    for (const b of state.bullets) if (b.life === 0 && !b.arrow) state.rings.push({ x: b.x, y: b.y, t: 0.25, max: 0.25, color: '#ff7b4a', size: 70 });
     if (state.shells.some((sh) => sh.life === 0)) state.sfxQ.push(['impact']);
     for (const arr of [state.bullets, state.shells]) {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i].life <= 0) arr.splice(i, 1);

@@ -154,6 +154,8 @@ let distPrev = null, distTravel = 0, flightSteps = 0, altMin = Infinity, altMax 
 const actTally = {};
 if (process.env.FIRE_TRACE && sim.fire) { const ig = sim.fire.ignite; let n = 0; sim.fire.ignite = (d, x, why, opts) => { if (n++ < 3) console.log(`ignite ${why} d${d} x${Math.round(x)} @${(simClock / 1000).toFixed(1)}s ${new Error().stack.split('\n').slice(2, 6).map((s) => s.trim().replace(/\(.*[\\/]/, '(')).join(' < ')}`); return ig(d, x, why, opts); }; } // (FIRE_TRACE: who lights the first fires; only reaches callers that look the function up through sim.fire)
 const ringTrack = []; // --map ring: every ring map's dynamic state (course.ring) the bots met
+const newHit = () => ({ gun: 0, arrow: 0, bolt: 0, other: 0 }); // (CASTLE.md D1: the power of the enemy bullets that landed on the ship, by who fired them: the castle's guns (flak, mortar stones) or its archers and ballista)
+state.onBulletHit = (b) => { const rg = state.course.ring, t = rg ? (rg.hitPower ||= newHit()) : newHit(); t[b.arrow ? 'arrow' : b.bolt ? 'bolt' : b.flak || b.mortar ? 'gun' : 'other'] += b.dmg || 1; }; // (kept on the ring it landed in)
 const crTrack = { rec: null, list: [] }; // --creature: every creature the bots met, one a mission
 const traceRows = args.trace ? ['step\tphase\tlap\tx\ty\talt\tdist\tspeed\tpitch\tvy\thull\tgas\tkills\twrecks'] : null; // (--trace)
 const t0 = realNow();
@@ -378,6 +380,10 @@ if (state.ships.length > 1) for (const sh of state.ships) console.log(`ship ${sh
 }
 ringTrack.forEach((r, i) => { // (R0: one line for each ring the bots met: how it ended, the faces, the shutters, the specials)
   const S = r.stats, down = r.faces.filter((f) => f.down).length;
+  if (r.gar) { // (D1: the garrison - what it did, and the fairness figure: the castle's guns against its archers, ballista and chain, in power that landed)
+    const G = r.gar.stats, hp = r.hitPower || newHit(), garr = hp.arrow + hp.bolt + G.chainPower;
+    console.log(`garrison ${i + 1}: volleys ${G.volleys} (${G.arrows} arrows), ballista bolts ${G.bolts}, posts wrecked ${G.postsDown}, squads bombed ${G.squadsBombed} / shot ${G.squadsShot}, cheers ${G.cheers}, fled ${G.flees}, surrendered ${G.surrenders}, grapples ${G.grapples}, chain: lookout ${G.calls} / snagged ${G.snags} / snapped ${G.snaps}, stones ${G.stones}; power landed: guns ${hp.gun.toFixed(1)}, arrows ${hp.arrow.toFixed(1)}, bolts ${hp.bolt.toFixed(1)}, chain ${G.chainPower.toFixed(1)} (garrison ${(garr / Math.max(0.01, hp.gun) * 100).toFixed(0)}% of the guns')`);
+  }
   console.log(`ring ${i + 1} (${r.variant}, R ${r.R}, C ${Math.round(r.C)} px, ${r.faces.length} faces): ${r.crown ? 'FELL (' + r.crown.how + ')' : 'standing'}, faces breached ${down}/${r.faces.length} [${S.breaches.map((b) => 'gate ' + (b.face + 1) + ' by ' + b.how + (b.by ? ' ' + b.by : '')).join(', ')}], keep ${r.keep.hp.toFixed(0)}/${r.keep.max}, shutter windows ${S.windows}, core hits ${S.coreShells} shells + ${S.coreBombs} bombs, keep chips ${S.chips}, specials wrecked ${S.specialsDown}, bats ${S.bats}, flak ${S.flaks}, mortars ${S.mortars}, zips ${S.zips} (${S.raiders} raider squads), boarded ${S.boards}, charges ${S.planted} set / ${S.charges} blown, revolving wraps ${S.wraps}`);
 });
 {

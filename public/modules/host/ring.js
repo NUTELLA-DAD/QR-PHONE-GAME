@@ -16,6 +16,7 @@ import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { shellDmg } from './aim.js';
 import { pop } from './popups.js';
 import { setGoal, stationCell, stationDist } from './maps.js';
+import { createGarrison } from './garrison.js'; // (CASTLE.md D1: the castle's archers, ballista, squads and boom chain; config.GARRISON)
 
 const RG = () => config.RING;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -23,7 +24,8 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export function createRing({ state, puff, credit, onMarker }) {
   const crs = () => state.course;
   const rr = () => state.course && state.course.ring;
-  let deps = {}; // spawnBats, spawnBoss, dropSquad (simulation.js binds them once the squadrons and the raiders exist)
+  let deps = {}; // spawnBats, spawnBoss, dropSquad, blast (simulation.js binds them once the squadrons and the raiders exist)
+  const gar = createGarrison({ state, puff, credit }); // (it plays only while course.ring.gar is set: config.GARRISON.ENABLED)
   const warn = (text, secs = 3) => { state.ev.warn = secs; state.ev.warnText = text; };
   const shipAim = () => { const sh = mainShip(state), A = sh.layout.aimPoint; return { x: toWorldX(sh, A.x), y: toWorldY(sh, A.y) }; };
   const moment = (kind, who, data) => state.moment && state.moment(kind, { who: who ? [who] : [], where: null, data }); // (the Ship's Book: data only)
@@ -34,11 +36,12 @@ export function createRing({ state, puff, credit, onMarker }) {
   function begin(map) {
     const course = crs();
     if (!map.ring) { course.ring = null; return; }
-    const G = RG(), V = G.VARIANTS[map.ring.variant] || G.VARIANTS.tower;
+    const G = RG(), V = G.VARIANTS[map.ring.variant] || G.VARIANTS.tower, GS = config.GARRISON;
+    const spHp = (k) => { const K = G[k.toUpperCase()] || (GS && GS[k.toUpperCase()]); return K ? K.HP || 1 : 1; }; // (a special's hit points: its block in config.RING, or the garrison's ballista)
     const faces = map.ring.faces.map((f) => ({
       i: f.i, x: f.x, y: f.y, angle: f.angle, core: { ...f.core }, hp: V.CORE_HP, max: V.CORE_HP,
       open: 0, t: 0, windows: 0, down: false, how: null, by: {}, charge: null,
-      special: { ...f.special, hp: G[f.special.kind.toUpperCase()] ? G[f.special.kind.toUpperCase()].HP || 1 : 1, max: G[f.special.kind.toUpperCase()] ? G[f.special.kind.toUpperCase()].HP || 1 : 1, dead: false, t: 3 + f.i * 1.3 },
+      special: { ...f.special, hp: spHp(f.special.kind), max: spHp(f.special.kind), dead: false, t: 3 + f.i * 1.3 },
       gal: f.gallery ? { ...f.gallery, job: { name: 'plant', prog: 0, worked: false }, zipT: G.GALLERY.ZIP_EVERY * 0.4 } : null,
     }));
     const r = {
@@ -48,6 +51,7 @@ export function createRing({ state, puff, credit, onMarker }) {
       stats: { windows: 0, coreShells: 0, coreBombs: 0, chips: 0, charges: 0, planted: 0, zips: 0, raiders: 0, bats: 0, flaks: 0, mortars: 0, boards: 0, breaches: [], wraps: 0, specialsDown: 0 },
     };
     course.ring = r;
+    gar.begin(r, map);
     if (state.slow !== undefined && state.slow !== 1) state.slow = 1;
   }
 
@@ -74,6 +78,7 @@ export function createRing({ state, puff, credit, onMarker }) {
     const top = rank(f);
     const who = whoOf(byId != null ? byId : top && top[0]);
     r.stats.breaches.push({ face: f.i, how, by: who ? who.name : null });
+    gar.onBreach(f); // (its archers are silenced, its men run)
     if (config.MAPS.OUTPOST_REFILL && state.bombBay) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX);
     if (r.moor) { const k = r.moor.faces.indexOf(f.i); if (k >= 0 && !r.moor.cut[k]) { r.moor.cut[k] = true; if (r.moor.cut.every(Boolean) && !r.moor.falling) { r.moor.falling = true; r.moor.fallT = 0; } } }
     if (how !== 'keep') {
@@ -165,6 +170,7 @@ export function createRing({ state, puff, credit, onMarker }) {
         }
       }
     }
+    gar.update(dt); // (the garrison: archers, ballista, squads, the chain; after the cores and specials have had their shells)
     // The gallery's charge job wears off when nobody holds it.
     for (const f of r.faces) if (f.gal) { const j = f.gal.job; if (!j.worked) j.prog = Math.max(0, j.prog - dt * 0.4); j.worked = false; }
     citadelStep(r, dt, aim);
@@ -178,7 +184,7 @@ export function createRing({ state, puff, credit, onMarker }) {
   // ---------- the specials ----------
   function stepSpecial(f, dt, aim, sh) {
     const G = RG(), sp = f.special, r = rr();
-    if (sp.dead || sp.kind === 'gallery') return;
+    if (sp.dead || sp.kind === 'gallery' || sp.kind === 'ballista') return; // (the ballista is the garrison's: garrison.js)
     const K = G[sp.kind.toUpperCase()];
     if (Math.hypot(aim.x - sp.x, aim.y - sp.y) > K.RANGE || state.ship.down) { sp.t = Math.max(sp.t, 1.5); return; }
     if ((sp.t -= dt) > 0) return;
@@ -201,13 +207,16 @@ export function createRing({ state, puff, credit, onMarker }) {
       r.stats.flaks++;
     } else {
       const T = K.FLIGHT, tx = toWorldX(sh, A.x - 400 + crs().rand() * 800) + vs * T, ty = toWorldY(sh, A.y - 50 + crs().rand() * 300);
-      state.bullets.push({ x: sp.x, y: fy, vx: (tx - sp.x) / T, vy: (ty - fy) / T - 0.5 * K.GRAVITY * T, ay: K.GRAVITY, life: T + 0.05, miss: crs().rand() < K.MISS, dmg: K.DAMAGE, mortar: true });
+      state.bullets.push({ x: sp.x, y: fy, vx: (tx - sp.x) / T, vy: (ty - fy) / T - 0.5 * K.GRAVITY * T, ay: K.GRAVITY, life: T + 0.05, miss: crs().rand() < K.MISS, dmg: K.DAMAGE, mortar: true, ...stoneFlags(r) });
       r.stats.mortars++;
     }
     puff(sp.x, fy - 20, '#555', 4);
     if (state.flashes) state.flashes.push({ x: sp.x, y: fy - 20, ang: -Math.PI / 2, t: 0.12, color: '#ffcf80', size: 1.6 });
     sfx('cannon');
   }
+
+  // The catapult's stone (garrison on): the mortar's shell is a stone; on the citadel and in the Ember sky it burns, and lights a deck it hits.
+  const stoneFlags = (r) => (r.gar ? { stone: true, kind: 'stone', ...(r.variant === 'citadel' || (state.env && state.env.id === 'ember') ? { burn: true, fire: config.GARRISON.STONE.FIRE } : {}) } : {});
 
   // The gallery's raiders: a line from the keep door to the ship's boarding point; when it arrives a squad drops aboard.
   function zipStep(dt, sh) {
@@ -228,10 +237,10 @@ export function createRing({ state, puff, credit, onMarker }) {
       z.t += dt;
       const s = clamp(z.t / z.dur, 0, 1);
       z.x1 = toWorldX(sh, z.ex);
-      z.y1 = toWorldY(sh, -230);
+      z.y1 = toWorldY(sh, z.grapple ? sh.layout.bounds.y1 - 30 : -230); // (a grapple hooks the keel)
       z.x = z.x0 + (z.x1 - z.x0) * s;
       z.y = z.y0 + (z.y1 - z.y0) * s + Math.sin(s * Math.PI) * 60;
-      if (z.t >= z.dur && deps.dropSquad) { deps.dropSquad(z.ex, -200 + sh.pose.y); r.stats.raiders++; z.done = true; }
+      if (z.t >= z.dur && deps.dropSquad) { deps.dropSquad(z.ex, -200 + sh.pose.y, z.men); r.stats.raiders++; z.done = true; }
     }
     r.zips = r.zips.filter((z) => !z.done && z.t < z.dur + 0.5);
   }
@@ -240,6 +249,7 @@ export function createRing({ state, puff, credit, onMarker }) {
   function blast(b) {
     const r = rr(), G = RG(), R = config.BOMBS.RADIUS;
     if (!r) return;
+    gar.blast(b); // (squads, posts and the chain)
     for (const f of r.faces) {
       if (f.down) continue;
       const c = f.core;
@@ -415,6 +425,7 @@ export function createRing({ state, puff, credit, onMarker }) {
     pop(state, r.faces[0].x, r.faces[0].y - 500, 'boss', '#ffd23f', 2.4);
     for (const f of r.faces) for (let k = 0; k < 6; k++) puff(f.x + (k - 3) * 90, f.y - 120 - k * 40, k % 2 ? '#ff5a1f' : '#ffd23f', 20);
     state.slow = RG().CROWN.SLOW;
+    gar.onCrown(); // (the garrison surrenders)
     for (const p of Object.values(state.players)) if (p.on && p.on.ring != null) dismount(p, 'gone');
     const last = r.stats.breaches.length ? state.players && Object.values(state.players).find((q) => q.name === r.stats.breaches[r.stats.breaches.length - 1].by) : null;
     moment('ring-fall', last || null, { name: r.name, how });
@@ -462,7 +473,7 @@ export function createRing({ state, puff, credit, onMarker }) {
     }
   }
 
-  return { begin, update, blast, progress, surfaces, board, boardCheck, boarderStep, forceBoard, dismount, hitCore, chip, bind: (d) => { deps = d; }, get state() { return rr(); } };
+  return { begin, update, blast, progress, surfaces, board, boardCheck, boarderStep, forceBoard, dismount, hitCore, chip, bind: (d) => { deps = d; gar.bind(d); }, garrison: gar, get state() { return rr(); } };
 }
 
 // ---- helpers for the drawing, the HUD and the tools (pure; take course.ring) ----
