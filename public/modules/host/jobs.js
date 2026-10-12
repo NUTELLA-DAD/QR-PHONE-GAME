@@ -13,6 +13,7 @@ import { bunkerEmpty } from './goingDown.js';
 import { gripJobs } from './creatureGrip.js';
 import { scrapOn, holdSpot, holdFull } from './scrap.js';
 import { isMothballed } from './gunsMatter.js';
+import { verbOf } from './roleCards.js'; // (F10: the verb of a job, for the head tag on the TV and the ? card)
 
 const J = config.JOBS;
 // Worked out per ship layout (rebuilt when a new ship build is applied to it).
@@ -216,12 +217,12 @@ export function createJobFinder(state) {
     const tgt = pick.r.via || j;
     const near = pick.r.via ? 40 : J.ARRIVE;
     const dir = direction(p, tgt.d, tgt.x, near);
-    p.job = { job: j, kind: j.kind, label: j.label + (pick.r.via ? ` (get ${pick.r.via.kind || pick.r.via.n})` : ''), dir: dir.arrived ? null : dir.dir, color: j.kind === 'help' && j.obj.color ? j.obj.color : JOB_COLORS[j.kind] };
+    p.job = { job: j, kind: j.kind, label: j.label + (pick.r.via ? ` (get ${pick.r.via.kind || pick.r.via.n})` : ''), dir: dir.arrived ? null : dir.dir, color: j.kind === 'help' && j.obj.color ? j.obj.color : JOB_COLORS[j.kind], ...(config.CONTROLS.ROLE_CARDS.ENABLED ? { verb: verbOf(j.kind, j.label, !!pick.r.via) } : {}) };
     // Arrived at the job (no rack needed): the arrow goes away and the suggestion is done.
     if (!pick.r.via && dir.arrived) p.job.dir = null;
   };
 
   // What the phone gets: null until they have been free a moment.
-  const ui = (p) => (p.job && p.job.dir && p.freeT >= J.IDLE_AFTER ? { label: p.job.label, dir: p.job.dir, kind: p.job.kind, ...(p.lock ? { seated: true } : {}) } : null);
+  const ui = (p) => (p.job && p.job.dir && p.freeT >= J.IDLE_AFTER ? { label: p.job.label, dir: p.job.dir, kind: p.job.kind, ...(p.job.verb ? { verb: p.job.verb } : {}), ...(p.lock ? { seated: true } : {}) } : null);
   return { update, ui };
 }

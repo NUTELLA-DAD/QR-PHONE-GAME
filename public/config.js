@@ -5,6 +5,8 @@ const STOP_SHAPE_ON = typeof process === 'undefined' || !(process.env && process
 const GUNS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_GUNS);
 // F2 (FUN.md): the alarm arbiter queues banners (alarms.js); NO_ALARMS=1 in a tool is the old last-writer-wins banner (the checks that read the banner text right after an event pin it; the seeded gates are identical either way).
 const ALARMS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_ALARMS);
+// F10 (FUN.md): role cards - the join card and the ? button on the phone, the verb over an idle crewman's head on the TV. ON in the game; NO_ROLE_CARDS=1 in a tool is the old game (the seeded baselines and the frames pin it).
+const ROLE_CARDS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_ROLE_CARDS);
 export const config = {
   W: 1600,
   H: 900,
@@ -3218,6 +3220,9 @@ export const config = {
     AID_GRACE: 0.25, // seconds a press may still carry the PREVIOUS button label's id (the phone pressed just before the label changed)
     BAY_JUMP_ZONE: 22, // px either side of the hatch: only here does Action say "Jump!" (the rest of the bay is for the bombardier's seat)
     HOLD_TAP: 0.25, // a hold-action released sooner than this (seconds) counts as a tap: the phone nags "keep holding"
+    // F10 (FUN.md): role cards. JOIN_TEXT is the card a new phone gets after joining (tap or CARD_TIME seconds to close); the ? button in the top strip shows the hint for the seat or the job
+    // for HELP_TIME seconds; the TV draws the job's verb (GRAB / PATCH / SPRAY / LOAD / STOKE / TAKE THE HELM ...) over a crewman who has been free VERB_AFTER seconds with a job on offer.
+    ROLE_CARDS: { ENABLED: ROLE_CARDS_ON, VERB_AFTER: 5, CARD_TIME: 8, HELP_TIME: 7, JOIN_TITLE: "You're crew!", JOIN_TEXT: 'Walk with the stick. Press the big button to grab or use things. Follow the GOLD ARROW.' },
   },
   // Ship modules (guns, boiler, helm, engines, lift, steam pipes).
   MODULES: {
