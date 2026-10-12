@@ -97,6 +97,7 @@ export const config = {
     SHOT_EVERY: 0.22,
     BULLET_SPEED: 720,
     RESPAWN: 5, // seconds until the next fighter after one goes down
+    SPAWN_BAND: [-700, 200], // a fighter's first run starts at the ship's height plus a random offset in this band (px; negative = above her)
   },
   // How far the helm can climb/dive (world pixels either way) and how fast.
   SHIP: {
@@ -107,6 +108,7 @@ export const config = {
     REVERSE: 0.4, // how much of the throttle is reverse
     HULL_DAMAGE: 1, // multiplier on hull damage taken (armour upgrades lower it)
     HIT_DAMAGE: 3, // hull lost per enemy bullet hit (bigger blasts scale this up)
+    DRAIN: { BREACH: 0.5, FIRE: 0.35, MUL: 2 }, // hull a second one open breach / one fire takes (x MUL x the damage scale) off a ship with no frame (the enemy gunship, a Versus ship: shipSim.js stepUpkeep); botsim and voyagesim use it to estimate how much hull the fires and breaches ate
     HOLE_CHANCE: 0.6, // chance an enemy bullet hit punches a hole in the deck
     TILT_MAX: 0.06, // most the nose tips up/down while climbing or diving (radians, about 3.5 degrees)
     TILT_PER_SPEED: 0.0004, // tilt per pixel/second of climb
@@ -639,6 +641,7 @@ export const config = {
     SUPPLY_REACH: 750, // fly within this of the balloon to grab it
     SUPPLY_HULL: 12,
     SUPPLY_COAL: 25,
+    SUPPLY_AMMO: 8, // shells every gun gets from the balloon
     // F4 (FUN.md): guns that matter - the tempo follows where the guns are and how late in the voyage it is.
     AIM_AT_GUNS: GUNS_ON, // a set piece (and a swarm, a bomber, a squadron, imps) comes in on the side of the ship where the most guns are manned and have been idle longest (links.js state.links.aim)
     FORCE_COLUMN: 0, // tools only (BATCH_SET=PACING.FORCE_COLUMN=5): pretend every stop is this stop of the voyage (0 = the real one)
@@ -2024,36 +2027,19 @@ export const config = {
   WRECK: {
     TIME: 8, // seconds of breaking apart before the restart
   },
-  // "GOING DOWN!": the first time the hull hits 0 in a mission the ship does not break up at once. She FALLS for a while (goingDown.js) and the crew has to make her LIFT beat her
-  // WEIGHT again - the real numbers of the flight (balance.js weight with the crew, coal, cargo and bombs aboard; the gasbags' lift by how much gas each holds; steam; engines pointing up).
-  // The TV shows the two as a big balance bar. The ways: DUMP WEIGHT (shovel the loose cargo over the rail, drop the bombs, dump the coal bunker), PATCH the glowing gasbag leaks and PUMP
-  // (a hand at the helm), FULL STEAM (stoke the boiler: hot gas lifts more, up-pointing engines push harder - but over-pressure blows the boiler, so VENT), or as a last resort CUT AWAY
-  // a heavy section (hold Action at the marked joint: a break-off that stays lost until the sky-dock rebuilds it). Lift beating weight by MARGIN for HOLD seconds = "SHE HOLDS!";
-  // otherwise she is wrecked as usual.
+  // "GOING DOWN!" / FALLING (goingDown.js; the rule is STRUCTURE.LIFT): her lift is short of her weight and the crew has to make her LIFT beat her WEIGHT again - the real numbers of the flight
+  // (the neutral fill, the water in her, torn bags, canvas and loads; the gasbags' lift by how much gas each holds; thermals; engines pointing up).
+  // The TV shows the two as a big balance bar. The ways: DUMP WEIGHT (shovel the loose cargo over the rail, drop the bombs, dump the coal bunker), PATCH the gasbag leaks and PUMP
+  // (a hand at the helm), FULL STEAM (stoke the boiler: up-pointing engines push harder - but over-pressure blows the boiler, so VENT), or as a last resort CUT AWAY
+  // a heavy section (hold Action at the marked joint: a break-off that stays lost until the sky-dock rebuilds it). Lift beating weight for STRUCTURE.LIFT.END seconds = "SHE HOLDS!";
+  // sitting on the ground short of lift for CRASH.TIME is the loss. (STRUCTURE.md WP6: the old once-a-mission last stand and its numbers are gone.)
   GOING_DOWN: {
-    ENABLED: true,
-    TIME: 24, // seconds of falling (with 8 crew)
-    TIME_PER_MISSING: 1.6, // extra seconds for each crew member under 8 (so 2 players get 6 x this more)
-    SURVIVE_HULL: 15, // hull left when she holds
-    HOLD_HULL: 2, // hull shown while she falls (nothing can hurt her meanwhile)
-    GRACE: 5, // seconds nothing can hurt her after she holds
-    LEVEL_GAS: 8, // gas above the neutral fill the bags are left with when she holds (a gentle climb, not a rocket)
-    FALL_RATE: 62, // sinking speed (px/s) at the end of the fall with nothing done; it starts at FALL_START of this
-    FALL_START: 0.45,
-    FALL_BRAKE: 0.8, // her lift matching her weight takes this share off the sinking
     NOSE: 0.045, // extra nose-down tip while falling (radians)
     ENEMY_RATE: 0.12, // enemy spawn speed while she falls (1 = normal)
-    START_GAS: 18, // the gas the torn bags are left with when she starts to fall (0..100; a bag fuller than this loses the difference)
-    PUMP_MUL: 0.5, // the pump only gets this share of its gas into the torn bags
-    MARGIN: 3, // her lift must beat her weight by this many points...
-    HOLD: 2, // ...for this many seconds in a row to save her
-    TRIM_LOSS: 14, // a lopsided ship spills lift: this many points lost per 100 px her centre of mass sits beyond BALANCE.LEVEL_PX from her centre of lift (dump evenly!)
-    LEAKS_MIN: 1, // gasbag leaks that must be patched: 1 + crew / 4, within MIN..MAX
-    LEAKS_MAX: 3,
-    LEAK_MUL: 4, // each glowing leak loses this many times the normal gas per second (GAS.LEAK_PER_HOLE) until it is patched
-    STEAM_LIFT: 28, // hot gas: lift points a boiler at full overdrive adds (0 at BOILER.OVERDRIVE_AT pressure, full at 100)
+    MARGIN: 3, // her lift must be short of her weight by more than this many points for it to count as falling (the gates' measure() uses it too)
+    TRIM_LOSS: 14, // a lopsided ship spills lift: this many points lost per 100 px her centre of mass sits beyond BALANCE.LEVEL_PX from her centre of lift (dump evenly!) (measure(), the build gauge)
+    STEAM_LIFT: 28, // hot gas: lift points a boiler at full overdrive adds (0 at BOILER.OVERDRIVE_AT pressure, full at 100) (measure(), the build gauge)
     STOKE_PRESS: 14, // a load of coal shovelled in while she falls kicks the pressure up this much at once (BOILER.WARN_AT starts the blowout chance - vent!)
-    CARGO: { BASE: 1, PER_CREW: 0.6, MIN: 2, MAX: 8 }, // loose cargo (crates and sandbags) that shakes loose on her decks when she starts to fall: BASE + crew x PER_CREW loads, shovelled overboard (the SHOVEL job)
     DUMP: {
       COAL_WEIGHT: 10, // gas points the coal bunker's stock weighs: dumping it overboard takes this off her weight ...
       COAL_TIME: 1.6, // ... seconds of holding Action at the bunker; but then there is no coal to stoke with, and ...
@@ -2079,9 +2065,8 @@ export const config = {
   // STRUCTURAL DAMAGE (STRUCTURE.md; structure.js): there is no hull bar. The ship is a frame of SEGMENTS (a stretch of each deck with the hull under it, SEG_PX long) and her gasbags have canvas.
   // A hit hurts the segment it lands on, a breach or a fire wears its segment down until it is planked or out, the crew SHORE UP a segment with a hammer. A segment that reaches 0 gives way:
   // the end of the ship breaks off, a middle one splits her in half (the half with the most lift flies on; a half with no gasbag falls). Lift below weight = she falls (goingDown.js), and
-  // sitting on the ground like that for CRASH.TIME seconds is the loss. ENABLED false (or NO_STRUCTURE=1 in a tool) is the old hull bar, byte for byte.
+  // sitting on the ground like that for CRASH.TIME seconds is the loss. (WP6: this is the only rule for the co-op ship; the enemy gunship and the Versus ships still play the old hull bar until WP3.)
   STRUCTURE: {
-    ENABLED: typeof process === 'undefined' || !(process.env && process.env.NO_STRUCTURE), // the switch (a browser has no process: on)
     SEG_PX: 240, // length of a segment along a deck (the grid the decks are cut on: a deck's end cell shorter than END_MIN of it joins its neighbour)
     END_MIN: 0.45,
     FRAME_GAP: 220, // decks whose rows are this close (px) are joined by frames where they overlap in x ...
@@ -2116,7 +2101,7 @@ export const config = {
     EASY_SPLIT_STOP: 2, // on Easy she cannot split before this stop of the voyage
     RESTORE_PER_POINT: 0.03, // soundness a hull point of the old repairs (a reward, a supply drop, a checkpoint flag, a kill) gives back, into the weakest load-bearing segments first
     LIMP_HP: 0.6, // a wreck that limps home on a spare is patched up to this
-    SHIM_SPREAD: 4, // damageHull(amount) from the creatures, flame and the like spreads over this many load-bearing segments at a time (WP2 moves them onto segments)
+    SHIM_SPREAD: 4, // damageHull(amount) from flame, a flood, bats and the like spreads over this many load-bearing segments at a time (the creatures hit the segment under the blow: structure.hit)
     PIECE: {
       LIFE: 45, // seconds a half with a gasbag can drift after the split before it breaks up
       BOT_ABANDON: 2, // seconds before a bot on a half that is going down jumps (a parachute) or swings across
@@ -3316,6 +3301,8 @@ export const config = {
         LINK_HOLD: 25, SURGE_GAP: 30, SURGE_STOP_PRESS: 85, SURGE_MAX: 4,
       },
     },
+    SURGE_MAX_PRESS: 78, // a bot starts a boiler surge only while the pressure is under this (a surge pushes it up; it blows at BOILER.WARN_AT) ...
+    SURGE_MIN_FUEL: 25, // ... and with more than this much coal in the firebox
     WHACK_EVERY: 0.35, // time between swings at a raider
     ICE_AT: 0.5, // frost: bots chip an ice crust once it is this thick (0-1)
     ENGINEER_PRESS: 35, // steam this low: bots shut the valve of a leaking module (reopened after repair)

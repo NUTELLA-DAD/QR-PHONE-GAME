@@ -21,6 +21,7 @@ import { applyForce, hitForce } from './forces.js';
 import { hurt, knockOut } from './health.js';
 import { pop } from './popups.js';
 import { shipOf, mainShip } from './ships.js';
+import { creatureHit } from './structure.js';
 
 const DK = () => config.CREATURES.DRAKE;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -505,7 +506,7 @@ function swoopHit(state, cr, ship, a, q) {
   a.esc = { x: -a.dir.x * 0.3, y: -0.95 };
   dk.dazed = S.DAZED;
   cr.stats.swoopHits += 1;
-  if (sim && sim.damageHull) sim.damageHull(S.HULL);
+  creatureHit(ship, a.sx, a.sy, S.HULL, { power: S.POWER }); // (STRUCTURE.md WP2: the segment it strikes)
   hitForce(ship.ctx, a.sx, a.sy, S.POWER);
   ship.pose.vy = (ship.pose.vy || 0) + a.dir.y * 120;
   if (sim && sim.air) sim.air.shove(S.SHOVE, a.sx);
@@ -671,7 +672,7 @@ function tailLash(state, cr, ship, pc) {
     else if (!p.lock && sim && sim.air) { p.tossed = true; sim.air.startFlight(p, dir * S.VX, -S.VY); if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, 'LASHED OFF THE DECK! Open the parachute or grab a ladder!', [200, 60, 200]); }
     else if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, 'LASHED!', [200, 60, 200]);
   }
-  if (sim && sim.damageHull) sim.damageHull(P.LASH_HULL);
+  creatureHit(ship, pc.px, pl.y, P.LASH_HULL, { power: S.POWER }); // (the top-deck segment under the tail)
   hitForce(ship.ctx, pc.px, pl.y, S.POWER);
   state.ship.shake = Math.max(state.ship.shake || 0, 1);
   const w = entry(ship, pc.px, pl.y);
@@ -886,7 +887,7 @@ function stepLunge(state, cr, ship, dt, mid, a) {
       const sim = ship.sim;
       if (d <= C.LUNGE_REACH && sim) {
         cr.stats.lungeHits += 1;
-        sim.damageHull(C.LUNGE_HULL);
+        creatureHit(ship, a.sx, a.sy, C.LUNGE_HULL, { power: C.LUNGE_POWER }); // (the segment the neck snaps at)
         hitForce(ship.ctx, a.sx, a.sy, C.LUNGE_POWER);
         for (const p of Object.values(state.players)) {
           if (shipOf(state, p) !== ship || p.fly || p.fall || p.conn != null || p.ko > 0 || p.d == null) continue;
@@ -989,7 +990,7 @@ function stepSpouts(state, cr, ship, dt) {
       state.sfxQ.push(['whoosh']);
       cr.hooks.puff(sp.x, sp.y - 300, '#ff8a34', 12);
       const near = Math.abs(shipMid(ship).x - sp.x) < S.W && ship.layout.bounds && toWorldY(ship, ship.layout.bounds.y1) > sp.y - S.H; // her keel in the column
-      if (near && ship.sim && ship.sim.damageHull) { ship.sim.damageHull(S.HULL); banner(state, 'THE LAVA SPOUT SCORCHES THE HULL!', 2); state.ship.shake = Math.max(state.ship.shake || 0, 0.8); }
+      if (near && ship.sim) { creatureHit(ship, toShipX(ship, sp.x), 0, S.HULL, { kind: 'rock' }); banner(state, 'THE LAVA SPOUT SCORCHES THE HULL!', 2); state.ship.shake = Math.max(state.ship.shake || 0, 0.8); }
     }
   }
   // the tow: hauled over an erupting spout by a harpoon line, it is roasted (the Kraken's tow onto rock, creatureFight.js stepRock)

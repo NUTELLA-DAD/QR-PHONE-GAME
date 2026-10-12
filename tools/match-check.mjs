@@ -152,9 +152,8 @@ function bare({ mode = null, phase = 'fight', near = true } = {}) {
   }
   return sim;
 }
-// The wreck recipe of tools/two-ships-check.mjs: the last stand is used up, so the next blow is final.
+// The wreck recipe of tools/two-ships-check.mjs: no fall is running, so the next blow is final.
 const wreckShip = (sh) => {
-  sh.sim.goingDown.tryStart();
   sh.ctx.goingDown = null;
   sh.ctx.gdGrace = 0;
   sh.sim.damageHull(1000);

@@ -1,11 +1,9 @@
-// "GOING DOWN!" - the ship's last stand (once per mission): her LIFT has to beat her WEIGHT again.
+// "GOING DOWN!" - FALLING: her LIFT has to beat her WEIGHT again. (STRUCTURE.md WP6: the old once-a-mission last stand, which the hull bar triggered, is gone; this is the one rule.)
 //
-// When the hull first reaches 0 in a mission she does not break up. She FALLS for GOING_DOWN.TIME seconds, nothing can hurt her meanwhile, and the TV shows a big LIFT vs WEIGHT balance bar
-// made of the real numbers of the flight (measure()):
-//   WEIGHT  the build's weight plus what moves (balance.js: crew, coal in the firebox, shells, bombs, loads on the decks, what is carried), the cargo still in the racks - less the coal
-//           bunker's stock if the crew has dumped it. Falls the moment something goes overboard.
-//   LIFT    the gasbags' lift (by size, and by how much gas they hold: the torn bags start nearly flat), the hot gas of a boiler at overdrive, engines pointing up (engines.js) - less the lift
-//           a lopsided ship spills (dump evenly!).
+// The TV shows a big LIFT vs WEIGHT balance bar made of the real numbers of the flight (physical()):
+//   WEIGHT  the gas she needs to hover: the neutral fill, the water in her, the torn bags, ragged canvas, the loads on her decks (and the hold), heavy engines, the coal and bombs aboard. Falls the
+//           moment something goes overboard.
+//   LIFT    the gasbags' lift (by how much gas they hold), thermals, engines pointing up (engines.js).
 // The ways to bring the two together, each a job for the crew (job arrows on the phones, jobsFor; bots, botJobs):
 //   DUMP WEIGHT  cargo that shook loose on the decks is shovelled overboard (the SHOVEL job, cargo.js); hold Action at the bomb bay to let the bomb load go; hold Action at the coal
 //                bunker to dump its stock (then there is nothing to stoke with, and the bunker stays empty a while after);
@@ -13,20 +11,18 @@
 //   FULL STEAM   coal into the boiler: more pressure = hotter gas = more lift - but past BOILER.WARN_AT the boiler can blow, so somebody VENTS the steam;
 //   DUMP THE SCRAP  (LOOP.md G1) hold Action at the hold bin to throw the whole hold overboard: scrap is weight too, and the first thing the crew gives up before cutting a section away;
 //   CUT AWAY     the last resort: hold Action at a marked joint to cut a heavy section away (breakOff.js, cause 'jettison'; lost until the sky-dock rebuilds it).
-// Lift beating weight by MARGIN for HOLD seconds = "SHE HOLDS!" (hull SURVIVE_HULL, levelled out). Otherwise the normal wreck happens (so voyages may limp home on a spare gasbag).
 //
-// WITH STRUCTURE ON (STRUCTURE.md, config.STRUCTURE) it is no longer a last stand but the CONTINUOUS rule for lift: FALLING starts whenever her lift is short of her weight by MARGIN for LIFT.START
-// seconds while she sinks (and the helm is not venting on purpose), and ends after her lift beats her weight for LIFT.END seconds (SHE HOLDS! and LIFT.GRACE seconds of calm). It can happen any number
-// of times, with LIFT.COOLDOWN seconds between alarms. Lift and weight are the PHYSICAL ones (the gas she is made to hover on against what the bags have to carry: the canvas, loads, flood, heavy
-// engines), the ones the flight really uses; no leaks are spawned and no cargo shaken loose - real holes and real weight are the emergency. She falls by the flight physics, not a fixed rate. The
-// loss is the CRASH: sitting on the ground (or the sea) with lift short of weight for CRASH.TIME seconds.
+// FALLING (config.STRUCTURE) is the CONTINUOUS rule for lift: it starts whenever her lift is short of her weight by MARGIN for LIFT.START seconds while she sinks (and the helm is not venting on
+// purpose), and ends after her lift beats her weight for LIFT.END seconds (SHE HOLDS! and LIFT.GRACE seconds of calm). It can happen any number of times, with LIFT.COOLDOWN seconds between alarms.
+// Lift and weight are the PHYSICAL ones (the ones the flight really uses); no leaks are spawned and no cargo shaken loose - real holes and real weight are the emergency. She falls by the flight
+// physics, not a fixed rate. The loss is the CRASH: sitting on the ground (or the sea) with lift short of weight for CRASH.TIME seconds. A ship with no frame (the enemy gunship, a Versus ship)
+// has no fall: structure.on() is false and update() does nothing.
 //
-// This file owns the rules; shipSim.js / simulation.js call the small hooks (tryStart, active/protect, onStoke, update, holdAction/perform, pumpMul, newMission).
+// This file owns the rules; shipSim.js / simulation.js call the small hooks (startFall, active/protect, onStoke, update, holdAction/perform, newMission).
 import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
-import { altBounds } from './course.js';
 import { pop } from './popups.js';
-import { refillBags, liftGas } from './gasBags.js';
+import { liftGas } from './gasBags.js';
 import { mainShip, shipOf } from './ships.js';
 import { thrustOf } from './shipBuild.js';
 import { toWorldX, toWorldY } from './pose.js';
@@ -56,16 +52,15 @@ export function hatchesWorth(state) {
   return state.hatches.filter((h) => !h.want && ((state.loads || []).some((ld) => ld.d === h.d && ld.x > h.x0 && ld.x < h.x1) || coals.some((co) => co.d === h.d && co.x > h.x0 - R && co.x < h.x1 + R)));
 }
 
-export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHoleAt, getCargo, breakOff, getStructure }) {
-  const cargo = { place: (...a) => getCargo().place(...a), spawn: (...a) => getCargo().spawn(...a), worldAt: (...a) => getCargo().worldAt(...a) }; // (cargo.js is made after this, shipSim.js)
+export function createGoingDown({ state, phoneFx, wreck, getCargo, breakOff, getStructure }) {
+  const cargo = { spawn: (...a) => getCargo().spawn(...a), worldAt: (...a) => getCargo().worldAt(...a) }; // (cargo.js is made after this, shipSim.js)
   const ship = mainShip(state); // (the ship that falls: one of these per ship)
   const L = ship.layout;
   const tb = () => tables(L);
   const shipPop = (x, y, kind, color, size) => pop(state, toWorldX(ship, x), toWorldY(ship, y), kind, color, size); // (a point on the ship)
-  let used = false; // the last stand has been used in this mission
-  let lowT = 0, cdT = 0, lastGas = 50, rise = 0, groundT = 0, stallT = 0; // (structure on: seconds she has been short of lift while sinking; seconds before the next alarm may sound)
-  const live = () => { const s = getStructure && getStructure(); return !!(s && s.on()); }; // (STRUCTURE.md: the continuous rule)
-  state.goingDown = null; // { t, time, lift, weight, need, hold, m, holes, joints, ... } (see tryStart)
+  let lowT = 0, cdT = 0, lastGas = 50, rise = 0, groundT = 0, stallT = 0; // (seconds she has been short of lift while sinking; seconds before the next alarm may sound)
+  const live = () => { const s = getStructure && getStructure(); return !!(s && s.on()); }; // (STRUCTURE.md: a ship with a frame; the enemy gunship, a Versus ship and a half that split off have no fall)
+  state.goingDown = null; // { t, time, lift, weight, need, hold, m, holes, joints, ... } (see beginLive)
   state.gdBanner = null; // { text, sub, color, t, max } big words in the middle of the TV
   state.gdGrace = 0; // seconds she cannot be hurt after holding
   state.gdSince = 99; // seconds since she last held (SHE HOLDS!): raiders.js lets no boarders come for RAIDERS.HOLD_CALM seconds after it
@@ -105,42 +100,8 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
   };
 
   // ---- the emergency ----
-  const protect = () => (live() ? state.gdGrace > 0 : !!state.goingDown || state.gdGrace > 0); // nothing can hurt her (with structure on: only for a moment after SHE HOLDS)
+  const protect = () => state.gdGrace > 0; // nothing can hurt her (for a moment after SHE HOLDS)
   const active = () => !!state.goingDown;
-  const pumpMul = () => (state.goingDown && !live() ? GD.PUMP_MUL : 1); // (the torn bags take only part of what the pump sends)
-
-  const spawnHoles = (g) => {
-    const want = g.required;
-    const pool = state.gasHoles.filter((h) => !h.gd).slice(0, want);
-    g.holes = pool;
-    let guard = 0;
-    while (g.holes.length < want && guard++ < 40) {
-      let x = 400 + Math.random() * 640;
-      const nb = L.gasbags.length, bag = nb > 1 ? L.gasbags[g.holes.length % nb] : null; // (several bags: the leaks are spread over them, one bag after another)
-      if (bag) x = clamp(x, bag.x0 + 30, bag.x1 - 30);
-      if (g.holes.some((h) => Math.abs(h.x - x) < 140)) continue;
-      const h = gasHoleAt(x, L.gasbag.cy + 120, bag ? g.holes.length % nb : undefined);
-      h.prog = 0;
-      state.gasHoles.push(h);
-      g.holes.push(h);
-    }
-    for (const h of g.holes) h.gd = true;
-  };
-
-  // The cargo that shakes loose on her decks (spread along the main and lower decks, crates and sandbags in turn, so the loads are even): returns the weight added.
-  const spawnCargo = (n) => {
-    const C = GD.CARGO, decks = [tb().MAIN_D, tb().LOWER_D].filter((d, i, a) => d >= 0 && a.indexOf(d) === i);
-    const count = clamp(Math.round(C.BASE + n * C.PER_CREW), C.MIN, C.MAX);
-    let w = 0;
-    if (!decks.length) return w;
-    for (let k = 0; k < count; k++) {
-      const d = decks[k % decks.length], pl = L.platforms[d];
-      const x = pl.x0 + 80 + ((pl.x1 - pl.x0 - 160) * ((k * 0.618 + 0.17) % 1)); // (a golden-ratio spread: the loads fall on both ends and the middle)
-      const ld = cargo.place(k % 2 ? 'sandbag' : 'crate', d, x);
-      w += ld.w;
-    }
-    return w;
-  };
 
   // The marked joints where a heavy section can be cut away: the ends of the decks, tried with the break-off planner; the heaviest ones that do not take the helm, a boiler, a coal
   // bunker or a gasbag with them. { d, x (a spot on the part that stays), label, mass, spec, prog }.
@@ -278,132 +239,17 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     }
   };
 
-  const tryStart = () => {
-    if (live()) { if (state.goingDown || state.ship.down) return false; beginLive(physical()); return true; } // (structure on: there is no once-a-mission last stand, updateLive starts the fall whenever she needs it - this starts it now, for the gates)
-    if (!GD.ENABLED || used || state.goingDown || state.ship.down || state.phase !== 'flying') return false;
-    used = true;
-    const n = crewCount();
-    const g = (state.goingDown = {
-      t: 0,
-      time: GD.TIME + GD.TIME_PER_MISSING * clamp(8 - n, 0, 6),
-      crew: n,
-      required: clamp(GD.LEAKS_MIN + Math.floor((n - 1) / 3), GD.LEAKS_MIN, GD.LEAKS_MAX),
-      holes: [],
-      joints: [],
-      hold: 0, // seconds her lift has beaten her weight in a row
-      need: 0, need0: 1, // how many points short she is (weight + margin - lift)
-      coalShed: 0, // the coal bunker's stock dumped (weight points)
-      coalGone: false,
-      cuts: 0,
-      dumped: 0,
-      m: null,
-      bombJob: null,
-      coalJob: null,
-      beep: 0,
-    });
-    if (tb().COAL) g.coalJob = { d: tb().COAL.d, x: tb().COAL.x, prog: 0, worked: false };
-    if (tb().BAY) g.bombJob = { d: tb().BAY.d, x: tb().BAY.x, prog: 0, worked: false };
-    spawnHoles(g);
-    spawnCargo(n);
-    // The torn bags have lost most of their gas.
-    for (const b of state.bags) b.gas = Math.min(b.gas, GD.START_GAS);
-    g.joints = findJoints();
-    g.m = measure();
-    g.need = g.m.weight + GD.MARGIN - g.m.lift;
-    g.need0 = Math.max(10, g.need);
-    state.ship.hull = GD.HOLD_HULL;
-    state.ship.shake = 1.4;
-    say('GOING DOWN! DUMP THE WEIGHT - PATCH AND PUMP - FULL STEAM!', 5);
-    state.sfxQ.push(['alarm']);
-    for (const p of humans()) phoneFx(p, 'GOING DOWN! Lift must beat weight: dump cargo overboard, patch the glowing leaks, pump, stoke the boiler (and vent it)!', [200, 80, 200, 80, 400]);
+  const finish = () => { state.goingDown = null; };
+  // Start the fall now (the gates use it; in the game updateLive starts it whenever her lift is short).
+  const startFall = () => {
+    if (state.goingDown || state.ship.down || !live()) return false;
+    beginLive(physical());
     return true;
   };
 
-  const finish = () => {
-    const g = state.goingDown;
-    if (g) for (const h of g.holes) delete h.gd;
-    state.goingDown = null;
-  };
-
-  const succeed = (why) => {
-    const g = state.goingDown;
-    if (g && g.coalGone) state.gdCoalOut = GD.DUMP.COAL_REFILL; // (the bunker was dumped: it stays empty a while)
-    if (g && state.moment && state.momentTake) state.moment('going-down-saved', { who: state.momentTake('gd').slice(0, 3).map((r) => r.ref), where: null, data: { cuts: g.cuts } }); // (the Ship's Book: whoever patched, stoked, cut and dumped while she fell)
-    finish();
-    state.ship.hull = GD.SURVIVE_HULL;
-    state.ship.vy = 0;
-    state.ship.shake = 1.2;
-    for (const b of state.bags) b.gas = Math.min(b.gas, config.GAS.NEUTRAL + GD.LEVEL_GAS); // (pumped full to save her: she levels out gently instead of shooting up)
-    refillBags(state, config.GAS.NEUTRAL + 6);
-    state.gdGrace = GD.GRACE;
-    state.gdSince = 0;
-    state.gdBanner = { text: 'SHE HOLDS!', sub: why || 'Her lift beats her weight - levelling out with a sliver of hull...', color: '#7bdc8a', t: 3.5, max: 3.5 };
-    say('SHE HOLDS! PATCH HER UP!', 4, 'objective');
-    state.sfxQ.push(['kill']);
-    shipPuff(800, 600, '#ffffff', 22);
-    for (const p of humans()) phoneFx(p, 'SHE HOLDS!', [60, 40, 60, 40, 200]);
-  };
-
-  const fail = (text) => {
-    finish();
-    wreck(text); // (the last stand is used up, so this is a real wreck)
-  };
-
-  // Called every frame while flying (after the flight maths, before the pitch is worked out).
+  // Called every frame while flying (after the flight maths, before the pitch is worked out). A ship with no frame (the enemy gunship, a Versus ship) has no fall.
   const update = (dt) => {
-    if (live()) return updateLive(dt);
-    state.gdSince += dt;
-    if (state.gdBanner && (state.gdBanner.t -= dt) <= 0) state.gdBanner = null;
-    if (state.gdCoalOut > 0) state.gdCoalOut = Math.max(0, state.gdCoalOut - dt);
-    if (state.gdGrace > 0) {
-      state.gdGrace -= dt;
-      state.ship.hull = Math.max(state.ship.hull, GD.SURVIVE_HULL * 0.9);
-    }
-    const g = state.goingDown;
-    if (!g || state.ship.down) return;
-    g.t += dt;
-    state.ship.hull = GD.HOLD_HULL;
-    state.ship.shake = Math.max(state.ship.shake, 0.35);
-    // The glowing leaks lose gas fast until they are patched.
-    const extra = config.GAS.LEAK_PER_HOLE * (GD.LEAK_MUL - 1);
-    for (const h of openHoles(g)) {
-      const b = state.bags[h.bag < state.bags.length ? h.bag | 0 : 0];
-      if (b) b.gas = Math.max(0, b.gas - extra * dt);
-    }
-    // Holding Action wears off like any other job.
-    for (const o of [...g.joints, g.coalJob, g.bombJob, g.scrapJob]) {
-      if (!o) continue;
-      if (!o.worked) o.prog = Math.max(0, (o.prog || 0) - dt * 0.4);
-      o.worked = false;
-    }
-    // The numbers, and how far short she is.
-    const m = (g.m = measure(g.coalShed));
-    g.need = m.weight + GD.MARGIN - m.lift;
-    g.lift = m.lift;
-    g.weight = m.weight;
-    if (g.t <= dt * 1.5) g.need0 = Math.max(10, g.need); // (the first look with the cargo on the decks: how far short she starts)
-    // The sinking: faster the longer it goes, slower the nearer her lift is to her weight. Never into the rock (the course pushes her out and she scrapes harmlessly), and never
-    // below the lowest height a plain course allows.
-    const u = clamp(g.t / g.time, 0, 1);
-    const short = clamp(g.need / g.need0, 0, 1);
-    let rate = GD.FALL_RATE * (GD.FALL_START + (1 - GD.FALL_START) * u) * (1 - GD.FALL_BRAKE * (1 - short));
-    if (state.course && state.course.scraping) rate = 0;
-    const lo = state.course ? altBounds(state).lo : -Infinity;
-    let alt = state.ship.alt - rate * dt;
-    if (isFinite(lo) && alt < lo) alt = Math.max(lo, state.ship.alt);
-    mainShip(state).pose.y = -(alt);
-    state.ship.vy = Math.min(state.ship.vy || 0, 0);
-    state.goingDownRate = rate;
-    // Alarm bleeps.
-    if ((g.beep -= dt) <= 0) {
-      g.beep = 1.1;
-      state.sfxQ.push(['alarm']);
-    }
-    // Saved? Her lift must beat her weight by the margin, and stay there.
-    if (g.need <= 0) g.hold += dt;
-    else g.hold = Math.max(0, g.hold - dt * 1.5);
-    if (g.hold >= GD.HOLD) return succeed();
-    if (g.t >= g.time) return fail("SHE FELL FROM THE SKY!");
+    if (live()) updateLive(dt);
   };
 
   // A load of coal went into the boiler (shipSim.js 'stoke'): the steam jumps - full steam is more lift, but the boiler blows at the top.
@@ -495,14 +341,13 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     }
   };
 
-  // The mission ended (beacon / home) while she was falling: she limps in.
+  // The mission ended (beacon / home) while she was falling: the fall ends, she limps in.
   const missionDone = () => {
-    if (state.goingDown) { if (live()) finish(); else succeed('Home at last!'); }
+    if (state.goingDown) finish();
   };
 
-  // A new mission: the last stand is back, the coal bunker is stocked.
+  // A new mission: the coal bunker is stocked.
   const newMission = () => {
-    used = false;
     lowT = 0; cdT = 0; groundT = 0; state.crashT = 0;
     if (state.goingDown) finish();
     state.gdGrace = 0;
@@ -558,7 +403,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     say('CARGO THROUGH THE HATCH! -' + Math.round(w) + ' WEIGHT', 2.5, 'info');
   };
 
-  return { live, physical, crashTime, tryStart, update, protect, active, pumpMul, onStoke, holdAction, perform, missionDone, newMission, reset, pitch, status, jobsFor, measure, noteDumped };
+  return { live, physical, crashTime, startFall, update, protect, active, onStoke, holdAction, perform, missionDone, newMission, reset, pitch, status, jobsFor, measure, noteDumped };
 }
 
 // The hold's dump job always stands where the bin is NOW (a part that broke off or a split changes the decks under it): the progress of a hold in hand is kept.

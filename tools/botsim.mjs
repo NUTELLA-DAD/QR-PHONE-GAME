@@ -95,6 +95,7 @@ if (args.build && args.build !== 'classic') {
   applyBuild(await loadBuild(args.build, BUILDS));
 }
 const { createRunStats } = await load('modules/host/buildStats.js');
+const { hullOrStructure } = await load('modules/host/structure.js');
 const sim = createSimulation();
 const state = sim.state;
 if (args.ships > 1) {
@@ -245,7 +246,7 @@ for (let step = 1; step <= totalSteps; step++) {
   lastPress = state.ship.press;
   if (state.bags.length > 1) { if (state.bagAlert && state.bagAlert !== lastBagAlert) { bagDowns++; lastBagAlert = state.bagAlert; } if (state.phase === 'flying') for (const b of state.bags) bagMin = Math.min(bagMin, b.gas); }
   if (state.phase === 'flying' && state.searchlights) { lightSteps++; state.searchlights.forEach((l, i) => { if (l.manned) lightManned[i] = (lightManned[i] || 0) + 1; }); if (state.litTargets.length) lightLit++; }
-  if (state.phase === 'flying') { hullSum += state.ship.hull; hullN++; const nf = state.fires.length; fireSteps += nf; if (nf) fireStepsAny++; if (nf > firePrev) fireStarts += nf - firePrev; firePrev = nf; fireHullEaten += nf * 0.35 * 2 * dt; } else firePrev = 0;
+  if (state.phase === 'flying') { hullSum += hullOrStructure(state.ship); hullN++; const nf = state.fires.length; fireSteps += nf; if (nf) fireStepsAny++; if (nf > firePrev) fireStarts += nf - firePrev; firePrev = nf; fireHullEaten += nf * config.SHIP.DRAIN.FIRE * config.SHIP.DRAIN.MUL * dt; } else firePrev = 0;
   if (state.phase === 'flying' && !state.ship.down) {
     const dd = distPrev == null ? 0 : state.course.dist - distPrev;
     if (distPrev == null || Math.abs(dd) >= 200) { segSteps = 0; altRef = null; } else distTravel += dd; // (a new mission map or a restart resets the distance: skip that jump and start a new stretch)
@@ -280,7 +281,7 @@ for (let step = 1; step <= totalSteps; step++) {
   // --trace FILE: every N steps the ship's numbers at full precision (x, y = the pose's world position; alt/dist are what they are made of).
   if (traceRows && step % args.traceEvery === 0) {
     const sh = state.ships[0], p = sh.pose;
-    traceRows.push([step, state.phase, state.course.lap, p.x, p.y, state.ship.alt, state.course.dist, state.ship.speed, state.ship.pitch || 0, state.ship.vy || 0, state.ship.hull, state.ship.gas, killsTotal, wrecks].join('\t'));
+    traceRows.push([step, state.phase, state.course.lap, p.x, p.y, state.ship.alt, state.course.dist, state.ship.speed, state.ship.pitch || 0, state.ship.vy || 0, hullOrStructure(state.ship), state.ship.gas, killsTotal, wrecks].join('\t'));
   }
   // Watchdog: a vote that never resolves.
   stuckVoteSteps = state.vote ? stuckVoteSteps + 1 : 0;
@@ -288,7 +289,7 @@ for (let step = 1; step <= totalSteps; step++) {
   if (state.ships[0].pose.f !== lastFacing) { turns++; lastFacing = state.ships[0].pose.f; }
   if (process.env.TRACE && step % 300 === 0) console.log(`t ${step / 60}s alt ${Math.round(state.ship.alt)} vy ${Math.round(state.ship.vy || 0)} gas ${state.ship.gas.toFixed(0)} holes ${state.gasHoles.length} speed ${state.ship.speed.toFixed(2)} sail ${(state.sailPush || 0).toFixed(2)} dist ${Math.round(state.course.dist)} scrape ${state.course.scraping} hull ${Math.round(state.ship.hull)}`);
   if (step % 3600 === 0) {
-    console.log(`min ${step / 3600}: mission ${state.course.lap}, hull ${Math.round(state.ship.hull)}, kills ${killsTotal}, wrecks ${wrecks}`);
+    console.log(`min ${step / 3600}: mission ${state.course.lap}, hull ${Math.round(hullOrStructure(state.ship))}, kills ${killsTotal}, wrecks ${wrecks}`);
   }
 }
 
@@ -380,8 +381,8 @@ if (state.ships.length > 1) for (const sh of state.ships) console.log(`ship ${sh
 { const G = state.gasStats; if (G && state.bags.some((b) => b.type && b.type !== 'helium') || (G && (G.lit || G.exploded))) console.log(`gas: bags ${state.bags.map((b) => b.type).join('/')}, hydrogen scorched ${G.scorched}, alight ${G.lit}, exploded ${G.exploded}, fizzled ${G.fizzled}, chained ${G.chained}; hot air heat now ${state.hotAir ? state.hotAir.heat.toFixed(2) : 'n/a'} (lowest ${state.hotAir ? state.hotAir.min.toFixed(2) : 'n/a'}, cold calls ${G.hotCold})`); } // (GAS TYPES: printed only when a bag holds something other than helium)
 { const H = state.hatchStats; if ((state.hatches || []).length && H) console.log(`hatch: ${state.hatches.length} cargo drop hatch${state.hatches.length === 1 ? '' : 'es'}, opened ${H.opened}x, ${H.dropped} crates dropped by hand, ${H.loads} loads through it, ${H.tipped} raiders tipped, ${H.fell} crew fell through, coal chute ${H.dumped}x`); } // (a ship with a hatch part, the bots work the lever)
 {
-  const S = state.structStats; // STRUCTURE.md: how sound the frame was, what gave way, how often lift failed and who saved her (not printed with NO_STRUCTURE=1: the old baselines stand)
-  if (S && config.STRUCTURE.ENABLED && !config.PVP.ENABLED) console.log(`structure: meter mean ${S.meterN ? (S.meterSum / S.meterN).toFixed(1) : 'n/a'}% (lowest ${S.meterMin.toFixed(0)}%); gave way ${S.failures}x (break-offs ${S.breakoffs}, splits ${S.splits}, folds ${S.folds}); held at the last moment ${S.saves}x; shored up ${S.shored.toFixed(1)} segment-hp by hammer; lift failed ${S.falls}x (saved ${S.saved}), crashed ${S.crashes}x; halves in the sky now ${state.ships.filter((q) => q.piece).length}`);
+  const S = state.structStats; // STRUCTURE.md: how sound the frame was, what gave way, how often lift failed and who saved her
+  if (S && !config.PVP.ENABLED) console.log(`structure: meter mean ${S.meterN ? (S.meterSum / S.meterN).toFixed(1) : 'n/a'}% (lowest ${S.meterMin.toFixed(0)}%); gave way ${S.failures}x (break-offs ${S.breakoffs}, splits ${S.splits}, folds ${S.folds}); held at the last moment ${S.saves}x; shored up ${S.shored.toFixed(1)} segment-hp by hammer; lift failed ${S.falls}x (saved ${S.saved}), crashed ${S.crashes}x; halves in the sky now ${state.ships.filter((q) => q.piece).length}; falls by cause ${Object.entries(S.why || {}).map(([k, v]) => k + " " + v).join(", ") || "none"}`);
 }
 ringTrack.forEach((r, i) => { // (R0: one line for each ring the bots met: how it ended, the faces, the shutters, the specials)
   const S = r.stats, down = r.faces.filter((f) => f.down).length;

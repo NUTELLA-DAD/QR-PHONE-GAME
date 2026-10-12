@@ -16,6 +16,7 @@ import { hitForce } from './forces.js';
 import { hurt, knockOut } from './health.js';
 import { pop } from './popups.js';
 import { mainShip, shipOf } from './ships.js';
+import { creatureHit } from './structure.js';
 import { envIdOf } from './environments.js';
 
 const CR = () => config.CREATURES;
@@ -184,7 +185,7 @@ function impact(state, cr, ship, b, sea) {
   h.puff(wx, wy - 100, '#7a3a5a', 12);
   state.sfxQ.push(['impact']);
   state.ship.shake = Math.max(state.ship.shake || 0, 2);
-  if (sim && sim.damageHull) sim.damageHull(B.HULL);
+  creatureHit(ship, ix, iy, B.HULL, { power: B.POWER, kind: 'rock' }); // (STRUCTURE.md WP2: it smashes the keel under the shadow)
   hitForce(ship.ctx, ix, iy, B.POWER);
   shove(ship, Math.sign(mx - cr.base.x || 1) * B.KICK_X * ship.pose.f, -B.KICK_UP); // (flung up and a little sideways)
   // the crew: the ones at the impact are knocked out, those near it lose a heart, everyone is thrown about

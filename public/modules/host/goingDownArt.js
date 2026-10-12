@@ -253,7 +253,7 @@ function drawBalance(ctx, state, g, time) {
   if (saved) {
     ctx.fillStyle = '#7bdc8a';
     ctx.font = '22px ' + config.FONTS.DISPLAY;
-    ctx.fillText(`HOLD IT! ${Math.min(config.GOING_DOWN.HOLD, g.hold).toFixed(1)} / ${config.GOING_DOWN.HOLD}s`, x + w / 2, y + 80);
+    ctx.fillText(`HOLD IT! ${Math.min(config.STRUCTURE.LIFT.END, g.hold).toFixed(1)} / ${config.STRUCTURE.LIFT.END}s`, x + w / 2, y + 80);
   } else {
     ctx.fillStyle = need > 25 ? '#ff8a6c' : '#ffd23f';
     ctx.font = '22px ' + config.FONTS.DISPLAY;

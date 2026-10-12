@@ -17,6 +17,7 @@ import { createSpyglass } from './spyglass.js'; // the lookout's panning spyglas
 import { UPGRADES, UPGRADE_BLOCKS } from './upgrades.js';
 import { refillBags } from './gasBags.js';
 import { createMainShip, createShip, shipOf, eachShip, newGuns, transfer, areHostile, mendHull } from './ships.js';
+import { hullOrStructure } from './structure.js';
 import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
 import { createTowing } from './towing.js';
@@ -243,13 +244,9 @@ export function createSimulation() {
   W.moment = moments.moment;
   W.overboard = moments.overboard;
 
-  // The hull gave out: the ship breaks apart, then the whole game starts over.
+  // The frame gave out (or she crashed): the ship breaks apart, then the whole game starts over.
   function wreck(text = "SHE'S BREAKING UP!") {
     if (state.ship.down) return;
-    if (!main.sim.structure.on()) {
-      if (goingDown.active()) return; // (she is already falling: the fall decides)
-      if (goingDown.tryStart()) return; // the first time in a mission: GOING DOWN! - a last stand instead
-    }
     state.ship.hull = 0;
     const limp = canLimp(); // a spare gasbag takes the blow: the voyage goes on
     state.ship.down = limp ? config.LIMP.TIME : Math.max(config.WRECK.TIME, config.VOYAGE.WRECK_SUMMARY_TIME);
@@ -585,7 +582,7 @@ export function createSimulation() {
       if (Math.hypot(wx - toWorldX(main, layout.midPoint.x), wy - toWorldY(main, layout.midPoint.y)) < PC.SUPPLY_REACH) {
         mendHull(state, PC.SUPPLY_HULL);
         state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + PC.SUPPLY_COAL);
-        for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
+        for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + PC.SUPPLY_AMMO);
         state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + 1);
         puff(wx, wy, '#ffd23f', 20);
         pop(state, wx, wy - 120, 'SUPPLIES!', '#ffd23f', 1.4);
@@ -877,7 +874,7 @@ export function createSimulation() {
   };
 
   // Sky-dock offers: repairs that are actually needed, then random upgrades, then 'Cast off!'.
-  const needsHull = () => state.ship.hull < 99 || (main.sim.structure.on() && main.sim.structure.segs().some((g) => g.hp < 0.95)) || state.breaches.length || state.fires.length || modules.list.some((m) => m.broken || m.hp < m.max - 0.5);
+  const needsHull = () => hullOrStructure(state.ship) < 99 || (main.sim.structure.on() && main.sim.structure.segs().some((g) => g.hp < 0.95)) || state.breaches.length || state.fires.length || modules.list.some((m) => m.broken || m.hp < m.max - 0.5);
   const needsGas = () => state.bags.some((b) => b.gas < config.GAS.START * 0.95) || state.gasHoles.length;
   const mixedGas = () => layout.gasbags.some((b) => b.gasType);
   const needsCoal = () => state.ship.fuel < config.BOILER.FUEL_MAX * 0.85 || Object.values(state.GUNS).some((g) => g.ammo < g.max * 0.7) || state.bombBay.bombs < config.BOMBS.MAX;
@@ -1120,9 +1117,9 @@ export function createSimulation() {
     if (!ok.length) return cast;
     // A sensible crew fixes what is badly hurt first: the hull, then the gasbag, then coal and shells.
     const want = (id) => ok.find((i) => v.options[i].id === id);
-    if (state.ship.hull < SH.BOT_REPAIR_HULL && want('repair-hull') != null) return want('repair-hull');
+    if (hullOrStructure(state.ship) < SH.BOT_REPAIR_HULL && want('repair-hull') != null) return want('repair-hull');
     if ((state.gasHoles.length >= 2 || state.ship.gas < 30) && want('repair-gas') != null) return want('repair-gas');
-    if (want('mend-her') != null && (state.ship.hull < SH.BOT_REPAIR_HULL || state.gasHoles.length >= 2 || state.ship.gas < 30)) return want('mend-her'); // (F6: the one repair card of the 60-second dock)
+    if (want('mend-her') != null && (hullOrStructure(state.ship) < SH.BOT_REPAIR_HULL || state.gasHoles.length >= 2 || state.ship.gas < 30)) return want('mend-her'); // (F6: the one repair card of the 60-second dock)
     const rebuild = ok.find((i) => v.options[i].rebuild != null); // (S.5i: the oldest REBUILD card they can pay for: it mends the newer ones too)
     if (rebuild != null && Math.random() < config.BREAKOFF.BOT_REBUILD) return rebuild;
     const toHelium = ok.find((i) => v.options[i].gas === 'helium'); // (GAS TYPES: a crew whose hydrogen bag has been scorched swaps it for helium)

@@ -89,6 +89,7 @@ const { createSimulation } = await load('modules/host/simulation.js');
 const S = await load('modules/host/ships.js');
 const T = await load('modules/host/pose.js');
 const { hullLost } = await load('modules/host/structure.js'); // (STRUCTURE.md: what the Kraken's blow costs her is the soundness of her frame it takes, until WP2 puts it on a segment)
+const frameHp = (ship) => ship.sim.structure.segs().reduce((n, g) => n + g.hp, 0); // (STRUCTURE.md WP2: a creature hits the segment under the blow - the sum of the frame's soundness drops wherever it lands; the hull meter reads only the weakest load-bearing segment)
 const A = await load('modules/host/aim.js');
 const CS = await load('modules/host/creatureSystem.js');
 const FL = await load('modules/host/flame.js');
@@ -589,9 +590,9 @@ const freedBy = (cr) => (cr.grips[0] && cr.grips[0].mode === 'recoil' ? cr.grips
   const B = arena();
   B.ship.sim.breakOff = () => null;
   const gb = seize(B);
-  const h0 = B.st.ship.hull;
+  const h0 = B.st.ship.hull, f0 = frameHp(B.ship);
   for (let i = 0; i < secs(GP.TIME + 3) && B.cr.grips[0] && B.cr.grips[0].mode === 'hold'; i++) step(B.sim);
-  report(!!gb && B.cr.stats.hulled === 1 && B.st.ship.hull < h0 - 0.5, `a ship with nothing to break off takes the hull blow instead (hull ${h0.toFixed(0)} -> ${B.st.ship.hull.toFixed(0)})`);
+  report(!!gb && B.cr.stats.hulled === 1 && frameHp(B.ship) < f0 - 0.02, `a ship with nothing to break off takes the hull blow instead (frame soundness ${f0.toFixed(2)} -> ${frameHp(B.ship).toFixed(2)} segments)`);
   void hull0;
 }
 
@@ -717,7 +718,7 @@ const freedBy = (cr) => (cr.grips[0] && cr.grips[0].mode === 'recoil' ? cr.grips
   const msgs = [];
   cr.hooks.phoneFx = (p, t) => msgs.push(t);
   standOn(p1, ship, top, (PLS(ship)[top].x0 + PLS(ship)[top].x1) / 2, null);
-  const hull0 = st.ship.hull;
+  const hull0 = st.ship.hull, f0 = frameHp(ship);
   cr.ai.slapT = 0;
   let banner = null, n = 0;
   for (; n < secs(8) && !(cr.stats.slaps > 0); n++) {
@@ -731,7 +732,7 @@ const freedBy = (cr) => (cr.grips[0] && cr.grips[0].mode === 'recoil' ? cr.grips
   report(cr.stats.slaps === 1 && /TOP DECK/.test(banner || '') && msgs.some((t) => /SLAP/.test(t)), `the slap is announced ("${banner}") and lands after ${(n / 60).toFixed(1)} s`);
   report(p1.hearts === config.HEALTH.MAX - SL.HEARTS && p1.ko <= 0, `it costs a heart and does not one-shot (${p1.hearts} of ${config.HEALTH.MAX} hearts)`);
   report(p1.fly === true || p1.fall === true || p1.d !== top, 'and flings him off the deck into the air (the airborne system takes him from there)');
-  report(st.ship.hull < hull0 && cr.stats.slapHits === 1, `with a little hull damage (${hull0.toFixed(1)} -> ${st.ship.hull.toFixed(1)})`);
+  report(frameHp(ship) < f0 - 0.002 && cr.stats.slapHits === 1, `with a little hull damage (frame soundness ${f0.toFixed(3)} -> ${frameHp(ship).toFixed(3)} segments)`);
   // a person at a station is hurt but kept where he is
   const B = arena();
   const q = B.st.players.p1;
@@ -1025,11 +1026,11 @@ function CreatureExpose(cr) { for (const p of cr.parts) if (p.kind === 'heart') 
   const p2 = (st.players.p2 = { ...p1, id: 'p2', name: 'P2' });
   const hold = () => { standOn(p1, ship, deck, Math.max(pl.x0 + 20, Math.min(pl.x1 - 20, ix + 500))); standOn(p2, ship, deck, ix); };
   hold();
-  const hull0 = st.ship.hull, lost0 = hullLost(ship), vy0 = ship.pose.vy, ev0 = st.breakStats.events;
+  const hull0 = st.ship.hull, lost0 = hullLost(ship), f0 = frameHp(ship), hpSeg0 = ship.sim.structure.segs().map((q) => q.hp), vy0 = ship.pose.vy, ev0 = st.breakStats.events;
   for (let i = 0; i < secs(2) && !cr.breach.impacted; i++) { hold(); step(sim); }
   const b = cr.breach;
   report(b.impacted && b.hit === true && cr.stats.breachHits === 1, `she stayed in the shadow, low over the water (keel ${b.gap.toFixed(0)} px above it, reach ${BR.REACH}): it smashes into the hull`);
-  report((config.STRUCTURE.ENABLED ? hullLost(ship) > lost0 + 0.5 : st.ship.hull < hull0 - 1) && ship.pose.vy < vy0 - 100, `big hull damage (${hull0.toFixed(1)} -> ${st.ship.hull.toFixed(1)}; ${(hullLost(ship) - lost0).toFixed(2)}% of her frame) and a kick up (${vy0.toFixed(0)} -> ${ship.pose.vy.toFixed(0)} px/s)`);
+  report(Math.max(...ship.sim.structure.segs().map((q, i) => (hpSeg0[i] ?? q.hp) - q.hp)) > 0.01 && ship.pose.vy < vy0 - 100, `big hull damage (the keel segment under the shadow lost ${(Math.max(...ship.sim.structure.segs().map((q, i) => (hpSeg0[i] ?? q.hp) - q.hp)) * 100).toFixed(1)}% of its soundness; ${(hullLost(ship) - lost0).toFixed(2)}% of her frame; frame ${f0.toFixed(2)} -> ${frameHp(ship).toFixed(2)}) and a kick up (${vy0.toFixed(0)} -> ${ship.pose.vy.toFixed(0)} px/s)`);
   report(p1.hearts === config.HEALTH.MAX - 1 && p2.ko > 0, `crew near the impact lose a heart (${p1.hearts} of ${config.HEALTH.MAX}) and the one at it is knocked out (${p2.ko.toFixed(0)} s)`);
   void ev0;
   // exposed in the air: heart and beak open, shots do more
@@ -1888,10 +1889,10 @@ const spawnCr = (ctx, kind = 'drake') => ctx.sim.creatures.spawn(kind);
   {
     const b = burnOn(SBD.BUILDS.classic, 'wood');
     const { sim, st, ship } = b.ctx;
-    const hull0 = st.ship.hull, hearts0 = b.p1.hearts ?? config.HEALTH.MAX;
+    const hull0 = st.ship.hull, f0 = frameHp(ship), hearts0 = b.p1.hearts ?? config.HEALTH.MAX;
     let lit = 0, hearts = 0, hull = false;
     for (let i = 0; i < 25; i++) { const o = CBR.breathBurn(st, b.cr, ship, b.cone, 0.1); lit += o.decks; hearts += o.hearts; hull = hull || o.hull; step(sim, 6); }
-    report(lit > 0 && st.fires.length > 0 && hull && st.ship.hull < hull0, `the cone lights a wooden deck by its flammability (${lit} spots lit, ${st.fires.length} fires burning) and scorches the hull (${hull0.toFixed(0)} -> ${st.ship.hull.toFixed(1)})`);
+    report(lit > 0 && st.fires.length > 0 && hull && frameHp(ship) < f0, `the cone lights a wooden deck by its flammability (${lit} spots lit, ${st.fires.length} fires burning) and scorches the hull (frame soundness ${f0.toFixed(2)} -> ${frameHp(ship).toFixed(2)} segments)`);
     report(hearts > 0 && (b.p1.hearts ?? config.HEALTH.MAX) < hearts0 + 1e-9 && (b.p1.hearts < hearts0 || b.p1.ko > 0), `a crewman in the cone loses hearts (${hearts0} -> ${b.p1.hearts})`);
   }
   // armour plate
@@ -1928,9 +1929,9 @@ const spawnCr = (ctx, kind = 'drake') => ctx.sim.creatures.spawn(kind);
   onlyAttack('swoop');
   const msgs = [];
   cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t });
-  let hull0 = st.ship.hull, hits = 0, tries = 0, seen = {};
+  let hull0 = st.ship.hull, f0 = frameHp(ship), hits = 0, tries = 0, seen = {};
   for (; tries < 4 && !hits; tries++) {
-    hull0 = st.ship.hull;
+    hull0 = st.ship.hull; f0 = frameHp(ship);
     wake(cr);
     until(sim, () => actIs(cr, 'swoop'), 15);
     seen.banner = seen.banner || /SWOOP/.test(st.ev.warnText);
@@ -1938,7 +1939,7 @@ const spawnCr = (ctx, kind = 'drake') => ctx.sim.creatures.spawn(kind);
     until(sim, () => cr.stats.swoopHits > hits || !actIs(cr, 'swoop'), 12);
     hits = cr.stats.swoopHits;
   }
-  report(seen.banner && seen.ring && hits >= 1 && st.ship.hull < hull0 && cr.drake.dazed > 0, `a SWOOP: the banner, the ring on the spot, then it bumps the hull (${hull0.toFixed(1)} -> ${st.ship.hull.toFixed(1)}) and is DAZED ${cr.drake.dazed.toFixed(1)} s (everything hurts it ${DRK.SWOOP.DAZED_MUL}x)`);
+  report(seen.banner && seen.ring && hits >= 1 && frameHp(ship) < f0 && cr.drake.dazed > 0, `a SWOOP: the banner, the ring on the spot, then it bumps the hull (frame soundness ${f0.toFixed(2)} -> ${frameHp(ship).toFixed(2)}) and is DAZED ${cr.drake.dazed.toFixed(1)} s (everything hurts it ${DRK.SWOOP.DAZED_MUL}x)`);
   const wing = cr.parts.find((p) => p.id === 'wingN'), wp = on(wing), h0 = wing.hp;
   st.shells.push({ x: wp.x, y: wp.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
   step(sim, 3);
@@ -2147,7 +2148,7 @@ const spawnCr = (ctx, kind = 'drake') => ctx.sim.creatures.spawn(kind);
   const wing = cr.parts.find((p) => p.id === 'wingN');
   CS.hurtCreature(st, { part: wing, seg: 3 }, wing.hp + 1, { src: 'shell', who: 'p1' });
   until(sim, () => cr.drake.mode === 'crawl', 8);
-  const hull0 = st.ship.hull;
+  const hull0 = st.ship.hull, f0 = frameHp(ship);
   cr.ai.breather = 0;
   cr.drake.nextT = 1e9;
   cr.drake.lastGape = cr.age + 1e9;
@@ -2649,9 +2650,9 @@ const roostedBird = () => {
   const { sim, st, ship, cr } = A;
   onlyBird('pass');
   noRoost();
-  let hull0 = st.ship.hull, hits = 0, seen = {};
+  let hull0 = st.ship.hull, f0 = frameHp(ship), hits = 0, seen = {};
   for (let tries = 0; tries < 4 && !hits; tries++) {
-    hull0 = st.ship.hull;
+    hull0 = st.ship.hull; f0 = frameHp(ship);
     wakeB(cr);
     until(sim, () => bActIs(cr, 'pass'), 15);
     seen.banner = seen.banner || /DIVES/.test(st.ev.warnText);
@@ -2659,7 +2660,7 @@ const roostedBird = () => {
     until(sim, () => cr.stats.passHits > hits || !bActIs(cr, 'pass'), 12);
     hits = cr.stats.passHits;
   }
-  report(seen.banner && seen.ring && hits >= 1 && st.ship.hull < hull0 && cr.bird.dazed > 0, `a diving PASS: the banner, the ring on the spot, then it bumps the hull (${hull0.toFixed(1)} -> ${st.ship.hull.toFixed(1)}) and is DAZED ${cr.bird.dazed.toFixed(1)} s (everything hurts it ${TB.PASS.DAZED_MUL}x)`);
+  report(seen.banner && seen.ring && hits >= 1 && frameHp(ship) < f0 && cr.bird.dazed > 0, `a diving PASS: the banner, the ring on the spot, then it bumps the hull (frame soundness ${f0.toFixed(2)} -> ${frameHp(ship).toFixed(2)}) and is DAZED ${cr.bird.dazed.toFixed(1)} s (everything hurts it ${TB.PASS.DAZED_MUL}x)`);
   const wing = cr.parts.find((p) => p.id === 'wingN'), wp = on(wing), h0 = wing.hp;
   st.shells.push({ x: wp.x, y: wp.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
   step(sim, 3);

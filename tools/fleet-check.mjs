@@ -314,7 +314,7 @@ config.COLLIDE.ENABLED = true;
     report(g1 > 0 && g2 >= g1 + 6, `darkness: with a second ship the overlay cuts light for her glow and her two beams as well (${g1} gradients a frame with one ship, ${g2} with two)`);
   }
   // (e) STRUCTURE.md: a ship that splits in the sky - both halves are drawn (the one with no gasbag too), through the fall, the crash and after, with the structure bar and the lift / weight tug on the HUD
-  if (config.STRUCTURE.ENABLED) {
+  {
     const { sim, st, A } = boot({ extra: 0, bots: 5 });
     const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
     let exc = frames(sim, st, renderer, 90);

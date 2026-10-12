@@ -66,7 +66,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     e.air = e.stalled = e.pullDir = null;
     e.bank = 0;
     e.x = mid.x + side * F.RUN_FROM;
-    e.y = mid.y + rand(-700, 200);
+    e.y = mid.y + rand(F.SPAWN_BAND[0], F.SPAWN_BAND[1]);
     e.heading = side > 0 ? Math.PI : 0;
     e.fire = 0;
     startRun(e);

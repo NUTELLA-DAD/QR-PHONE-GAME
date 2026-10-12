@@ -208,10 +208,13 @@ console.log('--- (a) moments are recorded ---');
   const A = boot(8, { seed: 4 });
   const { sim, st } = A;
   step(sim, 60 * 20);
-  st.ship.hull = 0;
-  step(sim);
-  const started = !!st.goingDown;
-  const saved = until(sim, () => !st.goingDown, 60);
+  const ours = st.ships[0]; // (STRUCTURE.md WP6: the fall is lift failing - torn bags, four holes and no steam - and the bots save her)
+  for (const b of st.bags) b.gas = 8;
+  for (let k = 0; k < 4; k++) st.gasHoles.push(ours.sim.gasHoleAt(ours.layout.gasbags[0].cx + (k - 1.5) * 150, ours.layout.gasbags[0].cy, 0));
+  st.ship.press = 0;
+  st.ship.fuel = 12;
+  let started = false;
+  const saved = until(sim, () => { started = started || !!st.goingDown; return started && !st.goingDown; }, 75);
   const m = find(sim, 'going-down-saved');
   report(started && saved && named(m), `GOING DOWN! saved: "going-down-saved" by ${m && m.who.join(' & ')} (weight ${m && m.weight})`);
 }
@@ -223,9 +226,9 @@ console.log('--- (a) moments are recorded ---');
   const holder = helm || (() => { const p = st.players.bot0; return p; })();
   void holder;
   // a stretch of low hull: whoever is at the helm for all of it is named when it ends
-  const who = sim.getHelm();
-  for (let i = 0; i < 60 * 30; i++) { st.ship.hull = Math.min(st.ship.hull, 30); step(sim); if (!sim.getHelm()) break; }
-  st.ship.hull = 90;
+  const who = sim.getHelm(), S = st.ships[0].sim.structure; // (the crisis is the frame: the load-bearing segments held at 30%)
+  for (let i = 0; i < 60 * 30; i++) { for (const g of S.segs()) if (g.critical) g.hp = Math.min(g.hp, 0.3); step(sim); if (!sim.getHelm()) break; }
+  S.restoreAll();
   step(sim, 5);
   const m = find(sim, 'helm-held');
   report(!!who && named(m) && m.who[0] === who.name, `the helm held through a crisis: "helm-held" ${m ? 'by ' + m.who + ' (' + m.data.secs + ' s)' : 'none (nobody at the helm: ' + !who + ')'}`);
@@ -317,11 +320,9 @@ console.log('--- (d) the TV draws the Book ---');
     step(sim, 60 * 60 * 4);
     sim.closeStop('done');
     if (victory) sim.endRun(true);
-    else { // the real way a ship is lost: the hull gives out, the last stand (GOING DOWN!) runs out of time, no spare gasbag is left, she breaks up
+    else { // the real way a ship is lost: no spare gasbag is left and she crashes (the CRASH clock of a fall that nobody saves, STRUCTURE.md WP6)
       st.run.spares = 0;
-      st.ship.hull = 0;
-      step(sim);
-      if (st.goingDown) st.goingDown.t = st.goingDown.time;
+      st.ships[0].sim.wreck('SHE CRASHED INTO THE GROUND!');
       step(sim, 60 * 3);
     }
     const e = st.runEnd;

@@ -1179,7 +1179,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.lineWidth = 2.5;
     // STRUCTURE.md: no hull bar - the soundness of the weakest load-bearing section of the frame (red under 30%, the number in the bar) and, in the thin strip under it, the LIFT / WEIGHT tug of war: the
     // needle left of the middle means she is heavy and sinking (the panel's rows below do not move, so the bar is a little thinner and the strip takes the rest of its height)
-    const sm = config.STRUCTURE.ENABLED && !config.PVP.ENABLED && state.ship.structure != null;
+    const sm = !config.PVP.ENABLED && state.ship.structure != null;
     const hv = sm ? state.ship.structure : state.ship.hull, bh = sm ? 13 : 22;
     ctx.fillStyle = '#3b2a1d';
     ctx.fillRect(46, 58, 408, bh);

@@ -172,6 +172,7 @@ const finish = (o, { kill = true } = {}) => {
   const { sim, st } = boot();
   step(sim, 60);
   st.run.salvage = 600;
+  for (const g of st.ships[0].sim.structure.segs()) if (g.critical) g.hp = 0.5; // (the frame is the hull: STRUCTURE.md WP6)
   st.ship.hull = 50;
   st.ship.fuel = 20;
   SH.V2_PART_CHANCE = 1;
