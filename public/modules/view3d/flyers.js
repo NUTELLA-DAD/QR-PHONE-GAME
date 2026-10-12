@@ -12,6 +12,7 @@ import { scrapOn, holdSpot, holdCount } from '../host/scrap.js'; // (SCRAP, LOOP
 import * as A from './enemyArt.js';
 import { createLines } from './lines3d.js';
 import { createInstanced, createLampInstances } from './swarm3d.js';
+import { createModelSets } from './modelSets.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const fin = (n, d = 0) => (Number.isFinite(n) ? n : d);
@@ -32,6 +33,7 @@ export function createFlyers(root, stateArg, api = {}) {
   const _M = new THREE.Matrix4(), _P = new THREE.Vector3(), _Q = new THREE.Quaternion(), _S = new THREE.Vector3(), _C = new THREE.Color(), _E = new THREE.Euler();
   const pools = new Map();
   const lines = createLines(root, 600, { depth: true, order: 4 }); // (contrails: they hide behind the ships)
+  const modelSets = createModelSets(root); // (the planes of one kind are drawn as one instanced copy of each of their meshes: modelSets.js)
   const slots = []; // one WeakMap of accumulators per slot (an object can have more than one rate): nothing is ever written on the game's own objects
   let K = 0, T = 0, DT = 0.016, frame = 0, zoomEq = 0.5, refVxNow = 0;
   const P = () => (api.P ? api.P() : null);
@@ -77,7 +79,7 @@ export function createFlyers(root, stateArg, api = {}) {
   // one plane placed by hand (a docked escort): slot i of pool `key`
   const syncOne = (key, i, p, make) => { const g = use(key, i, make); placePlane(g, p); g.scale.setScalar(p.hijackScale || 1); };
   const palFor = (tm) => (tm && tm.color ? { body: tm.color, wing: tm.pale || tm.color, trim: '#e8d8a8', dark: '#4a4440' } : PAL_FRIEND);
-  const ghostify = (g) => { g.traverse((o) => { if (o.material) { const one = (q) => { const k = q.clone(); k.transparent = true; k.opacity = 0.35; k.depthWrite = false; return k; }; o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); } }); return g; }; // (a plane still being built: see-through)
+  const ghostify = (g) => { g.userData.noInst = 'ghost'; g.traverse((o) => { if (o.material) { const one = (q) => { const k = q.clone(); k.transparent = true; k.opacity = 0.35; k.depthWrite = false; return k; }; o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); } }); return g; }; // (a plane still being built: see-through)
   const dockN = new Map(), dockSeen = new Set(), flySeen = new Set();
   const contrail = (t) => { // thin white lines behind the planes, brightest where they turned hard (the sim keeps the points: planes.js trail)
     if (!t || t.length < 2) return;
@@ -184,7 +186,7 @@ export function createFlyers(root, stateArg, api = {}) {
   };
 
   // ---- SCRAP (LOOP.md G1): a little canopy over each falling bundle, a gold ring round it (and round a gunship's hulk). The bundles themselves are instanced boxes: syncBits below. ----------------------------------------
-  const RING_GEO = new THREE.RingGeometry(0.86, 1, 40), RING_MAT = new THREE.MeshBasicMaterial({ color: '#ffd23f', transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
+  const RING_GEO = new THREE.RingGeometry(0.86, 1, 40), RING_MAT = new THREE.MeshBasicMaterial({ color: '#ffd23f', transparent: true, opacity: 0.85, depthWrite: false, forceSinglePass: true, side: THREE.DoubleSide });
   const RING_GEO2 = new THREE.RingGeometry(0.978, 1, 48); // (the hulk's ring is big: the same thin line, not a fat band)
   const makeRing = () => { const m = new THREE.Mesh(RING_GEO, RING_MAT); m.renderOrder = 9; return m; };
   const makeBigRing = () => { const m = new THREE.Mesh(RING_GEO2, RING_MAT); m.renderOrder = 9; return m; };
@@ -538,8 +540,11 @@ export function createFlyers(root, stateArg, api = {}) {
       syncRockets();
       syncSpecials();
       syncBits();
+      modelSets.begin();
+      for (const arr of pools.values()) for (const g of arr) if (g.visible) modelSets.add(g);
+      modelSets.end();
     },
-    dispose() { hideAll(); lines.dispose(); },
+    dispose() { hideAll(); modelSets.dispose(); lines.dispose(); },
     // the planes' model for the dev page / a screenshot tool
     models: A,
     T: () => T,

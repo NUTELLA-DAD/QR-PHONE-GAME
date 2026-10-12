@@ -165,7 +165,7 @@ export function createBeams({ scene, post, world, state, models }) {
     beam.frustumCulled = false;
     beam.visible = false;
     group.add(beam);
-    const pm = new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, side: THREE.DoubleSide, toneMapped: false });
+    const pm = new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, forceSinglePass: true, side: THREE.DoubleSide, toneMapped: false });
     const pool = new THREE.Mesh(poolGeo, pm);
     pool.frustumCulled = false;
     pool.renderOrder = 6;

@@ -5,12 +5,13 @@
 //   * red lanterns hung from the gunwale, a boiler stack with a soot-black cap, and a bone-white skull on the horn.
 // Everything here is rigid. The pieces on the bag are children of the bag's own node, so they swell with it and sag with it when she is hurt.
 //   buildEnemyDecor(ctx, model, { bp, gunship }) -> { update(t), setIntent(name), flag }
-import { THREE, Batch, tagSmall, glowMat, G } from '../style.js';
+import { THREE, Batch, tagSmall, glowMat, G, moveParts, bakePoses } from '../style.js';
 import { BAG_RZ } from './bag.js';
 
 const PI = Math.PI;
 const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const GALE_STEPS = 8; // (the pennant's angles follow the gale continuously; baked in 9 steps, 0.125 of the gale each: under 4 degrees out)
 const FLAG_KEYS = [[0.06, 0.18, 0.26, 0.28], [0, -0.12, -0.2, -0.14], [-0.07, 0.08, 0.18, 0.14]];
 const CREAM = '#ebdfc0', OX = '#8c2f2f', OXD = '#5c1e1e', IRON = '#2f2a2e', IRON2 = '#4a4346';
 const profile = (b, u) => { const p = u < 0 ? 1.75 : 2.0; return b.ry * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(u), p)), 1 / p); }; // the bag's own profile (bag.js)
@@ -73,10 +74,9 @@ export function buildEnemyDecor(ctx, model, o = {}) {
     for (let k = -3; k <= 3; k++) { const u = k * 0.2, top = profile(G0, u), h = 54 - Math.abs(k) * 7; b.cone(IRON, u * rx, top - 5 + h / 2, 0, 12 - Math.abs(k) * 1.2, h, 2.2, 0, 0, 0); }
     // her emblem on both flanks (A4: the bag is the squat oval of bag.js, BAG_RZ deep, so the emblem lies on ITS skin, not 0.96 ry out in front of it)
     const zf = profile(G0, 0.12) * BAG_RZ + 2;
-    for (const sgn of [1, -1]) { const e = new Batch(); emblemParts(emblemKind, e, sgn * (zf + 1), Math.min(150, ry * 0.9)); const eg = e.build({ cast: false, receive: false }); eg.position.x = rx * 0.12; eg.position.y = ry * 0.02; grp.add(eg); }
+    for (const sgn of [1, -1]) { const e = new Batch(); emblemParts(emblemKind, e, sgn * (zf + 1), Math.min(150, ry * 0.9)); b.append(e, new THREE.Matrix4().makeTranslation(rx * 0.12, ry * 0.02, 0)); } // (PERF: spikes, straps, emblems, mast and horn are ONE mesh and one ink shell a bag, 2 draw calls, not 2 each)
     // an iron band round the bag at each end (armour straps in charcoal)
     for (const u of [-0.55, 0.55]) { const r = profile(G0, u); b.geo(IRON, new THREE.TorusGeometry(1, 0.022, 6, 28), new THREE.Matrix4().compose(V(u * rx, 0, 0), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, PI / 2, 0)), V(r * 0.97 * BAG_RZ + 3, r * 0.97, r * 0.97 * 0.96)), 0); }
-    grp.add(tagSmall(b.build({ cast: false })));
     node.add(grp);
     parts.push(grp);
     if (i === 0) { // the mast and the pennant
@@ -85,7 +85,7 @@ export function buildEnemyDecor(ctx, model, o = {}) {
       mb.rod('#2b2622', V(mx, topAt - 6, 0), V(mx, topAt + 150, 0), 3.4, 1.6);
       mb.sphere('#c9a85a', mx, topAt + 154, 0, 6, 6, 6, 1.2, true);
       mb.rod('#2b2622', V(mx, topAt + 2, 0), V(mx - 30, topAt - 30, 0), 1.6, 0);
-      grp.add(mb.build({ cast: false }));
+      b.append(mb);
       const colsFor = (si) => { // the cloth's three rows for flag segment si, with her pattern on the outer part
         const a = flagDef.a, b2 = flagDef.b, p = flagDef.pattern;
         if (si < 2) return [a, a, a];
@@ -96,16 +96,24 @@ export function buildEnemyDecor(ctx, model, o = {}) {
         return [0, 1, 2].map((j) => ((si + j) % 2 ? b2 : a));
       };
       flag = new THREE.Group();
-      const segs = [];
-      for (let si = 0; si < 4; si++) {
-        const sg = new THREE.Group(), fb = new Batch(), cols = colsFor(si);
-        cols.forEach((c, j) => fb.box(c, 14.5, -(j + 0.5) * 22, 0, 29, 22, 3, 1.4));
-        sg.add(tagSmall(fb.build({ cast: false })));
-        sg.position.x = si * 29;
-        flag.add(sg);
-        segs.push(sg);
+      // PERF: the cloth's four hinged segments in every held pose (3 keys) at every gale step (GALE_STEPS + 1) are baked into ONE mesh (2 draw calls, it was 8); the shown range follows the key and the gale
+      const poses = [];
+      for (let gi = 0; gi <= GALE_STEPS; gi++) {
+        const gl = gi / GALE_STEPS;
+        for (let k = 0; k < 3; k++) {
+          const ps = [];
+          for (let si = 0; si < 4; si++) {
+            const fb = new Batch(), cols = colsFor(si);
+            cols.forEach((c, j) => fb.box(c, 14.5, -(j + 0.5) * 22, 0, 29, 22, 3, 1.4));
+            moveParts(fb.parts, new THREE.Matrix4().makeTranslation(si * 29, 0, 0).multiply(new THREE.Matrix4().makeRotationY(FLAG_KEYS[k][si] * (1 + 1.8 * gl) + 0.16 * gl * (si + 1))));
+            ps.push(...fb.parts);
+          }
+          poses.push(ps);
+        }
       }
-      flag.userData.segs = segs;
+      const cloth = bakePoses(poses, { cast: false, small: true });
+      flag.add(cloth);
+      flag.userData.show = (k, gale) => cloth.userData.show(Math.round(clamp(gale, 0, 1) * GALE_STEPS) * 3 + k);
       for (const name of intents) { const bd = badgeFor(name); bd.position.set(34, -33, 0); bd.visible = false; flag.add(bd); badges[name] = bd; }
       flag.scale.x = -1; // (streams toward the stern, the way she flies)
       flag.position.set(mx, topAt + 150, 0);
@@ -117,8 +125,9 @@ export function buildEnemyDecor(ctx, model, o = {}) {
       hb.geo('#c9a85a', new THREE.TorusGeometry(1, 0.1, 6, 16), new THREE.Matrix4().compose(V(nx + 20, 0, 0), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, PI / 2, 0)), V(15, 15, 15)), 1);
       hb.sphere(CREAM, nx + 2, 26, 0, 12, 13, 11, 1.8, true);
       for (const z of [-4.4, 4.4]) hb.sphere('#14110f', nx + 8, 28, z, 3, 3.6, 2, 0, true);
-      grp.add(hb.build({ cast: false }));
+      b.append(hb);
     }
+    grp.add(b.build({ cast: false, one: true, small: true })); // (one mesh, the ink inside)
   });
   // ---- on the hull: red lanterns along the gunwale, a boiler stack -----------------------------------------------------------------------------------------------------------------------------------
   const body = new THREE.Group();
@@ -131,7 +140,6 @@ export function buildEnemyDecor(ctx, model, o = {}) {
     const n = Math.max(1, Math.round((q.x1 - q.x0) / 260));
     for (let k = 0; k < n; k++) { const x = q.x0 + ((k + 0.5) * (q.x1 - q.x0)) / n; lampPts.push([x, q.y - 84]); hb.rod('#2b2622', V(X(x), Y(q.y - 66), ctx.W * 0.88), V(X(x), Y(q.y - 82), ctx.W * 0.88), 1.2, 0); }
   }
-  body.add(hb.build({ cast: false }));
   if (lampPts.length) {
     const gs = lampPts.map(([x, y]) => { const g = G.sphereLo.clone(); g.applyMatrix4(new THREE.Matrix4().compose(V(X(x), Y(y), ctx.W * 0.88), new THREE.Quaternion(), V(7, 8.4, 7))); return g; });
     const merged = new THREE.Mesh(mergeG(gs), lampM);
@@ -143,8 +151,9 @@ export function buildEnemyDecor(ctx, model, o = {}) {
     sb.cyl('#3a3638', sx, sy + 56, -ctx.W * 0.3, 15, 90, 2.6);
     sb.cyl('#14110f', sx, sy + 106, -ctx.W * 0.3, 18, 8, 1.6);
     sb.cyl(OX, sx, sy + 62, -ctx.W * 0.3, 16.5, 7, 0);
-    body.add(sb.build({ cast: false }));
+    hb.append(sb);
   }
+  body.add(hb.build({ cast: false, one: true }));
   void top;
   model.content.add(body);
   parts.push(body);
@@ -152,7 +161,7 @@ export function buildEnemyDecor(ctx, model, o = {}) {
     flag, parts,
     update(t, intent, gale = 0) {
       const K = Math.floor(t * 8);
-      if (flag) { flag.userData.segs.forEach((sg, i) => { sg.rotation.y = FLAG_KEYS[K % 3][i] * (1 + 1.8 * gale) + 0.16 * gale * (i + 1); }); }  // (WP12: a gust makes it snap harder and stand out, on the same stepped keys)
+      if (flag) flag.userData.show(K % 3, gale);  // (WP12: a gust makes it snap harder and stand out, on the same stepped keys)
       D.setIntent(intent);
     },
     setIntent(name) { const n = intents.includes(name) ? name : 'approach'; for (const k of intents) if (badges[k]) badges[k].visible = k === n; },

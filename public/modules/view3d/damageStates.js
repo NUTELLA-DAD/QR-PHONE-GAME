@@ -66,7 +66,7 @@ export function createPartDamage({ state, models, vfx }) {
     const aDecal = new THREE.InstancedBufferAttribute(new Float32Array(max * 4), 4);
     aDecal.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aDecal', aDecal);
-    const mat = new THREE.MeshBasicMaterial({ map: sheet(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2.5, polygonOffsetUnits: -2.5, side: THREE.DoubleSide });
+    const mat = new THREE.MeshBasicMaterial({ map: sheet(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2.5, polygonOffsetUnits: -2.5, forceSinglePass: true, side: THREE.DoubleSide });
     mat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aDecal;').replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\n  vMapUv = aDecal.xy + uv * aDecal.zw;\n#endif');
     };

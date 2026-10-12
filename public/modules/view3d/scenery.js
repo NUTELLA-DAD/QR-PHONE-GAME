@@ -3,7 +3,7 @@
 // 8 fps keys (3D.md section 1): a flag's pose, the beacon's sweep, a turret's aim and its health pips and warning glow, smoke from a chimney or a wrecked turret (WP4's particles).
 // WP9 (enemies and world objects v2) gave them detail: sandbagged turrets with plated domes, the outposts' lookout posts and red lanterns, hinged flags, a lighthouse with a sweeping beam, windowed castles.
 // The turrets' dotted warning lines are drawn with the line pool (worldObjects.js).
-import { THREE, Batch, applyLook, tagSmall, INK, G, glowMat, glow } from './style.js';
+import { THREE, Batch, applyLook, tagSmall, INK, G, glowMat, glow, moveParts, bakePoses } from './style.js';
 import { config } from '../../config.js';
 import { groundAt } from '../host/course.js';
 import { buildRocket } from './enemyArt.js';
@@ -17,23 +17,23 @@ const RANGE = 3200; // build and show things this far (world units) either side 
 export const FLAG_KEYS = [[0.05, 0.16, 0.24, 0.26], [0, -0.1, -0.18, -0.12], [-0.06, 0.06, 0.16, 0.12]]; // a flag's rigid segments: three held poses
 const SLIT = '#2b2420';
 
-// a flag of `n` hinged segments (rigid): cloth(i) -> [color, ...] per cell stack; w = a segment's width, h = the flag's height. update() poses the segments on the key.
+// a flag of `n` hinged segments (rigid): cloth(i) -> [color, ...] per cell stack; w = a segment's width, h = the flag's height. The three held poses (FLAG_KEYS: each segment turned about its own hinge) are baked
+// into ONE mesh (style.js bakePoses) and poseFlag() shows the one on the key: 2 draw calls (a picture and its ink shell) whatever the number of segments (it was 2 a segment).
 function buildFlag(n, w, h, cells, depth = 3, hOf = null, decorate = null) {
-  const flag = new THREE.Group();
-  const segs = [];
-  for (let i = 0; i < n; i++) {
-    const sg = new THREE.Group(), b = new Batch(), rows = cells(i) || [], hh = h * (hOf ? hOf(i) : 1); // (hOf: a segment's share of the full height: a pennant tapers)
-    rows.forEach((col, j) => b.box(col, w / 2, -(j + 0.5) * (hh / rows.length), 0, w, hh / rows.length, depth, 1.2));
-    if (decorate) decorate(i, b, hh);
-    sg.add(tagSmall(b.build()));
-    sg.position.x = i * w;
-    flag.add(sg);
-    segs.push(sg);
-  }
-  flag.userData.segs = segs;
-  return flag;
+  const poses = FLAG_KEYS.map((row) => {
+    const parts = [];
+    for (let i = 0; i < n; i++) {
+      const b = new Batch(), rows = cells(i) || [], hh = h * (hOf ? hOf(i) : 1); // (hOf: a segment's share of the full height: a pennant tapers)
+      rows.forEach((col, j) => b.box(col, w / 2, -(j + 0.5) * (hh / rows.length), 0, w, hh / rows.length, depth, 1.2));
+      if (decorate) decorate(i, b, hh);
+      moveParts(b.parts, new THREE.Matrix4().makeTranslation(i * w, 0, 0).multiply(new THREE.Matrix4().makeRotationY(row[i % 4])));
+      parts.push(...b.parts);
+    }
+    return parts;
+  });
+  return bakePoses(poses, { cast: true, receive: true, small: true });
 }
-const poseFlag = (flag, K, phase = 0) => { const segs = flag && flag.userData.segs, row = FLAG_KEYS[(((Math.floor(K) + phase) % 3) + 3) % 3]; if (segs && row) segs.forEach((sg, i) => { sg.rotation.y = row[i % 4]; }); };
+const poseFlag = (flag, K, phase = 0) => { const show = flag && flag.userData.show; if (show) show((((Math.floor(K) + phase) % 3) + 3) % 3); };
 
 function banner(b, x, y, s) { // the raiders' banner on a wall or tower: dark red with a black horn mark (the 2D one hangs from (x, y) downward)
   b.box('#8e1f1a', x, y - 30 * s, 0, 40 * s, 60 * s, 6, 2);
@@ -87,7 +87,7 @@ function buildBlock(course, bk) {
     for (const k of [0.12, 0.2]) b.cyl('#f3ead6', cx, -(top + (g - top) * k + 5), 0, w / 2 + 7, 10, 0);
     b.cyl('#6a2f24', cx, -(top + (g - top) * 0.6), 0, w / 2 + 8, 6, 0); // a belt of darker brick
   } else return null;
-  const grp = tagSmall(b.build());
+  const grp = b.build({ one: true, small: true });
   grp.position.z = Z;
   if (bk.kind === 'chimney') grp.userData.smokeAt = { x: cx, y: -top };
   return grp;
@@ -107,7 +107,7 @@ function buildTurret(t) {
   for (let k = 0; k < 9; k++) { const a = (k / 9) * PI * 2; base.sphere(SACK, Math.cos(a) * 52, -2, Math.sin(a) * 34, 14, 8, 11, 1.6, true); } // the sandbags
   base.box('#5a3a22', -48, 6, 24, 18, 14, 14, 1.4); base.box('#5a3a22', -48, 20, 24, 14, 10, 12, 1.4); // an ammo crate or two
   base.cyl('#a8443f', 0, 42, 0, 6, 6, 1.4); // the lamp's stand
-  live.add(base.build());
+  live.add(base.build({ one: true, small: true }));
   const lampOff = new THREE.MeshBasicMaterial({ color: '#6b1b17' }), lampOn = glowMat('#ff2a3c', 3);
   const lamp = new THREE.Mesh(G.sphereLo, lampOff);
   lamp.scale.setScalar(7); lamp.position.set(0, 48, 0);
@@ -119,7 +119,7 @@ function buildTurret(t) {
     r.rod('#2b2622', V3(-26, 10, 0), V3(12, 84, 0), 3.4, 2);
     r.rod('#2b2622', V3(-26, 10, 12), V3(12, 84, 12), 2, 1.2); r.rod('#2b2622', V3(-26, 10, -12), V3(12, 84, -12), 2, 1.2);
     r.box('#5a5558', 12, 84, 0, 18, 6, 28, 1.6, 0, 0, 0.4);
-    live.add(r.build());
+    live.add(r.build({ one: true, small: true }));
     const rk = buildRocket();
     rk.position.set(-6, 52, 0); rk.rotation.z = 1.1; rk.scale.setScalar(1.2);
     live.add(rk);
@@ -129,7 +129,7 @@ function buildTurret(t) {
     barrel.box('#2b2622', 62, 0, 0, 8, 22, 22, 1.6); // the muzzle ring
     barrel.box('#3a3638', -2, 0, 0, 22, 26, 26, 2); // the breech
     barrel.box('#c9a85a', 30, 0, 0, 6, 18, 18, 0.6); // a brass band
-    pivot.add(barrel.build());
+    pivot.add(barrel.build({ one: true, small: true }));
     live.add(pivot);
   }
   const pips = new THREE.InstancedMesh(PIP_GEO, new THREE.MeshBasicMaterial({ color: '#a8443f' }), 8);
@@ -144,7 +144,7 @@ function buildTurret(t) {
   rub.sphere('#3b3b3b', 14, 14, 0, 16, 10, 14, 2.5);
   rub.box('#2b2622', -22, 16, 6, 22, 6, 6, 1, 0, 0, 0.5);
   for (let k = 0; k < 5; k++) rub.sphere(SACK, Math.cos(k) * 48, -2, Math.sin(k * 1.7) * 30, 12, 7, 9, 1.4, true);
-  dead.add(rub.build());
+  dead.add(rub.build({ one: true, small: true }));
   const glowM = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color: '#ff2a3c', transparent: true, opacity: 0.4, depthWrite: false }));
   glowM.position.set(0, 26, 20);
   glowM.visible = false;
@@ -171,7 +171,7 @@ function buildMarker(m, course) {
     b.box('#8a6444', x, gy + mastH, 0, 120, 24, 60, 3);
     for (const s of [-1, 1]) b.rod('#5a3e26', V3(x + s * 60, gy + mastH + 12, 30), V3(x + s * 60, gy + mastH + 44, 30), 2, 1);
     b.rod('#2b2622', V3(x, gy + mastH, 0), V3(x, gy + mastH + 110, 0), 2.5, 0);
-    root.add(tagSmall(b.build()));
+    root.add(b.build({ one: true, small: true }));
     const fl = buildFlag(4, 18, 36, () => ['#3a86ff', '#3a86ff'], 2.4);
     fl.position.set(x + 1, gy + mastH + 108, 0);
     root.add(fl);
@@ -183,7 +183,7 @@ function buildMarker(m, course) {
     b.rod('#4a3a2a', V3(x - 33, gy + 392, 20), V3(x + 33, gy + 392, 20), 1.6, 0);
     for (const s of [-1, 1]) { b.rod('#2b2622', V3(x, gy + 410, 0), V3(x + s * 20, gy + 380, 0), 1, 0); b.sphere('#ff6a3a', x + s * 20, gy + 372, 0, 8, 10, 8, 1.4, true); }
     for (let k = 0; k < 8; k++) { const a = (k / 8) * PI * 2; b.sphere(SACK, x + Math.cos(a) * 46, gy + 6, Math.sin(a) * 30, 17, 9, 12, 1.8, true); }
-    root.add(tagSmall(b.build()));
+    root.add(b.build({ one: true, small: true }));
     const fl = buildFlag(4, 26, 70, () => ['#8e1f1a', '#8e1f1a'], 4, (i) => [1, 0.88, 0.7, 0.46][i], (i, bb, hh) => { // the raiders' banner: a tapering pennant, a black horn mark on its second segment
       if (i !== 1) return;
       bb.box('#2b2622', 13, -hh * 0.5, 3.4, 12, hh * 0.4, 2.2, 0);
@@ -197,7 +197,7 @@ function buildMarker(m, course) {
     const topH = 640 + LIFT;
     b.rod('#2b2622', V3(x, gy, 0), V3(x, gy + topH, 0), 3.4, 2);
     b.sphere('#c9a85a', x, gy + topH + 6, 0, 7, 7, 7, 1.4, true);
-    root.add(tagSmall(b.build()));
+    root.add(b.build({ one: true, small: true }));
     const fl = buildFlag(4, 26, 72, (i) => [0, 1, 2].map((j) => ((i + j) % 2 ? '#ffffff' : '#a8443f')), 3);
     fl.position.set(x, gy + topH, 0);
     root.add(fl);
@@ -213,7 +213,7 @@ function buildMarker(m, course) {
     for (const a of [0.2, 1.77, 3.34, 4.91]) b.rod('#3a3330', V3(x + Math.cos(a) * 30, gy + H + 12, Math.sin(a) * 30), V3(x + Math.cos(a) * 30, gy + H + 56, Math.sin(a) * 30), 2.2, 0);
     b.cone('#3b2a1d', x, gy + H + 92, 0, 56, 50, 3, 0, Math.PI / 4, 0);
     b.sphere('#c9a85a', x, gy + H + 122, 0, 7, 7, 7, 1.4, true);
-    root.add(tagSmall(b.build()));
+    root.add(b.build({ one: true, small: true }));
     const lantern = new THREE.Mesh(new THREE.CylinderGeometry(24, 24, 44, 14), glowMat('#ffe27a', 2.2));
     lantern.position.set(x, gy + H + 34, 0);
     root.add(lantern);

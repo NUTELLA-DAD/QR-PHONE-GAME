@@ -182,6 +182,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const teamFlags = createTeamFlags({ state, models }); // (WP15: a pole and a stepped pennant on every teamed ship; updated after syncShips)
   V.teamFlags = teamFlags;
   V.lineup = null; // (the dev page's crew line-up sets { x, y }: world point, y up)
+  V.scene = scene; V.renderer = renderer; // (dev: the call profiler in tools/view3d-check.mjs --calls reads these)
   V.flyers = flyers; V.worldObjects = worldObjects; V.glows = glows; V.wreck3d = wreck3d; // (WP9: handles for the dev page and the gate)
   V.enemyLineup = null; // (WP9: the dev page's enemy line-up sets { x, y, page }: the middle of the picture in the 3D world, y up)
   // WP9: the 2D HUD canvas draws the crew's name labels, call-outs, progress bars and popups over this picture (render.js drawOver3D). It asks where things are on the screen through these:

@@ -1,17 +1,19 @@
 // THE 3D UMBRELLA GATE (WP14): the host in 3D by default, in a real headless Chrome. Starts its OWN server on a free port and stops it by its PID at the end (never kills node globally).
-//   node tools/view3d-check.mjs [--all] [--quick] [--gl default|swiftshader] [--port N] [--shots DIR] [--only a,b,..] [--snapshot --force] [--verbose]
+//   node tools/view3d-check.mjs [--all] [--quick] [--gl default|swiftshader] [--port N] [--shots DIR] [--only a,b,..] [--snapshot --force] [--verbose] [--calls | --calls1 [--rows N]] [--probe FILE.js] [--stress]
 //   node tools/buildsim.mjs --check-3d [--all]          the same, from the gate runner          node tools/buildsim.mjs --snapshot-3d --force     re-capture the screenshot fixtures
 // Steps (--only names):
 //   rules     the GPU probe's rules (detect.js classifyGpu) on a table of real renderer strings: discrete -> high, integrated -> medium, software / no WebGL 2 -> 2D
-//   hosts     (a) host.html loads with 0 console errors and 0 game errors: the lobby (NO ?view: 3D is the default), a flight with 8 bots, a dark cave, the Kraken's lair and Versus;
+//   hosts     (a) host.html loads with 0 console errors and 0 game errors: the lobby (NO ?view: 3D is the default), a flight with 8 bots, a dark cave, the Kraken's lair, Versus (10 s and, seeded, at close range at 30 s), and a seeded fight with the gunship, the squadron and a bomber;
 //             (d) in those scenes at Medium: draw calls <= 150, triangles <= 450k, view JS <= 6 ms;  (e) V.alignError (the HUD against the 3D picture) is 0 px with cinematics off
 //   models    (b) model.fallbacks is empty for the classic ship, the Sparrow, the five minimum builds, the enemy gunship and 10 generated ships
-//   shots     (c) seven seeded scenes against tools/fixtures/shots3d/*.png (mean abs diff < 2 %, no 64 x 64 block over 12 %); --snapshot --force writes the fixtures
+//   shots     (c) nine seeded scenes (the last two, fight and versus_close, are the dearest pictures: they prove the perf batching changed no pixel) against tools/fixtures/shots3d/*.png (mean abs diff < 2 %, no 64 x 64 block over 12 %); --snapshot --force writes the fixtures
 //   tiers     the flight scene at High / Medium / Low: the numbers (printed), 0 errors
 //   fallback  (f) --gl swiftshader and no WebGL at all: the host comes up in 2D with 0 errors and never loads Three.js; the governor's step down to 2D (a toast, at a calm moment, never mid-fight)
 //   offline   (g) every page above runs with the network blocked for anything but localhost: 0 external requests, 0 failed loads; plus the phone page and the build page; a static scan for CDN links
 //   sub       (h) with --all: lint3d, physics-check, enemy3d-check, light3d-check, weather3d-check, cine3d-check, creature3d-check --quick, crew3d-check --quick
 // --quick skips the long real-time waits and the tier runs. Screenshots of the scenes go to --shots DIR when given.
+// Dev aids: --calls (or --calls1: one frame) prints where the draw calls go in the fight and Versus scenes (per object, shadow and main pass); --probe FILE.js runs a page-side function there and prints its result; --stress follows the Versus match
+// to 60 s (informational); env SHOT_EXTRA="&look=nooutlines" adds to the address of the shot scenes.
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -151,6 +153,21 @@ const gateMeasure = (name, m) => {
   check(m.js <= BUDGET.js, `${name}: view JS ${m.js} ms <= ${BUDGET.js} ms`, `${name}: view JS ${m.js} ms > ${BUDGET.js} ms`);
 };
 
+// --calls: where the draw calls go. Wraps renderer.renderBufferDirect for a few frames and groups every call by the object's nearest named ancestors / type / material (shadow-pass calls have scene === null); prints per-frame averages.
+const PROFILE = `(()=>{ const V=window.view3dDebug().view, R=V.renderer, rows=new Map(), orig=R.renderBufferDirect, origReset=R.info.reset.bind(R.info), f0=V.frames, one=${has('calls1')};
+  const pathOf=(o)=>{ const bits=[]; for(let p=o;p&&p.type!=='Scene';p=p.parent){ const i=p.parent?p.parent.children.indexOf(p):0; bits.push((p.name?p.name:p.type[0])+(p.parent&&p.parent.type!=='Scene'&&!p.name?i:'')); } return bits.reverse().join('>'); };
+  const nameOf=(o)=>{ const bits=[]; for(let p=o;p&&bits.length<4;p=p.parent){ const n=p.name||''; if(n) bits.push(n); } return bits.reverse().join('/')||('(unnamed, parent '+(o.parent&&(o.parent.name||o.parent.type))+')'); };
+  let seg=0,lastF=-1,fr1=0; R.info.reset=function(){ if(V.frames!==lastF){ lastF=V.frames; seg=0; } seg++; if(seg===1) fr1++; return origReset(); };
+  R.renderBufferDirect=function(cam,sc,geo,mat,obj,grp){ if(seg!==1||(obj.isInstancedMesh&&obj.count===0)) return orig.apply(this,arguments); const g=geo&&geo.attributes&&geo.attributes.position; const key=(sc?'main  ':'shadow')+' | '+(one?pathOf(obj)+' v'+(g?g.count:'?'):nameOf(obj))+' | '+obj.type+(obj.isInstancedMesh?' x'+obj.count:'')+' | '+(mat&&mat.type)+(mat&&mat.side===1?' back':'')+(mat&&mat.name?' '+mat.name:'')+(mat&&mat.color&&mat.type==='MeshBasicMaterial'?' #'+mat.color.getHexString():''); rows.set(key,(rows.get(key)||0)+1); return orig.apply(this,arguments); };
+  return new Promise((res)=>{ const t0=performance.now(); const tick=()=>{ const done=one?fr1>=1&&V.frames>lastF:performance.now()-t0>500; if(!done) return setTimeout(tick,5); R.renderBufferDirect=orig; R.info.reset=origReset; const fr=Math.max(1,fr1); const out=[...rows.entries()].sort((a,b)=>b[1]-a[1]).map(([k,v])=>(v/fr).toFixed(1)+'  '+k); res(JSON.stringify({ frames:fr, total:+([...rows.values()].reduce((a,b)=>a+b,0)/fr).toFixed(1), rows:out })); }; tick(); }); })()`;
+const profileOf = async (name, P) => {
+  if (has('probe')) console.log(`    probe ${name}: ` + JSON.stringify(await P.json(`(()=>{ try { return JSON.stringify((${fs.readFileSync(arg('probe'), 'utf8')})()) } catch(e) { return JSON.stringify(String(e)) } })()`)));
+  if (!has('calls') && !has('calls1')) return;
+  const r = await P.json(PROFILE); if (!r) return;
+  console.log(`    --- ${name}: calls per frame by object (${r.frames} frames sampled, ${r.total} calls a frame, shadow + main) ---`);
+  for (const l of r.rows.slice(0, Number(arg('rows', 45)))) console.log('      ' + l);
+};
+
 const results = { tiers: {} };
 try {
   // ---- rules: the probe's classification table -----------------------------------------------------------------------------------------------------------------------------------
@@ -207,6 +224,7 @@ try {
       check(fb.list.length === 0, `models: the live ships${fb.gunship ? " and the gunship" : " (the gunship did not come this time; the generated and fixture builds below still cover her parts)"} have no fallbacks (${fb.models} model(s))`, 'models: the live ships / gunship have fallbacks ' + JSON.stringify(fb));
       await sleep(quick ? 3500 : 6500);
       gateMeasure('fight (gunship, fighters, bomber)', await P.json(MEASURE));
+      await profileOf('fight', P);
       const { minimumBuild } = await import(pathToFileURL(path.join(here, 'tools/fixtures/minimum-lib.mjs')).href);
       const { generateShip } = await import(pathToFileURL(path.join(here, 'public/modules/host/shipGen.js')).href);
       const lists = {};
@@ -259,15 +277,38 @@ try {
       await P.close();
 
       // Versus, seeded and stepped: 10 s of the match (600 steps), the same every run. (A free-running page measured a random arena - course.js rng(Date.now()) - and wherever the bots had got to
-      // after 10 s: from far apart at 115 calls to closing in at 160 run to run, on every commit. Once the ships close to fighting range the picture is 150-220 calls: NOT gated here, see 3D.md.)
+      // after 10 s: from far apart at 115 calls to closing in at 160 run to run, on every commit. Once the ships close to fighting range the picture was 150-220 calls: it is gated below, at 30 s and seeded, since the 3D perf pass, see 3D.md.)
       P = await openPage(`${BASE}/host.html?view=3d&tier=medium&versus=1&bots=4`, { gl: GL, seed: true });
       await P.ev('(()=>{ window.__seed(11); window.__step(600); return 1 })()');
       await sleep(3000);
       s = await P.json(STATE);
       check(s && s.is3d && s.ships >= 2, 'versus: two ships in 3D', 'versus: ' + JSON.stringify(s));
       gateMeasure('versus', await P.json(MEASURE));
+      await profileOf('versus (10 s)', P);
       await shotTo(P, 'wp14_versus.png');
+      // the same match at 30 s (1800 steps): the two ships have closed to fighting range, their planes are out, the damage decals are on: the dearest Versus picture (150-220 calls before the 3D perf pass)
+      await P.ev('(()=>{ window.__seed(12); window.__step(1200); return 1 })()'); // (re-seeded: the view's own random numbers in the real-time frames between must not move the match)
+      await sleep(2500);
+      gateMeasure('versus close range (30 s)', await P.json(MEASURE));
+      await profileOf('versus close range (30 s)', P);
+      await shotTo(P, 'perf_versus_close.png');
+      if (has('stress')) { // (--stress: the same match every 5 s from 35 s to 60 s, to see how bad the close-range picture gets; informational)
+        for (let sec = 35; sec <= 60; sec += 5) { await P.ev('(()=>{ window.__seed(' + (20 + sec) + '); window.__step(300); return 1 })()'); await sleep(1200); const m = await P.json(MEASURE); if (m && !m.none) console.log(`    versus ${sec} s: ${fmt(m)}`); await profileOf('versus ' + sec + ' s', P); }
+      }
       await settle('versus', P);
+      await P.close();
+
+      // A fight, seeded and stepped (the real-time one above is a different fight every run, 87-157 calls): our ship, the gunship, the strafing squadron and a bomber 6 s after they appear.
+      P = await openPage(`${BASE}/host.html?view=3d&tier=medium&cine=0`, { gl: GL, seed: true });
+      await P.ev(`(()=>{ window.__seed(11); const B=document.getElementById('bots'); B.click(); B.click(); document.getElementById('castoff').click(); window.__step(300);
+        game.course.startMission(2,{kind:'open',environment:'skyisles',danger:2}); game.state.ev.warn=0; for(let k=0;k<40&&!game.state.gunship;k++){ game.gunship.spawn(k+1); window.__step(30); } game.squadrons.spawnStrafers(); game.squadrons.spawnBomber(); window.__step(120); return 1 })()`);
+      await sleep(2500);
+      s = await P.json(STATE);
+      check(s && s.is3d && s.gunship, 'fight (seeded): in 3D with the gunship on us', 'fight (seeded): ' + JSON.stringify(s));
+      gateMeasure('fight (seeded: gunship, squadron, bomber)', await P.json(MEASURE));
+      await profileOf('fight (seeded)', P);
+      await shotTo(P, 'perf_fight_seeded.png');
+      await settle('fight (seeded)', P);
       await P.close();
     }
   }
@@ -290,7 +331,7 @@ try {
 
   // ---- shots: (c) the screenshot regression -------------------------------------------------------------------------------------------------------------------------------------
   if (want('shots')) {
-    console.log(snapshot ? 'shots: writing the fixtures' : 'shots: seven seeded scenes against tools/fixtures/shots3d/');
+    console.log(snapshot ? 'shots: writing the fixtures' : 'shots: nine seeded scenes against tools/fixtures/shots3d/');
     // Everything that makes the scene is ONE synchronous call (no real-time frame can take a random number in the middle): the generator is re-seeded, the bots climb aboard, she casts off, the
     // simulation (frozen from the start, see SEED) is stepped by hand. The page's Math.random and Date.now were fixed from its first line (SEED), so the map is the same too.
     const BOOT = (steps, tail = '') => `(()=>{ window.__seed(11);
@@ -313,14 +354,19 @@ try {
       { name: 'versus', q: 'view=3d&versus=1&bots=4', setup: FREEZE_ONLY(420) },
       // (LOOP R1: the fortress ring: the ship is put in clear air at the face at 135 degrees, so the picture shows the bent rock, a castle face with its shutter and the keep behind her)
       { name: 'ring', q: 'view=3d&kind=ring&variant=fortress', setup: BOOT(120, RING_SPOT(135)) },
+      // (the 3D perf pass: the two dearest pictures, to prove that batching and instancing the planes, flags, decor and ink did not change a pixel: a fight with the gunship, the squadron and a bomber on us, and
+      // the Versus match at 30 s with the two ships at close range)
+      { name: 'fight', q: 'view=3d&env=skyisles&kind=open', setup: BOOT(300, "game.course.startMission(2,{kind:'open',environment:'skyisles',danger:2}); game.state.ev.warn=0; for(let k=0;k<40&&!game.state.gunship;k++){ game.gunship.spawn(k+1); window.__step(30); } game.squadrons.spawnStrafers(); game.squadrons.spawnBomber(); window.__step(120);") },
+      { name: 'versus_close', q: 'view=3d&versus=1&bots=4', setup: FREEZE_ONLY(1800) },
       { name: 'storm', q: 'view=3d&env=storm&kind=open', setup: BOOT(300, 'const st=game.state, w=st.weather; w.storm=1; w.gust=110; w.gusting=true; w.gustIn=0; st.env.gale=1; st.env.windDir=1; st.env.wind=300; w.flash=0;') },
     ];
     fs.mkdirSync(FIX, { recursive: true });
     for (const S of SCENES) {
       if (arg('scene') && S.name !== arg('scene')) continue; // (--scene NAME: only that one, to write or check a single fixture)
-      const P = await openPage(`${BASE}/host.html?${S.q}&tier=medium&cine=0`, { gl: GL, w: SHOT.w, h: SHOT.h, seed: true });
+      const P = await openPage(`${BASE}/host.html?${S.q}${process.env.SHOT_EXTRA || ""}&tier=medium&cine=0`, { gl: GL, w: SHOT.w, h: SHOT.h, seed: true }); // (SHOT_EXTRA="&look=nooutlines": a dev aid to see the same scene another way)
       await P.ev(S.setup);
       await P.ev(HOLD);
+      if (has('calls1') || has('calls')) { console.log('    ' + S.name + ': ' + fmt(await P.json(MEASURE))); await profileOf('shot ' + S.name, P); }
       const buf = await P.png();
       const stt = await P.json(STATE);
       if (verbose) console.log('    view ' + (await P.ev('JSON.stringify((({cx,cy,zoom})=>({cx,cy,zoom}))(window.__lastView))')) + ' ship ' + (await P.ev('JSON.stringify([game.state.ships[0].pose.x,game.state.ships[0].pose.y,game.state.ships[0].pose.vx])')));

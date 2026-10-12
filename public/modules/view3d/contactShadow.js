@@ -60,7 +60,7 @@ export function createContactShadow(parent, state, models) {
   g.setAttribute('aRight', new THREE.InterleavedBufferAttribute(buf, 4, 8));
   g.instanceCount = 0;
   const mat = new THREE.ShaderMaterial({
-    vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest: true, side: THREE.DoubleSide,
+    vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest: true, forceSinglePass: true, side: THREE.DoubleSide,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     uniforms: RB.addUniforms({ uColor: { value: new THREE.Color(K0.COLOR || '#1c1a2c') }, uSoft: { value: new THREE.Vector2(K0.SOFT != null ? K0.SOFT : 0.4, 0) } }),
   });

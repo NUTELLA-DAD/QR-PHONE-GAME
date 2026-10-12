@@ -50,7 +50,7 @@ export function createDamageView({ state, models }) {
   const sheet = () => getTrimSheet().texture;
   const planeGeo = new THREE.PlaneGeometry(1, 1);
   const half = (k) => { const t = bagTexture().clone(); t.repeat.set(0.5, 1); t.offset.set(0.5 * k, 0); t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; return t; }; // (the left half of the painting is the rip, the right half the patch)
-  const skinMat = (k) => new THREE.MeshBasicMaterial({ map: half(k), transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+  const skinMat = (k) => new THREE.MeshBasicMaterial({ map: half(k), transparent: true, depthWrite: false, forceSinglePass: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
   const ripMat = skinMat(0), patchMaterial = skinMat(1);
   const ripMats = { rip: ripMat, patch: patchMaterial };
   const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler(), _z = new THREE.Vector3(0, 0, 1);
@@ -61,7 +61,7 @@ export function createDamageView({ state, models }) {
     const aDecal = new THREE.InstancedBufferAttribute(new Float32Array(K().MAX * 4), 4);
     aDecal.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aDecal', aDecal);
-    const mat = new THREE.MeshBasicMaterial({ map: sheet(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide });
+    const mat = new THREE.MeshBasicMaterial({ map: sheet(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, forceSinglePass: true, side: THREE.DoubleSide });
     mat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aDecal;').replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\n  vMapUv = aDecal.xy + uv * aDecal.zw;\n#endif');
     };
