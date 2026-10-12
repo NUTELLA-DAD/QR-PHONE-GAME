@@ -307,7 +307,7 @@ const finite = (st) => { const r = st.course.ring, sh = st.ships[0]; return [sh.
     config.PACING.RATE_START = config.PACING.RATE_END = 1;
     const r0 = st.course.ring;
     let t = null;
-    for (let i = 0; i < 8 * 3600 && t === null; i++) { step(1, false); if (r0.crown) t = i / 3600; if (st.phase === 'lobby') break; }
+    for (let i = 0; i < 8 * 3600 && t === null; i++) { step(1, false); if (r0.crown || (st.course.ring && st.course.ring.crown)) t = i / 3600; if (st.phase === 'lobby') break; } // (F5: a wreck that limps home on a spare remakes the ring: the tower won by the second attempt counts)
     won.push(t === null ? 'no' : t.toFixed(1) + ' min');
   }
   report(won.every((x) => x !== 'no'), `the tower is won by 4 bots on Easy within 8 minutes on every seed: ${won.join(', ')}`);

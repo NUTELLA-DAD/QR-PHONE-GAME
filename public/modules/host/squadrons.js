@@ -549,8 +549,9 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     // Boarding lines.
     if ((z.boardCd -= dt) <= 0 && !state.boarders.length) {
       z.boardCd = W.BOSS_BOARD_EVERY;
-      dropSquad(layout.boarderEntryPoints[layout.boarderEntryPoints.length - 1].x, -200 - state.ship.alt); // (ship coordinates, as raiders.js has always taken it)
-      warn('BOARDING LINES! RAIDERS INCOMING!');
+      const lines = dropSquad(layout.boarderEntryPoints[layout.boarderEntryPoints.length - 1].x, -200 - state.ship.alt); // (ship coordinates, as raiders.js has always taken it)
+      if (lines === 'blocked') z.boardCd = config.RAIDERS.RETRY; // (F5: the deck is full or she is falling: try again soon)
+      else if (lines !== 'announced') warn('BOARDING LINES! RAIDERS INCOMING!'); // (an announced boarding has its own BOARDERS AFT / FORE banner)
     }
   };
 

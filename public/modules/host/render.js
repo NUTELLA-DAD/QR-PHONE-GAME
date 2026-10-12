@@ -3214,6 +3214,26 @@ export function createRenderer({ ctx, state: world, canvas }) {
         art.threat.drawBombs(time / 1000);
         drawHighlights(time / 1000);
         lap('hazards');
+        if (ship.main) for (const b of state.boarders) { // F5: an announced boarding - each raider hangs on his line over the deck he will land on, a red mark below
+          if (!(b.hang > 0)) continue;
+          ink();
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(b.x, b.y - 66);
+          ctx.lineTo(b.x + 14, b.y - 900);
+          ctx.stroke();
+          const lp = b.landD != null ? layout.platforms[b.landD] : null;
+          if (lp && Math.floor(time / 250) % 2 === 0) {
+            ctx.fillStyle = '#e63946';
+            ctx.beginPath();
+            ctx.moveTo(b.x, lp.y - 8);
+            ctx.lineTo(b.x - 16, lp.y - 40);
+            ctx.lineTo(b.x + 16, lp.y - 40);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
         [...Object.values(state.players).filter((p) => !p.hj && !p.fly && !(p.lock && (state.escorts || []).some((e) => e.name === p.lock && e.flying))), ...state.boarders].sort((a, b) => a.y - b.y).forEach((player) => {
           // Crew aboard a gunship are stored in HER frame: draw them where she is.
           if (player.onGunship && state.gunship) {
