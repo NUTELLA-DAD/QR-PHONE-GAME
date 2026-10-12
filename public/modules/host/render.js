@@ -30,6 +30,7 @@ import { createLinkArt } from './linkArt.js'; // linked-station wires, gust warn
 import { createHealthArt } from './healthArt.js'; // heart pips over a hurt crewman's head
 import { createSearchlightArt } from './searchlightArt.js'; // searchlight lamps, beams and the darkness overlay
 import { createPortholeArt } from './portholeArt.js'; // the round brass portholes: friends off screen, the lookout's spyglass (portholes.js)
+import { idleVerb } from './roleCards.js'; // F10: the verb over a free crewman's head
 import { createFleetArt } from './fleetArt.js'; // B.3: the panels, pennants and edge arrows of a sky with several ships
 import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, HUD, scoreboard (pvp/match.js)
 import { bandOf, metres, BAND_WORDS } from './pvp/range.js'; // the range bands: the TV's readout
@@ -80,6 +81,36 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.lineWidth = config.OUTLINE.MAIN;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
+  };
+
+  // F10 (FUN.md): the verb tag over a crewman who has been free for a while with a job on offer (GRAB / PATCH / SPRAY / LOAD / STOKE / TAKE THE HELM ...): a dark plate, gold letters, drawn at the current transform (x, y = the middle of the plate).
+  const verbTag = (text, x, y, k = 1) => { // (k: 2D world units are drawn small when the camera is out, so that view asks for a bigger plate)
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(k, k);
+    x = 0;
+    y = 0;
+    ctx.font = '26px ' + config.FONTS.DISPLAY;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const w = ctx.measureText(text).width + 26, h = 38;
+    ink();
+    ctx.lineWidth = 4;
+    ctx.fillStyle = '#2b2622';
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y - h / 2, w, h, 12);
+    ctx.fill();
+    ctx.strokeStyle = '#f3ead6';
+    ctx.stroke();
+    ctx.fillStyle = '#ffd23f';
+    ctx.fillText(text, x, y + 1);
+    ctx.restore();
+  };
+
+  const verbRank = (p, all) => { // (two crew side by side on a deck: every other tag sits a step higher, so the plates do not lie on one another)
+    let n = 0;
+    for (const q of Object.values(all)) if (q !== p && q.d === p.d && idleVerb(q) && (q.x < p.x || (q.x === p.x && String(q.id) < String(p.id)))) n++;
+    return n & 1;
   };
 
   const rrect = (x, y, w, h, r) => {
@@ -2917,6 +2948,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.stroke();
         ctx.restore();
       }
+      const iv = idleVerb(p); // (F10: the verb, above the arrow if there is one)
+      if (iv) verbTag(iv, 0, -44 - (jb && jb.dir ? 40 : 0) - (K8 & 1 ? 3 : 0) - verbRank(p, state.players) * 42);
       if (p.team && sh.team && p.team !== sh.team.id) versusArt.bang(0, -70, p.team, { zoom: zs }, tq);
       spotterFor(sh).drawHelp(p, 0, 0, tq);
     };
@@ -3367,6 +3400,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
             ctx.stroke();
             ctx.restore();
           }
+          const iv = idleVerb(p); // (F10: the verb, above the arrow if there is one)
+          if (iv) verbTag(iv, px, y - 52 - (jb && jb.dir ? 50 : 0) + Math.sin(time / 180) * 3 - verbRank(p, state.players) * 58, 1.4);
           if (p.team && ship.team && p.team !== ship.team.id) versusArt.bang(px, y - 70, p.team, view, time / 1000); // (an enemy on this deck: a "!" over his head)
           art.spotter.drawHelp(p, px, y, time / 1000); // HELP! call-out
         }

@@ -1,4 +1,6 @@
 import { createRadar } from './radar.js';
+import { config } from '../../config.js';
+import { helpFor } from './help.js';
 
 export function createControllerUI({ network }) {
   const $ = (id) => document.getElementById(id);
@@ -16,6 +18,7 @@ export function createControllerUI({ network }) {
     hijack: 'Kick the pilot: tap any button 3 times, or hold Action.',
     escort: 'Stick points where to fly. Guns fire by themselves.',
     light: 'Stick sweeps the beam. HOLD to focus it.',
+    boiler: 'Tap SHOVEL to feed the fire. Bring coal from the bunker. HOLD the button to SURGE steam.', // (F10: the ? card needs a line for the boiler too)
     coil: 'Aim with the stick, HOLD to charge, let go to fire!',
     shield: 'Point the stick to swing the shield round the ship.',
     bombbay: 'Press DROP when the red ring is on a target.',
@@ -143,6 +146,33 @@ export function createControllerUI({ network }) {
     if (!tm) return;
     document.body.style.setProperty('--tc', tm.color);
     $('teambar').textContent = "You're " + tm.name + ' - tap to swap';
+  };
+
+  // F10 (FUN.md, config.CONTROLS.ROLE_CARDS): the role card. One big card over the controls: the join card (after joining, once) and the ? button's hint for the seat or the job.
+  // A tap closes it, or it closes itself after a few seconds.
+  const RC = config.CONTROLS.ROLE_CARDS;
+  let cardTimer = null;
+  const hideCard = () => {
+    clearTimeout(cardTimer);
+    $('rcard').classList.remove('show');
+  };
+  const showCard = (card, secs) => {
+    $('rcic').textContent = card.icon;
+    $('rctitle').textContent = card.title;
+    $('rctext').textContent = card.text;
+    $('rcard').classList.add('show');
+    clearTimeout(cardTimer);
+    cardTimer = setTimeout(hideCard, secs * 1000);
+  };
+  let joinCarded = false;
+  const joinCard = () => {
+    if (!RC.ENABLED || joinCarded) return;
+    joinCarded = true; // (once per page: a reconnect does not show it again)
+    showCard({ icon: '🧭', title: RC.JOIN_TITLE, text: RC.JOIN_TEXT }, RC.CARD_TIME);
+  };
+  const helpCard = () => {
+    if ($('rcard').classList.contains('show')) return hideCard();
+    showCard(helpFor(uiState, SEAT_HINTS), RC.HELP_TIME);
   };
 
   // A short message that pops up over the controls, plus a buzz.
@@ -344,6 +374,15 @@ export function createControllerUI({ network }) {
       join();
     };
     $('leave').onclick = () => network.sendInput({ jx: 0, jy: 0, leave: 1 });
+    $('hintbtn').style.display = RC.ENABLED ? '' : 'none'; // (F10: the ? button - re-shows the hint for the seat or the job)
+    $('hintbtn').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      helpCard();
+    });
+    $('rcard').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      hideCard();
+    });
     $('teambar').addEventListener('pointerdown', () => network.sendInput({ jx: 0, jy: 0, swap: 1 })); // (Versus lobby: swap sides)
     network.socket.on('join:error', (message) => setJoinError(message));
     network.socket.on('join:ok', (message) => {
@@ -354,6 +393,7 @@ export function createControllerUI({ network }) {
       $('vjoin').classList.remove('show');
       $('vplay').classList.add('show');
       navigator.wakeLock?.request('screen').catch(() => {});
+      joinCard();
     });
     network.socket.on('room:closed', () => location.reload());
     network.socket.on('ui', (next) => updateUI(next));

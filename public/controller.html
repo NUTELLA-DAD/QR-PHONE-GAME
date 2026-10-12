@@ -196,6 +196,17 @@ body.teamed #strip{border-left:16px solid var(--tc,#c4574d)}
 #rotate{display:none;position:fixed;inset:0;background:#2b2622;color:#f3ead6;font-size:24px;font-weight:900;text-align:center;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:9}
 #rotate .ic{font-size:70px}
 @media (orientation:portrait){body.play #rotate{display:flex}}
+/* F10 role cards: the ? button in the top strip (round, 44 px: a thumb) and the big card (join card / ? hint) over the controls. */
+#hintbtn{flex:none;width:44px;height:44px;padding:0;border-radius:50%;font:inherit;font-weight:900;font-size:28px;line-height:1;border:4px solid #2b2622;background:#4d86c6;color:#fff;box-shadow:0 3px 0 #2b2622;touch-action:none}
+#hintbtn:active{transform:translateY(3px);box-shadow:0 0 0 #2b2622}
+#rcard{display:none;position:fixed;inset:0;z-index:9;background:rgba(43,38,34,.86);align-items:center;justify-content:center;padding:10px;touch-action:none}
+#rcard.show{display:flex}
+#rcard .box{display:flex;align-items:center;gap:18px;width:min(94vw,740px);max-height:92vh;background:#f3ead6;border:6px solid #2b2622;border-radius:22px;padding:14px 22px;box-shadow:0 8px 0 #000,inset 0 0 0 3px #f3ead6,inset 0 0 0 5px rgba(107,74,50,.45)}
+#rcard .ic{flex:none;font-size:min(26vh,96px);line-height:1}
+#rcard .bd{min-width:0}
+#rcard h2{margin:0 0 6px;font-family:'Limelight',Georgia,serif;font-weight:400;font-size:clamp(24px,8vh,38px);line-height:1.05;color:#a8443f}
+#rcard p{margin:0;font-size:clamp(17px,5.4vh,26px);font-weight:700;line-height:1.22}
+#rcard small{display:block;margin-top:8px;font-size:clamp(12px,3.4vh,15px);color:#6b5a48}
 /* ---- Captain's logbook look (matches the TV): Limelight for titles and shouts, cream paper, warm-brown ink. ---- */
 h1,.big,#leave,#help,#toast,#vote h2,#vote button em,#rotate,#job,#code,#teambar{font-family:'Limelight',Georgia,serif;font-weight:400}
 h1{font-size:28px}
@@ -221,7 +232,7 @@ h1{font-size:28px}
 #carry{min-width:0;flex:0 1 auto;overflow:hidden}
 #carrytx{overflow:hidden;text-overflow:ellipsis}
 /* Narrow phones: keep the top strip on ONE line even with LEAVE showing (the button area below is sized from what is left). */
-@media (max-width:660px){#carry{font-size:15px;padding:0 6px 0 4px}#carry .cico{font-size:22px}#leave{min-width:96px;padding:2px 10px;font-size:17px;min-height:40px}#help{min-width:76px;padding:2px 8px}#strip{gap:6px}}
+@media (max-width:660px){#carry{font-size:15px;padding:0 6px 0 4px}#carry .cico{font-size:22px}#leave{min-width:96px;padding:2px 10px;font-size:17px;min-height:40px}#help{min-width:76px;padding:2px 8px}#strip{gap:6px}#hintbtn{width:40px;height:40px;font-size:24px}}
 </style></head><body>
 <div id="vjoin" class="view show">
   <h1>Join the crew</h1>
@@ -238,6 +249,7 @@ h1{font-size:28px}
     <div id="hearts" style="display:none"></div>
     <div id="carry"><span class="cico">✋</span><span id="carrytx">Hands empty</span></div>
     <div id="hullbox"><div id="hull"><div id="hfill"></div><span>HULL</span></div><div id="lift"><div id="lfill"></div></div></div>
+    <button id="hintbtn" aria-label="What do I do?">?</button>
     <button id="help">🆘 Help!</button>
     <button id="leave">⬅ LEAVE</button>
   </div>
@@ -262,6 +274,7 @@ h1{font-size:28px}
   </div>
 </div>
 <div id="vote"><h2 id="vtitle">Pick an upgrade</h2><div class="cards" id="vcards"></div></div>
+<div id="rcard"><div class="box"><div class="ic" id="rcic">🧭</div><div class="bd"><h2 id="rctitle"></h2><p id="rctext"></p><small>Tap to close</small></div></div></div>
 <div id="hurtflash"></div>
 <div id="toast"></div>
 <div id="rotate"><div class="ic">📱↻</div>Turn your phone sideways</div>

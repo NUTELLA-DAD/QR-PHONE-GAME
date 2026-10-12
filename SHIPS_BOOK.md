@@ -81,7 +81,7 @@ The game has an astonishing number of things that *can happen*, and almost no wa
 | L3 | Crew Roster and titles | M | a veteran's title shows within 2 s of scanning in |
 | L4 | The Nemesis | M | the voyage win rate stays within 5 points; you can name her without looking |
 | L5 | Secret Orders | M | 40-70% completed; an order never blocks a critical job |
-| L6 | Mooring drill | S | every new phone does one job within 90 s |
+| L6 | Mooring drill | S | every new phone does one job within 90 s (**built in FUN.md F10**: the join card, the ? button and the verb over an idle head; the 90 s test is a human playtest) |
 | L7 | Play of the mission, slow motion, awards v2 | S | someone says "do that again" |
 | L8 | Lobby fold, shop trim, dock mess hall and stop events | S/M | the dock takes under 60 s (**the shop trim is done in FUN.md F6**: three cards, shorter votes, six fittings; the lobby fold, the mess hall and the stop events remain) |
 
