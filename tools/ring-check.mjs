@@ -19,6 +19,8 @@
 //   (m) grapples from below: the keel near a squad for 1.5 s -> a swing (the tell) -> a ring zip -> raiders aboard; cool-downs
 //   (n) the catapult's stones (burning on the citadel, a flame where they land) and the boom chain (the lookout's call, snag + drag + bag ticks, snaps by strain / shells / bombs, diving under passes; the helm bots dive)
 //   (o) fairness: the garrison's damage at most 60% of the face guns', on paper (config) and in play (8 bots, power landed)
+//   (p) F12, small ships crack castles: a ship with no bomb bay (the Sparrow) has her guns' magazines filled as a shutter opens (RING.FAIR); the classic ship keeps the bay's refill; NO_RINGFAIR=1 is the old ring
+//   (q) F12: a limp home keeps the gates the crew had breached (RING.FAIR.KEEP_GATES); the old castle's Flagship is not carried over to the new one
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { installShims, seedRandom, publicDir } from './shims.mjs';
@@ -787,6 +789,75 @@ function SQ() { return GA.SQUAD; }
   }
   config.PACING.RATE_START = config.PACING.RATE_END = 0;
   report(tally.guns > 0 && tally.garr <= 0.6 * tally.guns, `fairness in play: what landed on the ship over those runs - garrison ${tally.garr.toFixed(1)} against the guns' ${tally.guns.toFixed(1)} (${((tally.garr / Math.max(0.01, tally.guns)) * 100).toFixed(0)}%, at most 60%)`);
+}
+// ---- (p) F12, small ships crack castles: a ship with no bomb bay has her magazines filled when a shutter opens (RING.FAIR), the classic ship keeps the bay's refill ----
+{
+  const { applyBuild } = await load('shipLayout.js');
+  const { BUILDS } = await load('modules/host/shipBuild.js');
+  const open = (build, fair) => {
+    applyBuild(BUILDS[build]);
+    config.RING.FAIR.ENABLED = fair;
+    const { st, step, ring, park } = boot(seed0, { variant: 'tower', human: true }), f = ring().faces[0];
+    park(f.x, f.y - 1400);
+    step(30);
+    for (const g of Object.values(st.GUNS)) g.ammo = 2;
+    if (st.bombBay) st.bombBay.bombs = 0;
+    kill(st, f);
+    step(2);
+    const guns = Object.values(st.GUNS).filter((g) => g.type !== 'flame' && g.type !== 'mines' && g.type !== 'harpoon');
+    return { open: f.open > 0, full: guns.every((g) => g.ammo >= g.max), low: guns.every((g) => g.ammo <= 4), bombs: st.bombBay ? st.bombBay.bombs : 0, bay: !!st.ships[0].layout.bombBay };
+  };
+  const sp = open('sparrow', true), spOff = open('sparrow', false), cl = open('classic', true);
+  config.RING.FAIR.ENABLED = true;
+  applyBuild(BUILDS.classic);
+  report(!sp.bay && sp.open && sp.full, `F12: the Sparrow (no bomb bay) has every magazine full as the shutter opens (open ${sp.open}, full ${sp.full})`);
+  report(spOff.open && spOff.low && !spOff.full, 'F12: with RING.FAIR off (NO_RINGFAIR=1) her magazines stay as they were');
+  report(cl.bay && cl.open && cl.low && cl.bombs === config.BOMBS.MAX, `F12: the classic ship keeps the bay's refill (${cl.bombs} bombs) and her guns are left alone`);
+}
+// ---- (q) F12, a limp home keeps the breached gates (RING.FAIR.KEEP_GATES) and the Flagship of an old castle does not hang on ----
+{
+  const { st, step, ring, sim } = boot(seed0, { variant: 'fortress', human: true }), course = st.course, id = course.stop && course.stop.id, f0 = ring().faces[0];
+  kill(st, f0);
+  step(2);
+  for (let i = 0; i < 20; i++) shellAt(st, f0.core.x, f0.core.y);
+  step(2);
+  report(f0.down && JSON.stringify(st.run.castle && st.run.castle[id]) === '[0]', `F12: a breached gate is remembered by the run (${JSON.stringify(st.run.castle)})`);
+  const opts = { kind: 'ring', stop: course.stop, danger: 3, lengthMul: 1 };
+  sim.course.startMission(course.lap, opts); // (a limp home, and the stop flown again on a new map)
+  const r2 = ring();
+  report(r2 !== f0 && r2.faces[0].down && r2.faces[0].how === 'kept' && r2.faces.slice(1).every((f) => !f.down) && course.map.outposts[0].done && course.turrets.filter((t) => t.outpost === 0).every((t) => t.dead), `F12: the stop flown again has that gate still breached (${r2.faces.map((f) => (f.down ? 'X ' + f.how : '-')).join(', ')}), its guns gone`);
+  for (const f of r2.faces) kill(st, f);
+  for (let k = 0; k < 5 && !r2.crown; k++) { step(2); for (const f of r2.faces) if (!f.down && f.open > 0) for (let i = 0; i < 20; i++) shellAt(st, f.core.x, f.core.y); step(2); }
+  report(!!r2.crown && !(st.run.castle && st.run.castle[id]), 'F12: the crown falls and the run forgets the castle');
+  config.RING.FAIR.KEEP_GATES = false;
+  sim.course.startMission(course.lap, opts);
+  const f1 = ring().faces[0];
+  kill(st, f1);
+  step(2);
+  for (let i = 0; i < 20; i++) shellAt(st, f1.core.x, f1.core.y);
+  step(2);
+  sim.course.startMission(course.lap, opts);
+  report(f1.down && ring().faces.every((f) => !f.down), 'F12: with KEEP_GATES off a new map is a whole castle');
+  config.RING.FAIR.KEEP_GATES = true;
+}
+{
+  // the Flagship hung on a citadel before a limp is not carried to the next one (squadrons.js updateBoss)
+  const { st, step, ring, sim } = boot(seed0, { variant: 'citadel', human: true }), course = st.course;
+  sim.squadrons.spawnBoss();
+  const z0 = st.boss;
+  report(!!z0 && z0.moor === ring().moor, 'F12: the Flagship hangs on the citadel\'s mooring');
+  sim.squadrons.reset(); // (the limp home: reset() tells the boss to leave)
+  sim.course.startMission(course.lap, { kind: 'ring', stop: course.stop, danger: 3, lengthMul: 1 });
+  step(5);
+  report(st.boss !== z0 && (!st.boss || st.boss.moor === ring().moor), 'F12: after a limp home the old Flagship is gone, the new castle hangs its own (' + (st.boss ? 'a new one' : 'none yet') + ')');
+  config.RING.FAIR.ENABLED = false;
+  const z1 = (st.boss = null, sim.squadrons.spawnBoss(), st.boss);
+  sim.squadrons.reset();
+  sim.course.startMission(course.lap, { kind: 'ring', stop: course.stop, danger: 3, lengthMul: 1 });
+  step(5);
+  report(st.boss === z1 && z1.leaving, 'F12: with NO_RINGFAIR the old Flagship hangs on (the old bug, kept for the baselines)');
+  config.RING.FAIR.ENABLED = true;
+  st.boss = null;
 }
 // the switch
 {

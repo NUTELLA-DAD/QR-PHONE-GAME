@@ -46,12 +46,15 @@ export function createRing({ state, puff, credit, onMarker }) {
     }));
     const r = {
       variant: map.ring.variant, name: map.ring.name, xRing: map.ring.xRing, R: map.ring.R, C: map.ring.C, axisY: map.ring.axisY, faces,
-      keep: { hp: V.KEEP_HP, max: V.KEEP_HP }, crown: null, zips: [],
+      keep: { hp: V.KEEP_HP, max: V.KEEP_HP }, crown: null, zips: [], t: 0,
       moor: map.ring.variant === 'citadel' ? { x: faces.reduce((a, f) => a + f.x, 0) / faces.length, y: faces[0].y - G.MOOR.UP, faces: faces.map((f) => f.i), cut: faces.map(() => false), falling: false, fallT: 0, spawned: false } : null,
       stats: { windows: 0, coreShells: 0, coreBombs: 0, chips: 0, charges: 0, planted: 0, zips: 0, raiders: 0, bats: 0, flaks: 0, mortars: 0, boards: 0, breaches: [], wraps: 0, specialsDown: 0 },
     };
     course.ring = r;
     gar.begin(r, map);
+    // F12 (RING.FAIR.KEEP_GATES): a limp home flies the stop again on a new map, but the gates the crew had breached stay breached (state.run.castle, kept by breach() below)
+    const kept = G.FAIR.ENABLED && G.FAIR.KEEP_GATES && state.run && state.run.castle && course.stop && state.run.castle[course.stop.id];
+    if (kept) for (const i of kept) if (faces[i]) keepDown(faces[i], r, map);
     if (state.slow !== undefined && state.slow !== 1) state.slow = 1;
   }
 
@@ -77,7 +80,8 @@ export function createRing({ state, puff, credit, onMarker }) {
     sfx('impact');
     const top = rank(f);
     const who = whoOf(byId != null ? byId : top && top[0]);
-    r.stats.breaches.push({ face: f.i, how, by: who ? who.name : null });
+    r.stats.breaches.push({ face: f.i, how, by: who ? who.name : null, t: r.t }); // (t: seconds into the ring stop, for the tools)
+    if (RG().FAIR.ENABLED && RG().FAIR.KEEP_GATES && state.run && course.stop) (state.run.castle ??= {})[course.stop.id] = r.faces.filter((q) => q.down).map((q) => q.i); // (F12: the gates that stay breached if the crew limps home and comes back)
     gar.onBreach(f); // (its archers are silenced, its men run)
     if (config.MAPS.OUTPOST_REFILL && state.bombBay) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX);
     if (r.moor) { const k = r.moor.faces.indexOf(f.i); if (k >= 0 && !r.moor.cut[k]) { r.moor.cut[k] = true; if (r.moor.cut.every(Boolean) && !r.moor.falling) { r.moor.falling = true; r.moor.fallT = 0; } } }
@@ -86,6 +90,20 @@ export function createRing({ state, puff, credit, onMarker }) {
       warn(r.moor && !r.moor.falling && left ? 'MOORING CUT! ' + left + ' TO GO' : left ? 'GATE ' + (f.i + 1) + ' BREACHED! ' + left + ' TO GO' : 'THE LAST GATE IS BREACHED!', 3.5);
       moment('ring-breach', who, { name: r.name, how });
     }
+  }
+
+  // A gate breached before the crew's last limp home stays breached on the map flown again (F12): the quiet half of breach() - no banner, no Book moment, the same gun, special and mooring state.
+  function keepDown(f, r, map) {
+    f.down = true;
+    f.how = 'kept';
+    f.open = 0;
+    f.hp = 0;
+    map.outposts[f.i].done = true;
+    for (const t of turretsOf(f)) t.dead = true;
+    f.special.dead = true;
+    r.stats.breaches.push({ face: f.i, how: 'kept', by: null, t: 0 });
+    gar.onBreach(f);
+    if (r.moor) { const k = r.moor.faces.indexOf(f.i); if (k >= 0) r.moor.cut[k] = true; if (r.moor.cut.every(Boolean)) { r.moor.falling = true; r.moor.fallT = 0; } }
   }
 
   // The core takes points (only while the shutter is open); a shut shutter chips the keep's pool. `by` = the player id.
@@ -111,13 +129,19 @@ export function createRing({ state, puff, credit, onMarker }) {
   }
 
   // A shutter opening throws the face's stores open too: the bomb bay is restocked (CORE.RESTOCK), so the window can be bombed.
-  const restock = () => { if (RG().CORE.RESTOCK && state.bombBay) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX); };
+  // (F12: a ship with no bomb bay gets her guns' magazines filled instead: RING.FAIR)
+  const restock = () => {
+    const G = RG();
+    if (G.CORE.RESTOCK && state.bombBay) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX);
+    if (G.CORE.RESTOCK && G.FAIR.ENABLED && !mainShip(state).layout.bombBay) for (const g of Object.values(state.GUNS || {})) if (g.type !== 'flame' && g.type !== 'mines' && g.type !== 'harpoon') g.ammo = Math.max(g.ammo, Math.round(g.max * G.FAIR.GUN_RESTOCK));
+  };
 
   // ---------- the step ----------
   function update(dt) {
     const r = rr(), course = crs(), G = RG();
     if (!r || state.ship.down > 0) return;
     const sh = mainShip(state), aim = shipAim();
+    r.t += dt;
     // Revolving turrets travel round the ring (and wrap at its end: the 3D view makes it seamless).
     for (const t of course.turrets) {
       if (!t.rev || t.dead) continue;
@@ -421,6 +445,7 @@ export function createRing({ state, puff, credit, onMarker }) {
     const r = rr();
     if (r.crown) return;
     r.crown = { how, t: 0, done: false };
+    if (state.run && state.run.castle && crs().stop) delete state.run.castle[crs().stop.id]; // (F12: nothing left to keep)
     warn(r.name + ' FALLS!', 6);
     pop(state, r.faces[0].x, r.faces[0].y - 500, 'boss', '#ffd23f', 2.4);
     for (const f of r.faces) for (let k = 0; k < 6; k++) puff(f.x + (k - 3) * 90, f.y - 120 - k * 40, k % 2 ? '#ff5a1f' : '#ffd23f', 20);
