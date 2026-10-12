@@ -39,12 +39,12 @@ export function createRaiders({ state, modules, puff, impact }) {
     return b;
   };
 
-  // A squad arrives at (x, y) (boarding lines from the boss).
-  const dropSquad = (x, y) => {
+  // A squad arrives at (x, y) (boarding lines from the boss). `only`: a smaller party of that many plain grunts (the castle garrison's grapples, garrison.js).
+  const dropSquad = (x, y, only) => {
     const crew = crewHeads(state);
-    const count = Math.max(1, Math.min(6, Math.round((1 + Math.floor(crew / 4)) * crewMul(state, 'raiders'))));
+    const count = only != null ? only : Math.max(1, Math.min(6, Math.round((1 + Math.floor(crew / 4)) * crewMul(state, 'raiders'))));
     for (let i = 0; i < count; i++) {
-      const type = i === 0 ? 'grunt' : pickType();
+      const type = i === 0 || only != null ? 'grunt' : pickType();
       const t = R[type];
       state.boarders.push({
         id: 'r' + nextId++,

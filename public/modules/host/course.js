@@ -19,6 +19,7 @@ import { inFunnel } from './creatureFight.js'; // (C.3: the open beak gapes up t
 import { pickEnvironment } from './environments.js';
 import { makeMap, buildArenaMap, solidAt, floorBelow, roofAbove, distToGoal, routeAhead, setGoal, stationCell, stationDist } from './maps.js';
 import { applyForce } from './forces.js';
+import { chainWay } from './garrison.js'; // (CASTLE.md D1: a boom chain across the lane changes the pilot's plan)
 import { createRing } from './ring.js'; // (the orbit finale: faces, shutters, the gallery, the crown; course.ring is its state on a ring map)
 
 const K = config.COURSE;
@@ -141,7 +142,7 @@ export function pilotPlan(state, ahead, cruise) {
   const alt = state.ship.alt;
   if (ship.ai) return ship.ai.plan(state); // (the enemy gunship: her captain's ring spots, strafing runs and retreats, gunshipShip.js)
   if (state.rival) return rivalPlan(state); // (Versus: the rival, not the beacon, is the goal; every ship has her own)
-  if (course && course.map) return giveWay(state, ship, mapPlan(state, cruise));
+  if (course && course.map) return course.ring && course.ring.gar ? chainWay(state, giveWay(state, ship, mapPlan(state, cruise)), cruise) : giveWay(state, ship, mapPlan(state, cruise));
   const B = altBounds(state);
   const range = (w) => [Math.max(w.min, B.lo), Math.min(w.max, B.hi)];
   const [lo, hi] = range(altWindow(state, ahead));
@@ -801,7 +802,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       }
       if ((t.cd -= dt) <= 0) {
         t.warned = false;
-        t.cd = (r(K.TURRET_FIRE_MIN, K.TURRET_FIRE_MAX) / firePace(state)) * (course.map && course.map.open ? 1.3 : 1);
+        t.cd = (r(K.TURRET_FIRE_MIN, K.TURRET_FIRE_MAX) / firePace(state)) * (course.map && course.map.open ? 1.3 : 1) * (t.slow || 1); // (t.slow: its gun crew is dead, garrison.js)
         const helm = Object.values(state.players).find((q) => layout.kindOf(q.lock) === 'helm');
         const miss = course.rand() < K.FLAK_MISS || (helm && Math.abs(helm.jy) > 0.3 && course.rand() < 0.4);
         const tx = toWorldX(ship, REF.x - 500 + course.rand() * 1000);
@@ -1311,5 +1312,5 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
 
   if (config.MAPS.ENABLED) startMission(1, firstMission && firstMission());
 
-  return { advance, update, reset, restart, helmHint, dropBomb, predictBomb, startMission, place, ringSys };
+  return { advance, update, reset, restart, helmHint, dropBomb, predictBomb, startMission, place, ringSys, blast };
 }

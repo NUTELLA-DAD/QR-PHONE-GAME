@@ -513,10 +513,15 @@ export function createShipSim(world, ship, W) {
   };
 
   // Something exploded against the ship at (x, y) in ship coordinates. power 1 = one enemy bullet.
-  const impactBody = (x, y, power, hullMul = 1, kind = 'hit') => { // (hullMul: the hull a blow costs, apart from the size of the blow: our shells on the enemy gunship, gunshipShip.js)
+  const impactBody = (x, y, power, hullMul = 1, kind = 'hit', fire = 0) => { // (hullMul: the hull a blow costs, apart from the size of the blow: our shells on the enemy gunship, gunshipShip.js. kind / fire: the castle garrison's blows, CASTLE.md D1 - 'arrow' and 'chain' are small ones that shrink what they may do beside their damage, an arrow is stopped by plate, a 'bolt' makes a double gas hole, fire = the chance a burning arrow or stone lights what it hits)
     // Riveted plate (S.5g) on this stretch of hull wall or rail: the hit counts for much less, and rarely punches through.
     const d = onGasbag(x, y) < 0 ? roomPlatformAt(x, y) : null;
     const plate = d !== null && !!armourOn(layout, d, x);
+    const light = kind === 'arrow' || kind === 'chain';
+    if (plate && kind === 'arrow') { // (plate is immune to arrows)
+      shipPuff(x, y, '#cfd8dc', 3);
+      return;
+    }
     if (plate) {
       power *= config.ARMOUR.POWER_MUL;
       state.fireStats.plated++;
@@ -536,14 +541,15 @@ export function createShipSim(world, ship, W) {
     }
     shipPuff(x, y, '#ff7b00', Math.round(8 * power));
     const coll = crewMul(state, 'collateral'); // (small crews: hits break fewer things)
-    const pm = config.PVP.ENABLED || ship.ai ? Math.min(1, power) : 1; // (the enemy gunship too: our shells are small blows on her, as on a rival ship. Versus: a crew shell is a small blow - it chips the hull and only now and then breaks something or lights a fire, in proportion to its power)
+    const pm = (light || config.PVP.ENABLED || ship.ai ? Math.min(1, power) : 1) * (kind === 'arrow' ? config.GARRISON.ARCHER.CHANCE_MUL : 1); // (the enemy gunship too: our shells are small blows on her, as on a rival ship. Versus: a crew shell is a small blow - it chips the hull and only now and then breaks something or lights a fire, in proportion to its power)
     modules.hitAt(x, y, shipPuff, power, coll);
-    helmsmanHit(x, y, power);
+    if (!light) helmsmanHit(x, y, power);
     crewHit(x, y, power);
     const hitBag = onGasbag(x, y);
     if (hitBag >= 0) {
-      if (state.bags[hitBag] && state.bags[hitBag].type === 'hydrogen') hydrogen.hit(hitBag, power * pm); // (a shell into a hydrogen bag: a spark can light it)
-      if (state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll * pm) state.gasHoles.push(gasHoleAt(x, y, hitBag));
+      if (state.bags[hitBag] && state.bags[hitBag].type === 'hydrogen') hydrogen.hit(hitBag, power * pm + fire * 3); // (a shell into a hydrogen bag: a spark can light it; a burning arrow or stone surely might)
+      if (kind !== 'chain' && state.gasHoles.length < config.GAS.MAX_HOLES && Math.random() < config.GAS.HOLE_CHANCE * coll * pm) state.gasHoles.push(gasHoleAt(x, y, hitBag)); // (a boom chain wears the canvas, it does not punch holes)
+      if (kind === 'bolt' && state.gasHoles.length < config.GAS.MAX_HOLES) state.gasHoles.push(gasHoleAt(x + 40, y + 30, hitBag)); // (a ballista bolt: a double hole)
       if (structure.on()) structure.hit(x, y, 2 * power * hullMul, { power, bag: hitBag, kind }); // (STRUCTURE.md: the canvas of that bag wears, not the frame)
       else damageHull(2 * power * hullMul);
       return;
@@ -555,6 +561,7 @@ export function createShipSim(world, ship, W) {
       // (a fire starts more readily on tinder (the coal), and not at all on plate: the spot's flammability scales the chance, 1 on a plain deck)
       const ig = fireSys.igniteChance(d, x);
       if ((power >= 2 && Math.random() < coll * Math.min(1, ig)) || Math.random() < 0.35 * coll * ig * pm) fireSys.ignite(d, x + (Math.random() - 0.5) * 80, 'hit');
+      if (fire && Math.random() < fire * Math.min(1, ig)) fireSys.ignite(d, x + (Math.random() - 0.5) * 80, 'hit'); // (a burning arrow or stone: the spot's own igniteChance)
     }
     if (structure.on()) structure.hit(x, y, config.SHIP.HIT_DAMAGE * power * hullMul, { power, kind }); // (STRUCTURE.md: the segment under the blow, half of it when a station, gun or engine took the hit)
     else damageHull(config.SHIP.HIT_DAMAGE * power * hullMul);
@@ -974,9 +981,10 @@ export function createShipSim(world, ship, W) {
     return !!(breakOff({ kind: 'limb', x, y, reach: C.END_REACH ?? B.HIT.END_REACH, len: B.HIT.LIMB, cause: kind }) || breakOff({ kind: 'limb', x, y, reach: C.FAR, len: B.HIT.LIMB, cause: kind })); // (nothing near the contact - the nose of the gasbag took the rock - and the bow crumples instead)
   }
 
-  const impact = (x, y, power, hullMul = 1, kind = 'hit') => { // (kind: 'hit' a shell or bomb, 'rock' a scrape, 'ram' two hulls meeting; it only names the mark in hitLog)
+  const impact = (x, y, power, hullMul = 1, kind = 'hit', fire = 0) => { // (kind: 'hit' a shell or bomb, 'rock' a scrape, 'ram' two hulls meeting, and the castle's 'arrow' 'bolt' 'stone' 'chain'; it names the mark in hitLog, and the garrison's blows are told apart in impactBody)
+    kind ||= 'hit'; // (a bullet with no kind is a plain hit)
     logHit(x, y, power, kind);
-    impactBody(x, y, power, hullMul, kind);
+    impactBody(x, y, power, hullMul, kind, fire || 0);
     if (power >= 2 && BOC().ENABLED) hardHit(x, y, power); // (the blow as it was struck: plate on the spot lowers the chance inside hardHit)
   };
 

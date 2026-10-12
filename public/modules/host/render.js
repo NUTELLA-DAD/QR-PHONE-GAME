@@ -936,7 +936,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
       } else glowShot(shell, shell.frag ? '#ffd23f' : (ship.world.players[shell.owner] || {}).color || '#f2d36b', (shell.frag ? 5 : 9 + 3 * big) * farSc, 0.06);
     }
     for (const bullet of state.bullets) {
-      if (bullet.flak) drawFlakBurst(ctx, bullet.x, bullet.y, 13); // (flak: a flat gouache burst)
+      if (bullet.arrow || bullet.bolt) ringArt.drawShot(bullet); // (the castle garrison's arrows and ballista bolts, ringArt.js)
+      else if (bullet.flak) drawFlakBurst(ctx, bullet.x, bullet.y, 13); // (flak: a flat gouache burst)
       else glowShot(bullet, '#ff2e55', 12, 0.09);
     }
   };

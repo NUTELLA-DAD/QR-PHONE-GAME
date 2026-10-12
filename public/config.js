@@ -1278,6 +1278,39 @@ export const config = {
     MOOR: { UP: 2500, FIRE_RANGE: 2800, FALL_TIME: 3.2, FALL_ACC: 700 }, // the citadel's Flagship hangs UP px above its faces' platforms, fires at a ship this close, and when both moorings are cut falls for FALL_TIME s
     PROGRESS_APPROACH: 0.4, // the stop's progress (0-1): the approach takes the first share of it, the faces the rest
   },
+  // THE GARRISON (CASTLE.md package D1; garrison.js, ring.js, maps.js buildRingMap, ringArt.js): the castle's men fight back, on ring maps only. ENABLED false = exactly the R0 ring.
+  //   ARCHERS     two posts on every face's wall walk. A horn and a flag go up, an amber arc shows for TELL s, then 24-32 lobbed arrows. Each arrow is weak (DMG power) and 45% miss. Plate is immune to them,
+  //               the Deflector stops them, a searchlight on the post dazzles it (DAZZLE_MISS), shells or bombs wreck it (HP), and an arrow cannot climb more than CLIMB px above its post: fly high.
+  //               Fire arrows (variants in FIRE.VARIANTS, skies in FIRE.ENVS) light a deck by the spot's igniteChance. Only ONE telegraph (a volley's tell or the ballista's lock) at a time, castle wide.
+  //   BALLISTA    a face's special (FIRST: seconds in range before its first lock): it LOCKs for LOCK s (a pale aim-line, sp.lock; the line freezes the last FREEZE s), then a straight bolt flies at SPEED. A bolt bites a structure segment
+  //               hard (POWER) and makes a double gas hole on the bag. The helm's jink raises the miss.
+  //   GUN CREWS / SQUADS  a crew of CREW men mans every face gun (a dead crew slows its gun SLOW times over); SQUADS of MEN stand on the plazas (state: muster / cheer / man / flee / surrender / dead).
+  //               A bomb kills a squad (+1 kill, a Book moment), a shell takes SHELL_MEN men, they cheer CHEER s after a hit on the ship, flee when their gate is breached, surrender on the crown. A squad
+  //               whose plaza has the keel within GRAPPLE.RANGE px for GRAPPLE.NEED s throws grapples: raiders (ring zips) climb aboard GRAPPLE.TIME s later.
+  //   CATAPULT    the mortar's stones: on the citadel and in the Ember sky they burn (FIRE.STONE chance to light a deck on a hit, and a flame where they land).
+  //   BOOM CHAIN  fortress and citadel: a chain across the lane at ring angles AT (x pi), hanging from the top to LOW px above the platforms. A ship with any part in it is snagged: DRAG slows her, PULL
+  //               drags her back, the bag takes a tick of damage every TICK s. It snaps after SNAP_AFTER s snagged, or at 0 of HP (shells x SHELL_MUL, bombs BOMB); under it passes freely.
+  GARRISON: {
+    ENABLED: true,
+    SPECIALS: { fortress: ['hangar', 'gallery', 'ballista', 'mortar'] }, // per variant: the faces' specials in turn when the garrison is on (the flak battery of the fortress's third face is the ballista)
+    ARCHER: {
+      POSTS: 2, X: [-760, 760], UP: 600, // posts per face, where they stand from the face's middle (px), and how high above the platform
+      HP: 3, HIT_R: 70, BOMB_R: 100, // shell points to wreck a post, the radius a shell / a bomb in flight hits it at
+      RANGE: 3000, // a post only acts with a ship's aim point this close
+      FIRST: [12, 45], EVERY: [55, 75], // seconds in range before its first volley, and between volleys (each post)
+      TELL: 1.2, LOOSE: 0.5, COUNT: [24, 32], // the tell, the seconds the arrows take to leave, arrows per volley
+      DMG: 0.12, MISS: 0.45, DAZZLE_MISS: 0.9, JINK_MISS: 0.1, // power of one arrow, the share that miss, the share when the post is in a searchlight beam, and the extra while the helm jinks
+      CHANCE_MUL: 0.3, // scale on what an arrow hit may do beside its small damage (a breach, a gas hole): the hit's own chance x this
+      GRAVITY: 650, CLIMB: 800, T: [0.9, 2.2], SPEED_HINT: 950, // arrows lob under this gravity, rise at most CLIMB px above the post, and fly T seconds (distance / SPEED_HINT, clamped)
+      FIRE: { VARIANTS: ['citadel'], ENVS: ['ember'], SHARE: 0.2, IGNITE: 0.15 }, // fire arrows: in these castles / skies this share of arrows burn; a burning hit lights a deck with this chance x igniteChance
+    },
+    BALLISTA: { HP: 6, FIRST: [10, 30], EVERY: 45, RANGE: 3000, LOCK: 1.5, FREEZE: 0.4, SPEED: 1700, POWER: 2.3, MISS: 0.15, JINK_MISS: 0.4 },
+    CREW: { MEN: 3, SLOW: 2, SHELL_MEN: 2 }, // a gun crew's men; its gun fires this many times slower once they are dead; men a shell takes from a squad
+    SQUAD: { MEN: 7, PER_PLAZA: 1, PLAZA_X: [600, 1500], SWAY: 70, CHEER: 1.6, CHEER_RANGE: 3600, FLEE_SPEED: 260, HIT_W: 12 }, // men on a plaza, squads per plaza, the plaza's inner / outer edge from the face's middle (both sides), px they pace, seconds of cheering, how near the ship, flee speed, px of width per man
+    GRAPPLE: { RANGE: 250, NEED: 1.5, EVERY: 120, GAP: 90, TIME: 2.2, MEN: 1, MAX: 1, BOT_DODGE: 0 }, // keel within RANGE px of a squad for NEED s; a squad throws again after EVERY s (and the castle after GAP s); the rope takes TIME s; men that climb; BOT_DODGE: 1 = the helm bots climb 300 px when a swing begins (it costs them more than the grapple does: off); a squad only throws with fewer than MAX raiders aboard (the raiders are a squad scaled to the crew: ring zips -> dropSquad)
+    STONE: { FIRE: 0.25 }, // chance a burning stone lights the deck it hits (x igniteChance)
+    CHAIN: { AT: { fortress: [0.5, 1.5], citadel: [0.45] }, TOP: 6000, LOW: 2800, HP: 6, SNAP_AFTER: 6, DRAG: 3.5, PULL: 260, TICK: 1, POWER: 1, SHELL_MUL: 2, BOMB: 3, LOOKOUT: 2600, CLEAR: 3200, FACE_GAP: 2600, MARGIN: 90 }, // angles (x pi) it hangs at; the anchor height above the platforms; the low end above the platforms; hit points; seconds snagged before it snaps; drag per second; px/s it drags her back; seconds between bag ticks; power of a tick; shell damage x; hit points a bomb takes; the lookout's call distance; the map cuts the sky this half-width (px) round it clear of rock from its low end down to the platforms, and keeps it FACE_GAP px from any face; px the bot dives under it
+  },
   // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
   WAVES: {
     FIRST_AFTER: 35, // seconds before the first wave
@@ -2189,7 +2222,7 @@ export const config = {
     RING: 500, // moments kept in state.moments (the oldest are dropped; each stop's best are written into run.log at its end, so the postcard never needs the old ones)
     // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
     WEIGHT: {
-      'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
+      'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
       'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra

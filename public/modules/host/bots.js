@@ -3,6 +3,7 @@
 import { config } from '../../config.js';
 import { layoutTables, walkCost } from '../../shipLayout.js';
 import { bestTarget, targets } from './aim.js';
+import { chainDive } from './garrison.js'; // (CASTLE.md D1: the boom chain the helm dives under)
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
 import { shipGeom, landX, boilerX, routeStep } from './gunship.js';
 import { X0 as GUNSHIP_X0 } from './gunshipBlueprint.js';
@@ -236,7 +237,7 @@ function gunReach(state, n) {
   if (best.target.kind === 'para' || best.target.kind === 'gport') return 0.6; // paratroopers and gunship gun ports are worth manning a gun for
   if (best.target.kind.startsWith('rival')) return 0.6; // Versus: the other airship in range is what the guns are for (aim.js targets(): her guns, her bags, her boiler and helm, her hull)
   if (best.target.kind === 'core') return 0.55; // (a ring map: a core with its shutter open - the window is short: be at the gun)
-  return best.target.kind === 'turret' || best.target.kind === 'shutter' || best.target.kind === 'rspecial' ? 0.8 : 1;
+  return best.target.kind === 'turret' || best.target.kind === 'shutter' || best.target.kind === 'rspecial' || best.target.kind === 'post' ? 0.8 : 1;
 }
 
 // ---------- The weapons of the range bands (weapons.js, config.GUN_TYPES): the mine layer and the harpoon gun are not aimed at a target, they are used when the captain wants them ----------
@@ -307,6 +308,15 @@ function beamDodge(state) {
     if (Math.abs(Math.cos(z.aim)) < 0.2 || Math.abs(lineY - cy) > 520) continue;
     return state.ship.alt + (lineY > cy ? 380 : -380);
   }
+  return null;
+}
+
+// CASTLE.md D1: soldiers on a plaza are swinging a grapple at the keel (their timer has run a good part of the way): climb out of their reach.
+function grappleDodge(state) {
+  const r = state.course && state.course.ring;
+  if (!r || !r.gar) return null;
+  const GR = config.GARRISON.GRAPPLE;
+  for (const f of r.faces) for (const q of f.squads || []) if (q.kind === 'plaza' && q.grapT > GR.NEED * 0.5 && q.grapCd <= 0 && GR.BOT_DODGE) return 300 - mainShip(state).pose.y; // (300 px higher than she is: altitude = -pose.y)
   return null;
 }
 
@@ -839,6 +849,7 @@ function operate(p, state, dt) {
       plan.target = base.target + (plan.target - base.target) * wv;
       plan.speed = base.speed + (plan.speed - base.speed) * wv;
     }
+    const chainD = !gunshipAi && !cap ? chainDive(state) : null; // (a boom chain across the lane: pilotPlan already holds her back and aims under it; the bot also dives hard, as the plan's small change of height is not enough for the helm to move on)
     const towX = drakeTowX(state);
     if (towX !== null) plan.speed = clamp(((towX - toWorldX(mainShip(state), L.refPoint.x)) * mainShip(state).pose.f) / 700, -0.4, 0.4); // (over the vent, with the drake on her line)
     p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1); // (pace: her speed on the lever's scale, without the sails and overdrive, flight.js)
@@ -859,7 +870,7 @@ function operate(p, state, dt) {
       p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1);
     }
     let target = null;
-    const dodge = beamDodge(state) ?? dodgeAltitude(state);
+    const dodge = beamDodge(state) ?? dodgeAltitude(state) ?? grappleDodge(state);
     if (lo > hi || Math.abs(plan.target - ship.alt) > 120) target = plan.target;
     else if (dodge !== null && dodge > lo && dodge < hi) target = dodge;
     else if (ship.alt < lo + 15 || ship.alt > hi - 15 || cap) target = plan.target; // (the Versus captain always follows her plan: her jinks are small moves)
@@ -874,14 +885,15 @@ function operate(p, state, dt) {
     // C.6a: the Cinder Drake sits on her gasbag: the helm shakes it off with a hard climb, then back down to her course altitude, over and over (swords on the top deck do the same job; the dev flag for boarding leaves it sitting).
     if (state.creature && state.creature.kind === 'drake' && drakeBoardable(state.creature) && config.CREATURES.FORCE_WIN !== 'board' && lo <= hi) target = clamp(plan.target + (Math.floor(performance.now() / 1800) % 2 ? 450 : 0), lo, hi);
     if (state.creature && state.creature.kind === 'thunderbird' && birdOnBag(state.creature) && config.CREATURES.FORCE_WIN !== 'board' && lo <= hi) target = clamp(plan.target + (Math.floor(performance.now() / 1800) % 2 ? 450 : 0), lo, hi); // C.6b: the same shake-off for the Thunderbird on her bag (not for one resting on a spire)
+    if (chainD) target = Math.min(target ?? plan.target, chainD.alt); // (never above the height that clears the chain)
     // (Gentle enough not to overshoot now that she glides with momentum.)
     if (target !== null) p.jy = clamp((ship.alt - target) / 90 + (ship.vy || 0) / 260, -1, 1);
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
     else p.jy = 0;
     // The PRESSURE lever: pump or vent the gasbag toward the altitude the plan wants.
-    p.gas = state.goingDown ? 1 : gasFor(state, lungeAlt ?? beamDodge(state) ?? (dip !== null && target === dip ? dip : plan.target)); // (GOING DOWN!: pump flat out)
+    p.gas = state.goingDown ? 1 : gasFor(state, lungeAlt ?? beamDodge(state) ?? (chainD && state.ship.alt > chainD.alt ? chainD.alt : null) ?? (dip !== null && target === dip ? dip : plan.target)); // (GOING DOWN!: pump flat out)
     levelWithEngines(p, state, lungeAlt !== null);
-    if (p.gas < 0 && !state.goingDown && mainShip(state).sim.structure.on()) { // (balance pass: lift is a live rule, so the bot helm no longer vents the bags flat to dive: never more than DIVE points under the level she hovers at - an empty bag and no steam to refill it was how most falls began)
+    if (p.gas < 0 && !state.goingDown && mainShip(state).sim.structure.on() && !(chainD && state.ship.alt > chainD.alt)) { // (...except to dive under a boom chain, which is worth the gas) // (balance pass: lift is a live rule, so the bot helm no longer vents the bags flat to dive: never more than DIVE points under the level she hovers at - an empty bag and no steam to refill it was how most falls began)
       const hover = config.GAS.NEUTRAL + (state.structDeficit || 0) + (state.engineWeight || 0) + ((state.env && state.env.sink) || 0);
       if (state.ship.gas <= hover - config.STRUCTURE.BOT.DIVE) p.gas = 0;
     }
