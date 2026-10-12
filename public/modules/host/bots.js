@@ -29,6 +29,7 @@ import { drakeBoardable } from './creatureDrake.js';
 import { birdBoardable, birdOnBag, birdDiving, birdSwallowing, gizzardGlowing } from './creatureBird.js'; // (C.6b: the Thunderbird's rod calls, the coil's gizzard shot, the helm's shake-off)
 
 const B = config.BOTS;
+const prof = () => B.PROFILES[B.PROFILE] || B.PROFILES.bot; // (FUN.md F8: the bot profile in play - how often they think, how loosely they aim, how slowly they answer an alarm - read live so a tool can switch it)
 // Tables worked out per ship layout (rebuilt when a new ship build is applied to it): `tables(L).MAIN` ... Every function below gets its layout as
 // `const L = mainShip(state).layout` (B1; B2 passes each bot's own ship).
 const tables = layoutTables((L) => {
@@ -435,7 +436,7 @@ function crossJobs(state, bot) {
   const now = performance.now();
   const foe = ship.world.ships.filter((o) => o !== ship && areHostile(ship, o) && !(o.state.down > 0)).map((o) => ({ o, d: Math.hypot(o.pose.x - ship.pose.x, o.pose.y - ship.pose.y) })).sort((a, b) => a.d - b.d)[0];
   if (!foe || foe.d > XB.THROW_RANGE) { bot.throwUntil = 0; return out; }
-  if (!(bot.throwUntil > now) && (bot.carry === 'sandbag' || bot.carry === 'crate' || Math.random() < (XB.THROW_CHANCE * B.THINK_EVERY) / 60) && throwSpot(ship, foe.o).sol) bot.throwUntil = now + 18000;
+  if (!(bot.throwUntil > now) && (bot.carry === 'sandbag' || bot.carry === 'crate' || Math.random() < (XB.THROW_CHANCE * prof().THINK_EVERY) / 60) && throwSpot(ship, foe.o).sol) bot.throwUntil = now + 18000;
   if (bot.throwUntil > now) out.push({ kind: 'throw', obj: foe.o, max: 2, throwKind: kind });
   return out;
 }
@@ -520,7 +521,7 @@ function hatchJobs(state, bot) {
       return Math.max(a, b) > lo - HB.BELOW_X && Math.min(a, b) < hi + HB.BELOW_X && y > wy + 80 && y < wy + HB.BELOW_Y;
     }));
     if (!below) { if (bot.hatchUntil) bot.hatchUntil = 0; continue; }
-    if (!(bot.hatchUntil > now) && (bot.carry === 'sandbag' || bot.carry === 'crate' || Math.random() < (HB.DROP_CHANCE * B.THINK_EVERY) / 60)) bot.hatchUntil = now + 16000;
+    if (!(bot.hatchUntil > now) && (bot.carry === 'sandbag' || bot.carry === 'crate' || Math.random() < (HB.DROP_CHANCE * prof().THINK_EVERY) / 60)) bot.hatchUntil = now + 16000;
     if (going || bot.hatchUntil > now) out.push({ kind: 'hatch', obj: h, mode: 'drop', max: 1, throwKind: rack });
   }
   return out;
@@ -901,6 +902,11 @@ function operate(p, state, dt) {
       p.jx = clamp((config.GOING_DOWN.COAST - (ship.pace ?? ship.speed)) * 4, -1, 1);
       p.jy = -1;
     }
+    if (prof().HELM_NOISE > 0 && !gunshipAi && !cap) { // (a human hand on the wheel is never steady: a small push, held a moment, then a new one - from the sim RNG, so a seed repeats)
+      if ((p.noiseT = (p.noiseT || 0) - dt) <= 0) { p.noiseT = 0.3 + Math.random() * 0.4; p.noiseX = (Math.random() * 2 - 1) * prof().HELM_NOISE; p.noiseY = (Math.random() * 2 - 1) * prof().HELM_NOISE; }
+      p.jx = clamp(p.jx + (p.noiseX || 0), -1, 1);
+      p.jy = clamp(p.jy + (p.noiseY || 0), -1, 1);
+    }
   } else if (L.kindOf(p.lock) === 'coil') {
     // Aim at the thickest bunch of enemies and charge while lined up.
     const shot = coilShot(state);
@@ -988,7 +994,7 @@ function operate(p, state, dt) {
     p.jx = Math.cos(angle);
     p.jy = Math.sin(angle);
     const off = Math.abs(Math.atan2(Math.sin(angle - gun.aim), Math.cos(angle - gun.aim)));
-    const tol = specOf(gun).tol ?? B.AIM_TOLERANCE; // (a long gun is aimed more truly than a broadside gun; a grapeshot gun less)
+    const tol = specOf(gun).tol != null ? specOf(gun).tol * (prof().AIM_TOLERANCE / B.PROFILES.bot.AIM_TOLERANCE) : prof().AIM_TOLERANCE; // (the profile's looseness scales a gun's own tolerance; the bot profile is x1) (a long gun is aimed more truly than a broadside gun; a grapeshot gun less)
     p.fire = gun.ammo > 0 && off < tol && (!mainShip(state).ai || mainShip(state).ai.mayFire(p.lock)) && (gun.type !== 'harpoon' || harpoonWanted(state, gun)) && (gun.type !== 'flame' || flameReady(p, gun, state)); // (the gunship fires broadsides from firing spots, with a glow first, not whenever a gun bears)
   }
 }
@@ -1426,7 +1432,7 @@ function maybeDare(p, state, bots, job) {
   if (listJobs(state, p).some((j) => j.urgent || j.kind === 'revive' || j.kind === 'defuse' || j.kind === 'flee' || j.kind === 'cutline')) return;
   const kinds = dareKinds(state);
   // (a plane to steal or a gunship alongside is a better excuse than a quiet moment)
-  if (Math.random() >= ((flot ? config.SCRAP.BOTS.HOOK_PER_MIN : DR.CHANCE_PER_MIN * (kinds.length > 1 ? DR.TARGET_BOOST : 1)) * B.THINK_EVERY) / 60) return;
+  if (Math.random() >= ((flot ? config.SCRAP.BOTS.HOOK_PER_MIN : DR.CHANCE_PER_MIN * (kinds.length > 1 ? DR.TARGET_BOOST : 1)) * prof().THINK_EVERY) / 60) return;
   let pick = Math.random() * kinds.reduce((a, k) => a + DR.KINDS[k], 0);
   let kind = kinds[0];
   for (const k of kinds) {
@@ -1460,7 +1466,7 @@ function pvpRaid(p, state, bots, job) {
   if (rivalWithinHook(state)) kinds.push('board');
   if (L.bombBay && dropPossible(state)) kinds.push('drop');
   if (!kinds.length) return;
-  if (Math.random() >= (RD.CHANCE_PER_MIN * RD.BOOST * c.S.raid * B.THINK_EVERY) / 60) return;
+  if (Math.random() >= (RD.CHANCE_PER_MIN * RD.BOOST * c.S.raid * prof().THINK_EVERY) / 60) return;
   let pick = Math.random() * kinds.reduce((a, k) => a + DR.KINDS[k], 0);
   let kind = kinds[0];
   for (const k of kinds) {
@@ -1860,7 +1866,7 @@ export function updateBot(p, state, dt) {
 
   const bots = Object.values(state.players).filter((q) => q.bot);
   if ((p.think = (p.think || 0) - dt) <= 0) {
-    p.think = B.THINK_EVERY;
+    p.think = prof().THINK_EVERY;
     if (p.lock) {
       // Rotate off stations now and then, and leave early if fires/holes/raiders outnumber free hands.
       const free = bots.filter((q) => !q.lock && !(q.ko > 0) && !q.mate).length; // (a mate cannot take the jobs a station-keeper would leave for)
@@ -1880,7 +1886,18 @@ export function updateBot(p, state, dt) {
       const soleGun = config.PVP.ENABLED && tables(L).GUN_STATIONS.includes(p.lock) && !bots.some((q) => q !== p && q.lock && tables(L).GUN_STATIONS.includes(q.lock)); // (Versus: the last gunner keeps his gun, a ship needs one that shoots)
       const HC = config.HEALTH; // crew health: a bot burning at its station, or on its last heart, leaves it (the helm stays: the ship needs steering)
       const hurtCall = HC.ENABLED && !p.enemy && !isHelm(L, p.lock) && !soleGun && ((p.inFire && (p.burnT || 0) > HC.BOT.FLEE) || (state.phase === 'flying' && L.medbay && hearts(p) <= HC.JOB_AT));
-      if ((p.lockLeft <= 0 && !soleGun) || gunUseless || rodCall || hackCall || helmCall || fallCall || hurtCall || (urgent > free && !isHelm(L, p.lock) && Math.random() < B.LEAVE_FOR_EMERGENCY)) {
+      const rotate = (p.lockLeft <= 0 && !soleGun) || gunUseless;
+      let leave = rotate || rodCall || hackCall || helmCall || fallCall || hurtCall || (urgent > free && !isHelm(L, p.lock) && Math.random() < B.LEAVE_FOR_EMERGENCY);
+      if (leave && !rotate && (prof().REACT > 0 || prof().ALARM_GAP > 0)) { // (a human answers an alarm after a moment, and does not drop everything twice in a row; a plain rotation is not an alarm)
+        const now = performance.now();
+        if (now - (p.alarmAt ?? -1e9) < prof().ALARM_GAP * 1000) leave = false;
+        else if (prof().REACT > 0 && !(now < (p.alertUntil ?? 0))) {
+          if (p.reactAt == null) p.reactAt = now + prof().REACT * 1000 * (0.6 + Math.random() * 0.8);
+          if (now < p.reactAt) leave = false;
+        }
+        if (leave) { p.alarmAt = now; p.reactAt = null; p.alertUntil = now + prof().ALERT * 1000; }
+      } else if (!leave) p.reactAt = null;
+      if (leave) {
         p.leaveQ = true;
         p.lockLeft = undefined;
         p.botJob = null;
@@ -1889,13 +1906,19 @@ export function updateBot(p, state, dt) {
         return;
       }
     } else {
-      p.restCd = (p.restCd || 0) - B.THINK_EVERY;
+      p.restCd = (p.restCd || 0) - prof().THINK_EVERY;
       let job = chooseJob(state, p, bots);
       if (job && job.kind === 'station' && !isHelm(L, job.obj) && p.restCd > 0) job = null; // (the helm is never "resting")
+      let reacting = false;
+      if (job && prof().REACT > 0 && !(performance.now() < (p.alertUntil ?? 0)) && (!p.botJob || job.kind !== p.botJob.kind)) { // (a human looks up before he answers a NEW kind of job: he stands a moment, then goes; the next fire or hole of the kind he is on, he just carries on)
+        const now = performance.now(), key = job.kind;
+        if (p.reactKey !== key) { p.reactKey = key; p.reactJobAt = now + prof().REACT * 1000 * (0.6 + Math.random() * 0.8); }
+        if (now < p.reactJobAt) { job = null; reacting = true; } else { p.reactKey = null; p.alertUntil = now + prof().ALERT * 1000; }
+      } else if (p.reactKey != null) p.reactKey = null;
       if (job) p.wanderTo = null;
       if (!job || !p.botJob || job.kind !== p.botJob.kind || job.obj !== p.botJob.obj) p.jobSince = performance.now();
       p.botJob = job;
-      if (DR.ENABLED) maybeDare(p, state, bots, job); // (idle? maybe feel daring)
+      if (DR.ENABLED && !reacting) maybeDare(p, state, bots, job); // (idle? maybe feel daring)
       if (p.dare) return;
     }
   }
@@ -1915,10 +1938,6 @@ export function updateBot(p, state, dt) {
 // (3) now and then hold the boiler surge for a few seconds when steam is comfortably high (job 'surge'), letting go before it blows.
 // All of these come after fires, breaches, the helm, gas emergencies and coal/ammo chores in listJobs.
 const LK = config.LINKS;
-const LINK_HOLD_MS = 25000; // a loader stays beside a busy gun (it has a target) whose shell is already primed for this long, then goes elsewhere
-const SURGE_GAP_MS = 30000; // bots surge at most this often
-const SURGE_STOP_PRESS = 85; // ...and let go when the pressure reaches this
-const SURGE_MAX_MS = 4000; // ...or after this long
 
 function lookoutReach(state) {
   const L = mainShip(state).layout;
@@ -1938,7 +1957,7 @@ function linkJobs(state, bot, early) {
     const gun = state.GUNS[n];
     const gunner = players.find((q) => q.lock === n && !(q.ko > 0));
     if (!gunner || gunner === bot || gun.ammo <= 0 || mods.some((m) => m.name === n && m.broken)) continue;
-    const staying = !!bot.botJob && bot.botJob.kind === 'link' && bot.botJob.obj === n && now - (bot.jobSince || 0) < LINK_HOLD_MS;
+    const staying = !!bot.botJob && bot.botJob.kind === 'link' && bot.botJob.obj === n && now - (bot.jobSince || 0) < prof().LINK_HOLD * 1000;
     const busy = !!bestTarget(state, gun); // (a gun with a target uses shell after shell: that is where a loader earns its keep)
     if (gun.primed && !(staying && busy)) continue;
     if (busy === early) out.push({ kind: 'link', obj: n, max: 1, cap: 2 });
@@ -1949,7 +1968,7 @@ function linkJobs(state, bot, early) {
   if (bot.surgeStart > 0 && !(bot.botJob && bot.botJob.kind === 'surge')) bot.surgeStart = 0; // (interrupted: forget it)
   const surging = bot.botJob && bot.botJob.kind === 'surge' && (bot.surgeStart || 0) > 0;
   const calm = L.hasKind('boiler') && !state.fires.length && !mods.some((m) => m.broken && critical(mods, m)) && players.some((q) => isHelm(L, q.lock));
-  if (surging ? ship.press < SURGE_STOP_PRESS + 1 : calm && ship.press >= LK.SURGE.MIN_PRESS + 4 && ship.press <= 78 && ship.fuel > 25 && now - (state.surgeBotAt || -1e9) > SURGE_GAP_MS && ship.speed > 0.25) out.push({ kind: 'surge', obj: 'surge', max: 1 });
+  if (surging ? ship.press < prof().SURGE_STOP_PRESS + 1 : calm && ship.press >= LK.SURGE.MIN_PRESS + 4 && ship.press <= 78 && ship.fuel > 25 && now - (state.surgeBotAt || -1e9) > prof().SURGE_GAP * 1000 && ship.speed > 0.25) out.push({ kind: 'surge', obj: 'surge', max: 1 });
   return out;
 }
 
@@ -1968,7 +1987,7 @@ function linkWork(p, state, job) {
   const now = performance.now();
   if (!(p.surgeStart > 0)) p.surgeStart = now;
   p.jx = 0;
-  p.fire = state.ship.press < SURGE_STOP_PRESS && now - p.surgeStart < SURGE_MAX_MS;
+  p.fire = state.ship.press < prof().SURGE_STOP_PRESS && now - p.surgeStart < prof().SURGE_MAX * 1000;
   if (!p.fire) {
     // Done (or it got too hot): let go, and don't surge again for a while.
     state.surgeBotAt = now;

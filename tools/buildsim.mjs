@@ -29,6 +29,8 @@
 //        node tools/buildsim.mjs --check-turn       M.3: COME ABOUT: the helm's command (the phone's button or the stick astern, held), the manoeuvre (squash through zero, f flips at the middle, her speed along the bow flips so the ground speed does not jump, speed held down, no guns, the camera's zoom held), the refusals (too fast, already turning, cooling down, falling, a gunship alongside, a hookshot line, the mirrored hull in rock), rock on the right side, the Nose Gun's shells, a person's screen-relative stick (also one held across the flip), a headless bot helm turning on a route map and flying back to a goal behind her, a second ship turning on her own, the bots' jobs through a turn (tools/turn-check.mjs)
 //        node tools/buildsim.mjs --check-curriculum   G0: the voyage curriculum (tools/curriculum-check.mjs): 200 seeded routes per mode (QUICK / VOYAGE / CAMPAIGN, gentle and the second voyage) hold their shape, slot tables, set-piece gates (no gunship in column 1, no strafers before column 2), sky tiers in order, lairs from 60% of the route, an easy branch in every middle column and the flag rules; ENABLED = false is byte-identical to the old routes; in the game the first stop allows bats and imps only and a crew under the expected power is offered a salvage run
 //        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt (run with NO_STRUCTURE=1, the old hull bar, until STRUCTURE.md WP6 re-snapshots it for the structure game)
+//        node tools/buildsim.mjs --check-human-profile [--runs 12] [--build sparrow|classic] [--seed 1] [--with-bot]   FUN.md F8: 12 voyages with the HUMAN bot profile (slow thinking, loose aim, late answers, a shaky helm hand) as a snapshot table of results and fun numbers (overrun, idle%, menu s/stop, dull gap, first threat and falls per stop); no pass/fail thresholds yet, it fails only on errors or crashes; --with-bot prints the bot profile's table beside it
+//        node tools/buildsim.mjs --check-fun-metrics   FUN.md F8: the fun counters (tools/funmetrics.mjs) count right on a staged state, and the bot profile keeps today's numbers (tools/fun-check.mjs)
 //        node tools/buildsim.mjs --check-scrap      SCRAP, FLOTSAM AND THE HOLD (LOOP.md G1; tools/scrap-check.mjs): the item and the hold bin, what falls from each kind of kill, the chute / drift / landing, the hookshot catch, a harpoon hauling a hulk and the bundles taken from it, stow and the hold's weight on the LIFT / WEIGHT gauge, dumping it while she falls, limp home keeping it, Versus and NO_SCRAP off, the helm's plan, botsim 3 minutes with 8 bots. (--check-botsim, --check-golden, --check-frames and --check-creature run with NO_SCRAP=1 beside NO_STRUCTURE=1 until G7 re-snapshots them for the scrap game.)
 //        node tools/buildsim.mjs --check-structure  STRUCTURE.md WP0 + WP1 (tools/structure-check.mjs): the segments and the load graph, what a hit / a breach / a fire / rock hurts, the hammer, the warning and the creak, the grace, the failure rules, a SPLIT into two ships (the piece falls and crashes, her crew wake in the medbay, a REBUILD card brings her back), folding, lift failing (FALLING, bots save her, the CRASH), the NO_STRUCTURE switch, determinism, botsim --split / --sink, a ship with no gasbag
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
@@ -159,6 +161,23 @@ function checkBotsim() {
       const a = want.split('\n'), b = gotSummary.split('\n');
       for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) console.log('  baseline: ' + a[i] + '\n  now:      ' + b[i]);
     }
+  }
+  return ok;
+}
+
+// FUN.md F8: N seeded voyages (the Sparrow by default, the ship the browser starts) with the HUMAN bot profile, printed as voyagesim's own table. A snapshot: no thresholds, it fails only on a crash or an error.
+async function checkHumanProfile(rest) {
+  const flag = (n, d) => { const i = rest.indexOf('--' + n); return i < 0 ? d : rest[i + 1]; };
+  const runs = flag('runs', '12'), build = flag('build', 'sparrow'), seed = flag('seed', '1');
+  let ok = true;
+  for (const profile of rest.includes('--with-bot') ? ['human', 'bot'] : ['human']) {
+    const r = await nodeOut(['tools/voyagesim.mjs', '--runs', runs, '--seed', seed, '--build', build, '--profile', profile]);
+    const lines = r.out.split('\n').filter((l) => /^(---|seed |MODE |median stops|fun |  by stop|structure:|wreck flags)/.test(l));
+    console.log(`\n=== profile ${profile}, ${build}, ${runs} voyages from seed ${seed} ===\n` + lines.join('\n'));
+    const errors = Number((r.out.match(/errors (\d+)\s*$/m) || [])[1] || 0), crashed = /^seed +\d+: ERROR/m.test(r.out);
+    const good = r.code === 0 && !crashed && errors === 0 && /^fun /m.test(r.out);
+    console.log(`${good ? 'PASS' : 'FAIL'} voyagesim --profile ${profile}: exit ${r.code}, errors ${errors}${crashed ? ', a run crashed' : ''}`);
+    if (!good) { ok = false; console.log(r.out.split('\n').slice(-15).join('\n')); }
   }
   return ok;
 }
@@ -2049,7 +2068,7 @@ const GOLD_MAPS = ['network', 'route', 'open'];
 
 // voyagesim --runs 10 for one difficulty -> { wins, runs, medianMin }
 async function goldVoyage(difficulty) {
-  const r = await nodeOut(['tools/voyagesim.mjs', '--runs', '10', '--difficulty', difficulty]);
+  const r = await nodeOut(['tools/voyagesim.mjs', '--runs', '10', '--difficulty', difficulty, '--build', 'none']);
   const m = r.out.match(/MODE \w+: median ([\d.]+) min .*victory rate (\d+)\/(\d+)/);
   if (!m) throw new Error('voyagesim ' + difficulty + ' gave no MODE line:\n' + r.out.slice(-400));
   return { medianMin: +m[1], wins: +m[2], runs: +m[3] };
@@ -2568,6 +2587,10 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'structure-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-botsim') {
   process.exit(checkBotsim() ? 0 : 1);
+} else if (mode === '--check-fun-metrics') {
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'fun-check.mjs')], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-human-profile') {
+  process.exit((await checkHumanProfile(argv.slice(1))) ? 0 : 1);
 } else if (mode === '--check-multi') {
   process.exit((await checkMulti()) ? 0 : 1);
 } else if (mode === '--check-validator') {

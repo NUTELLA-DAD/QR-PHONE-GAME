@@ -1,6 +1,7 @@
 // Full-voyage bot simulation. Plays whole voyages (8 stops) with bot crew and reports how far each got and why it died.
 //  --mode quick|voyage|campaign: the session-length mode (config.VOYAGE.MODES); --daily flies today's daily voyage. The table shows median minutes and victory rate.
-//  --build sparrow|classic: start the voyage with that ship and the Shipwright's Yard (part cards at the sky-docks, the bots vote for them): the table adds the parts bought by the Flagship. Default: no start build (the classic ship, the old shop).
+//  --build sparrow|classic|none: start the voyage with that ship and the Shipwright's Yard (part cards at the sky-docks, the bots vote for them): the table adds the parts bought by the Flagship. Default: sparrow (the ship the browser starts with). `none` = no start build (the classic ship, the old shop: what the golden baseline flies).
+//  --profile bot|human (FUN.md F8): how the bots play (config.BOTS.PROFILES). `human` thinks slowly, aims loosely, answers alarms late and steers with a shaky hand, so its win rate is a better compass for people. Default: bot.
 // Usage: node tools/voyagesim.mjs [--runs 10] [--difficulty normal] [--mode voyage] [--bots 8] [--humans 0] [--topup] [--maxmin 45] [--stall 8] [--seed 1] [--verbose]
 //  natural mode (default): the run ends on a wreck or victory; the cause of the wreck is reported.
 //  --topup: the hull is kept full so the run cannot end; reports STALLS (no stop reached for --stall minutes).
@@ -11,11 +12,11 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
-const args = { runs: 1, difficulty: 'normal', mode: 'voyage', daily: false, bots: 8, humans: 0, topup: false, maxmin: 45, seed: 1, verbose: false, child: false, trace: 0, dump: 0, stall: 8, set: '', build: '' };
+const args = { runs: 1, difficulty: 'normal', mode: 'voyage', daily: false, bots: 8, humans: 0, topup: false, maxmin: 45, seed: 1, verbose: false, child: false, trace: 0, dump: 0, stall: 8, set: '', build: 'sparrow', profile: 'bot' };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
-  if (a === '--help' || a === '-h') { console.log('node tools/voyagesim.mjs [--runs 10] [--difficulty easy|normal|hard] [--mode quick|voyage|campaign] [--daily] [--bots 8] [--humans 0] [--topup] [--maxmin 45] [--stall 8] [--seed 1] [--verbose] [--build sparrow|classic] [--set "CREW_SCALE.TABLE.4.fire=0.5;DIFFICULTY.normal.damage=0.2"]'); process.exit(0); }
+  if (a === '--help' || a === '-h') { console.log('node tools/voyagesim.mjs [--runs 10] [--difficulty easy|normal|hard] [--mode quick|voyage|campaign] [--daily] [--bots 8] [--humans 0] [--topup] [--maxmin 45] [--stall 8] [--seed 1] [--verbose] [--build sparrow|classic|none] [--profile bot|human] [--set "CREW_SCALE.TABLE.4.fire=0.5;DIFFICULTY.normal.damage=0.2"]'); process.exit(0); }
   else if (a === '--topup' || a === '--verbose' || a === '--child' || a === '--daily') args[a.slice(2)] = true;
   else if (a.startsWith('--') && a.slice(2) in args) { const v = argv[++i]; args[a.slice(2)] = typeof args[a.slice(2)] === 'number' ? Number(v) : v; }
   else { console.error('Unknown option ' + a); process.exit(2); }
@@ -27,7 +28,7 @@ if (args.runs > 1 && !args.child) {
   const seeds = [];
   for (let i = 0; i < args.runs; i++) seeds.push(args.seed + i);
   const runOne = (seed) => new Promise((res) => {
-    const a = [me, '--child', '--seed', String(seed), '--difficulty', args.difficulty, '--mode', args.mode, '--bots', String(args.bots), '--humans', String(args.humans), '--maxmin', String(args.maxmin), '--stall', String(args.stall), '--set', args.set, '--build', args.build];
+    const a = [me, '--child', '--seed', String(seed), '--difficulty', args.difficulty, '--mode', args.mode, '--bots', String(args.bots), '--humans', String(args.humans), '--maxmin', String(args.maxmin), '--stall', String(args.stall), '--set', args.set, '--build', args.build, '--profile', args.profile];
     if (args.topup) a.push('--topup');
     if (args.daily) a.push('--daily');
     const c = spawn(process.execPath, a);
@@ -64,11 +65,6 @@ if (args.runs > 1 && !args.child) {
     const sum = (f) => O.reduce((a, o) => a + f(o), 0);
     console.log(`offered and taken: lairs offered ${sum((o) => o.lair.length)}, taken ${sum((o) => o.taken.filter((id) => o.lair.includes(id)).length)}; salvage runs offered ${sum((o) => o.salvage.length)}, taken ${sum((o) => o.taken.filter((id) => o.salvage.includes(id)).length)} (over ${ok.length} voyages)`);
   }
-  { // the ramp (FUN.md F1): per column, the hull mean while flying and the FALLING alarms per voyage that reached it
-    const col = {};
-    for (const r of ok) for (const b of r.byStop || []) { const c = (col[b.col] ??= { hull: 0, n: 0, falls: 0, v: 0 }); c.hull += b.hull; c.n += b.n; c.falls += b.falls; c.v++; (c.min ??= []).push((b.t1 - b.t0) / 3600); }
-    console.log('ramp, per column: ' + Object.keys(col).map(Number).sort((a, b) => a - b).map((k) => `${k + 1}: hull ${(col[k].hull / Math.max(1, col[k].n)).toFixed(1)}, falls ${(col[k].falls / col[k].v).toFixed(2)}, ${(col[k].min.sort((a, b) => a - b)[col[k].min.length >> 1]).toFixed(1)} min (${col[k].v} stops)`).join(' | '));
-  }
   { // SCRAP (LOOP.md G1): bundles caught (landed on a deck or taken off a hulk) and stowed per stop FLOWN (done = stops finished, the one she ended on included), against config.SCRAP.INCOME_TARGET
     const sc = ok.filter((r) => r.scrap), { config: cfg } = await import(new URL("../public/config.js", import.meta.url).href);
     if (sc.length) {
@@ -83,10 +79,20 @@ if (args.runs > 1 && !args.child) {
     for (const r of ok) for (const w of r.wrecks || []) by[w] = (by[w] || 0) + 1;
     if (n) console.log(`structure: per voyage falls ${(sum('falls') / n).toFixed(1)} (saved ${(sum('saved') / n).toFixed(1)}), crashes ${(sum('crashes') / n).toFixed(1)}, failures ${(sum('failures') / n).toFixed(1)}, splits ${(sum('splits') / n).toFixed(1)}, folds ${(sum('folds') / n).toFixed(1)}; wrecks (limps too) ${Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' x' + v).join(', ') || 'none'}`);
   }
+  { // FUN (FUN.md F8): how the voyages felt - overruns, idle seats, menu time, dull gaps, the first threat of each stop, FALLING alarms per stop (tools/funmetrics.mjs)
+    const fr = ok.filter((r) => r.fun), n = fr.length, sum = (k) => fr.reduce((a, r) => a + r.fun[k], 0), pc = (a, b) => (b > 0 ? (100 * a / b).toFixed(1) + '%' : 'n/a');
+    if (n) {
+      const gaps = fr.map((r) => r.fun.gapMax).sort((a, b) => a - b), cols = {};
+      for (const r of fr) { for (const c of Object.keys(r.fun.flown)) (cols[c] ??= { flown: 0, thr: [], falls: 0 }).flown++; for (const [c, v] of Object.entries(r.fun.threat)) cols[c].thr.push(v); for (const [c, v] of Object.entries(r.fun.falls)) (cols[c] ??= { flown: 0, thr: [], falls: 0 }).falls += v; }
+      const keys = Object.keys(cols).map(Number).sort((a, b) => a - b), mean = (a) => (a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(0) + 's' : 'none');
+      console.log(`fun (profile ${args.profile}, build ${args.build}): overrun ${(sum('overrun') / n).toFixed(2)} per voyage (${fr.filter((r) => r.fun.overrun).length}/${n} voyages had one), idle% ${pc(sum('idleSecs'), sum('seatSecs'))} of seat time (gun seats ${pc(sum('gunIdleSecs'), sum('gunSecs'))}), menu s/stop ${(sum('menuSecs') / Math.max(1, sum('scorecards'))).toFixed(0)} (${sum('scorecards')} scorecards), longest no-moment gap median ${gaps[(gaps.length - 1) >> 1].toFixed(0)}s max ${gaps[gaps.length - 1].toFixed(0)}s`);
+      console.log('  by stop: ' + keys.map((c) => `${c + 1}: first threat ${mean(cols[c].thr)} (${cols[c].thr.length}/${cols[c].flown}), falls ${(cols[c].falls / cols[c].flown).toFixed(1)}`).join(' | '));
+    }
+  }
   { const n = ok.reduce((a, r) => a + (r.breaks || 0), 0); if (n) console.log(`parts broke off ${n} time(s) in ${ok.filter((r) => r.breaks).length} of ${ok.length} voyages: ${[...new Set(ok.flatMap((r) => r.breakCauses || []))].join(', ')}`); }
   const causes = {};
   for (const r of ok) for (const k of r.flags || []) causes[k] = (causes[k] || 0) + 1;
-  if (args.build) { console.log('salvage earned per run: ' + ok.map((r) => r.earned).join(', ')); const pc = ok.map((r) => (r.parts || []).length); const win = ok.filter((r) => r.victory).map((r) => (r.parts || []).length); const all = {}; for (const r of ok) for (const id of r.parts || []) all[id] = (all[id] || 0) + 1; console.log(`parts bought by the end (start ship ${args.build}): mean ${(pc.reduce((a, b) => a + b, 0) / (pc.length || 1)).toFixed(1)}, victories only ${(win.reduce((a, b) => a + b, 0) / (win.length || 1)).toFixed(1)}; which: ${Object.entries(all).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + '=' + v).join(', ')}`); }
+  if (args.build !== 'none') { console.log('salvage earned per run: ' + ok.map((r) => r.earned).join(', ')); const pc = ok.map((r) => (r.parts || []).length); const win = ok.filter((r) => r.victory).map((r) => (r.parts || []).length); const all = {}; for (const r of ok) for (const id of r.parts || []) all[id] = (all[id] || 0) + 1; console.log(`parts bought by the end (start ship ${args.build}): mean ${(pc.reduce((a, b) => a + b, 0) / (pc.length || 1)).toFixed(1)}, victories only ${(win.reduce((a, b) => a + b, 0) / (win.length || 1)).toFixed(1)}; which: ${Object.entries(all).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + '=' + v).join(', ')}`); }
   console.log('wreck flags: ' + Object.entries(causes).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(', '));
   process.exit(0);
 }
@@ -111,6 +117,8 @@ if (process.env.NO_BREAKOFF) config.BREAKOFF.ENABLED = false; // (compare voyage
 if (!process.env.WITH_SPYGLASS) config.SPYGLASS.BOTS = false; // (bot lookouts pan and spot the spyglass in the game; the voyage baselines keep their numbers)
 if (process.env.NO_CURRICULUM) config.VOYAGE.CURRICULUM.ENABLED = false; // (compare voyages with the old random skies and kinds instead of the teaching curriculum: G0)
 if (process.env.NO_LAIRS) config.CREATURES.LAIR.COUNT = { short: 0, long: 0 }; // (compare voyages with no Kraken lair on the route: C.3)
+if (!config.BOTS.PROFILES[args.profile]) { console.error('Bad profile; use ' + Object.keys(config.BOTS.PROFILES).join('|')); process.exit(2); }
+config.BOTS.PROFILE = args.profile; // (FUN.md F8: --profile human makes the bots fail like people)
 // --set "A.B.C=value;...": tweak config numbers for tuning runs
 for (const kv of args.set.split(';').filter(Boolean)) { const [k, v] = kv.split('='); const ks = k.split('.'); let o = config; for (const x of ks.slice(0, -1)) o = o[x] ??= {}; o[ks[ks.length - 1]] = Number(v); }
 const { SHIP_LAYOUT, kindOf } = await load('shipLayout.js');
@@ -121,9 +129,12 @@ const maps = await load("modules/host/maps.js");
 const course = await load("modules/host/course.js");
 const sim = createSimulation();
 const state = sim.state;
+const { createFunMetrics } = await import(pathToFileURL(path.join(root, '..', 'tools', 'funmetrics.mjs')).href);
+const { targets: aimTargets } = await load('modules/host/aim.js');
+const fun = createFunMetrics(state, { kindOf, targets: aimTargets, moments: sim.moments }); // (FUN.md F8: overrun, idle seats, menu time, dull gaps, first threat and falls per stop)
 state.difficulty = args.difficulty;
 sim.setSession(args.mode, args.daily);
-if (args.build) { // (--build sparrow | classic | a .json / .mjs / fixture name: any parts list is registered as BUILDS.custom and used as the start ship)
+if (args.build !== 'none') { // (--build sparrow | classic | a .json / .mjs / fixture name: any parts list is registered as BUILDS.custom and used as the start ship)
   const { BUILDS } = await load('modules/host/shipBuild.js');
   if (!BUILDS[args.build]) {
     const { loadBuild } = await import(pathToFileURL(path.join(root, '..', 'tools', 'buildload.mjs')).href);
@@ -171,7 +182,6 @@ let result = null;
 const curve = []; // (G0: per stop reached, the ship's power against the curriculum's expected power and the stop's skulls)
 let curveStop = null;
 const lairs = { seen: new Set(), won: new Set(), met: 0, how: {} };
-const byStop = {}; let lastFalls = 0; // (F1: per stop flown, the hull while flying and the FALLING alarms: result.byStop)
 const wrecks = []; // (balance pass: the text of every wreck of the voyage, limps included, from the moment the ship goes down)
 let wasDown = 0;
 for (let step = 1; step <= maxSteps && !result; step++) {
@@ -182,11 +192,11 @@ for (let step = 1; step <= maxSteps && !result; step++) {
     if (state.phase === 'flying' && !state.ship.down && step % 30 === 0) { snapshot = snap(); rolling.flying++; rolling.br += snapshot.breaches; rolling.fires += snapshot.fires; rolling.gh += snapshot.holes; for (const q of Object.values(state.players)) { if (q.mate) { mateStat.snaps++; const mk = q.ko > 0 ? "ko" : q.botJob ? q.botJob.kind : "idle"; mateStat.jobs[mk] = (mateStat.jobs[mk] || 0) + 1; if (q.lock) mateStat.locks++; continue; } const k = q.ko > 0 ? "ko" : q.lock ? "station" : q.botJob ? (["fire", "patch", "repair", "swat", "valve", "ice", "unclog", "oxygen", "vent", "coal", "ammo", "revive"].includes(q.botJob.kind) ? "chore" : q.botJob.kind === "fight" ? "fight" : "other") : "idle"; rolling.crew[k] = (rolling.crew[k] || 0) + 1; rolling.n++; } if (!snapshot.helmManned) rolling.helmEmpty++; }
     const h0 = state.ship.hull, nf = state.fires.length, nb = state.breaches.length, fl = state.phase === 'flying' && !state.ship.down;
     sim.update(dt);
+    fun.step(dt);
     if (state.ship.down > 0 && !wasDown) wrecks.push(String((state.ev && state.ev.warnText) || '?').replace(/ THE (SEA|ROCKS|GROUND)!$/, '!'));
     wasDown = state.ship.down > 0 ? 1 : 0;
     mateStat.max = Math.max(mateStat.max, Object.values(state.players).filter((q) => q.mate).length);
     { const cr = state.creature; if (cr && !lairs.seen.has(cr)) { lairs.seen.add(cr); lairs.met++; } if (cr && cr.dying && cr.stats.win && !lairs.won.has(cr)) { lairs.won.add(cr); lairs.how[cr.stats.win] = (lairs.how[cr.stats.win] || 0) + 1; } } // (C.3: the Kraken lairs the crew met and how they won)
-    { const sid = state.run && state.run.stopId, F = (state.structStats && state.structStats.falls) || 0; if (sid) { const b = (byStop[sid] ??= { col: Number(sid.split('.')[0]), hull: 0, n: 0, falls: 0, t0: step, t1: step }); b.t1 = step; if (F > lastFalls) b.falls += F - lastFalls; if (fl && step % 30 === 0) { b.hull += state.ship.hull; b.n++; } } lastFalls = F; } // (F1)
     if (fl && state.ship.hull < h0) { const dd = damageMul(state); const pf = nf * 0.35 * dd * 2 * dt, pb = nb * 0.5 * dd * 2 * dt, drop = h0 - state.ship.hull; dmg.fire += pf; dmg.breach += pb; dmg.direct += Math.max(0, drop - pf - pb); }
   } catch (err) { errorCount++; if (errorCount < 4) console.error('ERR', err && err.stack); }
   if (state.phase === 'lobby' && !state.runEnd && !state.wreck) sim.castOff();
@@ -233,7 +243,8 @@ if (!result) {
   result = { earned: state.run.earned, parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
 }
 result.curve = curve;
-result.byStop = Object.values(byStop); // (F1: { col, hull, n, falls } per stop reached)
+result.fun = fun.result(); // (FUN.md F8)
+result.profile = args.profile;
 result.offers = state.run.offers || { lair: [], salvage: [], taken: [] }; // (G0: the lairs and salvage runs the route votes offered, and the stops the crew took)
 { const S = state.scrapStats; if (S && config.SCRAP.ENABLED && !config.PVP.ENABLED) result.scrap = { spawned: S.spawned, landed: S.landed, hooked: S.hooked, stowed: S.stowed, lost: S.lost, taken: S.taken, hulks: S.hulks, dumped: S.dumped, by: S.by, holdSum: S.holdSum, holdN: S.holdN, carrySecs: S.carrySecs, crewSecs: S.crewSecs }; } // (SCRAP, LOOP.md G1: what fell, what was caught and stowed over the voyage)
 result.lairs = { planned: state.run.voyage.columns.flat().filter((s) => s.lair).length, met: lairs.met, won: lairs.won.size, how: lairs.how }; // (C.3)

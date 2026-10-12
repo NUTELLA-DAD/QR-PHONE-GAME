@@ -4,12 +4,12 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0, blowout: 0, trace: null, traceEvery: 30, ships: 1, build2: 'classic', split: 0, sink: 0, botTurns: 0, teams: 0, breakoff: 0, creature: null, lair: 0, variant: null };
+const args = { bots: 8, humans: 0, minutes: 5, difficulty: 'normal', map: null, seed: null, env: null, reapply: 0, build: null, rupture: 0, blowout: 0, trace: null, traceEvery: 30, ships: 1, build2: 'classic', split: 0, sink: 0, botTurns: 0, teams: 0, breakoff: 0, creature: null, lair: 0, variant: null, profile: null, fun: 0 };
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') {
-    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open|ring [--variant tower|fortress|citadel (R0: the orbit finale ring map; RING_FORCE_BOARD=1 puts a bot on the boarding gallery to plant the charge)]] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi|bags|giantbag] [--rupture SECONDS (several gasbags: shoot the fore bag flat then, S.5d)] [--blowout SECONDS (S.5f: over-pressure the boiler every SECONDS of flight so it blows and lights a fire beside itself: a fire test)] [--ships N [--build2 NAME] (B.2: N ships in one sky, the bots dealt out round the ships by player.ship; ship 0 is the classic one or --build, the others --build2; the summary is about ship 0, with one line per ship at the end)] [--teams 1 (B.3: each ship takes a team: red, blue, green)] [--split SECONDS (STRUCTURE.md: every SECONDS of flight the middle of the frame gives way and she splits in half; prints a structure line)] [--sink SECONDS (STRUCTURE.md: every SECONDS of flight the gasbags are shot flat and torn open: lift fails, the crew have to save her)] [--breakoff SECONDS (S.5i: force a break-off every SECONDS of flight: a bomb bay explosion, then the limb a gun or an engine stands on, then a gasbag; the crew rebuild at the next sky-dock; prints a breakoff line)] [--creature kraken (C.1: a giant Kraken in every mission: rises ahead of the ship; prints a creature line)] [--bot-turns 1 (M.3: a bot at the helm may COME ABOUT when the goal has been behind her for a while; off by default so the baseline stands; prints a turns line)] [--trace FILE [--trace-every 30] (B0: a per-step dump of the ship, tab separated, for tools/buildsim.mjs --check-frames)]');
+    console.log('node tools/botsim.mjs [--bots 8] [--humans 0] [--minutes 5] [--difficulty easy|normal|hard] [--map network|route|open|ring [--variant tower|fortress|citadel (R0: the orbit finale ring map; RING_FORCE_BOARD=1 puts a bot on the boarding gallery to plant the charge)]] [--env skyisles|frost|ember|fungal|aether|storm|sea] [--seed N] [--reapply N] [--build multi|bags|giantbag] [--rupture SECONDS (several gasbags: shoot the fore bag flat then, S.5d)] [--blowout SECONDS (S.5f: over-pressure the boiler every SECONDS of flight so it blows and lights a fire beside itself: a fire test)] [--ships N [--build2 NAME] (B.2: N ships in one sky, the bots dealt out round the ships by player.ship; ship 0 is the classic one or --build, the others --build2; the summary is about ship 0, with one line per ship at the end)] [--teams 1 (B.3: each ship takes a team: red, blue, green)] [--split SECONDS (STRUCTURE.md: every SECONDS of flight the middle of the frame gives way and she splits in half; prints a structure line)] [--sink SECONDS (STRUCTURE.md: every SECONDS of flight the gasbags are shot flat and torn open: lift fails, the crew have to save her)] [--breakoff SECONDS (S.5i: force a break-off every SECONDS of flight: a bomb bay explosion, then the limb a gun or an engine stands on, then a gasbag; the crew rebuild at the next sky-dock; prints a breakoff line)] [--creature kraken (C.1: a giant Kraken in every mission: rises ahead of the ship; prints a creature line)] [--bot-turns 1 (M.3: a bot at the helm may COME ABOUT when the goal has been behind her for a while; off by default so the baseline stands; prints a turns line)] [--profile bot|human (FUN.md F8: how the bots play, config.BOTS.PROFILES; default bot)] [--fun 1 (print the fun numbers - overrun, idle seats, menu time, dull gap, first threat and falls per stop - BEFORE the summary marker, so the baseline gate is not about them)] [--trace FILE [--trace-every 30] (B0: a per-step dump of the ship, tab separated, for tools/buildsim.mjs --check-frames)]');
     process.exit(0);
   } else if (a.startsWith('--') && a.slice(2).replace(/-([a-z])/g, (m, c) => c.toUpperCase()) in args) {
     const key = a.slice(2).replace(/-([a-z])/g, (m, c) => c.toUpperCase()); // (--trace-every -> traceEvery)
@@ -60,6 +60,7 @@ if (process.env.NO_SQUADRONS) config.SQUADRONS.FORMATIONS = false; // (compare r
 if (process.env.BATCH_SET) for (const kv of process.env.BATCH_SET.split(';').filter(Boolean)) { const [k, v] = kv.split('='); const ks = k.split('.'); let o = config; for (const x of ks.slice(0, -1)) o = o[x] ??= {}; o[ks[ks.length - 1]] = v === 'true' ? true : v === 'false' ? false : Number(v); } // (tools/botbatch.mjs --set A.B=n;C.D=m: any config number for one run)
 if (process.env.NO_HEALTH) config.HEALTH.ENABLED = false; // (compare runs with the old crew rules: no hearts, a raider blow or a bomb knocks a crewman out in one go)
 if (process.env.HEALTH_CFG) { const merge = (a, b) => { for (const [k, v] of Object.entries(b)) { if (v && typeof v === 'object') merge(a[k], v); else a[k] = v; } }; merge(config.HEALTH, JSON.parse(process.env.HEALTH_CFG)); } // (tuning: HEALTH_CFG='{"SHELL":{"RADIUS":140}}' overrides config.HEALTH numbers)
+if (args.profile) { if (!config.BOTS.PROFILES[args.profile]) { console.error('Bad profile; use ' + Object.keys(config.BOTS.PROFILES).join('|')); process.exit(2); } config.BOTS.PROFILE = args.profile; } // (FUN.md F8: --profile human makes the bots fail like people)
 if (!config.DIFFICULTY[args.difficulty]) { console.error('Bad difficulty; use ' + Object.keys(config.DIFFICULTY).join('|')); process.exit(2); }
 if (args.variant && !args.map) args.map = 'ring'; // (R0: --variant alone flies that ring)
 if (args.variant) {
@@ -104,6 +105,8 @@ if (args.ships > 1) {
 if (args.teams) state.ships.forEach((sh, i) => { sh.team = config.FLEET.DEV_TEAMS[i % config.FLEET.DEV_TEAMS.length]; });
 if (args.botTurns) config.SHIP.TURN.BOT_TURNS = true;
 let turns = 0, lastFacing = state.ships[0].pose.f; // (--bot-turns: how often ship 0 came about)
+let fun = null; // (--fun 1: the fun numbers, tools/funmetrics.mjs; data only)
+if (args.fun) { const { createFunMetrics } = await import(pathToFileURL(path.join(root, '..', 'tools', 'funmetrics.mjs')).href); const { targets: aimTargets } = await load('modules/host/aim.js'); fun = createFunMetrics(state, { kindOf: SHIP_LAYOUT.kindOf, targets: aimTargets, moments: sim.moments }); }
 const runStats = args.build ? createRunStats(state) : null; // (--build: the per-run numbers tools/buildsim.mjs reads)
 state.difficulty = args.difficulty;
 
@@ -189,6 +192,7 @@ for (let step = 1; step <= totalSteps; step++) {
     }
     if (args.blowout && state.phase === 'flying' && step % Math.round(args.blowout * 60) === 0) state.ship.press = 100; // (the next step the boiler blows: a pipe bursts and a fire may start beside it)
     sim.update(dt);
+    if (fun) fun.step(dt);
     if (ruptured && healedAt === null && state.gasHoles.length === 0 && state.bags[state.bags.length - 1].gas > config.GAS.BAG_UP) healedAt = step / 60 - args.rupture;
     { const rg = state.course.ring; if (rg && !ringTrack.includes(rg)) ringTrack.push(rg); }
     if (runStats) runStats.step(dt);
@@ -301,6 +305,7 @@ if (traceRows) fs.writeFileSync(args.trace, traceRows.join('\n') + '\n');
     for (const l of postcard(run.log)) console.log('  postcard> ' + (l.first ? `[${l.no} ${l.name}] ` : '') + l.text);
   }
 }
+if (fun) { const { funLine } = await import(pathToFileURL(path.join(root, '..', 'tools', 'funmetrics.mjs')).href); console.log(funLine(fun.result())); }
 console.log('--- botsim summary ---');
 console.log(`bots ${args.bots} (${args.humans} as humans; ship's mates seen: ${matesMax}), ${args.minutes} min, ${args.difficulty}, map ${args.map || 'mixed'}, seed ${args.seed ?? 'random'}`);
 console.log(`missions completed: ${missions}` + (missionMins.length ? `, minutes each: ${missionMins.map((m) => m.toFixed(1)).join(" ")}, average ${(missionMins.reduce((a, b) => a + b, 0) / missionMins.length).toFixed(1)}` : ""));

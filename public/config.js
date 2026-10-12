@@ -3186,7 +3186,27 @@ export const config = {
   },
   // Test bot behaviour (times in seconds).
   BOTS: {
-    THINK_EVERY: 0.3, // how often a bot rethinks what to do
+    // BOT PROFILES (FUN.md F8): how the bots play. 'bot' is the tireless test bot every baseline was captured with; 'human' fails like a real person: rethinks slowly, aims loosely,
+    // takes a moment to answer an alarm, will not drop everything twice in a row, and the hand on the wheel wobbles. PROFILE picks one (tools: --profile human|bot; the game keeps 'bot').
+    PROFILE: 'bot',
+    PROFILES: {
+      bot: {
+        THINK_EVERY: 0.3, // how often a bot rethinks what to do (s)
+        AIM_TOLERANCE: 0.12, // fire when aim is within this many radians (a gun with a tolerance of its own is scaled by this over the bot's)
+        REACT: 0, // delay (s) before a bot answers a NEW job or alarm (0 = at once; a random 0.6-1.4 of it, drawn from the sim RNG)
+        ALERT: 0, // seconds after a bot has answered an alarm during which it follows the next jobs at once (a person who is already moving does not look up again for each one)
+        ALARM_GAP: 0, // a bot drops its station for an alarm at most once per this many seconds (0 = any time)
+        HELM_NOISE: 0, // the helm input wobbles by up to this much (0-1, a new push every half second or so, from the sim RNG)
+        LINK_HOLD: 25, // a loader stays beside a busy gun (it has a target) whose shell is already primed for this long (s), then goes elsewhere
+        SURGE_GAP: 30, // bots surge the boiler at most this often (s)
+        SURGE_STOP_PRESS: 85, // ...and let go when the pressure reaches this
+        SURGE_MAX: 4, // ...or after this long (s)
+      },
+      human: {
+        THINK_EVERY: 0.9, AIM_TOLERANCE: 0.25, REACT: 1.2, ALERT: 6, ALARM_GAP: 20, HELM_NOISE: 0.15,
+        LINK_HOLD: 25, SURGE_GAP: 30, SURGE_STOP_PRESS: 85, SURGE_MAX: 4,
+      },
+    },
     WHACK_EVERY: 0.35, // time between swings at a raider
     ICE_AT: 0.5, // frost: bots chip an ice crust once it is this thick (0-1)
     ENGINEER_PRESS: 35, // steam this low: bots shut the valve of a leaking module (reopened after repair)
@@ -3213,7 +3233,6 @@ export const config = {
     JOB_HOLD: 2.5, // seconds a bot sticks to a job before it may swap to a more urgent kind (it never swaps to a merely closer job of the same kind)
     HELM_CALL: 0.7, // chance per think that a crew member leaves a station to take an empty helm
     AMMO_LOW: 10, // fetch ammo when a gun has this many shells or fewer
-    AIM_TOLERANCE: 0.12, // fire when aim is within this many radians
     STATION_MIN: 20, // stay at a station at least this long...
     STATION_MAX: 40, // ...and at most this long, then rotate
     STATION_TIER_PX: 1800, // a station that is one 'usefulness point' better is worth walking this many extra px for
