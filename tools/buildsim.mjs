@@ -2563,7 +2563,7 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-classic') {
   process.exit((await checkClassic()) ? 0 : 1);
 } else if (mode === '--check-scrap') { // LOOP.md G1: scrap, flotsam and the hold
-  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'scrap-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'scrap-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, SCRAP_ON: '1' } }).status === 0 ? 0 : 1);
 } else if (mode === '--check-structure') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'structure-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-botsim') {

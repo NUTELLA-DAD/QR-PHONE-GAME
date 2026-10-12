@@ -2,7 +2,15 @@
 
 Fable's read-only study, 2026-10-12, for the lead (Opus) to execute. It is read from the code and measured with the tools; nothing was edited.
 
-**Status: plan only. The owner is reading it.** A few items go against things the owner asked for: the own-ship escort crash, "relentless" boarding, and pausing the Away Team. They need the owner's yes before anyone builds them.
+**Status: approved by the owner 2026-10-12.** Owner decisions:
+- **Go:** build it, starting with round 1 (F1 + F8; F7 done).
+- **Escort crash: KEEP as it is.** Friendly planes still crash into the player's own ship, so F4 must NOT change .
+- **Boarding:** announced boarding attacks (F5) replace "relentless" boarding.
+- **Pause both:** the Away Team (A0-A3) until after the first playtest, and scrap carrying (F7) until G2 + the scrap patch.
+
+Progress:
+- **F7 done:**  is off in the game;  turns it on in a tool, and  sets it.
+- **Garrison D1 merged.**
 
 ## 0. What was measured (on top of the balance table)
 

@@ -2160,7 +2160,7 @@ export const config = {
   // HOLD (a bin in the hold room that starts empty and never refills; what is in it weighs and shows on the LIFT / WEIGHT gauge; GOING DOWN! can dump it). ENABLED false (or NO_SCRAP=1 in a tool) is the game without
   // any of it, byte for byte; Versus (PVP.ENABLED) never has it. Money mends, scrap builds (the Yard prices parts in scrap from G2 on).
   SCRAP: {
-    ENABLED: typeof process === 'undefined' || !(process.env && process.env.NO_SCRAP), // the switch (a browser has no process: on)
+    ENABLED: typeof process !== 'undefined' && !!(process.env && process.env.SCRAP_ON && !process.env.NO_SCRAP), // the switch: OFF in the game for now (FUN.md F7: paused until scrap can be spent, G2 + the scrap patch); SCRAP_ON=1 turns it on in a tool
     BUNDLE_W: 1, // (lead, 2026-10-11: 4 -> 2, until G2/G4 let the crew spend scrap; the balance pass, 2026-10-11: 2 -> 1 with HOLD_FREE - under the structure rule the scrap was a quarter of everything she weighed and the bots' win rate went with it; G7 re-tunes) what one bundle weighs (gas points; CROSS.CARGO.ITEMS.scrap.w reads this): in a hand, on a deck, or in the hold
     HOLD_FREE: 2, // (balance pass) the first bundles in the hold that weigh nothing on the lift (the hold is built for ballast): only the ones past this count, BUNDLE_W each (a full hold of 8 weighs 6 points)
     HOLD_CAP: 8, // bundles one hold bin takes (a full one weighs (HOLD_CAP - HOLD_FREE) x BUNDLE_W: build for it, or dump it)
