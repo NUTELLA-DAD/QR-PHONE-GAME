@@ -83,7 +83,7 @@ The game has an astonishing number of things that *can happen*, and almost no wa
 | L5 | Secret Orders | M | 40-70% completed; an order never blocks a critical job |
 | L6 | Mooring drill | S | every new phone does one job within 90 s |
 | L7 | Play of the mission, slow motion, awards v2 | S | someone says "do that again" |
-| L8 | Lobby fold, shop trim, dock mess hall and stop events | S/M | the dock takes under 60 s |
+| L8 | Lobby fold, shop trim, dock mess hall and stop events | S/M | the dock takes under 60 s (**the shop trim is done in FUN.md F6**: three cards, shorter votes, six fittings; the lobby fold, the mess hall and the stop events remain) |
 
 Order: L0 → L1 → L2 → L3 → L4, then L5 and L6, then L7 and L8. **Playtest with real people after L2.**
 

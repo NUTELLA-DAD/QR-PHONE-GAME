@@ -73,6 +73,7 @@ export function createSimulation() {
     flashes: [], // muzzle flashes { x, y, ang, t, color }
     rings: [], // impact rings { x, y, t, max, color, size }
     tempo: newTempo(), // build-up -> peak -> calm (breather)
+    briefing: null, // F6: the 3-second BRIEFING card at a stop's start { t, title, goal } (render.js drawBriefing)
     supply: null, // a supply balloon to catch during a calm { mx, my, t }
     supplySeq: 0, // (SCRAP: numbers the bundles of a supply crate)
     gasValve: { input: 0, auto: false }, // +1 = pumping hot steam into the gasbag, -1 = venting
@@ -122,8 +123,8 @@ export function createSimulation() {
     if ((key === 'holes' || key === 'coal') && state.goingDown) moments.note('gd', player); // (who patched and stoked while she fell: goingDown.js tells them when she holds)
   };
   // A quick message and buzz on one player's phone (doesn't change their buttons).
-  const phoneFx = (player, toast, buzz) => {
-    if (player && !player.bot && socket) socket.emit('host:ui', { id: player.id, ui: { fx: { toast, buzz } } });
+  const phoneFx = (player, toast, buzz, ms) => {
+    if (player && !player.bot && socket) socket.emit('host:ui', { id: player.id, ui: { fx: { toast, buzz, ms } } });
   };
   // Kill credit goes to whoever fired the shell.
   const credit = (shell) => {
@@ -354,6 +355,7 @@ export function createSimulation() {
     state.periscope = false;
     state.vote = null;
     state.scorecard = null;
+    state.briefing = null;
     pendingVote = null;
     state.kills = 0;
     watch.kills = 0;
@@ -416,6 +418,27 @@ export function createSimulation() {
     state.ev.warn = secs;
     state.ev.warnText = text;
   };
+  // F6: the BRIEFING card of a new stop. The TV gets the stop's goal in one line (render.js drawBriefing); each phone gets a toast with the goal and the verb of that player's nearest seat.
+  const seatVerb = (p) => {
+    const BR = config.STOP_SHAPE.BRIEFING, L = shipOf(state, p).layout;
+    let kind = p.lock ? L.kindOf(p.lock) : null;
+    if (!kind) { // (not seated: the nearest seat on his deck, else the nearest along the ship - a crewman still dropping in has no deck yet)
+      let best = Infinity;
+      const onDeck = p.d != null && !p.fall;
+      for (const s of L.stations) {
+        const d = Math.abs((s.x || 0) - (p.x || 0)) + (!onDeck || s.d === p.d ? 0 : 900);
+        if (d < best) { best = d; kind = s.kind; }
+      }
+    }
+    return BR.VERBS[kind] || BR.VERBS.other;
+  };
+  const startBriefing = () => {
+    const BR = config.STOP_SHAPE.BRIEFING, b = state.course && state.course.brief;
+    state.course.brief = null;
+    if (!BR.ENABLED || !b || config.PVP.ENABLED) return;
+    state.briefing = { t: BR.TIME, title: b.title, goal: b.goal };
+    for (const p of Object.values(state.players)) if (!p.bot && !p.mate) phoneFx(p, `${b.goal} - YOUR JOB: ${seatVerb(p)}`, [40], BR.TOAST_MS);
+  };
   const setPieces = {
     gunship: { text: 'GUNSHIP ON THE HORIZON!', go: () => gunship.spawn(), alive: () => !!state.gunship, max: () => config.PACING.GUNSHIP_PEAK_MAX },
     bombers: { text: 'BOMBER RAID INCOMING!', go: () => { const n = Math.max(1, Math.round((1 + (lapNo() > 1 ? 1 : 0) + (crewHeads(state) >= 10 ? 1 : 0)) * crewMul(state, 'count'))); for (let i = 0; i < n; i++) squadrons.spawnBomber(); return true; }, alive: () => state.bombers.length > 0 },
@@ -423,7 +446,13 @@ export function createSimulation() {
     swarm: { text: 'HUGE BAT SWARM!', go: () => { squadrons.spawnBigSwarm(); return true; }, alive: () => state.bats.some((b) => !b.dead && b.hp > 0 && !b.leaving) },
     imps: { text: 'IMP SWARM - GUNS AND SHIELD!', go: () => { specials.spawn.imps(); return true; }, alive: () => state.specials.imps.length > 0 },
   };
+  // F6: a stop with neither a lair nor a ring has no giant of its own: the gunship is its one big thing (if its gates allow one), at the first set piece after STOP_SHAPE.GUNSHIP.AFTER_PEAKS.
+  const wantsGunship = (tp) => {
+    const G = config.STOP_SHAPE.GUNSHIP, c = state.course, st = c && c.stop;
+    return G.ENABLED && !!st && !st.lair && !st.ring && !st.flagship && !c.ring && !tp.big && tp.peaks >= G.AFTER_PEAKS && !state.gunship && (!st.gates || st.gates.includes('gunship'));
+  };
   const pickSetPiece = (tp) => {
+    if (wantsGunship(tp)) return 'gunship';
     const pool = [];
     const gates = state.course && state.course.stop && state.course.stop.gates; // (the voyage's teaching curriculum: the set pieces this stop allows, config.VOYAGE.CURRICULUM; none given = all)
     const add = (k, w) => { if (k !== tp.last && (!gates || gates.includes(k))) for (let i = 0; i < Math.round(w * favour(state, k)); i++) pool.push(k); }; // (the environment's enemy flavour scales each weight)
@@ -449,6 +478,11 @@ export function createSimulation() {
       tp.tries = 0;
       tp.t = PC.PEAK_MAX;
       tp.peaks++;
+    } else if (phase === 'escape') { // (F6: the calm after the objective; the course ends the stop when its timer runs out)
+      tp.t = state.course.escape.t;
+      tp.rate = 0;
+      sayBanner(config.STOP_SHAPE.ESCAPE.TEXT, config.STOP_SHAPE.ESCAPE.BANNER);
+      spawnSupply();
     } else {
       tp.t = PC.CALM;
       tp.rate = 0;
@@ -464,8 +498,23 @@ export function createSimulation() {
     tp.el += dt;
     tp.bossOk = tp.phase === 'build' || (tp.phase === 'calm' && tp.el > PC.CALM * 0.5); // (the boss never arrives in the middle of a set piece or straight after one)
     if (state.gunship) tp.gunshipEnd = tp.mt; // (the gap counts from when she is gone)
+    const withdrawStragglers = () => { // (a calm, and the escape: far-off stragglers go home, then every one)
+      if (tp.el > PC.CALM_LEAVE) {
+        const force = tp.el > PC.CALM_FORCE;
+        const far = PC.CALM_FAR;
+        gunship.retire();
+        squadrons.withdraw(far, force);
+        specials.withdraw(far, force);
+        threats.withdraw(far, force);
+      }
+    };
     // The mission boss is its own big moment: it holds the peak until it is gone, then the calm comes. (A giant creature counts as the boss.)
-    if (state.boss || state.creature) { // (a creature that is dying still counts: the calm, the supply drop and its banner wait until it has sunk, so the final banner can be read)
+    if (state.course && state.course.escape && config.STOP_SHAPE.ESCAPE.ENABLED) { // F6: the objective is done: rate 0, the calm music, the supply balloon, and the stop ends when the course's timer does
+      if (tp.phase !== 'escape') enterPhase(tp, 'escape');
+      tp.rate = 0;
+      tp.t = state.course.escape.t;
+      withdrawStragglers();
+    } else if (state.boss || state.creature) { // (a creature that is dying still counts: the calm, the supply drop and its banner wait until it has sunk, so the final banner can be read)
       if (tp.phase !== 'peak' || tp.kind !== 'boss') {
         tp.phase = 'peak';
         tp.kind = 'boss';
@@ -493,6 +542,7 @@ export function createSimulation() {
           if (tp.kind !== 'gunship') SP.go();
           tp.spawned = true;
           tp.last = tp.kind;
+          if (tp.kind === 'gunship') tp.big = 1; // (F6: the stop's one big thing has come)
           tp.el = 0;
           sayBanner(typeof SP.text === 'function' ? SP.text() : SP.text, 4.5);
         }
@@ -507,14 +557,7 @@ export function createSimulation() {
       // CALM: nothing new; stragglers go home; then the next build-up.
       tp.rate = 0;
       tp.t -= dt;
-      if (tp.el > PC.CALM_LEAVE) {
-        const force = tp.el > PC.CALM_FORCE;
-        const far = PC.CALM_FAR;
-        gunship.retire();
-        squadrons.withdraw(far, force);
-        specials.withdraw(far, force);
-        threats.withdraw(far, force);
-      }
+      withdrawStragglers();
       if (tp.t <= 0) enterPhase(tp, 'build');
     }
     if (state.course && state.course.stop && state.course.stop.rateMul) tp.rate *= state.course.stop.rateMul; // (a salvage run: lighter enemies, config.VOYAGE.CURRICULUM.SALVAGE.RATE_MUL)
@@ -649,13 +692,16 @@ export function createSimulation() {
   };
 
   // What a stop asks of the course (see startMission in course.js).
+  const goalOf = (stop) => (stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'ring' ? 'BREACH THE ' + ({ tower: 'TOWER', fortress: 'FORTRESS', citadel: 'CITADEL' }[stop.ring] || 'CASTLE') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON');
   const missionOpts = (stop) => ({
     environment: stop.play,
     kind: stop.kind,
     danger: stop.danger,
     stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined), gates: stop.gates, ring: stop.ring, nemesis: stop.nemesis, multi: stop.multi, salvage: stop.salvage, rateMul: stop.salvage ? VY.CURRICULUM.SALVAGE.RATE_MUL : undefined, slack: stop.slack, early: stop.early }, // (slack: F1, a small ship's early caves are wider; early: the classic ship's stop 1 may call the planes at its first set piece; gates... rateMul: the teaching curriculum's set-piece gates, ring / Nemesis / multi-part flags and the salvage run's lighter enemies, config.VOYAGE.CURRICULUM; lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
     lengthMul: modeInfo(state.run.mode).lengthMul,
-    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'ring' ? 'BREACH THE ' + ({ tower: 'TOWER', fortress: 'FORTRESS', citadel: 'CITADEL' }[stop.ring] || 'CASTLE') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
+    title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${goalOf(stop)}!`,
+    goal: goalOf(stop), // (F6: the BRIEFING card's one line)
+    heading: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()}`,
   });
   const firstMission = () => missionOpts(curStop());
 
@@ -804,7 +850,7 @@ export function createSimulation() {
     for (const p of Object.values(state.players)) {
       p.vote = null;
       p.uk = null;
-      p.voteAt = 1.5 + Math.random() * 3.5; // bots take a moment to "think"
+      p.voteAt = config.VOTE.BOT_THINK.FIRST[0] + Math.random() * config.VOTE.BOT_THINK.FIRST[1]; // bots take a moment to "think"
       p.fire = false;
     }
   };
@@ -834,7 +880,7 @@ export function createSimulation() {
     if (!state.startBuild) return null; // (headless tools without a start build keep the old shop)
     if (state.run.lost && state.run.lost.length) return null; // (no new parts for a ship with sections missing: rebuild first - the REBUILD cards)
     const run = state.run, found =PS.DERELICT_STOPS.includes(legNo(curStop()));
-    if (!found && !state.yardOnly && Math.random() >= PS.CARD_CHANCE) return null; // (not every dock has a part for sale)
+    if (!found && !state.yardOnly && Math.random() >= (SH.V2 ? SH.V2_PART_CHANCE : PS.CARD_CHANCE)) return null; // (not every dock has a part for sale)
     const ahead = run.voyage.columns.slice(curStop().col + 1).flat(); // (what is still on the route: raids need a bomb bay, the Aether is the Flagship's sky)
     const offer = offerPart(run.build, { owned: ownedParts(), crew: crewHeads(state), avoid: run.lastPart, only: state.yardOnly || null, route: { raids: ahead.filter((x) => x.kind === 'open').length, aether: ahead.some((x) => x.env === 'aether') } });
     if (!offer) return null;
@@ -909,7 +955,34 @@ export function createSimulation() {
     state.ev.warnText = 'REBUILT: ' + (e.names.join(', ') || e.label).toUpperCase().slice(0, 60);
   };
 
+  const shopTime = () => (SH.V2 ? SH.V2_TIME : SH.TIME); // (F6: the 60-second dock votes faster)
+  const shopMax = () => (SH.V2 ? SH.V2_MAX_TIME : SH.MAX_TIME);
+  // F6, SHOP.V2: MEND HER is the hull, the gas and the coal in one card, priced by need: only the pieces the ship wants are in it (and in the price). null = she needs nothing.
+  const mendCard = () => {
+    const need = { hull: needsHull(), gas: needsGas(), coal: needsCoal() };
+    const bits = [need.hull && 'hull', need.gas && 'gas', need.coal && 'coal'].filter(Boolean);
+    if (!bits.length) return null;
+    const cost = (need.hull ? SH.REPAIR_HULL : 0) + (need.gas ? gasTopUpCost(layout.gasbags, SH.REPAIR_GAS) : 0) + (need.coal ? SH.REPAIR_COAL : 0);
+    return { id: 'mend-her', kind: 'repair', name: 'MEND HER', icon: '🔧', desc: 'Her ' + bits.join(', ').replace(/, ([^,]*)$/, ' and $1') + ', all mended in one go.', cost: Math.round((cost * SH.MEND_MUL) / 5) * 5, mend: need };
+  };
+  // F6, SHOP.V2: three cards - MEND HER (if she needs it), ONE part or fitting (a REBUILD if parts broke off, the creature's trophy, a Yard part, else one of six fittings), and Cast off.
+  const buildOffersV2 = () => {
+    const offers = [];
+    const mend = mendCard();
+    if (mend) offers.push(mend);
+    const open = SH.V2_FITTINGS.map((id) => UPGRADES.find((u) => u.id === id)).filter((u) => u && (state.upgrades[u.id] || 0) < u.max);
+    const lost = state.run.lost || [];
+    const big = (lost.length ? rebuildCard(lost[0], 0) : null) || trophyCard() || partCard();
+    if (big) offers.push(big);
+    while (offers.length < SH.V2_OFFERS - 1 && open.length) {
+      const u = open.splice((Math.random() * open.length) | 0, 1)[0];
+      offers.push({ id: u.id, kind: 'upgrade', name: u.name, icon: u.icon, desc: u.desc, cost: upgradePrice(u), level: (state.upgrades[u.id] || 0) + 1, max: u.max });
+    }
+    offers.push({ id: 'cast', kind: 'cast', name: 'Cast off!', icon: '🚀', desc: 'Leave the dock and choose the next stop.', cost: 0 });
+    return offers;
+  };
   const buildOffers = () => {
+    if (SH.V2) return buildOffersV2();
     const offers = [];
     if (needsHull()) offers.push({ id: 'repair-hull', kind: 'repair', name: 'Full Repair', icon: '🔧', desc: 'Hull, holes, fires and every broken part, as good as new.', cost: SH.REPAIR_HULL });
     if (needsGas()) offers.push({ id: 'repair-gas', kind: 'repair', name: 'New Gas', icon: '🎈', desc: mixedGas() ? 'Patch the bags and fill them up (helium dearest, hydrogen cheap, hot air free).' : 'Patch the gasbag and fill it up.', cost: gasTopUpCost(layout.gasbags, SH.REPAIR_GAS) }); // (GAS TYPES: the price follows the gases in the bags, partsShop.js)
@@ -936,6 +1009,14 @@ export function createSimulation() {
     } else if (o.rebuild != null) {
       rebuildLost(o.rebuild, state.vote ? Object.values(state.players).filter((p) => p.vote != null && state.vote.options[p.vote] === o) : []); // (the Log names whoever voted for it)
       if (state.vote) for (const x of state.vote.options) if (x.rebuild != null && x.rebuild >= o.rebuild) x.sold = true; // (...and every newer break-off came back with it)
+    } else if (o.mend) { // MEND HER (F6): the pieces she needed
+      if (o.mend.hull) UPGRADES.find((u) => u.id === 'spare-parts').apply({ state, modules });
+      if (o.mend.gas) { refillBags(state, config.GAS.START); state.gasHoles.length = 0; }
+      if (o.mend.coal) {
+        state.ship.fuel = config.BOILER.FUEL_MAX;
+        for (const g of Object.values(state.GUNS)) g.ammo = g.max;
+        state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX);
+      }
     } else if (o.id === 'repair-hull') UPGRADES.find((u) => u.id === 'spare-parts').apply({ state, modules });
     else if (o.id === 'repair-gas') {
       refillBags(state, config.GAS.START);
@@ -964,7 +1045,7 @@ export function createSimulation() {
     if (prize) { addSalvage(config.CROSS.TOW.PRIZE, 'gunships', 'PRIZE IN TOW!'); W.towing.cut(prize, ''); state.gunship.prize = false; }
     const options = buildOffers();
     if (options.every((o) => o.kind === 'cast' || cardOff(o))) return startRoute(); // nothing affordable: straight on
-    openVote({ kind: 'dock', title: 'SKY-DOCK', options, t: SH.TIME });
+    openVote({ kind: 'dock', title: 'SKY-DOCK', options, t: shopTime() });
   };
 
   // CATCH-UP (G0, config.VOYAGE.CURRICULUM): a crew whose ship is under the expected power for the next column is offered a SALVAGE RUN there: its lowest-danger stop (never a lair, a ring or the Flagship)
@@ -999,7 +1080,7 @@ export function createSimulation() {
       for (const k of ['lair', 'salvage']) if (s[k] && !offers[k].includes(id)) offers[k].push(id);
       return { id, kind: 'stop', name: stopName(s), icon: s.flagship ? '🚩' : s.lair ? lairOf(s.creature).ICON : env.icon, desc: `${s.lair ? lairOf(s.creature).LABEL + ': ' : ''}${s.lair ? lairOf(s.creature).KIND : VY.KIND_NAMES[s.kind] || s.kind} - ${'💀'.repeat(s.danger)} - reward ${s.reward}`, danger: s.danger, reward: s.reward, envName: env.name, color: env.color, kindName: s.lair ? lairOf(s.creature).KIND : VY.KIND_NAMES[s.kind], lair: !!s.lair, salvage: !!s.salvage, tag: s.tag || '' };
     });
-    openVote({ kind: 'route', title: 'WHERE TO NEXT?', options, t: VY.ROUTE_TIME });
+    openVote({ kind: 'route', title: 'WHERE TO NEXT?', options, t: SH.V2 ? VY.ROUTE_TIME_V2 : VY.ROUTE_TIME });
   };
 
   const goToStop = (id) => {
@@ -1031,6 +1112,7 @@ export function createSimulation() {
     const want = (id) => ok.find((i) => v.options[i].id === id);
     if (state.ship.hull < SH.BOT_REPAIR_HULL && want('repair-hull') != null) return want('repair-hull');
     if ((state.gasHoles.length >= 2 || state.ship.gas < 30) && want('repair-gas') != null) return want('repair-gas');
+    if (want('mend-her') != null && (state.ship.hull < SH.BOT_REPAIR_HULL || state.gasHoles.length >= 2 || state.ship.gas < 30)) return want('mend-her'); // (F6: the one repair card of the 60-second dock)
     const rebuild = ok.find((i) => v.options[i].rebuild != null); // (S.5i: the oldest REBUILD card they can pay for: it mends the newer ones too)
     if (rebuild != null && Math.random() < config.BREAKOFF.BOT_REBUILD) return rebuild;
     const toHelium = ok.find((i) => v.options[i].gas === 'helium'); // (GAS TYPES: a crew whose hydrogen bag has been scorched swaps it for helium)
@@ -1039,7 +1121,7 @@ export function createSimulation() {
     if (part != null && Math.random() < (v.options[part].rec ? YD.BOT_REC_CHANCE : YD.BOT_PART_CHANCE)) return part; // (a crew that can afford a part card likes to build)
     if (Math.random() < SH.BOT_CAST_CHANCE) return cast;
     const rep = ok.filter((i) => v.options[i].kind === 'repair');
-    if (rep.length && Math.random() < 0.7) return rep[(Math.random() * rep.length) | 0];
+    if (rep.length && Math.random() < SH.BOT_REPAIR_CHANCE) return rep[(Math.random() * rep.length) | 0];
     return ok[(Math.random() * ok.length) | 0];
   };
 
@@ -1054,8 +1136,8 @@ export function createSimulation() {
   };
   const resumeDock = (back) => {
     const left = !back.options.every((x) => x.kind === 'cast' || cardOff(x));
-    openVote({ ...back, t: left ? SH.TIME : YD.BUILT_STAMP });
-    state.vote.total = Math.min(back.total, SH.MAX_TIME - YD.BUILT_STAMP);
+    openVote({ ...back, t: left ? shopTime() : YD.BUILT_STAMP });
+    state.vote.total = Math.min(back.total, shopMax() - YD.BUILT_STAMP);
   };
 
   const updateVote = (dt) => {
@@ -1085,7 +1167,7 @@ export function createSimulation() {
     }
     const wait = v.kind === 'dock' ? SH.ALL_VOTED_WAIT : VY.ROUTE_ALL_VOTED_WAIT;
     if (voters.length && voters.every((p) => p.vote != null)) v.t = Math.min(v.t, wait);
-    if (v.kind === 'dock' && v.total > SH.MAX_TIME) v.t = Math.min(v.t, 0);
+    if (v.kind === 'dock' && v.total > shopMax()) v.t = Math.min(v.t, 0);
     if (v.t > 0) return;
     if (v.onDone) { // (Versus: the shelf is tallied a team at a time, the rematch all together; the match decides what follows)
       const tally = (list, none) => {
@@ -1108,7 +1190,7 @@ export function createSimulation() {
       const tied = idx.filter((i) => counts[i] === best);
       pick = tied[(Math.random() * tied.length) | 0];
     }
-    if (v.total > SH.MAX_TIME && v.kind === 'dock') pick = v.options.findIndex((o) => o.kind === 'cast');
+    if (v.total > shopMax() && v.kind === 'dock') pick = v.options.findIndex((o) => o.kind === 'cast');
     const o = v.options[pick];
     if (v.kind === 'route') {
       closeVote();
@@ -1149,12 +1231,12 @@ export function createSimulation() {
         return startRoute();
       }
       v.t = YD.BUILT_STAMP; // (a part was just built: the dock stays open while the BUILT stamp shows, then she casts off)
-      v.total = Math.min(v.total, SH.MAX_TIME - YD.BUILT_STAMP);
-    } else v.t = SH.TIME;
+      v.total = Math.min(v.total, shopMax() - YD.BUILT_STAMP);
+    } else v.t = shopTime();
     for (const p of Object.values(state.players)) {
       p.vote = null;
       p.uk = null;
-      p.voteAt = 1 + Math.random() * 3;
+      p.voteAt = config.VOTE.BOT_THINK.AGAIN[0] + Math.random() * config.VOTE.BOT_THINK.AGAIN[1];
     }
   };
 
@@ -1200,7 +1282,7 @@ export function createSimulation() {
       play: entry && entry.play ? { text: entry.play, kind: entry.playKind, crew: entry.playCrew } : null, // (PLAY OF THE MISSION: "Mia planted the charge")
       gentle,
       log: entry ? entry.text : null,
-      t: config.VOTE.SCORECARD_TIME,
+      t: SH.V2 ? config.VOTE.SCORECARD_TIME_V2 : config.VOTE.SCORECARD_TIME,
       gain: { ...run.gain },
       gained: Object.values(run.gain).reduce((a, b) => a + b, 0),
       total: run.salvage,
@@ -1275,6 +1357,7 @@ export function createSimulation() {
       return;
     }
     if (state.salvagePop && (state.salvagePop.t -= dt) <= 0) state.salvagePop = null;
+    if (state.briefing && (state.briefing.t -= dt) <= 0) state.briefing = null;
     { const Y = state.yard; if (Y.built && (Y.built.t -= dt) <= 0) Y.built = null; if (Y.newPart && Y.newPart.t > 0) Y.newPart.t -= dt; if (Y.pull > 0) Y.pull -= dt; }
     // While the crew votes on an upgrade, the action is paused.
     if (state.vote) {
@@ -1304,6 +1387,7 @@ export function createSimulation() {
         gunship.reset();
         W.flotsam.reset(); // (SCRAP: the last stop's flotsam is gone)
         state.tempo = newTempo();
+        startBriefing(); // (F6: the BRIEFING card, if this stop has one)
         state.enemy.dead = Math.max(state.enemy.dead, 6);
         eachShip(state, (sh) => sh.sim.goingDown.newMission()); // (the last stand is back for the new mission)
       }

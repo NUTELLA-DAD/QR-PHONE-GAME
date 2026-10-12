@@ -95,6 +95,11 @@ if (args.runs > 1 && !args.child) {
       console.log('  by stop: ' + keys.map((c) => `${c + 1}: first threat ${mean(cols[c].thr)} (${cols[c].thr.length}/${cols[c].flown}), falls ${(cols[c].falls / cols[c].flown).toFixed(1)}`).join(' | '));
     }
   }
+  { // STOP SHAPE (FUN.md F6): briefings, escapes, the gunship as the one big thing, mid-voyage zeppelins, and the dock's three cards
+    const sh = ok.filter((r) => r.shape), n = sh.length, sum = (k) => sh.reduce((a, r) => a + r.shape[k], 0), cards = {};
+    for (const r of sh) for (const [k, v] of Object.entries(r.shape.cards)) cards[k] = (cards[k] || 0) + v;
+    if (n) console.log(`stop shape: ${sum('stops')} stops flown, ${sum('brief')} briefings, ${sum('escape')} escapes, gunship set piece at ${sum('gunship')} of them (${sum('plain')} stops had neither lair nor ring), ${sum('midBoss')} mid-voyage zeppelins; ${sum('docks')} docks, cards [${Object.entries(cards).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + v).join(', ')}], dock s ${(sum('dockSecs') / Math.max(1, sum('docks'))).toFixed(1)}, scorecard+dock+route s/stop ${(sum('menuSecs') / Math.max(1, sum('stops'))).toFixed(0)}`);
+  }
   { const n = ok.reduce((a, r) => a + (r.breaks || 0), 0); if (n) console.log(`parts broke off ${n} time(s) in ${ok.filter((r) => r.breaks).length} of ${ok.length} voyages: ${[...new Set(ok.flatMap((r) => r.breakCauses || []))].join(', ')}`); }
   const causes = {};
   for (const r of ok) for (const k of r.flags || []) causes[k] = (causes[k] || 0) + 1;
@@ -188,6 +193,7 @@ let result = null;
 const curve = []; // (G0: per stop reached, the ship's power against the curriculum's expected power and the stop's skulls)
 let curveStop = null;
 const lairs = { seen: new Set(), won: new Set(), met: 0, how: {} };
+const shape = { stops: 0, plain: 0, brief: 0, escape: 0, gunship: 0, midBoss: 0, docks: 0, cards: {}, dockSecs: 0, menuSecs: 0 }, shapeSeen = {}; let shapeStop = null; // (F6)
 const hullBy = {}; // (F1: per stop flown, the hull while flying and the minutes: result.hullBy)
 const wrecks = []; // (balance pass: the text of every wreck of the voyage, limps included, from the moment the ship goes down)
 let wasDown = 0;
@@ -200,6 +206,19 @@ for (let step = 1; step <= maxSteps && !result; step++) {
     const h0 = state.ship.hull, nf = state.fires.length, nb = state.breaches.length, fl = state.phase === 'flying' && !state.ship.down;
     sim.update(dt);
     fun.step(dt);
+    { // (F6: what the stop shape did: counted per stop, per dock)
+      const sid = state.run && state.run.stopId, st = sid && state.run.voyage.columns.flat().find((x) => x.id === sid);
+      if (sid && sid !== shapeStop) { shapeStop = sid; shape.stops++; if (st && !st.lair && !st.ring && !st.flagship) shape.plain++; }
+      if (state.briefing && !shapeSeen.brief) shape.brief++;
+      if (state.tempo && state.tempo.phase === 'escape' && !shapeSeen.esc) shape.escape++;
+      if (state.tempo && state.tempo.big && !shapeSeen.big) shape.gunship++;
+      if (state.boss && state.boss !== shapeSeen.boss && !(st && st.flagship) && !(state.course && state.course.ring && state.course.ring.moor)) shape.midBoss++;
+      const v = state.vote && state.vote.kind === 'dock' ? state.vote : null;
+      if (v && v !== shapeSeen.vote) { shape.docks++; for (const o of v.options) shape.cards[o.id.replace(/^part-.*/, 'part').replace(/^rebuild-.*/, 'rebuild')] = (shape.cards[o.id.replace(/^part-.*/, 'part').replace(/^rebuild-.*/, 'rebuild')] || 0) + 1; }
+      if (v) shape.dockSecs += dt;
+      if (state.scorecard || state.vote) shape.menuSecs += dt;
+      Object.assign(shapeSeen, { brief: !!state.briefing, esc: !!(state.tempo && state.tempo.phase === 'escape'), big: !!(state.tempo && state.tempo.big), boss: state.boss, vote: v });
+    }
     if (state.ship.down > 0 && !wasDown) wrecks.push(String((state.ev && state.ev.warnText) || '?').replace(/ THE (SEA|ROCKS|GROUND)!$/, '!'));
     wasDown = state.ship.down > 0 ? 1 : 0;
     mateStat.max = Math.max(mateStat.max, Object.values(state.players).filter((q) => q.mate).length);
@@ -253,6 +272,7 @@ if (!result) {
 result.curve = curve;
 result.hullBy = Object.values(hullBy); // (F1: { col, hull, n, t0, t1 } per stop reached)
 result.fun = fun.result(); // (FUN.md F8)
+result.shape = shape; // (F6)
 result.profile = args.profile;
 result.offers = state.run.offers || { lair: [], salvage: [], taken: [] }; // (G0: the lairs and salvage runs the route votes offered, and the stops the crew took)
 { const S = state.scrapStats; if (S && config.SCRAP.ENABLED && !config.PVP.ENABLED) result.scrap = { spawned: S.spawned, landed: S.landed, hooked: S.hooked, stowed: S.stowed, lost: S.lost, taken: S.taken, hulks: S.hulks, dumped: S.dumped, by: S.by, holdSum: S.holdSum, holdN: S.holdN, carrySecs: S.carrySecs, crewSecs: S.crewSecs }; } // (SCRAP, LOOP.md G1: what fell, what was caught and stowed over the voyage)

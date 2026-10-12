@@ -1104,6 +1104,7 @@ function work(p, state) {
     return;
   }
   if (job.kind === 'raid') {
+    if (!state.gunship) return; // (F6: she may have left - the escape calm sends her home - between the job being picked and its next step)
     if (steer(p, tables(L).MAIN, boilerX(state.gunship), 30)) p.fire = true;
     return;
   }

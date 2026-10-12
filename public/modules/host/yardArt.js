@@ -106,21 +106,22 @@ export function createYardArt({ ctx, book, dots, wrapLines, ink, pics, spares, w
     else { ctx.font = `${Math.round(size * 0.78)}px "Segoe UI Emoji", sans-serif`; ctx.textAlign = 'center'; ctx.fillStyle = L.INK; ctx.fillText(o.icon, x + size / 2, y + size * 0.78); }
   };
   const shopCards = (v, voters) => {
-    const run = world.run, n = v.options.length, rows = Math.ceil(n / 2), gap = 14, cw = (RIGHT.w - gap) / 2, ch = Math.min(200, (RIGHT.h - (rows - 1) * gap) / rows);
+    const run = world.run, n = v.options.length, one = config.SHOP.V2 && n <= 3; // (F6: the 3-card dock is one tall column of big cards, not a 2 x 2 grid)
+    const rows = one ? n : Math.ceil(n / 2), gap = one ? 22 : 14, cw = one ? RIGHT.w : (RIGHT.w - gap) / 2, ch = Math.min(one ? 214 : 200, (RIGHT.h - (rows - 1) * gap) / rows);
     v.options.forEach((o, i) => {
-      const x = RIGHT.x + (i % 2) * (cw + gap), y = RIGHT.y + Math.floor(i / 2) * (ch + gap);
+      const x = one ? RIGHT.x : RIGHT.x + (i % 2) * (cw + gap), y = RIGHT.y + (one ? i : Math.floor(i / 2)) * (ch + gap);
       const off = o.kind !== 'cast' && (o.sold || o.cost > run.salvage), part = o.kind === 'part';
       ctx.globalAlpha = off ? 0.5 : 1;
       book.paper(x, y, cw, ch, { r: 14, pins: false, fill: part ? '#f4e2a8' : o.kind === 'cast' ? '#d6e3bc' : o.kind === 'repair' ? '#ecdcae' : null });
       picture(o, x + 14, y + 16, 72);
       ctx.textAlign = 'left';
       ctx.fillStyle = L.INK;
-      ctx.font = '24px ' + config.FONTS.DISPLAY;
+      ctx.font = (one ? '29px ' : '24px ') + config.FONTS.DISPLAY;
       ctx.fillText(o.name, x + 100, y + 38, cw - 112);
-      ctx.font = '400 16px ' + config.FONTS.TEXT;
-      wrapLines(o.desc, cw - 116).slice(0, 3).forEach((l, k) => ctx.fillText(l, x + 100, y + 62 + k * 20, cw - 112));
+      ctx.font = (one ? '400 20px ' : '400 16px ') + config.FONTS.TEXT;
+      wrapLines(o.desc, cw - 116).slice(0, one ? 4 : 3).forEach((l, k) => ctx.fillText(l, x + 100, y + (one ? 70 : 62) + k * (one ? 25 : 20), cw - 112));
       if (o.kind !== 'cast') {
-        ctx.font = '21px ' + config.FONTS.DISPLAY;
+        ctx.font = (one ? '26px ' : '21px ') + config.FONTS.DISPLAY;
         ctx.fillStyle = off && !o.sold ? '#b3261e' : L.INK;
         ctx.fillText(o.sold ? 'SOLD' : o.cost === 0 ? 'FREE' : `Salvage ${o.cost}`, x + 100, y + ch - 18);
       }
