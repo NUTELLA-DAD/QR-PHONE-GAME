@@ -429,7 +429,7 @@ export function createSimulation() {
     const add = (k, w) => { if (k !== tp.last && (!gates || gates.includes(k))) for (let i = 0; i < Math.round(w * favour(state, k)); i++) pool.push(k); }; // (the environment's enemy flavour scales each weight)
     add('swarm', 2);
     add('imps', 1);
-    if (tp.peaks >= 1 || lapNo() > 1) {
+    if (tp.peaks >= 1 || lapNo() > 1 || (state.course && state.course.stop && state.course.stop.early)) {
       add('bombers', 2);
       add('strafers', 2);
       if (tp.mt > config.PACING.GUNSHIP_FIRST && tp.mt - tp.gunshipEnd > config.PACING.GUNSHIP_GAP && !state.gunship) add('gunship', 4);
@@ -653,7 +653,7 @@ export function createSimulation() {
     environment: stop.play,
     kind: stop.kind,
     danger: stop.danger,
-    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined), gates: stop.gates, ring: stop.ring, nemesis: stop.nemesis, multi: stop.multi, salvage: stop.salvage, rateMul: stop.salvage ? VY.CURRICULUM.SALVAGE.RATE_MUL : undefined, slack: stop.slack }, // (slack: F1, a small ship's early caves are wider; gates... rateMul: the teaching curriculum's set-piece gates, ring / Nemesis / multi-part flags and the salvage run's lighter enemies, config.VOYAGE.CURRICULUM; lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
+    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined), gates: stop.gates, ring: stop.ring, nemesis: stop.nemesis, multi: stop.multi, salvage: stop.salvage, rateMul: stop.salvage ? VY.CURRICULUM.SALVAGE.RATE_MUL : undefined, slack: stop.slack, early: stop.early }, // (slack: F1, a small ship's early caves are wider; early: the classic ship's stop 1 may call the planes at its first set piece; gates... rateMul: the teaching curriculum's set-piece gates, ring / Nemesis / multi-part flags and the salvage run's lighter enemies, config.VOYAGE.CURRICULUM; lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
     lengthMul: modeInfo(state.run.mode).lengthMul,
     title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'ring' ? 'BREACH THE ' + ({ tower: 'TOWER', fortress: 'FORTRESS', citadel: 'CITADEL' }[stop.ring] || 'CASTLE') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
   });

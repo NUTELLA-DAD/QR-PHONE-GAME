@@ -942,8 +942,8 @@ export const config = {
       // that took 15-20 minutes. Her caves (network, route and salvage stops) get SLACK squares of spare room in tunnels and shafts instead of MAPS.TUNNEL_SLACK / SHAFT_SLACK, by the stop's share of the route
       // (8 values stretched over it, like POWER_CURVE; 1 = the normal caves): wide for the first stops, narrowing as she grows. ENABLED false = every cave as before.
       WIDE_CAVES: { ENABLED: true, SLACK: [4, 4, 3, 3, 2, 2, 1, 1] },
-      // F1: the classic ship is not bored at stop 1: these set pieces are added to stop 1's gates (a gun-only bat-and-imp stop left her hull at 99-100). ENABLED false = bats and imps only, as before.
-      CLASSIC_STOP1: { ENABLED: true, GATES: ['strafers'] },
+      // F1: the classic ship is not bored at stop 1: these set pieces are added to stop 1's gates (a gun-only bat-and-imp stop left her hull at 99-100). DANGER_ADD more skulls on it (1 skull = 20% more damage). ENABLED false = bats and imps only, as before.
+      CLASSIC_STOP1: { ENABLED: true, KIND: 'open', GATES: ['strafers'], DANGER_ADD: 1 },
       GATE_TAGS: { gunship: 'NEW: GUNSHIPS', strafers: 'NEW: DOGFIGHTERS', bombers: 'NEW: BOMBERS' }, // the route map's tiny tag on a column where this set piece is first allowed
       ENV_TAGS: { frost: 'NEW: ICE', ember: 'NEW: HEAT', storm: 'NEW: STORMS', sea: 'NEW: WATER', fungal: 'NEW: DARK' }, // ...and on a stop whose sky the route has not shown before
       TABLES: {

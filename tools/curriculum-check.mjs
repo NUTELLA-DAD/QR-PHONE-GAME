@@ -61,8 +61,9 @@ for (const [mode, o] of variants) {
     const last = cols[n - 1];
     if (last.length !== 1 || !last[0].flagship || last[0].env !== 'aether' || last[0].kind !== (config.RING.ENABLED ? 'ring' : 'network') || last[0].danger !== maxD) fail(sd, 'the Flagship stop');
     if (last[0].ring !== 'citadel') fail(sd, 'the Flagship has no citadel flag');
+    const cl1 = C1.ENABLED && o.classic && !second; // (F1: the classic ship's stop 1 is an outpost raid with more skulls)
     const wideAt = (s) => WC.SLACK[Math.round(s.share * (WC.SLACK.length - 1))]; // (F1: the slack of a gentle route's stop, by its share of the route)
-    if (!second && (cols[0][0].env !== 'skyisles' || cols[0][0].kind !== 'network' || cols[0][0].danger !== 1 || cols[0][0].slot !== 0)) fail(sd, 'first stop is not the Sky Isles cave run');
+    if (!second && (cols[0][0].env !== 'skyisles' || cols[0][0].kind !== (cl1 ? C1.KIND || 'network' : 'network') || cols[0][0].danger !== (cl1 ? 1 + C1.DANGER_ADD : 1) || cols[0][0].slot !== 0)) fail(sd, 'first stop is not the Sky Isles cave run');
     if (cols.flat().some((s) => (WC.ENABLED && o.gentle && !second ? s.slack !== wideAt(s) : s.slack !== undefined))) fail(sd, 'a stop with the wrong cave slack (wide only on a gentle first voyage)');
     if (WC.ENABLED && o.gentle && !second && (cols.flat().some((s) => !(s.slack >= 1)) || cols[0][0].slack <= config.MAPS.TUNNEL_SLACK)) fail(sd, 'the slack is not above the normal caves at stop 1');
     if (second && (cols[h].length < V.CHOICES_MIN || cols[h][0].slot !== CU.SECOND_START || cols[h][0].base !== table[CU.SECOND_START].danger + bonus)) fail(sd, 'the second voyage does not start at slot ' + CU.SECOND_START);
@@ -99,7 +100,7 @@ for (const [mode, o] of variants) {
       for (const s of col) {
         if (!s.lair && !allowed.includes(s.env)) fail(sd, `${s.id} sky ${s.env} is not in slot ${slot}'s ${allowed}`);
         if (s.lair && !LR.BY_ENV[s.env]) fail(sd, `${s.id} lair in ${s.env}`);
-        const kinds = s.lair ? ['lair'] : s.ring && config.RING.ENABLED ? ['ring'] : s.ring && !s.flagship ? ['open'] : row.kinds; // (a ring stop flies the ring map, config.RING.ENABLED; R0)
+        const kinds = c === 0 && cl1 && C1.KIND ? [C1.KIND] : s.lair ? ['lair'] : s.ring && config.RING.ENABLED ? ['ring'] : s.ring && !s.flagship ? ['open'] : row.kinds; // (a ring stop flies the ring map, config.RING.ENABLED; R0)
         if (!kinds.includes(s.kind)) fail(sd, `${s.id} kind ${s.kind} not in ${kinds}`);
         sawKind.add(s.kind);
         if (s.play !== s.env) fail(sd, `${s.id} plays ${s.play}`);
