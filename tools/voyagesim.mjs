@@ -91,6 +91,7 @@ if (args.runs > 1 && !args.child) {
       for (const r of fr) { for (const c of Object.keys(r.fun.flown)) (cols[c] ??= { flown: 0, thr: [], falls: 0 }).flown++; for (const [c, v] of Object.entries(r.fun.threat)) cols[c].thr.push(v); for (const [c, v] of Object.entries(r.fun.falls)) (cols[c] ??= { flown: 0, thr: [], falls: 0 }).falls += v; }
       const keys = Object.keys(cols).map(Number).sort((a, b) => a - b), mean = (a) => (a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(0) + 's' : 'none');
       console.log(`fun (profile ${args.profile}, build ${args.build}): overrun ${(sum('overrun') / n).toFixed(2)} per voyage (${fr.filter((r) => r.fun.overrun).length}/${n} voyages had one), idle% ${pc(sum('idleSecs'), sum('seatSecs'))} of seat time (gun seats ${pc(sum('gunIdleSecs'), sum('gunSecs'))}), menu s/stop ${(sum('menuSecs') / Math.max(1, sum('scorecards'))).toFixed(0)} (${sum('scorecards')} scorecards), longest no-moment gap median ${gaps[(gaps.length - 1) >> 1].toFixed(0)}s max ${gaps[gaps.length - 1].toFixed(0)}s`);
+      { const stl = ok.filter((r) => r.struct), to = ok.filter((r) => r.timeout); console.log(`ground (F5): sitting grounded and still with no alarm ${(sum('groundStillSecs') / n).toFixed(0)}s per voyage, ground-stall alarms ${(stl.reduce((a, r) => a + ((r.struct.why || {}).stalled || 0), 0) / Math.max(1, stl.length)).toFixed(2)} per voyage, timeouts that ended on the ground ${to.filter((r) => r.groundedAtEnd).length}/${to.length}`); }
       console.log('  by stop: ' + keys.map((c) => `${c + 1}: first threat ${mean(cols[c].thr)} (${cols[c].thr.length}/${cols[c].flown}), falls ${(cols[c].falls / cols[c].flown).toFixed(1)}`).join(' | '));
     }
   }
@@ -247,7 +248,7 @@ for (let step = 1; step <= maxSteps && !result; step++) {
 }
 if (!result) {
   const stopId = state.run.stopId;
-  result = { earned: state.run.earned, parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
+  result = { earned: state.run.earned, parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, groundedAtEnd: !!state.grounded, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
 }
 result.curve = curve;
 result.hullBy = Object.values(hullBy); // (F1: { col, hull, n, t0, t1 } per stop reached)

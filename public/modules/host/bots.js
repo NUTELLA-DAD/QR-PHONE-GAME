@@ -622,6 +622,7 @@ function listJobs(state, bot) {
   if (shipH.main && sj && (sj.charge || birdDiving(state.creature)) && !players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'rod' && !q.lock)) for (const r of sj.rods) jobs.push({ kind: 'rod', obj: r, max: 1 }); // (the Thunderbird's lightning dive: the rod is manned before the first bolt is called, C.6b)
   // Raiders: fight them, but never with more than about half the crew (the rest keep the ship going).
   for (const b of state.boarders) if (!b.fall) jobs.push({ kind: 'fight', obj: b, max: 2, cap: Math.max(2, Math.ceil(players.filter((q) => q.bot).length / 2)) });
+  for (const b of state.boarders) if (b.hang > 0 && b.landD != null && !jobs.some((j) => j.kind === 'fight' && j.hung)) jobs.push({ kind: 'fight', obj: b, max: 1, cap: 1, hung: true }); // (F5: an announced boarding - one free hand walks to where they will drop)
   for (const q of players) if (foeOf(q, bot) && !q.fall && !(q.ko > 0)) jobs.push({ kind: 'fight', obj: q, max: 2, cap: Math.max(2, Math.ceil(players.filter((r) => r.bot).length / 2)) }); // (Versus: boarders from the other ship; the gunship's crew against ours)
   // Sunken Sea: pump out a flooded hull (an emergency), winch up a survivor on the rope (a salvage bonus).
   const sea = state.sea;
@@ -1136,6 +1137,10 @@ function work(p, state) {
   if (job.kind === 'fight') {
     const crew = state.gunship && state.gunship.crew.includes(o);
     const foe = foeOf(o, p); // (Versus: a crewman of the other team; B.5: the gunship's crew and ours)
+    if (o.hang > 0 && o.landD != null && state.boarders.includes(o)) { // (F5: still on the line: wait for him under it, sword ready)
+      if (steer(p, o.landD, o.x - 70, 40)) p.jx = 0;
+      return;
+    }
     if (foe && !crew && !state.boarders.includes(o) && o.id != null && state.players[o.id] !== o) return; // (he left this ship - carried home, or swung back - since the job was picked)
     if (o.fall || !(state.boarders.includes(o) || crew || foe) || (!hostile(p, state) && !getTool(state, p, 'sword') && tables(L).PICKUPS.some((r) => r.kind === 'sword'))) return; // (no sword rack aboard: fight bare-handed, shoving them back; a boarder has no rack of his own to take a sword from)
     if (steer(p, goalOf(L, o), o.x, 45) || (Math.abs(o.y - p.y) < 20 && Math.abs(o.x - p.x) < 70)) {

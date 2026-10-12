@@ -52,9 +52,11 @@ export function coalAt(L, d, x) {
 }
 
 // Most fires at once: CAP_BASE for a ship with CAP_REF_PX of walkable deck, in proportion for bigger or smaller ones.
-export function fireCap(L) {
+// (F5, FIRE.PARTY: with `crew` given the base is CAP_FLAT + crew x CAP_PER_CREW instead of CAP_BASE; the validator, which knows no crew, keeps CAP_BASE.)
+export function fireCap(L, crew) {
   const total = L.platforms.reduce((n, q) => n + (q.x1 - q.x0), 0);
-  return clamp(Math.round((F().CAP_BASE * total) / F().CAP_REF_PX), F().CAP_MIN, F().CAP_MAX);
+  const base = F().PARTY && crew != null ? F().CAP_FLAT + F().CAP_PER_CREW * crew : F().CAP_BASE;
+  return clamp(Math.round((base * total) / F().CAP_REF_PX), F().CAP_MIN, F().CAP_MAX);
 }
 
 // Where fire f ({ d, x }) could spread: a spot each side along its deck (100..160 px away, as it always did) and through any connector end within LADDER_REACH.

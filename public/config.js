@@ -1,3 +1,4 @@
+const PARTY_ON = typeof process === 'undefined' || !(process.env && process.env.NO_PARTY); // FUN.md F5 (raiders and fire as a party): the switch for RAIDERS.PARTY, FIRE.PARTY and RAIDERS.KO_TIME (a browser has no process: on). NO_PARTY=1 in a tool = the old numbers (the seeded baselines pin it)
 export const config = {
   W: 1600,
   H: 900,
@@ -996,6 +997,10 @@ export const config = {
   FIRE: {
     SPREAD_EVERY: 7, // seconds before a fire tries to spread (shorter on very flammable ground, longer on damp / open-air ground; the crew-size 'spread' scale applies too)
     CAP_BASE: 8, // most fires burning at once on a ship with CAP_REF_PX of deck (the classic ship): bigger ships hold more, small ones fewer
+    // F5: fire is a job, not a verdict. PARTY: the cap base becomes CAP_FLAT + crew x CAP_PER_CREW (a crew of 8: 5.7; of 3: 4); on columns 1..EARLY_COLS a fire spreads every SPREAD_EARLY seconds; nothing new ignites while she is FALLING. false = the old numbers.
+    PARTY: PARTY_ON,
+    CAP_FLAT: 3, CAP_PER_CREW: 1 / 3,
+    SPREAD_EARLY: 10, EARLY_COLS: 3,
     CAP_REF_PX: 5180, // total walkable deck width of the classic ship (px)
     CAP_MIN: 3, CAP_MAX: 24, // ...and the cap never goes outside these
     FLAMMABILITY: {
@@ -1458,7 +1463,16 @@ export const config = {
     sapper: { name: 'Sapper', hp: 2, speed: 100, windup: 0.6, reach: 40, species: 'skeleton', color: '#7a6420', scale: 0.95 },
     cutter: { name: 'Cutter', hp: 3, speed: 105, windup: 0.6, reach: 40, species: 'bat', color: '#2f4f8c', scale: 1 },
     MIX: { grunt: 0.5, brute: 0.15, sapper: 0.2, cutter: 0.15 }, // chances for each raider that lands from a gunship or boarding line
-    KO_TIME: 12,
+    KO_TIME: PARTY_ON ? 8 : 12, // seconds a crewman stays knocked out (a crewmate revives him sooner); 12 before F5
+    STRIKE_CD: 1.5, // seconds a raider waits after a swing before the next
+    // F5 "a party, not a spiral": boarding is ANNOUNCED. A boss's boarding lines hang the raiders on their ropes in sight for WARN_TIME seconds under a BOARDERS AFT / FORE banner, then
+    // they drop; only 1 + crew / ABOARD_CREW_DIV may be aboard at once (ABOARD_FLOOR: at least that on a harder difficulty); none arrive while she is FALLING or within HOLD_CALM seconds of SHE HOLDS;
+    // cutters go for stations before crew. Rope crossings and paratroopers from a gunship obey the same cap and calm. false = the old relentless arrivals.
+    PARTY: PARTY_ON,
+    WARN_TIME: 3, // seconds the boarders hang on their ropes before they drop
+    ABOARD_BASE: 1, ABOARD_CREW_DIV: 3, ABOARD_FLOOR: { veteran: 2, hard: 2 }, // most raiders aboard (hanging ones count) = ABOARD_BASE + floor(crew / ABOARD_CREW_DIV), at least the floor of the difficulty
+    HOLD_CALM: 10, // seconds after SHE HOLDS before boarders may come again (none during the fall itself)
+    RETRY: 5, // seconds before a boss whose boarding lines were refused (full deck, falling) tries again
     BOMB_FUSE: 10, // seconds until a sapper's bomb goes off
     DEFUSE_TIME: 1.6, // seconds of holding Action to defuse (no tool needed)
     CUT_DAMAGE: 14, // per second a cutter does to the module it's hacking
@@ -1968,7 +1982,7 @@ export const config = {
     MATE_JOBS: ['shovel', 'vent'], // the job kinds a ship's mate takes besides MATES.JOBS while she falls (the mates dump cargo and vent steam too)
     STOKE_BELOW: 76, // bots (and the job arrows) stoke while the pressure is below this (so a load, STOKE_PRESS more, stays under BOILER.WARN_AT) ...
     EARLY: { SCRAP: 1, BOMBS: 1.5, COAL: 0.2, COAL_FUEL: 50, CUT: 0.35 }, // (structure on, bots) the dumps come early, since lift is a live rule: the hold after SCRAP seconds of falling, the bombs after BOMBS, the coal bunker once COAL of the crash clock is gone (and only with COAL_FUEL or more in the firebox: no bunker, no steam, no pump), the marked joints at CUT
-    ALL_HANDS: 12, ALL_HANDS_DOWN: 0, // (structure on, bots) a fall that is short of lift by no more than this many points takes only the idle hands and the helm: the gunners keep their posts; past it everybody leaves his station (once she is down on the ground the limit is ALL_HANDS_DOWN)
+    ALL_HANDS: 20, ALL_HANDS_DOWN: 0, // (F5: 12 -> 20, the gunners stay on their guns in small falls) // (structure on, bots) a fall that is short of lift by no more than this many points takes only the idle hands and the helm: the gunners keep their posts; past it everybody leaves his station (once she is down on the ground the limit is ALL_HANDS_DOWN)
     COAST: 0, // (structure on) the cruise speed (0..1) the bot at the helm holds while she falls: the engines drink the steam the pump needs
     STOKE_LOW: 40, // (structure on) ... and put one more hand on the shovel while it is below this (the pump needs steam; a boiler running dry is how most falls are lost)
     VENT_AT: 86, // ... open a vent when it is this high (BOILER.WARN_AT blows the boiler) ...
@@ -1995,8 +2009,8 @@ export const config = {
     CANVAS_PER_HULL: 0.05, // canvas a gasbag loses per old hull point a hit on it would have cost (a shell is 2 x power x the damage scale: about 0.02 on Normal) ...
     CANVAS_LOSS: 16, // ... and the gas points of lift a bag with no canvas left has lost (weight: she hovers that much higher on the pump)
     PATCH_CANVAS: 0.25, // canvas a patched gasbag hole gives back
-    BREACH_RATE: 0.012, // soundness a second an open breach takes off its segment (x the damage scale), until it is planked
-    FIRE_RATE: 0.01, // ... and a fire (a big one counts BLAZE.HULL_MUL times)
+    BREACH_RATE: 0.007, // soundness a second an open breach takes off its segment (x the damage scale), until it is planked (F5: 0.012 before)
+    FIRE_RATE: 0.006, // ... and a fire (a big one counts BLAZE.HULL_MUL times) (F5: 0.01 before)
     SCRAPE_MUL: 1, // rock scraping the keel: a plain hit of this power
     REPAIR_RATE: 0.12, // soundness a second a hammer held on a segment gives back (SHORE UP)
     LOAD_WEIGHT: 1, // gas points of weight (lift she needs on top of the neutral fill) per point a load lying on her decks weighs
@@ -2004,6 +2018,8 @@ export const config = {
     JOB_AT: 0.6, // a segment below this is a FRAME job for idle phones and the bots (critical ones first)
     GRACE_SPLIT: { easy: 14, normal: 8, veteran: 6, hard: 5 }, // seconds a critical segment at 0 holds (at HOLD_HP) before it gives, by difficulty: a hammer saves it
     GRACE_END: 2, // ... and one that is not critical (an end, a pod, a nest)
+    GRACE_END_KEY: 8, // F5: ... but an end that carries the boiler or the helm holds this long (null = GRACE_END), and cannot break off before stop KEY_NO_BREAK_BEFORE of the voyage (0 = no limit): the first stops are not lost to an end segment taking the steam or the wheel with it
+    KEY_NO_BREAK_BEFORE: 3,
     HOLD_HP: 0.02,
     HELD_HP: 0.3, // a segment that fails but cannot give way (nothing can come away there, or Easy before stop 2) is left at this
     CANVAS_RESTORE: 0.01, // canvas every gasbag gets back per old hull point of a repair
@@ -2021,7 +2037,7 @@ export const config = {
       FALL_TERMINAL: 700, // ... at most this fast (px/s)
     },
     // FALLING (goingDown.js): whenever her lift is short of her weight by MARGIN for START seconds and she is sinking; it ends after lift beats weight for END seconds ("SHE HOLDS!")
-    LIFT: { START: 1.5, END: 2, COOLDOWN: 10, GRACE: 3, NOHELM_SHORT: 12, GRAZE: 16, GRAZE_T: 4, PUMP_AT: 0.5, RISE_MIN: 4, EMPTY_GAS: 6, SINK_VY: 3, RELIEF_DECAY: 0.2 }, // SINK_VY: she counts as sinking below this climb rate (px/s); RELIEF_DECAY: weight dumped overboard (gdRelief) buys this many gas points less of relief a second; short of lift is only TROUBLE when the helm pumps this hard (0..1) and the gas rises slower than RISE_MIN points a second (no steam, a bag torn open), the bag is down to EMPTY_GAS, or nobody flies her AND she is short by more than NOHELM_SHORT (an empty helm alone is not trouble), or she is down on the ground (a GRAZE - short by no more than GRAZE for less than GRAZE_T seconds - is not: a helm that vents and holds the bag low is diving on purpose)
+    LIFT: { GROUND_STALL: 40, STALL_SPEED: 0.05, START: 1.5, END: 2, COOLDOWN: 10, GRACE: 3, NOHELM_SHORT: 12, GRAZE: 16, GRAZE_T: 4, PUMP_AT: 0.5, RISE_MIN: 4, EMPTY_GAS: 6, SINK_VY: 3, RELIEF_DECAY: 0.2 }, // SINK_VY: she counts as sinking below this climb rate (px/s); RELIEF_DECAY: weight dumped overboard (gdRelief) buys this many gas points less of relief a second; short of lift is only TROUBLE when the helm pumps this hard (0..1) and the gas rises slower than RISE_MIN points a second (no steam, a bag torn open), the bag is down to EMPTY_GAS, or nobody flies her AND she is short by more than NOHELM_SHORT (an empty helm alone is not trouble), or she is down on the ground (a GRAZE - short by no more than GRAZE for less than GRAZE_T seconds - is not: a helm that vents and holds the bag low is diving on purpose)
     // The loss: sitting on the ground (or the sea) with lift short of weight by more than SHORT, inside a FALLING alarm, this long (seconds on Normal, plus PER_CREW for each crewman under 8; by difficulty for the rest). The clock runs at RECOVER_MUL while the gas is rising by RISE_OK points a second or more (a pump that is working keeps her alive longer).
     CRASH: { TIME: { easy: 20, normal: 12, veteran: 9, hard: 7 }, PER_CREW: 1, SHORT: 2, RISE_OK: 4, RECOVER_MUL: 0.35 },
     BOT: { DIVE: 14 }, // (balance pass) bots: the helm vents the bags only down to this many gas points under the level she hovers at (a dive that empties the bag cannot be pumped back without steam)

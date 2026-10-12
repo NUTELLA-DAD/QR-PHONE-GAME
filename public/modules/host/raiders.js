@@ -39,13 +39,31 @@ export function createRaiders({ state, modules, puff, impact }) {
     return b;
   };
 
+  // ---- F5 (RAIDERS.PARTY): how many may be aboard, and when they may not come ----
+  const maxAboard = () => Math.max(R.ABOARD_BASE + Math.floor(crewHeads(state) / R.ABOARD_CREW_DIV), R.ABOARD_FLOOR[state.difficulty] || 0);
+  const calm = () => !state.goingDown && (state.gdSince ?? 99) >= R.HOLD_CALM; // (not while she is FALLING, nor within HOLD_CALM seconds of SHE HOLDS)
+  const room = () => Math.max(0, maxAboard() - state.boarders.length); // (raiders hanging on their ropes count as aboard)
+  // May more raiders come now? (the gunships ask before a paratrooper jumps or a guard crosses her rope)
+  const canBoard = () => !R.PARTY || (calm() && room() > 0);
+  const topDeck = () => P.reduce((best, q) => (q.y < best ? q.y : best), Infinity);
+  const deckUnder = (x, y) => { let best = null; P.forEach((q, d) => { if (x >= q.x0 && x <= q.x1 && q.y > y && (best === null || q.y < P[best].y)) best = d; }); return best; };
+
   // A squad arrives at (x, y) (boarding lines from the boss). `only`: a smaller party of that many plain grunts (the castle garrison's grapples, garrison.js).
+  // PARTY: returns 'blocked' (nobody comes: the deck is full or she is falling) or 'announced' (the boss's lines: they hang in sight for WARN_TIME seconds under a banner, then drop).
   const dropSquad = (x, y, only) => {
     const crew = crewHeads(state);
-    const count = only != null ? only : Math.max(1, Math.min(6, Math.round((1 + Math.floor(crew / 4)) * crewMul(state, 'raiders'))));
+    let count = only != null ? only : Math.max(1, Math.min(6, Math.round((1 + Math.floor(crew / 4)) * crewMul(state, 'raiders'))));
+    const announce = R.PARTY && only == null;
+    if (R.PARTY) {
+      count = Math.min(count, room());
+      if (!calm() || count <= 0) return 'blocked';
+      if (announce) y = topDeck() - 380; // (they hang in plain view over the ship, a rope above each)
+    }
+    const mid = P.reduce((n, q) => n + (q.x0 + q.x1) / 2, 0) / (P.length || 1);
     for (let i = 0; i < count; i++) {
       const type = i === 0 || only != null ? 'grunt' : pickType();
       const t = R[type];
+      const bx = x + (i - (count - 1) / 2) * 45, by = y - (announce ? 0 : i * 40);
       state.boarders.push({
         id: 'r' + nextId++,
         type,
@@ -53,21 +71,27 @@ export function createRaiders({ state, modules, puff, impact }) {
         species: t.species,
         color: t.color,
         scale: t.scale,
-        x: x + (i - (count - 1) / 2) * 45,
-        y: y - i * 40,
+        x: bx,
+        y: by,
         fall: true,
         hp: t.hp,
         hit: 0,
         cd: 0,
         windup: 0,
         face: 1,
+        ...(announce ? { hang: R.WARN_TIME, landD: deckUnder(bx, by) } : null),
       });
     }
+    if (!announce) return;
+    state.ev.warn = R.WARN_TIME;
+    state.ev.warnText = x > mid ? 'BOARDERS FORE!' : 'BOARDERS AFT!';
+    state.sfxQ && state.sfxQ.push(['alarm']);
+    return 'announced';
   };
 
   const strike = (b, target) => {
     const t = R[b.type];
-    b.cd = 1.5;
+    b.cd = R.STRIKE_CD;
     // (just back on their feet? a moment's grace, so one raider can't keep a whole crew down)
     if (!target || target.ko > 0 || target.koGrace > 0 || target.d !== b.d || target.conn != null || (target.jz || 0) > config.MOVE.JUMP_DODGE || target.fly || Math.abs(target.x - b.x) > t.reach + 12) {
       shipPuff(b.x + b.face * 40, b.y - 50, '#ddd', 4); // swung at thin air
@@ -101,6 +125,10 @@ export function createRaiders({ state, modules, puff, impact }) {
     const live = Object.values(state.players).filter((q) => !q.fall && !q.fly && !(q.ko > 0) && q.d != null);
     for (const b of state.boarders) {
       if (b.fall) {
+        if (b.hang > 0) { // (PARTY: hanging on the boarding line in sight; the line pays out once it is calm)
+          if (calm()) b.hang -= dt;
+          continue;
+        }
         if (!b.tipped) fall(b, dt, 300); // (a raider tipped out of a cargo drop hatch falls by hatch.js's rules)
         continue;
       }
@@ -111,7 +139,7 @@ export function createRaiders({ state, modules, puff, impact }) {
       b.cutting = null;
 
       // Nearest crew member on the same deck within reach: wind up, then strike.
-      const near = live
+      const near = R.PARTY && b.type === 'cutter' && cutterTarget(b) ? undefined : live // (PARTY: a cutter with a station to hack leaves the crew alone)
         .filter((q) => q.conn == null && b.conn == null && q.d === b.d && Math.abs(q.x - b.x) < t.reach)
         .sort((q1, q2) => Math.abs(q1.x - b.x) - Math.abs(q2.x - b.x))[0];
       if (b.windup > 0) {
@@ -216,5 +244,5 @@ export function createRaiders({ state, modules, puff, impact }) {
     state.bombs.length = 0;
   };
 
-  return { update, dropSquad, dropOne, pickType, onHit, reset };
+  return { update, dropSquad, dropOne, pickType, onHit, reset, canBoard };
 }

@@ -63,11 +63,12 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
   const tb = () => tables(L);
   const shipPop = (x, y, kind, color, size) => pop(state, toWorldX(ship, x), toWorldY(ship, y), kind, color, size); // (a point on the ship)
   let used = false; // the last stand has been used in this mission
-  let lowT = 0, cdT = 0, lastGas = 50, rise = 0, groundT = 0; // (structure on: seconds she has been short of lift while sinking; seconds before the next alarm may sound)
+  let lowT = 0, cdT = 0, lastGas = 50, rise = 0, groundT = 0, stallT = 0; // (structure on: seconds she has been short of lift while sinking; seconds before the next alarm may sound)
   const live = () => { const s = getStructure && getStructure(); return !!(s && s.on()); }; // (STRUCTURE.md: the continuous rule)
   state.goingDown = null; // { t, time, lift, weight, need, hold, m, holes, joints, ... } (see tryStart)
   state.gdBanner = null; // { text, sub, color, t, max } big words in the middle of the TV
   state.gdGrace = 0; // seconds she cannot be hurt after holding
+  state.gdSince = 99; // seconds since she last held (SHE HOLDS!): raiders.js lets no boarders come for RAIDERS.HOLD_CALM seconds after it
   state.gdCoalOut = 0; // seconds the coal bunker stays empty (it was dumped)
 
   const crewCount = () => Math.max(1, Object.values(state.players).filter((p) => p.connected !== false && !p.mate).length);
@@ -209,6 +210,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     if (state.gdBanner && (state.gdBanner.t -= dt) <= 0) state.gdBanner = null;
     if (state.gdCoalOut > 0) state.gdCoalOut = Math.max(0, state.gdCoalOut - dt);
     if (state.gdGrace > 0) state.gdGrace -= dt;
+    state.gdSince += dt;
     if (state.gdRelief > 0) state.gdRelief = Math.max(0, state.gdRelief - dt * config.STRUCTURE.LIFT.RELIEF_DECAY); // (weight dumped overboard buys a while of height; the bunker and the bomb racks fill up again)
     cdT = Math.max(0, cdT - dt);
     if (ship.piece) return;
@@ -222,9 +224,16 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     lastGas = gasNow;
     groundT = state.grounded ? groundT + dt : Math.max(0, groundT - dt * 2); // (how long she has been touching the ground: a graze is a touch that lets go again)
     const trouble = (pumpIn >= LF.PUMP_AT && rise < LF.RISE_MIN) || gasNow <= LF.EMPTY_GAS || (!helmManned() && !state.autopilot && short > LF.NOHELM_SHORT) || (state.grounded && (short > LF.GRAZE || groundT > LF.GRAZE_T)); // (balance pass: an empty helm alone is not trouble - only with a real lift deficit; a ship down on the ground is, unless it is a graze: lift short by no more than GRAZE and down for less than GRAZE_T seconds)
+    stallT = !g && LF.GROUND_STALL && state.grounded && Math.abs(state.ship.speed) < LF.STALL_SPEED ? stallT + dt : Math.max(0, stallT - dt * 2); // (F5: on the ground and not moving: the ground soft lock's clock; a ship that sits there bounces, so a lift-off for a moment only slows it)
     if (!g) {
       lowT = short > GD.MARGIN && ((state.ship.vy || 0) < -config.STRUCTURE.LIFT.SINK_VY || state.grounded) && trouble ? lowT + dt : Math.max(0, lowT - dt);
       if (lowT >= config.STRUCTURE.LIFT.START && cdT <= 0 && state.gdGrace <= 0) { lowT = 0; { const S = getStructure(); if (S) { const w = (S.stats.why ||= {}), k = state.grounded ? 'grounded' : gasNow <= LF.EMPTY_GAS ? 'bagEmpty' : (pumpIn >= LF.PUMP_AT && rise < LF.RISE_MIN) ? 'pumpNoRise' : 'noHelm'; w[k] = (w[k] || 0) + 1; } } beginLive(m); }
+      else if (stallT >= LF.GROUND_STALL && cdT <= 0 && state.gdGrace <= 0) { // (F5: sat on the ground GROUND_STALL seconds with no alarm: raise FALLING anyway, so the crash clock, the alarms and the limp happen and the voyage cannot sit there for ever)
+        stallT = 0;
+        { const S = getStructure(); if (S) { const w = (S.stats.why ||= {}); w.stalled = (w.stalled || 0) + 1; } }
+        beginLive(m);
+        state.goingDown.stall = true;
+      }
     } else {
       g.t = state.crashT || 0;
       g.time = crashTime();
@@ -244,13 +253,14 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
       g.age = (g.age || 0) + dt;
       state.ship.shake = Math.max(state.ship.shake, 0.2);
       if ((g.beep -= dt) <= 0) { g.beep = 1.1; state.sfxQ.push(['alarm']); }
-      if (short <= 0) g.hold += dt; else g.hold = Math.max(0, g.hold - dt * 1.5);
+      if (short <= 0 && !(g.stall && state.grounded)) g.hold += dt; else g.hold = Math.max(0, g.hold - dt * 1.5);
       if (g.hold >= config.STRUCTURE.LIFT.END) {
         const S = getStructure(); if (S) S.stats.saved++;
         if (state.moment && state.momentTake) state.moment('going-down-saved', { who: state.momentTake('gd').slice(0, 3).map((r) => r.ref), where: null, data: { cuts: g.cuts || 0 } }); // (the Ship's Book: whoever patched, pumped and dumped while she fell)
         finish();
         cdT = config.STRUCTURE.LIFT.COOLDOWN;
         state.gdGrace = config.STRUCTURE.LIFT.GRACE;
+        state.gdSince = 0;
         state.gdBanner = { text: 'SHE HOLDS!', sub: 'Her lift beats her weight again', color: '#7bdc8a', t: 3, max: 3 };
         say('SHE HOLDS!', 3);
         state.sfxQ.push(['kill']);
@@ -259,7 +269,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     }
     // the loss: down on the ground (or the sea) with her lift still short of her weight
     const need = crashTime(), CR = config.STRUCTURE.CRASH; // (balance pass: the crash clock only runs inside a FALLING alarm - the crew was told - and only while she is really short, CRASH.SHORT)
-    if (g && state.grounded && short > CR.SHORT) state.crashT = (state.crashT || 0) + dt * (rise >= CR.RISE_OK ? CR.RECOVER_MUL : 1); else state.crashT = Math.max(0, (state.crashT || 0) - dt * 2);
+    if (g && state.grounded && (short > CR.SHORT || g.stall)) state.crashT = (state.crashT || 0) + dt * (rise >= CR.RISE_OK ? CR.RECOVER_MUL : 1); else state.crashT = Math.max(0, (state.crashT || 0) - dt * 2);
     if (state.crashT >= need) {
       const sea = !!(state.sea && state.sea.spray > 0.5 && state.sea.flood > 0);
       const S = getStructure(); if (S) S.stats.crashes++;
@@ -327,6 +337,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     for (const b of state.bags) b.gas = Math.min(b.gas, config.GAS.NEUTRAL + GD.LEVEL_GAS); // (pumped full to save her: she levels out gently instead of shooting up)
     refillBags(state, config.GAS.NEUTRAL + 6);
     state.gdGrace = GD.GRACE;
+    state.gdSince = 0;
     state.gdBanner = { text: 'SHE HOLDS!', sub: why || 'Her lift beats her weight - levelling out with a sliver of hull...', color: '#7bdc8a', t: 3.5, max: 3.5 };
     say('SHE HOLDS! PATCH HER UP!', 4);
     state.sfxQ.push(['kill']);
@@ -342,6 +353,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
   // Called every frame while flying (after the flight maths, before the pitch is worked out).
   const update = (dt) => {
     if (live()) return updateLive(dt);
+    state.gdSince += dt;
     if (state.gdBanner && (state.gdBanner.t -= dt) <= 0) state.gdBanner = null;
     if (state.gdCoalOut > 0) state.gdCoalOut = Math.max(0, state.gdCoalOut - dt);
     if (state.gdGrace > 0) {

@@ -42,7 +42,7 @@ const NODE_NAMES = Object.keys(G.NODES);
 // Hunting or latched on (the phases in which she can be boarded, and her crew fights back).
 const engaged = (g) => g.phase === 'hunt' || g.phase === 'latch';
 
-export function createGunshipShip({ state, puff, credit, dropOne, pickType, spawnBats, addShip, removeShip }) {
+export function createGunshipShip({ state, puff, credit, dropOne, pickType, canBoard, spawnBats, addShip, removeShip }) {
   const ours = state.ships[0]; // (she hunts the main ship)
   const layout = ours.layout;
   const P = layout.platforms;
@@ -1164,7 +1164,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
       g.paraDue = true;
       const high = g.arrived && g.node && G.NODES[g.node].drop;
       if (high) {
-        if (state.paras.length >= G.PARA_MAX_AIR || ours.ctx.boarders.length >= G.PARA_MAX_BOARDERS || ours.state.down) g.paraT = 3;
+        if (state.paras.length >= G.PARA_MAX_AIR || ours.ctx.boarders.length >= G.PARA_MAX_BOARDERS || ours.state.down || (canBoard && !canBoard())) g.paraT = 3; // (F5: nobody jumps while she is falling, just after SHE HOLDS, or with the deck full)
         else if (dropParas(g)) {
           S.climbs++;
           g.paraDue = false;
@@ -1188,7 +1188,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, spaw
       if (g.rope && (g.sendT += dt) >= G.LATCH_SEND_EVERY * (g.bp.special === 'ramp' ? GP.RAMP.SEND_MUL : 1)) {
         g.sendT = 0;
         const guard = crewOf(g).find((c) => c.role === 'guard');
-        if (guard || g.extra > 0) {
+        if ((guard || g.extra > 0) && (!canBoard || canBoard())) {
           if (guard) { delete h.crewReg[guard.id]; guard.lock = null; }
           else g.extra--;
           S.sent++;

@@ -3,6 +3,7 @@
 //   overrun     events where at least 3 crew were knocked out, 2 fires burned and 2 raiders were aboard, all at once (a new event after 5 s of calm)
 //   idle        crew seat time with nothing to do (a gun with no target, a lamp with nothing to light: the bots' gunIdle), over all seats and over gun seats alone
 //   menu        seconds of scorecard + dock + route votes, and how many scorecards there were (menu s/stop = secs / scorecards)
+//   groundStill seconds sitting on the ground, not moving, with no FALLING alarm up (F5: the ground soft lock)
 //   gap         the longest stretch of flight (s) without a named moment in the Ship's Book
 //   threat      per stop (column): flight seconds until the first thing to shoot or fight showed up
 //   falls       per stop (column): FALLING (GOING DOWN!) alarms
@@ -11,7 +12,7 @@ const STATIC = new Set(['turret', 'post', 'core', 'shutter', 'rspecial', 'laid',
 export const FUN = { KO: 3, FIRES: 2, BOARDERS: 2, OVERRUN_CALM: 5, SAMPLE: 10 };
 
 export function createFunMetrics(state, { kindOf, targets, moments }) {
-  const m = { flightSecs: 0, seatSecs: 0, idleSecs: 0, gunSecs: 0, gunIdleSecs: 0, overrun: 0, overrunSecs: 0, menuSecs: 0, scorecards: 0, gapMax: 0, threat: {}, flown: {}, falls: {} };
+  const m = { flightSecs: 0, seatSecs: 0, idleSecs: 0, gunSecs: 0, gunIdleSecs: 0, overrun: 0, overrunSecs: 0, groundStillSecs: 0, menuSecs: 0, scorecards: 0, gapMax: 0, threat: {}, flown: {}, falls: {} };
   let overCalm = 1e9, gap = 0, lastNamed = moments ? moments.totals.named : 0, wasCard = false, wasDown = false, n = 0;
   const colOf = () => (state.run && state.run.stopId ? Number(String(state.run.stopId).split('.')[0]) : 0);
   const threatNow = () => targets(state).some((t) => !STATIC.has(t.kind)) || state.boarders.length > 0 || !!state.boss || !!state.creature;
@@ -30,6 +31,7 @@ export function createFunMetrics(state, { kindOf, targets, moments }) {
       if (moments && moments.totals.named !== lastNamed) { lastNamed = moments.totals.named; gap = 0; }
       gap += dt;
       if (gap > m.gapMax) m.gapMax = gap;
+      if (state.grounded && Math.abs(state.ship.speed) < 0.05 && !state.goingDown) m.groundStillSecs += dt; // (F5)
       // seats with nothing to do
       for (const q of Object.values(state.players)) {
         if (!q.lock || q.mate || q.enemy || q.ko > 0 || q.fall) continue;

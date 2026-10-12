@@ -1214,7 +1214,7 @@ export function createSimulation() {
   const squadrons = createSquadrons({ state, puff, impact, hitsShip, dropSquad: raiders.dropSquad, credit, gnaw, damageHull, phoneFx });
   const specials = createSpecials({ state, puff, impact, hitsShip, credit, shieldBlocks });
   const creatures = createCreatureSystem({ state, puff, credit, phoneFx }); // (giant creatures, BOSSES.md: state.creature; for now only the dev flag config.CREATURES.DEV_SPAWN spawns one)
-  const gunshipDeps = { state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, spawnBats: (from, n) => squadrons.spawnBats(from, n) };
+  const gunshipDeps = { state, puff, impact, credit, dropOne: raiders.dropOne, pickType: raiders.pickType, canBoard: raiders.canBoard, spawnBats: (from, n) => squadrons.spawnBats(from, n) };
   const gunship = config.GUNSHIP.AS_SHIP ? createGunshipShip({ ...gunshipDeps, addShip: (...a) => addShip(...a), removeShip: (...a) => removeShip(...a), W }) : createGunship(gunshipDeps); // (B.5: the gunship as a Ship, gunshipShip.js, when the flag is on; else the old offset-from-our-ship one)
   const weather = createWeather({ state, impact, puff });
   const env = createEnvironment({ state, puff, phoneFx, impact, damageHull, ignite: fireSys.ignite }); // ice, thermals, blizzards (rules in environments.js)

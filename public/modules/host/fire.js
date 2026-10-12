@@ -10,7 +10,7 @@ import { config } from '../../config.js';
 import { all } from '../../shipLayout.js';
 import { mainShip } from './ships.js';
 import { toWorldX, toWorldY } from './pose.js';
-import { crewMul } from './crewscale.js';
+import { crewMul, crewAboard } from './crewscale.js';
 import { pop } from './popups.js';
 import { flamAt, fireCap, spreadSpots, coalAt } from './fireModel.js';
 
@@ -23,11 +23,13 @@ export function createFire({ state, shipPuff }) {
   state.blaze = null;
   state.blazeCd = 0;
 
-  let capV = -1, capN = 0;
-  const cap = () => { // (cached per layout version: the sum runs over every deck)
-    if (capV !== SL.version) { capV = SL.version; capN = fireCap(SL); }
+  let capV = -1, capC = -1, capN = 0;
+  const cap = () => { // (cached per layout version and crew size: the sum runs over every deck)
+    const crew = F.PARTY ? crewAboard(state) || 8 : null; // (no crew yet: the standard eight, as crewscale.js) // (F5: a small crew is not buried in fires)
+    if (capV !== SL.version || capC !== crew) { capV = SL.version; capC = crew; capN = fireCap(SL, crew); }
     return capN;
   };
+  const column = () => (state.course && state.course.stop ? state.course.stop.col + 1 + ((state.run && state.run.base) || 0) : 99); // (the stop's number in the voyage, as structure's stopNo)
 
   const igniteChance = (d, x) => clamp(flamAt(SL, d, x) / F.FLAMMABILITY.deck, 0, F.HIT_IGNITE_MAX);
 
@@ -57,6 +59,7 @@ export function createFire({ state, shipPuff }) {
     const cx = clamp(x, p.x0 + 20, p.x1 - 20);
     const fl = flamAt(SL, d, cx);
     if (fl <= 0) return null; // plate, or ground that cannot burn
+    if (F.PARTY && state.goingDown) return null; // (F5: nothing new catches while she is FALLING: the crew has one job at a time)
     if (state.fires.length >= cap() + (opts.over ? B.EXTRA_CAP : 0)) return null;
     const fire = { x: cx, d, t: 0, prog: 0 };
     if (opts.big) fire.big = true;
@@ -92,7 +95,7 @@ export function createFire({ state, shipPuff }) {
     }
     for (const fire of state.fires) {
       const here = clamp(flamAt(SL, fire.d, fire.x), F.SPREAD_MIN_MUL, F.SPREAD_MAX_MUL) * (fire.big ? B.SPREAD_MUL : 1);
-      if ((fire.t += dt) > F.SPREAD_EVERY / crewMul(state, 'spread') / here && state.fires.length < cap() + (state.blaze ? B.EXTRA_CAP : 0)) {
+      if ((fire.t += dt) > (F.PARTY && column() <= F.EARLY_COLS ? F.SPREAD_EARLY : F.SPREAD_EVERY) / crewMul(state, 'spread') / here && state.fires.length < cap() + (state.blaze ? B.EXTRA_CAP : 0)) {
         fire.t = 0;
         const spots = spreadSpots(SL, fire);
         const total = spots.reduce((n, s) => n + s.w, 0);

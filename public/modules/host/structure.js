@@ -179,7 +179,9 @@ export function createStructure({ state, ship, hooks }) {
     return best;
   };
 
-  const graceOf = (g) => (g.critical ? C().GRACE_SPLIT[hooks.difficulty()] ?? C().GRACE_SPLIT.normal : C().GRACE_END);
+  // (F5: an end segment that carries the boiler or the helm holds longer: losing it takes the steam or the wheel with it)
+  const carriesKey = (g) => ['boiler', 'helm'].some((k) => layout.all(k).some((s) => s.d === g.d && s.x >= g.x0 && s.x <= g.x1));
+  const graceOf = (g) => (g.critical ? C().GRACE_SPLIT[hooks.difficulty()] ?? C().GRACE_SPLIT.normal : C().GRACE_END_KEY != null && carriesKey(g) ? C().GRACE_END_KEY : C().GRACE_END);
 
   // ---- damage ----
   const enterHold = (g, big) => {
@@ -328,6 +330,7 @@ export function createStructure({ state, ship, hooks }) {
       pending = { spec: { comps: f, gone, small: small.flatMap((c) => c.stretches), at: gone.length ? (gone[0].a + gone[0].b) / 2 : 0, ids: list.map((g) => g.sig) } };
       return true;
     }
+    if (K.KEY_NO_BREAK_BEFORE && hooks.stopNo() < K.KEY_NO_BREAK_BEFORE && [...list, ...small.flatMap((c) => c.segs.map((i) => S.segs[i]))].some(carriesKey)) { for (const g of list) { g.hp = K.HELD_HP; g.hold = null; } hooks.say('IT HOLDS - FOR NOW...', 3); return false; } // (F5: an end with the boiler or the helm cannot break off in the first stops)
     const cuts = [...gone, ...small.flatMap((c) => c.stretches)];
     const r = hooks.breakCuts(cuts, 'structure');
     stats.breakoffs += r ? 1 : 0;

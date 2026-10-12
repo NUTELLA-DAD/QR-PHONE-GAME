@@ -254,7 +254,7 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
         g.x += Math.max(-320 * dt, Math.min(320 * dt, tx - g.x)) + vs * dt;
         g.y += Math.max(-200 * dt, Math.min(200 * dt, keepClear(state, g.x, ty, 120, 0, 300) - g.y));
         if (Math.abs(g.x - tx) < 80 && !g.harpoon && (g.t -= dt) <= 0) {
-          const [sx0, sy0] = layout.samples[(Math.random() * 10) | 0]; // somewhere on the underside
+          const [sx0, sy0] = layout.samples[Math.min(layout.samples.length - 1, (Math.random() * 10) | 0)]; // somewhere on the underside (F5: a small ship has fewer than ten samples)
           const hx = toWorldX(ship, sx0);
           const hy = toWorldY(ship, sy0);
           const d = Math.hypot(hx - g.x, hy - g.y) || 1;
