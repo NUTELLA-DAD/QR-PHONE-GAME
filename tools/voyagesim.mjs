@@ -73,6 +73,11 @@ if (args.runs > 1 && !args.child) {
       console.log(`scrap: per stop ${(caught / stops).toFixed(1)} caught (target ${cfg.SCRAP.INCOME_TARGET.join('-')}; runs ${per[0].toFixed(1)}-${per[per.length - 1].toFixed(1)}, median ${per[(per.length - 1) >> 1].toFixed(1)}), ${(sum('stowed') / stops).toFixed(1)} stowed, ${(sum('spawned') / stops).toFixed(1)} fell (${Object.entries(by).map(([k, v]) => k + ' ' + (v / stops).toFixed(1)).join(', ') || 'none'}), ${(sum('lost') / stops).toFixed(1)} lost; hooked ${sum('hooked')}, hulks ${sum('hulks')} (${sum('taken')} bundles off them), dumped ${sum('dumped')}; hold avg ${(sum('holdSum') / Math.max(1, sum('holdN'))).toFixed(1)}/${cfg.SCRAP.HOLD_CAP}, carrying ${(100 * sum('carrySecs') / Math.max(1, sum('crewSecs'))).toFixed(1)}% of crew time`);
     }
   }
+  { // STRUCTURE (STRUCTURE.md): the falls and crashes per voyage, and what every wreck (limps included) was
+    const st = ok.filter((r) => r.struct), n = st.length, sum = (k) => st.reduce((a, r) => a + (r.struct[k] || 0), 0), by = {};
+    for (const r of ok) for (const w of r.wrecks || []) by[w] = (by[w] || 0) + 1;
+    if (n) console.log(`structure: per voyage falls ${(sum('falls') / n).toFixed(1)} (saved ${(sum('saved') / n).toFixed(1)}), crashes ${(sum('crashes') / n).toFixed(1)}, failures ${(sum('failures') / n).toFixed(1)}, splits ${(sum('splits') / n).toFixed(1)}, folds ${(sum('folds') / n).toFixed(1)}; wrecks (limps too) ${Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' x' + v).join(', ') || 'none'}`);
+  }
   { const n = ok.reduce((a, r) => a + (r.breaks || 0), 0); if (n) console.log(`parts broke off ${n} time(s) in ${ok.filter((r) => r.breaks).length} of ${ok.length} voyages: ${[...new Set(ok.flatMap((r) => r.breakCauses || []))].join(', ')}`); }
   const causes = {};
   for (const r of ok) for (const k of r.flags || []) causes[k] = (causes[k] || 0) + 1;
@@ -161,6 +166,8 @@ let result = null;
 const curve = []; // (G0: per stop reached, the ship's power against the curriculum's expected power and the stop's skulls)
 let curveStop = null;
 const lairs = { seen: new Set(), won: new Set(), met: 0, how: {} };
+const wrecks = []; // (balance pass: the text of every wreck of the voyage, limps included, from the moment the ship goes down)
+let wasDown = 0;
 for (let step = 1; step <= maxSteps && !result; step++) {
   try {
     simClock += dt * 1000;
@@ -169,6 +176,8 @@ for (let step = 1; step <= maxSteps && !result; step++) {
     if (state.phase === 'flying' && !state.ship.down && step % 30 === 0) { snapshot = snap(); rolling.flying++; rolling.br += snapshot.breaches; rolling.fires += snapshot.fires; rolling.gh += snapshot.holes; for (const q of Object.values(state.players)) { if (q.mate) { mateStat.snaps++; const mk = q.ko > 0 ? "ko" : q.botJob ? q.botJob.kind : "idle"; mateStat.jobs[mk] = (mateStat.jobs[mk] || 0) + 1; if (q.lock) mateStat.locks++; continue; } const k = q.ko > 0 ? "ko" : q.lock ? "station" : q.botJob ? (["fire", "patch", "repair", "swat", "valve", "ice", "unclog", "oxygen", "vent", "coal", "ammo", "revive"].includes(q.botJob.kind) ? "chore" : q.botJob.kind === "fight" ? "fight" : "other") : "idle"; rolling.crew[k] = (rolling.crew[k] || 0) + 1; rolling.n++; } if (!snapshot.helmManned) rolling.helmEmpty++; }
     const h0 = state.ship.hull, nf = state.fires.length, nb = state.breaches.length, fl = state.phase === 'flying' && !state.ship.down;
     sim.update(dt);
+    if (state.ship.down > 0 && !wasDown) wrecks.push(String((state.ev && state.ev.warnText) || '?').replace(/ THE (SEA|ROCKS|GROUND)!$/, '!'));
+    wasDown = state.ship.down > 0 ? 1 : 0;
     mateStat.max = Math.max(mateStat.max, Object.values(state.players).filter((q) => q.mate).length);
     { const cr = state.creature; if (cr && !lairs.seen.has(cr)) { lairs.seen.add(cr); lairs.met++; } if (cr && cr.dying && cr.stats.win && !lairs.won.has(cr)) { lairs.won.add(cr); lairs.how[cr.stats.win] = (lairs.how[cr.stats.win] || 0) + 1; } } // (C.3: the Kraken lairs the crew met and how they won)
     if (fl && state.ship.hull < h0) { const dd = damageMul(state); const pf = nf * 0.35 * dd * 2 * dt, pb = nb * 0.5 * dd * 2 * dt, drop = h0 - state.ship.hull; dmg.fire += pf; dmg.breach += pb; dmg.direct += Math.max(0, drop - pf - pb); }
@@ -220,6 +229,7 @@ result.curve = curve;
 result.offers = state.run.offers || { lair: [], salvage: [], taken: [] }; // (G0: the lairs and salvage runs the route votes offered, and the stops the crew took)
 { const S = state.scrapStats; if (S && config.SCRAP.ENABLED && !config.PVP.ENABLED) result.scrap = { spawned: S.spawned, landed: S.landed, hooked: S.hooked, stowed: S.stowed, lost: S.lost, taken: S.taken, hulks: S.hulks, dumped: S.dumped, by: S.by, holdSum: S.holdSum, holdN: S.holdN, carrySecs: S.carrySecs, crewSecs: S.crewSecs }; } // (SCRAP, LOOP.md G1: what fell, what was caught and stowed over the voyage)
 result.lairs = { planned: state.run.voyage.columns.flat().filter((s) => s.lair).length, met: lairs.met, won: lairs.won.size, how: lairs.how }; // (C.3)
+result.wrecks = wrecks; result.struct = state.structStats ? { ...state.structStats } : null; // (balance pass: every wreck's cause, and the structure counters: falls, saves, crashes, failures, splits)
 result.breaks = state.breakStats ? state.breakStats.events : 0; // (S.5i: how often parts broke off in this voyage, and what did it)
 result.breakCauses = state.breakStats && state.breakStats.causes ? state.breakStats.causes.map((c) => c.split('@')[0]) : [];
 console.log('RESULT ' + JSON.stringify(result));

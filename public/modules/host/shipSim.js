@@ -1827,8 +1827,8 @@ export function createShipSim(world, ship, W) {
       // moment (time to patch and pump). Once in a while only; it is a lifeline, not a fix.
       const BL = G.BALLAST;
       state.ballastCd = Math.max(0, (state.ballastCd || 0) - dt);
-      if (BL && state.ship.gas < BL.BELOW && state.ballastCd <= 0 && !goingDown.active()) { // (falling, the crew's own dumping is the ballast)
-        state.ship.gas = BL.TO;
+      if (BL && state.ship.gas < BL.BELOW && state.ballastCd <= 0 && (!goingDown.active() || structure.on())) { // (falling, the crew's own dumping is the ballast)
+        state.ship.gas = structure.on() ? Math.min(100, Math.max(BL.TO, G.NEUTRAL + (state.structDeficit || 0) + (state.engineWeight || 0) + state.env.sink + BL.OVER)) : BL.TO; // (structure on: the ballast lifts her to the level she hovers at, plus OVER - lift is a live rule, and a bag that hit empty falls fast)
         state.ship.vy = Math.max(state.ship.vy || 0, 0);
         state.ballastCd = BL.COOLDOWN;
         state.ev.warn = 3;
@@ -2045,8 +2045,13 @@ export function createShipSim(world, ship, W) {
     const kept = Object.fromEntries(Object.entries(state.GUNS).map(([k, g]) => [k, { ammo: g.ammo, max: g.max }]));
     layout.applyBuild(parts);
     const moved = (d) => (ids[d] != null ? layout.platforms.findIndex((q) => q.id === ids[d]) : -1);
-    for (const list of [state.breaches, state.fires]) {
-      for (let i = list.length - 1; i >= 0; i--) { const d = moved(list[i].d); if (d < 0) list.splice(i, 1); else list[i].d = d; }
+    for (const list of [state.breaches, state.fires, state.bombs, state.boarders, state.icing, state.loads]) { // (balance pass: the bombs, raiders, ice and loads on the decks follow their deck too - a bundle or a raider left on a deck number that no longer exists broke the bots' routes)
+      if (!list) continue;
+      for (let i = list.length - 1; i >= 0; i--) {
+        if (list[i].d == null && list !== state.breaches && list !== state.fires) continue;
+        const d = moved(list[i].d);
+        if (d < 0 || (list === state.boarders && list[i].conn != null)) list.splice(i, 1); else list[i].d = d;
+      }
     }
     const bags = layout.gasbags;
     for (const h of state.gasHoles) { // a hole stays in the bag it was in (by the bag's middle), wherever that bag is in the list now

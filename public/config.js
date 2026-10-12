@@ -1474,7 +1474,7 @@ export const config = {
     SCRAPE_BELOW: 25, // grinding along the ground with gas below this, the hull scrapes...
     SCRAPE_DAMAGE: 5, // ...losing this much hull per second (before the difficulty multiplier)
     MAX_HOLES: 8,
-    BALLAST: { BELOW: 4, TO: 56, COOLDOWN: 75 }, // emergency ballast drop: gas below BELOW jumps to TO (a brief hover), at most once per COOLDOWN seconds
+    BALLAST: { BELOW: 4, TO: 56, COOLDOWN: 75, OVER: 4 }, // emergency ballast drop: gas below BELOW jumps to TO (a brief hover), at most once per COOLDOWN seconds (structure on, also while she falls: to the level she hovers at plus OVER, if that is more)
     HOLE_CHANCE: 1, // chance a hit on the gasbag punches a hole
     // Several gasbags side by side (S.5d): each has its own gas and holes; the pump and the vent act on all of them, and the ship's lift follows the
     // lift-weighted average of their gas. A bag at or below BAG_DOWN is deflated (it sags, the TV calls it out) while the rest of the bags hold at least BAG_REST
@@ -1923,6 +1923,10 @@ export const config = {
     },
     MATE_JOBS: ['shovel', 'vent'], // the job kinds a ship's mate takes besides MATES.JOBS while she falls (the mates dump cargo and vent steam too)
     STOKE_BELOW: 76, // bots (and the job arrows) stoke while the pressure is below this (so a load, STOKE_PRESS more, stays under BOILER.WARN_AT) ...
+    EARLY: { SCRAP: 1, BOMBS: 1.5, COAL: 0.2, COAL_FUEL: 50, CUT: 0.35 }, // (structure on, bots) the dumps come early, since lift is a live rule: the hold after SCRAP seconds of falling, the bombs after BOMBS, the coal bunker once COAL of the crash clock is gone (and only with COAL_FUEL or more in the firebox: no bunker, no steam, no pump), the marked joints at CUT
+    ALL_HANDS: 12, ALL_HANDS_DOWN: 0, // (structure on, bots) a fall that is short of lift by no more than this many points takes only the idle hands and the helm: the gunners keep their posts; past it everybody leaves his station (once she is down on the ground the limit is ALL_HANDS_DOWN)
+    COAST: 0, // (structure on) the cruise speed (0..1) the bot at the helm holds while she falls: the engines drink the steam the pump needs
+    STOKE_LOW: 40, // (structure on) ... and put one more hand on the shovel while it is below this (the pump needs steam; a boiler running dry is how most falls are lost)
     VENT_AT: 86, // ... open a vent when it is this high (BOILER.WARN_AT blows the boiler) ...
     VENT_CLOSE: 74, // ... and close it again below this
     CUT_AT: 0.5, // bots cut a section away only when this share of the fall is gone and she is still short (the last resort)
@@ -1973,9 +1977,10 @@ export const config = {
       FALL_TERMINAL: 700, // ... at most this fast (px/s)
     },
     // FALLING (goingDown.js): whenever her lift is short of her weight by MARGIN for START seconds and she is sinking; it ends after lift beats weight for END seconds ("SHE HOLDS!")
-    LIFT: { START: 1.5, END: 2, COOLDOWN: 10, GRACE: 3, PUMP_AT: 0.5, RISE_MIN: 4, EMPTY_GAS: 6, SINK_VY: 3, RELIEF_DECAY: 0.2 }, // SINK_VY: she counts as sinking below this climb rate (px/s); RELIEF_DECAY: weight dumped overboard (gdRelief) buys this many gas points less of relief a second; short of lift is only TROUBLE when the helm pumps this hard (0..1) and the gas rises slower than RISE_MIN points a second (no steam, a bag torn open), the bag is down to EMPTY_GAS, or nobody flies her (a helm that vents and holds the bag low is diving on purpose)
-    // The loss: sitting on the ground (or the sea) with lift still short of weight this long. Seconds on Normal, plus PER_CREW for each crewman under 8; by difficulty for the rest.
-    CRASH: { TIME: { easy: 14, normal: 8, veteran: 6, hard: 5 }, PER_CREW: 1 },
+    LIFT: { START: 1.5, END: 2, COOLDOWN: 10, GRACE: 3, NOHELM_SHORT: 12, GRAZE: 16, GRAZE_T: 4, PUMP_AT: 0.5, RISE_MIN: 4, EMPTY_GAS: 6, SINK_VY: 3, RELIEF_DECAY: 0.2 }, // SINK_VY: she counts as sinking below this climb rate (px/s); RELIEF_DECAY: weight dumped overboard (gdRelief) buys this many gas points less of relief a second; short of lift is only TROUBLE when the helm pumps this hard (0..1) and the gas rises slower than RISE_MIN points a second (no steam, a bag torn open), the bag is down to EMPTY_GAS, or nobody flies her AND she is short by more than NOHELM_SHORT (an empty helm alone is not trouble), or she is down on the ground (a GRAZE - short by no more than GRAZE for less than GRAZE_T seconds - is not: a helm that vents and holds the bag low is diving on purpose)
+    // The loss: sitting on the ground (or the sea) with lift short of weight by more than SHORT, inside a FALLING alarm, this long (seconds on Normal, plus PER_CREW for each crewman under 8; by difficulty for the rest). The clock runs at RECOVER_MUL while the gas is rising by RISE_OK points a second or more (a pump that is working keeps her alive longer).
+    CRASH: { TIME: { easy: 20, normal: 12, veteran: 9, hard: 7 }, PER_CREW: 1, SHORT: 2, RISE_OK: 4, RECOVER_MUL: 0.35 },
+    BOT: { DIVE: 14 }, // (balance pass) bots: the helm vents the bags only down to this many gas points under the level she hovers at (a dive that empties the bag cannot be pumped back without steam)
     CREAK_EVERY: 2, // seconds between the creaks while a segment is critical
   },
   // Spare gasbags: in a voyage a wreck is not final. Each wreck costs one spare, loses the stop's progress and a share
@@ -2123,8 +2128,9 @@ export const config = {
   // any of it, byte for byte; Versus (PVP.ENABLED) never has it. Money mends, scrap builds (the Yard prices parts in scrap from G2 on).
   SCRAP: {
     ENABLED: typeof process === 'undefined' || !(process.env && process.env.NO_SCRAP), // the switch (a browser has no process: on)
-    BUNDLE_W: 2, // (lead, 2026-10-11: halved until G2/G4 let the crew spend scrap; a full hold of weight-4 bundles halved the bots' win rate; G7 re-tunes) what one bundle weighs (gas points; CROSS.CARGO.ITEMS.scrap.w reads this): in a hand, on a deck, or in the hold
-    HOLD_CAP: 8, // bundles one hold bin takes (a full one is 32 points of weight: build for it, or dump it)
+    BUNDLE_W: 1, // (lead, 2026-10-11: 4 -> 2, until G2/G4 let the crew spend scrap; the balance pass, 2026-10-11: 2 -> 1 with HOLD_FREE - under the structure rule the scrap was a quarter of everything she weighed and the bots' win rate went with it; G7 re-tunes) what one bundle weighs (gas points; CROSS.CARGO.ITEMS.scrap.w reads this): in a hand, on a deck, or in the hold
+    HOLD_FREE: 2, // (balance pass) the first bundles in the hold that weigh nothing on the lift (the hold is built for ballast): only the ones past this count, BUNDLE_W each (a full hold of 8 weighs 6 points)
+    HOLD_CAP: 8, // bundles one hold bin takes (a full one weighs (HOLD_CAP - HOLD_FREE) x BUNDLE_W: build for it, or dump it)
     INCOME_TARGET: [5, 8], // bundles a stop should bring a crew that catches most of them (the voyagesim read-out checks it; the game does not use it)
     // What falls when something dies: how many bundles (a fraction is the chance of one), and how they fall.
     FLOTSAM: {
@@ -2173,6 +2179,7 @@ export const config = {
       HOOK_COOLDOWN: 6, // seconds after any stunt before the next flotsam hook (DARING.COOLDOWN is the long wait for the others)
       DUMP_LATE: 0.1, // GOING DOWN!: bots dump the hold once the crash clock is this far gone ...
       DUMP_AFTER: 6, // ... or after she has been falling this many seconds, whichever comes first
+      HOLD_SOFT: 5, // (balance pass) a hold this full is heavy enough: the helm stops steering under flotsam, the bots stop stripping hulks and hooking bundles (loads already lying on a deck are still stowed)
     },
   },
   // THE SHIP'S BOOK (SHIPS_BOOK.md L0 + L1). moments.js remembers what happened, with names (state.moments, data only: it draws no random numbers and changes nothing in the sim); logWriter.js tells it back as
@@ -3151,6 +3158,7 @@ export const config = {
     FIRE_CAP: 4, // at most this many crew on fires at once
     HOT_FIRE_CAP: 6, // a fire in the coal (a big one, S.5f) is the worst fire aboard: up to this many crew run to it, ahead of every other chore (two to a fire)
     HOT_FIRE_PX: 900, // ...and among fires a coal fire counts as this many px of walking nearer than it is
+    FUEL_LOW_LIVE: 45, // (structure on) the stoker goes while the firebox holds less than this (25 otherwise): the pump that keeps her up drinks steam all the time, and a cold boiler is how most falls are lost
     COAL_EMERGENCY: 15, // boiler fuel below this (with pressure not high): stoke it before anything else
     PRESS_EMERGENCY: 22, // steam below this (with coal not plentiful): same
     BIG_ENGINE_COAL: 70, // a ship with a heavy or great engine: the stoker also hurries (two sacks, urgent) while the firebox holds less than this...

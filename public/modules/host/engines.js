@@ -38,7 +38,7 @@ export function createEngines({ state, modules }) {
 
   const sync = () => {
     const L = layout;
-    if (version === L.version && state.engines.length === L.engines.length) return;
+    if (version === L.version && state.engines.length === L.engines.length && state.engines.every((e, i) => e.d === L.engines[i].d)) return; // (a deck cut away below an engine moves its deck number without a new version: follow it, or pushes() reads a deck that is gone)
     version = L.version;
     const old = new Map(state.engines.map((q) => [q.name, q])); // (an engine that is still there after a build change - a part broke off, S.5i - stays pointed where the crew turned it, and keeps its throttle)
     state.engines = L.engines.map((e, i) => { const o = old.get(e.name); return { name: e.name, i, d: e.d, x: e.x, size: e.size, dir: o && o.home === (e.dir || 0) ? o.dir : e.dir || 0, home: e.dir || 0, swivel: !!e.swivel, fwd: 1, up: 0, thr: o ? o.thr : 1, pow: o ? o.pow : null }; });
@@ -64,6 +64,7 @@ export function createEngines({ state, modules }) {
   // (A big engine moves more push per unit of throttle: the weights are per unit of PUSH, and centred on the push of each kind, so the shifts still add up to nothing: sizeK is the push of a unit of throttle.)
   const sizeK = (e) => { const S = sizeNamed(e.size); return Math.abs(e.up) > Math.abs(e.fwd) && e.up > 0 ? S.lift : S.thrust; };
   const noseWeights = () => {
+    sync(); // (a bot asks before the engines have been brought up to date this frame, after a deck was cut away: bring them up to date first, or this reads a deck that is gone and the step ends before the engines update)
     const raw = state.engines.map((e) => (e.works === false ? 0 : -forcesOf(state, pushes(e, 1, 1)).torque));
     const kind = state.engines.map((e) => (Math.abs(e.up) > Math.abs(e.fwd) ? 1 : 0));
     const w = raw.map((r, i) => {

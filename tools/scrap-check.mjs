@@ -35,6 +35,7 @@ const SC = await load('modules/host/scrap.js');
 const { cargoItem } = await load('modules/host/cargo.js');
 const { windSpeed } = await load('modules/host/sails.js');
 const S = config.SCRAP;
+const hw = (n) => Math.max(0, n - (S.HOLD_FREE || 0)) * S.BUNDLE_W; // (what n bundles in the hold weigh: the first HOLD_FREE are ballast, balance pass)
 const DT = 1 / 60;
 const errors = [];
 const secs = (s) => Math.round(s * 60);
@@ -82,7 +83,7 @@ const momentsOf = (st, kind) => (st.moments || []).filter((m) => m.kind === kind
 
 // ---------------------------------------------------------------- 1. the item and the bin
 {
-  report(cargoItem('scrap') && cargoItem('scrap').w === S.BUNDLE_W && S.BUNDLE_W === 2 && S.HOLD_CAP === 8, `a bundle is a cargo kind: ${S.BUNDLE_W} points a bundle, the hold takes ${S.HOLD_CAP}`);
+  report(cargoItem('scrap') && cargoItem('scrap').w === S.BUNDLE_W && S.BUNDLE_W === 1 && S.HOLD_FREE === 2 && S.HOLD_CAP === 8, `a bundle is a cargo kind: ${S.BUNDLE_W} points a bundle, the hold takes ${S.HOLD_CAP}`);
   for (const name of ['classic', 'sparrow']) {
     const L = createLayout(BUILDS[name]);
     const sp = SC.holdSpot(L), room = sp && L.rooms.find((r) => r.d === sp.d && /hold/i.test(r.name) && sp.x >= r.x0 && sp.x <= r.x1);
@@ -266,7 +267,7 @@ const momentsOf = (st, kind) => (st.moments || []).filter((m) => m.kind === kind
   p.actQ = true; step(sim, secs(3));
   report(p.carry === null && st.scrapHold.count === 1 && st.scrapStats.stowed === 1 && st.run.scrapStowed === 1 && momentsOf(st, 'scrap-first').length === 1, `stowed: the hold has ${st.scrapHold.count}, run.scrapStowed ${st.run.scrapStowed}, a "scrap-first" moment`);
   { const hold = st.scrapHold.count; st.scrapHold.count = 0; step(sim, 3); const l0 = st.balance.live; st.scrapHold.count = 3; step(sim, 3); const l1 = st.balance.live; st.scrapHold.count = hold;
-    report(l1 - l0 > 3 * S.BUNDLE_W - 0.5 && l1 - l0 < 3 * S.BUNDLE_W + 0.5, `the hold weighs: three bundles in it move the live balance by ${(l1 - l0).toFixed(1)} (${3 * S.BUNDLE_W})`); }
+    report(l1 - l0 > hw(3) - 0.5 && l1 - l0 < hw(3) + 0.5, `the hold weighs: three bundles in it move the live balance by ${(l1 - l0).toFixed(1)} (${hw(3)}; the first ${S.HOLD_FREE} are ballast)`); }
   step(sim, 3);
   const wt1 = st.liftWeight.weight;
   // fill it, then one too many
@@ -276,12 +277,12 @@ const momentsOf = (st, kind) => (st.moments || []).filter((m) => m.kind === kind
   report(u && u.type === 'need' && /full/.test(u.label), `a full hold says so: "${u && u.label}"`);
   step(sim, secs(2));
   const wt2 = st.liftWeight.weight;
-  report(wt2 - wt1 > (S.HOLD_CAP - 1) * S.BUNDLE_W - 2 && wt2 - wt1 < (S.HOLD_CAP - 1) * S.BUNDLE_W + 2, `a full hold shows on the LIFT / WEIGHT gauge: weight ${wt1.toFixed(1)} -> ${wt2.toFixed(1)} (+${(wt2 - wt1).toFixed(1)}, seven bundles more at ${S.BUNDLE_W})`);
+  report(wt2 - wt1 > hw(S.HOLD_CAP) - hw(1) - 2 && wt2 - wt1 < hw(S.HOLD_CAP) - hw(1) + 2, `a full hold shows on the LIFT / WEIGHT gauge: weight ${wt1.toFixed(1)} -> ${wt2.toFixed(1)} (+${(wt2 - wt1).toFixed(1)}, seven bundles more at ${S.BUNDLE_W})`);
   // not in Versus, not with the switch off: the hold is a thing of the game only
   config.SCRAP.ENABLED = false; step(sim, secs(1));
   const wt3 = st.liftWeight.weight;
   config.SCRAP.ENABLED = true;
-  report(wt2 - wt3 > S.HOLD_CAP * S.BUNDLE_W - 2, 'with the switch off the hold weighs nothing');
+  report(wt2 - wt3 > hw(S.HOLD_CAP) - 2, 'with the switch off the hold weighs nothing');
   // GRAB at the bin takes one out again (for G4's frames); the purse helpers G2 prices from
   p.carry = null; p.x = sp.x; step(sim, 3);
   const n0 = st.scrapHold.count, gr = ours.sim.interaction(p, null).grab;
@@ -315,7 +316,7 @@ const momentsOf = (st, kind) => (st.moments || []).filter((m) => m.kind === kind
   report(u && u.type === 'dumpscrap' && u.hold && /SCRAP/.test(u.label), `at the bin the Action button says "${u && u.label}" (hold)`);
   p.fire = true; step(sim, secs(4)); p.fire = false; step(sim, secs(1));
   report(st.scrapHold.count === 0 && st.scrapStats.dumped >= S.HOLD_CAP && momentsOf(st, 'scrap-dumped').length === 1, `held Action throws the whole hold overboard (hold ${st.scrapHold.count}, dumped ${st.scrapStats.dumped}, a "scrap-dumped" moment)`);
-  report(st.liftWeight.weight < w1 - S.HOLD_CAP * S.BUNDLE_W + 6, `the gauge drops with it: weight ${w1.toFixed(1)} -> ${st.liftWeight.weight.toFixed(1)}`);
+  report(st.liftWeight.weight < w1 - hw(S.HOLD_CAP) + 6, `the gauge drops with it: weight ${w1.toFixed(1)} -> ${st.liftWeight.weight.toFixed(1)}`);
   // the bots do it before they cut a section away
   const r = boot({ bots: 8, s: seed + 3 });
   step(r.sim, secs(8));
@@ -338,7 +339,7 @@ const momentsOf = (st, kind) => (st.moments || []).filter((m) => m.kind === kind
   ours.sim.wreck('TEST');
   report(!!st.limp, `a wreck with a spare gasbag: she limps (${st.limp ? st.limp.spares : '-'} spares left)`);
   step(sim, secs(config.LIMP.TIME + 3));
-  report(!st.limp && !st.ship.down && st.scrapHold.count === 5 && SC.holdWeight(ours.ctx) === 5 * S.BUNDLE_W, `limped home: the hold still has ${st.scrapHold.count} bundles (and weighs ${SC.holdWeight(ours.ctx)})`);
+  report(!st.limp && !st.ship.down && st.scrapHold.count === 5 && SC.holdWeight(ours.ctx) === hw(5), `limped home: the hold still has ${st.scrapHold.count} bundles (and weighs ${SC.holdWeight(ours.ctx)})`);
 }
 {
   const { sim, st, ours } = boot();

@@ -87,7 +87,7 @@ export const SHIP_KEYS = [
 // --check-two-ships fails and names it: a read that quietly fell through to ship 0 would be a cross-talk bug.
 export const WORLD_SHARED = ['bats', 'bombers', 'boss', 'bullets', 'difficulty', 'enemy', 'enemyBombs', 'ev', 'flashes', 'mines', 'paras', 'periscope', 'phase', 'popups', 'rings', 'match', 'rockets', 'sfxQ', 'shells', 'specials', 'strafers', 'squadrons', 'tempo', 'weather', 'wrecks', 'hijacks', 'chutes', 'shipBombs', 'puffs', 'kills', 'scroll', 'ships', 'paused', 'mode', 'thrown', 'tows', 'laid', 'debris', 'creature', 'moments', 'moment', 'momentNote', 'momentTake', 'momentOverboard', 'hulks', 'scrapStats', 'flotsam'];
 // World keys a ship's code WRITES as a plain number (a context would shadow them): they pass through to the world on every context.
-export const WORLD_WRITES = ['kills'];
+export const WORLD_WRITES = ['kills', 'bossDownLap']; // (bossDownLap: the creature system writes it from a ship's context when a gun kills a lair's creature - on the context it shadowed the world's, course.js never saw the lair slain and the stop never ended)
 
 // The body of a fresh ship (today's state.ship at the start).
 export const newBody = () => ({ alt: 0, speed: 0.3, order: 0.3, hull: 100, shake: 0, down: 0, press: 65, fuel: config.BOILER.START_FUEL, gas: config.GAS.START });

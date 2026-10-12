@@ -80,6 +80,7 @@ export function createNav(layout) {
       if (direct < Infinity) return { cost: direct, node: -1 };
     }
     let best = { cost: Infinity, node: -1 };
+    if (!nodesOn[d1] || !nodesOn[d2]) return best; // (a deck this ship does not have - after a split or a break-off, or a mark from another ship: there is no way)
     for (const a of nodesOn[d1]) {
       const c = C[a >> 1];
       if (a % 2 && isPole(c)) continue; // cannot climb a pole

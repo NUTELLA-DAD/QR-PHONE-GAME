@@ -54,9 +54,10 @@ function findSpot(L) {
 const tables = layoutTables((L) => ({ SPOT: findSpot(L) }));
 export const holdSpot = (layout) => tables(layout).SPOT;
 export const holdCount = (state) => (scrapOn() && state.scrapHold ? state.scrapHold.count | 0 : 0);
-export const holdWeight = (state) => holdCount(state) * S().BUNDLE_W;
+export const holdWeight = (state) => Math.max(0, holdCount(state) - (S().HOLD_FREE || 0)) * S().BUNDLE_W; // (the first HOLD_FREE bundles are ballast: the hold is built for them, they weigh nothing on the lift)
 export const holdX = (state, layout) => { const sp = holdSpot(layout); return sp ? sp.x : layout.refPoint ? layout.refPoint.x : 0; };
 export const holdFull = (state) => holdCount(state) >= S().HOLD_CAP;
+export const heavyHold = (state) => holdCount(state) >= S().BOTS.HOLD_SOFT; // (the bots stop going after flotsam once the hold is this full: it weighs on the lift - balance pass)
 // The hold as a purse (G2 prices parts in scrap, G4's frames eat it, derelicts pay into it): holdSpend takes n bundles out if there are that many (true), holdAdd puts up to n in and answers how many fitted.
 export const holdSpend = (state, n) => { if (!(n > 0) || holdCount(state) < n) return false; state.scrapHold.count -= n; return true; };
 export const holdAdd = (state, n) => { if (!scrapOn() || !(n > 0)) return 0; const rec = (state.scrapHold ||= { count: 0 }), fit = Math.min(n, S().HOLD_CAP - rec.count); if (fit > 0) rec.count += fit; return Math.max(0, fit); };
@@ -240,7 +241,7 @@ export const topDeck = (L) => {
 };
 export function helmPlan(world) {
   const hulks = (world.hulks || []).filter((h) => h.left > 0);
-  if (!scrapOn() || !((world.thrown && world.thrown.length) || hulks.length) || world.phase !== 'flying' || world.ship.down > 0 || world.goingDown || (world.creature && !world.creature.dying)) return null; // (a creature that is dying is no threat: its field of bundles is worth the detour)
+  if (!scrapOn() || heavyHold(world) || !((world.thrown && world.thrown.length) || hulks.length) || world.phase !== 'flying' || world.ship.down > 0 || world.goingDown || (world.creature && !world.creature.dying)) return null; // (a creature that is dying is no threat: its field of bundles is worth the detour)
   const B = S().BOTS, F = S().FLOTSAM, ship = mainShip(world), L = ship.layout;
   const g = world.gunship;
   if (g && g.phase !== 'sinking' && g.phase !== 'leaving') return null; // (a gunship is about: her fight comes first)
