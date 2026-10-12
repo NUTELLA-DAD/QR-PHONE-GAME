@@ -39,8 +39,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   const lap = () => (state.course ? state.course.lap : 1);
   const crew = () => crewHeads(state);
   const warn = (text, secs = 3) => {
-    state.ev.warn = secs;
-    state.ev.warnText = text;
+    state.say('setpiece', text, null, secs);
   };
   const touches = (x, y, r) => { // (a round thing at world (x, y): hitsShip wants ship coordinates)
     const sx = toShipX(ship, x);

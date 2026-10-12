@@ -15,8 +15,7 @@ export function createHydrogen({ state, ship, fireSys, explode, shipPuff, rng })
 
   const warn = (text) => {
     if (!ship.main) return;
-    state.ev.warn = 3;
-    state.ev.warnText = text;
+    state.say('blaze', text, null, 3);
   };
 
   const light = (i, fuseMul = 1, why = 'fire') => {

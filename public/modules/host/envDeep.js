@@ -69,8 +69,7 @@ export function createDeepEnv({ state, puff, phoneFx }) {
           state.spores.push({ x: dir > 0 ? -S.RX - 80 : 1600 + S.RX + 80, y: P[d].y - 70, rx: S.RX * rand(0.85, 1.2), ry: S.RY * rand(0.85, 1.15), vx: dir * S.SPEED * rand(0.8, 1.2), seed: seed++ });
           if (!warned.spore) {
             warned.spore = true;
-            state.ev.warn = 3;
-            state.ev.warnText = 'SPORE CLOUD DRIFTING THROUGH THE SHIP!';
+            state.say('info', 'SPORE CLOUD DRIFTING THROUGH THE SHIP!', null, 3);
           }
         }
       }
@@ -92,8 +91,7 @@ export function createDeepEnv({ state, puff, phoneFx }) {
     const worst = Math.max(...state.clogs.map((c) => c.lvl));
     if (worst > 0.6 && !warned.clog) {
       warned.clog = true;
-      state.ev.warn = 3;
-      state.ev.warnText = 'ENGINES CLOGGING WITH SPORES - CLEAR THEM!';
+      state.say('info', 'ENGINES CLOGGING WITH SPORES - CLEAR THEM!', null, 3);
     } else if (worst < 0.25) warned.clog = false;
     // Crew inside a cloud (on a deck of the ship) are slowed and cough.
     for (const p of Object.values(state.players)) {
@@ -124,13 +122,11 @@ export function createDeepEnv({ state, puff, phoneFx }) {
     E.lack = clamp(1 - E.o2 / O.LOW, 0, 1);
     if (E.o2 < 0.3 && !warned.o2low) {
       warned.o2low = true;
-      state.ev.warn = 3;
-      state.ev.warnText = 'OXYGEN LOW - REFILL THE TANK ON THE BRIDGE!';
+      state.say('info', 'OXYGEN LOW - REFILL THE TANK ON THE BRIDGE!', null, 3);
     }
     if (E.o2 <= 0 && !warned.o2out) {
       warned.o2out = true;
-      state.ev.warn = 3;
-      state.ev.warnText = 'OUT OF OXYGEN - EVERYONE SLOWS DOWN!';
+      state.say('fire', 'OUT OF OXYGEN - EVERYONE SLOWS DOWN!', 4, 3);
     }
     if (E.o2 > 0.55) warned.o2low = warned.o2out = false;
   };

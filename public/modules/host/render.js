@@ -1385,6 +1385,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       book.stamp(text, 800, state.boss || state.creature ? 786 : 854, { size: 22, maxW: 1100 }); // red-ink stamp
       ctx.globalAlpha = 1;
       ink();
+      drawAlso(state.boss || state.creature ? 786 : 854);
     }
     drawUpgradeIcons();
     if (state.phase === 'lobby') drawLobby();
@@ -1393,6 +1394,26 @@ export function createRenderer({ ctx, state: world, canvas }) {
     if (state.briefing) drawBriefing();
     if (state.scorecard) drawScorecard();
     if (state.vote) drawVote();
+  };
+
+  // F2: the small "also" line over the banner: the next alarm waiting its turn (alarms.js), and how many more wait behind it.
+  const drawAlso = (bannerY) => {
+    const q = state.ev.q;
+    if (!config.ALARMS.ENABLED || !config.ALARMS.ALSO || !q || !q.length) return;
+    const text = 'ALSO: ' + q[0].text + (q.length > 1 ? '  (+' + (q.length - 1) + ')' : '');
+    ctx.save();
+    ctx.globalAlpha = Math.min(0.9, state.ev.warn * 2);
+    ctx.font = '700 17px ' + config.FONTS.TEXT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const w = Math.min(1100, ctx.measureText(text).width + 36), y = bannerY - 44; // (above the stamp: it sits near the bottom edge)
+    ctx.fillStyle = 'rgba(43,38,34,0.78)';
+    ctx.beginPath();
+    ctx.roundRect(800 - w / 2, y - 15, w, 30, 15);
+    ctx.fill();
+    ctx.fillStyle = '#f4e9d0';
+    ctx.fillText(text, 800, y + 1, 1090);
+    ctx.restore();
   };
 
   // F6: the BRIEFING card at a stop's start: the stop's name and its goal in one big line (the phones get the goal and the verb of their nearest seat). It fades in and out.

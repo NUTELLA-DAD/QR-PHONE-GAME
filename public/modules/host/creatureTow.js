@@ -34,8 +34,7 @@ export function creatureLatch(state, ship, hit, from, gun, player) {
     by: player ? player.id : null, tension: 0, d: hit.d, a: { x: hit.x, y: hit.y }, b: { x: hit.x, y: hit.y }, stat: { ship: 0, creature: 0 },
   };
   cr.harpoons.push(tow);
-  state.ev.warn = 2.2;
-  state.ev.warnText = 'HARPOONED ' + String(cr.name || 'THE CREATURE') + '!';
+  state.say('info', 'HARPOONED ' + String(cr.name || 'THE CREATURE') + '!', null, 2.2);
   void gun;
   return tow;
 }
@@ -46,7 +45,7 @@ function cut(state, cr, tow, text = 'THE HARPOON LINE IS CUT!') {
   cr.harpoons.splice(i, 1);
   cr.hooks.puff((tow.a.x + tow.b.x) / 2, (tow.a.y + tow.b.y) / 2, '#d8c79a', 10);
   state.sfxQ.push(['hit']);
-  if (text) { state.ev.warn = 2.5; state.ev.warnText = text; }
+  if (text) { state.say('info', text, null, 2.5); }
 }
 
 function shove(sh, dx, dy) {

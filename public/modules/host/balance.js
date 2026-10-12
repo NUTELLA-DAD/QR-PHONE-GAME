@@ -76,8 +76,7 @@ export function createBalance(state) {
     bal.warn = Math.abs(t.deg) >= B.WARN_DEG;
     bal.cd = Math.max(0, bal.cd - dt);
     if (bal.warn && bal.cd <= 0 && state.phase === 'flying' && !state.ship.down && !(state.ev.warn > 0)) {
-      state.ev.warn = 2.5;
-      state.ev.warnText = (t.deg > 0 ? 'NOSE-HEAVY' : 'TAIL-HEAVY') + '! TRIM HER! MOVE CREW OR BALLAST ' + (t.deg > 0 ? 'AFT' : 'FORE');
+      state.say('helm', (t.deg > 0 ? 'NOSE-HEAVY' : 'TAIL-HEAVY') + '! TRIM HER! MOVE CREW OR BALLAST ' + (t.deg > 0 ? 'AFT' : 'FORE'), null, 2.5, { role: 'helm' });
       bal.cd = B.WARN_EVERY;
     }
   }

@@ -98,8 +98,7 @@ export function createSails({ state, modules }) {
           sail.torn = true;
           sail.lowering = true;
           state.sailStats.torn++;
-          state.ev.warn = 3;
-          state.ev.warnText = 'THE GUST TORE THE SAIL! MEND IT WITH A HAMMER';
+          state.say('fire', 'THE GUST TORE THE SAIL! MEND IT WITH A HAMMER', 4, 3);
           pop(state, toWorldX(ship, lay.x), toWorldY(ship, layout.platforms[lay.d].y - lay.h * 0.6), 'RIIIP!', '#e63946', 1);
           state.sfxQ.push(['impact']);
         }
@@ -108,8 +107,7 @@ export function createSails({ state, modules }) {
     state.sailWarn = gust > 0 && state.sails.some((s) => s.hoist > 0.05 && !s.lowering && !s.torn);
     if (flying && state.sailWarn && gust === 1 && !state.sailWarned) {
       state.sailWarned = true;
-      state.ev.warn = 2.5;
-      state.ev.warnText = 'GUST COMING - REEF THE SAILS!';
+      state.say('info', 'GUST COMING - REEF THE SAILS!', null, 2.5);
     }
     if (!state.sailWarn) state.sailWarned = false;
     // The pull: each raised sail adds BONUS x how windy it is, the later ones a little less (diminishing returns). Sails go slack against the rock.

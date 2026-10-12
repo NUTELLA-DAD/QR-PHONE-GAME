@@ -92,7 +92,7 @@ export function createFlotsam({ world, puff, phoneFx = () => {} }) {
     while (world.thrown.filter((q) => q.chute).length > F.MAX) { const i = world.thrown.findIndex((q) => q.chute); world.thrown.splice(i, 1); stats.lost++; }
     stats.spawned += made;
     stats.by[src] = (stats.by[src] || 0) + made;
-    if (made && o.banner !== false && !(world.ev.warn > 0)) { world.ev.warn = 2.5; world.ev.warnText = 'SCRAP! GET UNDER IT'; } // (the helm's cue)
+    if (made && o.banner !== false && !(world.ev.warn > 0)) { world.say('info', 'SCRAP! GET UNDER IT', null, 2.5); } // (the helm's cue)
     return made;
   };
   const note = (src, n) => { stats.spawned += n; stats.by[src] = (stats.by[src] || 0) + n; }; // (bundles that never fell: the supply crate's land on her deck)

@@ -70,8 +70,7 @@ export function stepBreach(state, cr, ship, dt) {
       if (b.t >= B.DIVE) {
         b.phase = 'warn';
         b.t = 0;
-        state.ev.warn = B.WARN;
-        state.ev.warnText = "IT'S UNDER US! CLIMB!";
+        state.say('setpiece', "IT'S UNDER US! CLIMB!", 8, B.WARN);
         state.sfxQ.push(['alarm']);
         for (const p of Object.values(state.players)) if (!p.bot && cr.hooks.phoneFx) cr.hooks.phoneFx(p, "IT'S UNDER US! CLIMB!", [200, 100, 200, 100, 300]);
       }
@@ -173,15 +172,13 @@ function impact(state, cr, ship, b, sea) {
   free.forEach((p, i) => reachPart(cr, p, wx + (i - 1) * 260, wy - 120 - 90 * (i % 2)));
   if (!b.hit) {
     cr.stats.breachMiss = (cr.stats.breachMiss || 0) + 1;
-    state.ev.warn = 3;
-    state.ev.warnText = inZone ? 'IT MISSED! WE CLIMBED CLEAR!' : 'IT MISSED! IT CRASHES BACK INTO THE SEA!';
+    state.say('setpiece', inZone ? 'IT MISSED! WE CLIMBED CLEAR!' : 'IT MISSED! IT CRASHES BACK INTO THE SEA!', null, 3);
     pop(state, wx, wy - 200, 'MISSED!', '#8fe388', 1.6);
     return;
   }
   cr.stats.breachHits = (cr.stats.breachHits || 0) + 1;
   const sim = ship.sim, diff = state.difficulty || 'normal';
-  state.ev.warn = 3.5;
-  state.ev.warnText = 'IT SMASHES INTO THE HULL!';
+  state.say('setpiece', 'IT SMASHES INTO THE HULL!', null, 3.5);
   pop(state, wx, wy - 200, 'SMASH!', '#ff2a2a', 2.2);
   h.puff(wx, wy - 100, '#ffffff', 16);
   h.puff(wx, wy - 100, '#7a3a5a', 12);

@@ -170,8 +170,7 @@ export function createHatches({ state, ship, air, cargo, goingDown, puff, phoneF
       h.crewOn = h.warn > 0 && crew.length > 0;
       if (h.crewOn && !h.warned) { // the TV and the phones of whoever stands on it
         h.warned = true;
-        state.ev.warn = 2.2;
-        state.ev.warnText = 'CLEAR THE HATCH!';
+        state.say('info', 'CLEAR THE HATCH!', null, 2.2);
         for (const p of crew) phoneFx(p, 'GET OFF THE HATCH!', [200, 80, 200]);
       }
       if (!h.gap) continue;

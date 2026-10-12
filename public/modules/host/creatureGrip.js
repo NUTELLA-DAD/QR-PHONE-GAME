@@ -101,8 +101,7 @@ function startGrip(state, cr, ship, dive = false) { // dive: one of the several 
   // the limb rears up beside the ship's end (a reach that holds), then the strike follows after WINDUP
   const root = rootOf(cr, limb), rx = c.wx + cr.side * 350, ry = c.wy - 500, d = Math.hypot(rx - root.x, ry - root.y), k = d > limb.reach * 0.97 ? (limb.reach * 0.97) / d : 1;
   reachPart(cr, limb, root.x + (rx - root.x) * k, root.y + (ry - root.y) * k);
-  state.ev.warn = 2.6;
-  state.ev.warnText = dive ? CR().DIVE.TEXT : 'TENTACLE! ' + g.end + ' ' + g.deck + '!';
+  state.say('setpiece', dive ? CR().DIVE.TEXT : 'TENTACLE! ' + g.end + ' ' + g.deck + '!', 6, 2.6);
   state.sfxQ.push(['roar']);
   warnCrew(state, cr, ship, g, 'GET OFF THE ' + g.end + ' ' + g.deck + '!');
   return g;
@@ -208,7 +207,7 @@ function rip(state, cr, g) {
   else {
     if (sim && sim.damageHull) sim.damageHull(G.RIP.HULL);
     cr.stats.hulled = (cr.stats.hulled || 0) + 1;
-    if (ship.main) { state.ev.warn = 3.5; state.ev.warnText = 'THE TENTACLE CRUSHES HER HULL!'; }
+    if (ship.main) { state.say('setpiece', 'THE TENTACLE CRUSHES HER HULL!', null, 3.5); }
     hitForce(ship.ctx, g.x, g.y, 4);
   }
   pop(state, wx, wy - 140, 'RIPPED!', '#ff2a2a', 1.8);
@@ -314,8 +313,7 @@ function startSlap(state, cr, ship) {
   const s = { limb, ship, mode: 'wind', t: 0, nearX, y: pl.y, farX: nearX === pl.x1 - 40 ? pl.x0 + 40 : pl.x1 - 40 };
   cr.slap = s;
   limb.gripCd = 999;
-  state.ev.warn = 2.4;
-  state.ev.warnText = 'TENTACLE RISING! GET OFF THE TOP DECK!';
+  state.say('setpiece', 'TENTACLE RISING! GET OFF THE TOP DECK!', 6, 2.4);
   state.sfxQ.push(['roar']);
   for (const p of Object.values(state.players)) if (!p.bot && shipOf(state, p) === ship && p.d === d && !p.fly && cr.hooks.phoneFx) cr.hooks.phoneFx(p, 'SLAP! GET OFF THE TOP DECK - or JUMP!', [150, 60, 150]);
   return s;

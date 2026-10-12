@@ -29,8 +29,7 @@ export function createComeAbout(ship, W, { goingDown, flight }) {
   const say = (who, text) => {
     if (who) W.phoneFx(who, text, [60, 60, 60]);
     if (ship.main && (!who || !who.bot)) {
-      state.ev.warn = 1.8;
-      state.ev.warnText = text.toUpperCase();
+      state.say('info', text.toUpperCase(), null, 1.8);
     }
   };
 
@@ -74,8 +73,7 @@ export function createComeAbout(ship, W, { goingDown, flight }) {
     g.dur = T.TIME * (flight ? flight.turnScale() : 1); // (a heavy ship takes longer to come round, flight.js)
     pose.turn = g.t / g.dur;
     if (ship.main) {
-      state.ev.warn = g.dur;
-      state.ev.warnText = 'COMING ABOUT!';
+      state.say('helm', 'COMING ABOUT!', null, g.dur);
     }
     state.sfxQ.push(['comeabout']);
     if (who) W.phoneFx(who, 'Coming about!', [40, 40, 120]);

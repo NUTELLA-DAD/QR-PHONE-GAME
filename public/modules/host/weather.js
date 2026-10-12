@@ -42,8 +42,7 @@ export function createWeather({ state, impact, puff }) {
     if (w.bolt && (w.bolt.t -= dt) <= 0) w.bolt = null;
     if (want > 0 && !announced) {
       announced = true;
-      state.ev.warn = 3.5;
-      state.ev.warnText = 'STORM FRONT - HOLD ON TO YOUR HATS!';
+      state.say('setpiece', 'STORM FRONT - HOLD ON TO YOUR HATS!', null, 3.5);
     }
     if (want === 0) announced = false;
     if (w.storm < 0.15 || state.ship.down) {
@@ -87,8 +86,7 @@ export function createWeather({ state, impact, puff }) {
         w.bolt = { x: toWorldX(ship, x), y: toWorldY(ship, y), t: 0.25 }; // (the bolt is drawn in the world)
         puff(toWorldX(ship, x), toWorldY(ship, y), '#fff7a8', 10);
         impact(x, y, S.STRIKE_POWER);
-        state.ev.warn = 1.5;
-        state.ev.warnText = 'LIGHTNING STRIKE!';
+        state.say('info', 'LIGHTNING STRIKE!', null, 1.5);
       } else {
         w.bolt = { x: toWorldX(ship, rand(-800, 2400)), y: null, t: 0.2 }; // a bolt in the distance
       }

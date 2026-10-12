@@ -72,9 +72,8 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
   state.gdCoalOut = 0; // seconds the coal bunker stays empty (it was dumped)
 
   const crewCount = () => Math.max(1, Object.values(state.players).filter((p) => p.connected !== false && !p.mate).length);
-  const say = (text, secs = 3) => {
-    state.ev.warn = secs;
-    state.ev.warnText = text;
+  const say = (text, secs = 3, kind = 'falling') => {
+    state.say(kind, text, null, secs);
   };
   const humans = () => Object.values(state.players).filter((p) => !p.bot && p.connected !== false);
   const openHoles = (g) => g.holes.filter((h) => state.gasHoles.includes(h));
@@ -262,7 +261,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
         state.gdGrace = config.STRUCTURE.LIFT.GRACE;
         state.gdSince = 0;
         state.gdBanner = { text: 'SHE HOLDS!', sub: 'Her lift beats her weight again', color: '#7bdc8a', t: 3, max: 3 };
-        say('SHE HOLDS!', 3);
+        say('SHE HOLDS!', 3, 'objective');
         state.sfxQ.push(['kill']);
         for (const p of humans()) phoneFx(p, 'SHE HOLDS!', [60, 40, 60, 40, 200]);
       }
@@ -339,7 +338,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     state.gdGrace = GD.GRACE;
     state.gdSince = 0;
     state.gdBanner = { text: 'SHE HOLDS!', sub: why || 'Her lift beats her weight - levelling out with a sliver of hull...', color: '#7bdc8a', t: 3.5, max: 3.5 };
-    say('SHE HOLDS! PATCH HER UP!', 4);
+    say('SHE HOLDS! PATCH HER UP!', 4, 'objective');
     state.sfxQ.push(['kill']);
     shipPuff(800, 600, '#ffffff', 22);
     for (const p of humans()) phoneFx(p, 'SHE HOLDS!', [60, 40, 60, 40, 200]);
@@ -452,7 +451,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
       if (r) {
         g.cuts++;
         g.joints = findJoints(); // (the deck numbers changed)
-        say(`CUT AWAY! -${Math.round(r.plan.mass)} WEIGHT`, 3);
+        say(`CUT AWAY! -${Math.round(r.plan.mass)} WEIGHT`, 3, 'info');
         phoneFx(player, 'Cut away! She is lighter...', [60, 40, 120]);
       } else {
         phoneFx(player, "It won't come away!", [40]);
@@ -556,7 +555,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     const g = state.goingDown;
     if (!g || !(w > 0)) return;
     g.dumped += w;
-    say('CARGO THROUGH THE HATCH! -' + Math.round(w) + ' WEIGHT', 2.5);
+    say('CARGO THROUGH THE HATCH! -' + Math.round(w) + ' WEIGHT', 2.5, 'info');
   };
 
   return { live, physical, crashTime, tryStart, update, protect, active, pumpMul, onStoke, holdAction, perform, missionDone, newMission, reset, pitch, status, jobsFor, measure, noteDumped };

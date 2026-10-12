@@ -104,8 +104,7 @@ export function watchBags(state) {
     if (!b.down && b.gas <= G.BAG_DOWN && rs / rw >= b.gas + G.BAG_REST) {
       b.down = true;
       const name = bagName(i, bags.length);
-      state.ev.warn = 3.2;
-      state.ev.warnText = `${name} DOWN! ${holes[i] ? 'PATCH IT AND PUMP!' : 'PUMP IT UP!'}`;
+      state.say('helm', `${name} DOWN! ${holes[i] ? 'PATCH IT AND PUMP!' : 'PUMP IT UP!'}`, null, 3.2, { role: 'helm' });
       state.bagAlert = { i, name, text: state.ev.warnText, at: state.scroll };
       state.sfxQ.push(['alarm']);
     } else if (b.down && b.gas > G.BAG_UP) b.down = false;
@@ -148,7 +147,6 @@ export function stepHotAir(state, dt, fired) {
   if (h.heat < H.WARN_BELOW && !h.warned) {
     h.warned = true;
     state.gasStats.hotCold++;
-    state.ev.warn = 3;
-    state.ev.warnText = 'HOT AIR COOLING - STOKE THE BOILER!';
+    state.say('info', 'HOT AIR COOLING - STOKE THE BOILER!', null, 3);
   } else if (h.heat > H.WARN_BELOW + 0.15) h.warned = false;
 }

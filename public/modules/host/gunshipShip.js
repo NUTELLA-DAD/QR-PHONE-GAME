@@ -54,9 +54,8 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
   state.gunship = null;
   state.paras = []; // paratroopers in the air (world coordinates, like shells; vx is a world velocity)
   const S = (state.gsStats = { spawned: 0, dropped: 0, shot: 0, landed: 0, latches: 0, cut: 0, sent: 0, portsDown: 0, contacts: 0, collisions: 0, reverts: 0, maxDepth: 0, breakoffs: 0, shots: 0, turns: 0, strafes: 0, retreats: 0, aborts: 0, flees: 0, climbs: 0, mortars: 0, flaks: 0, turretShots: 0, bats: 0, harpoons: 0, ladders: 0, boarded: 0, kills: 0, captured: 0, charges: 0 });
-  const warn = (text, secs = 3.5) => {
-    state.ev.warn = secs;
-    state.ev.warnText = text;
+  const warn = (text, secs = 3.5, kind = 'setpiece') => {
+    state.say(kind, text, null, secs);
   };
   const lap = () => (state.course ? state.course.lap : 1);
   let stamp = 0;
@@ -699,7 +698,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
       S.dropped++;
     }
     sPuff(sx, sy, '#eee6d2', 8);
-    warn('PARATROOPERS! SHOOT THEM DOWN!', 2.5);
+    warn('PARATROOPERS! SHOOT THEM DOWN!', 2.5, 'boarders');
     return true;
   };
   const updateParas = (dt) => {
@@ -841,7 +840,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
     const g = state.gunship;
     if (!g) return;
     S.boarded++;
-    if (!p.bot) { state.ev.warn = 3; state.ev.warnText = "YOU'RE ABOARD THE GUNSHIP!"; }
+    if (!p.bot) { state.say('boarders', "YOU'RE ABOARD THE GUNSHIP!", null, 3); }
     state.sfxQ && state.sfxQ.push(['alarm']);
     stomp(p);
   };
@@ -872,7 +871,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
     if (!g || g.charge) return;
     g.charge = { t: G.FUSE, by: player && player.id };
     S.charges++;
-    warn('CHARGE SET! GET BACK TO THE SHIP!', 3);
+    warn('CHARGE SET! GET BACK TO THE SHIP!', 3, 'objective');
   };
   // Her helm is taken: her crew strike their colours and she goes down quietly; our boarders are carried home. Supplies and salvage as for a charge.
   const captured = (player) => {
@@ -881,7 +880,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
     g.captured = true; // (she goes down at the end of the step: this is called from inside her crew's loop, and everyone aboard is carried home)
     g.capturedBy = player && player.id;
     S.captured++;
-    warn('THE GUNSHIP SURRENDERS! HER HELM IS YOURS - SUPPLIES ABOARD', 4);
+    warn('THE GUNSHIP SURRENDERS! HER HELM IS YOURS - SUPPLIES ABOARD', 4, 'objective');
   };
 
   // She is done: shot down (byCrew false), blown up by the charge (byCrew), or taken (quiet). She sinks for a few seconds, then she is gone.
@@ -910,8 +909,8 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
       ours.state.fuel = Math.min(config.BOILER.FUEL_MAX, ours.state.fuel + G.REWARD_COAL);
       for (const gun of Object.values(ours.ctx.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
       ours.ctx.bombBay.bombs = Math.min(config.BOMBS.MAX, ours.ctx.bombBay.bombs + 2);
-      if (!quiet) warn('GUNSHIP DESTROYED! SUPPLIES ABOARD: HULL, COAL AND AMMO', 4);
-    } else warn('GUNSHIP SHOT DOWN!', 3);
+      if (!quiet) warn('GUNSHIP DESTROYED! SUPPLIES ABOARD: HULL, COAL AND AMMO', 4, 'objective');
+    } else warn('GUNSHIP SHOT DOWN!', 3, 'objective');
     for (const c of crewOf(g)) { c.lock = null; delete h.crewReg[c.id]; }
     // her ship breaks up: wrecked, the gasbag empties, she falls
     if (!(h.state.down > 0)) {
@@ -1013,7 +1012,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
           g.prize = true;
           sendAllHome(g);
           for (const c of crewOf(g)) { c.lock = null; delete h.crewReg[c.id]; }
-          warn('A PRIZE! TOW HER HOME TO THE SKY-DOCK', 4);
+          warn('A PRIZE! TOW HER HOME TO THE SKY-DOCK', 4, 'objective');
         }
         h.state.order = 0;
         h.state.fuel = 0;
@@ -1182,7 +1181,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
         g.herRope = true;
         S.latches++;
         state.sfxQ && state.sfxQ.push(['swing']);
-        warn('SHE FIRES HER GRAPPLE! CUT THE LINE AT THE BOW - OR BOARD HER!', 3.5);
+        warn('SHE FIRES HER GRAPPLE! CUT THE LINE AT THE BOW - OR BOARD HER!', 3.5, 'boarders');
       }
       // ...then her guards (and deckhands) cross the rope to board us.
       if (g.rope && (g.sendT += dt) >= G.LATCH_SEND_EVERY * (g.bp.special === 'ramp' ? GP.RAMP.SEND_MUL : 1)) {
@@ -1194,7 +1193,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
           S.sent++;
           dropOne && dropOne(geom().BOW.x - 70 + rand(-40, 40), P[geom().MAIN].y - 70, pickType ? pickType() : 'grunt');
           sPuff(geom().BOW.x - 40, geom().BOW.y - 40, '#d8c79a', 8);
-          warn('RAIDERS CROSSING HER ROPE!', 2);
+          warn('RAIDERS CROSSING HER ROPE!', 2, 'boarders');
         }
       }
     }
