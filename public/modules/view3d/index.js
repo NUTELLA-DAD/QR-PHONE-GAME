@@ -32,7 +32,7 @@ import { createWeather } from './weather.js';
 import { placeCamera, worldToScreen, FOV, ELEV } from './camera3d.js';
 import { createCinema } from './cinema.js'; // WP11: the camera's cinematic moments
 import { RB } from './ringBend.js'; // LOOP R1: the ring map's bend (a camera-relative wrap done by the vertex shaders)
-import { createRingCastle } from './ringCastle.js'; // LOOP R1: the placeholder castle (R2 replaces it)
+import { createRingCastle } from './ringCastle.js'; // LOOP R2: the ring castle (strip gatehouses and walls, the island, the ward, the keep and crown)
 import { config } from '../../config.js';
 import { createPorthole } from './porthole.js'; // WP11: the Versus far-ship porthole
 import { createPortholes3D } from './portholes.js'; // the round portholes: a friendly plane off screen, the lookout's spyglass
@@ -203,8 +203,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   // WP5: broken-off parts as rigid bodies (destruction.js, the Rapier wreckage world loads a moment after the view starts) and the marks of the blows a ship took (damageView.js)
   const destruction = createDestruction({ parent: worldRoot, state, models, terrain, world, inRock });
   const damage = createDamageView({ state, models });
-  let castle = null; // LOOP R1: the ring map's placeholder castle (ringCastle.js; if it cannot be made the ring is just the bent rock)
-  try { castle = createRingCastle({ parent: worldRoot, state }); } catch (e) { console.warn('view3d castle off', e); }
+  let castle = null; // LOOP R2: the ring map's castle (ringCastle.js; if it cannot be made the ring is just the bent rock; P = the vfx's particles, for the braziers' fire)
+  try { castle = createRingCastle({ parent: worldRoot, state, P: () => (vfx && vfx.P) || null }); } catch (e) { console.warn('view3d castle off', e); }
   V.castle = castle;
   // WP6: the damage state of every part (soot, dents, poses, smoke, scorch memory, breaches, the flat bag), on top of the poses shipMesh sets each frame
   const partDamage = createPartDamage({ state, models, vfx });

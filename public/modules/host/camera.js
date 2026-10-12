@@ -95,7 +95,8 @@ export function createWorldCamera() {
     }
     // Normal zoom: the biggest ship fills the allowed fraction of the width (and fits vertically).
     const baseZoom0 = Math.min(width / (bigW / C.SHIP_SCREEN_FRACTION), height / (bigH / (C.SHIP_SCREEN_HEIGHT_FRACTION || 1)));
-    const baseZoom = baseZoom0 * zoomMul; // (the split's main view looks a little wider than the one ship's normal framing)
+    const ringMul = state.course && state.course.map && state.course.map.ring ? Math.max(0.5, Math.min(1.5, finite(config.RING3D && config.RING3D.ZOOM_MUL, 1))) : 1; // (R2: a ring map's castle is big; RING3D.ZOOM_MUL widens or tightens the plain framing there. 1 = off)
+    const baseZoom = baseZoom0 * zoomMul * ringMul; // (the split's main view looks a little wider than the one ship's normal framing)
     const fitZoom = Math.min(width / (x1 - x0), height / (y1 - y0));
     const minZoom = baseZoom0 / maxOut;
     const zoom = Math.max(minZoom, Math.min(baseZoom, fitZoom));
