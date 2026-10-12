@@ -20,6 +20,7 @@ export const WORDS = {
   burn: ['SIZZLE!', 'HOT!', 'YEOW!'], // ...burning
   heal: ['+HEART'], // ...and gets one back
   ram: ['RAMMED!'], // a ram prow lands (shipCollide.js)
+  crash: ['CRASHED!'], // a patrol plane flies into an airship (escort.js)
 };
 
 export function pop(state, x, y, kind, color = '#f2d36b', size = 1) {

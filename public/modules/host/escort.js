@@ -7,10 +7,10 @@
 //     or flies her home to the hook if she is badly hurt (or the patrol is off).
 // With nobody at the station an auto pilot flies her out when enemies come near the ship: she is
 // a worse shot than a human, so flying one yourself is still worth it. Docked planes repair.
-// Enemy bullets and rock hurt her. Shot down, the pilot bails out and comes round in the medical
+// Enemy bullets, rock and airships (any hull or gasbag, her own included: config ESCORT.CRASH_ON_SHIPS) hurt her. Shot down, the pilot bails out and comes round in the medical
 // bay, and the crew need a while to build another.
 import { config } from '../../config.js';
-import { flyPlane, smoke, shootDown, angDiff } from './planes.js';
+import { flyPlane, smoke, shootDown, angDiff, shipTouched } from './planes.js';
 import { targets } from './aim.js';
 import { inRock, groundAt, ceilAt } from './course.js';
 import { pop } from './popups.js';
@@ -24,7 +24,7 @@ export const isEscortStation = (n, layout) => typeof n === 'string' && layout.es
 // The plane belonging to a station name (or undefined).
 export const escortFor = (state, n) => (state.escorts || []).find((e) => e.name === n);
 
-export function createEscort({ state, puff, phoneFx }) {
+export function createEscort({ state, puff, phoneFx, moment }) {
   const ship = mainShip(state); // (B1: the ship the patrol planes hang under; B2 makes this one per ship)
   const layout = ship.layout;
   const DOCKS = layout.escortDocks; // (filled in place when a new ship build is applied, so this stays current)
@@ -55,15 +55,23 @@ export function createEscort({ state, puff, phoneFx }) {
 
   const launch = (s) => {
     const d = dockPoint(s);
-    Object.assign(s, { docked: false, flying: true, returning: false, x: d.x, y: d.y + 20, heading: 0.5, trail: [], orbit: s.idx ? -Math.PI / 2 : Math.PI / 2, air: null, stalled: false, bank: 0, idle: 0 });
+    Object.assign(s, { docked: false, flying: true, returning: false, x: d.x, y: d.y + 20, heading: 0.5, launchT: E.DOCK_GRACE, trail: [], orbit: s.idx ? -Math.PI / 2 : Math.PI / 2, air: null, stalled: false, bank: 0, idle: 0 });
     puff(d.x, d.y, '#ffffff', 10);
   };
 
-  const crash = (s, why) => {
+  // Airships she may fly into without a crash (and the auto pilot's lookahead lets be): her own ship while she drops off the hook (a few seconds after launch) or comes in to latch on (near the hook).
+  const ownGrace = (s) => (sh) => sh === ship && (s.launchT > 0 || (s.returning && Math.hypot(s.x - dockPoint(s).x, s.y - dockPoint(s).y) < E.DOCK_GRACE_RANGE));
+
+  const crash = (s, why, hit) => {
     shootDown(state, s, 'escort');
     puff(s.x, s.y, '#ff5a1f', 22);
-    pop(state, s.x, s.y - 50, 'kill', '#ff5a5a', 1);
+    pop(state, s.x, s.y - 50, hit ? 'crash' : 'kill', '#ff5a5a', 1);
     const p = pilot(s);
+    if (hit) { // (she flew into an airship: it takes a small knock where she struck, the Ship's Book notes whoever was at the stick)
+      hit.ship.sim.impact(toShipX(hit.ship, hit.x), toShipY(hit.ship, hit.y), E.CRASH_POWER);
+      if (state.sfxQ) state.sfxQ.push(['clang', true]);
+      if (p && moment) moment('escort-crash', { who: [p], data: { own: hit.ship === ship } });
+    }
     if (p) {
       p.lock = null;
       const rv = layout.reviveSpot();
@@ -75,11 +83,12 @@ export function createEscort({ state, puff, phoneFx }) {
     }
     Object.assign(s, { docked: true, flying: false, returning: false, auto: false, hp: E.HP, rebuild: E.REBUILD });
     state.ev.warn = 2.5;
-    state.ev.warnText = 'PATROL PLANE ' + s.num + ' DOWN! A NEW ONE IN ' + E.REBUILD + 's';
+    state.ev.warnText = 'PATROL PLANE ' + s.num + (hit ? ' CRASHED!' : ' DOWN!') + ' A NEW ONE IN ' + E.REBUILD + 's';
   };
 
   const updateOne = (s, dt) => {
     if (s.rebuild > 0) s.rebuild = Math.max(0, s.rebuild - dt);
+    if (s.launchT > 0) s.launchT = Math.max(0, s.launchT - dt);
     if (state.phase !== 'flying' || state.ship.down) {
       if (s.flying) Object.assign(s, { docked: true, flying: false, returning: false });
       return;
@@ -167,11 +176,47 @@ export function createEscort({ state, puff, phoneFx }) {
         ty = s.y + (s.y - o.y) * 5;
       }
     }
+    // Airships ahead: the auto pilot (and a bot at the station; a person is trusted to fly) looks along her path and swings to a clear heading if it would cross a hull within the lookahead.
+    let avoiding = false;
+    if (E.CRASH_ON_SHIPS && (!p || p.bot) && state.ships && state.ships.length) {
+      const ign = ownGrace(s);
+      const air = s.air || E.SPEED;
+      const FL = config.FLIGHT;
+      const w = E.TURN_AVOID * Math.max(FL.SLOW_TURN, Math.min(FL.FAST_TURN, FL.SLOW_TURN + (1 - FL.SLOW_TURN) * (air / E.SPEED))); // (how fast she can swing round, as flyPlane works it out)
+      // Is the track clear if she swings to heading a? (the arc she would really fly: turning at her best rate, not a straight line)
+      const clear = (a) => {
+        const dts = E.AVOID_LOOKAHEAD / E.AVOID_STEPS;
+        let h = s.heading, x = s.x, y = s.y;
+        for (let k = 1; k <= E.AVOID_STEPS; k++) {
+          h += Math.max(-w * dts, Math.min(w * dts, angDiff(a, h)));
+          x += Math.cos(h) * air * dts;
+          y += Math.sin(h) * air * dts;
+          if (shipTouched(state, s, E.AVOID_NOSE, ign, { x, y, t: dts * k, heading: h }, E.AVOID_PAD)) return false;
+        }
+        return true;
+      };
+      if (s.dodgeT > 0) s.dodgeT -= dt; // (a way round, once picked, is kept for AVOID_HOLD seconds - as long as it stays clear)
+      if (s.dodgeT > 0 && !clear(s.dodgeA)) s.dodgeT = 0;
+      if (!(s.dodgeT > 0) && !clear(s.heading)) {
+        for (const da of [0.5, -0.5, 1.0, -1.0, 1.6, -1.6, 2.3, -2.3]) {
+          if (clear(s.heading + da)) {
+            s.dodgeA = s.heading + da;
+            s.dodgeT = E.AVOID_HOLD;
+            break;
+          }
+        }
+      }
+      if (s.dodgeT > 0) {
+        tx = s.x + Math.cos(s.dodgeA) * 1000;
+        ty = s.y + Math.sin(s.dodgeA) * 1000;
+        avoiding = true;
+      }
+    }
     // Close in on the hook: slow right down so she can latch on.
     const homing = s.returning && Math.hypot(tx - s.x, ty - s.y) < 600;
     flyPlane(state, s, tx, ty, dt, {
       speed: homing ? E.SPEED * 0.6 : E.SPEED,
-      turn: homing ? E.TURN * 1.8 : E.TURN,
+      turn: homing ? E.TURN * 1.8 : avoiding ? E.TURN_AVOID : E.TURN,
       turnAvoid: E.TURN_AVOID,
       nearShip: s.returning ? null : nearShip,
       midY: mid.y,
@@ -208,6 +253,10 @@ export function createEscort({ state, puff, phoneFx }) {
     }
     if (s.hp <= 0) return crash(s, 'Shot down!');
     if (inRock(state, s.x, s.y)) return crash(s, 'Crashed into the rock!');
+    if (E.CRASH_ON_SHIPS && state.ships && state.ships.length) {
+      const hit = shipTouched(state, s, E.AVOID_NOSE, ownGrace(s));
+      if (hit) return crash(s, hit.ship === ship ? 'You flew into your own ship!' : 'You flew into another airship!', hit);
+    }
     // Too far away: the radio's out of range, she comes home.
     if (Math.hypot(s.x - mid.x, s.y - mid.y) > E.LEASH) s.returning = true;
   };

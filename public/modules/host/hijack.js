@@ -10,7 +10,7 @@
 // Bots only take part while they are on a daring stunt (p.daring, see bots.js).
 // Player fields: p.hj = the plane while riding (then p.x / p.y are the plane's place in the WORLD). Plane fields: rider (player id), phase 'kick'|'fly'.
 import { config } from '../../config.js';
-import { flyPlane, smoke, shootDown, angDiff } from './planes.js';
+import { flyPlane, smoke, shootDown, angDiff, shipTouched } from './planes.js';
 import { targets } from './aim.js';
 import { inRock } from './course.js';
 import { pop } from './popups.js';
@@ -161,6 +161,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
       }
       if (s.kickP >= 1) {
         s.phase = 'fly';
+        s.flyT = 0; // (seconds since she became yours: the crash-into-an-airship rule waits E.DOCK_GRACE, she starts beside the ship)
         s.kickP = 1;
         state.chutes ||= [];
         state.chutes.push({ x: s.x, y: s.y - 20, vx: ((s.vx || 0) - ship.pose.vx) * 0.2, vy: -260, t: 0 });
@@ -270,6 +271,17 @@ export function createHijack({ state, puff, phoneFx, air }) {
         pop(state, s.x, s.y - 50, 'kill', '#ff5a5a', 1);
         bail(p, s.hp <= 0 ? 'Shot down! You bailed out.' : 'Crashed! You bailed out.', true);
         continue;
+      }
+      // A stolen plane is as solid to the airships as the patrol planes (E.CRASH_ON_SHIPS): any hull or gasbag, and the ship takes a small knock.
+      if (s.phase === 'fly' && (s.flyT += dt) > E.DOCK_GRACE && E.CRASH_ON_SHIPS) {
+        const hit = shipTouched(state, s, E.AVOID_NOSE);
+        if (hit) {
+          hit.ship.sim.impact(toShipX(hit.ship, hit.x), toShipY(hit.ship, hit.y), E.CRASH_POWER);
+          puff(s.x, s.y, '#ff5a1f', 20);
+          pop(state, s.x, s.y - 50, 'crash', '#ff5a5a', 1);
+          bail(p, 'Crashed into an airship! You bailed out.', true);
+          continue;
+        }
       }
       p.x = s.x;
       p.y = s.y;

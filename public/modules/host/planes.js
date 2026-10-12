@@ -177,6 +177,25 @@ export function bumpShip(state, e, o) {
   return true;
 }
 
+// Which airship does a plane touch? Her middle or her nose (nose px ahead along the heading) inside any ship's hull or gasbag (the ship's own hitsShip, so the shapes are what a shell hits).
+// Ships that are down, wrecked or a falling piece are not solid; ignore(ship) skips one more. path = null for where she is now, or { x, y, t, heading }: where she WOULD be after t seconds (a
+// point of her predicted track, in a still world: each ship moves too, so the point is taken against that ship's own travel); pad also checks that far to each side.
+// Returns { ship, x, y } (the world point of contact) or null.
+export function shipTouched(state, e, nose, ignore, path = null, pad = 0) {
+  const h = path ? path.heading : e.heading, c = Math.cos(h), s = Math.sin(h);
+  for (const sh of state.ships || []) {
+    if (!sh.sim || sh.piece || sh.state.down > 0 || sh.ctx.wreck || (ignore && ignore(sh))) continue;
+    const mx = path ? path.x - sh.pose.vx * path.t : e.x, my = path ? path.y - sh.pose.vy * path.t : e.y;
+    for (const k of [0, nose]) {
+      for (const l of pad ? [0, -pad, pad] : [0]) { // (l: across the heading, a path is checked with room to spare)
+        const px = mx + c * k - s * l, py = my + s * k + c * l;
+        if (sh.sim.hitsShip(toShipX(sh, px), toShipY(sh, py))) return { ship: sh, x: px, y: py };
+      }
+    }
+  }
+  return null;
+}
+
 // Contrail: a short line of points behind the plane, bright while it turns hard.
 export function trail(state, e, dt) {
   const t = (e.trail = e.trail || []);
