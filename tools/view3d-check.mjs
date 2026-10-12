@@ -258,9 +258,11 @@ try {
       await settle('lair', P);
       await P.close();
 
-      // Versus
-      P = await openPage(`${BASE}/host.html?view=3d&tier=medium&versus=1&bots=4`, { gl: GL });
-      await sleep(quick ? 6000 : 10000);
+      // Versus, seeded and stepped: 10 s of the match (600 steps), the same every run. (A free-running page measured a random arena - course.js rng(Date.now()) - and wherever the bots had got to
+      // after 10 s: from far apart at 115 calls to closing in at 160 run to run, on every commit. Once the ships close to fighting range the picture is 150-220 calls: NOT gated here, see 3D.md.)
+      P = await openPage(`${BASE}/host.html?view=3d&tier=medium&versus=1&bots=4`, { gl: GL, seed: true });
+      await P.ev('(()=>{ window.__seed(11); window.__step(600); return 1 })()');
+      await sleep(3000);
       s = await P.json(STATE);
       check(s && s.is3d && s.ships >= 2, 'versus: two ships in 3D', 'versus: ' + JSON.stringify(s));
       gateMeasure('versus', await P.json(MEASURE));
