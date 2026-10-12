@@ -11,6 +11,7 @@ Fable's read-only study, 2026-10-12, for the lead (Opus) to execute. It is read 
 Progress:
 - **F7 done:** `SCRAP.ENABLED` is off in the game; `SCRAP_ON=1` turns it on in a tool, and `--check-scrap` sets it.
 - **Garrison D1 merged.**
+- **F8 done (2026-10-12):** `config.BOTS.PROFILES { bot, human }` + `BOTS.PROFILE` (default `bot`, byte-identical); `--profile human|bot` on botsim, voyagesim and botbatch; voyagesim defaults to `--build sparrow` (`--build none` = the old no-start-build, used by `--check-golden`); fun lines in the voyagesim summary (`tools/funmetrics.mjs`; botsim prints them only with `--fun 1`, before the baseline marker); `--check-human-profile` (a snapshot, no thresholds) and `--check-fun-metrics`.
 
 ## 0. What was measured (on top of the balance table)
 
