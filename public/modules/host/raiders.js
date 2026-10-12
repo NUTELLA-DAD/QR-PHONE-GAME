@@ -83,8 +83,7 @@ export function createRaiders({ state, modules, puff, impact }) {
       });
     }
     if (!announce) return;
-    state.ev.warn = R.WARN_TIME;
-    state.ev.warnText = x > mid ? 'BOARDERS FORE!' : 'BOARDERS AFT!';
+    state.say('boarders', x > mid ? 'BOARDERS FORE!' : 'BOARDERS AFT!', null, R.WARN_TIME, { deck: deckUnder(x, y) });
     state.sfxQ && state.sfxQ.push(['alarm']);
     return 'announced';
   };
@@ -172,8 +171,7 @@ export function createRaiders({ state, modules, puff, impact }) {
           b.planted = true;
           state.bombs.push({ x: b.x, d: b.d, t: R.BOMB_FUSE, prog: 0 });
           shipPuff(b.x, b.y - 20, '#333', 8);
-          state.ev.warn = 3;
-          state.ev.warnText = 'A SAPPER PLANTED A BOMB!';
+          state.say('boarders', 'A SAPPER PLANTED A BOMB!', null, 3, { deck: b.d });
           continue;
         }
       } else if (b.type === 'cutter') {

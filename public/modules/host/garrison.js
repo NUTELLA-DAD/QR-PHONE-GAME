@@ -280,8 +280,7 @@ export function createGarrison({ state, puff, credit }) {
     q.grapT = 0;
     q.n -= GR.MEN;
     r.gar.stats.grapples++;
-    state.ev.warn = 2.5;
-    state.ev.warnText = 'GRAPPLES! THEY ARE CLIMBING ABOARD!';
+    state.say('boarders', 'GRAPPLES! THEY ARE CLIMBING ABOARD!', null, 2.5);
     sfx('charge');
   }
   function flee(r, f, q) {
@@ -398,7 +397,7 @@ export function createGarrison({ state, puff, credit }) {
         const xa = toWorldX(sh, B.x0), xb = toWorldX(sh, B.x1), top = toWorldY(sh, B.y0), bot = toWorldY(sh, B.y1);
         const ahead = (c.x - toWorldX(sh, L.refPoint.x)) * f;
         if (sh.main) { // the lookout's call, once as she closes on it
-          if (ahead > 0 && ahead < C.LOOKOUT && !c.called) { c.called = true; g.stats.calls++; state.ev.warn = 3; state.ev.warnText = 'LOOKOUT: BOOM CHAIN AHEAD! DIVE UNDER IT!'; sfx('horn'); }
+          if (ahead > 0 && ahead < C.LOOKOUT && !c.called) { c.called = true; g.stats.calls++; state.say('helm', 'LOOKOUT: BOOM CHAIN AHEAD! DIVE UNDER IT!', null, 3); sfx('horn'); }
           else if (ahead > C.LOOKOUT * 1.4 || ahead < -C.LOOKOUT) c.called = false;
         }
         if (!(Math.min(xa, xb) < c.x && Math.max(xa, xb) > c.x && top < c.yLow && bot > c.yTop)) continue;
@@ -429,8 +428,7 @@ export function createGarrison({ state, puff, credit }) {
     for (let k = 0; k < 6; k++) puff(c.x, c.yLow - k * 140, '#ffd23f', 8);
     pop(state, c.x, c.yLow - 200, 'SNAP', '#ffd23f', 1.5);
     sfx('impact');
-    state.ev.warn = 2.5;
-    state.ev.warnText = how === 'strain' ? 'THE CHAIN SNAPPED!' : 'THE CHAIN IS BROKEN!';
+    state.say('setpiece', how === 'strain' ? 'THE CHAIN SNAPPED!' : 'THE CHAIN IS BROKEN!', null, 2.5);
   }
 
   // ---------- catapult stones: a flame where one lands ----------

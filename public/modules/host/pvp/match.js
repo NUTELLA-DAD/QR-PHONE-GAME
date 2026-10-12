@@ -145,7 +145,7 @@ export function createMatch(D) {
     const crew = players().filter((p) => !p.mate);
     crew.forEach((p, i) => assign(p, i % 2 ? 'blue' : 'red'));
     Object.assign(M, { phase: 'lobby', round: 0, t: 0, score: { red: 0, blue: 0 }, winner: null, results: [], stats: { red: fresh(), blue: fresh() }, totals: { red: fresh(), blue: fresh() }, picks: { red: 0, blue: 0 }, slow: 1, capturedBy: null });
-    world.ev.warn = 0; // (the voyage's "STOP 1" banner is not for this lobby)
+    world.alarmClear(); // (the voyage's "STOP 1" banner is not for this lobby)
     for (const sh of world.ships) sh.buildId = 'classic';
   }
   function leave() {
@@ -261,8 +261,7 @@ export function createMatch(D) {
       if (p.team) dropAboard(p, shipOfTeam(p.team));
     }
     world.phase = 'lobby'; // (moored: the count-in; D.launch() casts both ships off)
-    world.ev.warn = 3;
-    world.ev.warnText = 'ROUND ' + M.round + ' - GET READY!';
+    world.say('objective', 'ROUND ' + M.round + ' - GET READY!', null, 3);
     M.phase = 'count';
     refreshRivals(0);
     return true;
@@ -284,8 +283,7 @@ export function createMatch(D) {
     const need = V().WINS_NEEDED;
     if (M.score.red >= need || M.score.blue >= need) M.winner = M.score.red > M.score.blue ? 'red' : 'blue';
     else if (M.round >= need * 2 + 1) M.winner = M.score.red === M.score.blue ? 'draw' : M.score.red > M.score.blue ? 'red' : 'blue'; // (draws can drag it out: five rounds at most)
-    world.ev.warn = V().FINALE + V().BETWEEN;
-    world.ev.warnText = winner ? winner.toUpperCase() + ' WINS THE ROUND' + (cause === 'captured' ? ' - HELM TAKEN!' : cause === 'timeout' ? ' ON HULL' : '!') : 'A DRAW - BOTH SHIPS DOWN';
+    world.say('objective', winner ? winner.toUpperCase() + ' WINS THE ROUND' + (cause === 'captured' ? ' - HELM TAKEN!' : cause === 'timeout' ? ' ON HULL' : '!') : 'A DRAW - BOTH SHIPS DOWN', 6, V().FINALE + V().BETWEEN);
   }
   // The deciding blow (a wreck) plays out in slow motion for the first part of the finale.
   const finaleSlow = () => (M.t < V().FINALE * 0.55 ? 0.4 : 1);
@@ -433,7 +431,7 @@ export function createMatch(D) {
     const R = wallRect();
     M.wall = R;
     if (!R) return;
-    if (M.storm.s > 0 && !M.storm.warned && M.phase === 'fight') { M.storm.warned = 1; world.ev.warn = 3; world.ev.warnText = 'THE STORM CLOSES IN!'; world.sfxQ.push(['bell']); }
+    if (M.storm.s > 0 && !M.storm.warned && M.phase === 'fight') { M.storm.warned = 1; world.say('setpiece', 'THE STORM CLOSES IN!', null, 3); world.sfxQ.push(['bell']); }
     for (const sh of sideShips()) {
       if (sh.state.down > 0) continue;
       const mx = toWorldX(sh, sh.layout.refPoint.x), my = toWorldY(sh, sh.layout.refPoint.y);
@@ -485,8 +483,7 @@ export function createMatch(D) {
         D.launch();
         M.phase = 'fight';
         M.t = 0;
-        world.ev.warn = 2;
-        world.ev.warnText = 'FIGHT!';
+        world.say('objective', 'FIGHT!', null, 2);
         world.sfxQ.push(['bell']);
       }
     } else if (M.phase === 'fight') {

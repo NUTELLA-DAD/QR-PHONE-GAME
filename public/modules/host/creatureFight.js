@@ -115,8 +115,7 @@ function enterPhase(state, cr, ph) {
     ai.mouthT = Math.min(ai.mouthT ?? 1e9, F.BREATHER + phaseP(cr).mouthEvery * CR().MOUTH.P3_FIRST);
   }
   if (d.banner) {
-    state.ev.warn = F.BANNER;
-    state.ev.warnText = d.banner;
+    state.say('setpiece', d.banner, null, F.BANNER);
     for (const p of Object.values(state.players)) if (!p.bot && h.phoneFx) h.phoneFx(p, d.banner, [150, 60, 150, 60, 250]);
   }
   state.sfxQ.push(['roar']);
@@ -140,8 +139,7 @@ function openWindow(state, cr, P) {
   cr.mouthWin = { t: 0, left: P.mouthFor };
   cr.stats.windows = (cr.stats.windows || 0) + 1;
   state.sfxQ.push(['roar']);
-  state.ev.warn = P.mouthFor; // (the call to the bomb bay beats any lesser banner)
-  state.ev.warnText = KRAKEN_MOUTH_TEXT + ' (' + Math.floor(cr.fed) + '/' + M.FED + ')';
+  state.say('setpiece', KRAKEN_MOUTH_TEXT + ' (' + Math.floor(cr.fed) + '/' + M.FED + ')', 6, P.mouthFor);
   const ship = mainShip(state);
   for (const p of Object.values(state.players)) {
     if (p.bot || p.fly || p.fall || shipOf(state, p) !== ship || !ship.layout.kindOf || ship.layout.kindOf(p.lock) !== 'bombBay') continue;
@@ -195,7 +193,7 @@ function stepRock(state, cr, dt) {
     pop(state, cr.x, sea - 400, 'CRUNCH!', '#ff9a2e', 1.8);
     cr.hooks.puff(cr.x + (cr.hooks.rng() - 0.5) * 1200, sea - 300, '#8a847c', 12);
     state.sfxQ.push(['impact']);
-    if (!(state.ev.warn > 1)) { state.ev.warn = 1.8; state.ev.warnText = T.TEXT; }
+    if (!(state.ev.warn > 1)) { state.say('info', T.TEXT, null, 1.8); }
   }
 }
 

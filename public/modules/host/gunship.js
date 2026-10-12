@@ -97,9 +97,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
   state.gunship = null;
   state.paras = []; // paratroopers in the air (world coordinates, like shells; vx is a world velocity)
   const S = (state.gsStats = { spawned: 0, dropped: 0, shot: 0, landed: 0, latches: 0, cut: 0, sent: 0, portsDown: 0, contacts: 0, collisions: 0, reverts: 0, maxDepth: 0, breakoffs: 0, shots: 0, turns: 0, strafes: 0, retreats: 0, aborts: 0, flees: 0, climbs: 0, mortars: 0, flaks: 0, turretShots: 0, bats: 0, harpoons: 0, ladders: 0 });
-  const warn = (text, secs = 3.5) => {
-    state.ev.warn = secs;
-    state.ev.warnText = text;
+  const warn = (text, secs = 3.5, kind = 'setpiece') => {
+    state.say(kind, text, null, secs);
   };
   const lap = () => (state.course ? state.course.lap : 1);
 
@@ -730,7 +729,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       S.dropped++;
     }
     sPuff(sx, sy, '#eee6d2', 8);
-    warn('PARATROOPERS! SHOOT THEM DOWN!', 2.5);
+    warn('PARATROOPERS! SHOOT THEM DOWN!', 2.5, 'boarders');
     return true;
   };
   const updateParas = (dt) => {
@@ -943,7 +942,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     const g = state.gunship;
     if (!g || g.charge) return;
     g.charge = { t: G.FUSE, by: player && player.id };
-    warn('CHARGE SET! GET BACK TO THE SHIP!', 3);
+    warn('CHARGE SET! GET BACK TO THE SHIP!', 3, 'objective');
   };
 
   const explode = (byCrew) => {
@@ -963,8 +962,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + G.REWARD_COAL);
       for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
       state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + 2);
-      warn('GUNSHIP DESTROYED! SUPPLIES ABOARD: HULL, COAL AND AMMO', 4);
-    } else warn('GUNSHIP SHOT DOWN!', 3);
+      warn('GUNSHIP DESTROYED! SUPPLIES ABOARD: HULL, COAL AND AMMO', 4, 'objective');
+    } else warn('GUNSHIP SHOT DOWN!', 3, 'objective');
     g.crew.length = 0;
   };
 
@@ -1204,7 +1203,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
         g.herRope = true;
         S.latches++;
         state.sfxQ && state.sfxQ.push(['swing']);
-        warn('SHE FIRES HER GRAPPLE! CUT THE LINE AT THE BOW - OR BOARD HER!', 3.5);
+        warn('SHE FIRES HER GRAPPLE! CUT THE LINE AT THE BOW - OR BOARD HER!', 3.5, 'boarders');
       }
       // ...then her guards (and deckhands) cross the rope to board us.
       if (g.rope && (g.sendT += dt) >= G.LATCH_SEND_EVERY * (g.bp.special === 'ramp' ? GP.RAMP.SEND_MUL : 1)) {
@@ -1216,7 +1215,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
           S.sent++;
           dropOne && dropOne(geom().BOW.x - 70 + rand(-40, 40), P[geom().MAIN].y - 70, pickType ? pickType() : 'grunt');
           sPuff(geom().BOW.x - 40, geom().BOW.y - 40, '#d8c79a', 8);
-          warn('RAIDERS CROSSING HER ROPE!', 2);
+          warn('RAIDERS CROSSING HER ROPE!', 2, 'boarders');
         }
       }
     }

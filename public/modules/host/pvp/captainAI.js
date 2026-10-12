@@ -83,8 +83,7 @@ export function callout(state, text, prio = 1) {
   if (now - m.calloutAt < gap) return false;
   if (state.ev.warn > 0.4 && prio < 2) return false;
   m.calloutAt = now;
-  state.ev.warn = 2.2;
-  state.ev.warnText = (ship.team ? ship.team.id.toUpperCase() + ' ' : '') + text;
+  state.say('info', (ship.team ? ship.team.id.toUpperCase() + ' ' : '') + text, null, 2.2);
   return true;
 }
 const count = (state, key) => { const m = state.match, s = mainShip(state); if (m && m.count && s.team) m.count(s.team.id, key); };

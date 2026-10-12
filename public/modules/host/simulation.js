@@ -36,6 +36,7 @@ import { createDebris } from './debris.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { deckPieces } from './shipBuild.js';
 import { createMoments } from './moments.js';
+import { createAlarms } from './alarms.js';
 import { writeStop, postcard, gentleLine } from './logWriter.js';
 import { generateVoyage, expectedPower, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
@@ -137,6 +138,7 @@ export function createSimulation() {
   };
   // What a ship's systems may ask of the world: the helpers above, and (filled in as they are made) the world's systems and the run-level rules.
   const W = { puff, phoneFx, stat, credit, emitPlayerUi, wreck: (text) => wreck(text), finishLimp: () => finishLimp(), restartGame: () => restartGame() };
+  W.alarms = createAlarms({ world: state }); // (FUN.md F2: world.say(kind, text, pri, hold, at) is the one voice of the TV banner; alarms.js)
   W.towing = createTowing({ world: state, puff, phoneFx }); // (B.6: towlines between ships - every ship's ATTACK asks it)
   state.flotsam = W.flotsam = createFlotsam({ world: state, puff, phoneFx }); // (SCRAP, LOOP.md G1: what falls out of the sky when something dies, hulks; scrap.js)
   W.afterBreak = (sh) => { if (sh.main) refreshPower(); }; // (a ship that lost her guns is a weaker ship: the voyage's danger follows her, like a part bought)
@@ -210,8 +212,7 @@ export function createSimulation() {
       rv.ai.onBoard(player);
       return;
     }
-    state.ev.warn = 3.5;
-    state.ev.warnText = 'BOARDERS ON THE ' + String(rv.layout.platforms[d].name || 'DECK').toUpperCase() + '!';
+    state.say('boarders', 'BOARDERS ON THE ' + String(rv.layout.platforms[d].name || 'DECK').toUpperCase() + '!', null, 3.5, { deck: d });
     state.sfxQ.push(['alarm']);
     phoneFx(player, "You're aboard the " + (rv.team ? rv.team.name + ' ' : '') + 'ship! Fight, sabotage the boiler or take the helm', [60, 40, 60]);
   };
@@ -253,8 +254,7 @@ export function createSimulation() {
     state.ship.down = limp ? config.LIMP.TIME : Math.max(config.WRECK.TIME, config.VOYAGE.WRECK_SUMMARY_TIME);
     state.wreck = { t: 0, lap: state.course ? state.course.lap : 1, kills: state.kills };
     state.ship.shake = 1.5;
-    state.ev.warn = config.WRECK.TIME;
-    state.ev.warnText = text;
+    state.say('crash', text, null, config.WRECK.TIME);
     if (limp) return startLimp();
     // Laps fully flown still count toward this TV's record.
     const laps = state.wreck.lap - 1;
@@ -322,8 +322,7 @@ export function createSimulation() {
       player.uk = null;
     }
     const loose = shakeLoose(run);
-    state.ev.warn = 4;
-    state.ev.warnText = 'PATCHED UP - ' + run.spares + ' SPARE GASBAG' + (run.spares === 1 ? '' : 'S') + ' LEFT' + (loose ? ' - THE NEW ' + loose.toUpperCase() + ' SHOOK LOOSE' : '');
+    state.say('objective', 'PATCHED UP - ' + run.spares + ' SPARE GASBAG' + (run.spares === 1 ? '' : 'S') + ' LEFT' + (loose ? ' - THE NEW ' + loose.toUpperCase() + ' SHOOK LOOSE' : ''), null, 4);
     const back = run.visited.length > 1;
     run.visited.pop(); // the stop she wrecked on does not count
     if (run.visited.length) run.stopId = run.visited[run.visited.length - 1];
@@ -403,8 +402,7 @@ export function createSimulation() {
       Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x), stats: {} });
       player.uk = null; // resend the phone's buttons
     }
-    state.ev.warn = 5;
-    state.ev.warnText = 'A NEW SHIP IS READY!';
+    state.say('objective', 'A NEW SHIP IS READY!', null, 5);
   }
 
   // ---- The pacing director ----
@@ -414,9 +412,8 @@ export function createSimulation() {
   const missionPace = () => spawnPace(state);
   const lapNo = () => (state.course ? state.course.lap : 1);
   const buildTime = () => Math.max(config.PACING.BUILD_MIN, (config.PACING.BUILD * (1 - Math.min(0.5, (lapNo() - 1) * config.PACING.BUILD_PER_MISSION))) / missionPace());
-  const sayBanner = (text, secs = 4) => {
-    state.ev.warn = secs;
-    state.ev.warnText = text;
+  const sayBanner = (text, secs = 4, kind = 'setpiece') => {
+    state.say(kind, text, null, secs);
   };
   // F6: the BRIEFING card of a new stop. The TV gets the stop's goal in one line (render.js drawBriefing); each phone gets a toast with the goal and the verb of that player's nearest seat.
   const seatVerb = (p) => {
@@ -574,16 +571,16 @@ export function createSimulation() {
         state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + 1);
         puff(wx, wy, '#ffd23f', 20);
         pop(state, wx, wy - 120, 'SUPPLIES!', '#ffd23f', 1.4);
-        state.ev.warn = 2.5;
-        state.ev.warnText = 'SUPPLIES ABOARD: HULL, COAL AND AMMO!';
+        let supplyText = 'SUPPLIES ABOARD: HULL, COAL AND AMMO!';
         if (scrapOn()) { // (SCRAP: the crate has scrap in it: bundles land on her top deck)
           const td = topDeck(layout), d = td ? layout.platforms.indexOf(td) : -1;
           if (d >= 0) {
             for (let k = 0; k < config.SCRAP.FLOTSAM.SUPPLY; k++) main.sim.cargo.land({ id: 2000000 + state.supplySeq++, kind: 'scrap', from: null }, d, (td.x0 + td.x1) / 2 + (k - 0.5) * 60);
-            state.ev.warnText = 'SUPPLIES ABOARD: HULL, COAL, AMMO AND SCRAP!';
+            supplyText = 'SUPPLIES ABOARD: HULL, COAL, AMMO AND SCRAP!';
             W.flotsam.note('supply', config.SCRAP.FLOTSAM.SUPPLY);
           }
         }
+        state.say('info', supplyText, null, 2.5);
         state.sfxQ.push(['bell']);
         state.supply = null;
       } else if (sp.t <= 0) state.supply = null;
@@ -687,8 +684,7 @@ export function createSimulation() {
     persistBuild();
     addSalvage(VY.SECOND.SALVAGE_BONUS, 'mission');
     mendHull(state, VY.SECOND.HARBOUR_REPAIR);
-    state.ev.warn = 5;
-    state.ev.warnText = 'FIRST VOYAGE COMPLETE - THE CREW DOCKS!';
+    state.say('objective', 'FIRST VOYAGE COMPLETE - THE CREW DOCKS!', null, 5);
   };
 
   // What a stop asks of the course (see startMission in course.js).
@@ -839,8 +835,7 @@ export function createSimulation() {
     if (run.daily) state.runEnd.dailyBest = recordDaily(s, run.daily.key, run.mode, { stops: done, victory, salvage: run.earned });
     saveVoyageSave(s);
     if (victory) {
-      state.ev.warn = 6;
-      state.ev.warnText = 'THE FLAGSHIP IS DOWN - VICTORY!';
+      state.say('objective', 'THE FLAGSHIP IS DOWN - VICTORY!', 6, 6);
     }
   };
 
@@ -918,8 +913,7 @@ export function createSimulation() {
     Object.assign(state.yard, { built: { t: YD.BUILT_STAMP, name: o.baseName, letter: c.letter, where: c.where }, newPart: { name: o.baseName.toUpperCase(), x: c.x, y: c.y, t: 0 }, hold: true });
     state.yard.sum = summaryOf(validate(run.build));
     persistBuild();
-    state.ev.warn = 3;
-    state.ev.warnText = `BUILT: ${o.baseName.toUpperCase()}!`;
+    state.say('info', `BUILT: ${o.baseName.toUpperCase()}!`, null, 3);
   };
   // A limp home shakes the newest part loose: its modules start broken (a hammer mends them), a new gasbag starts with a hole. No part is ever lost. Returns its name.
   const shakeLoose = (run) => {
@@ -951,8 +945,7 @@ export function createSimulation() {
     lost.length = k;
     fitShip(copyData(e.before), lost.length ? 'broken' : e.buildId);
     persistBuild();
-    state.ev.warn = 3;
-    state.ev.warnText = 'REBUILT: ' + (e.names.join(', ') || e.label).toUpperCase().slice(0, 60);
+    state.say('info', 'REBUILT: ' + (e.names.join(', ') || e.label).toUpperCase().slice(0, 60), null, 3);
   };
 
   const shopTime = () => (SH.V2 ? SH.V2_TIME : SH.TIME); // (F6: the 60-second dock votes faster)
@@ -1027,8 +1020,7 @@ export function createSimulation() {
         state.run.build = r.parts;
         fitShip(state.run.build, 'yard');
         persistBuild();
-        state.ev.warn = 3;
-        state.ev.warnText = `${o.gas === 'hydrogen' ? 'HYDROGEN' : o.gas === 'hot' ? 'HOT AIR' : 'HELIUM'} IN THE BAG!`;
+        state.say('info', `${o.gas === 'hydrogen' ? 'HYDROGEN' : o.gas === 'hot' ? 'HOT AIR' : 'HELIUM'} IN THE BAG!`, null, 3);
       }
     } else if (o.id === 'repair-coal') {
       state.ship.fuel = config.BOILER.FUEL_MAX;
@@ -1129,8 +1121,7 @@ export function createSimulation() {
   const startSlotVote = (back, o) => {
     closeVote();
     const mark = o.dealt ? ' (CREW DEAL: 25% off)' : '';
-    state.ev.warn = 3;
-    state.ev.warnText = `BOUGHT: ${o.name.toUpperCase()}!${mark}`;
+    state.say('info', `BOUGHT: ${o.name.toUpperCase()}!${mark}`, null, 3);
     openVote({ kind: 'slot', title: `WHERE DOES THE ${o.baseName.toUpperCase()} GO?`, t: YD.SLOT_TIME, part: o, back,
       options: o.choices.map((c) => ({ kind: 'slot', name: c.where, icon: c.letter, desc: c.note, letter: c.letter })) });
   };
@@ -1218,12 +1209,11 @@ export function createSimulation() {
       state.run.bought.push(o.id);
       if (o.choices.length > 1) return startSlotVote(v, o); // (several places: the crew picks A / B / C)
       buildPart(o, 0);
-      if (o.dealt) state.ev.warnText += ' CREW DEAL: ALL AGREED, 25% OFF';
+      if (o.dealt) state.say('info', 'CREW DEAL: ALL AGREED, 25% OFF', null, 3); // (BUILT: says the part; this follows it)
     } else applyOffer(o);
     o.sold = true;
     if (o.kind !== 'part') {
-      state.ev.warn = 3;
-      state.ev.warnText = `BOUGHT: ${o.name.toUpperCase()}!`;
+      state.say('info', `BOUGHT: ${o.name.toUpperCase()}!`, null, 3);
     }
     if (v.options.every((x) => x.kind === 'cast' || cardOff(x))) {
       if (o.kind !== 'part') {
@@ -1484,8 +1474,7 @@ export function createSimulation() {
   const launch = () => {
     eachShip(state, (sh) => updateCrewScale(sh.ctx, 0)); // (settle the spare gasbags and crew factors for the chosen difficulty)
     state.phase = 'flying';
-    state.ev.warn = 4;
-    state.ev.warnText = 'CAST OFF!';
+    state.say('objective', 'CAST OFF!', null, 4);
   };
   const shipCollide = createShipCollide({ world: state, puff });
   const match = createMatch({ world: state, addShip: (...a) => addShip(...a), removeShip: (...a) => removeShip(...a), course: () => course, launch, restart: () => restartGame(), openVote, newBot, puff, phoneFx, emitUi: emitPlayerUi });

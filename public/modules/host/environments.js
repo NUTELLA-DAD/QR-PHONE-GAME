@@ -160,8 +160,7 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull, ig
         E.windDir = Math.random() < 0.5 ? -1 : 1;
         if (!warned.blizzard) {
           warned.blizzard = true;
-          state.ev.warn = 3;
-          state.ev.warnText = 'BLIZZARD GUST - HOLD ON!';
+          state.say('setpiece', 'BLIZZARD GUST - HOLD ON!', null, 3);
         }
       }
     }
@@ -207,15 +206,13 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull, ig
       state.ship.press = Math.min(100, state.ship.press + (E.heat * L.PRESS_RATE + E.burn * L.BURN_PRESS) * dt);
       if (E.heat > 0.35 && !warned.thermal) {
         warned.thermal = true;
-        state.ev.warn = 2.5;
-        state.ev.warnText = 'LAVA THERMAL - VENT GAS TO STAY LOW!';
+        state.say('info', 'LAVA THERMAL - VENT GAS TO STAY LOW!', null, 2.5);
       }
       if (E.heat < 0.1) warned.thermal = false;
       if (E.burn > 0.2) {
         if (!warned.burn) {
           warned.burn = true;
-          state.ev.warn = 2.5;
-          state.ev.warnText = 'TOO LOW - THE LAVA IS SCORCHING THE HULL!';
+          state.say('fire', 'TOO LOW - THE LAVA IS SCORCHING THE HULL!', 4, 2.5);
         }
         if ((burnT -= dt * E.burn) <= 0) {
           burnT = L.FIRE_EVERY;

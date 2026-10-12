@@ -62,7 +62,7 @@ export function createTowing({ world, puff, phoneFx = () => {} }) {
     const e = ends(tow);
     puff((e.a.x + e.b.x) / 2, (e.a.y + e.b.y) / 2, '#d8c79a', 12);
     world.sfxQ.push(['hit']);
-    if (text) { world.ev.warn = 2.5; world.ev.warnText = text; }
+    if (text) { world.say('info', text, null, 2.5); }
   };
 
   const throwLine = (ship, p) => {
@@ -105,8 +105,7 @@ export function createTowing({ world, puff, phoneFx = () => {} }) {
     const tow = link(ship, hit.ship, from, { x: hit.x, y: hit.y - 10 }, hit.d / H.SPEED + 0.05, p ? p.id : null);
     if (!tow) return null;
     Object.assign(tow, { harpoon: true, reel: H.REEL, minLen: H.LEN, snap: H.SNAP, maxAcc: H.MAX_ACC, k: H.K, hp: H.HP });
-    world.ev.warn = 2.2;
-    world.ev.warnText = (ship.team ? ship.team.id.toUpperCase() + ' ' : '') + 'HARPOONS ' + String(hit.ship.name || 'THE SHIP').toUpperCase() + '!';
+    world.say('info', (ship.team ? ship.team.id.toUpperCase() + ' ' : '') + 'HARPOONS ' + String(hit.ship.name || 'THE SHIP').toUpperCase() + '!', null, 2.2);
     return tow;
   };
 

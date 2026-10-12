@@ -21,9 +21,8 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
   let mineT = config.MINES.FIRST_AFTER;
 
   const crew = () => crewHeads(state);
-  const warn = (text, secs = 3.5) => {
-    state.ev.warn = secs;
-    state.ev.warnText = text;
+  const warn = (text, secs = 3.5, kind = 'info') => {
+    state.say(kind, text, null, secs);
   };
   // Does a round thing at world (x, y) with radius r touch the ship? (hitsShip wants ship coordinates)
   const touches = (x, y, r) => {
@@ -277,7 +276,7 @@ export function createThreats({ state, puff, impact, hitsShip, dropSquad, getHel
     updateWrecks(dt);
     updateChutes(state, dt);
     updateShells(dt);
-    state.ev.warn = Math.max(0, state.ev.warn - dt);
+    state.alarmTick(dt); // (the banner counts down and the next waiting alarm takes its turn: alarms.js)
   };
 
   return { update, reset, withdraw };

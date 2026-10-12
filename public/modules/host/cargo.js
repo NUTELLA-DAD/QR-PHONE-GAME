@@ -97,7 +97,7 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
     pop(state, o.x, o.y - 60, 'THUD!', '#e8c25a', 1);
     state.sfxQ.push(['hit']);
     state.ship.shake = Math.max(state.ship.shake || 0, 0.25);
-    if (item.from !== ship.id) { state.ev.warn = 2.5; state.ev.warnText = `${label(item.kind).toUpperCase()} LANDED ON THE ${(pl.name || 'DECK').toUpperCase()}! SHOVEL IT OFF`; }
+    if (item.from !== ship.id) { state.say('info', `${label(item.kind).toUpperCase()} LANDED ON THE ${(pl.name || 'DECK').toUpperCase()}! SHOVEL IT OFF`, null, 2.5, { deck: d }); }
     return ld;
   };
 

@@ -69,7 +69,7 @@ export function stepMines(world, dt, puff) {
       sh.sim.impact(sx, sy, K.POWER * (direct ? 1 : K.BLAST_MUL));
       const a = sh.layout.aimPoint, dx = toWorldX(sh, a.x) - m.x, dy = toWorldY(sh, a.y) - m.y, n = Math.hypot(dx, dy) || 1;
       kickForce(sh.ctx, { x: sx, y: sy }, (dx / n) * sh.pose.f, dy / n, K.KICK * (direct ? 1 : 0.5));
-      if (direct) { world.ev.warn = 2; world.ev.warnText = (sh.team ? sh.team.id.toUpperCase() + ' ' : '') + 'HIT A MINE!'; }
+      if (direct) { world.say('info', (sh.team ? sh.team.id.toUpperCase() + ' ' : '') + 'HIT A MINE!', null, 2); }
       if (world.match && world.match.on && m.team && sh.team && sh.team.id !== m.team) world.match.count(m.team, 'mineHits');
     }
     if (how === 'shot' && shooter && world.match && world.match.on && shooter.team) world.match.count(shooter.team, 'mineShot');

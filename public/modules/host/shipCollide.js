@@ -247,9 +247,8 @@ export function createShipCollide(D) {
     for (const S of [A, B]) S.sim.crash(toShipX(S, c.x), toShipY(S, c.y), c.closing, 'ram', ram ? (prow(S) ? R.BREAK_SELF : R.BREAK_OTHER) : 1); // (a hard ram can break off the part at the contact point, S.5i; shipSim.js crash. A ram prow keeps the rammer's own parts on and breaks the other ship's more)
     if (ram) { // the red-ink stamp (a "parts broke off" banner from the crash above rides along behind it)
       const broke = world.ev.warn > 0 && /BROKE OFF/.test(world.ev.warnText || '') ? ' ' + world.ev.warnText : '';
-      world.ev.warn = Math.max(world.ev.warn, 2.2);
-      world.ev.warnText = 'RAMMED!' + broke;
-    } else { world.ev.warn = 1.5; world.ev.warnText = 'THE SHIPS COLLIDE!'; }
+      world.say('helm', 'RAMMED!' + broke, null, Math.max(world.ev.warn, 2.2));
+    } else { world.say('helm', 'THE SHIPS COLLIDE!', null, 1.5); }
   }
 
   // The world's once-a-step call, after the ships have moved.

@@ -754,9 +754,8 @@ export function createShipSim(world, ship, W) {
     state.sfxQ.push([blast ? 'alarm' : 'impact']);
     for (const p of crew) phoneFx(p, null, blast ? [200, 60, 200] : [120, 40, 80]);
     if (ship.main) {
-      state.ev.warn = 5;
       const nm = plan.names.length ? plan.names.slice(0, 3).join(', ') + (plan.names.length > 3 ? ' +' + (plan.names.length - 3) + ' MORE' : '') : plan.summary.split(',')[0];
-      state.ev.warnText = (blast ? 'THE BOMB BAY EXPLODED! ' : spec.cause === 'hydrogen' ? 'THE HYDROGEN BAG EXPLODED! ' : spec.cause === 'bag' ? 'A GASBAG TORE AWAY! ' : spec.cause === 'structure' ? 'SHE GAVE WAY! ' : 'PARTS BROKE OFF! ') + (nm ? 'LOST: ' + nm.toUpperCase() : '');
+      state.say(blast || spec.cause === 'hydrogen' ? 'blaze' : 'structure', (blast ? 'THE BOMB BAY EXPLODED! ' : spec.cause === 'hydrogen' ? 'THE HYDROGEN BAG EXPLODED! ' : spec.cause === 'bag' ? 'A GASBAG TORE AWAY! ' : spec.cause === 'structure' ? 'SHE GAVE WAY! ' : 'PARTS BROKE OFF! ') + (nm ? 'LOST: ' + nm.toUpperCase() : ''), null, 5);
     }
     if (ship.main && W.moment) { // (the Ship's Book: what was lost, and whoever stood nearest - or fell with it)
       const near = crew.filter((p) => !p.mate && !p.enemy && p.d != null && !p.onGunship).sort((a, b) => Math.abs(a.x - bx) - Math.abs(b.x - bx))[0];
@@ -872,9 +871,8 @@ export function createShipSim(world, ship, W) {
     state.sfxQ.push(['alarm']);
     for (const p of Object.values(world.players)) phoneFx(p, null, [250, 70, 250, 70, 400]);
     if (ship.main) {
-      state.ev.warn = 6;
       const nm = plan.names.length ? plan.names.slice(0, 3).join(', ') + (plan.names.length > 3 ? ' +' + (plan.names.length - 3) + ' MORE' : '') : label.toUpperCase();
-      state.ev.warnText = "SHE'S BROKEN IN HALF! LOST: " + nm.toUpperCase();
+      state.say('structure', "SHE'S BROKEN IN HALF! LOST: " + nm.toUpperCase(), 8, 6);
     }
     if (ship.main && W.moment) { // (the Ship's Book: who rode the half that went, or stood at the seam)
       const rode = awayCrew.map((a) => a.p).filter((p) => !p.mate && !p.enemy);
@@ -908,7 +906,7 @@ export function createShipSim(world, ship, W) {
       shipPop(bx, by - 90, 'bayBoom', '#ff7b00', 1.8);
       state.ship.shake = Math.max(state.ship.shake, B.SHAKE);
       hitForce(state, bx, by, B.POWER);
-      if (ship.main) { state.ev.warn = 4; state.ev.warnText = 'THE BOMB BAY EXPLODED!'; }
+      if (ship.main) { state.say('blaze', 'THE BOMB BAY EXPLODED!', null, 4); }
     }
     return r;
   }
@@ -952,7 +950,7 @@ export function createShipSim(world, ship, W) {
     }
     if (!r && blast) { // ...and ripped open: no gas, holes everywhere
       for (let k = state.gasHoles.length; k < config.GAS.MAX_HOLES; k++) state.gasHoles.push(gasHoleAt(bag.cx + (k - 4) * 60, bag.cy, i));
-      if (ship.main) { state.ev.warn = 4; state.ev.warnText = 'THE HYDROGEN BAG EXPLODED! PATCH AND PUMP!'; }
+      if (ship.main) { state.say('blaze', 'THE HYDROGEN BAG EXPLODED! PATCH AND PUMP!', null, 4); }
     }
     return r;
   }
@@ -1006,7 +1004,7 @@ export function createShipSim(world, ship, W) {
     protect: () => goingDown.protect(),
     difficulty: () => world.difficulty,
     stopNo: () => (state.course && state.course.stop ? state.course.stop.col + 1 + ((world.run && world.run.base) || 0) : 99), // (the number of the stop she is flying; a headless run with no route can split at once)
-    say: (text, secs) => { if (ship.main) { state.ev.warn = secs; state.ev.warnText = text; } },
+    say: (text, secs) => { if (ship.main) { state.say('structure', text, null, secs); } },
     buzz: (pattern) => { for (const p of Object.values(state.players)) phoneFx(p, null, pattern); },
     pop: (x, y, kind, color, size) => shipPop(x, y, kind, color, size),
     breakCuts: (cuts, cause) => breakOff({ kind: 'cuts', cuts, cause }, { force: true }),
@@ -1102,8 +1100,7 @@ export function createShipSim(world, ship, W) {
     shipPuff(boiler.x, platformY(boiler.d) - 70, '#fff', 20);
     shipPop(boiler.x, platformY(boiler.d) - 160, 'boiler', '#ff5a1f', 1.6);
     state.ship.shake = Math.max(state.ship.shake, 0.6);
-    state.ev.warn = 3;
-    state.ev.warnText = 'THE ' + (ship.team ? ship.team.name + ' ' : '') + 'BOILER IS SABOTAGED!';
+    state.say('fire', 'THE ' + (ship.team ? ship.team.name + ' ' : '') + 'BOILER IS SABOTAGED!', null, 3);
     tally(player, 'sabotage');
     if (player.bot && all('coal').length) player.stealNow = true; // (B.6: ...and now he loots her bunker)
     phoneFx(player, 'Boiler sabotaged!', [60, 60, 60]);
@@ -1116,8 +1113,7 @@ export function createShipSim(world, ship, W) {
     if (old && old !== player) { old.lock = null; old.fire = false; old.restCd = 4; old.x = helm.x + 60; }
     player.lock = helm.n; // (he is at the wheel now: whoever is on the other end of the ship's team is flying her until he lets go)
     player.x = helm.x;
-    state.ev.warn = 4;
-    state.ev.warnText = 'HELM TAKEN BY ' + (player.team || '').toUpperCase() + '!';
+    state.say('helm', 'HELM TAKEN BY ' + (player.team || '').toUpperCase() + '!', null, 4);
     tally(player, 'captures');
     if (world.match && world.match.captured) world.match.captured(ship, player);
   };
@@ -1666,11 +1662,12 @@ export function createShipSim(world, ship, W) {
       const glock = !!(grabNow && player.grabLock > 0);
       const progNow = !player.lock && player.act && player.act.hold && player.act.obj && typeof player.act.obj.prog === 'number' ? Math.round(player.act.obj.prog * 10) : -1; // (how far a hold action has got)
       const eng = player.lock && kind === 'helm' && !player.hj && !player.bot ? engines.panel(ship.pose.f) : null; // (the helm's engine levers: one per engine, left to right as the TV shows her)
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, st ? st.s + '/' + st.l + '/' + st.w + '/' + st.f : '', primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : ''].join('|');
+      const alarm = ship.main && !player.bot ? state.alarmPhone(player, stKind) : ''; // (FUN.md F2: the phone's one line - the top alarm that concerns this player's deck or seat; alarms.js)
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, st ? st.s + '/' + st.l + '/' + st.w + '/' + st.f : '', primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : '', alarm].join('|');
       if (key !== player.uk) {
         player.uk = key;
         if (!player.bot) {
-          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, st, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, hp, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT, med: !!health.medbay(), fc: ship.pose.f, tn: state.turning.t > 0, eng, tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
+          player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, st, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, hp, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT, med: !!health.medbay(), fc: ship.pose.f, tn: state.turning.t > 0, eng, alarm, tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
           emitPlayerUi(player.id, player.ui);
         }
       }
@@ -1726,8 +1723,7 @@ export function createShipSim(world, ship, W) {
     state.ship.press = clamp(state.ship.press + (heat - (state.steamUse * state.ship.press) / BO.USE_REF) * dt, 0, 100);
     if (state.ship.press >= BO.WARN_AT && !state.pressureWarned && !state.ship.down) {
       state.pressureWarned = true;
-      state.ev.warn = 3;
-      state.ev.warnText = 'PRESSURE HIGH - OPEN A VENT!';
+      state.say('fire', 'PRESSURE HIGH - OPEN A VENT!', 4, 3, { role: 'boiler' });
     }
     if (state.ship.press < BO.WARN_AT - 10) state.pressureWarned = false;
     // Overdrive: 0 at OVERDRIVE_AT up to 1 at 100 pressure (engines, pump and coil get faster).
@@ -1757,8 +1753,7 @@ export function createShipSim(world, ship, W) {
       const pipes = modules.list.filter((m) => m.kind === 'pipe' && !m.broken);
       if (pipes.length) modules.damage(pipes[(Math.random() * pipes.length) | 0], 999, shipPuff);
       state.ship.shake = 0.6;
-      state.ev.warn = 3;
-      state.ev.warnText = 'THE BOILER BLEW! A PIPE BURST!';
+      state.say('fire', 'THE BOILER BLEW! A PIPE BURST!', null, 3, { role: 'boiler' });
     }
 
     engines.update(dt); // (pointed engines: the speed they allow, the lift they make, engines.js)
@@ -1839,8 +1834,7 @@ export function createShipSim(world, ship, W) {
         state.ship.gas = structure.on() ? Math.min(100, Math.max(BL.TO, G.NEUTRAL + (state.structDeficit || 0) + (state.engineWeight || 0) + state.env.sink + BL.OVER)) : BL.TO; // (structure on: the ballast lifts her to the level she hovers at, plus OVER - lift is a live rule, and a bag that hit empty falls fast)
         state.ship.vy = Math.max(state.ship.vy || 0, 0);
         state.ballastCd = BL.COOLDOWN;
-        state.ev.warn = 3;
-        state.ev.warnText = 'BALLAST DROPPED! PATCH THE BAG AND PUMP!';
+        state.say('helm', 'BALLAST DROPPED! PATCH THE BAG AND PUMP!', null, 3, { role: 'helm' });
         shipPuff(800, 700, '#c9a85a', 14);
       }
     }
@@ -1865,8 +1859,7 @@ export function createShipSim(world, ship, W) {
       if (state.course && state.course.scraping && state.balance.scrape) damageHull(state.balance.scrape * dt); // a nose-heavy bow digs in
       if (state.ship.gas < 12 && !state.gasWarned) {
         state.gasWarned = true;
-        state.ev.warn = 2.5;
-        state.ev.warnText = state.gasHoles.length ? 'GASBAG EMPTY - PATCH IT AND PUMP!' : 'GASBAG EMPTY - PUMP IT UP!';
+        state.say('helm', state.gasHoles.length ? 'GASBAG EMPTY - PATCH IT AND PUMP!' : 'GASBAG EMPTY - PUMP IT UP!', null, 2.5, { role: 'helm' });
       } else if (state.ship.gas > 25) state.gasWarned = false;
     } else if (state.phase !== 'flying') {
       // Moored at the mast.

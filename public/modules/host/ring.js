@@ -26,7 +26,7 @@ export function createRing({ state, puff, credit, onMarker }) {
   const rr = () => state.course && state.course.ring;
   let deps = {}; // spawnBats, spawnBoss, dropSquad, blast (simulation.js binds them once the squadrons and the raiders exist)
   const gar = createGarrison({ state, puff, credit }); // (it plays only while course.ring.gar is set: config.GARRISON.ENABLED)
-  const warn = (text, secs = 3) => { state.ev.warn = secs; state.ev.warnText = text; };
+  const warn = (text, secs = 3) => { state.say('objective', text, null, secs); };
   const shipAim = () => { const sh = mainShip(state), A = sh.layout.aimPoint; return { x: toWorldX(sh, A.x), y: toWorldY(sh, A.y) }; };
   const moment = (kind, who, data) => state.moment && state.moment(kind, { who: who ? [who] : [], where: null, data }); // (the Ship's Book: data only)
   const sfx = (...a) => state.sfxQ && state.sfxQ.push(a);

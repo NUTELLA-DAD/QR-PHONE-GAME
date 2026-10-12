@@ -596,9 +596,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     const next = course.features.find((f) => f.type !== 'hills' && (fa === 1 ? f.x0 > shipFront - 200 && f.x0 - shipFront < secs * v : (f.x0 - shipFront) * fa > -200 && (f.x0 - shipFront) * fa < secs * v));
     if (next && course.warned !== next) {
       course.warned = next;
-      state.ev.warn = 3;
       const zig = next.first ? 'ZIG-ZAG AHEAD - ' : '';
-      state.ev.warnText = {
+      const ahead = {
         mountain: 'MOUNTAIN AHEAD - CLIMB!',
         overhang: 'LOW ROCK AHEAD - DIVE!',
         underpass: 'UNDERPASS AHEAD - HOLD HER STEADY!',
@@ -611,6 +610,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         cave: 'CAVE MOUTH - GET LOW!',
         factory: 'SMOKESTACKS AHEAD - CLIMB!',
       }[next.type];
+      if (ahead) state.say('helm', ahead, null, 3, { role: 'helm' });
     }
   };
 
@@ -677,8 +677,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       cc.scrapeCd = K.SCRAPE_COOLDOWN;
       sh.sim.impact(worst.sx, worst.sy, 1 + Math.min(2, worst.depth / 40), 1, 'rock'); // (the last two arguments only name the mark in the ship's hitLog, 3D)
       if (sh.main) {
-        st.ev.warn = 1.5;
-        st.ev.warnText = 'SCRAPING THE ROCKS!'; // (the TV's banner is about the main ship)
+        st.say('helm', 'SCRAPING THE ROCKS!', 4, 1.5); // (the TV's banner is about the main ship)
       }
     }
   };
@@ -771,8 +770,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       cc.scrapeCd = K.SCRAPE_COOLDOWN;
       sh.sim.impact(worst.sx, worst.sy, 1 + Math.min(2, worst.depth / 40), 1, 'rock'); // (the last two arguments only name the mark in the ship's hitLog, 3D)
       if (sh.main) {
-        st.ev.warn = 1.5;
-        st.ev.warnText = 'SCRAPING THE ROCKS!';
+        st.say('helm', 'SCRAPING THE ROCKS!', 4, 1.5);
       }
     }
   };
@@ -990,8 +988,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         state.ship.speed = Math.max(0, state.ship.speed);
         course.stuckBest = null;
         state.tugHauls = (state.tugHauls || 0) + 1; // (counted for tools/buildsim.mjs: a build that wedges in caves)
-        state.ev.warn = 3.5;
-        state.ev.warnText = 'STUCK FAST! A TUG HAULS YOU CLEAR';
+        state.say('helm', 'STUCK FAST! A TUG HAULS YOU CLEAR', null, 3.5);
       }
     }
     if (course.escape) { // (F6: the calm after the objective; when it ends the stop is over)
@@ -1003,8 +1000,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       // Open sky: knock out every outpost (all its guns), nearest first.
       for (const o of map.outposts) if (!o.done && course.turrets.filter((t) => t.outpost === map.outposts.indexOf(o)).every((t) => t.dead)) {
         o.done = true;
-        state.ev.warn = 3;
-        state.ev.warnText = 'OUTPOST DESTROYED!' + (config.MAPS.OUTPOST_REFILL ? ' BOMB BAY RESTOCKED' : '');
+        state.say('objective', 'OUTPOST DESTROYED!' + (config.MAPS.OUTPOST_REFILL ? ' BOMB BAY RESTOCKED' : ''), null, 3);
         if (config.MAPS.OUTPOST_REFILL && state.bombBay) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX); // their stores are ours
       }
       const left = map.outposts.filter((o) => !o.done);
@@ -1026,8 +1022,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       if (!left.length && !course.done) {
         course.done = true;
         mendHull(state, K.CHECKPOINT_REPAIR);
-        state.ev.warn = 4;
-        state.ev.warnText = 'ALL OUTPOSTS DOWN! MISSION ' + course.lap + ' COMPLETE';
+        state.say('objective', 'ALL OUTPOSTS DOWN! MISSION ' + course.lap + ' COMPLETE', null, 4);
         course.pendingNext = true;
         finishStop({ kind: 'home', lap: course.lap + 1 }, true);
       }
@@ -1042,14 +1037,12 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     const lairWho = birdLair ? 'THUNDERBIRD' : drakeLair ? 'DRAKE' : 'KRAKEN'; // (a lair flown with no sea / no lava - a tool forcing another environment - is an ordinary mission: the creature cannot come)
     const lairAlive = lair && state.bossDownLap !== course.lap;
     if ((flagshipAlive || lairAlive) && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS && !(state.ev.warn > 0)) {
-      state.ev.warn = 2;
-      state.ev.warnText = lairAlive ? 'SLAY THE ' + lairWho + ' FIRST!' : 'SINK THE FLAGSHIP FIRST!';
+      state.say('objective', lairAlive ? 'SLAY THE ' + lairWho + ' FIRST!' : 'SINK THE FLAGSHIP FIRST!', 4, 2);
     }
     if (lair && !course.done && !lairAlive && !state.creature) { // (it is dead and has sunk out of sight)
       course.done = true;
       mendHull(state, K.CHECKPOINT_REPAIR);
-      state.ev.warn = 4;
-      state.ev.warnText = 'THE ' + lairWho + ' IS SLAIN! MISSION ' + course.lap + ' COMPLETE';
+      state.say('objective', 'THE ' + lairWho + ' IS SLAIN! MISSION ' + course.lap + ' COMPLETE', null, 4);
       course.pendingNext = true;
       finishStop({ kind: 'home', lap: course.lap + 1 }, true);
       return;
@@ -1057,8 +1050,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     if (!course.done && !flagshipAlive && !lair && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS) { // (a lair is done only when its creature has sunk, above)
       course.done = true;
       mendHull(state, K.CHECKPOINT_REPAIR);
-      state.ev.warn = 4;
-      state.ev.warnText = 'BEACON REACHED! MISSION ' + course.lap + ' COMPLETE';
+      state.say('objective', 'BEACON REACHED! MISSION ' + course.lap + ' COMPLETE', null, 4);
       course.pendingNext = true;
       if (onMarker) onMarker({ kind: 'home', lap: course.lap + 1 });
     }
@@ -1071,18 +1063,17 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       if (m.passed || m.cx > shipX) continue;
       m.passed = true;
       course.lastMarker = m;
-      state.ev.warn = 3.5;
       if (m.kind === 'home') {
-        state.ev.warnText = `HOME! LAP ${m.lap - 1} COMPLETE - LAP ${m.lap} BEGINS`;
+        state.say('objective', `HOME! LAP ${m.lap - 1} COMPLETE - LAP ${m.lap} BEGINS`, null, 3.5);
         course.lap = m.lap;
         course.leg = 'out';
       } else if (m.kind === 'beacon') {
-        state.ev.warnText = 'TURNING BEACON - HEADING HOME!';
+        state.say('objective', 'TURNING BEACON - HEADING HOME!', null, 3.5);
         course.leg = 'home';
       } else {
         // Supplies at every flag patch the hull up a little.
         mendHull(state, K.CHECKPOINT_REPAIR);
-        state.ev.warnText = 'CHECKPOINT! SUPPLIES ABOARD: +' + K.CHECKPOINT_REPAIR + ' HULL';
+        state.say('objective', 'CHECKPOINT! SUPPLIES ABOARD: +' + K.CHECKPOINT_REPAIR + ' HULL', null, 3.5);
       }
       if (m.kind !== 'checkpoint' && onMarker) onMarker(m);
     }
@@ -1224,8 +1215,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     ship.pose.x = m.cx - REF.x - K.REWIND_BEFORE;
     course.warned = null;
     for (const t of course.turrets) t.cd = Math.max(t.cd, 2);
-    state.ev.warn = 3;
-    state.ev.warnText = m.kind === 'home' ? 'BACK TO THE MOORING MAST - TRY AGAIN!' : 'BACK TO THE LAST ' + (m.kind === 'beacon' ? 'BEACON' : 'CHECKPOINT') + '!';
+    state.say('objective', m.kind === 'home' ? 'BACK TO THE MOORING MAST - TRY AGAIN!' : 'BACK TO THE LAST ' + (m.kind === 'beacon' ? 'BEACON' : 'CHECKPOINT') + '!', null, 3);
   };
 
   // Start mission n on a fresh map: the ship at the start, the beacon somewhere ahead.
@@ -1290,8 +1280,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     if (map.open && state.bombBay) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX); // a full bay for the raid
     state.rockets.length = 0;
     if (state.shipBombs) state.shipBombs.length = 0;
-    if (!course.brief) state.ev.warn = 4; // (the BRIEFING card says it instead)
-    if (!course.brief) state.ev.warnText = opts.title ? opts.title : map.ring ? 'MISSION ' + n + ': BREACH ' + map.ring.name + '!' : map.open ? 'MISSION ' + n + ': DESTROY ' + map.outposts.length + ' OUTPOSTS!' : 'MISSION ' + n + ': REACH THE BEACON!';
+    if (!course.brief) state.say('objective', opts.title ? opts.title : map.ring ? 'MISSION ' + n + ': BREACH ' + map.ring.name + '!' : map.open ? 'MISSION ' + n + ': DESTROY ' + map.outposts.length + ' OUTPOSTS!' : 'MISSION ' + n + ': REACH THE BEACON!', null, 4); // (the BRIEFING card says it instead when there is one)
   }
 
   // A brand-new game: fresh terrain from the home mast, lap 1.

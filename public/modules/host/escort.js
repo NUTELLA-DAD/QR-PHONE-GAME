@@ -82,8 +82,7 @@ export function createEscort({ state, puff, phoneFx, moment }) {
       phoneFx?.(p, why + (rv.medbay ? ' You bailed out - coming round in the medical bay...' : ' You bailed out - you come round on deck...'));
     }
     Object.assign(s, { docked: true, flying: false, returning: false, auto: false, hp: E.HP, rebuild: E.REBUILD });
-    state.ev.warn = 2.5;
-    state.ev.warnText = 'PATROL PLANE ' + s.num + (hit ? ' CRASHED!' : ' DOWN!') + ' A NEW ONE IN ' + E.REBUILD + 's';
+    state.say('info', 'PATROL PLANE ' + s.num + (hit ? ' CRASHED!' : ' DOWN!') + ' A NEW ONE IN ' + E.REBUILD + 's', null, 2.5);
   };
 
   const updateOne = (s, dt) => {

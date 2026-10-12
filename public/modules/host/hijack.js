@@ -167,8 +167,7 @@ export function createHijack({ state, puff, phoneFx, air }) {
         state.chutes.push({ x: s.x, y: s.y - 20, vx: ((s.vx || 0) - ship.pose.vx) * 0.2, vy: -260, t: 0 });
         puff(s.x, s.y, '#ffffff', 10);
         pop(state, s.x, s.y - 70, 'OUT YOU GO!', '#ffd23f', 1.1);
-        state.ev.warn = 2.5;
-        state.ev.warnText = (p.name || 'A CREWMATE').toUpperCase() + ' STOLE A FIGHTER!';
+        state.say('info', (p.name || 'A CREWMATE').toUpperCase() + ' STOLE A FIGHTER!', null, 2.5);
         phoneFx(p, 'She is yours! Stick steers, guns fire on their own. LEAVE bails out.', null);
         p.fire = false;
       }

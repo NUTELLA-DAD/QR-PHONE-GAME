@@ -147,8 +147,7 @@ function die(state, cr, why, opts) {
   pop(state, cr.x, cr.y - 700, 'boss', '#ff5a1f', 2.2);
   for (let k = 0; k < 6; k++) h.puff(cr.x + (h.rng() - 0.5) * 1800, cr.y - 300 + (h.rng() - 0.5) * 900, '#7a3a5a', 18);
   const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', WT = drake ? CR().DRAKE.WIN_TEXT : bird ? CR().THUNDERBIRD.WIN_TEXT : CR().WIN_TEXT;
-  state.ev.warn = CR().FINALE.BANNER;
-  state.ev.warnText = (WT[why] || 'SLAIN!') + ' ' + cr.name + (drake ? CR().DRAKE.DEATH_TEXT : bird ? CR().THUNDERBIRD.DEATH_TEXT : ' SINKS BENEATH THE WAVES!'); // the final banner: how it ended, then what happens to it
+  state.say('objective', (WT[why] || 'SLAIN!') + ' ' + cr.name + (drake ? CR().DRAKE.DEATH_TEXT : bird ? CR().THUNDERBIRD.DEATH_TEXT : ' SINKS BENEATH THE WAVES!'), null, CR().FINALE.BANNER); // the final banner: how it ended, then what happens to it
   state.sfxQ.push(['roar']);
   state.ship.shake = Math.max(state.ship.shake || 0, 1.5);
   for (const p of Object.values(state.players)) if (!p.bot && h.phoneFx) h.phoneFx(p, WT[why] || 'SLAIN!', [60, 40, 60, 40, 300]);
@@ -395,8 +394,7 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
     cr.hooked = false;
     setupDrake(state, cr, ship);
     state.creature = cr;
-    state.ev.warn = 4;
-    state.ev.warnText = cr.name + ' SWOOPS IN FROM THE SMOKE!';
+    state.say('setpiece', cr.name + ' SWOOPS IN FROM THE SMOKE!', null, 4);
     state.sfxQ.push(['roar']);
     return cr;
   };
@@ -425,8 +423,7 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
     cr.hooked = false;
     setupBird(state, cr, ship);
     state.creature = cr;
-    state.ev.warn = 4;
-    state.ev.warnText = cr.name + ' SCREAMS OUT OF THE STORM!';
+    state.say('setpiece', cr.name + ' SCREAMS OUT OF THE STORM!', null, 4);
     state.sfxQ.push(['screech']);
     return cr;
   };
@@ -458,8 +455,7 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
     if (CR().BOARD.HEART_EXPOSED) exposeHeart(cr);
     cr.puppet.auto = false; // (the beak's timer starts after it has risen)
     state.creature = cr;
-    state.ev.warn = 4;
-    state.ev.warnText = cr.name + ' RISES FROM THE DEEP!';
+    state.say('setpiece', cr.name + ' RISES FROM THE DEEP!', null, 4);
     state.sfxQ.push(['splash']);
     return cr;
   };

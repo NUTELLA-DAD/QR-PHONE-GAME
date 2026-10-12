@@ -48,6 +48,7 @@
 //        node tools/buildsim.mjs --check-yard       S.6: the Shipwright's Yard (tools/yard-check.mjs): the Sparrow, part cards in the sky-dock shop (prices, the validator on every place, the 25% crew deal), the A / B / C slot vote, the refit at the dock that keeps hull / coal / shells, the whole catalogue, derelict stops (free), limp home shaking the newest part loose, the build in the voyage save and kept by a campaign's second voyage, the phones' cards, the TV (blueprint, gauges, pins, BUILT, NEW call-out) on a stub canvas, the camera's hold and pull-back, bots buying parts, Versus fitting the classic ship
 //        node tools/buildsim.mjs --check-squadrons  ENEMY SQUADRONS (tools/squadrons-check.mjs): a spawn makes a squadron of 3 to 6 with a leader, slots and a bearing banner; formation keeping on the approach in all six formations; the break into attack pairs from different angles with a phone buzz; regroup and a second pass; the leader shot down (scatter, a new leader); withdrawal at heavy losses; determinism; the radar cluster; the bomber escort; two ships and Versus; a 3-minute 8-bot run with 0 errors
 //        node tools/buildsim.mjs --check-escort-crash  PATROL PLANES AND AIRSHIPS (tools/escort-crash-check.mjs; config.ESCORT.CRASH_ON_SHIPS): a flying patrol plane that touches any ship's hull or gasbag (her own after the launch grace, another ship, the enemy gunship, the Versus rival; a stolen plane too) crashes like one shot down - the pilot bails out, the rebuild timer starts, CRASHED! pops, a Ship's Book moment - and the ship takes a small knock where she struck; the auto pilot (and a bot) steer clear of hulls, a person at the stick can still fly into one; the switch off = the old game; a bot run with 0 errors. (The seeded baselines run with NO_ESCORT_CRASH=1.)
+//        node tools/buildsim.mjs --check-alarms     FUN.md F2, ONE VOICE (tools/alarms-check.mjs): the TV banner goes through one arbiter (host/alarms.js) - a lower priority waits, an equal one replaces after HOLD, priority 8+ (FALLING, a crash) cuts in at once, the same words are merged, the queue is sorted and capped, the phone shows one line for its own deck or seat, 0 direct banner writes left (a grep); the seeded checks that read the banner text run with NO_ALARMS=1 (the old last-writer banner)
 //        node tools/buildsim.mjs --check-party      FUN.md F5, RAIDERS AND FIRE AS A PARTY (tools/party-check.mjs): announced boarding (ropes in sight, BOARDERS AFT / FORE), at most 1 + crew/3 aboard, none while FALLING or just after SHE HOLDS, cutters hack stations before crew, the fire cap follows the crew and nothing ignites while FALLING, slower early spread, end segments with the boiler or helm hold 8 s and cannot break off before stop 3, the grounded 40 s soft lock raises FALLING; NO_PARTY=1 = the old numbers
 //        node tools/buildsim.mjs --check-ring       R0: THE RING MAP, the orbit finale's sim half (tools/ring-check.mjs): the tower / fortress / citadel maps build (C = 2 pi R, faces, spires), a face's shutter opens when its guns fall (for 6 s, then every 30 s) and its core takes damage only while open, revolving turrets move and wrap, the gallery is a landing surface and a planted charge breaches a face, victory by cores or by the keep's pool (the crown falls, the stop completes, the Ship's Book has it), the citadel moors the Flagship and two cut moorings drop her, 3 seeds x 3 min with 8 bots per variant, the tower won by 4 bots on Easy, the curriculum's ring stops fly the ring map (QUICK and VOYAGE); and D1 THE GARRISON (j)-(o): archers, the ballista, manned guns and squads, grapples, the catapult's stones and the boom chain, the fairness rule (garrison damage at most 60% of the guns')
 //        node tools/buildsim.mjs --check-creature   C.1 to C.6b: giant creatures (the Kraken, the Cinder Drake and the Thunderbird) in the real world, their grips, boarding and the harpoon (tools/creature-check.mjs, then the C.0 skeleton check tools/creature-spike-check.mjs): every weapon hurts a part, the beak, severing, both kill paths, 8 bots on the Kraken in three skies, the TV draws it
@@ -2585,6 +2586,7 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-classic') {
   process.exit((await checkClassic()) ? 0 : 1);
 } else if (mode === '--check-scrap') { // LOOP.md G1: scrap, flotsam and the hold
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'scrap-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, SCRAP_ON: '1' } }).status === 0 ? 0 : 1);
 } else if (mode === '--check-structure') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'structure-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
@@ -2601,12 +2603,14 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-edit') {
   process.exit((await checkEdit()) ? 0 : 1);
 } else if (mode === '--check-fire') {
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   process.exit((await checkFire()) ? 0 : 1);
 } else if (mode === '--check-balance') {
   process.exit((await checkBalance()) ? 0 : 1);
 } else if (mode === '--check-minimum') {
   process.exit((await checkMinimum()) ? 0 : 1);
 } else if (mode === '--check-match' || mode === '--check-arena') {
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   const match = spawnSync(process.execPath, [path.join(root, 'tools', 'match-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' });
   process.exit(match.status === 0 && checkBotsim() ? 0 : 1);
 } else if (mode === '--check-two-ships') {
@@ -2616,6 +2620,7 @@ if (mode === '--snapshot-classic') {
   const fleet = spawnSync(process.execPath, [path.join(root, 'tools', 'fleet-check.mjs')], { cwd: root, stdio: 'inherit' }).status === 0; // (B.3: the systems that were ship 0's alone, run for every ship; and the TV drawing every ship, on a stub canvas)
   process.exit(bags && small && fleet ? 0 : 1);
 } else if (mode === '--check-collide') {
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'collide-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-3d-lint') { // WP7: the no-wobble lint for public/modules/view3d/ (tools/lint3d.mjs): no new Math.sin / Math.cos of the time (allow: parts3d/, "// wobble-ok:")
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'lint3d.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
@@ -2629,15 +2634,21 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gen-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-flame') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'flame-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-alarms') { // FUN.md F2: one voice - the alarm arbiter (tools/alarms-check.mjs)
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'alarms-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-party') { // FUN.md F5: raiders and fire as a party (tools/party-check.mjs)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'party-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-escort-crash') {
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'escort-crash-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-squadrons') {
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'squadrons-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-ring') { // R0: the ring map (tools/ring-check.mjs)
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'ring-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-creature') {
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   const run = (script, args) => spawnSync(process.execPath, [path.join(root, 'tools', script), ...args], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STRUCTURE: '1', NO_SCRAP: '1', NO_ESCORT_CRASH: '1', NO_PARTY: '1', NO_STOP_SHAPE: '1' } }).status === 0; // (SCRAP: no flotsam in the fights until G7) (STRUCTURE.md: the creature fights are balanced for the hull-bar game - the Kraken's grip drags her into the sea, where a crash is now a loss: WP2 moves the creatures onto segments and WP6 re-balances them; until then this gate runs the old game)
   const world = run('creature-check.mjs', argv.slice(1)); // (C.1: the creature in the real game)
   const body = run('creature-spike-check.mjs', []); // (C.0: the body itself)
@@ -2647,6 +2658,7 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-stop-shape') { // F6: the briefing, the gunship as the one big thing, the escape, no mid-voyage zeppelin, the 3-card dock (tools/stopshape-check.mjs)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'stopshape-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-gas') {
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gas-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1' } }).status === 0 ? 0 : 1);
 } else if (mode === '--check-breakoff') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'breakoff-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1' } }).status === 0 ? 0 : 1);
@@ -2667,10 +2679,13 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--check-crossship') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'crossship-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-hatch') {
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'hatch-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-gunship-ship') {
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gunship-ship-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-turn') {
+  process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'turn-check.mjs')], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-engines') {
   process.exit((await checkEngines()) ? 0 : 1);
@@ -2711,6 +2726,6 @@ if (mode === '--snapshot-classic') {
 } else if (mode === '--lint') {
   process.exit((await lint(argv[1] ? path.resolve(argv[1]) : path.join(root, 'public'))) ? 0 : 1); // (optional argument: another public/ folder to scan)
 } else {
-  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-curriculum | --check-squadrons | --check-escort-crash | --check-party | --check-scrap | --check-ring | --check-ring3d | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-hatch | --check-breakoff | --check-structure | --check-physics | --check-enemy3d | --check-3d | --snapshot-3d --force | --check-health | --check-flame | --check-creature | --check-gen | --check-turn | --snapshot-classic --force');
+  console.log('node tools/buildsim.mjs --build <name|file> [--bots-check] | --random N [--seed 1 --minutes 4 --envs a,b --bots 6 --out file.json] | --check-classic | --lint | --check-curriculum | --check-alarms | --check-squadrons | --check-escort-crash | --check-party | --check-scrap | --check-ring | --check-ring3d | --check-botsim | --check-multi | --check-validator | --check-edit | --check-balance | --check-bags | --check-minimum | --check-fire | --check-match | --check-two-ships | --check-collide | --check-yard | --check-gunship-ship | --check-crossship | --check-hatch | --check-breakoff | --check-structure | --check-physics | --check-enemy3d | --check-3d | --snapshot-3d --force | --check-health | --check-flame | --check-creature | --check-gen | --check-turn | --snapshot-classic --force');
   process.exit(mode === '--help' || mode === '-h' ? 0 : 2);
 }

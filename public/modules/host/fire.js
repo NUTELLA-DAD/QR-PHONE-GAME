@@ -46,8 +46,7 @@ export function createFire({ state, shipPuff }) {
       state.fireStats.lit++;
     }
     state.ship.shake = Math.max(state.ship.shake, 0.5);
-    state.ev.warn = 4;
-    state.ev.warnText = B.CALL;
+    state.say('blaze', B.CALL, null, 4, { deck: fire.d });
     state.sfxQ.push(['alarm']);
     pop(state, toWorldX(ship, fire.x), toWorldY(ship, p.y - 150), 'WHOOOOSH!', '#ff5a1f', 1.5);
     shipPuff(fire.x, p.y - 60, '#3b3b3b', 14);

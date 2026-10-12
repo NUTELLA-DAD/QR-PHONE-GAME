@@ -7,6 +7,44 @@ export function createControllerUI({ network }) {
   // "Take <station>" gets its icon from the station's KIND (sent by the host as `kind`), not its name: a ship may have a "Fore Boiler" or a "Mid Nest Searchlight".
   const TAKE_ICONS = { light: '🔦', helm: '☸️', boiler: '🔥', swivel: '⚙️' };
 
+  // The phone's one info line (FUN.md F2), in order: the top alarm that concerns this player (the host sends `alarm` only for his deck or seat; big, in red), the seat's own status,
+  // being hurt, then the hint for what he can do now. The first rule that answers wins. One short line: the info bar never wraps.
+  const SEAT_HINTS = {
+    helm: 'Stick: engines + trim (right = right on the TV). HOLD the turn button to come about.',
+    gun: 'Drag to aim, hold FIRE. Hold PRIME for a big shell.',
+    lookout: 'PAN THE SPYGLASS: the stick looks far ahead (top of the TV). Spot what comes!',
+    hijack: 'Kick the pilot: tap any button 3 times, or hold Action.',
+    escort: 'Stick points where to fly. Guns fire by themselves.',
+    light: 'Stick sweeps the beam. HOLD to focus it.',
+    coil: 'Aim with the stick, HOLD to charge, let go to fire!',
+    shield: 'Point the stick to swing the shield round the ship.',
+    bombbay: 'Press DROP when the red ring is on a target.',
+    swivel: 'Stick turns the engine: ahead to cruise, up to climb, down to dive.',
+    cannon: 'Stick aims the barrel. HOLD to charge, let go to FIRE the crewman in it!',
+    cannonseat: 'You are in the barrel: hold on. Alone, the stick aims and the big button fires you.',
+  };
+  const HINT_RULES = [ // [does it apply, the words]
+    [(n) => n.locked && SEAT_HINTS[n.kind], (n) => SEAT_HINTS[n.kind]],
+    [(n) => !n.locked && n.load >= 0, () => 'Hold Action to load the shell for the gunner'],
+    [(n) => !n.locked && n.taken, () => 'Someone is already here'],
+    [(n) => !n.locked && n.label && n.label !== 'Hey!', (n) => (n.hold ? 'HOLD the big button' : 'Tap the big button')],
+    [(n) => !n.locked && n.grab, (n) => (n.gswap ? 'Hold GRAB to ' + (n.grab.startsWith('Put back') ? 'put it back' : 'swap') : 'Tap GRAB (or the big button)')],
+    [(n) => !n.locked && n.carry === 'ammo', () => 'Bring the ammo to a gun or the bomb bay'],
+    [(n) => !n.locked && n.carry === 'coal', () => 'Bring the coal to a boiler'],
+    [(n) => !n.locked && n.carry === 'scrap', () => 'Bring the scrap to the hold'],
+    [(n) => !n.locked && n.carry, () => 'Big button uses what you hold'],
+    [() => true, () => 'Walk to a station, rack, fire or hole'],
+  ];
+  const infoLine = (n) => {
+    if (n.alarm) return `<span class="alarm">${n.alarm}</span>`;
+    const where = n.station || 'Walking';
+    const ammo = n.ammo != null ? ` - ${n.ammo} ${n.kind === 'bombbay' ? 'bombs' : 'shells'}` : '';
+    const sore = n.hp != null && n.hp > 0 && n.hp <= (n.jat ?? 1); // (crew health: on the last heart)
+    const warn = n.status ? n.status : sore ? (n.med ? 'GET TO THE MEDBAY!' : 'Hurt! A crewmate can bandage you') : '';
+    const hint = HINT_RULES.find(([applies]) => applies(n))[1](n);
+    return `<b>${where}${ammo}</b> - ${warn ? `<span class="warn">${warn}</span>` : hint}`;
+  };
+
   // Icon for the Action button, picked from the start of its label.
   const ACTION_ICONS = [
     ['STOW THE SCRAP', '🔩'], ['Take scrap out', '🔩'], ['Pick up the scrap', '🔩'], ['Take scrap off', '🔩'], ['DUMP THE SCRAP', '🔩'], ['Swap to hookshot', '🪝'], ['Take hookshot', '🪝'], ['Reel in', '🪝'], ['KICK', '🦶'], ['Auto guns', '🔫'],
@@ -255,44 +293,7 @@ export function createControllerUI({ network }) {
       $('hfill').style.background = next.hull > 35 ? '#4caf50' : '#e63946';
     }
 
-    const where = next.station || 'Walking';
-    const ammo = next.ammo != null ? ` - ${next.ammo} ${next.kind === 'bombbay' ? 'bombs' : 'shells'}` : '';
-    // (one short line: the info bar never wraps; a warning from the host replaces the hint)
-    const hint = next.locked
-      ? {
-          helm: 'Stick: engines + trim (right = right on the TV). HOLD the turn button to come about.',
-          gun: 'Drag to aim, hold FIRE. Hold PRIME for a big shell.',
-          lookout: 'PAN THE SPYGLASS: the stick looks far ahead (top of the TV). Spot what comes!',
-          hijack: 'Kick the pilot: tap any button 3 times, or hold Action.',
-          escort: 'Stick points where to fly. Guns fire by themselves.',
-          light: 'Stick sweeps the beam. HOLD to focus it.',
-          coil: 'Aim with the stick, HOLD to charge, let go to fire!',
-          shield: 'Point the stick to swing the shield round the ship.',
-          bombbay: 'Press DROP when the red ring is on a target.',
-          swivel: 'Stick turns the engine: ahead to cruise, up to climb, down to dive.',
-          cannon: 'Stick aims the barrel. HOLD to charge, let go to FIRE the crewman in it!',
-          cannonseat: 'You are in the barrel: hold on. Alone, the stick aims and the big button fires you.',
-        }[next.kind]
-      : next.load >= 0
-        ? 'Hold Action to load the shell for the gunner'
-        : next.taken
-          ? 'Someone is already here'
-          : next.label && next.label !== 'Hey!'
-            ? next.hold ? 'HOLD the big button' : 'Tap the big button'
-            : next.grab
-              ? next.gswap ? 'Hold GRAB to ' + (next.grab.startsWith('Put back') ? 'put it back' : 'swap') : 'Tap GRAB (or the big button)'
-              : next.carry === 'ammo'
-                ? 'Bring the ammo to a gun or the bomb bay'
-                : next.carry === 'coal'
-                  ? 'Bring the coal to a boiler'
-                  : next.carry === 'scrap'
-                    ? 'Bring the scrap to the hold'
-                    : next.carry
-                    ? 'Big button uses what you hold'
-                    : 'Walk to a station, rack, fire or hole';
-    const sore = next.hp != null && next.hp > 0 && next.hp <= (next.jat ?? 1); // (crew health: on the last heart)
-    const warn = next.status ? `<span class="warn">${next.status}</span>` : sore ? `<span class="warn">${next.med ? 'GET TO THE MEDBAY!' : 'Hurt! A crewmate can bandage you'}</span>` : '';
-    $('info').innerHTML = `<b>${where}${ammo}</b> - ${warn || hint}`;
+    $('info').innerHTML = infoLine(next); // (FUN.md F2: ONE line - the top alarm for this player's deck or seat, else the seat's status, else the hint: infoLine above)
     $('leave').style.display = next.locked ? 'block' : 'none';
     const helm = next.locked && next.kind === 'helm';
     document.body.classList.toggle('helm', helm);

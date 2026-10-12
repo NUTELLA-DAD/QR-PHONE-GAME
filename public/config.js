@@ -1,6 +1,8 @@
 const PARTY_ON = typeof process === 'undefined' || !(process.env && process.env.NO_PARTY); // FUN.md F5 (raiders and fire as a party): the switch for RAIDERS.PARTY, FIRE.PARTY and RAIDERS.KO_TIME (a browser has no process: on). NO_PARTY=1 in a tool = the old numbers (the seeded baselines pin it)
 // F6 (FUN.md): the stop shape and the 60-second dock are ON in the game; NO_STOP_SHAPE=1 in a tool is the old game (the seeded botsim / golden baselines pin it).
 const STOP_SHAPE_ON = typeof process === 'undefined' || !(process.env && process.env.NO_STOP_SHAPE);
+// F2 (FUN.md): the alarm arbiter queues banners (alarms.js); NO_ALARMS=1 in a tool is the old last-writer-wins banner (the checks that read the banner text right after an event pin it; the seeded gates are identical either way).
+const ALARMS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_ALARMS);
 export const config = {
   W: 1600,
   H: 900,
@@ -1966,6 +1968,19 @@ export const config = {
     TIER_BONUS: 0.18, // a lookout / searchlight / gun on the high tier sees, lights and shoots this much further (warning time, beam length, shell life)
     GUST_PER_TIER: 0.2, // a storm gust shoves the ship this much harder per high tier she carries (share of the shove)
     MAST_CLEAR: 40, // the high nest sits at least this far inside the end of the nest it is climbed from (px)
+  },
+  // FUN.md F2, ONE VOICE: the alarm arbiter (host/alarms.js). Every TV banner goes through world.say(kind, text, pri, hold, at); the TV says one thing at a time, in order of danger, and the phone one line.
+  // A lower priority waits in a small queue; an equal or higher one takes over once the banner on screen has had HOLD seconds; PREEMPT and above (a crash, FALLING) cut in at once. The same words are merged.
+  ALARMS: {
+    ENABLED: ALARMS_ON, // false (NO_ALARMS=1 in a tool) = the old banner: the last writer wins (the seeded gates are byte-identical either way: the banner is text only)
+    HOLD: 2.5, // seconds a banner is safe from anything below PREEMPT (a banner shorter than that protects itself for its own length)
+    PREEMPT: 8, // this priority and above shows at once, over anything of lower (or the same) priority
+    PRI: { crash: 9, falling: 8, boarders: 7, blaze: 7, helm: 6, structure: 6, setpiece: 5, objective: 5, fire: 4, info: 2 }, // the kinds, most urgent first
+    QUEUE: 3, // banners waiting behind the one on screen (the lowest and newest is dropped past this)
+    STALE: 6, // seconds a waiting banner stays worth saying (then it is dropped: the moment has passed)
+    PHONE_ONE_LINE: true, // the phone's info line shows the top alarm that concerns that player's deck or seat (false = the old line: the station's status, else the hint)
+    PHONE_ALL: ['crash', 'falling'], // kinds that every phone shows, whatever deck or seat
+    ALSO: true, // the TV shows a small "also" line for the next banner in the queue
   },
   // When the hull gives out the ship breaks apart and the whole game starts over at the mast.
   WRECK: {

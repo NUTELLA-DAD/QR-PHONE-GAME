@@ -30,7 +30,7 @@ const diffOf = (state) => state.difficulty || 'normal';
 const shipMid = (ship) => ({ x: toWorldX(ship, ship.layout.refPoint.x), y: toWorldY(ship, ship.layout.refPoint.y) });
 const partOf = (cr, kind) => cr.parts.find((p) => p.kind === kind);
 const wingsOf = (cr) => cr.parts.filter((p) => p.kind === 'wing');
-const banner = (state, text, secs = 2.6) => { state.ev.warn = secs; state.ev.warnText = text; };
+const banner = (state, text, secs = 2.6) => { state.say('setpiece', text, null, secs); };
 const rand = (cr, a, b) => a + cr.hooks.rng() * (b - a);
 const mouthAt = (cr) => { const m = partOf(cr, 'mouth'); return m && m.segs[0] ? { x: m.segs[0].x, y: m.segs[0].y } : { x: cr.x, y: cr.y }; };
 // A point of the ship in ship coordinates -> the world, through her tilt (so it moves and tips with her).

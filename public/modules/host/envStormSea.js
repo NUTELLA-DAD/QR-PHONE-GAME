@@ -136,8 +136,7 @@ export function createStormSea({ state, puff, impact, damageHull, ignite }) {
   };
 
   const warn = (secs, text) => {
-    state.ev.warn = secs;
-    state.ev.warnText = text;
+    state.say('setpiece', text, null, secs);
   };
 
   // ============================== STORM FRONT ==============================
