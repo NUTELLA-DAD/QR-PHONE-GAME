@@ -3246,13 +3246,33 @@ export const config = {
   // THE RING IN 3D (LOOP.md R1, view3d/ringBend.js): on a ring map the flat strip is wrapped round the castle by the vertex shaders, relative to where the camera looks, so the plane at the ship stays 1:1 with the
   // 2D HUD (the camera never rolls). LEAD = the approach's last stretch eases into the circle as an arc of half the ring's curvature, this many R long (no corner where the approach meets the ring).
   // FLAT = the strip stays perfectly flat this far from the camera's look-at point (px, at least the ship's half length + FLAT_PAD, at most FLAT_MAX), then BLEND px of easing into the true circle (so the ship is
-  // not bent like a banana and the HUD is exact at her; beyond that the ring is the true circle of radius R). KEEP / FACE = the placeholder castle (R2 replaces it): the keep's radius (share of R) and height,
-  // a face's block, and the colours.
+  // not bent like a banana and the HUD is exact at her; beyond that the ring is the true circle of radius R). The rest is the R2 castle (view3d/ringCastle.js): KEEP, FACE, WALL, ISLAND, WARD and the three ART palettes below.
   RING3D: {
     ENABLED: true,
-    LEAD: 0.8, FLAT: 700, FLAT_PAD: 200, FLAT_MAX: 1500, BLEND: 900, FOG: 0.5, // FOG = the fog is measured this many ring radii further than the camera's distance (so the far side of the ring is not washed out)
-    KEEP: { RADIUS: 0.2, MIN_RADIUS: 480, UP: 2600, DOWN: 1500, COLOR: '#a29c98', ROOF: '#6f7d93', SHADE: '#7d7774', GLOW: '#ffb347' },
-    FACE: { REACH: 5500, W: 880, H: 760, DEPTH: 620, COLOR: '#b9a287', TRIM: '#7a6a58', SHUTTER: '#403b3a', LEDGE: '#8c7358', ROPE: '#2e2a2a' },
+    LEAD: 0.8, FLAT: 700, FLAT_PAD: 200, FLAT_MAX: 1500, BLEND: 900,
+    FOG: 0.75, // the fog is measured this many ring radii further than the camera's distance (so the far side of the ring is not washed out; R2: 0.5 -> 0.75, the island is big and far)
+    ZOOM_MUL: 1, // R2: the 2D camera's zoom is multiplied by this on a ring map (camera.js; 1 = the plain framing; the globally zoomed-out camera already shows the ward and the crown. 0.92 shows a little more of the castle)
+    // R2 CASTLE ART (view3d/ringCastle.js with castleStrip.js / castleWard.js / castleKit.js). Everything is in world px (the game's px).
+    // KEEP: the slim keep stands in the camera frame, BACK x R behind the castle's axis; RADIUS x R wide (at least MIN_RADIUS); UP = its roof line's height above the platforms (kept low enough that the CROWN stays in the picture).
+    KEEP: { RADIUS: 0.09, MIN_RADIUS: 280, BACK: 0.25, DOWN: 1500, UP: { tower: 1900, fortress: 2250, citadel: 2150 } },
+    // FACE = a gatehouse on its platform: W x H x DEPTH of the gate block (the 2D wall's size), TOWER_X / TOWER_R / TOWER_H = its drum towers (centre offset, radius, height of the wall under the roof)
+    FACE: { REACH: 5500, W: 880, H: 760, DEPTH: 620, COLOR: '#b9a287', TRIM: '#7a6a58', SHUTTER: '#403b3a', LEDGE: '#8c7358', ROPE: '#2e2a2a', TOWER_X: 560, TOWER_R: 165, TOWER_H: 880 },
+    // WALL = the curtain wall that joins the gatehouses on the strip (it stands on the island's rim, behind the platforms): H high, DEPTH thick, its centre Z (behind the plane), parapet, a wall tower every TOWER_EVERY px
+    WALL: { H: 520, DEPTH: 150, Z: -265, PARAPET: 66, MERLON: 62, MERLON_EVERY: 140, SEG: 440, TOWER_EVERY: 1700, TOWER_H: 700 },
+    // ISLAND = the floating rock under the castle (camera frame): its rim is INSET px inside R, tiers of cliff go down TIERS times (DEPTH x R in all); FALLS = the ring angles (x pi) of the two waterfalls
+    ISLAND: { INSET: 170, TIERS: 7, DEPTH: 0.62, FALLS: { tower: [0.5, 1.5], fortress: [0.5, 1.5], citadel: [0.28, 1.72] } },
+    // WARD = the inner towers (camera frame, turning with the ring). face = stand on the ray of that face (or a = a ring angle, x pi); r = their distance from the axis (x R); h = height above the platforms (px); rad = radius; roof = cone | spire | crown
+    WARD: {
+      tower: [],
+      fortress: [{ face: 0, r: 0.46, h: 1500, rad: 250, roof: 'cone' }, { face: 1, r: 0.46, h: 1950, rad: 215, roof: 'spire' }, { face: 2, r: 0.46, h: 1700, rad: 270, roof: 'crown' }, { face: 3, r: 0.46, h: 2100, rad: 225, roof: 'cone' }],
+      citadel: [{ face: 0, r: 0.44, h: 1600, rad: 235, roof: 'cone' }, { face: 1, r: 0.44, h: 1800, rad: 225, roof: 'spire' }, { a: 1.0, r: 0.3, h: 2050, rad: 260, roof: 'spire' }],
+    },
+    // THE THREE PALETTES (soft, faded; Ember Pact: oxblood and ember on iron). stone / shade / trim = walls; roof / roofDark = slate or tile; wood / woodDark = timber; banner / flame / gold = heraldry; rock = cliff strata (top to bottom); top = the island's grass; paving / road = the courtyard
+    ART: {
+      tower: { stone: '#d8ccb2', shade: '#b9aa8e', trim: '#8f8268', roof: '#6c7d92', roofDark: '#53647a', wood: '#94724c', woodDark: '#664b30', iron: '#46423f', glass: '#2a2530', banner: '#a8473a', flame: '#ffb347', gold: '#cfae5c', rock: ['#d0b690', '#bb9d77', '#a38662', '#8c7152'], top: '#93b06a', paving: '#d9cfb8', road: '#bdae8e', shard: '#9fdcff', water: '#bfe4ee', waterDark: '#8cc3d4' },
+      fortress: { stone: '#a09da2', shade: '#7f7c84', trim: '#68656e', roof: '#93403a', roofDark: '#6f2e2b', wood: '#7a5a3e', woodDark: '#563c28', iron: '#3f3b3e', glass: '#241f27', banner: '#8f302c', flame: '#ffb347', gold: '#c8a85c', rock: ['#ab957f', '#927d6b', '#7a6757', '#65564a'], top: '#7f8e64', paving: '#c3baa8', road: '#a79a82', shard: '#9fdcff', water: '#b6dbe6', waterDark: '#86b6c8' },
+      citadel: { stone: '#b9bfd8', shade: '#939ab8', trim: '#767da6', roof: '#6d72b8', roofDark: '#51569a', wood: '#8a6a4a', woodDark: '#604830', iron: '#44415a', glass: '#272444', banner: '#8f302c', flame: '#ffb347', gold: '#dcba58', rock: ['#c2b4a2', '#a99b8b', '#908474', '#7a6f66'], top: '#9dba8e', paving: '#cdd0e0', road: '#aeb3cc', shard: '#8fe6ff', water: '#c4ecf6', waterDark: '#94cce0' },
+    },
   },
   // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.
   // SCALE = size of one texture pixel in world units (the 512px tile covers 512*SCALE units; the airship is ~1500 wide).

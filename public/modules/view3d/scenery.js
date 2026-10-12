@@ -14,7 +14,7 @@ const V3 = (x, y, z = 0) => new THREE.Vector3(x, y, z);
 const PI = Math.PI;
 const Z = -45; // the depth the land's things stand at (just in front of the rock slab behind the ships)
 const RANGE = 3200; // build and show things this far (world units) either side of the camera
-const FLAG_KEYS = [[0.05, 0.16, 0.24, 0.26], [0, -0.1, -0.18, -0.12], [-0.06, 0.06, 0.16, 0.12]]; // a flag's rigid segments: three held poses
+export const FLAG_KEYS = [[0.05, 0.16, 0.24, 0.26], [0, -0.1, -0.18, -0.12], [-0.06, 0.06, 0.16, 0.12]]; // a flag's rigid segments: three held poses
 const SLIT = '#2b2420';
 
 // a flag of `n` hinged segments (rigid): cloth(i) -> [color, ...] per cell stack; w = a segment's width, h = the flag's height. update() poses the segments on the key.

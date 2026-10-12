@@ -135,6 +135,7 @@ export const RB = {
   get C() { return S.C; },
   get axisY() { return S.axisY; },
   get xc() { return S.xc; },
+  get thc() { return S.thc; }, // (R2: the heading of the path under the camera; a thing in the ring's own frame, like the castle's ward, turns by -thc about the vertical axis at RB.axis())
   get flat() { return S.flat; },
   get ok() { return chunksOk; },
   state: S,

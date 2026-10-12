@@ -265,7 +265,7 @@ Later, the Island Titan can circle a ring, and DEFEND can be a ring round your o
 |---|---|---|
 | R0 | the ring map in the sim (faces, shutters, revolving turrets, gallery, the keep), `botsim --map ring`, a flat 2D fallback with the dial | M |
 | R1 | the bend and the ring camera; HUD within 1 px through a whole circle | M |
-| R2 | the castle kit and art, the ring dial, the slow-motion crown fall | M |
+| R2 | the castle kit and art, the ring dial, the slow-motion crown fall | M (the castle art is BUILT, see CASTLE.md R2 and 3D.md section 29; the dial and the crown fall are D3) |
 | R3 | parallax landmarks and arrivals from depth | S |
 | R4 | 3D ghosts of Yard places and frames (with G4) | S/M |
 | R5 | weather fronts from depth, the fortress porthole, creature depth | S |
