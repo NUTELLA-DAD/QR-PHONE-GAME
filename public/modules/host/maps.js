@@ -18,16 +18,16 @@ export function shipBox(layout) {
 
 // A SALVAGE RUN (voyage.js, simulation.js markSalvage; config.VOYAGE.CURRICULUM.SALVAGE): the catch-up stop of a crew that is behind. For now it is flown on the map kind SALVAGE.MAP (a pass: no outposts, a beacon
 // at the end, so even a ship with no bomb bay can finish it) a level lower, and the map is flagged map.salvage; package G6 gives it a real objective.
-export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = null, variant = null) { // (variant: which ring a 'ring' map is, 'tower' | 'fortress' | 'citadel')
-  if (kind !== 'salvage') return makeMapOf(kind, level, rand, lengthMul, layout, creature, variant);
+export function makeMap(kind, level, rand, lengthMul = 1, layout, creature = null, variant = null, slack = null) { // (variant: which ring a 'ring' map is, 'tower' | 'fortress' | 'citadel'; slack: F1, squares of spare room in a cave's tunnels and shafts instead of config.MAPS.TUNNEL_SLACK / SHAFT_SLACK)
+  if (kind !== 'salvage') return makeMapOf(kind, level, rand, lengthMul, layout, creature, variant, slack);
   const S = config.VOYAGE.CURRICULUM.SALVAGE;
-  const map = makeMapOf(S.MAP, Math.max(1, level - S.LEVEL_DROP), rand, lengthMul, layout, creature);
+  const map = makeMapOf(S.MAP, Math.max(1, level - S.LEVEL_DROP), rand, lengthMul, layout, creature, null, slack);
   map.salvage = true;
   return map;
 }
 
 // Build a map, checking the ship really can get from the start to the beacon (try again if not).
-function makeMapOf(kind, level, rand, lengthMul = 1, layout, creature = null, variant = null) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES; creature: which lair a 'lair' map is, 'kraken' or 'drake')
+function makeMapOf(kind, level, rand, lengthMul = 1, layout, creature = null, variant = null, slack = null) { // (lengthMul: a session mode's map length factor, config.VOYAGE.MODES; creature: which lair a 'lair' map is, 'kraken' or 'drake')
   let map = null;
   for (let tries = 0; tries < 40; tries++) {
     // (Late-voyage open maps are so crowded with peaks and islands that no layout may pass the checks below; rather than
@@ -37,7 +37,7 @@ function makeMapOf(kind, level, rand, lengthMul = 1, layout, creature = null, va
       if (map.startDist < 1e9) return map;
       continue;
     }
-    map = kind === 'lair' ? (creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout);
+    map = kind === 'lair' ? (creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout, slack);
     if (map.startDist >= 1e9) continue;
     if (map.lair) return map; // (no outposts to reach: the lair's middle is the goal)
     if (map.open) {
@@ -80,7 +80,7 @@ function makeMapOf(kind, level, rand, lengthMul = 1, layout, creature = null, va
   return map;
 }
 
-function buildMap(kind, level, rand, lengthMul = 1, layout) {
+function buildMap(kind, level, rand, lengthMul = 1, layout, slack = null) {
   const M = config.MAPS;
   const C = M.CELL;
   const r = (a, b) => a + rand() * (b - a);
@@ -94,8 +94,8 @@ function buildMap(kind, level, rand, lengthMul = 1, layout) {
       for (let i = Math.max(2, Math.min(i0, i1)); i <= Math.min(W - 3, Math.max(i0, i1)); i++) solid[idx(i, j)] = 0;
     }
   };
-  const TUN = layout.caveNeed.tunnel + M.TUNNEL_SLACK; // tunnel height (cells)
-  const SHAFT = layout.caveNeed.shaft + M.SHAFT_SLACK; // shaft width (cells)
+  const TUN = layout.caveNeed.tunnel + (slack ?? M.TUNNEL_SLACK); // tunnel height (cells)
+  const SHAFT = layout.caveNeed.shaft + (slack ?? M.SHAFT_SLACK); // shaft width (cells)
   // Join two room centres: along, then up/down (or the other way round), wide enough for the ship.
   const join = (a, b) => {
     const hFirst = rand() < 0.5;

@@ -196,13 +196,23 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   const shipButton = document.getElementById('shipBtn');
   const showShip = () => {
     const sb = simulation.state.startBuild;
-    const html = sb === 'playtest' ? 'Ship: your build<br><small style="font-size:12px;opacity:.75">from the build page</small>' : 'Ship: ' + (sb === 'classic' ? 'Classic' : 'Sparrow') + `<br><small style="font-size:12px;opacity:.75">${sb === 'classic' ? 'the full ship from the start' : 'start small, build at the sky-docks'}</small>`;
+    const BC = config.VOYAGE.START_BUILD_BY_CREW;
+    const html = simulation.state.startBuildAuto ? `Ship: Auto (${simulation.pickStartBuild() === 'classic' ? 'Classic' : 'Sparrow'})<br><small style="font-size:12px;opacity:.75">Sparrow for ${BC.max} crew or fewer, else Classic</small>` : sb === 'playtest' ? 'Ship: your build<br><small style="font-size:12px;opacity:.75">from the build page</small>' : 'Ship: ' + (sb === 'classic' ? 'Classic' : 'Sparrow') + `<br><small style="font-size:12px;opacity:.75">${sb === 'classic' ? 'the full ship from the start' : 'start small, build at the sky-docks'}</small>`;
     if (shipButton.innerHTML !== html) shipButton.innerHTML = html;
   };
   shipButton.onclick = () => {
-    const next = simulation.state.startBuild === 'classic' ? 'sparrow' : 'classic'; // (a playtest build goes to classic first)
-    simulation.setStartBuild(next);
-    saveStartBuild(next);
+    const sb = simulation.state.startBuild;
+    if (simulation.state.startBuildAuto) { // (F1: Auto -> Sparrow -> Classic -> Auto: the first two force a ship, the last goes back to choosing by the crew size)
+      simulation.setStartBuild('sparrow');
+      saveStartBuild('sparrow');
+    } else if (config.VOYAGE.START_BUILD_BY_CREW.ENABLED && sb === 'classic') {
+      simulation.setStartBuild(simulation.pickStartBuild(), 'auto');
+      saveStartBuild(null);
+    } else {
+      const next = sb === 'classic' ? 'sparrow' : 'classic'; // (a playtest build goes to classic first)
+      simulation.setStartBuild(next);
+      saveStartBuild(next);
+    }
     showShip();
   };
   setInterval(() => { showMode(); showDaily(); showShip(); }, 500); // (a finished daily voyage updates today's best)
