@@ -8,14 +8,14 @@ import { shipGeom, landX, boilerX, routeStep } from './gunship.js';
 import { X0 as GUNSHIP_X0 } from './gunshipBlueprint.js';
 import { isEscortStation, escortFor } from './escort.js';
 import { lightNames, isSearchlight, darkTarget } from './searchlight.js';
-import { botJobs as goingDownJobs, bunkerEmpty } from './goingDown.js';
+import { botJobs as goingDownJobs, bunkerEmpty, helmDeputy } from './goingDown.js';
 import { autopilotOn } from './crewscale.js';
 import { flamAt } from './fireModel.js';
 import { hearts } from './health.js';
-import { mainShip, hostileTo, foeOf, areHostile } from './ships.js';
+import { mainShip, hostileTo, foeOf, areHostile, shipOf } from './ships.js';
 import { cannonPlan } from './cannon.js';
 import { solveThrow } from './cargo.js';
-import { scrapOn, holdSpot, holdFull, helmPlan } from './scrap.js';
+import { scrapOn, holdSpot, holdFull, heavyHold, helmPlan } from './scrap.js';
 import { cannonSeatName, sizeNamed } from './shipBuild.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/captainAI.js';
@@ -79,6 +79,7 @@ function steer(p, d, x, near = 12) {
   const g = world && world.gunship;
   const L = world && mainShip(world).layout;
   const { steerTo } = mainShip(world).nav; // (a bot walks on ITS ship)
+  if (!L.platforms[d]) { p.jx = 0; p.jy = 0; p.botJob = null; return false; } // (the deck is gone - a split, a break-off, a job from another ship: drop the job, choose again)
   if (g && d === tables(L).MAIN && p.d === tables(L).MAIN && !p.swing) {
     const MAIN = tables(L).MAIN, MAIN_X1 = shipGeom(L).MAIN_X1;
     const mid = (MAIN_X1 + GUNSHIP_X0) / 2; // targets past this are on her deck (her home frame)
@@ -441,7 +442,7 @@ function scrapJobs(state, bot) {
   }
   if (bot.carry || full) return out;
   for (const ld of state.loads || []) if (ld.kind === 'scrap') out.push({ kind: 'stow', obj: ld, max: 1 });
-  for (const h of state.hulks || []) if (h.left > 0 && hulkSpot(ship, h)) out.push({ kind: 'hulk', obj: h, max: 2 });
+  for (const h of state.hulks || []) if (h.left > 0 && !heavyHold(state) && hulkSpot(ship, h)) out.push({ kind: 'hulk', obj: h, max: 2 });
   return out;
 }
 // Where a bot stands to strip a hulk: the open deck whose point nearest the hulk is within hand's reach of it ({ d, x }), or null.
@@ -566,7 +567,10 @@ function listJobs(state, bot) {
   const canHammer = hasTool('hammer'), canSpray = hasTool('extinguisher');
   // Nobody at the wheel in flight is the worst emergency of all: someone takes the helm first.
   const helmSt = L.one('helm');
-  if (state.phase === 'flying' && helmSt && !players.some((q) => isHelm(L, q.lock)) && !mods.some((m) => m.name === helmSt.n && m.broken)) jobs.push({ kind: 'station', obj: helmSt.n, max: 1 });
+  if (state.phase === 'flying' && helmSt && !players.some((q) => isHelm(L, q.lock)) && !mods.some((m) => m.name === helmSt.n && m.broken)) {
+    if (!mainShip(state).sim.structure.on()) jobs.push({ kind: 'station', obj: helmSt.n, max: 1 });
+    else if (helmDeputy(state, bot) === bot) jobs.push({ kind: 'station', obj: helmSt.n, max: 1, tier: 0, urgent: true }); // (balance pass: lift is a live rule now, an empty helm is how she falls: the nearest free hand takes it ahead of the guns, and nobody else is sent)
+  }
   jobs.push(...sailJobs(state, bot, true)); // (a gust is coming or she is in a cave: reef any sail that is up)
   // A fire in the coal (S.5f: a big fire, or one on ground as flammable as the coal) is the worst fire aboard: a blaze there feeds itself and spreads fast. Everyone near
   // runs to it at once, ahead of the other chores.
@@ -616,7 +620,7 @@ function listJobs(state, bot) {
   // (Only when the gas is actually running out or the bag is in ruins, and never more than a few hands at once.)
   const gasHoles = state.gasHoles || [];
   const gasCrisis = (gasHoles.length >= B.GAS_EMERGENCY && (ship.gas < B.GAS_LOW || gasHoles.length >= B.GAS_RUIN)) || (gasHoles.length > 0 && (state.bags || []).some((b) => b.down)); // (a flat bag in a row of bags: patch its holes)
-  for (const q of players) if (q !== bot && q.ko > 0 && !q.fall && !foeOf(q, bot)) jobs.push({ kind: 'revive', obj: q, max: 1 }); // (nobody revives the other side's boarder)
+  for (const q of players) if (q !== bot && q.ko > 0 && !q.fall && !foeOf(q, bot) && shipOf(state, q) === shipOf(state, bot)) jobs.push({ kind: 'revive', obj: q, max: 1 }); // (nobody revives the other side's boarder)
   if (bombStarved) jobs.push({ kind: 'ammo', obj: bay, max: 2, cap: 2 });
   // A real blaze (fires spread and eat the hull) comes before patching holes in the gasbag.
   if (canSpray && state.fires.length >= B.FIRE_BLAZE) for (const f of state.fires) if (!hotFires.includes(f)) jobs.push({ kind: 'fire', obj: f, max: 1, cap: B.FIRE_CAP });
@@ -699,7 +703,7 @@ function listJobs(state, bot) {
   if (bot.carry === 'coal') for (const n of tables(L).GUN_STATIONS) if (state.GUNS[n].type === 'flame' && state.GUNS[n].ammo < state.GUNS[n].max) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   // Now and then the crew shovels extra coal to push into overdrive.
   const pushing = Math.floor(performance.now() / 1000 / B.OVERDRIVE_PUSH_EVERY) % 3 === 0;
-  if (L.hasKind('boiler') && L.hasKind('coal') && (state.ship.fuel < (pushing ? 60 : 25) && state.ship.press < config.BOILER.WARN_AT - (pushing ? 10 : 25)) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
+  if (L.hasKind('boiler') && L.hasKind('coal') && (state.ship.fuel < (pushing ? 60 : mainShip(state).sim.structure.on() ? B.FUEL_LOW_LIVE : 25) && state.ship.press < config.BOILER.WARN_AT - (pushing ? 10 : 25)) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
   if (canHammer) for (const m of mods) if (!m.broken && m.hp < (['engine', 'helm', 'lift', 'shield', 'coil'].includes(m.kind) ? m.max * config.MODULES.LEAK_BELOW - 1 : 60)) jobs.push({ kind: 'repair', obj: m, max: 1 });
   const guns = !L.hasKind('ammo') ? [] : tables(L).GUN_STATIONS.filter((n) => state.GUNS[n].type !== 'flame' && state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
   const fuelRuns = !L.hasKind('coal') ? [] : tables(L).GUN_STATIONS.filter((n) => state.GUNS[n].type === 'flame' && state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'coal' || state.GUNS[n].ammo <= config.FLAME.BOT.FUEL_LOW)); // (a flamethrower's tank takes coal, not shells)
@@ -877,6 +881,14 @@ function operate(p, state, dt) {
     // The PRESSURE lever: pump or vent the gasbag toward the altitude the plan wants.
     p.gas = state.goingDown ? 1 : gasFor(state, lungeAlt ?? beamDodge(state) ?? (dip !== null && target === dip ? dip : plan.target)); // (GOING DOWN!: pump flat out)
     levelWithEngines(p, state, lungeAlt !== null);
+    if (p.gas < 0 && !state.goingDown && mainShip(state).sim.structure.on()) { // (balance pass: lift is a live rule, so the bot helm no longer vents the bags flat to dive: never more than DIVE points under the level she hovers at - an empty bag and no steam to refill it was how most falls began)
+      const hover = config.GAS.NEUTRAL + (state.structDeficit || 0) + (state.engineWeight || 0) + ((state.env && state.env.sink) || 0);
+      if (state.ship.gas <= hover - config.STRUCTURE.BOT.DIVE) p.gas = 0;
+    }
+    if (state.goingDown && mainShip(state).sim.structure.on()) { // (balance pass: while she falls the helm stops the engines - every steam point left to the pump - and trims the nose up)
+      p.jx = clamp((config.GOING_DOWN.COAST - (ship.pace ?? ship.speed)) * 4, -1, 1);
+      p.jy = -1;
+    }
   } else if (L.kindOf(p.lock) === 'coil') {
     // Aim at the thickest bunch of enemies and charge while lined up.
     const shot = coilShot(state);
@@ -1189,10 +1201,24 @@ function work(p, state) {
   } else if (job.kind === 'station') {
     const s = stationNamed(L, o);
     if (birdCoil(state) && L.kindOf(o) === 'coil') p.wantStation = o; // (C.6b: the classic coil has a sword rack and a pipe valve beside it, and Action there would take the sword or turn the valve: shipSim.js useFor lets this bot take the station)
-    if (steer(p, s.d, s.x)) {
+    const strOn = mainShip(state).sim.structure.on();
+    let sx = s.x;
+    if (strOn && isHelm(L, o)) { // (balance pass: crew knocked out in the helm room - the raiders strike there - each take the Action button for a revive while he stands in reach (65 px); the wheel answers from 85: stand where no body is in reach)
+      const bodies = Object.values(state.players).filter((q) => q !== p && q.ko > 0 && !q.fall && q.conn == null && q.d === s.d), pl = L.platforms[s.d];
+      if (bodies.length && pl) {
+        const free = [s.x, s.x - 75, s.x + 75].filter((x) => x >= pl.x0 + 15 && x <= pl.x1 - 15 && bodies.every((q) => Math.abs(q.x - x) >= 70)).sort((a, b) => Math.abs(a - p.x) - Math.abs(b - p.x));
+        if (free.length) sx = free[0];
+      }
+    }
+    if (steer(p, s.d, sx)) {
       // Fix it up on the way in if we happen to have a hammer.
       const m = (state.modules || []).find((q) => q.name === o);
-      if (p.carry === 'hammer' && m && m.hp < m.max) p.fire = true;
+      // (balance pass: a knocked-out crewman within reach - often the helmsman himself, who falls at his wheel - takes the Action button for a revive, so the station never answers a tap: bring him round first.
+      // And the wheel is taken before it is mended: the hammer in his hand waits.)
+      // A tool in his hand also takes the button before the wheel does (a hurt module or a cracked frame under a hammer is "repair" / "shore up", a hold): the racks are endless, so he sets it down first.
+      if (strOn && isHelm(L, o) && !(m && m.broken) && (p.carry === 'hammer' || p.carry === 'extinguisher' || p.carry === 'sword')) p.carry = null;
+      if (strOn && Object.values(state.players).some((q) => q !== p && q.ko > 0 && !q.fall && q.conn == null && q.d === p.d && Math.abs(q.x - p.x) < 65)) p.fire = true;
+      else if (p.carry === 'hammer' && m && m.hp < m.max && !(strOn && isHelm(L, o) && !m.broken)) p.fire = true;
       else press(p);
     }
   }
@@ -1340,7 +1366,7 @@ function aimPlane(state, p) {
 
 // SCRAP: is there flotsam in hook reach of the ship, and a hookshot to throw (a rack of them aboard, or one in a hand)?
 function scrapHookable(state) {
-  if (!scrapOn() || !(state.thrown || []).length) return false;
+  if (!scrapOn() || !(state.thrown || []).length || heavyHold(state)) return false;
   const ship = mainShip(state), L = ship.layout;
   if (!tables(L).PICKUPS.some((r) => r.kind === 'hookshot')) return false;
   const o = { x: toWorldX(ship, L.aimPoint.x), y: toWorldY(ship, L.aimPoint.y) };
@@ -1838,7 +1864,7 @@ export function updateBot(p, state, dt) {
       const rodCall = !isHelm(L, p.lock) && !(birdCoil(state) && L.kindOf(p.lock) === 'coil') && state.stormJob && (state.stormJob.charge || birdDiving(state.creature)) && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9; // (the Thunderbird's coil man stays at the coil: it drinks the bolt the rod grounds)
       // Nobody is at the wheel in flight and nobody is on the way: leave the station and take it.
       const helmCall = !isHelm(L, p.lock) && !humanAutopilot(p, state) && state.phase === 'flying' && !Object.values(state.players).some((q) => isHelm(L, q.lock) || (q.botJob && q.botJob.kind === 'station' && isHelm(L, q.botJob.obj))) && !(state.modules || []).some((m) => m.kind === 'helm' && m.broken) && Math.random() < B.HELM_CALL;
-      const fallCall = (!!state.goingDown || (mainShip(state).piece && (mainShip(state).splitT || 0) >= config.STRUCTURE.PIECE.BOT_ABANDON)) && !isHelm(L, p.lock); // GOING DOWN!: everybody off their stations (the hand at the helm stays: he pumps); a half that split off: everybody jumps
+      const fallCall = ((!!state.goingDown && (state.goingDown.need > (state.grounded ? config.GOING_DOWN.ALL_HANDS_DOWN : config.GOING_DOWN.ALL_HANDS) || !mainShip(state).sim.structure.on())) ||(mainShip(state).piece && (mainShip(state).splitT || 0) >= config.STRUCTURE.PIECE.BOT_ABANDON)) && !isHelm(L, p.lock); // GOING DOWN!: everybody off their stations (the hand at the helm stays: he pumps); a half that split off: everybody jumps
       const soleGun = config.PVP.ENABLED && tables(L).GUN_STATIONS.includes(p.lock) && !bots.some((q) => q !== p && q.lock && tables(L).GUN_STATIONS.includes(q.lock)); // (Versus: the last gunner keeps his gun, a ship needs one that shoots)
       const HC = config.HEALTH; // crew health: a bot burning at its station, or on its last heart, leaves it (the helm stays: the ship needs steering)
       const hurtCall = HC.ENABLED && !p.enemy && !isHelm(L, p.lock) && !soleGun && ((p.inFire && (p.burnT || 0) > HC.BOT.FLEE) || (state.phase === 'flying' && L.medbay && hearts(p) <= HC.JOB_AT));

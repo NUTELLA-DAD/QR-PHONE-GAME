@@ -27,7 +27,7 @@ import { layoutTables } from '../../shipLayout.js';
 import { altBounds } from './course.js';
 import { pop } from './popups.js';
 import { refillBags, liftGas } from './gasBags.js';
-import { mainShip } from './ships.js';
+import { mainShip, shipOf } from './ships.js';
 import { thrustOf } from './shipBuild.js';
 import { toWorldX, toWorldY } from './pose.js';
 import { planBreak, makeRng } from './breakOff.js';
@@ -63,7 +63,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
   const tb = () => tables(L);
   const shipPop = (x, y, kind, color, size) => pop(state, toWorldX(ship, x), toWorldY(ship, y), kind, color, size); // (a point on the ship)
   let used = false; // the last stand has been used in this mission
-  let lowT = 0, cdT = 0, lastGas = 50, rise = 0; // (structure on: seconds she has been short of lift while sinking; seconds before the next alarm may sound)
+  let lowT = 0, cdT = 0, lastGas = 50, rise = 0, groundT = 0; // (structure on: seconds she has been short of lift while sinking; seconds before the next alarm may sound)
   const live = () => { const s = getStructure && getStructure(); return !!(s && s.on()); }; // (STRUCTURE.md: the continuous rule)
   state.goingDown = null; // { t, time, lift, weight, need, hold, m, holes, joints, ... } (see tryStart)
   state.gdBanner = null; // { text, sub, color, t, max } big words in the middle of the TV
@@ -220,10 +220,11 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
     const LF = config.STRUCTURE.LIFT, pumpIn = state.gasValve ? state.gasValve.input : 0, gasNow = state.ship.gas;
     rise += (((gasNow - lastGas) / Math.max(dt, 1e-4)) - rise) * Math.min(1, dt * 3);
     lastGas = gasNow;
-    const trouble = (pumpIn >= LF.PUMP_AT && rise < LF.RISE_MIN) || gasNow <= LF.EMPTY_GAS || (!helmManned() && !state.autopilot);
+    groundT = state.grounded ? groundT + dt : Math.max(0, groundT - dt * 2); // (how long she has been touching the ground: a graze is a touch that lets go again)
+    const trouble = (pumpIn >= LF.PUMP_AT && rise < LF.RISE_MIN) || gasNow <= LF.EMPTY_GAS || (!helmManned() && !state.autopilot && short > LF.NOHELM_SHORT) || (state.grounded && (short > LF.GRAZE || groundT > LF.GRAZE_T)); // (balance pass: an empty helm alone is not trouble - only with a real lift deficit; a ship down on the ground is, unless it is a graze: lift short by no more than GRAZE and down for less than GRAZE_T seconds)
     if (!g) {
-      lowT = short > GD.MARGIN && (state.ship.vy || 0) < -config.STRUCTURE.LIFT.SINK_VY && trouble ? lowT + dt : Math.max(0, lowT - dt);
-      if (lowT >= config.STRUCTURE.LIFT.START && cdT <= 0 && state.gdGrace <= 0) { lowT = 0; beginLive(m); }
+      lowT = short > GD.MARGIN && ((state.ship.vy || 0) < -config.STRUCTURE.LIFT.SINK_VY || state.grounded) && trouble ? lowT + dt : Math.max(0, lowT - dt);
+      if (lowT >= config.STRUCTURE.LIFT.START && cdT <= 0 && state.gdGrace <= 0) { lowT = 0; { const S = getStructure(); if (S) { const w = (S.stats.why ||= {}), k = state.grounded ? 'grounded' : gasNow <= LF.EMPTY_GAS ? 'bagEmpty' : (pumpIn >= LF.PUMP_AT && rise < LF.RISE_MIN) ? 'pumpNoRise' : 'noHelm'; w[k] = (w[k] || 0) + 1; } } beginLive(m); }
     } else {
       g.t = state.crashT || 0;
       g.time = crashTime();
@@ -257,8 +258,8 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
       }
     }
     // the loss: down on the ground (or the sea) with her lift still short of her weight
-    const need = crashTime();
-    if (state.grounded && short > 0) state.crashT = (state.crashT || 0) + dt; else state.crashT = Math.max(0, (state.crashT || 0) - dt * 2);
+    const need = crashTime(), CR = config.STRUCTURE.CRASH; // (balance pass: the crash clock only runs inside a FALLING alarm - the crew was told - and only while she is really short, CRASH.SHORT)
+    if (g && state.grounded && short > CR.SHORT) state.crashT = (state.crashT || 0) + dt * (rise >= CR.RISE_OK ? CR.RECOVER_MUL : 1); else state.crashT = Math.max(0, (state.crashT || 0) - dt * 2);
     if (state.crashT >= need) {
       const sea = !!(state.sea && state.sea.spray > 0.5 && state.sea.flood > 0);
       const S = getStructure(); if (S) S.stats.crashes++;
@@ -491,7 +492,7 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
   // A new mission: the last stand is back, the coal bunker is stocked.
   const newMission = () => {
     used = false;
-    lowT = 0; cdT = 0; state.crashT = 0;
+    lowT = 0; cdT = 0; groundT = 0; state.crashT = 0;
     if (state.goingDown) finish();
     state.gdGrace = 0;
     state.gdCoalOut = 0;
@@ -552,6 +553,20 @@ export function createGoingDown({ state, phoneFx, puff, shipPuff, wreck, gasHole
 // The hold's dump job always stands where the bin is NOW (a part that broke off or a split changes the decks under it): the progress of a hold in hand is kept.
 const syncScrapJob = (g, sp) => { const j = (g.scrapJob ||= { d: 0, x: 0, prog: 0, worked: false }); if (sp) { j.d = sp.d; j.x = sp.x; } return j; };
 const botScrapJob = (state, g) => syncScrapJob(g, holdSpot(mainShip(state).layout));
+// The one hand who takes an EMPTY helm (balance pass, STRUCTURE.md): the nearest free crewman - not knocked out, not falling or flying, not at a station, not hauling coal or scrap - by the walk. Only he is offered the
+// job (urgent, ahead of every station), so the walk is as short as it can be and nobody else leaves his work; a hand at a station answers the helm call by himself (bots.js). Structure on only.
+export function helmDeputy(state, bot) {
+  const ship = mainShip(state), st = tables(ship.layout).HELM, { travelTime } = ship.nav;
+  if (!st || !ship.sim.structure.on()) return null;
+  let best = null, bt = Infinity;
+  for (const q of Object.values(state.players)) {
+    if (!q.bot || q.mate || q.enemy || q.lock || q.ko > 0 || q.fall || q.fly || q.hj || q.dare || q.onGunship || (q.d == null && q.conn == null) || q.carry === 'coal' || q.carry === 'scrap' || shipOf(state, q) !== ship) continue;
+    let t = travelTime(q, st.d, st.x);
+    if (!Number.isFinite(t)) t = 1e5 + Math.abs((q.x || 0) - st.x); // (no way to the helm just now - an open hatch cuts the deck - he is still the one to go: the way opens when it shuts)
+    if (t < bt) { bt = t; best = q; }
+  }
+  return best === bot ? bot : null;
+}
 // ---- bots: while she falls they split across the jobs (bots.js asks for this instead of its usual list) ----
 // Returns jobs in the order bots should claim them (the first free one of the first kind wins), each `urgent`.
 export function botJobs(state, bot) {
@@ -575,9 +590,24 @@ export function botJobs(state, bot) {
   // A hand at the helm pumps the bags full (it stays there: updateBot keeps the helm bot on his post).
   const helmSt = t.HELM;
   const helmTaken = players.some((q) => q !== bot && (L.kindOf(q.lock) === 'helm' || (q.botJob && q.botJob.kind === 'station' && helmSt && q.botJob.obj === helmSt.n)));
-  if (helmSt && !helmTaken && state.ship.gas < 97) add({ kind: 'station', obj: helmSt.n, tier: 0 });
+  const strOn = mainShip(state).sim.structure.on(); // (balance pass: with structure on the helm is manned whatever the bags hold, by the nearest hand, and the steam gets as much care as the leaks)
+  if (helmSt && !helmTaken && (strOn ? helmDeputy(state, bot) === bot : state.ship.gas < 97)) add({ kind: 'station', obj: helmSt.n, tier: 0 });
+  const fix = []; // the steam: a burst pipe leaks it away, a broken boiler / lift / helm gives none (structure on only)
+  if (strOn) {
+    const mods = state.modules || [], crit = (m) => config.BOTS.CRITICAL.includes(m.kind) || (m.kind === 'pipe' && ((t) => !!t && config.BOTS.CRITICAL.includes(t.kind))(mods.find((q) => q.name === m.to)));
+    for (const m of mods) if (m.kind === 'pipe' && m.broken && m.open && crit(m)) fix.push({ kind: 'valve', obj: m });
+    for (const m of mods) if (m.broken && crit(m)) fix.push({ kind: 'repair', obj: m });
+    for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open && crit(m)) fix.push({ kind: 'valve', obj: m }); // (a shut valve on the helm's, the lift's or the boiler's pipe starves it: open it)
+  }
+  if (strOn) (L.gasValves || []).forEach((v, i) => { // a ruptured bag bleeds the pump's gas out of the shared feed: shut its valve (the normal list does the same), and open it again once it is patched
+    const holes = state.gasHoles.filter((h) => (h.bag | 0) === v.bag).length, bag = (state.bags || [])[v.bag], isOpen = state.gasValveOpen[i] !== false;
+    if (isOpen && bag && state.bags.length > 1 && (holes >= 2 || (bag.down && holes))) add({ kind: 'gasvalve', obj: v });
+    else if (!isOpen && holes === 0) add({ kind: 'gasvalve', obj: v });
+  });
   for (const h of open) add({ kind: 'patch', obj: h });
-  const coalSlots = stokeOk && press < GD.STOKE_BELOW ? (n >= 5 ? 2 : 1) : 0;
+  const lowSteam = strOn && press < GD.STOKE_LOW;
+  const coalSlots = stokeOk && press < GD.STOKE_BELOW ? (n >= 5 ? (lowSteam ? 3 : 2) : lowSteam && n >= 3 ? 2 : 1) : 0;
+  for (const j of fix) add(j);
   for (let k = 0; k < coalSlots; k++) add({ kind: 'coal', obj: 'gdcoal' + k });
   if (!hot && press < GD.VENT_CLOSE) L.vents.forEach((v, i) => { if (state.ventOpen[i]) add({ kind: 'vent', obj: v }); }); // (the steam is wanted now: shut the vents again)
   // A cargo drop hatch with weight over it (or the coal bunker beside it): one pull of its lever and it is gone.
@@ -591,12 +621,12 @@ export function botJobs(state, bot) {
   // What cannot be reached by the easy ways: the last resorts.
   const reach = (100 - state.ship.gas) * 0.8 + (GD.STEAM_LIFT - g.m.steam) + g.m.cargo + g.m.bombs;
   const short = g.need > 0;
-  if (short && scrapOn() && holdCount(state) > 0 && holdSpot(L) && (late > config.SCRAP.BOTS.DUMP_LATE || (g.age || 0) > config.SCRAP.BOTS.DUMP_AFTER)) add({ kind: 'dumpscrap', obj: botScrapJob(state, g) }); // (SCRAP: the hold goes over the side before the bombs, the coal or a section)
-  if (short && state.bombBay.bombs > 0 && t.BAY && (loads.length === 0 || late > 0.3)) add({ kind: 'dumpbombs', obj: g.bombJob });
-  if (short && !g.coalGone && g.coalJob && late > GD.CUT_AT * 0.7 && g.need > reach * 0.75) add({ kind: 'dumpcoal', obj: g.coalJob });
-  if (short && late > GD.CUT_AT && (g.need > reach * 0.9 || late > 0.8)) for (const j of g.joints) add({ kind: 'cut', obj: j });
+  if (short && scrapOn() && holdCount(state) > 0 && holdSpot(L) && (late > config.SCRAP.BOTS.DUMP_LATE || (g.age || 0) > (strOn ? GD.EARLY.SCRAP : config.SCRAP.BOTS.DUMP_AFTER))) add({ kind: 'dumpscrap', obj: botScrapJob(state, g) }); // (SCRAP: the hold goes over the side before the bombs, the coal or a section)
+  if (short && state.bombBay.bombs > 0 && t.BAY && (loads.length === 0 || late > 0.3 || (strOn && (g.age || 0) > GD.EARLY.BOMBS))) add({ kind: 'dumpbombs', obj: g.bombJob });
+  if (short && !g.coalGone && g.coalJob && (strOn ? state.ship.fuel >= GD.EARLY.COAL_FUEL && late > GD.EARLY.COAL : late > GD.CUT_AT * 0.7) && g.need > reach * 0.75) add({ kind: 'dumpcoal', obj: g.coalJob });
+  if (short && late > (strOn ? GD.EARLY.CUT : GD.CUT_AT) && (g.need > reach * 0.9 || late > 0.8)) for (const j of g.joints) add({ kind: 'cut', obj: j });
   for (const h of state.hatches || []) if (h.want && h.openSecs > config.HATCH.BOT.OPEN_FOR) add({ kind: 'hatch', obj: h, mode: 'close', urgent: false }); // (it has done its work: shut it again so nobody walks into the hole)
   // Nothing left to do - help the fallen up.
-  for (const q of players) if (q !== bot && q.ko > 0 && !q.fall) jobs.push({ kind: 'revive', obj: q, max: 1 });
+  for (const q of players) if (q !== bot && q.ko > 0 && !q.fall && shipOf(state, q) === shipOf(state, bot)) jobs.push({ kind: 'revive', obj: q, max: 1 });
   return jobs;
 }

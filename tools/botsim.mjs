@@ -182,8 +182,8 @@ for (let step = 1; step <= totalSteps; step++) {
         S0.setLastFail(-1e9);
       }
     }
-    if (args.sink && state.phase === 'flying' && !state.ship.down && step % Math.round(args.sink * 60) === 0) { // (--sink: every bag shot flat and torn open: she falls until the crew patch and pump her up)
-      state.bags.forEach((b, i) => { b.gas = 4; for (let k = 0; k < 2 && state.gasHoles.length < config.GAS.MAX_HOLES; k++) state.gasHoles.push(sim.gasHoleAt(state.ships[0].layout.gasbags[i].cx + (k - 0.5) * 120, state.ships[0].layout.gasbags[i].cy, i)); });
+    if (args.sink && state.phase === 'flying' && !state.ship.down && step % Math.round(args.sink * 60) === 0) { // (--sink: every bag shot flat and torn open, and the steam gone cold - the balance pass made the crew quick enough to refill a flat bag at once, so the steam goes too: she falls until the crew patch, stoke and pump her up)
+      state.ship.press = Math.min(state.ship.press, 8); state.bags.forEach((b, i) => { b.gas = 4; for (let k = 0; k < 2 && state.gasHoles.length < config.GAS.MAX_HOLES; k++) state.gasHoles.push(sim.gasHoleAt(state.ships[0].layout.gasbags[i].cx + (k - 0.5) * 120, state.ships[0].layout.gasbags[i].cy, i)); });
     }
     if (args.blowout && state.phase === 'flying' && step % Math.round(args.blowout * 60) === 0) state.ship.press = 100; // (the next step the boiler blows: a pipe bursts and a fire may start beside it)
     sim.update(dt);
