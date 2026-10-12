@@ -381,7 +381,6 @@ const momentsOf = (st, kind) => (st.moments || []).filter((m) => m.kind === kind
 {
   const run = (args, env = {}) => {
     const e = { ...process.env, ...env };
-    delete e.NO_STRUCTURE;
     if (!env.NO_SCRAP) delete e.NO_SCRAP;
     const r = spawnSync(process.execPath, [path.join(here, 'botsim.mjs'), ...args], { encoding: 'utf8', maxBuffer: 1 << 26, env: e });
     const out = r.stdout || '';

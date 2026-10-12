@@ -3,6 +3,7 @@
 // warnings, upgrades, swings, pickups, hammering.
 import { config } from '../../config.js';
 import { createMusic } from './music.js';
+import { hullOrStructure } from './structure.js';
 
 export function createSfx(state) {
   let ac = null;
@@ -231,7 +232,7 @@ export function createSfx(state) {
     if (state.shells.length > last.shells && ready('cannon', 0.06)) play('cannon');
     if (state.bullets.length > last.bullets && ready('pew', 0.15)) play('pew');
     if (state.kills > last.kills) play('boom');
-    const hullDrop = last.hull - state.ship.hull;
+    const hullDrop = last.hull - hullOrStructure(state.ship);
     if (hullDrop > 0.8 && ready('hit', 0.12)) play('hit', hullDrop > 4);
     if (state.ship.down > 0 && !last.down) play('crash');
     if (state.vote && !last.vote) play('fanfare');
@@ -249,7 +250,7 @@ export function createSfx(state) {
     last.shells = state.shells.length;
     last.bullets = state.bullets.length;
     last.kills = state.kills;
-    last.hull = state.ship.hull;
+    last.hull = hullOrStructure(state.ship);
     last.down = state.ship.down > 0;
     last.vote = !!state.vote;
     last.boss = !!state.boss;

@@ -9,6 +9,7 @@ import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { armourOn } from './fireModel.js';
 import { hurt, knockOut } from './health.js';
 import { shipOf } from './ships.js';
+import { creatureHit } from './structure.js';
 import { pop } from './popups.js';
 
 const BR = () => config.CREATURES.DRAKE.BREATH;
@@ -46,7 +47,7 @@ export function breathBurn(state, cr, ship, cone, dt, budget = null) { // (budge
   state.flashes.push({ x: cone.x + dx * cone.len * 0.3, y: cone.y + dy * cone.len * 0.3, ang: cone.ang, t: dt * 1.6, color: '#ffb347', size: F.GLOW * 1.8, glow: true });
   let limit = Infinity; // how far along the cone the first hull stops it (plus PENETRATE)
   const decks = new Map(), bags = new Map();
-  let hull = false, plated = false;
+  let hull = false, plated = false, first = null; // (first: the ship point where the cone first meets her)
   const step = 36, n = Math.ceil(cone.len / step), spread = Math.tan(cone.half) * 0.8, px = -dy, py = dx;
   for (let k = 1; k <= n && k * step <= limit; k++) {
     const r = k * step;
@@ -54,7 +55,7 @@ export function breathBurn(state, cr, ship, cone, dt, budget = null) { // (budge
       const x = cone.x + dx * r + px * lat * spread * r, y = cone.y + dy * r + py * lat * spread * r;
       const sx = toShipX(ship, x), sy = toShipY(ship, y);
       if (!sim.hitsShip(sx, sy)) continue;
-      if (!hull) limit = r + (cone.pen ?? B.PENETRATE);
+      if (!hull) { limit = r + (cone.pen ?? B.PENETRATE); first = { x: sx, y: sy }; }
       hull = true;
       const bag = sim.onGasbag(sx, sy);
       if (bag >= 0) { if (!bags.has(bag)) bags.set(bag, { sx, sy }); continue; }
@@ -69,7 +70,7 @@ export function breathBurn(state, cr, ship, cone, dt, budget = null) { // (budge
   limit = hull ? limit : Infinity;
   if (hull) { // the hull is scorched (less on plate)
     out.hull = true;
-    sim.damageHull(B.HULL_RATE * dt * (plated && !decks.size ? config.ARMOUR.POWER_MUL : 1));
+    creatureHit(ship, first.x, first.y, B.HULL_RATE * dt * (plated && !decks.size ? config.ARMOUR.POWER_MUL : 1)); // (STRUCTURE.md WP2: the segment the cone first scorches)
     cr.hooks.puff(cone.x + dx * Math.min(cone.len, limit - (cone.pen ?? B.PENETRATE)), cone.y + dy * Math.min(cone.len, limit - (cone.pen ?? B.PENETRATE)) - 10, '#8a7f73', 1);
   }
   for (const { d, x } of decks.values()) {

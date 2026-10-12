@@ -460,9 +460,9 @@ export function createShipSim(world, ship, W) {
   const dangerMul = () => 1 + (((state.course && state.course.danger) || 2) - 2) * config.VOYAGE.DANGER_DAMAGE; // skulls on the stop
   const damageHull = (amount) => {
     if (ship.piece) return; // (a half that split off is falling: nothing more to lose, STRUCTURE.md)
-    if (structure.on()) return structure.shim(amount); // (STRUCTURE.md: no hull bar. The creatures, flame, a flood and the like still call this: the blow is spread over her load-bearing segments until WP2 gives each its place)
-    const danger = dangerMul();
-    if (goingDown.protect()) return; // falling (the last stand) or just saved: nothing can hurt her
+    if (structure.on()) return structure.shim(amount); // (STRUCTURE.md: no hull bar. Flame, a flood, bats and the like still call this: the blow is spread over her load-bearing segments until WP2 gives each its place; the creatures call structure.hit at the spot)
+    const danger = dangerMul(); // (a ship with no frame - the enemy gunship, a Versus ship - still plays the hull bar until WP3)
+    if (goingDown.protect()) return; // just saved: nothing can hurt her
     if (!state.ship.down && (state.ship.hull -= amount * config.SHIP.HULL_DAMAGE * dmgMul() * danger) <= 0) wreck();
   };
 
@@ -996,9 +996,9 @@ export function createShipSim(world, ship, W) {
   const balance = createBalance(state); // the seesaw: live centre of mass against the bag's lift (balance.js)
   const flight = createFlight({ state, ship }); // the forces on her drive her pose: engines, sails, drag, buoyancy, weight (flight.js)
   const fireSys = createFire({ state, shipPuff }); // fire that cares where things are: flammability, spreading, the coal blaze (fire.js, fireModel.js)
-  const goingDown = createGoingDown({ state, phoneFx, puff, shipPuff, wreck: (t) => wreck(t), gasHoleAt, getCargo: () => cargo, breakOff: (spec, opts) => breakOff(spec, opts), getStructure: () => structure }); // GOING DOWN! last stand: her lift against her weight (goingDown.js)
+  const goingDown = createGoingDown({ state, phoneFx, wreck: (t) => wreck(t), getCargo: () => cargo, breakOff: (spec, opts) => breakOff(spec, opts), getStructure: () => structure }); // GOING DOWN! last stand: her lift against her weight (goingDown.js)
   state.gdJobs = goingDown.jobsFor; // (read by jobs.js)
-  // STRUCTURE (STRUCTURE.md, structure.js): the frame of segments that replaced the hull bar. Off (config.STRUCTURE.ENABLED), nothing in it runs and the old hull bar plays.
+  // STRUCTURE (STRUCTURE.md, structure.js): the frame of segments that replaced the hull bar. A ship with no frame (structure.on() false: the enemy gunship, a Versus ship) still plays the old hull bar until WP3.
   const structure = createStructure({ state, ship, hooks: {
     scale: () => config.SHIP.HULL_DAMAGE * dmgMul() * dangerMul(), // (what a hull point costs: the upgrades' armour, the difficulty and the size of the crew, the skulls on the stop)
     drainScale: () => dmgMul(),
@@ -1853,7 +1853,7 @@ export function createShipSim(world, ship, W) {
       const pumping = Math.max(0, valve.input) * (state.ship.press > G.PUMP_MIN_PRESS && modules.boilerUp() ? Math.min(1, state.ship.press / 60) : 0);
       state.steamParts.pump = pumping * G.PUMP_STEAM;
       // The pump and the vent act on every gasbag at once; seepage and holes are per bag (gasBags.js: with one bag this is the old single gas value).
-      stepBags(state, pumping * G.PUMP_RATE * goingDown.pumpMul() * (1 + config.BOILER.OD_PUMP * state.overdrive) * state.links.helmMul + Math.min(0, valve.input) * G.VENT_RATE * state.links.helmMul, dt);
+      stepBags(state, pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) * state.links.helmMul + Math.min(0, valve.input) * G.VENT_RATE * state.links.helmMul, dt);
       state.ship.press = Math.max(0, state.ship.press - pumping * G.PUMP_STEAM * dt);
       watchBags(state); // a bag going flat: "FORE BAG DOWN!"
       stepHotAir(state, dt, hasKind('boiler') && modules.boilerUp()); // (hot-air bags: the burner's heat follows the boiler, gasBags.js)
@@ -1969,8 +1969,9 @@ export function createShipSim(world, ship, W) {
 
     if (structure.on()) { // (STRUCTURE.md: a breach or a fire wears down the segment it is in, until it is planked or out)
       if (!state.ship.down) structure.drain(dt);
-    } else if (!state.ship.down && !goingDown.protect()) {
-      state.ship.hull -= (state.breaches.length * 0.5 + fireSys.load() * 0.35) * (ship.ai ? ship.ai.drainMul() : damageMul(state)) * 2 * dt;
+    } else if (!ship.piece && !state.ship.down && !goingDown.protect()) { // (a ship with no frame - the enemy gunship, a Versus ship - still plays the hull bar until STRUCTURE.md WP3)
+      const D = config.SHIP.DRAIN;
+      state.ship.hull -= (state.breaches.length * D.BREACH + fireSys.load() * D.FIRE) * (ship.ai ? ship.ai.drainMul() : damageMul(state)) * D.MUL * dt;
       if (state.ship.hull <= 0) wreck();
     }
     if (!state.ship.down) structure.step(dt);
@@ -1984,13 +1985,12 @@ export function createShipSim(world, ship, W) {
     state.stunts = { cast: hookshot.cast, origin: hookshot.origin, surfaces: air.surfaces, bigFighter: hj.bigFighter }; // (read by the bots' daring stunts, bots.js)
   };
 
-  // A ship that is not the main one gives out: she breaks apart (the first time in a mission GOING DOWN! instead) and is rebuilt after WRECK.TIME. The run, the
+  // A ship that is not the main one gives out: she breaks apart and is rebuilt after WRECK.TIME. The run, the
   // record and the limp rules belong to the main ship.
   function wreckAside(why) {
     if (state.ship.down) return;
     if (ship.piece) return breakPiece();
-    if (goingDown.active()) return;
-    if (!ship.ai && !structure.on() && goingDown.tryStart()) return; // (the enemy gunship has no last stand; with structure the last stand is the continuous falling, goingDown.js)
+    if (goingDown.active()) return; // (she is falling: the fall decides, goingDown.js)
     void why;
     state.ship.hull = 0;
     state.ship.down = config.WRECK.TIME;

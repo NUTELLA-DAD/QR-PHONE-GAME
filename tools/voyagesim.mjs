@@ -134,6 +134,7 @@ config.BOTS.PROFILE = args.profile; // (FUN.md F8: --profile human makes the bot
 for (const kv of args.set.split(';').filter(Boolean)) { const [k, v] = kv.split('='); const ks = k.split('.'); let o = config; for (const x of ks.slice(0, -1)) o = o[x] ??= {}; o[ks[ks.length - 1]] = Number(v); }
 const { SHIP_LAYOUT, kindOf } = await load('shipLayout.js');
 const { damageMul } = await load('modules/host/crewscale.js');
+const { hullOrStructure } = await load('modules/host/structure.js');
 const { createSimulation } = await load('modules/host/simulation.js');
 const { expectedPower: exp } = await load('modules/host/voyage.js');
 const maps = await load("modules/host/maps.js");
@@ -200,10 +201,10 @@ let wasDown = 0;
 for (let step = 1; step <= maxSteps && !result; step++) {
   try {
     simClock += dt * 1000;
-    if (args.topup && state.phase === 'flying' && !state.ship.down) state.ship.hull = 100;
+    if (args.topup && state.phase === 'flying' && !state.ship.down) { state.ship.hull = 100; state.ships[0].sim.structure.restoreAll(); } // (the frame is the hull now: STRUCTURE.md WP6)
     // remember the recent past so we can describe the build-up to a wreck
     if (state.phase === 'flying' && !state.ship.down && step % 30 === 0) { snapshot = snap(); rolling.flying++; rolling.br += snapshot.breaches; rolling.fires += snapshot.fires; rolling.gh += snapshot.holes; for (const q of Object.values(state.players)) { if (q.mate) { mateStat.snaps++; const mk = q.ko > 0 ? "ko" : q.botJob ? q.botJob.kind : "idle"; mateStat.jobs[mk] = (mateStat.jobs[mk] || 0) + 1; if (q.lock) mateStat.locks++; continue; } const k = q.ko > 0 ? "ko" : q.lock ? "station" : q.botJob ? (["fire", "patch", "repair", "swat", "valve", "ice", "unclog", "oxygen", "vent", "coal", "ammo", "revive"].includes(q.botJob.kind) ? "chore" : q.botJob.kind === "fight" ? "fight" : "other") : "idle"; rolling.crew[k] = (rolling.crew[k] || 0) + 1; rolling.n++; } if (!snapshot.helmManned) rolling.helmEmpty++; }
-    const h0 = state.ship.hull, nf = state.fires.length, nb = state.breaches.length, fl = state.phase === 'flying' && !state.ship.down;
+    const h0 = hullOrStructure(state.ship), nf = state.fires.length, nb = state.breaches.length, fl = state.phase === 'flying' && !state.ship.down;
     sim.update(dt);
     fun.step(dt);
     { // (F6: what the stop shape did: counted per stop, per dock)
@@ -223,8 +224,8 @@ for (let step = 1; step <= maxSteps && !result; step++) {
     wasDown = state.ship.down > 0 ? 1 : 0;
     mateStat.max = Math.max(mateStat.max, Object.values(state.players).filter((q) => q.mate).length);
     { const cr = state.creature; if (cr && !lairs.seen.has(cr)) { lairs.seen.add(cr); lairs.met++; } if (cr && cr.dying && cr.stats.win && !lairs.won.has(cr)) { lairs.won.add(cr); lairs.how[cr.stats.win] = (lairs.how[cr.stats.win] || 0) + 1; } } // (C.3: the Kraken lairs the crew met and how they won)
-    { const sid = state.run && state.run.stopId; if (sid) { const b = (hullBy[sid] ??= { col: Number(sid.split('.')[0]), hull: 0, n: 0, t0: step, t1: step }); b.t1 = step; if (fl && step % 30 === 0) { b.hull += state.ship.hull; b.n++; } } } // (F1)
-    if (fl && state.ship.hull < h0) { const dd = damageMul(state); const pf = nf * 0.35 * dd * 2 * dt, pb = nb * 0.5 * dd * 2 * dt, drop = h0 - state.ship.hull; dmg.fire += pf; dmg.breach += pb; dmg.direct += Math.max(0, drop - pf - pb); }
+    { const sid = state.run && state.run.stopId; if (sid) { const b = (hullBy[sid] ??= { col: Number(sid.split('.')[0]), hull: 0, n: 0, t0: step, t1: step }); b.t1 = step; if (fl && step % 30 === 0) { b.hull += hullOrStructure(state.ship); b.n++; } } } // (F1)
+    if (fl && hullOrStructure(state.ship) < h0) { const dd = damageMul(state); const D = config.SHIP.DRAIN, pf = nf * D.FIRE * dd * D.MUL * dt, pb = nb * D.BREACH * dd * D.MUL * dt, drop = h0 - hullOrStructure(state.ship); dmg.fire += pf; dmg.breach += pb; dmg.direct += Math.max(0, drop - pf - pb); }
   } catch (err) { errorCount++; if (errorCount < 4) console.error('ERR', err && err.stack); }
   if (state.phase === 'lobby' && !state.runEnd && !state.wreck) sim.castOff();
   const stopId = state.run && state.run.stopId;

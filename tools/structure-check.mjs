@@ -10,7 +10,7 @@
 //      the piece crashes and her crew wake in the medical bay, removeShip runs, one REBUILD card brings the classic ship back); a ship facing left; 0 errors, no NaN;
 //   6  a segment at the end of the ship that gives way is an ordinary break-off;   7  a worn-out frame (mean soundness under MIN_SHARE) folds;
 //   8  LIFT FAILS: no steam and torn bags -> FALLING; bots (8 / 4 / 2) save her on several seeds; nobody acts -> she crashes after CRASH.TIME (wreck, limp, run end); the alarm can sound twice in one mission;
-//   9  the flag: with config.STRUCTURE.ENABLED false (NO_STRUCTURE=1) there are no frames and the old hull bar plays;
+//   9  creatures hit the segment under the blow (creatureHit: one segment, not four); a ship with no frame (PVP, the enemy gunship) keeps the hull bar;
 //  10  the same seed plays the same twice (botsim --split);  11  botsim --split and --sink on two maps, 3 minutes each, 0 errors;  12  a ship with no gasbag flown 20 s with four bots: 0 errors, no NaN.
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -487,19 +487,23 @@ const sever = (S, ours, x, half = 130) => {
   report(starts >= 2 && w.S.stats.falls >= 2, `no once-per-mission rule: the fall started ${starts} times in one mission (${w.S.stats.saved} saved)`);
 }
 
-// ---------------------------------------------------------------- 9. the switch
+// ---------------------------------------------------------------- 9. creatures hit a segment; a ship with no frame keeps the hull bar
 {
-  const was = SC.ENABLED;
-  SC.ENABLED = false;
   const { sim, st, ours, S } = boot({ bots: 2 });
   step(sim, secs(3));
+  const segs = S.segs(), g = segs.filter((q) => q.critical)[1] || segs[0], before = segs.map((q) => q.hp);
+  ST.creatureHit(ours, g.x, g.y, 40, { power: 2 });
+  const lost = segs.map((q, i) => before[i] - q.hp), hit = lost.filter((v) => v > 1e-9);
+  report(hit.length === 1 && lost[segs.indexOf(g)] > 0.01, `a creature's blow (40 hull points) hurts the one segment under it (${hit.length} segment hurt, ${(lost[segs.indexOf(g)] || 0).toFixed(3)} of its soundness; the old shim spread it over ${SC.SHIM_SPREAD})`);
+  const k0 = segs.map((q) => q.hp);
+  ST.creatureHit(ours, g.x, 0, 40, { kind: 'rock' });
+  report(segs.some((q, i) => q.hp < k0[i] - 1e-9 && q.row === segs.filter((o) => !o.nest).sort((a, b) => b.y - a.y)[0].row), 'a blow from below (kind rock) lands on the keel');
   const h0 = st.ship.hull;
+  config.PVP.ENABLED = true; const noFrame = !S.on(); // (a ship with no frame: structure.on() is false for the enemy gunship and a Versus ship)
   ours.sim.impact(800, 600, 2);
-  const b = st.bags[0].hp;
   step(sim, secs(2));
-  report(!S.on() && st.ship.structure == null && st.ship.hull < h0 && st.ship.hull > 0, `with config.STRUCTURE.ENABLED false the old hull bar plays (hull ${h0} -> ${st.ship.hull.toFixed(2)}, no structure meter)`);
-  void b;
-  SC.ENABLED = was;
+  config.PVP.ENABLED = false;
+  report(noFrame && st.ship.hull < h0 && st.ship.structure == null, `with no frame (PVP.ENABLED) the old hull bar plays (hull ${h0.toFixed(2)} -> ${st.ship.hull.toFixed(2)}, no structure meter)`);
 }
 
 // ---------------------------------------------------------------- 10. determinism, 11. botsim --split / --sink, 12. a bagless ship
@@ -511,8 +515,6 @@ const botsim = (args, env = {}) => {
 {
   const a = botsim(['--minutes', '2', '--seed', '4', '--map', 'open', '--split', '40']), b = botsim(['--minutes', '2', '--seed', '4', '--map', 'open', '--split', '40']);
   report(a.out.length > 200 && a.out === b.out && /structure:/.test(a.out), 'the same seed plays the same twice (botsim --split 40, 2 minutes: identical summaries)');
-  const off = botsim(['--minutes', '1', '--seed', '4', '--map', 'open'], { NO_STRUCTURE: '1' });
-  report(!/structure:/.test(off.out) && off.errors === 0, 'NO_STRUCTURE=1 plays the old game (no structure line, 0 errors)');
 }
 {
   for (const map of quick ? ['open'] : ['open', 'network']) {

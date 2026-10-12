@@ -28,12 +28,13 @@
 //        node tools/buildsim.mjs --check-gunship-ship  B.5: the enemy gunship as a SHIP (tools/gunship-ship-check.mjs): she spawns with a real layout and a bot crew who live on her, flies and comes about on her own pose and flight, fights (her cannonballs, our shells, the ports), LATCHES with a rope that is a spring between two poses and sends her guards across, our crew board her (swing, fight, plant the charge, swing back, take her helm), she can be sunk, a fire on her spreads, a natural pacing-director run; then the parity bands against the old gunship (tools/gunship-parity.mjs)
 //        node tools/buildsim.mjs --check-turn       M.3: COME ABOUT: the helm's command (the phone's button or the stick astern, held), the manoeuvre (squash through zero, f flips at the middle, her speed along the bow flips so the ground speed does not jump, speed held down, no guns, the camera's zoom held), the refusals (too fast, already turning, cooling down, falling, a gunship alongside, a hookshot line, the mirrored hull in rock), rock on the right side, the Nose Gun's shells, a person's screen-relative stick (also one held across the flip), a headless bot helm turning on a route map and flying back to a goal behind her, a second ship turning on her own, the bots' jobs through a turn (tools/turn-check.mjs)
 //        node tools/buildsim.mjs --check-curriculum   G0: the voyage curriculum (tools/curriculum-check.mjs): 200 seeded routes per mode (QUICK / VOYAGE / CAMPAIGN, gentle and the second voyage) hold their shape, slot tables, set-piece gates (no gunship in column 1, no strafers before column 2), sky tiers in order, lairs from 60% of the route, an easy branch in every middle column and the flag rules; ENABLED = false is byte-identical to the old routes; in the game the first stop allows bats and imps only and a crew under the expected power is offered a salvage run
-//        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt (run with NO_STRUCTURE=1, the old hull bar, until STRUCTURE.md WP6 re-snapshots it for the structure game)
+//        node tools/buildsim.mjs --check-botsim     the 9 seeded botsim runs must match tools/fixtures/botsim-baseline.txt (the structure game: STRUCTURE.md WP6 re-snapshotted it; node tools/buildsim.mjs --snapshot-botsim --force re-captures it)
+//        node tools/buildsim.mjs --snapshot-botsim --force [note]   re-capture tools/fixtures/botsim-baseline.txt (same 9 commands and pins; the note goes in its header)
 //        node tools/buildsim.mjs --check-human-profile [--runs 12] [--build sparrow|classic] [--seed 1] [--with-bot]   FUN.md F8: 12 voyages with the HUMAN bot profile (slow thinking, loose aim, late answers, a shaky helm hand) as a snapshot table of results and fun numbers (overrun, idle%, menu s/stop, dull gap, first threat and falls per stop); no pass/fail thresholds yet, it fails only on errors or crashes; --with-bot prints the bot profile's table beside it
 //        node tools/buildsim.mjs --check-fun-metrics   FUN.md F8: the fun counters (tools/funmetrics.mjs) count right on a staged state, and the bot profile keeps today's numbers (tools/fun-check.mjs)
 //        node tools/buildsim.mjs --check-stop-shape  FUN.md F6 (tools/stopshape-check.mjs): the 3 s briefing card, the gunship as the one big thing of a stop with no lair or ring, the 20 s ESCAPE calm after the objective, no mid-voyage zeppelin (WAVES.MID_BOSS false), the 3-card dock (MEND HER / one part or fitting / Cast off) with the shorter votes and the bots buying from it, SHOP.V2 off = the old dock; the tools (--check-botsim, --check-golden, --check-frames, --check-creature) run with NO_STOP_SHAPE=1
-//        node tools/buildsim.mjs --check-scrap      SCRAP, FLOTSAM AND THE HOLD (LOOP.md G1; tools/scrap-check.mjs): the item and the hold bin, what falls from each kind of kill, the chute / drift / landing, the hookshot catch, a harpoon hauling a hulk and the bundles taken from it, stow and the hold's weight on the LIFT / WEIGHT gauge, dumping it while she falls, limp home keeping it, Versus and NO_SCRAP off, the helm's plan, botsim 3 minutes with 8 bots. (--check-botsim, --check-golden, --check-frames and --check-creature run with NO_SCRAP=1 beside NO_STRUCTURE=1 until G7 re-snapshots them for the scrap game.)
-//        node tools/buildsim.mjs --check-structure  STRUCTURE.md WP0 + WP1 (tools/structure-check.mjs): the segments and the load graph, what a hit / a breach / a fire / rock hurts, the hammer, the warning and the creak, the grace, the failure rules, a SPLIT into two ships (the piece falls and crashes, her crew wake in the medbay, a REBUILD card brings her back), folding, lift failing (FALLING, bots save her, the CRASH), the NO_STRUCTURE switch, determinism, botsim --split / --sink, a ship with no gasbag
+//        node tools/buildsim.mjs --check-scrap      SCRAP, FLOTSAM AND THE HOLD (LOOP.md G1; tools/scrap-check.mjs): the item and the hold bin, what falls from each kind of kill, the chute / drift / landing, the hookshot catch, a harpoon hauling a hulk and the bundles taken from it, stow and the hold's weight on the LIFT / WEIGHT gauge, dumping it while she falls, limp home keeping it, Versus and NO_SCRAP off, the helm's plan, botsim 3 minutes with 8 bots. (--check-botsim, --check-golden, --check-frames and --check-creature run with NO_SCRAP=1 until G7 re-snapshots them for the scrap game.)
+//        node tools/buildsim.mjs --check-structure  STRUCTURE.md WP0 + WP1 (tools/structure-check.mjs): the segments and the load graph, what a hit / a breach / a fire / rock hurts, the hammer, the warning and the creak, the grace, the failure rules, a SPLIT into two ships (the piece falls and crashes, her crew wake in the medbay, a REBUILD card brings her back), folding, lift failing (FALLING, bots save her, the CRASH), determinism, botsim --split / --sink, a ship with no gasbag
 //        node tools/buildsim.mjs --check-multi      S.3: the scratch multi-instance build (2 boilers, 2 lookouts) validates and botsims clean
 //        node tools/buildsim.mjs --check-validator   S.5: broken builds must FAIL/WARN with the right message (the classic passes clean)
 //        node tools/buildsim.mjs --check-edit        S.5b/S.5c: the blueprint editor (draw a keel deck, extend main, lengthen the bag, cut the top deck, erase; ladders and delete; erase everything and build a ship up from nothing) validates and flies 2 min with 0 errors
@@ -50,6 +51,7 @@
 //        node tools/buildsim.mjs --check-escort-crash  PATROL PLANES AND AIRSHIPS (tools/escort-crash-check.mjs; config.ESCORT.CRASH_ON_SHIPS): a flying patrol plane that touches any ship's hull or gasbag (her own after the launch grace, another ship, the enemy gunship, the Versus rival; a stolen plane too) crashes like one shot down - the pilot bails out, the rebuild timer starts, CRASHED! pops, a Ship's Book moment - and the ship takes a small knock where she struck; the auto pilot (and a bot) steer clear of hulls, a person at the stick can still fly into one; the switch off = the old game; a bot run with 0 errors. (The seeded baselines run with NO_ESCORT_CRASH=1.)
 //        node tools/buildsim.mjs --check-guns       FUN.md F4, GUNS THAT MATTER (tools/guns-check.mjs): the director aims swarms, bombers, squadrons and imps at the side where the guns are manned (state.links.aim), the harder tempo from stop 3 and two set pieces from stop 5, no mines before stop 3, the job arrow for a gunner with no target for 6 s (still seated), CREW_SEATS mothballs the Aft Dorsal Gun and the Deflector under 8 crew, the lone fighter as a squadron of one, the bots man no gun with nothing to shoot; NO_GUNS=1 = the old game
 //        node tools/buildsim.mjs --check-helm       FUN.md F3, A HELM FOR ONE THUMB (tools/helm-check.mjs): the stick's up/down pumps and vents (let go and the autopilot trim holds her height), the phone's gas gauge (ui.hv) and no engine panel until CONTROLS.EXPERT, SPLIT undone for a person without EXPERT, a bot's stick is the gas, the Navigator station is gone; NO_HELM_V2=1 = the old helm (and the Navigator)
+//        node tools/buildsim.mjs --check-hygiene    FUN.md F9 + F11 (tools/hygiene-check.mjs): a grep gate - the supply ammo, the fighter spawn band, the hull drain, the raider strike cooldown and the bot surge limits live in config.js; NO_STRUCTURE, the legacy last stand and the creatures' damageHull shim stay gone
 //        node tools/buildsim.mjs --check-alarms     FUN.md F2, ONE VOICE (tools/alarms-check.mjs): the TV banner goes through one arbiter (host/alarms.js) - a lower priority waits, an equal one replaces after HOLD, priority 8+ (FALLING, a crash) cuts in at once, the same words are merged, the queue is sorted and capped, the phone shows one line for its own deck or seat, 0 direct banner writes left (a grep); the seeded checks that read the banner text run with NO_ALARMS=1 (the old last-writer banner)
 //        node tools/buildsim.mjs --check-role-cards FUN.md F10, ROLE CARDS (tools/rolecards-check.mjs): the verb of every job kind (GRAB / PATCH / SPRAY / LOAD / STOKE / TAKE THE HELM / HELP ...), shown over a crewman only after VERB_AFTER s free with a job, the ? card for each kind of station, NO_ROLE_CARDS=1 = the old game (no verb, no field); --check-frames, golden and botsim run with NO_ROLE_CARDS=1
 //        node tools/buildsim.mjs --check-party      FUN.md F5, RAIDERS AND FIRE AS A PARTY (tools/party-check.mjs): announced boarding (ropes in sight, BOARDERS AFT / FORE), at most 1 + crew/3 aboard, none while FALLING or just after SHE HOLDS, cutters hack stations before crew, the fire cap follows the crew and nothing ignites while FALLING, slower early spread, end segments with the boiler or helm hold 8 s and cannot break off before stop 3, the grounded 40 s soft lock raises FALLING; NO_PARTY=1 = the old numbers
@@ -154,14 +156,29 @@ async function checkMulti() {
 }
 
 // The 9 seeded botsim runs must give the same summaries as the baseline captured before Phase S.1.
+const BOTSIM_BASELINE = path.join(root, 'tools', 'fixtures', 'botsim-baseline.txt');
+// One baseline command, run with the pins of the seeded baselines (SCRAP: the baseline plays without it until G7 - LOOP.md G1; the other flags are the games FUN.md F3 to F10 added), its summary text.
+function runBotsimBlock(cmd) {
+  const out = spawnSync(process.execPath, cmd.replace(/^node /, '').split(' '), { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NO_SCRAP: '1', NO_ESCORT_CRASH: '1', NO_PARTY: '1', NO_STOP_SHAPE: '1', NO_GUNS: '1', NO_ROLE_CARDS: '1', NO_HELM_V2: '1' } });
+  const got = (out.stdout || '').replace(/\r/g, '').split('\n').filter((l) => !l.startsWith('real time')).join('\n');
+  return got.slice(got.indexOf('--- botsim summary ---')).trim();
+}
+// STRUCTURE.md WP6: re-capture the baseline for the structure game (the commands stay the ones in the file; `note` is added to its header).
+function snapshotBotsim(note) {
+  const text = fs.readFileSync(BOTSIM_BASELINE, 'utf8').replace(/\r/g, '');
+  const at = text.search(/^\$ /m), head = text.slice(0, at).replace(/\n+$/, '\n');
+  const blocks = text.split(/^\$ /m).slice(1).map((b) => b.split('\n')[0].trim());
+  let out = head + (note ? '\n' + note + '\n' : '') + '\n';
+  for (const cmd of blocks) { out += '$ ' + cmd + '\n' + runBotsimBlock(cmd) + '\n\n'; console.log('captured ' + cmd); }
+  fs.writeFileSync(BOTSIM_BASELINE, out.replace(/\n+$/, '\n'));
+  console.log('wrote ' + BOTSIM_BASELINE);
+}
 function checkBotsim() {
-  const text = fs.readFileSync(path.join(root, 'tools', 'fixtures', 'botsim-baseline.txt'), 'utf8').replace(/\r/g, '');
+  const text = fs.readFileSync(BOTSIM_BASELINE, 'utf8').replace(/\r/g, '');
   const blocks = text.split(/^\$ /m).slice(1).map((b) => { const [cmd, ...rest] = b.split('\n'); return { cmd: cmd.trim(), want: rest.join('\n').trim() }; });
   let ok = true;
   for (const { cmd, want } of blocks) {
-    const out = spawnSync(process.execPath, cmd.replace(/^node /, '').split(' '), { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, NO_STRUCTURE: '1', NO_SCRAP: '1', NO_ESCORT_CRASH: '1', NO_PARTY: '1', NO_STOP_SHAPE: '1', NO_GUNS: '1', NO_ROLE_CARDS: '1', NO_HELM_V2: '1' } }); // (SCRAP: the baseline plays without it until G7 - LOOP.md G1) (the baseline is the hull-bar game: STRUCTURE.md WP6 re-snapshots it for the structure game)
-    const got = (out.stdout || '').replace(/\r/g, '').split('\n').filter((l) => !l.startsWith('real time')).join('\n');
-    const gotSummary = got.slice(got.indexOf('--- botsim summary ---')).trim();
+    const gotSummary = runBotsimBlock(cmd);
     const same = gotSummary === want;
     console.log((same ? 'PASS ' : 'FAIL ') + cmd);
     if (!same) {
@@ -2631,14 +2648,16 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'lint3d.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-yard') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'yard-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1', NO_GUNS: '1', NO_ROLE_CARDS: '1', NO_HELM_V2: '1' } }).status === 0 ? 0 : 1);
-} else if (mode === '--check-log') { // L0 + L1: the Ship's Book (tools/log-check.mjs): moments, the Log writer, the postcard, the dock line, play of the mission (its scripted scenes are the hull-bar game until STRUCTURE.md WP6, like the creature gate; NO_STRUCTURE=0 runs them with structure on)
-  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'log-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STRUCTURE: process.env.NO_STRUCTURE ?? '1' } }).status === 0 ? 0 : 1);
+} else if (mode === '--check-log') { // L0 + L1: the Ship's Book (tools/log-check.mjs): moments, the Log writer, the postcard, the dock line, play of the mission
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'log-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-health') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'health-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-gen') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gen-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-flame') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'flame-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+} else if (mode === '--check-hygiene') { // FUN.md F9 + F11: the tunables moved to config.js stay there and the retired switches stay gone (tools/hygiene-check.mjs, a grep)
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'hygiene-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-alarms') { // FUN.md F2: one voice - the alarm arbiter (tools/alarms-check.mjs)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'alarms-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-party') { // FUN.md F5: raiders and fire as a party (tools/party-check.mjs)
@@ -2660,7 +2679,7 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'ring-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-creature') {
   process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
-  const run = (script, args) => spawnSync(process.execPath, [path.join(root, 'tools', script), ...args], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STRUCTURE: '1', NO_SCRAP: '1', NO_ESCORT_CRASH: '1', NO_PARTY: '1', NO_STOP_SHAPE: '1', NO_GUNS: '1', NO_ROLE_CARDS: '1', NO_HELM_V2: '1' } }).status === 0; // (SCRAP: no flotsam in the fights until G7) (STRUCTURE.md: the creature fights are balanced for the hull-bar game - the Kraken's grip drags her into the sea, where a crash is now a loss: WP2 moves the creatures onto segments and WP6 re-balances them; until then this gate runs the old game)
+  const run = (script, args) => spawnSync(process.execPath, [path.join(root, 'tools', script), ...args], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_SCRAP: '1', NO_ESCORT_CRASH: '1', NO_PARTY: '1', NO_STOP_SHAPE: '1', NO_GUNS: '1', NO_ROLE_CARDS: '1', NO_HELM_V2: '1' } }).status === 0; // (SCRAP: no flotsam in the fights until G7) (STRUCTURE.md: the creature fights are balanced for the hull-bar game - the Kraken's grip drags her into the sea, where a crash is now a loss: WP2 moves the creatures onto segments and WP6 re-balances them; until then this gate runs the old game)
   const world = run('creature-check.mjs', argv.slice(1)); // (C.1: the creature in the real game)
   const body = run('creature-spike-check.mjs', []); // (C.0: the body itself)
   process.exit(world && body ? 0 : 1);
@@ -2691,7 +2710,7 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'crossship-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-hatch') {
   process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
-  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'hatch-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
+  process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'hatch-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit', env: { ...process.env, NO_STOP_SHAPE: '1', NO_GUNS: '1', NO_ROLE_CARDS: '1', NO_HELM_V2: '1' } }).status === 0 ? 0 : 1);
 } else if (mode === '--check-gunship-ship') {
   process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'gunship-ship-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
@@ -2714,19 +2733,22 @@ if (mode === '--snapshot-classic') {
   if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/pose-lint-allow.json from the current code (do this only when the counts went DOWN).'); process.exit(2); }
   fs.writeFileSync(POSE_ALLOW, JSON.stringify(poseCounts(path.join(root, 'public')), null, 1) + '\n');
   console.log('wrote ' + POSE_ALLOW);
+} else if (mode === '--snapshot-botsim') { // STRUCTURE.md WP6: re-capture tools/fixtures/botsim-baseline.txt (same commands, same pins as --check-botsim); anything after --force is added to the file's header
+  if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/botsim-baseline.txt from the current code (do it when a PLANNED change legitimately moves the numbers). Text after --force becomes a header note.'); process.exit(2); }
+  snapshotBotsim(argv.slice(2).join(' '));
 } else if (mode === '--snapshot-golden') {
-  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1'; process.env.NO_ROLE_CARDS = '1'; process.env.NO_HELM_V2 = '1';
+  process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1'; process.env.NO_ROLE_CARDS = '1'; process.env.NO_HELM_V2 = '1';
   if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/golden.json from the current code (do it when a PLANNED change legitimately moves the numbers).'); process.exit(2); }
   await snapshotGolden();
 } else if (mode === '--check-golden') {
-  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1'; process.env.NO_ROLE_CARDS = '1'; process.env.NO_HELM_V2 = '1'; // (the golden numbers are the hull-bar game's, without scrap: STRUCTURE.md WP6 re-captures them for the structure game)
+  process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1'; process.env.NO_ROLE_CARDS = '1'; process.env.NO_HELM_V2 = '1'; // (the golden numbers are the structure game's, without scrap)
   process.exit((await checkGolden()) ? 0 : 1);
 } else if (mode === '--snapshot-frames') {
-  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1'; process.env.NO_ROLE_CARDS = '1'; process.env.NO_HELM_V2 = '1';
+  process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1'; process.env.NO_ROLE_CARDS = '1'; process.env.NO_HELM_V2 = '1';
   if (argv[1] !== '--force') { console.log('Pass --force to rewrite tools/fixtures/frames/ from the current code.'); process.exit(2); }
   await snapshotFrames();
 } else if (mode === '--check-frames') {
-  process.env.NO_STRUCTURE = '1'; process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1'; process.env.NO_ROLE_CARDS = '1'; process.env.NO_HELM_V2 = '1'; // (...and so are the frames)
+  process.env.NO_SCRAP = '1'; process.env.NO_ESCORT_CRASH = '1'; process.env.NO_PARTY = '1'; process.env.NO_STOP_SHAPE = '1'; process.env.NO_GUNS = '1'; process.env.NO_ROLE_CARDS = '1'; process.env.NO_HELM_V2 = '1'; // (...and so are the frames)
   process.exit((await checkFrames()) ? 0 : 1);
 } else if (mode === '--check-pose') {
   process.exit((await checkPose()) ? 0 : 1);

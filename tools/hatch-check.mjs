@@ -74,6 +74,8 @@ function boot({ parts = null, others = [], calm = true, clear = true, bots = 0, 
   if (clear) st.course.map.solid.fill(0);
   return { sim, st, ships };
 }
+// STRUCTURE.md WP6: a fall is lift failing, so a gate that wants one to go on keeps the bags torn flat.
+const sag = (A) => () => { for (const b of A.ctx.bags) b.gas = Math.min(b.gas, 6); };
 function step(sim, n = 1, each = null) {
   for (let i = 0; i < n; i++) {
     for (const sh of sim.state.ships) sh.state.press = Math.min(Math.max(sh.state.press, 45), 72);
@@ -373,13 +375,13 @@ let sc = lowerScene();
   const m0 = A.sim.goingDown.measure();
   report(m0.cargo >= w - 0.01, `(d) three loads lie on the trapdoors: GOING DOWN!'s weight counts them (cargo ${m0.cargo.toFixed(1)} of weight ${m0.weight.toFixed(1)})`);
   report(hatchesWorth(A.ctx).length === 0, '(d) ...and outside GOING DOWN! nobody is sent to the hatch');
-  A.sim.goingDown.tryStart();
+  A.sim.goingDown.startFall();
   step(sim, 5);
   const jobs = A.ctx.gdJobs({ x: 100, d, id: 'x', carry: null });
   report(A.ctx.goingDown && hatchesWorth(A.ctx).length === 1 && (jobs || []).some((j) => j.kind === 'hatch' && /HATCH/.test(j.label)), '(d) GOING DOWN!: the hatch is a job for the phones ("PULL THE HATCH LEVER - THE CARGO DROPS!") while cargo lies over it');
   const before = A.ctx.goingDown.m.weight, dumped0 = A.ctx.goingDown.dumped;
   rec().want = true; rec().warn = 0;
-  step(sim, seconds(H.OPEN_TIME + 4));
+  step(sim, seconds(H.OPEN_TIME + 4), sag(A)); // (the fall is kept going: torn bags)
   const m1 = A.ctx.goingDown.m;
   report(A.ctx.loads.filter((l) => l.d === d && l.x > h.x0 && l.x < h.x1).length === 0 && before - m1.weight >= w - 3 && A.ctx.goingDown.dumped - dumped0 >= w - 0.01, `(d) opening it drops the cargo: her weight falls ${(before - m1.weight).toFixed(1)} (the loads weighed ${w}), counted as dumped (${(A.ctx.goingDown.dumped - dumped0).toFixed(1)})`);
   report(hatchesWorth(A.ctx).length === 0, '(d) ...and the job is gone');
@@ -397,11 +399,11 @@ let sc = lowerScene();
     const g = lowerScene({ parts: COAL });
     const { sim, A } = g;
     step(sim, 5);
-    A.sim.goingDown.tryStart();
+    A.sim.goingDown.startFall();
     step(sim, 5);
     const gd = A.ctx.goingDown, fuel0 = gd.m.weight;
     A.ctx.hatches[0].want = true; A.ctx.hatches[0].warn = 0;
-    step(sim, seconds(H.OPEN_TIME + 1.5));
+    step(sim, seconds(H.OPEN_TIME + 1.5), sag(A));
     report(gd.coalGone === true && gd.coalShed > 0 && A.ctx.hatchStats.dumped >= 1 && gd.m.weight < fuel0 - gd.coalShed * 0.5, `(d) opening it while she falls spills the bunker: coal gone (shed ${gd.coalShed}), her weight ${fuel0.toFixed(1)} -> ${gd.m.weight.toFixed(1)}`);
   }
 }
@@ -413,7 +415,7 @@ let sc = lowerScene();
   const { sim, A, d, h } = g;
   const mid = (h.x0 + h.x1) / 2, rec = () => A.ctx.hatches[0];
   step(sim, seconds(8));
-  A.sim.goingDown.tryStart();
+  A.sim.goingDown.startFall();
   for (let k = 0; k < 4; k++) A.sim.cargo.place(k % 2 ? 'sandbag' : 'crate', d, mid - 70 + k * 45);
   let hold = 0, ourOn = 0;
   step(sim, seconds(quick ? 25 : 40), () => {

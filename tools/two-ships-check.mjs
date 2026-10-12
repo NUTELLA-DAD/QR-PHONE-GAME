@@ -140,7 +140,6 @@ const snap = (sh) => JSON.stringify({
   // a wreck of one does not end the run, she is rebuilt, the other is not wrecked
   const { sim: sim5, st: st5, A: A5, B: B5 } = boot({ bots: 0 });
   step(sim5, 5);
-  B5.sim.goingDown.tryStart(); // (the last stand is used up, so the next wreck is a real one)
   B5.ctx.goingDown = null;
   B5.ctx.gdGrace = 0;
   B5.sim.wreck('test'); // (STRUCTURE.md: no hull to drain to 0 - she is wrecked outright)
@@ -155,7 +154,6 @@ const snap = (sh) => JSON.stringify({
   const run = (sim, n) => { for (let i = 0; i < n; i++) { try { step(sim, 1); } catch (e) { errs.push(String(e && e.stack).split('\n').slice(0, 3).join(' | ')); if (errs.length > 3) return; } } };
   const { sim, st, A, B } = boot();
   run(sim, 300);
-  A.sim.goingDown.tryStart(); // (the last stand is used up, so the next wreck is a real one: the voyage's spare gasbag takes it, she limps home)
   A.ctx.goingDown = null;
   A.ctx.gdGrace = 0;
   A.sim.wreck('test');

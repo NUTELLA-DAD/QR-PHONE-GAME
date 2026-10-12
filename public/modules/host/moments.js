@@ -13,6 +13,7 @@
 //   moments.restart()                                        a new run: forget everything
 import { config } from '../../config.js';
 import { shipOf } from './ships.js';
+import { hullOrStructure } from './structure.js';
 
 // What a moment of each kind says about who deserves it when the caller could not name him: the stats to look at, best first.
 const BUSY = {
@@ -133,7 +134,7 @@ export function createMoments({ world, stopInfo, helm }) {
       }
     }
     for (const k of Object.keys(carry)) if (!seen[k]) delete carry[k];
-    const trouble = !world.ship.down && (world.ship.hull < L.HELM.HULL || !!world.goingDown);
+    const trouble = !world.ship.down && (hullOrStructure(world.ship) < L.HELM.HULL || !!world.goingDown);
     if (trouble) {
       crisis.t += dt;
       const h = helm();

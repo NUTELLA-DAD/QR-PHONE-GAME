@@ -20,6 +20,7 @@ import { applyForce, hitForce } from './forces.js';
 import { hurt, knockOut } from './health.js';
 import { pop } from './popups.js';
 import { shipOf } from './ships.js';
+import { creatureHit } from './structure.js';
 
 const BD = () => config.CREATURES.THUNDERBIRD;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -458,7 +459,7 @@ function passHit(state, cr, ship, a, q) {
   a.esc = { x: -a.dir.x * 0.3, y: -0.95 };
   bd.dazed = S.DAZED;
   cr.stats.passHits += 1;
-  if (sim && sim.damageHull) sim.damageHull(S.HULL);
+  creatureHit(ship, a.sx, a.sy, S.HULL, { power: S.POWER }); // (STRUCTURE.md WP2: the segment it strikes)
   hitForce(ship.ctx, a.sx, a.sy, S.POWER);
   ship.pose.vy = (ship.pose.vy || 0) + a.dir.y * 120;
   if (sim && sim.air) sim.air.shove(S.SHOVE, a.sx);

@@ -21,6 +21,7 @@ import { applyForce, hitForce } from './forces.js';
 import { hurt, knockOut } from './health.js';
 import { pop } from './popups.js';
 import { shipOf } from './ships.js';
+import { creatureHit } from './structure.js';
 
 const CR = () => config.CREATURES;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -205,7 +206,7 @@ function rip(state, cr, g) {
   if (sim && sim.breakOff) r = sim.breakOff({ kind: 'limb', x: g.x, y: g.y, reach: G.RIP.REACH, len: G.RIP.LEN, cause: 'creature' }, { force: true });
   if (r) cr.stats.ripped = (cr.stats.ripped || 0) + 1;
   else {
-    if (sim && sim.damageHull) sim.damageHull(G.RIP.HULL);
+    creatureHit(ship, g.x, g.y, G.RIP.HULL); // (STRUCTURE.md WP2: the segment under the grip)
     cr.stats.hulled = (cr.stats.hulled || 0) + 1;
     if (ship.main) { state.say('setpiece', 'THE TENTACLE CRUSHES HER HULL!', null, 3.5); }
     hitForce(ship.ctx, g.x, g.y, 4);
@@ -356,7 +357,7 @@ function lashDeck(state, cr, ship, d, s) {
       if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, 'SLAPPED OFF THE DECK! Open the parachute or grab a ladder!', [200, 60, 200]);
     } else if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, 'SLAPPED!', [200, 60, 200]);
   }
-  if (sim && sim.damageHull) sim.damageHull(S.HULL);
+  creatureHit(ship, (s.nearX + s.farX) / 2, s.y, S.HULL, { power: S.POWER }); // (the segment the whip lands on)
   hitForce(ship.ctx, (s.nearX + s.farX) / 2, s.y, S.POWER);
   state.ship.shake = Math.max(state.ship.shake || 0, 1);
   const wx = toWorldX(ship, (s.nearX + s.farX) / 2), wy = toWorldY(ship, s.y);

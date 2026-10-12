@@ -15,6 +15,7 @@ import { flamAt } from './fireModel.js';
 import { hearts } from './health.js';
 import { mainShip, hostileTo, foeOf, areHostile, shipOf } from './ships.js';
 import { cannonPlan } from './cannon.js';
+import { hullOrStructure } from './structure.js';
 import { solveThrow } from './cargo.js';
 import { scrapOn, holdSpot, holdFull, heavyHold, helmPlan } from './scrap.js';
 import { cannonSeatName, sizeNamed } from './shipBuild.js';
@@ -328,7 +329,7 @@ function rescueAltitude(state) {
   const L = ship.layout;
   const s = state.sea;
   const c = state.course;
-  if (!s || !c || !c.map || !L.bombBay || s.y == null || state.env.id !== 'sea' || state.ship.hull < 40 || s.flood > 0.5) return null; // (no bomb bay, no rope to rescue anyone with)
+  if (!s || !c || !c.map || !L.bombBay || s.y == null || state.env.id !== 'sea' || hullOrStructure(state.ship) < 40 || s.flood > 0.5) return null; // (no bomb bay, no rope to rescue anyone with)
   const R = config.ENVIRONMENTS.sea.RESCUE;
   const bx = toWorldX(ship, L.bombBay.x);
   for (const sv of s.survivors) {
@@ -396,7 +397,7 @@ function cannonReach(state, n) {
   if (r.goUntil > now) return 0.6;
   if (now - (r.tryAt || 0) < 1000) return 4;
   r.tryAt = now;
-  if (Object.values(state.players).filter((q) => q.bot && !q.mate && !(q.ko > 0)).length < XB.CANNON_MIN_CREW || state.ship.hull < config.BOTS.DARING.MIN_HULL) return 4;
+  if (Object.values(state.players).filter((q) => q.bot && !q.mate && !(q.ko > 0)).length < XB.CANNON_MIN_CREW || hullOrStructure(state.ship) < config.BOTS.DARING.MIN_HULL) return 4;
   if (!(cannonPlan(ship, c, r) || cannonPlan(ship, c, r, { solo: true })) || Math.random() >= XB.CANNON_CHANCE / 60) return 4;
   r.goUntil = now + 60000;
   return 0.6;
@@ -1436,7 +1437,7 @@ function dareKinds(state) {
 function maybeDare(p, state, bots, job) {
   const L = mainShip(state).layout;
   const RD = config.PVP.ENABLED ? config.PVP.BOT.RAID : null; // (Versus: raids are bolder and more often than co-op stunts)
-  if (!DR.ENABLED || p.mate || p.enemy || (mainShip(state).ai && hostile(p, state)) || p.dare || !state.stunts || state.phase !== 'flying' || state.ship.down || state.ship.hull < (RD ? RD.MIN_HULL : DR.MIN_HULL)) return; // (the gunship's crew are not daring; our boarders on her deck are busy)
+  if (!DR.ENABLED || p.mate || p.enemy || (mainShip(state).ai && hostile(p, state)) || p.dare || !state.stunts || state.phase !== 'flying' || state.ship.down || hullOrStructure(state.ship) < (RD ? RD.MIN_HULL : DR.MIN_HULL)) return; // (the gunship's crew are not daring; our boarders on her deck are busy)
   if (bots.length < DR.MIN_CREW || bots.filter((q) => q.dare).length >= (RD ? RD.MAX : DR.MAX_AT_ONCE)) return;
   const flot = !RD && scrapHookable(state); // (SCRAP: bundles to hook are only there for a few seconds: a shorter cooldown and a better chance)
   if (state.stuntEnd !== undefined && performance.now() - state.stuntEnd < (RD ? RD.COOLDOWN : flot ? config.SCRAP.BOTS.HOOK_COOLDOWN : DR.COOLDOWN) * 1000) return;
@@ -1559,7 +1560,7 @@ function dareStep(p, state, dt) {
   switch (d.phase) {
     case 'get': {
       if (p.carry === 'hookshot') return setPhase(p, state, 'aim'), true;
-      if (d.t > DR.GET_TIMEOUT || state.ship.hull < DR.MIN_HULL) return endDare(p, state, 'no hookshot'), false;
+      if (d.t > DR.GET_TIMEOUT || hullOrStructure(state.ship) < DR.MIN_HULL) return endDare(p, state, 'no hookshot'), false;
       getTool(state, p, 'hookshot');
       return true;
     }
@@ -1983,7 +1984,7 @@ function linkJobs(state, bot, early) {
   if (bot.surgeStart > 0 && !(bot.botJob && bot.botJob.kind === 'surge')) bot.surgeStart = 0; // (interrupted: forget it)
   const surging = bot.botJob && bot.botJob.kind === 'surge' && (bot.surgeStart || 0) > 0;
   const calm = L.hasKind('boiler') && !state.fires.length && !mods.some((m) => m.broken && critical(mods, m)) && players.some((q) => isHelm(L, q.lock));
-  if (surging ? ship.press < prof().SURGE_STOP_PRESS + 1 : calm && ship.press >= LK.SURGE.MIN_PRESS + 4 && ship.press <= 78 && ship.fuel > 25 && now - (state.surgeBotAt || -1e9) > prof().SURGE_GAP * 1000 && ship.speed > 0.25) out.push({ kind: 'surge', obj: 'surge', max: 1 });
+  if (surging ? ship.press < prof().SURGE_STOP_PRESS + 1 : calm && ship.press >= LK.SURGE.MIN_PRESS + 4 && ship.press <= config.BOTS.SURGE_MAX_PRESS && ship.fuel > config.BOTS.SURGE_MIN_FUEL && now - (state.surgeBotAt || -1e9) > prof().SURGE_GAP * 1000 && ship.speed > 0.25) out.push({ kind: 'surge', obj: 'surge', max: 1 });
   return out;
 }
 

@@ -1,7 +1,7 @@
 // STRUCTURE (STRUCTURE.md, WP0 + WP1): the hull bar is gone. A ship is a frame of SEGMENTS: a stretch of each deck (SEG_PX long) with the rooms on it and the hull skin under it. Each segment has a
 // soundness (hp, 0..1); the gasbags have a canvas hp of their own (state.bags[i].hp). What hurts a segment: a shell that lands on it, a breach or a fire on it, rock under the keel. What mends it: a hammer
 // (SHORE UP), a reward, a supply drop. A segment that reaches 0 holds on at HOLD_HP for a GRACE (a hammer saves it), then gives way: the end of the ship breaks off, or - when the stretch that is left on
-// each side is long enough - she SPLITS in half (shipSim.js splitShip). The whole thing is switched by config.STRUCTURE.ENABLED (NO_STRUCTURE=1): off, nothing here runs and the old hull bar plays.
+// each side is long enough - she SPLITS in half (shipSim.js splitShip). It is the one rule for the co-op ship (WP6); a ship with no frame (on() false: the enemy gunship, a Versus ship, a half that split off) keeps the old hull bar until WP3.
 //
 //   THE PURE HALF (Node-safe, no live ship)
 //     segmentsOf(layout)         { segs, adj, total }  every segment { sig: deckId@col, id, d, row, name, x0, x1, x, y, y0, y1, w, gondola, critical, nest, hp:1, st / state }. The cells lie on a grid of SEG_PX
@@ -104,14 +104,22 @@ export function stretchesOf(segs, idx) {
   return out;
 }
 
-// How much she has lost, 0..100 (the gates that used to read 100 - hull): with structure on the length-weighted soundness missing from her frame, else the hull bar's.
+// How much she has lost, 0..100 (the gates that used to read 100 - hull): with a frame the length-weighted soundness missing from it, else the hull bar's.
 export const hullLost = (ship) => {
   const S = ship.sim && ship.sim.structure;
   if (S && S.on()) return 100 * (1 - S.meanHp());
   return 100 - ship.state.hull;
 };
-// The old hull reading of a ship's body (tools and readers that want one number): the structure meter when structure is on, else the hull bar.
-export const hullOrStructure = (body) => (body.structure != null && config.STRUCTURE.ENABLED ? body.structure : body.hull);
+// How sound a ship's body is, 0..100 (the readers that want one number: the bots, the sound, the dock): the structure meter of a ship with a frame, else the hull bar of one without (the gunship, a Versus ship).
+// state.ship.hull is only a MIRROR of the meter for the HUD and the old Versus readers.
+export const hullOrStructure = (body) => (body.structure != null ? body.structure : body.hull);
+// A creature's blow at ship point (x, y): the segment under it (structure.hit), else the hull bar of a ship with no frame. `amount` is in old hull points (HIT_DAMAGE x power); o { power, kind }.
+export function creatureHit(ship, x, y, amount, o = {}) {
+  const sim = ship.sim;
+  if (!sim) return;
+  if (sim.structure.on()) sim.structure.hit(x, y, amount, { kind: 'creature', ...o });
+  else if (sim.damageHull) sim.damageHull(amount);
+}
 
 // ---- the live half ----
 // deps: { state (the ship's context), ship, hooks }. hooks: { scale() the damage scale of a blow (difficulty x crew x skulls x armour upgrades), drainScale() the same for a breach or a fire, protect() nothing can hurt her,
@@ -125,7 +133,7 @@ export function createStructure({ state, ship, hooks }) {
   state.structDeficit = 0;
   state.gdRelief = 0;
   state.grounded = false;
-  const on = () => C().ENABLED && !ship.ai && !ship.piece && !config.PVP.ENABLED;
+  const on = () => !ship.ai && !ship.piece && !config.PVP.ENABLED;
   const segs = () => S.segs;
 
   // ---- carrying soundness across a new layout (a break-off, a split, a build fitted at the dock): by deck row and where they overlap ----
@@ -353,7 +361,7 @@ export function createStructure({ state, ship, hooks }) {
   const step = (dt) => {
     sync();
     const K = C(), bodyHp = state.ship;
-    if (!on()) { state.structDeficit = 0; return; }
+    if (!on()) { state.structDeficit = 0; bodyHp.structure = null; return; } // (no frame: the hull bar is the reading, hullOrStructure)
     clockT += dt;
     const due = [];
     for (const g of S.segs) {

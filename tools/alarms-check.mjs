@@ -164,7 +164,7 @@ function step(sim, n = 1, each = null) {
   st.say('setpiece', 'A BUSY BANNER', null, 4);
   step(sim, 6);
   const gd = st.ships[0].sim.goingDown;
-  const started = gd.tryStart();
+  const started = gd.startFall();
   report(started && /FALLING|GOING DOWN/.test(st.ev.warnText) && st.ev.warn > 3.9, 'GOING DOWN! over a busy banner is on screen the same step: "' + st.ev.warnText + '" (warn ' + st.ev.warn.toFixed(2) + ')');
 }
 

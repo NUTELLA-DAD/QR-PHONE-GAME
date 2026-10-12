@@ -1,6 +1,7 @@
 // Run statistics for a ship build, collected while bots fly her (tools/botsim.mjs --build ..., tools/buildsim.mjs, public/buildtest.html).
 // Call stats.step(dt) after every sim.update(dt); stats.result() gives the numbers buildCheck.js judges and the batch table prints.
 import { mainShip } from './ships.js';
+import { hullOrStructure } from './structure.js';
 
 export function createRunStats(state) {
   const R = { steps: 0, flightSteps: 0, hullSum: 0, kills: 0, wrecks: 0, missions: 0, walkSteps: 0, crewSteps: 0 };
@@ -32,7 +33,7 @@ export function createRunStats(state) {
       }
       if (state.phase !== 'flying') return;
       R.flightSteps++;
-      R.hullSum += state.ship.hull;
+      R.hullSum += hullOrStructure(state.ship);
       if (state.balance) { const a = Math.abs(state.balance.deg); tiltSum += a; if (a > tiltMax) tiltMax = a; }
       for (const q of Object.values(state.players)) {
         if (q.lock) manned[q.lock] = (manned[q.lock] || 0) + 1;
