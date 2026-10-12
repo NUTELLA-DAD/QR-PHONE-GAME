@@ -220,6 +220,20 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   showMode();
   showDaily();
 
+  // F3 (FUN.md) EXPERT HELM: also puts the SPLIT engine panel (a lever per engine) on the helm phone. Off by default; remembered on this TV.
+  const expertButton = document.getElementById('expert');
+  try { if (localStorage.getItem('airshipExpertHelm') === '1') config.CONTROLS.EXPERT = true; } catch { /* (not remembered) */ }
+  const showExpert = () => {
+    const html = config.CONTROLS.HELM_V2 ? (config.CONTROLS.EXPERT ? 'Helm: EXPERT<br><small style="font-size:12px;opacity:.75">stick + split engine levers</small>' : 'Helm: easy<br><small style="font-size:12px;opacity:.75">one stick, one lever</small>') : 'Helm: classic';
+    if (expertButton.innerHTML !== html) expertButton.innerHTML = html;
+  };
+  expertButton.onclick = () => {
+    config.CONTROLS.EXPERT = !config.CONTROLS.EXPERT;
+    try { localStorage.setItem('airshipExpertHelm', config.CONTROLS.EXPERT ? '1' : '0'); } catch { /* (not remembered) */ }
+    showExpert();
+  };
+  showExpert();
+
   document.getElementById('bots').onclick = () => {
     if (simulation.match.on) { // (Versus: two bots to each side)
       simulation.match.addBots('red', 2);

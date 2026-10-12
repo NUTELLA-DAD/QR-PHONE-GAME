@@ -1227,6 +1227,36 @@ export function createShipSim(world, ship, W) {
   // Before the step: fit the gasbags to a new build, and the trim engine is off until the helmsman asks.
   const preStep = () => { syncBags(state); if (structure.on()) structure.sync(); }; // (a new build was applied at the dock: fit the gasbags to it - and the segments of her frame)
   const trimOff = () => { state.ship.trim = 0; };
+  // F3 (FUN.md) THE HELM FOR ONE THUMB. The stick's up/down is the pump and the vent (up = pump hot steam in, she climbs; down = vent, she sinks; a bot's stick is exact, a person's has a deadzone);
+  // let it go and the autopilot's trim takes over: it holds the height she would coast to (helmHoldAlt, latched when the stick is let go) with the pump and the small trim engine. No PRESSURE lever any more:
+  // the phone shows the gas as a gauge with the hover mark (ui.hv). GOING DOWN!: the hand at the helm pumps flat out, as before.
+  let helmHoldAlt = null;
+  const helmStickV2 = (player) => {
+    const HH = config.CONTROLS.HELM_HOLD;
+    const up = -(player.jy || 0);
+    if (!player.bot && !config.CONTROLS.EXPERT && state.thrust.split) engines.command({ split: false }); // (no SPLIT panel on this phone: a person's helm always has the engines linked to the lever; a bot may still split them to level her)
+    if (goingDown.active()) { state.gasValve.input = 1; helmHoldAlt = null; return; }
+    if (player.bot) { // (a bot's stick is exact; the autopilot's trim engine is its own number, bots.js trimIn - the old trim stick)
+      state.gasValve.input = clamp(up, -1, 1);
+      state.ship.trim = Math.abs(player.trimIn || 0) > 0.15 ? -player.trimIn : 0;
+      helmHoldAlt = null;
+      return;
+    }
+    if (Math.abs(up) > HH.DEAD) {
+      helmHoldAlt = null;
+      state.gasValve.input = clamp(Math.sign(up) * ((Math.abs(up) - HH.DEAD) / (1 - HH.DEAD)) * HH.GAIN, -1, 1);
+      return;
+    }
+    const here = state.ship.alt; // (her height now, in the world's own up-is-positive)
+    if (helmHoldAlt === null) helmHoldAlt = here + (state.ship.vy || 0) * HH.LEAD;
+    state.gasValve.input = gasFor(state, helmHoldAlt);
+    state.ship.trim = clamp((helmHoldAlt - here) / HH.SPAN, -1, 1) * HH.TRIM;
+  };
+  const helmGauge = () => { // [the lift-weighted gas, the gas she hovers at]: above the mark she rises, below it she sinks
+    const G = config.GAS;
+    const hover = G.NEUTRAL + (state.weightDeficit || 0) + state.env.sink - state.env.lift / G.LIFT + (state.engineWeight || 0);
+    return [Math.round(liftGas(state)), Math.round(hover)];
+  };
 
   // A1: the crew: bots think, everyone walks, climbs, mans stations and presses buttons; the phones are told what their buttons do now.
   const stepCrew = (dt) => {
@@ -1345,8 +1375,11 @@ export function createShipSim(world, ship, W) {
             const lever = state.thrust.split ? engines.splitOrder() : player.thr != null ? clamp(player.thr, REV, 1) : flight.order(); // (the lever stays where it was; with the throttles SPLIT the order is what the engines' own levers add up to, engines.js)
             const want = player.jx > 0.25 ? player.jx : player.jx < -0.25 ? player.jx * SH.REVERSE : lever;
             driveSpeed(want);
-            state.ship.trim = Math.abs(player.jy) > 0.15 ? -player.jy : 0;
-            state.gasValve.input = goingDown.active() ? 1 : clamp(player.gas || 0, -1, 1); // (GOING DOWN!: the hand at the helm pumps flat out)
+            if (config.CONTROLS.HELM_V2) helmStickV2(player); // (F3: the stick's up/down is the pump and the vent; let go and the autopilot trim holds her height)
+            else {
+              state.ship.trim = Math.abs(player.jy) > 0.15 ? -player.jy : 0;
+              state.gasValve.input = goingDown.active() ? 1 : clamp(player.gas || 0, -1, 1); // (GOING DOWN!: the hand at the helm pumps flat out)
+            }
             gasManned = true;
             helmFlown = true;
             if (player.ca || (!player.bot && player.jx < -SH.TURN.STICK)) comeAbout.ask(player); // COME ABOUT: the phone's button held, or the stick held hard astern (people only)
@@ -1629,7 +1662,7 @@ export function createShipSim(world, ship, W) {
       const feel = state.buoyancy > 0 ? 'RISING' : state.buoyancy < 0 ? 'FALLING' : 'holding';
       const leakNow = modules.leaks()[0];
       const leakText = leakNow ? (leakNow.pipe && leakNow.pipe.open ? `${leakNow.m.name} pipe leaking - close the valve or repair` : `${leakNow.m.name} leaking steam - repair it`) : '';
-      if (kind === 'helm' && player.lock && !status && state.rig && !state.rig.boiler) status = `Hand wheel - no boiler, no steam: the lever can only VENT gas (down), the trim is weak${state.rig.engine ? ', the engines are dead' : ''}. The wind carries her.`;
+      if (kind === 'helm' && player.lock && !status && state.rig && !state.rig.boiler) status = `Hand wheel - no boiler, no steam: the ${config.CONTROLS.HELM_V2 ? 'stick' : 'lever'} can only VENT gas (down), the trim is weak${state.rig.engine ? ', the engines are dead' : ''}. The wind carries her.`;
       if (kind === 'boiler' && !status && leakText) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - ${leakText}`;
       if (kind === 'boiler' && !status) status = `Steam ${Math.round(state.ship.press / 5) * 5}% - coal ${Math.round(state.ship.fuel / 5) * 5}%`;
       if (kind === 'helm' && player.lock && !status && (state.ship.press < config.GAS.PUMP_MIN_PRESS || state.gasHoles.length)) status = `Gas ${Math.round(state.ship.gas)}% - ${feel}${state.ship.press < config.GAS.PUMP_MIN_PRESS ? ' - NO STEAM TO PUMP!' : ''}${state.gasHoles.length ? ' - ' + state.gasHoles.length + ' holes leaking' : ''}`;
@@ -1662,13 +1695,16 @@ export function createShipSim(world, ship, W) {
       const gaid = grabNow ? aidOf(grabNow, player.carry) : '';
       const glock = !!(grabNow && player.grabLock > 0);
       const progNow = !player.lock && player.act && player.act.hold && player.act.obj && typeof player.act.obj.prog === 'number' ? Math.round(player.act.obj.prog * 10) : -1; // (how far a hold action has got)
-      const eng = player.lock && kind === 'helm' && !player.hj && !player.bot ? engines.panel(ship.pose.f) : null; // (the helm's engine levers: one per engine, left to right as the TV shows her)
+      const eng = player.lock && kind === 'helm' && !player.hj && !player.bot && (!config.CONTROLS.HELM_V2 || config.CONTROLS.EXPERT) ? engines.panel(ship.pose.f) : null; // (the helm's engine levers: one per engine, left to right as the TV shows her)
       const alarm = ship.main && !player.bot ? state.alarmPhone(player, stKind) : ''; // (FUN.md F2: the phone's one line - the top alarm that concerns this player's deck or seat; alarms.js)
       const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, st ? st.s + '/' + st.l + '/' + st.w + '/' + st.f : '', primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : '', alarm].join('|');
-      if (key !== player.uk) {
-        player.uk = key;
+      const hv = config.CONTROLS.HELM_V2 && player.lock && kind === 'helm' && !player.hj && !player.bot ? helmGauge() : null; // (F3: the phone's gas gauge, [gas, the hover mark] in whole numbers: the pressure lever is only a readout now)
+      const keyF = hv ? key + '|' + hv : key;
+      if (keyF !== player.uk) {
+        player.uk = keyF;
         if (!player.bot) {
           player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, st, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, hp, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT, med: !!health.medbay(), fc: ship.pose.f, tn: state.turning.t > 0, eng, alarm, tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
+          if (hv) player.ui.hv = hv;
           emitPlayerUi(player.id, player.ui);
         }
       }
@@ -1793,6 +1829,7 @@ export function createShipSim(world, ship, W) {
     const valve = state.gasValve;
     const flying = state.phase === 'flying' && !state.ship.down;
     state.autopilot = false;
+    if (!gasManned) helmHoldAlt = null; // (F3: nobody at the wheel: the held height is forgotten)
     // Easy/Normal: with nobody at the helm the ship flies itself, gently.
     const assist = autopilotOn(state) && flying && !ship.ai && !ship.piece && (!goingDown.active() || structure.on()); // (the gunship has no autopilot: with no helmsman she drifts; falling, nobody pumps for her)
     const plan = assist && rig.helm && (!getHelm() || !gasManned) ? pilotPlan(state, 4, 0.3) : null;

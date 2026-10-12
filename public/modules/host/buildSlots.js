@@ -576,7 +576,7 @@ export function minimalBuild(plan = MINIMAL) {
   return p;
 }
 
-// Parts a build can lose without breaking the game (guns beyond the first, lamps, escort fighters, the navigator ...).
+// Parts a build can lose without breaking the game (guns beyond the first, lamps, escort fighters ...).
 // Returns [{ label, apply(parts) -> new parts }].
 export function removals(parts) {
   const out = [];
@@ -586,7 +586,6 @@ export function removals(parts) {
     if (p.part === 'gun' && guns > 1) out.push({ label: p.n, apply: drop() });
     else if (p.part === 'searchlight') out.push({ label: p.n, apply: drop() });
     else if (p.part === 'station' && p.kind === 'escort') out.push({ label: p.n, apply: drop((o) => o.part === 'escortDock' && o.n === p.n) });
-    else if (p.part === 'station' && p.kind === 'navigator') out.push({ label: p.n, apply: drop() });
     else if (p.part === 'station' && ['boiler', 'coal', 'ammo', 'lookout'].includes(p.kind) && parts.filter((o) => o.part === 'station' && o.kind === p.kind).length > 1) out.push({ label: p.n, apply: drop() });
   });
   return out;

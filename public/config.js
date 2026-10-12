@@ -5,6 +5,8 @@ const STOP_SHAPE_ON = typeof process === 'undefined' || !(process.env && process
 const GUNS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_GUNS);
 // F2 (FUN.md): the alarm arbiter queues banners (alarms.js); NO_ALARMS=1 in a tool is the old last-writer-wins banner (the checks that read the banner text right after an event pin it; the seeded gates are identical either way).
 const ALARMS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_ALARMS);
+// F3 (FUN.md): a helm for one thumb - the stick's up/down is the pump and the vent, the speed lever is the cruise, the pressure lever a readout, the trim part of the autopilot, the SPLIT engine panel only with CONTROLS.EXPERT. ON in the game (a browser has no process); NO_HELM_V2=1 in a tool is the old helm (the seeded baselines pin it).
+const HELM_V2_ON = typeof process === 'undefined' || !(process.env && process.env.NO_HELM_V2);
 export const config = {
   W: 1600,
   H: 900,
@@ -3218,6 +3220,9 @@ export const config = {
     AID_GRACE: 0.25, // seconds a press may still carry the PREVIOUS button label's id (the phone pressed just before the label changed)
     BAY_JUMP_ZONE: 22, // px either side of the hatch: only here does Action say "Jump!" (the rest of the bay is for the bombardier's seat)
     HOLD_TAP: 0.25, // a hold-action released sooner than this (seconds) counts as a tap: the phone nags "keep holding"
+    HELM_V2: HELM_V2_ON, // F3: the stick's up/down pumps and vents the gasbag (up = climb), left/right is ahead/astern; the speed lever stays the cruise; the PRESSURE lever is a gauge with the hover mark; let go of the stick and the autopilot trim holds her height
+    EXPERT: false, // F3: the lobby toggle (the TV's EXPERT HELM button): the helm phone also shows the SPLIT engine panel (a lever per engine) - off by default; remembered on the TV (localStorage.airshipExpertHelm)
+    HELM_HOLD: { DEAD: 0.15, GAIN: 1.15, LEAD: 0.9, TRIM: 0.6, SPAN: 150 }, // F3: DEAD = the stick's deadzone; GAIN = full pump/vent a little before the stick's edge; with the stick let go the autopilot holds the height she would coast to in LEAD seconds (the pump follows gasFor; the trim engine pushes at TRIM x full over SPAN px)
   },
   // Ship modules (guns, boiler, helm, engines, lift, steam pipes).
   MODULES: {

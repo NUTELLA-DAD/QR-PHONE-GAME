@@ -124,6 +124,17 @@ body.lefty #plever{right:auto;left:calc(var(--a) + min(20vh,84px) + 20px)}
 #plever .handle{position:absolute;left:-8px;right:-8px;height:30px;margin-top:-15px;background:#f3ead6;border:5px solid #2b2622;border-radius:10px}
 #plever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
 #plever .rev{position:absolute;left:0;right:0;bottom:4px;text-align:center;color:#8ab8ff;font-size:11px;font-weight:900}
+/* F3 (FUN.md) A helm for one thumb: the stick pumps (up) and vents (down); the old PRESSURE lever is only a GAS gauge now (the host sends ui.hv = [gas, hover]): a narrower bar, the yellow line is where she hovers, the handle only marks the gas. */
+#plever.gauge{width:min(12vh,52px);pointer-events:none;background:#2b241d}
+body.lefty #plever.gauge{right:auto;left:calc(var(--a) + min(20vh,84px) + 20px)}
+#plever.gauge .handle{height:8px;margin-top:-4px;left:-5px;right:-5px;border-width:3px;border-radius:5px;background:#fff}
+#plever.gauge .mid{height:5px;margin-top:-2px;top:50%}
+#plever.gauge .mid::after{content:'HOVER';position:absolute;left:0;right:0;bottom:5px;text-align:center;font-size:9px;font-weight:900;color:#ffd23f;line-height:1}
+#plever.gauge .tag{font-size:11px;top:2px}
+#plever.gauge .rev{color:#cfe3ff}
+/* The stick on the helm says what up and down do. */
+body.gaugeon #pad::before{content:'CLIMB \25B2';position:absolute;left:0;right:0;top:7%;text-align:center;font-weight:900;font-size:clamp(10px,2.6vh,15px);color:#6b4a32;pointer-events:none}
+body.gaugeon #pad::after{content:'\25BC SINK';position:absolute;left:0;right:0;bottom:7%;text-align:center;font-weight:900;font-size:clamp(10px,2.6vh,15px);color:#6b4a32;pointer-events:none}
 #lever .tag{position:absolute;left:0;right:0;top:-2px;text-align:center;color:#fff;font-size:12px;font-weight:900}
 /* Helm ENGINE PANEL (modules/controller/enginePanel.js): a small lever per engine, left to right as the ship sits on the screen, an arrow under each for the way it points; SPLIT / LINK above.
    Linked, the levers follow the main lever by themselves (and the auto-trim); split, each one is dragged on its own. In the middle column; hidden unless the ship has two engines or more. */

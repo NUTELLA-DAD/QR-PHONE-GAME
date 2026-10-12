@@ -1097,8 +1097,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     const alt = state.ship.alt;
     if (course.scraping && state.ship.speed < 0) return 'Backing off the wall - now climb or dive!';
     const plan = pilotPlan(state, 2.5, 0.5);
-    if (plan.speed < 0.1 && plan.target - alt > 120) return 'STOP (lever to the line) - PRESSURE lever UP to climb!';
-    if (plan.speed < 0.1 && alt - plan.target > 120) return 'STOP (lever to the line) - PRESSURE lever DOWN to drop!';
+    if (plan.speed < 0.1 && plan.target - alt > 120) return config.CONTROLS.HELM_V2 ? 'STOP (lever to the line) - stick UP to climb!' : 'STOP (lever to the line) - PRESSURE lever UP to climb!';
+    if (plan.speed < 0.1 && alt - plan.target > 120) return config.CONTROLS.HELM_V2 ? 'STOP (lever to the line) - stick DOWN to drop!' : 'STOP (lever to the line) - PRESSURE lever DOWN to drop!';
     if (w.min > w.max) return 'Squeeze through - hold the middle!';
     if (alt < w.min) return 'CLIMB! (stick up - and pump the gas)';
     if (alt > w.max) return 'DIVE! (stick down - and vent the gas)';
