@@ -3344,6 +3344,7 @@ export const config = {
     AMMO_LOW: 10, // fetch ammo when a gun has this many shells or fewer
     GUN_IDLE_LEAVE: GUNS_ON ? 3 : 6, // F4: a bot at a gun with no target leaves it after this many seconds (it was 6; a human's phone shows the arrow after JOBS.SEATED_IDLE)
     FILL_GUNS: GUNS_ON ? 0 : 99, // F4: the most guns a bot mans with no target in reach (the rest of the crew haul, mend and load); none at all in a calm or the escape (99 = as many as there are)
+    FIRE_AT_REPAIR: HELM_V2_ON, // F3: a fire within FIRE_RADIUS of a broken critical part (the boiler that has just blown) is put out before the part is mended: the hand at the hammer burned, stepped out, came back and never finished (the tower's seed 2: the boiler stayed broken 40 s, the helm pipe with it, she crashed)
     STATION_MIN: 20, // stay at a station at least this long...
     STATION_MAX: 40, // ...and at most this long, then rotate
     STATION_TIER_PX: 1800, // a station that is one 'usefulness point' better is worth walking this many extra px for

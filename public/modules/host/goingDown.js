@@ -607,6 +607,7 @@ export function botJobs(state, bot) {
   if (strOn) {
     const mods = state.modules || [], crit = (m) => config.BOTS.CRITICAL.includes(m.kind) || (m.kind === 'pipe' && ((t) => !!t && config.BOTS.CRITICAL.includes(t.kind))(mods.find((q) => q.name === m.to)));
     for (const m of mods) if (m.kind === 'pipe' && m.broken && m.open && crit(m)) fix.push({ kind: 'valve', obj: m });
+    if (config.BOTS.FIRE_AT_REPAIR) for (const m of mods) if (m.broken && crit(m)) for (const f of state.fires) if (f.d === m.d && Math.abs(f.x - m.x) < config.MODULES.FIRE_RADIUS) fix.push({ kind: 'fire', obj: f }); // (F3: a fire at the part being mended burns the hand at the hammer out of it again and again: spray it first)
     for (const m of mods) if (m.broken && crit(m)) fix.push({ kind: 'repair', obj: m });
     for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open && crit(m)) fix.push({ kind: 'valve', obj: m }); // (a shut valve on the helm's, the lift's or the boiler's pipe starves it: open it)
   }
