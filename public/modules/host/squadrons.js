@@ -17,6 +17,7 @@ import { flyPlane, smoke, shootDown, angDiff, shoveShip, bumpShip, bounceStep } 
 import { targetShip, mendHull } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { createSquads } from './squads.js';
+import { aimedSide } from './gunsMatter.js';
 
 const W = config.WAVES;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -51,7 +52,9 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   // from = { x, y } to launch from a point (the boss's hangar), and n to set the swarm size.
   const spawnBats = (from = null, count = 0) => {
     const n = count || Math.max(1, Math.round(Math.min(W.BATS_MAX, W.BATS_BASE + (lap() - 1) * W.BATS_PER_LAP + Math.floor(crew() / 4)) * crewMul(state, 'count')));
-    const fromRight = Math.random() < 0.65;
+    let fromRight = Math.random() < 0.65;
+    const aimed = aimedSide(state, 0); // (F4: from the side of the ship where the guns are)
+    if (aimed) fromRight = aimed > 0;
     for (let i = 0; i < n; i++) {
       const [sx, sy] = layout.samples[(Math.random() * layout.samples.length) | 0];
       state.bats.push({
@@ -70,7 +73,9 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   };
 
   const spawnBomber = () => {
-    const fromLeft = Math.random() < 0.5;
+    let fromLeft = Math.random() < 0.5;
+    const aimed = aimedSide(state, 0); // (F4: from the side of the ship where the guns are)
+    if (aimed) fromLeft = aimed < 0;
     const y = toWorldY(ship, B.y0 - 320);
     state.bombers.push({
       x: fromLeft ? toWorldX(ship, B.x0 - 2600) : toWorldX(ship, B.x1 + 2600),
@@ -654,8 +659,26 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     }
   };
 
+  // F4 (SQUADRONS.FOLD_LONE): the lone big fighter (state.enemy, threats.js) stays down; in its place comes a squadron of one at the same pace: ENEMY.RESPAWN s after the last one went, at the director's rate, and never on top of a squadron already up.
+  let loneT = 3, lone = null;
+  const updateLone = (dt) => {
+    const SQ = config.SQUADRONS;
+    if (!SQ.FOLD_LONE || !SQ.FORMATIONS) return;
+    if (lone && (!(lone.hp > 0) || lone.gone || !state.strafers.includes(lone))) {
+      lone = null;
+      loneT = config.ENEMY.RESPAWN;
+    }
+    const rate = (state.tempo ? state.tempo.rate : 1) * spawnPace(state);
+    if (lone || rate <= 0 || state.ship.down || state.strafers.length) return;
+    if ((loneT -= dt * rate) > 0) return;
+    const hp = Math.max(2, Math.round((5 + Math.floor(crew() / 4)) * crewMul(state, 'hp'))); // (the old fighter's toughness)
+    const sq = squads.spawn({ size: 1, hp, lone: true });
+    lone = sq.leader;
+  };
+
   const update = (dt) => {
     director(dt);
+    updateLone(dt);
     updateBats(dt);
     updateBombers(dt);
     updateStrafers(dt);

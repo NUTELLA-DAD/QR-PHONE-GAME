@@ -158,6 +158,36 @@ export function createRenderer({ ctx, state: world, canvas }) {
   installUprightText(ctx); // (text drawn under a mirror - a ship that has come about - still reads the right way round)
   const filmLook = createFilmLook(ctx);
 
+  // F4 (CREW_SEATS): a station mothballed for a small crew sits under a lashed canvas cover (state.links.moth).
+  const drawTarps = () => {
+    const moth = state.links && state.links.moth;
+    if (!moth) return;
+    for (const n of Object.keys(moth)) {
+      const gun = state.GUNS[n], st = layout.stations.find((q) => q.n === n), pl = st && layout.platforms[st.d];
+      const x = gun ? gun.bx : st && st.x, y = gun ? gun.by : pl && pl.y - 34;
+      if (x == null || y == null) continue;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = '#b7a77c';
+      ink();
+      ctx.beginPath();
+      ctx.moveTo(-46, 30);
+      ctx.quadraticCurveTo(-48, -22, -10, -34);
+      ctx.quadraticCurveTo(26, -42, 46, 30);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = '#6b5d3c';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-34, 6);
+      ctx.lineTo(36, -6);
+      ctx.moveTo(-40, 22);
+      ctx.lineTo(40, 14);
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
   const drawGuns = () => {
     for (const [name, gun] of Object.entries(state.GUNS)) {
       // While someone is on the gun, show the arc it can turn through.
@@ -3224,6 +3254,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         }
         if (!ship.ai) {
           drawGuns();
+          drawTarps();
           art.env.drawIce(); // frost: ice crusts on the gasbag, top deck and guns
           art.env.drawDeep(); // fungal: spore clouds and clogged engines; aether: the oxygen tank
           art.env.drawShip(); // storm rods, sea pump, winch and flood water

@@ -11,6 +11,7 @@
 // Planes carry squadronId, leader (true on the squadron leader), formation, slot, fx, fy and ace / paint (the radar, the TV's lookout arrows and the 3D view read them); state.squadrons
 // lists the squadrons. Nothing here draws or reads the screen; the numbers are config.SQUADRONS. Everything is deterministic in the seeded random numbers (Math.random is the seeded one in the tests).
 import { config } from '../../config.js';
+import { aimedSide } from './gunsMatter.js';
 import { keepClear, inRock, groundAt, ceilAt } from './course.js';
 import { crewMul } from './crewscale.js';
 import { envIdOf } from './environments.js';
@@ -72,14 +73,15 @@ export function createSquads({ state, ship, shipMid, nearShip, phoneFx, warn }) 
     });
     sq.leader = mem[0] || null;
   };
-  const describe = (sq) => `SQUADRON: ${sq.n0} FIGHTERS, ${FORMATION_SHORT[sq.formation] || sq.formation}${sq.formation === 'escort' ? '' : ' FORMATION'} - BEARING ${sq.leader ? bearing(sq.leader) : 'AHEAD'}${sq.ace ? ' - ACE LEADER' : ''}`;
+  const describe = (sq) => sq.lone ? `ENEMY FIGHTER - BEARING ${sq.leader ? bearing(sq.leader) : 'AHEAD'}` : `SQUADRON: ${sq.n0} FIGHTERS, ${FORMATION_SHORT[sq.formation] || sq.formation}${sq.formation === 'escort' ? '' : ' FORMATION'} - BEARING ${sq.leader ? bearing(sq.leader) : 'AHEAD'}${sq.ace ? ' - ACE LEADER' : ''}`;
 
   // A squadron that comes in from the side: the leader first, the others in their slots about him.
-  const spawn = () => {
+  // (opt.size 1 and opt.hp: F4 folds the lone big fighter in as a squadron of one - no ace, no formation to speak of, the old fighter's toughness)
+  const spawn = (opt = {}) => {
     const SQ = config.SQUADRONS;
-    const n = sizeNow();
+    const n = opt.size || sizeNow();
     const formation = pickFormation(n);
-    const side0 = Math.random() < 0.5 ? -1 : 1;
+    const side0 = aimedSide(state, Math.random() < 0.5 ? -1 : 1, ship.pose.f); // (F4: out on the side of the ship where the guns are, as a world side)
     const mid = shipMid();
     const offs = slotOffsets(formation, n);
     // The side and height to come in from: the first place where the whole squadron (and the stretch just ahead of it) is clear of rock, else the leader is lifted out of the wall.
@@ -102,17 +104,17 @@ export function createSquads({ state, ship, shipMid, nearShip, phoneFx, warn }) 
     }
     if (!found) ly = keepClear(state, lx, ly, 200);
     const heading = side > 0 ? Math.PI : 0;
-    const sq = { id: nextId++, formation, mode: 'form', t: 0, n0: n, size: n, leader: null, anchor: null, ace: false, paint: null, aim: { dx: rand(-300, 300), dy: rand(-300, -100) }, cx: lx, cy: ly, spread: 0, side };
+    const sq = { id: nextId++, formation, mode: 'form', t: 0, n0: n, size: n, leader: null, anchor: null, ace: false, paint: null, aim: { dx: rand(-300, 300), dy: rand(-300, -100) }, cx: lx, cy: ly, spread: 0, side, lone: !!opt.lone };
     const frame = { x: lx, y: ly, heading };
     const planes = offs.map((o, i) => {
       const w = slotWorld(frame, o);
-      const p = newPlane(sq, i, w.x, i ? keepClear(state, w.x, w.y, 120) : ly, heading, hpFor());
+      const p = newPlane(sq, i, w.x, i ? keepClear(state, w.x, w.y, 120) : ly, heading, opt.hp || hpFor());
       p.fx = o.fx;
       p.fy = o.fy;
       return p;
     });
     sq.leader = planes[0];
-    if (danger() >= SQ.ACE_DANGER) { // a flying circus ace at the head of the squadron
+    if (danger() >= SQ.ACE_DANGER && !opt.lone) { // a flying circus ace at the head of the squadron
       const paint = SQ.ACE_PAINTS[(Math.random() * SQ.ACE_PAINTS.length) | 0];
       Object.assign(planes[0], { ace: true, paint: paint.id, body: paint.body, trim: paint.trim, hp: Math.round(planes[0].hp * SQ.ACE_HP), max: Math.round(planes[0].max * SQ.ACE_HP) });
       sq.ace = true;

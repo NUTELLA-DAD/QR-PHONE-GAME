@@ -9,9 +9,11 @@ import { config } from '../../config.js';
 import { layoutTables } from '../../shipLayout.js';
 import { bestTarget } from './aim.js';
 import { mainShip } from './ships.js';
+import { crewHeads } from './crewscale.js';
 
 const LK = config.LINKS;
 const SG = LK.SURGE;
+const angDiff = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 // Worked out per ship layout (rebuilt when a new ship build is applied to it).
 const tables = layoutTables((layout) => ({
@@ -21,7 +23,7 @@ const tables = layoutTables((layout) => ({
 
 export function createLinks({ state, modules, shipPuff }) {
   const layout = mainShip(state).layout; // (B1: the ship whose crew are linked; B2 makes this one per ship)
-  state.links = { helmMul: 1, nest: false, nestSpot: false, helmMan: false, loaders: [], surge: { level: 0, held: 0, to: 'engine', by: null } };
+  state.links = { helmMul: 1, nest: false, nestSpot: false, helmMan: false, loaders: [], surge: { level: 0, held: 0, to: 'engine', by: null }, aim: { side: 0, fore: 0, aft: 0 }, idle: {}, moth: {} }; // (F4: aim = the side of the ship the director attacks; idle = seconds each manned gun has had no target; moth = the stations under their covers)
   state.surgeEngine = 0; // 0-1: how hard the engines are surging (read by course.js scrollSpeed and camera.js)
   state.surgeCoil = 0; // 0-1: how hard the coil is surging (read by coil.js)
   state.linkStats = { gunT: 0, gunPair: 0, gunIdle: 0, helmT: 0, helmPair: 0, nestT: 0, nestPair: 0, surgeT: 0 };
@@ -62,8 +64,43 @@ export function createLinks({ state, modules, shipPuff }) {
     }
   };
 
+  // F4 (CREW_SEATS): under UNDER crew the stations in MOTHBALL (those this ship has) are mothballed: nobody takes them, the bots and the job arrows leave them alone, the TV draws a cover over them.
+  const updateMoth = () => {
+    const CS = config.CREW_SEATS, L = state.links;
+    const want = CS.ENABLED && crewHeads(state) < CS.UNDER ? CS.MOTHBALL.filter((n) => layout.stations.some((q) => q.n === n)) : [];
+    if (want.length === Object.keys(L.moth).length && want.every((n) => L.moth[n])) return;
+    L.moth = Object.fromEntries(want.map((n) => [n, true]));
+    for (const q of Object.values(state.players)) if (q.lock && L.moth[q.lock]) { q.lock = null; q.fire = false; } // (whoever sat there steps off)
+  };
+
+  // F4: how long each manned gun has had no target (the gunner's own idle clock: his phone's job arrow, JOBS.SEATED_IDLE), and which side of the ship the guns are on that want something to shoot at (state.links.aim:
+  // every manned gun weighs 1 + a little for each second it has waited; a gun counts for the side or sides its arc covers). Looked at every SCAN seconds.
+  let scanT = 0;
+  const gunAim = (dt) => {
+    const L = state.links, AM = config.LINKS_AIM;
+    scanT += dt;
+    const scan = scanT >= AM.SCAN, span = scanT;
+    if (scan) scanT = 0;
+    let fore = 0, aft = 0;
+    for (const [name, gun] of Object.entries(state.GUNS)) {
+      const gunner = !L.moth[name] && onStation(name);
+      if (!gunner) { delete L.idle[name]; continue; }
+      if (scan) L.idle[name] = bestTarget(state, gun) ? 0 : (L.idle[name] || 0) + span;
+      else if (L.idle[name] == null) L.idle[name] = 0;
+      if (!gunner.bot) gunner.gunIdle = L.idle[name]; // (a bot keeps its own count: bots.js)
+      if (gun.type === 'flame' || gun.type === 'harpoon' || gun.type === 'mines') continue; // (a flamethrower, the harpoon and the mine layer are not what the sky is aimed at)
+      const w = 1 + AM.IDLE_WEIGHT * Math.min(AM.IDLE_CAP, L.idle[name]);
+      if (angDiff(-AM.SIDE_ANGLE, gun.home) <= gun.arc + AM.ARC_PAD) fore += w;
+      if (angDiff(Math.PI + AM.SIDE_ANGLE, gun.home) <= gun.arc + AM.ARC_PAD) aft += w;
+    }
+    L.aim.fore = fore;
+    L.aim.aft = aft;
+    L.aim.side = fore > aft ? 1 : aft > fore ? -1 : 0;
+  };
+
   const update = (dt) => {
     const L = state.links;
+    if (config.CREW_SEATS.ENABLED) updateMoth();
     const S = state.linkStats;
     const flying = state.phase === 'flying' && !state.ship.down;
     const s = L.surge;
@@ -84,6 +121,7 @@ export function createLinks({ state, modules, shipPuff }) {
     L.nest = nestCrew.length > 0 && L.helmMan;
     L.nestSpot = L.nest && (nestCrew.some((q) => (q.spotRecent || 0) > 0) || (nestCrew.some((q) => layout.kindOf(q.lock) === 'searchlight') && state.litTargets && state.litTargets.length > 0));
     L.helmMul = LK.ENABLED && L.nest ? 1 + (L.nestSpot ? LK.HELM_SPOT : LK.HELM_MAN) : 1;
+    if (config.PACING.AIM_AT_GUNS || config.JOBS.SEATED_IDLE > 0) gunAim(dt);
     // ---- Gun + loader (who is loading which gun: read by linkArt.js) ----
     L.loaders.length = 0;
     for (const [name, gun] of Object.entries(state.GUNS)) {

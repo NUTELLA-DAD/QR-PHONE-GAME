@@ -12,6 +12,7 @@ import { keepClear, inRock } from './course.js';
 import { pop } from './popups.js';
 import { shellDmg } from './aim.js';
 import { targetShip } from './ships.js';
+import { aimedSide } from './gunsMatter.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 
 const SP = config.SPECIALS;
@@ -40,7 +41,7 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
   const refX = () => toWorldX(ship, layout.refPoint.x); // (the middle of the ship along the sky)
   // (The specials keep station on the ship: their steering is by speed relative to her, so her own world speed is added to what they want and
   // carried in their moves. At rest against her, vx = her speed.)
-  const side = () => (Math.random() < 0.5 ? -1 : 1);
+  const side = () => aimedSide(state, Math.random() < 0.5 ? -1 : 1); // (F4: out on the side of the ship where the guns are)
   const kill = (shell, x, y, size = 1) => {
     state.kills += 1;
     credit?.(shell);
@@ -59,8 +60,9 @@ export function createSpecials({ state, puff, impact, hitsShip, credit, shieldBl
   };
   const spawnImps = () => {
     const n = Math.max(2, Math.round((SP.IMP_COUNT + (lap() - 1) * 4) * crewMul(state, 'count')));
+    const aim = aimedSide(state, 0);
     for (let i = 0; i < n; i++) {
-      const s = i % 2 ? -1 : 1;
+      const s = aim ? (i % 3 === 2 ? -aim : aim) : i % 2 ? -1 : 1; // (F4: most of the swarm on the side of the guns)
       // (Aim a little inside the outline so they really reach the hull.)
       const [ox, oy] = layout.samples[(Math.random() * layout.samples.length) | 0];
       const tx = ox + (SH.cx - ox) * 0.15;

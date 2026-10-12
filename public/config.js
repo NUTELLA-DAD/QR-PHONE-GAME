@@ -1,6 +1,8 @@
 const PARTY_ON = typeof process === 'undefined' || !(process.env && process.env.NO_PARTY); // FUN.md F5 (raiders and fire as a party): the switch for RAIDERS.PARTY, FIRE.PARTY and RAIDERS.KO_TIME (a browser has no process: on). NO_PARTY=1 in a tool = the old numbers (the seeded baselines pin it)
 // F6 (FUN.md): the stop shape and the 60-second dock are ON in the game; NO_STOP_SHAPE=1 in a tool is the old game (the seeded botsim / golden baselines pin it).
 const STOP_SHAPE_ON = typeof process === 'undefined' || !(process.env && process.env.NO_STOP_SHAPE);
+// F4 (FUN.md): guns that matter - set pieces aimed at the manned guns, a harder tempo from stop 3, two set pieces at once from stop 5, no mines before stop 3, the job arrow for a gunner with no target, mothballed seats for small crews, the lone fighter as a squadron of one. ON in the game; NO_GUNS=1 in a tool is the old game (the seeded baselines pin it).
+const GUNS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_GUNS);
 export const config = {
   W: 1600,
   H: 900,
@@ -237,6 +239,7 @@ export const config = {
   // the old loose circling dogfighters, byte for byte (tools/botsim.mjs NO_SQUADRONS=1).
   SQUADRONS: {
     FORMATIONS: true,
+    FOLD_LONE: GUNS_ON, // F4: the lone big fighter (ENEMY above) comes as a squadron of one instead, as tough as the old fighter (needs FORMATIONS)
     MIN: 3, MAX: 6, // planes in a squadron
     EXTRA: 1, // planes added to the old DOGFIGHT count (difficulty, crew size and mission already scale that one)...
     DANGER_EXTRA_AT: 3, // ...and one more on a stop with this many skulls or more
@@ -630,6 +633,22 @@ export const config = {
     SUPPLY_REACH: 750, // fly within this of the balloon to grab it
     SUPPLY_HULL: 12,
     SUPPLY_COAL: 25,
+    // F4 (FUN.md): guns that matter - the tempo follows where the guns are and how late in the voyage it is.
+    AIM_AT_GUNS: GUNS_ON, // a set piece (and a swarm, a bomber, a squadron, imps) comes in on the side of the ship where the most guns are manned and have been idle longest (links.js state.links.aim)
+    FORCE_COLUMN: 0, // tools only (BATCH_SET=PACING.FORCE_COLUMN=5): pretend every stop is this stop of the voyage (0 = the real one)
+    AIM_CHANCE: 0.85, // ...this often (else a coin toss, as before)
+    HARD: { // from stop FROM_COLUMN of a voyage (numbered from 1; a single mission, as the tools fly it, counts as late) the director runs faster: a livelier trickle, shorter calms, shorter set pieces
+      ENABLED: GUNS_ON,
+      FROM_COLUMN: 3,
+      RATE_START: 0.6, // trickle speed at the start of a build-up (was 0.45)
+      CALM: 34, // nothing new for this long after a set piece. FUN.md asked for 24 (down from 34), but the old director overwrote every calm with the set piece's own length (PEAK_MAX, 50 s: simulation.js updateTempo), so the real calm was 50 s; the harder tempo honours its calm, and 34 is a cut of a third to what was flown. 24 cut it in half and classic victories fell 4 -> 1 of 24
+      PEAK_MAX: 40, // a set piece is called off after this long (was 50)
+    },
+    MULTI: { // two set pieces at once
+      ENABLED: GUNS_ON,
+      FROM_COLUMN: 5,
+      DELAY: 4, // the second comes this many seconds after the first (never the gunship, never while she is falling or the gunship is about)
+    },
   },
   // F6 (FUN.md): the shape of a stop - BRIEFING -> flight -> ONE big thing -> ESCAPE -> scorecard -> the dock.
   STOP_SHAPE: {
@@ -743,6 +762,20 @@ export const config = {
     BLAST_SIZE: 150, // size of the burst ring on the TV
   },
   // Linked stations (links.js, prime.js): two crew at once are worth more than two crew apart. Always a bonus; a lone crew member still plays.
+  // F4 (FUN.md): a small crew does not need every seat. Under UNDER crew, on a ship that has these stations (the classic), they are MOTHBALLED: drawn under a lashed canvas cover, taken by no one, not offered to the bots or the job arrows (links.js state.links.moth).
+  CREW_SEATS: {
+    ENABLED: GUNS_ON,
+    UNDER: 8,
+    MOTHBALL: ['Aft Dorsal Gun', 'Deflector'], // a gun that mostly does what the Dorsal Gun does, and the shield that matters only to imp and bomb set pieces
+  },
+  // F4: which side of the ship the director attacks (links.js state.links.aim).
+  LINKS_AIM: {
+    SCAN: 0.25, // seconds between looks at whether a manned gun has a target (the idle count of each gun)
+    IDLE_CAP: 30, // an idle gun counts for more the longer it has waited, up to this many seconds...
+    IDLE_WEIGHT: 0.1, // ...each second adds this much to its weight (a manned gun is worth 1)
+    ARC_PAD: 0.35, // radians: a gun covers a side if that side's direction is within its arc plus this
+    SIDE_ANGLE: 0.2, // ...the fore direction is this far above level (the aft one mirrors it): enemies come in a little high
+  },
   LINKS: {
     ENABLED: true, // false = no links at all (tools/botsim.mjs uses NO_LINKS=1 to compare)
     // GUN + LOADER: a second crew member standing at a manned gun holds Action to prime its shell for the gunner.
@@ -1177,6 +1210,7 @@ export const config = {
   },
   // Floating mines drifting toward the bow.
   MINES: {
+    FIRST_COLUMN: GUNS_ON ? 3 : 0, // F4: no mines before this stop of a voyage (0 = always; a single mission counts as late)
     FIRST_AFTER: 30,
     EVERY_MIN: 18,
     EVERY_MAX: 28,
@@ -3283,6 +3317,8 @@ export const config = {
     JOB_HOLD: 2.5, // seconds a bot sticks to a job before it may swap to a more urgent kind (it never swaps to a merely closer job of the same kind)
     HELM_CALL: 0.7, // chance per think that a crew member leaves a station to take an empty helm
     AMMO_LOW: 10, // fetch ammo when a gun has this many shells or fewer
+    GUN_IDLE_LEAVE: GUNS_ON ? 3 : 6, // F4: a bot at a gun with no target leaves it after this many seconds (it was 6; a human's phone shows the arrow after JOBS.SEATED_IDLE)
+    FILL_GUNS: GUNS_ON ? 0 : 99, // F4: the most guns a bot mans with no target in reach (the rest of the crew haul, mend and load); none at all in a calm or the escape (99 = as many as there are)
     STATION_MIN: 20, // stay at a station at least this long...
     STATION_MAX: 40, // ...and at most this long, then rotate
     STATION_TIER_PX: 1800, // a station that is one 'usefulness point' better is worth walking this many extra px for
@@ -3321,6 +3357,7 @@ export const config = {
     SWITCH_GAIN: 0.6, // ...and is only swapped for a new job that scores this fraction of the old one or better (lower = calmer)
     ARRIVE: 70, // px: standing this close (same deck) means you have arrived - the arrow goes away
     IDLE_AFTER: 0.8, // seconds free (no station, not working) before the first arrow shows
+    SEATED_IDLE: GUNS_ON ? 6 : 0, // F4: a gunner seated with no target for this many seconds gets the gold job arrow too, on the phone while still seated (0 = off); the bots leave an idle gun after the same time
     AMMO_LOW: 8, // a gun with this many shells or fewer is worth an ammo run
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score

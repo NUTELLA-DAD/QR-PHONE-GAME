@@ -192,7 +192,13 @@ export function buildShipModel(layout, opts = {}) {
       });
       if (decor) decor.update(t, opts.gunship && opts.gunship.intent, model.gale || 0);
       const guns = st.GUNS || {};
-      for (const [name, pivot] of Object.entries(dyn.guns)) { const live = guns[name]; if (live && Number.isFinite(live.aim)) pivot.rotation.z = -live.aim; }
+      const moth = (st.links && st.links.moth) || {}; // (F4: a gun mothballed for a small crew sits under a canvas cover)
+      for (const [name, pivot] of Object.entries(dyn.guns)) {
+        const live = guns[name];
+        if (live && Number.isFinite(live.aim)) pivot.rotation.z = -live.aim;
+        if (moth[name] && !pivot.userData.tarp) { pivot.userData.tarp = new THREE.Mesh(new THREE.BoxGeometry(80, 50, 56), new THREE.MeshBasicMaterial({ color: '#b7a77c' })); pivot.add(pivot.userData.tarp); }
+        if (pivot.userData.tarp) pivot.userData.tarp.visible = !!moth[name];
+      }
       const sls = st.searchlights || [];
       dyn.lamps.forEach((lp, i) => {
         const live = sls.find((q) => q.n === lp.name) || sls[i];

@@ -36,6 +36,7 @@ import { createDebris } from './debris.js';
 import { toWorld, toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { deckPieces } from './shipBuild.js';
 import { createMoments } from './moments.js';
+import { stopColumn } from './gunsMatter.js';
 import { writeStop, postcard, gentleLine } from './logWriter.js';
 import { generateVoyage, expectedPower, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
@@ -465,8 +466,23 @@ export function createSimulation() {
     }
     return pool[(Math.random() * pool.length) | 0] || 'swarm';
   };
+  // F4 (PACING.HARD): from stop FROM_COLUMN the director runs the harder numbers (a livelier trickle, shorter calms and set pieces).
+  const tempoNums = () => {
+    const H = config.PACING.HARD;
+    return H.ENABLED && stopColumn(state) >= H.FROM_COLUMN ? { ...config.PACING, RATE_START: H.RATE_START, CALM: H.CALM, PEAK_MAX: H.PEAK_MAX, hard: true } : config.PACING;
+  };
+  // F4 (PACING.MULTI): from stop FROM_COLUMN a second set piece (never the gunship) comes DELAY s after the first, while the ship is not falling and the gunship is not about.
+  const secondSetPiece = (tp) => {
+    const MU = config.PACING.MULTI;
+    if (!MU.ENABLED || tp.second !== undefined || tp.kind === 'gunship' || tp.el < MU.DELAY || stopColumn(state) < MU.FROM_COLUMN) return;
+    if (goingDown.active() || state.gunship || state.ship.down || squadrons.bossSoon()) return;
+    const gates = state.course && state.course.stop && state.course.stop.gates;
+    const pool = ['swarm', 'imps', 'bombers', 'strafers'].filter((k) => k !== tp.kind && (!gates || gates.includes(k)));
+    tp.second = pool.length ? pool[(Math.random() * pool.length) | 0] : null;
+    if (tp.second) setPieces[tp.second].go();
+  };
   const enterPhase = (tp, phase) => {
-    const PC = config.PACING;
+    const PC = tempoNums();
     tp.phase = phase;
     tp.el = 0;
     if (phase === 'build') {
@@ -474,6 +490,7 @@ export function createSimulation() {
       tp.rate = PC.RATE_START;
     } else if (phase === 'peak') {
       tp.kind = pickSetPiece(tp);
+      tp.second = undefined;
       tp.spawned = false;
       tp.tries = 0;
       tp.t = PC.PEAK_MAX;
@@ -491,7 +508,7 @@ export function createSimulation() {
     }
   };
   const updateTempo = (dt) => {
-    const PC = config.PACING;
+    const PC = tempoNums();
     const tp = state.tempo;
     if (state.ship.down) return;
     tp.mt += dt;
@@ -548,10 +565,11 @@ export function createSimulation() {
         }
         tp.t = PC.PEAK_MAX;
       } else {
-        const over = (!SP.alive() || squadrons.bossSoon()) && tp.el >= PC.PEAK_MIN;
+        secondSetPiece(tp);
+        const over = (!(SP.alive() || (!!tp.second && setPieces[tp.second].alive())) || squadrons.bossSoon()) && tp.el >= PC.PEAK_MIN;
         const cap = tp.el >= (SP.max ? SP.max() : PC.PEAK_MAX);
         if (over || cap) enterPhase(tp, 'calm');
-        tp.t = Math.max(0, (SP.max ? SP.max() : PC.PEAK_MAX) - tp.el);
+        if (!(PC.hard && tp.phase !== 'peak')) tp.t = Math.max(0, (SP.max ? SP.max() : PC.PEAK_MAX) - tp.el); // (the old line also overwrote the calm that was just entered with the peak's length; the harder tempo keeps the calm it asked for)
       }
     } else {
       // CALM: nothing new; stragglers go home; then the next build-up.

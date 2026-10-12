@@ -12,6 +12,7 @@ import { hearts } from './health.js';
 import { bunkerEmpty } from './goingDown.js';
 import { gripJobs } from './creatureGrip.js';
 import { scrapOn, holdSpot, holdFull } from './scrap.js';
+import { isMothballed } from './gunsMatter.js';
 
 const J = config.JOBS;
 // Worked out per ship layout (rebuilt when a new ship build is applied to it).
@@ -97,7 +98,7 @@ export function createJobFinder(state) {
     if (state.sea && state.sea.pump && state.sea.flood > config.ENVIRONMENTS.sea.FLOOD.JOB_AT) add('pump', state.sea.pump, state.sea.pump.d, state.sea.pump.x, {}, 'PUMP OUT THE BILGE!');
     if (state.sea && state.sea.winch) add('winch', state.sea.winch, state.sea.winch.d, state.sea.winch.x, {}, 'WINCH UP THE SURVIVOR!');
     for (const b of state.bats || []) if (b.latched && b.landed && b.hp > 0) add('swat', b, b.d, b.lx);
-    const mods = state.modules || [];
+    const mods = (state.modules || []).filter((m) => !isMothballed(state, m.name)); // (F4: a mothballed station is not repaired or fed)
     for (const m of mods) {
       if (m.kind === 'pipe') {
         if (m.broken || m.hp < m.max * 0.5) add(m.broken && m.open ? 'leak' : 'repair', m, m.d, m.x, {}, `${m.broken && m.open ? 'LEAK' : 'REPAIR'} ${m.name}`);
@@ -179,7 +180,9 @@ export function createJobFinder(state) {
   // Called every frame for each human.
   const update = (p, dt) => {
     // Busy = on a station, working a hold job, fighting, hurt or in the air: no arrow, and the free timer restarts.
-    const busy = p.lock || p.ko > 0 || p.fall || p.fly || p.air || p.onGunship || p.connected === false || (p.act && p.act.hold && p.fire) || (p.atkCd || 0) > 0 || p.swing;
+    // F4 (JOBS.SEATED_IDLE): a gunner seated with no target for a while (links.js counts it) is free for a job again: the arrow shows on his phone while he is still seated.
+    const seatedIdle = J.SEATED_IDLE > 0 && p.lock && state.phase === 'flying' && !!state.GUNS[p.lock] && (p.gunIdle || 0) >= J.SEATED_IDLE;
+    const busy = (p.lock && !seatedIdle) || p.ko > 0 || p.fall || p.fly || p.air || p.onGunship || p.connected === false || (p.act && p.act.hold && p.fire) || (p.atkCd || 0) > 0 || p.swing;
     if (busy) {
       p.freeT = 0;
       p.job = null;
@@ -219,6 +222,6 @@ export function createJobFinder(state) {
   };
 
   // What the phone gets: null until they have been free a moment.
-  const ui = (p) => (p.job && p.job.dir && p.freeT >= J.IDLE_AFTER ? { label: p.job.label, dir: p.job.dir, kind: p.job.kind } : null);
+  const ui = (p) => (p.job && p.job.dir && p.freeT >= J.IDLE_AFTER ? { label: p.job.label, dir: p.job.dir, kind: p.job.kind, ...(p.lock ? { seated: true } : {}) } : null);
   return { update, ui };
 }
