@@ -4,26 +4,26 @@
 //   const sw = createInstanced(parent, template, max)   template = a Group from style.js Batch.build() (its mesh and ink shell share the geometry, which this reuses; do not dispose the template)
 //   sw.begin(); sw.add(matrix); sw.end()                 once a frame
 //   createLampInstances(parent, max, geometry)           little unlit spheres, one colour each (HDR allowed: they cross the bloom threshold): a mine's lamp
-import { THREE, toonVC, plainVC, outlineMat, look } from './style.js';
+import { THREE, look, inkDouble, toonVCInkS, plainVCInk, depthVCInk } from './style.js';
 
 export function createInstanced(parent, template, max = 64) {
-  const geo = template.userData.mesh ? template.userData.mesh.geometry : template.children[0].geometry;
-  const mesh = new THREE.InstancedMesh(geo, look.toon ? toonVC : plainVC, max);
-  mesh.userData.toon = toonVC; mesh.userData.plain = plainVC; mesh.userData.shadowCaster = true; mesh.userData.shadowReceiver = false;
+  const base = template.userData.mesh ? template.userData.mesh.geometry : template.children[0].geometry;
+  // the picture and its ink shell are ONE instanced mesh (style.js inkDouble: the geometry twice, the ink in the same draw): a flock costs (poses x 1) calls, not (poses x 2)
+  const geo = base.attributes.aShell ? base : inkDouble(base);
+  const mesh = new THREE.InstancedMesh(geo, look.toon ? toonVCInkS : plainVCInk, max);
+  mesh.userData.toon = toonVCInkS; mesh.userData.plain = plainVCInk; mesh.userData.shadowCaster = true; mesh.userData.shadowReceiver = false;
   mesh.castShadow = look.shadows;
-  const shell = new THREE.InstancedMesh(geo, outlineMat, max);
-  shell.userData.isOutline = true; shell.userData.small = true;
-  shell.visible = look.toon && look.outlines && !(look.low);
-  for (const m of [mesh, shell]) { m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.count = 0; parent.add(m); }
-  mesh.name = shell.name = 'swarm';
+  mesh.customDepthMaterial = depthVCInk;
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.frustumCulled = false; mesh.count = 0; parent.add(mesh);
+  mesh.name = 'swarm';
   let n = 0;
   return {
-    mesh, shell, max,
+    mesh, shell: null, max,
     begin() { n = 0; },
-    add(M) { if (n >= max) return false; mesh.setMatrixAt(n, M); shell.setMatrixAt(n, M); n++; return true; },
-    end() { mesh.count = shell.count = n; mesh.instanceMatrix.needsUpdate = shell.instanceMatrix.needsUpdate = true; mesh.visible = n > 0; },
+    add(M) { if (n >= max) return false; mesh.setMatrixAt(n, M); n++; return true; },
+    end() { mesh.count = n; mesh.instanceMatrix.needsUpdate = true; mesh.visible = n > 0; },
     get count() { return n; },
-    dispose() { mesh.removeFromParent(); shell.removeFromParent(); },
+    dispose() { mesh.removeFromParent(); },
   };
 }
 

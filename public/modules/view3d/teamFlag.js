@@ -3,7 +3,7 @@
 // shown changes 8 times a second on a fixed 3-key cycle: no cloth, no sine, no vertex work. Three meshes a ship would be too many, so only the shown pose is visible: the flag costs 4 draw calls a ship (the pole and the pose,
 // each with its ink shell). Zoomed far out the whole flag grows (the 2D game does the same), so it still reads from the sofa. A child of the ship's content group, so it leans with her and turns with COME ABOUT.
 //   createTeamFlags({ state, models }) -> { update(t, zoom), dispose() }
-import { THREE, Batch, tagSmall } from './style.js';
+import { THREE, Batch, bakePoses, moveParts } from './style.js';
 import { config } from '../../config.js';
 
 const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
@@ -20,7 +20,7 @@ const teamColors = (team) => {
 };
 
 // one pose of the flag: cloth segments (the last one is notched into a swallow tail) and a pale stripe along the middle, in the flag's own frame (+x streams toward the stern, y up)
-function poseGroup(col, len, hgt, angles) {
+function poseParts(col, len, hgt, angles, pole) { // (the pole is part of every pose: ONE mesh and one ink shell show pole + the flag in the pose on the key: 2 draw calls a ship, it was 4)
   const b = new Batch(), sl = len / SEGS;
   for (let i = 0; i < SEGS; i++) {
     const u = i / SEGS, h = hgt * (1 - 0.35 * u), a = angles[i], hx = -i * sl, cx = hx - Math.cos(a) * sl * 0.5, cz = Math.sin(a) * sl * 0.5; // (the flag streams toward -x of the content frame: the stern)
@@ -34,7 +34,10 @@ function poseGroup(col, len, hgt, angles) {
       }
     }
   }
-  return tagSmall(b.build({ cast: false, receive: false }));
+  moveParts(b.parts, new THREE.Matrix4().makeTranslation(0, pole - 2, 0)); // (the flag hangs from the top of the pole)
+  b.rod('#2b2622', V(0, -4, 0), V(0, pole, 0), 2.6, 1.4);
+  b.sphere(col.dark, 0, pole + 6, 0, 6, 6, 6, 1.2, true);
+  return b.parts;
 }
 
 export function createTeamFlags({ state, models }) {
@@ -60,16 +63,10 @@ export function createTeamFlags({ state, models }) {
     } else if (b) { x = model.X((b.x0 + b.x1) / 2); y = model.Y(b.y0 + 12); }
     void gb;
     root.position.set(x, y, 0);
-    const pb = new Batch();
-    pb.rod('#2b2622', V(0, -4, 0), V(0, pole, 0), 2.6, 1.4);
-    pb.sphere(col.dark, 0, pole + 6, 0, 6, 6, 6, 1.2, true);
-    root.add(tagSmall(pb.build({ cast: false, receive: false })));
-    const flagRoot = new THREE.Group();
-    flagRoot.position.set(0, pole - 2, 0);
-    const poses = KEYS.map((ang) => { const g = poseGroup(col, len, hgt, ang); g.visible = false; flagRoot.add(g); return g; });
-    root.add(flagRoot);
+    const flag = bakePoses(KEYS.map((ang) => poseParts(col, len, hgt, ang, pole)), { cast: false, receive: false, small: true });
+    root.add(flag);
     parent.add(root);
-    return { model, root, poses, teamKey: JSON.stringify(sh.team && (sh.team.id || sh.team.color)), scale: 1, shown: -1 };
+    return { model, root, flag, teamKey: JSON.stringify(sh.team && (sh.team.id || sh.team.color)), scale: 1, shown: -1 };
   }
 
   const update = (t, zoom = 1) => {
@@ -86,7 +83,7 @@ export function createTeamFlags({ state, models }) {
       const nz = ((config.CAMERA && config.CAMERA.VERSUS) || {}).NAME_ZOOM || 0, sc = nz && zoom > 0 && zoom < nz ? clamp(nz / zoom, 1, 2.6) : 1;
       if (sc !== r.scale) { r.scale = sc; r.root.scale.setScalar(sc); }
       const k = Math.floor(t * 8) % 3;
-      if (k !== r.shown) { r.poses.forEach((g, i) => { g.visible = i === k; }); r.shown = k; }
+      if (k !== r.shown) { r.flag.userData.show(k); r.shown = k; }
     }
     for (const [id, r] of recs) if (!live.has(id)) drop(id, r);
   };

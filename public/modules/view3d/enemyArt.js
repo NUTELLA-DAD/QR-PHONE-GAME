@@ -47,7 +47,7 @@ const prop = (color, len, w, x = 0, depth = 7) => { // two blades on a hub: one 
   void w;
   return g;
 };
-const blurMat = new THREE.MeshBasicMaterial({ color: '#4a4440', transparent: true, opacity: 0.26, depthWrite: false, side: THREE.DoubleSide });
+const blurMat = new THREE.MeshBasicMaterial({ color: '#4a4440', transparent: true, opacity: 0.26, depthWrite: false, forceSinglePass: true, side: THREE.DoubleSide });
 const blurDisc = (r, x = 0) => { const m = new THREE.Mesh(DISC, blurMat); m.scale.setScalar(r); m.position.x = x; m.renderOrder = 3; return m; };
 
 // ---- a BIPLANE (the dogfighters, our escorts, a stolen plane, the Devil's single fighter): about 124 long, 140 across ---------------------------------------------------------
@@ -105,6 +105,7 @@ export function buildBiplane(pal, o = {}) {
   g.add(blur);
   g.scale.setScalar(s);
   g.userData.prop = pg; g.userData.blur = blur;
+  g.userData.sig = 'bip' + JSON.stringify([pal, o]); // (modelSets.js: planes of one sig are drawn as one instanced copy of every mesh)
   return g;
 }
 
@@ -140,6 +141,7 @@ export function buildBomber(o = {}) {
   for (const z of [-96, 96]) { const pg = prop(COL.coal, 76, 8, 0, 8); pg.position.set(78, -10, z); g.add(pg); const bl = blurDisc(38, 80); bl.position.set(80, -10, z); g.add(bl); props.push(pg); }
   g.userData.props = props;
   g.userData.prop = props[0];
+  g.userData.sig = 'bomber' + JSON.stringify(o);
   return g;
 }
 
@@ -171,6 +173,7 @@ export function buildDevil() {
   const blur = blurDisc(26, 96);
   g.add(blur);
   g.userData.prop = pg; g.userData.blur = blur;
+  g.userData.sig = 'devil';
   return g;
 }
 
@@ -232,7 +235,7 @@ export function buildMineBalloon(r = 34) {
   bb.cone(COL.canvas, 0, r + 66, 0, 7, 12, 1.4, 0, 0, PI);
   return bb.build();
 }
-const RING = new THREE.MeshBasicMaterial({ color: '#ff3b2e', transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide });
+const RING = new THREE.MeshBasicMaterial({ color: '#ff3b2e', transparent: true, opacity: 0.16, depthWrite: false, forceSinglePass: true, side: THREE.DoubleSide });
 export const MINE_COLORS = { on: glow('#ff2e2e', 3), amber: glow('#ffb347', 2.6), off: new THREE.Color('#4a2a2a') };
 export const MINE_MATS = { ringOn: RING, ringGeo: new THREE.CircleGeometry(1, 36), lampGeo: G.sphereLo };
 
@@ -267,6 +270,7 @@ export function buildChute() {
   for (const k of [-1, -0.4, 0.4, 1]) body.rod('#2b2622', V(k * 49, 52, 0), V(0, 2, 0), 0.9, 0);
   g.add(tagSmall(body.build()));
   g.userData.canopy = cg;
+  g.userData.sig = 'chute'; // (modelSets.js: every parachute in the sky is one instanced copy of each mesh)
   return g;
 }
 
@@ -280,6 +284,7 @@ export function buildScrapChute() {
   const cords = new Batch();
   for (const k of [-1, -0.4, 0.4, 1]) cords.rod('#2b2622', V(k * 39, 40, 0), V(0, 4, 0), 0.9, 0);
   g.add(tagSmall(cords.build()));
+  g.userData.sig = 'scrapchute';
   return g;
 }
 export function buildScrapHulk() {
@@ -299,7 +304,9 @@ export function buildRocket() {
   b.cone('#7a2a22', 25, 0, 0, 7.6, 16, 2, 0, 0, -PI / 2);
   for (const k of [0, 1, 2]) b.box('#5a5558', -18, 0, 0, 12, 20, 2.6, 1.4, (k * PI) / 3, 0, 0);
   b.cyl('#3a3a3e', -17, 0, 0, 6, 4, 1, 0, 0, PI / 2);
-  return tagSmall(b.build());
+  const g = tagSmall(b.build());
+  g.userData.sig = 'rocket';
+  return g;
 }
 
 // ---- the specials (specials.js) -----------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -169,6 +169,57 @@ outlineMat.onBeforeCompile = (sh) => {
 };
 outlineMat.customProgramCacheKey = () => 'ink-outline';
 
+// ONE-CALL INK (the 3D perf pass). A picture and its ink shell are two draw calls (two meshes, the shell drawn BackSide from the same geometry). Where a thing is instanced or baked in poses, the shell is made part of
+// the SAME mesh instead: the geometry twice over (aShell 0 = the picture copy, 1 = the ink copy pushed out along onormal), one DoubleSide material that keeps only the front faces of the picture copy and only the back faces
+// of the ink copy (painted in the ink colour). The same pixels as the pair, half the calls; the shadow pass kills the ink copy (depthVCInk). Same trick as the ship's trim material (parts3d/kit.js).
+//   inkDouble(geometry)             -> the doubled geometry ({ n } in userData: the vertex count of one copy)
+//   toonVCInk / plainVCInk          the materials (look.toon picks); toonVCInkS is the same for small things (Detail: low drops their ink)
+export const inkLook = { on: { value: 1 }, onSmall: { value: 1 }, color: { value: new THREE.Color(INK) } };
+function inkCall(m, small) {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    inkUniforms(sh);
+    sh.uniforms.uInkOn = small ? inkLook.onSmall : inkLook.on; sh.uniforms.uInk = inkLook.color;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec3 onormal; attribute float aShell; varying float vShell;\n' + INK_GLSL)
+      .replace('#include <begin_vertex>', 'vec3 transformed = vec3( position ) + inkPush( onormal ) * aShell; vShell = aShell;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vShell; uniform float uInkOn; uniform vec3 uInk;')
+      .replace('void main() {', 'void main() {\n  if ( vShell > 0.5 ) { if ( uInkOn < 0.5 || gl_FrontFacing ) discard; } else if ( ! gl_FrontFacing ) discard;')
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  if ( vShell > 0.5 ) gl_FragColor.rgb = uInk;');
+  };
+  m.customProgramCacheKey = () => (m.isMeshToonMaterial ? 'toon-rim-vc-ink' : 'lambert-vc-ink');
+  m.shadowSide = THREE.BackSide; // (as the single-sided picture material it replaces: the shadow is cast by the back faces)
+  return m;
+}
+export const toonVCInk = inkCall(rimify(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap, side: THREE.DoubleSide })), false);
+export const toonVCInkS = inkCall(rimify(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap, side: THREE.DoubleSide })), true);
+export const plainVCInk = inkCall(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), false);
+toonVCInk.name = toonVCInkS.name = 'toonVCInk'; plainVCInk.name = 'plainVCInk';
+export const depthVCInk = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); // (the shadow pass of a doubled geometry: the ink copy is thrown off screen)
+depthVCInk.onBeforeCompile = (sh) => {
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aShell;').replace('#include <project_vertex>', '#include <project_vertex>\n  if ( aShell > 0.5 ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );');
+};
+depthVCInk.customProgramCacheKey = () => 'depth-vc-ink';
+// The geometry twice over for the one-call ink: [the picture copy | the ink copy], aShell 0 then 1. (A non-indexed Batch geometry: position, normal, color, onormal.)
+export function inkDouble(geo) {
+  const n = geo.attributes.position.count, g = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal', 'color', 'onormal']) {
+    const a = geo.attributes[name];
+    if (!a) continue;
+    const arr = new Float32Array(a.array.length * 2);
+    arr.set(a.array); arr.set(a.array, a.array.length);
+    g.setAttribute(name, new THREE.BufferAttribute(arr, a.itemSize));
+  }
+  const sh = new Float32Array(n * 2);
+  sh.fill(1, n);
+  g.setAttribute('aShell', new THREE.BufferAttribute(sh, 1));
+  g.userData.n = n;
+  g.computeBoundingSphere();
+  return g;
+}
+
 // A toon / plain pair for a single flat colour (used by animated bits that are not vertex coloured).
 export function pairFor(color, extra = {}) {
   return {
@@ -189,6 +240,8 @@ export function styled(mesh, toon, plain) {
 
 // Walk a subtree after a toggle: swap materials, show/hide ink shells, shadows.
 export function applyLook(root) {
+  inkLook.on.value = look.toon && look.outlines ? 1 : 0; // (the one-call ink: the look's switches are uniforms)
+  inkLook.onSmall.value = look.toon && look.outlines && !look.low ? 1 : 0;
   root.traverse((o) => {
     if (o.userData.toon) o.material = look.toon ? o.userData.toon : o.userData.plain;
     if (o.userData.isOutline) o.visible = look.toon && look.outlines && !(look.low && o.userData.small);
@@ -281,12 +334,23 @@ export class Batch {
   geo(color, geometry, matrix, ow = 0) { this.parts.push(piece(geometry, color, matrix, ow)); return this; }
   get empty() { return this.parts.length === 0; }
   // -> a Group holding the mesh and its outline shell (or an empty Group).
-  build({ cast = true, receive = true } = {}) {
+  // one: true = ONE mesh with its ink shell inside (inkDouble: 1 draw call, not 2); then group.userData.mesh is that mesh and there is no shell child. small = Detail: low drops its ink.
+  build({ cast = true, receive = true, one = false, small = false } = {}) {
     const group = new THREE.Group();
     if (!this.parts.length) return group;
     const geometry = mergeGeometries(this.parts, false);
     for (const p of this.parts) p.dispose();
     this.tris = geometry.attributes.position.count / 3;
+    if (one) {
+      const mesh = styled(new THREE.Mesh(inkDouble(geometry), small ? toonVCInkS : toonVCInk), small ? toonVCInkS : toonVCInk, plainVCInk);
+      geometry.dispose();
+      mesh.userData.shadowCaster = cast; mesh.userData.shadowReceiver = receive;
+      mesh.castShadow = cast && look.shadows; mesh.receiveShadow = receive && look.shadows;
+      mesh.customDepthMaterial = depthVCInk;
+      group.add(mesh);
+      group.userData.mesh = mesh;
+      return group;
+    }
     const mesh = styled(new THREE.Mesh(geometry, toonVC), toonVC, plainVC);
     mesh.userData.shadowCaster = cast;
     mesh.userData.shadowReceiver = receive;
@@ -299,6 +363,52 @@ export class Batch {
     group.userData.mesh = mesh;
     return group;
   }
+}
+
+// ---- baking: rigid pieces moved into place, and several poses of one thing in ONE mesh ------------------------------------------------------------------------------------
+const _n3 = new THREE.Matrix3(), _ov = new THREE.Vector3();
+// Move a Batch's pieces (its `.parts`) by a matrix: position and normal by the matrix, the outline vector by its rotation (rigid placement; the length of the outline vector is kept). Returns the list.
+export function moveParts(parts, matrix) {
+  _n3.setFromMatrix4(matrix);
+  for (const p of parts) {
+    p.applyMatrix4(matrix);
+    const on = p.attributes.onormal;
+    if (on) for (let i = 0; i < on.count; i++) { _ov.fromBufferAttribute(on, i).applyMatrix3(_n3); on.setXYZ(i, _ov.x, _ov.y, _ov.z); }
+  }
+  return parts;
+}
+// Add another Batch's pieces to this one at a matrix (the other batch is consumed): many small batches become one mesh and one ink shell (2 draw calls however many).
+Batch.prototype.append = function append(other, matrix) { this.parts.push(...(matrix ? moveParts(other.parts, matrix) : other.parts)); other.parts = []; return this; };
+
+// A flag, a wing, a hatch: a rigid thing that holds one of a few poses. `poses` = [[piece geometries of pose 0], [pose 1], ...] (a Batch's `.parts`, each already moved into its pose). All the poses are merged into ONE
+// geometry, pose after pose (each pose twice: the picture and its ink shell, see inkDouble), and the mesh draws only the range of the pose that is shown (group.userData.show(i)): four hinged segments cost ONE
+// draw call (it was 8: a picture and a shell for every segment).
+export function bakePoses(poses, { cast = false, receive = false, small = true } = {}) {
+  const group = new THREE.Group(), all = [], ranges = [];
+  let at = 0;
+  for (const parts of poses) {
+    let n = 0;
+    for (const p of parts) n += p.attributes.position.count;
+    all.push(...parts, ...parts.map((p) => p.clone())); // (the picture copy, then the ink copy)
+    ranges.push([at, n * 2, n]);
+    at += n * 2;
+  }
+  if (!at) { group.userData.show = () => {}; group.userData.poses = 0; return group; }
+  const geometry = mergeGeometries(all, false);
+  for (const p of all) p.dispose();
+  const shell = new Float32Array(at);
+  for (const r of ranges) shell.fill(1, r[0] + r[2], r[0] + r[1]);
+  geometry.setAttribute('aShell', new THREE.BufferAttribute(shell, 1));
+  const mesh = styled(new THREE.Mesh(geometry, small ? toonVCInkS : toonVCInk), small ? toonVCInkS : toonVCInk, plainVCInk);
+  mesh.userData.shadowCaster = cast; mesh.userData.shadowReceiver = receive;
+  mesh.castShadow = cast && look.shadows; mesh.receiveShadow = receive && look.shadows;
+  mesh.customDepthMaterial = depthVCInk;
+  group.add(mesh);
+  group.userData.mesh = mesh;
+  group.userData.poses = ranges.length;
+  group.userData.show = (i) => { const r = ranges[Math.max(0, Math.min(ranges.length - 1, i | 0))]; geometry.setDrawRange(r[0], r[1]); };
+  group.userData.show(0);
+  return group;
 }
 
 // Mark every ink shell under a root as "small" (crew, planes, bats): Detail: low drops those.
