@@ -85,6 +85,7 @@ export function createSimulation() {
     record: loadRecord(), // best run on this TV: { laps, kills }
     vote: null, // a vote in progress: the sky-dock shop, where a bought part goes, or the route map
     startBuild: null, // the ship a new voyage starts with ('sparrow' | 'classic', setStartBuild; the browser host picks it from config.VOYAGE.START_BUILD); null = whatever ship 0 is (headless tools) and no PART cards in the shop
+    startBuildAuto: false, // F1: nobody forced the start ship, so CAST OFF picks it by the crew size (config.VOYAGE.START_BUILD_BY_CREW; setStartBuild(id, 'auto'))
     yard: { built: null, newPart: null, hold: false, pull: 0 }, // the Shipwright's Yard (S.6b): the BUILT stamp, the "NEW: ..." call-out, the camera hold at the dock and the slow pull-back after cast off
     enemy: { x: -2000, y: 300, vx: 0, vy: 0, hp: 5, fire: 0, dead: 3, heading: null },
     shells: [],
@@ -428,7 +429,7 @@ export function createSimulation() {
     const add = (k, w) => { if (k !== tp.last && (!gates || gates.includes(k))) for (let i = 0; i < Math.round(w * favour(state, k)); i++) pool.push(k); }; // (the environment's enemy flavour scales each weight)
     add('swarm', 2);
     add('imps', 1);
-    if (tp.peaks >= 1 || lapNo() > 1) {
+    if (tp.peaks >= 1 || lapNo() > 1 || (state.course && state.course.stop && state.course.stop.early)) {
       add('bombers', 2);
       add('strafers', 2);
       if (tp.mt > config.PACING.GUNSHIP_FIRST && tp.mt - tp.gunshipEnd > config.PACING.GUNSHIP_GAP && !state.gunship) add('gunship', 4);
@@ -575,7 +576,7 @@ export function createSimulation() {
   const newRun = () => {
     const prevLost = state.run && state.run.lost && state.run.lost.length ? state.run.lost[0] : null; // (a ship that had lost parts: the voyage starts again with her whole)
     const daily = state.daily ? dailyVoyage() : null;
-    const voyage = generateVoyage(daily ? daily.seed : (Math.random() * 2 ** 31) | 0, { mode: state.mode, gentle: !!state.startBuild && state.startBuild !== 'classic' });
+    const voyage = generateVoyage(daily ? daily.seed : (Math.random() * 2 ** 31) | 0, { mode: state.mode, gentle: !!state.startBuild && state.startBuild !== 'classic', classic: state.startBuild === 'classic' });
     const first = voyage.columns[0][0];
     const M = modeInfo(state.mode);
     state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0,
@@ -592,6 +593,11 @@ export function createSimulation() {
     moments.restart(); // (a new voyage: the Ship's Book starts a fresh page)
     logUsed.clear();
     logUsed.counts = {};
+  };
+  // F1: the start ship that fits the crew on the TV now (config.VOYAGE.START_BUILD_BY_CREW): the Sparrow for a crew of max or fewer, the classic ship for a bigger one. Mates do not count.
+  const pickStartBuild = () => {
+    const B = VY.START_BUILD_BY_CREW;
+    return Object.values(state.players).filter((p) => !p.mate && p.connected !== false).length <= B.max ? B.small : B.big;
   };
   const logUsed = new Set(); // the sentences the Log has told this run (logWriter.js never tells one twice)
   // A stop is over (done, limped home from, or lost): its moments are written into the Log (run.log) and the dock / scorecard / postcard read them from there. Call it BEFORE the stop's stats are banked.
@@ -647,7 +653,7 @@ export function createSimulation() {
     environment: stop.play,
     kind: stop.kind,
     danger: stop.danger,
-    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined), gates: stop.gates, ring: stop.ring, nemesis: stop.nemesis, multi: stop.multi, salvage: stop.salvage, rateMul: stop.salvage ? VY.CURRICULUM.SALVAGE.RATE_MUL : undefined }, // (gates... rateMul: the teaching curriculum's set-piece gates, ring / Nemesis / multi-part flags and the salvage run's lighter enemies, config.VOYAGE.CURRICULUM; lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
+    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined), gates: stop.gates, ring: stop.ring, nemesis: stop.nemesis, multi: stop.multi, salvage: stop.salvage, rateMul: stop.salvage ? VY.CURRICULUM.SALVAGE.RATE_MUL : undefined, slack: stop.slack, early: stop.early }, // (slack: F1, a small ship's early caves are wider; early: the classic ship's stop 1 may call the planes at its first set piece; gates... rateMul: the teaching curriculum's set-piece gates, ring / Nemesis / multi-part flags and the salvage run's lighter enemies, config.VOYAGE.CURRICULUM; lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
     lengthMul: modeInfo(state.run.mode).lengthMul,
     title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'ring' ? 'BREACH THE ' + ({ tower: 'TOWER', fortress: 'FORTRESS', citadel: 'CITADEL' }[stop.ring] || 'CASTLE') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON'}!`,
   });
@@ -969,6 +975,8 @@ export function createSimulation() {
     if (!CU.ENABLED || !run.voyage.curriculum || run.power == null) return;
     const next = stop.next.map((id) => stopById(run.voyage, id));
     if (!next.length || next.some((s) => s.salvage) || run.power >= expectedPower(next[0]) - CU.SALVAGE.SLACK) return;
+    if (next[0].col < CU.SALVAGE.FROM_COLUMN) return; // (F1: never before the third column...)
+    if (CU.SALVAGE.MAX_PER_VOYAGE && run.voyage.columns.flat().filter((s) => s.salvage).length >= CU.SALVAGE.MAX_PER_VOYAGE) return; // (...and at most one a voyage, so the curriculum, the lairs and the fortress arrive)
     const pick = next.filter((s) => !s.lair && !s.ring && !s.flagship && !s.harbour).sort((a, b) => a.danger - b.danger)[0];
     if (!pick) return;
     pick.salvage = true;
@@ -1423,7 +1431,14 @@ export function createSimulation() {
     castOff: () => {
       if (state.phase !== 'lobby') return;
       if (match.on) { match.begin(); return; } // (Versus: CAST OFF starts the match - the shelf, then the rounds)
-      if (state.run.key !== sessionKey()) { // (the lobby changed the mode or the daily voyage after the route was made)
+      let remade = false;
+      if (state.startBuildAuto && VY.START_BUILD_BY_CREW.ENABLED && state.startBuild !== pickStartBuild()) { // (F1: nobody forced a ship, so the crew on the TV picks it: the route and the first map are made again for her)
+        state.startBuild = pickStartBuild();
+        newRun();
+        course.startMission(1, firstMission());
+        remade = true;
+      }
+      if (!remade && state.run.key !== sessionKey()) { // (the lobby changed the mode or the daily voyage after the route was made)
         newRun();
         course.startMission(1, firstMission());
       }
@@ -1461,15 +1476,18 @@ export function createSimulation() {
     },
     // The ship a new voyage starts with: 'sparrow', 'classic' or null (= whatever ship 0 is; no parts in the shop). In the lobby the new voyage is made now (with that ship, with the first
     // mission's map made for her); mid-voyage it is the next voyage's.
-    setStartBuild: (id) => {
+    // how = 'auto': nobody forced this ship, so CAST OFF may swap it for the one that fits the crew (F1, START_BUILD_BY_CREW); any other call (the Ship button, a tool, the build page) forces it.
+    setStartBuild: (id, how) => {
       if (id != null && !BUILDS[id]) return;
       state.startBuild = id || null;
+      state.startBuildAuto = how === 'auto' && !!id && id !== 'playtest';
       if (state.phase === 'lobby' && !match.on) {
         newRun();
         course.startMission(1, firstMission());
       }
     },
     fitShip,
+    pickStartBuild, // (F1: the ship that fits the crew now; the lobby's Ship button shows it)
     dailyInfo: () => {
       const d = dailyVoyage();
       return { ...d, best: dailyBest(state.save, d.key, state.mode) };

@@ -1225,7 +1225,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     const MP = config.MAPS;
     let kind = opts.stop && opts.stop.lair ? 'lair' : MP.FORCE_KIND || opts.kind || MP.KINDS[(n - 1) % MP.KINDS.length]; // (a lair stop: the Kraken's sea, maps.js buildLairMap, whatever the tools force)
     if (kind === 'ring' && !config.RING.ENABLED) kind = 'open'; // (the switch, R0: with the ring off a ring stop flies the old outpost raid)
-    const map = opts.arena ? buildArenaMap(course.rand, layout, opts.arena, opts.arenaGap) : makeMap(kind, n, course.rand, opts.lengthMul || 1, layout, opts.stop && opts.stop.creature, config.RING.FORCE_VARIANT || (opts.stop && opts.stop.ring) || null); // (a lair map: the Kraken's sea or the Drake's lava, by opts.stop.creature; Versus: the big arena sky, maps.js buildArenaMap)
+    const map = opts.arena ? buildArenaMap(course.rand, layout, opts.arena, opts.arenaGap) : makeMap(kind, n, course.rand, opts.lengthMul || 1, layout, opts.stop && opts.stop.creature, config.RING.FORCE_VARIANT || (opts.stop && opts.stop.ring) || null, opts.stop && opts.stop.slack); // (F1: opts.stop.slack = the wider caves of a small ship's early stops, maps.js makeMap; a lair map: the Kraken's sea or the Drake's lava, by opts.stop.creature; Versus: the big arena sky, maps.js buildArenaMap)
     map.environment = pickEnvironment(opts.environment); // 'skyisles' (the original look and rules), 'frost', 'ember'...
     const d = Math.min(1, (n - 1) / 4);
     Object.assign(course, {

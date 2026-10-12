@@ -38,7 +38,8 @@ const V = config.VOYAGE, CU = V.CURRICULUM, LR = config.CREATURES.LAIR;
 // ---- (a) the generated routes ----
 const GATES_ALL = ['swarm', 'imps', 'bombers', 'strafers', 'gunship'];
 const seeds = Array.from({ length: COUNT }, (_, i) => (i + 1) * 7919 + 13);
-const variants = [['quick', {}], ['quick', { gentle: true }], ['voyage', {}], ['voyage', { gentle: true }], ['campaign', {}], ['campaign', { voyageNo: 2 }]];
+const variants = [['quick', {}], ['quick', { gentle: true }], ['voyage', {}], ['voyage', { gentle: true }], ['voyage', { classic: true }], ['campaign', {}], ['campaign', { voyageNo: 2 }]];
+const WC = CU.WIDE_CAVES, C1 = CU.CLASSIC_STOP1; // (F1: a small ship's caves are wide; the classic ship's stop 1 has strafers added)
 const stats = { lairs: 0, creatures: {}, rings: {}, nemesis: 0, multi: 0, n: {}, tags: 0, voyages: 0 };
 for (const [mode, o] of variants) {
   const M = V.MODES[mode], table = VG.curriculumTable(mode), L = table.length;
@@ -60,7 +61,11 @@ for (const [mode, o] of variants) {
     const last = cols[n - 1];
     if (last.length !== 1 || !last[0].flagship || last[0].env !== 'aether' || last[0].kind !== (config.RING.ENABLED ? 'ring' : 'network') || last[0].danger !== maxD) fail(sd, 'the Flagship stop');
     if (last[0].ring !== 'citadel') fail(sd, 'the Flagship has no citadel flag');
-    if (!second && (cols[0][0].env !== 'skyisles' || cols[0][0].kind !== 'network' || cols[0][0].danger !== 1 || cols[0][0].slot !== 0)) fail(sd, 'first stop is not the Sky Isles cave run');
+    const cl1 = C1.ENABLED && o.classic && !second; // (F1: the classic ship's stop 1 is an outpost raid with more skulls)
+    const wideAt = (s) => WC.SLACK[Math.round(s.share * (WC.SLACK.length - 1))]; // (F1: the slack of a gentle route's stop, by its share of the route)
+    if (!second && (cols[0][0].env !== 'skyisles' || cols[0][0].kind !== (cl1 ? C1.KIND || 'network' : 'network') || cols[0][0].danger !== (cl1 ? 1 + C1.DANGER_ADD : 1) || cols[0][0].slot !== 0)) fail(sd, 'first stop is not the Sky Isles cave run');
+    if (cols.flat().some((s) => (WC.ENABLED && o.gentle && !second ? s.slack !== wideAt(s) : s.slack !== undefined))) fail(sd, 'a stop with the wrong cave slack (wide only on a gentle first voyage)');
+    if (WC.ENABLED && o.gentle && !second && (cols.flat().some((s) => !(s.slack >= 1)) || cols[0][0].slack <= config.MAPS.TUNNEL_SLACK)) fail(sd, 'the slack is not above the normal caves at stop 1');
     if (second && (cols[h].length < V.CHOICES_MIN || cols[h][0].slot !== CU.SECOND_START || cols[h][0].base !== table[CU.SECOND_START].danger + bonus)) fail(sd, 'the second voyage does not start at slot ' + CU.SECOND_START);
     // lairs
     const lairCols = [];
@@ -72,7 +77,8 @@ for (const [mode, o] of variants) {
       const slot = col[0].slot, row = table[slot];
       const share = c === n - 1 ? 1 : second ? CU.SECOND_START / (CU.POWER_CURVE.length - 1) + ((c - h) / (m - 1)) * (1 - CU.SECOND_START / (CU.POWER_CURVE.length - 1)) : c / (n - 1);
       if (slot !== Math.round(share * (L - 1))) fail(sd, `column ${c} takes slot ${slot}, its share ${share.toFixed(2)} says ${Math.round(share * (L - 1))}`);
-      if (col.some((s) => s.slot !== slot || s.gates.join() !== row.gates.join())) fail(sd, `column ${c} stops disagree on their slot`);
+      const slotGates = (c === h && !second && C1.ENABLED && o.classic ? [...new Set([...row.gates, ...C1.GATES])] : row.gates).join(); // (F1: the classic ship has stop 1's threat added)
+      if (col.some((s) => s.slot !== slot || s.gates.join() !== slotGates)) fail(sd, `column ${c} stops disagree on their slot`);
       const base = c === n - 1 ? maxD : Math.min(maxD, row.danger + bonus);
       if (col.some((s) => s.base !== base)) fail(sd, `column ${c} base danger`);
       if (base < lastBase) fail(sd, `base danger falls at column ${c}`);
@@ -82,8 +88,10 @@ for (const [mode, o] of variants) {
       // gates: nothing is taken back, column 1 has bats and imps only, strafers wait for column 2
       if (lastGates.some((g) => !row.gates.includes(g))) fail(sd, `a gate closes at column ${c}`);
       lastGates = row.gates;
-      if (!second && c === 0 && col[0].gates.some((g) => !['swarm', 'imps'].includes(g))) fail(sd, 'column 1 allows ' + col[0].gates.join());
-      if (!second && c === 0 && (col[0].gates.includes('gunship') || col[0].gates.includes('strafers'))) fail(sd, 'gunship or strafers in column 1');
+      const first = ['swarm', 'imps', ...(C1.ENABLED && o.classic ? C1.GATES : [])]; // (F1: the classic ship keeps a real threat at stop 1)
+      if (!second && c === 0 && col[0].gates.some((g) => !first.includes(g))) fail(sd, 'column 1 allows ' + col[0].gates.join());
+      if (!second && c === 0 && (col[0].gates.includes('gunship') || (col[0].gates.includes('strafers') && !(C1.ENABLED && o.classic)))) fail(sd, 'gunship or strafers in column 1');
+      if (!second && c === 0 && C1.ENABLED && o.classic && !C1.GATES.every((g) => col[0].gates.includes(g))) fail(sd, 'the classic ship lacks its stop-1 threat');
       if (!second && c === 1 && !['gunship', 'bombers', 'strafers'].every((g) => col[0].gates.includes(g))) fail(sd, 'column 2 does not teach the planes and the gunship');
       if (col.some((s) => s.gates.some((g) => !GATES_ALL.includes(g)))) fail(sd, 'unknown gate');
       // skies
@@ -92,7 +100,7 @@ for (const [mode, o] of variants) {
       for (const s of col) {
         if (!s.lair && !allowed.includes(s.env)) fail(sd, `${s.id} sky ${s.env} is not in slot ${slot}'s ${allowed}`);
         if (s.lair && !LR.BY_ENV[s.env]) fail(sd, `${s.id} lair in ${s.env}`);
-        const kinds = s.lair ? ['lair'] : s.ring && config.RING.ENABLED ? ['ring'] : s.ring && !s.flagship ? ['open'] : row.kinds; // (a ring stop flies the ring map, config.RING.ENABLED; R0)
+        const kinds = c === 0 && cl1 && C1.KIND ? [C1.KIND] : s.lair ? ['lair'] : s.ring && config.RING.ENABLED ? ['ring'] : s.ring && !s.flagship ? ['open'] : row.kinds; // (a ring stop flies the ring map, config.RING.ENABLED; R0)
         if (!kinds.includes(s.kind)) fail(sd, `${s.id} kind ${s.kind} not in ${kinds}`);
         sawKind.add(s.kind);
         if (s.play !== s.env) fail(sd, `${s.id} plays ${s.play}`);
@@ -136,7 +144,7 @@ for (const [mode, o] of variants) {
       for (const t of cols[c + 1]) if (!cols[c].some((s) => s.next.includes(t.id))) fail(sd, `${t.id} cannot be reached`);
     }
   }
-  const label = `${mode}${second ? ' voyage 2' : ''}${o.gentle ? ' (gentle)' : ''}`;
+  const label = `${mode}${second ? ' voyage 2' : ''}${o.gentle ? ' (gentle)' : ''}${o.classic ? ' (classic)' : ''}`;
   report(!bad.length, `${COUNT} ${label} routes: shape, slots, gates, sky tiers, lairs, easy branches, flags, links${bad.length ? '\n  ' + bad.join('\n  ') : ''}`);
 }
 report(stats.lairs > 0 && Object.keys(stats.creatures).length >= 2, `lairs appear in the curriculum routes: ${stats.lairs} (${Object.entries(stats.creatures).map(([k, v]) => k + ' ' + v).join(', ')})`);
@@ -212,7 +220,15 @@ function watch(sim, st, secs) {
 }
 {
   const { sim, st } = boot();
-  const stop0 = st.run.voyage.columns[0][0];
+  const stopA = st.run.voyage.columns[0][0];
+  const colA = stopA.next.map((id) => VG.stopById(st.run.voyage, id));
+  st.run.power = 0; // (F1: a crew with no power at all is still never offered a salvage run in the second column: stop 2 is the real thing)
+  sim.startRoute();
+  report(CU.SALVAGE.FROM_COLUMN <= 1 || (!st.vote.options.some((o) => o.salvage) && !st.run.offers.salvage.length && colA.every((s) => !s.salvage)), `F1: no salvage run in the second column, even for a crew at power 0 (FROM_COLUMN ${CU.SALVAGE.FROM_COLUMN})`);
+  // ...so the catch-up tests below stand at a stop of the second column, voting for the third
+  const stop0 = colA[0];
+  st.run.stopId = stop0.id;
+  st.run.visited.push(stop0.id);
   const colNext = stop0.next.map((id) => VG.stopById(st.run.voyage, id));
   const lowest = Math.min(...colNext.map((s) => s.danger));
   st.run.power = VG.expectedPower(colNext[0]) - 0.1;
@@ -232,6 +248,37 @@ function watch(sim, st, secs) {
   const errs0 = (globalThis.gameErrors || []).length;
   const w = watch(sim, st, 120);
   report(w.seen.every((k) => k === 'swarm' || k === 'boss') && !w.planes && (globalThis.gameErrors || []).length === errs0, `2 minutes on the salvage run: set pieces [${w.seen}], no planes, 0 errors`);
+  // F1: at most MAX_PER_VOYAGE a voyage - a second weak vote later on offers nothing (and with the limit lifted it would)
+  const later = VG.stopById(st.run.voyage, s.next[0]);
+  st.run.stopId = later.id;
+  st.run.power = 0;
+  sim.startRoute();
+  report(!CU.SALVAGE.MAX_PER_VOYAGE || !st.vote.options.some((o) => o.salvage), `F1: only ${CU.SALVAGE.MAX_PER_VOYAGE} salvage run per voyage: the next weak vote (column ${later.col + 1}) offers ${st.vote.options.filter((o) => o.salvage).length}`);
+  const keep = CU.SALVAGE.MAX_PER_VOYAGE;
+  CU.SALVAGE.MAX_PER_VOYAGE = 0;
+  sim.startRoute();
+  CU.SALVAGE.MAX_PER_VOYAGE = keep;
+  report(!keep || st.vote.options.some((o) => o.salvage), 'F1: MAX_PER_VOYAGE 0 gives the old behaviour (a salvage run at every weak vote)');
+}
+{
+  // F1: the start ship follows the crew size at CAST OFF unless one was forced (config.VOYAGE.START_BUILD_BY_CREW)
+  const BC = V.START_BUILD_BY_CREW;
+  const launch = (bots, how) => {
+    const sim = createSimulation(), st = sim.state;
+    sim.setSession('voyage', false);
+    sim.setStartBuild(how === 'auto' ? BC.small : how, how === 'auto' ? 'auto' : undefined);
+    for (let i = 0; i < bots; i++) { const e = st.ships[0].layout.boarderEntryPoints, id = 'bot' + i; st.players[id] = { id, bot: true, human: false, name: 'Bot' + (i + 1), species: config.CREW_SPECIES[i % config.CREW_SPECIES.length], color: colors[i % colors.length], x: e[0].x + 5 * i, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true }; }
+    sim.castOff();
+    step(sim, 30);
+    return st;
+  };
+  const small = launch(BC.max, 'auto'), big = launch(BC.max + 1, 'auto');
+  report(small.startBuild === BC.small && big.startBuild === BC.big, `CAST OFF with ${BC.max} crew flies the ${small.startBuild}, with ${BC.max + 1} the ${big.startBuild}`);
+  report(big.run.build.length > small.run.build.length && !!big.run.voyage.columns[0][0].gates.includes('strafers') && !small.run.voyage.columns[0][0].gates.includes('strafers') && small.run.voyage.columns[0][0].slack > config.MAPS.TUNNEL_SLACK && big.run.voyage.columns[0][0].slack === undefined, 'the route and the ship were made again for the ship she flies (the classic has stop 1 planes, the Sparrow wide caves)');
+  const forcedBig = launch(BC.max - 2, 'classic'), forcedSmall = launch(BC.max + 4, 'sparrow');
+  report(forcedBig.startBuild === 'classic' && forcedSmall.startBuild === 'sparrow', 'a forced ship (the Ship button, a tool) is never swapped for the crew size');
+  const off = (() => { const keepE = BC.ENABLED; BC.ENABLED = false; const st = launch(BC.max + 4, 'auto'); BC.ENABLED = keepE; return st; })();
+  report(off.startBuild === BC.small, 'START_BUILD_BY_CREW.ENABLED = false: the ship asked for stays');
 }
 {
   const { sim, st } = boot({ start: null }); // (the headless classic: no ship power figure)
@@ -241,6 +288,7 @@ function watch(sim, st, secs) {
 {
   const { sim, st } = boot({ mode: 'quick' });
   st.run.power = 0;
+  st.run.stopId = (st.run.voyage.columns[1].find((s) => s.next.some((id) => { const t = VG.stopById(st.run.voyage, id); return !t.ring && !t.lair; })) || st.run.voyage.columns[1][0]).id; // (F1: from the second column on, voting for the third, at a stop that leads to a plain one)
   sim.startRoute();
   report(st.vote.options.filter((o) => o.salvage).length === 1, 'QUICK: a crew at power 0 is offered a salvage run too');
   CU.ENABLED = false;

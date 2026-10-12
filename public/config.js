@@ -903,6 +903,9 @@ export const config = {
     },
     START_MODE: 'voyage',
     START_BUILD: 'sparrow', // the ship a Voyage / Quick / Campaign starts with in the browser host ('classic' = the old full ship; the pause menu toggles it). Headless tools stay on the classic ship unless they ask (sim.setStartBuild)
+    // F1 (FUN.md): in the browser host the start ship follows the crew size at CAST OFF unless the Ship button (or ?ship=) has forced one: a crew of MAX or fewer gets the Sparrow, a bigger one the classic ship (simulation.js castOff, pickStartBuild).
+    // A tool that asks for a build with sim.setStartBuild(id) has forced it. ENABLED false = the Ship button's saved choice (or START_BUILD) always wins, as before.
+    START_BUILD_BY_CREW: { ENABLED: true, max: 6, small: 'sparrow', big: 'classic' },
     // The harder second voyage of the Evening Campaign, started after the first Flagship falls.
     SECOND: {
       DANGER_BONUS: 1, // every stop (and the Flagship) is this many skulls harder (danger may go above 3)
@@ -917,7 +920,7 @@ export const config = {
     CURRICULUM: {
       ENABLED: true, // false = the old dice: every middle stop's sky, kind and skulls are random (generateVoyage is then exactly what it was)
       TIERS: { A: ['frost', 'ember'], B: ['storm', 'sea', 'fungal'] }, // the skies a slot can name by tier: A = ice and heat (the first new skies), B = dark, water and spores (the hard ones)
-      BRANCH_UP: 0.55, // each branch of a column but its easy one is a skull harder than the column's base with this chance (the easy one is always at the base)
+      BRANCH_UP: 0.35, // (F1: was 0.55) each branch of a column but its easy one is a skull harder than the column's base with this chance (the easy one is always at the base)
       LAIR_FROM: 0.6, // a creature lair only stands at this share of the route or later (and only in a slot with lair: true); the number of lairs is config.CREATURES.LAIR.COUNT as before
       SECOND_START: 2, // the second voyage of an Evening Campaign starts at this slot (3rd column) of the table, with its difficulty
       // The ship power a crew is expected to have on arriving at a stop, by the stop's share of the route (the curve is stretched over the route: 8 values, first = the first stop, last = the Flagship).
@@ -925,6 +928,8 @@ export const config = {
       POWER_CURVE: [0.45, 0.6, 0.7, 0.78, 0.86, 0.92, 0.97, 1.0],
       SALVAGE: {
         SLACK: 0, // a crew is offered one when its power is more than this under the curve (0 = anywhere under it)
+        MAX_PER_VOYAGE: 1, // F1: at most this many salvage runs are offered in one voyage (0 = no limit, as before); the Sparrow used to be offered one at nearly every stop and never saw the real curriculum
+        FROM_COLUMN: 2, // F1: ...and none in a column before this one (0-based: 2 = the third column; 0 = anywhere, as before), so stop 2 is always the real thing
         MAP: 'route', // the map a salvage run is flown on, for now (a winding pass to a beacon: no outposts, so a ship with no bomb bay can finish it; G6 gives it a real objective)
         LEVEL_DROP: 1, // ...flown at this many levels lower (a smaller, calmer map)
         DANGER_DROP: 1, // the stop is this many skulls easier (never under 1)
@@ -933,6 +938,12 @@ export const config = {
         REWARD_MUL: 1, // reward salvage x this
         TAG: 'SALVAGE', ICON: '🎈', // the route map's label and gentle icon (a balloon)
       },
+      // F1: the Sparrow (a start ship without the classic's size, voyage.js opts.gentle) cannot fly a cave with the classic's slack without grinding her keel: 8 falling alarms in 9 minutes at stop 1, and a salvage pass
+      // that took 15-20 minutes. Her caves (network, route and salvage stops) get SLACK squares of spare room in tunnels and shafts instead of MAPS.TUNNEL_SLACK / SHAFT_SLACK, by the stop's share of the route
+      // (8 values stretched over it, like POWER_CURVE; 1 = the normal caves): wide for the first stops, narrowing as she grows. ENABLED false = every cave as before.
+      WIDE_CAVES: { ENABLED: true, SLACK: [4, 4, 3, 3, 2, 2, 1, 1] },
+      // F1: the classic ship is not bored at stop 1: these set pieces are added to stop 1's gates (a gun-only bat-and-imp stop left her hull at 99-100). DANGER_ADD more skulls on it (1 skull = 20% more damage). ENABLED false = bats and imps only, as before.
+      CLASSIC_STOP1: { ENABLED: true, KIND: 'open', GATES: ['strafers'], DANGER_ADD: 1 },
       GATE_TAGS: { gunship: 'NEW: GUNSHIPS', strafers: 'NEW: DOGFIGHTERS', bombers: 'NEW: BOMBERS' }, // the route map's tiny tag on a column where this set piece is first allowed
       ENV_TAGS: { frost: 'NEW: ICE', ember: 'NEW: HEAT', storm: 'NEW: STORMS', sea: 'NEW: WATER', fungal: 'NEW: DARK' }, // ...and on a stop whose sky the route has not shown before
       TABLES: {
@@ -944,10 +955,10 @@ export const config = {
         ],
         voyage: [ // 8 stops (a 6 or 7 stop route takes the slots its columns' shares round to; the Evening Campaign uses this table too)
           { env: ['skyisles'], kinds: ['network'], gates: ['swarm', 'imps'], danger: 1 }, // 1: a cave run, bats and imps only
-          { env: ['skyisles'], kinds: ['open', 'route'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 1 }, // 2: a raid or a pass; planes and the first gunship
+          { env: ['skyisles'], kinds: ['open', 'route'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2 }, // 2: a raid or a pass; planes and the first gunship (F1: danger 1 -> 2)
           { env: ['A'], kinds: ['open'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2, ring: 'tower' }, // 3: a Frost or Ember raid, the tower
           { env: ['A', 'sea'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2 }, // 4: the heist / salvage / defend slot (G6; until then any kind)
-          { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, nemesis: true }, // 5: the dark skies; the Nemesis may appear
+          { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 2, nemesis: true }, // 5: the dark skies; the Nemesis may appear (F1: danger 3 -> 2, so the curve is 1,2,2,2,2,3,3,3)
           { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, lair: true, ring: 'fortress' }, // 6: a lair or the fortress
           { env: ['B'], kinds: ['open', 'route', 'network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, lair: true, multi: true }, // 7: the multi-part slot (a lair may stand here too, for a short route that skipped slot 6)
           { env: ['aether'], kinds: ['network'], gates: ['swarm', 'imps', 'bombers', 'strafers', 'gunship'], danger: 3, ring: 'citadel' }, // 8: the Flagship

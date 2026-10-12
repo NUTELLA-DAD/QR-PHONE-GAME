@@ -65,6 +65,11 @@ if (args.runs > 1 && !args.child) {
     const sum = (f) => O.reduce((a, o) => a + f(o), 0);
     console.log(`offered and taken: lairs offered ${sum((o) => o.lair.length)}, taken ${sum((o) => o.taken.filter((id) => o.lair.includes(id)).length)}; salvage runs offered ${sum((o) => o.salvage.length)}, taken ${sum((o) => o.taken.filter((id) => o.salvage.includes(id)).length)} (over ${ok.length} voyages)`);
   }
+  { // the ramp (FUN.md F1): per column, the hull mean while flying and the median minutes a stop took (docks included)
+    const col = {};
+    for (const r of ok) for (const b of r.hullBy || []) { const c = (col[b.col] ??= { hull: 0, n: 0, min: [] }); c.hull += b.hull; c.n += b.n; c.min.push((b.t1 - b.t0) / 3600); }
+    console.log('ramp, per column: ' + Object.keys(col).map(Number).sort((a, b) => a - b).map((k) => `${k + 1}: hull ${(col[k].hull / Math.max(1, col[k].n)).toFixed(1)}, ${col[k].min.sort((a, b) => a - b)[col[k].min.length >> 1].toFixed(1)} min (${col[k].min.length})`).join(' | '));
+  }
   { // SCRAP (LOOP.md G1): bundles caught (landed on a deck or taken off a hulk) and stowed per stop FLOWN (done = stops finished, the one she ended on included), against config.SCRAP.INCOME_TARGET
     const sc = ok.filter((r) => r.scrap), { config: cfg } = await import(new URL("../public/config.js", import.meta.url).href);
     if (sc.length) {
@@ -182,6 +187,7 @@ let result = null;
 const curve = []; // (G0: per stop reached, the ship's power against the curriculum's expected power and the stop's skulls)
 let curveStop = null;
 const lairs = { seen: new Set(), won: new Set(), met: 0, how: {} };
+const hullBy = {}; // (F1: per stop flown, the hull while flying and the minutes: result.hullBy)
 const wrecks = []; // (balance pass: the text of every wreck of the voyage, limps included, from the moment the ship goes down)
 let wasDown = 0;
 for (let step = 1; step <= maxSteps && !result; step++) {
@@ -197,6 +203,7 @@ for (let step = 1; step <= maxSteps && !result; step++) {
     wasDown = state.ship.down > 0 ? 1 : 0;
     mateStat.max = Math.max(mateStat.max, Object.values(state.players).filter((q) => q.mate).length);
     { const cr = state.creature; if (cr && !lairs.seen.has(cr)) { lairs.seen.add(cr); lairs.met++; } if (cr && cr.dying && cr.stats.win && !lairs.won.has(cr)) { lairs.won.add(cr); lairs.how[cr.stats.win] = (lairs.how[cr.stats.win] || 0) + 1; } } // (C.3: the Kraken lairs the crew met and how they won)
+    { const sid = state.run && state.run.stopId; if (sid) { const b = (hullBy[sid] ??= { col: Number(sid.split('.')[0]), hull: 0, n: 0, t0: step, t1: step }); b.t1 = step; if (fl && step % 30 === 0) { b.hull += state.ship.hull; b.n++; } } } // (F1)
     if (fl && state.ship.hull < h0) { const dd = damageMul(state); const pf = nf * 0.35 * dd * 2 * dt, pb = nb * 0.5 * dd * 2 * dt, drop = h0 - state.ship.hull; dmg.fire += pf; dmg.breach += pb; dmg.direct += Math.max(0, drop - pf - pb); }
   } catch (err) { errorCount++; if (errorCount < 4) console.error('ERR', err && err.stack); }
   if (state.phase === 'lobby' && !state.runEnd && !state.wreck) sim.castOff();
@@ -243,6 +250,7 @@ if (!result) {
   result = { earned: state.run.earned, parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
 }
 result.curve = curve;
+result.hullBy = Object.values(hullBy); // (F1: { col, hull, n, t0, t1 } per stop reached)
 result.fun = fun.result(); // (FUN.md F8)
 result.profile = args.profile;
 result.offers = state.run.offers || { lair: [], salvage: [], taken: [] }; // (G0: the lairs and salvage runs the route votes offered, and the stops the crew took)

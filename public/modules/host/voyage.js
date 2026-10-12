@@ -86,6 +86,7 @@ function generateLegacy(seed, opts = {}) {
 // With config.VOYAGE.CURRICULUM.ENABLED the stops follow the teaching table (generateCurriculum); without it the old dice (generateLegacy, exactly as it was).
 // A curriculum route adds to each stop: slot (its row in the table), share (0..1 along the route), base (the column's base skulls), gates (the set pieces the pacing director may call there), and the optional
 // flags tag (the route map's "NEW: ..." text), ring ('tower' | 'fortress' | 'citadel'), nemesis (the Nemesis may appear) and multi (a multi-part objective, G6).
+// F1: opts.gentle (a start ship with no bomb bay) gives every stop a slack (wider cave tunnels, config.VOYAGE.CURRICULUM.WIDE_CAVES); opts.classic (the full ship) adds a real set piece to stop 1 (CLASSIC_STOP1).
 export function generateVoyage(seed, opts = {}) {
   return config.VOYAGE.CURRICULUM && config.VOYAGE.CURRICULUM.ENABLED ? generateCurriculum(seed, opts) : generateLegacy(seed, opts);
 }
@@ -139,6 +140,7 @@ function generateCurriculum(seed, opts = {}) {
       usedEnv.add(env);
       const danger = last || r === easyRow ? base : Math.min(maxD, base + (rand() < C.BRANCH_UP ? 1 : 0));
       let kinds = e.kinds;
+      if (opts.classic && !second && c === h && C.CLASSIC_STOP1.ENABLED && C.CLASSIC_STOP1.KIND) kinds = [C.CLASSIC_STOP1.KIND]; // (F1: ...and a real map: an outpost raid, where the ground guns shoot back)
       if (opts.gentle && slot <= 1 && r === easyRow && kinds.includes('open')) kinds = kinds.filter((k) => k !== 'open'); // (gentle: a small ship with no bomb bay always has a way round an outpost raid in the first columns)
       let kind = kinds[ri(0, kinds.length - 1)];
       for (let tries = 0; tries < 4 && usedKind.has(kind) && kinds.length > 1; tries++) kind = kinds[ri(0, kinds.length - 1)];
@@ -160,6 +162,8 @@ function generateCurriculum(seed, opts = {}) {
         base,
         gates: e.gates.slice(),
       };
+      if (opts.gentle && !second && C.WIDE_CAVES.ENABLED) stop.slack = C.WIDE_CAVES.SLACK[Math.round(share * (C.WIDE_CAVES.SLACK.length - 1))]; // (F1: a small ship's caves are wide at first and narrow down to the normal ones, so she is not grinding her keel on the way to the stops that teach)
+      if (opts.classic && !second && c === h && C.CLASSIC_STOP1.ENABLED) { stop.gates = [...new Set([...stop.gates, ...C.CLASSIC_STOP1.GATES])]; stop.danger = Math.min(maxD, stop.danger + C.CLASSIC_STOP1.DANGER_ADD); stop.early = true; } // (F1: the classic ship keeps a real threat at stop 1)
       if (e.nemesis && !last) stop.nemesis = true;
       if (e.multi && !last) stop.multi = true;
       col.push(stop);
@@ -364,9 +368,18 @@ export function loadStartBuild() {
     return config.VOYAGE.START_BUILD;
   }
 }
-export function saveStartBuild(id) {
+// Has the host ever forced a ship with the Ship button (F1: if not, CAST OFF picks the ship by the crew size, config.VOYAGE.START_BUILD_BY_CREW)?
+export function hasSavedBuild() {
   try {
-    localStorage.setItem(SHIP_KEY, id);
+    return START_BUILDS.includes(localStorage.getItem(SHIP_KEY));
+  } catch {
+    return false;
+  }
+}
+export function saveStartBuild(id) { // (null = back to choosing by the crew size)
+  try {
+    if (id == null) localStorage.removeItem(SHIP_KEY);
+    else localStorage.setItem(SHIP_KEY, id);
   } catch {
     // ignore
   }

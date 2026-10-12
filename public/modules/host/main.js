@@ -10,7 +10,7 @@ import { createPerfGovernor, perfState } from './perf.js';
 import { autoDetect, rememberProbe } from '../view3d/detect.js'; // (WP14: no imports of its own, so Three.js is not loaded when the probe says 2D)
 import { applyBuild } from '../../shipLayout.js'; // (ship 0's compatibility forward: the dev build below is applied before the simulation reads the layout)
 import { BUILDS } from './shipBuild.js';
-import { loadStartBuild } from './voyage.js';
+import { loadStartBuild, hasSavedBuild, START_BUILDS } from './voyage.js';
 import { buildShelf } from './pvp/shelf.js';
 import { readPlaytestJob, armVersus } from './playtest.js';
 
@@ -86,7 +86,14 @@ fitCanvas();
 }
 const simulation = createSimulation();
 if (playtest && playtest.mode === 'coop') BUILDS.playtest = playtest.parts; // (the build page's ship: the voyage starts with it, and so does every new voyage)
-simulation.setStartBuild(playtest && playtest.mode === 'coop' ? 'playtest' : loadStartBuild()); // (the browser host starts a Voyage with the Sparrow, or the classic ship: the pause menu's Ship button; headless tools keep whatever ship they apply)
+{
+  const ask = new URLSearchParams(location.search).get('ship'); // (F1: host.html?ship=sparrow|classic forces a ship; otherwise a ship saved by the Ship button; otherwise CAST OFF picks by the crew size)
+  const forced = playtest && playtest.mode === 'coop' ? 'playtest' : START_BUILDS.includes(ask) ? ask : hasSavedBuild() ? loadStartBuild() : null;
+  if (forced) simulation.setStartBuild(forced);
+  else if (config.VOYAGE.START_BUILD_BY_CREW.ENABLED) simulation.setStartBuild(simulation.pickStartBuild(), 'auto');
+  else simulation.setStartBuild(loadStartBuild());
+}
+// (the browser host starts a Voyage with the Sparrow or the classic ship: the pause menu's Ship button, or the crew size at CAST OFF; headless tools keep whatever ship they apply)
 // Dev (B.2): host.html?ships=2 puts a SECOND airship in the sky (a copy of the classic one, or host.html?ships=2&build2=[parts JSON]), kept a little behind ours and
 // below her, each with four bot crew. They are one simulation: each ship has her own hull, gas, guns, fires, crew and art. (?ships=3 adds a third.)
 {
