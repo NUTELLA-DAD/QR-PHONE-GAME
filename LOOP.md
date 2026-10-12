@@ -151,7 +151,7 @@ WEEK     the Book remembers the ship, titles and the Nemesis; unlocks; a harder 
 |---|---|---|
 | G0 | Curriculum: tiered skies, column gates, lairs from 0.6 of the route, mode shapes, the catch-up branch | S |
 | G1 | Scrap and flotsam: item, hold, flotsam from kills, land/hook/harpoon, stow, weight, bots stow and steer under | M |
-| G2 | Yard in scrap: prices, sell/buy, derelict legs give scrap, upgrades trimmed, shop of 3 cards | S/M |
+| G2 | Yard in scrap: prices, sell/buy, derelict legs give scrap, upgrades trimmed, shop of 3 cards (FUN.md F6 already made the 3-card dock and the six fittings with `SHOP.V2`; G2 is the scrap prices on top) | S/M |
 | T | Treasure chests at outposts, HEIST | M |
 | G4 | Frames (the in-flight build crew job, the phone BUILD card, scrap patches, provenance) | L |
 | G5 | Derelicts and stripping, named part cards | M |

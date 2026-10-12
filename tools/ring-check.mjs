@@ -38,6 +38,10 @@ const { createSimulation } = await load('modules/host/simulation.js');
 const VG = await load('modules/host/voyage.js');
 const { stationDist } = await load('modules/host/maps.js');
 const { toShipY } = await load('modules/host/pose.js');
+const { UPGRADE_BLOCKS } = await load('modules/host/upgrades.js');
+const copyData = (v) => (Array.isArray(v) ? v.map(copyData) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, copyData(x)])) : v);
+const UPGRADES0 = copyData(Object.fromEntries(UPGRADE_BLOCKS.map((b) => [b, config[b]]))); // (F6: what the sky-dock's fittings change, as it was before any scenario: a stop that ends in a dock must not leave a better ship for the next)
+const restoreUpgrades = (target, from) => { for (const [k, v] of Object.entries(from)) { if (v && typeof v === 'object' && !Array.isArray(v) && target[k] && typeof target[k] === 'object') restoreUpgrades(target[k], v); else target[k] = copyData(v); } };
 const RG = config.RING;
 const DT = 1 / 60;
 const colors = ['#e63946', '#3a86ff', '#f1c40f', '#06d6a0', '#8338ec', '#ff7b00'];
@@ -49,6 +53,7 @@ const PACING0 = { s: 1, e: 1 };
 // A fresh seeded sim on a ring map. opts: bots (default 0), human (a person-like crewman), variant.
 function boot(seed, o = {}) {
   clock = seedRandom(seed);
+  restoreUpgrades(config, UPGRADES0);
   config.VOYAGE.CURRICULUM.ENABLED = false;
   config.MAPS.FORCE_KIND = 'ring';
   config.RING.FORCE_VARIANT = o.variant || 'tower';
@@ -224,6 +229,7 @@ const finite = (st) => { const r = st.course.ring, sh = st.ships[0]; return [sh.
   report(f.down && r.crown && r.crown.how === 'cores' && /THE TOWER FALLS!/.test(st.ev.warnText) && st.slow < 1, `all cores down: the crown falls ("${st.ev.warnText}"), slow motion x${st.slow}`);
   report(!st.course.done, 'the stop is not complete yet (the crown is falling)');
   step(Math.round((RG.CROWN.DONE_AFTER + 1) * 60));
+  if (st.course.escape) step(Math.round((config.STOP_SHAPE.ESCAPE.TIME + 1) * 60)); // (F6: the escape calm comes before the scorecard)
   report(st.course.done && st.slow === 1 && !!st.scorecard && st.scorecard.stopName && st.run.salvage > salvage0, `then the stop completes: the scorecard is up (${st.scorecard && st.scorecard.stopName}), salvage ${salvage0} -> ${st.run.salvage}, slow motion over`);
   const kinds = (st.moments || []).map((m) => m.kind);
   report(kinds.includes('ring-breach') && kinds.includes('ring-fall'), `the Ship's Book has the moments (${[...new Set(kinds.filter((k) => k.startsWith('ring-')))]})`);
@@ -237,6 +243,7 @@ const finite = (st) => { const r = st.course.ring, sh = st.ships[0]; return [sh.
   step(2);
   report(r.crown && r.crown.how === 'keep' && r.faces.every((f) => f.down) && /THE FORTRESS FALLS!/.test(st.ev.warnText), `the keep's pool at 0 breaches every gate at once: "${st.ev.warnText}"`);
   step(Math.round((RG.CROWN.DONE_AFTER + 1) * 60));
+  if (st.course.escape) step(Math.round((config.STOP_SHAPE.ESCAPE.TIME + 1) * 60)); // (F6: the escape calm comes before the scorecard)
   report(st.course.done, 'and the stop completes');
 }
 
@@ -261,6 +268,7 @@ const finite = (st) => { const r = st.course.ring, sh = st.ships[0]; return [sh.
   for (let i = 0; i < (RG.MOOR.FALL_TIME + 3) * 60 && !r.crown; i++) step(1);
   report(!st.boss && st.bossDownLap === st.course.lap && !!r.crown && /THE CITADEL FALLS!/.test(st.ev.warnText), `she is sunk, the citadel falls ("${st.ev.warnText}", crown by ${r.crown && r.crown.how})`);
   step(Math.round((RG.CROWN.DONE_AFTER + 1) * 60));
+  if (st.course.escape) step(Math.round((config.STOP_SHAPE.ESCAPE.TIME + 1) * 60)); // (F6: the escape calm comes before the scorecard)
   report(st.course.done && !!st.scorecard, 'and the Flagship stop completes (the scorecard is up)');
 }
 {

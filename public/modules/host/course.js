@@ -391,7 +391,13 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   };
   Object.defineProperty(course, 'dist', { enumerable: true, get: () => ship.pose.x, set: (v) => { ship.pose.x = v; } }); // (where ship 0 is along the sky: the POSE owns it since M.2; this is the old name for it)
   state.course = course;
-  const ringSys = createRing({ state, puff, credit, onMarker }); // (R0: the ring map's rules, ring.js; it plays only while course.ring is set)
+  // F6: the objective is done. Outposts, a lair or a ring end the stop after the ESCAPE calm (course.escape; tempo.phase 'escape', simulation.js updateTempo); a beacon, the Flagship, and a game with the shape off end it at once.
+  const finishStop = (m, escapable) => {
+    const E = config.STOP_SHAPE.ESCAPE;
+    if (E.ENABLED && escapable && !course.escape && course.stop && !course.stop.flagship && !(course.ring && course.ring.moor)) course.escape = { t: E.TIME, m };
+    else if (onMarker) onMarker(m);
+  };
+  const ringSys = createRing({ state, puff, credit, onMarker: (m) => finishStop(m, true) }); // (R0: the ring map's rules, ring.js; it plays only while course.ring is set)
 
   const r = (a, b) => a + course.rand() * (b - a);
   // Harder along each lap and with every lap.
@@ -988,6 +994,10 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         state.ev.warnText = 'STUCK FAST! A TUG HAULS YOU CLEAR';
       }
     }
+    if (course.escape) { // (F6: the calm after the objective; when it ends the stop is over)
+      if ((course.escape.t -= dt) <= 0) { const m = course.escape.m; course.escape = null; if (onMarker) onMarker(m); }
+      return;
+    }
     if (map.ring) return ringSys.progress(sx, sy); // (a ring map: its faces are fought like outposts, ring.js)
     if (map.open && !map.lair) {
       // Open sky: knock out every outpost (all its guns), nearest first.
@@ -1019,7 +1029,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
         state.ev.warn = 4;
         state.ev.warnText = 'ALL OUTPOSTS DOWN! MISSION ' + course.lap + ' COMPLETE';
         course.pendingNext = true;
-        if (onMarker) onMarker({ kind: 'home', lap: course.lap + 1 });
+        finishStop({ kind: 'home', lap: course.lap + 1 }, true);
       }
       return;
     }
@@ -1041,7 +1051,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       state.ev.warn = 4;
       state.ev.warnText = 'THE ' + lairWho + ' IS SLAIN! MISSION ' + course.lap + ' COMPLETE';
       course.pendingNext = true;
-      if (onMarker) onMarker({ kind: 'home', lap: course.lap + 1 });
+      finishStop({ kind: 'home', lap: course.lap + 1 }, true);
       return;
     }
     if (!course.done && !flagshipAlive && !lair && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS) { // (a lair is done only when its creature has sunk, above)
@@ -1222,7 +1232,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
   // opts (from the voyage): { environment, kind, danger, modifiers, stop, title }. environment is the id of
   // the look/hazards to use ('skyisles' for now); the map is also tagged with it (map.environment).
   function startMission(n, opts = {}) {
-    const MP = config.MAPS;
+    const MP = config.MAPS, BR = config.STOP_SHAPE.BRIEFING;
     let kind = opts.stop && opts.stop.lair ? 'lair' : MP.FORCE_KIND || opts.kind || MP.KINDS[(n - 1) % MP.KINDS.length]; // (a lair stop: the Kraken's sea, maps.js buildLairMap, whatever the tools force)
     if (kind === 'ring' && !config.RING.ENABLED) kind = 'open'; // (the switch, R0: with the ring off a ring stop flies the old outpost raid)
     const map = opts.arena ? buildArenaMap(course.rand, layout, opts.arena, opts.arenaGap) : makeMap(kind, n, course.rand, opts.lengthMul || 1, layout, opts.stop && opts.stop.creature, config.RING.FORCE_VARIANT || (opts.stop && opts.stop.ring) || null, opts.stop && opts.stop.slack); // (F1: opts.stop.slack = the wider caves of a small ship's early stops, maps.js makeMap; a lair map: the Kraken's sea or the Drake's lava, by opts.stop.creature; Versus: the big arena sky, maps.js buildArenaMap)
@@ -1241,6 +1251,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       elev0: 0,
       done: false,
       pendingNext: false,
+      escape: null, // (F6: { t, m } while the ESCAPE calm runs after the objective)
+      brief: BR.ENABLED && opts.title ? { goal: opts.goal || opts.title, title: opts.heading || opts.title } : null, // (F6: the BRIEFING card, raised when the stop's first flight step runs: simulation.js startBriefing)
       progress: 0,
       justStarted: true,
       turrets: map.turrets.map((t) => ({
@@ -1278,8 +1290,8 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     if (map.open && state.bombBay) state.bombBay.bombs = Math.max(state.bombBay.bombs, config.BOMBS.MAX); // a full bay for the raid
     state.rockets.length = 0;
     if (state.shipBombs) state.shipBombs.length = 0;
-    state.ev.warn = 4;
-    state.ev.warnText = opts.title ? opts.title : map.ring ? 'MISSION ' + n + ': BREACH ' + map.ring.name + '!' : map.open ? 'MISSION ' + n + ': DESTROY ' + map.outposts.length + ' OUTPOSTS!' : 'MISSION ' + n + ': REACH THE BEACON!';
+    if (!course.brief) state.ev.warn = 4; // (the BRIEFING card says it instead)
+    if (!course.brief) state.ev.warnText = opts.title ? opts.title : map.ring ? 'MISSION ' + n + ': BREACH ' + map.ring.name + '!' : map.open ? 'MISSION ' + n + ': DESTROY ' + map.outposts.length + ' OUTPOSTS!' : 'MISSION ' + n + ': REACH THE BEACON!';
   }
 
   // A brand-new game: fresh terrain from the home mast, lap 1.

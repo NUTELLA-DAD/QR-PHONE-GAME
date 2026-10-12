@@ -1020,6 +1020,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       const left = map.outposts.filter((o) => !o.done).length;
       goalText = 'OUTPOSTS ' + (total - left) + '/' + total + (km === null ? '' : km < 0.5 ? ' - BOMBS AWAY!' : ' - next ' + km.toFixed(1) + ' km');
     } else goalText = 'BEACON ' + (km === null ? '?' : km.toFixed(1) + ' km');
+    if (c.escape) goalText = config.STOP_SHAPE.ESCAPE.TEXT + ' - ' + Math.ceil(c.escape.t) + 's'; // (F6: the calm after the big thing)
     const gy0 = y0 + h + 24;
     book.paper(x0 - 12, gy0, w + 24, 36, { r: 8, pins: false });
     ctx.fillStyle = LB.INK;
@@ -1359,8 +1360,28 @@ export function createRenderer({ ctx, state: world, canvas }) {
     if (state.phase === 'lobby') drawLobby();
     drawBossBar();
     drawCreatureBar();
+    if (state.briefing) drawBriefing();
     if (state.scorecard) drawScorecard();
     if (state.vote) drawVote();
+  };
+
+  // F6: the BRIEFING card at a stop's start: the stop's name and its goal in one big line (the phones get the goal and the verb of their nearest seat). It fades in and out.
+  const drawBriefing = () => {
+    const b = state.briefing, T = config.STOP_SHAPE.BRIEFING.TIME;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, b.t * 3, (T - b.t) * 6 + 0.2));
+    book.paper(300, 250, 1000, 200, { r: 22 });
+    ctx.fillStyle = LB.INK;
+    ctx.textAlign = 'center';
+    ctx.font = '700 22px ' + config.FONTS.TEXT;
+    ctx.fillText('BRIEFING  -  ' + b.title, 800, 296, 920);
+    ctx.font = '58px ' + config.FONTS.DISPLAY;
+    ctx.fillStyle = LB.STAMP;
+    ctx.fillText(b.goal + '!', 800, 378, 940);
+    ctx.fillStyle = LB.INK;
+    ctx.font = '400 20px ' + config.FONTS.TEXT;
+    ctx.fillText('Check your phone: your job is on it', 800, 424, 920);
+    ctx.restore();
   };
 
   // Comic-book words: pop in big, settle, then float up and fade.

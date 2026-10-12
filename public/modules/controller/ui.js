@@ -79,6 +79,7 @@ export function createControllerUI({ network }) {
       cards.dataset.sig = sig;
       cards.innerHTML = '';
       cards.classList.toggle('route', v.kind === 'route' || v.kind === 'slot'); // (one big card per place when the crew picks where a part goes: A / B / C)
+      cards.classList.toggle('dock3', v.kind === 'dock' && v.options.length <= 3); // (F6: the 60-second dock: two big cards and Cast off, bigger type and touch targets)
       v.options.forEach((o, i) => {
         const b = document.createElement('button');
         const price = o.sold ? 'SOLD' : o.cost != null ? 'Salvage ' + o.cost : '';
@@ -149,7 +150,7 @@ export function createControllerUI({ network }) {
     t.textContent = fx.toast;
     t.style.display = 'block';
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => (t.style.display = 'none'), 1800);
+    toastTimer = setTimeout(() => (t.style.display = 'none'), fx.ms || 1800); // (the host may ask for longer: the stop's BRIEFING)
   };
 
   // Idle: a big arrow to the most useful job (the host picks it).

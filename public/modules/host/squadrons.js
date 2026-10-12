@@ -101,6 +101,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   };
   const flagshipStop = () => !!(state.course && ((state.course.stop && state.course.stop.flagship) || (state.course.ring && state.course.ring.moor))); // (a citadel is the Flagship's stop, however it was started)
   const lairStop = () => !!(state.course && state.course.stop && state.course.stop.lair) || !!(state.course && state.course.ring && !state.course.ring.moor); // (a lair has its own boss, the giant creature: no zeppelin there; nor on a ring map, whose castle is the fight - only the citadel's Flagship comes, moored to it)
+  const midBossOk = () => W.MID_BOSS !== false || flagshipStop(); // (F6: no zeppelin in the middle of a voyage when WAVES.MID_BOSS is off; the Flagship stays)
   const spawnBoss = () => {
     // The last stop of a voyage is the Flagship: the Iron Dreadnought at her toughest.
     const flagship = flagshipStop();
@@ -175,7 +176,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     if (state.ship.down || !Object.keys(state.players).length) return;
     const c = state.course;
     // Boss: once per lap, on the way home.
-    if (c && c.progress > W.BOSS_AT && (c.progress < 0.9 || flagshipStop()) && bossLap !== lap() && !state.boss && !state.creature && !lairStop() && (!state.tempo || state.tempo.bossOk)) spawnBoss(); // (a giant creature is the boss of its mission)
+    if (c && c.progress > W.BOSS_AT && (c.progress < 0.9 || flagshipStop()) && bossLap !== lap() && !state.boss && !state.creature && !lairStop() && midBossOk() && (!state.tempo || state.tempo.bossOk)) spawnBoss(); // (a giant creature is the boss of its mission)
     // The trickle between set pieces: small bat swarms. The pacing director (simulation.js) sets how
     // fast this clock runs (0 in a calm) and calls the bigger set pieces itself.
     if ((waveT -= dt * (state.tempo ? state.tempo.rate : 1)) > 0) return;
@@ -703,7 +704,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
   // Is this mission's boss still to come, and close? (The director holds its next set piece for the boss.)
   const bossSoon = () => {
     const c = state.course;
-    return !!c && !state.boss && !state.creature && !lairStop() && bossLap !== lap() && c.progress > W.BOSS_AT - config.PACING.BOSS_LEAD && (c.progress < 0.9 || flagshipStop());
+    return !!c && !state.boss && !state.creature && !lairStop() && midBossOk() && bossLap !== lap() && c.progress > W.BOSS_AT - config.PACING.BOSS_LEAD && (c.progress < 0.9 || flagshipStop());
   };
   return { update, reset, restart, bossSoon, withdraw, spawnBigSwarm, spawnBats, spawnBomber, spawnBoss, spawnStrafers, squads, squadBanner: () => squads.banner() };
 }

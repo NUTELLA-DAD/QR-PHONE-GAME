@@ -1,3 +1,5 @@
+// F6 (FUN.md): the stop shape and the 60-second dock are ON in the game; NO_STOP_SHAPE=1 in a tool is the old game (the seeded botsim / golden baselines pin it).
+const STOP_SHAPE_ON = typeof process === 'undefined' || !(process.env && process.env.NO_STOP_SHAPE);
 export const config = {
   W: 1600,
   H: 900,
@@ -628,6 +630,25 @@ export const config = {
     SUPPLY_HULL: 12,
     SUPPLY_COAL: 25,
   },
+  // F6 (FUN.md): the shape of a stop - BRIEFING -> flight -> ONE big thing -> ESCAPE -> scorecard -> the dock.
+  STOP_SHAPE: {
+    BRIEFING: {
+      ENABLED: STOP_SHAPE_ON,
+      TIME: 3, // seconds the briefing card shows on the TV (the stop's goal in one line)...
+      TOAST_MS: 3000, // ...and each phone gets a toast with the goal and the verb of its nearest seat for this long
+      VERBS: { helm: 'STEER', gun: 'SHOOT', boiler: 'STOKE', coal: 'SHOVEL COAL', ammo: 'LOAD THE GUNS', lookout: 'SPOT', deflector: 'SHIELD', coil: 'ZAP', searchlight: 'LIGHT', sail: 'TRIM THE SAIL', cannon: 'FIRE THE CANNON', bombBay: 'DROP BOMBS', escort: 'FLY ESCORT', swivel: 'TURN THE ENGINE', other: 'HELP OUT' }, // station kind -> the verb on the phone
+    },
+    ESCAPE: {
+      ENABLED: STOP_SHAPE_ON,
+      TIME: 20, // seconds of calm after the objective is done (outposts down, lair slain, ring breached) before the scorecard: tempo.phase 'escape', rate 0, calm music
+      TEXT: 'ESCAPE TO THE BEACON', // the banner...
+      BANNER: 6, // ...and the seconds it shows
+    },
+    GUNSHIP: {
+      ENABLED: STOP_SHAPE_ON, // a stop with neither a lair nor a ring gets the gunship as its guaranteed set piece (if its gates allow one)
+      AFTER_PEAKS: 0, // ...at the first set piece after this many have passed (0 = the first one, about 50 s in: a stop can be short, and the big thing should not arrive as it ends; a cave can seldom host her - she needs clear sky - and then a swarm comes and she is tried again at the next)
+    },
+  },
   // Deflector shield: a steam-powered arc the Deflector station swings around the ship. It
   // blocks enemy bullets, bats, rockets and bombs that hit it.
   SHIELD: {
@@ -810,6 +831,8 @@ export const config = {
     TIME: 15, // seconds to vote
     ALL_VOTED_WAIT: 1.5, // once everyone has voted, wait this long
     SCORECARD_TIME: 8, // seconds the mission scorecard shows before the sky-dock
+    SCORECARD_TIME_V2: 6, // ...with SHOP.V2 (F6: the 60-second dock)
+    BOT_THINK: { FIRST: [1.5, 3.5], AGAIN: [1, 3] }, // bots take [least, plus up to this much more] seconds to "think" before voting: when a vote opens, and again after each purchase
   },
   // SALVAGE: the currency of a voyage. Earned in missions, spent at the sky-dock.
   SALVAGE: {
@@ -835,6 +858,15 @@ export const config = {
     REPAIR_COAL: 20, // boiler topped up with coal, guns with shells
     BOT_CAST_CHANCE: 0.12, // bots: chance to cast off on each round
     BOT_REPAIR_HULL: 85, // bots: buy the full hull repair first when the hull is below this
+    BOT_REPAIR_CHANCE: 0.7, // bots: chance to pick a repair card at random, when nothing was urgent
+    // F6 (FUN.md): the 60-second dock. V2 = three cards: MEND HER (hull, gas and coal in one, priced by need), ONE part or fitting, and Cast off. false = the old six-card dock.
+    V2: STOP_SHAPE_ON,
+    V2_OFFERS: 3, // cards on offer in V2, Cast off included
+    V2_TIME: 12, // seconds to vote on each purchase (TIME in the old dock)
+    V2_MAX_TIME: 35, // the whole dock closes after this long (MAX_TIME in the old dock)
+    MEND_MUL: 0.8, // MEND HER costs the pieces it carries (full repair, gas, coal: only the ones needed) times this
+    V2_PART_CHANCE: 0.9, // chance that the dock's second card is a Yard part, when the ship can take one (PARTS_SHOP.CARD_CHANCE in the old dock); a derelict stop always has one
+    V2_FITTINGS: ['twin-barrels', 'auto-loader', 'armour', 'firebox', 'safety-valve', 'rudders'], // the six fittings V2 offers (UPGRADES keeps all fifteen)
   },
   // The SHIPWRIGHT'S YARD (S.6a, modules/host/partsShop.js): ship PARTS as cards in the sky-dock shop, at most one per dock. A part is a pure build edit (the voyage's parts list,
   // simulation.js run.build), checked by the validator (never a FAIL) and fitted to ship 0 at the dock; its effects are weight, lift, steam and stations in the build, never config.
@@ -969,6 +1001,7 @@ export const config = {
     CHOICES_MIN: 2, // stops to choose between in each middle column
     CHOICES_MAX: 3,
     ROUTE_TIME: 20, // seconds to vote on the next stop
+    ROUTE_TIME_V2: 15, // ...with SHOP.V2 (F6)
     ROUTE_ALL_VOTED_WAIT: 1.2,
     REWARD_BASE: 10, // a stop's salvage reward: base + per skull + random
     REWARD_PER_DANGER: 15,
@@ -1352,6 +1385,7 @@ export const config = {
     BOMB_EVERY: 1.8, // seconds between bombs while over the ship
     BOMB_IMPACT: 1.0,
     BOSS_AT: 0.66, // lap progress (0-1) when the Dread Zeppelin shows up, on the way home
+    MID_BOSS: !STOP_SHAPE_ON, // false (F6): no dread / carrier zeppelin in the middle of a voyage - lairs, rings and the gunship are the memorable bosses; the Flagship finale stays
     BOSS_HP: 36,
     BOSS_HP_PER_LAP: 10, // extra boss toughness per mission...
     BOSS_HP_LAPS: 4, // ...for at most this many missions
