@@ -1009,7 +1009,7 @@ export function createShipSim(world, ship, W) {
   const health = createHealth({ state, ship, phoneFx, emitPlayerUi, shipPuff, shipPop }); // crew health: hearts, burns, the medical bay (health.js)
   const hydrogen = createHydrogen({ state, ship, fireSys, explode: (i, blast) => explodeBag(i, blast), shipPuff, rng: () => breakRng() }); // hydrogen bags: scorched by fire, alight, exploding (hydrogen.js, config.GASES.HYDROGEN)
   const raiders = createRaiders({ state, modules, puff, impact });
-  const escort = createEscort({ state, puff, phoneFx });
+  const escort = createEscort({ state, puff, phoneFx, moment: (kind, o) => W.moment && W.moment(kind, o) });
 
   // A latched bat chews a hole: a gasbag leak, or a breach in the deck it sits on (ship coordinates).
   const gnaw = (kind, x, y, d) => {

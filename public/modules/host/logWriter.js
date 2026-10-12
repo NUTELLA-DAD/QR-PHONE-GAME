@@ -73,6 +73,7 @@ const SENT = {
   'scrap-hook': ['{who} hooked a bundle of scrap out of thin air and reeled it in.', 'A falling bundle met {who1}\'s hookshot and came aboard.', '{who} fished scrap out of the sky with a hook and a steady arm.'],
   'hulk-hauled': ['{who} hauled a wrecked hulk alongside and stripped it of scrap.', 'The hulk came alongside on {who1}\'s harpoon line, and the crew took it apart.', '{who} reeled in the hulk and the scrap came off it in armfuls.'],
   'scrap-dumped': ['{who} dumped the scrap to climb, and she rose.', 'The whole hold went over the side at {who1}\'s hand, and the ship was glad of it.', '{who} threw the scrap away to save the ship, which is exactly what scrap is for.'],
+  'escort-crash': ['{who} flew the escort fighter straight into an airship, and the airship won.', 'The escort fighter found a hull, and {who1} found the medical bay.', '{who} was admiring the view when the fighter met the ship.'],
   quiet: ['{who} kept the kettle on while the sky stayed quiet.', 'It was a calm one, and {who} polished the brass.', '{who} had time to admire the view.'],
 };
 // What the busiest crewman of a job gets (moments of kind 'leader'): stat -> 3 variants. No numbers: the stat is only a hint.
@@ -110,7 +111,7 @@ const PLAY = {
   'creature-win': ['brought down {C}'], 'creature-freed': ['hacked {C} loose'], breakoff: ['was beside it when {things} came off'], split: ['rode the half that fell'], 'breakoff-bay': ['was next to the bomb bay when it went'], rebuild: ['bought {things} back'],
   'going-down-saved': ['pulled her out of the dive'], 'helm-held': ['held the helm through the worst of it'], limp: ['got her home on the spare gasbag'], 'ship-lost': ['stayed to the last'],
   'flagship-down': ['sank the Flagship'], 'boss-down': ['shot down the zeppelin'], sandbag: ['carried the {item} the whole stop'],
-  'scrap-first': ['stowed the first scrap'], 'scrap-hook': ['hooked scrap out of the sky'], 'hulk-hauled': ['hauled a hulk alongside'], 'scrap-dumped': ['dumped the scrap to climb'],
+  'scrap-first': ['stowed the first scrap'], 'scrap-hook': ['hooked scrap out of the sky'], 'hulk-hauled': ['hauled a hulk alongside'], 'scrap-dumped': ['dumped the scrap to climb'], 'escort-crash': ['flew the escort fighter into an airship'],
 };
 const PLAY_LEADER = { kills: 'ruled the guns', raiders: 'beat back the raiders', holes: 'patched the hull', fires: 'fought the fires', repairs: 'kept her running', ammo: 'kept the guns fed', coal: 'fed the boiler', revives: 'picked everyone up', defused: 'defused the bomb', vent: 'saved the boiler', demolished: 'bombed the outposts', sabotage: 'sabotaged the gunship', boarding: 'led the boarding', sails: 'worked the sails', thrown: 'threw ballast', spots: 'spotted for the guns', cannon: 'flew the crew cannon', shovels: 'cleared the decks', cuts: 'cut her free', dumped: 'dumped the weight', hatch: 'worked the hatch', captures: 'took the bridge', bats: 'swatted the bats', stowed: 'filled the hold' };
 const AGAIN = ['Once more, ', 'Yet again, ', 'As ever, ', 'Still, ', 'And then, ', 'Later, '];

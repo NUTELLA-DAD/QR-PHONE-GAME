@@ -321,6 +321,17 @@ export const config = {
     CRAMPED: 0.12, // share of the space round the ship that is rock before the auto pilot stays home
     BOT_MAX: 1, // bot crew will fly at most this many of the planes at once
     ORBIT_SPREAD: 0.4, // the second plane circles this much wider
+    // Airships are solid to the patrol planes: a flying one that touches ANY ship's hull or gasbag (her own, the rival's, a fleet ship, the enemy gunship) crashes like one shot down
+    // (the pilot bails out, the crew rebuild her) and the ship she hit takes a small knock where she struck. The auto pilot looks ahead and steers clear; a person at the stick can still fly into one.
+    CRASH_ON_SHIPS: typeof process === 'undefined' || !(process.env && process.env.NO_ESCORT_CRASH), // the switch (a browser has no process: on). NO_ESCORT_CRASH=1 in a tool = the old game, planes pass through ships (the seeded botsim baselines pin it)
+    CRASH_POWER: 0.6, // the impact() power the ship takes where the plane struck (a shell is about 1; a rock scrape 1 to 3)
+    DOCK_GRACE: 1.6, // seconds after launch her own ship cannot crash her (she drops off the hook right under the hull)
+    DOCK_GRACE_RANGE: 280, // ...and coming home, within this far of her hook (px)
+    AVOID_LOOKAHEAD: 0.6, // the auto pilot steers away when her path would cross a ship's hull within this many seconds
+    AVOID_STEPS: 6, // ...checked at this many points along the path
+    AVOID_NOSE: 26, // the plane's nose counts this far ahead of her middle (px)
+    AVOID_PAD: 60, // ...and the path is checked this far to each side too, so she clears a hull instead of skimming it (px)
+    AVOID_HOLD: 0.5, // once she has picked a way round she keeps to it this many seconds (no flipping in and out of the dodge)
   },
   // Personal hookshot (a tool from the rack): ATTACK fires it, it catches the ship, rock, the gunship
   // and big enemies, you swing on the rope, ACTION (hold) reels in, ATTACK/JUMP lets go and you launch.
@@ -2172,7 +2183,7 @@ export const config = {
     // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
     WEIGHT: {
       'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
-      'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'hulk-hauled': 5, 'scrap-dumped': 4, 'fire-first': 2, overboard: 2,
+      'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra
     // Jobs done a lot in one stop earn a moment at the stop's end: the stat, and how many make it worth a line. Weight = LEADER_W.BASE + (count / that number - 1) x LEADER_W.PER, at most LEADER_W.MAX.
