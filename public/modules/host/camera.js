@@ -74,6 +74,11 @@ export function createWorldCamera() {
     for (const t of state.hijacks || []) if (near(t, C.FRAME_RANGE + 600)) things.push(t); // a stolen plane stays in view
     for (const t of state.specials ? [...state.specials.snipers, ...state.specials.tugs] : []) if (near(t, C.FRAME_RANGE + 400)) things.push(t);
     if (state.supply && state.course) things.push({ x: state.supply.mx, y: state.supply.my });
+    const AT = state.away; // (CASTLE.md A0/A2: the away team on the ground stays in the picture, and so does an open vault the rope can reach - as far as the zoom cap allows)
+    if (AT && AT.on) {
+      for (const p of Object.values(state.players)) if (p.on && p.on.away && p.on.mode !== 'home' && !p.on.deck && p.connected !== false) things.push({ x: p.x, y: p.y + 60 });
+      if (AT.tre && AT.tre.on && AT.rope.gap <= config.AWAY.LADDER.REACH + 100) for (const v of AT.tre.vaults) if (v.state === 'open' && Math.abs(v.x - AT.rope.x) < 1500 && AT.tre.chests.some((c) => c.vault === v.k && c.state === 'ground')) things.push({ x: v.x, y: v.y + 60 });
+    }
     if (state.gunship) { // (she stays an offset from our ship: converted through her pose; far off on her way in she is only an edge arrow)
       const L = main.layout, gd = Math.min(state.gunship.dx, 1300);
       things.push({ x: toWorldX(main, L.bounds.x1 + 790 + gd), y: toWorldY(main, L.refPoint.y + state.gunship.dy) }, { x: toWorldX(main, L.bounds.x1 + 1490 + gd), y: toWorldY(main, L.refPoint.y - 200 + state.gunship.dy) });

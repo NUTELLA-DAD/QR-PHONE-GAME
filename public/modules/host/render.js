@@ -11,6 +11,7 @@ import { createCharacterArt } from './characterArt.js';
 import { createCrewArt } from './crewArt.js';
 import { createCourseArt } from './courseArt.js';
 import { createGroundArt } from './groundArt.js'; // (CASTLE.md A0: the away team's ladders, flares and pickup marker)
+import { createTreasureArt } from './treasureArt.js'; // (CASTLE.md A2: the outposts' vaults, chests and guards)
 import { createRingArt } from './ringArt.js'; // (the orbit finale drawn flat: castle faces, shutters, the ring dial; R0)
 import { createSkyArt } from './skyArt.js';
 import { createEnvArt } from './envArt.js';
@@ -50,7 +51,7 @@ import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
 import { windSpeed } from './sails.js';
 import { drawScrapBundle, drawScrapChute, drawScrapRing, drawScrapHulk } from './scrapArt.js';
-import { scrapOn, holdCount } from './scrap.js';
+import { scrapOn, holdCount, chestCount } from './scrap.js';
 import { drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
 // ONE renderer draws the whole sky (B.3): the background and the terrain once, then EVERY ship (renderFrame's loop over the ships: each under her own pose, with her own art bake,
@@ -130,6 +131,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const drawSpecials = createSpecialsArt({ ctx, state, ink });
   const ringArt = createRingArt({ ctx, state, ink });
   const groundArt = createGroundArt({ ctx, world, ink }); // (CASTLE.md A0: the walkways, the wall ladders, the rope ladder, the flare and the pickup marker)
+  const treasureArt = createTreasureArt({ ctx, world, ink }); // (CASTLE.md A2: the vaults, the chests, the guards)
   const spotterArt = createSpotterArt({ ctx, state }); // spotted-target brackets (HELP! call-outs and primed-gun glows are the ships': artsOf)
   const linkArt = createLinkArt({ ctx, state }); // gust / updraft arrows (the loader and lookout wires are the ships': artsOf)
   const healthArt = createHealthArt({ ctx }); // crew health: heart pips over a hurt crewman
@@ -1398,6 +1400,11 @@ export function createRenderer({ ctx, state: world, canvas }) {
             drawScrapBundle(ctx, 532, 236, 0.7);
             ctx.save(); ctx.textAlign = 'left'; ctx.font = '700 18px ' + config.FONTS.DISPLAY; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.strokeStyle = config.INK; ctx.strokeText(`${n}/${cap}`, 552, 243); ctx.fillStyle = n >= cap ? '#ff9a3c' : '#ffd23f'; ctx.fillText(`${n}/${cap}`, 552, 243); ctx.restore();
           }
+          if (chestCount(world.ships[0].ctx) > 0) { // (CASTLE.md A2: the treasure in the hold - a chest and its count, under the scrap's)
+            const n = chestCount(world.ships[0].ctx), cap = config.AWAY.TREASURE.HOLD_CAP;
+            treasureArt.chest(540, 270, 0.42, 'chest', false);
+            ctx.save(); ctx.textAlign = 'left'; ctx.font = '700 18px ' + config.FONTS.DISPLAY; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.strokeStyle = config.INK; ctx.strokeText(`${n}/${cap}`, 560, 267); ctx.fillStyle = n >= cap ? '#ff9a3c' : '#ffd23f'; ctx.fillText(`${n}/${cap}`, 560, 267); ctx.restore();
+          }
           ctx.textAlign = 'left';
           ctx.fillStyle = state.salvagePop ? '#2e7d32' : '#5a4a3a';
           ctx.font = Math.round(Math.max(11, Math.min(16, (16 * lowNameDraw) / Math.max(1, lowNameW)))) + 'px ' + config.FONTS.DISPLAY; // (a smaller size first, then squeezed to its measured room: see lowName above)
@@ -1550,7 +1557,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.fillText(sc.rows.length ? 'Crew awards' : sc.gentle || 'Crew awards', 800, 228, 1120); // (no award earned: a kind line naming whoever did the most - never "nobody did much")
     if (sc.play) logArt().playRibbon(sc.play, 800, 248, 1040); // (the Ship's Book: PLAY OF THE MISSION)
     const G = sc.gain || {};
-    const names = { kills: 'enemies', outposts: 'outposts', gunships: 'gunships', boss: 'boss', rescue: 'survivors', mission: 'mission bonus', away: 'away team' };
+    const names = { kills: 'enemies', outposts: 'outposts', gunships: 'gunships', boss: 'boss', rescue: 'survivors', mission: 'mission bonus', away: 'away team', treasure: 'treasure' };
     ctx.fillStyle = '#8a5a00';
     ctx.font = '23px ' + config.FONTS.DISPLAY;
     ctx.fillText(`Salvage +${sc.gained} (${Object.keys(G).map((k) => names[k] + ' ' + G[k]).join(', ')})   -   total ${sc.total}`, 800, 775 - (state.newRecord ? 45 : 0));
@@ -2215,6 +2222,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
       rrect(-8, -12, 30, 22, 8);
       ctx.fill();
       ctx.stroke();
+    } else if (item === 'chest') { // CASTLE.md A2: a treasure chest in the arms
+      treasureArt.chest(10, 14, 0.5, 'chest', false);
     } else if (item === 'crate') {
       ctx.fillStyle = '#c9a05f';
       ctx.fillRect(-8, -16, 28, 28);
@@ -3164,6 +3173,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
           for (const o of S.pickups) { const a = pt(o.x, o.y); if (a) groundArt.pickup(a.x, a.y, zs * 0.9, K8, o.name, zs); }
           for (const f of S.flares) { const a = pt(f.x, f.y); if (a) groundArt.flare(a.x, a.y, zs * 0.9, K8, f.name, zs, px(f.x, f.y)); }
           groundArt.drawObjectives(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }); // (CASTLE.md A1: the objectives' markers, the prisoners and the carried banner, through the camera)
+          treasureArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }); // (CASTLE.md A2: the vaults, chests and guards, through the camera)
         }
       } catch (e) { /* (a nicety: never stop the frame) */ }
       placeNames(); // (WP15: every name queued above, laid out together so none lies on another)
@@ -3462,6 +3472,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       if (world.debris && world.debris.length) debrisArt.draw(); // (S.5i: broken-off parts tumble in the world)
       everyShip(() => drawAirborne(ts, view.zoom)); // crew in the air and their ropes live in the world, not in the ship's frame
       groundArt.drawWorld(ts, Math.max(1, Math.min(3, 0.8 / (view.zoom || 0.5)))); // (A0: the walkways, ladders, rope ladder, flares and the pickup marker, in the world)
+      treasureArt.draw(ts, Math.max(1, Math.min(3, 0.8 / (view.zoom || 0.5)))); // (A2: the vaults, chests and guards, in the world)
       drawCross(ts); // (B.6: cannon smoke trails, thrown loads, towlines)
       everyShip(() => { if (!ship.ai) { drawCoil(ts); drawShield(ts); } }); // each ship's Lightning Coil and Deflector band (world points)
       if (fleetN() > 1) fleet.drawPennants(world, wv, width, height, time); // the team flags on the masts

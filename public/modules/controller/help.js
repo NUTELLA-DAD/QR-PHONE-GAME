@@ -19,6 +19,7 @@ export function helpFor(n, seatHints) {
   if (j && j.label) return { icon: '🧭', title: 'YOUR JOB: ' + (j.verb || 'GO'), text: j.label + '. Follow the GOLD ARROW, then press the big button.' };
   if (n.carry === 'ammo') return { icon: '📦', title: 'You carry ammo', text: 'Bring the ammo to a gun or the bomb bay. The big button loads it.' };
   if (n.carry === 'coal') return { icon: '⚫', title: 'You carry coal', text: 'Bring the coal to a boiler. The big button shovels it in.' };
+  if (n.carry === 'chest') return { icon: '🧰', title: 'You carry a chest', text: 'Heavy! Walk it to the rope ladder and climb, then STOW it at the hold. A second hand makes it faster. ATTACK puts it down.' };
   if (n.carry) return { icon: '🤲', title: 'In your hands', text: 'The big button uses what you hold. GRAB swaps it.' };
   return { icon: '🧭', title: 'What do I do?', text: R.JOIN_TEXT + ' Nothing to do? Walk to a station and press the big button.' };
 }

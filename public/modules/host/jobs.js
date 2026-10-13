@@ -36,6 +36,7 @@ JOB_COLORS.heal = '#ff7b9c'; // (crew health: down to the last heart - go to the
 JOB_COLORS.frame = '#d9a24a'; // (STRUCTURE.md: a hammer on a weak segment of the frame)
 JOB_COLORS.abandon = '#ff4d4d'; // (...and the half of the ship that split off is going down: jump)
 JOB_COLORS.stow = '#ffd23f'; // (SCRAP, LOOP.md G1: pick a bundle up off the deck and carry it to the hold - gold, like every pickup)
+JOB_COLORS.stowchest = '#ffd23f'; // (CASTLE.md A2: a chest from an outpost's vault goes in the hold - gold)
 JOB_COLORS.hack = '#f2c14e'; // (C.2: a tentacle holds the ship: gold arrow to the grip point, sword in hand)
 JOB_COLORS.pickup = '#ff8c1a'; // (CASTLE.md A0: an away man's flare: the helm hovers over him and the rope ladder takes him up)
 
@@ -87,6 +88,7 @@ export function createJobFinder(state) {
         else if (!p.carry) for (const ld of state.loads || []) if (ld.kind === 'scrap') add('stow', ld, ld.d, ld.x, {}, `PICK UP THE SCRAP - ${roomName(ld.d, ld.x)}`);
       }
     }
+    if (p.carry === 'chest' && !me.ai && holdSpot(L) && state.away && state.away.tre && state.away.tre.chests.some((c) => c.state === 'aboard' && c.by[0] === p.id)) add('stowchest', 'hold', holdSpot(L).d, holdSpot(L).x, { urgency: J.URGENCY.stow }, `STOW THE CHEST - ${roomName(holdSpot(L).d, holdSpot(L).x)}`); // (CASTLE.md A2: a chest in your arms goes in the hold)
     for (const f of state.fires) add('fire', f, f.d, f.x, {}, f.h2 ? `FIRE UNDER THE HYDROGEN BAG - ${roomName(f.d, f.x)}` : undefined); // (GAS TYPES: a fire that reaches a hydrogen bag says so)
     for (const h of state.breaches) add('hole', h, h.d, h.x);
     const S = me.sim && me.sim.structure; // STRUCTURE.md: a segment of the frame below JOB_AT wants shoring up with a hammer (a critical one is worth far more)
@@ -209,8 +211,8 @@ export function createJobFinder(state) {
     p.jobT = J.EVERY;
     let jobs = list(p).filter((j) => j.d != null);
     // Hauling something? Delivering it comes first (if there is anywhere to deliver it).
-    const delivery = jobs.filter((j) => j.kind === p.carry || (p.carry === 'scrap' && j.kind === 'stow'));
-    if (delivery.length && (p.carry === 'ammo' || p.carry === 'coal' || p.carry === 'scrap')) jobs = delivery;
+    const delivery = jobs.filter((j) => j.kind === p.carry || (p.carry === 'scrap' && j.kind === 'stow') || (p.carry === 'chest' && j.kind === 'stowchest'));
+    if (delivery.length && (p.carry === 'ammo' || p.carry === 'coal' || p.carry === 'scrap' || p.carry === 'chest')) jobs = delivery;
     const scored = jobs.map((j) => ({ j, ...score(p, j) })).filter((s) => isFinite(s.r.time)).sort((a, b) => a.score - b.score);
     const cur = p.job && jobs.find((j) => same(j, p.job.job));
     let pick = null;

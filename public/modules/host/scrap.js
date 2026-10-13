@@ -54,7 +54,10 @@ function findSpot(L) {
 const tables = layoutTables((L) => ({ SPOT: findSpot(L) }));
 export const holdSpot = (layout) => tables(layout).SPOT;
 export const holdCount = (state) => (scrapOn() && state.scrapHold ? state.scrapHold.count | 0 : 0);
-export const holdWeight = (state) => Math.max(0, holdCount(state) - (S().HOLD_FREE || 0)) * S().BUNDLE_W; // (the first HOLD_FREE bundles are ballast: the hold is built for them, they weigh nothing on the lift)
+// TREASURE (CASTLE.md A2, treasure.js): the chests stowed in the hold weigh on the lift too - real cargo, no free ballast. They count while AWAY is on (NO_AWAY=1 leaves them out).
+export const chestWeight = (state) => (config.AWAY.ENABLED && state.chestHold ? state.chestHold.w || 0 : 0);
+export const chestCount = (state) => (config.AWAY.ENABLED && state.chestHold ? state.chestHold.list.length : 0);
+export const holdWeight = (state) => Math.max(0, holdCount(state) - (S().HOLD_FREE || 0)) * S().BUNDLE_W + chestWeight(state); // (the first HOLD_FREE bundles are ballast: the hold is built for them, they weigh nothing on the lift)
 export const holdX = (state, layout) => { const sp = holdSpot(layout); return sp ? sp.x : layout.refPoint ? layout.refPoint.x : 0; };
 export const holdFull = (state) => holdCount(state) >= S().HOLD_CAP;
 export const heavyHold = (state) => holdCount(state) >= S().BOTS.HOLD_SOFT; // (the bots stop going after flotsam once the hold is this full: it weighs on the lift - balance pass)

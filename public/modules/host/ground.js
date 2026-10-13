@@ -15,6 +15,7 @@ import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { floorBelow, solidAt } from './maps.js';
 import { pop } from './popups.js';
 import { createObjectives } from './objectives.js'; // (CASTLE.md A1: the castle objectives on the ground, config.AWAY.OBJECTIVES)
+import { createTreasure } from './treasure.js'; // (CASTLE.md A2: the outposts' vaults, chests and guards, config.AWAY.TREASURE)
 
 const A = () => config.AWAY;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -53,6 +54,7 @@ export function createGround({ state, puff, phoneFx }) {
   };
   const enabled = () => S.on;
   const obj = createObjectives({ state, S, host: { phoneFx, puff, deps: () => deps, onGround: () => onGround(), groundAt: (x, y) => groundAt(mapNow(), x, y) } }); // (A1: S.obj; its steps are called below)
+  const tre = createTreasure({ state, S, host: { phoneFx, puff, deps: () => deps, onGround: () => onGround(), groundAt: (x, y) => groundAt(mapNow(), x, y), layout: () => main().layout, mine: (p) => shipOf(state, p) === main() } }); // (A2: S.tre, the outposts' treasure)
 
   // ---------- the map ----------
   // A new map: the walkways and their ladders (ring maps); anybody still on the old ground is brought home (the stop ended).
@@ -67,6 +69,7 @@ export function createGround({ state, puff, phoneFx }) {
     S.rope.out = false;
     S.rope.users = 0;
     obj.begin(map); // (A1: the objectives this ring offers; none on any other map)
+    tre.begin(map); // (A2: a vault for each outpost of an open-sky raid; none on any other map)
     if (!A().ENABLED || !map || !map.ring) return;
     for (const f of map.ring.faces) {
       if (!f.walk) continue;
@@ -83,6 +86,7 @@ export function createGround({ state, puff, phoneFx }) {
     S.hold = null;
     S.rope.out = false;
     obj.reset(); // (A1)
+    tre.reset(); // (A2)
   }
 
   // ---------- the rope ladder ----------
@@ -238,6 +242,7 @@ export function createGround({ state, puff, phoneFx }) {
     const sh = main(), sp = ropeSpot(sh.layout), rv = sh.layout.reviveSpot();
     const o = p.on;
     obj.onAboard(p, o, free || quiet); // (A1: a man who climbs aboard with the great banner has stolen it)
+    tre.onAboard(p, o, free || quiet); // (A2: ...and one who climbs aboard with a chest still has it to stow)
     p.on = null;
     p.hook = null;
     p.trip = null;
@@ -261,6 +266,7 @@ export function createGround({ state, puff, phoneFx }) {
   function walkHome(p) {
     const sh = main(), map = mapNow();
     obj.onGone(p); // (A1: the banner he carried is dropped)
+    tre.onGone(p); // (A2: ...and the chest, where he stood)
     const flare = S.flares.findIndex((f) => f.id === p.id);
     if (flare >= 0) S.flares.splice(flare, 1);
     p.on = { away: true, mode: 'home', t: 0, flareCd: 0, flareT: 0 };
@@ -321,6 +327,7 @@ export function createGround({ state, puff, phoneFx }) {
     const jump = p.jumpQ;
     p.jumpQ = false;
     if (p.atkQ && obj.shove(p)) p.atkQ = false; // (A1: soldiers on him: ATTACK shoves them back before it fires anything)
+    else if (p.atkQ && tre.attack(p)) p.atkQ = false; // (A2: ...a vault guard likewise; with nothing to shove, ATTACK puts a chest down)
     // the hookshot: ATTACK fires it; once it catches he is a swinger again (airborne.js and hookshot.js take him)
     if (ctl.hookshot) {
       if (p.atkQ && p.carry === 'hookshot' && !p.bot) ctl.hookshot.onAttack(p);
@@ -331,7 +338,7 @@ export function createGround({ state, puff, phoneFx }) {
     if (Math.abs(dir) > 0.15) p.face = dir < 0 ? -1 : 1;
     if (o.mode === 'walk') {
       let moved = false;
-      const walk = K.WALK * obj.speedMul(p); // (A1: the great banner is heavy)
+      const walk = K.WALK * obj.speedMul(p) * tre.speedMul(p); // (A1: the great banner is heavy; A2: so is a chest)
       if (o.deck) {
         const nx = clamp(p.x + dir * walk * dt, o.deck.x0, o.deck.x1);
         moved = Math.abs(dir) > 0.15 && nx !== p.x;
@@ -378,7 +385,7 @@ export function createGround({ state, puff, phoneFx }) {
     } else if (o.mode === 'rope') {
       const R = S.rope;
       if (!R.out) { o.s = 0; }
-      if (Math.abs(jy) > 0.4) o.s = clamp(o.s + (jy * K.LADDER.CLIMB * dt), 0, R.len);
+      if (Math.abs(jy) > 0.4) o.s = clamp(o.s + (jy * K.LADDER.CLIMB * tre.climbMul(p) * dt), 0, R.len);
       o.s = clamp(o.s, 0, R.len);
       p.x = R.x;
       p.y = R.y + o.s;
@@ -397,7 +404,7 @@ export function createGround({ state, puff, phoneFx }) {
     // the Action button
     if (o.mode === 'walk' || o.mode === 'ladder') {
       const cd = o.flareCd;
-      const ov = o.mode === 'walk' && !o.deck ? obj.act(p, dt, ctl) : null; // (A1: at an objective the button works it - a hold; away from one it is the flare)
+      const ov = o.mode === 'walk' && !o.deck ? tre.act(p, dt, ctl) || obj.act(p, dt, ctl) : null; // (A1: at an objective the button works it - a hold; away from one it is the flare) (A2: at a chest it grabs or helps carry it)
       if (ov) p.act = ov;
       else {
         p.act = cd > 0 ? { type: 'wait', label: 'FLARE READY IN ' + Math.ceil(cd) + 's' } : { type: 'flare', label: 'FIRE FLARE' };
@@ -434,7 +441,18 @@ export function createGround({ state, puff, phoneFx }) {
     const R = S.rope, K = A();
     if (o.mode === 'rope') { p.jy = t.ready ? -1 : 1; return; } // (down the rope to the foot; or up it)
     if (o.mode === 'ladder') { p.jy = 0; return; }
-    if (obj.shoveReady(p)) p.atkQ = true; // (A1: soldiers on him: he shoves)
+    if (obj.shoveReady(p) || tre.shoveReady(p)) p.atkQ = true; // (A1: soldiers on him: he shoves; A2: so does a vault guard)
+    if (!t.ready && t.chest) { // (A2: this trip is for a chest: walk to the nearest, hold the button there; with it in his arms (or none left, or out of time) he goes home)
+      const g = tre.botGoal(p);
+      if (!g.done && t.t <= K.TREASURE.BOT.TIME) {
+        p.jx = Math.abs(g.x - p.x) > 30 ? Math.sign(g.x - p.x) : 0;
+        p.fire = g.fire;
+        return;
+      }
+      t.ready = true;
+      t.t = 0;
+      if (!tre.carrying(p)) { if (!o.flareCd) fireFlare(p, o); t.flared = true; }
+    }
     if (!t.ready && t.ob) { // (A1: this trip is an objective: walk to its spot and hold the button there; done or out of time = go home)
       const g = obj.botGoal(p, t.ob);
       if (!g.done && t.t <= K.OBJECTIVES.BOT.TIME) {
@@ -481,11 +499,12 @@ export function createGround({ state, puff, phoneFx }) {
     if (p.mate || p.ko > 0 || p.fall || p.fly || p.lock || p.dare || p.hj || p.conn != null || p.swing || p.onGunship) return false;
     if (awayList().length || crew().some((q) => q.trip)) return false;
     const R = S.rope, K = A().LADDER, r = state.course && state.course.ring;
+    if (!r && R.gap <= K.REACH - 20 && R.gap !== Infinity && tre.tripChest()) return true; // (A2: an open-sky raid: the rope reaches the ground and a vault is open within a walk)
     if (!r || R.gap > K.REACH - 20 || R.gap === Infinity) return false;
     const m = plazaMid(R.x);
     return m != null && Math.abs(m - R.x) < 1500 && Math.abs(R.ground - r.faces[0].y) < 40; // (the ground under the hatch is a platform: a plaza is near)
   }
-  const tripStarted = (p) => { p.trip = { t: 0, goal: null, ready: false, flared: false, walk: true, ob: obj.pickFor(p) }; S.tripCd = A().BOT.TRIP_EVERY; S.stats.trips++; }; // (ob: A1, the objective this trip does)
+  const tripStarted = (p) => { const chest = !state.course.ring && !!tre.tripChest(); p.trip = { t: 0, goal: null, ready: false, flared: false, walk: true, ob: obj.pickFor(p), chest }; S.tripCd = A().BOT.TRIP_EVERY; S.stats.trips++; if (chest) tre.trips(); }; // (ob: A1, the objective this trip does; chest: A2, this trip fetches a chest)
 
   // ---------- each step ----------
   function update(dt) {
@@ -495,6 +514,7 @@ export function createGround({ state, puff, phoneFx }) {
     S.tripCd = Math.max(0, S.tripCd - dt);
     ropeStep(dt);
     obj.update(dt); // (A1: the objectives, the prisoners, the banner, the soldiers)
+    tre.update(dt); // (A2: the vaults, the chests, the guards)
     const K = A(), map = mapNow();
     const list = awayList();
     // a flyer with ground below gets a parachute button
@@ -550,7 +570,7 @@ export function createGround({ state, puff, phoneFx }) {
     const o = p.on;
     if (!o || !o.away) return null;
     const K = A();
-    const ov = obj.ui(p); // (A1: an objective at his feet, soldiers on him, the banner in his arms)
+    const ov = tre.ui(p) || obj.ui(p); // (A1: an objective at his feet, soldiers on him, the banner in his arms) (A2: a chest at his feet or in his arms, guards)
     let hint;
     if (o.mode === 'home') hint = 'You walked home. You rejoin at the next dock.';
     else if (o.mode === 'rope') hint = 'CLIMB the rope: stick UP to the ship, DOWN to the ground. JUMP lets go.';
@@ -568,9 +588,11 @@ export function createGround({ state, puff, phoneFx }) {
   // ---------- the bot helm (bots.js operate) ----------
   // Where the ship should be to take the nearest pickup: { dx (world px the rope's hatch must move), alt (the altitude that puts the rope's top at the hover height) } or null.
   function helmCall() {
-    if (!S.on || !S.pickups.length) return null;
+    if (!S.on) return null;
+    const vault = !S.pickups.length ? tre.vaultCall() : null; // (A2, tools only: the bot helm hovers over an open vault so a trip can reach the chests)
+    if (!S.pickups.length && !vault) return null;
     const sh = main(), R = S.rope;
-    const pk = S.pickups.reduce((b, q) => (Math.abs(q.x - R.x) < Math.abs(b.x - R.x) ? q : b));
+    const pk = vault || S.pickups.reduce((b, q) => (Math.abs(q.x - R.x) < Math.abs(b.x - R.x) ? q : b));
     return { dx: pk.x - R.x, alt: R.y - sh.pose.y - pk.y, name: pk.name };
   }
   // The job on the helm man's phone: PICK UP <name> (jobs.js).
@@ -583,7 +605,7 @@ export function createGround({ state, puff, phoneFx }) {
 
   return {
     bind: (d) => { deps = { ...deps, ...d }; },
-    objectiveJob: (p, f) => obj.job(p, f), obj,
+    objectiveJob: (p, f) => tre.job(p, f) || obj.job(p, f), obj, tre, payTreasure: () => tre.pay(), chestStow: (p) => tre.stow(p),
     begin, reset, update, surfaces, step, enabled, ui, helmCall, pickupJob, ropeSpot, ladderAction, useLadder, mount, lowerRope, dockReturn, holdStop, tripWanted, tripStarted,
     awayList, onGround, groundAt: (x, y) => groundAt(mapNow(), x, y), eligible, rejoin, walkHome, fireFlare,
   };

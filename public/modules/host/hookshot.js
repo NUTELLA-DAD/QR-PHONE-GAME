@@ -34,6 +34,10 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
       const R = config.SCRAP.HOOK.R;
       for (const it of state.thrown || []) if (it.chute && !it.haul && Math.abs(wx - it.x) < R && Math.abs(wy - it.y) < R && Math.hypot(wx - it.x, wy - it.y) < R) return { kind: 'scrap', light: true, item: it, pos: () => ((state.thrown || []).includes(it) ? { x: it.x, y: it.y } : null) };
     }
+    { // TREASURE (CASTLE.md A2): a chest lying on the ground near the line is a LIGHT anchor too: it is hauled up into the hold
+      const tre = state.groundSys && state.groundSys.tre, c = tre ? tre.hookable(wx, wy) : null;
+      if (c) return { kind: 'chest', light: true, chest: true, item: c, pos: () => (tre.live(c) || c.state === 'ground' ? { x: c.x, y: c.y - 24 } : null) };
+    }
     const x = toShipX(ship, wx); // (our own decks, the gunship's and the gasbag are in ship coordinates)
     const y = toShipY(ship, wy);
     // The enemy gunship's decks and hull (and our own decks): horizontal edges.
@@ -189,9 +193,16 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
   // SCRAP: the hook has caught a bundle in the air: it is reeled in (only by someone standing on a deck: a swinging flyer lets it go).
   const haul = (p, h) => {
     const it = h.anchor.item;
-    if (!it || p.fly || p.d == null || it.haul) { h.phase = 'back'; return; }
+    if (!it || p.fly || p.d == null || it.haul || (h.anchor.chest && it.state !== 'ground')) { h.phase = 'back'; return; }
     h.phase = 'haul';
     h.item = it;
+    if (h.anchor.chest) { // (TREASURE: the chest comes up the line; the treasure module keeps it from being taken twice)
+      h.chest = true;
+      state.groundSys.tre.hauling(it, p);
+      state.sfxQ.push(['clang', true]);
+      puff(it.x, it.y, '#ffe9a8', 5);
+      return;
+    }
     it.haul = p.id;
     it.hooked = true;
     it.owner = p.id;
@@ -334,13 +345,20 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
         h.phase = 'back';
       }
     } else if (h.phase === 'haul') { // (SCRAP: the bundle comes in to the hand on the line, and lands at the thrower's feet)
-      const it = h.item;
-      if (!it || !(state.thrown || []).includes(it) || it.haul !== p.id || p.fly || p.d == null) { if (it && it.haul === p.id) it.haul = null; p.hook = null; p.hookCd = H.MISS_COOLDOWN; return; }
-      const dx = o.x - it.x, dy = o.y - it.y, d = Math.hypot(dx, dy) || 1, step = Math.min(d, config.SCRAP.HOOK.HAUL_SPEED * dt);
+      const it = h.item, tre = h.chest ? state.groundSys.tre : null; // (TREASURE: the item is a chest, hauled at its own speed into the hold)
+      const listed = tre ? tre.live(it) && it.haul === p.id : it && (state.thrown || []).includes(it) && it.haul === p.id;
+      if (!it || !listed || p.fly || p.d == null) { if (it && it.haul === p.id && !tre) it.haul = null; p.hook = null; p.hookCd = H.MISS_COOLDOWN; return; }
+      const dx = o.x - it.x, dy = o.y - it.y, d = Math.hypot(dx, dy) || 1, step = Math.min(d, (tre ? config.AWAY.TREASURE.HOOK.HAUL_SPEED : config.SCRAP.HOOK.HAUL_SPEED) * dt);
       it.x += (dx / d) * step; it.y += (dy / d) * step; it.vx = it.vy = 0;
       h.len = Math.max(0, d - step);
       h.dx = -dx / d; h.dy = -dy / d;
-      if (h.len <= config.SCRAP.HOOK.LAND_AT) {
+      if (tre && h.len <= config.AWAY.TREASURE.HOOK.LAND_AT) {
+        p.hook = null;
+        p.hookCd = H.MISS_COOLDOWN;
+        p.swingT = performance.now();
+        puff(o.x, o.y, '#ffe9a8', 5);
+        tre.hooked(it, p);
+      } else if (!tre && h.len <= config.SCRAP.HOOK.LAND_AT) {
         state.thrown.splice(state.thrown.indexOf(it), 1);
         it.haul = null;
         ship.sim.cargo.land(it, p.d, p.x);

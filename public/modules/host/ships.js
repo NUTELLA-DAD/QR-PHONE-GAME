@@ -71,6 +71,8 @@ export const SHIP_KEYS = [
   'cannons', 'loads', 'rackStock', 'hatches', 'hatchStats',
   // SCRAP (LOOP.md G1, scrap.js): what is stowed in her hold { count }
   'scrapHold',
+  // TREASURE (CASTLE.md A2, treasure.js): the chests stowed in her hold { list, w }
+  'chestHold',
   // parts breaking off (S.5i): the counters of what broke, and how much lift she lost with a gasbag (flight.js uses it as extra weight)
   'breakStats', 'liftDeficit',
   // STRUCTURE (structure.js): the segments of her frame, what her torn canvas and loads weigh, the weight dumped, whether she sits on the ground, the failing section, the counters, lift against weight, how long she has been down

@@ -88,7 +88,7 @@ export function createGoingDown({ state, phoneFx, wreck, getCargo, breakOff, get
     const trim = (GD.TRIM_LOSS * Math.max(0, Math.abs(bal.dx || 0) - B.LEVEL_PX)) / 100;
     // weight, and what it is made of
     const loads = (state.loads || []).reduce((n, ld) => n + ld.w, 0) + holdWeight(state);
-    const carried = Object.values(state.players).reduce((n, p) => n + (p.d == null || p.fall || p.air || p.fly || p.connected === false ? 0 : (CG.ITEMS[p.carry] || { w: 0 }).w), 0);
+    const carried = Object.values(state.players).reduce((n, p) => n + (p.d == null || p.fall || p.air || p.fly || p.connected === false ? 0 : p.carry === 'chest' ? config.AWAY.TREASURE.CHEST.W : (CG.ITEMS[p.carry] || { w: 0 }).w), 0); // (A2: a chest in your arms)
     let racks = 0;
     for (const r of L.racks) if (CG.ITEMS[r.kind] && (r.kind === 'sandbag' || r.kind === 'crate')) racks += CG.ITEMS[r.kind].w * (state.rackStock && state.rackStock[`${r.p}@${r.x}`] != null ? state.rackStock[`${r.p}@${r.x}`] : CG.STOCK);
     const bombs = (state.bombBay ? state.bombBay.bombs : 0) * W.bomb;
