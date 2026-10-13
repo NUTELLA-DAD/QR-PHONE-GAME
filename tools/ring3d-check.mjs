@@ -145,6 +145,13 @@ const MEASURE = `(async()=>{ const V=window.view3dDebug().view; if(!V) return JS
   const dt=(performance.now()-t0)/1000; const u=s[s.length-1];
   return JSON.stringify({ calls:med(s.map(q=>q.calls)), maxCalls:Math.max(...s.map(q=>q.calls)), tris:med(s.map(q=>q.tris)), maxTris:Math.max(...s.map(q=>q.tris)), js:+med(s.map(q=>q.jsMs)).toFixed(2), maxJs:+Math.max(...s.map(q=>q.jsMs)).toFixed(2), ringMs:+med(s.map(q=>q.ring?q.ring.ms:0)).toFixed(3), fps:Math.round((V.frames-f0)/dt), tier:u.tier, ringOn:s.every(q=>!!q.ring) }) })()`;
 
+// --calls (a dev aid, as in view3d-check.mjs): where one frame's draw calls go in each live scene, by object path (shadow and main pass apart)
+const PROFILE = `(()=>{ const V=window.view3dDebug().view, R=V.renderer, rows=new Map(), orig=R.renderBufferDirect, origReset=R.info.reset.bind(R.info), f0=V.frames, one=true;
+  const pathOf=(o)=>{ const bits=[]; for(let p=o;p&&p.type!=='Scene';p=p.parent){ const i=p.parent?p.parent.children.indexOf(p):0; bits.push((p.name?p.name:p.type[0])+(p.parent&&p.parent.type!=='Scene'&&!p.name?i:'')); } return bits.reverse().join('>'); };
+  const nameOf=(o)=>{ const bits=[]; for(let p=o;p&&bits.length<4;p=p.parent){ const n=p.name||''; if(n) bits.push(n); } return bits.reverse().join('/')||('(unnamed, parent '+(o.parent&&(o.parent.name||o.parent.type))+')'); };
+  let seg=0,lastF=-1,fr1=0; R.info.reset=function(){ if(V.frames!==lastF){ lastF=V.frames; seg=0; } seg++; if(seg===1) fr1++; return origReset(); };
+  R.renderBufferDirect=function(cam,sc,geo,mat,obj,grp){ if(seg!==1||(obj.isInstancedMesh&&obj.count===0)) return orig.apply(this,arguments); const g=geo&&geo.attributes&&geo.attributes.position; const key=(sc?'main  ':'shadow')+' | '+(one?pathOf(obj)+' v'+(g?g.count:'?'):nameOf(obj))+' | '+obj.type+(obj.isInstancedMesh?' x'+obj.count:'')+' | '+(mat&&mat.type)+(mat&&mat.side===1?' back':'')+(mat&&mat.name?' '+mat.name:'')+(mat&&mat.color&&mat.type==='MeshBasicMaterial'?' #'+mat.color.getHexString():''); rows.set(key,(rows.get(key)||0)+1); return orig.apply(this,arguments); };
+  return new Promise((res)=>{ const t0=performance.now(); const tick=()=>{ const done=one?fr1>=1&&V.frames>lastF:performance.now()-t0>500; if(!done) return setTimeout(tick,5); R.renderBufferDirect=orig; R.info.reset=origReset; const fr=Math.max(1,fr1); const out=[...rows.entries()].sort((a,b)=>b[1]-a[1]).map(([k,v])=>(v/fr).toFixed(1)+'  '+k); res(JSON.stringify({ frames:fr, total:+([...rows.values()].reduce((a,b)=>a+b,0)/fr).toFixed(1), rows:out })); }; tick(); }); })()`;
 const settle = async (name, P) => {
   const game = (await P.json('JSON.stringify(window.gameErrors||[])')) || [];
   const bad = [...P.errors, ...P.warns];
@@ -173,6 +180,7 @@ try {
       const m = await P.json(MEASURE);
       if (m && !m.none) {
         console.log(`    ${v}: ${fmtStat(m)}`);
+        if (has('calls')) { const r = await P.json(PROFILE); if (r) for (const l of r.rows.slice(0, Number(arg('rows', 60)))) console.log('      ' + l); }
         check(m.maxCalls <= BUDGET.calls, `${v}: draw calls ${m.maxCalls} <= ${BUDGET.calls}`, `${v}: draw calls ${m.maxCalls} > ${BUDGET.calls}`);
         check(m.maxTris <= BUDGET.tris, `${v}: triangles ${Math.round(m.maxTris / 1000)}k <= ${BUDGET.tris / 1000}k`, `${v}: triangles ${Math.round(m.maxTris / 1000)}k > ${BUDGET.tris / 1000}k`);
         check(m.js <= BUDGET.js, `${v}: view JS ${m.js} ms <= ${BUDGET.js} ms (the ring bend itself: ${m.ringMs} ms)`, `${v}: view JS ${m.js} ms > ${BUDGET.js} ms`);

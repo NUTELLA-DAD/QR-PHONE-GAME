@@ -48,6 +48,7 @@ window.__P = {
   escort(i, dx, dy) { const st = this.st(), sh = this.sh(); st.escorts = st.escorts || []; while (st.escorts.length <= i) st.escorts.push({ name: 'Escort ' + (st.escorts.length + 1), flying: true, docked: false, x: 0, y: 0, vx: 0, vy: 0, heading: 0, hp: 3, max: 3, trail: [], fake: true }); const e = st.escorts[i]; e.flying = true; e.docked = false; e.x = sh.pose.x + dx; e.y = sh.pose.y + dy; e.heading = dx < 0 ? Math.PI : 0; return e; },
   noEscorts() { const st = this.st(); st.escorts = (st.escorts || []).filter((e) => !e.fake); for (const e of st.escorts) e.flying = false; st.escort = st.escorts[0]; },
   enemyAt(x, y) { const e = this.st().enemy; e.dead = 0; e.x = x; e.y = y; e.vx = 0; e.vy = 0; return e; },
+  async waitFor(pred, ms = 8000) { const t0 = performance.now(); while (!pred() && performance.now() - t0 < ms) await this.frame(); return pred(); }, // (wait on what the check is about, drawn frames, not a fixed time: a busy machine draws fewer of them)
   async untilSpy(max = 6000) { const st = this.st(); let n = 0; while (!(st.spy && st.spy.on) && n < max) { window.__step(30); n += 30; } return n; },
 };
 `;
@@ -168,8 +169,10 @@ try {
   // ---- 3. the spyglass ----------------------------------------------------------------------------------------------------------------------------------------------------------
   if (want('spy')) {
     console.log('3. 3D Medium: the lookout\'s spyglass: shown, panned, spotting');
-    const t1 = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(), C=window.__cfg.SPYGLASS; const n=await P.untilSpy(); window.__step(120); await sl(1200); await P.frame(); const S=st.spy;
-      window.__r.on={ n, on:S.on, bot:S.bot, who:S.who, fwd:S.fwd, ahead:C.AHEAD, items:P.items(), live:P.live(), stats:P.V().stats().portholes, W:document.getElementById('c').width }; return 1; })()`;
+    // (Where the spyglass STARTS is read at the step the lookout takes the nest: a bot lookout pans toward the nearest threat ahead at once, and with the set pieces of today's game one is usually
+    // about, so two seconds later it was 4000 px out, not where it started. "pan: up" allows for the top of the map: the lens is kept inside it, so a ship flying high cannot look 1000 px up.)
+    const t1 = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(), C=window.__cfg.SPYGLASS; let n=0; while(!(st.spy && st.spy.on) && n<6000){ window.__step(1); n++; } const start=st.spy.fwd; window.__step(120); await sl(1200); await P.frame(); const S=st.spy;
+      window.__r.on={ n, on:S.on, bot:S.bot, who:S.who, fwd:start, fwdNow:S.fwd, ahead:C.AHEAD, items:P.items(), live:P.live(), stats:P.V().stats().portholes, W:document.getElementById('c').width }; return 1; })()`;
     const tbot = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(), S=st.spy; let e=null, near=1e9, got=false; for(let i=0;i<420;i++){ e=P.enemyAt(sh.pose.x+8200, sh.pose.y-400); window.__step(1); near=Math.min(near, Math.hypot(S.cx-e.x, S.cy-e.y)); if(e.spotT>0) got=true; }
       await sl(500); window.__r.botPan={ bot:S.bot, dist:near, spotted:got }; return 1; })()`;
     const tpan = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(), S=st.spy, C=window.__cfg.SPYGLASS; const p=st.players[S.who]; p.bot=false; st.enemy.dead=9; const R={};
@@ -181,7 +184,7 @@ try {
       for(let i=0;i<420;i++){ p.jxs=-1; window.__step(1); min=Math.min(min,S.fwd); if(S.fwd<S.tfwd-1e-6) over=true; }
       p.jxs=0; for(let i=0;i<120;i++){ window.__step(1); min=Math.min(min,S.fwd); }
       R.left={ fwd:S.fwd, min, limit:-C.BEHIND, over };
-      const up0=S.up; for(let i=0;i<150;i++){ p.jxs=0; p.jy=-1; window.__step(1); } R.up={ from:up0, to:S.up, limit:C.UP };
+      const up0=S.up; for(let i=0;i<150;i++){ p.jxs=0; p.jy=-1; window.__step(1); } R.up={ from:up0, to:S.up, limit:C.UP, room:S.my };
       for(let i=0;i<300;i++){ p.jy=1; window.__step(1); } R.down={ to:S.up, limit:-C.DOWN };
       p.jy=0; p.jxs=1; for(let i=0;i<150;i++){ window.__step(1); } p.jxs=0; for(let i=0;i<150;i++){ window.__step(1); }
       p.jy=-0.4; for(let i=0;i<150;i++){ p.jy=0; p.jxs=0; window.__step(1); } // back toward the middle of the sky for the picture
@@ -220,7 +223,7 @@ try {
       if (!(P.right.fwd > 11000 && P.right.mono && !P.right.over)) fail('pan: right: the spyglass did not glide smoothly out (fwd ' + P.right.fwd + ', monotone ' + P.right.mono + ', over ' + P.right.over + ')');
       if (!(P.right.max <= P.right.limit + 1)) fail('pan: it went past its range ahead (' + P.right.max + ' of ' + P.right.limit + ')');
       if (!(P.left.min >= P.left.limit - 1 && P.left.fwd <= -1500 && !P.left.over)) fail('pan: left: ' + JSON.stringify(P.left));
-      if (!(P.up.to > P.up.from + 1000 && P.up.to <= P.up.limit + 1)) fail('pan: up: ' + JSON.stringify(P.up));
+      if (!((P.up.to > P.up.from + 1000 || P.up.to >= P.up.room - 5) && P.up.to <= P.up.limit + 1)) fail('pan: up: ' + JSON.stringify(P.up));
       if (!(P.down.to < 0 && P.down.to >= P.down.limit - 1)) fail('pan: down: ' + JSON.stringify(P.down));
       if (!(Math.abs(P.recentre.fwd - 7000) < 5)) fail('pan: it did not settle on its goal ' + JSON.stringify(P.recentre));
     }
@@ -255,7 +258,7 @@ try {
   // ---- 5. 2D, Low, Versus ------------------------------------------------------------------------------------------------------------------------------------------------------------
   if (want('twod')) {
     console.log('5. the 2D view');
-    const t = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(); await P.untilSpy(); window.__step(120); P.escort(0, -5200, -200); await sl(1400); await P.frame(); window.__r.twod={ items:P.items() }; return 1; })()`;
+    const t = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(); await P.untilSpy(); window.__step(120); await P.untilSpy(); P.escort(0, -5200, -200); await sl(400); await P.waitFor(() => P.items().some((i) => i.kind === 'spy' && i.pic === '2d') && P.items().some((i) => i.kind === 'edge' && i.pic === '2d')); await P.frame(); window.__r.twod={ items:P.items() }; return 1; })()`;
     const r = run('twod', '2d', 'kind=open&env=skyisles', [step(boot(300), 300), step(t, 400, '2d')]);
     clean('twod', r); show('twod', r.data);
     const it = (r.data && r.data.twod && r.data.twod.items) || [];
@@ -264,7 +267,7 @@ try {
   }
   if (want('low')) {
     console.log('6. 3D, tier Low: the arrows stay, the spyglass is drawn in 2D');
-    const t = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(); await P.untilSpy(); window.__step(120); P.escort(0, 6200, -300); await sl(1400); await P.frame(); window.__r.low={ items:P.items(), live:P.live() }; return 1; })()`;
+    const t = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(); await P.untilSpy(); window.__step(120); await P.untilSpy(); P.escort(0, 6200, -300); await sl(400); await P.waitFor(() => P.items().some((i) => i.kind === 'spy')); await sl(600); await P.frame(); window.__r.low={ items:P.items(), live:P.live() }; return 1; })()`;
     const r = run('low', '3d', 'tier=low&kind=open&env=skyisles', [step(boot(300), 300), step(t, 400, 'low')]);
     clean('low', r); show('low', r.data);
     const d = r.data && r.data.low;

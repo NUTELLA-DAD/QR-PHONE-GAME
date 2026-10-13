@@ -146,8 +146,22 @@ function spawnG(sim, opts) {
   report(sawTurn && flips >= 1, `(b) ...she came about (a COME ABOUT of her own, ${flips} flip(s) of her facing) to bring her stern guns to bear`);
   report(inRockPts <= 12, `(b) ...her outline was in rock at ${inRockPts} of the checks (rock contact is the ship rules')`);
   const S = st.gsStats;
-  report(S.shots > 0 && Math.min(...hullsOurs) < 100, `(c) she fires: ${S.shots} cannonballs, and they reach our ship (our hull ${Math.min(...hullsOurs).toFixed(0)}% at its lowest)`);
+  console.log(`     (in this fight she fired ${S.shots} cannonballs before our 8 bots hooked her, boarded (${S.boarded}) and killed ${S.kills} of her crew: our bots' hook job runs as soon as her yardarm is in HOOK_RANGE, and on some seeds they reach her gunner before her first broadside is due, FIRE_EVERY s after she takes station. Her firing is gated in the scene below, where nobody boards her)`);
   report(S.portsDown >= 1 || h.state.hull < 90 || !st.gunship, `(c) our shells hurt her: ${S.portsDown} gun port(s) shot out, her hull ${st.gunship ? h.state.hull.toFixed(0) : 'gone'}%`);
+}
+{
+  // (c) she fires: one person at our helm and nobody at our guns or our bow, so nobody hooks her or kills her gunners; she takes station, mans her stern guns and fires broadsides
+  // that reach our hull. (Her gunners' range is her cannonball's, not a crew shell's: aim.js solution; before that fix they never pulled the trigger from a firing spot 1520-2300 px out.)
+  const { sim, st, ours } = boot({ bots: 0 });
+  step(sim, seconds(3));
+  spawnG(sim, SPAWN);
+  let hits = 0, secs = 0;
+  st.onBulletHit = (b, sh) => { if (b.from === st.gunship?.ship?.id && sh === ours) hits++; }; // (simulation.js: a bullet that hit a ship's hull)
+  step(sim, seconds(90), (i) => { secs = i / 60; if (!st.gunship || hits > 0) return 'stop'; }); // (her first broadside comes FIRE_EVERY s after she is on station with a gunner at his gun; with a crew of one the next comes later, crewscale.js)
+  st.onBulletHit = null;
+  const S = st.gsStats;
+  report(S.shots > 0 && hits > 0, `(c) she fires: ${S.shots} cannonballs in ${secs.toFixed(0)} s, and they reach our ship (${hits} hit our hull)`);
+  sim.gunship.reset();
 }
 {
   // the sky's own fire does not hurt her, her fire does not hurt her: a flak bullet from the sky through her hull passes

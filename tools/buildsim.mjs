@@ -1066,7 +1066,7 @@ async function checkBags() {
       if (noPump && i === at * 60) { keep.pump = config.GAS.PUMP_RATE; keep.vent = config.GAS.VENT_RATE; config.GAS.PUMP_RATE = 0; config.GAS.VENT_RATE = 0; } // (nobody can pump or vent from here: what the bag lost stays lost, and the pilot cannot make it up)
       sim.update(1 / 60);
       if (!out.warn && sim.state.ev.warn > 0 && /BAG DOWN/.test(sim.state.ev.warnText || '')) out.warn = { t: i / 60 - at, text: sim.state.ev.warnText };
-      if (i % 60 === 0) out.snap[i / 60] = { alt: sim.state.ship.alt, pitch: sim.state.ship.pitch, rest: sim.state.balance.restPitch, deg: sim.state.balance.deg, gas: sim.state.bags.map((b) => b.gas), mean: sim.state.ship.gas, down: sim.state.bags.map((b) => b.down), holes: sim.state.gasHoles.length };
+      if (i % 60 === 0) out.snap[i / 60] = { alt: sim.state.ship.alt, pitch: sim.state.ship.pitch, rest: sim.state.balance.restPitch, deg: sim.state.balance.deg, gas: sim.state.bags.map((b) => b.gas), mean: sim.state.ship.gas, down: sim.state.bags.map((b) => b.down), holes: sim.state.gasHoles.length, hull: sim.state.ship.hull, sdown: sim.state.ship.down, phase: sim.state.phase };
     }
     if (keep.pump != null) { config.GAS.PUMP_RATE = keep.pump; config.GAS.VENT_RATE = keep.vent; }
     out.state = sim.state;
@@ -1081,7 +1081,9 @@ async function checkBags() {
     const a = t2.snap[35], b = t1.snap[35];
     report(t2.warn && t2.warn.t < 2 && /FORE BAG DOWN/.test(t2.warn.text) && t2.state.bagAlert && t2.state.bagAlert.name === 'FORE BAG', 'the TV calls it out: "' + (t2.warn ? t2.warn.text : 'nothing') + '" ' + (t2.warn ? t2.warn.t.toFixed(1) + ' s after the hit' : ''));
     report(!t1.warn, 'no false alarm without a rupture (venting every bag is not "a bag down")');
-    report(t2.state.ship.down === 0 && t2.state.ship.hull > 40 && t2.state.phase === 'flying', `she keeps flying with the fore bag down (hull ${t2.state.ship.hull.toFixed(0)}, gas ${a.gas.map((g) => g.toFixed(0)).join('/')})`);
+    // (read 10 s after the rupture, like the lines below: with the pump and the vents cut - noPump - the natural leak brings EVERY ship to the ground by about 50 s, the four-bag ship that
+    // lost nothing as well, and since STRUCTURE.md a ship sitting on rock with her lift short crashes (goingDown.js crashT), so the end of the 60 s run measured the floor, not the lost bag)
+    report(a.sdown === 0 && a.hull > 40 && a.phase === 'flying', `she keeps flying with the fore bag down: 10 s after it went she is in the air (hull ${a.hull.toFixed(0)}, gas ${a.gas.map((g) => g.toFixed(0)).join('/')})`);
     report(a.alt < b.alt - 100, `...but lower: 10 s after the rupture she is ${(b.alt - a.alt).toFixed(0)} px under the same ship with all four bags (alt ${a.alt.toFixed(0)} vs ${b.alt.toFixed(0)})`);
     report(a.deg >= 3 && a.rest > b.rest + 0.01, `...and tips toward the lost bag: nose-heavy ${a.deg} deg, rests ${a.rest.toFixed(3)} rad nose-down (all four bags: ${b.deg} deg, ${b.rest.toFixed(3)})`);
     // a tail bag lost tips the other way
@@ -1111,7 +1113,7 @@ async function checkBags() {
       for (let i = 0; i <= at(24); i++) {
         clock += 1000 / 60;
         me.x = gv.x; me.d = gv.d; me.jx = 0; me.fall = false; me.grabLock = 0; // (the crewman stays at the valve)
-        if (i === at(8)) { for (let k = 0; k < fore; k++) st.bags[k].gas = 30; st.bags[fore].gas = 0; for (const x of [1300, 1340, 1320]) st.gasHoles.push(sim.gasHoleAt(x, 450, fore)); helmsman.gas = pumpOff ? 0 : 1; out.before = { healthy: st.bags.slice(0, fore).reduce((n, b) => n + b.gas, 0) / fore, total: total() }; }
+        if (i === at(8)) { for (let k = 0; k < fore; k++) st.bags[k].gas = 30; st.bags[fore].gas = 0; for (const x of [1300, 1340, 1320]) st.gasHoles.push(sim.gasHoleAt(x, 450, fore)); helmsman.gas = pumpOff ? 0 : 1; helmsman.jy = config.CONTROLS.HELM_V2 && !pumpOff ? -1 : 0; /* (F3: with the one-thumb helm the stick held UP is the pump; the PRESSURE lever, gas, is the old helm's) */ out.before = { healthy: st.bags.slice(0, fore).reduce((n, b) => n + b.gas, 0) / fore, total: total() }; }
         if (close && i === at(8.4)) tap();
         if (patch && i === at(11.5)) st.gasHoles.length = 0;
         if (reopen && i === at(11.9)) tap();
@@ -1494,6 +1496,12 @@ async function checkEngines() {
   const both = (d) => lab.withEngines(C, { 'Aft Engine': d, 'Fore Engine': d });
   const only = (name, d) => lab.withEngines(C, { [name]: d });
   const near = (a, b, e) => Math.abs(a - b) <= e;
+  // The scripted helmsman in this check flies with the pre-F3 controls: the PRESSURE lever (p.gas) held still, the stick's up/down as the trim, the SPLIT panel for anyone. With the
+  // one-thumb helm (FUN.md F3, CONTROLS.HELM_V2, the game's default) a still stick is the autopilot holding her height - it vents and pumps against the very climb and dive these lines
+  // measure - and the split levers are the EXPERT panel. So these runs pin the old helm (the bots' botsim runs are separate processes: today's helm); the end of the check flies the
+  // per-engine levers again with today's helm and EXPERT on. (--check-helm covers the one-thumb helm itself.)
+  const HV2 = config.CONTROLS.HELM_V2, EXP = config.CONTROLS.EXPERT;
+  config.CONTROLS.HELM_V2 = false;
 
   // ---- the pure operations and the validator
   {
@@ -1662,6 +1670,19 @@ async function checkEngines() {
     const wind = MT && config.WIND.BASE * config.SHIP.TOP_SPEED;
     report(Math.abs(vw - wind) < wind * 0.12, `a ship with no engines settles on the wind: ${Math.round(vw)} px/s (the wind is ${Math.round(wind)})`);
   }
+
+  // ---- (i) today's helm (F3): the per-engine throttles are the EXPERT panel, and they still work through the phone's messages
+  config.CONTROLS.HELM_V2 = true;
+  config.CONTROLS.EXPERT = true;
+  {
+    const { applyPlayerInput } = await load('modules/host/network.js');
+    const fly = (setup) => { const sim = lab.boot(C), p = lab.at(sim, 'helm'), send = (d) => applyPlayerInput(sim.state, p, { jx: 0, jy: 0, ...d }); setup(send); lab.run(sim, 7, () => { p.jx = 0; p.jy = 0; }); return { sim, p }; };
+    const lever = fly((send) => send({ thr: 0.6 })), split = fly((send) => { send({ split: true }); send({ thrs: [0.25, 0.8] }); });
+    const a = split.sim.engines.byName('Aft Engine'), f = split.sim.engines.byName('Fore Engine'), v = split.sim.state.ship.speed;
+    report(split.sim.state.thrust.split && near(a.thr, 0.25, 1e-9) && near(f.thr, 0.8, 1e-9) && near(v, 0.525, 0.03) && near(lever.sim.state.ship.speed, 0.6, 0.02) && !!(split.p.ui && split.p.ui.eng), `today's helm (HELM_V2) with EXPERT: SPLIT and the per-engine levers come through applyPlayerInput (aft ${a.thr}, fore ${f.thr}: speed ${v.toFixed(3)}, the lever alone at 0.6 gives ${lever.sim.state.ship.speed.toFixed(3)}) and the phone gets its engine panel (ui.eng)`);
+  }
+  config.CONTROLS.HELM_V2 = HV2;
+  config.CONTROLS.EXPERT = EXP;
   lab.restore();
   return ok;
 }
