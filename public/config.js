@@ -1607,6 +1607,7 @@ export const config = {
   STEAMFIX: {
     ENABLED: STEAMFIX_ON,
     SCRAPE_MODULES: 0.3, // a scrape of rock (impact kind 'rock') hits the modules and pipes near the keel at this share of its power (a shell still hits at full strength): the grinding takes the keel plates, not the plumbing
+    KINDLING: 22, // a ship with no coal bunker left (it broke off) keeps this much fire in the boiler by burning spars: she could never be stoked again and sat cold, her steam gone, until the dock (the stalled human-profile voyages)
     RESERVE: 25, // a boiler that has broken leaves its steam in the line: while the pressure is at least this the helm, the engines and the pump keep working on it (about ten seconds with nobody to stoke it), time to hammer the boiler (was: all steam gone at once)
     BURN_MUL: 0.8, // the coal burns this much as fast as BOILER.BURN_RATE (a sack of 25 lasts 89 s, not 71): a stoker busy for a minute does not find the firebox cold. The firebox was under 12 for 10% of a human-profile flight
     SEAL_HELM: 1, // 1 = the helm's own pipe shuts itself too (0: it keeps leaking until a hammer mends it: measured, the leak starved the pump more than the dark helm did)

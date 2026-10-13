@@ -37,6 +37,7 @@ export function createSteamFix({ state, ship, modules, structure, goingDown, shi
   const update = (dt) => {
     if (!on()) return;
     clock += dt;
+    if (!hasKind('coal') && hasKind('boiler') && modules.boilerUp() && state.ship.fuel < F().KINDLING) state.ship.fuel = F().KINDLING; // (a ship that has lost her coal bunker cannot be stoked: the crew burns spars and furniture to keep a small fire in)
     for (const m of modules.sealBursts(dt)) { // a pipe that has leaked SEAL_AFTER seconds shuts its own valve
       state.steamWarn.sealed++;
       shipPuff(m.pos.x, m.pos.y, '#ffffff', 8);

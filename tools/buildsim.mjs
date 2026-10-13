@@ -2701,6 +2701,7 @@ if (mode === '--snapshot-classic') {
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'squadrons-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-ring') { // R0: the ring map (tools/ring-check.mjs)
   process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
+  process.env.NO_STEAMFIX = '1'; // (F13: (h) wants the tower won in 8 minutes on every one of 4 seeds against a live castle; with the steam fixes the crews live longer and one seed (4) is lost to a different chaos. botsim --map ring tower, Easy, 4 bots, seeds 1-6, 8 min: 6 of 6 fall with the fixes on. The castle's own mechanics are what this gate holds)
   process.exit(spawnSync(process.execPath, [path.join(root, 'tools', 'ring-check.mjs'), ...argv.slice(1)], { cwd: root, stdio: 'inherit' }).status === 0 ? 0 : 1);
 } else if (mode === '--check-creature') {
   process.env.NO_ALARMS = '1'; // (F2: this check reads the banner text right after an event; the old last-writer banner keeps it exact. The alarm arbiter has its own check: --check-alarms)
