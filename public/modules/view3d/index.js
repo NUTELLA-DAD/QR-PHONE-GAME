@@ -36,6 +36,7 @@ import { createRingCastle } from './ringCastle.js'; // LOOP R2: the ring castle 
 import { GAR_LIVE } from './garrisonKit.js';
 import { createAway3d } from './away3d.js'; // CASTLE.md A3: the away team in 3D (the rope ladder, the flare, the objective props and signs, the prisoners)
 import { createTreasure3d } from './treasure3d.js'; // CASTLE.md A2 in 3D: the outpost vault, the chests and the sack of gold (the HUD keeps only their words)
+import { createStructure3d } from './structure3d.js'; // STRUCTURE.md WP5: the segments of the frame in 3D (soot, cracks, the warning edge and seam, the split, the falling half and its crash)
 import { createFrames3d } from './frames3d.js'; // LOOP.md R4: the scaffold of a part the crew are building in flight (a G4 frame): a blueprint ghost, steel layers, a gold band, the built moment
 import { createScrap3d } from './scrap3d.js'; // LOOP.md G2 in 3D: the rivet plates of the scrap patch on the ship's hull
 import { createGarrison3d } from './garrison3d.js'; // CASTLE.md D2: the garrison in 3D (soldiers, arrows, the ballista, the boom chain, grapples, white flags)
@@ -237,6 +238,9 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   V.frames3d = frames3d;
   // WP6: the damage state of every part (soot, dents, poses, smoke, scorch memory, breaches, the flat bag), on top of the poses shipMesh sets each frame
   const partDamage = createPartDamage({ state, models, vfx });
+  let struct3d = null; // STRUCTURE.md WP5 (structure3d.js; if it cannot be made the ships are simply without the segment soot, seam and split effects)
+  try { struct3d = createStructure3d({ parent: worldRoot, state, models, destruction, world, P: () => (vfx && vfx.P && look.vfx ? vfx.P : null), sea: () => (envIdOf(state) === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : null) }); } catch (e) { console.warn('view3d structure off', e); }
+  V.struct = struct3d;
   V.destruction = destruction; V.damage = damage; V.partDamage = partDamage;
   // WP10: the Fungal Depths' glowing mushrooms, vine bulbs, motes and spore clouds (fungal.js; it listens to the rock's chunks, so it is made after the wreckage world took that slot)
   let fungal = null;
@@ -305,7 +309,13 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       else yaw = pose.f === 1 ? 0 : Math.PI;
       root.rotation.y = yaw;
       model.pitchG.rotation.z = -(pose.pitch || 0);
-      try { wreck3d.apply(sh, model, dt); } catch (e) { logOnce('wreck', e); } // (WP9: a ship breaking up tips and falls away, her bags peel off: wreck3d.js)
+      if (struct3d && sh.piece) { // (STRUCTURE.md WP5: a half that fell off the ship tips seam end down and drifts away from the seam)
+        const pg = model.pitchG;
+        if (pg.userData.baseX == null) pg.userData.baseX = pg.position.x;
+        pg.rotation.z += struct3d.tilt(sh, model);
+        pg.position.x = pg.userData.baseX + struct3d.drift(sh);
+      }
+      if (!model.shattered) try { wreck3d.apply(sh, model, dt); } catch (e) { logOnce('wreck', e); } // (WP9: a ship breaking up tips and falls away, her bags peel off: wreck3d.js)
       root.updateMatrixWorld(true);
       const side = (camera.position.x - root.position.x) * Math.sin(yaw) + (camera.position.z - root.position.z) * Math.cos(yaw);
       const CB = (config.CINE3D && config.CINE3D.COME_ABOUT && config.CINE3D.COME_ABOUT.BOTH) || [0.3, 0.7];
@@ -495,12 +505,14 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     setInkFor(cam.D, cam.visH); // (A1: ONE number a frame makes every outline screen-constant: style.js)
     crew.setView(cam.D); // (A5: the crew's heads and markers grow with the camera's distance)
     if (beams) { try { beams.updateLit(camera, state, world.night); } catch (e) { logOnce('lit', e); } } // (which targets a manned beam holds: the toon shader gives them a warm rim)
+    if (struct3d) struct3d.pre(t); // (STRUCTURE.md WP5: reads the split notes and breaks up a half that has just crashed, while the models are still whole)
     try { destruction.process(); } catch (e) { logOnce('destruction', e); } // (the break-off notes are read BEFORE syncShips rebuilds a ship from her new layout)
     syncShips(t, dt);
     try { contact.update(); } catch (e) { logOnce('contact', e); } // (A6: after the ships are placed; reads the map and the poses)
     try { teamFlags.update(t, lastView ? lastView.zoom : 1); } catch (e) { logOnce('teamFlags', e); }
     try { damage.update(world.night); } catch (e) { logOnce('damage', e); }
     try { partDamage.update(dt, t, world.night); } catch (e) { logOnce('partDamage', e); }
+    if (struct3d) { try { struct3d.update({ t, dt, night: world.night, tier }); } catch (e) { logOnce('struct3d', e); } } // (the segments' soot, cracks, seam and shards: after the ships are placed)
     if (scrap3d) { try { scrap3d.update({ t }); } catch (e) { logOnce('scrap3d', e); } } // (the plates ride the ship's own group: after she is placed)
     if (frames3d) { try { frames3d.update({ t, dt }); } catch (e) { logOnce('frames3d', e); } } // (the scaffold rides the ship's own group, like the plates)
     if (treasure3d) { try { treasure3d.update({ t, dt, night: world.night, tier }); } catch (e) { logOnce('treasure3d', e); } }
@@ -613,7 +625,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.resetOrbit = () => { lastPivot.set(0, 0, 0); }; // WP13: the next orbit frame starts from the starting view again (the build page's double-click)
-  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison, setpieces, away3d, treasure3d, scrap3d, frames3d]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison, setpieces, away3d, treasure3d, scrap3d, frames3d, struct3d]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));

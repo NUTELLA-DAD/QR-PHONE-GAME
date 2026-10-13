@@ -87,8 +87,8 @@ export function createPhysics(R) {
 
     // ---- debris: spec = { shipIndex, pos: [x, y, z], quat: [x, y, z, w], vel, ang, boxes: [{ cx, cy, cz, hx, hy, hz }], rel (density against water), mat ('wood' | 'iron' | 'canvas'), kind ('piece' | 'chunk'), delay } ----
     addDebris(spec) {
-      const pieces = debris.filter((d) => d.kind === 'piece').length, stones = debris.filter((d) => d.kind === 'stone').length, chunks = debris.length - pieces - stones;
-      if (spec.kind === 'stone' ? stones >= ((K.STONES || {}).CAP || 48) : spec.kind === 'chunk' ? chunks >= K.CHUNKS.CAP : pieces >= D().MAX) return null; // (D3: the castle's stone chunks are a kind of their own)
+      const pieces = debris.filter((d) => d.kind === 'piece').length, stones = debris.filter((d) => d.kind === 'stone').length, shards = debris.filter((d) => d.kind === 'shard').length, chunks = debris.length - pieces - stones - shards;
+      if (spec.kind === 'stone' ? stones >= ((K.STONES || {}).CAP || 48) : spec.kind === 'shard' ? shards >= ((K.SHARDS || {}).CAP || 40) : spec.kind === 'chunk' ? chunks >= K.CHUNKS.CAP : pieces >= D().MAX) return null; // (D3: the castle's stone chunks are a kind of their own; WP5 structure: so are the planks and splinters of a split and of a crashed half)
       const body = world.createRigidBody(R.RigidBodyDesc.dynamic()
         .setTranslation(spec.pos[0], spec.pos[1], spec.pos[2]).setRotation({ x: spec.quat[0], y: spec.quat[1], z: spec.quat[2], w: spec.quat[3] })
         .setLinvel(spec.vel[0], spec.vel[1], 0).setAngvel({ x: spec.ang[0], y: spec.ang[1], z: spec.ang[2] })
