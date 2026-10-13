@@ -629,7 +629,7 @@ function listJobs(state, bot) {
   const bombStarved = bombRun && !!bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs <= 0 && !mods.some((m) => m.name === bay && m.broken) && Math.hypot(c.target.x - refX, c.target.y - refY) < config.MAPS.BOMB_RUN_MAN * 2;
   // The boiler is dying (no coal, or the pressure has collapsed): nothing else works without steam - stoke it right away.
   const ship = state.ship;
-  if (state.phase === 'flying' && L.hasKind('boiler') && L.hasKind('coal') && !bunkerEmpty(state) && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
+  if (state.phase === 'flying' && L.hasKind('boiler') && L.hasKind('coal') && !bunkerEmpty(state) && ((ship.fuel < B.COAL_EMERGENCY && ship.press < 60) || (ship.press < B.PRESS_EMERGENCY && ship.fuel < 45) || (config.STEAMFIX.ENABLED && ship.fuel < config.STEAMFIX.BOT_COAL && ship.press < config.STEAMFIX.BOT_COAL_PRESS))) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
   // ENGINE SIZES: a ship with a heavy or great engine burns steam fast and her big engine sputters when the line sags (she sinks): the stoker goes earlier, and for two sacks, while the pressure is low.
   if (state.phase === 'flying' && L.hasKind('boiler') && L.hasKind('coal') && !bunkerEmpty(state) && (state.engines || []).some((q) => sizeNamed(q.size).steam > 1) && ship.fuel < B.BIG_ENGINE_COAL && ship.press < config.ENGINES.STARVED_PRESS + B.BIG_ENGINE_MARGIN) jobs.push({ kind: 'coal', obj: 'coal', max: 2, urgent: true });
   // Hot-air bags lift only while the boiler is hot (GAS TYPES, gasBags.js): when the burner is cooling, somebody stokes it.
@@ -738,7 +738,7 @@ function listJobs(state, bot) {
   if (bot.carry === 'coal') for (const n of tables(L).GUN_STATIONS) if (state.GUNS[n].type === 'flame' && state.GUNS[n].ammo < state.GUNS[n].max) jobs.push({ kind: 'ammo', obj: n, max: 1 });
   // Now and then the crew shovels extra coal to push into overdrive.
   const pushing = Math.floor(performance.now() / 1000 / B.OVERDRIVE_PUSH_EVERY) % 3 === 0;
-  if (L.hasKind('boiler') && L.hasKind('coal') && (state.ship.fuel < (pushing ? 60 : mainShip(state).sim.structure.on() ? B.FUEL_LOW_LIVE : 25) && state.ship.press < config.BOILER.WARN_AT - (pushing ? 10 : 25)) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
+  if (L.hasKind('boiler') && L.hasKind('coal') && (state.ship.fuel < (pushing ? 60 : mainShip(state).sim.structure.on() ? B.FUEL_LOW_LIVE : 25) && state.ship.press < (config.STEAMFIX.ENABLED && !pushing ? config.STEAMFIX.BOT_STOKE_PRESS : config.BOILER.WARN_AT - (pushing ? 10 : 25))) || bot.carry === 'coal') jobs.push({ kind: 'coal', obj: 'coal', max: state.ship.press < 30 ? 2 : 1 });
   if (canHammer) for (const m of mods) if (!m.broken && m.hp < (['engine', 'helm', 'lift', 'shield', 'coil'].includes(m.kind) ? m.max * config.MODULES.LEAK_BELOW - 1 : 60)) jobs.push({ kind: 'repair', obj: m, max: 1 });
   const guns = !L.hasKind('ammo') ? [] : tables(L).GUN_STATIONS.filter((n) => !isMothballed(state, n) && state.GUNS[n].type !== 'flame' && state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'ammo' || state.GUNS[n].ammo <= B.AMMO_LOW));
   const fuelRuns = !L.hasKind('coal') ? [] : tables(L).GUN_STATIONS.filter((n) => state.GUNS[n].type === 'flame' && state.GUNS[n].ammo < state.GUNS[n].max && (bot.carry === 'coal' || state.GUNS[n].ammo <= config.FLAME.BOT.FUEL_LOW)); // (a flamethrower's tank takes coal, not shells)
@@ -923,6 +923,10 @@ function operate(p, state, dt) {
     if (p.gas < 0 && !state.goingDown && mainShip(state).sim.structure.on() && !(chainD && state.ship.alt > chainD.alt)) { // (...except to dive under a boom chain, which is worth the gas) // (balance pass: lift is a live rule, so the bot helm no longer vents the bags flat to dive: never more than DIVE points under the level she hovers at - an empty bag and no steam to refill it was how most falls began)
       const hover = config.GAS.NEUTRAL + (state.structDeficit || 0) + (state.engineWeight || 0) + ((state.env && state.env.sink) || 0);
       if (state.ship.gas <= hover - config.STRUCTURE.BOT.DIVE) p.gas = 0;
+    }
+    if (config.STEAMFIX.ENABLED && state.grounded && !state.goingDown && mainShip(state).sim.structure.on() && p.gas < 0.5) { // (F13: the keel is on rock and the bag is low: venting more gets her nowhere - lift off the ledge first, then the plan goes on; sitting there with the bag held low is how the cave stops raised their FALLING alarms)
+      const hover = config.GAS.NEUTRAL + (state.structDeficit || 0) + (state.engineWeight || 0) + ((state.env && state.env.sink) || 0);
+      if (state.ship.gas < hover - config.STEAMFIX.BOT_LIFTOFF) p.gas = 0.5;
     }
     if (state.goingDown && mainShip(state).sim.structure.on()) { // (balance pass: while she falls the helm stops the engines - every steam point left to the pump - and trims the nose up)
       p.jx = clamp((config.GOING_DOWN.COAST - (ship.pace ?? ship.speed)) * 4, -1, 1);
@@ -1245,6 +1249,7 @@ function work(p, state) {
   } else if (job.kind === 'repair') {
     if (getTool(state, p, 'hammer', o) && steer(p, o.d, o.x, 20)) p.fire = true;
   } else if (job.kind === 'valve') {
+    if (config.STEAMFIX.ENABLED && o.broken && !o.open) { p.botJob = null; return; } // (F13: the burst pipe shut itself while he walked: pressing now would open it again)
     if (steer(p, o.d, o.x, 10)) press(p);
   } else if (job.kind === 'ammo') {
     const want = state.GUNS[o] && state.GUNS[o].type === 'flame' ? 'coal' : 'ammo'; // (a flamethrower is fuelled with coal)

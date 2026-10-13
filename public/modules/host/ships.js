@@ -66,7 +66,7 @@ export const SHIP_KEYS = [
   'escorts', 'escort', 'escortCramped', 'stunts', 'stuntEnd', 'stuntLog', 'stuntPlane', 'stuntStats',
   // worked out every step
   'rig', 'steamParts', 'steamUse', 'overdrive', 'buoyancy', 'sinking', 'autopilot', 'pressureWarned', 'warnBeep', 'boilerBlew', 'helmHit', 'ballastCd', 'gasWarned', 'lastAlt', 'noPump',
-  'lookout', 'lookoutBonus', 'valveLog', 'valveShuts', 'boilerLoads',
+  'lookout', 'lookoutBonus', 'valveLog', 'valveShuts', 'boilerLoads', 'steamWarn', // (steamWarn: F13, how often each rung of the steam warning ladder has spoken)
   // cross-ship play (B.6): the crew cannons' records, the loads lying on her decks (cargo.js), the stock of her sandbag racks
   'cannons', 'loads', 'rackStock', 'hatches', 'hatchStats',
   // SCRAP (LOOP.md G1, scrap.js): what is stowed in her hold { count }

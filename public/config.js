@@ -11,6 +11,8 @@ const ROLE_CARDS_ON = typeof process === 'undefined' || !(process.env && process
 const HELM_V2_ON = typeof process === 'undefined' || !(process.env && process.env.NO_HELM_V2);
 // F12 (FUN.md): small ships crack castles - a ship with no bomb bay (the Sparrow) has her guns' magazines filled every time a castle shutter opens, and her gunners keep their shells for the window (RING.FAIR). ON in the game; NO_RINGFAIR=1 in a tool is the old game (the seeded baselines pin it).
 const RINGFAIR_ON = typeof process === 'undefined' || !(process.env && process.env.NO_RINGFAIR);
+// F13 (FUN.md): steam and lift - the plumbing is not wrecked by every scrape of rock, a burst pipe shuts its own valve, the pump gets the steam first while she sinks, a warning ladder (LOW ON COAL, LOW STEAM, SINKING) comes before FALLING, and the grazing rule is less trigger-happy (STEAMFIX). ON in the game; NO_STEAMFIX=1 in a tool is the old game (the seeded baselines pin it).
+const STEAMFIX_ON = typeof process === 'undefined' || !(process.env && process.env.NO_STEAMFIX);
 export const config = {
   W: 1600,
   H: 900,
@@ -1598,6 +1600,33 @@ export const config = {
     BLOWOUT_RATE: 0.12, // chance per second of a blowout at 100 pressure (scales up from 0 at WARN_AT)
     WARN_SHAKE: 0.18, // screen rattle while over WARN_AT (more near the top)
   },
+  // F13 (FUN.md "Steam and lift: stop starving the gasbag"). Measured first (voyagesim, Sparrow, 12 voyages, 25 min): 57% of the FALLING alarms were "sitting on rock" in a cave with the steam fine (a bot dives a cave shaft, lands on a ledge,
+  // and the scrape counts as a shell on the keel), 27% were the pump with no steam (two burst pipes leaking 12 a second), and a burst pipe ran with its valve open for 12 s on average (a quarter of a minute of lost pressure, 28 bursts a voyage).
+  // The coal was not the problem (the firebox was under 12 for 1% of the flight). So: the plumbing takes less of a scrape, a burst pipe shuts itself, the pump is served first, the crew is told early, a graze is forgiven more.
+  // ENABLED false (NO_STEAMFIX=1 in a tool) = the old numbers exactly.
+  STEAMFIX: {
+    ENABLED: STEAMFIX_ON,
+    SCRAPE_MODULES: 0.3, // a scrape of rock (impact kind 'rock') hits the modules and pipes near the keel at this share of its power (a shell still hits at full strength): the grinding takes the keel plates, not the plumbing
+    RESERVE: 25, // a boiler that has broken leaves its steam in the line: while the pressure is at least this the helm, the engines and the pump keep working on it (about ten seconds with nobody to stoke it), time to hammer the boiler (was: all steam gone at once)
+    BURN_MUL: 0.8, // the coal burns this much as fast as BOILER.BURN_RATE (a sack of 25 lasts 89 s, not 71): a stoker busy for a minute does not find the firebox cold. The firebox was under 12 for 10% of a human-profile flight
+    SEAL_HELM: 1, // 1 = the helm's own pipe shuts itself too (0: it keeps leaking until a hammer mends it: measured, the leak starved the pump more than the dark helm did)
+    BOILER_HP: 1.5, // the boiler is an iron vessel: it takes this many times a module's health (MODULES.HP) before it breaks and the steam is gone (a boiler that broke was in a third of the falls)
+    SEAL_AFTER: 5, // seconds a burst pipe leaks with its valve open before the pipe's safety valve shuts it by itself (the module behind it goes dark until a hammer mends the pipe; the mended pipe opens again by itself)
+    PUMP_FULL: 40, // the pump runs at full rate from this boiler pressure (60 before: below it the rate falls in proportion) ...
+    PUMP_MIN: 10, // ... and still moves gas down to this pressure (GAS.PUMP_MIN_PRESS 15 before; the helm itself goes dark under MODULES.STEAM_MIN 10)
+    DAMPER: 72, // the firebox damper: past this boiler pressure the fire is drawn down in proportion (nothing at 100): an idle ship settles near 85 and does not run away to the blowout. The leaks of burst pipes used to hide that; with them mended the boiler blew 6 times a voyage instead of 2
+    EASE: 0.4, // while the helm pumps hard (input at least EASE_AT) and the line is under EASE_BELOW, the engines draw this share of their steam: the pump is served first
+    EASE_AT: 0.5,
+    EASE_BELOW: 50,
+    GRAZE: 24, GRAZE_T: 6, // the rock rule of STRUCTURE.LIFT with a kinder hand: sitting on the ground counts as trouble when short of lift by more than GRAZE points (16 before), or touching for GRAZE_T seconds (4 before): a dive onto a ledge is not a fall
+    COAL_ARROW: 40, // the phone's COAL job arrow comes at this firebox percent (JOBS.COAL_LOW 30 before)
+    BOT_LIFTOFF: 3, // bots: with the keel on rock and the bag more than this many gas points under the level she hovers at, the helm pumps (half way) to lift her off the ledge instead of holding the bag low
+    BOT_COAL: 32, // bots: below this firebox fuel (with the line under BOT_COAL_PRESS) the coal run is urgent, ahead of the chores
+    BOT_COAL_PRESS: 96,
+    BOT_STOKE_PRESS: 96, // bots: the ordinary coal run (firebox under FUEL_LOW_LIVE) no longer waits for the pressure to fall under 65: a firebox that runs dry while the line is high (an idle ship at a castle) leaves nothing when the engines start. The damper keeps the line from running away, so they stoke at any pressure under this
+    // The warning ladder before FALLING: each rung speaks once, then waits EVERY seconds (and until the reading has recovered by REARM) before it may speak again.
+    WARN: { FUEL: 28, PRESS: 36, SINK: 6, EVERY: 25, REARM: 12, HOLD: 3.5 }, // LOW ON COAL (firebox percent), LOW STEAM / STEAM LEAK (boiler pressure), SINKING (gas points short of lift while she sinks); the TV's steam gauge shows the LOW zone under PRESS
+  },
   // The gasbag is the big up/down control. The helm's PRESSURE lever pumps hot steam in (she
   // rises - fast when overfilled) or vents it (she drops - fast when deflated). At the neutral
   // fill she hangs still. Hot gas cools and seeps out, and holes leak more, so the helmsman
@@ -2024,7 +2053,7 @@ export const config = {
     ENABLED: ALARMS_ON, // false (NO_ALARMS=1 in a tool) = the old banner: the last writer wins (the seeded gates are byte-identical either way: the banner is text only)
     HOLD: 2.5, // seconds a banner is safe from anything below PREEMPT (a banner shorter than that protects itself for its own length)
     PREEMPT: 8, // this priority and above shows at once, over anything of lower (or the same) priority
-    PRI: { crash: 9, falling: 8, boarders: 7, blaze: 7, helm: 6, structure: 6, setpiece: 5, objective: 5, fire: 4, info: 2 }, // the kinds, most urgent first
+    PRI: { crash: 9, falling: 8, boarders: 7, blaze: 7, helm: 6, structure: 6, setpiece: 5, objective: 5, steam: 5, fire: 4, info: 2 }, // the kinds, most urgent first
     QUEUE: 3, // banners waiting behind the one on screen (the lowest and newest is dropped past this)
     STALE: 6, // seconds a waiting banner stays worth saying (then it is dropped: the moment has passed)
     PHONE_ONE_LINE: true, // the phone's info line shows the top alarm that concerns that player's deck or seat (false = the old line: the station's status, else the hint)

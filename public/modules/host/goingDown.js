@@ -179,11 +179,11 @@ export function createGoingDown({ state, phoneFx, wreck, getCargo, breakOff, get
     if (state.ship.down || state.phase !== 'flying') { state.crashT = 0; lowT = 0; if (g) finish(); return; }
     // Is it TROUBLE or a descent she asked for? A helm that vents and holds the bag low is diving on purpose, and one that pumps back up after a dive is fixing it; it is trouble when the helm pumps hard and the
     // gas will not come (no steam, a bag torn open), when the bag is nearly empty, or when nobody is flying her at all.
-    const LF = config.STRUCTURE.LIFT, pumpIn = state.gasValve ? state.gasValve.input : 0, gasNow = state.ship.gas;
+    const LF = config.STRUCTURE.LIFT, pumpIn = state.gasValve ? state.gasValve.input : 0, gasNow = state.ship.gas, SF = config.STEAMFIX, graze = SF.ENABLED ? SF.GRAZE : LF.GRAZE, grazeT = SF.ENABLED ? SF.GRAZE_T : LF.GRAZE_T; // (F13: a dive onto a ledge is not a fall: the graze limits are kinder)
     rise += (((gasNow - lastGas) / Math.max(dt, 1e-4)) - rise) * Math.min(1, dt * 3);
     lastGas = gasNow;
     groundT = state.grounded ? groundT + dt : Math.max(0, groundT - dt * 2); // (how long she has been touching the ground: a graze is a touch that lets go again)
-    const trouble = (pumpIn >= LF.PUMP_AT && rise < LF.RISE_MIN) || gasNow <= LF.EMPTY_GAS || (!helmManned() && !state.autopilot && short > LF.NOHELM_SHORT) || (state.grounded && (short > LF.GRAZE || groundT > LF.GRAZE_T)); // (balance pass: an empty helm alone is not trouble - only with a real lift deficit; a ship down on the ground is, unless it is a graze: lift short by no more than GRAZE and down for less than GRAZE_T seconds)
+    const trouble = (pumpIn >= LF.PUMP_AT && rise < LF.RISE_MIN) || gasNow <= LF.EMPTY_GAS || (!helmManned() && !state.autopilot && short > LF.NOHELM_SHORT) || (state.grounded && (short > graze || groundT > grazeT)); // (balance pass: an empty helm alone is not trouble - only with a real lift deficit; a ship down on the ground is, unless it is a graze: lift short by no more than GRAZE and down for less than GRAZE_T seconds)
     stallT = !g && LF.GROUND_STALL && state.grounded && Math.abs(state.ship.speed) < LF.STALL_SPEED ? stallT + dt : Math.max(0, stallT - dt * 2); // (F5: on the ground and not moving: the ground soft lock's clock; a ship that sits there bounces, so a lift-off for a moment only slows it)
     if (!g) {
       lowT = short > GD.MARGIN && ((state.ship.vy || 0) < -config.STRUCTURE.LIFT.SINK_VY || state.grounded) && trouble ? lowT + dt : Math.max(0, lowT - dt);
