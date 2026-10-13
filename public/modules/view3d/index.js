@@ -36,6 +36,7 @@ import { createRingCastle } from './ringCastle.js'; // LOOP R2: the ring castle 
 import { GAR_LIVE } from './garrisonKit.js';
 import { createAway3d } from './away3d.js'; // CASTLE.md A3: the away team in 3D (the rope ladder, the flare, the objective props and signs, the prisoners)
 import { createTreasure3d } from './treasure3d.js'; // CASTLE.md A2 in 3D: the outpost vault, the chests and the sack of gold (the HUD keeps only their words)
+import { createFrames3d } from './frames3d.js'; // LOOP.md R4: the scaffold of a part the crew are building in flight (a G4 frame): a blueprint ghost, steel layers, a gold band, the built moment
 import { createScrap3d } from './scrap3d.js'; // LOOP.md G2 in 3D: the rivet plates of the scrap patch on the ship's hull
 import { createGarrison3d } from './garrison3d.js'; // CASTLE.md D2: the garrison in 3D (soldiers, arrows, the ballista, the boom chain, grapples, white flags)
 import { createSetPieces } from './setpiece3d.js'; // CASTLE.md D3: the castle's set pieces in 3D (the gatehouse collapse, the crown fall, the flaming stones)
@@ -231,6 +232,9 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   let scrap3d = null; // LOOP.md G2 in 3D: the scrap patch's rivet plates on the hull (scrap3d.js)
   try { scrap3d = createScrap3d({ parent: worldRoot, state, models }); } catch (e) { console.warn('view3d scrap off', e); }
   V.scrap = scrap3d;
+  let frames3d = null; // LOOP.md R4: the frames (G4) in 3D (frames3d.js; if it cannot be made the HUD's gold tag is all there is)
+  try { frames3d = createFrames3d({ parent: worldRoot, state, models, P: () => (vfx && vfx.P) || null }); } catch (e) { console.warn('view3d frames off', e); }
+  V.frames3d = frames3d;
   // WP6: the damage state of every part (soot, dents, poses, smoke, scorch memory, breaches, the flat bag), on top of the poses shipMesh sets each frame
   const partDamage = createPartDamage({ state, models, vfx });
   V.destruction = destruction; V.damage = damage; V.partDamage = partDamage;
@@ -498,6 +502,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     try { damage.update(world.night); } catch (e) { logOnce('damage', e); }
     try { partDamage.update(dt, t, world.night); } catch (e) { logOnce('partDamage', e); }
     if (scrap3d) { try { scrap3d.update({ t }); } catch (e) { logOnce('scrap3d', e); } } // (the plates ride the ship's own group: after she is placed)
+    if (frames3d) { try { frames3d.update({ t, dt }); } catch (e) { logOnce('frames3d', e); } } // (the scaffold rides the ship's own group, like the plates)
     if (treasure3d) { try { treasure3d.update({ t, dt, night: world.night, tier }); } catch (e) { logOnce('treasure3d', e); } }
     syncSky();
     const main = state.ships[0];
@@ -608,7 +613,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.resetOrbit = () => { lastPivot.set(0, 0, 0); }; // WP13: the next orbit frame starts from the starting view again (the build page's double-click)
-  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison, setpieces, away3d, treasure3d, scrap3d]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison, setpieces, away3d, treasure3d, scrap3d, frames3d]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));

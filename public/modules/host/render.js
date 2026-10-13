@@ -1483,10 +1483,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.restore();
   };
 
+  const FRAME_COUNT = /^\d+\/\d+$/; // (the sim pops "1/3" over a frame when a bundle goes in; the BUILD n/m tag over the frame already says it)
   // Comic-book words: pop in big, settle, then float up and fade.
   const drawPopups = (zoom) => {
     const screen = Math.max(1, 0.3 / zoom); // keep them readable when zoomed out (but small)
     for (const p of state.popups || []) {
+      if (FRAME_COUNT.test(String(p.text))) continue; // (a frame's "2/3" pop sat on its own BUILD 2/3 tag: the tag says it)
       const grow = p.t < 0.12 ? 0.4 + (p.t / 0.12) * 0.8 : 1.2 - Math.min(0.2, (p.t - 0.12) * 0.6);
       const alpha = p.t > 0.75 ? Math.max(0, 1 - (p.t - 0.75) / 0.35) : 1;
       ctx.save();
@@ -3239,7 +3241,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       }
       // comic-book popups (the words for a hit, a kill, a rocket ...): in the world, on the plane of the game
       for (const p of world.popups || []) {
-        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || FRAME_COUNT.test(String(p.text))) continue; // (a frame's "2/3" pop sat on its own BUILD 2/3 tag)
         const q = proj([p.x, -(p.y - p.t * 40), 40]);
         if (!q) continue;
         const grow = p.t < 0.12 ? 0.4 + (p.t / 0.12) * 0.8 : 1.2 - Math.min(0.2, (p.t - 0.12) * 0.6);
