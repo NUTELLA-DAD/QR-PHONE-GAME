@@ -192,7 +192,7 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
   // GRAB at the bin with empty hands: take one bundle out of the hold again (to feed a frame, throw it, or put it on a hulk's tow).
   const unstowAction = (p, here) => {
     const sp = scrapOn() ? holdSpot(L) : null;
-    return sp && !p.carry && (!p.bot || (p.botJob && p.botJob.kind === 'scrappatch')) && holdCount(state) > 0 && here(sp, config.TOOLS.REACH) ? { type: 'unstow', obj: sp, label: `Take scrap out (${holdCount(state)} in the hold)` } : null;
+    return sp && !p.carry && (!p.bot || (p.botJob && (p.botJob.kind === 'scrappatch' || p.botJob.kind === 'buildframe'))) && holdCount(state) > 0 && here(sp, config.TOOLS.REACH) ? { type: 'unstow', obj: sp, label: `Take scrap out (${holdCount(state)} in the hold)` } : null;
   };
   const unstow = (p) => {
     if (p.carry || holdCount(state) <= 0) return false;

@@ -18,6 +18,7 @@ import { cannonPlan } from './cannon.js';
 import { hullOrStructure } from './structure.js';
 import { solveThrow } from './cargo.js';
 import { scrapOn, holdSpot, holdFull, holdCount, heavyHold, helmPlan } from './scrap.js';
+import { framesOn, pendingOf, frameSpot, calmFor } from './buildFrames.js';
 import { cannonSeatName, sizeNamed } from './shipBuild.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/captainAI.js';
@@ -463,17 +464,31 @@ function scrapJobs(state, bot, patching = false) {
   if (!scrapOn() || state.phase !== 'flying' || state.ship.down || bot.mate || bot.team === 'enemy') return [];
   const ship = mainShip(state), L = ship.layout, sp = holdSpot(L);
   if (!sp || ship.ai) return [];
-  const out = [], full = holdFull(state);
+  const out = [], full = holdFull(state), frame = frameJob(state);
   if (bot.carry === 'scrap') {
     if (patching) return out; // (G2: a failing segment wants this bundle: the patch job is ahead of the bin)
+    if (frame) { out.push(frame); return out; } // (G4: a calm, and a part bought as a frame is waiting for its bundles: carry this one to it)
     if (!full) out.push({ kind: 'stow', obj: 'hold', max: 99 });
     else if (bot.d != null && !bot.fly) { ship.sim.cargo.place('scrap', bot.d, bot.x); bot.carry = null; } // (the hold is full: put it down where he stands, to be picked up when there is room)
     return out;
   }
-  if (bot.carry || full) return out;
-  for (const ld of state.loads || []) if (ld.kind === 'scrap') out.push({ kind: 'stow', obj: ld, max: 1 });
-  for (const h of state.hulks || []) if (h.left > 0 && !heavyHold(state) && hulkSpot(ship, h)) out.push({ kind: 'hulk', obj: h, max: 2 });
+  if (bot.carry) return out;
+  if (!full) {
+    for (const ld of state.loads || []) if (ld.kind === 'scrap') out.push({ kind: 'stow', obj: ld, max: 1 });
+    for (const h of state.hulks || []) if (h.left > 0 && !heavyHold(state) && hulkSpot(ship, h)) out.push({ kind: 'hulk', obj: h, max: 2 });
+  }
+  if (frame && holdCount(state) > 0) out.push(frame); // (G4: take a bundle out of the hold and build with it)
   return out;
+}
+// FRAMES (config.FRAMES, LOOP.md G4): bots build only in a CALM - the tempo's calm or escape, no set piece, no fall, no raiders aboard, no fire burning, no gunship hunting, no live creature - so the gunners and the stokers are never short of hands in a crisis.
+function frameCalm(state) {
+  return calmFor(state, config.FRAMES.BOTS.ALLOW);
+}
+// The build job a bot may take now (one frame at a time), or null.
+function frameJob(state) {
+  if (!framesOn() || !frameCalm(state)) return null;
+  const f = pendingOf(state).find((q) => q.ok !== false);
+  return f ? { kind: 'buildframe', obj: f, max: 2, cap: config.FRAMES.BOTS.CAP } : null;
 }
 // Where a bot stands to strip a hulk: the open deck whose point nearest the hulk is within hand's reach of it ({ d, x }), or null.
 function hulkSpot(ship, h) {
@@ -813,7 +828,7 @@ function chooseJob(state, bot, bots) {
   const onKind = (job) => bots.filter((o) => o !== bot && o.botJob && o.botJob.kind === job.kind && o.botJob.cap != null).length;
   // Chores (patching, fires, repairs, swatting...) can take only so many hands: the rest keep the guns manned and the
   // ship running. Without this a ship full of holes sends the WHOLE crew to patch and nobody shoots back (a death spiral).
-  const CHORE = { fire: 1, patch: 1, repair: 1, swat: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1, frame: 1, scrappatch: 1 };
+  const CHORE = { fire: 1, patch: 1, repair: 1, swat: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1, frame: 1, scrappatch: 1, buildframe: 1 };
   const onChores = bots.filter((o) => o !== bot && !o.lock && !(o.ko > 0) && o.botJob && CHORE[o.botJob.kind] && !o.botJob.urgent).length;
   const choresFull = state.phase === 'flying' && onChores >= Math.max(3, Math.ceil(bots.length * B.CHORE_SHARE));
   const cur = bot.botJob;
@@ -1251,6 +1266,11 @@ function work(p, state) {
   } else if (job.kind === 'scrappatch') { // (SCRAP PATCH: take a bundle out of the hold bin, carry it to the failing segment, hold Action there)
     if (!(state.frames || []).includes(o) || o.hp >= config.SCRAP.PATCH.AT) { p.botJob = null; return; } // (patched, shored up, or the frame was cut again)
     if (p.carry === 'scrap') { if (steer(p, o.d, o.x, 30)) { p.jx = 0; p.fire = true; } }
+    else if (!p.carry && holdCount(state) > 0) { const sp = holdSpot(L); if (sp && steer(p, sp.d, sp.x, 18)) { p.jx = 0; press(p); } }
+    else p.botJob = null;
+  } else if (job.kind === 'buildframe') { // (FRAMES: take a bundle out of the hold bin, carry it to the scaffold of the part the crew bought, hold Action there; a calm only)
+    if (!framesOn() || o.done || o.ok === false || !pendingOf(state).includes(o) || !frameCalm(state)) { p.botJob = null; return; }
+    if (p.carry === 'scrap') { const s = frameSpot(mainShip(state), o); if (steer(p, s.d, s.x, 25)) { p.jx = 0; p.fire = true; } }
     else if (!p.carry && holdCount(state) > 0) { const sp = holdSpot(L); if (sp && steer(p, sp.d, sp.x, 18)) { p.jx = 0; press(p); } }
     else p.botJob = null;
   } else if (job.kind === 'frame') {
