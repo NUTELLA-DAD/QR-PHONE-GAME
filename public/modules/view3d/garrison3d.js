@@ -144,13 +144,35 @@ export function createGarrison3d({ parent, state, P }) {
         chainBoom(B, C, A, c.x, yB, z);
       } else {
         const yBreak = yB + (CH.HANG || 1100);
-        const yL = Math.min(yT, yBreak + 1300); chainRun(B, C, A, c.x, yBreak, c.x, yL, z, L, W); if (yT > yL) B.rod(C.CHAIN || "#77737b", V3.set(c.x, yL, z).clone(), V3.set(c.x, yT, z).clone(), 4, 0); // the top half, hanging from the anchor, its last links ragged
-        chainRun(B, C, A, c.x + 6, yBreak - 40, c.x + 14, yBreak - 130, z, L * 0.9, W * 0.9);
+        const yL = Math.min(yT, yBreak + 1300), whip = !!(chainInfo.get(c) && chainInfo.get(c).top); if (!whip) chainRun(B, C, A, c.x, yBreak, c.x, yL, z, L, W); if (yT > yL) B.rod(C.CHAIN || "#77737b", V3.set(c.x, yL, z).clone(), V3.set(c.x, yT, z).clone(), 4, 0); // the top half, hanging from the anchor, its last links ragged (D3: while it whips after the snap it is a mesh of its own, buildTop)
+        if (!whip) chainRun(B, C, A, c.x + 6, yBreak - 40, c.x + 14, yBreak - 130, z, L * 0.9, W * 0.9);
       }
     }
     const g = B.parts.length ? B.build({ one: true, cast: false, receive: false, small: true }) : null;
     if (g) { g.name = 'garrisonDyn'; g.traverse((o) => { if (o.isMesh) o.frustumCulled = false; }); }
     return g;
+  }
+  function snapFx(c, Pt, stage) { // D3: the moment a chain parts: a white flash, a ring, a shower of sparks and iron chips at the break (stage 0), a second smaller shower at the end of the falling half (stage 1)
+    if (!Pt || look.vfx === false) return;
+    const S = (K().SET || {}).CHAIN || {}, x = c.x, yBreak = -c.yLow + ((GC().CHAIN || {}).HANG || 1100), y = stage === 0 ? yBreak : yBreak - 170, n = S.SPARKS || 30;
+    Pt.burst('spark', x, y, 24, stage === 0 ? n : Math.round(n * 0.5), { speed: [220, 900], life: [0.3, 0.8], size: [5, 9], color: '#ffd37a' });
+    if (stage === 0) {
+      Pt.spawn('flash', x, y, 40, { size: 560, size1: 1.2, life: 0.1, color: '#fff0c8', hdr: 3, alpha: 1 });
+      Pt.ring(x, y, 30, 560, '#ffd23f', 0.36);
+      Pt.splinters(x, y, 30, 8, { kind: 'iron', speed: [200, 560], up: [40, 220], area: 30 });
+    } else Pt.spawn('flash', x, y, 40, { size: 300, size1: 1.1, life: 0.08, color: '#ffd37a', hdr: 2, alpha: 0.8 });
+    Pt.burst('smoke', x, y, 10, 2, { size: [40, 60], size1: 2.2, life: [0.8, 1.3], color: '#555050', alpha: 0.6, speed: [10, 50], up: [20, 60] });
+  }
+  function buildTop(c) { // D3: the top half of a snapped chain as a mesh of its own, so it can whip about its upper end (SET.CHAIN.WHIP) before it settles into the dynamic batch
+    const CH = GC().CHAIN || {}, A = kit.A, C = kit.C, B = new Batch(), L = CH.LINK || 82, W = CH.THICK || 17;
+    const yT = -c.yTop, yB = -c.yLow, z = -10, yBreak = yB + (CH.HANG || 1100), yL = Math.min(yT, yBreak + 1300);
+    chainRun(B, C, A, c.x, yBreak, c.x, yL, z, L, W);
+    chainRun(B, C, A, c.x + 6, yBreak - 40, c.x + 14, yBreak - 130, z, L * 0.9, W * 0.9);
+    const g = B.build({ one: true, cast: false, receive: false, small: true });
+    g.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+    g.name = 'chainWhip';
+    root.add(g);
+    return { g, pivotY: yL };
   }
   function buildFall(c) { // the log and the lower half of a snapped chain, to be moved down
     const CH = GC().CHAIN || {}, A = kit.A, C = kit.C, B = new Batch();
@@ -183,7 +205,7 @@ export function createGarrison3d({ parent, state, P }) {
     const G = GC();
     if (!ring || G.ENABLED === false || broken) { if (wasOn) { wasOn = false; hide(); } if (castle) castle.garrison = false; return; }
     wasOn = true;
-    if (ring !== lastRing) { lastRing = ring; dynSig = ''; chainInfo.clear(); for (const f of falls.splice(0)) if (f.mesh) { f.mesh.removeFromParent(); f.mesh.traverse((o) => o.geometry && o.geometry.dispose()); } } // (a new stop: a new ring object)
+    if (ring !== lastRing) { lastRing = ring; dynSig = ''; chainInfo.clear(); for (const f of falls.splice(0)) { if (f.mesh) { f.mesh.removeFromParent(); f.mesh.traverse((o) => o.geometry && o.geometry.dispose()); } if (f.top) { f.top.g.removeFromParent(); f.top = null; } } } // (a new stop: a new ring object)
     if (!kit || kitKey !== ring.variant) {
       try { buildKit(ring); dynSig = ''; chainInfo.clear(); } catch (e) { console.warn('view3d garrison build failed', e); disposeKit(); broken = true; hide(); return; }
     }
@@ -202,18 +224,35 @@ export function createGarrison3d({ parent, state, P }) {
     for (const c of (ring.gar && ring.gar.chains) || []) { // (a chain the view saw whole and now sees broken: the lower half falls from here)
       let info = chainInfo.get(c);
       if (!info) { info = { intact: !c.broken, t0: -1, mesh: null }; chainInfo.set(c, info); }
+      if (info.top && info.t0 >= 0 && Math.floor((t - info.t0) * 8) >= (((K().SET || {}).CHAIN || {}).WHIP || []).length) { info.top.g.removeFromParent(); info.top.g.traverse((o) => o.geometry && o.geometry.dispose()); info.top = null; } // (the whip is over: the top half goes back into the dynamic batch, below)
       if (!c.broken) info.intact = true;
-      else if (info.intact && info.t0 < 0) { info.t0 = t; try { info.mesh = buildFall(c); falls.push(info); stats.falls++; } catch (e) { console.warn('view3d garrison fall failed', e); } }
+      else if (info.intact && info.t0 < 0) {
+        info.t0 = t;
+        try { info.mesh = buildFall(c); falls.push(info); stats.falls++; } catch (e) { console.warn('view3d garrison fall failed', e); }
+        try { // D3: the snap: sparks, a flash and a ring at the break, the top half whips (stepped), the falling half kicks away
+          if ((((config.RING3D || {}).SET || {}).ENABLED) !== false) { info.top = buildTop(c); info.c = c; snapFx(c, Pt, 0); stats.snaps = (stats.snaps || 0) + 1; }
+        } catch (e) { console.warn('view3d chain snap failed', e); info.top = null; }
+      }
     }
-    if (dSig !== dynSig) {
-      dynSig = dSig;
+    const dSig2 = dSig + '|' + (((ring.gar && ring.gar.chains) || []).map((c) => (chainInfo.get(c) && chainInfo.get(c).top ? 'w' : '-')).join('')); // (a snapped chain's top half is a mesh of its own while it whips)
+    if (dSig2 !== dynSig) {
+      dynSig = dSig2;
       if (dyn) { dyn.removeFromParent(); dyn.traverse((o) => o.geometry && o.geometry.dispose()); dyn = null; }
       try { dyn = buildDynamic(ring); if (dyn) root.add(dyn); stats.dynBuilds++; } catch (e) { console.warn('view3d garrison dynamic failed', e); dyn = null; }
     }
+    const SC = (K().SET || {}).CHAIN || {}, WHIP = SC.WHIP || [], KICK = SC.KICK || [];
     for (let i = falls.length - 1; i >= 0; i--) { // the falling halves: stepped on the 8 fps key
-      const f = falls[i], u = (Math.floor((t - f.t0) * 8) / 8) / (CH.FALL_FOR || 2.4);
-      if (u >= 1 || u < 0) { if (f.mesh) { f.mesh.removeFromParent(); f.mesh.traverse((o) => o.geometry && o.geometry.dispose()); f.mesh = null; } falls.splice(i, 1); continue; }
-      f.mesh.position.y = -(CH.FALL_PX || 2400) * u * u;
+      const f = falls[i], kk = Math.floor((t - f.t0) * 8), u = (kk / 8) / (CH.FALL_FOR || 2.4);
+      if (f.top) { // D3: the top half whips about its upper end (a held angle each key, dying away), the falling half kicks away from the break and then drops
+        const pivX = f.c.x;
+        if (kk >= WHIP.length) { f.top.g.removeFromParent(); f.top.g.traverse((o) => o.geometry && o.geometry.dispose()); f.top = null; }
+        else { const a = WHIP[Math.max(0, kk)] || 0, cs = Math.cos(a), sn = Math.sin(a); f.top.g.rotation.z = a; f.top.g.position.set(pivX - (pivX * cs - f.top.pivotY * sn), f.top.pivotY - (pivX * sn + f.top.pivotY * cs), 0); }
+        if (kk === 1 && !f.fx1) { f.fx1 = true; snapFx(f.c, Pt, 1); }
+      }
+      if (u >= 1 || u < 0) { if (f.mesh) { f.mesh.removeFromParent(); f.mesh.traverse((o) => o.geometry && o.geometry.dispose()); f.mesh = null; } if (f.top) { f.top.g.removeFromParent(); f.top.g.traverse((o) => o.geometry && o.geometry.dispose()); f.top = null; } falls.splice(i, 1); continue; }
+      const ka = f.c ? KICK[Math.min(Math.max(0, kk), KICK.length - 1)] || 0 : 0, py = f.c ? -f.c.yLow + (CH.HANG || 1100) - 150 : 0, px = f.c ? f.c.x : 0, c2 = Math.cos(ka), s2 = Math.sin(ka);
+      f.mesh.rotation.z = ka;
+      f.mesh.position.set(f.c ? px - (px * c2 - py * s2) : 0, (f.c ? py - (px * s2 + py * c2) : 0) - (CH.FALL_PX || 2400) * u * u, 0);
     }
 
     // -- the men
@@ -384,6 +423,8 @@ export function createGarrison3d({ parent, state, P }) {
         const yBreak = yB + (CH.HANG || 1100);
         lines.seg(c.x, yT, c.x, yBreak, 40, g0, 0.1, -35);
         glow.add(c.x + 10, yBreak - 70, 8, 14, 14, 10, '#ff9a3a', 1.2 + 0.4 * st); // (the broken end smoulders)
+        const inf = chainInfo.get(c), sk = inf && inf.t0 >= 0 ? Math.floor((t - inf.t0) * 8) : 99;
+        if (sk >= 0 && sk < 3) glow.add(c.x, yBreak - 30, 30, 70 - 18 * sk, 70 - 18 * sk, 14, '#fff0c8', 3.2 - sk * 0.8); // D3: the snap's white-hot flare, three keys
       }
     }
 
@@ -410,6 +451,6 @@ export function createGarrison3d({ parent, state, P }) {
   }
   return {
     update, stats, root,
-    dispose() { disposeKit(); if (dyn) { dyn.removeFromParent(); dyn.traverse((o) => o.geometry && o.geometry.dispose()); } for (const f of falls) if (f.mesh) f.mesh.removeFromParent(); glow.dispose(); lines.dispose(); parent.remove(root); },
+    dispose() { disposeKit(); if (dyn) { dyn.removeFromParent(); dyn.traverse((o) => o.geometry && o.geometry.dispose()); } for (const f of falls) { if (f.mesh) f.mesh.removeFromParent(); if (f.top) f.top.g.removeFromParent(); } glow.dispose(); lines.dispose(); parent.remove(root); },
   };
 }

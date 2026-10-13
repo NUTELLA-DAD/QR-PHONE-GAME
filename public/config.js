@@ -1216,7 +1216,8 @@ export const config = {
       KICK: 240, // px/s the blast adds to a piece, away from the blast centre
       FADE: 0.6, // seconds a piece shrinks away over when its 2D twin expires
       BURY: 0.35, // a piece whose middle has been inside the rock this long (seconds) is removed (it started in it, or tunnelled): it must never fall through a mountain
-      CHUNKS: { MIN: 8, MAX: 20, SPEED: 420, SIZE_MIN: 12, SIZE_MAX: 34, CAP: 24, LIFE: 4.2 }, // a blast also throws this many plank and iron chunks (bodies of their own)
+      CHUNKS: { MIN: 8, MAX: 20, SPEED: 420, SIZE_MIN: 12, SIZE_MAX: 34, CAP: 24, LIFE: 4.2 },
+      STONES: { CAP: 48, GRAVITY: 2.2 }, // D3: the castle set pieces' stone chunks (view3d/setpiece3d.js): a kind of their own, so the blast chunks above keep their cap; GRAVITY = times the debris gravity (a stone falls harder than a plank) // a blast also throws this many plank and iron chunks (bodies of their own)
       SCAR: { RIM: 15, COLOR: '#2a1d16' }, // the charred rim round a hole a part left: width (px) and colour
       DECALS: { MAX: 64, LIFE: 0 }, // dents and scorch marks per ship (the oldest is overwritten); LIFE 0 = they stay until the ship is rebuilt
     },
@@ -3441,6 +3442,7 @@ export const config = {
     COME_ABOUT: { AZ: 0.17, ELEV: 0.02, SMOOTH: 0.2, BOTH: [0.3, 0.7] }, // a gentle dolly (A1: 0.17 rad = 10 degrees, so the hull stays a closed box and no black hole opens; was 0.26) that peaks at the middle of the 2.6 s turn (the ship's pose.turn), then back
     BREACH: { MUL: 1.16, ELEV: 0.2, LEAN: 0.04, IN: 0.6, OUT: 1.1 }, // the Kraken's breach warning (dive, shadow, lunge, until the splash): pull back and look further down so the sea and the shadow under her read
     FINALE: { AZ: 0.44, ELEV: 0.03, MUL: 1.05, LEAN: 0.3, IN: 1.0, OUT: 1.1 }, // the slow-motion finale (state.slow / the match's slow): a 25 degree orbit round the dying target, then back
+    CROWN: { AZ: 0.3, ELEV: 0.02, MUL: 1.12, FOLLOW: 0.42, IN: 0.9, OUT: 1.5 }, // D3: the crown falls on a ring (CASTLE.md): a slow 17 degree orbit, a 12% pull-back and the look-at following the crown down (FOLLOW = the share of its drop), timed to the sim's own slow-motion (ring.crown.t); it replaces the generic finale orbit there
     CAST: { AZ: 0.1, ELEV: 0.16, MUL: 1.14, OUT: 0.9, FOR: 0.7 }, // cast off: a rise and pull-back that settles into the gameplay framing (starts the moment the lobby launches)
     KICK: { MIN_POWER: 2.4, PX: 12, MAX_PX: 15, STEP: 0.07, STEPS: [1, 0.5, 0.2], COOLDOWN: 0.18, SHAKE_EDGE: 1.0 }, // a hard hit: a translational jolt held for three steps of STEP seconds (full, half, a fifth), then gone. PX = size at power 6, capped at MAX_PX (config.CAMERA.SHAKE_MAX applies too)
   },
@@ -3486,6 +3488,22 @@ export const config = {
       ARROW: { LEN: 190, THICK: 12, BOLT_LEN: 340, BOLT_THICK: 16 },
       CHAIN: { LINK: 82, THICK: 17, SPREAD: 110, WEIGHT: 56, FALL_FOR: 2.4, FALL_PX: 2400, HANG: 1100, COLUMN: 150 },
       COL: { SKIN: '#e3b78e', HELM: '#8f949c', PANTS: '#3b3236', LEATHER: '#6b4a2a', CLOTH: '#f7f2e6', SHAFT: '#3a2616', HEAD: '#4b5058', FEATHER: '#efe9d6', BOLT: '#2f2622', BOLT_HEAD: '#8c9096', FIRE: '#ff8a2a', AMBER: '#ffaa28', LOCK: '#fff0c8', LOCK_HOT: '#ff5a3c', CHAIN: '#77737b', CHAIN_GLOW: '#ffc84a', CHAIN_HOT: '#ff6a3c', ROPE: '#8a6a44', HORN: '#ffc86a' },
+    },
+    // D3 THE SET PIECES (view3d/setpiece3d.js, castleStrip.js, ringCastle.js, garrison3d.js; CASTLE.md "big moments"): the castle's big moments in 3D. View only: everything reads course.ring / state.bullets.
+    //   COLLAPSE: a breached gatehouse sinks into its own dust over KEYS steps of 8 fps (SINK = the height left at each key, BULGE = how much it spreads) while stone chunks (Rapier bodies, instanced) peel off its top and tumble
+    //     down the cliff; CHUNKS = how many by tier, SIZE / SPEED / UP the chunk's size and launch speeds (px, px/s); LIFE = seconds a chunk lasts; DUST = dust puffs per key.
+    //   CROWN: the crown falls on the sim's own slow-motion clock (ring.crown.t, sim seconds): it shudders until BREAK_AT, tips and slides off (SLIDE px sideways, FORWARD px toward the viewer, TILT rad) and drops so that it
+    //     lands at LAND_AT (the slow-motion lasts to config.RING.CROWN.SLOW_FOR); it breaks into CHUNKS gold pieces and stays lying on the lawn for HOLD seconds of sim time.
+    //   BRIDGE: the drawbridge's drop on the first shutter window: the fraction of the way down at each 8 fps key (accelerating, a thud at 1.0, a small rebound).
+    //   STONE: a catapult stone (state.bullets stone: true): SIZE px across, GLOW the fire's halo, TRAIL puffs per key; burning stones glow.
+    //   CHAIN: the boom chain's snap: SPARKS, the recoil of the top half (radians per 8 fps key after the snap) and the kick of the falling half.
+    SET: {
+      ENABLED: true,
+      COLLAPSE: { KEYS: 8, SINK: [1, 0.94, 0.82, 0.66, 0.5, 0.36, 0.22, 0.1], BULGE: 0.07, CHUNKS: { low: 10, medium: 26, high: 44 }, SIZE: [46, 130], SPEED: [180, 640], UP: [120, 520], LIFE: [3.6, 5.6], DUST: { low: 3, medium: 6, high: 9 } },
+      CROWN: { SHAKE: 0.55, BREAK_AT: 0.6, LAND_AT: 2.3, SLIDE: 1150, FORWARD: -260, TILT: 1.35, CHUNKS: { low: 6, medium: 12, high: 18 }, COLOR: ['#dcba58', '#c8a85c', '#f4efe0', '#8f302c'], HOLD: 3.0 },
+      BRIDGE: { STEPS: [0, 0.04, 0.16, 0.4, 0.74, 1, 0.92, 1], DUST: 12 },
+      STONE: { SIZE: 104, GLOW: 210, TRAIL: 2, CAP: 14, ROCK: '#8d8378', ROCK2: '#6e655c', HOT: '#ffb27a' },
+      CHAIN: { SPARKS: 30, WHIP: [0.0, 0.2, -0.15, 0.1, -0.06, 0.03, -0.012, 0], KICK: [0.0, -0.08, -0.14, -0.1, -0.05, 0.0, 0.0, 0.0] },
     },
   },
   // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.

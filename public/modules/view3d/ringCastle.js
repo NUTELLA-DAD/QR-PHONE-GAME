@@ -31,7 +31,7 @@ export function createRingCastle({ parent, state, P }) {
   const stripGlow = createGlowSet(root, glowDisc(), 24, false), frameGlow = createGlowSet(wardRoot, glowDiamond(), 48, true);
   let ringRef = null, mapKey = '', staticSig = '', dynSig = '', base0 = 0;
   let strip = null, dyn = null, ward = null, falls = null, keep = null, crown = null;
-  const eased = new Map(), bridge = new Map(); // face index -> how far the portcullis is up / the drawbridge is down (0..1)
+  const eased = new Map(), bridge = new Map(); // face index -> how far the portcullis is up (0..1) / the drawbridge: { t0: the view time its drop began (null = not yet), idx: the held step shown } (D3: config RING3D.SET.BRIDGE.STEPS)
   const stats = { faces: 0, rebuilds: 0, dynRebuilds: 0, ms: 0, tris: 0, fireTried: 0, fireMade: 0, mapMs: 0, staticMs: 0 };
   let lastFire = -1, broken = false, garrisonDraws = false;
 
@@ -51,7 +51,8 @@ export function createRingCastle({ parent, state, P }) {
 
   const artOf = (ring) => (K().ART || {})[ring.variant] || (K().ART || {}).fortress || {};
   const gateLevel = (f) => Math.round(clamp(eased.get(f.i) || 0, 0, 1) * 3);
-  const bridgeLevel = (f) => Math.round(clamp(bridge.get(f.i) || 0, 0, 1) * 3);
+  const bridgeSteps = () => { const s = ((K().SET || {}).BRIDGE || {}).STEPS; return Array.isArray(s) && s.length > 1 ? s : [0, 0.25, 0.6, 1]; };
+  const bridgeOf = (f) => { let b = bridge.get(f.i); if (!b) { b = { t0: null, idx: 0 }; bridge.set(f.i, b); } return b; };
 
   function buildMap(ring, map) {
     const m0 = performance.now();
@@ -69,7 +70,7 @@ export function createRingCastle({ parent, state, P }) {
     crown.group.position.y = keep.seatY;
     keepRoot.add(crown.group);
     eased.clear(); bridge.clear();
-    for (const f of ring.faces) { eased.set(f.i, 0); bridge.set(f.i, f.windows >= 1 && !f.down ? 1 : 0); }
+    for (const f of ring.faces) { eased.set(f.i, 0); bridge.set(f.i, { t0: null, idx: f.windows >= 1 && !f.down ? bridgeSteps().length - 1 : 0 }); } // (a bridge that is already down when the map starts just stands down)
     stats.tris = ward.tris + keep.tris + crown.tris;
     stats.mapMs = performance.now() - m0;
   }
@@ -83,9 +84,34 @@ export function createRingCastle({ parent, state, P }) {
   }
   function buildDyn(ring) {
     dropGroup(dyn);
-    dyn = buildDynamic(ring, artOf(ring), (f) => ({ gate: gateLevel(f), bridge: bridgeLevel(f) }));
+    const steps = bridgeSteps();
+    dyn = buildDynamic(ring, artOf(ring), (f) => ({ gate: gateLevel(f), bridge: steps[bridgeOf(f).idx] ?? 0 }));
     root.add(dyn);
     stats.dynRebuilds++;
+  }
+
+  // D3 THE DRAWBRIDGE DROP: on the first shutter window the leaf is let go and falls in held steps on the 8 fps key (SET.BRIDGE.STEPS: the share of the way down at each key; slow to start, faster, a thud, a small
+  // rebound, down). The key it lands on throws dust off the leaf, a flash and a few splinters (the vfx's particles); a bridge that is already down when the map begins just stands down.
+  function stepBridge(f, t) {
+    const b = bridgeOf(f), steps = bridgeSteps(), last = steps.length - 1;
+    if (f.down) { b.idx = 0; b.t0 = null; return; }
+    if (f.windows < 1 || b.idx >= last) return;
+    if (b.t0 == null) b.t0 = t;
+    const idx = clamp(Math.floor((t - b.t0) * 8), 0, last);
+    if (idx === b.idx) return;
+    const land = steps.findIndex((v) => v >= 1), was = b.idx;
+    b.idx = idx;
+    if (land >= 0 && was < land && idx >= land) bridgeThud(f);
+  }
+  function bridgeThud(f) {
+    const Pt = getP();
+    if (!Pt || look.vfx === false) return;
+    const S = (K().SET || {}).BRIDGE || {}, x = f.x, y = -f.y + 34, z = -30 + 26 + 150;
+    stats.thuds = (stats.thuds || 0) + 1;
+    Pt.burst('dust', x, y + 6, z, Math.max(3, S.DUST || 9), { area: 150, size: [95, 160], size1: 2.2, life: [0.6, 1.1], speed: [90, 320], up: [20, 100], alpha: 0.9, color: '#cdb98f' }); // (a darker tan than the collapse's dust: the gate and the grass behind it are pale)
+    Pt.spawn('flash', x, y + 30, z + 20, { size: 360, size1: 1.2, life: 0.09, color: '#ffc860', hdr: 2.6, alpha: 0.95 }); // the thud
+    Pt.ring(x, y + 12, z + 10, 420, '#ffd98a', 0.3, { alpha: 0.65 });
+    Pt.splinters(x, y + 10, z, 8, { kind: 'wood', speed: [160, 380], up: [80, 220], area: 110 });
   }
 
   function update({ on, map, night, t = 0, dt = 0.016 }) {
@@ -104,12 +130,11 @@ export function createRingCastle({ parent, state, P }) {
     for (const f of ring.faces) {
       const v = eased.get(f.i) || 0, tgt = !f.down && f.open > 0 ? 1 : 0;
       eased.set(f.i, v + (tgt - v) * Math.min(1, dt * 9));
-      const b = bridge.get(f.i) || 0, bt = !f.down && f.windows >= 1 ? 1 : 0;
-      bridge.set(f.i, b + clamp(bt - b, -dt * 1.6, dt * 1.6));
+      stepBridge(f, t);
     }
     const sSig = ring.faces.map((f) => (f.down ? 'x' : 'a') + (f.special.dead ? 'd' : 'a') + (f.gal ? 'g' : '')).join(',') + '|' + look.shadows;
     if (sSig !== staticSig) { staticSig = sSig; dynSig = ''; try { buildStatic(ring); } catch (e) { console.warn('view3d castle strip failed', e); dropStrip(); } }
-    const dSig = ring.faces.map((f) => (f.down ? 'x' : gateLevel(f) + '' + bridgeLevel(f))).join(',');
+    const dSig = ring.faces.map((f) => (f.down ? 'x' : gateLevel(f) + '' + bridgeOf(f).idx)).join(',');
     if (dSig !== dynSig) { dynSig = dSig; try { buildDyn(ring); } catch (e) { console.warn('view3d castle gate failed', e); dropGroup(dyn); dyn = null; } }
     // the ward turns with the ring; the keep stands set back behind the axis
     const ax = RB.axis();
@@ -183,6 +208,8 @@ export function createRingCastle({ parent, state, P }) {
     get crown() { return crown ? crown.group : null; }, // (D3: the crown group, origin at the keep's seat; move / turn it to make it fall)
     get ward() { return wardRoot; },
     get fallAngles() { return falls ? falls.angles : []; }, // (x pi: where the two waterfalls are on the ring)
+    get crownMeta() { return crown && keep ? { band: crown.band, seatY: keep.seatY, height: crown.height, base0, lantern: crown.lantern, flag: crown.flag } : null; }, // (D3: what setpiece3d.js needs to drop the crown: the gold band's radius, where it sits, the ground (base0 = the platforms' top))
+    art: (ring) => artOf(ring), // (D3: the palette, so the collapsing gatehouse is built in the castle's own stone)
     get crownTopY() { return crown ? crown.group.position.y + crown.height : 0; }, // (the world y of the top of the great banner's pole: the crown must stay in the picture)
     keepRadius: () => (ringRef ? keepRadius(ringRef, K()) : 0),
     dispose() { disposeAll(); stripGlow.dispose(); frameGlow.dispose(); lines.dispose(); parent.remove(root); },

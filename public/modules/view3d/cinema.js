@@ -24,15 +24,15 @@ function damp(c, target, time, dt) {
 }
 const chan = () => ({ x: 0, v: 0 });
 
-export function createCinema({ state, settings = {} }) {
+export function createCinema({ state, settings = {}, crown = null }) { // crown: () => { on, u, drop } or null (D3: setpiece3d.js tells where the falling crown is)
   const K = () => config.CINE3D || {};
-  const ch = { come: chan(), breach: chan(), finale: chan(), cast: chan() };
+  const ch = { come: chan(), breach: chan(), finale: chan(), cast: chan(), crown: chan() };
   const pose = { active: false, az: 0, elev: 0, mul: 1, dx: 0, dy: 0, kickPx: 0, why: '' };
   const kicks = []; // { age, sx, sy, mag } (px on the screen)
   const seen = new Map(); // ship id -> the newest hitLog number already looked at
   let prevPhase = null, castHold = 0, shakePrev = 0, kickCd = 0;
-  const C = { count: 0, fired: { come: 0, breach: 0, finale: 0, cast: 0, kick: 0 } }; // (stats for the gate: how many times each moment started)
-  const was = { come: false, breach: false, finale: false };
+  const C = { count: 0, fired: { come: 0, breach: 0, finale: 0, cast: 0, kick: 0, crown: 0 } }; // (stats for the gate: how many times each moment started)
+  const was = { come: false, breach: false, finale: false, crown: false };
 
   const enabled = () => {
     const ok = K().ENABLED !== false && settings.cine !== false && settings.cine !== 0;
@@ -111,11 +111,18 @@ export function createCinema({ state, settings = {} }) {
     damp(ch.breach, warn ? 1 : 0, warn ? KB.IN ?? 0.6 : KB.OUT ?? 1.1, dt);
     // SLOW-MOTION FINALE: the Kraken's last blow (state.slow) or the match's finale (match.slow)
     const slow = fin((state.match && state.match.on && state.match.slow) || state.slow, 1);
-    const slowOn = slow < 0.99;
+    const ringCrown = !!(state.course && state.course.ring && state.course.ring.crown); // (D3: the castle's crown falling is its own beat below, not the finale orbit)
+    const slowOn = slow < 0.99 && !ringCrown;
     const KF = KC.FINALE || {};
     if (slowOn && !was.finale) C.fired.finale++;
     was.finale = slowOn;
     damp(ch.finale, slowOn ? 1 : 0, slowOn ? KF.IN ?? 1 : KF.OUT ?? 1.1, dt);
+    // THE CROWN FALLS (D3): while the crown is shuddering, tipping and dropping (the sim's own slow-motion, ring.crown.t): a slow orbit, a pull-back, and the look-at following it down
+    const cue = typeof crown === 'function' && !versus ? crown() : null, crownOn = !!(cue && cue.on && ringCrown);
+    const KR = KC.CROWN || {};
+    if (crownOn && !was.crown) C.fired.crown++;
+    was.crown = crownOn;
+    damp(ch.crown, crownOn ? 1 : 0, crownOn ? KR.IN ?? 0.9 : KR.OUT ?? 1.5, dt);
     // CAST OFF: starts risen and pulled back, settles into the gameplay framing
     const KS = KC.CAST || {};
     if (castHold > 0) castHold -= dt; else damp(ch.cast, 0, KS.OUT ?? 0.9, dt);
@@ -136,9 +143,9 @@ export function createCinema({ state, settings = {} }) {
     for (const c of Object.values(ch)) if (Math.abs(c.x) < 0.002 && Math.abs(c.v) < 0.01) { c.x = 0; c.v = 0; }
     // ---- combine ----
     const KA = KC.COME_ABOUT || {};
-    const a = ch.come.x * (KA.AZ ?? 0.26) + ch.finale.x * (KF.AZ ?? 0.44) + ch.cast.x * (KS.AZ ?? 0.1);
-    const el = ch.come.x * (KA.ELEV ?? 0.02) + ch.breach.x * (KB.ELEV ?? 0.2) + ch.finale.x * (KF.ELEV ?? 0.03) + ch.cast.x * (KS.ELEV ?? 0.16);
-    let mul = 1 + ch.breach.x * ((KB.MUL ?? 1.16) - 1) + ch.finale.x * ((KF.MUL ?? 1.05) - 1) + ch.cast.x * ((KS.MUL ?? 1.14) - 1);
+    const a = ch.come.x * (KA.AZ ?? 0.26) + ch.finale.x * (KF.AZ ?? 0.44) + ch.cast.x * (KS.AZ ?? 0.1) + ch.crown.x * (KR.AZ ?? 0.3);
+    const el = ch.come.x * (KA.ELEV ?? 0.02) + ch.breach.x * (KB.ELEV ?? 0.2) + ch.finale.x * (KF.ELEV ?? 0.03) + ch.cast.x * (KS.ELEV ?? 0.16) + ch.crown.x * (KR.ELEV ?? 0.02);
+    let mul = 1 + ch.breach.x * ((KB.MUL ?? 1.16) - 1) + ch.finale.x * ((KF.MUL ?? 1.05) - 1) + ch.cast.x * ((KS.MUL ?? 1.14) - 1) + ch.crown.x * ((KR.MUL ?? 1.12) - 1);
     // the zoom cap holds: never further out than the 2D camera's own cap (the creature's, Versus's)
     const zoom = fin(v.zoom, 0.5), minZoom = fin(v.minZoom, 0);
     if (minZoom > 0) mul = Math.min(mul, Math.max(1, zoom / minZoom));
@@ -146,6 +153,7 @@ export function createCinema({ state, settings = {} }) {
     const visH = Math.max(16, h || 1080) / Math.max(1e-3, zoom);
     let dx = ox / zoom, dy = oy / zoom;
     dy += ch.breach.x * (KB.LEAN ?? 0.07) * visH;
+    if (ch.crown.x > 0 && cue) dy += ch.crown.x * (KR.FOLLOW ?? 0.42) * fin(cue.drop) * clamp(fin(cue.u), 0, 1); // (the look-at slides down with the crown: map pixels, y down)
     if (ch.finale.x > 0 && cr && Number.isFinite(cr.x) && Number.isFinite(cr.y)) {
       const k = ch.finale.x * (KF.LEAN ?? 0.4);
       dx += (cr.x - fin(v.cx)) * k; dy += (cr.y - fin(v.cy)) * k;
@@ -154,7 +162,7 @@ export function createCinema({ state, settings = {} }) {
     pose.active = any;
     pose.az = a; pose.elev = el; pose.mul = mul; pose.dx = dx; pose.dy = dy;
     pose.kickPx = Math.hypot(ox, oy);
-    pose.why = any ? [ch.come.x && 'come', ch.breach.x && 'breach', ch.finale.x && 'finale', ch.cast.x && 'cast', pose.kickPx && 'kick'].filter(Boolean).join('+') : '';
+    pose.why = any ? [ch.come.x && 'come', ch.breach.x && 'breach', ch.finale.x && 'finale', ch.cast.x && 'cast', ch.crown.x && 'crown', pose.kickPx && 'kick'].filter(Boolean).join('+') : '';
     C.count = any ? C.count + 1 : C.count;
     return pose;
   }

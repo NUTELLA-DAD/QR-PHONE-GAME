@@ -139,7 +139,7 @@ function rubble(B, A, K, f) {
   B.box(A.trim, x - 20, base + 150, ZF - 120, 160, 100, 200, 5, 0.1, 0.4, 0);
   B.box(A.stone, x + 330, base + 30, ZF + 20, 90, 60, 90, 4, 0.3, 0.7, 0.2);
   B.box(A.trim, x - 380, base + 24, ZF + 30, 80, 48, 80, 4, 0.2, 0.3, 0.4);
-  disc(B, '#3b3330', x, base + 3, ZF + 10, 200, 4, 12, 0);
+  tcyl(B, '#3b3330', x, base + 3, ZF + 10, 200, 200, 4, 12, 0); // (a scorch lying flat on the ground (D3: it stood up on its edge, a black half-disc cutting the cliff))
 }
 
 // ---- the specials -----------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -312,7 +312,7 @@ function buildFlags(spots, A, parent) {
 export const poseFlags = (flags, key) => { for (const f of flags) { const r = f.ranges[(((Math.floor(key) + f.phase) % 3) + 3) % 3]; if (r) f.mesh.geometry.setDrawRange(r[0], r[1]); } };
 
 // ---- the dynamic batch: portcullis and drawbridge -----------------------------------------------------------------------------------------------------------------------------------
-// levels = (f) => { gate: 0..3 (how far the portcullis is up), bridge: 0..3 (0 = raised, 3 = down) }
+// levels = (f) => { gate: 0..3 (how far the portcullis is up), bridge: 0..1 (0 = raised, 1 = down) }
 export function buildDynamic(ring, A, levels) {
   const B = new Batch();
   for (const f of ring.faces) {
@@ -331,7 +331,7 @@ export function buildDynamic(ring, A, levels) {
       if (half > 20) B.box(A.iron, x, y, zz + 1, half * 2, 13, 8, 0);
     }
     // drawbridge: a leaf hinged on the sill, chains to the arch
-    const a = (1 - L.bridge / 3) * (PI / 2) * 0.94, len = 150, px = x, py = base + 26, pz = ZF + 26;
+    const a = (1 - clampN(L.bridge, 0, 1)) * (PI / 2) * 0.94, len = 150, px = x, py = base + 26, pz = ZF + 26; // (D3: bridge = the fraction of the way down, 0..1, one of the config RING3D.SET.BRIDGE.STEPS)
     const dy = Math.sin(a), dz = Math.cos(a);
     B.box(A.wood, px, py + dy * len / 2, pz + dz * len / 2, 240, 18, len, 0, -a, 0, 0); // (no ink on the dynamic batch: one draw call fewer)
     B.box(A.woodDark, px, py + dy * (len - 10), pz + dz * (len - 10), 244, 22, 18, 0, -a, 0, 0);
@@ -343,4 +343,15 @@ export function buildDynamic(ring, A, levels) {
   const g = buildBatch(B, { cast: false, receive: false });
   plainify(g, 'castleDynamic');
   return g;
+}
+
+// ---- D3: one gatehouse on its own, for the collapse ---------------------------------------------------------------------------------------------------------------------------------
+// The intact gatehouse of a face built about x = 0 and the platform's top (y = 0): setpiece3d.js stands it back on the face, sinks and spreads it in 8 fps steps while the static strip already shows the rubble, and drops it.
+const clampN = (v, a, b) => (v < a ? a : v > b ? b : Number.isFinite(v) ? v : a);
+export function buildGatehouseGroup(f, A, K) {
+  const B = new Batch(), out = { cores: [], lamps: [], fires: [], backDoor: [], flagSpots: [] }, c = f.core;
+  gatehouse(B, A, K, { i: f.i, x: 0, y: 0, core: { x: 0, y: 0, w: c.w, h: c.h }, gal: null }, out);
+  const group = buildBatch(B, { cast: false, receive: false });
+  plainify(group, 'castleCollapse');
+  return { group, tris: B.tris };
 }

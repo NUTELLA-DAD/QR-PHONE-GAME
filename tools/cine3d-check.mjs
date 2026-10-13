@@ -1,5 +1,5 @@
 // CAMERA AND CINEMATICS (WP11) gate: the 3D view in a real headless Chrome (tools/shot3d.mjs). Starts its OWN server on a free port and stops it by its PID at the end (never kills node globally).
-//   node tools/cine3d-check.mjs [--port N] [--quick] [--shots DIR] [--prefix wp11_] [--only off,come,breach,kick,ring,versus,long]
+//   node tools/cine3d-check.mjs [--port N] [--quick] [--shots DIR] [--prefix wp11_] [--only off,come,breach,kick,ring,crown,versus,long]
 // The simulation is frozen between steps (window.game.update is a no-op) and advanced by hand, so every moment is the same. Every run must print 0 console errors. Checks:
 //   off     ?cine=0 and a COME ABOUT: no cinematic ever starts, and the HUD alignment holds (the 3D projection of 35 plane points is within 1 px of the 2D camera's own mapping) every frame
 //   come    a COME ABOUT with cinematics on: the dolly peaks near config.CINE3D.COME_ABOUT.AZ, never overshoots or goes negative (critically damped), never rolls, and AFTER it ends the camera is the
@@ -8,6 +8,7 @@
 //           FINALE.AZ), then everything is back and aligned
 //   kick    a hard hit (a hitLog entry of power 5) gives a translational kick held in at most 3 steps, then nothing; a weak hit gives none. A cast off gives the rise and pull-back, then settles
 //   ring    (LOOP R1) a COME ABOUT on the fortress ring with the strip bent: the HUD within 1 px all through, no roll (the full circle is tools/ring3d-check.mjs)
+//   crown   (CASTLE.md D3) the ring's crown falls on the sim's slow-motion clock: the crown beat (a slow orbit to CROWN.AZ, a 12% pull-back, the look-at following it down) starts once, replaces the finale orbit, never rolls or swings back, the crown lands, and the camera is the plain lens again
 //   versus  Versus with the ships far apart: the split view's porthole is drawn in 3D (Medium) with the frame on the 2D canvas, the Low tier keeps the 2D inset; the numbers of the porthole are printed
 //   long    (not --quick) 8 bots in real time for 14 s with a COME ABOUT, on and off
 import { spawn, spawnSync } from 'node:child_process';
@@ -196,6 +197,31 @@ try {
       if (t.fired.come || t.peakAz > 0) fail('ring: a cinematic started with ?cine=0');
     }
     if (r.data && r.data.hold_after && (!r.data.hold_after.settled || !(r.data.hold_after.align < 1))) fail('ring: not aligned after the held turn ' + JSON.stringify(r.data.hold_after));
+  }
+
+  if (want('crown')) {
+    console.log('4c. the crown falls (CASTLE.md D3): the ring camera beat on the sim\'s slow-motion clock, then back to the plain lens');
+    const place = `(async()=>{ ${sl} const c=window.__c, st=window.game.state, sh=st.ships[0], r=st.course.ring; sh.pose.x=r.xRing+135*Math.PI/180*r.R-sh.layout.refPoint.x; sh.pose.y=r.axisY+500-sh.layout.refPoint.y; sh.pose.vy=0; for(let i=0;i<120;i++) await c.frame(); window.__r.ringOn=!!c.V().stats().ring; return 1 })()`;
+    // (the sim is frozen: ring.crown.t is advanced by hand, 2 sim steps a frame at the 0.35 slow-motion, the way main.js would)
+    const crownPass = `(async()=>{ ${sl} const c=window.__c, st=window.game.state, r=st.course.ring; window.__acc={ max:{}, min:{}, n:0 }; r.crown={ how:'keep', t:0, done:false }; st.slow=0.35; let k=0, sawLand=false, maxMul=1;
+      while(r.crown.t<3.3 && k<900){ r.crown.t+=2*0.35/60; await c.frame(); const s=c.sample(); window.__rec(s); if(s.mul>maxMul) maxMul=s.mul; const cu=c.V().setpieces&&c.V().setpieces.cue; if(cu&&cu.landed) sawLand=true; k++; }
+      const peakAz=window.__acc.max.az, midAlign=window.__acc.max.align; r.crown.t=3.4; st.slow=1; const settled=await c.settle(9000); const after=c.sample();
+      window.__r={ ...(window.__r||{}), crown:{ frames:k, peakAz, minAz:window.__acc.min.az, maxRoll:window.__acc.max.roll, maxMul, sawLand, settled, after, fired:c.V().cinema.stats.fired, stats:c.V().setpieces&&c.V().setpieces.stats } }; return 1; })()`;
+    const r = run('crown', 'tier=medium&kind=ring&variant=fortress', [[boot(120), 300], [`window.__r={}; 1`, 10], [place, 100], [crownPass, 100, shotName('crown_end')]]);
+    clean('crown', r); show('crown', r.data);
+    const d = r.data && r.data.crown, KR = 0.3;
+    if (r.data && !r.data.ringOn) fail('crown: the ring bend was not on');
+    if (d) {
+      if (d.frames < 100) fail('crown: the fall did not run (' + d.frames + ' frames)');
+      if (!(d.fired.crown >= 1)) fail('crown: the crown beat never started ' + JSON.stringify(d.fired));
+      if (d.fired.finale) fail('crown: the generic finale orbit started on top of the crown beat ' + JSON.stringify(d.fired));
+      if (!(d.peakAz > 0.2 && d.peakAz <= KR + 0.0001)) fail('crown: the orbit peaked at ' + d.peakAz + ' (want 0.2 to ' + KR + ')');
+      if (!(d.minAz >= -1e-9)) fail('crown: the orbit swung back past zero (' + d.minAz + ')');
+      if (!(d.maxRoll < 1e-6)) fail('crown: the camera rolled (' + d.maxRoll + ')');
+      if (!(d.maxMul > 1.05 && d.maxMul <= 1.121)) fail('crown: the pull-back is off (' + d.maxMul + ')');
+      if (!d.sawLand) fail('crown: the crown never landed in the view');
+      if (!d.settled || d.after.active || !(d.after.align < 1)) fail('crown: not back on the plain lens afterwards ' + JSON.stringify(d.after));
+    }
   }
 
   if (want('versus')) {

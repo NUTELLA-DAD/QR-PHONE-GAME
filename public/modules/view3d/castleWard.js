@@ -274,5 +274,5 @@ export function buildCrown(ring, A, K, rk, topR) {
     group.add(mesh);
     flag = { mesh, ranges: merged.ranges, phase: 0 };
   }
-  return { group, flag, lantern, tris: B.tris, height: topY + 150 };
+  return { group, flag, lantern, tris: B.tris, height: topY + 150, band };
 }
