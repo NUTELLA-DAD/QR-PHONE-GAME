@@ -5,12 +5,13 @@
 //   ch.wanted()        should CAST OFF open the vote now?       ch.start()       open it
 //   ch.resolve(option) the vote ended on this option            ch.update(dt)    the ceremony's clock (casts off when it ends)
 //   ch.skip()          CAST OFF pressed during the vote / the ceremony
-//   ch.endRun(...)     the voyage is over: its page, the crew's records, a lost ship to the fleet
+//   ch.endRun(...)     the voyage is over: its page, the crew's records (L3: with the phone's id, the seconds at each station and the deeds; a new title is told to the phone), a lost ship to the fleet
 import { config } from '../../config.js';
-import { shipNames, newShip, recordVoyage, recordCrew, retireShip } from './book.js';
+import { shipNames, newShip, recordVoyage, recordCrew, retireShip, findCrew } from './book.js';
+import { titleFor } from './roster.js';
 import { dateKey, saveVoyageSave } from './voyage.js';
 
-export function createChristening({ state, openVote, closeVote, launch, phoneFx }) {
+export function createChristening({ state, openVote, closeVote, launch, phoneFx, roster }) {
   const BK = () => config.BOOK;
   const on = () => BK().ENABLED && !config.PVP.ENABLED && state.mode !== 'versus' && state.christenMode !== 'off';
   const humans = () => Object.values(state.players).filter((p) => !p.bot && !p.mate && p.connected !== false).length;
@@ -54,7 +55,19 @@ export function createChristening({ state, openVote, closeVote, launch, phoneFx 
       const humansList = Object.values(state.players).filter((p) => !p.bot && !p.mate && p.name);
       const { t, ...page } = e; // (the countdown to the next voyage is not part of the page)
       recordVoyage(save, { ...page, shipName: ship, ship, date: key, lost: !e.victory });
-      recordCrew(save, humansList.map((p) => ({ name: p.name, color: p.color, species: p.species, stats: (run.crew[p.id] || {}).stats || {} })), e.victory, key, ship);
+      const before = {}; // (L3: each human's headline title before this voyage is written, to tell who earned a new one)
+      for (const p of humansList) { const f = findCrew(save, p); before[p.id] = titleFor(f ? f.rec : null).name; }
+      recordCrew(save, humansList.map((p) => ({ name: p.name, color: p.color, species: p.species, stats: (run.crew[p.id] || {}).stats || {}, ...(roster ? roster.collect(p) : {}) })), e.victory, key, ship);
+      const fresh = [], lowest = BK().ROSTER.RANKS[BK().ROSTER.RANKS.length - 1].name;
+      for (const p of humansList) {
+        const now = titleFor((findCrew(save, p) || {}).rec).name;
+        if (now !== before[p.id] && now !== lowest) fresh.push({ name: p.name, color: p.color, title: now });
+      }
+      if (fresh.length) {
+        e.titles = fresh; // (the phones are told: "New title: Firefighter!")
+        if (phoneFx) for (const f of fresh) { const p = humansList.find((q) => q.name === f.name); if (p) phoneFx(p, `New title: ${f.title}!`, [60, 40, 60, 40, 120], 4000); }
+      }
+      if (roster) roster.refresh(); // (the scorecard and the lobby read the new titles)
       if (!e.victory && save.ship) { retireShip(save, 'lost', e.stopName, key); state.shipName = null; }
     } catch (err) { (globalThis.gameErrors = globalThis.gameErrors || []).push('book: ' + err.message); }
   };

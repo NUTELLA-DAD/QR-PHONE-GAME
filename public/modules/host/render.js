@@ -1519,6 +1519,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.fillStyle = LB.INK_SOFT;
     ctx.fillText(state.shipName ? state.shipName.toUpperCase() : "THE CAPTAIN'S LOGBOOK", 800, 196, 540); // (L2: her name once she has one)
     if (config.BOOK.ENABLED && state.save) bookArt().lobbyCard(state.save, state.shipName, 30, 276);
+    if (config.BOOK.ENABLED && state.welcomes && state.welcomes.length) bookArt().welcomes(state.welcomes, 470, 226); // (L3: "Mia the Old Salt returns!" for a few seconds after a phone scans in)
     const crew = crewHeads(state);
     const mates = matesWanted(state, 0, true); // (ship's mates who will come aboard on CAST OFF)
     const lines = [
@@ -1580,7 +1581,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
       const col = i % 2;
       const row = Math.floor(i / 2);
       const x = 260 + col * 560;
-      const y = (sc.play ? 392 : 300) + row * (sc.play ? 78 : 92);
+      const titled = config.BOOK.ENABLED && state.titles && state.titles[r.name]; // (L3: a human's headline title under the name)
+      const y = (sc.play ? 392 : 300) + row * (sc.play ? (titled ? 88 : 78) : 92);
       ctx.textAlign = 'left';
       ctx.font = '44px "Segoe UI Emoji", sans-serif';
       ctx.fillText(r.icon, x, y + 14);
@@ -1596,6 +1598,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.fillStyle = '#5a4a3a';
       ctx.font = '400 22px ' + config.FONTS.TEXT;
       ctx.fillText(`${r.value} ${r.unit}`, x + 80 + ctx.measureText(r.name).width + 40, y + 34);
+      if (titled) { ctx.fillStyle = LB.STAMP; ctx.font = '700 22px ' + config.FONTS.TEXT; ctx.fillText(titled, x + 70, y + 59, 460); } // (the Ship's Book's crew roster, L3)
       ctx.fillStyle = config.INK;
     });
   };

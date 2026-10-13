@@ -153,7 +153,10 @@ try {
   await host.shot('book_7_cover_tv.png');
   await host.key('ArrowRight');
   await sleep(500);
-  check(await host.ev('game.state.bookView.page === 1'), 'the right arrow turns to the first voyage page');
+  check(await host.ev('game.state.bookView.page === 1'), 'the right arrow turns to the crew roster page (L3)');
+  await host.key('ArrowRight');
+  await sleep(500);
+  check(await host.ev('game.state.bookView.page === 2'), 'the right arrow again turns to the first voyage page');
   await host.shot('book_8_page_tv.png');
   await host.key('Escape');
   check(await host.waitFor('game.state.bookView.open === false', 3000) && await host.ev('!game.state.paused && getComputedStyle(document.getElementById("menu")).display === "none"'), 'Esc shuts the book and does not open the pause menu');
@@ -173,6 +176,8 @@ try {
   await host.key('b');
   await sleep(600);
   await host.shot('book_10_cover_memorial_tv.png');
+  await host.key('ArrowRight'); // (the crew roster page, L3)
+  await sleep(300);
   await host.key('ArrowRight');
   await sleep(500);
   await host.shot('book_11_page_lost_tv.png');

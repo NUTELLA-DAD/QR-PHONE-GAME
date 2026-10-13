@@ -2528,6 +2528,36 @@ export const config = {
     KEEP: { VOYAGES: 40, CREW: 60, FLEET: 12, ROUTE: 30 }, // what the save keeps: voyage pages (the oldest drop off), crew records, earlier ships, stops on a page's route
     COVER: { VOYAGES: 6, FLEET: 3, CREW: 6 }, // rows on the book's cover: recent voyages, lost ships, crew
     ART: { MIN_PX: 22, PLATE_PX: 22 }, // smallest text on the book's TV pages (logical px of 1600 x 900: 22 is 26 on a 1080p TV); the name plate in the HUD
+    // THE CREW ROSTER, L3 (SHIPS_BOOK.md; roster.js): each human's service record in the save (save.crew, kept by the phone's own id so a new TV session knows the same phone, by the name otherwise), and the title it earns.
+    // Deterministic: the headline title is the deed title the record beats its threshold by most (rank titles by voyages when no deed qualifies). A bot never has a record.
+    // Everything here is a number or a name to tune; the rules themselves are in roster.js (titleFor).
+    ROSTER: {
+      MIN_VOYAGES: 2, // a deed title (below) needs this many voyages flown, so one wild night does not name a person for good
+      // Deed titles: `stat` is a stat key (or a list, summed) of the scorecard totals over all voyages, `deed` a Book moment kind counted over all voyages, `station` a kind of station and `secs` /
+      // `share` the flying seconds and the share of all station time spent there; `min` the total needed. `rank` breaks a tie between two titles that are equally far past their number (the higher wins).
+      TITLES: [
+        { id: 'lunatic', name: "Ship's Lunatic", deed: 'overboard-lunatic', min: 2, rank: 9 }, // fell overboard three times in a voyage, twice over
+        { id: 'gunner', name: 'Gun Captain', stat: 'kills', min: 120, rank: 6 }, // enemies shot down
+        { id: 'boarder', name: "Boarder's Bane", stat: 'raiders', min: 20, rank: 8 }, // raiders beaten on deck
+        { id: 'stoker', name: 'Stoker of the Year', stat: 'coal', min: 25, rank: 5 }, // coal loads shovelled
+        { id: 'fire', name: 'Firefighter', stat: 'fires', min: 20, rank: 7 }, // fires put out
+        { id: 'patch', name: 'Patch Master', stat: 'holes', min: 30, rank: 4 }, // holes patched
+        { id: 'medic', name: "Ship's Surgeon", stat: 'revives', min: 8, rank: 7 }, // crewmates brought round
+        { id: 'builder', name: 'Master Builder', stat: ['framed', 'patched'], min: 8, rank: 6 }, // frames built and hull patches welded from scrap
+        { id: 'treasure', name: 'Treasure Hunter', stat: 'stowed', min: 10, rank: 6 }, // treasure and scrap stowed in the hold
+        { id: 'ammo', name: 'Quartermaster', stat: 'ammo', min: 60, rank: 3 }, // ammo runs
+        { id: 'bomb', name: 'Bomb Squad', stat: 'defused', min: 6, rank: 8 }, // bombs defused
+        { id: 'saboteur', name: 'Gunship Breaker', stat: 'sabotage', min: 4, rank: 9 }, // gunships blown up from inside
+        { id: 'helm', name: 'Helmsman', station: 'helm', secs: 1200, share: 0.4, rank: 5 }, // 20 minutes at the helm, 40% of all their station time
+        { id: 'lookout', name: 'Eagle Eye', station: 'lookout', secs: 900, share: 0.4, rank: 4 },
+      ],
+      // The ranks, by voyages flown (the best one the record reaches is the headline when no deed title is earned). Nobody yet is a Deckhand.
+      RANKS: [{ name: 'Old Salt', voyages: 8 }, { name: 'Able Hand', voyages: 3 }, { name: 'Deckhand', voyages: 0 }],
+      DEED_KINDS: ['overboard', 'overboard-lunatic', 'going-down-saved', 'gunship-charge', 'gunship-captured', 'creature-win', 'flagship-down', 'boss-down', 'ring-charge', 'treasure-heist', 'scrap-built', 'frame-built', 'revive-fire', 'helm-held'], // moment kinds counted into a record's deeds (the others are not kept)
+      STATION_NAMES: { helm: 'the helm', gun: 'the guns', boiler: 'the boiler', engine: 'the engines', lookout: 'the lookout', coal: 'the coal bunker', ammo: 'the ammo hold', bombBay: 'the bomb bay', deflector: 'the deflector', coil: 'the coil', searchlight: 'the searchlight', escort: 'the escort hook' }, // a favourite station on the Book's roster page
+      WELCOME: { SECS: 8, MAX: 4, NEW: true }, // a scan-in stands on the TV lobby this many seconds, at most MAX at once; NEW: a new player is welcomed too ("Deckhand"), not only a veteran
+      PAGE: { ROWS: 8 }, // crew on the Book's roster page (the most voyages first)
+    },
   },
   // PvP look (modules/host/pvp/pvpArt.js: the flag, the two-sided hull bars, the "!" over an enemy). Soft faded team colours, logbook style.
   PVP_ART: {

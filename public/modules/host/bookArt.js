@@ -6,9 +6,11 @@
 //   art.ceremony(christen)             the bottle, the plank and her name painted on it (state.christen = { name, t, t0 })
 //   art.plate(name, x, y)              the small name plate in the HUD; returns its width
 //   art.lobbyCard(save, name, x, y)    "THE SHIP'S BOOK" card in the lobby
-//   art.page(view, save)               the Ship's Book (view = { page }): page 0 the cover, then the voyages; returns the number of pages
+//   art.page(view, save)               the Ship's Book (view = { page }): page 0 the cover, page 1 the crew roster (L3), then the voyages; returns the number of pages
+//   art.welcomes(list, x, y)           L3: the lobby's scan-in banners ("Mia the Old Salt returns!"), state.welcomes
 import { config } from '../../config.js';
-import { prettyDate, shipRef } from './book.js';
+import { prettyDate, shipRef, crewPage, pageCount } from './book.js';
+import { titleFor, favouriteStation, notable } from './roster.js';
 
 const TAU = Math.PI * 2;
 const hash = (n) => { let h = Math.imul(n + 1, 2654435761) >>> 0; h ^= h >>> 15; return (h >>> 0) / 4294967296; }; // (0..1, the same for the same number)
@@ -270,7 +272,7 @@ export function createBookArt({ ctx, book, logArt, dots }) {
       ctx.fillStyle = LB.INK; ctx.font = `700 ${MIN}px ${F.TEXT}`;
       ctx.fillText(c.name, X + 34, cy, 230);
       ctx.fillStyle = LB.INK_SOFT; ctx.font = `400 ${MIN}px ${F.TEXT}`;
-      ctx.fillText(`${c.voyages} voyage${c.voyages === 1 ? '' : 's'}, ${c.victories} won`, X + 280, cy, 330);
+      ctx.fillText(`${titleFor(c).name} - ${c.voyages} voyage${c.voyages === 1 ? '' : 's'}, ${c.victories} won`, X + 280, cy, 460); // (L3: the title leads)
     });
     if (!crew.length) { ctx.fillStyle = LB.INK_SOFT; ctx.font = `400 ${MIN}px ${F.TEXT}`; ctx.fillText('Nobody has signed the book yet.', X, Math.max(y + 30, 566) + 36); }
     // the voyages, newest first
@@ -300,17 +302,75 @@ export function createBookArt({ ctx, book, logArt, dots }) {
     ctx.fillText(`Page 1 of ${pages}`, 1430, 852);
     ctx.textAlign = 'left';
   };
+  // ---- the crew roster page (L3): every human who has flown, the most voyages first: title, record, favourite station, what they did most ----
+  const rosterPage = (save, pages) => {
+    const X = 110, RO = config.BOOK.ROSTER;
+    book.paper(60, 30, 1420, 840, { r: 22 });
+    ctx.textAlign = 'left';
+    ctx.fillStyle = LB.INK;
+    ctx.font = `56px ${F.DISPLAY}`;
+    ctx.fillText('THE CREW ROSTER', X, 108, 900);
+    ctx.fillStyle = LB.INK_SOFT;
+    ctx.font = `700 ${MIN + 2}px ${F.TEXT}`;
+    ctx.fillText('service records kept on this TV - names only', X + 2, 146);
+    const crew = Object.values(save.crew).sort((a, b) => b.voyages - a.voyages || String(b.last).localeCompare(String(a.last)) || a.name.localeCompare(b.name)).slice(0, RO.PAGE.ROWS);
+    crew.forEach((c, i) => {
+      const y = 214 + i * 76, t = titleFor(c), fav = favouriteStation(c), what = notable(c, 2);
+      ctx.beginPath(); ctx.arc(X + 14, y - 9, 12, 0, TAU); ctx.fillStyle = c.color; ctx.fill(); ctx.strokeStyle = LB.INK; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.textAlign = 'left';
+      ctx.fillStyle = LB.INK; ctx.font = `28px ${F.DISPLAY}`;
+      ctx.fillText(c.name, X + 40, y, 300);
+      ctx.fillStyle = LB.STAMP; ctx.font = `700 ${MIN + 4}px ${F.TEXT}`;
+      ctx.fillText(t.name, X + 360, y - 2, 480);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = LB.INK; ctx.font = `700 ${MIN}px ${F.TEXT}`;
+      ctx.fillText(`${c.voyages} voyage${c.voyages === 1 ? '' : 's'}, ${c.victories} won`, 1430, y - 2, 420);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = LB.INK_SOFT; ctx.font = `400 ${MIN}px ${F.TEXT}`;
+      const bits = [];
+      if (fav) bits.push(`likes ${RO.STATION_NAMES[fav.kind] || 'the ' + fav.kind}`);
+      bits.push(...what);
+      if (t.also.length) bits.push(`also ${t.also.slice(0, 2).join(', ')}`);
+      ctx.fillText(bits.length ? bits.join('  -  ') : 'still learning the ropes', X + 40, y + 32, 1260);
+      ctx.strokeStyle = 'rgba(107,74,50,.25)'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(X, y + 46); ctx.lineTo(1430, y + 46); ctx.stroke();
+    });
+    ctx.fillStyle = LB.INK_SOFT; ctx.font = `400 ${MIN}px ${F.TEXT}`;
+    ctx.strokeStyle = LB.INK_SOFT; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(110, 816); ctx.lineTo(1430, 816); ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillText('Left and Right turn the page - Esc closes the book', 112, 852, 800);
+    ctx.textAlign = 'right';
+    ctx.fillText(`Page 2 of ${pages}`, 1430, 852);
+    ctx.textAlign = 'left';
+  };
   const page = (view, save) => {
-    const pages = 1 + (save && save.book ? save.book.length : 0);
+    const pages = pageCount(save), roster = crewPage(save);
     safe(() => {
       const p = Math.max(0, Math.min(pages - 1, view.page | 0));
       ctx.fillStyle = 'rgba(43,34,22,.82)';
       ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
       if (p === 0) cover(save, pages);
-      else logArt.postcard(entryAt(save, p), 0, { footer: `Page ${p + 1} of ${pages}  -  Left and Right turn the page, Esc closes the book`, noDim: true });
+      else if (roster && p === 1) rosterPage(save, pages);
+      else logArt.postcard(entryAt(save, p - (roster ? 1 : 0)), 0, { footer: `Page ${p + 1} of ${pages}  -  Left and Right turn the page, Esc closes the book`, noDim: true });
     });
     return pages;
   };
 
-  return { vote, ceremony, plate, lobbyCard, page, shipRef };
+  // ---- the lobby's scan-in banners (L3): a veteran is welcomed by title, a new face by "Deckhand" ----
+  const welcomes = (list, x, y) => safe(() => {
+    list.forEach((w, i) => {
+      const by = y + i * 86;
+      book.paper(x, by, 660, 76, { r: 12, pins: false });
+      ctx.beginPath(); ctx.arc(x + 34, by + 38, 15, 0, TAU); ctx.fillStyle = w.color || '#cccccc'; ctx.fill(); ctx.strokeStyle = LB.INK; ctx.lineWidth = 3; ctx.stroke();
+      ctx.textAlign = 'left';
+      ctx.fillStyle = LB.INK;
+      fit(w.line, 580, 30, MIN + 2);
+      ctx.fillText(w.line, x + 64, by + 38, 580);
+      ctx.fillStyle = LB.INK_SOFT; ctx.font = `400 ${MIN}px ${F.TEXT}`;
+      ctx.fillText(w.sub || '', x + 64, by + 64, 580);
+    });
+  });
+
+  return { vote, ceremony, plate, lobbyCard, page, welcomes, shipRef };
 }
