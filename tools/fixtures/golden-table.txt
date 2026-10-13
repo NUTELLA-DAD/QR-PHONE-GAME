@@ -1,15 +1,15 @@
-GOLDEN behaviour baseline captured 2026-10-12 (node tools/buildsim.mjs --snapshot-golden --force to re-capture)
-voyagesim normal: 3/10 victories, median 45 min
-voyagesim easy: 5/10 victories, median 41.7 min
+GOLDEN behaviour baseline captured 2026-10-13 (node tools/buildsim.mjs --snapshot-golden --force to re-capture)
+voyagesim normal: 3/10 victories, median 44.1 min
+voyagesim easy: 6/10 victories, median 41.7 min
 botsim 10 min, 8 bots: run          missions  min/mission   hull  kills wrecks hauls blowouts contacts tows
-  network-1                            1       2.9      67.9        57         0       111         0       227         0
+  network-1                            1       2.9      67.9        77         0       117         0       208         0
   network-2                            2       3.3      98.8       119         0        43         0       139         0
   network-3                            2       3.0      96.9        78         0        89         0        79         0
   open-1                               1       2.9        86        64         0        99         2       198         0
   open-2                               1       3.6      98.1        49         0       127         1        12         0
-  open-3                               2       2.8      95.4        94         0        91         1        21         0
+  open-3                               2       2.8      87.8        63         0       109         1        47         0
   route-1                              2       3.9      98.7        77         0        91         0       327         0
   route-2                              2       4.1      94.9        87         0       139         1       256         0
   route-3                              2       3.4      99.2        84         0        75         1       414         1
 cave runs (network, 4 min):  contacts / tows network-11 3/0, network-12 16/0, network-13 8/0
-capability px/s (speed climb dive): step1 123/0/0, step2 123/52/417, step3 123/501/460, step4 561/501/462, step5 628/501/462
+capability px/s (speed climb dive): step1 123/0/0, step2 123/52/418, step3 123/502/460, step4 560/500/462, step5 628/500/462
