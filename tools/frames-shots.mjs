@@ -98,6 +98,22 @@ window.__a = {
 `;
 
 let host = null, phone = null;
+// R4 (3d only): a close-up of the frame's place through the 3D view's own projection, saved as r4_<name>.png (the empty scaffold, half built, nearly full, the built moment, the finished part).
+const R4Z = Math.max(1, Number(arg('r4zoom', 1)) || 1); // (--r4zoom 2 = the close-ups twice as close)
+const r4 = async (name, w0 = 330, h0 = 210, clear = true) => {
+  const w = Math.round(w0 / R4Z), h = Math.round(h0 / R4Z);
+  if (view !== '3d') return;
+  const c = await host.ev(`(()=>{ const V = window.view3dDebug().view, st = window.game.state, sh = st.ships[0], f = st.run.frames[0]; if (!V || !f) return null; const g = f.ghost || { x0: f.x - 44, x1: f.x + 44, y0: f.y - 74, y1: f.y + 12 }; const p = V.hud3d.shipPt(sh, (g.x0 + g.x1) / 2, (g.y0 + g.y1) / 2, 0); const q = p && V.hud3d.project(p[0], p[1], p[2]); return q ? [q.x * innerWidth, q.y * innerHeight] : null })()`);
+  if (!c) { check(false, 'r4 ' + name + ': the frame has no place on the screen'); return; }
+  await host.shot(`r4_${name}.png`, { x: Math.max(0, Math.round(c[0] - w / 2)), y: Math.max(0, Math.round(c[1] - h / 2)), width: w, height: h, scale: 3 * R4Z });
+  if (!clear) return;
+  // ... and once more with the crewman stepped aside (he stands in front of the scaffold while he builds), then put back exactly
+  const x0 = await host.ev('(()=>{ const p = window.__a.me(), x = p.x; p.x = x + 260; return x })()');
+  await host.ev('window.__a.settle(14)');
+  await host.shot(`r4_${name}_clear.png`, { x: Math.max(0, Math.round(c[0] - w / 2)), y: Math.max(0, Math.round(c[1] - h / 2)), width: w, height: h, scale: 3 * R4Z });
+  await host.ev(`(()=>{ window.__a.me().x = ${x0}; return 1 })()`);
+  await host.ev('window.__a.settle(10)');
+};
 try {
   host = await openPage(`${BASE}/host.html?view=${view}&kind=open&tier=medium&cine=0&christen=0`, 1600, 900, false, true);
   check(await host.waitFor('window.__meter!==undefined', 60000), 'the host page is up');
@@ -179,30 +195,60 @@ try {
   await phone.shot(`frames_${view}_phone_build.png`);
   await host.ev('window.__a.settle(40)');
   await host.shot(`frames_${view}_tv_frame.png`);
+  await r4('1_empty');
 
   // holding Action: the bar fills, the part fills in
   await host.ev('(()=>{ const a = window.__a, p = a.me(); p.fire = true; a.step(60); return 1 })()');
   await host.ev('window.__a.settle(30)');
   await phone.shot(`frames_${view}_phone_building.png`);
   await host.shot(`frames_${view}_tv_building.png`);
+  await r4('2_first_bundle_going_in');
   await host.ev('(()=>{ const a = window.__a, p = a.me(); a.step(110); p.fire = false; a.step(10); return 1 })()');
   check(await host.ev('window.game.state.run.frames[0].fill === 1 && window.__a.me().carry === null'), 'one bundle in: the frame is 1/3, his hands are empty');
   await host.ev('window.__a.settle(60)');
   await host.shot(`frames_${view}_tv_frame1.png`);
+  await r4('3_half_built');
   // two more bundles (from the hold, as another crewman would carry them)
   await host.ev('(()=>{ const a = window.__a, p = a.me(); p.carry = "scrap"; p.fire = true; a.step(170); p.fire = false; a.step(10); return 1 })()');
   check(await host.ev('window.game.state.run.frames[0].fill === 2 && !window.game.state.run.frames[0].done'), 'two bundles in: 2/3');
   await host.ev('window.__a.settle(60)');
   await host.shot(`frames_${view}_tv_frame2.png`);
   await host.shot(`frames_${view}_tv_frame2_closeup.png`, { x: 540, y: 520, width: 340, height: 190, scale: 4 });
+  await host.ev('(()=>{ const a = window.__a, p = a.me(); p.carry = "scrap"; p.fire = true; a.step(95); return 1 })()'); // (the third bundle part way in: the band is high, nearly full)
+  await host.ev('window.__a.settle(30)');
+  await r4('4_nearly_full');
+  if (view === '3d') { // R4: what the scaffold costs - the same frame drawn with it and without (config.FRAMES3D.ENABLED off for a moment)
+    const calls = () => host.ev('(async () => { await window.__a.settle(6); const V = window.view3dDebug().view, i = V.renderer.info; return { calls: i.render.calls, tris: i.render.triangles, own: V.frames3d.stats.calls, ms: +V.frames3d.stats.ms.toFixed(3) } })()');
+    const withIt = await calls();
+    await host.ev('(async () => { const { config } = await import("/config.js"); config.FRAMES3D.ENABLED = false; return 1 })()');
+    const without = await calls();
+    await host.ev('(async () => { const { config } = await import("/config.js"); config.FRAMES3D.ENABLED = true; return 1 })()');
+    await host.ev('window.__a.settle(6)');
+    console.log('  R4 cost: with ' + JSON.stringify(withIt) + ' without ' + JSON.stringify(without));
+    check(withIt.calls - without.calls <= 3 && withIt.calls <= 150, 'the scaffold adds at most 3 draw calls (' + (withIt.calls - without.calls) + ') and the scene stays under 150 (' + withIt.calls + ')');
+  }
+  const modelGuns = () => host.ev('(()=>{ const V = window.view3dDebug().view, sh = game.state.ships[0], e = V && V.models.get(sh.id); return e ? { ver: e.ver, layoutVer: sh.layout.version, guns: [...e.model.parts.keys()].filter((k) => k.startsWith("gun:")).length, scaffold: !!(V.frames3d && V.frames3d.live) } : null })()');
+  const mg0 = view === '3d' ? await modelGuns() : null;
   const guns0 = await host.ev('window.game.state.ships[0].layout.stations.filter(s => s.kind === "gun").length');
   await host.ev('(()=>{ const a = window.__a, p = a.me(); p.carry = "scrap"; p.fire = true; a.step(170); p.fire = false; a.step(10); return 1 })()');
   const guns1 = await host.ev('window.game.state.ships[0].layout.stations.filter(s => s.kind === "gun").length');
   check(await host.ev('window.game.state.run.frames[0].done') && guns1 === guns0 + 1, `the last bundle: the gun is alive (${guns0} -> ${guns1} guns)`);
+  await host.ev('window.__a.settle(2)');
+  await r4('5_built_moment_a', 330, 210, false);
+  await host.ev('window.__a.settle(2)');
+  await r4('5_built_moment_b', 330, 210, false);
+  if (view === '3d') { // R4: growPart changed the layout's version, so the view built her model again and the new gun is in it; the scaffold is gone
+    await host.ev('window.__a.settle(30)');
+    const mg1 = await modelGuns();
+    console.log('  3D model before ' + JSON.stringify(mg0) + ' after ' + JSON.stringify(mg1));
+    check(mg0 && mg1 && mg1.ver === mg1.layoutVer && mg1.ver > mg0.ver && mg1.guns === mg0.guns + 1, 'the 3D ship was built again with the new gun (' + (mg0 && mg0.guns) + ' -> ' + (mg1 && mg1.guns) + ' gun parts)');
+    check(mg0 && mg0.scaffold === true && mg1 && mg1.scaffold === false, 'the scaffold stood while it was built and is gone once the part is');
+  }
   console.log('  built by: ' + await host.ev('JSON.stringify(window.game.state.run.parts.filter(p => p.frame))'));
   await host.ev('window.__a.step(40); window.__a.settle(60)');
   await sleep(500);
   await host.shot(`frames_${view}_tv_built.png`);
+  await r4('6_finished_part');
   await host.shot(`frames_${view}_tv_built_closeup.png`, { x: 540, y: 520, width: 340, height: 190, scale: 4 });
   await phone.shot(`frames_${view}_phone_built.png`);
   console.log('  the Book: ' + await host.ev('JSON.stringify(game.state.moments.filter(m => m.kind === "frame-built").map(m => m.who))'));

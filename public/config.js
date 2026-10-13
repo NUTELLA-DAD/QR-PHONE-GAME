@@ -3701,6 +3701,21 @@ export const config = {
     RING: { R: 44, PULSE: 3, COLOR: '#ffd23f' }, // (the gold ring round a flotsam bundle; it swells PULSE px on the 8 fps key; a bundle on a deck has a smaller one)
     CAP: { BUNDLES: 64, RINGS: 64 },
   },
+  // LOOP.md R4 (frames3d.js / framesKit.js, 3D.md section 35): the scaffold of a part the crew are building in flight (G4 frames) in the 3D view. A blueprint-blue ghost of the part (a translucent volume, bright edges, a
+  // line for each bundle still to carry) inside pale timber scaffolding; a slab of steel for each bundle in; a gold band rising while a bundle goes in; a gold ring on the deck where the crew stand; a gold flash when it is built.
+  FRAMES3D: {
+    ENABLED: true,
+    PAD: 8, // px: the scaffold stands this far outside the part's own box
+    DEPTH: 64, // px: how deep the scaffold stands (the part's box, centred on the ship's middle plane)
+    VOL_ALPHA: 0.42, EDGE_ALPHA: 0.95, EDGE: 3.2, // the ghost volume's opacity, its edges' opacity and thickness
+    COL: { BLUE: '#4f9cf0', EDGE: '#c4e2ff', INK: '#1b2a44', TIMBER: '#a9bccd', TIMBER_DARK: '#6f8398', PLANK: '#bccbd8', GOLD: '#ffd23f' },
+    STEEL: { A: '#66788c', B: '#4c5b6d', BEVEL: '#c6d2de', RIVET: '#e3e9ee' },
+    RING: { R: 36, W: 8, Z: 84 }, // the BUILD HERE ring on the deck: radius, width, how far toward the camera
+    GLOW: { BAND: 2.2, BAND_ALPHA: 0.8, TOP: 3, RING: 1.35, PULSE: [1, 1.5] }, // HDR multipliers (they bloom); the ring's brightness alternates on the 8 fps key
+    PROG_STEPS: 10, // the rising band moves in this many steps for each bundle
+    SPARKS: { EVERY: 2, N: 3 }, // while a bundle is going in: N gold sparks on every EVERY-th 8 fps key
+    BUILT: { KEYS: 6, GROW: 3, FADE: 1.8, SPARKS: 26, DUST: 6 }, // the built moment: a gold shell swelling GROW px a key for KEYS keys (HDR FADE x, falling), sparks, dust, a flash and a ring
+  },
   // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.
   // SCALE = size of one texture pixel in world units (the 512px tile covers 512*SCALE units; the airship is ~1500 wide).
   // Painted textures on the ship and gunships. STRENGTH: how strongly they show (1 = subtle, 2 = clear, 3 = bold).
