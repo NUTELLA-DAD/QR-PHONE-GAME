@@ -124,7 +124,7 @@ export function createYardArt({ ctx, book, dots, wrapLines, ink, pics, spares, w
         ctx.font = (one ? '26px ' : '21px ') + config.FONTS.DISPLAY;
         ctx.fillStyle = off && !o.sold ? '#b3261e' : L.INK;
         ctx.fillText(o.sold ? 'SOLD' : priceWords(o), x + 100, y + ch - 18, cw - 116);
-        if (o.scrap && !o.sold) for (let k = 0; k < o.scrap; k++) { ctx.globalAlpha = off ? 0.5 : k < o.scrapPay ? 1 : 0.28; drawScrapBundle(ctx, x + cw - 28 - k * 30, y + ch - 62, 0.8); } // (G2: one bundle for each the card asks; the ones the hold covers are bright, the rest are paid in cash)
+        if ((o.scrap || o.frame) && !o.sold) for (let k = 0; k < (o.frame ? o.need : o.scrap); k++) { ctx.globalAlpha = off ? 0.5 : o.frame ? 0.55 : k < o.scrapPay ? 1 : 0.28; drawScrapBundle(ctx, x + cw - 28 - k * 30, y + ch - 62, 0.8); } // (G2: one bundle for each the card asks; the ones the hold covers are bright, the rest are paid in cash; G4: a frame card's are all half bright - carried in flight)
         ctx.globalAlpha = off ? 0.5 : 1;
       }
       if (part && !o.sold) { // the part card wears a brass tag
@@ -188,14 +188,14 @@ export function createYardArt({ ctx, book, dots, wrapLines, ink, pics, spares, w
     const choices = part && (v.kind === 'slot' || !part.sold) ? part.choices : [];
     const pins = choices.map((c) => ({ x: c.x, y: c.y, letter: c.letter, ghost: c.ghost }));
     const built = Y.built;
-    blueprint(layout, pins, built ? { text: 'BUILT', sub: `${built.name.toUpperCase()} - ${built.where.toUpperCase()}` } : null);
+    blueprint(layout, pins, built ? { text: built.frame ? 'FRAME' : 'BUILT', sub: `${built.name.toUpperCase()} - ${built.where.toUpperCase()}` } : null);
     gauges(Y.sum || (part && part.now), built ? [] : choices);
     if (v.kind === 'slot') {
       note([[part.desc, '400 17px ' + config.FONTS.TEXT, L.INK, 22], [`The lettered pins on the blueprint are the places; the brass letters on the gauges show what each would do.`, '400 15px ' + config.FONTS.TEXT, L.INK_SOFT, 20]]);
       slotCards(v, voters);
     } else {
       const lines = [];
-      if (built) lines.push([`BUILT: ${built.name} (${built.where}). Cast off and watch her grow.`, '24px ' + config.FONTS.DISPLAY, GOOD, 30]);
+      if (built) lines.push([built.frame ? `FRAME PLACED: ${built.name} (${built.where}). Cast off, then carry scrap to it.` : `BUILT: ${built.name} (${built.where}). Cast off and watch her grow.`, '24px ' + config.FONTS.DISPLAY, GOOD, 30]);
       else if (part && !part.sold) {
         lines.push([`${part.baseName}: ${part.desc}`, '22px ' + config.FONTS.DISPLAY, L.INK, 28]);
         lines.push([part.choices.map((c) => `${c.letter} ${c.where}`).join('   '), '700 15px ' + config.FONTS.TEXT, L.INK_SOFT, 20]);

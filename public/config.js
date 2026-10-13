@@ -2473,6 +2473,29 @@ export const config = {
       HOLD_SOFT: 5, // (balance pass) a hold this full is heavy enough: the helm stops steering under flotsam, the bots stop stripping hulks and hooking bundles (loads already lying on a deck are still stowed)
     },
   },
+  // FRAMES (LOOP.md G4; buildFrames.js, simulation.js placeFrame / finishFrame): "the crew should be ship building as they go from scraps". At the dock a small part (a gun, a lamp, plate, ballast, a bunker, a sail,
+  // a hatch, a ladder ...) can be bought as a FRAME: the card costs a share of the salvage and no bundles; the part is delivered as an empty scaffold on its Yard place and the crew BUILD it in flight - a crewman
+  // carrying a bundle holds Action at the frame (n/m), and when it is full the part comes alive (the ship's parts list grows in the air, shipSim.js growPart) and the Book names the builders. Needs SCRAP on (a Node tool
+  // without SCRAP_ON never sees a frame); NO_FRAMES=1 in a tool (or ENABLED false) is the game without them: the dock offers only the plain part card.
+  FRAMES: {
+    ENABLED: typeof process === 'undefined' || !process.env ? true : !process.env.NO_FRAMES, // the switch
+    PARTS: ['gun', 'gun_long', 'gun_mortar', 'gun_scatter', 'gun_flak', 'gun_harpoon', 'gun_flame', 'lamp', 'armour', 'ballast', 'coal', 'ammo', 'sail', 'ladder', 'pole', 'lift', 'dropHatch'], // the Yard parts a frame can be bought for (the small ones; hull bays, decks, bags, engines, boilers, the bomb bay and nests stay at the Yard)
+    CASH_SHARE: 0.4, // the frame card costs this share of the part's salvage price (the plain card is half in cash and half in bundles from the hold, or all cash with an empty hold): the bundles are carried in flight
+    PER: 30, MIN: 2, MAX: 6, // bundles a frame takes = the part's salvage price / PER, rounded, between MIN and MAX (the same scale as SCRAP.PRICE.PART_PER: a gun is 3)
+    TIME: 2.5, // seconds of holding Action to put one bundle in
+    DECAY: 2, // a bundle nobody is working on loses its progress this fast (bar units a second: let go half way and it starts over)
+    REACH: 70, // px along the deck: a crewman this close to the frame's work spot (the deck point nearest the part's place) can build
+    MAX_PENDING: 1, // frames waiting to be built at once (one frame at a time: a second card is not offered until the first stands)
+    PLACE_SLACK: 420, // px: if the ship has changed since the frame was bought (parts broke off), the place is cut again on what she is and must be this near the old one, else the frame has no room and is refunded at the next dock
+    ARROWS: ['build', 'calm', 'escape'], // the phones' gold arrows (BUILD, TAKE SCRAP OUT OF THE HOLD) show only in these tempo phases and with no fall, raiders, fire, gunship or live creature about (never in a set piece): a person can still build whenever he likes
+    BOTS: {
+      CAP: 2, // bots on a build job at once (the rest keep the guns, the boiler and the chores)
+      BUY: 0.8, // the chance a bot votes for the frame card when it cannot pay for the plain part card
+      PREFER: 0, // ... and when it CAN pay for it but the hold cannot cover the card's bundles (it would pay the rest in cash): 0 = never (a bot crew that can buy a part now does not swap it for one it has to build; 0.8 costs the Sparrow's bots wins in voyagesim)
+      ALLOW: ['calm', 'escape'], // bots build only in a CALM: these tempo phases (never a set piece or the trickle before one), and never while she falls, with raiders aboard, a gunship or a live creature about ...
+      MAX_FIRES: 0, // ... or more than this many fires burning
+    },
+  },
   // THE SHIP'S BOOK (SHIPS_BOOK.md L0 + L1). moments.js remembers what happened, with names (state.moments, data only: it draws no random numbers and changes nothing in the sim); logWriter.js tells it back as
   // short sentences in the banner voice; logArt.js draws the Log line at the sky-dock, the PLAY OF THE MISSION ribbon on the scorecard and the run-end postcard.
   LOG: {
@@ -2481,7 +2504,7 @@ export const config = {
     // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
     WEIGHT: {
       'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'away-banner': 8, 'away-charge': 7, 'away-prisoners': 6, 'away-ballista': 5, 'away-beacon': 4, 'away-winch': 4, 'away-ko': 3, 'treasure-stowed': 5, 'treasure-heist': 8, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
-      'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'scrap-patch': 7, 'scrap-built': 4, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
+      'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'scrap-patch': 7, 'scrap-built': 4, 'frame-built': 6, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra
     // Jobs done a lot in one stop earn a moment at the stop's end: the stat, and how many make it worth a line. Weight = LEADER_W.BASE + (count / that number - 1) x LEADER_W.PER, at most LEADER_W.MAX.
@@ -3545,7 +3568,7 @@ export const config = {
     COAL_LOW: 30, // boiler fuel below this percent is worth a coal run
     CLAIM_PENALTY: 1.2, // each other crewmate already going to the same job adds this to its (distance-weighted) score
     // How much each kind of job matters (bigger = pulls harder; score = seconds of walking / this).
-    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5, hack: 3.4, frame: 1.9, stow: 1.4, hulk: 1.5, scrappatch: 2.2, scrapgrab: 2 },
+    URGENCY: { fight: 3, fire: 2.6, revive: 2.2, heal: 3.5, bandage: 1.3, hole: 1.8, gas: 1.6, swat: 1.5, leak: 1.4, ice: 1.2, unclog: 1.2, oxygen: 1.6, rod: 3.2, pump: 1.9, winch: 1.5, repair: 1.1, ammo: 1, coal: 1, help: 8, trim: 0.9, sail: 1.3, reef: 3, shovel: 1.5, hack: 3.4, frame: 1.9, stow: 1.4, hulk: 1.5, scrappatch: 2.2, scrapgrab: 2, buildframe: 1.7, buildgrab: 1.6 },
   },
   SPECIES: {
     bulldog: { fur: '#b08a62', ear: 'floppy' },

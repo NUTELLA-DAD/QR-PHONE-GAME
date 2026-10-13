@@ -23,6 +23,7 @@ import { createHookshot } from './hookshot.js';
 import { createCannon } from './cannon.js';
 import { createCargo, cargoItem, isStocked } from './cargo.js';
 import { scrapOn, scrapNote } from './scrap.js';
+import { nearFrame, work as frameWork, frameWords } from './buildFrames.js';
 import { createHatches } from './hatch.js';
 import { pop } from './popups.js';
 import { assistAim } from './aim.js';
@@ -208,6 +209,11 @@ export function createShipSim(world, ship, W) {
     if (patchSeg) return { type: 'scrappatch', obj: patchSeg, hold: true, label: `PATCH ${structure.nameOf(patchSeg)} (scrap)` };
     const patchGrab = scrapOn() && player.bot && !player.carry && player.botJob && player.botJob.kind === 'scrappatch' ? cargo.unstowAction(player, here) : null; // (a bot sent to patch a segment takes a bundle out of the hold bin first)
     if (patchGrab) return patchGrab;
+    // FRAMES (config.FRAMES, LOOP.md G4): a bundle in your hands at the scaffold of a part the crew have bought: hold Action and it goes in (n/m); when it is full the part comes alive. It comes before the hold bin, after a failing segment; a bot only on its build job.
+    const buildFr = ship.main && player.carry === 'scrap' && !state.goingDown && (!player.bot || (player.botJob && player.botJob.kind === 'buildframe')) ? nearFrame(ship, player.d, player.x) : null;
+    if (buildFr) return buildFr.ok === false ? { type: 'need', label: 'No room for this frame now' } : { type: 'buildframe', obj: buildFr, hold: true, label: frameWords(buildFr) };
+    const buildGrab = ship.main && player.bot && !player.carry && player.botJob && player.botJob.kind === 'buildframe' ? cargo.unstowAction(player, here) : null; // (a bot sent to build takes a bundle out of the hold bin first)
+    if (buildGrab) return buildGrab;
     const dumpC = cargo.stowAction(player, here) || cargo.dumpAction(player) || cargo.hulkAction(player) || cargo.shovelAction(player, here); // (SCRAP: the hold bin with a bundle in your hands, a hulk within reach of empty ones)
     if (dumpC) return dumpC;
     const hatchBot = !player.bot || (player.botJob && player.botJob.kind === 'hatch'); // (a bot works a cargo drop hatch only when its job says so)
@@ -1584,6 +1590,18 @@ export function createShipSim(world, ship, W) {
               shipPop(object.x, object.y - 120, 'PLATED!', '#ffd23f', 0.9);
               state.sfxQ.push(['clang', true]);
             }
+          } else if (act.type === 'buildframe') { // FRAMES: a bundle carried into a part's scaffold (buildFrames.js work); the last one makes the part come alive (simulation.js finishFrame)
+            const r = player.carry === 'scrap' ? frameWork(object, player, dt) : null;
+            if (Math.random() < dt * 5) shipPuff(object.x + (Math.random() - 0.5) * 60, object.y - 30, '#ffd23f', 2);
+            if (r) {
+              player.carry = null;
+              stat(player, 'framed');
+              scrapNote(world, 'framed', player, { ship, frame: object });
+              shipPuff(object.x, object.y - 30, '#e8c25a', 8);
+              shipPop(object.x, object.y - 120, r.done ? 'BUILT!' : `${object.fill}/${object.need}`, '#ffd23f', 0.9);
+              state.sfxQ.push(['clang', true]);
+              if (r.done && W.finishFrame) W.finishFrame(object);
+            }
           } else if (act.type === 'rod') env.stormSea.rodHold(object);
           else if (act.type === 'pump') env.stormSea.pumpWork(dt);
           else if (act.type === 'winch') env.stormSea.winchWork(object, dt);
@@ -2157,12 +2175,25 @@ export function createShipSim(world, ship, W) {
     return { newBomb };
   }
 
+  // A part finished IN FLIGHT (LOOP.md G4, buildFrames.js): the mirror of breakOff - the layout is replaced in place by a longer parts list and everything made from it follows (reshape: the crew keep their decks, the
+  // holes, fires, loads and bags stay where they were, the guns and lamps are made again keeping their shells). Nobody is thrown (nothing is taken away; a crewman whose deck is somehow gone lands on the nearest).
+  // Returns true when the part is on her.
+  function growPart(parts) {
+    if (state.ship.down || state.wreck || !layout.parts) return false;
+    const old = snapshotOld();
+    layout.applyBuild(parts);
+    reshape(old, { crew: Object.values(state.players), lost: () => false, lose: (p) => { p.d = old.oldP[p.d] ? nearestDeck(old.oldP[p.d].y, p.x) : 0; } });
+    structure.sync(); // (the frame is cut again from what she is now, keeping the soundness of the segments that stay)
+    state.hitLog.length = 0; state.breakEvents.length = 0; // (3D: the new ship wears no dents)
+    return true;
+  }
+
   return {
     ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, health, goingDown, steamFix, raiders, escort, coil, searchlights, air, cannon, cargo, hatches,
     get hookshot() { return hookshot; },
     get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
     hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, wreck: (text) => wreck(text), shieldBlocks, gnaw, shipPuff, shipPop, breakOff, splitShip, structure, explodeBay, explodeBag, hydrogen, crash, seedBreak: (n) => { breakRng = makeRng(n); }, // (the gate reseeds the break-off rolls)
     interaction, taken, holder, getHelm, worksKind, isHostile, homeOf, sendHome,
-    preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn, refit, fitBuild, comeAbout,
+    preStep, trimOff, stepCrew, stepSystems, moor, stepShield, stepUpkeep, attach, respawn, refit, fitBuild, growPart, comeAbout,
   };
 }

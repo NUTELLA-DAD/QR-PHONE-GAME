@@ -26,7 +26,8 @@ import { drawBoilerSteam, drawFallMarks, drawHoleGlow } from './goingDownArt.js'
 import { windFactor } from './sails.js';
 import { gasKey, hotLift } from './gases.js';
 import { drawHatch } from './hatchArt.js';
-import { drawScrapBundle, drawScrapRing, drawScrapBin, drawRivetPlate } from './scrapArt.js';
+import { drawScrapBundle, drawScrapRing, drawScrapBin, drawRivetPlate, drawFrameScaffold } from './scrapArt.js';
+import { pendingOf, frameSpot } from './buildFrames.js';
 import { scrapOn, holdSpot, holdCount } from './scrap.js';
 import { artOf, steamPuff, drawEngineBody, drawEngineProp } from './engineArt.js';
 
@@ -1593,6 +1594,15 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     }
   };
 
+  // The scaffolds of the parts the crew bought as frames (LOOP.md G4, buildFrames.js): timber round the part's place, the part filling in as bundles are carried to it, a gold ring on the deck where the crew stand.
+  const liveFrames = (time) => {
+    if (!ship.main) return;
+    for (const f of pendingOf(state)) {
+      const at = frameSpot(ship, f), q = P[at.d];
+      drawFrameScaffold(ctx, f, time, q ? { x: at.x, y: q.y } : null);
+    }
+  };
+
   // The hold bin (scrap.js holdSpot): a slatted crate on the deck of the Hold that shows how many bundles are stowed.
   const liveHold = (time) => {
     const sp = scrapOn() ? holdSpot(L) : null, q = sp && P[sp.d];
@@ -1755,6 +1765,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     guard('loads', liveLoads);
     guard('hold', liveHold, time);
     guard('plates', livePlates);
+    guard('frames', liveFrames, time);
     if ((L.hatches || []).length) guard('hatches', liveHatches, time);
     guard('steam', liveVents, time);
     guard('lift', liveConnectors);

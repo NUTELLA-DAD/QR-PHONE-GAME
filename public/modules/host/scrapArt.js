@@ -143,3 +143,63 @@ export function drawScrapBin(ctx, x, y, count, cap, time = 0) {
   ctx.fillText(`HOLD ${count}/${cap}`, x, y - h - 8);
   ctx.restore();
 }
+
+// A FRAME (LOOP.md G4, buildFrames.js): the scaffold of a part the crew bought and are building from carried scrap, in the SHIP's own frame. f = { ghost: { x0, y0, x1, y1 }, x, y, fill, prog, need, name }:
+// timber poles and braces round the part's place, the part filling in from the bottom as bundles go in (iron plates, rising), a row of bundle slots over it (solid = in, dashed = still to carry) and "n/m". spot = { x, y }
+// where the crew stand (the deck point nearest the place): a gold ring there says BUILD HERE.
+const WOOD = '#8a6a44', WOOD_DARK = '#5e4630';
+export function drawFrameScaffold(ctx, f, time = 0, spot = null) {
+  const g = f.ghost && f.ghost.x0 != null ? f.ghost : { x0: f.x - 44, x1: f.x + 44, y0: f.y - 74, y1: f.y + 12 };
+  const w = g.x1 - g.x0, h = g.y1 - g.y0, t = Math.max(0, Math.min(1, ((f.fill || 0) + (f.prog || 0)) / Math.max(1, f.need)));
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.fillStyle = 'rgba(243,234,214,0.30)'; // the part's ghost: a pale panel
+  ctx.fillRect(g.x0, g.y0, w, h);
+  if (t > 0) { // the part filling in: iron plates rising from the bottom
+    const fh = h * t;
+    ctx.fillStyle = 'rgba(141,150,160,0.82)';
+    ctx.fillRect(g.x0, g.y1 - fh, w, fh);
+    ctx.strokeStyle = INK();
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let y = g.y1 - 13; y > g.y1 - fh; y -= 13) { ctx.moveTo(g.x0, y); ctx.lineTo(g.x1, y); }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(179,188,198,0.9)';
+    ctx.fillRect(g.x0, g.y1 - fh, w, 4);
+  }
+  ctx.strokeStyle = WOOD_DARK; // the scaffold: two poles, a top beam and two braces
+  ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.moveTo(g.x0, g.y1); ctx.lineTo(g.x0, g.y0 - 8); ctx.moveTo(g.x1, g.y1); ctx.lineTo(g.x1, g.y0 - 8); ctx.moveTo(g.x0 - 8, g.y0); ctx.lineTo(g.x1 + 8, g.y0); ctx.stroke();
+  ctx.strokeStyle = WOOD;
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(g.x0, g.y1); ctx.lineTo(g.x1, g.y0); ctx.moveTo(g.x1, g.y1); ctx.lineTo(g.x0, g.y0); ctx.stroke();
+  ctx.setLineDash([14, 9]); // the dashed outline of what is coming
+  ctx.lineDashOffset = -(time * 20) % 23;
+  ctx.strokeStyle = INK();
+  ctx.lineWidth = 6;
+  ctx.strokeRect(g.x0, g.y0, w, h);
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 3.2;
+  ctx.strokeRect(g.x0, g.y0, w, h);
+  ctx.setLineDash([]);
+  const n = Math.max(1, f.need | 0), step = Math.min(34, (w + 40) / n), x0 = (g.x0 + g.x1) / 2 - (step * (n - 1)) / 2, by = g.y0 - 30;
+  for (let k = 0; k < n; k++) { // the bundle slots over it
+    if (k < (f.fill || 0)) drawScrapBundle(ctx, x0 + k * step, by, 0.6);
+    else { ctx.setLineDash([4, 4]); ctx.strokeStyle = INK(); ctx.lineWidth = 2; ctx.strokeRect(x0 + k * step - 10, by - 8, 20, 16); ctx.setLineDash([]); }
+  }
+  const cx = (g.x0 + g.x1) / 2, ty = by - 42; // the tag: a gold plate on a pole, "BUILD n/m"
+  ctx.strokeStyle = WOOD_DARK;
+  ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(cx, ty + 12); ctx.lineTo(cx, by - 12); ctx.stroke();
+  ctx.font = '700 30px ' + config.FONTS.DISPLAY;
+  ctx.textAlign = 'center';
+  const tag = `BUILD ${f.fill || 0}/${f.need}`, tw = ctx.measureText(tag).width + 26;
+  ctx.fillStyle = GOLD;
+  ctx.strokeStyle = INK();
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.roundRect(cx - tw / 2, ty - 26, tw, 40, 8); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = INK();
+  ctx.fillText(tag, cx, ty + 5);
+  ctx.restore();
+  if (spot) drawScrapRing(ctx, spot.x, spot.y - 6, 26, time); // BUILD HERE: the gold ring on the deck where the crew stand
+}

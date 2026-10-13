@@ -53,6 +53,7 @@ import { matesWanted } from './mates.js';
 import { windSpeed } from './sails.js';
 import { drawScrapBundle, drawScrapChute, drawScrapRing, drawScrapHulk } from './scrapArt.js';
 import { scrapOn, holdCount, chestCount, priceWords } from './scrap.js';
+import { pendingOf as pendingFrames, frameSpot } from './buildFrames.js';
 import { drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
 // ONE renderer draws the whole sky (B.3): the background and the terrain once, then EVERY ship (renderFrame's loop over the ships: each under her own pose, with her own art bake,
@@ -1966,7 +1967,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       if (o.kind !== 'cast') {
         ctx.font = '25px ' + config.FONTS.DISPLAY;
         ctx.fillStyle = off && !o.sold ? '#b3261e' : config.INK;
-        ctx.fillText(o.sold ? 'SOLD' : o.scrap ? priceWords(o) : `Salvage ${o.cost}`, x + cw / 2, y + 282, cw - 20); // (G2: "Salvage 55 + 3 scrap")
+        ctx.fillText(o.sold ? 'SOLD' : o.scrap || o.frame ? priceWords(o) : `Salvage ${o.cost}`, x + cw / 2, y + 282, cw - 20); // (G2: "Salvage 55 + 3 scrap")
         if (o.max > 1 && !o.sold) {
           ctx.font = '700 16px ' + config.FONTS.TEXT;
           ctx.fillStyle = config.INK;
@@ -3137,6 +3138,10 @@ export function createRenderer({ ctx, state: world, canvas }) {
           const ch = J.charge, held = !!ch.held, q = at3(ch.x, -330);
           if (q) { at(q, zs); label(held ? 'GROUNDING...' : 'LIGHTNING! HOLD A ROD!', 0, -64, '27px ' + DISP, held ? '#9fe8ff' : '#fff27a', config.INK, 6); }
           if (!held) for (const r of J.rods || []) { const q2 = WP[r.d] && at3(r.x, WP[r.d].y - 205); if (q2) { at(q2, zs); label('HOLD!', 0, 0, '31px ' + DISP, '#fff27a', config.INK, 5); } }
+        }
+        for (const fr of pendingFrames(world)) { // FRAMES (LOOP.md G4): the 3D scaffold is R4's; until then a gold tag over the deck point where the crew build says what is going up and how far it is
+          const sp = frameSpot(ms, fr), q = WP[sp.d] && at3(sp.x, WP[sp.d].y - 235);
+          if (q) { at(q, zs); label(`BUILD ${String(fr.name).toUpperCase()} ${fr.fill}/${fr.need}`, 0, 0, '24px ' + DISP, '#ffd23f', config.INK, 6); if (fr.prog > 0) drawBar(0, 14, Math.min(1, fr.prog)); }
         }
         const sea = world.sea;
         if (sea && sea.pump && WP[sea.pump.d]) {

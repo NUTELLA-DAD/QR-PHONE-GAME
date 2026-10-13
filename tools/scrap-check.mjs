@@ -456,6 +456,7 @@ const momentsOf = (st, kind) => (st.moments || []).filter((m) => m.kind === kind
   const PR = S.PRICE;
   const dock = (hold, salvage = 600, off = false, chance = 1) => {
     const b = boot({ startBuild: 'sparrow' });
+    config.FRAMES.ENABLED = false; // (G4's FRAME twin of a part card is its own gate, --check-frames-build: these cards are G2's prices)
     b.sim.setSession && b.sim.setSession('voyage', false);
     step(b.sim, secs(30));
     b.st.run.salvage = salvage;

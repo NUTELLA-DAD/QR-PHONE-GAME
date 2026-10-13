@@ -22,6 +22,7 @@ import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
 import { createTowing } from './towing.js';
 import { createFlotsam, scrapOn, topDeck, holdCount, holdSpend, priceWords, scrapNote } from './scrap.js';
+import { framesOn, framable, bundlesFor, pendingOf, stepFrames, buildersOf, frameSpot } from './buildFrames.js';
 import { stepThrown, cargoItem } from './cargo.js';
 import { stepMines } from './minefield.js';
 import { stepFlak } from './weapons.js';
@@ -29,7 +30,7 @@ import { gunStock } from './gunTypes.js';
 import { newBot } from './network.js';
 import { BUILDS } from './shipBuild.js';
 import { powerRatio } from './shipPower.js';
-import { offerPart, partPrice, moduleNames, newModules, summaryOf, choiceScore, gasTopUpCost, gasOffer } from './partsShop.js';
+import { offerPart, partPrice, moduleNames, newModules, summaryOf, choiceScore, choicesFor, entryById, gasTopUpCost, gasOffer } from './partsShop.js';
 import { setGas } from './buildEdit.js';
 import { validate } from './buildCheck.js';
 import { createShipSim, flushPresses } from './shipSim.js';
@@ -649,7 +650,7 @@ export function createSimulation() {
     const M = modeInfo(state.mode);
     state.run = { voyage, stopId: first.id, visited: [first.id], salvage: 0, earned: 0, gain: {}, gunships: 0, kills: 0, crew: {}, bought: [], spares: sparesFor(state), sparesMax: sparesFor(state), limps: 0,
       mode: state.mode, key: sessionKey(), daily: daily && { key: daily.key, name: daily.name }, voyageNo: 1, voyages: M.voyages, base: 0, rival: M.rival,
-      build: null, parts: [], lastPart: null, lost: [], trophy: null, log: [], lastLog: null }; // (log: the Ship's Book - one writeStop() result for each stop flown, oldest first; lastLog: the newest, which the sky-dock shows. trophy: a slain creature's part card still to be offered at a dock, config.CREATURES.REWARD; build: this voyage's ship as a parts list; parts: what the crew has bought, newest last: { id, name, names, bag }; lastPart: the card of the last dock; lost: parts that broke off in flight and are not rebuilt yet, oldest first, S.5i)
+      build: null, parts: [], lastPart: null, lost: [], trophy: null, log: [], lastLog: null, frames: [] }; // (frames: G4, buildFrames.js - parts bought as a scaffold and still to be built, or built; log: the Ship's Book - one writeStop() result for each stop flown, oldest first; lastLog: the newest, which the sky-dock shows. trophy: a slain creature's part card still to be offered at a dock, config.CREATURES.REWARD; build: this voyage's ship as a parts list; parts: what the crew has bought, newest last: { id, name, names, bag }; lastPart: the card of the last dock; lost: parts that broke off in flight and are not rebuilt yet, oldest first, S.5i)
     const start = state.startBuild && BUILDS[state.startBuild];
     state.run.build = copyData(start || (prevLost ? prevLost.before : layout.parts) || BUILDS.classic);
     if (start && main.buildId !== state.startBuild) fitShip(state.run.build, state.startBuild); // (a new voyage starts with the start build, whatever the last one grew into)
@@ -930,12 +931,13 @@ export function createSimulation() {
   const persistBuild = () => { // the run's ship, kept in the voyage save (versioned, tolerant: voyage.js)
     const run = state.run;
     if (!run || !state.startBuild) return;
-    state.save.build = { v: 1, parts: run.lost && run.lost.length ? run.lost[0].before : run.build, log: run.parts.map((p) => ({ id: p.id, name: p.name })), voyageNo: run.voyageNo };
+    state.save.build = { v: 1, parts: run.lost && run.lost.length ? run.lost[0].before : run.build, log: run.parts.map((p) => ({ id: p.id, name: p.name, ...(p.by && p.by.length ? { by: p.by } : {}) })), voyageNo: run.voyageNo };
     saveVoyageSave(state.save);
   };
   // Put a chosen place of a part on the ship: the build is the choice's parts list (already validated), fitted to ship 0 at the dock.
   const buildPart = (o, index) => {
     const run = state.run, c = o.choices[index];
+    if (o.frame) return placeFrame(o, c); // (G4: bought as a frame: the part is built in flight)
     const before = moduleNames(layout);
     run.build = c.parts;
     fitShip(run.build, 'yard');
@@ -946,6 +948,87 @@ export function createSimulation() {
     persistBuild();
     state.say('info', `BUILT: ${o.baseName.toUpperCase()}!`, null, 3);
   };
+  // ---- FRAMES (LOOP.md G4, config.FRAMES, buildFrames.js): a small part bought as a scaffold at the dock and built in flight with carried scrap ----
+  // The frame card twins the part card: the same part and places, a share of the salvage and no bundles at the dock (the crew carry them). null: frames off, no part card, a big part, a free one, or one frame is waiting already.
+  const frameCard = (o) => {
+    const F = config.FRAMES, base = o.base || o.cost;
+    if (!framesOn() || o.kind !== 'part' || o.trophy || o.derelict || !(base > 0) || !framable(o.entry) || pendingOf(state).length >= F.MAX_PENDING) return null;
+    const need = bundlesFor(base);
+    return { ...o, id: 'frame-' + o.entry, frame: true, need, base, name: `${o.baseName} (FRAME)`, icon: '\u{1F3D7}\u{FE0F}', desc: `Built in flight: carry ${need} scrap to its frame and it comes alive.`, cost: Math.round((base * F.CASH_SHARE) / 5) * 5,
+      scrap: undefined, scrapPay: undefined, cashFull: undefined, each: undefined, badge: 'FRAME: BUILD IT IN FLIGHT' };
+  };
+  // The parts list with the frame's part on it. Usually the one the crew chose at the Yard; if she has changed since (parts broke off, another part was bought) the place is cut again on what she is now and must be near the old one.
+  const framePlan = (f) => {
+    if (JSON.stringify(layout.parts) === f.baseKey) return f.parts;
+    const e = entryById(f.entry);
+    if (!e) return null;
+    let best = null;
+    for (const c of choicesFor(e, layout.parts)) { const d = Math.abs(c.x - f.x) + Math.abs(c.y - f.y); if (d <= config.FRAMES.PLACE_SLACK && (!best || d < best.d)) best = { c, d }; }
+    return best ? best.c.parts : null;
+  };
+  // Is there room for it on her as she is? (parts broken off and waiting for their REBUILD do not block it: finishFrame puts the part on the ship as she was before them too)
+  const frameCheck = (f) => {
+    const lost = (state.run.lost || []).length;
+    if (f.v === layout.version && f.lostN === lost) return;
+    f.v = layout.version;
+    f.lostN = lost;
+    f.ok = !!framePlan(f);
+  };
+  // The crew bought the frame: it stands on its Yard place from the moment she casts off.
+  const placeFrame = (o, c) => {
+    const run = state.run;
+    const f = { id: (run.frameSeq = (run.frameSeq || 0) + 1), entry: o.entry, name: o.baseName, need: o.need, fill: 0, prog: 0, x: c.x, y: c.y, where: c.where, letter: c.letter, ghost: c.ghost || null, paid: o.paid || 0,
+      baseKey: JSON.stringify(layout.parts), parts: c.parts, by: {}, ok: true, done: false, v: layout.version, lostN: (run.lost || []).length, stop: run.stopId };
+    (run.frames ||= []).push(f);
+    Object.assign(state.yard, { built: { t: YD.BUILT_STAMP, name: o.baseName, letter: c.letter, where: c.where, frame: true } });
+    state.say('info', `FRAME PLACED: ${o.baseName.toUpperCase()} - CARRY ${o.need} SCRAP TO IT!`, null, 3);
+  };
+  // The last bundle is in: the part comes alive (the ship's parts list grows in the air, shipSim.js growPart) and the Book names the builders.
+  const finishFrame = (f) => {
+    const run = state.run;
+    if (f.done || !run) return;
+    frameCheck(f);
+    const parts = f.ok ? framePlan(f) : null, before = moduleNames(layout);
+    if (!parts || !main.sim.growPart(parts)) { f.fill = Math.max(0, f.need - 1); f.ok = !!parts; return; } // (no room, or she is going down: the last bundle waits)
+    f.done = true;
+    const lost = run.lost || [];
+    if (lost.length) { // (parts are waiting to be rebuilt: the part goes on the ship as she was before each break-off too, so the REBUILD cards bring it back)
+      const e = entryById(f.entry);
+      for (const q of lost) {
+        let best = null;
+        for (const c of e ? choicesFor(e, q.before) : []) { const d = Math.abs(c.x - f.x) + Math.abs(c.y - f.y); if (d <= config.FRAMES.PLACE_SLACK && (!best || d < best.d)) best = { c, d }; }
+        if (best) q.before = best.c.parts;
+      }
+      run.build = copyData(lost[0].before);
+    } else run.build = parts;
+    main.buildId = 'yard';
+    const by = buildersOf(f);
+    run.parts.push({ id: f.entry, name: f.name, names: newModules(before, moduleNames(layout)), bag: false, frame: true, by });
+    persistBuild();
+    refreshPower();
+    state.yard.newPart = { name: f.name.toUpperCase(), x: f.x, y: f.y, t: YD.NEW_CALLOUT };
+    state.say('info', `BUILT: ${f.name.toUpperCase()}!`, null, 4);
+    scrapNote(state, 'frame-built', null, { who: Object.keys(f.by).map((id) => state.players[id]).filter(Boolean), name: f.name });
+    main.sim.shipPop(f.x, f.y - 100, 'BUILT!', '#ffd23f', 1.2);
+    main.sim.shipPuff(f.x, f.y - 40, '#e8c25a', 16);
+    state.sfxQ.push(['clang', true]);
+  };
+  W.finishFrame = finishFrame;
+  // A frame with no room left at a dock (she changed under it): taken down, what it cost comes back.
+  const refundFrames = () => {
+    const run = state.run;
+    if ((run.lost || []).length) return; // (a REBUILD may bring the place back: wait for it)
+    for (let i = (run.frames || []).length - 1; i >= 0; i--) {
+      const f = run.frames[i];
+      if (f.done) continue;
+      frameCheck(f);
+      if (f.ok) continue;
+      run.salvage += f.paid;
+      run.frames.splice(i, 1);
+      state.say('info', `NO ROOM FOR THE ${f.name.toUpperCase()} FRAME NOW: ${f.paid} SALVAGE BACK`, null, 3);
+    }
+  };
+
   // A limp home shakes the newest part loose: its modules start broken (a hammer mends them), a new gasbag starts with a hole. No part is ever lost. Returns its name.
   const shakeLoose = (run) => {
     const last = run.parts[run.parts.length - 1];
@@ -1025,6 +1108,7 @@ export function createSimulation() {
   const buildOffers = () => {
     const offers = buildOffersRaw();
     offers.forEach(priceInScrap);
+    { const at = offers.findIndex((o) => o.kind === 'part'), fc = at >= 0 ? frameCard(offers[at]) : null; if (fc) offers.splice(at + 1, 0, fc); } // (G4: the part card's twin, bought as a frame)
     return offers;
   };
   const buildOffersRaw = () => {
@@ -1090,6 +1174,7 @@ export function createSimulation() {
     W.ground.payTreasure(); // (A2: a ship that limped home pays her chests here; after a scorecard the hold is already empty)
     const prize = state.gunship && state.gunship.prize && state.tows.find((t) => t.b === state.gunship.ship); // (B.6: a captured gunship still in tow when we reach the dock: a salvage bonus, and she is released and goes down)
     if (prize) { addSalvage(config.CROSS.TOW.PRIZE, 'gunships', 'PRIZE IN TOW!'); W.towing.cut(prize, ''); state.gunship.prize = false; }
+    if (framesOn()) refundFrames(); // (G4: a frame with no room left on her is taken down and paid back)
     const options = buildOffers();
     if (options.every((o) => o.kind === 'cast' || cardOff(o))) return startRoute(); // nothing affordable: straight on
     openVote({ kind: 'dock', title: 'SKY-DOCK', options, t: shopTime() });
@@ -1165,7 +1250,9 @@ export function createSimulation() {
     if (rebuild != null && Math.random() < config.BREAKOFF.BOT_REBUILD) return rebuild;
     const toHelium = ok.find((i) => v.options[i].gas === 'helium'); // (GAS TYPES: a crew whose hydrogen bag has been scorched swaps it for helium)
     if (toHelium != null && state.gasStats && state.gasStats.scorched > 0) return toHelium;
-    const part = ok.find((i) => v.options[i].kind === 'part');
+    const part = ok.find((i) => v.options[i].kind === 'part' && !v.options[i].frame);
+    const frame = ok.find((i) => v.options[i].frame); // (G4: the part bought as a frame - only when the plain card is out of the crew's reach: a bot crew never gives up a part it can pay for now for one it has to build)
+    if (frame != null && (part == null ? Math.random() < config.FRAMES.BOTS.BUY : v.options[part].scrapPay < v.options[part].scrap && Math.random() < config.FRAMES.BOTS.PREFER)) return frame;
     if (part != null && Math.random() < Math.max(v.options[part].rec ? YD.BOT_REC_CHANCE : YD.BOT_PART_CHANCE, v.options[part].scrap && v.options[part].scrapPay >= v.options[part].scrap ? config.SCRAP.PRICE.BOT_BUY : 0)) return part; // (G2: a card the hold pays in bundles is a bargain) // (a crew that can afford a part card likes to build)
     if (Math.random() < SH.BOT_CAST_CHANCE) return cast;
     const rep = ok.filter((i) => v.options[i].kind === 'repair');
@@ -1204,7 +1291,7 @@ export function createSimulation() {
           title: v.kind === 'dock' ? `SKY-DOCK - ${state.run.salvage} salvage` : v.kind === 'shelf' && p.team ? `${v.title} - ${p.team.toUpperCase()}` : v.title,
           t: Math.max(0, Math.ceil(v.t)),
           mine: valid(p.vote) ? p.vote : null,
-          options: v.options.map((o) => ({ name: o.name, icon: o.icon, desc: o.desc, cost: o.kind === 'cast' || o.kind === 'stop' || v.kind === 'slot' ? null : o.cost, off: v.kind === 'dock' && cardOff(o), sold: !!o.sold, price: o.scrap ? priceWords(o) : null, badge: o.kind === 'part' ? o.badge + (o.spots > 1 ? ` - ${o.spots} places` : '') : null })),
+          options: v.options.map((o) => ({ name: o.name, icon: o.icon, desc: o.desc, cost: o.kind === 'cast' || o.kind === 'stop' || v.kind === 'slot' ? null : o.cost, off: v.kind === 'dock' && cardOff(o), sold: !!o.sold, price: o.scrap || o.frame ? priceWords(o) : null, badge: o.kind === 'part' ? o.badge + (o.spots > 1 ? ` - ${o.spots} places` : '') : null })),
         },
       };
       const key = 'vote|' + ui.vote.title + '|' + ui.vote.t + '|' + ui.vote.mine + '|' + ui.vote.options.map((o) => o.name + o.off + o.sold + o.desc + o.cost + (o.price || '')).join();
@@ -1263,12 +1350,14 @@ export function createSimulation() {
       o.dealt = deal;
     }
     state.run.salvage -= price;
+    o.paid = price; // (G4: a frame remembers what it cost, to pay it back if she changes under it)
     if (o.scrapPay > 0 && holdSpend(state, o.scrapPay)) { // (G2: the bundles come out of the hold; the Book tells who voted for it)
       const crew = Object.values(state.players).filter((p) => p.vote === pick && !p.mate);
       scrapNote(state, 'spent', null, { n: o.scrapPay, part: true, name: o.baseName || o.name, who: crew });
     }
     if (o.kind === 'part') {
       o.sold = true;
+      for (const x of v.options) if (x.kind === 'part' && x.entry === o.entry) x.sold = true; // (G4: the plain card and its frame twin are one part)
       state.run.bought.push(o.id);
       if (o.choices.length > 1) return startSlotVote(v, o); // (several places: the crew picks A / B / C)
       buildPart(o, 0);
@@ -1476,6 +1565,7 @@ export function createSimulation() {
       salvageWatch();
       moments.tick(dt); // (the Ship's Book's clock; data only)
       W.flotsam.step(dt); // (SCRAP: the deaths of this step become bundles on little parachutes; hulks float)
+      if (framesOn() && state.run) { for (const f of pendingOf(state)) frameCheck(f); stepFrames(state, dt); } // (G4: a frame's room is checked when the ship changes; a bundle nobody works on loses its progress)
     }
 
     shipCollide.step(dt); // (every ship has moved: two hulls that overlap are pushed apart, bounce and hurt - shipCollide.js)
@@ -1641,6 +1731,7 @@ export function createSimulation() {
       }
     },
     fitShip,
+    finishFrame, // (G4: a frame whose last bundle is in; the gates call it)
     pickStartBuild, // (F1: the ship that fits the crew now; the lobby's Ship button shows it)
     dailyInfo: () => {
       const d = dailyVoyage();

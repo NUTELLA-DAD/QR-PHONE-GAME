@@ -13,6 +13,7 @@ import { bunkerEmpty } from './goingDown.js';
 import { gripJobs } from './creatureGrip.js';
 import { scrapOn, holdSpot, holdFull, holdCount } from './scrap.js';
 import { isMothballed } from './gunsMatter.js';
+import { framesOn, pendingOf, frameSpot, frameWords, calmFor } from './buildFrames.js';
 import { verbOf } from './roleCards.js'; // (F10: the verb of a job, for the head tag on the TV and the ? card)
 
 const J = config.JOBS;
@@ -38,6 +39,8 @@ JOB_COLORS.abandon = '#ff4d4d'; // (...and the half of the ship that split off i
 JOB_COLORS.stow = '#ffd23f'; // (SCRAP, LOOP.md G1: pick a bundle up off the deck and carry it to the hold - gold, like every pickup)
 JOB_COLORS.scrappatch = '#ffd23f'; // (LOOP.md G2, the scrap patch: carry a bundle to a failing segment and rivet it on - gold)
 JOB_COLORS.scrapgrab = '#ffd23f'; // (...first take one out of the hold bin)
+JOB_COLORS.buildframe = '#ffd23f'; // (LOOP.md G4, frames: carry a bundle to the scaffold of a part the crew bought and build it - gold)
+JOB_COLORS.buildgrab = '#ffd23f'; // (...first take one out of the hold bin)
 JOB_COLORS.stowchest = '#ffd23f'; // (CASTLE.md A2: a chest from an outpost's vault goes in the hold - gold)
 JOB_COLORS.hack = '#f2c14e'; // (C.2: a tentacle holds the ship: gold arrow to the grip point, sword in hand)
 JOB_COLORS.pickup = '#ff8c1a'; // (CASTLE.md A0: an away man's flare: the helm hovers over him and the rope ladder takes him up)
@@ -83,10 +86,11 @@ export function createJobFinder(state) {
     // HELP! calls (spotter.js): the crew sent to a caller get an arrow to them, in the caller's colour.
     for (const c of state.helpCalls || []) if (c.caller !== p && c.who.includes(p.id) && c.caller.d != null) { const s = spot(c.caller); add('help', c.caller, s.d, s.x, {}, `HELP ${c.caller.name}! - ${roomName(s.d, s.x)}`); }
     for (const ld of state.loads || []) if (ld.kind !== 'scrap') add('shovel', ld, ld.d, ld.x, {}, `SHOVEL THE ${((config.CROSS.CARGO.ITEMS[ld.kind] || {}).label || 'LOAD').toUpperCase()} OVERBOARD - ${roomName(ld.d, ld.x)}`); // (B.6: cargo thrown onto her deck tips her)
+    const framesNow = me.main && framesOn() && calmFor(state, config.FRAMES.ARROWS) ? pendingOf(state).filter((f) => f.ok !== false) : []; // (G4: parts waiting for their bundles - and the sky quiet enough to send anybody)
     { // SCRAP: a bundle on the deck is picked up (hands empty), one in your hands goes to the hold (the hold bin is in the Hold room: holdSpot)
       const sp = scrapOn() && !me.ai ? holdSpot(L) : null;
       if (sp && !holdFull(state)) {
-        if (p.carry === 'scrap') add('stow', 'hold', sp.d, sp.x, {}, `STOW THE SCRAP - ${roomName(sp.d, sp.x)}`);
+        if (p.carry === 'scrap') { if (!framesNow.length) add('stow', 'hold', sp.d, sp.x, {}, `STOW THE SCRAP - ${roomName(sp.d, sp.x)}`); } // (G4: a part waits for its bundles: the arrow goes to the frame, not the bin)
         else if (!p.carry) for (const ld of state.loads || []) if (ld.kind === 'scrap') add('stow', ld, ld.d, ld.x, {}, `PICK UP THE SCRAP - ${roomName(ld.d, ld.x)}`);
       }
     }
@@ -95,6 +99,14 @@ export function createJobFinder(state) {
       const bad = sp && (p.carry === 'scrap' || (!p.carry && holdCount(state) > 0)) ? Sx.jobsOf().filter((g) => g.hp < PT.AT) : [];
       if (p.carry === 'scrap') for (const g of bad) add('scrappatch', g, g.d, g.x, g.st === 'critical' ? { urgency: J.URGENCY.scrappatch * PT.URGENT } : {}, `PATCH ${Sx.nameOf(g)} WITH SCRAP`);
       else if (bad.length) add('scrapgrab', 'patch', sp.d, sp.x, bad.some((g) => g.st === 'critical') ? { urgency: J.URGENCY.scrapgrab * PT.URGENT } : {}, `TAKE SCRAP OUT OF THE HOLD - ${Sx.nameOf(bad[0])} IS FAILING`);
+    }
+    if (framesNow.length) { // FRAMES (config.FRAMES, LOOP.md G4): a part the crew bought as a scaffold: a bundle in your hands goes to it (n/m), with empty hands the arrow points to the hold bin to take one
+      const sp = holdSpot(L);
+      for (const f of framesNow) {
+        const at = frameSpot(me, f);
+        if (p.carry === 'scrap') add('buildframe', f, at.d, at.x, {}, `${frameWords(f)} - ${roomName(at.d, at.x)}`);
+        else if (!p.carry && sp && holdCount(state) > 0) add('buildgrab', f, sp.d, sp.x, {}, `TAKE SCRAP OUT OF THE HOLD - TO BUILD THE ${String(f.name).toUpperCase()}`);
+      }
     }
     if (p.carry === 'chest' && !me.ai && holdSpot(L) && state.away && state.away.tre && state.away.tre.chests.some((c) => c.state === 'aboard' && c.by[0] === p.id)) add('stowchest', 'hold', holdSpot(L).d, holdSpot(L).x, { urgency: J.URGENCY.stow }, `STOW THE CHEST - ${roomName(holdSpot(L).d, holdSpot(L).x)}`); // (CASTLE.md A2: a chest in your arms goes in the hold)
     for (const f of state.fires) add('fire', f, f.d, f.x, {}, f.h2 ? `FIRE UNDER THE HYDROGEN BAG - ${roomName(f.d, f.x)}` : undefined); // (GAS TYPES: a fire that reaches a hydrogen bag says so)
@@ -219,7 +231,7 @@ export function createJobFinder(state) {
     p.jobT = J.EVERY;
     let jobs = list(p).filter((j) => j.d != null);
     // Hauling something? Delivering it comes first (if there is anywhere to deliver it).
-    const delivery = jobs.filter((j) => j.kind === p.carry || (p.carry === 'scrap' && (j.kind === 'stow' || j.kind === 'scrappatch')) || (p.carry === 'chest' && j.kind === 'stowchest'));
+    const delivery = jobs.filter((j) => j.kind === p.carry || (p.carry === 'scrap' && (j.kind === 'stow' || j.kind === 'scrappatch' || j.kind === 'buildframe')) || (p.carry === 'chest' && j.kind === 'stowchest'));
     if (delivery.length && (p.carry === 'ammo' || p.carry === 'coal' || p.carry === 'scrap' || p.carry === 'chest')) jobs = delivery;
     const scored = jobs.map((j) => ({ j, ...score(p, j) })).filter((s) => isFinite(s.r.time)).sort((a, b) => a.score - b.score);
     const cur = p.job && jobs.find((j) => same(j, p.job.job));
