@@ -3187,7 +3187,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
             for (const f of S.flares) { const a = pt(f.x, f.y); if (a) groundArt.flare(a.x, a.y, zs * 0.9, K8, f.name, zs, px(f.x, f.y)); }
           }
           groundArt.drawObjectives(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, A3); // (CASTLE.md A1: the objectives' markers, the prisoners and the carried banner, through the camera)
-          treasureArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }); // (CASTLE.md A2: the vaults, chests and guards, through the camera)
+          treasureArt.draw(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, !!(p3.treasure && p3.treasure())); // (CASTLE.md A2: the vaults, chests and guards, through the camera; while the 3D view draws the vault, chests and sacks only their words, the grab bar and the guards stay here)
         }
       } catch (e) { /* (a nicety: never stop the frame) */ }
       placeNames(); // (WP15: every name queued above, laid out together so none lies on another)

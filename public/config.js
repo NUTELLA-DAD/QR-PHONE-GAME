@@ -3655,6 +3655,29 @@ export const config = {
     COL: { WOOD: '#8a6444', WOOD_DARK: '#5e4129', ROPE: '#c9a66b', IRON: '#3f3b3e', KEG: '#a37a45', KEG_BAND: '#3d3a3c', POWDER: '#2b2724', COAL: '#2c2a2b', FIRE: '#ff8a2a', FLAME_CORE: '#ffd9a0', SMOKE: '#59534f', GOLD: '#ffd23f', BANNER: '#a8302c', BANNER_GOLD: '#d9b24e', SIGN_POST: '#5e4129', BOARD: '#fff7e0', JAM: '#4b3a2c' },
     CAP: { CELLS: 220, QUADS: 24 },
   },
+  // THE TREASURE IN 3D (view3d/treasure3d.js + treasureKit.js, CASTLE.md A2 / 3D.md section 34; view only: it reads state.away.tre and state.chestHold): the outpost's stone VAULT with an iron door that swings open in
+  // held steps, the chests and the sack of gold lying on the ground / on the hookshot's line / carried by a PAIR / stacked in the ship's hold, and (crewParts.js) the chest and the sack in a man's arms. Open-sky maps only.
+  // Z: the depth things stand at (the man walks at AWAY3D.Z.GROUND 70; the vault stands behind the chests, its door face at VAULT + depth / 2). SIZE: 1 = a chest 84 px wide (the 2D one was 74). DOOR = the share of
+  // the way open at each 8 fps key since the vault opened (7 keys, 0.9 s). HOLD: the chests stacked behind the hold bin (size, spacing, row height, how far behind the bin). LIFT: a chest lifts this many px as its bar fills.
+  TREASURE3D: {
+    ENABLED: true,
+    Z: { VAULT: -36, CHEST: 40, PAIR: 96 },
+    SIZE: 0.9, SACK: 1, // (1 = a chest 84 px wide; 0.9 = 76: the sim may put two chests 65 px apart)
+    DOOR: [0, 0.08, 0.28, 0.55, 0.8, 0.95, 1],
+    HOLD: { SIZE: 0.78, GAP: 76, ROW: 41, BEHIND: 80, RIM: 32 },
+    LIFT: 14,
+    COL: { WOOD: '#a66f3c', WOOD_DARK: '#7a4a26', IRON: '#4a4036', GOLD: '#ffd23f', STONE: '#a8a08e', SHADE: '#857c6a', TRIM: '#6d6557', DOOR: '#58565e', STRAP: '#34323a', DARK: '#231e1b', SACK: '#c9a66b', ROPE: '#7a5a34' },
+    CAP: { CHESTS: 24, SACKS: 12 },
+  },
+  // SCRAP IN 3D (view3d/scrap3d.js + scrapKit.js, LOOP.md G1 / G2): the lit, outlined BUNDLES (in the sky on their chutes, on the decks, on a hulk) with their gold rings and the HOLD BIN with its pile, and the RIVET PLATES of the scrap patch bolted over the deck edge of a mended segment (1 to 3 of them, state.frames[i].plates), big dark steel with bright rivets so they read
+  // from the sofa (the 2D ones were small and pale). W = plate width for 1 / 2 / 3 plates, H = height, TOP = how far below the deck top its upper edge sits, OUT = how far in front of the deck's edge it stands.
+  SCRAP3D: {
+    ENABLED: true,
+    PLATE: { W: [104, 88, 74], H: 40, TOP: -2, OUT: 3, GAP: 7, COL: { STEEL: '#6c7b8c', STEEL2: '#7f8fa0', BEVEL: '#b9c5d1', RIVET: '#e3e9ee', DARK: '#3c4652', WELD: '#2f3640' } },
+    COL: { IRON_A: '#8d96a0', IRON_B: '#b3bcc6', IRON_C: '#76808a', STRAP: '#d9a24a', BIN: '#8a6444', BIN_SLAT: '#a87c4a', BIN_POST: '#5e4129' }, // (the bundle's three plates and strap: the same iron as the 2D drawing; the hold bin's planks)
+    RING: { R: 44, PULSE: 3, COLOR: '#ffd23f' }, // (the gold ring round a flotsam bundle; it swells PULSE px on the 8 fps key; a bundle on a deck has a smaller one)
+    CAP: { BUNDLES: 64, RINGS: 64 },
+  },
   // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.
   // SCALE = size of one texture pixel in world units (the 512px tile covers 512*SCALE units; the airship is ~1500 wide).
   // Painted textures on the ship and gunships. STRENGTH: how strongly they show (1 = subtle, 2 = clear, 3 = bold).
