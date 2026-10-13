@@ -33,7 +33,7 @@ export function createRingCastle({ parent, state, P }) {
   let strip = null, dyn = null, ward = null, falls = null, keep = null, crown = null;
   const eased = new Map(), bridge = new Map(); // face index -> how far the portcullis is up / the drawbridge is down (0..1)
   const stats = { faces: 0, rebuilds: 0, dynRebuilds: 0, ms: 0, tris: 0, fireTried: 0, fireMade: 0, mapMs: 0, staticMs: 0 };
-  let lastFire = -1, broken = false;
+  let lastFire = -1, broken = false, garrisonDraws = false;
 
   const dropGroup = (g) => { if (!g) return; g.removeFromParent(); g.traverse((o) => { if (o.geometry && !o.userData.keepGeo) o.geometry.dispose(); }); };
   const dropStrip = () => {
@@ -168,7 +168,7 @@ export function createRingCastle({ parent, state, P }) {
         else lines.seg(boss.x + (i ? 160 : -160), -(boss.y + 150), f.x, top, 9, rope, 1, 10);
       });
     }
-    for (const z of ring.zips || []) if (z.x1 != null && fin(z.x0) && fin(z.y0) && fin(z.x1) && fin(z.y1)) lines.seg(z.x0, -z.y0, z.x1, -z.y1, 5, '#a8443f', 1, 20);
+    for (const z of ring.zips || []) if (z.x1 != null && !(z.grapple && garrisonDraws) && fin(z.x0) && fin(z.y0) && fin(z.x1) && fin(z.y1)) lines.seg(z.x0, -z.y0, z.x1, -z.y1, 5, '#a8443f', 1, 20); // (the garrison's grapples are drawn by garrison3d.js when it is on)
     lines.end();
     stats.faces = ring.faces.length;
     stats.ms = performance.now() - t0;
@@ -176,6 +176,9 @@ export function createRingCastle({ parent, state, P }) {
   }
   return {
     update, stats, root,
+    get flagSpots() { return strip ? strip.flagSpots : []; }, // (D2: where the gatehouses' and the wall towers' flag poles stand, { x, y, z, f, scale }: the garrison's white flags go there)
+    get fires() { return strip ? strip.fires : []; }, // (D2: the braziers, { f, x, y, z }: the garrison adds a halo to them in the dark)
+    set garrison(v) { garrisonDraws = !!v; }, // (D2: garrison3d.js draws the grapple ropes itself)
     get keep() { return keepRoot; }, // (the whole keep with its crown, standing in the camera frame; ring3d-check reads its position)
     get crown() { return crown ? crown.group : null; }, // (D3: the crown group, origin at the keep's seat; move / turn it to make it fall)
     get ward() { return wardRoot; },
