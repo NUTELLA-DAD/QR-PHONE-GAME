@@ -295,7 +295,7 @@ export function scarfParts() {
 
 // ---- items ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // hand items are authored in the hand's frame (origin = the fist, +y = the item's long axis); chest items in the torso frame (the load hugged in front: ITEMC).
-export const CHEST_ITEMS = new Set(['coal', 'ammo', 'sandbag', 'crate', 'scrap', 'keg', 'banner']);
+export const CHEST_ITEMS = new Set(['coal', 'ammo', 'sandbag', 'crate', 'scrap', 'keg', 'banner', 'chest', 'goldsack', 'chestpair']);
 export function itemParts(kind, opt = '') {
   if (!kind) return [];
   return memo('item|' + kind + '|' + opt, () => {
@@ -369,6 +369,16 @@ export function itemParts(kind, opt = '') {
       P.box(C, '#a8302c', -56, 187, 0, 56, 28, 2.8, OWS);
       P.box(C, '#d9b24e', -66, 249, 0.4, 76, 5, 3.4, 0);
       P.box(C, '#ffb347', -60, 222, 1.6, 12, 24, 3.4, 0);
+    } else if (kind === 'chest') { // A2 in 3D: a treasure chest hugged in front (its long side along his way, the clasp toward the viewer): a plank body, a round lid, two iron bands, a gold clasp
+      P.box(C, '#a66f3c', 18, 25, 0, 31, 14, 21, OW);
+      P.add(C, CYL, '#7a4a26', mat(18, 32, 0, 6.5, 31, 10.5, 0, 0, Math.PI / 2), OWS);
+      for (const s of [-1, 1]) P.box(C, '#4a4036', 18 + s * 9.5, 27, 0, 3.2, 19, 22.4, 0.5);
+      P.box(C, '#ffd23f', 18, 31, 10.8, 5.4, 8, 2.4, 0.8);
+    } else if (kind === 'goldsack') { // A2 in 3D: a sack of gold hugged in front: a tan belly, a tied neck, a coin showing
+      P.sph(C, '#c9a66b', 18, 29, 0, 12.5, 12.5, 11, OW, 0, SP_L);
+      P.cone(C, '#c9a66b', 18, 44.5, 0, 5.6, 9, OWS);
+      P.cyl(C, '#7a5a34', 18, 40, 0, 5.8, 2.6, 0.6);
+      P.sph(C, '#ffd23f', 22, 30, 9.6, 4, 4, 1.4, 0.7, 0, SP_T);
     } else if (kind === 'crate') {
       P.box(C, '#c9a05f', 18, 31, 0, 25, 25, 25, OW);
       for (const s of [1, -1]) P.box(C, '#8a6644', 18, 31, s * 12.9, 31, 3, 1.4, 0, 0, 0, 0, 0.78);

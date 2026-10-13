@@ -35,6 +35,8 @@ import { RB } from './ringBend.js'; // LOOP R1: the ring map's bend (a camera-re
 import { createRingCastle } from './ringCastle.js'; // LOOP R2: the ring castle (strip gatehouses and walls, the island, the ward, the keep and crown)
 import { GAR_LIVE } from './garrisonKit.js';
 import { createAway3d } from './away3d.js'; // CASTLE.md A3: the away team in 3D (the rope ladder, the flare, the objective props and signs, the prisoners)
+import { createTreasure3d } from './treasure3d.js'; // CASTLE.md A2 in 3D: the outpost vault, the chests and the sack of gold (the HUD keeps only their words)
+import { createScrap3d } from './scrap3d.js'; // LOOP.md G2 in 3D: the rivet plates of the scrap patch on the ship's hull
 import { createGarrison3d } from './garrison3d.js'; // CASTLE.md D2: the garrison in 3D (soldiers, arrows, the ballista, the boom chain, grapples, white flags)
 import { createSetPieces } from './setpiece3d.js'; // CASTLE.md D3: the castle's set pieces in 3D (the gatehouse collapse, the crown fall, the flaming stones)
 import { SET_LIVE } from './setpieceKit.js';
@@ -97,7 +99,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const terrain = createTerrain(worldRoot);
   const kraken = createCreatureView(worldRoot);
   let vfx = null; // (WP4: the particles; made below, after the ship models exist)
-  const flyers = createFlyers(worldRoot, state, { P: () => (vfx && vfx.P && look.vfx ? vfx.P : null), shipPoint: (sh, x, y, z) => (V && V.hud3d ? V.hud3d.shipPt(sh, x, y, z) : null), mainShip: () => state.ships[0] });
+  const flyers = createFlyers(worldRoot, state, { P: () => (vfx && vfx.P && look.vfx ? vfx.P : null), shipPoint: (sh, x, y, z) => (V && V.hud3d ? V.hud3d.shipPt(sh, x, y, z) : null), mainShip: () => state.ships[0], scrapLive: () => !!(scrap3d && scrap3d.live) }); // (scrapLive: scrap3d.js draws the bundles, their rings and the hold bin; flyers keeps the chutes and the hulk)
   const worldObjects = createWorldObjects(worldRoot, state, { shipPoint: (sh, x, y, z) => (V && V.hud3d ? V.hud3d.shipPt(sh, x, y, z) : null), modelOf: (sh) => { const e = V && V.models && V.models.get(sh.id); return e ? e.model : null; }, crew: (key) => (V && V.crew ? V.crew.anchor(key) : null), mainShip: () => state.ships[0] });
   const scenery = createScenery(worldRoot, state, { P: () => (vfx && vfx.P && look.vfx ? vfx.P : null) });
   const glows = createThreatGlows(worldRoot, state);
@@ -203,6 +205,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     shipPt: (sh, x, y, z = 0) => { const e = models.get(sh.id); if (!e) return null; _hp.set(e.model.X(x), e.model.Y(y), z); e.model.content.localToWorld(_hp); return [_hp.x, _hp.y, _hp.z]; },
     crew: (key) => crew.anchor(key),
     away: () => (away3d && away3d.live ? away3d : null), // (A3: the HUD's 2D ladders, flares, markers and figures step back while the 3D ones are drawn; away.signAt(ob) = where an objective's sign board is)
+    treasure: () => (treasure3d && treasure3d.live ? treasure3d : null), // (A2 in 3D: the HUD's 2D vault, chests and sacks step back while the 3D ones are drawn: only their words and the grab bar stay)
   };
   const teamColorOf = (p, sh) => { try { const side = p.team ? teamOf(p.team) : sh ? sh.team : state.ships[0] && state.ships[0].team; return side && side.color ? side.color : null; } catch { return null; } };
   // WP4: the particles (fire, smoke, steam, sparks, splinters, muzzle flashes, rings; vfx.js reads the game's state, particles.js draws). If they cannot be made the old flame cones and puff balls stay.
@@ -222,6 +225,12 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   let away3d = null; // CASTLE.md A3: the rope ladder, wall ladders, flares, pickup ring, objective props and signs, prisoners (away3d.js; if it cannot be made the HUD draws the 2D stand-ins)
   try { away3d = createAway3d({ parent: worldRoot, state, P: () => (vfx && vfx.P) || null, bob: () => { const sh = state.ships[0], e = sh && models.get(sh.id); return e && e.model && e.model.root ? -e.model.root.position.y - sh.pose.y : 0; } }); } catch (e) { console.warn('view3d away off', e); }
   V.away = away3d;
+  let treasure3d = null; // CASTLE.md A2 in 3D: the vault, the chests and the sacks of gold (treasure3d.js; if it cannot be made the HUD draws the 2D shapes)
+  try { treasure3d = createTreasure3d({ parent: worldRoot, state, models, P: () => (vfx && vfx.P) || null }); } catch (e) { console.warn('view3d treasure off', e); }
+  V.treasure = treasure3d;
+  let scrap3d = null; // LOOP.md G2 in 3D: the scrap patch's rivet plates on the hull (scrap3d.js)
+  try { scrap3d = createScrap3d({ parent: worldRoot, state, models }); } catch (e) { console.warn('view3d scrap off', e); }
+  V.scrap = scrap3d;
   // WP6: the damage state of every part (soot, dents, poses, smoke, scorch memory, breaches, the flat bag), on top of the poses shipMesh sets each frame
   const partDamage = createPartDamage({ state, models, vfx });
   V.destruction = destruction; V.damage = damage; V.partDamage = partDamage;
@@ -306,7 +315,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       for (const p of crewList) { const jb = p.job; if (jb && jb.dir && !p.bot && (p.freeT || 0) >= IDLE && jb.job && Number.isFinite(jb.job.x) && jb.job.d != null) jobs.push({ d: jb.job.d, x: jb.job.x }); }
       model.update({ t, ship: sh, world: state, night: world.night, lamps: !sh.ai, sweep: !!S.sweep, spotShadow: tier.spotShadow && world.night > 0.5 && index === 0, tier: tier.name, jobs });
       const raiders = sh.ctx && sh.ctx.boarders ? sh.ctx.boarders : state.boarders || [];
-      for (const p of crewList) crew.placeAboard(p.id, p, model, { teamColor: teamColorOf(p, sh) });
+      for (const p of crewList) crew.placeAboard(p.id, treasure3d ? treasure3d.rec(p) : p, model, { teamColor: teamColorOf(p, sh) }); // (A2 in 3D: a sack of gold or a pair's half-carry in his arms)
       raiders.forEach((r, i) => crew.placeAboard('r' + sh.id + (r.id || i), { ...r, id: 'r' + (r.id || i) }, model));
       if (sh.crewReg) for (const c of Object.values(sh.crewReg)) crew.placeAboard('g' + sh.id + c.id, c, model); // (the enemy gunship's own crew: skeleton raiders who live on her, ships.js crewReg)
     });
@@ -314,7 +323,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     for (const p of Object.values(state.players)) {
       if (!p.fly || p.hj || p.enemy || p.connected === false) continue;
       const aw = away3d && p.on && p.on.away ? away3d.specFor(p) : null; // (A3: a man on the ground stands at his own depth and may carry the great banner or a keg)
-      crew.placeFly(p.id, aw ? aw.rec : p, { teamColor: teamColorOf(p, null), z: aw ? aw.z : undefined });
+      const rec0 = aw ? aw.rec : p;
+      crew.placeFly(p.id, treasure3d ? treasure3d.rec(rec0) : rec0, { teamColor: teamColorOf(p, null), z: aw ? aw.z : undefined });
     }
     if (away3d) { try { away3d.placeCrew(crew); } catch (e) { logOnce('away3d crew', e); } } // (A3: freed prisoners and the men in the cage)
     if (V.lineup) crew.lineup(V.lineup.x, V.lineup.y, V.lineup.page); // (the dev page's crew line-up)
@@ -487,6 +497,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     try { teamFlags.update(t, lastView ? lastView.zoom : 1); } catch (e) { logOnce('teamFlags', e); }
     try { damage.update(world.night); } catch (e) { logOnce('damage', e); }
     try { partDamage.update(dt, t, world.night); } catch (e) { logOnce('partDamage', e); }
+    if (scrap3d) { try { scrap3d.update({ t }); } catch (e) { logOnce('scrap3d', e); } } // (the plates ride the ship's own group: after she is placed)
+    if (treasure3d) { try { treasure3d.update({ t, dt, night: world.night, tier }); } catch (e) { logOnce('treasure3d', e); } }
     syncSky();
     const main = state.ships[0];
     try { flyers.update(t, main ? main.pose.vx || 0 : 0, { dt, zoomEq: h / Math.max(1, cam.visH), lineup: V.enemyLineup }); } catch (e) { logOnce("flyers", e); }
@@ -596,7 +608,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.resetOrbit = () => { lastPivot.set(0, 0, 0); }; // WP13: the next orbit frame starts from the starting view again (the build page's double-click)
-  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison, setpieces, away3d]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison, setpieces, away3d, treasure3d, scrap3d]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));

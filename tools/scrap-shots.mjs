@@ -118,7 +118,7 @@ try {
     const L = sh.layout, d = L.deckIndex('main'), segs = a.str().segs().filter((g) => g.d === d && !g.nest);
     const seg = segs.find((g) => g.critical) || segs[0], p = a.me();
     window.__seg = seg; seg.hp = 0.2; st.scrapHold = { count: 4 };
-    for (const b of Object.values(st.players)) if (b.bot) { b.d = d; b.x = seg.x - 500; b.botJob = null; }
+    for (const b of Object.values(st.players)) if (b.bot) { b.d = d; b.x = seg.x - 500; b.botJob = null; b.carry = "coal"; } // (the bots carry coal, so none of them takes the patch job: with the "bot" profile they answer at once and the human would lose that race; any code that makes an object calls Math.random for its uuid, which shifts the seeded sequence)
     p.fall = false; p.fly = false; p.air = false; p.conn = null; p.lock = null; p.ko = 0; p.carry = null; p.d = d; p.x = seg.x - 230; p.y = L.platforms[d].y; p.jx = p.jy = 0; p.freeT = 6; p.jobT = 0;
     a.step(20); return 1 })()`);
   await host.ev('window.__a.step(40); window.__a.settle(60)');

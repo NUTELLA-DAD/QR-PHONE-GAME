@@ -1,6 +1,7 @@
 // THE OUTPOSTS' TREASURE, drawn (CASTLE.md package A2; treasure.js keeps state.away.tre). The 2D fallback draws the open vaults, the chests and sacks of gold lying on the ground (a bar fills while a man holds the button),
-// the chests in the arms of the men who carry them, a chest on the hookshot's line, and the vault guards with their warning "!" and the line they aim along; the 3D view has no models for any of it yet (A3 makes them),
-// so render.js draws the same shapes on the HUD there, through the 3D camera. Every shape draws at the CURRENT transform and takes the scale of the thing (w) and of the words (u). Nothing wobbles: pulses are held for 1/8 s.
+// the chests in the arms of the men who carry them, a chest on the hookshot's line, and the vault guards with their warning "!" and the line they aim along. The 3D view draws the vault, the chests and the sacks of gold
+// itself (view3d/treasure3d.js, 3D.md section 34), so render.js passes `live3d` and only their words, the grab bar, TWO CARRY and the guards are drawn here, through the 3D camera; with 3D off (or the model layer failed)
+// the same shapes are drawn as before. Every shape draws at the CURRENT transform and takes the scale of the thing (w) and of the words (u). Nothing wobbles: pulses are held for 1/8 s.
 import { config } from '../../config.js';
 
 const WOOD = '#9a6a3a', WOOD_DARK = '#6b4526', GOLD = '#ffd23f', IRON = '#4a4036', COIN = '#ffe27a';
@@ -68,26 +69,29 @@ export function createTreasureArt({ ctx, world, ink }) {
   };
 
   // The vault: a stone slab let into the ground with a dark opening, the sign over it. n = chests left.
-  const vault = (v, x, y, w, u, k8, n) => {
-    ctx.save();
-    ink();
-    ctx.lineWidth = 4 * w;
-    ctx.fillStyle = '#8c8372';
-    rr(x - 90 * w, y - 12 * w, 180 * w, 22 * w, 5 * w);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#2a2420';
-    ctx.beginPath();
-    ctx.moveTo(x - 52 * w, y - 12 * w);
-    ctx.lineTo(x - 52 * w, y - 62 * w);
-    ctx.quadraticCurveTo(x, y - 106 * w, x + 52 * w, y - 62 * w);
-    ctx.lineTo(x + 52 * w, y - 12 * w);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-    if (n > 0) text('VAULT' + (n > 1 ? ' x' + n : ''), x, y - 120 * w, 22, (k8 & 4) ? '#8a5a00' : '#4a2f12', u);
-    else text('EMPTY', x, y - 120 * w, 18, '#7a6a52', u);
+  const vault = (v, x, y, w, u, k8, n, live3d = false) => {
+    if (!live3d) { // (the 3D view has a stone strongroom of its own: only the words are drawn there, over its roof)
+      ctx.save();
+      ink();
+      ctx.lineWidth = 4 * w;
+      ctx.fillStyle = '#8c8372';
+      rr(x - 90 * w, y - 12 * w, 180 * w, 22 * w, 5 * w);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#2a2420';
+      ctx.beginPath();
+      ctx.moveTo(x - 52 * w, y - 12 * w);
+      ctx.lineTo(x - 52 * w, y - 62 * w);
+      ctx.quadraticCurveTo(x, y - 106 * w, x + 52 * w, y - 62 * w);
+      ctx.lineTo(x + 52 * w, y - 12 * w);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    const ty = y - (live3d ? 215 : 120) * w;
+    if (n > 0) text('VAULT' + (n > 1 ? ' x' + n : ''), x, ty, 22, (k8 & 4) ? '#8a5a00' : '#4a2f12', u);
+    else text('EMPTY', x, ty, 18, '#7a6a52', u);
   };
 
   // A guard: a helmet, a coat and a rifle held toward g.face; an aiming guard raises it and a "!" stands over him.
@@ -129,7 +133,7 @@ export function createTreasureArt({ ctx, world, ink }) {
   };
 
   // Everything, at the CURRENT transform in world units (the 2D pass) or through a projector (the 3D HUD pass: proj(x, y) -> { x, y, u, w } or null).
-  const draw = (time, tu = 1, proj = null) => {
+  const draw = (time, tu = 1, proj = null, live3d = false) => { // (live3d: the 3D view draws the vaults, chests and sacks itself - view3d/treasure3d.js - so only their words, the grab bar and TWO CARRY are drawn here)
     const S = world.away, t = S && S.tre;
     if (!S || !S.on || !t || !t.on) return;
     const k8 = Math.floor(time * 8), K = config.AWAY.TREASURE;
@@ -144,13 +148,13 @@ export function createTreasureArt({ ctx, world, ink }) {
     for (const v of t.vaults) {
       if (v.state !== 'open' || Math.abs(v.x - S.rope.x) > K.SHOW) continue;
       const q = at(v.x, v.y), n = t.chests.filter((c) => c.vault === v.k && (c.state === 'ground' || c.state === 'carried' || c.state === 'hauled')).length;
-      if (q) vault(v, q.x, q.y, q.w, q.u, k8, n);
+      if (q) vault(v, q.x, q.y, q.w, q.u, k8, n, live3d);
     }
     for (const c of t.chests) {
       if (c.state === 'ground') {
         const q = at(c.x, c.y);
         if (!q) continue;
-        chest(q.x, q.y, 1.15 * q.w, c.kind, (k8 & 4) !== 0);
+        if (!live3d) chest(q.x, q.y, 1.15 * q.w, c.kind, (k8 & 4) !== 0);
         if (c.prog > 0.02) { // the bar fills while a man holds the button
           ctx.save();
           ctx.strokeStyle = '#2d8a3e';
@@ -164,10 +168,10 @@ export function createTreasureArt({ ctx, world, ink }) {
         if (labelled.has(c)) text(c.label, q.x, q.y - 84 * q.w, 18, '#4a2f12', q.u); // (a label only on the chest a man stands at: three of them side by side run together)
       } else if (c.state === 'carried') { // in the arms of the man who carries it (2D draws it in his hands; the 3D view has no chest for his hands yet, so the HUD holds it over his head)
         const q = at(c.x, c.y - 150);
-        if (q) { if (proj) chest(q.x, q.y, 0.8 * q.w, c.kind, false); if (c.by.length > 1) text('TWO CARRY', q.x, q.y - 70 * q.w, 17, '#2d6a3e', q.u); }
+        if (q) { if (proj && !live3d) chest(q.x, q.y, 0.8 * q.w, c.kind, false); if (c.by.length > 1) text('TWO CARRY', q.x, q.y - 70 * q.w, 17, '#2d6a3e', q.u); }
       } else if (c.state === 'hauled') {
         const q = at(c.x, c.y);
-        if (q) chest(q.x, q.y + 30 * q.w, 0.8 * q.w, c.kind, true);
+        if (q && !live3d) chest(q.x, q.y + 30 * q.w, 0.8 * q.w, c.kind, true);
       }
     }
     for (const g of t.guards) { if (g.state === 'gone') continue; const q = at(g.x, g.y); if (q) guard(g, q.x, q.y, q.w, k8); }
