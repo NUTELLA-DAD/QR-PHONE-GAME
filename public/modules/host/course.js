@@ -1270,6 +1270,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     });
     course.lastMarker = course.markers[0];
     ringSys.begin(map); // (a ring map: the faces' state, course.ring; null on any other map)
+    if (state.groundSys) state.groundSys.begin(map); // (A0: the walkways and ladders of this ground; whoever was still on the last one is brought home, ground.js)
     ship.pose.x = map.start.x - REF.x;
     course.homeAlt = REF.y - map.start.y;
     ship.pose.y = -course.homeAlt;

@@ -37,6 +37,7 @@ JOB_COLORS.frame = '#d9a24a'; // (STRUCTURE.md: a hammer on a weak segment of th
 JOB_COLORS.abandon = '#ff4d4d'; // (...and the half of the ship that split off is going down: jump)
 JOB_COLORS.stow = '#ffd23f'; // (SCRAP, LOOP.md G1: pick a bundle up off the deck and carry it to the hold - gold, like every pickup)
 JOB_COLORS.hack = '#f2c14e'; // (C.2: a tentacle holds the ship: gold arrow to the grip point, sword in hand)
+JOB_COLORS.pickup = '#ff8c1a'; // (CASTLE.md A0: an away man's flare: the helm hovers over him and the rope ladder takes him up)
 
 export function createJobFinder(state) {
   const L = mainShip(state).layout; // (the ship these jobs are on: the finder is made per ship, on that ship's context)
@@ -183,6 +184,12 @@ export function createJobFinder(state) {
     // Busy = on a station, working a hold job, fighting, hurt or in the air: no arrow, and the free timer restarts.
     // F4 (JOBS.SEATED_IDLE): a gunner seated with no target for a while (links.js counts it) is free for a job again: the arrow shows on his phone while he is still seated.
     const seatedIdle = J.SEATED_IDLE > 0 && p.lock && state.phase === 'flying' && !!state.GUNS[p.lock] && (p.gunIdle || 0) >= J.SEATED_IDLE;
+    const pk = p.lock && !p.bot && L.kindOf(p.lock) === 'helm' && mainShip(state).main && state.groundSys ? state.groundSys.pickupJob(p, mainShip(state).pose.f) : null; // (A0: the helm man's phone: PICK UP <name> - the away man's flare or his STRANDED clock, ground.js)
+    if (pk) {
+      p.freeT = 0;
+      p.job = { job: pk, kind: 'pickup', label: pk.label, dir: pk.dir, color: pk.color, seated: true, ...(config.CONTROLS.ROLE_CARDS.ENABLED ? { verb: 'PICK UP' } : {}) };
+      return;
+    }
     const busy = (p.lock && !seatedIdle) || p.ko > 0 || p.fall || p.fly || p.air || p.onGunship || p.connected === false || (p.act && p.act.hold && p.fire) || (p.atkCd || 0) > 0 || p.swing;
     if (busy) {
       p.freeT = 0;
@@ -223,6 +230,6 @@ export function createJobFinder(state) {
   };
 
   // What the phone gets: null until they have been free a moment.
-  const ui = (p) => (p.job && p.job.dir && p.freeT >= J.IDLE_AFTER ? { label: p.job.label, dir: p.job.dir, kind: p.job.kind, ...(p.job.verb ? { verb: p.job.verb } : {}), ...(p.lock ? { seated: true } : {}) } : null);
+  const ui = (p) => (p.job && p.job.dir && (p.freeT >= J.IDLE_AFTER || p.job.kind === 'pickup') ? { label: p.job.label, dir: p.job.dir, kind: p.job.kind, ...(p.job.verb ? { verb: p.job.verb } : {}), ...(p.lock ? { seated: true } : {}) } : null);
   return { update, ui };
 }

@@ -15,6 +15,7 @@ import { inRock } from './course.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { creatureAnchor } from './creatureBoard.js'; // (C.2: every part of a giant creature is an anchor)
 import { scrapOn } from './scrap.js';
+import { rockTop } from './ground.js'; // (CASTLE.md A0: hookshot to rock - a man reeled in to a rock face with open air above it stands on top of it)
 
 const H = config.HOOKSHOT;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -289,6 +290,17 @@ export function createHookshot({ state, puff, phoneFx, air, hijack }) {
       p.hook = null;
       p.hookCd = H.MISS_COOLDOWN;
       a.board(p);
+    } else if (p.fire && a && a.kind === 'rock' && dist < H.LEDGE_AT + 30 && h.len <= H.MIN_LEN + 1 && ship.main && state.groundSys && state.groundSys.enabled() && state.course && state.course.map && rockTop(state.course.map, h.ax, h.ay, H.ROCK_CLIMB) != null) {
+      // CASTLE.md A0, hookshot to rock: reeled right in to a rock face with open air above it within ROCK_CLIMB px: you hop up onto the top of it and land on the ground (ground.js)
+      const top = rockTop(state.course.map, h.ax, h.ay, H.ROCK_CLIMB);
+      p.hook = null;
+      p.hookCd = H.MISS_COOLDOWN;
+      p.x = h.ax;
+      p.y = top - 16;
+      p.fvx = 0;
+      p.fvy = -H.LEDGE_POP * 0.4;
+      p.apex = toShipY(ship, p.y - 40);
+      puff(p.x, top, '#d9cbb0', 4);
     } else if (p.fire && a && a.surf && dist < H.LEDGE_AT && h.len <= H.MIN_LEN + 1) {
       // Climb up onto a deck edge: hop up over it.
       p.hook = null;

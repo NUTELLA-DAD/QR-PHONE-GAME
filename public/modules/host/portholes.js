@@ -36,6 +36,7 @@ export function createPortholes({ state }) {
       for (const e of list) if (e && e.flying && Number.isFinite(e.x) && Number.isFinite(e.y)) out.push({ key: keyOf(e), x: e.x, y: e.y, size: 70, name: 'ESCORT' });
     }
     for (const h of state.hijacks || []) if (h && Number.isFinite(h.x) && Number.isFinite(h.y) && (h.hp == null || h.hp > 0)) out.push({ key: keyOf(h), x: h.x, y: h.y, size: 70, name: 'OUR FIGHTER' });
+    for (const p of state.groundSys && state.groundSys.onGround ? state.groundSys.onGround() : []) if (Number.isFinite(p.x) && Number.isFinite(p.y)) out.push({ key: keyOf(p), x: p.x, y: p.y - 60, size: 90, name: String(p.name || 'AWAY').toUpperCase() }); // (CASTLE.md A0: an away man who is off screen is a friend in a window too)
     return out;
   };
 

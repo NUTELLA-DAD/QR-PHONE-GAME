@@ -13,6 +13,9 @@ const HELM_V2_ON = typeof process === 'undefined' || !(process.env && process.en
 const RINGFAIR_ON = typeof process === 'undefined' || !(process.env && process.env.NO_RINGFAIR);
 // F13 (FUN.md): steam and lift - the plumbing is not wrecked by every scrape of rock, a burst pipe shuts its own valve, the pump gets the steam first while she sinks, a warning ladder (LOW ON COAL, LOW STEAM, SINKING) comes before FALLING, and the grazing rule is less trigger-happy (STEAMFIX). ON in the game; NO_STEAMFIX=1 in a tool is the old game (the seeded baselines pin it).
 const STEAMFIX_ON = typeof process === 'undefined' || !(process.env && process.env.NO_STEAMFIX);
+// A0 (CASTLE.md, the Away Team): crew leave the ship and walk the ground (plazas, castle walls, rock): AWAY. ON in the game; NO_AWAY=1 in a tool is the old game (the seeded baselines and the frames pin it). AWAY_BOT_TRIPS=1 lets the bots make trips (a test: tools/away-check.mjs, botsim).
+const AWAY_ON = typeof process === 'undefined' || !(process.env && process.env.NO_AWAY);
+const AWAY_BOT_TRIPS_ON = typeof process !== 'undefined' && !!(process.env && process.env.AWAY_BOT_TRIPS);
 export const config = {
   W: 1600,
   H: 900,
@@ -377,6 +380,7 @@ export const config = {
     LEDGE_POP: 300, // reeling right up to a deck edge: upward kick so you land on top (px/s)
     LEDGE_AT: 70, // reel in to this close to a deck anchor and you climb onto it (px)
     BOARD_AT: 75, // reel in to this close to a dogfighter and you climb aboard (px)
+    ROCK_CLIMB: 420, // CASTLE.md A0: reeled right in to a rock face, you stand on top of it if open air is within this many px above the hook (the away team's landing; only where config.AWAY is on)
   },
   // Hijack a small plane: touch a dogfighter in the air (or hook it and reel in), kick the pilot out, fly it.
   HIJACK: {
@@ -1413,6 +1417,42 @@ export const config = {
     STONE: { FIRE: 0.25 }, // chance a burning stone lights the deck it hits (x igniteChance)
     CHAIN: { AT: { fortress: [0.5, 1.5], citadel: [0.45] }, TOP: 6000, LOW: 2800, HP: 6, SNAP_AFTER: 6, DRAG: 3.5, PULL: 260, TICK: 1, POWER: 1, SHELL_MUL: 2, BOMB: 3, LOOKOUT: 2600, CLEAR: 3200, FACE_GAP: 2600, MARGIN: 90 }, // angles (x pi) it hangs at; the anchor height above the platforms; the low end above the platforms; hit points; seconds snagged before it snaps; drag per second; px/s it drags her back; seconds between bag ticks; power of a tick; shell damage x; hit points a bomb takes; the lookout's call distance; the map cuts the sky this half-width (px) round it clear of rock from its low end down to the platforms, and keeps it FACE_GAP px from any face; px the bot dives under it
   },
+  // THE AWAY TEAM (CASTLE.md package A0; ground.js, shipSim.js, bots.js, jobs.js, portholes.js): crew leave the ship and walk the GROUND - the castle plazas and curtain-wall walkways (with wall ladders), the rock of any open sky.
+  // ENABLED false (NO_AWAY=1 in a tool) = the old game. Only with MIN_CREW or more aboard (a small crew has no use for an away team: no ladder, nowhere to land); only people land (bots only on a BOT_TRIPS trip).
+  //   GETTING DOWN   a parachute, a hookshot swing or the crew cannon puts you on the ground you reach; or the ROPE LADDER on the lowest deck: it hangs from the keel to near the ground while the ship hovers within LADDER.REACH.
+  //   GETTING BACK   climb the rope ladder while the helm hovers over you; hook the hull; or fire a FLARE: the TV and the helm's phone mark you, the bot helm comes and hovers (jobs.js 'pickup').
+  //   LEFT BEHIND    the ship further than STRAND.LEASH from you, or the stop ended with you on the ground: STRANDED for STRAND.TIME s (a flare starts the clock again); then you walk home and rejoin at the next dock for HOME.COST salvage. Nobody dies of it; bots never strand.
+  AWAY: {
+    ENABLED: AWAY_ON,
+    MIN_CREW: 3, // crew aboard (people and bots) needed before the away team exists at all
+    BOT_TRIPS: AWAY_BOT_TRIPS_ON, // tools only: a bot now and then climbs down, walks to a plaza, fires a flare and comes back (keeps the code honest; off in normal bot play)
+    WALK: 230, // px/s on the ground
+    CLIMB: 190, // px/s on a wall ladder
+    STEP: 60, // the highest step up a walker takes in his stride (px); a rock face higher than this stops him
+    DROP: 70, // a drop ahead of more than this is an edge, not a slope (px) ...
+    EDGE_HOLD: 0.7, // ... and pushing at it this long (s) steps off: he falls (a parachute button, then the old fall back aboard if nothing is below)
+    LAND_RANGE: 5200, // ground this near below a flyer (px) makes ACTION open his parachute (a vault, a swing, a thrown man); farther and it is the old fall
+    HAND: 150, // px: a wall ladder is climbed from this close to its foot or its top
+    SLOPE: 900, // px/s a man's height follows the ground under him (a one-cell step is not a pop)
+    LEAP: { VX: 140, VY: 260, DROP_VY: 60 }, // JUMP off a wall or a ladder: sideways speed and upward speed; stepping off an edge: the first downward speed (px/s)
+    LOOKBACK: 24, // px: the rock under a flyer is looked for from this far above him (a fast faller must not start inside it)
+    LADDER: {
+      REACH: 820, // the rope ladder can be lowered with the deck at the foot of the ship within this many px of the ground ...
+      LEN_MAX: 900, // ... and it hangs at most this long
+      NEAR: 45, // ... to this many px above the ground
+      REACH_X: 70, // the action is offered within this many px of the ladder hatch on the lowest deck
+      GRAB: 48, // you take hold of the rope's foot from this close (sideways) ...
+      GRAB_Y: 90, // ... and no more than this far under it
+      CLIMB: 215, // px/s on the rope
+      KEEP: 10, // a rope nobody is on is drawn up after this many seconds
+      HOVER: 560, // the pickup marker: the foot of the ship hovers this high over the crewman
+      CALL_NEAR: 700, // a man who has called for a pickup (a flare, or STRANDED) and the ship's hatch this near him (px): the ladder drops by itself
+    },
+    FLARE: { COOLDOWN: 18, LIFE: 55 }, // seconds before the next flare; how long a flare is lit (the pickup call stays that long)
+    STRAND: { TIME: 40, LEASH: 2800, BACK: 0.75 }, // the STRANDED countdown (s); the ship is "gone" past LEASH px from you (and back when closer than BACK x LEASH)
+    HOME: { COST: 12, MAX: 180 }, // salvage paid when a man who walked home rejoins at the next dock; he is back at the next stop at latest after MAX s
+    BOT: { STAY: 6, TRIP_EVERY: 45, RETURN_MAX: 40 }, // trips: seconds a bot looks round; seconds between trips; a bot that cannot get back in this long is taken home (bots never strand)
+  },
   // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
   WAVES: {
     FIRST_AFTER: 35, // seconds before the first wave
@@ -2054,7 +2094,7 @@ export const config = {
     ENABLED: ALARMS_ON, // false (NO_ALARMS=1 in a tool) = the old banner: the last writer wins (the seeded gates are byte-identical either way: the banner is text only)
     HOLD: 2.5, // seconds a banner is safe from anything below PREEMPT (a banner shorter than that protects itself for its own length)
     PREEMPT: 8, // this priority and above shows at once, over anything of lower (or the same) priority
-    PRI: { crash: 9, falling: 8, boarders: 7, blaze: 7, helm: 6, structure: 6, setpiece: 5, objective: 5, steam: 5, fire: 4, info: 2 }, // the kinds, most urgent first
+    PRI: { crash: 9, falling: 8, boarders: 7, blaze: 7, helm: 6, away: 6, structure: 6, setpiece: 5, objective: 5, steam: 5, fire: 4, info: 2 }, // the kinds, most urgent first
     QUEUE: 3, // banners waiting behind the one on screen (the lowest and newest is dropped past this)
     STALE: 6, // seconds a waiting banner stays worth saying (then it is dropped: the moment has passed)
     PHONE_ONE_LINE: true, // the phone's info line shows the top alarm that concerns that player's deck or seat (false = the old line: the station's status, else the hint)

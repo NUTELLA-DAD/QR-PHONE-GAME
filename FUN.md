@@ -6,7 +6,7 @@ Fable's read-only study, 2026-10-12, for the lead (Opus) to execute. It is read 
 - **Go:** build it, starting with round 1 (F1 + F8; F7 done).
 - **Escort crash: KEEP as it is.** Friendly planes still crash into the player's own ship, so F4 must NOT change `ESCORT.CRASH_ON_SHIPS`.
 - **Boarding:** announced boarding attacks (F5) replace "relentless" boarding.
-- **Pause both:** the Away Team (A0-A3) until after the first playtest, and scrap carrying (F7) until G2 + the scrap patch.
+- **Pause both:** the Away Team (A0-A3) until after the first playtest, and scrap carrying (F7) until G2 + the scrap patch. **Update 2026-10-13: the owner un-paused the Away Team ("build the castle away team next"); A0 merged.**
 
 Progress:
 - **F7 done:** `SCRAP.ENABLED` is off in the game; `SCRAP_ON=1` turns it on in a tool, and `--check-scrap` sets it.

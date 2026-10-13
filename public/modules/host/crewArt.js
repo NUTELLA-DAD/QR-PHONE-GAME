@@ -112,7 +112,7 @@ export function createCrewArt({ ctx }) {
     const swingAge = now - (p.swingT || -1e9);
     const walk = p.moving ? Math.sin(time * 11) : 0;
     const o = { fa: -walk * 0.5, ba: walk * 0.5, fl: walk * 0.55, bl: -walk * 0.55, swingAge, effort: !!((p.fire && p.act && p.act.hold) || swingAge < 300 || p.windup > 0), up: false };
-    if (p.fly || p.tumble) {
+    if ((p.fly && !(p.on && p.on.away)) || p.tumble) { // (CASTLE.md A0: a man standing on the ground is not flailing)
       o.fa = o.ba = -2.9 + Math.sin(time * 14) * 0.25;
       o.fl = 0.5 + Math.sin(time * 14) * 0.2;
       o.bl = -0.4 - Math.sin(time * 14) * 0.2;
