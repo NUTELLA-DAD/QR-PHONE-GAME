@@ -383,6 +383,9 @@ const press = (sim, p, n = 3) => { p.actQ = true; step(sim, n); p.actQ = false; 
     if (tow) { p.jx = -1; p.jy = 0.1; p.atkQ = true; step(sim, 3); p.atkQ = false; p.jx = 0; made = sim.towing.tows[0] || null; }
     step(sim, 30); hm.thr = 0.3; // (the towing ship gets under way, gently, once the line is out)
     step(sim, seconds(14), () => {
+      // (the helmsman keeps her level with the prize, as a player towing would: the cold prize's bag seeps and she sinks. Before F3 the helm with the gas
+      // left alone drifted down with her; since F3 a released stick holds the height, the prize hangs ever lower and the line parts at SNAP after ~13 s)
+      if (config.CONTROLS.HELM_V2) hm.jy = B.pose.y - A.pose.y > 60 ? 0.6 : 0;
       twistA = Math.max(twistA, Math.abs(A.ctx.forces.theta)); twistB = Math.max(twistB, Math.abs(B.ctx.forces.theta));
       if (sim.towing.tows[0]) tension = Math.max(tension, sim.towing.tows[0].tension || 0);
     });

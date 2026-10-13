@@ -24,7 +24,7 @@ const near = (a, b, e = 0.05) => Math.abs(a - b) <= e;
 
 // a staged state: a calm ship with a gunner on an empty sky, a helmsman, a stoker off to the side
 const mk = () => ({
-  phase: 'flying', ship: { down: 0 }, scorecard: null, vote: null, run: { stopId: '1.0' }, goingDown: null, boss: null, creature: null,
+  phase: 'flying', ship: { down: 0, speed: 0, press: 60, fuel: 100, gas: 100, vy: 0 }, scorecard: null, vote: null, run: { stopId: '1.0' }, goingDown: null, boss: null, creature: null,
   fires: [], boarders: [],
   players: {
     g1: { bot: true, lock: 'Gun A', gunIdle: 3, ko: 0 },

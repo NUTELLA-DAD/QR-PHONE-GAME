@@ -1802,7 +1802,9 @@ async function checkEngineSizes() {
     const bal = lab.balanceOf(C), c = { x: bal.com.x, y: bal.com.y, k2: bal.k2 };
     const sp0 = staticPitch(lab.buildLayout(foreUp(undefined)), c), sp1 = staticPitch(lab.buildLayout(foreUp('heavy')), c), sp2 = staticPitch(lab.buildLayout(foreUp('great')), c);
     report(near(sp1.raw / sp0.raw, 2, 0.01) && near(sp2.raw / sp0.raw, 3.5, 0.01) && sp2.raw < 0, `the static pitch of a nose engine pointing up: pod ${sp0.raw} degrees, heavy ${sp1.raw}, great ${sp2.raw} (nose UP, 2x and 3.5x, about the same centre of mass)`);
-    const run = (parts) => { const sim = lab.boot(parts), p = lab.at(sim, 'helm'); lab.run(sim, 5, () => { p.jx = 0; p.jy = 0; p.gas = 0; }); return { theta: sim.state.forces.theta, torque: sim.state.forces.torque, pitch: sim.state.ship.pitch }; };
+    // (nobody at the helm: the ship's own autopilot flies both builds, the same with either helm. With a person at the helm and the stick let go, the F3 helm holds her height:
+    // against 56 gas points of engine lift it vents to 0 and she bobs about 150 px for ~13 s, so at 5 s the great ship was at the bottom of a bob, diving, nose down - the helm, not the engine)
+    const run = (parts) => { const sim = lab.boot(parts); lab.run(sim, 5); return { theta: sim.state.forces.theta, torque: sim.state.forces.torque, pitch: sim.state.ship.pitch }; };
     const r0 = run(foreUp(undefined)), r2 = run(foreUp('great'));
     report(r2.theta < r0.theta - 0.002 && Math.abs(r2.torque) > Math.abs(r0.torque) * 2.5 && r2.pitch < r0.pitch, `in flight the great nose engine lifts the nose: raw torque ${r0.torque.toFixed(4)} -> ${r2.torque.toFixed(4)}, tilt ${(r0.theta * 57.3).toFixed(2)} -> ${(r2.theta * 57.3).toFixed(2)} degrees (capped at ${config.FORCES.MAX_DEG}), pitch ${(r0.pitch * 57.3).toFixed(2)} -> ${(r2.pitch * 57.3).toFixed(2)}`);
     lab.restore();
@@ -1822,9 +1824,13 @@ async function checkEngineSizes() {
     const gq = lab.validate(greatShip), gw = gq.warns.find((w) => /big engine/.test(w));
     report(gq.ok && gq.checks.some((x) => x.group === 'Thrust' && /1 great lift engine/.test(x.text) && /up 56 gas points/.test(x.text)) && !!gw, `the Thrust line lists the great engine and 56 gas points of lift; the Steam WARN: "${(gw || '').slice(0, 110)}"`);
     // a starved boiler: two heavy engines on ONE boiler, no pressure help, the real steam model (no clamp on the line)
-    const starve = (parts) => { const sim = lab.boot(parts), p = lab.at(sim, 'helm'), st = sim.state; for (let i = 0; i < 60 * 40; i++) { p.jx = 0; p.jy = 0; p.gas = 0; st.ship.fuel = 100; st.ship.speed = 0.5; st.ship.order = 0.5; sim.update(1 / 60); } return { press: st.ship.press, fed: st.engines[0].fed, panel: sim.engines.panel(1) }; }; // (cruising at half speed with the firebox kept full: the line settles where the heat and the engines' steam balance)
+    // (the sky is cleared: she used to ram a rock wall of the open map at 19 s, smashing the Fore Engine and bursting its pipe, and that open pipe's leak - 6 of the 12.75 steam used - was what
+    // starved the line. Since F13 a burst pipe shuts itself after 5 s, so the wreck no longer starved anything. In clear air with the firebox kept full one boiler keeps two heavy engines at 94%;
+    // they starve once the coal runs low: both ships fly on the same firebox, at the LOW ON COAL mark)
+    const coal = config.STEAMFIX.WARN.FUEL;
+    const starve = (parts) => { const sim = lab.boot(parts), p = lab.at(sim, 'helm'), st = sim.state; st.course.map.solid.fill(0); for (let i = 0; i < 60 * 40; i++) { p.jx = 0; p.jy = 0; p.gas = 0; st.ship.fuel = coal; st.ship.speed = 0.5; st.ship.order = 0.5; sim.update(1 / 60); } return { press: st.ship.press, fed: st.engines[0].fed, panel: sim.engines.panel(1) }; }; // (cruising at half speed with the firebox held at `coal`: the line settles where the heat and the engines' steam balance)
     const s0 = starve(C), s1 = starve(sized(C, 'heavy', BOTH));
-    report(s0.fed > s1.fed + 0.15 && s1.press < E.STARVED_PRESS && near(s1.fed, s1.press / 50, 0.02), `the real boiler (cruising, firebox kept full): the classic line settles at ${s0.press.toFixed(0)}, her engines run at ${(s0.fed * 100).toFixed(0)}%; two heavy engines on one boiler starve the line to ${s1.press.toFixed(0)} and every engine runs at ${(s1.fed * 100).toFixed(0)}% (press / 50)`);
+    report(s0.fed > s1.fed + 0.15 && s1.press < E.STARVED_PRESS && near(s1.fed, s1.press / 50, 0.02), `the real boiler (cruising, the firebox held at ${coal}, the LOW ON COAL mark): the classic line settles at ${s0.press.toFixed(0)}, her engines run at ${(s0.fed * 100).toFixed(0)}%; two heavy engines on one boiler starve the line to ${s1.press.toFixed(0)} and every engine runs at ${(s1.fed * 100).toFixed(0)}% (press / 50)`);
     report(s1.panel && s1.panel.l.every((q) => q[4] === 'H' && q[5] === 1) && s0.panel.l.every((q) => q[4] === '' && q[5] === 0), `the helm's phone is told: the heavy levers carry the badge "H" and the starved flag (${JSON.stringify(s1.panel.l[0])}); the pods carry neither (${JSON.stringify(s0.panel.l[0])})`);
     // the Yard
     const rng = () => 0.5;
