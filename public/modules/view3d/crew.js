@@ -138,7 +138,8 @@ export function createCrewLayer(parent) {
     const hp = !raider && !ko && rec.connected !== false && rec.hearts != null ? heartsOf(rec.hearts, config.HEALTH.MAX) : '';
     const chute = rec.fly && rec.chuteOpen ? 2 : rec.fly && rec.chute > 0 ? 1 : rec.fall && !rec.tumble && !rec.fly ? 2 : 0;
     const hook = !!(rec.hook && rec.hook.phase) && !raider;
-    const c = { kind, species, item: ITEMS_OK.has(item) ? item : null, itemOpt: item === 'hookshot' && rec.hook ? 'fired' : '', ko, hearts: hp, chute, hook, mark: !raider, team: !!env.teamColor, acc: L.acc, satchel: rec.type === 'sapper' };
+    const plain = !!rec.plain; // (A3: a freed prisoner in plain clothes: no colour cone, no hearts, no scarf)
+    const c = { kind, species, item: ITEMS_OK.has(item) ? item : null, itemOpt: item === 'hookshot' && rec.hook ? 'fired' : '', ko, hearts: plain ? '' : hp, chute, hook, mark: !raider && !plain, team: !!env.teamColor, acc: L.acc && !plain, satchel: rec.type === 'sapper' };
     const o = f.cfg;
     let ch = false;
     for (const k of Object.keys(c)) if (o[k] !== c[k]) { ch = true; break; }
@@ -152,7 +153,7 @@ export function createCrewLayer(parent) {
     }
     return ch;
   }
-  const ITEMS_OK = new Set(['coal', 'ammo', 'sword', 'hammer', 'hookshot', 'towline', 'sandbag', 'crate', 'scrap', 'extinguisher', 'cutlass', 'club', 'bomb', 'cleaver']);
+  const ITEMS_OK = new Set(['coal', 'ammo', 'sword', 'hammer', 'hookshot', 'towline', 'sandbag', 'crate', 'scrap', 'extinguisher', 'cutlass', 'club', 'bomb', 'cleaver', 'keg', 'banner']);
 
   function partsOf(c) {
     const out = [];
@@ -297,7 +298,7 @@ export function createCrewLayer(parent) {
     const t0 = performance.now();
     try {
       let f = figs.get(key);
-      const zt = 70;
+      const zt = Number.isFinite(extra.z) ? extra.z : 70; // (A3: the away team stands deeper or nearer: on the wall walk, on a wall ladder)
       const z = f && f.z != null ? f.z + (zt - f.z) * Math.min(1, L.dt * 5) : zt;
       f = drive(key, rec, { W: null, lx: fin(rec.x), ly: -fin(rec.y), lz: z, cz: 1, teamColor: extra.teamColor || null });
       f.z = z;

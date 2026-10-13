@@ -295,7 +295,7 @@ export function scarfParts() {
 
 // ---- items ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // hand items are authored in the hand's frame (origin = the fist, +y = the item's long axis); chest items in the torso frame (the load hugged in front: ITEMC).
-export const CHEST_ITEMS = new Set(['coal', 'ammo', 'sandbag', 'crate', 'scrap']);
+export const CHEST_ITEMS = new Set(['coal', 'ammo', 'sandbag', 'crate', 'scrap', 'keg', 'banner']);
 export function itemParts(kind, opt = '') {
   if (!kind) return [];
   return memo('item|' + kind + '|' + opt, () => {
@@ -357,6 +357,18 @@ export function itemParts(kind, opt = '') {
       P.box(C, '#b3bcc6', 17, 28, 0, 28, 7, 17, OW);
       P.box(C, '#76808a', 17, 21.5, 0, 24, 6, 17, OW);
       P.box(C, '#d9a24a', 17, 28, 0, 6, 26, 19, 1.4);
+    } else if (kind === 'keg') { // A3: a powder keg hugged in front: a fat barrel with two iron hoops and a plug
+      P.sph(C, '#a37a45', 18, 30, 0, 12.5, 15, 12.5, OW, 0, SP_L);
+      P.cyl(C, '#3d3a3c', 18, 22.5, 0, 12.2, 3.2, 0.8);
+      P.cyl(C, '#3d3a3c', 18, 37.5, 0, 12.2, 3.2, 0.8);
+      P.cyl(C, '#2b2724', 18, 45.5, 0, 4.2, 3, 0.7);
+    } else if (kind === 'banner') { // A3: the great banner carried on his back: a tall pole leaning back, a gold finial, a crimson cloth with a swallow tail and a gold edge (fictional Ember Pact colours)
+      P.rod(C, '#563c28', V(-16, -6, 0), V(-26, 252, 0), 2.8, OWS);
+      P.sph(C, '#d9b24e', -26.7, 257, 0, 5, 5, 5, 0.8, 0, SP_L);
+      P.box(C, '#a8302c', -66, 226, 0, 76, 52, 2.8, OWS);
+      P.box(C, '#a8302c', -56, 187, 0, 56, 28, 2.8, OWS);
+      P.box(C, '#d9b24e', -66, 249, 0.4, 76, 5, 3.4, 0);
+      P.box(C, '#ffb347', -60, 222, 1.6, 12, 24, 3.4, 0);
     } else if (kind === 'crate') {
       P.box(C, '#c9a05f', 18, 31, 0, 25, 25, 25, OW);
       for (const s of [1, -1]) P.box(C, '#8a6644', 18, 31, s * 12.9, 31, 3, 1.4, 0, 0, 0, 0, 0.78);

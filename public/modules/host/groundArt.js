@@ -248,6 +248,21 @@ export function createGroundArt({ ctx, world, ink }) {
     if (ob.state === 'fuse') text(Math.max(0, Math.ceil(ob.t)) + ' s', x, y - up - r - 12 * u, 30, '#d62828', tu);
     else if (!done) text(ob.label, x, y - up - r - 12 * u, small ? 18 : 22, '#4a2f12', tu);
   };
+  // A3: when the 3D view draws the sign (post, board and icon), the HUD keeps only the words, the bar that fills and the fuse's seconds, on the 3D board: (x, y) = its centre, rpx = its radius in pixels.
+  const markerWords = (ob, x, y, rpx, u, tu) => {
+    if (ob.state === 'taken') return;
+    if (ob.prog > 0.02 && ob.state === 'ready') {
+      ctx.save();
+      ctx.strokeStyle = '#2d8a3e';
+      ctx.lineWidth = Math.max(3, 8 * u);
+      ctx.beginPath();
+      ctx.arc(x, y, rpx + 7 * u, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, ob.prog));
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (ob.state === 'fuse') text(Math.max(0, Math.ceil(ob.t)) + ' s', x, y - rpx - 12 * u, 30, '#d62828', tu);
+    else if (ob.state !== 'done') text(ob.label, x, y - rpx - 12 * u, ob.kind === 'keg' ? 18 : 22, '#4a2f12', tu);
+  };
   // A freed prisoner: a small figure in grey with a chain, walking (held poses: no wobble) or climbing.
   const prisoner = (pr, x, y, u, k8) => {
     ctx.save();
@@ -296,16 +311,18 @@ export function createGroundArt({ ctx, world, ink }) {
     ctx.restore();
   };
   // Every objective, freed prisoner and carried banner, at the CURRENT transform in world units (the 2D pass) or through a projector (the 3D HUD pass: proj(x, y) -> { x, y, u } or null, u = the scale there).
-  const drawObjectives = (time, tu = 1, proj = null) => {
+  const drawObjectives = (time, tu = 1, proj = null, live3d = null) => { // (live3d = the 3D view's away layer: it draws the signs, the prisoners and the carried banner itself; signAt(ob) -> { x, y, r } is where a sign board is)
     const S = world.away, O = S && S.obj;
     if (!S || !S.on || !O || !O.on) return;
     const k8 = Math.floor(time * 8);
     const at = (x, y) => (proj ? proj(x, y) : { x, y, u: tu, w: 1 }); // (u: the scale of a sign and its words; w: the scale of a figure standing in the world)
     for (const ob of O.list) {
       if (ob.live === false || Math.abs(ob.x - S.rope.x) > config.AWAY.OBJECTIVES.SHOW) continue; // (its gate has fallen: the winch, the charge and the ballista go with it; a face far from the ship is out of the picture - in 3D the ring's far side shows behind)
+      if (live3d) { const sg = live3d.signAt(ob), q3 = at(sg.x, sg.y); if (q3) markerWords(ob, q3.x, q3.y, sg.r * (q3.w / 1.1), q3.u, q3.u); continue; }
       const q = at(ob.x, ob.y);
       if (q) marker(ob, q.x, q.y, q.u, k8, q.u);
     }
+    if (live3d) return;
     for (const pr of O.prisoners) { if (pr.state === 'aboard') continue; const q = at(pr.x, pr.y); if (q) prisoner(pr, q.x, q.y, q.w, k8); }
     if (O.banner) { const c = world.players[O.banner.carrier]; if (c && c.on && c.on.away && c.on.mode !== 'home') { const q = at(c.x, c.y - 150); if (q) carried(q.x, q.y, q.w, k8); } }
   };
@@ -329,5 +346,5 @@ export function createGroundArt({ ctx, world, ink }) {
     for (const f of S.flares) flare(f.x, f.y, tu, k8, f.name, tu, 1);
   };
 
-  return { drawGround, drawWorld, drawObjectives, ladder, flare, pickup, plank, text, ROPE };
+  return { drawGround, drawWorld, drawObjectives, ladder, flare, pickup, plank, text, icon, ROPE };
 }

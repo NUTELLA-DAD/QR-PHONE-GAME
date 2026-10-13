@@ -93,6 +93,7 @@ window.__a = {
   step(n) { for (let i = 0; i < n; i++) { this.pin(); window.__upd(1/60); } },
   me() { return Object.values(window.game.state.players).find((q) => !q.bot); },
   face() { return window.game.state.course.ring.faces[0]; },
+  calm(on) { for (const f of this.st().course.ring.faces) for (const q of f.squads) if (q.kind === 'plaza') q.huntCd = on ? 1e9 : 0; }, // (A1: the plaza squads do not notice a man on the ground while a shot is taken)
   plazaMid() { const f = this.face(), pz = window.game.state.course.map.ring.faces[0].plazas[0]; return (pz.x0 + pz.x1) / 2; },
   async settle(n = 60) { for (let i = 0; i < n; i++) await this.frame(); },
 };
@@ -116,6 +117,7 @@ try {
   await zoom3d(0.8);
   // Mia drops by parachute onto the plaza of the first gate; the ship waits well to the left
   await host.ev(`(()=>{ const a = window.__a, st = a.st(), sh = st.ships[0], f = a.face(), px = a.plazaMid(), p = a.me(); a.park(px - 1500, f.y - 700); a.step(40); sh.sim.air.startFlight(p, 0, 0); p.fall = false; p.conn = null; p.lock = null; p.d = p.d ?? 1; p.x = px + 200; p.y = f.y - 420; p.fvx = 0; p.fvy = 60; p.lsy = p.apex = p.y - sh.pose.y; p.chute = 1; p.chuteOpen = true; return 1 })()`);
+  await host.ev('window.__a.calm(true); 1');
   await host.ev('window.__a.step(240); 1');
   check(await host.ev('(()=>{ const p = window.__a.me(); return !!p.on && p.on.away && p.on.mode === "walk" && Math.abs(p.y - window.__a.face().y) < 3 })()'), 'Mia landed on the plaza by parachute (on the ground)');
   await host.ev('(()=>{ const a = window.__a, p = a.me(); a.park(p.x - 1200, a.face().y - 620); a.step(60); return 1 })()');
@@ -127,7 +129,7 @@ try {
   const line = await phone.ev('document.getElementById("info").textContent');
   const btn = await phone.ev('document.getElementById("act").textContent');
   console.log('  phone: ' + line + ' | button: ' + btn);
-  check(/AWAY TEAM/.test(line) && /FLARE|CLIMB/.test(line) && /FIRE FLARE/.test(btn), 'the phone says AWAY TEAM with a ground hint, and the big button is FIRE FLARE');
+  check(/AWAY TEAM/.test(line) && /FLARE|CLIMB|Objective/.test(line) && /FIRE FLARE/.test(btn), 'the phone says AWAY TEAM with a ground hint, and the big button is FIRE FLARE');
   await phone.shot(`away_${view}_phone_ground.png`);
 
   // the ship comes over her and lowers the rope ladder
