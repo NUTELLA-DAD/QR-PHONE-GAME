@@ -631,9 +631,20 @@ function pilotPlanFor(sh) { return pilotPlan(sh.ctx, 2.5, 0.55); }
     const far = inset && inset.ship, arena = g.M.wall, cx = (arena.x0 + arena.x1) / 2;
     const nearer = Math.abs(aimOf(r, 'x') - cx) <= Math.abs(aimOf(b, 'x') - cx) ? r : b;
     report(!!inset && v.clipped && far && far !== nearer && inset.zoom >= v.zoom / config.CAMERA.VERSUS.INSET.MAX_RATIO - 1e-9 && inset.w > 400 && inset.x + inset.w <= 1920, `ships 15000 px apart do not fit even at the widest zoom: the view SPLITS - the main view follows the ship nearer the middle (${nearer.name}), a framed porthole (${Math.round(inset ? inset.w : 0)} x ${Math.round(inset ? inset.h : 0)} px) shows the far one (${far ? far.name : '?'}), zoom ${inset ? inset.zoom.toFixed(3) : '-'} against the main view's ${v.zoom.toFixed(3)}`);
-    b.pose.x = r.pose.x + (config.PVP.START_GAP + 700);
+    // The hysteresis (CAMERA.VERSUS ENTER / EXIT): find the gap at which the view splits as the ships draw apart (a fresh camera at each gap, 200 px steps), then come back from the
+    // split to a little inside that gap: the porthole stays up there, while a camera that never split shows both ships in one view at the same gap. (This used to move to START_GAP + 700
+    // and expect the porthole: that was in the band when the start gap was "just inside the widest view"; the widest view now frames 8400 px at zoom 0.18 and the split comes near 12000.)
+    const fresh = (gap, n = 30) => { const c = createWorldCamera(); b.pose.x = r.pose.x + gap; let w; for (let i = 0; i < n; i++) w = c.update(DT, g.st, 1920, 1080); return w; };
+    let splitAt = null;
+    for (let gap = config.PVP.START_GAP; gap <= 15000 && splitAt === null; gap += 200) if (fresh(gap).inset) splitAt = gap;
+    const back = splitAt - 400;
+    const neverSplit = splitAt !== null && !fresh(back).inset;
+    b.pose.x = r.pose.x + 15000;
+    v = run(120);
+    const wasSplit = !!v.inset;
+    b.pose.x = r.pose.x + back;
     v = run(180);
-    report(!!v.inset, 'the split has a hysteresis: back at a little over the start gap the porthole is still up (no flicker)');
+    report(splitAt !== null && wasSplit && !!v.inset && neverSplit, `the split has a hysteresis: drawing apart the view splits at ${splitAt} px; coming back from the split, at ${back} px the porthole is still up (no flicker), where a camera that never split frames both`);
     b.pose.x = r.pose.x + 5200;
     v = run(300);
     report(!v.inset && !v.clipped, 'once the ships are comfortably close again the porthole goes and one view frames both');

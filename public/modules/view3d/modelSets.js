@@ -28,6 +28,7 @@ export function createModelSets(parent, max = 40) {
       } else {
         mesh = new THREE.InstancedMesh(src.geometry, src.material, max);
         mesh.userData.toon = src.userData.toon; mesh.userData.plain = src.userData.plain;
+        if (src.customDepthMaterial) mesh.customDepthMaterial = src.customDepthMaterial; // (a model built with the one-call ink, style.js Batch.build({ one: true }): its shadow pass drops the ink copy, depthVCInk)
       }
       let shell = null;
       if (sh && ghost) { // (a see-through ghost keeps the pair: its materials are faded copies)

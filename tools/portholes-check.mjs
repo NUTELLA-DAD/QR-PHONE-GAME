@@ -48,6 +48,7 @@ window.__P = {
   escort(i, dx, dy) { const st = this.st(), sh = this.sh(); st.escorts = st.escorts || []; while (st.escorts.length <= i) st.escorts.push({ name: 'Escort ' + (st.escorts.length + 1), flying: true, docked: false, x: 0, y: 0, vx: 0, vy: 0, heading: 0, hp: 3, max: 3, trail: [], fake: true }); const e = st.escorts[i]; e.flying = true; e.docked = false; e.x = sh.pose.x + dx; e.y = sh.pose.y + dy; e.heading = dx < 0 ? Math.PI : 0; return e; },
   noEscorts() { const st = this.st(); st.escorts = (st.escorts || []).filter((e) => !e.fake); for (const e of st.escorts) e.flying = false; st.escort = st.escorts[0]; },
   enemyAt(x, y) { const e = this.st().enemy; e.dead = 0; e.x = x; e.y = y; e.vx = 0; e.vy = 0; return e; },
+  async waitFor(pred, ms = 8000) { const t0 = performance.now(); while (!pred() && performance.now() - t0 < ms) await this.frame(); return pred(); }, // (wait on what the check is about, drawn frames, not a fixed time: a busy machine draws fewer of them)
   async untilSpy(max = 6000) { const st = this.st(); let n = 0; while (!(st.spy && st.spy.on) && n < max) { window.__step(30); n += 30; } return n; },
 };
 `;
@@ -255,7 +256,7 @@ try {
   // ---- 5. 2D, Low, Versus ------------------------------------------------------------------------------------------------------------------------------------------------------------
   if (want('twod')) {
     console.log('5. the 2D view');
-    const t = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(); await P.untilSpy(); window.__step(120); P.escort(0, -5200, -200); await sl(1400); await P.frame(); window.__r.twod={ items:P.items() }; return 1; })()`;
+    const t = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(); await P.untilSpy(); window.__step(120); await P.untilSpy(); P.escort(0, -5200, -200); await sl(400); await P.waitFor(() => P.items().some((i) => i.kind === 'spy' && i.pic === '2d') && P.items().some((i) => i.kind === 'edge' && i.pic === '2d')); await P.frame(); window.__r.twod={ items:P.items() }; return 1; })()`;
     const r = run('twod', '2d', 'kind=open&env=skyisles', [step(boot(300), 300), step(t, 400, '2d')]);
     clean('twod', r); show('twod', r.data);
     const it = (r.data && r.data.twod && r.data.twod.items) || [];
@@ -264,7 +265,7 @@ try {
   }
   if (want('low')) {
     console.log('6. 3D, tier Low: the arrows stay, the spyglass is drawn in 2D');
-    const t = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(); await P.untilSpy(); window.__step(120); P.escort(0, 6200, -300); await sl(1400); await P.frame(); window.__r.low={ items:P.items(), live:P.live() }; return 1; })()`;
+    const t = `(async()=>{ ${sl} const P=window.__P, st=P.st(), sh=P.sh(); await P.untilSpy(); window.__step(120); await P.untilSpy(); P.escort(0, 6200, -300); await sl(400); await P.waitFor(() => P.items().some((i) => i.kind === 'spy')); await sl(600); await P.frame(); window.__r.low={ items:P.items(), live:P.live() }; return 1; })()`;
     const r = run('low', '3d', 'tier=low&kind=open&env=skyisles', [step(boot(300), 300), step(t, 400, 'low')]);
     clean('low', r); show('low', r.data);
     const d = r.data && r.data.low;

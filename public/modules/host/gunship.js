@@ -1383,7 +1383,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       return null;
     }
     if (player.x > geom().MAIN_X1 - 45) {
-      if (!g.rope) return { type: 'hook', label: g.turn ? 'She is turning round!' : gap(g) <= G.HOOK_RANGE ? 'Fire hookshot!' : 'Too far to hook!' };
+      if (!g.rope) return { type: 'hook', label: g.turn ? 'She is turning round!' : gap(g) <= G.HOOK_RANGE ? 'Fire hookshot!' : 'Too far to hook!', idle: !!g.turn || gap(g) > G.HOOK_RANGE }; // (idle: a press cannot catch her now, so a gas valve in reach comes first: shipSim.js useFor)
       if (inSwingRange(g)) return { type: 'swing', label: 'Swing across!' };
     }
     // Her grapple is on our bow: hack through the line (just behind the swing spot).

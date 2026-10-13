@@ -56,11 +56,24 @@ try {
 
   if (!quick) {
     console.log('3. host, 16 bots');
-    const host16 = `(async()=>{ const b=document.getElementById('bots'); for(let i=0;i<4;i++) b.click(); ${SLEEP(500)} document.getElementById('castoff').click(); ${SLEEP(30000)} const st=window.view3dDebug().view.stats(); return JSON.stringify({crew:st.crew, sceneCalls:st.sceneCalls, jsMs:st.jsMs, errors:window.gameErrors||[]}); })()`;
+    // (The bots are real time, so at any moment a few of the 16 may not stand on a deck: a pilot in an escort fighter's cockpit, a hand in the air, and raiders or the gunship's crew add figures.
+    // The figures are compared with the people the view is meant to draw in that same frame - index.js's own rule, read between two frames - and the check waits, frame by frame, for the frame
+    // where all 16 are aboard and drawn, rather than taking whatever moment a fixed delay lands on: before, "16 figures" read 14-16.)
+    const host16 = `(async()=>{ const b=document.getElementById('bots'); for(let i=0;i<4;i++) b.click(); ${SLEEP(500)} document.getElementById('castoff').click(); ${SLEEP(30000)}
+      const frame=()=>new Promise((r)=>requestAnimationFrame(()=>r(1)));
+      const want=()=>{ const st=window.game.state, ships=st.ships||[]; let crew=0, bots=0, others=0;
+        const esc=(p)=>p.lock && ships.some((sh)=>((sh.ctx && sh.ctx.escorts) || st.escorts || []).some((e)=>e.name===p.lock && e.flying));
+        for (const p of Object.values(st.players)) { if (p.bot) bots++; if (p.enemy || p.hj || p.connected===false) continue; if (p.fly || !esc(p)) crew++; }
+        for (const sh of ships) { others += ((sh.ctx && sh.ctx.boarders) ? sh.ctx.boarders : st.boarders || []).length; if (sh.crewReg) others += Object.keys(sh.crewReg).length; }
+        return { bots, crew, others }; };
+      let w=want(), st=window.view3dDebug().view.stats();
+      for (let i=0;i<600 && !(w.crew===16 && st.crew.figs===16+w.others);i++){ await frame(); w=want(); st=window.view3dDebug().view.stats(); }
+      return JSON.stringify({crew:st.crew, want:w, sceneCalls:st.sceneCalls, jsMs:st.jsMs, errors:window.gameErrors||[]}); })()`;
     r = shot('host16', 'host.html?view=3d', host16, ['--ready', 'window.__meter!==undefined']);
     console.log('  errors ' + r.errs + '  ' + JSON.stringify(r.data));
     if (r.errs !== 0) fail('console errors in the 16-bot host run');
-    if (!r.data || r.data.crew.figs !== 16) fail('expected 16 crew figures');
+    if (!r.data || r.data.want.bots !== 16 || r.data.crew.figs !== r.data.want.crew + r.data.want.others) fail('the crew figures are not the 16 bot crew (plus any raiders) the view should draw: ' + JSON.stringify(r.data && { figs: r.data.crew.figs, want: r.data.want }));
+    else if (r.data.want.crew !== 16) console.log('  (no frame in 10 s had all 16 aboard at once; the figures matched the ' + r.data.want.crew + ' the view should draw)');
     if (r.data && r.data.crew.calls > 6) fail('more than 6 crew draw calls');
     if (r.data && r.data.crew.ms > 2) fail('the crew layer took more than 2 ms a frame');
     if (r.data && r.data.errors.length) fail('game errors: ' + r.data.errors.join(' | '));

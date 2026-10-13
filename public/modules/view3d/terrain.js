@@ -14,7 +14,7 @@
 // the lip is BITTEN inward by a stable hash (<= config.LOOK3D.ROCK.CHIP units; the collision is untouched) and its edge is split every 24 units so the bites are small chips, and ONE instanced mesh of painted plants
 // stands along the upward lips (fringe.js). The cut edges' normals come out of terrainWalls.js makeCell, which now orients them by the corner field (a cut lying on a cell's edge used to be a coin toss).
 // Chunk build time is measured (terrain.stats): the budget is 4 ms.
-import { THREE, PAL, INK, look, rimify, fx, INK_GLSL, inkUniforms } from './style.js';
+import { THREE, PAL, look, rimify, fx, INK_GLSL, inkUniforms, inkLook } from './style.js';
 import { getTrimSheet, uvRect, ROCK_STRATA } from './textures.js';
 import { config } from '../../config.js';
 import { CH, makeCell, chunkWalls } from './terrainWalls.js';
@@ -111,21 +111,35 @@ const rockToon = rimify(new THREE.MeshToonMaterial({ vertexColors: true, gradien
     sh.uniforms.uFloor = fx.uFloor;
     sh.uniforms.uRockDir = fx.uRimDir; sh.uniforms.uCapCol = RU.uCapCol; sh.uniforms.uShadeMul = RU.uShadeMul; sh.uniforms.uRockK = RU.uRockK;
     sh.uniforms.uRockRect = { value: ROCK_STRATA.map((n) => { const q = uvRect(n, 3); return new THREE.Vector4(q.u0, q.v0, q.u1, q.v1); }) };
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + STRATA_VERT).replace('#include <begin_vertex>', '#include <begin_vertex>\nvRock = aRock; vWP = position.xy;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + STRATA_FRAG)
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + STRATA_VERT + INK_VERT).replace('#include <begin_vertex>', '#include <begin_vertex>\nvRock = aRock; vWP = position.xy;' + INK_BEGIN).replace('#include <project_vertex>', '#include <project_vertex>' + INK_CLIP);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + STRATA_FRAG + INK_FRAG)
       .replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb = rockLook( diffuseColor.rgb );')
-      .replace('#include <opaque_fragment>', 'outgoingLight += uFloor * ( 0.4 + 0.6 * diffuseColor.rgb );\n{ vec3 fN = normalize( normal ); float fE = 1.0 - saturate( dot( fN, normalize( vViewPosition ) ) ); outgoingLight += uFloor * 1.8 * smoothstep( 0.4, 0.85, fE ); } // (WP15: and a cool rim where the rock turns edge-on, so an unlit cave still has a readable outline)\n#include <opaque_fragment>'); // (the dark-blue floor: in the dark the rock keeps a faint silhouette)
+      .replace('#include <opaque_fragment>', 'outgoingLight += uFloor * ( 0.4 + 0.6 * diffuseColor.rgb );\n{ vec3 fN = normalize( normal ); float fE = 1.0 - saturate( dot( fN, normalize( vViewPosition ) ) ); outgoingLight += uFloor * 1.8 * smoothstep( 0.4, 0.85, fE ); } // (WP15: and a cool rim where the rock turns edge-on, so an unlit cave still has a readable outline)\n#include <opaque_fragment>' + INK_PAINT); // (the dark-blue floor: in the dark the rock keeps a faint silhouette)
+    inkRockUniforms(sh);
   };
-  rockToon.customProgramCacheKey = () => 'toon-rim-rock';
+  rockToon.customProgramCacheKey = () => 'toon-rim-rock-ink';
 }
-const rockPlain = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
 // A1: the ink ribbon along a lip is screen-constant like every other outline: its inner vertices carry the inward offset in `onormal` (config.LOOK3D.INK.TERRAIN world units at the reference zoom), style.js inkPush widens it.
-const inkMat = new THREE.MeshBasicMaterial({ color: INK, side: THREE.DoubleSide });
-inkMat.onBeforeCompile = (sh) => {
-  inkUniforms(sh);
-  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 onormal;\n' + INK_GLSL).replace('#include <begin_vertex>', 'vec3 transformed = position + inkPush( onormal );');
+// (The draw-call pass, ring maps: the ribbon was a mesh of its own, so every chunk cost 2 calls and a ring shows 16 to 23 chunks. It is now the tail of the chunk's own geometry, aInk = 1, drawn by the rock's
+// materials: pushed by inkPush, painted the ink colour, and thrown off screen while the look has no outlines (style.js inkLook.on: toon and outlines) and in the shadow pass, where the ribbon never was.)
+const INK_VERT = '\nattribute vec3 onormal; attribute float aInk; varying float vInk; uniform float uInkOn;\n' + INK_GLSL;
+const INK_BEGIN = '\ntransformed += inkPush( onormal ) * aInk; vInk = aInk;';
+const INK_CLIP = '\nif ( aInk > 0.5 && uInkOn < 0.5 ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );';
+const INK_FRAG = '\nvarying float vInk; uniform vec3 uInk;';
+const INK_PAINT = '\nif ( vInk > 0.5 ) gl_FragColor.rgb = uInk;';
+function inkRockUniforms(sh) { inkUniforms(sh); sh.uniforms.uInkOn = inkLook.on; sh.uniforms.uInk = inkLook.color; }
+const rockPlain = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+rockPlain.onBeforeCompile = (sh) => { // (the plain look has no outlines: inkLook.on is 0 whenever this material is on, so the ribbon is always thrown off)
+  inkRockUniforms(sh);
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>' + INK_VERT).replace('#include <begin_vertex>', '#include <begin_vertex>' + INK_BEGIN).replace('#include <project_vertex>', '#include <project_vertex>' + INK_CLIP);
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>' + INK_FRAG).replace('#include <opaque_fragment>', '#include <opaque_fragment>' + INK_PAINT);
 };
-inkMat.customProgramCacheKey = () => 'ink-lip';
+rockPlain.customProgramCacheKey = () => 'lambert-rock-ink';
+const rockDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); // (a cave's rock casts shadows; its ink ribbon did not and does not)
+rockDepth.onBeforeCompile = (sh) => {
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aInk;').replace('#include <project_vertex>', '#include <project_vertex>\n  if ( aInk > 0.5 ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );');
+};
+rockDepth.customProgramCacheKey = () => 'depth-rock-ink';
 const LIP_W = () => Math.max(2, Number(config.LOOK3D && config.LOOK3D.INK && config.LOOK3D.INK.TERRAIN) || 9);
 const rock3d = () => (config.LOOK3D && config.LOOK3D.ROCK) || {}; // (A7: the rock's numbers, config.LOOK3D.ROCK)
 
@@ -408,7 +422,7 @@ function buildChunk(map, ci, cj) {
               flat(A, B, B2, n3, wallCol.r, wallCol.g, wallCol.b, kflag);
               flat(A, B2, A2, n3, wallCol.r, wallCol.g, wallCol.b, kflag);
             }
-            // the ink: a ribbon on the (bitten) lip, LIP_W units wide at the reference zoom (A1: screen-constant, see inkMat), going inward (into the rock). The inner vertices sit on the lip in x / y and carry the inward offset in `onormal`.
+            // the ink: a ribbon on the (bitten) lip, LIP_W units wide at the reference zoom (A1: screen-constant, see INK_BEGIN), going inward (into the rock). The inner vertices sit on the lip in x / y and carry the inward offset in `onormal`.
             const w = LIP_W(), s0 = lipShift(ax + dx * t0, ay + dy * t0), s1 = lipShift(ax + dx * t1, ay + dy * t1);
             const pa = [ax + dx * t0 + s0[0], ay + dy * t0 + s0[1]], pb = [ax + dx * t1 + s1[0], ay + dy * t1 + s1[1]];
             const qa = [pa[0] - nx * w, pa[1] - ny * w], qb = [pb[0] - nx * w, pb[1] - ny * w];
@@ -432,11 +446,18 @@ function buildChunk(map, ci, cj) {
     }
   }
   if (!any || !pos.length) return null;
+  // ONE geometry, one draw call: the rock, then its ink ribbon (aInk 1; drawn after the rock, so where they meet the ink is on top as when it was a mesh of its own drawn after the rock's)
+  const nR = pos.length / 3, nI = ink.length / 3, n = nR + nI;
+  const P = new Float32Array(n * 3), N = new Float32Array(n * 3), Cl = new Float32Array(n * 3), Rk = new Float32Array(n * 4), O = new Float32Array(n * 3), K = new Float32Array(n);
+  P.set(pos); N.set(nor); Cl.set(col); Rk.set(rock);
+  if (nI) { P.set(ink, nR * 3); O.set(inkN, nR * 3); K.fill(1, nR); for (let i = nR; i < n; i++) N[i * 3 + 2] = 1; }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  g.setAttribute('aRock', new THREE.Float32BufferAttribute(rock, 4));
+  g.setAttribute('position', new THREE.BufferAttribute(P, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(Cl, 3));
+  g.setAttribute('aRock', new THREE.BufferAttribute(Rk, 4));
+  g.setAttribute('onormal', new THREE.BufferAttribute(O, 3));
+  g.setAttribute('aInk', new THREE.BufferAttribute(K, 1));
   g.computeBoundingSphere();
   const grp = new THREE.Group();
   grp.userData.plants = plants.length ? new Float32Array(plants) : null; // (the fringe's plants of this chunk, see createTerrain)
@@ -447,17 +468,8 @@ function buildChunk(map, ci, cj) {
   mesh.userData.shadowReceiver = true;
   mesh.castShadow = look.shadows && !map.open;
   mesh.receiveShadow = look.shadows;
+  mesh.customDepthMaterial = rockDepth;
   grp.add(mesh);
-  if (ink.length) {
-    const ig = new THREE.BufferGeometry();
-    ig.setAttribute('position', new THREE.Float32BufferAttribute(ink, 3));
-    ig.setAttribute('onormal', new THREE.Float32BufferAttribute(inkN, 3));
-    ig.computeBoundingSphere();
-    const im = new THREE.Mesh(ig, inkMat);
-    im.userData.isOutline = true;
-    im.visible = look.toon && look.outlines;
-    grp.add(im);
-  }
   grp.userData.tris = (pos.length + ink.length) / 9;
   return grp;
 }

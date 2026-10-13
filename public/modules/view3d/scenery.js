@@ -7,7 +7,8 @@ import { THREE, Batch, applyLook, tagSmall, INK, G, glowMat, glow, moveParts, ba
 import { config } from '../../config.js';
 import { groundAt } from '../host/course.js';
 import { buildRocket } from './enemyArt.js';
-import { RB } from './ringBend.js'; // (LOOP R1: revolving guns are drawn at the ring image nearest the camera)
+import { RB } from './ringBend.js';
+import { createModelSets } from './modelSets.js'; // (the draw-call pass: every turret of a kind is one instanced copy) // (LOOP R1: revolving guns are drawn at the ring image nearest the camera)
 
 const fin = (n, d = 0) => (Number.isFinite(n) ? n : d);
 const V3 = (x, y, z = 0) => new THREE.Vector3(x, y, z);
@@ -93,12 +94,18 @@ function buildBlock(course, bk) {
   return grp;
 }
 
-// the turret: a sandbagged emplacement with a plated dome, a barrel on a mount, a lamp that goes red when it is about to fire, and eight health pips (an instanced strip: 2 draw calls, however many show)
+// the turret: a sandbagged emplacement with a plated dome, a barrel on a mount, a lamp that goes red when it is about to fire, and eight health pips.
+// (The draw-call pass, ring maps: a turret was 7 calls - its body and barrel with their shadows, the lamp, the pips and their ink - and a ring carries five. Now every turret of a kind is ONE instanced copy:
+// the body with its barrel (`core`, modelSets.js), the lamp (one set lit, one dark), the rubble, and the pips of all of them in one strip with its ink, built in createScenery.)
 const SACK = '#b79a63';
 const PIP_GEO = new THREE.BoxGeometry(1, 1, 1);
+const PIP_MAX = 8 * 24; // (the shared pip strip: eight pips for each of up to 24 turrets in sight)
 function buildTurret(t) {
   const root = new THREE.Group();
-  const live = new THREE.Group(), dead = new THREE.Group();
+  const live = new THREE.Group(), dead = new THREE.Group(), core = new THREE.Group();
+  core.userData.sig = t.rocket ? 'turret-rocket' : 'turret'; // (modelSets.js: same sig = same meshes)
+  dead.userData.sig = 'turret-dead';
+  live.add(core);
   const base = new Batch();
   base.cyl('#6b5a4a', 0, 8, 0, 40, 24, 3.4);
   base.cyl('#5a5558', 0, 10, 0, 42, 5, 2);
@@ -107,7 +114,7 @@ function buildTurret(t) {
   for (let k = 0; k < 9; k++) { const a = (k / 9) * PI * 2; base.sphere(SACK, Math.cos(a) * 52, -2, Math.sin(a) * 34, 14, 8, 11, 1.6, true); } // the sandbags
   base.box('#5a3a22', -48, 6, 24, 18, 14, 14, 1.4); base.box('#5a3a22', -48, 20, 24, 14, 10, 12, 1.4); // an ammo crate or two
   base.cyl('#a8443f', 0, 42, 0, 6, 6, 1.4); // the lamp's stand
-  live.add(base.build({ one: true, small: true }));
+  core.add(base.build({ one: true, small: true }));
   const lampOff = new THREE.MeshBasicMaterial({ color: '#6b1b17' }), lampOn = glowMat('#ff2a3c', 3);
   const lamp = new THREE.Mesh(G.sphereLo, lampOff);
   lamp.scale.setScalar(7); lamp.position.set(0, 48, 0);
@@ -119,10 +126,10 @@ function buildTurret(t) {
     r.rod('#2b2622', V3(-26, 10, 0), V3(12, 84, 0), 3.4, 2);
     r.rod('#2b2622', V3(-26, 10, 12), V3(12, 84, 12), 2, 1.2); r.rod('#2b2622', V3(-26, 10, -12), V3(12, 84, -12), 2, 1.2);
     r.box('#5a5558', 12, 84, 0, 18, 6, 28, 1.6, 0, 0, 0.4);
-    live.add(r.build({ one: true, small: true }));
+    core.add(r.build({ one: true, small: true }));
     const rk = buildRocket();
     rk.position.set(-6, 52, 0); rk.rotation.z = 1.1; rk.scale.setScalar(1.2);
-    live.add(rk);
+    core.add(rk);
   } else {
     const barrel = new Batch();
     barrel.box('#5a5558', 31, 0, 0, 62, 16, 16, 2.5);
@@ -130,15 +137,8 @@ function buildTurret(t) {
     barrel.box('#3a3638', -2, 0, 0, 22, 26, 26, 2); // the breech
     barrel.box('#c9a85a', 30, 0, 0, 6, 18, 18, 0.6); // a brass band
     pivot.add(barrel.build({ one: true, small: true }));
-    live.add(pivot);
+    core.add(pivot);
   }
-  const pips = new THREE.InstancedMesh(PIP_GEO, new THREE.MeshBasicMaterial({ color: '#a8443f' }), 8);
-  const pipsInk = new THREE.InstancedMesh(PIP_GEO, new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }), 8);
-  pips.userData.small = true; pipsInk.userData.isOutline = true; pipsInk.userData.small = true;
-  const M = new THREE.Matrix4();
-  for (let i = 0; i < 8; i++) { M.compose(V3(-45.5 + i * 13, 84, 0), new THREE.Quaternion(), V3(9, 9, 9)); pips.setMatrixAt(i, M); M.compose(V3(-45.5 + i * 13, 84, 0), new THREE.Quaternion(), V3(13, 13, 13)); pipsInk.setMatrixAt(i, M); }
-  pips.frustumCulled = pipsInk.frustumCulled = false;
-  live.add(pips, pipsInk);
   const rub = new Batch();
   rub.sphere('#3b3b3b', 0, 6, 0, 36, 14, 26, 3);
   rub.sphere('#3b3b3b', 14, 14, 0, 16, 10, 14, 2.5);
@@ -149,8 +149,17 @@ function buildTurret(t) {
   glowM.position.set(0, 26, 20);
   glowM.visible = false;
   root.add(live, dead, glowM);
-  root.userData = { live, dead, pivot, pips, pipsInk, glow: glowM, lamp, lampOn, lampOff };
+  root.userData = { live, dead, core, pivot, glow: glowM, lamp, lampOn, lampOff };
   return tagSmall(root);
+}
+// the pips of every turret in sight: one strip and its ink (2 draw calls), filled each frame by createScenery
+function buildPips(parent) {
+  const pips = new THREE.InstancedMesh(PIP_GEO, new THREE.MeshBasicMaterial({ color: '#a8443f' }), PIP_MAX);
+  const ink = new THREE.InstancedMesh(PIP_GEO, new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }), PIP_MAX);
+  pips.userData.small = true; ink.userData.isOutline = true; ink.userData.small = true;
+  for (const m of [pips, ink]) { m.frustumCulled = false; m.count = 0; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.name = 'turretPips'; parent.add(m); }
+  applyLook(ink);
+  return { pips, ink };
 }
 
 // ---- the route markers -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -236,11 +245,12 @@ export function createScenery(root, state, api = {}) {
   const group = new THREE.Group();
   root.add(group);
   const blocks = new Map(), turrets = new Map(), markers = new Map();
+  const sets = createModelSets(group, 24), pipStrip = buildPips(group), _pm = new THREE.Matrix4(), _pq = new THREE.Quaternion(), _pp = new THREE.Vector3(), _ps = new THREE.Vector3();
   let courseRef = null, K = 0;
   const accs = new WeakMap();
   const P = () => (api.P ? api.P() : null);
   const due = (o, perSec, dt) => { let a = (accs.get(o) || 0) + perSec * dt; const n = Math.floor(a); accs.set(o, a - n); return Math.min(n, 2); };
-  const clear = () => { for (const m of [blocks, turrets, markers]) { for (const o of m.values()) if (o) { o.removeFromParent(); o.traverse((q) => q.geometry && q.geometry.dispose()); } m.clear(); } };
+  const clear = () => { for (const m of [blocks, turrets, markers]) { for (const o of m.values()) if (o) { o.removeFromParent(); o.traverse((q) => q.geometry && q.geometry.dispose()); } m.clear(); } sets.dispose(); };
   const get = (map, key, make) => {
     if (map.has(key)) return map.get(key);
     let o = null;
@@ -266,6 +276,8 @@ export function createScenery(root, state, api = {}) {
         ob.visible = near;
         if (near && p && ob.userData.smokeAt && due(ob, 3.5, dt)) { const s = ob.userData.smokeAt; p.burst('smoke', s.x, s.y + 24, Z + 10, 1, { size: [40, 66], size1: 2.4, life: [2, 3.2], color: '#8a8480', alpha: 0.7, speed: [4, 14], up: [34, 60] }); } // a factory chimney smokes
       }
+      sets.begin();
+      let pipN = 0;
       for (const t of course.turrets || []) {
         if (t.x == null) continue;
         const tx = RB.on && t.rev ? t.x - RB.C * Math.round((t.x - camX) / RB.C) : t.x; // (LOOP R1: a revolving gun wraps at the ring's end by jumping C back; the bend makes x and x + C the same place, so it is drawn at the image nearest the camera: no pop at the wrap)
@@ -279,14 +291,23 @@ export function createScenery(root, state, api = {}) {
         u.live.visible = !t.dead;
         u.dead.visible = !!t.dead;
         u.pivot.rotation.z = -fin(t.aim);
-        const hp = Math.max(0, Math.min(8, Math.round(fin(t.hp))));
-        u.pips.count = u.pipsInk.count = t.dead ? 0 : hp;
+        const hp = t.dead ? 0 : Math.max(0, Math.min(8, Math.round(fin(t.hp))));
+        for (let i = 0; i < hp && pipN < PIP_MAX; i++, pipN++) { // (the pips sit over the turret, unturned: the same boxes the turret used to carry)
+          _pm.compose(_pp.set(tx - 45.5 + i * 13, -(t.y + 20) + 84, Z), _pq, _ps.setScalar(9)); pipStrip.pips.setMatrixAt(pipN, _pm);
+          _ps.setScalar(13); _pm.compose(_pp, _pq, _ps); pipStrip.ink.setMatrixAt(pipN, _pm);
+        }
         const warn = Number(config.COURSE.TURRET_WARN) || 1, k = t.charging ? Math.max(0, Math.min(1, 1 - Math.max(0, fin(t.cd)) / warn)) : 0;
         u.glow.visible = !!t.charging && !t.dead;
         u.glow.scale.setScalar(30 + 40 * k);
-        u.lamp.material = t.charging && !t.dead ? (K & 1 ? u.lampOn : u.lampOff) : u.lampOff; // (the lamp blinks: held keys)
+        const lit = t.charging && !t.dead && (K & 1);
+        u.lamp.material = lit ? u.lampOn : u.lampOff; // (the lamp blinks: held keys)
+        u.lamp.userData.sig = lit ? 'turret-lamp-on' : 'turret-lamp-off'; // (a set for each look: an instanced copy has one material)
+        if (!t.dead) { u.core.visible = u.lamp.visible = true; sets.add(u.core); sets.add(u.lamp); } // (taken over: drawn by the sets and hidden here; a group the sets cannot take draws itself)
+        else { u.dead.visible = true; sets.add(u.dead); }
         if (t.dead && p && due(t, 2.5, dt)) p.burst('smoke', tx, -(t.y + 20) + 30, Z + 10, 1, { size: [30, 52], size1: 2, life: [1.6, 2.6], color: '#403c3c', alpha: 0.75, speed: [3, 12], up: [24, 50] }); // a wrecked turret smoulders
       }
+      sets.end();
+      for (const m of [pipStrip.pips, pipStrip.ink]) { m.count = pipN; m.instanceMatrix.needsUpdate = true; }
       for (const m of course.markers || []) {
         const x = fin(m.mx ?? m.cx, NaN);
         if (!Number.isFinite(x)) continue;
@@ -302,7 +323,7 @@ export function createScenery(root, state, api = {}) {
         if (om.visible && om.userData.beam) om.userData.beam.rotation.y = -(K * 0.19); // (the beam turns at a constant 1.5 rad/s, shown in 8 fps steps)
       }
     },
-    dispose() { clear(); group.removeFromParent(); },
+    dispose() { clear(); sets.dispose(); group.removeFromParent(); },
   };
 }
 void glow;
