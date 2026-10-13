@@ -14,6 +14,7 @@ import { mainShip, shipOf, transfer } from './ships.js';
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { floorBelow, solidAt } from './maps.js';
 import { pop } from './popups.js';
+import { createObjectives } from './objectives.js'; // (CASTLE.md A1: the castle objectives on the ground, config.AWAY.OBJECTIVES)
 
 const A = () => config.AWAY;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -51,6 +52,7 @@ export function createGround({ state, puff, phoneFx }) {
     return A_.ENABLED && !config.PVP.ENABLED && !!map && !!map.open && !map.lair && !map.arena && state.phase === 'flying' && !state.ship.down && crew().length >= A_.MIN_CREW;
   };
   const enabled = () => S.on;
+  const obj = createObjectives({ state, S, host: { phoneFx, puff, deps: () => deps, onGround: () => onGround(), groundAt: (x, y) => groundAt(mapNow(), x, y) } }); // (A1: S.obj; its steps are called below)
 
   // ---------- the map ----------
   // A new map: the walkways and their ladders (ring maps); anybody still on the old ground is brought home (the stop ended).
@@ -64,6 +66,7 @@ export function createGround({ state, puff, phoneFx }) {
     S.hold = null;
     S.rope.out = false;
     S.rope.users = 0;
+    obj.begin(map); // (A1: the objectives this ring offers; none on any other map)
     if (!A().ENABLED || !map || !map.ring) return;
     for (const f of map.ring.faces) {
       if (!f.walk) continue;
@@ -79,6 +82,7 @@ export function createGround({ state, puff, phoneFx }) {
     S.pickups.length = 0;
     S.hold = null;
     S.rope.out = false;
+    obj.reset(); // (A1)
   }
 
   // ---------- the rope ladder ----------
@@ -101,7 +105,7 @@ export function createGround({ state, puff, phoneFx }) {
     const g = map ? groundAt(map, R.x, R.y) : null;
     R.ground = g;
     R.gap = g == null ? Infinity : g - R.y;
-    R.users = awayList().filter((p) => p.on.mode === 'rope').length;
+    R.users = awayList().filter((p) => p.on.mode === 'rope').length + obj.climbers(); // (A1: freed prisoners climbing keep it down too)
     if (R.out) {
       R.len = clamp(R.gap - K.NEAR, 0, K.LEN_MAX);
       R.idle = R.users ? 0 : R.idle + dt;
@@ -233,6 +237,7 @@ export function createGround({ state, puff, phoneFx }) {
   function rejoin(p, quiet, free) {
     const sh = main(), sp = ropeSpot(sh.layout), rv = sh.layout.reviveSpot();
     const o = p.on;
+    obj.onAboard(p, o, free || quiet); // (A1: a man who climbs aboard with the great banner has stolen it)
     p.on = null;
     p.hook = null;
     p.trip = null;
@@ -255,6 +260,7 @@ export function createGround({ state, puff, phoneFx }) {
   // Out of sight: he walks home; the dock brings him back (and takes a little salvage).
   function walkHome(p) {
     const sh = main(), map = mapNow();
+    obj.onGone(p); // (A1: the banner he carried is dropped)
     const flare = S.flares.findIndex((f) => f.id === p.id);
     if (flare >= 0) S.flares.splice(flare, 1);
     p.on = { away: true, mode: 'home', t: 0, flareCd: 0, flareT: 0 };
@@ -314,6 +320,7 @@ export function createGround({ state, puff, phoneFx }) {
     const dir = wdir(p), jy = p.jy || 0;
     const jump = p.jumpQ;
     p.jumpQ = false;
+    if (p.atkQ && obj.shove(p)) p.atkQ = false; // (A1: soldiers on him: ATTACK shoves them back before it fires anything)
     // the hookshot: ATTACK fires it; once it catches he is a swinger again (airborne.js and hookshot.js take him)
     if (ctl.hookshot) {
       if (p.atkQ && p.carry === 'hookshot' && !p.bot) ctl.hookshot.onAttack(p);
@@ -324,15 +331,16 @@ export function createGround({ state, puff, phoneFx }) {
     if (Math.abs(dir) > 0.15) p.face = dir < 0 ? -1 : 1;
     if (o.mode === 'walk') {
       let moved = false;
+      const walk = K.WALK * obj.speedMul(p); // (A1: the great banner is heavy)
       if (o.deck) {
-        const nx = clamp(p.x + dir * K.WALK * dt, o.deck.x0, o.deck.x1);
+        const nx = clamp(p.x + dir * walk * dt, o.deck.x0, o.deck.x1);
         moved = Math.abs(dir) > 0.15 && nx !== p.x;
         if (Math.abs(dir) > 0.15) p.x = nx;
         o.gy = o.deck.y;
         p.y = o.gy;
       } else {
         if (Math.abs(dir) > 0.15) {
-          const nx = p.x + dir * K.WALK * dt, hy = o.gy - K.STEP;
+          const nx = p.x + dir * walk * dt, hy = o.gy - K.STEP;
           if (solidAt(map, nx, hy)) o.edgeT = 0; // (a rock face: stopped)
           else {
             const gy = groundAt(map, nx, hy);
@@ -389,11 +397,15 @@ export function createGround({ state, puff, phoneFx }) {
     // the Action button
     if (o.mode === 'walk' || o.mode === 'ladder') {
       const cd = o.flareCd;
-      p.act = cd > 0 ? { type: 'wait', label: 'FLARE READY IN ' + Math.ceil(cd) + 's' } : { type: 'flare', label: 'FIRE FLARE' };
-      if (tap && !cd) fireFlare(p, o);
+      const ov = o.mode === 'walk' && !o.deck ? obj.act(p, dt, ctl) : null; // (A1: at an objective the button works it - a hold; away from one it is the flare)
+      if (ov) p.act = ov;
+      else {
+        p.act = cd > 0 ? { type: 'wait', label: 'FLARE READY IN ' + Math.ceil(cd) + 's' } : { type: 'flare', label: 'FIRE FLARE' };
+        if (tap && !cd) fireFlare(p, o);
+      }
     } else p.act = { type: 'wait', label: 'CLIMB: stick up / down' };
     p.grabAct = null;
-    p.fire = false;
+    if (!(p.act && p.act.hold)) p.fire = false; // (a hold keeps its button down until the phone lets go)
   }
 
   function fireFlare(p, o) {
@@ -418,9 +430,23 @@ export function createGround({ state, puff, phoneFx }) {
     t.t += dt;
     p.jx = 0;
     p.jy = 0;
+    p.fire = false;
     const R = S.rope, K = A();
     if (o.mode === 'rope') { p.jy = t.ready ? -1 : 1; return; } // (down the rope to the foot; or up it)
     if (o.mode === 'ladder') { p.jy = 0; return; }
+    if (obj.shoveReady(p)) p.atkQ = true; // (A1: soldiers on him: he shoves)
+    if (!t.ready && t.ob) { // (A1: this trip is an objective: walk to its spot and hold the button there; done or out of time = go home)
+      const g = obj.botGoal(p, t.ob);
+      if (!g.done && t.t <= K.OBJECTIVES.BOT.TIME) {
+        p.jx = Math.abs(g.x - p.x) > 30 ? Math.sign(g.x - p.x) : 0;
+        p.fire = g.fire;
+        return;
+      }
+      t.ready = true;
+      t.t = 0;
+      if (!o.flareCd) fireFlare(p, o);
+      t.flared = true;
+    }
     if (!t.ready) {
       if (t.goal == null) t.goal = plazaMid(p.x) ?? p.x;
       p.jx = Math.abs(t.goal - p.x) > 40 ? Math.sign(t.goal - p.x) : 0;
@@ -459,7 +485,7 @@ export function createGround({ state, puff, phoneFx }) {
     const m = plazaMid(R.x);
     return m != null && Math.abs(m - R.x) < 1500 && Math.abs(R.ground - r.faces[0].y) < 40; // (the ground under the hatch is a platform: a plaza is near)
   }
-  const tripStarted = (p) => { p.trip = { t: 0, goal: null, ready: false, flared: false, walk: true }; S.tripCd = A().BOT.TRIP_EVERY; S.stats.trips++; };
+  const tripStarted = (p) => { p.trip = { t: 0, goal: null, ready: false, flared: false, walk: true, ob: obj.pickFor(p) }; S.tripCd = A().BOT.TRIP_EVERY; S.stats.trips++; }; // (ob: A1, the objective this trip does)
 
   // ---------- each step ----------
   function update(dt) {
@@ -468,6 +494,7 @@ export function createGround({ state, puff, phoneFx }) {
     S.on = worldOn();
     S.tripCd = Math.max(0, S.tripCd - dt);
     ropeStep(dt);
+    obj.update(dt); // (A1: the objectives, the prisoners, the banner, the soldiers)
     const K = A(), map = mapNow();
     const list = awayList();
     // a flyer with ground below gets a parachute button
@@ -503,6 +530,10 @@ export function createGround({ state, puff, phoneFx }) {
         if (!S.rope.out && Math.abs(p.x - S.rope.x) < A().LADDER.CALL_NEAR && S.rope.gap <= K.LADDER.REACH) lowerRope(p);
       }
     }
+    for (const pk of obj.pickups()) { // (A1: freed prisoners walking to the rope: the helm comes and hovers, the ladder drops by itself)
+      S.pickups.push(pk);
+      if (!S.rope.out && Math.abs(pk.x - S.rope.x) < K.LADDER.CALL_NEAR && S.rope.gap <= K.LADDER.REACH) lowerRope(null);
+    }
     for (const f of S.flares) { f.t -= dt; const p = state.players[f.id]; if (p && p.on && p.on.away && p.on.mode !== 'home') { f.x = p.x; f.y = p.y; } else f.t = 0; }
     S.flares = S.flares.filter((f) => f.t > 0);
     S.stats.pickups = Math.max(S.stats.pickups, S.pickups.length);
@@ -519,17 +550,19 @@ export function createGround({ state, puff, phoneFx }) {
     const o = p.on;
     if (!o || !o.away) return null;
     const K = A();
+    const ov = obj.ui(p); // (A1: an objective at his feet, soldiers on him, the banner in his arms)
     let hint;
     if (o.mode === 'home') hint = 'You walked home. You rejoin at the next dock.';
     else if (o.mode === 'rope') hint = 'CLIMB the rope: stick UP to the ship, DOWN to the ground. JUMP lets go.';
     else if (o.mode === 'ladder') hint = 'CLIMB the wall ladder: stick UP or DOWN.';
+    else if (ov) hint = ov.hint;
     else if (S.rope.out && Math.abs(p.x - S.rope.x) < 400) hint = 'The ROPE LADDER: stand under it and push the stick UP to CLIMB.';
     else if (!o.deck && ladderNear(o, p, true)) hint = 'CLIMB: push the stick UP at the wall ladder. Or FIRE FLARE to call the ship.';
     else if (o.deck) hint = 'On the wall. Stick DOWN at a ladder to climb down. JUMP leaps off. FIRE FLARE calls the ship.';
     else hint = 'FIRE FLARE to call the ship. Walk to a wall ladder and push UP to CLIMB.';
     const left = o.strand > 0 ? Math.max(0, Math.ceil(K.STRAND.TIME - o.strand)) : 0;
     const status = o.mode === 'home' ? '' : left ? 'STRANDED! ' + left + ' s - FIRE A FLARE, climb the rope, or hook the ship' : o.flareT > 0 ? 'FLARE UP - wait for the ship' : '';
-    return { u: { hint, left, mode: o.mode }, status, k: o.mode + '|' + hint + '|' + left + '|' + (o.flareT > 0 ? 1 : 0) + '|' + Math.ceil(o.flareCd || 0) };
+    return { u: { hint, left, mode: o.mode, ...(ov && o.mode === 'walk' ? { verb: ov.verb } : {}) }, status, k: o.mode + '|' + hint + '|' + left + '|' + (o.flareT > 0 ? 1 : 0) + '|' + Math.ceil(o.flareCd || 0) };
   }
 
   // ---------- the bot helm (bots.js operate) ----------
@@ -545,11 +578,12 @@ export function createGround({ state, puff, phoneFx }) {
     if (!S.on || !S.pickups.length) return null;
     const R = S.rope, pk = S.pickups.reduce((b, q) => (Math.abs(q.x - R.x) < Math.abs(b.x - R.x) ? q : b));
     const dx = pk.x - R.x, near = Math.abs(dx) < 160;
-    return { kind: 'pickup', label: 'PICK UP ' + String(pk.name).toUpperCase() + (near ? ' - HOVER, THE LADDER IS DOWN' : ' - FLY TO THE FLARE'), dir: near ? 'down' : (dx * f > 0 ? 'right' : 'left'), color: '#ff8c1a', seated: true };
+    return { kind: 'pickup', label: 'PICK UP ' + String(pk.name).toUpperCase() + (near ? ' - HOVER, THE LADDER IS DOWN' : pk.prisoners ? ' - FLY OVER THEM' : ' - FLY TO THE FLARE'), dir: near ? 'down' : (dx * f > 0 ? 'right' : 'left'), color: '#ff8c1a', seated: true };
   }
 
   return {
     bind: (d) => { deps = { ...deps, ...d }; },
+    objectiveJob: (p, f) => obj.job(p, f), obj,
     begin, reset, update, surfaces, step, enabled, ui, helmCall, pickupJob, ropeSpot, ladderAction, useLadder, mount, lowerRope, dockReturn, holdStop, tripWanted, tripStarted,
     awayList, onGround, groundAt: (x, y) => groundAt(mapNow(), x, y), eligible, rejoin, walkHome, fireFlare,
   };

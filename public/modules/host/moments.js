@@ -17,7 +17,7 @@ import { hullOrStructure } from './structure.js';
 
 // What a moment of each kind says about who deserves it when the caller could not name him: the stats to look at, best first.
 const BUSY = {
-  'creature-win': ['kills', 'raiders', 'cannon'], 'flagship-down': ['kills', 'cannon', 'raiders'], 'ring-fall': ['kills', 'demolished'], 'ring-squad': ['kills', 'demolished'], 'ring-breach': ['kills', 'demolished'], 'ring-charge': ['sabotage', 'boarding'], 'boss-down': ['kills', 'cannon', 'raiders'], 'gunship-shot': ['kills'], 'gunship-fled': ['kills'], 'gunship-charge': ['sabotage', 'boarding', 'raiders'],
+  'creature-win': ['kills', 'raiders', 'cannon'], 'flagship-down': ['kills', 'cannon', 'raiders'], 'ring-fall': ['kills', 'demolished'], 'ring-squad': ['kills', 'demolished'], 'ring-breach': ['kills', 'demolished'], 'ring-charge': ['sabotage', 'boarding'], 'away-winch': ['sabotage', 'boarding'], 'away-charge': ['sabotage', 'boarding'], 'away-ballista': ['sabotage', 'boarding'], 'away-beacon': ['sabotage', 'boarding'], 'away-prisoners': ['sabotage', 'boarding'], 'away-banner': ['sabotage', 'boarding'], 'away-ko': ['sabotage', 'boarding'], 'boss-down': ['kills', 'cannon', 'raiders'], 'gunship-shot': ['kills'], 'gunship-fled': ['kills'], 'gunship-charge': ['sabotage', 'boarding', 'raiders'],
   'gunship-captured': ['captures', 'boarding', 'raiders'], 'going-down-saved': ['holes', 'dumped', 'cuts', 'coal'], 'ship-lost': ['repairs', 'holes', 'fires'], limp: ['repairs', 'holes', 'fires'], breakoff: ['repairs', 'fires', 'holes'],
   'breakoff-bay': ['repairs', 'fires', 'holes'], rebuild: ['repairs', 'holes'],
 };

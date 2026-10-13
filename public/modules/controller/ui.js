@@ -58,6 +58,7 @@ export function createControllerUI({ network }) {
   // Icon for the Action button, picked from the start of its label.
   const ACTION_ICONS = [
     ['FIRE FLARE', '🧨'], ['FLARE READY', '⏳'], ['LOWER THE ROPE', '🪜'], ['CLIMB DOWN THE ROPE', '🪜'], ['ROPE LADDER', '🪜'], ['CLIMB', '🧗'], ['WALKING HOME', '🚶'], // (CASTLE.md A0: the away team)
+    ['CRANK', '⚙️'], ['PLANT', '💣'], ['SABOTAGE', '🧨'], ['LIGHT THE', '🔥'], ['FREE THE', '🔓'], ['STEAL THE', '🚩'], ['GRAB THE POWDER', '🛢️'], ['POWDER KEG', '🛢️'], // (CASTLE.md A1: the castle objectives)
     ['STOW THE SCRAP', '🔩'], ['Take scrap out', '🔩'], ['Pick up the scrap', '🔩'], ['Take scrap off', '🔩'], ['DUMP THE SCRAP', '🔩'], ['Swap to hookshot', '🪝'], ['Take hookshot', '🪝'], ['Reel in', '🪝'], ['KICK', '🦶'], ['Auto guns', '🔫'],
     ['Swap to sword', '🗡️'], ['Swap to hammer', '🔨'], ['Swap to extinguisher', '🧯'], ['Take sword', '🗡️'], ['Take hammer', '🔨'], ['Take extinguisher', '🧯'], ['Put back', '↩️'],
     ['TAKE THE HELM', '☸️'], ['Sabotage', '🧨'], ['Defenders', '🛡️'], ['Spray fire', '🧯'], ['Clear spores', '🍄'], ['Refill oxygen', '🫧'], ['Chip ice', '🧊'], ['Patch hole', '🔨'], ['Repair', '🔧'], ['Revive', '💫'],

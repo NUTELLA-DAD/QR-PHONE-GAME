@@ -913,7 +913,8 @@ export function createSimulation() {
     if (!offer) return null;
     const e = offer.entry;
     state.yard.sum = offer.base.sum;
-    return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: e.blurb, cost: 0, trophy: true, badge: 'TROPHY: from the ' + (run.trophy === config.CREATURES.THUNDERBIRD.REWARD.TROPHY ? 'Thunderbird' : run.trophy === config.CREATURES.DRAKE.REWARD.TROPHY ? 'Drake' : 'Kraken'),
+    const from = run.trophyFrom; // (A1: the great banner stolen from a castle is a trophy too: the same part, its own name and words)
+    return { id: 'part-' + e.id, kind: 'part', entry: e.id, baseName: e.name, name: from ? from.name : e.name, icon: e.icon, pic: e.pic, picDir: e.picDir, desc: from ? from.desc : e.blurb, cost: 0, trophy: true, badge: 'TROPHY: ' + (from ? from.from : 'from the ' + (run.trophy === config.CREATURES.THUNDERBIRD.REWARD.TROPHY ? 'Thunderbird' : run.trophy === config.CREATURES.DRAKE.REWARD.TROPHY ? 'Drake' : 'Kraken')),
       choices: offer.choices, now: offer.base.sum, baseWarns: offer.base.res.warns, spots: offer.choices.length };
   };
   const persistBuild = () => { // the run's ship, kept in the voyage save (versioned, tolerant: voyage.js)
@@ -929,7 +930,7 @@ export function createSimulation() {
     run.build = c.parts;
     fitShip(run.build, 'yard');
     run.parts.push({ id: o.entry, name: o.baseName, names: newModules(before, moduleNames(layout)), bag: o.entry === 'gasbag' });
-    if (o.trophy) run.trophy = null; // (the trophy is taken)
+    if (o.trophy) { run.trophy = null; run.trophyFrom = null; } // (the trophy is taken)
     Object.assign(state.yard, { built: { t: YD.BUILT_STAMP, name: o.baseName, letter: c.letter, where: c.where }, newPart: { name: o.baseName.toUpperCase(), x: c.x, y: c.y, t: 0 }, hold: true });
     state.yard.sum = summaryOf(validate(run.build));
     persistBuild();
@@ -1305,7 +1306,13 @@ export function createSimulation() {
     run.gain = {};
     pendingVote = stop.flagship ? 'victory' : 'dock';
   };
-  W.ground.bind({ release: (m) => stopDone(m), pay: (n) => { const run = state.run; if (run) run.salvage = Math.max(0, run.salvage - n); } }); // (A0: the stop that waited for a stranded man goes on; the dock charges the ones who walked home)
+  W.ground.bind({
+    release: (m) => stopDone(m), pay: (n) => { const run = state.run; if (run) run.salvage = Math.max(0, run.salvage - n); },
+    // (A1, the castle objectives: a lit beacon calls the supply balloon; a freed prisoner and the great banner are salvage; the banner is also a trophy part card, taken at the next dock)
+    supply: () => { if (!state.supply) spawnSupply(); return !!state.supply; },
+    salvage: (n, label) => addSalvage(n, 'away', label),
+    trophy: (t) => { const run = state.run; if (!run || run.trophy) return false; run.trophy = t.part; run.trophyFrom = t; return true; },
+  }); // (A0: the stop that waited for a stranded man goes on; the dock charges the ones who walked home)
 
   newRun();
   const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip, firstMission });

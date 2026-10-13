@@ -130,6 +130,7 @@ export function createGarrison({ state, puff, credit }) {
       if (f.down) continue;
       for (const p of f.posts) {
         if (p.dead) continue;
+        if (p.hush > 0) { p.hush -= dt; p.t = Math.max(p.t, A.FIRST[0] * 0.5); continue; } // (A1: the winch was cranked: this post is silent for a while)
         if (p.mode === 'idle') {
           const tg = nearest(p.x, p.y, A.RANGE);
           if (!tg) { p.t = Math.max(p.t, 1); continue; }
@@ -199,7 +200,7 @@ export function createGarrison({ state, puff, credit }) {
   // ---------- the ballista ----------
   function stepBallista(r, f, dt) {
     const B = GG().BALLISTA, sp = f.special, g = r.gar;
-    if (sp.dead || sp.kind !== 'ballista') return;
+    if (sp.dead || sp.silent || sp.kind !== 'ballista') return; // (A1: sp.silent - a crewman sabotaged it)
     if (sp.lock) {
       const L = sp.lock;
       if (!shipsLive().includes(L.ship)) { sp.lock = null; if (g.busy === sp) g.busy = null; sp.t = B.EVERY * 0.5; return; }
@@ -251,11 +252,11 @@ export function createGarrison({ state, puff, credit }) {
         if (q.kind === 'gun' && q.gun.dead && q.state !== 'flee' && q.state !== 'surrender') flee(r, f, q);
         if (q.state === 'flee') {
           const to = q.fleeTo, d = to - q.x;
-          if (Math.abs(d) > 4) q.x += Math.sign(d) * Math.min(Math.abs(d), SQ.FLEE_SPEED * dt);
+          if (Math.abs(d) > 4) q.x += Math.sign(d) * Math.min(Math.abs(d), (q.hunt ? q.hunt.v : SQ.FLEE_SPEED) * dt); // (A1: a squad hunting a crewman on the ground runs at its own pace, objectives.js)
           continue;
         }
         if (q.state === 'surrender') continue;
-        if (q.kind === 'plaza') q.x = q.home + Math.sin(g.t * 0.5 + q.phase) * SQ.SWAY;
+        if (q.kind === 'plaza' && !q.hunt) q.x = q.home + Math.sin(g.t * 0.5 + q.phase) * SQ.SWAY;
         if (q.state === 'cheer') { if ((q.cheer -= dt) <= 0) q.state = q.kind === 'gun' ? 'man' : 'muster'; }
         else if (cheerFrom.some((cx) => Math.abs(cx - q.x) < SQ.CHEER_RANGE)) { q.state = 'cheer'; q.cheer = SQ.CHEER; g.stats.cheers++; }
         // the grapple: the keel close to a plaza squad for long enough
@@ -284,7 +285,8 @@ export function createGarrison({ state, puff, credit }) {
     sfx('charge');
   }
   function flee(r, f, q) {
-    if (q.state === 'dead' || q.state === 'flee') return;
+    if (q.state === 'dead' || (q.state === 'flee' && !q.hunt)) return;
+    q.hunt = null; // (A1: a hunt ends when the squad runs for good)
     q.state = 'flee';
     const pl = crs().map.ring.faces[f.i].plat;
     q.fleeTo = q.x < f.x ? pl.x0 - 200 : pl.x1 + 200; // (off the platform, to the nearer end)
@@ -322,6 +324,7 @@ export function createGarrison({ state, puff, credit }) {
           if (q.state === 'dead' || q.state === 'surrender' || Math.abs(s.x - q.x) > (q.n * SQ.HIT_W) / 2 + 24 || s.y < q.y - 120 || s.y > q.y + 30) continue;
           s.life = 0;
           q.n -= CR.SHELL_MEN;
+          if (q.hunt && q.n > 0) { q.hunt.phase = 'stun'; q.hunt.t = config.AWAY.OBJECTIVES.SOLDIERS.STUN; q.hunt.saved = true; q.state = 'muster'; } // (A1: a shell on a squad that hunts a crewman staggers it)
           puff(s.x, s.y, '#c9a875', 6);
           if (q.n <= 0) { kill(r, q, 'shell'); credit?.(s); }
           done = true;
@@ -455,10 +458,36 @@ export function createGarrison({ state, puff, credit }) {
   function onCrown() {
     const r = rr();
     if (!r || !r.gar) return;
-    for (const f of r.faces) for (const q of f.squads || []) if (q.state !== 'dead') { q.state = 'surrender'; q.x = q.home; r.gar.stats.surrenders++; } // (even those who ran come back, hands up)
+    for (const f of r.faces) for (const q of f.squads || []) if (q.state !== 'dead') { q.state = 'surrender'; q.hunt = null; q.x = q.home; r.gar.stats.surrenders++; } // (even those who ran come back, hands up)
     for (const f of r.faces) for (const p of f.posts || []) { p.mode = 'idle'; p.aim = null; p.telegraph = 0; }
     r.gar.busy = null;
   }
 
-  return { begin, update, blast, onBreach, onCrown, bind: (d) => { deps = d; } };
+  // ---- signals from the away team's objectives (objectives.js) ----
+  // The winch was cranked: this face's posts stand down for secs (a volley in the making is called off).
+  function hush(f, secs) {
+    const r = rr();
+    if (!r || !r.gar) return;
+    for (const p of f.posts || []) { if (p.dead) continue; p.hush = secs; if (p.mode !== 'idle') endVolley(r, p); }
+  }
+  // The ballista was sabotaged: no lock, no bolt.
+  function silence(f) {
+    const r = rr();
+    if (!r || !r.gar) return;
+    if (f.special.lock) f.special.lock = null;
+    if (r.gar.busy === f.special) r.gar.busy = null;
+  }
+  // The great banner is gone: the face's soldiers run for good, and a gun crew that runs leaves its gun slow.
+  function rout(f) {
+    const r = rr();
+    if (!r || !r.gar) return;
+    for (const q of f.squads || []) {
+      if (q.state === 'dead' || q.state === 'surrender') continue;
+      flee(r, f, q);
+      if (q.kind === 'gun' && q.gun && !q.gun.dead) q.gun.slow = GG().CREW.SLOW;
+    }
+    f.flag = 0;
+  }
+
+  return { begin, update, blast, onBreach, onCrown, hush, silence, rout, bind: (d) => { deps = d; } };
 }

@@ -190,6 +190,12 @@ export function createJobFinder(state) {
       p.job = { job: pk, kind: 'pickup', label: pk.label, dir: pk.dir, color: pk.color, seated: true, ...(config.CONTROLS.ROLE_CARDS.ENABLED ? { verb: 'PICK UP' } : {}) };
       return;
     }
+    const aw = p.on && p.on.away && !p.bot && state.groundSys ? state.groundSys.objectiveJob(p, mainShip(state).pose.f) : null; // (A1: an away man's phone: the arrow to the nearest objective - CRANK, PLANT, SABOTAGE, LIGHT, FREE, STEAL - or to the rope with the banner)
+    if (aw) {
+      p.freeT = 0;
+      p.job = { job: aw, kind: aw.kind, label: aw.label, dir: aw.dir, color: aw.color, away: true, ...(config.CONTROLS.ROLE_CARDS.ENABLED ? { verb: aw.verb } : {}) };
+      return;
+    }
     const busy = (p.lock && !seatedIdle) || p.ko > 0 || p.fall || p.fly || p.air || p.onGunship || p.connected === false || (p.act && p.act.hold && p.fire) || (p.atkCd || 0) > 0 || p.swing;
     if (busy) {
       p.freeT = 0;
@@ -230,6 +236,6 @@ export function createJobFinder(state) {
   };
 
   // What the phone gets: null until they have been free a moment.
-  const ui = (p) => (p.job && p.job.dir && (p.freeT >= J.IDLE_AFTER || p.job.kind === 'pickup') ? { label: p.job.label, dir: p.job.dir, kind: p.job.kind, ...(p.job.verb ? { verb: p.job.verb } : {}), ...(p.lock ? { seated: true } : {}) } : null);
+  const ui = (p) => (p.job && p.job.dir && (p.freeT >= J.IDLE_AFTER || p.job.kind === 'pickup' || p.job.away) ? { label: p.job.label, dir: p.job.dir, kind: p.job.kind, ...(p.job.verb ? { verb: p.job.verb } : {}), ...(p.lock ? { seated: true } : {}) } : null);
   return { update, ui };
 }
