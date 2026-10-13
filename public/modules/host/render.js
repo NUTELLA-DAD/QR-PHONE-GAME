@@ -2449,11 +2449,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
   // Crew in free flight (jumped, thrown or swinging on a hookshot) are world objects: drawn in map coordinates, after the ship, with their colour marker and rope.
   const drawAirborne = (time, zoom = 0.5) => {
     art.hook.drawRopes(); // hookshot ropes and hooks (on the deck or in the air: the rope is in the world)
+    const awayTags = []; // (one AWAY TEAM label for crewmen standing together)
     for (const p of Object.values(state.players)) {
       if (!p.fly || p.hj || p.connected === false) continue;
       if (p.on && p.on.away && p.on.mode === 'home') continue; // (CASTLE.md A0: walked home - nobody sees him)
       drawPlayer(p, time);
-      if (p.on && p.on.away) verbTag('AWAY TEAM', p.x, p.y - 226, Math.max(1.1, 0.6 / (zoom || 0.5))); // (A0: the away team's label over the man on the ground)
+      if (p.on && p.on.away && !awayTags.some((t) => Math.abs(t.x - p.x) < 260 && Math.abs(t.y - p.y) < 160) && awayTags.push({ x: p.x, y: p.y })) verbTag('AWAY TEAM', p.x, p.y - 226, Math.max(1.1, 0.6 / (zoom || 0.5))); // (A0: the away team's label over the man on the ground)
       if (!p.color) continue;
       const y = p.y - (p.ko > 0 ? 90 : 165) + Math.sin(time * 1000 / 300 + p.x) * 4;
       ink();
@@ -3159,6 +3160,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         }
       } catch (e) { /* (words are a nicety: never stop the frame) */ }
       // crew in the air (a jump, a throw, a parachute, the hookshot): names and marks
+      const awayTags = []; // (one AWAY TEAM label for crewmen standing together)
       for (const p of Object.values(world.players)) {
         if (!p.fly || p.hj || p.connected === false || p.enemy) continue;
         if (p.on && p.on.away && p.on.mode === 'home') continue; // (CASTLE.md A0: walked home - nobody sees him)
@@ -3166,7 +3168,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         crewMarks(p, p.id, shipOf(world, p) || mainShip(world));
         if (p.on && p.on.away) { // (A0: the label over a man on the ground, over his name)
           const a = p3.crew(p.id), q = a && proj([a.x, a.y + ((a.ko ? 66 : 128) * (a.sc || 1) + (a.up || 0)) + 30 * (a.sc || 1), a.z]); // (the name's own spot: the label stands a few lines above it)
-          if (q) { at({ x: q.x, y: q.y - 62 * zs }, zs); verbTag('AWAY TEAM', 0, 0, 1); }
+          if (q && !awayTags.some((t) => Math.abs(t.x - q.x) < 200 * zs && Math.abs(t.y - q.y) < 70 * zs) && awayTags.push({ x: q.x, y: q.y })) { at({ x: q.x, y: q.y - 62 * zs }, zs); verbTag('AWAY TEAM', 0, 0, 1); }
         }
       }
       try { // (A0: the 3D castle has no ladders, rope, flare or pickup ring of its own yet - A3 - so the HUD draws them through the camera: the walkways and wall ladders, the rope ladder, a lit flare, the pickup marker)
