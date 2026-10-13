@@ -374,6 +374,7 @@ export function createSimulation() {
     state.thrown.length = 0; state.tows.length = 0; state.laid.length = 0; // (B.6: loads in the air and towlines are gone with the voyage, and so are the ship's own loads, cannon records and rack stocks; laid mines too)
     if (state.loads) state.loads.length = 0;
     for (const sh of state.ships) if (sh.ctx.scrapHold) sh.ctx.scrapHold.count = 0; // (SCRAP: the hold is empty again; the flotsam in the air goes with the thrown loads above)
+    for (const sh of state.ships) if (sh.ctx.chestHold) { sh.ctx.chestHold.list.length = 0; sh.ctx.chestHold.w = 0; } // (A2: ...and so are the treasure chests)
     W.flotsam.reset();
     if (state.cannons) state.cannons = {};
     if (state.rackStock) state.rackStock = {};
@@ -1055,6 +1056,7 @@ export function createSimulation() {
 
   const startDock = () => {
     W.ground.dockReturn(); // (A0: whoever walked home from the ground is aboard again, at a little salvage)
+    W.ground.payTreasure(); // (A2: a ship that limped home pays her chests here; after a scorecard the hold is already empty)
     const prize = state.gunship && state.gunship.prize && state.tows.find((t) => t.b === state.gunship.ship); // (B.6: a captured gunship still in tow when we reach the dock: a salvage bonus, and she is released and goes down)
     if (prize) { addSalvage(config.CROSS.TOW.PRIZE, 'gunships', 'PRIZE IN TOW!'); W.towing.cut(prize, ''); state.gunship.prize = false; }
     const options = buildOffers();
@@ -1285,6 +1287,7 @@ export function createSimulation() {
     }
     const run = state.run;
     const stop = curStop();
+    W.ground.payTreasure(); // (CASTLE.md A2: the chests stowed in the hold, and any in a man's arms aboard, are paid - a row on the scorecard)
     addSalvage(SV.MISSION + stop.reward, 'mission');
     const rows = awardRows(Object.values(state.players).filter((p) => !p.mate), true);
     const entry = closeStop('done'); // (the Ship's Book: the stop's moments become its Log line and its play of the mission, before the stats are banked)
@@ -1311,6 +1314,7 @@ export function createSimulation() {
     // (A1, the castle objectives: a lit beacon calls the supply balloon; a freed prisoner and the great banner are salvage; the banner is also a trophy part card, taken at the next dock)
     supply: () => { if (!state.supply) spawnSupply(); return !!state.supply; },
     salvage: (n, label) => addSalvage(n, 'away', label),
+    treasure: (n, label) => addSalvage(n, 'treasure', label), // (A2: the chests in the hold, a row of their own on the scorecard)
     trophy: (t) => { const run = state.run; if (!run || run.trophy) return false; run.trophy = t.part; run.trophyFrom = t; return true; },
   }); // (A0: the stop that waited for a stranded man goes on; the dock charges the ones who walked home)
 

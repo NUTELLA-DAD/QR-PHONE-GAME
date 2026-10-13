@@ -16,6 +16,7 @@ import { pop } from './popups.js';
 import { inGap } from './shipBuild.js';
 import { creatureCargo } from './creatureSystem.js';
 import { scrapOn, scrapNote, holdSpot, holdCount, holdWeight } from './scrap.js';
+import { chestStowAction } from './treasure.js';
 import { windSpeed } from './sails.js';
 import { inRock } from './course.js';
 
@@ -170,12 +171,14 @@ export function createCargo({ state, ship, air, puff, phoneFx, stat }) {
   // A bot only does these when its job says so (its one button would otherwise pick up and stow things it is merely walking past).
   const botOk = (p, kind) => !p.bot || (p.botJob && p.botJob.kind === kind);
   const stowAction = (p, here) => {
+    if (p.carry === 'chest') return chestStowAction(state, p, L, here); // (TREASURE, CASTLE.md A2: a chest from an outpost's vault goes in the same bin)
     const sp = scrapOn() ? holdSpot(L) : null;
     if (!sp || p.carry !== 'scrap' || !here(sp, config.TOOLS.REACH) || !botOk(p, 'stow')) return null;
     const cap = config.SCRAP.HOLD_CAP, n = holdCount(state);
     return n >= cap ? { type: 'need', label: `The hold is full (${n}/${cap}) - dump it or build bigger` } : { type: 'stow', obj: sp, label: `STOW THE SCRAP (${n + 1}/${cap})` };
   };
   const stow = (p) => {
+    if (p.carry === 'chest') return !!(state.groundSys && state.groundSys.chestStow(p));
     if (p.carry !== 'scrap' || holdCount(state) >= config.SCRAP.HOLD_CAP) return false;
     (state.scrapHold ||= { count: 0 }).count++;
     p.carry = null;

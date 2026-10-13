@@ -1484,6 +1484,34 @@ export const config = {
       SOLDIERS: { NOTICE: 520, DY: 160, TELL: 1.1, SPEED: 190, REACH: 90, SLACK: 40, WIND: 0.7, STUN: 1.4, PUSH: 180, SHOVE: 130, SHOVE_CD: 0.8, GIVE_UP: 3, MISSES: 2, LEASH: 900, COOLDOWN: 20 },
       BOT: { DO: true, KIND: null, RANGE: 1100, TIME: 70 }, // tools: a tripping bot does ONE objective (the nearest within RANGE px of the rope, or KIND) and gives up after TIME s
     },
+    // OUTPOST TREASURE (CASTLE.md package A2 + LOOP.md G3/T; treasure.js): when an outpost on an open-sky map is destroyed its VAULT opens on the ground, with CHESTS in it (and maybe a sack of gold).
+    // Only where the away team exists (3 or more crew), and every stop stays winnable from the air: the treasure is a bonus. ENABLED false = A0/A1 only (NO_AWAY=1 turns all of it off).
+    //   CARRY    hold Action at a chest to GRAB it (player.carry 'chest'); it slows the man (SOLO x his walk and CLIMB_SOLO x the rope); a second man who holds Action at it joins in (HELP) and the pair go PAIR x as fast
+    //            (a pair must stay within TOGETHER px of each other or the helper lets go). ATTACK puts it down. Up the rope ladder and onto the ship it is STOWED in the hold bin (Action there); the bots stow it at once.
+    //   HOLD     a chest in the hold or in your hands weighs W on the lift (balance.js, structure.js, goingDown.js through scrap.js holdWeight): the hold takes HOLD_CAP of them.
+    //   PAY      each chest stowed pays PAY salvage when the stop ends (the scorecard's "treasure" row), or at the dock for a ship that limped home; a chest lifted during the ESCAPE calm and brought aboard is a HEIST (+HEIST.BONUS each, a Book moment).
+    //   HOOK     a man on a deck with the hookshot can catch a chest lying within R px of the line and haul it up (HAUL_SPEED px/s); at LAND_AT px from his hand it drops straight into the hold.
+    //   GUARDS   the first chest lifted from a vault calls a small squad (N men, one more at danger N_DANGER): after ARRIVE s they appear SPAWN px from the vault, walk (SPEED px/s) to within RANGE px of a CARRIER, shout and
+    //            aim for AIM s, then fire every EVERY s: a hit takes HEARTS (HIT_STILL chance on a man standing, HIT_MOVING on a man walking). A shove (ATTACK within SHOVE px) throws one back PUSH px and stuns it STUN s;
+    //            GIVE_UP shoves and it leaves. With nobody carrying they leave after LEAVE s.
+    TREASURE: {
+      ENABLED: true,
+      CHESTS: { BASE: 1, DANGER_AT: [2, 4], MAX: 3 }, // chests in a vault = BASE, one more for each number the stop's danger reaches, at most MAX (danger 1: one, 2-3: two, 4+: three)
+      GOLD: { CHANCE: 0.5, W: 2, PAY: 4, SOLO: 0.8 }, // a loose sack of gold lies in this share of vaults (a hash of the stop and the outpost: no random numbers); it is carried like a chest by one man (SOLO x his walk and climb), lighter and worth less
+      CHEST: { W: 6, PAY: 9 }, // weight on the lift (gas points; a sandbag is 6, a crate 9, a crew member 1.2) and salvage paid
+      SPACING: 130, // px between the things lying in a vault
+      REACH: 110, HEIGHT: 120, // a chest is taken from this close (sideways), and within HEIGHT px of the ground it lies on
+      HELP_REACH: 170, // a second man joins a carry from this close to the man who carries
+      GRAB_TIME: 1.2, HELP_TIME: 0.6, DECAY: 0.6, // seconds of holding Action to lift a chest / to join a carry; a bar nobody holds runs back this much of a full bar per second
+      CARRY: { SOLO: 0.5, PAIR: 0.85, CLIMB_SOLO: 0.65, CLIMB_PAIR: 0.9, TOGETHER: 340 }, // walk and rope speeds as shares of the usual, with one carrier and with two; the most two carriers may stand apart (px)
+      HOLD_CAP: 6, // chests one hold takes
+      HEIST: { BONUS: 4 }, // extra salvage for each chest lifted during the ESCAPE calm and got aboard
+      HOOK: { R: 150, HAUL_SPEED: 1300, LAND_AT: 90 }, // the hookshot: how close to its line a chest must lie, how fast it comes up (px/s), and how near the hand it drops into the hold
+      GUARDS: { N: 2, N_DANGER: 4, ARRIVE: 3.5, SPAWN: 650, SPEED: 150, RANGE: 520, AIM: 1.1, EVERY: 3, HIT_STILL: 0.6, HIT_MOVING: 0.28, HEARTS: 1, SHOVE: 130, SHOVE_CD: 0.8, PUSH: 170, STUN: 2, GIVE_UP: 3, LEAVE: 8, HEIGHT: 200 }, // (SHOVE_CD: seconds between two of a man's shoves; HEIGHT: a guard shoots at a carrier within this many px x 6 of his own height)
+      SHOW: 3600, // px: the TV marks a vault this near (sideways) the rope ladder's hatch
+      SEEK: 3000, // px: the phone's arrow points at a chest this near the man
+      BOT: { VAULT_CALL: 120, RANGE: 1500, TIME: 75 }, // tools (BOT_TRIPS): the bot helm hovers over an open vault for at most VAULT_CALL s; a trip starts for a chest within RANGE px of the rope; a tripping bot gives up after TIME s
+    },
   },
   // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
   WAVES: {
@@ -2431,7 +2459,7 @@ export const config = {
     RING: 500, // moments kept in state.moments (the oldest are dropped; each stop's best are written into run.log at its end, so the postcard never needs the old ones)
     // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
     WEIGHT: {
-      'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'away-banner': 8, 'away-charge': 7, 'away-prisoners': 6, 'away-ballista': 5, 'away-beacon': 4, 'away-winch': 4, 'away-ko': 3, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
+      'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'away-banner': 8, 'away-charge': 7, 'away-prisoners': 6, 'away-ballista': 5, 'away-beacon': 4, 'away-winch': 4, 'away-ko': 3, 'treasure-stowed': 5, 'treasure-heist': 8, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
       'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra

@@ -25,7 +25,7 @@ export function createBalance(state) {
     const add = (w, x) => { m += w; mx += w * x; ix += w * (x - SB.comX) ** 2; };
     for (const p of Object.values(state.players)) {
       if (p.d == null || p.fall || p.air || p.fly || p.onGunship || p.connected === false) continue;
-      const w = W.crew + (p.carry === 'coal' || p.carry === 'ammo' ? W.carry : (config.CROSS.CARGO.ITEMS[p.carry] || { w: 0 }).w); // (B.6: a sandbag or crate in your hands weighs what it weighs on a deck)
+      const w = W.crew + (p.carry === 'coal' || p.carry === 'ammo' ? W.carry : p.carry === 'chest' ? config.AWAY.TREASURE.CHEST.W : (config.CROSS.CARGO.ITEMS[p.carry] || { w: 0 }).w); // (B.6: a sandbag or crate in your hands weighs what it weighs on a deck)
       add(w, p.x);
       cm += w * (p.x - SB.comX);
     }
