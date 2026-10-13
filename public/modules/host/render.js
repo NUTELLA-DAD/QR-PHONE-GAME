@@ -1550,7 +1550,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.fillText(sc.rows.length ? 'Crew awards' : sc.gentle || 'Crew awards', 800, 228, 1120); // (no award earned: a kind line naming whoever did the most - never "nobody did much")
     if (sc.play) logArt().playRibbon(sc.play, 800, 248, 1040); // (the Ship's Book: PLAY OF THE MISSION)
     const G = sc.gain || {};
-    const names = { kills: 'enemies', outposts: 'outposts', gunships: 'gunships', boss: 'boss', rescue: 'survivors', mission: 'mission bonus' };
+    const names = { kills: 'enemies', outposts: 'outposts', gunships: 'gunships', boss: 'boss', rescue: 'survivors', mission: 'mission bonus', away: 'away team' };
     ctx.fillStyle = '#8a5a00';
     ctx.font = '23px ' + config.FONTS.DISPLAY;
     ctx.fillText(`Salvage +${sc.gained} (${Object.keys(G).map((k) => names[k] + ' ' + G[k]).join(', ')})   -   total ${sc.total}`, 800, 775 - (state.newRecord ? 45 : 0));
@@ -3163,6 +3163,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
           if (R.out && R.len > 4) { const a = pt(R.x, R.y), b = pt(R.x, R.y + R.len); if (a && b) groundArt.ladder(a.x, a.y, b.x, b.y, px(R.x, R.y) * 1.3, 40 * px(R.x, R.y) * 1.3, groundArt.ROPE); }
           for (const o of S.pickups) { const a = pt(o.x, o.y); if (a) groundArt.pickup(a.x, a.y, zs * 0.9, K8, o.name, zs); }
           for (const f of S.flares) { const a = pt(f.x, f.y); if (a) groundArt.flare(a.x, a.y, zs * 0.9, K8, f.name, zs, px(f.x, f.y)); }
+          groundArt.drawObjectives(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }); // (CASTLE.md A1: the objectives' markers, the prisoners and the carried banner, through the camera)
         }
       } catch (e) { /* (a nicety: never stop the frame) */ }
       placeNames(); // (WP15: every name queued above, laid out together so none lies on another)

@@ -1366,7 +1366,7 @@ export function createShipSim(world, ship, W) {
         hijack.rider(player, dt); // flying a stolen dogfighter (kick the pilot out, then steer)
         if (!player.bot) player.act = player.grabAct = null;
       } else if (player.on) {
-        if (player.on.away) W.ground.step(ship, player, dt, { hookshot, holdOk }); // (A0: the away team on the ground: walk, climb, flare, hook; ground.js)
+        if (player.on.away) { W.ground.step(ship, player, dt, { hookshot, holdOk }); if (!player.bot) trackAid(player, 'a', player.act); } // (A0: the away team on the ground: walk, climb, flare, hook; ground.js) (A1: a hold at an objective counts only while the label it began on is showing)
         else if (player.on.ring != null) W.ring.boarderStep(ship, player, dt, holdOk); // (the ring map's gallery: walk it, plant the charge at the keep door)
         else W.creatures.boarderStep(ship, player, dt, holdOk); // aboard a giant creature: walk its outline, BLIND IT, STRIKE THE HEART (creatureBoard.js)
       } else if (player.lock) {

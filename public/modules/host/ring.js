@@ -145,6 +145,7 @@ export function createRing({ state, puff, credit, onMarker }) {
     // Revolving turrets travel round the ring (and wrap at its end: the 3D view makes it seamless).
     for (const t of course.turrets) {
       if (!t.rev || t.dead) continue;
+      if (t.hush > 0) { t.hush -= dt; continue; } // (A1: the beacon is lit: the revolving guns pause - course.js holds their fire too)
       t.mx += t.rev * dt;
       if (t.mx >= r.xRing + r.C) { t.mx -= r.C; r.stats.wraps++; }
       t.cx = t.mx;
@@ -154,8 +155,9 @@ export function createRing({ state, puff, credit, onMarker }) {
       const alive = liveTurrets(f).length;
       // The shutter: opens when the guns are down, for OPEN_FOR s, then again every EVERY s.
       if (!alive) {
-        if (f.windows === 0) { f.windows = 1; f.open = G.CORE.OPEN_FOR; f.t = G.CORE.EVERY; r.stats.windows++; warn('GATE ' + (f.i + 1) + ' SHUTTER OPEN - HIT THE CORE!', 3); sfx('roar'); restock(); }
-        else if ((f.t -= dt) <= 0) { f.windows++; f.open = G.CORE.OPEN_FOR; f.t = G.CORE.EVERY; r.stats.windows++; warn('GATE ' + (f.i + 1) + ' SHUTTER OPEN AGAIN!', 3); sfx('roar'); restock(); }
+        const open = G.CORE.OPEN_FOR * (f.winch ? config.AWAY.OBJECTIVES.WINCH.MUL : 1); // (A1: a cranked gate winch holds the shutter open longer)
+        if (f.windows === 0) { f.windows = 1; f.open = open; f.t = G.CORE.EVERY; r.stats.windows++; warn('GATE ' + (f.i + 1) + ' SHUTTER OPEN - HIT THE CORE!', 3); sfx('roar'); restock(); }
+        else if ((f.t -= dt) <= 0) { f.windows++; f.open = open; f.t = G.CORE.EVERY; r.stats.windows++; warn('GATE ' + (f.i + 1) + ' SHUTTER OPEN AGAIN!', 3); sfx('roar'); restock(); }
         if (f.open > 0 && (f.open -= dt) <= 0) { f.open = 0; if (!f.down) warn('SHUTTER CLOSED - SHOOT THE GUNS OR WAIT', 2); }
       }
       stepSpecial(f, dt, aim, sh);

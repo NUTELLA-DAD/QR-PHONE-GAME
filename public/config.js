@@ -1453,6 +1453,37 @@ export const config = {
     STRAND: { TIME: 40, LEASH: 2800, BACK: 0.75 }, // the STRANDED countdown (s); the ship is "gone" past LEASH px from you (and back when closer than BACK x LEASH)
     HOME: { COST: 12, MAX: 180 }, // salvage paid when a man who walked home rejoins at the next dock; he is back at the next stop at latest after MAX s
     BOT: { STAY: 6, TRIP_EVERY: 45, RETURN_MAX: 40 }, // trips: seconds a bot looks round; seconds between trips; a bot that cannot get back in this long is taken home (bots never strand)
+    // CASTLE OBJECTIVES (CASTLE.md package A1; objectives.js): jobs for the away team on the ground of a ring face. Each is an Action HOLD at a spot (a marker on the TV, a verb on the phone) with a Ship's Book moment.
+    // Only where the away team exists (3 or more crew, AWAY.MIN_CREW), on a ring map, and every castle is still won from the air: nothing here is needed. ENABLED false = A0 only (NO_AWAY=1 turns all of it off).
+    //   WINCH     crank the gate winch: that face's shutter stays open MUL x as long for the rest of the stop, and its archer posts are silent for SILENCE s.
+    //   CHARGE    carry a powder crate (a crate or ammo from the ship's racks, or the KEG on the plaza), hold PLANT at a tower base: a fuse of FUSE s, then BOMBS bombs' worth on the face's core (open shutter) or the keep's pool (shut); BLAST_R px round it knocks a man out.
+    //   BALLISTA  sabotage the ballista at its tower base: it is silent for the stop.
+    //   BEACON    light the beacon: the revolving guns pause (PAUSE s) and a supply balloon comes.
+    //   CAGE      free the prisoners: MEN of them walk (WALK px/s) to the rope ladder and climb it (CLIMB px/s); each who gets aboard is SALVAGE salvage.
+    //   BANNER    steal the great banner and carry it back up the rope (walk SLOW x as fast): the face's soldiers flee for good, SALVAGE salvage and a trophy part card (TROPHY, see simulation.js trophyCard).
+    //   SOLDIERS  a plaza squad notices a man on the ground within NOTICE px: it shouts and points for TELL s, runs at SPEED px/s, winds up WIND s and strikes (a knock-out, as a raider's blow, the usual KO_TIME). A shove (SHOVE px reach) throws it back PUSH px
+    //             and stuns it STUN s; after GIVE_UP shoves, or a miss, or a shell or a bomb on the squad, it goes home and does not look again for COOLDOWN s. A man faster than SPEED simply outruns it (WALK 230).
+    OBJECTIVES: {
+      ENABLED: true,
+      PER_FACE: 2, // objectives offered on one face at most, chosen by a hash of the stop, the face and the kind (no random numbers), spread so a castle shows different kinds
+      REACH: 100, // px: an objective is worked from this close (and within HEIGHT px of the ground it stands on)
+      HEIGHT: 120,
+      GAP: 230, // px: objectives on one face stand at least this far apart
+      SPREAD: 0.6, EDGE: 1560, // a kind already offered elsewhere in the castle ranks this much worse (0..1 is the hash's own range); a spot is at most this far from its face's middle (the platform ends at 1700)
+      DECAY: 0.5, // a bar nobody holds runs back this much per second (of a full bar)
+      SHOW: 3000, // px: the TV marks the objectives within this far (sideways) of the rope ladder's hatch
+      SEEK: 2400, // px: the phone's arrow and hint point only at an objective this near the man (a far gate is out of the ship's leash)
+      AT: { winch: 0, charge: 760, keg: 1380, cage: 1000, banner: 1240, beacon: 1480 }, // where each stands, px from the face's middle (on the side of a plaza; the ballista stands at its tower)
+      FORCE: null, // tools: a list of kinds offered on every face that can have them (tools/objectives-check.mjs)
+      WINCH: { TIME: 3.5, MUL: 2, SILENCE: 40 },
+      CHARGE: { TIME: 3, KEG_TIME: 1.2, FUSE: 8, BOMBS: 2, BLAST_R: 260 },
+      BALLISTA: { TIME: 3.5 },
+      BEACON: { TIME: 3, PAUSE: 25 },
+      CAGE: { TIME: 2.5, MEN: 3, WALK: 150, CLIMB: 215, SALVAGE: 10 },
+      BANNER: { TIME: 3.5, SLOW: 0.85, SALVAGE: 20, EXTRA: 25, TROPHY: 'featherSail', NAME: 'Banner sail', DESC: 'The great banner of the castle, sewn into a mast and sail: it pulls harder than canvas and a gust cannot tear it.' }, // EXTRA: salvage instead when a trophy card is already waiting
+      SOLDIERS: { NOTICE: 520, DY: 160, TELL: 1.1, SPEED: 190, REACH: 90, SLACK: 40, WIND: 0.7, STUN: 1.4, PUSH: 180, SHOVE: 130, SHOVE_CD: 0.8, GIVE_UP: 3, MISSES: 2, LEASH: 900, COOLDOWN: 20 },
+      BOT: { DO: true, KIND: null, RANGE: 1100, TIME: 70 }, // tools: a tripping bot does ONE objective (the nearest within RANGE px of the rope, or KIND) and gives up after TIME s
+    },
   },
   // Enemy waves (bat swarms and bombers) and the Dread Zeppelin boss.
   WAVES: {
@@ -2400,7 +2431,7 @@ export const config = {
     RING: 500, // moments kept in state.moments (the oldest are dropped; each stop's best are written into run.log at its end, so the postcard never needs the old ones)
     // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
     WEIGHT: {
-      'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
+      'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'away-banner': 8, 'away-charge': 7, 'away-prisoners': 6, 'away-ballista': 5, 'away-beacon': 4, 'away-winch': 4, 'away-ko': 3, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
       'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra

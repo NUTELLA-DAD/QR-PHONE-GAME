@@ -784,8 +784,9 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       const wy = t.my ?? groundAt(course, wx);
       t.x = wx;
       t.y = wy - 20;
-      t.vx = t.rev || 0; // (a revolving gun on a ring map moves: the gunners lead it)
+      t.vx = t.hush > 0 ? 0 : t.rev || 0; // (a revolving gun on a ring map moves: the gunners lead it; A1: not while a lit beacon holds it, t.hush)
       if (t.dead) continue;
+      if (t.hush > 0) { t.cd = Math.max(t.cd, 0.9); t.charging = false; t.warned = false; continue; } // (A1: a beacon was lit: this gun neither turns nor fires)
       // Aim at the middle of the ship.
       const ty = aimY;
       t.aim = Math.atan2(ty - t.y, aimX - wx);
