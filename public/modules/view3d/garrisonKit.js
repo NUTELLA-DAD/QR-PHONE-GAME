@@ -154,17 +154,30 @@ export const ARROW_TIP = 0.65; // (x of the head's tip in the unit arrow)
 // Local space: the pivot at the origin, the stock along +x, the arms standing in the picture's plane (as the 2D game draws it). Four poses: the bow drawn 0, 1/3, 2/3, all the way.
 export function buildBallista(A, C) {
   const w = A.wood || '#7a5a3e', wd = A.woodDark || '#563c28', iron = A.iron || '#3f3b3e';
-  const poses = [0, 1, 2, 3].map((pull) => {
-    const B = new Batch(), k = pull / 3, tip = 100 - 40 * k, nock = 98 - 72 * k;
+  const poses = [0, 1, 2, 3, 'jam'].map((pull) => { // (pose 4 = A3's SABOTAGED ballista: one arm snapped and hanging by the string, the bolt wedged crooked, the stock scorched)
+    const jam = pull === 'jam', B = new Batch(), k = jam ? 0.25 : pull / 3, tip = 100 - 40 * k, nock = 98 - 72 * k;
     B.box(w, 38, 0, 0, 150, 17, 24, 2.2); // the stock
     B.box(wd, 38, -10, 0, 150, 5, 30, 0);
     B.cyl(iron, 0, -13, 0, 19, 12, 1.5); // the turntable
     B.box(wd, 96, 0, 0, 16, 34, 28, 1.6); // the bow's block
+    if (jam) B.box('#3a3029', 40, 10, 0, 70, 3, 22, 0); // the scorch on the stock
     for (const s of [-1, 1]) {
+      if (jam && s === 1) { // the upper arm snaps halfway: a splintered stump, the outer half hangs from the string
+        B.rod(w, V(96, 8, 0), V(106, 40, 0), 6, 1.5); B.box('#d8c08a', 108, 44, 0, 10, 7, 9, 0.8, 0, 0, 0.9);
+        B.rod(w, V(86, 72, 7), V(112, 26, 9), 5.2, 1.4); B.sphere(iron, 86, 72, 7, 5, 5, 5, 1, true);
+        B.rod(C.CLOTH, V(86, 72, 7), V(nock, 0, 0), 1.5, 0);
+        continue;
+      }
       B.rod(w, V(96, s * 8, 0), V(110 - 14 * k, s * 50, 0), 6, 1.5);
       B.rod(w, V(110 - 14 * k, s * 50, 0), V(tip, s * 92, 0), 5.4, 1.5);
       B.sphere(iron, tip, s * 92, 0, 6, 6, 6, 1, true);
       B.rod(C.CLOTH, V(tip, s * 92, 0), V(nock, 0, 0), 1.5, 0); // the string
+    }
+    if (jam) { // the bolt wedged crooked in its groove, pointing up
+      B.rod(C.BOLT, V(nock + 6, -2, 0), V(nock + 108, 74, 0), 3.6, 1);
+      B.cone(C.BOLT_HEAD, nock + 116, 80, 0, 7.5, 24, 1.1, 0, 0, -0.64);
+      B.box(C.FEATHER, nock + 12, 2, 0, 20, 12, 1.6, 0.5, 0, 0, 0.64);
+      return B.parts;
     }
     B.rod(C.BOLT, V(nock - 4, 0, 0), V(nock + 142, 0, 0), 3.6, 1); // the bolt in its groove
     B.cone(C.BOLT_HEAD, nock + 152, 0, 0, 7.5, 24, 1.1, 0, 0, -PI / 2);

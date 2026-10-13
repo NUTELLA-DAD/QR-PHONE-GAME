@@ -392,7 +392,8 @@ export function createGarrison3d({ parent, state, P }) {
         b.key = k8;
         if (L && fin(L.x1) && fin(L.y1)) b.ang = Math.atan2(-(L.y1 - L.y0), L.x1 - L.x0);
         const pull = L ? 1 - Math.max(0, L.t) / Math.max(0.01, L.max || 1.5) : 0;
-        b.pose = clamp(Math.round(pull * 3), 0, 3);
+        b.pose = sp.silent ? 4 : clamp(Math.round(pull * 3), 0, 3); // (A3: a sabotaged ballista is the broken pose, drooping)
+        if (sp.silent) b.ang = 0.18;
         b.group.userData.show(b.pose);
         b.group.rotation.z = b.ang;
       }

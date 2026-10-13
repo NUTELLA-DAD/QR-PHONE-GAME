@@ -3158,12 +3158,18 @@ export function createRenderer({ ctx, state: world, canvas }) {
           ctx.setTransform(1, 0, 0, 1, 0, 0);
           const pt = (x, y) => proj([x, -y, 60]);
           const px = (x, y) => { const a = pt(x, y), b = pt(x + 100, y); return a && b ? Math.max(0.3, Math.hypot(b.x - a.x, b.y - a.y) / 100) : 0.5; };
-          if (world.groundSys && world.groundSys.onGround().length) for (const l of S.ladders) { const a = pt(l.x, l.y0 + 6), b = pt(l.x, l.y1); if (a && b) groundArt.ladder(a.x, a.y, b.x, b.y, px(l.x, l.y0), 46 * px(l.x, l.y0)); } // (the wall ladders, while somebody is down there to climb them; the castle art has the walkways)
+          const A3 = p3.away && p3.away(); // (CASTLE.md A3: the 3D view draws the ladders, the flare, the pickup ring, the signs, the prisoners and the carried banner; the HUD then keeps only their words)
+          if (!A3 && world.groundSys && world.groundSys.onGround().length) for (const l of S.ladders) { const a = pt(l.x, l.y0 + 6), b = pt(l.x, l.y1); if (a && b) groundArt.ladder(a.x, a.y, b.x, b.y, px(l.x, l.y0), 46 * px(l.x, l.y0)); } // (the wall ladders, while somebody is down there to climb them; the castle art has the walkways)
           const R = S.rope;
-          if (R.out && R.len > 4) { const a = pt(R.x, R.y), b = pt(R.x, R.y + R.len); if (a && b) groundArt.ladder(a.x, a.y, b.x, b.y, px(R.x, R.y) * 1.3, 40 * px(R.x, R.y) * 1.3, groundArt.ROPE); }
-          for (const o of S.pickups) { const a = pt(o.x, o.y); if (a) groundArt.pickup(a.x, a.y, zs * 0.9, K8, o.name, zs); }
-          for (const f of S.flares) { const a = pt(f.x, f.y); if (a) groundArt.flare(a.x, a.y, zs * 0.9, K8, f.name, zs, px(f.x, f.y)); }
-          groundArt.drawObjectives(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }); // (CASTLE.md A1: the objectives' markers, the prisoners and the carried banner, through the camera)
+          if (!A3 && R.out && R.len > 4) { const a = pt(R.x, R.y), b = pt(R.x, R.y + R.len); if (a && b) groundArt.ladder(a.x, a.y, b.x, b.y, px(R.x, R.y) * 1.3, 40 * px(R.x, R.y) * 1.3, groundArt.ROPE); }
+          if (A3) { // (the words only)
+            for (const o of S.pickups) { const a = pt(o.gx != null ? o.gx : o.x, (o.prisoners && R.ground != null ? R.ground : o.gy != null ? o.gy : o.y) - 450); if (a) groundArt.text('PICK UP ' + String(o.name).toUpperCase(), a.x, a.y, 22, '#8a4a00', zs); }
+            for (const f of S.flares) { const fa = A3.flareAt(f), a = pt(fa.x, fa.y - 95); if (a) groundArt.text('FLARE', a.x, a.y, 20, '#ff5a3c', zs); }
+          } else {
+            for (const o of S.pickups) { const a = pt(o.x, o.y); if (a) groundArt.pickup(a.x, a.y, zs * 0.9, K8, o.name, zs); }
+            for (const f of S.flares) { const a = pt(f.x, f.y); if (a) groundArt.flare(a.x, a.y, zs * 0.9, K8, f.name, zs, px(f.x, f.y)); }
+          }
+          groundArt.drawObjectives(K8 / 8, zs, (x, y) => { const a = pt(x, y); return a ? { x: a.x, y: a.y, u: zs * 0.85, w: Math.max(0.35, px(x, y)) * 1.1 } : null; }, A3); // (CASTLE.md A1: the objectives' markers, the prisoners and the carried banner, through the camera)
         }
       } catch (e) { /* (a nicety: never stop the frame) */ }
       placeNames(); // (WP15: every name queued above, laid out together so none lies on another)

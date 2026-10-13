@@ -3577,6 +3577,24 @@ export const config = {
       CHAIN: { SPARKS: 30, WHIP: [0.0, 0.2, -0.15, 0.1, -0.06, 0.03, -0.012, 0], KICK: [0.0, -0.08, -0.14, -0.1, -0.05, 0.0, 0.0, 0.0] },
     },
   },
+  // A3 THE AWAY TEAM IN 3D (view3d/away3d.js + awayKit.js, CASTLE.md; view only: it reads state.away): the rope ladder, the wall ladders and their planks, the flare, the pickup ring, the objective props (winch, powder keg and
+  // planted charge, ballista, beacon, prisoner cage, the great banner), the objective signs, the freed prisoners and the carried banner / keg. Everything stands in the flat map frame (the ring bend wraps it) and moves on
+  // 8 fps keys; nothing here is a sine of time. Z = the depth a man stands at (the plaza, the wall walk's plank, a wall ladder, the rope ladder); WALL_Z = the depth a wall ladder stands at; PLANK = the wall walk's ledge.
+  // ROPE: CELL = a rung every this many px, SWAY = held sideways offsets per 8 fps key (a table, not a sine), AMP / AMP_MOVE = px of sway at the foot (still / the ship moving fast).
+  // FLARE: RISE seconds to climb H px over the man (then it hangs and sinks SINK px over its life). SIGN: the depth the signs stand at (their height and size are in away3d.js SIGNS). PRISONERS = the plain clothes.
+  AWAY3D: {
+    ENABLED: true,
+    Z: { GROUND: 70, DECK: 16, LADDER: -158, ROPE: 68, ROPE_BODY: 55 }, // (the wall walk stands in front of the gate block's face, z -30, or a man over a gatehouse would be hidden inside it; the wall ladders stand on the curtain wall, behind the ship)
+    WALL_Z: -176, PLANK: { Z: 8, DEPTH: 66, THICK: 13 },
+    ROPE: { CELL: 40, W: 24, SWAY: [0, 1, 2, 2, 1, 0, -1, -2, -2, -1], AMP: 7, AMP_MOVE: 14 },
+    FLARE: { RISE: 1.0, H: 520, SINK: 70, SIZE: 1, COLOR: '#ff4a2e', CORE: '#fff0c0', SMOKE: '#d8cfc6' },
+    RING: { R: 96, DASHES: 14, COLOR: '#ffd23f', ARROW_UP: 250, ARROW: 1.5 },
+    SIGN: { Z: 60 }, // (the signs stand at z 60, the depth the HUD projects its words at)
+    SPOT: { R: 52, DASHES: 10 },
+    PRISONERS: { COLORS: ['#b8b2a2', '#a39b86', '#9ba596'], SPECIES: ['bulldog', 'cat', 'rabbit', 'wolf'] },
+    COL: { WOOD: '#8a6444', WOOD_DARK: '#5e4129', ROPE: '#c9a66b', IRON: '#3f3b3e', KEG: '#a37a45', KEG_BAND: '#3d3a3c', POWDER: '#2b2724', COAL: '#2c2a2b', FIRE: '#ff8a2a', FLAME_CORE: '#ffd9a0', SMOKE: '#59534f', GOLD: '#ffd23f', BANNER: '#a8302c', BANNER_GOLD: '#d9b24e', SIGN_POST: '#5e4129', BOARD: '#fff7e0', JAM: '#4b3a2c' },
+    CAP: { CELLS: 220, QUADS: 24 },
+  },
   // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.
   // SCALE = size of one texture pixel in world units (the 512px tile covers 512*SCALE units; the airship is ~1500 wide).
   // Painted textures on the ship and gunships. STRENGTH: how strongly they show (1 = subtle, 2 = clear, 3 = bold).
