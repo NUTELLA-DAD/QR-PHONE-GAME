@@ -512,6 +512,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     // Leave when the ship gets home, or after a crash.
     const c = state.course;
     if (c && (c.progress < 0.5 || c.progress > 0.97) && !z.flagship) z.leaving = true; // (the Flagship never leaves)
+    if (z.moor && config.RING.FAIR.ENABLED && (z.leaving || !c || !c.ring || z.moor !== c.ring.moor)) { state.boss = null; return; } // (F12: a limp home flies the stop again and reset() tells the old Flagship to leave; a moored one never did, it hung on the old castle's mooring for good, the new castle's moorings then cut nothing and the stop could not be won: 'ring 2/2' for 15 minutes in a Sparrow voyage. Gone with the old castle, a new one is hung when the ship comes near (ring.js citadelStep))
     if (z.moor) {
       if (!moorStep(z, dt)) return; // (falling, or the ship is out of her range)
     } else {

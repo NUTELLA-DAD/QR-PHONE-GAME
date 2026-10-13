@@ -42,7 +42,7 @@ if (args.runs > 1 && !args.child) {
   console.log(`--- voyagesim ${args.topup ? 'TOP-UP' : 'NATURAL'} ${args.mode}${args.daily ? ' (daily)' : ''} ${args.difficulty}, ${args.bots} bots (${args.humans} as humans), ${args.runs} runs ---`);
   for (const r of rows) {
     if (r.error) { console.log(`seed ${r.seed}: ERROR ${r.error}`); continue; }
-    console.log(`seed ${String(r.seed).padStart(3)}: stops ${r.done}/${r.total} ${r.victory ? 'VICTORY' : r.timeout ? 'TIMEOUT' : 'wreck'} ${(r.minutes || 0).toFixed(1)}min${args.topup ? ` stalls ${r.stalls} [${(r.stallInfo || []).join("; ")}]` : ""} | ${r.cause}`);
+    console.log(`seed ${String(r.seed).padStart(3)}: stops ${r.done}/${r.total} ${r.victory ? 'VICTORY' : r.timeout ? 'TIMEOUT' : 'wreck'} ${(r.minutes || 0).toFixed(1)}min${args.topup ? ` stalls ${r.stalls} [${(r.stallInfo || []).join("; ")}]` : ""} | ${r.cause}${(r.ringStops || []).length ? ' | castles: ' + r.ringStops.map((x) => x.variant + ' ' + (((x.tFell != null ? x.tFell : x.t1) - x.t0) / 3600).toFixed(1) + (x.tFell != null ? ' fell' : ' not') + (x.attempts > 1 ? ' x' + x.attempts : '')).join(', ') : ''}`); // (F12: the castle stops of the voyage)
   }
   const ok = rows.filter((r) => !r.error);
   const ds = ok.map((r) => r.done).sort((a, b) => a - b);
@@ -99,6 +99,15 @@ if (args.runs > 1 && !args.child) {
     const sh = ok.filter((r) => r.shape), n = sh.length, sum = (k) => sh.reduce((a, r) => a + r.shape[k], 0), cards = {};
     for (const r of sh) for (const [k, v] of Object.entries(r.shape.cards)) cards[k] = (cards[k] || 0) + v;
     if (n) console.log(`stop shape: ${sum('stops')} stops flown, ${sum('brief')} briefings, ${sum('escape')} escapes, gunship set piece at ${sum('gunship')} of them (${sum('plain')} stops had neither lair nor ring), ${sum('midBoss')} mid-voyage zeppelins; ${sum('docks')} docks, cards [${Object.entries(cards).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + v).join(', ')}], dock s ${(sum('dockSecs') / Math.max(1, sum('docks'))).toFixed(1)}, scorecard+dock+route s/stop ${(sum('menuSecs') / Math.max(1, sum('stops'))).toFixed(0)}`);
+  }
+  { // RING STOPS (FUN.md F12): the castle stops, per kind. Minutes = from the first moment the castle was in the sky to the fall of its crown (a limp home and the stops flown on the way count: that is how long the stop took the crew); a stop that never fell counts how long she was there when the voyage ended. Unfinished: the clock ran out (clock) or she was wrecked there for good / the run ended elsewhere (ended)
+    const rs = ok.flatMap((r) => (r.ringStops || []).map((x) => ({ ...x, timeout: !!r.timeout })));
+    const med = (a) => (a.length ? ((a = a.slice().sort((x, y) => x - y)), (a[(a.length - 1) >> 1] + a[a.length >> 1]) / 2).toFixed(1) : 'n/a');
+    if (rs.length) {
+      const mins = (x) => ((x.tFell != null ? x.tFell : x.t1) - x.t0) / 3600;
+      const line = (name, l) => `${name} ${l.length} (fell ${l.filter((x) => x.tFell != null).length}: median ${med(l.filter((x) => x.tFell != null).map(mins))} min; unfinished clock ${l.filter((x) => x.tFell == null && x.timeout).length} / ended ${l.filter((x) => x.tFell == null && !x.timeout).length}, they were there ${med(l.filter((x) => x.tFell == null).map(mins))} min; all-stops median ${med(l.map(mins))} min; attempts ${(l.reduce((a, x) => a + x.attempts, 0) / l.length).toFixed(1)}, first face at ${med(l.filter((x) => x.firstFace != null).map((x) => (x.firstFace - x.t0) / 3600))} min, faces down ${l.reduce((a, x) => a + x.down, 0)}/${l.reduce((a, x) => a + x.faces, 0)})`;
+      console.log('ring stops (F12): ' + [['all', rs], ...['tower', 'fortress', 'citadel'].map((v) => [v, rs.filter((x) => x.variant === v)])].filter(([, l]) => l.length).map(([n, l]) => line(n, l)).join(' | '));
+    }
   }
   { const n = ok.reduce((a, r) => a + (r.breaks || 0), 0); if (n) console.log(`parts broke off ${n} time(s) in ${ok.filter((r) => r.breaks).length} of ${ok.length} voyages: ${[...new Set(ok.flatMap((r) => r.breakCauses || []))].join(', ')}`); }
   const causes = {};
@@ -196,6 +205,7 @@ let curveStop = null;
 const lairs = { seen: new Set(), won: new Set(), met: 0, how: {} };
 const shape = { stops: 0, plain: 0, brief: 0, escape: 0, gunship: 0, midBoss: 0, docks: 0, cards: {}, dockSecs: 0, menuSecs: 0 }, shapeSeen = {}; let shapeStop = null; // (F6)
 const hullBy = {}; // (F1: per stop flown, the hull while flying and the minutes: result.hullBy)
+const ringStops = {}; // (F12: per ring stop: the castle, when it was entered, when its crown fell, how many faces were down at the last step)
 const wrecks = []; // (balance pass: the text of every wreck of the voyage, limps included, from the moment the ship goes down)
 let wasDown = 0;
 for (let step = 1; step <= maxSteps && !result; step++) {
@@ -220,6 +230,7 @@ for (let step = 1; step <= maxSteps && !result; step++) {
       if (state.scorecard || state.vote) shape.menuSecs += dt;
       Object.assign(shapeSeen, { brief: !!state.briefing, esc: !!(state.tempo && state.tempo.phase === 'escape'), big: !!(state.tempo && state.tempo.big), boss: state.boss, vote: v });
     }
+    { const rg = state.course && state.course.ring, sid = state.run && state.run.stopId; if (rg && sid) { const e = (ringStops[sid] ??= { stop: sid, variant: rg.variant, t0: step, t1: step, tFell: null, faces: rg.faces.length, down: 0, windows: 0, firstFace: null, attempts: 0, rg: null }); if (e.rg !== rg) { e.rg = rg; e.attempts++; } e.t1 = step; e.down = rg.faces.filter((f) => f.down).length; e.windows = rg.stats.windows; if (e.down && e.firstFace == null) e.firstFace = step; if (rg.crown && e.tFell == null) e.tFell = step; } } // (F12)
     if (state.ship.down > 0 && !wasDown) wrecks.push(String((state.ev && state.ev.warnText) || '?').replace(/ THE (SEA|ROCKS|GROUND)!$/, '!'));
     wasDown = state.ship.down > 0 ? 1 : 0;
     mateStat.max = Math.max(mateStat.max, Object.values(state.players).filter((q) => q.mate).length);
@@ -274,6 +285,7 @@ result.curve = curve;
 result.hullBy = Object.values(hullBy); // (F1: { col, hull, n, t0, t1 } per stop reached)
 result.fun = fun.result(); // (FUN.md F8)
 result.shape = shape; // (F6)
+result.ringStops = Object.values(ringStops).map(({ rg, ...x }) => x); // (F12)
 result.profile = args.profile;
 result.offers = state.run.offers || { lair: [], salvage: [], taken: [] }; // (G0: the lairs and salvage runs the route votes offered, and the stops the crew took)
 { const S = state.scrapStats; if (S && config.SCRAP.ENABLED && !config.PVP.ENABLED) result.scrap = { spawned: S.spawned, landed: S.landed, hooked: S.hooked, stowed: S.stowed, lost: S.lost, taken: S.taken, hulks: S.hulks, dumped: S.dumped, by: S.by, holdSum: S.holdSum, holdN: S.holdN, carrySecs: S.carrySecs, crewSecs: S.crewSecs }; } // (SCRAP, LOOP.md G1: what fell, what was caught and stowed over the voyage)

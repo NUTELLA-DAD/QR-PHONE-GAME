@@ -300,6 +300,22 @@ function groundTargets(state) {
   return out;
 }
 
+// F12 (FUN.md "small ships crack castles"): a ship with no bomb bay has one weapon for a castle's core, the gun that can reach it, and the window (RING.CORE.OPEN_FOR s) is the only time that gun counts. This is the gun a hand should be at
+// when a shutter is open or about to open (RING.FAIR.BOT_LEAD s), or null: another gun is manned already, nothing reaches the core, or the ship has a bay (whose man is taken below) or the fair rules are off.
+function ringWindowGun(state, players, mods) {
+  const R = config.RING.FAIR, r = state.course && state.course.ring, L = mainShip(state).layout;
+  if (!R.ENABLED || !r || r.crown || L.bombBay || state.phase !== 'flying' || state.ship.down) return null;
+  const face = r.faces.find((f) => !f.down && (f.open > 0 || (f.windows > 0 && f.t < R.BOT_LEAD)));
+  if (!face) return null;
+  for (const n of tables(L).GUN_STATIONS) {
+    const g = state.GUNS[n];
+    if (!g || g.type === 'flame' || g.type === 'mines' || g.type === 'harpoon' || isMothballed(state, n) || mods.some((m) => m.name === n && m.broken) || players.some((q) => q.lock === n)) continue;
+    const b = bestTarget(state, g);
+    if (b && b.target.obj === face && (b.target.kind === 'core' || b.target.kind === 'shutter')) return n;
+  }
+  return null;
+}
+
 // A sniper about to fire with its line across the ship: climb or dive out of it.
 function beamDodge(state) {
   const ship = mainShip(state);
@@ -621,6 +637,9 @@ function listJobs(state, bot) {
   // The parts everything else hangs on (the helm and its steam pipe, the boiler, the lift): a broken one is fixed first,
   // otherwise the gasbag can never be pumped up again and the ship just sits there burning.
   for (const m of mods) if (canHammer && m.broken && critical(mods, m)) jobs.push({ kind: 'repair', obj: m, max: 1, cap: 3, urgent: true });
+  // F12: a castle's shutter is open (or about to be) and nobody holds the gun that reaches its core: one hand goes there ahead of the chores and the fighting (the bay's man, below, is the classic ship's)
+  const winGun = ringWindowGun(state, players, mods);
+  if (winGun) jobs.push({ kind: 'station', obj: winGun, max: 1, tier: 0 });
   // Storm Front: a bolt is charging - one crew member holds a lightning rod (grounds it, the coil may drink it).
   const sj = state.stormJob;
   if (shipH.main && sj && (sj.charge || birdDiving(state.creature)) && !players.some((q) => q !== bot && q.botJob && q.botJob.kind === 'rod' && !q.lock)) for (const r of sj.rods) jobs.push({ kind: 'rod', obj: r, max: 1 }); // (the Thunderbird's lightning dive: the rod is manned before the first bolt is called, C.6b)

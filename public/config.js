@@ -9,6 +9,8 @@ const ALARMS_ON = typeof process === 'undefined' || !(process.env && process.env
 const ROLE_CARDS_ON = typeof process === 'undefined' || !(process.env && process.env.NO_ROLE_CARDS);
 // F3 (FUN.md): a helm for one thumb - the stick's up/down is the pump and the vent, the speed lever is the cruise, the pressure lever a readout, the trim part of the autopilot, the SPLIT engine panel only with CONTROLS.EXPERT. ON in the game (a browser has no process); NO_HELM_V2=1 in a tool is the old helm (the seeded baselines pin it).
 const HELM_V2_ON = typeof process === 'undefined' || !(process.env && process.env.NO_HELM_V2);
+// F12 (FUN.md): small ships crack castles - a ship with no bomb bay (the Sparrow) has her guns' magazines filled every time a castle shutter opens, and her gunners keep their shells for the window (RING.FAIR). ON in the game; NO_RINGFAIR=1 in a tool is the old game (the seeded baselines pin it).
+const RINGFAIR_ON = typeof process === 'undefined' || !(process.env && process.env.NO_RINGFAIR);
 export const config = {
   W: 1600,
   H: 900,
@@ -1369,6 +1371,12 @@ export const config = {
     CROWN: { SLOW: 0.35, SLOW_FOR: 2.2, DONE_AFTER: 3.2, HULL: 30 }, // the crown falls: slow motion for SLOW_FOR s (sim time), the stop completes DONE_AFTER s after, the spoils patch the hull
     MOOR: { UP: 2500, FIRE_RANGE: 2800, FALL_TIME: 3.2, FALL_ACC: 700 }, // the citadel's Flagship hangs UP px above its faces' platforms, fires at a ship this close, and when both moorings are cut falls for FALL_TIME s
     PROGRESS_APPROACH: 0.4, // the stop's progress (0-1): the approach takes the first share of it, the faces the rest
+    // F12 (FUN.md "small ships crack castles"): the shutter's window is a bomb-bay moment (RESTOCK fills the bay to BOMBS.MAX, a bomb is worth CORE.BOMB shell points), so a ship with NO bomb bay (the Sparrow) met it with
+    // a gun that had spent its magazine on the face's guns (5 shells left of 20 when the shutter opened, none for the second window). FAIR gives her the same open stores: every time a shutter opens, her broadside guns'
+    // magazines are filled (GUN_RESTOCK = the share of a magazine they are brought up to; flame, mine and harpoon guns are left alone). Off (NO_RINGFAIR=1) = the old ring exactly.
+    // BOT_LEAD: the bots put a hand on the gun that reaches the core this many seconds before the shutter's next window (and while it is open), when nobody is on it (bots.js ringWindowGun).
+    // KEEP_GATES: a limp home flies the castle stop again on a new map, but the gates the crew had already breached stay breached (state.run.castle): the garrison does not rebuild a wall in the minutes it takes to patch a gasbag.
+    FAIR: { ENABLED: RINGFAIR_ON, GUN_RESTOCK: 1, BOT_LEAD: 8, KEEP_GATES: true },
   },
   // THE GARRISON (CASTLE.md package D1; garrison.js, ring.js, maps.js buildRingMap, ringArt.js): the castle's men fight back, on ring maps only. ENABLED false = exactly the R0 ring.
   //   ARCHERS     two posts on every face's wall walk. A horn and a flag go up, an amber arc shows for TELL s, then 24-32 lobbed arrows. Each arrow is weak (DMG power) and 45% miss. Plate is immune to them,

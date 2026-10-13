@@ -892,7 +892,7 @@ export function createSimulation() {
     const run = state.run, found =PS.DERELICT_STOPS.includes(legNo(curStop()));
     if (!found && !state.yardOnly && Math.random() >= (SH.V2 ? SH.V2_PART_CHANCE : PS.CARD_CHANCE)) return null; // (not every dock has a part for sale)
     const ahead = run.voyage.columns.slice(curStop().col + 1).flat(); // (what is still on the route: raids need a bomb bay, the Aether is the Flagship's sky)
-    const offer = offerPart(run.build, { owned: ownedParts(), crew: crewHeads(state), avoid: run.lastPart, only: state.yardOnly || null, route: { raids: ahead.filter((x) => x.kind === 'open').length, aether: ahead.some((x) => x.env === 'aether') } });
+    const offer = offerPart(run.build, { owned: ownedParts(), crew: crewHeads(state), avoid: run.lastPart, only: state.yardOnly || null, route: { raids: ahead.filter((x) => x.kind === 'open' || (config.RING.FAIR.ENABLED && x.ring)).length, aether: ahead.some((x) => x.env === 'aether') } });
     if (!offer) return null;
     const e = offer.entry;
     run.lastPart = e.id;
