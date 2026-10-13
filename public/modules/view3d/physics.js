@@ -87,14 +87,14 @@ export function createPhysics(R) {
 
     // ---- debris: spec = { shipIndex, pos: [x, y, z], quat: [x, y, z, w], vel, ang, boxes: [{ cx, cy, cz, hx, hy, hz }], rel (density against water), mat ('wood' | 'iron' | 'canvas'), kind ('piece' | 'chunk'), delay } ----
     addDebris(spec) {
-      const pieces = debris.filter((d) => d.kind === 'piece').length, chunks = debris.length - pieces;
-      if (spec.kind === 'chunk' ? chunks >= K.CHUNKS.CAP : pieces >= D().MAX) return null;
+      const pieces = debris.filter((d) => d.kind === 'piece').length, stones = debris.filter((d) => d.kind === 'stone').length, chunks = debris.length - pieces - stones;
+      if (spec.kind === 'stone' ? stones >= ((K.STONES || {}).CAP || 48) : spec.kind === 'chunk' ? chunks >= K.CHUNKS.CAP : pieces >= D().MAX) return null; // (D3: the castle's stone chunks are a kind of their own)
       const body = world.createRigidBody(R.RigidBodyDesc.dynamic()
         .setTranslation(spec.pos[0], spec.pos[1], spec.pos[2]).setRotation({ x: spec.quat[0], y: spec.quat[1], z: spec.quat[2], w: spec.quat[3] })
         .setLinvel(spec.vel[0], spec.vel[1], 0).setAngvel({ x: spec.ang[0], y: spec.ang[1], z: spec.ang[2] })
         .enabledTranslations(true, true, false) // (the wreckage stays in the gameplay plane: it is where the 2D game says the piece is)
         .setAdditionalMassProperties(1e-4, { x: 0, y: 0, z: 0 }, { x: K.TILT_INERTIA, y: K.TILT_INERTIA, z: 0 }, { x: 0, y: 0, z: 0, w: 1 }) // (...and it turns about the camera axis: a huge extra inertia about the other two keeps it from leaning out of the cut-away. Locking those axes outright would switch friction off in Rapier)
-        .setLinearDamping(K.LINEAR_DAMP).setAngularDamping(K.ANGULAR_DAMP).setCcdEnabled(true));
+        .setLinearDamping(K.LINEAR_DAMP).setAngularDamping(K.ANGULAR_DAMP).setCcdEnabled(true).setGravityScale(spec.kind === 'stone' ? ((K.STONES || {}).GRAVITY || 2) : 1));
       const rel = spec.rel > 0 ? spec.rel : 0.55;
       const ownBit = spec.shipIndex != null && spec.shipIndex >= 0 ? GROUP.ship(spec.shipIndex) : 0;
       const colliders = [];

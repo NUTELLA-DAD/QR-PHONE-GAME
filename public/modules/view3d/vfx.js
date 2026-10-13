@@ -9,6 +9,7 @@ import { createParticles, rnd, rgbOf } from './particles.js';
 import { config } from '../../config.js';
 import { toShipX, toShipY } from '../host/pose.js';
 import { GAR_LIVE } from './garrisonKit.js'; // D2: true while garrison3d.js draws the castle's arrows and bolts itself (no tracer then)
+import { SET_LIVE } from './setpieceKit.js'; // D3: true while setpiece3d.js draws the catapult stones itself (no generic tracer then)
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const fin = Number.isFinite;
@@ -216,6 +217,7 @@ export function createVfx({ state, scene, world, models }) {
       if (!fin(b.x) || !fin(b.y) || b.life <= 0) continue;
       if (!seen.has(b)) seen.add(b);
       if ((b.arrow || b.bolt) && GAR_LIVE.on) continue; // (D2: the garrison's arrows and bolts are instanced models, garrison3d.js, not tracers)
+      if (b.stone && SET_LIVE.stone) continue; // (D3: a catapult stone is a rough stone with its own fire trail, setpiece3d.js)
       tracer(b.vx, b.vy, b.x, b.y, b.flak ? K.FLAK : K.BULLET, 2.4, b.flak ? 16 : 11, b.mortar ? 80 : 60, b, dt, !!b.mortar || !!b.flak);
     }
     // the test volley: shells in flight, then an impact where each one ends

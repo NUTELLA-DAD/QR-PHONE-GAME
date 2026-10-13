@@ -30,6 +30,7 @@ export function createDestruction({ parent, state, models, terrain, world, inRoc
   group.name = 'wreckage';
   parent.add(group);
   const pieces = [], chunks = [];
+  const loose = new Set(); // D3: handles of the castle stones' bodies (bodies.add)
   let physics = null, loading = false, failed = false, awake = false, idleFor = 0, sea = NaN;
   const lastChunks = new Map(); // key -> { map, ci, cj }: the rock chunks standing now (so the physics can take them when it wakes)
   const stats = { events: 0, pieces: 0, chunks: 0, bodies: 0, stepMs: 0, maxStepMs: 0, loadMs: 0, fallback: 0, lastExtractMs: 0 };
@@ -110,7 +111,7 @@ export function createDestruction({ parent, state, models, terrain, world, inRoc
       physics = createPhysics(R);
       physics.warmup();
       physics.events.splash = (x, y, size, speed) => { if (speed > K().SPLASH_SPEED) hooks.splash(x, y, size); };
-      physics.events.bump = (x, y, strength, mat) => { hooks.spark(x, y, 40, { n: mat === 'iron' ? 4 : 2 }); if (strength > 160) hooks.smoke(x, y, 40, { r: 16, life: 0.9, color: '#8a7f72', rise: 20 }); };
+      physics.events.bump = (x, y, strength, mat) => { if (mat === 'stone') { if (strength > 150) hooks.smoke(x, y, 40, { r: 20 + Math.min(18, strength * 0.03), life: 0.9, grow: 1.7, color: '#a99c88', rise: 14 }); return; } hooks.spark(x, y, 40, { n: mat === 'iron' ? 4 : 2 }); if (strength > 160) hooks.smoke(x, y, 40, { r: 16, life: 0.9, color: '#8a7f72', rise: 20 }); }; // (D3: a castle stone that knocks raises dust, not sparks)
       stats.loadMs = performance.now() - t0;
       loading = false;
       for (const p of pieces) if (!p.id) toBody(p); // (pieces made while it loaded fall by hand until now)
@@ -344,11 +345,27 @@ export function createDestruction({ parent, state, models, terrain, world, inRoc
       return piece;
     },
     removeExternal(piece) { const i = pieces.indexOf(piece); if (i >= 0) removePiece(i); },
+    // D3: bodies for the castle's set pieces (setpiece3d.js draws them itself, instanced: no mesh here). add({ pos: [x, y, z], quat, vel: [x, y], ang: [0, 0, spin], boxes }) -> a handle, or null while the engine is still
+    // loading (the caller lets the stone fall by hand) or the cap is full. They are the rock walls' and the ships' business like any wreckage, and keep the engine awake while they exist.
+    bodies: {
+      add(spec) {
+        load();
+        if (!physics) return null;
+        if (!awake) wake();
+        const id = physics.addDebris({ shipIndex: -1, pos: spec.pos, quat: spec.quat || [0, 0, 0, 1], vel: spec.vel, ang: spec.ang || [0, 0, 0], boxes: spec.boxes, rel: spec.rel || 1.8, mat: 'stone', kind: 'stone', delay: 0 });
+        if (id) loose.add(id);
+        return id || null;
+      },
+      read(id, out) { return physics && id ? physics.read(id, out) : null; },
+      remove(id) { if (!id) return; loose.delete(id); if (physics) physics.remove(id); },
+      get count() { return loose.size; },
+      get ready() { return !!physics; },
+    },
     // dt = seconds of this frame. Steps the physics (the ships' hulls put where the models are), moves every piece's mesh, smokes, fades and removes what is done.
     update(dt) {
-      if (!pieces.length && !puffs.length) { if (awake && (idleFor += dt) > 5) sleep(); return; }
+      if (!pieces.length && !puffs.length && !loose.size) { if (awake && (idleFor += dt) > 5) sleep(); return; }
       idleFor = 0;
-      if (physics && pieces.length) {
+      if (physics && (pieces.length || loose.size)) {
         if (!awake) wake();
         physics.setSea(Number.isFinite(sea) ? -sea : NaN);
         syncShips();
@@ -408,6 +425,7 @@ export function createDestruction({ parent, state, models, terrain, world, inRoc
       for (let i = pieces.length - 1; i >= 0; i--) removePiece(i);
       puffs.length = 0;
       stepPuffs(0);
+      loose.clear();
       if (physics) { physics.clear(); }
     },
     dispose() { D.clear(); if (terrain) terrain.onChunk = null; if (physics) physics.dispose(); parent.remove(group); },

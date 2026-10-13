@@ -35,6 +35,8 @@ import { RB } from './ringBend.js'; // LOOP R1: the ring map's bend (a camera-re
 import { createRingCastle } from './ringCastle.js'; // LOOP R2: the ring castle (strip gatehouses and walls, the island, the ward, the keep and crown)
 import { GAR_LIVE } from './garrisonKit.js';
 import { createGarrison3d } from './garrison3d.js'; // CASTLE.md D2: the garrison in 3D (soldiers, arrows, the ballista, the boom chain, grapples, white flags)
+import { createSetPieces } from './setpiece3d.js'; // CASTLE.md D3: the castle's set pieces in 3D (the gatehouse collapse, the crown fall, the flaming stones)
+import { SET_LIVE } from './setpieceKit.js';
 import { config } from '../../config.js';
 import { createPorthole } from './porthole.js'; // WP11: the Versus far-ship porthole
 import { createPortholes3D } from './portholes.js'; // the round portholes: a friendly plane off screen, the lookout's spyglass
@@ -111,7 +113,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); V.lost = true; });
   // WP11: ?cine=0 turns the cinematic camera moves off (for people who get motion-sick); the pause menu's Cinema button changes S.cine live (host/main.js)
   { const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('cine') : null; if (q === '0' || q === 'off') S.cine = false; }
-  const cinema = createCinema({ state, settings: S });
+  let setpieces = null; // CASTLE.md D3 (made below, next to the garrison; the cinema asks it where the falling crown is)
+  const cinema = createCinema({ state, settings: S, crown: () => (setpieces && setpieces.cue) || null });
   V.cinema = cinema;
   let porthole = null; // (made on the first Versus split, Medium tier and up)
   let portholes3d = null; // (the round portholes: made when the first one is planned)
@@ -212,6 +215,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   let garrison = null; // CASTLE.md D2: the castle's men, arrows, the ballista, the boom chain (garrison3d.js; if it cannot be made the ring just has no garrison in 3D)
   try { garrison = createGarrison3d({ parent: worldRoot, state, P: () => (vfx && vfx.P) || null }); } catch (e) { console.warn('view3d garrison off', e); }
   V.garrison = garrison;
+  try { setpieces = createSetPieces({ parent: worldRoot, state, P: () => (vfx && vfx.P) || null, destruction }); } catch (e) { console.warn('view3d set pieces off', e); }
+  V.setpieces = setpieces;
   // WP6: the damage state of every part (soot, dents, poses, smoke, scorch memory, breaches, the flat bag), on top of the poses shipMesh sets each frame
   const partDamage = createPartDamage({ state, models, vfx });
   V.destruction = destruction; V.damage = damage; V.partDamage = partDamage;
@@ -322,6 +327,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       if (n >= 400) break;
       if (!Number.isFinite(b.x)) continue;
       if ((b.arrow || b.bolt) && GAR_LIVE.on) continue; // (D2: the garrison's arrows and bolts are drawn by garrison3d.js)
+      if (b.stone && SET_LIVE.stone) continue; // (D3: a catapult stone is drawn by setpiece3d.js)
       setInst(shellMesh, n, b.x, -b.y, 0, b.flak ? 14 : 11, b.flak ? '#e8884a' : '#ff2e55');
       setInst(shellInk, n, b.x, -b.y, 0, (b.flak ? 14 : 11) * (1 + 0.28 * INKK()));
       n++;
@@ -436,6 +442,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     if (on !== was || (map && map !== ringMap)) ringMap = map;
     if (castle) { try { castle.update({ on, map, env, camTarget, night: world.night, t, dt }); } catch (e) { logOnce('castle', e); } }
     if (garrison) { try { garrison.update({ on, t, dt, night: world.night, tier, castle }); } catch (e) { logOnce('garrison', e); } }
+    if (setpieces) { try { setpieces.update({ on, t, dt, night: world.night, tier, castle }); } catch (e) { logOnce('setpieces', e); } }
     ringMs = performance.now() - r0;
   }
 
@@ -578,7 +585,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.resetOrbit = () => { lastPivot.set(0, 0, 0); }; // WP13: the next orbit frame starts from the starting view again (the build page's double-click)
-  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison, setpieces]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));

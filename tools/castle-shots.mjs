@@ -1,3 +1,4 @@
+// (D3: --setpieces [--cine 1] [--scenes bridge,collapse,stone,chain,crown] runs the castle's big moments on a fake clock, see setpieceShots below)
 // CASTLE SHOTS (LOOP R2 / CASTLE.md; view3d/ringCastle.js): the ring castles in a real headless Chrome, for the eyes and for the budget. Starts its OWN server on a free port and stops it by its PID (never kills node globally).
 //   node tools/castle-shots.mjs --shots DIR [--prefix castle_] [--variants tower,fortress,citadel] [--angles 0,90,180,270] [--extra] [--port N] [--verbose]
 // For every variant: the ship placed at each ring angle (clear air picked near it) with the plain gameplay zoom -> <prefix><variant>_<angle>.png, the approach -> <prefix><variant>_approach.png, and with --extra a wide
@@ -235,14 +236,122 @@ async function garrisonShots(P, v) {
   await P.ev(`window.view3dDebug().view.setTod(''); 1`); await g('g.unlook(); return 1');
 }
 
+// ---- D3: the set pieces (--setpieces [--prefix setpiece_] [--cine 1]): a gatehouse collapsing over time, the crown falling (with the cinematic camera when --cine 1), the drawbridge dropping, stones in flight and landing,
+//   the boom chain snapping. The view runs on a FAKE CLOCK (window.__s: every frame advances the view's own time by a fixed step, so the 8 fps keys land where the pictures are taken) and the sim is frozen: the set
+//   pieces are driven by hand the way the sim would (face.down, ring.crown.t, a stone in state.bullets, chain.broken). Prints the peak draw calls and the chunk and body counts.
+const SP_PRE = `
+window.__s = {
+  clock: { on: false, now: 0 }, wrapped: false, bul: [], peak: 0,
+  V() { return window.view3dDebug().view; },
+  start() { const V = this.V(); if (!this.wrapped) { const orig = V.renderFrame; V.renderFrame = (now, view, opts = {}) => (this.clock.on ? orig(this.clock.now, view, { ...opts, t: this.clock.now / 1000 }) : orig(now, view, opts)); this.wrapped = true; } this.clock.now = performance.now(); this.clock.on = true; },
+  stop() { this.clock.on = false; },
+  async adv(sec, each) { const n = Math.max(1, Math.round(sec / 0.03)); for (let i = 0; i < n; i++) { this.clock.now += sec / n * 1000; this.move(sec / n); if (each) each(sec / n); await window.__c.frame(); const c = this.V().stats().calls; if (c > this.peak) this.peak = c; } },
+  move(dt) { const st = window.game.state; for (let i = this.bul.length - 1; i >= 0; i--) { const b = this.bul[i]; b.x += b.vx * dt; b.y += b.vy * dt; b.vy += b.ay * dt; b.life -= dt; if (b.life <= 0) { const k = st.bullets.indexOf(b); if (k >= 0) st.bullets.splice(k, 1); this.bul.splice(i, 1); } } },
+  stone(x0, y0, x1, y1, T, burn) { const st = window.game.state, K = 520; const b = { x: x0, y: y0, vx: (x1 - x0) / T, vy: (y1 - y0) / T - 0.5 * K * T, ay: K, life: T, mortar: true, stone: true, kind: 'stone', miss: true, dmg: 0, ...(burn ? { burn: true, fire: 0.5 } : {}) }; st.bullets.push(b); this.bul.push(b); return b; },
+};`;
+async function setpieceShots(P, v) {
+  const pre = has('prefix') ? prefix : 'setpiece_';
+  const S = (code) => P.ev(`(async()=>{ const s=window.__s, g=window.__g; ${code} })()`);
+  const SJ = (code) => P.json(`(async()=>{ const s=window.__s, g=window.__g; const r = await (async()=>{ ${code} })(); return JSON.stringify(r) })()`);
+  const shot = async (name) => shotTo(P, `${pre}${v}_${name}.png`);
+  await P.ev(GAR_PRE); await P.ev(SP_PRE);
+  await P.ev(`(()=>{ window.game.state.briefing = null; const b = document.getElementById('castoff'); if (b && b.parentElement) b.parentElement.style.display = 'none'; return 1 })()`);
+  const info = await SJ('const r=g.ring(); return { variant: r.variant, faces: r.faces.length, specials: r.faces.map((f)=>f.special.kind), chains: (r.gar&&r.gar.chains||[]).map((c)=>c.x), R: r.R }');
+  console.log('    ' + JSON.stringify(info));
+  const face = Math.min(1, (info && info.faces || 1) - 1);
+  await S('s.start(); g.cam(1); await window.__c.settle(20); return 1');
+  const W = (n) => !has('scenes') || (arg('scenes', '') || '').split(',').includes(n); // (--scenes bridge,collapse,stone,chain,crown picks some of them)
+  // 1. the drawbridge: the shutter opens on the first window, the leaf is let go (held steps at 8 fps)
+  if (W('bridge')) {
+  await S(`const r=g.ring(), f=r.faces[${face}]; f.windows=0; f.open=0; g.atX(f.x - 3300, 600); g.look(f.x, f.y - 330, 1.05); await s.adv(0.4); return 1`);
+  await shot('bridge_0');
+  await S(`const f=g.ring().faces[${face}]; f.windows=1; f.open=6; await s.adv(0.02); return 1`);
+  const steps = [1, 2, 3, 4, 5, 6, 8];
+  for (const [i, k] of steps.entries()) {
+    await S(`await s.adv(${i ? (k - steps[i - 1]) * 0.125 : 0.11}); return 1`); await shot('bridge_' + (i + 1));
+    if (verbose) console.log('    bridge key ' + k + ': ' + JSON.stringify(await SJ('const P=s.V().vfx.P; return { pool: P.stats().pool, drawn: P.stats().drawn, spawned: P.stats().spawned, idx: s.V().castle.stats.thuds }')));
+  }
+  const bs = await SJ('const c=s.V().castle; return { thuds: c.stats.thuds, dyn: c.stats.dynRebuilds, spawned: s.V().vfx.P.stats().spawned }');
+  check(bs && bs.thuds >= 1, `${v}: the drawbridge landed with a thud (${JSON.stringify(bs)})`, `${v}: no thud ${JSON.stringify(bs)}`);
+  }
+  // 2. a gatehouse collapses
+  if (W('collapse')) {
+  const cf = Math.min(2, (info && info.faces || 1) - 1);
+  await S(`const r=g.ring(), f=r.faces[${cf}]; g.atX(f.x - 3300, 600); g.look(f.x, f.y - 700, 0.78); f.open=0; await s.adv(0.5); return 1`);
+  await shot('collapse_before');
+  await S(`const r=g.ring(), f=r.faces[${cf}]; f.down=true; f.special.dead=true; f.open=0; f.hp=0; await s.adv(0.02); return 1`);
+  const cks = [0.0, 0.14, 0.14, 0.14, 0.2, 0.3, 0.5, 1.2];
+  for (const [i, dtc] of cks.entries()) {
+    await S(`await s.adv(${dtc}); return 1`);
+    await shot('collapse_' + (i + 1));
+    if (i === 3) console.log('    collapse chunks at 4: ' + JSON.stringify(await SJ('const sp=s.V().setpieces; return { chunks: sp.chunkCount, stats: sp.stats, collapsing: sp.collapsing, peak: s.peak }')));
+  }
+  const cs = await SJ('const sp=s.V().setpieces; const d=s.V().destruction; return { stats: sp.stats, bodies: d.bodies.count, physics: d.ready, peak: s.peak, calls: s.V().stats().calls }');
+  console.log('    after the collapse ' + JSON.stringify(cs));
+  check(cs && cs.stats.collapses === 1 && cs.stats.chunks === ({ low: 10, medium: 26, high: 44 })[arg('tier', 'medium')], `${v}: the gatehouse collapsed into ${cs && cs.stats.chunks} chunks (${cs && cs.stats.bodies} bodies, ${cs && cs.stats.fakes} by hand)`, `${v}: no collapse ${JSON.stringify(cs)}`);
+  await S('await s.adv(7); return 1'); // (the chunks fade away)
+  }
+  // 3. flaming stones: a plain one and a burning one, in flight and landing
+  if (W('stone')) {
+  const sf = Math.min(1, (info && info.faces || 1) - 1);
+  for (const burn of [false, true]) {
+    const tag = burn ? 'fire' : 'rock';
+    const trk = 'const b=s.bul[0]; if (b) { g.look(b.x + 150, b.y + 60, 1.25); } await s.adv(0.04);'; // (the camera rides with the stone: close enough to see what it is)
+    await S(`const f=g.ring().faces[${sf}]; g.atX(f.x - 3600, 900); g.look(f.x - 1500, f.y - 300, 1.25); s.stone(f.x - 2300, f.y - 120, f.x - 300, f.y - 20, 2.2, ${burn}); await s.adv(0.5); ${trk} return 1`);
+    await shot('stone_' + tag + '_1');
+    await S(`await s.adv(0.46); ${trk} return 1`); await shot('stone_' + tag + '_2');
+    await S(`await s.adv(0.46); ${trk} return 1`); await shot('stone_' + tag + '_3');
+    await S(`await s.adv(0.62); const f=g.ring().faces[${sf}]; g.look(f.x - 300, f.y - 120, 1.1); await s.adv(0.1); return 1`); await shot('stone_' + tag + '_land');
+    await S('await s.adv(0.3); return 1'); await shot('stone_' + tag + '_after');
+    await S('await s.adv(1.2); return 1');
+  }
+  const ss = await SJ('return s.V().setpieces.stats');
+  check(ss && ss.landed >= 2, `${v}: both stones landed with a burst (${ss && ss.landed})`, `${v}: stones did not land ${JSON.stringify(ss)}`);
+  }
+  // 4. the boom chain snaps
+  if (W('chain') && info && info.chains && info.chains.length) {
+    await S(`const c=g.ring().gar.chains[0]; g.atX(c.x - 2500, 1400); g.look(c.x, c.yLow - 1000, 0.95); await s.adv(0.5); return 1`);
+    await shot('chain_0');
+    await S(`const c=g.ring().gar.chains[0]; c.broken=true; await s.adv(0.02); return 1`);
+    for (const [i, dtc] of [0, 0.125, 0.125, 0.125, 0.25, 0.5].entries()) { await S(`await s.adv(${dtc}); return 1`); await shot('chain_' + (i + 1)); }
+    console.log('    chain: ' + JSON.stringify(await SJ('return s.V().garrison.stats')));
+  }
+  // 5. the crown falls (the sim's slow-motion: ring.crown.t advances 0.35 of the real time)
+  if (W('crown')) {
+  await S(`const r=g.ring(); g.unlook(); g.cam(1); g.at(${face}, 0, 520); await s.adv(0.6); return 1`);
+  await shot('crown_0');
+  await S('const r=g.ring(); r.crown = { how: "keep", t: 0, done: false }; window.game.state.slow = 0.35; return 1');
+  const marks = [0.3, 0.7, 1.1, 1.5, 1.9, 2.3, 2.6, 3.4];
+  let T = 0;
+  for (const [i, m] of marks.entries()) {
+    const real = (m - T) / 0.35;
+    await S(`const r=g.ring(); await s.adv(${real}, (d) => { r.crown.t += d * 0.35; }); return 1`);
+    T = m;
+    await shot('crown_' + (i + 1));
+    if (m >= 2.3 && m < 2.7) console.log('    crown at ' + m + ': ' + JSON.stringify(await SJ('const sp=s.V().setpieces, c=s.V().cinema; return { cue: sp.cue, stats: sp.stats, cine: c.pose.why, peak: s.peak }')));
+  }
+  await S('const r=g.ring(); r.crown.t = 3.3; window.game.state.slow = 1; await s.adv(3); return 1');
+  await shot('crown_after');
+  const cr = await SJ('return { stats: s.V().setpieces.stats, fired: s.V().cinema.stats.fired, peak: s.peak }');
+  console.log('    ' + JSON.stringify(cr));
+  check(cr && cr.stats.crowns === 1 && cr.stats.landed >= 1, `${v}: the crown broke off and landed`, `${v}: the crown did not fall ${JSON.stringify(cr)}`);
+  console.log(`    peak draw calls during the set pieces: ${cr && cr.peak}`);
+  }
+  const pk = await SJ('return { peak: s.peak, d: s.V().destruction.stats }');
+  check(pk && pk.peak <= 150, `${v}: the whole scene peaked at ${pk && pk.peak} draw calls through the set pieces (<= 150)`, `${v}: the scene peaked at ${pk && pk.peak} draw calls (> 150)`);
+  console.log(`    wreckage world: step ${pk && pk.d.stepMs.toFixed(2)} ms (worst ${pk && pk.d.maxStepMs.toFixed(2)} ms), ${pk && pk.d.bodies} bodies left`);
+  await S('s.stop(); return 1');
+}
+
 const shotTo = async (P, file) => { if (!shotDir) return; fs.mkdirSync(shotDir, { recursive: true }); fs.writeFileSync(path.join(shotDir, file), await P.png()); };
 
 try {
   for (const v of VARIANTS) {
     console.log(`${v}:`);
-    const P = await openPage(`${BASE}/host.html?view=3d&kind=ring&variant=${v}&tier=${arg("tier", "medium")}&cine=0`);
+    const P = await openPage(`${BASE}/host.html?view=3d&kind=ring&variant=${v}&tier=${arg("tier", "medium")}&cine=${arg("cine", "0")}`);
     await P.ev(PRE);
     await P.ev(BOTS8);
+    if (has('setpieces')) { await setpieceShots(P, v); for (const e of P.errors.slice(0, 8)) console.log('    [' + v + '] ' + e); check(P.errors.length === 0, `${v}: 0 console errors`, `${v}: ${P.errors.length} console error(s)`); await P.close(); continue; }
     if (garrisonMode) { await garrisonShots(P, v); for (const e of P.errors.slice(0, 8)) console.log('    [' + v + '] ' + e); check(P.errors.length === 0, `${v}: 0 console errors`, `${v}: ${P.errors.length} console error(s)`); await P.close(); continue; }
     const first = ANGLES.length ? ANGLES[0] : 0;
     let worstCrown = -9;

@@ -190,6 +190,9 @@ function scenario() { // a ship, rock and a handful of pieces, scripted
   for (let i = 0; i < DB.MAX + 6; i++) if (P.addDebris({ shipIndex: -1, pos: [i * 200, 0, 0], quat: [0, 0, 0, 1], vel: [0, 0], ang: [0, 0, 0], boxes: [box(40, 20)], rel: 1 })) made++;
   for (let i = 0; i < KP.CHUNKS.CAP + 6; i++) if (P.addDebris({ kind: 'chunk', shipIndex: -1, pos: [i * 90, 500, 0], quat: [0, 0, 0, 1], vel: [0, 0], ang: [0, 0, 0], boxes: [box(10, 6, 6)], rel: 1 })) chunks++;
   report(made === DB.MAX && chunks === KP.CHUNKS.CAP, `bodies are capped: ${made} pieces (BREAKOFF.DEBRIS.MAX ${DB.MAX}) and ${chunks} chunks (PHYS.CHUNKS.CAP ${KP.CHUNKS.CAP})`);
+  let stones = 0; // (D3: the castle's stone chunks are a kind of their own: they fill their own cap and leave the other two alone)
+  for (let i = 0; i < KP.STONES.CAP + 8; i++) if (P.addDebris({ kind: 'stone', shipIndex: -1, pos: [i * 120, 900, 0], quat: [0, 0, 0, 1], vel: [0, 0], ang: [0, 0, 0], boxes: [box(30, 24, 20)], rel: 1.8 })) stones++;
+  report(stones === KP.STONES.CAP && P.addDebris({ kind: 'chunk', shipIndex: -1, pos: [0, 2000, 0], quat: [0, 0, 0, 1], vel: [0, 0], ang: [0, 0, 0], boxes: [box(10, 6, 6)], rel: 1 }) === null, `stone chunks are capped at ${stones} (PHYS.STONES.CAP ${KP.STONES.CAP}), apart from the pieces and the blast chunks (both still full)`);
   const t0 = process.hrtime.bigint(); // (performance.now is the simulated clock in this tool)
   for (let s = 0; s < 120; s++) P.step(1 / 60);
   const ms = Number(process.hrtime.bigint() - t0) / 1e6 / 120;
