@@ -26,7 +26,7 @@ import { drawBoilerSteam, drawFallMarks, drawHoleGlow } from './goingDownArt.js'
 import { windFactor } from './sails.js';
 import { gasKey, hotLift } from './gases.js';
 import { drawHatch } from './hatchArt.js';
-import { drawScrapBundle, drawScrapRing, drawScrapBin } from './scrapArt.js';
+import { drawScrapBundle, drawScrapRing, drawScrapBin, drawRivetPlate } from './scrapArt.js';
 import { scrapOn, holdSpot, holdCount } from './scrap.js';
 import { artOf, steamPuff, drawEngineBody, drawEngineProp } from './engineArt.js';
 
@@ -1583,6 +1583,16 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     }
   };
 
+  // The plates of the scrap patch (LOOP.md G2, structure.js patchWork): each plate a segment of the frame carries is a riveted iron plate bolted on the deck's edge, a little out of line.
+  const livePlates = () => {
+    for (const g of state.frames || []) {
+      if (!g.plates || g.nest) continue;
+      const q = P[g.d];
+      if (!q) continue;
+      for (let k = 0; k < g.plates; k++) drawRivetPlate(ctx, g.x + (k - (g.plates - 1) / 2) * 58, q.y + 9 + (k % 2) * 5, 54, ((k % 3) - 1) * 0.05);
+    }
+  };
+
   // The hold bin (scrap.js holdSpot): a slatted crate on the deck of the Hold that shows how many bundles are stowed.
   const liveHold = (time) => {
     const sp = scrapOn() ? holdSpot(L) : null, q = sp && P[sp.d];
@@ -1744,6 +1754,7 @@ export function createShipArt({ ctx: screenCtx, state, sprites, ship = mainShip(
     guard('cannons', liveCannons, time);
     guard('loads', liveLoads);
     guard('hold', liveHold, time);
+    guard('plates', livePlates);
     if ((L.hatches || []).length) guard('hatches', liveHatches, time);
     guard('steam', liveVents, time);
     guard('lift', liveConnectors);

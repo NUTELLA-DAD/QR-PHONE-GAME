@@ -52,7 +52,7 @@ import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
 import { windSpeed } from './sails.js';
 import { drawScrapBundle, drawScrapChute, drawScrapRing, drawScrapHulk } from './scrapArt.js';
-import { scrapOn, holdCount, chestCount } from './scrap.js';
+import { scrapOn, holdCount, chestCount, priceWords } from './scrap.js';
 import { drawScreen as drawGoingDown, drawLimpCard, drawSpares } from './goingDownArt.js';
 
 // ONE renderer draws the whole sky (B.3): the background and the terrain once, then EVERY ship (renderFrame's loop over the ships: each under her own pose, with her own art bake,
@@ -1926,7 +1926,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     if (v.kind === 'dock') {
       const line = `Salvage: ${run.salvage}${scrapOn() ? `   -   in the hold: ${holdCount(world.ships[0].ctx)}/${config.SCRAP.HOLD_CAP}` : ''}   -   vote on your phone: buy something or CAST OFF   -   ${Math.max(0, Math.ceil(v.t))}s`;
       ctx.fillText(line, 800, top0 + 42, 1000);
-      if (scrapOn()) { const w = Math.min(1000, ctx.measureText(line).width); drawScrapBundle(ctx, 800 - w / 2 - 28, top0 + 34, 0.8); } // (SCRAP: a bundle beside the hold's count, which the Yard will spend from G2 on)
+      if (scrapOn()) { const w = Math.min(1000, ctx.measureText(line).width); drawScrapBundle(ctx, 800 - w / 2 - 28, top0 + 34, 0.8); } // (SCRAP: a bundle beside the hold's count, which the Yard spends: G2)
     }
     else ctx.fillText(`Vote on your phone - ${Math.max(0, Math.ceil(v.t))}s`, 800, 125);
     // Spare gasbags (lives) in the corner.
@@ -1966,7 +1966,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       if (o.kind !== 'cast') {
         ctx.font = '25px ' + config.FONTS.DISPLAY;
         ctx.fillStyle = off && !o.sold ? '#b3261e' : config.INK;
-        ctx.fillText(o.sold ? 'SOLD' : `Salvage ${o.cost}`, x + cw / 2, y + 282);
+        ctx.fillText(o.sold ? 'SOLD' : o.scrap ? priceWords(o) : `Salvage ${o.cost}`, x + cw / 2, y + 282, cw - 20); // (G2: "Salvage 55 + 3 scrap")
         if (o.max > 1 && !o.sold) {
           ctx.font = '700 16px ' + config.FONTS.TEXT;
           ctx.fillStyle = config.INK;

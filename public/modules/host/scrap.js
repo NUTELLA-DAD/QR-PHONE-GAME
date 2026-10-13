@@ -65,6 +65,10 @@ export const heavyHold = (state) => holdCount(state) >= S().BOTS.HOLD_SOFT; // (
 export const holdSpend = (state, n) => { if (!(n > 0) || holdCount(state) < n) return false; state.scrapHold.count -= n; return true; };
 export const holdAdd = (state, n) => { if (!scrapOn() || !(n > 0)) return 0; const rec = (state.scrapHold ||= { count: 0 }), fit = Math.min(n, S().HOLD_CAP - rec.count); if (fit > 0) rec.count += fit; return Math.max(0, fit); };
 
+// G2: a dock card's price in words: "Salvage 55 + 3 scrap" when the hold covers its bundles, "Salvage 100 + 1 scrap" when it covers some, plain "Salvage 130" when it covers none (and says what scrap would take off).
+// The card is o { cost (salvage now), scrap (bundles it asks), scrapPay (bundles the hold covers now), cashFull (salvage with every bundle covered) } as simulation.js priceInScrap left it.
+export const priceWords = (o) => (o.cost === 0 && !o.scrap ? 'FREE' : !o.scrap ? `Salvage ${o.cost}` : o.scrapPay > 0 ? `Salvage ${o.cost} + ${o.scrapPay} scrap` : `Salvage ${o.cost}  (or ${o.cashFull} + ${o.scrap} scrap)`);
+
 // ---- the sky's flotsam ----
 export function createFlotsam({ world, puff, phoneFx = () => {} }) {
   const hulks = (world.hulks = []);
@@ -295,7 +299,7 @@ export function helmPlan(world) {
 export function scrapNote(world, what, p, data = {}) {
   const st = world.scrapStats;
   if (!st) return;
-  const run = world.run, rs = run ? (run.scrap ||= { landed: 0, hooked: 0, stowed: 0, taken: 0, lost: 0, hulks: 0, dumped: 0 }) : null;
+  const run = world.run, rs = run ? (run.scrap ||= { landed: 0, hooked: 0, stowed: 0, taken: 0, lost: 0, hulks: 0, dumped: 0, patched: 0, spent: 0, built: 0 }) : null;
   const bump = (k, n = 1) => { st[k] = (st[k] || 0) + n; if (rs) rs[k] = (rs[k] || 0) + n; };
   const who = p && !p.mate && !p.enemy && p.name ? [p] : [];
   const moment = (kind, o) => { if (world.moment) world.moment(kind, o); };
@@ -303,6 +307,8 @@ export function scrapNote(world, what, p, data = {}) {
   else if (what === 'hooked') { bump('landed'); bump('hooked'); moment('scrap-hook', { who }); }
   else if (what === 'stowed') { const first = !run || !run.scrapStowed; bump('stowed'); if (run) run.scrapStowed = (run.scrapStowed || 0) + 1; if (first) moment('scrap-first', { who }); }
   else if (what === 'taken') bump('taken');
+  else if (what === 'patched') { bump('patched'); if (data.saved) moment('scrap-patch', { who, data: { names: [data.name] } }); } // (G2: the scrap patch; a segment that was about to give way and held is the moment)
+  else if (what === 'spent') { bump('spent', data.n || 0); if (data.part) { bump('built'); moment('scrap-built', { who: data.who || [], data: { names: [data.name] } }); } } // (G2: bundles paid at the dock; a part or fitting built with some of them is the moment)
   else if (what === 'hulk') {
     bump('stripped');
     const h = data.hulk;

@@ -128,7 +128,7 @@ export function createStructure({ state, ship, hooks }) {
   const layout = ship.layout;
   let S = segmentsOf(layout), version = layout.version;
   let clockT = 0, lastFailT = -1e9, pending = null, cursor = 0, warnCd = 0, creakCd = 0, warned = new Set();
-  const stats = (state.structStats = { meterSum: 0, meterN: 0, meterMin: 100, failures: 0, breakoffs: 0, splits: 0, folds: 0, saves: 0, shored: 0, holds: 0, crashes: 0, falls: 0, saved: 0 });
+  const stats = (state.structStats = { meterSum: 0, meterN: 0, meterMin: 100, failures: 0, breakoffs: 0, splits: 0, folds: 0, saves: 0, shored: 0, holds: 0, crashes: 0, falls: 0, saved: 0, patched: 0, patchSaves: 0 });
   state.frames = S.segs;
   state.structDeficit = 0;
   state.gdRelief = 0;
@@ -144,7 +144,7 @@ export function createStructure({ state, ship, hooks }) {
     for (const n of N.segs) {
       const same = old.find((o) => o.sig === n.sig && Math.abs(o.y - n.y) < 1);
       const near = same ? [same] : old.filter((o) => Math.abs(o.y - n.y) < 1 && Math.min(o.x1, n.x1) - Math.max(o.x0, n.x0) >= 0.3 * Math.min(o.w, n.w));
-      if (near.length) { const w = near.reduce((a, b) => (b.hp < a.hp ? b : a)); n.hp = w.hp; n.hold = w.hold || null; n.st = n.state = w.st; }
+      if (near.length) { const w = near.reduce((a, b) => (b.hp < a.hp ? b : a)); n.hp = w.hp; n.hold = w.hold || null; n.st = n.state = w.st; const pl = near.reduce((m, o) => Math.max(m, o.plates || 0), 0); if (pl) n.plates = pl; } // (the riveted plates of a scrap patch stay on the hull)
     }
     S = N;
     state.frames = S.segs;
@@ -198,6 +198,7 @@ export function createStructure({ state, ship, hooks }) {
     stats.holds++;
   };
   const hurtSeg = (g, dmg, big) => {
+    if (g.plates) dmg *= 1 - Math.min(config.SCRAP.PATCH.PLATE_MAX, g.plates) * config.SCRAP.PATCH.PLATE_SHIELD; // (SCRAP PATCH: a riveted plate takes a share of every blow)
     if (g.hold) { if (big) g.hold.max = 0; return; } // (held at 0: only a big blow does anything, it ends the grace)
     if (g.hp <= 0) { enterHold(g, big); return; }
     if (!(dmg > 0)) return;
@@ -250,6 +251,24 @@ export function createStructure({ state, ship, hooks }) {
     stats.shored += add;
     if (g.hold && g.hp >= C().SAVED_HP) save(g);
     return true;
+  };
+  // SCRAP PATCH (config.SCRAP.PATCH, shipSim.js): a bundle of scrap riveted over a failing segment by a crewman who stands at it holding Action. patchWork(g, dt) fills the job's bar; when it is full the plate is on
+  // (+PATCH.HP soundness, g.plates + 1, drawn as a riveted plate) and it answers { saved } (a segment that was about to give way holds); the caller takes the bundle out of his hands. false until then.
+  const patchNear = (d, x) => { const g = frameNear(d, x); return g && g.hp < config.SCRAP.PATCH.AT ? g : null; };
+  const patchWork = (g, dt) => {
+    const P = config.SCRAP.PATCH;
+    g.patching = true;
+    g.worked = true;
+    g.patchProg = (g.patchProg || 0) + dt / P.TIME;
+    if (g.patchProg < 1) return false;
+    g.patchProg = 0;
+    const was = !!g.hold;
+    g.hp = Math.min(1, g.hp + P.HP);
+    g.plates = Math.min(P.PLATE_MAX, (g.plates || 0) + 1);
+    stats.patched++;
+    stats.shored += P.HP;
+    if (g.hold && g.hp >= C().SAVED_HP) { save(g); stats.patchSaves++; }
+    return { saved: was && !g.hold, seg: g };
   };
   const canvasRestore = (amt) => { for (const b of state.bags || []) if ((b.hp ?? 1) < 1) b.hp = Math.min(1, (b.hp ?? 1) + amt); };
   const patchBag = (i) => { const b = state.bags[i]; if (b && (b.hp ?? 1) < 1) b.hp = Math.min(1, (b.hp ?? 1) + C().PATCH_CANVAS); };
@@ -365,6 +384,7 @@ export function createStructure({ state, ship, hooks }) {
     clockT += dt;
     const due = [];
     for (const g of S.segs) {
+      if (g.patchProg) { if (!g.patching) g.patchProg = Math.max(0, g.patchProg - dt * config.SCRAP.PATCH.DECAY); g.patching = false; } // (a patch nobody is working loses its progress)
       if (g.hp <= 0 && !g.hold) enterHold(g, false);
       if (g.hold) {
         if (g.worked) { g.worked = false; continue; }
@@ -404,7 +424,7 @@ export function createStructure({ state, ship, hooks }) {
   const flush = () => { if (!pending || !on()) { pending = null; return null; } const p = pending; pending = null; return hooks.doSplit(p.spec); };
 
   return {
-    on, sync, hit, shim, drain, repair, restore, restoreAll, setAll, reset, step, flush, frameNear, jobsOf, meter, meanHp, canvasLoss, patchBag, nameOf, segAt, keelAt, segOnDeck, resolve, fold, segs, stats, canSplit,
+    on, sync, hit, shim, drain, repair, restore, restoreAll, setAll, reset, step, flush, frameNear, jobsOf, meter, meanHp, canvasLoss, patchBag, nameOf, segAt, keelAt, segOnDeck, resolve, fold, segs, stats, canSplit, patchNear, patchWork,
     get pending() { return pending; },
     get lastFail() { return lastFailT; },
     setLastFail: (t) => { lastFailT = t; },

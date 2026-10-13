@@ -22,7 +22,7 @@ import { createAirborne } from './airborne.js';
 import { createHookshot } from './hookshot.js';
 import { createCannon } from './cannon.js';
 import { createCargo, cargoItem, isStocked } from './cargo.js';
-import { scrapOn } from './scrap.js';
+import { scrapOn, scrapNote } from './scrap.js';
 import { createHatches } from './hatch.js';
 import { pop } from './popups.js';
 import { assistAim } from './aim.js';
@@ -203,6 +203,11 @@ export function createShipSim(world, ship, W) {
     if (dropC && player.d === BAY_D && Math.abs(player.x - layout.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return dropC;
     if ((!player.bot || (player.dare && player.dare.kind === 'drop')) && player.d === BAY_D && tool !== 'ammo' && Math.abs(player.x - layout.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return { type: 'jump', label: 'Jump!' };
     // B.6: at the rail with a sandbag or crate in your hands, Action dumps it overboard for a quick lift; a load lying on the deck by your feet wants shovelling off.
+    // SCRAP PATCH (config.SCRAP.PATCH, LOOP.md G2): a bundle in your hands and a failing segment of the frame under your feet: hold Action to rivet it on. It comes before the hold bin and the rail (a failing segment is the better use of the bundle); a bot only on its patch job.
+    const patchSeg = scrapOn() && player.carry === 'scrap' && !state.goingDown && structure.on() && (!player.bot || (player.botJob && player.botJob.kind === 'scrappatch')) ? structure.patchNear(player.d, player.x) : null;
+    if (patchSeg) return { type: 'scrappatch', obj: patchSeg, hold: true, label: `PATCH ${structure.nameOf(patchSeg)} (scrap)` };
+    const patchGrab = scrapOn() && player.bot && !player.carry && player.botJob && player.botJob.kind === 'scrappatch' ? cargo.unstowAction(player, here) : null; // (a bot sent to patch a segment takes a bundle out of the hold bin first)
+    if (patchGrab) return patchGrab;
     const dumpC = cargo.stowAction(player, here) || cargo.dumpAction(player) || cargo.hulkAction(player) || cargo.shovelAction(player, here); // (SCRAP: the hold bin with a bundle in your hands, a hulk within reach of empty ones)
     if (dumpC) return dumpC;
     const hatchBot = !player.bot || (player.botJob && player.botJob.kind === 'hatch'); // (a bot works a cargo drop hatch only when its job says so)
@@ -1567,6 +1572,17 @@ export function createShipSim(world, ship, W) {
             if (structure.repair(object, dt)) {
               if (Math.random() < dt * 4) shipPuff(object.x + (Math.random() - 0.5) * object.w * 0.6, object.y - 30, '#d9cbb0', 2);
               stat(player, 'frames', dt * config.STRUCTURE.REPAIR_RATE);
+            }
+          } else if (act.type === 'scrappatch') { // SCRAP PATCH: a bundle riveted over a failing segment (structure.js patchWork)
+            const r = player.carry === 'scrap' ? structure.patchWork(object, dt) : false;
+            if (Math.random() < dt * 5) shipPuff(object.x + (Math.random() - 0.5) * object.w * 0.6, object.y - 30, '#ffd23f', 2);
+            if (r) {
+              player.carry = null;
+              stat(player, 'patched');
+              scrapNote(world, 'patched', player, { ship, name: structure.nameOf(r.seg), saved: r.saved });
+              shipPuff(object.x, object.y - 40, '#e8c25a', 8);
+              shipPop(object.x, object.y - 120, 'PLATED!', '#ffd23f', 0.9);
+              state.sfxQ.push(['clang', true]);
             }
           } else if (act.type === 'rod') env.stormSea.rodHold(object);
           else if (act.type === 'pump') env.stormSea.pumpWork(dt);

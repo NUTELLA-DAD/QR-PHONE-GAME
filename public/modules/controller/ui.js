@@ -126,7 +126,7 @@ export function createControllerUI({ network }) {
     box.style.display = 'flex';
     $('vtitle').textContent = `${v.title} - ${v.t}s`;
     const cards = $('vcards');
-    const sig = v.kind + '|' + v.options.map((o) => o.name + '|' + o.off + '|' + o.sold + '|' + o.desc + '|' + o.cost + '|' + (o.badge || '')).join('/');
+    const sig = v.kind + '|' + v.options.map((o) => o.name + '|' + o.off + '|' + o.sold + '|' + o.desc + '|' + o.cost + '|' + (o.price || '') + '|' + (o.badge || '')).join('/');
     if (cards.dataset.sig !== sig) {
       cards.dataset.sig = sig;
       cards.innerHTML = '';
@@ -135,7 +135,7 @@ export function createControllerUI({ network }) {
       cards.classList.toggle('dock3',v.kind === 'dock' && v.options.length <= 3); // (F6: the 60-second dock: two big cards and Cast off, bigger type and touch targets)
       v.options.forEach((o, i) => {
         const b = document.createElement('button');
-        const price = o.sold ? 'SOLD' : o.cost != null ? 'Salvage ' + o.cost : '';
+        const price = o.sold ? 'SOLD' : o.price || (o.cost != null ? 'Salvage ' + o.cost : ''); // (G2: o.price says "Salvage 55 + 3 scrap")
         b.innerHTML = `${o.badge ? '<i class="bd">' + o.badge + '</i>' : ''}<span class="ic">${o.icon}</span><b>${o.name}</b><small>${o.desc}</small>${price ? '<em>' + price + '</em>' : ''}`;
         b.classList.toggle('slot', v.kind === 'slot');
         b.classList.toggle('part', !!o.badge);

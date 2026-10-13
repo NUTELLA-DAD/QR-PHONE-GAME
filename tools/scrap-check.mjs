@@ -10,6 +10,10 @@
 //   6  the hold: a bundle on the deck is picked up (Action), stowed (Action at the bin), the hold takes HOLD_CAP and refuses more, its weight is in the balance and on the LIFT / WEIGHT gauge, STOW job arrows on the phones;
 //   7  GOING DOWN!: hold Action at the bin dumps the scrap (the gauge drops by its weight, a moment), the bots do it before they cut a section away;
 //   8  limp home keeps the hold;  9  a person carrying scrap can dump it at the rail (it lifts like a sandbag);  10  the helm's plan under flotsam;
+//  12  the SCRAP PATCH (G2): a bundle in the hands + a failing segment = hold Action: +0.3 soundness, a riveted plate that stays, takes a share of every blow, saves a held segment (a Book moment), gold arrows (to the bin, then the
+//      segment, verb PATCH), GRAB at the bin feeds it, a bot does it, off with the switch;
+//  13  the DOCK in scrap (G2): parts and fittings cost half in cash and the rest in bundles from the hold (a full hold, an empty one = the old price, one bundle), MEND HER and Cast off are not priced in it, buying takes the bundles
+//      out and writes a Book moment, the words on the card, off with PRICE.ENABLED / the switch;
 //  11  botsim: NO_SCRAP and SCRAP.ENABLED=false print no scrap line and play the same; 3 minutes with 8 bots on two maps: 0 errors, bundles stowed; the same seed plays the same twice.
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -104,7 +108,7 @@ const momentsOf = (st, kind) => (st.moments || []).filter((m) => m.kind === kind
   let b0 = base();
   kill(st.strafers, 60, (i) => ({ x: at.x + i * 20, y: at.y, vx: 100, vy: 0, hp: 3, max: 3 }));
   const n1 = base() - b0;
-  report(n1 >= 10 && n1 <= 32, `60 dogfighters shot down drop ${n1} bundles (chance ${S.FLOTSAM.FIGHTER} each)`);
+  report(Math.abs(n1 - 60 * S.FLOTSAM.FIGHTER) <= 12, `60 dogfighters shot down drop ${n1} bundles (chance ${S.FLOTSAM.FIGHTER} each)`);
   // a plane that withdrew (hit points left) drops nothing
   clean(st); b0 = base();
   { const p = { x: at.x, y: at.y, vx: 0, vy: 0, hp: 3, max: 3 }; st.strafers.push(p); fl.step(DT); st.strafers.length = 0; fl.step(DT); }
@@ -124,7 +128,7 @@ const momentsOf = (st, kind) => (st.moments || []).filter((m) => m.kind === kind
   { const e = st.enemy; let n = 0;
     for (let i = 0; i < 60; i++) { Object.assign(e, { x: at.x, y: at.y, vx: 0, vy: 0, hp: 5, dead: 0, heading: 0 }); fl.step(DT); e.hp = 0; e.dead = 4; fl.step(DT); n = base() - b0; }
     Object.assign(e, { dead: 6, hp: 5, heading: null });
-    report(n >= 10 && n <= 32, `the big fighter shot down 60 times drops ${n} bundles`); }
+    report(Math.abs(n - 60 * S.FLOTSAM.FIGHTER) <= 12, `the big fighter shot down 60 times drops ${n} bundles`); }
   // a gunship: two loose and a hulk of four
   clean(st); b0 = base();
   { st.gunship = { phase: 'hunt', bp: { cx: 0, hullTop: 0, hullBot: 0, name: 'THE IRON WIDOW' }, dx: toShipX(ours, at.x), dy: at.y - ours.pose.y };
@@ -375,6 +379,119 @@ const momentsOf = (st, kind) => (st.moments || []).filter((m) => m.kind === kind
   st.strafers.push({ x: mid + 300, y: dy - 100, hp: 3, vx: 0, vy: 0 });
   report(SC.helmPlan(st) === null, 'with a fighter close by there is no detour (a calm only)');
   clean(st);
+}
+
+// ---------------------------------------------------------------- 12. the scrap patch (LOOP.md G2): carry a bundle to a failing segment, hold Action
+{
+  const { sim, st, ours } = boot();
+  step(sim, secs(2));
+  clean(st);
+  const PT = S.PATCH, str = ours.sim.structure, sp = SC.holdSpot(ours.layout);
+  const segs = str.segs().filter((g) => !g.nest && g.d !== sp.d);
+  const seg = segs.find((g) => g.critical) || segs[0];
+  const p = person(st, ours, 'patcher', seg.d, seg.x, 'scrap');
+  seg.hp = 1; step(sim, 3);
+  let u = ours.sim.interaction(p, null).use;
+  report(!u || u.type !== 'scrappatch', 'a sound segment is not patched');
+  seg.hp = 0.3; step(sim, 2);
+  u = ours.sim.interaction(p, null).use;
+  report(u && u.type === 'scrappatch' && u.hold && /PATCH/.test(u.label), `a bundle in his hands at a failing segment (${seg.hp.toFixed(2)}): "${u && u.label}" (hold)`);
+  const hp0 = seg.hp;
+  p.fire = true; step(sim, secs(PT.TIME * 0.5)); p.fire = false; step(sim, secs(1));
+  report(p.carry === 'scrap' && !seg.patchProg && !seg.plates, 'let go half way: the bundle is still in his hands and the job starts over');
+  p.fire = true; step(sim, secs(PT.TIME + 0.6)); p.fire = false; step(sim, 3);
+  report(p.carry === null && Math.abs(seg.hp - (hp0 + PT.HP)) < 0.06 && seg.plates === 1 && str.stats.patched === 1 && st.scrapStats.patched === 1 && st.run.scrap.patched === 1, `held Action ${PT.TIME} s: the bundle is used up, soundness ${hp0.toFixed(2)} -> ${seg.hp.toFixed(2)} (+${PT.HP}), one plate on the hull, counted`);
+  report((ours.sim.interaction(person(st, ours, 'hammerless', seg.d, seg.x), null).use || {}).type !== 'scrappatch', 'without a bundle in his hands there is no patch (the hammer SHORE UP stays)');
+  // a plate takes a share of every blow
+  { const at = (plates) => { seg.hp = 1; seg.hold = null; seg.plates = plates; str.hit(seg.x, seg.y - 20, 20, {}); return 1 - seg.hp; };
+    const l0 = at(0), l2 = at(2);
+    report(l0 > 0 && Math.abs(l2 / l0 - (1 - 2 * PT.PLATE_SHIELD)) < 0.02, `two plates take ${(100 * (1 - l2 / l0)).toFixed(0)}% off a blow (${l0.toFixed(3)} -> ${l2.toFixed(3)}; PLATE_SHIELD ${PT.PLATE_SHIELD} each)`); }
+  // a segment about to give way holds: a Book moment
+  seg.plates = 0; seg.hp = 0.02; seg.hold = { t: 1, max: 8 };
+  p.carry = 'scrap'; p.fire = true; step(sim, secs(PT.TIME + 0.6)); p.fire = false; step(sim, 3);
+  report(!seg.hold && seg.hp > S.PATCH.HP * 0.9 && str.stats.patchSaves === 1 && momentsOf(st, 'scrap-patch').length === 1, `a segment held at 0 is saved by one bundle (soundness ${seg.hp.toFixed(2)}), a "scrap-patch" moment is written (${momentsOf(st, 'scrap-patch').length})`);
+  // the plates survive a new layout of the ship (sync) and are drawn
+  seg.plates = 2; ours.layout.version = (ours.layout.version || 0) + 1; step(sim, 3);
+  const again = str.segs().find((g) => g.sig === seg.sig);
+  report(again && again.plates === 2, 'the plates stay on the hull when the frame is re-cut (a part fitted, a section lost)');
+  // the arrows: gold, to the bin first, then to the segment; the verb says PATCH
+  const idle = person(st, ours, 'idle', seg.d, seg.x - 300);
+  seg.plates = 0; seg.hp = 0.2; seg.hold = null; st.scrapHold = { count: 3 };
+  idle.freeT = 5; idle.jobT = 0; ours.sim.jobFinder.update(idle, 0.1);
+  report(idle.job && idle.job.kind === 'scrapgrab' && idle.job.color === '#ffd23f' && /TAKE SCRAP/.test(idle.job.label), `empty hands, scrap in the hold, a failing segment: the gold arrow says "${idle.job ? idle.job.label : '-'}"`);
+  idle.carry = 'scrap'; idle.jobT = 0; idle.job = null; ours.sim.jobFinder.update(idle, 0.1);
+  report(idle.job && idle.job.kind === 'scrappatch' && idle.job.color === '#ffd23f' && (!config.CONTROLS.ROLE_CARDS.ENABLED || idle.job.verb === 'PATCH'), `carrying it: "${idle.job ? idle.job.label : '-'}" (verb ${idle.job && idle.job.verb})`);
+  idle.carry = null; st.scrapHold = { count: 0 }; idle.jobT = 0; idle.job = null; ours.sim.jobFinder.update(idle, 0.1);
+  report(!idle.job || (idle.job.kind !== 'scrapgrab' && idle.job.kind !== 'scrappatch'), 'no scrap anywhere: no gold arrow (the hammer job stays)');
+  // the hold bin feeds it: GRAB at the bin with a failing segment about
+  st.scrapHold = { count: 3 };
+  const g2 = person(st, ours, 'grabber', sp.d, sp.x);
+  step(sim, 3);
+  const gr = ours.sim.interaction(g2, null).grab;
+  g2.grabLock = 0; g2.grabQ = true; step(sim, 3);
+  report(gr && gr.type === 'unstow' && g2.carry === 'scrap' && st.scrapHold.count === 2, `GRAB at the bin takes a bundle for the patch (hold 3 -> ${st.scrapHold.count})`);
+  // with the switch off: no patch
+  config.SCRAP.ENABLED = false;
+  const q = person(st, ours, 'off', seg.d, seg.x, 'scrap');
+  seg.hp = 0.2; step(sim, 3);
+  report(((ours.sim.interaction(q, null).use || {}).type) !== 'scrappatch', 'with the switch off there is no scrap patch');
+  config.SCRAP.ENABLED = true;
+}
+// the bots: a free hand takes a bundle out of the bin, walks to the failing segment and rivets it
+{
+  const { sim, st, ours } = boot({ bots: 3, s: seed + 7 });
+  step(sim, secs(12));
+  clean(st);
+  const str = ours.sim.structure, sp = SC.holdSpot(ours.layout);
+  const seg = str.segs().filter((g) => !g.nest && g.d !== sp.d && g.gondola)[0];
+  st.scrapHold = { count: 3 };
+  seg.hp = 0.2;
+  let patchedAt = null;
+  step(sim, secs(60), (i) => { seg.hp = Math.min(seg.hp, 0.5); if (str.stats.patched > 0 && patchedAt == null) { patchedAt = i / 60; return 'stop'; } });
+  report(patchedAt != null && st.scrapHold.count === 2 && seg.plates >= 1, `a bot patches a failing segment with scrap from the hold (${patchedAt == null ? 'never' : patchedAt.toFixed(0) + ' s in'}, hold ${st.scrapHold.count}, plates ${seg.plates || 0})`);
+}
+
+// ---------------------------------------------------------------- 13. the dock's prices in scrap (LOOP.md G2): half cash, half bundles; a crew with no scrap pays the old price
+{
+  const PR = S.PRICE;
+  const dock = (hold, salvage = 600, off = false, chance = 1) => {
+    const b = boot({ startBuild: 'sparrow' });
+    b.sim.setSession && b.sim.setSession('voyage', false);
+    step(b.sim, secs(30));
+    b.st.run.salvage = salvage;
+    b.st.scrapHold = { count: hold };
+    config.SHOP.V2_PART_CHANCE = chance;
+    if (off) config.SCRAP.ENABLED = false; // (boot() switched it on)
+    b.sim.startDock();
+    return b;
+  };
+  const priced = (v) => v.options.filter((o) => o.scrap);
+  { const { st } = dock(S.HOLD_CAP), v = st.vote, cards = priced(v);
+    report(v && v.kind === 'dock' && v.options.length === config.SHOP.V2_OFFERS && cards.length >= 1, `the dock has ${v && v.options.length} cards and ${cards.length} of them are priced in scrap: ${cards.map((o) => `${o.name} ${o.cost} + ${o.scrap}`).join(', ')}`);
+    report(cards.every((o) => o.scrapPay === o.scrap && o.cost === Math.round((o.base * PR.CASH_SHARE) / 5) * 5 && o.cost < o.base), 'with a full hold every card costs half in cash and the bundles: ' + cards.map((o) => `${o.base} -> ${o.cost} + ${o.scrap}`).join(', '));
+    report(cards.every((o) => o.scrap >= PR.MIN && o.scrap <= PR.MAX) && v.options.every((o) => o.kind !== 'cast' ? true : !o.scrap) && !v.options.find((o) => o.id === 'mend-her' && o.scrap), 'MEND HER and Cast off are not priced in scrap; every card asks 1 to 8 bundles');
+    const w = SC.priceWords(cards[0]);
+    report(/scrap/.test(w) && /Salvage \d+ \+ \d+ scrap/.test(w), `the card says it in words: "${w}"`); }
+  { const { st } = dock(0), cards = priced(st.vote);
+    report(cards.length >= 1 && cards.every((o) => o.scrapPay === 0 && Math.abs(o.cost - o.base) <= 5), 'an empty hold pays the old price in cash: ' + cards.map((o) => `${o.base} -> ${o.cost}`).join(', ') + ' ("' + SC.priceWords(cards[0]) + '")'); }
+  { const { st } = dock(1), cards = priced(st.vote).filter((o) => o.scrap >= 2);
+    report(!cards.length || cards.every((o) => o.scrapPay === 1 && o.cost > Math.round((o.base * PR.CASH_SHARE) / 5) * 5 && o.cost < o.base), 'one bundle in the hold covers one bundle of a card and the rest is cash'); }
+  { const { st } = dock(S.HOLD_CAP, 600, false, 0), fits = st.vote.options.filter((o) => o.kind === 'upgrade');
+    report(fits.length >= 1 && fits.every((o) => o.scrap >= 1 && o.scrapPay === o.scrap && o.cost < o.base), `the fittings are priced in scrap too: ${fits.map((o) => `${o.name} ${o.base} -> ${o.cost} + ${o.scrap}`).join(', ')}`); }
+  { PR.ENABLED = false; const { st } = dock(S.HOLD_CAP); report(priced(st.vote).length === 0, 'SCRAP.PRICE.ENABLED = false: the dock is in salvage only'); PR.ENABLED = true; }
+  { const { st } = dock(S.HOLD_CAP, 600, true); report(priced(st.vote).length === 0, 'with the switch off the dock is in salvage only'); config.SCRAP.ENABLED = true; }
+  // buying: the bundles leave the hold, the cash leaves the purse, the Book tells it
+  { const { sim, st, ours } = dock(S.HOLD_CAP, 600), v = st.vote;
+    const i = v.options.findIndex((o) => o.scrap), o = v.options[i];
+    const pl = person(st, ours, 'buyer', 'main', 300); pl.vote = i; pl.voteAt = 1e9;
+    const cash = o.cost, bundles = o.scrapPay, kind = o.kind;
+    step(sim, secs(4));
+    for (let k = 0; k < 4 && st.vote && st.vote.kind === 'slot'; k++) { pl.vote = 0; step(sim, secs(4)); }
+    report(st.run.salvage === 600 - cash && st.scrapHold.count === S.HOLD_CAP - bundles && st.run.bought.includes(o.id), `bought ${o.name} (${kind}): salvage 600 -> ${st.run.salvage} (-${cash}), the hold ${S.HOLD_CAP} -> ${st.scrapHold.count} (-${bundles})`);
+    report(st.run.scrap.spent === bundles && st.run.scrap.built === 1 && momentsOf(st, 'scrap-built').length === 1 && momentsOf(st, 'scrap-built')[0].who.includes('buyer'), `counted: ${st.run.scrap.spent} bundles spent, a "scrap-built" moment names the voter (${momentsOf(st, 'scrap-built').map((m) => m.who.join('+')).join(',')})`); }
+  // a card the salvage cannot pay is off, but scrap makes it cheaper: 100 salvage + a full hold buys what 100 alone cannot
+  { const full = dock(S.HOLD_CAP, 600), empty = dock(0, 600), a = priced(full.st.vote)[0], b = empty.st.vote.options.find((x) => x.id === (a && a.id));
+    report(!a || !b || a.cost < b.cost, `the same card is cheaper in cash with scrap in the hold (${a && a.cost} against ${b && b.cost})`); }
 }
 
 // ---------------------------------------------------------------- 11. the tools: off means off, bots stow, the same seed twice
