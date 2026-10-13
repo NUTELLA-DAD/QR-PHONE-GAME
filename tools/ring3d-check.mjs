@@ -94,7 +94,7 @@ async function openPage(url, opts = {}) {
     try { ws.close(); } catch { /* closed */ }
     if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' }); else chrome.kill();
     await sleep(300);
-    try { fs.rmSync(profile, { recursive: true, force: true }); } catch { /* Chrome still holds a file: leave it */ }
+    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch { /* Chrome still holds a file: leave it */ }
   };
   await send('Page.navigate', { url });
   P.ready = await P.waitFor('window.__meter!==undefined', 60000);

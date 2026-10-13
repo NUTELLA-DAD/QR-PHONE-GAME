@@ -33,6 +33,11 @@ const only = (arg('only', '') || '').split(',').filter(Boolean);
 const want = (n) => !only.length || only.includes(n);
 const port = Number(arg('port', 5200 + Math.floor(Math.random() * 600)));
 const FIX = path.join(here, 'tools', 'fixtures', 'shots3d');
+// (housekeeping: the 3D tools' throwaway folders - Chrome profiles that Windows would not let go of, old pictures - older than 6 hours are swept away, so the disk does not fill up)
+try {
+  const OLD = Date.now() - 6 * 3600e3, MINE = /^(view3d|view3d-chrome|shot3d|ring3d-chrome|light3d|weather3d|portholes|enemy3d|crew3d|cine3d|creature3d)-/;
+  for (const n of fs.readdirSync(os.tmpdir())) if (MINE.test(n)) { const p = path.join(os.tmpdir(), n); try { if (fs.statSync(p).mtimeMs < OLD) fs.rmSync(p, { recursive: true, force: true }); } catch { /* in use */ } }
+} catch { /* no temp dir listing */ }
 const out = fs.mkdtempSync(path.join(os.tmpdir(), 'view3d-'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
@@ -118,7 +123,7 @@ async function openPage(url, opts = {}) {
     try { ws.close(); } catch { /* closed */ }
     if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' }); else chrome.kill();
     await sleep(300);
-    try { fs.rmSync(profile, { recursive: true, force: true }); } catch { /* Chrome still holds a file: leave it */ }
+    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch { /* Chrome still holds a file: leave it */ }
   };
   await send('Page.navigate', { url });
   if (opts.ready !== false) P.ready = await P.waitFor(opts.ready || 'window.__meter!==undefined', opts.readyMs || 60000);
