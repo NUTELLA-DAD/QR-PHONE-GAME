@@ -111,7 +111,7 @@ export function createDestruction({ parent, state, models, terrain, world, inRoc
       physics = createPhysics(R);
       physics.warmup();
       physics.events.splash = (x, y, size, speed) => { if (speed > K().SPLASH_SPEED) hooks.splash(x, y, size); };
-      physics.events.bump = (x, y, strength, mat) => { if (mat === 'stone') { if (strength > 150) hooks.smoke(x, y, 40, { r: 20 + Math.min(18, strength * 0.03), life: 0.9, grow: 1.7, color: '#a99c88', rise: 14 }); return; } hooks.spark(x, y, 40, { n: mat === 'iron' ? 4 : 2 }); if (strength > 160) hooks.smoke(x, y, 40, { r: 16, life: 0.9, color: '#8a7f72', rise: 20 }); }; // (D3: a castle stone that knocks raises dust, not sparks)
+      physics.events.bump = (x, y, strength, mat) => { if (mat === 'shard') { if (strength > 220) hooks.smoke(x, y, 40, { r: 10, life: 0.6, grow: 1.5, color: '#a89880', rise: 12 }); return; } if (mat === 'stone') { if (strength > 150) hooks.smoke(x, y, 40, { r: 20 + Math.min(18, strength * 0.03), life: 0.9, grow: 1.7, color: '#a99c88', rise: 14 }); return; } hooks.spark(x, y, 40, { n: mat === 'iron' ? 4 : 2 }); if (strength > 160) hooks.smoke(x, y, 40, { r: 16, life: 0.9, color: '#8a7f72', rise: 20 }); }; // (D3: a castle stone that knocks raises dust, not sparks)
       stats.loadMs = performance.now() - t0;
       loading = false;
       for (const p of pieces) if (!p.id) toBody(p); // (pieces made while it loaded fall by hand until now)
@@ -175,7 +175,7 @@ export function createDestruction({ parent, state, models, terrain, world, inRoc
         items.push({ kind: meta ? meta.kind : 'deck', vol: b ? Math.max(1, (b.x1 - b.x0) * (b.y1 - b.y0)) : 2000 });
       }
       if (!pc.ellipse) { // the hull, deck and room walls inside the hole
-        const skin = [...model.parts.values()].filter((q) => SKIN_KINDS.includes(q.kind) && !lostSet.has(q.key)).map((q) => q.key);
+        const skin = [...model.parts.values()].filter((q) => (SKIN_KINDS.includes(q.kind) || ev.clipAll) && !lostSet.has(q.key)).map((q) => q.key); // (clipAll, WP5 structure: a whole half that crashed - every static part inside the piece's boxes comes along, cut at their edges, in the piece's one mesh)
         const rects = pc.clips.map((c) => ({ x0: c.x0 - pv, x1: c.x1 - pv, y0: -c.y1, y1: -c.y0 }));
         const g = model.assembled.extractClip(skin, rects);
         if (g.children.length) { inner.add(g); meshes++; }
@@ -299,8 +299,8 @@ export function createDestruction({ parent, state, models, terrain, world, inRoc
     // the first frame of smoke at each piece, and (for a blast) the chunks and a flash of sparks at the centre
     const ctr = (() => { const c = model.content, v = new THREE.Vector3(ev.origin.x - model.pv, -ev.origin.y, 0); return c.localToWorld(v); })();
     if (ev.blast) {
-      scatter(sh, model, ev, rng, ctr);
-      for (let k = 0; k < 10; k++) hooks.smoke(ctr.x + (rng() - 0.5) * 220, ctr.y + (rng() - 0.5) * 140, 60, { r: 20 + rng() * 16, life: 1.5, grow: 1.4, color: k % 3 ? '#4a4540' : '#d9622b', rise: 50 });
+      if (!ev.noChunks) scatter(sh, model, ev, rng, ctr); // (WP5 structure: a crashed half makes its own instanced shards, structure3d.js, not 48 draw calls of chunk meshes)
+      for (let k = 0; k < (ev.noChunks ? 0 : 10); k++) hooks.smoke(ctr.x + (rng() - 0.5) * 220, ctr.y + (rng() - 0.5) * 140, 60, { r: 20 + rng() * 16, life: 1.5, grow: 1.4, color: k % 3 ? '#4a4540' : '#d9622b', rise: 50 });
     } else {
       for (let k = 0; k < 4; k++) hooks.smoke(ctr.x + (rng() - 0.5) * 120, ctr.y + (rng() - 0.5) * 80, 60, { r: 22, life: 1.2, color: '#6e6862', rise: 40 });
     }
@@ -329,6 +329,9 @@ export function createDestruction({ parent, state, models, terrain, world, inRoc
       }
     },
     setSea(seaY) { sea = seaY; },
+    // WP5 structure: a break-off note made by the VIEW (structure3d.js: a half that split off has hit the ground or the sea). The ship's model must still be whole; its parts and the hull inside plan.pieces' boxes
+    // become bodies, exactly as for a note from the simulation.
+    shatter(sh, ev) { try { take(sh, ev); return true; } catch (err) { console.warn('wreckage', err); return false; } },
     // WP8: a body somebody else made (the Kraken's severed limbs, view3d/creature.js). spec = { holder (a Group at the body's start pose, its mesh inside), boxes (the physics boxes in the body's
     // frame, y up), rel (density against water: about 0.9 floats), mat, size, vel: [x, y], spin, life (s) }. It falls, bounces, splashes and floats like a chunk; returns the piece (pass it to
     // removeExternal), or null when the cap is full. The holder's geometry is disposed when it goes.
@@ -352,7 +355,7 @@ export function createDestruction({ parent, state, models, terrain, world, inRoc
         load();
         if (!physics) return null;
         if (!awake) wake();
-        const id = physics.addDebris({ shipIndex: -1, pos: spec.pos, quat: spec.quat || [0, 0, 0, 1], vel: spec.vel, ang: spec.ang || [0, 0, 0], boxes: spec.boxes, rel: spec.rel || 1.8, mat: 'stone', kind: 'stone', delay: 0 });
+        const id = physics.addDebris({ shipIndex: -1, pos: spec.pos, quat: spec.quat || [0, 0, 0, 1], vel: spec.vel, ang: spec.ang || [0, 0, 0], boxes: spec.boxes, rel: spec.rel || 1.8, mat: spec.mat || 'stone', kind: spec.kind || 'stone', delay: 0 }); // (WP5 structure: kind 'shard' = the planks and splinters of a split / a crashed half, structure3d.js)
         if (id) loose.add(id);
         return id || null;
       },

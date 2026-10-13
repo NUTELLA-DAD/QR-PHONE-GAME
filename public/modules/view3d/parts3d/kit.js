@@ -51,15 +51,55 @@ void scarTest() { if ( vWall < 0.5 ) return; for ( int i = 0; i < 8; i ++ ) { if
 //   row 1  x y = a corner chopped off (local coordinates: everything right of x and below y is gone, with a ragged edge: a sail's missing flap), z = how ragged; z 0 = none
 // It is still ONE draw call: the shader reads the texel; damageStates.js rewrites a texel only when a part's state changes. Everything is steady: hashes of the position, nothing moves.
 export const DMG_W = 512; // (parts a ship can number; any beyond that share texel 0 = no damage shown)
+// WP5 STRUCTURE (STRUCTURE.md; structure3d.js): rows 2 and 3 of the same texture hold up to SEG_N hurt SEGMENTS of the frame (a stretch of a deck with the hull under it): row 2 = x0 y0 x1 y1 (content coordinates, the
+// walls' own vScarP), row 3 = x soot (0..1: the segment grows dark as its soundness drops), y cracks (0..1: a web of cracks that spreads outward from the middle), z warn (0 = none; > 0 = the failing edge and the glowing
+// cracks are ON this key: structure3d.js flickers it on the 8 fps key), w a seed. uSegN says how many are in use (0 = the loop never runs). Walls only (hull, decks, rooms: dmgWall), never the ink shell.
+export const SEG_N = 24;
+export const DMG_ROWS = 4;
 const dmgFx = { uSoot: { value: new THREE.Color(config.DAMAGE3D.COLORS.SOOT) }, uWet: { value: 0 } };
 // WP12 WEATHER on the ship: uWet (rain-soaked: everything a little darker, shared by every ship) and a per-part FROST amount (the data texture uWx, 512 x 1, r = frost 0..1; weather.js writes it): the upward faces of an iced part
 // (the bag's back, an outdoor deck, a gun) grow a white crust with hard toon edges (value noise fixed to the part's own coordinates) and a few static sparkles. Nothing moves.
 export const setWet = (v) => { dmgFx.uWet.value = v; };
 const DMG_VERT_COMMON = 'attribute float aPart; varying float vPart; varying float vWy;';
 const DMG_VERT_BEGIN = 'vPart = aPart; vWy = normalize( mat3( modelMatrix ) * objectNormal ).y;';
-const DMG_FRAG = `uniform sampler2D uDmg; uniform sampler2D uWx; uniform float uWet; uniform vec3 uSoot; uniform vec4 uSootPts[24]; uniform float uSootN; varying float vPart; varying float vWy; vec4 dmgV = vec4( 0.0 ); float dmgRim = 0.0; float wxSp = 0.0; float dmgWall = 0.0;
+const DMG_FRAG = `uniform sampler2D uDmg; uniform sampler2D uWx; uniform float uWet; uniform vec3 uSoot; uniform vec4 uSootPts[24]; uniform float uSootN; uniform float uSegN; varying float vPart; varying float vWy; vec4 dmgV = vec4( 0.0 ); float dmgRim = 0.0; float wxSp = 0.0; float dmgWall = 0.0;
+float sgSoot = 0.0, sgCore = 0.0, sgFringe = 0.0, sgEdge = 0.0, sgHeat = 0.0, sgWash = 0.0;
 float dmgH( vec2 c ) { vec3 p3 = fract( vec3( c.xyx ) * 0.1031 ); p3 += dot( p3, p3.yzx + 33.33 ); return fract( ( p3.x + p3.y ) * p3.z ); }
 float dmgN( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f ); return mix( mix( dmgH( i ), dmgH( i + vec2( 1.0, 0.0 ) ), f.x ), mix( dmgH( i + vec2( 0.0, 1.0 ) ), dmgH( i + vec2( 1.0, 1.0 ) ), f.x ), f.y ); }
+// WP5: the cracks of one segment. A wandering web (the borders of a jittered grid; the wander and the jitter are hashes of the position, so nothing moves), each border cracked or not by a hash against the level, the middle
+// of the segment first. Returns x = the dark core, y = the pale splintered fringe round it.
+vec2 segCracks( vec2 p, float lvl, float seed, vec4 a ) {
+  vec2 pw = p + 10.0 * vec2( dmgN( p / 37.0 + seed ), dmgN( p / 37.0 + seed + 13.0 ) ) - 5.0;
+  vec2 g = pw / 58.0, ip = floor( g ), fp = fract( g );
+  float d1 = 8.0, d2 = 8.0; vec2 id1 = vec2( 0.0 ), id2 = vec2( 0.0 );
+  for ( int j = -1; j <= 1; j ++ ) for ( int i = -1; i <= 1; i ++ ) {
+    vec2 o = vec2( float( i ), float( j ) ), cell = ip + o;
+    vec2 r = o + vec2( dmgH( cell + seed ), dmgH( cell + seed + 31.7 ) ) - fp;
+    float d = dot( r, r );
+    if ( d < d1 ) { d2 = d1; id2 = id1; d1 = d; id1 = cell; } else if ( d < d2 ) { d2 = d; id2 = cell; }
+  }
+  float e = sqrt( d2 ) - sqrt( d1 );
+  float h = dmgH( id1 + id2 + seed + 5.0 );
+  float mid = abs( p.x - ( a.x + a.z ) * 0.5 ) / max( 24.0, ( a.z - a.x ) * 0.5 );
+  float on = step( h, lvl * 1.45 - mid * 0.55 );
+  float w = 0.1 + 0.26 * lvl;
+  return on * vec2( 1.0 - smoothstep( w * 0.5, w * 0.72, e ), 1.0 - smoothstep( w * 0.9, w * 1.7, e ) );
+}
+void segTest() {
+  if ( dmgWall < 0.5 || uSegN < 0.5 || vShell > 0.5 ) return;
+  for ( int i = 0; i < ${SEG_N}; i ++ ) {
+    if ( float( i ) >= uSegN ) break;
+    vec4 a = texelFetch( uDmg, ivec2( i, 2 ), 0 );
+    float inx = min( vScarP.x - a.x, a.z - vScarP.x ), iny = min( vScarP.y - a.y, a.w - vScarP.y );
+    if ( inx < 0.0 || iny < 0.0 ) continue;
+    vec4 b = texelFetch( uDmg, ivec2( i, 3 ), 0 );
+    float w = smoothstep( 0.0, 34.0, inx ) * smoothstep( 0.0, 14.0, iny );
+    sgSoot = max( sgSoot, b.x * w * ( 0.86 + 0.28 * clamp( ( vScarP.y - a.y ) / max( 1.0, a.w - a.y ), 0.0, 1.0 ) ) ); // (smoke stains climb: the top of the segment is darker)
+    vec2 cr = vec2( 0.0 );
+    if ( b.y > 0.0 ) { cr = segCracks( vScarP, b.y, b.w, a ) * w; sgCore = max( sgCore, cr.x ); sgFringe = max( sgFringe, cr.y ); }
+    if ( b.z > 0.0 ) { sgWash = max( sgWash, min( b.z, 1.0 ) * w ); sgEdge = max( sgEdge, b.z * ( 1.0 - smoothstep( 3.0, 15.0, inx ) ) * smoothstep( 0.0, 12.0, iny ) ); sgHeat = max( sgHeat, b.z * cr.x ); }
+  }
+}
 void dmgTest() {
   int pi = int( vPart + 0.5 );
   dmgV = texelFetch( uDmg, ivec2( pi, 0 ), 0 );
@@ -82,6 +122,7 @@ void dmgTest() {
     if ( cx > 0.0 && cy > 0.0 ) discard;
     dmgRim = max( dmgRim, 1.0 - smoothstep( 0.0, 5.0, length( max( vec2( -cx, -cy ), 0.0 ) ) ) );
   }
+  segTest();
 }`;
 const DMG_TINT = `{
     float soot = dmgV.r, dent = dmgV.g, grey = dmgV.a;
@@ -96,6 +137,16 @@ const DMG_TINT = `{
       float th = 0.74 - soot * 0.4;
       diffuseColor.rgb *= 1.0 - 0.2 * soot;
       diffuseColor.rgb = mix( diffuseColor.rgb, uSoot, 0.7 * smoothstep( th - 0.05, th + 0.22, nz ) );
+    }
+    if ( sgSoot > 0.005 || sgFringe > 0.01 ) { // WP5: a hurt segment of the frame: the wall goes dark and charred as its soundness drops (blotches of char at two sizes, fixed to the wall), then the cracks: a pale splintered fringe round a dark core
+      float sn = 0.6 * dmgN( vScarP / 52.0 + 3.0 ) + 0.4 * dmgN( vScarP / 19.0 + 11.0 );
+      diffuseColor.rgb *= 1.0 - 0.85 * sgSoot * ( 0.7 + 0.5 * sn );      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.05, 0.034, 0.026 ), 0.85 * smoothstep( 0.3, 0.95, sgSoot * ( 0.4 + 1.2 * sn ) ) );
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.9, 0.74, 0.5 ), 0.62 * sgFringe * ( 1.0 - sgCore ) );
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.035, 0.02, 0.015 ), sgCore );
+    }
+    if ( sgWash > 0.01 ) { // WP5: the warning: a red wash over the whole failing segment, a hot red band on both its ends, orange-hot cracks (blinking on the 8 fps key, structure3d.js)
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.85, 0.09, 0.05 ), 0.13 * sgWash + 0.8 * clamp( sgEdge, 0.0, 1.0 ) );
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0, 0.38, 0.06 ), 0.9 * clamp( sgHeat, 0.0, 1.0 ) );
     }
     if ( dent > 0.01 ) {
       vec2 c = floor( vScarP / 22.0 ), f = fract( vScarP / 22.0 ) - 0.5;
@@ -129,20 +180,20 @@ function patchShell(sh, uHide, ink, scar) {
   sh.uniforms.uScarN = scar.uScarN; sh.uniforms.uCarveA = scar.uCarveA; sh.uniforms.uCarveB = scar.uCarveB; sh.uniforms.uCarveN = scar.uCarveN;
   sh.uniforms.uDmg = scar.uDmg;
   sh.uniforms.uWx = scar.uWx; sh.uniforms.uWet = dmgFx.uWet;
-  sh.uniforms.uSoot = dmgFx.uSoot; sh.uniforms.uSootPts = scar.uSootPts; sh.uniforms.uSootN = scar.uSootN;
+  sh.uniforms.uSoot = dmgFx.uSoot; sh.uniforms.uSootPts = scar.uSootPts; sh.uniforms.uSootN = scar.uSootN; sh.uniforms.uSegN = scar.uSegN;
   sh.vertexShader = sh.vertexShader.replace('#include <common>', SHELL_VERT_COMMON + '\n' + SCAR_VERT_COMMON + '\n' + DMG_VERT_COMMON).replace('#include <begin_vertex>', SHELL_VERT_BEGIN + '\n' + SCAR_VERT_BEGIN + '\n' + DMG_VERT_BEGIN).replace('#include <project_vertex>', SHELL_VERT_PROJECT);
   if (ink) { sh.uniforms.uInkOn = inkOn; sh.uniforms.uInk = inkColor; }
   sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vShell;' + (ink ? ' uniform float uInkOn; uniform vec3 uInk;' : '') + '\n' + SCAR_FRAG + '\n' + DMG_FRAG)
     .replace('void main() {', 'void main() {\n  ' + (ink ? 'if ( vShell > 0.5 ) { if ( uInkOn < 0.5 || gl_FrontFacing ) discard; } else if ( ! gl_FrontFacing ) discard;' : 'if ( vShell > 0.5 || ! gl_FrontFacing ) discard;') + '\n  scarTest();\n  carveTest();\n  dmgTest();')
     .replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.16, 0.10, 0.07 ), clamp( scarRim, 0.0, 1.0 ) * 0.85 );\n  ' + DMG_TINT);
-  sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  gl_FragColor.rgb += vec3( 1.2, 1.3, 1.5 ) * wxSp;');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  gl_FragColor.rgb += vec3( 1.2, 1.3, 1.5 ) * wxSp + vec3( 0.6, 0.06, 0.02 ) * sgEdge * 0.5 + vec3( 0.7, 0.2, 0.03 ) * sgHeat;;');
   if (ink) sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\n  if ( vShell > 0.5 ) gl_FragColor.rgb = uInk;');
 }
 export function makeTrimMaterials() {
   const sheet = getTrimSheet();
   const uHide = { value: 0 };
-  const dmgData = new Float32Array(DMG_W * 2 * 4); // (WP6: one texel a part, two rows, see DMG_FRAG; damageStates.js rewrites it and sets dmgTex.needsUpdate only when a part's state changes)
-  const dmgTex = new THREE.DataTexture(dmgData, DMG_W, 2, THREE.RGBAFormat, THREE.FloatType);
+  const dmgData = new Float32Array(DMG_W * DMG_ROWS * 4); // (WP6: one texel a part, two rows, see DMG_FRAG; damageStates.js rewrites it and sets dmgTex.needsUpdate only when a part's state changes. WP5: rows 2 and 3 are the hurt segments, structure3d.js)
+  const dmgTex = new THREE.DataTexture(dmgData, DMG_W, DMG_ROWS, THREE.RGBAFormat, THREE.FloatType);
   dmgTex.minFilter = dmgTex.magFilter = THREE.NearestFilter;
   dmgTex.generateMipmaps = false;
   dmgTex.needsUpdate = true;
@@ -151,7 +202,7 @@ export function makeTrimMaterials() {
   wxTex.minFilter = wxTex.magFilter = THREE.NearestFilter;
   wxTex.generateMipmaps = false;
   wxTex.needsUpdate = true;
-  const scar = { uScar: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uScarN: { value: 0 }, uDmg: { value: dmgTex }, uWx: { value: wxTex }, uSootPts: { value: Array.from({ length: 24 }, () => new THREE.Vector4(0, 0, 1, 0)) }, uSootN: { value: 0 }, uCarveA: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveB: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveN: { value: 0 } }; // (WP5: the holes broken-off parts left, see patchShell)
+  const scar = { uScar: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0)) }, uScarN: { value: 0 }, uDmg: { value: dmgTex }, uWx: { value: wxTex }, uSootPts: { value: Array.from({ length: 24 }, () => new THREE.Vector4(0, 0, 1, 0)) }, uSootN: { value: 0 }, uSegN: { value: 0 }, uCarveA: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveB: { value: Array.from({ length: CARVE_N }, () => new THREE.Vector4(0, 0, 0, 0)) }, uCarveN: { value: 0 } }; // (WP5: the holes broken-off parts left, see patchShell)
   const toon = rimify(new THREE.MeshToonMaterial({ vertexColors: true, map: sheet.texture, gradientMap, side: THREE.DoubleSide }));
   const rim = toon.onBeforeCompile;
   toon.onBeforeCompile = (sh, r) => { // (the painted sheet is a little darker than white on average: a small gain keeps the hull colours where the flat ones were)

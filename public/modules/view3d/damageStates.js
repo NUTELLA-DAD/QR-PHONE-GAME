@@ -14,7 +14,7 @@
 // a plank patch once it is mended), RAM DENTS (dents on the prow for each landed ram), HULL SOOT (the hull, decks and rooms darken as the hull share drops), the DEFLATED BAG (a stepped crumple and sag, no cloth)
 // and REPAIRS (a part that mends snaps back through a half-way key and gives a puff of dust and sparks). Everything is steady: rigid poses, stepped keys, no wobble.
 import { THREE, look } from './style.js';
-import { PartBatch, inkInstanced } from './parts3d/kit.js';
+import { PartBatch, inkInstanced, DMG_W } from './parts3d/kit.js';
 import { GUN_LOOK } from './parts3d/weapons.js';
 import { getTrimSheet, uvRect, SCORCH, HOLES } from './textures.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -538,14 +538,18 @@ export function createPartDamage({ state, models, vfx }) {
     const mb = {};
     for (const m of st.modules || []) mb[m.name] = m;
     const hull = st.ship && fin(st.ship.hull) ? st.ship.hull : 100, share = clamp(1 - hull / 100, 0, 1);
-    const sootHull = share <= KK.HULL.SOOT_FROM ? 0 : clamp((share - KK.HULL.SOOT_FROM) / (1 - KK.HULL.SOOT_FROM), 0, 1) * KK.HULL.SOOT_MAX;
-    const dentHull = hull < KK.HULL.DENT_BELOW ? ((KK.HULL.DENT_BELOW - hull) / KK.HULL.DENT_BELOW) * 0.4 : 0;
+    // WP5: with a frame (STRUCTURE.md) the all-over grime follows how worn the WHOLE frame is (the length-weighted mean of its segments), not the one weakest segment: that one is darkened by itself (structure3d.js, rows 2-3 of the data texture)
+    let meanShare = share;
+    { const fr = st.frames; if (fr && fr.length && sh.sim && sh.sim.structure && sh.sim.structure.on()) { let a = 0, b = 0; for (const g of fr) { if (g.nest || !fin(g.hp)) continue; a += (1 - clamp(g.hp, 0, 1)) * g.w; b += g.w; } meanShare = b > 0 ? clamp(a / b, 0, 1) : 0; } }
+    const sootHull = meanShare <= KK.HULL.SOOT_FROM ? 0 : clamp((meanShare - KK.HULL.SOOT_FROM) / (1 - KK.HULL.SOOT_FROM), 0, 1) * KK.HULL.SOOT_MAX;
+    const hullM = 100 * (1 - meanShare);
+    const dentHull = hullM < KK.HULL.DENT_BELOW ? ((KK.HULL.DENT_BELOW - hullM) / KK.HULL.DENT_BELOW) * 0.4 : 0;
     const vx = (sh.pose && sh.pose.vx) || 0, vy = -((sh.pose && sh.pose.vy) || 0);
     watchFires(rec, pm, st, dt);
     watchBreaches(rec, pm, st);
     writeSoot(rec, pm, st, share);
     let best = 3, nDamaged = 0, nBroken = 0;
-    const data = rec.mats.dmgData, W = rec.mats.dmgData.length / 8;
+    const data = rec.mats.dmgData, W = DMG_W; // (the texture is DMG_ROWS rows of DMG_W texels: row 1 starts W texels in)
     let wrote = false;
     for (const p of rec.parts) {
       // 1. the state, from the sim
