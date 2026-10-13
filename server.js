@@ -61,7 +61,7 @@ io.on('connection', (s) => {
     s.data = { host: code }; s.join(code); s.emit('host:created', code);
   });
 
-  s.on('player:join', ({ code, name, species, token }) => {
+  s.on('player:join', ({ code, name, species, token, pid }) => {
     code = String(code || '').toUpperCase(); const room = rooms[code];
     if (!room) return s.emit('join:error', 'Room not found. Check the code.');
     let p = token && room.players[token];
@@ -71,10 +71,10 @@ io.on('connection', (s) => {
       token = Math.random().toString(36).slice(2) + Date.now().toString(36);
       p = room.players[token] = { token, color: COLORS.find(c => !used.includes(c)) || COLORS[0] };
     }
-    Object.assign(p, { sid: s.id, name: String(name || 'Crew').slice(0, 12), species: species || 'bulldog' });
+    Object.assign(p, { sid: s.id, name: String(name || 'Crew').slice(0, 12), species: species || 'bulldog', pid: String(pid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) }); // (pid: the phone's own random id, kept in its localStorage, so the TV knows the same phone in a later session: the Ship's Book crew roster)
     s.data = { code, token }; s.join(code);
     s.emit('join:ok', { token, color: p.color, name: p.name, code });
-    io.to(room.host).emit('player:joined', { id: token, name: p.name, species: p.species, color: p.color });
+    io.to(room.host).emit('player:joined', { id: token, name: p.name, species: p.species, color: p.color, pid: p.pid });
   });
 
   s.on('player:input', (data) => {
