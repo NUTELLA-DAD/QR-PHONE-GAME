@@ -319,6 +319,7 @@ console.log(`fires: burning avg ${hullN ? (fireSteps / hullN).toFixed(2) : 'n/a'
 console.log(`hauled: ${sum('ammo')} ammo loads, ${sum('coal')} coal loads; fires out ${sum('fires')}, holes patched ${sum('holes')}`);
 const pc = (n) => (pN ? ((100 * n) / pN).toFixed(1) : 'n/a') + '%';
 console.log(`steam: mean ${pN ? (pSum / pN).toFixed(1) : 'n/a'}, <35 ${pc(pLow)}, >70 ${pc(pOver70)}, >90 ${pc(pOver90)}, blowouts ${blowouts}, leaking ${pc(leakSteps)}`);
+if (config.STEAMFIX.ENABLED && state.steamWarn) console.log(`steam fixes (F13): warnings LOW ON COAL ${state.steamWarn.fuel}, LOW STEAM ${state.steamWarn.press}, SINKING ${state.steamWarn.sink}; burst pipes that shut themselves ${state.steamWarn.sealed}`);
 if (args.env === 'frost' || args.env === 'ember') {
   const pe = (n) => (envN ? ((100 * n) / envN).toFixed(1) : 'n/a') + '%';
   const av = (n) => (envN ? (n / envN).toFixed(2) : 'n/a');

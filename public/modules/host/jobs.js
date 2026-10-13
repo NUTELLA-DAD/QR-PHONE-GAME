@@ -116,7 +116,7 @@ export function createJobFinder(state) {
       const hold = L.nearest('ammo', p); // (the ammo hold nearest to this player)
       if (hold) for (const n of guns.slice(0, 2)) { const s = stationNamed(n); add('ammo', n, s.d, s.x, { fetch: hold.n }, `AMMO for ${n}`); } // (no ammo hold on the ship: nothing to fetch)
     }
-    const fuelLow = state.ship.fuel < config.BOILER.FUEL_MAX * (J.COAL_LOW / 100);
+    const fuelLow = state.ship.fuel < config.BOILER.FUEL_MAX * ((config.STEAMFIX.ENABLED ? config.STEAMFIX.COAL_ARROW : J.COAL_LOW) / 100); // (F13: the arrow comes earlier than the banner)
     if (carry === 'coal' || (fuelLow && carry !== 'ammo' && L.nearest('coal', p) && !bunkerEmpty(state))) { // (no coal bunker, or one dumped overboard in GOING DOWN!: the fire just dies down, nothing to haul)
       // Coal goes to the boiler nearest to where it is picked up (or nearest to the carrier, if already carrying).
       const bunker = carry === 'coal' ? null : L.nearest('coal', p);

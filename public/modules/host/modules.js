@@ -46,7 +46,8 @@ export function createModules(ship) {
     if (bay && L.bombBay) add({ name: bay.n, kind: 'bombbay', d: bay.d, x: bay.x, pos: { x: L.bombBay.x, y: L.bombBay.y - 30 } });
     // Boilers (a build may have several) then the helm.
     for (const s of [...all('boiler'), ...all('helm').slice(0, 1)]) {
-      add({ name: s.n, kind: s.kind, d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 } });
+      const hp = s.kind === 'boiler' && config.STEAMFIX.ENABLED ? M.HP * config.STEAMFIX.BOILER_HP : M.HP; // (F13: the boiler is an iron vessel)
+      add({ name: s.n, kind: s.kind, d: s.d, x: s.x, pos: { x: s.x, y: P[s.d].y - 60 }, hp, max: hp, baseMax: hp });
     }
     for (const e of L.engines) { const hp = M.HP * engineSize(e).hp; add({ name: e.name, kind: 'engine', d: e.d, x: e.x, pos: { x: e.x, y: P[e.d].y + 38 }, hp, max: hp, baseMax: hp }); } // (a heavy engine takes more hits: config.ENGINES.SIZES hp)
     const lr = L.liftRepair;
@@ -61,7 +62,7 @@ export function createModules(ship) {
     for (const m of list) {
       const o = old[m.name];
       if (o) Object.assign(m, { hp: o.hp, max: o.max, baseMax: o.baseMax, broken: o.broken });
-      if (o && m.kind === 'pipe') m.open = o.open;
+      if (o && m.kind === 'pipe') { m.open = o.open; if (o.sealed) m.sealed = true; }
     }
     for (const k of Object.keys(byName)) delete byName[k];
     for (const m of list) byName[m.name] = m;
@@ -77,7 +78,7 @@ export function createModules(ship) {
 
   // Does the boiler's steam reach this module right now?
   const hasSteam = (state, name) => {
-    if (!boilerUp() || state.ship.press < M.STEAM_MIN) return false;
+    if ((!boilerUp() && !(config.STEAMFIX.ENABLED && state.ship.press >= config.STEAMFIX.RESERVE)) || state.ship.press < M.STEAM_MIN) return false; // (F13: a boiler that has just broken leaves its steam in the line: the helm, the engines and the pump run on it while it lasts, about ten seconds, time to hammer the boiler)
     const pipe = pipeTo(name);
     return !pipe || (pipe.open && !pipe.broken);
   };
@@ -115,9 +116,23 @@ export function createModules(ship) {
     m.hp = Math.min(m.max, m.hp + M.REPAIR_RATE * dt);
     if (m.hp >= m.max) {
       m.broken = false;
+      if (m.sealed) { m.open = true; m.sealed = false; } // (F13: the pipe's own safety valve shut it when it burst; a mended pipe opens again by itself)
       return true;
     }
     return false;
+  };
+
+  // F13: a burst pipe with its valve open leaks until somebody shuts it; with STEAMFIX it shuts itself after SEAL_AFTER seconds (m.sealed: the mended pipe will open again by itself). Returns the pipes sealed this step.
+  const sealBursts = (dt) => {
+    const F = config.STEAMFIX, sealed = [];
+    for (const m of list) {
+      if (m.kind !== 'pipe') continue;
+      if (m.broken && m.open && (F.SEAL_HELM || !(byName[m.to] && byName[m.to].kind === 'helm'))) { // (the helm's own pipe is left leaking unless SEAL_HELM: a dark helm cannot pump the bag)
+        m.leakT = (m.leakT || 0) + dt;
+        if (m.leakT >= F.SEAL_AFTER) { m.open = false; m.sealed = true; m.leakT = 0; sealed.push(m); }
+      } else m.leakT = 0;
+    }
+    return sealed;
   };
 
   const update = (state, dt) => {
@@ -171,7 +186,7 @@ export function createModules(ship) {
       m.max = m.baseMax;
       m.hp = m.max;
       m.broken = false;
-      if (m.kind === 'pipe') m.open = true;
+      if (m.kind === 'pipe') { m.open = true; m.sealed = false; m.leakT = 0; }
     }
   };
 
@@ -191,5 +206,5 @@ export function createModules(ship) {
     return '';
   };
 
-  return { list, byName, boilers, boilerUp, handWheel, hasSteam, works, damage, hitAt, repair, update, pressureDrain, drainParts, leaks, leakRate, reset, status, rebuild };
+  return { list, byName, boilers, boilerUp, handWheel, hasSteam, works, damage, hitAt, repair, sealBursts, update, pressureDrain, drainParts, leaks, leakRate, reset, status, rebuild };
 }

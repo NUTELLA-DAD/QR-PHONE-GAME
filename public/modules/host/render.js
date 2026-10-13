@@ -1247,12 +1247,14 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const warnAt = config.BOILER.WARN_AT / 100;
     const p = state.ship.press;
     const odAt = config.BOILER.OVERDRIVE_AT / 100;
-    if (steamed) gauge(104, p, [[odAt, warnAt, 'rgba(255,190,60,.55)'], [warnAt, 1, 'rgba(230,57,70,.55)']], p >= config.BOILER.WARN_AT ? '#e63946' : p >= config.BOILER.OVERDRIVE_AT ? '#ffd23f' : '#e8eef2');
+    const SFX = config.STEAMFIX, lowAt = SFX.ENABLED ? SFX.WARN.PRESS / 100 : 0; // (F13: the LOW zone of the steam gauge: under it the pump starves and the ladder warns)
+    if (steamed) gauge(104, p, [...(lowAt ? [[0, lowAt, 'rgba(230,57,70,.5)']] : []), [odAt, warnAt, 'rgba(255,190,60,.55)'], [warnAt, 1, 'rgba(230,57,70,.55)']], p >= config.BOILER.WARN_AT ? '#e63946' : p >= config.BOILER.OVERDRIVE_AT ? '#ffd23f' : p < lowAt * 100 ? '#ff8a7a' : '#e8eef2');
     // Overdrive zone label, and a thin stacked bar of where the steam goes.
     ctx.fillStyle = 'rgba(60,40,10,.8)';
     ctx.font = '700 10px ' + config.FONTS.TEXT;
     ctx.textAlign = 'center';
     if (steamed) ctx.fillText('OVERDRIVE', 46 + 408 * ((odAt + warnAt) / 2), 115);
+    if (steamed && lowAt) ctx.fillText('LOW', 46 + 408 * (lowAt / 2), 115);
     const sp = steamed ? state.steamParts : null;
     if (sp) {
       const segs = [['engines', '#5b8fd9', 'ENG'], ['pump', '#6cc070', 'PUMP'], ['shield', '#9b7be0', 'SHLD'], ['coil', '#7fd8ee', 'COIL'], ['leaks', '#e63946', 'LEAK'], ['vents', '#d6d6d6', 'VENT'], ['other', '#8a7560', '']];
@@ -1363,7 +1365,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       });
     }
     ctx.textAlign = 'right';
-    if (steamed) ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100);
+    if (steamed) { if (SFX.ENABLED && state.ship.fuel < SFX.WARN.FUEL) ctx.fillStyle = '#c0392b'; ctx.fillText('Coal ' + Math.round(state.ship.fuel) + '%', 454, 100); } // (F13: the coal read-out goes red under the LOW ON COAL warning)
     if (state.autopilot) {
       // WP15: the bow pennant (drawFacing) owns x 158..286 of this row, so AUTOPILOT goes between the "Hull" label and it, shrunk to fit (it used to sit on top of AHEAD).
       ctx.fillStyle = '#3a5a8c';

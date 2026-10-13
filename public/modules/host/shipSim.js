@@ -32,6 +32,7 @@ import { stepFlame } from './flame.js';
 import { createPrime } from './prime.js';
 import { createLinks } from './links.js';
 import { createGoingDown, bunkerEmpty } from './goingDown.js';
+import { createSteamFix } from './steamFix.js'; // (FUN.md F13: steam and lift)
 import { createComeAbout } from './comeAbout.js';
 import { createBalance } from './balance.js';
 import { createFlight } from './flight.js';
@@ -246,6 +247,10 @@ export function createShipSim(world, ship, W) {
     if (player.bot && player.wantStation && station && station.n === player.wantStation && LOCKABLE(station.n) && !taken(station.n)) return { type: 'station', station, label: takeLabel(station) }; // (C.6b: a bot sent to a station that a rack, a pipe valve or a vent stands next to - the classic ship's coil - takes THAT station, not the nearer chore; bots.js sets wantStation)
     const scrapC = cargo.pickAction(player, here); // (SCRAP: a bundle lying at your feet, hands empty)
     if (scrapC) return scrapC;
+    if (config.STEAMFIX.ENABLED && player.bot && player.botJob && player.botJob.kind === 'vent') { // (F13: a bot sent to shut a vent that is bleeding the line gets the vent, not the rack or the extinguisher beside it: one such bot stood at the vent for twenty minutes with the steam draining out)
+      const vi = layout.vents.indexOf(player.botJob.obj);
+      if (vi >= 0 && here(layout.vents[vi], T.REACH)) return { type: 'vent', obj: layout.vents[vi], label: state.ventOpen[vi] ? 'Close vent' : 'Open vent' };
+    }
     // Otherwise standing at a rack or hook means take / swap / put back.
     const pickup = legacy ? PICKUPS.find((r) => here(r, T.REACH)) : null;
     // (carrying ammo or coal next to a gun or the boiler means load it, not swap it for a tool)
@@ -544,7 +549,7 @@ export function createShipSim(world, ship, W) {
     shipPuff(x, y, '#ff7b00', Math.round(8 * power));
     const coll = crewMul(state, 'collateral'); // (small crews: hits break fewer things)
     const pm = (light || config.PVP.ENABLED || ship.ai ? Math.min(1, power) : 1) * (kind === 'arrow' ? config.GARRISON.ARCHER.CHANCE_MUL : 1); // (the enemy gunship too: our shells are small blows on her, as on a rival ship. Versus: a crew shell is a small blow - it chips the hull and only now and then breaks something or lights a fire, in proportion to its power)
-    modules.hitAt(x, y, shipPuff, power, coll);
+    modules.hitAt(x, y, shipPuff, power, kind === 'rock' && config.STEAMFIX.ENABLED && structure.on() ? coll * config.STEAMFIX.SCRAPE_MODULES : coll); // (F13: a scrape of rock grinds the keel plates, it does not gut the plumbing at the keel)
     if (!light) helmsmanHit(x, y, power);
     crewHit(x, y, power);
     const hitBag = onGasbag(x, y);
@@ -1012,6 +1017,7 @@ export function createShipSim(world, ship, W) {
     breakCuts: (cuts, cause) => breakOff({ kind: 'cuts', cuts, cause }, { force: true }),
     doSplit: (spec) => splitShip(spec),
   } });
+  const steamFix = createSteamFix({ state, ship, modules, structure, goingDown, shipPuff, hasKind }); // steam and lift: burst pipes shut themselves, the pump first, the warning ladder (steamFix.js, config.STEAMFIX)
   const comeAbout = createComeAbout(ship, W, { goingDown, flight }); // turning her round on the helm's command (comeAbout.js)
 
   const health = createHealth({ state, ship, phoneFx, emitPlayerUi, shipPuff, shipPop }); // crew health: hearts, burns, the medical bay (health.js)
@@ -1738,7 +1744,7 @@ export function createShipSim(world, ship, W) {
     const lit = modules.boilers().filter((m) => !m.broken).length;
     if (state.ship.fuel > 0 && lit > 0) {
       const boost = 1 + (lit - 1) * BO.EXTRA_BOILER;
-      state.ship.fuel = Math.max(0, state.ship.fuel - BO.BURN_RATE * boost * dt);
+      state.ship.fuel = Math.max(0, state.ship.fuel - BO.BURN_RATE * boost * steamFix.burnMul() * dt);
       // More coal = hotter fire, but with diminishing returns (a load lasts about a minute).
       heat = ((BO.HEAT_MAX * state.ship.fuel) / (state.ship.fuel + BO.HEAT_HALF)) * boost;
     }
@@ -1753,11 +1759,14 @@ export function createShipSim(world, ship, W) {
     parts.coil = state.coil.charging ? config.COIL.STEAM_USE : 0;
     parts.pump = state.steamParts ? state.steamParts.pump || 0 : 0; // (set below, while pumping)
     state.steamParts = parts; // where the steam goes: read by the HUD gauge
+    steamFix.update(dt); // (F13: burst pipes shut themselves, the warning ladder; steamFix.js)
+    parts.engines *= steamFix.easeEngines(); // (F13: the pump comes first while she sinks and is being pumped: the engines draw less of a low line)
     state.steamUse = parts.other + parts.engines + parts.leaks + parts.vents + parts.shield + parts.coil;
     // Leaking modules puff steam so the crew can see where it's going.
     for (const l of modules.leaks()) {
       if (Math.random() < dt * (2 + 10 * (l.rate / config.MODULES.LEAK_FULL))) shipPuff(l.m.pos.x + (Math.random() - 0.5) * 30, l.m.pos.y - 20, '#ffffff', 1);
     }
+    heat *= steamFix.damper(); // (F13: the firebox damper draws the fire down as the line climbs past STEAMFIX.DAMPER)
     state.ship.press = clamp(state.ship.press + (heat - (state.steamUse * state.ship.press) / BO.USE_REF) * dt, 0, 100);
     if (state.ship.press >= BO.WARN_AT && !state.pressureWarned && !state.ship.down) {
       state.pressureWarned = true;
@@ -1851,7 +1860,8 @@ export function createShipSim(world, ship, W) {
     // cools and seeps out, and holes leak more.
     if (flying) {
       state.noPump = !rig.pump; // (no helm or no boiler: nobody can ever top her up, so the bag only seeps very slowly, see gasBags.js)
-      const pumping = Math.max(0, valve.input) * (state.ship.press > G.PUMP_MIN_PRESS && modules.boilerUp() ? Math.min(1, state.ship.press / 60) : 0);
+      const FX = config.STEAMFIX, fixed = steamFix.on(); // (F13: the pump moves gas down to PUMP_MIN pressure and runs full from PUMP_FULL; before, from 15 and 60)
+      const pumping = Math.max(0, valve.input) * (state.ship.press > (fixed ? FX.PUMP_MIN : G.PUMP_MIN_PRESS) && (modules.boilerUp() || (fixed && state.ship.press >= FX.RESERVE)) ? Math.min(1, state.ship.press / (fixed ? FX.PUMP_FULL : 60)) : 0);
       state.steamParts.pump = pumping * G.PUMP_STEAM;
       // The pump and the vent act on every gasbag at once; seepage and holes are per bag (gasBags.js: with one bag this is the old single gas value).
       stepBags(state, pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) * state.links.helmMul + Math.min(0, valve.input) * G.VENT_RATE * state.links.helmMul, dt);
@@ -2124,7 +2134,7 @@ export function createShipSim(world, ship, W) {
   }
 
   return {
-    ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, health, goingDown, raiders, escort, coil, searchlights, air, cannon, cargo, hatches,
+    ship, layout, walkers: { moveWalker, steerTo, fall, detach, platformBelow }, modules, jobFinder, prime, links, sails, engines, forces, balance, flight, fireSys, health, goingDown, steamFix, raiders, escort, coil, searchlights, air, cannon, cargo, hatches,
     get hookshot() { return hookshot; },
     get env() { return ship.main ? W.env : ownEnv; }, // (the sky's hazards on her: ice, thermals, spores, oxygen, storm rods, the sea)
     hitsShip, onGasbag, gasHoleAt, roomPlatformAt, impact, damageHull, wreck: (text) => wreck(text), shieldBlocks, gnaw, shipPuff, shipPop, breakOff, splitShip, structure, explodeBay, explodeBag, hydrogen, crash, seedBreak: (n) => { breakRng = makeRng(n); }, // (the gate reseeds the break-off rolls)

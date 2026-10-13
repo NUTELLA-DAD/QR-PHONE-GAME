@@ -205,6 +205,7 @@ console.log('--- (a) moments are recorded ---');
   }
 }
 { // GOING DOWN! saved
+  config.STEAMFIX.ENABLED = false; // (FUN.md F13: with the steam fixes the bots stop this crisis (no coal, no pressure, four holes) before it counts as a fall; this scene is about the Book's moment for a saved fall, so it plays the old steam)
   const A = boot(8, { seed: 4 });
   const { sim, st } = A;
   step(sim, 60 * 20);
@@ -216,6 +217,7 @@ console.log('--- (a) moments are recorded ---');
   let started = false;
   const saved = until(sim, () => { started = started || !!st.goingDown; return started && !st.goingDown; }, 75);
   const m = find(sim, 'going-down-saved');
+  config.STEAMFIX.ENABLED = true;
   report(started && saved && named(m), `GOING DOWN! saved: "going-down-saved" by ${m && m.who.join(' & ')} (weight ${m && m.weight})`);
 }
 { // the helm held through a crisis

@@ -7,15 +7,52 @@
 //   gap         the longest stretch of flight (s) without a named moment in the Ship's Book
 //   threat      per stop (column): flight seconds until the first thing to shoot or fight showed up
 //   falls       per stop (column): FALLING (GOING DOWN!) alarms
+//   steam       (F13) flight seconds with the pressure under 30 / the firebox under 12 / a burst pipe open / the leaks over 3 / the boiler broken; and, for every FALLING alarm, the state of the steam at that moment
 // Thresholds live here as plain constants: they define what the lines MEAN, they do not tune the game.
 const STATIC = new Set(['turret', 'post', 'core', 'shutter', 'rspecial', 'laid', 'mine', 'para']); // (shootables that sit on the map from the start, or drift: not a threat showing up)
 export const FUN = { KO: 3, FIRES: 2, BOARDERS: 2, OVERRUN_CALM: 5, SAMPLE: 10 };
 
 export function createFunMetrics(state, { kindOf, targets, moments }) {
-  const m = { flightSecs: 0, seatSecs: 0, idleSecs: 0, gunSecs: 0, gunIdleSecs: 0, overrun: 0, overrunSecs: 0, groundStillSecs: 0, menuSecs: 0, scorecards: 0, gapMax: 0, threat: {}, flown: {}, falls: {} };
+  const m = { flightSecs: 0, seatSecs: 0, idleSecs: 0, gunSecs: 0, gunIdleSecs: 0, overrun: 0, overrunSecs: 0, groundStillSecs: 0, menuSecs: 0, scorecards: 0, gapMax: 0, threat: {}, flown: {}, falls: {}, steam: { flight: 0, lowPress: 0, lowFuel: 0, pipe: 0, leaking: 0, boilerOut: 0, nobodyStoking: 0, bursts: 0, burstSecs: 0, burstMax: 0, burstStuck: 0, blowouts: 0, boilerBreaks: 0, over90: 0, why: {}, boilerWhy: {}, at: [] } };
   let overCalm = 1e9, gap = 0, lastNamed = moments ? moments.totals.named : 0, wasCard = false, wasDown = false, n = 0;
   const colOf = () => (state.run && state.run.stopId ? Number(String(state.run.stopId).split('.')[0]) : 0);
   const threatNow = () => targets(state).some((t) => !STATIC.has(t.kind)) || state.boarders.length > 0 || !!state.boss || !!state.creature;
+  // F13: the steam, per second of flight, and at the start of every fall (which of the causes in goingDown.js stats.why it was, and what the steam was doing)
+  let why0 = {}, prevPress = 0, boilerWas = false;
+  const pipeBroken = {};
+  const burstAt = {}; // pipe name -> seconds it has been burst with its valve open (F13: how long a leak runs before somebody shuts the valve)
+  const steamStep = (dt, fell) => {
+    const S = m.steam, mods = state.modules || [], P = state.steamParts || {}, press = state.ship.press, fuel = state.ship.fuel;
+    const pipeOpen = mods.some((q) => q.kind === 'pipe' && q.broken && q.open), boilerOut = mods.some((q) => q.kind === 'boiler' && q.broken);
+    const stoking = Object.values(state.players).some((q) => !q.enemy && !(q.ko > 0) && (q.carry === 'coal' || (q.botJob && q.botJob.kind === 'coal')));
+    S.flight += dt;
+    if (press === 75 && prevPress > 75) S.blowouts++; // (the boiler blowing sets the line to exactly 75)
+    if (press >= 90) S.over90 += dt;
+    prevPress = press;
+    if (boilerOut && !boilerWas) { S.boilerBreaks++; const bm = mods.find((q) => q.kind === 'boiler' && q.broken), c = (press === 75 || prevPress === 75) ? 'blowout' : bm && state.fires.some((f) => f.d === bm.d && Math.abs(f.x - bm.x) < 160) ? 'fire' : 'hit'; S.boilerWhy[c] = (S.boilerWhy[c] || 0) + 1; }
+    boilerWas = boilerOut;
+    for (const q of mods) {
+      if (q.kind !== 'pipe') continue;
+      if (q.broken && !pipeBroken[q.name]) { // a pipe has just burst: what was going on (a fire beside it, the boiler blowing, rock under the keel, else a hit)
+        const c = state.fires.some((f) => f.d === q.d && Math.abs(f.x - q.x) < 160) ? 'fire' : (press === 75 || prevPress === 75) ? 'blowout' : state.grounded ? 'rock' : 'hit';
+        S.why[c] = (S.why[c] || 0) + 1;
+      }
+      pipeBroken[q.name] = !!q.broken;
+      if (q.broken && q.open) { if (burstAt[q.name] == null) { burstAt[q.name] = 0; S.bursts++; } burstAt[q.name] += dt; if (burstAt[q.name] > 20 && burstAt[q.name] - dt <= 20) S.burstStuck++; }
+      else if (burstAt[q.name] != null) { S.burstSecs += burstAt[q.name]; S.burstMax = Math.max(S.burstMax, burstAt[q.name]); delete burstAt[q.name]; }
+    }
+    if (press < 30) S.lowPress += dt;
+    if (fuel < 12) S.lowFuel += dt;
+    if (pipeOpen) S.pipe += dt;
+    if ((P.leaks || 0) > 3) S.leaking += dt;
+    if (boilerOut) S.boilerOut += dt;
+    if (fuel < 30 && !stoking) S.nobodyStoking += dt;
+    if (fell) {
+      const why = (state.structStats && state.structStats.why) || {}, k = Object.keys(why).find((x) => (why[x] || 0) > (why0[x] || 0)) || '?';
+      why0 = { ...why };
+      if (S.at.length < 60) S.at.push({ why: k, col: colOf(), press: Math.round(press), fuel: Math.round(fuel), pump: +(P.pump || 0).toFixed(1), leaks: +(P.leaks || 0).toFixed(1), eng: +(P.engines || 0).toFixed(1), vents: +(P.vents || 0).toFixed(1), speed: +state.ship.speed.toFixed(2), pipe: pipeOpen, boilerOut, stoking, brokenMods: mods.filter((q) => q.broken).length, holes: (state.gasHoles || []).length, gas: Math.round(state.ship.gas), short: state.liftWeight ? Math.round(state.liftWeight.weight - state.liftWeight.lift) : null, input: +(state.gasValve ? state.gasValve.input : 0).toFixed(2), vy: Math.round(state.ship.vy || 0), grounded: !!state.grounded, helm: Object.values(state.players).some((q) => kindOf(q.lock) === 'helm'), map: state.course && state.course.map ? state.course.map.kind + (state.course.map.open ? '' : ':cave') : null, env: state.env && state.env.id, unstick: !!(state.course && state.course.unstick > 0), helmDark: mods.some((q) => (q.kind === 'helm' && q.broken) || (q.kind === 'pipe' && q.to && mods.some((h) => h.kind === 'helm' && h.name === q.to) && (q.broken || !q.open))), coalOut: (state.gdCoalOut || 0) > 0 || !!(state.goingDown && state.goingDown.coalGone), fires: state.fires.length, ko: Object.values(state.players).filter((q) => q.ko > 0).length });
+    }
+  };
   return {
     step(dt) {
       n++;
@@ -52,9 +89,10 @@ export function createFunMetrics(state, { kindOf, targets, moments }) {
       // a fall
       const down = !!state.goingDown;
       if (down && !wasDown) m.falls[col] = (m.falls[col] || 0) + 1;
+      steamStep(dt, down && !wasDown);
       wasDown = down;
     },
-    result: () => ({ ...m, threat: { ...m.threat }, flown: { ...m.flown }, falls: { ...m.falls } }),
+    result: () => ({ ...m, threat: { ...m.threat }, flown: { ...m.flown }, falls: { ...m.falls }, steam: { ...m.steam, at: m.steam.at.slice() } }),
   };
 }
 
