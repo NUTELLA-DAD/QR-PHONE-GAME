@@ -170,6 +170,11 @@ body.teamed #strip{border-left:16px solid var(--tc,#c4574d)}
 #vote h2{margin:0;color:#f3ead6;font-size:22px;text-align:center}
 #vote .cards{flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));grid-auto-rows:minmax(110px,1fr);gap:10px;min-height:0;overflow-y:auto;touch-action:pan-y}
 #vote .cards.route{grid-template-columns:1fr}
+#vote .cards.names{grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(0,1fr)}
+#vote .cards.names button{min-height:0;gap:2px;padding:6px 8px;overflow:hidden}
+#vote .cards.names button .ic{font-size:34px;line-height:1}
+#vote .cards.names button b{font-size:21px;line-height:1.15}
+#vote .cards.names button small{font-size:16px;line-height:1.1}
 #vote .cards.dock3{grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,2fr) minmax(0,1fr);grid-auto-rows:minmax(0,1fr)}
 #vote .cards.dock3 button{min-height:0;gap:3px;padding:6px 10px;overflow:hidden}
 #vote .cards.dock3 button .ic{font-size:36px;line-height:1}

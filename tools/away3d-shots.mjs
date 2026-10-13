@@ -108,7 +108,7 @@ window.__a = {
 
 let host = null, phone = null;
 try {
-  host = await openPage(`${BASE}/host.html?view=${view}&kind=ring&variant=fortress&tier=${arg("tier", "medium")}&cine=0`, 1600, 900, false, true);
+  host = await openPage(`${BASE}/host.html?view=${view}&kind=ring&variant=fortress&tier=${arg("tier", "medium")}&cine=0&christen=0`, 1600, 900, false, true);
   check(await host.waitFor('window.__meter!==undefined', 60000), 'the host page is up');
   await host.ev(PRE);
   const code = await host.ev('document.getElementById("code").textContent');

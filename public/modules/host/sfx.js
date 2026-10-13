@@ -116,6 +116,12 @@ export function createSfx(state) {
       tone('sine', 1320, 1310, 0.7, 0.12);
     },
     fanfare: () => [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, f, 0.18, 0.25, i * 0.11)),
+    glass: () => { // the christening bottle (christen.js): a crack, a spray of glass, then a bell for her name
+      noise('highpass', 3000, 0.35, 0.45, 0, 2);
+      [2400, 3100, 2750, 3600].forEach((f, i) => tone('triangle', f, f * 0.9, 0.08, 0.12, 0.04 + i * 0.05));
+      tone('sine', 880, 870, 0.9, 0.25, 0.5);
+      tone('sine', 1320, 1310, 0.7, 0.1, 0.5);
+    },
     impact: () => {
       noise('bandpass', 1200, 0.12, 0.3, 0, 2);
       tone('square', 300, 120, 0.08, 0.08);
