@@ -158,6 +158,14 @@ function special(B, A, f, out) {
     B.rod(A.woodDark, V3(sx + 90, base + 316, -130), V3(sx + 90, base + 410, -130), 3, 1);
     B.box(A.banner, sx + 122, base + 392, -130, 56, 34, 4, 1);
     cone(B, A.flame, sx + 122, base + 392, -126, 8, 24, 5, 0);
+  } else if (sp.kind === 'ballista') { // (D2: the garrison's ballista: a low stone bastion, 90 high, its merlons in front; garrison3d.js stands the ballista itself on it (the sim's lock starts 100 px above the ground) and turns it on 8 fps keys)
+    B.box(A.stone, sx, base + 45, -95, 190, 90, 130, 8);
+    B.box(A.shade, sx, base + 14, -92, 214, 28, 150, 5);
+    B.box(A.trim, sx, base + 92, -90, 202, 12, 142, 4);
+    for (const dx of [-1, 1]) for (const dz of [-1, 1]) B.box(A.stone, sx + dx * 80, base + 116, -95 + dz * 50, 36, 36, 30, 4);
+    B.box(A.glass, sx, base + 40, -28, 18, 56, 6, 0);
+    B.rod(A.woodDark, V3(sx - 84, base + 116, -146), V3(sx - 84, base + 230, -146), 3, 1);
+    B.box(A.banner, sx - 84 + 24, base + 214, -146, 48, 30, 4, 1);
   } else if (sp.kind === 'flak') { // a ballista tower
     B.box(A.stone, sx, base + 125, -110, 150, 250, 150, 8);
     B.box(A.shade, sx, base + 20, -108, 176, 40, 176, 6);

@@ -33,6 +33,8 @@ import { placeCamera, worldToScreen, FOV, ELEV } from './camera3d.js';
 import { createCinema } from './cinema.js'; // WP11: the camera's cinematic moments
 import { RB } from './ringBend.js'; // LOOP R1: the ring map's bend (a camera-relative wrap done by the vertex shaders)
 import { createRingCastle } from './ringCastle.js'; // LOOP R2: the ring castle (strip gatehouses and walls, the island, the ward, the keep and crown)
+import { GAR_LIVE } from './garrisonKit.js';
+import { createGarrison3d } from './garrison3d.js'; // CASTLE.md D2: the garrison in 3D (soldiers, arrows, the ballista, the boom chain, grapples, white flags)
 import { config } from '../../config.js';
 import { createPorthole } from './porthole.js'; // WP11: the Versus far-ship porthole
 import { createPortholes3D } from './portholes.js'; // the round portholes: a friendly plane off screen, the lookout's spyglass
@@ -207,6 +209,9 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   let castle = null; // LOOP R2: the ring map's castle (ringCastle.js; if it cannot be made the ring is just the bent rock; P = the vfx's particles, for the braziers' fire)
   try { castle = createRingCastle({ parent: worldRoot, state, P: () => (vfx && vfx.P) || null }); } catch (e) { console.warn('view3d castle off', e); }
   V.castle = castle;
+  let garrison = null; // CASTLE.md D2: the castle's men, arrows, the ballista, the boom chain (garrison3d.js; if it cannot be made the ring just has no garrison in 3D)
+  try { garrison = createGarrison3d({ parent: worldRoot, state, P: () => (vfx && vfx.P) || null }); } catch (e) { console.warn('view3d garrison off', e); }
+  V.garrison = garrison;
   // WP6: the damage state of every part (soot, dents, poses, smoke, scorch memory, breaches, the flat bag), on top of the poses shipMesh sets each frame
   const partDamage = createPartDamage({ state, models, vfx });
   V.destruction = destruction; V.damage = damage; V.partDamage = partDamage;
@@ -316,6 +321,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     for (const b of state.bullets) {
       if (n >= 400) break;
       if (!Number.isFinite(b.x)) continue;
+      if ((b.arrow || b.bolt) && GAR_LIVE.on) continue; // (D2: the garrison's arrows and bolts are drawn by garrison3d.js)
       setInst(shellMesh, n, b.x, -b.y, 0, b.flak ? 14 : 11, b.flak ? '#e8884a' : '#ff2e55');
       setInst(shellInk, n, b.x, -b.y, 0, (b.flak ? 14 : 11) * (1 + 0.28 * INKK()));
       n++;
@@ -347,6 +353,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       const sh = state.ships[0], c = state.creature;
       v = { ...v, cx: (sh.pose.x + sh.layout.refPoint.x + c.x) / 2, cy: (sh.pose.y + sh.layout.refPoint.y + c.y) / 2 };
     }
+    if (S.look && Number.isFinite(S.look.x) && Number.isFinite(S.look.y)) v = { ...v, cx: S.look.x, cy: S.look.y }; // (dev / screenshots: look at a map point, castle-shots.mjs --close)
     if (S.focus && state.creature) { const c = state.creature; v = { ...v, cx: c.x + (S.focus.dx || 0), cy: c.y + (S.focus.dy || 0) }; } // (dev / screenshots: look at the creature; settings.focus = { dx, dy } in game pixels)
     const orbit = !!(controls && S.orbit);
     let cine = null;
@@ -428,6 +435,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     if (on) RB.setFrame(camTarget.x, shipHalfLen());
     if (on !== was || (map && map !== ringMap)) ringMap = map;
     if (castle) { try { castle.update({ on, map, env, camTarget, night: world.night, t, dt }); } catch (e) { logOnce('castle', e); } }
+    if (garrison) { try { garrison.update({ on, t, dt, night: world.night, tier, castle }); } catch (e) { logOnce('garrison', e); } }
     ringMs = performance.now() - r0;
   }
 
@@ -570,7 +578,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.resetOrbit = () => { lastPivot.set(0, 0, 0); }; // WP13: the next orbit frame starts from the starting view again (the build page's double-click)
-  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));

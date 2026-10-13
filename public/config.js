@@ -3474,6 +3474,19 @@ export const config = {
       fortress: { stone: '#a09da2', shade: '#7f7c84', trim: '#68656e', roof: '#93403a', roofDark: '#6f2e2b', wood: '#7a5a3e', woodDark: '#563c28', iron: '#3f3b3e', glass: '#241f27', banner: '#8f302c', flame: '#ffb347', gold: '#c8a85c', rock: ['#ab957f', '#927d6b', '#7a6757', '#65564a'], top: '#7f8e64', paving: '#c3baa8', road: '#a79a82', shard: '#9fdcff', water: '#b6dbe6', waterDark: '#86b6c8' },
       citadel: { stone: '#b9bfd8', shade: '#939ab8', trim: '#767da6', roof: '#6d72b8', roofDark: '#51569a', wood: '#8a6a4a', woodDark: '#604830', iron: '#44415a', glass: '#272444', banner: '#8f302c', flame: '#ffb347', gold: '#dcba58', rock: ['#c2b4a2', '#a99b8b', '#908474', '#7a6f66'], top: '#9dba8e', paving: '#cdd0e0', road: '#aeb3cc', shard: '#8fe6ff', water: '#c4ecf6', waterDark: '#94cce0' },
     },
+    // D2 THE GARRISON IN 3D (view3d/garrison3d.js + garrisonKit.js, CASTLE.md): the castle's men, arrows, bolts, the amber arc, the ballista and its line, the boom chain, grapples, white flags. View only (it reads course.ring).
+    // CAP = soldiers drawn at most per quality tier (nearest the camera first; the draw calls stay the same whatever the number); REACH = how far round the ring (x R) men are drawn from the camera's place on it;
+    // MAN = a soldier's height, the gap between men in a squad, the depth rows a squad stands in (the land's things stand at z -45), the archers' wall depth, the gun crews' depth. BANNER = pole height / cloth width / cloth height of a plaza squad's standard.
+    // COL = the colours that are not the castle palette's (the tunic and the banner come from ART[variant].banner / gold). Everything is stepped: poses on 8 fps keys, banners 4 a second, the chain's glow on 8 fps steps.
+    GAR: {
+      ENABLED: true,
+      CAP: { low: 28, medium: 64, high: 110 }, ARROWS: 140, REACH: 1.5,
+      MAN: { H: 150, GAP: 56, ROWS: [-48, -86], POST_Z: -258, GUN_Z: -20, GUN_DX: 120 },
+      BANNER: { POLE: 300, W: 40, CLOTH: 104, Z: -90 },
+      ARROW: { LEN: 190, THICK: 12, BOLT_LEN: 340, BOLT_THICK: 16 },
+      CHAIN: { LINK: 82, THICK: 17, SPREAD: 110, WEIGHT: 56, FALL_FOR: 2.4, FALL_PX: 2400, HANG: 1100, COLUMN: 150 },
+      COL: { SKIN: '#e3b78e', HELM: '#8f949c', PANTS: '#3b3236', LEATHER: '#6b4a2a', CLOTH: '#f7f2e6', SHAFT: '#3a2616', HEAD: '#4b5058', FEATHER: '#efe9d6', BOLT: '#2f2622', BOLT_HEAD: '#8c9096', FIRE: '#ff8a2a', AMBER: '#ffaa28', LOCK: '#fff0c8', LOCK_HOT: '#ff5a3c', CHAIN: '#77737b', CHAIN_GLOW: '#ffc84a', CHAIN_HOT: '#ff6a3c', ROPE: '#8a6a44', HORN: '#ffc86a' },
+    },
   },
   // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.
   // SCALE = size of one texture pixel in world units (the 512px tile covers 512*SCALE units; the airship is ~1500 wide).
