@@ -17,7 +17,7 @@ import { mainShip, hostileTo, foeOf, areHostile, shipOf } from './ships.js';
 import { cannonPlan } from './cannon.js';
 import { hullOrStructure } from './structure.js';
 import { solveThrow } from './cargo.js';
-import { scrapOn, holdSpot, holdFull, heavyHold, helmPlan } from './scrap.js';
+import { scrapOn, holdSpot, holdFull, holdCount, heavyHold, helmPlan } from './scrap.js';
 import { cannonSeatName, sizeNamed } from './shipBuild.js';
 import { toWorldX, toWorldY, toShipX, toShipY, aimToShip } from './pose.js';
 import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/captainAI.js';
@@ -459,12 +459,13 @@ function crossJobs(state, bot) {
   return out;
 }
 // SCRAP (config.SCRAP): the bundles lying on the deck go to the hold (stow: pick one up, carry it to the bin, Action), and a hulk alongside is stripped from an open deck (hulk: Action beside it takes one bundle).
-function scrapJobs(state, bot) {
+function scrapJobs(state, bot, patching = false) {
   if (!scrapOn() || state.phase !== 'flying' || state.ship.down || bot.mate || bot.team === 'enemy') return [];
   const ship = mainShip(state), L = ship.layout, sp = holdSpot(L);
   if (!sp || ship.ai) return [];
   const out = [], full = holdFull(state);
   if (bot.carry === 'scrap') {
+    if (patching) return out; // (G2: a failing segment wants this bundle: the patch job is ahead of the bin)
     if (!full) out.push({ kind: 'stow', obj: 'hold', max: 99 });
     else if (bot.d != null && !bot.fly) { ship.sim.cargo.place('scrap', bot.d, bot.x); bot.carry = null; } // (the hold is full: put it down where he stands, to be picked up when there is room)
     return out;
@@ -669,6 +670,9 @@ function listJobs(state, bot) {
   if (gasCrisis && canHammer) for (const h of gasHoles) jobs.push({ kind: 'patch', obj: h, max: 1, cap: B.GAS_CAP });
   // STRUCTURE.md: a load-bearing segment of the frame about to give (critical): two hands with hammers, ahead of breaches and modules. The merely damaged ones come after the breaches.
   const framesS = shipH.sim && shipH.sim.structure, framesAll = framesS && framesS.on() ? framesS.jobsOf() : [];
+  // SCRAP PATCH (config.SCRAP.PATCH, LOOP.md G2): a free hand with a bundle in the hold (or in its hands) rivets a failing segment: a critical one ahead of the hammer jobs, the others with them
+  const patchJobs = framesS && framesS.on() && scrapOn() && !shipH.ai && (bot.carry === 'scrap' || (!bot.carry && holdCount(state) > 0)) ? framesAll.filter((g) => g.hp < config.SCRAP.PATCH.AT).map((g) => ({ kind: 'scrappatch', obj: g, max: 1, cap: 2, ...(g.st === 'critical' ? { urgent: true } : {}) })) : [];
+  jobs.push(...patchJobs.filter((j) => j.urgent));
   if (canHammer) for (const g of framesAll) if (g.st === 'critical') jobs.push({ kind: 'frame', obj: g, max: 1, cap: 2, urgent: true });
   const frames = !canHammer ? [] : framesAll.filter((g) => g.st !== 'critical').map((g) => ({ kind: 'frame', obj: g, max: 1 }));
   // Bats latched on the ship: swat them before they chew holes (bare hands are enough).
@@ -698,8 +702,9 @@ function listJobs(state, bot) {
   }
   const broken = !canHammer ? [] : mods.filter((m) => m.broken).map((m) => ({ kind: 'repair', obj: m, max: 1 }));
   // Use the tool already in hand first.
+  const softPatch = patchJobs.filter((j) => !j.urgent);
   if (bot.carry === "hammer") jobs.push(...hullHoles, ...frames, ...leaks, ...broken, ...holes, ...icy, ...deep, ...fires);
-  else jobs.push(...fires, ...hullHoles, ...frames, ...leaks, ...broken, ...holes, ...icy, ...deep);
+  else jobs.push(...fires, ...hullHoles, ...softPatch, ...frames, ...leaks, ...broken, ...holes, ...icy, ...deep);
   for (const m of mods) if (m.kind === 'pipe' && !m.broken && !m.open && (!leaky(m) || state.ship.press >= B.ENGINEER_PRESS + 25)) jobs.push({ kind: 'valve', obj: m, max: 1 });
   jobs.push(...healJobs(state, bot)); // (crew health: the medbay for a bot on its last heart, a bandage for a hurt person)
   // Stations, most useful first. The vital ones (helm, gas valve, a gun or weapon with a target
@@ -714,7 +719,7 @@ function listJobs(state, bot) {
   jobs.push(...hatchWorks.filter((j) => j.mode !== 'tip'));
   for (const n of open) if (reach(n) <= 0.8) jobs.push({ kind: 'station', obj: n, max: 1, tier: reach(n) });
   jobs.push(...linkJobs(state, bot, true)); // (LINKED STATIONS block at the end of this file: loaders for guns with a target)
-  const scrapWork = scrapJobs(state, bot); // (SCRAP, LOOP.md G1: bundles on the deck to stow, a hulk alongside to strip)
+  const scrapWork = scrapJobs(state, bot, patchJobs.length > 0); // (SCRAP, LOOP.md G1: bundles on the deck to stow, a hulk alongside to strip)
   if (bot.carry === 'scrap') jobs.unshift(...scrapWork); else jobs.push(...scrapWork);
   // A gunship alongside: hook on, run across, fight its crew, plant the charge - then run back.
   const gs = state.gunship;
@@ -808,7 +813,7 @@ function chooseJob(state, bot, bots) {
   const onKind = (job) => bots.filter((o) => o !== bot && o.botJob && o.botJob.kind === job.kind && o.botJob.cap != null).length;
   // Chores (patching, fires, repairs, swatting...) can take only so many hands: the rest keep the guns manned and the
   // ship running. Without this a ship full of holes sends the WHOLE crew to patch and nobody shoots back (a death spiral).
-  const CHORE = { fire: 1, patch: 1, repair: 1, swat: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1, frame: 1 };
+  const CHORE = { fire: 1, patch: 1, repair: 1, swat: 1, valve: 1, ice: 1, unclog: 1, oxygen: 1, frame: 1, scrappatch: 1 };
   const onChores = bots.filter((o) => o !== bot && !o.lock && !(o.ko > 0) && o.botJob && CHORE[o.botJob.kind] && !o.botJob.urgent).length;
   const choresFull = state.phase === 'flying' && onChores >= Math.max(3, Math.ceil(bots.length * B.CHORE_SHARE));
   const cur = bot.botJob;
@@ -1243,6 +1248,11 @@ function work(p, state) {
     if (getTool(state, p, 'extinguisher', o) && steer(p, o.d, o.x, 30)) p.fire = true;
   } else if (job.kind === 'abandon') {
     press(p); // (STRUCTURE.md: jump! shipSim.js useFor offers a bot the parachute jump once its job says so)
+  } else if (job.kind === 'scrappatch') { // (SCRAP PATCH: take a bundle out of the hold bin, carry it to the failing segment, hold Action there)
+    if (!(state.frames || []).includes(o) || o.hp >= config.SCRAP.PATCH.AT) { p.botJob = null; return; } // (patched, shored up, or the frame was cut again)
+    if (p.carry === 'scrap') { if (steer(p, o.d, o.x, 30)) { p.jx = 0; p.fire = true; } }
+    else if (!p.carry && holdCount(state) > 0) { const sp = holdSpot(L); if (sp && steer(p, sp.d, sp.x, 18)) { p.jx = 0; press(p); } }
+    else p.botJob = null;
   } else if (job.kind === 'frame') {
     if (!(state.frames || []).includes(o) || o.hp >= 0.97) { p.botJob = null; return; } // (shored up, or the frame was cut again)
     if (getTool(state, p, 'hammer', o) && steer(p, o.d, o.x, 30)) { p.jx = 0; p.fire = true; }

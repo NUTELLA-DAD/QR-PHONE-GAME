@@ -7,7 +7,7 @@
 import { config } from '../../config.js';
 import { blueprintView, drawBlueprint } from './blueprintArt.js';
 import { drawScrapBundle } from './scrapArt.js';
-import { scrapOn, holdCount } from './scrap.js';
+import { scrapOn, holdCount, priceWords } from './scrap.js';
 
 const GOOD = '#4f7f3f', WARNC = '#c9892a', BAD = '#a8443f';
 const levelColor = (lv) => (lv === 'FAIL' ? BAD : lv === 'WARN' ? WARNC : GOOD);
@@ -123,7 +123,9 @@ export function createYardArt({ ctx, book, dots, wrapLines, ink, pics, spares, w
       if (o.kind !== 'cast') {
         ctx.font = (one ? '26px ' : '21px ') + config.FONTS.DISPLAY;
         ctx.fillStyle = off && !o.sold ? '#b3261e' : L.INK;
-        ctx.fillText(o.sold ? 'SOLD' : o.cost === 0 ? 'FREE' : `Salvage ${o.cost}`, x + 100, y + ch - 18);
+        ctx.fillText(o.sold ? 'SOLD' : priceWords(o), x + 100, y + ch - 18, cw - 116);
+        if (o.scrap && !o.sold) for (let k = 0; k < o.scrap; k++) { ctx.globalAlpha = off ? 0.5 : k < o.scrapPay ? 1 : 0.28; drawScrapBundle(ctx, x + cw - 28 - k * 30, y + ch - 62, 0.8); } // (G2: one bundle for each the card asks; the ones the hold covers are bright, the rest are paid in cash)
+        ctx.globalAlpha = off ? 0.5 : 1;
       }
       if (part && !o.sold) { // the part card wears a brass tag
         ctx.save();

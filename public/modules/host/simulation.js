@@ -21,7 +21,7 @@ import { hullOrStructure } from './structure.js';
 import { createMatch } from './pvp/match.js';
 import { createShipCollide } from './shipCollide.js';
 import { createTowing } from './towing.js';
-import { createFlotsam, scrapOn, topDeck } from './scrap.js';
+import { createFlotsam, scrapOn, topDeck, holdCount, holdSpend, priceWords, scrapNote } from './scrap.js';
 import { stepThrown, cargoItem } from './cargo.js';
 import { stepMines } from './minefield.js';
 import { stepFlak } from './weapons.js';
@@ -996,7 +996,29 @@ export function createSimulation() {
     offers.push({ id: 'cast', kind: 'cast', name: 'Cast off!', icon: '🚀', desc: 'Leave the dock and choose the next stop.', cost: 0 });
     return offers;
   };
+  // G2 (config.SCRAP.PRICE): a Yard part or a fitting is paid half in cash and half in BUNDLES from the hold (money mends, scrap builds). The card keeps its old salvage price as o.base and asks o.scrap bundles; what the hold cannot
+  // cover is paid in cash at o.each a bundle, so a crew with no scrap pays exactly the old price. settleScrap re-reads the hold (the card's cost, scrapPay) every step the dock is open.
+  const priceInScrap = (o) => {
+    const P = config.SCRAP.PRICE;
+    if (!scrapOn() || !P.ENABLED || (o.kind !== 'part' && o.kind !== 'upgrade') || !(o.cost > 0) || o.trophy || o.derelict) return o;
+    o.base = o.cost;
+    o.scrap = Math.max(P.MIN, Math.min(P.MAX, config.SCRAP.HOLD_CAP, Math.round(o.base / (o.kind === 'part' ? P.PART_PER : P.FITTING_PER))));
+    o.cashFull = Math.round((o.base * P.CASH_SHARE) / 5) * 5;
+    o.each = (o.base - o.cashFull) / o.scrap;
+    return settleScrap(o);
+  };
+  const settleScrap = (o) => {
+    if (o.scrap == null) return o;
+    o.scrapPay = Math.min(o.scrap, holdCount(state));
+    o.cost = Math.round((o.cashFull + (o.scrap - o.scrapPay) * o.each) / 5) * 5;
+    return o;
+  };
   const buildOffers = () => {
+    const offers = buildOffersRaw();
+    offers.forEach(priceInScrap);
+    return offers;
+  };
+  const buildOffersRaw = () => {
     if (SH.V2) return buildOffersV2();
     const offers = [];
     if (needsHull()) offers.push({ id: 'repair-hull', kind: 'repair', name: 'Full Repair', icon: '🔧', desc: 'Hull, holes, fires and every broken part, as good as new.', cost: SH.REPAIR_HULL });
@@ -1134,7 +1156,7 @@ export function createSimulation() {
     const toHelium = ok.find((i) => v.options[i].gas === 'helium'); // (GAS TYPES: a crew whose hydrogen bag has been scorched swaps it for helium)
     if (toHelium != null && state.gasStats && state.gasStats.scorched > 0) return toHelium;
     const part = ok.find((i) => v.options[i].kind === 'part');
-    if (part != null && Math.random() < (v.options[part].rec ? YD.BOT_REC_CHANCE : YD.BOT_PART_CHANCE)) return part; // (a crew that can afford a part card likes to build)
+    if (part != null && Math.random() < Math.max(v.options[part].rec ? YD.BOT_REC_CHANCE : YD.BOT_PART_CHANCE, v.options[part].scrap && v.options[part].scrapPay >= v.options[part].scrap ? config.SCRAP.PRICE.BOT_BUY : 0)) return part; // (G2: a card the hold pays in bundles is a bargain) // (a crew that can afford a part card likes to build)
     if (Math.random() < SH.BOT_CAST_CHANCE) return cast;
     const rep = ok.filter((i) => v.options[i].kind === 'repair');
     if (rep.length && Math.random() < SH.BOT_REPAIR_CHANCE) return rep[(Math.random() * rep.length) | 0];
@@ -1160,6 +1182,7 @@ export function createSimulation() {
     v.t -= dt;
     v.total += dt;
     const voters = Object.values(state.players).filter((p) => p.connected !== false && !p.mate);
+    if (v.kind === 'dock') for (const o of v.options) settleScrap(o); // (G2: the hold may have changed)
     const valid = (i) => Number.isInteger(i) && i >= 0 && i < v.options.length && !(v.kind === 'dock' && cardOff(v.options[i]));
     for (const p of voters) {
       if (p.bot && p.vote == null && (p.voteAt -= dt) <= 0) p.vote = botChoice(v, p);
@@ -1171,10 +1194,10 @@ export function createSimulation() {
           title: v.kind === 'dock' ? `SKY-DOCK - ${state.run.salvage} salvage` : v.kind === 'shelf' && p.team ? `${v.title} - ${p.team.toUpperCase()}` : v.title,
           t: Math.max(0, Math.ceil(v.t)),
           mine: valid(p.vote) ? p.vote : null,
-          options: v.options.map((o) => ({ name: o.name, icon: o.icon, desc: o.desc, cost: o.kind === 'cast' || o.kind === 'stop' || v.kind === 'slot' ? null : o.cost, off: v.kind === 'dock' && cardOff(o), sold: !!o.sold, badge: o.kind === 'part' ? o.badge + (o.spots > 1 ? ` - ${o.spots} places` : '') : null })),
+          options: v.options.map((o) => ({ name: o.name, icon: o.icon, desc: o.desc, cost: o.kind === 'cast' || o.kind === 'stop' || v.kind === 'slot' ? null : o.cost, off: v.kind === 'dock' && cardOff(o), sold: !!o.sold, price: o.scrap ? priceWords(o) : null, badge: o.kind === 'part' ? o.badge + (o.spots > 1 ? ` - ${o.spots} places` : '') : null })),
         },
       };
-      const key = 'vote|' + ui.vote.title + '|' + ui.vote.t + '|' + ui.vote.mine + '|' + ui.vote.options.map((o) => o.name + o.off + o.sold + o.desc + o.cost).join();
+      const key = 'vote|' + ui.vote.title + '|' + ui.vote.t + '|' + ui.vote.mine + '|' + ui.vote.options.map((o) => o.name + o.off + o.sold + o.desc + o.cost + (o.price || '')).join();
       if (key !== p.uk) {
         p.uk = key;
         emitPlayerUi(p.id, ui);
@@ -1228,6 +1251,10 @@ export function createSimulation() {
       o.dealt = deal;
     }
     state.run.salvage -= price;
+    if (o.scrapPay > 0 && holdSpend(state, o.scrapPay)) { // (G2: the bundles come out of the hold; the Book tells who voted for it)
+      const crew = Object.values(state.players).filter((p) => p.vote === pick && !p.mate);
+      scrapNote(state, 'spent', null, { n: o.scrapPay, part: true, name: o.baseName || o.name, who: crew });
+    }
     if (o.kind === 'part') {
       o.sold = true;
       state.run.bought.push(o.id);

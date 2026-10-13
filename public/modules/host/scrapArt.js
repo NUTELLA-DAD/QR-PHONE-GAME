@@ -5,6 +5,7 @@
 //   drawScrapRing(ctx, x, y, r, time)                   the gold ring (a dashed circle that turns slowly, with a soft glow)
 //   drawScrapHulk(ctx, h, time)                         a gunship's hulk (h = { x, y, rot, left, max, hooked })
 //   drawScrapBin(ctx, x, y, count, cap, time)           the hold bin standing on a deck at (x, y): a slatted crate that shows how full it is
+//   drawRivetPlate(ctx, x, y, w, rot)                   a riveted iron plate bolted over a failing stretch of the frame (the scrap patch, G2), centred on (x, y), about 52 x 22 at w 52
 import { config } from '../../config.js';
 
 const INK = () => config.INK;
@@ -105,6 +106,23 @@ export function drawScrapHulk(ctx, h, time = 0) {
   ctx.restore();
   const n = Math.max(0, h.left | 0); // the bundles still on it, piled on top
   for (let k = 0; k < n; k++) drawScrapBundle(ctx, h.x - 70 + k * 44, h.y - 56 - (k % 2) * 14, 1.1, ((k % 3) - 1) * 0.12);
+}
+
+export function drawRivetPlate(ctx, x, y, w = 52, rot = 0) {
+  const h = w * 0.42;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.lineWidth = 2.6;
+  ctx.strokeStyle = INK();
+  ctx.lineJoin = 'round';
+  ctx.fillStyle = IRON[0];
+  ctx.beginPath(); ctx.rect(-w / 2, -h / 2, w, h); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = IRON[1]; // a lit edge along the top
+  ctx.fillRect(-w / 2 + 2, -h / 2 + 2, w - 4, 3);
+  ctx.fillStyle = INK(); // the rivets, one in each corner and one between
+  for (const [rx, ry] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]]) { ctx.beginPath(); ctx.arc(rx * (w / 2 - 6), ry * (h / 2 - 5), 1.9, 0, 7); ctx.fill(); }
+  ctx.restore();
 }
 
 export function drawScrapBin(ctx, x, y, count, cap, time = 0) {

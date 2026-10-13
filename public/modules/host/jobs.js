@@ -11,7 +11,7 @@ import { toWorldX, toShipX } from './pose.js';
 import { hearts } from './health.js';
 import { bunkerEmpty } from './goingDown.js';
 import { gripJobs } from './creatureGrip.js';
-import { scrapOn, holdSpot, holdFull } from './scrap.js';
+import { scrapOn, holdSpot, holdFull, holdCount } from './scrap.js';
 import { isMothballed } from './gunsMatter.js';
 import { verbOf } from './roleCards.js'; // (F10: the verb of a job, for the head tag on the TV and the ? card)
 
@@ -36,6 +36,8 @@ JOB_COLORS.heal = '#ff7b9c'; // (crew health: down to the last heart - go to the
 JOB_COLORS.frame = '#d9a24a'; // (STRUCTURE.md: a hammer on a weak segment of the frame)
 JOB_COLORS.abandon = '#ff4d4d'; // (...and the half of the ship that split off is going down: jump)
 JOB_COLORS.stow = '#ffd23f'; // (SCRAP, LOOP.md G1: pick a bundle up off the deck and carry it to the hold - gold, like every pickup)
+JOB_COLORS.scrappatch = '#ffd23f'; // (LOOP.md G2, the scrap patch: carry a bundle to a failing segment and rivet it on - gold)
+JOB_COLORS.scrapgrab = '#ffd23f'; // (...first take one out of the hold bin)
 JOB_COLORS.stowchest = '#ffd23f'; // (CASTLE.md A2: a chest from an outpost's vault goes in the hold - gold)
 JOB_COLORS.hack = '#f2c14e'; // (C.2: a tentacle holds the ship: gold arrow to the grip point, sword in hand)
 JOB_COLORS.pickup = '#ff8c1a'; // (CASTLE.md A0: an away man's flare: the helm hovers over him and the rope ladder takes him up)
@@ -87,6 +89,12 @@ export function createJobFinder(state) {
         if (p.carry === 'scrap') add('stow', 'hold', sp.d, sp.x, {}, `STOW THE SCRAP - ${roomName(sp.d, sp.x)}`);
         else if (!p.carry) for (const ld of state.loads || []) if (ld.kind === 'scrap') add('stow', ld, ld.d, ld.x, {}, `PICK UP THE SCRAP - ${roomName(ld.d, ld.x)}`);
       }
+    }
+    { // SCRAP PATCH (config.SCRAP.PATCH): a segment of the frame is failing and there is scrap: a bundle in your hands goes to the segment, with empty hands the arrow points to the hold bin to take one
+      const Sx = me.sim && me.sim.structure, sp = scrapOn() && !me.ai && Sx && Sx.on() ? holdSpot(L) : null, PT = config.SCRAP.PATCH;
+      const bad = sp && (p.carry === 'scrap' || (!p.carry && holdCount(state) > 0)) ? Sx.jobsOf().filter((g) => g.hp < PT.AT) : [];
+      if (p.carry === 'scrap') for (const g of bad) add('scrappatch', g, g.d, g.x, g.st === 'critical' ? { urgency: J.URGENCY.scrappatch * PT.URGENT } : {}, `PATCH ${Sx.nameOf(g)} WITH SCRAP`);
+      else if (bad.length) add('scrapgrab', 'patch', sp.d, sp.x, bad.some((g) => g.st === 'critical') ? { urgency: J.URGENCY.scrapgrab * PT.URGENT } : {}, `TAKE SCRAP OUT OF THE HOLD - ${Sx.nameOf(bad[0])} IS FAILING`);
     }
     if (p.carry === 'chest' && !me.ai && holdSpot(L) && state.away && state.away.tre && state.away.tre.chests.some((c) => c.state === 'aboard' && c.by[0] === p.id)) add('stowchest', 'hold', holdSpot(L).d, holdSpot(L).x, { urgency: J.URGENCY.stow }, `STOW THE CHEST - ${roomName(holdSpot(L).d, holdSpot(L).x)}`); // (CASTLE.md A2: a chest in your arms goes in the hold)
     for (const f of state.fires) add('fire', f, f.d, f.x, {}, f.h2 ? `FIRE UNDER THE HYDROGEN BAG - ${roomName(f.d, f.x)}` : undefined); // (GAS TYPES: a fire that reaches a hydrogen bag says so)
@@ -211,7 +219,7 @@ export function createJobFinder(state) {
     p.jobT = J.EVERY;
     let jobs = list(p).filter((j) => j.d != null);
     // Hauling something? Delivering it comes first (if there is anywhere to deliver it).
-    const delivery = jobs.filter((j) => j.kind === p.carry || (p.carry === 'scrap' && j.kind === 'stow') || (p.carry === 'chest' && j.kind === 'stowchest'));
+    const delivery = jobs.filter((j) => j.kind === p.carry || (p.carry === 'scrap' && (j.kind === 'stow' || j.kind === 'scrappatch')) || (p.carry === 'chest' && j.kind === 'stowchest'));
     if (delivery.length && (p.carry === 'ammo' || p.carry === 'coal' || p.carry === 'scrap' || p.carry === 'chest')) jobs = delivery;
     const scored = jobs.map((j) => ({ j, ...score(p, j) })).filter((s) => isFinite(s.r.time)).sort((a, b) => a.score - b.score);
     const cur = p.job && jobs.find((j) => same(j, p.job.job));
