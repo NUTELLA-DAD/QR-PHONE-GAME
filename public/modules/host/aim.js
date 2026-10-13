@@ -136,7 +136,7 @@ export function solution(state, gun, target) {
   if (gun.type) return typedSolution(state, ship, gun, target, gx, gy); // (a long gun, a mortar ...: gunTypes.js)
   let p = target.at(0);
   for (let i = 0; i < 3; i++) p = target.at(Math.hypot(p.x - gx, p.y - gy) / SHELL_SPEED);
-  if (Math.hypot(p.x - gx, p.y - gy) > RANGE * (gun.reach || 1)) return null; // (a gun on a high crow's nest reaches further: config.NEST)
+  if (!ship.ai && Math.hypot(p.x - gx, p.y - gy) > RANGE * (gun.reach || 1)) return null; // (a gun on a high crow's nest reaches further: config.NEST) (the enemy gunship's cannon throws her own slow cannonball, not a crew shell: her range is GUNSHIP.FIRE_RANGE and the director's mayFire says when a broadside is due - with the shell's 1520 px here her gunners never pulled the trigger from a firing spot 1500-2300 px out)
   const angle = aimToShip(ship, Math.atan2(p.y - gy, p.x - gx)); // (the world direction as the ship sees it: a ship facing left mirrors it; gun.home / gun.arc are in ship space)
   return Math.abs(angleDiff(angle, gun.home)) <= gun.arc ? angle : null;
 }

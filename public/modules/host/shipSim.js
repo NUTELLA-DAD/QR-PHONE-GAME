@@ -196,7 +196,8 @@ export function createShipSim(world, ship, W) {
     const bandageAct = sore && { type: 'bandage', obj: sore, hold: true, time: HB.BANDAGE.TIME, label: `Bandage ${sore.name}` };
     if (sore && legacy && player.botJob && player.botJob.kind === 'bandage' && player.botJob.obj === sore) return bandageAct;
     const boarding = gunship.interaction(player);
-    if (boarding) return boarding;
+    const valveHere = () => (layout.gasValves || []).some((v) => here(v, T.VALVE_REACH));
+    if (boarding && !(boarding.idle && valveHere())) return boarding; // (a hookshot that cannot catch her - too far, or she is turning - does not hide a gas valve: the fore bag's valve at the bow could not be shut or opened while a gunship was anywhere in the sky)
     // Standing over the open bomb bay doors: jump out (parachute). Not while carrying ammo - that loads the bombs. (B.6: carrying a sandbag or crate there, Action lets IT fall through the belly instead.)
     const dropC = cargo.dropAction(player);
     if (dropC && player.d === BAY_D && Math.abs(player.x - layout.bombBay.jumpX) < CTL.BAY_JUMP_ZONE) return dropC;
@@ -233,7 +234,7 @@ export function createShipSim(world, ship, W) {
     const hurt = modules.list.find((m) => m.hp < m.max && here(m, T.REACH + 15));
     if (hurt && tool === 'hammer') return { type: 'repair', obj: hurt, hold: true, label: `Repair ${hurt.name}` };
     const frame = structure.on() ? structure.frameNear(player.d, player.x) : null; // SHORE UP (STRUCTURE.md): a hammer held on the segment of the frame under your feet
-    if (frame && tool === 'hammer') return { type: 'frame', obj: frame, hold: true, label: `SHORE UP ${structure.nameOf(frame)}` };
+    if (frame && tool === 'hammer' && !(player.bot && player.botJob && player.botJob.kind === 'gasvalve' && valveHere())) return { type: 'frame', obj: frame, hold: true, label: `SHORE UP ${structure.nameOf(frame)}` };
     // A gas valve (S.5d): shut or open the feed to its gasbag. Turned from VALVE_REACH, closer than a rack's reach, so it still works on a crowded deck.
     const gv = (layout.gasValves || []).find((v) => here(v, T.VALVE_REACH));
     if (gv) { const i = layout.gasValves.indexOf(gv); return { type: 'gasvalve', obj: gv, label: `${state.gasValveOpen[i] === false ? 'Open' : 'Close'} ${bagName(gv.bag, layout.gasbags.length).toLowerCase()} valve` }; }

@@ -209,7 +209,8 @@ else {
     for (let i = 0; i < 40; i++) { try { const r = await fetch(`http://localhost:${port}/host.html`); if (r.ok) break; } catch { /* not up yet */ } await new Promise((r) => setTimeout(r, 250)); }
     const flyAndBreak = (what) => `(async()=>{
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-      document.getElementById('shipBtn').click(); document.getElementById('bots').click(); document.getElementById('castoff').click(); // (the Classic ship: she has the bomb bay)
+      for (let k = 0; k < 4 && !(game.state.startBuild === 'classic' && !game.state.startBuildAuto); k++) document.getElementById('shipBtn').click(); // (the Classic ship: she has the bomb bay. Since F1 the button goes Auto -> Sparrow -> Classic, so one click picked the Sparrow, who has no bay)
+      document.getElementById('bots').click(); document.getElementById('castoff').click();
       await sleep(6000);
       const V = view3dDebug().view, D = V.destruction, s = game.state.ships[0], out = {};
       const ids = s.layout.partRects.map((r) => r.id), model = V.models.get(s.id).model;
