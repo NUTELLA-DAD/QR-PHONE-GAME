@@ -1254,6 +1254,7 @@ export function createShipSim(world, ship, W) {
     if (Math.abs(up) > HH.DEAD) {
       helmHoldAlt = null;
       state.gasValve.input = clamp(Math.sign(up) * ((Math.abs(up) - HH.DEAD) / (1 - HH.DEAD)) * HH.GAIN, -1, 1);
+      state.ship.trim = state.gasValve.input; // (the trim engine pushes the way the stick does, as with the old helm and a bot's stick: with no steam to pump - no boiler, or a blown one - the hand trim still climbs slowly; and the autopilot's last trim is not left pushing against the stick)
       return;
     }
     const here = state.ship.alt; // (her height now, in the world's own up-is-positive)
@@ -1867,8 +1868,8 @@ export function createShipSim(world, ship, W) {
     // cools and seeps out, and holes leak more.
     if (flying) {
       state.noPump = !rig.pump; // (no helm or no boiler: nobody can ever top her up, so the bag only seeps very slowly, see gasBags.js)
-      const FX = config.STEAMFIX, fixed = steamFix.on(); // (F13: the pump moves gas down to PUMP_MIN pressure and runs full from PUMP_FULL; before, from 15 and 60)
-      const pumping = Math.max(0, valve.input) * (state.ship.press > (fixed ? FX.PUMP_MIN : G.PUMP_MIN_PRESS) && (modules.boilerUp() || (fixed && state.ship.press >= FX.RESERVE)) ? Math.min(1, state.ship.press / (fixed ? FX.PUMP_FULL : 60)) : 0);
+      const FX = config.STEAMFIX, fixed = steamFix.on(); // (F13: the pump moves gas down to PUMP_MIN pressure and runs full from PUMP_FULL; before, from 15 and 60; the steam left in the line after a boiler breaks drives it too - not on a ship with no boiler fitted)
+      const pumping = Math.max(0, valve.input) * (state.ship.press > (fixed ? FX.PUMP_MIN : G.PUMP_MIN_PRESS) && (modules.boilerUp() || (fixed && rig.boiler && state.ship.press >= FX.RESERVE)) ? Math.min(1, state.ship.press / (fixed ? FX.PUMP_FULL : 60)) : 0);
       state.steamParts.pump = pumping * G.PUMP_STEAM;
       // The pump and the vent act on every gasbag at once; seepage and holes are per bag (gasBags.js: with one bag this is the old single gas value).
       stepBags(state, pumping * G.PUMP_RATE * (1 + config.BOILER.OD_PUMP * state.overdrive) * state.links.helmMul + Math.min(0, valve.input) * G.VENT_RATE * state.links.helmMul, dt);

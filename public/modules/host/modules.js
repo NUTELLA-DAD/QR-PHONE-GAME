@@ -78,7 +78,7 @@ export function createModules(ship) {
 
   // Does the boiler's steam reach this module right now?
   const hasSteam = (state, name) => {
-    if ((!boilerUp() && !(config.STEAMFIX.ENABLED && state.ship.press >= config.STEAMFIX.RESERVE)) || state.ship.press < M.STEAM_MIN) return false; // (F13: a boiler that has just broken leaves its steam in the line: the helm, the engines and the pump run on it while it lasts, about ten seconds, time to hammer the boiler)
+    if ((!boilerUp() && !(config.STEAMFIX.ENABLED && boilers().length > 0 && state.ship.press >= config.STEAMFIX.RESERVE)) || state.ship.press < M.STEAM_MIN) return false; // (F13: a boiler that has just broken leaves its steam in the line: the helm, the engines and the pump run on it while it lasts, about ten seconds, time to hammer the boiler; a ship with no boiler fitted has no line to keep steam in)
     const pipe = pipeTo(name);
     return !pipe || (pipe.open && !pipe.broken);
   };
