@@ -2,11 +2,12 @@
 // Node-safe, no DOM, NO random numbers: a variant is picked by a hash of what happened (so a seeded botsim stays byte for byte what it was), and a sentence the run has already told is never told twice.
 // Rules of the voice: a sentence always names someone; a number only when it is small or funny ("twice"); no stat-row phrasing; never "nobody did much".
 //
-//   writeStop(moments, info, ctx)  -> { no, name, head, text, cands: [{ text, kind, weight, who }] }   info = { no, name }; ctx = { used: Set, players: [..] }
+//   writeStop(moments, info, ctx)  -> { no, name, head, text, cands: [{ text, kind, weight, who }] }   info = { no, name }; ctx = { used: Set, players: [..], ship: "The Brass Heron" (L2: the ship's name, when she has one) }
 //   postcard(entries, opts)        -> [{ no, name, first, text, kind }]                                 entries = the run.log of writeStop results; opts = { lines, min, perStop }
 //   playOf(moment)                 -> "Mia planted the charge" (the short phrase after PLAY OF THE MISSION)
 //   gentleLine(players, no)        -> a kind line naming whoever did the most (for a scorecard with no awards)
 import { config } from '../../config.js';
+import { shipRef } from './book.js';
 
 // ---- small helpers ----
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0; return h; };
@@ -115,6 +116,15 @@ const LEADER = {
   stowed: ['{who} carried scrap to the hold all stop.', 'The hold filled up in {who1}\'s arms.', '{who} was the hold\'s best friend, bundle after bundle.'],
   bats: ['{who} swatted bats off the ship all stop.', 'Every bat on board got to know {who1}\'s boot.', '{who} fought the bats and the bats lost.'],
 };
+// L2: once she has a name (the christening), a few lines say it instead of "she" / "the crew": kind -> 3 variants, used in place of the plain ones when ctx.ship is set. {ship} = "the Brass Heron" (shipRef).
+const NAMED = {
+  quiet: ['{who} kept the kettle on while {ship} drifted through a quiet sky.', 'It was a calm one for {ship}, and {who} polished her brass.', '{who} had time to admire the view from {ship}.'],
+  limp: ['{ship} broke up, but a spare gasbag and {who} got her home.', '{who} stitched the spare gasbag on, and {ship} limped away.', '{ship} went down in pieces, and {who} put her back together in the air.'],
+  'going-down-saved': ['{ship} was going down, and {who} pumped and patched until she held.', '{who} kept {ship} in the air when she had no business staying there.', 'With the ground rushing up, {who} dumped weight and {ship} held.'],
+  'helm-held': ['{who} held the helm of {ship} steady while everything went wrong.', '{ship} was in ribbons, and {who} never left the wheel.', '{who} kept {ship} head to the wind through the worst of it.'],
+  'ship-lost': ['{who} was the last one aboard when {ship} broke up over {stop}.', '{ship} went down over {stop}, and {who} saluted as she fell.', '{stop} was the end of {ship}, with {who1} still at the post.'],
+  rebuild: ['{who} put a hand up to buy back {things} for {ship} at the Yard.', '{things} went back onto {ship} at the Yard, and {who} paid the bill.', '{who} would not leave the dock until {ship} had {things} again.'],
+};
 // The short phrase after "PLAY OF THE MISSION:" (the name comes first): kind -> variants.
 const PLAY = {
   'fire-first': ['put out the first fire'], 'revive-fire': ['carried on reviving with the fires still burning'], overboard: ['went for a swim'], 'overboard-twice': ['went overboard again'], 'overboard-lunatic': ['went over the side yet again'],
@@ -127,17 +137,17 @@ const PLAY = {
 };
 const PLAY_LEADER = { kills: 'ruled the guns', raiders: 'beat back the raiders', holes: 'patched the hull', fires: 'fought the fires', repairs: 'kept her running', ammo: 'kept the guns fed', coal: 'fed the boiler', revives: 'picked everyone up', defused: 'defused the bomb', vent: 'saved the boiler', demolished: 'bombed the outposts', sabotage: 'sabotaged the gunship', boarding: 'led the boarding', sails: 'worked the sails', thrown: 'threw ballast', spots: 'spotted for the guns', cannon: 'flew the crew cannon', shovels: 'cleared the decks', cuts: 'cut her free', dumped: 'dumped the weight', hatch: 'worked the hatch', captures: 'took the bridge', bats: 'swatted the bats', stowed: 'filled the hold' };
 const AGAIN = ['Once more, ', 'Yet again, ', 'As ever, ', 'Still, ', 'And then, ', 'Later, '];
-export const TEMPLATES = { SENT, LEADER, PLAY, PLAY_LEADER }; // (for tools/log-check.mjs: every template is filled with odd data and must come out clean)
+export const TEMPLATES = { SENT, LEADER, PLAY, PLAY_LEADER, NAMED }; // (for tools/log-check.mjs: every template is filled with odd data and must come out clean)
 const GENTLE = ['A quiet stop. {who} did the most, mostly by being there.', 'Not much to report, but {who} was the busiest of the lot.', 'A gentle one. {who} kept the ship\'s spirits up.'];
 
 // ---- filling a template ----
-function vars(m) {
+function vars(m, ship) {
   const d = m.data || {}, all = m.who && m.who.length ? m.who : ['The crew'];
   const names = all.length > 3 ? [all[0], all[1], 'the rest of the crew'] : all; // (a whole crew who voted the same way is not read out one by one)
   const G = titled(d.name || d.gunship || 'the gunship'), C = titled(d.creature || 'the beast');
   const n = d.n | 0;
   return {
-    who: nameList(names), who1: names[0], where: m.where || '', inwhere: inWhere(m.where), C, G, things: things(d.names), item: d.item || 'sandbag', stop: m.stopName || 'the stop',
+    ship: ship ? shipRef(ship) : 'the ship', who: nameList(names), who1: names[0], where: m.where || '', inwhere: inWhere(m.where), C, G, things: things(d.names), item: d.item || 'sandbag', stop: m.stopName || 'the stop',
     times: TIMES[Math.min(9, Math.max(1, n))] || n + ' times',
   };
 }
@@ -155,8 +165,8 @@ export function sentence(m, ctx = {}) {
   const used = ctx.used || new Set();
   const counts = (used.counts ||= {}); // (how often each line has been told this run: the next telling starts at the next variant)
   const ck = m.kind === 'leader' ? 'leader:' + (m.data || {}).stat : keyOf(m);
-  const list = m.kind === 'leader' ? LEADER[(m.data || {}).stat] || SENT.quiet : SENT[ck] || SENT.quiet;
-  const v = vars(m);
+  const list = m.kind === 'leader' ? LEADER[(m.data || {}).stat] || SENT.quiet : (ctx.ship && NAMED[ck]) || SENT[ck] || SENT.quiet; // (a named ship: her own variants where there are some)
+  const v = vars(m, ctx.ship);
   const h = hash(`${m.kind}|${m.stop}|${(m.who || []).join(',')}|${(m.data || {}).stat || ''}|${(m.data || {}).n || ''}`) + (counts[ck] || 0);
   let text = null;
   for (let i = 0; i < list.length && text === null; i++) {
@@ -203,7 +213,7 @@ export function writeStop(moments, info, ctx = {}) {
   const list = moments.filter((m) => m.weight > 0).sort((a, b) => b.weight - a.weight || a.n - b.n);
   const picked = [];
   const whos = new Set();
-  const take = (m, again) => { const t = sentence(m, { used, again }); if (t) picked.push({ text: t, kind: m.kind, weight: m.weight, who: m.who.slice(), stat: (m.data || {}).stat }); return !!t; };
+  const take = (m, again) => { const t = sentence(m, { used, again, ship: ctx.ship }); if (t) picked.push({ text: t, kind: m.kind, weight: m.weight, who: m.who.slice(), stat: (m.data || {}).stat }); return !!t; };
   const rest = [];
   for (const m of list) { // first the heaviest moment of each different person, then whatever is left
     const key = m.who[0] || '';
@@ -214,7 +224,7 @@ export function writeStop(moments, info, ctx = {}) {
   if (!picked.length && list.length) take(list[0], true); // (every line of the heaviest has been told: tell it again, with a word in front)
   if (!picked.length) { // a stop where nothing was written down: still somebody's line
     const who = busy(ctx.players);
-    const t = sentence({ kind: 'quiet', stop: info.no, who: [who ? who.name : 'The crew'], data: {} }, { used, again: true });
+    const t = sentence({ kind: 'quiet', stop: info.no, who: [who ? who.name : 'The crew'], data: {} }, { used, again: true, ship: ctx.ship });
     if (t) picked.push({ text: t, kind: 'quiet', weight: 0.5, who: [who ? who.name : 'The crew'] });
   }
   const head = `Stop ${info.no}, ${info.name}.`;

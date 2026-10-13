@@ -131,7 +131,8 @@ export function createControllerUI({ network }) {
       cards.dataset.sig = sig;
       cards.innerHTML = '';
       cards.classList.toggle('route', v.kind === 'route' || v.kind === 'slot'); // (one big card per place when the crew picks where a part goes: A / B / C)
-      cards.classList.toggle('dock3', v.kind === 'dock' && v.options.length <= 3); // (F6: the 60-second dock: two big cards and Cast off, bigger type and touch targets)
+      cards.classList.toggle('names', v.kind === 'name'); // (L2: the christening: five names and "Name her later", three to a row)
+      cards.classList.toggle('dock3',v.kind === 'dock' && v.options.length <= 3); // (F6: the 60-second dock: two big cards and Cast off, bigger type and touch targets)
       v.options.forEach((o, i) => {
         const b = document.createElement('button');
         const price = o.sold ? 'SOLD' : o.price || (o.cost != null ? 'Salvage ' + o.cost : ''); // (G2: o.price says "Salvage 55 + 3 scrap")

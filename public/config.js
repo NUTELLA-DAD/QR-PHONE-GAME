@@ -2495,6 +2495,17 @@ export const config = {
     // Drawing (logArt.js, logical 1600 x 900: 22 px here is 26 px on a 1080p screen, the smallest the postcard uses).
     ART: { LINE_PX: 23, DOCK_PX: 24, PLAY_PX: 30, MIN_PX: 22 },
   },
+  // THE SHIP'S BOOK, L2 (SHIPS_BOOK.md; book.js, bookArt.js): the christening at the first CAST OFF, the ship's name in the save (save v3: her voyages, her Log and postcards, the crew's records) and the Ship's Book page in the lobby.
+  // ENABLED false is the game without any of it: no vote, no ceremony, no records. ON in the browser; in a Node tool it is OFF unless BOOK_ON=1 (many gates cast off with a phone-like human and expect to fly at once, and the
+  // seeded baselines pin the old game), and NO_BOOK2=1 turns it off even then. With it on, a crew of bots never christens either (the vote needs a human phone: MIN_HUMANS).
+  BOOK: {
+    ENABLED: typeof process === 'undefined' || (!!(process.env && process.env.BOOK_ON) && !process.env.NO_BOOK2),
+    CHRISTEN: { OPTIONS: 5, VOTE_TIME: 14, ALL_VOTED_WAIT: 1.2, CEREMONY: 5, BREAK_AT: 1.4, MIN_HUMANS: 1 }, // names offered, the vote's length (s), the wait once everyone has voted, the ceremony's length (vote + ceremony stay under 20 s), when the bottle breaks (s into it), humans needed for the vote to open
+    NAME_MAX: 26, // longest ship name kept (letters)
+    KEEP: { VOYAGES: 40, CREW: 60, FLEET: 12, ROUTE: 30 }, // what the save keeps: voyage pages (the oldest drop off), crew records, earlier ships, stops on a page's route
+    COVER: { VOYAGES: 6, FLEET: 3, CREW: 6 }, // rows on the book's cover: recent voyages, lost ships, crew
+    ART: { MIN_PX: 22, PLATE_PX: 22 }, // smallest text on the book's TV pages (logical px of 1600 x 900: 22 is 26 on a 1080p TV); the name plate in the HUD
+  },
   // PvP look (modules/host/pvp/pvpArt.js: the flag, the two-sided hull bars, the "!" over an enemy). Soft faded team colours, logbook style.
   PVP_ART: {
     RED: '#c4574d', RED_DARK: '#8f3a34', RED_PALE: '#e8b7ae', // team red: flag / bar / outline / light tint

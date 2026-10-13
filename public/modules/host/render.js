@@ -38,6 +38,7 @@ import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, 
 import { bandOf, metres, BAND_WORDS } from './pvp/range.js'; // the range bands: the TV's readout
 import { BARRELS, drawBarrel, drawChute, drawMines, drawRam, SHELL_LOOK } from './weaponsArt.js'; // the barrels of the gun types, laid mines, the ram prow
 import { drawFlameGun } from './flameArt.js'; // the flamethrower's pilot light, cone of fire and heat gauge
+import { createBookArt } from './bookArt.js'; // L2: the christening vote and ceremony, the name plate, the lobby's book card, the Ship's Book page
 import { createLogArt } from './logArt.js'; // L1: the Ship's Book on the TV (the sky-dock's Log line, PLAY OF THE MISSION, the run-end postcard)
 import { createYardArt } from './yardArt.js'; // S.6b: the Shipwright's Yard (the sky-dock blueprint, the A / B / C vote, BUILT, "NEW: ...")
 import { createPartPictures } from './partArt.js'; // the little part pictures of the build tray, on the Yard's cards
@@ -155,6 +156,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
   let yardArt = null; // (made at its first use: it needs wrapLines and dots, defined further down)
   let logArtMade = null;
   const logArt = () => (logArtMade = logArtMade || createLogArt({ ctx, book, crewAt: drawCrewAt })); // (the Ship's Book's drawing, logArt.js)
+  let bookArtMade = null;
+  const bookArt = () => (bookArtMade = bookArtMade || createBookArt({ ctx, book, logArt: logArt(), dots })); // (L2: the christening and the book's pages, bookArt.js)
   // Each SHIP's art, made the first time she is drawn on HER context: her baked picture (one bake per ship, keyed on her layout), her lamps, her bombs, ropes, wires, call-outs and the
   // hazards that ride on her (ice, spores, storm rods, the sea). Nothing is shared between ships.
   const arts = new Map();
@@ -1431,11 +1434,13 @@ export function createRenderer({ ctx, state: world, canvas }) {
     }
     drawUpgradeIcons();
     if (state.phase === 'lobby') drawLobby();
+    else if (state.shipName && config.BOOK.ENABLED) bookArt().plate(state.shipName, 30, 258); // (L2: her name plate under the gauges)
     drawBossBar();
     drawCreatureBar();
     if (state.briefing) drawBriefing();
     if (state.scorecard) drawScorecard();
     if (state.vote) drawVote();
+    if (state.christen) bookArt().ceremony(state.christen); // (L2: the bottle on the bow)
   };
 
   // F2: the small "also" line over the banner: the next alarm waiting its turn (alarms.js), and how many more wait behind it.
@@ -1509,9 +1514,10 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.font = '62px ' + config.FONTS.DISPLAY;
     ctx.fillStyle = LB.INK;
     ctx.fillText('AIRSHIP CREW', 800, 170, 540);
-    ctx.font = '700 14px ' + config.FONTS.TEXT;
+    ctx.font = (state.shipName ? '700 22px ' : '700 14px ') + config.FONTS.TEXT;
     ctx.fillStyle = LB.INK_SOFT;
-    ctx.fillText("THE CAPTAIN'S LOGBOOK", 800, 196);
+    ctx.fillText(state.shipName ? state.shipName.toUpperCase() : "THE CAPTAIN'S LOGBOOK", 800, 196, 540); // (L2: her name once she has one)
+    if (config.BOOK.ENABLED && state.save) bookArt().lobbyCard(state.save, state.shipName, 30, 276);
     const crew = crewHeads(state);
     const mates = matesWanted(state, 0, true); // (ship's mates who will come aboard on CAST OFF)
     const lines = [
@@ -1553,6 +1559,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.fillStyle = LB.INK;
     ctx.font = '49px ' + config.FONTS.DISPLAY;
     ctx.fillText(sc.flagship ? 'THE FLAGSHIP IS DOWN!' : `${sc.stopName} cleared!`, 800, 185);
+    if (state.shipName) { ctx.font = '700 22px ' + config.FONTS.TEXT; ctx.fillStyle = LB.INK_SOFT; ctx.fillText(state.shipName.toUpperCase(), 800, 138, 900); ctx.fillStyle = LB.INK; } // (L2: the ship's name over the title)
     ctx.font = '700 26px ' + config.FONTS.TEXT;
     ctx.fillText(sc.rows.length ? 'Crew awards' : sc.gentle || 'Crew awards', 800, 228, 1120); // (no award earned: a kind line naming whoever did the most - never "nobody did much")
     if (sc.play) logArt().playRibbon(sc.play, 800, 248, 1040); // (the Ship's Book: PLAY OF THE MISSION)
@@ -1900,6 +1907,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     }
     ctx.fillStyle = 'rgba(43,34,22,.72)';
     ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
+    if (v.kind === 'name') return bookArt().vote(v, Object.values(state.players).filter((p) => !p.mate)); // (L2: the christening)
     yardArt = yardArt || createYardArt({ ctx, book, dots, wrapLines, ink, pics: createPartPictures({ sprites }), spares: drawSpares, world });
     const logE = v.kind === 'dock' && config.LOG.ENABLED && state.run ? state.run.lastLog : null; // (the Ship's Book: the Log line of the stop just flown, at the top of the dock)
     if (yardArt.isYard(v)) { // (a dock with a PART card, or where the part goes: the blueprint screen)
@@ -3517,6 +3525,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         drawRunEnd();
         ctx.globalAlpha = 1;
       }
+      if (state.bookView && state.bookView.open) bookArt().page(state.bookView, state.save); // (L2: the Ship's Book, over everything)
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     lap('hud');
