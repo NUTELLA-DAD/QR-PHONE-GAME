@@ -240,7 +240,7 @@ export function createBookArt({ ctx, book, logArt, dots }) {
       ctx.fillText(upper(s.name), X, 258, 600);
       ctx.font = `400 ${MIN + 2}px ${F.TEXT}`; ctx.fillStyle = LB.INK;
       ctx.fillText(`Christened ${prettyDate(s.born) || 'long ago'}`, X, 296, 600);
-      ctx.fillText(`${s.voyages} voyage${s.voyages === 1 ? '' : 's'}, ${s.victories} won, ${s.stops} stops flown`, X, 330, 600);
+      ctx.fillText(`${s.voyages} voyage${s.voyages === 1 ? '' : 's'}, ${s.victories} won, ${s.stops} stop${s.stops === 1 ? '' : 's'} flown`, X, 330, 600);
     } else {
       ctx.fillStyle = LB.INK; ctx.font = `400 ${MIN + 2}px ${F.TEXT}`;
       ctx.fillText('She has no name yet.', X, 262, 600);
