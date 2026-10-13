@@ -7,6 +7,7 @@
 //   art.postcard(runEnd, secondsLeft)             the whole run-end page
 import { config } from '../../config.js';
 import { lairOf } from './voyage.js';
+import { prettyDate } from './book.js';
 
 const hash = (n) => { let h = Math.imul(n + 1, 2654435761) >>> 0; h ^= h >>> 15; return (h >>> 0) / 4294967296; }; // (0..1, the same for the same number: a hand-drawn wobble that does not move)
 const TAU = Math.PI * 2;
@@ -241,13 +242,20 @@ export function createLogArt({ ctx, book, crewAt }) {
     lines.forEach((t, k) => ctx.fillText(t, x, labelAbove ? y - R - 14 - (total - 1 - k) * 25 : y + R + 26 + k * 25));
   };
 
-  const postcard = (e, left) => {
+  // opts (L2, bookArt.js): footer = the line at the bottom right in place of "A new voyage starts..." (a page of the Ship's Book); noDim = the dimming is already drawn.
+  const postcard = (e, left, opts = {}) => {
     safe(() => {
       const MIN = A.MIN_PX, PX = A.LINE_PX;
-      ctx.fillStyle = 'rgba(43,34,22,.82)';
-      ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
+      if (!opts.noDim) {
+        ctx.fillStyle = 'rgba(43,34,22,.82)';
+        ctx.fillRect(-config.W, -config.H, config.W * 3, config.H * 3);
+      }
       book.paper(60, 30, 1420, 840, { r: 22 }); // (it ends at x 1480: the join-code badge in the corner of the screen stays clear of it)
       ctx.lineJoin = 'round';
+      if (e.shipName && !e.victory) { // (L2: a ship that was lost: the page has a black border)
+        ctx.strokeStyle = '#1b1410'; ctx.lineWidth = 9; ctx.strokeRect(67, 37, 1406, 826); // (a heavy mourning border at the paper's edge, and a thin rule inside it: the writing keeps clear of both)
+        ctx.lineWidth = 2.5; ctx.strokeRect(78, 48, 1384, 814 - 2);
+      }
       // the big rubber stamp across the page, under the writing
       const word = e.victory ? 'VICTORY' : 'SHIP LOST', scol = e.victory ? STAMP_GREEN : LB.STAMP;
       ctx.save();
@@ -267,10 +275,10 @@ export function createLogArt({ ctx, book, crewAt }) {
       ctx.textAlign = 'left';
       ctx.fillStyle = LB.INK;
       ctx.font = `50px ${F.DISPLAY}`;
-      ctx.fillText("THE SHIP'S LOG", 110, 98);
+      ctx.fillText(e.shipName ? 'THE LOG OF ' + String(e.shipName).toUpperCase() : "THE SHIP'S LOG", 110, 98, 960); // (L2: her name once she has one)
       ctx.fillStyle = LB.INK_SOFT;
       ctx.font = `700 ${MIN}px ${F.TEXT}`;
-      const sub = `${e.modeLabel}${e.voyages > 1 ? ' - voyage ' + e.voyageNo + ' of ' + e.voyages : ''}${e.daily ? ' - DAILY: ' + e.daily + (e.dailyBest ? ' (NEW BEST!)' : '') : ''}  -  ${e.victory ? 'all ' + e.done + ' stops flown' : e.done + ' of ' + e.total + ' stops flown'}`;
+      const sub = `${e.modeLabel}${e.voyages > 1 ? ' - voyage ' + e.voyageNo + ' of ' + e.voyages : ''}${e.daily ? ' - DAILY: ' + e.daily + (e.dailyBest ? ' (NEW BEST!)' : '') : ''}${e.date ? ' - ' + prettyDate(e.date) : ''}  -  ${e.victory ? 'all ' + e.done + ' stops flown' : e.done + ' of ' + e.total + ' stops flown'}`;
       ctx.fillText(sub, 112, 133, 1000);
       ctx.textAlign = 'center';
       book.stamp(e.victory ? 'VICTORY!' : 'SHIP LOST!', 1210, 92, { size: 46, rot: -0.05, color: scol });
@@ -365,7 +373,7 @@ export function createLogArt({ ctx, book, crewAt }) {
       ctx.textAlign = 'left'; ctx.fillStyle = LB.INK; ctx.font = `700 ${MIN}px ${F.TEXT}`;
       ctx.fillText(`Salvage ${e.salvage}  -  ${e.kills} shot down  -  ${e.gunships} gunship${e.gunships === 1 ? '' : 's'} sunk`, 112, 852, 700);
       ctx.textAlign = 'right'; ctx.fillStyle = LB.INK_SOFT; ctx.font = `400 ${MIN}px ${F.TEXT}`;
-      ctx.fillText(`A new voyage starts at the mast in ${Math.max(1, Math.ceil(left))}...`, 1430, 852, 620);
+      ctx.fillText(opts.footer || `A new voyage starts at the mast in ${Math.max(1, Math.ceil(left))}...`, 1430, 852, opts.footer ? 760 : 620);
       ctx.textAlign = 'left';
     });
   };

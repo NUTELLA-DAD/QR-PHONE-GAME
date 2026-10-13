@@ -1,6 +1,7 @@
 // The Voyage: a branching route map of stops, generated from a seed at the start of a run,
 // plus the little bit of saved progress (best run, total runs, unlocks) kept on the TV.
 import { config } from '../../config.js';
+import { normalizeBook } from './book.js'; // (save v3: the ship's book, book.js)
 
 const mulberry = (seed) => {
   let s = seed >>> 0;
@@ -301,17 +302,30 @@ const KEY = 'airshipVoyage';
 // daily: { date, best: { <mode>: { stops, victory, salvage } } } - the best result for today's daily voyage, per mode.
 // build: the ship of the last voyage as a parts list ({ v: 1, parts: [...], log: [{ id, name }], voyageNo }): written at every part bought at the sky-dock (simulation.js persistBuild), so a campaign's second voyage
 // keeps the ship it built (and the Captain's Log can show it). Tolerant: a save without it, or with a build that does not look like a parts list, just has none.
-const blank = () => ({ version: 2, bestStops: 0, bestSalvage: 0, totalRuns: 0, victories: 0, unlocks: [], daily: null, build: null });
+// SAVE v3 (SHIPS_BOOK.md L2, book.js): ship = the ship afloat { name, born, voyages, victories, stops, salvage } or null; book = one page per voyage (the postcard's data), oldest first; fleet = the ships she followed and lost;
+// crew = a record for every human who has flown, by name. A v1 / v2 save has none of these and gets a blank book: the old fields are never dropped, and the old text is kept aside once (airshipVoyage.v1 / .v2, and .bad for a save that
+// would not parse) so nothing can be lost by moving up.
+const blank = () => ({ version: 3, bestStops: 0, bestSalvage: 0, totalRuns: 0, victories: 0, unlocks: [], daily: null, build: null, ship: null, book: [], fleet: [], crew: {} });
 export const validBuild = (b) => !!b && typeof b === 'object' && b.v === 1 && Array.isArray(b.parts) && b.parts.length > 0 && b.parts.every((p) => p && typeof p === 'object' && typeof p.part === 'string');
+const keepAside = (suffix, raw) => { try { const k = KEY + '.' + suffix; if (raw && localStorage.getItem(k) == null) localStorage.setItem(k, raw); } catch { /* (full or blocked) */ } };
+// Any stored text -> a v3 save (also used by tools/book-check.mjs for the v1 / v2 fixtures).
+export function upgradeSave(raw) {
+  let parsed = null;
+  try { parsed = JSON.parse(raw); } catch { keepAside('bad', raw); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) parsed = {};
+  const was = Number.isFinite(parsed.version) ? parsed.version : 1;
+  if (raw && was < 3) keepAside('v' + was, raw);
+  const v = { ...blank(), ...parsed };
+  if (!v.daily || typeof v.daily !== 'object' || !v.daily.best || typeof v.daily.best !== 'object') v.daily = null; // (tolerate odd saves)
+  if (!Array.isArray(v.unlocks)) v.unlocks = [];
+  if (!validBuild(v.build)) v.build = null;
+  else if (!Array.isArray(v.build.log)) v.build.log = [];
+  v.version = 3;
+  return normalizeBook(v);
+}
 export function loadVoyageSave() {
   try {
-    const v = { ...blank(), ...(JSON.parse(localStorage.getItem(KEY)) || {}) };
-    if (!v.daily || typeof v.daily !== 'object' || !v.daily.best || typeof v.daily.best !== 'object') v.daily = null; // (tolerate odd saves)
-    if (!Array.isArray(v.unlocks)) v.unlocks = [];
-    if (!validBuild(v.build)) v.build = null;
-    else if (!Array.isArray(v.build.log)) v.build.log = [];
-    v.version = 2;
-    return v;
+    return upgradeSave(localStorage.getItem(KEY));
   } catch {
     return blank();
   }

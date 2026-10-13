@@ -144,6 +144,35 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   // Back at the mast after the ship is lost: the button comes back.
   setInterval(showCastButton, 250);
 
+  // L2 (SHIPS_BOOK.md): host.html?christen=0 never christens (tools), ?christen=1 christens even a crew of bots (to try it alone). The Ship's Book: B or its button opens it (in the lobby, or from the pause menu),
+  // Left / Right (or a click on the left / right half of the screen) turn the page, Esc or Close shuts it. While it is open it takes every key (Space must not cast off under it).
+  { const q = new URLSearchParams(location.search).get('christen'); if (q === '0') simulation.state.christenMode = 'off'; else if (q === '1') simulation.state.christenMode = 'always'; }
+  const bv = simulation.state.bookView, bookBtn = document.getElementById('bookBtn'), bookNav = document.getElementById('bookNav');
+  const book = { onClose: null };
+  const bookPages = () => 1 + ((simulation.state.save && simulation.state.save.book) || []).length;
+  const naming = () => !!(simulation.state.christen || (simulation.state.vote && simulation.state.vote.kind === 'name')); // (the name vote and the ceremony have the whole screen, like the book)
+  const bookShow = () => { document.body.classList.toggle('bookopen', bv.open || naming()); if (bookNav) { bookNav.style.display = bv.open ? 'flex' : 'none'; document.getElementById('bookPage').textContent = `Page ${bv.page + 1} of ${bookPages()}`; } };
+  book.open = () => { if (!config.BOOK.ENABLED) return; bv.open = true; bv.page = 0; bookShow(); };
+  book.close = () => { bv.open = false; bookShow(); if (book.onClose) book.onClose(); };
+  book.turn = (d) => { bv.page = Math.max(0, Math.min(bookPages() - 1, bv.page + d)); bookShow(); };
+  book.isOpen = () => bv.open;
+  if (bookBtn) bookBtn.onclick = book.open;
+  if (bookNav) { document.getElementById('bookPrev').onclick = () => book.turn(-1); document.getElementById('bookNext').onclick = () => book.turn(1); document.getElementById('bookClose').onclick = book.close; }
+  addEventListener('keydown', (e) => {
+    if (bv.open) {
+      if (e.key === 'ArrowLeft') book.turn(-1);
+      else if (e.key === 'ArrowRight') book.turn(1);
+      else if (e.key === 'Escape' || e.key === 'b' || e.key === 'B') book.close();
+      e.stopImmediatePropagation(); // (the book has the keyboard: not even the menu or CAST OFF sees it)
+      e.preventDefault();
+    } else if ((e.key === 'b' || e.key === 'B') && simulation.state.phase === 'lobby' && !simulation.state.vote && !simulation.state.christen && !simulation.match.on) book.open();
+  }, true);
+  addEventListener('pointerdown', (e) => { if (bv.open && !(e.target && e.target.closest && e.target.closest('#bookNav'))) book.turn(e.clientX < innerWidth / 2 ? -1 : 1); });
+  const showBookButton = () => { if (bookBtn) bookBtn.style.display = config.BOOK.ENABLED && !simulation.match.on ? '' : 'none'; };
+  showBookButton();
+  setInterval(showBookButton, 500);
+  setInterval(bookShow, 100);
+
   // Difficulty button cycles Easy -> Normal -> Veteran -> Hard.
   const diffButton = document.getElementById('difficulty');
   // (small text under the label: the game is also tuned to the number of crew aboard, see config.CREW_SCALE)
@@ -248,5 +277,5 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
     count();
   };
 
-  return { socket, count, onPlayerInput, onJoinBot };
+  return { socket, count, onPlayerInput, onJoinBot, book };
 }

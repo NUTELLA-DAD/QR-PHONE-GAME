@@ -1,0 +1,1 @@
+{"version":2,"bestStops":9,"bestSalvage":880,"totalRuns":23,"victories":4,"unlocks":["flagship-medal"],"daily":{"date":"2026-10-11","best":{"voyage":{"stops":6,"victory":false,"salvage":410}}},"build":{"v":1,"parts":[{"part":"gasbag","x":0,"y":0},{"part":"engine","x":40,"y":10}],"log":[{"id":"gasbag","name":"Spare gasbag"}],"voyageNo":2}}

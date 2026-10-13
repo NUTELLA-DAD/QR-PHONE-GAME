@@ -78,6 +78,12 @@ export function createMenu({ simulation, network, onPause, perf, music }) {
     $('expert').click();
     sync();
   };
+  $('mBook').onclick = () => { // (L2: the Ship's Book over the menu: the game stays paused, and the menu comes back when the book is shut)
+    if (!network.book) return;
+    el.style.display = 'none';
+    network.book.onClose = () => { if (open) { el.style.display = 'flex'; sync(); } };
+    network.book.open();
+  };
   $('mShip').onclick = () => { // (the Sparrow or the classic ship: fitted at once in the lobby, otherwise for the next voyage)
     $('shipBtn').click();
     sync();

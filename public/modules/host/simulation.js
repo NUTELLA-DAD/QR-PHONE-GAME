@@ -41,6 +41,7 @@ import { stopColumn } from './gunsMatter.js';
 import { createAlarms } from './alarms.js';
 import { createGround } from './ground.js'; // (CASTLE.md A0: the away team on the ground, config.AWAY)
 import { writeStop, postcard, gentleLine } from './logWriter.js';
+import { createChristening } from './christen.js'; // (L2: the christening vote and the ceremony, the voyage's page in the book)
 import { generateVoyage, expectedPower, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
 // Best run, remembered by this browser (the TV). Never let storage problems break the game.
@@ -88,7 +89,11 @@ export function createSimulation() {
     daily: false, // fly today's daily voyage (route seeded by the date)
     phase: 'lobby', // 'lobby' = moored at the mast while the crew joins; 'flying' after CAST OFF
     record: loadRecord(), // best run on this TV: { laps, kills }
-    vote: null, // a vote in progress: the sky-dock shop, where a bought part goes, or the route map
+    vote: null, // a vote in progress: the sky-dock shop, where a bought part goes, or the route map (or, at the first CAST OFF, the ship's name)
+    shipName: null, // L2: the ship's name ("The Brass Heron"), christened at the first CAST OFF and kept in the save (book.js); null = not named yet
+    christen: null, // L2: the ceremony after the vote { name, t, t0, broke } (christen.js; bookArt.js draws it)
+    christenMode: 'auto', // L2: 'auto' = the vote opens when a human phone is aboard; 'always' (host.html?christen=1) also for bots only; 'off' (?christen=0) never
+    bookView: { open: false, page: 0 }, // L2: the Ship's Book page on the TV (network.js opens it, bookArt.js draws it)
     startBuild: null, // the ship a new voyage starts with ('sparrow' | 'classic', setStartBuild; the browser host picks it from config.VOYAGE.START_BUILD); null = whatever ship 0 is (headless tools) and no PART cards in the shop
     startBuildAuto: false, // F1: nobody forced the start ship, so CAST OFF picks it by the crew size (config.VOYAGE.START_BUILD_BY_CREW; setStartBuild(id, 'auto'))
     yard: { built: null, newPart: null, hold: false, pull: 0 }, // the Shipwright's Yard (S.6b): the BUILT stamp, the "NEW: ..." call-out, the camera hold at the dock and the slow pull-back after cast off
@@ -356,6 +361,7 @@ export function createSimulation() {
     state.upgrades = {};
     state.periscope = false;
     state.vote = null;
+    state.christen = null;
     state.scorecard = null;
     state.briefing = null;
     pendingVote = null;
@@ -630,6 +636,7 @@ export function createSimulation() {
   const VY = config.VOYAGE;
   state.save = loadVoyageSave(); // best run, total runs, unlocks (this TV)
   Object.assign(state, loadModePrefs()); // the session mode picked last time (mode, daily)
+  state.shipName = config.BOOK.ENABLED && state.save.ship ? state.save.ship.name : null; // (L2: the ship she was christened last time)
 
   // What the lobby has picked, as a text: when it differs from the route already made, the route is made again at CAST OFF.
   const sessionKey = () => state.mode + '|' + (state.daily ? dailyVoyage().key : '');
@@ -670,7 +677,7 @@ export function createSimulation() {
     const list = moments.open();
     moments.close();
     const s = curStop();
-    const entry = { ...writeStop(list, info, { used: logUsed, players }), end, env: s.env, icon: envInfo(s.env).icon, lair: !!s.lair, creature: s.creature || null, flagship: !!s.flagship, count: list.length, colors: Object.fromEntries(players.filter((p) => p.name).map((p) => [p.name, p.color])) }; // (colors: each crewman's colour, so the TV can pick his name out in it)
+    const entry = { ...writeStop(list, info, { used: logUsed, players, ship: state.shipName }), end, env: s.env, icon: envInfo(s.env).icon, lair: !!s.lair, creature: s.creature || null, flagship: !!s.flagship, count: list.length, colors: Object.fromEntries(players.filter((p) => p.name).map((p) => [p.name, p.color])) }; // (colors: each crewman's colour, so the TV can pick his name out in it)
     run.log.push(entry);
     run.lastLog = entry;
     return entry;
@@ -844,6 +851,7 @@ export function createSimulation() {
       route: routeOf(run.log),
       lines: postcard(run.log),
       colors: Object.assign({}, ...run.log.map((q) => q.colors), ...Object.values(run.crew).map((c) => ({ [c.name]: c.color }))),
+      shipName: state.shipName, // (L2: her name on the postcard; a lost ship is written out of the save just below)
     };
     const s = state.save;
     s.totalRuns++;
@@ -854,6 +862,7 @@ export function createSimulation() {
       if (!s.unlocks.includes('flagship-medal')) s.unlocks.push('flagship-medal');
     }
     if (run.daily) state.runEnd.dailyBest = recordDaily(s, run.daily.key, run.mode, { stops: done, victory, salvage: run.earned });
+    christening.endRun(state.runEnd, run); // (L2: the voyage's page, the crew's records; a lost ship goes into the fleet)
     saveVoyageSave(s);
     if (victory) {
       state.say('objective', 'THE FLAGSHIP IS DOWN - VICTORY!', 6, 6);
@@ -1121,6 +1130,7 @@ export function createSimulation() {
       const sc = v.part.choices.map((c) => choiceScore(c, v.part.now, v.part.baseWarns));
       return sc.indexOf(Math.max(...sc));
     }
+    if (v.kind === 'name') return (Math.random() * (v.options.length - 1)) | 0; // (L2: a bot names her too, never "later")
     if (v.kind === 'route' || v.kind === 'shelf' || v.kind === 'slot') return (Math.random() * v.options.length) | 0;
     if (v.kind === 'rematch') return 0;
     if (!ok.length) return cast;
@@ -1180,7 +1190,7 @@ export function createSimulation() {
         emitPlayerUi(p.id, ui);
       }
     }
-    const wait = v.kind === 'dock' ? SH.ALL_VOTED_WAIT : VY.ROUTE_ALL_VOTED_WAIT;
+    const wait = v.kind === 'dock' ? SH.ALL_VOTED_WAIT : v.kind === 'name' ? config.BOOK.CHRISTEN.ALL_VOTED_WAIT : VY.ROUTE_ALL_VOTED_WAIT;
     if (voters.length && voters.every((p) => p.vote != null)) v.t = Math.min(v.t, wait);
     if (v.kind === 'dock' && v.total > shopMax()) v.t = Math.min(v.t, 0);
     if (v.t > 0) return;
@@ -1200,13 +1210,15 @@ export function createSimulation() {
     const best = Math.max(...counts);
     const idx = v.options.map((_, i) => i);
     let pick;
-    if (best === 0) pick = v.kind === 'dock' ? v.options.findIndex((o) => o.kind === 'cast') : v.kind === 'slot' ? 0 : (Math.random() * v.options.length) | 0;
+    if (v.kind === 'name' && v.skipped) pick = v.options.findIndex((o) => o.kind === 'skip'); // (L2: CAST OFF pressed again on the TV)
+    else if (best === 0) pick = v.kind === 'dock' ? v.options.findIndex((o) => o.kind === 'cast') : v.kind === 'slot' || v.kind === 'name' ? 0 : (Math.random() * v.options.length) | 0; // (nobody voted for her name: the first one)
     else {
       const tied = idx.filter((i) => counts[i] === best);
       pick = tied[(Math.random() * tied.length) | 0];
     }
     if (v.total > shopMax() && v.kind === 'dock') pick = v.options.findIndex((o) => o.kind === 'cast');
     const o = v.options[pick];
+    if (v.kind === 'name') return christening.resolve(o); // (L2: the christening vote: a name, or "later")
     if (v.kind === 'route') {
       closeVote();
       return goToStop(o.id);
@@ -1386,6 +1398,7 @@ export function createSimulation() {
     if (state.salvagePop && (state.salvagePop.t -= dt) <= 0) state.salvagePop = null;
     if (state.briefing && (state.briefing.t -= dt) <= 0) state.briefing = null;
     { const Y = state.yard; if (Y.built && (Y.built.t -= dt) <= 0) Y.built = null; if (Y.newPart && Y.newPart.t > 0) Y.newPart.t -= dt; if (Y.pull > 0) Y.pull -= dt; }
+    if (state.christen) christening.update(dt); // (L2: the bottle on the bow; the ship casts off when it is over)
     // While the crew votes on an upgrade, the action is paused.
     if (state.vote) {
       flushAll();
@@ -1514,6 +1527,7 @@ export function createSimulation() {
     state.phase = 'flying';
     state.say('objective', 'CAST OFF!', null, 4);
   };
+  const christening = createChristening({ state, openVote, closeVote, launch, phoneFx }); // (L2: SHIPS_BOOK.md, christen.js)
   const shipCollide = createShipCollide({ world: state, puff });
   const match = createMatch({ world: state, addShip: (...a) => addShip(...a), removeShip: (...a) => removeShip(...a), course: () => course, launch, restart: () => restartGame(), openVote, newBot, puff, phoneFx, emitUi: emitPlayerUi });
 
@@ -1542,6 +1556,7 @@ export function createSimulation() {
     castOff: () => {
       if (state.phase !== 'lobby') return;
       if (match.on) { match.begin(); return; } // (Versus: CAST OFF starts the match - the shelf, then the rounds)
+      if (christening.skip()) return; // (L2: CAST OFF again while the name vote or the ceremony shows skips it)
       let remade = false;
       if (state.startBuildAuto && VY.START_BUILD_BY_CREW.ENABLED && state.startBuild !== pickStartBuild()) { // (F1: nobody forced a ship, so the crew on the TV picks it: the route and the first map are made again for her)
         state.startBuild = pickStartBuild();
@@ -1553,6 +1568,7 @@ export function createSimulation() {
         newRun();
         course.startMission(1, firstMission());
       }
+      if (christening.wanted()) { christening.start(); return; } // (L2: the first CAST OFF of an unnamed ship opens the name vote; the ship casts off when it and the ceremony are over)
       launch();
     },
     onMarker,

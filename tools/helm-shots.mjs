@@ -75,7 +75,7 @@ async function openPage(url, W, H, mobile) {
 
 let host = null, phone = null;
 try {
-  host = await openPage(`${BASE}/host.html?view=${view}&cine=0`, 1600, 900, false);
+  host = await openPage(`${BASE}/host.html?view=${view}&cine=0&christen=0`, 1600, 900, false);
   check(await host.waitFor('!!window.game && !!document.getElementById("code") && /^[A-Z0-9]{4}$/.test(document.getElementById("code").textContent)', 40000), 'the host page is up with a room code');
   const code = await host.ev('document.getElementById("code").textContent');
   check(await host.ev('!!document.getElementById("expert") && /easy/.test(document.getElementById("expert").textContent)'), 'the lobby has the Helm: easy button');
