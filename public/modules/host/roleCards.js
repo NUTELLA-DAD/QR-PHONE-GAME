@@ -4,7 +4,7 @@
 import { config } from '../../config.js';
 
 export const VERBS = { fire: 'SPRAY', hole: 'PATCH', gas: 'PATCH', repair: 'PATCH', leak: 'PATCH', frame: 'PATCH', ice: 'PATCH', unclog: 'PATCH', ammo: 'LOAD', coal: 'STOKE', helm: 'TAKE THE HELM',
-  revive: 'HELP', help: 'HELP', winch: 'HELP', heal: 'HEAL', fight: 'FIGHT', hack: 'FIGHT', swat: 'FIGHT', rod: 'GRAB', stow: 'GRAB', shovel: 'SHOVEL', dump: 'DUMP', vent: 'VENT', hatch: 'PULL', cut: 'CUT', pump: 'PUMP', oxygen: 'PUMP', trim: 'TRIM', sail: 'SAIL', reef: 'SAIL', abandon: 'JUMP' };
+  revive: 'HELP', help: 'HELP', winch: 'HELP', heal: 'HEAL', fight: 'FIGHT', hack: 'FIGHT', swat: 'FIGHT', rod: 'GRAB', stow: 'GRAB', shovel: 'SHOVEL', dump: 'DUMP', vent: 'VENT', hatch: 'PULL', cut: 'CUT', pump: 'PUMP', oxygen: 'PUMP', trim: 'TRIM', sail: 'SAIL', reef: 'SAIL', abandon: 'JUMP', pickup: 'PICK UP' };
 export const FIRST_WORD = { FIRE: 'SPRAY', HULL: 'PATCH', REPAIR: 'PATCH', AMMO: 'LOAD', COAL: 'STOKE', STOKE: 'STOKE', HELP: 'HELP', REVIVE: 'HELP', TAKE: 'TAKE THE HELM', RAIDER: 'FIGHT' };
 
 export function verbOf(kind, label, fetching) {

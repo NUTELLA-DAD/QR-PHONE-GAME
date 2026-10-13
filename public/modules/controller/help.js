@@ -7,6 +7,7 @@ export const STATION_ICONS = { helm: '☸️', gun: '🔫', boiler: '🔥', look
 export function helpFor(n, seatHints) {
   const R = config.CONTROLS.ROLE_CARDS;
   if (n.ko) return { icon: '💤', title: 'Knocked out', text: 'Hang tight - a crewmate can revive you.' };
+  if (n.away && n.away.hint) return { icon: '🧗', title: 'AWAY TEAM', text: n.away.hint }; // (CASTLE.md A0: off the ship, on the ground)
   if (n.locked) {
     return {
       icon: STATION_ICONS[n.kind] || '🎮',

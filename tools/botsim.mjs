@@ -385,6 +385,7 @@ if (state.ships.length > 1) for (const sh of state.ships) console.log(`ship ${sh
   const S = state.structStats; // STRUCTURE.md: how sound the frame was, what gave way, how often lift failed and who saved her
   if (S && !config.PVP.ENABLED) console.log(`structure: meter mean ${S.meterN ? (S.meterSum / S.meterN).toFixed(1) : 'n/a'}% (lowest ${S.meterMin.toFixed(0)}%); gave way ${S.failures}x (break-offs ${S.breakoffs}, splits ${S.splits}, folds ${S.folds}); held at the last moment ${S.saves}x; shored up ${S.shored.toFixed(1)} segment-hp by hammer; lift failed ${S.falls}x (saved ${S.saved}), crashed ${S.crashes}x; halves in the sky now ${state.ships.filter((q) => q.piece).length}; falls by cause ${Object.entries(S.why || {}).map(([k, v]) => k + " " + v).join(", ") || "none"}`);
 }
+{ const S = state.away && state.away.stats; if (S && (S.trips || S.landings || S.ropes || S.flares)) console.log(`away (CASTLE.md A0): trips ${S.trips}, landings ${S.landings} (${S.wall} on a wall), rope ladder lowered ${S.ropes}x, down ${S.ropeDown}x / up ${S.ropeUp}x, wall ladders ${S.ladders}, flares ${S.flares}, hooks ${S.hooks}, stranded ${S.strands}, walked home ${S.homes}, back aboard ${S.returns}`); }
 ringTrack.forEach((r, i) => { // (R0: one line for each ring the bots met: how it ended, the faces, the shutters, the specials)
   const S = r.stats, down = r.faces.filter((f) => f.down).length;
   if (r.gar) { // (D1: the garrison - what it did, and the fairness figure: the castle's guns against its archers, ballista and chain, in power that landed)

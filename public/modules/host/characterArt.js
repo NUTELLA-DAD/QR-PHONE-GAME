@@ -85,7 +85,7 @@ export function createCharacterArt({ ctx, sprites, drawItem }) {
     let backLeg = -walk * 0.55;
     let frontArm = -walk * 0.5;
     let backArm = walk * 0.5;
-    if (p.fly || p.tumble) {
+    if ((p.fly && !(p.on && p.on.away)) || p.tumble) { // (CASTLE.md A0: a man standing on the ground is not flailing)
       frontArm = backArm = -2.9 + Math.sin(time * 14) * 0.25; // arms up, flailing
       frontLeg = 0.5 + Math.sin(time * 14) * 0.2;
       backLeg = -0.4 - Math.sin(time * 14) * 0.2;

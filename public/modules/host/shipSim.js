@@ -282,7 +282,7 @@ export function createShipSim(world, ship, W) {
     if (sore) return bandageAct;
     if (fire) return { type: 'need', label: 'Need an extinguisher' };
     if (hole || hurt || gasHole || (frame && frame.hp < config.STRUCTURE.JOB_AT)) return { type: 'need', label: 'Need a hammer' };
-    return null;
+    return ship.main && W.ground ? W.ground.ladderAction(player, legacy) : null; // (CASTLE.md A0: the rope ladder's hatch on the lowest deck, when nothing else wants the button: lower it, climb down it)
   };
 
   // What a boarder's Action button does (Versus): at the helm, TAKE THE HELM (hold; not while a defender stands by it); at the boiler, SABOTAGE (hold). Fighting is the ATTACK button.
@@ -1134,6 +1134,8 @@ export function createShipSim(world, ship, W) {
       air.jumpChute(player);
       stat(player, 'jumps');
       phoneFx(player, 'Jumping! Steer with the stick - the chute opens in a moment', [60, 40, 60]);
+    } else if (type === 'ladder') {
+      if (W.ground.useLadder(ship, player)) phoneFx(player, 'Down the rope ladder! Stick down to climb, UP to climb back.', [40, 30, 40]);
     } else if (type === 'hook') {
       if (gunship.fireHook()) {
         stat(player, 'boarding');
@@ -1276,7 +1278,7 @@ export function createShipSim(world, ship, W) {
       if (player.koGrace > 0) player.koGrace -= dt;
       health.step(player, dt); // (crew health: i-frames, burns, the medical bay, the flashes)
       if (player.on && player.on.ring != null) W.ring.boardCheck(player); // (R0: standing on a ring map's boarding gallery, ring.js)
-      else if (player.on && W.creatures) W.creatures.boardCheck(player); // (C.2: standing on a giant creature: if it dives or dies, or he is knocked out, he falls)
+      else if (player.on && !player.on.away && W.creatures) W.creatures.boardCheck(player); // (C.2: standing on a giant creature: if it dives or dies, or he is knocked out, he falls) (A0: the away team on the ground is ground.js's)
       if (player.hook && (player.fall || player.ko > 0 || player.lock || player.swing || player.conn != null || player.connected === false)) hookshot.clear(player);
       if (player.swing) {
         gunship.swingStep(player, dt);
@@ -1320,7 +1322,8 @@ export function createShipSim(world, ship, W) {
         player.actQ = false;
         player.jumpQ = false;
         flushPresses(player);
-        if (player.fly) air.step(player, dt, false); // knocked out mid-air: still falls
+        if (player.on && player.on.away) { /* (A0: out cold on the ground: he lies where he is) */ }
+        else if (player.fly) air.step(player, dt, false); // knocked out mid-air: still falls
         else {
           player.air = false;
           player.jz = 0;
@@ -1354,7 +1357,7 @@ export function createShipSim(world, ship, W) {
         player.lock = null;
         player.fire = false;
       }
-      const nearStations = !player.lock && player.conn == null ? layout.stations.filter((s) => s.d === player.d && Math.abs(player.x - s.x) < T.STATION_REACH) : [];
+      const nearStations = !player.lock && player.conn == null && !(player.on && player.on.away) ? layout.stations.filter((s) => s.d === player.d && Math.abs(player.x - s.x) < T.STATION_REACH) : [];
       // (people keep the station they were already at until another is clearly closer; bots just take the nearest)
       const station = player.bot ? nearStations.sort((a, b) => Math.abs(player.x - a.x) - Math.abs(player.x - b.x))[0] || null : sticky(player, 'stKey', nearStations, (s) => Math.abs(player.x - s.x), (s) => s.n);
 
@@ -1363,7 +1366,8 @@ export function createShipSim(world, ship, W) {
         hijack.rider(player, dt); // flying a stolen dogfighter (kick the pilot out, then steer)
         if (!player.bot) player.act = player.grabAct = null;
       } else if (player.on) {
-        if (player.on.ring != null) W.ring.boarderStep(ship, player, dt, holdOk); // (the ring map's gallery: walk it, plant the charge at the keep door)
+        if (player.on.away) W.ground.step(ship, player, dt, { hookshot, holdOk }); // (A0: the away team on the ground: walk, climb, flare, hook; ground.js)
+        else if (player.on.ring != null) W.ring.boarderStep(ship, player, dt, holdOk); // (the ring map's gallery: walk it, plant the charge at the keep door)
         else W.creatures.boarderStep(ship, player, dt, holdOk); // aboard a giant creature: walk its outline, BLIND IT, STRIKE THE HEART (creatureBoard.js)
       } else if (player.lock) {
         player.moving = false;
@@ -1704,7 +1708,9 @@ export function createShipSim(world, ship, W) {
       const progNow = !player.lock && player.act && player.act.hold && player.act.obj && typeof player.act.obj.prog === 'number' ? Math.round(player.act.obj.prog * 10) : -1; // (how far a hold action has got)
       const eng = player.lock && kind === 'helm' && !player.hj && !player.bot && (!config.CONTROLS.HELM_V2 || config.CONTROLS.EXPERT) ? engines.panel(ship.pose.f) : null; // (the helm's engine levers: one per engine, left to right as the TV shows her)
       const alarm = ship.main && !player.bot ? state.alarmPhone(player, stKind) : ''; // (FUN.md F2: the phone's one line - the top alarm that concerns this player's deck or seat; alarms.js)
-      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, st ? st.s + '/' + st.l + '/' + st.w + '/' + st.f : '', primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : '', alarm].join('|');
+      const awayUi = player.on && player.on.away ? W.ground.ui(player) : null; // (A0: the away man's hint and STRANDED countdown, ground.js)
+      if (awayUi && awayUi.status) status = awayUi.status;
+      const key = [player.hj ? 'hj' + player.hj.phase : stationName, player.hj ? 'hijack' : kind, !!(player.lock || player.hj), takenBySomeone, label, ammoText, player.carry || '', hold, status, attackLabel, hull, st ? st.s + '/' + st.l + '/' + st.w + '/' + st.f : '', primePct, loadPct, jobUi ? jobUi.label + '|' + jobUi.dir : '', aid, gaid, grabNow ? grabNow.label + grabNow.swap : '', glock, progNow, ship.pose.f, state.turning.t > 0 ? 1 : 0, hp, player.team ? player.team + (state.match && state.match.phase === 'lobby' ? 's' : '') : '', eng ? JSON.stringify(eng) : '', alarm, awayUi ? awayUi.k : ''].join('|');
       const hv = config.CONTROLS.HELM_V2 && player.lock && kind === 'helm' && !player.hj && !player.bot ? helmGauge() : null; // (F3: the phone's gas gauge, [gas, the hover mark] in whole numbers: the pressure lever is only a readout now)
       const keyF = hv ? key + '|' + hv : key;
       if (keyF !== player.uk) {
@@ -1712,6 +1718,7 @@ export function createShipSim(world, ship, W) {
         if (!player.bot) {
           player.ui = { station: player.hj ? 'Stolen Fighter' : stationName, kind: player.hj ? 'hijack' : kind, locked: !!(player.lock || player.hj), taken: takenBySomeone, label, ammo: ammoText, carry: player.carry || null, hold, status, attack: attackLabel, hull, st, prime: primePct, load: loadPct, job: jobUi, aid, grab: grabNow ? grabNow.label : null, gaid, gswap: !!(grabNow && grabNow.swap), glock, prog: progNow, hp, hpMax: config.HEALTH.MAX, jat: config.HEALTH.JOB_AT, med: !!health.medbay(), fc: ship.pose.f, tn: state.turning.t > 0, eng, alarm, tm: player.team ? { id: player.team, name: teamOf(player.team).name, color: teamOf(player.team).color, swap: !!(state.match && state.match.on && state.match.phase === 'lobby') } : null }; // (tm: Versus - the side the phone is on, and whether it may still swap)
           if (hv) player.ui.hv = hv;
+          if (awayUi) { player.ui.away = awayUi.u; player.ui.station = 'AWAY TEAM'; }
           emitPlayerUi(player.id, player.ui);
         }
       }

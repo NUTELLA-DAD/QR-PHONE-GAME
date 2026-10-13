@@ -558,7 +558,7 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
 
   // A new mission (or a new game): the creature is gone and the dev flag may spawn a new one.
   const reset = () => {
-    for (const p of Object.values(state.players)) if (p.on) p.on = null; // (a boarder is a flyer again: the airborne system takes him from here)
+    for (const p of Object.values(state.players)) if (p.on && !p.on.away) p.on = null; // (a boarder is a flyer again: the airborne system takes him from here)
     state.creature = null;
     for (const sh of state.ships || []) if (sh.ctx && sh.ctx.perch) sh.ctx.perch = null; // (the Drake's weight is gone with it)
     if (state.slow !== undefined) state.slow = 1;

@@ -10,6 +10,7 @@ import { createSprites } from './sprites.js';
 import { createCharacterArt } from './characterArt.js';
 import { createCrewArt } from './crewArt.js';
 import { createCourseArt } from './courseArt.js';
+import { createGroundArt } from './groundArt.js'; // (CASTLE.md A0: the away team's ladders, flares and pickup marker)
 import { createRingArt } from './ringArt.js'; // (the orbit finale drawn flat: castle faces, shutters, the ring dial; R0)
 import { createSkyArt } from './skyArt.js';
 import { createEnvArt } from './envArt.js';
@@ -128,6 +129,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const courseArt = createCourseArt({ ctx, state, ink, sprites, skyArt, envArt, bgArt });
   const drawSpecials = createSpecialsArt({ ctx, state, ink });
   const ringArt = createRingArt({ ctx, state, ink });
+  const groundArt = createGroundArt({ ctx, world, ink }); // (CASTLE.md A0: the walkways, the wall ladders, the rope ladder, the flare and the pickup marker)
   const spotterArt = createSpotterArt({ ctx, state }); // spotted-target brackets (HELP! call-outs and primed-gun glows are the ships': artsOf)
   const linkArt = createLinkArt({ ctx, state }); // gust / updraft arrows (the loader and lookout wires are the ships': artsOf)
   const healthArt = createHealthArt({ ctx }); // crew health: heart pips over a hurt crewman
@@ -2428,11 +2430,13 @@ export function createRenderer({ ctx, state: world, canvas }) {
   };
 
   // Crew in free flight (jumped, thrown or swinging on a hookshot) are world objects: drawn in map coordinates, after the ship, with their colour marker and rope.
-  const drawAirborne = (time) => {
+  const drawAirborne = (time, zoom = 0.5) => {
     art.hook.drawRopes(); // hookshot ropes and hooks (on the deck or in the air: the rope is in the world)
     for (const p of Object.values(state.players)) {
       if (!p.fly || p.hj || p.connected === false) continue;
+      if (p.on && p.on.away && p.on.mode === 'home') continue; // (CASTLE.md A0: walked home - nobody sees him)
       drawPlayer(p, time);
+      if (p.on && p.on.away) verbTag('AWAY TEAM', p.x, p.y - 226, Math.max(1.1, 0.6 / (zoom || 0.5))); // (A0: the away team's label over the man on the ground)
       if (!p.color) continue;
       const y = p.y - (p.ko > 0 ? 90 : 165) + Math.sin(time * 1000 / 300 + p.x) * 4;
       ink();
@@ -3140,9 +3144,27 @@ export function createRenderer({ ctx, state: world, canvas }) {
       // crew in the air (a jump, a throw, a parachute, the hookshot): names and marks
       for (const p of Object.values(world.players)) {
         if (!p.fly || p.hj || p.connected === false || p.enemy) continue;
+        if (p.on && p.on.away && p.on.mode === 'home') continue; // (CASTLE.md A0: walked home - nobody sees him)
         crewNames(p, p.id, zs);
         crewMarks(p, p.id, shipOf(world, p) || mainShip(world));
+        if (p.on && p.on.away) { // (A0: the label over a man on the ground, over his name)
+          const a = p3.crew(p.id), q = a && proj([a.x, a.y + ((a.ko ? 66 : 128) * (a.sc || 1) + (a.up || 0)) + 30 * (a.sc || 1), a.z]); // (the name's own spot: the label stands a few lines above it)
+          if (q) { at({ x: q.x, y: q.y - 62 * zs }, zs); verbTag('AWAY TEAM', 0, 0, 1); }
+        }
       }
+      try { // (A0: the 3D castle has no ladders, rope, flare or pickup ring of its own yet - A3 - so the HUD draws them through the camera: the walkways and wall ladders, the rope ladder, a lit flare, the pickup marker)
+        const S = world.away;
+        if (S && S.on) {
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          const pt = (x, y) => proj([x, -y, 60]);
+          const px = (x, y) => { const a = pt(x, y), b = pt(x + 100, y); return a && b ? Math.max(0.3, Math.hypot(b.x - a.x, b.y - a.y) / 100) : 0.5; };
+          if (world.groundSys && world.groundSys.onGround().length) for (const l of S.ladders) { const a = pt(l.x, l.y0 + 6), b = pt(l.x, l.y1); if (a && b) groundArt.ladder(a.x, a.y, b.x, b.y, px(l.x, l.y0), 46 * px(l.x, l.y0)); } // (the wall ladders, while somebody is down there to climb them; the castle art has the walkways)
+          const R = S.rope;
+          if (R.out && R.len > 4) { const a = pt(R.x, R.y), b = pt(R.x, R.y + R.len); if (a && b) groundArt.ladder(a.x, a.y, b.x, b.y, px(R.x, R.y) * 1.3, 40 * px(R.x, R.y) * 1.3, groundArt.ROPE); }
+          for (const o of S.pickups) { const a = pt(o.x, o.y); if (a) groundArt.pickup(a.x, a.y, zs * 0.9, K8, o.name, zs); }
+          for (const f of S.flares) { const a = pt(f.x, f.y); if (a) groundArt.flare(a.x, a.y, zs * 0.9, K8, f.name, zs, px(f.x, f.y)); }
+        }
+      } catch (e) { /* (a nicety: never stop the frame) */ }
       placeNames(); // (WP15: every name queued above, laid out together so none lies on another)
       // enemy bombers' health bars, a stolen plane's KICK THE PILOT bar, and the ring and "!" over a bat that has latched on
       for (const p of world.bombers || []) {
@@ -3246,6 +3268,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
       courseArt.drawBuildings(wv, width, time / 1000);
       courseArt.drawMarkers(wv, width, time / 1000);
       ringArt.draw(time / 1000); // (a ring map: the castle's faces under their guns)
+      groundArt.drawGround(); // (CASTLE.md A0: the castle's walkways and wall ladders, under the ships)
       courseArt.drawTurrets(time / 1000);
       drawBombs(time / 1000);
       skyArt.fogFront(wv, width, height); // thin fog over the rock, under the ship
@@ -3436,7 +3459,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
       everyShip(drawShipLayer);
       if (world.gunship && world.gunship.asShip) drawGunship.rope(world.gunship, ts); // (the gunship's grapple line runs between two ships: it is drawn in the world)
       if (world.debris && world.debris.length) debrisArt.draw(); // (S.5i: broken-off parts tumble in the world)
-      everyShip(() => drawAirborne(ts)); // crew in the air and their ropes live in the world, not in the ship's frame
+      everyShip(() => drawAirborne(ts, view.zoom)); // crew in the air and their ropes live in the world, not in the ship's frame
+      groundArt.drawWorld(ts, Math.max(1, Math.min(3, 0.8 / (view.zoom || 0.5)))); // (A0: the walkways, ladders, rope ladder, flares and the pickup marker, in the world)
       drawCross(ts); // (B.6: cannon smoke trails, thrown loads, towlines)
       everyShip(() => { if (!ship.ai) { drawCoil(ts); drawShield(ts); } }); // each ship's Lightning Coil and Deflector band (world points)
       if (fleetN() > 1) fleet.drawPennants(world, wv, width, height, time); // the team flags on the masts

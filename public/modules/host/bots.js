@@ -896,6 +896,12 @@ function operate(p, state, dt) {
       if (flot.alt != null && hi - lo > 160) plan.target = clamp(flot.alt, lo + 40, hi - 40); // (only where the terrain leaves room)
       p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1);
     }
+    const away = !gunshipAi && !cap && mainShip(state).main && state.groundSys ? state.groundSys.helmCall() : null; // (A0: an away man's flare, or a man stranded: fly over him and hover with the rope ladder's foot 560 px over his head)
+    if (away) {
+      plan.speed = clamp((away.dx * mainShip(state).pose.f) / 700, -0.4, 0.4);
+      plan.target = clamp(away.alt, lo + 20, Math.max(lo + 20, hi - 20));
+      p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1);
+    }
     let target = null;
     const dodge = beamDodge(state) ?? dodgeAltitude(state) ?? grappleDodge(state);
     if (lo > hi || Math.abs(plan.target - ship.alt) > 120) target = plan.target;
@@ -1861,6 +1867,28 @@ function ringForceBoard(p, state) {
   return rs.forceBoard(ship, p);
 }
 
+// CASTLE.md A0, the away team's bot (config.AWAY.BOT_TRIPS - tools only; normal bot play never goes ashore): once the rope ladder can reach a plaza ONE idle bot walks to the hatch on the lowest deck,
+// lowers the ladder and climbs down; from then on ground.js step() drives him (a walk to the plaza's middle, a look round, a flare, the climb home). True = this bot is on a trip.
+function awayTrip(p, state, dt) {
+  const g = state.groundSys;
+  if (!g || !config.AWAY.BOT_TRIPS) return false;
+  if (p.on && p.on.away) return true;
+  if (!p.trip) {
+    if (!g.tripWanted(p)) return false;
+    g.tripStarted(p);
+    p.botJob = null;
+    p.wanderTo = null;
+  }
+  if (p.fall || p.fly || p.ko > 0 || !g.enabled() || (p.trip.t += dt) > 45) { p.trip = null; return false; }
+  const sp = g.ropeSpot();
+  if (steer(p, sp.d, sp.x, 20)) {
+    p.jx = 0;
+    p.jy = 0;
+    g.useLadder(mainShip(state), p);
+  }
+  return true;
+}
+
 // Called once per frame for each bot, before the game applies its input.
 export function updateBot(p, state, dt) {
   const L = mainShip(state).layout;
@@ -1879,6 +1907,8 @@ export function updateBot(p, state, dt) {
   }
   if (config.CREATURES.FORCE_WIN === 'board' && forceBoard(p, state)) return; // (C.3 dev flag)
   if (config.RING.FORCE_BOARD && ringForceBoard(p, state)) return; // (R0 dev flag)
+  if (p.on && p.on.away) return; // (A0: a bot on the ground is driven by ground.js, never by the brain below)
+  if (config.AWAY.BOT_TRIPS && awayTrip(p, state, dt)) return; // (A0, tools only)
   // A daring stunt takes over the bot until it is safely back on a deck.
   if (p.dare) {
     if (dareStep(p, state, dt)) return;

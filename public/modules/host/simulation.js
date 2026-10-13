@@ -39,6 +39,7 @@ import { deckPieces } from './shipBuild.js';
 import { createMoments } from './moments.js';
 import { stopColumn } from './gunsMatter.js';
 import { createAlarms } from './alarms.js';
+import { createGround } from './ground.js'; // (CASTLE.md A0: the away team on the ground, config.AWAY)
 import { writeStop, postcard, gentleLine } from './logWriter.js';
 import { generateVoyage, expectedPower, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
 
@@ -165,6 +166,7 @@ export function createSimulation() {
     if (sh.piece) for (const o of state.ships) if (o !== sh && !o.piece) sh.sim.air.addProvider(pieceDecks(sh, o)); // (STRUCTURE.md: whoever jumps from a half that split off lands on the decks of the others)
     sh.sim.air.addProvider(() => (W.ring ? W.ring.surfaces(sh) : [])); // (R0: the ring map's boarding galleries are landing places and hook anchors, ring.js)
     sh.sim.air.addProvider(() => (W.creatures ? W.creatures.surfaces(sh) : [])); // (C.2: a surfaced giant creature's mantle is a landing place for this ship's crew in the air, creatureBoard.js)
+    sh.sim.air.addProvider(() => (W.ground ? W.ground.surfaces(sh) : [])); // (A0: the castle walkways and the rock below are landing places for the main ship's people, ground.js)
     return sh;
   };
   // Versus (B.4): the decks of a ship of ANOTHER team are landing places (and hook anchors) for a crewman of `me` in the air - a leap, a parachute or a swing across and he is aboard her
@@ -229,6 +231,7 @@ export function createSimulation() {
   W.addShip = (...a) => addShip(...a); // (a split: shipSim.js splitShip makes the half that goes a ship of her own)
   W.removeShip = (...a) => removeShip(...a);
   Object.defineProperty(state, 'rival', { get: () => (state.ships[0] && state.ships[0].rival) || null, enumerable: false, configurable: true }); // (Versus: ship 0's rival, ships.js; every ship's context answers its own)
+  W.ground = state.groundSys = createGround({ state, puff, phoneFx }); // (A0: the away team; it needs ship 0, which addShip makes next, only when it runs. course.js begins it on every map, bots.js asks it for trips)
   const main = addShip(null); // (B.2: this file is the WORLD. What belongs to one ship is shipSim.js; the voyage, the pacing director, the wreck and restart rules below work on the main ship, ships[0])
   const layout = main.layout;
   main.buildId = 'classic'; // (which build she wears: 'classic' | 'sparrow' | 'yard' = a start build that parts have been added to; Versus' shelf sets its own)
@@ -314,6 +317,7 @@ export function createSimulation() {
     coil.reset();
     gunship.reset();
     goingDown.reset();
+    W.ground.reset(); // (A0: the away team is brought aboard first)
     for (const player of Object.values(state.players)) {
       const [e0, e1] = shipOf(state, player).layout.boarderEntryPoints; // (back aboard their own ship)
       Object.assign(player, { ko: 0, lock: null, carry: null, conn: null, climb: false, fall: true, y: -60, x: e0.x + Math.random() * (e1.x - e0.x) });
@@ -347,6 +351,7 @@ export function createSimulation() {
     state.lastAlt = 0;
     state.wreck = null;
     state.limp = null;
+    W.ground.reset(); // (A0: nobody is left on the ground of the last game)
     state.phase = 'lobby';
     state.upgrades = {};
     state.periscope = false;
@@ -1048,6 +1053,7 @@ export function createSimulation() {
   const cardOff = (o) => o.kind !== 'cast' && (o.sold || o.cost > state.run.salvage);
 
   const startDock = () => {
+    W.ground.dockReturn(); // (A0: whoever walked home from the ground is aboard again, at a little salvage)
     const prize = state.gunship && state.gunship.prize && state.tows.find((t) => t.b === state.gunship.ship); // (B.6: a captured gunship still in tow when we reach the dock: a salvage bonus, and she is released and goes down)
     if (prize) { addSalvage(config.CROSS.TOW.PRIZE, 'gunships', 'PRIZE IN TOW!'); W.towing.cut(prize, ''); state.gunship.prize = false; }
     const options = buildOffers();
@@ -1264,6 +1270,10 @@ export function createSimulation() {
   let pendingVote = null;
   const onMarker = (m) => {
     if (m.kind !== 'home') return;
+    if (W.ground.holdStop(m)) return; // (A0: somebody is on the ground: the scorecard waits for him - STRANDED - ground.js releases it below)
+    stopDone(m);
+  };
+  const stopDone = (m) => {
     goingDown.missionDone(); // (reaching home while falling: she limps in)
     // A new record for this TV?
     const laps = m.lap - 1;
@@ -1295,6 +1305,7 @@ export function createSimulation() {
     run.gain = {};
     pendingVote = stop.flagship ? 'victory' : 'dock';
   };
+  W.ground.bind({ release: (m) => stopDone(m), pay: (n) => { const run = state.run; if (run) run.salvage = Math.max(0, run.salvage - n); } }); // (A0: the stop that waited for a stranded man goes on; the dock charges the ones who walked home)
 
   newRun();
   const course = createCourse({ state, impact, puff, onMarker, credit, hitsShip, firstMission });
@@ -1406,6 +1417,7 @@ export function createSimulation() {
       if (!config.PVP.ENABLED) creatures.update(dt);
       if (!config.PVP.ENABLED) gunship.update(dt);
       course.update(dt);
+      W.ground.update(dt); // (A0: the rope ladder, the flares, the stranded count)
       weather.update(dt);
       env.update(dt);
       eachShip(state, (sh, i) => { if (i > 0 && !sh.ai) sh.sim.env.update(dt); }); // (every other ship has the sky's hazards of her own: ice, thermals, spores, oxygen, storm rods, the sea; the enemy gunship flies in none of them)
