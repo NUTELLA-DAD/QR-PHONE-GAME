@@ -193,6 +193,9 @@ function scenario() { // a ship, rock and a handful of pieces, scripted
   let stones = 0; // (D3: the castle's stone chunks are a kind of their own: they fill their own cap and leave the other two alone)
   for (let i = 0; i < KP.STONES.CAP + 8; i++) if (P.addDebris({ kind: 'stone', shipIndex: -1, pos: [i * 120, 900, 0], quat: [0, 0, 0, 1], vel: [0, 0], ang: [0, 0, 0], boxes: [box(30, 24, 20)], rel: 1.8 })) stones++;
   report(stones === KP.STONES.CAP && P.addDebris({ kind: 'chunk', shipIndex: -1, pos: [0, 2000, 0], quat: [0, 0, 0, 1], vel: [0, 0], ang: [0, 0, 0], boxes: [box(10, 6, 6)], rel: 1 }) === null, `stone chunks are capped at ${stones} (PHYS.STONES.CAP ${KP.STONES.CAP}), apart from the pieces and the blast chunks (both still full)`);
+  let shards = 0; // (STRUCTURE.md WP5: the planks and splinters of a split and of a crashed half are a kind of their own too)
+  for (let i = 0; i < KP.SHARDS.CAP + 8; i++) if (P.addDebris({ kind: 'shard', mat: 'shard', shipIndex: -1, pos: [i * 90, 1300, 0], quat: [0, 0, 0, 1], vel: [0, 0], ang: [0, 0, 0], boxes: [box(40, 8, 10)], rel: 0.55 })) shards++;
+  report(shards === KP.SHARDS.CAP && P.addDebris({ kind: 'stone', shipIndex: -1, pos: [0, 2600, 0], quat: [0, 0, 0, 1], vel: [0, 0], ang: [0, 0, 0], boxes: [box(10, 6, 6)], rel: 1.8 }) === null, `shards are capped at ${shards} (PHYS.SHARDS.CAP ${KP.SHARDS.CAP}), apart from the other kinds (the stones are still full)`);
   const t0 = process.hrtime.bigint(); // (performance.now is the simulated clock in this tool)
   for (let s = 0; s < 120; s++) P.step(1 / 60);
   const ms = Number(process.hrtime.bigint() - t0) / 1e6 / 120;

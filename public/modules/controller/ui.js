@@ -184,6 +184,11 @@ export function createControllerUI({ network }) {
     joinCarded = true; // (once per page: a reconnect does not show it again)
     showCard({ icon: '🧭', title: RC.JOIN_TITLE, text: RC.JOIN_TEXT }, RC.CARD_TIME);
   };
+  // L3 (SHIPS_BOOK.md): the TV knows this phone. A veteran's join card says "Welcome back, Mia!  Old Salt - 12 voyages, 7 won."; a new face's says the rank they start as (and the usual how-to).
+  const showWelcome = (w) => {
+    if (w.vet) showCard({ icon: '⚓', title: w.title, text: w.text }, RC.CARD_TIME);
+    else if (RC.ENABLED) showCard({ icon: '🧭', title: w.title, text: RC.JOIN_TEXT }, RC.CARD_TIME);
+  };
   const helpCard = () => {
     if ($('rcard').classList.contains('show')) return hideCard();
     showCard(helpFor(uiState, SEAT_HINTS), RC.HELP_TIME);
@@ -284,6 +289,7 @@ export function createControllerUI({ network }) {
 
   const updateUI = (next) => {
     if (next.fx) return showFx(next.fx);
+    if (next.welcome) return showWelcome(next.welcome);
     if (next.rd) return showRadar(next.rd);
     if (next.tm && Object.keys(next).length === 1) return showTeam(next.tm); // (Versus: just the side he is on, sent at once when he swaps)
     showTeam(next.tm);

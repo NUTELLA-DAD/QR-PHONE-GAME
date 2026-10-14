@@ -43,6 +43,7 @@ import { createAlarms } from './alarms.js';
 import { createGround } from './ground.js'; // (CASTLE.md A0: the away team on the ground, config.AWAY)
 import { writeStop, postcard, gentleLine } from './logWriter.js';
 import { createChristening } from './christen.js'; // (L2: the christening vote and the ceremony, the voyage's page in the book)
+import { createRoster } from './roster.js'; // (L3: the crew roster - a title for each returning phone, welcomed on the lobby and on the phone, roster.js)
 import { generateVoyage, expectedPower, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave, dateKey } from './voyage.js';
 import { createNemesis } from './nemesis.js'; // (L4: the Nemesis, a named enemy captain the Ship's Book remembers)
 
@@ -251,6 +252,7 @@ export function createSimulation() {
     return s ? { no: stopNo(run, s), name: stopName(s), env: s.env } : null;
   };
   const moments = createMoments({ world: state, stopInfo, helm: getHelm });
+  const roster = createRoster({ state, emitUi: emitPlayerUi }); // (L3: SHIPS_BOOK.md, roster.js)
   W.moment = moments.moment;
   W.overboard = moments.overboard;
 
@@ -670,6 +672,7 @@ export function createSimulation() {
     state.runEnd = null;
     state.salvagePop = null;
     moments.restart(); // (a new voyage: the Ship's Book starts a fresh page)
+    roster.restart(); // (L3: the stations' clock starts again)
     logUsed.clear();
     logUsed.counts = {};
   };
@@ -1649,6 +1652,7 @@ export function createSimulation() {
   };
   // One step. (Since M.4 pose.vx is the ship's integrated velocity, flight.js: nothing is measured here any more.)
   const update = (dt) => {
+    roster.update(dt); // (L3: scan-in welcomes and titles; the Book's switch off = nothing)
     if (match.on) match.pre(dt); // (Versus: each ship's view of her rival)
     stepWorld(dt);
     if (match.on) match.post(dt); // (...and the rules of the round, a vote open or not)
@@ -1660,7 +1664,7 @@ export function createSimulation() {
     state.phase = 'flying';
     state.say('objective', 'CAST OFF!', null, 4);
   };
-  const christening = createChristening({ state, openVote, closeVote, launch, phoneFx }); // (L2: SHIPS_BOOK.md, christen.js)
+  const christening = createChristening({ state, openVote, closeVote, launch, phoneFx, roster }); // (L2: SHIPS_BOOK.md, christen.js)
   const shipCollide = createShipCollide({ world: state, puff });
   const match = createMatch({ world: state, addShip: (...a) => addShip(...a), removeShip: (...a) => removeShip(...a), course: () => course, launch, restart: () => restartGame(), openVote, newBot, puff, phoneFx, emitUi: emitPlayerUi });
 

@@ -7,7 +7,9 @@
 //   normalizeBook(v)                  -> fills v.ship / v.book / v.fleet / v.crew (v3) from whatever the save had (v1, v2 or v3), in place
 //   newShip(name, dateKey)            -> { name, born, voyages, victories, stops, salvage }
 //   recordVoyage(save, entry)         -> the voyage's page into save.book (the ship's tallies move on); returns the page
-//   recordCrew(save, list, victory, dateKey, shipName)   list = [{ name, color, species, stats }] (humans only)
+//   recordCrew(save, list, victory, dateKey, shipName)   list = [{ name, color, species, stats, pid?, stations?, deeds? }] (humans only; L3: roster.js reads a record back as a title)
+//   findCrew(save, p)                 -> { key, rec }: the record of a person (L3): the one with this phone's id (p.pid), else the one kept under the name; null if there is none
+//   pageCount(save) / crewPage(save)  the Ship's Book's pages: the cover, the crew roster page (once anybody has flown), then a postcard for each voyage (L3)
 //   retireShip(save, fate, where, dateKey)  -> the ship afloat goes to save.fleet ('lost'), save.ship = null
 import { config } from '../../config.js';
 import { normalizeNemesis } from './nemesis.js'; // (L4: the save's `nemesis` field)
@@ -65,7 +67,9 @@ export const newShip = (name, born) => ({ name: cleanName(name), born: str(born)
 const goodShip = (s) => (s && typeof s === 'object' && cleanName(s.name) ? { ...s, name: cleanName(s.name), born: str(s.born), voyages: num(s.voyages), victories: num(s.victories), stops: num(s.stops), salvage: num(s.salvage) } : null);
 const goodPage = (p) => (p && typeof p === 'object' && Array.isArray(p.lines) ? { ...p, no: num(p.no), ship: p.ship == null ? null : str(p.ship), date: str(p.date), victory: !!p.victory, route: Array.isArray(p.route) ? p.route : [], rows: Array.isArray(p.rows) ? p.rows : [], colors: p.colors && typeof p.colors === 'object' ? p.colors : {} } : null);
 const goodFleet = (f) => (f && typeof f === 'object' && cleanName(f.name) ? { ...f, name: cleanName(f.name), born: str(f.born), ended: str(f.ended), voyages: num(f.voyages), victories: num(f.victories), fate: str(f.fate, 'lost'), where: str(f.where) } : null);
-const goodCrew = (c) => (c && typeof c === 'object' && str(c.name) ? { ...c, name: str(c.name), color: str(c.color, '#cccccc'), species: str(c.species), voyages: num(c.voyages), victories: num(c.victories), first: str(c.first), last: str(c.last), stats: c.stats && typeof c.stats === 'object' ? c.stats : {} } : null);
+const tally = (o) => { const r = {}; if (o && typeof o === 'object' && !Array.isArray(o)) for (const [k, n] of Object.entries(o)) if (Number.isFinite(n) && n > 0) r[k] = n; return r; };
+// (L3: pid = the phone's own id, stations = seconds at each kind of station, deeds = Book moments by kind; an L2 record has none of them and gets them empty)
+const goodCrew = (c) => (c && typeof c === 'object' && str(c.name) ? { ...c, name: str(c.name), color: str(c.color, '#cccccc'), species: str(c.species), voyages: num(c.voyages), victories: num(c.victories), first: str(c.first), last: str(c.last), stats: c.stats && typeof c.stats === 'object' ? c.stats : {}, pid: str(c.pid), stations: tally(c.stations), deeds: tally(c.deeds) } : null);
 // v1 and v2 saves have none of this: they get a blank book. v3 saves are checked, bad entries are dropped, nothing else in the save is touched.
 export function normalizeBook(v) {
   v.ship = goodShip(v.ship);
@@ -95,12 +99,31 @@ export function recordVoyage(save, entry) {
   }
   return page;
 }
-// A record for each human who flew (names are the key: the same name on the same TV is the same person; the phone remembers the typed name).
+// The record of a person (L3): the one that holds this phone's id; failing that, an older record kept under the same name and with no id yet (an L2 save, or a phone that has not been here before: recordCrew claims
+// it); a person with no id (a tool, an old phone) is found by name.
+export function findCrew(save, p) {
+  const crew = (save && save.crew) || {};
+  const pid = str(p && p.pid), name = str(p && p.name).trim();
+  if (pid) {
+    for (const [key, rec] of Object.entries(crew)) if (rec.pid === pid) return { key, rec };
+    const old = crew[name];
+    return old && !old.pid ? { key: name, rec: old } : null;
+  }
+  return crew[name] ? { key: name, rec: crew[name] } : null;
+}
+// The Ship's Book: page 0 is the cover, page 1 the crew roster once anybody has flown, then a postcard for each voyage.
+export const crewPage = (save) => !!(save && save.crew && Object.keys(save.crew).length);
+export const pageCount = (save) => 1 + (crewPage(save) ? 1 : 0) + (save && save.book ? save.book.length : 0);
+// A record for each human who flew. L3: the key is the phone's id (a phone that comes back to a new TV session is the same person); with no id the name is the key, as in L2. The name on the record follows the phone's.
 export function recordCrew(save, list, victory, dateKey, shipName) {
   for (const p of list || []) {
     const name = str(p && p.name).trim();
     if (!name) continue;
-    const c = save.crew[name] || (save.crew[name] = { name, color: '#cccccc', species: '', voyages: 0, victories: 0, first: dateKey, last: dateKey, stats: {} });
+    const pid = str(p.pid);
+    const found = findCrew(save, p);
+    const c = found ? found.rec : (save.crew[pid || name] = { name, color: '#cccccc', species: '', voyages: 0, victories: 0, first: dateKey, last: dateKey, stats: {}, pid, stations: {}, deeds: {} });
+    c.name = name;
+    if (pid) c.pid = pid;
     c.color = str(p.color, c.color);
     c.species = str(p.species, c.species);
     c.voyages++;
@@ -108,6 +131,10 @@ export function recordCrew(save, list, victory, dateKey, shipName) {
     c.last = dateKey;
     c.ship = shipName || c.ship || null;
     for (const [k, n] of Object.entries(p.stats || {})) if (Number.isFinite(n)) c.stats[k] = Math.round(((c.stats[k] || 0) + n) * 100) / 100;
+    for (const [field, add] of [['stations', p.stations], ['deeds', p.deeds]]) { // (L3)
+      c[field] = tally(c[field]);
+      for (const [k, n] of Object.entries(add || {})) if (Number.isFinite(n) && n > 0) c[field][k] = Math.round(((c[field][k] || 0) + n) * 10) / 10;
+    }
   }
   const names = Object.keys(save.crew);
   if (names.length > BK().KEEP.CREW) { // (too many: the ones who flew longest ago go)

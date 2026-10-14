@@ -2,6 +2,7 @@ import { config } from '../../config.js';
 import { mainShip, shipOf, crewOf } from './ships.js';
 import { crewAboard, crewHeads } from './crewscale.js';
 import { saveStartBuild } from './voyage.js';
+import { pageCount } from './book.js';
 
 // What a phone's input message does to its player (also used by tools/controls.mjs, which plays a person without a socket).
 // Button presses are queued flags the simulation eats next frame; `aid` is the id of the label the phone was showing (see aidOf in
@@ -149,7 +150,7 @@ export function initHostNetwork({ simulation, onRoomClosed, onPlayerInput, onJoi
   { const q = new URLSearchParams(location.search).get('christen'); if (q === '0') simulation.state.christenMode = 'off'; else if (q === '1') simulation.state.christenMode = 'always'; }
   const bv = simulation.state.bookView, bookBtn = document.getElementById('bookBtn'), bookNav = document.getElementById('bookNav');
   const book = { onClose: null };
-  const bookPages = () => 1 + ((simulation.state.save && simulation.state.save.book) || []).length;
+  const bookPages = () => pageCount(simulation.state.save); // (the cover, the crew roster page once anybody has flown (L3), a postcard for each voyage)
   const naming = () => !!(simulation.state.christen || (simulation.state.vote && simulation.state.vote.kind === 'name')); // (the name vote and the ceremony have the whole screen, like the book)
   const bookShow = () => { document.body.classList.toggle('bookopen', bv.open || naming()); if (bookNav) { bookNav.style.display = bv.open ? 'flex' : 'none'; document.getElementById('bookPage').textContent = `Page ${bv.page + 1} of ${bookPages()}`; } };
   book.open = () => { if (!config.BOOK.ENABLED) return; bv.open = true; bv.page = 0; bookShow(); };

@@ -1221,6 +1221,7 @@ export const config = {
       FADE: 0.6, // seconds a piece shrinks away over when its 2D twin expires
       BURY: 0.35, // a piece whose middle has been inside the rock this long (seconds) is removed (it started in it, or tunnelled): it must never fall through a mountain
       CHUNKS: { MIN: 8, MAX: 20, SPEED: 420, SIZE_MIN: 12, SIZE_MAX: 34, CAP: 24, LIFE: 4.2 },
+      SHARDS: { CAP: 40 }, // STRUCTURE.md WP5 (view3d/structure3d.js): the planks and splinters of a split and of a crashed half, drawn as one instanced mesh
       STONES: { CAP: 48, GRAVITY: 2.2 }, // D3: the castle set pieces' stone chunks (view3d/setpiece3d.js): a kind of their own, so the blast chunks above keep their cap; GRAVITY = times the debris gravity (a stone falls harder than a plank) // a blast also throws this many plank and iron chunks (bodies of their own)
       SCAR: { RIM: 15, COLOR: '#2a1d16' }, // the charred rim round a hole a part left: width (px) and colour
       DECALS: { MAX: 64, LIFE: 0 }, // dents and scorch marks per ship (the oldest is overwritten); LIFE 0 = they stay until the ship is rebuilt
@@ -2528,6 +2529,36 @@ export const config = {
     KEEP: { VOYAGES: 40, CREW: 60, FLEET: 12, ROUTE: 30 }, // what the save keeps: voyage pages (the oldest drop off), crew records, earlier ships, stops on a page's route
     COVER: { VOYAGES: 6, FLEET: 3, CREW: 6 }, // rows on the book's cover: recent voyages, lost ships, crew
     ART: { MIN_PX: 22, PLATE_PX: 22 }, // smallest text on the book's TV pages (logical px of 1600 x 900: 22 is 26 on a 1080p TV); the name plate in the HUD
+    // THE CREW ROSTER, L3 (SHIPS_BOOK.md; roster.js): each human's service record in the save (save.crew, kept by the phone's own id so a new TV session knows the same phone, by the name otherwise), and the title it earns.
+    // Deterministic: the headline title is the deed title the record beats its threshold by most (rank titles by voyages when no deed qualifies). A bot never has a record.
+    // Everything here is a number or a name to tune; the rules themselves are in roster.js (titleFor).
+    ROSTER: {
+      MIN_VOYAGES: 2, // a deed title (below) needs this many voyages flown, so one wild night does not name a person for good
+      // Deed titles: `stat` is a stat key (or a list, summed) of the scorecard totals over all voyages, `deed` a Book moment kind counted over all voyages, `station` a kind of station and `secs` /
+      // `share` the flying seconds and the share of all station time spent there; `min` the total needed. `rank` breaks a tie between two titles that are equally far past their number (the higher wins).
+      TITLES: [
+        { id: 'lunatic', name: "Ship's Lunatic", deed: 'overboard-lunatic', min: 2, rank: 9 }, // fell overboard three times in a voyage, twice over
+        { id: 'gunner', name: 'Gun Captain', stat: 'kills', min: 120, rank: 6 }, // enemies shot down
+        { id: 'boarder', name: "Boarder's Bane", stat: 'raiders', min: 20, rank: 8 }, // raiders beaten on deck
+        { id: 'stoker', name: 'Stoker of the Year', stat: 'coal', min: 25, rank: 5 }, // coal loads shovelled
+        { id: 'fire', name: 'Firefighter', stat: 'fires', min: 20, rank: 7 }, // fires put out
+        { id: 'patch', name: 'Patch Master', stat: 'holes', min: 30, rank: 4 }, // holes patched
+        { id: 'medic', name: "Ship's Surgeon", stat: 'revives', min: 8, rank: 7 }, // crewmates brought round
+        { id: 'builder', name: 'Master Builder', stat: ['framed', 'patched'], min: 8, rank: 6 }, // frames built and hull patches welded from scrap
+        { id: 'treasure', name: 'Treasure Hunter', stat: 'stowed', min: 10, rank: 6 }, // treasure and scrap stowed in the hold
+        { id: 'ammo', name: 'Quartermaster', stat: 'ammo', min: 60, rank: 3 }, // ammo runs
+        { id: 'bomb', name: 'Bomb Squad', stat: 'defused', min: 6, rank: 8 }, // bombs defused
+        { id: 'saboteur', name: 'Gunship Breaker', stat: 'sabotage', min: 4, rank: 9 }, // gunships blown up from inside
+        { id: 'helm', name: 'Helmsman', station: 'helm', secs: 1200, share: 0.4, rank: 5 }, // 20 minutes at the helm, 40% of all their station time
+        { id: 'lookout', name: 'Eagle Eye', station: 'lookout', secs: 900, share: 0.4, rank: 4 },
+      ],
+      // The ranks, by voyages flown (the best one the record reaches is the headline when no deed title is earned). Nobody yet is a Deckhand.
+      RANKS: [{ name: 'Old Salt', voyages: 8 }, { name: 'Able Hand', voyages: 3 }, { name: 'Deckhand', voyages: 0 }],
+      DEED_KINDS: ['overboard', 'overboard-lunatic', 'going-down-saved', 'gunship-charge', 'gunship-captured', 'creature-win', 'flagship-down', 'boss-down', 'ring-charge', 'treasure-heist', 'scrap-built', 'frame-built', 'revive-fire', 'helm-held'], // moment kinds counted into a record's deeds (the others are not kept)
+      STATION_NAMES: { helm: 'the helm', gun: 'the guns', boiler: 'the boiler', engine: 'the engines', lookout: 'the lookout', coal: 'the coal bunker', ammo: 'the ammo hold', bombBay: 'the bomb bay', deflector: 'the deflector', coil: 'the coil', searchlight: 'the searchlight', escort: 'the escort hook' }, // a favourite station on the Book's roster page
+      WELCOME: { SECS: 8, MAX: 4, NEW: true }, // a scan-in stands on the TV lobby this many seconds, at most MAX at once; NEW: a new player is welcomed too ("Deckhand"), not only a veteran
+      PAGE: { ROWS: 8 }, // crew on the Book's roster page (the most voyages first)
+    },
   },
   // THE NEMESIS, L4 (SHIPS_BOOK.md; nemesis.js, nemesisArt.js): one named enemy captain the Book remembers. She is generated from a seed (a colour and a beast: "The Red Kestrel"), flies the stop's gunship set piece
   // at the PLANNED stops (never a lair, ring, salvage or Flagship stop), limps away when beaten (until the final showdown), comes back a little stronger, and the save (v3, `nemesis`) keeps her across evenings.
@@ -3738,6 +3769,25 @@ export const config = {
     PROG_STEPS: 10, // the rising band moves in this many steps for each bundle
     SPARKS: { EVERY: 2, N: 3 }, // while a bundle is going in: N gold sparks on every EVERY-th 8 fps key
     BUILT: { KEYS: 6, GROW: 3, FADE: 1.8, SPARKS: 26, DUST: 6 }, // the built moment: a gold shell swelling GROW px a key for KEYS keys (HDR FADE x, falling), sparks, dust, a flash and a ring
+  },
+  // STRUCTURE.md WP5 (view3d/structure3d.js; 3D.md section 36): what the frame's SEGMENTS look like in 3D. View only: it reads state.frames (each { sig, id, x0, x1, y0, y1, hp, hold, critical, nest }), the split note the simulation leaves on
+  // breakEvents, the piece ships (ship.piece) and their crash (ship.ctx.ship.down). Nothing here moves on a sine: soot and cracks grow in steps on the 8 fps key, the warning edge blinks on it, the tilt of a falling half is a
+  // function of the sim's own clock (splitT).
+  STRUCT3D: {
+    ENABLED: true,
+    SOOT: { FROM: 0.97, FULL: 0.2, MAX: 1, UP: 0.1, DOWN: 0.25 }, // a segment starts to darken below soundness FROM and is black at FULL (MAX = the shader strength); it darkens at most UP a key (8 a second) and clears DOWN a key when mended
+    CRACK: { FROM: 0.8, FULL: 0.08, STEPS: 10, GROW: 0.125 }, // the crack web: none above FROM, full at FULL; grows GROW a key (a step of 1 / STEPS each time) and spreads out from the middle of the segment
+    WARN: { AT: 0.3, DIM: 0.22, LATE: 0.7 }, // a segment under AT soundness (or holding at 0) blinks its edges red-orange and its cracks glow: DIM = the strength in the off key; LATE = share of the grace after which the blink is nearly steady
+    EXT: { DOWN: 70, UP: 50 }, // the lowest / highest segment of a column also covers this much hull below / above its deck slab
+    // the seam of a segment that is about to give way (grace running): a glowing jagged line through the cut, sparks, embers and a little smoke
+    SEAM: { Z: 74, JAG: 15, STEP: 24, CORE: [8, 18], GLOW: [42, 86], HDR: 2.2, GLOW_HDR: 1.3, CORE_COLOR: '#ffd890', GLOW_COLOR: '#ff5a10', MINOR: 0.55, STEPS: 8, SPARK_EVERY: 2, SPARKS: [2, 5], EMBER_EVERY: 4 },
+    // the split moment (the note kind 'split'): a white-hot flash in the gap, sparks, dust, splinters and torn planks (instanced shards on Rapier bodies), and the cut ends of both halves grow torn teeth
+    SPLIT: { FLASH: 420, SPARKS: 48, DUST: 14, SMOKE: 6, RING: 520, PLANKS: 14, GLOW_KEYS: 8, TEETH: 5, TOOTH: [22, 60], TEETH_COLORS: ['#e2c590', '#b98a5a', '#d8b27a'] },
+    // a half that split off while it falls: it tips seam end down (radians at the full tilt, over TILT_T seconds of the sim's clock), drifts away from the seam and trails smoke and embers
+    PIECE: { TILT: 0.5, TILT_BAG: 0.22, TILT_T: 2.6, DRIFT: 36, DRIFT_MAX: 120, TRAIL_EVERY: 2 },
+    // the crash (the sim's breakPiece: ship.ctx.ship.down turns positive): the half breaks into three pieces and its parts (Rapier bodies, destruction.js) and throws shards; dust on rock, a splash in the sea
+    CRASH: { SHARDS: 18, SHARD_SPEED: [120, 520], SHARD_LEN: [50, 130], SMOKE: 8, DUST: 18, SPARKS: 40, SPLASH: 520, DROPS: 36, KEEP_PARTS: 6 },
+    SHARD: { CAP: 40, LIFE: [5, 7.5], FADE: 0.7, COLORS: ['#d9b98a', '#b98a56', '#8f6338', '#e8d2a6', '#6e4a2a'] }, // the instanced shards: at most CAP bodies; life in seconds; the wood colours
   },
   // Painted gouache textures laid over the ship and gunship fills (art/textures/*.png). ENABLED false = flat colours as before.
   // SCALE = size of one texture pixel in world units (the 512px tile covers 512*SCALE units; the airship is ~1500 wide).
