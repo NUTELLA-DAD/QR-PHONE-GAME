@@ -3572,6 +3572,32 @@ export const config = {
       SUN: { COLOR: '#ffe48a', CORE: '#fff4c4', EDGE: '#ffd23f', ALPHA: [0.13, 0.17] }, // the shaft of sun
       FUNNEL: { COLOR: '#ffd23f', ALPHA: 0.06, ALPHA_OPEN: 0.16 }, // the gold column over the open maw
     },
+    // THE MYCELIAL MOTHER in 3D (3D.md section 41; view3d/creatureMother.js, motherModel.js, motherWings.js, motherPaint.js, motherFx.js): a spore-moth in soft faded violet, lilac, rose and cream, lit from inside by teal-lime bioluminescence.
+    // Sizes are the sim's own px (config.CREATURES.MOTHER); everything here is colour, glow and depth. Glow channels: 1 = the near eye, 2 = the far eye, 3 = the bioluminescence (spots, gill hem, antenna tips, roots, wing eyespots), 4 = the spore heart.
+    MOTHER: {
+      cap: '#8c76c8', capDk: '#5a4694', capLt: '#b6a4e4', spot: '#efe6cc', spotCore: '#fff6dc', spotGlow: '#6cf0c8',
+      stem: '#6e5aa4', root: '#8f7dc0', fur: '#d2c0ea', furDk: '#9d86c8', furLt: '#f0e6fa', skirt: '#e4b4cc',
+      gill: '#e6b6cd', gillDk: '#b27ca6', gillEdge: '#f6dcea',
+      eye: '#e4ff62', eyeLt: '#f6ffa6', eyeDk: '#9ac21e', eyePupil: '#2a1a40', socket: '#3a2c50', dead: '#4c4560', crack: '#17111f', glint: '#ffffff',
+      antenna: '#9680c8', antennaLt: '#dccdf2', antennaTip: '#9cffd6', rootGlow: '#1c7a64',
+      wing: '#b79ae0', wingDk: '#6c54a4', wingLt: '#ecdcf8', wingRose: '#d898b8', wingRoseDk: '#a85f86', wingPeach: '#f2c9b4', wingCream: '#f4e8c8', wingGold: '#f0cf6a', eyeSpotTeal: '#58d8c0', wingInk: '#241a34',
+      pod: '#c4a6d6', podDk: '#8466a4', petal: '#dcaccb', petalDk: '#a6709c', heart: '#ff72ae', heartIn: '#ffd6e8',
+      tendril: '#3f8f88', tendrilDk: '#24585e', tendrilLt: '#8fd0b4', glowDot: '#c4ff9a', glowDotDk: '#2a6a50', bud: '#f4cc52', cut: '#e8dcae', char: '#f4cc52', flesh: '#e8dcae', // (char / flesh = the tip colours the generic tube kit reads: the gold bud, the pale cut face)
+      nodule: '#d6ffb8', noduleAlt: '#8ff0d0',
+      burnChar: '#2c2422', burnHot: '#ff8a30', burnEmber: '#ffd35c', // (a burnt-out segment, a burning one)
+      spore: '#c8ff8a', sporeLt: '#f2ffd0', sporeDk: '#4a7a2a', sporeFlash: '#ffd23f', ring: '#ff4d4d',
+      EYE_GLOW: { asleep: 0.25, base: 0.45, lit: 1.45, blind: 0, hit: 2.6, tired: 0.5 }, THROAT_GLOW: { shut: 0, open: 0 }, // HDR strength of an eye's glow: asleep, awake but in the dark, a lamp holds it
+      BIO_GLOW: { dark: 0.55, lit: 1.0 }, HEART_GLOW: [1.0, 1.7], // (the bioluminescence in the dark and in a lamp; the open spore heart pulses between its two numbers on the 8 fps key)
+      EMISSIVE: { dark: 0.5, lit: 0.6 }, TENDRIL_EMISSIVE: { dark: 0.45, lit: 0.55 }, // how brightly the painted glow (the toon material's emissive map) shows
+      DIM: 0.13, LIT: 1.2, TENDRIL_DIM: 0.24, WARM: [1.08, 0.97, 0.9], SELF: 0.85, // the colour of a part nobody's lamp holds, in the dark (x its own colour) and of a lit one
+      REVEAL_STEPS: 3, // a part fades from dark to lit (and back) in this many held steps
+      INK: 22, // ink outline width on the big shapes (world units; the ink keeps its width on the screen)
+      TENTACLE_SIDES: 12,
+      Z: { HEAD: 0, CAP: 0, WING: -330, ANT: 220, ROOT_FRONT: 40, FRONT: 330, BACK: -250, WRAP_MARGIN: 130, ROOF: -40 }, // the depth things lie at (the ship's plane is 0; the lair's rock stands with its face at -70): the wings behind her, the antennae in front, the tendrils at the front layer
+      PUFF: [1, 1.06, 1.13, 1.21], // the cap's swelling in the three steps of the spore telegraph
+      WING_ANG: [52, 30, -8, 50], // the wing's angle (deg, down from horizontal) in the four steps of the sim's beat key: folded, half open, spread, down-stroke (as the 2D picture)
+      SPORE_PUFFS: 14, // puffs in a spore cloud's picture
+    },
   },
 
   // The 3D particles (view3d/particles.js + vfx.js; 3D.md section 12). Caps per quality tier (the pool and the splinter boxes), RATE scales every emitter, colours are hex (fire and sparks are drawn HDR

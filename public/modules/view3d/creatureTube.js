@@ -17,8 +17,8 @@ export const Q = 3; // rings per segment (joints plus Q - 1 smooth ones between)
 const bodyRings = (maxSegs) => Q * maxSegs + 1;
 
 // The Cinder Drake reuses it with its own studs: cup = the instanced geometry (a spine: base at the origin, axis +y), rsMax / gap = the biggest stud and the spacing, stationsFor(l) = which limbs get any,
-// cols = the two stud colours, rows = angles round the tube from the belly side (PI = the back).
-export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, palette, ow = 14, tipK = 2.6, maxSuckers = 360, rows = [-0.62, 0.62], suckerK = 0.3, cup: cupGeo = null, rsMax = 64, gap = 3.6, stationsFor = null, cols = null }) {
+// cols = the two stud colours, rows = angles round the tube from the belly side (PI = the back), ridgeJoint / ridgeMid = how far the ridge on the back stands out at a joint and between joints (the Mycelial Mother's tendrils are smooth: 0.05 / 0.02).
+export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, palette, ow = 14, tipK = 2.6, maxSuckers = 360, rows = [-0.62, 0.62], suckerK = 0.3, cup: cupGeo = null, rsMax = 64, gap = 3.6, stationsFor = null, cols = null, ridgeJoint = 0.2, ridgeMid = 0.07 }) {
   const RB = bodyRings(maxSegs), R = RB + 2, S1 = sides + 1; // (every limb: RB body rings, two end rings: the tip, or the cut face)
   const perLimb = R * S1, total = perLimb * nLimbs;
   const pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), uv = new Float32Array(total * 2), col = new Float32Array(total * 3), glow = new Float32Array(total), ono = new Float32Array(total * 3);
@@ -73,7 +73,7 @@ export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, pale
 
   // the fixed things of a layout: the v coordinate of every ring (by the limb's design lengths: the texture never slides) and where its suckers sit
   function layout(L, segs) {
-    const n = segs.length, key = n + '|' + segs.map((s) => Math.round(s.len) + ',' + Math.round(s.r)).join(';');
+    const n = segs.length, key = n + '|' + segs.map((s) => Math.round(s.lenD ?? s.len) + ',' + Math.round(s.r)).join(';');
     if (L.layoutKey === key) return;
     L.layoutKey = key;
     L.n = n;
@@ -82,7 +82,7 @@ export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, pale
     const circ = (r) => TAU * Math.max(8, r);
     vv[0] = 0;
     for (let i = 0; i < n; i++) {
-      const s = segs[i], rm = (s.r + s.r1) / 2, dv = s.len / circ(rm); // (the arc length over the circumference keeps the spots round)
+      const s = segs[i], rm = (s.r + s.r1) / 2, dv = (s.lenD ?? s.len) / circ(rm); // (the arc length over the circumference keeps the spots round; lenD = the design length, when a caller draws a segment bent or stretched: the texture does not slide)
       for (let j = 1; j <= Q; j++) vv[Q * i + j] = v + (dv * j) / Q;
       v += dv;
     }
@@ -201,7 +201,7 @@ export function createTubeSet({ nLimbs, maxSegs, sides = 12, map, uniforms, pale
       const ds = Pk[a].distanceTo(Pk[b]) || 1;
       Tk[kk].slope = (Rk[b] - Rk[a]) / ds;
       const joint = kk % Q === 0, last = kk === nb - 1;
-      wr(k, Pk[kk], Rk[kk], Tk[kk], N1k[kk], N2k[kk], joint && !last ? 0.2 : 0.07, false);
+      wr(k, Pk[kk], Rk[kk], Tk[kk], N1k[kk], N2k[kk], joint && !last ? ridgeJoint : ridgeMid, false);
     }
     const e = nb - 1, rEnd = Rk[e], Te = Tk[e], nA = N1k[e], nB = N2k[e];
     if (severed) {

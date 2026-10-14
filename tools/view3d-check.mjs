@@ -6,7 +6,7 @@
 //   hosts     (a) host.html loads with 0 console errors and 0 game errors: the lobby (NO ?view: 3D is the default), a flight with 8 bots, a dark cave, the Kraken's lair, Versus (10 s and, seeded, at close range at 30 s), and a seeded fight with the gunship, the squadron and a bomber;
 //             (d) in those scenes at Medium: draw calls <= 150, triangles <= 450k, view JS <= 6 ms;  (e) V.alignError (the HUD against the 3D picture) is 0 px with cinematics off
 //   models    (b) model.fallbacks is empty for the classic ship, the Sparrow, the five minimum builds, the enemy gunship and 10 generated ships
-//   shots     (c) thirteen seeded scenes (the last two, fight and versus_close, are the dearest pictures: they prove the perf batching changed no pixel) against tools/fixtures/shots3d/*.png (mean abs diff < 2 %, no 64 x 64 block over 12 %); --snapshot --force writes the fixtures
+//   shots     (c) fourteen seeded scenes (the last two, fight and versus_close, are the dearest pictures: they prove the perf batching changed no pixel) against tools/fixtures/shots3d/*.png (mean abs diff < 2 %, no 64 x 64 block over 12 %); --snapshot --force writes the fixtures
 //   tiers     the flight scene at High / Medium / Low: the numbers (printed), 0 errors
 //   fallback  (f) --gl swiftshader and no WebGL at all: the host comes up in 2D with 0 errors and never loads Three.js; the governor's step down to 2D (a toast, at a calm moment, never mid-fight)
 //   offline   (g) every page above runs with the network blocked for anything but localhost: 0 external requests, 0 failed loads; plus the phone page and the build page; a static scan for CDN links
@@ -336,7 +336,7 @@ try {
 
   // ---- shots: (c) the screenshot regression -------------------------------------------------------------------------------------------------------------------------------------
   if (want('shots')) {
-    console.log(snapshot ? 'shots: writing the fixtures' : 'shots: thirteen seeded scenes against tools/fixtures/shots3d/');
+    console.log(snapshot ? 'shots: writing the fixtures' : 'shots: fourteen seeded scenes against tools/fixtures/shots3d/');
     // Everything that makes the scene is ONE synchronous call (no real-time frame can take a random number in the middle): the generator is re-seeded, the bots climb aboard, she casts off, the
     // simulation (frozen from the start, see SEED) is stepped by hand. The page's Math.random and Date.now were fixed from its first line (SEED), so the map is the same too.
     const BOOT = (steps, tail = '') => `(()=>{ window.__seed(11);
@@ -359,6 +359,7 @@ try {
       { name: 'thunderbird', q: 'view=3d&lair=storm&creature=thunderbird', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(420);') }, // (the Thunderbird in the Storm Front lair: the storm-bird with layered gold-tipped feathers and lightning on its wings)
       { name: 'titan', q: 'view=3d&creature=titan', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(900);') }, // (C.6c: the Island Titan standing on its plain in the Sky Isles: a stone colossus with an island on its back, the rubble heap, the ship over it; 3D.md section 38)
       { name: 'wyrm', q: 'view=3d&creature=wyrm', setup: BOOT(300, 'for(let i=0;i<80&&!game.state.creature;i++) window.__step(60); for(let i=0;i<80&&!(game.state.creature.grips||[]).some(g=>g.mode==="hold");i++) window.__step(30); window.__step(90);') }, // (C.6d: the Rime Wyrm erupted from its ice cliff and coiling the hull: a frost serpent in a thick translucent ice shell, the collar standing out of the cliff top; 3D.md section 40)
+      { name: 'mother', q: 'view=3d&creature=mother', setup: BOOT(300, 'for(let i=0;i<80&&!game.state.creature;i++) window.__step(60); for(let i=0;i<200&&game.state.creature.mother.mode!=="awake";i++) window.__step(30); window.__step(240); const c=game.state.creature; for(const p of c.parts) p.lit=true; c.mother.beat=2; const V=window.view3dDebug().view; V.S.focus={dx:0,dy:1100}; V.S.zoom=0.75;') }, // (C.6e: the Mycelial Mother hanging from the roof of the Fungal Depths lair, wings spread, every part lit: a lilac spore-moth with a gill skirt, compound eyes, peacock eyespots, feathered antennae and teal tendrils; 3D.md section 41)
       { name: 'versus', q: 'view=3d&versus=1&bots=4', setup: FREEZE_ONLY(420) },
       // (LOOP R1: the fortress ring: the ship is put in clear air at the face at 135 degrees, so the picture shows the bent rock, a castle face with its shutter and the keep behind her)
       { name: 'ring', q: 'view=3d&kind=ring&variant=fortress', setup: BOOT(120, RING_SPOT(135)) },
@@ -399,7 +400,7 @@ try {
       const mean = total / (A.width * A.height);
       let worst = 0, wk = 0;
       for (let k = 0; k < sums.length; k++) { const v = sums[k] / cnt[k]; if (v > worst) { worst = v; wk = k; } }
-      const good = mean < SHOT.mean && worst < (S.name === 'storm' ? 0.2 : S.name === 'thunderbird' ? 0.4 : SHOT.block); // (the storm scenes: rain streaks and the bots' searchlight beam are not frame-exact, so one 64 px block may differ more)
+      const good = mean < SHOT.mean && worst < (S.name === 'storm' || S.name === 'mother' ? 0.2 : S.name === 'thunderbird' ? 0.4 : SHOT.block); // (the storm scenes: rain streaks and the bots' searchlight beam are not frame-exact, so one 64 px block may differ more; the Mother's cave has the nest lamp's beam at the corner)
       console.log(`    ${S.name}: mean diff ${(mean * 100).toFixed(2)} %, worst 64x64 block ${(worst * 100).toFixed(1)} % (at ${(wk % bw) * 64},${Math.floor(wk / bw) * 64})`);
       if (!good) {
         const dir = shotDir || out; fs.mkdirSync(dir, { recursive: true });
