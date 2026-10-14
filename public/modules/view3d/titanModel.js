@@ -97,17 +97,29 @@ export function torsoZ(x, y) { // the depth of the torso's near skin at (x, y) (
   return z;
 }
 const topY = (s, x, z) => { const u = ((x - s[0]) / s[2]) ** 2 + (z / s[4]) ** 2; return u < 0.95 ? s[1] + s[3] * Math.sqrt(1 - u) : s[1] + s[3] * 0.2; }; // the height of a stone's top at (x, z)
-// a glowing crystal plate in the gap between two floating stones: a flattened disc (rx, rz) of cyan light with a pale heart
+// a cluster of crystal light in the gap between two floating stones: a fat pale column in the middle with a ring of tilted spires round it, each a two-tone bipyramid (lighter above, darker below, so the facets read). They are held
+// apart by the cluster and the sky shows between its spires (rx, rz = the half sizes at the stones, thick = the gap's height; the spires' ends are hidden in the stones)
 function addGapPlate(mesh, P, OW, cx, cy, rx, rz, thick, name) {
-  const g = new THREE.CylinderGeometry(1, 1, 1, 12, 1);
-  flat(mesh, g, M4(V(cx, cy, 0), null, V(rx, thick, rz)), { ow: OW * 0.3, color: P.crystal, glow: 3, name });
-  flat(mesh, g, M4(V(cx, cy, 0), null, V(rx * 0.7, thick * 1.08, rz * 0.7)), { ow: 0, color: P.crystalIn, glow: 4, name });
+  const spire = (x, z, r, hl, tiltX, tiltZ, top, bot, ow) => {
+    const up = new THREE.ConeGeometry(r, hl, 6, 1), dn = new THREE.ConeGeometry(r, hl, 6, 1);
+    up.translate(0, hl / 2, 0); dn.rotateX(Math.PI); dn.translate(0, -hl / 2, 0);
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(tiltX, 0.5, tiltZ));
+    flat(mesh, up, M4(V(cx + x, cy, z), q), { ow, color: top, glow: 3, name });
+    flat(mesh, dn, M4(V(cx + x, cy, z), q), { ow, color: bot, glow: 3, name });
+  };
+  const N = 9;
+  for (let k = 0; k < N; k++) {
+    const an = (k / N) * TAU + 0.35, x = Math.cos(an) * rx * 0.76, z = Math.sin(an) * rz * 0.76, h1 = hash(k, 7, 3), h2 = hash(k, 9, 4);
+    spire(x, z, rx * (0.2 + 0.06 * h1), thick * (0.85 + 0.4 * h2), Math.sin(an) * 0.14, -Math.cos(an) * 0.14, k % 2 ? P.crystalIn : P.crystal, P.crystalDk, OW * 0.3);
+  }
+  spire(0, 0, rx * 0.34, thick * 1.1, 0, 0, P.crystalIn, P.crystal, OW * 0.3);
 }
 const SEG = (a, b, w, d, color, mesh, o = {}) => { // a thin stick from a to b (3D points): a box along the line
   const dir = b.clone().sub(a), len = dir.length(), mid = a.clone().add(b).multiplyScalar(0.5), q = new THREE.Quaternion().setFromUnitVectors(V(1, 0, 0), dir.normalize());
   flat(mesh, new THREE.BoxGeometry(len, w, d), M4(mid, q), { color, ...o });
 };
 
+export const HEART = { x: 330, y: 960, z: 330 }; // the crystal heart's place in the body's frame
 export function buildTitan(cr, P, opts = {}) {
   const OW = P.INK || 26, low = !!opts.low, mesh = new Mesher();
   // --- the torso: three floating faceted boulders (chest, belly, hips) with a cyan plate of light in each gap ---
@@ -136,12 +148,12 @@ export function buildTitan(cr, P, opts = {}) {
   stone(mesh, rockGeo(880, 600, 290, { detail: 1, jitter: 0.12, seed: 51, squashTop: 0.2 }), M4(V(1210, -1700, hz)), { ow: OW * 0.9, color: P.stoneDk, name: 'heap', seed: 51 });
   for (const [x, y, r, k] of [[900, -1180, 230, 0], [1250, -1300, 260, 1], [1560, -1700, 220, 2], [700, -1650, 200, 3], [1100, -1850, 240, 4], [1850, -2000, 180, 5]]) stone(mesh, rockGeo(r, r * 0.8, r * 0.9, { detail: 1, jitter: 0.22, seed: 60 + k }), M4(V(x, y, hz + (k % 2 ? 90 : -40)), qz(k)), { ow: OW * 0.7, color: k % 2 ? P.stone : P.stoneLt, name: 'heap', seed: 60 + k });
   // --- the heartstone in the first gap and the vein that climbs the chest toward the island: cyan, glowing (channels 4 and 3) ---
-  const hx = 330, hy = 960, hzz = 340;
-  const crown = new THREE.ConeGeometry(1, 1, 4, 1), base = new THREE.ConeGeometry(1, 1, 4, 1);
+  const hx = HEART.x, hy = HEART.y, hzz = HEART.z; // a cut crystal heart hovering in the gap between the chest and the belly; no ring of stone: a thin ring of light with shards orbits it (the piece 'heartO')
+  const crown = new THREE.ConeGeometry(1, 1, 6, 1), base = new THREE.ConeGeometry(1, 1, 6, 1);
   crown.translate(0, 0.5, 0); base.rotateX(Math.PI); base.translate(0, -0.5, 0);
-  flat(mesh, crown, M4(V(hx, hy, hzz), qy(Math.PI / 4), V(190, 250, 110)), { ow: OW * 0.5, color: P.crystalIn, glow: 4, name: 'heartstone' });
-  flat(mesh, base, M4(V(hx, hy, hzz), qy(Math.PI / 4), V(190, 250, 110)), { ow: OW * 0.5, color: P.crystal, glow: 4, name: 'heartstone' });
-  flat(mesh, new THREE.TorusGeometry(215, 34, 5, 10), M4(V(hx, hy, hzz - 30), qy(0), V(1, 1.25, 0.6)), { ow: OW * 0.5, color: P.stoneLt, name: 'heartstone' });
+  flat(mesh, crown, M4(V(hx, hy + 20, hzz), qy(Math.PI / 6), V(170, 250, 120)), { ow: OW * 0.5, color: P.crystalIn, glow: 4, name: 'heartstone' });
+  flat(mesh, base, M4(V(hx, hy + 20, hzz), qy(Math.PI / 6), V(170, 320, 120)), { ow: OW * 0.5, color: P.crystal, glow: 4, name: 'heartstone' });
+  flat(mesh, base, M4(V(hx + 24, hy + 20, hzz + 40), qy(Math.PI / 6), V(80, 210, 56)), { ow: 0, color: P.crystalIn, glow: 4, name: 'heartstone' }); // the pale heart inside it
   const vein = [[330, 960], [230, 1250], [90, 1450], [-120, 1720], [-380, 1950]];
   for (let i = 0; i < vein.length - 1; i++) {
     const a = vein[i], b = vein[i + 1], za = Math.max(250, torsoZ(a[0], a[1]) + 26), zb = Math.max(200, torsoZ(b[0], b[1]) + 26);
@@ -186,8 +198,8 @@ function addHead(mesh, P, OW, low) {
   stone(mesh, rockGeo(260, 200, 330, { detail: 1, jitter: 0.2, seed: 4 }), M4(V(-150, 640, 0)), { ow: OW * 0.8, color: P.stone, name: 'head', seed: 4 });
   flat(mesh, rockGeo(330, 80, 300, { detail: 1, jitter: 0.25, seed: 5 }), M4(V(-170, 800, 20), qz(0.1)), { ow: OW * 0.3, color: P.moss, name: 'head' });
   flat(mesh, rockGeo(180, 60, 150, { detail: 1, jitter: 0.25, seed: 6 }), M4(V(-380, 540, -150)), { ow: OW * 0.3, color: P.mossDk, name: 'head' });
-  stone(mesh, rockGeo(170, 150, 150, { detail: 0, jitter: 0.2, seed: 7 }), M4(V(-420, 300, 410)), { ow: OW * 0.6, color: P.stoneLt, name: 'head', seed: 7 }); // ears
-  stone(mesh, rockGeo(170, 150, 150, { detail: 0, jitter: 0.2, seed: 8 }), M4(V(-420, 300, -410)), { ow: OW * 0.6, color: P.stoneLt, name: 'head', seed: 8 });
+  stone(mesh, rockGeo(165, 140, 130, { detail: 1, jitter: 0.22, seed: 7 }), M4(V(-420, 300, 410)), { ow: OW * 0.6, color: P.stone, name: 'head', seed: 7 }); // ears (rounded rocks, not flat hexagons)
+  stone(mesh, rockGeo(165, 140, 130, { detail: 1, jitter: 0.22, seed: 8 }), M4(V(-420, 300, -410)), { ow: OW * 0.6, color: P.stone, name: 'head', seed: 8 });
   // a rounded nose bridge above the lip
   stone(mesh, rockGeo(150, 125, 200, { detail: 1, jitter: 0.15, seed: 6 }), M4(V(650, 185, 0), qz(-0.1)), { ow: OW * 0.7, color: P.stoneLt, name: 'head', seed: 6 });
   // the eyes: a dark socket and a glowing amber ball (glow channel 1) on each side, under the brow
@@ -198,7 +210,7 @@ function addHead(mesh, P, OW, low) {
   }
   // the upper lip (a heavy rounded snout stone) with its row of stone teeth; behind it the dark throat that shows when the jaw drops
   stone(mesh, rockGeo(300, 95, 345, { detail: 1, jitter: 0.1, seed: 11 }), M4(V(545, 48, 0)), { ow: OW * 0.75, color: P.stone, name: 'head', seed: 11 });
-  flat(mesh, new THREE.BoxGeometry(70, 330, 600), M4(V(345, -110, 0)), { ow: 0, color: P.mouthIn, glow: 2, name: 'head' });
+  flat(mesh, new THREE.BoxGeometry(70, 250, 540), M4(V(345, -105, 0)), { ow: 0, color: P.mouthIn, glow: 2, name: 'head' });
   flat(mesh, new THREE.BoxGeometry(520, 40, 560), M4(V(590, -2, 0)), { ow: 0, color: P.mouthIn, glow: 2, name: 'head' }); // the roof of the mouth
   for (let k = 0; k < 5; k++) {
     const z = (k - 2) * 140, tooth = new THREE.ConeGeometry(50, 130, 4, 1);
@@ -271,6 +283,20 @@ function addBoulder(mesh, P, OW, r, nm, seed) {
   stone(mesh, rockGeo(r * 0.55, r * 0.4, r * 0.5, { detail: 0, jitter: 0.2, seed: seed + 2 }), M4(V(r * 0.5, -r * 0.45, r * 0.45)), { ow: OW * 0.3, color: P.boulderDk, name: nm, seed: seed + 2 });
 }
 
+// ---- the heart's orbit: a thin tilted ring of light with three crystal shards on it, built at the heart's centre; the view turns it about the vertical axis in held steps (the arms' shard rings do the same) ----------------------
+function addHeartOrbit(mesh, P, OW, name) {
+  const ring = new THREE.TorusGeometry(330, 13, 4, 28);
+  ring.rotateX(Math.PI / 2);
+  flat(mesh, ring, M4(V(0, 20, 0), qz(0.5)), { ow: 0, color: P.crystal, glow: 3, name });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU + 0.4, p = V(Math.cos(a) * 330, 20, Math.sin(a) * 330).applyQuaternion(qz(0.5)), q = qz(0.5 + (i - 1) * 0.3);
+    const up = new THREE.ConeGeometry(48, 96, 4, 1), dn = new THREE.ConeGeometry(48, 96, 4, 1);
+    up.translate(0, 48, 0); dn.rotateX(Math.PI); dn.translate(0, -48, 0);
+    flat(mesh, up, M4(p, q), { ow: OW * 0.3, color: i === 1 ? P.crystalIn : P.crystal, glow: i === 1 ? 4 : 3, name });
+    flat(mesh, dn, M4(p, q), { ow: OW * 0.3, color: P.crystalDk, glow: 3, name });
+  }
+}
+
 // ---- all the rigid pieces ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 export function buildPieces(cr, P, opts = {}) {
   const OW = P.INK || 26, low = !!opts.low, T = opts.T, mesh = new Mesher(), sides = low ? 9 : 12;
@@ -283,6 +309,7 @@ export function buildPieces(cr, P, opts = {}) {
   addRuin(mesh, P, OW, (T.ISLAND.X0 + T.ISLAND.X1) / 2 + 450, -T.ISLAND.TOP, opts.Z.ISLAND[0] + 560);
   for (let s = 0; s < 4; s++) addCrystal(mesh, P, OW, T.CRYSTAL.R, s);
   for (let b = 0; b < 3; b++) addBoulder(mesh, P, OW, T.BOULDER.R, 'boulder' + b, 140 + b * 7);
+  addHeartOrbit(mesh, P, OW, 'heartO');
   const arms = buildArmPieces(mesh, P, OW, T, { ...opts, cr });
   const geometry = mesh.build();
   return { geometry, set: new RigidSet(geometry, mesh.ranges), ranges: mesh.ranges, tris: mesh.verts / 3, arms };
