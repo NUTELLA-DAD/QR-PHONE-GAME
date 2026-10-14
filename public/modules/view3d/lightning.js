@@ -74,9 +74,15 @@ export function createLightning({ scene, post, world, state }) {
     if (frame === 2) { glowMesh.visible = coreMesh.visible = haloMesh.visible = false; S.shown = ''; return; }
     if (!cur.built) {
       cur.built = true;
-      const vh = Math.max(600, fin(c.cam && c.cam.visH, 1500)), top = c.target.y + vh / 2 + 400;
-      const x1 = b.x, y1 = cur.far ? c.target.y - vh * 0.35 : -b.y, x0 = b.x + 120, r = rng(cur.seed);
-      const n = Math.max(4, Math.round(fin(B.SEGMENTS, 9))), jit = fin(B.JITTER, 0.1) * (top - y1) * 0.55;
+      const vh = Math.max(600, fin(c.cam && c.cam.visH, 1500));
+      let top = c.target.y + vh / 2 + 400, x0 = b.x + 120;
+      // THE THUNDERBIRD'S BOLT (3D.md section 26): a bolt it has called down on the ship starts at ITS BEAK, not above the top of the screen (the sim's strike at its own beak, the swallowed bolt, still comes from the sky)
+      const cr = state.creature, bk = cr && cr.kind === 'thunderbird' && !cr.dying && !cur.far ? cr.parts.find((q) => q.kind === 'beak') : null, bs = bk && bk.segs && bk.segs[0];
+      const fromBird = !!(bs && fin(bs.x) && fin(bs.y) && Math.hypot(bs.x - b.x, bs.y - b.y) > 700);
+      if (fromBird) { x0 = bs.x; top = -bs.y; }
+      S.from = fromBird ? 'bird' : 'sky'; S.topY = top; // (for the gate)
+      const x1 = b.x, y1 = cur.far ? c.target.y - vh * 0.35 : -b.y, r = rng(cur.seed);
+      const n = Math.max(4, Math.round(fin(B.SEGMENTS, 9))), jit = fin(B.JITTER, 0.1) * Math.abs(top - y1) * 0.55;
       const main = zigzag(r, x0, top, x1, y1, n, jit);
       const z = cur.far ? -1400 : 50, widen = cur.far ? 1.7 : 1, wg = fin(B.WIDTH, 16) * widen, wc = fin(B.CORE_WIDTH, 5) * widen;
       const gpos = [], cpos = [], hpos = [];

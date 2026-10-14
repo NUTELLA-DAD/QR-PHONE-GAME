@@ -16,7 +16,7 @@ import { paintHeadAtlas, paintLimbSkin, creatureToon, makeUniforms, Tinter, coil
 import { createTubeSet } from './creatureTube.js';
 import { buildKraken } from './creatureKraken.js';
 import { buildDrake, drakeSkins, drakeLimbs, drakeTubeOpts, extendDrake } from './creatureDrake.js';
-import { buildThunderbird } from './creatureThunderbird.js';
+import { buildThunderbird, birdSkins, birdLimbs, birdTubeOpts, extendThunderbird } from './creatureThunderbird.js';
 import { createFoamRings, createShadowDecal, createGripMarkers, createRopeSet } from './creatureFx.js';
 import { createWaterFx } from './creatureWater.js';
 
@@ -31,8 +31,9 @@ export const KINDS = {
   // The Cinder Drake (3D.md section 24): its own skins (scales + ember cracks), tube opts (spines on the neck and tail), the extension that places its head, jaw, wings, legs and fire (creatureDrake.js), and
   // `desperate`: its phase 3 is a rage, not tiredness (no pale tired tint)
   drake: { id: 'drake', palette: () => config.CREATURE3D.DRAKE, build: buildDrake, limbKind: 'wing', limbsOf: drakeLimbs, skins: drakeSkins, tubeOpts: drakeTubeOpts, extend: extendDrake, desperate: true, sheen: 0 },
-  // The Thunderbird (C.6b): a first fallback only (creatureThunderbird.js): a lathe torso and the generic tapered tubes for every limb (`tubesOnly`: no suckers), the gizzard as the generic heart window; the model is a later task
-  thunderbird: { id: 'thunderbird', palette: () => config.CREATURE3D.THUNDERBIRD, build: buildThunderbird, limbKind: 'wing', tubesOnly: true, desperate: true, sheen: 0 },
+  // The Thunderbird (3D.md section 26): its own feather skins, tube opts (no suckers), the extension that places its head, beak, talons, feathers and lightning (creatureThunderbird.js); the gizzard is the generic heart
+  // window (the extension decides when its stone shows: heartScale); `desperate`: its frenzy is not tiredness
+  thunderbird: { id: 'thunderbird', palette: () => config.CREATURE3D.THUNDERBIRD, build: buildThunderbird, limbKind: 'wing', limbsOf: birdLimbs, skins: birdSkins, tubeOpts: birdTubeOpts, extend: extendThunderbird, desperate: true, sheen: 0 },
 };
 
 export function createCreatureView(parent) {
@@ -213,7 +214,7 @@ export function createCreatureView(parent) {
       if (!cr || !cr.parts || !cr.parts.length) {
         coilFade.uCoilZ.value = 1e9;
         root.visible = false;
-        if (rig) { rig.foam.mesh.visible = false; rig.shadow.hide(); rig.markers.mesh.visible = false; rig.ropes.group.visible = false; clearChunks(); rig.water.reset(); }
+        if (rig) { rig.foam.mesh.visible = false; rig.shadow.hide(); rig.markers.mesh.visible = false; rig.ropes.group.visible = false; clearChunks(); rig.water.reset(); if (rig.ext && rig.ext.hide) { try { rig.ext.hide(); } catch { /* (gone) */ } } }
         return;
       }
       const tier = ctx.tier || null, lowNow = !!(tier && tier.name === 'low');
@@ -267,7 +268,7 @@ export function createCreatureView(parent) {
         else lid.pose(0, 0);
       });
       const hd = R.head.dyn.heart;
-      if (hd) { if (heartP && !heartP.hidden && !heartP.dead) hd.pose(0, 1 + 0.1 * (_stepKey(t, 4) & 1)); else hd.pose(0, 0); }
+      if (hd) { if (R.ext && R.ext.heartScale) hd.pose(0, R.ext.heartScale(heartP, t)); else if (heartP && !heartP.hidden && !heartP.dead) hd.pose(0, 1 + 0.1 * (_stepKey(t, 4) & 1)); else hd.pose(0, 0); } // (the Thunderbird's shield must lift before the stone shows)
       R.glow[3] = P.HEART_GLOW;
       R.uniforms.uGlow.value.set(R.glow[0], R.glow[1], R.glow[2], R.glow[3]);
       // a kind's own extension (the Drake's pieces, wings, legs, fire) places what the generic view does not: its limbs too

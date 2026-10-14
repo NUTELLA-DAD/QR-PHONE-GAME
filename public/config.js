@@ -3311,12 +3311,25 @@ export const config = {
       TENTACLE_SIDES: 12, // sides of a limb's tube (Low tier: 8)
       Z: { FRONT: 330, BACK: -250, ROOT_FRONT: 140, ROOT_BACK: -120, WRAP_MARGIN: 130 },
     },
-    // THE THUNDERBIRD (view3d/creatureThunderbird.js, C.6b): the first fallback only (tapered tubes and a plain torso, the Kraken's keys in storm slate and gold); the proper model is a later task.
+    // THE THUNDERBIRD (view3d/creatureThunderbird.js, birdModel.js, birdWings.js, birdPaint.js, birdFx.js; 3D.md section 26): the same keys as the Kraken's and the Drake's, in storm slate-blue, cream and gold, and the rest of its look.
     THUNDERBIRD: {
-      skin: '#3d4b6e', skinDark: '#262f4a', belly: '#c9d4e8', spot: '#262f4a', spotLight: '#6f86b0', fin: '#4f6290', bone: '#e8e2c8', char: '#2f2a2e', eye: '#fff27a', iris: '#ffffff', pupil: '#17101e',
-      mouthIn: '#8f5f24', lips: '#e8b84a', flesh: '#d98a95', heart: '#9fe8ff', dead: '#4a5470', exhausted: '#8f9ab8',
-      EYE_GLOW: { base: 1.3, lit: 2.2, blind: 0.25, tired: 0.7 },
-      THROAT_GLOW: { shut: 0.25, open: 2.1 }, HEART_GLOW: 2.4,
+      skin: '#4b61a2', skinDark: '#2a3563', belly: '#e0e8f7', spot: '#2a3563', spotLight: '#9fb4e0', fin: '#4f6290', bone: '#e8e2c8', char: '#2f2a2e', eye: '#a8ecff', iris: '#ffffff', pupil: '#0f1424',
+      mouthIn: '#c9772a', lips: '#e8b84a', flesh: '#d98a95', heart: '#3cc8ff', stoneHi: '#dcf8ff', dead: '#4a5470', exhausted: '#8f9ab8',
+      gold: '#e9b846', goldDk: '#a87820', goldPale: '#f6dc86', horn: '#2a2a3a', foot: '#e0b43c', claw: '#2b2630', plate: '#e4ecf8', plateEdge: '#e9b846', cyan: '#9fe8ff', white: '#ffffff', inkLeaf: '#10142a', // (the beak, its cere, a pale gold, the brow ridge, the legs, the talons, the breast shield and its rim, the lightning, and the dark of the feather outlines)
+      FEATHER: { // the colours of a feather in each row: base, middle, end, the band at the tip (gold on the long flight feathers) and the glowing edge
+        flight: { a: '#3a4f8c', b: '#5c78b8', c: '#98b2e2', band: '#f4cc62', edge: '#9fe8ff', gl: 2 },
+        cover1: { a: '#6f8fd0', b: '#9fbbe6', c: '#d2e2fa', band: '#eef4fe', edge: '#ffffff' },
+        cover2: { a: '#c8d8f2', b: '#e4edfa', c: '#ffffff', band: '#f8e08c', edge: '#ffffff' },
+        tail: { a: '#34478a', b: '#546fb0', c: '#8aa6dc', band: '#f4cc62', edge: '#9fe8ff', gl: 2 },
+        hackle: { a: '#4a60a0', b: '#7f9ad0', c: '#c0d2ee', band: '#f0f4fc', edge: '#ffffff' },
+        loose: { a: '#3e5496', b: '#6b88c8', c: '#b4c8ec', band: '#f0c25a', edge: '#ffffff', gl: 2 }, // (the feathers that scatter)
+      },
+      EYE_GLOW: { base: 1.5, lit: 2.4, blind: 0.25, tired: 0.7 },
+      THROAT_GLOW: { shut: 0.35, open: 2.3 }, GOLD_GLOW: 0.72, SELF: 1.0, HEART_GLOW: 1.6, // (glow channel 1 = the eyes, 2 = the gold (beak, feet, feather bands: lit by itself, GOLD_GLOW), 3 = the STORM CHARGE (the feather points, the crest tips, the open mouth: it rises in quarters as an attack is called), 4 = the gizzard's stone. SELF = the bird's own light in the dark (a floor of its own colour, x the night))
+      CHARGE: { base: 0.3, rest: 0.2, gust: 0.55, beat: 0.85, wind: 0.5, lock: 0.7, dive: 1, call: 0.7, swallow: 0.9, perch: 0.25, dazed: 0.15 }, // how charged it is in each state (0..1): more arcs, longer arcs, brighter tips
+      ARC: { COLOR: '#8fd4ff', CORE: '#ffffff', HDR: 2.6, WIDTH: 15, CORE_WIDTH: 5.5, MAX_STITCH: 9, TETHER: 22 }, // the crackle: a glow ribbon and a white core (HDR, so the bloom burns), the most small arcs on the wings at full charge, the tether's width
+      FEATHERS: { high: 1, low: 0.6 }, // how many feathers of each row the wings carry (the Low tier builds a lighter bird)
+      CONFETTI: 56, FALL: 3.4, // the loose feathers (one instanced mesh) and how long one lives (s)
       INK: 14,
       TENTACLE_SIDES: 12,
       Z: { FRONT: 330, BACK: -250, ROOT_FRONT: 140, ROOT_BACK: -120, WRAP_MARGIN: 130 },
