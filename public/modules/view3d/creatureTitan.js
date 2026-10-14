@@ -4,16 +4,17 @@
 //   - the TORSO, the rubble heap, the heartstone and its vein are the generic "head" record (a still mesh), placed with the sim's body at a depth BEHIND the lair's plain face, so a sinking Titan is hidden by the plain itself
 //   - every other piece is a RIGID PIECE (RigidSet) in the body's own frame (a child of the body group, so walking moves nothing in the mesh): the two LEGS (they swap and lift on `cr.titan.leg` while it walks), the HEAD
 //     (tipped back in three held steps for the roar), the hinged JAW (sixths of `openAmt`), the ISLAND with its trees and ruin, the CRYSTAL in four stages, three boulders
-//   - the ARMS follow the sim's own segments: three stone slabs each, placed by the segment's position and angle (a tilt in depth from the shoulder to the hand), the hand open / a fist (gripping the gasbag or holding a
-//     boulder) / broken; hurt arms crack (a bite out of the slabs, cyan light in the cracks, stone chips off) at ARM_STAGES; a shelled-off arm leaves a stump with a jagged face, and the slabs that came off are Rapier bodies
+//   - the ARMS are FLOATING STONES (titanArms.js): three boulders each, one per sim segment, centred on the segment (with a stepped bob), held by a cyan tether between the sim's joints (a crystal node and orbiting shards at
+//     each joint, a soft glow); the hand is a palm crystal among four finger stones that spread, clench, wrap the gasbag or cradle a boulder; hurt arms crack a boulder (a crater, bright cracks, a flickering tether) at
+//     ARM_STAGES; a shelled-off arm snaps its light (a flash, a crystal stub) and the boulders that came off are Rapier bodies; the shoulder keeps its crystal socket
 //   - the MARKS (titanFx.js): the boulder's red ring, the gold funnel over the roaring mouth, the island's landing strip and the crystal's ring
 //   - DEATH: it kneels (legs shorten, the body leans), the head drops and the jaw hangs, cracks flare, the island and everything on it crumbles into Rapier rocks and dust, and the sim sinks it into the plain
 import { THREE, outlineMat, applyLook } from './style.js';
 import { config } from '../../config.js';
 import { Tinter, Mesher } from './creatureKit.js';
 import { paintTitanStone, paintBlank } from './titanPaint.js';
-import { buildTitan, buildPieces, JAW_PIVOT, V, M4, stone, rockGeo } from './titanModel.js';
-import { addSlab, addHand } from './titanArms.js';
+import { buildTitan, buildPieces, JAW_PIVOT, V, M4, stone, rockGeo, hash } from './titanModel.js';
+import { addStoneBody, addCut, addBrokenHand, through, HAND } from './titanArms.js';
 import { createTitanOverlay } from './titanFx.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -44,7 +45,7 @@ export function extendTitan(ctx) {
 
   const S = {
     key: -1, tilt: 0, open: 0, kneel: 0, crush: 0, leg: 0, armStage: { N: 0, F: 0 }, cStage: 0, cGone: false, died: false, dieSteps: 0, isleGone: false, treesGone: false, loose: new Set(), shake: 0, wasRoar: false, wasOpen: false, heat: -1,
-    gripN: false, gripF: false, deadFrom: 0, feetKey: -1, built: Date.now(),
+    gripN: false, gripF: false, deadFrom: 0, feetKey: -1, built: Date.now(), hand: { N: '', F: '' }, cut: { N: false, F: false }, dropped: { N: false, F: false },
   };
   const byId = (id) => cr.parts.find((p) => p.id === id);
   const Pt = () => (link.vfx && link.vfx.P) || null;
@@ -77,30 +78,143 @@ export function extendTitan(ctx) {
   const rnd = (a) => { S.rs = (Math.imul((S.rs || 7) + a * 977, 0x2c1b3c6d) + 0x7f4a7c15) | 0; return ((S.rs >>> 0) % 10000) / 10000; };
   const colors = () => [P.stone, P.stoneDk, P.stoneLt, P.soil, P.grassDk];
 
-  // ---- the arms ----
-  function placeArm(tag, p, st, bp, bang, boulderHeld, gripping) {
-    const nm = (j, v) => 'a' + tag + j + v;
-    const full = dims[tag], n = p && !p.dead ? Math.min(3, p.segs.length) : 0;
-    const hide = () => { for (let j = 0; j < 3; j++) { set.place(nm(j, 'a'), null); set.place(nm(j, 'b'), null); } for (const h of ['o', 'f', 'b']) set.place('h' + tag + h, null); set.place('c' + tag, null); };
-    if (!n) { hide(); return; }
-    const zr0 = tag === 'N' ? ZC.ARM_N : ZC.ARM_F, zr = gripping ? [zr0[0], ZC.GRIP] : zr0, reach0 = p.reach0 || full.reduce((a, d) => a + d.len, 0) || 1;
-    let s = 0, last = null;
+  // ---- the arms: floating stones (titanArms.js) ----
+  const FOLD = (a) => { const x = Math.atan2(Math.sin(a), Math.cos(a)); return x > Math.PI / 2 ? x - Math.PI : x <= -Math.PI / 2 ? x + Math.PI : x; }; // (an angle folded into -90..90 degrees: a stone looks the same turned round)
+  const lerp = (a, b, u) => a + (b - a) * u;
+  const BOBS = [-1, 0, 1, 0]; // the floating bob: a stepped triangle (held 4 keys a step), each stone on its own phase: no sine of time
+  const bobOf = (key, tag, j) => BOBS[((key >> 2) + j * 2 + (tag === 'F' ? 1 : 0)) & 3];
+  const flickOf = (key, tag, j, on) => (on && hash(key >> 1, j * 5 + (tag === 'F' ? 3 : 0), 11) < 0.45 ? 0.22 : 1); // a hurt boulder's light flickers in held steps (2 keys)
+  const armNames = { N: [], F: [] };
+  for (const tag of ['N', 'F']) {
+    for (let j = 0; j < 3; j++) armNames[tag].push('a' + tag + j + 'a', 'a' + tag + j + 'b', 't' + tag + j);
+    armNames[tag].push('j' + tag + '1', 'j' + tag + '2', 'p' + tag, 'c' + tag);
+    for (let k = 0; k < 4; k++) armNames[tag].push('h' + tag + k);
+    for (let i = 0; i < 4; i++) armNames[tag].push('f' + tag + i + 'a', 'f' + tag + i + 'b');
+  }
+  const BOB = P.BOB || 22, SHIFT = 260; // (SHIFT: how far back a stone slides in depth where it would cover the face)
+  const HEAD_AT = [T.BODY.HEAD.AT[0], -T.BODY.HEAD.AT[1]];
+  const avoidHead = (x, y, r) => clamp((560 + 0.5 * r - Math.hypot(x - HEAD_AT[0], y - HEAD_AT[1])) / (0.6 * r + 60), 0, 1); // 1 where a near-arm stone would hide the face: it passes BEHIND the head there
+  // o: { bp, bang, key, f, held (the boulder in this hand), gripping, gone, ta (the part's tint), GL (the glows) }
+  function placeArm(tag, p, st, o) {
+    const { bp, bang, key, f, held, gripping, gone, ta, GL } = o, full = dims[tag];
+    const hideArm = () => { for (const nme of armNames[tag]) set.place(nme, null); };
+    const P3 = (x, y) => { const q = bp(x, y); return { x: q.x, y: q.y }; };
+    const zr0 = tag === 'N' ? ZC.ARM_N : ZC.ARM_F, zr = gripping ? [zr0[0], ZC.GRIP] : zr0, near = tag === 'N';
+    const n = p && !p.dead && !gone ? Math.min(3, p.segs.length) : 0;
+    const sev = !!(p && (p.severed || p.dead || gone));
+    // the shoulder socket: always there (its crystal burns on with no arm)
+    if (!p || !p.at) { hideArm(); set.place('k' + tag, null); return; }
+    const sock = P3(cr.x + f * p.at[0], cr.y + p.at[1]), a0 = n ? bang(p.segs[0].ang) : 0, zs = zr[0] + (near ? 200 - SHIFT * avoidHead(sock.x, sock.y, 150) : 0);
+    set.place('k' + tag, trn(sock.x, sock.y, zs).multiply(rotZ(a0)));
+    ptint.set(rs['k' + tag], ta[0], ta[1], ta[2]);
+    GL.push([sock.x, sock.y, zs + 60, 340, sev ? 1.0 : 0.6]);
+    if (!n) { hideArm(); return; }
+    const reach0 = p.reach0 || full.reduce((a, d) => a + d.len, 0) || 1, zAt = (s, x, y) => lerp(zr[0], zr[1], clamp(s / reach0, 0, 1)) - (near ? SHIFT * avoidHead(x, y, 200) : 0);
+    // the joints (where the light is) and the segments' angles, in the body's frame
+    const J = [], A = [];
+    let s = 0;
+    for (let j = 0; j < n; j++) { const sg = p.segs[j], q = P3(sg.x, sg.y); J.push({ x: q.x, y: q.y, z: zAt(s, q.x, q.y) }); A.push(bang(sg.ang)); s += sg.len; }
+    { const sg = p.segs[n - 1], q = P3(sg.x + Math.cos(sg.ang) * sg.len, sg.y + Math.sin(sg.ang) * sg.len); J.push({ x: q.x, y: q.y, z: zAt(s, q.x, q.y) }); }
+    const crackFrom = st >= 2 ? 1 : st === 1 ? 2 : 9;
+    const tinted = (nme, fl) => ptint.set(rs[nme], ta[0] * fl, ta[1] * fl, ta[2] * fl);
     for (let j = 0; j < 3; j++) {
-      if (j >= n) { set.place(nm(j, 'a'), null); set.place(nm(j, 'b'), null); continue; }
-      const sg = p.segs[j], L = sg.len, a = bang(sg.ang), z0 = zr[0] + (zr[1] - zr[0]) * (s / reach0), z1 = zr[0] + (zr[1] - zr[0]) * ((s + L) / reach0), flip = Math.cos(a) < 0 ? -1 : 1;
-      s += L;
-      const q0 = bp(sg.x, sg.y), M = trn(q0.x, q0.y, z0).multiply(rotZ(a)).multiply(rotY(-Math.atan2(z1 - z0, L))).multiply(scl(1, flip, 1));
-      const cracked = st >= 1 && j >= (st === 1 ? 2 : 1);
-      set.place(nm(j, cracked ? 'a' : 'b'), null);
-      set.place(nm(j, cracked ? 'b' : 'a'), M);
-      last = { M, L, r: sg.r1 };
+      const na = 'a' + tag + j + 'a', nb = 'a' + tag + j + 'b', nt = 't' + tag + j;
+      if (j >= n) { set.place(na, null); set.place(nb, null); set.place(nt, null); continue; }
+      const cracked = j >= crackFrom, fl = flickOf(key, tag, j, cracked), a = J[j], b = J[j + 1], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, mz = (a.z + b.z) / 2;
+      set.place(cracked ? na : nb, null);
+      set.place(cracked ? nb : na, trn(mx, my + bobOf(key, tag, j) * BOB, mz).multiply(rotZ(0.4 * FOLD(A[j]))));
+      tinted(na, 1); tinted(nb, 1);
+      const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, d2 = Math.hypot(dx, dy), d3 = Math.hypot(d2, dz), L = full[j].len;
+      set.place(nt, trn(a.x, a.y, a.z).multiply(rotZ(Math.atan2(dy, dx))).multiply(rotY(-Math.atan2(dz, Math.max(1, d2)))).multiply(scl(d3 / L, 1, 1)));
+      tinted(nt, fl);
     }
-    for (const h of ['o', 'f', 'b']) set.place('h' + tag + h, null);
+    // the joints: a crystal diamond with shards orbiting it, and a soft glow
+    const th = (k) => key * 0.5 * (k % 2 ? 1 : -1) + k * 1.3 + (tag === 'F' ? 0.8 : 0);
+    for (let k = 1; k <= 2; k++) {
+      const nn = 'j' + tag + k;
+      if (k < n) {
+        const q = J[k], fl = flickOf(key, tag, k - 1, k - 1 >= crackFrom || k >= crackFrom);
+        set.place(nn, trn(q.x, q.y, q.z).multiply(rotZ(A[k - 1]))); tinted(nn, fl);
+        GL.push([q.x, q.y, q.z + 40, 300, 0.5 * fl]);
+      } else set.place(nn, null);
+    }
+    for (let k = 0; k < 4; k++) {
+      const nm = 'h' + tag + k;
+      if (k === 3) continue; // (the palm's shards: below)
+      if (k < n) { const q = k === 0 ? { x: sock.x, y: sock.y, z: zs } : J[k]; set.place(nm, trn(q.x, q.y, q.z).multiply(rotZ(a0 * (k === 0 ? 1 : 0) + (k ? A[k - 1] : 0))).multiply(new THREE.Matrix4().makeRotationX(th(k)))); tinted(nm, k === 0 ? 1 : flickOf(key, tag, k - 1, k >= crackFrom)); } else set.place(nm, null);
+    }
+    // the hand (or, for a shot-off arm, the stump with its snapped light)
+    const End = J[n], zE = End.z, r = full[2].r1, nmP = 'p' + tag;
+    for (let i = 0; i < 4; i++) { set.place('f' + tag + i + 'a', null); set.place('f' + tag + i + 'b', null); }
+    if (p.severed || n < 3) {
+      set.place(nmP, null); set.place('h' + tag + '3', null);
+      set.place('c' + tag, trn(End.x, End.y + bobOf(key, tag, 3) * BOB * 0.5, End.z).multiply(rotZ(A[n - 1])));
+      tinted('c' + tag, flickOf(key, tag, 5, true));
+      GL.push([End.x, End.y, End.z + 40, 360, 0.6 * flickOf(key, tag, 5, true)]);
+      S.hand[tag] = 'stump';
+      return;
+    }
     set.place('c' + tag, null);
-    if (!last) return;
-    const End = last.M.clone().multiply(trn(last.L, 0, 0));
-    if (!p.severed && n === 3) set.place('h' + tag + (boulderHeld || gripping ? 'f' : st >= 2 ? 'b' : 'o'), End);
-    else set.place('c' + tag, End.clone().multiply(scl(last.r / 250, last.r / 250, last.r / 250)));
+    const ah = A[2], flip = Math.cos(ah) < 0 ? -1 : 1, H = trn(End.x, End.y, zE).multiply(rotZ(ah)).multiply(scl(1, flip, 1)), mode = p.ctl ? p.ctl.mode : 'idle';
+    const pose = gripping ? 'grip' : held ? 'cradle' : st >= 2 ? 'broken' : mode === 'wind' ? 'fist' : mode === 'strike' || mode === 'seize' ? 'open' : 'relaxed', brk = pose === 'broken';
+    S.hand[tag] = pose;
+    const flH = flickOf(key, tag, 4, st >= 2), pulse = ((key >> 1) & 1) ? 1.1 : 1, hb = bobOf(key, tag, 3) * BOB * 0.5;
+    let palmAt;
+    if (pose === 'cradle') {
+      const bc = P3(held.x, held.y), R = held.r || T.BOULDER.R, kk = R / 300;
+      for (let i = 0; i < 4; i++) {
+        const q = [-1.3, -0.62, 0.62, 1.3][i], M = trn(bc.x + R * 1.0 * Math.sin(q), bc.y - R * 1.0 * Math.cos(q) + hb * (i % 2 ? 1 : -1), zE + (i % 2 ? 0.3 : -0.25) * R).multiply(rotZ(q)).multiply(scl(1.25 * kk, 1.25 * kk, 1.25 * kk));
+        set.place('f' + tag + i + 'a', M);
+      }
+      palmAt = trn(bc.x, bc.y - 0.95 * R, zE + 30).multiply(rotZ(Math.PI / 2)).multiply(scl(pulse * kk, pulse * kk, pulse * kk));
+    } else {
+      const arr = HAND[pose];
+      for (let i = 0; i < 4; i++) {
+        if (brk && i >= 2) continue;
+        const [x, y, z, phi, sc] = arr[i], M = H.clone().multiply(trn(x * r, y * r + hb * (i % 2 ? 1 : -1), z * r)).multiply(rotZ(phi)).multiply(scl(sc, sc, sc));
+        set.place('f' + tag + i + (brk ? 'b' : 'a'), M);
+      }
+      palmAt = H.clone().multiply(trn(HAND.PALM * r, 0, 0)).multiply(scl(pulse * (brk ? 0.85 : 1), pulse * (brk ? 0.85 : 1), pulse * (brk ? 0.85 : 1)));
+    }
+    set.place(nmP, palmAt);
+    for (let i = 0; i < 4; i++) { tinted('f' + tag + i + 'a', 1); tinted('f' + tag + i + 'b', 1); }
+    tinted(nmP, flH);
+    // the palm's shards orbit the wrist axis
+    const pe = new THREE.Vector3().setFromMatrixPosition(palmAt);
+    set.place('h' + tag + '3', trn(pe.x, pe.y, pe.z).multiply(rotZ(pose === 'cradle' ? Math.PI / 2 : ah)).multiply(new THREE.Matrix4().makeRotationX(th(3)))); tinted('h' + tag + '3', flH);
+    GL.push([pe.x, pe.y, pe.z + 50, 430, 0.65 * flH]);
+  }
+
+  // a whole boulder of an arm as a Rapier body (it falls when the Titan dies): at world (x, y, z), turned by ang
+  function spawnBoulder(x, y, z, d, ang, vx, vy, spin, seed, life) {
+    const D = link.destruction;
+    if (!D || !D.addExternal || S.loose.size > 40) return null;
+    const m = new Mesher();
+    addStoneBody(m, P, OW, d.rx, d.ry, d.rz, 'x', seed, { cracked: true });
+    const geo = m.build(), holder = new THREE.Group(), mesh = new THREE.Mesh(geo, headMat), ink = new THREE.Mesh(geo, outlineMat);
+    mesh.frustumCulled = ink.frustumCulled = false;
+    mesh.userData.toon = headMat; ink.userData.isOutline = true;
+    holder.add(mesh, ink);
+    holder.position.set(x, y, z);
+    holder.quaternion.setFromAxisAngle(Z_AX, ang);
+    plainOf(mesh);
+    applyLook(holder);
+    const piece = D.addExternal({ holder, boxes: [{ cx: 0, cy: 0, cz: 0, hx: d.rx * 0.8, hy: d.ry * 0.8, hz: d.rz * 0.78 }], rel: 1.8, mat: 'stone', size: d.rx * 1.6, vel: [vx, vy], spin, life });
+    if (!piece) { geo.dispose(); return null; }
+    S.loose.add(piece);
+    return piece;
+  }
+  // the Titan is dying: the light holding an arm together goes out, and its boulders drop
+  function dropArm(tag, p) {
+    S.dropped[tag] = true;
+    const Ptc = Pt(), zr = tag === 'N' ? ZC.ARM_N : ZC.ARM_F;
+    p.segs.slice(0, 3).forEach((sg, j) => {
+      const d = dims[tag][j];
+      if (!d) return;
+      const c = Math.cos(sg.ang), s = Math.sin(sg.ang), mx = sg.x + c * sg.len / 2, my = sg.y + s * sg.len / 2, z = BZ + lerp(zr[0], zr[1], (j + 0.5) / 3);
+      spawnBoulder(mx, -my, z, d, -sg.ang * 0.4, (j - 1) * 150, 100 + j * 70, (j - 1) * 1.6, 600 + j + (tag === 'F' ? 20 : 0), 5);
+      if (Ptc) { Ptc.flash(sg.x, -sg.y, z + 250, 900, '#d9fcff', { hdr: 2.0, alpha: 0.85, life: 0.22 }); Ptc.burst('spark', sg.x, -sg.y, z + 250, 12, { speed: [200, 900], size: [6, 10], life: [0.4, 0.9], color: '#bff6ff', noRate: true }); }
+    });
   }
 
   const ext = {
@@ -132,12 +246,6 @@ export function extendTitan(ctx) {
       for (const nme of ['legN', 'legF', 'isle', 'treeA', 'treeB', 'ruin', 'boulder0', 'boulder1', 'boulder2']) ptint.set(rs[nme], tm[0], tm[1], tm[2]);
       ptint.set(rs.head, th[0], th[1], th[2]);
       ptint.set(rs.jaw, tj[0], tj[1], tj[2]);
-      for (const [tag, p] of [['N', armN], ['F', armF]]) {
-        const ta = tintOf(p);
-        for (let j = 0; j < 3; j++) { ptint.set(rs['a' + tag + j + 'a'], ta[0], ta[1], ta[2]); ptint.set(rs['a' + tag + j + 'b'], ta[0], ta[1], ta[2]); }
-        for (const h of ['o', 'f', 'b']) ptint.set(rs['h' + tag + h], ta[0], ta[1], ta[2]);
-        ptint.set(rs['c' + tag], ta[0], ta[1], ta[2]);
-      }
       const tc = crystal && crystal.hit > 0 ? FLASH : [1, 1, 1];
       for (let s = 0; s < 4; s++) ptint.set(rs['crys' + s], tc[0], tc[1], tc[2]);
       // ---- the glows: eyes (1), the open throat (2), the veins and crystal (3), the heartstone (4) ----
@@ -164,7 +272,7 @@ export function extendTitan(ctx) {
       [['legN', LG.AT[0], 170, 1], ['legF', LG.AT[1], -170, 0]].forEach(([nme, lx, lz, isN]) => {
         const lifted = walking && (isN ? leg === 1 : leg === 0), swing = walking ? (lifted ? 0.1 : -0.05) : 0;
         const kn = 1 - 0.3 * S.kneel;
-        const M = trn(lx, lifted ? LG.LIFT : 0, lz).multiply(trn(0, -2200, 0)).multiply(scl(1 + 0.1 * S.kneel, kn, 1 + 0.1 * S.kneel)).multiply(trn(0, 2200, 0)).multiply(trn(0, 420, 0)).multiply(rotZ(swing)).multiply(trn(0, -420, 0));
+        const M = trn(lx, lifted ? LG.LIFT : 0, lz).multiply(trn(0, -2200, 0)).multiply(scl(1 + 0.1 * S.kneel, kn, 1 + 0.1 * S.kneel)).multiply(trn(0, 2200, 0)).multiply(trn(0, -380, 0)).multiply(rotZ(swing)).multiply(trn(0, 380, 0));
         set.place(nme, inv ? inv.clone().multiply(M) : M);
       });
       if (walking && leg !== S.leg && S.feetKey !== key) { // a foot comes down: dust and a ring
@@ -174,8 +282,9 @@ export function extendTitan(ctx) {
       }
       S.leg = leg;
       // ---- the arms ----
-      const heldBy = (p) => (cr.boulders || []).some((b) => b && b.mode === 'held' && b.arm === p);
+      const heldBy = (p) => (cr.boulders || []).find((b) => b && b.mode === 'held' && b.arm === p && fin(b.x) && fin(b.y)) || null;
       const gripping = (p) => (cr.grips || []).some((g) => g && g.limb === p && (g.mode === 'hold' || g.mode === 'seize'));
+      const GL = []; // (the soft glows of the arms' light this frame, in the body's frame: x, y, z, radius, strength)
       for (const [tag, p] of [['N', armN], ['F', armF]]) {
         const frac = p ? p.hp / Math.max(1, p.maxHp) : 0, st = p && p.severed ? 2 : frac <= P.ARM_STAGES[1] ? 2 : frac <= P.ARM_STAGES[0] ? 1 : 0;
         if (p && !p.dead && st > S.armStage[tag] && S.loose.size < 40) { // it cracks: stone chips off the slab that took the blow
@@ -187,7 +296,15 @@ export function extendTitan(ctx) {
           }
         }
         S.armStage[tag] = Math.max(S.armStage[tag], st);
-        placeArm(tag, p, dying ? 2 : st, bp, bang, p ? heldBy(p) : false, p ? gripping(p) : false);
+        if (p && p.severed && !S.cut[tag]) { // the light snaps: a flash, a ring, sparks and a burst of crystal at the cut
+          S.cut[tag] = true;
+          const sg = p.segs[p.segs.length - 1];
+          if (Ptc && sg) { const ex = sg.x + Math.cos(sg.ang) * sg.len, ey = sg.y + Math.sin(sg.ang) * sg.len, z = BZ + (tag === 'N' ? ZC.ARM_N[0] + 200 : ZC.ARM_F[1]); Ptc.flash(ex, -ey, z + 120, 1100, '#d9fcff', { hdr: 2.6, alpha: 0.95, life: 0.28 }); Ptc.ring(ex, -ey, z + 120, 900, '#7fe8ff', 0.5); Ptc.burst('spark', ex, -ey, z + 120, 34, { speed: [300, 1300], size: [6, 11], life: [0.4, 1.0], color: '#bff6ff', noRate: true }); }
+        }
+        if (p && !p.severed && !p.dead) S.cut[tag] = false;
+        if (dying && p && !p.dead && !S.dropped[tag] && sk >= 0.3) dropArm(tag, p);
+        const gone = !!(dying && p && S.dropped[tag]);
+        placeArm(tag, p, dying ? 2 : st, { bp, bang, key, f, held: p ? heldBy(p) : null, gripping: p ? gripping(p) : false, gone, ta: tintOf(p), GL });
       }
       // ---- the boulders: held in a fist or flying: spin in held steps ----
       const bl = (cr.boulders || []).filter((b) => b && b.mode !== 'gone');
@@ -248,6 +365,13 @@ export function extendTitan(ctx) {
       for (let s = 0; s < 4; s++) set.place('crys' + s, isleOn && treesOn && stage < 4 && s === stage ? W(trn(T.CRYSTAL.X + quake, TOP + jit, ZC.CRYSTAL)) : null);
       // ---- the marks: the boulder's rings, the funnel, the landing strip, the crystal's ring ----
       overlay.begin(key);
+      { // the soft glow of the floating stones' light (the heartstone too): fades as the body goes under
+        const gk = dying ? 1 - clamp((sk - 2) / 2.5, 0, 1) : 1;
+        if (gk > 0.02) {
+          GL.push([330, 960, 420, 600, 0.3 * (1 + (key & 1) * 0.4)]);
+          for (const g of GL) { _bv.set(g[0], g[1], g[2]).applyMatrix4(R.hg.matrix); overlay.glow(_bv.x, _bv.y, _bv.z, g[3] * k, g[4] * gk); }
+        }
+      }
       if (!dying) {
         for (const rg of tt.rings || []) if (rg && fin(rg.x) && fin(rg.y)) overlay.ring(rg.x, -rg.y, 420, rg.r || 500, !!rg.locked);
         if (mouthP && mouthP.segs[0] && (cr.mouthWin || tt.roar)) { const m = mouthP.segs[0], M = T.MOUTH; overlay.funnel(m.x, -m.y, 380, M.FUNNEL_W, M.FUNNEL_UP, !!cr.mouthWin, Math.floor(cr.age * 4) % 2); }
@@ -278,18 +402,19 @@ export function extendTitan(ctx) {
         const z = BZ + zr[0] + (zr[1] - zr[0]) * ((off + L / 2) / total);
         off += L;
         const m = new Mesher();
-        addSlab(m, P, OW, L, s.r, s.r1, 'slab', 400 + j, true);
-        if (j === segs.length - 1) addHand(m, P, OW, s.r1, 'broken', 'slab', 460, L);
+        const d = full[Math.min(full.length - 1, i0 + j)];
+        addStoneBody(m, P, OW, d.rx, d.ry, d.rz, 'slab', 400 + j, { cracked: true });
+        addCut(through(m, M4(V(-d.rx * 0.9, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z_AX, Math.PI))), P, OW, 150, 'slab', 430 + j); // the snapped light sticks out of the broken end
+        if (j === segs.length - 1) addBrokenHand(m, P, OW, s.r1, L / 2, 'slab', 460);
         const geo = m.build(), holder = new THREE.Group(), mesh = new THREE.Mesh(geo, headMat), ink = new THREE.Mesh(geo, outlineMat);
         mesh.frustumCulled = ink.frustumCulled = false;
         mesh.userData.toon = headMat; ink.userData.isOutline = true;
-        mesh.position.set(-L / 2, 0, 0); ink.position.copy(mesh.position);
         holder.add(mesh, ink);
         holder.position.set(mx, -my, z);
         holder.quaternion.setFromAxisAngle(Z_AX, -ang);
         plainOf(mesh);
         applyLook(holder);
-        const rr = (s.r + s.r1) / 2, boxes = [-0.28, 0, 0.28].map((u) => ({ cx: L * u, cy: 0, cz: 0, hx: L * 0.16, hy: rr * 0.8, hz: rr * 0.72 }));
+        const boxes = [{ cx: 0, cy: 0, cz: 0, hx: d.rx * 0.8, hy: d.ry * 0.8, hz: d.rz * 0.78 }];
         const piece = D.addExternal({ holder, boxes, rel: 1.8, mat: 'stone', size: L * 0.6, vel: [(c.vx || 0) + (j - 1) * 140, -(c.vy || 0) + j * 60], spin: -(c.w || 0) + (j - 1) * 0.8, life: Math.max(0.3, config.CREATURES.CHUNK.LIFE - (c.t || 0)) });
         if (!piece) { geo.dispose(); return; }
         made.push({ holder, piece, geo });
