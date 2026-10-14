@@ -1308,6 +1308,180 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     }
   }
 
+  // ================================================================ THE MYCELIAL MOTHER (C.6e) ================================================================
+  // The same recipe (pictures baked once per zoom, blitted; poses from the sim, nothing wobbles) in violet and spore-green: a fat mushroom-moth CAP hanging from the roof with gills along its underside, pale spotted wings that
+  // hang folded, spread (the wing beat's wind-up) or stroke down (cr.mother.beat 0..3, a stepped key), two big glowing eyes, the pink SPORE HEART (phase 3) and TENDRILS of teal with glowing dots and a gold bud at the tip.
+  // In the dark every part is dim unless a beam holds it (lookOf); the tendrils glow on their own while they grow or hold (the system lights them).
+  const M_CAP = '#6b46b8', M_CAP_DK = '#4a2e8a', M_GILL = '#2d1a5c', M_SPOT = '#d8c6ff', M_WING = '#cdbdf2', M_WING_DK = '#8a6fc0', M_EYE = '#e6f06a', M_TEND = '#2f9d78', M_TEND_DK = '#1f6b57', M_GLOW = '#9dffd8', M_BUD = '#ffd23f', M_HEART = '#e657b6';
+  function motherCapPic(len, R, puff, look) {
+    return get(`mcap|${Math.round(len)}|${Math.round(R)}|${puff}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5, k = 1 + 0.03 * puff, W = R * k;
+      return bake(-W - pad, -0.6 * R - pad, W + pad, len + W + pad, (g) => {
+        const body = () => { g.beginPath(); g.moveTo(-W, -0.5 * R); g.lineTo(-W, len); g.arc(0, len, W, Math.PI, 0, true); g.lineTo(W, -0.5 * R); g.closePath(); };
+        body();
+        g.fillStyle = col(M_CAP);
+        g.fill();
+        g.save();
+        body();
+        g.clip();
+        g.fillStyle = col(M_CAP_DK); // the shaded flank
+        g.fillRect(W * 0.35, -R, W, len + 2 * W);
+        g.strokeStyle = col(M_GILL); // gills fanning out along the underside
+        g.lineWidth = A.INK_W * 0.7;
+        for (let a = 0.12; a < 0.9; a += 0.085) {
+          g.beginPath();
+          g.moveTo(Math.cos(Math.PI * a) * W * 0.25, len + Math.sin(Math.PI * a) * W * 0.25);
+          g.lineTo(Math.cos(Math.PI * a) * W * 1.1, len + Math.sin(Math.PI * a) * W * 1.1);
+          g.stroke();
+        }
+        g.fillStyle = col(M_SPOT);
+        for (const [x, y, r] of [[-0.55, 0.0, 0.16], [0.1, 0.1, 0.12], [-0.15, 0.45, 0.09], [0.5, 0.35, 0.1], [-0.6, 0.55, 0.07]]) { g.beginPath(); g.arc(x * W, y * R, r * W, 0, Math.PI * 2); g.fill(); }
+        poly(g, [[-0.85 * W, 0], [-0.6 * W, 0.15 * R], [-0.55 * W, 0.7 * R], [-0.75 * W, 0.7 * R]], hiColor(look), false);
+        g.restore();
+        body();
+        g.lineWidth = INK_B;
+        g.stroke();
+      });
+    });
+  }
+  // One wing in its own frame: the pivot at the origin, the leading edge along +x, pose 0 folded (narrow), 1 half open, 2 spread, 3 down-stroke (a wider, bent shape).
+  function motherWingPic(L, pose, look) {
+    return get(`mwing|${Math.round(L)}|${pose}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5, Wd = L * (pose === 0 ? 0.3 : 0.55);
+      return bake(-0.1 * L - pad, -0.35 * L - pad, L * 1.08 + pad, Wd * 1.1 + pad, (g) => {
+        const wing = [[0, -0.05 * L], [0.5 * L, -0.12 * L], [L, 0], [0.88 * L, 0.5 * Wd], [0.55 * L, Wd], [0.2 * L, 0.8 * Wd], [0, 0.25 * Wd]];
+        poly(g, wing, col(M_WING), true, INK_B);
+        g.save();
+        g.beginPath();
+        wing.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+        g.closePath();
+        g.clip();
+        g.strokeStyle = col(M_WING_DK);
+        g.lineWidth = A.INK_W * 0.8;
+        for (const [x, y] of [[0.95, 0.2], [0.8, 0.55], [0.55, 0.85], [0.3, 0.75]]) { g.beginPath(); g.moveTo(0, 0.05 * Wd); g.lineTo(x * L, y * Wd); g.stroke(); }
+        g.fillStyle = col(M_CAP); // the eyespot
+        g.beginPath();
+        g.arc(0.62 * L, 0.34 * Wd, 0.13 * Math.min(L, Wd * 2), 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = col(M_BUD);
+        g.beginPath();
+        g.arc(0.62 * L, 0.34 * Wd, 0.06 * Math.min(L, Wd * 2), 0, Math.PI * 2);
+        g.fill();
+        g.restore();
+        poly(g, wing, null, true, INK_B);
+      });
+    });
+  }
+  function motherEyePic(r, state, look) { // state 0 open, 1 put out
+    return get(`meye|${Math.round(r)}|${state}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5;
+      return bake(-r * 1.25 - pad, -r * 1.25 - pad, r * 1.25 + pad, r * 1.25 + pad, (g) => {
+        g.beginPath();
+        g.ellipse(0, 0, r * 1.15, r, 0, 0, Math.PI * 2);
+        g.fillStyle = state ? col(M_GILL) : col(M_EYE);
+        g.fill();
+        g.lineWidth = INK_B;
+        g.stroke();
+        if (state) {
+          g.beginPath();
+          g.moveTo(-r * 0.6, -r * 0.5); g.lineTo(r * 0.6, r * 0.5); g.moveTo(r * 0.6, -r * 0.5); g.lineTo(-r * 0.6, r * 0.5);
+          g.stroke();
+          return;
+        }
+        poly(g, [[0, -0.8 * r], [0.22 * r, 0], [0, 0.8 * r], [-0.22 * r, 0]], col(M_GILL), false); // the slit pupil
+        g.fillStyle = hiColor(look);
+        g.beginPath();
+        g.arc(-0.45 * r, -0.4 * r, 0.2 * r, 0, Math.PI * 2);
+        g.fill();
+      });
+    });
+  }
+  function motherHeartPic(R, beat, look) {
+    return get(`mheart|${Math.round(R)}|${beat}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5, k = 1 + 0.1 * beat;
+      return bake(-R * 1.3 - pad, -R * 1.3 - pad, R * 1.3 + pad, R * 1.3 + pad, (g) => {
+        g.beginPath();
+        g.ellipse(0, 0, R * k, R * 0.9 * k, 0, 0, Math.PI * 2);
+        g.fillStyle = col(M_HEART);
+        g.fill();
+        g.lineWidth = INK_B;
+        g.stroke();
+        g.fillStyle = col(M_SPOT);
+        for (const [x, y] of [[-0.4, -0.2], [0.35, -0.3], [0, 0.35]]) { g.beginPath(); g.arc(x * R, y * R, 0.14 * R, 0, Math.PI * 2); g.fill(); }
+        poly(g, [[-0.6 * R, -0.45 * R], [-0.1 * R, -0.65 * R], [0, -0.5 * R], [-0.5 * R, -0.25 * R]], hiColor(look), false);
+      });
+    });
+  }
+  // One tendril segment (base joint at the origin, along +x): teal, tapering, with glowing dots; the last is a bud with a gold tip; a cut one ends flat.
+  function motherSegPic(s, mode, look) {
+    const L = s.len, r0 = s.r, r1 = s.r1;
+    return get(`mseg|${Math.round(L)}|${Math.round(r0)}|${Math.round(r1)}|${mode}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5, tipX = L + r1 * 2.4;
+      return bake(-r0 - pad, -r0 * 1.2 - pad, (mode === 'tip' ? tipX : L) + r1 * 0.6 + pad, r0 * 1.2 + pad, (g) => {
+        const pts = [[0, -r0], [L * 0.5, -r0 * 0.5 - r1 * 0.5], [L, -r1]];
+        if (mode === 'tip') pts.push([tipX, 0]);
+        pts.push([L, r1], [L * 0.5, r0 * 0.5 + r1 * 0.5], [0, r0]);
+        poly(g, pts, col(M_TEND), true, INK_B);
+        g.beginPath();
+        g.arc(0, 0, r0, Math.PI / 2, (Math.PI * 3) / 2);
+        g.fillStyle = col(M_TEND);
+        g.fill();
+        g.stroke();
+        poly(g, [[r0 * 0.1, -0.7 * r0], [L * 0.5, -0.6 * (r0 + r1) / 2], [L * 0.9, -0.65 * r1], [L * 0.9, -0.35 * r1], [L * 0.5, -0.3 * (r0 + r1) / 2], [r0 * 0.1, -0.35 * r0]], hiColor(look), false);
+        g.fillStyle = col(M_GLOW);
+        for (const u of [0.25, 0.6]) { g.beginPath(); g.arc(L * u, ((r0 + r1) / 2) * 0.25 * (u > 0.5 ? -1 : 1), Math.max(8, r1 * 0.22), 0, Math.PI * 2); g.fill(); }
+        if (mode === 'tip') { g.fillStyle = col(M_BUD); g.beginPath(); g.arc(L + r1 * 1.1, 0, r1 * 0.95, 0, Math.PI * 2); g.fill(); g.lineWidth = A.INK_W * 0.8; g.stroke(); }
+      });
+    });
+  }
+  function drawMotherLimb(p) {
+    const look = lookOf(p), n = p.segs.length;
+    for (let i = 0; i < n; i++) {
+      const s = p.segs[i];
+      if (!!s.behind !== behindPass) continue;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (Math.cos(s.ang) < 0) ctx.scale(1, -1);
+      blit(motherSegPic(s, i === n - 1 && !p.severed ? 'tip' : 'mid', look));
+      ctx.restore();
+    }
+  }
+  function drawMother(body) {
+    const mt = body.mother, by = (id) => body.parts.find((q) => q.id === id), cap = by('cap');
+    if (!mt || !cap || !cap.segs[0]) return;
+    const s = cap.segs[0], R = s.r, key = Math.floor(body.age * 8);
+    const capLook = lookOf(cap);
+    for (const side of [-1, 1]) { // the wings, behind the cap
+      ctx.save();
+      ctx.translate(s.x + side * R * 0.8, s.y + R * 0.55);
+      const a = [Math.PI * 0.46, Math.PI * 0.3, -0.12, Math.PI * 0.4][mt.beat || 0];
+      ctx.rotate(side > 0 ? a : Math.PI - a);
+      if (side < 0) ctx.scale(1, -1);
+      blit(motherWingPic(R * 2.6, mt.beat || 0, capLook));
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    blit(motherCapPic(s.len, R, mt.puff || 0, capLook));
+    ctx.restore();
+    const heart = by('heart');
+    if (heart && !heart.dead && !heart.hidden && heart.segs[0]) {
+      ctx.save();
+      ctx.translate(heart.segs[0].x, heart.segs[0].y);
+      blit(motherHeartPic(heart.segs[0].r, key % 4 < 2 ? 0 : 1, lookOf(heart)));
+      ctx.restore();
+    }
+    for (const e of body.parts) {
+      if (e.kind !== 'eye' || !e.segs[0]) continue;
+      ctx.save();
+      ctx.translate(e.segs[0].x, e.segs[0].y);
+      blit(motherEyePic(e.segs[0].r, e.dead ? 1 : 0, e.dead ? 'dim' : e.hit > 0 ? 'flash' : 'lit')); // (the eyes glow on their own: a lamp makes them hittable, not visible)
+      ctx.restore();
+    }
+    for (const p of body.parts) if (p.limb && !p.dead) drawMotherLimb(p);
+  }
+
   // ---- drawing ------------------------------------------------------------------------------------------------------------------------------------------------
   const lookOf = (p) => (p.hit > 0 ? 'flash' : p.lit ? 'lit' : 'dim');
 
@@ -1317,6 +1491,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
   function drawLimb(p) {
     if (p.art === 'thunderbird') return drawBirdLimb(p); // (C.6b: the Thunderbird's feathers, also a plucked wing tumbling)
     if (p.art === 'titan') return drawTitanLimb(p); // (C.6c: the Titan's stone arm, also an arm shelled off tumbling)
+    if (p.art === 'mother') return drawMotherLimb(p); // (C.6e: the Mycelial Mother's tendril, also one burnt or cut off tumbling)
     if (p.id === 'wyrm') return drawWyrmLimb(p); // (C.6d: the Rime Wyrm's body, iced; also its coil passing behind the ship)
     if (p.kind === 'wing' || p.kind === 'neck' || p.kind === 'tail') return drawDrakeLimb(p); // (the Cinder Drake's limbs, also its torn-off wing tumbling)
     const look = lookOf(p), n = p.segs.length;
@@ -1375,6 +1550,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     if (body.kind === 'thunderbird') return drawBird(body); // (C.6b)
     if (body.kind === 'titan') return drawTitan(body); // (C.6c)
     if (body.kind === 'wyrm') return drawWyrm(body); // (C.6d)
+    if (body.kind === 'mother') return drawMother(body); // (C.6e)
     for (const p of body.parts) if (p.limb && !p.dead && p.layer === 'back') drawLimb(p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind === 'mantle') drawRigid(body, p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind !== 'mantle') drawRigid(body, p);

@@ -12,6 +12,7 @@ import { tilt, inRock } from './course.js';
 import { pop } from './popups.js';
 import { envOf } from './environments.js';
 import { mainShip } from './ships.js';
+import { sporeBlocks } from './creatureMother.js'; // (C.6e: the Mycelial Mother's spore clouds block the beams)
 import { toWorldX, toWorldY, aimToWorld, aimToShip } from './pose.js';
 
 const S = config.SEARCHLIGHT;
@@ -130,6 +131,7 @@ export function createSearchlights({ state }) {
         if (dist > l.reach + t.r) continue;
         const off = Math.abs(angleDiff(Math.atan2(dy, dx), e.a));
         if (off <= l.half + Math.atan2(t.r, Math.max(dist, 1))) {
+          if (state.creature && state.creature.kind === 'mother' && sporeBlocks(state, e.x, e.y, p.x, p.y)) { state.creature.stats.blocked += 1; continue; } // (C.6e: a spore cloud between the lamp and the target swallows the beam)
           lit = true;
           l.litCount += 1;
         }

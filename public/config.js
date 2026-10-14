@@ -33,7 +33,7 @@ export const config = {
     SHIP_SCREEN_FRACTION: 0.4, SHIP_SCREEN_HEIGHT_FRACTION: 0.62, // the ship (incl. its long gasbag) takes at most this much of the screen width, and this much of its height (owner, 2026-10-11: zoomed out from 0.53 / full height - it felt tight on the airship)
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
-    CREATURE: { MAX_ZOOM_OUT: 2.4, DRAKE_MAX_ZOOM_OUT: 3.4, TITAN_MAX_ZOOM_OUT: 4.4, WYRM_MAX_ZOOM_OUT: 4.4, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2; the Cinder Drake flies about the ship in loops 8000 px across: DRAKE_MAX_ZOOM_OUT; the Island Titan stands 5000 px tall below her: TITAN_MAX_ZOOM_OUT; the Rime Wyrm's body reaches 7000 px out of its cliff: WYRM_MAX_ZOOM_OUT), and its living parts are kept in view with this much margin (world pixels)
+    CREATURE: { MAX_ZOOM_OUT: 2.4, DRAKE_MAX_ZOOM_OUT: 3.4, TITAN_MAX_ZOOM_OUT: 4.4, WYRM_MAX_ZOOM_OUT: 4.4, MOTHER_MAX_ZOOM_OUT: 3.6, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2; the Cinder Drake flies about the ship in loops 8000 px across: DRAKE_MAX_ZOOM_OUT; the Island Titan stands 5000 px tall below her: TITAN_MAX_ZOOM_OUT; the Rime Wyrm's body reaches 7000 px out of its cliff: WYRM_MAX_ZOOM_OUT), and its living parts are kept in view with this much margin (world pixels)
     SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
     ZOOM_SMOOTHING: 0.6, // how quickly it zooms (low = calm, no pumping)
     PULL_SMOOTHING: 0.22, // ...and this slowly in the pull-back after a part was built at the sky-dock (YARD.PULL_TIME): the "she grew!" moment
@@ -2505,6 +2505,7 @@ export const config = {
     // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
     WEIGHT: {
       'creature-win': 10, 'creature-boulder': 3, 'titan-island': 6, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'away-banner': 8, 'away-charge': 7, 'away-prisoners': 6, 'away-ballista': 5, 'away-beacon': 4, 'away-winch': 4, 'away-ko': 3, 'treasure-stowed': 5, 'treasure-heist': 8, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
+      'creature-light': 4, 'creature-burn': 4, 'creature-cap': 4, // C.6e: the Mycelial Mother - the first lamp that found her in the dark, a tendril that went up in flames, a mortar shell on her cap
       'creature-chip': 3, 'creature-thaw': 3, // C.6d: the Rime Wyrm - a hammer chipped the ice off its coil, or thawed a gun it had frozen
       'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'nemesis-down': 10, 'nemesis-won': 9, 'nemesis-escape': 6, 'nemesis-scar': 5, 'nemesis-met': 4, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'scrap-patch': 7, 'scrap-built': 4, 'frame-built': 6, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
@@ -2741,7 +2742,7 @@ export const config = {
     // voyage (the long ones, LONG_STOPS columns or more, get the bigger number); never the first stop, never two in a row; +DANGER skulls and x REWARD_MUL reward.
     LAIR: {
       COUNT: { short: 1, long: 2 }, LONG_STOPS: 7, DANGER: 1, REWARD_MUL: 2,
-      BY_ENV: { sea: 'kraken', ember: 'drake', storm: 'thunderbird', frost: 'wyrm' }, // which creature lives in which sky (a lair stop is a Sunken Sea stop with a Kraken, an Ember Forge stop with a Drake, a Storm Front stop with a Thunderbird or a Frost Peaks stop with the Rime Wyrm: voyage.js markLairs)
+      BY_ENV: { sea: 'kraken', ember: 'drake', storm: 'thunderbird', frost: 'wyrm', fungal: 'mother' }, // which creature lives in which sky (a lair stop is a Sunken Sea stop with a Kraken, an Ember Forge stop with a Drake, a Storm Front stop with a Thunderbird or a Frost Peaks stop with the Rime Wyrm: voyage.js markLairs)
       RUN: 16000, BEYOND: 9000, SEA_BELOW: 2000, // px from the launch to the lair's middle (where the route ends and she hovers); more map beyond it; the sea lies this far under the launch height
       SPIRES: [[-35, 3], [0, 2], [35, 4]], SPIRE_W: 2600, SPIRE_UP: [450, 900], // rock spires standing in the sea: [cells from the lair's middle (the one at 0 stands right under her when she hovers there), +- jitter in cells], their width at the sea line and how far they stand above it (px)
       ICON: '\u{1F419}', LABEL: 'LAIR', NAME: "The Kraken's Lair", KIND: 'Kraken lair', // the route map's creature icon (octopus) and label
@@ -3014,6 +3015,73 @@ export const config = {
       // The Wyrm's lair map (maps.js buildWyrmLairMap): open sky in Frost Peaks, the launch on row LAUNCH_ROW, a floor FLOOR_BELOW px under it and ICE CLIFFS standing on it at CLIFFS px from the lair's middle (CLIFF_W px wide at
       // the top, their tops CLIFF_TOP px under the launch height).
       LAIR: { ICON: '\u{1F409}', LABEL: 'LAIR', NAME: "The Rime Wyrm's Lair", KIND: 'Wyrm lair', LAUNCH_ROW: 20, FLOOR_BELOW: 5400, CLIFFS: [-7600, -3800, 3800, 7600], CLIFF_W: 2600, CLIFF_TOP: 2300 },
+    },
+    // ---- THE MYCELIAL MOTHER (C.6e, BOSSES.md 2.5): the Fungal Depths' spore-moth, clinging to the roof of a dark cavern (creatures/mother.js = the body, creatureMother.js = the fight). The cave is PITCH DARK
+    // (the Fungal Depths' DARK): her cap, her eyes and her heart cannot be aimed at, hit by a shell or burnt until a SEARCHLIGHT beam holds them (the nest lamp points up: the lamp crew are the heart of this fight);
+    // a tendril is seen (and can be hit) while it grows toward the ship, holds it, burns, or is inside the ship's own glow. Her attacks: GRAB (a tendril GROWS toward the ship: a red ring on the deck end, WINDUP s,
+    // then it holds her UP toward the roof until she hacks it or burns it free), SPORES (the cap puffs up, then a cloud falls on the ship: it BLOCKS THE BEAMS, slows the crew and clogs the engines; flame clears it
+    // at once, and sets the deck under it alight) and the WING BEAT (she spreads her wings, then BEATS: the ship is shoved sideways toward the rock pillars). Burning (BURN): flame does MUL x to a tendril, the fire
+    // SPREADS along it and jumps to the next tendril, and a burning tendril lets go. Ways to win (cr.stats.win): 'burn' / 'cut' (every tendril gone: burnt or hacked and shot off), 'eyes' (both eyes put out), 'mortar'
+    // (MORTAR.HITS mortar shells on the lit cap), 'board' (strike the spore heart from her cap in phase 3), 'hp' (the pool).
+    MOTHER: {
+      NAME: 'THE MYCELIAL MOTHER', ENV: 'fungal',
+      HP: 1300, // the health pool (the slow, safe way to win)
+      HP_MUL: { tentacle: 1, mantle: 1, eye: 1, heart: 1, pool: 1 }, // tuning knobs on the data's hp (like HURT.PART_HP_MUL for the Kraken)
+      POOL: { tentacle: 0.3, mantle: 0.5, eye: 1.2, heart: 2 }, // share of a blow that also comes off the pool (a hack takes none: creatureSystem.js)
+      // The body (px, in her own frame: y down, the origin is the middle of the cap's top where it clings to the roof; she is nearly symmetrical, body.f only mirrors the eyes). The CAP is a vertical capsule hanging from
+      // the roof (a landing place for a boarder: it is walked on its underside); the two EYES and the SPORE HEART (hidden until phase 3) sit on its face; the TENDRILS are chains of SEGS rigid segments rooted on its underside
+      // (ROOTS), hanging REST_DOWN px when idle. The wings are only a picture (cr.mother.beat).
+      BODY: {
+        CAP: { AT: [0, 0], LEN: 260, R: 900, HP: 700 },
+        EYES: { AT: [[-430, 880], [430, 880]], R: 160, HP: 400 },
+        HEART: { AT: [0, 1010], R: 190, HP: 230 },
+        TENDRILS: { N: 5, SEGS: 7, LEN: [520, 380], R: [150, 42], HP: 650, ROOTS: [[-660, 760], [-340, 980], [0, 1040], [340, 980], [660, 760]], REST_DOWN: 1000, REST_FAN: 0.3, BEND: 0.12 },
+      },
+      // Where she hangs (maps.js buildMotherLairMap): her origin sits DROP px under the roof's surface above the lair's middle.
+      CAP_DROP: 450,
+      // She stays asleep until the ship is within WAKE_DX px of the lair's middle; then she stirs for ARRIVE s (untouchable) before the first attack (FIRST s after).
+      WAKE_DX: 7000, ARRIVE: 5, FIRST: 6,
+      // THE ATTACK DIRECTOR: a pause of EVERY s (x the phase's PHASE_MUL, x the difficulty) between attacks, the next chosen by WEIGHTS[phase]; a dead eye slows her by EYE_SLOW each. The beat only begins in phase 2.
+      ATTACK: { EVERY: [6, 9], PHASE_MUL: { 1: 1, 2: 0.85, 3: 0.7 }, WEIGHTS: { 1: { grab: 3, spores: 1.4, beat: 0 }, 2: { grab: 3, spores: 1.5, beat: 1.4 }, 3: { grab: 3.2, spores: 1.6, beat: 1.8 } }, EYE_SLOW: 1.35, BREATHER: 3.5, BANNER: 4.5 },
+      // THE GRAB: a tendril GROWS toward the ship (the Kraken's grab with these numbers merged over CREATURES.GRIP): WINDUP s of warning (a red ring on the deck end), then it holds her, pulling UP toward the roof
+      // (PULL_UP) and a little sideways, until it is hacked, burnt, shot (RELEASE_DMG of its health) or has held TIME s, when it rips a section off. HACK_DMG is the share of its health a hack takes off a tendril (it is wounded
+      // as it is cut free: two hacks cut one off); MAX[phase] = grabs at once at most (the crew's size caps it too: GRIPS_BY_CREW). The tendril is revealed while it grows and holds.
+      GRAB: {
+        TIME: 14, TIME_BY_DIFF: { easy: 1.4, normal: 1, veteran: 0.9, hard: 0.8 }, WINDUP: 1.4, SEIZE_MAX: 2.5, REACH_SHARE: 0.92, SEP: 260, SPREAD: 1.6,
+        PULL_UP: true, SIDEWAYS: 0.3, BASE_ACC: 90, K: 0.03, MAX_ACC: 190, MAX_TOTAL: 230, SLACK: 0.7, RAMP: 0.8, TORQUE: 0.2, SHAKE: 0.25, SHOVE_POWER: 2,
+        COOLDOWN: 3, RECOIL: 1.2, RELEASE_DMG: 0.3, SWORD_TIME: 1.5, HAMMER_TIME: 2.8, BLOWS: 3,
+        WRAP: { SEGS: 4, TURNS: 1.1, START_TURNS: 0.4, KEYS: 8, LIFT: 70, UNDER: 35, MIN_RY: 150, PITCH: 380, N: 22 },
+        RIP: { REACH: 230, LEN: 260, HULL: 70 },
+        MAX: { 1: 2, 2: 3, 3: 3 }, HACK_DMG: 0.4, SEEN_R: 1.12,
+      },
+      // BURNING: flame does MUL x to a tendril (hurtCreature src 'flame'), sets the segment it touches alight: the fire runs along the tendril at SPREAD segments a second, each segment burns TIME s (a flamethrower
+      // keeps it going) taking DPS hp a second off the tendril, and from a burning root it JUMPS to another tendril whose root is within JUMP_R px (every JUMP_EVERY s, with chance JUMP_P). A burning tendril lets go
+      // of the ship, flinches back for FLINCH s and glows (it is revealed in the dark). The tendril is cut off where its fire is rootmost.
+      BURN: { MUL: 3, DPS: 14, TIME: 5.5, SPREAD: 1.6, JUMP_R: 520, JUMP_EVERY: 2.6, JUMP_P: 0.45, FLINCH: 4 },
+      // THE CAP: a plain shell does only SHELL_MUL of its damage (the cap is spongy), a MORTAR shell all of it; MORTAR.HITS mortar shells on the LIT cap win the fight ('mortar'). A mortar needs a lit cap too.
+      CAP: { SHELL_MUL: 0.25 },
+      MORTAR: { HITS: 12 },
+      // THE EYES: hit only while lit. LIT_MUL x the damage; both put out ends it ('eyes'). A dead eye is a blind eye: she grabs EYE_SLOW x slower.
+      EYES: { LIT_MUL: 1.25 },
+      // SPORES: the cap puffs up for WIND s (stepped, a banner, a buzz on every phone, a red ring on the ship where the cloud will fall), then a cloud RX x RY px, centred DY px above the ship's middle (so it covers the nest lamp), falls on her over FALL s, lingers LINGER s and
+      // thins away. Inside it (or with it between the lamp and the target) a searchlight lights nothing; the crew inside are slowed (the Fungal Depths' own SPORES.SLOW) and the engines under it clog CLOG a second.
+      // FLAME burns it off at once (a flash) and lights IGNITE fires on the decks under it (fire.js caps apply); a wing beat blows it away. MAX = clouds at once (by phase).
+      SPORES: { WIND: 1.8, FALL: 2.6, LINGER: 8, RX: 1100, RY: 800, DY: 300, CLOG: 0.06, IGNITE: 2, MAX: { 1: 1, 2: 1, 3: 2 }, FADE: 1.5 },
+      // THE WING BEAT: the wings spread for WIND s (a banner naming the side, a buzz on every phone, arrows on the TV), then BEAT s of beating: the ship is shoved PUSH px/s toward the side it points to (and given a
+      // KICK px/s of speed: the helm must brake, climb over the pillars or steer into the wind), twisted at the top of the bag (FX), the crew stagger (SHOVE). It points toward the side of the cave the ship is already
+      // nearer to (random when she is in the middle). The ship is not beaten while a tendril holds her. RECOVER s of rest afterwards.
+      BEAT: { WIND: 1.9, BEAT: 1.6, RECOVER: 1.4, PUSH: 620, KICK: 240, FX: 200, SHOVE: 4, SHAKE: 0.9, VY: 0 },
+      // PHASES: 1 'IT STIRS', 2 'IT BEATS' (below TWO_HP of the pool, or TWO_LOST tendrils gone: the wing beat joins), 3 'IT THRASHES' (below THREE_HP, or THREE_LOST gone: two grabs at once, attacks come faster, the spore heart
+      // opens for a boarder on her cap).
+      PHASE: { TWO_HP: 0.66, THREE_HP: 0.33, TWO_LOST: 2, THREE_LOST: 4 },
+      BOARD: { HEART_TIME: 6, HEART_DMG: 200 }, // the spore heart (phase 3): hold Action with a sword HEART_TIME s, HEART_DMG off the heart (POOL.heart x that off the pool)
+      SPAWN: { SINK: 7, SINK_DEEP: 1400 }, // s it takes to wither and fall when dead, px it falls
+      WIN_TEXT: { burn: 'BURNT BARE!', cut: 'CUT TO THE ROOT!', eyes: 'BLINDED!', mortar: 'CAP BURST!', board: 'SPORE HEART STRUCK!', hp: 'BROUGHT DOWN!' },
+      DEATH_TEXT: ' WITHERS AND FALLS FROM THE ROOF!',
+      REWARD: { HULL: 35, GAS: 30, TROPHY: null }, // salvage x3, the hull patched and every bag topped up; no trophy part card
+      // The Mother's lair map (maps.js buildMotherLairMap): a closed cavern in the Fungal Depths, the launch on row LAUNCH_ROW, a roof ROOF_ABOVE px over the launch height and a floor FLOOR_BELOW px under it, two
+      // rock PILLARS at PILLARS px from the lair's middle (WIDTH px wide, their tops TOP_BELOW px under the launch height: a wing beat can push her into one; she can fly over), stalactites and stalagmites elsewhere.
+      LAIR: { ICON: '\u{1F98B}', LABEL: 'LAIR', NAME: "The Mycelial Mother's Lair", KIND: 'Mother lair', LAUNCH_ROW: 30, ROOF_ABOVE: 3000, FLOOR_BELOW: 2600, PILLARS: [-2900, 2900], WIDTH: 1000, TOP_BELOW: 100, SPIKES: 14 },
     },
   },
   // Effects in the storybook gouache style (modules/host/vfxArt.js): flat colours, ink from INK + OUTLINE, no gradients.

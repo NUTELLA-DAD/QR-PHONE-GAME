@@ -151,9 +151,10 @@ export function bestTarget(state, gun) {
     if (t.kind === 'laid' && (gun.type === 'mortar' || gun.type === 'harpoon')) continue; // (a lob is no way to hit a mine, and a harpoon is for ships)
     if (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship' && t.kind !== 'hulk' && !towTarget(state.creature, t)) continue; // (...and for the exhausted creature, and for a gunship's hulk: SCRAP)
     if (t.kind === 'creaturePart' && forcedSkip(state.creature, t.part, gun.type)) continue; // (dev flag: the bots hold their fire so that the fight can only end one way)
+    if (t.dark) continue; // (C.6e: in the Mycelial Mother's dark nothing can be aimed at until a searchlight beam holds it)
     const angle = solution(state, gun, t);
     if (angle === null) continue;
-    const base = (u) => (u.rank != null ? u.rank : order[u.kind]) - (gun.type === 'flak' && u.kind === 'creaturePart' && u.part.kind === 'wing' ? 3 : 0); // (a creature's part ranks by what it is: an open beak, a lit eye, a limb; the flak gun's job is the Drake's wings)
+    const base = (u) => (u.rank != null ? u.rank : order[u.kind]) - (gun.type === 'flak' && u.kind === 'creaturePart' && u.part.kind === 'wing' ? 3 : 0) - (gun.type === 'mortar' && u.kind === 'creaturePart' && u.part.kind === 'mantle' ? 4 : 0); // (the mortar's job on the Mother is her cap) // (a creature's part ranks by what it is: an open beak, a lit eye, a limb; the flak gun's job is the Drake's wings)
     const rank = (u) => (isSpotted(u.obj) ? base(u) - 20 : base(u)); // (spotted targets come first)
     if (!best || rank(t) < rank(best.target)) best = { target: t, angle };
   }
@@ -169,6 +170,7 @@ export function assistAim(state, gun, wanted, maxAngle, strength) {
   const SL = config.SEARCHLIGHT;
   for (const t of targets(state)) {
     if ((t.kind === 'flier' && gun.type !== 'flak') || (t.kind === 'laid' && gun.type === 'mortar') || (gun.type === 'harpoon' && !t.kind.startsWith('rival') && t.kind !== 'gunship' && t.kind !== 'hulk' && !towTarget(state.creature, t))) continue;
+    if (t.dark) continue;
     const angle = solution(state, gun, t);
     if (angle === null) continue;
     const spotted = isSpotted(t.obj); // (a spotted target is easier to lock onto: wider reach, counts as closer)

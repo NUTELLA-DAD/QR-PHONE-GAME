@@ -73,7 +73,7 @@ export function mouthWindowSoon(state, secs = 4) {
 }
 
 // Is this aim target (creatureTargets) worth a harpoon? The exhausted creature's body: the harpoon gun may aim at it in phase 3 (aim.js), the bots man it then.
-export const towTarget = (cr, t) => !!cr && !cr.dying && cr.kind !== 'thunderbird' && cr.kind !== 'titan' && (cr.kind === 'drake' ? cr.drake.mode === 'crawl' : cr.phase >= 3) && t.kind === 'creaturePart' && t.part.kind === (cr.kind === 'wyrm' ? 'head' : 'mantle'); // (the Drake: once it crawls; the Rime Wyrm's head, hauled into the sun)
+export const towTarget = (cr, t) => !!cr && !cr.dying && cr.kind !== 'thunderbird' && cr.kind !== 'titan' && cr.kind !== 'mother' && (cr.kind === 'drake' ? cr.drake.mode === 'crawl' : cr.phase >= 3) && t.kind === 'creaturePart' && t.part.kind === (cr.kind === 'wyrm' ? 'head' : 'mantle'); // (the Drake: once it crawls; the Rime Wyrm's head, hauled into the sun)
 
 // The dev / test flag (config.CREATURES.FORCE_WIN): does a bot gun of this type hold its fire at this part? (sever: only tentacles; hp: never tentacles; mouth: nothing, only bombs; tow and board: tentacles
 // until phase 3, then nothing - except the harpoon, which hooks the mantle - so the fight can only end the way it was asked to.)
@@ -84,6 +84,14 @@ export function forcedSkip(cr, part, gunType) {
     if (f === 'arms') return part.kind !== 'tentacle';
     if (f === 'hp') return part.kind === 'tentacle';
     if (f === 'mouth' || f === 'crystal') return true;
+    return false;
+  }
+  if (cr.kind === 'mother') { // the Mycelial Mother (C.6e): burn = only a flamethrower on the tendrils; cut = the tendrils, no flame; eyes = only the eyes; mortar = only a mortar, at the cap; board = anything until phase 3, then nothing (one sworded bot boards her); hp = anything
+    if (f === 'burn') return part.kind !== 'tentacle' || (gunType !== 'flame' && gunType !== 'any');
+    if (f === 'cut') return part.kind !== 'tentacle' || gunType === 'flame';
+    if (f === 'eyes') return part.kind !== 'eye';
+    if (f === 'mortar') return part.kind !== 'mantle' || (gunType !== 'mortar' && gunType !== 'any');
+    if (f === 'board') return cr.phase >= 3;
     return false;
   }
   if (cr.kind === 'wyrm') { // the Rime Wyrm (C.6d): shell / hp = anything; mouth = nothing, only bombs; tow / board = the body until phase 3, then nothing (the harpoon hooks the head; a sworded bot boards it; shells on the open maw only wear the pool down: bombs are what feed it)

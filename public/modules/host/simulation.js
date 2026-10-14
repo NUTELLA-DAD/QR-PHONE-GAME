@@ -731,7 +731,7 @@ export function createSimulation() {
   };
 
   // What a stop asks of the course (see startMission in course.js).
-  const goalOf = (stop) => (stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'wyrm' ? 'RIME WYRM' : stop.creature === 'titan' ? 'ISLAND TITAN' : stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'ring' ? 'BREACH THE ' + ({ tower: 'TOWER', fortress: 'FORTRESS', citadel: 'CITADEL' }[stop.ring] || 'CASTLE') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON');
+  const goalOf = (stop) => (stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'mother' ? 'MYCELIAL MOTHER' : stop.creature === 'wyrm' ? 'RIME WYRM' : stop.creature === 'titan' ? 'ISLAND TITAN' : stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'ring' ? 'BREACH THE ' + ({ tower: 'TOWER', fortress: 'FORTRESS', citadel: 'CITADEL' }[stop.ring] || 'CASTLE') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON');
   const missionOpts = (stop) => ({
     environment: stop.play,
     kind: stop.kind,
@@ -800,7 +800,7 @@ export function createSimulation() {
     if (cr && cr.dying && !cr.paid) { // a giant creature that sank: the boss reward, times config.CREATURES.REWARD_MUL
       cr.paid = true;
       addSalvage(SV.BOSS * config.CREATURES.REWARD_MUL, 'boss', cr.name + ' slain!');
-      const RW = cr.kind === 'wyrm' ? config.CREATURES.WYRM.REWARD : cr.kind === 'titan' ? config.CREATURES.TITAN.REWARD : cr.kind === 'thunderbird' ? config.CREATURES.THUNDERBIRD.REWARD : cr.kind === 'drake' ? config.CREATURES.DRAKE.REWARD : config.CREATURES.REWARD; // (the spoils: the hull and every gasbag patched, and the trophy part card at the next dock)
+      const RW = cr.kind === 'mother' ? config.CREATURES.MOTHER.REWARD : cr.kind === 'wyrm' ? config.CREATURES.WYRM.REWARD : cr.kind === 'titan' ? config.CREATURES.TITAN.REWARD : cr.kind === 'thunderbird' ? config.CREATURES.THUNDERBIRD.REWARD : cr.kind === 'drake' ? config.CREATURES.DRAKE.REWARD : config.CREATURES.REWARD; // (the spoils: the hull and every gasbag patched, and the trophy part card at the next dock)
       mendHull(state, RW.HULL);
       for (const b of state.bags) b.gas = Math.min(100, b.gas + RW.GAS);
       if (state.run && RW.TROPHY) state.run.trophy = RW.TROPHY; // (the Island Titan leaves no trophy card, and must not wipe one still waiting)

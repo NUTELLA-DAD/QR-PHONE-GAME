@@ -54,6 +54,7 @@ function lightReach(state, n) {
   const threats = (state.litTargets ? state.litTargets.length : 0) + (state.dimTargets ? state.dimTargets.length : 0);
   if (state.phase !== 'flying') return 5;
   const nest = L.isNestStation(n) ? 0.3 : 0; // (a nest lamp sees more of the sky: slightly preferred)
+  if (state.creature && state.creature.kind === 'mother' && !state.creature.dying && L.isNestStation(n)) return 0.4; // (C.6e: the Mycelial Mother can be aimed at only while a beam holds her: the nest lamp comes before everything)
   if (darkTarget(state) > 0.3) return (threats ? 2.2 : 3.4) - nest; // (after the guns that have a target, ahead of an idle gun or the lookout when there is something to light)
   return (threats >= 2 ? 3.2 : 5) - nest;
 }
@@ -145,6 +146,23 @@ const wyrmTowX = (state) => {
   const cr = state.creature, f = config.CREATURES.FORCE_WIN;
   if (!cr || cr.kind !== 'wyrm' || cr.dying || cr.phase < 3 || !cr.wyrm.sun || !(cr.hooked || (cr.harpoons || []).length) || (f && f !== 'tow')) return null;
   return cr.wyrm.sun.x;
+};
+// C.6e: the Mycelial Mother clings to the roof of a pitch-dark cave. The nest lamp is manned at once (lightReach), and its beam is held on her eyes in turn (her cap if both are out, or when the gate wants the mortar): the guns can aim at
+// nothing she has not lit. A spore cloud between the lamp and her blinds the beam; flame burns it off. The helm braces against a wing beat (the push is told on cr.mother.gust).
+const motherOn = (state) => { const cr = state.creature; return cr && cr.kind === 'mother' && !cr.dying ? cr : null; };
+function motherLampAim(state, l) { // the beam angle (ship space) for this lamp, or null (nothing of hers in its arc)
+  const cr = motherOn(state);
+  if (!cr) return null;
+  const cap = cr.parts.find((q) => q.kind === 'mantle'), eyes = cr.parts.filter((q) => q.kind === 'eye' && !q.dead && q.segs[0]), f = config.CREATURES.FORCE_WIN;
+  if (!cap || !cap.segs[0]) return null;
+  const pick = eyes.length && f !== 'mortar' ? eyes[Math.floor(cr.age / 5) % eyes.length] : cap, s = pick.segs[0];
+  const m = pick === cap ? { x: s.x, y: s.y + s.len + s.r * 0.5 } : { x: s.x, y: s.y }; // (the cap: a point low on its underside)
+  const a = aimToShip(mainShip(state), Math.atan2(m.y - l.ey, m.x - l.ex)) - (state.ship.pitch || 0);
+  return Math.abs(angleDiff(a, l.home)) <= l.arc ? a : null;
+}
+const motherBrace = (state) => { // the lever the helm holds against a wing beat (null = no beat)
+  const cr = motherOn(state), g = cr && cr.mother.gust;
+  return g ? clamp(-g.dir * mainShip(state).pose.f * 0.9, -1, 1) : null;
 };
 // Helm: altitude that dodges the next mine skimming the top or bottom of the ship (or null).
 // Best direction for the Lightning Coil: the angle (within its arc) that lines up the most targets.
@@ -952,6 +970,8 @@ function operate(p, state, dt) {
     const chainD = !gunshipAi && !cap ? chainDive(state) : null; // (a boom chain across the lane: pilotPlan already holds her back and aims under it; the bot also dives hard, as the plan's small change of height is not enough for the helm to move on)
     const towX = drakeTowX(state) ?? wyrmTowX(state);
     if (towX !== null) plan.speed = clamp(((towX - toWorldX(mainShip(state), L.refPoint.x)) * mainShip(state).pose.f) / 700, -0.4, 0.4); // (over the vent, with the drake on her line)
+    const brace = motherBrace(state); // (C.6e: a wing beat of the Mycelial Mother: full astern against the wind)
+    if (brace !== null) plan.speed = brace;
     p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1); // (pace: her speed on the lever's scale, without the sails and overdrive, flight.js)
     // COME ABOUT (config.SHIP.TURN.BOT_TURNS): the way to the goal has been behind her for a while, so hold the turn command like a phone's button (plan.dx is how far the route point is ahead of her bow).
     const TN = config.SHIP.TURN;
@@ -1055,6 +1075,8 @@ function operate(p, state, dt) {
     // Sweep the beam toward the enemy nearest the ship (in the dark with nothing about: a slow sweep); focus on it.
     const l = (state.searchlights || []).find((q) => q.n === p.lock);
     if (!l) return;
+    const ma = motherLampAim(state, l); // (C.6e: hold the beam on the Mycelial Mother's eye, or her cap)
+    if (ma !== null) { p.jx = Math.cos(ma); p.jy = Math.sin(ma); p.fire = false; p.gunIdle = 0; return; }
     const sx = toWorldX(mainShip(state), L.midPoint.x);
     const sy = toWorldY(mainShip(state), L.midPoint.y);
     const pitch = state.ship.pitch || 0;
