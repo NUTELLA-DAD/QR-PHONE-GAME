@@ -29,9 +29,11 @@ const diffOf = (state) => state.difficulty || 'normal';
 const rootOf = (cr, p) => ({ x: cr.x + p.at[0] * cr.f, y: cr.y + p.at[1] });
 // C.6c: the Island Titan's hand on the gasbag is the same grip with its own numbers (config.CREATURES.TITAN.GRAB overrides GRIP: a mostly sideways pull, a longer hold, a gentler squeeze).
 // C.6d: the Rime Wyrm's coil is the Kraken's grab with config.CREATURES.WYRM.COIL merged over it (a longer hold, a wider helix, and ANCHOR: it stops the ship).
-const gripCfg = (cr) => (cr && cr.kind === 'titan' ? { ...CR().GRIP, ...CR().TITAN.GRAB } : cr && cr.kind === 'wyrm' ? { ...CR().GRIP, ...CR().WYRM.COIL } : CR().GRIP);
+// C.6e: the Mycelial Mother's tendrils are the same grab with config.CREATURES.MOTHER.GRAB merged over it (a longer hold, and PULL_UP: they pull her UP toward the roof, not down).
+const gripCfg = (cr) => (cr && cr.kind === 'titan' ? { ...CR().GRIP, ...CR().TITAN.GRAB } : cr && cr.kind === 'wyrm' ? { ...CR().GRIP, ...CR().WYRM.COIL } : cr && cr.kind === 'mother' ? { ...CR().GRIP, ...CR().MOTHER.GRAB } : CR().GRIP);
 const isTitan = (cr) => !!cr && cr.kind === 'titan';
 const isWyrm = (cr) => !!cr && cr.kind === 'wyrm';
+const isMother = (cr) => !!cr && cr.kind === 'mother';
 
 // How many tentacles may hold at once: by crew size (GRIPS_BY_CREW), fewer while it is blinded.
 const blindCount = (cr) => cr.parts.filter((p) => p.kind === 'eye' && p.blindT > 0).length;
@@ -115,7 +117,7 @@ export function startGrip(state, cr, ship, dive = false) { // dive: one of the s
   // the limb rears up beside the ship's end (a reach that holds), then the strike follows after WINDUP
   const root = rootOf(cr, limb), rx = c.wx + cr.side * 350, ry = c.wy - 500, d = Math.hypot(rx - root.x, ry - root.y), k = d > limb.reach * 0.97 ? (limb.reach * 0.97) / d : 1;
   reachPart(cr, limb, root.x + (rx - root.x) * k, root.y + (ry - root.y) * k);
-  state.say('setpiece', dive ? CR().DIVE.TEXT : isWyrm(cr) ? 'THE WYRM COILS! ' + g.end + ' ' + g.deck + '!' : 'TENTACLE! ' + g.end + ' ' + g.deck + '!', 6, 2.6);
+  state.say('setpiece', dive ? CR().DIVE.TEXT : isWyrm(cr) ? 'THE WYRM COILS! ' + g.end + ' ' + g.deck + '!' : isMother(cr) ? 'A TENDRIL GROWS DOWN! ' + g.end + ' ' + g.deck + '!' : 'TENTACLE! ' + g.end + ' ' + g.deck + '!', 6, 2.6);
   state.sfxQ.push(['roar']);
   warnCrew(state, cr, ship, g, 'GET OFF THE ' + g.end + ' ' + g.deck + '!');
   return g;
@@ -217,7 +219,7 @@ function stepGrip(state, cr, g, dt) {
       cr.hooks.puff(g.wx, g.wy, '#7a3a5a', 10);
       state.ship.shake = Math.max(state.ship.shake || 0, 0.6);
       if (ship.sim && ship.sim.air) ship.sim.air.shove(G.SHOVE_POWER, g.x); // (the crew on the open decks stagger toward the low end)
-      warnCrew(state, cr, ship, g, isTitan(cr) ? 'PRY ITS FINGERS OFF! (sword, hold Action)' : isWyrm(cr) ? 'THE WYRM HAS YOU! Chip its ice with a hammer, shell it - or HACK THE COIL (sword)!' : 'HACK THE TENTACLE! (sword, hold Action)', [200, 60, 200]);
+      warnCrew(state, cr, ship, g, isTitan(cr) ? 'PRY ITS FINGERS OFF! (sword, hold Action)' : isWyrm(cr) ? 'THE WYRM HAS YOU! Chip its ice with a hammer, shell it - or HACK THE COIL (sword)!' : isMother(cr) ? 'THE MOTHER HAS YOU! Burn the tendril (flame), shell it - or HACK IT FREE (sword, hold Action)!' : 'HACK THE TENTACLE! (sword, hold Action)', [200, 60, 200]);
     } else if (g.t > G.SEIZE_MAX) releaseGrip(cr, g, 'missed');
     return false;
   }
@@ -226,7 +228,7 @@ function stepGrip(state, cr, g, dt) {
   if (!isTitan(cr)) setWrap(limb, coilPath(ship, g, Math.min(1, Math.floor(g.t * 8) / G.WRAP.KEYS), G), G.WRAP.SEGS); // (the coil tightens in stepped keys, no wobble; a stone hand does not coil)
   const root = rootOf(cr, limb);
   const dx = root.x - g.wx, dy = root.y - g.wy, d = Math.hypot(dx, dy) || 1;
-  const sx = (dx / d) * G.SIDEWAYS, sy = 1, sm = Math.hypot(sx, sy), px = sx / sm, py = sy / sm;
+  const sx = (dx / d) * G.SIDEWAYS, sy = G.PULL_UP ? -1 : 1, sm = Math.hypot(sx, sy), px = sx / sm, py = sy / sm; // (the Kraken pulls her DOWN to the sea; the Mycelial Mother pulls her UP to the roof)
   const stretch = Math.max(0, d - limb.reach * G.SLACK);
   const holders = cr.grips.filter((q) => q.ship === ship && q.mode === 'hold');
   const holding = holders.length || 1, D = CR().DIVE, diving = holders.some((q) => q.dive); // (a DIVE: the grips pull harder, and all together up to MAX_TOTAL x TOTAL_MUL)
@@ -313,7 +315,7 @@ export function gripNear(state, ship, p) {
 }
 // The Action button: HACK THE TENTACLE! with a sword (or, slower, a hammer); anything else near it says what is missing. (The Titan's hand: PRY ITS FINGERS OFF!)
 export function actionFor(state, ship, p) {
-  const g = gripNear(state, ship, p), cr = state.creature, G = gripCfg(cr), what = isTitan(cr) ? 'PRY ITS FINGERS OFF!' : isWyrm(cr) ? 'HACK THE COIL!' : 'HACK THE TENTACLE!';
+  const g = gripNear(state, ship, p), cr = state.creature, G = gripCfg(cr), what = isTitan(cr) ? 'PRY ITS FINGERS OFF!' : isWyrm(cr) ? 'HACK THE COIL!' : isMother(cr) ? 'HACK THE TENDRIL!' : 'HACK THE TENTACLE!';
   if (!g) return null;
   if (p.carry === 'sword') return { type: 'hack', obj: g.job, hold: true, time: G.SWORD_TIME, label: what };
   if (p.carry === 'hammer') return { type: 'hack', obj: g.job, hold: true, time: G.HAMMER_TIME, label: what.replace(/!$/, '') + '! (hammer: slow)' };
@@ -342,6 +344,7 @@ export function hacked(state, ship, p, job) {
   if (!g || !live(g)) return;
   releaseGrip(cr, g, 'hack');
   cr.stats.hacks = (cr.stats.hacks || 0) + 1;
+  if (cr.hooks.hacked) cr.hooks.hacked(g, p); // (C.6e: a hack wounds the Mother's tendril as it cuts it free)
   if (state.moment && p) state.moment('creature-freed', { who: [p], data: { creature: cr.name, how: isTitan(cr) ? 'pry' : 'hack' } }); // (the Ship's Book)
   pop(state, g.wx, g.wy - 140, 'FREE!', '#8fe388', 1.6);
   cr.hooks.puff(g.wx, g.wy, '#8fe388', 8);

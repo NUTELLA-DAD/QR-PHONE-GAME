@@ -1036,8 +1036,9 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     const drakeLair = map.creature === 'drake', birdLair = map.creature === 'thunderbird'; // (C.6a: the Ember Forge's lair, the Cinder Drake; C.6b: the Storm Front's, the Thunderbird)
     const titanLair = map.creature === 'titan'; // (C.6c: the Sky Isles' lair, the Island Titan)
     const wyrmLair = map.creature === 'wyrm'; // (C.6d: the Frost Peaks' lair, the Rime Wyrm)
-    const lair = !!map.lair && (wyrmLair ? !!state.env && state.env.id === 'frost' : titanLair ? !!state.env && state.env.id === 'skyisles' : birdLair ? !!state.env && state.env.id === 'storm' : Number.isFinite(state.env && (drakeLair ? state.env.lavaY : state.env.seaY)));
-    const lairWho = wyrmLair ? 'RIME WYRM' : titanLair ? 'ISLAND TITAN' : birdLair ? 'THUNDERBIRD' : drakeLair ? 'DRAKE' : 'KRAKEN'; // (a lair flown with no sea / no lava - a tool forcing another environment - is an ordinary mission: the creature cannot come)
+    const motherLair = map.creature === 'mother'; // (C.6e: the Fungal Depths' lair, the Mycelial Mother)
+    const lair = !!map.lair && (motherLair ? !!state.env && state.env.id === 'fungal' : wyrmLair ? !!state.env && state.env.id === 'frost' : titanLair ? !!state.env && state.env.id === 'skyisles' : birdLair ? !!state.env && state.env.id === 'storm' : Number.isFinite(state.env && (drakeLair ? state.env.lavaY : state.env.seaY)));
+    const lairWho = motherLair ? 'MYCELIAL MOTHER' : wyrmLair ? 'RIME WYRM' : titanLair ? 'ISLAND TITAN' : birdLair ? 'THUNDERBIRD' : drakeLair ? 'DRAKE' : 'KRAKEN'; // (a lair flown with no sea / no lava - a tool forcing another environment - is an ordinary mission: the creature cannot come)
     const lairAlive = lair && state.bossDownLap !== course.lap;
     if ((flagshipAlive || lairAlive) && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS && !(state.ev.warn > 0)) {
       state.say('objective', lairAlive ? 'SLAY THE ' + lairWho + ' FIRST!' : 'SINK THE FLAGSHIP FIRST!', 4, 2);
@@ -1093,6 +1094,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       const p = mapPlan(state, 0.5);
       const h = p.dx > 300 ? 'AHEAD' : p.dx < -300 ? 'BEHIND - COME ABOUT!' : ''; // (p.dx: how far ahead of her bow the way goes; behind her, turning round is quicker than backing up)
       const v = p.dy < -250 ? 'UP (pump the gas!)' : p.dy > 250 ? 'DOWN (vent the gas!)' : '';
+      if (course.map.lair && course.map.creature === 'mother') return h || v ? "Way to the Mother's lair: " + [v, h].filter(Boolean).join(' and ') : 'The lair! Hold her under the dark dome - and keep clear of the rock pillars.';
       if (course.map.lair) { const dr = course.map.creature === 'drake', tb = course.map.creature === 'thunderbird', ti = course.map.creature === 'titan', wy = course.map.creature === 'wyrm'; return h || v ? 'Way to the ' + (wy ? "Wyrm's" : ti ? "Titan's" : tb ? "Thunderbird's" : dr ? "Drake's" : "Kraken's") + ' lair: ' + [v, h].filter(Boolean).join(' and ') : wy ? 'The lair! Keep clear of the ice cliffs - the Wyrm lies under them.' : ti ? 'The lair! Keep her high over the Titan, clear of its hands.' : tb ? 'The lair! Hold her steady in the storm, clear of the spires.' : dr ? 'The lair! Keep her over the shelf, clear of the lava.' : 'The lair! Keep her over the water, clear of the sea.'; }
       return h || v ? (course.map.open ? 'Next outpost: ' : 'Way to the beacon: ') + [v, h].filter(Boolean).join(' and ') : course.map.open ? 'Outpost below - guns and bombs!' : '';
     }

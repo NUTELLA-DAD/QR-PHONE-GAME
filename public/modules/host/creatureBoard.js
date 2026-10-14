@@ -28,6 +28,7 @@ function frame(m) {
   const s = m.segs[0];
   let top = { x: s.x, y: s.y }, d = { x: Math.cos(s.ang), y: Math.sin(s.ang) };
   if (d.y < 0) { top = { x: s.x + d.x * s.len, y: s.y + d.y * s.len }; d = { x: -d.x, y: -d.y }; }
+  if (m.id === 'cap') { top = { x: s.x + Math.cos(s.ang) * s.len, y: s.y + Math.sin(s.ang) * s.len }; d = { x: -Math.cos(s.ang), y: -Math.sin(s.ang) }; } // (C.6e: the Mycelial Mother's cap hangs from the roof: its "top" is the rounded UNDERSIDE a boarder walks, d points up the axis toward the roof)
   return { top, d, l: { x: d.y, y: -d.x }, R: s.r, len: s.len };
 }
 const smax = (F) => F.R * Math.PI / 2 + F.len * 0.98;
@@ -59,7 +60,7 @@ function nearestS(F, wx, wy) {
 // ---- the landing strip ---- (people only: a bot would stand on it for ever, so it falls past as it always did and is carried back to the medical bay; C.5 teaches bots to board)
 export function creatureSurfaces(state, ship) {
   const cr = state.creature;
-  if (!cr || cr.mode !== 'idle' || !state.ships.includes(ship) || ship.ctx.wreck || cr.kind === 'titan' || (cr.kind === 'drake' && !drakeBoardable(cr)) || (cr.kind === 'thunderbird' && !birdBoardable(cr))) return [];
+  if (!cr || cr.mode !== 'idle' || !state.ships.includes(ship) || ship.ctx.wreck || cr.kind === 'titan' || cr.kind === 'mother' || (cr.kind === 'drake' && !drakeBoardable(cr)) || (cr.kind === 'thunderbird' && !birdBoardable(cr))) return [];
   const m = mantleOf(cr);
   if (!m) return [];
   const F = frame(m), B = BR();
@@ -96,7 +97,7 @@ export function creatureAnchor(state, wx, wy) {
     const cc = Math.cos(s.ang), ss = Math.sin(s.ang);
     return { x: s.x + cc * lu - ss * lv, y: s.y + ss * lu + cc * lv };
   };
-  const body = p.kind !== 'tentacle' && p.kind !== 'wing' && p.kind !== 'neck' && p.kind !== 'tail' && p.kind !== 'talon' && cr.kind !== 'titan' && (cr.kind !== 'drake' || drakeBoardable(cr)) && (cr.kind !== 'wyrm' || p.kind === 'mantle'); // (the Rime Wyrm: only its collar is a place to climb aboard; the rest is an anchor) (the Titan's body is only an anchor: its island is the place to land) (reel right in to the body and you climb aboard; a limb is only an anchor)
+  const body = p.kind !== 'tentacle' && p.kind !== 'wing' && p.kind !== 'neck' && p.kind !== 'tail' && p.kind !== 'talon' && cr.kind !== 'titan' && (cr.kind !== 'drake' || drakeBoardable(cr)) && (cr.kind !== 'wyrm' || p.kind === 'mantle') && (cr.kind !== 'mother' || p.kind === 'mantle'); // (the Mycelial Mother: only her cap; reel in to it and you climb onto its underside) (the Rime Wyrm: only its collar is a place to climb aboard; the rest is an anchor) (the Titan's body is only an anchor: its island is the place to land) (reel right in to the body and you climb aboard; a limb is only an anchor)
   return { kind: 'enemy', creature: cr, part: p, pos, surf: body, board: body ? (pl) => { const q = pos() || { x: wx, y: wy }; return boardAt(state, shipOf(state, pl), pl, q.x, q.y); } : null };
 }
 
@@ -119,7 +120,7 @@ export function boardAt(state, ship, p, wx, wy) {
   p.tossed = false;
   p.hook = null;
   p.noLand = 0;
-  if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, cr.kind === 'thunderbird' ? 'YOU ARE ON THE THUNDERBIRD! CUT THE GIZZARD with a sword. JUMP to leap off.' : cr.kind === 'drake' ? 'YOU ARE ON THE DRAKE! HACK THE SCALES by its heart (sword), then STRIKE THE HEART. JUMP to leap off.' : cr.kind === 'wyrm' ? 'YOU ARE ON THE RIME WYRM! Walk down its collar to the pale UNDERBELLY and STRIKE it with a sword. JUMP to leap off.' : 'YOU ARE ON THE KRAKEN! BLIND IT at an eye, STRIKE THE HEART with a sword. JUMP to leap off.', [60, 40, 60]);
+  if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, cr.kind === 'thunderbird' ? 'YOU ARE ON THE THUNDERBIRD! CUT THE GIZZARD with a sword. JUMP to leap off.' : cr.kind === 'drake' ? 'YOU ARE ON THE DRAKE! HACK THE SCALES by its heart (sword), then STRIKE THE HEART. JUMP to leap off.' : cr.kind === 'mother' ? 'YOU ARE ON THE MOTHER\'S CAP! Walk to the SPORE HEART at the bottom of it (once it opens, in phase 3) and STRIKE it with a sword. JUMP to leap off.' : cr.kind === 'wyrm' ? 'YOU ARE ON THE RIME WYRM! Walk down its collar to the pale UNDERBELLY and STRIKE it with a sword. JUMP to leap off.' : 'YOU ARE ON THE KRAKEN! BLIND IT at an eye, STRIKE THE HEART with a sword. JUMP to leap off.', [60, 40, 60]);
   pop(state, q.x, q.y - 160, 'BOARDED!', '#ffd23f', 1.2);
   return true;
 }
@@ -170,7 +171,7 @@ function actFor(state, p) {
   const near = (part) => { const m = segMid(part.segs[0]); return Math.hypot(m.x - p.x, m.y - p.y) <= (part.kind === 'heart' ? B.HEART_REACH : B.EYE_REACH) + part.segs[0].r; };
   if (heart && near(heart)) {
     const bird = cr.kind === 'thunderbird';
-    if (p.carry === 'sword') return { type: 'strike', obj: job(heart, 'strike'), hold: true, time: bird ? config.CREATURES.THUNDERBIRD.BOARD.CUT_TIME : cr.kind === 'drake' ? config.CREATURES.DRAKE.BOARD.HEART_TIME : cr.kind === 'wyrm' ? config.CREATURES.WYRM.BOARD.HEART_TIME : B.HEART_TIME, label: bird ? 'CUT THE GIZZARD!' : cr.kind === 'wyrm' ? 'STRIKE THE UNDERBELLY!' : 'STRIKE THE HEART!', part: heart };
+    if (p.carry === 'sword') return { type: 'strike', obj: job(heart, 'strike'), hold: true, time: bird ? config.CREATURES.THUNDERBIRD.BOARD.CUT_TIME : cr.kind === 'drake' ? config.CREATURES.DRAKE.BOARD.HEART_TIME : cr.kind === 'wyrm' ? config.CREATURES.WYRM.BOARD.HEART_TIME : cr.kind === 'mother' ? config.CREATURES.MOTHER.BOARD.HEART_TIME : B.HEART_TIME, label: bird ? 'CUT THE GIZZARD!' : cr.kind === 'wyrm' ? 'STRIKE THE UNDERBELLY!' : cr.kind === 'mother' ? 'STRIKE THE SPORE HEART!' : 'STRIKE THE HEART!', part: heart };
     return { type: 'need', label: bird ? 'Need a sword to cut the gizzard!' : 'Need a sword to strike the heart!' };
   }
   if (!heart && cr.kind === 'drake') { const a = scalesAction(state, p); if (a) return a; } // (the Drake's heart is behind its breast scales: hack them off first)
@@ -227,7 +228,7 @@ export function boarderStep(state, ship, p, dt, holdOk) {
         cr.stats.blinded = (cr.stats.blinded || 0) + 1;
         if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, 'You blinded it! Its grabs slow down.', [30, 40, 30]);
       } else {
-        cr.hooks.hurt({ part, seg: 0 }, cr.kind === 'wyrm' ? config.CREATURES.WYRM.BOARD.HEART_DMG : B.HEART_DMG, { who: p.id, src: 'sword' });
+        cr.hooks.hurt({ part, seg: 0 }, cr.kind === 'wyrm' ? config.CREATURES.WYRM.BOARD.HEART_DMG : cr.kind === 'mother' ? config.CREATURES.MOTHER.BOARD.HEART_DMG : B.HEART_DMG, { who: p.id, src: 'sword' });
         cr.stats.struck = (cr.stats.struck || 0) + 1;
         pop(state, at.x, at.y - 140, 'STRIKE!', '#ff5a1f', 1.8);
         state.sfxQ.push(['sever']);

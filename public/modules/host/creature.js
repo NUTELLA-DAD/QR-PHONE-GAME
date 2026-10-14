@@ -501,14 +501,14 @@ export function segDist(s, x, y) {
   const r = s.r + ((s.r1 ?? s.r) - s.r) * t;
   return Math.hypot(x - (s.x + ex * t), y - (s.y + ey * t)) - r;
 }
-export function hitInfo(body, x, y, r = 0) {
+export function hitInfo(body, x, y, r = 0, seen = null) { // seen(part, segment): false = that bit cannot be found (C.6e: the Mycelial Mother in the dark)
   let best = null, bd = Infinity, bp = 9, bi = -1;
   for (const p of body.parts) {
     if (p.dead || p.hidden) continue;
     const prio = PRIO[p.kind] ?? 2;
     for (let i = 0; i < p.segs.length; i++) {
       const d = segDist(p.segs[i], x, y);
-      if (d > r) continue;
+      if (d > r || (seen && !seen(p, i))) continue;
       if (prio < bp || (prio === bp && d < bd)) { best = p; bd = d; bp = prio; bi = i; }
     }
   }

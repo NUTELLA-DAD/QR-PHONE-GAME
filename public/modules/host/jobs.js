@@ -75,7 +75,7 @@ export function createJobFinder(state) {
     const out = [];
     const add = (kind, obj, d, x, extra, label) => out.push({ kind, obj, d, x, urgency: J.URGENCY[kind], label: label || `${WORD[kind]} - ${roomName(d, x)}`, max: kind === 'fight' ? 2 : 1, ...extra });
     for (const b of state.boarders) if (!b.fall && b.hp > 0) { const s = spot(b); add('fight', b, s.d, b.x); }
-    if (state.creature) for (const g of gripJobs(state, mainShip(state))) add('hack', g.obj, g.d, g.x, {}, (g.tool === 'hammer' ? `CHIP THE ICE! (hammer) - ${roomName(g.d, g.x)}` : state.creature.kind === 'wyrm' ? `HACK THE COIL! - ${roomName(g.d, g.x)}` : state.creature.kind === 'titan' ? `PRY ITS FINGERS OFF! - ${roomName(g.d, g.x)}` : `HACK THE TENTACLE! - ${roomName(g.d, g.x)}`)); // (a giant creature holds the ship: creatureGrip.js)
+    if (state.creature) for (const g of gripJobs(state, mainShip(state))) add('hack', g.obj, g.d, g.x, {}, (g.tool === 'hammer' ? `CHIP THE ICE! (hammer) - ${roomName(g.d, g.x)}` : state.creature.kind === 'wyrm' ? `HACK THE COIL! - ${roomName(g.d, g.x)}` : state.creature.kind === 'mother' ? `HACK THE TENDRIL! (or burn it) - ${roomName(g.d, g.x)}` : state.creature.kind === 'titan' ? `PRY ITS FINGERS OFF! - ${roomName(g.d, g.x)}` : `HACK THE TENTACLE! - ${roomName(g.d, g.x)}`)); // (a giant creature holds the ship: creatureGrip.js)
     for (const q of Object.values(state.players)) if (q !== p && q.ko > 0 && !q.fall && q.conn == null && q.d != null) add('revive', q, q.d, q.x, {}, `REVIVE ${q.name} - ${roomName(q.d, q.x)}`);
     // Crew health: down to your last heart (and the ship has a medical bay): the arrow points there, ahead of nearly everything (the cot heals a heart every few seconds).
     const HC = config.HEALTH, mb = L.medbay;

@@ -14,12 +14,14 @@ import { createDrake } from './creatures/drake.js';
 import { createBird } from './creatures/thunderbird.js';
 import { createTitan } from './creatures/titan.js';
 import { createWyrm } from './creatures/wyrm.js';
+import { createMother } from './creatures/mother.js';
 import { stepBody, hitInfo, severPart, setMouth, nearestFreeLimb, reachPart, releasePart, exposeHeart, makeRng, segDist } from './creature.js';
 import { thinkAttacks, hurtGrips, actionFor, blow, hacked, jobsOf, gripJobs, gripNear } from './creatureGrip.js';
 import { setupDrake, stepDrake, drakeHit, drakeMul, drakeWays, drakeDied, poolWhy, perchAction, perchBlow, perchHacked, perchJobs, perchObjects } from './creatureDrake.js';
 import { setupBird, stepBird, birdHit, birdMul, birdWays, birdDied, birdPerchAction, birdPerchBlow, birdPerchHacked, birdPerchJobs, birdPerchObjects } from './creatureBird.js';
 import { setupTitan, stepTitan, titanHit, titanWays, titanDied } from './creatureTitan.js';
 import { setupWyrm, stepWyrm, wyrmArmour, wyrmWays, wyrmDied, wyrmAction, wyrmBlow, wyrmHacked, wyrmChipObjects, wyrmChipJobs, wyrmHoldBack } from './creatureWyrm.js';
+import { setupMother, stepMother, burning, motherSeen, motherArmour, motherHit, motherWays, motherDied, motherFlame } from './creatureMother.js';
 import { creatureSurfaces, boardCheck, boarderStep, decayJobs } from './creatureBoard.js';
 import { stepHarpoons } from './creatureTow.js';
 import { stepBreach, seaLevel } from './creatureBreach.js';
@@ -48,6 +50,7 @@ const tentaclesGone = (cr) => tentacles(cr).every((p) => p.severed || p.dead);
 // The part under a round thing of radius r at world (x, y): { part, seg } or null (only while it can be hurt).
 export function creatureHit(state, x, y, r = 0) {
   const cr = state.creature;
+  if (cr && cr.kind === 'mother') return vulnerable(cr) ? hitInfo(cr, x, y, r, (p, i) => motherSeen(state, cr, p, i)) : null; // (C.6e: in the dark a shell finds only what a beam holds, or a tendril in the ship's glow)
   return vulnerable(cr) ? hitInfo(cr, x, y, r) : null;
 }
 // Is some part of it touching a round thing at (x, y)? (a mine's trigger)
@@ -58,15 +61,16 @@ export const creatureTouch = (state, x, y, r = 0) => !!creatureHit(state, x, y, 
 export function hurtCreature(state, hit, dmg, opts = {}) {
   const cr = state.creature;
   if (!vulnerable(cr) || !hit || hit.part.dead || !(dmg > 0)) return null;
-  const H = CR().HURT, p = hit.part, t = p.tgt, drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', wyrm = cr.kind === 'wyrm';
+  const H = CR().HURT, p = hit.part, t = p.tgt, drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', wyrm = cr.kind === 'wyrm', mother = cr.kind === 'mother';
   if (wyrm) { dmg = wyrmArmour(state, cr, p, hit.seg, dmg, opts.src || 'shell'); if (!(dmg > 0)) return null; } // (C.6d: the Rime Wyrm's ice armour: shells bounce, flame melts, a bare segment takes it all)
+  if (mother) dmg = motherArmour(state, cr, p, hit.seg, dmg, opts.src || 'shell'); // (C.6e: flame is triple against a tendril, a plain shell only a quarter against her spongy cap)
   if (t && t.lit > 0) dmg *= 1 + config.SEARCHLIGHT.LIT_DAMAGE; // (anything in a searchlight beam takes more)
   if (cr.breach && cr.breach.exposed) dmg *= CR().BREACH.BONUS; // (hanging in the air with its heart and beak open)
   if (drake) dmg *= drakeMul(cr, p, opts.src || 'shell'); // (dazed after a swoop, coughing after a choke, flak on a wing)
   if (bird) dmg *= birdMul(state, cr, p, opts.src || 'shell'); // (dazed after a pass, the glowing gizzard, a drunk lightning bolt fired back by the coil)
   p.hp = Math.max(0, p.hp - dmg);
   p.hit = CR().HIT_FLASH;
-  cr.hp = Math.max(0, cr.hp - dmg * ((drake ? CR().DRAKE.POOL : bird ? CR().THUNDERBIRD.POOL : titan ? CR().TITAN.POOL : wyrm ? CR().WYRM.POOL : H.POOL)[p.kind] ?? 1));
+  cr.hp = Math.max(0, cr.hp - (mother && opts.src === 'hack' ? 0 : dmg) * ((drake ? CR().DRAKE.POOL : bird ? CR().THUNDERBIRD.POOL : titan ? CR().TITAN.POOL : wyrm ? CR().WYRM.POOL : mother ? CR().MOTHER.POOL : H.POOL)[p.kind] ?? 1));
   const st = cr.stats, src = opts.src || 'shell';
   st.dmg += dmg;
   st.by[src] = (st.by[src] || 0) + dmg;
@@ -86,9 +90,10 @@ export function hurtCreature(state, hit, dmg, opts = {}) {
   if (drake) drakeHit(state, cr, p, dmg, src, opts); // (chokes, driving it off the perch, a torn wing sends it crashing)
   if (bird) birdHit(state, cr, p, dmg, src, opts); // (zaps at the gizzard, mortar hits on the spire, driving it off the perch, a plucked wing)
   if (titan) titanHit(state, cr, p, dmg, src, opts); // (an arm shelled off)
+  if (mother) motherHit(state, cr, p, dmg, src, opts, hit.seg); // (C.6e: a tendril set alight, an eye put out, a mortar shell on her cap)
   if (!cr.dying) { // how it ends (cr.stats.win): every tentacle cut off, fed enough bombs, the heart struck, or the pool empty
-    const ways = drake ? drakeWays(cr, p, src) : bird ? birdWays(cr, p, src) : titan ? titanWays(cr, p, src) : wyrm ? wyrmWays(cr, p, src) : [];
-    if (!drake && !bird && !titan && !wyrm) {
+    const ways = drake ? drakeWays(cr, p, src) : bird ? birdWays(cr, p, src) : titan ? titanWays(cr, p, src) : wyrm ? wyrmWays(cr, p, src) : mother ? motherWays(cr, p, src) : [];
+    if (!drake && !bird && !titan && !wyrm && !mother) {
       if (tentaclesGone(cr)) ways.push('sever');
       if (cr.fed >= CR().MOUTH.FED) ways.push('mouth');
       if (p.kind === 'heart' && src === 'sword' && (p.hp <= 0 || cr.hp <= 0)) ways.push('board');
@@ -119,7 +124,7 @@ function sever(state, cr, p, i, opts) {
   if (!gone.length) return false;
   const K = CR().CHUNK, h = cr.hooks, o = gone[0];
   cr.stats.severed += 1;
-  cr.chunks.push({ cx: o.x, cy: o.y, a: 0, vx: (h.rng() - 0.5) * K.KICK * 2, vy: -K.KICK * 0.8, w: (h.rng() - 0.5) * K.SPIN * 2, t: 0, part: { kind: p.kind, segs: gone.map((s) => ({ ...s, x: s.x - o.x, y: s.y - o.y })), side: p.side, lit: p.lit, hit: 0, severed: false, ...(cr.kind === 'thunderbird' ? { art: 'thunderbird' } : cr.kind === 'titan' ? { art: 'titan' } : {}) } });
+  cr.chunks.push({ cx: o.x, cy: o.y, a: 0, vx: (h.rng() - 0.5) * K.KICK * 2, vy: -K.KICK * 0.8, w: (h.rng() - 0.5) * K.SPIN * 2, t: 0, part: { kind: p.kind, segs: gone.map((s) => ({ ...s, x: s.x - o.x, y: s.y - o.y })), side: p.side, lit: p.lit, hit: 0, severed: false, ...(cr.kind === 'thunderbird' ? { art: 'thunderbird' } : cr.kind === 'titan' ? { art: 'titan' } : cr.kind === 'mother' ? { art: 'mother', burn: p.burn ? gone.map((_, k) => p.burn[i + k] || 0) : null } : {}) } });
   while (cr.chunks.length > K.MAX) cr.chunks.shift();
   h.puff(o.x, o.y, '#7a3a5a', 14);
   h.puff(o.x, o.y, '#e8dcc0', 6);
@@ -152,8 +157,8 @@ function die(state, cr, why, opts) {
   if (state.moment) state.moment('creature-win', { who: opts.who ? [opts.who] : [], where: null, data: { creature: cr.name, kind: cr.kind, way: why } }); // (the Ship's Book: which creature, how it ended, and the final blow's owner)
   pop(state, cr.x, cr.y - 700, 'boss', '#ff5a1f', 2.2);
   for (let k = 0; k < 6; k++) h.puff(cr.x + (h.rng() - 0.5) * 1800, cr.y - 300 + (h.rng() - 0.5) * 900, '#7a3a5a', 18);
-  const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', wyrm = cr.kind === 'wyrm', WT = drake ? CR().DRAKE.WIN_TEXT : bird ? CR().THUNDERBIRD.WIN_TEXT : titan ? CR().TITAN.WIN_TEXT : wyrm ? CR().WYRM.WIN_TEXT : CR().WIN_TEXT;
-  state.say('objective', (WT[why] || 'SLAIN!') + ' ' + cr.name + (drake ? CR().DRAKE.DEATH_TEXT : bird ? CR().THUNDERBIRD.DEATH_TEXT : titan ? CR().TITAN.DEATH_TEXT : wyrm ? CR().WYRM.DEATH_TEXT : ' SINKS BENEATH THE WAVES!'), null, CR().FINALE.BANNER); // the final banner: how it ended, then what happens to it
+  const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', wyrm = cr.kind === 'wyrm', mother = cr.kind === 'mother', WT = drake ? CR().DRAKE.WIN_TEXT : bird ? CR().THUNDERBIRD.WIN_TEXT : titan ? CR().TITAN.WIN_TEXT : wyrm ? CR().WYRM.WIN_TEXT : mother ? CR().MOTHER.WIN_TEXT : CR().WIN_TEXT;
+  state.say('objective', (WT[why] || 'SLAIN!') + ' ' + cr.name + (drake ? CR().DRAKE.DEATH_TEXT : bird ? CR().THUNDERBIRD.DEATH_TEXT : titan ? CR().TITAN.DEATH_TEXT : wyrm ? CR().WYRM.DEATH_TEXT : mother ? CR().MOTHER.DEATH_TEXT : ' SINKS BENEATH THE WAVES!'), null, CR().FINALE.BANNER); // the final banner: how it ended, then what happens to it
   state.sfxQ.push(['roar']);
   state.ship.shake = Math.max(state.ship.shake || 0, 1.5);
   for (const p of Object.values(state.players)) if (!p.bot && h.phoneFx) h.phoneFx(p, WT[why] || 'SLAIN!', [60, 40, 60, 40, 300]);
@@ -161,6 +166,7 @@ function die(state, cr, why, opts) {
   if (bird) birdDied(state, cr); // (no more weight on her bag, no more bolts called)
   if (titan) titanDied(state, cr); // (the boulders are gone; ground.js drops whoever stands on its island)
   if (wyrm) wyrmDied(state, cr); // (no more breath, no more coil)
+  if (mother) motherDied(state, cr); // (the spore clouds thin away; no more wing beats)
 }
 
 // ---- one function per weapon ---------------------------------------------------------------------------------------------------------------------------------
@@ -174,7 +180,7 @@ export function creatureShell(state) {
     const hit = creatureHit(state, s.x, s.y, H.TOUCH) || creatureHit(state, s.x - (s.vx || 0) / 120, s.y - (s.vy || 0) / 120, H.TOUCH); // (and halfway back along the step it flew)
     if (!hit) continue;
     s.life = 0;
-    hurtCreature(state, hit, config.GUNS.DAMAGE * H.SHELL_MUL * shellMul(s, tgtOf(hit.part)), { who: s.owner, src: s.kind === 'mortar' && state.creature.kind === 'thunderbird' ? 'mortar' : 'shell' }); // (a mortar shell on the resting Thunderbird is its own kind of blow)
+    hurtCreature(state, hit, config.GUNS.DAMAGE * H.SHELL_MUL * shellMul(s, tgtOf(hit.part)), { who: s.owner, src: s.kind === 'mortar' && (state.creature.kind === 'thunderbird' || state.creature.kind === 'mother') ? 'mortar' : 'shell' }); // (a mortar shell on the resting Thunderbird, or on the Mother's cap, is its own kind of blow)
     state.puffs.push({ x: s.x, y: s.y, vx: 0, vy: -30, life: 0.3, max: 0.3, c: '#ffcf40' });
   }
 }
@@ -230,12 +236,14 @@ export function creatureBurn(state, inCone, origin, dt, who) {
   const cr = state.creature;
   if (!vulnerable(cr)) return;
   const dmg = CR().HURT.FLAME_DPS * dt;
+  if (cr.kind === 'mother') motherFlame(state, cr, inCone, dt, who); // (C.6e: flame in a spore cloud burns it off, and lights the decks under it)
   for (const p of [...cr.parts]) {
     if (p.dead || p.hidden) continue;
     let best = null, bd = Infinity;
     for (let i = 0; i < p.segs.length; i++) {
       const s = p.segs[i], m = segMid(s);
       if (!inCone(m.x, m.y, s.r)) continue;
+      if (cr.kind === 'mother' && !motherSeen(state, cr, p, i)) continue; // (in the dark flame finds only what a beam holds, or a tendril in the ship's glow)
       const d = Math.hypot(m.x - origin.x, m.y - origin.y);
       if (d < bd) { bd = d; best = i; }
     }
@@ -309,6 +317,18 @@ export function creatureTargets(state, list = [], only = null, gunType = 'any') 
   for (const p of cr.parts) {
     if (!alivePart(p) || (only ? p.kind !== only : forcedSkip(cr, p, gunType))) continue;
     const t = tgtOf(p);
+    if (cr.kind === 'mother') { // C.6e: every living bit is listed (the searchlight has to find it) but flagged dark until a beam holds it: aim.js lets no gun aim at a dark one
+      let seg = 0, rank = p.kind === 'eye' ? 3 : p.kind === 'heart' ? 3.4 : 6;
+      if (p.kind === 'tentacle') { // the seen segment nearest the aim point (else the nearest at all)
+        if (p.severed) continue;
+        let bd = Infinity;
+        p.segs.forEach((s, i) => { const m = segMid(s), d = Math.hypot(m.x - ax, m.y - ay) + (motherSeen(state, cr, p, i) ? 0 : 1e5); if (d < bd) { bd = d; seg = i; } });
+        rank = burning(p) ? 4 : p.ctl.mode !== 'idle' ? 4.4 : 6.8;
+      }
+      const i = Math.min(seg, p.segs.length - 1);
+      list.push({ kind: 'creaturePart', obj: t, part: p, seg: i, r: Math.max(30, p.segs[i].r), rank, dark: !motherSeen(state, cr, p, i), at: () => segMid(p.segs[Math.min(i, p.segs.length - 1)]) });
+      continue;
+    }
     if (p.kind === 'tentacle' || (drake && p.limb)) {
       if (p.severed) continue; // (a stump is not worth a shell)
       if (wyrm && p.ice) { // C.6d: the Rime Wyrm's body is armoured: a target for each of the nearest few BARE segments (a shell on ice only bounces), else the nearest iced one
@@ -334,7 +354,7 @@ export function creatureTargets(state, list = [], only = null, gunType = 'any') 
   return list;
 }
 // What a harpoon gun may aim at: the exhausted creature's body (phase 3), whatever FORCE_WIN hides from the other guns.
-export const creatureTowTargets = (state) => (state.creature && state.creature.kind !== 'thunderbird' && state.creature.kind !== 'titan' && (state.creature.kind === 'drake' ? state.creature.drake.mode === 'crawl' : state.creature.phase >= 3) ? creatureTargets(state, [], state.creature.kind === 'wyrm' ? 'head' : 'mantle') : []); // (the Drake: once it crawls; the Thunderbird is never towed)
+export const creatureTowTargets = (state) => (state.creature && state.creature.kind !== 'thunderbird' && state.creature.kind !== 'titan' && state.creature.kind !== 'mother' && (state.creature.kind === 'drake' ? state.creature.drake.mode === 'crawl' : state.creature.phase >= 3) ? creatureTargets(state, [], state.creature.kind === 'wyrm' ? 'head' : 'mantle') : []); // (the Drake: once it crawls; the Thunderbird is never towed)
 // The phone radar's blips (spotter.js): the body, the beak and every tentacle.
 export function creatureRadar(state) {
   const cr = state.creature;
@@ -342,6 +362,7 @@ export function creatureRadar(state) {
   const out = [];
   for (const p of cr.parts) {
     if (!alivePart(p) || (p.kind !== 'tentacle' && p.kind !== 'mantle' && p.kind !== 'mouth' && p.kind !== 'wing')) continue;
+    if (cr.kind === 'mother' && !motherSeen(state, cr, p, p.kind === 'tentacle' ? p.segs.length >> 1 : 0)) continue; // (the radar is no way around the dark: she must be lit)
     out.push({ obj: tgtOf(p), pos: () => segMid(p.segs[p.kind === 'tentacle' ? p.segs.length >> 1 : 0] || p.segs[0]) });
   }
   return out;
@@ -395,7 +416,8 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
   const lavaY = () => (state.env && Number.isFinite(state.env.lavaY) ? state.env.lavaY : null);
   const titanHome = () => envIdOf(state) === CR().TITAN.ENV && !!(state.course && state.course.map && state.course.map.creature === 'titan'); // (the Island Titan stands on the Titan lair's plain: maps.js buildTitanLairMap)
   const wyrmHome = () => envIdOf(state) === CR().WYRM.ENV && !!(state.course && state.course.map && state.course.map.creature === 'wyrm' && (state.course.map.cliffs || []).length); // (the Rime Wyrm lies under the ice cliffs of the Wyrm lair: maps.js buildWyrmLairMap)
-  const homeOk = (kind) => (kind === 'wyrm' ? wyrmHome() : kind === 'titan' ? titanHome() : kind === 'thunderbird' ? envIdOf(state) === CR().THUNDERBIRD.ENV : kind === 'drake' ? lavaY() !== null && envIdOf(state) === CR().DRAKE.ENV : seaY() !== null);
+  const motherHome = () => envIdOf(state) === CR().MOTHER.ENV && !!(state.course && state.course.map && state.course.map.creature === 'mother' && state.course.map.dome); // (the Mycelial Mother clings to the roof of the Mother lair's cavern: maps.js buildMotherLairMap)
+  const homeOk = (kind) => (kind === 'mother' ? motherHome() : kind === 'wyrm' ? wyrmHome() : kind === 'titan' ? titanHome() : kind === 'thunderbird' ? envIdOf(state) === CR().THUNDERBIRD.ENV : kind === 'drake' ? lavaY() !== null && envIdOf(state) === CR().DRAKE.ENV : seaY() !== null);
   // THE CINDER DRAKE (C.6a): it flies in from off screen, untouchable for SPAWN.ARRIVE s, then circles; creatureDrake.js is its brain.
   const spawnDrake = () => {
     if (state.creature || !homeOk('drake')) return state.creature || null;
@@ -512,7 +534,35 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
     return cr;
   };
 
+  // THE MYCELIAL MOTHER (C.6e): she clings to the roof of the lair's dark cavern, asleep and untouchable until the ship comes near; creatureMother.js is her brain.
+  const spawnMother = () => {
+    if (state.creature || !homeOk('mother')) return state.creature || null;
+    const ship = mainShip(state), D = CR().MOTHER, dome = state.course.map.dome;
+    const side = ship.pose.f || 1;
+    const cr = createMother(dome.x, dome.roofY + D.CAP_DROP, CR().SEED, { f: 1 });
+    const m = hpMul();
+    for (const p of cr.parts) {
+      p.hp = p.maxHp = Math.max(1, Math.round(p.maxHp * m * (D.HP_MUL[p.kind] ?? 1)));
+      p.lit = true;
+    }
+    cr.hp = cr.maxHp = Math.max(1, Math.round(D.HP * m * D.HP_MUL.pool));
+    Object.assign(cr, { name: D.NAME, mode: 'surfacing', dying: false, age: 0, sinkT: 0, side, base: { x: cr.x, y: cr.y }, chunks: [], stats: { dmg: 0, by: {}, parts: {}, severed: 0, chomps: 0, fed: 0, win: null }, ai: { breather: 0 } });
+    Object.assign(cr, { phase: 1, fed: 0, mouthWin: null, phaseDy: 0 });
+    Object.defineProperty(cr, 'hooks', { value: { state, puff, credit, rng, phoneFx, hurt: (hit, dmg, opts) => hurtCreature(state, hit, dmg, opts), hurtPool: (dmg, src, who) => hurtPool(state, dmg, src, { who }), sever: (p, seg, opts = {}) => sever(state, cr, p, seg, opts), hacked: (g, p) => { if (g.limb.dead || g.limb.severed) return; hurtCreature(state, { part: g.limb, seg: Math.max(1, Math.floor(g.limb.segs.length * 0.4)) }, g.limb.maxHp * D.GRAB.HACK_DMG, { who: p && p.id, src: 'hack' }); } }, enumerable: false });
+    Object.defineProperty(cr, 'grips', { value: [], enumerable: false, writable: true });
+    Object.defineProperty(cr, 'harpoons', { value: [], enumerable: false });
+    cr.slap = null;
+    cr.breach = null;
+    cr.breachDy = 0;
+    cr.tvx = 0;
+    cr.hooked = false;
+    setupMother(state, cr, ship);
+    state.creature = cr;
+    return cr;
+  };
+
   const spawn = (kind = 'kraken') => {
+    if (kind === 'mother') return spawnMother();
     if (kind === 'wyrm') return spawnWyrm();
     if (kind === 'titan') return spawnTitan();
     if (kind === 'drake') return spawnDrake();
@@ -576,10 +626,16 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
     }
     const cr = state.creature;
     if (!cr) return;
-    const ship = mainShip(state), S = CR().SPAWN, mid = shipMid(ship), drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', wyrm = cr.kind === 'wyrm';
+    const ship = mainShip(state), S = CR().SPAWN, mid = shipMid(ship), drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', wyrm = cr.kind === 'wyrm', mother = cr.kind === 'mother';
     cr.age += dt;
     let dive = 0;
-    if (wyrm) { // the Wyrm cracks a cliff and erupts (creatureWyrm.js); dead, it collapses into the cliff
+    if (mother) { // the Mother clings to the roof (creatureMother.js); dead, she withers and falls
+      stepMother(state, cr, ship, dt);
+      if (cr.mode === 'dying') {
+        cr.sinkT += dt;
+        dive = CR().MOTHER.SPAWN.SINK_DEEP * smooth(cr.sinkT / CR().MOTHER.SPAWN.SINK);
+      }
+    } else if (wyrm) { // the Wyrm cracks a cliff and erupts (creatureWyrm.js); dead, it collapses into the cliff
       stepWyrm(state, cr, ship, dt);
       dive = cr.wyrm.dive;
       if (cr.mode === 'dying') {
@@ -628,13 +684,13 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
     cr.vx = cr.vy = 0;
     if (cr.mode === 'dying') state.slow = cr.sinkT < CR().FINALE.SLOW_FOR ? CR().FINALE.SLOW : 1; // (the last blow plays in slow motion: main.js runs the sim at this speed)
     if (vulnerable(cr)) creatureShell(state);
-    if (drake || bird || titan || wyrm) { /* (its attacks are in stepDrake / stepBird / stepTitan / stepWyrm) */ } else if (cr.mode === 'idle') think(cr, dt, ship);
+    if (drake || bird || titan || wyrm || mother) { /* (its attacks are in stepDrake / stepBird / stepTitan / stepWyrm / stepMother) */ } else if (cr.mode === 'idle') think(cr, dt, ship);
     else if (cr.grips.length || cr.slap) thinkAttacks(state, cr, ship, dt); // (sinking: the limbs that held her let go and the records are cleared)
     stepHarpoons(state, cr, dt);
     decayJobs(cr, dt);
     const dark = (state.darkNow || 0) > CR().DARK_AT; // (in the dark each part is dim unless a searchlight has it)
     const flash = bird && !!state.weather && state.weather.flash > 0.45; // (a flash of lightning shows the Thunderbird for a moment: the picture only, the guns' aim assist still needs a beam)
-    for (const p of cr.parts) p.lit = !dark || flash || (!!p.tgt && p.tgt.lit > 0);
+    for (const p of cr.parts) p.lit = !dark || flash || (!!p.tgt && p.tgt.lit > 0) || (mother && motherSeen(state, cr, p, 0)); // (the Mother's tendrils show while they reach, hold, burn or stand in the ship's glow)
     if (bird && cr.bird.glow > 0) { // the swallowed bolt lights the gizzard from inside: it counts as lit (aim assist, the picture)
       const gz = cr.parts.find((p) => p.kind === 'heart');
       if (gz) { gz.lit = true; tgtOf(gz).lit = Math.max(tgtOf(gz).lit, 0.3); }
@@ -649,7 +705,7 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
       c.part.lit = cr.parts[0].lit;
     }
     cr.chunks = cr.chunks.filter((c) => c.t < CR().CHUNK.LIFE);
-    if (cr.mode === 'dying' && cr.sinkT >= (wyrm ? CR().WYRM.SPAWN.SINK : titan ? CR().TITAN.SPAWN.SINK : bird ? CR().THUNDERBIRD.SPAWN.SINK : drake ? CR().DRAKE.SPAWN.SINK : S.SINK_TIME) && !cr.chunks.length) {
+    if (cr.mode === 'dying' && cr.sinkT >= (mother ? CR().MOTHER.SPAWN.SINK : wyrm ? CR().WYRM.SPAWN.SINK : titan ? CR().TITAN.SPAWN.SINK : bird ? CR().THUNDERBIRD.SPAWN.SINK : drake ? CR().DRAKE.SPAWN.SINK : S.SINK_TIME) && !cr.chunks.length) {
       state.creature = null;
       state.slow = 1;
     }

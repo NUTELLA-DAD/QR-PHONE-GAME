@@ -37,7 +37,7 @@ function makeMapOf(kind, level, rand, lengthMul = 1, layout, creature = null, va
       if (map.startDist < 1e9) return map;
       continue;
     }
-    map = kind === 'lair' ? (creature === 'wyrm' ? buildWyrmLairMap(level, rand, lengthMul, layout) : creature === 'titan' ? buildTitanLairMap(level, rand, lengthMul, layout) : creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout, slack);
+    map = kind === 'lair' ? (creature === 'mother' ? buildMotherLairMap(level, rand, lengthMul, layout) : creature === 'wyrm' ? buildWyrmLairMap(level, rand, lengthMul, layout) : creature === 'titan' ? buildTitanLairMap(level, rand, lengthMul, layout) : creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout, slack);
     if (map.startDist >= 1e9) continue;
     if (map.lair) return map; // (no outposts to reach: the lair's middle is the goal)
     if (map.open) {
@@ -376,6 +376,34 @@ function buildWyrmLairMap(level, rand, lengthMul = 1, layout) {
     cliffs.push({ x: (ci + 0.5) * C, top: topRow * C, w: (2 * half + 1) * C });
   }
   const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'wyrm', cliffs, floorY: floorRow * C };
+  finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
+  return map;
+}
+
+// THE MYCELIAL MOTHER'S LAIR (config.CREATURES.MOTHER.LAIR, C.6e): a closed cavern in the Fungal Depths, the launch on row LAUNCH_ROW, a flat roof ROOF_ABOVE px over the launch height (the Mother clings to it above the lair's
+// middle) and a floor FLOOR_BELOW px under it, two rock PILLARS standing on the floor PILLARS px either side of the lair's middle (WIDTH px wide, flat tops TOP_BELOW px under the launch height: a wing beat can push her into one, she can
+// fly over), and SPIKES stalactites and stalagmites elsewhere. map.dome = { x (the lair's middle), roofY, floorY, pillars [{ x0, x1, top }] } in map pixels. No outposts, no guns.
+function buildMotherLairMap(level, rand, lengthMul = 1, layout) {
+  const M = config.MAPS, LR = config.CREATURES.LAIR, ML = config.CREATURES.MOTHER.LAIR, C = M.CELL;
+  const startI = 12, goalI = startI + Math.round((LR.RUN * lengthMul) / C);
+  const W = goalI + Math.round(LR.BEYOND / C) + 20, H = M.OPEN_HEIGHT;
+  const sj = ML.LAUNCH_ROW, roofRow = sj - Math.round(ML.ROOF_ABOVE / C), floorRow = Math.min(H - 3, sj + Math.round(ML.FLOOR_BELOW / C));
+  const solid = new Uint8Array(W * H);
+  const idx = (i, j) => j * W + i;
+  for (let i = 0; i < W; i++) for (let j = 0; j < H; j++) if (j < roofRow || j >= floorRow || i < 3 || i >= W - 3) solid[idx(i, j)] = 1;
+  const pillars = [];
+  const half = Math.max(1, Math.round(ML.WIDTH / 2 / C)), topRow = sj + Math.max(0, Math.round(ML.TOP_BELOW / C));
+  for (const dx of ML.PILLARS) {
+    const ci = goalI + Math.round(dx / C);
+    for (let i = ci - half; i <= ci + half; i++) for (let j = topRow; j < floorRow; j++) solid[idx(i, j)] = 1;
+    pillars.push({ x0: (ci - half) * C, x1: (ci + half + 1) * C, top: topRow * C });
+  }
+  for (let k = 0; k < ML.SPIKES; k++) { // stalactites from the roof and stalagmites from the floor, away from the arena round the lair's middle
+    const ci = startI + 8 + Math.floor(rand() * (W - startI - 16)), len = 2 + Math.floor(rand() * 3), up = rand() < 0.4;
+    if (Math.abs(ci - goalI) < 22) continue;
+    for (let d = 0; d < len; d++) for (let i = ci - Math.max(0, 1 - Math.floor(d / 2)); i <= ci + Math.max(0, 1 - Math.floor(d / 2)); i++) { const j = up ? floorRow - 1 - d : roofRow + d; if (i > 3 && i < W - 3 && Math.abs(j - sj) > 3) solid[idx(i, j)] = 1; }
+  }
+  const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'mother', dome: { x: (goalI + 0.5) * C, roofY: roofRow * C, floorY: floorRow * C, pillars } };
   finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
   return map;
 }
