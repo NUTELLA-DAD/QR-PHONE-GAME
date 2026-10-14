@@ -509,6 +509,15 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     if (!z) return;
     z.hit = Math.max(0, z.hit - dt);
     z.bob += dt;
+    if (z.fleeing) { // C.6f: the Void Eel is dead and she cuts her moorings and runs (creatureEel.js eelFleeFlagship): no guns, no bats, no boarders; the stop is won (bossDownLap is set), she is gone after FLEE s
+      const F = config.CREATURES.EEL.FINALE;
+      z.fleeT += dt;
+      z.x += (z.fleeDir || 1) * F.FLEE_SPEED * Math.min(1, z.fleeT / 1.5) * dt;
+      z.y -= 160 * dt;
+      if (Math.floor(z.fleeT * 8) !== Math.floor((z.fleeT - dt) * 8)) puff(z.x - (z.fleeDir || 1) * 260, z.y + 60, '#555', 8);
+      if (z.fleeT >= F.FLEE) state.boss = null;
+      return;
+    }
     // Leave when the ship gets home, or after a crash.
     const c = state.course;
     if (c && (c.progress < 0.5 || c.progress > 0.97) && !z.flagship) z.leaving = true; // (the Flagship never leaves)

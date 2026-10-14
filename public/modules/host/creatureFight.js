@@ -31,7 +31,7 @@ export function inFunnel(cr, x, y) {
   const s = m.segs[0], F = mouthCfg(cr);
   return Math.abs(x - s.x) <= F.FUNNEL_W && y >= s.y - F.FUNNEL_UP && y <= s.y + s.r;
 }
-export const mouthCfg = (cr) => (cr && cr.kind === 'titan' ? config.CREATURES.TITAN.MOUTH : cr && cr.kind === 'wyrm' ? config.CREATURES.WYRM.MOUTH : CR().MOUTH); // (C.6c: the Island Titan's roar has its own funnel, gulp and lure; fed bombs in the same way)
+export const mouthCfg = (cr) => (cr && cr.kind === 'eel' ? config.CREATURES.EEL.MOUTH : cr && cr.kind === 'titan' ? config.CREATURES.TITAN.MOUTH : cr && cr.kind === 'wyrm' ? config.CREATURES.WYRM.MOUTH : CR().MOUTH); // (C.6c: the Island Titan's roar has its own funnel, gulp and lure; fed bombs in the same way)
 export const mouthOpenNow = (state) => !!state.creature && !state.creature.dying && state.creature.mode === 'idle' && !!mouthOf(state.creature) && mouthOf(state.creature).open && (state.creature.kind !== 'drake' || state.creature.drake.mode === 'crawl');
 export const mouthKey = (cr) => (cr && cr.kind === 'drake' ? 'bombs' : 'mouth'); // the FORCE_WIN word for "feed it bombs"
 
@@ -67,13 +67,14 @@ export function bombInMouth(state) {
 // Is a window open, or about to be (within `secs`)? Whoever has the bomb bay should be at it.
 export function mouthWindowSoon(state, secs = 4) {
   const cr = state.creature;
+  if (cr && cr.kind === 'eel') return !cr.dying && cr.mode === 'idle' && (!!cr.mouthWin || (!!cr.eel.act && (cr.eel.act.kind === 'swallow' || cr.eel.act.kind === 'bite')) || cr.eel.nextT <= secs); // (C.6f: the Void Eel gapes when it swallows; the bay is manned from a few seconds before the next act)
   if (cr && cr.kind === 'wyrm') return !cr.dying && (cr.wyrm.mode === 'crack' || (cr.wyrm.mode === 'out' && cr.wyrm.sub !== 'retreat' && cr.wyrm.sub !== 'miss')); // (C.6d: the Rime Wyrm gapes when its coil lets go, not on a clock: the bay is manned whenever it is out)
   if (!cr || cr.dying || cr.mode === 'surfacing') return false;
   return !!cr.mouthWin || (cr.ai.mouthT !== undefined && cr.ai.mouthT <= secs && !(cr.ai.breather > 0));
 }
 
 // Is this aim target (creatureTargets) worth a harpoon? The exhausted creature's body: the harpoon gun may aim at it in phase 3 (aim.js), the bots man it then.
-export const towTarget = (cr, t) => !!cr && !cr.dying && cr.kind !== 'thunderbird' && cr.kind !== 'titan' && cr.kind !== 'mother' && (cr.kind === 'drake' ? cr.drake.mode === 'crawl' : cr.phase >= 3) && t.kind === 'creaturePart' && t.part.kind === (cr.kind === 'wyrm' ? 'head' : 'mantle'); // (the Drake: once it crawls; the Rime Wyrm's head, hauled into the sun)
+export const towTarget = (cr, t) => !!cr && !cr.dying && cr.kind !== 'eel' && cr.kind !== 'thunderbird' && cr.kind !== 'titan' && cr.kind !== 'mother' && (cr.kind === 'drake' ? cr.drake.mode === 'crawl' : cr.phase >= 3) && t.kind === 'creaturePart' && t.part.kind === (cr.kind === 'wyrm' ? 'head' : 'mantle'); // (the Drake: once it crawls; the Rime Wyrm's head, hauled into the sun)
 
 // The dev / test flag (config.CREATURES.FORCE_WIN): does a bot gun of this type hold its fire at this part? (sever: only tentacles; hp: never tentacles; mouth: nothing, only bombs; tow and board: tentacles
 // until phase 3, then nothing - except the harpoon, which hooks the mantle - so the fight can only end the way it was asked to.)
@@ -84,6 +85,12 @@ export function forcedSkip(cr, part, gunType) {
     if (f === 'arms') return part.kind !== 'tentacle';
     if (f === 'hp') return part.kind === 'tentacle';
     if (f === 'mouth' || f === 'crystal') return true;
+    return false;
+  }
+  if (cr.kind === 'eel') { // the Void Eel (C.6f): sever = only the tail sections (their joints); mouth = nothing, only bombs in the gaping maw; board = nothing (one sworded bot leaps onto the crown); hp = anything but the tail sections
+    if (f === 'sever') return part.kind !== 'tentacle';
+    if (f === 'hp') return part.kind === 'tentacle';
+    if (f === 'mouth' || f === 'board') return true;
     return false;
   }
   if (cr.kind === 'mother') { // the Mycelial Mother (C.6e): burn = only a flamethrower on the tendrils; cut = the tendrils, no flame; eyes = only the eyes; mortar = only a mortar, at the cap; board = anything until phase 3, then nothing (one sworded bot boards her); hp = anything

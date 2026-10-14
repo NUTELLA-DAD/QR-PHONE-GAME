@@ -439,6 +439,22 @@ function boulderDodge(state) {
   return want !== null && want >= bounds.lo && want <= bounds.hi ? want : null;
 }
 
+// C.6f: the Void Eel. The helm backs away: (a) from a SWALLOW's red ring (from the moment the jaws gape until the lunge has landed: full astern, about 330 px/s by the lock), and (b) from the LURE (a gold bulb ahead of her)
+// once a lookout has called it, or (a bot's own eyes) within BOT.SEES px, while it is still ahead of her (it creeps up at DRIFT px/s and gives up after TIME s: she only has to stay clear of it). Backing costs no gas (a climb over a
+// swallow or round a lure used up the Sparrow's lift in the thin air). Returns the lever the helm holds (-1..1) or null.
+function eelWatch(state) {
+  const cr = state.creature;
+  if (!cr || cr.kind !== 'eel' || cr.dying || !cr.eel || cr.mode !== 'idle') return null;
+  const E = config.CREATURES.EEL, ev = cr.eel, ship = mainShip(state), L = ship.layout;
+  const rg = ev.ring, a = ev.act, lu = ev.lure;
+  if (rg && a && a.kind === 'swallow' && a.sub !== 'recover' && a.sub !== 'retreat' && a.sub !== 'seek') return E.BOT.BRAKE;
+  if (lu && lu.live) {
+    const mx = toWorldX(ship, L.refPoint.x), my = toWorldY(ship, L.refPoint.y), f = ship.pose.f || 1;
+    if ((lu.known || Math.hypot(lu.x - mx, lu.y - my) < E.BOT.SEES) && (lu.x - mx) * f > -(L.bounds.x1 - L.bounds.x0) * 0.6) return E.BOT.BRAKE; // (still ahead of her, or alongside)
+  }
+  return null;
+}
+
 // Versus (B.4): a bot of the OTHER team standing on this ship is a boarder. He does not mend her: he fights her crew, sabotages her boiler (hold) and takes her helm (hold) - never both
 // at once: the nearer defender first, then whichever of the two the rules of the round want (Capture: the helm).
 const hostile = (p, state) => hostileTo(p, mainShip(state)); // (ships.js: different teams in Versus, the enemy gunship's side against ours)
@@ -684,7 +700,7 @@ function listJobs(state, bot) {
   // (F3: a fire burning where a critical part is being mended - the boiler that has just blown, say - burns the hand at the hammer, who steps out of it, walks back, burns again and never finishes: put that fire out first, ahead of stoking a broken boiler)
   if (config.BOTS.FIRE_AT_REPAIR && canSpray) for (const m of mods) if (m.broken && critical(mods, m)) for (const f of state.fires) if (f.d === m.d && Math.abs(f.x - m.x) < config.MODULES.FIRE_RADIUS && !hotFires.includes(f)) jobs.push({ kind: 'fire', obj: f, max: 1, cap: 2, urgent: true });
   // C.2: a giant creature's tentacle holds the ship (creatureGrip.js): two hands go to hack it free, ahead of everything but a blaze in the coal.
-  if (state.creature && (hasTool('sword') || hasTool('hammer'))) for (const gj of gripJobs(state, mainShip(state))) if (gj.tool !== 'hammer') jobs.push({ kind: 'hack', obj: gj.obj, max: 2, urgent: true });
+  if (state.creature && (hasTool('sword') || hasTool('hammer'))) for (const gj of gripJobs(state, mainShip(state))) if (gj.tool !== 'hammer') jobs.push({ kind: 'hack', obj: gj.obj, max: state.creature.kind === 'eel' ? 1 : 2, urgent: true }); // (the Void Eel's coils: one hand each, the rest keep their posts - at the Flagship's stop the crew has raiders and fires to fight too)
   if (canHammer) for (const cj of chipJobsOf(state).slice(0, WYRM_CHIPPERS)) jobs.push({ kind: 'chip', obj: cj.obj, max: 1, urgent: true }); // (C.6d: ice on the Rime Wyrm's coil; the hack job comes first in this list, so when its arrow shows the chippers go to hack)
   // Versus: a boarder at the wheel or the boiler is the worst thing aboard (he is taking the ship): the defenders go for him before anything else, up to half the crew.
   if ((config.PVP.ENABLED || mainShip(state).ai) && bot.team) {
@@ -972,6 +988,8 @@ function operate(p, state, dt) {
     if (towX !== null) plan.speed = clamp(((towX - toWorldX(mainShip(state), L.refPoint.x)) * mainShip(state).pose.f) / 700, -0.4, 0.4); // (over the vent, with the drake on her line)
     const brace = motherBrace(state); // (C.6e: a wing beat of the Mycelial Mother: full astern against the wind)
     if (brace !== null) plan.speed = brace;
+    const eelW = eelWatch(state); // (C.6f: a swallow's red ring at her bow, or a lure she has been told of: back away)
+    if (eelW !== null) plan.speed = eelW;
     p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1); // (pace: her speed on the lever's scale, without the sails and overdrive, flight.js)
     // COME ABOUT (config.SHIP.TURN.BOT_TURNS): the way to the goal has been behind her for a while, so hold the turn command like a phone's button (plan.dx is how far the route point is ahead of her bow).
     const TN = config.SHIP.TURN;
@@ -1945,15 +1963,15 @@ const humanAutopilot = (p, state) => !!p.human && autopilotOn(state);
 function forceBoard(p, state) {
   const cr = state.creature;
   if (!cr) p.forceBoard = false;
-  if (cr && !p.on && p.forceBoard && ((cr.kind === 'drake' && !drakeBoardable(cr)) || (cr.kind === 'thunderbird' && !birdBoardable(cr)))) p.forceBoard = false; // (it flew off the bag: he is a faller again, and the next perch needs a boarder)
+  if (cr && !p.on && p.forceBoard && ((cr.kind === 'drake' && !drakeBoardable(cr)) || (cr.kind === 'thunderbird' && !birdBoardable(cr)) || cr.kind === 'eel')) p.forceBoard = false; // (the Void Eel's lunge shakes a boarder off: he falls, then climbs on again when it is circling quietly) // (it flew off the bag: he is a faller again, and the next perch needs a boarder)
   if (p.on) {
     p.jx = p.jy = 0;
     p.fire = !!cr && !cr.dying;
     return true;
   }
-  if (!cr || cr.dying || cr.mode !== 'idle' || !(cr.kind === 'thunderbird' ? birdBoardable(cr) : cr.kind === 'drake' ? drakeBoardable(cr) : cr.phase >= 3) || !mantleOf(cr) || p.mate || p.ko > 0 || p.fall) return false; // (the Drake: while it sits on her bag; the Thunderbird: on her bag or on a spire)
+  if (!cr || cr.dying || cr.mode !== 'idle' || !(cr.kind === 'thunderbird' ? birdBoardable(cr) : cr.kind === 'drake' ? drakeBoardable(cr) : cr.kind === 'eel' ? cr.eel.mode === 'circle' && !cr.eel.act : cr.phase >= 3) || !mantleOf(cr) || p.mate || p.ko > 0 || p.fall) return false; // (the Drake: while it sits on her bag; the Thunderbird: on her bag or on a spire)
   if (Object.values(state.players).some((q) => q.on || q.forceBoard)) return false; // (one boarder is enough)
-  const L = mainShip(state).layout, heart = cr.parts.find((q) => q.kind === 'heart' && !q.dead && (cr.kind === 'drake' || cr.kind === 'thunderbird' || !q.hidden)); // (the Drake's heart is hidden behind its scales: the boarder hacks them off first)
+  const L = mainShip(state).layout, heart = cr.parts.find((q) => q.kind === 'heart' && !q.dead && (cr.kind === 'drake' || cr.kind === 'thunderbird' || cr.kind === 'eel' || !q.hidden)); // (the Drake's heart is hidden behind its scales: the boarder hacks them off first; the Void Eel's lantern is hidden from the guns only)
   if (!heart || isHelm(L, p.lock)) return false;
   p.forceBoard = true;
   p.lock = null;

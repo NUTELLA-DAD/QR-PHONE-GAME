@@ -1482,6 +1482,207 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     for (const p of body.parts) if (p.limb && !p.dead) drawMotherLimb(p);
   }
 
+  // ================================================================ THE VOID EEL (C.6f) ================================================================
+  // The same recipe in indigo, lavender and cyan with GOLD: a long scaled body of 24 segments (a cyan dorsal fin along the back, a pale belly), the glowing gold JOINT bands at the ends of the tail sections (bright on the one that
+  // can be cut, dull on the ones behind it), a heavy-browed head with a cyan eye and a hinged maw (shut, half, wide: openAmt) with bone teeth, the tall CROWN fin standing up from the head and the LANTERN on a cord from its top:
+  // dark when it hunts, a soft gold-and-cyan glow when it gapes, and while it LURES a gold bundle that looks like a pickup (cr.eel.lampLit 0 / 1 / 2). Poses come from the sim; nothing wobbles (the lamp twinkles on the 8 Hz key).
+  const E_BODY = '#3d3180', E_BODY_DK = '#271d58', E_BELLY = '#b9a9ee', E_FIN = '#4fd8e8', E_FIN_DK = '#2a8fa6', E_GOLD = '#ffd23f', E_GOLD_DK = '#b8861a', E_DULL = '#8a7a58', E_EYE = '#8ffff0', E_MAW = '#3a0f2e', E_TOOTH = '#f0ead8', E_LAMP = '#ffe27a';
+  // One body segment (base joint at the origin, along +x): a tapered scaled capsule, fin along the back (-y), pale belly (+y); band: 0 none, 1 a joint band at the base, 2 at the far end; on = the bright gold of the joint that can be cut.
+  function eelSegPic(s, band, on, look) {
+    const L = s.len, r0 = s.r, r1 = s.r1;
+    return get(`eseg|${Math.round(L)}|${Math.round(r0)}|${Math.round(r1)}|${band}|${on ? 1 : 0}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5, fin = Math.max(14, r0 * 0.55);
+      return bake(-r0 - pad, -Math.max(r0, r1) - fin - pad, L + r1 * 0.6 + pad, Math.max(r0, r1) + pad, (g) => {
+        const rm = (r0 + r1) / 2 * 1.06;
+        const outline = () => { g.beginPath(); g.moveTo(0, -r0); g.lineTo(L * 0.5, -rm); g.lineTo(L, -r1); g.arc(L, 0, r1, -Math.PI / 2, Math.PI / 2); g.lineTo(L * 0.5, rm); g.lineTo(0, r0); g.arc(0, 0, r0, Math.PI / 2, (Math.PI * 3) / 2); g.closePath(); };
+        poly(g, [[L * 0.1, -r0 * 0.9], [L * 0.28, -r0 - fin], [L * 0.62, -rm * 0.95], [L * 0.8, -r1 - fin * 0.7], [L * 0.95, -r1 * 0.95]], col(E_FIN), true, A.INK_W * 0.8); // the dorsal fin
+        outline();
+        g.fillStyle = col(E_BODY);
+        g.fill();
+        g.save();
+        outline();
+        g.clip();
+        poly(g, [[-r0 * 1.2, r0 * 0.25], [L * 0.5, rm * 0.3], [L + r1, r1 * 0.25], [L + r1, rm * 2], [-r0 * 1.2, rm * 2]], col(E_BELLY), false); // the pale belly
+        poly(g, [[-r0, -r0 * 1.1], [L + r1, -r1 * 1.1], [L + r1, -r1 * 0.55], [-r0, -r0 * 0.55]], col(E_BODY_DK), false); // the dark back
+        g.strokeStyle = col(E_BODY_DK); // scale arcs
+        g.lineWidth = A.INK_W * 0.6;
+        for (const u of [0.28, 0.62]) { g.beginPath(); g.arc(L * u, 0, rm * 0.62, -0.9, 0.9); g.stroke(); }
+        poly(g, [[r0 * 0.2, -0.5 * r0], [L * 0.5, -0.5 * rm], [L * 0.9, -0.5 * r1], [L * 0.9, -0.28 * r1], [L * 0.5, -0.28 * rm], [r0 * 0.2, -0.28 * r0]], hiColor(look), false);
+        g.restore();
+        outline();
+        g.lineWidth = INK_B;
+        g.stroke();
+        if (band) { // the joint band across the body at the base (1) or the far end (2)
+          const x = band === 1 ? 0 : L, r = band === 1 ? r0 : r1, w = Math.max(18, r * 0.5);
+          poly(g, [[x - w / 2, -r * 1.12], [x + w / 2, -r * 1.12], [x + w / 2, r * 1.12], [x - w / 2, r * 1.12]], col(on ? E_GOLD : E_DULL), true, A.INK_W * 0.8);
+          if (on) { g.fillStyle = col(WHITE); for (const yy of [-0.55, 0, 0.55]) { g.beginPath(); g.arc(x, r * yy, Math.max(5, r * 0.09), 0, Math.PI * 2); g.fill(); } }
+        }
+      });
+    });
+  }
+  function drawEelLimb(p) {
+    const look = lookOf(p), n = p.segs.length;
+    for (let i = 0; i < n; i++) {
+      const s = p.segs[i];
+      if (!!s.behind !== behindPass) continue;
+      const band = p.kind === 'tentacle' && n >= 2 ? (i === 0 ? 1 : i === n - 1 ? 2 : 0) : 0;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (Math.cos(s.ang) < 0) ctx.scale(1, -1);
+      blit(eelSegPic(s, band, !!p.joint, look));
+      ctx.restore();
+    }
+  }
+  // The head (start at the origin, along +x): a heavy brow, a long upper jaw with the front teeth, a cyan eye, gill slits.
+  function eelHeadPic(len, r, look) {
+    return get(`ehead|${Math.round(len)}|${Math.round(r)}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5;
+      return bake(-r * 0.6 - pad, -r * 1.2 - pad, len + r * 0.4 + pad, r * 1.1 + pad, (g) => {
+        const head = [[-r * 0.2, -r * 0.7], [len * 0.28, -r * 1.05], [len * 0.7, -r * 0.62], [len + r * 0.05, -r * 0.2], [len + r * 0.1, r * 0.12], [len * 0.6, r * 0.34], [len * 0.2, r * 0.8], [-r * 0.2, r * 0.7]];
+        poly(g, head, col(E_BODY), true, INK_B);
+        g.save();
+        g.beginPath();
+        head.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])));
+        g.closePath();
+        g.clip();
+        poly(g, [[-r, r * 0.2], [len * 0.5, r * 0.18], [len * 1.2, r * 0.12], [len * 1.2, r * 2], [-r, r * 2]], col(E_BELLY), false);
+        poly(g, [[-r, -r * 1.4], [len * 1.2, -r * 1.4], [len * 1.2, -r * 0.6], [len * 0.28, -r * 0.8], [-r, -r * 0.4]], col(E_BODY_DK), false);
+        g.strokeStyle = col(E_BODY_DK);
+        g.lineWidth = A.INK_W * 0.7;
+        for (const u of [0.06, 0.14, 0.22]) { g.beginPath(); g.moveTo(len * u, -r * 0.1); g.lineTo(len * (u - 0.03), r * 0.5); g.stroke(); }
+        poly(g, [[len * 0.1, -r * 0.7], [len * 0.55, -r * 0.55], [len * 0.55, -r * 0.4], [len * 0.1, -r * 0.5]], hiColor(look), false);
+        g.restore();
+        poly(g, head, null, true, INK_B);
+        g.beginPath();
+        g.ellipse(len * 0.5, -r * 0.34, r * 0.22, r * 0.17, -0.2, 0, Math.PI * 2);
+        g.fillStyle = col(E_EYE);
+        g.fill();
+        g.lineWidth = A.INK_W * 0.8;
+        g.stroke();
+        g.fillStyle = col(E_MAW);
+        g.beginPath(); g.arc(len * 0.52, -r * 0.34, r * 0.07, 0, Math.PI * 2); g.fill();
+        for (let k = 0; k < 4; k++) tri(g, len * (0.58 + k * 0.1), r * 0.3 - k * r * 0.045, len * (0.62 + k * 0.1), r * 0.3 - k * r * 0.045, len * (0.6 + k * 0.1), r * 0.62 - k * r * 0.05, col(E_TOOTH), A.INK_W * 0.55);
+      });
+    });
+  }
+  // The maw (centred on the head's tip, along +x): shut = a seam, half, wide = a dark throat between the hinged jaws with teeth. state 0..2.
+  function eelMouthPic(R, state, look) {
+    return get(`emouth|${Math.round(R)}|${state}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5, open = [0, 0.55, 1.0][state], a = 0.15 + open * 0.95;
+      const hx = -R * 0.55, hy = R * 0.05, jx = hx + Math.cos(a) * R * 1.7, jy = hy + Math.sin(a) * R * 1.7;
+      return bake(-R * 0.8 - pad, -R * 0.9 - pad, R * 1.35 + pad, Math.max(R * 0.4, jy) + R * 0.5 + pad, (g) => {
+        if (state > 0) {
+          poly(g, [[hx, hy - R * 0.1], [R * 1.05, -R * 0.2], [jx, jy], [hx + Math.cos(a - 0.5) * R * 0.9, hy + Math.sin(a - 0.5) * R * 0.9]], col(E_MAW), true, INK_B); // the throat
+          for (let k = 0; k < 5; k++) tri(g, R * (0.0 + k * 0.2), -R * 0.2 + k * R * 0.0, R * (0.1 + k * 0.2), -R * 0.2, R * (0.05 + k * 0.2), -R * 0.2 + R * 0.34, col(E_TOOTH), A.INK_W * 0.55); // the upper teeth
+        }
+        poly(g, [[hx, hy], [R * 1.0, hy + R * 0.12], [jx, jy], [jx - R * 0.15, jy + R * 0.36], [hx + Math.cos(a) * R * 0.5, hy + Math.sin(a) * R * 0.5 + R * 0.42]], col(E_BODY), true, INK_B); // the lower jaw
+        if (state > 0) for (let k = 0; k < 4; k++) { const t = 0.3 + k * 0.2, px = hx + (jx - hx) * t, py = hy + (jy - hy) * t; tri(g, px - R * 0.07, py, px + R * 0.07, py, px, py - R * 0.3, col(E_TOOTH), A.INK_W * 0.55); }
+        if (state === 0) { g.beginPath(); g.moveTo(hx, hy); g.lineTo(R * 1.0, -R * 0.1); g.lineWidth = INK_B; g.stroke(); }
+      });
+    });
+  }
+  // The crown (base at the origin, +x is UP): a tall leaf-shaped fin of cyan ribs on indigo.
+  function eelCrownPic(len, R, look) {
+    return get(`ecrown|${Math.round(len)}|${Math.round(R)}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5;
+      return bake(-R * 0.4 - pad, -R * 1.3 - pad, len + R * 1.2 + pad, R * 1.3 + pad, (g) => {
+        const fin = [[-R * 0.2, -R * 0.9], [len * 0.4, -R * 1.15], [len + R * 0.2, -R * 0.55], [len + R * 1.0, 0], [len + R * 0.2, R * 0.55], [len * 0.4, R * 1.15], [-R * 0.2, R * 0.9]];
+        poly(g, fin, col(E_FIN_DK), true, INK_B);
+        g.save();
+        g.beginPath();
+        fin.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])));
+        g.closePath();
+        g.clip();
+        g.fillStyle = col(E_BODY);
+        g.fillRect(-R, -R * 0.5, len * 0.5, R);
+        g.strokeStyle = col(E_FIN);
+        g.lineWidth = A.INK_W * 0.9;
+        for (const yy of [-0.8, -0.4, 0, 0.4, 0.8]) { g.beginPath(); g.moveTo(0, yy * R * 0.7); g.lineTo(len + R * 0.9, yy * R * 0.18); g.stroke(); }
+        poly(g, [[len * 0.1, -R * 0.85], [len * 0.8, -R * 0.4], [len * 0.8, -R * 0.25], [len * 0.1, -R * 0.65]], hiColor(look), false);
+        g.restore();
+        poly(g, fin, null, true, INK_B);
+      });
+    });
+  }
+  // The lantern (centred): mode 0 dark, 1 a soft gold-and-cyan glow, 2 the LURE - a gold bundle with a band and a twinkle (tw 0 / 1).
+  function eelLampPic(R, mode, tw, look) {
+    return get(`elamp|${Math.round(R)}|${mode}|${tw}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5, H = R * 2.6;
+      return bake(-H - pad, -H - pad, H + pad, H + pad, (g) => {
+        if (mode > 0) { g.globalAlpha = mode === 2 ? 0.34 : 0.22; g.fillStyle = col(E_LAMP); g.beginPath(); g.arc(0, 0, H, 0, Math.PI * 2); g.fill(); g.globalAlpha = mode === 2 ? 0.5 : 0.32; g.beginPath(); g.arc(0, 0, H * 0.62, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1; }
+        if (mode === 2) { // a gold pickup: a sack tied at the top with a band
+          poly(g, [[-R * 0.8, R * 0.7], [-R * 0.95, -R * 0.1], [-R * 0.5, -R * 0.65], [R * 0.5, -R * 0.65], [R * 0.95, -R * 0.1], [R * 0.8, R * 0.7]], col(E_GOLD), true, INK_B);
+          poly(g, [[-R * 0.5, -R * 0.65], [-R * 0.3, -R * 1.0], [R * 0.3, -R * 1.0], [R * 0.5, -R * 0.65]], col(E_GOLD_DK), true, INK_B * 0.8);
+          poly(g, [[-R * 0.85, R * 0.1], [R * 0.85, R * 0.1], [R * 0.82, R * 0.3], [-R * 0.82, R * 0.3]], col(E_GOLD_DK), false);
+          poly(g, [[-R * 0.55, -R * 0.4], [-R * 0.2, -R * 0.5], [-R * 0.25, -R * 0.1], [-R * 0.6, 0]], hiColor(look), false);
+          if (tw) { g.fillStyle = col(WHITE); poly(g, [[R * 0.7, -R * 1.2], [R * 0.8, -R * 0.85], [R * 1.15, -R * 0.75], [R * 0.8, -R * 0.65], [R * 0.7, -R * 0.3], [R * 0.6, -R * 0.65], [R * 0.25, -R * 0.75], [R * 0.6, -R * 0.85]], col(WHITE), true, A.INK_W * 0.5); }
+          return;
+        }
+        g.beginPath();
+        g.arc(0, 0, R * 0.8, 0, Math.PI * 2);
+        g.fillStyle = mode ? col(E_LAMP) : col(E_BODY_DK);
+        g.fill();
+        g.lineWidth = INK_B;
+        g.stroke();
+        if (mode) { g.fillStyle = col(E_EYE); g.beginPath(); g.arc(-R * 0.15, -R * 0.15, R * 0.35, 0, Math.PI * 2); g.fill(); }
+        g.fillStyle = hiColor(look);
+        g.beginPath(); g.arc(-R * 0.3, -R * 0.3, R * 0.18, 0, Math.PI * 2); g.fill();
+      });
+    });
+  }
+  function drawEel(body) {
+    const ev = body.eel, by = (id) => body.parts.find((q) => q.id === id), key = Math.floor((body.age || 0) * 8);
+    if (!ev) return;
+    for (const p of body.parts) if (p.limb && !p.dead) drawEelLimb(p);
+    const head = by('head'), mouth = by('mouth'), crown = by('crown'), lamp = by('lamp');
+    if (head && !head.dead && head.segs[0]) {
+      const s = head.segs[0];
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (Math.cos(s.ang) < 0) ctx.scale(1, -1);
+      blit(eelHeadPic(s.len, s.r, lookOf(head)));
+      ctx.restore();
+    }
+    if (crown && !crown.dead && crown.segs[0]) {
+      const s = crown.segs[0];
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      blit(eelCrownPic(s.len, s.r, lookOf(crown)));
+      ctx.restore();
+    }
+    if (mouth && !mouth.dead && mouth.segs[0] && head && head.segs[0]) {
+      const s = mouth.segs[0], hs = head.segs[0];
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(hs.ang);
+      if (Math.cos(hs.ang) < 0) ctx.scale(1, -1);
+      blit(eelMouthPic(s.r, mouth.openAmt < 0.25 ? 0 : mouth.openAmt < 0.75 ? 1 : 2, lookOf(mouth)));
+      ctx.restore();
+    }
+    if (lamp && crown && crown.segs[0] && lamp.segs[0]) { // the cord from the crown's top to the lantern, then the lantern
+      const c = crown.segs[0], l = lamp.segs[0], top = { x: c.x, y: c.y - c.len - c.r * 0.6 };
+      ctx.save();
+      ctx.strokeStyle = config.INK;
+      ctx.lineWidth = A.INK_W * 1.4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(top.x, top.y);
+      ctx.quadraticCurveTo((top.x + l.x) / 2, Math.min(top.y, l.y) - 80, l.x, l.y);
+      ctx.stroke();
+      ctx.strokeStyle = E_GOLD_DK;
+      ctx.lineWidth = A.INK_W * 0.6;
+      ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.translate(l.x, l.y);
+      blit(eelLampPic(l.r, ev.lampLit || 0, key % 2, 'lit'));
+      ctx.restore();
+    }
+  }
+
   // ---- drawing ------------------------------------------------------------------------------------------------------------------------------------------------
   const lookOf = (p) => (p.hit > 0 ? 'flash' : p.lit ? 'lit' : 'dim');
 
@@ -1491,6 +1692,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
   function drawLimb(p) {
     if (p.art === 'thunderbird') return drawBirdLimb(p); // (C.6b: the Thunderbird's feathers, also a plucked wing tumbling)
     if (p.art === 'titan') return drawTitanLimb(p); // (C.6c: the Titan's stone arm, also an arm shelled off tumbling)
+    if (p.art === 'eel') return drawEelLimb(p); // (C.6f: the Void Eel's scaled body, also a section cut off tumbling)
     if (p.art === 'mother') return drawMotherLimb(p); // (C.6e: the Mycelial Mother's tendril, also one burnt or cut off tumbling)
     if (p.id === 'wyrm') return drawWyrmLimb(p); // (C.6d: the Rime Wyrm's body, iced; also its coil passing behind the ship)
     if (p.kind === 'wing' || p.kind === 'neck' || p.kind === 'tail') return drawDrakeLimb(p); // (the Cinder Drake's limbs, also its torn-off wing tumbling)
@@ -1551,6 +1753,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     if (body.kind === 'titan') return drawTitan(body); // (C.6c)
     if (body.kind === 'wyrm') return drawWyrm(body); // (C.6d)
     if (body.kind === 'mother') return drawMother(body); // (C.6e)
+    if (body.kind === 'eel') return drawEel(body); // (C.6f)
     for (const p of body.parts) if (p.limb && !p.dead && p.layer === 'back') drawLimb(p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind === 'mantle') drawRigid(body, p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind !== 'mantle') drawRigid(body, p);
@@ -1558,14 +1761,14 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
   }
   // The second pass of a wrapped limb: only its segments behind the ship (render.js calls this before the ships are drawn, and draw() after).
   function drawBehind(body, view = {}) {
-    if (!body.parts.some((p) => p.wrap && !p.dead)) return;
+    if (!body.parts.some((p) => (p.wrap || body.kind === 'eel') && !p.dead)) return; // (the Void Eel's far half passes behind the hull too)
     const S = clamp((view.zoom || 1) * (view.dpr || 1) * A.SS, A.MIN_SCALE, A.MAX_SCALE);
     const bucket = Math.round(Math.log2(S) * 2) / 2;
     scale = Math.pow(2, bucket);
     if (!buckets.has(bucket)) buckets.set(bucket, new Map());
     cache = buckets.get(bucket);
     behindPass = true;
-    for (const p of body.parts) if (p.limb && !p.dead && p.wrap) drawLimb(p);
+    for (const p of body.parts) if (p.limb && !p.dead && (p.wrap || body.kind === 'eel')) drawLimb(p);
     behindPass = false;
   }
   // Debris and other callers draw limbs on their own: make sure there is a cache for the current scale first.

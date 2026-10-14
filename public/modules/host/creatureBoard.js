@@ -120,7 +120,7 @@ export function boardAt(state, ship, p, wx, wy) {
   p.tossed = false;
   p.hook = null;
   p.noLand = 0;
-  if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, cr.kind === 'thunderbird' ? 'YOU ARE ON THE THUNDERBIRD! CUT THE GIZZARD with a sword. JUMP to leap off.' : cr.kind === 'drake' ? 'YOU ARE ON THE DRAKE! HACK THE SCALES by its heart (sword), then STRIKE THE HEART. JUMP to leap off.' : cr.kind === 'mother' ? 'YOU ARE ON THE MOTHER\'S CAP! Walk to the SPORE HEART at the bottom of it (once it opens, in phase 3) and STRIKE it with a sword. JUMP to leap off.' : cr.kind === 'wyrm' ? 'YOU ARE ON THE RIME WYRM! Walk down its collar to the pale UNDERBELLY and STRIKE it with a sword. JUMP to leap off.' : 'YOU ARE ON THE KRAKEN! BLIND IT at an eye, STRIKE THE HEART with a sword. JUMP to leap off.', [60, 40, 60]);
+  if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, cr.kind === 'thunderbird' ? 'YOU ARE ON THE THUNDERBIRD! CUT THE GIZZARD with a sword. JUMP to leap off.' : cr.kind === 'drake' ? 'YOU ARE ON THE DRAKE! HACK THE SCALES by its heart (sword), then STRIKE THE HEART. JUMP to leap off.' : cr.kind === 'eel' ? 'YOU ARE ON THE VOID EEL! Walk the crown to the LANTERN and SMASH it with a sword. JUMP to leap off - the low gravity carries you far.' : cr.kind === 'mother' ? 'YOU ARE ON THE MOTHER\'S CAP! Walk to the SPORE HEART at the bottom of it (once it opens, in phase 3) and STRIKE it with a sword. JUMP to leap off.' : cr.kind === 'wyrm' ? 'YOU ARE ON THE RIME WYRM! Walk down its collar to the pale UNDERBELLY and STRIKE it with a sword. JUMP to leap off.' : 'YOU ARE ON THE KRAKEN! BLIND IT at an eye, STRIKE THE HEART with a sword. JUMP to leap off.', [60, 40, 60]);
   pop(state, q.x, q.y - 160, 'BOARDED!', '#ffd23f', 1.2);
   return true;
 }
@@ -141,8 +141,9 @@ export function dismount(state, p, how) {
   p.rot = 0;
   if (how === 'jump') {
     const toward = Math.sign(toWorldX(ship, ship.layout.refPoint.x) - p.x) || 1;
-    p.fvx = toward * B.JUMP_VX;
-    p.fvy = -B.JUMP_VY;
+    const boost = o.cr && o.cr.kind === 'eel' ? config.CREATURES.EEL.BOARD.JUMP_BOOST : 1; // (the Aether's low gravity: the leap off the Void Eel's crown goes further)
+    p.fvx = toward * B.JUMP_VX * boost;
+    p.fvy = -B.JUMP_VY * boost;
     p.noLand = 0.3;
   } else {
     p.fvx = o.cr && o.cr.vx ? o.cr.vx : 0;
@@ -167,11 +168,11 @@ export function boardCheck(state, p) {
 function actFor(state, p) {
   const cr = state.creature, B = BR();
   const job = (part, name) => part.job || (part.job = { name, prog: 0, worked: false });
-  const heart = cr.parts.find((q) => q.kind === 'heart' && !q.dead && (!q.hidden || cr.kind === 'thunderbird')); // (a boarder can reach the Thunderbird's gizzard through its breast feathers, glowing or not)
+  const heart = cr.parts.find((q) => q.kind === 'heart' && !q.dead && (!q.hidden || cr.kind === 'thunderbird' || cr.kind === 'eel')); // (the Void Eel's lantern is hidden from the guns but a boarder on its crown can reach it) // (a boarder can reach the Thunderbird's gizzard through its breast feathers, glowing or not)
   const near = (part) => { const m = segMid(part.segs[0]); return Math.hypot(m.x - p.x, m.y - p.y) <= (part.kind === 'heart' ? B.HEART_REACH : B.EYE_REACH) + part.segs[0].r; };
   if (heart && near(heart)) {
     const bird = cr.kind === 'thunderbird';
-    if (p.carry === 'sword') return { type: 'strike', obj: job(heart, 'strike'), hold: true, time: bird ? config.CREATURES.THUNDERBIRD.BOARD.CUT_TIME : cr.kind === 'drake' ? config.CREATURES.DRAKE.BOARD.HEART_TIME : cr.kind === 'wyrm' ? config.CREATURES.WYRM.BOARD.HEART_TIME : cr.kind === 'mother' ? config.CREATURES.MOTHER.BOARD.HEART_TIME : B.HEART_TIME, label: bird ? 'CUT THE GIZZARD!' : cr.kind === 'wyrm' ? 'STRIKE THE UNDERBELLY!' : cr.kind === 'mother' ? 'STRIKE THE SPORE HEART!' : 'STRIKE THE HEART!', part: heart };
+    if (p.carry === 'sword') return { type: 'strike', obj: job(heart, 'strike'), hold: true, time: bird ? config.CREATURES.THUNDERBIRD.BOARD.CUT_TIME : cr.kind === 'drake' ? config.CREATURES.DRAKE.BOARD.HEART_TIME : cr.kind === 'wyrm' ? config.CREATURES.WYRM.BOARD.HEART_TIME : cr.kind === 'mother' ? config.CREATURES.MOTHER.BOARD.HEART_TIME : cr.kind === 'eel' ? config.CREATURES.EEL.BOARD.HEART_TIME : B.HEART_TIME, label: bird ? 'CUT THE GIZZARD!' : cr.kind === 'eel' ? 'SMASH THE LANTERN!' : cr.kind === 'wyrm' ? 'STRIKE THE UNDERBELLY!' : cr.kind === 'mother' ? 'STRIKE THE SPORE HEART!' : 'STRIKE THE HEART!', part: heart };
     return { type: 'need', label: bird ? 'Need a sword to cut the gizzard!' : 'Need a sword to strike the heart!' };
   }
   if (!heart && cr.kind === 'drake') { const a = scalesAction(state, p); if (a) return a; } // (the Drake's heart is behind its breast scales: hack them off first)
@@ -228,7 +229,7 @@ export function boarderStep(state, ship, p, dt, holdOk) {
         cr.stats.blinded = (cr.stats.blinded || 0) + 1;
         if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, 'You blinded it! Its grabs slow down.', [30, 40, 30]);
       } else {
-        cr.hooks.hurt({ part, seg: 0 }, cr.kind === 'wyrm' ? config.CREATURES.WYRM.BOARD.HEART_DMG : cr.kind === 'mother' ? config.CREATURES.MOTHER.BOARD.HEART_DMG : B.HEART_DMG, { who: p.id, src: 'sword' });
+        cr.hooks.hurt({ part, seg: 0 }, cr.kind === 'wyrm' ? config.CREATURES.WYRM.BOARD.HEART_DMG : cr.kind === 'mother' ? config.CREATURES.MOTHER.BOARD.HEART_DMG : cr.kind === 'eel' ? config.CREATURES.EEL.BOARD.HEART_DMG : B.HEART_DMG, { who: p.id, src: 'sword' });
         cr.stats.struck = (cr.stats.struck || 0) + 1;
         pop(state, at.x, at.y - 140, 'STRIKE!', '#ff5a1f', 1.8);
         state.sfxQ.push(['sever']);
