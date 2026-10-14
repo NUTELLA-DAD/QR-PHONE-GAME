@@ -1415,7 +1415,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
           ctx.textAlign = 'left';
           ctx.fillStyle = state.salvagePop ? '#2e7d32' : '#5a4a3a';
           ctx.font = Math.round(Math.max(11, Math.min(16, (16 * lowNameDraw) / Math.max(1, lowNameW)))) + 'px ' + config.FONTS.DISPLAY; // (a smaller size first, then squeezed to its measured room: see lowName above)
-          if (lowName) ctx.fillText(lowName, 46, 204, Math.max(30, lowNameDraw));
+          if (lowName) { // (a long salvage note is cut short with an ellipsis rather than squeezed unreadable)
+            let s = lowName;
+            const room = Math.max(30, lowNameDraw);
+            if (ctx.measureText(s).width > room * 1.15) { while (s.length > 4 && ctx.measureText(s + '…').width > room) s = s.slice(0, -1); s = s.trimEnd() + '…'; }
+            ctx.fillText(s, 46, 204, room);
+          }
           ctx.textAlign = 'right';
           ctx.fillStyle = config.INK;
           ctx.font = '700 14px ' + config.FONTS.TEXT;
