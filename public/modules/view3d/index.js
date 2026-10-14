@@ -45,6 +45,8 @@ import { SET_LIVE } from './setpieceKit.js';
 import { config } from '../../config.js';
 import { createPorthole } from './porthole.js'; // WP11: the Versus far-ship porthole
 import { createPortholes3D } from './portholes.js'; // the round portholes: a friendly plane off screen, the lookout's spyglass
+import { createDepth } from './depth3d.js'; // LOOP R3 / R5: landmarks, arrivals and weather fronts from the depth, the lair's giant circling far away
+import { createFortressPorthole } from './fortressPorthole.js'; // LOOP R5: a round window onto a ring face whose shutter is open while the face is off screen
 import { envIdOf } from '../host/environments.js';
 import { shipOf, teamOf } from '../host/ships.js';
 import { inRock } from '../host/course.js';
@@ -98,10 +100,11 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   const worldRoot = new THREE.Group();
   scene.add(worldRoot);
   const world = createWorld(scene, renderer);
+  const depth = createDepth({ state, world }); // LOOP R3 / R5: what is staged far behind the play plane (landmarks, the destination, a weather front, the lair's giant) and the arrivals from depth
   const terrain = createTerrain(worldRoot);
   const kraken = createCreatureView(worldRoot);
   let vfx = null; // (WP4: the particles; made below, after the ship models exist)
-  const flyers = createFlyers(worldRoot, state, { P: () => (vfx && vfx.P && look.vfx ? vfx.P : null), shipPoint: (sh, x, y, z) => (V && V.hud3d ? V.hud3d.shipPt(sh, x, y, z) : null), mainShip: () => state.ships[0], scrapLive: () => !!(scrap3d && scrap3d.live) }); // (scrapLive: scrap3d.js draws the bundles, their rings and the hold bin; flyers keeps the chutes and the hulk)
+  const flyers = createFlyers(worldRoot, state, { arrive: depth.arrive, P: () => (vfx && vfx.P && look.vfx ? vfx.P : null), shipPoint: (sh, x, y, z) => (V && V.hud3d ? V.hud3d.shipPt(sh, x, y, z) : null), mainShip: () => state.ships[0], scrapLive: () => !!(scrap3d && scrap3d.live) }); // (scrapLive: scrap3d.js draws the bundles, their rings and the hold bin; flyers keeps the chutes and the hulk)
   const worldObjects = createWorldObjects(worldRoot, state, { shipPoint: (sh, x, y, z) => (V && V.hud3d ? V.hud3d.shipPt(sh, x, y, z) : null), modelOf: (sh) => { const e = V && V.models && V.models.get(sh.id); return e ? e.model : null; }, crew: (key) => (V && V.crew ? V.crew.anchor(key) : null), mainShip: () => state.ships[0] });
   const scenery = createScenery(worldRoot, state, { P: () => (vfx && vfx.P && look.vfx ? vfx.P : null) });
   const glows = createThreatGlows(worldRoot, state);
@@ -124,6 +127,9 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   let porthole = null; // (made on the first Versus split, Medium tier and up)
   let portholes3d = null; // (the round portholes: made when the first one is planned)
   V.portholesLive = new Set(); // (the ids of the round portholes drawn in 3D this frame: the 2D renderer draws only their rims)
+  V.depth = depth;
+  const fortress = createFortressPorthole({ renderer, state, mapPt: (x, y) => (V.hud3d ? V.hud3d.mapPt(x, y) : null) }); // LOOP R5 (its rim and plate are drawn in 3D: host/ is not touched)
+  V.fortress = fortress;
 
   // ---- size, detail and quality tier -------------------------------------------------------------------------------------------------------------------------------------
   let sizeKey = '', detail = null, tierName = '', flagKey = '';
@@ -303,7 +309,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
       const pose = sh.pose, root = model.root;
       const bt = t + 2.7 * index;
       const bob = Math.sin(bt * 1.1) * 5 + Math.sin(bt * 0.37 + 1) * 3; // wobble-ok: the ship's own slow bob (the 2D game's, +-3 px), the one idle sine 3D.md allows
-      root.position.set(pose.x + model.pv, -(pose.y + bob), 0);
+      root.position.set(pose.x + model.pv, -(pose.y + bob), sh.ai ? depth.arrive.edge(sh, pose.x + model.pv) : 0); // (R3: an enemy gunship the sim spawns past the edge is drawn far back in the depth first and comes forward as it comes in)
       let yaw;
       if (pose.turn > 0) { const startF = pose.turn < 0.5 ? pose.f : -pose.f; yaw = Math.PI * pose.turn + (startF === -1 ? Math.PI : 0); } // COME ABOUT: a real half-turn about the vertical axis
       else yaw = pose.f === 1 ? 0 : Math.PI;
@@ -502,6 +508,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     syncTod(dt);
     const cam = syncCamera(view, w, h, dt);
     try { ringFrame(map, env, t, dt); } catch (e) { logOnce('ring', e); }
+    try { depth.update({ t, dt, env, map, cam, target: camTarget, tier, cave: world.cave, versus: !!(state.match && state.match.on) }); } catch (e) { logOnce('depth', e); } // (R3 / R5: before the ships and the flyers are placed: they ask it for their arrival depth)
     setInkFor(cam.D, cam.visH); // (A1: ONE number a frame makes every outline screen-constant: style.js)
     crew.setView(cam.D); // (A5: the crew's heads and markers grow with the camera's distance)
     if (beams) { try { beams.updateLit(camera, state, world.night); } catch (e) { logOnce('lit', e); } } // (which targets a manned beam holds: the toon shader gives them a warm rim)
@@ -521,7 +528,11 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     try { flyers.update(t, main ? main.pose.vx || 0 : 0, { dt, zoomEq: h / Math.max(1, cam.visH), lineup: V.enemyLineup }); } catch (e) { logOnce("flyers", e); }
     try { glows.update(t, look.glows && state.phase !== 'lobby'); } catch (e) { logOnce('glows', e); }
     try { worldObjects.update(t, dt, { x: camTarget.x, y: camTarget.y, D: cam.D, hw: cam.visW / 2, hh: cam.visH / 2 }); } catch (e) { logOnce('worldObjects', e); }
-    const phItems = (opts.portholes || []).filter((it) => it.pic === '3d' && it.a > 0 && Number.isFinite(it.cx) && Number.isFinite(it.cy));
+    // LOOP R5: the fortress window (a ring face whose shutter is open while it is off screen) joins the planned portholes
+    let fortItems = [];
+    try { fortItems = fortress.plan({ w, h, t, tier, others: (opts.portholes || []).filter((it) => it.a > 0) }); } catch (e) { logOnce('fortress', e); fortItems = []; }
+    const portholeList = fortItems.length ? [...(opts.portholes || []), ...fortItems] : opts.portholes;
+    const phItems = (portholeList || []).filter((it) => it.pic === '3d' && it.a > 0 && Number.isFinite(it.cx) && Number.isFinite(it.cy));
     try { scenery.update(camTarget.x, cam.visW / 2, { t, dt, extra: phItems.map((it) => ({ x: it.cx, hw: it.r / it.zoom + 300 })) }); } catch (e) { logOnce('scenery', e); }
     const seaNow = env === 'sea' && state.env && Number.isFinite(state.env.seaY) ? state.env.seaY : null;
     try { kraken.update(state.creature, world.night, dt, t, { state, sea: seaNow, tier }); } catch (e) { logOnce('creature', e); }
@@ -570,11 +581,12 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     }
     // The round portholes (portholes3d: a friendly plane off screen, the lookout's spyglass): small extra draws of the same scene over the big picture; the HUD draws the rims.
     V.portholesLive = new Set();
-    if (opts.portholes && opts.portholes.length && !S.orbit && tier.name !== 'low' && look.post && post.enabled && !(portholes3d && portholes3d.error)) {
+    if (portholeList && portholeList.length && !S.orbit && tier.name !== 'low' && look.post && post.enabled && !(portholes3d && portholes3d.error)) {
       try {
         if (!portholes3d) { portholes3d = createPortholes3D({ renderer, scene, world }); V.portholes3d = portholes3d; }
         const cssW = Math.max(2, canvas.clientWidth || window.innerWidth), cssH = Math.max(2, canvas.clientHeight || window.innerHeight);
-        V.portholesLive = portholes3d.render(opts.portholes, cssW / Math.max(1, w), cssW, cssH, { dt, t, seaY: seaNow == null ? NaN : seaNow, map, tier });
+        V.portholesLive = portholes3d.render(portholeList, cssW / Math.max(1, w), cssW, cssH, { dt, t, seaY: seaNow == null ? NaN : seaNow, map, tier });
+        if (fortItems.length) fortress.draw(V.portholesLive, cssW, cssH, cssW / Math.max(1, w)); // (R5: its brass rim and plate, in 3D over the picture)
       } catch (e) { logOnce('portholes3d', e); }
     }
     const j2 = performance.now();
@@ -625,7 +637,7 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
   };
   V.setTod = (name) => { S.tod = name || ''; };
   V.resetOrbit = () => { lastPivot.set(0, 0, 0); }; // WP13: the next orbit frame starts from the starting view again (the build page's double-click)
-  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison, setpieces, away3d, treasure3d, scrap3d, frames3d, struct3d]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
+  V.dispose = () => { for (const part of [beams, lightning, fungal, porthole, portholes3d, weather, teamFlags, castle, garrison, setpieces, away3d, treasure3d, scrap3d, frames3d, struct3d, fortress]) { try { if (part && part.dispose) part.dispose(); } catch { /* (gone) */ } } try { destruction.dispose(); } catch { /* (gone) */ } try { renderer.dispose(); } catch { /* (gone) */ } };
 
   applyDetail();
   console.info('view3d: not drawn yet - ' + NOT_DRAWN.join('; '));

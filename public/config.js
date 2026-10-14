@@ -3644,6 +3644,28 @@ export const config = {
     CAST: { AZ: 0.1, ELEV: 0.16, MUL: 1.14, OUT: 0.9, FOR: 0.7 }, // cast off: a rise and pull-back that settles into the gameplay framing (starts the moment the lobby launches)
     KICK: { MIN_POWER: 2.4, PX: 12, MAX_PX: 15, STEP: 0.07, STEPS: [1, 0.5, 0.2], COOLDOWN: 0.18, SHAKE_EDGE: 1.0 }, // a hard hit: a translational jolt held for three steps of STEP seconds (full, half, a fifth), then gone. PX = size at power 6, capped at MAX_PX (config.CAMERA.SHAKE_MAX applies too)
   },
+  // DEPTH IN 3D (LOOP.md R3 and R5; view3d/depth3d.js, landmarks3d.js, arrivals3d.js, fronts3d.js, farCreature.js, fortressPorthole.js). View only: the sim has no depth and nothing here can be hit. ENABLED: false (or ?look=nodepth)
+  // gives the old picture. A tier can drop parts (TIERS: landmarks, front, creature, fortress; Low drops all but the arrivals, which cost nothing).
+  //   LANDMARKS: far things at real 3D depth, fixed to the world (parallax from the ship's own motion): a landmark every SPACING px along the map, FAR_Z / NEAR_Z = the two depth bands (two draw calls, drawn between the
+  //     painted strips), MAX of them, HAZE = [where the haze starts (depth), its range, the most it takes] (aerial perspective), BLINK = a lamp's period in 8 fps keys (on for two thirds).
+  //   DEST: the next stop's silhouette growing on the horizon: it shows from FAR px away (along the map), grows from SCALE[0] to SCALE[1], slides from SCREEN[0] to SCREEN[1] of the half width, stands at depth Z and
+  //     hangs at SHARE of the screen's half height; a stop with a real scenery thing (the beacon, an outpost) dissolves in FADE px between NEAR + FADE and NEAR (the real one stands up there).
+  //   ARRIVE: a squadron, bomber, gunship, boss or bat swarm that the sim spawns past the screen edge is drawn far away in the depth first, so that it sits at the edge of the picture, and comes forward as the sim brings it in
+  //     (depth = D * (1 - distance past the middle / (EDGE x the half width)), at most MAXZ x D back; no longer than SECS s after it appeared). A supply balloon (which appears in view) flies in from SUPPLY_Z x D back over SUPPLY s.
+  //   FRONT: a storm front's cloud wall rolls in from the horizon over LEAD (a share of the route) before its zone, stays through the zone and rolls away over TAIL after it; a blizzard (frost) and the Ember smoke bank roll
+  //     in as the sim's own number rises (they have no earlier hint). WALL = the number of cloud sprites, Z = [far depth, near depth], COLORS = [shade, lit, rim] per kind.
+  //   CREATURE: before a lair fight the lair's giant circles far away: STEP = the orbit's keys a second (8), SECS = one circuit; BY_KIND = each giant's ellipse (RX across, RZ in depth), its middle depth Z and SCALE (the Kraken wheels inside the sea, which ends 1500 behind the plane).
+  //   FORTRESS: a round window onto a ring face whose shutter is open while that face is off screen: R = its radius (share of the screen height), MAX = windows at once.
+  DEPTH3D: {
+    ENABLED: true,
+    TIERS: { high: { landmarks: 1, front: 1, creature: 1, fortress: 1 }, medium: { landmarks: 1, front: 1, creature: 1, fortress: 1 }, low: { landmarks: 0, front: 0, creature: 0, fortress: 0 } },
+    LANDMARKS: { SPACING: [3400, 5400], FAR_Z: [-7800, -6500], NEAR_Z: [-5900, -4700], MAX: 22, HAZE: [2500, 5000, 0.62], BLINK: 12, LAMP_LOW: 0.3 },
+    DEST: { Z: -5600, FAR: 11000, NEAR: 3500, FADE: 500, SCALE: [0.4, 0.8], SCREEN: [0.95, 0.7], SHARE: -0.12 },
+    ARRIVE: { ENABLED: true, EDGE: 0.92, MAXZ: 1.5, SECS: 6, SUPPLY: 2.2, SUPPLY_Z: 1.1 },
+    FRONT: { LEAD: 0.07, TAIL: 0.05, EASE: 0.35, WALL: 15, Z: [-9000, -2400], SPAN: 2.6, COLORS: { storm: ['#343b52', '#5a6482', '#aab6d0'], blizzard: ['#aebbc9', '#e4ecf2', '#ffffff'], smoke: ['#3c2e30', '#6c5456', '#d08a4a'] } },
+    CREATURE: { STEP: 8, SECS: 26, BY_KIND: { drake: { RX: 2200, RZ: 1500, Z: -4200, SCALE: 2.7 }, thunderbird: { RX: 2300, RZ: 1500, Z: -4200, SCALE: 2.3 }, kraken: { RX: 1500, RZ: 420, Z: -1050, SCALE: 1.3 } } },
+    FORTRESS: { R: 0.11, MAX: 1, MARGIN: 0.04, ZOOM: 0.3 },
+  },
   // THE RING IN 3D (LOOP.md R1, view3d/ringBend.js): on a ring map the flat strip is wrapped round the castle by the vertex shaders, relative to where the camera looks, so the plane at the ship stays 1:1 with the
   // 2D HUD (the camera never rolls). LEAD = the approach's last stretch eases into the circle as an arc of half the ring's curvature, this many R long (no corner where the approach meets the ring).
   // FLAT = the strip stays perfectly flat this far from the camera's look-at point (px, at least the ship's half length + FLAT_PAD, at most FLAT_MAX), then BLEND px of easing into the true circle (so the ship is
