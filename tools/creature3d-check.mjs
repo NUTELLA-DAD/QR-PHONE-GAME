@@ -12,6 +12,8 @@
 //       body with its own feathers), it dies (a flash, feathers) and the view hides; then the Low tier
 //   4c. THE ISLAND TITAN (host.html?creature=titan; skip with --no-titan; 3D.md section 38): it stands within the budget (at most 12 meshes, 60k triangles), every piece is placed, the island's grass top is exactly the sim's island deck, a boulder in a fist with its red
 //       ring and then flying, the fist on the gasbag, the jaw and the funnel for the roar, an arm that cracks in two stages, a shelled-off arm (a stump and Rapier slabs), the crystal in four stages, the death (the island crumbles, it kneels); then the Low tier
+//   4d. THE RIME WYRM (host.html?creature=wyrm; skip with --no-wyrm; 3D.md section 40): the cliff cracks, it erupts and coils within the budget (at most 10 meshes, 60k triangles), every piece is placed, the ice follows the sim in
+//       four steps and sheds Rapier shards, the maw opens in steps with the throat glowing, the frost breath draws its cone and rings on frozen guns, phase 3 shows the underbelly and the sun, the death shatters the ice; then the Low tier
 //   5. (--long) host.html?creature=kraken for 3 minutes with 8 bot crew, in real time
 // Screenshots go to a temp folder (printed), not into the repo.
 import { spawn, spawnSync } from 'node:child_process';
@@ -330,6 +332,82 @@ try {
     if (rtl.errs !== 0 || rtl.evalErrors) fail('console / eval errors on the Titan at the Low tier');
     if (!rtl.data || !rtl.data.low || rtl.data.low.kind !== 'titan' || !rtl.data.low.low || !rtl.data.low.head || !rtl.data.low.isle || rtl.data.low.tris > 60000 || rtl.data.low.meshes > 12) fail('the Low tier Titan is missing or too big ' + JSON.stringify(rtl.data && rtl.data.low));
     if (rtl.data && rtl.data.errors && rtl.data.errors.length) fail('game errors in the Titan Low tier run');
+  }
+  if (!argv.includes('--no-wyrm')) {
+    // THE RIME WYRM (3D.md section 40; BOSSES.md C.6d): the frost serpent on the Frost Peaks lair (host.html?creature=wyrm), step by step with the sim frozen. Checked: the cliff cracks (the cracks mesh and the red ring), it erupts
+    // and coils the hull within the budget (at most 10 meshes, 60k triangles with ink), every piece is placed (12 segments, the collar, the skull, both jaws), the body lies behind the cliff's face while it is buried, the ice
+    // follows the sim's numbers (a full shell, a cracked one, frost patches, bare with cold seams) and sheds shards as Rapier bodies when it steps down, a ping flashes, the maw opens in steps and the throat glows, the
+    // frost breath draws its cone and the frozen guns their rings, phase 3 shows the underbelly and the sun, the death shatters the ice and the view hides; then the Low tier.
+    console.log('4d. the Rime Wyrm (host.html?creature=wyrm): crack, eruption, coil, ice steps, maw, breath, sun, belly, death; then Low');
+    const wmeas = `window.__meas=()=>{ const k=${view}.kraken, r=k.rig, e=r.ext; let meshes=0, tris=0; const walk=(o)=>{ let v=true, p=o; while(p){ if(!p.visible) v=false; p=p.parent; } if(o.isMesh && v && !(o.isInstancedMesh && o.count===0)){ const g=o.geometry; if(g.drawRange && g.drawRange.count===0) return; meshes++; let t=(g.index?g.index.count:g.attributes.position.count)/3; if(o.isInstancedMesh) t*=o.count; tris+=t; } o.children.forEach(walk); }; walk(k.root); if(e){ walk(e.marks.mesh); walk(e.cracks.mesh); } for (const m of [r.foam.mesh, r.shadow.mesh, r.markers.mesh, r.ropes.group]) walk(m); return { meshes, tris:Math.round(tris) }; };
+      window.__pl=(n)=>{ const e=${view}.kraken.rig.ext, p=e.bset.pieces[n]||e.iset.pieces[n]; return !!(p&&p.key&&p.key!=='hidden'); };
+      window.__plI=(n)=>{ const p=${view}.kraken.rig.ext.iset.pieces[n]; return !!(p&&p.key&&p.key!=='hidden'); };`;
+    const wsteps = [
+      setup,
+      // the telegraph: the cliff cracks (the cracks mesh, the ring) and the Wyrm is buried (nothing of its body placed)
+      [`(async()=>{ ${sl} ${wmeas} const cr=__cr(); window.__until(()=>cr.wyrm.mode==='crack'&&cr.wyrm.crack.t>1.2, 20000); await sl(900); const e=${view}.kraken.rig.ext; window.__wp8.crack={ mode:cr.wyrm.mode, cracks:e.cracks.visible, marks:e.marks.count, buried:!window.__pl('b0')&&!window.__pl('collar'), kind:${view}.kraken.rig.kind }; return JSON.stringify(window.__wp8.crack) })()`, 300, 'crack'],
+      // the eruption and the coil: within the budget, every piece placed, the body in front of the cliff's face only where it is above the cliff
+      [`(async()=>{ ${sl} const cr=__cr(); window.__until(()=>cr.grips.some(g=>g.mode==='hold'), 12000); window.__step(60); cr.ai.breather=99; await sl(1500); const k=${view}.kraken, r=k.rig, e=r.ext, m=window.__meas(), P=(n)=>window.__pl(n);
+        let segs=0; for(let i=0;i<12;i++) if(P('b'+i)) segs++;
+        const zs=[]; for(let i=0;i<12;i++){ const kk=e.bset.pieces['b'+i].key; if(kk&&kk!=='hidden') zs.push(kk[14]); }
+        window.__wp8.stand={ kind:r.kind, ext:!!e, visible:k.root.visible, mode:cr.mode, meshes:m.meshes, tris:m.tris, js:${view}.stats().jsMs, segs, collar:P('collar'), skull:P('skull'), jaws:P('jawU')&&P('jawL'), tubesHidden:!r.tubes.mesh.visible, hold:cr.grips.some(g=>g.mode==='hold'), zmin:Math.min(...zs), zmax:Math.max(...zs), cracksGone:!e.cracks.visible, lip:P('lip') }; return JSON.stringify(window.__wp8.stand) })()`, 300, 'stand'],
+      // the ice follows the sim: bare, frost patches, a cracked shell, a full shell; shards fall when it steps down
+      [`(async()=>{ ${sl} const cr=__cr(), e=${view}.kraken.rig.ext, D=${view}.destruction, l=cr.parts.find(p=>p.id==='wyrm'); const set=[0,0.2,0.55,1,1,1,1,1,1,1,1,1]; const c0=D.chunks.length; l.ice=l.iceMax.map((m,i)=>m*set[i]); window.__step(3); await sl(500);
+        window.__wp8.ice={ bare:!window.__plI('i0F')&&!window.__plI('i0C')&&!window.__plI('i0P')&&window.__pl('g0'), patches:window.__plI('i1P')&&!window.__pl('g1'), cracked:window.__plI('i2C'), full:window.__plI('i3F'), loose:e.S.loose.size, bodies:D.chunks.length-c0 };
+        l.ice[3]=0; l.ice[4]=l.iceMax[4]*0.3; window.__step(3); await sl(500); window.__wp8.ice.after={ bare3:window.__pl('g3'), patches4:window.__plI('i4P'), loose:e.S.loose.size };
+        l.iceFlash=0.15; l.iceAge[5]=0; window.__step(1); await sl(300); window.__wp8.ice.ping=e.S.flash.get(l)>0||l.iceFlash>=0; return JSON.stringify(window.__wp8.ice) })()`, 300, 'ice'],
+      // the maw opens in steps; the throat glows; the funnel is drawn
+      [`(async()=>{ ${sl} const cr=__cr(), e=${view}.kraken.rig.ext, R=${view}.kraken.rig; for(const g of cr.grips) g.left=0.01; window.__step(120); cr.ai.breather=0; const was=e.S.open, n=__until(()=>!!cr.mouthWin, 3000); window.__step(30); await sl(1500);
+        window.__wp8.maw={ n, win:!!cr.mouthWin, was, open:e.S.open, jaws:window.__pl('jawU')&&window.__pl('jawL'), throat:window.__pl('throat'), funnel:e.marks.count>=1, glow:R.uniforms.uGlow.value.y }; return JSON.stringify(window.__wp8.maw) })()`, 300, 'maw'],
+      // the frost breath: the throat's ring, then the cone; a frozen gun gets its ring
+      [`(async()=>{ ${sl} const cr=__cr(), e=${view}.kraken.rig.ext, st=window.game.state; cr.mouthWin=null; window.__step(300); cr.wyrm.breathT=0; cr.ai.breather=0; const n=__until(()=>cr.wyrm.breath&&cr.wyrm.breath.sub==='wind', 3000); window.__step(20); await sl(400); const wind=e.marks.count>=1; const n2=__until(()=>cr.wyrm.breath&&cr.wyrm.breath.sub==='blow', 3000); window.__step(4); await sl(500);
+        window.__wp8.breath={ n, wind, blow:!!(cr.wyrm.breath&&cr.wyrm.breath.sub==='blow'), marks:e.marks.count, iced:(st.icing||[]).filter(c=>c.wyrm).length }; window.__step(60); await sl(500); window.__wp8.breath.guns=(st.icing||[]).filter(c=>c.wyrm&&c.lvl>=0.8).length; window.__wp8.breath.ring=e.marks.count>=1; return JSON.stringify(window.__wp8.breath) })()`, 300, 'breath'],
+      // phase 3: the underbelly and the sun
+      [`(async()=>{ ${sl} const cr=__cr(), e=${view}.kraken.rig.ext; cr.hp=cr.maxHp*0.3; cr.ai.breather=0; const n=__until(()=>cr.phase===3&&!!cr.wyrm.sun, 3000); window.__step(30); await sl(1200);
+        window.__wp8.p3={ n, phase:cr.phase, sun:!!cr.wyrm.sun, belly:window.__pl('belly'), marks:e.marks.count }; return JSON.stringify(window.__wp8.p3) })()`, 300, 'p3'],
+      measure('wyrm'),
+      // death: a flash, the ice shatters (shards), it sinks into the cliff; the view hides afterwards
+      [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, cr=__cr(), e=${view}.kraken.rig.ext; cr.hp=1; cr.hooks.hurtPool(5,'sun'); void cs; window.__step(20); await sl(500); const d0={ killed:cr.mode==='dying', mode:cr.mode, died:e.S.died, loose:e.S.loose.size };
+        window.__step(90); await sl(700); window.__wp8.death={ d0, iceGone:!['F','C','P'].some(v=>window.__plI('i3'+v)||window.__plI('c'+v)), loose:e.S.loose.size, sink:cr.sinkT }; return JSON.stringify(window.__wp8.death) })()`, 300, 'death'],
+      [`(async()=>{ ${sl} window.__step(900); await sl(1200); const k=${view}.kraken; window.__wp8.gone=!window.game.state.creature; window.__wp8.hiddenAfter=!k.root.visible && !k.rig.ext.marks.mesh.visible && !k.rig.ext.cracks.visible; window.__wp8.errors=window.gameErrors||[]; return 1 })()`, 300],
+    ];
+    const rw = run('wyrm', 'creature=wyrm', wsteps);
+    const wd = rw.data || {};
+    console.log('  errors ' + rw.errs + ' evalErrors ' + rw.evalErrors + '  ' + JSON.stringify(wd).slice(0, 1600));
+    if (rw.errs !== 0 || rw.evalErrors) fail('console / eval errors in the Wyrm run');
+    const wc = wd.crack;
+    if (!wc || wc.mode !== 'crack' || !wc.cracks || !(wc.marks >= 1) || !wc.buried || wc.kind !== 'wyrm') fail('the cliff must crack (the cracks mesh and the red ring) while the Wyrm is buried ' + JSON.stringify(wc));
+    const w0 = wd.stand;
+    if (!w0 || w0.kind !== 'wyrm' || !w0.ext || !w0.visible || !w0.hold) fail('the Wyrm view (rig.ext) was not built or it has not coiled the hull ' + JSON.stringify(w0));
+    else {
+      if (w0.meshes > 10) fail('the Wyrm draws ' + w0.meshes + ' meshes (budget 10)');
+      if (w0.tris > 60000) fail('the Wyrm is ' + w0.tris + ' triangles with ink (budget 60000)');
+      if (w0.js > 2.5) fail('the frame JS is ' + w0.js + ' ms');
+      if (w0.segs !== 12 || !w0.collar || !w0.skull || !w0.jaws || !w0.tubesHidden || !w0.cracksGone) fail('a piece of the Wyrm is not placed ' + JSON.stringify(w0));
+      if (!(w0.zmax > 30)) fail('a coiled segment must pass in front of the hull (z ' + w0.zmax + ')');
+    }
+    const wi = wd.ice;
+    if (!wi || !wi.bare || !wi.patches || !wi.cracked || !wi.full || !(wi.loose >= 0) || !wi.after || !wi.after.bare3 || !wi.after.patches4 || !(wi.after.loose >= 1)) fail('the ice must follow the sim (bare with seams, frost patches, a cracked shell, a full shell) and shed shards when it steps down ' + JSON.stringify(wi));
+    const wm = wd.maw;
+    if (!wm || !wm.win || !(wm.open > 0.5) || !(wm.was < 0.2) || !wm.jaws || !wm.throat || !wm.funnel || !(wm.glow > 1.2)) fail('the maw: the jaws part in steps, the throat glows and the funnel is drawn ' + JSON.stringify(wm));
+    const wb = wd.breath;
+    if (!wb || !wb.wind || !wb.blow || !(wb.marks >= 1) || !(wb.guns >= 1) || !wb.ring) fail('the frost breath: the throat ring, the cone, and a ring on a frozen gun ' + JSON.stringify(wb));
+    const w3 = wd.p3;
+    if (!w3 || w3.phase !== 3 || !w3.sun || !w3.belly || !(w3.marks >= 2)) fail('phase 3: the underbelly and the shaft of sun ' + JSON.stringify(w3));
+    if (!wd.wyrm || wd.wyrm.meshes > 10 || wd.wyrm.tris > 60000) fail('the Wyrm costs too much: ' + JSON.stringify(wd.wyrm));
+    const wh = wd.death;
+    if (!wh || !wh.d0 || !wh.d0.killed || wh.d0.mode !== 'dying' || !wh.d0.died || !wh.iceGone || !(wh.loose >= 3)) fail('the death: the ice shatters into shards ' + JSON.stringify(wh));
+    if (!wd.gone || !wd.hiddenAfter) fail('after the death the view must hide ' + JSON.stringify([wd.gone, wd.hiddenAfter]));
+    if (wd.errors && wd.errors.length) fail('game errors in the Wyrm run: ' + JSON.stringify(wd.errors).slice(0, 200));
+    const wlow = [
+      setup,
+      [`(async()=>{ ${sl} ${wmeas} const cr=__cr(); window.__until(()=>cr.grips.some(g=>g.mode==='hold'), 12000); window.__step(60); cr.ai.breather=99; await sl(1500); const r=${view}.kraken.rig; const m=window.__meas(); window.__wp8.low={ kind:r.kind, low:r.low, ext:!!r.ext, meshes:m.meshes, tris:m.tris, segs:[0,1,2,3,4,5,6,7,8,9,10,11].filter(i=>window.__pl('b'+i)).length, skull:window.__pl('skull') }; window.__wp8.errors=window.gameErrors||[]; return JSON.stringify(window.__wp8.low) })()`, 300, 'wyrmlow'],
+    ];
+    const rwl = run('wyrmlow', 'creature=wyrm&tier=low', wlow);
+    console.log('  low tier: errors ' + rwl.errs + '  ' + JSON.stringify(rwl.data).slice(0, 400));
+    if (rwl.errs !== 0 || rwl.evalErrors) fail('console / eval errors on the Wyrm at the Low tier');
+    if (!rwl.data || !rwl.data.low || rwl.data.low.kind !== 'wyrm' || !rwl.data.low.low || rwl.data.low.segs !== 12 || !rwl.data.low.skull || rwl.data.low.tris > 60000 || rwl.data.low.meshes > 10) fail('the Low tier Wyrm is missing or too big ' + JSON.stringify(rwl.data && rwl.data.low));
+    if (rwl.data && rwl.data.errors && rwl.data.errors.length) fail('game errors in the Wyrm Low tier run');
   }
   if (long) {
     console.log('5. host.html?creature=kraken, 8 bots, 3 minutes in real time');
