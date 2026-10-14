@@ -6,16 +6,26 @@ import { createLights, TOD } from './lights.js';
 import { createSky } from './sky.js';
 import { createClouds } from './clouds.js';
 import { createWater } from './water.js';
+import { createLandmarks } from './landmarks3d.js'; // LOOP R3: far landmarks at real depth + the destination on the horizon
+import { createFronts } from './fronts3d.js'; // LOOP R5: the weather front rolling in from the depth
+import { createFarCreature } from './farCreature.js'; // LOOP R5: the lair's giant circling far away
 export { TOD };
+
+let lastDepthLog = '';
+const logDepth = (what, e) => { const m = what + ': ' + String(e && e.message ? e.message : e); if (m !== lastDepthLog) { lastDepthLog = m; console.warn('view3d depth', m); } }; // (drawing must never throw: a failure here leaves the sky emptier)
 
 export function createWorld(scene, renderer) {
   const lights = createLights(scene);
   const sky = createSky(scene, renderer);
   const clouds = createClouds(scene);
   const water = createWater(scene);
+  let landmarks = null, fronts = null, farCreature = null; // (R3 / R5: if one cannot be made the sky is simply without it)
+  try { landmarks = createLandmarks(scene); } catch (e) { console.warn('view3d landmarks off', e); }
+  try { fronts = createFronts(scene); } catch (e) { console.warn('view3d fronts off', e); }
+  try { farCreature = createFarCreature(scene); } catch (e) { console.warn('view3d far creature off', e); }
   const { hemi, sun } = lights;
 
-  const W = { sunDir: lights.sunDir, tod: 'day', todCfg: TOD.day, night: 0, gloom: 0, cave: false, envId: null, bgDim: 1, hemi, sun, water: water.group, waterView: water, clouds, backOn: true, lights, sky };
+  const W = { sunDir: lights.sunDir, tod: 'day', todCfg: TOD.day, night: 0, gloom: 0, cave: false, envId: null, bgDim: 1, hemi, sun, water: water.group, waterView: water, clouds, backOn: true, lights, sky, landmarks, fronts, farCreature, depthCtx: null };
 
   // splashAt(x, y, size [, z]): a ring decal on the Sunken Sea's surface (for the VFX pass; see water.js). Does nothing when there is no sea.
   W.splashAt = (x, y, size, z) => water.splashAt(x, y, size, z);
@@ -44,6 +54,9 @@ export function createWorld(scene, renderer) {
     sky.setRig(lights.rig);
     clouds.setRig(lights.rig, envId, cave);
     water.setRig(lights.rig, envId);
+    if (landmarks) landmarks.setEnv(envId, cave);
+    if (fronts) fronts.setEnv(envId, cave);
+    if (farCreature) farCreature.setEnv(envId, cave);
   };
 
   // Every frame. cam = the THREE camera; target = where it looks (3D), vis = world units visible at the ship plane { w, h }, t = seconds, seaY = the sea level (game y; NaN = no sea), map = the course's map.
@@ -51,8 +64,12 @@ export function createWorld(scene, renderer) {
     sky.update(cam, target, vis, t);
     clouds.update(cam, target, t, cam.aspect, vis);
     water.update(cam, target, t, seaY, map);
+    // R3 / R5: what is far behind the play plane (placed for THIS camera, so a porthole's pass gets its own). W.depthCtx = what the view's depth director worked out this frame (depth3d.js).
+    if (landmarks) { try { landmarks.update(cam, target, vis, t, map, W.depthCtx, W); } catch (e) { logDepth('landmarks', e); } }
+    if (fronts) { try { fronts.update(cam, target, vis, t, W.depthCtx, W); } catch (e) { logDepth('fronts', e); } }
+    if (farCreature) { try { farCreature.update(cam, target, vis, t, W.depthCtx, W); } catch (e) { logDepth('far creature', e); } }
   };
-  W.setTier = (tier) => { water.setTier(tier); };
+  W.setTier = (tier) => { water.setTier(tier); if (landmarks) landmarks.setTier(tier); if (fronts) fronts.setTier(tier); if (farCreature) farCreature.setTier(tier); };
   W.setLook = () => { W.applyLights(); };
   W.setTod('day');
   void THREE;

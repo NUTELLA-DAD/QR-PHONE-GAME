@@ -21,7 +21,7 @@ export { THREE };
 // A6: contact (the soft shadow under each ship, contactShadow.js), gouache (the opaque flat smoke with a light crescent and an ink rim; false = the old translucent soft discs).
 // A3: strips (the far / mid strips recede into the haze), skyart (the painted Ember sky and the painted cave stone: false = the old gradient and the old cave picture).
 // WP10: beam (the volumetric searchlight beams, light pools and the lit-target rim: false = the old flat cones), lightning (the strike flash + bolt), fungal (the glowing mushrooms and spores).
-export const look = { toon: true, outlines: true, shadows: true, low: false, bloom: true, lut: true, grain: true, fog: true, rim: true, lanterns: true, post: true, dark: true, clouds: true, water: true, vfx: true, glows: true, beam: true, lightning: true, fungal: true, weather: true, strips: true, skyart: true, contact: true, gouache: true, fringe: true };
+export const look = { toon: true, outlines: true, shadows: true, low: false, bloom: true, lut: true, grain: true, fog: true, rim: true, lanterns: true, post: true, dark: true, clouds: true, water: true, vfx: true, glows: true, beam: true, lightning: true, fungal: true, weather: true, strips: true, skyart: true, contact: true, gouache: true, fringe: true, depth: true };
 
 // Shared shader numbers (one object, read by every patched material, so changing them needs no recompile): the toon rim light, and what the painted backdrops need to survive tone mapping.
 export const fx = {

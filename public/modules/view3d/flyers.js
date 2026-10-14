@@ -63,13 +63,16 @@ export function createFlyers(root, stateArg, api = {}) {
     void flipBy;
   };
   const planeShell = (mesh) => { const gr = new THREE.Group(), inner = new THREE.Group(); inner.add(mesh); gr.add(inner); gr.userData.inner = inner; gr.userData.mesh = mesh; return gr; };
-  const syncPlanes = (key, list, make, max = 24, post = null) => {
+  // LOOP R3: arr = true for the enemies the sim brings in from beyond the picture's edge (depth3d.js): they are drawn far back in the depth first and come forward as they come in
+  const arrOf = (o, x) => (api.arrive ? api.arrive.edge(o, x) : 0);
+  const syncPlanes = (key, list, make, max = 24, post = null, arr = false) => {
     let n = 0;
     for (const p of list) {
       if (!p || p.dead > 0 || p.dead === true || !Number.isFinite(p.x) || !Number.isFinite(p.y) || n >= max) continue;
       const g = use(key, n, () => planeShell(make(p)));
       n++;
       placePlane(g, p);
+      if (arr) g.position.z = arrOf(p, p.x);
       if (p.hijackScale) g.scale.setScalar(p.hijackScale);
       if (post) post(g, p);
     }
@@ -109,7 +112,7 @@ export function createFlyers(root, stateArg, api = {}) {
     for (const b of list) {
       if (!b || b.delay > 0 || !Number.isFinite(b.x) || !Number.isFinite(b.y) || n >= 40) continue;
       const latched = b.latched && b.landed, hang = latched && b.kind === 'gas';
-      put(b.x, -b.y, 60, hang ? PI : latched ? 0 : clamp(-(fin(b.vx) - refVxNow) * 0.0004, -0.28, 0.28), 1.7); // (it tilts into its flight; a gas-bag bat hangs upside down)
+      put(b.x, -b.y, 60 + (latched ? 0 : arrOf(b, b.x)), hang ? PI : latched ? 0 : clamp(-(fin(b.vx) - refVxNow) * 0.0004, -0.28, 0.28), 1.7); // (it tilts into its flight; a gas-bag bat hangs upside down)
       w.sets[latched ? 4 : (K + n) & 3].add(_m); // (the key picks the pose: wing up, level, down, level; folded when latched)
       n++;
     }
@@ -248,7 +251,7 @@ export function createFlyers(root, stateArg, api = {}) {
       n++;
       const boss = m.obj;
       boss.visible = true;
-      boss.position.set(z.x, -z.y, 0);
+      boss.position.set(z.x, -z.y, arrOf(z, z.x));
       stats.boss = n;
       const main = api.mainShip && api.mainShip();
       const aimX = main ? main.pose.x + (main.layout.aimPoint ? main.layout.aimPoint.x : 0) : z.x - 1000, aimY = main ? -(main.pose.y + (main.layout.aimPoint ? main.layout.aimPoint.y : 0)) : -z.y;
@@ -374,7 +377,7 @@ export function createFlyers(root, stateArg, api = {}) {
     if (sp && state.course && Number.isFinite(sp.mx) && Number.isFinite(sp.my)) {
       if (!supply) { supply = makeSupply(); applyLook(supply); root.add(supply); }
       supply.visible = true;
-      supply.position.set(sp.mx, -(sp.my + BOB_SUPPLY[K % 40]), 0);
+      supply.position.set(sp.mx, -(sp.my + BOB_SUPPLY[K % 40]), api.arrive ? api.arrive.time(sp) : 0); // (R3: the balloon flies in from the depth)
     } else if (supply) supply.visible = false;
   };
 
@@ -488,12 +491,12 @@ export function createFlyers(root, stateArg, api = {}) {
       const vc = state.course ? envOf(state).strafer : null; // (the Aether's void corsairs are a different colour)
       const strafers = (state.strafers || []);
       const strafePal = vc ? { body: vc.body, wing: vc.body, trim: vc.trim, dark: '#2f2a3a' } : PAL_STRAFER;
-      syncPlanes('S' + (vc ? vc.body : ''), strafers.filter((p) => !p.ace && !p.leader), () => A.buildBiplane(strafePal, { enemy: true, pilot: 'skull' }));
-      syncPlanes('SL' + (vc ? vc.body : ''), strafers.filter((p) => p.leader && !p.ace), () => A.buildBiplane(strafePal, { enemy: true, pilot: 'skull', pennant: '#efe6cf' }), 8); // (a squadron's leader flies a pennant: squads.js)
-      for (const ap of config.SQUADRONS.ACE_PAINTS) syncPlanes('A' + ap.id, strafers.filter((p) => p.ace && p.paint === ap.id), () => A.buildBiplane({ body: ap.body, wing: ap.body, trim: ap.trim, dark: '#2f2a3a' }, { enemy: true, pilot: 'skull', pennant: ap.trim }), 4); // (the ace's flying circus paint)
+      syncPlanes('S' + (vc ? vc.body : ''), strafers.filter((p) => !p.ace && !p.leader), () => A.buildBiplane(strafePal, { enemy: true, pilot: 'skull' }), 24, null, true);
+      syncPlanes('SL' + (vc ? vc.body : ''), strafers.filter((p) => p.leader && !p.ace), () => A.buildBiplane(strafePal, { enemy: true, pilot: 'skull', pennant: '#efe6cf' }), 8, null, true); // (a squadron's leader flies a pennant: squads.js)
+      for (const ap of config.SQUADRONS.ACE_PAINTS) syncPlanes('A' + ap.id, strafers.filter((p) => p.ace && p.paint === ap.id), () => A.buildBiplane({ body: ap.body, wing: ap.body, trim: ap.trim, dark: '#2f2a3a' }, { enemy: true, pilot: 'skull', pennant: ap.trim }), 4, null, true); // (the ace's flying circus paint)
       const dev = state.enemy && !lobby && !(state.enemy.dead > 0) ? [state.enemy] : [];
       syncPlanes('D', dev, () => A.buildDevil(), 1);
-      syncPlanes('B', state.bombers || [], () => A.buildBomber(), 6, (g, p) => { g.rotation.z = 0; g.userData.inner.rotation.x = 0; g.rotation.y = fin(p.vx) < 0 ? PI : 0; }); // (a bomber turns about her tail: the emblem is on both sides)
+      syncPlanes('B', state.bombers || [], () => A.buildBomber(), 6, (g, p) => { g.rotation.z = 0; g.userData.inner.rotation.x = 0; g.rotation.y = fin(p.vx) < 0 ? PI : 0; }, true); // (a bomber turns about her tail: the emblem is on both sides)
       // our planes: the escorts of EVERY ship (each ship has her own, state.ships[i].ctx.escorts; Versus tints them by team), flying or docked (sitting on their hook under the hull, moving with the ship and her pitch, a ghost while a new one is built), and the stolen fighters
       const ships = (state.ships || []).filter((s) => !s.ai);
       const sets = ships.length ? ships.map((sh) => ({ sh, list: (sh.ctx && sh.ctx.escorts) || (sh === state.ships[0] ? state.escorts : null) || [] })) : [{ sh: null, list: state.escorts || [state.escort] }];
