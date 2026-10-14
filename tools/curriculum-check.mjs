@@ -33,14 +33,15 @@ const clock = seedRandom(seed);
 const load = (p) => import(pathToFileURL(path.join(publicDir, p)).href);
 const { config } = await load('config.js');
 const VG = await load('modules/host/voyage.js');
-const V = config.VOYAGE, CU = V.CURRICULUM, LR = config.CREATURES.LAIR;
+const V = config.VOYAGE, CU = V.CURRICULUM, LR = config.CREATURES.LAIR, TL = config.CREATURES.TITAN.LAIR;
+const isTitan = (s) => !!s.lair && s.creature === 'titan'; // (C.6c: the Island Titan's lair is the one early lair: the second stop flown of a first voyage, Sky Isles, bats and imps only; it has its own rules below)
 
 // ---- (a) the generated routes ----
 const GATES_ALL = ['swarm', 'imps', 'bombers', 'strafers', 'gunship'];
 const seeds = Array.from({ length: COUNT }, (_, i) => (i + 1) * 7919 + 13);
 const variants = [['quick', {}], ['quick', { gentle: true }], ['voyage', {}], ['voyage', { gentle: true }], ['voyage', { classic: true }], ['campaign', {}], ['campaign', { voyageNo: 2 }]];
 const WC = CU.WIDE_CAVES, C1 = CU.CLASSIC_STOP1; // (F1: a small ship's caves are wide; the classic ship's stop 1 has strafers added)
-const stats = { lairs: 0, creatures: {}, rings: {}, nemesis: 0, multi: 0, n: {}, tags: 0, voyages: 0 };
+const stats = { lairs: 0, creatures: {}, rings: {}, nemesis: 0, multi: 0, n: {}, tags: 0, voyages: 0, titans: 0, titanEligible: 0 };
 for (const [mode, o] of variants) {
   const M = V.MODES[mode], table = VG.curriculumTable(mode), L = table.length;
   const second = (o.voyageNo || 1) > 1, h = second ? 1 : 0, bonus = second ? V.SECOND.DANGER_BONUS : 0, maxD = 3 + bonus;
@@ -68,8 +69,10 @@ for (const [mode, o] of variants) {
     if (WC.ENABLED && o.gentle && !second && (cols.flat().some((s) => !(s.slack >= 1)) || cols[0][0].slack <= config.MAPS.TUNNEL_SLACK)) fail(sd, 'the slack is not above the normal caves at stop 1');
     if (second && (cols[h].length < V.CHOICES_MIN || cols[h][0].slot !== CU.SECOND_START || cols[h][0].base !== table[CU.SECOND_START].danger + bonus)) fail(sd, 'the second voyage does not start at slot ' + CU.SECOND_START);
     // lairs
-    const lairCols = [];
+    const lairCols = [], titanCols = [];
     let lastTier = -1, lastBase = 0, lastGates = [];
+    const titanWanted = TL.ENABLED && !second && m >= TL.MIN_STOPS && !!cols[h + TL.COLUMN] && cols[h + TL.COLUMN].some((s) => s.env === 'skyisles'); // (C.6c: the Titan's lair is guaranteed on the second stop flown of every first voyage of at least MIN_STOPS stops, when that column has Sky Isles stops: the 5-stop campaign route's second stop is already Frost or Ember)
+    if (titanWanted) stats.titanEligible++;
     for (let c = h; c < n; c++) {
       const col = cols[c];
       const mid = c > 0 && c < n - 1;
@@ -78,7 +81,7 @@ for (const [mode, o] of variants) {
       const share = c === n - 1 ? 1 : second ? CU.SECOND_START / (CU.POWER_CURVE.length - 1) + ((c - h) / (m - 1)) * (1 - CU.SECOND_START / (CU.POWER_CURVE.length - 1)) : c / (n - 1);
       if (slot !== Math.round(share * (L - 1))) fail(sd, `column ${c} takes slot ${slot}, its share ${share.toFixed(2)} says ${Math.round(share * (L - 1))}`);
       const slotGates = (c === h && !second && C1.ENABLED && o.classic ? [...new Set([...row.gates, ...C1.GATES])] : row.gates).join(); // (F1: the classic ship has stop 1's threat added)
-      if (col.some((s) => s.slot !== slot || s.gates.join() !== slotGates)) fail(sd, `column ${c} stops disagree on their slot`);
+      if (col.some((s) => s.slot !== slot || (isTitan(s) ? s.gates.join() !== 'swarm,imps' : s.gates.join() !== slotGates))) fail(sd, `column ${c} stops disagree on their slot`);
       const base = c === n - 1 ? maxD : Math.min(maxD, row.danger + bonus);
       if (col.some((s) => s.base !== base)) fail(sd, `column ${c} base danger`);
       if (base < lastBase) fail(sd, `base danger falls at column ${c}`);
@@ -92,14 +95,14 @@ for (const [mode, o] of variants) {
       if (!second && c === 0 && col[0].gates.some((g) => !first.includes(g))) fail(sd, 'column 1 allows ' + col[0].gates.join());
       if (!second && c === 0 && (col[0].gates.includes('gunship') || (col[0].gates.includes('strafers') && !(C1.ENABLED && o.classic)))) fail(sd, 'gunship or strafers in column 1');
       if (!second && c === 0 && C1.ENABLED && o.classic && !C1.GATES.every((g) => col[0].gates.includes(g))) fail(sd, 'the classic ship lacks its stop-1 threat');
-      if (!second && c === 1 && !['gunship', 'bombers', 'strafers'].every((g) => col[0].gates.includes(g))) fail(sd, 'column 2 does not teach the planes and the gunship');
+      if (!second && c === 1 && !['gunship', 'bombers', 'strafers'].every((g) => col.find((s) => !isTitan(s)).gates.includes(g))) fail(sd, 'column 2 does not teach the planes and the gunship'); // (the Titan's stop is only one of the choices: another stop of the column teaches them)
       if (col.some((s) => s.gates.some((g) => !GATES_ALL.includes(g)))) fail(sd, 'unknown gate');
       // skies
       const tiers = col.filter((s) => !s.lair).map((s) => VG.envTier(s.env));
       const allowed = VG.envsOf(row.env);
       for (const s of col) {
         if (!s.lair && !allowed.includes(s.env)) fail(sd, `${s.id} sky ${s.env} is not in slot ${slot}'s ${allowed}`);
-        if (s.lair && !LR.BY_ENV[s.env]) fail(sd, `${s.id} lair in ${s.env}`);
+        if (s.lair && !isTitan(s) && !LR.BY_ENV[s.env]) fail(sd, `${s.id} lair in ${s.env}`);
         const kinds = c === 0 && cl1 && C1.KIND ? [C1.KIND] : s.lair ? ['lair'] : s.ring && config.RING.ENABLED ? ['ring'] : s.ring && !s.flagship ? ['open'] : row.kinds; // (a ring stop flies the ring map, config.RING.ENABLED; R0)
         if (!kinds.includes(s.kind)) fail(sd, `${s.id} kind ${s.kind} not in ${kinds}`);
         sawKind.add(s.kind);
@@ -112,7 +115,13 @@ for (const [mode, o] of variants) {
       }
       // lairs, flags
       for (const s of col) {
-        if (s.lair) {
+        if (isTitan(s)) { // the Island Titan's lair: its own rules
+          if (!titanWanted || c !== h + TL.COLUMN) fail(sd, `${s.id} Titan lair in column ${c} (wanted: ${titanWanted ? h + TL.COLUMN : 'none'})`);
+          if (s.env !== 'skyisles' || s.kind !== 'lair' || s.flagship || s.harbour || s.ring || s.nemesis || s.multi) fail(sd, `${s.id} Titan lair is not a plain Sky Isles lair`);
+          if (s.danger !== Math.max(1, s.base + TL.DANGER) && s.danger !== Math.max(1, s.base + 1 + TL.DANGER)) fail(sd, `${s.id} Titan lair danger ${s.danger} (base ${s.base})`);
+          stats.titans++;
+          titanCols.push(c);
+        } else if (s.lair) {
           if (!row.lair) fail(sd, `${s.id} lair in a slot with lair: false`);
           if (s.share < CU.LAIR_FROM) fail(sd, `${s.id} lair at ${s.share} of the route (before ${CU.LAIR_FROM})`);
           if (s.flagship || s.harbour) fail(sd, 'lair on the Flagship or harbour');
@@ -135,7 +144,10 @@ for (const [mode, o] of variants) {
     }
     const maxLairs = m >= LR.LONG_STOPS ? LR.COUNT.long : LR.COUNT.short;
     if (lairCols.length > maxLairs) fail(sd, `${lairCols.length} lairs, at most ${maxLairs}`);
-    if (lairCols.some((c, i) => lairCols.some((d, j) => i < j && Math.abs(c - d) <= 1))) fail(sd, 'two lairs in a row');
+    const allLairCols = [...lairCols, ...titanCols];
+    if (allLairCols.some((c, i) => allLairCols.some((d, j) => i < j && Math.abs(c - d) <= 1))) fail(sd, 'two lairs in a row');
+    if (titanWanted && titanCols.length !== 1) fail(sd, `${titanCols.length} Titan lairs on a route that must have exactly 1`);
+    if (!titanWanted && titanCols.length) fail(sd, 'a Titan lair where none belongs (a quick route, or a second voyage)');
     // a gentle route: a way round an outpost raid in its first two columns
     if (o.gentle) for (let c = 0; c < Math.min(2, n - 1); c++) if (!cols[c].some((s) => s.danger <= s.base && s.kind !== 'open')) fail(sd, `gentle column ${c} has no way round a raid`);
     // reachable, leading on
@@ -148,6 +160,7 @@ for (const [mode, o] of variants) {
   report(!bad.length, `${COUNT} ${label} routes: shape, slots, gates, sky tiers, lairs, easy branches, flags, links${bad.length ? '\n  ' + bad.join('\n  ') : ''}`);
 }
 report(stats.lairs > 0 && Object.keys(stats.creatures).length >= 2, `lairs appear in the curriculum routes: ${stats.lairs} (${Object.entries(stats.creatures).map(([k, v]) => k + ' ' + v).join(', ')})`);
+report(stats.titans > 0 && stats.titans === stats.titanEligible, `the Island Titan's lair (C.6c): ${stats.titans} on ${stats.titanEligible} routes that must have one (the second stop flown of a first voyage of ${TL.MIN_STOPS}+ stops that has Sky Isles stops there: Sky Isles, bats and imps only, never beside another lair)`);
 report(stats.nemesis > 0 && stats.multi > 0 && stats.rings.tower > 0 && stats.rings.fortress > 0 && stats.rings.citadel > 0, `Nemesis flags ${stats.nemesis}, multi-part flags ${stats.multi}, rings ${JSON.stringify(stats.rings)}, route-map tags ${stats.tags}`);
 console.log('INFO columns per mode: ' + Object.entries(stats.n).map(([k, v]) => k + ' ' + Object.entries(v).map(([c, x]) => c + 'x' + x).join('/')).join(', '));
 

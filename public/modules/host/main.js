@@ -72,6 +72,7 @@ fitCanvas();
   if (c === 'kraken') { config.CREATURES.DEV_SPAWN = c; config.ENVIRONMENTS.FORCE = 'sea'; } // (the Kraken lives at the water line: the mission is flown in the Sunken Sea)
   if (c === 'drake') { config.CREATURES.DEV_SPAWN = c; config.ENVIRONMENTS.FORCE = 'ember'; } // (C.6a: the Cinder Drake lives in the Ember Forge: host.html?creature=drake flies it there; ?lair=ember makes every stop the Drake's lair)
   if (c === 'thunderbird') { config.CREATURES.DEV_SPAWN = c; config.ENVIRONMENTS.FORCE = 'storm'; } // (C.6b: the Thunderbird lives in the Storm Front: host.html?creature=thunderbird flies it there; ?lair=storm makes every stop its lair, with the rock spires)
+  if (c === 'titan' || new URLSearchParams(location.search).get('lair') === 'titan') { config.CREATURES.DEV_LAIR = true; config.CREATURES.DEV_LAIR_AS = 'titan'; config.ENVIRONMENTS.FORCE = 'skyisles'; } // (C.6c: the Island Titan stands on its own lair's plain in the Sky Isles: host.html?creature=titan (or ?lair=titan) makes every stop its lair)
   if (new URLSearchParams(location.search).get('heart') === '1') config.CREATURES.BOARD.HEART_EXPOSED = true; // (C.2: host.html?creature=kraken&heart=1 exposes the heart so STRIKE THE HEART can be tried; C.3 decides when it is really exposed: phase 3)
   if (new URLSearchParams(location.search).get('lair') === 'ember') { config.CREATURES.DEV_LAIR = true; config.ENVIRONMENTS.FORCE = 'ember'; }
   if (new URLSearchParams(location.search).get('lair') === 'storm') { config.CREATURES.DEV_LAIR = true; config.ENVIRONMENTS.FORCE = 'storm'; }

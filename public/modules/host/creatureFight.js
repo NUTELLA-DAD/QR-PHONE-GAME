@@ -28,9 +28,10 @@ const tentaclesLost = (cr) => cr.parts.filter((p) => p.kind === 'tentacle' && (p
 export function inFunnel(cr, x, y) {
   const m = cr && mouthOf(cr);
   if (!m || !m.open || m.dead || !m.segs[0] || cr.mode !== 'idle' || (cr.kind === 'drake' && cr.drake.mode !== 'crawl')) return false; // (the Drake's mouth takes bombs from above only while it crawls)
-  const s = m.segs[0], F = CR().MOUTH;
+  const s = m.segs[0], F = mouthCfg(cr);
   return Math.abs(x - s.x) <= F.FUNNEL_W && y >= s.y - F.FUNNEL_UP && y <= s.y + s.r;
 }
+export const mouthCfg = (cr) => (cr && cr.kind === 'titan' ? config.CREATURES.TITAN.MOUTH : CR().MOUTH); // (C.6c: the Island Titan's roar has its own funnel, gulp and lure; fed bombs in the same way)
 export const mouthOpenNow = (state) => !!state.creature && !state.creature.dying && state.creature.mode === 'idle' && !!mouthOf(state.creature) && mouthOf(state.creature).open && (state.creature.kind !== 'drake' || state.creature.drake.mode === 'crawl');
 export const mouthKey = (cr) => (cr && cr.kind === 'drake' ? 'bombs' : 'mouth'); // the FORCE_WIN word for "feed it bombs"
 
@@ -71,13 +72,19 @@ export function mouthWindowSoon(state, secs = 4) {
 }
 
 // Is this aim target (creatureTargets) worth a harpoon? The exhausted creature's body: the harpoon gun may aim at it in phase 3 (aim.js), the bots man it then.
-export const towTarget = (cr, t) => !!cr && !cr.dying && cr.kind !== 'thunderbird' && (cr.kind === 'drake' ? cr.drake.mode === 'crawl' : cr.phase >= 3) && t.kind === 'creaturePart' && t.part.kind === 'mantle'; // (the Drake: once it crawls)
+export const towTarget = (cr, t) => !!cr && !cr.dying && cr.kind !== 'thunderbird' && cr.kind !== 'titan' && (cr.kind === 'drake' ? cr.drake.mode === 'crawl' : cr.phase >= 3) && t.kind === 'creaturePart' && t.part.kind === 'mantle'; // (the Drake: once it crawls)
 
 // The dev / test flag (config.CREATURES.FORCE_WIN): does a bot gun of this type hold its fire at this part? (sever: only tentacles; hp: never tentacles; mouth: nothing, only bombs; tow and board: tentacles
 // until phase 3, then nothing - except the harpoon, which hooks the mantle - so the fight can only end the way it was asked to.)
 export function forcedSkip(cr, part, gunType) {
   const f = CR().FORCE_WIN;
   if (!f || !cr) return false;
+  if (cr.kind === 'titan') { // the Island Titan (C.6c): arms = only the arms; mouth = nothing, only bombs in the roar; crystal = nothing, only on foot (crew trips); hp = anything but the arms
+    if (f === 'arms') return part.kind !== 'tentacle';
+    if (f === 'hp') return part.kind === 'tentacle';
+    if (f === 'mouth' || f === 'crystal') return true;
+    return false;
+  }
   if (cr.kind === 'thunderbird') { // the Thunderbird (C.6b): pluck = only the wings; gizzard = only the glowing gizzard (the coil's bolt wins it); mortar = nothing until it rests on a spire; board = nothing (one bot boards it); hp = anything
     if (f === 'pluck') return part.kind !== 'wing';
     if (f === 'gizzard') return part.kind !== 'heart';
@@ -148,7 +155,7 @@ function openWindow(state, cr, P) {
 }
 // Swim to put the beak under her bomb bay: the point where a bomb let go now comes down to the beak's height (a ship with no bay: under her middle).
 export function lureX(state, cr, ship) {
-  const M = CR().MOUTH, m = mouthOf(cr).segs[0], g = bayPoint(state, ship);
+  const M = mouthCfg(cr), m = mouthOf(cr).segs[0], g = bayPoint(state, ship);
   if (!ship.layout.bombBay) return g.x + ship.pose.vx * M.LURE_LEAD;
   const a = config.BOMBS.GRAVITY / 2, dy = Math.max(0, m.y - g.y), t = (-60 + Math.sqrt(3600 + 4 * a * dy)) / (2 * a); // (the fall time from the bay down to the beak)
   return bombAt(g.x, g.y, ship.pose.vx, t).x;

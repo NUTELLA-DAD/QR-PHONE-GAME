@@ -37,7 +37,7 @@ function makeMapOf(kind, level, rand, lengthMul = 1, layout, creature = null, va
       if (map.startDist < 1e9) return map;
       continue;
     }
-    map = kind === 'lair' ? (creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout, slack);
+    map = kind === 'lair' ? (creature === 'titan' ? buildTitanLairMap(level, rand, lengthMul, layout) : creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout, slack);
     if (map.startDist >= 1e9) continue;
     if (map.lair) return map; // (no outposts to reach: the lair's middle is the goal)
     if (map.open) {
@@ -349,6 +349,22 @@ function buildStormLairMap(level, rand, lengthMul = 1, layout) {
     spires.push({ x: (ci + 0.5) * C, w: TL.SPIRE_W, top: topRow * C });
   }
   const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'thunderbird', spires };
+  finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
+  return map;
+}
+
+// THE ISLAND TITAN'S LAIR (config.CREATURES.TITAN.LAIR, C.6c): open sky in the Sky Isles and a flat PLAIN of rock FLOOR_BELOW px under the launch height (the launch is on row LAUNCH_ROW), where the colossus stands (map.floorY is
+// the plain's top, in map pixels). Nothing else: no outposts, no guns, no spires. The ship hovers about a Titan's chest away from the plain's top; its island, on its back, comes up under the hull.
+function buildTitanLairMap(level, rand, lengthMul = 1, layout) {
+  const M = config.MAPS, LR = config.CREATURES.LAIR, TL = config.CREATURES.TITAN.LAIR, C = M.CELL;
+  const startI = 12, goalI = startI + Math.round((LR.RUN * lengthMul) / C);
+  const W = goalI + Math.round(LR.BEYOND / C) + 20, H = M.OPEN_HEIGHT;
+  const sj = TL.LAUNCH_ROW, floorRow = Math.min(H - 3, sj + Math.round(TL.FLOOR_BELOW / C));
+  const solid = new Uint8Array(W * H);
+  const idx = (i, j) => j * W + i;
+  for (let i = 0; i < W; i++) for (let j = floorRow; j < H; j++) solid[idx(i, j)] = 1;
+  void rand;
+  const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'titan', floorY: floorRow * C };
   finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
   return map;
 }

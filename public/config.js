@@ -33,7 +33,7 @@ export const config = {
     SHIP_SCREEN_FRACTION: 0.4, SHIP_SCREEN_HEIGHT_FRACTION: 0.62, // the ship (incl. its long gasbag) takes at most this much of the screen width, and this much of its height (owner, 2026-10-11: zoomed out from 0.53 / full height - it felt tight on the airship)
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
-    CREATURE: { MAX_ZOOM_OUT: 2.4, DRAKE_MAX_ZOOM_OUT: 3.4, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2; the Cinder Drake flies about the ship in loops 8000 px across: DRAKE_MAX_ZOOM_OUT), and its living parts are kept in view with this much margin (world pixels)
+    CREATURE: { MAX_ZOOM_OUT: 2.4, DRAKE_MAX_ZOOM_OUT: 3.4, TITAN_MAX_ZOOM_OUT: 4.4, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2; the Cinder Drake flies about the ship in loops 8000 px across: DRAKE_MAX_ZOOM_OUT; the Island Titan stands 5000 px tall below her: TITAN_MAX_ZOOM_OUT), and its living parts are kept in view with this much margin (world pixels)
     SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
     ZOOM_SMOOTHING: 0.6, // how quickly it zooms (low = calm, no pumping)
     PULL_SMOOTHING: 0.22, // ...and this slowly in the pull-back after a part was built at the sky-dock (YARD.PULL_TIME): the "she grew!" moment
@@ -2504,7 +2504,7 @@ export const config = {
     RING: 500, // moments kept in state.moments (the oldest are dropped; each stop's best are written into run.log at its end, so the postcard never needs the old ones)
     // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
     WEIGHT: {
-      'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'away-banner': 8, 'away-charge': 7, 'away-prisoners': 6, 'away-ballista': 5, 'away-beacon': 4, 'away-winch': 4, 'away-ko': 3, 'treasure-stowed': 5, 'treasure-heist': 8, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
+      'creature-win': 10, 'creature-boulder': 3, 'titan-island': 6, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'away-banner': 8, 'away-charge': 7, 'away-prisoners': 6, 'away-ballista': 5, 'away-beacon': 4, 'away-winch': 4, 'away-ko': 3, 'treasure-stowed': 5, 'treasure-heist': 8, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
       'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'scrap-patch': 7, 'scrap-built': 4, 'frame-built': 6, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra
@@ -2687,6 +2687,7 @@ export const config = {
     // s without new attacks. Per phase (P): grips = most grabs at once (0 = by crew, GRIPS_BY_CREW; 1 = single grabs), gripMul / slapMul = x the pause between grabs / slaps, breach = the lunge is on,
     // mouthEvery / mouthFor = the beak opens on a roar every so many s and stays open that long; phase 3 also surfaces half out of the water (up px) and dives (dive: every s, 3 grips at once).
     DEV_LAIR: false, // dev flag: every stop but the Flagship is a lair (host.html?lair=1, tools/botsim.mjs --lair 1)
+    DEV_LAIR_AS: null, // dev flag: ...and its creature is this one whatever the sky ('titan': host.html?creature=titan, tools/botsim.mjs --creature titan); null = the sky's own (LAIR.BY_ENV)
     FORCE_WIN: null, // dev / test flag: "sever" | "mouth" | "tow" | "board" | "hp" steers the bots AND lets only that one way end the fight, so a gate can prove each win on its own (botsim: CREATURE_FORCE_WIN=tow)
     PHASE: {
       TWO: { HP: 0.66, LOST: 2 }, THREE: { HP: 0.33, LOST: 4 }, BREATHER: 3.5, BANNER: 4.5, SHAKE: 1.1,
@@ -2876,6 +2877,57 @@ export const config = {
       REWARD: { HULL: 35, GAS: 30, TROPHY: 'featherSail' }, // salvage x3, the hull patched and every bag topped up; the trophy part card: the Thunderbird feather sail
       LAIR: { ICON: '\u{1F985}', LABEL: 'LAIR', NAME: "The Thunderbird's Lair", KIND: 'Thunderbird lair', FLOOR_BELOW: 3800, SPIRES: [[-30, 3], [0, 1], [30, 3]], SPIRE_W: 2400, SPIRE_DEPTH: [2100, 2500] }, // the lair map (maps.js buildStormLairMap): the sky's floor lies this far under the launch; rock spires [cells from the lair's middle (the one at 0 stands right under her when she hovers there), +- jitter], their width at the floor line and how far their tops lie under the launch height (px)
       TROPHY: { PULL_MUL: 1.5 }, // the Thunderbird feather sail: a mast and sail that pulls this much harder and that a gust cannot tear (sails.js)
+    },
+    // ---- THE ISLAND TITAN (C.6c, BOSSES.md 2.7): the Sky Isles' gentle tutorial boss, a slow stone colossus about 5000 px tall (twice the ship) with a small island on its back. creatures/titan.js = the body, creatureTitan.js = the fight,
+    // creatureIsland.js = the island as a walkable ground (ground.js) and the crystal on it. It stands on the lair's flat plain, strides after the ship at WALK px/s and does three things, each with a long telegraph:
+    // BOULDER (it picks a rock up, hefts it overhead, a red ring marks where it will land, then throws: dodge it by moving, or shoot it to gravel; a hit shakes a hull segment), GRAB (phase 2: a hand closes on the GASBAG; swords on
+    // the top deck pry its fingers off, or shoot the arm; unfreed it squeezes the bag) and ROAR (it throws its head back and opens its mouth: bombs in!). Phases: 1 'IT WAKES' (boulders, roars), 2 'IT GRABS' (one arm lost, or the pool
+    // under TWO_HP: the gasbag grab joins), 3 'IT ROARS' (under THREE_HP: faster, two boulders at once). Ways to win (cr.stats.win): 'arms' (both arms shelled off), 'mouth' (FED bombs into the roaring mouth), 'crystal' (hack the
+    // crystal on its island, on foot: ground.js lands crew on the island, a rope ladder, a parachute, a hookshot or a vault), 'hp' (the pool). Everything about it is easy and readable: low damage, slow telegraphs.
+    TITAN: {
+      NAME: 'THE ISLAND TITAN', ENV: 'skyisles',
+      HP: 2200, // the health pool (the slow, safe way to win)
+      HP_MUL: { tentacle: 1.2, mantle: 1, head: 1, mouth: 1, heart: 1, pool: 1 }, // tuning knobs on the data's hp (like HURT.PART_HP_MUL for the Kraken); the arms are kind 'tentacle'
+      POOL: { tentacle: 0.25, mantle: 0.3, head: 0.25, mouth: 0.5, heart: 1 }, // share of a blow that also comes off the pool
+      // The body (px, in the Titan's own frame: facing +x, y down; the torso's centre is the origin). FEET = how far below the origin the soles are. The legs are only a picture; the torso, head, mouth, arms and crystal are the parts.
+      BODY: {
+        FEET: 2200,
+        TORSO: { AT: [0, -1250], LEN: 1750, R: 820, HP: 500 }, // a capsule from AT straight down, LEN long
+        HEAD: { AT: [250, -2150], R: 520, HP: 320 },
+        MOUTH: { AT: [720, -2050], R: 300, HP: 200 }, // on the front of the face: it opens for the roar
+        ARM: { SEGS: 3, LEN: [1000, 900], R: [340, 230], HP: 900, AT: [[150, -1500], [-300, -1500]], REST: [[1500, -1200], [1300, -1000]], BEND: 0.3, SWAY: 0.25 }, // [near arm, far arm]: three stone slabs, root to hand; they hang forward at rest (px from the shoulder); idle sway is this share of the usual
+        LEGS: { AT: [250, -350], W: 600, LIFT: 160 }, // the legs are drawn only: where they stand (px from the middle), how wide, how high a foot lifts when it walks
+      },
+      // The island on its back: a slab of rock with grass on top that crew can land on and walk (ground.js). X0..X1 from the Titan's middle (negative = behind it), TOP = the walking surface, DEPTH = how far the rock hangs below it.
+      ISLAND: { X0: -2150, X1: -150, TOP: -2450, DEPTH: 1250 },
+      // The crystal in its chest grows up through the spine to a spire on the island; HACK it (hold Action, a sword is quickest) STRIKES times to win. R = its size, REACH = px a man may stand from it.
+      CRYSTAL: { X: -1150, R: 260, HP: 150, STRIKES: 3, STRIKES_BY_DIFF: { easy: 2, normal: 3, veteran: 3, hard: 4 }, TIME: 4.5, TIME_HAMMER: 6.5, TIME_BARE: 9, REACH: 340, TREMOR: 1.6, SHAKE: 0.9, BOT_TIME: 110 }, // seconds of holding per strike; the island quakes TREMOR s after each (crew stagger, no harm)
+      // How it arrives and walks. It strides in from FROM px away over ARRIVE s (untouchable) to its HOME, OFFSET px beyond the lair's middle (where she hovers to fight), and waits there while she is within ZONE px of it; when she is not it walks
+      // after her at WALK px/s (CATCH px/s when it is more than FAR px from where it wants to be), stopping BAND px short; it turns round only when she is FLIP_DX px behind it.
+      SPAWN: { FROM: 4200, ARRIVE: 12, SINK: 9, SINK_DEEP: 3000, FIRST: 5 }, // px it comes from, s it takes, s it takes to crumble when dead, px it sinks into the plain, s before its first attack
+      STAND: { OFFSET: 1300, BAND: 260, ZONE: 4200, WALK: 150, CATCH: 450, FAR: 2600, FLIP_DX: 3400 },
+      ATTACK: {
+        EVERY: [6, 10], BREATHER: 3.5, BANNER: 4.5, // s between attacks (min, max; x the difficulty's pause x the phase); s of quiet after a phase change; the phase banner
+        WEIGHTS: { 1: { throw: 1, grab: 0 }, 2: { throw: 3, grab: 2 }, 3: { throw: 3, grab: 2 } }, // their odds by phase (phase 1 never grabs)
+        PHASE_MUL: { 1: 1, 2: 0.9, 3: 0.7 }, // x the pause between attacks
+      },
+      // BOULDER: an arm reaches for a rock on the plain (PICK s), hefts it overhead (AIM s: a ring on the TV marks the spot it will land, in front of her middle), the ring locks LOCK s before the throw, the rock flies FLIGHT s along an arc
+      // (GRAVITY px/s^2) and strikes anything of the ship it touches (a circle of radius R): HULL hull points (the segment under it, creatureHit) at POWER, a shove for the crew (SHOVE) and a shake. It breaks to gravel if shells hit it
+      // for HP damage. A missed rock flies on and thuds on the plain. Phase 3 throws a second one DOUBLE s after the first.
+      BOULDER: { PICK: 1.1, AIM: 1.6, LOCK: 0.75, FLIGHT: 3.4, AIM_DY: 300, MISS_AFTER: 1.2, RECOVER: 1.5, GRAVITY: 120, R: 300, HP: 36, HULL: 22, POWER: 2, SHAKE: 0.8, SHOVE: 2.5, DOUBLE: 1.4, FLIGHT_BY_DIFF: { easy: 1.2, normal: 1, veteran: 0.9, hard: 0.85 } },
+      // GRAB: a hand closes on the gasbag (WINDUP s of warning, the banner, a buzz for the crew on the top deck), the grip pulls her toward the Titan (the Kraken's grip numbers, overridden here: mostly sideways) and twists the bag; swords on the top deck
+      // at the grip pry the fingers off (the Kraken's HACK), shells on the arm free her too. After TIME s (x difficulty) it SQUEEZES the bag: HOLES holes in the gasbag and a blow of HULL to the frame, then it lets go. Phase 3 may grab with two hands.
+      GRAB: { FIRST: 5, TIME: 12, TIME_BY_DIFF: { easy: 1.5, normal: 1, veteran: 0.9, hard: 0.8 }, WINDUP: 1.6, SIDEWAYS: 2, BASE_ACC: 220, MAX_ACC: 330, MAX_TOTAL: 520, TORQUE: 0.3, SHAKE: 0.14, COOLDOWN: 5, RELEASE_DMG: 0.25, SWORD_TIME: 1.4, HAMMER_TIME: 2.4, MAX: { 1: 0, 2: 1, 3: 2 }, RIP: { HOLES: 2, HULL: 16, POWER: 1.6 } },
+      // ROAR: it throws its head back (WIND s: a banner, a buzz for the bomb bay), then the MOUTH is open for FOR s: a bomb or crate inside the FUNNEL (W px each side of the mouth, UP px above it) falls in. FED bombs win (a crate is half);
+      // it gulps after a bomb (the mouth is shut GULP s). It walks to put the mouth under her bomb bay (LURE_SPEED px/s). The first roar comes FIRST s after it arrives, then every EVERY s (x phase x difficulty).
+      MOUTH: { FIRST: 20, EVERY: [22, 28], WIND: 1.4, FOR: 5.5, FED: 4, GULP: 2, REOPEN: 0.4, SLACK: 1.5, FUNNEL_W: 520, FUNNEL_UP: 2600, LURE_SPEED: 650, LURE_LEAD: 1.1, PHASE_MUL: { 1: 1, 2: 0.9, 3: 0.75 } },
+      PHASE: { TWO_HP: 0.66, THREE_HP: 0.33 },
+      WIN_TEXT: { arms: 'ARMS SHELLED OFF!', mouth: 'BOMBED IN THE MOUTH!', crystal: 'CRYSTAL SHATTERED!', hp: 'BROUGHT DOWN!' },
+      DEATH_TEXT: ' KNEELS, CRUMBLES AND SINKS!',
+      REWARD: { HULL: 35, GAS: 30, TROPHY: null }, // salvage x3, the hull patched and every bag topped up; no trophy part card (yet)
+      // The Titan's lair is an early Sky Isles stop: the SECOND stop flown of a voyage (the column after the first; COLUMN = how many columns after it, 1 = the next) when the route has MIN_STOPS stops or more, guaranteed, on one of that column's Sky Isles stops,
+      // +DANGER skulls and x REWARD_MUL reward. The map (maps.js buildTitanLairMap): open sky, a flat plain FLOOR_BELOW px under the launch height (launch on row LAUNCH_ROW), nothing else.
+      LAIR: { ICON: '\u{1F5FF}', LABEL: 'TITAN', NAME: "The Island Titan's Lair", KIND: 'Titan lair', LAUNCH_ROW: 18, FLOOR_BELOW: 5800, DANGER: 0, REWARD_MUL: 1.5, COLUMN: 1, MIN_STOPS: 5, ENABLED: true },
     },
   },
   // Effects in the storybook gouache style (modules/host/vfxArt.js): flat colours, ink from INK + OUTLINE, no gradients.

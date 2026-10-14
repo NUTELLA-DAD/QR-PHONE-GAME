@@ -10,6 +10,7 @@ import { config } from '../../config.js';
 import { hitInfo } from './creature.js';
 import { drakeBoardable, scalesAction, scalesOpened } from './creatureDrake.js'; // (C.6a: the Drake is a landing place only while it is perched on her bag)
 import { birdBoardable } from './creatureBird.js'; // (C.6b: the Thunderbird, while it sits on her bag or on a rock spire)
+import { islandOf } from './creatureIsland.js'; // (C.6c: the Island Titan has no mantle to land on, but its island is an anchor and a ground)
 import { toWorldX, toWorldY, toShipX, toShipY } from './pose.js';
 import { shipOf } from './ships.js';
 import { pop } from './popups.js';
@@ -58,7 +59,7 @@ function nearestS(F, wx, wy) {
 // ---- the landing strip ---- (people only: a bot would stand on it for ever, so it falls past as it always did and is carried back to the medical bay; C.5 teaches bots to board)
 export function creatureSurfaces(state, ship) {
   const cr = state.creature;
-  if (!cr || cr.mode !== 'idle' || !state.ships.includes(ship) || ship.ctx.wreck || (cr.kind === 'drake' && !drakeBoardable(cr)) || (cr.kind === 'thunderbird' && !birdBoardable(cr))) return [];
+  if (!cr || cr.mode !== 'idle' || !state.ships.includes(ship) || ship.ctx.wreck || cr.kind === 'titan' || (cr.kind === 'drake' && !drakeBoardable(cr)) || (cr.kind === 'thunderbird' && !birdBoardable(cr))) return [];
   const m = mantleOf(cr);
   if (!m) return [];
   const F = frame(m), B = BR();
@@ -75,6 +76,14 @@ export function creatureSurfaces(state, ship) {
 export function creatureAnchor(state, wx, wy) {
   const cr = state.creature;
   if (!cr || cr.mode !== 'idle' || (cr.kind === 'drake' && !drakeBoardable(cr) && cr.drake.mode !== 'crawl') || (cr.kind === 'thunderbird' && !birdBoardable(cr))) return null;
+  if (cr.kind === 'titan') { // C.6c: the rock of its island is an anchor that rides it; reeled right in you land ON the island (ground.js landOn), the walkable ground that moves with the Titan
+    const isl = islandOf(state);
+    if (isl && wx >= isl.x0 && wx <= isl.x1 && wy >= isl.y - 60 && wy <= isl.y + isl.depth) {
+      const lx = (wx - cr.x) * cr.f, ly = wy - cr.y;
+      const pos = () => (state.creature !== cr || cr.mode !== 'idle' || cr.dying ? null : { x: cr.x + lx * cr.f, y: cr.y + ly });
+      return { kind: 'enemy', creature: cr, part: null, pos, surf: false, board: (pl) => !!state.groundSys && state.groundSys.landOn(pl) };
+    }
+  }
   const hit = hitInfo(cr, wx, wy, BR().HOOK_R);
   if (!hit) return null;
   const p = hit.part, i = hit.seg, s0 = p.segs[i];
@@ -87,7 +96,7 @@ export function creatureAnchor(state, wx, wy) {
     const cc = Math.cos(s.ang), ss = Math.sin(s.ang);
     return { x: s.x + cc * lu - ss * lv, y: s.y + ss * lu + cc * lv };
   };
-  const body = p.kind !== 'tentacle' && p.kind !== 'wing' && p.kind !== 'neck' && p.kind !== 'tail' && p.kind !== 'talon' && (cr.kind !== 'drake' || drakeBoardable(cr)); // (reel right in to the body and you climb aboard; a limb is only an anchor)
+  const body = p.kind !== 'tentacle' && p.kind !== 'wing' && p.kind !== 'neck' && p.kind !== 'tail' && p.kind !== 'talon' && cr.kind !== 'titan' && (cr.kind !== 'drake' || drakeBoardable(cr)); // (the Titan's body is only an anchor: its island is the place to land) (reel right in to the body and you climb aboard; a limb is only an anchor)
   return { kind: 'enemy', creature: cr, part: p, pos, surf: body, board: body ? (pl) => { const q = pos() || { x: wx, y: wy }; return boardAt(state, shipOf(state, pl), pl, q.x, q.y); } : null };
 }
 

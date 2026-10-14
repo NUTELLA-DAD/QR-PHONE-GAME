@@ -63,6 +63,7 @@ function buildPart(body, pd, index) {
     p.reach = p.reach0 = p.segs.reduce((a, s) => a + s.len, 0);
     p.bend = (pd.bend || 0) * (0.8 + rng() * 0.4); // which way it arches (the sign) and how much; fixed for the limb
     p.side = p.bend >= 0 ? -1 : 1; // the sucker side: the inside of the arch
+    p.swayMul = pd.swayMul ?? 1; // C.6c (the Titan's stone arms): idle sway is this share of the usual
     p.ctl = { mode: pd.drive ? 'drive' : 'idle', keys: Math.floor(rng() * C.SWAY.EVERY_KEYS), cmd: null, rest: pd.rest, sway: [0, 0], pull: null, target: null, grab: false, fast: false, hold: 0 };
     if (pd.drive) p.rel = { x: pd.rest[0], y: pd.rest[1] }; // a driven limb: its goal is this vector (fractions of its reach, the body's own frame), set on keys by the creature's own code
     p.px = new Float64Array(p.segs.length + 1);
@@ -396,7 +397,7 @@ function tickLimb(body, p) {
     default:
       if (c.keys >= C.SWAY.EVERY_KEYS) { // idle: a new stepped sway pose
         c.keys = 0;
-        const amp = C.SWAY.AMOUNT * p.reach0;
+        const amp = C.SWAY.AMOUNT * p.reach0 * p.swayMul;
         c.sway = [(body.rng() * 2 - 1) * amp, (body.rng() * 2 - 1) * amp * 0.6];
       }
       p.goal = restGoal(body, p);

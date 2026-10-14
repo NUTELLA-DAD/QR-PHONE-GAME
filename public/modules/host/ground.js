@@ -7,6 +7,8 @@
 //   FLARE        the away man's Action: calls the ship (the TV and the helm's phone mark him, the bot helm comes and hovers, the ladder drops by itself).
 //   LEASH        the ship further than STRAND.LEASH, or the stop ended with him on the ground: STRANDED, STRAND.TIME s, then he walks home (out of the game) and rejoins at the next dock for HOME.COST salvage. Bots never strand.
 //   TRIPS        (tools, AWAY.BOT_TRIPS) a bot climbs down the rope, walks to a plaza, fires a flare and comes back: bots.js awayTrip drives the walk to the hatch, step() below drives him on the ground.
+//   THE ISLAND   (BOSSES.md C.6c) the Island Titan's island on its back is a DECK that MOVES (S.island = { island: true, moves: true, x0, x1, y }, refreshed every step by syncIsland from the creature): it is a landing place like a wall walk, the rope
+//                ladder reaches down to it (groundInfo), a hookshot reeled in to it lands you on it (landOn) and a man on it is carried by its movement (o.lx, the offset from its middle). The crystal on it is the Titan's heart (creatureIsland.js).
 //
 // state.away = { on, rope, flares, pickups, hold, stats, ... } is the world's record of it (the TV draws from it; the tools read it). Every number is config.AWAY. Nothing here wobbles.
 import { config } from '../../config.js';
@@ -16,6 +18,7 @@ import { floorBelow, solidAt } from './maps.js';
 import { pop } from './popups.js';
 import { createObjectives } from './objectives.js'; // (CASTLE.md A1: the castle objectives on the ground, config.AWAY.OBJECTIVES)
 import { createTreasure } from './treasure.js'; // (CASTLE.md A2: the outposts' vaults, chests and guards, config.AWAY.TREASURE)
+import { islandOf, islandAct, islandUi, islandJob, islandBotGoal, islandTrip } from './creatureIsland.js'; // (BOSSES.md C.6c: the Island Titan's island is a deck that moves with it, and the crystal on it)
 
 const A = () => config.AWAY;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -36,7 +39,7 @@ export function rockTop(map, x, y, maxUp) {
 export function createGround({ state, puff, phoneFx }) {
   let deps = { release: () => {}, pay: () => {} };
   const mapNow = () => (state.course && state.course.map) || null;
-  const S = (state.away = { on: false, map: null, decks: [], ladders: [], rope: { out: false, len: 0, gap: Infinity, x: 0, y: 0, users: 0, idle: 0, d: 0, sx: 0 }, flares: [], pickups: [], hold: null, clock: 0, tripCd: 0, stats: { landings: 0, wall: 0, ladders: 0, ropes: 0, ropeDown: 0, ropeUp: 0, flares: 0, strands: 0, homes: 0, returns: 0, pickups: 0, hooks: 0, trips: 0, stepOffs: 0 } });
+  const S = (state.away = { on: false, map: null, decks: [], island: null, ladders: [], rope: { out: false, len: 0, gap: Infinity, x: 0, y: 0, users: 0, idle: 0, d: 0, sx: 0 }, flares: [], pickups: [], hold: null, clock: 0, tripCd: 0, stats: { landings: 0, wall: 0, ladders: 0, ropes: 0, ropeDown: 0, ropeUp: 0, flares: 0, strands: 0, homes: 0, returns: 0, pickups: 0, hooks: 0, trips: 0, stepOffs: 0 } });
   const sfx = (...a) => state.sfxQ && state.sfxQ.push(a);
   const say = (text, hold = 3.5, at) => state.say && state.say('away', text, 6, hold, at);
   const upper = (p) => String(p.name || 'CREW').toUpperCase();
@@ -50,7 +53,7 @@ export function createGround({ state, puff, phoneFx }) {
   // Is there an away team at all now? Open sky with ground in it, enough crew, no Versus (a lair's sea, a cave, the arena have no ground to walk).
   const worldOn = () => {
     const A_ = A(), map = mapNow();
-    return A_.ENABLED && !config.PVP.ENABLED && !!map && !!map.open && !map.lair && !map.arena && state.phase === 'flying' && !state.ship.down && crew().length >= A_.MIN_CREW;
+    return A_.ENABLED && !config.PVP.ENABLED && !!map && !!map.open && (!map.lair || map.creature === 'titan') && !map.arena && state.phase === 'flying' && !state.ship.down && crew().length >= A_.MIN_CREW;
   };
   const enabled = () => S.on;
   const obj = createObjectives({ state, S, host: { phoneFx, puff, deps: () => deps, onGround: () => onGround(), groundAt: (x, y) => groundAt(mapNow(), x, y) } }); // (A1: S.obj; its steps are called below)
@@ -62,6 +65,8 @@ export function createGround({ state, puff, phoneFx }) {
     reset();
     S.map = map;
     S.decks = [];
+    S.island = null;
+    S.islandSeen = false;
     S.ladders = [];
     S.flares.length = 0;
     S.pickups.length = 0;
@@ -89,6 +94,25 @@ export function createGround({ state, puff, phoneFx }) {
     tre.reset(); // (A2)
   }
 
+  // ---------- the Titan's island (C.6c) ----------
+  // The island as a deck that moves: made, refreshed and removed every step from the creature (creatureIsland.js islandOf); its middle is where a man on it is measured from.
+  function syncIsland() {
+    const isl = S.on ? islandOf(state) : null, old = S.island;
+    if (isl) {
+      if (!old) { S.island = isl; S.decks.push(isl); } else Object.assign(old, { x0: isl.x0, x1: isl.x1, y: isl.y, depth: isl.depth, cr: isl.cr });
+    } else if (old) {
+      S.decks = S.decks.filter((d) => d !== old);
+      S.island = null;
+    }
+  }
+  const midOf = (dk) => (dk.x0 + dk.x1) / 2;
+  // The ground under a point, rock or the island: { y, deck } (deck = the island's record when that is what is below) or null.
+  function groundInfo(x, fromY) {
+    const g = groundAt(mapNow(), x, fromY), isl = S.island;
+    if (isl && x >= isl.x0 && x <= isl.x1 && fromY <= isl.y + 40 && (g == null || isl.y < g)) return { y: isl.y, deck: isl };
+    return g == null ? null : { y: g, deck: null };
+  }
+
   // ---------- the rope ladder ----------
   // Where the hatch is on the lowest deck: the widest of the lowest platforms, away from the bomb bay's doors.
   function ropeSpot(L = main().layout) {
@@ -106,8 +130,9 @@ export function createGround({ state, puff, phoneFx }) {
     R.sx = sp.x;
     R.x = toWorldX(sh, sp.x);
     R.y = toWorldY(sh, sp.y + 24);
-    const g = map ? groundAt(map, R.x, R.y) : null;
+    const gi = map ? groundInfo(R.x, R.y) : null, g = gi ? gi.y : null;
     R.ground = g;
+    R.groundDeck = gi ? gi.deck : null; // (the Titan's island when that is what the rope reaches)
     R.gap = g == null ? Infinity : g - R.y;
     R.users = awayList().filter((p) => p.on.mode === 'rope').length + obj.climbers(); // (A1: freed prisoners climbing keep it down too)
     if (R.out) {
@@ -196,7 +221,12 @@ export function createGround({ state, puff, phoneFx }) {
       p.carry = null;
       return;
     }
+    landAt(p, wx, wy, deck);
+  }
+  // A man comes down on the ground at world (wx, wy): on a wall walk (deck), the rock (null) or the Titan's island.
+  function landAt(p, wx, wy, deck) {
     p.on = { away: true, mode: 'walk', deck: deck || null, gy: wy, s: 0, edgeT: 0, flareCd: 0, flareT: 0, strand: 0, gone: false, since: S.clock };
+    if (deck && deck.moves) p.on.lx = wx - midOf(deck); // (a moving deck carries him: his place is measured from its middle)
     p.fly = true;
     p.air = false;
     p.jz = 0;
@@ -213,8 +243,21 @@ export function createGround({ state, puff, phoneFx }) {
     p.hook = null;
     p.climb = false;
     S.stats.landings++;
+    if (deck && deck.island) { // the Titan's back: the first man on it makes the Book (once a stop)
+      S.stats.island = (S.stats.island || 0) + 1;
+      if (!S.islandSeen && state.moment) { S.islandSeen = true; state.moment('titan-island', { who: [p], where: null, data: { creature: deck.cr ? deck.cr.name : 'the Titan' } }); }
+      if (!p.bot) { pop(state, wx, wy - 170, "ON THE TITAN'S BACK!", '#7fe8ff', 1.4); phoneFx(p, "You are on the Titan's island! Walk to the glowing CRYSTAL and HACK it. JUMP leaps off.", [30, 40, 30]); }
+      return;
+    }
     if (deck) S.stats.wall++;
     if (!p.bot) { pop(state, wx, wy - 170, deck ? 'ON THE WALL!' : 'LANDED!', '#ffd23f', 1.1); phoneFx(p, 'On the ground! FIRE FLARE calls the ship.', [30, 40, 30]); }
+  }
+  // A hookshot reeled in to the island (creatureIsland.js / creatureBoard.js creatureAnchor): he hops up onto it. False if he cannot (no away team, a bot off a trip).
+  function landOn(p) {
+    const isl = S.island;
+    if (!S.on || !isl || !eligible(p)) return false;
+    landAt(p, clamp(p.x, isl.x0 + 60, isl.x1 - 60), isl.y, isl);
+    return true;
   }
   // Off the ground into the air: a hop off a wall, an edge, a hook, a rope let go. dir = the world way he leaps.
   function leave(sh, p, dir, how) {
@@ -340,11 +383,13 @@ export function createGround({ state, puff, phoneFx }) {
       let moved = false;
       const walk = K.WALK * obj.speedMul(p) * tre.speedMul(p); // (A1: the great banner is heavy; A2: so is a chest)
       if (o.deck) {
+        if (o.deck.moves && o.lx !== undefined) p.x = midOf(o.deck) + o.lx; // (the Titan's island moves: it carries him along)
         const nx = clamp(p.x + dir * walk * dt, o.deck.x0, o.deck.x1);
         moved = Math.abs(dir) > 0.15 && nx !== p.x;
         if (Math.abs(dir) > 0.15) p.x = nx;
         o.gy = o.deck.y;
         p.y = o.gy;
+        if (o.deck.moves) o.lx = p.x - midOf(o.deck);
       } else {
         if (Math.abs(dir) > 0.15) {
           const nx = p.x + dir * walk * dt, hy = o.gy - K.STEP;
@@ -394,8 +439,9 @@ export function createGround({ state, puff, phoneFx }) {
       if (o.s <= 0 && jy < -0.4) { S.stats.ropeUp++; rejoin(p, false); return; }
       if (o.s >= R.len - 0.5 && jy > 0.4 && R.ground != null && R.ground - p.y < K.LADDER.GRAB_Y + 60) { // (the foot of the rope: step off onto the ground)
         o.mode = 'walk';
-        o.deck = null;
+        o.deck = R.groundDeck || null; // (the foot of the rope on the Titan's island: he walks that moving deck)
         o.gy = R.ground;
+        if (o.deck && o.deck.moves) o.lx = p.x - midOf(o.deck);
         p.climb = false;
         p.y = Math.min(R.ground, p.y + 40);
         o.since = S.clock;
@@ -404,7 +450,7 @@ export function createGround({ state, puff, phoneFx }) {
     // the Action button
     if (o.mode === 'walk' || o.mode === 'ladder') {
       const cd = o.flareCd;
-      const ov = o.mode === 'walk' && !o.deck ? tre.act(p, dt, ctl) || obj.act(p, dt, ctl) : null; // (A1: at an objective the button works it - a hold; away from one it is the flare) (A2: at a chest it grabs or helps carry it)
+      const ov = o.mode === 'walk' && o.deck && o.deck.island ? islandAct(state, p, dt, ctl) : o.mode === 'walk' && !o.deck ? tre.act(p, dt, ctl) || obj.act(p, dt, ctl) : null; // (C.6c: on the Titan's island the button hacks the crystal) (A1: at an objective the button works it - a hold; away from one it is the flare) (A2: at a chest it grabs or helps carry it)
       if (ov) p.act = ov;
       else {
         p.act = cd > 0 ? { type: 'wait', label: 'FLARE READY IN ' + Math.ceil(cd) + 's' } : { type: 'flare', label: 'FIRE FLARE' };
@@ -453,6 +499,18 @@ export function createGround({ state, puff, phoneFx }) {
       t.t = 0;
       if (!tre.carrying(p)) { if (!o.flareCd) fireFlare(p, o); t.flared = true; }
     }
+    if (!t.ready && t.crystal) { // (C.6c: this trip is the Titan's crystal: walk to it along the island, hold the button; broken, or out of time, or the Titan gone = go home)
+      const g = islandBotGoal(state, p);
+      if (!g.done && o.deck && o.deck.island && t.t <= config.CREATURES.TITAN.CRYSTAL.BOT_TIME) {
+        p.jx = Math.abs(g.x - p.x) > 30 ? Math.sign(g.x - p.x) : 0;
+        p.fire = g.fire;
+        return;
+      }
+      t.ready = true;
+      t.t = 0;
+      if (!o.flareCd) fireFlare(p, o);
+      t.flared = true;
+    }
     if (!t.ready && t.ob) { // (A1: this trip is an objective: walk to its spot and hold the button there; done or out of time = go home)
       const g = obj.botGoal(p, t.ob);
       if (!g.done && t.t <= K.OBJECTIVES.BOT.TIME) {
@@ -499,12 +557,13 @@ export function createGround({ state, puff, phoneFx }) {
     if (p.mate || p.ko > 0 || p.fall || p.fly || p.lock || p.dare || p.hj || p.conn != null || p.swing || p.onGunship) return false;
     if (awayList().length || crew().some((q) => q.trip)) return false;
     const R = S.rope, K = A().LADDER, r = state.course && state.course.ring;
+    if (S.island && R.groundDeck === S.island && R.gap <= K.REACH - 20 && islandTrip(state)) return true; // (C.6c: the rope reaches the Titan's island and its crystal is whole: a trip to hack it)
     if (!r && R.gap <= K.REACH - 20 && R.gap !== Infinity && tre.tripChest()) return true; // (A2: an open-sky raid: the rope reaches the ground and a vault is open within a walk)
     if (!r || R.gap > K.REACH - 20 || R.gap === Infinity) return false;
     const m = plazaMid(R.x);
     return m != null && Math.abs(m - R.x) < 1500 && Math.abs(R.ground - r.faces[0].y) < 40; // (the ground under the hatch is a platform: a plaza is near)
   }
-  const tripStarted = (p) => { const chest = !state.course.ring && !!tre.tripChest(); p.trip = { t: 0, goal: null, ready: false, flared: false, walk: true, ob: obj.pickFor(p), chest }; S.tripCd = A().BOT.TRIP_EVERY; S.stats.trips++; if (chest) tre.trips(); }; // (ob: A1, the objective this trip does; chest: A2, this trip fetches a chest)
+  const tripStarted = (p) => { const crystal = !!S.island && S.rope.groundDeck === S.island && islandTrip(state), chest = !crystal && !state.course.ring && !!tre.tripChest(); p.trip = { t: 0, goal: null, ready: false, flared: false, walk: true, ob: crystal ? null : obj.pickFor(p), chest, crystal }; S.tripCd = A().BOT.TRIP_EVERY; S.stats.trips++; if (chest) tre.trips(); }; // (ob: A1, the objective this trip does; chest: A2, this trip fetches a chest)
 
   // ---------- each step ----------
   function update(dt) {
@@ -512,6 +571,7 @@ export function createGround({ state, puff, phoneFx }) {
     S.clock += dt;
     S.on = worldOn();
     S.tripCd = Math.max(0, S.tripCd - dt);
+    syncIsland(); // (C.6c: the Titan's island, before the rope looks for the ground)
     ropeStep(dt);
     obj.update(dt); // (A1: the objectives, the prisoners, the banner, the soldiers)
     tre.update(dt); // (A2: the vaults, the chests, the guards)
@@ -520,7 +580,7 @@ export function createGround({ state, puff, phoneFx }) {
     // a flyer with ground below gets a parachute button
     if (S.on && map) for (const q of Object.values(state.players)) {
       if (!q.fly || q.on || !eligible(q) || q.hj || q.bot || q.chute > 0) continue;
-      const gy = groundAt(map, q.x, q.y), want = gy != null && gy - q.y < K.LAND_RANGE && gy - q.y > 120;
+      const gi = groundInfo(q.x, q.y), gy = gi ? gi.y : null, want = gy != null && gy - q.y < K.LAND_RANGE && gy - q.y > 120;
       if (want) { q.chuteOk = true; q.awayChute = true; } else if (q.awayChute) { q.chuteOk = false; q.awayChute = false; }
     }
     S.pickups.length = 0;
@@ -528,6 +588,11 @@ export function createGround({ state, puff, phoneFx }) {
       const o = p.on;
       if (p.connected === false && o.mode !== 'home') { walkHome(p); continue; }
       if (o.mode === 'home') { o.t += dt; if (o.t > K.HOME.MAX && !S.hold) rejoin(p, true, true); continue; }
+      if (o.deck && o.deck.island && S.island !== o.deck) { // C.6c: the Titan is dead (or gone): its island falls from under him - bots are taken home, a man steps off into the air with a parachute button
+        if (p.bot) rejoin(p, true, true);
+        else { stepOff(main(), p, 0, 'edge'); phoneFx(p, "THE TITAN'S ISLAND IS FALLING! Press ACTION for the parachute!", [200, 60, 200]); }
+        continue;
+      }
       o.flareT = Math.max(0, (o.flareT || 0) - dt);
       if (o.mode === 'rope' && p.ko > 0) { o.s = clamp(o.s, 0, S.rope.len); p.x = S.rope.x; p.y = S.rope.y + o.s; } // (out cold on the rope: he hangs on and rides it)
       // the leash: the ship has gone, or the stop has ended
@@ -545,7 +610,7 @@ export function createGround({ state, puff, phoneFx }) {
       } else if (S.hold || !S.on || Math.abs(p.x - S.rope.x) > K.STRAND.LEASH) { rejoin(p, true, true); continue; } // (bots never strand: the stop ended, the ship is far, the away team is gone)
       // the pickup call: a lit flare, or a man who is stranded; the rope drops by itself when the ship hovers there
       if (o.flareT > 0 || o.strand > 0 || (p.bot && p.trip && p.trip.ready)) {
-        const g = o.mode === 'walk' && !o.deck ? o.gy : map ? groundAt(map, p.x, p.y) : null;
+        const g = o.mode === 'walk' && (!o.deck || o.deck.island) ? o.gy : map ? groundAt(map, p.x, p.y) : null;
         S.pickups.push({ id: p.id, name: p.name, x: p.x, y: (g == null ? p.y : g) - K.LADDER.HOVER, gx: p.x, gy: g == null ? p.y : g, flare: o.flareT > 0, bot: !!p.bot });
         if (!S.rope.out && Math.abs(p.x - S.rope.x) < A().LADDER.CALL_NEAR && S.rope.gap <= K.LADDER.REACH) lowerRope(p);
       }
@@ -570,7 +635,7 @@ export function createGround({ state, puff, phoneFx }) {
     const o = p.on;
     if (!o || !o.away) return null;
     const K = A();
-    const ov = tre.ui(p) || obj.ui(p); // (A1: an objective at his feet, soldiers on him, the banner in his arms) (A2: a chest at his feet or in his arms, guards)
+    const ov = (o.mode === 'walk' && o.deck && o.deck.island ? islandUi(state, p) : null) || tre.ui(p) || obj.ui(p); // (C.6c: the Titan's crystal) (A1: an objective at his feet, soldiers on him, the banner in his arms) (A2: a chest at his feet or in his arms, guards)
     let hint;
     if (o.mode === 'home') hint = 'You walked home. You rejoin at the next dock.';
     else if (o.mode === 'rope') hint = 'CLIMB the rope: stick UP to the ship, DOWN to the ground. JUMP lets go.';
@@ -590,9 +655,10 @@ export function createGround({ state, puff, phoneFx }) {
   function helmCall() {
     if (!S.on) return null;
     const vault = !S.pickups.length ? tre.vaultCall() : null; // (A2, tools only: the bot helm hovers over an open vault so a trip can reach the chests)
-    if (!S.pickups.length && !vault) return null;
+    const isl = !S.pickups.length && !vault && A().BOT_TRIPS && S.island && islandTrip(state) ? { x: midOf(S.island), y: S.island.y - A().LADDER.HOVER, name: 'the crystal' } : null; // (C.6c, tools only: the bot helm hovers over the Titan's island so a trip can reach the crystal)
+    if (!S.pickups.length && !vault && !isl) return null;
     const sh = main(), R = S.rope;
-    const pk = vault || S.pickups.reduce((b, q) => (Math.abs(q.x - R.x) < Math.abs(b.x - R.x) ? q : b));
+    const pk = vault || isl || S.pickups.reduce((b, q) => (Math.abs(q.x - R.x) < Math.abs(b.x - R.x) ? q : b));
     return { dx: pk.x - R.x, alt: R.y - sh.pose.y - pk.y, name: pk.name };
   }
   // The job on the helm man's phone: PICK UP <name> (jobs.js).
@@ -605,7 +671,7 @@ export function createGround({ state, puff, phoneFx }) {
 
   return {
     bind: (d) => { deps = { ...deps, ...d }; },
-    objectiveJob: (p, f) => tre.job(p, f) || obj.job(p, f), obj, tre, payTreasure: () => tre.pay(), chestStow: (p) => tre.stow(p),
+    objectiveJob: (p, f) => islandJob(state, p, f) || tre.job(p, f) || obj.job(p, f), obj, tre, landOn, island: () => S.island, payTreasure: () => tre.pay(), chestStow: (p) => tre.stow(p),
     begin, reset, update, surfaces, step, enabled, ui, helmCall, pickupJob, ropeSpot, ladderAction, useLadder, mount, lowerRope, dockReturn, holdStop, tripWanted, tripStarted,
     awayList, onGround, groundAt: (x, y) => groundAt(mapNow(), x, y), eligible, rejoin, walkHome, fireFlare,
   };

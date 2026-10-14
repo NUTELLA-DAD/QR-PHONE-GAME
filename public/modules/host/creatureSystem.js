@@ -12,10 +12,12 @@ import { config } from '../../config.js';
 import { createKraken } from './creatures/kraken.js';
 import { createDrake } from './creatures/drake.js';
 import { createBird } from './creatures/thunderbird.js';
+import { createTitan } from './creatures/titan.js';
 import { stepBody, hitInfo, severPart, setMouth, nearestFreeLimb, reachPart, releasePart, exposeHeart, makeRng, segDist } from './creature.js';
 import { thinkAttacks, hurtGrips, actionFor, blow, hacked, jobsOf, gripJobs } from './creatureGrip.js';
 import { setupDrake, stepDrake, drakeHit, drakeMul, drakeWays, drakeDied, poolWhy, perchAction, perchBlow, perchHacked, perchJobs, perchObjects } from './creatureDrake.js';
 import { setupBird, stepBird, birdHit, birdMul, birdWays, birdDied, birdPerchAction, birdPerchBlow, birdPerchHacked, birdPerchJobs, birdPerchObjects } from './creatureBird.js';
+import { setupTitan, stepTitan, titanHit, titanWays, titanDied } from './creatureTitan.js';
 import { creatureSurfaces, boardCheck, boarderStep, decayJobs } from './creatureBoard.js';
 import { stepHarpoons } from './creatureTow.js';
 import { stepBreach, seaLevel } from './creatureBreach.js';
@@ -54,14 +56,14 @@ export const creatureTouch = (state, x, y, r = 0) => !!creatureHit(state, x, y, 
 export function hurtCreature(state, hit, dmg, opts = {}) {
   const cr = state.creature;
   if (!vulnerable(cr) || !hit || hit.part.dead || !(dmg > 0)) return null;
-  const H = CR().HURT, p = hit.part, t = p.tgt, drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird';
+  const H = CR().HURT, p = hit.part, t = p.tgt, drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan';
   if (t && t.lit > 0) dmg *= 1 + config.SEARCHLIGHT.LIT_DAMAGE; // (anything in a searchlight beam takes more)
   if (cr.breach && cr.breach.exposed) dmg *= CR().BREACH.BONUS; // (hanging in the air with its heart and beak open)
   if (drake) dmg *= drakeMul(cr, p, opts.src || 'shell'); // (dazed after a swoop, coughing after a choke, flak on a wing)
   if (bird) dmg *= birdMul(state, cr, p, opts.src || 'shell'); // (dazed after a pass, the glowing gizzard, a drunk lightning bolt fired back by the coil)
   p.hp = Math.max(0, p.hp - dmg);
   p.hit = CR().HIT_FLASH;
-  cr.hp = Math.max(0, cr.hp - dmg * ((drake ? CR().DRAKE.POOL : bird ? CR().THUNDERBIRD.POOL : H.POOL)[p.kind] ?? 1));
+  cr.hp = Math.max(0, cr.hp - dmg * ((drake ? CR().DRAKE.POOL : bird ? CR().THUNDERBIRD.POOL : titan ? CR().TITAN.POOL : H.POOL)[p.kind] ?? 1));
   const st = cr.stats, src = opts.src || 'shell';
   st.dmg += dmg;
   st.by[src] = (st.by[src] || 0) + dmg;
@@ -71,7 +73,7 @@ export function hurtCreature(state, hit, dmg, opts = {}) {
     cr.fed += src === 'bomb' ? 1 : H.CARGO_MOUTH;
     st.fed = cr.fed;
     if (cr.mouthWin && src === 'bomb') { // it gulps and the beak snaps shut a moment (creatureFight.js reopens it if the window has time left)
-      cr.mouthWin.gulp = CR().MOUTH.GULP;
+      cr.mouthWin.gulp = titan ? CR().TITAN.MOUTH.GULP : CR().MOUTH.GULP;
       setMouth(cr, p, false);
     }
   }
@@ -80,9 +82,10 @@ export function hurtCreature(state, hit, dmg, opts = {}) {
   if ((p.kind === 'tentacle' || p.kind === 'wing') && p.hp <= 0 && !p.severed) out.sever = sever(state, cr, p, p.kind === 'wing' ? Math.max(1, hit.seg) : hit.seg, opts); // (a torn wing leaves a stump of at least one segment)
   if (drake) drakeHit(state, cr, p, dmg, src, opts); // (chokes, driving it off the perch, a torn wing sends it crashing)
   if (bird) birdHit(state, cr, p, dmg, src, opts); // (zaps at the gizzard, mortar hits on the spire, driving it off the perch, a plucked wing)
+  if (titan) titanHit(state, cr, p, dmg, src, opts); // (an arm shelled off)
   if (!cr.dying) { // how it ends (cr.stats.win): every tentacle cut off, fed enough bombs, the heart struck, or the pool empty
-    const ways = drake ? drakeWays(cr, p, src) : bird ? birdWays(cr, p, src) : [];
-    if (!drake && !bird) {
+    const ways = drake ? drakeWays(cr, p, src) : bird ? birdWays(cr, p, src) : titan ? titanWays(cr, p, src) : [];
+    if (!drake && !bird && !titan) {
       if (tentaclesGone(cr)) ways.push('sever');
       if (cr.fed >= CR().MOUTH.FED) ways.push('mouth');
       if (p.kind === 'heart' && src === 'sword' && (p.hp <= 0 || cr.hp <= 0)) ways.push('board');
@@ -103,7 +106,7 @@ function hurtPool(state, dmg, src, opts = {}) {
   cr.hp = Math.max(0, cr.hp - dmg);
   cr.stats.dmg += dmg;
   cr.stats.by[src] = (cr.stats.by[src] || 0) + dmg;
-  const why = cr.kind === 'drake' ? poolWhy(cr, src) : cr.kind !== 'thunderbird' && src === 'rock' ? 'tow' : 'hp';
+  const why = cr.kind === 'drake' ? poolWhy(cr, src) : cr.kind !== 'thunderbird' && cr.kind !== 'titan' && src === 'rock' ? 'tow' : 'hp';
   if (cr.hp <= 0 && (!CR().FORCE_WIN || CR().FORCE_WIN === why)) die(state, cr, why, opts);
 }
 
@@ -113,7 +116,7 @@ function sever(state, cr, p, i, opts) {
   if (!gone.length) return false;
   const K = CR().CHUNK, h = cr.hooks, o = gone[0];
   cr.stats.severed += 1;
-  cr.chunks.push({ cx: o.x, cy: o.y, a: 0, vx: (h.rng() - 0.5) * K.KICK * 2, vy: -K.KICK * 0.8, w: (h.rng() - 0.5) * K.SPIN * 2, t: 0, part: { kind: p.kind, segs: gone.map((s) => ({ ...s, x: s.x - o.x, y: s.y - o.y })), side: p.side, lit: p.lit, hit: 0, severed: false, ...(cr.kind === 'thunderbird' ? { art: 'thunderbird' } : {}) } });
+  cr.chunks.push({ cx: o.x, cy: o.y, a: 0, vx: (h.rng() - 0.5) * K.KICK * 2, vy: -K.KICK * 0.8, w: (h.rng() - 0.5) * K.SPIN * 2, t: 0, part: { kind: p.kind, segs: gone.map((s) => ({ ...s, x: s.x - o.x, y: s.y - o.y })), side: p.side, lit: p.lit, hit: 0, severed: false, ...(cr.kind === 'thunderbird' ? { art: 'thunderbird' } : cr.kind === 'titan' ? { art: 'titan' } : {}) } });
   while (cr.chunks.length > K.MAX) cr.chunks.shift();
   h.puff(o.x, o.y, '#7a3a5a', 14);
   h.puff(o.x, o.y, '#e8dcc0', 6);
@@ -146,13 +149,14 @@ function die(state, cr, why, opts) {
   if (state.moment) state.moment('creature-win', { who: opts.who ? [opts.who] : [], where: null, data: { creature: cr.name, kind: cr.kind, way: why } }); // (the Ship's Book: which creature, how it ended, and the final blow's owner)
   pop(state, cr.x, cr.y - 700, 'boss', '#ff5a1f', 2.2);
   for (let k = 0; k < 6; k++) h.puff(cr.x + (h.rng() - 0.5) * 1800, cr.y - 300 + (h.rng() - 0.5) * 900, '#7a3a5a', 18);
-  const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', WT = drake ? CR().DRAKE.WIN_TEXT : bird ? CR().THUNDERBIRD.WIN_TEXT : CR().WIN_TEXT;
-  state.say('objective', (WT[why] || 'SLAIN!') + ' ' + cr.name + (drake ? CR().DRAKE.DEATH_TEXT : bird ? CR().THUNDERBIRD.DEATH_TEXT : ' SINKS BENEATH THE WAVES!'), null, CR().FINALE.BANNER); // the final banner: how it ended, then what happens to it
+  const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', WT = drake ? CR().DRAKE.WIN_TEXT : bird ? CR().THUNDERBIRD.WIN_TEXT : titan ? CR().TITAN.WIN_TEXT : CR().WIN_TEXT;
+  state.say('objective', (WT[why] || 'SLAIN!') + ' ' + cr.name + (drake ? CR().DRAKE.DEATH_TEXT : bird ? CR().THUNDERBIRD.DEATH_TEXT : titan ? CR().TITAN.DEATH_TEXT : ' SINKS BENEATH THE WAVES!'), null, CR().FINALE.BANNER); // the final banner: how it ended, then what happens to it
   state.sfxQ.push(['roar']);
   state.ship.shake = Math.max(state.ship.shake || 0, 1.5);
   for (const p of Object.values(state.players)) if (!p.bot && h.phoneFx) h.phoneFx(p, WT[why] || 'SLAIN!', [60, 40, 60, 40, 300]);
   if (drake) drakeDied(state, cr); // (no more fire, no more weight on her bag)
   if (bird) birdDied(state, cr); // (no more weight on her bag, no more bolts called)
+  if (titan) titanDied(state, cr); // (the boulders are gone; ground.js drops whoever stands on its island)
 }
 
 // ---- one function per weapon ---------------------------------------------------------------------------------------------------------------------------------
@@ -287,7 +291,15 @@ export function creatureTargets(state, list = [], only = null, gunType = 'any') 
   const ship = mainShip(state), L = ship.layout;
   const ax = toWorldX(ship, L.aimPoint.x), ay = toWorldY(ship, L.aimPoint.y);
   const dark = (state.darkNow || 0) > CR().DARK_AT;
-  const bird = cr.kind === 'thunderbird', drake = cr.kind === 'drake' || bird, vs = ship.pose.vx || 0; // (drake: a flier -- the Drake or the Thunderbird; the Thunderbird has its own ranks below)
+  if (cr.kind === 'titan' && !only) { // C.6c: a boulder in the air is the first thing to shoot at (36 hp: a few shells shatter it); it flies a known arc
+    const TB = CR().TITAN.BOULDER;
+    for (const b of cr.titan.boulders) {
+      if (b.mode !== 'fly') continue;
+      const bt = b.tgt || (b.tgt = { lit: 0, spotT: 0 });
+      list.push({ kind: 'boulder', obj: bt, b, r: b.r, rank: 2.6, at: (tt) => ({ x: b.x + b.vx * (tt || 0), y: b.y + b.vy * (tt || 0) + 0.5 * TB.GRAVITY * (tt || 0) * (tt || 0) }) });
+    }
+  }
+  const bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', drake = cr.kind === 'drake' || bird, vs = ship.pose.vx || 0; // (drake: a flier -- the Drake or the Thunderbird; the Thunderbird has its own ranks below)
   // (the Drake flies fast: a shot leads it by where it will be, relative to the ship that fires)
   const led = (pt, tt) => ({ x: pt.x + ((cr.mvx || 0) - vs) * (tt || 0), y: pt.y + (cr.mvy || 0) * (tt || 0) });
   for (const p of cr.parts) {
@@ -297,13 +309,13 @@ export function creatureTargets(state, list = [], only = null, gunType = 'any') 
       if (p.severed) continue; // (a stump is not worth a shell)
       let bi = 0, bd = Infinity;
       p.segs.forEach((s, i) => { const m = segMid(s), d = Math.hypot(m.x - ax, m.y - ay); if (d < bd) { bd = d; bi = i; } });
-      let rank = !drake ? 8.8 : p.kind === 'wing' ? (!bird && cr.drake.mode === 'crawl' ? 9 : 6.4) : p.kind === 'neck' ? 8.4 : 9.1; // (wings first while it flies: tear one and it crashes; pluck both and the Thunderbird falls)
+      let rank = !drake ? (titan ? 6.6 : 8.8) : p.kind === 'wing' ? (!bird && cr.drake.mode === 'crawl' ? 9 : 6.4) : p.kind === 'neck' ? 8.4 : 9.1; // (wings first while it flies: tear one and it crashes; pluck both and the Thunderbird falls)
       if (bird && dark && !(t.lit > 0)) rank += 2; // (a dark sky: the parts a searchlight has come first)
       const at = drake ? (tt) => led(segMid(p.segs[Math.min(bi, p.segs.length - 1)]), tt) : () => segMid(p.segs[Math.min(bi, p.segs.length - 1)]);
       list.push({ kind: 'creaturePart', obj: t, part: p, seg: bi, r: Math.max(30, p.segs[bi].r), rank, at });
     } else {
       const open = p.kind === 'mouth' && p.open, lit = p.kind === 'eye' && (!dark || t.lit > 0);
-      let rank = p.kind === 'mouth' ? (open ? (drake ? 3.6 : 4.6) : drake ? 9.7 : 9.6) : p.kind === 'eye' ? (lit ? 5.6 : 9.3) : p.kind === 'heart' ? (bird ? 3.4 : 5) : p.kind === 'head' ? 7.2 : 9.4; // (the Thunderbird's gizzard is only a target while it glows)
+      let rank = p.kind === 'mouth' ? (open ? (drake ? 3.6 : 4.6) : drake ? 9.7 : 9.6) : p.kind === 'eye' ? (lit ? 5.6 : 9.3) : p.kind === 'heart' ? (bird ? 3.4 : 5) : p.kind === 'head' ? (titan ? 8.2 : 7.2) : 9.4; // (the Thunderbird's gizzard is only a target while it glows; the Titan's arms are the better target than its head, 6.6 above)
       if (bird && p.kind !== 'heart' && dark && !(t.lit > 0)) rank += 2;
       list.push({ kind: 'creaturePart', obj: t, part: p, seg: 0, r: p.segs[0].r, rank, at: drake ? (tt) => led(segMid(p.segs[0]), tt) : () => segMid(p.segs[0]) });
     }
@@ -311,7 +323,7 @@ export function creatureTargets(state, list = [], only = null, gunType = 'any') 
   return list;
 }
 // What a harpoon gun may aim at: the exhausted creature's body (phase 3), whatever FORCE_WIN hides from the other guns.
-export const creatureTowTargets = (state) => (state.creature && state.creature.kind !== 'thunderbird' && (state.creature.kind === 'drake' ? state.creature.drake.mode === 'crawl' : state.creature.phase >= 3) ? creatureTargets(state, [], 'mantle') : []); // (the Drake: once it crawls; the Thunderbird is never towed)
+export const creatureTowTargets = (state) => (state.creature && state.creature.kind !== 'thunderbird' && state.creature.kind !== 'titan' && (state.creature.kind === 'drake' ? state.creature.drake.mode === 'crawl' : state.creature.phase >= 3) ? creatureTargets(state, [], 'mantle') : []); // (the Drake: once it crawls; the Thunderbird is never towed)
 // The phone radar's blips (spotter.js): the body, the beak and every tentacle.
 export function creatureRadar(state) {
   const cr = state.creature;
@@ -330,7 +342,7 @@ export function creaturePoints(state) {
     const sea = seaLevel(state);
     return sea === null ? [] : [{ x: cr.breach.x, y: sea, r: 400 }];
   }
-  if (!vulnerable(cr)) return [];
+  if (!vulnerable(cr) && !(cr && cr.kind === 'titan' && cr.dying)) return []; // (the dying Titan stays in the picture: the finale is its crumbling)
   const out = [];
   for (const p of cr.parts) {
     if (!alivePart(p)) continue;
@@ -369,7 +381,8 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
 
   // The Ember Forge has lava low in the map (state.env.lavaY): that is the Drake's sky.
   const lavaY = () => (state.env && Number.isFinite(state.env.lavaY) ? state.env.lavaY : null);
-  const homeOk = (kind) => (kind === 'thunderbird' ? envIdOf(state) === CR().THUNDERBIRD.ENV : kind === 'drake' ? lavaY() !== null && envIdOf(state) === CR().DRAKE.ENV : seaY() !== null);
+  const titanHome = () => envIdOf(state) === CR().TITAN.ENV && !!(state.course && state.course.map && state.course.map.creature === 'titan'); // (the Island Titan stands on the Titan lair's plain: maps.js buildTitanLairMap)
+  const homeOk = (kind) => (kind === 'titan' ? titanHome() : kind === 'thunderbird' ? envIdOf(state) === CR().THUNDERBIRD.ENV : kind === 'drake' ? lavaY() !== null && envIdOf(state) === CR().DRAKE.ENV : seaY() !== null);
   // THE CINDER DRAKE (C.6a): it flies in from off screen, untouchable for SPAWN.ARRIVE s, then circles; creatureDrake.js is its brain.
   const spawnDrake = () => {
     if (state.creature || !homeOk('drake')) return state.creature || null;
@@ -428,7 +441,37 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
     return cr;
   };
 
+  // THE ISLAND TITAN (C.6c): it strides in over the plain, untouchable for SPAWN.ARRIVE s, then stands ahead of the ship; creatureTitan.js is its brain.
+  const spawnTitan = () => {
+    if (state.creature || !homeOk('titan')) return state.creature || null;
+    const ship = mainShip(state), D = CR().TITAN;
+    const mid = shipMid(ship), side = ship.pose.f || 1;
+    const cr = createTitan(mid.x + side * (D.STAND.OFFSET + D.SPAWN.FROM), state.course.map.floorY - D.BODY.FEET, CR().SEED, { f: -side });
+    const m = hpMul();
+    for (const p of cr.parts) {
+      p.hp = p.maxHp = Math.max(1, Math.round(p.maxHp * m * (D.HP_MUL[p.kind] ?? 1)));
+      p.lit = true;
+    }
+    cr.hp = cr.maxHp = Math.max(1, Math.round(D.HP * m * D.HP_MUL.pool));
+    Object.assign(cr, { name: D.NAME, mode: 'surfacing', dying: false, age: 0, sinkT: 0, side, base: { x: cr.x, y: cr.y }, chunks: [], stats: { dmg: 0, by: {}, parts: {}, severed: 0, chomps: 0, fed: 0, win: null }, ai: { breather: 0 } });
+    Object.assign(cr, { phase: 1, fed: 0, mouthWin: null, phaseDy: 0 });
+    Object.defineProperty(cr, 'hooks', { value: { state, puff, credit, rng, phoneFx, hurt: (hit, dmg, opts) => hurtCreature(state, hit, dmg, opts), hurtPool: (dmg, src, who) => hurtPool(state, dmg, src, { who }), sever: (p, seg, opts = {}) => sever(state, cr, p, seg, opts) }, enumerable: false });
+    Object.defineProperty(cr, 'grips', { value: [], enumerable: false, writable: true });
+    Object.defineProperty(cr, 'harpoons', { value: [], enumerable: false });
+    cr.slap = null;
+    cr.breach = null;
+    cr.breachDy = 0;
+    cr.tvx = 0;
+    cr.hooked = false;
+    setupTitan(state, cr, ship);
+    state.creature = cr;
+    state.say('setpiece', cr.name + ' STRIDES OUT OF THE HAZE!', null, 4);
+    state.sfxQ.push(['roar']);
+    return cr;
+  };
+
   const spawn = (kind = 'kraken') => {
+    if (kind === 'titan') return spawnTitan();
     if (kind === 'drake') return spawnDrake();
     if (kind === 'thunderbird') return spawnBird();
     if (state.creature || kind !== 'kraken' || seaY() === null) return state.creature || null; // (the Kraken lives at the water line: with no sea level it does not come)
@@ -490,10 +533,16 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
     }
     const cr = state.creature;
     if (!cr) return;
-    const ship = mainShip(state), S = CR().SPAWN, mid = shipMid(ship), drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird';
+    const ship = mainShip(state), S = CR().SPAWN, mid = shipMid(ship), drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan';
     cr.age += dt;
     let dive = 0;
-    if (bird) { // the Thunderbird flies (creatureBird.js); dead, it falls into the clouds
+    if (titan) { // the Titan strides about the plain (creatureTitan.js); dead, it crumbles into it
+      stepTitan(state, cr, ship, dt);
+      if (cr.mode === 'dying') {
+        cr.sinkT += dt;
+        dive = CR().TITAN.SPAWN.SINK_DEEP * smooth(cr.sinkT / CR().TITAN.SPAWN.SINK);
+      }
+    } else if (bird) { // the Thunderbird flies (creatureBird.js); dead, it falls into the clouds
       stepBird(state, cr, ship, dt);
       if (cr.mode === 'dying') {
         cr.sinkT += dt;
@@ -529,7 +578,7 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
     cr.vx = cr.vy = 0;
     if (cr.mode === 'dying') state.slow = cr.sinkT < CR().FINALE.SLOW_FOR ? CR().FINALE.SLOW : 1; // (the last blow plays in slow motion: main.js runs the sim at this speed)
     if (vulnerable(cr)) creatureShell(state);
-    if (drake || bird) { /* (its attacks are in stepDrake / stepBird) */ } else if (cr.mode === 'idle') think(cr, dt, ship);
+    if (drake || bird || titan) { /* (its attacks are in stepDrake / stepBird / stepTitan) */ } else if (cr.mode === 'idle') think(cr, dt, ship);
     else if (cr.grips.length || cr.slap) thinkAttacks(state, cr, ship, dt); // (sinking: the limbs that held her let go and the records are cleared)
     stepHarpoons(state, cr, dt);
     decayJobs(cr, dt);
@@ -550,7 +599,7 @@ export function createCreatureSystem({ state, puff, credit, phoneFx = () => {} }
       c.part.lit = cr.parts[0].lit;
     }
     cr.chunks = cr.chunks.filter((c) => c.t < CR().CHUNK.LIFE);
-    if (cr.mode === 'dying' && cr.sinkT >= (bird ? CR().THUNDERBIRD.SPAWN.SINK : drake ? CR().DRAKE.SPAWN.SINK : S.SINK_TIME) && !cr.chunks.length) {
+    if (cr.mode === 'dying' && cr.sinkT >= (titan ? CR().TITAN.SPAWN.SINK : bird ? CR().THUNDERBIRD.SPAWN.SINK : drake ? CR().DRAKE.SPAWN.SINK : S.SINK_TIME) && !cr.chunks.length) {
       state.creature = null;
       state.slow = 1;
     }

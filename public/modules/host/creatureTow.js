@@ -16,7 +16,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function creatureRay(state, o, ang, range) {
   const cr = state.creature;
-  if (!cr || cr.mode !== 'idle' || cr.kind === 'thunderbird' || (cr.kind === 'drake' && cr.drake.mode !== 'crawl')) return null; // (the Drake can only be harpooned once it crawls; the Thunderbird never)
+  if (!cr || cr.mode !== 'idle' || cr.kind === 'thunderbird' || cr.kind === 'titan' || (cr.kind === 'drake' && cr.drake.mode !== 'crawl')) return null; // (the Drake can only be harpooned once it crawls; the Thunderbird and the Island Titan never)
   const T = config.CREATURES.TOW, c = Math.cos(ang), s = Math.sin(ang);
   for (let d = 40; d <= range; d += 30) {
     const x = o.x + c * d, y = o.y + s * d, hit = hitInfo(cr, x, y, T.HIT_R);

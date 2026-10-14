@@ -746,6 +746,326 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     if (wingN && !wingN.dead) drawBirdLimb(wingN);
   }
 
+  // ================================================================ THE ISLAND TITAN (C.6c) ================================================================
+  // The same recipe (pictures baked once per zoom and blitted; poses from the sim, nothing wobbles) in warm grey stone with moss, a cyan crystal and an amber eye. Everything but the arms is drawn in the Titan's own frame
+  // (facing +x, origin at the middle of its torso; ctx is translated to the body and mirrored by body.f): the legs (a picture; they stride on the key clock while it walks), the heap of rubble it takes its boulders from, the torso with
+  // the glowing heartstone in its chest, the head and the mouth (a hinged jaw that drops for the roar), the ISLAND on its back with the CRYSTAL growing from it (config.CREATURES.TITAN.ISLAND). The arms are the generic limbs
+  // (three slabs and a hand, in world coordinates).
+  const S_STONE = '#9a9384', S_STONE_DK = '#6b665c', S_STONE_LT = '#c4bca8', S_MOSS = '#6f8f4a', S_MOSS_DK = '#4d6b36', S_SOIL = '#7a5a3a', S_SOIL_DK = '#523a26', S_GRASS = '#7aa84e', S_GRASS_DK = '#4f7a3a', S_TRUNK = '#5a3f28', S_BOULDER = '#b08a5e';
+  const S_CRYSTAL = '#7fe8ff', S_CRYSTAL_DK = '#2fa4c8', S_CRYSTAL_IN = '#e8ffff', S_EYE = '#ffc84a', S_MOUTH = '#3a2420', S_TOOTH = '#e8dcc0';
+  const INK_B = A.INK_W * 1.3; // the big silhouettes get a heavier line
+
+  function titanTorsoPic(look) {
+    return get(`ttorso|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5;
+      return bake(-1250 - pad, -2300 - pad, 1250 + pad, 800 + pad, (g) => {
+        const body = [[-380, -2150], [-900, -1900], [-1000, -1500], [-870, -900], [-730, -300], [-770, 350], [-700, 650], [700, 650], [770, 350], [730, -300], [890, -900], [1010, -1500], [930, -1900], [440, -2150]];
+        poly(g, body, col(S_STONE), true, INK_B);
+        g.save();
+        g.beginPath();
+        body.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+        g.closePath();
+        g.clip();
+        poly(g, [[-1100, -300], [0, -250], [1100, -300], [1100, 800], [-1100, 800]], col(S_STONE_DK), false); // the shaded belly
+        poly(g, [[-380, -2100], [440, -2100], [700, -1700], [-100, -1650]], hiColor(look), false); // the light on the shoulders
+        poly(g, [[-950, -1900], [-500, -1750], [-300, -1400], [-950, -1300]], col(S_MOSS), false); // moss on the back
+        poly(g, [[500, -1980], [900, -1800], [850, -1640], [520, -1800]], col(S_MOSS), false);
+        for (const [x1, y1, x2, y2] of [[-300, -1250, 200, -1180], [100, -700, 600, -600], [-600, -450, -100, -400], [300, -1650, 700, -1500]]) { // chest plates: heavy ink lines
+          g.beginPath();
+          g.moveTo(x1, y1);
+          g.lineTo(x2, y2);
+          g.lineWidth = A.INK_W * 0.8;
+          g.stroke();
+        }
+        g.restore();
+        poly(g, body, null, true, INK_B);
+      });
+    });
+  }
+  // The heartstone in its chest and the vein that climbs its back to the crystal on the island: cyan, drawn over the torso (it flickers in two stepped frames).
+  function titanHeartPic(stage, look) {
+    return get(`theart|${stage}|${look}`, () => {
+      const pad = A.INK_W * 2;
+      return bake(-1300 - pad, -2500 - pad, 700 + pad, -500 + pad, (g) => {
+        const lit = stage ? S_CRYSTAL_IN : S_CRYSTAL, mid = looks[look](S_CRYSTAL);
+        g.lineJoin = 'round';
+        g.beginPath(); // the vein: from the chest, up the spine and across the shoulder to the island
+        for (const [x, y] of [[330, -1000], [200, -1300], [60, -1480], [-120, -1750], [-380, -1950], [-700, -2150], [-1000, -2300]]) { if (x === 330) g.moveTo(x, y); else g.lineTo(x, y); }
+        g.lineWidth = A.INK_W * 2.4;
+        g.strokeStyle = INK;
+        g.stroke();
+        g.lineWidth = A.INK_W * 1.3;
+        g.strokeStyle = mid;
+        g.stroke();
+        poly(g, [[330, -1250], [510, -1000], [330, -760], [150, -1000]], mid, true, A.INK_W); // the heartstone: a cut crystal in the chest
+        poly(g, [[330, -1130], [420, -1000], [330, -880], [240, -1000]], looks[look](lit), false);
+      });
+    });
+  }
+  function titanLegPic(look) {
+    return get(`tleg|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5;
+      return bake(-700 - pad, -450 - pad, 1100 + pad, 2300 + pad, (g) => {
+        const leg = [[-300, -420], [300, -420], [260, 900], [310, 1900], [820, 1950], [920, 2200], [-480, 2200], [-380, 1850], [-330, 900]];
+        poly(g, leg, col(S_STONE), true, INK_B);
+        g.save();
+        g.beginPath();
+        leg.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+        g.closePath();
+        g.clip();
+        poly(g, [[-120, -500], [140, -500], [110, 2300], [-150, 2300]], col(S_STONE_DK), false); // the shaded stripe down the middle
+        poly(g, [[-300, 700], [-80, 900], [-300, 1200]], col(S_MOSS), false);
+        poly(g, [[-480, 1950], [920, 1950], [920, 2250], [-480, 2250]], col(S_STONE_DK), false); // the foot block
+        g.beginPath();
+        g.moveTo(-300, 300);
+        g.lineTo(0, 520);
+        g.lineTo(-120, 780);
+        g.lineWidth = A.INK_W * 0.8;
+        g.stroke();
+        g.restore();
+        poly(g, leg, null, true, INK_B);
+      });
+    });
+  }
+  function titanRubblePic(look) {
+    return get(`trubble|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5;
+      return bake(300 - pad, 800 - pad, 2100 + pad, 2300 + pad, (g) => {
+        poly(g, [[320, 2200], [560, 1550], [820, 1250], [1100, 1050], [1380, 1280], [1700, 1650], [2060, 2200]], col(S_STONE_DK), true, INK_B);
+        for (const [x, y, r] of [[900, 1180, 230], [1250, 1300, 260], [1560, 1700, 220], [700, 1650, 200], [1100, 1850, 240]]) poly(g, [[x - r, y + r * 0.5], [x - r * 0.7, y - r * 0.6], [x + r * 0.2, y - r], [x + r, y - r * 0.2], [x + r * 0.8, y + r * 0.7]], col(S_STONE), true, A.INK_W);
+        poly(g, [[820, 1100], [1040, 1020], [1060, 1080], [840, 1180]], hiColor(look), false);
+      });
+    });
+  }
+  function titanHeadPic(look) {
+    return get(`thead|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5;
+      return bake(-800 - pad, -800 - pad, 1100 + pad, 700 + pad, (g) => {
+        const head = [[-480, -400], [-300, -620], [200, -680], [520, -520], [640, -120], [700, 220], [470, 520], [-250, 580], [-560, 260]];
+        poly(g, head, col(S_STONE), true, INK_B);
+        g.save();
+        g.beginPath();
+        head.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+        g.closePath();
+        g.clip();
+        poly(g, [[-700, 100], [800, 60], [800, 800], [-700, 800]], col(S_STONE_DK), false);
+        poly(g, [[-300, -650], [220, -700], [500, -520], [-100, -430]], hiColor(look), false);
+        poly(g, [[-500, -450], [-100, -700], [100, -560], [-300, -330]], col(S_MOSS), false);
+        g.restore();
+        poly(g, [[60, -330], [640, -300], [660, -170], [80, -180]], col(S_STONE_DK), true, A.INK_W); // the heavy brow
+        poly(g, [[250, -150], [480, -170], [440, 20], [270, 40]], looks[look](S_EYE), true, A.INK_W * 0.9); // the amber eye
+        poly(g, [[330, -110], [400, -120], [390, -20], [340, -10]], looks[look](S_MOUTH), false);
+        poly(g, [[560, -90], [760, 60], [620, 200]], col(S_STONE_LT), true, A.INK_W * 0.9); // a blocky nose
+        poly(g, head, null, true, INK_B);
+      });
+    });
+  }
+  // The mouth on the front of the face: shut it is a heavy lip; open, the lower jaw drops and the dark throat shows between rows of stone teeth. state 0 shut, 1 half open, 2 wide open. Centred on the mouth point.
+  function titanMouthPic(R, state, look) {
+    return get(`tmouth|${Math.round(R)}|${state}|${look}`, () => {
+      const col = looks[look], gap = [0, 0.55, 1.1][state] * R, pad = INK_B * 1.5;
+      return bake(-1.3 * R - pad, -1.0 * R - pad, 1.5 * R + pad, 2.3 * R + pad, (g) => {
+        if (gap > 0) {
+          poly(g, [[-0.9 * R, -0.35 * R], [0.9 * R, -0.35 * R], [0.8 * R, gap + 0.5 * R], [-0.8 * R, gap + 0.55 * R]], col(S_MOUTH), true, A.INK_W);
+          for (let k = 0; k < 4; k++) { const x = (-0.7 + k * 0.45) * R; poly(g, [[x - 0.17 * R, -0.35 * R], [x + 0.17 * R, -0.35 * R], [x + 0.1 * R, 0.1 * R + gap * 0.25], [x - 0.1 * R, 0.1 * R + gap * 0.25]], col(S_TOOTH), true, A.INK_W * 0.6); }
+        }
+        poly(g, [[-0.95 * R, gap + 0.15 * R], [0.95 * R, gap + 0.15 * R], [0.85 * R, gap + 0.8 * R], [-0.7 * R, gap + 0.85 * R]], col(S_STONE_DK), true, INK_B * 0.8); // the jaw (drops for the roar)
+        poly(g, [[-1.1 * R, -0.75 * R], [1.2 * R, -0.7 * R], [1.1 * R, -0.3 * R], [-1.0 * R, -0.25 * R]], col(S_STONE), true, INK_B * 0.8); // the upper lip
+        poly(g, [[-0.9 * R, -0.65 * R], [1.0 * R, -0.62 * R], [1.0 * R, -0.5 * R], [-0.9 * R, -0.5 * R]], hiColor(look), false);
+        if (gap > 0) for (let k = 0; k < 3; k++) { const x = (-0.45 + k * 0.45) * R; poly(g, [[x - 0.13 * R, gap + 0.2 * R], [x + 0.13 * R, gap + 0.2 * R], [x, gap - 0.15 * R - 0.1 * R]], col(S_TOOTH), true, A.INK_W * 0.6); }
+      });
+    });
+  }
+  // The island: a slab of rock with grass on top, roots and a jagged underside, two round trees and a ruined arch. Its top edge is at y = TOP exactly (the crew stand on it: ground.js).
+  function titanIslandPic(look) {
+    return get(`tisland|${look}`, () => {
+      const col = looks[look], I = config.CREATURES.TITAN.ISLAND, pad = INK_B * 1.5, x0 = I.X0, x1 = I.X1, top = I.TOP, d = I.DEPTH, w = x1 - x0, cx = (x0 + x1) / 2;
+      return bake(x0 - 250 - pad, top - 520 - pad, x1 + 250 + pad, top + d + 150 + pad, (g) => {
+        const rock = [[x0 - 120, top + 60], [x0 + 150, top + d * 0.45], [x0 + w * 0.22, top + d * 0.7], [cx - w * 0.12, top + d * 0.95], [cx + w * 0.06, top + d], [cx + w * 0.2, top + d * 0.82], [x1 - w * 0.18, top + d * 0.62], [x1 - 120, top + d * 0.35], [x1 + 120, top + 60], [x1, top], [x0, top]];
+        poly(g, rock, col(S_STONE_DK), true, INK_B);
+        poly(g, [[x0 - 120, top + 60], [x0, top], [x1, top], [x1 + 120, top + 60], [x1 - 100, top + 230], [cx, top + 300], [x0 + 100, top + 230]], col(S_SOIL), false); // the earth band under the grass
+        poly(g, [[x0 + 150, top + 380], [x0 + w * 0.3, top + 560], [x0 + w * 0.22, top + 760]], col(S_STONE), false);
+        poly(g, [[x0 - 90, top + 70], [x0, top], [x1, top], [x1 + 90, top + 70], [x1 - 60, top + 130], [x0 + 60, top + 130]], col(S_GRASS), true, INK_B); // the grass on top
+        poly(g, [[x0 + 40, top + 40], [x1 - 40, top + 40], [x1 - 80, top + 90], [x0 + 80, top + 90]], col(S_GRASS_DK), false);
+        poly(g, [[x0 + 200, top + 8], [x1 - 200, top + 8], [x1 - 260, top + 30], [x0 + 260, top + 30]], hiColor(look), false);
+        g.lineWidth = A.INK_W * 0.8;
+        for (const rx of [x0 + 300, cx - 200, cx + 150, x1 - 500]) { g.beginPath(); g.moveTo(rx, top + 220); g.lineTo(rx - 40, top + 520); g.lineTo(rx + 20, top + 700); g.stroke(); } // hanging roots
+        for (const [tx, tr] of [[x0 + 420, 200], [x1 - 380, 170]]) { // two round trees
+          poly(g, [[tx - 36, top], [tx + 36, top], [tx + 24, top - tr * 1.3], [tx - 24, top - tr * 1.3]], col(S_TRUNK), true, A.INK_W * 0.9);
+          g.beginPath();
+          g.arc(tx, top - tr * 1.6, tr, 0, Math.PI * 2);
+          g.fillStyle = col(S_GRASS_DK);
+          g.fill();
+          g.lineWidth = A.INK_W;
+          g.stroke();
+          g.beginPath();
+          g.arc(tx - tr * 0.3, top - tr * 1.8, tr * 0.5, 0, Math.PI * 2);
+          g.fillStyle = col(S_GRASS);
+          g.fill();
+        }
+        const ax = cx + 450; // a ruined arch
+        poly(g, [[ax - 150, top], [ax - 80, top], [ax - 80, top - 330], [ax - 150, top - 300]], col(S_STONE_LT), true, A.INK_W * 0.9);
+        poly(g, [[ax + 80, top], [ax + 150, top], [ax + 150, top - 240], [ax + 80, top - 330]], col(S_STONE_LT), true, A.INK_W * 0.9);
+        poly(g, [[ax - 150, top - 300], [ax - 40, top - 400], [ax + 80, top - 340], [ax - 80, top - 300]], col(S_STONE), true, A.INK_W * 0.9);
+      });
+    });
+  }
+  // The crystal on the island: a cluster of cut spires, cyan with a pale heart, rooted at the island's top; stage = how many strokes have cracked it (0..3, more cracks), a hit flashes it white.
+  function titanCrystalPic(R, stage, look) {
+    return get(`tcrystal|${Math.round(R)}|${stage}|${look}`, () => {
+      const col = looks[look], pad = A.INK_W * 2;
+      return bake(-2.2 * R - pad, -2.7 * R - pad, 2.2 * R + pad, 0.9 * R + pad, (g) => {
+        g.beginPath();
+        g.arc(0, -0.8 * R, 1.9 * R, 0, Math.PI * 2); // a faint glow round it
+        g.fillStyle = 'rgba(127,232,255,0.18)';
+        g.fill();
+        poly(g, [[-1.15 * R, 0.7 * R], [-1.0 * R, -0.3 * R], [-0.65 * R, -1.1 * R], [-0.3 * R, 0.7 * R]], col(S_CRYSTAL_DK), true, A.INK_W);
+        poly(g, [[0.35 * R, 0.7 * R], [0.7 * R, -0.5 * R], [1.0 * R, -1.0 * R], [1.2 * R, 0.7 * R]], col(S_CRYSTAL_DK), true, A.INK_W);
+        poly(g, [[-0.6 * R, 0.7 * R], [-0.4 * R, -1.3 * R], [0.05 * R, -2.4 * R], [0.5 * R, -1.2 * R], [0.7 * R, 0.7 * R]], col(S_CRYSTAL), true, A.INK_W * 1.1);
+        poly(g, [[-0.2 * R, 0.5 * R], [-0.15 * R, -1.1 * R], [0.05 * R, -1.9 * R], [0.2 * R, -1.0 * R], [0.25 * R, 0.5 * R]], col(S_CRYSTAL_IN), false);
+        poly(g, [[-0.5 * R, -0.9 * R], [-0.3 * R, -1.3 * R], [-0.15 * R, -0.5 * R]], hiColor(look), false);
+        g.strokeStyle = INK;
+        g.lineWidth = A.INK_W * 0.9;
+        const cracks = [[[0.3, -1.6], [0.0, -1.1], [0.2, -0.7], [-0.1, -0.2]], [[-0.3, -1.0], [0.1, -0.6], [-0.2, -0.1], [0.1, 0.4]], [[0.45, -0.9], [0.1, -0.4], [0.35, 0.1]]];
+        for (let c = 0; c < Math.min(stage, 3); c++) { g.beginPath(); cracks[c].forEach(([x, y], i) => (i ? g.lineTo(x * R, y * R) : g.moveTo(x * R, y * R))); g.stroke(); }
+      });
+    });
+  }
+  function titanBoulderPic(r, look) {
+    return get(`tboulder|${Math.round(r)}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5;
+      return bake(-1.2 * r - pad, -1.2 * r - pad, 1.2 * r + pad, 1.2 * r + pad, (g) => {
+        const pts = [[-1.0, -0.2], [-0.7, -0.8], [0.0, -1.05], [0.75, -0.7], [1.05, 0.1], [0.7, 0.85], [-0.1, 1.05], [-0.8, 0.7]].map(([x, y]) => [x * r, y * r]);
+        poly(g, pts, col(S_BOULDER), true, INK_B);
+        poly(g, [[-0.6 * r, -0.7 * r], [0.0, -0.95 * r], [0.6 * r, -0.65 * r], [0.1 * r, -0.4 * r]], hiColor(look), false);
+        poly(g, [[0.2 * r, 0.1 * r], [0.9 * r, 0.1 * r], [0.7 * r, 0.8 * r], [0.0 * r, 0.9 * r]], col(S_STONE_DK), false);
+        poly(g, [[-0.9 * r, 0.1 * r], [-0.4 * r, 0.0], [-0.3 * r, 0.5 * r], [-0.7 * r, 0.6 * r]], col(S_MOSS), false);
+        poly(g, pts, null, true, INK_B);
+      });
+    });
+  }
+  // An arm segment: a slab of stone with a ball joint at its root and cracks; the last has a hand (four fingers and a thumb); a cut one ends in a broken face.
+  function titanArmPic(s, mode, look) {
+    const L = s.len, r0 = s.r, r1 = s.r1;
+    return get(`tarm|${Math.round(L)}|${Math.round(r0)}|${Math.round(r1)}|${mode}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5, mid = (r0 + r1) / 2;
+      return bake(-r0 * 1.1 - pad, -r0 * 1.35 - pad, L + (mode === 'tip' ? r1 * 3.2 : r1 * 1.2) + pad, r0 * 1.35 + pad, (g) => {
+        const slab = [[0, -r0 * 1.02], [L * 0.3, -r0 * 1.12], [L * 0.7, -mid * 1.08], [L, -r1], [L, r1], [L * 0.65, mid * 1.1], [L * 0.3, r0 * 1.06], [0, r0 * 1.02]];
+        poly(g, slab, col(S_STONE), true, INK_B);
+        g.save();
+        g.beginPath();
+        slab.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+        g.closePath();
+        g.clip();
+        poly(g, [[0, r0 * 0.15], [L, r1 * 0.2], [L, r1 * 1.3], [0, r0 * 1.3]], col(S_STONE_DK), false);
+        poly(g, [[r0 * 0.2, -r0 * 1.0], [L * 0.9, -r1 * 0.95], [L * 0.9, -r1 * 0.55], [r0 * 0.2, -r0 * 0.6]], hiColor(look), false);
+        poly(g, [[L * 0.25, -r0 * 1.2], [L * 0.5, -mid * 1.2], [L * 0.45, -mid * 0.6], [L * 0.22, -r0 * 0.7]], col(S_MOSS), false);
+        g.beginPath();
+        g.moveTo(L * 0.35, -mid * 0.2);
+        g.lineTo(L * 0.5, mid * 0.2);
+        g.lineTo(L * 0.42, mid * 0.6);
+        g.lineWidth = A.INK_W * 0.8;
+        g.stroke();
+        g.restore();
+        poly(g, slab, null, true, INK_B);
+        g.beginPath(); // the ball joint at the root
+        g.arc(0, 0, r0 * 0.72, 0, Math.PI * 2);
+        g.fillStyle = col(S_STONE_LT);
+        g.fill();
+        g.lineWidth = INK_B * 0.9;
+        g.stroke();
+        poly(g, [[-r0 * 0.4, -r0 * 0.3], [-r0 * 0.05, -r0 * 0.55], [r0 * 0.15, -r0 * 0.25]], hiColor(look), false);
+        if (mode === 'tip') { // the hand
+          for (const [dy, len] of [[-0.62, 1.75], [-0.22, 2.05], [0.18, 2.0], [0.58, 1.6]]) poly(g, [[L - r1 * 0.2, dy * r1 - r1 * 0.2], [L + r1 * len, dy * r1 - r1 * 0.17], [L + r1 * len + r1 * 0.12, dy * r1 + r1 * 0.12], [L - r1 * 0.2, dy * r1 + r1 * 0.2]], col(S_STONE_LT), true, A.INK_W * 0.9);
+          poly(g, [[L, r1 * 0.8], [L + r1 * 0.9, r1 * 1.5], [L + r1 * 1.2, r1 * 1.25], [L + r1 * 0.3, r1 * 0.6]], col(S_STONE_LT), true, A.INK_W * 0.9); // the thumb
+        }
+        if (mode === 'cut') { // broken off: a jagged face of lighter stone
+          poly(g, [[L - 10, -r1], [L + r1 * 0.35, -r1 * 0.5], [L + r1 * 0.1, -r1 * 0.1], [L + r1 * 0.45, r1 * 0.4], [L + r1 * 0.05, r1]], col(S_STONE_LT), true, A.INK_W * 0.9);
+        }
+      });
+    });
+  }
+  function drawTitanLimb(p) {
+    const look = lookOf(p), n = p.segs.length;
+    for (let i = 0; i < n; i++) {
+      const s = p.segs[i];
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (Math.cos(s.ang) < 0) ctx.scale(1, -1); // (the light stays on top)
+      blit(titanArmPic(s, i === n - 1 ? (p.severed ? 'cut' : 'tip') : 'mid', look));
+      ctx.restore();
+    }
+  }
+  function drawTitan(body) {
+    const T = config.CREATURES.TITAN, tt = body.titan, by = (id) => body.parts.find((q) => q.id === id);
+    const torso = by('torso'), head = by('head'), mouth = by('mouth'), armN = by('armN'), armF = by('armF'), crystal = by('crystal');
+    const look = torso ? lookOf(torso) : 'lit', lift = T.BODY.LEGS.LIFT, walking = tt && tt.walking, leg = tt ? tt.leg : 0;
+    ctx.save();
+    ctx.translate(body.x, body.y);
+    ctx.scale(body.f, 1);
+    // behind the body: the far leg, the island with its crystal
+    ctx.save();
+    ctx.translate(T.BODY.LEGS.AT[1], walking && leg === 0 ? -lift : 0);
+    blit(titanLegPic(look === 'lit' ? 'dim' : look));
+    ctx.restore();
+    blit(titanIslandPic(look));
+    if (crystal && !crystal.dead && crystal.segs[0]) {
+      const frac = Math.max(0, crystal.hp) / Math.max(1, crystal.maxHp), stage = frac > 0.99 ? 0 : frac > 0.6 ? 1 : frac > 0.3 ? 2 : 3;
+      ctx.save();
+      ctx.translate(T.CRYSTAL.X, T.ISLAND.TOP - T.CRYSTAL.R * 0.7); // (the part's middle; its foot is on the island's top)
+      blit(titanCrystalPic(T.CRYSTAL.R, stage, crystal.hit > 0 ? 'flash' : look === 'dim' ? 'dim' : 'lit'));
+      ctx.restore();
+    }
+    ctx.restore();
+    if (armF && !armF.dead) drawTitanLimb(armF);
+    ctx.save();
+    ctx.translate(body.x, body.y);
+    ctx.scale(body.f, 1);
+    blit(titanRubblePic(look));
+    ctx.save();
+    ctx.translate(T.BODY.LEGS.AT[0], walking && leg === 1 ? -lift : 0);
+    blit(titanLegPic(look));
+    ctx.restore();
+    if (torso && !torso.dead) {
+      const k = 1 + config.CREATURES.BREATH.AMOUNT * body.puff; // the held breath: a snap, not a swell
+      ctx.save();
+      ctx.translate(0, T.BODY.TORSO.AT[1] + T.BODY.TORSO.LEN / 2);
+      ctx.scale(k, k);
+      ctx.translate(0, -(T.BODY.TORSO.AT[1] + T.BODY.TORSO.LEN / 2));
+      blit(titanTorsoPic(look));
+      blit(titanHeartPic(body.key % 2, look === 'dim' ? 'dim' : 'lit'));
+      ctx.restore();
+    }
+    ctx.restore();
+    if (armN && !armN.dead) drawTitanLimb(armN); // (the near arm passes in front of the chest but BEHIND the face: the mouth must always be seen)
+    ctx.save();
+    ctx.translate(body.x, body.y);
+    ctx.scale(body.f, 1);
+    if (head && !head.dead) {
+      const hs = head.segs[0], hx = T.BODY.HEAD.AT[0], hy = T.BODY.HEAD.AT[1], rear = tt && tt.pose === 'roar';
+      ctx.save();
+      if (rear) { // the head tips back for the roar
+        ctx.translate(hx, hy);
+        ctx.rotate(-0.2);
+        ctx.translate(-hx, -hy);
+      }
+      ctx.save();
+      ctx.translate(hx, hy);
+      blit(titanHeadPic(lookOf(head)));
+      ctx.restore();
+      if (mouth && !mouth.dead && mouth.segs[0]) {
+        ctx.save();
+        ctx.translate(T.BODY.MOUTH.AT[0], T.BODY.MOUTH.AT[1]);
+        blit(titanMouthPic(T.BODY.MOUTH.R, mouth.openAmt < 0.25 ? 0 : mouth.openAmt < 0.75 ? 1 : 2, lookOf(mouth)));
+        ctx.restore();
+      }
+      ctx.restore();
+      void hs;
+    }
+    ctx.restore();
+  }
+
   // ---- drawing ------------------------------------------------------------------------------------------------------------------------------------------------
   const lookOf = (p) => (p.hit > 0 ? 'flash' : p.lit ? 'lit' : 'dim');
 
@@ -754,6 +1074,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
   let behindPass = false;
   function drawLimb(p) {
     if (p.art === 'thunderbird') return drawBirdLimb(p); // (C.6b: the Thunderbird's feathers, also a plucked wing tumbling)
+    if (p.art === 'titan') return drawTitanLimb(p); // (C.6c: the Titan's stone arm, also an arm shelled off tumbling)
     if (p.kind === 'wing' || p.kind === 'neck' || p.kind === 'tail') return drawDrakeLimb(p); // (the Cinder Drake's limbs, also its torn-off wing tumbling)
     const look = lookOf(p), n = p.segs.length;
     for (let i = 0; i < n; i++) {
@@ -809,6 +1130,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     stats.bakes = 0;
     if (body.kind === 'drake') return drawDrake(body); // (C.6a)
     if (body.kind === 'thunderbird') return drawBird(body); // (C.6b)
+    if (body.kind === 'titan') return drawTitan(body); // (C.6c)
     for (const p of body.parts) if (p.limb && !p.dead && p.layer === 'back') drawLimb(p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind === 'mantle') drawRigid(body, p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind !== 'mantle') drawRigid(body, p);
@@ -836,5 +1158,15 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     drawLimb(p);
   }
 
-  return { draw, drawBehind, drawLimb: drawLimbAt, stats, clear: () => buckets.clear() };
+  // C.6c: a Titan's boulder (radius r), centred on the current transform.
+  function drawBoulderAt(r, view = {}) {
+    const S = clamp((view.zoom || 1) * (view.dpr || 1) * A.SS, A.MIN_SCALE, A.MAX_SCALE);
+    const bucket = Math.round(Math.log2(S) * 2) / 2;
+    scale = Math.pow(2, bucket);
+    if (!buckets.has(bucket)) buckets.set(bucket, new Map());
+    cache = buckets.get(bucket);
+    blit(titanBoulderPic(r, 'lit'));
+  }
+
+  return { draw, drawBehind, drawLimb: drawLimbAt, drawBoulder: drawBoulderAt, stats, clear: () => buckets.clear() };
 }

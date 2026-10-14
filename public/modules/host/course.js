@@ -1034,8 +1034,9 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
     // At the Flagship the beacon only counts once she has been sunk. A lair is the same: its goal is where she hovers to fight, and the stop is done when the giant creature is dead (it sets bossDownLap too).
     const flagshipAlive = course.stop && course.stop.flagship && state.bossDownLap !== course.lap;
     const drakeLair = map.creature === 'drake', birdLair = map.creature === 'thunderbird'; // (C.6a: the Ember Forge's lair, the Cinder Drake; C.6b: the Storm Front's, the Thunderbird)
-    const lair = !!map.lair && (birdLair ? !!state.env && state.env.id === 'storm' : Number.isFinite(state.env && (drakeLair ? state.env.lavaY : state.env.seaY)));
-    const lairWho = birdLair ? 'THUNDERBIRD' : drakeLair ? 'DRAKE' : 'KRAKEN'; // (a lair flown with no sea / no lava - a tool forcing another environment - is an ordinary mission: the creature cannot come)
+    const titanLair = map.creature === 'titan'; // (C.6c: the Sky Isles' lair, the Island Titan)
+    const lair = !!map.lair && (titanLair ? !!state.env && state.env.id === 'skyisles' : birdLair ? !!state.env && state.env.id === 'storm' : Number.isFinite(state.env && (drakeLair ? state.env.lavaY : state.env.seaY)));
+    const lairWho = titanLair ? 'ISLAND TITAN' : birdLair ? 'THUNDERBIRD' : drakeLair ? 'DRAKE' : 'KRAKEN'; // (a lair flown with no sea / no lava - a tool forcing another environment - is an ordinary mission: the creature cannot come)
     const lairAlive = lair && state.bossDownLap !== course.lap;
     if ((flagshipAlive || lairAlive) && Math.hypot(sx - map.goal.x, sy - map.goal.y) < config.MAPS.GOAL_RADIUS && !(state.ev.warn > 0)) {
       state.say('objective', lairAlive ? 'SLAY THE ' + lairWho + ' FIRST!' : 'SINK THE FLAGSHIP FIRST!', 4, 2);
@@ -1091,7 +1092,7 @@ export function createCourse({ state, impact, puff, onMarker, credit, hitsShip, 
       const p = mapPlan(state, 0.5);
       const h = p.dx > 300 ? 'AHEAD' : p.dx < -300 ? 'BEHIND - COME ABOUT!' : ''; // (p.dx: how far ahead of her bow the way goes; behind her, turning round is quicker than backing up)
       const v = p.dy < -250 ? 'UP (pump the gas!)' : p.dy > 250 ? 'DOWN (vent the gas!)' : '';
-      if (course.map.lair) { const dr = course.map.creature === 'drake', tb = course.map.creature === 'thunderbird'; return h || v ? 'Way to the ' + (tb ? "Thunderbird's" : dr ? "Drake's" : "Kraken's") + ' lair: ' + [v, h].filter(Boolean).join(' and ') : tb ? 'The lair! Hold her steady in the storm, clear of the spires.' : dr ? 'The lair! Keep her over the shelf, clear of the lava.' : 'The lair! Keep her over the water, clear of the sea.'; }
+      if (course.map.lair) { const dr = course.map.creature === 'drake', tb = course.map.creature === 'thunderbird', ti = course.map.creature === 'titan'; return h || v ? 'Way to the ' + (ti ? "Titan's" : tb ? "Thunderbird's" : dr ? "Drake's" : "Kraken's") + ' lair: ' + [v, h].filter(Boolean).join(' and ') : ti ? 'The lair! Keep her high over the Titan, clear of its hands.' : tb ? 'The lair! Hold her steady in the storm, clear of the spires.' : dr ? 'The lair! Keep her over the shelf, clear of the lava.' : 'The lair! Keep her over the water, clear of the sea.'; }
       return h || v ? (course.map.open ? 'Next outpost: ' : 'Way to the beacon: ') + [v, h].filter(Boolean).join(' and ') : course.map.open ? 'Outpost below - guns and bombs!' : '';
     }
     const w = altWindow(state, 2.5);

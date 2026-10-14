@@ -47,6 +47,8 @@ import { createCreatureArt } from './creatureArt.js'; // C.1: the giant creature
 import { krakenPhaseName } from './creatures/kraken.js'; // C.3: the name of its phase on the health bar
 import { drakePhaseName } from './creatures/drake.js'; // C.6a: the Cinder Drake's
 import { birdPhaseName } from './creatures/thunderbird.js'; // C.6b: the Thunderbird's
+import { titanPhaseName } from './creatures/titan.js'; // C.6c: the Island Titan's
+import { crystalOf } from './creatureIsland.js'; // C.6c: the crystal on its island (the mark on the TV)
 import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
@@ -657,9 +659,9 @@ export function createRenderer({ ctx, state: world, canvas }) {
   let creatureArt = null; // (made when the first creature appears)
   // The wrapped coils of a gripping tentacle that pass BEHIND the ship: drawn before the ships (the rest of the creature, and the coils in front, come after them in drawEffects).
   // C.3: while the beak gapes under her bomb bay (cr.mouthWin) the whole body is under her, so all of it is drawn behind her hull and she flies over its head.
-  const wholeBehind = (cr) => !!cr.mouthWin && cr.mode === 'idle' && cr.kind !== 'drake';
+  const wholeBehind = (cr) => !!cr.mouthWin && cr.mode === 'idle' && cr.kind !== 'drake' && cr.kind !== 'titan'; // (the Titan always stands in front of its glows: its arms reach the ship)
   // The line a creature is clipped at: the sea for the Kraken (it rises out of the water), the lava for a Drake (it falls into it when it dies).
-  const creatureClipY = () => (envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : world.creature && world.creature.kind === 'drake' && envIdOf(world) === 'ember' && world.env && Number.isFinite(world.env.lavaY) ? world.env.lavaY : null);
+  const creatureClipY = () => (world.creature && world.creature.kind === 'titan' ? world.creature.titan.floorY - config.CREATURES.SINK_CLIP : envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : world.creature && world.creature.kind === 'drake' && envIdOf(world) === 'ember' && world.env && Number.isFinite(world.env.lavaY) ? world.env.lavaY : null);
   const drawCreatureBehind = (view) => {
     const cr = world.creature;
     if (cr && wholeBehind(cr)) return drawCreatureBody(view, cr);
@@ -674,11 +676,11 @@ export function createRenderer({ ctx, state: world, canvas }) {
     creatureArt.drawBehind(cr, { zoom: view.zoom, dpr: 1 });
     ctx.restore();
   };
-  const drawCreature = (view) => {
+  const drawCreature = (view, time = 0) => {
     const cr = world.creature;
     if (!cr) return;
     if (!wholeBehind(cr)) drawCreatureBody(view, cr);
-    drawCreatureAttacks(cr);
+    drawCreatureAttacks(cr, view, time);
   };
   const drawCreatureBody = (view, cr) => {
     if (!creatureArt) creatureArt = createCreatureArt({ ctx });
@@ -863,11 +865,94 @@ export function createRenderer({ ctx, state: world, canvas }) {
       ctx.stroke();
     }
   };
-  const drawCreatureAttacks = (cr) => {
+  // C.6c: the Island Titan's marks: the boulders (held in a hand, or in the air), the ring where a boulder will land (dashed while it follows her, solid when it has locked), the gold funnel above its mouth while it
+  // roars (drop the bombs in the column), and the island's top edge as a gold dashed landing strip with the crystal's ring (the hold fills it green).
+  const drawTitanFx = (cr, view, time) => {
+    const T = config.CREATURES.TITAN, tt = cr.titan;
+    if (!creatureArt) creatureArt = createCreatureArt({ ctx });
+    ctx.lineJoin = 'round';
+    for (const b of cr.boulders || []) {
+      if (b.mode === 'gone') continue;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(Math.floor(b.rot * 4) * 0.25); // (a turn every 1/4 rad: stepped, never a smooth spin)
+      creatureArt.drawBoulder(b.r, { zoom: view.zoom, dpr: 1 });
+      ctx.restore();
+    }
+    for (const rg of tt.rings || []) {
+      ink();
+      ctx.strokeStyle = '#ff4d4d';
+      ctx.lineWidth = rg.locked ? 26 : 16;
+      ctx.setLineDash(rg.locked ? [] : [44, 30]);
+      ctx.beginPath();
+      ctx.arc(rg.x, rg.y, rg.r, 0, Math.PI * 2);
+      ctx.stroke();
+      if (rg.locked) { ctx.strokeStyle = '#ffd0d0'; ctx.lineWidth = 12; ctx.stroke(); ctx.beginPath(); ctx.arc(rg.x, rg.y, rg.r * (0.45 + 0.1 * (Math.floor(cr.age * 8) % 2)), 0, Math.PI * 2); ctx.strokeStyle = '#ff4d4d'; ctx.stroke(); }
+      ctx.setLineDash([]);
+    }
+    const mouth = cr.parts.find((p) => p.kind === 'mouth');
+    if (mouth && mouth.segs[0] && (cr.mouthWin || tt.roar) && !cr.dying) { // the funnel above the mouth
+      const m = mouth.segs[0], M = T.MOUTH, open = !!cr.mouthWin;
+      ctx.fillStyle = open ? 'rgba(255,210,63,0.16)' : 'rgba(255,210,63,0.07)';
+      ctx.fillRect(m.x - M.FUNNEL_W, m.y - M.FUNNEL_UP, M.FUNNEL_W * 2, M.FUNNEL_UP);
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 12;
+      ctx.setLineDash([60, 40]);
+      ctx.beginPath();
+      ctx.moveTo(m.x - M.FUNNEL_W, m.y - M.FUNNEL_UP);
+      ctx.lineTo(m.x - M.FUNNEL_W, m.y);
+      ctx.moveTo(m.x + M.FUNNEL_W, m.y - M.FUNNEL_UP);
+      ctx.lineTo(m.x + M.FUNNEL_W, m.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (open) for (let k = 0; k < 3; k++) { // chevrons pointing down into it
+        const cy = m.y - 260 - k * 420 + (Math.floor(cr.age * 4) % 2) * 80;
+        ctx.beginPath();
+        ctx.moveTo(m.x - 150, cy - 90);
+        ctx.lineTo(m.x, cy + 40);
+        ctx.lineTo(m.x + 150, cy - 90);
+        ctx.stroke();
+      }
+    }
+    const isl = world.away && world.away.island; // (only where the away team exists: that is when the crew can land on it)
+    if (isl && !cr.dying) { // the landing strip
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 12;
+      ctx.setLineDash([70, 50]);
+      ctx.beginPath();
+      ctx.moveTo(isl.x0 + 60, isl.y - 14);
+      ctx.lineTo(isl.x1 - 60, isl.y - 14);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const c = crystalOf(world);
+      if (c && c.alive) {
+        const job = c.part.job, r = T.CRYSTAL.REACH;
+        ctx.beginPath();
+        ctx.strokeStyle = '#7fe8ff';
+        ctx.lineWidth = 14;
+        ctx.setLineDash([30, 24]);
+        ctx.arc(c.x, c.y - 120, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (job && job.prog > 0.02) {
+          ctx.beginPath();
+          ctx.strokeStyle = '#8fe388';
+          ctx.lineWidth = 22;
+          ctx.arc(c.x, c.y - 120, r * 0.8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, job.prog));
+          ctx.stroke();
+        }
+      }
+    }
+    for (const p of Object.values(world.players)) { // the crew on the island were drawn with the airborne ones, before the island's picture: draw them again on top of it
+      if (p.fly && p.on && p.on.away && p.on.deck && p.on.deck.island && p.on.mode !== 'home' && p.connected !== false) drawPlayer(p, time);
+    }
+  };
+  const drawCreatureAttacks = (cr, view, time) => {
     ctx.save();
     ctx.lineCap = 'round';
     if (cr.kind === 'drake') drawDrakeFx(cr);
     else if (cr.kind === 'thunderbird') drawBirdFx(cr);
+    else if (cr.kind === 'titan') drawTitanFx(cr, view, time);
     for (const g of cr.grips || []) {
       if (g.mode === 'recoil') continue;
       ctx.beginPath();
@@ -937,7 +1022,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     threatArt.drawMines(time);
     drawMines(ctx, world, time, view.zoom); // (mines laid by a mine layer, minefield.js)
     threatArt.drawBoss(time);
-    drawCreature(view);
+    drawCreature(view, time);
     threatArt.drawBombers(time);
     threatArt.drawBats(time);
     threatArt.drawStrafers(time);
@@ -1060,7 +1145,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     // Beacon (cave missions).
     const gx = px(map.goal.x);
     const gy = py(map.goal.y);
-    ctx.fillStyle = map.lair ? (map.creature === 'thunderbird' ? '#4f6290' : map.creature === 'drake' ? '#c2452a' : '#7a3a5a') : map.open ? 'rgba(0,0,0,0)' : '#ffd23f'; // (a lair: the Kraken's mark, in its purple)
+    ctx.fillStyle = map.lair ? (map.creature === 'titan' ? '#7a8a5a' : map.creature === 'thunderbird' ? '#4f6290' : map.creature === 'drake' ? '#c2452a' : '#7a3a5a') : map.open ? 'rgba(0,0,0,0)' : '#ffd23f'; // (a lair: the Kraken's mark, in its purple)
     ctx.beginPath();
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
@@ -1082,8 +1167,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
     let goalText;
     if (map.ring && c.ring) goalText = c.done ? map.ring.name + ' HAS FALLEN!' : c.ring.crown ? map.ring.name + ' FALLS!' : (c.ring.moor && state.boss ? 'MOORINGS ' + c.ring.moor.cut.filter(Boolean).length + '/' + c.ring.moor.cut.length + ' - ' : '') + 'GATES ' + c.ring.faces.filter((f) => f.down).length + '/' + c.ring.faces.length + (km === null ? '' : km < 0.5 ? ' - FIRE!' : ' - next ' + km.toFixed(1) + ' km');
-    else if (c.done) goalText = map.lair ? (map.creature === 'thunderbird' ? 'THE THUNDERBIRD IS SLAIN!' : map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
-    else if (map.lair) goalText = state.creature ? (map.creature === 'thunderbird' ? 'SLAY THE THUNDERBIRD!' : map.creature === 'drake' ? 'SLAY THE DRAKE!' : 'SLAY THE KRAKEN!') : (map.creature === 'thunderbird' ? "THUNDERBIRD'S LAIR" : map.creature === 'drake' ? "DRAKE'S LAIR" : "KRAKEN'S LAIR") + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
+    else if (c.done) goalText = map.lair ? (map.creature === 'titan' ? 'THE ISLAND TITAN IS SLAIN!' : map.creature === 'thunderbird' ? 'THE THUNDERBIRD IS SLAIN!' : map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
+    else if (map.lair) goalText = state.creature ? (map.creature === 'titan' ? 'SLAY THE ISLAND TITAN!' : map.creature === 'thunderbird' ? 'SLAY THE THUNDERBIRD!' : map.creature === 'drake' ? 'SLAY THE DRAKE!' : 'SLAY THE KRAKEN!') : (map.creature === 'titan' ? "THE TITAN'S LAIR" : map.creature === 'thunderbird' ? "THUNDERBIRD'S LAIR" : map.creature === 'drake' ? "DRAKE'S LAIR" : "KRAKEN'S LAIR") + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
     else if (map.open) {
       const total = map.outposts.length;
       const left = map.outposts.filter((o) => !o.done).length;
@@ -1627,14 +1712,14 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const drawCreatureBar = () => {
     const cr = world.creature;
     if (!cr || cr.mode === 'surfacing') return;
-    const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', limbs = cr.parts.filter((p) => p.kind === (drake || bird ? 'wing' : 'tentacle'));
+    const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', limbs = cr.parts.filter((p) => p.kind === (drake || bird ? 'wing' : 'tentacle'));
     book.paper(450, 806, 700, 74, { r: 10 });
     ctx.fillStyle = LB.INK;
     ctx.font = '16px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
-    ctx.fillText(cr.name + ' - ' + (bird ? birdPhaseName : drake ? drakePhaseName : krakenPhaseName)(cr.phase || 1) + (cr.dying ? (drake || bird ? ' - FALLING' : ' - SINKING') : ''), 800, 826, 640); // (C.3: its phase, and what it said)
+    ctx.fillText(cr.name + ' - ' + (titan ? titanPhaseName : bird ? birdPhaseName : drake ? drakePhaseName : krakenPhaseName)(cr.phase || 1) + (cr.dying ? (titan ? ' - CRUMBLING' : drake || bird ? ' - FALLING' : ' - SINKING') : ''), 800, 826, 640); // (C.3: its phase, and what it said)
     if (cr.mouthWin && !cr.dying) { // the beak is open: a gold tag over the bar with the bombs it has been fed
-      const M = drake ? { FED: config.CREATURES.DRAKE.FED } : config.CREATURES.MOUTH;
+      const M = titan ? config.CREATURES.TITAN.MOUTH : drake ? { FED: config.CREATURES.DRAKE.FED } : config.CREATURES.MOUTH;
       ink();
       ctx.lineWidth = 3;
       ctx.fillStyle = '#ffd23f';
@@ -1681,6 +1766,23 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.stroke();
       }
     }
+    if (titan && !cr.dying) { // C.6c: the strokes of the crystal (cyan diamonds, filled as the crystal is hacked) and a tag while a boulder is in the air
+      const n = config.CREATURES.TITAN.CRYSTAL.STRIKES_BY_DIFF[world.difficulty || 'normal'] ?? config.CREATURES.TITAN.CRYSTAL.STRIKES;
+      for (let k = 0; k < n; k++) {
+        const x = 1010 + k * 26, y = 840;
+        ink();
+        ctx.lineWidth = 2.5;
+        ctx.fillStyle = k < (cr.stats.struck || 0) ? '#7fe8ff' : '#cfc6b0';
+        ctx.beginPath();
+        ctx.moveTo(x, y - 11);
+        ctx.lineTo(x + 8, y);
+        ctx.lineTo(x, y + 11);
+        ctx.lineTo(x - 8, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
     if (bird && !cr.dying) { // the bolts in its gizzard (coil hits won), as little lightning marks, and a gold tag while it rests on a spire with the mortar hits so far
       const B = config.CREATURES.THUNDERBIRD;
       for (let k = 0; k < B.ZAP.HITS; k++) {
@@ -1713,12 +1815,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
     }
     ctx.fillStyle = '#3b2a1d';
     ctx.fillRect(470, 856, 660, 14);
-    ctx.fillStyle = bird ? '#4f6290' : drake ? '#c2452a' : '#7a2d63';
+    ctx.fillStyle = titan ? '#8a8478' : bird ? '#4f6290' : drake ? '#c2452a' : '#7a2d63';
     ctx.fillRect(470, 856, (660 * Math.max(0, cr.hp)) / cr.maxHp, 14);
     ink();
     ctx.lineWidth = 2.5;
     ctx.strokeRect(470, 856, 660, 14);
-    for (const share of bird ? [config.CREATURES.THUNDERBIRD.PHASE.TWO_HP, config.CREATURES.THUNDERBIRD.PHASE.THREE_HP] : drake ? [config.CREATURES.DRAKE.PHASE.TWO_HP, config.CREATURES.DRAKE.PHASE.THREE_HP] : [config.CREATURES.PHASE.TWO.HP, config.CREATURES.PHASE.THREE.HP]) { // the notches where phase 2 and 3 begin
+    for (const share of titan ? [config.CREATURES.TITAN.PHASE.TWO_HP, config.CREATURES.TITAN.PHASE.THREE_HP] : bird ? [config.CREATURES.THUNDERBIRD.PHASE.TWO_HP, config.CREATURES.THUNDERBIRD.PHASE.THREE_HP] : drake ? [config.CREATURES.DRAKE.PHASE.TWO_HP, config.CREATURES.DRAKE.PHASE.THREE_HP] : [config.CREATURES.PHASE.TWO.HP, config.CREATURES.PHASE.THREE.HP]) { // the notches where phase 2 and 3 begin
       ctx.beginPath();
       ctx.moveTo(470 + 660 * share, 852);
       ctx.lineTo(470 + 660 * share, 874);
@@ -2032,7 +2134,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.font = (choice ? 44 : 30) + 'px "Segoe UI Emoji", sans-serif';
         ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : s.lair ? lairOf(s.creature).ICON : s.salvage ? config.VOYAGE.CURRICULUM.SALVAGE.ICON : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
         if (s.lair) { // a lair: a ring of its purple round the stop and a LAIR tag (config.CREATURES.LAIR)
-          ctx.strokeStyle = s.creature === 'thunderbird' ? '#4f6290' : s.creature === 'drake' ? '#c2452a' : '#7a3a5a';
+          ctx.strokeStyle = s.creature === 'titan' ? '#7a8a5a' : s.creature === 'thunderbird' ? '#4f6290' : s.creature === 'drake' ? '#c2452a' : '#7a3a5a';
           ctx.lineWidth = 6;
           ctx.setLineDash([8, 6]);
           ctx.beginPath();

@@ -27,6 +27,9 @@ const CR = () => config.CREATURES;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const diffOf = (state) => state.difficulty || 'normal';
 const rootOf = (cr, p) => ({ x: cr.x + p.at[0] * cr.f, y: cr.y + p.at[1] });
+// C.6c: the Island Titan's hand on the gasbag is the same grip with its own numbers (config.CREATURES.TITAN.GRAB overrides GRIP: a mostly sideways pull, a longer hold, a gentler squeeze).
+const gripCfg = (cr) => (cr && cr.kind === 'titan' ? { ...CR().GRIP, ...CR().TITAN.GRAB } : CR().GRIP);
+const isTitan = (cr) => !!cr && cr.kind === 'titan';
 
 // How many tentacles may hold at once: by crew size (GRIPS_BY_CREW), fewer while it is blinded.
 const blindCount = (cr) => cr.parts.filter((p) => p.kind === 'eye' && p.blindT > 0).length;
@@ -55,6 +58,7 @@ function shove(sh, dx, dy) {
 // Where the tip is glued (just over the deck at the grip point) and the helix the outer segments follow round the hull: from the top (over the gunwale), down the FRONT of her, under the keel and up the BACK
 // (z > 0 in front of her, < 0 behind). Both come from the ship's own coordinates through her tilt and pose.js, so the coil moves and tips with her.
 function entryOf(ship, g) {
+  if (g.bag) { const [bx, by] = tilt(ship.ctx, g.bx, g.by); return { x: toWorldX(ship, bx), y: toWorldY(ship, by) }; } // (C.6c: the Titan's hand lies on the side of the gasbag)
   const [tx, ty] = tilt(ship.ctx, g.x, g.y - CR().GRIP.WRAP.LIFT);
   return { x: toWorldX(ship, tx), y: toWorldY(ship, ty) };
 }
@@ -108,9 +112,41 @@ function startGrip(state, cr, ship, dive = false) { // dive: one of the several 
   return g;
 }
 
+// C.6c, THE TITAN'S HAND ON THE GASBAG: the same grip record as a tentacle's (cr.grips). The grip point g.x, g.y is the end of the top deck nearest the Titan (where swords pry the fingers off), the hand itself lies on the
+// side of the gasbag (g.bx, g.by, ship coordinates; entryOf). Returns the grip, or null if no free arm can reach the bag or the ship has no bag or no top deck.
+export function startBagGrip(state, cr, ship) {
+  const G = gripCfg(cr), h = cr.hooks, L = ship.layout, d = topDeck(ship);
+  if (d < 0 || !L.gasbags.length) return null;
+  const pl = L.platforms[d];
+  const sd = (Math.sign(cr.x - toWorldX(ship, L.refPoint.x)) || 1) * (ship.pose.f || 1); // (the way along the ship, in her own coordinates, toward the Titan)
+  const bag = L.gasbags.reduce((best, b) => (!best || sd * (b.cx + sd * b.rx) > sd * (best.cx + sd * best.rx) ? b : best), null);
+  const x = sd > 0 ? pl.x1 - 30 : pl.x0 + 30, bx = bag.cx + sd * bag.rx * 0.9, by = bag.cy - bag.ry * 0.3;
+  const wx = toWorldX(ship, bx), wy = toWorldY(ship, by);
+  let limb = null, bd = Infinity;
+  for (const p of cr.parts) {
+    if (!isFree(p) || p.severed) continue; // (a stump has no hand)
+    const r = rootOf(cr, p), dist = Math.hypot(wx - r.x, wy - r.y);
+    if (dist > p.reach * G.REACH_SHARE || dist >= bd) continue;
+    bd = dist;
+    limb = p;
+  }
+  if (!limb) return null;
+  const total = G.TIME * (G.TIME_BY_DIFF[diffOf(state)] ?? 1);
+  const gwx = toWorldX(ship, x), gwy = toWorldY(ship, pl.y);
+  const g = { bag: true, bagI: L.gasbags.indexOf(bag), bx, by, dive: false, limb, ship, mode: 'wind', t: 0, x, y: pl.y, wx: gwx, wy: gwy, left: total, total, dmg: 0, end: sd > 0 ? 'FORE' : 'AFT', deck: String(pl.name || 'TOP DECK').toUpperCase(), job: { name: 'hack', prog: 0, worked: false, live: true, d, x }, stat: { tilt: 0, secs: 0 } };
+  cr.grips.push(g);
+  limb.gripCd = 999;
+  const root = rootOf(cr, limb), rx = wx + cr.side * 400, ry = wy - 700, dd = Math.hypot(rx - root.x, ry - root.y), k = dd > limb.reach * 0.97 ? (limb.reach * 0.97) / dd : 1;
+  reachPart(cr, limb, root.x + (rx - root.x) * k, root.y + (ry - root.y) * k); // (the hand rears over the bag first)
+  state.say('setpiece', 'THE TITAN GRABS THE GASBAG! SWORDS TO THE ' + g.end + ' TOP DECK!', 6, 3);
+  state.sfxQ.push(['roar']);
+  warnCrew(state, cr, ship, g, 'ITS HAND IS ON THE GASBAG! Take a sword to the ' + g.end + ' TOP DECK and pry the fingers off!', [150, 60, 150, 60, 250]);
+  return g;
+}
+
 // The crew standing near the spot (same deck, within WARN_REACH) feel it on their phones.
 function warnCrew(state, cr, ship, g, text, buzz = [120, 60, 120, 60, 200]) {
-  const R = CR().GRIP.WARN_REACH, pl = ship.layout.platforms;
+  const R = gripCfg(cr).WARN_REACH, pl = ship.layout.platforms;
   for (const p of Object.values(state.players)) {
     if (p.bot || p.fly || p.fall || p.d == null || shipOf(state, p) !== ship || !pl[p.d] || Math.abs(pl[p.d].y - g.y) > 8 || Math.abs(p.x - g.x) > R) continue;
     if (cr.hooks.phoneFx) cr.hooks.phoneFx(p, text, buzz);
@@ -120,7 +156,7 @@ function warnCrew(state, cr, ship, g, text, buzz = [120, 60, 120, 60, 200]) {
 // ---- one grip, one step ----
 export function releaseGrip(cr, g, why) {
   if (g.mode === 'recoil') return;
-  const G = CR().GRIP;
+  const G = gripCfg(cr);
   g.mode = 'recoil';
   g.t = 0;
   g.why = why;
@@ -135,7 +171,7 @@ export function releaseGrip(cr, g, why) {
 }
 
 function stepGrip(state, cr, g, dt) {
-  const G = CR().GRIP, ship = g.ship, limb = g.limb;
+  const G = gripCfg(cr), ship = g.ship, limb = g.limb;
   g.t += dt;
   if (g.mode === 'recoil') {
     if (!limb.dead && limb.ctl.mode === 'idle') limb.ctl.fast = true; // (it snaps back, not lazily)
@@ -172,13 +208,13 @@ function stepGrip(state, cr, g, dt) {
       cr.hooks.puff(g.wx, g.wy, '#7a3a5a', 10);
       state.ship.shake = Math.max(state.ship.shake || 0, 0.6);
       if (ship.sim && ship.sim.air) ship.sim.air.shove(G.SHOVE_POWER, g.x); // (the crew on the open decks stagger toward the low end)
-      warnCrew(state, cr, ship, g, 'HACK THE TENTACLE! (sword, hold Action)', [200, 60, 200]);
+      warnCrew(state, cr, ship, g, isTitan(cr) ? 'PRY ITS FINGERS OFF! (sword, hold Action)' : 'HACK THE TENTACLE! (sword, hold Action)', [200, 60, 200]);
     } else if (g.t > G.SEIZE_MAX) releaseGrip(cr, g, 'missed');
     return false;
   }
   // HOLD: the tip goes with the ship; she is dragged down and toward it; the timer runs
   moveGrip(limb, en.x, en.y);
-  setWrap(limb, coilPath(ship, g, Math.min(1, Math.floor(g.t * 8) / G.WRAP.KEYS)), G.WRAP.SEGS); // (the coil tightens in stepped keys, no wobble)
+  if (!isTitan(cr)) setWrap(limb, coilPath(ship, g, Math.min(1, Math.floor(g.t * 8) / G.WRAP.KEYS)), G.WRAP.SEGS); // (the coil tightens in stepped keys, no wobble; a stone hand does not coil)
   const root = rootOf(cr, limb);
   const dx = root.x - g.wx, dy = root.y - g.wy, d = Math.hypot(dx, dy) || 1;
   const sx = (dx / d) * G.SIDEWAYS, sy = 1, sm = Math.hypot(sx, sy), px = sx / sm, py = sy / sm;
@@ -188,7 +224,7 @@ function stepGrip(state, cr, g, dt) {
   const a = Math.min(G.MAX_ACC * (g.dive ? D.PULL_MUL : 1), (G.BASE_ACC + G.K * stretch) * (g.dive ? D.PULL_MUL : 1), (G.MAX_TOTAL * (diving ? D.TOTAL_MUL : 1)) / holding) * clamp(g.t / G.RAMP, 0.15, 1); // (every grip pulls: the pull grows with their number, up to MAX_TOTAL)
   g.acc = a; // (px/s^2 this grip pulls with right now: the gate adds them up)
   shove(ship, px * a * dt, py * a * dt);
-  applyForce(ship.ctx, { x: g.x, y: g.y, fx: px * ship.pose.f * a * G.TORQUE, fy: py * a * G.TORQUE, source: 'grab' });
+  applyForce(ship.ctx, { x: g.bag ? g.bx : g.x, y: g.bag ? g.by : g.y, fx: px * ship.pose.f * a * G.TORQUE, fy: py * a * G.TORQUE, source: 'grab' });
   state.ship.shake = Math.max(state.ship.shake || 0, G.SHAKE);
   g.stat.secs += dt;
   const fo = ship.ctx.forces;
@@ -200,8 +236,9 @@ function stepGrip(state, cr, g, dt) {
 
 // The time is up: the section is torn off (a ship with nothing that can break takes a big hull hit), and the limb lets go.
 function rip(state, cr, g) {
-  const G = CR().GRIP, ship = g.ship, sim = ship.sim;
+  const G = gripCfg(cr), ship = g.ship, sim = ship.sim;
   const wx = g.wx, wy = g.wy;
+  if (g.bag) return squeeze(state, cr, g);
   let r = null;
   if (sim && sim.breakOff) r = sim.breakOff({ kind: 'limb', x: g.x, y: g.y, reach: G.RIP.REACH, len: G.RIP.LEN, cause: 'creature' }, { force: true });
   if (r) cr.stats.ripped = (cr.stats.ripped || 0) + 1;
@@ -218,6 +255,30 @@ function rip(state, cr, g) {
   releaseGrip(cr, g, 'rip');
 }
 
+// C.6c: the Titan's time is up: it SQUEEZES the gasbag (holes in the bag, a blow on the frame under it) and lets go. Nothing is torn off the decks.
+function squeeze(state, cr, g) {
+  const R = gripCfg(cr).RIP, ship = g.ship, bag = ship.layout.gasbags[g.bagI];
+  let n = 0;
+  if (bag && ship.sim && ship.sim.gasHoleAt) {
+    for (let k = 0; k < R.HOLES && ship.ctx.gasHoles.length < config.GAS.MAX_HOLES; k++) {
+      const sx = bag.cx + (cr.hooks.rng() - 0.5) * bag.rx * 1.2, u = clamp((sx - bag.cx) / bag.rx, -0.95, 0.95), sy = bag.cy - bag.ry * Math.sqrt(Math.max(0, 1 - u * u)) + 40;
+      ship.ctx.gasHoles.push(ship.sim.gasHoleAt(sx, sy, g.bagI));
+      n++;
+    }
+  }
+  creatureHit(ship, g.x, g.y, R.HULL, { power: R.POWER }); // (STRUCTURE.md WP2: the segment under the bag)
+  hitForce(ship.ctx, g.bx, g.by, R.POWER * 2);
+  cr.stats.hulled = (cr.stats.hulled || 0) + 1;
+  cr.stats.squeezed = (cr.stats.squeezed || 0) + 1;
+  cr.stats.holes = (cr.stats.holes || 0) + n;
+  pop(state, g.wx, g.wy - 160, 'SQUEEZED!', '#ff2a2a', 1.8);
+  cr.hooks.puff(g.wx, g.wy - 300, '#d9cbb0', 14);
+  state.sfxQ.push(['impact']);
+  state.ship.shake = Math.max(state.ship.shake || 0, 1);
+  if (ship.main) state.say('setpiece', 'THE TITAN SQUEEZED THE GASBAG!', null, 3);
+  releaseGrip(cr, g, 'rip');
+}
+
 // A hit on a limb (hurtCreature): flame makes it let go at once, shells or the coil once it has taken RELEASE_DMG of its health since it seized.
 export function hurtGrips(cr, part, dmg, src) {
   for (const g of cr.grips) {
@@ -225,7 +286,7 @@ export function hurtGrips(cr, part, dmg, src) {
     g.dmg += dmg;
     if (src === 'flame') releaseGrip(cr, g, 'flame');
     else if (part.hp <= 0) releaseGrip(cr, g, 'severed');
-    else if (g.dmg >= CR().GRIP.RELEASE_DMG * part.maxHp) releaseGrip(cr, g, 'shot');
+    else if (g.dmg >= gripCfg(cr).RELEASE_DMG * part.maxHp) releaseGrip(cr, g, 'shot');
     else continue;
     cr.hooks.puff(g.wx, g.wy, '#ffffff', 6);
   }
@@ -238,19 +299,19 @@ function gripNear(state, ship, p) {
   if (!cr || p.d == null || p.fly || p.fall || p.conn != null) return null;
   const pl = ship.layout.platforms[p.d];
   if (!pl) return null;
-  return cr.grips.find((g) => g.ship === ship && g.mode === 'hold' && Math.abs(pl.y - g.y) < 8 && Math.abs(p.x - g.x) <= CR().GRIP.CUT_REACH) || null;
+  return cr.grips.find((g) => g.ship === ship && g.mode === 'hold' && Math.abs(pl.y - g.y) < 8 && Math.abs(p.x - g.x) <= gripCfg(cr).CUT_REACH) || null;
 }
-// The Action button: HACK THE TENTACLE! with a sword (or, slower, a hammer); anything else near it says what is missing.
+// The Action button: HACK THE TENTACLE! with a sword (or, slower, a hammer); anything else near it says what is missing. (The Titan's hand: PRY ITS FINGERS OFF!)
 export function actionFor(state, ship, p) {
-  const g = gripNear(state, ship, p), G = CR().GRIP;
+  const g = gripNear(state, ship, p), cr = state.creature, G = gripCfg(cr), what = isTitan(cr) ? 'PRY ITS FINGERS OFF!' : 'HACK THE TENTACLE!';
   if (!g) return null;
-  if (p.carry === 'sword') return { type: 'hack', obj: g.job, hold: true, time: G.SWORD_TIME, label: 'HACK THE TENTACLE!' };
-  if (p.carry === 'hammer') return { type: 'hack', obj: g.job, hold: true, time: G.HAMMER_TIME, label: 'HACK THE TENTACLE! (hammer: slow)' };
-  return { type: 'need', label: 'Need a sword to hack the tentacle!' };
+  if (p.carry === 'sword') return { type: 'hack', obj: g.job, hold: true, time: G.SWORD_TIME, label: what };
+  if (p.carry === 'hammer') return { type: 'hack', obj: g.job, hold: true, time: G.HAMMER_TIME, label: what.replace(/!$/, '') + '! (hammer: slow)' };
+  return { type: 'need', label: isTitan(cr) ? 'Need a sword to pry its fingers off!' : 'Need a sword to hack the tentacle!' };
 }
 // ATTACK with a sword (or a hammer) beside the grip point: one blow of BLOWS. True = it was a blow at the tentacle.
 export function blow(state, ship, p) {
-  const g = gripNear(state, ship, p), G = CR().GRIP;
+  const g = gripNear(state, ship, p), G = gripCfg(state.creature);
   if (!g || (p.carry !== 'sword' && p.carry !== 'hammer')) return false;
   g.job.prog += (p.carry === 'sword' ? 1 : G.HAMMER_BLOW) / G.BLOWS;
   g.job.worked = true;
@@ -271,7 +332,7 @@ export function hacked(state, ship, p, job) {
   if (!g || !live(g)) return;
   releaseGrip(cr, g, 'hack');
   cr.stats.hacks = (cr.stats.hacks || 0) + 1;
-  if (state.moment && p) state.moment('creature-freed', { who: [p], data: { creature: cr.name, how: 'hack' } }); // (the Ship's Book)
+  if (state.moment && p) state.moment('creature-freed', { who: [p], data: { creature: cr.name, how: isTitan(cr) ? 'pry' : 'hack' } }); // (the Ship's Book)
   pop(state, g.wx, g.wy - 140, 'FREE!', '#8fe388', 1.6);
   cr.hooks.puff(g.wx, g.wy, '#8fe388', 8);
   state.sfxQ.push(['clang']);
@@ -370,6 +431,14 @@ function lashDeck(state, cr, ship, d, s) {
 }
 
 // ---- the attack director ----
+// C.6c: for a creature with its own director (the Titan, creatureTitan.js): the limbs' rest timers and every grip under way, once a step; nothing new starts here.
+export function tickGrips(state, cr, dt) {
+  for (const p of cr.parts) {
+    if (p.gripCd > 0) p.gripCd -= dt;
+    if (p.blindT > 0) p.blindT -= dt;
+  }
+  cr.grips = cr.grips.filter((g) => !stepGrip(state, cr, g, dt));
+}
 export function thinkAttacks(state, cr, ship, dt) {
   const G = CR().GRIP, S = CR().SLAP, ai = cr.ai, h = cr.hooks;
   if (ai.gripT === undefined) {
