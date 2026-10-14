@@ -65,8 +65,10 @@ export function radarItems(state) {
 
 // SCRAP (LOOP.md G1): the bundles falling on chutes and the hulks, as gold blips on the PHONE radar only (the lookout's spyglass and the portholes use radarItems: they look for enemies).
 export function flotsamItems(state) {
-  if (!scrapOn()) return [];
-  const out = [], k = RADAR_KINDS.indexOf('flotsam');
+  const cr = state.creature, lu = cr && cr.kind === 'eel' && !cr.dying && cr.eel ? cr.eel.lure : null; // (C.6f: the Void Eel's LURE is a gold blip too - it looks like a pickup until a lookout calls it, then it is the creature)
+  const lure = lu && lu.live ? [{ k: RADAR_KINDS.indexOf(lu.known ? 'creature' : 'flotsam'), kind: lu.known ? 'creature' : 'flotsam', obj: lu, pos: () => ({ x: lu.x, y: lu.y }) }] : [];
+  if (!scrapOn()) return lure;
+  const out = [...lure], k = RADAR_KINDS.indexOf('flotsam');
   for (const it of state.thrown || []) if (it.chute && it.kind === 'scrap' && !it.haul) out.push({ k, kind: 'flotsam', obj: it, pos: () => ({ x: it.x, y: it.y }) });
   for (const h of state.hulks || []) if (h.left > 0) out.push({ k, kind: 'flotsam', obj: h, pos: () => ({ x: h.x, y: h.y }) });
   return out;

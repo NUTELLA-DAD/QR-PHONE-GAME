@@ -52,6 +52,7 @@ import { titanPhaseName } from './creatures/titan.js'; // C.6c: the Island Titan
 import { crystalOf } from './creatureIsland.js'; // C.6c: the crystal on its island (the mark on the TV)
 import { wyrmPhaseName } from './creatures/wyrm.js'; // C.6d: the Rime Wyrm's
 import { motherPhaseName } from './creatures/mother.js'; // C.6e: the Mycelial Mother's
+import { eelPhaseName } from './creatures/eel.js'; // C.6f: the Void Eel's
 import { wyrmChipJobs } from './creatureWyrm.js'; // C.6d: the ice a hammer can reach (the rings on the TV)
 import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
@@ -665,13 +666,13 @@ export function createRenderer({ ctx, state: world, canvas }) {
   let creatureArt = null; // (made when the first creature appears)
   // The wrapped coils of a gripping tentacle that pass BEHIND the ship: drawn before the ships (the rest of the creature, and the coils in front, come after them in drawEffects).
   // C.3: while the beak gapes under her bomb bay (cr.mouthWin) the whole body is under her, so all of it is drawn behind her hull and she flies over its head.
-  const wholeBehind = (cr) => !!cr.mouthWin && cr.mode === 'idle' && cr.kind !== 'drake' && cr.kind !== 'titan' && cr.kind !== 'wyrm'; // (the Wyrm's head is always in front: it has her coiled) (the Titan always stands in front of its glows: its arms reach the ship)
+  const wholeBehind = (cr) => !!cr.mouthWin && cr.mode === 'idle' && cr.kind !== 'drake' && cr.kind !== 'titan' && cr.kind !== 'wyrm' && cr.kind !== 'eel'; // (the Void Eel's head is drawn as it is) // (the Wyrm's head is always in front: it has her coiled) (the Titan always stands in front of its glows: its arms reach the ship)
   // The line a creature is clipped at: the sea for the Kraken (it rises out of the water), the lava for a Drake (it falls into it when it dies).
   const creatureClipY = () => (world.creature && world.creature.kind === 'wyrm' ? world.creature.base.y + 30 - config.CREATURES.SINK_CLIP : world.creature && world.creature.kind === 'titan' ? world.creature.titan.floorY - config.CREATURES.SINK_CLIP : envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : world.creature && world.creature.kind === 'drake' && envIdOf(world) === 'ember' && world.env && Number.isFinite(world.env.lavaY) ? world.env.lavaY : null);
   const drawCreatureBehind = (view) => {
     const cr = world.creature;
     if (cr && wholeBehind(cr)) return drawCreatureBody(view, cr);
-    if (!cr || !creatureArt || !cr.parts.some((p) => p.wrap)) return;
+    if (!cr || !creatureArt || !(cr.kind === 'eel' || cr.parts.some((p) => p.wrap))) return;
     const seaY = creatureClipY();
     ctx.save();
     if (seaY !== null) {
@@ -1175,6 +1176,49 @@ export function createRenderer({ ctx, state: world, canvas }) {
       }
     }
   };
+  // C.6f: the Void Eel's marks: the LURE once a lookout has called it (a red dashed ring round the bulb), the SWALLOW's ring (dashed red and following her bow while the jaws gape, solid and darker once it has LOCKED, with chevrons
+  // from the head to it), all in stepped 8-a-second keys. The eel itself, its lantern and the gold lure are creatureArt.js.
+  const drawEelFx = (cr) => {
+    const ev = cr.eel, key = Math.floor(cr.age * 8);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    const lu = ev.lure;
+    if (lu && lu.live && lu.known && !cr.dying) {
+      ctx.strokeStyle = '#ff4d4d';
+      ctx.lineWidth = 14;
+      ctx.setLineDash([50, 36]);
+      ctx.beginPath();
+      ctx.arc(lu.x, lu.y, 340 + (key % 2) * 16, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const rg = ev.ring;
+    if (rg && !cr.dying) {
+      const u = Math.min(1, Math.floor((rg.t / rg.T) * 8) / 8), hd = ev.head;
+      ctx.globalAlpha = rg.locked ? 0.3 : 0.1 + 0.12 * u;
+      ctx.fillStyle = '#ff2a2a';
+      ctx.beginPath();
+      ctx.arc(rg.x, rg.y, rg.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = rg.locked ? '#ff2a2a' : '#ff6a4d';
+      ctx.lineWidth = rg.locked ? 22 : 14;
+      if (!rg.locked) ctx.setLineDash([60, 40]);
+      ctx.beginPath();
+      ctx.arc(rg.x, rg.y, rg.r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const dx = rg.x - hd.x, dy = rg.y - hd.y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d;
+      if (d > rg.r + 300) for (let k = 0; k < 3; k++) { // chevrons from the head toward the ring: where the lunge will go
+        const t = rg.r + 140 + k * 220 + (rg.locked ? 0 : (key % 3) * 50), cx = rg.x - ux * t, cy = rg.y - uy * t;
+        ctx.beginPath();
+        ctx.moveTo(cx - ux * 90 - uy * 120, cy - uy * 90 + ux * 120);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(cx - ux * 90 + uy * 120, cy - uy * 90 - ux * 120);
+        ctx.stroke();
+      }
+    }
+  };
   const drawCreatureAttacks = (cr, view, time) => {
     ctx.save();
     ctx.lineCap = 'round';
@@ -1183,6 +1227,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     else if (cr.kind === 'thunderbird') drawBirdFx(cr);
     else if (cr.kind === 'titan') drawTitanFx(cr, view, time);
     else if (cr.kind === 'wyrm') drawWyrmFx(cr, view, time);
+    else if (cr.kind === 'eel') drawEelFx(cr);
     for (const g of cr.grips || []) {
       if (g.mode === 'recoil') continue;
       ctx.beginPath();
@@ -1375,7 +1420,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     // Beacon (cave missions).
     const gx = px(map.goal.x);
     const gy = py(map.goal.y);
-    ctx.fillStyle = map.lair ? (map.creature === 'mother' ? '#7a52c8' : map.creature === 'wyrm' ? '#5b8fb8' : map.creature === 'titan' ? '#7a8a5a' : map.creature === 'thunderbird' ? '#4f6290' : map.creature === 'drake' ? '#c2452a' : '#7a3a5a') : map.open ? 'rgba(0,0,0,0)' : '#ffd23f'; // (a lair: the Kraken's mark, in its purple)
+    ctx.fillStyle = map.lair ? (map.creature === 'eel' ? '#d4a82a' : map.creature === 'mother' ? '#7a52c8' : map.creature === 'wyrm' ? '#5b8fb8' : map.creature === 'titan' ? '#7a8a5a' : map.creature === 'thunderbird' ? '#4f6290' : map.creature === 'drake' ? '#c2452a' : '#7a3a5a') : map.open ? 'rgba(0,0,0,0)' : '#ffd23f'; // (a lair: the Kraken's mark, in its purple)
     ctx.beginPath();
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
@@ -1397,8 +1442,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
     let goalText;
     if (map.ring && c.ring) goalText = c.done ? map.ring.name + ' HAS FALLEN!' : c.ring.crown ? map.ring.name + ' FALLS!' : (c.ring.moor && state.boss ? 'MOORINGS ' + c.ring.moor.cut.filter(Boolean).length + '/' + c.ring.moor.cut.length + ' - ' : '') + 'GATES ' + c.ring.faces.filter((f) => f.down).length + '/' + c.ring.faces.length + (km === null ? '' : km < 0.5 ? ' - FIRE!' : ' - next ' + km.toFixed(1) + ' km');
-    else if (c.done) goalText = map.lair ? (map.creature === 'mother' ? 'THE MYCELIAL MOTHER IS SLAIN!' : map.creature === 'wyrm' ? 'THE RIME WYRM IS SLAIN!' : map.creature === 'titan' ? 'THE ISLAND TITAN IS SLAIN!' : map.creature === 'thunderbird' ? 'THE THUNDERBIRD IS SLAIN!' : map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
-    else if (map.lair) goalText = state.creature ? (map.creature === 'mother' ? 'SLAY THE MYCELIAL MOTHER!' : map.creature === 'wyrm' ? 'SLAY THE RIME WYRM!' : map.creature === 'titan' ? 'SLAY THE ISLAND TITAN!' : map.creature === 'thunderbird' ? 'SLAY THE THUNDERBIRD!' : map.creature === 'drake' ? 'SLAY THE DRAKE!' : 'SLAY THE KRAKEN!') : (map.creature === 'wyrm' ? "THE WYRM'S LAIR" : map.creature === 'titan' ? "THE TITAN'S LAIR" : map.creature === 'thunderbird' ? "THUNDERBIRD'S LAIR" : map.creature === 'drake' ? "DRAKE'S LAIR" : "KRAKEN'S LAIR") + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
+    else if (c.done) goalText = map.lair ? (map.creature === 'eel' ? 'THE VOID EEL IS SLAIN!' : map.creature === 'mother' ? 'THE MYCELIAL MOTHER IS SLAIN!' : map.creature === 'wyrm' ? 'THE RIME WYRM IS SLAIN!' : map.creature === 'titan' ? 'THE ISLAND TITAN IS SLAIN!' : map.creature === 'thunderbird' ? 'THE THUNDERBIRD IS SLAIN!' : map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
+    else if (map.lair) goalText = state.creature ? (map.creature === 'eel' ? 'SLAY THE VOID EEL!' : map.creature === 'mother' ? 'SLAY THE MYCELIAL MOTHER!' : map.creature === 'wyrm' ? 'SLAY THE RIME WYRM!' : map.creature === 'titan' ? 'SLAY THE ISLAND TITAN!' : map.creature === 'thunderbird' ? 'SLAY THE THUNDERBIRD!' : map.creature === 'drake' ? 'SLAY THE DRAKE!' : 'SLAY THE KRAKEN!') : (map.creature === 'eel' ? "THE EEL'S LAIR" : map.creature === 'wyrm' ? "THE WYRM'S LAIR" : map.creature === 'titan' ? "THE TITAN'S LAIR" : map.creature === 'thunderbird' ? "THUNDERBIRD'S LAIR" : map.creature === 'drake' ? "DRAKE'S LAIR" : "KRAKEN'S LAIR") + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
     else if (map.open) {
       const total = map.outposts.length;
       const left = map.outposts.filter((o) => !o.done).length;
@@ -1949,14 +1994,14 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const drawCreatureBar = () => {
     const cr = world.creature;
     if (!cr || (cr.mode === 'surfacing' && !(cr.kind === 'wyrm' && cr.stats.erupts > 0))) return;
-    const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', wyrm = cr.kind === 'wyrm', mother = cr.kind === 'mother', limbs = wyrm ? [] : cr.parts.filter((p) => p.kind === (drake || bird ? 'wing' : 'tentacle'));
+    const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', wyrm = cr.kind === 'wyrm', mother = cr.kind === 'mother', eel = cr.kind === 'eel', limbs = wyrm ? [] : cr.parts.filter((p) => p.kind === (drake || bird ? 'wing' : 'tentacle'));
     book.paper(450, 806, 700, 74, { r: 10 });
     ctx.fillStyle = LB.INK;
     ctx.font = '16px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
-    ctx.fillText(cr.name + ' - ' + (mother ? motherPhaseName : wyrm ? wyrmPhaseName : titan ? titanPhaseName : bird ? birdPhaseName : drake ? drakePhaseName : krakenPhaseName)(cr.phase || 1) + (cr.dying ? (mother ? ' - WITHERING' : wyrm ? ' - COLLAPSING' : titan ? ' - CRUMBLING' : drake || bird ? ' - FALLING' : ' - SINKING') : ''), 800, 826, 640); // (C.3: its phase, and what it said)
+    ctx.fillText(cr.name + ' - ' + (eel ? eelPhaseName : mother ? motherPhaseName : wyrm ? wyrmPhaseName : titan ? titanPhaseName : bird ? birdPhaseName : drake ? drakePhaseName : krakenPhaseName)(cr.phase || 1) + (cr.dying ? (eel ? ' - ADRIFT' : mother ? ' - WITHERING' : wyrm ? ' - COLLAPSING' : titan ? ' - CRUMBLING' : drake || bird ? ' - FALLING' : ' - SINKING') : ''), 800, 826, 640); // (C.3: its phase, and what it said)
     if (cr.mouthWin && !cr.dying) { // the beak is open: a gold tag over the bar with the bombs it has been fed
-      const M = wyrm ? config.CREATURES.WYRM.MOUTH : titan ? config.CREATURES.TITAN.MOUTH : drake ? { FED: config.CREATURES.DRAKE.FED } : config.CREATURES.MOUTH;
+      const M = eel ? config.CREATURES.EEL.MOUTH : wyrm ? config.CREATURES.WYRM.MOUTH : titan ? config.CREATURES.TITAN.MOUTH : drake ? { FED: config.CREATURES.DRAKE.FED } : config.CREATURES.MOUTH;
       ink();
       ctx.lineWidth = 3;
       ctx.fillStyle = '#ffd23f';
@@ -2032,6 +2077,20 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.font = '16px ' + config.FONTS.DISPLAY;
       }
     }
+    if (eel && !cr.dying) { // C.6f: a red tag while the gold is a known lure or a swallow is coming, a gold one at the Flagship's stop (kill the eel and she flees)
+      const lu = cr.eel.lure, rg = cr.eel.ring, text = rg ? 'IT WILL SWALLOW THE BOW - BRAKE OR CLIMB!' : lu && lu.live && lu.known ? 'THE GOLD IS A LURE - STEER CLEAR!' : cr.eel.finale && !cr.mouthWin ? 'KILL THE EEL AND THE FLAGSHIP FLEES' : null;
+      if (text) {
+        ink();
+        ctx.lineWidth = 3;
+        ctx.fillStyle = rg || (lu && lu.live && lu.known) ? '#ff6a4d' : '#ffd23f';
+        ctx.fillRect(540, 736, 520, 28);
+        ctx.strokeRect(540, 736, 520, 28);
+        ctx.fillStyle = LB.INK;
+        ctx.font = '15px ' + config.FONTS.DISPLAY;
+        ctx.fillText(text, 800, 756, 500);
+        ctx.font = '16px ' + config.FONTS.DISPLAY;
+      }
+    }
     if (wyrm) { // C.6d: one cyan pip for every segment of ice left on its body (a hammer or flame clears them), a gap where it is bare
       const limb = cr.parts.find((p) => p.id === 'wyrm'), n = limb && limb.ice ? limb.ice.length : 0;
       for (let i = 0; i < n; i++) {
@@ -2100,12 +2159,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
     }
     ctx.fillStyle = '#3b2a1d';
     ctx.fillRect(470, 856, 660, 14);
-    ctx.fillStyle = mother ? '#7a52c8' : wyrm ? '#5b8fb8' : titan ? '#8a8478' : bird ? '#4f6290' : drake ? '#c2452a' : '#7a2d63';
+    ctx.fillStyle = eel ? '#d4a82a' : mother ? '#7a52c8' : wyrm ? '#5b8fb8' : titan ? '#8a8478' : bird ? '#4f6290' : drake ? '#c2452a' : '#7a2d63';
     ctx.fillRect(470, 856, (660 * Math.max(0, cr.hp)) / cr.maxHp, 14);
     ink();
     ctx.lineWidth = 2.5;
     ctx.strokeRect(470, 856, 660, 14);
-    for (const share of mother ? [config.CREATURES.MOTHER.PHASE.TWO_HP, config.CREATURES.MOTHER.PHASE.THREE_HP] : wyrm ? [config.CREATURES.WYRM.PHASE.TWO_HP, config.CREATURES.WYRM.PHASE.THREE_HP] : titan ? [config.CREATURES.TITAN.PHASE.TWO_HP, config.CREATURES.TITAN.PHASE.THREE_HP] : bird ? [config.CREATURES.THUNDERBIRD.PHASE.TWO_HP, config.CREATURES.THUNDERBIRD.PHASE.THREE_HP] : drake ? [config.CREATURES.DRAKE.PHASE.TWO_HP, config.CREATURES.DRAKE.PHASE.THREE_HP] : [config.CREATURES.PHASE.TWO.HP, config.CREATURES.PHASE.THREE.HP]) { // the notches where phase 2 and 3 begin
+    for (const share of eel ? [config.CREATURES.EEL.PHASE.TWO_HP, config.CREATURES.EEL.PHASE.THREE_HP] : mother ? [config.CREATURES.MOTHER.PHASE.TWO_HP, config.CREATURES.MOTHER.PHASE.THREE_HP] : wyrm ? [config.CREATURES.WYRM.PHASE.TWO_HP, config.CREATURES.WYRM.PHASE.THREE_HP] : titan ? [config.CREATURES.TITAN.PHASE.TWO_HP, config.CREATURES.TITAN.PHASE.THREE_HP] : bird ? [config.CREATURES.THUNDERBIRD.PHASE.TWO_HP, config.CREATURES.THUNDERBIRD.PHASE.THREE_HP] : drake ? [config.CREATURES.DRAKE.PHASE.TWO_HP, config.CREATURES.DRAKE.PHASE.THREE_HP] : [config.CREATURES.PHASE.TWO.HP, config.CREATURES.PHASE.THREE.HP]) { // the notches where phase 2 and 3 begin
       ctx.beginPath();
       ctx.moveTo(470 + 660 * share, 852);
       ctx.lineTo(470 + 660 * share, 874);
@@ -2419,7 +2478,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.font = (choice ? 44 : 30) + 'px "Segoe UI Emoji", sans-serif';
         ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : s.lair ? lairOf(s.creature).ICON : s.salvage ? config.VOYAGE.CURRICULUM.SALVAGE.ICON : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
         if (s.lair) { // a lair: a ring of its purple round the stop and a LAIR tag (config.CREATURES.LAIR)
-          ctx.strokeStyle = s.creature === 'mother' ? '#7a52c8' : s.creature === 'wyrm' ? '#5b8fb8' : s.creature === 'titan' ? '#7a8a5a' : s.creature === 'thunderbird' ? '#4f6290' : s.creature === 'drake' ? '#c2452a' : '#7a3a5a';
+          ctx.strokeStyle = s.creature === 'eel' ? '#d4a82a' : s.creature === 'mother' ? '#7a52c8' : s.creature === 'wyrm' ? '#5b8fb8' : s.creature === 'titan' ? '#7a8a5a' : s.creature === 'thunderbird' ? '#4f6290' : s.creature === 'drake' ? '#c2452a' : '#7a3a5a';
           ctx.lineWidth = 6;
           ctx.setLineDash([8, 6]);
           ctx.beginPath();

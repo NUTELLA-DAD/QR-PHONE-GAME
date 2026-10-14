@@ -31,6 +31,9 @@
 //   C.6c: the last section (I0-I10) is THE ISLAND TITAN: its body (2 stone arms, torso, head, mouth, a hidden crystal), the boulder (banner, buzz, the ring that follows her and locks, the rock: a hit shakes a frame segment, a move or a shell saves her), the gasbag grab (phase 2 only: a sideways pull within FORCES.MAX_DEG, swords pry it off, a squeeze that tears nothing off), the roar (bombs in the open mouth), the arms and the phases, the ISLAND as a ground that moves with it (a parachute, being carried, JUMP, a hookshot, the rope ladder, its fall), the CRYSTAL on foot, the reward, the lair, the early route placement, the TV, and the bots (forced arms / mouth / crystal / hp by 8 bots on Normal, 4 and 16 bots on Easy; --no-titan-bots skips them)
 //   C.6d: the last section (W0-W8) is THE RIME WYRM: its body and its lair of ice cliffs, the cracking cliff and the eruption, the coil (it stops her, the hack arrow comes last), the ice armour (shells bounce, a hammer chips it, flame
 //   melts it, a bare segment takes more), the frost breath that jams the guns, the gape, the phases, the sun (a harpoon hauls its head), the underbelly, the reward, the lair stops, the TV, and the bots: each forced win by 8 bots on Normal, 4 and 16 bots on Easy
+//   C.6f: the last section (E0-E9) is THE VOID EEL: its body (24 rigid segments in four sections) and Aether lair, the orbit, the gold lure and the lookout's call, the bite, the coil (grips by crew size, the tilt, it stops her, a sword frees her, the rip), the swallow (the ring follows her bow, locks,
+//   the lunge; a ship that backs off or climbs is missed, the maw hangs open under her bomb bay), the joints (cut tail first, three cuts win), the crown and the lantern, the Flagship's stop (kill the eel and she flees, sink her and it leaves), the TV, and the bots: each forced win by 8 bots on Normal,
+//   4 and 16 bots on Easy, unforced, and the Flagship's stop with and without it (--no-eel-bots skips the bot fights)
 // Exit code 1 on any failure.
 import path from 'node:path';
 import fs from 'node:fs';
@@ -5198,6 +5201,606 @@ if (!argv.includes('--no-mother-bots')) {
     report(rows.every((x) => x.ok) && how.every((h) => h !== 'NOT'), `unforced, 8 bots on Normal win (${how.join(', ')})`);
   }
   report(results.every(({ r }) => clean(r)), `0 errors and no NaN in any of the ${results.length} Mother bot fights`);
+}
+
+// =================================================================== C.6f: THE VOID EEL ===================================================================
+//   (E0) the body (3 tail sections of 6 segments, a neck section, head, maw, crown, a hidden lantern), its lair in the Aether only; it swims in untouchable, then circles
+//   (E1) THE ORBIT: the head circles the ship, rigid segments follow it (follow-the-leader keeps every length), the guns lead the body, the camera frames it
+//   (E2) THE LURE: a gold bulb ahead of the ship (a gold blip on the phone radar), the LOOKOUT calls it (banner, phone, Book moment), without one it is told late; a ship that flies into it is BITTEN (hull blow, a coil follows)
+//   (E3) THE COIL: grips by crew size (1 / 2 / 3), the tilt stays inside FORCES.MAX_DEG, it STOPS her, a sword frees her, the timer rips a section off
+//   (E4) THE SWALLOW: banner, the maw gapes, the ring follows her bow and LOCKS, the lunge; a ship that stays is hit, one that backs off or climbs is missed (a dodge); the maw hangs open under her bomb bay
+//   (E5) THE JOINTS: a shell on a joint of the tail-most section does JOINT.MUL x, the sections behind it are armoured and cannot be cut; cut tail first; three cuts win
+//   (E6) the ways it ends scripted (sever, mouth, board, hp): stats.win, banner, bossDownLap, slow motion; a boarder walks the crown, strikes the lantern and is shaken off by a lunge
+//   (E7) THE FLAGSHIP'S STOP: it comes with her (FINALE.ENABLED) at less health; kill it and she FLEES (the stop is won); sink her first and it swims away; with the switch off there is no eel
+//   (E8) the TV on a stub canvas, and (E9) the bots: each forced win by 8 bots on Normal, 4 and 16 bots on Easy, unforced, and the Flagship's stop with the eel along
+const EE = C.EEL;
+const EEB = await load('modules/host/creatureEel.js');
+const EE0 = JSON.stringify({ W: EE.ATTACK.WEIGHTS, E: EE.ATTACK.EVERY, F: EE.ATTACK.FIRST, FIN: EE.FINALE.ENABLED, LE: EE.LURE.EVERY, FF: EE.FINALE.FIRST });
+const eCfgBack = () => { const o = JSON.parse(EE0); EE.ATTACK.WEIGHTS = o.W; EE.ATTACK.EVERY = o.E; EE.ATTACK.FIRST = o.F; EE.FINALE.ENABLED = o.FIN; EE.LURE.EVERY = o.LE; EE.FINALE.FIRST = o.FF; };
+const ePart = (cr, id) => cr.parts.find((p) => p.id === id);
+const eTails = (cr) => ['e0', 'e1', 'e2'].map((id) => ePart(cr, id));
+const eQuiet = (cr) => { cr.eel.nextT = 1e9; cr.ai.breather = 0; };
+const eWeights = (w) => { for (const ph of [1, 2, 3]) EE.ATTACK.WEIGHTS[ph] = { lure: 0, swallow: 0, coil: 0, ...w }; };
+const eBow = (ship) => T.toWorldX(ship, ship.layout.bounds.x1);
+// The Void Eel in its lair (the Aether) with the ship held at the lair's middle (A.hold: null = let her go), its acts held until a test asks.
+function eelUp({ difficulty = 'normal', bots = 0, awake = true, start = null } = {}) {
+  restoreCfg();
+  eCfgBack();
+  C.DEV_LAIR_AS = 'eel';
+  const ctx = boot({ env: 'aether', lair: true, difficulty, bots, start });
+  const map = ctx.st.course.map;
+  const hold = { x: map.goal.x - ctx.ship.layout.refPoint.x, y: map.goal.y - ctx.ship.layout.refPoint.y };
+  ctx.ship.pose.x = hold.x;
+  ctx.ship.pose.y = hold.y;
+  step(ctx.sim, 5);
+  const cr = ctx.sim.creatures.spawn('eel');
+  eQuiet(cr);
+  const A = { ...ctx, cr, p1: ctx.st.players.p1, map, hold };
+  if (awake) eStep(A, secs(EE.ORBIT.ARRIVE + 3), () => cr.mode === 'idle');
+  eStep(A, 10);
+  A.st.ev.warn = 0; // (the banner slot is clear: a test reads what the next say() put there)
+  A.st.ev.q = [];
+  return A;
+}
+// Step with the ship held where she is (A.hold) and her frame kept sound; stops early when `done()` is true. Returns the seconds it ran.
+function eStep(A, n, done = null) {
+  let k = 0;
+  for (; k < n; k++) {
+    if (A.hold) { A.ship.pose.x = A.hold.x; A.ship.pose.y = A.hold.y; }
+    if (done && done()) break;
+    step(A.sim);
+  }
+  return k / 60;
+}
+const eWin = (name, sim, st, cr, why) => {
+  step(sim, 2);
+  report(cr.dying && cr.stats.win === why && cr.diedBy === why, `${name}: stats.win "${cr.stats.win}"`);
+  report(st.bossDownLap === st.course.lap && st.slow === FN.SLOW, `${name}: the boss counts as down and the last blow runs in slow motion (state.slow ${st.slow})`);
+  until(sim, () => st.ev.warnText.startsWith(EE.WIN_TEXT[why]), 6); // (the banner waits behind the one on screen: the arbiter's HOLD)
+  report(st.ev.warnText.startsWith(EE.WIN_TEXT[why]) && st.ev.warn > 0, `${name}: the final banner "${st.ev.warnText}"`);
+};
+// A citadel in the Aether (the Flagship's stop), the ship parked within range of her mooring, nothing else spawning by itself. opts.finale: the eel switch.
+function citadelUp({ finale = true, difficulty = 'normal', bots = 0 } = {}) {
+  restoreCfg();
+  eCfgBack();
+  EE.FINALE.ENABLED = finale;
+  clock = seedRandom(seed);
+  config.ENVIRONMENTS.FORCE = 'aether';
+  config.MAPS.FORCE_KIND = 'ring';
+  config.RING.FORCE_VARIANT = 'citadel';
+  config.ESCORT.AUTO_PATROL = false;
+  const sim = createSimulation(), st = sim.state;
+  curSt = st;
+  st.difficulty = difficulty;
+  const e = st.ships[0].layout.boarderEntryPoints;
+  st.players.p1 = { id: 'p1', bot: false, name: 'P1', species: config.CREW_SPECIES[0], color: '#e63946', x: e[0].x + 100, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true };
+  for (let i = 0; i < bots; i++) { const id = 'bot' + i; st.players[id] = { id, bot: true, human: false, name: 'Bot' + (i + 1), species: config.CREW_SPECIES[i % config.CREW_SPECIES.length], color: '#3a86ff', x: e[0].x + 25 * i, y: -60, fall: true, jx: 0, jy: 0, t: 0, connected: true }; }
+  sim.castOff();
+  const sh = st.ships[0], REF = sh.layout.refPoint, r = st.course.ring;
+  const rate0 = [config.PACING.RATE_START, config.PACING.RATE_END];
+  config.PACING.RATE_START = config.PACING.RATE_END = 0;
+  step(sim, 60);
+  const park = (x, y) => { sh.pose.x = x - REF.x; sh.pose.y = y - REF.y; st.ship.vy = 0; st.ship.speed = 0; };
+  park(r.moor.x, r.moor.y + 1900);
+  return { sim, st, ship: sh, ring: r, park, rate0, hold: null };
+}
+const citadelDown = (A) => { config.PACING.RATE_START = A.rate0[0]; config.PACING.RATE_END = A.rate0[1]; config.MAPS.FORCE_KIND = 'open'; config.RING.FORCE_VARIANT = null; };
+
+// (E0) the world and the body
+{
+  restoreCfg();
+  eCfgBack();
+  C.DEV_LAIR_AS = 'eel';
+  const ctx = boot({ env: 'aether', lair: true });
+  const { sim, st, ship } = ctx;
+  const map = st.course.map;
+  report(map.lair === true && map.creature === 'eel' && map.outposts.length === 0 && map.turrets.length === 0 && Number.isFinite(map.startDist) && map.startDist < 1e8 && map.floorY - map.goal.y > 3000, `its lair is open sky in the Aether: no outposts or guns, the floor ${Math.round(map.floorY - map.goal.y)} px under the lair's middle, a way to the middle`);
+  report(spawnCr(ctx, 'kraken') === null && spawnCr(ctx, 'drake') === null && spawnCr(ctx, 'thunderbird') === null && spawnCr(ctx, 'titan') === null && spawnCr(ctx, 'wyrm') === null && spawnCr(ctx, 'mother') === null && st.creature === null, 'no other creature comes to the Eel lair');
+  const cr = spawnCr(ctx, 'eel');
+  const cnt = (k) => cr.parts.filter((p) => p.kind === k);
+  report(!!cr && cr.kind === 'eel' && cr.name === EE.NAME && cr.mode === 'surfacing' && cr.eel.mode === 'arrive' && cnt('tentacle').length === 3 && cnt('neck').length === 1 && cnt('head').length === 1 && cnt('mouth').length === 1 && cnt('mantle').length === 1 && cnt('heart').length === 1 && cnt('heart')[0].hidden && cr.parts.every((p) => p.hp > 0),
+    `spawn puts ${cr && cr.name} in state.creature, arriving: 3 tail sections + a neck section (6 segments each), a head, a maw, a crown and a hidden lantern`);
+  report(cr.parts.filter((p) => p.limb).every((p) => p.segs.length === EE.BODY.PER && p.segs.every((s) => s.len === EE.BODY.LEN)) && cr.parts.filter((p) => p.limb).length * EE.BODY.PER === 24, 'the body is 24 rigid segments of the same length');
+  const B0 = boot({ env: 'sea' });
+  report(spawnCr(B0, 'eel') === null && B0.st.creature === null, 'the eel does not come to the Sunken Sea (and without a citadel there is no finale)');
+  const mid = (p) => midOf(p.segs[0]);
+  const tg0 = AIM.targets(st).filter((t) => t.kind === 'creaturePart').length, hp0 = cr.hp;
+  st.shells.push({ x: mid(ePart(cr, 'e1')).x, y: mid(ePart(cr, 'e1')).y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 5);
+  report(cr.hp === hp0 && tg0 === 0 && SP.radarItems(st).filter((i) => i.kind === 'creature').length === 0 && cr.mode === 'surfacing', 'while it swims in it cannot be hurt, shot at or spotted');
+  let t0 = cr.age;
+  const hold = { x: ship.pose.x, y: ship.pose.y };
+  for (let i = 0; i < secs(EE.ORBIT.ARRIVE + 3) && cr.mode !== 'idle'; i++) { ship.pose.x = hold.x; ship.pose.y = hold.y; step(sim); }
+  report(cr.mode === 'idle' && cr.eel.mode === 'circle' && Math.abs(cr.age - t0 - EE.ORBIT.ARRIVE) < 1.2, `it arrives after ${(cr.age - t0).toFixed(1)} s (ORBIT.ARRIVE ${EE.ORBIT.ARRIVE} s) and circles`);
+  step(sim, 30);
+  const tg = AIM.targets(st).filter((t) => t.kind === 'creaturePart');
+  const radar = SP.radarItems(st).filter((i) => i.kind === 'creature');
+  report(tg.length >= 5 && tg.every((t) => t.obj && typeof t.obj.lit === 'number' && typeof t.at(0).x === 'number' && Number.isFinite(t.at(0.4).y)) && !tg.some((t) => t.part.kind === 'heart') && radar.length >= 4 && radar.every((i) => i.k === SP.RADAR_KINDS.indexOf('creature') && Number.isFinite(i.pos().x)), `risen: ${tg.length} aim targets (the lantern is hidden from the guns), ${radar.length} radar blips`);
+  const canvas = { width: 1920, height: 1080 };
+  const cam1 = createWorldCamera(), cam2 = createWorldCamera();
+  let v1, v2;
+  for (let i = 0; i < 5; i++) v1 = cam1.update(1 / 60, st, canvas.width, canvas.height);
+  const keep = st.creature;
+  st.creature = null;
+  for (let i = 0; i < 5; i++) v2 = cam2.update(1 / 60, st, canvas.width, canvas.height);
+  st.creature = keep;
+  report(near(v2.minZoom / v1.minZoom, config.CAMERA.CREATURE.EEL_MAX_ZOOM_OUT / config.CAMERA.MAX_ZOOM_OUT, 1e-6) && v1.zoom <= v2.zoom + 1e-9, `the camera may zoom out to 1/${config.CAMERA.CREATURE.EEL_MAX_ZOOM_OUT} while it lives (zoom ${v1.zoom.toFixed(3)} against ${v2.zoom.toFixed(3)})`);
+}
+
+// (E1) the orbit and the body
+{
+  const A = eelUp();
+  const { sim, st, ship, cr } = A;
+  const b = ship.layout.bounds, cx = T.toWorldX(ship, (b.x0 + b.x1) / 2), cy = T.toWorldY(ship, (b.y0 + b.y1) / 2), hx = (b.x1 - b.x0) / 2, hy = (b.y1 - b.y0) / 2;
+  const rx = Math.max(EE.ORBIT.RX, hx + EE.ORBIT.CLEAR_X), ry = Math.max(EE.ORBIT.RY, hy + EE.ORBIT.CLEAR_Y);
+  let swept = 0, last = Math.atan2(cr.eel.head.y - cy, cr.eel.head.x - cx), rmin = 9, rmax = 0, lenErr = 0;
+  for (let i = 0; i < secs(30); i++) {
+    eStep(A, 1);
+    const a = Math.atan2(cr.eel.head.y - cy, cr.eel.head.x - cx);
+    swept += Math.atan2(Math.sin(a - last), Math.cos(a - last));
+    last = a;
+    const k = Math.hypot((cr.eel.head.x - cx) / rx, (cr.eel.head.y - cy) / ry);
+    rmin = Math.min(rmin, k); rmax = Math.max(rmax, k);
+    const P = cr.eel.P;
+    for (let j = 0; j < 24; j++) lenErr = Math.max(lenErr, Math.abs(Math.hypot(P[2 * j + 2] - P[2 * j], P[2 * j + 3] - P[2 * j + 1]) - EE.BODY.LEN));
+  }
+  report(Math.abs(swept) > Math.PI * 1.2 && rmin > 0.7 && rmax < 1.3, `the head circles the ship: ${(Math.abs(swept) / (Math.PI * 2)).toFixed(2)} turns in 30 s, between ${rmin.toFixed(2)} and ${rmax.toFixed(2)} x the loop's radius`);
+  report(lenErr < 1, `follow-the-leader keeps every segment its length (worst error ${lenErr.toFixed(3)} px)`);
+  const sections = ['e0', 'e1', 'e2', 'e3'].map((id) => ePart(cr, id));
+  const endOf = (s) => ({ x: s.x + Math.cos(s.ang) * s.len, y: s.y + Math.sin(s.ang) * s.len });
+  let joined = 0;
+  for (let k = 1; k < 3; k++) { const a = endOf(sections[k].segs[5]), n = sections[k - 1].segs[0]; joined = Math.max(joined, Math.hypot(a.x - n.x, a.y - n.y)); } // (a tail section runs from its root on the head's side to its tip: the tip of one is the root of the next toward the tail)
+  joined = Math.max(joined, Math.hypot(sections[2].segs[0].x - sections[3].segs[0].x, sections[2].segs[0].y - sections[3].segs[0].y));
+  report(joined < 1, `each section ends where the next begins (worst gap ${joined.toFixed(2)} px)`);
+  const body = AIM.targets(st).filter((t) => t.kind === 'creaturePart' && (t.part.kind === 'tentacle' || t.part.kind === 'neck'));
+  const moving = body.filter((t) => Math.hypot(t.at(0.6).x - t.at(0).x, t.at(0.6).y - t.at(0).y) > 60);
+  report(body.length >= 3 && moving.length >= 2, `the guns lead the moving body (${moving.length} of ${body.length} body targets lead by more than 60 px over 0.6 s)`);
+  report(body.filter((t) => t.rank === 4.6).every((t) => t.part.id === 'e0' && (t.seg === 0 || t.seg === 5)) && body.some((t) => t.rank === 4.6), 'the joints (end segments) of the tail-most section are the ranked targets, the rest of the body is a poor mark');
+}
+
+// (E2) the lure
+{
+  const A = eelUp();
+  const { sim, st, ship, cr, p1 } = A;
+  const ev = cr.eel, msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  p1.lock = null;
+  eWeights({ lure: 1 });
+  ev.nextT = 0;
+  eStep(A, secs(20), () => ev.lure && ev.lure.live);
+  report(!!ev.lure && ev.lure.live && ev.act && ev.act.kind === 'lure' && ev.act.sub === 'hang' && !ev.lure.known, 'a gold lure hangs ahead of the ship, and nobody has called it');
+  eQuiet(cr);
+  const lu = ev.lure, f = ship.pose.f || 1, bow = eBow(ship);
+  report(f * (lu.x - bow) > EE.LURE.AHEAD * 0.5 && f * (lu.x - bow) < EE.LURE.AHEAD * 1.2 && Math.abs(lu.y - (T.toWorldY(ship, ship.layout.refPoint.y))) < EE.LURE.ALT + 700, `it is ${Math.round(f * (lu.x - bow))} px ahead of her bow, about her height`);
+  const gold = SP.flotsamItems(st).filter((i) => i.obj === lu);
+  report(gold.length === 1 && gold[0].kind === 'flotsam' && Math.abs(gold[0].pos().x - lu.x) < 1, 'on the phone radar it is a GOLD blip (a pickup) until it is called');
+  report(!ev.lure.known && cr.parts.filter((p) => p.id !== 'lamp').every((p) => !p.lit), 'the body behind it is dim in the dark: only the bulb shines');
+  // the lookout calls it
+  const lk = ship.layout.all('lookout')[0];
+  report(!!lk && ship.layout.kindOf(lk.n) === 'lookout', 'the classic ship has a lookout seat');
+  Object.assign(p1, { fall: false, fly: false, lock: lk.n });
+  st.sfxQ.length = 0;
+  eStep(A, 10);
+  report(lu.known === true && /LURE/.test(st.ev.warnText) && /LOOKOUT/.test(st.ev.warnText) && cr.stats.lookout === 1, `the lookout calls it: "${st.ev.warnText}"`);
+  report(SP.flotsamItems(st).filter((i) => i.obj === lu).every((i) => i.kind === 'creature') && st.moments.some((m) => m.kind === 'creature-lure'), 'the radar blip turns into the creature and the Book keeps the lookout\'s name');
+  report(cr.parts.every((p) => p.lit), 'once it is called the body is shown');
+  // a ship that flies into it is bitten
+  p1.lock = null;
+  const hull0 = frameHp(ship), x0 = ship.pose.x;
+  A.hold = null;
+  ship.pose.x += lu.x - T.toWorldX(ship, ship.layout.refPoint.x) - 100;
+  ship.pose.y += lu.y - T.toWorldY(ship, ship.layout.refPoint.y);
+  st.ship.speed = 0;
+  step(sim, 50);
+  report(cr.stats.bites === 1 && frameHp(ship) < hull0 - 0.005 && ev.act && ev.act.kind === 'coil', `flying into the lure is a BITE: ${(hull0 - frameHp(ship)).toFixed(3)} of the frame's soundness lost and the coil follows (act ${ev.act && ev.act.kind})`);
+  // a ship that keeps away is not bitten: the lure creeps up, then gives up
+  const B = eelUp();
+  B.cr.hooks.phoneFx = () => {};
+  eWeights({ lure: 1 });
+  B.cr.eel.nextT = 0;
+  eStep(B, secs(20), () => B.cr.eel.lure && B.cr.eel.lure.live);
+  eQuiet(B.cr);
+  const lu2 = B.cr.eel.lure;
+  B.hold = null;
+  B.ship.pose.x -= f * 6000; // (she moves clean out of its way)
+  eStep(B, secs(EE.LURE.TIME + 4), () => !B.cr.eel.act);
+  report(B.cr.stats.bites === 0 && !B.cr.eel.act && B.cr.eel.lure === null && !!lu2, 'a ship that keeps away is never bitten: the lure gives up after its time');
+  // without a lookout it is still told when the head shows
+  const C2 = eelUp();
+  C2.cr.hooks.phoneFx = () => {};
+  eWeights({ lure: 1 });
+  C2.cr.eel.nextT = 0;
+  eStep(C2, secs(20), () => C2.cr.eel.lure && C2.cr.eel.lure.live);
+  eQuiet(C2.cr);
+  C2.hold = null;
+  let tell = '';
+  eStep(C2, secs(EE.LURE.TIME), () => { if (/LURE/.test(C2.st.ev.warnText)) tell = C2.st.ev.warnText; return C2.cr.eel.lure && C2.cr.eel.lure.known; });
+  report(C2.cr.eel.lure && C2.cr.eel.lure.known && /GOLD IS AN EEL/.test(tell) && C2.cr.stats.lookout === 0, `with nobody in the lookout seat it is told at ${EE.LURE.TELL} px: "${tell}"`);
+}
+
+// (E3) the coil
+{
+  for (const [crew, want] of [[1, 1], [6, 2], [12, 3]]) {
+    const A = eelUp({ bots: crew - 1 });
+    const { sim, st, ship, cr } = A;
+    cr.phase = 3;
+    cr.hooks.phoneFx = () => {};
+    for (const p of Object.values(st.players)) if (p.bot) { p.lock = null; }
+    eWeights({ coil: 1 });
+    cr.eel.nextT = 0;
+    let most = 0;
+    eStep(A, secs(30), () => { most = Math.max(most, cr.grips.filter((g) => g.mode === 'hold').length); return most >= want && cr.grips.filter((g) => g.mode === 'hold').length >= want; });
+    eQuiet(cr);
+    report(most === want, `${crew} crew: ${most} coil${most === 1 ? '' : 's'} hold at once (GRIPS_BY_CREW says ${want})`);
+    if (crew === 12) {
+      const gs = cr.grips.filter((g) => g.mode === 'hold');
+      report(gs.length === 3 && new Set(gs.map((g) => g.limb.id)).size === 3 && gs.every((g) => ['e0', 'e1', 'e2'].includes(g.limb.id)), 'three tail sections, one grip each, on three deck ends');
+      eStep(A, secs(2));
+      const tilt = Math.abs(ship.ctx.forces.theta);
+      report(tilt <= (config.FORCES.MAX_DEG * Math.PI) / 180 + 1e-3, `three coils at once: the tilt ${(tilt * 180 / Math.PI).toFixed(2)} deg stays inside FORCES.MAX_DEG ${config.FORCES.MAX_DEG}`);
+      report(cr.eel.tight >= 0.99 && gs.every((g) => g.limb.wrap && g.limb.wrap.pts.length > 4), 'the loop is closed round the hull and every coil winds round it');
+    }
+  }
+  const A = eelUp();
+  const { sim, st, ship, cr, p1 } = A;
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  standOn(p1, ship, topD(ship), 400, null);
+  eWeights({ coil: 1 });
+  cr.eel.nextT = 0;
+  let banner = '';
+  A.hold = { ...A.hold };
+  eStep(A, secs(8), () => { if (/TIGHTENS|COILS/.test(st.ev.warnText)) banner = st.ev.warnText; return cr.grips.length > 0; });
+  report(/TIGHTENS ITS LOOP|EEL COILS/.test(banner), `the loop tightens with a banner: "${banner}"`);
+  eStep(A, secs(10), () => cr.grips[0] && cr.grips[0].mode === 'hold');
+  const g = cr.grips[0];
+  report(!!g && g.mode === 'hold' && cr.stats.coils >= 1, 'a tail section reaches in and holds');
+  eQuiet(cr);
+  // it stops her
+  A.hold = null;
+  ship.ctx.ship.speed = 1;
+  step(sim, secs(4));
+  report(Math.abs(ship.pose.vx) < 120, `the coil holds her still (speed ${Math.round(ship.pose.vx)} px/s after 4 s, with the engines pushing)`);
+  report(msgs.some((m) => m.id === 'p1' && /EEL|COIL|GET OFF/.test(m.t)), 'the phone buzzes for the crew at the deck end');
+  // a sword frees her
+  for (const gg of cr.grips) gg.left = Math.max(gg.left, 60);
+  standOn(p1, ship, g.job.d, g.x - 30, 'sword');
+  p1.fire = true;
+  for (let n = 0; n < secs(EE.COIL.SWORD_TIME + 1) && !freedBy(cr); n++) { p1.x = g.x - 30; step(sim); }
+  p1.fire = false;
+  report(freedBy(cr) === 'hack' && cr.stats.hacks === 1, `a sword hack frees her (${freedBy(cr)})`);
+  // the timer rips a section off
+  step(sim, secs(EE.COIL.RECOIL + EE.COIL.COOLDOWN + 2));
+  A.hold = { x: ship.pose.x, y: ship.pose.y };
+  cr.eel.act = null; cr.eel.nextT = 0; cr.eel.tight = 0;
+  eWeights({ coil: 1 });
+  const n0 = ship.layout.platforms.length, hull0 = frameHp(ship);
+  eStep(A, secs(30), () => cr.grips[0] && cr.grips[0].mode === 'hold');
+  eQuiet(cr);
+  const g2 = cr.grips[0];
+  report(!!g2 && g2.mode === 'hold', 'a second coil takes hold');
+  g2.left = 0.05;
+  step(sim, 15);
+  report((cr.stats.ripped || 0) + (cr.stats.hulled || 0) >= 1 && (ship.layout.platforms.length < n0 || frameHp(ship) < hull0), `unhacked, its time runs out: a section is ripped off (platforms ${n0} -> ${ship.layout.platforms.length}) or the hull takes the blow`);
+}
+
+// (E4) the swallow
+{
+  const A = eelUp();
+  const { sim, st, ship, cr } = A;
+  const ev = cr.eel, msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  st.players.p1.lock = null;
+  eWeights({ swallow: 1 });
+  ev.nextT = 0;
+  let banner = '';
+  eStep(A, secs(15), () => { if (/GAPES AHEAD/.test(st.ev.warnText)) banner = st.ev.warnText; return ev.act && ev.act.sub === 'wind'; });
+  eQuiet(cr);
+  const mouth = ePart(cr, 'mouth'), S = EE.SWALLOW;
+  report(/GAPES AHEAD/.test(banner) && /BRAKE|CLIMB/.test(banner) && ev.ring && !ev.ring.locked && ev.act.sub === 'wind', `the head swings ahead of the bow and gapes: "${banner}"`);
+  eStep(A, 12);
+  report(mouth.open && !!cr.mouthWin && ev.ring.r === S.R && msgs.some((m) => /SWALLOW/.test(m.t)), 'the maw is open for bombs from now on, the red ring is up and the phones are told');
+  const f = ship.pose.f || 1, bow = eBow(ship);
+  const bb = ship.layout.bounds;
+  report(Math.abs(ev.ring.x - bow) < 40 && Math.abs(ev.ring.y - T.toWorldY(ship, (bb.y0 + bb.y1) / 2 + ((bb.y1 - bb.y0) / 2) * S.RING_DROP)) < 40, `the ring sits on her bow, low on the hull (${Math.round(ev.ring.x - bow)} px off)`);
+  eStep(A, secs(S.WIND - S.LOCK + 0.3), () => ev.ring.locked);
+  const lx = ev.ring.x;
+  A.ship.pose.x = A.hold.x;
+  eStep(A, 10);
+  report(ev.ring.locked && ev.ring.x === lx, 'it LOCKS: from now on the ring stays where it is');
+  const hull0 = frameHp(ship), vx0 = ship.pose.vx;
+  eStep(A, secs(3), () => ev.act && ev.act.sub === 'recover');
+  eStep(A, 5);
+  report(cr.stats.swallowHits === 1 && frameHp(ship) < hull0 - 0.005 && ship.pose.vx * f <= vx0 * f, `a ship that stays is SWALLOWED: ${(hull0 - frameHp(ship)).toFixed(3)} of the frame's soundness lost, kicked back`);
+  report(mouth.open && ev.act.sub === 'recover', 'afterwards the maw hangs open');
+  // under her bomb bay
+  const bay = ship.layout.bombBay;
+  eStep(A, secs(2.5));
+  const m = mouth.segs[0], g = { x: T.toWorldX(ship, bay.x), y: T.toWorldY(ship, bay.y) };
+  report(Math.abs(m.x - g.x) < 900 && m.y > g.y + 300, `the maw swims under her bomb bay (${Math.round(m.x - g.x)} px sideways, ${Math.round(m.y - g.y)} px below)`);
+  const fed0 = cr.fed;
+  for (let k = 0; k < 4 && cr.fed === fed0; k++) { CS.creatureBomb(st, { x: m.x, y: m.y - 400, owner: 'p1' }); step(sim, 2); }
+  report(cr.fed > fed0, `a bomb let go over the open maw is FED to it (${cr.fed}/${EE.MOUTH.FED})`);
+  eStep(A, secs(12), () => !ev.act);
+  // a ship that backs off is missed
+  for (const how of ['back', 'climb']) {
+    const B = eelUp();
+    B.cr.hooks.phoneFx = () => {};
+    eWeights({ swallow: 1 });
+    B.cr.eel.nextT = 0;
+    eStep(B, secs(15), () => B.cr.eel.act && B.cr.eel.act.sub === 'wind');
+    eQuiet(B.cr);
+    const h0 = frameHp(B.ship), moment0 = B.st.moments.length;
+    B.hold = null;
+    const x0 = B.ship.pose.x, y0 = B.ship.pose.y, ff = B.ship.pose.f || 1;
+    for (let n = 0; n < secs(S.WIND + S.LUNGE + 0.2) && !(B.cr.eel.act && B.cr.eel.act.sub === 'recover'); n++) {
+      if (how === 'back') { B.ship.pose.x = x0 - ff * 330 * (n / 60); B.ship.pose.y = y0; }
+      else { B.ship.pose.y = y0 - 330 * (n / 60); B.ship.pose.x = x0; }
+      step(B.sim);
+    }
+    step(B.sim, 5);
+    report(B.cr.stats.swallowHits === 0 && B.cr.stats.dodged === 1 && frameHp(B.ship) >= h0 - 0.001 && B.st.moments.length > moment0, `a ship that ${how === 'back' ? 'backs away' : 'climbs'} at 330 px/s is missed: a dodge (swallows ${B.cr.stats.swallows}, hits ${B.cr.stats.swallowHits}, dodged ${B.cr.stats.dodged}), and the Book remembers it`);
+  }
+}
+
+// (E5) the joints
+{
+  const A = eelUp();
+  const { sim, st, ship, cr, p1 } = A;
+  const [e0, e1, e2] = eTails(cr);
+  cr.hp = cr.maxHp = 1e9; // (the pool is out of the way: the sections alone decide the phase and the end)
+  const dmgOf = (p, seg) => { const m = midOf(p.segs[seg]); const h = CS.creatureHit(st, m.x, m.y, 0); if (!h || h.part !== p) return null; const hp0 = p.hp; CS.hurtCreature(st, h, 10, { who: 'p1', src: 'shell' }); return hp0 - p.hp; };
+  const jt = dmgOf(e0, 0) ?? dmgOf(e0, 5), mid2 = dmgOf(e0, 2) ?? dmgOf(e0, 3);
+  report(jt !== null && mid2 !== null && near(jt / mid2, EE.JOINT.MUL, 0.01), `a shell on a joint of the tail-most section does ${(jt / mid2).toFixed(2)} x a shell on its middle (JOINT.MUL ${EE.JOINT.MUL})`);
+  const armoured = dmgOf(e1, 0) ?? dmgOf(e1, 5), plain = dmgOf(e1, 2) ?? dmgOf(e1, 3);
+  report(armoured !== null && plain !== null && near(armoured, plain, 1e-6) && near(plain, mid2 / 2, 1e-6), 'the sections behind it are armoured: half damage even on a joint');
+  report(EEB.eelCuttable(cr, e0) && !EEB.eelCuttable(cr, e1) && !EEB.eelCuttable(cr, e2), 'only the tail-most section left can be cut');
+  // shoot e2 to nothing: it stays
+  CS.hurtCreature(st, { part: e2, seg: 0 }, e2.hp * 5, { who: 'p1', src: 'shell' });
+  report(!e2.dead && !e2.severed && e2.hp >= 1, 'a section behind the cuttable one cannot be cut, however hard it is hit (it stays at 1 hp)');
+  const pool0 = cr.hp;
+  const out = CS.hurtCreature(st, { part: e0, seg: 0 }, e0.hp + 1, { who: 'p1', src: 'shell' });
+  report(out && out.sever && e0.dead && cr.chunks.length === 1 && cr.chunks[0].part.art === 'eel' && cr.stats.cuts === 1 && cr.hp < pool0, 'a joint shot to nothing cuts the section off: it tumbles away as a chunk');
+  report(EEB.eelCuttable(cr, e1) && /JOINT CUT/.test(st.ev.warnText) && st.sfxQ.some((x) => x[0] === 'sever'), `the next one is exposed: "${st.ev.warnText}"`);
+  step(sim, 30);
+  const P = cr.eel.P;
+  report(Math.abs(e1.segs[5].x + Math.cos(e1.segs[5].ang) * e1.segs[5].len - P[2 * 6]) < 1 && cr.phase === 2, 'the eel is shorter (its tail now starts at the next joint) and the phase moved on (a section cut: phase 2)');
+  CS.hurtCreature(st, { part: e1, seg: 0 }, e1.hp + 1, { who: 'p1', src: 'shell' });
+  report(e1.dead && EEB.eelCuttable(cr, e2) && !cr.dying, 'the second section goes');
+  CS.hurtCreature(st, { part: e2, seg: 0 }, e2.hp + 1, { who: 'p1', src: 'shell' });
+  eWin('the third joint', sim, st, cr, 'sever');
+}
+
+// (E6) the ways it ends
+{
+  // MOUTH: FED bombs into the open maw
+  {
+    const A = eelUp();
+    const { sim, st, cr } = A;
+    const mouth = ePart(cr, 'mouth');
+    const m = mouth.segs[0];
+    CS.creatureBomb(st, { x: m.x, y: m.y - 400, owner: 'p1' });
+    report(cr.fed === 0, 'a bomb over a SHUT maw is not fed to it');
+    cr.mouthWin = { t: 0, left: 99 };
+    cr.hooks.hurt({ part: mouth, seg: 0 }, 0.0001, { who: 'p1', src: 'shell' });
+    mouth.open = true;
+    for (let k = 0; k < EE.MOUTH.FED + 2 && !cr.dying; k++) {
+      mouth.open = true;
+      cr.mouthWin.gulp = 0;
+      const mm = mouth.segs[0];
+      CS.creatureBomb(st, { x: mm.x, y: mm.y - 500, owner: 'p1' });
+      step(sim, 1);
+    }
+    report(cr.dying, `${EE.MOUTH.FED} bombs into the open maw end it`);
+    eWin('the maw', sim, st, cr, 'mouth');
+  }
+  // HP
+  {
+    const A = eelUp();
+    const { st, cr } = A;
+    cr.hooks.hurtPool(1e9, 'shell', 'p1');
+    eWin('the pool', A.sim, st, cr, 'hp');
+    report(cr.mode === 'dying' && cr.eel.mode === 'dying' && cr.mouthWin === null && cr.eel.ring === null && cr.eel.lure === null, 'dead: no ring, no lure, the maw shut');
+    step(A.sim, secs(EE.SPAWN.SINK + 12));
+    report(st.creature === null && st.slow === 1, 'it goes limp, drifts into the void and is gone');
+  }
+  // BOARD
+  {
+    const A = eelUp();
+    const { sim, st, ship, cr, p1 } = A;
+    const lamp = ePart(cr, 'lamp'), crown = ePart(cr, 'crown');
+    p1.carry = 'sword';
+    const ls = lamp.segs[0];
+    report(lamp.hidden && CS.creatureHit(st, ls.x, ls.y, 60) === null || (CS.creatureHit(st, ls.x, ls.y, 60) && CS.creatureHit(st, ls.x, ls.y, 60).part !== lamp), 'the lantern is hidden from the guns');
+    report(BD.boardAt(st, ship, p1, ls.x, ls.y) && !!p1.on && p1.on.cr === cr, 'a flier lands on the crown: he is aboard');
+    const x0 = p1.x;
+    step(sim, 40);
+    const cs = crown.segs[0];
+    report(Math.hypot(p1.x - cs.x, p1.y - (cs.y - cs.len)) < cs.r * 2.5 && p1.x !== x0, 'he is carried along by the crown as the eel circles');
+    let label = null, type = null;
+    const n1 = until(sim, () => { p1.fire = true; if (p1.act) { label = p1.act.label; type = p1.act.type; } return cr.dying || p1.on === null; }, 60);
+    report(type === 'strike' && /LANTERN/.test(label), `on the crown: "${label}" (a sword, ${EE.BOARD.HEART_TIME} s a stroke)`);
+    if (!cr.dying) { // (a lunge or a bite may have shaken him off first: that is the rule, then he climbs back on and finishes)
+      for (let tries = 0; tries < 20 && !cr.dying; tries++) { if (!p1.on) { p1.carry = 'sword'; BD.boardAt(st, ship, p1, ls.x, ls.y); } p1.fire = true; step(sim, 60); }
+    }
+    p1.fire = false;
+    report(cr.dying && cr.stats.win === 'board' && cr.stats.struck >= 1, `${cr.stats.struck} strokes of the sword break the lantern (after ${n1.toFixed(1)} s)`);
+    eWin('the lantern', sim, st, cr, 'board');
+  }
+  // a lunge shakes a boarder off
+  {
+    const A = eelUp();
+    const { sim, st, ship, cr, p1 } = A;
+    cr.hooks.phoneFx = () => {};
+    const ls = ePart(cr, 'lamp').segs[0];
+    p1.carry = 'sword';
+    BD.boardAt(st, ship, p1, ls.x, ls.y);
+    eWeights({ swallow: 1 });
+    cr.eel.nextT = 0;
+    eStep(A, secs(20), () => !p1.on);
+    eQuiet(cr);
+    report(!p1.on && p1.fly === true && p1.tossed === true && cr.stats.shaken >= 1, 'the swallow\'s lunge shakes the boarder off the crown: he falls free with his parachute button');
+  }
+}
+
+// (E7) the Flagship's stop
+{
+  // switch off: no eel
+  {
+    const A = citadelUp({ finale: false });
+    const { sim, st } = A;
+    step(sim, secs(10));
+    report(!!st.boss && st.boss.flagship && st.creature === null, 'with the finale switch off the Flagship comes alone (the pinned baselines)');
+    citadelDown(A);
+  }
+  // on: the eel comes with her
+  const A = citadelUp({ finale: true });
+  const { sim, st, ship, ring } = A;
+  const said = []; // (every banner said: with the old last-writer banner (the gates run with NO_ALARMS) a later one hides an earlier)
+  const say0 = st.say;
+  st.say = function (...a) { said.push(String(a[1])); return say0.apply(this, a); };
+  step(sim, secs(4));
+  report(!!st.boss && st.boss.flagship, 'the Flagship is moored at the citadel');
+  eStep(A, secs(6), () => !!st.creature);
+  const cr = st.creature;
+  report(!!cr && cr.kind === 'eel' && cr.eel.finale && /VOID EEL/.test(said.join(' ')) && cr.maxHp > 0, `the Void Eel comes with her ("${st.ev.warnText}")`);
+  const lair = eelUp();
+  report(cr.maxHp < lair.cr.maxHp * 0.95 && cr.maxHp > lair.cr.maxHp * EE.FINALE.HP_MUL * 0.9, `at the Flagship it has less health (${cr.maxHp} against ${lair.cr.maxHp} in its lair: x${EE.FINALE.HP_MUL})`);
+  const ev = cr.eel;
+  until(sim, () => cr.mode === 'idle', EE.ORBIT.ARRIVE + 4);
+  report(cr.mode === 'idle' && ev.nextT > 0 && ev.nextT <= EE.FINALE.FIRST + 1, 'it arrives and its first act waits FINALE.FIRST s');
+  // coils are capped at the finale's number
+  cr.phase = 3;
+  eWeights({ coil: 1 });
+  ev.nextT = 0;
+  let most = 0;
+  for (let n = 0; n < secs(30); n++) { step(sim); most = Math.max(most, cr.grips.filter((g) => g.mode === 'hold').length); }
+  eQuiet(cr);
+  report(most <= EE.FINALE.MAX_GRIPS, `at most ${EE.FINALE.MAX_GRIPS} coils at the Flagship (saw ${most})`);
+  for (const g of cr.grips) g.left = 0.01;
+  step(sim, secs(10));
+  // kill the eel: she flees
+  cr.hooks.hurtPool(1e9, 'shell', 'p1');
+  step(sim, 5);
+  const z = st.boss;
+  report(cr.dying && cr.stats.win === 'hp' && !!z && z.fleeing === true && /FLAGSHIP FLEES/.test(said.join(' ')) && st.bossDownLap === st.course.lap && st.moments.some((m) => m.kind === 'creature-fled'), `the eel is dead: the Flagship cuts her moorings and runs ("${st.ev.warnText}"), the Book keeps it`);
+  const x1 = z.x;
+  step(sim, secs(1.5));
+  report(Math.abs(z.x - x1) > 400 && z.guns.every((g) => g.cd >= 0), 'she is running (and has stopped shooting)');
+  for (let n = 0; n < secs(EE.FINALE.FLEE + 2) && st.boss; n++) step(sim);
+  report(!st.boss && !!ring.crown && ring.crown.how === 'flagship', `she is gone and the citadel falls (crown by ${ring.crown && ring.crown.how})`);
+  step(sim, Math.round((config.RING.CROWN.DONE_AFTER + 1) * 60));
+  if (st.course.escape) step(sim, Math.round((config.STOP_SHAPE.ESCAPE.TIME + 1) * 60));
+  report(st.course.done && !!st.scorecard, 'and the Flagship stop completes (the scorecard is up)');
+  citadelDown(A);
+  // sink her first: the eel swims away
+  const B = citadelUp({ finale: true });
+  eStep(B, secs(10), () => !!B.st.creature);
+  const crB = B.st.creature;
+  report(!!crB && crB.kind === 'eel', 'again: the eel comes with the Flagship');
+  until(B.sim, () => crB.mode === 'idle', EE.ORBIT.ARRIVE + 4);
+  const [f0, f1] = B.ring.faces;
+  for (const f of B.ring.faces) { f.open = 5; f.windows = 1; }
+  B.sim.course.ringSys.hitCore(f0, 99, 'p1', 'bomb');
+  B.sim.course.ringSys.hitCore(f1, 99, 'p1', 'bomb');
+  for (let n = 0; n < secs(config.RING.MOOR.FALL_TIME + 4) && !B.ring.crown; n++) step(B.sim);
+  step(B.sim, 10);
+  report(!!B.ring.crown && crB.eel.mode === 'leaving' && crB.mode === 'leaving', 'with the Flagship sunk the eel gives up and swims away (cr.mode leaving: nothing hurts it, nothing holds her)');
+  for (let n = 0; n < secs(EE.FINALE.LEAVE + 2) && B.st.creature; n++) step(B.sim);
+  report(B.st.creature === null, 'and it is gone');
+  citadelDown(B);
+}
+
+// (E8) the TV
+{
+  const A = eelUp();
+  const { sim, st, cr, p1 } = A;
+  const canvas = { width: 1920, height: 1080, clientWidth: 1920 };
+  const cam = createWorldCamera();
+  const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+  const seen = new Set();
+  let exc = 0, hudText = false, ms = 0, frames = 0, tag = false;
+  const frame = () => {
+    eStep(A, 1);
+    rec.texts.length = 0;
+    const t0 = hr();
+    try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; if (exc < 3) console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
+    ms += hr() - t0;
+    frames++;
+    if (rec.texts.some((x) => x.s.startsWith('THE VOID EEL - '))) hudText = true;
+    if (rec.texts.some((x) => /BRAKE OR CLIMB|STEER CLEAR/.test(x.s))) tag = true;
+    const ev = cr.eel;
+    if (cr.grips.some((g) => g.mode === 'hold')) seen.add('grip'); if (ev.ring) seen.add('ring'); if (ev.lure && ev.lure.live) seen.add('lure'); if (cr.mouthWin) seen.add('maw'); if (cr.chunks.length) seen.add('chunk');
+  };
+  for (let f = 0; f < 120; f++) frame();
+  eWeights({ lure: 1 }); cr.eel.act = null; cr.eel.nextT = 0;
+  for (let f = 0; f < 60 * 8; f++) frame();
+  Object.assign(p1, { fall: false, fly: false, lock: A.ship.layout.all('lookout')[0].n });
+  for (let f = 0; f < 60 * 2; f++) frame();
+  p1.lock = null;
+  eWeights({ swallow: 1 }); cr.eel.act = null; cr.eel.lure = null; cr.eel.nextT = 0;
+  for (let f = 0; f < 60 * 12; f++) frame();
+  eWeights({ coil: 1 }); cr.eel.act = null; cr.eel.nextT = 0;
+  for (let f = 0; f < 60 * 14; f++) frame();
+  eQuiet(cr);
+  CS.hurtCreature(st, { part: ePart(cr, 'e0'), seg: 0 }, 1e9, { who: 'p1', src: 'shell' });
+  for (let f = 0; f < 90; f++) frame();
+  report(exc === 0 && hudText && ['grip', 'ring', 'lure', 'maw', 'chunk'].every((k) => seen.has(k)), `the fight draws on a stub canvas for ${frames} frames with 0 errors (seen: ${[...seen].join(', ')}); the bar says THE VOID EEL with its phase`);
+  report(tag, 'the bar warns "BRAKE OR CLIMB" for a swallow and "STEER CLEAR" for a called lure');
+  console.log(`     whole-TV frame with the Void Eel: ${(ms / frames).toFixed(2)} ms (JS on a stub canvas)`);
+  const stub = stubCtx();
+  const art = createCreatureArt({ ctx: stub });
+  let t = 0, blits = 0;
+  for (let f = 0; f < 300; f++) { eStep(A, 1); const t0 = hr(); art.draw(cr, { zoom: 0.18, dpr: 1 }); art.drawBehind(cr, { zoom: 0.18, dpr: 1 }); t += hr() - t0; blits = Math.max(blits, art.stats.blits); }
+  report(t / 300 < config.PERF.BUDGET_MS && blits > 20, `creatureArt alone: ${(t / 300).toFixed(3)} ms a frame over 300 frames (${blits} blits; budget ${config.PERF.BUDGET_MS} ms)`);
+}
+
+// (E9) the bots
+if (!argv.includes('--no-eel-bots')) {
+  restoreCfg();
+  eCfgBack();
+  const botsimPath = path.join(publicDir, '..', 'tools', 'botsim.mjs');
+  const run = (args, env = {}) => new Promise((resolve) => {
+    const real = { NO_ALARMS: '', NO_SCRAP: '', NO_PARTY: '', NO_STOP_SHAPE: '', NO_GUNS: '', NO_RINGFAIR: '', NO_STEAMFIX: '', NO_AWAY: '', NO_ROLE_CARDS: '', NO_HELM_V2: '' };
+    const c = spawn(process.execPath, [botsimPath, ...args], { env: { ...process.env, ...real, ...env } });
+    let out = '';
+    c.stdout.on('data', (d) => (out += d));
+    c.stderr.on('data', (d) => (out += d));
+    c.on('close', (code) => resolve({ code, out }));
+  });
+  const fight = (out) => {
+    const m = /fight 1: phase (\d)[^\n]*?; ended: (\w+)(?: at (\d+)s)?/.exec(out);
+    return m ? { phase: +m[1], ended: m[2], at: m[3] === undefined ? null : +m[3] } : null;
+  };
+  const pool = async (jobs, n) => { const res = []; let k = 0; await Promise.all(Array.from({ length: n }, async () => { while (k < jobs.length) { const i = k++; res[i] = await jobs[i](); } })); return res; };
+  const seedsB = quick ? [1, 2] : [1, 2, 3];
+  const forced = ['sever', 'mouth', 'board', 'hp'];
+  const jobs = [];
+  for (const w of forced) for (const sd of seedsB) jobs.push(() => run(['--creature', 'eel', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd)], { CREATURE_FORCE_WIN: w }).then((r) => ({ w, sd, r })));
+  for (const bots of [4, 16]) for (const sd of seedsB) jobs.push(() => run(['--creature', 'eel', '--bots', String(bots), '--difficulty', 'easy', '--minutes', '16', '--seed', String(sd)]).then((r) => ({ w: 'easy' + bots, sd, r })));
+  for (const sd of seedsB) jobs.push(() => run(['--creature', 'eel', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd)]).then((r) => ({ w: 'free', sd, r })));
+  for (const sd of seedsB) for (const eel of [false, true]) jobs.push(() => run(['--finale', 'eel', '--bots', '8', '--difficulty', 'normal', '--minutes', '8', '--seed', String(sd)], eel ? {} : { NO_EEL_FINALE: '1' }).then((r) => ({ w: eel ? 'finale+eel' : 'finale', sd, r })));
+  const results = await pool(jobs, 5);
+  const clean = (r) => r.code === 0 && /errors: 0/.test(r.out) && !/NaN/.test(r.out);
+  const byWin = {};
+  for (const { w, sd, r } of results) { const f = fight(r.out); (byWin[w] ||= []).push({ sd, f, ok: clean(r) }); }
+  for (const w of forced) {
+    const rows = byWin[w];
+    const times = rows.map((x) => (x.f && x.f.ended === w ? x.f.at : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t !== null && t <= 360), `forced ${w.toUpperCase()}: 8 bots on Normal end it that way within 6 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] === null ? 'NOT (' + (x.f ? x.f.ended + ', phase ' + x.f.phase : 'no fight') + ')' : times[i] + ' s')).join(', ')})`);
+  }
+  for (const bots of [4, 16]) {
+    const rows = byWin['easy' + bots];
+    const times = rows.map((x) => (x.f && x.f.ended !== 'no' ? { at: x.f.at, how: x.f.ended } : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t && t.at <= 600), `${bots} bots on Easy win within 10 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] ? times[i].how + ' ' + times[i].at + ' s' : 'NOT')).join(', ')})`);
+  }
+  {
+    const rows = byWin.free;
+    const how = rows.map((x) => (x.f && x.f.ended !== 'no' ? x.f.ended + ' ' + x.f.at + ' s' : 'NOT'));
+    report(rows.every((x) => x.ok) && how.every((h) => h !== 'NOT'), `unforced, 8 bots on Normal win (${how.join(', ')})`);
+  }
+  report(['finale', 'finale+eel'].every((w) => byWin[w].every((x) => x.ok)), `the Flagship's stop flies with and without the eel: 0 errors, no NaN (${seedsB.length} seeds each)`);
+  report(results.every(({ r }) => clean(r)), `0 errors and no NaN in any of the ${results.length} Eel bot fights`);
 }
 
 restoreCfg();

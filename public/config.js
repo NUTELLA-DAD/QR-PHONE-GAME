@@ -16,6 +16,8 @@ const STEAMFIX_ON = typeof process === 'undefined' || !(process.env && process.e
 // A0 (CASTLE.md, the Away Team): crew leave the ship and walk the ground (plazas, castle walls, rock): AWAY. ON in the game; NO_AWAY=1 in a tool is the old game (the seeded baselines and the frames pin it). AWAY_BOT_TRIPS=1 lets the bots make trips (a test: tools/away-check.mjs, botsim).
 const AWAY_ON = typeof process === 'undefined' || !(process.env && process.env.NO_AWAY);
 const AWAY_BOT_TRIPS_ON = typeof process !== 'undefined' && !!(process.env && process.env.AWAY_BOT_TRIPS);
+// C.6f (BOSSES.md 2.6): the Void Eel joins the Flagship's fight at the end of a voyage (CREATURES.EEL.FINALE). ON in the game (a browser has no process); a Node tool keeps it OFF unless WITH_EEL=1, so every seeded baseline (botsim, golden, frames, the voyage gates) is the game it was. The dev lair (?creature=eel, botsim --creature eel) works either way.
+const EEL_FINALE_ON = typeof process === 'undefined' || !!(process.env && process.env.WITH_EEL);
 export const config = {
   W: 1600,
   H: 900,
@@ -33,7 +35,7 @@ export const config = {
     SHIP_SCREEN_FRACTION: 0.4, SHIP_SCREEN_HEIGHT_FRACTION: 0.62, // the ship (incl. its long gasbag) takes at most this much of the screen width, and this much of its height (owner, 2026-10-11: zoomed out from 0.53 / full height - it felt tight on the airship)
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
-    CREATURE: { MAX_ZOOM_OUT: 2.4, DRAKE_MAX_ZOOM_OUT: 3.4, TITAN_MAX_ZOOM_OUT: 4.4, WYRM_MAX_ZOOM_OUT: 4.4, MOTHER_MAX_ZOOM_OUT: 3.6, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2; the Cinder Drake flies about the ship in loops 8000 px across: DRAKE_MAX_ZOOM_OUT; the Island Titan stands 5000 px tall below her: TITAN_MAX_ZOOM_OUT; the Rime Wyrm's body reaches 7000 px out of its cliff: WYRM_MAX_ZOOM_OUT), and its living parts are kept in view with this much margin (world pixels)
+    CREATURE: { MAX_ZOOM_OUT: 2.4, DRAKE_MAX_ZOOM_OUT: 3.4, TITAN_MAX_ZOOM_OUT: 4.4, WYRM_MAX_ZOOM_OUT: 4.4, MOTHER_MAX_ZOOM_OUT: 3.6, EEL_MAX_ZOOM_OUT: 5, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2; the Cinder Drake flies about the ship in loops 8000 px across: DRAKE_MAX_ZOOM_OUT; the Island Titan stands 5000 px tall below her: TITAN_MAX_ZOOM_OUT; the Rime Wyrm's body reaches 7000 px out of its cliff: WYRM_MAX_ZOOM_OUT), and its living parts are kept in view with this much margin (world pixels)
     SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
     ZOOM_SMOOTHING: 0.6, // how quickly it zooms (low = calm, no pumping)
     PULL_SMOOTHING: 0.22, // ...and this slowly in the pull-back after a part was built at the sky-dock (YARD.PULL_TIME): the "she grew!" moment
@@ -2506,6 +2508,7 @@ export const config = {
     WEIGHT: {
       'creature-win': 10, 'creature-boulder': 3, 'titan-island': 6, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'away-banner': 8, 'away-charge': 7, 'away-prisoners': 6, 'away-ballista': 5, 'away-beacon': 4, 'away-winch': 4, 'away-ko': 3, 'treasure-stowed': 5, 'treasure-heist': 8, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
       'creature-light': 4, 'creature-burn': 4, 'creature-cap': 4, // C.6e: the Mycelial Mother - the first lamp that found her in the dark, a tendril that went up in flames, a mortar shell on her cap
+      'creature-lure': 5, 'creature-dodge': 4, 'creature-fled': 10, // C.6f: the Void Eel - the lookout who called the lure, a swallow the helm dodged, the Flagship that fled when the eel died
       'creature-chip': 3, 'creature-thaw': 3, // C.6d: the Rime Wyrm - a hammer chipped the ice off its coil, or thawed a gun it had frozen
       'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'nemesis-down': 10, 'nemesis-won': 9, 'nemesis-escape': 6, 'nemesis-scar': 5, 'nemesis-met': 4, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'scrap-patch': 7, 'scrap-built': 4, 'frame-built': 6, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
@@ -3082,6 +3085,68 @@ export const config = {
       // The Mother's lair map (maps.js buildMotherLairMap): a closed cavern in the Fungal Depths, the launch on row LAUNCH_ROW, a roof ROOF_ABOVE px over the launch height and a floor FLOOR_BELOW px under it, two
       // rock PILLARS at PILLARS px from the lair's middle (WIDTH px wide, their tops TOP_BELOW px under the launch height: a wing beat can push her into one; she can fly over), stalactites and stalagmites elsewhere.
       LAIR: { ICON: '\u{1F98B}', LABEL: 'LAIR', NAME: "The Mycelial Mother's Lair", KIND: 'Mother lair', LAUNCH_ROW: 30, ROOF_ABOVE: 3000, FLOOR_BELOW: 2600, PILLARS: [-2900, 2900], WIDTH: 1000, TOP_BELOW: 100, SPIKES: 14 },
+    },
+    // ---- THE VOID EEL (C.6f, BOSSES.md 2.6): the Aether's serpent, 24 rigid segments in four sections (creatures/eel.js = the body, creatureEel.js = the fight). It CIRCLES the ship in a loop, head first, the body trailing
+    // (follow-the-leader on the 8 Hz key clock's world, no sine). Its LANTERN is a lure that looks like a gold pickup hanging in the dark ahead of her, with the head lying behind it: fly into it and it BITES (a hull blow and a
+    // coil with no warning); the LOOKOUT calls it ("IT'S A LURE!"). It COILS (the loop tightens round the hull; three sections reach in, one grip each: the Kraken's grab, merged with COIL), and it SWALLOWS (the head swings ahead
+    // of the bow and gapes: a red ring marks where the jaws will close, follows her, LOCKS, the head lunges; the helm must brake, turn away or climb). Ways to win (cr.stats.win): 'sever' (the three tail sections cut off at
+    // their JOINTS: a shell on a joint does JOINT_MUL x), 'mouth' (FED bombs into the open maw), 'board' (leap onto the crown behind the head, in the Aether's low gravity, and strike the lantern), 'hp' (the pool). At the
+    // Flagship's stop (FINALE) it comes with her; killing it makes her FLEE, which wins the stop just as sinking her does.
+    EEL: {
+      NAME: 'THE VOID EEL', ENV: 'aether',
+      HP: 2100, // the health pool (the slow, safe way to win)
+      HP_MUL: { tentacle: 1, neck: 1, head: 1, mouth: 1, mantle: 1, heart: 1, pool: 1 }, // tuning knobs on the data's hp
+      POOL: { tentacle: 0.35, neck: 0.8, head: 1, mouth: 2, mantle: 0.5, heart: 3 }, // share of a blow that also comes off the pool
+      // The body (px). SECTIONS x PER segments of LEN px, radius R tail -> neck; SECTION_HP is the hp of each of the three tail sections (the neck section is the head's: it is not cut). HEAD/MOUTH/CROWN/LAMP ride the neck's tip:
+      // the CROWN is a vertical crest standing UP from the head (a landing strip for a boarder, who walks it), the LAMP (the lure, and the weak point a boarder strikes) hangs at its top, UP px over the head and FWD px ahead of it.
+      BODY: {
+        SECTIONS: 4, PER: 6, LEN: 300, R: [70, 190], SECTION_HP: 1700, NECK_HP: 1500,
+        HEAD: { LEN: 360, R: 250, HP: 420 }, MOUTH: { R: 300, HP: 260 }, CROWN: { LEN: 430, R: 210, HP: 320, FWD: 120 }, LAMP: { UP: 120, FWD: 430, R: 130, HP: 900 },
+      },
+      // THE ORBIT: the head circles the ship on an ellipse RX x RY round her middle (at least her half-size plus CLEAR_X / CLEAR_Y), at SPEED px/s, the body trailing. FOLLOW = how fast the circle's centre catches up with her
+      // (the loop swims with her); the head chases its station at up to CHASE px/s. DIR: +1 clockwise on the screen. SPEED_PER_CUT = the share it speeds up for each section cut off. ARRIVE s it swims in from AFAR x the radius (untouchable).
+      ORBIT: { RX: 2700, RY: 1100, CLEAR_X: 700, CLEAR_Y: 450, SPEED: 650, SPEED_PER_CUT: 0.12, CHASE: 1700, DIR: 1, ARRIVE: 7, AFAR: 2.4 },
+      SPAWN: { SINK: 8, SINK_DEEP: 3200, SINK_DRIFT: 700 }, // s it takes to go limp and fall away when dead, px it falls, px/s it drifts on
+      // THE ATTACK DIRECTOR: one act at a time (lure / swallow / coil), a pause of EVERY s between them (x the phase x the difficulty x FINALE.PACE), the next chosen by WEIGHTS[phase] (a lure waits LURE.EVERY since the last one).
+      ATTACK: { EVERY: [6, 9], PHASE_MUL: { 1: 1, 2: 0.85, 3: 0.7 }, WEIGHTS: { 1: { lure: 1.4, swallow: 2.2, coil: 1.4 }, 2: { lure: 1.2, swallow: 2.2, coil: 2.2 }, 3: { lure: 1, swallow: 2.4, coil: 2.4 } }, BREATHER: 3.5, BANNER: 4.5, FIRST: 9 },
+      // THE LURE: a gold bulb hangs AHEAD px in front of her bow at her height (+- ALT px), the head lying behind it, for TIME s (it creeps toward her at DRIFT px/s). It looks like a gold pickup: the phone radar shows it as a
+      // gold blip. Touching it (the hull within TOUCH px) = a BITE. The LOOKOUT (a crewman at the lookout seat, within RANGE px) calls it; without one it is told at TELL px, when the head shows. EVERY = s between lures.
+      LURE: { AHEAD: 3300, ALT: 260, TIME: 22, DRIFT: 140, TOUCH: 210, RANGE: 5600, TELL: 2000, EVERY: 34, BOB: 14, SEEK_MAX: 8, BEHIND: 1500, PRE_DY: 700, SEEK_SPEED: 0.7, HANG_SPEED: 0.3, REACH: 160, PASSED: 1600, TEXT: "LOOKOUT: IT'S A LURE! THE GOLD IS A TRAP - STEER CLEAR!", TELL_TEXT: "IT'S A LURE! THE GOLD IS AN EEL - TURN AWAY!" },
+      // (more LURE: the head swings in PRE_DY px above or below its spot first, closes the last stretch at SEEK_SPEED x the chase speed and hangs at HANG_SPEED x; it counts as there within REACH px; the lure gives up once she is PASSED px beyond it, SEEK_MAX s at most to get there)
+      // THE BITE (a ship that flew into the lure): the jaws shut on the bow: a hull blow of HULL at POWER, a kick, the crew stagger, and a coil takes hold at the nearest deck end after only WINDUP s (none of the usual warning).
+      BITE: { HULL: 60, POWER: 2.4, SHOVE: 3, KICK: 220, WINDUP: 0.35, SHAKE: 1.1, SPEED: 4200, HIT_AT: 0.15, END: 0.6 }, // (SPEED px/s the head snaps at the bulb, HIT_AT s into the snap the blow lands, END s the coil takes over)
+      // SWALLOW: the head swims AHEAD px in front of her bow (SEEK_MAX s at most), gapes (the maw is open for bombs from now until the end of RECOVER), WIND s of telegraph: a red ring of radius R (px) round where the jaws will close
+      // follows her bow (LEAD s ahead of it) until LOCK s before the lunge, then stays; the head LUNGES (LUNGE s) at the ring; hull inside it = SWALLOWED: a hull blow of HULL at POWER, a kick back (KICK px/s), the crew thrown (SHOVE),
+      // (never a heart). RECOVER s the maw hangs open after (bombs!), then the head swims off. A miss ends the same way. RING_AHEAD: how far in front of her bow (px) the ring's centre sits; RING_DROP: how far below her middle, as a share of her half height (the lower hull: a climb of about R x (1 - 0.6 x ...) takes the keel out of it).
+      SWALLOW: { AHEAD: 1900, RING_AHEAD: 0, RING_DROP: 0.6, R: 400, WIND: 3.2, LOCK: 1.2, LEAD: 0.5, LUNGE: 0.4, RECOVER: 5, SEEK_MAX: 4.5, HULL: 90, POWER: 3, KICK: 420, SHOVE: 4, SHAKE: 1.3, YO: 300, SWING: 1500, SWING_DY: 600, REACH: 220, MIN_SPEED: 500, RING_HIDE: 0.6 }, // (the station's height varies +- YO px; the head swings SWING px beyond it and SWING_DY up or down first, counts as there within REACH px, lunges at no less than MIN_SPEED px/s; the ring is taken down RING_HIDE s into the recovery)
+      // THE COIL (its grip): the Kraken's grab with these numbers merged over CREATURES.GRIP. TIGHTEN s the loop closes round the hull (the head hangs ahead); then the tail sections (up to MAX[phase] and the crew's cap)
+      // reach in one by one, SPREAD s apart (the head runs the shrinking loop at RUN_SPEED px/s for TIGHTEN + SETTLE s so the whole body lies round her; after a bite TIGHTEN is FAST_MUL x as long; a section out of reach is tried again every RETRY s while the loop still turns at SEEK_SPIN x its speed; the loop opens over OPEN_TIME s when the last coil lets go and eases back at LOOSEN per s; GIVE_UP s without a section in reach and it lets go): WINDUP s of warning (a red ring on the deck end), the grip holds TIME s (x difficulty) and rips a section off unless it is hacked, shot (RELEASE_DMG of the section) or cut.
+      // ANCHOR: it STOPS her (BRAKE px/s^2 toward DRIFT px/s), so she cannot fly out of its next lunge. HUG = how far outside her bounds the tight loop lies.
+      COIL: {
+        MAX: { 1: 1, 2: 2, 3: 3 }, TIGHTEN: 2.6, SETTLE: 2.5, RUN_SPEED: 1500, SPREAD: 1.3, GIVE_UP: 6, HUG_X: 220, HUG_Y: 160,
+        TIME: 15, TIME_BY_DIFF: { easy: 1.4, normal: 1, veteran: 0.9, hard: 0.8 }, FAST_MUL: 0.55, RETRY: 0.4, SEEK_SPIN: 0.28, OPEN_TIME: 2, LOOSEN: 1.2, WINDUP: 1.3, SEIZE_MAX: 2.5, REACH_SHARE: 0.66, SEP: 200, MIN_DECK: 300, WARN_REACH: 450,
+        SIDEWAYS: 60, BASE_ACC: 60, K: 0, MAX_ACC: 100, MAX_TOTAL: 100, SLACK: 0.75, RAMP: 0.8, TORQUE: 0.25, SHAKE: 0.2, SHOVE_POWER: 2,
+        COOLDOWN: 3, RECOIL: 1.2, RELEASE_DMG: 0.4, SWORD_TIME: 1.5, HAMMER_TIME: 2.8, BLOWS: 3,
+        WRAP: { SEGS: 2, TURNS: 1.2, START_TURNS: 0.4, KEYS: 8, LIFT: 70, UNDER: 35, MIN_RY: 150, PITCH: 400, N: 24 },
+        RIP: { REACH: 230, LEN: 260, HULL: 70 },
+        ANCHOR: { BRAKE: 600, DRIFT: 0 },
+      },
+      // THE JOINTS: the first and last segment of each tail section glow gold; a shell, bomb or coil bolt there does JOINT_MUL x. A section at 0 hp is cut off whole (it tumbles away and the loop is shorter).
+      JOINT: { MUL: 2.6, BEHIND_MUL: 0.5 }, // (the sections behind the cuttable one take BEHIND_MUL of a blow)
+      // PHASES: 1 'IT CIRCLES', 2 'IT COILS' (below TWO_HP of the pool, or TWO_LOST sections cut: more grips), 3 'IT THRASHES' (below THREE_HP, or THREE_LOST cut: faster, three grips, the swallow comes quicker).
+      PHASE: { TWO_HP: 0.66, THREE_HP: 0.33, TWO_LOST: 1, THREE_LOST: 2 },
+      MOUTH: { FED: 5, GULP: 2.2, FUNNEL_W: 520, FUNNEL_UP: 2200, LURE_SPEED: 950, LURE_LEAD: 1.1, BELOW: 1100, REOPEN: 0.4, SLACK: 1.5 }, // bombs to win; s the maw is shut after swallowing a bomb; the column over the open maw a bomb or crate falls into; after a swallow the head swims (LURE_SPEED px/s, her speed led by LURE_LEAD s) to gape up at her bomb bay from BELOW px under it
+      BOARD: { HEART_TIME: 6, HEART_DMG: 150, JUMP_BOOST: 1.6 }, // the lantern: hold Action with a sword HEART_TIME s, HEART_DMG off it (it has LAMP.HP; the pool takes POOL.heart x that); a boarder's leap off the crown goes JUMP_BOOST x further (low gravity); a swallow's lunge and a bite SHAKE every boarder off the crown (he falls: parachute!)
+      WIN_TEXT: { sever: 'CUT TO PIECES!', mouth: 'BOMBED IN THE MAW!', board: 'LANTERN SMASHED!', hp: 'RUN DOWN!' },
+      DEATH_TEXT: ' GOES LIMP AND DRIFTS INTO THE VOID!',
+      REWARD: { HULL: 35, GAS: 30, TROPHY: null }, // salvage x3, the hull patched and every bag topped up; no trophy part card
+      // AT THE FLAGSHIP'S STOP: the Eel comes when she does (ring.js citadelStep -> squadrons spawnBoss), at HP_MUL of its health with everything slower (PACE x the pause between attacks, a coil holds COIL_TIME_MUL x as long before it rips) and at most MAX_GRIPS grips; its first act is
+      // FIRST s after it arrives (RANK_ADD: added to the aim rank of every part of it, so the guns look at the castle first when it is more than 0). Killing it makes the Flagship FLEE (FLEE s: she cuts her moorings and runs, the stop is won as if she had sunk; the crown falls RING.CROWN.DONE_AFTER 3.2 s later, so she must be gone by then); sinking her first sends the Eel away (LEAVE s).
+      FINALE: { ENABLED: EEL_FINALE_ON, HP_MUL: 0.6, PACE: 1.8, MAX_GRIPS: 1, COIL_TIME_MUL: 2, FIRST: 12, RANK_ADD: 0, FLEE: 3, FLEE_SPEED: 1100, LEAVE: 3, LEAVE_SPEED: 2400, LEAVE_DIST: 4000, LEAVE_RISE: 800, TEXT: 'THE FLAGSHIP FLEES THE FIELD! THE EEL IS DEAD - THE CITADEL IS YOURS!', ARRIVE_TEXT: 'SOMETHING LONG AND GOLD-LIT SLIDES OUT OF THE VOID... THE VOID EEL HUNTS WITH THE FLAGSHIP!' },
+      // What the bots do (creature bots): the helm sees the lure at SEES px (a lookout may have called it sooner) and backs away from it, and from a swallow's ring, with the lever at BRAKE (negative = astern); a bot with a sword leaps onto the crown for the 'board' win.
+      BOT: { SEES: 2800, BRAKE: -0.6 },
+      // The Eel's lair map (maps.js buildEelLairMap): open sky in the Aether, the launch on row LAUNCH_ROW and a floor FLOOR_BELOW px under it, out of reach (the planet far below). No outposts, no guns.
+      LAIR: { ICON: '\u{1F40D}', LABEL: 'LAIR', NAME: "The Void Eel's Lair", KIND: 'Eel lair', LAUNCH_ROW: 24, FLOOR_BELOW: 9000 },
     },
   },
   // Effects in the storybook gouache style (modules/host/vfxArt.js): flat colours, ink from INK + OUTLINE, no gradients.

@@ -7,6 +7,7 @@
 //   setWrap(part, pts, k)               the outer k segments of a limb lie along a path round something (a ship's hull): front/back by z, see below
 //   severPart(body, part, i)            cut a limb at segment i: segments i.. leave (returned, for debris); the stump carries on
 //   setMouth / damagePart / nearestFreeLimb / exposeHeart / setLit   small helpers
+// C.6f (the Void Eel, creatures/eel.js) adds one: a part with p.manual set is laid out by the creature's own code every step (stepBody leaves its segments alone).
 // C.6a (the Drake, creatures/drake.js) adds three generic things, all inert for the Kraken: body.rot (the whole body pitches: nose up is positive, a stepped value), DRIVEN limbs (pd.drive: the limb's goal is
 // p.rel, a vector in fractions of its reach in the body's own frame, changed only on keys and carried with the body's motion; no sway), and ATTACHED rigid parts (pd.attach: a head that rides a neck's tip).
 //   bodyVec(body, x, y)  a vector of the body's own frame (facing +x, y down) as a world vector (the mirror and the pitch applied);  snapPose(body)  every limb jumps to its goal (after the body turns round)
@@ -315,9 +316,9 @@ export function stepBody(body, dt) {
     if (p.hit > 0) p.hit = Math.max(0, p.hit - dt);
     if (p.dead) continue;
     if (p.rel) { const g = relGoal(body, p); p.goal.x = g.x; p.goal.y = g.y; }
-    if (p.limb) solveLimb(body, p, dt, C.IK.ITER, false);
+    if (p.limb) { if (!p.manual) solveLimb(body, p, dt, C.IK.ITER, false); } // (p.manual: the creature's own code lays the part out - the Void Eel's body, creatureEel.js)
     else {
-      placeRigid(body, p);
+      if (!p.manual) placeRigid(body, p);
       if (p.kind === 'mouth') p.openAmt += ((p.open ? 1 : 0) - p.openAmt) * (1 - Math.exp(-C.EASE.MOUTH * dt));
     }
   }

@@ -37,7 +37,7 @@ function makeMapOf(kind, level, rand, lengthMul = 1, layout, creature = null, va
       if (map.startDist < 1e9) return map;
       continue;
     }
-    map = kind === 'lair' ? (creature === 'mother' ? buildMotherLairMap(level, rand, lengthMul, layout) : creature === 'wyrm' ? buildWyrmLairMap(level, rand, lengthMul, layout) : creature === 'titan' ? buildTitanLairMap(level, rand, lengthMul, layout) : creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout, slack);
+    map = kind === 'lair' ? (creature === 'eel' ? buildEelLairMap(level, rand, lengthMul, layout) : creature === 'mother' ? buildMotherLairMap(level, rand, lengthMul, layout) : creature === 'wyrm' ? buildWyrmLairMap(level, rand, lengthMul, layout) : creature === 'titan' ? buildTitanLairMap(level, rand, lengthMul, layout) : creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout, slack);
     if (map.startDist >= 1e9) continue;
     if (map.lair) return map; // (no outposts to reach: the lair's middle is the goal)
     if (map.open) {
@@ -404,6 +404,22 @@ function buildMotherLairMap(level, rand, lengthMul = 1, layout) {
     for (let d = 0; d < len; d++) for (let i = ci - Math.max(0, 1 - Math.floor(d / 2)); i <= ci + Math.max(0, 1 - Math.floor(d / 2)); i++) { const j = up ? floorRow - 1 - d : roofRow + d; if (i > 3 && i < W - 3 && Math.abs(j - sj) > 3) solid[idx(i, j)] = 1; }
   }
   const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'mother', dome: { x: (goalI + 0.5) * C, roofY: roofRow * C, floorY: floorRow * C, pillars } };
+  finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
+  return map;
+}
+
+// THE VOID EEL'S LAIR (config.CREATURES.EEL.LAIR, C.6f): open sky in the Aether, the launch on row LAUNCH_ROW and a floor of rock FLOOR_BELOW px under it, out of reach (the planet is far below). Nothing else: no outposts, no guns, no
+// spires - the eel circles the ship in empty sky. (At the Flagship's stop the Eel comes to the citadel instead: creatureSystem.js, no map of its own.)
+function buildEelLairMap(level, rand, lengthMul = 1, layout) {
+  const M = config.MAPS, LR = config.CREATURES.LAIR, EL = config.CREATURES.EEL.LAIR, C = M.CELL;
+  const startI = 12, goalI = startI + Math.round((LR.RUN * lengthMul) / C);
+  const W = goalI + Math.round(LR.BEYOND / C) + 20, H = M.OPEN_HEIGHT;
+  const sj = EL.LAUNCH_ROW, floorRow = Math.min(H - 3, sj + Math.round(EL.FLOOR_BELOW / C));
+  const solid = new Uint8Array(W * H);
+  const idx = (i, j) => j * W + i;
+  for (let i = 0; i < W; i++) for (let j = floorRow; j < H; j++) solid[idx(i, j)] = 1;
+  void rand;
+  const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'eel', floorY: floorRow * C };
   finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
   return map;
 }
