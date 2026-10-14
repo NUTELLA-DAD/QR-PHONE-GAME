@@ -41,7 +41,8 @@ export function createRaiders({ state, modules, puff, impact }) {
 
   // ---- F5 (RAIDERS.PARTY): how many may be aboard, and when they may not come ----
   const maxAboard = () => Math.max(R.ABOARD_BASE + Math.floor(crewHeads(state) / R.ABOARD_CREW_DIV), R.ABOARD_FLOOR[state.difficulty] || 0);
-  const calm = () => !state.goingDown && (state.gdSince ?? 99) >= R.HOLD_CALM; // (not while she is FALLING, nor within HOLD_CALM seconds of SHE HOLDS)
+  const eelBusy = () => { const c = state.creature; return !!(c && c.kind === 'eel' && c.eel && c.eel.finale && c.eel.calmT > 0); }; // (C.6f: at the Flagship's stop nobody boards while the Void Eel has the crew's hands - a lure, swallow or coil, and BOARD_CALM s after: creatureEel.js)
+  const calm = () => !state.goingDown && (state.gdSince ?? 99) >= R.HOLD_CALM && !eelBusy(); // (not while she is FALLING, nor within HOLD_CALM seconds of SHE HOLDS, nor while the Eel at the Flagship's stop is at her)
   const room = () => Math.max(0, maxAboard() - state.boarders.length); // (raiders hanging on their ropes count as aboard)
   // May more raiders come now? (the gunships ask before a paratrooper jumps or a guard crosses her rope)
   const canBoard = () => !R.PARTY || (calm() && room() > 0);

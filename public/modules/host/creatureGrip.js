@@ -253,7 +253,7 @@ function rip(state, cr, g) {
   const wx = g.wx, wy = g.wy;
   if (g.bag) return squeeze(state, cr, g);
   let r = null;
-  if (sim && sim.breakOff) r = sim.breakOff({ kind: 'limb', x: g.x, y: g.y, reach: G.RIP.REACH, len: G.RIP.LEN, cause: 'creature' }, { force: true });
+  if (sim && sim.breakOff && !(isEel(cr) && cr.eel.finale && !CR().EEL.FINALE.RIP_BREAK)) r = sim.breakOff({ kind: 'limb', x: g.x, y: g.y, reach: G.RIP.REACH, len: G.RIP.LEN, cause: 'creature' }, { force: true });
   if (r) cr.stats.ripped = (cr.stats.ripped || 0) + 1;
   else {
     creatureHit(ship, g.x, g.y, G.RIP.HULL); // (STRUCTURE.md WP2: the segment under the grip)
