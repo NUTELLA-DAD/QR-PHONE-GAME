@@ -504,6 +504,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     const m = shipMid();
     return !state.ship.down && Math.hypot(m.x - z.x, m.y - z.y) < M.FIRE_RANGE;
   };
+  const eelGunMul = () => { const c = state.creature; return c && c.kind === 'eel' && c.eel && c.eel.finale && !c.dying ? config.CREATURES.EEL.FINALE.GUN_MUL : 1; }; // (C.6f: the Void Eel is at her stop: the Flagship's turrets give it room, so the fire the guns light does not pile on top of the coils)
   const updateBoss = (dt) => {
     const z = state.boss;
     if (!z) return;
@@ -541,7 +542,7 @@ export function createSquadrons({ state, puff, impact, hitsShip, dropSquad, cred
     // Turrets.
     for (const g of z.guns) {
       if (g.dead || (g.cd -= dt) > 0) continue;
-      g.cd = (W.BOSS_FIRE_EVERY * rand(0.8, 1.2)) / firePace(state);
+      g.cd = (W.BOSS_FIRE_EVERY * rand(0.8, 1.2) * eelGunMul()) / firePace(state);
       const gx = z.x + g.dx;
       const gy = z.y + 150;
       const tx = toWorldX(ship, rand(300, 1400));

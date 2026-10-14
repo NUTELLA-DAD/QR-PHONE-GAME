@@ -220,6 +220,7 @@ export function stepEel(state, cr, ship, dt) {
   }
   // the Flagship is down (sunk, or the stop won another way): the eel goes
   if (ev.finale && state.course && state.course.ring && state.course.ring.crown) { startLeaving(state, cr); return stepLeaving(state, cr, ship, C, dC, dt); }
+  if (ev.finale) ev.calmT = ev.act || cr.grips.length ? E.FINALE.BOARD_CALM : Math.max(0, (ev.calmT || 0) - dt); // (the Flagship's stop: while the Eel has the hands - an act, a coil on the hull - and BOARD_CALM s after, her raiders are held back: raiders.js calm())
   checkPhase(state, cr);
   tickGrips(state, cr, dt);
   let spin = 1;
