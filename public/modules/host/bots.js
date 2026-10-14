@@ -2,7 +2,7 @@
 // (jx/jy joystick, actQ = tap Action, fire = hold Action), so they test the real game rules.
 import { config } from '../../config.js';
 import { layoutTables, walkCost } from '../../shipLayout.js';
-import { bestTarget, targets } from './aim.js';
+import { bestTarget, targets, solution } from './aim.js';
 import { chainDive } from './garrison.js'; // (CASTLE.md D1: the boom chain the helm dives under)
 import { altWindow, altBounds, pilotPlan, gasFor } from './course.js';
 import { shipGeom, landX, boilerX, routeStep } from './gunship.js';
@@ -121,6 +121,31 @@ function firingSolution(state, gun) {
 
 // C.6b: is the Thunderbird out, in a way the coil is worth manning for? It calls lightning bolts the coil can drink, and its gizzard glows (the gate's dev flag FORCE_WIN keeps the coil for the 'gizzard' win).
 const birdCoil = (state) => { const cr = state.creature, f = config.CREATURES.FORCE_WIN; return !!cr && cr.kind === 'thunderbird' && !cr.dying && (!f || f === 'gizzard') && (cr.phase >= 2 || f === 'gizzard' || birdSwallowing(cr) || birdDiving(cr)); };
+// C.6d: the Rime Wyrm has the hull in its coil: a hammer-hand or two chip the ice at the coil's segments (the 'chip' job below) while the gunners shoot what is bare.
+const WYRM_CHIPPERS = 2, WYRM_GUNNERS = 2; // (hands that chip at once; gunners a chipper may not take a post from)
+// Is there something for an escort plane to shoot? (the Rime Wyrm's armour only bounces a plane's bullets: its parts do not count)
+const escortTargets = (state) => targets(state).some((t) => !(t.kind === 'creaturePart' && state.creature && state.creature.kind === 'wyrm'));
+// Chip where a gun can then shoot: a segment (or one of its neighbours, which the chip cracks too) that some gun's arc and range covers; if no gun reaches any of them, any of them.
+const wyrmShootable = (state, j) => {
+  const part = j.obj.part, L = mainShip(state).layout;
+  return [-1, 0, 1].some((k) => {
+    const s = part.segs[j.obj.seg + k];
+    if (!s) return false;
+    const t = { kind: 'creaturePart', part, r: s.r, at: () => ({ x: s.x + Math.cos(s.ang) * s.len * 0.5, y: s.y + Math.sin(s.ang) * s.len * 0.5 }) };
+    return tables(L).GUN_STATIONS.some((n) => { const g = state.GUNS[n]; return !!g && g.type !== 'flame' && g.type !== 'mines' && g.type !== 'harpoon' && solution(state, g, t) !== null; });
+  });
+};
+const chipJobsOf = (state) => {
+  if (!state.creature || state.creature.kind !== 'wyrm') return [];
+  const all = gripJobs(state, mainShip(state)).filter((j) => j.tool === 'hammer'), good = all.filter((j) => wyrmShootable(state, j));
+  return good.length ? good : all;
+};
+// C.6d: its head is hooked and hauled in phase 3: the helm flies her to the shaft of sun, where the head will melt.
+const wyrmTowX = (state) => {
+  const cr = state.creature, f = config.CREATURES.FORCE_WIN;
+  if (!cr || cr.kind !== 'wyrm' || cr.dying || cr.phase < 3 || !cr.wyrm.sun || !(cr.hooked || (cr.harpoons || []).length) || (f && f !== 'tow')) return null;
+  return cr.wyrm.sun.x;
+};
 // Helm: altitude that dodges the next mine skimming the top or bottom of the ship (or null).
 // Best direction for the Lightning Coil: the angle (within its arc) that lines up the most targets.
 function coilShot(state) {
@@ -235,6 +260,7 @@ function gunReach(state, n) {
   const best = bestTarget(state, state.GUNS[n]);
   if (best && best.target.kind === 'flier') return 0.5; // (an enemy in the air: a flak gun's whole job)
   if (best && best.target.kind === 'laid') return 0.6; // (a mine in the way: shoot it before it is a hole in the hull)
+  if (best && best.target.kind === 'creaturePart' && best.target.rank < 9 && state.creature && state.creature.kind === 'wyrm') return 0.6; // (C.6d: a BARE segment of the Rime Wyrm, or its open maw, is worth a gun: a shell on ice only bounces)
   // Paratroopers are about to jump (or are in the air): get up to the dorsal gun, it covers their approach.
   if (!best && n === paraGun(L) && state.gunship && (state.paras.length || state.gunship.paraDue)) return 0.7;
   if (!best) return 2;
@@ -640,7 +666,8 @@ function listJobs(state, bot) {
   // (F3: a fire burning where a critical part is being mended - the boiler that has just blown, say - burns the hand at the hammer, who steps out of it, walks back, burns again and never finishes: put that fire out first, ahead of stoking a broken boiler)
   if (config.BOTS.FIRE_AT_REPAIR && canSpray) for (const m of mods) if (m.broken && critical(mods, m)) for (const f of state.fires) if (f.d === m.d && Math.abs(f.x - m.x) < config.MODULES.FIRE_RADIUS && !hotFires.includes(f)) jobs.push({ kind: 'fire', obj: f, max: 1, cap: 2, urgent: true });
   // C.2: a giant creature's tentacle holds the ship (creatureGrip.js): two hands go to hack it free, ahead of everything but a blaze in the coal.
-  if (state.creature && (hasTool('sword') || hasTool('hammer'))) for (const gj of gripJobs(state, mainShip(state))) jobs.push({ kind: 'hack', obj: gj.obj, max: 2, urgent: true });
+  if (state.creature && (hasTool('sword') || hasTool('hammer'))) for (const gj of gripJobs(state, mainShip(state))) if (gj.tool !== 'hammer') jobs.push({ kind: 'hack', obj: gj.obj, max: 2, urgent: true });
+  if (canHammer) for (const cj of chipJobsOf(state).slice(0, WYRM_CHIPPERS)) jobs.push({ kind: 'chip', obj: cj.obj, max: 1, urgent: true }); // (C.6d: ice on the Rime Wyrm's coil; the hack job comes first in this list, so when its arrow shows the chippers go to hack)
   // Versus: a boarder at the wheel or the boiler is the worst thing aboard (he is taking the ship): the defenders go for him before anything else, up to half the crew.
   if ((config.PVP.ENABLED || mainShip(state).ai) && bot.team) {
     const vsH = L.one('helm'), vsB = L.one('boiler');
@@ -741,7 +768,7 @@ function listJobs(state, bot) {
   // right now) come before chores like topping up coal or patching dents.
   const isBroken = (n) => mods.some((m) => m.name === n && m.broken);
   const botPlanes = players.filter((q) => q.bot && isEscortStation(q.lock, L)).length; // the crew can only spare so many for the patrol planes
-  const reach = (n) => (isEscortStation(n, L) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && targets(state).length ? 0.6 : 4))(escortFor(state, n)) : L.kindOf(n) === 'lookout' ? lookoutReach(state) : L.kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : L.kindOf(n) === 'coil' ? (coilShot(state).count >= 3 || birdCoil(state) ? 0.7 : 4) : L.kindOf(n) === 'bombBay' ? ((groundTargets(state).length || bombRunOn(state) || beakBombing(state)) && state.bombBay.bombs > 0 ? 0.5 : 4) : L.kindOf(n) === 'swivel' ? (swivelOff(state, n) > 0.3 ? 0.5 : 4) : L.kindOf(n) === 'cannon' || L.kindOf(n) === 'cannonSeat' ? cannonReach(state, n) : isSearchlight(n, L) ? lightReach(state, n) : !tables(L).GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
+  const reach = (n) => (isEscortStation(n, L) ? ((e) => (e && e.rebuild <= 0 && (e.docked || e.auto) && botPlanes < config.ESCORT.BOT_MAX && !state.escortCramped && escortTargets(state) ? 0.6 : 4))(escortFor(state, n)) : L.kindOf(n) === 'lookout' ? lookoutReach(state) : L.kindOf(n) === 'deflector' ? (incoming(state) ? 0.6 : 4) : L.kindOf(n) === 'coil' ? (coilShot(state).count >= 3 || birdCoil(state) ? 0.7 : 4) : L.kindOf(n) === 'bombBay' ? ((groundTargets(state).length || bombRunOn(state) || beakBombing(state)) && state.bombBay.bombs > 0 ? 0.5 : 4) : L.kindOf(n) === 'swivel' ? (swivelOff(state, n) > 0.3 ? 0.5 : 4) : L.kindOf(n) === 'cannon' || L.kindOf(n) === 'cannonSeat' ? cannonReach(state, n) : isSearchlight(n, L) ? lightReach(state, n) : !tables(L).GUN_STATIONS.includes(n) ? 0 : gunReach(state, n));
   const open = tables(L).MANNED_STATIONS.filter((n) => !isBroken(n) && !isMothballed(state, n) && !players.some((q) => q.lock === n)).sort((a, b) => reach(a) - reach(b));
   jobs.push(...crossJobs(state, bot)); // (B.6: loads thrown onto the deck: shovel them off)
   const hatchWorks = hatchJobs(state, bot); // (cargo drop hatches: tip raiders out - before any fighting - shut one, drop a crate on a ship below)
@@ -799,6 +826,17 @@ function listJobs(state, bot) {
   // Versus: the captain is closing in to burn her (pvp/captainAI.js): the burners are manned first, ahead of the chores.
   const burnCap = state.rival ? mainShip(state).captain : null;
   if (burnCap && (burnCap.play === 'burn' || burnCap.burnWish)) for (const n of tables(L).GUN_STATIONS) { const g = state.GUNS[n]; if (g.type === 'flame' && g.ammo > 0 && !isBroken(n) && !players.some((q) => q.lock === n)) jobs.unshift({ kind: 'station', obj: n, max: 1, tier: 0.2 }); }
+  // C.6d: a gun that can reach a BARE segment of the Rime Wyrm (or its open maw) is manned right behind the chippers, ahead of the chores (ice is only worth chipping if somebody then shoots), until three hands are at the guns
+  if (state.creature && state.creature.kind === 'wyrm' && !state.creature.dying) {
+    const gunSt = (j) => j.kind === 'station' && typeof j.obj === 'string' && tables(L).GUN_STATIONS.includes(j.obj) && j.tier <= 0.6;
+    const manned = players.filter((q) => q.bot && q.lock && tables(L).GUN_STATIONS.includes(q.lock)).length, moved = jobs.filter(gunSt).slice(0, Math.max(0, WYRM_GUNNERS + 1 - manned));
+    if (moved.length) {
+      for (const j of moved) jobs.splice(jobs.indexOf(j), 1);
+      let at = 0;
+      jobs.forEach((j, i) => { if (j.kind === 'hack' || j.kind === 'chip') at = i + 1; });
+      jobs.splice(at, 0, ...moved);
+    }
+  }
   return jobs;
 }
 
@@ -912,7 +950,7 @@ function operate(p, state, dt) {
       plan.speed = base.speed + (plan.speed - base.speed) * wv;
     }
     const chainD = !gunshipAi && !cap ? chainDive(state) : null; // (a boom chain across the lane: pilotPlan already holds her back and aims under it; the bot also dives hard, as the plan's small change of height is not enough for the helm to move on)
-    const towX = drakeTowX(state);
+    const towX = drakeTowX(state) ?? wyrmTowX(state);
     if (towX !== null) plan.speed = clamp(((towX - toWorldX(mainShip(state), L.refPoint.x)) * mainShip(state).pose.f) / 700, -0.4, 0.4); // (over the vent, with the drake on her line)
     p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1); // (pace: her speed on the lever's scale, without the sails and overdrive, flight.js)
     // COME ABOUT (config.SHIP.TURN.BOT_TURNS): the way to the goal has been behind her for a while, so hold the turn command like a phone's button (plan.dx is how far the route point is ahead of her bow).
@@ -1186,6 +1224,16 @@ function work(p, state) {
     if (!o.live) { p.botJob = null; return; }
     const noSword = !tables(L).PICKUPS.some((r) => r.kind === 'sword');
     if (!(p.carry === 'sword' || (noSword && p.carry === 'hammer')) && !getTool(state, p, noSword ? 'hammer' : 'sword', o)) return;
+    if (steer(p, o.d, o.x, 40)) {
+      p.jx = 0;
+      p.fire = true;
+    }
+    return;
+  }
+  if (job.kind === 'chip') { // C.6d: ice on the Rime Wyrm's coil: a hammer in hand, then hold Action beside the segment until it is bare
+    const cr = state.creature;
+    if (!o.live || !cr || cr.kind !== 'wyrm' || cr.dying || !(o.part.ice && o.part.ice[o.seg] > 0)) { p.botJob = null; return; }
+    if (!getTool(state, p, 'hammer', o)) return;
     if (steer(p, o.d, o.x, 40)) {
       p.jx = 0;
       p.fire = true;
@@ -1993,7 +2041,8 @@ export function updateBot(p, state, dt) {
       // Never wander off the helm while there's terrain to steer through (nor the gunship's crew off their posts).
       if ((isHelm(L, p.lock) && config.COURSE.ENABLED) || p.enemy) p.lockLeft = Math.max(p.lockLeft, 1);
       // A lightning bolt is charging and nobody is on their way to a rod: leave the station (not the helm).
-      const hackCall = !!state.creature && !isHelm(L, p.lock) && gripJobs(state, mainShip(state)).length > 0 && !bots.some((q) => q.botJob && q.botJob.kind === 'hack') && Math.random() < 0.9; // (C.2: a tentacle holds the ship and nobody is on the way to hack it)
+      const hackCall = !!state.creature && !isHelm(L, p.lock) && gripJobs(state, mainShip(state)).some((j) => j.tool !== 'hammer') && !bots.some((q) => q.botJob && q.botJob.kind === 'hack') && Math.random() < 0.9; // (C.2: a tentacle holds the ship and nobody is on the way to hack it)
+      const chipCall = !isHelm(L, p.lock) && tables(L).PICKUPS.some((r) => r.kind === 'hammer') && chipJobsOf(state).length > 0 && bots.filter((q) => q.botJob && q.botJob.kind === 'chip').length < WYRM_CHIPPERS && bots.filter((q) => q !== p && q.lock && tables(L).GUN_STATIONS.includes(q.lock)).length >= WYRM_GUNNERS && Math.random() < 0.9; // (C.6d: ice on the Rime Wyrm's coil and fewer than two hands are on the way to chip it - and enough gunners are left to shoot what is bare)
       const rodCall = !isHelm(L, p.lock) && !(birdCoil(state) && L.kindOf(p.lock) === 'coil') && state.stormJob && (state.stormJob.charge || birdDiving(state.creature)) && !bots.some((q) => q.botJob && q.botJob.kind === 'rod') && Math.random() < 0.9; // (the Thunderbird's coil man stays at the coil: it drinks the bolt the rod grounds)
       // Nobody is at the wheel in flight and nobody is on the way: leave the station and take it.
       const helmCall = !isHelm(L, p.lock) && !humanAutopilot(p, state) && state.phase === 'flying' && !Object.values(state.players).some((q) => isHelm(L, q.lock) || (q.botJob && q.botJob.kind === 'station' && isHelm(L, q.botJob.obj))) && !(state.modules || []).some((m) => m.kind === 'helm' && m.broken) && Math.random() < B.HELM_CALL;
@@ -2002,7 +2051,7 @@ export function updateBot(p, state, dt) {
       const HC = config.HEALTH; // crew health: a bot burning at its station, or on its last heart, leaves it (the helm stays: the ship needs steering)
       const hurtCall = HC.ENABLED && !p.enemy && !isHelm(L, p.lock) && !soleGun && ((p.inFire && (p.burnT || 0) > HC.BOT.FLEE) || (state.phase === 'flying' && L.medbay && hearts(p) <= HC.JOB_AT));
       const rotate = (p.lockLeft <= 0 && !soleGun) || gunUseless;
-      let leave = rotate || rodCall || hackCall || helmCall || fallCall || hurtCall || (urgent > free && !isHelm(L, p.lock) && Math.random() < B.LEAVE_FOR_EMERGENCY);
+      let leave = rotate || rodCall || hackCall || chipCall || helmCall || fallCall || hurtCall || (urgent > free && !isHelm(L, p.lock) && Math.random() < B.LEAVE_FOR_EMERGENCY);
       if (leave && !rotate && (prof().REACT > 0 || prof().ALARM_GAP > 0)) { // (a human answers an alarm after a moment, and does not drop everything twice in a row; a plain rotation is not an alarm)
         const now = performance.now();
         if (now - (p.alarmAt ?? -1e9) < prof().ALARM_GAP * 1000) leave = false;

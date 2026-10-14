@@ -1066,6 +1066,248 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     ctx.restore();
   }
 
+  // ================================================================ THE RIME WYRM (C.6d) ================================================================
+  // The same recipe (pictures baked once per zoom and blitted; poses from the sim, nothing wobbles) in slate-blue scales with a pale belly, charcoal horns, an icy cyan eye, and ICE ARMOUR: each body segment is drawn in one of
+  // three states from its ice (part.ice[i] / part.iceMax[i], creatureWyrm.js): a full shell of faceted ice with icicles (armoured), frost patches (thin), or bare scale where a hammer has chipped it. The collar (the thick neck
+  // standing out of the cliff) is drawn in its own frame (origin = the top of its straight part, ctx mirrored by body.f so +x points at the ship; the pale belly strip faces her). The head has horns and a hinged-jaw maw
+  // (the mouth part): two jaws that part in a V for the gape, the dark throat between. The body is the generic limb, in world coordinates.
+  const W_SCALE = '#4f6f8e', W_DARK = '#33506d', W_BELLY = '#d6e7f2', W_ICE = '#c9e9fa', W_ICE_LT = '#f3fcff', W_ICE_DK = '#8cc2de', W_EYE = '#7fe8ff', W_MAW = '#5b2347', W_FANG = '#f1f6fa', W_SOFT = '#f0b9c4', W_HORN = '#2b3446';
+  const wyIce = (p, i) => (!p.ice || !(p.ice[i] > 0) ? 0 : p.ice[i] < p.iceMax[i] * 0.5 ? 1 : 2);
+
+  // One body segment: base joint at the origin, along +x. stage 0 bare, 1 frosted, 2 armoured.
+  function wyrmSegPic(s, stage, look) {
+    const L = s.len, r0 = s.r, r1 = s.r1;
+    return get(`wseg|${Math.round(L)}|${Math.round(r0)}|${Math.round(r1)}|${stage}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5, rm = ((r0 + r1) / 2) * 1.08;
+      const edge = (x) => { const u = clamp(x / L, 0, 1); return r0 + (r1 - r0) * u + (rm - (r0 + r1) / 2) * 4 * u * (1 - u); };
+      return bake(-r0 * 1.2 - pad, -r0 * 1.9 - pad, L + r1 * 0.5 + pad, r0 * 1.9 + pad, (g) => {
+        const body = [[0, -r0], [L * 0.5, -rm], [L, -r1], [L, r1], [L * 0.5, rm * 0.98], [0, r0]];
+        for (const [x, k] of [[0.18, 0.34], [0.5, 0.4], [0.8, 0.3]]) tri(g, x * L - k * L * 0.28, -edge(x * L) + 4, x * L + k * L * 0.28, -edge(x * L) + 4, x * L - k * L * 0.1, -edge(x * L) - r0 * 0.55, col(W_HORN), A.INK_W * 0.8); // the back plates
+        poly(g, body, col(W_SCALE), true, INK_B);
+        g.beginPath();
+        g.arc(0, 0, r0, Math.PI / 2, (Math.PI * 3) / 2);
+        g.fillStyle = col(W_SCALE);
+        g.fill();
+        g.lineWidth = INK_B;
+        g.stroke();
+        g.save();
+        g.beginPath();
+        body.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+        g.closePath();
+        g.clip();
+        poly(g, [[0, r0 * 0.25], [L * 0.5, rm * 0.3], [L, r1 * 0.3], [L, r1 * 1.4], [0, r0 * 1.4]], col(W_BELLY), false); // the pale belly strip
+        poly(g, [[r0 * 0.1, -r0 * 0.85], [L * 0.5, -rm * 0.88], [L * 0.95, -r1 * 0.85], [L * 0.95, -r1 * 0.55], [L * 0.5, -rm * 0.58], [r0 * 0.1, -r0 * 0.55]], hiColor(look), false); // highlight band
+        for (let k = 0; k < 3; k++) tri(g, L * (0.12 + 0.3 * k), -rm * 0.2, L * (0.12 + 0.3 * k) + rm * 0.35, -rm * 0.2 + rm * 0.25, L * (0.12 + 0.3 * k) + rm * 0.05, rm * 0.2, col(W_DARK), A.INK_W * 0.5); // scale marks
+        if (stage === 1) { // frost: a few white patches on the back
+          poly(g, [[L * 0.1, -r0 * 1.0], [L * 0.45, -rm * 1.05], [L * 0.4, -rm * 0.35], [L * 0.12, -r0 * 0.4]], col(W_ICE_LT), false);
+          poly(g, [[L * 0.62, -rm * 1.0], [L * 0.95, -r1 * 1.0], [L * 0.92, -r1 * 0.3], [L * 0.66, -rm * 0.45]], col(W_ICE), false);
+        }
+        g.restore();
+        poly(g, body, null, true, INK_B);
+        if (stage === 1) {
+          tri(g, L * 0.3, rm * 0.95, L * 0.4, rm * 0.95, L * 0.35, rm * 0.95 + r0 * 0.5, col(W_ICE), A.INK_W * 0.6);
+        }
+        if (stage === 2) { // the armour: a faceted shell of ice with icicles above and below
+          const sh = [[-r0 * 0.15, -r0 * 1.12], [L * 0.3, -rm * 1.18], [L * 0.7, -rm * 1.14], [L * 1.04, -r1 * 1.12], [L * 1.06, r1 * 1.1], [L * 0.7, rm * 1.14], [L * 0.3, rm * 1.18], [-r0 * 0.15, r0 * 1.12]];
+          for (let k = 0; k < 3; k++) { const x = L * (0.15 + 0.32 * k); tri(g, x - L * 0.07, rm * 1.1, x + L * 0.07, rm * 1.1, x, rm * 1.1 + r0 * (0.6 + 0.25 * (k % 2)), col(W_ICE), A.INK_W * 0.7); }
+          for (let k = 0; k < 3; k++) { const x = L * (0.2 + 0.3 * k); tri(g, x - L * 0.06, -rm * 1.14, x + L * 0.06, -rm * 1.14, x, -rm * 1.14 - r0 * 0.5, col(W_ICE_LT), A.INK_W * 0.7); }
+          poly(g, sh, col(W_ICE), true, INK_B);
+          g.save();
+          g.beginPath();
+          sh.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+          g.closePath();
+          g.clip();
+          poly(g, [[0, r0 * 0.1], [L * 0.5, rm * 0.2], [L, r1 * 0.1], [L * 1.1, r1 * 1.3], [0, r0 * 1.3]], col(W_ICE_DK), false);
+          poly(g, [[L * 0.06, -r0 * 1.0], [L * 0.52, -rm * 1.06], [L * 0.5, -rm * 0.5], [L * 0.1, -r0 * 0.46]], col(W_ICE_LT), false);
+          g.beginPath(); // facet cracks
+          g.moveTo(L * 0.28, -rm * 0.9);
+          g.lineTo(L * 0.4, -rm * 0.1);
+          g.lineTo(L * 0.3, rm * 0.5);
+          g.moveTo(L * 0.7, -rm * 0.8);
+          g.lineTo(L * 0.62, rm * 0.2);
+          g.lineWidth = A.INK_W * 0.55;
+          g.stroke();
+          g.restore();
+          poly(g, sh, null, true, INK_B);
+        }
+      });
+    });
+  }
+  // The head: the neck joint at the origin, along +x. Horns swept back, an icy eye, a crest; the ice crown by stage.
+  function wyrmHeadPic(len, r, stage, look) {
+    return get(`whead|${Math.round(len)}|${Math.round(r)}|${stage}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5;
+      return bake(-r * 2 - pad, -r * 2.4 - pad, len + r * 0.8 + pad, r * 1.4 + pad, (g) => {
+        poly(g, [[0.1 * len, -0.85 * r], [-1.5 * r, -1.9 * r], [0.3 * len, -1.25 * r]], col(W_HORN), true, INK_B * 0.8); // the far horn
+        const skull = [[0, -0.85 * r], [0.3 * len, -1.0 * r], [0.78 * len, -0.6 * r], [len, -0.34 * r], [len, 0.3 * r], [0.74 * len, 0.5 * r], [0.3 * len, 0.95 * r], [0, 0.8 * r]];
+        poly(g, skull, col(W_SCALE), true, INK_B);
+        g.save();
+        g.beginPath();
+        skull.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+        g.closePath();
+        g.clip();
+        poly(g, [[0, 0.1 * r], [0.5 * len, 0.2 * r], [len, 0.1 * r], [len, 1.4 * r], [0, 1.4 * r]], col(W_BELLY), false);
+        poly(g, [[0.05 * len, -0.8 * r], [0.5 * len, -0.9 * r], [0.9 * len, -0.5 * r], [0.9 * len, -0.38 * r], [0.5 * len, -0.7 * r], [0.05 * len, -0.62 * r]], hiColor(look), false);
+        g.restore();
+        poly(g, skull, null, true, INK_B);
+        poly(g, [[0.12 * len, -0.9 * r], [-1.2 * r, -1.6 * r], [-1.0 * r, -2.2 * r], [0.34 * len, -1.15 * r]], col(W_HORN), true, INK_B * 0.8); // the near horn
+        for (let k = 0; k < 3; k++) tri(g, 0.42 * len + k * 0.14 * len, -0.9 * r + k * 0.1 * r, 0.5 * len + k * 0.14 * len, -0.9 * r + k * 0.1 * r, 0.44 * len + k * 0.14 * len, -1.5 * r + k * 0.1 * r, col(W_HORN), A.INK_W * 0.7); // crest
+        g.beginPath(); // the eye
+        g.arc(0.45 * len, -0.32 * r, 0.2 * r, 0, Math.PI * 2);
+        g.fillStyle = col(W_EYE);
+        g.fill();
+        g.lineWidth = A.INK_W * 0.8;
+        g.stroke();
+        poly(g, [[0.4 * len, -0.62 * r], [0.52 * len, -0.5 * r], [0.5 * len, -0.38 * r]], col(W_HORN), false);
+        g.beginPath();
+        g.arc(0.93 * len, -0.15 * r, 0.06 * r, 0, Math.PI * 2);
+        g.fillStyle = col(W_DARK);
+        g.fill();
+        if (stage >= 1) { // the crown of ice
+          const n = stage === 2 ? 5 : 3;
+          for (let k = 0; k < n; k++) { const x = 0.12 * len + k * (0.6 * len) / n; tri(g, x - 0.06 * len, -0.95 * r, x + 0.06 * len, -0.95 * r, x, -0.95 * r - r * (stage === 2 ? 0.9 : 0.5) * (1 - 0.15 * (k % 2)), col(stage === 2 ? W_ICE : W_ICE_LT), A.INK_W * 0.7); }
+          if (stage === 2) poly(g, [[0.04 * len, -0.9 * r], [0.55 * len, -1.05 * r], [0.78 * len, -0.6 * r], [0.5 * len, -0.5 * r], [0.06 * len, -0.5 * r]], col(W_ICE), true, A.INK_W);
+        }
+      });
+    });
+  }
+  // The maw: centred on the mouth point, the axis along +x: the upper jaw and the lower jaw part in a V (state 0 shut, 1 half, 2 wide), the dark throat between, white fangs.
+  function wyrmMouthPic(R, state, look) {
+    return get(`wmouth|${Math.round(R)}|${state}|${look}`, () => {
+      const col = looks[look], th = [0.04, 0.38, 0.8][state], pad = INK_B * 1.5, J = 2.1 * R;
+      return bake(-1.2 * R - pad, -J * 1.05 - pad, J + 0.4 * R + pad, J * 1.05 + pad, (g) => {
+        const jaw = (sgn) => { // a wedge hinged at the origin, turned by sgn * th (-1: the upper jaw, 1: the lower)
+          g.save();
+          g.rotate(sgn * th);
+          const top = [[-0.5 * R, 0], [-0.5 * R, -0.5 * R], [J * 0.55, -0.42 * R], [J, -0.1 * R], [J, 0]];
+          poly(g, top.map(([x, y]) => [x, sgn * -y]), col(sgn > 0 ? W_BELLY : W_SCALE), true, INK_B);
+          for (let k = 0; k < 4; k++) { const x = (0.5 + k * 0.38) * R; tri(g, x - 0.1 * R, 0, x + 0.1 * R, 0, x, -sgn * 0.45 * R, col(W_FANG), A.INK_W * 0.6); } // fangs, pointing into the gap
+          g.restore();
+        };
+        if (th > 0.2) poly(g, [[-0.4 * R, 0], [J * 0.9, -Math.sin(th) * J * 0.9], [J * 0.9, Math.sin(th) * J * 0.9]], col(W_MAW), true, INK_B * 0.7); // the dark throat
+        jaw(-1);
+        jaw(1);
+      });
+    });
+  }
+  // The collar: the top of its straight part at the origin, the axis down +y, +x toward the ship (the pale belly side). stage by its ice.
+  function wyrmCollarPic(len, r, stage, look) {
+    return get(`wcollar|${Math.round(len)}|${Math.round(r)}|${stage}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5;
+      return bake(-r * 1.35 - pad, -r * 1.9 - pad, r * 1.35 + pad, len + r + pad, (g) => {
+        const cap = (x0, x1, y0, y1, fill, ink = true) => {
+          g.beginPath();
+          g.moveTo(x0, y1);
+          g.lineTo(x0, y0);
+          g.arc((x0 + x1) / 2, y0, (x1 - x0) / 2, Math.PI, 0);
+          g.lineTo(x1, y1);
+          g.closePath();
+          if (fill) {
+            g.fillStyle = fill;
+            g.fill();
+          }
+          if (ink) { g.lineWidth = INK_B; g.stroke(); }
+        };
+        cap(-r, r, 0, len + r * 0.4, col(W_SCALE));
+        g.save();
+        g.beginPath();
+        g.moveTo(-r, len + r);
+        g.lineTo(-r, 0);
+        g.arc(0, 0, r, Math.PI, 0);
+        g.lineTo(r, len + r);
+        g.closePath();
+        g.clip();
+        poly(g, [[r * 0.25, -r], [r * 1.2, -r], [r * 1.2, len + r], [r * 0.25, len + r]], col(W_BELLY), false); // the pale belly side, toward the ship
+        for (let k = 0; k < 5; k++) poly(g, [[-r, len * (0.12 + 0.2 * k)], [r, len * (0.12 + 0.2 * k) - r * 0.1], [r, len * (0.12 + 0.2 * k) + r * 0.05], [-r, len * (0.12 + 0.2 * k) + r * 0.15]], col(W_DARK), false); // plate bands
+        poly(g, [[-r * 0.8, -r * 0.8], [-r * 0.45, -r * 0.9], [-r * 0.4, len], [-r * 0.7, len]], hiColor(look), false);
+        if (stage >= 1) poly(g, [[-r, -r * 0.2], [r * 0.2, -r * 1.1], [r * 0.2, len * 0.55], [-r, len * 0.5]], col(stage === 2 ? W_ICE : W_ICE_LT), false); // the ice on its back
+        if (stage === 2) {
+          poly(g, [[-r * 0.9, -r * 0.1], [-r * 0.3, -r * 0.9], [-r * 0.25, len * 0.35], [-r * 0.85, len * 0.3]], col(W_ICE_LT), false);
+          g.beginPath();
+          g.moveTo(-r * 0.5, len * 0.1);
+          g.lineTo(-r * 0.2, len * 0.3);
+          g.lineTo(-r * 0.55, len * 0.5);
+          g.lineWidth = A.INK_W * 0.55;
+          g.stroke();
+        }
+        g.restore();
+        cap(-r, r, 0, len + r * 0.4, null, true);
+        if (stage >= 1) for (let k = 0; k < (stage === 2 ? 4 : 2); k++) tri(g, -r + k * 0.5 * r + 0.1 * r, -0.2 * r, -r + k * 0.5 * r + 0.55 * r, -0.2 * r, -r + k * 0.5 * r + 0.3 * r, -r * (stage === 2 ? 1.5 : 1.15) + (k % 2) * 0.2 * r, col(W_ICE_LT), A.INK_W * 0.7); // icicles on the crown
+      });
+    });
+  }
+  // The underbelly (the heart, phase 3): a soft pale plate where the ice has fallen from its flank, a pink spot at its middle.
+  function wyrmBellyPic(R, look) {
+    return get(`wbelly|${Math.round(R)}|${look}`, () => {
+      const col = looks[look], pad = INK_B * 1.5;
+      return bake(-1.2 * R - pad, -1.2 * R - pad, 1.2 * R + pad, 1.2 * R + pad, (g) => {
+        poly(g, [[0, -1.05 * R], [0.9 * R, -0.5 * R], [0.95 * R, 0.5 * R], [0, 1.05 * R], [-0.9 * R, 0.5 * R], [-0.95 * R, -0.5 * R]], col(W_BELLY), true, INK_B);
+        g.beginPath();
+        g.arc(0, 0, 0.5 * R, 0, Math.PI * 2);
+        g.fillStyle = col(W_SOFT);
+        g.fill();
+        g.lineWidth = A.INK_W * 0.8;
+        g.stroke();
+        poly(g, [[-0.25 * R, -0.25 * R], [0.05 * R, -0.35 * R], [0.1 * R, -0.1 * R]], hiColor(look), false);
+        for (const [x, y] of [[-0.7, -0.15], [0.7, -0.2], [-0.5, 0.6], [0.5, 0.65]]) tri(g, (x - 0.12) * R, y * R, (x + 0.12) * R, y * R, x * R, (y + 0.22) * R, col(W_DARK), A.INK_W * 0.5);
+      });
+    });
+  }
+  function drawWyrmLimb(p) {
+    const look = lookOf(p), n = p.segs.length;
+    for (let i = 0; i < n; i++) {
+      const s = p.segs[i];
+      if (!!s.behind !== behindPass) continue;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (Math.cos(s.ang) < 0) ctx.scale(1, -1); // (the light stays on top)
+      blit(wyrmSegPic(s, wyIce(p, i), look === 'lit' && p.iceFlash > 0 ? 'flash' : look));
+      ctx.restore();
+    }
+  }
+  function drawWyrm(body) {
+    const wy = body.wyrm, by = (id) => body.parts.find((q) => q.id === id);
+    if (!wy || !wy.shown) return;
+    const collar = by('collar'), limb = by('wyrm'), head = by('head'), mouth = by('mouth'), belly = by('belly');
+    const lk = (p) => (p.iceFlash > 0 && lookOf(p) === 'lit' ? 'flash' : lookOf(p));
+    if (collar && !collar.dead && collar.segs[0]) {
+      const s = collar.segs[0];
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.scale(body.f, 1);
+      blit(wyrmCollarPic(s.len, s.r, wyIce(collar, 0), lk(collar)));
+      ctx.restore();
+    }
+    if (belly && !belly.dead && !belly.hidden && belly.segs[0]) {
+      const s = belly.segs[0];
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.scale(body.f, 1);
+      blit(wyrmBellyPic(s.r, lookOf(belly)));
+      ctx.restore();
+    }
+    if (limb && !limb.dead) drawWyrmLimb(limb);
+    if (head && !head.dead && head.segs[0]) {
+      const s = head.segs[0];
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (Math.cos(s.ang) < 0) ctx.scale(1, -1);
+      blit(wyrmHeadPic(s.len, s.r, wyIce(head, 0), lk(head)));
+      ctx.restore();
+    }
+    if (mouth && !mouth.dead && mouth.segs[0]) {
+      const s = mouth.segs[0];
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.ang);
+      if (Math.cos(s.ang) < 0) ctx.scale(1, -1);
+      blit(wyrmMouthPic(s.r, mouth.openAmt < 0.25 ? 0 : mouth.openAmt < 0.75 ? 1 : 2, lookOf(mouth)));
+      ctx.restore();
+    }
+  }
+
   // ---- drawing ------------------------------------------------------------------------------------------------------------------------------------------------
   const lookOf = (p) => (p.hit > 0 ? 'flash' : p.lit ? 'lit' : 'dim');
 
@@ -1075,6 +1317,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
   function drawLimb(p) {
     if (p.art === 'thunderbird') return drawBirdLimb(p); // (C.6b: the Thunderbird's feathers, also a plucked wing tumbling)
     if (p.art === 'titan') return drawTitanLimb(p); // (C.6c: the Titan's stone arm, also an arm shelled off tumbling)
+    if (p.id === 'wyrm') return drawWyrmLimb(p); // (C.6d: the Rime Wyrm's body, iced; also its coil passing behind the ship)
     if (p.kind === 'wing' || p.kind === 'neck' || p.kind === 'tail') return drawDrakeLimb(p); // (the Cinder Drake's limbs, also its torn-off wing tumbling)
     const look = lookOf(p), n = p.segs.length;
     for (let i = 0; i < n; i++) {
@@ -1131,6 +1374,7 @@ export function createCreatureArt({ ctx, makeCanvas = defaultCanvas } = {}) {
     if (body.kind === 'drake') return drawDrake(body); // (C.6a)
     if (body.kind === 'thunderbird') return drawBird(body); // (C.6b)
     if (body.kind === 'titan') return drawTitan(body); // (C.6c)
+    if (body.kind === 'wyrm') return drawWyrm(body); // (C.6d)
     for (const p of body.parts) if (p.limb && !p.dead && p.layer === 'back') drawLimb(p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind === 'mantle') drawRigid(body, p);
     for (const p of body.parts) if (!p.limb && !p.dead && !p.hidden && p.kind !== 'mantle') drawRigid(body, p);

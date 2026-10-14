@@ -37,7 +37,7 @@ function makeMapOf(kind, level, rand, lengthMul = 1, layout, creature = null, va
       if (map.startDist < 1e9) return map;
       continue;
     }
-    map = kind === 'lair' ? (creature === 'titan' ? buildTitanLairMap(level, rand, lengthMul, layout) : creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout, slack);
+    map = kind === 'lair' ? (creature === 'wyrm' ? buildWyrmLairMap(level, rand, lengthMul, layout) : creature === 'titan' ? buildTitanLairMap(level, rand, lengthMul, layout) : creature === 'thunderbird' ? buildStormLairMap(level, rand, lengthMul, layout) : creature === 'drake' ? buildDrakeLairMap(level, rand, lengthMul, layout) : buildLairMap(level, rand, lengthMul, layout)) : kind === 'open' ? buildOpenMap(Math.max(1, level - Math.floor(tries / config.MAPS.EASE_EVERY)), rand, lengthMul, layout) : buildMap(kind, level, rand, lengthMul, layout, slack);
     if (map.startDist >= 1e9) continue;
     if (map.lair) return map; // (no outposts to reach: the lair's middle is the goal)
     if (map.open) {
@@ -349,6 +349,33 @@ function buildStormLairMap(level, rand, lengthMul = 1, layout) {
     spires.push({ x: (ci + 0.5) * C, w: TL.SPIRE_W, top: topRow * C });
   }
   const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'thunderbird', spires };
+  finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
+  return map;
+}
+
+// THE RIME WYRM'S LAIR (config.CREATURES.WYRM.LAIR, C.6d): open sky in Frost Peaks, the launch on row LAUNCH_ROW, an icy floor FLOOR_BELOW px under it and ICE CLIFFS standing on it: steep-sided blocks CLIFF_W px wide whose
+// tops lie CLIFF_TOP px under the launch height, at CLIFFS px from the lair's middle (the Wyrm lies buried under them and erupts out of the top of one, 1900 to 4300 px to the side of the ship). map.cliffs lists them:
+// { x (the middle), top, w } in map pixels. Nothing else: no outposts, no guns, no spires.
+function buildWyrmLairMap(level, rand, lengthMul = 1, layout) {
+  const M = config.MAPS, LR = config.CREATURES.LAIR, WL = config.CREATURES.WYRM.LAIR, C = M.CELL;
+  const startI = 12, goalI = startI + Math.round((LR.RUN * lengthMul) / C);
+  const W = goalI + Math.round(LR.BEYOND / C) + 20, H = M.OPEN_HEIGHT;
+  const sj = WL.LAUNCH_ROW, floorRow = Math.min(H - 3, sj + Math.round(WL.FLOOR_BELOW / C)), topRow = Math.min(floorRow - 3, sj + Math.round(WL.CLIFF_TOP / C));
+  const solid = new Uint8Array(W * H);
+  const idx = (i, j) => j * W + i;
+  for (let i = 0; i < W; i++) for (let j = floorRow; j < H; j++) solid[idx(i, j)] = 1;
+  void rand;
+  const cliffs = [];
+  const half = Math.max(2, Math.round(WL.CLIFF_W / 2 / C));
+  for (const dx of WL.CLIFFS) {
+    const ci = Math.max(startI + 20, Math.min(W - 14, goalI + Math.round((dx * lengthMul) / C)));
+    for (let i = ci - half; i <= ci + half; i++) {
+      if (i < 0 || i >= W) continue;
+      for (let j = topRow; j < floorRow; j++) solid[idx(i, j)] = 1;
+    }
+    cliffs.push({ x: (ci + 0.5) * C, top: topRow * C, w: (2 * half + 1) * C });
+  }
+  const map = { kind: 'lair', level, CELL: C, W, H, solid, turrets: [], outposts: [], open: true, lair: true, creature: 'wyrm', cliffs, floorY: floorRow * C };
   finishMap(map, { i: startI, j: sj }, { i: goalI, j: sj }, layout);
   return map;
 }

@@ -1625,7 +1625,7 @@ export function createShipSim(world, ship, W) {
                 if (!structure.on()) state.ship.hull = Math.min(100, state.ship.hull + 3); // (STRUCTURE.md: planking stops the drain on its segment, it gives nothing back)
               } else if (act.type === 'defuse') state.bombs.splice(state.bombs.indexOf(object), 1);
               else if (act.type === 'gas') { state.gasHoles.splice(state.gasHoles.indexOf(object), 1); structure.patchBag(object.bag | 0); } // (STRUCTURE.md: a patch mends the canvas a little)
-              else if (act.type === 'ice') env.chip(object);
+              else if (act.type === 'ice') { if (object.wyrm && W.moment && world.creature && world.creature.kind === 'wyrm' && object.gun) W.moment('creature-thaw', { who: [player], where: null, data: { creature: world.creature.name, gun: object.gun } }); env.chip(object); } // (C.6d: a gun the Rime Wyrm froze, hammered clear: the Ship's Book)
               else if (act.type === 'unclog') env.deep.unclog(object);
               else if (act.type === 'oxygen') env.deep.refill();
               else if (act.type === 'sabotage') (isHostile(player) ? sabotageBoiler(player) : gunship.plant(player));

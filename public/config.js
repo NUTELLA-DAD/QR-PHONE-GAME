@@ -33,7 +33,7 @@ export const config = {
     SHIP_SCREEN_FRACTION: 0.4, SHIP_SCREEN_HEIGHT_FRACTION: 0.62, // the ship (incl. its long gasbag) takes at most this much of the screen width, and this much of its height (owner, 2026-10-11: zoomed out from 0.53 / full height - it felt tight on the airship)
     ENEMY_MARGIN: 260, // empty sky kept around the enemy plane (world pixels)
     MAX_ZOOM_OUT: 1.8, // never zoom out more than this beyond the normal view
-    CREATURE: { MAX_ZOOM_OUT: 2.4, DRAKE_MAX_ZOOM_OUT: 3.4, TITAN_MAX_ZOOM_OUT: 4.4, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2; the Cinder Drake flies about the ship in loops 8000 px across: DRAKE_MAX_ZOOM_OUT; the Island Titan stands 5000 px tall below her: TITAN_MAX_ZOOM_OUT), and its living parts are kept in view with this much margin (world pixels)
+    CREATURE: { MAX_ZOOM_OUT: 2.4, DRAKE_MAX_ZOOM_OUT: 3.4, TITAN_MAX_ZOOM_OUT: 4.4, WYRM_MAX_ZOOM_OUT: 4.4, MARGIN: 200 }, // while a giant creature is alive the cap is this (BOSSES.md 3.2; the Cinder Drake flies about the ship in loops 8000 px across: DRAKE_MAX_ZOOM_OUT; the Island Titan stands 5000 px tall below her: TITAN_MAX_ZOOM_OUT; the Rime Wyrm's body reaches 7000 px out of its cliff: WYRM_MAX_ZOOM_OUT), and its living parts are kept in view with this much margin (world pixels)
     SMOOTHING: 1.6, // how quickly the camera pans to catch up (higher = snappier)
     ZOOM_SMOOTHING: 0.6, // how quickly it zooms (low = calm, no pumping)
     PULL_SMOOTHING: 0.22, // ...and this slowly in the pull-back after a part was built at the sky-dock (YARD.PULL_TIME): the "she grew!" moment
@@ -2505,6 +2505,7 @@ export const config = {
     // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
     WEIGHT: {
       'creature-win': 10, 'creature-boulder': 3, 'titan-island': 6, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'away-banner': 8, 'away-charge': 7, 'away-prisoners': 6, 'away-ballista': 5, 'away-beacon': 4, 'away-winch': 4, 'away-ko': 3, 'treasure-stowed': 5, 'treasure-heist': 8, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
+      'creature-chip': 3, 'creature-thaw': 3, // C.6d: the Rime Wyrm - a hammer chipped the ice off its coil, or thawed a gun it had frozen
       'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'nemesis-down': 10, 'nemesis-won': 9, 'nemesis-escape': 6, 'nemesis-scar': 5, 'nemesis-met': 4, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'scrap-patch': 7, 'scrap-built': 4, 'frame-built': 6, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra
@@ -2740,7 +2741,7 @@ export const config = {
     // voyage (the long ones, LONG_STOPS columns or more, get the bigger number); never the first stop, never two in a row; +DANGER skulls and x REWARD_MUL reward.
     LAIR: {
       COUNT: { short: 1, long: 2 }, LONG_STOPS: 7, DANGER: 1, REWARD_MUL: 2,
-      BY_ENV: { sea: 'kraken', ember: 'drake', storm: 'thunderbird' }, // which creature lives in which sky (a lair stop is a Sunken Sea stop with a Kraken, an Ember Forge stop with a Drake or a Storm Front stop with a Thunderbird: voyage.js markLairs)
+      BY_ENV: { sea: 'kraken', ember: 'drake', storm: 'thunderbird', frost: 'wyrm' }, // which creature lives in which sky (a lair stop is a Sunken Sea stop with a Kraken, an Ember Forge stop with a Drake, a Storm Front stop with a Thunderbird or a Frost Peaks stop with the Rime Wyrm: voyage.js markLairs)
       RUN: 16000, BEYOND: 9000, SEA_BELOW: 2000, // px from the launch to the lair's middle (where the route ends and she hovers); more map beyond it; the sea lies this far under the launch height
       SPIRES: [[-35, 3], [0, 2], [35, 4]], SPIRE_W: 2600, SPIRE_UP: [450, 900], // rock spires standing in the sea: [cells from the lair's middle (the one at 0 stands right under her when she hovers there), +- jitter in cells], their width at the sea line and how far they stand above it (px)
       ICON: '\u{1F419}', LABEL: 'LAIR', NAME: "The Kraken's Lair", KIND: 'Kraken lair', // the route map's creature icon (octopus) and label
@@ -2951,6 +2952,68 @@ export const config = {
       // The Titan's lair is an early Sky Isles stop: the SECOND stop flown of a voyage (the column after the first; COLUMN = how many columns after it, 1 = the next) when the route has MIN_STOPS stops or more, guaranteed, on one of that column's Sky Isles stops,
       // +DANGER skulls and x REWARD_MUL reward. The map (maps.js buildTitanLairMap): open sky, a flat plain FLOOR_BELOW px under the launch height (launch on row LAUNCH_ROW), nothing else.
       LAIR: { ICON: '\u{1F5FF}', LABEL: 'TITAN', NAME: "The Island Titan's Lair", KIND: 'Titan lair', LAUNCH_ROW: 18, FLOOR_BELOW: 5800, DANGER: 0, REWARD_MUL: 1.5, COLUMN: 1, MIN_STOPS: 5, ENABLED: true },
+    },
+    // ---- THE RIME WYRM (C.6d, BOSSES.md 2.4): the Frost Peaks' burrower, a serpent about 7000 px long that erupts out of an ice cliff. creatures/wyrm.js = the body, creatureWyrm.js = the fight. Its cycle: it lies BURIED (untouchable),
+    // CRACKS appear on a cliff face (CRACK s: the telegraph, a banner, a buzz on every phone), it ERUPTS and COILS the hull (creatureGrip.js with the Wyrm's own numbers, COIL: it stops the ship) for up to COIL.TIME s, lets go, GAPES its
+    // maw for bombs (MOUTH) and burrows again. Its body wears ICE ARMOUR (ICE): shells bounce off an iced segment until a hammer chips the ice (crew beside a coil segment), flame or the sun melts it; a bare segment takes full damage. Its
+    // FROST BREATH (BREATH) ices the guns (state.icing crusts at lvl 1: jammed until hammered off or thawed by flame). Phases: 1 'IT ERUPTS', 2 'FROST BREATH' (below TWO_HP: more guns iced), 3 'EXHAUSTED' (below THREE_HP: it
+    // stays out, the underbelly is open to boarders, and a harpoon can haul its head into the SUN). Ways to win (cr.stats.win): 'shell' (chip the ice, shell it down), 'mouth' (FED bombs in the gaping maw), 'tow' (haul the head
+    // into the shaft of sun until the pool melts), 'board' (strike the underbelly), 'hp' (the pool).
+    WYRM: {
+      NAME: 'THE RIME WYRM', ENV: 'frost',
+      HP: 900, // the health pool (the slow, safe way to win)
+      HP_MUL: { tentacle: 1, mantle: 1, head: 1, mouth: 1, heart: 1, pool: 1 }, // tuning knobs on the data's hp (like HURT.PART_HP_MUL for the Kraken); the body is kind 'tentacle'
+      POOL: { tentacle: 1, mantle: 0.5, head: 1.2, mouth: 2, heart: 3 }, // share of a blow that also comes off the pool (a shell on a bare segment is most of what drains it)
+      // The body (px, in the Wyrm's own frame: facing +x toward the ship, y down; the origin is the cliff top it comes out of). The COLLAR is the thick neck standing out of the rock (a capsule from AT straight down, LEN long: a
+      // landing strip for boarders); the LIMB is the body proper, SEGS rigid segments from the collar's top to the head (LEN root -> tip, R radius root -> tip; ARCH how far it bows upward); the HEAD rides its tip, the MOUTH
+      // the head's snout, and the BELLY (the heart: hidden until phase 3) is the soft patch on the collar's flank toward the ship.
+      BODY: {
+        COLLAR: { AT: [0, -1400], LEN: 1400, R: 520, HP: 500 },
+        LIMB: { SEGS: 12, LEN: [640, 520], R: [230, 120], HP: 700, AT: [60, -1400], ARCH: 0.3 },
+        HEAD: { LEN: 420, R: 300, HP: 450 },
+        MOUTH: { R: 240, HP: 220 },
+        BELLY: { AT: [470, -750], R: 230, HP: 260 },
+      },
+      // ICE ARMOUR: every segment of the limb, the head and the collar has ICE hit points of frost (x COLLAR_MUL / HEAD_MUL for those). A shell, mortar or coil bolt that meets an iced segment BOUNCES (a ping, no damage, but it wears SHELL_CHIP
+      // off the ice; a pop at most every BOUNCE_EVERY s); a bomb cracks BOMB_CHIP of the ice; flame melts it (FLAME_MUL ice per point of flame damage); a hammer CHIPS a segment bare (hold Action CHIP_TIME s, or BLOWS ATTACK blows) for a crewman
+      // within REACH px of it (and cracks SPREAD of the ice off the segments either side of it); a shell on a BARE segment does BARE_MUL times its damage, and the blow that chips a segment bare bites the scale beneath for CHIP_DMG; an OPEN STEAM VENT melts the ice on every segment within VENT_REACH px of it at VENT_MELT a second (it costs steam: the vent bleeds the line); the sun melts it too (SUN.ICE_RATE). Bare ice grows back REGROW per second after REGROW_AFTER s, and the whole body freezes over again when it burrows (a new eruption starts iced). In phase 3
+      // (nothing to burrow into) the armour is P3_MUL as thick. JOBS = how many chip spots the phones' arrows and the bots work at once.
+      ICE: { HP: 90, COLLAR_MUL: 2, HEAD_MUL: 1.5, SHELL_CHIP: 1.5, BOMB_CHIP: 0.4, SPREAD: 0.5, BARE_MUL: 2.5, CHIP_DMG: 24, VENT_REACH: 480, VENT_MELT: 22, FLAME_MUL: 1.8, CHIP_TIME: 2.6, BLOWS: 3, REACH: 420, REGROW_AFTER: 12, REGROW: 6, P3_MUL: 0.6, BOUNCE_EVERY: 0.6, JOBS: 4 },
+      // THE CYCLE. It first erupts FIRST s after the lair's creature spawns (waiting until a cliff is in range of her), then lies buried BURROW s (x the phase x difficulty) between eruptions. CRACK s of cracks, then the
+      // eruption: RISE s for the collar to come up (stepped). A miss (nothing in reach) flails MISS_FOR s. RETREAT s to burrow. In phase 3 it stays out: P3_COIL_EVERY / P3_GAPE_EVERY s between coils and gapes.
+      CYCLE: { FIRST: 6, CRACK: 2, RISE: 0.5, RETREAT: 0.9, BURROW: [6, 9], BURROW_PHASE_MUL: { 1: 1, 2: 0.85, 3: 1 }, MISS_FOR: 3, P3_FIRST: 4, P3_COIL_EVERY: [16, 22], P3_GAPE_EVERY: [12, 16], BREATHER: 3.5, BANNER: 4.5, RISE_DEEP: 2000 },
+      // Which cliff it comes out of: the ice cliffs of the lair (maps.js buildWyrmLairMap) whose top is MIN_DX..MAX_DX px sideways from her middle, the one nearest PREFER_DX (a cliff behind her counts BEHIND_PENALTY px further off).
+      CLIFF: { MIN_DX: 1900, MAX_DX: 4300, PREFER_DX: 3200, BEHIND_PENALTY: 1200 },
+      // THE COIL (its grip): the Kraken's grab with the Wyrm's own numbers (merged over CREATURES.GRIP). It reaches REACH_SHARE of the limb's length, WINDUP s of warning (a red ring on the deck end), then the outer WRAP.SEGS
+      // segments wind round her hull. It holds TIME s (x difficulty) and then RIPS a section off; a sword at the grip point hacks it free (SWORD_TIME s / BLOWS blows), shells on the limb take RELEASE_DMG of its hp to free her,
+      // flame does not free her (it melts the ice instead). ANCHOR: it STOPS her: her speed is braked at BRAKE px/s^2 toward a drift of DRIFT px/s toward the cliff. The hack arrow on the phones only shows in the last HACK_AT s
+      // (or when no ice is left to chip): before that the crew is meant to chip and shoot.
+      COIL: {
+        TIME: 20, TIME_BY_DIFF: { easy: 1.4, normal: 1, veteran: 0.9, hard: 0.8 }, WINDUP: 1.3, SEIZE_MAX: 2.5, REACH_SHARE: 0.58, SEP: 180,
+        SIDEWAYS: 8, BASE_ACC: 90, K: 0, MAX_ACC: 140, MAX_TOTAL: 140, SLACK: 0.75, RAMP: 0.8, TORQUE: 0.25, SHAKE: 0.2, SHOVE_POWER: 2,
+        COOLDOWN: 3, RECOIL: 1.2, RELEASE_DMG: 0.5, SWORD_TIME: 1.8, HAMMER_TIME: 3.2, BLOWS: 3,
+        WRAP: { SEGS: 5, TURNS: 1.5, START_TURNS: 0.4, KEYS: 8, LIFT: 70, UNDER: 35, MIN_RY: 150, PITCH: 420, N: 28 },
+        RIP: { REACH: 230, LEN: 260, HULL: 70 },
+        ANCHOR: { BRAKE: 800, DRIFT: 40 }, HACK_AT: 12,
+      },
+      // THE GAPE: after the coil lets go (and every P3_GAPE_EVERY s in phase 3) the head rears, the maw opens FOR s and the head swims to put it under her bomb bay (LURE_SPEED px/s, BELOW px under her middle); a bomb or crate
+      // inside the FUNNEL (W px each side of the maw, UP px above it) falls in. FED bombs win (a crate is half); it gulps GULP s after a bomb.
+      MOUTH: { FOR: 7, FED: 6, GULP: 3, FUNNEL_W: 420, FUNNEL_UP: 2300, LURE_SPEED: 1000, LURE_LEAD: 1.1, BELOW: 1200, REOPEN: 0.4, SLACK: 1.5, WIND: 1 },
+      // FROST BREATH: the throat glows WIND s (a banner, a buzz for every gunner, a roar), then the breath freezes the GUNS nearest the head: GUNS[phase] of them go to ice level LVL (jammed from JAM_AT 0.8; hammer them off or
+      // thaw them with flame). It breathes FIRST s after it seizes (or wakes in phase 3), then every EVERY[phase] s. TIME = how long the cone is drawn; LEN its length.
+      BREATH: { WIND: 1.7, TIME: 0.9, LEN: 1900, FIRST: 5, GUNS: { 1: 1, 2: 2, 3: 3 }, EVERY: { 1: 17, 2: 12, 3: 9 }, LVL: 1 },
+      // THE SUN: in phase 3 the harpoon hauls its head (cr.tvx, SHARE of the pull, at most MAX px/s) toward a shaft of sun DIST px from the cliff on the ship's side, W px wide. Its head rests STATION_DX px out of the cliff
+      // (STATION_DY px from its root) and returns there at RETURN px/s when not held. In the shaft the pool melts POOL_RATE hp/s (x HOOKED_MUL while a line holds it) and the ice ICE_RATE: a win ('tow').
+      SUN: { DIST: 5200, W: 1300, POOL_RATE: 60, HOOKED_MUL: 2.5, ICE_RATE: 160, SHARE: 0.55, MAX: 260, STATION_DX: 2100, STATION_DY: -500, RETURN: 150 },
+      BOARD: { HEART_TIME: 6, HEART_DMG: 200 }, // the underbelly (phase 3): hold Action with a sword HEART_TIME s, HEART_DMG off the belly (and POOL.heart x that off the pool)
+      PHASE: { TWO_HP: 0.66, THREE_HP: 0.33 },
+      SPAWN: { SINK: 8, SINK_DEEP: 2600 }, // s it takes to collapse into the cliff when dead, px it sinks
+      WIN_TEXT: { shell: 'ICE BROKEN, SHELLED DOWN!', mouth: 'BOMBED IN THE MAW!', tow: 'MELTED IN THE SUN!', board: 'UNDERBELLY STRUCK!', hp: 'BROUGHT DOWN!' },
+      DEATH_TEXT: ' COLLAPSES INTO ITS CLIFF!',
+      REWARD: { HULL: 35, GAS: 30, TROPHY: null }, // salvage x3, the hull patched and every bag topped up; no trophy part card (yet)
+      // The Wyrm's lair map (maps.js buildWyrmLairMap): open sky in Frost Peaks, the launch on row LAUNCH_ROW, a floor FLOOR_BELOW px under it and ICE CLIFFS standing on it at CLIFFS px from the lair's middle (CLIFF_W px wide at
+      // the top, their tops CLIFF_TOP px under the launch height).
+      LAIR: { ICON: '\u{1F409}', LABEL: 'LAIR', NAME: "The Rime Wyrm's Lair", KIND: 'Wyrm lair', LAUNCH_ROW: 20, FLOOR_BELOW: 5400, CLIFFS: [-7600, -3800, 3800, 7600], CLIFF_W: 2600, CLIFF_TOP: 2300 },
     },
   },
   // Effects in the storybook gouache style (modules/host/vfxArt.js): flat colours, ink from INK + OUTLINE, no gradients.

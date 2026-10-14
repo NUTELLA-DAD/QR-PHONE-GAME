@@ -64,6 +64,8 @@ function buildPart(body, pd, index) {
     p.bend = (pd.bend || 0) * (0.8 + rng() * 0.4); // which way it arches (the sign) and how much; fixed for the limb
     p.side = p.bend >= 0 ? -1 : 1; // the sucker side: the inside of the arch
     p.swayMul = pd.swayMul ?? 1; // C.6c (the Titan's stone arms): idle sway is this share of the usual
+    p.pullBack = pd.pullBack ?? C.PULL_BACK; // C.6d (the Rime Wyrm, a limb 7000 px long): how far it draws back before a strike and how high it rears, as shares of its reach
+    p.pullLift = pd.pullLift ?? C.PULL_LIFT;
     p.ctl = { mode: pd.drive ? 'drive' : 'idle', keys: Math.floor(rng() * C.SWAY.EVERY_KEYS), cmd: null, rest: pd.rest, sway: [0, 0], pull: null, target: null, grab: false, fast: false, hold: 0 };
     if (pd.drive) p.rel = { x: pd.rest[0], y: pd.rest[1] }; // a driven limb: its goal is this vector (fractions of its reach, the body's own frame), set on keys by the creature's own code
     p.px = new Float64Array(p.segs.length + 1);
@@ -358,7 +360,7 @@ function tickLimb(body, p) {
     const d = Math.hypot(dx, dy) || 1;
     c.target = { x: cmd.x, y: cmd.y };
     c.grab = cmd.kind === 'grip';
-    c.pull = { x: root.x - (dx / d) * C.PULL_BACK * p.reach, y: root.y - (dy / d) * C.PULL_BACK * p.reach - C.PULL_LIFT * p.reach };
+    c.pull = { x: root.x - (dx / d) * p.pullBack * p.reach, y: root.y - (dy / d) * p.pullBack * p.reach - p.pullLift * p.reach };
     c.mode = 'wind';
     c.keys = 0;
     c.fast = false;

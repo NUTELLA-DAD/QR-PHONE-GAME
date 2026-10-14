@@ -298,7 +298,7 @@ export const stopById = (voyage, id) => {
 };
 
 // The look and words of a lair by its creature ('kraken' | 'drake' | 'thunderbird'): { ICON, LABEL, NAME, KIND }.
-export const lairOf = (creature) => (creature === 'titan' ? config.CREATURES.TITAN.LAIR : creature === 'thunderbird' ? config.CREATURES.THUNDERBIRD.LAIR : creature === 'drake' ? config.CREATURES.DRAKE.LAIR : config.CREATURES.LAIR);
+export const lairOf = (creature) => (creature === 'wyrm' ? config.CREATURES.WYRM.LAIR : creature === 'titan' ? config.CREATURES.TITAN.LAIR : creature === 'thunderbird' ? config.CREATURES.THUNDERBIRD.LAIR : creature === 'drake' ? config.CREATURES.DRAKE.LAIR : config.CREATURES.LAIR);
 export const stopName = (s) => (s.flagship ? 'The Flagship' : s.harbour ? 'The Harbour' : s.lair ? lairOf(s.creature).NAME : envInfo(s.env).name);
 
 // Stop numbers run on across the voyages of a campaign: run.base = stops finished before this voyage's harbour.

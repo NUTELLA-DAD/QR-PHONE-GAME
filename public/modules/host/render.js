@@ -50,6 +50,8 @@ import { drakePhaseName } from './creatures/drake.js'; // C.6a: the Cinder Drake
 import { birdPhaseName } from './creatures/thunderbird.js'; // C.6b: the Thunderbird's
 import { titanPhaseName } from './creatures/titan.js'; // C.6c: the Island Titan's
 import { crystalOf } from './creatureIsland.js'; // C.6c: the crystal on its island (the mark on the TV)
+import { wyrmPhaseName } from './creatures/wyrm.js'; // C.6d: the Rime Wyrm's
+import { wyrmChipJobs } from './creatureWyrm.js'; // C.6d: the ice a hammer can reach (the rings on the TV)
 import { crewHeads } from './crewscale.js';
 import { bagNearX, bagEdgeY } from './shipBuild.js';
 import { matesWanted } from './mates.js';
@@ -662,9 +664,9 @@ export function createRenderer({ ctx, state: world, canvas }) {
   let creatureArt = null; // (made when the first creature appears)
   // The wrapped coils of a gripping tentacle that pass BEHIND the ship: drawn before the ships (the rest of the creature, and the coils in front, come after them in drawEffects).
   // C.3: while the beak gapes under her bomb bay (cr.mouthWin) the whole body is under her, so all of it is drawn behind her hull and she flies over its head.
-  const wholeBehind = (cr) => !!cr.mouthWin && cr.mode === 'idle' && cr.kind !== 'drake' && cr.kind !== 'titan'; // (the Titan always stands in front of its glows: its arms reach the ship)
+  const wholeBehind = (cr) => !!cr.mouthWin && cr.mode === 'idle' && cr.kind !== 'drake' && cr.kind !== 'titan' && cr.kind !== 'wyrm'; // (the Wyrm's head is always in front: it has her coiled) (the Titan always stands in front of its glows: its arms reach the ship)
   // The line a creature is clipped at: the sea for the Kraken (it rises out of the water), the lava for a Drake (it falls into it when it dies).
-  const creatureClipY = () => (world.creature && world.creature.kind === 'titan' ? world.creature.titan.floorY - config.CREATURES.SINK_CLIP : envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : world.creature && world.creature.kind === 'drake' && envIdOf(world) === 'ember' && world.env && Number.isFinite(world.env.lavaY) ? world.env.lavaY : null);
+  const creatureClipY = () => (world.creature && world.creature.kind === 'wyrm' ? world.creature.base.y + 30 - config.CREATURES.SINK_CLIP : world.creature && world.creature.kind === 'titan' ? world.creature.titan.floorY - config.CREATURES.SINK_CLIP : envIdOf(world) === 'sea' && world.env && Number.isFinite(world.env.seaY) ? world.env.seaY : world.creature && world.creature.kind === 'drake' && envIdOf(world) === 'ember' && world.env && Number.isFinite(world.env.lavaY) ? world.env.lavaY : null);
   const drawCreatureBehind = (view) => {
     const cr = world.creature;
     if (cr && wholeBehind(cr)) return drawCreatureBody(view, cr);
@@ -950,12 +952,165 @@ export function createRenderer({ ctx, state: world, canvas }) {
       if (p.fly && p.on && p.on.away && p.on.deck && p.on.deck.island && p.on.mode !== 'home' && p.connected !== false) drawPlayer(p, time);
     }
   };
+  // C.6d: the Rime Wyrm's marks: the cracks spreading across the cliff it will erupt from (the telegraph), the shaft of sun it can be hauled into (phase 3), the frost breath (a glowing ring at the throat, then a pale cone),
+  // the gold funnel over the open maw, and a dashed ring on every segment of ice a hammer can reach (it fills green as it is chipped).
+  const drawWyrmFx = (cr, view, time) => {
+    const W = config.CREATURES.WYRM, wy = cr.wyrm, key = Math.floor(cr.age * 8);
+    void view; void time;
+    ctx.lineJoin = 'round';
+    if (wy.sun && !cr.dying) { // a column of sunlight on the ship's side of the cliff
+      const sx = wy.sun.x, w = wy.sun.w, top = cr.base.y - 9000, bot = (world.course && world.course.map && world.course.map.floorY) || cr.base.y + 3200;
+      ctx.fillStyle = 'rgba(255,226,122,0.15)';
+      ctx.fillRect(sx - w / 2, top, w, bot - top);
+      ctx.fillStyle = 'rgba(255,240,170,0.18)';
+      ctx.fillRect(sx - w * 0.26, top, w * 0.52, bot - top);
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 12;
+      ctx.setLineDash([70, 50]);
+      ctx.beginPath();
+      ctx.moveTo(sx - w / 2, top);
+      ctx.lineTo(sx - w / 2, bot);
+      ctx.moveTo(sx + w / 2, top);
+      ctx.lineTo(sx + w / 2, bot);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (let k = 0; k < 6; k++) { // glints drifting down the beam, a step at a time
+        const gy = cr.base.y - 5200 + (((k * 1300 + key * 260) % 7800)), gx = sx + (((k * 53) % 100) / 100 - 0.5) * w * 0.7;
+        ctx.fillStyle = '#fff6c8';
+        ctx.fillRect(gx - 12, gy - 12, 24, 24);
+      }
+      if (wy.inSun) { ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(sx - w / 2, cr.base.y - 2400, w, 2400); }
+    }
+    if (wy.crack) { // the cliff cracks: the lines spread out from where the Wyrm will come, a step at a time
+      const c = wy.crack, u = Math.min(1, Math.floor((c.t / c.T) * 8) / 8), cx = c.x, cy = c.y + 260;
+      ctx.fillStyle = 'rgba(30,40,60,' + (0.35 + 0.4 * u).toFixed(2) + ')';
+      ctx.beginPath();
+      ctx.ellipse(cx, c.y + 40, 160 + 520 * u, 60 + 140 * u, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const n = 5 + Math.floor(u * 9);
+      ctx.lineCap = 'round';
+      for (let k = 0; k < n; k++) {
+        const h = ((k * 37 + c.seed * 11) % 100) / 100, a = Math.PI * (0.05 + 0.9 * ((k * 0.381966) % 1)), len = (260 + 1500 * h) * (0.25 + 0.75 * u);
+        const pts = [[cx, cy]];
+        let px = cx, py = cy;
+        for (let j = 1; j <= 4; j++) { const jit = (((k * 13 + j * 29 + c.seed) % 21) - 10) / 10; px += Math.cos(a + jit * 0.5) * len / 4; py += Math.sin(a + jit * 0.5) * len / 4 * 0.9; pts.push([px, Math.min(py, c.y + 2300)]); }
+        for (const [col, wd] of [[config.INK, 22], ['#e6f4ff', 9]]) {
+          ctx.strokeStyle = col;
+          ctx.lineWidth = wd;
+          ctx.beginPath();
+          pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+          ctx.stroke();
+        }
+      }
+      for (let k = 0; k < 4; k++) { // ice chips flying off the top
+        const fx = cx + (((k * 71 + key * 37) % 100) / 100 - 0.5) * c.w * 0.5, fy = c.y - 40 - (((k * 53 + key * 29) % 100) / 100) * 500 * u;
+        ctx.fillStyle = '#e6f4ff';
+        ctx.fillRect(fx - 16, fy - 16, 32, 32);
+      }
+      ctx.strokeStyle = '#ff4d4d';
+      ctx.lineWidth = 16;
+      ctx.setLineDash([60, 40]);
+      ctx.beginPath();
+      ctx.ellipse(cx, c.y + 40, 700 + 80 * (key % 2), 180, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const br = wy.breath, mouth = cr.parts.find((p) => p.kind === 'mouth');
+    if (br && mouth && mouth.segs[0] && !cr.dying) {
+      if (br.sub === 'wind') { // the throat glows
+        const m = mouth.segs[0];
+        ink();
+        ctx.lineWidth = 26;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, 260 + 50 * (key % 2), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = '#bfe6ff';
+        ctx.lineWidth = 14;
+        ctx.stroke();
+      } else if (br.x !== undefined) { // the cone
+        for (const [k, col] of [[1, '#a8dcf5'], [0.7, '#d9f1ff'], [0.4, '#ffffff']]) {
+          ctx.beginPath();
+          ctx.moveTo(br.x, br.y);
+          const n = 6, half = 0.24;
+          for (let i = 0; i <= n; i++) {
+            const a = br.ang - half * k + (2 * half * k * i) / n, r = br.len * k * ((i + key) % 2 ? 0.82 : 1);
+            ctx.lineTo(br.x + Math.cos(a) * r, br.y + Math.sin(a) * r);
+          }
+          ctx.closePath();
+          ctx.fillStyle = col;
+          ctx.fill();
+          if (k === 1) { ink(); ctx.lineWidth = 12; ctx.stroke(); }
+        }
+      }
+    }
+    if (mouth && mouth.segs[0] && (cr.mouthWin || (wy.gape && wy.sub === 'gape')) && !cr.dying) { // the funnel above the maw
+      const m = mouth.segs[0], M = W.MOUTH, open = !!cr.mouthWin;
+      ctx.fillStyle = open ? 'rgba(255,210,63,0.16)' : 'rgba(255,210,63,0.07)';
+      ctx.fillRect(m.x - M.FUNNEL_W, m.y - M.FUNNEL_UP, M.FUNNEL_W * 2, M.FUNNEL_UP);
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 12;
+      ctx.setLineDash([60, 40]);
+      ctx.beginPath();
+      ctx.moveTo(m.x - M.FUNNEL_W, m.y - M.FUNNEL_UP);
+      ctx.lineTo(m.x - M.FUNNEL_W, m.y);
+      ctx.moveTo(m.x + M.FUNNEL_W, m.y - M.FUNNEL_UP);
+      ctx.lineTo(m.x + M.FUNNEL_W, m.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (open) for (let k = 0; k < 3; k++) {
+        const cy = m.y - 260 - k * 420 + (Math.floor(cr.age * 4) % 2) * 80;
+        ctx.beginPath();
+        ctx.moveTo(m.x - 150, cy - 90);
+        ctx.lineTo(m.x, cy + 40);
+        ctx.lineTo(m.x + 150, cy - 90);
+        ctx.stroke();
+      }
+    }
+    for (const c of world.icing || []) { // a gun the breath has frozen solid: a pale ring and a cross on it, so the TV (and the crew) can see which guns are out
+      const ms = mainShip(world), pl = c.wyrm && ms.layout.platforms[c.d];
+      if (!pl || c.lvl < config.ENVIRONMENTS.frost.ICE.JAM_AT) continue;
+      const gx = toWorldX(ms, c.x), gy = toWorldY(ms, pl.y - 70);
+      ctx.strokeStyle = '#bfe6ff';
+      ctx.lineWidth = 14;
+      ctx.setLineDash([26, 18]);
+      ctx.beginPath();
+      ctx.arc(gx, gy, 130, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(gx - 70, gy - 70);
+      ctx.lineTo(gx + 70, gy + 70);
+      ctx.moveTo(gx + 70, gy - 70);
+      ctx.lineTo(gx - 70, gy + 70);
+      ctx.stroke();
+    }
+    if (cr.mode === 'idle' && !cr.dying) for (const j of wyrmChipJobs(world, mainShip(world))) { // the ice a hammer can reach
+      const p = j.obj.part, s = p.segs[j.obj.seg];
+      if (!s) continue;
+      const mx = s.x + Math.cos(s.ang) * s.len * 0.5, my = s.y + Math.sin(s.ang) * s.len * 0.5, rr = s.r * 1.25 + 40;
+      ctx.beginPath();
+      ctx.strokeStyle = '#7fe8ff';
+      ctx.lineWidth = 12;
+      ctx.setLineDash([30, 24]);
+      ctx.arc(mx, my, rr, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (j.obj.prog > 0.02) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#8fe388';
+        ctx.lineWidth = 20;
+        ctx.arc(mx, my, rr * 0.8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, j.obj.prog));
+        ctx.stroke();
+      }
+    }
+  };
   const drawCreatureAttacks = (cr, view, time) => {
     ctx.save();
     ctx.lineCap = 'round';
     if (cr.kind === 'drake') drawDrakeFx(cr);
     else if (cr.kind === 'thunderbird') drawBirdFx(cr);
     else if (cr.kind === 'titan') drawTitanFx(cr, view, time);
+    else if (cr.kind === 'wyrm') drawWyrmFx(cr, view, time);
     for (const g of cr.grips || []) {
       if (g.mode === 'recoil') continue;
       ctx.beginPath();
@@ -1148,7 +1303,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     // Beacon (cave missions).
     const gx = px(map.goal.x);
     const gy = py(map.goal.y);
-    ctx.fillStyle = map.lair ? (map.creature === 'titan' ? '#7a8a5a' : map.creature === 'thunderbird' ? '#4f6290' : map.creature === 'drake' ? '#c2452a' : '#7a3a5a') : map.open ? 'rgba(0,0,0,0)' : '#ffd23f'; // (a lair: the Kraken's mark, in its purple)
+    ctx.fillStyle = map.lair ? (map.creature === 'wyrm' ? '#5b8fb8' : map.creature === 'titan' ? '#7a8a5a' : map.creature === 'thunderbird' ? '#4f6290' : map.creature === 'drake' ? '#c2452a' : '#7a3a5a') : map.open ? 'rgba(0,0,0,0)' : '#ffd23f'; // (a lair: the Kraken's mark, in its purple)
     ctx.beginPath();
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
@@ -1170,8 +1325,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
     const km = Number.isFinite(dCells) ? (dCells * map.CELL) / config.MAPS.KM : null;
     let goalText;
     if (map.ring && c.ring) goalText = c.done ? map.ring.name + ' HAS FALLEN!' : c.ring.crown ? map.ring.name + ' FALLS!' : (c.ring.moor && state.boss ? 'MOORINGS ' + c.ring.moor.cut.filter(Boolean).length + '/' + c.ring.moor.cut.length + ' - ' : '') + 'GATES ' + c.ring.faces.filter((f) => f.down).length + '/' + c.ring.faces.length + (km === null ? '' : km < 0.5 ? ' - FIRE!' : ' - next ' + km.toFixed(1) + ' km');
-    else if (c.done) goalText = map.lair ? (map.creature === 'titan' ? 'THE ISLAND TITAN IS SLAIN!' : map.creature === 'thunderbird' ? 'THE THUNDERBIRD IS SLAIN!' : map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
-    else if (map.lair) goalText = state.creature ? (map.creature === 'titan' ? 'SLAY THE ISLAND TITAN!' : map.creature === 'thunderbird' ? 'SLAY THE THUNDERBIRD!' : map.creature === 'drake' ? 'SLAY THE DRAKE!' : 'SLAY THE KRAKEN!') : (map.creature === 'titan' ? "THE TITAN'S LAIR" : map.creature === 'thunderbird' ? "THUNDERBIRD'S LAIR" : map.creature === 'drake' ? "DRAKE'S LAIR" : "KRAKEN'S LAIR") + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
+    else if (c.done) goalText = map.lair ? (map.creature === 'wyrm' ? 'THE RIME WYRM IS SLAIN!' : map.creature === 'titan' ? 'THE ISLAND TITAN IS SLAIN!' : map.creature === 'thunderbird' ? 'THE THUNDERBIRD IS SLAIN!' : map.creature === 'drake' ? 'THE DRAKE IS SLAIN!' : 'THE KRAKEN IS SLAIN!') : map.open ? 'ALL OUTPOSTS DOWN!' : 'BEACON REACHED!';
+    else if (map.lair) goalText = state.creature ? (map.creature === 'wyrm' ? 'SLAY THE RIME WYRM!' : map.creature === 'titan' ? 'SLAY THE ISLAND TITAN!' : map.creature === 'thunderbird' ? 'SLAY THE THUNDERBIRD!' : map.creature === 'drake' ? 'SLAY THE DRAKE!' : 'SLAY THE KRAKEN!') : (map.creature === 'wyrm' ? "THE WYRM'S LAIR" : map.creature === 'titan' ? "THE TITAN'S LAIR" : map.creature === 'thunderbird' ? "THUNDERBIRD'S LAIR" : map.creature === 'drake' ? "DRAKE'S LAIR" : "KRAKEN'S LAIR") + (km === null ? '' : ' - ' + km.toFixed(1) + ' km');
     else if (map.open) {
       const total = map.outposts.length;
       const left = map.outposts.filter((o) => !o.done).length;
@@ -1721,15 +1876,15 @@ export function createRenderer({ ctx, state: world, canvas }) {
   // A giant creature's health bar: its name, one pip for each tentacle (crossed out once it is cut off), and the health pool.
   const drawCreatureBar = () => {
     const cr = world.creature;
-    if (!cr || cr.mode === 'surfacing') return;
-    const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', limbs = cr.parts.filter((p) => p.kind === (drake || bird ? 'wing' : 'tentacle'));
+    if (!cr || (cr.mode === 'surfacing' && !(cr.kind === 'wyrm' && cr.stats.erupts > 0))) return;
+    const drake = cr.kind === 'drake', bird = cr.kind === 'thunderbird', titan = cr.kind === 'titan', wyrm = cr.kind === 'wyrm', limbs = wyrm ? [] : cr.parts.filter((p) => p.kind === (drake || bird ? 'wing' : 'tentacle'));
     book.paper(450, 806, 700, 74, { r: 10 });
     ctx.fillStyle = LB.INK;
     ctx.font = '16px ' + config.FONTS.DISPLAY;
     ctx.textAlign = 'center';
-    ctx.fillText(cr.name + ' - ' + (titan ? titanPhaseName : bird ? birdPhaseName : drake ? drakePhaseName : krakenPhaseName)(cr.phase || 1) + (cr.dying ? (titan ? ' - CRUMBLING' : drake || bird ? ' - FALLING' : ' - SINKING') : ''), 800, 826, 640); // (C.3: its phase, and what it said)
+    ctx.fillText(cr.name + ' - ' + (wyrm ? wyrmPhaseName : titan ? titanPhaseName : bird ? birdPhaseName : drake ? drakePhaseName : krakenPhaseName)(cr.phase || 1) + (cr.dying ? (wyrm ? ' - COLLAPSING' : titan ? ' - CRUMBLING' : drake || bird ? ' - FALLING' : ' - SINKING') : ''), 800, 826, 640); // (C.3: its phase, and what it said)
     if (cr.mouthWin && !cr.dying) { // the beak is open: a gold tag over the bar with the bombs it has been fed
-      const M = titan ? config.CREATURES.TITAN.MOUTH : drake ? { FED: config.CREATURES.DRAKE.FED } : config.CREATURES.MOUTH;
+      const M = wyrm ? config.CREATURES.WYRM.MOUTH : titan ? config.CREATURES.TITAN.MOUTH : drake ? { FED: config.CREATURES.DRAKE.FED } : config.CREATURES.MOUTH;
       ink();
       ctx.lineWidth = 3;
       ctx.fillStyle = '#ffd23f';
@@ -1771,6 +1926,25 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.moveTo(x, y - 11);
         ctx.lineTo(x + 8, y + 7);
         ctx.lineTo(x - 8, y + 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    if (wyrm) { // C.6d: one cyan pip for every segment of ice left on its body (a hammer or flame clears them), a gap where it is bare
+      const limb = cr.parts.find((p) => p.id === 'wyrm'), n = limb && limb.ice ? limb.ice.length : 0;
+      for (let i = 0; i < n; i++) {
+        const x = 800 + (i - (n - 1) / 2) * 26, y = 840, on = limb.ice[i] > 0;
+        ink();
+        ctx.lineWidth = 2.5;
+        ctx.fillStyle = on ? (limb.ice[i] < limb.iceMax[i] * 0.5 ? '#bfe6ff' : '#7fe8ff') : '#cfc6b0';
+        ctx.beginPath();
+        ctx.moveTo(x, y - 11);
+        ctx.lineTo(x + 8, y - 4);
+        ctx.lineTo(x + 8, y + 5);
+        ctx.lineTo(x, y + 11);
+        ctx.lineTo(x - 8, y + 5);
+        ctx.lineTo(x - 8, y - 4);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
@@ -1825,12 +1999,12 @@ export function createRenderer({ ctx, state: world, canvas }) {
     }
     ctx.fillStyle = '#3b2a1d';
     ctx.fillRect(470, 856, 660, 14);
-    ctx.fillStyle = titan ? '#8a8478' : bird ? '#4f6290' : drake ? '#c2452a' : '#7a2d63';
+    ctx.fillStyle = wyrm ? '#5b8fb8' : titan ? '#8a8478' : bird ? '#4f6290' : drake ? '#c2452a' : '#7a2d63';
     ctx.fillRect(470, 856, (660 * Math.max(0, cr.hp)) / cr.maxHp, 14);
     ink();
     ctx.lineWidth = 2.5;
     ctx.strokeRect(470, 856, 660, 14);
-    for (const share of titan ? [config.CREATURES.TITAN.PHASE.TWO_HP, config.CREATURES.TITAN.PHASE.THREE_HP] : bird ? [config.CREATURES.THUNDERBIRD.PHASE.TWO_HP, config.CREATURES.THUNDERBIRD.PHASE.THREE_HP] : drake ? [config.CREATURES.DRAKE.PHASE.TWO_HP, config.CREATURES.DRAKE.PHASE.THREE_HP] : [config.CREATURES.PHASE.TWO.HP, config.CREATURES.PHASE.THREE.HP]) { // the notches where phase 2 and 3 begin
+    for (const share of wyrm ? [config.CREATURES.WYRM.PHASE.TWO_HP, config.CREATURES.WYRM.PHASE.THREE_HP] : titan ? [config.CREATURES.TITAN.PHASE.TWO_HP, config.CREATURES.TITAN.PHASE.THREE_HP] : bird ? [config.CREATURES.THUNDERBIRD.PHASE.TWO_HP, config.CREATURES.THUNDERBIRD.PHASE.THREE_HP] : drake ? [config.CREATURES.DRAKE.PHASE.TWO_HP, config.CREATURES.DRAKE.PHASE.THREE_HP] : [config.CREATURES.PHASE.TWO.HP, config.CREATURES.PHASE.THREE.HP]) { // the notches where phase 2 and 3 begin
       ctx.beginPath();
       ctx.moveTo(470 + 660 * share, 852);
       ctx.lineTo(470 + 660 * share, 874);
@@ -2144,7 +2318,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
         ctx.font = (choice ? 44 : 30) + 'px "Segoe UI Emoji", sans-serif';
         ctx.fillText(s.flagship ? '🚩' : s.id === cur.id ? '🛩️' : s.lair ? lairOf(s.creature).ICON : s.salvage ? config.VOYAGE.CURRICULUM.SALVAGE.ICON : env.icon, px(s.col), py(s) + (choice ? 15 : 10));
         if (s.lair) { // a lair: a ring of its purple round the stop and a LAIR tag (config.CREATURES.LAIR)
-          ctx.strokeStyle = s.creature === 'titan' ? '#7a8a5a' : s.creature === 'thunderbird' ? '#4f6290' : s.creature === 'drake' ? '#c2452a' : '#7a3a5a';
+          ctx.strokeStyle = s.creature === 'wyrm' ? '#5b8fb8' : s.creature === 'titan' ? '#7a8a5a' : s.creature === 'thunderbird' ? '#4f6290' : s.creature === 'drake' ? '#c2452a' : '#7a3a5a';
           ctx.lineWidth = 6;
           ctx.setLineDash([8, 6]);
           ctx.beginPath();
