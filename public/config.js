@@ -3663,6 +3663,28 @@ export const config = {
       WING_ANG: [52, 30, -8, 50], // the wing's angle (deg, down from horizontal) in the four steps of the sim's beat key: folded, half open, spread, down-stroke (as the 2D picture)
       SPORE_PUFFS: 14, // puffs in a spore cloud's picture
     },
+    // THE VOID EEL in 3D (3D.md section 42; view3d/creatureEel.js, eelModel.js, eelPaint.js, eelFins.js, eelFx.js): a deep-space serpent, deep indigo with a violet-teal sheen, glowing constellation spots along its flanks, translucent fin ridges,
+    // an angler's head with needle teeth and a lantern lure on a rod. Sizes are the sim's own px (config.CREATURES.EEL); everything here is colour, glow and depth. Glow channels: 1 = the eyes, 2 = the open throat, 3 = the joint seams, 4 = the lantern.
+    EEL: {
+      body: '#272f7a', bodyDk: '#161a4a', back: '#0d0f32', flank: '#34479c', violet: '#6b4fc4', teal: '#26a8b8', belly: '#9690dc', bellyDk: '#6f69c0',
+      dot: '#a6f8ff', dotGold: '#ffe08a', dotPale: '#f0e6ff', line: '#6fd8ee',
+      fin: '#58e4ea', finEdge: '#a47cf4', finDk: '#2e62a6', rib: '#c6faff',
+      bone: '#d8d0f0', boneDk: '#8d84bc', tooth: '#f6f1e2', toothDk: '#cbc3ac',
+      maw: '#4b1962', mawLt: '#a63cc4', throat: '#ff72d2', throatLt: '#ffd2f2', gill: '#12143a',
+      eye: '#7cf8ff', eyeLt: '#eaffff', eyeDk: '#1d7088', pupil: '#0a0d2a', socket: '#161a48',
+      gold: '#ffc83a', goldLt: '#fff2b0', goldDk: '#b8861a', dull: '#8a7a5c',
+      crate: '#f6c23c', crateDk: '#b87a18', strap: '#8c5a12', cord: '#b9b0e6', cut: '#c6faff', char: '#1b1f58', flesh: '#c6faff', // (char / flesh = the tip colours the generic tube kit reads)
+      stardust: '#d6c6ff', stardustLt: '#f4efff', ring: '#ff4d4d', ringLt: '#ffd0d0',
+      EYE_GLOW: { base: 1.5, lit: 2.1, hit: 2.6, dying: 0.2 }, THROAT_GLOW: { shut: 0.4, open: 2.2 }, SEAM_GLOW: { bright: 2.1, dull: 0.55 }, LAMP_GLOW: { dark: 0.55, glow: 1.45, crate: 1.2 },
+      EMISSIVE: { body: 0.85, dim: 0.12 }, // how brightly the painted constellation spots glow (the toon material's emissive map), lit and while the body hides behind its lure
+      DIM: 0.2, SELF: 0.5, REVEAL_STEPS: 3, // the colour of a part nobody lights while the eel hides behind its lure, the floor of the eel's own light, the held steps of the fade
+      FIN: { ALPHA: 0.6, DORSAL: 0.95, VENTRAL: 0.42, SPIKE: 0.3, TAIL: 1.3 }, // the fin ridges: opacity, how tall (x the body's radius) the back fin and the belly fin stand, how much taller they are at a joint, how far the tail's fin flares
+      INK: 24, // ink outline width on the big shapes (world units; the ink keeps its width on the screen)
+      TENTACLE_SIDES: 14,
+      Z: { LOOP: 430, SPAN: 800, HEAD: 0, CROWN: -6, WRAP_MARGIN: 130 }, // the depth things lie at (the ship's plane is 0): the far half of the loop (above the ship's middle) lies this far behind it and the near half this far in front (over SPAN px of height), the crown's flat sail
+      JAW: 1.05, // how far the lower jaw swings down (rad) when the maw is wide open
+      DISSOLVE: { FROM: 0.8, STEP: 0.22, TIME: 0.9 }, // the death: a section after section of the body thins to stardust, from the tail on: when the first one starts (s of the sim's sink), the gap between segments, how long one takes
+    },
   },
 
   // The 3D particles (view3d/particles.js + vfx.js; 3D.md section 12). Caps per quality tier (the pool and the splinter boxes), RATE scales every emitter, colours are hex (fire and sparks are drawn HDR

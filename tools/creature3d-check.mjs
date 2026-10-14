@@ -18,6 +18,10 @@
 //       the dark and the lamp (a part nobody's lamp holds is dim and her eyes glow low, a lit one fades up in held steps and the eyes blaze), the wings follow the beat key (four poses), the tendrils (five tubes, a grip wraps
 //       the hull, fire shows on a burning one with halos and a charred colour), the cap puffs up, a spore ring and cloud and the wind chevrons are drawn, phase 3 opens the spore heart in steps, a put-out eye goes dark and cracked,
 //       the death (she wilts, the wings fold, the stem stretches and she falls), the view hides; then the Low tier
+//   4f. THE VOID EEL (host.html?creature=eel; skip with --no-eel; 3D.md section 42): it circles the ship within the budget (at most 10 meshes, 60k triangles), every piece is placed and wound outward, the jaw swings in
+//       sixths with the throat glowing, the head rolls over (its back stays up) as it comes about, the lantern's three states (dark, glowing, the GOLD CRATE of the lure with its pickup ring and twinkle), the body dims behind
+//       the lure and fades back up when it is called, a coil takes the hull (the loop's far half behind it and the near half in front), the swallow's ring, chevrons and the lunge's streaks, the bite, a cut section (a stump,
+//       the bright joint rings move on, a Rapier body), the death (it dissolves into stardust from the tail on) and the view hides; then the Low tier
 //   5. (--long) host.html?creature=kraken for 3 minutes with 8 bot crew, in real time
 // Screenshots go to a temp folder (printed), not into the repo.
 import { spawn, spawnSync } from 'node:child_process';
@@ -508,6 +512,99 @@ try {
     if (rml.errs !== 0 || rml.evalErrors) fail('console / eval errors on the Mother at the Low tier');
     if (!rml.data || !rml.data.low || rml.data.low.kind !== 'mother' || !rml.data.low.low || !rml.data.low.wings || rml.data.low.tubes !== 5 || rml.data.low.tris > 60000 || rml.data.low.meshes > 10) fail('the Low tier Mother is missing or too big ' + JSON.stringify(rml.data && rml.data.low));
     if (rml.data && rml.data.errors && rml.data.errors.length) fail('game errors in the Mother Low tier run');
+  }
+  if (!argv.includes('--no-eel')) {
+    // THE VOID EEL (3D.md section 42; BOSSES.md C.6f): the Aether's serpent on the open-sky lair (host.html?creature=eel), step by step with the sim frozen. Each moment is read from the live rig (view.kraken.rig.ext)
+    // after the frame had time to draw it.
+    console.log('4f. the Void Eel (host.html?creature=eel): body, head, jaw, roll, lantern and lure, dim, coil, swallow, bite, cut, death; then Low');
+    const emeas = `window.__meas=()=>{ const k=${view}.kraken, r=k.rig, e=r.ext; let meshes=0, tris=0; const walk=(o)=>{ let v=true, p=o; while(p){ if(!p.visible) v=false; p=p.parent; } if(o.isMesh && v && !(o.isInstancedMesh && o.count===0)){ const g=o.geometry; if(g.drawRange && g.drawRange.count===0) return; meshes++; let t=(g.index?g.index.count:g.attributes.position.count)/3; if(o.isInstancedMesh) t*=o.count; if(g.drawRange && g.drawRange.count<Infinity) t=Math.min(t, g.drawRange.count/3); tris+=t; } o.children.forEach(walk); }; walk(k.root); if(e) walk(e.marks.mesh); for (const m of [r.foam.mesh, r.shadow.mesh, r.markers.mesh, r.ropes.group]) walk(m); return { meshes, tris:Math.round(tris) }; };
+      window.__pl=(n)=>{ const e=${view}.kraken.rig.ext, p=e.set.pieces[n]; return !!(p&&p.key&&p.key!=='hidden'); };
+      window.__cfg=null;`;
+    const esteps = [
+      setup,
+      // it circles in the dark Aether within the budget; every piece placed and wound outward; four body tubes, the fins, six rings or so, the head at the sim's head
+      [`(async()=>{ ${sl} ${emeas} window.__cfg=(await __imp('/config.js')).config; const cr=__cr(); window.__step(480); cr.parts.forEach(p=>{ p.lit=true; }); await sl(1500); const k=${view}.kraken, r=k.rig, e=r.ext, m=window.__meas(); const EM=await __imp('/modules/view3d/eelModel.js'); const rep=EM.windingReport(e.bodyMesh.geometry, e.ranges); const bad=Object.entries(rep).filter(([n,v])=>v>0.08).map(([n,v])=>n+':'+v.toFixed(3));
+        const hs=cr.parts.find(p=>p.id==='head').segs[0], sk=e.set.pieces.skull.key, names=['skull','brow','gill','eyeA','eyeB','jaw','teethU','teethL','throat','crown','knob','lampCore','lampCage','tailCone'].concat(Array.from({length:12},(_,i)=>'cord'+i)), missing=names.filter(n=>!window.__pl(n)), rings=Array.from({length:6},(_,i)=>window.__pl('jr'+i)).filter(Boolean).length;
+        window.__wp8.stand={ kind:r.kind, ext:!!e, visible:k.root.visible, mode:cr.mode, em:cr.eel.mode, meshes:m.meshes, tris:m.tris, js:${view}.stats().jsMs, bad, tubes:r.tubes.limbs.filter(l=>!l.dead).length, missing, rings, crateHidden:!window.__pl('lampCrate'), stumpHidden:!window.__pl('stump'), fins:e.fins.quads, headAt:sk? [Math.abs(sk[12]-hs.x), Math.abs(sk[13]+hs.y)] : null, errs:(window.gameErrors||[]).length }; return JSON.stringify(window.__wp8.stand) })()`, 300, 'edark'],
+      // the jaw swings in sixths of the sim's openAmt and the throat glows between the jaws
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext, mo=cr.parts.find(p=>p.id==='mouth'), U=r.uniforms.uGlow.value; const jaw=()=>e.set.pieces.jaw.key&&Array.from(e.set.pieces.jaw.key);
+        mo.openAmt=0; await sl(500); const a0=e.S.jawA, k0=jaw(), g0=U.y; mo.openAmt=0.5; mo.open=true; await sl(500); const a1=e.S.jawA; mo.openAmt=1; await sl(500); const a2=e.S.jawA, k2=jaw(), g2=U.y; mo.openAmt=0.52; await sl(400); const a3=e.S.jawA;
+        window.__wp8.jaw={ a0, a1, a2, a3, moved:!!(k0&&k2&&k0.some((v,i)=>Math.abs(v-k2[i])>1e-3)), g0, g2, throat:window.__pl('throat') }; mo.openAmt=0; mo.open=false; return JSON.stringify(window.__wp8.jaw) })()`, 300, 'ejaw'],
+      // the head rolls over as it comes about: heading right (back up, x forward) and heading left (still back up, x turned round)
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext, h=cr.parts.find(p=>p.id==='head').segs[0], ang0=h.ang; const key=()=>Array.from(e.set.pieces.skull.key); h.ang=0; await sl(500); const right=key(); h.ang=Math.PI; await sl(500); const left=key(); h.ang=-Math.PI/2; await sl(500); const up=key(); h.ang=ang0;
+        window.__wp8.roll={ right:[right[0], right[5]], left:[left[0], left[5]], up:[up[0], up[5], up[6], up[9]] }; return JSON.stringify(window.__wp8.roll) })()`, 300, 'eroll'],
+      // the lantern: dark (a cage round a dim core), glowing (it gapes), then the lure: a gold crate with a pickup ring and a twinkle; the body hides in the dark and fades back when it is called
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext, ev=cr.eel, U=r.uniforms.uGlow.value, lp=cr.parts.find(p=>p.id==='lamp').segs[0];
+        ev.lampLit=0; await sl(500); const dark={ core:window.__pl('lampCore'), cage:window.__pl('lampCage'), crate:window.__pl('lampCrate'), w:U.w };
+        ev.lampLit=1; await sl(500); const glow={ core:window.__pl('lampCore'), crate:window.__pl('lampCrate'), w:U.w, marks:e.marks.count };
+        ev.lampLit=2; ev.lure={ live:true, x:lp.x, y:lp.y, known:false, t:0, bob:0, spotT:0 }; cr.parts.forEach(p=>{ p.lit=p.id==='lamp'; }); await sl(1700);
+        const lure={ core:window.__pl('lampCore'), cage:window.__pl('lampCage'), crate:window.__pl('lampCrate'), w:U.w, marks:e.marks.count, revBody:e.S.rev.e1, revHead:e.S.rev.head, revLamp:e.S.rev.lamp, emis:r.tubes.material.emissiveIntensity, tint:Array.from(r.tubes.limbs[1].tint) };
+        ev.lure.known=true; cr.parts.forEach(p=>{ p.lit=true; }); await sl(1700); const called={ marks:e.marks.count, revBody:e.S.rev.e1, emis:r.tubes.material.emissiveIntensity };
+        ev.lure=null; ev.lampLit=0; await sl(300); window.__wp8.lamp={ dark, glow, lure, called }; return JSON.stringify(window.__wp8.lamp) })()`, 300, 'elure'],
+      // the coil: a tail section holds the hull and takes the coil's own depth; the far half of the loop lies behind the ship and the near half in front
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext, ev=cr.eel, C=window.__cfg.CREATURES.EEL; for(const k of [1,2,3]) C.ATTACK.WEIGHTS[k]={ lure:0, swallow:0, coil:1 }; ev.act=null; ev.lure=null; ev.ring=null; ev.nextT=0; cr.ai.breather=0; cr.parts.forEach(p=>{ p.lit=true; });
+        const n=__until(()=>(cr.grips||[]).some(g=>g.mode==='hold'), 8000); window.__step(40); await sl(900);
+        const hold=(cr.grips||[]).find(x=>x.mode==='hold'); let behind=0, front=0, wrapped=false, wb=0, wf=0; r.tubes.limbs.forEach(L=>{ if(L.dead) return; for(let k=0;k<L.nr;k++){ const z=L.P[k*3+2]; if(z<-100) behind++; if(z>100) front++; } });
+        if(hold&&hold.limb.wrap){ wrapped=true; const i=r.limbs.indexOf(hold.limb), L=r.tubes.limbs[i]; for(let k=0;k<L.nr;k++){ const z=L.P[k*3+2]; if(z<-100) wb++; if(z>100) wf++; } }
+        window.__wp8.coil={ n, hold:!!hold, wrapped, behind, front, wb, wf, tubes:r.tubes.limbs.filter(l=>!l.dead).length, loop:ev.tight }; return JSON.stringify(window.__wp8.coil) })()`, 300, 'ecoil'],
+      // the swallow: the red ring, three chevrons from the head, the lunge's streaks; the bite's gold snap
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext, ev=cr.eel; for(const g of cr.grips) g.left=0.01; window.__step(90); ev.act=null; ev.lure=null; const hx=cr.x, hy=cr.y; ev.act={ kind:'swallow', sub:'wind', t:1, f:1 }; ev.ring={ x:hx+1900, y:hy+200, r:400, locked:false, T:3.2, t:1.6, threat:true }; await sl(700); const wind=e.marks.count;
+        ev.ring.locked=true; ev.ring.t=3.2; await sl(500); const locked=e.marks.count; ev.act.sub='lunge'; ev.V[48]=3200; ev.V[49]=-400; await sl(500); const lunge=e.marks.count; ev.ring.hit=true; await sl(300); const hit=e.S.ringHit===ev.ring; ev.V[48]=0; ev.V[49]=0; ev.ring=null;
+        ev.act={ kind:'bite', sub:'snap', t:0, x:hx, y:hy }; await sl(600); const bite=e.S.wasBite; ev.act=null; await sl(400); window.__wp8.swallow={ wind, locked, lunge, hit, bite, after:e.marks.count }; return JSON.stringify(window.__wp8.swallow) })()`, 300, 'eswallow'],
+      (() => { const m = measure('eel'); m[0] = m[0].replace('r.ropes.group.visible=false; }', 'r.ropes.group.visible=false; if(r.ext&&r.ext.hide) r.ext.hide(); }'); return m; })(),
+      // a section cut off: its tail becomes a stump with a glowing face, the bright joint rings move on to the next section, and the cut piece falls as a Rapier body with its fins
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext, D=${view}.destruction, ev=cr.eel, e0=cr.parts.find(p=>p.id==='e0'), e1=cr.parts.find(p=>p.id==='e1'), e2=cr.parts.find(p=>p.id==='e2'); ev.act=null; window.__cfg.CREATURES.EEL.ATTACK.WEIGHTS[1]={ lure:0, swallow:0, coil:0 }; for(const g of cr.grips) g.left=0.01; window.__step(90);
+        const before={ cone:window.__pl('tailCone'), stump:window.__pl('stump') }; const b0=D.chunks.length; e0.joint=false; e1.joint=true; e2.joint=false; cr.hooks.sever(e0, 0, {}); e1.joint=true; window.__step(4); await sl(1500);
+        const tint=Array.from({length:6},(_,i)=>(e.bt.cur.get(e.ranges['jr'+i])||'').split('|').map(Number)[0]).filter(v=>v>0); const grp=e.set.pieces.stump;
+        window.__wp8.cut={ before, dead:e0.dead, cut:e.S.cut.has('e0'), cone:window.__pl('tailCone'), stump:window.__pl('stump'), sim:cr.chunks.length, view:r.chunks.size, bodies:D.chunks.length-b0, tubes:r.tubes.limbs.filter(l=>!l.dead).length, bright:tint.filter(v=>v>1).length, dull:tint.filter(v=>v<0.6).length, grp:!!grp }; return JSON.stringify(window.__wp8.cut) })()`, 300, 'ecut'],
+      // the death: it goes limp and dissolves into stardust from the tail on, the head last; then the view hides
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext; cr.hp=1; cr.hooks.hurtPool(5,'shell'); window.__step(30); await sl(600); const d0={ killed:cr.mode==='dying', died:e.S.died, alive:r.tubes.limbs.filter(l=>!l.dead).length }; const sp0=${view}.stats().vfx&&${view}.stats().vfx.spawned;
+        window.__step(210); await sl(700); const mid={ sink:cr.sinkT, alive:r.tubes.limbs.filter(l=>!l.dead).length, tailDead:r.tubes.limbs[0].dead, headLeft:window.__pl('skull'), spawned:(${view}.stats().vfx&&${view}.stats().vfx.spawned)-sp0 };
+        window.__step(150); await sl(700); const late={ sink:cr.sinkT, alive:r.tubes.limbs.filter(l=>!l.dead).length, tailsDead:r.tubes.limbs.slice(0,3).every(l=>l.dead), skull:window.__pl('skull') }; window.__wp8.death={ d0, mid, late }; return JSON.stringify(window.__wp8.death) })()`, 300, 'edeath'],
+      [`(async()=>{ ${sl} window.__step(900); await sl(1200); const k=${view}.kraken; window.__wp8.gone=!window.game.state.creature; window.__wp8.hiddenAfter=!k.root.visible && (!k.rig || !k.rig.ext || !k.rig.ext.marks.mesh.visible); window.__wp8.errors=window.gameErrors||[]; return 1 })()`, 300],
+    ];
+    const re = run('eel', 'creature=eel', esteps);
+    const ed = re.data || {};
+    console.log('  errors ' + re.errs + ' evalErrors ' + re.evalErrors + '  ' + JSON.stringify(ed).slice(0, 2200));
+    if (re.errs !== 0 || re.evalErrors) fail('console / eval errors in the Void Eel run');
+    const e0 = ed.stand;
+    if (!e0 || e0.kind !== 'eel' || !e0.ext || !e0.visible) fail('the Eel view (rig.ext) was not built ' + JSON.stringify(e0));
+    else {
+      if (e0.meshes > 10) fail('the Eel draws ' + e0.meshes + ' meshes (budget 10)');
+      if (e0.tris > 60000) fail('the Eel is ' + e0.tris + ' triangles with ink (budget 60000)');
+      if (e0.js > 2.5) fail('the frame JS is ' + e0.js + ' ms');
+      if (e0.bad && e0.bad.length) fail('triangles wound the wrong way ' + JSON.stringify(e0.bad));
+      if (e0.tubes !== 4 || (e0.missing && e0.missing.length) || e0.rings < 3 || !e0.crateHidden || !e0.stumpHidden || !(e0.fins > 100)) fail('a piece of the Eel is not placed ' + JSON.stringify(e0));
+      if (!e0.headAt || e0.headAt[0] > 1 || e0.headAt[1] > 1) fail('the skull is not at the sim\'s head ' + JSON.stringify(e0.headAt));
+      if (e0.errs) fail('game errors while it circles');
+    }
+    const ej = ed.jaw;
+    if (!ej || !(ej.a0 === 0) || !(Math.abs(ej.a1 - 3 / 6 * 1.05) < 1e-3) || !(Math.abs(ej.a2 - 1.05) < 1e-3) || !(Math.abs(ej.a3 - 3 / 6 * 1.05) < 0.02) || !ej.moved || !(ej.g2 > ej.g0 * 3) || !ej.throat) fail('the jaw swings in sixths of openAmt and the throat glows when it opens ' + JSON.stringify(ej));
+    const er = ed.roll;
+    if (!er || !(er.right[0] > 0.9 && er.right[1] > 0.9) || !(er.left[0] < -0.9 && er.left[1] > 0.9) || Math.abs(er.up[1]) > 0.2) fail('the head rolls over so that its back stays up (right: x forward, left: x turned round, both with the back up; heading up: its back toward the viewer) ' + JSON.stringify(er));
+    const el = ed.lamp;
+    if (!el || !el.dark.core || !el.dark.cage || el.dark.crate || !(el.glow.w > el.dark.w * 2) || !el.glow.core || el.glow.crate) fail('the lantern is a dark cage and then glows ' + JSON.stringify(el && [el.dark, el.glow]));
+    else if (!el.lure.crate || el.lure.core || el.lure.cage || !(el.lure.marks >= 4) || !(el.lure.revBody < 0.4) || !(el.lure.revHead < 0.4) || !(el.lure.revLamp > 0.9) || !(el.lure.emis < el.called.emis * 0.5) || !(el.called.revBody > 0.95) || !(el.called.marks > el.lure.marks)) fail('the lure: a gold crate with a pickup ring and a twinkle, the body dims behind it and comes back (with the red ring) when it is called ' + JSON.stringify(el.lure) + JSON.stringify(el.called));
+    const ec = ed.coil;
+    if (!ec || !ec.hold || !ec.wrapped || ec.tubes < 3 || !(ec.behind >= 6) || !(ec.front >= 6) || ec.wb + ec.wf < 2) fail('a tail section holds the hull (the coil\'s own depth) and the loop passes behind and in front of it ' + JSON.stringify(ec));
+    const es = ed.swallow;
+    if (!es || !(es.wind >= 4) || !(es.locked >= 4) || !(es.lunge >= es.locked + 3) || !es.hit || !es.bite || !(es.after < es.wind)) fail('the swallow: the red ring and three chevrons, the lunge\'s streaks, a hit, and the bite ' + JSON.stringify(es));
+    if (!ed.eel || ed.eel.meshes > 10 || ed.eel.tris > 60000) fail('the Eel costs too much: ' + JSON.stringify(ed.eel));
+    const ex = ed.cut;
+    if (!ex || !ex.dead || !ex.cut || ex.cone || !ex.stump || !(ex.sim >= 1) || !(ex.view >= 1) || !(ex.bodies >= 1) || ex.tubes !== 3 || !(ex.bright >= 1) || !(ex.dull >= 1)) fail('a section cut off: a stump with a glowing face, the cone gone, the bright rings moved on, a Rapier body ' + JSON.stringify(ex));
+    const edth = ed.death;
+    if (!edth || !edth.d0 || !edth.d0.killed || !edth.d0.died || !edth.mid || !(edth.mid.spawned > 20) || !(edth.late && edth.late.tailsDead && edth.late.alive <= 1)) fail('the death: it dissolves into stardust from the tail on ' + JSON.stringify(edth));
+    if (!ed.gone || !ed.hiddenAfter) fail('after the death the view must hide ' + JSON.stringify([ed.gone, ed.hiddenAfter]));
+    if (ed.errors && ed.errors.length) fail('game errors in the Eel run: ' + JSON.stringify(ed.errors).slice(0, 200));
+    const elow = [
+      setup,
+      [`(async()=>{ ${sl} ${emeas} const cr=__cr(); window.__step(480); cr.parts.forEach(p=>{ p.lit=true; }); await sl(1500); const r=${view}.kraken.rig; const m=window.__meas(); window.__wp8.low={ kind:r.kind, low:r.low, ext:!!r.ext, meshes:m.meshes, tris:m.tris, crown:window.__pl('crown'), tubes:r.tubes.limbs.filter(l=>!l.dead).length }; window.__wp8.errors=window.gameErrors||[]; return JSON.stringify(window.__wp8.low) })()`, 300, 'eellow'],
+    ];
+    const rel = run('eellow', 'creature=eel&tier=low', elow);
+    console.log('  low tier: errors ' + rel.errs + '  ' + JSON.stringify(rel.data).slice(0, 400));
+    if (rel.errs !== 0 || rel.evalErrors) fail('console / eval errors on the Eel at the Low tier');
+    if (!rel.data || !rel.data.low || rel.data.low.kind !== 'eel' || !rel.data.low.low || !rel.data.low.crown || rel.data.low.tubes !== 4 || rel.data.low.tris > 60000 || rel.data.low.meshes > 10) fail('the Low tier Eel is missing or too big ' + JSON.stringify(rel.data && rel.data.low));
+    if (rel.data && rel.data.errors && rel.data.errors.length) fail('game errors in the Eel Low tier run');
   }
   if (long) {
     console.log('5. host.html?creature=kraken, 8 bots, 3 minutes in real time');
