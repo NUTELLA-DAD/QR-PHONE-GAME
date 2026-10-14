@@ -12,6 +12,7 @@ import { assemble, makeTrimMaterials, inkOn } from './parts3d/kit.js';
 import { makeShipContext, buildParts, THEMES } from './parts3d/registry.js';
 import { GLOW as WGLOW } from './parts3d/weapons.js';
 import { buildEnemyDecor } from './parts3d/enemyDecor.js';
+import { buildNemesisMarks } from './parts3d/nemesisMarks.js';
 import { createStationMats } from './stationMats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { config } from '../../config.js';
@@ -89,7 +90,10 @@ export function buildShipModel(layout, opts = {}) {
 
   // WP9: the enemy gunship's menace (spikes on the bags, her emblem, her mast and pennant, a bowsprit horn, red lanterns, a stack): on top of the same parts every ship has
   let decor = null;
-  if (opts.enemy) { try { decor = buildEnemyDecor(ctx, { dyn, content }, { bp: opts.bp || null }); } catch (e) { fallbacks.push('enemy decor failed: ' + (e && e.message)); console.warn('ship3d decor', e); } }
+  if (opts.enemy) { try { decor = buildEnemyDecor(ctx, { dyn, content }, { bp: opts.bp || null, seal: !!opts.look }); } catch (e) { fallbacks.push('enemy decor failed: ' + (e && e.message)); console.warn('ship3d decor', e); } }
+  // L4: the Nemesis (opts.look: her colours were set in the theme): her painted seal on the gasbag and her name plate under the keel (parts3d/nemesisMarks.js, 2 draw calls); an ordinary gunship has no look
+  let marks = null;
+  if (opts.enemy && opts.look) { try { marks = buildNemesisMarks(ctx, { dyn, content }, { look: opts.look, name: opts.name, level: opts.level }); } catch (e) { fallbacks.push('nemesis marks failed: ' + (e && e.message)); console.warn('ship3d nemesis marks', e); } }
 
   // ---- lanterns (small lights hung in the rooms: ONE merged mesh of all the bulbs) and the boiler glow --------------------------------------------------------------------
   dyn.lanterns = ctx.lanternSpots;
@@ -168,7 +172,7 @@ export function buildShipModel(layout, opts = {}) {
     // WP5: the parts, by id. parts.get(key) = { key, kind, name, deck, x, x0, x1, dyn: [...], bounds }; ranges[key] = [{ layer, start, count }] into the one merged geometry.
     parts: built.parts, ranges: asm.ranges, assembled: asm,
     extractPart: (key) => asm.extract(key),
-    dispose() { try { for (const k of ['toon', 'plain', 'depth']) ctx.mats[k].dispose(); } catch { /* (gone already) */ } }, // (this ship's own materials; index.js calls it when the ship is rebuilt or gone)
+    dispose() { try { for (const k of ['toon', 'plain', 'depth']) ctx.mats[k].dispose(); } catch { /* (gone already) */ } try { if (marks) marks.dispose(); } catch { /* (gone already) */ } }, // (this ship's own materials; index.js calls it when the ship is rebuilt or gone)
     // Hide the hull wall that faces the viewer: camSide > 0 when the camera is on the ship's local +Z side.
     setView(camSide, both) { asm.setSide(camSide, both); model.viewSide = camSide; model.bothWalls = !!both; }, // (A1: both = the middle of a COME ABOUT shows both walls)
     // c: { t, ship (handle), world, night (0..1), lamps (the beams shine) }

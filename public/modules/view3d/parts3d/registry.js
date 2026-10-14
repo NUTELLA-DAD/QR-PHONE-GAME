@@ -26,6 +26,18 @@ import { buildEngine, buildSail } from './engines.js';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mixHex = (a, b, t) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
 
+const okHex = (c, d) => (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : d);
+// L4: the Nemesis's ship wears HER colours (nemesis.js look: a/b = her cloth and trim, bagColor, hullColor): the gasbag in her bag colour (a little of her cloth in it, lifted so the toon shading still reads on the dark
+// ones), the ribs and straps in her trim colour, the gondola leaning toward her hull colour. Every other gunship keeps THEMES.enemy exactly.
+export function nemesisTheme(look) {
+  const E = THEMES.enemy, L = look || {};
+  const bag = mixHex(mixHex(okHex(L.bagColor, E.bag), okHex(L.a, E.bag), 0.35), '#ffffff', 0.2);
+  return {
+    ...E, bag, bagShade: mixHex(bag, '#000000', 0.22), trim: mixHex(okHex(L.b, E.trim), '#ffffff', 0.1),
+    hull: mixHex(E.hull, okHex(L.hullColor, E.hull), 0.7), hullDark: mixHex(E.hullDark, okHex(L.hullColor, E.hullDark), 0.5), fin: mixHex(E.fin, okHex(L.a, E.fin), 0.35),
+  };
+}
+
 export const THEMES = {
   ours: { hull: '#b98a5a', hullDark: '#8a6444', deck: '#c9a05f', deckAlt: '#bf9567', wall: '#d2b98e', rail: '#6b4a32', bag: '#ebdfc0', bagShade: '#d6c7a2', fin: '#c49a74', brass: '#c9a85a', iron: '#6a6568', trim: '#8fb37a', glass: '#bcd9e3', rope: '#a88a5a', roomTint: 0 },
   enemy: { hull: '#4a4346', hullDark: '#2f2a2e', deck: '#6a5f62', deckAlt: '#5e5457', wall: '#6a5a5c', rail: '#2f2a2e', bag: '#a8443f', bagShade: '#8c2f2f', fin: '#4a4346', brass: '#b08a4a', iron: '#4a4346', trim: '#e8dcc0', glass: '#c9706a', rope: '#6b5a4a', roomTint: 0.55 },
@@ -101,7 +113,7 @@ export function locate(L, kind, part) {
 
 // The shared context every builder reads (the same numbers the old shipMesh computed up front).
 export function makeShipContext(layout, opts = {}) {
-  const L = layout, T = opts.enemy ? THEMES.enemy : THEMES.ours;
+  const L = layout, T = opts.enemy ? (opts.look ? nemesisTheme(opts.look) : THEMES.enemy) : THEMES.ours;
   const P = L.platforms || [];
   const b = L.bounds || { x0: 0, x1: 1500, y0: -300, y1: 900 };
   const pv = (b.x0 + b.x1) / 2, len = b.x1 - b.x0;

@@ -14,6 +14,7 @@ const out = path.resolve(arg('out', 'C:/Users/kenny/Downloads/AIRSHIP/airship/3d
 const port = Number(arg('port', 5900 + Math.floor(Math.random() * 90)));
 const view = arg('view', '2d');
 const sfx = arg('suffix', view === '3d' ? '_3d' : '');
+const seed = arg('seed', null) == null ? null : Number(arg('seed', 0)) | 0; // (L4 3D follow-up: --seed N picks the captain; in 3D the fight also takes close-ups of her ship, nemesis3d_<name>_*.png)
 const SLOW = view === '3d' ? 5 : 1; // (the 3D view runs the headless game several times slower: waits are stretched)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
@@ -62,7 +63,7 @@ async function openPage(url, W, H, mobile) {
     return r.result.value;
   };
   P.png = async () => Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64');
-  P.shot = async (name) => { const f = name.replace(/\.png$/, sfx + '.png'); fs.writeFileSync(path.join(out, f), await P.png()); console.log('  shot ' + f); };
+  P.shot = async (name) => { const f = /^nemesis3d_/.test(name) ? name : name.replace(/\.png$/, sfx + '.png'); fs.writeFileSync(path.join(out, f), await P.png()); console.log('  shot ' + f); };
   P.waitFor = async (expr, ms = 30000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = await P.ev(expr).catch(() => false); if (v) return true; await sleep(200); } return false; };
   P.close = async () => {
     try { ws.close(); } catch { /* closed */ }
@@ -81,6 +82,7 @@ try {
   check(await host.waitFor('!!window.game && !!document.getElementById("code") && /^[A-Z0-9]{4}$/.test(document.getElementById("code").textContent)', 40000), 'the host page is up with a room code');
   await host.ev('(async()=>{ const {config}=await import("/config.js"); window.__cfg=config; window.__NM=await import("/modules/host/nemesis.js"); return 1; })()');
   check(await host.ev('__cfg.NEMESIS.ENABLED === true && !!game.state.save.nemesis && !!game.state.save.nemesis.cur'), 'the Nemesis is on in the browser and the Book has a captain for this voyage');
+  if (seed != null) await host.ev(`(()=>{ const N = game.state.save.nemesis; N.cur = __NM.makeNemesis(${seed}, N.n || 1, 'shots'); return 1 })()`); // (--seed N: another captain, so the 3D shots show other colours)
   const foeName = await host.ev('game.state.save.nemesis.cur.name');
   console.log('  her name: ' + foeName);
   // A captain the Book remembers (she has met the crew twice), and a flag already won, so the lobby card has both.
@@ -128,6 +130,20 @@ try {
   check(await host.waitFor('game.state.gunship && game.state.gunship.phase === "hunt"', 60000 * SLOW), 'she closes in and hunts');
   await sleep(2500);
   await host.shot('nemesis_4_fight_tv.png');
+  if (view === '3d') { // the 3D follow-up: her ship close up (the game held still): her colours on the bag, her seal on the flank, her name plate under the keel
+    const slug = foeName.toLowerCase().replace(/[^a-z]+/g, '');
+    check(await host.ev('(()=>{ const m = window.view3dDebug().view; return !!m && !!m.S; })()'), 'the 3D view is reachable for the close-ups');
+    await host.ev('(()=>{ window.__upd = game.update; window.__z0 = window.view3dDebug().view.S.zoom; game.update = () => {}; return 1 })()');
+    await sleep(400);
+    const ZS = [['close', 2.4, 0], ['mid', 1.4, 0]];
+    for (const [tag, z, dy] of ZS) {
+      await host.ev(`(()=>{ const g = game.state.gunship, S = window.view3dDebug().view.S, sh = g.ship; S.look = { x: sh.pose.x + sh.layout.refPoint.x, y: sh.pose.y + sh.layout.refPoint.y + ${dy} }; S.zoom = ${z}; return 1 })()`);
+      await sleep(1500);
+      await host.shot(`nemesis3d_${slug}_${tag}.png`);
+    }
+    console.log('  3D marks: ' + await host.ev('(()=>{ const v = window.view3dDebug().view, st = v.stats ? v.stats() : null; return JSON.stringify(st && { calls: st.calls || st.drawCalls }) })()'));
+    await host.ev('(()=>{ const S = window.view3dDebug().view.S; S.look = null; S.zoom = window.__z0; game.update = window.__upd; return 1 })()');
+  }
 
   // 4. beaten: she limps away with a vow
   await host.ev('(()=>{ const g = game.state.gunship; g.ship.state.hull = 20; return 1 })()');
