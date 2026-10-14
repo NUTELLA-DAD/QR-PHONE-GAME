@@ -2569,9 +2569,9 @@ export const config = {
     GAP: 2, // ...then every this many columns (a stop she cannot fly in - a lair, a ring, a salvage run - waits: she comes at the next that can)
     MEETINGS: 3, // the third meeting of a voyage (or the last stop before the Flagship that can host her) is the FINAL showdown: she does not run
     AFTER_PEAKS: 0, // she is the stop's gunship, at its first set piece after this many (the same moment the F6 stop-shape gunship would come)
-    HULL: 'frigate', // her hull class never changes (a silhouette players learn); the blueprint seed is hers alone, so her layout and flag stay too
+    HULL: 'cutter', // her hull class never changes (a silhouette players learn); the blueprint seed is hers alone, so her layout and flag stay too. A cutter: a frigate made the stop-2 meeting cost the classic ship 9 hull points more than the gunship it replaces (voyagesim, 48 runs)
     MAX_LEVEL: 5, // a meeting makes her one level stronger, up to this
-    HP_MUL: 1.0, HP_STEP: 0.06, // hull points: x HP_MUL at level 0 (as tough as any gunship of the stop), plus HP_STEP for each level she has grown
+    HP_MUL: 0.85, HP_STEP: 0.05, // hull points: x HP_MUL at level 0, plus HP_STEP for each level she has grown (x1.1 at level 5): a little under an ordinary gunship at first, a little over at the end
     FIRE_STEP: 0.03, // her guns reload this share faster for each level (cap.fireMul x (1 - this x level))
     ESCAPE_AT: 0.35, // she limps away when her hull falls under this share (and nobody is on her or roped to her); at the final showdown she fights on
     FLOOR: 0.05, // before the final showdown a shot never sinks her: her hull stops at this share while she flees (a boarding charge or taking her helm still ends her for good)

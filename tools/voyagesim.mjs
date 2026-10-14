@@ -163,7 +163,7 @@ if (process.env.NO_LAIRS) config.CREATURES.LAIR.COUNT = { short: 0, long: 0 }; /
 if (!config.BOTS.PROFILES[args.profile]) { console.error('Bad profile; use ' + Object.keys(config.BOTS.PROFILES).join('|')); process.exit(2); }
 config.BOTS.PROFILE = args.profile; // (FUN.md F8: --profile human makes the bots fail like people)
 // --set "A.B.C=value;...": tweak config numbers for tuning runs
-for (const kv of args.set.split(';').filter(Boolean)) { const [k, v] = kv.split('='); const ks = k.split('.'); let o = config; for (const x of ks.slice(0, -1)) o = o[x] ??= {}; o[ks[ks.length - 1]] = Number(v); }
+for (const kv of args.set.split(';').filter(Boolean)) { const [k, v] = kv.split('='); const ks = k.split('.'); let o = config; for (const x of ks.slice(0, -1)) o = o[x] ??= {}; o[ks[ks.length - 1]] = Number.isNaN(Number(v)) ? v : Number(v); }
 const { SHIP_LAYOUT, kindOf } = await load('shipLayout.js');
 const { damageMul } = await load('modules/host/crewscale.js');
 const { hullOrStructure } = await load('modules/host/structure.js');

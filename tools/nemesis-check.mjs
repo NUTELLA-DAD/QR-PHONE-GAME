@@ -195,6 +195,7 @@ let arcFoe, arcSave;
   shoot(g, 24);
   const fled = flyUntil(sim, st, () => g.phase === 'leaving', 20);
   report(fled && g.fled && !g.paid, `meeting 1: below ${NM.ESCAPE_AT * 100}% hull she runs (phase ${g.phase}) instead of fighting on`);
+  fly(sim, st, 4); // (her banner waits its turn behind the one on screen)
   report(banners(st).some((t) => t.startsWith(`THE ${NMS.nameWords(foe)} LIMPS AWAY: "`)) && !banners(st).some((t) => /BADLY HIT/.test(t)), `...with her own banner and a vow: "${banners(st).find((t) => /LIMPS AWAY/.test(t))}"`);
   fly(sim, st, 3);
   report(st.run.salvage - salvage0 >= config.SALVAGE.GUNSHIP_SHOT * NM.ESCAPE_PAY && foe.escapes === 1, `...driven off: salvage +${st.run.salvage - salvage0}, escapes ${foe.escapes}`);
@@ -401,10 +402,7 @@ let arcFoe, arcSave;
   st.briefing.nemesis.rumour = false; st.briefing.nemesis.final = true; draw();
   report(exc === 0 && rec.texts.some((t) => t.s === 'THE FINAL SHOWDOWN'), 'the final showdown has its own tag');
   st.briefing = null;
-  // her on the stage: her seal beside her health bar
-  const g = meet(sim, st, { col: 1 });
-  draw();
-  report(!!g && exc === 0 && rec.texts.some((t) => t.s === g.bp.title), `she draws in flight (name ${g && g.bp.title}), 0 errors`);
+  // (her seal beside her health bar is drawn by gunshipArt.js: the stub canvas cannot bake a gunship, nemesis-shots.mjs looks at her in a real Chrome)
   // the lobby: the WANTED card and the flags
   const lob = boot();
   const R2 = createRenderer({ ctx: stubCtx(), state: lob.st, canvas });

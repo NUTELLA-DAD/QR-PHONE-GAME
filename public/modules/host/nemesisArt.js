@@ -93,25 +93,25 @@ export function createNemesisArt({ ctx, book }) {
   const lobbyCard = (save, x, y) => {
     const N = save && save.nemesis, foe = N && N.cur, flags = (N && N.fallen) || [];
     if (!foe && !flags.length) return 0;
-    const h = foe ? (flags.length ? 130 : 104) : 64;
+    const h = foe ? (flags.length ? 140 : 108) : 64;
     safe(() => {
       book.paper(x, y, 440, h, { r: 14 });
       ctx.textAlign = 'left';
       let fy = y + 40;
       if (foe) {
-        drawBadge(ctx, x + 50, y + 52, 32, foe.look, Math.min(config.NEMESIS.MAX_LEVEL, foe.meets | 0));
+        drawBadge(ctx, x + 50, y + 50, 32, foe.look, Math.min(config.NEMESIS.MAX_LEVEL, foe.meets | 0));
         ctx.fillStyle = LB.INK_SOFT; ctx.font = `700 ${MIN}px ${F.TEXT}`;
-        ctx.fillText(foe.meets ? 'STILL OUT THERE' : 'WANTED', x + 100, y + 30, 320);
+        ctx.fillText(foe.meets ? 'STILL OUT THERE' : 'WANTED', x + 100, y + 28, 320);
         ctx.fillStyle = foe.look && foe.look.a ? foe.look.a : LB.INK; ctx.font = `28px ${F.DISPLAY}`;
-        ctx.fillText(String(foe.name).toUpperCase(), x + 100, y + 62, 320);
+        ctx.fillText(String(foe.name).toUpperCase(), x + 100, y + 58, 320);
         ctx.fillStyle = LB.INK; ctx.font = `400 ${MIN}px ${F.TEXT}`;
-        ctx.fillText(foe.meets ? `met ${foe.meets}, driven off ${foe.escapes | 0}` : 'The crew has not met her yet.', x + 100, y + 90, 320);
-        fy = y + 118;
+        ctx.fillText(foe.meets ? `met ${foe.meets}, driven off ${foe.escapes | 0}` : 'The crew has not met her yet.', x + 100, y + 86, 320);
+        fy = y + 124;
       }
       if (flags.length) {
         ctx.fillStyle = LB.INK_SOFT; ctx.font = `700 ${MIN}px ${F.TEXT}`;
         ctx.fillText(`FLAGS WON: ${flags.length}`, x + 22, fy, 200);
-        flags.slice(-6).forEach((f, i) => pennant(x + 232 + i * 32, fy - 4, f.look));
+        flags.slice(-6).forEach((f, i) => pennant(x + 232 + i * 32, fy + 2, f.look));
       }
     });
     return h;

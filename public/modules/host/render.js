@@ -1525,7 +1525,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.fillStyle = LB.INK_SOFT;
     ctx.fillText(state.shipName ? state.shipName.toUpperCase() : "THE CAPTAIN'S LOGBOOK", 800, 196, 540); // (L2: her name once she has one)
     if (config.BOOK.ENABLED && state.save) bookArt().lobbyCard(state.save, state.shipName, 30, 276);
-    if (config.NEMESIS.ENABLED && state.save) nemesisArt().lobbyCard(state.save, 30, 502); // (L4: the captain still out there, and the flags of the beaten)
+    if (config.NEMESIS.ENABLED && state.save) nemesisArt().lobbyCard(state.save, 30, 494); // (L4: the captain still out there, and the flags of the beaten)
     if (config.BOOK.ENABLED && state.welcomes && state.welcomes.length) bookArt().welcomes(state.welcomes, 470, 226); // (L3: "Mia the Old Salt returns!" for a few seconds after a phone scans in)
     const crew = crewHeads(state);
     const mates = matesWanted(state, 0, true); // (ship's mates who will come aboard on CAST OFF)

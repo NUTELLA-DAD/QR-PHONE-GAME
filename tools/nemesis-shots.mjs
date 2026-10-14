@@ -14,6 +14,7 @@ const out = path.resolve(arg('out', 'C:/Users/kenny/Downloads/AIRSHIP/airship/3d
 const port = Number(arg('port', 5900 + Math.floor(Math.random() * 90)));
 const view = arg('view', '2d');
 const sfx = arg('suffix', view === '3d' ? '_3d' : '');
+const SLOW = view === '3d' ? 5 : 1; // (the 3D view runs the headless game several times slower: waits are stretched)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
 const check = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg); if (!cond) failed++; };
@@ -96,33 +97,41 @@ try {
   await sleep(800);
   const GATES = '["swarm","imps","bombers","strafers","gunship"]';
   const stopAt = async (col, name) => {
-    await host.ev(`(()=>{ game.state.run.nemesis.dueCol = ${col}; game.course.startMission(2, { kind: 'open', environment: 'skyisles', danger: 2, title: 'STOP ${col + 1}: ${name.toUpperCase()} - DESTROY THE OUTPOSTS!', goal: 'DESTROY THE OUTPOSTS', heading: 'STOP ${col + 1}: ${name.toUpperCase()}', stop: { id: '${col}.0', col: ${col}, name: '${name}', gates: ${GATES} } }); game.state.course.turrets.forEach(t => { t.hp = 1e9 }); return 1 })()`);
+    await host.ev(`(()=>{ game.state.run.nemesis.dueCol = ${col}; game.course.startMission(2, { kind: 'open', environment: 'skyisles', danger: 2, title: 'STOP ${col + 1}: ${name.toUpperCase()} - DESTROY THE OUTPOSTS!', goal: 'DESTROY THE OUTPOSTS', heading: 'STOP ${col + 1}: ${name.toUpperCase()}', stop: { id: '${col}.0', col: ${col}, name: '${name}', gates: ${GATES} } }); return 1 })()`);
   };
+  // the voyage's first briefing names her (the Book remembers): a picture of its own, then the card of the stop she is due at
+  check(await host.waitFor('!!game.state.briefing && !!game.state.briefing.nemesis && game.state.briefing.nemesis.rumour', 6000), 'the first briefing of the voyage carries the rumour');
+  await sleep(300);
+  await host.shot('nemesis_2a_rumour_briefing_tv.png');
+  check(await host.waitFor('!game.state.briefing', 30000 * SLOW), 'the first briefing is over');
   await stopAt(1, 'Cinder Reach');
   check(await host.waitFor('!!game.state.briefing && !!game.state.briefing.nemesis', 4000), 'the briefing carries her card');
   await host.ev('(()=>{ window.__upd = game.update; game.update = () => {}; return 1 })()'); // (hold the briefing for the picture)
   await sleep(500);
   console.log('  briefing: ' + await host.ev('JSON.stringify(game.state.briefing.nemesis.line + " / " + game.state.briefing.nemesis.sub)'));
-  await host.shot('nemesis_2_intro_briefing_tv.png');
+  await host.shot('nemesis_2b_intro_briefing_tv.png');
   await host.ev('(()=>{ game.update = window.__upd; return 1 })()');
 
   // 3. the fight: her arrival banner, then she hunts us with her seal on her health bar
   await host.ev('(()=>{ game.state.tempo.t = 0.01; return 1 })()'); // (the first set piece now)
-  let met = await host.waitFor('!!game.state.gunship && !!game.state.gunship.nemesis', 25000);
-  for (let k = 0; k < 4 && !met; k++) { await stopAt(1, 'Cinder Reach'); await host.ev('(()=>{ game.state.tempo.t = 0.01; return 1 })()'); met = await host.waitFor('!!game.state.gunship && !!game.state.gunship.nemesis', 25000); }
+  let met = await host.waitFor('!!game.state.gunship && !!game.state.gunship.nemesis', 25000 * SLOW);
+  for (let k = 0; k < 4 && !met; k++) { await stopAt(1, 'Cinder Reach'); await host.ev('(()=>{ game.state.tempo.t = 0.01; return 1 })()'); met = await host.waitFor('!!game.state.gunship && !!game.state.gunship.nemesis', 25000 * SLOW); }
   check(met, 'the stop\'s gunship set piece is HER');
   await sleep(400);
+  // (the picture of her arrival: the banner the game said when she spawned is put back on screen if another banner was ahead of it in the queue)
+  await host.ev('(()=>{ const g = game.state.gunship, ev = game.state.ev; if (ev.warnText !== g.nemesis.say.approach) { ev.warn = 0; ev.q.length = 0; game.state.say("setpiece", g.nemesis.say.approach, 6, 4.5); } return 1 })()');
+  await sleep(300);
   const banner = await host.ev('game.state.ev.warn > 0 ? game.state.ev.warnText : ""');
   console.log('  banner: ' + banner);
   check(/BACK - SHE REMEMBERS YOU!$/.test(banner), 'one headline: ' + banner);
   await host.shot('nemesis_3_arrival_banner_tv.png');
-  check(await host.waitFor('game.state.gunship && game.state.gunship.phase === "hunt"', 60000), 'she closes in and hunts');
+  check(await host.waitFor('game.state.gunship && game.state.gunship.phase === "hunt"', 60000 * SLOW), 'she closes in and hunts');
   await sleep(2500);
   await host.shot('nemesis_4_fight_tv.png');
 
   // 4. beaten: she limps away with a vow
   await host.ev('(()=>{ const g = game.state.gunship; g.ship.state.hull = 20; return 1 })()');
-  check(await host.waitFor('game.state.gunship && game.state.gunship.phase === "leaving"', 30000), 'below a third of her hull she runs');
+  check(await host.waitFor('game.state.gunship && game.state.gunship.phase === "leaving"', 30000 * SLOW), 'below a third of her hull she runs');
   await sleep(500);
   const esc = await host.ev('game.state.ev.warn > 0 ? game.state.ev.warnText : ""');
   console.log('  banner: ' + esc);
@@ -131,7 +140,7 @@ try {
 
   // 5. the Log: the scorecard line, then the postcard ("... is still out there")
   await host.ev('game.state.course.turrets.forEach(t => { t.dead = true; t.hp = 0 }); 1');
-  check(await host.waitFor('!!game.state.course.escape', 20000), 'all outposts down: the escape starts');
+  check(await host.waitFor('!!game.state.course.escape', 20000 * SLOW), 'all outposts down: the escape starts');
   await host.ev('game.state.course.escape.t = 0.2; 1');
   check(await host.waitFor('!!game.state.scorecard', 8000), 'the scorecard comes up');
   await sleep(600);
