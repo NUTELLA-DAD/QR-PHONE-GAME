@@ -731,12 +731,12 @@ export function createSimulation() {
   };
 
   // What a stop asks of the course (see startMission in course.js).
-  const goalOf = (stop) => (stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'ring' ? 'BREACH THE ' + ({ tower: 'TOWER', fortress: 'FORTRESS', citadel: 'CITADEL' }[stop.ring] || 'CASTLE') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON');
+  const goalOf = (stop) => (stop.flagship ? 'SINK THE FLAGSHIP' : stop.lair ? 'SLAY THE ' + (stop.creature === 'titan' ? 'ISLAND TITAN' : stop.creature === 'thunderbird' ? 'THUNDERBIRD' : stop.creature === 'drake' ? 'DRAKE' : 'KRAKEN') : stop.salvage ? 'SALVAGE RUN - REACH THE BEACON' : stop.kind === 'ring' ? 'BREACH THE ' + ({ tower: 'TOWER', fortress: 'FORTRESS', citadel: 'CITADEL' }[stop.ring] || 'CASTLE') : stop.kind === 'open' ? 'DESTROY THE OUTPOSTS' : 'REACH THE BEACON');
   const missionOpts = (stop) => ({
     environment: stop.play,
     kind: stop.kind,
     danger: stop.danger,
-    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined), gates: stop.gates, ring: stop.ring, nemesis: stop.nemesis, multi: stop.multi, salvage: stop.salvage, rateMul: stop.salvage ? VY.CURRICULUM.SALVAGE.RATE_MUL : undefined, slack: stop.slack, early: stop.early }, // (slack: F1, a small ship's early caves are wider; early: the classic ship's stop 1 may call the planes at its first set piece; gates... rateMul: the teaching curriculum's set-piece gates, ring / Nemesis / multi-part flags and the salvage run's lighter enemies, config.VOYAGE.CURRICULUM; lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
+    stop: { id: stop.id, col: stop.col, name: stopName(stop), env: stop.env, reward: stop.reward, flagship: stop.flagship, lair: !!stop.lair || (config.CREATURES.DEV_LAIR && !stop.flagship), creature: stop.creature || (config.CREATURES.DEV_LAIR && !stop.flagship ? config.CREATURES.DEV_LAIR_AS || config.CREATURES.LAIR.BY_ENV[config.ENVIRONMENTS.FORCE || stop.play] || 'kraken' : undefined), gates: stop.gates, ring: stop.ring, nemesis: stop.nemesis, multi: stop.multi, salvage: stop.salvage, rateMul: stop.salvage ? VY.CURRICULUM.SALVAGE.RATE_MUL : undefined, slack: stop.slack, early: stop.early }, // (slack: F1, a small ship's early caves are wider; early: the classic ship's stop 1 may call the planes at its first set piece; gates... rateMul: the teaching curriculum's set-piece gates, ring / Nemesis / multi-part flags and the salvage run's lighter enemies, config.VOYAGE.CURRICULUM; lair: a giant creature waits here, creatureSystem.js raises it at the zeppelin boss's slot; DEV_LAIR: every stop is one; creature: 'kraken' | 'drake', by the sky)
     lengthMul: modeInfo(state.run.mode).lengthMul,
     title: `STOP ${stopNo(state.run, stop)}: ${stopName(stop).toUpperCase()} - ${goalOf(stop)}!`,
     goal: goalOf(stop), // (F6: the BRIEFING card's one line)
@@ -800,10 +800,10 @@ export function createSimulation() {
     if (cr && cr.dying && !cr.paid) { // a giant creature that sank: the boss reward, times config.CREATURES.REWARD_MUL
       cr.paid = true;
       addSalvage(SV.BOSS * config.CREATURES.REWARD_MUL, 'boss', cr.name + ' slain!');
-      const RW = cr.kind === 'thunderbird' ? config.CREATURES.THUNDERBIRD.REWARD : cr.kind === 'drake' ? config.CREATURES.DRAKE.REWARD : config.CREATURES.REWARD; // (the spoils: the hull and every gasbag patched, and the trophy part card at the next dock)
+      const RW = cr.kind === 'titan' ? config.CREATURES.TITAN.REWARD : cr.kind === 'thunderbird' ? config.CREATURES.THUNDERBIRD.REWARD : cr.kind === 'drake' ? config.CREATURES.DRAKE.REWARD : config.CREATURES.REWARD; // (the spoils: the hull and every gasbag patched, and the trophy part card at the next dock)
       mendHull(state, RW.HULL);
       for (const b of state.bags) b.gas = Math.min(100, b.gas + RW.GAS);
-      if (state.run) state.run.trophy = RW.TROPHY;
+      if (state.run && RW.TROPHY) state.run.trophy = RW.TROPHY; // (the Island Titan leaves no trophy card, and must not wipe one still waiting)
     }
   };
 

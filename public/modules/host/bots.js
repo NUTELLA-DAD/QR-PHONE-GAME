@@ -25,7 +25,7 @@ import { captainFly, captainOf, callout, bombFalls, dropPossible } from './pvp/c
 import { specOf } from './gunTypes.js';
 import { gripJobs } from './creatureGrip.js';
 import { breachClimbAlt } from './creatureBreach.js';
-import { bombInMouth, mouthWindowSoon, forcedSkip, mouthKey } from './creatureFight.js';
+import { bombInMouth, mouthWindowSoon, forcedSkip, mouthKey, mouthCfg } from './creatureFight.js';
 import { boardAt, mantleOf } from './creatureBoard.js';
 import { drakeBoardable } from './creatureDrake.js';
 import { isMothballed } from './gunsMatter.js';
@@ -378,6 +378,21 @@ function dodgeAltitude(state) {
     if (target !== null && target >= bounds.lo && target <= bounds.hi && (!soonest || t < soonest.t)) soonest = { t, target };
   }
   return soonest && soonest.target;
+}
+
+// C.6c: the Island Titan's boulder is coming in level at a spot (the ring once it has locked, or a rock in the air that is still short of it): the helm climbs until her keel is over where it will pass, as high as the
+// window allows (the same altitude scale as above). The gunners shoot at it meanwhile (it is the first target in the list).
+function boulderDodge(state) {
+  const cr = state.creature;
+  if (!cr || cr.kind !== 'titan' || cr.dying || !cr.titan) return null;
+  const ship = mainShip(state), L = ship.layout, mx = toWorldX(ship, L.refPoint.x), tt = cr.titan, R = config.CREATURES.TITAN.BOULDER.R * 0.85 + 140;
+  const spots = [];
+  for (const rg of tt.rings || []) if (rg.locked) spots.push(rg);
+  for (const b of tt.boulders) if (b.mode === 'fly' && b.tx !== undefined && (b.x - b.tx) * (b.vx || 1) < 0) spots.push({ x: b.tx, y: b.ty });
+  let want = null;
+  for (const s of spots) if (Math.abs(s.x - mx) < 1900) want = Math.max(want ?? -Infinity, L.bounds.y1 + R - s.y);
+  const bounds = altBounds(state);
+  return want !== null && want >= bounds.lo && want <= bounds.hi ? want : null;
 }
 
 // Versus (B.4): a bot of the OTHER team standing on this ship is a boarder. He does not mend her: he fights her crew, sabotages her boiler (hold) and takes her helm (hold) - never both
@@ -771,7 +786,7 @@ function listJobs(state, bot) {
   if (!bombRun && bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs < 2 && (!guns.length || bot.carry === 'ammo')) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   // C.3: a Kraken about with its beak to feed: the bay is kept stocked with the bombs a win takes (the stock is loaded, the bombs are in the hold)
   const feeding = !!state.creature && !state.creature.dying && state.creature.kind !== 'thunderbird' && (!config.CREATURES.FORCE_WIN || config.CREATURES.FORCE_WIN === mouthKey(state.creature));
-  if (feeding && bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs < config.CREATURES.MOUTH.FED + 1) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
+  if (feeding && bay && L.hasKind('ammo') && state.bombBay && state.bombBay.bombs < mouthCfg(state.creature).FED + 1) jobs.push({ kind: 'ammo', obj: bay, max: 1 });
   jobs.push(...sailJobs(state, bot, false)); // (a sail to raise in a fair wind: after the chores, ahead of an idle gun post)
   jobs.push(...linkJobs(state, bot, false)); // (...and the quieter links: loaders for idle guns, the boiler surge)
   const fillers = players.filter((q) => q.bot && q.lock && tables(L).GUN_STATIONS.includes(q.lock) && (q.gunIdle || 0) > 0).length; // (F4: bots already sitting at a gun with nothing to shoot)
@@ -923,7 +938,7 @@ function operate(p, state, dt) {
       p.jx = clamp((plan.speed - (ship.pace ?? ship.speed)) * 4, -1, 1);
     }
     let target = null;
-    const dodge = beamDodge(state) ?? dodgeAltitude(state) ?? grappleDodge(state);
+    const dodge = beamDodge(state) ?? dodgeAltitude(state) ?? grappleDodge(state) ?? boulderDodge(state);
     if (lo > hi || Math.abs(plan.target - ship.alt) > 120) target = plan.target;
     else if (dodge !== null && dodge > lo && dodge < hi) target = dodge;
     else if (ship.alt < lo + 15 || ship.alt > hi - 15 || cap) target = plan.target; // (the Versus captain always follows her plan: her jinks are small moves)
@@ -944,7 +959,7 @@ function operate(p, state, dt) {
     else if (hi - lo > 250 && enemyActive(state)) p.jy = Math.sin(performance.now() / 700 + p.phase) * 0.7;
     else p.jy = 0;
     // The PRESSURE lever: pump or vent the gasbag toward the altitude the plan wants.
-    p.gas = state.goingDown ? 1 : gasFor(state, lungeAlt ?? beamDodge(state) ?? (chainD && state.ship.alt > chainD.alt ? chainD.alt : null) ?? (dip !== null && target === dip ? dip : plan.target)); // (GOING DOWN!: pump flat out)
+    p.gas = state.goingDown ? 1 : gasFor(state, lungeAlt ?? beamDodge(state) ?? boulderDodge(state) ?? (chainD && state.ship.alt > chainD.alt ? chainD.alt : null) ?? (dip !== null && target === dip ? dip : plan.target)); // (GOING DOWN!: pump flat out)
     levelWithEngines(p, state, lungeAlt !== null);
     if (p.gas < 0 && !state.goingDown && mainShip(state).sim.structure.on() && !(chainD && state.ship.alt > chainD.alt)) { // (...except to dive under a boom chain, which is worth the gas) // (balance pass: lift is a live rule, so the bot helm no longer vents the bags flat to dive: never more than DIVE points under the level she hovers at - an empty bag and no steam to refill it was how most falls began)
       const hover = config.GAS.NEUTRAL + (state.structDeficit || 0) + (state.engineWeight || 0) + ((state.env && state.env.sink) || 0);

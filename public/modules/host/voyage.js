@@ -173,6 +173,7 @@ function generateCurriculum(seed, opts = {}) {
   }
   curriculumRings(columns, seed, table);
   curriculumLairs(columns, seed, n, h, table);
+  titanLair(columns, seed, n, h, second);
   curriculumTags(columns, h);
   connectColumns(columns, rand, n);
   return { seed, columns, mode: opts.mode, voyageNo: opts.voyageNo || 1, curriculum: true };
@@ -208,6 +209,29 @@ function curriculumLairs(columns, seed, n, h, table) {
     delete s.nemesis;
     delete s.multi;
   }
+}
+
+// THE ISLAND TITAN'S LAIR (BOSSES.md 2.7, C.6c; config.CREATURES.TITAN.LAIR): the gentle tutorial boss stands on an EARLY Sky Isles stop - ONE of the Sky Isles stops of the column COLUMN after the first stop flown (the second stop of the
+// first voyage), guaranteed, in a route of MIN_STOPS flown stops or more (a 4-stop QUICK route keeps its late lair). It is a lair like the others (kind 'lair', its own map, no zeppelin) but only bats and imps fly with it, +DANGER skulls
+// and x REWARD_MUL reward, and the column keeps a branch at or under its base skulls (a lair is never the only easy way). Its own random stream, so a route without it is the same route; no Titan next to another lair, and none
+// in the second voyage of a campaign (that starts deeper in the table, with no Sky Isles).
+function titanLair(columns, seed, n, h, second) {
+  const TL = config.CREATURES.TITAN.LAIR;
+  if (!TL.ENABLED || second || n - h < TL.MIN_STOPS) return;
+  const c = h + TL.COLUMN, col = columns[c];
+  if (!col || c >= n - 1 || [c - 1, c + 1].some((x) => columns[x] && columns[x].some((s) => s.lair))) return;
+  const rand = mulberry((seed ^ 0x7469746e) >>> 0);
+  const homes = col.filter((s) => s.env === 'skyisles' && !s.ring && !s.lair && !s.harbour && !s.flagship && col.some((o) => o !== s && o.danger <= o.base));
+  if (!homes.length) return;
+  const s = homes[Math.floor(rand() * homes.length)];
+  s.lair = true;
+  s.creature = 'titan';
+  s.kind = 'lair';
+  s.danger = Math.max(1, s.danger + TL.DANGER);
+  s.reward = Math.round(s.reward * TL.REWARD_MUL);
+  s.gates = ['swarm', 'imps'];
+  delete s.nemesis;
+  delete s.multi;
 }
 
 // The ring flags (LOOP.md 3D add-on): a slot with ring: 'tower' / 'fortress' flags one stop of its column (a lair never takes it), 'citadel' the Flagship. The stop is flown on the ring map (kind 'ring', maps.js
@@ -274,7 +298,7 @@ export const stopById = (voyage, id) => {
 };
 
 // The look and words of a lair by its creature ('kraken' | 'drake' | 'thunderbird'): { ICON, LABEL, NAME, KIND }.
-export const lairOf = (creature) => (creature === 'thunderbird' ? config.CREATURES.THUNDERBIRD.LAIR : creature === 'drake' ? config.CREATURES.DRAKE.LAIR : config.CREATURES.LAIR);
+export const lairOf = (creature) => (creature === 'titan' ? config.CREATURES.TITAN.LAIR : creature === 'thunderbird' ? config.CREATURES.THUNDERBIRD.LAIR : creature === 'drake' ? config.CREATURES.DRAKE.LAIR : config.CREATURES.LAIR);
 export const stopName = (s) => (s.flagship ? 'The Flagship' : s.harbour ? 'The Harbour' : s.lair ? lairOf(s.creature).NAME : envInfo(s.env).name);
 
 // Stop numbers run on across the voyages of a campaign: run.base = stops finished before this voyage's harbour.

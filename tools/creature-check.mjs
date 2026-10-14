@@ -28,6 +28,7 @@
 //   (b) the bots (CREATURE_FORCE_WIN=sever|mouth|tow|board|hp): each win within 6 minutes of its spawn with 8 bots on Normal (tow on a harpoon ship), 4 and 16 bots on Easy within 10, 0 errors, no NaN
 //   C.6b: the last section (T0-T12) is THE THUNDERBIRD: its body, the gust (a shove and a twist within FORCES.MAX_DEG), the lightning dive (a held rod grounds a bolt, a manned coil drinks one and fires it back for 3x), the swallow and the glowing gizzard (coil zaps win), the perch,
 //   the roost on a rock spire (mortar hits win), boarding it (cut the gizzard), the plucked wings (both: it falls), the lair, the voyage, the reward and the feather sail, the TV, and the bots: each forced win by 8 bots on Normal, 4 and 16 bots on Easy
+//   C.6c: the last section (I0-I10) is THE ISLAND TITAN: its body (2 stone arms, torso, head, mouth, a hidden crystal), the boulder (banner, buzz, the ring that follows her and locks, the rock: a hit shakes a frame segment, a move or a shell saves her), the gasbag grab (phase 2 only: a sideways pull within FORCES.MAX_DEG, swords pry it off, a squeeze that tears nothing off), the roar (bombs in the open mouth), the arms and the phases, the ISLAND as a ground that moves with it (a parachute, being carried, JUMP, a hookshot, the rope ladder, its fall), the CRYSTAL on foot, the reward, the lair, the early route placement, the TV, and the bots (forced arms / mouth / crystal / hp by 8 bots on Normal, 4 and 16 bots on Easy; --no-titan-bots skips them)
 // Exit code 1 on any failure.
 import path from 'node:path';
 import fs from 'node:fs';
@@ -102,6 +103,7 @@ const { segDist } = await load('modules/host/creature.js');
 const { inRock } = await load('modules/host/course.js');
 
 const C = config.CREATURES, H = C.HURT;
+C.TITAN.LAIR.ENABLED = false; // (C.6c: the Island Titan's guaranteed early lair is off for every section before its own, which count lairs by the old rules: the Titan sections turn it on for the route checks)
 // C.3 made the real fight last (HURT.PART_HP_MUL: tougher tentacles and pool). The C.1 / C.2 sections below test one blow at a time against the BASE numbers of the data, so they run with every multiplier at 1;
 // the C.3 sections (and the bots, which run as child processes) use the real ones.
 const REAL_HP = { ...H.PART_HP_MUL };
@@ -155,7 +157,8 @@ function risen(ctx, phase = 2) { // (phase 2 by default: the C.1 / C.2 sections 
   cr.ai.reachT = 1e9;
   return cr;
 }
-const restoreCfg = () => { const o = JSON.parse(SAVED); Object.assign(C.BEHAVE, o.B); config.ENVIRONMENTS.FORCE = o.ENV; C.DEV_SPAWN = o.DEV; config.MAPS.FORCE_KIND = o.MAP; config.ESCORT.AUTO_PATROL = o.AP; C.DEV_LAIR = false; C.FORCE_WIN = null; unitHp(); };
+const AWAY_ON0 = config.AWAY.ENABLED; // (C.6c: the Island Titan sections turn the away team on, as the real game has it; the gate runs with NO_AWAY=1 otherwise)
+const restoreCfg = () => { const o = JSON.parse(SAVED); Object.assign(C.BEHAVE, o.B); config.ENVIRONMENTS.FORCE = o.ENV; C.DEV_SPAWN = o.DEV; config.MAPS.FORCE_KIND = o.MAP; config.ESCORT.AUTO_PATROL = o.AP; C.DEV_LAIR = false; C.DEV_LAIR_AS = null; config.AWAY.ENABLED = AWAY_ON0; C.FORCE_WIN = null; unitHp(); };
 const midOf = (s, u = 0.5) => ({ x: s.x + Math.cos(s.ang) * s.len * u, y: s.y + Math.sin(s.ang) * s.len * u });
 const partOf = (cr, kind) => cr.parts.find((p) => p.kind === kind);
 // A point on part p that every weapon radius attributes to p (hitInfo ranks the beak and eyes over limbs over the mantle, and limbs overlap near their roots).
@@ -3297,6 +3300,675 @@ const roostedBird = () => {
     report(rows.every((x) => x.ok) && how.every((h) => h !== 'NOT'), `unforced, 8 bots on Normal win (${how.join(', ')})`);
   }
   report(results.every(({ r }) => clean(r)), `0 errors and no NaN in any of the ${results.length} Thunderbird bot fights`);
+}
+
+// =================================================================== C.6c: THE ISLAND TITAN ===================================================================
+//   (I0) the body (2 arms of 3 stone slabs, torso, head, mouth, a hidden crystal), twice the ship, standing on the lair's plain; it lives in the Sky Isles lair only; it strides in untouchable; stepped keys
+//   (I1) every weapon hurts a part;  (I2) the BOULDER: banner, a buzz, the ring that follows her and then locks, the rock on its arc; a hit shakes a hull segment, a move out of the ring dodges it, shells shatter it
+//   (I3) the GRAB (phase 2 only): the hand on the gasbag, a sideways pull inside FORCES.MAX_DEG, swords pry it off, shells on the arm free her, unfreed it SQUEEZES the bag (holes, a frame blow, nothing torn off)
+//   (I4) the ROAR: a wind-up and a buzz for the bomb bay, then the mouth is open for bombs, the funnel, the gulp, crates are half, FED win;  (I5) shell the arms off (phase 2 at one arm, win at two), the phases by the pool
+//   (I6) the ISLAND as a ground that moves with it: a parachute landing, carried by it, JUMP, the rope ladder, a hookshot, it falls when the Titan dies;  (I7) the CRYSTAL on foot: strokes by tool, no gun can touch it, hint and arrow, the win
+//   (I8) the reward, the lair, the voyage (a Titan lair on the second stop flown, bats and imps only), the TV and the bots: each forced win by 8 bots on Normal, 4 and 16 bots on Easy
+const TT = C.TITAN;
+const TTM = await load('modules/host/creatures/titan.js');
+const TIT = await load('modules/host/creatureTitan.js');
+const ISL = await load('modules/host/creatureIsland.js');
+const CBD = await load('modules/host/creatureBoard.js');
+const TW0 = JSON.stringify({ W: TT.ATTACK.WEIGHTS, F: TT.SPAWN.FIRST, G: TT.GRAB.FIRST, M: TT.MOUTH.FIRST });
+const titanCfgBack = () => { const o = JSON.parse(TW0); TT.ATTACK.WEIGHTS = o.W; TT.SPAWN.FIRST = o.F; TT.GRAB.FIRST = o.G; TT.MOUTH.FIRST = o.M; };
+const onlyTitan = (kind) => { for (const ph of [1, 2, 3]) TT.ATTACK.WEIGHTS[ph] = { throw: 0, grab: 0, [kind]: 1 }; };
+const tQuiet = (cr) => { cr.ai.breather = 1e9; cr.titan.nextT = 1e9; cr.titan.grabT = 1e9; cr.ai.mouthT = 1e9; };
+const tWake = (cr) => { cr.ai.breather = 0; cr.titan.nextT = 0; };
+const tIsl = (ctx) => ctx.st.away.island;
+// A sim in the Sky Isles lair with the Island Titan arrived and standing, its attacks held until a test asks. away: the away team (the island) is on, as in the real game.
+function titanUp({ difficulty = 'normal', bots = 0, start = null, away = false } = {}) {
+  restoreCfg();
+  titanCfgBack();
+  config.AWAY.ENABLED = away;
+  C.DEV_LAIR_AS = 'titan';
+  const ctx = boot({ env: 'skyisles', lair: true, difficulty, bots, start });
+  const map = ctx.st.course.map;
+  ctx.ship.pose.x = map.goal.x - ctx.ship.layout.refPoint.x;
+  ctx.ship.pose.y = map.goal.y - ctx.ship.layout.refPoint.y;
+  step(ctx.sim, 5);
+  const cr = ctx.sim.creatures.spawn('titan');
+  for (let i = 0; i < secs(TT.SPAWN.ARRIVE + 1) && cr.mode !== 'idle'; i++) step(ctx.sim);
+  tQuiet(cr);
+  step(ctx.sim, 30);
+  return { ...ctx, cr, p1: ctx.st.players.p1, map };
+}
+// A person in free flight over a world point (the away-team gate's way), falling slowly.
+const flyOverT = (A, p, x, y, vy = 120, chute = true) => {
+  p.fall = false; p.conn = null; p.lock = null; p.d = p.d ?? 1; p.ko = 0; p.hearts = config.HEALTH.MAX;
+  A.ship.sim.air.startFlight(p, 0, 0);
+  p.x = x; p.y = y; p.fvx = 0; p.fvy = vy;
+  p.lsy = p.apex = T.toShipY(A.ship, y);
+  if (chute) { p.chute = 1; p.chuteOpen = true; }
+};
+const tAct = (cr, sub) => !!cr.titan.act && (sub === undefined || cr.titan.act.sub === sub);
+
+// (I0) the world and the body
+{
+  restoreCfg();
+  titanCfgBack();
+  C.DEV_LAIR_AS = 'titan';
+  const ctx = boot({ env: 'skyisles', lair: true });
+  const { sim, st, ship } = ctx;
+  const map = st.course.map;
+  report(map.lair === true && map.creature === 'titan' && map.outposts.length === 0 && map.turrets.length === 0 && Number.isFinite(map.floorY) && Number.isFinite(map.startDist) && map.startDist < 1e8 && !map.spires, `the Titan's lair is open sky over a flat plain ${Math.round(map.floorY - map.start.y)} px under the launch, no outposts, no guns`);
+  report(spawnCr(ctx, 'kraken') === null && spawnCr(ctx, 'drake') === null && spawnCr(ctx, 'thunderbird') === null && st.creature === null, 'no other creature comes to the Sky Isles lair (no sea, no lava, no storm)');
+  const cr = spawnCr(ctx, 'titan');
+  const cnt = (k) => cr.parts.filter((p) => p.kind === k);
+  report(!!cr && cr.kind === 'titan' && cr.name === TT.NAME && cr.mode === 'surfacing' && cnt('tentacle').length === 2 && cnt('tentacle').every((a) => a.segs.length === TT.BODY.ARM.SEGS && a.hp > 0) && cnt('mantle').length === 1 && cnt('head').length === 1 && cnt('mouth').length === 1 && cnt('heart').length === 1 && cnt('heart')[0].id === 'crystal' && cnt('heart')[0].hidden,
+    `spawn puts ${cr && cr.name} in state.creature: 2 arms of ${TT.BODY.ARM.SEGS} stone slabs each with hp, a torso, a head, a mouth and a hidden crystal`);
+  report(Math.abs(cr.y + TT.BODY.FEET - map.floorY) < 1 && cr.titan.floorY === map.floorY && cr.f === -ship.pose.f, `it stands on the plain (its soles at y ${Math.round(cr.y + TT.BODY.FEET)}, the plain ${map.floorY}) and faces her`);
+  const before = cr.parts.reduce((a, p) => a + p.hp, 0);
+  const m = midOf(cnt('tentacle')[0].segs[1]);
+  st.shells.push({ x: m.x, y: m.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 5);
+  report(cr.parts.reduce((a, p) => a + p.hp, 0) === before && AIM.targets(st).filter((t) => t.kind === 'creaturePart').length === 0 && SP.radarItems(st).filter((i) => i.kind === 'creature').length === 0 && !tIsl(ctx), 'while it strides in it cannot be hurt, shot at or spotted, and it has no island to land on');
+  const x0 = cr.x;
+  for (let i = 0; i < secs(TT.SPAWN.ARRIVE + 1) && cr.mode !== 'idle'; i++) step(sim);
+  report(cr.mode === 'idle' && x0 - cr.x > 0.5 * TT.SPAWN.FROM && Math.abs(cr.x - (st.course.map.goal.x + cr.titan.side * TT.STAND.OFFSET)) < TT.STAND.BAND + 5, `it strode ${Math.round(x0 - cr.x)} px in and stands ${TT.STAND.OFFSET} px beyond the lair's middle (x ${Math.round(cr.x)}, home ${Math.round(map.goal.x + cr.titan.side * TT.STAND.OFFSET)})`);
+  tQuiet(cr);
+  step(sim, 60);
+  const tg = AIM.targets(st).filter((t) => t.kind === 'creaturePart');
+  const kinds = new Set(tg.map((t) => t.part.kind));
+  report(['tentacle', 'head', 'mantle'].every((k) => kinds.has(k)) && !kinds.has('heart') && tg.every((t) => t.obj && typeof t.obj.lit === 'number' && Number.isFinite(t.at(0.5).x)), `arrived: ${tg.length} aim targets (${[...kinds].join(', ')}; the crystal is hidden; the shut mouth is a poor target)`);
+  const arms = tg.filter((t) => t.part.kind === 'tentacle'), others = tg.filter((t) => t.part.kind !== 'tentacle');
+  report(arms.length === 2 && arms.every((t) => others.every((o) => t.rank < o.rank)), `the arms rank before everything else (${arms[0].rank} against ${Math.min(...others.map((o) => o.rank))}): the guns go for what wins`);
+  const radar = SP.radarItems(st).filter((i) => i.kind === 'creature');
+  report(radar.length >= 3 && radar.every((i) => Number.isFinite(i.pos().x)), `${radar.length} blips on the phone radar`);
+  let x0b = 1e9, x1b = -1e9, y0b = 1e9, y1b = -1e9;
+  for (const p of cr.parts) for (const s of p.segs) for (const u of [0, 1]) { const x = s.x + Math.cos(s.ang) * s.len * u, y = s.y + Math.sin(s.ang) * s.len * u; x0b = Math.min(x0b, x - s.r); x1b = Math.max(x1b, x + s.r); y0b = Math.min(y0b, y - s.r); y1b = Math.max(y1b, y + s.r); }
+  const shipLen = ship.layout.bounds.x1 - ship.layout.bounds.x0, tall = TT.BODY.FEET + TT.BODY.HEAD.R - TT.BODY.HEAD.AT[1];
+  report(tall >= 1.8 * shipLen && tall <= 3 * shipLen && y1b - y0b >= 1.2 * shipLen, `it is about twice the ship: ${tall} px from sole to crown against her ${shipLen} (${(tall / shipLen).toFixed(1)}x); the parts alone span ${Math.round(y1b - y0b)} px`);
+  const arm = cnt('tentacle')[0];
+  let changed = 0, keyChanges = 0, lastKey = cr.key, lastGoal = arm.goal.x + ',' + arm.goal.y;
+  for (let i = 0; i < 180; i++) { step(sim); const r = arm.goal.x + ',' + arm.goal.y; if (r !== lastGoal) { if (cr.key === lastKey) changed++; else keyChanges++; lastGoal = r; } lastKey = cr.key; }
+  report(changed === 0, `no wobble: an arm's goal changed only on the key clock (${keyChanges} changes on keys, ${changed} between)`);
+  const B0 = boot({ env: 'sea' });
+  report(spawnCr(B0, 'titan') === null && B0.st.creature === null, 'and the Island Titan does not come to the Sunken Sea (no Titan lair map)');
+  const B1 = boot({ env: 'skyisles', lair: false });
+  report(spawnCr(B1, 'titan') === null && B1.st.creature === null, '...nor to an ordinary Sky Isles stop');
+}
+
+// (I1) every weapon hurts a part
+{
+  const A0 = titanUp();
+  const { sim, st, cr } = A0;
+  const arm = cr.parts.find((p) => p.id === 'armN'), torso = partOf(cr, 'mantle'), head = partOf(cr, 'head');
+  const a = on(arm), h0 = arm.hp;
+  st.shells.push({ x: a.x, y: a.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 3);
+  report(h0 - arm.hp > 0 && cr.stats.by.shell > 0, `a shell on an arm takes ${(h0 - arm.hp).toFixed(1)} off it (credited: ${cr.stats.by.shell.toFixed(1)} by shell)`);
+  const armF = cr.parts.find((p) => p.id === 'armF'), f0 = armF.hp, fp = midOf(armF.segs[1]);
+  CS.creatureBurn(st, (x, y) => Math.hypot(x - fp.x, y - fp.y) < 400, { x: fp.x - 200, y: fp.y }, 0.5, 'p1');
+  report(armF.hp < f0 && cr.stats.by.flame > 0, `flame on the far arm: -${(f0 - armF.hp).toFixed(1)}`);
+  const tp = midOf(torso.segs[0], 0.5), t0 = torso.hp;
+  const rb = CS.creatureBomb(st, { x: tp.x, y: tp.y, owner: 'p1' });
+  report(rb === 'burst' && torso.hp < t0, `a bomb on the body bursts on it (${rb}, -${(t0 - torso.hp).toFixed(1)})`);
+  const e = A0.ship.layout.coil, ex = T.toWorldX(A0.ship, e.x), ey = T.toWorldY(A0.ship, e.y - 60), hp = midOf(head.segs[0], 0), dx = hp.x - ex, dy = hp.y - ey, dl = Math.hypot(dx, dy), t1 = head.hp;
+  CS.creatureBeam(st, ex, ey, dx / dl, dy / dl, dl + 400, 120, 60, 'p1');
+  report(head.hp < t1 && cr.stats.by.coil > 0, `the coil's bolt hurts the head (-${(t1 - head.hp).toFixed(1)})`);
+  const mouth = partOf(cr, 'mouth'), ms = mouth.segs[0], m0 = mouth.hp;
+  report(CS.creatureBomb(st, { x: ms.x, y: ms.y, owner: 'p1' }) === 'closed' && mouth.hp === m0, 'a bomb on the SHUT mouth does nothing (it falls through)');
+  const crystal = partOf(cr, 'heart'), cs = crystal.segs[0], c0 = crystal.hp;
+  st.shells.push({ x: cs.x, y: cs.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 3);
+  report(crystal.hp === c0 && CS.creatureHit(st, cs.x, cs.y, 40) === null || (CS.creatureHit(st, cs.x, cs.y, 40) && CS.creatureHit(st, cs.x, cs.y, 40).part !== crystal), 'no gun can touch the crystal (a shell on it takes nothing off it): it is for people on foot');
+  report(TT.POOL.mouth >= TT.POOL.head && TT.POOL.heart >= TT.POOL.mantle && TT.POOL.tentacle <= 0.5, 'the weak points count more against the pool than the arms do');
+}
+
+// (I2) the BOULDER
+{
+  const A = titanUp();
+  const { sim, st, ship, cr, p1 } = A;
+  const B = TT.BOULDER, tt = cr.titan;
+  onlyTitan('throw');
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  standOn(p1, ship, topD(ship), 600, null);
+  tWake(cr);
+  st.sfxQ.length = 0;
+  until(sim, () => tAct(cr, 'pick'), 8);
+  report(tAct(cr, 'pick') && /BOULDER/.test(st.ev.warnText) && tt.boulders.length === 1 && tt.boulders[0].mode === 'held', `it reaches for a boulder on the rubble at its feet: "${st.ev.warnText}"`);
+  until(sim, () => tAct(cr, 'aim'), 4);
+  const tAim = cr.age;
+  step(sim, 5);
+  report(tAct(cr, 'aim') && /HEFTS A BOULDER/.test(st.ev.warnText) && msgs.some((m) => m.id === 'p1' && /BOULDER/.test(m.t) && Array.isArray(m.buzz)) && st.sfxQ.some((x) => x[0] === 'roar') && tt.ring && tt.ring.locked === false, `hefted overhead: banner "${st.ev.warnText}", a buzz on the phone, a roar, and a red ring that is not locked yet`);
+  const mid0 = { x: T.toWorldX(ship, ship.layout.refPoint.x), y: T.toWorldY(ship, ship.layout.refPoint.y) };
+  report(Math.abs(tt.ring.x - mid0.x) < 40 && Math.abs(tt.ring.y - (mid0.y + B.AIM_DY)) < 40 && tt.ring.r > B.R, `the ring is on her, a little under her middle (${Math.round(tt.ring.x - mid0.x)} px across, ${Math.round(tt.ring.y - mid0.y)} px down; the rock is ${B.R} px, the ring ${Math.round(tt.ring.r)})`);
+  ship.pose.x += 250;
+  step(sim, 6);
+  const rx = tt.ring.x;
+  report(Math.abs(rx - T.toWorldX(ship, ship.layout.refPoint.x)) < 60, 'until it locks the ring follows her as she moves');
+  until(sim, () => tt.ring && tt.ring.locked, 3);
+  const lockedAt = { x: tt.ring.x, y: tt.ring.y };
+  ship.pose.x -= 2500;
+  step(sim, 30);
+  report(tt.ring.locked && tt.ring.x === lockedAt.x && tt.ring.y === lockedAt.y, `then it LOCKS (${B.LOCK} s before the throw) and stays put while she moves on`);
+  until(sim, () => tt.boulders.some((b) => b.mode === 'fly'), 4);
+  const bo = tt.boulders.find((b) => b.mode === 'fly');
+  const tThrow = cr.age;
+  report(!!bo && tThrow - tAim >= B.AIM - 0.5, `the rock is thrown ${(tThrow - tAim).toFixed(1)} s after the heft began (AIM ${B.AIM} s)`);
+  report(AIM.targets(st).some((t) => t.kind === 'boulder' && t.rank < 3 && Number.isFinite(t.at(0.5).x)), 'a rock in the air is the first thing the guns may aim at (rank before the bats)');
+  // she has moved out of the ring: it comes down where she was and misses
+  const f0 = frameHp(ship), hits0 = cr.stats.boulderHits;
+  until(sim, () => !tt.boulders.length, 9);
+  report(cr.stats.boulderMiss === 1 && cr.stats.boulderHits === hits0 && frameHp(ship) === f0, `she moved out of the ring: it flew on and thudded on the plain (missed ${cr.stats.boulderMiss}, frame ${frameHp(ship).toFixed(0)} unchanged)`);
+  report(tThrow - tAim + B.FLIGHT >= 4, `from the heft to the landing there are ${(tThrow - tAim + B.FLIGHT * (B.FLIGHT_BY_DIFF.normal || 1)).toFixed(1)} s to move, shoot or climb`);
+}
+{
+  // a boulder that finds her: a frame blow on the segment it meets, a shake and a stagger - never a kill
+  const A = titanUp();
+  const { sim, st, ship, cr, p1 } = A;
+  onlyTitan('throw');
+  standOn(p1, ship, topD(ship), 600, null);
+  tWake(cr);
+  const f0 = frameHp(ship), hearts0 = p1.hearts;
+  let tilt = 0, peak = 0;
+  until(sim, () => { tilt = Math.max(tilt, Math.abs(st.forces.theta)); return cr.stats.boulderHits > 0; }, 16);
+  step(sim, 10);
+  report(cr.stats.boulderHits === 1 && frameHp(ship) < f0 && p1.hearts === hearts0, `a boulder that finds her shakes the frame (-${(f0 - frameHp(ship)).toFixed(3)} soundness, one segment) and nobody loses a heart`);
+  report(tilt <= config.FORCES.MAX_DEG * DEG + 1e-9, `the blow tips her ${((tilt / DEG)).toFixed(2)} degrees at most (the limit ${config.FORCES.MAX_DEG})`);
+  void peak;
+}
+{
+  // shells shatter it
+  const A = titanUp();
+  const { sim, st, ship, cr } = A;
+  onlyTitan('throw');
+  tWake(cr);
+  until(sim, () => cr.titan.boulders.some((b) => b.mode === 'fly'), 14);
+  const b = cr.titan.boulders.find((q) => q.mode === 'fly');
+  const f0 = frameHp(ship);
+  const need = Math.ceil(b.hp / (config.GUNS.DAMAGE * H.SHELL_MUL));
+  for (let k = 0; k < need; k++) { st.shells.push({ x: b.x, y: b.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 }); step(sim, 1); }
+  step(sim, 5);
+  report(cr.stats.shattered === 1 && !cr.titan.boulders.some((q) => q === b && q.mode !== 'gone') && frameHp(ship) === f0, `${need} shells shatter the rock in the air (shattered ${cr.stats.shattered}); nothing reaches her`);
+  report(st.moments.some((m) => m.kind === 'creature-boulder' && m.who.includes('P1')), 'the Ship\'s Book remembers who shot a boulder to gravel (creature-boulder)');
+}
+
+// (I3) the GRAB (phase 2)
+{
+  const A = titanUp();
+  const { sim, st, ship, cr, p1 } = A;
+  onlyTitan('throw');
+  tWake(cr);
+  let n = 0;
+  for (let i = 0; i < secs(90); i++) { cr.ai.breather = 0; if (cr.titan.nextT > 4) cr.titan.nextT = 0.5; step(sim); if (cr.stats.throws >= 4) break; n = i; }
+  report(cr.phase === 1 && cr.stats.throws >= 4 && cr.stats.grabs === 0 && !cr.grips.length, `phase 1 only throws boulders (${cr.stats.throws} throws, ${cr.stats.grabs} grabs in ${(n / 60).toFixed(0)} s)`);
+}
+{
+  const A = titanUp();
+  const { sim, st, ship, cr, p1, p1: p } = A;
+  const G = TT.GRAB, tt = cr.titan, GP2 = { ...C.GRIP, ...G };
+  const msgs = [];
+  cr.hooks.phoneFx = (q, t, buzz) => msgs.push({ id: q.id, t, buzz });
+  const topDeck = topD(ship);
+  standOn(p, ship, topDeck, 600, null);
+  cr.hp = cr.maxHp * (TT.PHASE.TWO_HP - 0.02);
+  step(sim, 5);
+  report(cr.phase === 2 && /GRABS FOR THE GASBAG/.test(st.ev.warnText) && TTM.titanPhaseName(1) === 'IT WAKES' && TTM.titanPhaseName(2) === 'IT GRABS' && TTM.titanPhaseName(3) === 'IT ROARS', `below ${TT.PHASE.TWO_HP * 100}% of the pool: phase 2, "${st.ev.warnText}"`);
+  cr.ai.breather = 0;
+  tt.nextT = 1e9;
+  tt.grabT = 0;
+  st.sfxQ.length = 0;
+  let banner = null, phases = [];
+  for (let i = 0; i < secs(20); i++) {
+    step(sim);
+    const g = cr.grips[0];
+    if (g && /GRABS THE GASBAG/.test(st.ev.warnText)) banner = st.ev.warnText;
+    if (g && phases[phases.length - 1] !== g.mode) phases.push(g.mode);
+    if (g && g.mode === 'hold') break;
+  }
+  tt.grabT = 1e9;
+  const g = cr.grips[0];
+  report(!!g && g.bag === true && /^THE TITAN GRABS THE GASBAG! SWORDS TO THE (FORE|AFT) TOP DECK!/.test(banner || '') && msgs.some((m) => m.id === p.id && /GASBAG/.test(m.t) && Array.isArray(m.buzz)) && st.sfxQ.some((x) => x[0] === 'roar'), `the hand closes on the gasbag: "${banner}", a buzz for whoever stands near, a roar (${phases.join(' -> ')})`);
+  report(!!g && g.limb.grip && g.limb.kind === 'tentacle' && Math.hypot(g.limb.grip.x - g.ex, g.limb.grip.y - g.ey) < 1 && Math.abs(g.ey - T.toWorldY(ship, g.by)) < 400, 'its hand is glued to the side of the gasbag (not to a deck): the picture and the physics agree');
+  report(g && GR.gripJobs(st, ship).length === 1 && GR.gripJobs(st, ship)[0].x === g.x && GR.gripJobs(st, ship)[0].d === g.job.d, 'the job arrow points at the deck end under the hand (swords go there)');
+  const x0 = ship.pose.x;
+  let tilt = 0, still = true;
+  const plats0 = ship.layout.platforms.length;
+  for (let i = 0; i < secs(5); i++) { step(sim); tilt = Math.max(tilt, Math.abs(st.forces.theta)); still = still && GR.gripped(ship); }
+  const toward = (ship.pose.x - x0) * (cr.x > ship.pose.x ? 1 : -1);
+  report(tilt > 0.1 * DEG && tilt <= config.FORCES.MAX_DEG * DEG + 1e-9, `the grip twists her: tilt ${(tilt / DEG).toFixed(2)} degrees, inside FORCES.MAX_DEG ${config.FORCES.MAX_DEG}`);
+  report(toward > 10 && still, `and pulls her sideways toward the Titan (${toward.toFixed(0)} px in 5 s), the hand staying on the bag`);
+  const why = ship.sim.comeAbout.why();
+  report(typeof why === 'string' && /tentacle|gripped|hand|holding/i.test(why), `COME ABOUT is refused while she is gripped ("${why}")`);
+  // the sword: PRY ITS FINGERS OFF
+  standOn(p, ship, g.job.d, g.x, 'sword');
+  const act = sim.creatures.actionFor(ship, p);
+  report(act && act.type === 'hack' && act.hold && act.label === 'PRY ITS FINGERS OFF!' && near(act.time, G.SWORD_TIME), `with a sword at the grip the Action is "${act && act.label}" (hold ${act && act.time} s)`);
+  standOn(p, ship, g.job.d, g.x, null);
+  report(sim.creatures.actionFor(ship, p).type === 'need' && /pry/i.test(sim.creatures.actionFor(ship, p).label), 'bare hands: "Need a sword to pry its fingers off!"');
+  standOn(p, ship, g.job.d, g.x, 'sword');
+  p.atkCd = 0;
+  for (let k = 0; k < 3; k++) { sim.creatures.blow(ship, p); p.atkCd = 0; }
+  step(sim, 5);
+  report(freedBy(cr) === 'hack' && cr.stats.hacks === 1 && !GR.gripped(ship) && st.moments.some((m) => m.kind === 'creature-freed' && m.data.how === 'pry'), 'three sword blows free her: it lets go (hacked), and the Book writes "pry"');
+  report(ship.layout.platforms.length === plats0, 'nothing was torn off her');
+}
+{
+  // the time runs out: it SQUEEZES the bag (holes, a frame blow) and lets go; nothing is torn off
+  const A = titanUp();
+  const { sim, st, ship, cr } = A;
+  const G = TT.GRAB;
+  cr.hp = cr.maxHp * (TT.PHASE.TWO_HP - 0.02);
+  step(sim, 5);
+  cr.ai.breather = 0;
+  cr.titan.grabT = 0;
+  until(sim, () => cr.grips[0] && cr.grips[0].mode === 'hold', 20);
+  cr.titan.grabT = 1e9;
+  const g = cr.grips[0];
+  const total = G.TIME * (G.TIME_BY_DIFF.normal || 1);
+  report(!!g && near(g.total, total), `the hold lasts ${g && g.total} s on Normal (GRAB.TIME ${G.TIME})`);
+  const holes0 = ship.ctx.gasHoles.length, f0 = frameHp(ship), plats0 = ship.layout.platforms.length;
+  g.left = 0.3;
+  step(sim, secs(2));
+  report(cr.stats.squeezed === 1 && ship.ctx.gasHoles.length === holes0 + G.RIP.HOLES && frameHp(ship) < f0 && ship.layout.platforms.length === plats0 && !cr.stats.ripped && cr.stats.holes === G.RIP.HOLES, `unfreed it SQUEEZES the bag: +${ship.ctx.gasHoles.length - holes0} holes in the gasbag, the frame -${(f0 - frameHp(ship)).toFixed(3)}, no deck torn off`);
+  report(cr.stats.freed && cr.stats.freed.rip === 1 && !GR.gripped(ship), 'then it lets go (a squeeze, not a rip)');
+  // shells on the arm free her too
+  cr.ai.breather = 0;
+  cr.titan.grabT = 0;
+  for (const q of cr.parts) q.gripCd = 0;
+  until(sim, () => cr.grips.some((q) => q.mode === 'hold'), 20);
+  cr.titan.grabT = 1e9;
+  const g2 = cr.grips.find((q) => q.mode === 'hold'), arm = g2.limb;
+  CS.hurtCreature(st, { part: arm, seg: 1 }, G.RELEASE_DMG * arm.maxHp + 1, { src: 'shell', who: 'p1' });
+  step(sim, 5);
+  report(freedBy(cr) === 'shot' && !GR.gripped(ship), `shells that take ${G.RELEASE_DMG * 100}% of the arm's health free her too`);
+}
+
+// (I4) the ROAR
+{
+  const A = titanUp();
+  const { sim, st, ship, cr, p1 } = A;
+  const M = TT.MOUTH, tt = cr.titan, mouth = partOf(cr, 'mouth');
+  const L = ship.layout, msgs = [];
+  cr.hooks.phoneFx = (q, t, buzz) => msgs.push({ id: q.id, t, buzz });
+  p1.lock = Object.keys(L.stations || {}).find((k) => L.kindOf(k) === 'bombBay') || L.bombBay.name || null;
+  report(mouth.open === false, 'the mouth is shut until a roar');
+  cr.ai.breather = 0;
+  cr.ai.mouthT = 0;
+  st.sfxQ.length = 0;
+  step(sim, 5);
+  report(!!tt.roar && !cr.mouthWin && /ABOUT TO ROAR/.test(st.ev.warnText) && st.sfxQ.some((x) => x[0] === 'roar') && tt.pose === 'roar' && mouth.open === false, `first the wind-up (${M.WIND} s): the head goes back, "${st.ev.warnText}", a roar`);
+  report(FT.mouthWindowSoon(st, 4) === true, 'the bots (and a bombardier\'s phone) know a window is coming (mouthWindowSoon)');
+  until(sim, () => cr.mouthWin && mouth.open, 4);
+  report(!!cr.mouthWin && mouth.open && /MOUTH OPEN/.test(st.ev.warnText) && cr.stats.windows === 1, `then the mouth opens for ${M.FOR} s: "${st.ev.warnText}"`);
+  step(sim, secs(1.2));
+  report(FT.bombInMouth(st) === true, 'after it has strode under her bomb bay a bomb let go from the bay falls into the mouth (the bots drop on this)');
+  const ms = mouth.segs[0], bay = ship.layout.bombBay, g = { x: T.toWorldX(ship, bay.x), y: T.toWorldY(ship, bay.y) + 20 };
+  report(Math.abs(ms.x - g.x) < M.FUNNEL_W + 200 && ms.y > g.y, `the mouth is under the bay (${Math.abs(ms.x - g.x).toFixed(0)} px across, ${(ms.y - g.y).toFixed(0)} px below; the funnel is ${M.FUNNEL_W} px each side)`);
+  const ring = sim.course.predictBomb(g.x, g.y);
+  report(ring && Math.abs(ring.x - ms.x) <= M.FUNNEL_W + 10, 'the bomb-bay aiming ring lands in the open mouth');
+  const f0 = cr.fed;
+  st.sfxQ.length = 0;
+  st.shipBombs.push({ x: g.x, y: g.y, vx: ship.pose.vx, vy: 60, owner: 'p1' });
+  for (let i = 0; i < secs(4) && cr.fed === f0; i++) step(sim, 1);
+  step(sim, 20);
+  report(cr.fed === f0 + 1 && cr.stats.chomps === 1 && st.sfxQ.some((x) => x[0] === 'chomp') && mouth.open === false, `the bomb comes down the funnel: CHOMP, fed ${cr.fed}/${M.FED}; it gulps and the mouth shuts ${M.GULP} s`);
+  step(sim, secs(M.GULP + 0.5));
+  report(!cr.mouthWin || cr.mouthWin.gulp <= 0, 'then the window ends or the mouth opens again');
+  // the rest: two crates (half each) and a bomb, then another bomb
+  cr.mouthWin = { t: 0, left: 4 };
+  mouth.open = true;
+  const mo = () => partOf(cr, 'mouth').segs[0];
+  const c1 = CS.creatureCargo(st, { x: mo().x, y: mo().y - 300, owner: 'p1' });
+  const c2 = CS.creatureCargo(st, { x: mo().x, y: mo().y - 300, owner: 'p1' });
+  report(c1 === true && c2 === true && Math.abs(cr.fed - (f0 + 2)) < 1e-9, `a crate is half a bomb (fed ${cr.fed})`);
+  cr.mouthWin.gulp = 0;
+  mouth.open = true;
+  CS.creatureBomb(st, { x: mo().x, y: mo().y - 400, owner: 'p1' });
+  cr.mouthWin.gulp = 0;
+  mouth.open = true;
+  const r4 = CS.creatureBomb(st, { x: mo().x, y: mo().y - 400, owner: 'p1' });
+  report(r4 === 'mouth' && cr.dying && cr.stats.win === 'mouth' && cr.fed >= M.FED, `FED ${M.FED} wins: stats.win "${cr.stats.win}"`);
+  report(st.ev.warnText.startsWith(TT.WIN_TEXT.mouth) && /CRUMBLES/.test(st.ev.warnText), `final banner "${st.ev.warnText}"`);
+}
+
+// (I5) the arms and the phases
+{
+  const A = titanUp();
+  const { sim, st, ship, cr } = A;
+  const armN = cr.parts.find((p) => p.id === 'armN'), armF = cr.parts.find((p) => p.id === 'armF');
+  CS.hurtCreature(st, { part: armN, seg: 1 }, armN.hp + 1, { src: 'shell', who: 'p1' });
+  report(armN.severed && armN.segs.length < TT.BODY.ARM.SEGS && cr.chunks.length === 1 && cr.chunks[0].part.kind === 'tentacle' && cr.chunks[0].part.art === 'titan' && /ARM IS SHELLED OFF/.test(st.ev.warnText), `an arm with no hp is shelled off where it was hit (a stump of ${armN.segs.length} slabs stays, the rest tumbles away): "${st.ev.warnText}"`);
+  cr.ai.breather = 0;
+  step(sim, 10);
+  report(cr.phase === 2 && !cr.dying, 'one arm gone: phase 2');
+  CS.hurtCreature(st, { part: armF, seg: 1 }, armF.hp + 1, { src: 'shell', who: 'p1' });
+  step(sim, 3);
+  report(cr.dying && cr.stats.win === 'arms' && /ARMS SHELLED OFF/.test(st.ev.warnText) && st.bossDownLap === st.course.lap, `both arms gone: it is beaten, stats.win "${cr.stats.win}", "${st.ev.warnText}"`);
+  report(st.slow < 1 && st.moments.some((m) => m.kind === 'creature-win' && m.data.way === 'arms'), 'the last blow plays in slow motion and the Book writes it (creature-win: arms)');
+}
+{
+  const A = titanUp();
+  const { sim, st, cr } = A;
+  cr.hp = cr.maxHp * (TT.PHASE.TWO_HP - 0.02);
+  step(sim, 5);
+  report(cr.phase === 2, 'below 66% of the pool: phase 2');
+  cr.ai.breather = 0;
+  cr.hp = cr.maxHp * (TT.PHASE.THREE_HP - 0.02);
+  step(sim, 5);
+  report(cr.phase === 3 && /FURIOUS/.test(st.ev.warnText), `below 33%: phase 3, "${st.ev.warnText}"`);
+  onlyTitan('throw');
+  cr.ai.breather = 0;
+  cr.titan.nextT = 0;
+  const t0 = cr.stats.throws;
+  let both = 0;
+  for (let i = 0; i < secs(20); i++) { step(sim); if (cr.titan.boulders.length >= 2) both = Math.max(both, cr.titan.boulders.length); }
+  report(cr.stats.throws - t0 >= 2 && both >= 2, `phase 3 throws two boulders at once (${cr.stats.throws - t0} throws, ${both} in the air together)`);
+}
+
+// (I6) the ISLAND: a ground that moves with it
+{
+  const A = titanUp({ away: true, bots: 2 });
+  const { sim, st, ship, cr, p1, map } = A;
+  const S = st.away, G = st.groundSys, I = TT.ISLAND;
+  step(sim, 10);
+  const isl = S.island;
+  report(!!isl && isl.island === true && isl.moves === true && S.on && S.decks.includes(isl) && near(isl.y, cr.y + I.TOP, 1) && Math.abs(isl.x1 - isl.x0 - (I.X1 - I.X0)) < 1, `the island is a deck of the away team: x ${Math.round(isl.x0)}..${Math.round(isl.x1)}, walking surface y ${Math.round(isl.y)} (${I.TOP} px over its middle)`);
+  report(isl.x0 > cr.x && ship.sim.air.surfaces().some((q) => q.id === 'ground:island'), 'it is on its back (away from the ship it faces) and it is a landing place for the crew');
+  report(G.groundAt(isl.x0 + 500, isl.y - 500) !== null, 'the plain below is still ground; the island is a second one');
+  // a parachute landing
+  ship.pose.x = isl.x0 - 3600 - ship.layout.refPoint.x;
+  step(sim, 20);
+  const isl2 = S.island;
+  p1.carry = null;
+  flyOverT(A, p1, (isl2.x0 + isl2.x1) / 2 - 200, isl2.y - 700, 100, true);
+  for (let i = 0; i < 400 && !p1.on; i++) step(sim, 1);
+  report(!!p1.on && p1.on.away && p1.on.mode === 'walk' && p1.on.deck === S.island && Math.abs(p1.y - S.island.y) < 2, `a person who drops onto it by parachute lands on it: he stands on the island (y ${Math.round(p1.y)}), a world object`);
+  report(st.moments.some((m) => m.kind === 'titan-island' && m.who.includes('P1')), 'the Ship\'s Book remembers the first man on the Titan\'s back (titan-island)');
+  const hint = G.ui(p1);
+  report(!!hint && /crystal/i.test(hint.u.hint), `his phone says: "${hint && hint.u.hint}"`);
+  // carried by its movement
+  const lx0 = p1.on.lx, x0 = p1.x;
+  ship.pose.x -= 7000;
+  for (let i = 0; i < secs(5); i++) { step(sim, 1); ship.pose.x += 0; }
+  const lx1 = p1.on.lx;
+  report(Math.abs(p1.x - x0) > 400 && Math.abs(lx1 - lx0) < 2 && p1.on && p1.on.deck === S.island, `the Titan walks after the ship and he is carried: he moved ${Math.round(p1.x - x0)} px with it, still ${Math.round(lx1)} px from the island's middle`);
+  p1.jx = 1;
+  p1.fire = false;
+  const xw = p1.x;
+  step(sim, 60);
+  report(Math.abs(p1.x - xw) > 100 || Math.abs((p1.x - (S.island.x0 + S.island.x1) / 2) - lx1) > 50, 'and he can still walk along it');
+  p1.jx = 0;
+  p1.jumpQ = true;
+  step(sim, 3);
+  report(!p1.on && p1.fly && p1.fvy < 0, 'JUMP leaps off it');
+  // a hookshot reeled in to its rock lands you on it
+  const isl3 = S.island, hx = (isl3.x0 + isl3.x1) / 2, hy = isl3.y + 300;
+  const anc = CBD.creatureAnchor(st, hx, hy);
+  report(!!anc && anc.kind === 'enemy' && typeof anc.board === 'function' && anc.pos() && Math.abs(anc.pos().x - hx) < 1, 'a hook on the island\'s rock is an anchor that rides it and lets you climb aboard');
+  flyOverT(A, p1, hx, isl3.y - 300, 0, false);
+  const landed = anc.board(p1);
+  report(landed === true && p1.on && p1.on.deck === S.island && p1.y === S.island.y, 'reeled right in he lands on the island');
+  const x1 = anc.pos().x, c0 = cr.x;
+  cr.base.x += 300;
+  step(sim, 2);
+  report(Math.abs(anc.pos().x - x1 - (cr.x - c0)) < 1 && Math.abs(cr.x - c0) > 250, `and the hook (the anchor) moves with the Titan (it moved ${Math.round(cr.x - c0)} px, the anchor ${Math.round(anc.pos().x - x1)})`);
+}
+{
+  // the rope ladder over the island, and the island's fall when the Titan dies
+  const A = titanUp({ away: true, bots: 2 });
+  const { sim, st, ship, cr, p1 } = A;
+  const S = st.away, G = st.groundSys;
+  step(sim, 10);
+  const isl4 = S.island, sp = G.ropeSpot();
+  ship.pose.x += isl4.x0 + 900 - T.toWorldX(ship, sp.x);
+  ship.pose.y = isl4.y - 1100 - ship.layout.refPoint.y;
+  step(sim, 40);
+  report(S.rope.groundDeck === S.island && S.rope.gap < config.AWAY.LADDER.REACH && S.rope.gap > 100, `with the ship over the island the rope ladder's foot finds it (gap ${Math.round(S.rope.gap)} px, reach ${config.AWAY.LADDER.REACH})`);
+  standOn(p1, ship, sp.d, sp.x, null);
+  p1.actQ = false;
+  report(G.useLadder(ship, p1) === true && S.rope.out && p1.on && p1.on.mode === 'rope', 'the Action at the hatch lowers the ladder over the island and he climbs down it');
+  for (let i = 0; i < 700 && !(p1.on && p1.on.mode === 'walk'); i++) { p1.jy = 1; step(sim, 1); }
+  p1.jy = 0;
+  report(!!p1.on && p1.on.mode === 'walk' && p1.on.deck === S.island && Math.abs(p1.y - S.island.y) < 12, 'at its foot he steps off onto the island (a deck that moves)');
+  // the island falls when the Titan dies: a man on it is in the air with the parachute button, a bot is taken home
+  const b0 = st.players.bot0;
+  b0.trip = { t: 0, goal: null, ready: false, flared: false };
+  b0.carry = null;
+  flyOverT(A, b0, (S.island.x0 + S.island.x1) / 2, S.island.y - 200, 100, true);
+  b0.bot = false; // (a person, for the landing: bots land only on a trip)
+  for (let i = 0; i < 300 && !b0.on; i++) step(sim, 1);
+  b0.bot = true;
+  report(!!b0.on && b0.on.deck === S.island, 'a second man on the island');
+  cr.hooks.hurtPool(1e9, 'shell', 'p1');
+  step(sim, secs(1));
+  report(!S.island && !p1.on && p1.fly && p1.chuteOk === true, 'killed, the Titan takes its island with it: the man on it is in the air with the parachute button');
+  report(!b0.on || !b0.on.deck, 'and a man still on it is dropped too');
+}
+
+// (I7) the CRYSTAL, on foot
+{
+  const A = titanUp({ away: true, bots: 2 });
+  const { sim, st, ship, cr, p1 } = A;
+  const S = st.away, G = st.groundSys, C0 = TT.CRYSTAL, tt = cr.titan, part = partOf(cr, 'heart');
+  ship.pose.x = S.island.x0 - 2000 - ship.layout.refPoint.x;
+  step(sim, 20);
+  const cx = () => ISL.crystalOf(st).x;
+  flyOverT(A, p1, cx() - 400, S.island.y - 600, 100, true);
+  for (let i = 0; i < 400 && !p1.on; i++) step(sim, 1);
+  report(!!p1.on && p1.on.deck === S.island, 'a man on the island');
+  p1.jx = 1;
+  for (let i = 0; i < 600 && Math.abs(p1.x - cx()) > C0.REACH * 0.5; i++) step(sim, 1);
+  p1.jx = 0;
+  const job = G.objectiveJob(p1, 1);
+  report(Math.abs(p1.x - cx()) <= C0.REACH && !!job && job.kind === 'hack' && /CRYSTAL/.test(job.label) && job.color === '#7fe8ff', `he walks to the crystal; his phone's gold arrow says "${job && job.label}"`);
+  const holdAct = () => { step(sim, 1); return p1.act; };
+  p1.carry = 'sword';
+  p1.fire = false;
+  step(sim, 2);
+  report(p1.act && p1.act.type === 'crystal' && p1.act.label === 'HACK THE CRYSTAL!' && near(p1.act.time, C0.TIME), `with a sword the Action is "${p1.act && p1.act.label}" (hold ${p1.act && p1.act.time} s)`);
+  p1.carry = 'hammer';
+  step(sim, 2);
+  const th = p1.act && p1.act.time;
+  p1.carry = null;
+  step(sim, 2);
+  const tb = p1.act && p1.act.time;
+  report(near(th, C0.TIME_HAMMER) && near(tb, C0.TIME_BARE) && C0.TIME < C0.TIME_HAMMER && C0.TIME_HAMMER < C0.TIME_BARE && /CHIP/.test(p1.act.label), `a hammer takes ${th} s a stroke and bare hands ${tb} s (a sword is quickest: ${C0.TIME} s)`);
+  void holdAct;
+  // the strokes
+  p1.carry = 'sword';
+  p1.fire = true;
+  const n = C0.STRIKES_BY_DIFF.normal;
+  let first = null;
+  for (let i = 0; i < secs(C0.TIME * 1.4) && !cr.stats.struck; i++) step(sim, 1);
+  first = cr.stats.struck;
+  report(first === 1 && part.hp < part.maxHp && part.hp > 0 && /CRACKS! 1\//.test(st.ev.warnText) && tt.tremor > 0, `after ${C0.TIME} s of holding: stroke 1 of ${n} lands, the crystal cracks (hp ${part.hp.toFixed(0)}/${part.maxHp}), "${st.ev.warnText}", the island quakes`);
+  for (let i = 0; i < secs(C0.TIME * 3) && !cr.dying; i++) step(sim, 1);
+  p1.fire = false;
+  report(cr.dying && cr.stats.win === 'crystal' && cr.stats.struck === n && st.bossDownLap === st.course.lap && st.ev.warnText.startsWith(TT.WIN_TEXT.crystal), `stroke ${cr.stats.struck}: the crystal shatters and it is beaten on foot: stats.win "${cr.stats.win}", "${st.ev.warnText}"`);
+  report(st.moments.some((m) => m.kind === 'creature-win' && m.data.way === 'crystal' && m.who.includes('P1')), 'the Book names the man on the island (creature-win: crystal)');
+  const A2 = titanUp({ away: true, difficulty: 'easy' });
+  report(C0.STRIKES_BY_DIFF.easy < C0.STRIKES_BY_DIFF.normal, `on Easy it takes ${C0.STRIKES_BY_DIFF.easy} strokes, on Normal ${C0.STRIKES_BY_DIFF.normal}, on Hard ${C0.STRIKES_BY_DIFF.hard}`);
+  void A2;
+}
+
+// (I8) the reward, the lair, the voyage
+{
+  restoreCfg();
+  titanCfgBack();
+  realHp();
+  C.DEV_LAIR_AS = 'titan';
+  const ctx = boot({ env: 'skyisles', lair: true, bots: 0, start: 'classic' });
+  const { sim, st, ship } = ctx;
+  const map = st.course.map, c = st.course;
+  report(c.stop && c.stop.lair === true && c.stop.creature === 'titan' && map.creature === 'titan', 'a Titan lair stop flies the lair map for the Titan');
+  step(sim, secs(2));
+  report(st.creature === null && !st.boss, 'at the start there is no creature and no zeppelin');
+  ship.pose.x = map.start.x + (map.goal.x - map.start.x) * 0.7 - ship.layout.refPoint.x;
+  st.tempo.phase = 'build';
+  st.tempo.bossOk = true;
+  for (let i = 0; i < secs(4) && !st.creature; i++) step(sim, 1);
+  report(!!st.creature && st.creature.kind === 'titan' && !st.boss, `at ${(c.progress * 100).toFixed(0)}% of the way the Titan comes in where the zeppelin would: ${st.creature && st.creature.name}; no zeppelin`);
+  const cr = st.creature;
+  for (let i = 0; i < secs(TT.SPAWN.ARRIVE + 1) && cr.mode !== 'idle'; i++) step(sim, 1);
+  tQuiet(cr);
+  step(sim, secs(5));
+  report(st.tempo.phase === 'peak' && st.tempo.kind === 'boss', 'the pacing director treats it as the mission boss');
+  ship.pose.x = map.goal.x - ship.layout.refPoint.x;
+  ship.pose.y = map.goal.y - ship.layout.refPoint.y;
+  st.ev.warn = 0;
+  step(sim, secs(3));
+  report(!c.done && !c.pendingNext, 'at the lair\'s middle with the Titan alive the stop is not done');
+  st.ship.hull = 40;
+  for (const b of st.bags) b.gas = 30;
+  st.run.trophy = 'krakenBeak';
+  const salv0 = st.run.salvage, hull0 = st.ship.hull;
+  cr.hooks.hurtPool(1e9, 'shell', 'p1');
+  step(sim, secs(2));
+  report(cr.dying && !c.done && st.bossDownLap === c.lap, 'killed, it is dying and the boss is down');
+  step(sim, secs(1));
+  const SV = config.SALVAGE.BOSS * C.REWARD_MUL;
+  report(st.run.salvage - salv0 >= SV && st.run.salvage - salv0 <= SV + 40, `triple boss salvage: +${st.run.salvage - salv0}`);
+  report(st.ship.hull >= hull0 + TT.REWARD.HULL - 1 && st.bags.every((b) => b.gas >= 30 + TT.REWARD.GAS - 10) && st.run.trophy === 'krakenBeak' && TT.REWARD.TROPHY === null, `a hull patch (+${TT.REWARD.HULL}) and every gasbag (+${TT.REWARD.GAS}); it leaves no trophy and does not wipe the one still waiting ("${st.run.trophy}")`);
+  for (let i = 0; i < secs(TT.SPAWN.SINK + C.CHUNK.LIFE + 3) && !c.done; i++) step(sim, 1);
+  report(c.done === true && c.pendingNext === true && st.creature === null && /ISLAND TITAN IS SLAIN/.test(st.ev.warnText), `once it has sunk the stop is done: "${st.ev.warnText}"`);
+}
+{
+  // the voyage: a Titan lair on the second stop flown, guaranteed, with its own rules
+  restoreCfg();
+  const L0 = TT.LAIR;
+  L0.ENABLED = true;
+  const seeds = Array.from({ length: quick ? 80 : 300 }, (_, i) => 1000 + i * 7919);
+  let withT = 0, eligible = 0, bad = [];
+  for (const mode of ['quick', 'voyage', 'campaign']) for (const voyageNo of [1, 2]) for (const sd of seeds) {
+    const v = VY.generateVoyage(sd, { mode, voyageNo, gentle: sd % 2 === 0 });
+    const tl = v.columns.flat().filter((q) => q.lair && q.creature === 'titan');
+    const h = voyageNo > 1 ? 1 : 0, n = v.columns.length;
+    const should = voyageNo === 1 && n - h >= L0.MIN_STOPS && v.columns[h + L0.COLUMN] && v.columns[h + L0.COLUMN].some((q) => q.env === 'skyisles');
+    if (should) eligible++;
+    if (tl.length !== (should ? 1 : 0)) bad.push(`${mode}/${voyageNo}/${sd}: ${tl.length} Titan lairs`);
+    for (const s of tl) {
+      withT++;
+      const col = v.columns[s.col];
+      if (s.col !== h + L0.COLUMN || s.env !== 'skyisles' || s.kind !== 'lair' || s.gates.join() !== 'swarm,imps' || !col.some((o) => o !== s && o.danger <= o.base)) bad.push(`${mode}/${sd}: ${s.id} ${JSON.stringify({ col: s.col, env: s.env, g: s.gates })}`);
+    }
+  }
+  report(!bad.length && withT === eligible && withT > 0, `the Titan's lair is guaranteed on the second stop flown of ${eligible} first voyages of ${L0.MIN_STOPS}+ stops (Sky Isles, bats and imps only, a way round it in the column), none in quick routes or second voyages${bad.length ? ': ' + bad.slice(0, 3).join('; ') : ''}`);
+  const tl = VY.lairOf('titan');
+  report(tl.NAME === L0.NAME && VY.stopName({ lair: true, creature: 'titan', env: 'skyisles' }) === L0.NAME, 'the stop has the right name');
+  L0.ENABLED = false;
+  const off = VY.generateVoyage(1000, { mode: 'voyage' });
+  L0.ENABLED = true;
+  report(!off.columns.flat().some((q) => q.creature === 'titan'), 'TITAN.LAIR.ENABLED = false takes it off every route');
+  const ctx = boot({ start: 'classic', bots: 3 });
+  const { sim, st } = ctx;
+  const v = st.run.voyage, here = v.columns[0][0], lair = v.columns[1][0];
+  Object.assign(lair, { env: 'skyisles', play: 'skyisles', kind: 'lair', lair: true, creature: 'titan', danger: 2, reward: 40 });
+  here.next = v.columns[1].map((s) => s.id);
+  st.run.salvage = 0;
+  sim.startDock();
+  if (st.vote && st.vote.kind === 'dock') {
+    const cast = st.vote.options.findIndex((o) => o.kind === 'cast');
+    for (const p of Object.values(st.players)) { p.voteAt = 1e9; p.vote = cast; }
+    step(sim, secs(3));
+  }
+  const route = st.vote && st.vote.kind === 'route' ? st.vote : null;
+  const opt = route && route.options.find((o) => o.id === lair.id);
+  report(!!opt && opt.lair === true && opt.icon === L0.ICON && /TITAN/.test(opt.desc) && opt.kindName === L0.KIND, `the route vote lists it: ${opt && opt.icon} "${opt && opt.name}" - ${opt && opt.desc}`);
+  const canvas = { width: 1920, height: 1080, clientWidth: 1920 };
+  const cam = createWorldCamera();
+  const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+  rec.texts.length = 0;
+  let exc = 0;
+  try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
+  const texts = rec.texts.map((q) => q.s);
+  report(exc === 0 && texts.includes(L0.ICON) && texts.includes(L0.LABEL), 'the TV\'s route map draws the Titan icon and its label (0 draw errors)');
+  L0.ENABLED = false;
+}
+
+// (I9) the TV
+{
+  const A = titanUp({ away: true });
+  const { sim, st, ship, cr, p1 } = A;
+  const canvas = { width: 1920, height: 1080, clientWidth: 1920 };
+  const cam = createWorldCamera();
+  const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+  const seen = new Set();
+  let exc = 0, hudText = false, ms = 0, frames = 0, marks = 0;
+  const frame = () => {
+    step(sim, 1);
+    rec.texts.length = 0;
+    const t0 = hr();
+    try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; if (exc < 3) console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
+    ms += hr() - t0;
+    frames++;
+    if (rec.texts.some((x) => x.s.startsWith('THE ISLAND TITAN - '))) hudText = true;
+    if (cr.titan.act) seen.add('throw.' + cr.titan.act.sub); if (cr.mouthWin) seen.add('roar'); if (cr.grips.some((g) => g.mode === 'hold')) seen.add('grab');
+    if (cr.titan.ring) marks++;
+  };
+  cr.phase = 2;
+  onlyTitan('throw');
+  cr.ai.breather = 0; cr.titan.nextT = 0;
+  for (let f = 0; f < 60 * 14; f++) { cr.ai.breather = 0; frame(); }
+  cr.titan.nextT = 1e9; cr.titan.grabT = 0; cr.ai.breather = 0;
+  for (let f = 0; f < 60 * 12 && !cr.grips.some((g) => g.mode === 'hold'); f++) { cr.ai.breather = 0; frame(); }
+  for (let f = 0; f < 60 * 3; f++) frame();
+  for (const q of cr.grips) q.left = 0.1;
+  for (let f = 0; f < 60 * 3; f++) frame();
+  cr.ai.mouthT = 0; cr.ai.breather = 0;
+  for (let f = 0; f < 60 * 10; f++) { cr.ai.breather = 0; frame(); }
+  const arm = cr.parts.find((p) => p.id === 'armN');
+  CS.hurtCreature(st, { part: arm, seg: 1 }, arm.hp + 1, { src: 'shell', who: 'p1' });
+  for (let f = 0; f < 60 * 3; f++) frame();
+  report(exc === 0 && hudText && ['throw.aim', 'roar', 'grab'].every((k) => seen.has(k)) && marks > 30, `the fight draws on a stub canvas for ${frames} frames with 0 errors (seen: ${[...seen].join(', ')}; the ring was up for ${marks} frames); the bar says THE ISLAND TITAN with its phase`);
+  console.log(`     whole-TV frame with the Titan: ${(ms / frames).toFixed(2)} ms (JS on a stub canvas)`);
+  const stub = stubCtx();
+  const art = createCreatureArt({ ctx: stub });
+  let t = 0, blits = 0;
+  for (let f = 0; f < 300; f++) { step(sim, 1); const t0 = hr(); art.draw(cr, { zoom: 0.14, dpr: 1 }); for (const c of cr.chunks) art.drawLimb(c.part, { zoom: 0.14, dpr: 1 }); for (const b of cr.titan.boulders) art.drawBoulder(b.r, { zoom: 0.14, dpr: 1 }); t += hr() - t0; blits = Math.max(blits, art.stats.blits); }
+  report(t / 300 < config.PERF.BUDGET_MS && blits > 12, `creatureArt alone: ${(t / 300).toFixed(3)} ms a frame over 300 frames (${blits} blits; budget ${config.PERF.BUDGET_MS} ms)`);
+}
+
+// (I10) the bots
+if (!argv.includes('--no-titan-bots')) {
+  restoreCfg();
+  titanCfgBack();
+  const botsimPath = path.join(publicDir, '..', 'tools', 'botsim.mjs');
+  const run = (args, env = {}) => new Promise((resolve) => {
+    const c = spawn(process.execPath, [botsimPath, ...args], { env: { ...process.env, NO_AWAY: '', ...env } }); // (the real game has the away team on: the island is there)
+    let out = '';
+    c.stdout.on('data', (d) => (out += d));
+    c.stderr.on('data', (d) => (out += d));
+    c.on('close', (code) => resolve({ code, out }));
+  });
+  const fight = (out) => {
+    const m = /fight 1: phase (\d)[^\n]*?; ended: (\w+)(?: at (\d+)s)?/.exec(out);
+    return m ? { phase: +m[1], ended: m[2], at: m[3] === undefined ? null : +m[3] } : null;
+  };
+  const pool = async (jobs, n) => { const res = []; let k = 0; await Promise.all(Array.from({ length: n }, async () => { while (k < jobs.length) { const i = k++; res[i] = await jobs[i](); } })); return res; };
+  const seedsB = quick ? [1, 2] : [1, 2, 3];
+  const forced = ['arms', 'mouth', 'crystal', 'hp'];
+  const jobs = [];
+  for (const w of forced) for (const sd of seedsB) jobs.push(() => run(['--creature', 'titan', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd)], { CREATURE_FORCE_WIN: w, ...(w === 'crystal' ? { AWAY_BOT_TRIPS: '1' } : {}) }).then((r) => ({ w, sd, r })));
+  for (const bots of [4, 16]) for (const sd of seedsB) jobs.push(() => run(['--creature', 'titan', '--bots', String(bots), '--difficulty', 'easy', '--minutes', '16', '--seed', String(sd)]).then((r) => ({ w: 'easy' + bots, sd, r })));
+  for (const sd of seedsB) jobs.push(() => run(['--creature', 'titan', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd)]).then((r) => ({ w: 'free', sd, r })));
+  const results = await pool(jobs, 5);
+  const clean = (r) => r.code === 0 && /errors: 0/.test(r.out) && !/NaN/.test(r.out);
+  const byWin = {};
+  for (const { w, sd, r } of results) { const f = fight(r.out); (byWin[w] ||= []).push({ sd, f, ok: clean(r) }); }
+  for (const w of forced) {
+    const rows = byWin[w];
+    const times = rows.map((x) => (x.f && x.f.ended === w ? x.f.at : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t !== null && t <= 360), `forced ${w.toUpperCase()}: 8 bots on Normal end it that way within 6 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] === null ? 'NOT (' + (x.f ? x.f.ended + ', phase ' + x.f.phase : 'no fight') + ')' : times[i] + ' s')).join(', ')})`);
+  }
+  for (const bots of [4, 16]) {
+    const rows = byWin['easy' + bots];
+    const times = rows.map((x) => (x.f && x.f.ended !== 'no' ? { at: x.f.at, how: x.f.ended } : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t && t.at <= 600), `${bots} bots on Easy win within 10 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] ? times[i].how + ' ' + times[i].at + ' s' : 'NOT')).join(', ')})`);
+  }
+  {
+    const rows = byWin.free;
+    const how = rows.map((x) => (x.f && x.f.ended !== 'no' ? x.f.ended + ' ' + x.f.at + ' s' : 'NOT'));
+    report(rows.every((x) => x.ok) && how.every((h) => h !== 'NOT'), `unforced, 8 bots on Normal win (${how.join(', ')})`);
+  }
+  report(results.every(({ r }) => clean(r)), `0 errors and no NaN in any of the ${results.length} Titan bot fights`);
 }
 
 restoreCfg();
