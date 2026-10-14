@@ -7,7 +7,9 @@
 //   3. the Low tier (?tier=low)
 //   4. THE CINDER DRAKE (host.html?creature=drake&lair=ember; skip with --no-drake): it arrives, breathes (the throat glow rises in steps, the jaw opens, the flame cone is drawn), swoops (the strike ring), perches
 //      (talons on the bag, the timer ring), a lava spout erupts, a wing tears off (a Rapier body with its skin), it crashes and crawls, a harpoon line is drawn, it dies in the lava; at most 12 meshes / 60k triangles
-//   4b. THE THUNDERBIRD (host.html?lair=storm; skip with --no-bird; C.6b, 3D.md section 26): the first fallback (tubes and a plain torso): it arrives within the budget, swallows a bolt (the gizzard shows), a wing is plucked (a Rapier body), it dies
+//   4b. THE THUNDERBIRD (host.html?lair=storm; skip with --no-bird; 3D.md section 26): it arrives within the budget (at most 12 meshes, 60k triangles), soars (every feather placed, the crackle), calls (the beak opens, the
+//       charge and the arcs rise), holds a bolt (the tether to the rod), swallows (the breast shield lifts in steps, the stone shows), a bolt it called starts at its beak, a blow scatters feathers, a wing is plucked (a Rapier
+//       body with its own feathers), it dies (a flash, feathers) and the view hides; then the Low tier
 //   5. (--long) host.html?creature=kraken for 3 minutes with 8 bot crew, in real time
 // Screenshots go to a temp folder (printed), not into the repo.
 import { spawn, spawnSync } from 'node:child_process';
@@ -175,30 +177,63 @@ try {
     if (rl.data && rl.data.errors && rl.data.errors.length) fail('game errors in the Drake Low tier run');
   }
   if (!argv.includes('--no-bird')) {
-    // THE THUNDERBIRD (3D.md section 26, C.6b): the first fallback (tapered tubes, a plain torso, the gizzard as the generic heart window): it arrives, swallows a bolt (the gizzard shows), a wing is plucked (a Rapier body),
-    // it dies. The proper model is a later task; this only proves the generic view draws it, cheaply and without errors.
-    console.log('4b. the Thunderbird (host.html?lair=storm), the first fallback: arrive, swallow (the gizzard shows), pluck a wing, death');
+    // THE THUNDERBIRD (3D.md section 26): the storm-bird in the Storm Front's lair, step by step. The bird is put away from the ship and posed by hand (the sim is frozen: creature.js stepBody + the pose names of
+    // creatures/thunderbird.js), so every moment is exact. Checked: it arrives (at most 12 meshes and 60k triangles with ink, a small frame JS), soars (the feathers placed, the crackle on its wings), calls (the beak
+    // opens in steps, more charge, more arcs), holds a bolt (the tether to the rod), swallows (the breast shield lifts in steps and the gizzard's stone shows, arcs round it), a bolt it called starts at ITS BEAK
+    // (lightning.js), a blow scatters feathers, a wing is plucked (a Rapier body with its own feathers), it dies (feathers, a flash) and the view hides; then the Low tier. Screenshots are in the temp folder.
+    console.log('4b. the Thunderbird (host.html?lair=storm): arrive, soar, call, tether, swallow (the shield lifts), the bolt from its beak, a blow, a plucked wing, death; then Low');
+    const bmeas = `window.__meas=()=>{ const k=${view}.kraken, r=k.rig, e=r.ext; let meshes=0, tris=0; const walk=(o)=>{ let v=true, p=o; while(p){ if(!p.visible) v=false; p=p.parent; } if(o.isMesh && v && !(o.isInstancedMesh && o.count===0)){ meshes++; const g=o.geometry; let t=(g.index?g.index.count:g.attributes.position.count)/3; if(o.isInstancedMesh) t*=o.count; tris+=t; } o.children.forEach(walk); }; walk(k.root); if(e&&e.fx){ walk(e.fx.mesh); walk(e.fx.cm); } for (const m of [r.foam.mesh, r.shadow.mesh, r.markers.mesh, r.ropes.group]) walk(m); return { meshes, tris:Math.round(tris) }; };`;
+    const place = `const m=await __imp('/modules/host/creature.js'); window.__sb=m.stepBody; const cr=__cr(), st=window.game.state, sh=st.ships[0]; cr.x=sh.pose.x+3300; cr.y=sh.pose.y-900; cr.base.x=cr.x; cr.base.y=cr.y; cr.vx=cr.vy=0; cr.f=-1;
+      window.__pose=(name,frames,extra)=>{ cr.bird.pose=name; if(extra) extra(cr); for(let i=0;i<frames;i++) window.__sb(cr,1/60); }; st.weather.bolt=null; st.weather.flash=0;`;
     const bsteps = [
       setup,
-      [`(()=>{ window.__step(500); ${view}.S.focus={dx:0,dy:-300}; ${view}.S.zoom=0.4; return 1 })()`, 700, 'arrive'],
+      [`(async()=>{ ${sl} ${bmeas} window.__step(500); ${view}.S.focus={dx:0,dy:-300}; ${view}.S.zoom=0.4; await sl(900); const k=${view}.kraken, r=k.rig, e=r.ext, m=window.__meas(); window.__wp8.arrive={ kind:r&&r.kind, ext:!!e, visible:k.root.visible, meshes:m.meshes, tris:m.tris, js:${view}.stats().jsMs, slots:e&&e.fm.slots, limbs:r.limbs.length }; return JSON.stringify(window.__wp8.arrive) })()`, 300, 'arrive'],
+      // soar: the feathers are all placed (no slot collapsed), the head, the beak and the feet are set, and the wings crackle
+      [`(async()=>{ ${sl} ${place} window.__pose('cruise',60); ${view}.S.focus={dx:0,dy:0}; ${view}.S.zoom=0.5; await sl(900); const r=${view}.kraken.rig, e=r.ext, a=e.fm.geometry.getAttribute('position').array; let nz=0; for(let i=0;i<a.length;i+=3) if(a[i]||a[i+1]||a[i+2]) nz++; const P=e.pieces.set.pieces; const placed=(n)=>!!(P[n].key&&P[n].key!=='hidden'); window.__wp8.soar={ shown:nz/(a.length/3), head:placed('head')&&placed('beak')&&placed('jaw'), feet:placed('footA')&&placed('footB'), arcs:e.fx.arcCount(), chg:e.S.chg, z:r.hg.position.z, meas:window.__meas() }; return JSON.stringify(window.__wp8.soar) })()`, 300, 'soar'],
+      // call: the wings rear, the beak opens in steps, the charge rises and the crackle grows
+      [`(async()=>{ ${sl} const r=${view}.kraken.rig, e=r.ext, cr=__cr(); const was=e.S.chg; window.__pose('rear',50,(c)=>{ c.bird.act={kind:'dive',sub:'call',t:1.2}; }); await sl(1100); window.__wp8.call={ was, chg:e.S.chg, open:e.S.open, arcs:e.fx.arcCount(), glow:r.glow[2], jaw:!!(e.pieces.set.pieces.jaw.key&&e.pieces.set.pieces.jaw.key!=='hidden'), meas:window.__meas() }; return JSON.stringify(window.__wp8.call) })()`, 300, 'call'],
+      // a bolt it has called: the tether from the beak to the rod, growing as the bolt charges
+      [`(async()=>{ ${sl} const r=${view}.kraken.rig, e=r.ext, st=window.game.state; st.stormJob.charge={ t:1.0, max:3, x:(st.stormJob.rods[0]||{x:600}).x, bird:true }; window.__pose('rear',20,(c)=>{ c.bird.act={kind:'dive',sub:'bolts',t:1.0}; }); await sl(700); window.__wp8.tether={ on:!!e.fx.S.tetherOn, arcs:e.fx.arcCount() }; st.stormJob.charge=null; return JSON.stringify(window.__wp8.tether) })()`, 300, 'tether'],
+      // swallow: the gizzard glows: the breast shield lifts in steps (five), the stone shows and throbs, arcs round it
+      [`(async()=>{ ${sl} const r=${view}.kraken.rig, e=r.ext, cr=__cr(); const g=cr.parts.find(p=>p.id==='gizzard'); const k0=e.S.openK; g.hidden=false; cr.bird.glow=9; cr.bird.glowMax=9; window.__pose('swallow',30,(c)=>{ c.bird.act={kind:'swallow',sub:'glow',t:1.0}; }); await sl(300); const k1=e.S.openK; await sl(1500); const h=r.head.dyn.heart, p=r.head.dyn.plates; window.__wp8.swallow={ k0, k1, k2:e.S.openK, stone:!!(h&&h.key&&h.key!=='0.000|0.000'), plates:p&&p.key, arcsOn:!!e.fx.S.wasOpen, open:e.S.open, meas:window.__meas() }; return JSON.stringify(window.__wp8.swallow) })()`, 300, 'swallow'],
+      // a bolt it called is drawn from ITS BEAK (not from the top of the screen); the swallowed bolt (at its own beak) still falls from the sky
+      [`(async()=>{ ${sl} const r=${view}.kraken.rig, e=r.ext, cr=__cr(), st=window.game.state, sh=st.ships[0]; const g=cr.parts.find(p=>p.id==='gizzard'); g.hidden=true; cr.bird.glow=0; cr.bird.act=null; window.__pose('rear',30,(c)=>{ c.bird.act={kind:'dive',sub:'call',t:1.0}; }); st.weather.bolt={ x:sh.pose.x+150, y:sh.pose.y-250, t:0.3 }; st.weather.flash=1; await sl(400); const L=${view}.lightning.stats; const bk=cr.parts.find(p=>p.kind==='beak').segs[0]; window.__wp8.bolt={ from:L.from, topY:L.topY, beakY:-bk.y, shown:L.shown }; return JSON.stringify(window.__wp8.bolt) })()`, 300, 'bolt'],
+      // a blow: feathers fly (one instanced mesh of loose feathers), the part flashes
+      [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, cr=__cr(), e=${view}.kraken.rig.ext; st.weather.bolt=null; st.weather.flash=0; window.__pose('cruise',20); const w=cr.parts.find(p=>p.id==='wingF'); cs.hurtCreature(st,{part:w,seg:2},60,{who:null,src:'shell'}); await sl(350); window.__wp8.hit={ feathers:e.fx.cm.count, vis:e.fx.cm.visible }; return JSON.stringify(window.__wp8.hit) })()`, 300, 'hit'],
       measure('bird'),
-      [`(async()=>{ ${sl} const D=(await __imp('/config.js')).config.CREATURES.THUNDERBIRD; for(const ph of [1,2,3]) D.ATTACK.WEIGHTS[ph]={swallow:1}; const k=${view}.kraken, r=k.rig, cr=__cr(); cr.phase=2; cr.bird.act=null; cr.bird.nextT=0; cr.ai.breather=0; __until(()=>cr.bird.glow>0,6000); window.__step(30); await sl(600); const h=r.head.dyn.heart; window.__wp8.swallow={ kind:r&&r.kind, glow:cr.bird.glow, shown:!!(h&&h.key&&h.key!=='0.000|0.000'), limbs:r.limbs.length }; return JSON.stringify(window.__wp8.swallow) })()`, 300, 'swallow'],
-      [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, cr=st.creature; const w=cr.parts.find(p=>p.id==='wingN'); cs.hurtCreature(st,{part:w,seg:2},w.hp+1,{who:null,src:'shell'}); window.__step(14); await sl(1200); const D=${view}.destruction; window.__wp8.pluck={ stump:w.segs.length, bodies:D.chunks.length, viewChunks:${view}.kraken.rig.chunks.size }; return JSON.stringify(window.__wp8.pluck) })()`, 300, 'pluck'],
-      [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, cr=st.creature; cr.hp=1; const m=cr.parts.find(p=>p.kind==='mantle'); const rr=cs.hurtCreature(st,{part:m,seg:0},50,{who:null,src:'shell'}); window.__step(30); await sl(400); window.__wp8.death={ killed:!!(rr&&rr.killed), mode:cr.mode }; window.__step(700); await sl(900); window.__wp8.gone=!window.game.state.creature; window.__wp8.hiddenAfter=!${view}.kraken.root.visible; window.__wp8.errors=window.gameErrors||[]; return JSON.stringify(window.__wp8.death) })()`, 300, 'death'],
+      [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, cr=st.creature; const w=cr.parts.find(p=>p.id==='wingN'); cs.hurtCreature(st,{part:w,seg:2},w.hp+1,{who:null,src:'shell'}); window.__pose('cruise',14); await sl(1300); const D=${view}.destruction; window.__wp8.pluck={ stump:w.segs.length, bodies:D.chunks.length, viewChunks:${view}.kraken.rig.chunks.size, extra:[...${view}.kraken.rig.chunks.values()].some(e=>e.extra), feathers:${view}.kraken.rig.ext.fx.cm.count }; return JSON.stringify(window.__wp8.pluck) })()`, 300, 'pluck'],
+      [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, cr=st.creature, e=${view}.kraken.rig.ext; cr.hp=1; const m=cr.parts.find(p=>p.kind==='mantle'); const rr=cs.hurtCreature(st,{part:m,seg:0},50,{who:null,src:'shell'}); window.__step(30); await sl(500); window.__wp8.death={ killed:!!(rr&&rr.killed), mode:cr.mode, flash:!!e.fx.S.deathDone, feathers:e.fx.cm.count, chg:e.S.chg }; window.__step(700); await sl(1200); const k=${view}.kraken; window.__wp8.gone=!window.game.state.creature; window.__wp8.hiddenAfter=!k.root.visible && !e.fx.mesh.visible && e.fx.cm.count===0; window.__wp8.errors=window.gameErrors||[]; return JSON.stringify(window.__wp8.death) })()`, 300, 'death'],
     ];
     const rb = run('bird', 'lair=storm', bsteps);
     const bd = rb.data || {};
-    console.log('  errors ' + rb.errs + ' evalErrors ' + rb.evalErrors + '  ' + JSON.stringify(bd).slice(0, 700));
+    console.log('  errors ' + rb.errs + ' evalErrors ' + rb.evalErrors + '  ' + JSON.stringify(bd).slice(0, 1200));
     if (rb.errs !== 0 || rb.evalErrors) fail('console / eval errors in the Thunderbird run');
-    if (!bd.bird) fail('no measurement of the Thunderbird');
+    if (!bd.arrive || !bd.arrive.ext || !bd.arrive.visible || bd.arrive.kind !== 'thunderbird') fail('the Thunderbird view (rig.ext) was not built ' + JSON.stringify(bd.arrive));
     else {
-      if (bd.bird.meshes > 12) fail('the Thunderbird draws ' + bd.bird.meshes + ' meshes (budget 12)');
-      if (bd.bird.tris > 60000) fail('the Thunderbird is ' + bd.bird.tris + ' triangles with ink (budget 60000)');
+      if (bd.arrive.meshes > 12) fail('the Thunderbird draws ' + bd.arrive.meshes + ' meshes (budget 12)');
+      if (bd.arrive.tris > 60000) fail('the Thunderbird is ' + bd.arrive.tris + ' triangles with ink (budget 60000)');
+      if (bd.arrive.js > 2.5) fail('the frame JS is ' + bd.arrive.js + ' ms');
     }
-    if (!bd.swallow || bd.swallow.kind !== 'thunderbird' || !(bd.swallow.glow > 0) || !bd.swallow.shown || bd.swallow.limbs < 6) fail('the swallow: the view did not build the Thunderbird / show the glowing gizzard ' + JSON.stringify(bd.swallow));
-    if (!bd.pluck || bd.pluck.stump < 1 || bd.pluck.bodies < 1 || bd.pluck.viewChunks < 1) fail('the plucked wing did not become a Rapier body ' + JSON.stringify(bd.pluck));
-    if (!bd.death || !bd.death.killed || !bd.gone || !bd.hiddenAfter) fail('the death: it dies, goes, and the view hides');
+    if (!bd.soar || !(bd.soar.shown > 0.95) || !bd.soar.head || !bd.soar.feet || !(bd.soar.arcs > 0) || bd.soar.meas.meshes > 12) fail('the soar: feathers placed, head / beak / feet set, the crackle on the wings ' + JSON.stringify(bd.soar));
+    if (!bd.call || !(bd.call.chg > bd.call.was) || !(bd.call.open > 0.5) || !bd.call.jaw || !(bd.call.arcs >= 5) || !(bd.call.glow > 1.5)) fail('the call: the beak opens, the charge rises, the crackle grows ' + JSON.stringify(bd.call));
+    if (!bd.tether || !bd.tether.on) fail('the tether to the rod was not drawn ' + JSON.stringify(bd.tether));
+    if (!bd.swallow || !(bd.swallow.k1 > bd.swallow.k0 && bd.swallow.k1 < 1) || !(bd.swallow.k2 >= 0.99) || !bd.swallow.stone || !bd.swallow.arcsOn) fail('the swallow: the shield lifts in steps and the stone shows ' + JSON.stringify(bd.swallow));
+    if (!bd.bolt || bd.bolt.from !== 'bird' || !(Math.abs(bd.bolt.topY - bd.bolt.beakY) < 50)) fail('a bolt it called must start at its beak ' + JSON.stringify(bd.bolt));
+    if (!bd.hit || !(bd.hit.feathers > 0)) fail('a blow must scatter feathers ' + JSON.stringify(bd.hit));
+    if (!bd.bird || bd.bird.meshes > 12 || bd.bird.tris > 60000) fail('the Thunderbird costs too much: ' + JSON.stringify(bd.bird));
+    if (!bd.pluck || bd.pluck.stump < 1 || bd.pluck.bodies < 1 || bd.pluck.viewChunks < 1 || !bd.pluck.extra) fail('the plucked wing did not become a Rapier body with its feathers ' + JSON.stringify(bd.pluck));
+    if (!bd.death || !bd.death.killed || !bd.death.flash || !(bd.death.feathers > 0) || !bd.gone || !bd.hiddenAfter) fail('the death: feathers and a flash, then it is gone and the view hides ' + JSON.stringify(bd.death));
     if (bd.errors && bd.errors.length) fail('game errors in the Thunderbird run: ' + JSON.stringify(bd.errors).slice(0, 200));
+    // the Low tier: fewer feathers and fewer sides: it still crackles, in a smaller model
+    const blow = [
+      setup,
+      [`(async()=>{ ${sl} ${bmeas} window.__step(500); ${place} window.__pose('rear',50,(c)=>{ c.bird.act={kind:'dive',sub:'call',t:1.2}; }); ${view}.S.focus={dx:0,dy:0}; ${view}.S.zoom=0.5; await sl(1100); const e=${view}.kraken.rig.ext; window.__wp8.low={ ext:!!e, arcs:e.fx.arcCount(), meas:window.__meas() }; window.__wp8.errors=window.gameErrors||[]; return JSON.stringify(window.__wp8.low) })()`, 300, 'birdlow'],
+    ];
+    const rbl = run('birdlow', 'lair=storm&tier=low', blow);
+    console.log('  low tier: errors ' + rbl.errs + '  ' + JSON.stringify(rbl.data).slice(0, 400));
+    if (rbl.errs !== 0 || rbl.evalErrors) fail('console / eval errors on the Thunderbird at the Low tier');
+    if (!rbl.data || !rbl.data.low || !rbl.data.low.ext || !(rbl.data.low.arcs > 0) || rbl.data.low.meas.tris > 40000 || rbl.data.low.meas.meshes > 12) fail('the Low tier Thunderbird is missing or too big ' + JSON.stringify(rbl.data && rbl.data.low));
+    if (rbl.data && rbl.data.errors && rbl.data.errors.length) fail('game errors in the Thunderbird Low tier run');
   }
   if (long) {
     console.log('5. host.html?creature=kraken, 8 bots, 3 minutes in real time');

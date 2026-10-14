@@ -93,11 +93,11 @@ const GLOW_BODY = `
     float gm = step( 0.5, vGlowId );
     float gk = vGlowId < 1.5 ? uGlow.x : ( vGlowId < 2.5 ? uGlow.y : ( vGlowId < 3.5 ? uGlow.z : uGlow.w ) );
     float sh = step( uSheenCut, dot( normalize( normal ), uSheenDir ) ) * uSheen * ( 1.0 - gm );
-    outgoingLight = mix( outgoingLight + vec3( 0.3, 0.33, 0.4 ) * sh, diffuseColor.rgb * gk, gm );
+    outgoingLight = mix( max( outgoingLight, diffuseColor.rgb * uSelf ) + vec3( 0.3, 0.33, 0.4 ) * sh, diffuseColor.rgb * gk, gm ); // (uSelf: the creature's own light, a floor of its own colour: 0 for the Kraken and the Drake, the Thunderbird sets it in the dark)
   }
 `;
 export function makeUniforms(cut = 0.99) {
-  return { uGlow: { value: new THREE.Vector4(1, 1, 1, 1) }, uSheen: { value: 1 }, uSheenCut: { value: cut }, uSheenDir: { value: new THREE.Vector3(0.3, 0.6, 0.74).normalize() } };
+  return { uGlow: { value: new THREE.Vector4(1, 1, 1, 1) }, uSheen: { value: 1 }, uSelf: { value: 0 }, uSheenCut: { value: cut }, uSheenDir: { value: new THREE.Vector3(0.3, 0.6, 0.74).normalize() } };
 }
 // WP15: SEE-THROUGH WHERE THE CREATURE PASSES IN FRONT OF THE SHIP. A tentacle's coil (or a front limb) crossing the open decks is nearer the camera than the crew and used to hide them. Inside the ship's box
 // (uCoilBox = world x0, x1, y0, y1; creature.js sets it every frame) and in front of the crew's lane (z above uCoilZ) the creature's picture AND its ink are drawn in a fixed screen-door pattern (every other pixel,
@@ -112,7 +112,7 @@ export function creatureToon(map, uniforms) {
     rim(sh, r);
     Object.assign(sh.uniforms, uniforms, coilFade);
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlowId; varying vec3 vCW;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlowId = aGlow; vCW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vGlowId; varying vec3 vCW;\nuniform vec4 uGlow; uniform float uSheen, uSheenCut; uniform vec3 uSheenDir; uniform vec4 uCoilBox; uniform float uCoilZ;').replace('void main() {', 'void main() {\n  ' + COIL_HOLE).replace('#include <opaque_fragment>', GLOW_BODY + '\n#include <opaque_fragment>');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vGlowId; varying vec3 vCW;\nuniform vec4 uGlow; uniform float uSheen, uSheenCut, uSelf; uniform vec3 uSheenDir; uniform vec4 uCoilBox; uniform float uCoilZ;').replace('void main() {', 'void main() {\n  ' + COIL_HOLE).replace('#include <opaque_fragment>', GLOW_BODY + '\n#include <opaque_fragment>');
   };
   m.customProgramCacheKey = () => 'creature-toon-coil';
   return m;
