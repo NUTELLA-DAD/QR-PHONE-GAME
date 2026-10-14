@@ -14,6 +14,10 @@
 //       ring and then flying, the fist on the gasbag, the jaw and the funnel for the roar, an arm that cracks in two stages, a shelled-off arm (a stump and Rapier slabs), the crystal in four stages, the death (the island crumbles, it kneels); then the Low tier
 //   4d. THE RIME WYRM (host.html?creature=wyrm; skip with --no-wyrm; 3D.md section 40): the cliff cracks, it erupts and coils within the budget (at most 10 meshes, 60k triangles), every piece is placed, the ice follows the sim in
 //       four steps and sheds Rapier shards, the maw opens in steps with the throat glowing, the frost breath draws its cone and rings on frozen guns, phase 3 shows the underbelly and the sun, the death shatters the ice; then the Low tier
+//   4e. THE MYCELIAL MOTHER (host.html?creature=mother; skip with --no-mother; 3D.md section 41): she hangs asleep in the dark within the budget (at most 10 meshes, 60k triangles), every piece is placed and wound outward,
+//       the dark and the lamp (a part nobody's lamp holds is dim and her eyes glow low, a lit one fades up in held steps and the eyes blaze), the wings follow the beat key (four poses), the tendrils (five tubes, a grip wraps
+//       the hull, fire shows on a burning one with halos and a charred colour), the cap puffs up, a spore ring and cloud and the wind chevrons are drawn, phase 3 opens the spore heart in steps, a put-out eye goes dark and cracked,
+//       the death (she wilts, the wings fold, the stem stretches and she falls), the view hides; then the Low tier
 //   5. (--long) host.html?creature=kraken for 3 minutes with 8 bot crew, in real time
 // Screenshots go to a temp folder (printed), not into the repo.
 import { spawn, spawnSync } from 'node:child_process';
@@ -408,6 +412,102 @@ try {
     if (rwl.errs !== 0 || rwl.evalErrors) fail('console / eval errors on the Wyrm at the Low tier');
     if (!rwl.data || !rwl.data.low || rwl.data.low.kind !== 'wyrm' || !rwl.data.low.low || rwl.data.low.segs !== 12 || !rwl.data.low.skull || rwl.data.low.tris > 60000 || rwl.data.low.meshes > 10) fail('the Low tier Wyrm is missing or too big ' + JSON.stringify(rwl.data && rwl.data.low));
     if (rwl.data && rwl.data.errors && rwl.data.errors.length) fail('game errors in the Wyrm Low tier run');
+  }
+  if (!argv.includes('--no-mother')) {
+    // THE MYCELIAL MOTHER (3D.md section 41; BOSSES.md C.6e): the spore-moth on the roof of the Fungal Depths' lair (host.html?creature=mother), step by step with the sim frozen. Each moment is read from the live rig
+    // (view.kraken.rig.ext) after the frame had time to draw it.
+    console.log('4e. the Mycelial Mother (host.html?creature=mother): dark, lamp, wings, tendrils, fire, spores, wind, heart, eye, death; then Low');
+    const mmeas = `window.__meas=()=>{ const k=${view}.kraken, r=k.rig, e=r.ext; let meshes=0, tris=0; const walk=(o)=>{ let v=true, p=o; while(p){ if(!p.visible) v=false; p=p.parent; } if(o.isMesh && v && !(o.isInstancedMesh && o.count===0)){ const g=o.geometry; if(g.drawRange && g.drawRange.count===0) return; meshes++; let t=(g.index?g.index.count:g.attributes.position.count)/3; if(o.isInstancedMesh) t*=o.count; tris+=t; } o.children.forEach(walk); }; walk(k.root); if(e) walk(e.marks.mesh); for (const m of [r.foam.mesh, r.shadow.mesh, r.markers.mesh, r.ropes.group]) walk(m); return { meshes, tris:Math.round(tris) }; };
+      window.__pl=(n)=>{ const e=${view}.kraken.rig.ext, p=e.set.pieces[n]; return !!(p&&p.key&&p.key!=='hidden'); };`;
+    const msteps = [
+      setup,
+      // she hangs asleep in the dark: within the budget, every piece placed and wound outward, the tendrils five tubes
+      [`(async()=>{ ${sl} ${mmeas} const cr=__cr(); window.__step(30); cr.parts.forEach(p=>{ p.lit=false; }); await sl(1500); const k=${view}.kraken, r=k.rig, e=r.ext, m=window.__meas(); const MM=await __imp('/modules/view3d/motherModel.js'); const rep=MM.windingReport(e.bodyMesh.geometry, e.set.ranges); const bad=Object.entries(rep).filter(([n,v])=>v>0.08).map(([n,v])=>n+':'+v.toFixed(3));
+        window.__wp8.stand={ kind:r.kind, ext:!!e, visible:k.root.visible, mode:cr.mode, mm:cr.mother.mode, meshes:m.meshes, tris:m.tris, js:${view}.stats().jsMs, bad, tubes:r.tubes.limbs.filter(l=>!l.dead).length, wings:window.__pl('wA')&&window.__pl('wB'), poses:e.poses.A.length===4&&e.poses.B.length===4, eyes:window.__pl('eyeA')&&window.__pl('eyeB')&&!window.__pl('sockA')&&!window.__pl('sockB'), cap:window.__pl('cap')&&window.__pl('skirt'), pod:window.__pl('petal0'), orbHidden:!window.__pl('orb'), pos:[e.bodyG.position.x,e.bodyG.position.y], capAt:[cr.parts.find(p=>p.id==='cap').segs[0].x,-cr.parts.find(p=>p.id==='cap').segs[0].y] }; return JSON.stringify(window.__wp8.stand) })()`, 300, 'mdark'],
+      // the dark and the lamp: dark = a dim shape and low eye glow; a lit eye blazes (in held steps) and the part brightens
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext, U=r.uniforms.uGlow.value, eyes=cr.parts.filter(p=>p.kind==='eye'); cr.parts.forEach(p=>{ p.lit=false; }); await sl(1200); const dark={ rev:e.S.rev.cap, eye:U.x, bio:U.z, emis:r.headMat.emissiveIntensity };
+        eyes[0].lit=true; cr.parts.find(p=>p.id==='cap').lit=true; await sl(250); const mid=e.S.rev.cap; await sl(1500); const lit={ rev:e.S.rev.cap, eyeA:U.x, eyeB:U.y, emis:r.headMat.emissiveIntensity, revB:e.S.rev.eB, revA:e.S.rev.eA };
+        window.__wp8.lamp={ dark, mid, lit }; return JSON.stringify(window.__wp8.lamp) })()`, 300, 'mlamp'],
+      // the wings follow the sim's beat key
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext; cr.mother.mode='awake'; const poses=[]; for(const b of [0,2,3,1]){ cr.mother.beat=b; await sl(400); poses.push([b, e.S.pose, window.__pl('wA'), window.__pl('wB')]); } cr.mother.beat=2; await sl(300);
+        const A=e.set.pieces.wA.key, B=e.set.pieces.wB.key; window.__wp8.wings={ poses, mirrored:!!(A&&B&&A[0]>0&&B[0]<0 || A&&B&&A[12]>0&&B[12]<0) }; cr.mother.beat=0; return JSON.stringify(window.__wp8.wings) })()`, 300, 'mwings'],
+      // the grab: five tubes, one wraps the hull (the coil's own depth), a burning tendril shows fire and the halo
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext; cr.mother.mode='awake'; cr.mode='idle'; cr.mother.nextT=0; cr.ai.breather=0; cr.mother.act=null; const n=__until(()=>(cr.grips||[]).some(g=>g.mode==='hold'), 8000); window.__step(40); await sl(600);
+        const hold=(cr.grips||[]).find(x=>x.mode==='hold'); let behind=0, front=0, wrapped=false; if(hold&&hold.limb.wrap){ wrapped=true; const i=r.limbs.indexOf(hold.limb), L=r.tubes.limbs[i]; for(let k=0;k<L.nr;k++){ const z=L.P[k*3+2]; if(z<-100) behind++; if(z>100) front++; } }
+        window.__wp8.grab={ n, hold:!!hold, wrapped, behind, front, tubes:r.tubes.limbs.filter(l=>!l.dead).length }; return JSON.stringify(window.__wp8.grab) })()`, 300, 'mgrab'],
+      [`(async()=>{ ${sl} const M=await __imp('/modules/host/creatureMother.js'); const cr=__cr(), r=${view}.kraken.rig, e=r.ext, st=window.game.state; cr.parts.forEach(p=>{ p.lit=true; }); for(const g of cr.grips) g.left=Math.max(g.left,60); const t=cr.parts.filter(p=>p.kind==='tentacle')[1]; M.igniteTendril(st, cr, t, 2, 'p1'); window.__step(40); t.burn[0]=-1; t.burn[1]=-1; t.hit=0; await sl(900);
+        const li=r.limbs.indexOf(t), L=r.tubes.limbs[li], col=r.tubes.geometry.getAttribute('color').array; let hot=0, charred=0; for(let k=0;k<L.nr;k++){ const o=(L.base+k*(r.tubes.sides+1))*3; if(col[o]>1.4) hot++; if(col[o]<0.3 && col[o+1]<0.3) charred++; }
+        window.__wp8.fire={ burning:t.burn&&t.burn.some(v=>v>0), marks:e.marks.count, hot, charred, buds:e.bodyG.parent.children.find(o=>o.name==='motherBuds').count, spawned:${view}.stats().vfx.spawned }; return JSON.stringify(window.__wp8.fire) })()`, 300, 'mfire'],
+      // a tendril cut off drops as a Rapier body (the generic chunk: a tube with its own skin and nodules)
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, D=${view}.destruction; for(const g of cr.grips) g.left=0.01; window.__step(60); const t=cr.parts.filter(p=>p.kind==='tentacle').find(p=>!p.severed&&!p.dead&&p.segs.length>=6); const b0=D.chunks.length; cr.hooks.sever(t, 3, {}); window.__step(4); await sl(1500);
+        window.__wp8.sever={ sim:cr.chunks.length, view:r.chunks.size, bodies:D.chunks.length-b0 }; return JSON.stringify(window.__wp8.sever) })()`, 300, 'msever'],
+      // spores: the cap puffs up in steps, the red ring and a cloud are drawn (and a flame burns it off in a gold flash)
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext, mt=cr.mother; for(const g of cr.grips) g.left=0.01; window.__step(60); mt.act=null; mt.puff=3; await sl(700); const puff3=e.set.pieces.cap.key&&e.set.pieces.cap.key[0];
+        mt.puff=0; mt.ring={ x:cr.x, y:cr.y+2400, rx:1100, ry:800, T:4.4, t:2, fall:false }; mt.clouds=[{ id:1, x:cr.x, y:cr.y+2400, x0:cr.x, y0:cr.y+1200, tx:cr.x, ty:cr.y+2400, t:3, rx:1100, ry:800, grow:1, mode:'linger', left:6, flash:false }]; await sl(700); const withBoth=e.marks.count;
+        mt.ring=null; mt.clouds[0].flash=true; await sl(500); const flashed=e.S.flashed.size; mt.clouds=[]; await sl(300);
+        window.__wp8.spores={ puff3, capKey:e.set.pieces.cap.key&&e.set.pieces.cap.key[0], withBoth, flashed, after:e.marks.count }; return JSON.stringify(window.__wp8.spores) })()`, 300, 'mspores'],
+      // the wing beat: the telegraph's dashed chevrons, then the beat's solid ones
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext, mt=cr.mother; mt.gust={ dir:1, t:0, beat:false, x:cr.x }; mt.beat=2; await sl(700); const wind=e.marks.count; mt.gust={ dir:-1, t:1, beat:true, x:cr.x }; mt.beat=3; await sl(700);
+        window.__wp8.beat={ wind, blow:e.marks.count, pose:e.S.pose }; mt.gust=null; mt.beat=0; await sl(400); window.__wp8.beat.after=e.marks.count; return JSON.stringify(window.__wp8.beat) })()`, 300, 'mbeat'],
+      measure('mother'),
+      // phase 3: the spore heart's pod opens in steps (petals fold back, the orb shows), with a ring for the boarders
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext, h=cr.parts.find(p=>p.id==='heart'); const shut=e.S.podStep; cr.phase=3; h.hidden=false; await sl(150); const mid=e.S.podStep; await sl(1500);
+        window.__wp8.heart={ shut, mid, open:e.S.podStep, orb:window.__pl('orb'), ring:e.marks.count>=1 }; return JSON.stringify(window.__wp8.heart) })()`, 300, 'mheart'],
+      // an eye put out: the dome goes, the dark cracked ball shows
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext, eye=cr.parts.find(p=>p.id==='eyeN'); eye.dead=true; eye.hp=0; await sl(900); const U=r.uniforms.uGlow.value;
+        window.__wp8.eyeOut={ dome:window.__pl('eyeA'), sock:window.__pl('sockA'), other:window.__pl('eyeB'), glowA:U.x, dead:e.S.eyeDead[0] }; return JSON.stringify(window.__wp8.eyeOut) })()`, 300, 'meye'],
+      // death: she wilts (the wings fold, the cap shrinks), falls from the roof (the stem stretches then snaps); the view hides afterwards
+      [`(async()=>{ ${sl} const cr=__cr(), r=${view}.kraken.rig, e=r.ext; const y0=e.bodyG.position.y; cr.hp=1; cr.hooks.hurtPool(5,'shell'); window.__step(30); await sl(600); const d0={ killed:cr.mode==='dying', died:e.S.died, pose:e.S.pose };
+        window.__step(200); await sl(900); const y1=e.bodyG.position.y; const d1={ pose:e.S.pose, fell:y0-y1, snapped:e.S.snapped, stem:!!(e.set.pieces.stem.key&&e.set.pieces.stem.key!=='hidden'), sink:cr.sinkT };
+        window.__step(300); await sl(900); window.__wp8.death={ d0, d1, y0, y1:e.bodyG.position.y }; return JSON.stringify(window.__wp8.death) })()`, 300, 'mdeath'],
+      [`(async()=>{ ${sl} window.__step(900); await sl(1200); const k=${view}.kraken; window.__wp8.gone=!window.game.state.creature; window.__wp8.hiddenAfter=!k.root.visible && !k.rig.ext.marks.mesh.visible; window.__wp8.errors=window.gameErrors||[]; return 1 })()`, 300],
+    ];
+    const rm = run('mother', 'creature=mother', msteps);
+    const md = rm.data || {};
+    console.log('  errors ' + rm.errs + ' evalErrors ' + rm.evalErrors + '  ' + JSON.stringify(md).slice(0, 2200));
+    if (rm.errs !== 0 || rm.evalErrors) fail('console / eval errors in the Mother run');
+    const m0 = md.stand;
+    if (!m0 || m0.kind !== 'mother' || !m0.ext || !m0.visible) fail('the Mother view (rig.ext) was not built ' + JSON.stringify(m0));
+    else {
+      if (m0.meshes > 10) fail('the Mother draws ' + m0.meshes + ' meshes (budget 10)');
+      if (m0.tris > 60000) fail('the Mother is ' + m0.tris + ' triangles with ink (budget 60000)');
+      if (m0.js > 2.5) fail('the frame JS is ' + m0.js + ' ms');
+      if (m0.bad && m0.bad.length) fail('triangles wound the wrong way ' + JSON.stringify(m0.bad));
+      if (m0.tubes !== 5 || !m0.wings || !m0.poses || !m0.eyes || !m0.cap || !m0.pod || !m0.orbHidden) fail('a piece of the Mother is not placed ' + JSON.stringify(m0));
+      if (Math.abs(m0.pos[0] - m0.capAt[0]) > 1 || Math.abs(m0.pos[1] - m0.capAt[1]) > 1) fail('the body is not at the sim\'s cap ' + JSON.stringify([m0.pos, m0.capAt]));
+    }
+    const ml = md.lamp;
+    if (!ml || !(ml.dark.rev === 0) || !(ml.dark.eye < 0.5) || !(ml.mid > 0 && ml.mid < 1) || !(ml.lit.rev > 0.95) || !(ml.lit.eyeA > 1.2) || !(ml.lit.eyeB < 0.6) || !(ml.lit.emis > ml.dark.emis)) fail('the dark and the lamp: dim and low glow in the dark; a lit part fades up in held steps and its eye blazes, the other eye stays low ' + JSON.stringify(ml));
+    const mw = md.wings;
+    if (!mw || !mw.poses || mw.poses.some((p) => p[0] !== p[1] || !p[2] || !p[3]) || !mw.mirrored) fail('the wings follow the beat key (four poses, both placed, the left mirrored) ' + JSON.stringify(mw));
+    const mg = md.grab;
+    if (!mg || !mg.hold || !mg.wrapped || mg.tubes !== 5 || mg.behind + mg.front < 2) fail('a tendril holds the hull and its coil takes its own depth ' + JSON.stringify(mg));
+    const mf = md.fire;
+    if (!mf || !mf.burning || !(mf.marks >= 1) || !(mf.hot >= 1) || !(mf.charred >= 1) || !(mf.buds >= 1) || !(mf.spawned > 0)) fail('a burning tendril: fire sprites, a halo, a hot colour, a burnt-out segment charred, the buds ' + JSON.stringify(mf));
+    const mv = md.sever;
+    if (!mv || !(mv.sim >= 1) || !(mv.view >= 1) || !(mv.bodies >= 1)) fail('a tendril cut off must become a Rapier body ' + JSON.stringify(mv));
+    const ms = md.spores;
+    if (!ms || !(ms.puff3 > 1.1) || !(ms.withBoth >= 2) || !(ms.flashed >= 1)) fail('the spores: the cap swells, a ring and a cloud are drawn, a flame flashes it ' + JSON.stringify(ms));
+    const mb = md.beat;
+    if (!mb || !(mb.wind >= 9) || !(mb.blow >= 9) || mb.after > mb.wind - 9 || mb.pose !== 3) fail('the wing beat: nine chevrons while the wings spread and while they beat ' + JSON.stringify(mb));
+    if (!md.mother || md.mother.meshes > 10 || md.mother.tris > 60000) fail('the Mother costs too much: ' + JSON.stringify(md.mother));
+    const mh = md.heart;
+    if (!mh || mh.shut !== 0 || !(mh.mid >= 1 && mh.mid < 3) || mh.open !== 3 || !mh.orb || !mh.ring) fail('phase 3: the pod opens in steps and the heart shows with its ring ' + JSON.stringify(mh));
+    const me = md.eyeOut;
+    if (!me || me.dome || !me.sock || !me.other || !(me.glowA === 0) || !me.dead) fail('an eye put out: the dome goes, the dark ball shows, the other eye stays ' + JSON.stringify(me));
+    const mx = md.death;
+    if (!mx || !mx.d0 || !mx.d0.killed || !mx.d0.died || !mx.d1 || !(mx.d1.fell > 200) || !mx.d1.snapped || mx.d1.pose > 1) fail('the death: she wilts, folds her wings and falls from the roof, the stem snaps ' + JSON.stringify(mx));
+    if (!md.gone || !md.hiddenAfter) fail('after the death the view must hide ' + JSON.stringify([md.gone, md.hiddenAfter]));
+    if (md.errors && md.errors.length) fail('game errors in the Mother run: ' + JSON.stringify(md.errors).slice(0, 200));
+    const mlow = [
+      setup,
+      [`(async()=>{ ${sl} ${mmeas} const cr=__cr(); window.__step(30); await sl(1500); const r=${view}.kraken.rig; const m=window.__meas(); window.__wp8.low={ kind:r.kind, low:r.low, ext:!!r.ext, meshes:m.meshes, tris:m.tris, wings:window.__pl('wA'), tubes:r.tubes.limbs.filter(l=>!l.dead).length }; window.__wp8.errors=window.gameErrors||[]; return JSON.stringify(window.__wp8.low) })()`, 300, 'motherlow'],
+    ];
+    const rml = run('motherlow', 'creature=mother&tier=low', mlow);
+    console.log('  low tier: errors ' + rml.errs + '  ' + JSON.stringify(rml.data).slice(0, 400));
+    if (rml.errs !== 0 || rml.evalErrors) fail('console / eval errors on the Mother at the Low tier');
+    if (!rml.data || !rml.data.low || rml.data.low.kind !== 'mother' || !rml.data.low.low || !rml.data.low.wings || rml.data.low.tubes !== 5 || rml.data.low.tris > 60000 || rml.data.low.meshes > 10) fail('the Low tier Mother is missing or too big ' + JSON.stringify(rml.data && rml.data.low));
+    if (rml.data && rml.data.errors && rml.data.errors.length) fail('game errors in the Mother Low tier run');
   }
   if (long) {
     console.log('5. host.html?creature=kraken, 8 bots, 3 minutes in real time');

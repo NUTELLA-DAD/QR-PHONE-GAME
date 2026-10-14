@@ -19,6 +19,7 @@ import { buildDrake, drakeSkins, drakeLimbs, drakeTubeOpts, extendDrake } from '
 import { buildThunderbird, birdSkins, birdLimbs, birdTubeOpts, extendThunderbird } from './creatureThunderbird.js';
 import { buildTitanBody, titanSkins, titanLimbs, titanTubeOpts, extendTitan } from './creatureTitan.js';
 import { buildWyrmBody, wyrmSkins, wyrmLimbs, wyrmTubeOpts, extendWyrm } from './creatureWyrm.js';
+import { buildMotherBody, motherSkins, motherLimbs, motherTubeOpts, extendMother } from './creatureMother.js';
 import { createFoamRings, createShadowDecal, createGripMarkers, createRopeSet } from './creatureFx.js';
 import { createWaterFx } from './creatureWater.js';
 
@@ -42,6 +43,9 @@ export const KINDS = {
   // The Rime Wyrm (3D.md section 40): a frost serpent of rigid pieces (12 scaled segments, the collar, the head with its hinged jaws) wrapped in a translucent ice shell that sheds in steps (creatureWyrm.js); a dry hide, so no
   // wet glint on the body (`sheen: 0`; the ice has its own), and its phase 3 is tiredness (the generic pale tint)
   wyrm: { id: 'wyrm', palette: () => config.CREATURE3D.WYRM, build: buildWyrmBody, limbKind: 'tentacle', limbsOf: wyrmLimbs, skins: wyrmSkins, tubeOpts: wyrmTubeOpts, extend: extendWyrm, sheen: 0 },
+  // The Mycelial Mother (3D.md section 41): a spore-moth hanging from the roof of a dark cave (creatureMother.js): its own atlas and tendril skin, tube opts (glowing nodules), the extension that places her cap, gills, face, eyes,
+  // antennae, wings and spore heart and draws the tendrils itself; a dry, furry body (no wet glint), and a phase 3 that is a thrash, not tiredness
+  mother: { id: 'mother', palette: () => config.CREATURE3D.MOTHER, build: buildMotherBody, limbKind: 'tentacle', limbsOf: motherLimbs, skins: motherSkins, tubeOpts: motherTubeOpts, extend: extendMother, desperate: true, sheen: 0 },
 };
 
 export function createCreatureView(parent) {
