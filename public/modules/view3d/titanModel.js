@@ -87,14 +87,21 @@ export function ringYZ(n, x, top, bot, w, { jitter = 0.04, seed = 1, k = 0 } = {
 }
 
 // ---- the torso ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// stations [y, xCentre, halfWidth x, halfDepth z] from the neck down to the hips (the 2D picture's outline: broad shoulders, a thick waist), z kept inside +-430 so the whole body lies behind the lair's plain
-const TORSO = [[2170, 40, 400, 300], [1990, 20, 740, 400], [1700, 10, 960, 430], [1280, 0, 930, 430], [820, 10, 860, 420], [320, 0, 740, 400], [-300, 0, 770, 410], [-640, 0, 690, 380]];
+// three big faceted boulders that FLOAT one above the other with a hand's breadth between them: chest, belly, hips [centre x, centre y, rx, ry, rz, colour, seed]. A glowing crystal plate fills each gap (they are held
+// together by light); the heartstone burns in the first gap. z stays inside +-440 so the whole body lies behind the lair's plain.
+export const TORSO_STONES = [[10, 1530, 900, 520, 440, 'torso', 5], [0, 610, 810, 300, 420, 'stoneDk', 6], [0, -80, 770, 300, 400, 'torso', 7]];
+const stoneZ = (s, x, y) => { const u = ((x - s[0]) / s[2]) ** 2 + ((y - s[1]) / s[3]) ** 2; return u < 0.96 ? s[4] * Math.sqrt(1 - u) : 0; };
 export function torsoZ(x, y) { // the depth of the torso's near skin at (x, y) (for what is stuck to it: the vein, the plates)
-  let i = 0;
-  while (i < TORSO.length - 2 && y < TORSO[i + 1][0]) i++;
-  const a = TORSO[i], b = TORSO[i + 1], u = clamp((a[0] - y) / (a[0] - b[0]), 0, 1), xc = a[1] + (b[1] - a[1]) * u, wx = a[2] + (b[2] - a[2]) * u, wz = a[3] + (b[3] - a[3]) * u;
-  const t = clamp((x - xc) / Math.max(1, wx), -0.97, 0.97);
-  return wz * Math.sqrt(1 - t * t);
+  let z = 0;
+  for (const s of TORSO_STONES) z = Math.max(z, stoneZ(s, x, y));
+  return z;
+}
+const topY = (s, x, z) => { const u = ((x - s[0]) / s[2]) ** 2 + (z / s[4]) ** 2; return u < 0.95 ? s[1] + s[3] * Math.sqrt(1 - u) : s[1] + s[3] * 0.2; }; // the height of a stone's top at (x, z)
+// a glowing crystal plate in the gap between two floating stones: a flattened disc (rx, rz) of cyan light with a pale heart
+function addGapPlate(mesh, P, OW, cx, cy, rx, rz, thick, name) {
+  const g = new THREE.CylinderGeometry(1, 1, 1, 12, 1);
+  flat(mesh, g, M4(V(cx, cy, 0), null, V(rx, thick, rz)), { ow: OW * 0.3, color: P.crystal, glow: 3, name });
+  flat(mesh, g, M4(V(cx, cy, 0), null, V(rx * 0.7, thick * 1.08, rz * 0.7)), { ow: 0, color: P.crystalIn, glow: 4, name });
 }
 const SEG = (a, b, w, d, color, mesh, o = {}) => { // a thin stick from a to b (3D points): a box along the line
   const dir = b.clone().sub(a), len = dir.length(), mid = a.clone().add(b).multiplyScalar(0.5), q = new THREE.Quaternion().setFromUnitVectors(V(1, 0, 0), dir.normalize());
@@ -103,41 +110,43 @@ const SEG = (a, b, w, d, color, mesh, o = {}) => { // a thin stick from a to b (
 
 export function buildTitan(cr, P, opts = {}) {
   const OW = P.INK || 26, low = !!opts.low, mesh = new Mesher();
-  const sides = low ? 9 : 12;
-  // --- the torso: a loft through the stations, every ring a rounded octagon-ish with a little jitter: a heavy block of cut stone ---
-  const rings = TORSO.map(([y, xc, wx, wz], i) => ringXZ(sides, y, xc, 0, wx, wz, { exp: 2.6, jitter: 0.045, seed: 5, k: i }));
-  stone(mesh, loft(rings, true), null, { ow: OW, color: P.torso, name: 'mantle', seed: 3 });
+  // --- the torso: three floating faceted boulders (chest, belly, hips) with a cyan plate of light in each gap ---
+  TORSO_STONES.forEach((s, i) => stone(mesh, rockGeo(s[2], s[3], s[4], { detail: low ? 1 : 2, jitter: 0.075, seed: s[6] }), M4(V(s[0], s[1], 0)), { ow: OW, color: P[s[5]], name: 'mantle', seed: s[6] * 3 + i }));
+  addGapPlate(mesh, P, OW, 0, 960, 520, 250, 150, 'mantle');
+  addGapPlate(mesh, P, OW, 0, 265, 470, 240, 140, 'mantle');
   // shoulder mounds (where the arms come out) and the hunch of the back, in the same stone
-  const lump = (c, r, col, sd, nm = 'mantle', jitterK = 0.18, d = 1) => stone(mesh, rockGeo(r.x, r.y, r.z, { detail: d, jitter: jitterK, seed: sd }), M4(c, qz((hash(sd, 4) - 0.5) * 0.5)), { ow: OW * 0.85, color: col, name: nm, seed: sd });
+  const lump = (c, r, col, sd, nm = 'mantle', jitterK = 0.13, d = 1) => stone(mesh, rockGeo(r.x, r.y, r.z, { detail: d, jitter: jitterK, seed: sd }), M4(c, qz((hash(sd, 4) - 0.5) * 0.5)), { ow: OW * 0.85, color: col, name: nm, seed: sd });
   lump(V(190, 1680, 340), V(450, 340, 300), P.stone, 11);
   lump(V(-330, 1700, -330), V(450, 340, 300), P.stoneDk, 12);
   lump(V(-560, 1420, 0), V(420, 700, 480), P.torso, 13);
   lump(V(-760, 1960, 120), V(330, 260, 330), P.stoneDk, 14);
   // the back ridge: rocks along the spine (the island sits on it)
   for (let i = 0; i < 5; i++) lump(V(-930 - (i % 2) * 40, 600 + i * 330, (i % 2 ? 90 : -70)), V(240 + (i % 3) * 30, 220, 280), i % 2 ? P.stoneDk : P.stone, 20 + i);
-  // chest plates: heavy raised slabs on the near side, a belt of stone across the belly
-  const plate = (x, y, w, h, sd, col) => { const z = torsoZ(x, y); stone(mesh, blockGeo(w, h, 120, { seed: sd, jitter: 0.12 }), M4(V(x, y, z - 18), qz((hash(sd, 9) - 0.5) * 0.18)), { ow: OW * 0.7, color: col, name: 'mantle', seed: sd }); };
-  plate(120, 1650, 620, 300, 31, P.stoneLt); plate(560, 560, 520, 330, 32, P.stone); plate(-300, 500, 560, 360, 33, P.stoneLt); plate(250, -140, 700, 260, 34, P.stoneDk);
-  // moss on the shoulders, the head's collar and the back: flat lumps in two greens
+  // chest plates: heavy raised facets on the near side of each stone
+  const plate = (x, y, w, h, sd, col) => { const z = torsoZ(x, y); stone(mesh, rockGeo(w / 2, h / 2, 90, { detail: 1, jitter: 0.12, seed: sd }), M4(V(x, y, z - 20), qz((hash(sd, 9) - 0.5) * 0.3)), { ow: OW * 0.7, color: col, name: 'mantle', seed: sd }); };
+  plate(120, 1720, 600, 280, 31, P.stoneLt); plate(560, 640, 480, 300, 32, P.stone); plate(-300, 560, 500, 300, 33, P.stoneLt); plate(250, -90, 620, 260, 34, P.stoneDk);
+  // moss on the shoulders, the head's collar and the back: flat lumps in two greens, sitting on the tops of the stones
   const moss = (c, r, sd, col) => flat(mesh, rockGeo(r.x, r.y, r.z, { detail: 1, jitter: 0.25, seed: sd }), M4(c, qz((hash(sd, 4) - 0.5) * 0.4)), { ow: OW * 0.3, color: col, name: 'mantle' });
-  moss(V(150, 1990, 330), V(300, 70, 160), 41, P.moss); moss(V(-360, 2030, -250), V(260, 60, 140), 42, P.mossDk); moss(V(-560, 1960, 160), V(320, 80, 220), 43, P.moss);
-  moss(V(-700, 1180, 380), V(220, 60, 100), 44, P.mossDk); moss(V(500, 1350, 330), V(160, 50, 80), 45, P.moss);
+  const CH = TORSO_STONES[0];
+  moss(V(150, topY(CH, 150, 300) - 40, 300), V(300, 70, 160), 41, P.moss); moss(V(-360, topY(CH, -360, -220) - 40, -220), V(260, 60, 140), 42, P.mossDk); moss(V(-560, 1960, 160), V(320, 80, 220), 43, P.moss);
+  moss(V(-700, 1180, 380), V(220, 60, 100), 44, P.mossDk); moss(V(500, topY(TORSO_STONES[1], 500, 200) - 30, 200), V(200, 55, 120), 45, P.moss);
+  moss(V(-100, topY(TORSO_STONES[2], -100, 120) - 30, 120), V(240, 50, 130), 46, P.moss);
   // --- the rubble heap at its feet (it picks its boulders from it): a mound of dark stone with loose rocks; in front of the plain's face, so it lies a little toward the viewer ---
   const hz = (opts.heapZ == null ? 180 : opts.heapZ);
   stone(mesh, rockGeo(880, 600, 290, { detail: 1, jitter: 0.12, seed: 51, squashTop: 0.2 }), M4(V(1210, -1700, hz)), { ow: OW * 0.9, color: P.stoneDk, name: 'heap', seed: 51 });
   for (const [x, y, r, k] of [[900, -1180, 230, 0], [1250, -1300, 260, 1], [1560, -1700, 220, 2], [700, -1650, 200, 3], [1100, -1850, 240, 4], [1850, -2000, 180, 5]]) stone(mesh, rockGeo(r, r * 0.8, r * 0.9, { detail: 1, jitter: 0.22, seed: 60 + k }), M4(V(x, y, hz + (k % 2 ? 90 : -40)), qz(k)), { ow: OW * 0.7, color: k % 2 ? P.stone : P.stoneLt, name: 'heap', seed: 60 + k });
-  // --- the heartstone in its chest and the vein that climbs the chest toward the island: cyan, glowing (channels 4 and 3) ---
-  const hx = 330, hy = 1000, hzz = torsoZ(hx, hy) + 18;
+  // --- the heartstone in the first gap and the vein that climbs the chest toward the island: cyan, glowing (channels 4 and 3) ---
+  const hx = 330, hy = 960, hzz = 340;
   const crown = new THREE.ConeGeometry(1, 1, 4, 1), base = new THREE.ConeGeometry(1, 1, 4, 1);
   crown.translate(0, 0.5, 0); base.rotateX(Math.PI); base.translate(0, -0.5, 0);
   flat(mesh, crown, M4(V(hx, hy, hzz), qy(Math.PI / 4), V(190, 250, 110)), { ow: OW * 0.5, color: P.crystalIn, glow: 4, name: 'heartstone' });
   flat(mesh, base, M4(V(hx, hy, hzz), qy(Math.PI / 4), V(190, 250, 110)), { ow: OW * 0.5, color: P.crystal, glow: 4, name: 'heartstone' });
-  flat(mesh, new THREE.TorusGeometry(215, 34, 5, 10), M4(V(hx, hy, hzz - 20), qy(0), V(1, 1.25, 0.6)), { ow: OW * 0.5, color: P.stoneLt, name: 'heartstone' });
-  const vein = [[330, 1000], [200, 1300], [60, 1480], [-120, 1750], [-380, 1950]];
+  flat(mesh, new THREE.TorusGeometry(215, 34, 5, 10), M4(V(hx, hy, hzz - 30), qy(0), V(1, 1.25, 0.6)), { ow: OW * 0.5, color: P.stoneLt, name: 'heartstone' });
+  const vein = [[330, 960], [230, 1250], [90, 1450], [-120, 1720], [-380, 1950]];
   for (let i = 0; i < vein.length - 1; i++) {
-    const a = vein[i], b = vein[i + 1];
-    SEG(V(a[0], a[1], torsoZ(a[0], a[1]) + 14), V(b[0], b[1], torsoZ(b[0], b[1]) + 14), 74, 42, P.crystal, mesh, { ow: OW * 0.35, glow: 3, name: 'vein' });
-    flat(mesh, rockGeo(70, 70, 50, { detail: 0, jitter: 0.2, seed: 70 + i }), M4(V(b[0], b[1], torsoZ(b[0], b[1]) + 26)), { ow: OW * 0.3, color: P.crystalIn, glow: 3, name: 'vein' });
+    const a = vein[i], b = vein[i + 1], za = Math.max(250, torsoZ(a[0], a[1]) + 26), zb = Math.max(200, torsoZ(b[0], b[1]) + 26);
+    SEG(V(a[0], a[1], za), V(b[0], b[1], zb), 74, 42, P.crystal, mesh, { ow: OW * 0.35, glow: 3, name: 'vein' });
+    flat(mesh, rockGeo(70, 70, 50, { detail: 0, jitter: 0.2, seed: 70 + i }), M4(V(b[0], b[1], zb + 14)), { ow: OW * 0.3, color: P.crystalIn, glow: 3, name: 'vein' });
   }
   const geometry = mesh.build();
   const torso = cr.parts.find((p) => p.kind === 'mantle');
@@ -148,54 +157,56 @@ export function buildTitan(cr, P, opts = {}) {
 }
 
 // ---- the legs -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// local frame: x = 0 on the leg's own centre line, y as in the body frame (the hip at +420, the soles at -2200)
-const LEG = [[420, 0, 330, 250], [-300, 0, 305, 240], [-900, -15, 285, 235], [-1350, 0, 305, 245], [-1850, -15, 335, 262]];
+// STACKED FLOATING STONES, like the arms: a thigh, a shin and a foot with a hand's breadth between them and a plate of cyan light in each gap (they swap and lift as one piece). local frame: x = 0 on the leg's own
+// centre line, y as in the body frame (the hips hang at -380, the soles at -2200)
 function addLeg(mesh, P, nm, seed, OW, sides) {
-  const rings = LEG.map(([y, xc, wx, wz], i) => ringXZ(sides, y, xc, 0, wx, wz, { exp: 2.5, jitter: 0.06, seed, k: i }));
-  stone(mesh, loft(rings, true), null, { ow: OW, color: P.stone, name: nm, seed });
-  stone(mesh, rockGeo(330, 260, 300, { detail: 1, jitter: 0.18, seed: seed + 1 }), M4(V(-10, -1080, 0)), { ow: OW * 0.8, color: P.stoneLt, name: nm, seed: seed + 1 }); // the knee
-  flat(mesh, rockGeo(210, 60, 170, { detail: 1, jitter: 0.25, seed: seed + 2 }), M4(V(-30, -830, 20)), { ow: OW * 0.3, color: P.moss, name: nm });
-  // the foot: a long block of darker stone, toes at the front
-  const foot = [[-480, -1900, -2200, 250], [-120, -1880, -2200, 305], [380, -1950, -2200, 310], [780, -2000, -2200, 270], [940, -2070, -2200, 200]];
-  stone(mesh, loft(foot.map(([x, t, b, w], i) => ringYZ(8, x, t, b, w, { jitter: 0.04, seed: seed + 3, k: i })), true), null, { ow: OW, color: P.stoneDk, name: nm, seed: seed + 3 });
-  for (const dz of [-150, 0, 150]) stone(mesh, rockGeo(120, 90, 100, { detail: 0, jitter: 0.2, seed: seed + 7 + dz }), M4(V(930, -2110, dz)), { ow: OW * 0.6, color: P.stoneLt, name: nm, seed: seed + 8 });
-  stone(mesh, rockGeo(250, 120, 280, { detail: 1, jitter: 0.2, seed: seed + 4 }), M4(V(0, -1900, 0)), { ow: OW * 0.7, color: P.stone, name: nm, seed: seed + 4 }); // the ankle
+  const det = sides > 10 ? 2 : 1;
+  stone(mesh, rockGeo(345, 335, 290, { detail: det, jitter: 0.09, seed }), M4(V(0, -775, 0)), { ow: OW, color: P.stone, name: nm, seed }); // the thigh
+  flat(mesh, rockGeo(215, 60, 170, { detail: 1, jitter: 0.25, seed: seed + 2 }), M4(V(-30, -480, 20)), { ow: OW * 0.3, color: P.moss, name: nm });
+  stone(mesh, rockGeo(215, 180, 190, { detail: 1, jitter: 0.15, seed: seed + 1 }), M4(V(60, -1030, 190), qz(0.3)), { ow: OW * 0.7, color: P.stoneLt, name: nm, seed: seed + 1 }); // the kneecap, on the front
+  stone(mesh, rockGeo(310, 330, 265, { detail: det, jitter: 0.09, seed: seed + 3 }), M4(V(-10, -1525, 0)), { ow: OW, color: P.stoneDk, name: nm, seed: seed + 3 }); // the shin
+  stone(mesh, rockGeo(560, 135, 310, { detail: 1, jitter: 0.1, seed: seed + 4 }), M4(V(230, -2065, 0)), { ow: OW, color: P.stone, name: nm, seed: seed + 4 }); // the foot
+  for (const dz of [-170, 0, 170]) stone(mesh, rockGeo(130, 95, 110, { detail: 0, jitter: 0.2, seed: seed + 7 + dz }), M4(V(840, -2105, dz)), { ow: OW * 0.6, color: P.stoneLt, name: nm, seed: seed + 8 }); // the toes
+  addGapPlate(mesh, P, OW, 0, -1150, 215, 175, 120, nm);
+  addGapPlate(mesh, P, OW, 0, -1900, 210, 170, 110, nm);
+  addGapPlate(mesh, P, OW, 0, -420, 230, 190, 110, nm);
 }
 
 // ---- the head ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// local frame: the head's centre (HEAD.AT) at the origin, +x the way it faces
+// local frame: the head's centre (HEAD.AT) at the origin, +x the way it faces. Rounded faceted boulders like the rest: a cranium, a heavy brow stone floating over the eyes, a snout, a hinged jaw stone.
 export const JAW_PIVOT = V(260, -130, 0);
 function addHead(mesh, P, OW, low) {
-  // the skull: its lower front is cut away (below the lip there is only the jaw), so a dropped jaw opens a gap the camera sees into from the side
-  const S = [[-560, 400, -260, 250], [-300, 640, -580, 400], [0, 690, -580, 430], [200, 670, -560, 430], [300, 640, -540, 425], [312, 640, -30, 425], [520, 520, -30, 400], [640, 150, -30, 340], [700, 110, -30, 290]];
-  const rings = S.map(([x, top, bot, w], i) => ringYZ(8, x, top, bot, w, { jitter: 0.05, seed: 9, k: i }));
-  stone(mesh, loft(rings, true), null, { ow: OW, color: P.head, name: 'head', seed: 9 });
-  // the heavy brow: a dark slab over the eyes, jutting forward; moss on the crown and a couple of crown stones
-  stone(mesh, blockGeo(640, 160, 880, { seed: 3, jitter: 0.06 }), M4(V(380, 270, 0), qz(-0.05)), { ow: OW * 0.8, color: P.stoneDk, name: 'head', seed: 3 });
-  stone(mesh, rockGeo(260, 200, 330, { detail: 1, jitter: 0.2, seed: 4 }), M4(V(-120, 640, 0)), { ow: OW * 0.8, color: P.stone, name: 'head', seed: 4 });
-  flat(mesh, rockGeo(330, 80, 300, { detail: 1, jitter: 0.25, seed: 5 }), M4(V(-140, 770, 20), qz(0.1)), { ow: OW * 0.3, color: P.moss, name: 'head' });
-  flat(mesh, rockGeo(180, 60, 150, { detail: 1, jitter: 0.25, seed: 6 }), M4(V(-380, 520, -150)), { ow: OW * 0.3, color: P.mossDk, name: 'head' });
-  stone(mesh, rockGeo(170, 150, 150, { detail: 0, jitter: 0.2, seed: 7 }), M4(V(-420, 300, 300)), { ow: OW * 0.6, color: P.stoneLt, name: 'head', seed: 7 }); // ears
-  stone(mesh, rockGeo(170, 150, 150, { detail: 0, jitter: 0.2, seed: 8 }), M4(V(-420, 300, -300)), { ow: OW * 0.6, color: P.stoneLt, name: 'head', seed: 8 });
-  // a blocky nose bridge above the lip
-  stone(mesh, blockGeo(210, 230, 330, { seed: 6, jitter: 0.1 }), M4(V(640, 170, 0), qz(-0.1)), { ow: OW * 0.7, color: P.stoneLt, name: 'head', seed: 6 });
+  const det = low ? 1 : 2;
+  // the cranium: a big faceted boulder; its lower front is flattened away (below the lip there is only the jaw), so a dropped jaw opens a gap the camera sees into from the side
+  const cutLow = (g, cx, cy) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const wx = p.getX(i) + cx, wy = p.getY(i) + cy; if (wx > 150 && wy < -90) p.setY(i, -90 - cy + (wy + 90) * 0.08); } g.computeVertexNormals(); return g; };
+  stone(mesh, cutLow(rockGeo(500, 560, 440, { detail: det, jitter: 0.07, seed: 9 }), -170, 120), M4(V(-170, 120, 0)), { ow: OW, color: P.head, name: 'head', seed: 9 }); // the cranium (the back of the head)
+  stone(mesh, cutLow(rockGeo(400, 340, 410, { detail: det, jitter: 0.08, seed: 13 }), 330, 10), M4(V(330, 10, 0)), { ow: OW, color: P.head, name: 'head', seed: 13 }); // the face block: the eyes sit in its sides
+  // the brow: a dark stone floating over the eyes, jutting forward; a crown stone, moss, ears
+  stone(mesh, rockGeo(330, 115, 470, { detail: 1, jitter: 0.1, seed: 3 }), M4(V(375, 268, 0), qz(-0.06)), { ow: OW * 0.8, color: P.stoneDk, name: 'head', seed: 3 });
+  stone(mesh, rockGeo(260, 200, 330, { detail: 1, jitter: 0.2, seed: 4 }), M4(V(-150, 640, 0)), { ow: OW * 0.8, color: P.stone, name: 'head', seed: 4 });
+  flat(mesh, rockGeo(330, 80, 300, { detail: 1, jitter: 0.25, seed: 5 }), M4(V(-170, 800, 20), qz(0.1)), { ow: OW * 0.3, color: P.moss, name: 'head' });
+  flat(mesh, rockGeo(180, 60, 150, { detail: 1, jitter: 0.25, seed: 6 }), M4(V(-380, 540, -150)), { ow: OW * 0.3, color: P.mossDk, name: 'head' });
+  stone(mesh, rockGeo(170, 150, 150, { detail: 0, jitter: 0.2, seed: 7 }), M4(V(-420, 300, 410)), { ow: OW * 0.6, color: P.stoneLt, name: 'head', seed: 7 }); // ears
+  stone(mesh, rockGeo(170, 150, 150, { detail: 0, jitter: 0.2, seed: 8 }), M4(V(-420, 300, -410)), { ow: OW * 0.6, color: P.stoneLt, name: 'head', seed: 8 });
+  // a rounded nose bridge above the lip
+  stone(mesh, rockGeo(150, 125, 200, { detail: 1, jitter: 0.15, seed: 6 }), M4(V(650, 185, 0), qz(-0.1)), { ow: OW * 0.7, color: P.stoneLt, name: 'head', seed: 6 });
   // the eyes: a dark socket and a glowing amber ball (glow channel 1) on each side, under the brow
   for (const sz of [1, -1]) {
-    flat(mesh, rockGeo(165, 140, 90, { detail: 1, jitter: 0.1, seed: 10 }), M4(V(365, 70, sz * 400)), { ow: OW * 0.5, color: P.stoneDk, name: 'head' });
-    flat(mesh, new THREE.SphereGeometry(1, low ? 8 : 12, low ? 6 : 8), M4(V(375, 70, sz * 450), null, V(140, 115, 56)), { ow: 0, color: P.eye, glow: 1, name: 'head' });
-    flat(mesh, new THREE.SphereGeometry(1, 8, 6), M4(V(395, 67, sz * 492), null, V(30, 46, 14)), { ow: 0, color: P.eyeDk, name: 'head' });
+    flat(mesh, rockGeo(185, 160, 100, { detail: 1, jitter: 0.1, seed: 10 }), M4(V(365, 70, sz * 335)), { ow: OW * 0.5, color: P.stoneDk, name: 'head' });
+    flat(mesh, new THREE.SphereGeometry(1, low ? 8 : 12, low ? 6 : 8), M4(V(375, 70, sz * 395), null, V(155, 128, 60)), { ow: 0, color: P.eye, glow: 1, name: 'head' });
+    flat(mesh, new THREE.SphereGeometry(1, 8, 6), M4(V(398, 67, sz * 445), null, V(34, 52, 14)), { ow: 0, color: P.eyeDk, name: 'head' });
   }
-  // the upper lip (a heavy slab across the face, a little narrower than the head) with its row of stone teeth; behind it the dark throat that shows when the jaw drops
-  stone(mesh, blockGeo(540, 140, 700, { seed: 7, jitter: 0.06 }), M4(V(560, 55, 0)), { ow: OW * 0.75, color: P.stone, name: 'head', seed: 11 });
+  // the upper lip (a heavy rounded snout stone) with its row of stone teeth; behind it the dark throat that shows when the jaw drops
+  stone(mesh, rockGeo(300, 95, 345, { detail: 1, jitter: 0.1, seed: 11 }), M4(V(545, 48, 0)), { ow: OW * 0.75, color: P.stone, name: 'head', seed: 11 });
   flat(mesh, new THREE.BoxGeometry(70, 330, 600), M4(V(345, -110, 0)), { ow: 0, color: P.mouthIn, glow: 2, name: 'head' });
   flat(mesh, new THREE.BoxGeometry(520, 40, 560), M4(V(590, -2, 0)), { ow: 0, color: P.mouthIn, glow: 2, name: 'head' }); // the roof of the mouth
   for (let k = 0; k < 5; k++) {
     const z = (k - 2) * 140, tooth = new THREE.ConeGeometry(50, 130, 4, 1);
     tooth.rotateX(Math.PI);
-    flat(mesh, tooth, M4(V(790, -60, z), qy(Math.PI / 4)), { ow: OW * 0.25, color: P.tooth, name: 'head' });
+    flat(mesh, tooth, M4(V(790, -50, z), qy(Math.PI / 4)), { ow: OW * 0.25, color: P.tooth, name: 'head' });
   }
-  // the lower jaw (its own piece, hinged at the back, inside the cheek: it drops for the roar): a heavy slab with teeth and the floor of the mouth
-  stone(mesh, blockGeo(690, 220, 720, { seed: 8, jitter: 0.06 }), M4(V(545, -150, 0)), { ow: OW * 0.75, color: P.stoneDk, name: 'jaw', seed: 12 });
+  // the lower jaw (its own piece, hinged at the back, inside the cheek: it drops for the roar): a heavy rounded stone with teeth and the floor of the mouth
+  stone(mesh, rockGeo(365, 110, 345, { detail: 1, jitter: 0.1, seed: 12 }), M4(V(545, -150, 0)), { ow: OW * 0.75, color: P.stoneDk, name: 'jaw', seed: 12 });
   for (let k = 0; k < 4; k++) { const z = (k - 1.5) * 160, tooth = new THREE.ConeGeometry(46, 120, 4, 1); flat(mesh, tooth, M4(V(820, -10, z), qy(Math.PI / 4)), { ow: OW * 0.25, color: P.tooth, name: 'jaw' }); }
   flat(mesh, new THREE.BoxGeometry(440, 30, 560), M4(V(560, -38, 0)), { ow: 0, color: P.mouthIn, glow: 2, name: 'jaw' });
 }

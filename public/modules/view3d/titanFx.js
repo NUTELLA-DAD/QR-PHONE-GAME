@@ -72,6 +72,36 @@ export function createTitanOverlay(parent, P) {
   mesh.visible = false;
   mesh.name = 'titanMarks';
   parent.add(mesh);
+  // ---- the SOFT GLOW of the floating stones' light (one more draw call): round additive quads at the arms' joints, palms and sockets, depth-tested (a stone in front hides it: it shows in the gaps) ----
+  const MG = 24, gpos = new Float32Array(MG * 6 * 3), gloc = new Float32Array(MG * 6 * 2), gk = new Float32Array(MG * 6);
+  const ggeo = new THREE.BufferGeometry();
+  ggeo.setAttribute('position', new THREE.BufferAttribute(gpos, 3).setUsage(THREE.DynamicDrawUsage));
+  ggeo.setAttribute('aP', new THREE.BufferAttribute(gloc, 2));
+  ggeo.setAttribute('aK', new THREE.BufferAttribute(gk, 1).setUsage(THREE.DynamicDrawUsage));
+  for (let q = 0; q < MG; q++) for (let k = 0; k < 6; k++) { gloc[(q * 6 + k) * 2] = corners[k][0]; gloc[(q * 6 + k) * 2 + 1] = corners[k][1]; }
+  ggeo.setDrawRange(0, 0);
+  ggeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e7);
+  const gmat = new THREE.ShaderMaterial({
+    uniforms: { uCol: { value: col(P.crystal || '#62def4') } }, transparent: true, depthWrite: false, depthTest: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    vertexShader: 'attribute vec2 aP; attribute float aK; varying vec2 vP; varying float vK; void main() { vP = aP; vK = aK; gl_Position = projectionMatrix * viewMatrix * vec4( position, 1.0 ); }',
+    fragmentShader: `varying vec2 vP; varying float vK; uniform vec3 uCol;
+      void main() { float d = length( vP ); float a = clamp( 1.0 - d, 0.0, 1.0 ); a = a * a * ( 0.6 + 0.4 * step( d, 0.3 ) ); if ( a < 0.01 ) discard; gl_FragColor = vec4( uCol, a * vK );
+        #include <colorspace_fragment>
+      }`,
+  });
+  gmat.toneMapped = false;
+  const gmesh = new THREE.Mesh(ggeo, gmat);
+  gmesh.frustumCulled = false;
+  gmesh.renderOrder = 18;
+  gmesh.visible = false;
+  gmesh.name = 'titanGlow';
+  parent.add(gmesh);
+  let gn = 0;
+  const glowQuad = (cx, cy, cz, r, k) => {
+    if (gn >= MG || !Number.isFinite(cx) || !Number.isFinite(cy) || !(r > 0)) return;
+    for (let c = 0; c < 6; c++) { const i = gn * 6 + c; gpos[i * 3] = cx + corners[c][0] * r; gpos[i * 3 + 1] = cy + corners[c][1] * r; gpos[i * 3 + 2] = cz; gk[i] = k; }
+    gn++;
+  };
   let n = 0;
   const quad = (cx, cy, cz, hw, hh, kind, p1, b0 = 0, b1 = 0) => {
     if (n >= MAX || !Number.isFinite(cx) || !Number.isFinite(cy)) return;
@@ -84,8 +114,9 @@ export function createTitanOverlay(parent, P) {
     n++;
   };
   return {
-    mesh,
-    begin(key) { n = 0; U.uKey.value = key; },
+    mesh, glowMesh: gmesh,
+    begin(key) { n = 0; gn = 0; U.uKey.value = key; },
+    glow(x, y, z, r, k = 0.7) { glowQuad(x, y, z, r, k); }, // (x, y, z in world units; r the radius; k the strength)
     // (x, y) 3D (y up); r = the ring's radius
     ring(x, y, z, r, locked) { quad(x, y, z, r * 1.2, r * 1.2, locked ? 1 : 0, r); },
     funnel(x, y, z, w, h, open, step) { quad(x, y + h / 2, z, w, h / 2, 2, open ? 1 : 0, step); },
@@ -95,9 +126,13 @@ export function createTitanOverlay(parent, P) {
       geo.setDrawRange(0, n * 6);
       geo.getAttribute('position').needsUpdate = geo.getAttribute('aA').needsUpdate = geo.getAttribute('aB').needsUpdate = true;
       mesh.visible = n > 0;
+      ggeo.setDrawRange(0, gn * 6);
+      ggeo.getAttribute('position').needsUpdate = ggeo.getAttribute('aK').needsUpdate = true;
+      gmesh.visible = gn > 0;
     },
-    hide() { n = 0; geo.setDrawRange(0, 0); mesh.visible = false; },
+    hide() { n = 0; gn = 0; geo.setDrawRange(0, 0); mesh.visible = false; ggeo.setDrawRange(0, 0); gmesh.visible = false; },
     get count() { return n; },
-    dispose() { geo.dispose(); mat.dispose(); mesh.removeFromParent(); },
+    get glows() { return gn; },
+    dispose() { geo.dispose(); mat.dispose(); mesh.removeFromParent(); ggeo.dispose(); gmat.dispose(); gmesh.removeFromParent(); },
   };
 }

@@ -14,7 +14,8 @@ const arg = (k, d) => { const i = argv.indexOf('--' + k); return i < 0 ? d : arg
 const out = path.resolve(arg('out', 'C:/Users/kenny/Downloads/AIRSHIP/airship/3d-screenshots'));
 const port = Number(arg('port', 5900 + Math.floor(Math.random() * 90)));
 const view = arg('view', '2d');
-const pre = view === '3d' ? 'titan3d_' : 'titan_'; // (the file names)
+const pre = arg('prefix', view === '3d' ? 'titan3d_' : 'titan_'); // (the file names)
+const only = arg('only', '').split(',').filter(Boolean); // (--only stands,grip: take just these pictures; the fight still runs through)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
 const check = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg); if (!cond) failed++; };
@@ -54,15 +55,17 @@ async function openPage(url, W, H) {
     else if (d.method === 'Runtime.exceptionThrown') P.errors.push('EXCEPTION: ' + ((q.exceptionDetails.exception && q.exceptionDetails.exception.description) || q.exceptionDetails.text).slice(0, 400));
   };
   await send('Runtime.enable'); await send('Page.enable');
-  await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
+  await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: Number(arg('dpr', 1)), mobile: false });
   P.ev = async (expr) => {
     const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
     if (r.exceptionDetails) { P.errors.push('EVAL ERROR: ' + JSON.stringify(r.exceptionDetails).slice(0, 400)); return undefined; }
     return r.result.value;
   };
-  P.png = async () => Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64');
+  const clipArg = arg('clip', '').split(',').map(Number); // --clip x,y,w,h (css px): the picture is just that part (with --dpr 2, a close-up for the artist)
+  P.png = async () => Buffer.from((await send('Page.captureScreenshot', { format: 'png', ...(clipArg.length === 4 ? { clip: { x: clipArg[0], y: clipArg[1], width: clipArg[2], height: clipArg[3], scale: 1 } } : {}) })).data, 'base64');
   P.shot = async (name) => { fs.writeFileSync(path.join(out, name), await P.png()); console.log('  shot ' + name); };
   P.waitFor = async (expr, ms = 30000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = await P.ev(expr).catch(() => false); if (v) return true; await sleep(200); } return false; };
+  P.dpr = (n) => send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: n, mobile: false }); // (a sharper picture for the hero shot)
   P.close = async () => {
     try { ws.close(); } catch { /* closed */ }
     if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' }); else chrome.kill();
@@ -89,7 +92,7 @@ try {
   const run = (secs) => host.ev(`(()=>{ for (let i = 0; i < ${Math.round(secs * 60)}; i++) game.update(1/60); return 1; })()`);
   const runUntil = async (cond, secs = 120, chunk = 0.5) => { for (let t = 0; t < secs; t += chunk) { if (await host.ev(cond)) return true; await run(chunk); } return !!(await host.ev(cond)); };
   // a picture: the sim is held nearly still (state.slow) while the camera settles on it, then it runs on
-  const snap = async (name, wait = Number(arg('wait', view === '3d' ? 3000 : 16000))) => { await host.ev('game.state.slow = 0.00001; 1'); await sleep(wait); await host.shot(name); await host.ev('game.state.slow = 1; 1'); };
+  const snap = async (name, wait = Number(arg('wait', view === '3d' ? 3000 : 16000))) => { if (only.length && !only.some((o) => name.includes(o))) return; await host.ev('game.state.slow = 0.00001; 1'); await sleep(wait); await host.shot(name); await host.ev('game.state.slow = 1; 1'); };
   check(await host.ev('game.state.course.map.creature === "titan"'), 'the map is the Titan\'s lair');
   check(await runUntil('!!game.state.creature && game.state.creature.mode === "idle"', 150), 'the Titan strides in and wakes');
   await host.ev('game.state.briefing = null; 1');
@@ -98,8 +101,24 @@ try {
   if (view === '3d') { // the whole colossus: pulled back to show the legs on the plain, the rubble heap and the island on its back (the camera goes back to the game's own framing afterwards)
     await host.ev('(()=>{ const S = window.view3dDebug().view.S; S.focus = { dx: -250, dy: -1150 }; S.zoom = 0.42; return 1; })()');
     await snap(pre + 'full.png', 2500);
+    // the hero shot: the Titan full length in good light with the ship near it, at twice the pixels (the camera is nearer than the full shot)
+    await host.ev('(()=>{ const S = window.view3dDebug().view.S; S.focus = { dx: -1000, dy: -1400 }; S.zoom = 0.56; return 1; })()');
+    await host.dpr(2);
+    await snap(pre + 'hero.png', 3500);
+    await host.dpr(1);
     await host.ev('(()=>{ const S = window.view3dDebug().view.S; S.focus = null; S.zoom = undefined; return 1; })()');
     await sleep(1500);
+  }
+  const stopAt = (name) => { if (arg('until', '') === name) throw new Error('STOP'); }; // (--until full: end the run after that picture)
+  stopAt('full');
+  const focusArg = arg('focus', ''); // --focus dx,dy,zoom: one extra picture of that part (a close-up for the artist: dx, dy in world px from the Titan's origin, zoom as the camera's)
+  if (view === '3d' && focusArg) {
+    const [fx, fy, fz] = focusArg.split(',').map(Number);
+    await host.ev(`(()=>{ const S = window.view3dDebug().view.S; S.focus = { dx: ${fx}, dy: ${fy} }; S.zoom = ${fz}; return 1; })()`);
+    await snap(pre + 'focus.png', 2500);
+    await host.ev('(()=>{ const S = window.view3dDebug().view.S; S.focus = null; S.zoom = undefined; return 1; })()');
+    await sleep(1500);
+    stopAt('focus');
   }
   const info = await host.ev('(()=>{ const c = game.state.creature, sh = game.state.ships[0]; return JSON.stringify({ kind: c.kind, phase: c.phase, hp: Math.round(c.hp), arms: c.parts.filter((p) => p.kind === "tentacle").length, f: c.f, x: Math.round(c.x), y: Math.round(c.y), shipMid: [Math.round(sh.pose.x + sh.layout.refPoint.x), Math.round(sh.pose.y + sh.layout.refPoint.y)], armHand: c.parts.filter((p) => p.kind === "tentacle").map((p) => { const s = p.segs[p.segs.length - 1]; return [Math.round(s.x), Math.round(s.y)]; }), torso: c.parts.find((p) => p.kind === "mantle").segs[0] }); })()');
   console.log('  ' + info);
@@ -126,6 +145,11 @@ try {
   check(await runUntil('!!game.state.creature.mouthWin', 40, 0.25), 'the Titan roars: the mouth is open');
   await run(1.0);
   await snap(pre + 'mouth_window.png');
+
+  // an arm cracking: the near arm at a third of its health (two boulders cracked, the light flickering), the far arm at 60% (one)
+  await host.ev(`(()=>{ const c = game.state.creature; c.mouthWin = null; c.ai.mouthT = 999; c.titan.nextT = 999; for (const g of c.grips) g.left = 0.01; const n = c.parts.find((p) => p.id === 'armN'), f = c.parts.find((p) => p.id === 'armF'); n.hp = n.maxHp * 0.3; f.hp = f.maxHp * 0.6; return 1; })()`);
+  await run(2.5);
+  await snap(pre + 'arm_cracking.png');
 
   // an arm shelled off: the stump and the slabs that fall (a Rapier body each in 3D, the sim's tumbling chunk in 2D)
   await host.ev(`(async()=>{ const cs = await import('/modules/host/creatureSystem.js'); const s = game.state, c = s.creature; c.mouthWin = null; c.ai.mouthT = 999; c.titan.nextT = 999; const a = c.parts.find((p) => p.id === 'armN'); cs.hurtCreature(s, { part: a, seg: 1 }, a.hp + 5, { who: null, src: 'shell' }); return 1; })()`);
@@ -181,8 +205,7 @@ try {
   for (const e of errs.slice(0, 6)) console.log('  ' + e);
   check(errs.length === 0, '0 console errors, 0 game errors');
 } catch (e) {
-  failed++;
-  console.log('ERROR ' + (e && e.stack || e));
+  if (e && e.message === 'STOP') console.log('  (stopped as asked)'); else { failed++; console.log('ERROR ' + (e && e.stack || e)); }
 } finally {
   if (host) await host.close();
   stopServer();
