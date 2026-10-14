@@ -81,7 +81,7 @@ export function stepHarpoons(state, cr, dt) {
     const sep = (vb.x - va.x) * nx + (vb.y - va.y) * ny;
     const acc = clamp(H.K * stretch + TW.DAMP * Math.max(0, sep), 0, H.MAX_ACC);
     t.tension = clamp(stretch / (H.SNAP - t.len), 0, 1);
-    const drake = cr.kind === 'drake', TR = drake ? config.CREATURES.DRAKE.SPOUT : config.CREATURES.TOW_ROCK;
+    const drake = cr.kind === 'drake', TR = drake ? config.CREATURES.DRAKE.SPOUT : cr.kind === 'wyrm' ? config.CREATURES.WYRM.SUN : config.CREATURES.TOW_ROCK;
     const tired = drake ? cr.drake.mode === 'crawl' : cr.phase >= 3, sa = tired ? 1 - TR.SHARE : T.SHIP_SHARE, sb = 1 - sa; // (phase 3: the exhausted body gives, and is hauled much harder: config.CREATURES.TOW_ROCK; the crawling Drake, SPOUT)
     shove(ship, nx * acc * sa * dt, ny * acc * sa * dt);
     t.stat.ship += acc * sa * dt;

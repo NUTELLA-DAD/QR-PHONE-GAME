@@ -28,8 +28,10 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const diffOf = (state) => state.difficulty || 'normal';
 const rootOf = (cr, p) => ({ x: cr.x + p.at[0] * cr.f, y: cr.y + p.at[1] });
 // C.6c: the Island Titan's hand on the gasbag is the same grip with its own numbers (config.CREATURES.TITAN.GRAB overrides GRIP: a mostly sideways pull, a longer hold, a gentler squeeze).
-const gripCfg = (cr) => (cr && cr.kind === 'titan' ? { ...CR().GRIP, ...CR().TITAN.GRAB } : CR().GRIP);
+// C.6d: the Rime Wyrm's coil is the Kraken's grab with config.CREATURES.WYRM.COIL merged over it (a longer hold, a wider helix, and ANCHOR: it stops the ship).
+const gripCfg = (cr) => (cr && cr.kind === 'titan' ? { ...CR().GRIP, ...CR().TITAN.GRAB } : cr && cr.kind === 'wyrm' ? { ...CR().GRIP, ...CR().WYRM.COIL } : CR().GRIP);
 const isTitan = (cr) => !!cr && cr.kind === 'titan';
+const isWyrm = (cr) => !!cr && cr.kind === 'wyrm';
 
 // How many tentacles may hold at once: by crew size (GRIPS_BY_CREW), fewer while it is blinded.
 const blindCount = (cr) => cr.parts.filter((p) => p.kind === 'eye' && p.blindT > 0).length;
@@ -47,6 +49,13 @@ export function gripCap(state, cr) {
 const platformAt = (ship, y, x) => ship.layout.platforms.findIndex((pl) => Math.abs(pl.y - y) < 8 && x >= pl.x0 - 40 && x <= pl.x1 + 40);
 const live = (g) => g.mode === 'wind' || g.mode === 'seize' || g.mode === 'hold';
 export const gripped = (ship) => !!ship.ctx.creature && (ship.ctx.creature.grips || []).some((g) => g.ship === ship && live(g));
+// C.6d, the Rime Wyrm: the coil holds her fast. Her speed along the sky is braked at BRAKE px/s^2 toward a slow DRIFT (px/s) toward the cliff (dx: the way to the cliff); her climb is left alone, so she can still dodge up or down.
+function anchor(sh, dx, A, dt, t) {
+  const per = driveGain(sh);
+  if (!per) return;
+  const want = (Math.sign(dx) || 1) * A.DRIFT * clamp(t / 1.2, 0, 1), dv = clamp(want - sh.pose.vx, -A.BRAKE * dt, A.BRAKE * dt);
+  sh.ctx.ship.speed += dv / per;
+}
 // A shove of (dx, dy) px/s onto a ship's speed and climb (the way towing.js pushes: shipCollide.js does the same).
 function shove(sh, dx, dy) {
   const per = driveGain(sh);
@@ -57,13 +66,13 @@ function shove(sh, dx, dy) {
 // ---- the coil ----
 // Where the tip is glued (just over the deck at the grip point) and the helix the outer segments follow round the hull: from the top (over the gunwale), down the FRONT of her, under the keel and up the BACK
 // (z > 0 in front of her, < 0 behind). Both come from the ship's own coordinates through her tilt and pose.js, so the coil moves and tips with her.
-function entryOf(ship, g) {
+function entryOf(ship, g, G = CR().GRIP) {
   if (g.bag) { const [bx, by] = tilt(ship.ctx, g.bx, g.by); return { x: toWorldX(ship, bx), y: toWorldY(ship, by) }; } // (C.6c: the Titan's hand lies on the side of the gasbag)
-  const [tx, ty] = tilt(ship.ctx, g.x, g.y - CR().GRIP.WRAP.LIFT);
+  const [tx, ty] = tilt(ship.ctx, g.x, g.y - G.WRAP.LIFT);
   return { x: toWorldX(ship, tx), y: toWorldY(ship, ty) };
 }
-function coilPath(ship, g, prog) {
-  const W = CR().GRIP.WRAP, L = ship.layout;
+function coilPath(ship, g, prog, G = CR().GRIP) {
+  const W = G.WRAP, L = ship.layout;
   let low = g.y;
   for (const pl of L.platforms) low = Math.max(low, pl.y);
   const top = g.y - W.LIFT, ry = Math.max(W.MIN_RY, (low + W.UNDER - top) / 2), cy = top + ry, inward = g.x > L.refPoint.x ? -1 : 1;
@@ -76,8 +85,8 @@ function coilPath(ship, g, prog) {
 }
 
 // ---- starting a grab ----
-function startGrip(state, cr, ship, dive = false) { // dive: one of the several grips of a phase-3 DIVE (holds a little shorter, pulls harder)
-  const G = CR().GRIP, h = cr.hooks, L = ship.layout;
+export function startGrip(state, cr, ship, dive = false) { // dive: one of the several grips of a phase-3 DIVE (holds a little shorter, pulls harder)
+  const G = gripCfg(cr), h = cr.hooks, L = ship.layout;
   const cands = [];
   L.platforms.forEach((pl, d) => {
     if (pl.x1 - pl.x0 < G.MIN_DECK) return;
@@ -106,7 +115,7 @@ function startGrip(state, cr, ship, dive = false) { // dive: one of the several 
   // the limb rears up beside the ship's end (a reach that holds), then the strike follows after WINDUP
   const root = rootOf(cr, limb), rx = c.wx + cr.side * 350, ry = c.wy - 500, d = Math.hypot(rx - root.x, ry - root.y), k = d > limb.reach * 0.97 ? (limb.reach * 0.97) / d : 1;
   reachPart(cr, limb, root.x + (rx - root.x) * k, root.y + (ry - root.y) * k);
-  state.say('setpiece', dive ? CR().DIVE.TEXT : 'TENTACLE! ' + g.end + ' ' + g.deck + '!', 6, 2.6);
+  state.say('setpiece', dive ? CR().DIVE.TEXT : isWyrm(cr) ? 'THE WYRM COILS! ' + g.end + ' ' + g.deck + '!' : 'TENTACLE! ' + g.end + ' ' + g.deck + '!', 6, 2.6);
   state.sfxQ.push(['roar']);
   warnCrew(state, cr, ship, g, 'GET OFF THE ' + g.end + ' ' + g.deck + '!');
   return g;
@@ -185,7 +194,7 @@ function stepGrip(state, cr, g, dt) {
   if (g.job.hot > 0) { g.job.hot -= dt; g.job.worked = true; } // (a blow keeps the hack from wearing off for a moment)
   g.wx = toWorldX(ship, g.x);
   g.wy = toWorldY(ship, g.y);
-  const en = entryOf(ship, g);
+  const en = entryOf(ship, g, G);
   g.ex = en.x;
   g.ey = en.y;
   if (g.mode === 'wind') {
@@ -208,13 +217,13 @@ function stepGrip(state, cr, g, dt) {
       cr.hooks.puff(g.wx, g.wy, '#7a3a5a', 10);
       state.ship.shake = Math.max(state.ship.shake || 0, 0.6);
       if (ship.sim && ship.sim.air) ship.sim.air.shove(G.SHOVE_POWER, g.x); // (the crew on the open decks stagger toward the low end)
-      warnCrew(state, cr, ship, g, isTitan(cr) ? 'PRY ITS FINGERS OFF! (sword, hold Action)' : 'HACK THE TENTACLE! (sword, hold Action)', [200, 60, 200]);
+      warnCrew(state, cr, ship, g, isTitan(cr) ? 'PRY ITS FINGERS OFF! (sword, hold Action)' : isWyrm(cr) ? 'THE WYRM HAS YOU! Chip its ice with a hammer, shell it - or HACK THE COIL (sword)!' : 'HACK THE TENTACLE! (sword, hold Action)', [200, 60, 200]);
     } else if (g.t > G.SEIZE_MAX) releaseGrip(cr, g, 'missed');
     return false;
   }
   // HOLD: the tip goes with the ship; she is dragged down and toward it; the timer runs
   moveGrip(limb, en.x, en.y);
-  if (!isTitan(cr)) setWrap(limb, coilPath(ship, g, Math.min(1, Math.floor(g.t * 8) / G.WRAP.KEYS)), G.WRAP.SEGS); // (the coil tightens in stepped keys, no wobble; a stone hand does not coil)
+  if (!isTitan(cr)) setWrap(limb, coilPath(ship, g, Math.min(1, Math.floor(g.t * 8) / G.WRAP.KEYS), G), G.WRAP.SEGS); // (the coil tightens in stepped keys, no wobble; a stone hand does not coil)
   const root = rootOf(cr, limb);
   const dx = root.x - g.wx, dy = root.y - g.wy, d = Math.hypot(dx, dy) || 1;
   const sx = (dx / d) * G.SIDEWAYS, sy = 1, sm = Math.hypot(sx, sy), px = sx / sm, py = sy / sm;
@@ -224,6 +233,7 @@ function stepGrip(state, cr, g, dt) {
   const a = Math.min(G.MAX_ACC * (g.dive ? D.PULL_MUL : 1), (G.BASE_ACC + G.K * stretch) * (g.dive ? D.PULL_MUL : 1), (G.MAX_TOTAL * (diving ? D.TOTAL_MUL : 1)) / holding) * clamp(g.t / G.RAMP, 0.15, 1); // (every grip pulls: the pull grows with their number, up to MAX_TOTAL)
   g.acc = a; // (px/s^2 this grip pulls with right now: the gate adds them up)
   shove(ship, px * a * dt, py * a * dt);
+  if (G.ANCHOR) anchor(ship, dx, G.ANCHOR, dt, g.t); // (C.6d: the Rime Wyrm STOPS her)
   applyForce(ship.ctx, { x: g.bag ? g.bx : g.x, y: g.bag ? g.by : g.y, fx: px * ship.pose.f * a * G.TORQUE, fy: py * a * G.TORQUE, source: 'grab' });
   state.ship.shake = Math.max(state.ship.shake || 0, G.SHAKE);
   g.stat.secs += dt;
@@ -284,7 +294,7 @@ export function hurtGrips(cr, part, dmg, src) {
   for (const g of cr.grips) {
     if (g.limb !== part || !live(g)) continue;
     g.dmg += dmg;
-    if (src === 'flame') releaseGrip(cr, g, 'flame');
+    if (src === 'flame' && !isWyrm(cr)) releaseGrip(cr, g, 'flame'); // (the Rime Wyrm's ice melts under flame: that is no reason for it to let go)
     else if (part.hp <= 0) releaseGrip(cr, g, 'severed');
     else if (g.dmg >= gripCfg(cr).RELEASE_DMG * part.maxHp) releaseGrip(cr, g, 'shot');
     else continue;
@@ -294,7 +304,7 @@ export function hurtGrips(cr, part, dmg, src) {
 
 // ---- the crew's side ----
 // The grip this crewman can hack: same deck, within CUT_REACH of the grip point, the grip glued (HOLD).
-function gripNear(state, ship, p) {
+export function gripNear(state, ship, p) {
   const cr = state.creature;
   if (!cr || p.d == null || p.fly || p.fall || p.conn != null) return null;
   const pl = ship.layout.platforms[p.d];
@@ -303,7 +313,7 @@ function gripNear(state, ship, p) {
 }
 // The Action button: HACK THE TENTACLE! with a sword (or, slower, a hammer); anything else near it says what is missing. (The Titan's hand: PRY ITS FINGERS OFF!)
 export function actionFor(state, ship, p) {
-  const g = gripNear(state, ship, p), cr = state.creature, G = gripCfg(cr), what = isTitan(cr) ? 'PRY ITS FINGERS OFF!' : 'HACK THE TENTACLE!';
+  const g = gripNear(state, ship, p), cr = state.creature, G = gripCfg(cr), what = isTitan(cr) ? 'PRY ITS FINGERS OFF!' : isWyrm(cr) ? 'HACK THE COIL!' : 'HACK THE TENTACLE!';
   if (!g) return null;
   if (p.carry === 'sword') return { type: 'hack', obj: g.job, hold: true, time: G.SWORD_TIME, label: what };
   if (p.carry === 'hammer') return { type: 'hack', obj: g.job, hold: true, time: G.HAMMER_TIME, label: what.replace(/!$/, '') + '! (hammer: slow)' };
@@ -343,7 +353,8 @@ export function gripJobs(state, ship) {
   const cr = state.creature;
   if (!cr || !cr.grips) return [];
   const more = cr.hooks && cr.hooks.moreJobs ? cr.hooks.moreJobs(ship) : []; // (the Cinder Drake on her bag: DRIVE IT OFF, a hold-action job at the deck under it, creatureDrake.js)
-  return [...cr.grips.filter((g) => g.ship === ship && live(g) && g.job.live).map((g) => ({ kind: 'hack', obj: g.job, d: g.job.d, x: g.x })), ...more];
+  const hold = cr.hooks && cr.hooks.holdBack ? cr.hooks.holdBack : () => false; // (C.6d: the Rime Wyrm's crew chips and shoots first and hacks last: the hack arrow waits until HACK_AT s are left)
+  return [...cr.grips.filter((g) => g.ship === ship && live(g) && g.job.live && !hold(g)).map((g) => ({ kind: 'hack', obj: g.job, d: g.job.d, x: g.x })), ...more];
 }
 export const jobsOf = (state, ship) => (state.creature && state.creature.grips ? state.creature.grips.filter((g) => g.ship === ship).map((g) => g.job) : []);
 

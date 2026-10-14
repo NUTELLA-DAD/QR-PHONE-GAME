@@ -52,6 +52,9 @@ export function pickEnvironment(requested) {
   return E[id] && E[id].name ? id : E.DEFAULT;
 }
 
+// The guns out in the open (on a nest or an outdoor deck: the top deck on the classic ship): the ones that ice up. (C.6d: the Rime Wyrm's frost breath freezes them too, creatureWyrm.js.)
+export const gunSpotsOf = (layout) => { const P = layout.platforms, open = new Set(layout.outdoorDecks().map((d) => P[d].id)); return layout.all('gun').filter((s) => layout.isNestDeck(s.p) || open.has(s.p)).map((s) => ({ gun: s.n, d: s.d, x: s.x })); };
+
 // Weight of an enemy set piece in this environment (1 = unchanged).
 export const favour = (state, kind) => {
   const f = envOf(state).favour;
@@ -71,7 +74,7 @@ export function createEnvironment({ state, puff, phoneFx, impact, damageHull, ig
   let LOWER = IDX('lower');
   layout.onChange(() => { LOWER = IDX('lower'); }); // (a build fitted at the sky-dock, S.6)
   // Guns out in the open (on a nest or an outdoor deck: the top deck on the classic ship) are the ones that ice up; a covered deck is sheltered (S.5g).
-  const gunSpots = () => { const open = new Set(layout.outdoorDecks().map((d) => P[d].id)); return layout.all('gun').filter((s) => layout.isNestDeck(s.p) || open.has(s.p)).map((s) => ({ gun: s.n, d: s.d, x: s.x })); };
+  const gunSpots = () => gunSpotsOf(layout);
   let seenMap = null;
   let blizzT = 0;
   let blizzLeft = 0;

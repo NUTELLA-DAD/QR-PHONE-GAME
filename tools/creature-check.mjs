@@ -29,6 +29,8 @@
 //   C.6b: the last section (T0-T12) is THE THUNDERBIRD: its body, the gust (a shove and a twist within FORCES.MAX_DEG), the lightning dive (a held rod grounds a bolt, a manned coil drinks one and fires it back for 3x), the swallow and the glowing gizzard (coil zaps win), the perch,
 //   the roost on a rock spire (mortar hits win), boarding it (cut the gizzard), the plucked wings (both: it falls), the lair, the voyage, the reward and the feather sail, the TV, and the bots: each forced win by 8 bots on Normal, 4 and 16 bots on Easy
 //   C.6c: the last section (I0-I10) is THE ISLAND TITAN: its body (2 stone arms, torso, head, mouth, a hidden crystal), the boulder (banner, buzz, the ring that follows her and locks, the rock: a hit shakes a frame segment, a move or a shell saves her), the gasbag grab (phase 2 only: a sideways pull within FORCES.MAX_DEG, swords pry it off, a squeeze that tears nothing off), the roar (bombs in the open mouth), the arms and the phases, the ISLAND as a ground that moves with it (a parachute, being carried, JUMP, a hookshot, the rope ladder, its fall), the CRYSTAL on foot, the reward, the lair, the early route placement, the TV, and the bots (forced arms / mouth / crystal / hp by 8 bots on Normal, 4 and 16 bots on Easy; --no-titan-bots skips them)
+//   C.6d: the last section (W0-W8) is THE RIME WYRM: its body and its lair of ice cliffs, the cracking cliff and the eruption, the coil (it stops her, the hack arrow comes last), the ice armour (shells bounce, a hammer chips it, flame
+//   melts it, a bare segment takes more), the frost breath that jams the guns, the gape, the phases, the sun (a harpoon hauls its head), the underbelly, the reward, the lair stops, the TV, and the bots: each forced win by 8 bots on Normal, 4 and 16 bots on Easy
 // Exit code 1 on any failure.
 import path from 'node:path';
 import fs from 'node:fs';
@@ -1535,7 +1537,7 @@ const winCheck = (name, st, cr, why) => {
     const want = n - h >= LR.LONG_STOPS ? LR.COUNT.long : LR.COUNT.short;
     if (lairs.length > want) bad.push(`${mode}/${sd}: ${lairs.length} lairs, at most ${want}`);
     for (const s of lairs) {
-      if (s.env !== 'sea' && s.env !== 'ember' && s.env !== 'storm') bad.push(`${mode}/${sd}: lair on ${s.env}`); // (C.6a: a Sunken Sea stop holds the Kraken, an Ember Forge stop the Drake; C.6b: a Storm Front stop the Thunderbird)
+      if (s.env !== 'sea' && s.env !== 'ember' && s.env !== 'storm' && s.env !== 'frost') bad.push(`${mode}/${sd}: lair on ${s.env}`); // (C.6a: a Sunken Sea stop holds the Kraken, an Ember Forge stop the Drake; C.6b: a Storm Front stop the Thunderbird; C.6d: a Frost Peaks stop the Rime Wyrm)
       if (s.creature !== LR.BY_ENV[s.env]) bad.push(`${mode}/${sd}: lair on ${s.env} holds ${s.creature}`);
       if (s.col <= h || s.col >= n - 1) bad.push(`${mode}/${sd}: lair in column ${s.col} of ${n}`);
       if (s.kind !== 'lair' || s.flagship || s.harbour) bad.push(`${mode}/${sd}: lair kind ${s.kind}`);
@@ -1549,7 +1551,7 @@ const winCheck = (name, st, cr, why) => {
       else if (s.danger !== o.danger || s.reward !== o.reward || s.kind !== o.kind) bad.push(`${mode}/${sd}: ${s.id} (not a lair) changed`);
     });
   }
-  report(!bad.length, `${total} generated voyages (quick, voyage, campaign x both voyages): lairs only on Sunken Sea / Ember Forge / Storm Front stops (the creature of that sky), never the first stop, the harbour or the Flagship, never in neighbouring columns, at most ${LR.COUNT.short} (${LR.COUNT.long} from ${LR.LONG_STOPS} stops), +${LR.DANGER} skull and x${LR.REWARD_MUL} reward, everything else exactly as before${bad.length ? ' - ' + bad.slice(0, 3).join('; ') : ''}`);
+  report(!bad.length, `${total} generated voyages (quick, voyage, campaign x both voyages): lairs only on Sunken Sea / Ember Forge / Storm Front / Frost Peaks stops (the creature of that sky), never the first stop, the harbour or the Flagship, never in neighbouring columns, at most ${LR.COUNT.short} (${LR.COUNT.long} from ${LR.LONG_STOPS} stops), +${LR.DANGER} skull and x${LR.REWARD_MUL} reward, everything else exactly as before${bad.length ? ' - ' + bad.slice(0, 3).join('; ') : ''}`);
   console.log(`     lairs: ${withLair} of ${total} voyages have one (${two} have two)`);
   report(withLair / total > 0.5, `most voyages have a lair (${((withLair / total) * 100).toFixed(0)}%)`);
   // the same seed makes the same route
@@ -3969,6 +3971,729 @@ if (!argv.includes('--no-titan-bots')) {
     report(rows.every((x) => x.ok) && how.every((h) => h !== 'NOT'), `unforced, 8 bots on Normal win (${how.join(', ')})`);
   }
   report(results.every(({ r }) => clean(r)), `0 errors and no NaN in any of the ${results.length} Titan bot fights`);
+}
+
+// =================================================================== C.6d: THE RIME WYRM ===================================================================
+//   (W0) the body (a collar, one long iced body of 12 segments, a head, a maw, a hidden underbelly), the lair of ice cliffs in Frost Peaks only, buried it cannot be touched;  (W1) the CRACKING cliff (a banner, a buzz, the camera) and the eruption 2 s later
+//   (W2) the COIL: banner, a wind-up, the coil round the hull, it STOPS her (and her tilt stays inside FORCES.MAX_DEG), the hack arrow waits until the last HACK_AT s, a sword frees her, the timer rips a section off
+//   (W3) ICE ARMOUR: shells bounce (and wear a little off), bombs crack it, flame melts it, a hammer chips it (hold or blows; beside a rack the button takes a tool), a bare segment takes more, it grows back and freezes over again
+//   (W4) FROST BREATH: a wind-up with a buzz for the gunners, then the guns are jammed (the frost environment's own crusts), a hammer clears one;  (W5) the GAPE: the head swims under the bomb bay, the funnel, FED bombs win
+//   (W6) the phases (the belly opens, it stays out, the sun) and each win scripted: the sun (a harpoon hauls the head), the underbelly, the pool;  (W7) the reward, the lair stops of a voyage, the TV, and the bots: each forced win by 8 bots on Normal, 4 and 16 bots on Easy
+const WY = C.WYRM;
+const WYM = await load('modules/host/creatures/wyrm.js');
+const WYB = await load('modules/host/creatureWyrm.js');
+const WY0 = JSON.stringify({ BF: WY.BREATH.FIRST, CF: WY.CYCLE.FIRST, BU: WY.CYCLE.BURROW });
+const wyCfgBack = () => { const o = JSON.parse(WY0); WY.BREATH.FIRST = o.BF; WY.CYCLE.FIRST = o.CF; WY.CYCLE.BURROW = o.BU; };
+const wyOf = (cr) => cr.parts.find((p) => p.id === 'wyrm');
+const wQuiet = (cr) => { cr.wyrm.nextT = 1e9; cr.ai.breather = 0; };
+const iceCount = (cr) => wyOf(cr).ice.filter((v) => v > 0).length;
+const midWorld = (ship) => ({ x: T.toWorldX(ship, ship.layout.refPoint.x), y: T.toWorldY(ship, ship.layout.refPoint.y) });
+// A sim in the Frost Peaks lair with the Wyrm spawned (buried) and its cycle held; erupt: let it erupt and coil her (its breath held too unless breath).
+function wyrmUp({ difficulty = 'normal', bots = 0, erupt = false, breath = false, start = null } = {}) {
+  restoreCfg();
+  wyCfgBack();
+  if (!breath) WY.BREATH.FIRST = 1e9;
+  C.DEV_LAIR_AS = 'wyrm';
+  const ctx = boot({ env: 'frost', lair: true, difficulty, bots, start });
+  const map = ctx.st.course.map;
+  ctx.ship.pose.x = map.goal.x - ctx.ship.layout.refPoint.x;
+  ctx.ship.pose.y = map.goal.y - ctx.ship.layout.refPoint.y;
+  step(ctx.sim, 5);
+  const cr = ctx.sim.creatures.spawn('wyrm');
+  wQuiet(cr);
+  step(ctx.sim, 30);
+  const A = { ...ctx, cr, p1: ctx.st.players.p1, map };
+  if (erupt) eruptNow(A);
+  return A;
+}
+function eruptNow(A, toCoil = true) {
+  const { sim, cr } = A;
+  cr.wyrm.nextT = 0;
+  until(sim, () => cr.wyrm.mode === 'out', 8);
+  if (toCoil) until(sim, () => cr.grips[0] && cr.grips[0].mode === 'hold', 8);
+  cr.wyrm.nextT = 1e9;
+  return cr.grips[0] || null;
+}
+const holdCoil = (cr) => { for (const g of cr.grips) g.left = Math.max(g.left, 60); };
+const ENVM = await load('modules/host/environments.js');
+const wyWin = (name, st, cr, why) => {
+  report(cr.dying && cr.stats.win === why && cr.diedBy === why, `${name}: stats.win "${cr.stats.win}"`);
+  report(st.ev.warnText.startsWith(WY.WIN_TEXT[why]) && st.ev.warn >= FN.BANNER - 0.1, `${name}: the final banner "${st.ev.warnText}"`);
+  report(st.bossDownLap === st.course.lap && st.slow === FN.SLOW, `${name}: the boss counts as down and the last blow runs in slow motion (state.slow ${st.slow})`);
+};
+
+// (W0) the world and the body
+{
+  restoreCfg();
+  wyCfgBack();
+  C.DEV_LAIR_AS = 'wyrm';
+  const ctx = boot({ env: 'frost', lair: true });
+  const { sim, st, ship } = ctx;
+  const map = st.course.map;
+  const shipLen = ship.layout.bounds.x1 - ship.layout.bounds.x0;
+  report(map.lair === true && map.creature === 'wyrm' && map.outposts.length === 0 && map.turrets.length === 0 && map.cliffs.length === WY.LAIR.CLIFFS.length && Number.isFinite(map.startDist) && map.startDist < 1e8 && map.cliffs.every((c) => c.top - map.start.y > 1500), `the Wyrm's lair is open sky over an icy floor with ${map.cliffs.length} ice cliffs ${Math.round(map.cliffs[0].top - map.start.y)} px under the launch, no outposts or guns`);
+  report(spawnCr(ctx, 'kraken') === null && spawnCr(ctx, 'drake') === null && spawnCr(ctx, 'thunderbird') === null && spawnCr(ctx, 'titan') === null && st.creature === null, 'no other creature comes to the Wyrm lair');
+  const cr = spawnCr(ctx, 'wyrm');
+  const cnt = (k) => cr.parts.filter((p) => p.kind === k);
+  const limb = wyOf(cr);
+  report(!!cr && cr.kind === 'wyrm' && cr.name === WY.NAME && cr.mode === 'surfacing' && cr.wyrm.mode === 'buried' && cnt('mantle').length === 1 && cnt('tentacle').length === 1 && limb.segs.length === WY.BODY.LIMB.SEGS && cnt('head').length === 1 && cnt('mouth').length === 1 && cnt('heart').length === 1 && cnt('heart')[0].hidden && cr.parts.every((p) => p.hp > 0),
+    `spawn puts ${cr && cr.name} in state.creature, buried: a collar, a body of ${WY.BODY.LIMB.SEGS} segments, a head, a maw and a hidden underbelly`);
+  report([cnt('mantle')[0], limb, cnt('head')[0]].every((p) => p.ice && p.ice.length === p.segs.length && p.ice.every((v) => v > 0)) && limb.ice[0] === WY.ICE.HP && cnt('mantle')[0].ice[0] === WY.ICE.HP * WY.ICE.COLLAR_MUL && !cnt('mouth')[0].ice && !cnt('heart')[0].ice, 'the collar, the body and the head wear ice; the maw and the underbelly do not');
+  report(limb.reach >= 2.2 * shipLen, `it is long: ${Math.round(limb.reach)} px of body against her ${shipLen} (${(limb.reach / shipLen).toFixed(1)}x)`);
+  const col = cnt('mantle')[0].segs[0];
+  st.shells.push({ x: col.x, y: col.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 5);
+  report(cr.hp === cr.maxHp && AIM.targets(st).filter((t) => t.kind === 'creaturePart').length === 0 && SP.radarItems(st).filter((i) => i.kind === 'creature').length === 0 && CS.creatureHit(st, col.x, col.y, 100) === null, 'buried, it cannot be hurt, shot at or spotted');
+  wQuiet(cr);
+  const B0 = boot({ env: 'sea' });
+  report(spawnCr(B0, 'wyrm') === null && B0.st.creature === null, 'the Wyrm does not come to the Sunken Sea');
+  const B1 = boot({ env: 'frost', lair: false });
+  report(spawnCr(B1, 'wyrm') === null && B1.st.creature === null, '...nor to an ordinary Frost Peaks stop');
+}
+
+// (W1) the cracking cliff and the eruption
+{
+  const A = wyrmUp();
+  const { sim, st, ship, cr, p1 } = A;
+  const wy = cr.wyrm, CY = WY.CYCLE;
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  standOn(p1, ship, topD(ship), 600, null);
+  st.sfxQ.length = 0;
+  wy.nextT = 0;
+  until(sim, () => wy.mode === 'crack', 4);
+  const mid = midWorld(ship);
+  report(wy.mode === 'crack' && /CLIFF IS CRACKING/.test(st.ev.warnText) && msgs.some((m) => m.id === 'p1' && /CRACKING/.test(m.t) && Array.isArray(m.buzz)) && st.sfxQ.some((x) => x[0] === 'impact'), `a cliff cracks: banner "${st.ev.warnText}", a buzz on the phone, a thud`);
+  report(wy.crack && wy.crack.T === CY.CRACK && A.map.cliffs.includes(wy.cliff) && Math.abs(wy.cliff.x - mid.x) >= WY.CLIFF.MIN_DX && Math.abs(wy.cliff.x - mid.x) <= WY.CLIFF.MAX_DX && (wy.cliff.x - mid.x) * ship.pose.f > 0, `it is the cliff ${Math.round(Math.abs(wy.cliff.x - mid.x))} px ahead of her bow (${WY.CLIFF.MIN_DX}..${WY.CLIFF.MAX_DX} is its range)`);
+  const pts = CS.creaturePoints(st);
+  report(cr.mode === 'surfacing' && AIM.targets(st).filter((t) => t.kind === 'creaturePart').length === 0 && pts.length === 1 && Math.abs(pts[0].x - wy.cliff.x) < 1, 'while it cracks nothing can be hit, and the camera keeps the cliff in view');
+  const t0 = cr.age;
+  until(sim, () => wy.mode === 'out', 5);
+  report(Math.abs(cr.age - t0 - CY.CRACK) < 0.3 && cr.mode === 'idle' && cr.x === wy.cliff.x && cr.base.y === wy.cliff.top && cr.f === (mid.x >= wy.cliff.x ? 1 : -1), `it erupts after ${(cr.age - t0).toFixed(1)} s of cracks (CRACK ${CY.CRACK} s), out of the cliff top, facing her`);
+  step(sim, secs(WY.CYCLE.RISE + 0.5));
+  const tg = AIM.targets(st).filter((t) => t.kind === 'creaturePart');
+  report(['mantle', 'tentacle', 'head'].every((k) => tg.some((t) => t.part.kind === k)) && SP.radarItems(st).filter((i) => i.kind === 'creature').length >= 2, `out, it has ${tg.length} aim targets (the iced ones rank low: ${Math.min(...tg.map((t) => t.rank))}..${Math.max(...tg.map((t) => t.rank))}) and radar blips`);
+  const limb = wyOf(cr);
+  let changed = 0, lastKey = cr.key, lastGoal = limb.goal.x + ',' + limb.goal.y;
+  for (let i = 0; i < 180; i++) { step(sim); const r = limb.goal.x + ',' + limb.goal.y; if (r !== lastGoal) { if (cr.key === lastKey) changed++; lastGoal = r; } lastKey = cr.key; }
+  report(changed === 0, `no wobble: the body's goal changed only on the key clock (${changed} changes between keys)`);
+}
+
+// (W2) the COIL
+{
+  const A = wyrmUp();
+  const { sim, st, ship, cr, p1 } = A;
+  const wy = cr.wyrm, G = WY.COIL;
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  standOn(p1, ship, topD(ship), 380, null);
+  wy.nextT = 0;
+  until(sim, () => cr.grips.length > 0, 12);
+  const g = cr.grips[0];
+  report(!!g && g.mode === 'wind' && /THE WYRM COILS/.test(st.ev.warnText), `it strikes: banner "${st.ev.warnText}" and a wind-up on ${g && g.end} ${g && g.deck}`);
+  step(sim, secs(0.2));
+  const tWind = cr.age;
+  until(sim, () => g.mode === 'hold', 6);
+  report(g.mode === 'hold' && cr.age - tWind >= G.WINDUP - 0.6 && !!wyOf(cr).grip, `the wind-up gives ${G.WINDUP} s of warning, then the head seizes the deck end (held after ${(cr.age - tWind + 0.2).toFixed(1)} s)`);
+  const limb = wyOf(cr);
+  step(sim, secs(1.5));
+  report(!!limb.wrap && limb.wrap.k === G.WRAP.SEGS && limb.segs.some((s) => s.behind) && limb.segs.some((s) => !s.behind) && g.total === G.TIME, `the outer ${G.WRAP.SEGS} segments wind round her hull (some in front of it, some behind), held ${G.TIME} s`);
+  let tilt = 0;
+  holdCoil(cr);
+  for (let i = 0; i < secs(6); i++) { step(sim); tilt = Math.max(tilt, Math.abs(st.forces.theta)); }
+  const vx = ship.pose.vx;
+  report(tilt <= config.FORCES.MAX_DEG * DEG + 1e-9, `the coil tips her ${(tilt / DEG).toFixed(2)} degrees at most (the limit ${config.FORCES.MAX_DEG})`);
+  report(GR.gripped(ship) && typeof ship.sim.comeAbout.why() === 'string', `COME ABOUT is refused while she is coiled ("${ship.sim.comeAbout.why()}")`);
+  // it STOPS her: the same ship at full speed with and without the coil
+  const mk = (coiled) => {
+    const B = wyrmUp({ erupt: false });
+    B.ship.pose.x += 900;
+    if (coiled) { eruptNow(B); holdCoil(B.cr); }
+    else B.cr.wyrm.nextT = 1e9;
+    B.st.ship.speed = 0.55;
+    return B;
+  };
+  const S1 = mk(true), S0 = mk(false);
+  for (let i = 0; i < secs(4); i++) { holdCoil(S1.cr); step(S1.sim); step(S0.sim); }
+  report(Math.abs(S1.ship.pose.vx) < 0.35 * Math.abs(S0.ship.pose.vx) || Math.abs(S1.ship.pose.vx) < 60, `with the engines at 55% the coil holds her to ${S1.ship.pose.vx.toFixed(0)} px/s; free, she flies at ${S0.ship.pose.vx.toFixed(0)} px/s`);
+  report(Math.sign(vx) === Math.sign(wy.cliff.x - midWorld(ship).x) && Math.abs(vx) <= 120, `she drifts toward its cliff at ${G.ANCHOR.DRIFT} px/s at most (now ${vx.toFixed(0)})`);
+  // the arrow and the button
+  g.left = G.HACK_AT + 3;
+  const early = GR.gripJobs(st, ship).filter((j) => j.obj === g.job);
+  standOn(p1, ship, g.job.d, g.x, 'hammer');
+  const eAct = sim.creatures.actionFor(ship, p1);
+  report(early.length === 0 && (!eAct || eAct.label !== 'HACK THE COIL!'), `with more than ${G.HACK_AT} s left there is no hack arrow, and a hammer at the grip does not hack ("${eAct && eAct.label}")`);
+  g.left = G.HACK_AT - 1;
+  const late = GR.gripJobs(st, ship).filter((j) => j.obj === g.job);
+  const lAct = sim.creatures.actionFor(ship, p1);
+  report(late.length === 1 && lAct && lAct.label.startsWith('HACK THE COIL'), `in the last ${G.HACK_AT} s the arrow shows and the button is "${lAct && lAct.label}"`);
+  standOn(p1, ship, g.job.d, g.x, 'sword');
+  const sAct = sim.creatures.actionFor(ship, p1);
+  report(sAct && sAct.type === 'hack' && sAct.label === 'HACK THE COIL!' && near(sAct.time, G.SWORD_TIME), `a sword at the grip hacks at any time (hold ${sAct && sAct.time} s)`);
+  g.left = 20;
+  p1.atkCd = 0;
+  for (let k = 0; k < 3; k++) { sim.creatures.blow(ship, p1); p1.atkCd = 0; }
+  step(sim, 5);
+  report(freedBy(cr) === 'hack' && cr.stats.hacks === 1 && !GR.gripped(ship) && st.moments.some((m) => m.kind === 'creature-freed' && m.data.how === 'hack'), 'three sword blows free her: it lets go (hacked), and the Book writes it');
+  until(sim, () => wy.sub === 'gape', 4);
+  report(wy.sub === 'gape', 'once it lets go it GAPES (the maw opens for bombs)');
+}
+{
+  // the timer rips a section off; flame does not free her
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, ship, cr } = A;
+  const g = cr.grips[0], plats0 = ship.layout.platforms.length, limb = wyOf(cr);
+  const i = limb.segs.length - 1, s = limb.segs[i];
+  CS.creatureBurn(st, () => true, { x: s.x, y: s.y }, 0.5, 'p1');
+  step(sim, 5);
+  report(g.mode === 'hold', 'flame on the coil does not make it let go (it melts the ice)');
+  g.left = 0.05;
+  step(sim, secs(1));
+  report(freedBy(cr) === 'rip' && ((cr.stats.ripped || 0) + (cr.stats.hulled || 0)) >= 1, `unfreed when the time runs out it rips a section off (ripped ${cr.stats.ripped || 0}, hull crushed ${cr.stats.hulled || 0})`);
+  void plats0;
+}
+{
+  // shells on the bare body free her once they have done RELEASE_DMG of its hp
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, cr } = A;
+  const limb = wyOf(cr), g = cr.grips[0];
+  limb.ice.fill(0);
+  limb.hp = limb.maxHp;
+  holdCoil(cr);
+  let n = 0;
+  for (; n < 400 && g.mode === 'hold'; n++) {
+    const s = limb.segs[limb.segs.length - 2], m = midOf(s);
+    st.shells.push({ x: m.x, y: m.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+    step(sim, 2);
+  }
+  report(g.mode !== 'hold' && g.why === 'shot' && n < 400, `shells on its bare body free her after ${n} hits (${(WY.COIL.RELEASE_DMG * 100).toFixed(0)}% of its hp), the Wyrm lets go`);
+}
+
+// (W3) ICE ARMOUR
+{
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, ship, cr, p1 } = A;
+  holdCoil(cr);
+  const limb = wyOf(cr), I = WY.ICE;
+  const seg = (i) => midOf(limb.segs[i]);
+  const shell = (i, src = 'shell') => CS.hurtCreature(st, { part: limb, seg: i }, config.GUNS.DAMAGE * C.HURT.SHELL_MUL, { who: 'p1', src });
+  const i = 4;
+  const m = seg(i), hp0 = limb.hp, pool0 = cr.hp, ice0 = limb.ice[i];
+  st.sfxQ.length = 0;
+  const r = shell(i);
+  report(r === null && limb.hp === hp0 && cr.hp === pool0 && cr.stats.bounces === 1 && near(limb.ice[i], ice0 - I.SHELL_CHIP) && st.sfxQ.some((x) => x[0] === 'clang'), `a shell on an iced segment bounces: no damage, a clang, and it wears ${I.SHELL_CHIP} off the ice (${ice0} -> ${limb.ice[i]})`);
+  const iceB = limb.ice[i];
+  CS.hurtCreature(st, { part: limb, seg: i }, C.HURT.BOMB, { who: 'p1', src: 'bomb' });
+  report(limb.ice[i] < iceB - I.BOMB_CHIP * limb.iceMax[i] * 0.99 && limb.hp === hp0, `a bomb on it cracks ${(I.BOMB_CHIP * 100).toFixed(0)}% of the ice and does no damage`);
+  const iceF = limb.ice[i];
+  CS.creatureBurn(st, (x, y) => Math.hypot(x - m.x, y - m.y) < 80, { x: m.x - 20, y: m.y }, 0.5, 'p1');
+  report(iceCount(cr) <= 12 && limb.hp === hp0 && cr.stats.melted > 0 && limb.ice.reduce((a, v) => a + v, 0) < limb.iceMax.reduce((a, v) => a + v, 0) - 1, `flame melts the ice (${cr.stats.melted.toFixed(0)} melted) without hurting it`);
+  void iceF;
+  limb.ice[i] = 0;
+  const h1 = limb.hp, p1pool = cr.hp;
+  const rb = shell(i);
+  const dmg = config.GUNS.DAMAGE * C.HURT.SHELL_MUL * I.BARE_MUL;
+  report(!!rb && near(h1 - limb.hp, dmg, 1e-6) && near(p1pool - cr.hp, dmg * WY.POOL.tentacle, 1e-6), `a shell on a bare segment takes ${I.BARE_MUL}x its damage off the body (${(h1 - limb.hp).toFixed(1)}) and ${(p1pool - cr.hp).toFixed(1)} off the pool`);
+  // the hammer: the button, the hold, the blows, the neighbours
+  limb.ice.fill(WY.ICE.HP);
+  limb.iceMax.fill(WY.ICE.HP);
+  cr.stats.chips = 0;
+  // put him on the deck nearest that segment, and ask what the button says
+  const jobs = WYB.wyrmChipJobs(st, ship);
+  report(jobs.length > 0 && jobs.length <= I.JOBS && jobs.every((q) => q.kind === 'hack' && q.tool === 'hammer' && q.d >= 0 && Number.isFinite(q.x)), `${jobs.length} chip spots on her decks for the phones' arrows and the bots (kind hack, tool hammer)`);
+  const job = jobs[0];
+  standOn(p1, ship, job.d, job.x, 'hammer');
+  const racks = ship.layout.racks.filter((q) => q.d === job.d && Math.abs(q.x - job.x) < config.TOOLS.REACH).length;
+  const act = sim.creatures.actionFor(ship, p1);
+  if (!racks) report(act && act.type === 'hack' && act.hold && act.label === 'CHIP THE ICE!' && near(act.time, I.CHIP_TIME), `a hammer beside it: the Action is "${act && act.label}" (hold ${act && act.time} s)`);
+  else report(act === null || act.label !== 'CHIP THE ICE!', 'beside a tool rack the Action is the rack\'s, so a hammer can be swapped for a sword');
+  // find a spot away from the racks to work at
+  const work = jobs.find((q) => !ship.layout.racks.some((r2) => r2.d === q.d && Math.abs(r2.x - q.x) < config.TOOLS.REACH + 20)) || job;
+  standOn(p1, ship, work.d, work.x, 'hammer');
+  const act2 = sim.creatures.actionFor(ship, p1);
+  report(!!act2 && act2.label === 'CHIP THE ICE!' && act2.obj && act2.obj.name === 'chip', 'away from the racks the Action is CHIP THE ICE!');
+  const target = act2.obj, tp = target.part, ts = target.seg, before = iceCount(cr);
+  sim.creatures.hacked(ship, p1, target);
+  report(tp.ice[ts] === 0 && tp.ice[Math.max(0, ts - 1)] < WY.ICE.HP * (tp === limb ? 1 : 2) && cr.stats.chips === 1 && st.moments.some((q) => q.kind === 'creature-chip' && q.who.includes('P1')), `a finished hold chips the segment bare and cracks its neighbours (${before} iced segments -> ${iceCount(cr)}), and the Book remembers the hammer`);
+  // three ATTACK blows with a hammer do the same
+  const act3 = sim.creatures.actionFor(ship, p1);
+  p1.atkCd = 0;
+  let b = 0;
+  const ts3 = act3 && act3.obj ? act3.obj.seg : -1;
+  for (let k = 0; k < I.BLOWS; k++) { if (sim.creatures.blow(ship, p1)) b++; p1.atkCd = 0; }
+  report(b === I.BLOWS && cr.stats.chips === 2, `${I.BLOWS} ATTACK blows with a hammer chip a segment too (blow ${b}, segment ${ts3})`);
+  // a man with no hammer gets nothing
+  p1.carry = null;
+  const none = sim.creatures.actionFor(ship, p1);
+  report(!none || none.label !== 'CHIP THE ICE!', 'bare hands: no chip button');
+  // an open steam vent melts the segments beside it
+  if (ship.layout.vents.length) {
+    limb.ice.fill(WY.ICE.HP);
+    let bv = 0, bd = Infinity;
+    ship.layout.vents.forEach((v, k) => { const pl = PLS(ship)[v.d], wx = T.toWorldX(ship, v.x), wy = T.toWorldY(ship, pl.y - 40); for (let q = 0; q < limb.segs.length; q++) { const d = segDist(limb.segs[q], wx, wy); if (d < bd) { bd = d; bv = k; } } });
+    const reach0 = I.VENT_REACH;
+    I.VENT_REACH = bd + 60;
+    st.ventOpen[bv] = false;
+    const sum0 = limb.ice.reduce((a, v) => a + v, 0);
+    step(sim, 30);
+    const shut = limb.ice.reduce((a, v) => a + v, 0);
+    st.ventOpen[bv] = true;
+    for (let i2 = 0; i2 < 120; i2++) { holdCoil(cr); st.ventOpen[bv] = true; step(sim); }
+    st.ventOpen[bv] = false;
+    const open = limb.ice.reduce((a, v) => a + v, 0);
+    I.VENT_REACH = reach0;
+    report(shut >= sum0 - 1 && open < sum0 - 20 && cr.stats.vented > 0, `an open steam vent beside the coil melts the ice (${sum0.toFixed(0)} -> ${open.toFixed(0)} in 2 s; shut, none)`);
+    limb.ice.fill(0);
+  }
+  // it grows back
+  const k0 = limb.ice.findIndex((v) => v <= 0);
+  const grew0 = limb.ice[k0];
+  for (let i2 = 0; i2 < secs(I.REGROW_AFTER + 3); i2++) { holdCoil(cr); step(sim); }
+  report(k0 >= 0 && limb.ice[k0] > grew0, `a bare segment grows ice again after ${I.REGROW_AFTER} s (${grew0.toFixed(0)} -> ${limb.ice[k0].toFixed(0)})`);
+}
+{
+  // ice at the head and the collar, the maw shut or open
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, cr } = A;
+  holdCoil(cr);
+  const head = partOf(cr, 'head'), mouth = partOf(cr, 'mouth'), col = partOf(cr, 'mantle');
+  const hh = midOf(head.segs[0], 0.5), mm = mouth.segs[0];
+  const h0 = head.hp;
+  const r = CS.hurtCreature(st, { part: head, seg: 0 }, 50, { src: 'shell', who: 'p1' });
+  const r2 = CS.hurtCreature(st, { part: col, seg: 0 }, 50, { src: 'shell', who: 'p1' });
+  report(r === null && r2 === null && head.hp === h0, 'shells bounce off the iced head and the iced collar too');
+  const mp = mouth.hp;
+  const r3 = CS.hurtCreature(st, { part: mouth, seg: 0 }, 50, { src: 'shell', who: 'p1' });
+  report(r3 === null && mouth.hp === mp && !mouth.open, 'and off the shut maw (frost-lipped)');
+  void hh; void mm;
+}
+{
+  // a new eruption freezes it over again
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, cr } = A;
+  const limb = wyOf(cr);
+  limb.ice.fill(0);
+  holdCoil(cr);
+  cr.grips[0].left = 0.01;
+  until(sim, () => cr.wyrm.mode === 'buried', 40);
+  report(cr.wyrm.mode === 'buried' && limb.ice.every((v) => v === WY.ICE.HP) && limb.hp === limb.maxHp, 'after it burrows the whole body is iced again (a new eruption starts armoured)');
+  cr.wyrm.nextT = 0;
+  until(sim, () => cr.wyrm.mode === 'out', 8);
+  report(cr.wyrm.mode === 'out' && limb.ice.every((v) => v === WY.ICE.HP), 'and it comes out armoured');
+}
+
+// (W4) FROST BREATH
+{
+  const A = wyrmUp({ erupt: true, breath: true });
+  const { sim, st, ship, cr, p1 } = A;
+  const wy = cr.wyrm, B = WY.BREATH;
+  holdCoil(cr);
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  const gunNames = Object.keys(st.GUNS);
+  const gunner = gunNames.find((n) => ship.layout.kindOf(n) === 'gun');
+  Object.assign(p1, { lock: gunner, fall: false, fly: false, d: 0, ko: 0 });
+  p1.lock = gunner;
+  st.icing.length = 0;
+  wy.breathT = 0;
+  st.sfxQ.length = 0;
+  until(sim, () => wy.breath, 3);
+  const open = new Set(ENVM.gunSpotsOf(ship.layout).map((s) => s.gun));
+  report(!!wy.breath && wy.breath.sub === 'wind' && /FROZEN BREATH/.test(st.ev.warnText) && msgs.some((m) => m.id === 'p1' && /FROST BREATH/.test(m.t) && Array.isArray(m.buzz)) && st.sfxQ.some((x) => x[0] === 'roar'), `the breath is drawn in: banner "${st.ev.warnText}", a buzz on the gunner's phone`);
+  report(st.icing.every((c) => !c.wyrm), 'nothing is frozen yet during the wind-up');
+  const t0 = cr.age;
+  until(sim, () => wy.breath && wy.breath.sub === 'blow', 4);
+  report(Math.abs(cr.age - t0 - B.WIND) < 0.4 && wy.breath.len === B.LEN, `${B.WIND} s later it blows: the cone`);
+  const frozen = st.icing.filter((c) => c.wyrm);
+  report(frozen.length === Math.min(B.GUNS[1], open.size) && frozen.every((c) => c.lvl >= config.ENVIRONMENTS.frost.ICE.JAM_AT && open.has(c.gun)) && frozen.every((c) => ship.sim.env.gunJammed(c.gun)), `${frozen.length} open gun${frozen.length === 1 ? '' : 's'} frozen solid (${frozen.map((c) => c.gun).join(', ')}): jammed (phase 1 freezes ${B.GUNS[1]}, phase 2 ${B.GUNS[2]}, phase 3 ${B.GUNS[3]})`);
+  // the hammer clears it, the Book remembers
+  const c0 = frozen[0];
+  const spot = ENVM.gunSpotsOf(ship.layout).find((s) => s.gun === c0.gun);
+  standOn(p1, ship, spot.d, spot.x, 'hammer');
+  c0.prog = 0.99;
+  p1.fire = true;
+  step(sim, secs(1));
+  p1.fire = false;
+  report(!st.icing.includes(c0) && !ship.sim.env.gunJammed(c0.gun) && st.moments.some((q) => q.kind === 'creature-thaw' && q.who.includes('P1')), 'a hammer chips the crust off the gun: it fires again, and the Book remembers it');
+  step(sim, secs(B.TIME + 0.5));
+  report(!wy.breath && wy.breathT > B.EVERY[1] * 0.6, `the cone fades and the next breath is ${wy.breathT.toFixed(0)} s off (every ${B.EVERY[1]} s in phase 1)`);
+}
+{
+  // more guns in the later phases
+  const A = wyrmUp({ erupt: true, breath: true });
+  const { sim, st, ship, cr } = A;
+  holdCoil(cr);
+  const open = ENVM.gunSpotsOf(ship.layout).length;
+  const counts = [];
+  for (const ph of [2, 3]) {
+    cr.phase = ph;
+    st.icing.length = 0;
+    cr.wyrm.breath = null;
+    cr.wyrm.breathT = 0;
+    cr.ai.breather = 0;
+    holdCoil(cr);
+    until(sim, () => cr.wyrm.breath && cr.wyrm.breath.sub === 'blow', 4);
+    counts.push(st.icing.filter((c) => c.wyrm).length);
+  }
+  report(counts[0] === Math.min(WY.BREATH.GUNS[2], open) && counts[1] === Math.min(WY.BREATH.GUNS[3], open), `phase 2 freezes ${counts[0]} guns and phase 3 ${counts[1]} (of ${open} open ones)`);
+}
+
+// (W5) the GAPE
+{
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, ship, cr, p1 } = A;
+  const wy = cr.wyrm, M = WY.MOUTH;
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  cr.grips[0].left = 0.01;
+  until(sim, () => wy.sub === 'gape', 6);
+  const mouth = partOf(cr, 'mouth');
+  report(wy.sub === 'gape' && wy.headUp && /MAW IS ABOUT TO GAPE/.test(st.ev.warnText) && !cr.mouthWin, `it lets go and raises its head: "${st.ev.warnText}" (the maw is still shut)`);
+  step(sim, secs(M.WIND + 0.4));
+  report(!!cr.mouthWin && mouth.open && /GAPES/.test(st.ev.warnText) && cr.stats.windows === 1, `${M.WIND} s later the maw is open: "${st.ev.warnText}"`);
+  // the head swims to put the maw under her bay
+  step(sim, secs(4));
+  const ms = mouth.segs[0];
+  const bay = ship.layout.bombBay;
+  const mid = midWorld(ship);
+  const g = bay ? { x: T.toWorldX(ship, bay.x), y: T.toWorldY(ship, bay.y) } : mid;
+  report(Math.abs(ms.x - g.x) < M.FUNNEL_W + 400 && ms.y > g.y, `the maw hangs under her bomb bay (${Math.round(ms.x - g.x)} px across, ${Math.round(ms.y - g.y)} px below it)`);
+  report(CS.creatureBomb(st, { x: ms.x, y: ms.y - 200, owner: 'p1' }) === 'mouth' && cr.fed === 1, 'a bomb that falls in the open maw is a bomb fed (1)');
+  const m1 = mouth.hp;
+  step(sim, 20);
+  report(!mouth.open && cr.mouthWin.gulp > 0 && CS.creatureBomb(st, { x: ms.x, y: ms.y - 200, owner: 'p1' }) !== 'mouth' && cr.fed === 1, `it gulps: the maw shuts ${M.GULP} s and the next bomb is not fed`);
+  step(sim, secs(M.GULP + 0.6));
+  report(mouth.open || !cr.mouthWin, 'then it opens again for what is left of the window');
+  const f0 = cr.fed;
+  if (cr.mouthWin) CS.creatureCargo(st, { x: ms.x, y: ms.y - 200, owner: 'p1' });
+  report(cr.mouthWin ? near(cr.fed - f0, C.HURT.CARGO_MOUTH) : true, 'a thrown crate is half a bomb');
+  void m1; void p1;
+  until(sim, () => wy.mode === 'buried', 6);
+  report(wy.mode === 'buried' && cr.mode === 'surfacing' && wy.nextT >= WY.CYCLE.BURROW[0] * 0.9, `it is under the ice again for ${wy.nextT.toFixed(1)} s (BURROW ${WY.CYCLE.BURROW.join('..')})`);
+}
+{
+  // the window closes after FOR s: the maw shuts and it burrows
+  const A = wyrmUp({ erupt: true });
+  const { sim, cr } = A;
+  const wy = cr.wyrm, M = WY.MOUTH;
+  cr.grips[0].left = 0.01;
+  until(sim, () => cr.mouthWin && partOf(cr, 'mouth').open, 10);
+  const tOpen = cr.age;
+  let sawRetreat = false, shut = false, tShut = null;
+  for (let i2 = 0; i2 < secs(16) && wy.mode !== 'buried'; i2++) { step(sim); if (wy.sub === 'retreat' && !sawRetreat) { sawRetreat = true; tShut = cr.age; const mo = partOf(cr, 'mouth'); shut = !cr.mouthWin && (mo.cmdOpen === false || !mo.open); } }
+  report(sawRetreat && shut && tShut - tOpen >= M.FOR - 0.5 && tShut - tOpen <= M.FOR + M.GULP * 3 + M.SLACK + 1, `the window closes after ${(tShut - tOpen).toFixed(1)} s (FOR ${M.FOR} s): the maw shuts and it burrows`);
+}
+{
+  // FED bombs win it
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, cr } = A;
+  cr.maxHp = cr.hp = 5000; // (a thin crew's pool is small: the bombs would empty it first)
+  cr.grips[0].left = 0.01;
+  until(sim, () => cr.mouthWin && partOf(cr, 'mouth').open, 10);
+  const mouth = partOf(cr, 'mouth');
+  for (let k = 0; k < WY.MOUTH.FED && !cr.dying; k++) {
+    CS.creatureBomb(st, { x: mouth.segs[0].x, y: mouth.segs[0].y - 200, owner: 'p1' });
+    if (cr.mouthWin) { cr.mouthWin.gulp = 0; if (!mouth.open) { mouth.open = true; mouth.cmdOpen = null; } }
+  }
+  step(sim, 1);
+  wyWin('FEED the maw', st, cr, 'mouth');
+}
+
+// (W6) the phases, the sun, the underbelly
+{
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, ship, cr } = A;
+  const wy = cr.wyrm;
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  const belly = partOf(cr, 'heart');
+  report(cr.phase === 1 && belly.hidden && !wy.sun, 'phase 1: the underbelly is hidden and there is no sun');
+  cr.hp = cr.maxHp * (WY.PHASE.TWO_HP - 0.02);
+  step(sim, 2);
+  report(cr.phase === 2 && /FREEZES THE GUNS/.test(st.ev.warnText) && cr.ai.breather > 0 && msgs.some((m) => /FREEZES/.test(m.t)), `below ${(WY.PHASE.TWO_HP * 100).toFixed(0)}% of the pool: phase 2, banner "${st.ev.warnText}", a breather`);
+  cr.hp = cr.maxHp * (WY.PHASE.THREE_HP - 0.02);
+  step(sim, 2);
+  report(cr.phase === 3 && !belly.hidden && !!wy.sun && Math.abs(wy.sun.x - (cr.base.x + cr.f * WY.SUN.DIST)) < 1 && /SUN/.test(st.ev.warnText), `below ${(WY.PHASE.THREE_HP * 100).toFixed(0)}%: phase 3, the underbelly opens, a shaft of sun breaks through ${WY.SUN.DIST} px from the cliff ("${st.ev.warnText}")`);
+  report(cr.stats.phaseAt && cr.stats.phaseAt[3] !== undefined, 'the phase changes are recorded');
+  // it cannot burrow now: after the coil and the gape it waits out
+  cr.grips[0].left = 0.01;
+  until(sim, () => wy.sub === 'idle', 30);
+  step(sim, secs(4));
+  report(wy.mode === 'out' && wy.sub === 'idle' && cr.mode === 'idle', 'in phase 3 it stays out after the gape: no more burrowing (exhausted)');
+  const head = partOf(cr, 'head'), hs = head.segs[0];
+  const root = { x: cr.x + wyOf(cr).at[0] * cr.f, y: cr.y + wyOf(cr).at[1] };
+  report(Math.abs(Math.hypot(hs.x - root.x, hs.y - root.y)) < wyOf(cr).reach, 'the head hangs out of the cliff within reach of its root');
+  // it coils again, later
+  wy.coilT = 0;
+  until(sim, () => cr.grips[0] && cr.grips[0].mode === 'hold', 10);
+  report(wy.sub === 'coil' && cr.stats.coils >= 2, 'and it coils her again from where it hangs');
+  report(WY.POOL.mouth >= WY.POOL.head && WY.POOL.heart >= WY.POOL.mantle && WY.POOL.tentacle >= 0.9, 'the weak points count more against the pool than the body does');
+}
+{
+  // THE SUN: a harpoon on the head hauls it into the shaft; the pool melts
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, ship, cr, p1 } = A;
+  const wy = cr.wyrm;
+  cr.hp = cr.maxHp * 0.3;
+  step(sim, 2);
+  cr.grips[0].left = 0.01;
+  until(sim, () => wy.sub === 'idle', 30);
+  step(sim, secs(2));
+  wy.coilT = wy.gapeT = 1e9; // (the test hauls the head undisturbed)
+  const head = partOf(cr, 'head');
+  const tg = AIM.targets(st);
+  report(CS.creatureTowTargets(st).length === 1 && CS.creatureTowTargets(st)[0].part === head, 'in phase 3 the harpoon gun may aim at its head (and only there)');
+  const hs = head.segs[0], dk = PLS(ship)[ship.layout.deckIndex('main')];
+  const from = { x: dk.x1 - 80, y: dk.y - 60 };
+  const hx = T.toWorldX(ship, from.x), hy = T.toWorldY(ship, from.y);
+  const tw = TW.creatureLatch(st, ship, { part: head, seg: 0, d: Math.hypot(hs.x - hx, hs.y - hy), x: hs.x, y: hs.y }, from, config.GUN_TYPES.harpoon, p1);
+  step(sim, secs(1));
+  const sun = wy.sun;
+  report(cr.hooked && !!tw, 'the line holds the head');
+  // she flies to the sun: the line hauls the head after her
+  const toSun = sun.x - midWorld(ship).x;
+  ship.pose.x += toSun;
+  const h0 = hs.x;
+  let n = 0;
+  for (; n < secs(60) && !cr.dying; n++) { step(sim, 1); ship.pose.x += sun.x - midWorld(ship).x; ship.pose.vy = 0; } // (the helm holds her over the shaft: the line would drag her toward the head)
+  report(Math.abs(wy.haul) > 100 || cr.stats.sunSecs > 0, `the line hauls its head ${Math.round(Math.abs(wy.haul))} px toward the sun`);
+  report(cr.stats.sunSecs > 0 && (cr.stats.by.sun || 0) > 0, `in the shaft the pool melts: ${(cr.stats.sunSecs).toFixed(1)} s of sun took ${Math.round(cr.stats.by.sun || 0)} hp (haul ${Math.round(wy.haul)}, head x ${Math.round(head.segs[0].x)}, sun ${Math.round(sun.x)}, hooked ${cr.hooked}, sub ${wy.sub}, mode ${wy.mode}, ship ${Math.round(midWorld(ship).x)})`);
+  void h0; void tg;
+  wyWin('the SUN', st, cr, 'tow');
+}
+{
+  // without a line the sun is a place, not a weapon: the head hanging at its station is out of it
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, cr } = A;
+  cr.hp = cr.maxHp * 0.3;
+  cr.grips[0].left = 0.01;
+  until(sim, () => cr.wyrm.sub === 'idle', 30);
+  step(sim, secs(10));
+  report(!cr.wyrm.inSun && !(cr.stats.sunSecs > 0), 'a head hanging at its own station is out of the sun (it must be hauled)');
+}
+{
+  // BOARD the underbelly
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, ship, cr, p1 } = A;
+  const wy = cr.wyrm;
+  const belly = partOf(cr, 'heart');
+  cr.hp = cr.maxHp * 0.3;
+  step(sim, 2);
+  cr.grips[0].left = 0.01;
+  until(sim, () => wy.sub === 'idle', 30);
+  step(sim, secs(1));
+  Object.assign(p1, { fall: false, fly: true, air: false, lock: null, conn: null, ko: 0, jx: 0, jy: 0, jz: 0, hearts: config.HEALTH.MAX, carry: 'sword' });
+  const bs = belly.segs[0];
+  report(BD.boardAt(st, ship, p1, bs.x, bs.y) && !!p1.on, 'a flier lands on its collar: he is aboard (the landing strip is the collar\'s top)');
+  let n = 0, seen = null;
+  for (; n < secs(40) && !cr.dying; n++) { p1.fire = true; step(sim, 1); if (!seen && p1.act) seen = p1.act.label; }
+  p1.fire = false;
+  report(cr.dying && seen === 'STRIKE THE UNDERBELLY!', `holding Action with a sword at the belly ("${seen}") for ${(n / 60).toFixed(0)} s (${WY.BOARD.HEART_TIME} s a stroke, ${WY.BOARD.HEART_DMG} damage) brings it down`);
+  wyWin('BOARD and strike the underbelly', st, cr, 'board');
+}
+{
+  // the pool (shells on the bare body) wins it: 'shell'
+  const A = wyrmUp({ erupt: true });
+  const { sim, st, cr } = A;
+  holdCoil(cr);
+  const limb = wyOf(cr);
+  limb.ice.fill(0);
+  cr.hp = cr.maxHp * 0.3;
+  step(sim, 2);
+  let n = 0;
+  for (; n < 400 && !cr.dying; n++) {
+    holdCoil(cr);
+    limb.hp = limb.maxHp;
+    limb.ice.fill(0);
+    st.shells.push({ x: limb.segs[3].x, y: limb.segs[3].y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+    CS.creatureShell(st);
+  }
+  step(sim, 1);
+  report(cr.dying && n < 400, `chipped bare and shelled down by ${n} shells (the pool ${Math.round(cr.maxHp)})`);
+  wyWin('SHELL it down', st, cr, 'shell');
+}
+{
+  // FORCE_WIN: only the way asked for can end it
+  const A = wyrmUp({ erupt: true });
+  const { st, cr } = A;
+  holdCoil(cr);
+  C.FORCE_WIN = 'mouth';
+  const limb = wyOf(cr);
+  limb.ice.fill(0);
+  CS.hurtCreature(st, { part: limb, seg: 3 }, 1e9, { src: 'shell', who: 'p1' });
+  report(!cr.dying, 'with FORCE_WIN "mouth" an emptied pool does not end it (only the maw can)');
+  C.FORCE_WIN = null;
+}
+
+// (W7) the reward, the lair, the voyage, the TV
+{
+  restoreCfg();
+  wyCfgBack();
+  realHp();
+  C.DEV_LAIR_AS = 'wyrm';
+  const ctx = boot({ env: 'frost', lair: true, bots: 0, start: 'classic' });
+  const { sim, st, ship } = ctx;
+  const map = st.course.map, c = st.course;
+  report(c.stop && c.stop.lair === true && c.stop.creature === 'wyrm' && map.creature === 'wyrm', 'a Wyrm lair stop flies the lair map for the Wyrm');
+  step(sim, secs(2));
+  report(st.creature === null && !st.boss, 'at the start there is no creature and no zeppelin');
+  ship.pose.x = map.start.x + (map.goal.x - map.start.x) * 0.7 - ship.layout.refPoint.x;
+  st.tempo.phase = 'build';
+  st.tempo.bossOk = true;
+  for (let i = 0; i < secs(4) && !st.creature; i++) step(sim, 1);
+  report(!!st.creature && st.creature.kind === 'wyrm' && !st.boss, `at ${(c.progress * 100).toFixed(0)}% of the way the Wyrm stirs where the zeppelin would come in: ${st.creature && st.creature.name}; no zeppelin`);
+  const cr = st.creature;
+  wQuiet(cr);
+  step(sim, secs(3));
+  ship.pose.x = map.goal.x - ship.layout.refPoint.x;
+  ship.pose.y = map.goal.y - ship.layout.refPoint.y;
+  st.ev.warn = 0;
+  step(sim, secs(3));
+  report(!c.done && !c.pendingNext, 'at the lair\'s middle with the Wyrm alive the stop is not done');
+  cr.wyrm.nextT = 0;
+  until(sim, () => cr.wyrm.mode === 'out', 10);
+  report(st.tempo.phase === 'peak' && st.tempo.kind === 'boss', 'the pacing director treats it as the mission boss');
+  st.ship.hull = 40;
+  for (const b of st.bags) b.gas = 30;
+  st.run.trophy = 'krakenBeak';
+  const salv0 = st.run.salvage, hull0 = st.ship.hull;
+  cr.hooks.hurtPool(1e9, 'shell', 'p1');
+  step(sim, secs(2));
+  report(cr.dying && !c.done && st.bossDownLap === c.lap, 'killed, it is dying and the boss is down');
+  step(sim, secs(1));
+  const SV = config.SALVAGE.BOSS * C.REWARD_MUL;
+  report(st.run.salvage - salv0 >= SV && st.run.salvage - salv0 <= SV + 40, `triple boss salvage: +${st.run.salvage - salv0}`);
+  report(st.ship.hull >= hull0 + WY.REWARD.HULL - 1 && st.bags.every((b) => b.gas >= 30 + WY.REWARD.GAS - 10) && st.run.trophy === 'krakenBeak' && WY.REWARD.TROPHY === null, `a hull patch (+${WY.REWARD.HULL}) and every gasbag (+${WY.REWARD.GAS}); no trophy card (a waiting one is kept)`);
+  for (let i = 0; i < secs(WY.SPAWN.SINK + C.CHUNK.LIFE + 3) && !c.done; i++) step(sim, 1);
+  report(c.done === true && c.pendingNext === true && st.creature === null && /RIME WYRM IS SLAIN/.test(st.ev.warnText), `once it has collapsed the stop is done: "${st.ev.warnText}"`);
+}
+{
+  // the voyage: Frost Peaks stops hold the Wyrm
+  restoreCfg();
+  const LR = C.LAIR;
+  const seeds = Array.from({ length: quick ? 80 : 300 }, (_, i) => 1000 + i * 7919);
+  let frostLairs = 0, bad = [], total = 0;
+  for (const mode of ['quick', 'voyage', 'campaign']) for (const sd of seeds) {
+    const v = VY.generateVoyage(sd, { mode, gentle: sd % 2 === 0 });
+    for (const s of v.columns.flat()) if (s.lair) {
+      total++;
+      if (s.creature !== LR.BY_ENV[s.env] && s.creature !== 'titan') bad.push(`${mode}/${sd}: ${s.id} on ${s.env} holds ${s.creature}`);
+      if (s.creature === 'wyrm') { frostLairs++; if (s.env !== 'frost' || s.col === 0 || s.flagship) bad.push(`${mode}/${sd}: a Wyrm lair on ${s.env} column ${s.col}`); }
+    }
+  }
+  report(!bad.length && frostLairs > 0 && LR.BY_ENV.frost === 'wyrm', `lairs are by sky: ${frostLairs} of ${total} lairs on ${seeds.length * 3} routes are the Rime Wyrm's (Frost Peaks stops only, never the first stop or the Flagship)${bad.length ? '\n  ' + bad.slice(0, 5).join('\n  ') : ''}`);
+  const wl = VY.lairOf('wyrm');
+  report(wl.NAME === WY.LAIR.NAME && VY.stopName({ lair: true, creature: 'wyrm', env: 'frost' }) === WY.LAIR.NAME, 'the stop has the right name');
+  const ctx = boot({ start: 'classic', bots: 3 });
+  const { sim, st } = ctx;
+  const v = st.run.voyage, here = v.columns[0][0], lair = v.columns[1][0];
+  Object.assign(lair, { env: 'frost', play: 'frost', kind: 'lair', lair: true, creature: 'wyrm', danger: 2, reward: 40 });
+  here.next = v.columns[1].map((s) => s.id);
+  st.run.salvage = 0;
+  sim.startDock();
+  if (st.vote && st.vote.kind === 'dock') {
+    const cast = st.vote.options.findIndex((o) => o.kind === 'cast');
+    for (const p of Object.values(st.players)) { p.voteAt = 1e9; p.vote = cast; }
+    step(sim, secs(3));
+  }
+  const route = st.vote && st.vote.kind === 'route' ? st.vote : null;
+  const opt = route && route.options.find((o) => o.id === lair.id);
+  report(!!opt && opt.lair === true && opt.icon === WY.LAIR.ICON && /wyrm|lair/i.test(opt.desc) && opt.kindName === WY.LAIR.KIND, `the route vote lists it: ${opt && opt.icon} "${opt && opt.name}" - ${opt && opt.desc}`);
+  const canvas = { width: 1920, height: 1080, clientWidth: 1920 };
+  const cam = createWorldCamera();
+  const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+  rec.texts.length = 0;
+  let exc = 0;
+  try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
+  const texts = rec.texts.map((q) => q.s);
+  report(exc === 0 && texts.includes(WY.LAIR.ICON) && texts.includes(WY.LAIR.LABEL), 'the TV\'s route map draws the Wyrm icon and its label (0 draw errors)');
+}
+{
+  // the TV: cracks, the body, the chip rings, the breath, the funnel, the sun
+  const A = wyrmUp({ breath: true });
+  const { sim, st, ship, cr } = A;
+  const wy = cr.wyrm;
+  const canvas = { width: 1920, height: 1080, clientWidth: 1920 };
+  const cam = createWorldCamera();
+  const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+  const seen = new Set();
+  let exc = 0, hudText = false, ms = 0, frames = 0;
+  const frame = () => {
+    step(sim, 1);
+    rec.texts.length = 0;
+    const t0 = hr();
+    try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; if (exc < 3) console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
+    ms += hr() - t0;
+    frames++;
+    if (rec.texts.some((x) => x.s.startsWith('THE RIME WYRM - '))) hudText = true;
+    if (wy.crack) seen.add('crack'); if (wy.breath) seen.add('breath.' + wy.breath.sub); if (cr.mouthWin) seen.add('gape'); if (cr.grips.some((g) => g.mode === 'hold')) seen.add('coil'); if (wy.sun) seen.add('sun');
+    if (cr.mode === 'idle' && WYB.wyrmChipJobs(st, ship).length) seen.add('chip rings');
+  };
+  wy.nextT = 0;
+  for (let f = 0; f < 60 * 8; f++) frame();
+  cr.wyrm.breathT = 0;
+  for (let f = 0; f < 60 * 6; f++) { holdCoil(cr); frame(); }
+  wyOf(cr).ice[8] = 0;
+  for (const g of cr.grips) g.left = 0.1;
+  for (let f = 0; f < 60 * 10; f++) frame();
+  cr.hp = cr.maxHp * 0.3;
+  for (let f = 0; f < 60 * 6; f++) frame();
+  report(exc === 0 && hudText && ['crack', 'coil', 'breath.wind', 'breath.blow', 'gape', 'sun', 'chip rings'].every((k) => seen.has(k)), `the fight draws on a stub canvas for ${frames} frames with 0 errors (seen: ${[...seen].join(', ')}); the bar says THE RIME WYRM with its phase`);
+  console.log(`     whole-TV frame with the Wyrm: ${(ms / frames).toFixed(2)} ms (JS on a stub canvas)`);
+  const stub = stubCtx();
+  const art = createCreatureArt({ ctx: stub });
+  let t = 0, blits = 0;
+  cr.wyrm.nextT = 0;
+  until(sim, () => cr.wyrm.shown, 20);
+  for (let f = 0; f < 300; f++) { step(sim, 1); const t0 = hr(); art.draw(cr, { zoom: 0.14, dpr: 1 }); art.drawBehind(cr, { zoom: 0.14, dpr: 1 }); t += hr() - t0; blits = Math.max(blits, art.stats.blits); }
+  report(t / 300 < config.PERF.BUDGET_MS && blits > 5, `creatureArt alone: ${(t / 300).toFixed(3)} ms a frame over 300 frames (${blits} blits; budget ${config.PERF.BUDGET_MS} ms)`);
+}
+
+// (W8) the bots
+if (!argv.includes('--no-wyrm-bots')) {
+  restoreCfg();
+  wyCfgBack();
+  const botsimPath = path.join(publicDir, '..', 'tools', 'botsim.mjs');
+  const run = (args, env = {}) => new Promise((resolve) => {
+    // (the Wyrm's fight is long, and the old game's raiders and fires (NO_PARTY, NO_STEAMFIX ...) would sink the ship under the bots before it ends: its bots fly the real game, as the Titan's fly the away team's)
+    const real = { NO_ALARMS: '', NO_SCRAP: '', NO_PARTY: '', NO_STOP_SHAPE: '', NO_GUNS: '', NO_RINGFAIR: '', NO_STEAMFIX: '', NO_AWAY: '', NO_ROLE_CARDS: '', NO_HELM_V2: '' };
+    const c = spawn(process.execPath, [botsimPath, ...args], { env: { ...process.env, ...real, ...env } });
+    let out = '';
+    c.stdout.on('data', (d) => (out += d));
+    c.stderr.on('data', (d) => (out += d));
+    c.on('close', (code) => resolve({ code, out }));
+  });
+  const fight = (out) => {
+    const m = /fight 1: phase (\d)[^\n]*?; ended: (\w+)(?: at (\d+)s)?/.exec(out);
+    return m ? { phase: +m[1], ended: m[2], at: m[3] === undefined ? null : +m[3] } : null;
+  };
+  const pool = async (jobs, n) => { const res = []; let k = 0; await Promise.all(Array.from({ length: n }, async () => { while (k < jobs.length) { const i = k++; res[i] = await jobs[i](); } })); return res; };
+  const seedsB = quick ? [1, 2] : [1, 2, 3];
+  const forced = ['shell', 'mouth', 'tow', 'board', 'hp'];
+  const jobs = [];
+  for (const w of forced) for (const sd of seedsB) jobs.push(() => run(['--creature', 'wyrm', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd), ...(w === 'tow' ? ['--build', 'harpoon'] : [])], { CREATURE_FORCE_WIN: w }).then((r) => ({ w, sd, r })));
+  for (const bots of [4, 16]) for (const sd of seedsB) jobs.push(() => run(['--creature', 'wyrm', '--bots', String(bots), '--difficulty', 'easy', '--minutes', '16', '--seed', String(sd)]).then((r) => ({ w: 'easy' + bots, sd, r })));
+  for (const sd of seedsB) jobs.push(() => run(['--creature', 'wyrm', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd)]).then((r) => ({ w: 'free', sd, r })));
+  const results = await pool(jobs, 5);
+  const clean = (r) => r.code === 0 && /errors: 0/.test(r.out) && !/NaN/.test(r.out);
+  const byWin = {};
+  for (const { w, sd, r } of results) { const f = fight(r.out); (byWin[w] ||= []).push({ sd, f, ok: clean(r) }); }
+  for (const w of forced) {
+    const rows = byWin[w];
+    const times = rows.map((x) => (x.f && x.f.ended === w ? x.f.at : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t !== null && t <= 360), `forced ${w.toUpperCase()}: 8 bots on Normal end it that way within 6 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] === null ? 'NOT (' + (x.f ? x.f.ended + ', phase ' + x.f.phase : 'no fight') + ')' : times[i] + ' s')).join(', ')})`);
+  }
+  for (const bots of [4, 16]) {
+    const rows = byWin['easy' + bots];
+    const times = rows.map((x) => (x.f && x.f.ended !== 'no' ? { at: x.f.at, how: x.f.ended } : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t && t.at <= 600), `${bots} bots on Easy win within 10 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] ? times[i].how + ' ' + times[i].at + ' s' : 'NOT')).join(', ')})`);
+  }
+  {
+    const rows = byWin.free;
+    const how = rows.map((x) => (x.f && x.f.ended !== 'no' ? x.f.ended + ' ' + x.f.at + ' s' : 'NOT'));
+    report(rows.every((x) => x.ok) && how.every((h) => h !== 'NOT'), `unforced, 8 bots on Normal win (${how.join(', ')})`);
+  }
+  report(results.every(({ r }) => clean(r)), `0 errors and no NaN in any of the ${results.length} Wyrm bot fights`);
 }
 
 restoreCfg();
