@@ -17,6 +17,7 @@ import { createTubeSet } from './creatureTube.js';
 import { buildKraken } from './creatureKraken.js';
 import { buildDrake, drakeSkins, drakeLimbs, drakeTubeOpts, extendDrake } from './creatureDrake.js';
 import { buildThunderbird, birdSkins, birdLimbs, birdTubeOpts, extendThunderbird } from './creatureThunderbird.js';
+import { buildTitanBody, titanSkins, titanLimbs, titanTubeOpts, extendTitan } from './creatureTitan.js';
 import { createFoamRings, createShadowDecal, createGripMarkers, createRopeSet } from './creatureFx.js';
 import { createWaterFx } from './creatureWater.js';
 
@@ -34,6 +35,9 @@ export const KINDS = {
   // The Thunderbird (3D.md section 26): its own feather skins, tube opts (no suckers), the extension that places its head, beak, talons, feathers and lightning (creatureThunderbird.js); the gizzard is the generic heart
   // window (the extension decides when its stone shows: heartScale); `desperate`: its frenzy is not tiredness
   thunderbird: { id: 'thunderbird', palette: () => config.CREATURE3D.THUNDERBIRD, build: buildThunderbird, limbKind: 'wing', limbsOf: birdLimbs, skins: birdSkins, tubeOpts: birdTubeOpts, extend: extendThunderbird, desperate: true, sheen: 0 },
+  // The Island Titan (3D.md section 38): a stone colossus of rigid pieces (no tubes: its arms are slabs), its own stone skin, the extension that places its legs, head, jaw, arms, island and crystal (creatureTitan.js); a dry stone, so no wet
+  // glint (`sheen: 0`), and its phase 3 is a rage (`desperate`), not tiredness
+  titan: { id: 'titan', palette: () => config.CREATURE3D.TITAN, build: buildTitanBody, limbKind: 'tentacle', limbsOf: titanLimbs, skins: titanSkins, tubeOpts: titanTubeOpts, extend: extendTitan, desperate: true, sheen: 0 },
 };
 
 export function createCreatureView(parent) {
@@ -78,7 +82,7 @@ export function createCreatureView(parent) {
     const foam = createFoamRings(parent, fxU), shadow = createShadowDecal(parent, fxU), markers = createGripMarkers(parent), ropes = createRopeSet(parent);
     const ranges = head.ranges, tint = new Tinter(head.geometry);
     let ext = null; // (a kind's own extension: the Drake's rigid pieces, wings, legs and fire)
-    if (K.extend) ext = K.extend({ cr, P, low, root, parent, link, head, uniforms, uniformsT, headMat, headMap, limbMap, tubes, tint, plainOf });
+    if (K.extend) ext = K.extend({ cr, P, low, root, parent, link, head, uniforms, uniformsT, headMat, headMap, limbMap, tubes, tint, plainOf, hg });
     applyLook(root);
     root.traverse(plainOf);
     plainOf(foam.mesh);
@@ -152,6 +156,7 @@ export function createCreatureView(parent) {
   }
   function makeChunk(c) {
     if (!rig) return null;
+    if (rig.ext && rig.ext.makeChunk) { try { return rig.ext.makeChunk(c); } catch (e) { logOnce('chunk', e); return null; } } // (the Titan: its slabs are rigid stones, not tubes)
     const D = link.destruction, p = c.part, segs = p.segs, n = segs.length, P = rig.P, cr = rig.cr;
     if (!n) return null;
     if (!rig.bake) rig.bake = createTubeSet({ nLimbs: 1, maxSegs: Math.max(8, (rig.tubes.RB - 1) / rig.tubes.Q), sides: rig.low ? 8 : P.TENTACLE_SIDES || 12, map: rig.limbMap, uniforms: rig.uniformsT, palette: P, ow: P.INK || 14, ...rig.tubeOpts });

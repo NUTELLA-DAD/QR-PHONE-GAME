@@ -10,6 +10,8 @@
 //   4b. THE THUNDERBIRD (host.html?lair=storm; skip with --no-bird; 3D.md section 26): it arrives within the budget (at most 12 meshes, 60k triangles), soars (every feather placed, the crackle), calls (the beak opens, the
 //       charge and the arcs rise), holds a bolt (the tether to the rod), swallows (the breast shield lifts in steps, the stone shows), a bolt it called starts at its beak, a blow scatters feathers, a wing is plucked (a Rapier
 //       body with its own feathers), it dies (a flash, feathers) and the view hides; then the Low tier
+//   4c. THE ISLAND TITAN (host.html?creature=titan; skip with --no-titan; 3D.md section 38): it stands within the budget (at most 12 meshes, 60k triangles), every piece is placed, the island's grass top is exactly the sim's island deck, a boulder in a fist with its red
+//       ring and then flying, the fist on the gasbag, the jaw and the funnel for the roar, an arm that cracks in two stages, a shelled-off arm (a stump and Rapier slabs), the crystal in four stages, the death (the island crumbles, it kneels); then the Low tier
 //   5. (--long) host.html?creature=kraken for 3 minutes with 8 bot crew, in real time
 // Screenshots go to a temp folder (printed), not into the repo.
 import { spawn, spawnSync } from 'node:child_process';
@@ -235,6 +237,100 @@ try {
     if (!rbl.data || !rbl.data.low || !rbl.data.low.ext || !(rbl.data.low.arcs > 0) || rbl.data.low.meas.tris > 40000 || rbl.data.low.meas.meshes > 12) fail('the Low tier Thunderbird is missing or too big ' + JSON.stringify(rbl.data && rbl.data.low));
     if (rbl.data && rbl.data.errors && rbl.data.errors.length) fail('game errors in the Thunderbird Low tier run');
   }
+  if (!argv.includes('--no-titan')) {
+    // THE ISLAND TITAN (3D.md section 38; BOSSES.md C.6c): the stone colossus on the Sky Isles lair's plain (host.html?creature=titan), step by step with the sim frozen. Checked: it stands within the budget (at most 12
+    // meshes, 60k triangles with ink), every piece is placed (head, jaw, legs, three slabs and a hand on each arm, the island with its trees and ruin, the crystal), the island's walking top is EXACTLY the sim's island deck
+    // (ISLAND.TOP, X0..X1, the crew's depth), a boulder is held in a fist with its red ring and then flies, a hand closes on the gasbag, the jaw drops and the funnel shows for the roar, an arm cracks in two stages and
+    // sheds stone, an arm shelled off leaves a stump and its slabs become Rapier bodies, the crystal cracks in four stages, the Titan dies (the island and its trees crumble into bodies, it kneels and sinks) and the view
+    // hides; then the Low tier.
+    console.log('4c. the Island Titan (host.html?creature=titan): stand, island alignment, boulder, grab, roar, cracks, shelled arm, crystal, death; then Low');
+    const tmeas = `window.__meas=()=>{ const k=${view}.kraken, r=k.rig, e=r.ext; let meshes=0, tris=0; const walk=(o)=>{ let v=true, p=o; while(p){ if(!p.visible) v=false; p=p.parent; } if(o.isMesh && v && !(o.isInstancedMesh && o.count===0)){ const g=o.geometry; if(g.drawRange && g.drawRange.count===0) return; meshes++; let t=(g.index?g.index.count:g.attributes.position.count)/3; if(o.isInstancedMesh) t*=o.count; tris+=t; } o.children.forEach(walk); }; walk(k.root); if(e&&e.overlay) walk(e.overlay.mesh); for (const m of [r.foam.mesh, r.shadow.mesh, r.markers.mesh, r.ropes.group]) walk(m); return { meshes, tris:Math.round(tris) }; };
+      window.__pl=(n)=>{ const p=${view}.kraken.rig.ext.set.pieces[n]; return !!(p&&p.key&&p.key!=='hidden'); };`;
+    const tsteps = [
+      setup,
+      // stand: the lair's plain, the Titan has walked in and woken
+      [`(async()=>{ ${sl} ${tmeas} window.__step(780); window.__cr().ai.breather=99; window.__cr().titan.nextT=999; window.__cr().ai.mouthT=999; await sl(1200); const k=${view}.kraken, r=k.rig, e=r.ext, cr=__cr(), m=window.__meas(); const P=(n)=>window.__pl(n);
+        const hand=['hNo','hNf','hNb'].some(P)&&['hFo','hFf','hFb'].some(P), slabs=[0,1,2].every(j=>(P('aN'+j+'a')||P('aN'+j+'b'))&&(P('aF'+j+'a')||P('aF'+j+'b')));
+        window.__wp8.stand={ kind:r&&r.kind, ext:!!e, visible:k.root.visible, mode:cr.mode, meshes:m.meshes, tris:m.tris, js:${view}.stats().jsMs, head:P('head')&&P('jaw'), legs:P('legN')&&P('legF'), island:P('isle')&&P('treeA')&&P('treeB')&&P('ruin'), crystal:P('crys0'), slabs, hand, tubesHidden:!r.tubes.mesh.visible, z:r.hg.position.z }; return JSON.stringify(window.__wp8.stand) })()`, 300, 'stand'],
+      // the island: the GRASS TOP (the faces that point straight up) is exactly the sim's island deck (creatureIsland.js islandOf): its world height, and it covers x0..x1 along the depth line the crew walk at (z 16)
+      [`(async()=>{ ${sl} const I=await __imp('/modules/host/creatureIsland.js'), cfg=(await __imp('/config.js')).config, T=cfg.CREATURES.TITAN, cr=__cr(), st=window.game.state, r=${view}.kraken.rig, e=r.ext, g=r.hg;
+        const rg=e.pieces.ranges.isle, geo=e.pieces.geometry, pos=geo.getAttribute('position'), nor=geo.getAttribute('normal'), n0=rg.start, n1=rg.start+rg.count;
+        let ymax=-1e9; for(let i=n0;i<n1;i++) if(nor.getY(i)>0.999 && pos.getY(i)>ymax) ymax=pos.getY(i);
+        const deck=I.islandOf(st), zW=16, zB=(zW-g.position.z)/g.scale.z; let xa=1e9, xb=-1e9, tris=0;
+        for(let i=n0;i+2<n1;i+=3){ if(!(nor.getY(i)>0.999&&nor.getY(i+1)>0.999&&nor.getY(i+2)>0.999&&Math.abs(pos.getY(i)-ymax)<0.01)) continue; tris++; for(let k=0;k<3;k++){ const p=i+k, q=i+(k+1)%3, z0=pos.getZ(p), z1=pos.getZ(q); if((z0-zB)*(z1-zB)<=0 && z0!==z1){ const u=(zB-z0)/(z1-z0), x=pos.getX(p)+(pos.getX(q)-pos.getX(p))*u; xa=Math.min(xa,x); xb=Math.max(xb,x); } } }
+        const worldTop=g.position.y+g.scale.y*ymax, simTop=-deck.y, wA=g.position.x+g.scale.x*xa, wB=g.position.x+g.scale.x*xb, wx0=Math.min(wA,wB), wx1=Math.max(wA,wB), cx=I.crystalOf(st);
+        window.__wp8.island={ deck:!!deck, tris, topErr:Math.abs(worldTop-simTop), x0:wx0, x1:wx1, deckX0:deck.x0, deckX1:deck.x1, covers:wx0<=deck.x0+1&&wx1>=deck.x1-1, zB, crystalX:cx.x, topY:-T.ISLAND.TOP };
+        return JSON.stringify(window.__wp8.island) })()`, 200],
+      // a boulder: picked up (the fist round it, the hand overhead), its red ring on the TV, then the throw (the rock flies)
+      [`(async()=>{ ${sl} const cr=__cr(), e=${view}.kraken.rig.ext; cr.titan.nextT=0; cr.ai.breather=0; const n=__until(()=>cr.titan.ring&&cr.titan.ring.locked, 3000); window.__step(10); await sl(700); const b=cr.titan.boulders[0];
+        window.__wp8.heft={ n, held:!!b&&b.mode==='held', rock:window.__pl('boulder0'), fist:window.__pl('hNf')||window.__pl('hFf'), ring:e.overlay.count>=1, locked:!!cr.titan.ring&&cr.titan.ring.locked }; return JSON.stringify(window.__wp8.heft) })()`, 400, 'heft'],
+      [`(async()=>{ ${sl} const cr=__cr(), e=${view}.kraken.rig.ext; const n=__until(()=>cr.titan.boulders.some(b=>b.mode==='fly'), 3000); window.__step(40); await sl(500); const b=cr.titan.boulders.find(q=>q.mode==='fly'); const k=e.set.pieces.boulder0.key;
+        window.__wp8.fly={ n, flying:!!b, rock:window.__pl('boulder0'), ring:e.overlay.count>=1, at:k&&k!=='hidden'?[k[12],k[13],k[14]]:null, want:b?[(b.x-cr.x)*(cr.f<0?-1:1),-(b.y-cr.y)]:null }; return JSON.stringify(window.__wp8.fly) })()`, 300, 'fly'],
+      // the hand closes on the gasbag (phase 2): a fist on the gripping arm, its tip pulled to the ship's depth
+      [`(async()=>{ ${sl} const cr=__cr(), e=${view}.kraken.rig.ext; const n0=__until(()=>cr.titan.boulders.length===0, 3000); cr.hp=cr.maxHp*0.6; cr.ai.breather=0; cr.titan.grabT=0; cr.titan.nextT=99; const n=__until(()=>cr.grips.some(g=>g.mode==='hold'), 3000); window.__step(20); await sl(700);
+        const g=cr.grips.find(q=>q.mode==='hold'), tag=g&&g.limb.id==='armF'?'F':'N'; window.__wp8.grab={ n, hold:!!g, arm:g&&g.limb.id, fist:window.__pl('h'+tag+'f') }; return JSON.stringify(window.__wp8.grab) })()`, 400, 'grab'],
+      // the roar: the jaw drops (in steps), the throat glows, the gold funnel is drawn over the mouth
+      [`(async()=>{ ${sl} const cr=__cr(), e=${view}.kraken.rig.ext, R=${view}.kraken.rig; for(const g of cr.grips) g.left=0.01; window.__step(120); cr.ai.mouthT=0; cr.titan.nextT=99; cr.ai.breather=0; const was=e.S.open, n=__until(()=>!!cr.mouthWin, 3000); window.__step(30); await sl(1500);
+        window.__wp8.roar={ n, win:!!cr.mouthWin, was, open:e.S.open, jaw:window.__pl('jaw'), funnel:e.overlay.count>=1, throat:R.uniforms.uGlow.value.y, tilt:e.S.tilt }; return JSON.stringify(window.__wp8.roar) })()`, 300, 'roar'],
+      // an arm cracks in two stages: slabs with a bite and cyan light, stone chips fall as Rapier bodies
+      [`(async()=>{ ${sl} const cr=__cr(), e=${view}.kraken.rig.ext, D=${view}.destruction; cr.mouthWin=null; cr.ai.mouthT=999; for(const g of cr.grips) g.left=0.01; window.__step(60); const a=cr.parts.find(p=>p.id==='armN'); const c0=D.chunks.length; a.hp=a.maxHp*0.6; await sl(500); const s1={ stage:e.S.armStage.N, cracked:window.__pl('aN2b') };
+        a.hp=a.maxHp*0.3; await sl(500); window.__wp8.cracks={ s1, stage:e.S.armStage.N, cracked:window.__pl('aN1b')&&window.__pl('aN2b'), chips:e.S.loose.size, bodies:D.chunks.length-c0 }; return JSON.stringify(window.__wp8.cracks) })()`, 300, 'cracks'],
+      // the crystal in stages: whole, a crack, the tip broken, nearly gone
+      [`(async()=>{ ${sl} const cr=__cr(), e=${view}.kraken.rig.ext, cp=cr.parts.find(p=>p.id==='crystal'); const seen=[]; for(const f of [1,0.66,0.33,0.1]){ cp.hp=cp.maxHp*f; await sl(450); seen.push([0,1,2,3].filter(s=>window.__pl('crys'+s))); } window.__wp8.crystal={ seen, spark:e.S.cStage }; cp.hp=cp.maxHp; await sl(300); return JSON.stringify(window.__wp8.crystal) })()`, 300, 'crystal'],
+      // an arm shelled off: a stump with a jagged face and the slabs that fell are Rapier bodies
+      [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, cr=__cr(), e=${view}.kraken.rig.ext, D=${view}.destruction, R=${view}.kraken.rig; const a=cr.parts.find(p=>p.id==='armF'); const r=cs.hurtCreature(st,{part:a,seg:1},a.hp+5,{who:null,src:'shell'}); window.__step(14); await sl(500);
+        window.__wp8.sever={ severed:!!(r&&r.sever), stump:a.segs.length, cut:window.__pl('cF'), hand:window.__pl('hFo')||window.__pl('hFf')||window.__pl('hFb'), slab2:window.__pl('aF2a')||window.__pl('aF2b'), simChunks:cr.chunks.length, viewChunks:R.chunks.size, bodies:D.chunks.length, extra:[...R.chunks.values()].some(q=>q.extra) }; return JSON.stringify(window.__wp8.sever) })()`, 300, 'sever'],
+      measure('titan'),
+      // death: it falls apart; the island and its trees crumble into bodies, the island picture goes, it kneels
+      [`(async()=>{ ${sl} const cs=await __imp('/modules/host/creatureSystem.js'); const st=window.game.state, cr=__cr(), e=${view}.kraken.rig.ext, D=${view}.destruction; cr.hp=1; const m=cr.parts.find(p=>p.kind==='mantle'); const r=cs.hurtCreature(st,{part:m,seg:0},50,{who:null,src:'shell'}); window.__step(20); await sl(500); const d0={ killed:!!(r&&r.killed), mode:cr.mode, isle:window.__pl('isle') };
+        window.__step(70); await sl(900); const d1={ isle:window.__pl('isle'), trees:window.__pl('treeA')||window.__pl('treeB'), loose:e.S.loose.size, kneel:e.S.kneel, bodies:D.chunks.length };
+        window.__step(120); await sl(500); window.__wp8.death={ d0, d1, kneel:e.S.kneel, tilt:e.S.tilt, sink:cr.sinkT }; return JSON.stringify(window.__wp8.death) })()`, 300, 'death'],
+      [`(async()=>{ ${sl} window.__step(900); await sl(1200); const k=${view}.kraken; window.__wp8.gone=!window.game.state.creature; window.__wp8.hiddenAfter=!k.root.visible && !k.rig.ext.overlay.mesh.visible; window.__wp8.errors=window.gameErrors||[]; return 1 })()`, 300],
+    ];
+    const rt = run('titan', 'creature=titan', tsteps);
+    const td = rt.data || {};
+    console.log('  errors ' + rt.errs + ' evalErrors ' + rt.evalErrors + '  ' + JSON.stringify(td).slice(0, 1500));
+    if (rt.errs !== 0 || rt.evalErrors) fail('console / eval errors in the Titan run');
+    const st0 = td.stand;
+    if (!st0 || st0.kind !== 'titan' || !st0.ext || !st0.visible || st0.mode !== 'idle') fail('the Titan view (rig.ext) was not built or it is not standing ' + JSON.stringify(st0));
+    else {
+      if (st0.meshes > 12) fail('the Titan draws ' + st0.meshes + ' meshes (budget 12)');
+      if (st0.tris > 60000) fail('the Titan is ' + st0.tris + ' triangles with ink (budget 60000)');
+      if (st0.js > 2.5) fail('the frame JS is ' + st0.js + ' ms');
+      if (!st0.head || !st0.legs || !st0.island || !st0.crystal || !st0.slabs || !st0.hand || !st0.tubesHidden) fail('a piece of the Titan is not placed ' + JSON.stringify(st0));
+      if (!(st0.z < -80)) fail('the Titan must stand behind the lair plain\'s face (z ' + st0.z + '): a sinking body is hidden by the plain');
+    }
+    const is0 = td.island;
+    if (!is0 || !is0.deck || !(is0.tris > 4) || !(is0.topErr < 0.6) || !is0.covers) fail('the island picture does not line up with the sim\'s island deck (top y, x0..x1, the crew\'s depth) ' + JSON.stringify(is0));
+    const hf = td.heft;
+    if (!hf || !hf.held || !hf.rock || !hf.fist || !hf.ring || !hf.locked) fail('a held boulder: the rock in a fist and its red ring ' + JSON.stringify(hf));
+    const fl = td.fly;
+    if (!fl || !fl.flying || !fl.rock || !fl.at || !fl.want || Math.abs(fl.at[0] - fl.want[0]) > 6 || Math.abs(fl.at[1] - fl.want[1]) > 6) fail('the flying boulder is not where the sim has it ' + JSON.stringify(fl));
+    if (!td.grab || !td.grab.hold || !td.grab.fist) fail('the hand on the gasbag must be a fist ' + JSON.stringify(td.grab));
+    const ro = td.roar;
+    if (!ro || !ro.win || !(ro.open > 0.5) || !(ro.was < 0.2) || !ro.jaw || !ro.funnel || !(ro.throat > 1.2)) fail('the roar: the jaw drops in steps, the throat glows and the funnel is drawn ' + JSON.stringify(ro));
+    const ck = td.cracks;
+    if (!ck || !ck.s1 || ck.s1.stage !== 1 || !ck.s1.cracked || ck.stage !== 2 || !ck.cracked || !(ck.chips >= 2)) fail('an arm must crack in two stages and shed stone ' + JSON.stringify(ck));
+    const cy = td.crystal;
+    if (!cy || cy.seen.map((a) => a.join('')).join('|') !== '0|1|2|3') fail('the crystal must show stages 0, 1, 2, 3 as its health falls ' + JSON.stringify(cy));
+    const sv = td.sever;
+    if (!sv || !sv.severed || !sv.cut || sv.hand || sv.slab2 || sv.viewChunks < 1 || sv.bodies < 1 || !sv.extra) fail('the shelled-off arm: a stump with a jagged face, and its slabs are Rapier bodies ' + JSON.stringify(sv));
+    if (!td.titan || td.titan.meshes > 12 || td.titan.tris > 60000) fail('the Titan costs too much: ' + JSON.stringify(td.titan));
+    const dh = td.death;
+    if (!dh || !dh.d0 || !dh.d0.killed || dh.d0.mode !== 'dying' || !dh.d0.isle || !dh.d1 || dh.d1.isle || dh.d1.trees || !(dh.d1.loose >= 6) || !(dh.d1.kneel > 0) || !(dh.kneel >= 0.99)) fail('the death: the island and its trees crumble into bodies, the Titan kneels ' + JSON.stringify(dh));
+    if (!td.gone || !td.hiddenAfter) fail('after the death the view must hide ' + JSON.stringify([td.gone, td.hiddenAfter]));
+    if (td.errors && td.errors.length) fail('game errors in the Titan run: ' + JSON.stringify(td.errors).slice(0, 200));
+    // the Low tier: a lighter build of the same Titan
+    const tlow = [
+      setup,
+      [`(async()=>{ ${sl} ${tmeas} window.__step(780); window.__cr().ai.breather=99; window.__cr().titan.nextT=999; await sl(1500); const r=${view}.kraken.rig; const m=window.__meas(); window.__wp8.low={ kind:r.kind, low:r.low, ext:!!r.ext, meshes:m.meshes, tris:m.tris, head:window.__pl('head'), isle:window.__pl('isle') }; window.__wp8.errors=window.gameErrors||[]; return JSON.stringify(window.__wp8.low) })()`, 300, 'titanlow'],
+    ];
+    const rtl = run('titanlow', 'creature=titan&tier=low', tlow);
+    console.log('  low tier: errors ' + rtl.errs + '  ' + JSON.stringify(rtl.data).slice(0, 400));
+    if (rtl.errs !== 0 || rtl.evalErrors) fail('console / eval errors on the Titan at the Low tier');
+    if (!rtl.data || !rtl.data.low || rtl.data.low.kind !== 'titan' || !rtl.data.low.low || !rtl.data.low.head || !rtl.data.low.isle || rtl.data.low.tris > 60000 || rtl.data.low.meshes > 12) fail('the Low tier Titan is missing or too big ' + JSON.stringify(rtl.data && rtl.data.low));
+    if (rtl.data && rtl.data.errors && rtl.data.errors.length) fail('game errors in the Titan Low tier run');
+  }
   if (long) {
     console.log('5. host.html?creature=kraken, 8 bots, 3 minutes in real time');
     const lg = [[`(async()=>{ window.__wp8={}; const b=document.getElementById('bots'); b.click(); b.click(); await new Promise(r=>setTimeout(r,500)); document.getElementById('castoff').click(); return 1; })()`, 90000], [`(()=>{ window.__wp8.mid={ has:!!window.game.state.creature, errs:window.gameErrors||[] }; return 1 })()`, 90000], [`(()=>{ window.__wp8.end={ has:!!window.game.state.creature, errs:window.gameErrors||[], calls:${view}.stats().sceneCalls, fps:window.__meter&&window.__meter.fps }; return 1 })()`, 100]];
@@ -242,6 +338,15 @@ try {
     console.log('  errors ' + r4.errs + '  ' + JSON.stringify(r4.data).slice(0, 300));
     if (r4.errs !== 0 || r4.evalErrors) fail('console / eval errors in the long run');
     if (r4.data && ((r4.data.end && r4.data.end.errs.length) || (r4.data.mid && r4.data.mid.errs.length))) fail('game errors in the long run');
+    if (!argv.includes('--no-titan')) { // (the Island Titan fights the same 8 bots in real time: its boulders, grabs, roars, arms falling off and, with luck, its death)
+      console.log('5b. host.html?creature=titan, 8 bots, 3 minutes in real time');
+      const lt = [[`(async()=>{ window.__wp8={}; const b=document.getElementById('bots'); b.click(); b.click(); await new Promise(r=>setTimeout(r,500)); document.getElementById('castoff').click(); return 1; })()`, 90000], [`(()=>{ const c=window.game.state.creature; window.__wp8.mid={ has:!!c, kind:c&&c.kind, phase:c&&c.phase, errs:window.gameErrors||[] }; return 1 })()`, 90000], [`(()=>{ const c=window.game.state.creature; window.__wp8.end={ has:!!c, kind:c&&c.kind, errs:window.gameErrors||[], calls:${view}.stats().sceneCalls, fps:window.__meter&&window.__meter.fps, win:c&&c.stats&&c.stats.win }; return 1 })()`, 100]];
+      const r5 = run('longtitan', 'creature=titan', lt);
+      console.log('  errors ' + r5.errs + '  ' + JSON.stringify(r5.data).slice(0, 400));
+      if (r5.errs !== 0 || r5.evalErrors) fail('console / eval errors in the Titan long run');
+      if (r5.data && ((r5.data.end && r5.data.end.errs.length) || (r5.data.mid && r5.data.mid.errs.length))) fail('game errors in the Titan long run');
+      if (r5.data && r5.data.mid && r5.data.mid.has && r5.data.mid.kind !== 'titan') fail('the long run did not meet the Titan');
+    }
   }
   console.log('  screenshots: ' + out);
 } finally {
