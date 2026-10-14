@@ -6,7 +6,7 @@
 //   hosts     (a) host.html loads with 0 console errors and 0 game errors: the lobby (NO ?view: 3D is the default), a flight with 8 bots, a dark cave, the Kraken's lair, Versus (10 s and, seeded, at close range at 30 s), and a seeded fight with the gunship, the squadron and a bomber;
 //             (d) in those scenes at Medium: draw calls <= 150, triangles <= 450k, view JS <= 6 ms;  (e) V.alignError (the HUD against the 3D picture) is 0 px with cinematics off
 //   models    (b) model.fallbacks is empty for the classic ship, the Sparrow, the five minimum builds, the enemy gunship and 10 generated ships
-//   shots     (c) twelve seeded scenes (the last two, fight and versus_close, are the dearest pictures: they prove the perf batching changed no pixel) against tools/fixtures/shots3d/*.png (mean abs diff < 2 %, no 64 x 64 block over 12 %); --snapshot --force writes the fixtures
+//   shots     (c) thirteen seeded scenes (the last two, fight and versus_close, are the dearest pictures: they prove the perf batching changed no pixel) against tools/fixtures/shots3d/*.png (mean abs diff < 2 %, no 64 x 64 block over 12 %); --snapshot --force writes the fixtures
 //   tiers     the flight scene at High / Medium / Low: the numbers (printed), 0 errors
 //   fallback  (f) --gl swiftshader and no WebGL at all: the host comes up in 2D with 0 errors and never loads Three.js; the governor's step down to 2D (a toast, at a calm moment, never mid-fight)
 //   offline   (g) every page above runs with the network blocked for anything but localhost: 0 external requests, 0 failed loads; plus the phone page and the build page; a static scan for CDN links
@@ -336,7 +336,7 @@ try {
 
   // ---- shots: (c) the screenshot regression -------------------------------------------------------------------------------------------------------------------------------------
   if (want('shots')) {
-    console.log(snapshot ? 'shots: writing the fixtures' : 'shots: twelve seeded scenes against tools/fixtures/shots3d/');
+    console.log(snapshot ? 'shots: writing the fixtures' : 'shots: thirteen seeded scenes against tools/fixtures/shots3d/');
     // Everything that makes the scene is ONE synchronous call (no real-time frame can take a random number in the middle): the generator is re-seeded, the bots climb aboard, she casts off, the
     // simulation (frozen from the start, see SEED) is stepped by hand. The page's Math.random and Date.now were fixed from its first line (SEED), so the map is the same too.
     const BOOT = (steps, tail = '') => `(()=>{ window.__seed(11);
@@ -358,6 +358,7 @@ try {
       { name: 'drake', q: 'view=3d&lair=ember&creature=drake', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(420);') }, // (C.6a: the Cinder Drake, the placeholder tubes, in the Ember Forge)
       { name: 'thunderbird', q: 'view=3d&lair=storm&creature=thunderbird', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(420);') }, // (the Thunderbird in the Storm Front lair: the storm-bird with layered gold-tipped feathers and lightning on its wings)
       { name: 'titan', q: 'view=3d&creature=titan', setup: BOOT(300, 'for(let i=0;i<60&&!game.state.creature;i++) window.__step(60); window.__step(900);') }, // (C.6c: the Island Titan standing on its plain in the Sky Isles: a stone colossus with an island on its back, the rubble heap, the ship over it; 3D.md section 38)
+      { name: 'wyrm', q: 'view=3d&creature=wyrm', setup: BOOT(300, 'for(let i=0;i<80&&!game.state.creature;i++) window.__step(60); for(let i=0;i<80&&!(game.state.creature.grips||[]).some(g=>g.mode==="hold");i++) window.__step(30); window.__step(90);') }, // (C.6d: the Rime Wyrm erupted from its ice cliff and coiling the hull: a frost serpent in a thick translucent ice shell, the collar standing out of the cliff top; 3D.md section 40)
       { name: 'versus', q: 'view=3d&versus=1&bots=4', setup: FREEZE_ONLY(420) },
       // (LOOP R1: the fortress ring: the ship is put in clear air at the face at 135 degrees, so the picture shows the bent rock, a castle face with its shutter and the keep behind her)
       { name: 'ring', q: 'view=3d&kind=ring&variant=fortress', setup: BOOT(120, RING_SPOT(135)) },

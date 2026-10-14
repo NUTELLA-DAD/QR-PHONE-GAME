@@ -18,6 +18,7 @@ import { buildKraken } from './creatureKraken.js';
 import { buildDrake, drakeSkins, drakeLimbs, drakeTubeOpts, extendDrake } from './creatureDrake.js';
 import { buildThunderbird, birdSkins, birdLimbs, birdTubeOpts, extendThunderbird } from './creatureThunderbird.js';
 import { buildTitanBody, titanSkins, titanLimbs, titanTubeOpts, extendTitan } from './creatureTitan.js';
+import { buildWyrmBody, wyrmSkins, wyrmLimbs, wyrmTubeOpts, extendWyrm } from './creatureWyrm.js';
 import { createFoamRings, createShadowDecal, createGripMarkers, createRopeSet } from './creatureFx.js';
 import { createWaterFx } from './creatureWater.js';
 
@@ -38,6 +39,9 @@ export const KINDS = {
   // The Island Titan (3D.md section 38): a stone colossus of rigid pieces (no tubes: its arms are slabs), its own stone skin, the extension that places its legs, head, jaw, arms, island and crystal (creatureTitan.js); a dry stone, so no wet
   // glint (`sheen: 0`), and its phase 3 is a rage (`desperate`), not tiredness
   titan: { id: 'titan', palette: () => config.CREATURE3D.TITAN, build: buildTitanBody, limbKind: 'tentacle', limbsOf: titanLimbs, skins: titanSkins, tubeOpts: titanTubeOpts, extend: extendTitan, desperate: true, sheen: 0 },
+  // The Rime Wyrm (3D.md section 40): a frost serpent of rigid pieces (12 scaled segments, the collar, the head with its hinged jaws) wrapped in a translucent ice shell that sheds in steps (creatureWyrm.js); a dry hide, so no
+  // wet glint on the body (`sheen: 0`; the ice has its own), and its phase 3 is tiredness (the generic pale tint)
+  wyrm: { id: 'wyrm', palette: () => config.CREATURE3D.WYRM, build: buildWyrmBody, limbKind: 'tentacle', limbsOf: wyrmLimbs, skins: wyrmSkins, tubeOpts: wyrmTubeOpts, extend: extendWyrm, sheen: 0 },
 };
 
 export function createCreatureView(parent) {

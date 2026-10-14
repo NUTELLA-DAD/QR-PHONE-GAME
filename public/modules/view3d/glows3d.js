@@ -44,9 +44,12 @@ export function createThreatGlows(root, state) {
           // (the Cinder Drake is as big as three ships: a halo round its torso and wings would hide the model, so only its small weak points glow, behind it: the mouth, the heart)
           const drakePart = tg.kind === 'creaturePart' && state.creature && (state.creature.kind === 'drake' || state.creature.kind === 'thunderbird' || state.creature.kind === 'titan'); // (the Thunderbird is as big as three ships too: its wings and body get no halo; nor does the Island Titan's torso and head: its arms and mouth keep theirs)
           if (drakePart && DRAKE_BIG.has(tg.part && tg.part.kind)) continue;
-          const p = tg.at(0), r = Number(tg.r) * (drakePart ? 1.25 + k : 1.9 + k);
+          // (the Rime Wyrm is huge and iced: its body, collar and head glow only where a gun may hit them, a BARE segment (rank under 9; an iced one only makes a shell bounce), and the halo sits behind it)
+          const wyrmPart = tg.kind === 'creaturePart' && state.creature && state.creature.kind === 'wyrm' && tg.part && (tg.part.kind === 'tentacle' || tg.part.kind === 'mantle' || tg.part.kind === 'head');
+          if (wyrmPart && !(tg.rank < 9)) continue;
+          const p = tg.at(0), r = Number(tg.r) * (wyrmPart ? 0.95 + k : drakePart ? 1.25 + k : 1.9 + k);
           if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !(r > 0)) continue;
-          M.compose(P.set(p.x, -p.y, drakePart ? (state.creature.kind === 'thunderbird' ? -700 : state.creature.kind === 'titan' ? -900 : -160) : -30), Q, S.set(r * 2, r * 2, 1)); // (a little behind the thing itself: the 2D game draws the glow under the threat, over the ships)
+          M.compose(P.set(p.x, -p.y, wyrmPart ? -340 : drakePart ? (state.creature.kind === 'thunderbird' ? -700 : state.creature.kind === 'titan' ? -900 : -160) : -30), Q, S.set(r * 2, r * 2, 1)); // (a little behind the thing itself: the 2D game draws the glow under the threat, over the ships)
           mesh.setMatrixAt(n++, M);
         }
       }

@@ -3488,6 +3488,22 @@ export const config = {
       RING: { COLOR: '#ff4d4d', LOCKED: '#ffd0d0' }, // the boulder's red ring
       CHUNKS: 3, // the most stone chips an arm sheds at each crack
     },
+    // THE RIME WYRM in 3D (3D.md section 40; view3d/creatureWyrm.js, wyrmModel.js, wyrmPaint.js, wyrmFx.js): a pale frost serpent in soft faded colours. Sizes are the sim's own px (config.CREATURES.WYRM); everything here is
+    // colour, glow, depth and the look of the ice. Channel 1 of the glow = the icy eyes, 2 = the open throat, 3 = the cold seams of a bare hide, 4 = the underbelly's pink heart.
+    WYRM: {
+      hide: '#5b7a97', hideDk: '#3d566f', hideLt: '#7c9db6', belly: '#d9e8f2', bellyDk: '#aec6d7', plate: '#2f3d52', horn: '#2c3548', hornLt: '#52617a', soft: '#f3bcc8', pink: '#f08ea6',
+      ice: '#c5e6f8', iceMid: '#a9d6ee', iceLt: '#f1fbff', iceDk: '#86bddb', frost: '#e8f5fd', crack: '#3d6d92', iceFlash: '#ffffff', shard: '#cdeafa',
+      eye: '#86ecff', eyeDk: '#1f5f7e', maw: '#5a2447', throat: '#a4ecff', fang: '#f3f8fb', seam: '#92ecff',
+      EYE_GLOW: { base: 1.5, lit: 2.3, blind: 0.3, tired: 0.8 }, THROAT_GLOW: { shut: 0.3, open: 2.3, wind: 1.6 }, SEAM_GLOW: 1.15, HEART_GLOW: [1.0, 1.7], // (the throat's glow rises in held steps through the frost breath's wind-up; the heart pulses between the two on the 8 fps key)
+      EMISSIVE: 0.34, // how brightly the cold lines painted between the scales glow (the toon material's emissive map)
+      ICE: { ALPHA: 0.6, FULL: 0.72, CRACKED: 0.4 }, // the shell's opacity, and the shares of its ice at which a segment is a full shell / a cracked shell (below: frost patches, then 0 = bare)
+      INK: 22, // ink outline width on the big shapes (world units; the ink keeps its width on the screen)
+      Z: { COLLAR: -470, HIDE: -440, FREE: -170, HEAD: -170 }, // the depth things lie at (the ship's plane is 0; the lair's cliffs stand with their face at -70): the collar and every part of the body below the cliff top stay behind the rock's face, so a burrowed Wyrm is hidden by the cliff itself; the free body and the head lie a little behind the ship's plane
+      SHARDS: 3, // the most ice shards a cracking shell sheds at a step
+      BREATH: { FAR: '#b7e1f6', MID: '#dff3fe', CORE: '#ffffff', ALPHA: [0.5, 0.62, 0.78] }, // the frost-breath cone's layers
+      SUN: { COLOR: '#ffe48a', CORE: '#fff4c4', EDGE: '#ffd23f', ALPHA: [0.13, 0.17] }, // the shaft of sun
+      FUNNEL: { COLOR: '#ffd23f', ALPHA: 0.06, ALPHA_OPEN: 0.16 }, // the gold column over the open maw
+    },
   },
 
   // The 3D particles (view3d/particles.js + vfx.js; 3D.md section 12). Caps per quality tier (the pool and the splinter boxes), RATE scales every emitter, colours are hex (fire and sparks are drawn HDR
