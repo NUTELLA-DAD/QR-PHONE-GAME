@@ -2505,7 +2505,7 @@ export const config = {
     // How good a "play of the mission" each kind of moment is (the highest weight of a stop is its play; the Log tells the heaviest first).
     WEIGHT: {
       'creature-win': 10, 'flagship-down': 10, 'ring-fall': 10, 'ring-charge': 7, 'ring-breach': 5, 'ring-squad': 3, 'away-banner': 8, 'away-charge': 7, 'away-prisoners': 6, 'away-ballista': 5, 'away-beacon': 4, 'away-winch': 4, 'away-ko': 3, 'treasure-stowed': 5, 'treasure-heist': 8, 'boss-down': 8, 'ship-lost': 9, 'going-down-saved': 8, 'gunship-charge': 7, 'gunship-captured': 7, 'gunship-shot': 6, 'cannon-board': 6, 'overboard-lunatic': 7,
-      'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'scrap-patch': 7, 'scrap-built': 4, 'frame-built': 6, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
+      'helm-held': 5, limp: 5, 'breakoff-bay': 5, breakoff: 4, 'creature-freed': 4, 'revive-fire': 4, rebuild: 3, 'gunship-fled': 3, 'nemesis-down': 10, 'nemesis-won': 9, 'nemesis-escape': 6, 'nemesis-scar': 5, 'nemesis-met': 4, 'boarding-kill': 3, 'cannon-miss': 3, sandbag: 3, 'scrap-first': 3, 'scrap-hook': 3, 'scrap-patch': 7, 'scrap-built': 4, 'frame-built': 6, 'hulk-hauled': 5, 'scrap-dumped': 4, 'escort-crash': 3, 'fire-first': 2, overboard: 2,
     },
     OVERBOARD_PLUS: 1, OVERBOARD_MAX: 4, // an overboard moment weighs WEIGHT.overboard + this per earlier fall of the same person this run, up to this many extra
     // Jobs done a lot in one stop earn a moment at the stop's end: the stat, and how many make it worth a line. Weight = LEADER_W.BASE + (count / that number - 1) x LEADER_W.PER, at most LEADER_W.MAX.
@@ -2559,6 +2559,29 @@ export const config = {
       WELCOME: { SECS: 8, MAX: 4, NEW: true }, // a scan-in stands on the TV lobby this many seconds, at most MAX at once; NEW: a new player is welcomed too ("Deckhand"), not only a veteran
       PAGE: { ROWS: 8 }, // crew on the Book's roster page (the most voyages first)
     },
+  },
+  // THE NEMESIS, L4 (SHIPS_BOOK.md; nemesis.js, nemesisArt.js): one named enemy captain the Book remembers. She is generated from a seed (a colour and a beast: "The Red Kestrel"), flies the stop's gunship set piece
+  // at the PLANNED stops (never a lair, ring, salvage or Flagship stop), limps away when beaten (until the final showdown), comes back a little stronger, and the save (v3, `nemesis`) keeps her across evenings.
+  // On with the Book (BOOK_ON=1 in a Node tool); NO_NEMESIS=1 turns just her off. A stop she does not fly in is the old game byte for byte.
+  NEMESIS: {
+    ENABLED: typeof process === 'undefined' || (!!(process.env && process.env.BOOK_ON) && !process.env.NO_BOOK2 && !process.env.NO_NEMESIS),
+    FIRST_COL: 1, // the first planned meeting: this column of the route (0-based; 1 = stop 2, the first stop that allows a gunship)
+    GAP: 2, // ...then every this many columns (a stop she cannot fly in - a lair, a ring, a salvage run - waits: she comes at the next that can)
+    MEETINGS: 3, // the third meeting of a voyage (or the last stop before the Flagship that can host her) is the FINAL showdown: she does not run
+    AFTER_PEAKS: 0, // she is the stop's gunship, at its first set piece after this many (the same moment the F6 stop-shape gunship would come)
+    HULL: 'cutter', // her hull class never changes (a silhouette players learn); the blueprint seed is hers alone, so her layout and flag stay too. A cutter: a frigate made the stop-2 meeting cost the classic ship 9 hull points more than the gunship it replaces (voyagesim, 48 runs)
+    MAX_LEVEL: 5, // a meeting makes her one level stronger, up to this
+    HP_MUL: 0.85, HP_STEP: 0.05, // hull points: x HP_MUL at level 0, plus HP_STEP for each level she has grown (x1.1 at level 5): a little under an ordinary gunship at first, a little over at the end
+    FIRE_STEP: 0.03, // her guns reload this share faster for each level (cap.fireMul x (1 - this x level))
+    ESCAPE_AT: 0.35, // she limps away when her hull falls under this share (and nobody is on her or roped to her); at the final showdown she fights on
+    FLOOR: 0.05, // before the final showdown a shot never sinks her: her hull stops at this share while she flees (a boarding charge or taking her helm still ends her for good)
+    SALVAGE_MUL: 3, // sunk for good: this times the usual gunship salvage (SALVAGE.GUNSHIP_SHOT / GUNSHIP_BOARDED)
+    ESCAPE_PAY: 2, BLAST_PAY: 1.3, // driven off before the final showdown: this times SALVAGE.GUNSHIP_SHOT (a shot-down gunship earns that and its crew's kills); a charge she survives: this times SALVAGE.GUNSHIP_BOARDED (about what a boarded gunship is worth)
+    SCAR: { HULL: 12, HOLES: 1 }, // her visit is "scarred her" in the Log when she cost the ship this much hull (percent) or this many new gas holes
+    KEEP: { FALLEN: 6 }, // flags of beaten captains kept in the save
+    BRIEF: { RUMOUR: true }, // the first stop's briefing names her when the Book remembers her ("THE RED KESTREL IS STILL OUT THERE")
+    PHONE_MS: 2600, // the toast on each human phone when she appears
+    PRI: 6, // the alarm priority of her headlines (ALARMS.PRI: setpiece and objective are 5, helm and structure 6): she is told, not queued out
   },
   // PvP look (modules/host/pvp/pvpArt.js: the flag, the two-sided hull bars, the "!" over an enemy). Soft faded team colours, logbook style.
   PVP_ART: {

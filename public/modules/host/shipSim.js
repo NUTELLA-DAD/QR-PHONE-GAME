@@ -138,7 +138,7 @@ export function createShipSim(world, ship, W) {
   const { hitsShip, onGasbag, gasHoleAt, roomPlatformAt } = shipQueries(layout);
   installBags(state); // the gasbags side by side: state.bags, and state.ship.gas as their mean (gasBags.js)
   let hookshot = null; // made by attach() once the world's hijack exists
-  const wreck = (text) => (ship.main && !config.PVP.ENABLED ? W.wreck(text) : wreckAside(text)); // (the run ends with the main ship; another ship just breaks up and is rebuilt; in Versus a wreck ends the ROUND, whichever ship it is)
+  const wreck = (text) => (ship.ai && ship.ai.spare && ship.ai.spare() ? undefined : ship.main && !config.PVP.ENABLED ? W.wreck(text) : wreckAside(text)); // (the run ends with the main ship; another ship just breaks up and is rebuilt; in Versus a wreck ends the ROUND, whichever ship it is)
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
