@@ -51,10 +51,10 @@ export function addStoneBody(mesh, P, OW, rx, ry, rz, name, seed, o = {}) {
 // ---- the tether: a thin beam from the joint along +x for L: a cyan prism with a pale core (hidden inside the stones, it shows in the gaps) -------------------------------------------------------------------------
 export function addTether(mesh, P, L, name, w = 1) {
   const hex = (r, col, glow, len) => { const g = new THREE.CylinderGeometry(r, r, len, 6, 1); g.rotateZ(Math.PI / 2); g.translate(len / 2, 0, 0); flat(mesh, g, null, { ow: 0, color: col, glow, name }); };
-  hex(40 * w, P.crystal, 3, L);
-  flat(mesh, new THREE.BoxGeometry(L, 26 * w, 14 * w), M4(V(L / 2, 6 * w, 34 * w)), { ow: 0, color: P.crystalIn, glow: 4, name }); // a pale highlight along the near face: the beam has facets
-  flat(mesh, new THREE.BoxGeometry(L, 14 * w, 12 * w), M4(V(L / 2, -22 * w, 30 * w)), { ow: 0, color: P.crystalDk, glow: 3, name });
-  for (const u of [0.07, 0.93, 0.5]) putDiamond(mesh, 55 * w, 42 * w, V(L * u, 0, 0), new THREE.Quaternion(), P.crystalIn, 4, 0, name, 6, P.crystal); // beads of light along it (the ones in the gaps show)
+  hex(24 * w, P.crystal, 3, L); // a thin thread of light (the stones hide most of it) ...
+  flat(mesh, new THREE.BoxGeometry(L, 14 * w, 9 * w), M4(V(L / 2, 4 * w, 20 * w)), { ow: 0, color: P.crystalIn, glow: 4, name }); // a pale highlight along the near face: the thread has facets
+  // ... and a string of crystal beads that swell toward the stones: three at each end of the segment, where the stones leave a gap, so the gap shows a chain of light, not a flat bar
+  for (const [u, k] of [[0.8, 0.8], [0.86, 0.62], [0.92, 0.46], [0.2, 0.8], [0.14, 0.62], [0.08, 0.46]]) putDiamond(mesh, 62 * w * k, 40 * w * k, V(L * u, 0, 0), qx(u * 7), P.crystalIn, 4, 0, name, 6, P.crystal);
 }
 // a joint's crystal: a diamond along the arm with a pale heart (built at the joint)
 export function addNode(mesh, P, OW, r, name) {

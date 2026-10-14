@@ -13,7 +13,7 @@ import { THREE, outlineMat, applyLook } from './style.js';
 import { config } from '../../config.js';
 import { Tinter, Mesher } from './creatureKit.js';
 import { paintTitanStone, paintBlank } from './titanPaint.js';
-import { buildTitan, buildPieces, JAW_PIVOT, V, M4, stone, rockGeo, hash } from './titanModel.js';
+import { buildTitan, buildPieces, JAW_PIVOT, HEART, V, M4, stone, rockGeo, hash } from './titanModel.js';
 import { addStoneBody, addCut, addBrokenHand, through, HAND } from './titanArms.js';
 import { createTitanOverlay } from './titanFx.js';
 
@@ -94,6 +94,23 @@ export function extendTitan(ctx) {
   const BOB = P.BOB || 22, SHIFT = 260; // (SHIFT: how far back a stone slides in depth where it would cover the face)
   const HEAD_AT = [T.BODY.HEAD.AT[0], -T.BODY.HEAD.AT[1]];
   const avoidHead = (x, y, r) => clamp((560 + 0.5 * r - Math.hypot(x - HEAD_AT[0], y - HEAD_AT[1])) / (0.6 * r + 60), 0, 1); // 1 where a near-arm stone would hide the face: it passes BEHIND the head there
+  // keep a glowing gap between the arm's stones (C: their centres, SC: their scales, both changed in place; A: the segments' angles; dm: the stones' sizes). The stone's reach along a direction is that of its ellipse.
+  const GAP = 150;
+  function spreadStones(C, SC, A, dm, n) {
+    const reach = (j, ux, uy) => { const th = 0.4 * FOLD(A[j]), c = Math.cos(th), s = Math.sin(th), lx = ux * c + uy * s, ly = -ux * s + uy * c, d = dm[j]; return 0.95 / Math.sqrt((lx / d.rx) ** 2 + (ly / d.ry) ** 2 + 1e-12); };
+    for (let it = 0; it < 2; it++) {
+      for (let j = 0; j + 1 < n; j++) {
+        let dx = C[j + 1].x - C[j].x, dy = C[j + 1].y - C[j].y, d = Math.hypot(dx, dy);
+        if (!(d > 1)) { dx = Math.cos(A[j]); dy = Math.sin(A[j]); d = 1; } // (the same place: along the arm)
+        const ux = dx / d, uy = dy / d, e0 = reach(j, ux, uy), e1 = reach(j + 1, -ux, -uy), need = e0 * SC[j] + e1 * SC[j + 1] + GAP;
+        if (d >= need) continue;
+        const push = Math.min(need - d, 0.25 * Math.min(dm[j].len, dm[j + 1].len)), w0 = j === 0 ? 0.4 : 0.55, w1 = 1 - w0;
+        C[j].x -= ux * push * w0; C[j].y -= uy * push * w0; C[j + 1].x += ux * push * w1; C[j + 1].y += uy * push * w1;
+        const d2 = d + push;
+        if (d2 < need) { const f = clamp((d2 - GAP) / (e0 + e1), 0.6, 1); SC[j] = Math.min(SC[j], f); SC[j + 1] = Math.min(SC[j + 1], f); }
+      }
+    }
+  }
   // o: { bp, bang, key, f, held (the boulder in this hand), gripping, gone, ta (the part's tint), GL (the glows) }
   function placeArm(tag, p, st, o) {
     const { bp, bang, key, f, held, gripping, gone, ta, GL } = o, full = dims[tag];
@@ -117,12 +134,17 @@ export function extendTitan(ctx) {
     { const sg = p.segs[n - 1], q = P3(sg.x + Math.cos(sg.ang) * sg.len, sg.y + Math.sin(sg.ang) * sg.len); J.push({ x: q.x, y: q.y, z: zAt(s, q.x, q.y) }); }
     const crackFrom = st >= 2 ? 1 : st === 1 ? 2 : 9;
     const tinted = (nme, fl) => ptint.set(rs[nme], ta[0] * fl, ta[1] * fl, ta[2] * fl);
+    // the stones' centres: the middle of each segment, but when the sim folds the arm in (its rest pose) they would crowd and overlap, so they are eased apart along the line between them (a quarter of a segment at most) and, if that is not
+    // enough, shrunk (to 60%) so a glowing gap always shows between two stones. VIEW ONLY: the joints, tethers, nodes and hand stay on the sim's own points, and an arm in a reach is not touched.
+    const CEN = [], SC = [1, 1, 1];
+    for (let j = 0; j < n; j++) CEN.push({ x: (J[j].x + J[j + 1].x) / 2, y: (J[j].y + J[j + 1].y) / 2, z: (J[j].z + J[j + 1].z) / 2 });
+    spreadStones(CEN, SC, A, full, n);
     for (let j = 0; j < 3; j++) {
       const na = 'a' + tag + j + 'a', nb = 'a' + tag + j + 'b', nt = 't' + tag + j;
       if (j >= n) { set.place(na, null); set.place(nb, null); set.place(nt, null); continue; }
-      const cracked = j >= crackFrom, fl = flickOf(key, tag, j, cracked), a = J[j], b = J[j + 1], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, mz = (a.z + b.z) / 2;
+      const cracked = j >= crackFrom, fl = flickOf(key, tag, j, cracked), a = J[j], b = J[j + 1], mx = CEN[j].x, my = CEN[j].y, mz = CEN[j].z, sc = SC[j];
       set.place(cracked ? na : nb, null);
-      set.place(cracked ? nb : na, trn(mx, my + bobOf(key, tag, j) * BOB, mz).multiply(rotZ(0.4 * FOLD(A[j]))));
+      set.place(cracked ? nb : na, trn(mx, my + bobOf(key, tag, j) * BOB, mz).multiply(rotZ(0.4 * FOLD(A[j]))).multiply(scl(sc, sc, sc)));
       tinted(na, 1); tinted(nb, 1);
       const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, d2 = Math.hypot(dx, dy), d3 = Math.hypot(d2, dz), L = full[j].len;
       set.place(nt, trn(a.x, a.y, a.z).multiply(rotZ(Math.atan2(dy, dx))).multiply(rotY(-Math.atan2(dz, Math.max(1, d2)))).multiply(scl(d3 / L, 1, 1)));
@@ -268,12 +290,15 @@ export function extendTitan(ctx) {
         set.place('jaw', Mj);
       } else { set.place('head', null); set.place('jaw', null); }
       // ---- the legs: they swap and lift on the sim's key while it walks; they shorten when it kneels ----
+      const GL = []; // (the soft glows of the body's light this frame, in the body's frame: x, y, z, radius, strength: the arms', the heart's and the gaps')
       const walking = !!tt.walking && !dying, leg = tt.leg ? 1 : 0, LG = T.BODY.LEGS;
       [['legN', LG.AT[0], 170, 1], ['legF', LG.AT[1], -170, 0]].forEach(([nme, lx, lz, isN]) => {
         const lifted = walking && (isN ? leg === 1 : leg === 0), swing = walking ? (lifted ? 0.1 : -0.05) : 0;
         const kn = 1 - 0.3 * S.kneel;
         const M = trn(lx, lifted ? LG.LIFT : 0, lz).multiply(trn(0, -2200, 0)).multiply(scl(1 + 0.1 * S.kneel, kn, 1 + 0.1 * S.kneel)).multiply(trn(0, 2200, 0)).multiply(trn(0, -380, 0)).multiply(rotZ(swing)).multiply(trn(0, 380, 0));
-        set.place(nme, inv ? inv.clone().multiply(M) : M);
+        const Wm = inv ? inv.clone().multiply(M) : M;
+        set.place(nme, Wm);
+        for (const gy of [-420, -1150, -1900]) { _bv.set(0, gy, lz + 250).applyMatrix4(Wm); GL.push([_bv.x, _bv.y, _bv.z, 460, 0.24]); }
       });
       if (walking && leg !== S.leg && S.feetKey !== key) { // a foot comes down: dust and a ring
         S.feetKey = key;
@@ -281,10 +306,12 @@ export function extendTitan(ctx) {
         if (Ptc && tt.floorY != null) { const wx = cr.x + f * (lx + 250), wy = -tt.floorY; Ptc.burst('dust', wx, wy + 40, BZ + 100, 7, { dir: Math.PI / 2, spread: 1.5, speed: [120, 520], up: [30, 140], size: [110, 220], size1: 2.2, life: [0.9, 1.6], color: '#b9a888', alpha: 0.55, area: 420 }); Ptc.ring(wx, wy + 30, BZ + 100, 1100, '#d9cbb0', 0.45); }
       }
       S.leg = leg;
+      // ---- the heart's orbit: a ring of light and three shards turning about the crystal heart in held steps (the heart is in the still body; the orbit goes out with it as the body goes under) ----
+      set.place('heartO', !dying || sk < 2.5 ? trn(HEART.x, HEART.y, HEART.z).multiply(rotY(-f * key * 0.3)) : null);
+      ptint.set(rs.heartO, tm[0], tm[1], tm[2]);
       // ---- the arms ----
       const heldBy = (p) => (cr.boulders || []).find((b) => b && b.mode === 'held' && b.arm === p && fin(b.x) && fin(b.y)) || null;
       const gripping = (p) => (cr.grips || []).some((g) => g && g.limb === p && (g.mode === 'hold' || g.mode === 'seize'));
-      const GL = []; // (the soft glows of the arms' light this frame, in the body's frame: x, y, z, radius, strength)
       for (const [tag, p] of [['N', armN], ['F', armF]]) {
         const frac = p ? p.hp / Math.max(1, p.maxHp) : 0, st = p && p.severed ? 2 : frac <= P.ARM_STAGES[1] ? 2 : frac <= P.ARM_STAGES[0] ? 1 : 0;
         if (p && !p.dead && st > S.armStage[tag] && S.loose.size < 40) { // it cracks: stone chips off the slab that took the blow
@@ -368,7 +395,7 @@ export function extendTitan(ctx) {
       { // the soft glow of the floating stones' light (the heartstone too): fades as the body goes under
         const gk = dying ? 1 - clamp((sk - 2) / 2.5, 0, 1) : 1;
         if (gk > 0.02) {
-          GL.push([330, 960, 420, 600, 0.3 * (1 + (key & 1) * 0.4)]);
+          GL.push([HEART.x, HEART.y, HEART.z + 90, 560, 0.3 * (1 + (key & 1) * 0.4)], [0, 960, 330, 800, 0.24], [0, 265, 330, 720, 0.22]);
           for (const g of GL) { _bv.set(g[0], g[1], g[2]).applyMatrix4(R.hg.matrix); overlay.glow(_bv.x, _bv.y, _bv.z, g[3] * k, g[4] * gk); }
         }
       }
