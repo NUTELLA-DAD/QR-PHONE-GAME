@@ -274,7 +274,8 @@ export function createView3D({ canvas, state, settings = {}, onModels = null }) 
     if (!e || e.ver !== ver) {
       if (e) { worldRoot.remove(e.model.root); e.model.root.traverse((o) => o.geometry && o.geometry.dispose()); if (e.model.dispose) e.model.dispose(); }
       const gs = sh.ai && state.gunship && state.gunship.ship === sh ? state.gunship : null; // (the enemy gunship's blueprint: her flag, her emblem, her mast; and what her captain intends)
-      const model = buildShipModel(sh.layout, { enemy: !!sh.ai, bp: gs ? gs.bp : null, gunship: gs });
+      const nem = gs && gs.nemesis && gs.nemesis.look ? gs.nemesis : null; // (L4: the Nemesis's ship wears her colours, her seal and her name plate)
+      const model = buildShipModel(sh.layout, { enemy: !!sh.ai, bp: gs ? gs.bp : null, gunship: gs, look: nem ? nem.look : null, name: nem ? nem.name : null, level: nem ? nem.level : 0 });
       worldRoot.add(model.root);
       e = { model, ver };
       models.set(sh.id, e);
