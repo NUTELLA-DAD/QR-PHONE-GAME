@@ -3409,6 +3409,22 @@ export const config = {
       TENTACLE_SIDES: 12,
       Z: { FRONT: 330, BACK: -250, ROOT_FRONT: 140, ROOT_BACK: -120, WRAP_MARGIN: 130 },
     },
+    // THE ISLAND TITAN in 3D (3D.md section 38; view3d/creatureTitan.js, titanModel.js, titanPaint.js, titanFx.js): a stone colossus in soft faded daylight colours. Sizes are the sim's own px (config.CREATURES.TITAN); everything
+    // here is colour, glow and depth. Channel 1 of the glow = the eyes, 2 = the throat of the open mouth, 3 = the crystal veins and spires (a gentle glow), 4 = the heartstone in its chest and the crystal's flash.
+    TITAN: {
+      stone: '#9f9886', stoneDk: '#726d5f', stoneLt: '#c2baa4', torso: '#8b8473', head: '#bfb69e', moss: '#7fa257', mossDk: '#5a7e40', soil: '#8e6e48', soilDk: '#634a32', grass: '#8dbb5b', grassDk: '#639649', trunk: '#6c4b30', leaf: '#76a84e', leafDk: '#52833d', leafLt: '#9bc866',
+      crystal: '#62def4', crystalIn: '#d9fcff', crystalDk: '#2f95b6', crack: '#1c5c78', eye: '#ffb830', eyeDk: '#8a5a14', mouthIn: '#6a2a2e', tooth: '#eee6ce', boulder: '#b89664', boulderDk: '#8c6e46', dust: '#cdbf9f', ruin: '#c3bba5',
+      EYE_GLOW: { base: 1.35, lit: 2.2, blind: 0.3, tired: 0.8 }, THROAT_GLOW: { shut: 0.35, open: 2.2 }, VEIN_GLOW: 1.15, CRYSTAL_GLOW: 1.25, HEART_GLOW: [1.0, 1.5], // (the heartstone pulses between the two on the 8 fps key)
+      VEIN_EMISSIVE: 0.42, // how brightly the cracks painted in the stone glow (the toon material's emissive map)
+      INK: 26, // ink outline width on the big shapes (world units; the ink keeps its width on the screen)
+      Z: { BODY: -510, HEAD: 420, ARM_N: [170, 520], ARM_F: [-430, -330], ISLAND: [-240, 780], CRYSTAL: 380, HEAP: 180, GRIP: 620 }, // the depth things lie at, in the Titan's own frame (the world depth = BODY + this; the ship's plane is 0; the whole body stays behind the lair plain's face at world z -70, so a sinking Titan is hidden by the plain): the head, the arms [at the shoulder, at the hand], the island's far and near edge (the crew walk at the world depth 16), the crystal, the rubble heap, the depth of a hand that grips the gasbag
+      STAGES: [0.99, 0.6, 0.3], // the crystal's cracks: below these shares of its health it is at stage 1, 2, 3 (as the 2D picture)
+      ARM_STAGES: [0.66, 0.33], // an arm's slabs crack and lose stone at these shares of its health
+      HEAD_TILT: 0.26, // how far the head tips back for the roar (rad, in three held steps)
+      FUNNEL: { COLOR: '#ffd23f', ALPHA: 0.06, ALPHA_OPEN: 0.16 }, // the gold column over the roaring mouth
+      RING: { COLOR: '#ff4d4d', LOCKED: '#ffd0d0' }, // the boulder's red ring
+      CHUNKS: 3, // the most stone chips an arm sheds at each crack
+    },
   },
 
   // The 3D particles (view3d/particles.js + vfx.js; 3D.md section 12). Caps per quality tier (the pool and the splinter boxes), RATE scales every emitter, colours are hex (fire and sparks are drawn HDR
