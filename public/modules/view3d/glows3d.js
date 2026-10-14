@@ -49,9 +49,12 @@ export function createThreatGlows(root, state) {
           if (wyrmPart && !(tg.rank < 9)) continue;
           // (the Mycelial Mother: a bit of her nobody's lamp holds is not shown at all - not even a red glow - and her huge cap gets none: only the lit eyes, the spore heart and the tendrils that are seen)
           if (tg.kind === 'creaturePart' && state.creature && state.creature.kind === 'mother' && (tg.dark || (tg.part && tg.part.kind === 'mantle'))) continue;
-          const p = tg.at(0), r = Number(tg.r) * (wyrmPart ? 0.95 + k : drakePart ? 1.25 + k : 1.9 + k);
+          // (the Void Eel: a glow only where a gun is told to aim - the glowing joints of the section that can be cut and the open maw, rank under 7 - not round the long body or its head)
+          const eelPart = tg.kind === 'creaturePart' && state.creature && state.creature.kind === 'eel';
+          if (eelPart && !(tg.rank < 7)) continue;
+          const p = tg.at(0), r = Number(tg.r) * (eelPart ? 1.25 + k : wyrmPart ? 0.95 + k : drakePart ? 1.25 + k : 1.9 + k);
           if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !(r > 0)) continue;
-          M.compose(P.set(p.x, -p.y, wyrmPart ? -340 : drakePart ? (state.creature.kind === 'thunderbird' ? -700 : state.creature.kind === 'titan' ? -900 : -160) : -30), Q, S.set(r * 2, r * 2, 1)); // (a little behind the thing itself: the 2D game draws the glow under the threat, over the ships)
+          M.compose(P.set(p.x, -p.y, eelPart ? 300 : wyrmPart ? -340 : drakePart ? (state.creature.kind === 'thunderbird' ? -700 : state.creature.kind === 'titan' ? -900 : -160) : -30), Q, S.set(r * 2, r * 2, 1)); // (a little behind the thing itself: the 2D game draws the glow under the threat, over the ships)
           mesh.setMatrixAt(n++, M);
         }
       }

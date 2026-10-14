@@ -20,6 +20,7 @@ import { buildThunderbird, birdSkins, birdLimbs, birdTubeOpts, extendThunderbird
 import { buildTitanBody, titanSkins, titanLimbs, titanTubeOpts, extendTitan } from './creatureTitan.js';
 import { buildWyrmBody, wyrmSkins, wyrmLimbs, wyrmTubeOpts, extendWyrm } from './creatureWyrm.js';
 import { buildMotherBody, motherSkins, motherLimbs, motherTubeOpts, extendMother } from './creatureMother.js';
+import { buildEelBody, eelSkins, eelLimbs, eelTubeOpts, extendEel } from './creatureEel.js';
 import { createFoamRings, createShadowDecal, createGripMarkers, createRopeSet } from './creatureFx.js';
 import { createWaterFx } from './creatureWater.js';
 
@@ -46,6 +47,9 @@ export const KINDS = {
   // The Mycelial Mother (3D.md section 41): a spore-moth hanging from the roof of a dark cave (creatureMother.js): its own atlas and tendril skin, tube opts (glowing nodules), the extension that places her cap, gills, face, eyes,
   // antennae, wings and spore heart and draws the tendrils itself; a dry, furry body (no wet glint), and a phase 3 that is a thrash, not tiredness
   mother: { id: 'mother', palette: () => config.CREATURE3D.MOTHER, build: buildMotherBody, limbKind: 'tentacle', limbsOf: motherLimbs, skins: motherSkins, tubeOpts: motherTubeOpts, extend: extendMother, desperate: true, sheen: 0 },
+  // The Void Eel (3D.md section 42): a deep-space serpent (creatureEel.js): four smooth tubes (the three tail sections and the neck) with painted constellations and translucent fins, an angler's head with a hinged jaw, the crown,
+  // the rod and the lantern that turns into a gold crate while it lures; a wet glint on its hide, and its phase 3 is a thrash (`desperate`), not tiredness
+  eel: { id: 'eel', palette: () => config.CREATURE3D.EEL, build: buildEelBody, limbKind: 'tentacle', limbsOf: eelLimbs, skins: eelSkins, tubeOpts: eelTubeOpts, extend: extendEel, desperate: true, sheen: 0.45 },
 };
 
 export function createCreatureView(parent) {
