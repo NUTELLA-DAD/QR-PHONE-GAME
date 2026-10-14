@@ -388,8 +388,8 @@ function stepAct(state, cr, ship, dt, mid, a) {
 // ---- SPORES ----
 function startSpores(state, cr, ship, mid) {
   const S = MD().SPORES, mt = cr.mother;
-  mt.act = { kind: 'spores', sub: 'wind', t: 0, tx: mid.x, ty: mid.y };
-  mt.ring = { x: mid.x, y: mid.y, rx: S.RX, ry: S.RY, T: S.WIND + S.FALL, t: 0 };
+  mt.act = { kind: 'spores', sub: 'wind', t: 0, tx: mid.x, ty: mid.y - S.DY };
+  mt.ring = { x: mid.x, y: mid.y - S.DY, rx: S.RX, ry: S.RY, T: S.WIND + S.FALL, t: 0 };
   cr.stats.spores += 1;
   banner(state, 'THE MOTHER PUFFS UP! SPORES ARE COMING - THEY BLIND THE LAMPS! (FLAME BURNS THEM OFF)', S.WIND + 1.2);
   state.sfxQ.push(['roar']);

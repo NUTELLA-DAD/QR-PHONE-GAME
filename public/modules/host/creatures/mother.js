@@ -32,6 +32,7 @@ export function createMother(x = 0, y = 0, seed = 1, opts = {}) {
   const body = createCreatureBody(motherDef(), { x, y, seed, ...opts });
   body.puppet = { auto: false, closeAt: 0 };
   body.mother = { beat: 0 };
+  for (const p of body.parts) if (p.kind === 'tentacle') p.art = 'mother'; // (creatureArt.js draws a tendril, also one that tumbles off as a chunk)
   return body;
 }
 

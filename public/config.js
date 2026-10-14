@@ -3033,9 +3033,9 @@ export const config = {
       // (ROOTS), hanging REST_DOWN px when idle. The wings are only a picture (cr.mother.beat).
       BODY: {
         CAP: { AT: [0, 0], LEN: 260, R: 900, HP: 700 },
-        EYES: { AT: [[-430, 880], [430, 880]], R: 170, HP: 140 },
+        EYES: { AT: [[-430, 880], [430, 880]], R: 160, HP: 400 },
         HEART: { AT: [0, 1010], R: 190, HP: 230 },
-        TENDRILS: { N: 5, SEGS: 7, LEN: [520, 380], R: [150, 42], HP: 480, ROOTS: [[-660, 760], [-340, 980], [0, 1040], [340, 980], [660, 760]], REST_DOWN: 700, REST_FAN: 0.3, BEND: 0.35 },
+        TENDRILS: { N: 5, SEGS: 7, LEN: [520, 380], R: [150, 42], HP: 650, ROOTS: [[-660, 760], [-340, 980], [0, 1040], [340, 980], [660, 760]], REST_DOWN: 1000, REST_FAN: 0.3, BEND: 0.12 },
       },
       // Where she hangs (maps.js buildMotherLairMap): her origin sits DROP px under the roof's surface above the lair's middle.
       CAP_DROP: 450,
@@ -3052,21 +3052,21 @@ export const config = {
         COOLDOWN: 3, RECOIL: 1.2, RELEASE_DMG: 0.3, SWORD_TIME: 1.5, HAMMER_TIME: 2.8, BLOWS: 3,
         WRAP: { SEGS: 4, TURNS: 1.1, START_TURNS: 0.4, KEYS: 8, LIFT: 70, UNDER: 35, MIN_RY: 150, PITCH: 380, N: 22 },
         RIP: { REACH: 230, LEN: 260, HULL: 70 },
-        MAX: { 1: 2, 2: 3, 3: 3 }, HACK_DMG: 0.5, SEEN_R: 1.12,
+        MAX: { 1: 2, 2: 3, 3: 3 }, HACK_DMG: 0.4, SEEN_R: 1.12,
       },
       // BURNING: flame does MUL x to a tendril (hurtCreature src 'flame'), sets the segment it touches alight: the fire runs along the tendril at SPREAD segments a second, each segment burns TIME s (a flamethrower
       // keeps it going) taking DPS hp a second off the tendril, and from a burning root it JUMPS to another tendril whose root is within JUMP_R px (every JUMP_EVERY s, with chance JUMP_P). A burning tendril lets go
       // of the ship, flinches back for FLINCH s and glows (it is revealed in the dark). The tendril is cut off where its fire is rootmost.
-      BURN: { MUL: 3, DPS: 20, TIME: 5.5, SPREAD: 1.6, JUMP_R: 520, JUMP_EVERY: 2.2, JUMP_P: 0.6, FLINCH: 4 },
+      BURN: { MUL: 3, DPS: 14, TIME: 5.5, SPREAD: 1.6, JUMP_R: 520, JUMP_EVERY: 2.6, JUMP_P: 0.45, FLINCH: 4 },
       // THE CAP: a plain shell does only SHELL_MUL of its damage (the cap is spongy), a MORTAR shell all of it; MORTAR.HITS mortar shells on the LIT cap win the fight ('mortar'). A mortar needs a lit cap too.
       CAP: { SHELL_MUL: 0.25 },
-      MORTAR: { HITS: 5 },
+      MORTAR: { HITS: 12 },
       // THE EYES: hit only while lit. LIT_MUL x the damage; both put out ends it ('eyes'). A dead eye is a blind eye: she grabs EYE_SLOW x slower.
       EYES: { LIT_MUL: 1.25 },
-      // SPORES: the cap puffs up for WIND s (stepped, a banner, a buzz on every phone, a red ring on the ship where the cloud will fall), then a cloud RX x RY px falls on the ship over FALL s, lingers LINGER s and
+      // SPORES: the cap puffs up for WIND s (stepped, a banner, a buzz on every phone, a red ring on the ship where the cloud will fall), then a cloud RX x RY px, centred DY px above the ship's middle (so it covers the nest lamp), falls on her over FALL s, lingers LINGER s and
       // thins away. Inside it (or with it between the lamp and the target) a searchlight lights nothing; the crew inside are slowed (the Fungal Depths' own SPORES.SLOW) and the engines under it clog CLOG a second.
       // FLAME burns it off at once (a flash) and lights IGNITE fires on the decks under it (fire.js caps apply); a wing beat blows it away. MAX = clouds at once (by phase).
-      SPORES: { WIND: 1.8, FALL: 2.6, LINGER: 8, RX: 1100, RY: 650, CLOG: 0.06, IGNITE: 2, MAX: { 1: 1, 2: 1, 3: 2 }, FADE: 1.5 },
+      SPORES: { WIND: 1.8, FALL: 2.6, LINGER: 8, RX: 1100, RY: 800, DY: 300, CLOG: 0.06, IGNITE: 2, MAX: { 1: 1, 2: 1, 3: 2 }, FADE: 1.5 },
       // THE WING BEAT: the wings spread for WIND s (a banner naming the side, a buzz on every phone, arrows on the TV), then BEAT s of beating: the ship is shoved PUSH px/s toward the side it points to (and given a
       // KICK px/s of speed: the helm must brake, climb over the pillars or steer into the wind), twisted at the top of the bag (FX), the crew stagger (SHOVE). It points toward the side of the cave the ship is already
       // nearer to (random when she is in the middle). The ship is not beaten while a tendril holds her. RECOVER s of rest afterwards.

@@ -325,8 +325,8 @@ export function creatureTargets(state, list = [], only = null, gunType = 'any') 
         p.segs.forEach((s, i) => { const m = segMid(s), d = Math.hypot(m.x - ax, m.y - ay) + (motherSeen(state, cr, p, i) ? 0 : 1e5); if (d < bd) { bd = d; seg = i; } });
         rank = burning(p) ? 4 : p.ctl.mode !== 'idle' ? 4.4 : 6.8;
       }
-      const i = Math.min(seg, p.segs.length - 1);
-      list.push({ kind: 'creaturePart', obj: t, part: p, seg: i, r: Math.max(30, p.segs[i].r), rank, dark: !motherSeen(state, cr, p, i), at: () => segMid(p.segs[Math.min(i, p.segs.length - 1)]) });
+      const n = p.segs.length, segsOf = p.kind === 'tentacle' && p.ctl.mode !== 'idle' ? [...new Set([Math.min(seg, n - 1), ...Array.from({ length: Math.min(n, 6) }, (_, k) => n - 1 - k)])] : [Math.min(seg, n - 1)]; // (a tendril that reaches or holds: its outer segments too - they lie along the hull in the coil - so the flamethrower at the deck end finds one)
+      for (const i of segsOf) list.push({ kind: 'creaturePart', obj: t, part: p, seg: i, r: Math.max(30, p.segs[i].r), rank, dark: !motherSeen(state, cr, p, i), at: () => segMid(p.segs[Math.min(i, p.segs.length - 1)]) });
       continue;
     }
     if (p.kind === 'tentacle' || (drake && p.limb)) {

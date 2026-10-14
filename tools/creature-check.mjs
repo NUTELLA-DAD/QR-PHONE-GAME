@@ -1537,7 +1537,7 @@ const winCheck = (name, st, cr, why) => {
     const want = n - h >= LR.LONG_STOPS ? LR.COUNT.long : LR.COUNT.short;
     if (lairs.length > want) bad.push(`${mode}/${sd}: ${lairs.length} lairs, at most ${want}`);
     for (const s of lairs) {
-      if (s.env !== 'sea' && s.env !== 'ember' && s.env !== 'storm' && s.env !== 'frost') bad.push(`${mode}/${sd}: lair on ${s.env}`); // (C.6a: a Sunken Sea stop holds the Kraken, an Ember Forge stop the Drake; C.6b: a Storm Front stop the Thunderbird; C.6d: a Frost Peaks stop the Rime Wyrm)
+      if (s.env !== 'sea' && s.env !== 'ember' && s.env !== 'storm' && s.env !== 'frost' && s.env !== 'fungal') bad.push(`${mode}/${sd}: lair on ${s.env}`); // (C.6a: a Sunken Sea stop holds the Kraken, an Ember Forge stop the Drake; C.6b: a Storm Front stop the Thunderbird; C.6d: a Frost Peaks stop the Rime Wyrm)
       if (s.creature !== LR.BY_ENV[s.env]) bad.push(`${mode}/${sd}: lair on ${s.env} holds ${s.creature}`);
       if (s.col <= h || s.col >= n - 1) bad.push(`${mode}/${sd}: lair in column ${s.col} of ${n}`);
       if (s.kind !== 'lair' || s.flagship || s.harbour) bad.push(`${mode}/${sd}: lair kind ${s.kind}`);
@@ -1551,7 +1551,7 @@ const winCheck = (name, st, cr, why) => {
       else if (s.danger !== o.danger || s.reward !== o.reward || s.kind !== o.kind) bad.push(`${mode}/${sd}: ${s.id} (not a lair) changed`);
     });
   }
-  report(!bad.length, `${total} generated voyages (quick, voyage, campaign x both voyages): lairs only on Sunken Sea / Ember Forge / Storm Front / Frost Peaks stops (the creature of that sky), never the first stop, the harbour or the Flagship, never in neighbouring columns, at most ${LR.COUNT.short} (${LR.COUNT.long} from ${LR.LONG_STOPS} stops), +${LR.DANGER} skull and x${LR.REWARD_MUL} reward, everything else exactly as before${bad.length ? ' - ' + bad.slice(0, 3).join('; ') : ''}`);
+  report(!bad.length, `${total} generated voyages (quick, voyage, campaign x both voyages): lairs only on Sunken Sea / Ember Forge / Storm Front / Frost Peaks / Fungal Depths stops (the creature of that sky), never the first stop, the harbour or the Flagship, never in neighbouring columns, at most ${LR.COUNT.short} (${LR.COUNT.long} from ${LR.LONG_STOPS} stops), +${LR.DANGER} skull and x${LR.REWARD_MUL} reward, everything else exactly as before${bad.length ? ' - ' + bad.slice(0, 3).join('; ') : ''}`);
   console.log(`     lairs: ${withLair} of ${total} voyages have one (${two} have two)`);
   report(withLair / total > 0.5, `most voyages have a lair (${((withLair / total) * 100).toFixed(0)}%)`);
   // the same seed makes the same route
@@ -4694,6 +4694,510 @@ if (!argv.includes('--no-wyrm-bots')) {
     report(rows.every((x) => x.ok) && how.every((h) => h !== 'NOT'), `unforced, 8 bots on Normal win (${how.join(', ')})`);
   }
   report(results.every(({ r }) => clean(r)), `0 errors and no NaN in any of the ${results.length} Wyrm bot fights`);
+}
+
+// =================================================================== C.6e: THE MYCELIAL MOTHER ===================================================================
+//   (M0) the body (a cap, two eyes, a hidden spore heart, five tendrils) and her cavern in the Fungal Depths only; asleep she cannot be touched, she stirs when the ship comes near and then wakes
+//   (M1) THE DARK: unlit, her cap, eyes and heart cannot be aimed at or hit by a shell, a flame or the radar; a lamp beam makes them hittable; a tendril that reaches is hittable unlit
+//   (M2) THE TENDRIL GRAB: banner, a growing tendril, the pull UP (the tilt stays inside FORCES.MAX_DEG), a sword hack frees her and wounds it (not the pool), the timer rips a section off
+//   (M3) BURNING: flame does triple, sets the tendril alight, the fire runs along it and jumps to the next, a burning tendril lets go, a burnt tendril is cut off and the last one gone wins (BURN)
+//   (M4) SPORES: a ring and a banner, a cloud that falls on the ship, blinds the lamp, slows the crew; flame burns it off and lights the decks
+//   (M5) THE WING BEAT: a banner naming the side, then the ship is shoved that way (the tilt stays inside FORCES.MAX_DEG), not while a tendril holds her, rock stops her
+//   (M6) the phases and each win scripted (burn, cut, eyes, mortar, board, hp), the reward, the lair stops of a voyage, the TV, and (M7) the bots: each forced win by 8 bots on Normal, 4 and 16 bots on Easy
+const MM = C.MOTHER;
+const MMB = await load('modules/host/creatureMother.js');
+const MM0 = JSON.stringify({ F: MM.FIRST, A: MM.ARRIVE, E: MM.ATTACK.EVERY, W: MM.ATTACK.WEIGHTS });
+const mCfgBack = () => { const o = JSON.parse(MM0); MM.FIRST = o.F; MM.ARRIVE = o.A; MM.ATTACK.EVERY = o.E; MM.ATTACK.WEIGHTS = o.W; };
+const mPart = (cr, id) => cr.parts.find((p) => p.id === id);
+const mTend = (cr) => cr.parts.filter((p) => p.kind === 'tentacle');
+const mQuiet = (cr) => { cr.mother.nextT = 1e9; cr.ai.breather = 0; };
+const mWeights = (w) => { for (const ph of [1, 2, 3]) MM.ATTACK.WEIGHTS[ph] = { grab: 0, spores: 0, beat: 0, ...w }; };
+const mAimLamp = (A, target) => { // man the nest lamp with p1 and point its beam at a world point
+  const { st, ship, p1 } = A, l = st.searchlights.find((q) => /Nest/.test(q.n));
+  p1.lock = l.n;
+  p1.fall = false; p1.fly = false;
+  const a = T.aimToShip(ship, Math.atan2(target.y - l.ey, target.x - l.ex)) - (st.ship.pitch || 0);
+  p1.jx = Math.cos(a); p1.jy = Math.sin(a);
+  return l;
+};
+// A sim in the Mother's lair (the Fungal Depths) with her spawned; awake: wait until she has stirred and woken (her attacks held until a test asks).
+function motherUp({ difficulty = 'normal', bots = 0, awake = true, start = null } = {}) {
+  restoreCfg();
+  mCfgBack();
+  C.DEV_LAIR_AS = 'mother';
+  const ctx = boot({ env: 'fungal', lair: true, difficulty, bots, start });
+  const map = ctx.st.course.map;
+  ctx.ship.pose.x = map.goal.x - ctx.ship.layout.refPoint.x;
+  ctx.ship.pose.y = map.goal.y - ctx.ship.layout.refPoint.y;
+  step(ctx.sim, 5);
+  const cr = ctx.sim.creatures.spawn('mother');
+  mQuiet(cr);
+  const A = { ...ctx, cr, p1: ctx.st.players.p1, map };
+  if (awake) until(ctx.sim, () => cr.mode === 'idle', MM.ARRIVE + 4);
+  step(ctx.sim, 10);
+  return A;
+}
+const mHold = (cr) => { for (const g of cr.grips) g.left = Math.max(g.left, 60); };
+const mWin = (name, st, cr, why) => {
+  report(cr.dying && cr.stats.win === why && cr.diedBy === why, `${name}: stats.win "${cr.stats.win}"`);
+  report(st.ev.warnText.startsWith(MM.WIN_TEXT[why]) && st.ev.warn >= FN.BANNER - 0.1, `${name}: the final banner "${st.ev.warnText}"`);
+  report(st.bossDownLap === st.course.lap && st.slow === FN.SLOW, `${name}: the boss counts as down and the last blow runs in slow motion (state.slow ${st.slow})`);
+};
+const mGrab = (A, secsMax = 8) => { // ask for a grab now and wait until a tendril holds her
+  const { sim, cr } = A;
+  mWeights({ grab: 1 });
+  cr.mother.nextT = 0;
+  let n = 0;
+  for (; n < secs(secsMax) && !(cr.grips[0] && cr.grips[0].mode === 'hold'); n++) step(sim);
+  cr.mother.nextT = 1e9;
+  return cr.grips[0] && cr.grips[0].mode === 'hold' ? cr.grips[0] : null;
+};
+const mHack = (A, g, secsHold) => { // a sword at the grip point, Action held
+  const { sim, st, ship, p1 } = A;
+  standOn(p1, ship, g.job.d, g.x - 30, 'sword');
+  p1.fire = true;
+  for (let n = 0; n < secs(secsHold) && !freedBy(A.cr); n++) { p1.x = g.x - 30; step(sim); }
+  p1.fire = false;
+  void st;
+};
+
+// (M0) the world and the body
+{
+  restoreCfg();
+  mCfgBack();
+  C.DEV_LAIR_AS = 'mother';
+  const ctx = boot({ env: 'fungal', lair: true });
+  const { sim, st, ship } = ctx;
+  const map = st.course.map, d = map.dome;
+  report(map.lair === true && map.creature === 'mother' && map.outposts.length === 0 && map.turrets.length === 0 && !!d && d.pillars.length === MM.LAIR.PILLARS.length && Number.isFinite(map.startDist) && map.startDist < 1e8 && Math.abs(d.x - map.goal.x) < 400 && d.roofY < map.goal.y - 2000, `her lair is a closed cavern: a roof ${Math.round(map.goal.y - d.roofY)} px over the lair's middle, ${d.pillars.length} pillars, no outposts or guns, a way to the middle`);
+  report(spawnCr(ctx, 'kraken') === null && spawnCr(ctx, 'drake') === null && spawnCr(ctx, 'thunderbird') === null && spawnCr(ctx, 'titan') === null && spawnCr(ctx, 'wyrm') === null && st.creature === null, 'no other creature comes to the Mother lair');
+  const cr = spawnCr(ctx, 'mother');
+  const cnt = (k) => cr.parts.filter((p) => p.kind === k);
+  report(!!cr && cr.kind === 'mother' && cr.name === MM.NAME && cr.mode === 'surfacing' && cr.mother.mode === 'asleep' && cnt('mantle').length === 1 && cnt('eye').length === 2 && cnt('heart').length === 1 && cnt('heart')[0].hidden && cnt('tentacle').length === MM.BODY.TENDRILS.N && cr.parts.every((p) => p.hp > 0),
+    `spawn puts ${cr && cr.name} in state.creature, asleep: a cap, 2 eyes, a hidden spore heart and ${MM.BODY.TENDRILS.N} tendrils`);
+  const cap = mPart(cr, 'cap').segs[0];
+  report(cap.y - cap.r < d.roofY + 300 && cap.y + cap.len + cap.r > d.roofY + 1200 && Math.abs(cap.x - d.x) < 1, `her cap hangs from the roof above the lair's middle (bottom ${Math.round(cap.y + cap.len + cap.r)}, roof ${d.roofY})`);
+  st.shells.push({ x: cap.x, y: cap.y + cap.len + cap.r - 100, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 5);
+  report(cr.hp === cr.maxHp && AIM.targets(st).filter((t) => t.kind === 'creaturePart').length === 0 && SP.radarItems(st).filter((i) => i.kind === 'creature').length === 0 && CS.creatureHit(st, cap.x, cap.y + cap.len + cap.r - 100, 100) === null, 'asleep, she cannot be hurt, shot at or spotted');
+  const B0 = boot({ env: 'sea' });
+  report(spawnCr(B0, 'mother') === null && B0.st.creature === null, 'the Mother does not come to the Sunken Sea');
+  const B1 = boot({ env: 'fungal', lair: false });
+  report(spawnCr(B1, 'mother') === null && B1.st.creature === null, '...nor to an ordinary Fungal Depths stop');
+  // she stirs when the ship comes near, and wakes after ARRIVE s
+  mQuiet(cr);
+  ship.pose.x = d.x - MM.WAKE_DX * 3 - ship.layout.refPoint.x;
+  step(sim, 60);
+  report(cr.mother.mode === 'asleep', 'a ship far from her does not wake her');
+  ship.pose.x = d.x - 5000 - ship.layout.refPoint.x;
+  ship.pose.y = map.goal.y - ship.layout.refPoint.y;
+  st.sfxQ.length = 0;
+  let stirText = ""; for (let n = 0; n < 8; n++) { step(sim, 1); if (/STIRS/.test(st.ev.warnText)) stirText = st.ev.warnText; }
+  report(cr.mother.mode === 'stirring' && /STIRS/.test(stirText) && /LIGHT/.test(stirText) && st.sfxQ.some((x) => x[0] === 'roar') && cr.mode === 'surfacing', `near her she stirs: "${stirText}", untouchable meanwhile`);
+  const t0 = cr.age;
+  until(sim, () => cr.mode === 'idle', MM.ARRIVE + 3);
+  report(cr.mother.mode === 'awake' && Math.abs(cr.age - t0 - MM.ARRIVE) < 1.2, `she wakes ${(cr.age - t0).toFixed(1)} s later (ARRIVE ${MM.ARRIVE} s)`);
+}
+
+// (M1) the dark
+{
+  const A = motherUp();
+  const { sim, st, ship, cr, p1 } = A;
+  const eye = mPart(cr, 'eyeN'), cap = mPart(cr, 'cap'), es = eye.segs[0], cs = cap.segs[0];
+  report((st.darkNow || 0) > C.DARK_AT, `the cavern is dark (darkNow ${(st.darkNow || 0).toFixed(2)})`);
+  const tg = AIM.targets(st).filter((t) => t.kind === 'creaturePart');
+  report(tg.length > 0 && tg.filter((t) => t.part.kind !== 'tentacle').every((t) => t.dark === true) && SP.radarItems(st).filter((i) => i.kind === 'creature').length === 0, `unlit, her cap, eyes and heart are listed for the lamp but flagged dark (${tg.length} targets), and the radar shows nothing`);
+  const gun = st.GUNS['Dorsal Gun'];
+  const b0 = AIM.bestTarget(st, gun);
+  report(!b0 || b0.target.kind !== 'creaturePart' || b0.target.part.kind === 'tentacle', 'no gun will aim at anything of hers that is not lit');
+  const hp0 = eye.hp;
+  st.shells.push({ x: es.x, y: es.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 3);
+  report(CS.creatureHit(st, es.x, es.y, 60) === null && eye.hp === hp0 && cap.hp === cap.maxHp, 'a shell flying through the unlit eye finds nothing: no damage');
+  mAimLamp(A, { x: es.x, y: es.y });
+  step(sim, secs(2.5));
+  report(eye.tgt && eye.tgt.lit > 0 && cap.tgt.lit > 0 && !!cr.mother.lamp, `the nest lamp held on her eye lights the eye and the cap (lit ${eye.tgt && eye.tgt.lit.toFixed(2)}); the first lamp that finds her is a Book moment`);
+  const tg2 = AIM.targets(st).filter((t) => t.kind === 'creaturePart');
+  report(tg2.filter((t) => t.part.id === 'eyeN').every((t) => t.dark === false) && SP.radarItems(st).filter((i) => i.kind === 'creature').length > 0 && AIM.bestTarget(st, gun) !== null, 'lit, the eye is a plain target, the guns can aim at it and the radar shows her');
+  mAimLamp(A, { x: es.x, y: es.y });
+  const hp1 = eye.hp;
+  st.shells.push({ x: es.x, y: es.y, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 2);
+  const want = config.GUNS.DAMAGE * H.SHELL_MUL * (1 + config.SEARCHLIGHT.LIT_DAMAGE) * MM.EYES.LIT_MUL;
+  report(Math.abs((hp1 - eye.hp) - want) < want * 0.35 && (hp1 - eye.hp) > 0, `a shell on the lit eye hurts it ${(hp1 - eye.hp).toFixed(1)} (the beam adds ${config.SEARCHLIGHT.LIT_DAMAGE * 100}%, a lit eye ${MM.EYES.LIT_MUL}x more)`);
+  // a plain shell on the lit cap does only a quarter; a mortar shell all of it
+  const ch0 = cap.hp;
+  st.shells.push({ x: cs.x, y: cs.y + cs.len + cs.r - 150, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1 });
+  step(sim, 2);
+  const plain = ch0 - cap.hp;
+  const ch1 = cap.hp;
+  st.shells.push({ x: cs.x, y: cs.y + cs.len + cs.r - 150, vx: 0, vy: 0, life: 1, owner: 'p1', mul: 1, kind: 'mortar' });
+  step(sim, 2);
+  report(plain > 0 && cap.hp < ch1 && (ch1 - cap.hp) > plain * 3 && cr.mother.mortared === 1, `her cap is spongy: a plain shell does ${plain.toFixed(1)}, a mortar shell ${(ch1 - cap.hp).toFixed(1)} (and counts: ${cr.mother.mortared}/${MM.MORTAR.HITS})`);
+  // the beam leaves: dark again
+  p1.lock = null;
+  p1.jx = p1.jy = 0;
+  step(sim, secs(2));
+  report(!(eye.tgt.lit > 0) && CS.creatureHit(st, es.x, es.y, 60) === null, 'when the lamp lets go she is dark again, and unhittable');
+  // what a tendril shows
+  const mid = T.toWorldX(ship, ship.layout.refPoint.x), my = T.toWorldY(ship, ship.layout.refPoint.y);
+  const fake = (mode, y) => ({ kind: 'tentacle', ctl: { mode }, segs: [{ x: mid, y, len: 10, ang: 0, r: 10 }] });
+  report(MMB.motherSeen(st, cr, fake('seize', my - 3000), 0) && !MMB.motherSeen(st, cr, fake('idle', my - 3000), 0) && MMB.motherSeen(st, cr, fake('idle', my - 100), 0), 'a tendril that reaches is seen anywhere; an idle one only inside the ship\'s own glow');
+}
+
+// (M2) the tendril grab
+{
+  const A = motherUp();
+  const { sim, st, ship, cr, p1 } = A;
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  standOn(p1, ship, topD(ship), 400, null);
+  const y0 = ship.pose.y;
+  mWeights({ grab: 1 });
+  cr.mother.nextT = 0;
+  let banner = '';
+  for (let n = 0; n < secs(3) && cr.grips.length === 0; n++) { step(sim); if (/TENDRIL GROWS/.test(st.ev.warnText)) banner = st.ev.warnText; }
+  mQuiet(cr);
+  report(/TENDRIL GROWS DOWN/.test(banner) && cr.grips.length >= 1 && cr.grips[0].mode === 'wind', `a tendril grows toward the ship: banner "${banner}"`);
+  const limb = cr.grips[0].limb;
+  report(MMB.motherSeen(st, cr, limb, limb.segs.length - 1) && (limb.ctl.mode !== 'idle' || !!limb.ctl.cmd), 'while it grows it is seen, lamp or no lamp');
+  const g = mGrab(A);
+  report(!!g && cr.stats.grabs >= 1, 'it takes hold');
+  step(sim, secs(3));
+  const tilt = Math.abs(ship.ctx.forces.theta);
+  report(ship.pose.y < y0 - 20 && g.acc > 0 && tilt <= (config.FORCES.MAX_DEG * Math.PI) / 180 + 1e-3, `it pulls her UP toward the roof: ${Math.round(y0 - ship.pose.y)} px higher after 3 s, the tilt ${(tilt * 180 / Math.PI).toFixed(2)} deg inside the ${config.FORCES.MAX_DEG} deg limit`);
+  report(msgs.some((m) => m.id === 'p1' && /MOTHER HAS YOU|TENDRIL|GET OFF/.test(m.t)), 'the phone buzzes for the crew at the deck end');
+  // a sword at the grip frees her and wounds the tendril, but not the pool
+  const hp0 = cr.hp, th0 = g.limb.hp;
+  mHack(A, g, MM.GRAB.SWORD_TIME + 1);
+  report(freedBy(cr) === 'hack' && Math.abs((th0 - g.limb.hp) - g.limb.maxHp * MM.GRAB.HACK_DMG) < g.limb.maxHp * 0.06 && cr.hp === hp0 && cr.stats.hacks === 1, `a sword hack frees her (${freedBy(cr)}), wounds the tendril ${Math.round((th0 - g.limb.hp) / g.limb.maxHp * 100)}% and takes nothing off the pool`);
+  // enough hacks cut a tendril off
+  let cutOne = false;
+  for (let k = 0; k < 12 && !cutOne; k++) {
+    step(sim, secs(MM.GRAB.RECOIL + MM.GRAB.COOLDOWN + 1));
+    const gg = mGrab(A);
+    if (!gg) continue;
+    mHack(A, gg, MM.GRAB.SWORD_TIME + 1);
+    cutOne = mTend(cr).some((p) => p.severed);
+  }
+  report(cutOne && cr.chunks.length > 0, `${cr.stats.hacks} hacks cut a tendril off (a chunk tumbles)`);
+  // the timer rips a section off
+  const B = motherUp();
+  const G = mGrab(B);
+  step(B.sim, secs(MM.GRAB.TIME + 1));
+  report(!!G && (B.cr.stats.ripped > 0 || B.cr.stats.hulled > 0), `left alone, the tendril rips a section off after ${MM.GRAB.TIME} s (ripped ${B.cr.stats.ripped || 0}, hull crush ${B.cr.stats.hulled || 0})`);
+}
+
+// (M3) burning
+{
+  const A = motherUp();
+  const { sim, st, ship, cr } = A;
+  const g = mGrab(A);
+  report(!!g, 'a tendril holds her');
+  const limb = g.limb, ws = limb.segs[limb.segs.length - 1], wm = { x: ws.x, y: ws.y };
+  const hp0 = limb.hp;
+  CS.creatureBurn(st, (x, y, pad) => Math.hypot(x - wm.x, y - wm.y) < 150 + pad, { x: wm.x, y: wm.y + 200 }, 0.25, 'p1');
+  const dmg = hp0 - limb.hp, plain = H.FLAME_DPS * 0.25;
+  report(Math.abs(dmg - plain * MM.BURN.MUL) < plain * 1.2 && dmg > plain * 1.8, `flame does ${MM.BURN.MUL}x on a tendril: ${dmg.toFixed(1)} against ${plain.toFixed(1)}`);
+  report(MMB.burning(limb) && cr.stats.ignited === 1 && freedBy(cr) === 'flame', `it is alight and lets go of the ship (freed by "${freedBy(cr)}")`);
+  const n0 = limb.burn.filter((v) => v > 0).length;
+  step(sim, secs(2));
+  const n1 = limb.burn.filter((v) => v > 0).length;
+  report(n1 > n0 && n1 >= 4, `the fire runs along the tendril: ${n0} segments alight, then ${n1} two seconds later`);
+  const hp1 = limb.hp;
+  step(sim, secs(2));
+  report(limb.hp < hp1 && cr.stats.by.burn > 0, `a burning tendril keeps losing health (${(hp1 - limb.hp).toFixed(1)} in 2 s)`);
+  step(sim, secs(MM.BURN.JUMP_EVERY * 5 + 2));
+  report(cr.stats.jumps >= 1, `the fire jumps to another tendril (${cr.stats.jumps} jumps)`);
+  // burning ones to death cuts them off where the fire is rootmost
+  for (const p of mTend(cr)) { if (p.severed) continue; p.hp = Math.min(p.hp, p.maxHp * 0.03); MMB.igniteTendril(st, cr, p, 1, 'p1'); }
+  cr.mother.tDmg = 1000; cr.mother.tFire = 900;
+  until(sim, () => cr.dying, 8);
+  step(sim, 5);
+  const left = mTend(cr).filter((p) => !p.severed);
+  report(left.length === 0 && cr.stats.burnt >= 2 && cr.dying, `the burning tendrils burn off (${cr.stats.burnt} by fire, ${cr.chunks.length} chunks tumble)`);
+  mWin('every tendril burnt off', st, cr, 'burn');
+  const A2 = motherUp();
+  A2.cr.mother.tDmg = 1000; A2.cr.mother.tFire = 100;
+  for (const p of mTend(A2.cr)) CS.hurtCreature(A2.st, { part: p, seg: 2 }, p.hp + 5, { who: 'p1', src: 'shell' });
+  step(A2.sim, 2);
+  mWin('every tendril shot and hacked off (little fire)', A2.st, A2.cr, 'cut');
+  void ship;
+}
+
+// (M4) spores
+{
+  const A = motherUp();
+  const { sim, st, ship, cr, p1 } = A;
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  const mid = { x: T.toWorldX(ship, ship.layout.refPoint.x), y: T.toWorldY(ship, ship.layout.refPoint.y) };
+  const eyeP = mPart(cr, 'eyeN').segs[0];
+  standOn(p1, ship, topD(ship), 700, null);
+  mWeights({ spores: 1 });
+  cr.mother.nextT = 0;
+  let banner = '', ring = false, cloud = null;
+  for (let n = 0; n < secs(5) && !cloud; n++) { step(sim); if (/SPORES/.test(st.ev.warnText)) banner = st.ev.warnText; if (cr.mother.ring) ring = true; cloud = cr.mother.clouds[0] || null; }
+  mQuiet(cr);
+  report(/PUFFS UP/.test(banner) && ring && msgs.some((m) => /SPORE BURST/.test(m.t)) && !!cloud && cloud.mode === 'fall', `the cap puffs up: banner "${banner}", a red ring on the ship, a buzz on the phones, then a cloud is born at the cap`);
+  until(sim, () => cloud.mode === 'linger', MM.SPORES.FALL + 1);
+  const sx = Math.abs(cloud.x - mid.x), sy = Math.abs(cloud.y - mid.y);
+  report(cloud.mode === 'linger' && sx < 300 && sy < 300, `the cloud comes down on the ship (${Math.round(sx)} px off sideways, ${Math.round(sy)} px off in height)`);
+  standOn(p1, ship, topD(ship), 700, null);
+  step(sim, 10);
+  report(p1.sporeT > 0, 'the crew inside the cloud are slowed (their phone says SPORES)');
+  const l = mAimLamp(A, { x: eyeP.x, y: eyeP.y });
+  step(sim, secs(3.5));
+  report(!(mPart(cr, 'eyeN').tgt.lit > 0) && cr.stats.blocked > 0 && MMB.sporeBlocks(st, l.ex, l.ey, eyeP.x, eyeP.y), `with the cloud on the ship the nest lamp lights nothing of hers (blocked ${cr.stats.blocked} steps)`);
+  p1.lock = null;
+  const fires0 = st.fires.length;
+  CS.creatureBurn(st, (x, y, pad) => Math.hypot(x - cloud.x, y - cloud.y) < 700 + pad, { x: cloud.x, y: cloud.y }, 0.25, 'p1');
+  step(sim, secs(2));
+  report(cr.stats.cloudsBurnt === 1 && cr.mother.clouds.length === 0 && st.fires.length > fires0, `flame burns the cloud off at once and sets ${st.fires.length - fires0} deck fire(s) alight`);
+  mAimLamp(A, { x: eyeP.x, y: eyeP.y });
+  step(sim, secs(2.5));
+  report(mPart(cr, 'eyeN').tgt.lit > 0, 'the beam finds her again once the spores are gone');
+  p1.lock = null;
+  mWeights({ spores: 1 });
+  cr.mother.nextT = 0;
+  until(sim, () => cr.mother.clouds.length > 0, 6);
+  mQuiet(cr);
+  until(sim, () => cr.mother.clouds.length === 0, MM.SPORES.FALL + MM.SPORES.LINGER + MM.SPORES.FADE + 3);
+  report(cr.mother.clouds.length === 0, 'a cloud nobody burns thins away by itself');
+}
+
+// (M5) the wing beat
+{
+  const A = motherUp();
+  const { sim, st, ship, cr, p1 } = A;
+  const msgs = [];
+  cr.hooks.phoneFx = (p, t, buzz) => msgs.push({ id: p.id, t, buzz });
+  cr.phase = 2;
+  mWeights({ beat: 1 });
+  standOn(p1, ship, topD(ship), 600, null);
+  cr.mother.nextT = 0;
+  const x0 = ship.pose.x;
+  for (let n = 0; n < secs(3) && !cr.mother.gust; n++) step(sim);
+  const gust = cr.mother.gust;
+  mQuiet(cr);
+  const banner = st.ev.warnText;
+  report(!!gust && /SPREADS HER WINGS/.test(banner) && /LEFT|RIGHT/.test(banner) && msgs.some((m) => /WING BEAT/.test(m.t)) && (step(sim, 2), cr.mother.beat >= 1), `the wings spread: "${banner}" and a buzz on the phones`);
+  const dir = gust.dir;
+  step(sim, secs(MM.BEAT.WIND - 0.3));
+  const xs = ship.pose.x;
+  report(Math.abs(xs - x0) < 60, 'during the wind-up she is not moved');
+  let maxTilt = 0;
+  for (let n = 0; n < secs(MM.BEAT.BEAT + MM.BEAT.RECOVER + 0.6); n++) { step(sim); maxTilt = Math.max(maxTilt, Math.abs(ship.ctx.forces.theta)); }
+  const moved = (ship.pose.x - xs) * dir;
+  report(moved > MM.BEAT.PUSH * MM.BEAT.BEAT * 0.5 && cr.stats.beats === 1 && maxTilt <= (config.FORCES.MAX_DEG * Math.PI) / 180 + 1e-3, `the beat shoves her ${Math.round(moved)} px toward the ${dir < 0 ? 'left' : 'right'} (PUSH ${MM.BEAT.PUSH} px/s for ${MM.BEAT.BEAT} s), the tilt ${(maxTilt * 180 / Math.PI).toFixed(2)} deg inside the ${config.FORCES.MAX_DEG} deg limit`);
+  // not while a tendril holds her
+  const g = mGrab(A);
+  mHold(cr);
+  mWeights({ beat: 1 });
+  cr.mother.nextT = 0;
+  step(sim, secs(3));
+  mQuiet(cr);
+  report(!!g && cr.stats.beats === 1, 'she does not beat her wings while a tendril has the ship tethered');
+  // a pillar stops her
+  const B = motherUp();
+  B.cr.phase = 2;
+  const pil = B.map.dome.pillars[B.map.dome.pillars.length - 1], fb = B.ship.layout.fitBox, ref = B.ship.layout.refPoint;
+  B.ship.pose.x = pil.x0 - 150 - fb.x1;
+  B.ship.pose.y = B.map.goal.y + 150 - ref.y;
+  step(B.sim, 20);
+  const f0 = frameHp(B.ship);
+  mWeights({ beat: 1 });
+  B.cr.mother.nextT = 0;
+  for (let n = 0; n < secs(1) && !B.cr.mother.gust; n++) step(B.sim);
+  const dirB = B.cr.mother.gust ? B.cr.mother.gust.dir : 0;
+  mQuiet(B.cr);
+  step(B.sim, secs(MM.BEAT.WIND + MM.BEAT.BEAT + 1.5));
+  const front = B.ship.pose.x + fb.x1;
+  report(dirB > 0 && front <= pil.x0 + 150, `a ship beaten into a pillar is stopped by the rock (her bow ${Math.round(front)}, the pillar face ${Math.round(pil.x0)})`);
+  void f0;
+}
+
+// (M6) the phases, each win scripted, the reward
+{
+  const A = motherUp();
+  const { sim, st, cr } = A;
+  report(cr.phase === 1 && partOf(cr, 'heart').hidden, 'phase 1: IT STIRS, the spore heart is hidden');
+  st.sfxQ.length = 0;
+  cr.hp = cr.maxHp * (MM.PHASE.TWO_HP - 0.02);
+  step(sim, 3);
+  report(cr.phase === 2 && st.sfxQ.some((x) => x[0] === 'roar') && cr.ai.breather > 0 && /ANGRY/.test(st.ev.warnText), `below ${MM.PHASE.TWO_HP * 100}% of the pool: phase 2, a banner "${st.ev.warnText}" and a breather`);
+  cr.hp = cr.maxHp * (MM.PHASE.THREE_HP - 0.02);
+  step(sim, 3);
+  report(cr.phase === 3 && !partOf(cr, 'heart').hidden && /THRASHES/.test(st.ev.warnText), 'below 33%: phase 3, the spore heart opens');
+  const A1 = motherUp();
+  for (const p of mTend(A1.cr).slice(0, MM.PHASE.TWO_LOST)) CS.hurtCreature(A1.st, { part: p, seg: 3 }, p.hp + 1, { who: 'p1', src: 'shell' });
+  step(A1.sim, 3);
+  report(A1.cr.phase === 2, `${MM.PHASE.TWO_LOST} tendrils gone also begins phase 2`);
+  { // EYES
+    const B = motherUp();
+    const { sim: s, st: t, cr: c } = B;
+    const eN = mPart(c, 'eyeN'), eF = mPart(c, 'eyeF');
+    CS.hurtCreature(t, { part: eN, seg: 0 }, eN.hp + 1, { who: 'p1', src: 'shell' });
+    step(s, 1);
+    report(eN.dead && !c.dying && c.stats.eyesOut === 1 && /ONE EYE OUT|ANGRY/.test(t.ev.warnText), 'one eye out: the banner, and she is blind on that side (grabs slower)');
+    CS.hurtCreature(t, { part: eF, seg: 0 }, eF.hp + 1, { who: 'p1', src: 'shell' });
+    step(s, 3);
+    mWin('both eyes out', t, c, 'eyes');
+  }
+  { // MORTAR
+    const B = motherUp();
+    const { sim: s, st: t, cr: c } = B;
+    const cap = mPart(c, 'cap');
+    for (let k = 0; k < MM.MORTAR.HITS; k++) CS.hurtCreature(t, { part: cap, seg: 0 }, 5, { who: 'p1', src: 'mortar' });
+    step(s, 3);
+    mWin(`${MM.MORTAR.HITS} mortar shells on the cap`, t, c, 'mortar');
+  }
+  { // BOARD
+    const B = motherUp();
+    const { sim: s, st: t, ship: sh, cr: c, p1 } = B;
+    c.hp = c.maxHp * 0.3;
+    step(s, 3);
+    const heart = mPart(c, 'heart'), cap = mPart(c, 'cap');
+    report(c.phase === 3 && !heart.hidden, 'phase 3 for the boarder');
+    const CB = await load('modules/host/creatureBoard.js');
+    p1.carry = 'sword';
+    p1.fall = false; p1.fly = true;
+    const landed = CB.boardAt(t, sh, p1, heart.segs[0].x, heart.segs[0].y);
+    step(s, 3);
+    const cs = cap.segs[0];
+    report(landed && !!p1.on && p1.y > cs.y + cs.len, `a boarder lands on the UNDERSIDE of her cap (${p1 && Math.round(p1.y)} below the cap's axis end ${Math.round(cs.y + cs.len)})`);
+    p1.fire = true;
+    for (let n = 0; n < secs(MM.BOARD.HEART_TIME * 8) && !c.dying; n++) step(s);
+    p1.fire = false;
+    step(s, 2);
+    mWin('the spore heart struck', t, c, 'board');
+  }
+  { // HP
+    const B = motherUp();
+    B.cr.hooks.hurtPool(1e9, 'shell', 'p1');
+    step(B.sim, 3);
+    mWin('the pool', B.st, B.cr, 'hp');
+  }
+  { // the reward
+    const B = motherUp();
+    const { sim: s, st: t, cr: c } = B;
+    const salv0 = t.run.salvage;
+    t.ship.hull = 40;
+    c.hooks.hurtPool(1e9, 'shell', 'p1');
+    step(s, secs(3));
+    const SV = config.SALVAGE.BOSS * C.REWARD_MUL;
+    report(t.run.salvage - salv0 >= SV && t.run.salvage - salv0 <= SV + 40, `triple boss salvage: +${t.run.salvage - salv0}`);
+    report(t.ship.hull >= 40 + MM.REWARD.HULL - 1 && MM.REWARD.TROPHY === null, `a hull patch (+${MM.REWARD.HULL}); no trophy card`);
+    for (let i = 0; i < secs(MM.SPAWN.SINK + C.CHUNK.LIFE + 3) && !t.course.done; i++) step(s, 1);
+    report(t.course.done === true && t.creature === null && /MYCELIAL MOTHER IS SLAIN/.test(t.ev.warnText), `once she has fallen the stop is done: "${t.ev.warnText}"`);
+  }
+}
+{
+  // the voyage: Fungal Depths stops hold the Mother
+  restoreCfg();
+  const LR = C.LAIR;
+  const seeds = Array.from({ length: quick ? 80 : 300 }, (_, i) => 1000 + i * 7919);
+  let fungal = 0, bad = [], total = 0;
+  for (const mode of ['quick', 'voyage', 'campaign']) for (const sd of seeds) {
+    const v = VY.generateVoyage(sd, { mode, gentle: sd % 2 === 0 });
+    for (const s of v.columns.flat()) if (s.lair) {
+      total++;
+      if (s.creature !== LR.BY_ENV[s.env] && s.creature !== 'titan') bad.push(`${mode}/${sd}: ${s.id} on ${s.env} holds ${s.creature}`);
+      if (s.creature === 'mother') { fungal++; if (s.env !== 'fungal' || s.col === 0 || s.flagship) bad.push(`${mode}/${sd}: a Mother lair on ${s.env} column ${s.col}`); }
+    }
+  }
+  report(!bad.length && fungal > 0 && LR.BY_ENV.fungal === 'mother', `lairs are by sky: ${fungal} of ${total} lairs on ${seeds.length * 3} routes are the Mother's (Fungal Depths stops only, never the first stop or the Flagship)${bad.length ? '\n  ' + bad.slice(0, 5).join('\n  ') : ''}`);
+  report(VY.lairOf('mother').NAME === MM.LAIR.NAME && VY.stopName({ lair: true, creature: 'mother', env: 'fungal' }) === MM.LAIR.NAME, 'the stop has the right name');
+}
+{
+  // the TV: the dark cave, the lamp, a tendril, burning, spores, the wing beat, lit eyes
+  const A = motherUp();
+  const { sim, st, cr, p1 } = A;
+  const canvas = { width: 1920, height: 1080, clientWidth: 1920 };
+  const cam = createWorldCamera();
+  const renderer = createRenderer({ ctx: stubCtx(), state: st, canvas });
+  const seen = new Set();
+  let exc = 0, hudText = false, ms = 0, frames = 0;
+  const frame = () => {
+    step(sim, 1);
+    rec.texts.length = 0;
+    const t0 = hr();
+    try { renderer.renderFrame(clock.ms, cam.update(1 / 60, st, canvas.width, canvas.height)); } catch (e) { exc++; if (exc < 3) console.log('  draw error: ' + String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
+    ms += hr() - t0;
+    frames++;
+    if (rec.texts.some((x) => x.s.startsWith('THE MYCELIAL MOTHER - '))) hudText = true;
+    const mt = cr.mother;
+    if (cr.grips.some((g) => g.mode === 'hold')) seen.add('grip'); if (mt.clouds.length) seen.add('cloud'); if (mt.ring) seen.add('ring'); if (mt.gust) seen.add('gust'); if (mTend(cr).some(MMB.burning)) seen.add('fire'); if (mt.beat) seen.add('wings'); if (mPart(cr, 'eyeN').tgt && mPart(cr, 'eyeN').tgt.lit > 0) seen.add('lit');
+  };
+  const eyeP = mPart(cr, 'eyeN').segs[0];
+  for (let f = 0; f < 120; f++) { mAimLamp(A, { x: eyeP.x, y: eyeP.y }); frame(); }
+  p1.lock = null;
+  mGrab(A);
+  for (let f = 0; f < 60 * 2; f++) frame();
+  MMB.igniteTendril(st, cr, cr.grips[0] ? cr.grips[0].limb : mTend(cr)[0], 2, 'p1');
+  for (let f = 0; f < 60 * 3; f++) frame();
+  cr.phase = 2;
+  mWeights({ spores: 1 });
+  cr.mother.act = null; cr.mother.nextT = 0;
+  for (let f = 0; f < 60 * 8; f++) frame();
+  mWeights({ beat: 1 });
+  cr.mother.act = null; cr.mother.nextT = 0; cr.mother.clouds.length = 0;
+  for (let f = 0; f < 60 * 6; f++) frame();
+  mQuiet(cr);
+  report(exc === 0 && hudText && ['grip', 'cloud', 'ring', 'gust', 'fire', 'wings', 'lit'].every((k) => seen.has(k)), `the fight draws on a stub canvas for ${frames} frames with 0 errors (seen: ${[...seen].join(', ')}); the bar says THE MYCELIAL MOTHER with her phase`);
+  console.log(`     whole-TV frame with the Mother: ${(ms / frames).toFixed(2)} ms (JS on a stub canvas)`);
+  const stub = stubCtx();
+  const art = createCreatureArt({ ctx: stub });
+  let t = 0, blits = 0;
+  for (let f = 0; f < 300; f++) { step(sim, 1); const t0 = hr(); art.draw(cr, { zoom: 0.18, dpr: 1 }); art.drawBehind(cr, { zoom: 0.18, dpr: 1 }); t += hr() - t0; blits = Math.max(blits, art.stats.blits); }
+  report(t / 300 < config.PERF.BUDGET_MS && blits > 5, `creatureArt alone: ${(t / 300).toFixed(3)} ms a frame over 300 frames (${blits} blits; budget ${config.PERF.BUDGET_MS} ms)`);
+}
+
+// (M7) the bots
+if (!argv.includes('--no-mother-bots')) {
+  restoreCfg();
+  mCfgBack();
+  const botsimPath = path.join(publicDir, '..', 'tools', 'botsim.mjs');
+  const run = (args, env = {}) => new Promise((resolve) => {
+    const real = { NO_ALARMS: '', NO_SCRAP: '', NO_PARTY: '', NO_STOP_SHAPE: '', NO_GUNS: '', NO_RINGFAIR: '', NO_STEAMFIX: '', NO_AWAY: '', NO_ROLE_CARDS: '', NO_HELM_V2: '' };
+    const c = spawn(process.execPath, [botsimPath, ...args], { env: { ...process.env, ...real, ...env } });
+    let out = '';
+    c.stdout.on('data', (d) => (out += d));
+    c.stderr.on('data', (d) => (out += d));
+    c.on('close', (code) => resolve({ code, out }));
+  });
+  const fight = (out) => {
+    const m = /fight 1: phase (\d)[^\n]*?; ended: (\w+)(?: at (\d+)s)?/.exec(out);
+    return m ? { phase: +m[1], ended: m[2], at: m[3] === undefined ? null : +m[3] } : null;
+  };
+  const pool = async (jobs, n) => { const res = []; let k = 0; await Promise.all(Array.from({ length: n }, async () => { while (k < jobs.length) { const i = k++; res[i] = await jobs[i](); } })); return res; };
+  const seedsB = quick ? [1, 2] : [1, 2, 3];
+  const forced = ['burn', 'cut', 'eyes', 'mortar', 'board', 'hp'];
+  const buildOf = { burn: ['--build', 'motherflame'], mortar: ['--build', 'mothermortar'] };
+  const jobs = [];
+  for (const w of forced) for (const sd of seedsB) jobs.push(() => run(['--creature', 'mother', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd), ...(buildOf[w] || [])], { CREATURE_FORCE_WIN: w }).then((r) => ({ w, sd, r })));
+  for (const bots of [4, 16]) for (const sd of seedsB) jobs.push(() => run(['--creature', 'mother', '--bots', String(bots), '--difficulty', 'easy', '--minutes', '16', '--seed', String(sd)]).then((r) => ({ w: 'easy' + bots, sd, r })));
+  for (const sd of seedsB) jobs.push(() => run(['--creature', 'mother', '--bots', '8', '--difficulty', 'normal', '--minutes', '10', '--seed', String(sd)]).then((r) => ({ w: 'free', sd, r })));
+  const results = await pool(jobs, 5);
+  const clean = (r) => r.code === 0 && /errors: 0/.test(r.out) && !/NaN/.test(r.out);
+  const byWin = {};
+  for (const { w, sd, r } of results) { const f = fight(r.out); (byWin[w] ||= []).push({ sd, f, ok: clean(r) }); }
+  for (const w of forced) {
+    const rows = byWin[w];
+    const times = rows.map((x) => (x.f && x.f.ended === w ? x.f.at : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t !== null && t <= 360), `forced ${w.toUpperCase()}: 8 bots on Normal end it that way within 6 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] === null ? 'NOT (' + (x.f ? x.f.ended + ', phase ' + x.f.phase : 'no fight') + ')' : times[i] + ' s')).join(', ')})`);
+  }
+  for (const bots of [4, 16]) {
+    const rows = byWin['easy' + bots];
+    const times = rows.map((x) => (x.f && x.f.ended !== 'no' ? { at: x.f.at, how: x.f.ended } : null));
+    report(rows.every((x) => x.ok) && times.every((t) => t && t.at <= 600), `${bots} bots on Easy win within 10 minutes of its spawn, every seed (${rows.map((x, i) => 'seed ' + x.sd + ': ' + (times[i] ? times[i].how + ' ' + times[i].at + ' s' : 'NOT')).join(', ')})`);
+  }
+  {
+    const rows = byWin.free;
+    const how = rows.map((x) => (x.f && x.f.ended !== 'no' ? x.f.ended + ' ' + x.f.at + ' s' : 'NOT'));
+    report(rows.every((x) => x.ok) && how.every((h) => h !== 'NOT'), `unforced, 8 bots on Normal win (${how.join(', ')})`);
+  }
+  report(results.every(({ r }) => clean(r)), `0 errors and no NaN in any of the ${results.length} Mother bot fights`);
 }
 
 restoreCfg();
