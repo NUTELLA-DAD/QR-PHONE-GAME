@@ -43,7 +43,8 @@ import { createAlarms } from './alarms.js';
 import { createGround } from './ground.js'; // (CASTLE.md A0: the away team on the ground, config.AWAY)
 import { writeStop, postcard, gentleLine } from './logWriter.js';
 import { createChristening } from './christen.js'; // (L2: the christening vote and the ceremony, the voyage's page in the book)
-import { generateVoyage, expectedPower, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave } from './voyage.js';
+import { generateVoyage, expectedPower, stopById, stopName, lairOf, stopNo, stopTotal, envInfo, modeInfo, dailyVoyage, dailyBest, recordDaily, loadModePrefs, saveModePrefs, loadVoyageSave, saveVoyageSave, dateKey } from './voyage.js';
+import { createNemesis } from './nemesis.js'; // (L4: the Nemesis, a named enemy captain the Ship's Book remembers)
 
 // Best run, remembered by this browser (the TV). Never let storage problems break the game.
 function loadRecord() {
@@ -284,7 +285,9 @@ export function createSimulation() {
     run.salvage -= lost;
     const prev = run.visited.length > 1 ? stopById(run.voyage, run.visited[run.visited.length - 2]) : null;
     state.limp = { spares: run.spares, max: run.sparesMax, lost, back: prev ? stopName(prev) : null };
+    nemesis.bested('limp'); // (L4: she was still about when the ship broke up)
     moments.moment('limp', { data: { spares: run.spares } });
+    nemesis.endStop();
     closeStop('limp'); // (the stop she broke up over is written into the Log before its stats are banked)
     bankStats(true); // (what the crew did still counts for the awards)
   }
@@ -443,12 +446,18 @@ export function createSimulation() {
   const startBriefing = () => {
     const BR = config.STOP_SHAPE.BRIEFING, b = state.course && state.course.brief;
     state.course.brief = null;
+    const plan = state.run && state.run.voyage ? nemesis.stopPlan(state.course.stop || curStop()) : null; // (L4: is the Nemesis due at this stop? planned even with no briefing card)
     if (!BR.ENABLED || !b || config.PVP.ENABLED) return;
     state.briefing = { t: BR.TIME, title: b.title, goal: b.goal };
+    const nr = state.run && state.run.nemesis, nf = nemesis.foe();
+    if (nf && nr && (plan || nr.rumour)) { // (L4: her card under the goal: "THE RED KESTREL IS HUNTING YOU", or at the voyage's first stop, that she is still out there)
+      const s = nemesis.briefLines(plan);
+      state.briefing.nemesis = { name: nf.name, handle: nf.handle, look: nf.look, level: s.level, line: s.line, sub: s.sub, final: !!(plan && plan.final), rumour: !plan };
+    }
     for (const p of Object.values(state.players)) if (!p.bot && !p.mate) phoneFx(p, `${b.goal} - YOUR JOB: ${seatVerb(p)}`, [40], BR.TOAST_MS);
   };
   const setPieces = {
-    gunship: { text: 'GUNSHIP ON THE HORIZON!', go: () => gunship.spawn(), alive: () => !!state.gunship, max: () => config.PACING.GUNSHIP_PEAK_MAX },
+    gunship: { text: () => nemesis.headline() || 'GUNSHIP ON THE HORIZON!', go: () => { const no = nemesis.spawnOpts(), ok = gunship.spawn(no); if (ok && no) nemesis.met(no); return ok; }, alive: () => !!state.gunship, max: () => config.PACING.GUNSHIP_PEAK_MAX },
     bombers: { text: 'BOMBER RAID INCOMING!', go: () => { const n = Math.max(1, Math.round((1 + (lapNo() > 1 ? 1 : 0) + (crewHeads(state) >= 10 ? 1 : 0)) * crewMul(state, 'count'))); for (let i = 0; i < n; i++) squadrons.spawnBomber(); return true; }, alive: () => state.bombers.length > 0 },
     strafers: { text: () => (config.SQUADRONS.FORMATIONS && squadrons.squadBanner()) || 'ENEMY SQUADRON - DOGFIGHTERS!', go: () => { squadrons.spawnStrafers(); return true; }, alive: () => state.strafers.length > 0 },
     swarm: { text: 'HUGE BAT SWARM!', go: () => { squadrons.spawnBigSwarm(); return true; }, alive: () => state.bats.some((b) => !b.dead && b.hp > 0 && !b.leaving) },
@@ -460,7 +469,7 @@ export function createSimulation() {
     return G.ENABLED && !!st && !st.lair && !st.ring && !st.flagship && !c.ring && !tp.big && tp.peaks >= G.AFTER_PEAKS && !state.gunship && (!st.gates || st.gates.includes('gunship'));
   };
   const pickSetPiece = (tp) => {
-    if (wantsGunship(tp)) return 'gunship';
+    if (nemesis.wants(tp) || wantsGunship(tp)) return 'gunship'; // (L4: the Nemesis's stop: she is the gunship, at the first set piece)
     const pool = [];
     const gates = state.course && state.course.stop && state.course.stop.gates; // (the voyage's teaching curriculum: the set pieces this stop allows, config.VOYAGE.CURRICULUM; none given = all)
     const add = (k, w) => { if (k !== tp.last && (!gates || gates.includes(k))) for (let i = 0; i < Math.round(w * favour(state, k)); i++) pool.push(k); }; // (the environment's enemy flavour scales each weight)
@@ -656,6 +665,7 @@ export function createSimulation() {
     if (start && main.buildId !== state.startBuild) fitShip(state.run.build, state.startBuild); // (a new voyage starts with the start build, whatever the last one grew into)
     else if (!start && prevLost) fitShip(state.run.build, prevLost.buildId); // (...and with no start build, the ship she was before anything broke off)
     refreshPower();
+    nemesis.begin(); // (L4: the captain the Book remembers, a fresh arc for this voyage)
     Object.assign(state.yard, { built: null, newPart: null, hold: false, pull: 0 });
     state.runEnd = null;
     state.salvagePop = null;
@@ -668,6 +678,7 @@ export function createSimulation() {
     const B = VY.START_BUILD_BY_CREW;
     return Object.values(state.players).filter((p) => !p.mate && p.connected !== false).length <= B.max ? B.small : B.big;
   };
+  const nemesis = createNemesis({ state, persist: () => saveVoyageSave(state.save), dateKey, addSalvage: (...a) => addSalvage(...a), phoneFx: (...a) => phoneFx(...a), hullNow: () => hullOrStructure(state.ship), stopNameOf: (id) => { const s = id && state.run ? stopById(state.run.voyage, id) : null; return s ? stopName(s) : ''; } }); // (L4: nemesis.js - dormant unless config.NEMESIS.ENABLED)
   const logUsed = new Set(); // the sentences the Log has told this run (logWriter.js never tells one twice)
   // A stop is over (done, limped home from, or lost): its moments are written into the Log (run.log) and the dock / scorecard / postcard read them from there. Call it BEFORE the stop's stats are banked.
   const closeStop = (end) => {
@@ -769,8 +780,10 @@ export function createSimulation() {
     if (g && g.phase === 'sinking' && !g.paid) {
       g.paid = true;
       state.run.gunships++;
-      if (g.charge || g.captured) addSalvage(SV.GUNSHIP_BOARDED, 'gunships', g.captured ? 'Gunship captured by boarders!' : 'Gunship blown up by boarders!');
-      else addSalvage(SV.GUNSHIP_SHOT, 'gunships', 'Gunship shot down');
+      const nmul = g.nemesis ? config.NEMESIS.SALVAGE_MUL : 1; // (L4: the Nemesis sunk for good is worth triple)
+      const nname = g.nemesis ? g.nemesis.name.replace(/^The /, 'the ') : null;
+      if (g.charge || g.captured) addSalvage(SV.GUNSHIP_BOARDED * nmul, 'gunships', nname ? (g.captured ? `${nname} captured by boarders!` : `${nname} blown up by boarders!`) : g.captured ? 'Gunship captured by boarders!' : 'Gunship blown up by boarders!');
+      else addSalvage(SV.GUNSHIP_SHOT * nmul, 'gunships', nname ? `${nname} shot down` : 'Gunship shot down');
     }
     if (state.boss) watch.boss = state.boss;
     else if (watch.boss) {
@@ -830,7 +843,7 @@ export function createSimulation() {
     if (state.runEnd) return;
     const run = state.run;
     const stop = curStop();
-    if (!victory) { moments.moment('ship-lost', { data: {} }); closeStop('lost'); } // (the Ship's Book: the last page, written before the stats are banked; a victory was written at its scorecard)
+    if (!victory) { nemesis.bested('lost'); moments.moment('ship-lost', { data: {} }); nemesis.endStop(); closeStop('lost'); } // (the Ship's Book: the last page, written before the stats are banked; a victory was written at its scorecard)
     bankStats(false);
     const done = run.base + (victory ? stop.col + 1 : stop.col); // stops finished
     state.runEnd = {
@@ -863,6 +876,7 @@ export function createSimulation() {
       if (!s.unlocks.includes('flagship-medal')) s.unlocks.push('flagship-medal');
     }
     if (run.daily) state.runEnd.dailyBest = recordDaily(s, run.daily.key, run.mode, { stops: done, victory, salvage: run.earned });
+    nemesis.endRun(state.runEnd); // (L4: her tally, the "still out there" line on the postcard, the save)
     christening.endRun(state.runEnd, run); // (L2: the voyage's page, the crew's records; a lost ship goes into the fleet)
     saveVoyageSave(s);
     if (victory) {
@@ -1418,6 +1432,7 @@ export function createSimulation() {
     W.ground.payTreasure(); // (CASTLE.md A2: the chests stowed in the hold, and any in a man's arms aboard, are paid - a row on the scorecard)
     addSalvage(SV.MISSION + stop.reward, 'mission');
     const rows = awardRows(Object.values(state.players).filter((p) => !p.mate), true);
+    nemesis.endStop(); // (L4: her visit, if she came, is closed for the Log)
     const entry = closeStop('done'); // (the Ship's Book: the stop's moments become its Log line and its play of the mission, before the stats are banked)
     const gentle = rows.length || !entry ? null : gentleLine(Object.values(state.players), entry.no); // (no award earned: a kind line naming whoever did the most, never "nobody did much")
     bankStats(true);
@@ -1556,6 +1571,7 @@ export function createSimulation() {
       if (!config.PVP.ENABLED) specials.update(dt);
       if (!config.PVP.ENABLED) creatures.update(dt);
       if (!config.PVP.ENABLED) gunship.update(dt);
+      nemesis.update(dt); // (L4: she is watched: her scars, her escape, her end)
       course.update(dt);
       W.ground.update(dt); // (A0: the rope ladder, the flares, the stranded count)
       weather.update(dt);

@@ -38,6 +38,7 @@ import { createVersusArt } from './pvp/versusArt.js'; // B.4: the Versus lobby, 
 import { bandOf, metres, BAND_WORDS } from './pvp/range.js'; // the range bands: the TV's readout
 import { BARRELS, drawBarrel, drawChute, drawMines, drawRam, SHELL_LOOK } from './weaponsArt.js'; // the barrels of the gun types, laid mines, the ram prow
 import { drawFlameGun } from './flameArt.js'; // the flamethrower's pilot light, cone of fire and heat gauge
+import { createNemesisArt } from './nemesisArt.js'; // L4: the Nemesis's seal, her briefing card and the lobby's WANTED card
 import { createBookArt } from './bookArt.js'; // L2: the christening vote and ceremony, the name plate, the lobby's book card, the Ship's Book page
 import { createLogArt } from './logArt.js'; // L1: the Ship's Book on the TV (the sky-dock's Log line, PLAY OF THE MISSION, the run-end postcard)
 import { createYardArt } from './yardArt.js'; // S.6b: the Shipwright's Yard (the sky-dock blueprint, the A / B / C vote, BUILT, "NEW: ...")
@@ -159,6 +160,8 @@ export function createRenderer({ ctx, state: world, canvas }) {
   const logArt = () => (logArtMade = logArtMade || createLogArt({ ctx, book, crewAt: drawCrewAt })); // (the Ship's Book's drawing, logArt.js)
   let bookArtMade = null;
   const bookArt = () => (bookArtMade = bookArtMade || createBookArt({ ctx, book, logArt: logArt(), dots })); // (L2: the christening and the book's pages, bookArt.js)
+  let nemesisArtMade = null;
+  const nemesisArt = () => (nemesisArtMade = nemesisArtMade || createNemesisArt({ ctx, book })); // (L4: the Nemesis's seal, her card under the briefing and the lobby's WANTED card, nemesisArt.js)
   // Each SHIP's art, made the first time she is drawn on HER context: her baked picture (one bake per ship, keyed on her layout), her lamps, her bombs, ropes, wires, call-outs and the
   // hazards that ride on her (ice, spores, storm rods, the sea). Nothing is shared between ships.
   const arts = new Map();
@@ -1480,6 +1483,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.fillStyle = LB.INK;
     ctx.font = '400 20px ' + config.FONTS.TEXT;
     ctx.fillText('Check your phone: your job is on it', 800, 424, 920);
+    if (b.nemesis) nemesisArt().briefing(b.nemesis, ctx.globalAlpha); // (L4: "THE RED KESTREL IS HUNTING YOU", with her seal, under the goal)
     ctx.restore();
   };
 
@@ -1521,6 +1525,7 @@ export function createRenderer({ ctx, state: world, canvas }) {
     ctx.fillStyle = LB.INK_SOFT;
     ctx.fillText(state.shipName ? state.shipName.toUpperCase() : "THE CAPTAIN'S LOGBOOK", 800, 196, 540); // (L2: her name once she has one)
     if (config.BOOK.ENABLED && state.save) bookArt().lobbyCard(state.save, state.shipName, 30, 276);
+    if (config.NEMESIS.ENABLED && state.save) nemesisArt().lobbyCard(state.save, 30, 502); // (L4: the captain still out there, and the flags of the beaten)
     const crew = crewHeads(state);
     const mates = matesWanted(state, 0, true); // (ship's mates who will come aboard on CAST OFF)
     const lines = [

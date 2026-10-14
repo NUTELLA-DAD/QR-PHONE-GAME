@@ -128,6 +128,10 @@ if (args.runs > 1 && !args.child) {
       console.log('ring stops (F12): ' + [['all', rs], ...['tower', 'fortress', 'citadel'].map((v) => [v, rs.filter((x) => x.variant === v)])].filter(([, l]) => l.length).map(([n, l]) => line(n, l)).join(' | '));
     }
   }
+  { // THE NEMESIS (SHIPS_BOOK.md L4): how often she flew, was driven off, was sunk for good, and bested the ship (only with BOOK_ON=1)
+    const nm = ok.filter((r) => r.nemesis), sum = (k) => nm.reduce((a, r) => a + (r.nemesis[k] || 0), 0);
+    if (nm.length) console.log(`nemesis (L4): met ${sum('meetings')} times in ${nm.filter((r) => r.nemesis.meetings).length} of ${nm.length} voyages, driven off ${sum('escapes')}, sunk for good ${sum('slain')}, bested the ship ${sum('ours')}, final showdowns ${sum('final')}`);
+  }
   { const n = ok.reduce((a, r) => a + (r.breaks || 0), 0); if (n) console.log(`parts broke off ${n} time(s) in ${ok.filter((r) => r.breaks).length} of ${ok.length} voyages: ${[...new Set(ok.flatMap((r) => r.breakCauses || []))].join(', ')}`); }
   const causes = {};
   for (const r of ok) for (const k of r.flags || []) causes[k] = (causes[k] || 0) + 1;
@@ -306,6 +310,7 @@ if (!result) {
   result = { earned: state.run.earned, parts: (state.run.parts || []).map((p) => p.id), mates: mateInfo(), seed: args.seed, done: Number(stopId.split('.')[0]), total: state.run.voyage.columns.length, victory: false, timeout: true, minutes: args.maxmin, stalls, stallInfo, errors: errorCount, groundedAtEnd: !!state.grounded, flags: [], cause: `still flying at stop ${stopId}: ${JSON.stringify(snap())}` };
 }
 result.curve = curve;
+result.nemesis = state.run.nemesis ? { meetings: state.run.nemesis.meetings, escapes: state.run.nemesis.escapes, ours: state.run.nemesis.ours, slain: state.run.nemesis.slain ? 1 : 0, final: state.run.nemesis.final ? 1 : 0 } : null; // (L4)
 result.hullBy = Object.values(hullBy); // (F1: { col, hull, n, t0, t1 } per stop reached)
 result.fun = fun.result(); // (FUN.md F8)
 result.shape = shape; // (F6)

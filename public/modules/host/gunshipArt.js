@@ -20,6 +20,7 @@ import { shipGeom, mx } from './gunship.js';
 import { mainShip } from './ships.js';
 import { toShipX, toShipY, toWorldX, toWorldY } from './pose.js';
 import { config } from '../../config.js';
+import { drawBadge } from './nemesisArt.js'; // (L4: the Nemesis's seal)
 import { perfState } from './perf.js';
 import { paintPath, paintRect } from './textureArt.js';
 import { createSprites } from './sprites.js';
@@ -1506,6 +1507,7 @@ export function createGunshipArt({ ctx, state, ink, sprites: given }) {
       ctx.fillRect(cx - 200, by, 400, 22);
       ctx.fillStyle = flag.a;
       ctx.fillRect(cx - 196, by + 4, 392 * Math.max(0, g.hp / g.max), 14);
+      if (g.nemesis) drawBadge(ctx, cx - 232, by + 11, 24, g.nemesis.look, g.nemesis.level); // (L4: the Nemesis's seal beside her health bar, nemesisArt.js)
       if (g.posts) {
         const portsUp = g.ports ? g.ports.filter((q) => !q.dead).length : bp.weapons.length;
         const engOk = num(g.engF, 1) > 0.5;

@@ -10,6 +10,7 @@
 //   recordCrew(save, list, victory, dateKey, shipName)   list = [{ name, color, species, stats }] (humans only)
 //   retireShip(save, fate, where, dateKey)  -> the ship afloat goes to save.fleet ('lost'), save.ship = null
 import { config } from '../../config.js';
+import { normalizeNemesis } from './nemesis.js'; // (L4: the save's `nemesis` field)
 
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0; return h; };
 const next = (h) => { h = (h + 0x6d2b79f5) | 0; let t = Math.imul(h ^ (h >>> 15), 1 | h); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return { h, v: ((t ^ (t >>> 14)) >>> 0) / 4294967296 }; };
@@ -73,6 +74,7 @@ export function normalizeBook(v) {
   const crew = {};
   if (v.crew && typeof v.crew === 'object' && !Array.isArray(v.crew)) for (const [k, c] of Object.entries(v.crew)) { const g = goodCrew(c); if (g) crew[k] = g; }
   v.crew = crew;
+  normalizeNemesis(v); // (L4: the Nemesis the book remembers: { n, cur, fallen })
   return v;
 }
 

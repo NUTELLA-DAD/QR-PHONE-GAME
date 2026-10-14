@@ -176,11 +176,13 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     const at = spawnPos(bp);
     if (!at) return false;
     S.spawned++;
-    const hp = Math.round((G.HP + (lap() - 1) * 6) * bp.hpMul * (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).gunHp * crewMul(state, 'hp'));
+    const nm = o.nemesis || null; // (L4: the Nemesis - nemesis.js hands in her strength, her captain's nerve and her words)
+    const hp = Math.round((G.HP + (lap() - 1) * 6) * bp.hpMul * (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).gunHp * crewMul(state, 'hp') * (nm ? nm.hpMul : 1));
     const parasMul = bp.special === 'paras' ? GP.PARAS.EVERY_MUL : 1;
     state.gunship = {
       bp,
-      cap: bp.cap, // her captain's personality settings
+      cap: nm ? { ...bp.cap, ...nm.cap } : bp.cap, // her captain's personality settings
+      nemesis: nm,
       phase: 'approach',
       mode: 'station', // what her captain is doing: 'station' (ring spots), 'strafe' or 'retreat' (waypoint runs)
       intent: 'approach', // shown on her mast pennant
@@ -252,7 +254,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       const post = postFor(role);
       g.crew.push({ role, post, x: post, y: deckYAt(g, post), d: geom().MAIN, hp: G.CREW_HP, cd: rand(0.5, 1.5), face: g.m, wind: 0, cutT: 0, hammer: 0 });
     }
-    warn(bp.title + ' APPROACHES - SHOOT OUT HER GUNS OR BOARD HER!', 4);
+    warn(nm ? nm.say.approach : bp.title + ' APPROACHES - SHOOT OUT HER GUNS OR BOARD HER!', 4);
     return true;
   };
 
@@ -962,8 +964,8 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
       state.ship.fuel = Math.min(config.BOILER.FUEL_MAX, state.ship.fuel + G.REWARD_COAL);
       for (const gun of Object.values(state.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
       state.bombBay.bombs = Math.min(config.BOMBS.MAX, state.bombBay.bombs + 2);
-      warn('GUNSHIP DESTROYED! SUPPLIES ABOARD: HULL, COAL AND AMMO', 4, 'objective');
-    } else warn('GUNSHIP SHOT DOWN!', 3, 'objective');
+      warn(g.nemesis ? g.nemesis.say.down : 'GUNSHIP DESTROYED! SUPPLIES ABOARD: HULL, COAL AND AMMO', 4, 'objective');
+    } else warn(g.nemesis ? g.nemesis.say.down : 'GUNSHIP SHOT DOWN!', 3, 'objective');
     g.crew.length = 0;
   };
 
@@ -975,7 +977,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     g.phase = 'leaving';
     g.intent = 'flee';
     g.mode = 'station';
-    warn(text, secs);
+    warn(g.nemesis ? (g.fled ? g.nemesis.say.escape : g.nemesis.say.left) : text, secs); // (L4: the Nemesis names herself, and vows to return when she was beaten)
   };
 
   // She turns to latching on (a boarder captain, a harpoon, or her guns being down).
@@ -1034,6 +1036,7 @@ export function createGunship({ state, puff, impact, credit, dropOne, pickType, 
     // Badly hurt with her one retreat used up: she runs for it.
     if (g.phase === 'hunt' && !contact && g.hp < g.cap.fleeAt * g.max && g.retreats >= g.cap.retreats) {
       S.flees++;
+      g.fled = true;
       leave('THE GUNSHIP IS BADLY HIT AND FLEES!', 2.5);
       return;
     }

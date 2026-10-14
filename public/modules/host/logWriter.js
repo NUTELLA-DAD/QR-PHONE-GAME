@@ -43,6 +43,17 @@ const SENT = {
   'gunship-charge': ['{who} crept aboard {G}, planted the charge and ran.', '{who} set the charge on {G}, and the sky lit up behind the crew.', '{G} blew apart at {who1}\'s hand, and the boarders were back aboard just in time.'],
   'gunship-captured': ['{who} took the wheel of {G}, and her crew gave up.', '{G} surrendered to {who} without another shot.', '{who} stood at the helm of {G} and she struck her colours.'],
   'gunship-fled': ['{G} turned tail with {who1}\'s shells still ringing in her hull.', '{who} hit {G} so hard that she ran for home.', '{G} fled the field, and {who1} had the last word.'],
+  'nemesis-met': ['{G} found us over {stop}, and {who1} was first to the guns.', '{who} watched {G} come out of the haze over {stop}.', 'Over {stop}, {who1} knew the colours of {G} and sounded the alarm.'], // (L4: the Nemesis, nemesis.js)
+  'nemesis-met:again': ['{G} was back over {stop}, and {who} knew her flag at once.', '{who1} had been waiting for {G}, and there she was over {stop}.', '{G} found the ship again over {stop}; {who} had been counting the days.'],
+  'nemesis-met:final': ['{who} stood at the rail as {G} came for the last time over {stop}.', 'The last fight with {G} began over {stop}, with {who1} at the guns.', '{G} came for the final reckoning over {stop}, and {who} did not blink.'],
+  'nemesis-scar': ['{G} scarred {things} over {stop}, and {who} was patching before she had gone.', '{G} left her mark on {things} over {stop}; {who1} was first with a patch kit.', '{things} carries the scar of {G} from {stop}, and {who} carries the patch kit.'],
+  'nemesis-escape': ['{G} limped away over {stop}, vowing revenge, with {who} to thank for the limp.', '{who} hit {G} so hard that she ran, shouting that she would be back.', '{G} fled over {stop} with {who1}\'s shells ringing in her hull, and swore to return.'],
+  'nemesis-escape:charge': ['{who} planted the charge, and {G} came out of the blast burning and ran.', '{G} survived {who1}\'s charge over {stop}, barely, and fled with her flag singed.', '{who} blew half of {G} away over {stop}, and the other half got home.'],
+  'nemesis-down:charge': ['{who} planted the charge, and {G} will not be back.', '{G} blew apart at {who1}\'s hand, and her flag is ours.', '{who} lit the fuse on {G}, and the sky is a safer place.'],
+  'nemesis-down:shot': ['{who} fired the shot that finished {G} for good.', '{G} went down under {who1}\'s guns, and her flag with her.', 'It was {who1}\'s last shell that ended {G}.'],
+  'nemesis-down:captured': ['{who} took the wheel of {G}, and her flag came down.', '{G} struck her colours to {who}.', '{who} stood at the helm of {G}, and the long chase was over.'],
+  'nemesis-won': ['{G} was the last thing {who} saw of the ship over {stop}.', '{who1} fought {G} to the end and lost the ship over {stop}.', '{G} won over {stop}, and {who} will not forget it.'],
+  'nemesis-won:limp': ['{G} chased the ship down over {stop}, and {who} stitched her up to limp away.', '{who} held the ship together while {G} had her way over {stop}.', '{G} broke the ship over {stop}; {who1} kept enough of her flying to get home.'],
   'creature-win:sever': ['{who} cut off the last of {C}\'s arms and it had nothing left to hold with.', 'The last tentacle of {C} fell to {who1}\'s blade.', '{C} lost its final arm to {who}.'],
   'creature-win:mouth': ['{who} fed {C} bombs until it had had quite enough.', 'A bomb from {who1} went down the throat of {C}, and the fight went out of it.', '{C} choked on {who1}\'s last bomb.'],
   'creature-win:tow': ['{who} hauled {C} onto the rocks and left it there.', '{C} was dragged onto the rocks, with {who} on the line.', '{who1}\'s harpoon line walked {C} straight into the rocks.'],
@@ -130,7 +141,7 @@ const NAMED = {
 const PLAY = {
   'fire-first': ['put out the first fire'], 'revive-fire': ['carried on reviving with the fires still burning'], overboard: ['went for a swim'], 'overboard-twice': ['went overboard again'], 'overboard-lunatic': ['went over the side yet again'],
   'boarding-kill': ['took the fight to the gunship'], 'cannon-board': ['flew from the crew cannon onto the gunship'], 'cannon-miss': ['missed the whole sky with the crew cannon'],
-  'gunship-shot': ['fired the shot that sank {G}'], 'gunship-charge': ['planted the charge'], 'ring-charge': ['planted the charge at {G}'], 'ring-breach': ['broke a gate of {G}'], 'ring-fall': ['brought down {G}'], 'ring-squad': ['bombed the garrison of {G}'], 'away-winch': ['cranked the gate winch of {G}'], 'away-charge': ['blew a tower of {G}'], 'away-ballista': ['jammed the ballista of {G}'], 'away-beacon': ['lit the beacon of {G}'], 'away-prisoners': ['freed the prisoners of {G}'], 'away-banner': ['stole the great banner of {G}'], 'away-ko': ['met the garrison of {G} on foot'], 'treasure-stowed': ['stowed a chest from {G}'], 'treasure-heist': ['pulled off the heist at {G}'], 'gunship-captured': ['took the helm of {G}'], 'gunship-fled': ['drove {G} off'],
+  'gunship-shot': ['fired the shot that sank {G}'], 'gunship-charge': ['planted the charge'], 'ring-charge': ['planted the charge at {G}'], 'ring-breach': ['broke a gate of {G}'], 'ring-fall': ['brought down {G}'], 'ring-squad': ['bombed the garrison of {G}'], 'away-winch': ['cranked the gate winch of {G}'], 'away-charge': ['blew a tower of {G}'], 'away-ballista': ['jammed the ballista of {G}'], 'away-beacon': ['lit the beacon of {G}'], 'away-prisoners': ['freed the prisoners of {G}'], 'away-banner': ['stole the great banner of {G}'], 'away-ko': ['met the garrison of {G} on foot'], 'treasure-stowed': ['stowed a chest from {G}'], 'treasure-heist': ['pulled off the heist at {G}'], 'gunship-captured': ['took the helm of {G}'], 'gunship-fled': ['drove {G} off'], 'nemesis-met': ['faced {G}'], 'nemesis-scar': ['patched the scars of {G}'], 'nemesis-escape': ['drove {G} off again'], 'nemesis-down': ['finished {G} for good'], 'nemesis-won': ['went down fighting {G}'],
   'creature-win': ['brought down {C}'], 'creature-freed': ['hacked {C} loose'], breakoff: ['was beside it when {things} came off'], split: ['rode the half that fell'], 'breakoff-bay': ['was next to the bomb bay when it went'], rebuild: ['bought {things} back'],
   'going-down-saved': ['pulled her out of the dive'], 'helm-held': ['held the helm through the worst of it'], limp: ['got her home on the spare gasbag'], 'ship-lost': ['stayed to the last'],
   'flagship-down': ['sank the Flagship'], 'boss-down': ['shot down the zeppelin'], sandbag: ['carried the {item} the whole stop'],
@@ -158,6 +169,10 @@ function keyOf(m) {
   const d = m.data || {};
   if (m.kind === 'creature-win') return SENT['creature-win:' + d.way] ? 'creature-win:' + d.way : 'creature-win:hp';
   if (m.kind === 'creature-freed') return d.how === 'perch' ? 'creature-freed:perch' : 'creature-freed:hack';
+  if (m.kind === 'nemesis-met') return d.final ? 'nemesis-met:final' : d.again ? 'nemesis-met:again' : 'nemesis-met';
+  if (m.kind === 'nemesis-escape' && d.how === 'charge') return 'nemesis-escape:charge';
+  if (m.kind === 'nemesis-down') return SENT['nemesis-down:' + d.how] ? 'nemesis-down:' + d.how : 'nemesis-down:shot';
+  if (m.kind === 'nemesis-won') return d.how === 'limp' ? 'nemesis-won:limp' : 'nemesis-won';
   if (m.kind === 'overboard') return (d.n | 0) === 2 ? 'overboard-twice' : 'overboard';
   return m.kind;
 }

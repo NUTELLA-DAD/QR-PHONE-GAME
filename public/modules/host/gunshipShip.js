@@ -54,9 +54,10 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
   state.gunship = null;
   state.paras = []; // paratroopers in the air (world coordinates, like shells; vx is a world velocity)
   const S = (state.gsStats = { spawned: 0, dropped: 0, shot: 0, landed: 0, latches: 0, cut: 0, sent: 0, portsDown: 0, contacts: 0, collisions: 0, reverts: 0, maxDepth: 0, breakoffs: 0, shots: 0, turns: 0, strafes: 0, retreats: 0, aborts: 0, flees: 0, climbs: 0, mortars: 0, flaks: 0, turretShots: 0, bats: 0, harpoons: 0, ladders: 0, boarded: 0, kills: 0, captured: 0, charges: 0 });
-  const warn = (text, secs = 3.5, kind = 'setpiece') => {
-    state.say(kind, text, null, secs);
+  const warn = (text, secs = 3.5, kind = 'setpiece', pri = null) => {
+    state.say(kind, text, pri, secs);
   };
+  const NEM_PRI = () => config.NEMESIS.PRI; // (L4: the Nemesis's headlines outrank the ordinary set-piece banners, so the arc is never lost behind a rock scrape)
   const lap = () => (state.course ? state.course.lap : 1);
   let stamp = 0;
 
@@ -209,6 +210,14 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
     return null;
   };
 
+  // L4: the Nemesis is beaten, not sunk, before her final showdown: her hull stops at NEMESIS.FLOOR (true = spared). A charge set on her, her taken helm and the last fight are the ways to end her.
+  const spare = () => {
+    const g = state.gunship;
+    if (!g || !g.nemesis || g.nemesis.final || g.charge || g.captured || g.phase === 'sinking') return false;
+    g.ship.state.hull = config.NEMESIS.FLOOR * 100;
+    return true;
+  };
+
   // The ship.ai object every hook in the ship rules asks (shipSim.js, course.js, bots.js, aim.js, captainAI.js, ships.js).
   const makeAi = () => ({
     kind: 'gunship',
@@ -219,6 +228,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
     mayFire: (name) => mayFire(name),
     shoot: (player, gun, name) => shoot(player, gun, name),
     damageMul: () => GS().DAMAGE_MUL, // what any other blow costs her hull (a rock, a collision, a bullet of the sky's), x ours on Normal
+    spare: () => spare(), // (L4: before her final showdown the Nemesis is not sunk by a shell or a fire: shipSim.js wreck() asks)
     drainMul: () => GS().DRAIN_MUL, // what an open hole or a fire costs her hull every second (x ours at 1)
     hurt: (c, dmg, by) => hurt(c, dmg, by),
     onBoard: (p) => onBoard(p),
@@ -236,7 +246,8 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
     const at = spawnPos(bp);
     if (!at) return false;
     S.spawned++;
-    const hp = Math.round((G.HP + (lap() - 1) * 6) * bp.hpMul * (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).gunHp * crewMul(state, 'hp'));
+    const nm = o.nemesis || null; // (L4: the Nemesis - nemesis.js hands in her strength, her captain's nerve and her words)
+    const hp = Math.round((G.HP + (lap() - 1) * 6) * bp.hpMul * (config.DIFFICULTY[state.difficulty] || config.DIFFICULTY.normal).gunHp * crewMul(state, 'hp') * (nm ? nm.hpMul : 1));
     const { parts, info } = gunshipParts(bp);
     const ai = makeAi();
     const h = addShip(parts, { id: 'gunship', team: ENEMY_TEAM, name: bp.title, formation: { dx: 0, dalt: 0 }, ai, place: false });
@@ -259,7 +270,8 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
       ship: h,
       info,
       bp,
-      cap: bp.cap, // her captain's personality settings
+      cap: nm ? { ...bp.cap, ...nm.cap } : bp.cap, // her captain's personality settings
+      nemesis: nm,
       phase: 'approach',
       mode: 'station', // what her captain is doing: 'station' (ring spots), 'strafe' or 'retreat' (waypoint runs)
       intent: 'approach', // shown on her mast pennant
@@ -328,7 +340,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
     for (const role of ROLES.slice(0, bp.crew)) addCrewman(g, role);
     syncPose(g);
     refreshCrew(g);
-    warn(bp.title + ' APPROACHES - SHOOT OUT HER GUNS OR BOARD HER!', 4);
+    warn(nm ? nm.say.approach : bp.title + ' APPROACHES - SHOOT OUT HER GUNS OR BOARD HER!', 4, 'setpiece', nm ? NEM_PRI() : null);
     return true;
   };
 
@@ -880,17 +892,35 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
     g.captured = true; // (she goes down at the end of the step: this is called from inside her crew's loop, and everyone aboard is carried home)
     g.capturedBy = player && player.id;
     S.captured++;
-    warn('THE GUNSHIP SURRENDERS! HER HELM IS YOURS - SUPPLIES ABOARD', 4, 'objective');
+    warn(g.nemesis ? g.nemesis.say.captured : 'THE GUNSHIP SURRENDERS! HER HELM IS YOURS - SUPPLIES ABOARD', 4, 'objective', g.nemesis ? NEM_PRI() : null);
+  };
+
+  // L4: before her final showdown the charge does not finish the Nemesis: the blast wrecks her, the crew get the spoils, and she limps away burning (nemesis.js tells the Log and the save).
+  const survive = (g) => {
+    g.blast = true;
+    g.escapedBy = g.charge && g.charge.by;
+    g.charge = null;
+    for (let k = 0; k < 8; k++) sPuff(rand(g.bp.x0, g.bp.x1) + g.dx, rand(g.bp.bagTop + 80, g.bp.hullBot) + g.dy, k % 2 ? '#ff5a1f' : '#555', 24);
+    sPop(g.bp.cx + g.dx, g.bp.bagTop + 80 + g.dy, 'boss', '#ff5a1f', 1.6);
+    ours.state.shake = Math.max(ours.state.shake, 0.5);
+    mendHull(ours.ctx, G.REWARD_HULL, ours);
+    ours.state.fuel = Math.min(config.BOILER.FUEL_MAX, ours.state.fuel + G.REWARD_COAL);
+    for (const gun of Object.values(ours.ctx.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
+    ours.ctx.bombBay.bombs = Math.min(config.BOMBS.MAX, ours.ctx.bombBay.bombs + 2);
+    g.ship.state.hull = Math.min(g.ship.state.hull, config.NEMESIS.FLOOR * 100);
+    g.fled = true;
+    leave('', 3);
   };
 
   // She is done: shot down (byCrew false), blown up by the charge (byCrew), or taken (quiet). She sinks for a few seconds, then she is gone.
   const sink = (byCrew, quiet = false) => {
     const g = state.gunship;
     if (!g || g.phase === 'sinking') return;
+    if (byCrew && !quiet && g.nemesis && !g.nemesis.final) return survive(g);
     const h = g.ship;
     if (state.moment) { // (the Ship's Book: who finished her - the charge's planter, the one who took her helm, or the last shell's owner)
       const how = quiet ? 'captured' : byCrew ? 'charge' : 'shot', by = quiet ? g.capturedBy : byCrew ? g.charge && g.charge.by : g.shotBy;
-      state.moment('gunship-' + how, { who: by ? [by] : [], where: null, data: { name: g.bp.name } });
+      state.moment(g.nemesis ? 'nemesis-down' : 'gunship-' + how, { who: by ? [by] : [], where: null, data: { name: g.bp.name, how } });
     }
     g.phase = 'sinking';
     g.sink = 0;
@@ -909,8 +939,8 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
       ours.state.fuel = Math.min(config.BOILER.FUEL_MAX, ours.state.fuel + G.REWARD_COAL);
       for (const gun of Object.values(ours.ctx.GUNS)) gun.ammo = Math.min(gun.max, gun.ammo + 8);
       ours.ctx.bombBay.bombs = Math.min(config.BOMBS.MAX, ours.ctx.bombBay.bombs + 2);
-      if (!quiet) warn('GUNSHIP DESTROYED! SUPPLIES ABOARD: HULL, COAL AND AMMO', 4, 'objective');
-    } else warn('GUNSHIP SHOT DOWN!', 3, 'objective');
+      if (!quiet) warn(g.nemesis ? g.nemesis.say.down : 'GUNSHIP DESTROYED! SUPPLIES ABOARD: HULL, COAL AND AMMO', 4, 'objective', g.nemesis ? NEM_PRI() : null);
+    } else warn(g.nemesis ? g.nemesis.say.down : 'GUNSHIP SHOT DOWN!', 3, 'objective', g.nemesis ? NEM_PRI() : null);
     for (const c of crewOf(g)) { c.lock = null; delete h.crewReg[c.id]; }
     // her ship breaks up: wrecked, the gasbag empties, she falls
     if (!(h.state.down > 0)) {
@@ -930,7 +960,7 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
     g.phase = 'leaving';
     g.intent = 'flee';
     g.mode = 'station';
-    warn(text, secs);
+    warn(g.nemesis ? (g.fled ? (g.blast ? g.nemesis.say.blast : g.nemesis.say.escape) : g.nemesis.say.left) : text, secs, 'setpiece', g.nemesis ? NEM_PRI() : null); // (L4: the Nemesis names herself, and vows to return when she was beaten)
   };
 
   // She turns to latching on (a boarder captain, a harpoon, or her guns being down).
@@ -1059,7 +1089,8 @@ export function createGunshipShip({ state, puff, credit, dropOne, pickType, canB
     // Badly hurt with her one retreat used up: she runs for it.
     if (g.phase === 'hunt' && !contact && hullF(g) < g.cap.fleeAt && g.retreats >= g.cap.retreats) {
       S.flees++;
-      if (state.moment) state.moment('gunship-fled', { where: null, data: { name: g.bp.name } }); // (the Ship's Book: her name goes in the Log)
+      g.fled = true;
+      if (state.moment && !g.nemesis) state.moment('gunship-fled', { where: null, data: { name: g.bp.name } }); // (the Ship's Book: her name goes in the Log; the Nemesis tells it herself, nemesis.js)
       leave('THE GUNSHIP IS BADLY HIT AND FLEES!', 2.5);
       return;
     }

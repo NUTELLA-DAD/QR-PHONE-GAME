@@ -225,6 +225,8 @@ export function generateBlueprint(seed, opts = {}) {
     emblem: R.pick(GP.EMBLEMS),
     enginePower: GP.ENGINE_POWER[nEng] || 1,
   };
+  if (opts.look) Object.assign(bp, { flag: { a: opts.look.a, b: opts.look.b, pattern: opts.look.pattern }, hullColor: opts.look.hullColor, bagColor: opts.look.bagColor, emblem: opts.look.emblem }); // (L4: the Nemesis wears her own colours, drawn after every other random pick so nothing else moves)
+  if (opts.name) Object.assign(bp, { name: opts.name, title: opts.name.toUpperCase() });
   bp.pts = { col: outline(bp, 4), look: outline(bp, 30, 48, 10), spot: outline(bp, config.GUNSHIP.ROCK_MARGIN, 48, 10) };
   return bp;
 }
